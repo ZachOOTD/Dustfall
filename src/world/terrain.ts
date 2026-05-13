@@ -12,17 +12,39 @@ import { Tuning } from '../config/tuning.ts';
 const SIZE = 800;   // world units across the square terrain
 const CELLS = 128;  // cells per side; vertices = (CELLS+1)^2
 
-// Per-biome ground colors (Session P). Dune = warm sand, rocky = darker brown,
-// salt = near-white flats. Each is sampled directly into the vertex color buffer.
-const BIOME_COLOR_DUNE: readonly [number, number, number] = [0xb8 / 255, 0x91 / 255, 0x5a / 255];
-const BIOME_COLOR_ROCKY: readonly [number, number, number] = [0x7a / 255, 0x5a / 255, 0x3a / 255];
-const BIOME_COLOR_SALT: readonly [number, number, number] = [0xdc / 255, 0xd4 / 255, 0xc0 / 255];
+// Per-biome ground colors (Session P). Punchier than first-pass so the
+// regions read clearly from a distance: dune = saturated orange-sand,
+// rocky = dark red-brown, salt = bright warm-white.
+const BIOME_COLOR_DUNE: readonly [number, number, number] = [0xcd / 255, 0x95 / 255, 0x55 / 255];
+const BIOME_COLOR_ROCKY: readonly [number, number, number] = [0x55 / 255, 0x36 / 255, 0x1f / 255];
+const BIOME_COLOR_SALT: readonly [number, number, number] = [0xf0 / 255, 0xe8 / 255, 0xd2 / 255];
 
 // Smooth color blend driven by the biome noise scalar in [-1, 1]. Avoids the
 // hard color seam you'd get from a discrete biome lookup.
 function smoothstep(edge0: number, edge1: number, x: number): number {
   const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)));
   return t * t * (3 - 2 * t);
+}
+
+// Smooth biome-to-height-scale lookup. Mirrors the color blend so the height
+// transitions match the visual transitions exactly.
+function biomeHeightScale(noiseVal: number): number {
+  const rockyT = Tuning.BIOME_THRESHOLD_ROCKY;
+  const saltT = Tuning.BIOME_THRESHOLD_SALT;
+  const W = _BIOME_BLEND_WIDTH;
+  if (noiseVal < rockyT - W) return Tuning.BIOME_HEIGHT_SCALE_ROCKY;
+  if (noiseVal < rockyT + W) {
+    const t = smoothstep(rockyT - W, rockyT + W, noiseVal);
+    return Tuning.BIOME_HEIGHT_SCALE_ROCKY +
+      (Tuning.BIOME_HEIGHT_SCALE_DUNE - Tuning.BIOME_HEIGHT_SCALE_ROCKY) * t;
+  }
+  if (noiseVal < saltT - W) return Tuning.BIOME_HEIGHT_SCALE_DUNE;
+  if (noiseVal < saltT + W) {
+    const t = smoothstep(saltT - W, saltT + W, noiseVal);
+    return Tuning.BIOME_HEIGHT_SCALE_DUNE +
+      (Tuning.BIOME_HEIGHT_SCALE_SALT - Tuning.BIOME_HEIGHT_SCALE_DUNE) * t;
+  }
+  return Tuning.BIOME_HEIGHT_SCALE_SALT;
 }
 
 function lerp3(
@@ -77,7 +99,12 @@ export function createTerrain(
     for (let j = 0; j <= CELLS; j++) {
       const x = (i / CELLS - 0.5) * SIZE;
       const z = (j / CELLS - 0.5) * SIZE;
-      heights[i * (CELLS + 1) + j] = sampleHeight(noise, x, z);
+      // Biome-driven height multiplier — salt flats end up almost level,
+      // rocky biomes slightly more rugged, dune normal. Smooth via the raw
+      // biome noise so transitions are continuous (no discontinuity at the
+      // hard biome threshold).
+      const flatness = biomeHeightScale(biomes.rawAt(x, z));
+      heights[i * (CELLS + 1) + j] = sampleHeight(noise, x, z) * flatness;
     }
   }
 

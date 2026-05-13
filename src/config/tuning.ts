@@ -63,28 +63,24 @@ export const Tuning = {
   // Ridges run perpendicular to the wind direction; aniso < 1 elongates them.
   // Asymmetry biases ridge crests in the wind direction (steeper leeward face).
   DUNE_WIND_DIR_RAD: 0.62,             // ~36° from +X; world-fixed prevailing wind
-  DUNE_ANISO_RATIO: 0.32,              // <1 = ridges elongate perpendicular to wind
-  DUNE_RIDGE_SCALE_PRIMARY: 78,        // primary dune wavelength, meters
-  DUNE_RIDGE_SCALE_SECONDARY: 17,      // smaller ripples riding the primary ridges
-  DUNE_PRIMARY_AMP: 5.8,               // peak height contribution of primary ridges
-  DUNE_SECONDARY_AMP: 1.1,             // smaller ridges on top
-  DUNE_BASE_UNDULATION_AMP: 1.4,       // low-frequency ground-level wobble
-  DUNE_BASE_UNDULATION_SCALE: 220,
-  DUNE_ASYMMETRY_AMOUNT: 6.0,          // u-shift in meters; bows ridges along wind
+  DUNE_ANISO_RATIO: 0.28,              // <1 = ridges elongate perpendicular to wind
+  DUNE_RIDGE_SCALE_PRIMARY: 145,       // primary dune wavelength, meters
+  DUNE_RIDGE_SCALE_SECONDARY: 34,      // smaller ripples riding the primary ridges
+  DUNE_PRIMARY_AMP: 16.5,              // peak height contribution of primary ridges
+  DUNE_SECONDARY_AMP: 2.6,             // smaller ridges on top
+  DUNE_BASE_UNDULATION_AMP: 3.4,       // low-frequency ground-level wobble
+  DUNE_BASE_UNDULATION_SCALE: 320,
+  DUNE_ASYMMETRY_AMOUNT: 14.0,         // u-shift in meters; bows ridges along wind
 
   // Biomes (Session P)
-  BIOME_NOISE_FREQ: 1 / 200,           // ~200m wavelength → big regions
-  BIOME_THRESHOLD_ROCKY: -0.25,        // noise < this → rocky
-  BIOME_THRESHOLD_SALT: 0.40,          // noise > this → salt; in-between → dune
-
-  // Perimeter mountains (Session P) — distant horizon silhouette ring.
-  PERIMETER_MOUNTAIN_COUNT: 22,
-  PERIMETER_MOUNTAIN_RADIUS_MIN: 270,
-  PERIMETER_MOUNTAIN_RADIUS_MAX: 340,
-  PERIMETER_MOUNTAIN_WIDTH_MIN: 18,
-  PERIMETER_MOUNTAIN_WIDTH_MAX: 38,
-  PERIMETER_MOUNTAIN_HEIGHT_MIN: 30,
-  PERIMETER_MOUNTAIN_HEIGHT_MAX: 65,
+  BIOME_NOISE_FREQ: 1 / 220,           // ~220m wavelength → big regions
+  BIOME_THRESHOLD_ROCKY: -0.22,        // noise < this → rocky
+  BIOME_THRESHOLD_SALT: 0.32,          // noise > this → salt; in-between → dune
+  // Per-biome terrain-height multiplier. Salt flats are nearly featureless;
+  // rocky biomes are subtly more rugged than dunes.
+  BIOME_HEIGHT_SCALE_DUNE: 1.0,
+  BIOME_HEIGHT_SCALE_ROCKY: 1.15,
+  BIOME_HEIGHT_SCALE_SALT: 0.08,
 
   // Sky module
   SKY_SPHERE_RADIUS: 480,
