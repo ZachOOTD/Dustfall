@@ -6,8 +6,6 @@ import * as THREE from 'three';
 import type RAPIER from '@dimforge/rapier3d-compat';
 import type { Rng } from '../core/rng.ts';
 import type { Terrain } from './terrain.ts';
-import type { ShelterRegistry } from '../shelter/shelterZones.ts';
-import { addShelterZone } from '../shelter/shelterZones.ts';
 import { makeStaticBox } from '../physics/bodies.ts';
 
 const _q = new THREE.Quaternion();
@@ -19,7 +17,7 @@ function getQuat(o: THREE.Object3D): { x: number; y: number; z: number; w: numbe
 // ────────────────────────────────────────────────────────────────
 // 1. Animal ribcage — whale/dinosaur skeleton lying in the sand
 // ────────────────────────────────────────────────────────────────
-function placeRibcage(
+export function placeRibcage(
   scene: THREE.Scene,
   world: RAPIER.World,
   pos: THREE.Vector3,
@@ -72,70 +70,7 @@ function placeRibcage(
 }
 
 // ────────────────────────────────────────────────────────────────
-// 2. Half-buried truck wreck
-// ────────────────────────────────────────────────────────────────
-function placeTruckWreck(
-  scene: THREE.Scene,
-  world: RAPIER.World,
-  shelter: ShelterRegistry,
-  pos: THREE.Vector3,
-  rand: Rng,
-): void {
-  const group = new THREE.Group();
-  const rustColor = new THREE.Color().setHSL(0.04, 0.4, 0.18 + rand() * 0.06);
-  const metalColor = new THREE.Color().setHSL(0.06, 0.10, 0.10);
-  const rustMat = new THREE.MeshLambertMaterial({ color: rustColor, flatShading: true });
-  const metalMat = new THREE.MeshLambertMaterial({ color: metalColor, flatShading: true });
-
-  // Cab (front)
-  const cab = new THREE.Mesh(new THREE.BoxGeometry(1.7, 1.3, 1.7), rustMat);
-  cab.position.set(0.95, 0.55, 0);
-  group.add(cab);
-
-  // Cargo bed (rear, lower)
-  const bed = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.9, 1.6), rustMat);
-  bed.position.set(-0.7, 0.25, 0);
-  group.add(bed);
-
-  // Windshield slope — a thin tilted block in front
-  const ws = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.9, 1.55), metalMat);
-  ws.position.set(0.18, 0.95, 0);
-  ws.rotation.z = -0.45;
-  group.add(ws);
-
-  // Crumpled roof — small flat slab
-  const roof = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.1, 1.5), metalMat);
-  roof.position.set(0.95, 1.18, 0);
-  roof.rotation.z = (rand() - 0.5) * 0.2;
-  group.add(roof);
-
-  // Tilt + partial bury
-  group.position.copy(pos);
-  group.position.y -= 0.5 + rand() * 0.3;
-  group.rotation.y = rand() * Math.PI * 2;
-  group.rotation.z = (rand() - 0.5) * 0.18;
-  group.rotation.x = (rand() - 0.5) * 0.1;
-  scene.add(group);
-
-  makeStaticBox(
-    world,
-    { x: 2.2, y: 0.9, z: 0.9 },
-    { x: group.position.x, y: group.position.y + 0.6, z: group.position.z },
-    getQuat(group),
-  );
-
-  // Shelter zone: a slightly-larger box around the truck, just tall enough
-  // for the player to fit inside (capsule is ~1.7m tall, body center at +0.85
-  // above feet). We center the zone at chest height above the wreck.
-  addShelterZone(
-    shelter,
-    { x: group.position.x, y: group.position.y + 1.2, z: group.position.z },
-    { x: 2.6, y: 1.2, z: 1.6 },
-  );
-}
-
-// ────────────────────────────────────────────────────────────────
-// 3. Leaning radio tower — visible from far away
+// 2. Leaning radio tower — visible from far away
 // ────────────────────────────────────────────────────────────────
 function placeRadioTower(
   scene: THREE.Scene,
@@ -204,7 +139,7 @@ function placeRadioTower(
 }
 
 // ────────────────────────────────────────────────────────────────
-// 4. Cracked stone obelisk — broken pillar leaning into the wind
+// 3. Cracked stone obelisk — broken pillar leaning into the wind
 // ────────────────────────────────────────────────────────────────
 function placeObelisk(
   scene: THREE.Scene,
@@ -267,15 +202,14 @@ function placeObelisk(
 // ────────────────────────────────────────────────────────────────
 // Public entry: scatter ~6-9 hero landmarks around the world
 // ────────────────────────────────────────────────────────────────
-type HeroType = 'ribcage' | 'truck' | 'tower' | 'obelisk';
+type HeroType = 'ribcage' | 'tower' | 'obelisk';
 
-const HERO_TYPES: HeroType[] = ['ribcage', 'truck', 'tower', 'obelisk'];
+const HERO_TYPES: HeroType[] = ['ribcage', 'tower', 'obelisk'];
 
 export function placeHeroLandmarks(
   scene: THREE.Scene,
   world: RAPIER.World,
   terrain: Terrain,
-  shelter: ShelterRegistry,
   rand: Rng,
 ): void {
   const count = 7 + Math.floor(rand() * 3); // 7-9
@@ -290,7 +224,6 @@ export function placeHeroLandmarks(
     const pos = new THREE.Vector3(x, y, z);
     switch (type) {
       case 'ribcage':  placeRibcage(scene, world, pos, rand); break;
-      case 'truck':    placeTruckWreck(scene, world, shelter, pos, rand); break;
       case 'tower':    placeRadioTower(scene, world, pos, rand); break;
       case 'obelisk':  placeObelisk(scene, world, pos, rand); break;
     }

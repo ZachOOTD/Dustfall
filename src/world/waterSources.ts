@@ -192,3 +192,31 @@ export function findWaterSourceById(list: WaterSource[], id: number | undefined)
   for (const w of list) if (w.id === id) return w;
   return null;
 }
+
+/** Place a single water source at a fixed world position. Used by POIs
+ *  (Session P) — e.g., the abandoned-camp barrel. Returns the WaterSource;
+ *  the caller is responsible for pushing it into the registry list. */
+export function spawnWaterSourceAt(
+  scene: THREE.Scene,
+  terrain: Terrain,
+  rand: Rng,
+  kind: WaterSourceKind,
+  x: number,
+  z: number,
+): WaterSource {
+  const y = terrain.heightAt(x, z);
+  let mesh: THREE.Group;
+  if (kind === 'oasis') mesh = makeOasis(rand);
+  else if (kind === 'well') mesh = makeWell(rand);
+  else mesh = makeBarrel(rand);
+  mesh.position.set(x, y, z);
+  mesh.rotation.y = rand() * Math.PI * 2;
+  mesh.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; }
+  });
+  const id = _nextId++;
+  tag(mesh, id);
+  scene.add(mesh);
+  return { id, kind, mesh, pos: new THREE.Vector3(x, y, z), hovered: false };
+}

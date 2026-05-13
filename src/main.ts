@@ -14,7 +14,9 @@ import { makePlayer } from './physics/bodies.ts';
 import { installPhysicsDebug, updatePhysicsDebug } from './physics/debug.ts';
 import { preloadAssets } from './assets/loader.ts';
 import { createTerrain } from './world/terrain.ts';
-import { scatterLandmarks } from './world/landmarks.ts';
+import { createBiomeSampler } from './world/biomes.ts';
+import { createPerimeterMountains } from './world/horizon.ts';
+import { placePOIs } from './world/poi.ts';
 import { placeHeroLandmarks } from './world/heroLandmarks.ts';
 import { createSky, updateSky } from './world/sky.ts';
 import { updateStats } from './stats/survival.ts';
@@ -34,7 +36,6 @@ import { createViewModel, updateViewModel } from './player/viewModel.ts';
 import { createWeather, updateWeather } from './world/weather.ts';
 import { spawnWaterSources } from './world/waterSources.ts';
 import { spawnCacti } from './world/cactus.ts';
-import { spawnStandaloneLootContainers } from './world/lootContainers.ts';
 import { updateFires } from './world/fire.ts';
 import { addItem } from './inventory/inventory.ts';
 import { createMenus } from './ui/menus.ts';
@@ -64,15 +65,21 @@ const terrainRand = makeRng(Tuning.RNG_SEED);
 const scatterRand = makeRng(Tuning.RNG_SEED + 1);
 
 const shelter = createShelterRegistry();
-const terrain = createTerrain(three.scene, physics.world, terrainRand);
-placeHeroLandmarks(three.scene, physics.world, terrain, shelter, scatterRand);
-scatterLandmarks(three.scene, physics.world, terrain, assets, scatterRand);
+// Biome sampler is independent of terrain heights but seeded from the same
+// scatter stream so the world is fully deterministic from RNG_SEED.
+const biomes = createBiomeSampler(makeRng(Tuning.RNG_SEED + 17));
+const terrain = createTerrain(three.scene, physics.world, terrainRand, biomes);
+placeHeroLandmarks(three.scene, physics.world, terrain, scatterRand);
+createPerimeterMountains(three.scene, terrain, scatterRand);
 const pickupList = spawnCanteens(three.scene, terrain, assets, scatterRand);
 const branchList = spawnBranches(three.scene, terrain, scatterRand);
 pickupList.push(...branchList);
 const waterSources = spawnWaterSources(three.scene, terrain, scatterRand);
 const cacti = spawnCacti(three.scene, physics.world, terrain, scatterRand);
-const lootContainers = spawnStandaloneLootContainers(three.scene, terrain, scatterRand);
+
+// Hand-placed distant POIs (Session P). Adds entries to waterSources + pickups
+// for the abandoned-camp barrel and bandage.
+placePOIs(three.scene, physics.world, terrain, scatterRand, waterSources, pickupList);
 
 // Spawn one raider somewhere visible-but-not-immediate (~30m from spawn).
 const raiders = [
@@ -150,13 +157,14 @@ const ctx: GameContext = {
   ui: hud,
   physics,
   terrain,
+  biomes,
   assets,
   shelter,
   raiders,
   lizards,
   waterSources: { list: waterSources },
   cacti: { list: cacti },
-  lootContainers: { list: lootContainers, open: null },
+  lootContainers: { list: [], open: null },
   fires: { list: [] },
   tents: { list: [] },
   weather,

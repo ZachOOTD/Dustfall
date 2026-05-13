@@ -20,6 +20,7 @@ import type { Lizard } from './enemies/lizard.ts';
 import type { LootContainer } from './world/lootContainers.ts';
 import type { Fire } from './world/fire.ts';
 import type { Tent } from './world/tent.ts';
+import type { BiomeSampler } from './world/biomes.ts';
 
 export interface GameContext {
   three: {
@@ -68,6 +69,7 @@ export interface GameContext {
   };
   physics: PhysicsBundle;
   terrain: Terrain;
+  biomes: BiomeSampler;
   assets: AssetRegistry;
   shelter: ShelterRegistry;
   raiders: Raider[];

@@ -6,16 +6,54 @@ import * as THREE from 'three';
 import { createNoise2D } from 'simplex-noise';
 import RAPIER from '@dimforge/rapier3d-compat';
 import type { Rng } from '../core/rng.ts';
+import type { BiomeSampler } from './biomes.ts';
+import { Tuning } from '../config/tuning.ts';
 
 const SIZE = 800;   // world units across the square terrain
 const CELLS = 128;  // cells per side; vertices = (CELLS+1)^2
 
-// Octave amplitudes & scales tuned for a Sahara/Dune dune look.
-const OCTAVES: ReadonlyArray<readonly [number, number]> = [
-  [80, 6.5],   // large dunes
-  [25, 1.6],   // mid ridges
-  [6, 0.35],   // grain
-];
+// Per-biome ground colors (Session P). Dune = warm sand, rocky = darker brown,
+// salt = near-white flats. Each is sampled directly into the vertex color buffer.
+const BIOME_COLOR_DUNE: readonly [number, number, number] = [0xb8 / 255, 0x91 / 255, 0x5a / 255];
+const BIOME_COLOR_ROCKY: readonly [number, number, number] = [0x7a / 255, 0x5a / 255, 0x3a / 255];
+const BIOME_COLOR_SALT: readonly [number, number, number] = [0xdc / 255, 0xd4 / 255, 0xc0 / 255];
+
+// Smooth color blend driven by the biome noise scalar in [-1, 1]. Avoids the
+// hard color seam you'd get from a discrete biome lookup.
+function smoothstep(edge0: number, edge1: number, x: number): number {
+  const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)));
+  return t * t * (3 - 2 * t);
+}
+
+function lerp3(
+  a: readonly [number, number, number],
+  b: readonly [number, number, number],
+  t: number,
+): [number, number, number] {
+  return [
+    a[0] + (b[0] - a[0]) * t,
+    a[1] + (b[1] - a[1]) * t,
+    a[2] + (b[2] - a[2]) * t,
+  ];
+}
+
+const _BIOME_BLEND_WIDTH = 0.08;
+function blendedBiomeColor(noiseVal: number): [number, number, number] {
+  const rockyT = Tuning.BIOME_THRESHOLD_ROCKY;
+  const saltT = Tuning.BIOME_THRESHOLD_SALT;
+  // Below rockyT → rocky. Cross into dune over a blend band.
+  if (noiseVal < rockyT - _BIOME_BLEND_WIDTH) return [...BIOME_COLOR_ROCKY];
+  if (noiseVal < rockyT + _BIOME_BLEND_WIDTH) {
+    const t = smoothstep(rockyT - _BIOME_BLEND_WIDTH, rockyT + _BIOME_BLEND_WIDTH, noiseVal);
+    return lerp3(BIOME_COLOR_ROCKY, BIOME_COLOR_DUNE, t);
+  }
+  if (noiseVal < saltT - _BIOME_BLEND_WIDTH) return [...BIOME_COLOR_DUNE];
+  if (noiseVal < saltT + _BIOME_BLEND_WIDTH) {
+    const t = smoothstep(saltT - _BIOME_BLEND_WIDTH, saltT + _BIOME_BLEND_WIDTH, noiseVal);
+    return lerp3(BIOME_COLOR_DUNE, BIOME_COLOR_SALT, t);
+  }
+  return [...BIOME_COLOR_SALT];
+}
 
 export interface Terrain {
   mesh: THREE.Mesh;
@@ -30,6 +68,7 @@ export function createTerrain(
   scene: THREE.Scene,
   world: RAPIER.World,
   rand: Rng,
+  biomes: BiomeSampler,
 ): Terrain {
   const noise = createNoise2D(rand);
 
@@ -43,13 +82,26 @@ export function createTerrain(
   }
 
   // --- Three.js mesh ---
-  const positions = new Float32Array((CELLS + 1) * (CELLS + 1) * 3);
+  const vertCount = (CELLS + 1) * (CELLS + 1);
+  const positions = new Float32Array(vertCount * 3);
+  // Per-vertex biome color (Session P). Lambert respects vertexColors:true.
+  const colors = new Float32Array(vertCount * 3);
   for (let i = 0; i <= CELLS; i++) {
     for (let j = 0; j <= CELLS; j++) {
       const idx = (i * (CELLS + 1) + j) * 3;
-      positions[idx] = (i / CELLS - 0.5) * SIZE;
+      const x = (i / CELLS - 0.5) * SIZE;
+      const z = (j / CELLS - 0.5) * SIZE;
+      positions[idx] = x;
       positions[idx + 1] = heights[i * (CELLS + 1) + j];
-      positions[idx + 2] = (j / CELLS - 0.5) * SIZE;
+      positions[idx + 2] = z;
+      // Soft-blend the biome color: take a wider neighborhood average so the
+      // transition isn't a hard line. Two extra noise samples + a smoothstep
+      // weight on the raw biome noise gives a believable gradient.
+      const n = biomes.rawAt(x, z);
+      const c = blendedBiomeColor(n);
+      colors[idx]     = c[0];
+      colors[idx + 1] = c[1];
+      colors[idx + 2] = c[2];
     }
   }
   const indices: number[] = [];
@@ -70,10 +122,11 @@ export function createTerrain(
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   geo.setIndex(indices);
   geo.computeVertexNormals();
 
-  const mat = new THREE.MeshLambertMaterial({ color: 0xb8915a });
+  const mat = new THREE.MeshLambertMaterial({ vertexColors: true });
   const mesh = new THREE.Mesh(geo, mat);
   scene.add(mesh);
 
@@ -125,14 +178,49 @@ export function createTerrain(
   return { mesh, heights, heightAt, normalAt };
 }
 
+// Ridged + wind-warped dunes (Session P). Long parallel sand ridges run
+// perpendicular to the prevailing wind direction. Stylized — not physically
+// simulated — but reads as a desert from any angle.
+//
+// Pipeline per (x, z):
+//   1. Rotate world coords into wind-aligned (u, v): u along wind, v across.
+//   2. Bias u by a sin-of-v term so ridges curve gently (asymmetric crests).
+//   3. Sample ridged noise (1 - |simplex|) at two scales with anisotropic u.
+//      Aniso < 1 → features elongate in v (perpendicular to wind).
+//   4. Add a low-frequency base undulation to break repetition.
 function sampleHeight(
   noise: (x: number, y: number) => number,
   x: number,
   z: number,
 ): number {
-  let h = 0;
-  for (const [scale, amp] of OCTAVES) {
-    h += noise(x / scale, z / scale) * amp;
-  }
-  return h;
+  const cs = Math.cos(Tuning.DUNE_WIND_DIR_RAD);
+  const sn = Math.sin(Tuning.DUNE_WIND_DIR_RAD);
+  const u = x * cs + z * sn;       // along wind
+  const v = -x * sn + z * cs;      // perpendicular to wind
+
+  // Crest sawtooth bias — bows ridge crests along the wind axis.
+  const uBias = Math.sin(v / Tuning.DUNE_RIDGE_SCALE_PRIMARY * Math.PI) *
+                Tuning.DUNE_ASYMMETRY_AMOUNT;
+  const uShifted = u + uBias;
+  const aniso = Tuning.DUNE_ANISO_RATIO;
+
+  // Primary ridges — the dominant dune wavelength.
+  const r1 = 1 - Math.abs(noise(
+    uShifted * aniso / Tuning.DUNE_RIDGE_SCALE_PRIMARY,
+    v / Tuning.DUNE_RIDGE_SCALE_PRIMARY,
+  ));
+  // Secondary ripples riding on top of the primary ridges.
+  const r2 = 1 - Math.abs(noise(
+    uShifted * aniso / Tuning.DUNE_RIDGE_SCALE_SECONDARY,
+    v / Tuning.DUNE_RIDGE_SCALE_SECONDARY,
+  ));
+  // Low-frequency drift so the world isn't a uniform grid of ridges.
+  const base = noise(
+    x / Tuning.DUNE_BASE_UNDULATION_SCALE,
+    z / Tuning.DUNE_BASE_UNDULATION_SCALE,
+  ) * Tuning.DUNE_BASE_UNDULATION_AMP;
+
+  return r1 * Tuning.DUNE_PRIMARY_AMP +
+         r2 * Tuning.DUNE_SECONDARY_AMP +
+         base;
 }
