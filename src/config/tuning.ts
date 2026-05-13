@@ -10,6 +10,7 @@ export const Tuning = {
   PLAYER_EYE_OFFSET: 0.85,           // camera Y above body center
   WALK_SPEED: 4.2,
   SPRINT_MULTIPLIER: 1.7,
+  JUMP_VELOCITY: 7.0,                // m/s upward kick on jump (~1m apex)
 
   // Day/night
   DAY_LENGTH_SECONDS: 360,  // one in-game day = 6 real minutes
@@ -35,10 +36,23 @@ export const Tuning = {
   THIRST_DRAIN_PER_SEC: 1 / 300, // idle death in ~5 min
   THIRST_SPRINT_FACTOR: 2.2,
   THIRST_HEAT_FACTOR: 1.8,
-  HEAT_GAIN_PER_SEC: 1 / 90,
-  HEAT_COOL_PER_SEC: 1 / 40,
+  HEAT_GAIN_PER_SEC: 1 / 90,         // positive temperature gain in sun
+  HEAT_COOL_PER_SEC: 1 / 40,         // shelter cooling on positive side
   DEHYDRATION_DAMAGE: 1 / 30,
   HEATSTROKE_DAMAGE: 1 / 25,
+  // Hunger
+  HUNGER_DRAIN_PER_SEC: 1 / 600,     // ~10 min to starve from full
+  HUNGER_STARVATION_DAMAGE: 1 / 40,
+  // Stamina (controller.ts ticks it)
+  STAMINA_DRAIN_SPRINT: 1 / 6,       // 6s of sprint at full
+  STAMINA_RECOVER_PER_SEC: 1 / 9,    // 9s recovery from empty
+  STAMINA_SPRINT_THRESHOLD: 0.05,    // can't initiate sprint below this
+  // Cold (negative side of temperature)
+  COLD_NIGHT_DRAIN: 1 / 120,         // at night without shelter
+  COLD_SHELTER_RECOVER: 1 / 30,      // recover toward 0 in shelter
+  COLD_DAMAGE_PER_SEC: 1 / 35,       // when temperature ≤ -1
+  // Canteen (container)
+  CANTEEN_DRINK_DELTA: 0.25,         // fillLevel consumed per drink
 
   // Atmosphere
   FOG_NEAR: 25,
@@ -61,6 +75,15 @@ export const Tuning = {
   CANTEEN_COUNT: 35,
   CANTEEN_THIRST_RESTORE: 0.32,
   CANTEEN_PICKUP_RADIUS: 1.6,
+
+  // First-person viewmodel — hands + held item offset from camera (local space)
+  VIEWMODEL_OFFSET_X: 0.32,
+  VIEWMODEL_OFFSET_Y: -0.34,
+  VIEWMODEL_OFFSET_Z: -0.55,
+  // Per-item use-anim durations (seconds)
+  VIEWMODEL_CANTEEN_ANIM_S: 1.2,
+  VIEWMODEL_MACHETE_ANIM_S: 0.4,
+  VIEWMODEL_BANDAGE_ANIM_S: 0.8,
 } as const;
 
 // Sky gradient colors (top vs horizon) per time of day. Horizon stays close to

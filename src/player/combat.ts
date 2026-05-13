@@ -8,7 +8,8 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import type { GameContext } from '../GameContext.ts';
 import { isPlaying } from '../GameContext.ts';
 import { damageRaider, getRaiderForCollider } from '../enemies/raider.ts';
-import { playSwing, playHit } from '../audio/audio.ts';
+import { damageLizard, getLizardForCollider } from '../enemies/lizard.ts';
+import { playSwing, playHit, playLizardSquish } from '../audio/audio.ts';
 
 const SWING_RANGE = 1.8;
 const SWING_DAMAGE = 0.45;
@@ -37,6 +38,7 @@ export function updateCombat(ctx: GameContext, dt: number): void {
   _nextSwingAt = ctx.time.elapsed + SWING_COOLDOWN;
   _swingViewKick = 1.0;
   playSwing();
+  ctx.player.viewModel?.triggerUse();
 
   // Sweep a small capsule from camera forward
   const cam = ctx.three.camera;
@@ -63,11 +65,19 @@ export function updateCombat(ctx: GameContext, dt: number): void {
   );
   if (!hit) return;
 
+  // Dispatch hit by entity type
   const r = getRaiderForCollider(hit.collider.handle);
-  if (!r) return;
-
-  playHit(1.0);
-  damageRaider(r, SWING_DAMAGE, ctx);
+  if (r) {
+    playHit(1.0);
+    damageRaider(r, SWING_DAMAGE, ctx);
+    return;
+  }
+  const l = getLizardForCollider(hit.collider.handle);
+  if (l) {
+    playLizardSquish();
+    damageLizard(l, 1.0, ctx);
+    return;
+  }
 }
 
 /** Returns current crosshair pulse intensity (0..1) — used by HUD/crosshair. */

@@ -178,6 +178,409 @@ export function playHit(intensity: number = 1.0): void {
   src.stop(t + 0.15);
 }
 
+/** Drop — soft thud as item lands. Used when player drops an inventory slot. */
+export function playDrop(): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  const osc = a.ctx.createOscillator();
+  osc.type = 'triangle';
+  osc.frequency.setValueAtTime(180, t);
+  osc.frequency.exponentialRampToValueAtTime(80, t + 0.18);
+  const env = a.ctx.createGain();
+  env.gain.setValueAtTime(0.0, t);
+  env.gain.linearRampToValueAtTime(0.10, t + 0.005);
+  env.gain.exponentialRampToValueAtTime(0.001, t + 0.20);
+  osc.connect(env).connect(a.sfx);
+  osc.start(t);
+  osc.stop(t + 0.22);
+}
+
+/** Player hurt — short low groan when raider hits the player. */
+export function playPlayerHurt(): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  // Low groan
+  const osc = a.ctx.createOscillator();
+  osc.type = 'triangle';
+  osc.frequency.setValueAtTime(120, t);
+  osc.frequency.exponentialRampToValueAtTime(80, t + 0.22);
+  const env = a.ctx.createGain();
+  env.gain.setValueAtTime(0.0, t);
+  env.gain.linearRampToValueAtTime(0.16, t + 0.02);
+  env.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
+  osc.connect(env).connect(a.sfx);
+  osc.start(t);
+  osc.stop(t + 0.27);
+  // Breath noise overlay
+  const src = a.ctx.createBufferSource();
+  src.buffer = a.noiseBuffer;
+  src.playbackRate.value = 0.6;
+  const filter = a.ctx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.value = 320;
+  const nEnv = a.ctx.createGain();
+  nEnv.gain.setValueAtTime(0.0, t);
+  nEnv.gain.linearRampToValueAtTime(0.08, t + 0.02);
+  nEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.24);
+  src.connect(filter).connect(nEnv).connect(a.sfx);
+  src.start(t);
+  src.stop(t + 0.26);
+}
+
+/** Fire ignite — short whoosh + crackle when a fire is first lit. */
+export function playFireIgnite(): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  // Whoosh: filtered noise sweep, low-to-mid
+  const src = a.ctx.createBufferSource();
+  src.buffer = a.noiseBuffer;
+  src.playbackRate.value = 0.6;
+  const filter = a.ctx.createBiquadFilter();
+  filter.type = 'bandpass';
+  filter.frequency.setValueAtTime(200, t);
+  filter.frequency.exponentialRampToValueAtTime(1200, t + 0.35);
+  filter.Q.value = 3;
+  const env = a.ctx.createGain();
+  env.gain.setValueAtTime(0.0, t);
+  env.gain.linearRampToValueAtTime(0.16, t + 0.03);
+  env.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+  src.connect(filter).connect(env).connect(a.sfx);
+  src.start(t);
+  src.stop(t + 0.42);
+  // A small crackle at the end
+  const c = a.ctx.createBufferSource();
+  c.buffer = a.noiseBuffer;
+  c.playbackRate.value = 1.4;
+  const cf = a.ctx.createBiquadFilter();
+  cf.type = 'highpass';
+  cf.frequency.value = 1800;
+  const cEnv = a.ctx.createGain();
+  cEnv.gain.setValueAtTime(0.0, t + 0.32);
+  cEnv.gain.linearRampToValueAtTime(0.10, t + 0.34);
+  cEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.48);
+  c.connect(cf).connect(cEnv).connect(a.sfx);
+  c.start(t + 0.32);
+  c.stop(t + 0.5);
+}
+
+/** Fire crackle — single short pop. Fired as the fire burns over time. */
+export function playFireCrackle(): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  const src = a.ctx.createBufferSource();
+  src.buffer = a.noiseBuffer;
+  src.playbackRate.value = 1.6 + Math.random() * 0.4;
+  const filter = a.ctx.createBiquadFilter();
+  filter.type = 'bandpass';
+  filter.frequency.value = 1600 + Math.random() * 800;
+  filter.Q.value = 5;
+  const env = a.ctx.createGain();
+  env.gain.setValueAtTime(0.0, t);
+  env.gain.linearRampToValueAtTime(0.06, t + 0.002);
+  env.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
+  src.connect(filter).connect(env).connect(a.sfx);
+  src.start(t);
+  src.stop(t + 0.08);
+}
+
+/** Cook sizzle — ~0.6s filtered noise sweep with low rumble undertone. */
+export function playCookSizzle(): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  // Sizzle layer
+  const src = a.ctx.createBufferSource();
+  src.buffer = a.noiseBuffer;
+  src.playbackRate.value = 1.1;
+  const filter = a.ctx.createBiquadFilter();
+  filter.type = 'bandpass';
+  filter.frequency.setValueAtTime(2200, t);
+  filter.frequency.exponentialRampToValueAtTime(900, t + 0.55);
+  filter.Q.value = 2.5;
+  const env = a.ctx.createGain();
+  env.gain.setValueAtTime(0.0, t);
+  env.gain.linearRampToValueAtTime(0.10, t + 0.05);
+  env.gain.setValueAtTime(0.10, t + 0.40);
+  env.gain.exponentialRampToValueAtTime(0.001, t + 0.60);
+  src.connect(filter).connect(env).connect(a.sfx);
+  src.start(t);
+  src.stop(t + 0.62);
+  // Low rumble undertone (heat)
+  const osc = a.ctx.createOscillator();
+  osc.type = 'triangle';
+  osc.frequency.setValueAtTime(120, t);
+  const oEnv = a.ctx.createGain();
+  oEnv.gain.setValueAtTime(0.0, t);
+  oEnv.gain.linearRampToValueAtTime(0.04, t + 0.05);
+  oEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.60);
+  osc.connect(oEnv).connect(a.sfx);
+  osc.start(t);
+  osc.stop(t + 0.62);
+}
+
+/** Sleep thud — slow low descending tone as the player lies down. */
+export function playSleepThud(): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  const osc = a.ctx.createOscillator();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(120, t);
+  osc.frequency.exponentialRampToValueAtTime(50, t + 0.5);
+  const env = a.ctx.createGain();
+  env.gain.setValueAtTime(0.0, t);
+  env.gain.linearRampToValueAtTime(0.16, t + 0.04);
+  env.gain.exponentialRampToValueAtTime(0.001, t + 0.55);
+  osc.connect(env).connect(a.sfx);
+  osc.start(t);
+  osc.stop(t + 0.58);
+}
+
+/** Craft — quick metal tick + low thump (forging / clipping). */
+export function playCraft(): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  // High tick
+  const o1 = a.ctx.createOscillator();
+  o1.type = 'square';
+  o1.frequency.setValueAtTime(2400, t);
+  o1.frequency.exponentialRampToValueAtTime(1200, t + 0.04);
+  const e1 = a.ctx.createGain();
+  e1.gain.setValueAtTime(0.0, t);
+  e1.gain.linearRampToValueAtTime(0.07, t + 0.002);
+  e1.gain.exponentialRampToValueAtTime(0.001, t + 0.07);
+  o1.connect(e1).connect(a.sfx);
+  o1.start(t);
+  o1.stop(t + 0.09);
+  // Low thump
+  const o2 = a.ctx.createOscillator();
+  o2.type = 'triangle';
+  o2.frequency.setValueAtTime(160, t + 0.04);
+  o2.frequency.exponentialRampToValueAtTime(70, t + 0.18);
+  const e2 = a.ctx.createGain();
+  e2.gain.setValueAtTime(0.0, t + 0.04);
+  e2.gain.linearRampToValueAtTime(0.12, t + 0.05);
+  e2.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+  o2.connect(e2).connect(a.sfx);
+  o2.start(t + 0.04);
+  o2.stop(t + 0.24);
+}
+
+/** Refill (water source → canteen) — water filling a vessel, rising pitch. */
+export function playRefill(): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  const src = a.ctx.createBufferSource();
+  src.buffer = a.noiseBuffer;
+  src.playbackRate.value = 0.7;
+  const filter = a.ctx.createBiquadFilter();
+  filter.type = 'bandpass';
+  filter.frequency.setValueAtTime(400, t);
+  filter.frequency.exponentialRampToValueAtTime(900, t + 0.65);
+  filter.Q.value = 4;
+  const env = a.ctx.createGain();
+  env.gain.setValueAtTime(0.0, t);
+  env.gain.linearRampToValueAtTime(0.12, t + 0.05);
+  env.gain.setValueAtTime(0.12, t + 0.5);
+  env.gain.exponentialRampToValueAtTime(0.001, t + 0.75);
+  src.connect(filter).connect(env).connect(a.sfx);
+  src.start(t);
+  src.stop(t + 0.78);
+}
+
+/** Harvest (cactus snap) — short crackly snap. */
+export function playHarvest(): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  // Noise snap
+  const src = a.ctx.createBufferSource();
+  src.buffer = a.noiseBuffer;
+  src.playbackRate.value = 1.3;
+  const filter = a.ctx.createBiquadFilter();
+  filter.type = 'highpass';
+  filter.frequency.value = 1200;
+  const env = a.ctx.createGain();
+  env.gain.setValueAtTime(0.0, t);
+  env.gain.linearRampToValueAtTime(0.18, t + 0.005);
+  env.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+  src.connect(filter).connect(env).connect(a.sfx);
+  src.start(t);
+  src.stop(t + 0.18);
+  // Sub-crackle: low-freq thump from the cut
+  const osc = a.ctx.createOscillator();
+  osc.type = 'triangle';
+  osc.frequency.setValueAtTime(280, t);
+  osc.frequency.exponentialRampToValueAtTime(120, t + 0.12);
+  const oscEnv = a.ctx.createGain();
+  oscEnv.gain.setValueAtTime(0.0, t);
+  oscEnv.gain.linearRampToValueAtTime(0.10, t + 0.005);
+  oscEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+  osc.connect(oscEnv).connect(a.sfx);
+  osc.start(t);
+  osc.stop(t + 0.16);
+}
+
+/** Lizard squish — high chirp descending into a small crackle. */
+export function playLizardSquish(): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  // Chirp
+  const osc = a.ctx.createOscillator();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(1800, t);
+  osc.frequency.exponentialRampToValueAtTime(420, t + 0.20);
+  const env = a.ctx.createGain();
+  env.gain.setValueAtTime(0.0, t);
+  env.gain.linearRampToValueAtTime(0.10, t + 0.008);
+  env.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+  osc.connect(env).connect(a.sfx);
+  osc.start(t);
+  osc.stop(t + 0.25);
+  // Small crackle tail
+  const src = a.ctx.createBufferSource();
+  src.buffer = a.noiseBuffer;
+  src.playbackRate.value = 0.9;
+  const filter = a.ctx.createBiquadFilter();
+  filter.type = 'bandpass';
+  filter.frequency.value = 600;
+  filter.Q.value = 3;
+  const sEnv = a.ctx.createGain();
+  sEnv.gain.setValueAtTime(0.0, t + 0.06);
+  sEnv.gain.linearRampToValueAtTime(0.10, t + 0.07);
+  sEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+  src.connect(filter).connect(sEnv).connect(a.sfx);
+  src.start(t + 0.06);
+  src.stop(t + 0.24);
+}
+
+/** UI hover — very short soft tick. Use for menu button mouseenter. */
+export function playUiHover(): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  const osc = a.ctx.createOscillator();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(900, t);
+  const env = a.ctx.createGain();
+  env.gain.setValueAtTime(0.0, t);
+  env.gain.linearRampToValueAtTime(0.06, t + 0.003);
+  env.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
+  osc.connect(env).connect(a.sfx);
+  osc.start(t);
+  osc.stop(t + 0.08);
+}
+
+/** UI click — snappy two-stage tick. Menu button click / slider change. */
+export function playUiClick(): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  // High tick
+  const o1 = a.ctx.createOscillator();
+  o1.type = 'square';
+  o1.frequency.setValueAtTime(1400, t);
+  o1.frequency.exponentialRampToValueAtTime(900, t + 0.04);
+  const e1 = a.ctx.createGain();
+  e1.gain.setValueAtTime(0.0, t);
+  e1.gain.linearRampToValueAtTime(0.10, t + 0.003);
+  e1.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
+  o1.connect(e1).connect(a.sfx);
+  o1.start(t);
+  o1.stop(t + 0.07);
+  // Low tail
+  const o2 = a.ctx.createOscillator();
+  o2.type = 'sine';
+  o2.frequency.setValueAtTime(700, t);
+  const e2 = a.ctx.createGain();
+  e2.gain.setValueAtTime(0.0, t);
+  e2.gain.linearRampToValueAtTime(0.06, t + 0.005);
+  e2.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
+  o2.connect(e2).connect(a.sfx);
+  o2.start(t);
+  o2.stop(t + 0.10);
+}
+
+/** Inventory select — brief two-tone (low → higher). Slot switch. */
+export function playInventorySelect(): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  const o1 = a.ctx.createOscillator();
+  o1.type = 'sine';
+  o1.frequency.setValueAtTime(440, t);
+  const e1 = a.ctx.createGain();
+  e1.gain.setValueAtTime(0.0, t);
+  e1.gain.linearRampToValueAtTime(0.08, t + 0.005);
+  e1.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
+  o1.connect(e1).connect(a.sfx);
+  o1.start(t);
+  o1.stop(t + 0.08);
+
+  const o2 = a.ctx.createOscillator();
+  o2.type = 'sine';
+  o2.frequency.setValueAtTime(660, t + 0.04);
+  const e2 = a.ctx.createGain();
+  e2.gain.setValueAtTime(0.0, t + 0.04);
+  e2.gain.linearRampToValueAtTime(0.10, t + 0.045);
+  e2.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+  o2.connect(e2).connect(a.sfx);
+  o2.start(t + 0.04);
+  o2.stop(t + 0.14);
+}
+
+/** Equip — soft cloth-rustle (bandpass noise burst). Equipped item changes. */
+export function playEquip(): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  const src = a.ctx.createBufferSource();
+  src.buffer = a.noiseBuffer;
+  src.playbackRate.value = 0.9 + Math.random() * 0.2;
+  const filter = a.ctx.createBiquadFilter();
+  filter.type = 'bandpass';
+  filter.frequency.setValueAtTime(800, t);
+  filter.frequency.exponentialRampToValueAtTime(420, t + 0.18);
+  filter.Q.value = 2;
+  const env = a.ctx.createGain();
+  env.gain.setValueAtTime(0.0, t);
+  env.gain.linearRampToValueAtTime(0.13, t + 0.012);
+  env.gain.exponentialRampToValueAtTime(0.001, t + 0.20);
+  src.connect(filter).connect(env).connect(a.sfx);
+  src.start(t);
+  src.stop(t + 0.22);
+}
+
+/** Pour — filtered noise with downward pitch sweep (water sloshing). */
+export function playPour(): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  const src = a.ctx.createBufferSource();
+  src.buffer = a.noiseBuffer;
+  src.playbackRate.value = 0.75;
+  const filter = a.ctx.createBiquadFilter();
+  filter.type = 'bandpass';
+  filter.frequency.setValueAtTime(800, t);
+  filter.frequency.exponentialRampToValueAtTime(380, t + 0.50);
+  filter.Q.value = 3.5;
+  const env = a.ctx.createGain();
+  env.gain.setValueAtTime(0.0, t);
+  env.gain.linearRampToValueAtTime(0.10, t + 0.04);
+  env.gain.setValueAtTime(0.10, t + 0.36);
+  env.gain.exponentialRampToValueAtTime(0.001, t + 0.55);
+  src.connect(filter).connect(env).connect(a.sfx);
+  src.start(t);
+  src.stop(t + 0.58);
+}
+
 /** Death — slow low descending tone with rumble. */
 export function playDeath(): void {
   const a = getAudioInternals();

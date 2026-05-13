@@ -14,8 +14,20 @@
           <div class="stat-track"><div class="stat-fill" id="thirst-bar"></div></div>
         </div>
         <div class="stat-block">
-          <div class="stat-label">HEAT</div>
-          <div class="stat-track"><div class="stat-fill heat" id="heat-bar"></div></div>
+          <div class="stat-label">HUNGER</div>
+          <div class="stat-track"><div class="stat-fill hunger" id="hunger-bar"></div></div>
+        </div>
+        <div class="stat-block">
+          <div class="stat-label">TEMPERATURE</div>
+          <div class="stat-track temp-track">
+            <div class="stat-fill temp-cold" id="temp-cold-bar"></div>
+            <div class="stat-fill temp-heat" id="temp-heat-bar"></div>
+            <div class="temp-center"></div>
+          </div>
+        </div>
+        <div class="stat-block stamina-block">
+          <div class="stat-label">STAMINA</div>
+          <div class="stat-track thin"><div class="stat-fill stamina" id="stamina-bar"></div></div>
         </div>
         <div class="stat-block">
           <div class="stat-label">HEALTH</div>
@@ -23,8 +35,10 @@
         </div>
       </div>
       <div id="clock">06:00</div>
+      <div id="day-counter">day 1</div>
     </div>
     <div id="crosshair">·</div>
+    <div id="damage-vignette"></div>
 
     <div id="start-overlay" class="overlay">
       <div class="title">DUSTFALL</div>
@@ -40,6 +54,7 @@
     <div id="death-screen" class="overlay hidden">
       <div class="title death">YOU DIED</div>
       <div class="subtitle" id="death-cause">the sun took you</div>
+      <div id="days-survived-summary"></div>
       <button id="restart-btn">try again</button>
     </div>
 

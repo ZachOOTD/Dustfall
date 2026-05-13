@@ -1,11 +1,13 @@
 import * as THREE from 'three';
 import { Tuning, SkyColors } from '../config/tuning.ts';
+import { createGpuTimer, type GpuTimer } from './gpuTimer.ts';
 
 export interface SceneBundle {
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
   renderer: THREE.WebGLRenderer;
   clock: THREE.Clock;
+  gpuTimer: GpuTimer;
 }
 
 export function createScene(): SceneBundle {
@@ -42,5 +44,7 @@ export function createScene(): SceneBundle {
     renderer.setSize(window.innerWidth, window.innerHeight);
   });
 
-  return { scene, camera, renderer, clock: new THREE.Clock() };
+  const gpuTimer = createGpuTimer(renderer);
+
+  return { scene, camera, renderer, clock: new THREE.Clock(), gpuTimer };
 }

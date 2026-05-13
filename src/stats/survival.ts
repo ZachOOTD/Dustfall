@@ -1,4 +1,5 @@
-// Thirst / heat / health ticking + death triggers.
+// Thirst / temperature (two-way) / hunger / health ticking + death triggers.
+// Stamina is ticked in player/controller.ts (it depends on sprint state).
 
 import type { GameContext } from '../GameContext.ts';
 import { isPlaying } from '../GameContext.ts';
@@ -10,43 +11,72 @@ export function updateStats(ctx: GameContext, dt: number): void {
 
   const sprinting = isSprinting(ctx);
   const exposure = Math.max(0, ctx.time.sunHeight);
+  const t = ctx.stats;
 
-  // Heat — shelter halts sun-exposure heating and doubles passive cooling.
+  // Temperature — two-way.
+  //   Positive side: sun exposure heats you up (capped at +1 = heatstroke).
+  //   Negative side: cold nights without shelter chill you (down to -1 = freeze).
+  //   Shelter pulls you toward 0 from either side.
   if (ctx.player.inShelter) {
-    ctx.stats.heat = Math.max(0, ctx.stats.heat - Tuning.HEAT_COOL_PER_SEC * 2 * dt);
+    if (t.temperature > 0) {
+      t.temperature = Math.max(0, t.temperature - Tuning.HEAT_COOL_PER_SEC * 2 * dt);
+    } else if (t.temperature < 0) {
+      t.temperature = Math.min(0, t.temperature + Tuning.COLD_SHELTER_RECOVER * dt);
+    }
   } else if (exposure > 0.2) {
-    ctx.stats.heat = Math.min(
+    // Sun is up — heating
+    t.temperature = Math.min(
       1,
-      ctx.stats.heat + Tuning.HEAT_GAIN_PER_SEC * dt * exposure,
+      t.temperature + Tuning.HEAT_GAIN_PER_SEC * dt * exposure,
+    );
+  } else if (exposure <= 0.0) {
+    // Sun is down (night) — chilling
+    t.temperature = Math.max(
+      -1,
+      t.temperature - Tuning.COLD_NIGHT_DRAIN * dt,
     );
   } else {
-    ctx.stats.heat = Math.max(0, ctx.stats.heat - Tuning.HEAT_COOL_PER_SEC * dt);
+    // Twilight — drift toward 0
+    if (t.temperature > 0) {
+      t.temperature = Math.max(0, t.temperature - Tuning.HEAT_COOL_PER_SEC * dt);
+    } else if (t.temperature < 0) {
+      t.temperature = Math.min(0, t.temperature + Tuning.HEAT_COOL_PER_SEC * dt);
+    }
   }
 
-  // Thirst — sandstorms accelerate dehydration too
+  // Thirst — sandstorms + sprint + heat all accelerate.
   const stormFactor = 1 + ctx.weather.intensity * 0.30;
+  const heatBoost = Math.max(0, t.temperature); // only positive temp drives thirst
   const thirstMul =
     (sprinting ? Tuning.THIRST_SPRINT_FACTOR : 1) *
-    (1 + ctx.stats.heat * (Tuning.THIRST_HEAT_FACTOR - 1)) *
+    (1 + heatBoost * (Tuning.THIRST_HEAT_FACTOR - 1)) *
     stormFactor;
-  ctx.stats.thirst = Math.max(
-    0,
-    ctx.stats.thirst - Tuning.THIRST_DRAIN_PER_SEC * dt * thirstMul,
-  );
+  t.thirst = Math.max(0, t.thirst - Tuning.THIRST_DRAIN_PER_SEC * dt * thirstMul);
 
-  // Damage
-  if (ctx.stats.thirst <= 0) {
-    ctx.stats.health = Math.max(0, ctx.stats.health - Tuning.DEHYDRATION_DAMAGE * dt);
+  // Hunger — steady drain regardless of activity.
+  t.hunger = Math.max(0, t.hunger - Tuning.HUNGER_DRAIN_PER_SEC * dt);
+
+  // Damage from each lethal stat
+  if (t.thirst <= 0) {
+    t.health = Math.max(0, t.health - Tuning.DEHYDRATION_DAMAGE * dt);
   }
-  if (ctx.stats.heat >= 1) {
-    ctx.stats.health = Math.max(0, ctx.stats.health - Tuning.HEATSTROKE_DAMAGE * dt);
+  if (t.temperature >= 1) {
+    t.health = Math.max(0, t.health - Tuning.HEATSTROKE_DAMAGE * dt);
+  }
+  if (t.temperature <= -1) {
+    t.health = Math.max(0, t.health - Tuning.COLD_DAMAGE_PER_SEC * dt);
+  }
+  if (t.hunger <= 0) {
+    t.health = Math.max(0, t.health - Tuning.HUNGER_STARVATION_DAMAGE * dt);
   }
 
-  // Death
-  if (ctx.stats.health <= 0) {
+  // Death — pick the most severe cause
+  if (t.health <= 0) {
     let cause = 'the desert took you';
-    if (ctx.stats.heat >= 1) cause = 'the sun took you';
-    else if (ctx.stats.thirst <= 0) cause = 'the thirst took you';
+    if (t.temperature >= 1) cause = 'the sun took you';
+    else if (t.temperature <= -1) cause = 'the cold took you';
+    else if (t.thirst <= 0) cause = 'the thirst took you';
+    else if (t.hunger <= 0) cause = 'the hunger took you';
     die(ctx, cause);
   }
 }
@@ -54,7 +84,9 @@ export function updateStats(ctx: GameContext, dt: number): void {
 export function die(ctx: GameContext, cause: string): void {
   if (ctx.stats.dead) return;
   ctx.stats.dead = true;
-  ctx.ui.setDeathCause(cause);
+  // daysSurvived starts at 0 (= day 1). On death we show "you survived N days"
+  // where N is days fully + the current day, matching the in-game "day N" HUD.
+  ctx.ui.setDeathCause(cause, ctx.time.daysSurvived + 1);
   ctx.input.controls.unlock();
   playDeath();
 }
@@ -66,6 +98,7 @@ function isSprinting(ctx: GameContext): boolean {
   return (
     (ctx.input.keys['ShiftLeft'] || ctx.input.keys['ShiftRight']) &&
     ctx.stats.thirst > 0.02 &&
+    ctx.stats.stamina > Tuning.STAMINA_SPRINT_THRESHOLD &&
     moving
   );
 }

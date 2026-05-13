@@ -11,10 +11,18 @@ declare global {
 
 interface DebugApi {
   setTime: (t: number) => void;
-  setStats: (s: { thirst?: number; heat?: number; health?: number }) => void;
+  setStats: (s: {
+    thirst?: number;
+    temperature?: number;
+    hunger?: number;
+    stamina?: number;
+    health?: number;
+  }) => void;
   state: () => {
     thirst: number;
-    heat: number;
+    temperature: number;
+    hunger: number;
+    stamina: number;
     health: number;
     dayTime: number;
     playerDead: boolean;
@@ -36,12 +44,16 @@ export function installDebugPanel(ctx: GameContext): void {
     setTime: (t) => { ctx.time.dayTime = t; },
     setStats: (s) => {
       if (s.thirst !== undefined) ctx.stats.thirst = s.thirst;
-      if (s.heat !== undefined) ctx.stats.heat = s.heat;
+      if (s.temperature !== undefined) ctx.stats.temperature = s.temperature;
+      if (s.hunger !== undefined) ctx.stats.hunger = s.hunger;
+      if (s.stamina !== undefined) ctx.stats.stamina = s.stamina;
       if (s.health !== undefined) ctx.stats.health = s.health;
     },
     state: () => ({
       thirst: ctx.stats.thirst,
-      heat: ctx.stats.heat,
+      temperature: ctx.stats.temperature,
+      hunger: ctx.stats.hunger,
+      stamina: ctx.stats.stamina,
       health: ctx.stats.health,
       dayTime: ctx.time.dayTime,
       playerDead: ctx.stats.dead,

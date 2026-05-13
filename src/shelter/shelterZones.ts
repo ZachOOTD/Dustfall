@@ -23,16 +23,25 @@ export function createShelterRegistry(): ShelterRegistry {
   return { zones: [] };
 }
 
-/** Register a shelter zone at a world position with given half-extents. */
+/** Register a shelter zone at a world position with given half-extents.
+ *  Returns the zone reference so callers can remove it later. */
 export function addShelterZone(
   reg: ShelterRegistry,
   pos: THREE.Vector3 | { x: number; y: number; z: number },
   half: { x: number; y: number; z: number },
-): void {
-  reg.zones.push({
+): ShelterZone {
+  const zone: ShelterZone = {
     cx: pos.x, cy: pos.y, cz: pos.z,
     hx: half.x, hy: half.y, hz: half.z,
-  });
+  };
+  reg.zones.push(zone);
+  return zone;
+}
+
+/** Remove a previously-added zone (used when a fire burns out, tent breaks, etc). */
+export function removeShelterZone(reg: ShelterRegistry, zone: ShelterZone): void {
+  const idx = reg.zones.indexOf(zone);
+  if (idx >= 0) reg.zones.splice(idx, 1);
 }
 
 /** Returns true if the world point (x, y, z) is inside any zone. */

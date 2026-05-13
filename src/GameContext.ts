@@ -3,6 +3,7 @@
 
 import type * as THREE from 'three';
 import type { InputBundle } from './core/input.ts';
+import type { GpuTimer } from './core/gpuTimer.ts';
 import type { PhysicsBundle } from './physics/world.ts';
 import type { PlayerBody } from './physics/bodies.ts';
 import type { Terrain } from './world/terrain.ts';
@@ -12,6 +13,13 @@ import type { InventoryState } from './inventory/types.ts';
 import type { ShelterRegistry } from './shelter/shelterZones.ts';
 import type { Raider } from './enemies/raider.ts';
 import type { Weather } from './world/weather.ts';
+import type { ViewModel } from './player/viewModel.ts';
+import type { WaterSource } from './world/waterSources.ts';
+import type { Cactus } from './world/cactus.ts';
+import type { Lizard } from './enemies/lizard.ts';
+import type { LootContainer } from './world/lootContainers.ts';
+import type { Fire } from './world/fire.ts';
+import type { Tent } from './world/tent.ts';
 
 export interface GameContext {
   three: {
@@ -19,6 +27,7 @@ export interface GameContext {
     camera: THREE.PerspectiveCamera;
     renderer: THREE.WebGLRenderer;
     clock: THREE.Clock;
+    gpuTimer: GpuTimer;
   };
   lights: {
     sun: THREE.DirectionalLight;
@@ -30,11 +39,14 @@ export interface GameContext {
     sunHeight: number;   // -1..1, refreshed each frame by lighting.update
     sunDir: THREE.Vector3; // unit vector from world origin TOWARD the sun
     elapsed: number;     // wall-clock seconds since boot, for animation phase
+    daysSurvived: number; // increments when dayTime wraps past 1.0 → 0
   };
   stats: {
-    thirst: number;  // 0..1
-    heat: number;    // 0..1
-    health: number;  // 0..1
+    thirst: number;        // 0..1
+    temperature: number;   // -1..+1, 0 = comfortable, +1 = heatstroke, -1 = freezing
+    hunger: number;        // 0..1
+    stamina: number;       // 0..1
+    health: number;        // 0..1
     dead: boolean;
   };
   input: InputBundle;
@@ -44,6 +56,7 @@ export interface GameContext {
     velocityY: number;     // vertical velocity for gravity (m/s)
     onGround: boolean;
     inShelter: boolean;    // set each frame by shelter system
+    viewModel: ViewModel | null;
   };
   pickups: {
     list: Pickup[];
@@ -51,17 +64,26 @@ export interface GameContext {
   inventory: InventoryState;
   ui: {
     showToast: (text: string) => void;
-    setDeathCause: (cause: string) => void;
+    setDeathCause: (cause: string, daysSurvived?: number) => void;
   };
   physics: PhysicsBundle;
   terrain: Terrain;
   assets: AssetRegistry;
   shelter: ShelterRegistry;
   raiders: Raider[];
+  lizards: Lizard[];
+  waterSources: { list: WaterSource[] };
+  cacti: { list: Cactus[] };
+  lootContainers: { list: LootContainer[]; open: LootContainer | null };
+  fires: { list: Fire[] };
+  tents: { list: Tent[] };
   weather: Weather;
   flags: {
     started: boolean;     // true once the player has clicked into the game
     paused: boolean;      // true while the pause overlay is visible
+    /** Wall-clock-elapsed timestamp until which the damage vignette is shown.
+     *  Raider hits set this to `ctx.time.elapsed + 0.33`. HUD reads it. */
+    damageFlashUntil: number;
   };
 }
 

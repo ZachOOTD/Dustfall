@@ -8,11 +8,15 @@ import type { Terrain } from '../world/terrain.ts';
 import type { AssetRegistry } from '../assets/loader.ts';
 import { cloneAsset } from '../assets/loader.ts';
 import { Tuning } from '../config/tuning.ts';
-import type { ItemId } from '../inventory/types.ts';
+import type { ItemId, ItemMeta } from '../inventory/types.ts';
+import { getItemDef } from '../inventory/items.ts';
 
 export interface Pickup {
   id: number;                 // unique handle for hover/take
   itemId: ItemId;
+  /** Optional meta attached on world-spawn (e.g. canteen fillLevel). Passes
+   *  through to addItem on take. */
+  meta?: ItemMeta;
   mesh: THREE.Object3D;
   pos: THREE.Vector3;         // resting position; bob is added each frame
   bobPhase: number;
@@ -108,10 +112,13 @@ export function spawnCanteens(
     mesh.position.set(x, restY, z);
     mesh.rotation.y = rand() * Math.PI * 2;
 
+    // Pickups are small (~10cm) — their shadows are invisible against the
+    // dune and add to the shadow caster count for no visual gain.
+    mesh.userData.noShadow = true;
     mesh.traverse((o) => {
       const m = o as THREE.Mesh;
       if (m.isMesh) {
-        m.castShadow = true;
+        m.castShadow = false;
         m.receiveShadow = true;
       }
     });
@@ -123,6 +130,82 @@ export function spawnCanteens(
     list.push({
       id: pickupId,
       itemId: 'canteen',
+      meta: { fillLevel: 1 },  // fresh canteens start full
+      mesh,
+      pos: new THREE.Vector3(x, restY, z),
+      bobPhase: rand() * Math.PI * 2,
+      hovered: false,
+    });
+  }
+  return list;
+}
+
+// ────────────────────────────────────────────────────────────────
+// Branch pickup — small brown stick scattered across the world.
+// Used as fire fuel (aim at fire + E with branch selected adds 30s).
+// ────────────────────────────────────────────────────────────────
+function makePrimitiveBranch(rand: Rng): THREE.Group {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({
+    color: 0x5a3a22, roughness: 0.95, flatShading: true,
+  });
+  const len = 0.28 + rand() * 0.10;
+  const stick = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.018, 0.022, len, 6),
+    mat,
+  );
+  stick.rotation.z = Math.PI / 2;
+  g.add(stick);
+  // Small offshoot twig
+  if (rand() < 0.6) {
+    const twig = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.008, 0.012, 0.08, 4),
+      mat,
+    );
+    twig.position.set((rand() - 0.5) * len * 0.6, 0, 0);
+    twig.rotation.z = Math.PI / 2 + (rand() - 0.5) * 0.7;
+    g.add(twig);
+  }
+  return g;
+}
+
+export function spawnBranches(
+  scene: THREE.Scene,
+  terrain: Terrain,
+  rand: Rng,
+  count: number = 30,
+): Pickup[] {
+  const list: Pickup[] = [];
+  for (let i = 0; i < count; i++) {
+    const radius = 6 + rand() * 200;
+    const angle = rand() * Math.PI * 2;
+    const x = Math.cos(angle) * radius;
+    const z = Math.sin(angle) * radius;
+    const groundY = terrain.heightAt(x, z);
+
+    const mesh = makePrimitiveBranch(rand);
+    const restY = groundY + 0.08;
+    mesh.position.set(x, restY, z);
+    mesh.rotation.y = rand() * Math.PI * 2;
+
+    // Thin sticks — their shadow contribution is invisible from a meter+
+    // away. Skip the cost.
+    mesh.userData.noShadow = true;
+    mesh.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (m.isMesh) {
+        m.castShadow = false;
+        m.receiveShadow = true;
+      }
+    });
+
+    const pickupId = _nextId++;
+    tagPickupMeshes(mesh, pickupId);
+    scene.add(mesh);
+
+    list.push({
+      id: pickupId,
+      itemId: 'branch',
       mesh,
       pos: new THREE.Vector3(x, restY, z),
       bobPhase: rand() * Math.PI * 2,
@@ -146,6 +229,57 @@ export function bobPickups(ctx: import('../GameContext.ts').GameContext, dt: num
     p.mesh.position.y = p.pos.y + bob + (p.hovered ? 0.04 : 0);
     p.mesh.rotation.y += 0.4 * dt;
   }
+}
+
+/** Spawn a Pickup at a given world position from any ItemId — used for
+ *  player drops. Reuses the item's viewmodel mesh (scaled up) as the world
+ *  visual; falls back to a primitive cube if no makeViewModel is defined. */
+export function spawnDroppedPickup(
+  scene: THREE.Scene,
+  terrain: Terrain,
+  pos: { x: number; z: number },
+  itemId: ItemId,
+  meta?: ItemMeta,
+): Pickup {
+  const def = getItemDef(itemId);
+  let mesh: THREE.Object3D;
+  if (def.makeViewModel) {
+    mesh = def.makeViewModel();
+    mesh.scale.set(1.5, 1.5, 1.5);
+  } else {
+    const fallback = new THREE.Mesh(
+      new THREE.BoxGeometry(0.12, 0.08, 0.10),
+      new THREE.MeshStandardMaterial({ color: 0x8a7a5e, roughness: 0.9 }),
+    );
+    mesh = fallback;
+  }
+  const groundY = terrain.heightAt(pos.x, pos.z);
+  const restY = groundY + 0.15;
+  mesh.position.set(pos.x, restY, pos.z);
+  mesh.rotation.y = Math.random() * Math.PI * 2;
+  // Dropped items inherit the pickup no-shadow rule.
+  mesh.userData.noShadow = true;
+  mesh.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (m.isMesh) {
+      m.castShadow = false;
+      m.receiveShadow = true;
+    }
+  });
+
+  const pickupId = _nextId++;
+  tagPickupMeshes(mesh, pickupId);
+  scene.add(mesh);
+
+  return {
+    id: pickupId,
+    itemId,
+    meta: meta ? { ...meta } : undefined,
+    mesh,
+    pos: new THREE.Vector3(pos.x, restY, pos.z),
+    bobPhase: Math.random() * Math.PI * 2,
+    hovered: false,
+  };
 }
 
 /** Find a pickup by its userData.pickupId. */

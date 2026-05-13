@@ -2,9 +2,16 @@
 // "settings" link to the existing start overlay (which already has the title
 // art); a real multi-button main menu can come later.
 
+import * as THREE from 'three';
 import type { GameContext } from '../GameContext.ts';
-import { loadSettings, saveSettings, type Settings } from '../core/settings.ts';
-import { setMasterVolume } from '../audio/audio.ts';
+import {
+  loadSettings,
+  saveSettings,
+  presetValues,
+  type Settings,
+  type RenderQuality,
+} from '../core/settings.ts';
+import { setMasterVolume, playUiHover, playUiClick } from '../audio/audio.ts';
 
 let _settings: Settings = loadSettings();
 
@@ -15,6 +22,8 @@ interface SettingsRefs {
   volumeVal: HTMLSpanElement;
   fov: HTMLInputElement;
   fovVal: HTMLSpanElement;
+  renderQuality: HTMLSelectElement;
+  shadows: HTMLInputElement;
 }
 
 let _ctx: GameContext | null = null;
@@ -35,6 +44,7 @@ function makeButton(label: string, action: string): HTMLButtonElement {
   b.className = 'menu-btn';
   b.dataset.action = action;
   b.textContent = label;
+  b.addEventListener('mouseenter', playUiHover);
   return b;
 }
 
@@ -72,6 +82,56 @@ function makeSettingsRow(
   return row;
 }
 
+function makeSettingsDropdown(
+  labelText: string,
+  selectId: string,
+  options: ReadonlyArray<readonly [string, string]>,    // [value, label]
+): HTMLDivElement {
+  const row = document.createElement('div');
+  row.className = 'settings-row';
+
+  const label = document.createElement('label');
+  label.textContent = labelText;
+  row.appendChild(label);
+
+  const select = document.createElement('select');
+  select.id = selectId;
+  for (const [value, optLabel] of options) {
+    const opt = document.createElement('option');
+    opt.value = value;
+    opt.textContent = optLabel;
+    select.appendChild(opt);
+  }
+  row.appendChild(select);
+
+  // Empty value cell to align with the slider rows' grid.
+  const val = document.createElement('span');
+  val.className = 'settings-val';
+  row.appendChild(val);
+
+  return row;
+}
+
+function makeSettingsToggle(labelText: string, inputId: string): HTMLDivElement {
+  const row = document.createElement('div');
+  row.className = 'settings-row';
+
+  const label = document.createElement('label');
+  label.textContent = labelText;
+  row.appendChild(label);
+
+  const input = document.createElement('input');
+  input.type = 'checkbox';
+  input.id = inputId;
+  row.appendChild(input);
+
+  const filler = document.createElement('span');
+  filler.className = 'settings-val';
+  row.appendChild(filler);
+
+  return row;
+}
+
 // ─────────────────────────────────────────────────────────────
 // Public API
 // ─────────────────────────────────────────────────────────────
@@ -85,8 +145,10 @@ export function createMenus(ctx: GameContext): void {
     const link = document.createElement('div');
     link.className = 'menu-link';
     link.textContent = 'settings';
+    link.addEventListener('mouseenter', playUiHover);
     link.addEventListener('click', (e) => {
       e.stopPropagation();
+      playUiClick();
       openSettings();
     });
     const cta = startOverlay.querySelector('.cta');
@@ -108,6 +170,7 @@ export function createMenus(ctx: GameContext): void {
   ] as const) {
     const b = makeButton(label, action);
     b.addEventListener('click', () => {
+      playUiClick();
       if (action === 'resume') resumeFromPause();
       else if (action === 'settings') openSettings();
       else if (action === 'quit') location.reload();
@@ -135,10 +198,19 @@ export function createMenus(ctx: GameContext): void {
   rows.appendChild(makeSettingsRow('field of view', 'set-fov', 'set-fov-val', {
     min: '60', max: '100', step: '1',
   }));
+  rows.appendChild(makeSettingsDropdown('render quality', 'set-quality', [
+    ['low', 'low'],
+    ['medium', 'medium'],
+    ['high', 'high'],
+  ]));
+  rows.appendChild(makeSettingsToggle('shadows', 'set-shadows'));
   sp.appendChild(rows);
 
   const closeBtn = makeButton('close', 'close');
-  closeBtn.addEventListener('click', closeSettings);
+  closeBtn.addEventListener('click', () => {
+    playUiClick();
+    closeSettings();
+  });
   sp.appendChild(closeBtn);
 
   document.body.appendChild(sp);
@@ -151,6 +223,8 @@ export function createMenus(ctx: GameContext): void {
     volumeVal:      sp.querySelector<HTMLSpanElement>('#set-vol-val')!,
     fov:            sp.querySelector<HTMLInputElement>('#set-fov')!,
     fovVal:         sp.querySelector<HTMLSpanElement>('#set-fov-val')!,
+    renderQuality:  sp.querySelector<HTMLSelectElement>('#set-quality')!,
+    shadows:        sp.querySelector<HTMLInputElement>('#set-shadows')!,
   };
 
   // Reflect saved settings into sliders
@@ -160,6 +234,8 @@ export function createMenus(ctx: GameContext): void {
   _settingsRefs.volumeVal.textContent = _settings.masterVolume.toFixed(2);
   _settingsRefs.fov.value = String(_settings.fov);
   _settingsRefs.fovVal.textContent = String(_settings.fov);
+  _settingsRefs.renderQuality.value = _settings.renderQuality;
+  _settingsRefs.shadows.checked = _settings.shadowsEnabled;
 
   // Live-apply on drag, save on release.
   _settingsRefs.sensitivity.addEventListener('input', () => {
@@ -167,21 +243,52 @@ export function createMenus(ctx: GameContext): void {
     _settingsRefs!.sensitivityVal.textContent = _settings.sensitivity.toFixed(2);
     applySettings(_settings);
   });
-  _settingsRefs.sensitivity.addEventListener('change', () => saveSettings(_settings));
+  _settingsRefs.sensitivity.addEventListener('mouseenter', playUiHover);
+  _settingsRefs.sensitivity.addEventListener('change', () => {
+    playUiClick();
+    saveSettings(_settings);
+  });
 
   _settingsRefs.volume.addEventListener('input', () => {
     _settings.masterVolume = parseFloat(_settingsRefs!.volume.value);
     _settingsRefs!.volumeVal.textContent = _settings.masterVolume.toFixed(2);
     applySettings(_settings);
   });
-  _settingsRefs.volume.addEventListener('change', () => saveSettings(_settings));
+  _settingsRefs.volume.addEventListener('mouseenter', playUiHover);
+  _settingsRefs.volume.addEventListener('change', () => {
+    playUiClick();
+    saveSettings(_settings);
+  });
 
   _settingsRefs.fov.addEventListener('input', () => {
     _settings.fov = parseInt(_settingsRefs!.fov.value, 10);
     _settingsRefs!.fovVal.textContent = String(_settings.fov);
     applySettings(_settings);
   });
-  _settingsRefs.fov.addEventListener('change', () => saveSettings(_settings));
+  _settingsRefs.fov.addEventListener('mouseenter', playUiHover);
+  _settingsRefs.fov.addEventListener('change', () => {
+    playUiClick();
+    saveSettings(_settings);
+  });
+
+  // Render quality: applies + persists on change. No live "input" event for
+  // <select> — change fires once per selection.
+  _settingsRefs.renderQuality.addEventListener('mouseenter', playUiHover);
+  _settingsRefs.renderQuality.addEventListener('change', () => {
+    _settings.renderQuality = _settingsRefs!.renderQuality.value as RenderQuality;
+    playUiClick();
+    applySettings(_settings);
+    saveSettings(_settings);
+  });
+
+  // Shadows on/off — biggest single GPU lever.
+  _settingsRefs.shadows.addEventListener('mouseenter', playUiHover);
+  _settingsRefs.shadows.addEventListener('change', () => {
+    _settings.shadowsEnabled = _settingsRefs!.shadows.checked;
+    playUiClick();
+    applySettings(_settings);
+    saveSettings(_settings);
+  });
 }
 
 function applySettings(s: Settings): void {
@@ -194,6 +301,48 @@ function applySettings(s: Settings): void {
     _ctx.three.camera.updateProjectionMatrix();
   }
   setMasterVolume(s.masterVolume);
+  applyRenderQuality(_ctx, s.renderQuality);
+  applyShadows(_ctx, s.shadowsEnabled);
+}
+
+/** Toggle sun shadow casting. Off = scene renders once per frame (vs twice).
+ *  Biggest single GPU lever in the game. Regenerates shadow map on re-enable. */
+function applyShadows(ctx: GameContext, enabled: boolean): void {
+  const sun = ctx.lights.sun;
+  if (sun.castShadow === enabled) return;
+  sun.castShadow = enabled;
+  // Re-enabling: dispose the existing (possibly stale) map and let Three.js
+  // regenerate it. Disabling: leave it alone — costs nothing while unused.
+  if (enabled) {
+    const sm = sun.shadow.map;
+    if (sm) {
+      sm.dispose();
+      (sun.shadow as unknown as { map: THREE.WebGLRenderTarget | null }).map = null;
+    }
+  }
+}
+
+/** Live-apply a graphics quality preset: pixel ratio + shadow map size.
+ *  Both are dynamic; no renderer recreation needed. */
+function applyRenderQuality(ctx: GameContext, q: RenderQuality): void {
+  const values = presetValues(q, window.devicePixelRatio);
+  const renderer = ctx.three.renderer;
+  // Order: setPixelRatio BEFORE setSize so the framebuffer adopts the new ratio.
+  renderer.setPixelRatio(values.pixelRatio);
+  renderer.setSize(window.innerWidth, window.innerHeight);
+
+  // Shadow map: change size + force Three.js to regenerate by disposing the
+  // current map and clearing the ref. Cast to nullable because Three's types
+  // say `.map` is non-null after init, but null-assignment forces regen.
+  const sun = ctx.lights.sun;
+  if (sun.shadow.mapSize.x !== values.shadowMapSize) {
+    sun.shadow.mapSize.set(values.shadowMapSize, values.shadowMapSize);
+    const sm = sun.shadow.map;
+    if (sm) {
+      sm.dispose();
+      (sun.shadow as unknown as { map: THREE.WebGLRenderTarget | null }).map = null;
+    }
+  }
 }
 
 export function openSettings(): void {
@@ -209,7 +358,7 @@ export function closeSettings(): void {
   saveSettings(_settings);
 }
 
-function resumeFromPause(): void {
+export function resumeFromPause(): void {
   if (!_ctx) return;
   if (_pauseOverlay) _pauseOverlay.classList.add('hidden');
   if (_settingsPanel) _settingsPanel.classList.add('hidden');

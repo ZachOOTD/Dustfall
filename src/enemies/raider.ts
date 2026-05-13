@@ -10,7 +10,7 @@ import type { GameContext } from '../GameContext.ts';
 import { isPlaying } from '../GameContext.ts';
 import type { Terrain } from '../world/terrain.ts';
 import { die } from '../stats/survival.ts';
-import { playFootstep, playHit } from '../audio/audio.ts';
+import { playFootstep, playHit, playPlayerHurt } from '../audio/audio.ts';
 
 export type RaiderState =
   | 'patrol'
@@ -416,6 +416,8 @@ function performAttack(r: Raider, ctx: GameContext, distToPlayer: number): void 
   if (distToPlayer <= ATTACK_RANGE) {
     ctx.stats.health = Math.max(0, ctx.stats.health - ATTACK_DAMAGE);
     playHit(0.85);
+    playPlayerHurt();
+    ctx.flags.damageFlashUntil = ctx.time.elapsed + 0.33;
     ctx.ui.showToast('the blade catches you');
     if (ctx.stats.health <= 0) die(ctx, 'the raider took you');
   }

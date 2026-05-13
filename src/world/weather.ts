@@ -120,6 +120,12 @@ export function updateWeather(ctx: GameContext, dt: number): void {
   fog.far = 170 - 135 * w.intensity;
 
   // Particles: opacity rides intensity; positions drift around the camera.
+  // Visibility gate: skip the entire Points draw call when the storm is calm.
+  // Even at opacity=0, the renderer still processes 2000 points every frame.
+  const particlesVisible = w.intensity > 0.01;
+  if (w.particles.visible !== particlesVisible) {
+    w.particles.visible = particlesVisible;
+  }
   w.particleMat.opacity = w.intensity * 0.6;
   if (w.intensity > 0.01) {
     _camPos.copy(w.cameraRef.position);

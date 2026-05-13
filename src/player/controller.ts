@@ -32,8 +32,18 @@ export function updatePlayer(ctx: GameContext, dt: number): void {
   const r = (keys['KeyD'] ? 1 : 0) - (keys['KeyA'] ? 1 : 0);
   const moving = f !== 0 || r !== 0;
   const sprinting =
-    (keys['ShiftLeft'] || keys['ShiftRight']) && ctx.stats.thirst > 0.02 && moving;
+    (keys['ShiftLeft'] || keys['ShiftRight']) &&
+    ctx.stats.thirst > 0.02 &&
+    ctx.stats.stamina > Tuning.STAMINA_SPRINT_THRESHOLD &&
+    moving;
   const speed = Tuning.WALK_SPEED * (sprinting ? Tuning.SPRINT_MULTIPLIER : 1);
+
+  // Stamina: drains while sprinting; recovers otherwise.
+  if (sprinting) {
+    ctx.stats.stamina = Math.max(0, ctx.stats.stamina - Tuning.STAMINA_DRAIN_SPRINT * dt);
+  } else {
+    ctx.stats.stamina = Math.min(1, ctx.stats.stamina + Tuning.STAMINA_RECOVER_PER_SEC * dt);
+  }
 
   // Horizontal direction in camera-yaw space (no pitch).
   ctx.three.camera.getWorldDirection(fwd);
@@ -47,6 +57,11 @@ export function updatePlayer(ctx: GameContext, dt: number): void {
   desired.addScaledVector(right, r);
   if (desired.lengthSq() > 0) desired.normalize();
   desired.multiplyScalar(speed * dt);
+
+  // Jump: Space while grounded kicks velocityY upward; gravity does the rest.
+  if (ctx.player.onGround && ctx.input.pressed.has('Space')) {
+    ctx.player.velocityY = Tuning.JUMP_VELOCITY;
+  }
 
   // Gravity
   ctx.player.velocityY += GRAVITY * dt;
@@ -81,7 +96,12 @@ export function updatePlayer(ctx: GameContext, dt: number): void {
   }
 
   // Day/night clock advances only while playing.
+  const prevDayTime = ctx.time.dayTime;
   ctx.time.dayTime = (ctx.time.dayTime + dt / Tuning.DAY_LENGTH_SECONDS) % 1;
+  // Detect wrap (1.0 → 0): prevDayTime was near 1, new value is near 0.
+  if (prevDayTime > 0.9 && ctx.time.dayTime < 0.1) {
+    ctx.time.daysSurvived++;
+  }
 
   syncCameraToBody(ctx);
 }

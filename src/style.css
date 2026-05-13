@@ -61,12 +61,59 @@ canvas {
   transition: width 0.15s linear;
 }
 
-.stat-fill.heat {
-  background: #d97a4a;
+.stat-fill.hunger {
+  background: #c9a26a;
+}
+
+.stat-fill.stamina {
+  background: #8aa8c8;
 }
 
 .stat-fill.health {
   background: #c84a3a;
+}
+
+/* Stamina bar: thinner than the others */
+.stat-track.thin {
+  height: 2px;
+}
+
+/* Tighter spacing for the stamina row (paired with thirst conceptually) */
+.stamina-block {
+  margin-top: -4px;
+}
+
+/* Bipolar temperature bar — cold fills left from center, heat fills right */
+.stat-track.temp-track {
+  position: relative;
+  background: rgba(232, 220, 192, 0.10);
+}
+
+.temp-track .stat-fill {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  width: 0;
+}
+
+.temp-track .stat-fill.temp-cold {
+  right: 50%;
+  background: #5a7a9a;
+}
+
+.temp-track .stat-fill.temp-heat {
+  left: 50%;
+  background: #d97a4a;
+}
+
+.temp-track .temp-center {
+  position: absolute;
+  left: 50%;
+  top: -2px;
+  height: 7px;
+  width: 1px;
+  background: rgba(232, 220, 192, 0.55);
+  pointer-events: none;
 }
 
 #clock {
@@ -76,6 +123,18 @@ canvas {
   font-size: 18px;
   letter-spacing: 4px;
   color: #b8a888;
+  font-weight: 300;
+}
+
+#day-counter {
+  position: absolute;
+  top: 58px;
+  right: 32px;
+  font-family: 'Cormorant Garamond', serif;
+  font-style: italic;
+  font-size: 14px;
+  letter-spacing: 3px;
+  color: #8a7a5e;
   font-weight: 300;
 }
 
@@ -207,6 +266,25 @@ canvas {
 
 .hotbar-slot.empty .glyph {
   opacity: 0.0;
+}
+
+.hotbar-slot .glyph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+}
+
+.hotbar-slot .glyph svg {
+  width: 28px;
+  height: 28px;
+  color: rgba(232, 220, 192, 0.78);
+  display: block;
+}
+
+.hotbar-slot.selected .glyph svg {
+  color: #e8dcc0;
 }
 
 .hotbar-slot .keybind {
@@ -402,6 +480,371 @@ canvas {
   letter-spacing: 1px;
 }
 
+.settings-row select {
+  appearance: none;
+  -webkit-appearance: none;
+  background: rgba(8, 6, 4, 0.55);
+  border: 1px solid rgba(232, 220, 192, 0.30);
+  color: #e8dcc0;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 2px;
+  padding: 6px 12px;
+  cursor: pointer;
+  outline: none;
+  text-transform: lowercase;
+}
+
+.settings-row select:hover {
+  border-color: #e8dcc0;
+}
+
+.settings-row select option {
+  background: #1a140e;
+  color: #e8dcc0;
+}
+
+.settings-row input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  background: rgba(8, 6, 4, 0.55);
+  border: 1px solid rgba(232, 220, 192, 0.30);
+  cursor: pointer;
+  margin: 0;
+  outline: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+}
+
+.settings-row input[type="checkbox"]:hover {
+  border-color: #e8dcc0;
+}
+
+.settings-row input[type="checkbox"]:checked::after {
+  content: '';
+  display: block;
+  width: 10px;
+  height: 10px;
+  background: #e8dcc0;
+}
+
+/* Perf HUD: software-render warning row */
+.perf-row.warning .perf-v {
+  color: #c84a3a;
+}
+
+/* ──────────────────────────────────────────────────────────
+   Loot menu (overlay on top of pause overlay)
+   ────────────────────────────────────────────────────────── */
+#loot-menu {
+  z-index: 200;             /* above pause overlay (z=100) */
+  background: rgba(8, 6, 4, 0.96);
+  cursor: default;
+  gap: 14px;
+}
+
+.loot-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 24px;
+  margin-bottom: 24px;
+  width: 380px;
+  pointer-events: auto;
+}
+
+.loot-row {
+  display: grid;
+  grid-template-columns: 36px 1fr auto;
+  align-items: center;
+  gap: 14px;
+  background: rgba(232, 220, 192, 0.04);
+  border: 1px solid rgba(232, 220, 192, 0.25);
+  color: #e8dcc0;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  letter-spacing: 2px;
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: border-color 0.18s, background 0.18s;
+  text-align: left;
+}
+
+.loot-row:hover {
+  border-color: #e8dcc0;
+  background: rgba(232, 220, 192, 0.10);
+}
+
+.loot-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  color: rgba(232, 220, 192, 0.85);
+}
+
+.loot-icon svg {
+  width: 24px;
+  height: 24px;
+  display: block;
+}
+
+.loot-name {
+  color: #e8dcc0;
+}
+
+.loot-meta {
+  color: #8a7a5e;
+  font-size: 10px;
+  letter-spacing: 1px;
+}
+
+/* ──────────────────────────────────────────────────────────
+   Crafting menu — recipe rows showing result ← ingredients
+   ────────────────────────────────────────────────────────── */
+#crafting-menu, #sleep-overlay {
+  z-index: 200;
+  background: rgba(8, 6, 4, 0.96);
+  cursor: default;
+  gap: 14px;
+}
+
+.craft-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 24px;
+  margin-bottom: 24px;
+  width: 460px;
+  pointer-events: auto;
+}
+
+.craft-row {
+  display: grid;
+  grid-template-columns: 36px 1fr 18px 1fr;
+  align-items: center;
+  gap: 12px;
+  background: rgba(232, 220, 192, 0.04);
+  border: 1px solid rgba(232, 220, 192, 0.25);
+  color: #e8dcc0;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 2px;
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: border-color 0.18s, background 0.18s;
+  text-align: left;
+}
+
+.craft-row:hover:not(.insufficient) {
+  border-color: #e8dcc0;
+  background: rgba(232, 220, 192, 0.10);
+}
+
+.craft-row.insufficient {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.craft-result-icon, .craft-ing-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  color: rgba(232, 220, 192, 0.85);
+}
+
+.craft-result-icon svg, .craft-ing-icon svg {
+  width: 22px;
+  height: 22px;
+  display: block;
+}
+
+.craft-result-name {
+  color: #e8dcc0;
+}
+
+.craft-arrow {
+  color: rgba(232, 220, 192, 0.45);
+  text-align: center;
+}
+
+.craft-ingredients {
+  display: flex;
+  flex-direction: row;
+  gap: 14px;
+  align-items: center;
+}
+
+.craft-ing {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #b8a888;
+}
+
+.craft-ing.missing {
+  color: #c84a3a;
+}
+
+.craft-ing-label {
+  font-size: 10px;
+  letter-spacing: 0;
+}
+
+/* ──────────────────────────────────────────────────────────
+   Inventory overlay (backpack + hotbar)
+   ────────────────────────────────────────────────────────── */
+#inventory-overlay {
+  z-index: 200;
+  background: rgba(8, 6, 4, 0.96);
+  cursor: default;
+  gap: 14px;
+}
+
+.inv-section-label {
+  margin-top: 14px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 4px;
+  color: rgba(232, 220, 192, 0.5);
+  text-transform: uppercase;
+}
+
+.inv-grid {
+  display: grid;
+  gap: 6px;
+  pointer-events: auto;
+}
+
+.inv-grid-hotbar {
+  grid-template-columns: repeat(4, 60px);
+}
+
+.inv-grid-backpack {
+  grid-template-columns: repeat(5, 60px);
+  grid-template-rows: repeat(2, 60px);
+}
+
+.inv-tile {
+  width: 60px;
+  height: 60px;
+  border: 1px solid rgba(232, 220, 192, 0.25);
+  background: rgba(8, 6, 4, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #e8dcc0;
+  position: relative;
+  cursor: pointer;
+  transition: border-color 0.18s, background 0.18s, transform 0.12s;
+}
+
+.inv-tile:hover {
+  border-color: rgba(232, 220, 192, 0.7);
+  background: rgba(232, 220, 192, 0.06);
+}
+
+.inv-tile.swap-selected {
+  border-color: #e8c068;
+  background: rgba(232, 192, 104, 0.12);
+  transform: scale(1.04);
+}
+
+.inv-tile.empty .glyph {
+  opacity: 0;
+}
+
+.inv-tile .glyph {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.inv-tile .glyph svg {
+  width: 28px;
+  height: 28px;
+  color: rgba(232, 220, 192, 0.85);
+}
+
+.inv-tile.swap-selected .glyph svg {
+  color: #f8e0a0;
+}
+
+.inv-tile .count {
+  position: absolute;
+  bottom: 3px;
+  right: 5px;
+  font-size: 10px;
+  font-family: 'JetBrains Mono', monospace;
+  color: #b8a888;
+}
+
+/* ──────────────────────────────────────────────────────────
+   Canteen fill bar — shared between hotbar slots + inventory tiles
+   ────────────────────────────────────────────────────────── */
+.hotbar-slot .fill-bar, .inv-tile .fill-bar {
+  position: absolute;
+  left: 4px;
+  bottom: 4px;
+  height: 2px;
+  width: 100%;
+  background: #5a7a9a;
+  pointer-events: none;
+  max-width: calc(100% - 8px);
+}
+
+/* ──────────────────────────────────────────────────────────
+   Damage vignette — flashes red on player hit
+   ────────────────────────────────────────────────────────── */
+#damage-vignette {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease-out;
+  box-shadow: inset 0 0 240px 80px rgba(200, 30, 20, 0.55);
+  z-index: 18;
+}
+
+/* ──────────────────────────────────────────────────────────
+   Days-survived line on the death screen
+   ────────────────────────────────────────────────────────── */
+#days-survived-summary {
+  font-family: 'Cormorant Garamond', serif;
+  font-style: italic;
+  font-size: 16px;
+  color: rgba(232, 220, 192, 0.65);
+  margin-top: 6px;
+}
+
+/* ──────────────────────────────────────────────────────────
+   Crafting progress fill — appears on the in-progress row
+   ────────────────────────────────────────────────────────── */
+.craft-row {
+  position: relative;
+  overflow: hidden;
+}
+
+.craft-progress {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  background: #e8dcc0;
+  width: 0;
+  transition: width 0.05s linear;
+  pointer-events: none;
+}
+
 /* ──────────────────────────────────────────────────────────
    Dev-only perf HUD (F1 to toggle)
    ────────────────────────────────────────────────────────── */
@@ -421,7 +864,15 @@ canvas {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  min-width: 110px;
+  min-width: 280px;
+  max-width: 440px;
+}
+
+#perf-hud .perf-row .perf-v {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 280px;
 }
 
 #perf-hud.hidden {
