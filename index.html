@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dustfall</title>
+  </head>
+  <body>
+    <div id="hud">
+      <div id="stats">
+        <div class="stat-block">
+          <div class="stat-label">THIRST</div>
+          <div class="stat-track"><div class="stat-fill" id="thirst-bar"></div></div>
+        </div>
+        <div class="stat-block">
+          <div class="stat-label">HEAT</div>
+          <div class="stat-track"><div class="stat-fill heat" id="heat-bar"></div></div>
+        </div>
+        <div class="stat-block">
+          <div class="stat-label">HEALTH</div>
+          <div class="stat-track"><div class="stat-fill health" id="health-bar"></div></div>
+        </div>
+      </div>
+      <div id="clock">06:00</div>
+    </div>
+    <div id="crosshair">·</div>
+
+    <div id="start-overlay" class="overlay">
+      <div class="title">DUSTFALL</div>
+      <div class="subtitle">a desert is patient</div>
+      <div class="controls-hint">
+        <div>WASD &nbsp;&mdash;&nbsp; move</div>
+        <div>SHIFT &nbsp;&mdash;&nbsp; sprint</div>
+        <div>MOUSE &nbsp;&mdash;&nbsp; look</div>
+      </div>
+      <div class="cta">click to begin</div>
+    </div>
+
+    <div id="death-screen" class="overlay hidden">
+      <div class="title death">YOU DIED</div>
+      <div class="subtitle" id="death-cause">the sun took you</div>
+      <button id="restart-btn">try again</button>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

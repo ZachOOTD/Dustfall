@@ -1,0 +1,444 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500&family=JetBrains+Mono:wght@300;400&display=swap');
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #0a0a0a;
+  color: #e8dcc0;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+canvas {
+  display: block;
+}
+
+#hud {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10;
+  padding: 32px;
+}
+
+#stats {
+  position: absolute;
+  bottom: 32px;
+  left: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.stat-block {
+  width: 220px;
+}
+
+.stat-label {
+  font-size: 10px;
+  letter-spacing: 3px;
+  color: #b8a888;
+  margin-bottom: 5px;
+  font-weight: 300;
+}
+
+.stat-track {
+  width: 100%;
+  height: 3px;
+  background: rgba(232, 220, 192, 0.12);
+}
+
+.stat-fill {
+  height: 100%;
+  background: #e8dcc0;
+  width: 100%;
+  transition: width 0.15s linear;
+}
+
+.stat-fill.heat {
+  background: #d97a4a;
+}
+
+.stat-fill.health {
+  background: #c84a3a;
+}
+
+#clock {
+  position: absolute;
+  top: 32px;
+  right: 32px;
+  font-size: 18px;
+  letter-spacing: 4px;
+  color: #b8a888;
+  font-weight: 300;
+}
+
+#crosshair {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: rgba(232, 220, 192, 0.5);
+  font-size: 22px;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 6, 4, 0.92);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  cursor: pointer;
+}
+
+.overlay.hidden {
+  display: none;
+}
+
+.title {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 96px;
+  font-weight: 300;
+  letter-spacing: 16px;
+  color: #e8dcc0;
+}
+
+.title.death {
+  color: #c84a3a;
+  letter-spacing: 12px;
+  font-size: 72px;
+}
+
+.subtitle {
+  font-family: 'Cormorant Garamond', serif;
+  font-style: italic;
+  font-size: 20px;
+  color: #8a7a5e;
+  font-weight: 300;
+}
+
+.controls-hint {
+  margin-top: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: #6e6149;
+  font-size: 12px;
+  letter-spacing: 2px;
+  text-align: center;
+}
+
+.cta {
+  margin-top: 48px;
+  font-size: 11px;
+  letter-spacing: 6px;
+  color: #b8a888;
+  animation: pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+#restart-btn {
+  margin-top: 24px;
+  background: none;
+  border: 1px solid #6e6149;
+  color: #e8dcc0;
+  font-family: inherit;
+  font-size: 12px;
+  letter-spacing: 4px;
+  padding: 12px 32px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+#restart-btn:hover {
+  border-color: #e8dcc0;
+  background: rgba(232, 220, 192, 0.08);
+}
+
+/* ──────────────────────────────────────────────────────────
+   Hotbar (4 slots, bottom-center)
+   ────────────────────────────────────────────────────────── */
+#hotbar {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 6px;
+  z-index: 15;
+  pointer-events: none;
+}
+
+.hotbar-slot {
+  width: 52px;
+  height: 52px;
+  border: 1px solid rgba(232, 220, 192, 0.22);
+  background: rgba(8, 6, 4, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #e8dcc0;
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 30px;
+  position: relative;
+  transition: border-color 0.18s, background 0.18s;
+}
+
+.hotbar-slot.selected {
+  border-color: #e8dcc0;
+  background: rgba(232, 220, 192, 0.10);
+}
+
+.hotbar-slot.empty .glyph {
+  opacity: 0.0;
+}
+
+.hotbar-slot .keybind {
+  position: absolute;
+  top: 3px;
+  left: 5px;
+  font-size: 9px;
+  font-family: 'JetBrains Mono', monospace;
+  color: rgba(232, 220, 192, 0.35);
+  letter-spacing: 1px;
+}
+
+.hotbar-slot .count {
+  position: absolute;
+  bottom: 3px;
+  right: 5px;
+  font-size: 10px;
+  font-family: 'JetBrains Mono', monospace;
+  color: #b8a888;
+  letter-spacing: 1px;
+}
+
+/* ──────────────────────────────────────────────────────────
+   Interact prompt — small text under crosshair
+   ────────────────────────────────────────────────────────── */
+#interact-prompt {
+  position: fixed;
+  top: calc(50% + 28px);
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 3px;
+  color: #e8dcc0;
+  z-index: 12;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+#interact-prompt.show {
+  opacity: 1;
+}
+
+#interact-prompt .key {
+  background: rgba(232, 220, 192, 0.15);
+  border: 1px solid rgba(232, 220, 192, 0.45);
+  padding: 1px 6px 2px;
+  font-size: 10px;
+}
+
+/* ──────────────────────────────────────────────────────────
+   Shelter indicator
+   ────────────────────────────────────────────────────────── */
+#shelter-indicator {
+  position: fixed;
+  bottom: 100px;
+  left: 32px;
+  font-family: 'Cormorant Garamond', serif;
+  font-style: italic;
+  font-size: 14px;
+  letter-spacing: 4px;
+  color: #b8a888;
+  z-index: 14;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
+#shelter-indicator.show {
+  opacity: 1;
+}
+
+/* ──────────────────────────────────────────────────────────
+   Menus (pause + settings) + start-overlay extensions
+   ────────────────────────────────────────────────────────── */
+.title.small {
+  font-size: 56px;
+  letter-spacing: 10px;
+}
+
+.menu-link {
+  cursor: pointer;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 5px;
+  color: rgba(232, 220, 192, 0.55);
+  margin-top: 32px;
+  transition: color 0.2s;
+  pointer-events: auto;
+}
+
+.menu-link:hover {
+  color: #e8dcc0;
+}
+
+.menu-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 32px;
+  align-items: center;
+}
+
+.menu-btn {
+  background: none;
+  border: 1px solid rgba(232, 220, 192, 0.30);
+  color: #e8dcc0;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  letter-spacing: 4px;
+  padding: 12px 32px;
+  cursor: pointer;
+  min-width: 220px;
+  transition: border-color 0.2s, background 0.2s;
+  pointer-events: auto;
+}
+
+.menu-btn:hover {
+  border-color: #e8dcc0;
+  background: rgba(232, 220, 192, 0.08);
+}
+
+#settings-panel {
+  cursor: default;
+  gap: 16px;
+}
+
+.settings-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin-top: 24px;
+  margin-bottom: 24px;
+  pointer-events: auto;
+}
+
+.settings-row {
+  display: grid;
+  grid-template-columns: 200px 280px 60px;
+  gap: 18px;
+  align-items: center;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 3px;
+  color: #b8a888;
+}
+
+.settings-row label {
+  text-align: right;
+}
+
+.settings-row input[type="range"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  height: 2px;
+  background: rgba(232, 220, 192, 0.18);
+  border-radius: 0;
+  outline: none;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.settings-row input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #e8dcc0;
+  cursor: pointer;
+}
+
+.settings-row input[type="range"]::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #e8dcc0;
+  cursor: pointer;
+  border: none;
+}
+
+.settings-val {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: #e8dcc0;
+  text-align: left;
+  letter-spacing: 1px;
+}
+
+/* ──────────────────────────────────────────────────────────
+   Dev-only perf HUD (F1 to toggle)
+   ────────────────────────────────────────────────────────── */
+#perf-hud {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 25;
+  pointer-events: none;
+  background: rgba(8, 6, 4, 0.55);
+  border: 1px solid rgba(232, 220, 192, 0.18);
+  padding: 8px 12px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: #e8dcc0;
+  letter-spacing: 1px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 110px;
+}
+
+#perf-hud.hidden {
+  display: none;
+}
+
+.perf-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.perf-k {
+  color: rgba(232, 220, 192, 0.55);
+}
+
+.perf-v {
+  color: #e8dcc0;
+  font-weight: 400;
+}
