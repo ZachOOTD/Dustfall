@@ -32,7 +32,7 @@ export function createInventory(): InventoryState {
  * Pickup precedence: try hotbar first (stack, then empty), then backpack
  * (stack, then empty). Selected slot bias not implemented for v1.
  */
-export function addItem(inv: InventoryState, id: ItemId, meta?: ItemMeta): number {
+export function addItem(inv: InventoryState, id: ItemId, meta?: ItemMeta, ctx?: GameContext): number {
   const def = getItemDef(id);
 
   // 1a. Stack onto an existing hotbar slot.
@@ -41,6 +41,7 @@ export function addItem(inv: InventoryState, id: ItemId, meta?: ItemMeta): numbe
       const s = inv.slots[i];
       if (s.item === id && s.count < def.maxStack && !s.meta) {
         s.count++;
+        if (ctx) maybeFireHint(ctx, id);
         return i;
       }
     }
@@ -49,6 +50,7 @@ export function addItem(inv: InventoryState, id: ItemId, meta?: ItemMeta): numbe
       const s = inv.backpack[i];
       if (s.item === id && s.count < def.maxStack && !s.meta) {
         s.count++;
+        if (ctx) maybeFireHint(ctx, id);
         return 100 + i;
       }
     }
@@ -62,6 +64,7 @@ export function addItem(inv: InventoryState, id: ItemId, meta?: ItemMeta): numbe
       s.count = 1;
       if (meta) s.meta = { ...meta };
       else delete s.meta;
+      if (ctx) maybeFireHint(ctx, id);
       return i;
     }
   }
@@ -74,11 +77,19 @@ export function addItem(inv: InventoryState, id: ItemId, meta?: ItemMeta): numbe
       s.count = 1;
       if (meta) s.meta = { ...meta };
       else delete s.meta;
+      if (ctx) maybeFireHint(ctx, id);
       return 100 + i;
     }
   }
 
   return -1;
+}
+
+/** Lazy-load the tutorial module so inventory.ts doesn't grow a static dep
+ *  on ui/* (which would invite circulars). Identical pattern to the KeyC
+ *  crafting-menu lazy-import below. */
+function maybeFireHint(ctx: GameContext, id: ItemId): void {
+  void import('../ui/tutorial.ts').then((m) => m.maybeShowItemHint(ctx, id));
 }
 
 /** Count total occurrences of an item across hotbar + backpack.

@@ -5,6 +5,7 @@ import type { GameContext } from '../GameContext.ts';
 import { ensureAudioStarted } from '../audio/audio.ts';
 import { startSoundscape } from '../audio/soundscape.ts';
 import { showPauseOverlay } from '../ui/menus.ts';
+import { showControlsPanel, hideControlsPanel, noteIntroSeen, isControlsPanelOpen } from '../ui/tutorial.ts';
 
 export interface InputBundle {
   /** True while the key is held. Updated on every keydown/keyup. */
@@ -69,6 +70,8 @@ export function wireOverlays(ctx: GameContext): void {
     startOverlay.classList.add('hidden');
     ctx.flags.started = true;
     ctx.flags.paused = false;
+    // First-boot controls panel (if showing) dismisses on first lock.
+    noteIntroSeen();
   });
   ctx.input.controls.addEventListener('unlock', () => {
     if (ctx.stats.dead) return;
@@ -83,6 +86,17 @@ export function wireOverlays(ctx: GameContext): void {
 
   const restartBtn = document.getElementById('restart-btn');
   restartBtn?.addEventListener('click', () => location.reload());
+
+  // H — toggle controls/help panel (Session L). Works anytime: pre-game it
+  // re-opens the first-boot list; in-game it pauses + overlays above pause.
+  // Suppressed while the death screen is up (the dead get no help).
+  window.addEventListener('keydown', (e) => {
+    if (e.code !== 'KeyH' || e.repeat) return;
+    if (ctx.stats.dead) return;
+    e.preventDefault();
+    if (isControlsPanelOpen()) hideControlsPanel(ctx);
+    else showControlsPanel(ctx);
+  });
 
   ctx.three.scene.add(ctx.input.controls.object);
 }

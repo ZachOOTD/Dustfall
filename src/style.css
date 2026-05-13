@@ -846,6 +846,48 @@ canvas {
 }
 
 /* ──────────────────────────────────────────────────────────
+   Controls / help panel (first-boot + H-key, Session L)
+   ────────────────────────────────────────────────────────── */
+#controls-panel {
+  z-index: 200;             /* above pause overlay (z=100) */
+  background: rgba(8, 6, 4, 0.96);
+  cursor: default;
+  gap: 14px;
+}
+
+.controls-rows {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  column-gap: 22px;
+  row-gap: 10px;
+  margin-top: 28px;
+  margin-bottom: 18px;
+  width: 560px;
+  align-items: center;
+  pointer-events: auto;
+}
+
+.controls-row {
+  display: contents;        /* let children participate in the parent grid */
+}
+
+.controls-row .kbd {
+  text-align: right;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: #e8dcc0;
+}
+
+.controls-row .controls-desc {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: #b8a888;
+  text-align: left;
+}
+
+/* ──────────────────────────────────────────────────────────
    Dev-only perf HUD (F1 to toggle)
    ────────────────────────────────────────────────────────── */
 #perf-hud {

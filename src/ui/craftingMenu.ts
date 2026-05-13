@@ -219,7 +219,7 @@ function completeCraft(): void {
 
   let added = 0;
   for (let i = 0; i < recipe.resultCount; i++) {
-    const slotIdx = addItem(ctx.inventory, recipe.result);
+    const slotIdx = addItem(ctx.inventory, recipe.result, undefined, ctx);
     if (slotIdx < 0) break;
     added++;
   }

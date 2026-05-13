@@ -43,6 +43,7 @@ import { createCraftingMenu } from './ui/craftingMenu.ts';
 import { createSleepOverlay } from './ui/sleepOverlay.ts';
 import { createInventoryOverlay } from './ui/inventoryOverlay.ts';
 import { createPerfHud, updatePerfHud } from './ui/perfHud.ts';
+import { createTutorial } from './ui/tutorial.ts';
 import { installDebugPanel } from './debug/debugPanel.ts';
 
 // --- Bootstrap (async — Rapier WASM + asset preload before world build) ---
@@ -178,6 +179,9 @@ createCraftingMenu(ctx);
 createSleepOverlay(ctx);
 createInventoryOverlay(ctx);
 createPerfHud(ctx);
+// Tutorial panel must exist before wireOverlays so the lock handler can call
+// noteIntroSeen() — and before installDebugPanel so __game.showControls works.
+createTutorial(ctx);
 wireOverlays(ctx);
 installDebugPanel(ctx);
 installPhysicsDebug(ctx);

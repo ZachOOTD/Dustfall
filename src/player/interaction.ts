@@ -33,6 +33,7 @@ import { openLootMenu, isLootMenuOpen } from '../ui/lootMenu.ts';
 import { openSleepOverlay, isSleepOverlayOpen } from '../ui/sleepOverlay.ts';
 import { isCraftingMenuOpen } from '../ui/craftingMenu.ts';
 import { isInventoryOverlayOpen } from '../ui/inventoryOverlay.ts';
+import { isControlsPanelOpen } from '../ui/tutorial.ts';
 import type { InteractType, ItemId, Slot } from '../inventory/types.ts';
 
 const RAYCAST_DISTANCE = 2.5;
@@ -95,7 +96,7 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
 
   if (!isPlaying(ctx)) return;
   // Overlay menus suppress interaction (pointer is unlocked anyway).
-  if (isLootMenuOpen() || isSleepOverlayOpen() || isCraftingMenuOpen() || isInventoryOverlayOpen()) return;
+  if (isLootMenuOpen() || isSleepOverlayOpen() || isCraftingMenuOpen() || isInventoryOverlayOpen() || isControlsPanelOpen()) return;
 
   const cam = ctx.three.camera;
   cam.getWorldDirection(_dir);
@@ -136,7 +137,7 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
         promptNoun: def.name.toLowerCase(),
       };
       if (ctx.input.pressed.has('KeyE')) {
-        const slotIdx = addItem(ctx.inventory, p.itemId, p.meta);
+        const slotIdx = addItem(ctx.inventory, p.itemId, p.meta, ctx);
         if (slotIdx < 0) {
           ctx.ui.showToast('your bag is full');
           return;
@@ -180,7 +181,7 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
         const got = 1 + Math.floor(Math.random() * 2); // 1-2 pulp
         let added = 0;
         for (let i = 0; i < got; i++) {
-          if (addItem(ctx.inventory, 'cactus_pulp') >= 0) added++;
+          if (addItem(ctx.inventory, 'cactus_pulp', undefined, ctx) >= 0) added++;
         }
         if (added === 0) {
           ctx.ui.showToast('your bag is full');
@@ -200,7 +201,7 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
       if (l.state === 'dead') {
         ctx.inventory.hover = { type: 'take', distance: info.distance, promptNoun: 'meat', itemId: 'raw_lizard_meat' };
         if (ctx.input.pressed.has('KeyE')) {
-          const slotIdx = addItem(ctx.inventory, 'raw_lizard_meat');
+          const slotIdx = addItem(ctx.inventory, 'raw_lizard_meat', undefined, ctx);
           if (slotIdx < 0) {
             ctx.ui.showToast('your bag is full');
             return;

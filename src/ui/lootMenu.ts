@@ -102,7 +102,7 @@ function takeRow(idx: number, entry: LootEntry): void {
   // For stackable items, take the whole count.
   let takenCount = 0;
   for (let i = 0; i < entry.count; i++) {
-    const slotIdx = addItem(inv, entry.itemId, entry.meta);
+    const slotIdx = addItem(inv, entry.itemId, entry.meta, _ctx);
     if (slotIdx < 0) break;
     takenCount++;
   }

@@ -77,6 +77,7 @@ src/
     craftingMenu.ts       — C key; 3 recipes (bandage / fire_kit / tent_kit); 1s rAF progress bar; ingredients consumed only on completion
     inventoryOverlay.ts   — I key; hotbar + 10-slot backpack grids; click-then-click swap between any two slots
     perfHud.ts            — dev-only F1 overlay (FPS / draws / tris)
+    tutorial.ts           — first-boot controls panel + H-key reopen + per-item pickup hints (localStorage `dustfall.tutorial.v1`)
   debug/
     debugPanel.ts         — window.__game = { setTime, setStats, state, castDown, RAPIER, triggerStorm }
 ```
@@ -145,6 +146,10 @@ Once hardware acceleration is confirmed (GPU row shows your actual card), FPS sh
 
 **About engine migration**: Three.js with hardware acceleration is comfortably capable of this game's complexity at 60+ FPS. If FPS is bad with HW accel on, the bottleneck is in the scene (shadow casters, draw calls, fillrate) — not the engine. Don't migrate to a native engine (Godot, Bevy, Unity) on FPS evidence until HW acceleration is verified and the in-game perf tools (shadow toggle, render scale) have been tried. Electron/Tauri use the same Chromium → ANGLE → D3D11 pipeline as the browser — no FPS gain.
 
+### Tutorial flags (Session L)
+
+`localStorage['dustfall.tutorial.v1']` stores `{seenIntro, usedItems}`. Wipe via the console with `__game.resetTutorial()` (or delete the key + refresh) to see the first-boot panel + all pickup hints again. `__game.showControls()` opens the controls panel without changing flags.
+
 ## Sessions complete
 
 - **v0** — 1-hour prototype (flat sand, primitive landmarks, click-to-play)
@@ -160,12 +165,13 @@ Once hardware acceleration is confirmed (GPU row shows your actual card), FPS sh
 - **I** — Inventory & feel polish: Space jumps (Tuning.JUMP_VELOCITY=7); G drops the selected slot as a Pickup (meta preserved); 10-slot backpack + I-key overlay (click-then-click swap); pickups auto-overflow into backpack; canteen fillLevel rendered as thin bar on hotbar + backpack tiles; raider hits trigger red damage vignette + playPlayerHurt sfx; dead fires can be relit with a branch (`'relight'` InteractType + relightFire()); crafting has a 1s progress bar (rAF-driven); death screen shows "you survived N days"
 - **J** — Performance investigation + graphics quality: F1 perf HUD now shows GPU name (via `WEBGL_debug_renderer_info`), framebuffer resolution, and live render scale; new `renderQuality: 'low' | 'medium' | 'high'` setting persists to localStorage; preset live-applies pixel ratio (0.75 / 1.0 / min(devicePR, 2.0)) + shadow map size (1024 / 2048 / 2048) with no reload; settings panel adds a "render quality" dropdown row
 - **K** — FPS diagnostics + shadow toggle + sandstorm gate. Triggered by 17-30 FPS reports where Chrome had fallen back to WARP software rendering. F1 HUD gains `GPU ms` / `CPU ms` / `frame` ms rows via `EXT_disjoint_timer_query_webgl2`; SW-render warning automatically flags WARP/SwiftShader/Microsoft Basic Render. Shadow on/off setting (`sun.castShadow`) live-applies — typically 1.5-2× FPS gain when GPU-bound. Pickups + branches no longer cast shadows. Sandstorm Points hidden when intensity ≤ 0.01. CLAUDE.md gains a "Diagnosing low FPS" section that leads with the WARP fallback fix.
+- **L** — Tutorial & first-time UX. New `src/ui/tutorial.ts` owns: a first-boot controls panel (14 keybind rows incl. WASD/SHIFT/SPACE/MOUSE/LMB/Q/E/G/1-4/WHEEL/C/I/ESC/H/F1) shown above the start overlay until the player clicks to begin; an H-key shortcut to reopen it in-game (which unlocks pointer → pauses → panel renders above the pause overlay at z-index 200); per-item pickup hints fired by `inventory.addItem(...,ctx)` (canteen/branch/cloth/scrap/bandage/machete/fire_kit/tent_kit/cactus_pulp/raw_lizard_meat — each toast fires once across sessions). State persists in localStorage key `dustfall.tutorial.v1`; debug helpers `__game.resetTutorial()` + `__game.showControls()` for testing/screenshotting.
 
 ## Where we are now
 
-**Last completed**: Session K (FPS diagnostics + shadow toggle + sandstorm gate). `tsc --noEmit` clean. F1 HUD gains `GPU ms` / `CPU ms` / `frame` ms via `EXT_disjoint_timer_query_webgl2` (verified `gpuTimer.supported=true`). Sandstorm visibility gate: `particles.visible=false` when intensity≤0.01 (verified clear→false, storm→true). Pickups + branches `castShadow=false` with `userData.noShadow` honored by the main.ts shadow-setup traversal. Shadow toggle in settings panel live-applies via `sun.castShadow` (verified uncheck→false, re-check→true + map regen). SW-render warning regex correctly flags WARP/SwiftShader/Microsoft Basic Render. CLAUDE.md "Diagnosing low FPS" section leads with the WARP fallback fix path.
+**Last completed**: Session L (tutorial + first-time UX). `tsc --noEmit` clean. Verified: first-boot panel renders above start overlay (z=200, all 14 control rows present); H key toggles open↔hidden; `noteIntroSeen()` hides panel + writes `{seenIntro:true,usedItems:[]}` to localStorage on first pointer lock; `maybeShowItemHint(ctx,'cloth')` fires a 900ms-delayed toast "press C to open the crafting menu" and persists the item id; second call is a no-op; `resetTutorial()` wipes the localStorage key; `__game.showControls()` reopens the panel. Interaction raycasts suppressed when `isControlsPanelOpen()` is true.
 
-**Next**: v1.5 + Session I are complete. Possible follow-ups when ready: rigged Quaternius raider (replace primitive), inventory weight, save/load, NavMesh AI, vehicles, skill progression, multi-tier crafting, raider variants, damage vignette extended to fall/cold/heat damage. None blocking — the game is playable end-to-end with a survival loop, crafting, sleep, day counter, and full inventory management.
+**Next**: Roadmap (sessions M–R) lives in `~/.claude/plans/in-the-dustfall-folder-elegant-cray.md`. Near-term candidates: M save/load (localStorage snapshot), N rigged Quaternius raider, O enemy variety + warlord-camp win condition. Larger: P world design pass (sub-biomes + POIs), Q models/animations upgrade, R additional loops (trading / base-building / vehicle / 7-day countdown / bounties).
 
 ## Session workflow (read each start)
 

@@ -2,6 +2,7 @@
 
 import RAPIER from '@dimforge/rapier3d-compat';
 import type { GameContext } from '../GameContext.ts';
+import { resetTutorial, showControlsPanel } from '../ui/tutorial.ts';
 
 declare global {
   interface Window {
@@ -37,6 +38,11 @@ interface DebugApi {
   };
   /** Trigger a sandstorm immediately for testing. */
   triggerStorm: () => void;
+  /** Clear the tutorial localStorage flags so the controls panel + all
+   *  pickup hints fire again. Refresh to see the first-boot overlay. */
+  resetTutorial: () => void;
+  /** Open the controls panel from the console — handy for screenshotting. */
+  showControls: () => void;
 }
 
 export function installDebugPanel(ctx: GameContext): void {
@@ -76,5 +82,7 @@ export function installDebugPanel(ctx: GameContext): void {
       ctx.weather.state = 'building';
       ctx.weather.stateTimer = 0;
     },
+    resetTutorial,
+    showControls() { showControlsPanel(ctx); },
   };
 }
