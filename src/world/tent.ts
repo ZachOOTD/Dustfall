@@ -105,10 +105,19 @@ export function deployTent(ctx: GameContext): Tent | null {
     }
   }
 
+  return spawnTentAt(ctx, pos, Math.random() * Math.PI * 2);
+}
+
+/** Materialise a tent at the given world position + Y rotation. Used by
+ *  both deployTent (random rotation) and save/load (saved rotation). */
+export function spawnTentAt(
+  ctx: GameContext,
+  pos: THREE.Vector3,
+  rotationY: number,
+): Tent {
   const mesh = makeTentVisual();
   mesh.position.copy(pos);
-  // Random Y rotation so tents don't all face the same way
-  mesh.rotation.y = Math.random() * Math.PI * 2;
+  mesh.rotation.y = rotationY;
   mesh.traverse((o) => {
     const m = o as THREE.Mesh;
     if (m.isMesh) {
@@ -131,11 +140,17 @@ export function deployTent(ctx: GameContext): Tent | null {
     id,
     mesh,
     shelterZone,
-    pos,
+    pos: pos.clone(),
     hovered: false,
   };
   ctx.tents.list.push(tent);
   return tent;
+}
+
+/** Bump the module-level id counter past `n` so future spawns don't collide
+ *  with restored ids. Used by save/load. */
+export function setNextTentId(n: number): void {
+  if (n > _nextId) _nextId = n;
 }
 
 export function findTentById(list: Tent[], id: number | undefined): Tent | undefined {

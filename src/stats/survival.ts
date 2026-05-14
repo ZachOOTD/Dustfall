@@ -5,6 +5,7 @@ import type { GameContext } from '../GameContext.ts';
 import { isPlaying } from '../GameContext.ts';
 import { Tuning } from '../config/tuning.ts';
 import { playDeath } from '../audio/audio.ts';
+import { updateDeathScreenButtons } from '../ui/menus.ts';
 
 export function updateStats(ctx: GameContext, dt: number): void {
   if (!isPlaying(ctx)) return;
@@ -93,6 +94,10 @@ export function die(ctx: GameContext, cause: string): void {
     return;
   }
   ctx.stats.dead = true;
+  // Refresh the death overlay's Continue button visibility based on whether
+  // a save currently exists. Death does NOT auto-save; the player can only
+  // load whatever sleep autosave or manual save existed before they died.
+  updateDeathScreenButtons();
   // daysSurvived starts at 0 (= day 1). On death we show "you survived N days"
   // where N is days fully + the current day, matching the in-game "day N" HUD.
   ctx.ui.setDeathCause(cause, ctx.time.daysSurvived + 1);

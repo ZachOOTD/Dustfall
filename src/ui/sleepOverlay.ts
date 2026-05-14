@@ -4,6 +4,7 @@
 import type { GameContext } from '../GameContext.ts';
 import { playUiClick, playUiHover, playSleepThud } from '../audio/audio.ts';
 import { resumeFromPause } from './menus.ts';
+import { saveGameState } from '../persistence/save.ts';
 
 let _root: HTMLDivElement | null = null;
 let _ctx: GameContext | null = null;
@@ -70,6 +71,10 @@ function sleep(hours: number): void {
   ctx.stats.temperature = ctx.stats.temperature * (1 - 0.7 * fraction);
 
   ctx.ui.showToast(`you sleep ${hours} hours — the world keeps turning`);
+  // Sleep autosave — fired AFTER stat/time mutations complete so the save
+  // reflects the rested player. (M.4: one of two save triggers; the other
+  // is the pause menu's manual Save button.)
+  saveGameState(ctx);
   closeSleepOverlay();
 }
 

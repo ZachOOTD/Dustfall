@@ -131,12 +131,22 @@ export function spawnLizard(
 export function damageLizard(lizard: Lizard, _dmg: number, _ctx: GameContext): void {
   if (lizard.state === 'dead') return;
   lizard.state = 'dead';
-  // Flip on side
-  lizard.mesh.rotation.z = Math.PI / 2;
   lizard.mesh.position.y += 0.02;
-  // Now the body becomes a 'take' interactable yielding raw_lizard_meat
+  applyDeadPose(lizard);
+}
+
+/** Apply the dead-lizard visual + interaction retag. Safe to call from a
+ *  fresh restore where state is already 'dead' — does not bump position.y. */
+export function applyDeadPose(lizard: Lizard): void {
+  lizard.mesh.rotation.z = Math.PI / 2;
   untag(lizard.mesh);
   tag(lizard.mesh, lizard.id, 'take');
+}
+
+/** Bump the module-level id counter past `n` so future spawns don't collide
+ *  with restored ids. Used by save/load. */
+export function setNextLizardId(n: number): void {
+  if (n > _nextId) _nextId = n;
 }
 
 /** Called when the player takes the meat — removes from world + registry. */

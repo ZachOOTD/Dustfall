@@ -124,18 +124,42 @@ export function deployFire(ctx: GameContext): Fire | null {
     }
   }
 
+  const fire = spawnFireAt(ctx, pos, FIRE_INITIAL_FUEL, true);
+  playFireIgnite();
+  return fire;
+}
+
+/** Materialise a fire at the given world position, regardless of whether the
+ *  player is placing it (deployFire) or save/load is restoring it. Does NOT
+ *  check proximity, consume inventory, or play audio — that's the caller's job. */
+export function spawnFireAt(
+  ctx: GameContext,
+  pos: THREE.Vector3,
+  fuelSeconds: number,
+  alive: boolean,
+): Fire {
   const visual = makeFireVisual();
   visual.group.position.copy(pos);
   ctx.three.scene.add(visual.group);
 
   const id = _nextId++;
-  tag(visual.group, id, 'cook');
+  tag(visual.group, id, alive ? 'cook' : 'relight');
 
-  const shelterZone = addShelterZone(
-    ctx.shelter,
-    { x: pos.x, y: pos.y + SHELTER_HEIGHT / 2, z: pos.z },
-    { x: SHELTER_RADIUS, y: SHELTER_HEIGHT, z: SHELTER_RADIUS },
-  );
+  let shelterZone: ShelterZone | null = null;
+  if (alive) {
+    shelterZone = addShelterZone(
+      ctx.shelter,
+      { x: pos.x, y: pos.y + SHELTER_HEIGHT / 2, z: pos.z },
+      { x: SHELTER_RADIUS, y: SHELTER_HEIGHT, z: SHELTER_RADIUS },
+    );
+  } else {
+    // Dead fire visual — match the burn-out path in updateFires.
+    visual.flameGroup.visible = false;
+    visual.light.intensity = 0.2;
+    visual.light.color.set(0x5a1810);
+    (visual.ember.material as THREE.MeshBasicMaterial).opacity = 0.45;
+    (visual.ember.material as THREE.MeshBasicMaterial).color.set(0x4a1810);
+  }
 
   const fire: Fire = {
     id,
@@ -144,15 +168,20 @@ export function deployFire(ctx: GameContext): Fire | null {
     light: visual.light,
     emberMesh: visual.ember,
     shelterZone,
-    fuelSeconds: FIRE_INITIAL_FUEL,
-    alive: true,
+    fuelSeconds,
+    alive,
     hovered: false,
-    pos,
+    pos: pos.clone(),
     _nextCrackleAt: ctx.time.elapsed + 0.5 + Math.random() * 2,
   };
   ctx.fires.list.push(fire);
-  playFireIgnite();
   return fire;
+}
+
+/** Bump the module-level id counter past `n` so future spawns don't collide
+ *  with restored ids. Used by save/load. */
+export function setNextFireId(n: number): void {
+  if (n > _nextId) _nextId = n;
 }
 
 /** Add fuel (a branch worth = 30s). */

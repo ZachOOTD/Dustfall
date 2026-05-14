@@ -12,6 +12,7 @@ import {
   type RenderQuality,
 } from '../core/settings.ts';
 import { setMasterVolume, playUiHover, playUiClick } from '../audio/audio.ts';
+import { hasSave, saveGameState, loadGameState, clearSave } from '../persistence/save.ts';
 
 let _settings: Settings = loadSettings();
 
@@ -151,9 +152,50 @@ export function createMenus(ctx: GameContext): void {
       playUiClick();
       openSettings();
     });
-    const cta = startOverlay.querySelector('.cta');
+    const cta = startOverlay.querySelector<HTMLElement>('.cta');
     if (cta) startOverlay.insertBefore(link, cta);
     else startOverlay.appendChild(link);
+
+    // Continue button — only when a save exists. Clicking loads the save
+    // before the overlay-wide click handler locks pointer + starts the game.
+    if (hasSave()) {
+      const cont = document.createElement('div');
+      cont.className = 'cta continue-cta';
+      cont.textContent = 'continue';
+      cont.addEventListener('mouseenter', playUiHover);
+      cont.addEventListener('click', (e) => {
+        e.stopPropagation();
+        playUiClick();
+        const result = loadGameState(ctx);
+        if (!result.ok) {
+          ctx.ui.showToast(result.error ?? 'load failed');
+          return;
+        }
+        // Same lock-pointer flow as the new-game CTA. The pointer-lock
+        // 'lock' handler in input.ts hides the start overlay + sets
+        // flags.started.
+        ctx.input.controls.lock();
+      });
+      if (cta) startOverlay.insertBefore(cont, cta);
+      else startOverlay.appendChild(cont);
+
+      // Rephrase the existing CTA so the two paths read distinctly.
+      if (cta) cta.textContent = 'new game';
+
+      // Intercept New Game clicks: with an existing save in localStorage,
+      // proceeding silently would overwrite it on the first sleep / pause-
+      // Save. Capture-phase listener fires before the start-overlay's
+      // bubble-phase pointer-lock handler in input.ts.
+      if (cta) {
+        cta.addEventListener('click', (e) => {
+          if (!hasSave()) return; // user cleared between mount and click
+          e.stopPropagation();
+          e.preventDefault();
+          playUiClick();
+          showNewGameConfirm(ctx, startOverlay, cta, cont);
+        }, { capture: true });
+      }
+    }
   }
 
   // ── Pause overlay ──
@@ -165,6 +207,7 @@ export function createMenus(ctx: GameContext): void {
   pauseBtns.className = 'menu-buttons';
   for (const [label, action] of [
     ['resume', 'resume'],
+    ['save', 'save'],
     ['settings', 'settings'],
     ['quit to menu', 'quit'],
   ] as const) {
@@ -172,7 +215,17 @@ export function createMenus(ctx: GameContext): void {
     b.addEventListener('click', () => {
       playUiClick();
       if (action === 'resume') resumeFromPause();
-      else if (action === 'settings') openSettings();
+      else if (action === 'save') {
+        if (!_ctx) return;
+        const result = saveGameState(_ctx);
+        // Toast is z:20, pause overlay is z:100 — flip the button text in
+        // place so the feedback is visible WITH the pause menu still up.
+        // Also fire the toast for the brief moment after unpause.
+        const msg = result.ok ? 'game saved' : (result.error ?? 'save failed');
+        _ctx.ui.showToast(msg);
+        b.textContent = msg;
+        window.setTimeout(() => { b.textContent = 'save'; }, 1600);
+      } else if (action === 'settings') openSettings();
       else if (action === 'quit') location.reload();
     });
     pauseBtns.appendChild(b);
@@ -180,6 +233,34 @@ export function createMenus(ctx: GameContext): void {
   pause.appendChild(pauseBtns);
   document.body.appendChild(pause);
   _pauseOverlay = pause;
+
+  // ── Death overlay: rebrand the existing #restart-btn as "main menu" and
+  //    inject a "continue from last save" button next to it. The existing
+  //    restart-btn click handler in input.ts already reloads the page, which
+  //    is the desired "main menu" behaviour. ──
+  const deathScreen = document.getElementById('death-screen');
+  const restartBtn = document.getElementById('restart-btn');
+  if (deathScreen && restartBtn) {
+    restartBtn.textContent = 'main menu';
+    const cont = document.createElement('button');
+    cont.id = 'death-continue-btn';
+    cont.textContent = 'continue from last save';
+    cont.style.marginRight = '8px';
+    cont.addEventListener('mouseenter', playUiHover);
+    cont.addEventListener('click', () => {
+      playUiClick();
+      const result = loadGameState(ctx);
+      if (!result.ok) {
+        ctx.ui.showToast(result.error ?? 'load failed');
+        return;
+      }
+      // Restore: hide death screen, re-lock pointer, resume play.
+      deathScreen.classList.add('hidden');
+      ctx.input.controls.lock();
+    });
+    restartBtn.parentElement?.insertBefore(cont, restartBtn);
+    updateDeathScreenButtons();
+  }
 
   // ── Settings panel ──
   const sp = document.createElement('div');
@@ -378,4 +459,76 @@ export function showPauseOverlay(): void {
 
 export function isSettingsOpen(): boolean {
   return _settingsOpen;
+}
+
+/** Toggle the "continue from last save" button on the death screen based
+ *  on whether a save currently exists in localStorage. Called from
+ *  createMenus on boot and from survival.die() right before the death
+ *  overlay is shown. */
+export function updateDeathScreenButtons(): void {
+  const cont = document.getElementById('death-continue-btn');
+  if (cont) cont.style.display = hasSave() ? '' : 'none';
+}
+
+/** Inline confirm for New Game when a save would be overwritten. Hides the
+ *  CTAs + shows a small confirm row. Yes → clearSave + lock pointer.
+ *  Cancel → restore the CTAs. */
+function showNewGameConfirm(
+  ctx: GameContext,
+  startOverlay: HTMLElement,
+  newGameCta: HTMLElement,
+  continueCta: HTMLElement,
+): void {
+  // If a confirm is already open, do nothing.
+  if (startOverlay.querySelector('.new-game-confirm')) return;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'new-game-confirm';
+
+  const msg = document.createElement('div');
+  msg.className = 'subtitle';
+  msg.textContent = 'starting a new game will overwrite your existing save.';
+  wrap.appendChild(msg);
+
+  const row = document.createElement('div');
+  row.className = 'menu-buttons';
+
+  const yes = document.createElement('button');
+  yes.className = 'menu-btn';
+  yes.textContent = 'yes, new game';
+  yes.addEventListener('mouseenter', playUiHover);
+  yes.addEventListener('click', (e) => {
+    e.stopPropagation();
+    playUiClick();
+    clearSave();
+    // Tear down the confirm + the now-stale Continue button; the new run
+    // has no save until the player sleeps or hits Save.
+    wrap.remove();
+    continueCta.remove();
+    newGameCta.style.display = '';
+    newGameCta.textContent = 'click to begin';
+    ctx.input.controls.lock();
+  });
+  row.appendChild(yes);
+
+  const cancel = document.createElement('button');
+  cancel.className = 'menu-btn';
+  cancel.textContent = 'cancel';
+  cancel.addEventListener('mouseenter', playUiHover);
+  cancel.addEventListener('click', (e) => {
+    e.stopPropagation();
+    playUiClick();
+    wrap.remove();
+    newGameCta.style.display = '';
+    continueCta.style.display = '';
+  });
+  row.appendChild(cancel);
+
+  wrap.appendChild(row);
+
+  // Hide the CTAs while the confirm is up so the user can only Yes/Cancel.
+  newGameCta.style.display = 'none';
+  continueCta.style.display = 'none';
+
+  startOverlay.appendChild(wrap);
 }

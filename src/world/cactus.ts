@@ -149,3 +149,9 @@ export function findCactusById(list: Cactus[], id: number | undefined): Cactus |
   for (const c of list) if (c.id === id) return c;
   return null;
 }
+
+/** Bump the module-level id counter past `n` so future spawns don't collide
+ *  with restored ids. Used by save/load. */
+export function setNextCactusId(n: number): void {
+  if (n > _nextId) _nextId = n;
+}

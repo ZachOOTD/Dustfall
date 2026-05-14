@@ -295,6 +295,12 @@ export function spawnDroppedPickup(
   };
 }
 
+/** Bump the module-level id counter past `n` so future spawns don't collide
+ *  with restored ids. Used by save/load. */
+export function setNextPickupId(n: number): void {
+  if (n > _nextId) _nextId = n;
+}
+
 /** Find a pickup by its userData.pickupId. */
 export function findPickupById(
   list: Pickup[],

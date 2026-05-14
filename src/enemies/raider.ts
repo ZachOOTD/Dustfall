@@ -39,12 +39,21 @@ export interface RaiderBlackboard {
 const SIGHT_REFRESH = 0.5; // seconds between sight raycasts per raider
 
 export interface Raider {
+  id: number;
   group: THREE.Group;
   body: RAPIER.RigidBody;
   collider: RAPIER.Collider;
   bladeArm: THREE.Object3D;
   bb: RaiderBlackboard;
   health: number;
+}
+
+let _nextRaiderId = 1;
+
+/** Bump the module-level id counter past `n` so future spawns don't collide
+ *  with restored ids. Used by save/load. */
+export function setNextRaiderId(n: number): void {
+  if (n > _nextRaiderId) _nextRaiderId = n;
 }
 
 const RAIDER_HEIGHT = 1.85;
@@ -179,9 +188,25 @@ export function spawnRaider(
     lastSightResult: false,
   };
 
-  const raider: Raider = { group, body, collider, bladeArm, bb, health: 1.0 };
+  const raider: Raider = {
+    id: _nextRaiderId++,
+    group, body, collider, bladeArm, bb, health: 1.0,
+  };
   _colliderToRaider.set(collider.handle, raider);
   return raider;
+}
+
+/** Apply the dead-raider visual + remove the collider. Used by both
+ *  damageRaider (on kill) and load (when restoring a state='dead' raider).
+ *  Caller is responsible for any position adjustments — this only mutates
+ *  rotation + physics state. */
+export function applyRaiderDeadPose(raider: Raider, ctx: GameContext): void {
+  raider.group.rotation.x = -Math.PI / 2 + 0.1;
+  // Disable collider so a dead raider can be walked through.
+  if (_colliderToRaider.has(raider.collider.handle)) {
+    ctx.physics.world.removeCollider(raider.collider, false);
+    _colliderToRaider.delete(raider.collider.handle);
+  }
 }
 
 function pickPatrolTarget(center: { x: number; z: number }, radius: number): THREE.Vector3 {
@@ -319,11 +344,8 @@ export function damageRaider(r: Raider, dmg: number, ctx: GameContext): void {
     r.health = 0;
     transitionTo(r, 'dead');
     // Collapse the visual: drop to ground, rotate forward
-    r.group.rotation.x = -Math.PI / 2 + 0.1;
     r.group.position.y -= 0.2;
-    // Disable collider
-    ctx.physics.world.removeCollider(r.collider, false);
-    _colliderToRaider.delete(r.collider.handle);
+    applyRaiderDeadPose(r, ctx);
     ctx.ui.showToast('it falls — the desert reclaims it');
     return;
   }
