@@ -24,6 +24,7 @@ import type { Fire } from './world/fire.ts';
 import type { Tent } from './world/tent.ts';
 import type { BiomeSampler } from './world/biomes.ts';
 import type { SalvageableRegistry } from './world/salvage.ts';
+import type { FootprintRegistry } from './world/footprints.ts';
 
 export interface GameContext {
   three: {
@@ -86,6 +87,7 @@ export interface GameContext {
   salvageables: SalvageableRegistry;
   weather: Weather;
   ambientDust: AmbientDust;
+  footprints: FootprintRegistry;
   journals: { list: Journal[] };
   flags: {
     started: boolean;     // true once the player has clicked into the game

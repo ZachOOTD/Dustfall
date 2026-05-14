@@ -43,6 +43,7 @@ import { createAmbientDust, updateAmbientDust } from './world/ambientDust.ts';
 import { spawnWaterSources } from './world/waterSources.ts';
 import { spawnCacti } from './world/cactus.ts';
 import { updateFires } from './world/fire.ts';
+import { createFootprintRegistry, updateFootprints } from './world/footprints.ts';
 import { addItem } from './inventory/inventory.ts';
 import { createMenus } from './ui/menus.ts';
 import { createLootMenu } from './ui/lootMenu.ts';
@@ -106,6 +107,7 @@ const lizards = [
 
 const weather = createWeather(three.scene, three.camera);
 const ambientDust = createAmbientDust(three.scene, three.camera);
+const footprints = createFootprintRegistry(three.scene, terrain);
 
 // Player capsule: feet at terrain height under spawn point.
 const spawnGround = terrain.heightAt(0, 0);
@@ -182,6 +184,7 @@ const ctx: GameContext = {
   salvageables,
   weather,
   ambientDust,
+  footprints,
   journals: { list: [] as Journal[] },
   flags: { started: false, paused: false, damageFlashUntil: 0 },
 };
@@ -244,6 +247,7 @@ startLoop(ctx, (c, dt) => {
   // (bobPickups removed — items now rest flat on the ground; no float/spin)
   updateRaiders(c, dt);          // AI state machine + raider movement
   updateLizards(c, dt);          // small flee-AI wildlife
+  updateFootprints(c.footprints, c.time.elapsed); // age + fade pooled decals
   updateFires(c, dt);            // flicker + fuel decrement + burnout
   updateInteraction(c, dt);      // raycast hover + E to take/refill/search/harvest/cook/sleep
   updateInventoryInput(c, dt);   // 1-4, wheel, Q to use

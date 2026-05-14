@@ -154,6 +154,24 @@ export const Tuning = {
   // Footstep proximity check (Session Q) — within this distance to any
   // waterSource, footsteps play the wet/splash variant.
   FOOTSTEP_WET_RADIUS: 2.0,
+
+  // Footprint decals (Session Y) — InstancedMesh pools, alpha fade over time.
+  // Player prints fire at the existing footstep cadence (controller.ts);
+  // lizard tracks fire every cadence-meters of flee travel (lizard.ts).
+  FOOTPRINT_LIFETIME_S: 45,             // total visible age before recycle
+  FOOTPRINT_FADE_TAIL_S: 12,            // final smoothstep fade window
+  FOOTPRINT_OFFSET_Y: 0.04,             // meters above terrain (avoid z-fight)
+  FOOTPRINT_LATERAL_OFFSET: 0.16,       // L/R foot displacement perpendicular to walk dir
+  FOOTPRINT_PLAYER_POOL: 200,
+  FOOTPRINT_PLAYER_SIZE_X: 0.22,        // lateral (boot width)
+  FOOTPRINT_PLAYER_SIZE_Z: 0.36,        // forward (boot length)
+  FOOTPRINT_PLAYER_TOEOUT_RAD: 0.10,    // ~6° toe-out per side for natural gait
+  FOOTPRINT_COLOR_PLAYER_HEX: 0x2d1f12, // dark earth — reads as darker on light sand
+  FOOTPRINT_LIZARD_POOL: 240,
+  FOOTPRINT_LIZARD_SIZE_X: 0.10,
+  FOOTPRINT_LIZARD_SIZE_Z: 0.12,
+  FOOTPRINT_LIZARD_CADENCE_M: 0.30,     // tracks every X meters during flee
+  FOOTPRINT_LIZARD_COLOR_HEX: 0x1e1208, // very dark — small but visible
 } as const;
 
 // Sky gradient colors (top vs horizon) per time of day. Horizon stays close to

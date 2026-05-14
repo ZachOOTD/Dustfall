@@ -10,6 +10,7 @@ import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import type { GameContext } from '../GameContext.ts';
 import { isPlaying } from '../GameContext.ts';
+import { Tuning } from '../config/tuning.ts';
 import type { Terrain } from '../world/terrain.ts';
 
 export type LizardState = 'idle' | 'flee' | 'dead';
@@ -27,6 +28,8 @@ export interface Lizard {
   hovered: boolean;
   /** True once the player has taken the meat from the corpse. */
   looted: boolean;
+  /** Distance accumulator (m) for footprint cadence — flee state only. */
+  trackAccum: number;
 }
 
 let _nextId = 1;
@@ -126,6 +129,7 @@ export function spawnLizard(
     fleeDir: new THREE.Vector3(),
     hovered: false,
     looted: false,
+    trackAccum: 0,
   };
   _colliderToLizard.set(collider.handle, lizard);
   return lizard;
@@ -204,16 +208,29 @@ export function updateLizards(ctx: GameContext, dt: number): void {
       }
     } else if (l.state === 'flee') {
       // Move
-      l.pos.x += l.fleeDir.x * FLEE_SPEED * dt;
-      l.pos.z += l.fleeDir.z * FLEE_SPEED * dt;
+      const stepX = l.fleeDir.x * FLEE_SPEED * dt;
+      const stepZ = l.fleeDir.z * FLEE_SPEED * dt;
+      l.pos.x += stepX;
+      l.pos.z += stepZ;
       const groundY = ctx.terrain.heightAt(l.pos.x, l.pos.z);
       l.pos.y = groundY + TERRAIN_OFFSET;
       l.mesh.position.copy(l.pos);
       // Update kinematic body so the collider follows.
       l.body.setNextKinematicTranslation({ x: l.pos.x, y: l.pos.y + 0.05, z: l.pos.z });
+      // Track decals — only during flee. Skip on rocky biome (no impression).
+      l.trackAccum += Math.hypot(stepX, stepZ);
+      if (l.trackAccum >= Tuning.FOOTPRINT_LIZARD_CADENCE_M) {
+        l.trackAccum = 0;
+        const biome = ctx.biomes.biomeAt(l.pos.x, l.pos.z);
+        if (biome !== 'rocky') {
+          const yaw = Math.atan2(l.fleeDir.x, l.fleeDir.z);
+          ctx.footprints.spawn('lizard', l.pos.x, l.pos.z, yaw, elapsed);
+        }
+      }
       // Return to idle after duration OR if player far away
       if (elapsed > l.fleeUntil || distSq > (SPOT_DISTANCE * 2) * (SPOT_DISTANCE * 2)) {
         l.state = 'idle';
+        l.trackAccum = 0;
       }
     }
   }

@@ -23,6 +23,7 @@ const GRAVITY = -25; // m/s^2
 const STEP_DISTANCE = 1.7;       // meters between footsteps (walking)
 const STEP_DISTANCE_SPRINT = 1.4; // shorter cadence when sprinting
 let _stepAccum = 0;
+let _stepParity = 0;             // alternates 0/1 → ±lateral offset for L/R foot
 
 export function updatePlayer(ctx: GameContext, dt: number): void {
   if (!isPlaying(ctx)) {
@@ -96,7 +97,9 @@ export function updatePlayer(ctx: GameContext, dt: number): void {
 
   // Footsteps — accumulate horizontal distance moved while grounded; trigger
   // a sound each time we cross the step threshold. Variant is picked from
-  // biomeAt + proximity to any water source (wet beats biome).
+  // biomeAt + proximity to any water source (wet beats biome). Same beat
+  // also stamps a footprint decal — alternating L/R foot via _stepParity,
+  // skipped on rocky biome (Session Y).
   const horizontal = Math.hypot(corrected.x, corrected.z);
   if (ctx.player.onGround && moving) {
     _stepAccum += horizontal;
@@ -104,13 +107,26 @@ export function updatePlayer(ctx: GameContext, dt: number): void {
     if (_stepAccum >= threshold) {
       _stepAccum = 0;
       const tr = body.translation();
-      if (nearWaterSource(ctx, tr.x, tr.z)) {
+      const wet = nearWaterSource(ctx, tr.x, tr.z);
+      const biome = ctx.biomes.biomeAt(tr.x, tr.z);
+      if (wet) {
         playFootstepWet();
+      } else if (biome === 'rocky') {
+        playFootstepRock();
+      } else if (biome === 'salt') {
+        playFootstepSalt();
       } else {
-        const biome = ctx.biomes.biomeAt(tr.x, tr.z);
-        if (biome === 'rocky') playFootstepRock();
-        else if (biome === 'salt') playFootstepSalt();
-        else playFootstepSand();
+        playFootstepSand();
+      }
+      // Decal — skip on rocky (no impression in rock). Wet/salt/dune all stamp.
+      if (biome !== 'rocky') {
+        const yaw = Math.atan2(fwd.x, fwd.z);
+        const sign = _stepParity === 0 ? -1 : 1;
+        const offX = right.x * Tuning.FOOTPRINT_LATERAL_OFFSET * sign;
+        const offZ = right.z * Tuning.FOOTPRINT_LATERAL_OFFSET * sign;
+        const toeOut = Tuning.FOOTPRINT_PLAYER_TOEOUT_RAD * sign;
+        ctx.footprints.spawn('player', tr.x + offX, tr.z + offZ, yaw + toeOut, ctx.time.elapsed);
+        _stepParity ^= 1;
       }
     }
   } else {

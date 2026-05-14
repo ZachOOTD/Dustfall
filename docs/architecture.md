@@ -34,6 +34,7 @@ src/
     lootContainers.ts     — standalone crates with rolled contents; spawn + tag
     fire.ts               — placeable fire (deployFire); flicker + fuelSeconds + shelter zone + cook/add_fuel interactions
     tent.ts               — placeable tent (deployTent); shelter zone + sleep interactable
+    footprints.ts         — InstancedMesh decal pools (player + lizard). Canvas-drawn textures; per-instance opacity via onBeforeCompile shader patch; smoothstep fade over FOOTPRINT_LIFETIME_S.
   assets/
     loader.ts             — GLTFLoader wrapper + SkeletonUtils.clone (for future rigged assets)
     manifest.ts           — typed list of asset URLs (empty registry tolerated; primitive fallback)

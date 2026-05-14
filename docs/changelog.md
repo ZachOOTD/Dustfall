@@ -3,6 +3,19 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session Y — 2026-05-14 — Footprints + lizard tracks
+NEW `src/world/footprints.ts` — InstancedMesh pools per kind (player ×200,
+lizard ×240). Canvas-drawn alpha-mask textures (toe+heel double oval for
+player, three-streak claw mark for lizard) — zero asset files. Per-instance
+opacity via `onBeforeCompile` shader patch on MeshBasicMaterial: 1 draw
+call per kind yet independent fades. Player decals hook the existing
+`_stepAccum` cadence in `controller.ts` with L/R parity offset (±0.16m
+perpendicular, ±6° toe-out); lizard decals fire every 0.30m of flee-state
+travel in `lizard.ts`. Both skip rocky biome. 12s smoothstep tail; 45s
+total lifetime. Round-robin pool recycling. `partially verified` (tsc +
+spawn writes + fade math + decal screenshots; controller cadence path
+unexercised due to preview pointer-lock + rAF throttling).
+
 ## Session X — 2026-05-14 — Audio overhaul (sample-stem architecture)
 Replaced V/W procedural drone+pluck+bandpass-wind with sample-stem orchestrator.
 NEW `src/audio/samples.ts` (tolerant fetch+decodeAudioData; missing files log

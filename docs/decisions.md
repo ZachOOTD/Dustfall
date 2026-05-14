@@ -149,3 +149,37 @@ quiet always-on pad sets the lonely-desert tone without competing with
 SFX. Risk recorded in archived plan: if 30s of calm listening grates,
 drop `MUSIC_CALM_TARGET` to 0.10 or switch to a sparse fade-in/out
 cycle.
+
+## D19 — Footprint decals via InstancedMesh + onBeforeCompile, not DecalGeometry or RenderTarget (Session Y)
+**When**: Session Y.
+**Why**: Three alternatives were on the table:
+  1. `DecalGeometry` — projects per-decal geometry onto the terrain. Heavy:
+     each decal allocates a fresh BufferGeometry triangulated against the
+     terrain mesh. 200+ player + 240 lizard decals = thousands of cloned
+     geometries per minute of walking.
+  2. RenderTarget texture splat — paint stamps into an offscreen texture
+     that the terrain shader samples. Fast at runtime but needs a custom
+     terrain shader (currently a plain `MeshLambertMaterial` with
+     vertex-color biome blending) — would force a shader rewrite.
+  3. InstancedMesh + per-instance opacity via `onBeforeCompile` shader
+     patch — picked. One draw call per kind, pool size bounded (200+240),
+     round-robin recycle. Per-instance opacity via a custom
+     `instanceOpacity` attribute injected into `MeshBasicMaterial`'s
+     vertex/fragment shaders. Geometry is flat planes lying on the
+     terrain with `polygonOffset` to avoid z-fight. Doesn't conform to
+     terrain curvature in micro-detail (decal is flat, dune is curved)
+     but the small per-decal footprint (~20-35cm) hides this.
+The choice favors a known scaling cap (pool size) + minimal renderer
+surface area over visually-perfect terrain-conforming decals. Revisit if
+we need much larger or more-detailed decals later.
+
+## D20 — No footprints on rocky biome (Session Y)
+**When**: Session Y.
+**Why**: Real desert sand prints don't appear on rock. Both the player
+hook (`controller.ts`) and lizard hook (`lizard.ts`) check
+`ctx.biomes.biomeAt(x, z) === 'rocky'` and skip the decal spawn while
+the footstep AUDIO still plays. Salt and dune biomes both stamp (salt's
+crusted-mud reads like a flat impression — close enough for v1).
+Trade-off: walking from dune onto rock and back leaves a visible gap
+in the trail. Acceptable — reads as "the terrain doesn't take the
+print" rather than a bug.

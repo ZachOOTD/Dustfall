@@ -45,13 +45,12 @@ Run with `npm run dev` (port 5173). Type-check with `npx tsc --noEmit`.
 
 ## Where we are now
 
-**Last shipped**: Session X — audio overhaul, sample-stem architecture
-(7-stem orchestrator: 3-way wind + day/night ambient beds + calm/tense
-music; tolerant fetch+decode loader). Code-complete; CC0 .ogg files
-intentionally absent from `public/audio/` — soundscape degrades to silence
-until files land (Session N precedent). Prior milestones: W (opening
-scene), V (atmosphere), U (UX + empty world), N (rigged raider infra). See
-[docs/changelog.md](docs/changelog.md) for full history;
+**Last shipped**: Session Y — footprint + lizard-track decals
+(InstancedMesh pools with canvas-drawn alpha textures, per-instance
+opacity via onBeforeCompile shader patch). Prior milestones: X (audio
+overhaul sample-stem architecture, .ogg files pending in `public/audio/`),
+W (opening scene), V (atmosphere), U (UX + empty world), N (rigged raider
+infra). See [docs/changelog.md](docs/changelog.md) for full history;
 [docs/roadmap.md](docs/roadmap.md) for what's next.
 
 ### Tutorial flags (Session L)

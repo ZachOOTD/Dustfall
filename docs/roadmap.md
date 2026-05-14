@@ -9,13 +9,7 @@ and promotes the second.
 
 ---
 
-## Next — Y: Footprints + lizard tracks (~4h)
-Player leaves footprints in sand; lizards leave running tracks when
-they flee. Decals on terrain (RenderTarget or a long-lived particle
-trail). Fades over time. Pure atmosphere/feel polish — pairs well
-with the empty-world tone.
-
-## Then — Z: Stone-well rework + tactile salvage panels (~5h)
+## Next — Z: Stone-well rework + tactile salvage panels (~5h)
 Replace the current well visuals with a stone-circle well + wooden
 hatch, restricted to the salt-flats biome (`biomes.biomeAt() === 'salt'`).
 Switch salvage from "stare at wreck + hold E" to interactable panels /
