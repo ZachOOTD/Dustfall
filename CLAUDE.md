@@ -40,11 +40,16 @@ Run with `npm run dev` (port 5173). Type-check with `npx tsc --noEmit`.
 
 ## Where we are now
 
-**Last completed**: Session S (sci-fi pivot — scavenger desert + ship wrecks). `tsc --noEmit` clean. New `src/world/wrecks.ts` registry: engine cluster, fuselage section, escape pod, cargo container, antenna spire, engine bell (each composable at variable scale) + `placeDebrisField` helper. Hero landmarks (in `heroLandmarks.ts`) now pick from the wreck registry; old ribcage / obelisk / radio-tower types removed. POIs (`poi.ts`) re-themed: monolith → "Engine Block" (hero-scale engine cluster tipped into a dune), ribcage cluster → "Crashed Hull" (fuselage + engine bell + debris field), watchtower → "Antenna Outpost" (antenna spire on buried wreck base + small debris field), abandoned-camp → "Scavenger Camp" (fire ring + small fuselage windbreak + bandage). New `WRECK_*` palette constants in `tuning.ts` (cool grey-rust industrial). Verified browser-side: 4 POIs land at expected positions with 7-14 child objects each (main wreck + debris), 7-9 hero wrecks scatter at 70-250m radius.
+**Last completed**: Session S (sci-fi pivot — scavenger desert + ship wrecks) + several iterations on world feel:
+- **S shipped** the wreck primitive registry (`src/world/wrecks.ts`: engine cluster / fuselage / escape pod / cargo container / antenna spire / engine bell + `placeDebrisField` helper). Hero landmarks + 4 hand-placed POIs re-themed to wrecks.
+- **Dune iteration** — replaced the sharp `1 - |simplex|` ridge with `cos(n · π/2)` smooth-ridge function, organic noise warp, and 192-cell mesh resolution. Salt-flat biomes scale heights by 0.08× for near-flat playas; wider biome blend (0.22 noise units).
+- **Realism pass** — wells-only water (5 wells with a salt-biome quota of 2), player starts with a full canteen, scattered canteens removed, pickups stop bobbing/spinning + align to terrain normal, tall objects (cactus / antenna / obelisk / watchtower / wells) buried into the sand.
+- **Debug + crouch** — `Tuning.GOD_MODE = true` makes `die()` floor stats instead of killing. Hold LeftCtrl to crouch (eye 0.85→0.40m, walk × 0.5, sprint disabled). Ribcage hero landmark restored at ~15% probability.
+- **Compound colliders** — new `attachCompoundCollider` in `physics/bodies.ts` walks each child mesh and creates a shape-accurate Rapier collider (cuboid → BoxGeometry, cylinder → CylinderGeometry, ball → IcosahedronGeometry, cone → ConeGeometry; torus/buffer fallback to per-mesh AABB; circles skipped). Collider count 46 → 112; wrecks now collide along their actual silhouettes.
 
 Earlier sessions: A–L (foundation through tutorial UX) + P (barren-desert pass: dune terrain, biome map + per-vertex tints, wells with salt quota, prop cleanup). See `docs/architecture.md` for full history.
 
-**Next**: Session Q (camera bob, idle breathing, surface-aware footsteps, smoother use-anim curves). Plan at `C:\Users\Zach\.claude\plans\in-the-dustfall-folder-elegant-cray.md` → "Next session — Q" section. Then M (save/load), N (rigged Quaternius raider), O (enemy variety + win condition).
+**Next**: Session T (salvage gameplay — make wrecks salvageable for loot). Plan at `C:\Users\Zach\.claude\plans\in-the-dustfall-folder-elegant-cray.md` → "Session T" section. Then Q (camera bob + footsteps + ease curves), M (save/load), N (rigged Quaternius raider), O (enemy variety + win condition).
 
 ### Tutorial flags (Session L)
 
