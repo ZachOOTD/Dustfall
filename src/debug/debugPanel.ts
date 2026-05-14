@@ -3,6 +3,7 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import type { GameContext } from '../GameContext.ts';
 import { resetTutorial, showControlsPanel } from '../ui/tutorial.ts';
+import { getAudioStateSnapshot, type AudioStateSnapshot } from '../audio/soundscape.ts';
 
 declare global {
   interface Window {
@@ -43,6 +44,9 @@ interface DebugApi {
   resetTutorial: () => void;
   /** Open the controls panel from the console — handy for screenshotting. */
   showControls: () => void;
+  /** Per-stem audio gains + signal derivations. Null until first click unlocks
+   *  audio. Use to tune sample-pack mix levels without re-running. */
+  audioState: () => AudioStateSnapshot | null;
 }
 
 export function installDebugPanel(ctx: GameContext): void {
@@ -84,5 +88,6 @@ export function installDebugPanel(ctx: GameContext): void {
     },
     resetTutorial,
     showControls() { showControlsPanel(ctx); },
+    audioState: () => getAudioStateSnapshot(ctx),
   };
 }

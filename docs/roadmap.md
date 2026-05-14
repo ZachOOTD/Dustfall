@@ -9,17 +9,7 @@ and promotes the second.
 
 ---
 
-## Next — X: Audio overhaul (~6h)
-Replace the disabled placeholders (wind layer + procedural drone music,
-both turned off in V/W) with a proper soundscape. Procedural-only didn't
-land tonally; explore a small CC0 sample pack for ambient beds + music
-stems, keep procedural for SFX where it works (footsteps, drink, craft).
-Needs: situational wind (calm vs. windy vs. storm), day/night ambient
-bed, melodic music that fits the lonely sci-fi desert vibe. The wind
-node graph in `audio/soundscape.ts` is commented out — restore-point
-ready.
-
-## Then — Y: Footprints + lizard tracks (~4h)
+## Next — Y: Footprints + lizard tracks (~4h)
 Player leaves footprints in sand; lizards leave running tracks when
 they flee. Decals on terrain (RenderTarget or a long-lived particle
 trail). Fades over time. Pure atmosphere/feel polish — pairs well
@@ -58,8 +48,9 @@ Pick whatever feels most missing after the polish + atmosphere arc.
 ## Continuous polish (interleaved between numbered sessions)
 - Environmental: dust motes in light beams, footprint puffs, distant cloud
   bank, mirage shader on salt-flat biome.
-- Audio: ambient bird calls during day, insect chitter at night, distant
-  wind howl when sandstorm builds.
+- Audio: source + commit CC0 sample pack into `public/audio/` (file
+  contract in archived Session X plan). Architecture is in; soundscape
+  activates each stem as its .ogg lands.
 - HUD micro-polish: low-stat warning vignettes (cold = blue tint, thirst =
   brown), interact-prompt fade, low-stamina screen wobble.
 - Crosshair feedback: thicken on interactable, red on enemy.

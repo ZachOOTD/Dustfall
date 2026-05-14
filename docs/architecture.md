@@ -57,7 +57,8 @@ src/
     shelterZones.ts       — AABB registry + per-frame point-in-box check → ctx.player.inShelter; addShelterZone returns zone ref; removeShelterZone splices by identity (used by fires on burnout)
   audio/
     audio.ts              — Web Audio context, master/sfx/ambient gains, playFootstep/Pickup/Drink/Swing/Hit/Death/UiHover/UiClick/InventorySelect/Equip/Pour/Refill/Harvest/LizardSquish/FireIgnite/FireCrackle/CookSizzle/SleepThud/Craft/Drop/PlayerHurt
-    soundscape.ts         — wind loop (filtered noise + LFO wobble) modulated by night + storm
+    soundscape.ts         — sample-stem orchestrator: 3-way wind (calm/mid/storm), day/night ambient beds, calm+tense music. Crossfaded by weather.intensity + sunHeight. Procedural drift for breeze variation.
+    samples.ts            — tolerant loader. Fetches OGG stems from `/public/audio/` + decodeAudioData; missing files degrade to silence.
   ui/
     hud.ts                — 5 stat bars (thirst/hunger/two-way-temperature/stamina/health) + clock + day counter + toast + death screen + days-survived summary + damage vignette + shelter indicator
     hotbar.ts             — 4 slots bottom-center, keybind/SVG icon/count/canteen-fill-bar, diff-render (tracks fillLevel too)

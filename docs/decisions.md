@@ -124,3 +124,28 @@ surface clamped to full fog color, painting the wreck and surroundings
 red-brown even at 12 m distance. Fix: at peak storm, `fog.near = 15`,
 `fog.far = 30` — math stays sane, fog still feels claustrophobic. Going
 forward, always pair fog far + near changes; never let one cross the other.
+
+## D17 — CC0 sample stems over procedural for ambient + music (Session X)
+**When**: Session X.
+**Why**: D3 ("procedural Web Audio, no sample files") still holds for SFX
+— short envelope-shaped sounds work great synthesized. But Session V proved
+the same approach fails for long-form ambient + music: a 3-voice procedural
+score (drone pad + pentatonic plucks + storm sub) reads as "synthesizer
+demo," not "lonely-desert soundtrack." Session X carves out an exception:
+sample-based stems (.ogg, CC0) for the 3 wind layers, 2 day/night beds,
+and 2 music variants. SFX stay procedural. Stems are crossfaded by
+weather.intensity + sunHeight at runtime — no timeline, no DAW, no stem
+sync. The loader tolerates missing files so the architecture can ship
+ahead of the asset pack (same pattern as Session N rigged-raider GLB).
+
+## D18 — Continuous quiet music over silent-calm baseline (Session X)
+**When**: Session X.
+**Why**: V/W default was "silence in calm weather, music only during
+storms." User considered keeping it but chose to play `music-calm.ogg`
+continuously at ~0.20 gain instead, crossfading to a `music-tense.ogg`
+variant above `weather.intensity > 0.4`. Reason: the silence vibe was
+acceptable but felt like a fallback, not a deliberate choice. A very
+quiet always-on pad sets the lonely-desert tone without competing with
+SFX. Risk recorded in archived plan: if 30s of calm listening grates,
+drop `MUSIC_CALM_TARGET` to 0.10 or switch to a sparse fade-in/out
+cycle.

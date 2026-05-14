@@ -3,6 +3,18 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session X — 2026-05-14 — Audio overhaul (sample-stem architecture)
+Replaced V/W procedural drone+pluck+bandpass-wind with sample-stem orchestrator.
+NEW `src/audio/samples.ts` (tolerant fetch+decodeAudioData; missing files log
+warning + null). REWRITE `src/audio/soundscape.ts`: 7 stems (calm/mid/storm
+wind, day/night ambient beds, calm/tense music) crossfaded via smoothstep on
+weather.intensity + sunHeight + slow procedural breeze drift. Music bus 4s
+fade-in. DELETED `src/audio/music.ts`. New `__game.audioState()` debug hook.
+Files intentionally NOT shipped — `public/audio/` empty, code activates as
+each .ogg lands (Session N precedent). `partially verified` (tsc + signal
+math + graceful-degradation path confirmed via preview_eval; audible test
+deferred to when files arrive).
+
 ## Session W — 2026-05-14 — Opening scene + world detail
 Cinematic intro on fresh worlds (gated by `!hasSave()`): 30-s sandstorm,
 hand-authored crashed-shelter wreck (rectangular box-walls — NOT the broken
