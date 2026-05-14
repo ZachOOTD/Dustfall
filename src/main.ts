@@ -22,7 +22,7 @@ import { updateStats } from './stats/survival.ts';
 import { createHud, updateHud } from './ui/hud.ts';
 import { createHotbar, updateHotbar } from './ui/hotbar.ts';
 import { createInteractPrompt, updateInteractPrompt } from './ui/interactPrompt.ts';
-import { spawnCanteens, spawnBranches, bobPickups } from './pickups/pickups.ts';
+import { spawnBranches } from './pickups/pickups.ts';
 import { createInventory, updateInventoryInput } from './inventory/inventory.ts';
 import { updateInteraction } from './player/interaction.ts';
 import { updatePlayer } from './player/controller.ts';
@@ -69,15 +69,14 @@ const shelter = createShelterRegistry();
 const biomes = createBiomeSampler(makeRng(Tuning.RNG_SEED + 17));
 const terrain = createTerrain(three.scene, physics.world, terrainRand, biomes);
 placeHeroLandmarks(three.scene, physics.world, terrain, scatterRand);
-const pickupList = spawnCanteens(three.scene, terrain, assets, scatterRand);
-const branchList = spawnBranches(three.scene, terrain, scatterRand);
-pickupList.push(...branchList);
-const waterSources = spawnWaterSources(three.scene, terrain, scatterRand);
+// Scattered canteens were removed — the player starts with one (see below).
+const pickupList = spawnBranches(three.scene, terrain, scatterRand);
+const waterSources = spawnWaterSources(three.scene, terrain, scatterRand, biomes);
 const cacti = spawnCacti(three.scene, physics.world, terrain, scatterRand);
 
-// Hand-placed distant POIs (Session P). Adds entries to waterSources + pickups
-// for the abandoned-camp barrel and bandage.
-placePOIs(three.scene, physics.world, terrain, scatterRand, waterSources, pickupList);
+// Hand-placed distant POIs (Session P). Adds a bandage pickup at the
+// abandoned camp.
+placePOIs(three.scene, physics.world, terrain, scatterRand, pickupList);
 
 // Spawn one raider somewhere visible-but-not-immediate (~30m from spawn).
 const raiders = [
@@ -172,9 +171,11 @@ const ctx: GameContext = {
 // First-person viewmodel — must come after scene is built; consumes ctx.
 ctx.player.viewModel = createViewModel(ctx);
 
-// Player starts with a machete in slot 1 so combat is immediately accessible.
-// (Without this they'd need a machete pickup, which v1 doesn't spawn.)
+// Player starts with a machete (slot 0) and a full canteen (slot 1). Scattered
+// canteens were removed from the world — the starter canteen + wells are the
+// player's only water sources at boot.
 addItem(ctx.inventory, 'machete');
+addItem(ctx.inventory, 'canteen', { fillLevel: 1 });
 ctx.inventory.selectedIdx = 0;
 
 // IMPORTANT: createMenus must run BEFORE wireOverlays — the unlock handler
@@ -208,7 +209,7 @@ startLoop(ctx, (c, dt) => {
   updateShelter(c, dt);          // before stats so heat path sees inShelter
   updateStats(c, dt);            // thirst/heat/health drain + death
   updateSoundscape(c, dt);       // wind volume tracks day/night
-  bobPickups(c, dt);             // bob anim
+  // (bobPickups removed — items now rest flat on the ground; no float/spin)
   updateRaiders(c, dt);          // AI state machine + raider movement
   updateLizards(c, dt);          // small flee-AI wildlife
   updateFires(c, dt);            // flicker + fuel decrement + burnout

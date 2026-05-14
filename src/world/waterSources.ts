@@ -1,4 +1,4 @@
-// World water sources — oasis pools, abandoned wells, salvageable barrels.
+// World water sources — abandoned wells, scattered with a salt-biome quota.
 // The player aims at one and presses E with a non-full canteen to refill.
 //
 // Registered in `ctx.waterSources.list`. Tagged via userData.interactType/Id
@@ -7,8 +7,9 @@
 import * as THREE from 'three';
 import type { Rng } from '../core/rng.ts';
 import type { Terrain } from '../world/terrain.ts';
+import type { BiomeSampler } from './biomes.ts';
 
-export type WaterSourceKind = 'oasis' | 'well' | 'barrel';
+export type WaterSourceKind = 'well';
 
 export interface WaterSource {
   id: number;
@@ -26,49 +27,6 @@ function tag(root: THREE.Object3D, id: number): void {
     o.userData.interactId = id;
     o.userData.interactRegistry = 'waterSources';
   });
-}
-
-function makeOasis(rand: Rng): THREE.Group {
-  const g = new THREE.Group();
-  // Shallow water disc (CircleGeometry rotated to XZ).
-  const waterMat = new THREE.MeshStandardMaterial({
-    color: 0x3a6678,
-    emissive: 0x081820,
-    emissiveIntensity: 0.4,
-    roughness: 0.3,
-    metalness: 0.1,
-    transparent: true,
-    opacity: 0.85,
-  });
-  const radius = 1.2 + rand() * 0.8;
-  const disc = new THREE.Mesh(new THREE.CircleGeometry(radius, 20), waterMat);
-  disc.rotation.x = -Math.PI / 2;
-  disc.position.y = 0.02;
-  g.add(disc);
-
-  // Stone rim — small dark torus
-  const rim = new THREE.Mesh(
-    new THREE.TorusGeometry(radius + 0.05, 0.08, 5, 24),
-    new THREE.MeshStandardMaterial({ color: 0x3a3026, roughness: 0.9 }),
-  );
-  rim.rotation.x = Math.PI / 2;
-  rim.position.y = 0.04;
-  g.add(rim);
-
-  // 3-5 vegetation tufts (small green cylinders) around the rim
-  const tuftMat = new THREE.MeshStandardMaterial({ color: 0x4a6a3a, roughness: 0.9 });
-  const tuftCount = 3 + Math.floor(rand() * 3);
-  for (let i = 0; i < tuftCount; i++) {
-    const ang = (i / tuftCount) * Math.PI * 2 + rand() * 0.5;
-    const r = radius + 0.15 + rand() * 0.3;
-    const tuft = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.04, 0.06, 0.25 + rand() * 0.15, 5),
-      tuftMat,
-    );
-    tuft.position.set(Math.cos(ang) * r, 0.12, Math.sin(ang) * r);
-    g.add(tuft);
-  }
-  return g;
 }
 
 function makeWell(_rand: Rng): THREE.Group {
@@ -104,83 +62,51 @@ function makeWell(_rand: Rng): THREE.Group {
   return g;
 }
 
-function makeBarrel(_rand: Rng): THREE.Group {
-  const g = new THREE.Group();
-  const metalMat = new THREE.MeshStandardMaterial({
-    color: 0x6a4a30,
-    roughness: 0.85,
-    metalness: 0.3,
-  });
-  const lidMat = new THREE.MeshStandardMaterial({ color: 0x3a2820, roughness: 0.95 });
-  const barrel = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.32, 0.32, 0.7, 12),
-    metalMat,
-  );
-  barrel.position.y = 0.35;
-  g.add(barrel);
-
-  // Rust bands
-  const bandMat = new THREE.MeshStandardMaterial({ color: 0x3a2a18, roughness: 1 });
-  for (const y of [0.15, 0.55]) {
-    const band = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.325, 0.325, 0.04, 12),
-      bandMat,
-    );
-    band.position.y = y;
-    g.add(band);
-  }
-
-  // Lid
-  const lid = new THREE.Mesh(new THREE.CylinderGeometry(0.30, 0.30, 0.04, 12), lidMat);
-  lid.position.y = 0.71;
-  g.add(lid);
-  return g;
-}
-
 export function spawnWaterSources(
   scene: THREE.Scene,
   terrain: Terrain,
   rand: Rng,
+  biomes: BiomeSampler,
 ): WaterSource[] {
   const list: WaterSource[] = [];
-  const total = 10;        // 3 oases + 4 wells + 3 barrels
-  const kinds: WaterSourceKind[] = [
-    'oasis', 'oasis', 'oasis',
-    'well', 'well', 'well', 'well',
-    'barrel', 'barrel', 'barrel',
-  ];
-  for (let i = 0; i < total; i++) {
-    const kind = kinds[i];
-    const radius = 30 + rand() * 200;
-    const angle = rand() * Math.PI * 2;
-    const x = Math.cos(angle) * radius;
-    const z = Math.sin(angle) * radius;
-    const y = terrain.heightAt(x, z);
+  // Wells only — oases and barrels have been retired (they didn't fit the
+  // barren-desert tone). At least one well is forced into a salt-flat biome
+  // so the player has a survival landmark in the otherwise water-less salt.
+  const TOTAL_WELLS = 5;
+  const SALT_QUOTA = 2;          // at least this many wells must land in salt
 
-    let mesh: THREE.Group;
-    if (kind === 'oasis') mesh = makeOasis(rand);
-    else if (kind === 'well') mesh = makeWell(rand);
-    else mesh = makeBarrel(rand);
+  let saltPlaced = 0;
+  for (let i = 0; i < TOTAL_WELLS; i++) {
+    const requireSalt = saltPlaced < SALT_QUOTA;
+    // Retry sampling until biome constraint is satisfied or we give up.
+    let x = 0, z = 0;
+    for (let attempt = 0; attempt < 40; attempt++) {
+      const radius = 35 + rand() * 200;
+      const angle = rand() * Math.PI * 2;
+      x = Math.cos(angle) * radius;
+      z = Math.sin(angle) * radius;
+      if (!requireSalt || biomes.biomeAt(x, z) === 'salt') break;
+    }
+    if (biomes.biomeAt(x, z) === 'salt') saltPlaced++;
 
-    mesh.position.set(x, y, z);
+    const groundY = terrain.heightAt(x, z);
+    const mesh = makeWell(rand);
+    // Sink the well slightly so its stone base sits flush even on a slope.
+    mesh.position.set(x, groundY - 0.25, z);
     mesh.rotation.y = rand() * Math.PI * 2;
     mesh.traverse((o) => {
       const m = o as THREE.Mesh;
-      if (m.isMesh) {
-        m.castShadow = true;
-        m.receiveShadow = true;
-      }
+      if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; }
     });
 
     const id = _nextId++;
     tag(mesh, id);
     scene.add(mesh);
-
     list.push({
       id,
-      kind,
+      kind: 'well',
       mesh,
-      pos: new THREE.Vector3(x, y, z),
+      pos: new THREE.Vector3(x, groundY, z),
       hovered: false,
     });
   }
@@ -193,30 +119,3 @@ export function findWaterSourceById(list: WaterSource[], id: number | undefined)
   return null;
 }
 
-/** Place a single water source at a fixed world position. Used by POIs
- *  (Session P) — e.g., the abandoned-camp barrel. Returns the WaterSource;
- *  the caller is responsible for pushing it into the registry list. */
-export function spawnWaterSourceAt(
-  scene: THREE.Scene,
-  terrain: Terrain,
-  rand: Rng,
-  kind: WaterSourceKind,
-  x: number,
-  z: number,
-): WaterSource {
-  const y = terrain.heightAt(x, z);
-  let mesh: THREE.Group;
-  if (kind === 'oasis') mesh = makeOasis(rand);
-  else if (kind === 'well') mesh = makeWell(rand);
-  else mesh = makeBarrel(rand);
-  mesh.position.set(x, y, z);
-  mesh.rotation.y = rand() * Math.PI * 2;
-  mesh.traverse((o) => {
-    const m = o as THREE.Mesh;
-    if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; }
-  });
-  const id = _nextId++;
-  tag(mesh, id);
-  scene.add(mesh);
-  return { id, kind, mesh, pos: new THREE.Vector3(x, y, z), hovered: false };
-}

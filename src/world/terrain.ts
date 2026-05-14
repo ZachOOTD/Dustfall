@@ -59,7 +59,7 @@ function lerp3(
   ];
 }
 
-const _BIOME_BLEND_WIDTH = 0.08;
+const _BIOME_BLEND_WIDTH = 0.22;
 function blendedBiomeColor(noiseVal: number): [number, number, number] {
   const rockyT = Tuning.BIOME_THRESHOLD_ROCKY;
   const saltT = Tuning.BIOME_THRESHOLD_SALT;

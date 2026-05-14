@@ -93,7 +93,9 @@ export function spawnCacti(
     const y = terrain.heightAt(x, z);
 
     const mesh = makeCactus(rand);
-    mesh.position.set(x, y, z);
+    // Bury the trunk base ~0.25m so cacti don't show a visible gap on sloped
+    // sand (they stay vertical while the ground tilts).
+    mesh.position.set(x, y - 0.25, z);
     mesh.rotation.y = rand() * Math.PI * 2;
     mesh.traverse((o) => {
       const m = o as THREE.Mesh;

@@ -10,9 +10,7 @@ import * as THREE from 'three';
 import type RAPIER from '@dimforge/rapier3d-compat';
 import type { Rng } from '../core/rng.ts';
 import type { Terrain } from './terrain.ts';
-import type { WaterSource } from './waterSources.ts';
 import type { Pickup } from '../pickups/pickups.ts';
-import { spawnWaterSourceAt } from './waterSources.ts';
 import { spawnDroppedPickup } from '../pickups/pickups.ts';
 import { placeRibcage } from './heroLandmarks.ts';
 import { perturbOutward } from './sculpt.ts';
@@ -58,15 +56,15 @@ function placeMonolith(
 }
 
 // ────────────────────────────────────────────────────────────────
-// Abandoned camp — fire ring + barrel + bandage pickup
-// Returns the WaterSource + Pickup so the caller can register them.
+// Abandoned camp — fire ring + bandage pickup (no barrel; barrels removed)
+// Returns the bandage Pickup so the caller can register it.
 // ────────────────────────────────────────────────────────────────
 function placeAbandonedCamp(
   scene: THREE.Scene,
   terrain: Terrain,
   rand: Rng,
   center: THREE.Vector3,
-): { waterSource: WaterSource; pickup: Pickup } {
+): { pickup: Pickup } {
   // Fire ring — 8 small dark stones in a 1m circle
   const stoneMat = new THREE.MeshLambertMaterial({
     color: new THREE.Color().setHSL(0.07, 0.05, 0.12),
@@ -82,7 +80,7 @@ function placeAbandonedCamp(
     );
     stone.position.set(
       center.x + Math.cos(a) * r,
-      terrain.heightAt(center.x + Math.cos(a) * r, center.z + Math.sin(a) * r) + 0.04,
+      terrain.heightAt(center.x + Math.cos(a) * r, center.z + Math.sin(a) * r) - 0.02,
       center.z + Math.sin(a) * r,
     );
     stone.rotation.y = rand() * Math.PI;
@@ -90,21 +88,17 @@ function placeAbandonedCamp(
     stone.receiveShadow = true;
     scene.add(stone);
   }
-  // Ash patch — flat dark disc in the center
+  // Ash patch — flat dark disc in the center, aligned to terrain normal so
+  // it sits flush on slopes.
   const ash = new THREE.Mesh(
     new THREE.CircleGeometry(ringR * 0.85, 16),
     new THREE.MeshBasicMaterial({ color: 0x14100c }),
   );
-  ash.rotation.x = -Math.PI / 2;
+  const ashNormal = terrain.normalAt(center.x, center.z).clone();
   ash.position.set(center.x, terrain.heightAt(center.x, center.z) + 0.015, center.z);
+  // Default CircleGeometry is in XY plane; orient its +Z up, then tilt to normal.
+  ash.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), ashNormal);
   scene.add(ash);
-
-  // Barrel offset from the fire ring; tagged as a refillable water source.
-  const barrelX = center.x + 2.0 + rand() * 0.6;
-  const barrelZ = center.z - 0.6 + rand() * 1.2;
-  const waterSource = spawnWaterSourceAt(scene, terrain, rand, 'barrel', barrelX, barrelZ);
-  // Tilt it slightly so it reads as "abandoned, half-fallen."
-  waterSource.mesh.rotation.z = 0.18 + rand() * 0.1;
 
   // Bandage pickup on the other side of the fire.
   const bandageX = center.x - 1.4 + rand() * 0.6;
@@ -116,7 +110,7 @@ function placeAbandonedCamp(
     'bandage',
   );
 
-  return { waterSource, pickup };
+  return { pickup };
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -180,7 +174,9 @@ function placeWatchtower(
     group.add(slat);
   }
 
+  // Bury the footings ~0.4m so the legs don't appear to float on a slope.
   group.position.copy(pos);
+  group.position.y -= 0.4;
   group.rotation.y = rand() * Math.PI * 2;
   group.rotation.z = (rand() - 0.5) * 0.22;   // pronounced lean
   group.rotation.x = (rand() - 0.5) * 0.12;
@@ -236,7 +232,6 @@ export function placePOIs(
   world: RAPIER.World,
   terrain: Terrain,
   rand: Rng,
-  waterSourceList: WaterSource[],
   pickupList: Pickup[],
 ): void {
   for (const p of POI_LAYOUT) {
@@ -247,8 +242,7 @@ export function placePOIs(
         placeMonolith(scene, world, pos, rand);
         break;
       case 'camp': {
-        const { waterSource, pickup } = placeAbandonedCamp(scene, terrain, rand, pos);
-        waterSourceList.push(waterSource);
+        const { pickup } = placeAbandonedCamp(scene, terrain, rand, pos);
         pickupList.push(pickup);
         break;
       }

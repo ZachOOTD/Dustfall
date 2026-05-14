@@ -156,7 +156,7 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
       w.hovered = true;
       // Find a canteen slot the player can refill
       const slot = findRefillableCanteen(ctx);
-      const noun = w.kind === 'oasis' ? 'water' : w.kind === 'well' ? 'well' : 'barrel';
+      const noun = 'well';
       if (slot) {
         ctx.inventory.hover = { type: 'refill', distance: info.distance, promptNoun: noun };
         if (ctx.input.pressed.has('KeyE')) {

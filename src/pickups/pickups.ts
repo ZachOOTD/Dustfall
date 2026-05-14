@@ -33,6 +33,21 @@ function tagPickupMeshes(root: THREE.Object3D, pickupId: number): void {
   });
 }
 
+const _UP = new THREE.Vector3(0, 1, 0);
+const _alignQuat = new THREE.Quaternion();
+const _alignAxis = new THREE.Vector3();
+
+/** Tilt `mesh` so its local +Y points along the terrain normal at (x, z).
+ *  Preserves any existing rotation by composing the alignment quaternion
+ *  with whatever was already on the mesh. */
+function alignToTerrainNormal(mesh: THREE.Object3D, terrain: Terrain, x: number, z: number): void {
+  _alignAxis.copy(terrain.normalAt(x, z));
+  // Skip a no-op rotation when ground is flat (normal === +Y).
+  if (Math.abs(_alignAxis.y - 1) < 1e-4) return;
+  _alignQuat.setFromUnitVectors(_UP, _alignAxis);
+  mesh.quaternion.premultiply(_alignQuat);
+}
+
 // ────────────────────────────────────────────────────────────────
 // Canteen visual (improved primitive)
 // ────────────────────────────────────────────────────────────────
@@ -184,9 +199,13 @@ export function spawnBranches(
     const groundY = terrain.heightAt(x, z);
 
     const mesh = makePrimitiveBranch(rand);
-    const restY = groundY + 0.08;
+    // Sit the branch directly on (slightly into) the sand. Align rotation to
+    // the terrain normal so it follows the slope instead of floating with a
+    // visible gap at the downhill end.
+    const restY = groundY + 0.012;
     mesh.position.set(x, restY, z);
     mesh.rotation.y = rand() * Math.PI * 2;
+    alignToTerrainNormal(mesh, terrain, x, z);
 
     // Thin sticks — their shadow contribution is invisible from a meter+
     // away. Skip the cost.
@@ -215,20 +234,13 @@ export function spawnBranches(
   return list;
 }
 
-/**
- * Per-frame visual update: gentle bob + slow Y rotation. Hover state is
- * separate (set by interaction) and applied as an emissive boost on the
- * primary mesh material.
- */
-export function bobPickups(ctx: import('../GameContext.ts').GameContext, dt: number): void {
-  const t = ctx.time.elapsed;
-  for (const p of ctx.pickups.list) {
-    const bob = Math.sin(t * 1.4 + p.bobPhase) * 0.06;
-    p.mesh.position.x = p.pos.x;
-    p.mesh.position.z = p.pos.z;
-    p.mesh.position.y = p.pos.y + bob + (p.hovered ? 0.04 : 0);
-    p.mesh.rotation.y += 0.4 * dt;
-  }
+/** Retained for source compatibility — pickups no longer bob or spin.
+ *  Removed from the per-frame tick; callers may still reference the symbol. */
+export function bobPickups(
+  _ctx: import('../GameContext.ts').GameContext,
+  _dt: number,
+): void {
+  /* intentionally empty */
 }
 
 /** Spawn a Pickup at a given world position from any ItemId — used for
@@ -254,9 +266,10 @@ export function spawnDroppedPickup(
     mesh = fallback;
   }
   const groundY = terrain.heightAt(pos.x, pos.z);
-  const restY = groundY + 0.15;
+  const restY = groundY + 0.04;
   mesh.position.set(pos.x, restY, pos.z);
   mesh.rotation.y = Math.random() * Math.PI * 2;
+  alignToTerrainNormal(mesh, terrain, pos.x, pos.z);
   // Dropped items inherit the pickup no-shadow rule.
   mesh.userData.noShadow = true;
   mesh.traverse((o) => {

@@ -56,7 +56,7 @@ export function placeRibcage(
   group.add(skull);
 
   group.position.copy(pos);
-  group.position.y -= 0.05; // press into sand a touch
+  group.position.y -= 0.2; // press into sand so it sits flush on slopes
   group.rotation.y = rand() * Math.PI * 2;
   group.rotation.z = (rand() - 0.5) * 0.08;
   scene.add(group);
@@ -123,8 +123,10 @@ function placeRadioTower(
   antenna.position.set(0, height + 1.1, 0);
   group.add(antenna);
 
-  // Slight permanent lean
+  // Slight permanent lean. Sink the footing ~0.5m so the legs don't hover
+  // on sloped ground.
   group.position.copy(pos);
+  group.position.y -= 0.5;
   group.rotation.y = rand() * Math.PI * 2;
   group.rotation.z = (rand() - 0.5) * 0.10;
   scene.add(group);
@@ -187,7 +189,9 @@ function placeObelisk(
     group.add(chunk);
   }
 
+  // Sink the broken obelisk into the sand so the base reads as buried.
   group.position.copy(pos);
+  group.position.y -= 0.35;
   group.rotation.y = rand() * Math.PI * 2;
   scene.add(group);
 
