@@ -216,13 +216,7 @@ export function updateInventoryInput(ctx: GameContext, _dt: number): void {
     dropSelected(ctx);
   }
 
-  // C to open crafting menu
-  if (ctx.input.pressed.has('KeyC')) {
-    void import('../ui/craftingMenu.ts').then((m) => m.openCraftingMenu(ctx));
-  }
-
-  // I to open inventory overlay (backpack + hotbar)
-  if (ctx.input.pressed.has('KeyI')) {
-    void import('../ui/inventoryOverlay.ts').then((m) => m.openInventoryOverlay(ctx));
-  }
+  // I (inventory) and C (crafting) toggle handlers live in core/input.ts on
+  // a window listener so they fire even while another overlay has paused
+  // the game (this function is skipped when paused).
 }

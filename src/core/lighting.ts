@@ -89,8 +89,18 @@ export function updateLighting(ctx: GameContext, _dt: number): void {
   } else {
     target = SkyColors.HORIZON_NIGHT;
   }
-  (scene.background as THREE.Color).copy(target);
-  (scene.fog as THREE.Fog).color.copy(target);
+  // Sandstorm: pull the scene background HARD toward the storm-sky dust
+  // color (the dome behind the player), but lerp the FOG color more
+  // gently — fog tints every world surface within fog range, so a strong
+  // tint repaints the wreck and surrounding sand reddish. The sky tint
+  // is what sells "dust everywhere"; fog just adds a haze in the middle
+  // distance.
+  const storm = ctx.weather.intensity;
+  const dust = new THREE.Color(0x6e3a22);
+  const bgTarget = storm > 0.001 ? target.clone().lerp(dust, storm * 0.95) : target;
+  const fogTarget = storm > 0.001 ? target.clone().lerp(dust, storm * 0.45) : target;
+  (scene.background as THREE.Color).copy(bgTarget);
+  (scene.fog as THREE.Fog).color.copy(fogTarget);
 
   ambient.intensity =
     Tuning.AMBIENT_BASE

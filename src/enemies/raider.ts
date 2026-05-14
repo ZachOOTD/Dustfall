@@ -1,8 +1,11 @@
 // Raider — a hostile hooded wanderer.
 //
-// v1 uses a stylized primitive (cloak cylinder + head sphere + machete arm)
-// in lieu of a rigged Quaternius character. The mesh is animated via simple
-// transform tweens (idle sway, walk bob, attack lunge) — no AnimationMixer.
+// Session N: visual is a rigged Quaternius GLB driven by a per-instance
+// AnimationMixer (idle / walk / run / attack / die). If the GLB is missing
+// from /public/models/quaternius/raider.glb, falls back to the original
+// stylized primitive (cloak cylinder + head sphere + machete arm) with
+// transform-tween "swing" animation. AI / collider / hit detection are
+// identical in both paths.
 
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
@@ -11,6 +14,7 @@ import { isPlaying } from '../GameContext.ts';
 import type { Terrain } from '../world/terrain.ts';
 import { die } from '../stats/survival.ts';
 import { playFootstep, playHit, playPlayerHurt } from '../audio/audio.ts';
+import { cloneAsset, type AssetRegistry } from '../assets/loader.ts';
 
 export type RaiderState =
   | 'patrol'
@@ -38,14 +42,79 @@ export interface RaiderBlackboard {
 
 const SIGHT_REFRESH = 0.5; // seconds between sight raycasts per raider
 
+export type RaiderAnim = 'idle' | 'walk' | 'run' | 'attack' | 'die';
+
+export interface RaiderRig {
+  mixer: THREE.AnimationMixer;
+  actions: Partial<Record<RaiderAnim, THREE.AnimationAction>>;
+  current: RaiderAnim | null;
+}
+
 export interface Raider {
   id: number;
   group: THREE.Group;
   body: RAPIER.RigidBody;
   collider: RAPIER.Collider;
-  bladeArm: THREE.Object3D;
+  // Primitive-only — null when the rigged GLB is in use.
+  bladeArm: THREE.Object3D | null;
+  // Rigged GLB animation state — null when falling back to primitive.
+  rig: RaiderRig | null;
   bb: RaiderBlackboard;
   health: number;
+}
+
+// Resolve a Three.js AnimationClip by lowercase-substring match across a
+// candidate list. Quaternius packs use varied names ("Idle", "Idle_Loop",
+// "Sword_Slash", "Death", etc.) — first matching clip wins. Returns
+// undefined if no candidate matches.
+const CLIP_CANDIDATES: Record<RaiderAnim, string[]> = {
+  idle: ['idle'],
+  walk: ['walk'],
+  run: ['run'],
+  attack: ['sword', 'attack', 'slash', 'punch'],
+  die: ['death', 'die'],
+};
+
+function resolveClip(
+  clips: THREE.AnimationClip[],
+  candidates: string[],
+): THREE.AnimationClip | undefined {
+  for (const clip of clips) {
+    const lc = clip.name.toLowerCase();
+    if (candidates.some((c) => lc.includes(c))) return clip;
+  }
+  return undefined;
+}
+
+function buildRig(
+  root: THREE.Object3D,
+  clips: THREE.AnimationClip[],
+): RaiderRig {
+  const mixer = new THREE.AnimationMixer(root);
+  const actions: Partial<Record<RaiderAnim, THREE.AnimationAction>> = {};
+  (Object.keys(CLIP_CANDIDATES) as RaiderAnim[]).forEach((key) => {
+    const clip = resolveClip(clips, CLIP_CANDIDATES[key]);
+    if (clip) actions[key] = mixer.clipAction(clip);
+  });
+  return { mixer, actions, current: null };
+}
+
+function playAnim(rig: RaiderRig, next: RaiderAnim, fade = 0.18): void {
+  if (rig.current === next) return;
+  const nextAction = rig.actions[next];
+  if (!nextAction) return; // missing clip — hold previous
+  const prevAction = rig.current ? rig.actions[rig.current] : undefined;
+  prevAction?.fadeOut(fade);
+  nextAction.reset();
+  if (next === 'die') {
+    nextAction.setLoop(THREE.LoopOnce, 1);
+    nextAction.clampWhenFinished = true;
+  } else {
+    nextAction.setLoop(THREE.LoopRepeat, Infinity);
+    nextAction.clampWhenFinished = false;
+  }
+  nextAction.fadeIn(fade).play();
+  rig.current = next;
 }
 
 let _nextRaiderId = 1;
@@ -161,9 +230,33 @@ export function spawnRaider(
   scene: THREE.Scene,
   world: RAPIER.World,
   terrain: Terrain,
+  assets: AssetRegistry,
   spawnPos: THREE.Vector3,
 ): Raider {
-  const { group, bladeArm } = makeRaiderVisual();
+  // Prefer the rigged GLB. If it failed to load (or wasn't shipped yet),
+  // cloneAsset returns null and we fall back to the primitive visual so
+  // gameplay still works without the asset on disk.
+  let group: THREE.Group;
+  let bladeArm: THREE.Object3D | null = null;
+  let rig: RaiderRig | null = null;
+
+  const asset = assets.get('raider');
+  const cloned = asset ? cloneAsset(asset) : null;
+  if (cloned) {
+    group = cloned;
+    rig = buildRig(group, asset!.animations);
+    // Cast shadow on every mesh in the rigged hierarchy.
+    group.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; }
+    });
+    playAnim(rig, 'idle', 0); // settle into idle without fade on first frame
+  } else {
+    const primitive = makeRaiderVisual();
+    group = primitive.group;
+    bladeArm = primitive.bladeArm;
+  }
+
   const groundY = terrain.heightAt(spawnPos.x, spawnPos.z);
   group.position.set(spawnPos.x, groundY, spawnPos.z);
   scene.add(group);
@@ -190,7 +283,7 @@ export function spawnRaider(
 
   const raider: Raider = {
     id: _nextRaiderId++,
-    group, body, collider, bladeArm, bb, health: 1.0,
+    group, body, collider, bladeArm, rig, bb, health: 1.0,
   };
   _colliderToRaider.set(collider.handle, raider);
   return raider;
@@ -199,9 +292,27 @@ export function spawnRaider(
 /** Apply the dead-raider visual + remove the collider. Used by both
  *  damageRaider (on kill) and load (when restoring a state='dead' raider).
  *  Caller is responsible for any position adjustments — this only mutates
- *  rotation + physics state. */
+ *  rotation + physics state.
+ *
+ *  Rigged path: trigger the die clip and seek it to its final frame so the
+ *  load path lands on the dead pose immediately. The kill path also calls
+ *  this — for them the seek-to-end is harmless because performAttack runs
+ *  before death and the mixer's first .update(dt) will already be past 0.
+ *  If the GLB has no die clip we fall back to the primitive flop so dead
+ *  raiders still visually read as dead. */
 export function applyRaiderDeadPose(raider: Raider, ctx: GameContext): void {
-  raider.group.rotation.x = -Math.PI / 2 + 0.1;
+  if (raider.rig) {
+    const dieAction = raider.rig.actions.die;
+    if (dieAction) {
+      playAnim(raider.rig, 'die');
+      dieAction.time = dieAction.getClip().duration;
+      raider.rig.mixer.update(0);
+    } else {
+      raider.group.rotation.x = -Math.PI / 2 + 0.1;
+    }
+  } else {
+    raider.group.rotation.x = -Math.PI / 2 + 0.1;
+  }
   // Disable collider so a dead raider can be walked through.
   if (_colliderToRaider.has(raider.collider.handle)) {
     ctx.physics.world.removeCollider(raider.collider, false);
@@ -360,10 +471,15 @@ export function updateRaiders(ctx: GameContext, dt: number): void {
   const playerTr = ctx.player.body.body.translation();
 
   for (const r of ctx.raiders) {
+    // Mixer ticks even when dead so the die clip finishes playing through.
+    r.rig?.mixer.update(dt);
+
     if (r.bb.state === 'dead') continue;
     r.bb.stateTimer += dt;
-    r.bb.bladeSwing = Math.max(0, r.bb.bladeSwing - dt * 4); // decay
-    r.bladeArm.rotation.x = -r.bb.bladeSwing * 1.2;
+    if (!r.rig && r.bladeArm) {
+      r.bb.bladeSwing = Math.max(0, r.bb.bladeSwing - dt * 4); // decay
+      r.bladeArm.rotation.x = -r.bb.bladeSwing * 1.2;
+    }
 
     const distToPlayer = Math.hypot(
       playerTr.x - r.group.position.x,
@@ -381,6 +497,7 @@ export function updateRaiders(ctx: GameContext, dt: number): void {
           r.bb.stateTimer = 0;
         }
         moveToward(r, r.bb.patrolTarget, WALK_SPEED, dt, ctx);
+        if (r.rig) playAnim(r.rig, 'walk');
         if (playerVisible || playerHeard) {
           r.bb.lastSeenPlayer = new THREE.Vector3(playerTr.x, playerTr.y, playerTr.z);
           transitionTo(r, 'spotted');
@@ -389,6 +506,7 @@ export function updateRaiders(ctx: GameContext, dt: number): void {
       }
       case 'spotted': {
         faceTarget(r, playerTr);
+        if (r.rig) playAnim(r.rig, 'idle');
         if (r.bb.stateTimer >= 0.8) transitionTo(r, 'chase');
         break;
       }
@@ -403,6 +521,7 @@ export function updateRaiders(ctx: GameContext, dt: number): void {
         }
         const chaseTarget = r.bb.lastSeenPlayer ?? playerTr;
         moveToward(r, chaseTarget, RUN_SPEED, dt, ctx);
+        if (r.rig) playAnim(r.rig, 'run');
         // Give up if we haven't seen the player in too long
         if (!playerVisible && r.bb.stateTimer > CHASE_GIVEUP_DURATION) {
           r.bb.patrolCenter.set(r.group.position.x, r.group.position.y, r.group.position.z);
@@ -420,10 +539,17 @@ export function updateRaiders(ctx: GameContext, dt: number): void {
         if (ctx.time.elapsed >= r.bb.nextAttackAt) {
           performAttack(r, ctx, distToPlayer);
           r.bb.nextAttackAt = ctx.time.elapsed + ATTACK_COOLDOWN;
+        } else if (r.rig) {
+          // Between swings — hold idle so we're not stuck in a half-swing.
+          const attackAction = r.rig.actions.attack;
+          const swingDone =
+            !attackAction || attackAction.time >= attackAction.getClip().duration;
+          if (swingDone) playAnim(r.rig, 'idle');
         }
         break;
       }
       case 'stagger': {
+        if (r.rig) playAnim(r.rig, 'idle');
         if (r.bb.stateTimer >= 0.45) {
           transitionTo(r, 'chase');
         }
@@ -434,7 +560,14 @@ export function updateRaiders(ctx: GameContext, dt: number): void {
 }
 
 function performAttack(r: Raider, ctx: GameContext, distToPlayer: number): void {
-  r.bb.bladeSwing = 1.0; // animate the arm forward briefly
+  if (r.rig) {
+    // Force-restart so each swing replays from frame 0 even if the previous
+    // swing's clip hadn't finished decaying.
+    r.rig.current = null;
+    playAnim(r.rig, 'attack', 0.08);
+  } else {
+    r.bb.bladeSwing = 1.0; // primitive: animate the arm forward briefly
+  }
   if (distToPlayer <= ATTACK_RANGE) {
     ctx.stats.health = Math.max(0, ctx.stats.health - ATTACK_DAMAGE);
     playHit(0.85);

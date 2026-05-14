@@ -37,7 +37,10 @@ export function getLizardForCollider(handle: number): Lizard | undefined {
 }
 
 const SPOT_DISTANCE = 8;
-const FLEE_SPEED = 3.0;
+// Session U — was 3.0; lowered so a sprinting player can actually catch one.
+// Walk speed is 4.2, sprint is ~7.1 m/s; lizard at 2.5 still hustles but
+// the gap closes within a few seconds.
+const FLEE_SPEED = 2.5;
 const FLEE_DURATION = 3.0;
 const TERRAIN_OFFSET = 0.06;
 

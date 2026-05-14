@@ -24,16 +24,22 @@ import { createHud, updateHud } from './ui/hud.ts';
 import { createHotbar, updateHotbar } from './ui/hotbar.ts';
 import { createInteractPrompt, updateInteractPrompt } from './ui/interactPrompt.ts';
 import { spawnBranches } from './pickups/pickups.ts';
+import { spawnDeadTrees } from './world/deadTree.ts';
+import { setupOpeningScene } from './world/openingScene.ts';
+import { hasSave } from './persistence/save.ts';
+import { createJournalPanel } from './ui/journalPanel.ts';
+import type { Journal } from './world/journal.ts';
 import { createInventory, updateInventoryInput } from './inventory/inventory.ts';
 import { updateInteraction } from './player/interaction.ts';
 import { updatePlayer } from './player/controller.ts';
 import { createShelterRegistry, updateShelter } from './shelter/shelterZones.ts';
 import { updateSoundscape } from './audio/soundscape.ts';
-import { spawnRaider, updateRaiders } from './enemies/raider.ts';
+import { updateRaiders, type Raider } from './enemies/raider.ts';
 import { spawnLizard, updateLizards } from './enemies/lizard.ts';
 import { updateCombat } from './player/combat.ts';
 import { createViewModel, updateViewModel } from './player/viewModel.ts';
 import { createWeather, updateWeather } from './world/weather.ts';
+import { createAmbientDust, updateAmbientDust } from './world/ambientDust.ts';
 import { spawnWaterSources } from './world/waterSources.ts';
 import { spawnCacti } from './world/cactus.ts';
 import { updateFires } from './world/fire.ts';
@@ -74,7 +80,11 @@ const terrain = createTerrain(three.scene, physics.world, terrainRand, biomes);
 const salvageables = createSalvageableRegistry();
 placeHeroLandmarks(three.scene, physics.world, terrain, scatterRand, salvageables);
 // Scattered canteens were removed — the player starts with one (see below).
-const pickupList = spawnBranches(three.scene, terrain, scatterRand);
+// Session W — branches no longer spawn as a random ground scatter. They're
+// dropped in 2-4 clusters at the base of dead trees (see spawnDeadTrees
+// below) so they have a visible source.
+const pickupList = spawnBranches(three.scene, terrain, scatterRand, 0);
+spawnDeadTrees(three.scene, terrain, scatterRand, pickupList);
 const waterSources = spawnWaterSources(three.scene, terrain, scatterRand, biomes);
 const cacti = spawnCacti(three.scene, physics.world, terrain, scatterRand);
 
@@ -82,10 +92,9 @@ const cacti = spawnCacti(three.scene, physics.world, terrain, scatterRand);
 // abandoned camp. Massive POI wrecks register as salvageables too.
 placePOIs(three.scene, physics.world, terrain, scatterRand, pickupList, salvageables);
 
-// Spawn one raider somewhere visible-but-not-immediate (~30m from spawn).
-const raiders = [
-  spawnRaider(three.scene, physics.world, terrain, new THREE.Vector3(22, 0, -25)),
-];
+// Session U — raiders deprioritized (world is sandbox / "only survivor").
+// Code path stays so we can revisit later; just don't spawn one at boot.
+const raiders: Raider[] = [];
 
 // Spawn 4 lizards at distributed positions ~20-60m from origin.
 const lizards = [
@@ -96,6 +105,7 @@ const lizards = [
 ];
 
 const weather = createWeather(three.scene, three.camera);
+const ambientDust = createAmbientDust(three.scene, three.camera);
 
 // Player capsule: feet at terrain height under spawn point.
 const spawnGround = terrain.heightAt(0, 0);
@@ -171,6 +181,8 @@ const ctx: GameContext = {
   tents: { list: [] },
   salvageables,
   weather,
+  ambientDust,
+  journals: { list: [] as Journal[] },
   flags: { started: false, paused: false, damageFlashUntil: 0 },
 };
 
@@ -184,6 +196,18 @@ addItem(ctx.inventory, 'machete');
 addItem(ctx.inventory, 'canteen', { fillLevel: 1 });
 ctx.inventory.selectedIdx = 0;
 
+// Session W — fresh-world opening scene. The wreck + skeleton + journal
+// are placed on every boot when no save exists (so a "new game" replays
+// the opening). Continue-from-save skips it entirely so a player resuming
+// doesn't get teleported into the cinematic. The opening also seeds the
+// sandstorm and points the camera at the wreck.
+if (!hasSave()) {
+  const result = setupOpeningScene(
+    three.scene, physics.world, terrain, shelter, weather, three.camera, scatterRand,
+  );
+  ctx.journals.list.push(result.journal);
+}
+
 // IMPORTANT: createMenus must run BEFORE wireOverlays — the unlock handler
 // in input.ts calls showPauseOverlay which needs the menu DOM in place.
 createMenus(ctx);
@@ -191,6 +215,7 @@ createLootMenu(ctx);
 createCraftingMenu(ctx);
 createSleepOverlay(ctx);
 createInventoryOverlay(ctx);
+createJournalPanel(ctx);
 createPerfHud(ctx);
 // Tutorial panel must exist before wireOverlays so the lock handler can call
 // noteIntroSeen() — and before installDebugPanel so __game.showControls works.
@@ -209,6 +234,7 @@ startLoop(ctx, (c, dt) => {
   c.time.elapsed += dt;
   c.physics.step(dt);            // physics first
   updateWeather(c, dt);          // sandstorm intensity (drives sky + audio + thirst)
+  updateAmbientDust(c, dt);      // toned-down drift, suppressed by sandstorm
   updateLighting(c, dt);         // sun + lights + sunDir/sunHeight
   updateSky(c, dt);              // sky sphere + sun disc (reads weather)
   updatePlayer(c, dt);           // movement + camera + advance dayTime

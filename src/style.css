@@ -900,6 +900,47 @@ canvas {
 }
 
 /* ──────────────────────────────────────────────────────────
+   Journal panel (Session W)
+   ────────────────────────────────────────────────────────── */
+#journal-panel {
+  z-index: 200;             /* above pause overlay (z=100) */
+  background: rgba(8, 6, 4, 0.96);
+  cursor: default;
+  gap: 14px;
+}
+
+.journal-entries {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin-top: 24px;
+  margin-bottom: 22px;
+  max-width: 540px;
+  pointer-events: auto;
+}
+
+.journal-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.journal-date {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 3px;
+  color: #b8a888;
+}
+
+.journal-body {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  letter-spacing: 0.5px;
+  color: #e8dcc0;
+}
+
+/* ──────────────────────────────────────────────────────────
    Dev-only perf HUD (F1 to toggle)
    ────────────────────────────────────────────────────────── */
 #perf-hud {

@@ -44,6 +44,10 @@ export const ASSET_MANIFEST: AssetDef[] = [
 
   // Pickups
   { id: 'canteen', url: '/models/kenney/canteen.glb', colliderHint: 'box', kind: 'pickup_canteen' },
+
+  // Enemies — rigged + animated. Collider is created procedurally in
+  // spawnRaider (capsule), so colliderHint is irrelevant here.
+  { id: 'raider', url: '/models/quaternius/raider.glb', colliderHint: 'none', animated: true, scale: 1.0, yOffset: 0 },
 ];
 
 export interface LoadedAsset {

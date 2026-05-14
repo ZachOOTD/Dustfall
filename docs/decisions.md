@@ -82,3 +82,45 @@ fires only when `hasSave()`.
 **Why**: Iterating game feel requires not dying constantly. `Tuning.GOD_MODE`
 in `tuning.ts` floors stats in `die()` so the player survives. Will flip
 off when balance tuning starts (post-O / win-condition session).
+
+## D13 — Sandbox pivot: raiders deprioritized, win condition dropped
+**When**: Session U (mid-session direction shift).
+**Why**: User wants Dustfall to feel like an open-world sandbox survival
+game — "we're the only one's surviving in this desolate world." The
+planned O session (raider variants + warlord camp + satellite-phone
+endgame) was scoped to add a win condition; that's now off the table.
+The single spawned raider at boot was removed too. Raider AI + rigged-
+animation code in `src/enemies/raider.ts` STAYS — we may revisit (raider
+variants moved to the Later bucket). `Tuning.GOD_MODE` stays on
+indefinitely; no balance pass on the horizon.
+
+## D14 — Music disabled as placeholder; full audio overhaul pending
+**When**: Session V (built it), Session W bugfix (disabled it).
+**Why**: V built a 3-voice procedural music system (drone pad + pentatonic
+plucks + storm sub-bass via feedback-delay reverb) and a tuned wind layer.
+User feedback was clear: "not the vibe… we'll need to do an overhaul of the
+audio later so these can just be placeholder for now." Both wind and music
+are commented out in `audio/soundscape.ts` with restore points. The next
+session (X) is the overhaul. Tonally we likely need sample-based stems
+rather than pure synthesis — procedural music is hard to make feel like a
+soundtrack.
+
+## D15 — Opening wreck is intentionally non-salvageable
+**When**: Session W.
+**Why**: The wreck in the opening scene contains the dead survivor + their
+journal. It's a story prop, not a loop entry. Players spend Day 1 there;
+giving them scrap reward for stripping it down would conflict with the
+"this was someone's last shelter" tone. So it's the ONE wreck in the world
+not registered in the salvageables registry. All other wrecks (registered
+via `salvage.ts` in T) still salvage normally. If we later want it
+salvageable, just register it in `openingScene.ts`.
+
+## D16 — Fog: near and far BOTH move with storm intensity
+**When**: Session W bugfix.
+**Why**: First storm-fog pass moved only `fog.far` down (to 22 m at peak)
+while leaving `Tuning.FOG_NEAR` at 25. Three.js linear fog math
+`(dist - near) / (far - near)` inverts when `far < near` — every visible
+surface clamped to full fog color, painting the wreck and surroundings
+red-brown even at 12 m distance. Fix: at peak storm, `fog.near = 15`,
+`fog.far = 30` — math stays sane, fog still feels claustrophobic. Going
+forward, always pair fog far + near changes; never let one cross the other.

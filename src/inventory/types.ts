@@ -16,7 +16,9 @@ export type ItemId =
   | 'branch'
   | 'cloth'
   | 'fire_kit'
-  | 'tent_kit';
+  | 'tent_kit'
+  // Session W — alien cactus harvest
+  | 'alien_fruit';
 
 /** Per-slot metadata for stateful items (canteen fill level, cook state). */
 export interface ItemMeta {
@@ -91,7 +93,8 @@ export type InteractType =
   | 'add_fuel'  // fire + branch selected → E adds fuel
   | 'sleep'     // tent → E opens sleep overlay
   | 'relight'   // dead fire + branch selected → E reignites with 30s fuel
-  | 'salvage';  // wreck (Session T) — E starts a 1.5s salvage
+  | 'salvage'   // wreck (Session T) — E starts a 1.5s salvage
+  | 'read';     // journal (Session W) — E opens the journal panel
 
 export interface HoverState {
   type: InteractType;

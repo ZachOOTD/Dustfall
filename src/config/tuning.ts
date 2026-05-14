@@ -18,7 +18,7 @@ export const Tuning = {
   GOD_MODE: true,                    // never dies; die() floors stats instead
 
   // Day/night
-  DAY_LENGTH_SECONDS: 360,  // one in-game day = 6 real minutes
+  DAY_LENGTH_SECONDS: 480,  // Session U — was 360 (6 real min); now 8 real min
   START_DAY_TIME: 0.34,     // ~08:00 — sun reasonably high at spawn
 
   // Sun & lighting
@@ -102,6 +102,28 @@ export const Tuning = {
   SKY_SPHERE_RADIUS: 480,
   SUN_DISC_DISTANCE: 400,
   SUN_DISC_SIZE: 22,
+  // Session V — moon, stars, shooting stars, distant planet
+  MOON_DISC_SIZE: 16,
+  MOON_DISC_DISTANCE: 400,
+  STAR_COUNT: 800,
+  STAR_SPHERE_RADIUS: 460,            // just inside sky sphere
+  SHOOTING_STAR_POOL: 4,
+  SHOOTING_STAR_MIN_INTERVAL: 4,      // seconds, scaled inversely with nightMix
+  SHOOTING_STAR_MAX_INTERVAL: 12,
+  SHOOTING_STAR_LIFETIME_MIN: 0.8,
+  SHOOTING_STAR_LIFETIME_MAX: 1.6,
+  PLANET_DISTANCE: 420,
+  PLANET_SIZE: 14,
+  // Fixed direction: low on the eastern horizon (azimuth ~+X, elev ~0.18)
+  PLANET_DIR_X: 0.985,
+  PLANET_DIR_Y: 0.18,
+  PLANET_DIR_Z: -0.04,
+
+  // Ambient dust (Session V) — toned-down sandstorm-style drift, always on.
+  AMBIENT_DUST_COUNT: 400,
+  AMBIENT_DUST_SPREAD: 40,
+  AMBIENT_DUST_OPACITY: 0.10,
+  AMBIENT_DUST_SUPPRESS_STORM: 0.15,  // hide above this storm intensity
 
   // Scene
   FOV: 78,

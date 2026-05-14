@@ -3,6 +3,50 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session W — 2026-05-14 — Opening scene + world detail
+Cinematic intro on fresh worlds (gated by `!hasSave()`): 30-s sandstorm,
+hand-authored crashed-shelter wreck (rectangular box-walls — NOT the broken
+half-cylinder first cut), skeleton slumped against back wall with journal at
+fingertips opening a modal lore panel. Skylight hole in roof + emissive sun-
+patch on floor. Bundled: 12 dead trees clustering branch pickups (replaces
+random scatter), alien-cactus variant yielding new `alien_fruit`. Storm
+aggression rebuilt: dust particles use a circular gradient map (no more
+pixel squares), velocities 6 m/s, sky lerps 95% to dust, fog `near`+`far`
+BOTH move with intensity (math inversion bug — `fog.far < fog.near`
+painted everything fog color — fixed). Wreck oriented so entrance faces
+spawn, sits on flattest 5×5 patch within 20 m. `partially verified` (DOM
++ scene checks via preview_eval; screenshots timed out).
+
+## Session V — 2026-05-13 — Atmosphere + audio placeholder
+Night sky: moon sprite opposite the sun, 800-point star field, 4-line
+shooting-star pool, distant reddish-planet sprite anchored on the eastern
+horizon. New ambient-dust system (toned-down storm cousin) suppressed when
+storm > 0.15 or `player.inShelter`. Built a procedural music module (drone
+pad + pentatonic plucks + feedback-delay reverb + storm sub-bass) then
+DISABLED IT entirely — vibe wasn't right and a full audio overhaul is
+deferred (D14). Wind layer also disabled. `partially verified` (scene +
+audio-context unlock confirmed; screenshot timed out).
+
+## Session U — 2026-05-13 — UX & tuning pass + empty the world
+Removed spawned raider at boot (code path stays — D13). Window-listener
+Ctrl+W/A/S/D/Q `preventDefault` so the browser doesn't intercept (Ctrl-W
+was closing the tab mid-playtest). `I`/`C` now TOGGLE (open AND close)
+inventory + crafting overlays via a new window-keydown handler in input.ts
+— the polling in updateInventoryInput early-returned while paused. Hover
+tooltips via `root.title` on hotbar + inventory tiles. Lizard `FLEE_SPEED`
+3.0→2.5; `DAY_LENGTH_SECONDS` 360→480. `verified` via synthetic keydown +
+DOM inspection.
+
+## Session N — 2026-05-13 — Rigged raider visual + animation infra
+Per-instance `AnimationMixer`, fuzzy clip resolver (Quaternius packs name
+clips wildly — substring match against `idle/walk/run/attack/die`),
+crossfade helper. New `Raider.rig` field; bladeArm tween becomes
+primitive-only. Primitive fallback path exercised end-to-end. The rigged
+GLB at `public/models/quaternius/raider.glb` is intentionally NOT shipped
+— user deferred asset work; code activates the rigged path automatically
+when the file lands. `partially verified` (primitive path; rigged path
+unverified pending asset).
+
 ## Session M — 2026-05-14 — Save / load
 NEW `src/persistence/save.ts`. Single-slot `localStorage['dustfall.save.v1']`,
 seed-stamped (mismatch refused with toast). Sleep autosave + manual pause-menu

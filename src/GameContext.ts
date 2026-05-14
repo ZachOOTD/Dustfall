@@ -13,6 +13,8 @@ import type { InventoryState } from './inventory/types.ts';
 import type { ShelterRegistry } from './shelter/shelterZones.ts';
 import type { Raider } from './enemies/raider.ts';
 import type { Weather } from './world/weather.ts';
+import type { AmbientDust } from './world/ambientDust.ts';
+import type { Journal } from './world/journal.ts';
 import type { ViewModel } from './player/viewModel.ts';
 import type { WaterSource } from './world/waterSources.ts';
 import type { Cactus } from './world/cactus.ts';
@@ -83,6 +85,8 @@ export interface GameContext {
   tents: { list: Tent[] };
   salvageables: SalvageableRegistry;
   weather: Weather;
+  ambientDust: AmbientDust;
+  journals: { list: Journal[] };
   flags: {
     started: boolean;     // true once the player has clicked into the game
     paused: boolean;      // true while the pause overlay is visible

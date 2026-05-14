@@ -37,6 +37,17 @@ export function createInput(
     keys[e.code] = false;
   });
 
+  // Block browser shortcuts that conflict with Ctrl-as-crouch. Without this,
+  // Ctrl+W (forward) closes the tab, Ctrl+S (back) opens "save page", etc.
+  // We swallow Ctrl/⌘ + WASD/Q (movement + use-selected) — leaves devtools
+  // and refresh accessible.
+  const CTRL_BLOCK = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ']);
+  window.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && CTRL_BLOCK.has(e.code)) {
+      e.preventDefault();
+    }
+  });
+
   window.addEventListener('wheel', (e) => {
     bundle.wheel += e.deltaY;
   }, { passive: true });
@@ -96,6 +107,30 @@ export function wireOverlays(ctx: GameContext): void {
     e.preventDefault();
     if (isControlsPanelOpen()) hideControlsPanel(ctx);
     else showControlsPanel(ctx);
+  });
+
+  // I / C — toggle inventory overlay and crafting menu (Session U). Lives on
+  // window so it fires even when the game is paused by another overlay.
+  // Lazy-imported to avoid a boot-time cycle with the overlay modules.
+  // Pressing the partner key while one overlay is open is a no-op (avoids
+  // stacking two overlays on top of each other).
+  window.addEventListener('keydown', (e) => {
+    if (e.repeat || ctx.stats.dead || !ctx.flags.started) return;
+    if (e.code !== 'KeyI' && e.code !== 'KeyC') return;
+    e.preventDefault();
+    void (async () => {
+      const [inv, craft] = await Promise.all([
+        import('../ui/inventoryOverlay.ts'),
+        import('../ui/craftingMenu.ts'),
+      ]);
+      if (e.code === 'KeyI') {
+        if (inv.isInventoryOverlayOpen()) inv.closeInventoryOverlay();
+        else if (!craft.isCraftingMenuOpen()) inv.openInventoryOverlay(ctx);
+      } else {
+        if (craft.isCraftingMenuOpen()) craft.closeCraftingMenu();
+        else if (!inv.isInventoryOverlayOpen()) craft.openCraftingMenu(ctx);
+      }
+    })();
   });
 
   ctx.three.scene.add(ctx.input.controls.object);

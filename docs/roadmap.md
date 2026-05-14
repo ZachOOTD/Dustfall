@@ -9,24 +9,49 @@ and promotes the second.
 
 ---
 
-## Next — N: Rigged Quaternius raider + animations (~5h)
-Replace the primitive cloak/hood raider with a rigged GLTF (Quaternius
-"Animated Characters" pack, CC0). GLTFLoader infra exists from Session B.
-`SkeletonUtils.clone()` per raider; `AnimationMixer` per instance crossfades
-`idle / walk / run / attack / die`. Hit detection unchanged. Preserve the
-`Raider.id` field added in M.
+## Next — X: Audio overhaul (~6h)
+Replace the disabled placeholders (wind layer + procedural drone music,
+both turned off in V/W) with a proper soundscape. Procedural-only didn't
+land tonally; explore a small CC0 sample pack for ambient beds + music
+stems, keep procedural for SFX where it works (footsteps, drink, craft).
+Needs: situational wind (calm vs. windy vs. storm), day/night ambient
+bed, melodic music that fits the lonely sci-fi desert vibe. The wind
+node graph in `audio/soundscape.ts` is commented out — restore-point
+ready.
 
-## Then — O: Enemy variety + win condition (~7h)
-Scout / Ambusher / Brute raider variants + warlord camp at the radio tower
-+ satellite-phone signal endgame. Unblocks balance tuning + GOD_MODE off.
+## Then — Y: Footprints + lizard tracks (~4h)
+Player leaves footprints in sand; lizards leave running tracks when
+they flee. Decals on terrain (RenderTarget or a long-lived particle
+trail). Fades over time. Pure atmosphere/feel polish — pairs well
+with the empty-world tone.
 
-## Then — Q2: Rigged hands + lizard + windup attacks (~5h)
-Depends on N. Replaces primitive hands viewmodel with rigged hands;
-rigs the lizard; multi-keyframe attack windup frames for raiders.
+## Then — Z: Stone-well rework + tactile salvage panels (~5h)
+Replace the current well visuals with a stone-circle well + wooden
+hatch, restricted to the salt-flats biome (`biomes.biomeAt() === 'salt'`).
+Switch salvage from "stare at wreck + hold E" to interactable panels /
+access points on each wreck — more tactile.
 
-## Later — R: Additional gameplay loops (1–2 picks at ~4–7h each)
-Trading, base-building, vehicle, 7-day storm countdown, bounties.
-Pick 1–2 based on what feels missing post-O.
+## Later — Big-ticket bucket (1–2 picks per session at ~4–7h each)
+Pick whatever feels most missing after the polish + atmosphere arc.
+
+- Raider variants (scout / ambusher / brute) — *if* we decide to bring raiders back
+- Q2: Rigged hands + lizard (GLB-dependent — deferred with N's asset work)
+- Mega-ship POI with enterable explorable interior
+- Hover speeder bike for fast travel
+- Giant sand worm enemy
+- Base-building mechanics
+- Small red creature companion (pocketable + re-deployable)
+- Animated main menu (pod crash + flickering fire + day/night loop)
+- Tactile salvage via interactable panels / access points on wrecks
+- Footprints in sand (player + lizard tracks)
+- Stone-well rework (stone circle + wooden hatch, salt-flats biome only)
+- Weapon variants (pipe staff / scrap machete / scrap gun / energy pistol)
+- Torch + flashlight items
+- Trading / NPC economy
+- 7-day storm countdown
+- Bounties
+- Procedural world generation (idea — POIs randomized per seed)
+- Remove HUD stat bars in favor of audio/visual/text cues (idea)
 
 ---
 

@@ -7,8 +7,11 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import type { Rng } from '../core/rng.ts';
 import type { Terrain } from '../world/terrain.ts';
 
+export type CactusKind = 'normal' | 'alien';
+
 export interface Cactus {
   id: number;
+  kind: CactusKind;
   mesh: THREE.Group;
   pos: THREE.Vector3;
   harvested: boolean;
@@ -77,6 +80,78 @@ function makeCactus(rand: Rng): THREE.Group {
   return g;
 }
 
+// Alien variant (Session W) — a spherical pod base with 3-4 visible fruit
+// nodes on short stems. Distinct silhouette + cool palette so it's
+// recognizable at a distance.
+function makeAlienCactus(rand: Rng): THREE.Group {
+  const g = new THREE.Group();
+  const podMat = new THREE.MeshLambertMaterial({
+    color: 0x2c6e74,
+    emissive: 0x0a2628,
+    emissiveIntensity: 0.45,
+    flatShading: true,
+  });
+  const fruitMat = new THREE.MeshLambertMaterial({
+    color: 0x3aa8ae,
+    emissive: 0x1a5a60,
+    emissiveIntensity: 0.7,
+    flatShading: true,
+  });
+  const stemMat = new THREE.MeshLambertMaterial({
+    color: 0x1a4448,
+    flatShading: true,
+  });
+
+  // Bulbous main body
+  const baseR = 0.45 + rand() * 0.15;
+  const pod = new THREE.Mesh(new THREE.IcosahedronGeometry(baseR, 1), podMat);
+  pod.position.y = baseR * 0.9;
+  pod.scale.set(1, 1.15, 1);
+  g.add(pod);
+
+  // Smaller bulge on top — gives it an organic, alien feel
+  const top = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(baseR * 0.55, 1),
+    podMat,
+  );
+  top.position.y = baseR * 1.85;
+  g.add(top);
+
+  // 3-4 fruit nodes on short stems poking from the upper body
+  const fruitCount = 3 + Math.floor(rand() * 2);
+  for (let i = 0; i < fruitCount; i++) {
+    const a = (i / fruitCount) * Math.PI * 2 + rand() * 0.4;
+    const h = baseR * (1.0 + rand() * 0.6);
+    const r = baseR * 0.82;
+    const stemLen = 0.10 + rand() * 0.08;
+    const stem = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.018, 0.026, stemLen, 5),
+      stemMat,
+    );
+    stem.position.set(
+      Math.cos(a) * r,
+      h + stemLen / 2,
+      Math.sin(a) * r,
+    );
+    stem.rotation.z = Math.cos(a) * -0.4;
+    stem.rotation.x = Math.sin(a) * 0.4;
+    g.add(stem);
+
+    const fruit = new THREE.Mesh(
+      new THREE.IcosahedronGeometry(0.10 + rand() * 0.03, 1),
+      fruitMat,
+    );
+    fruit.position.set(
+      Math.cos(a) * (r + 0.12),
+      h + stemLen + 0.05,
+      Math.sin(a) * (r + 0.12),
+    );
+    g.add(fruit);
+  }
+
+  return g;
+}
+
 export function spawnCacti(
   scene: THREE.Scene,
   physicsWorld: RAPIER.World,
@@ -92,7 +167,9 @@ export function spawnCacti(
     const z = Math.sin(angle) * radius;
     const y = terrain.heightAt(x, z);
 
-    const mesh = makeCactus(rand);
+    // ~25% of cacti spawn as the alien variant.
+    const kind: CactusKind = rand() < 0.25 ? 'alien' : 'normal';
+    const mesh = kind === 'alien' ? makeAlienCactus(rand) : makeCactus(rand);
     // Bury the trunk base ~0.25m so cacti don't show a visible gap on sloped
     // sand (they stay vertical while the ground tilts).
     mesh.position.set(x, y - 0.25, z);
@@ -105,7 +182,7 @@ export function spawnCacti(
       }
     });
 
-    // Static collider — single cylinder approximating the trunk.
+    // Static collider — single cylinder approximating the trunk/pod.
     const bodyDesc = RAPIER.RigidBodyDesc.fixed().setTranslation(x, y + 1, z);
     const body = physicsWorld.createRigidBody(bodyDesc);
     const colliderDesc = RAPIER.ColliderDesc.cylinder(1, 0.20);
@@ -117,6 +194,7 @@ export function spawnCacti(
 
     list.push({
       id,
+      kind,
       mesh,
       pos: new THREE.Vector3(x, y, z),
       harvested: false,

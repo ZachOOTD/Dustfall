@@ -93,10 +93,12 @@ function renderSlot(refs: SlotRefs, slot: Slot): void {
   if (!slot.item) {
     refs.root.classList.add('empty');
     refs.count.textContent = '';
+    refs.root.title = '';
     return;
   }
   refs.root.classList.remove('empty');
   const def = getItemDef(slot.item);
+  refs.root.title = def.name.toLowerCase();
   if (def.makeIcon) {
     refs.glyph.appendChild(def.makeIcon());
   } else {

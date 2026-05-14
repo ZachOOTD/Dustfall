@@ -1,18 +1,47 @@
 // Stylized "Long Dark"-leaning sky:
 //   1) Inverted sphere with a 2-color gradient + sun halo (custom shader).
 //   2) Billboarded sun disc that follows the sun direction from camera.
+//   3) Session V — moon sprite (opposite the sun), star field, shooting-star
+//      pool, and a distant planet sprite. All anchored to the camera so they
+//      feel infinite.
 //
-// Both follow the camera each frame so they feel infinitely far away.
+// Visibility logic:
+//   - sun:       above horizon, fades just before set
+//   - moon:      below sun (i.e. -sunDir is above horizon), fades just after
+//                rise, dims during sandstorm
+//   - stars:     opacity = nightMix * (1 - storm), so they hide on bright days
+//                and during dust
+//   - shooting:  spawn rate scales with nightMix * (1 - storm), pool of N
+//   - planet:    fixed world direction; faint always-on visibility, slightly
+//                more saturated near dusk; storm dims it
 
 import * as THREE from 'three';
 import type { GameContext } from '../GameContext.ts';
 import { Tuning, SkyColors, SunColors } from '../config/tuning.ts';
+
+interface ShootingStar {
+  line: THREE.Line;
+  // start direction (unit vec from camera at spawn) and an orthogonal travel dir
+  origin: THREE.Vector3;
+  travel: THREE.Vector3;
+  lifetime: number;       // total seconds
+  elapsed: number;        // 0..lifetime, then recycled
+  active: boolean;
+}
 
 interface SkyBundle {
   sphere: THREE.Mesh;
   sphereMat: THREE.ShaderMaterial;
   sun: THREE.Sprite;
   sunMat: THREE.SpriteMaterial;
+  moon: THREE.Sprite;
+  moonMat: THREE.SpriteMaterial;
+  stars: THREE.Points;
+  starsMat: THREE.PointsMaterial;
+  planet: THREE.Sprite;
+  planetMat: THREE.SpriteMaterial;
+  shooters: ShootingStar[];
+  nextShooterAt: number;  // seconds (ctx.time.elapsed) when we try to spawn the next
 }
 
 let bundle: SkyBundle | null = null;
@@ -21,6 +50,14 @@ const _topColor = new THREE.Color();
 const _horizonColor = new THREE.Color();
 const _sunColor = new THREE.Color();
 const _sunPos = new THREE.Vector3();
+const _moonDir = new THREE.Vector3();
+const _moonPos = new THREE.Vector3();
+const _planetDir = new THREE.Vector3(
+  Tuning.PLANET_DIR_X, Tuning.PLANET_DIR_Y, Tuning.PLANET_DIR_Z,
+).normalize();
+const _planetPos = new THREE.Vector3();
+const _tmpOrigin = new THREE.Vector3();
+const _tmpTravel = new THREE.Vector3();
 
 const SKY_VERTEX = /* glsl */ `
 varying vec3 vDir;
@@ -74,6 +111,95 @@ function makeSunTexture(): THREE.CanvasTexture {
   return tex;
 }
 
+// Cool, slightly bluish moon — solid pale core with a soft halo. A few
+// darker speckles for "maria" so it doesn't read as a flat disc.
+function makeMoonTexture(): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d');
+  if (!g) throw new Error('canvas 2d context unavailable');
+  // Outer halo
+  const halo = g.createRadialGradient(64, 64, 24, 64, 64, 64);
+  halo.addColorStop(0, 'rgba(220,228,240,0.55)');
+  halo.addColorStop(0.55, 'rgba(180,200,224,0.18)');
+  halo.addColorStop(1, 'rgba(180,200,224,0)');
+  g.fillStyle = halo;
+  g.fillRect(0, 0, 128, 128);
+  // Solid disc body
+  g.beginPath();
+  g.arc(64, 64, 26, 0, Math.PI * 2);
+  const body = g.createRadialGradient(58, 58, 6, 64, 64, 28);
+  body.addColorStop(0, 'rgba(248,250,255,1)');
+  body.addColorStop(0.7, 'rgba(214,222,236,1)');
+  body.addColorStop(1, 'rgba(176,188,208,0.95)');
+  g.fillStyle = body;
+  g.fill();
+  // Maria speckles (deliberately quiet — no high contrast)
+  g.fillStyle = 'rgba(160,172,196,0.35)';
+  for (const [x, y, r] of [[58, 60, 4], [70, 64, 3], [62, 72, 5], [74, 56, 2.5]]) {
+    g.beginPath();
+    g.arc(x, y, r, 0, Math.PI * 2);
+    g.fill();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+// Distant planet — rust-tinged, banded radial gradient. Reads as a small
+// reddish dot on the horizon by day; warmer + slightly more visible at dusk.
+function makePlanetTexture(): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d');
+  if (!g) throw new Error('canvas 2d context unavailable');
+  // Soft halo
+  const halo = g.createRadialGradient(64, 64, 22, 64, 64, 60);
+  halo.addColorStop(0, 'rgba(200,90,60,0.35)');
+  halo.addColorStop(1, 'rgba(200,90,60,0)');
+  g.fillStyle = halo;
+  g.fillRect(0, 0, 128, 128);
+  // Body — banded reds
+  g.beginPath();
+  g.arc(64, 64, 22, 0, Math.PI * 2);
+  const body = g.createRadialGradient(60, 58, 4, 64, 64, 24);
+  body.addColorStop(0, 'rgba(238,160,112,1)');
+  body.addColorStop(0.5, 'rgba(200,90,55,1)');
+  body.addColorStop(1, 'rgba(126,50,30,1)');
+  g.fillStyle = body;
+  g.fill();
+  // A faint horizontal band suggesting rotation
+  g.fillStyle = 'rgba(110,42,22,0.45)';
+  g.fillRect(44, 66, 40, 3);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+// Build a sphere of star positions with magnitude jitter. Points are placed
+// just inside the sky sphere so they sit behind everything else.
+function buildStarGeometry(): THREE.BufferGeometry {
+  const count = Tuning.STAR_COUNT;
+  const radius = Tuning.STAR_SPHERE_RADIUS;
+  const positions = new Float32Array(count * 3);
+  const sizes = new Float32Array(count);
+  for (let i = 0; i < count; i++) {
+    // Uniform-on-sphere via cos-z rejection-free formula.
+    const u = Math.random() * 2 - 1;
+    const phi = Math.random() * Math.PI * 2;
+    const s = Math.sqrt(1 - u * u);
+    positions[i * 3]     = radius * s * Math.cos(phi);
+    positions[i * 3 + 1] = radius * u;
+    positions[i * 3 + 2] = radius * s * Math.sin(phi);
+    // Brightness jitter — 80% are small/dim, 20% noticeably brighter.
+    sizes[i] = Math.random() < 0.2 ? 2.2 + Math.random() * 1.6 : 0.8 + Math.random() * 0.7;
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geo.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+  return geo;
+}
+
 export function createSky(scene: THREE.Scene): void {
   const sphereGeo = new THREE.SphereGeometry(Tuning.SKY_SPHERE_RADIUS, 32, 18);
   const sphereMat = new THREE.ShaderMaterial({
@@ -113,16 +239,185 @@ export function createSky(scene: THREE.Scene): void {
   sun.frustumCulled = false;
   scene.add(sun);
 
-  bundle = { sphere, sphereMat, sun, sunMat };
+  // Moon — same sprite pattern, opposite the sun.
+  const moonMat = new THREE.SpriteMaterial({
+    map: makeMoonTexture(),
+    color: 0xffffff,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    depthTest: false,
+    fog: false,
+    toneMapped: false,
+    blending: THREE.NormalBlending,
+  });
+  const moon = new THREE.Sprite(moonMat);
+  moon.scale.setScalar(Tuning.MOON_DISC_SIZE);
+  moon.renderOrder = 0;
+  moon.frustumCulled = false;
+  scene.add(moon);
+
+  // Star field — additive points, opacity ramps with night. depthTest stays
+  // ON so terrain in the lower hemisphere occludes the stars beneath your feet
+  // (without it, transparent-pass ordering paints them over the terrain).
+  const starsMat = new THREE.PointsMaterial({
+    color: 0xffffff,
+    size: 1.6,
+    sizeAttenuation: false,   // constant pixel size — stars don't shrink with distance
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    depthTest: true,
+    fog: false,
+    toneMapped: false,
+    blending: THREE.AdditiveBlending,
+  });
+  const stars = new THREE.Points(buildStarGeometry(), starsMat);
+  stars.renderOrder = -0.5;   // after sky sphere, before sun/moon
+  stars.frustumCulled = false;
+  scene.add(stars);
+
+  // Distant planet — fixed-direction sprite, always visible (faint).
+  // depthTest on so mountains in the planet's direction occlude it (no
+  // showing through terrain).
+  const planetMat = new THREE.SpriteMaterial({
+    map: makePlanetTexture(),
+    color: 0xffffff,
+    transparent: true,
+    opacity: 0.55,
+    depthWrite: false,
+    depthTest: true,
+    fog: false,
+    toneMapped: false,
+    blending: THREE.NormalBlending,
+  });
+  const planet = new THREE.Sprite(planetMat);
+  planet.scale.setScalar(Tuning.PLANET_SIZE);
+  planet.renderOrder = 0;
+  planet.frustumCulled = false;
+  scene.add(planet);
+
+  // Shooting-star pool — each is a 2-vertex line; vertex colors fade tail→head.
+  const shooters: ShootingStar[] = [];
+  for (let i = 0; i < Tuning.SHOOTING_STAR_POOL; i++) {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
+    // Vertex colors so the tail fades out; head at color [1] stays bright.
+    geo.setAttribute('color', new THREE.BufferAttribute(
+      new Float32Array([1, 1, 1, 1, 1, 1]), 3,
+    ));
+    const mat = new THREE.LineBasicMaterial({
+      vertexColors: true,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      depthTest: true,
+      fog: false,
+      toneMapped: false,
+      blending: THREE.AdditiveBlending,
+    });
+    const line = new THREE.Line(geo, mat);
+    line.renderOrder = 0.5;     // above sun/moon
+    line.frustumCulled = false;
+    line.visible = false;
+    scene.add(line);
+    shooters.push({
+      line,
+      origin: new THREE.Vector3(),
+      travel: new THREE.Vector3(),
+      lifetime: 0,
+      elapsed: 0,
+      active: false,
+    });
+  }
+
+  bundle = {
+    sphere, sphereMat, sun, sunMat,
+    moon, moonMat, stars, starsMat,
+    planet, planetMat, shooters,
+    nextShooterAt: Tuning.SHOOTING_STAR_MIN_INTERVAL,
+  };
+}
+
+/** Pick an unused shooter and arm it with a random origin + travel arc. */
+function trySpawnShooter(b: SkyBundle, cam: THREE.Vector3): void {
+  const free = b.shooters.find((s) => !s.active);
+  if (!free) return;
+  // Origin: random direction in the upper sky. Floor at y=0.15 so shooters
+  // can streak through the lower sky too — players looking ahead at the
+  // horizon will see them, not just players who happen to look straight up.
+  const phi = Math.random() * Math.PI * 2;
+  const u = 0.15 + Math.random() * 0.7;      // y component, 0.15..0.85
+  const s = Math.sqrt(1 - u * u);
+  _tmpOrigin.set(s * Math.cos(phi), u, s * Math.sin(phi));
+  // Travel: tangent in the sky plane + slight downward bias. ~0.55 unit-sphere
+  // distance translates to a streak across roughly 30° of arc — visible
+  // enough that even peripheral attention catches them.
+  const tx = -Math.sin(phi);
+  const tz = Math.cos(phi);
+  _tmpTravel.set(tx, -0.08 - Math.random() * 0.18, tz)
+    .normalize()
+    .multiplyScalar(0.55 + Math.random() * 0.25);
+
+  free.origin.copy(_tmpOrigin);
+  free.travel.copy(_tmpTravel);
+  free.lifetime = Tuning.SHOOTING_STAR_LIFETIME_MIN +
+    Math.random() * (Tuning.SHOOTING_STAR_LIFETIME_MAX - Tuning.SHOOTING_STAR_LIFETIME_MIN);
+  free.elapsed = 0;
+  free.active = true;
+  free.line.visible = true;
+
+  // Seed initial line endpoints — both at origin; head will advance over time.
+  const posAttr = free.line.geometry.getAttribute('position') as THREE.BufferAttribute;
+  const arr = posAttr.array as Float32Array;
+  const distance = Tuning.STAR_SPHERE_RADIUS;
+  const ox = cam.x + _tmpOrigin.x * distance;
+  const oy = cam.y + _tmpOrigin.y * distance;
+  const oz = cam.z + _tmpOrigin.z * distance;
+  arr[0] = ox; arr[1] = oy; arr[2] = oz;
+  arr[3] = ox; arr[4] = oy; arr[5] = oz;
+  posAttr.needsUpdate = true;
+}
+
+/** Advance a single shooting star; mark inactive when its lifetime ends. */
+function updateShooter(s: ShootingStar, dt: number, cam: THREE.Vector3, opacityScale: number): void {
+  s.elapsed += dt;
+  const t = s.elapsed / s.lifetime;
+  if (t >= 1) {
+    s.active = false;
+    s.line.visible = false;
+    return;
+  }
+  // Head moves along travel; tail trails behind ~30% of the way.
+  const distance = Tuning.STAR_SPHERE_RADIUS;
+  const headDir = _tmpOrigin.copy(s.origin).addScaledVector(s.travel, t);
+  const tailT = Math.max(0, t - 0.3);
+  const tailDir = _tmpTravel.copy(s.origin).addScaledVector(s.travel, tailT);
+
+  const posAttr = s.line.geometry.getAttribute('position') as THREE.BufferAttribute;
+  const arr = posAttr.array as Float32Array;
+  arr[0] = cam.x + tailDir.x * distance;
+  arr[1] = cam.y + tailDir.y * distance;
+  arr[2] = cam.z + tailDir.z * distance;
+  arr[3] = cam.x + headDir.x * distance;
+  arr[4] = cam.y + headDir.y * distance;
+  arr[5] = cam.z + headDir.z * distance;
+  posAttr.needsUpdate = true;
+
+  // Brightness envelope: ramp up fast, fade out slowly.
+  const env = t < 0.15 ? t / 0.15 : 1 - (t - 0.15) / 0.85;
+  const mat = s.line.material as THREE.LineBasicMaterial;
+  mat.opacity = Math.max(0, env) * opacityScale;
 }
 
 /** Per-frame sky update: follow camera, blend gradient, animate sun disc. */
-export function updateSky(ctx: GameContext, _dt: number): void {
+export function updateSky(ctx: GameContext, dt: number): void {
   if (!bundle) return;
   const cam = ctx.three.camera.position;
 
-  // Sky sphere & sun stay anchored to the camera so they read as infinite.
+  // Sky sphere & sun & moon & stars & planet stay anchored to the camera.
   bundle.sphere.position.copy(cam);
+  bundle.stars.position.copy(cam);
 
   const sy = ctx.time.sunHeight;
   const aboveHorizon = Math.max(0, sy);
@@ -166,11 +461,14 @@ export function updateSky(ctx: GameContext, _dt: number): void {
     _sunColor.copy(SunColors.HORIZON).lerp(SunColors.GOLDEN, t);
   }
 
-  // Sandstorm tint: pull both horizon and top toward dust-red.
+  // Sandstorm tint: pull the entire sky (both horizon AND zenith) toward
+  // a uniform dust-rust color, almost completely overwriting the gradient
+  // at peak intensity. This is what makes the sky look "blocked by dust"
+  // rather than a clear sky behind a wall of fog.
   const storm = ctx.weather.intensity;
   if (storm > 0.001) {
-    _horizonColor.lerp(new THREE.Color(0x803020), storm * 0.7);
-    _topColor.lerp(new THREE.Color(0x402018), storm * 0.7);
+    _horizonColor.lerp(new THREE.Color(0x6e3a22), storm * 0.95);
+    _topColor.lerp(new THREE.Color(0x4a2614), storm * 0.95);
   }
 
   // Push uniforms.
@@ -178,7 +476,7 @@ export function updateSky(ctx: GameContext, _dt: number): void {
   bundle.sphereMat.uniforms.uHorizonColor.value.copy(_horizonColor);
   bundle.sphereMat.uniforms.uSunDir.value.copy(ctx.time.sunDir);
   bundle.sphereMat.uniforms.uSunColor.value.copy(_sunColor);
-  bundle.sphereMat.uniforms.uSunGlow.value = (0.4 + dayMix * 0.6) * (1 - storm * 0.6);
+  bundle.sphereMat.uniforms.uSunGlow.value = (0.4 + dayMix * 0.6) * (1 - storm * 0.92);
 
   // Sun disc: position along sun dir from camera, hide below horizon.
   _sunPos.copy(cam).addScaledVector(ctx.time.sunDir, Tuning.SUN_DISC_DISTANCE);
@@ -187,6 +485,45 @@ export function updateSky(ctx: GameContext, _dt: number): void {
   bundle.sunMat.opacity = Math.min(1, Math.max(0, sy * 5 + 0.1)); // fade out a bit before horizon
   bundle.sun.visible = aboveHorizon > -0.05;
 
-  // Suppress unused warning (nightMix would drive moon disc later if added).
-  void nightMix;
+  // ── Moon: opposite the sun, faded by nightMix and the storm. ──
+  _moonDir.copy(ctx.time.sunDir).multiplyScalar(-1);
+  _moonPos.copy(cam).addScaledVector(_moonDir, Tuning.MOON_DISC_DISTANCE);
+  bundle.moon.position.copy(_moonPos);
+  // Visible when the moon is above the horizon (moonDir.y > 0).
+  const moonAbove = Math.max(0, _moonDir.y);
+  bundle.moonMat.opacity = Math.min(1, moonAbove * 4 + 0.05) * (1 - storm * 0.85);
+  bundle.moon.visible = moonAbove > -0.02;
+
+  // ── Stars: opacity rides nightMix, killed by sandstorm and twilight glow. ──
+  // The 0.4 floor of dayMix knocks them out before they show in daylight.
+  bundle.starsMat.opacity = Math.max(0, nightMix - dayMix * 0.4) * (1 - storm * 0.9);
+
+  // ── Distant planet: fixed direction in world, always-on faint visibility. ──
+  _planetPos.copy(cam).addScaledVector(_planetDir, Tuning.PLANET_DISTANCE);
+  bundle.planet.position.copy(_planetPos);
+  // Slightly brighter at dusk (1 - aboveHorizon), pretty muted at midnight.
+  const planetGlow = 0.45 + Math.max(0, 0.55 - aboveHorizon) * 0.6;
+  bundle.planetMat.opacity = planetGlow * (1 - storm * 0.7);
+
+  // ── Shooting stars: tick active ones, occasionally arm a new one. ──
+  const nightVisibility = Math.max(0, nightMix - dayMix * 0.4) * (1 - storm * 0.9);
+  for (const s of bundle.shooters) {
+    if (s.active) updateShooter(s, dt, cam, nightVisibility);
+  }
+  // Fire earlier (threshold 0.02 vs 0.05) so dusk gets a few faint streaks
+  // before full dark — opacity scales with nightVisibility so they'll be
+  // subtle when the sky is still bright.
+  if (ctx.time.elapsed >= bundle.nextShooterAt && nightVisibility > 0.02) {
+    trySpawnShooter(bundle, cam);
+    // Next interval scales inversely with night strength (longer between
+    // shooters when the sky is barely dark).
+    const minI = Tuning.SHOOTING_STAR_MIN_INTERVAL;
+    const maxI = Tuning.SHOOTING_STAR_MAX_INTERVAL;
+    const scale = 1 / Math.max(0.2, nightVisibility);
+    bundle.nextShooterAt =
+      ctx.time.elapsed + (minI + Math.random() * (maxI - minI)) * scale;
+  } else if (nightVisibility <= 0.02) {
+    // Reset the timer when fully bright so we don't fire 4 in a row at dusk.
+    bundle.nextShooterAt = ctx.time.elapsed + Tuning.SHOOTING_STAR_MIN_INTERVAL;
+  }
 }

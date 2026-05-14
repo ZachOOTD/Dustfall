@@ -107,10 +107,12 @@ function renderTile(refs: TileRefs, slot: Slot, isSwapSel: boolean): void {
   refs.root.classList.toggle('swap-selected', isSwapSel);
   if (!slot.item) {
     refs.root.classList.add('empty');
+    refs.root.title = '';
     return;
   }
   refs.root.classList.remove('empty');
   const def = getItemDef(slot.item);
+  refs.root.title = def.name.toLowerCase();
   if (def.makeIcon) refs.glyph.appendChild(def.makeIcon());
   else refs.glyph.textContent = def.glyph;
   if (def.stackable && slot.count > 1) refs.count.textContent = `×${slot.count}`;

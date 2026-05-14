@@ -45,7 +45,13 @@ Run with `npm run dev` (port 5173). Type-check with `npx tsc --noEmit`.
 
 ## Where we are now
 
-**Last shipped**: Session M — save/load. See [docs/changelog.md](docs/changelog.md) for full history; [docs/roadmap.md](docs/roadmap.md) for what's next (Session N).
+**Last shipped**: Session W — opening scene + world detail (cinematic
+sandstorm intro, wreck shelter with skeleton + journal, dead-tree branch
+clusters, alien-cactus variant). Also landed in this batch: N (rigged
+raider infra — GLB pending), U (UX + tuning + empty world), V
+(atmosphere — sky/dust + music *disabled* pending overhaul). See
+[docs/changelog.md](docs/changelog.md) for full history;
+[docs/roadmap.md](docs/roadmap.md) for what's next.
 
 ### Tutorial flags (Session L)
 

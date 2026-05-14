@@ -16,6 +16,7 @@ const VERBS: Record<InteractType, string> = {
   sleep: 'sleep in',
   relight: 'relight',
   salvage: 'salvage',
+  read: 'read',
 };
 
 let _root: HTMLDivElement | null = null;

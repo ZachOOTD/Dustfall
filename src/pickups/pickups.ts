@@ -184,6 +184,50 @@ function makePrimitiveBranch(rand: Rng): THREE.Group {
   return g;
 }
 
+/** Spawn a single branch pickup at a specific (x, z) world position.
+ *  Aligns to terrain normal, applies the same no-shadow + pickup tagging.
+ *  Appends to `list` and returns the new Pickup. Used by dead-tree clusters
+ *  (Session W) and the legacy random scatter. */
+export function spawnBranchAt(
+  scene: THREE.Scene,
+  terrain: Terrain,
+  x: number,
+  z: number,
+  rand: Rng,
+  list: Pickup[],
+): Pickup {
+  const groundY = terrain.heightAt(x, z);
+  const mesh = makePrimitiveBranch(rand);
+  const restY = groundY + 0.012;
+  mesh.position.set(x, restY, z);
+  mesh.rotation.y = rand() * Math.PI * 2;
+  alignToTerrainNormal(mesh, terrain, x, z);
+
+  mesh.userData.noShadow = true;
+  mesh.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (m.isMesh) {
+      m.castShadow = false;
+      m.receiveShadow = true;
+    }
+  });
+
+  const pickupId = _nextId++;
+  tagPickupMeshes(mesh, pickupId);
+  scene.add(mesh);
+
+  const pickup: Pickup = {
+    id: pickupId,
+    itemId: 'branch',
+    mesh,
+    pos: new THREE.Vector3(x, restY, z),
+    bobPhase: rand() * Math.PI * 2,
+    hovered: false,
+  };
+  list.push(pickup);
+  return pickup;
+}
+
 export function spawnBranches(
   scene: THREE.Scene,
   terrain: Terrain,
@@ -196,40 +240,7 @@ export function spawnBranches(
     const angle = rand() * Math.PI * 2;
     const x = Math.cos(angle) * radius;
     const z = Math.sin(angle) * radius;
-    const groundY = terrain.heightAt(x, z);
-
-    const mesh = makePrimitiveBranch(rand);
-    // Sit the branch directly on (slightly into) the sand. Align rotation to
-    // the terrain normal so it follows the slope instead of floating with a
-    // visible gap at the downhill end.
-    const restY = groundY + 0.012;
-    mesh.position.set(x, restY, z);
-    mesh.rotation.y = rand() * Math.PI * 2;
-    alignToTerrainNormal(mesh, terrain, x, z);
-
-    // Thin sticks — their shadow contribution is invisible from a meter+
-    // away. Skip the cost.
-    mesh.userData.noShadow = true;
-    mesh.traverse((o) => {
-      const m = o as THREE.Mesh;
-      if (m.isMesh) {
-        m.castShadow = false;
-        m.receiveShadow = true;
-      }
-    });
-
-    const pickupId = _nextId++;
-    tagPickupMeshes(mesh, pickupId);
-    scene.add(mesh);
-
-    list.push({
-      id: pickupId,
-      itemId: 'branch',
-      mesh,
-      pos: new THREE.Vector3(x, restY, z),
-      bobPhase: rand() * Math.PI * 2,
-      hovered: false,
-    });
+    spawnBranchAt(scene, terrain, x, z, rand, list);
   }
   return list;
 }

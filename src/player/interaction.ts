@@ -43,6 +43,7 @@ import { openSleepOverlay, isSleepOverlayOpen } from '../ui/sleepOverlay.ts';
 import { isCraftingMenuOpen } from '../ui/craftingMenu.ts';
 import { isInventoryOverlayOpen } from '../ui/inventoryOverlay.ts';
 import { isControlsPanelOpen } from '../ui/tutorial.ts';
+import { isJournalPanelOpen } from '../ui/journalPanel.ts';
 import type { InteractType, ItemId, Slot } from '../inventory/types.ts';
 
 const RAYCAST_DISTANCE = 2.5;
@@ -52,7 +53,7 @@ const _dir = new THREE.Vector3();
 interface InteractHit {
   type: InteractType;
   id: number;
-  registry: 'pickups' | 'waterSources' | 'cacti' | 'lizards' | 'lootContainers' | 'fires' | 'tents' | 'salvageables';
+  registry: 'pickups' | 'waterSources' | 'cacti' | 'lizards' | 'lootContainers' | 'fires' | 'tents' | 'salvageables' | 'journals';
   distance: number;
 }
 
@@ -121,7 +122,7 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
     return;
   }
   // Overlay menus suppress interaction (pointer is unlocked anyway).
-  if (isLootMenuOpen() || isSleepOverlayOpen() || isCraftingMenuOpen() || isInventoryOverlayOpen() || isControlsPanelOpen()) {
+  if (isLootMenuOpen() || isSleepOverlayOpen() || isCraftingMenuOpen() || isInventoryOverlayOpen() || isControlsPanelOpen() || isJournalPanelOpen()) {
     if (_salvaging) cancelSalvage();
     return;
   }
@@ -142,6 +143,7 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
   for (const f of ctx.fires.list) targets.push(f.mesh);
   for (const t of ctx.tents.list) targets.push(t.mesh);
   for (const s of ctx.salvageables.list) targets.push(s.mesh);
+  for (const j of ctx.journals.list) targets.push(j.mesh);
   if (targets.length === 0) {
     if (_salvaging) cancelSalvage();
     return;
@@ -218,12 +220,18 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
       const c = findCactusById(ctx.cacti.list, info.id);
       if (!c || c.harvested) return;
       c.hovered = true;
-      ctx.inventory.hover = { type: 'harvest', distance: info.distance, promptNoun: 'cactus' };
+      const isAlien = c.kind === 'alien';
+      ctx.inventory.hover = {
+        type: 'harvest',
+        distance: info.distance,
+        promptNoun: isAlien ? 'alien cactus' : 'cactus',
+      };
       if (ctx.input.pressed.has('KeyE')) {
-        const got = 1 + Math.floor(Math.random() * 2); // 1-2 pulp
+        const got = 1 + Math.floor(Math.random() * 2); // 1-2 yields
+        const yieldId: ItemId = isAlien ? 'alien_fruit' : 'cactus_pulp';
         let added = 0;
         for (let i = 0; i < got; i++) {
-          if (addItem(ctx.inventory, 'cactus_pulp', undefined, ctx) >= 0) added++;
+          if (addItem(ctx.inventory, yieldId, undefined, ctx) >= 0) added++;
         }
         if (added === 0) {
           ctx.ui.showToast('your bag is full');
@@ -231,7 +239,11 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
         }
         harvestCactus(c);
         playHarvest();
-        ctx.ui.showToast(`you carve out ${added} piece${added > 1 ? 's' : ''} of pulp`);
+        if (isAlien) {
+          ctx.ui.showToast(`you pluck ${added} alien fruit${added > 1 ? 's' : ''}`);
+        } else {
+          ctx.ui.showToast(`you carve out ${added} piece${added > 1 ? 's' : ''} of pulp`);
+        }
       }
       return;
     }
@@ -374,6 +386,15 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
           completeAt: ctx.time.elapsed + SALVAGE_DURATION,
         };
         playSalvage();
+      }
+      return;
+    }
+
+    case 'journals': {
+      // Re-readable journal (Session W). E opens the modal lore panel.
+      ctx.inventory.hover = { type: 'read', distance: info.distance, promptNoun: 'journal' };
+      if (ctx.input.pressed.has('KeyE')) {
+        void import('../ui/journalPanel.ts').then((m) => m.openJournalPanel(ctx));
       }
       return;
     }

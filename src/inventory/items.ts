@@ -465,6 +465,57 @@ const _DEFS: Record<ItemId, ItemDef> = {
     },
   },
 
+  alien_fruit: {
+    id: 'alien_fruit',
+    name: 'ALIEN FRUIT',
+    glyph: '◉',
+    description: 'a bulbous teal fruit from the strange cactus',
+    stackable: true,
+    maxStack: 4,
+    onUse(ctx, _slot) {
+      ctx.stats.hunger = Math.min(1, ctx.stats.hunger + 0.25);
+      ctx.stats.thirst = Math.min(1, ctx.stats.thirst + 0.10);
+      return { consumed: true, message: 'tastes like nothing on this rock' };
+    },
+    makeViewModel() {
+      const group = new THREE.Group();
+      const bodyMat = new THREE.MeshLambertMaterial({
+        color: 0x2a8a8a,
+        emissive: 0x0a2828,
+        emissiveIntensity: 0.6,
+        flatShading: true,
+      });
+      const spotMat = new THREE.MeshLambertMaterial({
+        color: 0x103838,
+        flatShading: true,
+      });
+      const fruit = new THREE.Mesh(new THREE.IcosahedronGeometry(0.07, 1), bodyMat);
+      fruit.scale.set(1, 1.1, 0.95);
+      group.add(fruit);
+      // A few darker spots — small icosahedra parented at offsets
+      const spotPositions: Array<[number, number, number]> = [
+        [0.04, 0.02, 0.045], [-0.035, 0.04, 0.04], [0.01, -0.04, 0.05],
+      ];
+      for (const [x, y, z] of spotPositions) {
+        const spot = new THREE.Mesh(new THREE.IcosahedronGeometry(0.012, 0), spotMat);
+        spot.position.set(x, y, z);
+        group.add(spot);
+      }
+      return group;
+    },
+    makeIcon() {
+      const s = svg();
+      // Teardrop outline + 3 small dots
+      s.appendChild(svgEl('path', {
+        d: 'M12 4 C16 9, 17 13, 12 19 C7 13, 8 9, 12 4 Z',
+      }));
+      s.appendChild(svgEl('circle', { cx: '10.5', cy: '11', r: '0.7', fill: 'currentColor', stroke: 'none' }));
+      s.appendChild(svgEl('circle', { cx: '13', cy: '13.5', r: '0.7', fill: 'currentColor', stroke: 'none' }));
+      s.appendChild(svgEl('circle', { cx: '12', cy: '8', r: '0.6', fill: 'currentColor', stroke: 'none' }));
+      return s;
+    },
+  },
+
   tent_kit: {
     id: 'tent_kit',
     name: 'TENT KIT',
@@ -514,4 +565,5 @@ export const ALL_ITEM_IDS: ReadonlyArray<ItemId> = [
   'cactus_pulp', 'cooked_cactus_pulp',
   'raw_lizard_meat', 'cooked_lizard_meat',
   'branch', 'cloth', 'fire_kit', 'tent_kit',
+  'alien_fruit',
 ];
