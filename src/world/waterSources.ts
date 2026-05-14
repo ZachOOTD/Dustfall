@@ -8,6 +8,8 @@ import * as THREE from 'three';
 import type { Rng } from '../core/rng.ts';
 import type { Terrain } from '../world/terrain.ts';
 import type { BiomeSampler } from './biomes.ts';
+import { perturbOutward } from './sculpt.ts';
+import { Tuning } from '../config/tuning.ts';
 
 export type WaterSourceKind = 'well';
 
@@ -29,36 +31,94 @@ function tag(root: THREE.Object3D, id: number): void {
   });
 }
 
-function makeWell(_rand: Rng): THREE.Group {
+// Shared materials — instances reused across all wells.
+const _stoneMatLight = new THREE.MeshLambertMaterial({
+  color: Tuning.WELL_STONE_LIGHT_HEX,
+  flatShading: true,
+});
+const _stoneMatDark = new THREE.MeshLambertMaterial({
+  color: Tuning.WELL_STONE_DARK_HEX,
+  flatShading: true,
+});
+const _woodMat = new THREE.MeshLambertMaterial({
+  color: Tuning.WELL_WOOD_HEX,
+  flatShading: true,
+});
+const _woodMatDark = new THREE.MeshLambertMaterial({
+  color: Tuning.WELL_WOOD_DARK_HEX,
+  flatShading: true,
+});
+const _holeMat = new THREE.MeshBasicMaterial({ color: 0x05080a });
+
+function makeWell(rand: Rng): THREE.Group {
   const g = new THREE.Group();
-  const stoneMat = new THREE.MeshStandardMaterial({ color: 0x5a4a3a, roughness: 0.95 });
-  // Ring (TorusGeometry flat) + inner dark hole disc.
-  const ring = new THREE.Mesh(
-    new THREE.TorusGeometry(0.75, 0.18, 6, 16),
-    stoneMat,
-  );
-  ring.rotation.x = Math.PI / 2;
-  ring.position.y = 0.4;
-  g.add(ring);
-
-  // Stone wall blocks — 6 small box rings making it look constructed
-  const blockMat = new THREE.MeshStandardMaterial({ color: 0x6a5a48, roughness: 0.95 });
-  for (let i = 0; i < 8; i++) {
-    const ang = (i / 8) * Math.PI * 2;
-    const block = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.14, 0.20), blockMat);
-    block.position.set(Math.cos(ang) * 0.72, 0.27, Math.sin(ang) * 0.72);
-    block.rotation.y = -ang;
-    g.add(block);
+  const ringR = Tuning.WELL_RING_RADIUS;
+  const stoneCount = Tuning.WELL_STONE_COUNT;
+  // Ring of irregular stones — perturbed icosahedra at slight scale + height
+  // variation so the circle reads as hand-stacked rocks, not a precise build.
+  for (let i = 0; i < stoneCount; i++) {
+    const baseAng = (i / stoneCount) * Math.PI * 2;
+    // Small angular + radial jitter so stones don't perfectly tile.
+    const ang = baseAng + (rand() - 0.5) * 0.18;
+    const r = ringR * (0.94 + rand() * 0.12);
+    const sz = Tuning.WELL_STONE_SIZE * (0.78 + rand() * 0.34);
+    const geo = new THREE.IcosahedronGeometry(sz, 0);
+    perturbOutward(geo, 0.22, 31 + i * 7);
+    const mat = rand() < 0.5 ? _stoneMatLight : _stoneMatDark;
+    const stone = new THREE.Mesh(geo, mat);
+    stone.position.set(Math.cos(ang) * r, sz * 0.55, Math.sin(ang) * r);
+    stone.rotation.set(rand() * Math.PI, rand() * Math.PI, rand() * Math.PI);
+    // Squash slightly so stones look set into the ground rather than ball-like.
+    stone.scale.y = 0.78 + rand() * 0.12;
+    g.add(stone);
   }
-
-  // Dark hole
+  // Dark inner hole — set BELOW the hatch so peeks-through-the-cracks reads dark.
   const hole = new THREE.Mesh(
-    new THREE.CircleGeometry(0.55, 18),
-    new THREE.MeshBasicMaterial({ color: 0x05080a }),
+    new THREE.CircleGeometry(ringR * 0.72, 18),
+    _holeMat,
   );
   hole.rotation.x = -Math.PI / 2;
-  hole.position.y = 0.46;
+  hole.position.y = Tuning.WELL_STONE_SIZE * 0.35;
   g.add(hole);
+
+  // Wooden hatch — a small plank set across the well opening, slightly off-center
+  // so it reads as "pushed aside." Five narrow planks make up the slab.
+  const hatch = new THREE.Group();
+  const plankLen = ringR * 1.7;
+  const plankCount = Tuning.WELL_HATCH_PLANK_COUNT;
+  const plankW = (ringR * 1.5) / plankCount;
+  const plankH = Tuning.WELL_HATCH_THICKNESS;
+  for (let i = 0; i < plankCount; i++) {
+    const px = (i - (plankCount - 1) / 2) * plankW * 1.02;
+    const mat = (i + Math.floor(rand() * 2)) % 2 === 0 ? _woodMat : _woodMatDark;
+    const plank = new THREE.Mesh(
+      new THREE.BoxGeometry(plankW * 0.98, plankH, plankLen),
+      mat,
+    );
+    plank.position.set(px, 0, 0);
+    hatch.add(plank);
+  }
+  // Cross-brace — narrow strip across the planks, perpendicular
+  const brace = new THREE.Mesh(
+    new THREE.BoxGeometry(ringR * 1.5, plankH * 1.2, plankH * 1.6),
+    _woodMatDark,
+  );
+  brace.position.set(0, plankH * 0.5, plankLen * 0.28);
+  hatch.add(brace);
+  // Place the hatch sitting on top of the stone ring, slightly slid off-center
+  // so part of the well opening is visible (peek into the dark).
+  const slideAng = rand() * Math.PI * 2;
+  const slideDist = ringR * 0.18;
+  hatch.position.set(
+    Math.cos(slideAng) * slideDist,
+    Tuning.WELL_STONE_SIZE * 1.05,
+    Math.sin(slideAng) * slideDist,
+  );
+  hatch.rotation.y = slideAng + Math.PI / 2 + (rand() - 0.5) * 0.3;
+  // Tip the hatch up a tiny bit on one side for "askew" feel.
+  hatch.rotation.x = (rand() - 0.5) * 0.08;
+  g.add(hatch);
+
   return g;
 }
 
@@ -69,30 +129,31 @@ export function spawnWaterSources(
   biomes: BiomeSampler,
 ): WaterSource[] {
   const list: WaterSource[] = [];
-  // Wells only — oases and barrels have been retired (they didn't fit the
-  // barren-desert tone). At least one well is forced into a salt-flat biome
-  // so the player has a survival landmark in the otherwise water-less salt.
-  const TOTAL_WELLS = 5;
-  const SALT_QUOTA = 2;          // at least this many wells must land in salt
+  // Session Z — wells restricted to salt-flats biome (dried lakebed geology
+  // is where the player's mental model expects a dug well). Wells that can't
+  // find a salt patch within MAX_ATTEMPTS are silently dropped — better to
+  // ship 3 wells in salt than to scatter strays into dunes/rocky.
+  const TARGET_WELLS = Tuning.WELL_TARGET_COUNT;
+  const MAX_ATTEMPTS = 80;
 
-  let saltPlaced = 0;
-  for (let i = 0; i < TOTAL_WELLS; i++) {
-    const requireSalt = saltPlaced < SALT_QUOTA;
-    // Retry sampling until biome constraint is satisfied or we give up.
+  for (let i = 0; i < TARGET_WELLS; i++) {
     let x = 0, z = 0;
-    for (let attempt = 0; attempt < 40; attempt++) {
+    let placed = false;
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
       const radius = 35 + rand() * 200;
       const angle = rand() * Math.PI * 2;
-      x = Math.cos(angle) * radius;
-      z = Math.sin(angle) * radius;
-      if (!requireSalt || biomes.biomeAt(x, z) === 'salt') break;
+      const cx = Math.cos(angle) * radius;
+      const cz = Math.sin(angle) * radius;
+      if (biomes.biomeAt(cx, cz) === 'salt') {
+        x = cx; z = cz; placed = true; break;
+      }
     }
-    if (biomes.biomeAt(x, z) === 'salt') saltPlaced++;
+    if (!placed) continue; // no salt within budget — skip this well
 
     const groundY = terrain.heightAt(x, z);
     const mesh = makeWell(rand);
     // Sink the well slightly so its stone base sits flush even on a slope.
-    mesh.position.set(x, groundY - 0.25, z);
+    mesh.position.set(x, groundY - 0.05, z);
     mesh.rotation.y = rand() * Math.PI * 2;
     mesh.traverse((o) => {
       const m = o as THREE.Mesh;

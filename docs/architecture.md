@@ -29,7 +29,7 @@ src/
     heroLandmarks.ts      — placeRibcage/TruckWreck/RadioTower/Obelisk + placeHeroLandmarks
     sky.ts                — sky-sphere shader + sun-disc sprite + horizon/top color blend
     weather.ts            — sandstorm state machine + Points particles
-    waterSources.ts       — oasis / well / barrel scatter; refill canteens via E
+    waterSources.ts       — stone-ring + wooden-hatch wells; salt-flats biome ONLY (Session Z); refill canteens via E
     cactus.ts             — saguaro scatter; harvest E → cactus_pulp
     lootContainers.ts     — standalone crates with rolled contents; spawn + tag
     fire.ts               — placeable fire (deployFire); flicker + fuelSeconds + shelter zone + cook/add_fuel interactions

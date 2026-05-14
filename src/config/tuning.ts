@@ -172,6 +172,29 @@ export const Tuning = {
   FOOTPRINT_LIZARD_SIZE_Z: 0.12,
   FOOTPRINT_LIZARD_CADENCE_M: 0.30,     // tracks every X meters during flee
   FOOTPRINT_LIZARD_COLOR_HEX: 0x1e1208, // very dark — small but visible
+
+  // Stone-well rework (Session Z) — wells confined to salt-flats biome.
+  // Visual: ring of perturbed icosahedra stones + an askew wooden plank hatch.
+  WELL_TARGET_COUNT: 5,                 // try to place this many; salt may give fewer
+  WELL_RING_RADIUS: 0.78,               // center-to-stone radius (m)
+  WELL_STONE_COUNT: 9,
+  WELL_STONE_SIZE: 0.30,                // base radius of each perturbed icosahedron
+  WELL_STONE_LIGHT_HEX: 0x9a8a6e,       // pale weathered stone
+  WELL_STONE_DARK_HEX: 0x6c5a44,        // deeper stone (alternates around ring)
+  WELL_HATCH_PLANK_COUNT: 5,
+  WELL_HATCH_THICKNESS: 0.05,           // plank Y-thickness (m)
+  WELL_WOOD_HEX: 0x6b4a2c,              // sun-bleached desert wood
+  WELL_WOOD_DARK_HEX: 0x4a3220,         // shadow / weathered side
+
+  // Tactile salvage panels (Session Z) — small access plate on each wreck
+  // replaces the "raycast hits any mesh" salvage trigger. Each wreck
+  // constructor sets a kind-specific local offset; placeholder default fits
+  // most. Panel = small dark plate with a brighter rim/handle for affordance.
+  SALVAGE_PANEL_SIZE_X: 0.32,           // width (m)
+  SALVAGE_PANEL_SIZE_Y: 0.24,           // height
+  SALVAGE_PANEL_SIZE_Z: 0.06,           // depth (sticks out from hull)
+  SALVAGE_PANEL_BODY_HEX: 0x2a2622,     // dark metal plate
+  SALVAGE_PANEL_RIM_HEX: 0xa28860,      // warm brass rim — visible affordance
 } as const;
 
 // Sky gradient colors (top vs horizon) per time of day. Horizon stays close to

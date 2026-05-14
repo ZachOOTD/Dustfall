@@ -3,6 +3,19 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session Z — 2026-05-14 — Stone-well rework + tactile salvage panels
+Two threads. (1) `makeWell` rewritten: ring of 9 perturbed icosahedron stones
+(alternating light/dark palette) + askew 5-plank wooden hatch with cross-brace.
+`spawnWaterSources` now hard-requires salt biome (no quota fallback; unplaceable
+wells silently drop). 5/5 wells land in salt. (2) New `addAccessPanel` helper
+in `wrecks.ts` adds a small dark plate + brass rim + stub handle to every wreck
+at a kind-specific local offset. `Salvageable` gains a `panel` field; salvage
+interact tag moves from the wreck root to the panel mesh only, so players aim
+at the panel directly. POI custom hulls (engine_block, crashed_hull) forward
+the inner wreck's panel ref to the parent group. `partially verified` (tsc +
+state checks + well screenshot; panel-on-wreck screenshot blocked by paused-tick
+lighting).
+
 ## Session Y — 2026-05-14 — Footprints + lizard tracks
 NEW `src/world/footprints.ts` — InstancedMesh pools per kind (player ×200,
 lizard ×240). Canvas-drawn alpha-mask textures (toe+heel double oval for

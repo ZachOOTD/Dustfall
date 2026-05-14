@@ -9,11 +9,10 @@ and promotes the second.
 
 ---
 
-## Next — Z: Stone-well rework + tactile salvage panels (~5h)
-Replace the current well visuals with a stone-circle well + wooden
-hatch, restricted to the salt-flats biome (`biomes.biomeAt() === 'salt'`).
-Switch salvage from "stare at wreck + hold E" to interactable panels /
-access points on each wreck — more tactile.
+## Next — TBD (pick from Big-ticket bucket below)
+The polish + atmosphere arc (V/W/X/Y/Z) is complete. Pick the next big
+thing from the bucket at start of next session. User direction will
+promote one entry here.
 
 ## Later — Big-ticket bucket (1–2 picks per session at ~4–7h each)
 Pick whatever feels most missing after the polish + atmosphere arc.
@@ -26,9 +25,6 @@ Pick whatever feels most missing after the polish + atmosphere arc.
 - Base-building mechanics
 - Small red creature companion (pocketable + re-deployable)
 - Animated main menu (pod crash + flickering fire + day/night loop)
-- Tactile salvage via interactable panels / access points on wrecks
-- Footprints in sand (player + lizard tracks)
-- Stone-well rework (stone circle + wooden hatch, salt-flats biome only)
 - Weapon variants (pipe staff / scrap machete / scrap gun / energy pistol)
 - Torch + flashlight items
 - Trading / NPC economy

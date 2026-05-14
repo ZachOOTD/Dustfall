@@ -142,7 +142,7 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
   // Both alive (cook/add_fuel) and dead (relight) fires are interactable.
   for (const f of ctx.fires.list) targets.push(f.mesh);
   for (const t of ctx.tents.list) targets.push(t.mesh);
-  for (const s of ctx.salvageables.list) targets.push(s.mesh);
+  for (const s of ctx.salvageables.list) targets.push(s.panel);
   for (const j of ctx.journals.list) targets.push(j.mesh);
   if (targets.length === 0) {
     if (_salvaging) cancelSalvage();

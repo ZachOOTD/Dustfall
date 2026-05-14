@@ -37,6 +37,9 @@ function placeEngineBlock(
   // Compose into a parent group so we can rotate cleanly.
   const parent = new THREE.Group();
   parent.add(cluster);
+  // Forward the cluster's access panel up to the parent so registerSalvageable
+  // can find it (Session Z — `salvageables` reads `group.userData.accessPanel`).
+  parent.userData.accessPanel = cluster.userData.accessPanel;
   parent.position.copy(pos);
   parent.position.y -= 1.4;                       // deep bury on one side
   parent.rotation.y = -0.6;
@@ -134,6 +137,8 @@ function placeCrashedHull(
   const fuselage = makeFuselage(rand, 3.2);
   const parent = new THREE.Group();
   parent.add(fuselage);
+  // Forward the fuselage's access panel up to the parent for registerSalvageable.
+  parent.userData.accessPanel = fuselage.userData.accessPanel;
   parent.position.copy(pos);
   parent.position.y -= 1.6;
   parent.rotation.y = 0.9;

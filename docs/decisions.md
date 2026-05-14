@@ -183,3 +183,38 @@ crusted-mud reads like a flat impression — close enough for v1).
 Trade-off: walking from dune onto rock and back leaves a visible gap
 in the trail. Acceptable — reads as "the terrain doesn't take the
 print" rather than a bug.
+
+## D21 — Wells hard-confined to salt biome, no quota fallback (Session Z)
+**When**: Session Z.
+**Why**: Earlier, `spawnWaterSources` placed 5 wells anywhere with a
+"≥2 must be salt" quota — the other 3 could land on dunes or rocky
+outcrops where a dug well makes no sense (no aquifer below). Z tightens
+this to a HARD requirement: wells MUST be in salt (dried lakebed →
+believable groundwater). Sample positions that miss salt within 80
+attempts are silently dropped — better to ship 3 wells in salt than to
+scatter strays into wrong-feeling biomes. Side-effect: total well count
+may now be < 5 if the salt patches are tight; balance-wise this is fine
+because canteens are reusable and water sources are deliberately scarce
+in this game.
+
+## D22 — Salvage interact tag moves from wreck root to a small panel mesh (Session Z)
+**When**: Session Z.
+**Why**: Pre-Z, `registerSalvageable` tagged the wreck *group* with
+`interactType: 'salvage'`, so raycasting any mesh on the wreck (a nozzle,
+a strut, a 6m fuselage cylinder) triggered the prompt. Reads as
+non-tactile — the whole wreck is one giant button. Z introduces a small
+brass-rimmed access plate (~32×24×6 cm) embedded in each wreck at a
+kind-specific local offset; only THIS panel carries the interact tag.
+Players must aim at the panel deliberately. Architectural rules:
+  - Wreck constructors (`makeXxx` in `wrecks.ts`) bake in the panel and
+    stash it on `group.userData.accessPanel`.
+  - Custom POI hulls that wrap a wreck (engine_block, crashed_hull)
+    forward the inner panel ref to the outer group's
+    `userData.accessPanel`.
+  - `Salvageable.panel` field stores the ref; `interaction.ts` raycast
+    targets `s.panel`, not `s.mesh`.
+  - Panel meshes are flagged `noCollider` so the existing wreck compound
+    colliders aren't redundantly bumped.
+If a future wreck constructor forgets to call `addAccessPanel`,
+`registerSalvageable` falls back to tagging the group root (legacy
+behavior) so the wreck is still salvageable, just not tactile.

@@ -44,6 +44,72 @@ const _antennaMat = new THREE.MeshLambertMaterial({
   flatShading: true,
 });
 
+// Salvage-panel materials (Session Z) — shared across every wreck so we don't
+// allocate per-panel.
+const _panelBodyMat = new THREE.MeshLambertMaterial({
+  color: Tuning.SALVAGE_PANEL_BODY_HEX,
+  flatShading: true,
+});
+const _panelRimMat = new THREE.MeshLambertMaterial({
+  color: Tuning.SALVAGE_PANEL_RIM_HEX,
+  flatShading: true,
+});
+
+/**
+ * Build a salvage access panel — small dark plate with a brass rim ring and a
+ * raised stub for tactile affordance — and attach it as a child of `group` at
+ * the given local position. The panel mesh is stashed on `group.userData.accessPanel`
+ * so `registerSalvageable` can find it and tag it as the only interactable
+ * surface for this wreck (Session Z — replaces "raycast hits any mesh on the
+ * wreck" with "raycast hits THIS panel"). Scales with the wreck.
+ *
+ * `faceYaw` rotates the panel around Y so it presents face-out from the wreck
+ * (raycasts hit the rim, not the back). Optional — defaults to 0.
+ */
+export function addAccessPanel(
+  group: THREE.Group,
+  localX: number, localY: number, localZ: number,
+  scale = 1,
+  faceYaw = 0,
+): THREE.Mesh {
+  const sx = Tuning.SALVAGE_PANEL_SIZE_X * scale;
+  const sy = Tuning.SALVAGE_PANEL_SIZE_Y * scale;
+  const sz = Tuning.SALVAGE_PANEL_SIZE_Z * scale;
+
+  // Panel root mesh — the body. Used as the interact target.
+  const body = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), _panelBodyMat);
+  body.position.set(localX, localY, localZ);
+  body.rotation.y = faceYaw;
+  // Panel sits on a wreck hull that already has compound colliders. Don't add
+  // a redundant collider for the small bump — `attachCompoundCollider` skips
+  // children flagged `noCollider`.
+  body.userData.noCollider = true;
+
+  // Brass rim — thin frame slightly larger than the body, sticking forward.
+  const rim = new THREE.Mesh(
+    new THREE.BoxGeometry(sx * 1.12, sy * 1.12, sz * 0.45),
+    _panelRimMat,
+  );
+  rim.position.set(0, 0, sz * 0.35);
+  rim.userData.noCollider = true;
+  body.add(rim);
+
+  // Center stub — a tiny cylinder = handle / dial. Lives in front so it's
+  // unmissable when you look at the panel.
+  const stub = new THREE.Mesh(
+    new THREE.CylinderGeometry(sy * 0.22, sy * 0.22, sz * 0.7, 8),
+    _panelRimMat,
+  );
+  stub.rotation.x = Math.PI / 2;
+  stub.position.set(0, 0, sz * 0.65);
+  stub.userData.noCollider = true;
+  body.add(stub);
+
+  group.add(body);
+  group.userData.accessPanel = body;
+  return body;
+}
+
 // ────────────────────────────────────────────────────────────────
 // 1. Engine cluster — bundle of nozzles + small thrust frame.
 // Tilted leeward; reads as a propulsion module ripped from a ship.
@@ -97,6 +163,13 @@ export function makeEngineCluster(rand: Rng, scale = 1): THREE.Group {
   panel.position.set(0, nozzleH + baseR * 0.45, baseR * 1.05);
   panel.rotation.y = (rand() - 0.5) * 0.2;
   g.add(panel);
+  // Salvage access panel — on the rusty side panel face, off-center.
+  addAccessPanel(
+    g,
+    baseR * 0.55, nozzleH + baseR * 0.45, baseR * 1.12,
+    scale,
+    0,
+  );
   return g;
 }
 
@@ -142,6 +215,13 @@ export function makeFuselage(rand: Rng, scale = 1): THREE.Group {
   cap.rotation.y = -Math.PI / 2;
   cap.position.set(-length / 2 + 0.01, radius * 0.55, 0);
   g.add(cap);
+  // Salvage access panel — on the side of the tube, near the rust band.
+  addAccessPanel(
+    g,
+    length * 0.32, radius * 1.05, radius * 0.05,
+    scale,
+    0,
+  );
   return g;
 }
 
@@ -173,6 +253,14 @@ export function makeEscapePod(rand: Rng, scale = 1): THREE.Group {
   patch.position.set(-r * 0.5, r * 0.65, r * 0.3);
   patch.rotation.set(0.3, -0.4, 0.1);
   g.add(patch);
+  // Salvage access panel — opposite side from the broken hatch so both ends
+  // of the pod feel utilized.
+  addAccessPanel(
+    g,
+    -r * 0.75, r * 0.45, -r * 0.15,
+    scale,
+    Math.PI,
+  );
   return g;
 }
 
@@ -205,6 +293,14 @@ export function makeCargoContainer(rand: Rng, scale = 1): THREE.Group {
   );
   door.position.set(w / 2 + 0.02, h * 0.45, 0);
   g.add(door);
+  // Salvage access panel — beside the door, lower on the box so you crouch
+  // a touch to align (reads as "scavenger-modified access point").
+  addAccessPanel(
+    g,
+    w / 2 + 0.08, h * 0.30, d * 0.30,
+    scale,
+    Math.PI / 2,
+  );
   return g;
 }
 
@@ -253,6 +349,14 @@ export function makeAntennaSpire(rand: Rng, scale = 1): THREE.Group {
   dish.position.set(0, baseH * 0.5 + mastH + 0.1, 0);
   dish.rotation.z = -0.6 + rand() * 0.4;
   g.add(dish);
+  // Salvage access panel — on the buried base box, player-eye height.
+  // Scale is already baked into baseW/baseH so the panel `scale` arg is 1.
+  addAccessPanel(
+    g,
+    baseW * 0.42, baseH * 0.5, baseW * 0.30,
+    scale,
+    0,
+  );
   return g;
 }
 
@@ -292,6 +396,14 @@ export function makeEngineBell(rand: Rng, scale = 1): THREE.Group {
     strut.rotation.z = (rand() - 0.5) * 1.3;
     g.add(strut);
   }
+  // Salvage access panel — on the rim, outer face. The bell's a tilted torus
+  // so we sit the panel just outside the ring at roughly its midline.
+  addAccessPanel(
+    g,
+    R * 1.05, ring.position.y, 0,
+    scale,
+    Math.PI / 2,
+  );
   return g;
 }
 

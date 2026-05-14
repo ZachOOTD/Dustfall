@@ -21,7 +21,12 @@ export interface LootEntry {
 export interface Salvageable {
   id: number;
   kind: SalvageKind;
+  /** The full wreck group — used by markSalvageStripped to dim every child mesh
+   *  on depletion. The wreck itself is NOT interactive; only `panel` is. */
   mesh: THREE.Object3D;
+  /** Small access panel embedded in the wreck. The interaction raycast targets
+   *  this mesh; the wreck root carries no interact userData (Session Z). */
+  panel: THREE.Object3D;
   pos: THREE.Vector3;
   salvageRemaining: number;
   hovered: boolean;
@@ -51,7 +56,11 @@ export function createSalvageableRegistry(): SalvageableRegistry {
   return { list: [], nextId: 1 };
 }
 
-/** Tag the wreck group + push a record into the registry. */
+/** Tag the wreck group's access panel + push a record into the registry. The
+ *  wreck root itself is left untagged — only the panel is interactable
+ *  (Session Z, tactile salvage). Wreck constructors stash the panel on
+ *  `group.userData.accessPanel`; if missing we fall back to tagging the group
+ *  for legacy compatibility. */
 export function registerSalvageable(
   registry: SalvageableRegistry,
   group: THREE.Object3D,
@@ -63,13 +72,15 @@ export function registerSalvageable(
   const remaining = kind === 'massive'
     ? 4 + Math.floor(rand() * 3)   // 4-6
     : 2 + Math.floor(rand() * 2);  // 2-3
-  group.userData.interactType = 'salvage';
-  group.userData.interactId = id;
-  group.userData.interactRegistry = 'salvageables';
+  const panel = (group.userData.accessPanel as THREE.Object3D | undefined) ?? group;
+  panel.userData.interactType = 'salvage';
+  panel.userData.interactId = id;
+  panel.userData.interactRegistry = 'salvageables';
   const record: Salvageable = {
     id,
     kind,
     mesh: group,
+    panel,
     pos: pos.clone(),
     salvageRemaining: remaining,
     hovered: false,
