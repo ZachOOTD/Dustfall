@@ -11,6 +11,11 @@ export const Tuning = {
   WALK_SPEED: 4.2,
   SPRINT_MULTIPLIER: 1.7,
   JUMP_VELOCITY: 7.0,                // m/s upward kick on jump (~1m apex)
+  CROUCH_EYE_OFFSET: 0.40,           // camera Y above body center while crouched
+  CROUCH_SPEED_MULTIPLIER: 0.5,      // walk speed * this while crouched
+
+  // Debug — flip back to false before any "real" play test.
+  GOD_MODE: true,                    // never dies; die() floors stats instead
 
   // Day/night
   DAY_LENGTH_SECONDS: 360,  // one in-game day = 6 real minutes

@@ -1,7 +1,7 @@
 // Factory helpers for static + kinematic Rapier bodies + colliders.
 
 import RAPIER from '@dimforge/rapier3d-compat';
-import type * as THREE from 'three';
+import * as THREE from 'three';
 
 type Vec3Like = { x: number; y: number; z: number };
 type QuatLike = { x: number; y: number; z: number; w: number };
@@ -19,6 +19,38 @@ export function makeStaticBox(
     RAPIER.ColliderDesc.cuboid(halfExtents.x, halfExtents.y, halfExtents.z),
     body,
   );
+}
+
+const _aabb = new THREE.Box3();
+const _aabbCenter = new THREE.Vector3();
+const _aabbSize = new THREE.Vector3();
+/**
+ * Attach a static axis-aligned-box collider that snugly matches the world-space
+ * bounding volume of `obj` (a Group with arbitrary children, possibly rotated
+ * + scaled). Use after positioning the object so the AABB reflects its final
+ * pose. Avoids the hand-tuned half-extent guess work for irregular wrecks.
+ *
+ * `shrink` lets the caller pull collider faces inward by an absolute amount
+ * (meters) so the player doesn't bump into "invisible" volumes around thin
+ * antennas / dish edges. Negative shrink to inflate.
+ */
+export function attachAabbCollider(
+  world: RAPIER.World,
+  obj: THREE.Object3D,
+  shrink = 0,
+): RAPIER.Collider {
+  obj.updateMatrixWorld(true);
+  _aabb.setFromObject(obj);
+  _aabb.getCenter(_aabbCenter);
+  _aabb.getSize(_aabbSize);
+  const hx = Math.max(0.05, _aabbSize.x * 0.5 - shrink);
+  const hy = Math.max(0.05, _aabbSize.y * 0.5 - shrink);
+  const hz = Math.max(0.05, _aabbSize.z * 0.5 - shrink);
+  const bd = RAPIER.RigidBodyDesc.fixed().setTranslation(
+    _aabbCenter.x, _aabbCenter.y, _aabbCenter.z,
+  );
+  const body = world.createRigidBody(bd);
+  return world.createCollider(RAPIER.ColliderDesc.cuboid(hx, hy, hz), body);
 }
 
 export function makeStaticCylinder(

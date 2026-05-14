@@ -14,7 +14,7 @@ import type { Rng } from '../core/rng.ts';
 import type { Terrain } from './terrain.ts';
 import { Tuning } from '../config/tuning.ts';
 import { perturbOutward } from './sculpt.ts';
-import { makeStaticBox } from '../physics/bodies.ts';
+import { attachAabbCollider } from '../physics/bodies.ts';
 
 // ────────────────────────────────────────────────────────────────
 // Shared materials. Same materials reused across wrecks so we don't
@@ -371,22 +371,17 @@ export type WreckKind =
   | 'antenna_spire'
   | 'engine_bell';
 
-const _q = new THREE.Quaternion();
-function getQuat(o: THREE.Object3D): { x: number; y: number; z: number; w: number } {
-  o.getWorldQuaternion(_q);
-  return { x: _q.x, y: _q.y, z: _q.z, w: _q.w };
-}
-
 interface PlaceWreckOpts {
   scale?: number;
   buryY?: number;          // additional Y offset downward
   tiltZ?: number;          // additional Z-tilt in radians
   tiltX?: number;          // additional X-tilt in radians
   yaw?: number;            // explicit yaw (else random)
-  /** Approximate collider half-extents. Caller may supply if non-trivial. */
-  collider?: { halfW: number; halfH: number; halfD: number };
   /** When true, omit collider entirely (e.g., small ambient props). */
   noCollider?: boolean;
+  /** Shrink collider faces inward by N meters (e.g., 0.15 to allow walking
+   *  close to antenna struts without snagging on their thin volume). */
+  colliderShrink?: number;
 }
 
 export function placeWreck(
@@ -426,13 +421,10 @@ export function placeWreck(
   scene.add(group);
 
   if (!opts.noCollider) {
-    const c = opts.collider ?? { halfW: 1.2 * scale, halfH: 1.0 * scale, halfD: 1.2 * scale };
-    makeStaticBox(
-      world,
-      { x: c.halfW, y: c.halfH, z: c.halfD },
-      { x: group.position.x, y: group.position.y + c.halfH, z: group.position.z },
-      getQuat(group),
-    );
+    // Snug AABB collider — auto-fits the irregular shape regardless of how
+    // it was tilted, scaled, or composed. Slight shrink keeps the player
+    // from snagging on thin antennas / dish edges.
+    attachAabbCollider(world, group, opts.colliderShrink ?? 0.1);
   }
   return group;
 }

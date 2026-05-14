@@ -146,6 +146,7 @@ const ctx: GameContext = {
     body: playerBody,
     velocityY: 0,
     onGround: false,
+    crouching: false,
     inShelter: false,
     viewModel: null,
   },

@@ -52,10 +52,11 @@ export interface GameContext {
   };
   input: InputBundle;
   player: {
-    eyeOffset: number;     // camera Y above body center (m)
+    eyeOffset: number;     // camera Y above body center (m) — adjusted by crouch
     body: PlayerBody;
     velocityY: number;     // vertical velocity for gravity (m/s)
     onGround: boolean;
+    crouching: boolean;    // set each frame from LeftControl
     inShelter: boolean;    // set each frame by shelter system
     viewModel: ViewModel | null;
   };

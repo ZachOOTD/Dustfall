@@ -31,12 +31,20 @@ export function updatePlayer(ctx: GameContext, dt: number): void {
   const f = (keys['KeyW'] ? 1 : 0) - (keys['KeyS'] ? 1 : 0);
   const r = (keys['KeyD'] ? 1 : 0) - (keys['KeyA'] ? 1 : 0);
   const moving = f !== 0 || r !== 0;
+  // Crouch: hold LeftControl. Disables sprint, lowers camera, slows speed.
+  ctx.player.crouching = !!(keys['ControlLeft'] || keys['ControlRight']);
+  ctx.player.eyeOffset = ctx.player.crouching
+    ? Tuning.CROUCH_EYE_OFFSET
+    : Tuning.PLAYER_EYE_OFFSET;
   const sprinting =
+    !ctx.player.crouching &&
     (keys['ShiftLeft'] || keys['ShiftRight']) &&
     ctx.stats.thirst > 0.02 &&
     ctx.stats.stamina > Tuning.STAMINA_SPRINT_THRESHOLD &&
     moving;
-  const speed = Tuning.WALK_SPEED * (sprinting ? Tuning.SPRINT_MULTIPLIER : 1);
+  let speed = Tuning.WALK_SPEED;
+  if (sprinting) speed *= Tuning.SPRINT_MULTIPLIER;
+  else if (ctx.player.crouching) speed *= Tuning.CROUCH_SPEED_MULTIPLIER;
 
   // Stamina: drains while sprinting; recovers otherwise.
   if (sprinting) {

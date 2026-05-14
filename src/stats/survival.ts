@@ -83,6 +83,15 @@ export function updateStats(ctx: GameContext, dt: number): void {
 
 export function die(ctx: GameContext, cause: string): void {
   if (ctx.stats.dead) return;
+  // Testing godmode (Tuning.GOD_MODE). Floor the stats so the player can keep
+  // playing, but otherwise behave like nothing happened.
+  if (Tuning.GOD_MODE) {
+    ctx.stats.health = Math.max(ctx.stats.health, 0.5);
+    ctx.stats.thirst = Math.max(ctx.stats.thirst, 0.1);
+    ctx.stats.hunger = Math.max(ctx.stats.hunger, 0.1);
+    ctx.stats.temperature = Math.max(-0.99, Math.min(0.99, ctx.stats.temperature));
+    return;
+  }
   ctx.stats.dead = true;
   // daysSurvived starts at 0 (= day 1). On death we show "you survived N days"
   // where N is days fully + the current day, matching the in-game "day N" HUD.

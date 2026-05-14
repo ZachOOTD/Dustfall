@@ -19,13 +19,7 @@ import {
   placeWreck,
   placeDebrisField,
 } from './wrecks.ts';
-import { makeStaticBox } from '../physics/bodies.ts';
-
-const _q = new THREE.Quaternion();
-function getQuat(o: THREE.Object3D): { x: number; y: number; z: number; w: number } {
-  o.getWorldQuaternion(_q);
-  return { x: _q.x, y: _q.y, z: _q.z, w: _q.w };
-}
+import { attachAabbCollider } from '../physics/bodies.ts';
 
 // ────────────────────────────────────────────────────────────────
 // The Engine Block — massive engine cluster tipped at ~30° into a dune.
@@ -53,13 +47,8 @@ function placeEngineBlock(
     if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; }
   });
   scene.add(parent);
-  // Coarse collider — large box around the central mass.
-  makeStaticBox(
-    world,
-    { x: 4.5, y: 3.5, z: 4.5 },
-    { x: parent.position.x, y: parent.position.y + 3.0, z: parent.position.z },
-    getQuat(parent),
-  );
+  // AABB collider auto-fits the tilted engine cluster.
+  attachAabbCollider(world, parent, 0.2);
   // Debris field around the impact site.
   placeDebrisField(scene, terrain, pos, 14, rand, 10);
 }
@@ -86,12 +75,7 @@ function placeScavengerCamp(
     if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; }
   });
   scene.add(fuselage);
-  makeStaticBox(
-    world,
-    { x: 1.8, y: 0.9, z: 1.0 },
-    { x: fuselage.position.x, y: fuselage.position.y + 0.8, z: fuselage.position.z },
-    getQuat(fuselage),
-  );
+  attachAabbCollider(world, fuselage, 0.1);
 
   // Fire ring — 8 small dark stones in a 1m circle, on the lee side.
   const stoneMat = new THREE.MeshLambertMaterial({
@@ -158,12 +142,7 @@ function placeCrashedHull(
     if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; }
   });
   scene.add(parent);
-  makeStaticBox(
-    world,
-    { x: 6.0, y: 1.8, z: 2.6 },
-    { x: parent.position.x, y: parent.position.y + 1.6, z: parent.position.z },
-    getQuat(parent),
-  );
+  attachAabbCollider(world, parent, 0.2);
 
   // Engine bell off the "tail," angled.
   const bellPos = new THREE.Vector3(
@@ -222,7 +201,7 @@ export function placePOIs(
           scale: 1.4,
           buryY: 0.5,
           tiltZ: 0.08,
-          collider: { halfW: 1.6, halfH: 5, halfD: 1.6 },
+          colliderShrink: 0.3,    // ignore thin antenna struts + dish edges
         });
         placeDebrisField(scene, terrain, pos, 8, rand, 5);
         break;
