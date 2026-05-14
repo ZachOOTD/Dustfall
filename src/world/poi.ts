@@ -19,7 +19,7 @@ import {
   placeWreck,
   placeDebrisField,
 } from './wrecks.ts';
-import { attachAabbCollider } from '../physics/bodies.ts';
+import { attachCompoundCollider } from '../physics/bodies.ts';
 
 // ────────────────────────────────────────────────────────────────
 // The Engine Block — massive engine cluster tipped at ~30° into a dune.
@@ -48,7 +48,7 @@ function placeEngineBlock(
   });
   scene.add(parent);
   // AABB collider auto-fits the tilted engine cluster.
-  attachAabbCollider(world, parent, 0.2);
+  attachCompoundCollider(world, parent);
   // Debris field around the impact site.
   placeDebrisField(scene, terrain, pos, 14, rand, 10);
 }
@@ -75,7 +75,7 @@ function placeScavengerCamp(
     if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; }
   });
   scene.add(fuselage);
-  attachAabbCollider(world, fuselage, 0.1);
+  attachCompoundCollider(world, fuselage);
 
   // Fire ring — 8 small dark stones in a 1m circle, on the lee side.
   const stoneMat = new THREE.MeshLambertMaterial({
@@ -142,7 +142,7 @@ function placeCrashedHull(
     if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; }
   });
   scene.add(parent);
-  attachAabbCollider(world, parent, 0.2);
+  attachCompoundCollider(world, parent);
 
   // Engine bell off the "tail," angled.
   const bellPos = new THREE.Vector3(
@@ -201,7 +201,6 @@ export function placePOIs(
           scale: 1.4,
           buryY: 0.5,
           tiltZ: 0.08,
-          colliderShrink: 0.3,    // ignore thin antenna struts + dish edges
         });
         placeDebrisField(scene, terrain, pos, 8, rand, 5);
         break;

@@ -14,7 +14,7 @@ import type { Rng } from '../core/rng.ts';
 import type { Terrain } from './terrain.ts';
 import { Tuning } from '../config/tuning.ts';
 import { perturbOutward } from './sculpt.ts';
-import { attachAabbCollider } from '../physics/bodies.ts';
+import { attachCompoundCollider } from '../physics/bodies.ts';
 
 // ────────────────────────────────────────────────────────────────
 // Shared materials. Same materials reused across wrecks so we don't
@@ -379,9 +379,6 @@ interface PlaceWreckOpts {
   yaw?: number;            // explicit yaw (else random)
   /** When true, omit collider entirely (e.g., small ambient props). */
   noCollider?: boolean;
-  /** Shrink collider faces inward by N meters (e.g., 0.15 to allow walking
-   *  close to antenna struts without snagging on their thin volume). */
-  colliderShrink?: number;
 }
 
 export function placeWreck(
@@ -421,10 +418,11 @@ export function placeWreck(
   scene.add(group);
 
   if (!opts.noCollider) {
-    // Snug AABB collider — auto-fits the irregular shape regardless of how
-    // it was tilted, scaled, or composed. Slight shrink keeps the player
-    // from snagging on thin antennas / dish edges.
-    attachAabbCollider(world, group, opts.colliderShrink ?? 0.1);
+    // Per-primitive shape-accurate colliders. Each child mesh gets a
+    // matching cuboid / cylinder / ball / cone; torus + custom geometry
+    // fall back to a per-mesh AABB. Far better silhouette match than a
+    // single bounding box around the whole tilted composite.
+    attachCompoundCollider(world, group);
   }
   return group;
 }

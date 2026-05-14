@@ -26,13 +26,9 @@ const _aabbCenter = new THREE.Vector3();
 const _aabbSize = new THREE.Vector3();
 /**
  * Attach a static axis-aligned-box collider that snugly matches the world-space
- * bounding volume of `obj` (a Group with arbitrary children, possibly rotated
- * + scaled). Use after positioning the object so the AABB reflects its final
- * pose. Avoids the hand-tuned half-extent guess work for irregular wrecks.
- *
- * `shrink` lets the caller pull collider faces inward by an absolute amount
- * (meters) so the player doesn't bump into "invisible" volumes around thin
- * antennas / dish edges. Negative shrink to inflate.
+ * bounding volume of `obj`. Cheap one-collider approximation; less accurate
+ * than attachCompoundCollider for tilted composites but useful when shape
+ * fidelity doesn't matter (e.g., a simple buried prop).
  */
 export function attachAabbCollider(
   world: RAPIER.World,
@@ -51,6 +47,113 @@ export function attachAabbCollider(
   );
   const body = world.createRigidBody(bd);
   return world.createCollider(RAPIER.ColliderDesc.cuboid(hx, hy, hz), body);
+}
+
+const _wpos = new THREE.Vector3();
+const _wquat = new THREE.Quaternion();
+const _wscale = new THREE.Vector3();
+const _meshAabb = new THREE.Box3();
+const _meshAabbCenter = new THREE.Vector3();
+const _meshAabbSize = new THREE.Vector3();
+
+/**
+ * Attach one collider per child Mesh of `obj`, shaped to match the underlying
+ * primitive geometry (cuboid → BoxGeometry, cylinder → CylinderGeometry,
+ * ball → IcosahedronGeometry / SphereGeometry, cone → ConeGeometry). All
+ * colliders attach to a single fixed RigidBody at origin; each collider's
+ * local transform encodes the mesh's world-space pose.
+ *
+ * Unsupported geometries (TorusGeometry, custom BufferGeometry) fall back to
+ * a per-mesh world-space AABB cuboid so collision is never silently dropped.
+ * CircleGeometry meshes are intentionally skipped (2D, no real volume).
+ *
+ * Set `mesh.userData.noCollider = true` on any child that should be omitted.
+ */
+export function attachCompoundCollider(
+  world: RAPIER.World,
+  obj: THREE.Object3D,
+): RAPIER.RigidBody {
+  obj.updateMatrixWorld(true);
+  const body = world.createRigidBody(RAPIER.RigidBodyDesc.fixed());
+
+  obj.traverse((node) => {
+    const mesh = node as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    if (mesh.userData.noCollider) return;
+    const geo = mesh.geometry as THREE.BufferGeometry & {
+      type: string;
+      parameters?: Record<string, number>;
+    };
+    if (!geo) return;
+
+    mesh.getWorldPosition(_wpos);
+    mesh.getWorldQuaternion(_wquat);
+    mesh.getWorldScale(_wscale);
+    const quat = { x: _wquat.x, y: _wquat.y, z: _wquat.z, w: _wquat.w };
+
+    let desc: RAPIER.ColliderDesc | null = null;
+
+    switch (geo.type) {
+      case 'BoxGeometry': {
+        const p = geo.parameters!;
+        desc = RAPIER.ColliderDesc.cuboid(
+          (p.width  / 2) * _wscale.x,
+          (p.height / 2) * _wscale.y,
+          (p.depth  / 2) * _wscale.z,
+        );
+        break;
+      }
+      case 'CylinderGeometry': {
+        const p = geo.parameters!;
+        const halfHeight = (p.height / 2) * _wscale.y;
+        const radius = Math.max(p.radiusTop, p.radiusBottom) *
+                       Math.max(_wscale.x, _wscale.z);
+        desc = RAPIER.ColliderDesc.cylinder(halfHeight, radius);
+        break;
+      }
+      case 'ConeGeometry': {
+        const p = geo.parameters!;
+        const halfHeight = (p.height / 2) * _wscale.y;
+        const radius = p.radius * Math.max(_wscale.x, _wscale.z);
+        desc = RAPIER.ColliderDesc.cone(halfHeight, radius);
+        break;
+      }
+      case 'IcosahedronGeometry':
+      case 'SphereGeometry':
+      case 'DodecahedronGeometry':
+      case 'OctahedronGeometry':
+      case 'TetrahedronGeometry': {
+        const p = geo.parameters!;
+        const radius = p.radius * Math.max(_wscale.x, _wscale.y, _wscale.z);
+        desc = RAPIER.ColliderDesc.ball(radius);
+        break;
+      }
+      case 'CircleGeometry':
+        // 2D disc — visual only, no collision.
+        return;
+      default: {
+        // Torus + any custom BufferGeometry: per-mesh world-space AABB so the
+        // collider still blocks the player even if we can't pick a precise shape.
+        _meshAabb.setFromObject(mesh);
+        _meshAabb.getCenter(_meshAabbCenter);
+        _meshAabb.getSize(_meshAabbSize);
+        const aabbDesc = RAPIER.ColliderDesc.cuboid(
+          Math.max(0.02, _meshAabbSize.x * 0.5),
+          Math.max(0.02, _meshAabbSize.y * 0.5),
+          Math.max(0.02, _meshAabbSize.z * 0.5),
+        ).setTranslation(_meshAabbCenter.x, _meshAabbCenter.y, _meshAabbCenter.z);
+        world.createCollider(aabbDesc, body);
+        return;
+      }
+    }
+
+    desc = desc
+      .setTranslation(_wpos.x, _wpos.y, _wpos.z)
+      .setRotation(quat);
+    world.createCollider(desc, body);
+  });
+
+  return body;
 }
 
 export function makeStaticCylinder(
