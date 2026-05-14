@@ -110,7 +110,7 @@ const _DEFS: Record<ItemId, ItemDef> = {
     id: 'bandage',
     name: 'BANDAGE',
     glyph: '+',
-    description: 'a strip of clean cloth',
+    description: 'a strip of clean fabric — torn from a hull pennant',
     stackable: true,
     maxStack: 4,
     onUse(ctx, _slot) {
@@ -149,7 +149,7 @@ const _DEFS: Record<ItemId, ItemDef> = {
     id: 'scrap',
     name: 'SCRAP',
     glyph: '#',
-    description: 'rust-pitted metal scrap',
+    description: 'salvaged hull plating',
     stackable: true,
     maxStack: 8,
     onUse(_ctx, _slot) {

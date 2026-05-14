@@ -1,10 +1,11 @@
-// Distant POIs (Session P). Four hand-placed silhouettes ~60–150m from spawn,
-// each a single legible focal point in the otherwise barren-desert world.
+// Distant POIs (Session S re-theme). Four hand-placed silhouettes ~60-130m
+// from spawn, each a single legible focal point in the otherwise barren
+// scavenger desert.
 //
-//   - Monolith (12m dark spire) — pure atmosphere
-//   - Abandoned camp (fire ring + barrel + bandage pickup) — modest reward
-//   - Watchtower remnant (6m wooden silhouette) — pure atmosphere
-//   - Ribcage cluster (3 grouped ribcage primitives) — pure atmosphere
+//   - Engine Block       — massive 5-bell engine module tipped into a dune
+//   - Scavenger Camp     — fire ring + small fuselage lean-to + bandage
+//   - Antenna Outpost    — comm spire on buried wreckage base
+//   - Crashed Hull       — long fuselage with engine bell + debris field
 
 import * as THREE from 'three';
 import type RAPIER from '@dimforge/rapier3d-compat';
@@ -12,8 +13,12 @@ import type { Rng } from '../core/rng.ts';
 import type { Terrain } from './terrain.ts';
 import type { Pickup } from '../pickups/pickups.ts';
 import { spawnDroppedPickup } from '../pickups/pickups.ts';
-import { placeRibcage } from './heroLandmarks.ts';
-import { perturbOutward } from './sculpt.ts';
+import {
+  makeEngineCluster,
+  makeFuselage,
+  placeWreck,
+  placeDebrisField,
+} from './wrecks.ts';
 import { makeStaticBox } from '../physics/bodies.ts';
 
 const _q = new THREE.Quaternion();
@@ -23,49 +28,72 @@ function getQuat(o: THREE.Object3D): { x: number; y: number; z: number; w: numbe
 }
 
 // ────────────────────────────────────────────────────────────────
-// Monolith — 12m dark basalt spire
+// The Engine Block — massive engine cluster tipped at ~30° into a dune.
+// Iconic Jakku-Star-Destroyer silhouette: nozzles pointing skyward.
 // ────────────────────────────────────────────────────────────────
-function placeMonolith(
+function placeEngineBlock(
   scene: THREE.Scene,
   world: RAPIER.World,
+  terrain: Terrain,
   pos: THREE.Vector3,
   rand: Rng,
 ): void {
-  const geo = new THREE.IcosahedronGeometry(1.0, 1);
-  perturbOutward(geo, 0.18, 41);
-  const mat = new THREE.MeshLambertMaterial({
-    color: new THREE.Color().setHSL(0.62, 0.02, 0.06),
-    flatShading: true,
+  const cluster = makeEngineCluster(rand, 4.2);   // hero scale
+  // Compose into a parent group so we can rotate cleanly.
+  const parent = new THREE.Group();
+  parent.add(cluster);
+  parent.position.copy(pos);
+  parent.position.y -= 1.4;                       // deep bury on one side
+  parent.rotation.y = -0.6;
+  // Tip leeward — pitch around X so the nozzles point up-and-out.
+  parent.rotation.x = -0.55;
+  parent.rotation.z = -0.18;
+  parent.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; }
   });
-  const spire = new THREE.Mesh(geo, mat);
-  const h = 11 + rand() * 3;
-  const w = 1.3 + rand() * 0.5;
-  spire.scale.set(w, h, w * 0.85);
-  spire.position.copy(pos);
-  spire.position.y += h * 0.5 - 0.6;       // embed base slightly
-  spire.rotation.y = rand() * Math.PI * 2;
-  spire.rotation.z = (rand() - 0.5) * 0.08;
-  scene.add(spire);
-
+  scene.add(parent);
+  // Coarse collider — large box around the central mass.
   makeStaticBox(
     world,
-    { x: w * 0.6, y: h * 0.5, z: w * 0.5 },
-    { x: spire.position.x, y: spire.position.y, z: spire.position.z },
-    getQuat(spire),
+    { x: 4.5, y: 3.5, z: 4.5 },
+    { x: parent.position.x, y: parent.position.y + 3.0, z: parent.position.z },
+    getQuat(parent),
   );
+  // Debris field around the impact site.
+  placeDebrisField(scene, terrain, pos, 14, rand, 10);
 }
 
 // ────────────────────────────────────────────────────────────────
-// Abandoned camp — fire ring + bandage pickup (no barrel; barrels removed)
-// Returns the bandage Pickup so the caller can register it.
+// Scavenger camp — small fuselage chunk + lean-to fire ring + bandage.
+// Returns the bandage pickup so the caller can register it.
 // ────────────────────────────────────────────────────────────────
-function placeAbandonedCamp(
+function placeScavengerCamp(
   scene: THREE.Scene,
+  world: RAPIER.World,
   terrain: Terrain,
   rand: Rng,
   center: THREE.Vector3,
 ): { pickup: Pickup } {
-  // Fire ring — 8 small dark stones in a 1m circle
+  // Small fuselage section as the windbreak the camp is built against.
+  const fuselage = makeFuselage(rand, 0.9);
+  fuselage.position.copy(center);
+  fuselage.position.x -= 1.4;
+  fuselage.position.y -= 0.35;
+  fuselage.rotation.y = 0.4;
+  fuselage.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; }
+  });
+  scene.add(fuselage);
+  makeStaticBox(
+    world,
+    { x: 1.8, y: 0.9, z: 1.0 },
+    { x: fuselage.position.x, y: fuselage.position.y + 0.8, z: fuselage.position.z },
+    getQuat(fuselage),
+  );
+
+  // Fire ring — 8 small dark stones in a 1m circle, on the lee side.
   const stoneMat = new THREE.MeshLambertMaterial({
     color: new THREE.Color().setHSL(0.07, 0.05, 0.12),
     flatShading: true,
@@ -74,157 +102,100 @@ function placeAbandonedCamp(
   for (let i = 0; i < 8; i++) {
     const a = (i / 8) * Math.PI * 2 + rand() * 0.2;
     const r = ringR + (rand() - 0.5) * 0.06;
+    const sx = center.x + Math.cos(a) * r;
+    const sz = center.z + Math.sin(a) * r;
     const stone = new THREE.Mesh(
       new THREE.IcosahedronGeometry(0.10 + rand() * 0.04, 0),
       stoneMat,
     );
-    stone.position.set(
-      center.x + Math.cos(a) * r,
-      terrain.heightAt(center.x + Math.cos(a) * r, center.z + Math.sin(a) * r) - 0.02,
-      center.z + Math.sin(a) * r,
-    );
+    stone.position.set(sx, terrain.heightAt(sx, sz) - 0.02, sz);
     stone.rotation.y = rand() * Math.PI;
     stone.castShadow = false;
     stone.receiveShadow = true;
     scene.add(stone);
   }
-  // Ash patch — flat dark disc in the center, aligned to terrain normal so
-  // it sits flush on slopes.
+  // Ash patch — small dark disc, terrain-aligned.
   const ash = new THREE.Mesh(
     new THREE.CircleGeometry(ringR * 0.85, 16),
     new THREE.MeshBasicMaterial({ color: 0x14100c }),
   );
-  const ashNormal = terrain.normalAt(center.x, center.z).clone();
   ash.position.set(center.x, terrain.heightAt(center.x, center.z) + 0.015, center.z);
-  // Default CircleGeometry is in XY plane; orient its +Z up, then tilt to normal.
-  ash.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), ashNormal);
+  ash.quaternion.setFromUnitVectors(
+    new THREE.Vector3(0, 0, 1),
+    terrain.normalAt(center.x, center.z).clone(),
+  );
   scene.add(ash);
 
-  // Bandage pickup on the other side of the fire.
-  const bandageX = center.x - 1.4 + rand() * 0.6;
-  const bandageZ = center.z + 1.1 + rand() * 0.6;
-  const pickup = spawnDroppedPickup(
-    scene,
-    terrain,
-    { x: bandageX, z: bandageZ },
-    'bandage',
-  );
-
+  // Bandage pickup on the far side of the fire.
+  const bandageX = center.x + 1.0 + rand() * 0.4;
+  const bandageZ = center.z + 0.8 + rand() * 0.6;
+  const pickup = spawnDroppedPickup(scene, terrain, { x: bandageX, z: bandageZ }, 'bandage');
   return { pickup };
 }
 
 // ────────────────────────────────────────────────────────────────
-// Watchtower remnant — 6m wooden lean silhouette
+// Crashed Hull — long fuselage with engine bell on the tail.
+// Two wrecks paired so the silhouette reads as "one big ship."
 // ────────────────────────────────────────────────────────────────
-function placeWatchtower(
-  scene: THREE.Scene,
-  world: RAPIER.World,
-  pos: THREE.Vector3,
-  rand: Rng,
-): void {
-  const group = new THREE.Group();
-  const mat = new THREE.MeshLambertMaterial({
-    color: new THREE.Color().setHSL(0.07, 0.18, 0.16 + rand() * 0.04),
-    flatShading: true,
-  });
-
-  const height = 6.5 + rand() * 1.5;
-  const baseSpread = 0.85;
-  const topSpread = 0.32;
-  const upAxis = new THREE.Vector3(0, 1, 0);
-
-  // 4 legs forming a tapered pyramid (same pattern as radio tower, smaller).
-  for (let i = 0; i < 4; i++) {
-    const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
-    const bx = Math.cos(a) * baseSpread, bz = Math.sin(a) * baseSpread;
-    const tx = Math.cos(a) * topSpread, tz = Math.sin(a) * topSpread;
-    const dx = tx - bx, dy = height, dz = tz - bz;
-    const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
-    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.09, len, 5), mat);
-    leg.position.set((bx + tx) / 2, height / 2, (bz + tz) / 2);
-    const dir = new THREE.Vector3(dx, dy, dz).normalize();
-    leg.quaternion.setFromUnitVectors(upAxis, dir);
-    group.add(leg);
-  }
-  // 2 cross-bracing levels.
-  for (const level of [0.35, 0.7]) {
-    const y = level * height;
-    const spread = baseSpread + (topSpread - baseSpread) * level;
-    for (let i = 0; i < 4; i++) {
-      const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
-      const b = ((i + 1) / 4) * Math.PI * 2 + Math.PI / 4;
-      const x1 = Math.cos(a) * spread, z1 = Math.sin(a) * spread;
-      const x2 = Math.cos(b) * spread, z2 = Math.sin(b) * spread;
-      const dx = x2 - x1, dz = z2 - z1;
-      const len = Math.sqrt(dx * dx + dz * dz);
-      const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, len, 4), mat);
-      beam.position.set((x1 + x2) / 2, y, (z1 + z2) / 2);
-      beam.quaternion.setFromUnitVectors(upAxis, new THREE.Vector3(dx, 0, dz).normalize());
-      group.add(beam);
-    }
-  }
-  // Bare scaffold platform on top — three crossing slats, no roof.
-  for (let i = 0; i < 3; i++) {
-    const slat = new THREE.Mesh(
-      new THREE.BoxGeometry(topSpread * 2.2, 0.06, 0.10),
-      mat,
-    );
-    slat.position.set(0, height + 0.02, (i - 1) * topSpread * 0.7);
-    slat.rotation.y = i * 0.15;
-    group.add(slat);
-  }
-
-  // Bury the footings ~0.4m so the legs don't appear to float on a slope.
-  group.position.copy(pos);
-  group.position.y -= 0.4;
-  group.rotation.y = rand() * Math.PI * 2;
-  group.rotation.z = (rand() - 0.5) * 0.22;   // pronounced lean
-  group.rotation.x = (rand() - 0.5) * 0.12;
-  scene.add(group);
-
-  makeStaticBox(
-    world,
-    { x: baseSpread * 1.1, y: height / 2, z: baseSpread * 1.1 },
-    { x: group.position.x, y: group.position.y + height / 2, z: group.position.z },
-    getQuat(group),
-  );
-}
-
-// ────────────────────────────────────────────────────────────────
-// Ribcage cluster — 3 grouped ribcage primitives
-// ────────────────────────────────────────────────────────────────
-function placeRibcageCluster(
+function placeCrashedHull(
   scene: THREE.Scene,
   world: RAPIER.World,
   terrain: Terrain,
-  center: THREE.Vector3,
+  pos: THREE.Vector3,
   rand: Rng,
 ): void {
-  for (let i = 0; i < 3; i++) {
-    const ang = (i / 3) * Math.PI * 2 + rand() * 0.5;
-    const r = 1.8 + rand() * 1.4;
-    const x = center.x + Math.cos(ang) * r;
-    const z = center.z + Math.sin(ang) * r;
-    const y = terrain.heightAt(x, z);
-    placeRibcage(scene, world, new THREE.Vector3(x, y, z), rand);
-  }
+  // Main fuselage — hero scale, partly buried + tilted.
+  const fuselage = makeFuselage(rand, 3.2);
+  const parent = new THREE.Group();
+  parent.add(fuselage);
+  parent.position.copy(pos);
+  parent.position.y -= 1.6;
+  parent.rotation.y = 0.9;
+  parent.rotation.z = -0.18;
+  parent.rotation.x = 0.08;
+  parent.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; }
+  });
+  scene.add(parent);
+  makeStaticBox(
+    world,
+    { x: 6.0, y: 1.8, z: 2.6 },
+    { x: parent.position.x, y: parent.position.y + 1.6, z: parent.position.z },
+    getQuat(parent),
+  );
+
+  // Engine bell off the "tail," angled.
+  const bellPos = new THREE.Vector3(
+    pos.x + Math.cos(parent.rotation.y) * 8.0,
+    terrain.heightAt(pos.x + Math.cos(parent.rotation.y) * 8.0, pos.z + Math.sin(parent.rotation.y) * 8.0),
+    pos.z + Math.sin(parent.rotation.y) * 8.0,
+  );
+  placeWreck(scene, world, terrain, bellPos, 'engine_bell', rand, {
+    scale: 2.4,
+    buryY: 1.0,
+    tiltZ: 0.4,
+  });
+
+  // Debris field stretching from the impact site.
+  placeDebrisField(scene, terrain, pos, 16, rand, 12);
 }
 
 // ────────────────────────────────────────────────────────────────
 // Public entry — hand-picked positions + dispatch
 // ────────────────────────────────────────────────────────────────
 interface POISpec {
-  kind: 'monolith' | 'camp' | 'watchtower' | 'ribcage_cluster';
+  kind: 'engine_block' | 'camp' | 'antenna_outpost' | 'crashed_hull';
   x: number;
   z: number;
 }
 
-// Hand-picked: 4 POIs at ~60–130m from spawn, spread across the compass.
+// Hand-picked: 4 POIs at ~60-130m from spawn, spread across the compass.
 const POI_LAYOUT: ReadonlyArray<POISpec> = [
-  { kind: 'monolith',         x:  95, z:  -8 },
+  { kind: 'engine_block',     x:  95, z:  -8 },
   { kind: 'camp',             x: -42, z:  78 },
-  { kind: 'watchtower',       x: -88, z: -50 },
-  { kind: 'ribcage_cluster',  x:  18, z: -110 },
+  { kind: 'antenna_outpost',  x: -88, z: -50 },
+  { kind: 'crashed_hull',     x:  18, z: -110 },
 ];
 
 export function placePOIs(
@@ -238,19 +209,25 @@ export function placePOIs(
     const y = terrain.heightAt(p.x, p.z);
     const pos = new THREE.Vector3(p.x, y, p.z);
     switch (p.kind) {
-      case 'monolith':
-        placeMonolith(scene, world, pos, rand);
+      case 'engine_block':
+        placeEngineBlock(scene, world, terrain, pos, rand);
         break;
       case 'camp': {
-        const { pickup } = placeAbandonedCamp(scene, terrain, rand, pos);
+        const { pickup } = placeScavengerCamp(scene, world, terrain, rand, pos);
         pickupList.push(pickup);
         break;
       }
-      case 'watchtower':
-        placeWatchtower(scene, world, pos, rand);
+      case 'antenna_outpost':
+        placeWreck(scene, world, terrain, pos, 'antenna_spire', rand, {
+          scale: 1.4,
+          buryY: 0.5,
+          tiltZ: 0.08,
+          collider: { halfW: 1.6, halfH: 5, halfD: 1.6 },
+        });
+        placeDebrisField(scene, terrain, pos, 8, rand, 5);
         break;
-      case 'ribcage_cluster':
-        placeRibcageCluster(scene, world, terrain, pos, rand);
+      case 'crashed_hull':
+        placeCrashedHull(scene, world, terrain, pos, rand);
         break;
     }
   }

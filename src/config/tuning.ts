@@ -83,6 +83,16 @@ export const Tuning = {
   BIOME_HEIGHT_SCALE_ROCKY: 1.15,
   BIOME_HEIGHT_SCALE_SALT: 0.08,
 
+  // Wreck palette (Session S). Cool grey-rust industrial; avoids pure
+  // blacks/whites so primitives feel weathered, not cartoon.
+  WRECK_HULL_HEX: 0x5f5b54,            // weathered light grey hull
+  WRECK_HULL_DARK_HEX: 0x3a3631,       // shadowed/buried hull undersides
+  WRECK_RUST_HEX: 0x6e3a22,            // dominant rust accent
+  WRECK_RUST_DARK_HEX: 0x4a2614,       // deep-rust crevice color
+  WRECK_NOZZLE_INTERIOR_HEX: 0x14110e, // engine bell inside — near black
+  WRECK_NOZZLE_RIM_HEX: 0x4a4944,      // cooler metal rim
+  WRECK_ANTENNA_HEX: 0x2a2620,         // antenna struts / wires
+
   // Sky module
   SKY_SPHERE_RADIUS: 480,
   SUN_DISC_DISTANCE: 400,
