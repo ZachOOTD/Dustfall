@@ -64,13 +64,14 @@ export const Tuning = {
   // Asymmetry biases ridge crests in the wind direction (steeper leeward face).
   DUNE_WIND_DIR_RAD: 0.62,             // ~36° from +X; world-fixed prevailing wind
   DUNE_ANISO_RATIO: 0.28,              // <1 = ridges elongate perpendicular to wind
-  DUNE_RIDGE_SCALE_PRIMARY: 145,       // primary dune wavelength, meters
-  DUNE_RIDGE_SCALE_SECONDARY: 34,      // smaller ripples riding the primary ridges
-  DUNE_PRIMARY_AMP: 16.5,              // peak height contribution of primary ridges
-  DUNE_SECONDARY_AMP: 2.6,             // smaller ridges on top
-  DUNE_BASE_UNDULATION_AMP: 3.4,       // low-frequency ground-level wobble
-  DUNE_BASE_UNDULATION_SCALE: 320,
-  DUNE_ASYMMETRY_AMOUNT: 14.0,         // u-shift in meters; bows ridges along wind
+  DUNE_RIDGE_SCALE_PRIMARY: 170,       // primary dune wavelength, meters
+  DUNE_RIDGE_SCALE_SECONDARY: 42,      // smaller ripples riding the primary ridges
+  DUNE_PRIMARY_AMP: 13.5,              // peak height contribution of primary ridges
+  DUNE_SECONDARY_AMP: 1.9,             // smaller ridges on top
+  DUNE_BASE_UNDULATION_AMP: 2.8,       // low-frequency ground-level wobble
+  DUNE_BASE_UNDULATION_SCALE: 360,
+  DUNE_ASYMMETRY_AMOUNT: 26.0,         // organic u-warp (m); curves ridges
+  DUNE_WARP_SCALE: 420,                // wavelength of the warp noise channel
 
   // Biomes (Session P)
   BIOME_NOISE_FREQ: 1 / 220,           // ~220m wavelength → big regions

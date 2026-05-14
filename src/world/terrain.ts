@@ -10,7 +10,7 @@ import type { BiomeSampler } from './biomes.ts';
 import { Tuning } from '../config/tuning.ts';
 
 const SIZE = 800;   // world units across the square terrain
-const CELLS = 128;  // cells per side; vertices = (CELLS+1)^2
+const CELLS = 192;  // cells per side; vertices = (CELLS+1)^2 — ~4.17m grid
 
 // Per-biome ground colors (Session P). Punchier than first-pass so the
 // regions read clearly from a distance: dune = saturated orange-sand,
@@ -205,16 +205,24 @@ export function createTerrain(
   return { mesh, heights, heightAt, normalAt };
 }
 
-// Ridged + wind-warped dunes (Session P). Long parallel sand ridges run
-// perpendicular to the prevailing wind direction. Stylized — not physically
-// simulated — but reads as a desert from any angle.
+// Smooth wind-warped dunes. Long ridges run perpendicular to a prevailing
+// wind direction, with rounded crests and rounded valleys — no sharp peaks.
 //
-// Pipeline per (x, z):
-//   1. Rotate world coords into wind-aligned (u, v): u along wind, v across.
-//   2. Bias u by a sin-of-v term so ridges curve gently (asymmetric crests).
-//   3. Sample ridged noise (1 - |simplex|) at two scales with anisotropic u.
-//      Aniso < 1 → features elongate in v (perpendicular to wind).
-//   4. Add a low-frequency base undulation to break repetition.
+// Key design notes:
+//   - Crest function is `cos(n · π/2)`, which is C^∞ smooth at the peak.
+//     The earlier `1 - |n|` had a sharp kink at the peak (visually jagged).
+//   - Asymmetric warp uses a low-frequency noise channel — not a rigid sin —
+//     so ridges meander organically along the wind axis.
+//   - Aniso ratio < 1 compresses the wind-axis sample so features elongate
+//     across the wind (the visual ridges run perpendicular to wind).
+//   - Two octaves of smooth ridges + one low-frequency base.
+function smoothRidge(n: number): number {
+  // Maps simplex value in [-1, 1] → ridge height in [0, 1]. Smooth at top
+  // (n = 0) AND at troughs (n = ±1), because cos has zero derivative at the
+  // ridge peak and finite-but-continuous slope at the valley.
+  return Math.cos(n * Math.PI * 0.5);
+}
+
 function sampleHeight(
   noise: (x: number, y: number) => number,
   x: number,
@@ -224,23 +232,32 @@ function sampleHeight(
   const sn = Math.sin(Tuning.DUNE_WIND_DIR_RAD);
   const u = x * cs + z * sn;       // along wind
   const v = -x * sn + z * cs;      // perpendicular to wind
-
-  // Crest sawtooth bias — bows ridge crests along the wind axis.
-  const uBias = Math.sin(v / Tuning.DUNE_RIDGE_SCALE_PRIMARY * Math.PI) *
-                Tuning.DUNE_ASYMMETRY_AMOUNT;
-  const uShifted = u + uBias;
   const aniso = Tuning.DUNE_ANISO_RATIO;
 
-  // Primary ridges — the dominant dune wavelength.
-  const r1 = 1 - Math.abs(noise(
+  // Organic crest meander — a low-freq noise channel shifts the wind-axis
+  // sample so ridges curve gently in u rather than running ruler-straight.
+  // This reads as natural dune migration patterns. Stronger than the old
+  // sin-based bias and yields more believable shapes.
+  const warp = noise(
+    v / Tuning.DUNE_WARP_SCALE,
+    u / Tuning.DUNE_WARP_SCALE,
+  ) * Tuning.DUNE_ASYMMETRY_AMOUNT;
+  const uShifted = u + warp;
+
+  // Primary smooth ridges — the dominant dune wavelength.
+  const np = noise(
     uShifted * aniso / Tuning.DUNE_RIDGE_SCALE_PRIMARY,
     v / Tuning.DUNE_RIDGE_SCALE_PRIMARY,
-  ));
-  // Secondary ripples riding on top of the primary ridges.
-  const r2 = 1 - Math.abs(noise(
+  );
+  const r1 = smoothRidge(np);
+
+  // Secondary smooth ridges riding on top — same family, finer scale.
+  const ns = noise(
     uShifted * aniso / Tuning.DUNE_RIDGE_SCALE_SECONDARY,
     v / Tuning.DUNE_RIDGE_SCALE_SECONDARY,
-  ));
+  );
+  const r2 = smoothRidge(ns);
+
   // Low-frequency drift so the world isn't a uniform grid of ridges.
   const base = noise(
     x / Tuning.DUNE_BASE_UNDULATION_SCALE,
