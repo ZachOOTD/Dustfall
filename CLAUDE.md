@@ -40,16 +40,17 @@ Run with `npm run dev` (port 5173). Type-check with `npx tsc --noEmit`.
 
 ## Where we are now
 
-**Last completed**: Session S (sci-fi pivot — scavenger desert + ship wrecks) + several iterations on world feel:
-- **S shipped** the wreck primitive registry (`src/world/wrecks.ts`: engine cluster / fuselage / escape pod / cargo container / antenna spire / engine bell + `placeDebrisField` helper). Hero landmarks + 4 hand-placed POIs re-themed to wrecks.
-- **Dune iteration** — replaced the sharp `1 - |simplex|` ridge with `cos(n · π/2)` smooth-ridge function, organic noise warp, and 192-cell mesh resolution. Salt-flat biomes scale heights by 0.08× for near-flat playas; wider biome blend (0.22 noise units).
-- **Realism pass** — wells-only water (5 wells with a salt-biome quota of 2), player starts with a full canteen, scattered canteens removed, pickups stop bobbing/spinning + align to terrain normal, tall objects (cactus / antenna / obelisk / watchtower / wells) buried into the sand.
-- **Debug + crouch** — `Tuning.GOD_MODE = true` makes `die()` floor stats instead of killing. Hold LeftCtrl to crouch (eye 0.85→0.40m, walk × 0.5, sprint disabled). Ribcage hero landmark restored at ~15% probability.
-- **Compound colliders** — new `attachCompoundCollider` in `physics/bodies.ts` walks each child mesh and creates a shape-accurate Rapier collider (cuboid → BoxGeometry, cylinder → CylinderGeometry, ball → IcosahedronGeometry, cone → ConeGeometry; torus/buffer fallback to per-mesh AABB; circles skipped). Collider count 46 → 112; wrecks now collide along their actual silhouettes.
+**Last completed**: Session Q (game feel polish):
+- `ctx.player.speed` (horizontal m/s) populated each frame in `controller.ts` from the Rapier-corrected delta. Read by viewmodel for bob amplitude.
+- Viewmodel Y-bob phase-locked to footfall cadence (`BOB_FREQUENCY` cycles per meter walked, amplitude scales with `speed/WALK_SPEED` capped at 1.6× for sprint, halved on crouch). Bob applies to the viewmodel group only — never to the camera (motion sickness).
+- Idle breath: separate sine at `BREATH_FREQUENCY` Hz, faded in when `speed < BREATH_IDLE_THRESHOLD`. Sums with bob on viewmodel Y.
+- Footsteps split into 4 procedural variants in `audio.ts`: `playFootstepSand` / `Rock` / `Salt` / `Wet`. `playFootstep` retained as a legacy alias → sand. Dispatch in `controller.ts` step-fire uses `biomeAt(body.x, body.z)` + a 2m proximity check to any `waterSources.list[].pos` (wet wins over biome).
+- New `src/core/ease.ts` exports `easeOutBack`, `easeInOutCubic`, `easeOutQuad`. `items.ts` `playUseAnim` swapped: canteen = back-overshoot rise + quad release; bandage = cubic both ways; machete = back-strike (0..0.4) + cubic recovery (0.4..1). Old `smoothPulse` removed.
+- Browser-verified: walk-speed bob amp 0.018m, sprint amp 0.029m (capped at 1.6×), idle breath amp 0.01m over 3.3s; all 4 footstep functions present; canteen peaks at y=0.22 (back-overshoot past nominal 0.20), machete strikes to z=-0.242 in 0.1s with smooth cubic recovery.
 
-Earlier sessions: A–L (foundation through tutorial UX) + P (barren-desert pass: dune terrain, biome map + per-vertex tints, wells with salt quota, prop cleanup). See `docs/architecture.md` for full history.
+Earlier: A–L (foundation through tutorial UX), P (barren-desert pass), S (sci-fi pivot + ship wrecks), T (salvage gameplay). See `docs/architecture.md` for full history.
 
-**Next**: Session T (salvage gameplay — make wrecks salvageable for loot). Plan at `C:\Users\Zach\.claude\plans\in-the-dustfall-folder-elegant-cray.md` → "Session T" section. Then Q (camera bob + footsteps + ease curves), M (save/load), N (rigged Quaternius raider), O (enemy variety + win condition).
+**Next**: M (save/load — persist player state, placed entities, world flags including stripped wrecks). Then N (rigged Quaternius raider), O (enemy variety + win condition).
 
 ### Tutorial flags (Session L)
 

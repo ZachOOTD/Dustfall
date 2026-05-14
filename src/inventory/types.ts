@@ -90,7 +90,8 @@ export type InteractType =
   | 'cook'      // fire + raw food selected → E starts a 0.6s cook
   | 'add_fuel'  // fire + branch selected → E adds fuel
   | 'sleep'     // tent → E opens sleep overlay
-  | 'relight';  // dead fire + branch selected → E reignites with 30s fuel
+  | 'relight'   // dead fire + branch selected → E reignites with 30s fuel
+  | 'salvage';  // wreck (Session T) — E starts a 1.5s salvage
 
 export interface HoverState {
   type: InteractType;
@@ -100,4 +101,7 @@ export interface HoverState {
   itemId?: ItemId;
   /** Display noun shown in the prompt — "canteen", "wreckage", "water", etc. */
   promptNoun: string;
+  /** When true, the prompt suppresses both the [E] key chip and the verb,
+   *  showing only the noun. Used for passive/no-op prompts like a stripped wreck. */
+  passive?: boolean;
 }

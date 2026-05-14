@@ -123,6 +123,15 @@ export const Tuning = {
   VIEWMODEL_CANTEEN_ANIM_S: 1.2,
   VIEWMODEL_MACHETE_ANIM_S: 0.4,
   VIEWMODEL_BANDAGE_ANIM_S: 0.8,
+
+  // Idle breath (Session Q) — slow vertical sine on the viewmodel Y so the
+  // held item gently rises and falls when the player is still.
+  BREATH_AMPLITUDE: 0.012, // meters
+  BREATH_FREQUENCY: 0.35,  // Hz
+
+  // Footstep proximity check (Session Q) — within this distance to any
+  // waterSource, footsteps play the wet/splash variant.
+  FOOTSTEP_WET_RADIUS: 2.0,
 } as const;
 
 // Sky gradient colors (top vs horizon) per time of day. Horizon stays close to

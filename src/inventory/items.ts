@@ -7,6 +7,7 @@ import { Tuning } from '../config/tuning.ts';
 import { playDrink, playPour } from '../audio/audio.ts';
 import { deployFire } from '../world/fire.ts';
 import { deployTent } from '../world/tent.ts';
+import { easeOutBack, easeInOutCubic, easeOutQuad } from '../core/ease.ts';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -28,11 +29,6 @@ function svgEl<K extends keyof SVGElementTagNameMap>(
   const el = document.createElementNS(SVG_NS, tag);
   for (const k in attrs) el.setAttribute(k, attrs[k]);
   return el;
-}
-
-// Smoothstep: peaks at t=0.5, returns to 0 at t=1. Used for "rise + fall" anims.
-function smoothPulse(t: number): number {
-  return 16 * t * t * (1 - t) * (1 - t);
 }
 
 const _DEFS: Record<ItemId, ItemDef> = {
@@ -99,9 +95,14 @@ const _DEFS: Record<ItemId, ItemDef> = {
       return s;
     },
     playUseAnim(itemRoot, t) {
-      const p = smoothPulse(t);
+      // Rise to lips with a snappy back-overshoot; release with a soft ease.
+      // Positive rotation.x tips the cap toward the camera (toward the
+      // player's mouth); negative would pour forward, away from the face.
+      const p = t < 0.5
+        ? easeOutBack(t * 2)
+        : 1 - easeOutQuad((t - 0.5) * 2);
       itemRoot.position.set(-0.16 * p, 0.20 * p, 0.08 * p);
-      itemRoot.rotation.set(-1.35 * p, -0.25 * p, -0.18);
+      itemRoot.rotation.set(1.35 * p, -0.25 * p, -0.18);
     },
     useAnimDuration: Tuning.VIEWMODEL_CANTEEN_ANIM_S,
   },
@@ -138,7 +139,10 @@ const _DEFS: Record<ItemId, ItemDef> = {
       return s;
     },
     playUseAnim(itemRoot, t) {
-      const p = smoothPulse(t);
+      // Deliberate up + down, smooth at both ends — no overshoot.
+      const p = t < 0.5
+        ? easeInOutCubic(t * 2)
+        : 1 - easeInOutCubic((t - 0.5) * 2);
       itemRoot.position.set(-0.10 * p, 0.18 * p, 0.04 * p);
       itemRoot.rotation.set(-0.4 * p, 0, 0);
     },
@@ -218,7 +222,11 @@ const _DEFS: Record<ItemId, ItemDef> = {
       return s;
     },
     playUseAnim(itemRoot, t) {
-      const p = Math.sin(Math.PI * t);
+      // Strike phase (0..0.4): snap forward with back-overshoot.
+      // Recovery phase (0.4..1): cubic ease back to rest.
+      const p = t < 0.4
+        ? easeOutBack(t / 0.4)
+        : 1 - easeInOutCubic((t - 0.4) / 0.6);
       itemRoot.position.set(-0.04 * p, 0.04 * p, -0.22 * p);
       itemRoot.rotation.set(-0.85 * p, -0.2 * p, 0.15);
     },

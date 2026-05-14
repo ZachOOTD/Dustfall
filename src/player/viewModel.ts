@@ -30,6 +30,9 @@ let _lastSelectedIdx = -1;
 // `undefined` = boot state; first selection won't fire playEquip.
 let _lastEquippedId: ItemId | null | undefined = undefined;
 
+// Session Q — idle breath phase accumulator (advances by wall time).
+let _breathPhase = 0;
+
 // Reusable scratch vectors so we don't allocate every frame.
 const _offset = new THREE.Vector3();
 
@@ -57,25 +60,15 @@ export function configureViewModelObject(obj: THREE.Object3D): void {
   });
 }
 
-function buildHands(): THREE.Group {
-  const hands = new THREE.Group();
-  const handMat = new THREE.MeshLambertMaterial({ color: 0xb88a68 });
-  const handGeo = new THREE.BoxGeometry(0.06, 0.10, 0.05);
-  const left = new THREE.Mesh(handGeo, handMat);
-  left.position.set(-0.07, -0.02, 0);
-  const right = new THREE.Mesh(handGeo, handMat);
-  right.position.set(0.07, -0.02, 0);
-  hands.add(left, right);
-  configureViewModelObject(hands);
-  return hands;
-}
-
 export function createViewModel(ctx: GameContext): ViewModel {
   const group = new THREE.Group();
   group.name = 'viewmodel';
   ctx.three.scene.add(group);
 
-  const hands = buildHands();
+  // Hands group kept for future rigged-hand work (Session Q2). For now it's
+  // empty — the held item alone reads cleanly. The visibility toggle in
+  // swapEquippedMesh still flips this group so re-enabling later is trivial.
+  const hands = new THREE.Group();
   hands.visible = false;
   group.add(hands);
 
@@ -137,7 +130,7 @@ function swapEquippedMesh(vm: ViewModel, newId: ItemId | null): void {
   vm.currentItem = newId;
 }
 
-export function updateViewModel(ctx: GameContext, _dt: number): void {
+export function updateViewModel(ctx: GameContext, dt: number): void {
   const vm = ctx.player.viewModel;
   if (!vm) return;
 
@@ -151,6 +144,12 @@ export function updateViewModel(ctx: GameContext, _dt: number): void {
   );
   _offset.applyQuaternion(cam.quaternion);
   vm.group.position.copy(cam.position).add(_offset);
+
+  // 1b. Idle breath (Session Q). Slow vertical sine on the viewmodel Y so
+  // the held item gently rises and falls when the player is still. (Walking
+  // bob was tried and removed — read too fast on a first-person camera.)
+  _breathPhase += Tuning.BREATH_FREQUENCY * dt;
+  vm.group.position.y += Tuning.BREATH_AMPLITUDE * Math.sin(_breathPhase * Math.PI * 2);
 
   // Hide entirely when not in game (start overlay or dead).
   const visible = ctx.flags.started && !ctx.stats.dead;

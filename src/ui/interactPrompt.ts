@@ -15,11 +15,13 @@ const VERBS: Record<InteractType, string> = {
   add_fuel: 'add fuel to',
   sleep: 'sleep in',
   relight: 'relight',
+  salvage: 'salvage',
 };
 
 let _root: HTMLDivElement | null = null;
 let _label: HTMLSpanElement | null = null;
 let _keyEl: HTMLSpanElement | null = null;
+let _progressBar: HTMLDivElement | null = null;
 let _lastShown = false;
 let _lastLabel = '';
 
@@ -37,10 +39,32 @@ export function createInteractPrompt(): void {
   label.textContent = '';
   root.appendChild(label);
 
+  // Salvage progress bar — sits under the verb text, hidden by default.
+  const bar = document.createElement('div');
+  bar.className = 'salvage-progress';
+  bar.style.display = 'none';
+  root.appendChild(bar);
+
   document.body.appendChild(root);
   _root = root;
   _label = label;
   _keyEl = key;
+  _progressBar = bar;
+}
+
+/** Show the salvage progress bar with a 0..1 fill. Driven per-frame from
+ *  the interaction system while a salvage is in progress. */
+export function showSalvageProgress(t01: number): void {
+  if (!_progressBar) return;
+  _progressBar.style.display = '';
+  _progressBar.style.width = `${Math.max(0, Math.min(1, t01)) * 100}%`;
+}
+
+/** Hide the salvage progress bar. */
+export function hideSalvageProgress(): void {
+  if (!_progressBar) return;
+  _progressBar.style.display = 'none';
+  _progressBar.style.width = '0%';
 }
 
 export function updateInteractPrompt(ctx: GameContext, _dt: number): void {
@@ -54,9 +78,9 @@ export function updateInteractPrompt(ctx: GameContext, _dt: number): void {
   }
 
   if (show && hover) {
-    const verb = VERBS[hover.type];
+    const verb = hover.passive ? '' : VERBS[hover.type];
     const label = verb ? `${verb} ${hover.promptNoun}` : hover.promptNoun;
-    // Hide the key chip for passive prompts (kill = no E action)
+    // Hide the key chip for passive prompts (kill = no E action; stripped wrecks)
     _keyEl.style.display = verb ? '' : 'none';
     if (label !== _lastLabel) {
       _label.textContent = label;

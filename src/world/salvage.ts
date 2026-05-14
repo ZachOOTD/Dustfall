@@ -1,0 +1,180 @@
+// Salvage system (Session T). Every wreck (hero landmark + massive POI) is a
+// finite loot source: hover → press E → 1.5s progress → roll loot per wreck
+// kind → decrement salvageRemaining. When it hits zero the wreck is stripped:
+// the prompt reads "stripped" and a desaturation walk dims its meshes.
+//
+// Ribcages are organic — explicitly NOT registered (the caller decides).
+
+import * as THREE from 'three';
+import type { ItemId, ItemMeta } from '../inventory/types.ts';
+import type { Rng } from '../core/rng.ts';
+import type { WreckKind } from './wrecks.ts';
+
+export type SalvageKind = WreckKind | 'massive';
+
+export interface LootEntry {
+  id: ItemId;
+  count?: number;
+  meta?: ItemMeta;
+}
+
+export interface Salvageable {
+  id: number;
+  kind: SalvageKind;
+  mesh: THREE.Object3D;
+  pos: THREE.Vector3;
+  salvageRemaining: number;
+  hovered: boolean;
+  /** True once material desaturation has been applied on stripping. */
+  stripped: boolean;
+}
+
+/** Public friendly name for the prompt. */
+export function shortNameFor(kind: SalvageKind): string {
+  switch (kind) {
+    case 'engine_cluster':  return 'engine cluster';
+    case 'fuselage':        return 'fuselage';
+    case 'escape_pod':      return 'escape pod';
+    case 'cargo_container': return 'cargo container';
+    case 'antenna_spire':   return 'antenna spire';
+    case 'engine_bell':     return 'engine bell';
+    case 'massive':         return 'wreck';
+  }
+}
+
+export interface SalvageableRegistry {
+  list: Salvageable[];
+  nextId: number;
+}
+
+export function createSalvageableRegistry(): SalvageableRegistry {
+  return { list: [], nextId: 1 };
+}
+
+/** Tag the wreck group + push a record into the registry. */
+export function registerSalvageable(
+  registry: SalvageableRegistry,
+  group: THREE.Object3D,
+  kind: SalvageKind,
+  pos: THREE.Vector3,
+  rand: Rng,
+): Salvageable {
+  const id = registry.nextId++;
+  const remaining = kind === 'massive'
+    ? 4 + Math.floor(rand() * 3)   // 4-6
+    : 2 + Math.floor(rand() * 2);  // 2-3
+  group.userData.interactType = 'salvage';
+  group.userData.interactId = id;
+  group.userData.interactRegistry = 'salvageables';
+  const record: Salvageable = {
+    id,
+    kind,
+    mesh: group,
+    pos: pos.clone(),
+    salvageRemaining: remaining,
+    hovered: false,
+    stripped: false,
+  };
+  registry.list.push(record);
+  return record;
+}
+
+export function findSalvageableById(
+  list: Salvageable[],
+  id: number,
+): Salvageable | undefined {
+  for (const s of list) if (s.id === id) return s;
+  return undefined;
+}
+
+// ────────────────────────────────────────────────────────────────
+// Loot tables. Weighted independent rolls — each entry is "roll
+// the dice once; if it hits, append to the loot list."
+// ────────────────────────────────────────────────────────────────
+
+interface LootRoll {
+  id: ItemId;
+  chance: number;
+  count?: number;
+}
+
+const TABLES: Record<SalvageKind, LootRoll[]> = {
+  engine_cluster: [
+    { id: 'scrap', chance: 0.80, count: 2 },
+    { id: 'cloth', chance: 0.30 },
+  ],
+  fuselage: [
+    { id: 'scrap',   chance: 0.60, count: 2 },
+    { id: 'cloth',   chance: 0.50 },
+    { id: 'bandage', chance: 0.15 },
+  ],
+  escape_pod: [
+    { id: 'bandage', chance: 0.70 },
+    { id: 'cloth',   chance: 0.40 },
+    { id: 'scrap',   chance: 0.30 },
+  ],
+  cargo_container: [
+    { id: 'scrap',    chance: 0.50 },
+    { id: 'cloth',    chance: 0.40 },
+    { id: 'bandage',  chance: 0.25 },
+    { id: 'branch',   chance: 0.15 },
+    { id: 'tent_kit', chance: 0.03 },
+  ],
+  antenna_spire: [
+    { id: 'scrap', chance: 0.55, count: 2 },
+    { id: 'cloth', chance: 0.40 },
+  ],
+  engine_bell: [
+    { id: 'scrap', chance: 0.90, count: 2 },
+    { id: 'scrap', chance: 0.40 },
+  ],
+  // Massive POIs — richer rolls, more guaranteed scrap.
+  massive: [
+    { id: 'scrap',   chance: 0.95, count: 2 },
+    { id: 'scrap',   chance: 0.75 },
+    { id: 'cloth',   chance: 0.65 },
+    { id: 'bandage', chance: 0.45 },
+    { id: 'branch',  chance: 0.25 },
+    { id: 'fire_kit', chance: 0.05 },
+  ],
+};
+
+export function rollWreckLoot(kind: SalvageKind, rand: Rng): LootEntry[] {
+  const table = TABLES[kind];
+  const out: LootEntry[] = [];
+  for (const r of table) {
+    if (rand() < r.chance) {
+      out.push({ id: r.id, count: r.count });
+    }
+  }
+  // Guarantee at least one item so a successful salvage never feels empty.
+  if (out.length === 0) out.push({ id: 'scrap' });
+  return out;
+}
+
+/** Dim every mesh under the wreck group by cloning its material and
+ *  multiplying the color by 0.7. Materials are shared across wrecks at
+ *  module level in wrecks.ts — cloning per mesh protects the originals. */
+export function markSalvageStripped(s: Salvageable): void {
+  if (s.stripped) return;
+  s.stripped = true;
+  s.mesh.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh) return;
+    const mat = m.material;
+    if (Array.isArray(mat)) {
+      m.material = mat.map((mm) => dimMaterial(mm));
+    } else if (mat) {
+      m.material = dimMaterial(mat);
+    }
+  });
+}
+
+function dimMaterial(mat: THREE.Material): THREE.Material {
+  // Only clone if it's a material with a `.color` we can darken.
+  const anyMat = mat as THREE.Material & { color?: THREE.Color };
+  if (!anyMat.color) return mat;
+  const clone = mat.clone() as THREE.Material & { color: THREE.Color };
+  clone.color.multiplyScalar(0.7);
+  return clone;
+}

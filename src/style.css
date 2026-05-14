@@ -340,6 +340,18 @@ canvas {
   font-size: 10px;
 }
 
+#interact-prompt .salvage-progress {
+  position: absolute;
+  left: 0;
+  right: auto;
+  bottom: -6px;
+  height: 2px;
+  background: #e8dcc0;
+  width: 0;
+  transition: width 0.05s linear;
+  pointer-events: none;
+}
+
 /* ──────────────────────────────────────────────────────────
    Shelter indicator
    ────────────────────────────────────────────────────────── */

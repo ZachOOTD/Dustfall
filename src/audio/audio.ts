@@ -58,8 +58,8 @@ export function ensureAudioStarted(): void {
   for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
 }
 
-/** Footstep — short low-frequency thud. Slight random variation per call. */
-export function playFootstep(): void {
+/** Sand footstep — soft low thud. Default for the dune biome. */
+export function playFootstepSand(): void {
   const a = getAudioInternals();
   if (!a) return;
   const t = a.ctx.currentTime;
@@ -80,6 +80,108 @@ export function playFootstep(): void {
   src.connect(filter).connect(env).connect(a.sfx);
   src.start(t);
   src.stop(t + 0.20);
+}
+
+/** Rock footstep — shorter, brighter, with a small bandpass tap on top. */
+export function playFootstepRock(): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  // Base thump — higher cutoff than sand, shorter envelope.
+  const src = a.ctx.createBufferSource();
+  src.buffer = a.noiseBuffer;
+  src.playbackRate.value = 0.55 + Math.random() * 0.20;
+  const lo = a.ctx.createBiquadFilter();
+  lo.type = 'lowpass';
+  lo.frequency.value = 380 + Math.random() * 160;
+  lo.Q.value = 1.0;
+  const env = a.ctx.createGain();
+  env.gain.setValueAtTime(0.0, t);
+  env.gain.linearRampToValueAtTime(0.18, t + 0.004);
+  env.gain.exponentialRampToValueAtTime(0.001, t + 0.10);
+  src.connect(lo).connect(env).connect(a.sfx);
+  src.start(t);
+  src.stop(t + 0.14);
+  // Bandpass tap — slight stone-on-stone click.
+  const src2 = a.ctx.createBufferSource();
+  src2.buffer = a.noiseBuffer;
+  src2.playbackRate.value = 1.4 + Math.random() * 0.3;
+  const bp = a.ctx.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.value = 1200 + Math.random() * 300;
+  bp.Q.value = 2.0;
+  const env2 = a.ctx.createGain();
+  env2.gain.setValueAtTime(0.0, t);
+  env2.gain.linearRampToValueAtTime(0.08, t + 0.003);
+  env2.gain.exponentialRampToValueAtTime(0.001, t + 0.07);
+  src2.connect(bp).connect(env2).connect(a.sfx);
+  src2.start(t);
+  src2.stop(t + 0.09);
+}
+
+/** Salt footstep — brittle crust snap; brighter, very short, almost no sub. */
+export function playFootstepSalt(): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  const src = a.ctx.createBufferSource();
+  src.buffer = a.noiseBuffer;
+  src.playbackRate.value = 0.9 + Math.random() * 0.25;
+  // Highpass to suppress sub thud, leave just the crust-crunch upper band.
+  const hp = a.ctx.createBiquadFilter();
+  hp.type = 'highpass';
+  hp.frequency.value = 600;
+  const lo = a.ctx.createBiquadFilter();
+  lo.type = 'lowpass';
+  lo.frequency.value = 2400;
+  lo.Q.value = 0.8;
+  const env = a.ctx.createGain();
+  env.gain.setValueAtTime(0.0, t);
+  env.gain.linearRampToValueAtTime(0.14, t + 0.003);
+  env.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+  src.connect(hp).connect(lo).connect(env).connect(a.sfx);
+  src.start(t);
+  src.stop(t + 0.10);
+}
+
+/** Wet footstep (near a water source) — splash + faint pitched tail. */
+export function playFootstepWet(): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  // Splash noise — short, lowpassed, quick decay.
+  const src = a.ctx.createBufferSource();
+  src.buffer = a.noiseBuffer;
+  src.playbackRate.value = 0.7 + Math.random() * 0.3;
+  const lo = a.ctx.createBiquadFilter();
+  lo.type = 'lowpass';
+  lo.frequency.value = 800 + Math.random() * 200;
+  lo.Q.value = 0.9;
+  const env = a.ctx.createGain();
+  env.gain.setValueAtTime(0.0, t);
+  env.gain.linearRampToValueAtTime(0.20, t + 0.005);
+  env.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+  src.connect(lo).connect(env).connect(a.sfx);
+  src.start(t);
+  src.stop(t + 0.15);
+  // Pitched tail — small "plop" body resonance.
+  const osc = a.ctx.createOscillator();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(640, t);
+  osc.frequency.exponentialRampToValueAtTime(320, t + 0.10);
+  const oscEnv = a.ctx.createGain();
+  oscEnv.gain.setValueAtTime(0.0, t);
+  oscEnv.gain.linearRampToValueAtTime(0.06, t + 0.005);
+  oscEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+  osc.connect(oscEnv).connect(a.sfx);
+  osc.start(t);
+  osc.stop(t + 0.14);
+}
+
+/** Legacy alias — defaults to the sand variant. Kept so older callers keep
+ *  working; new code should call the per-surface function directly. */
+export function playFootstep(): void {
+  playFootstepSand();
 }
 
 /** Pickup — quick high chime, pitches up. */
@@ -392,6 +494,43 @@ export function playRefill(): void {
   src.connect(filter).connect(env).connect(a.sfx);
   src.start(t);
   src.stop(t + 0.78);
+}
+
+/** Salvage — metal scrape: filtered noise burst + low oscillator thump.
+ *  Brighter than footsteps, ~0.4s envelope. Played at salvage start and
+ *  completion. */
+export function playSalvage(): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  // Noise scrape — bandpass around ~2.5kHz for a metal-on-metal grind.
+  const src = a.ctx.createBufferSource();
+  src.buffer = a.noiseBuffer;
+  src.playbackRate.value = 0.7 + Math.random() * 0.2;
+  const filter = a.ctx.createBiquadFilter();
+  filter.type = 'bandpass';
+  filter.frequency.value = 2400;
+  filter.Q.value = 1.6;
+  const env = a.ctx.createGain();
+  env.gain.setValueAtTime(0.0, t);
+  env.gain.linearRampToValueAtTime(0.14, t + 0.02);
+  env.gain.linearRampToValueAtTime(0.10, t + 0.30);
+  env.gain.exponentialRampToValueAtTime(0.001, t + 0.42);
+  src.connect(filter).connect(env).connect(a.sfx);
+  src.start(t);
+  src.stop(t + 0.44);
+  // Low thump under the scrape — gives it weight.
+  const osc = a.ctx.createOscillator();
+  osc.type = 'triangle';
+  osc.frequency.setValueAtTime(110, t);
+  osc.frequency.exponentialRampToValueAtTime(70, t + 0.28);
+  const oscEnv = a.ctx.createGain();
+  oscEnv.gain.setValueAtTime(0.0, t);
+  oscEnv.gain.linearRampToValueAtTime(0.08, t + 0.01);
+  oscEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.30);
+  osc.connect(oscEnv).connect(a.sfx);
+  osc.start(t);
+  osc.stop(t + 0.32);
 }
 
 /** Harvest (cactus snap) — short crackly snap. */

@@ -20,6 +20,7 @@ import {
   placeDebrisField,
 } from './wrecks.ts';
 import { attachCompoundCollider } from '../physics/bodies.ts';
+import { registerSalvageable, type SalvageableRegistry } from './salvage.ts';
 
 // ────────────────────────────────────────────────────────────────
 // The Engine Block — massive engine cluster tipped at ~30° into a dune.
@@ -31,7 +32,7 @@ function placeEngineBlock(
   terrain: Terrain,
   pos: THREE.Vector3,
   rand: Rng,
-): void {
+): THREE.Group {
   const cluster = makeEngineCluster(rand, 4.2);   // hero scale
   // Compose into a parent group so we can rotate cleanly.
   const parent = new THREE.Group();
@@ -51,6 +52,7 @@ function placeEngineBlock(
   attachCompoundCollider(world, parent);
   // Debris field around the impact site.
   placeDebrisField(scene, terrain, pos, 14, rand, 10);
+  return parent;
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -63,7 +65,7 @@ function placeScavengerCamp(
   terrain: Terrain,
   rand: Rng,
   center: THREE.Vector3,
-): { pickup: Pickup } {
+): { pickup: Pickup; fuselage: THREE.Group } {
   // Small fuselage section as the windbreak the camp is built against.
   const fuselage = makeFuselage(rand, 0.9);
   fuselage.position.copy(center);
@@ -114,7 +116,7 @@ function placeScavengerCamp(
   const bandageX = center.x + 1.0 + rand() * 0.4;
   const bandageZ = center.z + 0.8 + rand() * 0.6;
   const pickup = spawnDroppedPickup(scene, terrain, { x: bandageX, z: bandageZ }, 'bandage');
-  return { pickup };
+  return { pickup, fuselage };
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -127,7 +129,7 @@ function placeCrashedHull(
   terrain: Terrain,
   pos: THREE.Vector3,
   rand: Rng,
-): void {
+): { hull: THREE.Group; bell: THREE.Group } {
   // Main fuselage — hero scale, partly buried + tilted.
   const fuselage = makeFuselage(rand, 3.2);
   const parent = new THREE.Group();
@@ -150,7 +152,7 @@ function placeCrashedHull(
     terrain.heightAt(pos.x + Math.cos(parent.rotation.y) * 8.0, pos.z + Math.sin(parent.rotation.y) * 8.0),
     pos.z + Math.sin(parent.rotation.y) * 8.0,
   );
-  placeWreck(scene, world, terrain, bellPos, 'engine_bell', rand, {
+  const bell = placeWreck(scene, world, terrain, bellPos, 'engine_bell', rand, {
     scale: 2.4,
     buryY: 1.0,
     tiltZ: 0.4,
@@ -158,6 +160,7 @@ function placeCrashedHull(
 
   // Debris field stretching from the impact site.
   placeDebrisField(scene, terrain, pos, 16, rand, 12);
+  return { hull: parent, bell };
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -183,30 +186,46 @@ export function placePOIs(
   terrain: Terrain,
   rand: Rng,
   pickupList: Pickup[],
+  salvageables?: SalvageableRegistry,
 ): void {
   for (const p of POI_LAYOUT) {
     const y = terrain.heightAt(p.x, p.z);
     const pos = new THREE.Vector3(p.x, y, p.z);
     switch (p.kind) {
-      case 'engine_block':
-        placeEngineBlock(scene, world, terrain, pos, rand);
-        break;
-      case 'camp': {
-        const { pickup } = placeScavengerCamp(scene, world, terrain, rand, pos);
-        pickupList.push(pickup);
+      case 'engine_block': {
+        const group = placeEngineBlock(scene, world, terrain, pos, rand);
+        if (salvageables) registerSalvageable(salvageables, group, 'massive', pos, rand);
         break;
       }
-      case 'antenna_outpost':
-        placeWreck(scene, world, terrain, pos, 'antenna_spire', rand, {
+      case 'camp': {
+        const { pickup, fuselage } = placeScavengerCamp(scene, world, terrain, rand, pos);
+        pickupList.push(pickup);
+        // The camp fuselage is small (0.9× scale) — register as a regular
+        // fuselage salvageable rather than 'massive'.
+        if (salvageables) registerSalvageable(salvageables, fuselage, 'fuselage', pos, rand);
+        break;
+      }
+      case 'antenna_outpost': {
+        const group = placeWreck(scene, world, terrain, pos, 'antenna_spire', rand, {
           scale: 1.4,
           buryY: 0.5,
           tiltZ: 0.08,
         });
         placeDebrisField(scene, terrain, pos, 8, rand, 5);
+        if (salvageables) registerSalvageable(salvageables, group, 'massive', pos, rand);
         break;
-      case 'crashed_hull':
-        placeCrashedHull(scene, world, terrain, pos, rand);
+      }
+      case 'crashed_hull': {
+        const { hull, bell } = placeCrashedHull(scene, world, terrain, pos, rand);
+        if (salvageables) {
+          registerSalvageable(salvageables, hull, 'massive', pos, rand);
+          // Also register the engine bell tail as its own salvageable so
+          // both halves of the wreck are interactable.
+          const bellPos = new THREE.Vector3().setFromMatrixPosition(bell.matrixWorld);
+          registerSalvageable(salvageables, bell, 'engine_bell', bellPos, rand);
+        }
         break;
+      }
     }
   }
 }

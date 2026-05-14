@@ -7,7 +7,12 @@ import * as THREE from 'three';
 import type { GameContext } from '../GameContext.ts';
 import { isPlaying } from '../GameContext.ts';
 import { Tuning } from '../config/tuning.ts';
-import { playFootstep } from '../audio/audio.ts';
+import {
+  playFootstepSand,
+  playFootstepRock,
+  playFootstepSalt,
+  playFootstepWet,
+} from '../audio/audio.ts';
 
 const fwd = new THREE.Vector3();
 const right = new THREE.Vector3();
@@ -90,14 +95,23 @@ export function updatePlayer(ctx: GameContext, dt: number): void {
   if (ctx.player.onGround && ctx.player.velocityY < 0) ctx.player.velocityY = 0;
 
   // Footsteps — accumulate horizontal distance moved while grounded; trigger
-  // a sound each time we cross the step threshold.
+  // a sound each time we cross the step threshold. Variant is picked from
+  // biomeAt + proximity to any water source (wet beats biome).
+  const horizontal = Math.hypot(corrected.x, corrected.z);
   if (ctx.player.onGround && moving) {
-    const horizontal = Math.hypot(corrected.x, corrected.z);
     _stepAccum += horizontal;
     const threshold = sprinting ? STEP_DISTANCE_SPRINT : STEP_DISTANCE;
     if (_stepAccum >= threshold) {
       _stepAccum = 0;
-      playFootstep();
+      const tr = body.translation();
+      if (nearWaterSource(ctx, tr.x, tr.z)) {
+        playFootstepWet();
+      } else {
+        const biome = ctx.biomes.biomeAt(tr.x, tr.z);
+        if (biome === 'rocky') playFootstepRock();
+        else if (biome === 'salt') playFootstepSalt();
+        else playFootstepSand();
+      }
     }
   } else {
     _stepAccum = 0;
@@ -121,4 +135,15 @@ function syncCameraToBody(ctx: GameContext): void {
     tr.y + ctx.player.eyeOffset,
     tr.z,
   );
+}
+
+function nearWaterSource(ctx: GameContext, x: number, z: number): boolean {
+  const r = Tuning.FOOTSTEP_WET_RADIUS;
+  const r2 = r * r;
+  for (const w of ctx.waterSources.list) {
+    const dx = w.pos.x - x;
+    const dz = w.pos.z - z;
+    if (dx * dx + dz * dz <= r2) return true;
+  }
+  return false;
 }

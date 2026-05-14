@@ -21,6 +21,7 @@ import type { LootContainer } from './world/lootContainers.ts';
 import type { Fire } from './world/fire.ts';
 import type { Tent } from './world/tent.ts';
 import type { BiomeSampler } from './world/biomes.ts';
+import type { SalvageableRegistry } from './world/salvage.ts';
 
 export interface GameContext {
   three: {
@@ -80,6 +81,7 @@ export interface GameContext {
   lootContainers: { list: LootContainer[]; open: LootContainer | null };
   fires: { list: Fire[] };
   tents: { list: Tent[] };
+  salvageables: SalvageableRegistry;
   weather: Weather;
   flags: {
     started: boolean;     // true once the player has clicked into the game

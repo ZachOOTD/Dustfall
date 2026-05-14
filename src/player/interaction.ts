@@ -21,6 +21,12 @@ import { findLizardById, lootLizard } from '../enemies/lizard.ts';
 import { findLootContainerById } from '../world/lootContainers.ts';
 import { findFireById, addFuel, relightFire } from '../world/fire.ts';
 import { findTentById } from '../world/tent.ts';
+import {
+  findSalvageableById,
+  markSalvageStripped,
+  rollWreckLoot,
+  shortNameFor,
+} from '../world/salvage.ts';
 import { getItemDef } from '../inventory/items.ts';
 import {
   playPickup,
@@ -28,7 +34,10 @@ import {
   playHarvest,
   playCookSizzle,
   playFireCrackle,
+  playSalvage,
 } from '../audio/audio.ts';
+import { maybeShowEventHint } from '../ui/tutorial.ts';
+import { showSalvageProgress, hideSalvageProgress } from '../ui/interactPrompt.ts';
 import { openLootMenu, isLootMenuOpen } from '../ui/lootMenu.ts';
 import { openSleepOverlay, isSleepOverlayOpen } from '../ui/sleepOverlay.ts';
 import { isCraftingMenuOpen } from '../ui/craftingMenu.ts';
@@ -43,9 +52,11 @@ const _dir = new THREE.Vector3();
 interface InteractHit {
   type: InteractType;
   id: number;
-  registry: 'pickups' | 'waterSources' | 'cacti' | 'lizards' | 'lootContainers' | 'fires' | 'tents';
+  registry: 'pickups' | 'waterSources' | 'cacti' | 'lizards' | 'lootContainers' | 'fires' | 'tents' | 'salvageables';
   distance: number;
 }
+
+const SALVAGE_DURATION = 1.5;
 
 // Map raw → cooked ItemIds (only items the player can actually cook here).
 const COOK_MAP: Partial<Record<ItemId, ItemId>> = {
@@ -59,6 +70,14 @@ let _cooking: {
   fromId: ItemId;
   toId: ItemId;
   fireId: number;
+  completeAt: number;
+} | null = null;
+
+// Module-level salvage state — set when the player starts an E hold on a
+// salvageable. Cleared on completion, on hover loss, or on player death.
+let _salvaging: {
+  salvageableId: number;
+  startedAt: number;     // ctx.time.elapsed when started
   completeAt: number;
 } | null = null;
 
@@ -89,14 +108,23 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
   for (const l of ctx.lizards) l.hovered = false;
   for (const f of ctx.fires.list) f.hovered = false;
   for (const t of ctx.tents.list) t.hovered = false;
+  for (const s of ctx.salvageables.list) s.hovered = false;
   ctx.inventory.hover = null;
 
   // Drive any in-progress cooking forward.
   tickCooking(ctx);
+  // Drive any in-progress salvage forward (cancelled later if hover drops).
+  tickSalvage(ctx);
 
-  if (!isPlaying(ctx)) return;
+  if (!isPlaying(ctx)) {
+    if (_salvaging) cancelSalvage();
+    return;
+  }
   // Overlay menus suppress interaction (pointer is unlocked anyway).
-  if (isLootMenuOpen() || isSleepOverlayOpen() || isCraftingMenuOpen() || isInventoryOverlayOpen() || isControlsPanelOpen()) return;
+  if (isLootMenuOpen() || isSleepOverlayOpen() || isCraftingMenuOpen() || isInventoryOverlayOpen() || isControlsPanelOpen()) {
+    if (_salvaging) cancelSalvage();
+    return;
+  }
 
   const cam = ctx.three.camera;
   cam.getWorldDirection(_dir);
@@ -113,15 +141,29 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
   // Both alive (cook/add_fuel) and dead (relight) fires are interactable.
   for (const f of ctx.fires.list) targets.push(f.mesh);
   for (const t of ctx.tents.list) targets.push(t.mesh);
-  if (targets.length === 0) return;
+  for (const s of ctx.salvageables.list) targets.push(s.mesh);
+  if (targets.length === 0) {
+    if (_salvaging) cancelSalvage();
+    return;
+  }
 
   const hits = _ray.intersectObjects(targets, true);
-  if (hits.length === 0) return;
+  if (hits.length === 0) {
+    if (_salvaging) cancelSalvage();
+    return;
+  }
 
   const hit = hits[0];
   const info = resolveInteractable(hit.object);
-  if (!info) return;
+  if (!info) {
+    if (_salvaging) cancelSalvage();
+    return;
+  }
   info.distance = hit.distance;
+  // If we're salvaging but the hovered thing is no longer the same wreck, cancel.
+  if (_salvaging && (info.registry !== 'salvageables' || info.id !== _salvaging.salvageableId)) {
+    cancelSalvage();
+  }
 
   // Dispatch to set hover state + prompt + handle E
   switch (info.registry) {
@@ -309,6 +351,32 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
       }
       return;
     }
+
+    case 'salvageables': {
+      const s = findSalvageableById(ctx.salvageables.list, info.id);
+      if (!s) return;
+      s.hovered = true;
+      const name = shortNameFor(s.kind);
+      if (s.salvageRemaining <= 0) {
+        ctx.inventory.hover = {
+          type: 'salvage',
+          distance: info.distance,
+          promptNoun: `${name} (stripped)`,
+          passive: true,
+        };
+        return;
+      }
+      ctx.inventory.hover = { type: 'salvage', distance: info.distance, promptNoun: name };
+      if (ctx.input.pressed.has('KeyE') && !_salvaging) {
+        _salvaging = {
+          salvageableId: s.id,
+          startedAt: ctx.time.elapsed,
+          completeAt: ctx.time.elapsed + SALVAGE_DURATION,
+        };
+        playSalvage();
+      }
+      return;
+    }
   }
 }
 
@@ -339,4 +407,59 @@ function findRefillableCanteen(ctx: GameContext): import('../inventory/types.ts'
     }
   }
   return null;
+}
+
+/** Per-frame salvage timer. Drives the progress bar, completes on time-up,
+ *  cancels if the target vanishes from the registry. */
+function tickSalvage(ctx: GameContext): void {
+  if (!_salvaging) return;
+  const c = _salvaging;
+  const s = findSalvageableById(ctx.salvageables.list, c.salvageableId);
+  if (!s || s.salvageRemaining <= 0) {
+    cancelSalvage();
+    return;
+  }
+  const elapsed = ctx.time.elapsed - c.startedAt;
+  const t01 = Math.min(1, elapsed / SALVAGE_DURATION);
+  showSalvageProgress(t01);
+  if (ctx.time.elapsed >= c.completeAt) {
+    completeSalvage(ctx, s);
+  }
+}
+
+function completeSalvage(ctx: GameContext, s: import('../world/salvage.ts').Salvageable): void {
+  const loot = rollWreckLoot(s.kind, Math.random);
+  const got: string[] = [];
+  for (const entry of loot) {
+    const n = entry.count ?? 1;
+    let added = 0;
+    for (let i = 0; i < n; i++) {
+      const idx = addItem(ctx.inventory, entry.id, entry.meta, ctx);
+      if (idx < 0) break;
+      added++;
+    }
+    if (added > 0) {
+      const def = getItemDef(entry.id);
+      got.push(added > 1 ? `${added} ${def.name.toLowerCase()}` : def.name.toLowerCase());
+    }
+  }
+  s.salvageRemaining--;
+  if (got.length === 0) {
+    ctx.ui.showToast('your bag is full');
+  } else {
+    ctx.ui.showToast(`salvaged: ${got.join(', ')}`);
+  }
+  playSalvage();
+  if (s.salvageRemaining <= 0) {
+    markSalvageStripped(s);
+  }
+  maybeShowEventHint(ctx, 'first_salvage', 'wrecks can be stripped — press E to salvage them');
+  _salvaging = null;
+  hideSalvageProgress();
+}
+
+function cancelSalvage(): void {
+  if (!_salvaging) return;
+  _salvaging = null;
+  hideSalvageProgress();
 }

@@ -198,6 +198,17 @@ export function maybeShowItemHint(ctx: GameContext, id: ItemId): void {
   setTimeout(() => ctx.ui.showToast(hint), 900);
 }
 
+/** One-shot tutorial toast for non-ItemId events (first salvage, etc.).
+ *  Uses the same persisted `usedItems` set with an `_evt_` prefix so the
+ *  eventId can never collide with an ItemId string. */
+export function maybeShowEventHint(ctx: GameContext, eventId: string, message: string): void {
+  const key = `_evt_${eventId}`;
+  if (_state.usedItems.includes(key)) return;
+  _state.usedItems.push(key);
+  saveState();
+  setTimeout(() => ctx.ui.showToast(message), 900);
+}
+
 /** Debug helper: wipes the seen-intro + seen-items flags so all hints fire
  *  again. Exposed via `__game.resetTutorial()`. */
 export function resetTutorial(): void {

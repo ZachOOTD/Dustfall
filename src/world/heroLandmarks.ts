@@ -9,6 +9,7 @@ import type { Rng } from '../core/rng.ts';
 import type { Terrain } from './terrain.ts';
 import { placeWreck, type WreckKind } from './wrecks.ts';
 import { makeStaticBox } from '../physics/bodies.ts';
+import { registerSalvageable, type SalvageableRegistry } from './salvage.ts';
 
 const _q = new THREE.Quaternion();
 function getQuat(o: THREE.Object3D): { x: number; y: number; z: number; w: number } {
@@ -97,6 +98,7 @@ export function placeHeroLandmarks(
   world: RAPIER.World,
   terrain: Terrain,
   rand: Rng,
+  salvageables?: SalvageableRegistry,
 ): void {
   const count = 7 + Math.floor(rand() * 3); // 7-9
   for (let i = 0; i < count; i++) {
@@ -109,9 +111,11 @@ export function placeHeroLandmarks(
       placeRibcage(scene, world, new THREE.Vector3(x, y, z), rand);
     } else {
       const kind = HERO_WRECK_TYPES[Math.floor(rand() * HERO_WRECK_TYPES.length)];
-      placeWreck(scene, world, terrain, new THREE.Vector3(x, y, z), kind, rand, {
+      const pos = new THREE.Vector3(x, y, z);
+      const group = placeWreck(scene, world, terrain, pos, kind, rand, {
         scale: kind === 'antenna_spire' ? 1.0 : 0.9 + rand() * 0.3,
       });
+      if (salvageables) registerSalvageable(salvageables, group, kind, pos, rand);
     }
   }
 }

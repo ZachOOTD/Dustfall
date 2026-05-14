@@ -17,6 +17,7 @@ import { createTerrain } from './world/terrain.ts';
 import { createBiomeSampler } from './world/biomes.ts';
 import { placePOIs } from './world/poi.ts';
 import { placeHeroLandmarks } from './world/heroLandmarks.ts';
+import { createSalvageableRegistry } from './world/salvage.ts';
 import { createSky, updateSky } from './world/sky.ts';
 import { updateStats } from './stats/survival.ts';
 import { createHud, updateHud } from './ui/hud.ts';
@@ -68,15 +69,18 @@ const shelter = createShelterRegistry();
 // scatter stream so the world is fully deterministic from RNG_SEED.
 const biomes = createBiomeSampler(makeRng(Tuning.RNG_SEED + 17));
 const terrain = createTerrain(three.scene, physics.world, terrainRand, biomes);
-placeHeroLandmarks(three.scene, physics.world, terrain, scatterRand);
+// Session T — salvage registry. Built up-front so hero landmarks + POIs
+// can register their wrecks as they're placed.
+const salvageables = createSalvageableRegistry();
+placeHeroLandmarks(three.scene, physics.world, terrain, scatterRand, salvageables);
 // Scattered canteens were removed — the player starts with one (see below).
 const pickupList = spawnBranches(three.scene, terrain, scatterRand);
 const waterSources = spawnWaterSources(three.scene, terrain, scatterRand, biomes);
 const cacti = spawnCacti(three.scene, physics.world, terrain, scatterRand);
 
 // Hand-placed distant POIs (Session P). Adds a bandage pickup at the
-// abandoned camp.
-placePOIs(three.scene, physics.world, terrain, scatterRand, pickupList);
+// abandoned camp. Massive POI wrecks register as salvageables too.
+placePOIs(three.scene, physics.world, terrain, scatterRand, pickupList, salvageables);
 
 // Spawn one raider somewhere visible-but-not-immediate (~30m from spawn).
 const raiders = [
@@ -165,6 +169,7 @@ const ctx: GameContext = {
   lootContainers: { list: [], open: null },
   fires: { list: [] },
   tents: { list: [] },
+  salvageables,
   weather,
   flags: { started: false, paused: false, damageFlashUntil: 0 },
 };
