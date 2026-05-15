@@ -277,3 +277,52 @@ up to 16m from the search center. Two related decisions:
       entrance gives a deterministic first-frame view.
 Save-load path unaffected — `setupOpeningScene` is skipped when
 `hasSave()` is true.
+
+## D26 — Sand-reclaimed floor: terrain IS the cavity floor (Session BB)
+**When**: Session BB.
+**Why**: First iteration of the mega-ship had a metal floor mesh covering
+the cavity interior, but no floor collider — player fell through. Fix
+options: (a) add a floor collider, (b) remove the floor mesh entirely
+and let terrain serve as the floor (player walks on sand inside).
+Picked (b) per user: "the floor of the wreck can be under the sand to
+make it look like the sand has reclaimed it over time." Result is more
+atmospheric (sand drifts inside, gradient terrain reads as natural
+burial). Implementation: no `_floorMat` mesh, no floor collider — the
+existing terrain heightfield collider supports the player both outside
+and inside the wreck. Walls extend WALL_BURY (2m) below the wreck
+origin so no gap is visible on sloped dunes. Wreck origin = mean terrain
+in footprint, so terrain rises into the cavity for the reclaimed look.
+
+## D27 — Wreck pose: terrain-normal tilt + per-section burial (Session BB)
+**When**: Session BB.
+**Why**: A wreck sitting flat-on-the-ground on a sloped dune looks like
+it landed on a level pad. Tilting it to match the terrain normal at
+its position gives the "crashed and settled" silhouette. Implementation
+in `src/world/poi.ts` mega_ship dispatch: sample
+`terrain.normalAt(x, z)` at the chosen flat spot, build a quaternion
+from up-axis to that normal capped at ~14° (`Math.min(angle, 0.25)`),
+compose with yaw, apply to both the Three.js group and the Rapier
+fixed-body rotation. Cap exists so the wreck doesn't tip absurdly on
+steep slopes. For the BB-2 mega-wreck, the cap tightens further to
+~5.7° (0.10 rad) since 0.25 rad on a 120m structure exposes 30m of
+underside on the high end — see BB plan section "Architectural risks."
+
+## D28 — Mega-wreck visual reference: Force Awakens Jakku Inflictor (Session BB plan)
+**When**: Session BB (plan-mode research).
+**Why**: User specifically asked to "do some research on what a sci-fi
+wreck of a ship should look like" referencing the Force Awakens opening
+with Rey salvaging the Star Destroyer. Visual takeaways logged here so
+future iterations don't drift off-reference:
+  - Wedge silhouette, bow buried, stern + bridge tower exposed
+  - Battle damage / hull rents reveal interior bays
+  - "David and Goliath" scale contrast (small figures against massive
+    plating) — the wreck must FEEL big through context, not just be big
+  - Layered sand burial (gradient drift up the sides)
+  - Surrounding wreckage field of smaller crashed ships acts as scale
+    reference
+  - Squatters lived in conning towers — interior is enterable + has
+    multiple connected rooms
+For Dustfall's scale (literal 1.6km Star Destroyer impossible in 280m
+playable radius), the BB-2/BB-3 mega-wreck targets 120m long × 45m wide
+× 30m tall above sand — ~10× linear vs current mega-ship, dominates
+skyline, visible from much of the playable area through fog.

@@ -9,17 +9,26 @@ and promotes the second.
 
 ---
 
-## Next — TBD (pick from Big-ticket bucket below)
-After AA (torch/flashlight + opening-scene rebuild), pick the next big
-thing from the bucket at start of next session. User direction will
-promote one entry here.
+## Next — BB-2: Mega-wreck (massive Jakku-scale crashed ship) — shell phase (~7h)
+Truly massive crashed-ship POI on Force Awakens / Jakku scale: 120m long
+× 45m wide × 30m tall above sand, half-buried, in SW quadrant
+(-180, -130). Three hull sections (bow + open mid-break + aft + bridge
+tower), 2 giant engine bells, surrounded by debris field. BB-2 ships the
+minimum-playable shell (walk-through end-to-end, 2 salvage panels);
+BB-3 adds catwalks + side room + skylights + remaining 6 panels +
+detail pass. Full design in `.claude/plans/archive/session-BB.md`.
+
+## Then — BB-3: Mega-wreck — verticality + detail (~6h)
+Adds 3 catwalks + ramps, the dark side room (Chamber 3), 3 skylights via
+`panelWithHole`, remaining 6 salvage panels, bridge tower climb, interior
+detail pass, surrounding debris field expansion + 2-3 small companion
+wrecks for scale.
 
 ## Later — Big-ticket bucket (1–2 picks per session at ~4–7h each)
 Pick whatever feels most missing after the polish + atmosphere arc.
 
 - Raider variants (scout / ambusher / brute) — *if* we decide to bring raiders back
 - Q2: Rigged hands + lizard (GLB-dependent — deferred with N's asset work)
-- Mega-ship POI with enterable explorable interior
 - Hover speeder bike for fast travel
 - Giant sand worm enemy
 - Base-building mechanics

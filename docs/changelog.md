@@ -3,6 +3,20 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session BB — 2026-05-15 — Mega-ship POI (enterable wreck v1) + mega-wreck plan
+NEW `src/world/megaShip.ts` — a ~12m enterable wreck in central dunes
+(-120, 30). Extracted `panelWithHole` to shared `src/world/panelUtils.ts`.
+Multi-iteration session: started boxy, ended as a detailed rusty sci-fi
+crashed cargo hauler — 111 meshes incl. 2 chambers split by bulkhead, side
+entrance, **sand-reclaimed floor** (no floor mesh; terrain serves), walls
+extending 2m below origin (no slope gaps), terrain-normal tilt for crashed
+feel, segmented bridge cone w/ viewport, engine bell + antenna masts +
+wing fins + exterior pipes/vents/seams/rust + interior ceiling pipes +
+wall conduits + broken hull plates around entrance. 3 salvage panels
+(massive×2 + engine_bell). Also authored a detailed BB-2/BB-3 plan for a
+TRULY mega-scale crashed ship (120m, Force Awakens Jakku scale) — see
+archived plan. `verified` (tsc + multiple screenshots).
+
 ## Session AA — 2026-05-14 — Torch/flashlight + opening-scene rebuild
 NEW `torch` (consumable, 3-min burn, warm PointLight + flicker) and
 `flashlight` (rechargeable, drains while lit, cool SpotLight) items + craft

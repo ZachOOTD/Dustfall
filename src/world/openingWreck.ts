@@ -19,6 +19,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import type { Rng } from '../core/rng.ts';
 import type { Terrain } from './terrain.ts';
 import { Tuning } from '../config/tuning.ts';
+import { panelWithHole } from './panelUtils.ts';
 
 // ── Shared materials. Reuse the wreck palette. ─────────────────────────
 const _hullMat = new THREE.MeshLambertMaterial({
@@ -110,57 +111,8 @@ function box(w: number, h: number, d: number, mat: THREE.Material): THREE.Mesh {
   return new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
 }
 
-/**
- * Build a flat panel (W along X, T along Y/thickness, D along Z) with a
- * rectangular hole at (cu, cv) of size (hw × hd). Returns a Group whose origin
- * sits at the panel's center — caller positions + rotates it like a single
- * Mesh. Up to 4 sub-meshes wrap the hole (top/bottom strips full-width, plus
- * left/right pieces in the hole's height band). Strips with zero size are
- * skipped, so the helper handles holes flush with an edge too.
- *
- * Session AA — replaces fake emissive shafts with actual missing geometry,
- * letting the directional sun light reach the interior through real gaps.
- */
-function panelWithHole(
-  W: number, T: number, D: number,
-  cu: number, cv: number,
-  hw: number, hd: number,
-  mat: THREE.Material,
-): THREE.Group {
-  const g = new THREE.Group();
-  const tol = 0.001;
-  const halfHw = hw / 2;
-  const halfHd = hd / 2;
-  // Top strip — between hole's far edge and panel's far edge (along Z).
-  const topLen = (D / 2) - (cv + halfHd);
-  if (topLen > tol) {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(W, T, topLen), mat);
-    m.position.z = (cv + halfHd + D / 2) / 2;
-    g.add(m);
-  }
-  // Bottom strip — between panel's near edge and hole's near edge (along Z).
-  const botLen = (cv - halfHd) - (-D / 2);
-  if (botLen > tol) {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(W, T, botLen), mat);
-    m.position.z = (-D / 2 + cv - halfHd) / 2;
-    g.add(m);
-  }
-  // Left of hole (along X), spanning only the hole's Z band.
-  const leftLen = (cu - halfHw) - (-W / 2);
-  if (leftLen > tol) {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(leftLen, T, hd), mat);
-    m.position.set((-W / 2 + cu - halfHw) / 2, 0, cv);
-    g.add(m);
-  }
-  // Right of hole (along X).
-  const rightLen = (W / 2) - (cu + halfHw);
-  if (rightLen > tol) {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(rightLen, T, hd), mat);
-    m.position.set((cu + halfHw + W / 2) / 2, 0, cv);
-    g.add(m);
-  }
-  return g;
-}
+// `panelWithHole` was extracted to `panelUtils.ts` in Session BB so megaShip.ts
+// can share it. Same shape (W=X, T=Y thickness, D=Z) and same caller contract.
 
 export function makeOpeningWreck(rand: Rng): THREE.Group {
   const g = new THREE.Group();

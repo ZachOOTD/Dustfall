@@ -45,13 +45,13 @@ Run with `npm run dev` (port 5173). Type-check with `npx tsc --noEmit`.
 
 ## Where we are now
 
-**Last shipped**: Session AA — torch + flashlight items (consumable +
-rechargeable light sources, per-frame `updateHeld` hook on `ItemDef`),
-plus a near-total rebuild of the opening wreck and scene (real geometry
-holes via new `panelWithHole` helper, translucent canvas tarp on the back
-roof, fixed pre-existing roof rotation inversion bug from W, wreck moved
-to central dunes, player teleported in front of entrance facing east at
-sunrise). Prior milestones: Z (stone-well + salvage panels), Y
+**Last shipped**: Session BB — enterable mega-ship POI (12m wreck in
+central dunes; sand-reclaimed floor, terrain-normal tilt, detailed
+sci-fi hull with pipes/vents/conduits/broken plates, 3 salvage panels).
+Detailed plan authored for a far larger BB-2/BB-3 mega-wreck (120m,
+Force Awakens Jakku scale) — see
+`.claude/plans/archive/session-BB.md`. Prior milestones: AA (torch +
+flashlight, opening-scene rebuild), Z (stone-well + salvage panels), Y
 (footprints + lizard tracks), X (audio sample-stem architecture, .ogg
 files pending in `public/audio/`), W (opening scene), V (atmosphere), U
 (UX + empty world), N (rigged raider infra). See

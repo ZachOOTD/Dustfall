@@ -91,7 +91,7 @@ const cacti = spawnCacti(three.scene, physics.world, terrain, scatterRand);
 
 // Hand-placed distant POIs (Session P). Adds a bandage pickup at the
 // abandoned camp. Massive POI wrecks register as salvageables too.
-placePOIs(three.scene, physics.world, terrain, scatterRand, pickupList, salvageables);
+placePOIs(three.scene, physics.world, terrain, scatterRand, pickupList, salvageables, shelter);
 
 // Session U — raiders deprioritized (world is sandbox / "only survivor").
 // Code path stays so we can revisit later; just don't spawn one at boot.
