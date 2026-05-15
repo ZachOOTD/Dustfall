@@ -53,7 +53,7 @@ const _dir = new THREE.Vector3();
 interface InteractHit {
   type: InteractType;
   id: number;
-  registry: 'pickups' | 'waterSources' | 'cacti' | 'lizards' | 'lootContainers' | 'fires' | 'tents' | 'salvageables' | 'journals';
+  registry: 'pickups' | 'waterSources' | 'cacti' | 'lizards' | 'lootContainers' | 'fires' | 'tents' | 'salvageables' | 'journals' | 'speeder';
   distance: number;
 }
 
@@ -144,6 +144,10 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
   for (const t of ctx.tents.list) targets.push(t.mesh);
   for (const s of ctx.salvageables.list) targets.push(s.panel);
   for (const j of ctx.journals.list) targets.push(j.mesh);
+  // CC-3.1 — speeder seat is interactable when not already mounted; the
+  // seat mesh is tagged with userData.interactType='mount' inside
+  // makeSpeeder so resolveInteractable picks it up on raycast hit.
+  if (ctx.speeder && !ctx.speeder.mounted) targets.push(ctx.speeder.seat);
   if (targets.length === 0) {
     if (_salvaging) cancelSalvage();
     return;
@@ -396,6 +400,19 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
       if (ctx.input.pressed.has('KeyE')) {
         void import('../ui/journalPanel.ts').then((m) => m.openJournalPanel(ctx));
       }
+      return;
+    }
+
+    case 'speeder': {
+      // CC-3.1 — looking at the speeder seat (and not mounted). Show
+      // the "[E] mount speeder" prompt. The actual mount action is
+      // handled by updateSpeeder earlier in the tick (which also
+      // checks SPEEDER_MOUNT_RANGE), so we don't dispatch E here.
+      ctx.inventory.hover = {
+        type: 'mount',
+        distance: info.distance,
+        promptNoun: 'speeder',
+      };
       return;
     }
   }

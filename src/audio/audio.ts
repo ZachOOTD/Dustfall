@@ -759,3 +759,86 @@ export function playDeath(): void {
   src.start(t);
   src.stop(t + 1.7);
 }
+
+// ─────────────────────────────────────────────────────────────────────
+// Speeder thrust loop (Session CC-polish). A sustained low-rumble +
+// filtered noise pad; both pitch + noise level modulate with current
+// horizontal speed. Idle thrum at low speed, urgent rumble at top
+// speed.
+// ─────────────────────────────────────────────────────────────────────
+interface SpeederThrustNodes {
+  osc: OscillatorNode;
+  oscGain: GainNode;
+  noise: AudioBufferSourceNode;
+  noiseFilter: BiquadFilterNode;
+  noiseGain: GainNode;
+  master: GainNode;
+}
+let _speederThrust: SpeederThrustNodes | null = null;
+
+export function startSpeederThrust(): void {
+  if (_speederThrust) return;   // already running
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  const master = a.ctx.createGain();
+  master.gain.setValueAtTime(0, t);
+  master.gain.linearRampToValueAtTime(1, t + 0.35);
+  master.connect(a.ambient);
+
+  // Low oscillator — base engine pitch
+  const osc = a.ctx.createOscillator();
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(70, t);
+  const oscGain = a.ctx.createGain();
+  oscGain.gain.value = 0.04;        // quiet at idle, modulated up
+  osc.connect(oscGain).connect(master);
+  osc.start(t);
+
+  // Filtered noise — rumble layer
+  const noise = a.ctx.createBufferSource();
+  noise.buffer = a.noiseBuffer;
+  noise.loop = true;
+  noise.playbackRate.value = 0.6;
+  const noiseFilter = a.ctx.createBiquadFilter();
+  noiseFilter.type = 'lowpass';
+  noiseFilter.frequency.value = 220;
+  noiseFilter.Q.value = 1.2;
+  const noiseGain = a.ctx.createGain();
+  noiseGain.gain.value = 0.05;
+  noise.connect(noiseFilter).connect(noiseGain).connect(master);
+  noise.start(t);
+
+  _speederThrust = { osc, oscGain, noise, noiseFilter, noiseGain, master };
+}
+
+/** Update thrust loop from current bike speed (m/s). Call each frame. */
+export function setSpeederThrustSpeed(speed: number, maxSpeed: number): void {
+  if (!_speederThrust) return;
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  const u = Math.min(1, Math.max(0, speed / maxSpeed));   // 0..1
+  // Pitch climbs 70 Hz idle → 140 Hz top speed.
+  _speederThrust.osc.frequency.setTargetAtTime(70 + u * 70, t, 0.05);
+  // Oscillator gain quiet at idle (0.04), louder under throttle (0.10).
+  _speederThrust.oscGain.gain.setTargetAtTime(0.04 + u * 0.06, t, 0.08);
+  // Noise rumble opens up with speed.
+  _speederThrust.noiseGain.gain.setTargetAtTime(0.05 + u * 0.12, t, 0.08);
+  _speederThrust.noiseFilter.frequency.setTargetAtTime(220 + u * 280, t, 0.08);
+}
+
+export function stopSpeederThrust(): void {
+  if (!_speederThrust) return;
+  const a = getAudioInternals();
+  if (!a) return;
+  const nodes = _speederThrust;
+  _speederThrust = null;
+  const t = a.ctx.currentTime;
+  // Fade out then stop the sources.
+  nodes.master.gain.cancelScheduledValues(t);
+  nodes.master.gain.setValueAtTime(nodes.master.gain.value, t);
+  nodes.master.gain.linearRampToValueAtTime(0, t + 0.25);
+  try { nodes.osc.stop(t + 0.30); } catch { /* may already be stopped */ }
+  try { nodes.noise.stop(t + 0.30); } catch { /* may already be stopped */ }
+}

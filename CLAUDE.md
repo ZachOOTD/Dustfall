@@ -45,16 +45,21 @@ Run with `npm run dev` (port 5173). Type-check with `npx tsc --noEmit`.
 
 ## Where we are now
 
-**Last shipped**: Session CC — hover speeder bike. Dynamic-body bike
-spawned next to the opening wreck, 1P rider POV (camera at +1.45m
-above bike body, above handlebars). Mouse turns the bike (yaw lerps
-toward camera yaw), W/S throttle (top speed 14 m/s, boost ×1.7), A/D
-strafe (7 m/s lateral), Space hop, E mount/dismount. All motion is
-velocity-controlled (not force/torque) — smooth, no spin-out, no
-NaN. Player body parks off-world at (0,-2000,0) while mounted so it
-can't collide with the dynamic bike. Prior milestones: BB-4 (storm +
-fog visual rework), BB-2 + BB-3 (Jakku-scale mega-wreck), BB (small
-mega-ship + plan), AA (torch + flashlight,
+**Last shipped**: Session CC-2 — hover speeder polish pass. Visual
+tilt (pitch + roll lerped, camera roll undo/reapply), 2-phase smooth
+jump with soft descent, camera height tuned to 1.0m, toggleable
+headlight (L key, SpotLight + emissive disc), full rusty-scoutbike
+model redesign (forward arm + headlamp, sunken cockpit + windshield,
+angled handlebar stem, fuel canister, foot pegs, side saddlebag with
+9-piece wrap-around straps + junction buckle, antenna with attached
+red tip light). NEW shared 3D engine-bell mesh helper in `wrecks.ts`
+— replaces the flat-CircleGeometry disc pattern across speeder (2
+bells), megaShip (1), megaWreck (2), and reused inside the standalone
+`makeEngineBell` + `makeEngineCluster`. Mount prompt via new `'mount'`
+InteractType + `'speeder'` registry. Nose + bell colliders on the
+speeder; bell colliders on world wrecks. Prior milestones: CC (hover
+speeder shell), BB-4 (storm + fog rework), BB-2 + BB-3 (Jakku-scale
+mega-wreck), BB (small mega-ship + plan), AA (torch + flashlight,
 opening-scene rebuild), Z (stone-well + salvage panels), Y
 (footprints + lizard tracks), X (audio sample-stem architecture, .ogg
 files pending in `public/audio/`), W (opening scene), V (atmosphere), U

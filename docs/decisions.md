@@ -500,3 +500,81 @@ collider splits (up to 4 cuboids each — front/back of hole + left/right
 in hole Z band). Worth it: each strip's cv (hole Z offset) is
 independent so skylights can be staggered for visual interest. Same
 pattern can be applied to walls if multi-hole walls are ever needed.
+
+## D37 — Speeder tilt as visual-only quaternion (not physics body rotation) (Session CC-2)
+**When**: Session CC-2.
+**Why**: D34 disabled the speeder body's X+Z rotations
+(`setEnabledRotations(false, true, false, true)`) so the chassis stays
+upright after collisions. But CC-2 also wants the bike to PITCH under
+W/S and ROLL under A/D for tactile feel. Resolved by composing a
+visual-only quaternion on top of the body's yaw each frame:
+```
+visualQ = yawQ × pitchQ × rollQ
+group.quaternion.copy(visualQ)
+```
+The physics body still rotates only around Y (yaw stays the same), but
+the visual mesh tilts. `s.visualPitch` + `s.visualRoll` lerp toward
+input-driven targets (`±SPEEDER_TILT_PITCH_MAX`, `±SPEEDER_TILT_ROLL_MAX`)
+with `SPEEDER_TILT_LERP = 0.12`. Two free benefits: tilt is
+deterministic (no physics surprises), and reverting to "no tilt" is
+just setting the constants to 0 — no body re-config needed.
+
+## D38 — Speeder camera roll: tracked-undo + re-apply (not naive multiply) (Session CC-2)
+**When**: Session CC-2.
+**Why**: First cut applied camera roll via
+`camera.quaternion.multiply(rollQ)` each frame while mounted. This
+spun the camera continuously at 12°/frame × 60fps = 720°/sec because
+`PointerLockControls` does NOT reset `camera.quaternion` between
+mouse events — it only writes on mousemove. So the roll quaternion
+accumulated across frames. Fix: track `s.lastCamRoll` on
+`SpeederState`, each frame multiply by the inverse of last roll
+THEN by the new roll. Net result: each frame's camera quat ends up
+with exactly the current roll applied (regardless of what
+PointerLockControls has done since), and the user can mouse-look
+normally without losing the roll. On dismount, undo any residual
+roll so the on-foot player doesn't inherit a banked horizon.
+
+## D39 — `'mount'` InteractType + `'speeder'` registry (Session CC-2)
+**When**: Session CC-2.
+**Why**: The "press E to mount" tooltip needed to plug into the
+existing crosshair-anchored interact prompt (D23 chain). Extended:
+  - `InteractType` gains `'mount'` (in `inventory/types.ts`); `VERBS`
+    in `interactPrompt.ts` gets `mount: 'mount'`.
+  - `InteractHit['registry']` union gains `'speeder'` (in
+    `player/interaction.ts`).
+  - The speeder's seat mesh is named `'speederSeat'` + tagged with
+    `userData.interactType='mount'`, `interactId=0`,
+    `interactRegistry='speeder'`. `placeSpeeder` extracts the seat
+    ref via `getObjectByName` and stores it on `SpeederState.seat`.
+  - `updateInteraction` pushes `ctx.speeder.seat` into targets when
+    `ctx.speeder && !ctx.speeder.mounted`. New `case 'speeder':`
+    sets `hover.type = 'mount'`, `promptNoun = 'speeder'`. Does NOT
+    dispatch on E-press — `updateSpeeder` already handles the mount
+    earlier in the tick (with its own `SPEEDER_MOUNT_RANGE = 3.5m`
+    check). The interaction system is purely showing the prompt.
+This pattern (singleton interactable with `interactId=0` + custom
+registry) is the template for future singletons like a bounty board.
+
+## D40 — Shared 3D engine bell mesh helper (Session CC-3)
+**When**: Session CC-3 (part of CC-2 long iteration).
+**Why**: The original engine-bell visual (`TorusGeometry` ring + flat
+`CircleGeometry` dark inner disc) used a 2D single-sided circle. From
+any angle except dead-on, the disc looked like a decal — especially
+bad on hero-scale bells (mega-wreck 10m bells, mega-ship). Replaced
+with a shared `makeEngineBellMesh(radius, depth, outerMat, interiorMat)`
+in `wrecks.ts`:
+  1. Outer flared cone — `CylinderGeometry(R, R*0.55, depth, 16, 1, true)`
+     (open-ended). DoubleSide variant of `outerMat` (cached in
+     `_bellOuterMatCache: WeakMap<Material, Material>`) so the inside-
+     the-mouth view isn't transparent.
+  2. Inner solid cylinder — `CylinderGeometry(R*0.75, R*0.45, depth*0.95)`
+     in `interiorMat`, slightly recessed so the +Y cap shows as the
+     dark exhaust face inside the flare; -Y cap closes the back.
+  3. Rim torus at the mouth — `TorusGeometry(R*1.02, R*0.06, 6, 18)`.
+Refactored all 7 bells (speeder ×2, megaShip ×1, megaWreck ×2,
+`makeEngineBell`, `makeEngineCluster`'s 3-5 nozzles) to use it. The
+WeakMap cache means even with 7+ bells across the world we allocate
+exactly one DoubleSide clone per source material. Trade-off: 3 meshes
+per bell instead of 2 — negligible perf cost, big visual upgrade. The
+helper's local +Y orientation is the convention — callers rotate as
+needed (most use `rotation.x = π/2` to point the mouth at +Z).

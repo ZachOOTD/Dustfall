@@ -3,6 +3,40 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session CC-2 — 2026-05-15 — Hover speeder polish (model, tilt, jump, bells, colliders)
+Long iteration pass on the speeder. **Tilt**: visual-only pitch/roll
+quaternion composed on top of the body's yaw (the X+Z rotation locks
+from D34 stay in place), lerped toward W/S pitch + A/D roll targets.
+Camera roll applied via tracked-undo on `camera.quaternion` (naive
+multiply accumulated to 720°/s spin). **Jump**: 2-phase pulse →
+recover with linearly-decaying upward floor + softer recover lerp
+(0.08), so the peak arcs smoothly instead of capping hard. **Camera**
+height tuned to 1.0m (between original 0.55 and prior 1.45).
+**Headlight**: toggleable on L — SpotLight child of bike + emissive
+disc material swap (intensity 0/8, materials `_headlampOff/OnMat`).
+**Model**: full rusty-scoutbike redesign — extended fuselage, 2-stage
+forward arm + tip + headlamp housing, sunken cockpit + windshield cowl
++ backrest, angled handlebar stem, fuel canister with bands + cap,
+foot pegs (moved forward to Z=0.15 to clear canister), exposed cables
+underneath, vent louvers + patched rust panels, antenna whip with
+attached red tip light. **Saddlebag**: single chunky bag on +X engine
+face with **9-piece contour-hugging strap rings** (×2 rings) that step
+pod-height→bag-height at the junction, plus a small buckle on top of
+the bag-top strap. **Engine bell mesh overhaul**: NEW `makeEngineBellMesh`
+helper in `wrecks.ts` — flared open-ended cone + recessed solid interior
+cylinder + rim torus, with WeakMap-cached DoubleSide material clone.
+Replaces the flat-`CircleGeometry`-disc pattern across speeder (2 bells),
+megaShip (1), megaWreck (2), and reused inside `makeEngineBell`
+(standalone wreck) + `makeEngineCluster` (engine_block POI nozzles).
+**Mount prompt**: NEW `'mount'` InteractType + `'speeder'` registry;
+seat mesh tagged + raycast-targeted in `interaction.ts` so looking at
+the seat shows `[E] mount speeder` via the existing prompt system.
+**Colliders**: speeder body gains a nose cuboid + 2 bell cylinders so
+the front + bells are solid; megaShip + megaWreck bells also get
+cylinder colliders. Decisions D37-D40. `partially verified` (tsc clean
++ state checks all confirmed; preview screenshot tool flaked
+mid-session — visuals deferred to live play).
+
 ## Session CC — 2026-05-15 — Hover speeder bike (dynamic-body, 1P, velocity-controlled)
 NEW `src/world/speeder.ts` — bike that spawns next to the opening
 wreck on fresh worlds. Iterated from force-based thrust + torque

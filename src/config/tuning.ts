@@ -75,8 +75,15 @@ export const Tuning = {
   // Movement is comfortable arcade: top speed 14 m/s (~50 km/h), 1s to
   // ramp up under hold, smooth deceleration on release.
   SPEEDER_HOVER_HEIGHT: 1.2,
-  SPEEDER_HOVER_K_P: 35,
-  SPEEDER_HOVER_K_D: 14,
+  SPEEDER_HOVER_K_P: 55,                // proportional gain (×0.1 inside the controller, so effective gain 5.5)
+  SPEEDER_HOVER_K_D: 14,                // unused after BB-CC velocity-control switch; kept for shape
+  SPEEDER_HOVER_VY_MAX: 12,             // m/s — max upward/downward target velocity (was 8; catches up dune slopes faster)
+  // Terrain look-ahead — sample N points along the bike's velocity
+  // vector and take MAX(terrain) so the bike anticipates dunes ahead
+  // and rises BEFORE the slope. Times in seconds; spacing roughly
+  // even from 0 to LOOKAHEAD_T.
+  SPEEDER_HOVER_LOOKAHEAD_T: 0.45,      // total lookahead time
+  SPEEDER_HOVER_LOOKAHEAD_SAMPLES: 4,   // including current position (0/dt/2dt/3dt)
   SPEEDER_DENSITY: 50,
   SPEEDER_MAX_SPEED: 14,                // m/s — forward + reverse cap
   SPEEDER_STRAFE_SPEED: 7,              // m/s — half forward speed
@@ -88,12 +95,31 @@ export const Tuning = {
   SPEEDER_TURN_LERP: 0.30,              // per-frame lerp toward target ang vel (snappier than linear lerp)
   SPEEDER_LINEAR_DAMP: 0,               // disabled — velocity is fully driven
   SPEEDER_ANGULAR_DAMP: 0,              // disabled — angvel is fully driven
-  SPEEDER_HOP_IMPULSE: 1800,
+  SPEEDER_HOP_IMPULSE: 1800,            // unused after CC-2 (jump replaced with 2-phase pulse/recover); kept for migration
   SPEEDER_MOUNT_RANGE: 3.5,
   SPEEDER_DISMOUNT_OFFSET: 1.8,
   SPEEDER_RIDER_SEAT_X: 0,              // local rider offset relative to bike center
-  SPEEDER_RIDER_SEAT_Y: 1.45,           // well above the handlebars (bars are at body-Y ~0.5)
-  SPEEDER_RIDER_SEAT_Z: 0.35,           // slightly behind center (cockpit position)
+  SPEEDER_RIDER_SEAT_Y: 1.00,           // mid-height (CC-2) — sees over handlebars (Y≈0.42) without floating
+  SPEEDER_RIDER_SEAT_Z: 0.55,           // over the sunken cockpit seat (CC-2 redesign moved the seat back)
+
+  // CC-2 — tilt on input (visual-only, bike body's rotation is X+Z-locked
+  // per D34). Pitch from W/S, roll from A/D. Camera rolls half as much
+  // so the world doesn't tumble.
+  SPEEDER_TILT_PITCH_MAX: 0.14,         // rad (~8°) nose-down under full forward thrust
+  SPEEDER_TILT_ROLL_MAX: 0.21,          // rad (~12°) lean into strafe
+  SPEEDER_TILT_LERP: 0.12,              // per-frame lerp toward target tilt
+  SPEEDER_CAM_ROLL_RATIO: 0.5,          // camera rolls this fraction of bike roll
+
+  // CC-2 — 2-phase jump. CC-2.3: pulse vy DECAYS linearly from
+  // JUMP_PULSE_VY → 0 over PULSE_DUR (smooths the rise toward the peak
+  // instead of forcing constant upward vy then hitting a wall); recover
+  // uses a slower lerp so the transition from "rising" to "falling at
+  // -VY_MIN" is gradual, not a hard pivot at the top.
+  SPEEDER_JUMP_PULSE_VY: 18,            // m/s peak upward target (start of pulse)
+  SPEEDER_JUMP_PULSE_DUR: 0.30,         // longer pulse → more gradual rise
+  SPEEDER_JUMP_RECOVER_DUR: 1.6,        // seconds of slow-descent recovery
+  SPEEDER_JUMP_RECOVER_VY_MIN: -2,      // m/s descent cap (softer than -3)
+  SPEEDER_JUMP_RECOVER_LERP: 0.08,      // vs the normal hover lerp 0.25 — much gentler transition through peak
 
   // Storm visuals (Session BB-4)
   // Near/mid/far dust layer particle counts. Mid keeps the old 2500;

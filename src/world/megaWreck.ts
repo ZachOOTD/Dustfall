@@ -34,7 +34,7 @@ import type { Rng } from '../core/rng.ts';
 import type { Terrain } from './terrain.ts';
 import { Tuning } from '../config/tuning.ts';
 import { panelWithHole } from './panelUtils.ts';
-import { addAccessPanel, placeDebrisField } from './wrecks.ts';
+import { addAccessPanel, placeDebrisField, makeEngineBellMesh } from './wrecks.ts';
 import { addShelterZone, type ShelterRegistry } from '../shelter/shelterZones.ts';
 import { registerSalvageable, type SalvageableRegistry } from './salvage.ts';
 
@@ -379,31 +379,25 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
 
   // ────────────────────────────────────────────────────────────────────
   // ENGINE BELLS — 2 giant nozzles at the rear of aft. Visual only.
+  // Uses the shared 3D bell helper (CC-3) so the hero-scale 10m
+  // diameter bells read as real flared nozzles from any angle.
   // ────────────────────────────────────────────────────────────────────
   const bellCenterY = AFT_HALF_H * 0.7;
   const bellCenterZ = AFT_ORIGIN_Z + AFT_HALF_L + WALL_THICK + BELL_OFFSET_Z;
+  const BELL_DEPTH = BELL_R * 1.1;
   for (const side of [-1, 1] as const) {
     const x = side * BELL_OFFSET_X;
-    // Mounting frame behind the ring.
+    // Mounting frame behind the bell.
     const frame = box(BELL_R * 1.8, BELL_R * 1.6, 1.2, _hullDarkMat);
     frame.position.set(x, bellCenterY, bellCenterZ - 1.0);
     g.add(frame);
-    // Ring (torus).
-    const ring = new THREE.Mesh(
-      new THREE.TorusGeometry(BELL_R, BELL_R * 0.18, 10, 22),
-      _hullMat,
-    );
-    ring.rotation.x = Math.PI / 2;
-    ring.position.set(x, bellCenterY, bellCenterZ);
-    g.add(ring);
-    // Inner dark disc.
-    const inner = new THREE.Mesh(
-      new THREE.CircleGeometry(BELL_R - BELL_R * 0.20, 22),
-      _nozzleInteriorMat,
-    );
-    inner.position.set(x, bellCenterY, bellCenterZ + 0.02);
-    g.add(inner);
-    // 3 struts radiating off the ring.
+    // 3D bell — mouth opens +Z; anchor base just past the mounting frame.
+    const bell = makeEngineBellMesh(BELL_R, BELL_DEPTH, _hullMat, _nozzleInteriorMat);
+    bell.rotation.x = Math.PI / 2;
+    bell.position.set(x, bellCenterY, bellCenterZ - BELL_DEPTH / 2);
+    g.add(bell);
+    // 3 struts radiating off the bell's outer rim — same broken-mount
+    // detail as the original.
     for (let i = 0; i < 3; i++) {
       const a = (i / 3) * Math.PI * 2;
       const strut = cyl(0.15, 0.20, BELL_R * 0.7, _nozzleRimMat, 6);
@@ -1147,6 +1141,24 @@ export function placeMegaWreck(
           28 + (i + 1) * 2,
           (AFT_ORIGIN_Z + TOWER_OFFSET_Z) - TOWER_HALF_L - 0.2 - i * 0.5,
         ),
+      body,
+    );
+  }
+
+  // CC-3.2 — engine bell colliders (2 hero bells at the rear of aft).
+  // Cylinder axis along +Z so the mouth faces back. The bell mesh is
+  // positioned at body-local (±BELL_OFFSET_X, bellCenterY, bellCenterZ
+  // - BELL_DEPTH/2) and extends from there +BELL_DEPTH along Z.
+  const _bellRotMw = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2);
+  const _bellRotMwObj = { x: _bellRotMw.x, y: _bellRotMw.y, z: _bellRotMw.z, w: _bellRotMw.w };
+  const BELL_DEPTH_MW = BELL_R * 1.1;
+  const bellCenterY_col = AFT_HALF_H * 0.7;
+  const bellCenterZ_col = AFT_ORIGIN_Z + AFT_HALF_L + WALL_THICK + BELL_OFFSET_Z;
+  for (const side of [-1, 1] as const) {
+    world.createCollider(
+      RAPIER.ColliderDesc.cylinder(BELL_DEPTH_MW / 2, BELL_R)
+        .setTranslation(side * BELL_OFFSET_X, bellCenterY_col, bellCenterZ_col)
+        .setRotation(_bellRotMwObj),
       body,
     );
   }

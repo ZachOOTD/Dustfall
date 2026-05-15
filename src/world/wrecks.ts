@@ -111,6 +111,64 @@ export function addAccessPanel(
 }
 
 // ────────────────────────────────────────────────────────────────
+// Shared 3D engine-bell mesh (Session CC-3). Replaces the prior
+// torus-ring + flat-CircleGeometry pattern with a flared open-ended
+// cone + recessed solid interior cylinder, so the bell has depth
+// from every viewing angle. Caller positions + rotates the returned
+// group; the bell's mouth opens at LOCAL +Y by default.
+// ────────────────────────────────────────────────────────────────
+const _bellOuterMatCache = new WeakMap<THREE.Material, THREE.Material>();
+function _bellOuterMat(src: THREE.Material): THREE.Material {
+  // Clone the source material with `side: DoubleSide` so the inside-
+  // the-mouth view of the flare isn't transparent (open-ended
+  // cylinder is single-sided by default). Cached so we only allocate
+  // one clone per source material across all bells in the world.
+  let cached = _bellOuterMatCache.get(src);
+  if (cached) return cached;
+  cached = src.clone();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (cached as any).side = THREE.DoubleSide;
+  _bellOuterMatCache.set(src, cached);
+  return cached;
+}
+
+export function makeEngineBellMesh(
+  radius: number,
+  depth: number,
+  outerMat: THREE.Material,
+  interiorMat: THREE.Material,
+): THREE.Group {
+  const g = new THREE.Group();
+  // Outer flared cone — open-ended cylinder, big radius at +Y (mouth),
+  // small radius at -Y (base / combustion-chamber end).
+  const flare = new THREE.Mesh(
+    new THREE.CylinderGeometry(radius, radius * 0.55, depth, 16, 1, true),
+    _bellOuterMat(outerMat),
+  );
+  flare.position.y = depth / 2;
+  g.add(flare);
+  // Inner darkness cylinder — solid (has caps); slightly smaller than
+  // flare so it sits inside the flare's wall, slightly recessed so the
+  // mouth shows a ring of flare metal before the dark interior. The
+  // -Y cap closes the back so the bell isn't see-through from behind.
+  const inner = new THREE.Mesh(
+    new THREE.CylinderGeometry(radius * 0.75, radius * 0.45, depth * 0.95, 16, 1, false),
+    interiorMat,
+  );
+  inner.position.y = depth / 2 - 0.02 * depth;
+  g.add(inner);
+  // Rim torus — thin band at the mouth edge for silhouette readability.
+  const rim = new THREE.Mesh(
+    new THREE.TorusGeometry(radius * 1.02, radius * 0.06, 6, 18),
+    outerMat,
+  );
+  rim.rotation.x = Math.PI / 2;
+  rim.position.y = depth;
+  g.add(rim);
+  return g;
+}
+
+// ────────────────────────────────────────────────────────────────
 // 1. Engine cluster — bundle of nozzles + small thrust frame.
 // Tilted leeward; reads as a propulsion module ripped from a ship.
 // ────────────────────────────────────────────────────────────────
@@ -119,34 +177,17 @@ export function makeEngineCluster(rand: Rng, scale = 1): THREE.Group {
   const nozzleCount = 3 + Math.floor(rand() * 3); // 3-5
   const baseR = (0.6 + rand() * 0.25) * scale;
   const nozzleH = (1.2 + rand() * 0.3) * scale;
-  // Tight ring layout
+  // Tight ring layout — each nozzle is a shared 3D bell mesh
+  // (flared cone + dark interior; replaces the prior open-cylinder +
+  // flat-disc pattern that read as fake from oblique angles).
   for (let i = 0; i < nozzleCount; i++) {
     const a = (i / nozzleCount) * Math.PI * 2;
     const r = baseR * 1.05;
     const cx = Math.cos(a) * r * 0.6;
     const cz = Math.sin(a) * r * 0.6;
-    // Outer rim
-    const rim = new THREE.Mesh(
-      new THREE.CylinderGeometry(baseR * 0.55, baseR * 0.5, nozzleH, 12, 1, true),
-      _nozzleRimMat,
-    );
-    rim.position.set(cx, nozzleH / 2, cz);
-    g.add(rim);
-    // Inner dark cone (interior of the bell — pure dark)
-    const inner = new THREE.Mesh(
-      new THREE.CylinderGeometry(baseR * 0.5, baseR * 0.42, nozzleH * 0.95, 10, 1, true),
-      _nozzleInteriorMat,
-    );
-    inner.position.set(cx, nozzleH / 2, cz);
-    g.add(inner);
-    // Closed disc at the back of each nozzle
-    const cap = new THREE.Mesh(
-      new THREE.CircleGeometry(baseR * 0.5, 12),
-      _hullMat,
-    );
-    cap.rotation.x = Math.PI / 2;
-    cap.position.set(cx, nozzleH - 0.01, cz);
-    g.add(cap);
+    const bell = makeEngineBellMesh(baseR * 0.55, nozzleH, _nozzleRimMat, _nozzleInteriorMat);
+    bell.position.set(cx, 0, cz);   // bell mouth opens +Y (matches the prior orientation)
+    g.add(bell);
   }
   // Thrust frame box behind the nozzles
   const frame = new THREE.Mesh(
@@ -367,43 +408,31 @@ export function makeAntennaSpire(rand: Rng, scale = 1): THREE.Group {
 export function makeEngineBell(rand: Rng, scale = 1): THREE.Group {
   const g = new THREE.Group();
   const R = (1.6 + rand() * 0.4) * scale;
-  const tube = R * 0.18;
-  const ring = new THREE.Mesh(
-    new THREE.TorusGeometry(R, tube, 8, 18),
-    _hullMat,
-  );
-  ring.rotation.x = Math.PI / 2;
-  ring.position.y = R * 0.65; // tilted so the bell mouth faces up-and-out
-  ring.rotation.z = (rand() - 0.5) * 0.4;
-  g.add(ring);
-  // Dark inner disc — the inside of the bell
-  const inner = new THREE.Mesh(
-    new THREE.CircleGeometry(R - tube * 1.1, 18),
-    _nozzleInteriorMat,
-  );
-  inner.position.copy(ring.position);
-  inner.rotation.copy(ring.rotation);
-  inner.rotation.x += Math.PI / 2;
-  g.add(inner);
-  // A few struts off the rim, evoking the broken mount
+  // 3D flared bell mesh — replaces the torus+flat-disc pattern. The
+  // helper returns a group with mouth opening at local +Y; here we
+  // keep the bell pointing roughly up (matching the prior pose) but
+  // give it a small Z-tilt to suggest a crash-tipped engine.
+  const bellY = R * 0.10;   // base anchor: helper draws bell from base to base+depth
+  const bell = makeEngineBellMesh(R, R * 1.1, _hullMat, _nozzleInteriorMat);
+  bell.position.y = bellY;
+  bell.rotation.z = (rand() - 0.5) * 0.4;
+  g.add(bell);
+  // The bell's "ring-midline" world Y (used for strut placement +
+  // access panel) ≈ base + half_depth, with the slight z-tilt ignored.
+  const midY = bellY + (R * 1.1) * 0.5;
+  // A few struts off the rim — broken-mount character.
   for (let i = 0; i < 3; i++) {
     const a = rand() * Math.PI * 2;
     const strut = new THREE.Mesh(
       new THREE.CylinderGeometry(0.05, 0.07, R * 0.9, 6),
       _antennaMat,
     );
-    strut.position.set(Math.cos(a) * R, ring.position.y + (rand() - 0.5) * 0.3, Math.sin(a) * R);
+    strut.position.set(Math.cos(a) * R, midY + (rand() - 0.5) * 0.3, Math.sin(a) * R);
     strut.rotation.z = (rand() - 0.5) * 1.3;
     g.add(strut);
   }
-  // Salvage access panel — on the rim, outer face. The bell's a tilted torus
-  // so we sit the panel just outside the ring at roughly its midline.
-  addAccessPanel(
-    g,
-    R * 1.05, ring.position.y, 0,
-    scale,
-    Math.PI / 2,
-  );
+  // Salvage access panel — on the outer rim, midline.
+  addAccessPanel(g, R * 1.05, midY, 0, scale, Math.PI / 2);
   return g;
 }
 

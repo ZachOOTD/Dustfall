@@ -32,7 +32,7 @@ import type { Rng } from '../core/rng.ts';
 import type { Terrain } from './terrain.ts';
 import { Tuning } from '../config/tuning.ts';
 import { panelWithHole } from './panelUtils.ts';
-import { addAccessPanel, placeDebrisField } from './wrecks.ts';
+import { addAccessPanel, placeDebrisField, makeEngineBellMesh } from './wrecks.ts';
 import { addShelterZone, type ShelterRegistry } from '../shelter/shelterZones.ts';
 import { registerSalvageable, type SalvageableRegistry } from './salvage.ts';
 
@@ -334,21 +334,12 @@ export function makeMegaShip(rand: Rng): THREE.Group {
   const engineFrame = box(HALF_W * 1.8, 1.4, 0.6, _hullMat);
   engineFrame.position.set(0, HALF_H * 0.9, HALF_L + WALL_THICK + 0.3);
   g.add(engineFrame);
-  const bellRing = new THREE.Mesh(
-    new THREE.TorusGeometry(ENGINE_R, ENGINE_R * 0.18, 8, 18),
-    _hullMat,
-  );
-  bellRing.rotation.x = Math.PI / 2;
-  bellRing.position.set(0, HALF_H * 0.9, HALF_L + WALL_THICK + 1.8);
-  g.add(bellRing);
-  const bellInner = new THREE.Mesh(
-    new THREE.CircleGeometry(ENGINE_R - ENGINE_R * 0.20, 18),
-    _nozzleInteriorMat,
-  );
-  bellInner.position.copy(bellRing.position);
-  bellInner.rotation.copy(bellRing.rotation);
-  bellInner.rotation.x += Math.PI / 2;
-  g.add(bellInner);
+  // 3D bell mesh (CC-3) — flared cone + recessed interior, no more flat
+  // disc. Mouth opens +Z (rotation.x = +π/2 maps local +Y → world +Z).
+  const bell = makeEngineBellMesh(ENGINE_R, ENGINE_R * 1.1, _hullMat, _nozzleInteriorMat);
+  bell.rotation.x = Math.PI / 2;
+  bell.position.set(0, HALF_H * 0.9, HALF_L + WALL_THICK + 0.95);   // base anchors to engineFrame back; mouth ends at +Z ≈ +2.05
+  g.add(bell);
   for (let i = 0; i < 3; i++) {
     const a = (i / 3) * Math.PI * 2;
     const strut = cyl(0.06, 0.08, ENGINE_R * 0.8, _nozzleRimMat, 6);
@@ -591,6 +582,20 @@ export function placeMegaShip(
       body,
     );
   }
+
+  // CC-3.2 — engine bell collider (cylinder, axis along +Z to match the
+  // bell's mouth direction). Bell mesh is at body-local
+  // (0, HALF_H*0.9, HALF_L + WALL_THICK + 0.95) with depth = ENGINE_R * 1.1.
+  // The body's existing fixed rotation transforms this into world space.
+  const _bellRotMs = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2);
+  const ENGINE_R_MS = 1.6;
+  const BELL_DEPTH_MS = ENGINE_R_MS * 1.1;
+  world.createCollider(
+    RAPIER.ColliderDesc.cylinder(BELL_DEPTH_MS / 2, ENGINE_R_MS)
+      .setTranslation(0, HALF_H * 0.9, HALF_L + WALL_THICK + 0.95 + BELL_DEPTH_MS / 2)
+      .setRotation({ x: _bellRotMs.x, y: _bellRotMs.y, z: _bellRotMs.z, w: _bellRotMs.w }),
+    body,
+  );
 
   // ── Shelter zone covering the cavity. Oversized so the axis-aligned
   // zone covers the rotated + tilted cavity in worst case.

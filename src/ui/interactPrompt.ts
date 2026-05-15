@@ -17,6 +17,7 @@ const VERBS: Record<InteractType, string> = {
   relight: 'relight',
   salvage: 'salvage',
   read: 'read',
+  mount: 'mount',
 };
 
 let _root: HTMLDivElement | null = null;

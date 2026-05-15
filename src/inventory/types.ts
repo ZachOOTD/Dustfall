@@ -108,7 +108,8 @@ export type InteractType =
   | 'sleep'     // tent → E opens sleep overlay
   | 'relight'   // dead fire + branch selected → E reignites with 30s fuel
   | 'salvage'   // wreck (Session T) — E starts a 1.5s salvage
-  | 'read';     // journal (Session W) — E opens the journal panel
+  | 'read'      // journal (Session W) — E opens the journal panel
+  | 'mount';    // speeder seat (Session CC-3.1) — E mounts the bike
 
 export interface HoverState {
   type: InteractType;

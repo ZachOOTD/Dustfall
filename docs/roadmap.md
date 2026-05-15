@@ -24,7 +24,6 @@ Pick whatever feels most missing after the polish + atmosphere arc.
 - Bounties
 - Procedural world generation (idea — POIs randomized per seed)
 - Remove HUD stat bars in favor of audio/visual/text cues (idea)
-- Speeder polish (~2-3h) — Y oscillation when crossing terrain at high speed (bike "skis" over dunes), smoother hover curve over slopes, optional thrust audio loop, dismount animation. Optional follow-up to CC.
 
 ---
 
