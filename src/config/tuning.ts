@@ -69,6 +69,32 @@ export const Tuning = {
   FOG_DENSITY_STORM: 0.055,
   WORLD_RADIUS: 280,
 
+  // Hover speeder (Session CC) — dynamic-body bike, velocity-controlled
+  // for both Y (hover) and XZ (movement). Bike yaw lerps toward the
+  // camera's yaw so steering is "where you look"; A/D strafe lateral.
+  // Movement is comfortable arcade: top speed 14 m/s (~50 km/h), 1s to
+  // ramp up under hold, smooth deceleration on release.
+  SPEEDER_HOVER_HEIGHT: 1.2,
+  SPEEDER_HOVER_K_P: 35,
+  SPEEDER_HOVER_K_D: 14,
+  SPEEDER_DENSITY: 50,
+  SPEEDER_MAX_SPEED: 14,                // m/s — forward + reverse cap
+  SPEEDER_STRAFE_SPEED: 7,              // m/s — half forward speed
+  SPEEDER_REVERSE_MULT: 0.55,           // S thrust = forward × this
+  SPEEDER_BOOST_MULT: 1.7,              // Shift while moving → max speed × this
+  SPEEDER_ACCEL_LERP: 0.07,             // per-frame lerp toward target XZ velocity (~14 frames to reach 64%)
+  SPEEDER_TURN_RATE_MAX: 3.0,           // rad/s cap on bike yaw rate
+  SPEEDER_TURN_RESPONSE: 4.0,           // target_ang_vel = wrapped_yaw_err × this (proportional)
+  SPEEDER_TURN_LERP: 0.30,              // per-frame lerp toward target ang vel (snappier than linear lerp)
+  SPEEDER_LINEAR_DAMP: 0,               // disabled — velocity is fully driven
+  SPEEDER_ANGULAR_DAMP: 0,              // disabled — angvel is fully driven
+  SPEEDER_HOP_IMPULSE: 1800,
+  SPEEDER_MOUNT_RANGE: 3.5,
+  SPEEDER_DISMOUNT_OFFSET: 1.8,
+  SPEEDER_RIDER_SEAT_X: 0,              // local rider offset relative to bike center
+  SPEEDER_RIDER_SEAT_Y: 1.45,           // well above the handlebars (bars are at body-Y ~0.5)
+  SPEEDER_RIDER_SEAT_Z: 0.35,           // slightly behind center (cockpit position)
+
   // Storm visuals (Session BB-4)
   // Near/mid/far dust layer particle counts. Mid keeps the old 2500;
   // near + far stack to give parallax depth.

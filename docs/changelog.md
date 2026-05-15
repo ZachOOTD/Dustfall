@@ -3,6 +3,25 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session CC — 2026-05-15 — Hover speeder bike (dynamic-body, 1P, velocity-controlled)
+NEW `src/world/speeder.ts` — bike that spawns next to the opening
+wreck on fresh worlds. Iterated from force-based thrust + torque
+steering (unstable, spun out, NaN'd) to **velocity-controlled** X/Z
+(target vel from input × bike forward/right, lerp 0.07), velocity-
+controlled yaw (lerp toward camera yaw, 0.30 response), velocity-
+controlled hover (already established BB-style PD-but-as-velocity-
+control). Camera written directly from rider seat at +1.45m above
+bike body (above handlebars); player capsule parked at (0,-2000,0)
+while mounted so it can't collide with the dynamic bike. Bike-body
+gravity scaled to 0 (we own Y entirely). Input scheme: **mouse turns
+the bike, A/D strafe, W/S throttle, Shift boost, Space hop, E
+mount/dismount**. Top speed 14 m/s forward / 23.8 m/s boosted /
+7 m/s strafe. Decisions D34 (velocity over force), D35 (mouse-turns
++ strafe over A/D-turns), D36 (camera-from-rider-seat / player-body-
+parked). `verified` (tsc + state checks for accel curve, yaw lerp,
+strafe direction; screenshot of rider POV with mega-wreck dead-
+ahead).
+
 ## Session BB-4 — 2026-05-15 — Storm + fog visual rework
 `THREE.Fog` → `THREE.FogExp2` with smoothstep density curve (`0.0035` →
 `0.055`). Single 2500-particle dust cloud → 3 stacked layers

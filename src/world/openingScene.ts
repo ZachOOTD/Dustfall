@@ -20,6 +20,7 @@ import { placeJournal } from './journal.ts';
 import { addShelterZone } from '../shelter/shelterZones.ts';
 import type { PlayerBody } from '../physics/bodies.ts';
 import { Tuning } from '../config/tuning.ts';
+import { placeSpeeder, type SpeederState } from './speeder.ts';
 // Session AA — opening storm seed removed; player now boots into calm weather
 // so the wreck and surrounding terrain read clearly on first impression.
 // `seedOpeningStorm` is still exported from weather.ts for future re-use.
@@ -99,6 +100,7 @@ export interface OpeningSceneResult {
   wreck: THREE.Group;
   skeleton: THREE.Group;
   journal: Journal;
+  speeder: SpeederState;
 }
 
 export function setupOpeningScene(
@@ -198,5 +200,19 @@ export function setupOpeningScene(
   camera.position.set(spawnX, spawnY, spawnZ);
   camera.lookAt(entranceWorld.x, entranceWorld.y, entranceWorld.z);
 
-  return { wreck, skeleton, journal };
+  // ── Speeder (Session CC) — spawn 8m to the side of the wreck so it's
+  // visible from the entrance but not in the player's spawn path.
+  // Position perpendicular to the wreck-entrance axis. With yaw=π/2 the
+  // entrance opens toward -X; perpendicular = ±Z. Pick +Z so the
+  // speeder ends up south of the wreck (player sees it as they emerge).
+  const speederLocal = new THREE.Vector3(0, 0, E.halfZ + 4.5);
+  const speederWorld = speederLocal.clone().applyEuler(yawRot).add(wreckOrigin);
+  // Heading: face roughly toward the mega-wreck SW so the player can hop
+  // on and accelerate in the natural exploration direction.
+  const speederYaw = Math.atan2(-180 - speederWorld.x, -130 - speederWorld.z);
+  const speederGroundY = terrain.heightAt(speederWorld.x, speederWorld.z);
+  speederWorld.y = speederGroundY + Tuning.SPEEDER_HOVER_HEIGHT;
+  const speeder = placeSpeeder(scene, world, terrain, speederWorld, speederYaw, rand);
+
+  return { wreck, skeleton, journal, speeder };
 }

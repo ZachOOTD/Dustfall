@@ -45,14 +45,15 @@ Run with `npm run dev` (port 5173). Type-check with `npx tsc --noEmit`.
 
 ## Where we are now
 
-**Last shipped**: Session BB-4 — storm + fog visual rework.
-`THREE.FogExp2` with intensity-driven density curve, 3 stacked dust
-layers (near/mid/far) with staged opacity ramps, in-scene clip-space
-quad vignette at peak storm, sun + ambient dimming with warm-dust color
-shift. Fog color lerp bumped to match denser falloff. Skylights inside
-the mega-wreck now read as dark portals to the storm outside while the
-bay stays calm — shelter kills all storm visuals. FPS 143 clear / 91
-peak. Prior milestones: BB-2 + BB-3 (Jakku-scale mega-wreck), BB (small
+**Last shipped**: Session CC — hover speeder bike. Dynamic-body bike
+spawned next to the opening wreck, 1P rider POV (camera at +1.45m
+above bike body, above handlebars). Mouse turns the bike (yaw lerps
+toward camera yaw), W/S throttle (top speed 14 m/s, boost ×1.7), A/D
+strafe (7 m/s lateral), Space hop, E mount/dismount. All motion is
+velocity-controlled (not force/torque) — smooth, no spin-out, no
+NaN. Player body parks off-world at (0,-2000,0) while mounted so it
+can't collide with the dynamic bike. Prior milestones: BB-4 (storm +
+fog visual rework), BB-2 + BB-3 (Jakku-scale mega-wreck), BB (small
 mega-ship + plan), AA (torch + flashlight,
 opening-scene rebuild), Z (stone-well + salvage panels), Y
 (footprints + lizard tracks), X (audio sample-stem architecture, .ogg

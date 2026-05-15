@@ -387,6 +387,82 @@ Future sessions can collapse to single-layer if perf becomes a problem
 on weaker hardware — the layer config is centralized in tuning.ts and
 the layer setup is symmetric.
 
+## D34 — Speeder: velocity-controlled motion over force/torque (Session CC)
+**When**: Session CC.
+**Why**: First cut was a "real" dynamic body — PD hover via `addForce`,
+forward thrust via `addForce`, steering via `addTorque`. Two failures:
+  (1) **PD hover NaN'd**: when the bike fell far below target Y, the
+  proportional gain × mass × error produced astronomical forces
+  (>1e6 N). Rapier's Euler integrator overshot, velocity went to
+  infinity, position serialized as `null`.
+  (2) **Torque steering spun out**: angular damping had to be high
+  enough to stop the bike spinning after A/D release, but high damping
+  made the bike feel sluggish under turn. There was no tuning that
+  gave both "responsive turn" and "stable straight line."
+Switched to **velocity control** for all three axes (X, Z linear; Y
+hover; yaw angular):
+  - Compute target velocity from input + state (e.g. forward × thrust,
+    yaw error × response gain).
+  - Clamp target velocity to a max.
+  - Lerp body's actual velocity toward target with a tuned factor
+    (0.07 for X/Z accel, 0.30 for yaw, 0.25 for hover Y).
+  - `body.setLinvel` / `body.setAngvel` each frame.
+This pattern is unconditionally stable (you can never overshoot a
+clamped target by more than the lerp factor per frame), feels arcade
+without the user noticing they're not in "real physics", and gives
+predictable timing (~14 frames to 64% of target). Required:
+  - `body.setGravityScale(0)` so Rapier doesn't re-apply gravity
+    between updateSpeeder runs and cancel the hover velocity.
+  - Linear + angular damping disabled (0). We own the velocity
+    completely; damping would fight our lerp.
+Trade-off lost: the bike can't be pushed around by other dynamic
+bodies (nothing exists in the world to push it anyway). If we ever
+add stacked-crate physics where you can ram the bike into something
+and have IT react, we'd need a hybrid: external impulses route
+through forces, our control inputs route through setLinvel. Not
+needed for v1.
+
+## D35 — Speeder input: mouse turns bike + A/D strafe (not A/D turn) (Session CC)
+**When**: Session CC.
+**Why**: Initial scheme was the bike-game classic: W/S throttle, A/D
+yaw, mouse independent look-around. User feedback: "starts spinning
+uncontrollably if I try to turn." Two issues stacked: the torque-
+based steering (D34) was already unstable, and the bike's heading
+being decoupled from the camera meant the player had to mentally
+track two yaws (where the bike points vs where they're looking).
+Switched to: **mouse turns the bike** (target yaw = camera yaw, lerp
+toward it), **A/D strafe**. This is the FPS-shooter mental model
+applied to a vehicle — the bike points where you look, A/D move you
+sideways relative to the bike's heading. Net effect: steering feels
+"where you look", strafe is the new lateral control, no separate
+turn input. Boost still maps to Shift. Lost: ability to spin in place
+without the camera moving (which was buggy anyway). Re-adoptable if
+ever needed by adding a "free-look" modifier key.
+
+## D36 — Speeder: camera at +1.45m above bike body, player capsule parked off-world (Session CC)
+**When**: Session CC.
+**Why**: Two camera-position pitfalls solved in one decision:
+  (a) Initial `RIDER_SEAT_Y = 0.55` put the camera at handlebar
+  height (handlebars sit at body-Y ≈ 0.5). Rider's view was blocked
+  by the bike's own geometry. Raised to 1.45m so the camera clears
+  the bars and the rider looks over them at the world.
+  (b) Initial approach teleported the player's kinematic capsule to
+  the rider seat each frame so the existing camera-from-player-body
+  pipeline would just work. But the kinematic capsule's
+  `setApplyImpulsesToDynamicBodies(true)` meant it bumped the dynamic
+  bike body — bike drifted away. Switched to: while mounted, the
+  player body parks at `(0, -2000, 0)` (out of physics relevance) and
+  `updateSpeeder` writes `camera.position` directly each frame from
+  `bike.translation + riderSeatOffset.rotateByYaw`. `updatePlayer`
+  early-returns BEFORE the `isPlaying` gate so the speeder-driven
+  camera persists even when pointer lock isn't engaged (e.g., in
+  preview or while paused).
+On dismount, the player body is teleported back via `body.setTranslation`
+(instant, not `setNextKinematicTranslation`) — because `updatePlayer`
+runs LATER in the same frame and would clobber a deferred kinematic
+update by reading the stale parked position (-2000) and rewriting
+it. Subtle but cost an hour to track down.
+
 ## D33 — Storm vignette as in-scene clip-space quad, not CSS overlay (Session BB-4)
 **When**: Session BB-4.
 **Why**: The screen-edge tint at peak storm could have been a CSS

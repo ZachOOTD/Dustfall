@@ -41,6 +41,7 @@ import { createViewModel, updateViewModel } from './player/viewModel.ts';
 import { createWeather, updateWeather } from './world/weather.ts';
 import { createAmbientDust, updateAmbientDust } from './world/ambientDust.ts';
 import { createStormVignette, updateStormVignette } from './world/stormVignette.ts';
+import { updateSpeeder } from './world/speeder.ts';
 import { spawnWaterSources } from './world/waterSources.ts';
 import { spawnCacti } from './world/cactus.ts';
 import { updateFires } from './world/fire.ts';
@@ -194,6 +195,7 @@ const ctx: GameContext = {
   weather,
   ambientDust,
   stormVignette,
+  speeder: null,                 // populated by setupOpeningScene on fresh worlds
   footprints,
   journals: { list: [] as Journal[] },
   flags: { started: false, paused: false, damageFlashUntil: 0 },
@@ -220,6 +222,7 @@ if (!hasSave()) {
     playerBody,
   );
   ctx.journals.list.push(result.journal);
+  ctx.speeder = result.speeder;
 }
 
 // IMPORTANT: createMenus must run BEFORE wireOverlays — the unlock handler
@@ -252,6 +255,7 @@ startLoop(ctx, (c, dt) => {
   updateStormVignette(c);        // screen-edge tint at peak storm (BB-4)
   updateLighting(c, dt);         // sun + lights + sunDir/sunHeight
   updateSky(c, dt);              // sky sphere + sun disc (reads weather)
+  updateSpeeder(c, dt);          // hover speeder forces + mount/dismount (CC) — must run BEFORE updatePlayer so the player capsule is teleported to the rider seat before camera-sync
   updatePlayer(c, dt);           // movement + camera + advance dayTime
   updateShelter(c, dt);          // before stats so heat path sees inShelter
   updateStats(c, dt);            // thirst/heat/health drain + death

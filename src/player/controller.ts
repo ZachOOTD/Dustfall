@@ -26,6 +26,19 @@ let _stepAccum = 0;
 let _stepParity = 0;             // alternates 0/1 → ±lateral offset for L/R foot
 
 export function updatePlayer(ctx: GameContext, dt: number): void {
+  // Mounted on speeder (Session CC): updateSpeeder already wrote the
+  // camera position from the rider seat. Skip syncCameraToBody (player
+  // body is parked off-world, so its translation isn't meaningful).
+  // Mouse-look via PointerLockControls keeps writing camera rotation.
+  // This check runs BEFORE the isPlaying gate because we want the
+  // camera-from-speeder to persist even when controls aren't locked
+  // (e.g., during pause or in preview without pointer lock).
+  if (ctx.speeder?.mounted) {
+    const prev = ctx.time.dayTime;
+    ctx.time.dayTime = (ctx.time.dayTime + dt / Tuning.DAY_LENGTH_SECONDS) % 1;
+    if (prev > 0.9 && ctx.time.dayTime < 0.1) ctx.time.daysSurvived++;
+    return;
+  }
   if (!isPlaying(ctx)) {
     // Sync camera to body even when not playing so death cam doesn't drift.
     syncCameraToBody(ctx);

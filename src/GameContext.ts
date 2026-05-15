@@ -15,6 +15,7 @@ import type { Raider } from './enemies/raider.ts';
 import type { Weather } from './world/weather.ts';
 import type { AmbientDust } from './world/ambientDust.ts';
 import type { StormVignette } from './world/stormVignette.ts';
+import type { SpeederState } from './world/speeder.ts';
 import type { Journal } from './world/journal.ts';
 import type { ViewModel } from './player/viewModel.ts';
 import type { WaterSource } from './world/waterSources.ts';
@@ -89,6 +90,7 @@ export interface GameContext {
   weather: Weather;
   ambientDust: AmbientDust;
   stormVignette: StormVignette;
+  speeder: SpeederState | null;       // null until the opening scene spawns it
   footprints: FootprintRegistry;
   journals: { list: Journal[] };
   flags: {
