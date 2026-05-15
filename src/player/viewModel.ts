@@ -172,7 +172,14 @@ export function updateViewModel(ctx: GameContext, dt: number): void {
     _lastEquippedId = equippedId;
   }
 
-  // 4. Drive active animation.
+  // 4. Per-frame hook for held items (torch/flashlight react to slot.meta).
+  const heldSlot = inv.slots[inv.selectedIdx];
+  if (heldSlot.item !== null) {
+    const def = getItemDef(heldSlot.item);
+    if (def.updateHeld) def.updateHeld(vm.itemRoot, heldSlot, ctx, dt);
+  }
+
+  // 5. Drive active animation.
   if (vm.anim.active) {
     const now = performance.now() / 1000;
     const t = (now - vm.anim.startTime) / vm.anim.duration;

@@ -516,6 +516,211 @@ const _DEFS: Record<ItemId, ItemDef> = {
     },
   },
 
+  // ─── Session AA — light sources for night gameplay ───────────────────
+
+  torch: {
+    id: 'torch',
+    name: 'TORCH',
+    glyph: '!',
+    description: 'wrapped cloth on a branch — burns for a few minutes',
+    stackable: false,
+    maxStack: 1,
+    onUse(_ctx, slot) {
+      if (!slot.meta) slot.meta = { lit: false, burnRemaining: 1 };
+      // Refuse to light a torch with no fuel left (defensive — burn-out path
+      // should clear the slot, but guards a weird state).
+      if (!slot.meta.lit && (slot.meta.burnRemaining ?? 0) < 0.001) {
+        return { consumed: false, message: 'the torch is spent' };
+      }
+      slot.meta.lit = !slot.meta.lit;
+      return { consumed: false, message: slot.meta.lit ? 'torch lit' : 'torch out' };
+    },
+    makeViewModel() {
+      const group = new THREE.Group();
+      // Branch shaft
+      const shaftMat = new THREE.MeshLambertMaterial({ color: 0x6a4a2a });
+      const shaft = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.018, 0.024, 0.34, 6),
+        shaftMat,
+      );
+      shaft.position.y = -0.04;
+      group.add(shaft);
+      // Cloth-wrap head
+      const wrapMat = new THREE.MeshLambertMaterial({ color: 0x8a6038 });
+      const wrap = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.045, 0.035, 0.10, 8),
+        wrapMat,
+      );
+      wrap.position.y = 0.14;
+      group.add(wrap);
+      // Flame — a small emissive cone at the top. updateHeld toggles its
+      // material.emissiveIntensity along with the light.
+      const flameMat = new THREE.MeshBasicMaterial({
+        color: Tuning.TORCH_LIGHT_COLOR_HEX,
+        transparent: true,
+        opacity: 0.0,
+        toneMapped: false,
+        fog: false,
+      });
+      const flame = new THREE.Mesh(
+        new THREE.ConeGeometry(0.05, 0.14, 6),
+        flameMat,
+      );
+      flame.name = 'torchFlame';
+      flame.position.y = 0.26;
+      group.add(flame);
+      // PointLight at the flame. Starts at 0 intensity.
+      const light = new THREE.PointLight(
+        Tuning.TORCH_LIGHT_COLOR_HEX,
+        0,
+        Tuning.TORCH_LIGHT_DISTANCE,
+        2,
+      );
+      light.name = 'torchLight';
+      light.position.y = 0.26;
+      group.add(light);
+      return group;
+    },
+    makeIcon() {
+      const s = svg();
+      // Stick + flame outline
+      s.appendChild(svgEl('line', { x1: '12', y1: '20', x2: '12', y2: '10' }));
+      s.appendChild(svgEl('rect', { x: '10', y: '8', width: '4', height: '4' }));
+      s.appendChild(svgEl('path', { d: 'M12 7 Q9 5 11 2 Q12 4 13 2 Q14 5 12 7 Z' }));
+      return s;
+    },
+    updateHeld(itemRoot, slot, ctx, dt) {
+      const light = itemRoot.getObjectByName('torchLight') as THREE.PointLight | null;
+      const flame = itemRoot.getObjectByName('torchFlame') as THREE.Mesh | null;
+      if (!slot.meta) slot.meta = { lit: false, burnRemaining: 1 };
+      const lit = !!slot.meta.lit;
+      if (!light || !flame) return;
+      if (!lit) {
+        light.intensity = 0;
+        (flame.material as THREE.MeshBasicMaterial).opacity = 0;
+        return;
+      }
+      // Drain burnRemaining; auto-consume on burn-out.
+      const remaining = (slot.meta.burnRemaining ?? 1) - dt / Tuning.TORCH_BURN_DURATION_S;
+      if (remaining <= 0) {
+        slot.meta.lit = false;
+        slot.meta.burnRemaining = 0;
+        slot.item = null;
+        slot.count = 0;
+        slot.meta = undefined;
+        light.intensity = 0;
+        (flame.material as THREE.MeshBasicMaterial).opacity = 0;
+        ctx.ui.showToast('the torch burns out');
+        return;
+      }
+      slot.meta.burnRemaining = remaining;
+      // Flicker — two desynced sines for organic feel.
+      const t = ctx.time.elapsed;
+      const wobble = Math.sin(t * 17.3) * 0.5 + Math.sin(t * 23.7) * 0.5;
+      light.intensity = Tuning.TORCH_LIGHT_INTENSITY + wobble * Tuning.TORCH_LIGHT_FLICKER_AMP;
+      (flame.material as THREE.MeshBasicMaterial).opacity = 0.85 + wobble * 0.1;
+    },
+  },
+
+  flashlight: {
+    id: 'flashlight',
+    name: 'FLASHLIGHT',
+    glyph: 'F',
+    description: 'a salvaged hand-light — drains, recharges while off',
+    stackable: false,
+    maxStack: 1,
+    onUse(_ctx, slot) {
+      if (!slot.meta) slot.meta = { lit: false, fuelLevel: 1 };
+      if (!slot.meta.lit && (slot.meta.fuelLevel ?? 0) < 0.02) {
+        return { consumed: false, message: 'the flashlight is dead — let it recharge' };
+      }
+      slot.meta.lit = !slot.meta.lit;
+      return { consumed: false, message: slot.meta.lit ? 'flashlight on' : 'flashlight off' };
+    },
+    makeViewModel() {
+      const group = new THREE.Group();
+      // Body — short cylinder
+      const bodyMat = new THREE.MeshLambertMaterial({ color: 0x3a3630 });
+      const body = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.035, 0.04, 0.16, 10),
+        bodyMat,
+      );
+      body.rotation.z = Math.PI / 2;
+      body.position.set(0, 0, -0.05);
+      group.add(body);
+      // Lens — bright disc on the forward end
+      const lensMat = new THREE.MeshBasicMaterial({
+        color: 0xe4f0ff,
+        transparent: true,
+        opacity: 0.4,
+        toneMapped: false,
+        fog: false,
+      });
+      const lens = new THREE.Mesh(
+        new THREE.CircleGeometry(0.035, 12),
+        lensMat,
+      );
+      lens.name = 'flashlightLens';
+      lens.position.set(0, 0, -0.135);
+      // Lens faces forward (-Z), already aligned by default CircleGeometry.
+      group.add(lens);
+      // Grip detail — small ridges
+      for (let i = 0; i < 3; i++) {
+        const ridge = new THREE.Mesh(
+          new THREE.BoxGeometry(0.005, 0.082, 0.005),
+          new THREE.MeshLambertMaterial({ color: 0x1a1612 }),
+        );
+        ridge.position.set(0.02 - i * 0.018, 0, -0.05);
+        group.add(ridge);
+      }
+      // SpotLight at the lens, pointed along -Z (camera forward).
+      const light = new THREE.SpotLight(
+        Tuning.FLASHLIGHT_LIGHT_COLOR_HEX,
+        0,
+        Tuning.FLASHLIGHT_LIGHT_DISTANCE,
+        Tuning.FLASHLIGHT_LIGHT_ANGLE_RAD,
+        Tuning.FLASHLIGHT_LIGHT_PENUMBRA,
+        1.5,
+      );
+      light.name = 'flashlightLight';
+      light.position.set(0, 0, -0.13);
+      // SpotLight needs its target in the scene graph. Add both light + target
+      // to this group so they inherit the camera's transform.
+      light.target.position.set(0, 0, -5);
+      group.add(light);
+      group.add(light.target);
+      return group;
+    },
+    makeIcon() {
+      const s = svg();
+      // Cylinder body + cone of light forward
+      s.appendChild(svgEl('rect', { x: '8', y: '11', width: '8', height: '6', rx: '0.6' }));
+      s.appendChild(svgEl('polygon', { points: '16,11 22,8 22,20 16,17' }));
+      s.appendChild(svgEl('circle', { cx: '10', cy: '14', r: '1', fill: 'currentColor', stroke: 'none' }));
+      return s;
+    },
+    updateHeld(itemRoot, slot, ctx, dt) {
+      const light = itemRoot.getObjectByName('flashlightLight') as THREE.SpotLight | null;
+      const lens = itemRoot.getObjectByName('flashlightLens') as THREE.Mesh | null;
+      if (!slot.meta) slot.meta = { lit: false, fuelLevel: 1 };
+      const lit = !!slot.meta.lit;
+      let fuel = slot.meta.fuelLevel ?? 1;
+      if (lit) {
+        fuel = Math.max(0, fuel - dt / Tuning.FLASHLIGHT_DRAIN_DURATION_S);
+        if (fuel <= 0) {
+          slot.meta.lit = false;
+          ctx.ui.showToast('your flashlight dies');
+        }
+      } else {
+        // Passive recharge while held + off.
+        fuel = Math.min(1, fuel + dt / Tuning.FLASHLIGHT_RECHARGE_DURATION_S);
+      }
+      slot.meta.fuelLevel = fuel;
+      if (light) light.intensity = slot.meta.lit ? Tuning.FLASHLIGHT_LIGHT_INTENSITY : 0;
+      if (lens) (lens.material as THREE.MeshBasicMaterial).opacity = slot.meta.lit ? 0.85 : 0.4;
+    },
+  },
+
   tent_kit: {
     id: 'tent_kit',
     name: 'TENT KIT',
@@ -566,4 +771,5 @@ export const ALL_ITEM_IDS: ReadonlyArray<ItemId> = [
   'raw_lizard_meat', 'cooked_lizard_meat',
   'branch', 'cloth', 'fire_kit', 'tent_kit',
   'alien_fruit',
+  'torch', 'flashlight',
 ];

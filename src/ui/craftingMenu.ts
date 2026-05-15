@@ -40,6 +40,23 @@ const RECIPES: Recipe[] = [
       { id: 'branch', count: 2 },
     ],
   },
+  // Session AA — light sources for night exploration.
+  {
+    result: 'torch',
+    resultCount: 1,
+    ingredients: [
+      { id: 'branch', count: 1 },
+      { id: 'cloth', count: 1 },
+    ],
+  },
+  {
+    result: 'flashlight',
+    resultCount: 1,
+    ingredients: [
+      { id: 'scrap', count: 2 },
+      { id: 'cloth', count: 1 },
+    ],
+  },
 ];
 
 let _root: HTMLDivElement | null = null;

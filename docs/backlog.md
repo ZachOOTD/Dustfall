@@ -40,3 +40,7 @@ Use `/triage-ideas` to bulk-classify a free-form dump.
 [polish] global time scale slower — day/night cycle pacing feels too quick
 [idea] remove HUD stat bars in favor of audio/visual/text cues ("you could use a drink")
 [feat] animated main menu: dunes + night sky, pod crashes leaving wreck + flickering fire, slow day/night cycle
+[polish] opening wreck: remove the floor sun-patch emissive disc (`sunPatch` in `openingWreck.ts`) — reads as a hard spotlight, not as natural sunlight
+[polish] opening wreck: add more small holes to the roof + walls so additional shafts of light reach the interior
+[bug] opening wreck: tally marks on the back wall don't appear in-game despite being present in `openingWreck.ts:288-304` — investigate position/occlusion/material
+[polish] opening scene: don't start a new game during a sandstorm — boot in calm weather so the wreck reads clearly on first impression

@@ -218,3 +218,62 @@ Players must aim at the panel deliberately. Architectural rules:
 If a future wreck constructor forgets to call `addAccessPanel`,
 `registerSalvageable` falls back to tagging the group root (legacy
 behavior) so the wreck is still salvageable, just not tactile.
+
+## D23 — `panelWithHole` helper for real geometry holes, not fake emissive shafts (Session AA)
+**When**: Session AA.
+**Why**: User wanted actual sunlight reaching the opening-wreck interior
+through pierced walls/roof. Tried two cheats first — emissive
+"light-shaft" cones inside the cavity, then exterior dark spots — both
+read as artificial. The fix was a new `panelWithHole(W, T, D, cu, cv,
+hw, hd, mat)` helper in `openingWreck.ts` that builds a flat panel as a
+`THREE.Group` of up to 4 sub-meshes wrapping a rectangular hole
+(top/bottom strips + left/right pieces in the hole's height band).
+Wall geometry is genuinely missing where the hole is; the directional
+sun reaches the floor through real gaps. Used for side walls, back wall
+(rotated -π/2 around X), and front-roof / back-roof slabs.
+Decorations (seams, rust streaks) consult `wallHoles[]` and skip
+positions that would float over a now-empty gap. Trade-off:
+panel-with-hole only supports ONE rectangular hole per call — multiple
+holes per wall would need a recursive rectangle decomposition. v1 places
+at most one hole per wall, which is enough.
+
+## D24 — Back roof as translucent flat tarp, not gabled hull (Session AA)
+**When**: Session AA.
+**Why**: After holes alone didn't brighten the interior enough — even
+with bigger holes the directional sun shadow from the surrounding walls
++ roof kept most of the cavity dark — user proposed replacing the back
+slabs with cloth that lets sun through. Implementation: a single FLAT
+horizontal panel in `_tarpMat` (MeshLambertMaterial with
+`transparent: true, opacity: 0.30, emissive: 0xb88a4a, intensity 0.45,
+side: DoubleSide`), tagged `userData.noShadow = true` so the wreck's
+local shadow walk sets `castShadow = false` — sun rays pass through to
+the cavity floor. Tarp is slightly tilted around X so the back edge
+anchors at the back-wall ledge (Y = HALF_H*2 + 0.06) and the front edge
+sags 25cm forward, reading as a salvaged sheet tied off and pulled tight.
+The emissive component is what makes the cloth itself look luminous when
+viewed from below — pure transparency alone left the underside dark.
+**Footgun fixed in this session**: the wreck's `g.traverse` at end of
+`makeOpeningWreck` was unconditionally setting `castShadow = true`,
+overwriting any `userData.noShadow` flags. main.ts's global shadow walk
+runs at boot BEFORE `setupOpeningScene`, so the wreck's local walk is
+the authoritative source. Updated the local walk to
+`m.castShadow = !m.userData.noShadow`.
+
+## D25 — Opening wreck placement: hardcoded yaw + post-placement player teleport (Session AA)
+**When**: Session AA.
+**Why**: The wreck's position is set by `findFlattestSpot`, which drifts
+up to 16m from the search center. Two related decisions:
+  (a) **Yaw**: was `atan2(wreckOrigin.x, wreckOrigin.z)` — meaning the
+      effective rotation depended on where flat-spot search ended up, so
+      "back wall faces sunrise" was approximate. Hardcoded to π/2 so the
+      back wall faces world +X (sunrise direction) exactly regardless of
+      drift. Cinematic intent always reads.
+  (b) **Player spawn**: was a fixed `(35, _, 0)` in main.ts — could
+      easily end up east of the wreck after drift, on the wrong side of
+      the entrance. Now `setupOpeningScene` takes a `playerBody`
+      parameter and calls `body.setNextKinematicTranslation` AFTER the
+      wreck is placed, putting the player 6m in front of the entrance
+      regardless of where the wreck landed. Camera lookAt at the
+      entrance gives a deterministic first-frame view.
+Save-load path unaffected — `setupOpeningScene` is skipped when
+`hasSave()` is true.

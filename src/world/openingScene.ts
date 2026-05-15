@@ -18,13 +18,26 @@ import { placeOpeningWreck, OPENING_WRECK_EXTENTS } from './openingWreck.ts';
 import { makeSkeleton } from './skeleton.ts';
 import { placeJournal } from './journal.ts';
 import { addShelterZone } from '../shelter/shelterZones.ts';
-import { seedOpeningStorm } from './weather.ts';
+import type { PlayerBody } from '../physics/bodies.ts';
+import { Tuning } from '../config/tuning.ts';
+// Session AA — opening storm seed removed; player now boots into calm weather
+// so the wreck and surrounding terrain read clearly on first impression.
+// `seedOpeningStorm` is still exported from weather.ts for future re-use.
 
-/** Nominal world position to search around for the wreck placement. We
- *  want it ~12-20m from spawn so it's visible through storm fog (fog.far
- *  at intensity 0.7 is ~30m with the more-aggressive storm) but not on
- *  top of the player. */
-const WRECK_SEARCH_CENTER = new THREE.Vector3(0, 0, 14);
+/** Nominal world position to search around for the wreck placement.
+ *  Session AA — picked empirically from a biome+POI scan: every position
+ *  within findFlattestSpot's 16m drift radius samples as `dune` (40/40
+ *  probes verified at runtime), and the minimum distance to any
+ *  hand-placed POI is ~63m (closest is antenna_outpost at (-88, -50)).
+ *  Sits west of origin on the -X axis. With yaw forced to π/2 below the
+ *  wreck's back wall still faces world +X (sunrise direction). Player
+ *  spawn is computed from the actual wreck position (after findFlattestSpot
+ *  drift) so they always land in front of the entrance. */
+const WRECK_SEARCH_CENTER = new THREE.Vector3(-50, 0, 0);
+
+/** How far in front of the entrance the player spawns. The player faces
+ *  the entrance via camera.lookAt at boot. */
+const PLAYER_SPAWN_OFFSET_FROM_ENTRANCE = 6;
 
 /** Compute terrain-height variance over a 5×5 patch centered on (cx, cz).
  *  Lower = flatter. Used to pick a flat landing spot for the wreck. */
@@ -96,6 +109,7 @@ export function setupOpeningScene(
   weather: Weather,
   camera: THREE.PerspectiveCamera,
   rand: Rng,
+  playerBody: PlayerBody,
 ): OpeningSceneResult {
   // ── Find the flattest landing spot near the nominal position so the
   // wreck doesn't clip into a dune slope, then RAISE the wreck so the
@@ -110,10 +124,11 @@ export function setupOpeningScene(
   );
   const wreckOrigin = new THREE.Vector3(flat.x, maxFootprintY + 0.05, flat.z);
 
-  // ── Orient the wreck so its entrance (local -Z) points back toward the
-  // player at the origin. atan2(x, z) gives the angle such that the
-  // rotated local -Z direction equals normalize(origin - wreck). ───────
-  const yaw = Math.atan2(wreckOrigin.x, wreckOrigin.z);
+  // ── Fixed yaw: back wall faces world +X (where the sun rises).
+  // Wreck-local +Z rotates to world +X under yaw=π/2, so the back-wall
+  // window catches the morning sun directly. Entrance (local -Z) opens
+  // toward world -X (west) — player is teleported there below. ─────────
+  const yaw = Math.PI / 2;
 
   // ── Place the wreck (mesh + collider, with yaw rotation applied). ─────
   const wreck = placeOpeningWreck(scene, world, terrain, wreckOrigin, yaw, rand);
@@ -150,14 +165,37 @@ export function setupOpeningScene(
   const journalWorld = journalLocal.clone().applyEuler(yawRot).add(wreckOrigin);
   const journal = placeJournal(scene, journalWorld, yaw + Math.PI * 0.5);
 
-  // ── Seed the opening sandstorm. ───────────────────────────────────────
-  seedOpeningStorm(weather);
+  // ── (Session AA — no opening sandstorm. Calm weather at boot.) ────────
+  // `weather` arg retained for future use (e.g. opening cinematic variants).
+  void weather;
 
-  // ── Point the camera at the wreck's entrance so the player sees the
-  // opening on their first frame. The entrance is at wreck local
-  // (0, halfY, -halfZ), rotated by yaw into world space. ───────────────
+  // ── Compute entrance world position (used for both player placement
+  // and camera lookAt). With yaw=π/2 the entrance opens toward world -X.
   const entranceLocal = new THREE.Vector3(0, E.halfY, -E.halfZ);
-  const entranceWorld = entranceLocal.applyEuler(yawRot).add(wreckOrigin);
+  const entranceWorld = entranceLocal.clone().applyEuler(yawRot).add(wreckOrigin);
+
+  // ── Teleport the player to a spot in front of the entrance, on the same
+  // Z line as the wreck so they face the entrance squarely. The Y is the
+  // terrain height at that spot + capsule offset. Done after wreck
+  // placement (which can drift ±16m via findFlattestSpot) so the player
+  // always lands the right distance from the entrance regardless. ──────
+  // "In front of the entrance" = on the side the entrance opens toward.
+  // With yaw=π/2, the entrance's outward direction is world -X, so the
+  // player goes further -X from the entrance.
+  const entranceOutward = new THREE.Vector3(0, 0, -1).applyEuler(yawRot);
+  const spawnX = entranceWorld.x + entranceOutward.x * PLAYER_SPAWN_OFFSET_FROM_ENTRANCE;
+  const spawnZ = entranceWorld.z + entranceOutward.z * PLAYER_SPAWN_OFFSET_FROM_ENTRANCE;
+  const spawnGroundY = terrain.heightAt(spawnX, spawnZ);
+  const spawnY = spawnGroundY + Tuning.PLAYER_CAPSULE_HALF_HEIGHT + Tuning.PLAYER_CAPSULE_RADIUS;
+  playerBody.body.setNextKinematicTranslation({ x: spawnX, y: spawnY, z: spawnZ });
+
+  // ── Camera lookAt — orient first-frame view toward the entrance. The
+  // camera follows the player body each frame; this just sets initial
+  // rotation before PointerLockControls takes over. ────────────────────
+  // Camera is at player position once syncCameraToBody runs, but for the
+  // very first frame the camera still sits at the original spawn point.
+  // Reposition it so lookAt anchors from the new player location.
+  camera.position.set(spawnX, spawnY, spawnZ);
   camera.lookAt(entranceWorld.x, entranceWorld.y, entranceWorld.z);
 
   return { wreck, skeleton, journal };

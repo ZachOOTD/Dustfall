@@ -45,14 +45,18 @@ Run with `npm run dev` (port 5173). Type-check with `npx tsc --noEmit`.
 
 ## Where we are now
 
-**Last shipped**: Session Z — stone-well rework (salt-flats only;
-perturbed-icosahedron stone ring + wooden plank hatch) + tactile salvage
-panels (small brass-rim access plate per wreck, raycast targets the panel
-not the whole hull). Prior milestones: Y (footprint + lizard-track
-decals), X (audio overhaul sample-stem architecture, .ogg files pending
-in `public/audio/`), W (opening scene), V (atmosphere), U (UX + empty
-world), N (rigged raider infra). See [docs/changelog.md](docs/changelog.md)
-for full history; [docs/roadmap.md](docs/roadmap.md) for what's next.
+**Last shipped**: Session AA — torch + flashlight items (consumable +
+rechargeable light sources, per-frame `updateHeld` hook on `ItemDef`),
+plus a near-total rebuild of the opening wreck and scene (real geometry
+holes via new `panelWithHole` helper, translucent canvas tarp on the back
+roof, fixed pre-existing roof rotation inversion bug from W, wreck moved
+to central dunes, player teleported in front of entrance facing east at
+sunrise). Prior milestones: Z (stone-well + salvage panels), Y
+(footprints + lizard tracks), X (audio sample-stem architecture, .ogg
+files pending in `public/audio/`), W (opening scene), V (atmosphere), U
+(UX + empty world), N (rigged raider infra). See
+[docs/changelog.md](docs/changelog.md) for full history;
+[docs/roadmap.md](docs/roadmap.md) for what's next.
 
 ### Tutorial flags (Session L)
 

@@ -18,14 +18,23 @@ export type ItemId =
   | 'fire_kit'
   | 'tent_kit'
   // Session W — alien cactus harvest
-  | 'alien_fruit';
+  | 'alien_fruit'
+  // Session AA — light sources for night gameplay
+  | 'torch'
+  | 'flashlight';
 
-/** Per-slot metadata for stateful items (canteen fill level, cook state). */
+/** Per-slot metadata for stateful items (canteen fill level, cook state, light state). */
 export interface ItemMeta {
   /** 0..1 fill amount for containers (canteen). */
   fillLevel?: number;
   /** Cook state for food items (raw → cooked via fire in Session G). */
   cookState?: 'raw' | 'cooked';
+  /** Whether a light source is currently on (torch / flashlight). */
+  lit?: boolean;
+  /** 0..1 remaining burn time for consumable torches. Reaches 0 → torch burns out. */
+  burnRemaining?: number;
+  /** 0..1 fuel level for rechargeable flashlights. Drains while lit, recharges while held + off. */
+  fuelLevel?: number;
 }
 
 export interface UseResult {
@@ -65,6 +74,11 @@ export interface ItemDef {
 
   /** Duration of the use animation in seconds. Omit/0 = no animation. */
   useAnimDuration?: number;
+
+  /** Per-frame hook for the currently-held item — reacts to slot.meta changes
+   *  (e.g., torch/flashlight light state, fuel depletion). Called from
+   *  `updateViewModel` only while this item is the equipped slot. */
+  updateHeld?: (itemRoot: THREE.Object3D, slot: Slot, ctx: GameContext, dt: number) => void;
 }
 
 export interface Slot {

@@ -115,9 +115,10 @@ const TABLES: Record<SalvageKind, LootRoll[]> = {
     { id: 'cloth', chance: 0.30 },
   ],
   fuselage: [
-    { id: 'scrap',   chance: 0.60, count: 2 },
-    { id: 'cloth',   chance: 0.50 },
-    { id: 'bandage', chance: 0.15 },
+    { id: 'scrap',      chance: 0.60, count: 2 },
+    { id: 'cloth',      chance: 0.50 },
+    { id: 'bandage',    chance: 0.15 },
+    { id: 'flashlight', chance: 0.05 },
   ],
   escape_pod: [
     { id: 'bandage', chance: 0.70 },
@@ -141,12 +142,13 @@ const TABLES: Record<SalvageKind, LootRoll[]> = {
   ],
   // Massive POIs — richer rolls, more guaranteed scrap.
   massive: [
-    { id: 'scrap',   chance: 0.95, count: 2 },
-    { id: 'scrap',   chance: 0.75 },
-    { id: 'cloth',   chance: 0.65 },
-    { id: 'bandage', chance: 0.45 },
-    { id: 'branch',  chance: 0.25 },
-    { id: 'fire_kit', chance: 0.05 },
+    { id: 'scrap',      chance: 0.95, count: 2 },
+    { id: 'scrap',      chance: 0.75 },
+    { id: 'cloth',      chance: 0.65 },
+    { id: 'bandage',    chance: 0.45 },
+    { id: 'branch',     chance: 0.25 },
+    { id: 'fire_kit',   chance: 0.05 },
+    { id: 'flashlight', chance: 0.08 },
   ],
 };
 

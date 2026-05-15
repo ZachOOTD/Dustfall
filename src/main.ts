@@ -109,7 +109,14 @@ const weather = createWeather(three.scene, three.camera);
 const ambientDust = createAmbientDust(three.scene, three.camera);
 const footprints = createFootprintRegistry(three.scene, terrain);
 
-// Player capsule: feet at terrain height under spawn point.
+// Player capsule. For a fresh game, setupOpeningScene below will teleport
+// the player to a spot in front of the wreck entrance once the wreck's
+// final position is known (findFlattestSpot drifts up to 16m from the
+// search center). The initial position is a placeholder near origin —
+// it's also where the player lands on a save-load (save.ts restores the
+// real position) and where they end up if the opening cinematic is
+// skipped for any reason. Y is sampled from the terrain so the capsule
+// doesn't spawn underground.
 const spawnGround = terrain.heightAt(0, 0);
 const spawnY =
   spawnGround + Tuning.PLAYER_CAPSULE_HALF_HEIGHT + Tuning.PLAYER_CAPSULE_RADIUS;
@@ -207,6 +214,7 @@ ctx.inventory.selectedIdx = 0;
 if (!hasSave()) {
   const result = setupOpeningScene(
     three.scene, physics.world, terrain, shelter, weather, three.camera, scatterRand,
+    playerBody,
   );
   ctx.journals.list.push(result.journal);
 }

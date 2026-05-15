@@ -3,6 +3,21 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session AA — 2026-05-14 — Torch/flashlight + opening-scene rebuild
+NEW `torch` (consumable, 3-min burn, warm PointLight + flicker) and
+`flashlight` (rechargeable, drains while lit, cool SpotLight) items + craft
+recipes + salvage drops + `ItemDef.updateHeld` per-frame hook. Opening
+wreck rebuilt: removed floor sun-patch + rust patches, brightened tally
+marks (Y=1.30), pierced REAL geometry holes in side walls + roof + back
+wall via new `panelWithHole` helper, replaced back roof with a translucent
+canvas TARP (emissive + `noShadow`), fixed pre-existing roof rotation
+inversion that had the apex BELOW the wall tops (Session W bug). Opening
+scene: no boot storm, wreck moved to central dunes (-50,0,0) via empirical
+biome+POI scan, yaw forced to π/2 (back wall faces east), player
+teleported relative to wreck post-placement. First-frame view is now the
+wreck silhouetted against the rising sun with the back-wall window
+glowing. `verified` (tsc + multiple screenshots).
+
 ## Session Z — 2026-05-14 — Stone-well rework + tactile salvage panels
 Two threads. (1) `makeWell` rewritten: ring of 9 perturbed icosahedron stones
 (alternating light/dark palette) + askew 5-plank wooden hatch with cross-brace.

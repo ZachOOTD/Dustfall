@@ -195,6 +195,23 @@ export const Tuning = {
   SALVAGE_PANEL_SIZE_Z: 0.06,           // depth (sticks out from hull)
   SALVAGE_PANEL_BODY_HEX: 0x2a2622,     // dark metal plate
   SALVAGE_PANEL_RIM_HEX: 0xa28860,      // warm brass rim — visible affordance
+
+  // Torch + flashlight (Session AA) — light sources for night gameplay.
+  // Torch is consumable (single burn cycle), flashlight is rechargeable
+  // (passive recharge while held + off).
+  TORCH_BURN_DURATION_S: 180,           // 3 real-minute burn before consumed
+  TORCH_LIGHT_DISTANCE: 12,             // PointLight `distance` falloff
+  TORCH_LIGHT_INTENSITY: 1.8,           // mean — flickers ±0.4 each frame
+  TORCH_LIGHT_FLICKER_AMP: 0.4,
+  TORCH_LIGHT_COLOR_HEX: 0xffb060,      // warm orange flame
+
+  FLASHLIGHT_DRAIN_DURATION_S: 120,     // 2 real-min from full to empty when lit
+  FLASHLIGHT_RECHARGE_DURATION_S: 180,  // 3 real-min from empty to full when off
+  FLASHLIGHT_LIGHT_DISTANCE: 25,
+  FLASHLIGHT_LIGHT_INTENSITY: 3.0,
+  FLASHLIGHT_LIGHT_ANGLE_RAD: 0.45,     // SpotLight `angle` — narrow beam
+  FLASHLIGHT_LIGHT_PENUMBRA: 0.3,
+  FLASHLIGHT_LIGHT_COLOR_HEX: 0xe4f0ff, // cool white
 } as const;
 
 // Sky gradient colors (top vs horizon) per time of day. Horizon stays close to

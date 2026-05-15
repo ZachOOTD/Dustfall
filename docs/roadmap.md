@@ -10,7 +10,7 @@ and promotes the second.
 ---
 
 ## Next — TBD (pick from Big-ticket bucket below)
-The polish + atmosphere arc (V/W/X/Y/Z) is complete. Pick the next big
+After AA (torch/flashlight + opening-scene rebuild), pick the next big
 thing from the bucket at start of next session. User direction will
 promote one entry here.
 
@@ -26,12 +26,12 @@ Pick whatever feels most missing after the polish + atmosphere arc.
 - Small red creature companion (pocketable + re-deployable)
 - Animated main menu (pod crash + flickering fire + day/night loop)
 - Weapon variants (pipe staff / scrap machete / scrap gun / energy pistol)
-- Torch + flashlight items
 - Trading / NPC economy
 - 7-day storm countdown
 - Bounties
 - Procedural world generation (idea — POIs randomized per seed)
 - Remove HUD stat bars in favor of audio/visual/text cues (idea)
+- Storm + fog visual rework (~5-7h) — full pass on sandstorm + fog realism: layered dust depth, fog-density curve tied to sky color, terrain darkening near peak, screen-edge tint at full intensity. Pairs with X's storm-tense music stem; replaces current uniform-color dust + linear fog with something that reads as a real weather event.
 
 ---
 
