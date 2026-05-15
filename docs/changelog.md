@@ -3,6 +3,37 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session BB-3 — 2026-05-15 — Mega-wreck verticality + detail pass
+3 catwalks (Y=3/7/11m) + 3 ramps inside aft bay. NEW dark side room
+(Chamber 3) off aft +X wall via doorway in refactored aft right wall.
+3 skylights via roof-strip `panelWithHole` replacement (3 strip panels,
+each with one hole). Bow gets a small ragged +X side opening for side-
+light. 6 more salvage panels (catwalks + side room + 2 engine bells +
+antenna spire requiring tower climb via debris-pile steps). Interior
+detail pass (ceiling pipes, wall conduits, broken consoles, hull-plate
+fragments). Exterior detail pass (seams, rust streaks/patches, exterior
+pipes, vents, broken antenna stubs). `placeDebrisField` (50m radius ×
+40 pieces) + 3 companion wrecks (fuselage + engine_cluster + escape_pod)
+at 30-60m offsets. 1049 total scene meshes, FPS 143. `verified` (tsc +
+preview screenshots of skylight-lit bay, dark side room, engine bells
+silhouetted against moon, antenna spire visible from spawn).
+
+## Session BB-2 — 2026-05-15 — Mega-wreck shell (Jakku-scale, 120m)
+NEW `src/world/megaWreck.ts` — TRULY mega-scale crashed ship at
+(-180, -130) in SW quadrant (drifted to (-180, -190) by flat-spot
+search). 3 hull sections (bow 35m + open mid-hull break + aft 60m) + 12m
+bridge tower + 2 ten-meter engine bells. Bow lives in a named 'bow'
+sub-group with runtime Y-offset anchored to terrain at the ENTRANCE
+position — needed because at 120m length terrain varies 12m+ across
+the footprint, so a static `BOW_ORIGIN_Y` like the archived plan
+suggested would push the entrance below terrain (D29). Widened
+flat-spot search to 9×9 at 15m spacing × radii up to 60m, tilt cap
+0.10 rad, `BOW_ENTRANCE_H` bumped to 4m for slack. 2 salvage panels
+(aft + bow), shelter zone over aft bay. POI registered in
+[src/world/poi.ts](src/world/poi.ts) with a new `terrainVarAtWide`
+helper. `verified` (tsc + screenshots + state checks for biome,
+clearance, salvageables, inShelter).
+
 ## Session BB — 2026-05-15 — Mega-ship POI (enterable wreck v1) + mega-wreck plan
 NEW `src/world/megaShip.ts` — a ~12m enterable wreck in central dunes
 (-120, 30). Extracted `panelWithHole` to shared `src/world/panelUtils.ts`.

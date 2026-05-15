@@ -45,13 +45,16 @@ Run with `npm run dev` (port 5173). Type-check with `npx tsc --noEmit`.
 
 ## Where we are now
 
-**Last shipped**: Session BB — enterable mega-ship POI (12m wreck in
-central dunes; sand-reclaimed floor, terrain-normal tilt, detailed
-sci-fi hull with pipes/vents/conduits/broken plates, 3 salvage panels).
-Detailed plan authored for a far larger BB-2/BB-3 mega-wreck (120m,
-Force Awakens Jakku scale) — see
-`.claude/plans/archive/session-BB.md`. Prior milestones: AA (torch +
-flashlight, opening-scene rebuild), Z (stone-well + salvage panels), Y
+**Last shipped**: Sessions BB-2 + BB-3 — the truly Jakku-scale mega-
+wreck (120m × 45m × 30m+) at (-180, -130) in the SW quadrant. BB-2
+shipped the shell (3 hull sections + bridge tower + 2 engine bells +
+walk-through end-to-end + shelter zone + 2 panels). BB-3 added 3
+catwalks at Y=3/7/11m, dark side room off aft +X, 3 skylights, bow
+ragged opening, 6 more salvage panels (incl. engine bells + antenna
+spire requiring tower climb), full interior + exterior detail pass,
+debris field + 3 companion wrecks. 1049 meshes, FPS 143. Prior
+milestones: BB (small mega-ship + plan), AA (torch + flashlight,
+opening-scene rebuild), Z (stone-well + salvage panels), Y
 (footprints + lizard tracks), X (audio sample-stem architecture, .ogg
 files pending in `public/audio/`), W (opening scene), V (atmosphere), U
 (UX + empty world), N (rigged raider infra). See

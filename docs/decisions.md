@@ -326,3 +326,39 @@ For Dustfall's scale (literal 1.6km Star Destroyer impossible in 280m
 playable radius), the BB-2/BB-3 mega-wreck targets 120m long × 45m wide
 × 30m tall above sand — ~10× linear vs current mega-ship, dominates
 skyline, visible from much of the playable area through fog.
+
+## D29 — Bow Y-offset anchored at runtime to terrain at the entrance (Session BB-2)
+**When**: Session BB-2.
+**Why**: The archived BB plan called for a static `BOW_ORIGIN_Y = -2.0`
+to bake nose-dive into the bow geometry. In practice, at 120m wreck
+length terrain Y varies up to 12m across the footprint (the wreck often
+straddles a dune slope), and a static -2m offset pushed the bow entrance
+2m below terrain at the entrance position — unwalkable. Fix: build the
+bow as a named 'bow' sub-group, and in `placeMegaWreck` compute
+`bowYOffset = bowEntranceTerrainY - bowEntranceWorldY` at runtime,
+apply to `bowGroup.position.y` AND propagate to every bow-collider
+translation. Anchoring to the ENTRANCE position (not bow center)
+guarantees the entrance is always walkable; the bow center may have
+terrain below the cavity floor (sand reclaims, acceptable) but never
+above the entrance opening. Companion fixes: widened the flat-spot
+search to 9×9 at 15m spacing (vs archived 5×5 at 8m — too narrow at
+this scale), tightened tilt cap to 0.10 rad (vs 0.25), bumped
+`BOW_ENTRANCE_H` from 3 to 4m for slack against ±1m terrain variation
+within the bow footprint. True tilted-bow geometry (rotating the bow
+section around X) deferred to a future session; the current static-
+height bow with runtime Y-offset is stable and shippable.
+
+## D30 — Mega-wreck skylights via 3 strip-panels (not multi-hole panel) (Session BB-3)
+**When**: Session BB-3.
+**Why**: BB-3 needed 3 skylights in the aft roof. `panelWithHole` only
+supports one rectangular hole per call (D23). Two options: (a) write a
+new multi-hole panel helper that decomposes the panel into pieces
+around N holes, (b) split the roof into 3 strips along Z, each with
+one hole via the existing helper. Picked (b) — keeps the utility
+single-purpose, no new code in panelUtils, and the strip pattern
+generalizes to N>3 skylights trivially by adding rows to `ROOF_STRIPS`.
+Trade-off: 3 mesh objects for the roof instead of 1, plus per-strip
+collider splits (up to 4 cuboids each — front/back of hole + left/right
+in hole Z band). Worth it: each strip's cv (hole Z offset) is
+independent so skylights can be staggered for visual interest. Same
+pattern can be applied to walls if multi-hole walls are ever needed.
