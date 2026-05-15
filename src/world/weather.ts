@@ -1,5 +1,10 @@
 // Sandstorm weather system. State machine: clear → building → storm → settling.
-// One particle cloud follows the camera and fades in/out via material opacity.
+// Session BB-4 rework: replaces the single uniform-color dust cloud with 3
+// stacked layers (near/mid/far) at different sizes, speeds, and colors so
+// the storm reads as volumetric instead of a flat color wash. Fog drives
+// the mid-distance falloff via FogExp2 density; layers stage in
+// intensity-staggered ramps so far dust appears first and near dust last
+// (the storm "closes in").
 
 import * as THREE from 'three';
 import type { GameContext } from '../GameContext.ts';
@@ -7,19 +12,24 @@ import { Tuning } from '../config/tuning.ts';
 
 export type WeatherState = 'clear' | 'building' | 'storm' | 'settling';
 
+interface DustLayer {
+  particles: THREE.Points;
+  mat: THREE.PointsMaterial;
+  vels: Float32Array;
+  count: number;
+  spread: number;
+  // Wrap range along Y is fixed per-layer (small for near, bigger for far).
+  yWrapHalf: number;
+}
+
 export interface Weather {
   state: WeatherState;
   intensity: number;     // 0..1, drives fog/sky/thirst/audio everywhere
   stateTimer: number;
   nextStormAt: number;   // ctx.time.elapsed when next storm should start
-  particles: THREE.Points;
-  particleMat: THREE.PointsMaterial;
-  particleVels: Float32Array; // per-particle drift velocity
+  layers: { near: DustLayer; mid: DustLayer; far: DustLayer };
   cameraRef: THREE.PerspectiveCamera;
 }
-
-const PARTICLE_COUNT = 2500;
-const PARTICLE_SPREAD = 90;   // bounding box around the camera
 
 // Soft circular dust mote — radial gradient. Without this, PointsMaterial
 // renders each particle as an opaque square, which reads as pixelated
@@ -39,49 +49,103 @@ function makeDustTexture(): THREE.CanvasTexture {
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
 }
+
+// One shared texture across all 3 layers.
+const _sharedDustTex = (() => {
+  // Defer creation to runtime (document available).
+  let cached: THREE.CanvasTexture | null = null;
+  return () => {
+    if (!cached) cached = makeDustTexture();
+    return cached;
+  };
+})();
+
 const BUILD_DURATION = 8;
 const STORM_DURATION = 90;
 const SETTLE_DURATION = 12;
 const STORM_INTERVAL_MIN = 360;  // earliest restart (6 min)
 const STORM_INTERVAL_MAX = 600;  // latest (10 min)
 
+interface LayerConfig {
+  count: number;
+  spread: number;
+  yWrapHalf: number;          // vertical wrap range
+  size: number;
+  color: number;
+  velMean: [number, number, number];
+  velSpread: [number, number, number];
+}
+
+function buildLayer(
+  scene: THREE.Scene,
+  cfg: LayerConfig,
+): DustLayer {
+  const positions = new Float32Array(cfg.count * 3);
+  const vels = new Float32Array(cfg.count * 3);
+  for (let i = 0; i < cfg.count; i++) {
+    positions[i * 3]     = (Math.random() - 0.5) * cfg.spread;
+    positions[i * 3 + 1] = (Math.random() * 2 - 1) * cfg.yWrapHalf;
+    positions[i * 3 + 2] = (Math.random() - 0.5) * cfg.spread;
+    vels[i * 3]     = cfg.velMean[0] + (Math.random() - 0.5) * cfg.velSpread[0];
+    vels[i * 3 + 1] = cfg.velMean[1] + (Math.random() - 0.5) * cfg.velSpread[1];
+    vels[i * 3 + 2] = cfg.velMean[2] + (Math.random() - 0.5) * cfg.velSpread[2];
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  const mat = new THREE.PointsMaterial({
+    color: cfg.color,
+    map: _sharedDustTex(),
+    size: cfg.size,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    alphaTest: 0.01,
+    fog: false,                 // dust is its own layer, not affected by FogExp2
+    toneMapped: false,
+    sizeAttenuation: true,
+  });
+  const particles = new THREE.Points(geo, mat);
+  particles.frustumCulled = false;
+  particles.visible = false;
+  scene.add(particles);
+  return { particles, mat, vels, count: cfg.count, spread: cfg.spread, yWrapHalf: cfg.yWrapHalf };
+}
+
 export function createWeather(
   scene: THREE.Scene,
   camera: THREE.PerspectiveCamera,
 ): Weather {
-  // Particle positions seeded near origin; they'll be re-centered on camera
-  // each frame so they always feel "around the player".
-  const positions = new Float32Array(PARTICLE_COUNT * 3);
-  const vels = new Float32Array(PARTICLE_COUNT * 3);
-  for (let i = 0; i < PARTICLE_COUNT; i++) {
-    positions[i * 3]     = (Math.random() - 0.5) * PARTICLE_SPREAD;
-    positions[i * 3 + 1] = Math.random() * 20 - 2;
-    positions[i * 3 + 2] = (Math.random() - 0.5) * PARTICLE_SPREAD;
-    // Per-particle drift bias. Fast horizontal sweep (~6 m/s) sells the
-    // "violent wind" feel; tiny vertical jitter keeps the cloud lively.
-    vels[i * 3]     = 6.0 + (Math.random() - 0.5) * 1.6;
-    vels[i * 3 + 1] = (Math.random() - 0.5) * 0.5;
-    vels[i * 3 + 2] = -2.8 + (Math.random() - 0.5) * 1.4;
-  }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-
-  const mat = new THREE.PointsMaterial({
-    color: 0xc8a070,
-    map: makeDustTexture(),
-    size: 0.32,
-    transparent: true,
-    opacity: 0,
-    depthWrite: false,
-    alphaTest: 0.01,         // discard nearly-transparent edges → cleaner sort
-    fog: false,
-    toneMapped: false,
-    sizeAttenuation: true,
+  // NEAR layer: small + fast + warm gold; close to player, parallax cue.
+  const near = buildLayer(scene, {
+    count: Tuning.STORM_DUST_NEAR_COUNT,
+    spread: Tuning.STORM_DUST_NEAR_SPREAD,
+    yWrapHalf: 6,
+    size: 0.18,
+    color: 0xd8b888,
+    velMean: [7.5, 0, -3.0],
+    velSpread: [2.0, 0.6, 1.8],
   });
-
-  const particles = new THREE.Points(geo, mat);
-  particles.frustumCulled = false;
-  scene.add(particles);
+  // MID layer: existing storm cloud. Mid-range size + speed + the old rust tint.
+  const mid = buildLayer(scene, {
+    count: Tuning.STORM_DUST_MID_COUNT,
+    spread: Tuning.STORM_DUST_MID_SPREAD,
+    yWrapHalf: 10,
+    size: 0.32,
+    color: 0xc8a070,
+    velMean: [6.0, 0, -2.8],
+    velSpread: [1.6, 0.5, 1.4],
+  });
+  // FAR layer: large + slow + muted; reads as distant haze haze, fades in
+  // early so the storm "starts on the horizon."
+  const far = buildLayer(scene, {
+    count: Tuning.STORM_DUST_FAR_COUNT,
+    spread: Tuning.STORM_DUST_FAR_SPREAD,
+    yWrapHalf: 18,
+    size: 0.60,
+    color: 0x8c6850,
+    velMean: [2.5, 0, -1.2],
+    velSpread: [0.8, 0.3, 0.7],
+  });
 
   return {
     state: 'clear',
@@ -89,14 +153,49 @@ export function createWeather(
     stateTimer: 0,
     nextStormAt:
       STORM_INTERVAL_MIN + Math.random() * (STORM_INTERVAL_MAX - STORM_INTERVAL_MIN),
-    particles,
-    particleMat: mat,
-    particleVels: vels,
+    layers: { near, mid, far },
     cameraRef: camera,
   };
 }
 
 const _camPos = new THREE.Vector3();
+
+function stepLayer(layer: DustLayer, opacity: number, visible: boolean, dt: number): void {
+  layer.mat.opacity = opacity;
+  if (layer.particles.visible !== visible) layer.particles.visible = visible;
+  if (!visible) return;
+  const half = layer.spread / 2;
+  const yHalf = layer.yWrapHalf;
+  const arr = layer.particles.geometry.attributes.position.array as Float32Array;
+  const vels = layer.vels;
+  for (let i = 0; i < layer.count; i++) {
+    const ix = i * 3;
+    arr[ix]     += vels[ix]     * dt;
+    arr[ix + 1] += vels[ix + 1] * dt;
+    arr[ix + 2] += vels[ix + 2] * dt;
+    let lx = arr[ix]     - _camPos.x;
+    let ly = arr[ix + 1] - _camPos.y;
+    let lz = arr[ix + 2] - _camPos.z;
+    if (lx >  half)  lx -= layer.spread;
+    if (lx < -half)  lx += layer.spread;
+    if (ly >  yHalf) ly -= yHalf * 2;
+    if (ly < -yHalf) ly += yHalf * 2;
+    if (lz >  half)  lz -= layer.spread;
+    if (lz < -half)  lz += layer.spread;
+    arr[ix]     = _camPos.x + lx;
+    arr[ix + 1] = _camPos.y + ly;
+    arr[ix + 2] = _camPos.z + lz;
+  }
+  layer.particles.geometry.attributes.position.needsUpdate = true;
+}
+
+/** Smoothstep clamp 0..1 between lo and hi. */
+function ramp(x: number, lo: number, hi: number): number {
+  if (x <= lo) return 0;
+  if (x >= hi) return 1;
+  const t = (x - lo) / (hi - lo);
+  return t * t * (3 - 2 * t);
+}
 
 export function updateWeather(ctx: GameContext, dt: number): void {
   const w = ctx.weather;
@@ -137,54 +236,34 @@ export function updateWeather(ctx: GameContext, dt: number): void {
       break;
   }
 
-  // Visuals — fog modulated by intensity. We move BOTH `near` and `far`
-  // so the fog feels close during a storm without the math inverting
-  // (near must stay strictly < far).
-  //   intensity 0.0 → near 25,  far 170  (no fog within 25m; clear-day default)
-  //   intensity 1.0 → near 15,  far 30   (fog starts close, fully opaque by 30m)
-  // 12-m wreck stays largely un-tinted; anything past 30m disappears.
-  const fog = ctx.three.scene.fog as THREE.Fog;
-  fog.near = Math.max(15, Tuning.FOG_NEAR - 10 * w.intensity);
-  fog.far = Math.max(30, Tuning.FOG_FAR - 140 * w.intensity);
+  // FogExp2 density curve. Smoothstep from CLEAR→STORM density so the
+  // start of a building storm rolls in gently instead of immediately
+  // dropping visibility off a cliff. Color is set in updateLighting.
+  const fog = ctx.three.scene.fog as THREE.FogExp2;
+  const densityT = ramp(w.intensity, 0, 1);
+  fog.density =
+    Tuning.FOG_DENSITY_CLEAR +
+    (Tuning.FOG_DENSITY_STORM - Tuning.FOG_DENSITY_CLEAR) * densityT;
 
-  // Particles: opacity rides intensity; positions drift around the camera.
-  // Visibility gate: skip the entire Points draw call when the storm is calm
-  // OR when the player is inside a shelter (storm shouldn't visually be
-  // inside a roofed area). Session V/W: AND with !inShelter.
-  const particlesVisible = w.intensity > 0.01 && !ctx.player.inShelter;
-  if (w.particles.visible !== particlesVisible) {
-    w.particles.visible = particlesVisible;
-  }
-  w.particleMat.opacity = w.intensity * 0.55;
-  if (w.intensity > 0.01) {
-    _camPos.copy(w.cameraRef.position);
-    const posAttr = w.particles.geometry.attributes.position;
-    const arr = posAttr.array as Float32Array;
-    const vels = w.particleVels;
-    const half = PARTICLE_SPREAD / 2;
+  // Per-layer opacity ramps. Far comes in first (provides distant haze
+  // before the player is "inside" the storm); near comes in last (the
+  // wind reaching you signals the storm's arrival).
+  const inShelter = ctx.player.inShelter;
+  _camPos.copy(w.cameraRef.position);
 
-    for (let i = 0; i < PARTICLE_COUNT; i++) {
-      const ix = i * 3;
-      arr[ix]     += vels[ix]     * dt;
-      arr[ix + 1] += vels[ix + 1] * dt;
-      arr[ix + 2] += vels[ix + 2] * dt;
+  const farOp =
+    ramp(w.intensity, Tuning.STORM_FAR_RAMP_LO, Tuning.STORM_FAR_RAMP_HI) *
+    Tuning.STORM_DUST_FAR_OPACITY;
+  const midOp = w.intensity * Tuning.STORM_DUST_MID_OPACITY;
+  const nearOp =
+    ramp(w.intensity, Tuning.STORM_NEAR_RAMP_LO, Tuning.STORM_NEAR_RAMP_HI) *
+    Tuning.STORM_DUST_NEAR_OPACITY;
 
-      // Wrap relative to camera so the cloud always surrounds us.
-      let lx = arr[ix]     - _camPos.x;
-      let ly = arr[ix + 1] - _camPos.y;
-      let lz = arr[ix + 2] - _camPos.z;
-      if (lx >  half) lx -= PARTICLE_SPREAD;
-      if (lx < -half) lx += PARTICLE_SPREAD;
-      if (ly >  10)   ly -= 20;
-      if (ly < -10)   ly += 20;
-      if (lz >  half) lz -= PARTICLE_SPREAD;
-      if (lz < -half) lz += PARTICLE_SPREAD;
-      arr[ix]     = _camPos.x + lx;
-      arr[ix + 1] = _camPos.y + ly;
-      arr[ix + 2] = _camPos.z + lz;
-    }
-    posAttr.needsUpdate = true;
-  }
+  // Inside shelter: kill all dust layers (player is roofed; visible dust
+  // breaks immersion). Outside: each layer driven by its own ramp.
+  stepLayer(w.layers.far, inShelter ? 0 : farOp, !inShelter && farOp > 0.001, dt);
+  stepLayer(w.layers.mid, inShelter ? 0 : midOp, !inShelter && midOp > 0.001, dt);
+  stepLayer(w.layers.near, inShelter ? 0 : nearOp, !inShelter && nearOp > 0.001, dt);
 }
 
 /** Convenience: trigger a storm immediately. Used by debug panel. */

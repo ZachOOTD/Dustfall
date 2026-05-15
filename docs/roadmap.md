@@ -9,15 +9,7 @@ and promotes the second.
 
 ---
 
-## Next — Storm + fog visual rework (~5-7h)
-Full pass on sandstorm + fog realism: layered dust depth, fog-density
-curve tied to sky color, terrain darkening near peak, screen-edge tint
-at full intensity. Pairs with X's storm-tense music stem; replaces
-current uniform-color dust + linear fog with something that reads as a
-real weather event. Now that the mega-wreck silhouette through fog is
-a key visual (BB-2/BB-3), the fog itself deserves attention.
-
-## Then — Big-ticket bucket (1–2 picks per session at ~4–7h each)
+## Next — Big-ticket bucket (1–2 picks per session at ~4–7h each)
 Pick whatever feels most missing after the polish + atmosphere arc.
 
 - Raider variants (scout / ambusher / brute) — *if* we decide to bring raiders back

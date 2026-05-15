@@ -13,7 +13,10 @@ export interface SceneBundle {
 export function createScene(): SceneBundle {
   const scene = new THREE.Scene();
   scene.background = SkyColors.DAY.clone();
-  scene.fog = new THREE.Fog(SkyColors.DAY.clone(), Tuning.FOG_NEAR, Tuning.FOG_FAR);
+  // FogExp2 (BB-4) — density ramps with weather.intensity. Linear fog
+  // (the old Tuning.FOG_NEAR/FAR) was a flat haze that read the same at
+  // 30m and 60m; exponential falloff sells "real" atmospheric dust.
+  scene.fog = new THREE.FogExp2(SkyColors.DAY.clone(), Tuning.FOG_DENSITY_CLEAR);
 
   const camera = new THREE.PerspectiveCamera(
     Tuning.FOV,

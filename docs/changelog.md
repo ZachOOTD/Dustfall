@@ -3,6 +3,22 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session BB-4 — 2026-05-15 — Storm + fog visual rework
+`THREE.Fog` → `THREE.FogExp2` with smoothstep density curve (`0.0035` →
+`0.055`). Single 2500-particle dust cloud → 3 stacked layers
+(`near` 800 / `mid` 2500 / `far` 600) with staged opacity ramps (far
+appears first as "storm on horizon", near appears last when wind reaches
+player). NEW `src/world/stormVignette.ts` — clip-space full-screen
+quad with aspect-corrected radial alpha gradient, only engages above
+intensity 0.4. `lighting.ts` adds storm dimming: sun × (1 - 0.65×storm),
+ambient × (1 - 0.20×storm) with color shifting toward warm dust. Fog
+color lerp to dust bumped 0.45 → 0.70 (FogExp2's denser falloff makes
+fog repaint every surface — needed stronger sky-color match). All storm
+visuals die in shelter (3 layers + vignette); skylights then read as
+"dark portals to the storm outside" with dust-tinted ambient leaking
+in. FPS 143 clear → 91 peak (target ≥60). `verified` (tsc + screenshots
+of clear/building/peak/inside-shelter states + state checks).
+
 ## Session BB-3 — 2026-05-15 — Mega-wreck verticality + detail pass
 3 catwalks (Y=3/7/11m) + 3 ramps inside aft bay. NEW dark side room
 (Chamber 3) off aft +X wall via doorway in refactored aft right wall.

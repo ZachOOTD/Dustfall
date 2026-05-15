@@ -348,6 +348,68 @@ within the bow footprint. True tilted-bow geometry (rotating the bow
 section around X) deferred to a future session; the current static-
 height bow with runtime Y-offset is stable and shippable.
 
+## D31 — FogExp2 over linear THREE.Fog for storm density (Session BB-4)
+**When**: Session BB-4.
+**Why**: Pre-BB-4, storm fog was linear `THREE.Fog` with `near` and
+`far` ramping (25→15, 170→30) with intensity. Linear fog reads the same
+across the middle distance and "snaps off" at `far`, giving a flat-
+wall feel. FogExp2 (exponential falloff via `density`) sells real
+atmospheric scattering — close objects fog gently, distant objects
+fade smoothly to invisible. Density curve: clear=`0.0035`, peak storm
+=`0.055`, smoothstep-eased between. No shader rewrites needed because
+default three.js materials respect both `FOG` and `FOG_EXP2` shader
+chunks; our custom shaders (sky.ts, particles, sun/moon sprites) all
+already set `fog: false` so they're unaffected. Trade-off: every
+fog-aware surface now reads slightly tinted in the foreground at peak
+storm (not just middle-distance) — addressed by bumping the fog-color
+lerp to dust from 0.45 → 0.70 so the foreground tint matches the sky
+tint instead of reading bichromatic. Switching back to linear is a
+1-line revert in scene.ts if a future session wants a bigger
+visibility range without dust feeling.
+
+## D32 — Three stacked dust layers (near/mid/far) over single layer + per-particle variance (Session BB-4)
+**When**: Session BB-4.
+**Why**: Two ways to get "depth" in particle dust: (a) one layer with
+per-particle size/color/speed variance, (b) three discrete layers each
+with their own bulk size/color/speed/spread. Picked (b). Reasons:
+  - Each layer's opacity can ramp independently with storm intensity —
+    far comes in first at `intensity 0` (storm appears on horizon),
+    near comes in last at `intensity > 0.15` (wind reaches you). This
+    staged ramp is the visual story; a single layer can't tell it.
+  - Layer-specific spread + Y-wrap (near=30m × 6m, far=200m × 18m) keeps
+    near particles tight around the player and far particles smeared
+    across the horizon — exactly what we want for parallax depth.
+  - 3 draw calls instead of 1 is a real cost but acceptable at the
+    measured FPS (143→91 at peak, well above the 60 target).
+  - Mid layer is the existing 2500-particle cloud, kept as-is so the
+    "this is what a storm looked like before" reference is preserved.
+Future sessions can collapse to single-layer if perf becomes a problem
+on weaker hardware — the layer config is centralized in tuning.ts and
+the layer setup is symmetric.
+
+## D33 — Storm vignette as in-scene clip-space quad, not CSS overlay (Session BB-4)
+**When**: Session BB-4.
+**Why**: The screen-edge tint at peak storm could have been a CSS
+`background: radial-gradient(...)` on a fullscreen DOM div. Picked an
+in-scene `THREE.Mesh` + `ShaderMaterial` with a clip-space vertex
+shader instead. Reasons:
+  - In-scene composites correctly with tone-mapping + bloom (if added
+    later) — CSS would over-paint a tone-mapped scene, fighting the
+    ReinhardToneMapping output.
+  - Aspect-corrected radius is one uniform → circle is round on every
+    aspect ratio. CSS `radial-gradient` ovals on widescreen.
+  - Color is a shader uniform; future sessions can drive it from the
+    same `fogTarget` color as the scene fog if we want the vignette
+    to track storm tint perfectly.
+  - Cost: 1 extra draw call (depth-test off, last in render order).
+    Negligible at our scene size.
+Trade-off: if the user later prefers a HUD-style overlay (HUD over
+vignette so vignette doesn't tint the HUD), we'd need to either move
+vignette to CSS or render HUD via a separate Three.js orthographic
+overlay. Not addressing now — current HUD reads fine over the
+~55%-opacity dust-rust vignette since HUD elements are bright/contrast-
+high already.
+
 ## D30 — Mega-wreck skylights via 3 strip-panels (not multi-hole panel) (Session BB-3)
 **When**: Session BB-3.
 **Why**: BB-3 needed 3 skylights in the aft roof. `panelWithHole` only

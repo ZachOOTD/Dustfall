@@ -14,6 +14,7 @@ import type { ShelterRegistry } from './shelter/shelterZones.ts';
 import type { Raider } from './enemies/raider.ts';
 import type { Weather } from './world/weather.ts';
 import type { AmbientDust } from './world/ambientDust.ts';
+import type { StormVignette } from './world/stormVignette.ts';
 import type { Journal } from './world/journal.ts';
 import type { ViewModel } from './player/viewModel.ts';
 import type { WaterSource } from './world/waterSources.ts';
@@ -87,6 +88,7 @@ export interface GameContext {
   salvageables: SalvageableRegistry;
   weather: Weather;
   ambientDust: AmbientDust;
+  stormVignette: StormVignette;
   footprints: FootprintRegistry;
   journals: { list: Journal[] };
   flags: {

@@ -40,6 +40,7 @@ import { updateCombat } from './player/combat.ts';
 import { createViewModel, updateViewModel } from './player/viewModel.ts';
 import { createWeather, updateWeather } from './world/weather.ts';
 import { createAmbientDust, updateAmbientDust } from './world/ambientDust.ts';
+import { createStormVignette, updateStormVignette } from './world/stormVignette.ts';
 import { spawnWaterSources } from './world/waterSources.ts';
 import { spawnCacti } from './world/cactus.ts';
 import { updateFires } from './world/fire.ts';
@@ -107,6 +108,7 @@ const lizards = [
 
 const weather = createWeather(three.scene, three.camera);
 const ambientDust = createAmbientDust(three.scene, three.camera);
+const stormVignette = createStormVignette(three.scene);
 const footprints = createFootprintRegistry(three.scene, terrain);
 
 // Player capsule. For a fresh game, setupOpeningScene below will teleport
@@ -191,6 +193,7 @@ const ctx: GameContext = {
   salvageables,
   weather,
   ambientDust,
+  stormVignette,
   footprints,
   journals: { list: [] as Journal[] },
   flags: { started: false, paused: false, damageFlashUntil: 0 },
@@ -246,6 +249,7 @@ startLoop(ctx, (c, dt) => {
   c.physics.step(dt);            // physics first
   updateWeather(c, dt);          // sandstorm intensity (drives sky + audio + thirst)
   updateAmbientDust(c, dt);      // toned-down drift, suppressed by sandstorm
+  updateStormVignette(c);        // screen-edge tint at peak storm (BB-4)
   updateLighting(c, dt);         // sun + lights + sunDir/sunHeight
   updateSky(c, dt);              // sky sphere + sun disc (reads weather)
   updatePlayer(c, dt);           // movement + camera + advance dayTime

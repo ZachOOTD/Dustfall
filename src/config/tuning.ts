@@ -60,9 +60,44 @@ export const Tuning = {
   CANTEEN_DRINK_DELTA: 0.25,         // fillLevel consumed per drink
 
   // Atmosphere
-  FOG_NEAR: 25,
+  FOG_NEAR: 25,                       // legacy linear-fog values (kept for reference)
   FOG_FAR: 170,
+  // Session BB-4 — FogExp2 density curve. Clear days feel open (low
+  // density), storm peak chokes visibility to ~30m. Density follows
+  // an eased curve from CLEAR→STORM as weather.intensity ramps.
+  FOG_DENSITY_CLEAR: 0.0035,
+  FOG_DENSITY_STORM: 0.055,
   WORLD_RADIUS: 280,
+
+  // Storm visuals (Session BB-4)
+  // Near/mid/far dust layer particle counts. Mid keeps the old 2500;
+  // near + far stack to give parallax depth.
+  STORM_DUST_NEAR_COUNT: 800,
+  STORM_DUST_MID_COUNT: 2500,
+  STORM_DUST_FAR_COUNT: 600,
+  STORM_DUST_NEAR_SPREAD: 30,
+  STORM_DUST_MID_SPREAD: 90,
+  STORM_DUST_FAR_SPREAD: 200,
+  // Layer-staggered opacity ramps so dust appears far-first then closes
+  // in. Each pair = [intensity at which layer starts, intensity at full].
+  STORM_NEAR_RAMP_LO: 0.15,
+  STORM_NEAR_RAMP_HI: 0.55,
+  STORM_FAR_RAMP_LO: 0.0,
+  STORM_FAR_RAMP_HI: 0.35,
+  // Peak opacity per layer.
+  STORM_DUST_NEAR_OPACITY: 0.55,
+  STORM_DUST_MID_OPACITY: 0.55,
+  STORM_DUST_FAR_OPACITY: 0.40,
+  // Terrain darkening at peak storm. Sun intensity × (1 - STORM_SUN_DIM),
+  // ambient × (1 - STORM_AMBIENT_DIM). Sun loses more than ambient (sun
+  // is "behind" the dust, ambient picks up dust-scattered light).
+  STORM_SUN_DIM: 0.65,
+  STORM_AMBIENT_DIM: 0.20,
+  // Vignette tint + intensity at peak storm.
+  STORM_VIGNETTE_HEX: 0x6e3a22,
+  STORM_VIGNETTE_MAX_OPACITY: 0.55,
+  STORM_VIGNETTE_INNER: 0.30,        // alpha=0 inside this normalized radius
+  STORM_VIGNETTE_OUTER: 0.85,        // alpha=full beyond this radius
 
   // Dune terrain (Session P) — ridged + wind-warped noise.
   // Ridges run perpendicular to the wind direction; aniso < 1 elongates them.

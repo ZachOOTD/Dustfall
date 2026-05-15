@@ -45,15 +45,15 @@ Run with `npm run dev` (port 5173). Type-check with `npx tsc --noEmit`.
 
 ## Where we are now
 
-**Last shipped**: Sessions BB-2 + BB-3 — the truly Jakku-scale mega-
-wreck (120m × 45m × 30m+) at (-180, -130) in the SW quadrant. BB-2
-shipped the shell (3 hull sections + bridge tower + 2 engine bells +
-walk-through end-to-end + shelter zone + 2 panels). BB-3 added 3
-catwalks at Y=3/7/11m, dark side room off aft +X, 3 skylights, bow
-ragged opening, 6 more salvage panels (incl. engine bells + antenna
-spire requiring tower climb), full interior + exterior detail pass,
-debris field + 3 companion wrecks. 1049 meshes, FPS 143. Prior
-milestones: BB (small mega-ship + plan), AA (torch + flashlight,
+**Last shipped**: Session BB-4 — storm + fog visual rework.
+`THREE.FogExp2` with intensity-driven density curve, 3 stacked dust
+layers (near/mid/far) with staged opacity ramps, in-scene clip-space
+quad vignette at peak storm, sun + ambient dimming with warm-dust color
+shift. Fog color lerp bumped to match denser falloff. Skylights inside
+the mega-wreck now read as dark portals to the storm outside while the
+bay stays calm — shelter kills all storm visuals. FPS 143 clear / 91
+peak. Prior milestones: BB-2 + BB-3 (Jakku-scale mega-wreck), BB (small
+mega-ship + plan), AA (torch + flashlight,
 opening-scene rebuild), Z (stone-well + salvage panels), Y
 (footprints + lizard tracks), X (audio sample-stem architecture, .ogg
 files pending in `public/audio/`), W (opening scene), V (atmosphere), U

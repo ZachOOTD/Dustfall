@@ -70,9 +70,13 @@ export function updateLighting(ctx: GameContext, _dt: number): void {
   sun.position.copy(_playerPos).addScaledVector(_sunDir, Tuning.SUN_DISTANCE);
 
   // Light intensity tracks sun height (clamped at 0 below horizon).
+  // BB-4 — storm dims the sun aggressively (sun is "behind" the dust)
+  // and dims the ambient gently (ambient picks up dust-scattered light).
   const aboveHorizon = Math.max(0, sy);
-  sun.intensity = aboveHorizon * Tuning.SUN_INTENSITY_MAX;
-  moon.intensity = Math.max(0, -sy) * Tuning.MOON_INTENSITY_MAX;
+  const storm = ctx.weather.intensity;
+  const sunStormDim = 1 - storm * Tuning.STORM_SUN_DIM;
+  sun.intensity = aboveHorizon * Tuning.SUN_INTENSITY_MAX * sunStormDim;
+  moon.intensity = Math.max(0, -sy) * Tuning.MOON_INTENSITY_MAX * sunStormDim;
   // Moon should also follow player so its lighting is consistent (no shadow on it).
   moon.position.copy(_playerPos).addScaledVector(_sunDir, -Tuning.SUN_DISTANCE);
 
@@ -90,20 +94,29 @@ export function updateLighting(ctx: GameContext, _dt: number): void {
     target = SkyColors.HORIZON_NIGHT;
   }
   // Sandstorm: pull the scene background HARD toward the storm-sky dust
-  // color (the dome behind the player), but lerp the FOG color more
-  // gently — fog tints every world surface within fog range, so a strong
-  // tint repaints the wreck and surrounding sand reddish. The sky tint
-  // is what sells "dust everywhere"; fog just adds a haze in the middle
-  // distance.
-  const storm = ctx.weather.intensity;
+  // color (the dome behind the player), and the FOG color about 70% of
+  // the way (BB-4 — bumped from 0.45 since FogExp2's denser falloff makes
+  // every surface read the fog color near the visibility limit, so the
+  // fog needs to match the sky tint or the world reads bichromatic).
   const dust = new THREE.Color(0x6e3a22);
   const bgTarget = storm > 0.001 ? target.clone().lerp(dust, storm * 0.95) : target;
-  const fogTarget = storm > 0.001 ? target.clone().lerp(dust, storm * 0.45) : target;
+  const fogTarget = storm > 0.001 ? target.clone().lerp(dust, storm * 0.70) : target;
   (scene.background as THREE.Color).copy(bgTarget);
-  (scene.fog as THREE.Fog).color.copy(fogTarget);
+  // scene.fog is FogExp2 (BB-4); FogBase has .color, same API as THREE.Fog.
+  (scene.fog as THREE.FogExp2).color.copy(fogTarget);
 
-  ambient.intensity =
+  // BB-4 — ambient also dims slightly during storm and shifts toward
+  // dust color (the sky is one giant orange dome, so ambient light
+  // arriving from above is dust-colored, not neutral).
+  const ambientStormDim = 1 - storm * Tuning.STORM_AMBIENT_DIM;
+  ambient.intensity = (
     Tuning.AMBIENT_BASE
     + aboveHorizon * Tuning.AMBIENT_DAY_GAIN
-    + Math.max(0, -sy) * Tuning.AMBIENT_NIGHT_GAIN;
+    + Math.max(0, -sy) * Tuning.AMBIENT_NIGHT_GAIN
+  ) * ambientStormDim;
+  if (storm > 0.001) {
+    ambient.color.copy(new THREE.Color(0x4a3a2a)).lerp(new THREE.Color(0x8a5840), storm * 0.7);
+  } else {
+    ambient.color.setHex(0x4a3a2a);
+  }
 }
