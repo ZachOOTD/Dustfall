@@ -3,6 +3,39 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session FF — 2026-05-16 — World rework #1: chunked terrain + bigger map
+`partially verified` — tsc clean; seam check passed numerically (Δ <
+0.0004m across all four chunk boundaries x=±400, z=±400, and the corner);
+preview screenshots confirm continuous horizon out to the LOD ring + no
+seam artifacts; full v1-save round-trip not exercised but loader accepts
+both versions. Replaced the single 800m heightfield with a 3×3 grid of
+TERRAIN_CHUNK_SIZE-meter chunks (default 800m × 3 = 2400m world span) all
+sharing one `createNoise2D` instance + world-space sampling for bit-
+identical heights at boundaries. New `Terrain.meshes: THREE.Mesh[]` +
+`Terrain.noise` (exposed so the far-LOD ring + future procgen can sample
+the same noise). New `src/world/terrainLod.ts`: coarse 80×80 square plane
+spanning [-2000, +2000], sits at `y=-0.15` to slot under the chunks (no
+donut carving needed — chunks always win the depth fight in the band).
+`SAVE_VERSION` 1 → 2 as a pure marker bump; loader accepts both versions
+(no schema change). Tuning bumps: `FAR_PLANE 600→1800`, `WORLD_RADIUS
+280→900`, `FOG_DENSITY_CLEAR 0.0035→0.0018`, `SHADOW_CULL_DISTANCE
+80→120`. Biome wavelength + POI placements + AI spawns intentionally
+unchanged (sessions #2 + #3). Decisions D50–D52.
+
+## Session EE — 2026-05-16 — Scoping: world rework split into 3 sub-sessions
+No code shipped — planning-only session. Split the 10-15h "world + biome
+rework" roadmap item into three shippable sub-sessions: #1 chunked
+terrain + bigger map (5-6h, 800m → 2400m via 3×3 heightfield chunks +
+far-LOD ring), #2 biome rescale + scatter retune (4-5h, `BIOME_NOISE_FREQ`
+1/220 → 1/900, count/bounds rescale), #3 procgen POIs + biome-aware AI
+spawns (4-6h, Poisson-disk POIs + ~28 lizards salt-excluded). Updated
+`docs/roadmap.md` to replace the single world-rework entry with the
+three ordered sub-entries. Authored
+`.claude/plans/world-rework-1-chunked-terrain.md` ready to execute next
+session (full files-to-touch list, tuning constants, seam-invisibility
+note, acceptance criteria, save-compat plan). Scoping rationale archived
+in `.claude/plans/archive/session-pick-from-soft-lobster.md`.
+
 ## Session DD — 2026-05-16 — Roaming Dune-style sand worm boss
 First boss-tier enemy. NEW `src/enemies/sandWorm.ts` (~750 lines):
 24m long lamprey-style mesh built along local +X with continuously

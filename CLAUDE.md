@@ -45,7 +45,27 @@ Run with `npm run dev` (port 5173). Type-check with `npx tsc --noEmit`.
 
 ## Where we are now
 
-**Last shipped**: Session DD — roaming Dune-style sand worm boss.
+**Last shipped**: Session FF — World rework #1: chunked terrain +
+bigger map. Replaced the single 800m heightfield with a 3×3 grid of
+800m heightfield chunks (2400m world span), all sharing one
+`createNoise2D` instance + world-space sampling so chunk-boundary
+heights are bit-identical (verified Δ < 0.0004m across all four
+seams). New `src/world/terrainLod.ts` adds a coarse 80×80 square LOD
+plane out to ±2000m, biased to `y=-0.15` so the chunks always win the
+z-fight inside the chunk band — no donut carving needed. `Terrain`
+interface now exposes `meshes: THREE.Mesh[]`, the shared `noise`
+sampler, and `worldHalfSize`. Tuning: `FAR_PLANE 600→1800`,
+`WORLD_RADIUS 280→900`, `FOG_DENSITY_CLEAR 0.0035→0.0018`,
+`SHADOW_CULL_DISTANCE 80→120`. `SAVE_VERSION` 1 → 2 as a pure marker
+(loader accepts both). Biomes, POIs, scatter, AI spawns intentionally
+unchanged (sessions #2 + #3 of the rework). Decisions D50–D52.
+
+**Prior milestone**: Session EE — scoping pass for the world rework.
+Split the 10-15h "world + biome rework" roadmap item into three
+sub-sessions; roadmap updated, session-1 plan authored, session FF
+then executed against it.
+
+**Prior milestone**: Session DD — roaming Dune-style sand worm boss.
 First boss-tier enemy: 24m segmented worm with continuously-tapered
 body + embedded torus ridge rings, lamprey-style **recessed maw**
 (BackSide-rendered throat carved into the head with two concentric

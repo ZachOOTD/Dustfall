@@ -1,6 +1,14 @@
 // Dune terrain: layered simplex heightmap mesh + matching Rapier heightfield.
 // Both share the same heights array — the visual mesh and the collider are
 // generated from identical samples so they overlay exactly.
+//
+// Session EE — world rework #1. Replaced the single 800m heightfield with a
+// GRID × GRID grid of CHUNK_SIZE-meter chunks (defaults: 3×3 × 800m =
+// 2400m world span). Each chunk reuses the previous 192-cell pattern so
+// per-chunk fidelity is unchanged. Seam invisibility: ALL chunks share one
+// `createNoise2D` instance AND sample world-space (x, z) — adjacent chunks
+// at their shared edge sample identical coords, producing bit-identical
+// heights and zero visible seams.
 
 import * as THREE from 'three';
 import { createNoise2D } from 'simplex-noise';
@@ -9,9 +17,6 @@ import type { Rng } from '../core/rng.ts';
 import type { BiomeSampler } from './biomes.ts';
 import { Tuning } from '../config/tuning.ts';
 
-const SIZE = 800;   // world units across the square terrain
-const CELLS = 192;  // cells per side; vertices = (CELLS+1)^2 — ~4.17m grid
-
 // Per-biome ground colors (Session P). Punchier than first-pass so the
 // regions read clearly from a distance: dune = saturated orange-sand,
 // rocky = dark red-brown, salt = bright warm-white.
@@ -19,8 +24,6 @@ const BIOME_COLOR_DUNE: readonly [number, number, number] = [0xcd / 255, 0x95 / 
 const BIOME_COLOR_ROCKY: readonly [number, number, number] = [0x55 / 255, 0x36 / 255, 0x1f / 255];
 const BIOME_COLOR_SALT: readonly [number, number, number] = [0xf0 / 255, 0xe8 / 255, 0xd2 / 255];
 
-// Smooth color blend driven by the biome noise scalar in [-1, 1]. Avoids the
-// hard color seam you'd get from a discrete biome lookup.
 function smoothstep(edge0: number, edge1: number, x: number): number {
   const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)));
   return t * t * (3 - 2 * t);
@@ -63,7 +66,6 @@ const _BIOME_BLEND_WIDTH = 0.22;
 function blendedBiomeColor(noiseVal: number): [number, number, number] {
   const rockyT = Tuning.BIOME_THRESHOLD_ROCKY;
   const saltT = Tuning.BIOME_THRESHOLD_SALT;
-  // Below rockyT → rocky. Cross into dune over a blend band.
   if (noiseVal < rockyT - _BIOME_BLEND_WIDTH) return [...BIOME_COLOR_ROCKY];
   if (noiseVal < rockyT + _BIOME_BLEND_WIDTH) {
     const t = smoothstep(rockyT - _BIOME_BLEND_WIDTH, rockyT + _BIOME_BLEND_WIDTH, noiseVal);
@@ -77,13 +79,26 @@ function blendedBiomeColor(noiseVal: number): [number, number, number] {
   return [...BIOME_COLOR_SALT];
 }
 
+interface Chunk {
+  /** World-space center of this chunk (Y = 0). */
+  centerX: number;
+  centerZ: number;
+  /** Heights at each vertex, indexed [i*(CELLS+1)+j]. */
+  heights: Float32Array;
+}
+
 export interface Terrain {
-  mesh: THREE.Mesh;
-  heights: Float32Array; // length (CELLS+1)^2, indexed [i*(CELLS+1)+j]
+  /** One mesh per chunk; consumers iterate (e.g. for shadow flags). */
+  meshes: THREE.Mesh[];
+  /** Shared simplex-noise instance — exposed so the far-LOD ring + future
+   *  procgen can sample identical world heights without seams. */
+  noise: (x: number, y: number) => number;
   /** Bilinear sample of terrain height at world (x, z). 0 outside bounds. */
   heightAt: (x: number, z: number) => number;
   /** Approximate normal at world (x, z) using neighboring samples. */
   normalAt: (x: number, z: number) => THREE.Vector3;
+  /** Half-extent of the playable square (world bounds = [-bound, +bound]). */
+  worldHalfSize: number;
 }
 
 export function createTerrain(
@@ -94,95 +109,118 @@ export function createTerrain(
 ): Terrain {
   const noise = createNoise2D(rand);
 
-  const heights = new Float32Array((CELLS + 1) * (CELLS + 1));
-  for (let i = 0; i <= CELLS; i++) {
-    for (let j = 0; j <= CELLS; j++) {
-      const x = (i / CELLS - 0.5) * SIZE;
-      const z = (j / CELLS - 0.5) * SIZE;
-      // Biome-driven height multiplier — salt flats end up almost level,
-      // rocky biomes slightly more rugged, dune normal. Smooth via the raw
-      // biome noise so transitions are continuous (no discontinuity at the
-      // hard biome threshold).
-      const flatness = biomeHeightScale(biomes.rawAt(x, z));
-      heights[i * (CELLS + 1) + j] = sampleHeight(noise, x, z) * flatness;
+  const SIZE = Tuning.TERRAIN_CHUNK_SIZE;
+  const CELLS = Tuning.TERRAIN_CHUNK_CELLS;
+  const GRID = Tuning.TERRAIN_CHUNK_GRID;
+  const stride = CELLS + 1;
+  const worldHalfSize = (SIZE * GRID) * 0.5;
+
+  const chunks: Chunk[] = [];
+  const meshes: THREE.Mesh[] = [];
+  // Build one heightfield collider + one mesh per (gx, gz) chunk. Each
+  // chunk's body is translated to the chunk's world-space center; vertices
+  // in the mesh are mesh-local, also centered on (0, 0).
+  for (let gx = 0; gx < GRID; gx++) {
+    for (let gz = 0; gz < GRID; gz++) {
+      const centerX = (gx - (GRID - 1) * 0.5) * SIZE;
+      const centerZ = (gz - (GRID - 1) * 0.5) * SIZE;
+
+      const heights = new Float32Array(stride * stride);
+      for (let i = 0; i <= CELLS; i++) {
+        for (let j = 0; j <= CELLS; j++) {
+          // World-space sampling — adjacent chunks' shared edge produces
+          // identical heights because both chunks pass the same world (x,z)
+          // through the SAME noise instance and biome sampler.
+          const localX = (i / CELLS - 0.5) * SIZE;
+          const localZ = (j / CELLS - 0.5) * SIZE;
+          const x = centerX + localX;
+          const z = centerZ + localZ;
+          const flatness = biomeHeightScale(biomes.rawAt(x, z));
+          heights[i * stride + j] = sampleHeight(noise, x, z) * flatness;
+        }
+      }
+
+      // --- Three.js mesh (vertex positions in mesh-local space) ---
+      const vertCount = stride * stride;
+      const positions = new Float32Array(vertCount * 3);
+      const colors = new Float32Array(vertCount * 3);
+      for (let i = 0; i <= CELLS; i++) {
+        for (let j = 0; j <= CELLS; j++) {
+          const idx = (i * stride + j) * 3;
+          const localX = (i / CELLS - 0.5) * SIZE;
+          const localZ = (j / CELLS - 0.5) * SIZE;
+          positions[idx] = localX;
+          positions[idx + 1] = heights[i * stride + j];
+          positions[idx + 2] = localZ;
+          const n = biomes.rawAt(centerX + localX, centerZ + localZ);
+          const c = blendedBiomeColor(n);
+          colors[idx]     = c[0];
+          colors[idx + 1] = c[1];
+          colors[idx + 2] = c[2];
+        }
+      }
+      const indices: number[] = [];
+      for (let i = 0; i < CELLS; i++) {
+        for (let j = 0; j < CELLS; j++) {
+          const a = i * stride + j;
+          const b = a + 1;
+          const c = (i + 1) * stride + j;
+          const d = c + 1;
+          indices.push(a, b, c, b, d, c);
+        }
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+      geo.setIndex(indices);
+      geo.computeVertexNormals();
+
+      const mat = new THREE.MeshLambertMaterial({ vertexColors: true });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(centerX, 0, centerZ);
+      scene.add(mesh);
+
+      // --- Rapier heightfield collider, body translated to chunk center ---
+      const colliderDesc = RAPIER.ColliderDesc.heightfield(
+        CELLS, CELLS, heights,
+        { x: SIZE, y: 1, z: SIZE },
+      );
+      const body = world.createRigidBody(
+        RAPIER.RigidBodyDesc.fixed().setTranslation(centerX, 0, centerZ),
+      );
+      world.createCollider(colliderDesc, body);
+
+      chunks.push({ centerX, centerZ, heights });
+      meshes.push(mesh);
     }
   }
-
-  // --- Three.js mesh ---
-  const vertCount = (CELLS + 1) * (CELLS + 1);
-  const positions = new Float32Array(vertCount * 3);
-  // Per-vertex biome color (Session P). Lambert respects vertexColors:true.
-  const colors = new Float32Array(vertCount * 3);
-  for (let i = 0; i <= CELLS; i++) {
-    for (let j = 0; j <= CELLS; j++) {
-      const idx = (i * (CELLS + 1) + j) * 3;
-      const x = (i / CELLS - 0.5) * SIZE;
-      const z = (j / CELLS - 0.5) * SIZE;
-      positions[idx] = x;
-      positions[idx + 1] = heights[i * (CELLS + 1) + j];
-      positions[idx + 2] = z;
-      // Soft-blend the biome color: take a wider neighborhood average so the
-      // transition isn't a hard line. Two extra noise samples + a smoothstep
-      // weight on the raw biome noise gives a believable gradient.
-      const n = biomes.rawAt(x, z);
-      const c = blendedBiomeColor(n);
-      colors[idx]     = c[0];
-      colors[idx + 1] = c[1];
-      colors[idx + 2] = c[2];
-    }
-  }
-  const indices: number[] = [];
-  for (let i = 0; i < CELLS; i++) {
-    for (let j = 0; j < CELLS; j++) {
-      const a = i * (CELLS + 1) + j;
-      const b = a + 1;
-      const c = (i + 1) * (CELLS + 1) + j;
-      const d = c + 1;
-      // Two triangles per cell. Three.js front face = CCW; we want the
-      // normal to point +Y (up). Vertex layout:
-      //   a (i,j) ----- b (i,j+1)
-      //     |             |
-      //   c (i+1,j) --- d (i+1,j+1)
-      // Triangles (a,b,c) and (b,d,c) both have normal (0,+1,0).
-      indices.push(a, b, c, b, d, c);
-    }
-  }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  geo.setIndex(indices);
-  geo.computeVertexNormals();
-
-  const mat = new THREE.MeshLambertMaterial({ vertexColors: true });
-  const mesh = new THREE.Mesh(geo, mat);
-  scene.add(mesh);
-
-  // --- Rapier heightfield collider ---
-  // Rapier docs: vertex (i,j) is at local (i/nrows - 0.5)*scale.x,
-  //              heights[i*(ncols+1)+j]*scale.y,
-  //              (j/ncols - 0.5)*scale.z.
-  // Our indexing already matches. Scale x/z by SIZE, y by 1 (heights in meters).
-  const colliderDesc = RAPIER.ColliderDesc.heightfield(
-    CELLS, CELLS, heights,
-    { x: SIZE, y: 1, z: SIZE },
-  );
-  const body = world.createRigidBody(RAPIER.RigidBodyDesc.fixed());
-  world.createCollider(colliderDesc, body);
 
   // --- Sampling helpers ---
+  // Index a chunk by world (x, z). Returns null if outside the playable area.
+  const chunkAt = (x: number, z: number): Chunk | null => {
+    const gx = Math.floor((x + worldHalfSize) / SIZE);
+    const gz = Math.floor((z + worldHalfSize) / SIZE);
+    if (gx < 0 || gx >= GRID || gz < 0 || gz >= GRID) return null;
+    return chunks[gx * GRID + gz];
+  };
+
   const heightAt = (x: number, z: number): number => {
-    const fi = (x / SIZE + 0.5) * CELLS;
-    const fj = (z / SIZE + 0.5) * CELLS;
-    if (fi < 0 || fi >= CELLS || fj < 0 || fj >= CELLS) return 0;
-    const i = Math.floor(fi);
-    const j = Math.floor(fj);
-    const tx = fi - i;
-    const tz = fj - j;
-    const stride = CELLS + 1;
-    const h00 = heights[i * stride + j];
-    const h10 = heights[(i + 1) * stride + j];
-    const h01 = heights[i * stride + (j + 1)];
-    const h11 = heights[(i + 1) * stride + (j + 1)];
+    const chunk = chunkAt(x, z);
+    if (!chunk) return 0;
+    // Local coords within this chunk: [-SIZE/2, +SIZE/2] → [0, CELLS].
+    const fi = ((x - chunk.centerX) / SIZE + 0.5) * CELLS;
+    const fj = ((z - chunk.centerZ) / SIZE + 0.5) * CELLS;
+    // Clamp to a safe interpolation range. fi can land on CELLS exactly at
+    // the +X edge — that's the boundary shared with the next chunk; heights
+    // there are identical so either chunk's sample matches.
+    const i = Math.min(CELLS - 1, Math.max(0, Math.floor(fi)));
+    const j = Math.min(CELLS - 1, Math.max(0, Math.floor(fj)));
+    const tx = Math.min(1, Math.max(0, fi - i));
+    const tz = Math.min(1, Math.max(0, fj - j));
+    const h00 = chunk.heights[i * stride + j];
+    const h10 = chunk.heights[(i + 1) * stride + j];
+    const h01 = chunk.heights[i * stride + (j + 1)];
+    const h11 = chunk.heights[(i + 1) * stride + (j + 1)];
     return (
       h00 * (1 - tx) * (1 - tz) +
       h10 * tx * (1 - tz) +
@@ -202,28 +240,16 @@ export function createTerrain(
     return _n;
   };
 
-  return { mesh, heights, heightAt, normalAt };
+  return { meshes, noise, heightAt, normalAt, worldHalfSize };
 }
 
 // Smooth wind-warped dunes. Long ridges run perpendicular to a prevailing
 // wind direction, with rounded crests and rounded valleys — no sharp peaks.
-//
-// Key design notes:
-//   - Crest function is `cos(n · π/2)`, which is C^∞ smooth at the peak.
-//     The earlier `1 - |n|` had a sharp kink at the peak (visually jagged).
-//   - Asymmetric warp uses a low-frequency noise channel — not a rigid sin —
-//     so ridges meander organically along the wind axis.
-//   - Aniso ratio < 1 compresses the wind-axis sample so features elongate
-//     across the wind (the visual ridges run perpendicular to wind).
-//   - Two octaves of smooth ridges + one low-frequency base.
 function smoothRidge(n: number): number {
-  // Maps simplex value in [-1, 1] → ridge height in [0, 1]. Smooth at top
-  // (n = 0) AND at troughs (n = ±1), because cos has zero derivative at the
-  // ridge peak and finite-but-continuous slope at the valley.
   return Math.cos(n * Math.PI * 0.5);
 }
 
-function sampleHeight(
+export function sampleHeight(
   noise: (x: number, y: number) => number,
   x: number,
   z: number,
@@ -234,31 +260,24 @@ function sampleHeight(
   const v = -x * sn + z * cs;      // perpendicular to wind
   const aniso = Tuning.DUNE_ANISO_RATIO;
 
-  // Organic crest meander — a low-freq noise channel shifts the wind-axis
-  // sample so ridges curve gently in u rather than running ruler-straight.
-  // This reads as natural dune migration patterns. Stronger than the old
-  // sin-based bias and yields more believable shapes.
   const warp = noise(
     v / Tuning.DUNE_WARP_SCALE,
     u / Tuning.DUNE_WARP_SCALE,
   ) * Tuning.DUNE_ASYMMETRY_AMOUNT;
   const uShifted = u + warp;
 
-  // Primary smooth ridges — the dominant dune wavelength.
   const np = noise(
     uShifted * aniso / Tuning.DUNE_RIDGE_SCALE_PRIMARY,
     v / Tuning.DUNE_RIDGE_SCALE_PRIMARY,
   );
   const r1 = smoothRidge(np);
 
-  // Secondary smooth ridges riding on top — same family, finer scale.
   const ns = noise(
     uShifted * aniso / Tuning.DUNE_RIDGE_SCALE_SECONDARY,
     v / Tuning.DUNE_RIDGE_SCALE_SECONDARY,
   );
   const r2 = smoothRidge(ns);
 
-  // Low-frequency drift so the world isn't a uniform grid of ridges.
   const base = noise(
     x / Tuning.DUNE_BASE_UNDULATION_SCALE,
     z / Tuning.DUNE_BASE_UNDULATION_SCALE,
@@ -268,3 +287,8 @@ function sampleHeight(
          r2 * Tuning.DUNE_SECONDARY_AMP +
          base;
 }
+
+// Re-export so the far-LOD ring can use the same biome height scaling as
+// the chunks (without it the LOD's salt regions would tower above the
+// chunks' near-flat salt).
+export { biomeHeightScale };

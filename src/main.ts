@@ -14,6 +14,7 @@ import { makePlayer } from './physics/bodies.ts';
 import { installPhysicsDebug, updatePhysicsDebug } from './physics/debug.ts';
 import { preloadAssets } from './assets/loader.ts';
 import { createTerrain } from './world/terrain.ts';
+import { createTerrainLod } from './world/terrainLod.ts';
 import { createBiomeSampler } from './world/biomes.ts';
 import { placePOIs } from './world/poi.ts';
 import { placeHeroLandmarks } from './world/heroLandmarks.ts';
@@ -84,6 +85,10 @@ const shelter = createShelterRegistry();
 // scatter stream so the world is fully deterministic from RNG_SEED.
 const biomes = createBiomeSampler(makeRng(Tuning.RNG_SEED + 17));
 const terrain = createTerrain(three.scene, physics.world, terrainRand, biomes);
+// EE — coarse far-LOD ring outside the chunk band so the horizon doesn't
+// drop off at the chunk edge. Sits at y = -0.15 so chunks always win the
+// z-fight inside the chunk band.
+createTerrainLod(three.scene, terrain.noise, biomes);
 // Session T — salvage registry. Built up-front so hero landmarks + POIs
 // can register their wrecks as they're placed.
 const salvageables = createSalvageableRegistry();
@@ -172,8 +177,10 @@ three.scene.traverse((obj) => {
     m.receiveShadow = true;
   }
 });
-terrain.mesh.castShadow = false;
-terrain.mesh.receiveShadow = true;
+for (const m of terrain.meshes) {
+  m.castShadow = false;
+  m.receiveShadow = true;
+}
 
 createSky(three.scene);
 

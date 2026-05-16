@@ -742,3 +742,64 @@ at arc midpoint, so a player who didn't dodge gets bitten.
 hit, but a moving / aware player has a real defensive option. That's
 the intended game-feel split. If raiders ever get a "charge" attack
 later, mirror this commit pattern.
+
+## D50 — 3×3 fixed-resident chunks (not streaming, not one big heightfield) (Session FF)
+**When**: Session FF — world rework #1.
+**Why**: Two alternatives were rejected. (a) Single enlarged
+heightfield at 2400m × 720-cell grid: ~3.6M-triangle monolithic mesh
+with one giant Rapier heightfield collider. The mesh becomes a frustum-
+culling disaster (single AABB spans the whole world) and the collider
+puts the entire heightfield on Rapier's hot path. (b) Streaming chunks
+(load/unload by player position): real procedural-world scale, but the
+load/unload pump is a session of its own — pose hand-off, collider
+re-registration, deterministic seed-per-chunk indexing, fade-in
+artifacts.
+**Pick**: 3×3 fixed-resident chunks. Each chunk reuses the proven 192-
+cell pattern so per-chunk fidelity matches the pre-FF world. All 9
+chunks resident at boot, no swap pump. Cheap enough that the playable
+area can grow to 2400m without changing the rendering or physics
+pipelines.
+**Trade-off**: world has a hard 2400m cap. If sessions #2 + #3 reveal
+the user wants 4000m+ ("real" exploration scale), revisit with
+streaming. For now, 2400m gives 9× the area of the old world — plenty
+of room for vaster biomes + spread POIs.
+
+## D51 — Seam invisibility via shared noise + world-space sampling (Session FF)
+**When**: Session FF.
+**Why**: Naively, each chunk would build its own `createNoise2D`
+instance from its own RNG stream. Adjacent chunks would then sample
+DIFFERENT noise channels at their shared edge, producing visible
+discontinuities at chunk boundaries — a grid of seams in the desert.
+The alternative considered was an explicit seam-stitching pass after
+mesh creation (averaging adjacent vertex heights).
+**Fix**: ONE shared `createNoise2D` instance lives at the
+`createTerrain` scope; every chunk passes it to `sampleHeight`. Every
+chunk samples WORLD-SPACE `(x, z)` (chunkCenter + localOffset), not
+chunk-local coords. With both invariants, vertex at chunk (gx,gz)'s
+east edge (worldX = chunkCenter.x + SIZE/2) and vertex at chunk
+(gx+1,gz)'s west edge (worldX = chunkCenter.x + SIZE/2) sample the
+SAME world coord through the SAME noise function and produce bit-
+identical heights. Verified Δ < 0.0004m across all four seams and the
+corner (residual is floating-point bilinear interp error).
+**Apply**: any future chunked / streamed terrain logic MUST honor
+both rules. If session #2 or #3 introduces a per-chunk noise seed, it
+breaks seam invisibility.
+
+## D52 — LOD ring slotted under chunks (no donut carving) (Session FF)
+**When**: Session FF.
+**Why**: The coarse far-LOD mesh (80×80 vertices over ±2000m, no
+collider) physically overlaps with the chunk band in [-1200, +1200].
+Three options: (a) donut-carve the LOD geometry to exclude the
+chunk-band square — costs an indexing pass and complicates the
+vertex layout for marginal benefit. (b) Disable depth-test on the
+LOD so chunks always paint over — would break terrain occlusion of
+landmarks beyond the chunk band. (c) Render the LOD slightly under
+the chunks.
+**Pick**: option (c). LOD mesh sits at `y = -0.15`. Inside the chunk
+band, the high-detail chunks always win the z-buffer fight by a
+millimeter or two. Outside the band, the LOD is the only terrain
+visible. The 0.15m bias is invisible at the LOD's viewing distance
+(>1200m from camera, heavy fog at the new clear-density 0.0018).
+**Trade-off**: at the chunk-band edge, the LOD sits 0.15m below the
+chunks — a tiny vertical step. Visually undetectable; nobody will see
+a 15cm shelf at 1200m.

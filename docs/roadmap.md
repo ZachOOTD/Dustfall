@@ -21,7 +21,8 @@ Pick whatever feels most missing after the polish + atmosphere arc.
 - 7-day storm countdown
 - Bounties (template: D39 `'mount'` singleton-interactable pattern from CC-2)
 - Procedural world generation (idea — POIs randomized per seed)
-- World + biome rework: larger map, vaster biomes, procgen terrain/biomes/POI/AI spawns
+- World rework #2 — biome rescale + scatter retune (4-5h): BIOME_NOISE_FREQ 1/220 → 1/900, cactus/tree/well counts rescaled, `findBiomeCentroid()` helper.
+- World rework #3 — procgen POIs + biome-aware AI spawns (4-6h): 6 anchor POIs + ~15 Poisson-disk procgen POIs (250m min separation); ~28 lizards, salt-excluded, density-by-distance.
 - Wreck POI rework: accurate collision, connected geometry (no floaters), less boxy, more curves + detail
 - New POI: wrecked satellite dish
 - Sled / rope / scrap-metal sled (physical-inventory drag-along, towable behind speeder)

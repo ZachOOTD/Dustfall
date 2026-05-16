@@ -35,7 +35,7 @@ export const Tuning = {
   SUN_DISTANCE: 100,        // how far the directional light sits from its target
   /** Landmarks placed beyond this distance from origin won't cast shadows
    *  (fog hides their shadows anyway and they make up the bulk of the cost). */
-  SHADOW_CULL_DISTANCE: 80,
+  SHADOW_CULL_DISTANCE: 120,  // EE — bumped from 80 with the larger world
 
   // Stats
   THIRST_DRAIN_PER_SEC: 1 / 300, // idle death in ~5 min
@@ -65,9 +65,24 @@ export const Tuning = {
   // Session BB-4 — FogExp2 density curve. Clear days feel open (low
   // density), storm peak chokes visibility to ~30m. Density follows
   // an eased curve from CLEAR→STORM as weather.intensity ramps.
-  FOG_DENSITY_CLEAR: 0.0035,
+  FOG_DENSITY_CLEAR: 0.0018,  // EE — tightened so 1km+ remains visible in the larger world
   FOG_DENSITY_STORM: 0.055,
-  WORLD_RADIUS: 280,
+  WORLD_RADIUS: 900,  // EE — soft visibility cap; was 280 for the 800m world
+
+  // World chunks (Session EE — world rework #1). The terrain is a
+  // TERRAIN_CHUNK_GRID × TERRAIN_CHUNK_GRID grid of TERRAIN_CHUNK_SIZE-meter
+  // heightfield chunks, total world span = SIZE * GRID. Each chunk reuses
+  // the previous 192-cell-per-side resolution (~4.17m grid) so per-chunk
+  // visual fidelity is identical to the pre-EE 800m world.
+  WORLD_SIZE: 2400,
+  TERRAIN_CHUNK_SIZE: 800,
+  TERRAIN_CHUNK_GRID: 3,
+  TERRAIN_CHUNK_CELLS: 192,
+  // Far-LOD ring (no physics): coarse heightmap mesh covering out to
+  // TERRAIN_LOD_OUTER_RADIUS so the horizon doesn't drop off at the chunk
+  // band edge (1200m).
+  TERRAIN_LOD_OUTER_RADIUS: 2000,
+  TERRAIN_LOD_CELLS: 80,                // ~50m per LOD cell
 
   // Hover speeder (Session CC) — dynamic-body bike, velocity-controlled
   // for both Y (hover) and XZ (movement). Bike yaw lerps toward the
@@ -215,7 +230,7 @@ export const Tuning = {
   // Scene
   FOV: 78,
   NEAR_PLANE: 0.1,
-  FAR_PLANE: 600,
+  FAR_PLANE: 1800,  // EE — bumped from 600 with the larger world
   RNG_SEED: 1337,
   LANDMARK_COUNT: 180,
 
