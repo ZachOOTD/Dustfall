@@ -3,6 +3,62 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session CC-4 — 2026-05-16 — Biome polish + crescent moon fix + GH Pages deploy
+Multi-thread polish session. **World/biome**: green saguaro cacti
+retired (`makeCactus` deleted, `CactusKind = 'alien'` only); alien
+cactus rare (TARGET 12 → 3), restricted to salt-flats + flat ground
+via new `terrainFlatnessAt` helper, base recolored to warm grey
+(`#7a7268`) so the teal fruit pops as the only saturated element.
+Dead trees same salt+flat restriction (new `biomes` param in
+`spawnDeadTrees`). Wells: 3 stacked rock rings (`WELL_STONE_RINGS=3`)
+with tighter spacing (`baseSize * 0.85`, was *1.75) so layers
+interlock instead of leaving gaps; hatch lowered to `stoneMinHalfHeight`
++ widened tilt randomization (±6° pitch + ±5° roll) so all four corners
+sit on stones instead of floating. Single well at the salt-flats
+centroid via new `findSaltCentroid` grid sweep (`WELL_TARGET_COUNT` 5
+→ 1). **Alien fruit lifecycle** (`updateCacti` tick): fruit + stems
+hide on harvest, regrow after a full `DAY_LENGTH_SECONDS` cycle, retag
+as harvestable; save/load re-arms the regrow clock on restore so
+save-scumming can't shortcut it. **Day cycle**: `DAY_LENGTH_SECONDS`
+480 → 720 (12 real-min, was 8). **Lizards**: `FLEE_SPEED` 2.5 → 1.8
+(catchable while sprinting now) + fixed head-rotation formula —
+mesh's local forward is +X (head at +X=0.11), but the old yaw used
+`atan2(x, z)` which assumes Three.js's -Z-forward default, leaving
+the head 90° perpendicular to motion. New formula `atan2(-fleeDir.z,
+fleeDir.x)` applied every frame during flee (was one-shot at flee
+transition). **Moon-direction bug fix** in `lighting.ts`: moon's
+`target` was never added to scene or updated, so its `target.position`
+stayed at world origin. When the player capsule parks at `(0,-2000,0)`
+while mounted on the speeder, moon position dropped below world, target
+stayed at origin → light direction inverted → night went pitch-dark
+when mounted. Fix: `scene.add(moon.target)` + `target.position.copy(
+playerPos)` + `target.updateMatrixWorld()` each frame, matching the
+sun's setup. Subtle side benefit: moonlight direction is now correct
+anywhere the player walks, not just near origin. **Save round-trips
+correctly**: removed the `!hasSave()` guard around `setupOpeningScene`
+(wreck/skeleton/journal/speeder always exist after boot;
+`loadGameState` patches the speeder pose over the default placement
+on Continue). NEW GAME with an existing save wipes + reloads for a
+clean slate. Title overlay gained `CONTINUE` button (via
+`titleOverlay.ts` `onContinue` option) plus tighter button spacing.
+Title subtitle: "a desert is patient" → "the desert is patient". CSS
+specificity fix so `#title-overlay.hidden` actually hides
+(`display:flex` at id-spec was beating `.overlay.hidden` at class-
+spec). **Infra**: NEW `.github/workflows/deploy.yml` builds + ships
+`dist/` to GitHub Pages on every push to master; `vite.config.ts`
+gains mode-based `base: '/Dustfall/'` for production. Phantom-dep
+landmine fixed — `simplex-noise@4.0.3` was being resolved from a
+parent directory's node_modules locally and never declared in
+`package.json`; CI's `npm ci` couldn't see it. Now declared properly
+(D46). Decisions D45–D47. `partially verified` (tsc clean; state
+checks confirmed cactus rarity + grey palette + fruit harvest/regrow
+round-trip + well 3-ring stack + hatch flat-bottom-on-min-stone +
+moon-target equal direction in mounted vs unmounted + lizard
+rotation across all 4 cardinal directions + save round-trip restored
+speeder pose to (123,5,-45) exactly + first GH Pages deploy
+succeeded after the simplex-noise fix; screenshot tool flaked
+intermittently — visual checks via pixel sampling).
+
 ## Session CC-3 — 2026-05-15 — Animated main menu (title screen)
 NEW `src/world/titleScene.ts` — dedicated THREE.Scene + camera, decoupled
 from the game world. Camera atop a Gaussian-bump hero dune on a 800m

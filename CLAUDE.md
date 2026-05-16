@@ -45,38 +45,35 @@ Run with `npm run dev` (port 5173). Type-check with `npx tsc --noEmit`.
 
 ## Where we are now
 
-**Last shipped**: Session CC-3 — animated main menu (title screen).
-Dedicated `src/world/titleScene.ts` (own THREE.Scene + camera, decoupled
-from game world) — camera atop a Gaussian-hero-dune perched on an 800m
-displaced-plane dune field, sky 2/3 / desert 1/3 composition. Tiny pod
-streaks in like a shooting star (additive Line trail + glow sprite) and a
-procedural **pyre** (nested cones + tongues + coal bed + ember/smoke
-pools, `fog: false` to punch through 200m haze) engulfs it on impact. Day/
-night cycle uses the **real in-game sky** (shader-sphere gradient + sun
-sprite + moon sprite + 800 stars + planet + shooter pool) — `sky.ts`
-exports its helpers so the title can build its own bundle without
-disturbing the game's singleton. Sun arc rebuilt around the camera-forward
-axis so it actually crosses the fixed view; left-shifted via
-`LEFT_SHIFT=0.50`. Boot starts in pre-dawn (`cycleOffset=0.19`, sun 18°
-below horizon, red glow building). **Moon now crescent + larger** in
-`sky.ts` (canvas `destination-out` carve, `MOON_DISC_SIZE` 16 → 32,
-`depthTest: true` so terrain occludes it — affects in-game too). NEW
-`src/ui/titleOverlay.ts` — DUSTFALL wordmark + subtitle + CONTINUE
-(when save exists) + NEW GAME. `startLoop` accepts an optional render-
-target getter that swaps title/game scenes by `ctx.flags.titleActive`.
-**Save/load round-trips speeder pose** (pos + rotationQuat + mounted +
-headlamp); `setupOpeningScene` now runs on every boot (was gated on
-`!hasSave`) so the starter wreck + speeder always exist, and
-`loadGameState` patches over the default placement on Continue. NEW GAME
-from a save wipes save + reloads (clean slate). Decisions D41–D44. Prior
-milestones: CC-2 (speeder polish), CC (hover speeder shell), BB-4 (storm +
-fog rework), BB-2/BB-3 (Jakku-scale mega-wreck), BB (small mega-ship), AA
-(torch + flashlight, opening-scene rebuild), Z (stone-well + salvage
-panels), Y (footprints + lizard tracks), X (audio sample-stem
-architecture, .ogg files pending in `public/audio/`), W (opening scene),
-V (atmosphere), U (UX + empty world), N (rigged raider infra). See
-[docs/changelog.md](docs/changelog.md) for full history;
-[docs/roadmap.md](docs/roadmap.md) for what's next.
+**Last shipped**: Session CC-4 — biome polish + crescent moon fix +
+GH Pages deploy. Green cacti retired; alien cactus rare (3 in salt
+flats, base grey, fruit teal), restricted to salt + flat ground via a
+new `terrainFlatnessAt` helper. Fruit hide on harvest + regrow after
+one `DAY_LENGTH_SECONDS` cycle. Dead trees same salt+flat restriction.
+Wells now 3 stacked rock rings with tighter spacing + tilted hatch
+sitting on min-stone height; single well placed at the salt-flats
+centroid (`findSaltCentroid` grid sweep). `DAY_LENGTH_SECONDS` 480 →
+720 (12 real-min day). Lizards 2.5 → 1.8 m/s + head-rotation formula
+fixed (mesh forward is local +X, was using -Z-forward yaw → 90° off).
+**Moon-light-when-mounted bug fix** in `lighting.ts`: moon's `target`
+never updated, so moon position parking at y=-1930 (player capsule at
+y=-2000 when mounted) inverted the light direction. `scene.add(moon
+.target)` + per-frame `target.position.copy(playerPos)` mirrors sun's
+setup; night-while-mounted now matches night-while-unmounted. Title
+gained CONTINUE button + tighter button spacing + corrected subtitle;
+`#title-overlay.hidden` CSS specificity fixed. **Infra**: GitHub
+Pages auto-deploy via `.github/workflows/deploy.yml` (mode-based Vite
+base path `/Dustfall/`). Phantom-dep fixed — `simplex-noise@4.0.3`
+was resolving from a parent dir's `node_modules` locally and missing
+from `package.json` — D46 + D47. Decisions D45–D47. Prior milestones:
+CC-3 (animated title screen), CC-2 (speeder polish), CC (hover speeder),
+BB-4 (storm + fog rework), BB-2/BB-3 (Jakku-scale mega-wreck), BB
+(small mega-ship), AA (torch + flashlight + opening rebuild), Z
+(stone-well + salvage panels), Y (footprints + lizard tracks), X
+(audio sample-stem architecture, .ogg files pending in
+`public/audio/`), W (opening scene), V (atmosphere), U (UX + empty
+world), N (rigged raider infra). See [docs/changelog.md](docs/changelog.md)
+for full history; [docs/roadmap.md](docs/roadmap.md) for what's next.
 
 ### Tutorial flags (Session L)
 

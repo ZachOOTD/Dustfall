@@ -646,3 +646,57 @@ Also flipped `depthTest: false → true` on the moon material so terrain
 occludes it (matching stars + planet) — the previous setting was a
 copy-paste from the sun material and caused the moon to render through
 dunes in-game.
+
+## D45 — Single well at the salt-flats centroid (not scattered) (Session CC-4)
+**When**: Session CC-4.
+**Why**: The salt-flats well was originally a quota-based scatter (up to
+5 wells, each placed at a random salt patch). User direction shifted
+to a single well 'at the center of the salt flats biome' — easier
+landmark, more of a destination, less RNG-driven map clutter. Picked
+an analytical centroid: grid-sample the explorable disc, score each
+'salt' cell by `rawAt(x, z) - distFromOrigin × 0.001` (higher raw
+biome-noise value = deeper into salt territory; the small distance
+penalty prefers central salt patches over edge ones). `WELL_TARGET_COUNT`
+stayed configurable (default 1) so a future tuning bump could re-
+introduce scatter without code surgery. Trade-off: the world loses
+some 'multiple watering holes' feel, but gains a clear pilgrimage-
+type goal — walk far enough across the salt and you'll find THE well.
+
+## D46 — GitHub Pages via Actions (not Cloudflare / Netlify / itch.io) (Session CC-4)
+**When**: Session CC-4.
+**Why**: User wanted to share Dustfall with friends. Four static-host
+options: GitHub Pages (free, GitHub-native), Cloudflare Pages (free,
+faster + unlimited bandwidth, requires connecting repo to CF), Netlify
+/ Vercel (similar to CF, 100 GB/mo cap), itch.io (game-dev focused, can
+be password-protected for friends-only, manual upload per release).
+Picked GitHub Pages because (1) repo is already on GitHub so zero new
+dashboard/account, (2) auto-deploy on push to master keeps the dev
+flow identical to what's been working all session, (3) workflow file
+is ~50 lines of YAML and lives next to the code (good archeology in 6
+months), (4) the public URL is fine for a shared-with-friends use case
+— if privacy ever matters, we can move to itch.io's password-protected
+upload without losing anything. Implementation: `.github/workflows/
+deploy.yml` (build with `npm ci` + `npm run build` → upload `dist/`
+→ `actions/deploy-pages@v4`), Vite config gains mode-based base `/Dustfall/`
+for production-only (dev stays at `/`). One-time UI toggle: Settings
+→ Pages → Source = 'GitHub Actions'.
+
+## D47 — Phantom `simplex-noise` dep (resolved from parent node_modules) (Session CC-4)
+**When**: Session CC-4.
+**Why**: Documenting a bite so future-Zach (and anyone else) doesn't
+get the same one. `simplex-noise@4.0.3` was being resolved at
+`C:/Users/Zach/node_modules/simplex-noise/` — installed in the user's
+home directory's node_modules (probably from a one-off `npm install`
+run outside the project) and silently picked up by Node's module-
+resolution walk-up. Locally `npx tsc --noEmit` passed (with
+`moduleResolution: "bundler"`, tsc defers actual module resolution to
+the bundler), `npm run build` passed (Vite walks up the tree too), and
+the game shipped fine — but on CI, `npm ci` strictly installs only what's
+in package.json's dependencies, with no fallback to a parent directory.
+Result: GitHub Pages build #1 failed with 3× "Cannot find module
+'simplex-noise'" errors. Fix: declared `simplex-noise: ^4.0.3` in
+package.json + ran `npm install` to update the lockfile. 
+**Lesson**: any time you suspect a phantom dep, check `ls
+C:/Users/Zach/node_modules/` — that directory should be empty for a
+project like this. Stray packages there will mask CI bugs forever
+because locally they 'just work.'
