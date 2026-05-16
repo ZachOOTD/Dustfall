@@ -36,6 +36,7 @@ import { createShelterRegistry, updateShelter } from './shelter/shelterZones.ts'
 import { updateSoundscape } from './audio/soundscape.ts';
 import { updateRaiders, type Raider } from './enemies/raider.ts';
 import { spawnLizard, updateLizards } from './enemies/lizard.ts';
+import { spawnSandWorm, updateSandWorm } from './enemies/sandWorm.ts';
 import { updateCombat } from './player/combat.ts';
 import { createViewModel, updateViewModel } from './player/viewModel.ts';
 import { createWeather, updateWeather } from './world/weather.ts';
@@ -111,6 +112,22 @@ const lizards = [
   spawnLizard(three.scene, physics.world, terrain, { x: -14, z: -34 }),
   spawnLizard(three.scene, physics.world, terrain, { x: 36, z: -22 }),
 ];
+
+// Session DD-2 — roaming sand worm. The home anchor (patrol center) is
+// configured in tuning.ts; we verify it lands in the dune biome at boot
+// and warn if it doesn't (future world-gen changes that shift biome
+// boundaries are caught visibly rather than silently breaking the
+// encounter).
+{
+  const hp = Tuning.SANDWORM_HOME_POS;
+  const biome = biomes.biomeAt(hp.x, hp.z);
+  if (biome !== 'dune') {
+    console.warn(
+      `[sandWorm] home pos (${hp.x}, ${hp.z}) is in biome '${biome}', not 'dune'. Encounter may feel wrong.`,
+    );
+  }
+}
+const sandWorm = spawnSandWorm(three.scene, physics.world, terrain);
 
 const weather = createWeather(three.scene, three.camera);
 const ambientDust = createAmbientDust(three.scene, three.camera);
@@ -191,6 +208,7 @@ const ctx: GameContext = {
   shelter,
   raiders,
   lizards,
+  sandWorm,
   waterSources: { list: waterSources },
   cacti: { list: cacti },
   lootContainers: { list: [], open: null },
@@ -349,6 +367,7 @@ startLoop(ctx, (c, dt) => {
   // (bobPickups removed — items now rest flat on the ground; no float/spin)
   updateRaiders(c, dt);          // AI state machine + raider movement
   updateLizards(c, dt);          // small flee-AI wildlife
+  updateSandWorm(c, dt);         // DD — buried boss; breaches when player enters territory
   updateFootprints(c.footprints, c.time.elapsed); // age + fade pooled decals
   updateFires(c, dt);            // flicker + fuel decrement + burnout
   updateCacti(c);                // CC-4 — regrow harvested alien-cactus fruit after a day cycle

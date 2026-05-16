@@ -360,6 +360,66 @@ const _DEFS: Record<ItemId, ItemDef> = {
     },
   },
 
+  // ─── Session DD — sand worm meat (raw + cooked) ───────────────────────
+
+  raw_worm_meat: {
+    id: 'raw_worm_meat',
+    name: 'RAW WORM-FLESH',
+    glyph: '≀',
+    description: 'a heavy slab of pale worm-flesh — fibrous, oozing',
+    stackable: true,
+    maxStack: 4,
+    onUse(ctx, _slot) {
+      ctx.stats.hunger = Math.min(1, ctx.stats.hunger + 0.18);
+      ctx.stats.health = Math.max(0, ctx.stats.health - 0.08);
+      return { consumed: true, message: 'raw worm — your stomach turns' };
+    },
+    makeViewModel() {
+      const group = new THREE.Group();
+      const mat = new THREE.MeshLambertMaterial({ color: 0xb8a088 });
+      const slab = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.035, 0.07), mat);
+      slab.rotation.set(0.1, 0.4, 0.05);
+      group.add(slab);
+      return group;
+    },
+    makeIcon() {
+      const s = svg();
+      s.appendChild(svgEl('polygon', { points: '4,12 7,7 17,7 20,12 18,17 14,18 6,17' }));
+      s.appendChild(svgEl('line', { x1: '8', y1: '11', x2: '16', y2: '14', 'stroke-width': '1' }));
+      s.appendChild(svgEl('line', { x1: '9', y1: '14', x2: '15', y2: '11', 'stroke-width': '1' }));
+      return s;
+    },
+  },
+
+  cooked_worm_meat: {
+    id: 'cooked_worm_meat',
+    name: 'COOKED WORM-FLESH',
+    glyph: '∝',
+    description: 'dense flesh seared dark over a fire — finally edible',
+    stackable: true,
+    maxStack: 4,
+    onUse(ctx, _slot) {
+      ctx.stats.hunger = Math.min(1, ctx.stats.hunger + 0.45);
+      return { consumed: true, message: 'rich, oily — it fills you' };
+    },
+    makeViewModel() {
+      const group = new THREE.Group();
+      const mat = new THREE.MeshLambertMaterial({ color: 0x5a3a26 });
+      const slab = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.035, 0.07), mat);
+      slab.rotation.set(0.1, 0.4, 0.05);
+      group.add(slab);
+      return group;
+    },
+    makeIcon() {
+      const s = svg();
+      s.appendChild(svgEl('polygon', { points: '4,12 7,7 17,7 20,12 18,17 14,18 6,17' }));
+      s.appendChild(svgEl('line', { x1: '8', y1: '11', x2: '16', y2: '14', 'stroke-width': '1' }));
+      s.appendChild(svgEl('path', { d: 'M9 4 Q10 2 11 4', 'stroke-width': '1' }));
+      s.appendChild(svgEl('path', { d: 'M13 4 Q14 2 15 4', 'stroke-width': '1' }));
+      return s;
+    },
+  },
+
   // ─── Session G — crafting materials + deployable kits ────────────────────
 
   branch: {
@@ -769,6 +829,7 @@ export const ALL_ITEM_IDS: ReadonlyArray<ItemId> = [
   'canteen', 'scrap', 'bandage', 'machete',
   'cactus_pulp', 'cooked_cactus_pulp',
   'raw_lizard_meat', 'cooked_lizard_meat',
+  'raw_worm_meat', 'cooked_worm_meat',
   'branch', 'cloth', 'fire_kit', 'tent_kit',
   'alien_fruit',
   'torch', 'flashlight',

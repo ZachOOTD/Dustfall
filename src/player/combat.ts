@@ -9,6 +9,7 @@ import type { GameContext } from '../GameContext.ts';
 import { isPlaying } from '../GameContext.ts';
 import { damageRaider, getRaiderForCollider } from '../enemies/raider.ts';
 import { damageLizard, getLizardForCollider } from '../enemies/lizard.ts';
+import { damageSandWorm, getSandWormForCollider } from '../enemies/sandWorm.ts';
 import { playSwing, playHit, playLizardSquish } from '../audio/audio.ts';
 
 const SWING_RANGE = 1.8;
@@ -51,6 +52,10 @@ export function updateCombat(ctx: GameContext, dt: number): void {
   _shapeVel.z = _fwd.z * SWING_RANGE;
 
   const shape = new RAPIER.Capsule(0.12, 0.20); // halfHeight, radius
+  // No filter flags (0 cast to QueryFilterFlags) — explicitly include
+  // sensors. The sand worm's collider is a sensor (so it can't push the
+  // player around physically) but we still need castShape to register
+  // hits on it for machete damage.
   const hit = ctx.physics.world.castShape(
     _startPos,
     _startRot,
@@ -59,7 +64,7 @@ export function updateCombat(ctx: GameContext, dt: number): void {
     0,                              // target time
     1.0,                            // max time-of-impact (vel is full range, so 1.0 = SWING_RANGE)
     true,                           // stopAtPenetration
-    undefined,
+    0 as unknown as RAPIER.QueryFilterFlags,
     undefined,
     ctx.player.body.collider,       // exclude player
   );
@@ -76,6 +81,15 @@ export function updateCombat(ctx: GameContext, dt: number): void {
   if (l) {
     playLizardSquish();
     damageLizard(l, 1.0, ctx);
+    return;
+  }
+  const worm = getSandWormForCollider(hit.collider.handle);
+  if (worm) {
+    // DD-2 — flat damage, no hit-zone classification. The damage handler
+    // gates itself on the worm's state so only lunge/stationaryBreach hits
+    // actually land. hitWorldY is unused but kept in the signature.
+    playHit(1.0);
+    damageSandWorm(worm, 0, ctx);
     return;
   }
 }

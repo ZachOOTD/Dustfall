@@ -3,6 +3,65 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session DD — 2026-05-16 — Roaming Dune-style sand worm boss
+First boss-tier enemy. NEW `src/enemies/sandWorm.ts` (~750 lines):
+24m long lamprey-style mesh built along local +X with continuously
+tapered cylinder segments + embedded torus ridge rings (major radius
+0.94× body so ribs read as connected, not floating). Recessed maw —
+no external protrusion: last 2 head segments are `openEnded`, an
+inward-narrowing `BackSide` cylinder forms the throat (rim flush
+with body diameter, emissive `#4a1808`), with concentric inward-
+pointing tooth rings (14 outer at the rim, 10 smaller deeper inside)
+and a dark back-cap disc. Body cylinder is `DoubleSide` so the open
+segments don't reveal daylight through the worm. 7-state behavior
+loop: `patrol → alert → charging → lunge → retreat → stationaryBreach
+→ dead`. Worm orbits a home anchor (`SANDWORM_HOME_POS = (60, 0)`,
+verified dune-biome at boot) at radius 42m on a 60m patrol disc.
+Detection radius 50m → alert (2s windup + roar) → charging at 8 m/s
+underground with **half-body riding above the sand** (basePos.y =
+groundY puts top half exposed). Charge commits to the player's
+position **snapshotted at enterCharging** — no leading, no per-tick
+refresh — so dodging sideways before the worm arrives causes the
+lunge to miss into empty sand. Lunge: 2.6s arc with `BREACH_ARC_PEAK
+= 5m`, pitch following `cos(t·π)·0.6` for tangent-aligned head pose,
+and a parabolic body bend (`sin(t·π) * 2.5m`, peak shifted 0.15
+toward head) applied per-child via `applyBodyBend` so the worm looks
+curved through the air, not a rigid stick. Bite damage 0.35 at
+arc midpoint within `BITE_RANGE = 4m`. Every 3rd retreat triggers
+stationaryBreach instead: rises vertical (pitch = π/2) for 5.5s
+with layered-sine sway around the world-horizontal lateral axis
+(eased in/out, peak ±0.3 rad) — reads as a cobra rearing. 6 HP, hits
+gated to lunge + stationaryBreach states only (uniform 1.0 dmg per
+swing — DD-1's three-zone weak-point system was scrapped after the
+glowing-ring weak point read as unrealistic UI). **Sensor collider**:
+worm cuboid is `setSensor(true)` so it never applies contact forces;
+otherwise the kinematic worm body shoves the kinematic player capsule
+skyward and ragdolls the dynamic speeder. Bite damage uses an
+explicit distance check, not physics contact. Machete `castShape`
+passes `0` for filter flags to include sensors. **Speeder mount fix**:
+`getPlayerPos(ctx)` returns `ctx.speeder.body.translation()` when
+`ctx.speeder.mounted` is true, since the capsule body is parked at
+`(0,-2000,0)` while mounted — without this the worm targets origin.
+**Tremor warning**: during alert/charging/retreat AND within 35m,
+camera position jitter ±0.06m × proximity-scaled intensity + dust
+puffs at the player's feet on a 0.35→0.10s cadence. Drops `[take]`
+worm corpse loot — `raw_worm_meat` + `cooked_worm_meat` items added
+to `ItemId` union with `inventory/items.ts` registrations; cook map
+in `interaction.ts` extends to worm meat over a fire. `playWormRoar`
++ `playWormChomp` synthesized in `audio.ts` (layered sawtooth/noise/
+sub-bass for the roar; tri+lowpass-noise impact for the chomp). 22
+new `SANDWORM_*` tuning constants. Save/load: optional
+`SaveV1.sandWorm = { state, health, looted, pos }` — mid-encounter
+states collapse to `patrol` at the saved XZ on load; dead state
+restores corpse at exact death position. New `GameContext.sandWorm`
+slot. Decisions D48–D49. `verified` (tsc clean, state-machine
+transitions hand-ticked through full cycle, dual-zone damage logic
+confirmed via `damageSandWorm` direct calls, charge commitment
+confirmed by player-move test, save/load round-trip verified for
+dead + mid-encounter states, sensor + castShape interaction
+confirmed via direct Rapier API call, screenshots of stationary
+breach + lunge body bend + recessed maw + charging half-body).
+
 ## Session CC-4 — 2026-05-16 — Biome polish + crescent moon fix + GH Pages deploy
 Multi-thread polish session. **World/biome**: green saguaro cacti
 retired (`makeCactus` deleted, `CactusKind = 'alien'` only); alien

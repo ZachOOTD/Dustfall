@@ -45,15 +45,46 @@ Run with `npm run dev` (port 5173). Type-check with `npx tsc --noEmit`.
 
 ## Where we are now
 
-**Last shipped**: Session CC-4 — biome polish + crescent moon fix +
-GH Pages deploy. Green cacti retired; alien cactus rare (3 in salt
-flats, base grey, fruit teal), restricted to salt + flat ground via a
-new `terrainFlatnessAt` helper. Fruit hide on harvest + regrow after
-one `DAY_LENGTH_SECONDS` cycle. Dead trees same salt+flat restriction.
-Wells now 3 stacked rock rings with tighter spacing + tilted hatch
-sitting on min-stone height; single well placed at the salt-flats
-centroid (`findSaltCentroid` grid sweep). `DAY_LENGTH_SECONDS` 480 →
-720 (12 real-min day). Lizards 2.5 → 1.8 m/s + head-rotation formula
+**Last shipped**: Session DD — roaming Dune-style sand worm boss.
+First boss-tier enemy: 24m segmented worm with continuously-tapered
+body + embedded torus ridge rings, lamprey-style **recessed maw**
+(BackSide-rendered throat carved into the head with two concentric
+inward-pointing tooth rings + emissive backstop). 7-state behavior
+loop: `patrol → alert → charging → lunge → retreat → stationaryBreach
+→ dead`. Patrols a 60m orbit around `SANDWORM_HOME_POS = (60, 0)` in
+the open dunes; detection radius 50m → alert (2s + roar) → charging
+at 8 m/s underground **with half the body above sand**. Charge
+**commits to the player's position snapshotted at enterCharging** —
+no leading, no refresh — so sidestep dodges work. Lunge: 2.6s arc
+with `BREACH_ARC_PEAK = 5m`, pitch follows tangent (`cos(t·π)·0.6`),
+plus per-child **body bend** via `applyBodyBend` so the worm looks
+curved through the air. Every 3rd retreat → stationaryBreach (5.5s
+vertical hold with layered-sine **side-to-side sway** around the
+world-horizontal lateral axis, ±0.3 rad). 6 HP, hits only register
+during lunge + stationaryBreach (`damageSandWorm` state-gated). **Sensor
+collider** — `setSensor(true)` so the worm doesn't physically shove
+the player or ragdoll the speeder; bite damage is an explicit
+distance check, not contact. Machete `castShape` passes filter `0`
+to include sensors. **Speeder mount fix**: `getPlayerPos(ctx)`
+returns `ctx.speeder.body.translation()` when mounted (capsule body
+is parked at `(0,-2000,0)` during mount — bug fixed where worm was
+attacking origin while player rode away). **Tremor warning** during
+alert/charging/retreat within 35m: ±0.06m camera-position jitter +
+dust puffs at player feet on a proximity-scaled 0.35→0.10s cadence.
+Drops `raw_worm_meat` (+`cooked_worm_meat` via fire). New
+`SandWorm` slot on GameContext; save schema gained optional
+`sandWorm: { state, health, looted, pos }` — mid-encounter states
+collapse to `patrol` at saved XZ on load, dead state restores
+corpse at exact death position. Decisions D48–D49. Prior milestone:
+CC-4 — biome polish + crescent moon fix + GH Pages deploy. Green
+cacti retired; alien cactus rare (3 in salt flats, base grey, fruit
+teal), restricted to salt + flat ground via a new `terrainFlatnessAt`
+helper. Fruit hide on harvest + regrow after one `DAY_LENGTH_SECONDS`
+cycle. Dead trees same salt+flat restriction. Wells now 3 stacked
+rock rings with tighter spacing + tilted hatch sitting on min-stone
+height; single well placed at the salt-flats centroid
+(`findSaltCentroid` grid sweep). `DAY_LENGTH_SECONDS` 480 → 720
+(12 real-min day). Lizards 2.5 → 1.8 m/s + head-rotation formula
 fixed (mesh forward is local +X, was using -Z-forward yaw → 90° off).
 **Moon-light-when-mounted bug fix** in `lighting.ts`: moon's `target`
 never updated, so moon position parking at y=-1930 (player capsule at

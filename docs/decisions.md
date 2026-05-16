@@ -700,3 +700,45 @@ package.json + ran `npm install` to update the lockfile.
 C:/Users/Zach/node_modules/` — that directory should be empty for a
 project like this. Stray packages there will mask CI bugs forever
 because locally they 'just work.'
+
+## D48 — Sand worm collider is a sensor (no contact forces) (Session DD)
+**When**: Session DD.
+**Why**: The worm body is a kinematic cuboid (12, 2, 2) that moves at
+up to 8 m/s underground + arcs 6m above sand during lunges. Both the
+player capsule (`kinematicPositionBased`) and the speeder body
+(dynamic) sit in the worm's path during normal play. With a regular
+solid collider, Rapier's character controller computes a "push-out"
+displacement for the kinematic player (launching them skyward when
+the lunge cuboid intersects from above) and applies real impulses to
+the dynamic speeder (ragdolling it into the terrain when the worm
+brushes past). Bite damage is unrelated — it's an explicit XZ
+distance check at the lunge arc midpoint in `tickLunge`, not a
+collision event. So we lose nothing by making the collider a sensor.
+**Implementation**: `collider.setSensor(true)` in `spawnSandWorm`.
+**Machete still works**: `castShape` defaults to including sensors;
+combat.ts also passes filter flag `0` explicitly so this never
+regresses if a future Rapier version changes the default.
+**Rejected alternatives**: collision groups (would require touching
+player + speeder collider configs); reducing collider size (doesn't
+solve the lunge-arc-above case).
+
+## D49 — Charge commits at enterCharging snapshot (not live-tracked) (Session DD)
+**When**: Session DD.
+**Why**: Original implementation refreshed `worm.target` every 0.5s
+during charging (leading the player by `playerVel * 1.0s`). Result:
+unavoidable lunge. Player sprints at 7.1 m/s, worm charges at 8 —
+the worm always closes regardless of direction, and the lunge fired
+when within `LUNGE_RANGE = 6m` of the **live** player. The encounter
+felt like a 100%-hit cooldown rather than a fight.
+**Fix**: `enterCharging` snapshots the player's CURRENT XZ to
+`worm.target`. `tickCharging` does NOT refresh. The lunge triggers
+when the **worm reaches its target** (distance to target, not to
+player). `enterLunge` arcs along `worm.target - worm.basePos`, not
+toward the live player. Player can now dodge sideways before the
+worm arrives → the lunge fires at empty sand → retreat → re-charge
+or stationary breach. The bite still uses `distToPlayer ≤ BITE_RANGE`
+at arc midpoint, so a player who didn't dodge gets bitten.
+**Trade-off**: charging at a slow / unaware player is now a guaranteed
+hit, but a moving / aware player has a real defensive option. That's
+the intended game-feel split. If raiders ever get a "charge" attack
+later, mirror this commit pattern.

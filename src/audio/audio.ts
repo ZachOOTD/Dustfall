@@ -442,6 +442,87 @@ export function playSleepThud(): void {
   osc.stop(t + 0.58);
 }
 
+/** Sand worm roar — layered low rumble + sandy noise burst + sub-bass thud.
+ *  Used on breach and on the worm's death. ~0.9s total. */
+export function playWormRoar(): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  // Intestinal rumble — sawtooth sweeping down
+  const rumble = a.ctx.createOscillator();
+  rumble.type = 'sawtooth';
+  rumble.frequency.setValueAtTime(80, t);
+  rumble.frequency.exponentialRampToValueAtTime(40, t + 0.8);
+  const rEnv = a.ctx.createGain();
+  rEnv.gain.setValueAtTime(0.0, t);
+  rEnv.gain.linearRampToValueAtTime(0.18, t + 0.06);
+  rEnv.gain.setValueAtTime(0.18, t + 0.55);
+  rEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.85);
+  rumble.connect(rEnv).connect(a.sfx);
+  rumble.start(t);
+  rumble.stop(t + 0.88);
+  // Sandy noise burst — bandpassed white noise
+  const src = a.ctx.createBufferSource();
+  src.buffer = a.noiseBuffer;
+  src.playbackRate.value = 0.5;
+  const filter = a.ctx.createBiquadFilter();
+  filter.type = 'bandpass';
+  filter.frequency.setValueAtTime(600, t);
+  filter.frequency.exponentialRampToValueAtTime(220, t + 0.7);
+  filter.Q.value = 2.5;
+  const nEnv = a.ctx.createGain();
+  nEnv.gain.setValueAtTime(0.0, t);
+  nEnv.gain.linearRampToValueAtTime(0.16, t + 0.04);
+  nEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.8);
+  src.connect(filter).connect(nEnv).connect(a.sfx);
+  src.start(t);
+  src.stop(t + 0.82);
+  // Sub-bass weight — steady square at 60Hz
+  const sub = a.ctx.createOscillator();
+  sub.type = 'square';
+  sub.frequency.setValueAtTime(60, t);
+  const sEnv = a.ctx.createGain();
+  sEnv.gain.setValueAtTime(0.0, t);
+  sEnv.gain.linearRampToValueAtTime(0.06, t + 0.08);
+  sEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.9);
+  sub.connect(sEnv).connect(a.sfx);
+  sub.start(t);
+  sub.stop(t + 0.92);
+}
+
+/** Sand worm chomp — short low impact when a bite lands on the player. */
+export function playWormChomp(): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  // Mid-low tone — triangle 140 → 50Hz
+  const osc = a.ctx.createOscillator();
+  osc.type = 'triangle';
+  osc.frequency.setValueAtTime(140, t);
+  osc.frequency.exponentialRampToValueAtTime(50, t + 0.18);
+  const env = a.ctx.createGain();
+  env.gain.setValueAtTime(0.0, t);
+  env.gain.linearRampToValueAtTime(0.24, t + 0.005);
+  env.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+  osc.connect(env).connect(a.sfx);
+  osc.start(t);
+  osc.stop(t + 0.25);
+  // Low-frequency noise crack — wet impact
+  const src = a.ctx.createBufferSource();
+  src.buffer = a.noiseBuffer;
+  src.playbackRate.value = 0.5;
+  const filter = a.ctx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.value = 320;
+  const nEnv = a.ctx.createGain();
+  nEnv.gain.setValueAtTime(0.0, t);
+  nEnv.gain.linearRampToValueAtTime(0.20, t + 0.003);
+  nEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+  src.connect(filter).connect(nEnv).connect(a.sfx);
+  src.start(t);
+  src.stop(t + 0.16);
+}
+
 /** Craft — quick metal tick + low thump (forging / clipping). */
 export function playCraft(): void {
   const a = getAudioInternals();

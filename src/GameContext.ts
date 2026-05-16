@@ -21,6 +21,7 @@ import type { ViewModel } from './player/viewModel.ts';
 import type { WaterSource } from './world/waterSources.ts';
 import type { Cactus } from './world/cactus.ts';
 import type { Lizard } from './enemies/lizard.ts';
+import type { SandWorm } from './enemies/sandWorm.ts';
 import type { LootContainer } from './world/lootContainers.ts';
 import type { Fire } from './world/fire.ts';
 import type { Tent } from './world/tent.ts';
@@ -81,6 +82,9 @@ export interface GameContext {
   shelter: ShelterRegistry;
   raiders: Raider[];
   lizards: Lizard[];
+  /** Session DD — single boss-tier sand worm. Null on boots where the worm
+   *  hasn't been spawned (shouldn't normally happen — main.ts spawns one). */
+  sandWorm: SandWorm | null;
   waterSources: { list: WaterSource[] };
   cacti: { list: Cactus[] };
   lootContainers: { list: LootContainer[]; open: LootContainer | null };

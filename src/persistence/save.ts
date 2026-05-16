@@ -26,6 +26,10 @@ import {
   applyRaiderDeadPose,
   type RaiderState,
 } from '../enemies/raider.ts';
+import {
+  applySandWormDeadPose,
+  type SandWormState,
+} from '../enemies/sandWorm.ts';
 import { spawnFireAt } from '../world/fire.ts';
 import { spawnTentAt } from '../world/tent.ts';
 import { removeShelterZone } from '../shelter/shelterZones.ts';
@@ -87,6 +91,20 @@ export interface SaveV1 {
     rotationQuat: { x: number; y: number; z: number; w: number };
     mounted: boolean;
     headlampOn: boolean;
+  };
+
+  /** Sand worm — DD-2 (roaming). `pos` is the worm's current basePos at
+   *  save time. Mid-encounter sub-states collapse to `patrol` on load
+   *  (too brittle to restore mid-arc). If saved state is `dead`, the
+   *  corpse is restored at that exact pos.
+   *
+   *  Pre-DD-2 saves lack `pos` — handled in loadGameState by falling
+   *  back to the home anchor. */
+  sandWorm?: {
+    state: SandWormState;
+    health: number;
+    looted: boolean;
+    pos?: V3;
   };
 }
 
@@ -190,6 +208,16 @@ export function saveGameState(ctx: GameContext): { ok: boolean; error?: string }
           headlampOn: ctx.speeder!.headlampOn,
         };
       })() : undefined,
+      sandWorm: ctx.sandWorm ? {
+        state: ctx.sandWorm.state,
+        health: ctx.sandWorm.health,
+        looted: ctx.sandWorm.looted,
+        pos: {
+          x: ctx.sandWorm.basePos.x,
+          y: ctx.sandWorm.basePos.y,
+          z: ctx.sandWorm.basePos.z,
+        },
+      } : undefined,
     };
 
     localStorage.setItem(SAVE_KEY, JSON.stringify(save));
@@ -378,6 +406,48 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
   for (const saved of save.tents) {
     const pos = new THREE.Vector3(saved.pos.x, saved.pos.y, saved.pos.z);
     spawnTentAt(ctx, pos, saved.rotationY);
+  }
+
+  // ── Sand worm (DD-2): worm now roams, so we restore its saved XZ.
+  //    Mid-encounter sub-states (alert/charging/lunge/stationaryBreach/
+  //    retreat) collapse to `patrol` at the saved pos. Dead state
+  //    restores the corpse pose at the exact death location. ──
+  if (save.sandWorm && ctx.sandWorm) {
+    const worm = ctx.sandWorm;
+    const savedState = save.sandWorm.state;
+    worm.health = save.sandWorm.health;
+    worm.looted = save.sandWorm.looted;
+    // Restore XZ — falls back to home anchor for pre-DD-2 saves missing pos.
+    if (save.sandWorm.pos) {
+      worm.basePos.set(save.sandWorm.pos.x, save.sandWorm.pos.y, save.sandWorm.pos.z);
+    } else {
+      worm.basePos.set(worm.home.x, worm.home.y, worm.home.z);
+    }
+    if (savedState === 'dead') {
+      worm.surfaceGroundY = ctx.terrain.heightAt(worm.basePos.x, worm.basePos.z);
+      applySandWormDeadPose(worm);
+      if (worm.looted) {
+        // Untag — corpse stays in world but no longer offers an [E] prompt.
+        worm.mesh.traverse((o) => {
+          delete o.userData.interactType;
+          delete o.userData.interactId;
+          delete o.userData.interactRegistry;
+        });
+      }
+    } else {
+      // Collapse to patrol — neutral state. Mesh hidden, collider parked.
+      worm.state = 'patrol';
+      worm.pitch = 0;
+      worm.mesh.visible = false;
+      worm.patrolTheta = Math.atan2(
+        worm.basePos.z - worm.home.z,
+        worm.basePos.x - worm.home.x,
+      );
+      // Snap Y to under-sand level at the restored XZ.
+      worm.basePos.y =
+        ctx.terrain.heightAt(worm.basePos.x, worm.basePos.z)
+        - Tuning.SANDWORM_UNDERGROUND_DEPTH;
+    }
   }
 
   // ── Speeder: patch position / rotation / mount state from save. The

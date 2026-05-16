@@ -18,6 +18,7 @@ import { despawnPickup, findPickupById } from '../pickups/pickups.ts';
 import { findWaterSourceById } from '../world/waterSources.ts';
 import { findCactusById, harvestCactus } from '../world/cactus.ts';
 import { findLizardById, lootLizard } from '../enemies/lizard.ts';
+import { lootSandWorm } from '../enemies/sandWorm.ts';
 import { findLootContainerById } from '../world/lootContainers.ts';
 import { findFireById, addFuel, relightFire } from '../world/fire.ts';
 import { findTentById } from '../world/tent.ts';
@@ -53,7 +54,7 @@ const _dir = new THREE.Vector3();
 interface InteractHit {
   type: InteractType;
   id: number;
-  registry: 'pickups' | 'waterSources' | 'cacti' | 'lizards' | 'lootContainers' | 'fires' | 'tents' | 'salvageables' | 'journals' | 'speeder';
+  registry: 'pickups' | 'waterSources' | 'cacti' | 'lizards' | 'sandWorms' | 'lootContainers' | 'fires' | 'tents' | 'salvageables' | 'journals' | 'speeder';
   distance: number;
 }
 
@@ -63,6 +64,7 @@ const SALVAGE_DURATION = 1.5;
 const COOK_MAP: Partial<Record<ItemId, ItemId>> = {
   'raw_lizard_meat': 'cooked_lizard_meat',
   'cactus_pulp': 'cooked_cactus_pulp',
+  'raw_worm_meat': 'cooked_worm_meat',
 };
 
 // Module-level cooking state — null when no cook in progress.
@@ -107,6 +109,7 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
   for (const w of ctx.waterSources.list) w.hovered = false;
   for (const c of ctx.cacti.list) c.hovered = false;
   for (const l of ctx.lizards) l.hovered = false;
+  if (ctx.sandWorm) ctx.sandWorm.hovered = false;
   for (const f of ctx.fires.list) f.hovered = false;
   for (const t of ctx.tents.list) t.hovered = false;
   for (const s of ctx.salvageables.list) s.hovered = false;
@@ -138,6 +141,12 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
   for (const w of ctx.waterSources.list) targets.push(w.mesh);
   for (const c of ctx.cacti.list) if (!c.harvested) targets.push(c.mesh);
   for (const l of ctx.lizards) targets.push(l.mesh);
+  // Sand worm — only target the corpse when visible (dead state). The
+  // mesh stays in the scene throughout but is invisible while dormant,
+  // and the live worm is taken via LMB (machete), not [E].
+  if (ctx.sandWorm && ctx.sandWorm.mesh.visible && ctx.sandWorm.state === 'dead' && !ctx.sandWorm.looted) {
+    targets.push(ctx.sandWorm.mesh);
+  }
   for (const lc of ctx.lootContainers.list) targets.push(lc.mesh);
   // Both alive (cook/add_fuel) and dead (relight) fires are interactable.
   for (const f of ctx.fires.list) targets.push(f.mesh);
@@ -272,6 +281,33 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
         // Living lizard — no prompt for "attack" since LMB handles it; show
         // a passive "lizard" prompt as flavor.
         ctx.inventory.hover = { type: 'kill', distance: info.distance, promptNoun: 'lizard' };
+      }
+      return;
+    }
+
+    case 'sandWorms': {
+      const worm = ctx.sandWorm;
+      if (!worm || worm.state !== 'dead' || worm.looted) return;
+      worm.hovered = true;
+      ctx.inventory.hover = {
+        type: 'take',
+        distance: info.distance,
+        promptNoun: 'worm-flesh',
+        itemId: 'raw_worm_meat',
+      };
+      if (ctx.input.pressed.has('KeyE')) {
+        // Yield 2-3 slabs — it's a giant worm.
+        const yieldN = 2 + Math.floor(Math.random() * 2);
+        let added = 0;
+        for (let i = 0; i < yieldN; i++) {
+          if (addItem(ctx.inventory, 'raw_worm_meat', undefined, ctx) >= 0) added++;
+        }
+        if (added === 0) {
+          ctx.ui.showToast('your bag is full');
+          return;
+        }
+        playPickup();
+        lootSandWorm(worm, ctx);
       }
       return;
     }

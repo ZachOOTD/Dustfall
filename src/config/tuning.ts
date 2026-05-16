@@ -346,6 +346,31 @@ export const Tuning = {
   TITLE_DUST_COUNT: 80,
   TITLE_SMOKE_POOL: 24,
   TITLE_SHAKE_DECAY: 8.0,                   // higher = faster shake decay
+
+  // Sand worm (Session DD-2) — roaming Dune-style ambush. Patrols a home
+  // zone underground; surfaces in lunge arcs or vertical stationary breaches.
+  SANDWORM_HOME_POS: { x: 60, z: 0 },        // anchor for patrol circle (dune biome)
+  SANDWORM_PATROL_RADIUS: 60,                // m — patrol circle radius around home
+  SANDWORM_DETECTION_RADIUS: 50,             // m — player triggers alert at this dist from worm
+  SANDWORM_DISENGAGE_RADIUS: 80,             // m — player escapes by exceeding this
+  SANDWORM_PATROL_SPEED: 3,                  // m/s — slow patrol traversal
+  SANDWORM_ALERT_SPEED: 5,                   // m/s — slow orienting movement
+  SANDWORM_CHARGE_SPEED: 8,                  // m/s — rush at player (player sprints 7.1) — dodgeable perpendicular
+  SANDWORM_RETREAT_SPEED: 7,                 // m/s — disengage movement
+  SANDWORM_ALERT_DURATION: 2.0,              // s — long windup so player can react
+  SANDWORM_LUNGE_RANGE: 7,                   // m — trigger lunge when this close to player
+  SANDWORM_LUNGE_DURATION: 2.6,              // s — slower arc gives a real damage window
+  SANDWORM_BREACH_ARC_PEAK: 5,               // m — peak Y of lunge arc above ground
+  SANDWORM_STATIONARY_BREACH_DURATION: 5.5,  // s — vertical hold during stationary breach (longer w/ side-to-side sway)
+  SANDWORM_STATIONARY_BREACH_HEIGHT: 8,      // m — head rises this far above ground
+  SANDWORM_STATIONARY_BREACH_EVERY: 3,       // every Nth retreat → stationary breach
+  SANDWORM_RETREAT_DISTANCE: 25,             // m — distance to retreat before next attack
+  SANDWORM_BITE_RANGE: 4.0,                  // m from worm body center for bite to land
+  SANDWORM_BITE_DAMAGE: 0.35,                // player health unit per bite
+  SANDWORM_MAX_HEALTH: 6.0,                  // 6 machete hits to kill
+  SANDWORM_LENGTH: 24,                       // m — total body length head-to-tail
+  SANDWORM_MAX_RADIUS: 2.0,                  // m — peak body radius
+  SANDWORM_UNDERGROUND_DEPTH: 5,             // m below ground while submerged
 } as const;
 
 // Sky gradient colors (top vs horizon) per time of day. Horizon stays close to

@@ -14,7 +14,6 @@ Pick whatever feels most missing after the polish + atmosphere arc.
 
 - Raider variants (scout / ambusher / brute) — *if* we decide to bring raiders back
 - Q2: Rigged hands + lizard (GLB-dependent — deferred with N's asset work)
-- Giant sand worm enemy
 - Base-building mechanics
 - Small red creature companion (pocketable + re-deployable)
 - Weapon variants (pipe staff / scrap machete / scrap gun / energy pistol)
@@ -22,6 +21,11 @@ Pick whatever feels most missing after the polish + atmosphere arc.
 - 7-day storm countdown
 - Bounties (template: D39 `'mount'` singleton-interactable pattern from CC-2)
 - Procedural world generation (idea — POIs randomized per seed)
+- World + biome rework: larger map, vaster biomes, procgen terrain/biomes/POI/AI spawns
+- Wreck POI rework: accurate collision, connected geometry (no floaters), less boxy, more curves + detail
+- New POI: wrecked satellite dish
+- Sled / rope / scrap-metal sled (physical-inventory drag-along, towable behind speeder)
+- Lizard-on-a-stick cooking system (raw lizard + branch → roast over fire)
 - Remove HUD stat bars in favor of audio/visual/text cues (idea)
 
 ---

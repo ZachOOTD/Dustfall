@@ -12,6 +12,8 @@ export type ItemId =
   | 'cooked_cactus_pulp'
   | 'raw_lizard_meat'
   | 'cooked_lizard_meat'
+  | 'raw_worm_meat'
+  | 'cooked_worm_meat'
   // Session G — fire / tent crafting + fuel + cloth
   | 'branch'
   | 'cloth'
