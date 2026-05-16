@@ -286,11 +286,15 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
     }
   }
 
-  // ── Cacti: apply harvested visual + untag where saved.harvested is true. ──
+  // ── Cacti: apply harvested visual + untag where saved.harvested is
+  //    true. We re-arm the regrowth clock from current elapsed (which is
+  //    0 right after a load), so the player gets a fresh DAY_LENGTH_SECONDS
+  //    wait before the fruit reappears — they don't get a free
+  //    instant-regrow by saving and reloading. ──
   for (const saved of save.cacti) {
     if (!saved.harvested) continue;
     const cactus = ctx.cacti.list.find((c) => c.id === saved.id);
-    if (cactus) harvestCactus(cactus);
+    if (cactus) harvestCactus(cactus, ctx.time.elapsed);
   }
 
   // ── Lizards: for matched ids restore pos/state/looted. Any lizard

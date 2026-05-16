@@ -34,7 +34,7 @@ export function createTitleOverlay(
 
   const subtitle = document.createElement('div');
   subtitle.className = 'title-subtitle';
-  subtitle.textContent = 'a desert is patient';
+  subtitle.textContent = 'the desert is patient';
   panel.appendChild(subtitle);
 
   // CONTINUE button — only when a save exists (caller decides by passing

@@ -6,8 +6,13 @@ import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import type { Rng } from '../core/rng.ts';
 import type { Terrain } from '../world/terrain.ts';
+import type { BiomeSampler } from './biomes.ts';
+import type { GameContext } from '../GameContext.ts';
+import { Tuning } from '../config/tuning.ts';
 
-export type CactusKind = 'normal' | 'alien';
+// CC-4 — only the alien variant spawns now (old green saguaro retired).
+// Kept as a union for forward-compat if more cactus species ship later.
+export type CactusKind = 'alien';
 
 export interface Cactus {
   id: number;
@@ -16,8 +21,14 @@ export interface Cactus {
   pos: THREE.Vector3;
   harvested: boolean;
   hovered: boolean;
-  /** Mesh shown when harvested (cap with cut showing exposed pulp). */
-  _capMesh: THREE.Object3D | null;
+  /** Fruit + stem meshes — hidden when harvested, re-shown when fruit
+   *  regrows (one full day cycle later, CC-4). */
+  _fruitMeshes: THREE.Object3D[];
+  /** ctx.time.elapsed when this cactus was harvested. Regrowth fires when
+   *  elapsed >= _harvestedAt + DAY_LENGTH_SECONDS. 0 means "never harvested
+   *  yet" OR "restored from save with unknown harvest time" (in the save
+   *  case we re-arm the clock from current elapsed at load). */
+  _harvestedAt: number;
 }
 
 let _nextId = 1;
@@ -38,57 +49,17 @@ function untag(root: THREE.Object3D): void {
   });
 }
 
-function makeCactus(rand: Rng): THREE.Group {
+// Alien variant (Session W; recolored CC-4) — a bulbous grey pod with 3-4
+// colored fruit nodes on short stems. The base now reads as weathered
+// desert stone rather than the original teal-blue so the FRUIT pops as
+// the single saturated element on the cactus. Returns the assembled
+// group AND the list of fruit + stem meshes so the harvest path can
+// hide them (and the regrowth tick can re-show them).
+function makeAlienCactus(rand: Rng): { group: THREE.Group; fruitMeshes: THREE.Object3D[] } {
   const g = new THREE.Group();
-  const trunkMat = new THREE.MeshLambertMaterial({ color: 0x3a5a2a });
-
-  const trunkH = 1.5 + rand() * 1.0;
-  const trunkR = 0.16 + rand() * 0.05;
-  const trunk = new THREE.Mesh(
-    new THREE.CylinderGeometry(trunkR * 0.85, trunkR, trunkH, 8),
-    trunkMat,
-  );
-  trunk.position.y = trunkH / 2;
-  g.add(trunk);
-
-  // Cap (dome on top)
-  const cap = new THREE.Mesh(
-    new THREE.SphereGeometry(trunkR * 0.85, 8, 5, 0, Math.PI * 2, 0, Math.PI / 2),
-    trunkMat,
-  );
-  cap.position.y = trunkH;
-  g.add(cap);
-
-  // 1-3 arm branches
-  const armCount = 1 + Math.floor(rand() * 3);
-  for (let i = 0; i < armCount; i++) {
-    const armH = 0.5 + rand() * 0.5;
-    const armR = trunkR * (0.65 + rand() * 0.2);
-    const arm = new THREE.Mesh(
-      new THREE.CylinderGeometry(armR * 0.85, armR, armH, 6),
-      trunkMat,
-    );
-    // L-shaped arms: horizontal segment + vertical stub
-    const heightUpTrunk = trunkH * (0.45 + rand() * 0.35);
-    const side = (rand() < 0.5 ? -1 : 1);
-    const horizontalLen = trunkR + 0.18;
-    // Vertical "elbow" piece
-    arm.geometry.translate(0, armH / 2, 0);
-    arm.position.set(side * horizontalLen, heightUpTrunk, 0);
-    g.add(arm);
-  }
-  return g;
-}
-
-// Alien variant (Session W) — a spherical pod base with 3-4 visible fruit
-// nodes on short stems. Distinct silhouette + cool palette so it's
-// recognizable at a distance.
-function makeAlienCactus(rand: Rng): THREE.Group {
-  const g = new THREE.Group();
+  const fruitMeshes: THREE.Object3D[] = [];
   const podMat = new THREE.MeshLambertMaterial({
-    color: 0x2c6e74,
-    emissive: 0x0a2628,
-    emissiveIntensity: 0.45,
+    color: 0x7a7268,         // warm grey, weathered-stone tone
     flatShading: true,
   });
   const fruitMat = new THREE.MeshLambertMaterial({
@@ -98,7 +69,7 @@ function makeAlienCactus(rand: Rng): THREE.Group {
     flatShading: true,
   });
   const stemMat = new THREE.MeshLambertMaterial({
-    color: 0x1a4448,
+    color: 0x5a544c,         // darker grey to match the pod
     flatShading: true,
   });
 
@@ -136,6 +107,7 @@ function makeAlienCactus(rand: Rng): THREE.Group {
     stem.rotation.z = Math.cos(a) * -0.4;
     stem.rotation.x = Math.sin(a) * 0.4;
     g.add(stem);
+    fruitMeshes.push(stem);
 
     const fruit = new THREE.Mesh(
       new THREE.IcosahedronGeometry(0.10 + rand() * 0.03, 1),
@@ -147,9 +119,24 @@ function makeAlienCactus(rand: Rng): THREE.Group {
       Math.sin(a) * (r + 0.12),
     );
     g.add(fruit);
+    fruitMeshes.push(fruit);
   }
 
-  return g;
+  return { group: g, fruitMeshes };
+}
+
+/** Mean of pairwise height-differences across a 4-sample cross around (x,z).
+ *  Higher = steeper. Cheap stand-in for slope when terrain has no normal API. */
+function terrainFlatnessAt(terrain: Terrain, cx: number, cz: number, r = 1.2): number {
+  const c = terrain.heightAt(cx, cz);
+  const e = terrain.heightAt(cx + r, cz);
+  const w = terrain.heightAt(cx - r, cz);
+  const n = terrain.heightAt(cx, cz - r);
+  const s = terrain.heightAt(cx, cz + r);
+  return Math.max(
+    Math.abs(e - c), Math.abs(w - c),
+    Math.abs(n - c), Math.abs(s - c),
+  );
 }
 
 export function spawnCacti(
@@ -157,21 +144,30 @@ export function spawnCacti(
   physicsWorld: RAPIER.World,
   terrain: Terrain,
   rand: Rng,
+  biomes: BiomeSampler,
 ): Cactus[] {
   const list: Cactus[] = [];
-  const total = 25;
-  for (let i = 0; i < total; i++) {
+  // CC-4 — alien cactus is now the ONLY variant, rare (3 across the salt
+  // flats), and restricted to flat-enough salt ground. Rejection-sample
+  // candidate spots until we hit TARGET placements or burn MAX_ATTEMPTS.
+  const TARGET = 3;
+  const MAX_ATTEMPTS = 200;
+  const FLATNESS_THRESHOLD = 0.6;  // max |dY/1.2m| sampled in 4 directions
+  let attempts = 0;
+  while (list.length < TARGET && attempts < MAX_ATTEMPTS) {
+    attempts++;
     const radius = 12 + rand() * 240;
     const angle = rand() * Math.PI * 2;
     const x = Math.cos(angle) * radius;
     const z = Math.sin(angle) * radius;
+    if (biomes.biomeAt(x, z) !== 'salt') continue;
+    if (terrainFlatnessAt(terrain, x, z) > FLATNESS_THRESHOLD) continue;
     const y = terrain.heightAt(x, z);
 
-    // ~25% of cacti spawn as the alien variant.
-    const kind: CactusKind = rand() < 0.25 ? 'alien' : 'normal';
-    const mesh = kind === 'alien' ? makeAlienCactus(rand) : makeCactus(rand);
-    // Bury the trunk base ~0.25m so cacti don't show a visible gap on sloped
-    // sand (they stay vertical while the ground tilts).
+    const kind: CactusKind = 'alien';
+    const built = makeAlienCactus(rand);
+    const mesh = built.group;
+    // Bury the base ~0.25m so the pod doesn't show a gap on slight slopes.
     mesh.position.set(x, y - 0.25, z);
     mesh.rotation.y = rand() * Math.PI * 2;
     mesh.traverse((o) => {
@@ -182,7 +178,7 @@ export function spawnCacti(
       }
     });
 
-    // Static collider — single cylinder approximating the trunk/pod.
+    // Static collider — single cylinder approximating the pod.
     const bodyDesc = RAPIER.RigidBodyDesc.fixed().setTranslation(x, y + 1, z);
     const body = physicsWorld.createRigidBody(bodyDesc);
     const colliderDesc = RAPIER.ColliderDesc.cylinder(1, 0.20);
@@ -199,27 +195,40 @@ export function spawnCacti(
       pos: new THREE.Vector3(x, y, z),
       harvested: false,
       hovered: false,
-      _capMesh: null,
+      _fruitMeshes: built.fruitMeshes,
+      _harvestedAt: 0,
     });
   }
   return list;
 }
 
-/** Mark a cactus as harvested — change visual + remove interaction tag. */
-export function harvestCactus(cactus: Cactus): void {
+/** Mark a cactus as harvested — hide the fruit + stems, record the
+ *  timestamp so the regrowth tick can re-show them later, untag so the
+ *  interaction system stops surfacing the cactus until fruit returns. */
+export function harvestCactus(cactus: Cactus, elapsed: number): void {
   if (cactus.harvested) return;
   cactus.harvested = true;
-  // Remove the top dome cap (find by Y position) — simulate "cut off the top"
-  // Instead, we just darken the top with a small overlay disc.
-  const cutMat = new THREE.MeshLambertMaterial({ color: 0x6a8a4a, emissive: 0x10180a });
-  const cut = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.04, 8), cutMat);
-  // Compute cap position: trunk top is the y of the first sphere mesh inside the group.
-  const trunk = cactus.mesh.children[0] as THREE.Mesh;
-  cut.position.y = trunk.position.y + (trunk.geometry as THREE.CylinderGeometry).parameters.height / 2;
-  cactus.mesh.add(cut);
-  cactus._capMesh = cut;
-  // Untag so the interaction raycast no longer surfaces this cactus.
+  cactus._harvestedAt = elapsed;
+  for (const f of cactus._fruitMeshes) f.visible = false;
+  // Untag so the interaction raycast no longer surfaces this cactus
+  // until fruit regrows.
   untag(cactus.mesh);
+}
+
+/** Per-frame regrowth tick (CC-4). Iterates harvested cacti and re-shows
+ *  their fruit when a full DAY_LENGTH_SECONDS has elapsed since harvest.
+ *  Cheap — usually 0–3 entries in `harvested` state at any time. */
+export function updateCacti(ctx: GameContext): void {
+  const now = ctx.time.elapsed;
+  for (const c of ctx.cacti.list) {
+    if (!c.harvested) continue;
+    if (now - c._harvestedAt < Tuning.DAY_LENGTH_SECONDS) continue;
+    // Regrow: show fruit + stems, retag as harvestable.
+    c.harvested = false;
+    c._harvestedAt = 0;
+    for (const f of c._fruitMeshes) f.visible = true;
+    tag(c.mesh, c.id);
+  }
 }
 
 export function findCactusById(list: Cactus[], id: number | undefined): Cactus | null {

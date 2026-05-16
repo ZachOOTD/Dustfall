@@ -41,9 +41,10 @@ export function getLizardForCollider(handle: number): Lizard | undefined {
 
 const SPOT_DISTANCE = 8;
 // Session U — was 3.0; lowered so a sprinting player can actually catch one.
-// Walk speed is 4.2, sprint is ~7.1 m/s; lizard at 2.5 still hustles but
-// the gap closes within a few seconds.
-const FLEE_SPEED = 2.5;
+// CC-4 — bumped down again (2.5 → 1.8) per playtest feedback: 2.5 m/s
+// was still too fast vs sprint 7.1 m/s once you factor in initial distance
+// + lizard's first-step rotation. Walk 4.2 / sprint 7.1 / lizard 1.8.
+const FLEE_SPEED = 1.8;
 const FLEE_DURATION = 3.0;
 const TERRAIN_OFFSET = 0.06;
 
@@ -203,8 +204,7 @@ export function updateLizards(ctx: GameContext, dt: number): void {
         l.fleeDir.set(dx, 0, dz);
         l.state = 'flee';
         l.fleeUntil = elapsed + FLEE_DURATION;
-        // Face flee direction
-        l.mesh.rotation.y = Math.atan2(l.fleeDir.x, l.fleeDir.z);
+        // (mesh.rotation.y is updated each frame in the flee branch below)
       }
     } else if (l.state === 'flee') {
       // Move
@@ -215,6 +215,12 @@ export function updateLizards(ctx: GameContext, dt: number): void {
       const groundY = ctx.terrain.heightAt(l.pos.x, l.pos.z);
       l.pos.y = groundY + TERRAIN_OFFSET;
       l.mesh.position.copy(l.pos);
+      // Always orient the head toward the direction of motion. The lizard
+      // mesh's local "forward" is +X (head at +X=0.11), so the correct yaw
+      // to map local +X onto world (fleeDir.x, _, fleeDir.z) is
+      // atan2(-z, x) — NOT atan2(x, z) (that's the -Z-forward convention
+      // and was leaving the head 90° off the direction of travel).
+      l.mesh.rotation.y = Math.atan2(-l.fleeDir.z, l.fleeDir.x);
       // Update kinematic body so the collider follows.
       l.body.setNextKinematicTranslation({ x: l.pos.x, y: l.pos.y + 0.05, z: l.pos.z });
       // Track decals — only during flee. Skip on rocky biome (no impression).

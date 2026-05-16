@@ -18,7 +18,7 @@ export const Tuning = {
   GOD_MODE: true,                    // never dies; die() floors stats instead
 
   // Day/night
-  DAY_LENGTH_SECONDS: 480,  // Session U — was 360 (6 real min); now 8 real min
+  DAY_LENGTH_SECONDS: 720,  // CC-4 — was 480 (8 min); now 12 min for less rushed pacing
   START_DAY_TIME: 0.34,     // ~08:00 — sun reasonably high at spawn
 
   // Sun & lighting
@@ -262,9 +262,10 @@ export const Tuning = {
 
   // Stone-well rework (Session Z) — wells confined to salt-flats biome.
   // Visual: ring of perturbed icosahedra stones + an askew wooden plank hatch.
-  WELL_TARGET_COUNT: 5,                 // try to place this many; salt may give fewer
+  WELL_TARGET_COUNT: 1,                 // CC-4 — single well at salt-flats center
   WELL_RING_RADIUS: 0.78,               // center-to-stone radius (m)
-  WELL_STONE_COUNT: 9,
+  WELL_STONE_COUNT: 9,                  // stones per ring
+  WELL_STONE_RINGS: 3,                  // CC-4 — stacked vertically (chest-high well)
   WELL_STONE_SIZE: 0.30,                // base radius of each perturbed icosahedron
   WELL_STONE_LIGHT_HEX: 0x9a8a6e,       // pale weathered stone
   WELL_STONE_DARK_HEX: 0x6c5a44,        // deeper stone (alternates around ring)

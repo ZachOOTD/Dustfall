@@ -54,31 +54,42 @@ function makeWell(rand: Rng): THREE.Group {
   const g = new THREE.Group();
   const ringR = Tuning.WELL_RING_RADIUS;
   const stoneCount = Tuning.WELL_STONE_COUNT;
-  // Ring of irregular stones — perturbed icosahedra at slight scale + height
-  // variation so the circle reads as hand-stacked rocks, not a precise build.
-  for (let i = 0; i < stoneCount; i++) {
-    const baseAng = (i / stoneCount) * Math.PI * 2;
-    // Small angular + radial jitter so stones don't perfectly tile.
-    const ang = baseAng + (rand() - 0.5) * 0.18;
-    const r = ringR * (0.94 + rand() * 0.12);
-    const sz = Tuning.WELL_STONE_SIZE * (0.78 + rand() * 0.34);
-    const geo = new THREE.IcosahedronGeometry(sz, 0);
-    perturbOutward(geo, 0.22, 31 + i * 7);
-    const mat = rand() < 0.5 ? _stoneMatLight : _stoneMatDark;
-    const stone = new THREE.Mesh(geo, mat);
-    stone.position.set(Math.cos(ang) * r, sz * 0.55, Math.sin(ang) * r);
-    stone.rotation.set(rand() * Math.PI, rand() * Math.PI, rand() * Math.PI);
-    // Squash slightly so stones look set into the ground rather than ball-like.
-    stone.scale.y = 0.78 + rand() * 0.12;
-    g.add(stone);
+  const rings = Tuning.WELL_STONE_RINGS;
+  const baseSize = Tuning.WELL_STONE_SIZE;
+  // CC-4 — three stacked rings of stones (was one) so the well reads as a
+  // chest-height structure visible from across the salt flats. Each ring
+  // sits about one stone-RADIUS above the one below it (was one full
+  // stone-DIAMETER), so adjacent rings overlap by ~half a stone height
+  // and the stack reads as dense interlocking masonry rather than three
+  // discrete bands with gaps. Small angular phase offset prevents column
+  // stacking.
+  const ringSpacing = baseSize * 0.85;
+  for (let ring = 0; ring < rings; ring++) {
+    const yOffset = baseSize * 0.55 + ring * ringSpacing;
+    const ringPhaseOffset = ring * (Math.PI / stoneCount); // alternate-row stagger
+    for (let i = 0; i < stoneCount; i++) {
+      const baseAng = (i / stoneCount) * Math.PI * 2 + ringPhaseOffset;
+      const ang = baseAng + (rand() - 0.5) * 0.18;
+      const r = ringR * (0.94 + rand() * 0.12);
+      const sz = baseSize * (0.78 + rand() * 0.34);
+      const geo = new THREE.IcosahedronGeometry(sz, 0);
+      perturbOutward(geo, 0.22, 31 + i * 7 + ring * 113);
+      const mat = rand() < 0.5 ? _stoneMatLight : _stoneMatDark;
+      const stone = new THREE.Mesh(geo, mat);
+      stone.position.set(Math.cos(ang) * r, yOffset, Math.sin(ang) * r);
+      stone.rotation.set(rand() * Math.PI, rand() * Math.PI, rand() * Math.PI);
+      stone.scale.y = 0.78 + rand() * 0.12;
+      g.add(stone);
+    }
   }
-  // Dark inner hole — set BELOW the hatch so peeks-through-the-cracks reads dark.
+  // Dark inner hole — set just below the top ring so peeks-through-the-cracks
+  // read as a deep shaft going down into the well.
   const hole = new THREE.Mesh(
     new THREE.CircleGeometry(ringR * 0.72, 18),
     _holeMat,
   );
   hole.rotation.x = -Math.PI / 2;
-  hole.position.y = Tuning.WELL_STONE_SIZE * 0.35;
+  hole.position.y = baseSize * 0.55 + (rings - 1) * ringSpacing + 0.05;
   g.add(hole);
 
   // Wooden hatch — a small plank set across the well opening, slightly off-center
@@ -105,21 +116,53 @@ function makeWell(rand: Rng): THREE.Group {
   );
   brace.position.set(0, plankH * 0.5, plankLen * 0.28);
   hatch.add(brace);
-  // Place the hatch sitting on top of the stone ring, slightly slid off-center
-  // so part of the well opening is visible (peek into the dark).
+  // Place the hatch sitting on top of the TOP stone ring, slightly slid
+  // off-center so part of the well opening is visible (peek into the dark).
+  // CC-4 — sit the hatch at the MIN stone-top height (≈ radius × min
+  // scale.y) instead of the average. Smallest stones now bear the plank
+  // on all corners, larger stones poke up through it (which is what
+  // hand-stacked masonry does — uneven tops, planks settle askew).
+  // Tilt randomization on BOTH pitch + roll widened so the plank reads as
+  // "wedged in askew" rather than "perfectly flat with daylight under
+  // half the corners".
   const slideAng = rand() * Math.PI * 2;
   const slideDist = ringR * 0.18;
+  const topRingY = baseSize * 0.55 + (rings - 1) * ringSpacing;
+  const stoneMinHalfHeight = baseSize * 0.61;  // ≈ radius_min × scale.y_min
   hatch.position.set(
     Math.cos(slideAng) * slideDist,
-    Tuning.WELL_STONE_SIZE * 1.05,
+    topRingY + stoneMinHalfHeight + Tuning.WELL_HATCH_THICKNESS * 0.5,
     Math.sin(slideAng) * slideDist,
   );
   hatch.rotation.y = slideAng + Math.PI / 2 + (rand() - 0.5) * 0.3;
-  // Tip the hatch up a tiny bit on one side for "askew" feel.
-  hatch.rotation.x = (rand() - 0.5) * 0.08;
+  // Pitch + roll tilt — both ±~6° so the plank looks settled into the
+  // uneven stone tops on all four corners.
+  hatch.rotation.x = (rand() - 0.5) * 0.22;
+  hatch.rotation.z = (rand() - 0.5) * 0.16;
   g.add(hatch);
 
   return g;
+}
+
+/** Find the salt-biome cell with the highest raw biome-noise value (the
+ *  "deepest" salt — most central to the flat). Search is a grid sweep of
+ *  the explorable disc; ties are broken toward smaller distance-from-
+ *  origin so the well anchors near spawn rather than at the edge. */
+function findSaltCentroid(biomes: BiomeSampler): { x: number; z: number } | null {
+  const RANGE = 220;
+  const STEP = 8;
+  let best: { x: number; z: number; score: number } | null = null;
+  for (let z = -RANGE; z <= RANGE; z += STEP) {
+    for (let x = -RANGE; x <= RANGE; x += STEP) {
+      if (biomes.biomeAt(x, z) !== 'salt') continue;
+      // Higher rawAt = deeper into salt territory. Subtract a small
+      // distance-from-origin penalty so we prefer central salt patches.
+      const dist = Math.sqrt(x * x + z * z);
+      const score = biomes.rawAt(x, z) - dist * 0.001;
+      if (!best || score > best.score) best = { x, z, score };
+    }
+  }
+  return best ? { x: best.x, z: best.z } : null;
 }
 
 export function spawnWaterSources(
@@ -129,27 +172,23 @@ export function spawnWaterSources(
   biomes: BiomeSampler,
 ): WaterSource[] {
   const list: WaterSource[] = [];
-  // Session Z — wells restricted to salt-flats biome (dried lakebed geology
-  // is where the player's mental model expects a dug well). Wells that can't
-  // find a salt patch within MAX_ATTEMPTS are silently dropped — better to
-  // ship 3 wells in salt than to scatter strays into dunes/rocky.
+  // CC-4 — exactly ONE well, placed at the densest salt-biome point we can
+  // find on the explorable disc. The old random-scatter (up to 5 wells)
+  // sprinkled wells across the entire salt region; the new "one big well
+  // at the center of the flats" reads as the player's destination instead
+  // of a routine point of interest. WELL_TARGET_COUNT is now 1 — the loop
+  // still respects it so a future tuning bump could re-introduce more.
   const TARGET_WELLS = Tuning.WELL_TARGET_COUNT;
-  const MAX_ATTEMPTS = 80;
+  const center = findSaltCentroid(biomes);
+  if (!center) return list; // no salt in range — silently skip
 
   for (let i = 0; i < TARGET_WELLS; i++) {
-    let x = 0, z = 0;
-    let placed = false;
-    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-      const radius = 35 + rand() * 200;
-      const angle = rand() * Math.PI * 2;
-      const cx = Math.cos(angle) * radius;
-      const cz = Math.sin(angle) * radius;
-      if (biomes.biomeAt(cx, cz) === 'salt') {
-        x = cx; z = cz; placed = true; break;
-      }
-    }
-    if (!placed) continue; // no salt within budget — skip this well
-
+    // For >1 wells we'd want jittered offsets; with 1 we just plant at the
+    // centroid. Offset for additional wells if WELL_TARGET_COUNT ever bumps.
+    const angle = rand() * Math.PI * 2;
+    const offsetR = i === 0 ? 0 : 8 + rand() * 12;
+    const x = center.x + Math.cos(angle) * offsetR;
+    const z = center.z + Math.sin(angle) * offsetR;
     const groundY = terrain.heightAt(x, z);
     const mesh = makeWell(rand);
     // Sink the well slightly so its stone base sits flush even on a slope.

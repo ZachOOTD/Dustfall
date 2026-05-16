@@ -35,6 +35,11 @@ export function createLights(scene: THREE.Scene): LightsBundle {
   const moon = new THREE.DirectionalLight(0x6a7ea0, 0.0);
   moon.position.set(-30, 50, -20);
   scene.add(moon);
+  // Moon's target needs to be in the scene graph so its matrixWorld updates
+  // when we mutate target.position each frame (CC-4 fix). Without this,
+  // target.position changes don't propagate to the light's direction
+  // calculation, leaving moonlight always pointing toward world origin.
+  scene.add(moon.target);
 
   const ambient = new THREE.AmbientLight(0x4a3a2a, Tuning.AMBIENT_BASE);
   scene.add(ambient);
@@ -77,8 +82,16 @@ export function updateLighting(ctx: GameContext, _dt: number): void {
   const sunStormDim = 1 - storm * Tuning.STORM_SUN_DIM;
   sun.intensity = aboveHorizon * Tuning.SUN_INTENSITY_MAX * sunStormDim;
   moon.intensity = Math.max(0, -sy) * Tuning.MOON_INTENSITY_MAX * sunStormDim;
-  // Moon should also follow player so its lighting is consistent (no shadow on it).
+  // Moon should also follow player so its lighting is consistent. We must
+  // update BOTH position and target — DirectionalLight direction is
+  // (target.position - light.position).normalize(), so leaving target at
+  // its default (world origin) would invert moonlight direction whenever
+  // the player position moves far from origin (e.g., mounted on the
+  // speeder, the player capsule parks at y=-2000, making moonlight shine
+  // UPWARD and dramatically darkening the world at night).
   moon.position.copy(_playerPos).addScaledVector(_sunDir, -Tuning.SUN_DISTANCE);
+  moon.target.position.copy(_playerPos);
+  moon.target.updateMatrixWorld();
 
   // Sky background + fog colors blend through the times of day.
   let target: THREE.Color;

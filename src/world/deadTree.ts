@@ -10,6 +10,7 @@
 import * as THREE from 'three';
 import type { Rng } from '../core/rng.ts';
 import type { Terrain } from './terrain.ts';
+import type { BiomeSampler } from './biomes.ts';
 import type { Pickup } from '../pickups/pickups.ts';
 import { spawnBranchAt } from '../pickups/pickups.ts';
 
@@ -65,22 +66,43 @@ function makeDeadTree(rand: Rng): THREE.Group {
   return g;
 }
 
-/** Spawn ~12 dead trees scattered across the world. Each tree drops 2-4
- *  branch pickups within a 1.5-3m ring at its base. Branches are appended
- *  to `branchList` so the caller (main.ts) can fold them into ctx.pickups. */
+/** Max |dY| across a 4-sample cross at radius `r`. Higher = steeper. */
+function terrainFlatnessAt(terrain: Terrain, cx: number, cz: number, r = 1.5): number {
+  const c = terrain.heightAt(cx, cz);
+  return Math.max(
+    Math.abs(terrain.heightAt(cx + r, cz) - c),
+    Math.abs(terrain.heightAt(cx - r, cz) - c),
+    Math.abs(terrain.heightAt(cx, cz + r) - c),
+    Math.abs(terrain.heightAt(cx, cz - r) - c),
+  );
+}
+
+/** Spawn dead trees scattered across the SALT-FLATS biome only, on
+ *  roughly-flat ground. Each tree drops 2-4 branch pickups within a
+ *  1.5-3m ring at its base. Branches are appended to `branchList` so the
+ *  caller (main.ts) folds them into ctx.pickups. CC-4 restricted trees
+ *  from any-biome to salt-only so the lake-bed reads as the only place
+ *  where stuff used to live (and died). */
 export function spawnDeadTrees(
   scene: THREE.Scene,
   terrain: Terrain,
   rand: Rng,
   branchList: Pickup[],
+  biomes: BiomeSampler,
   count = 12,
 ): THREE.Group[] {
   const trees: THREE.Group[] = [];
-  for (let i = 0; i < count; i++) {
+  const MAX_ATTEMPTS = count * 25;
+  const FLATNESS_THRESHOLD = 0.7;
+  let attempts = 0;
+  while (trees.length < count && attempts < MAX_ATTEMPTS) {
+    attempts++;
     const radius = 20 + rand() * 200;
     const angle = rand() * Math.PI * 2;
     const x = Math.cos(angle) * radius;
     const z = Math.sin(angle) * radius;
+    if (biomes.biomeAt(x, z) !== 'salt') continue;
+    if (terrainFlatnessAt(terrain, x, z) > FLATNESS_THRESHOLD) continue;
     const groundY = terrain.heightAt(x, z);
 
     const tree = makeDeadTree(rand);

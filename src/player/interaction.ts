@@ -241,7 +241,7 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
           ctx.ui.showToast('your bag is full');
           return;
         }
-        harvestCactus(c);
+        harvestCactus(c, ctx.time.elapsed);
         playHarvest();
         if (isAlien) {
           ctx.ui.showToast(`you pluck ${added} alien fruit${added > 1 ? 's' : ''}`);

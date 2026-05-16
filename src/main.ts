@@ -43,7 +43,7 @@ import { createAmbientDust, updateAmbientDust } from './world/ambientDust.ts';
 import { createStormVignette, updateStormVignette } from './world/stormVignette.ts';
 import { updateSpeeder } from './world/speeder.ts';
 import { spawnWaterSources } from './world/waterSources.ts';
-import { spawnCacti } from './world/cactus.ts';
+import { spawnCacti, updateCacti } from './world/cactus.ts';
 import { updateFires } from './world/fire.ts';
 import { createFootprintRegistry, updateFootprints } from './world/footprints.ts';
 import { addItem } from './inventory/inventory.ts';
@@ -92,9 +92,9 @@ placeHeroLandmarks(three.scene, physics.world, terrain, scatterRand, salvageable
 // dropped in 2-4 clusters at the base of dead trees (see spawnDeadTrees
 // below) so they have a visible source.
 const pickupList = spawnBranches(three.scene, terrain, scatterRand, 0);
-spawnDeadTrees(three.scene, terrain, scatterRand, pickupList);
+spawnDeadTrees(three.scene, terrain, scatterRand, pickupList, biomes);
 const waterSources = spawnWaterSources(three.scene, terrain, scatterRand, biomes);
-const cacti = spawnCacti(three.scene, physics.world, terrain, scatterRand);
+const cacti = spawnCacti(three.scene, physics.world, terrain, scatterRand, biomes);
 
 // Hand-placed distant POIs (Session P). Adds a bandage pickup at the
 // abandoned camp. Massive POI wrecks register as salvageables too.
@@ -351,6 +351,7 @@ startLoop(ctx, (c, dt) => {
   updateLizards(c, dt);          // small flee-AI wildlife
   updateFootprints(c.footprints, c.time.elapsed); // age + fade pooled decals
   updateFires(c, dt);            // flicker + fuel decrement + burnout
+  updateCacti(c);                // CC-4 — regrow harvested alien-cactus fruit after a day cycle
   updateInteraction(c, dt);      // raycast hover + E to take/refill/search/harvest/cook/sleep
   updateInventoryInput(c, dt);   // 1-4, wheel, Q to use
   updateCombat(c, dt);           // LMB swing → damage raider
