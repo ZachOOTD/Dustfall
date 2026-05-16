@@ -220,6 +220,16 @@ const POI_LAYOUT: ReadonlyArray<POISpec> = [
   { kind: 'mega_wreck',       x:-180, z:-130 },
 ];
 
+/** Anchor POI coords exposed for the HH procgen layer + lizard procgen
+ *  spawn, so they can do min-separation rejection / lizard clustering
+ *  without re-stating the hand-placed positions. mega_ship and mega_wreck
+ *  do flat-spot searches and may drift up to 60m from these nominal
+ *  coords, but for `POI_MIN_SEPARATION = 250m` that's well within the
+ *  separation budget. */
+export function getAnchorPOIPositions(): ReadonlyArray<{ x: number; z: number }> {
+  return POI_LAYOUT.map((p) => ({ x: p.x, z: p.z }));
+}
+
 export function placePOIs(
   scene: THREE.Scene,
   world: RAPIER.World,

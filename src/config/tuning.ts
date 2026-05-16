@@ -78,11 +78,9 @@ export const Tuning = {
   TERRAIN_CHUNK_SIZE: 800,
   TERRAIN_CHUNK_GRID: 3,
   TERRAIN_CHUNK_CELLS: 192,
-  // Far-LOD ring (no physics): coarse heightmap mesh covering out to
-  // TERRAIN_LOD_OUTER_RADIUS so the horizon doesn't drop off at the chunk
-  // band edge (1200m).
-  TERRAIN_LOD_OUTER_RADIUS: 2000,
-  TERRAIN_LOD_CELLS: 80,                // ~50m per LOD cell
+  // (HH — TERRAIN_LOD_OUTER_RADIUS / TERRAIN_LOD_CELLS removed. The FF far-LOD
+  // ring caused a visible "second terrain" floating above the chunks in dune
+  // valleys; fog at the chunk-band edge serves as the visible horizon now.)
 
   // Hover speeder (Session CC) — dynamic-body bike, velocity-controlled
   // for both Y (hover) and XZ (movement). Bike yaw lerps toward the
@@ -251,6 +249,27 @@ export const Tuning = {
   WELL_MIN_SEPARATION: 400,            // greedy exclusion radius for multi-well placement
   BIOME_CENTROID_SEARCH_RADIUS: 1100,  // grid sweep half-extent in findBiomeCentroid
   BIOME_CENTROID_GRID_STEP: 24,        // sample spacing in findBiomeCentroid
+
+  // Procgen POIs — Session HH (world rework #3). Augments the 6 hand-
+  // placed anchor POIs with ~15 wrecks scattered across the world via
+  // rejection sampling with min-separation enforcement (Poisson-disk
+  // character at this density). Vocabulary is the existing wreck kinds —
+  // no new art.
+  POI_PROCGEN_COUNT: 15,
+  POI_MIN_SEPARATION: 250,             // m — rejection-sample min distance between any two POIs
+  POI_MAX_PLACEMENT_TRIES: 80,         // per-target attempt budget
+  POI_SCATTER_RADIUS_MIN: 120,         // m — leave room for spawn cluster + anchor POIs
+  POI_SCATTER_RADIUS_MAX: 1100,        // m — safely inside chunk band
+
+  // Lizard procgen — Session HH. Replaces 4 hard-coded spawns with
+  // density-based scatter that clusters near POIs + sparse global density.
+  // Salt biome rejected (lizards don't live on featureless flats).
+  LIZARD_TARGET_COUNT: 28,
+  LIZARD_PER_POI_AVG: 1.5,             // average lizards clustered per POI (1 or 2 each)
+  LIZARD_CLUSTER_RADIUS_MIN: 8,        // m — min offset of clustered lizard from POI center
+  LIZARD_CLUSTER_RADIUS_MAX: 20,       // m — max offset of clustered lizard from POI center
+  LIZARD_SCATTER_RADIUS_MAX: 1100,     // m — global-pass scatter outer bound
+  LIZARD_SPAWN_BUFFER_FROM_ORIGIN: 25, // m — keep player spawn area un-ambushy
 
   // Pickups
   CANTEEN_COUNT: 35,

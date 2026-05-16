@@ -856,3 +856,50 @@ later session, more cacti, more POI salvageables) don't need
 migration code. Just bump `SAVE_VERSION` as a marker and trust the
 id-based lookup. The version bump exists so future tooling can
 distinguish saves from different world layouts.
+
+## D56 — LOD ring removed (D52 superseded) (Session HH)
+**When**: Session HH.
+**Why**: D52's "slot the LOD 0.15m beneath the chunks via mesh.position.y"
+approach assumed the resolution difference between LOD and chunks was
+small. It isn't. The LOD uses 50m vertex spacing with linear interpolation
+between samples; the chunks use 4.17m spacing with fine dune detail
+(primary wavelength 170m, amplitude 13.5m). When two adjacent LOD
+samples land on dune crests and the chunks dip into a valley between
+them, the LOD's straight line sits 10m+ above the chunks' actual valley
+floor. The 0.15m bias is meaningless against that overshoot; the LOD
+ends up "floating" above the chunks in valleys, and since it has no
+collider, the player passes through it.
+**Fix**: delete `src/world/terrainLod.ts` and its tuning constants
+entirely. Chunks become the single source of terrain truth. The chunk-
+band edge (1200m radial) is the visible horizon; fog density 0.0018
+gives `exp(-(0.0018·1200)²) ≈ 0.009` — ~99% opaque at the edge, so
+nothing past 1200m would have been visible anyway.
+**Rejected alternative**: donut-carving the LOD to only emit triangles
+outside the chunk band. The LOD's only purpose was to extend the
+visible horizon past 1200m, but fog at that distance makes any
+contribution nearly invisible. Carrying the code path isn't worth it
+at the current fog density.
+**Apply**: if a future session wants an extended-horizon read (e.g.
+the user wants to see distant terrain past 1200m), the right move is
+EITHER a donut-carved LOD (vertex-aligned at the chunk-band boundary)
+OR streaming chunks. Don't reintroduce the overlap-with-bias approach.
+
+## D57 — Procgen POI rejection covers all salvageables, not just anchor POIs (Session HH)
+**When**: Session HH (mid-flight bug-fix).
+**Why**: First implementation passed only the 6 anchor POI coords to
+`placeProcgenPOIs` as exclusion centers. Hero landmarks (15-20 wrecks
+placed earlier in the boot) were NOT in the exclusion set, so a procgen
+POI landed 2.2m from a hero-landmark engine_cluster — visibly
+overlapping wrecks. Found by min-pair-distance check across the
+salvageables registry post-boot.
+**Fix**: main.ts collects ALL already-registered salvageable positions
+(anchor POIs + hero landmarks + mega-ship/wreck parts) at the time
+`placeProcgenPOIs` runs, and passes the combined list as the exclusion
+centers. Procgen-vs-existing min separation is now 265m (above the
+250m threshold).
+**Apply**: future procgen placement layers must check against the LIVE
+salvageables registry, not just the static anchor coord list. If
+session ordering ever changes (e.g. hero landmarks placed AFTER
+procgen POIs), the exclusion logic must be re-audited. Equivalent rule
+holds for anything else with positional uniqueness — read the registry,
+don't trust a static layout list.

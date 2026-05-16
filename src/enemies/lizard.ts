@@ -136,6 +136,69 @@ export function spawnLizard(
   return lizard;
 }
 
+/** HH (world rework #3) — replaces the 4 hard-coded lizard spawns with
+ *  biome-aware procgen scatter. Clusters 1-2 lizards near each POI, fills
+ *  the remainder with sparse global density. Salt biome rejected (lizards
+ *  don't live on featureless flats). 25m buffer around player spawn so
+ *  the opening scene isn't ambushy. Deterministic from the passed `rand`
+ *  stream, so ids are stable across reloads. */
+export function spawnLizardsProcgen(
+  scene: THREE.Scene,
+  physicsWorld: RAPIER.World,
+  terrain: Terrain,
+  biomes: { biomeAt: (x: number, z: number) => 'dune' | 'rocky' | 'salt' },
+  rand: () => number,
+  poiPositions: ReadonlyArray<THREE.Vector3>,
+): Lizard[] {
+  const lizards: Lizard[] = [];
+  const target = Tuning.LIZARD_TARGET_COUNT;
+  const buffer = Tuning.LIZARD_SPAWN_BUFFER_FROM_ORIGIN;
+  const bufferSq = buffer * buffer;
+  const clusterMin = Tuning.LIZARD_CLUSTER_RADIUS_MIN;
+  const clusterSpan = Tuning.LIZARD_CLUSTER_RADIUS_MAX - clusterMin;
+  const scatterMax = Tuning.LIZARD_SCATTER_RADIUS_MAX;
+  const perPoi = Tuning.LIZARD_PER_POI_AVG;
+
+  // Cluster pass — 1 or 2 lizards per POI averaging perPoi.
+  for (const p of poiPositions) {
+    if (lizards.length >= target) break;
+    const n = rand() < (perPoi - 1) ? 2 : 1;
+    for (let i = 0; i < n; i++) {
+      if (lizards.length >= target) break;
+      let placed = false;
+      for (let tries = 0; tries < 5; tries++) {
+        const a = rand() * Math.PI * 2;
+        const r = clusterMin + rand() * clusterSpan;
+        const x = p.x + Math.cos(a) * r;
+        const z = p.z + Math.sin(a) * r;
+        if (biomes.biomeAt(x, z) === 'salt') continue;
+        if (x * x + z * z < bufferSq) continue;
+        lizards.push(spawnLizard(scene, physicsWorld, terrain, { x, z }));
+        placed = true;
+        break;
+      }
+      // If we couldn't place near this POI, skip — the global pass will
+      // top up the count.
+      if (!placed) continue;
+    }
+  }
+
+  // Global pass — top up to target with sparse scatter across the world.
+  const MAX_GLOBAL_TRIES = (target - lizards.length) * 20;
+  let tries = 0;
+  while (lizards.length < target && tries < MAX_GLOBAL_TRIES) {
+    tries++;
+    const r = buffer + rand() * (scatterMax - buffer);
+    const a = rand() * Math.PI * 2;
+    const x = Math.cos(a) * r;
+    const z = Math.sin(a) * r;
+    if (biomes.biomeAt(x, z) === 'salt') continue;
+    lizards.push(spawnLizard(scene, physicsWorld, terrain, { x, z }));
+  }
+
+  return lizards;
+}
+
 export function damageLizard(lizard: Lizard, _dmg: number, _ctx: GameContext): void {
   if (lizard.state === 'dead') return;
   lizard.state = 'dead';

@@ -45,37 +45,39 @@ Run with `npm run dev` (port 5173). Type-check with `npx tsc --noEmit`.
 
 ## Where we are now
 
-**Last shipped**: Session GG — World rework #2: biome rescale + scatter
-retune. `BIOME_NOISE_FREQ 1/220 → 1/900` so biome regions are vast
-(~2.67 per 2400m axis instead of ~10) — salt / rocky / dune now form
-recognisable broad swaths instead of speckling. New
-`findBiomeCentroid(biomes, target, options)` in biomes.ts generalises
-the old `findSaltCentroid`; `waterSources.ts` uses greedy
-`excludeCenters` to plant 3 wells across separate salt regions
-(verified pairwise 1112-1413m apart). Cactus / dead-tree / hero-
-landmark counts + radius bounds promoted to tuning constants and
-rescaled for the 2400m world: 10 cacti (was 3), 30 dead trees (was
-12), 15-20 hero landmarks (was 7-9), scatter radii out to ~1100m.
-`SAVE_VERSION 2 → 3` (pure marker; loader accepts v1/v2/v3; id-based
-scatter persistence needs no migration code — count growth is
-absorbed by the existing find-by-id semantics). Dropped dead
-`LANDMARK_COUNT: 180` from tuning. Sandworm home (60,0) still
-resolves to dune. Decisions D53-D55.
+**Last shipped**: Session HH — World rework #3: procgen POIs + biome-
+aware AI spawns. ~15 procgen wrecks scattered across the chunk band
+via rejection sampling with `POI_MIN_SEPARATION = 250m` against ALL
+already-registered salvageables (anchor POIs + hero landmarks +
+mega-ship parts). Lizards bumped from 4 hardcoded → 28 procgen, salt
+biome rejected, 25m buffer around player spawn, clustered ~1.5 per
+POI plus sparse global density. New `src/world/procgenPoi.ts` and
+`spawnLizardsProcgen` in `lizard.ts`. **Also deleted FF's
+`src/world/terrainLod.ts`**: its 50m linear interpolation poked
+10m+ above the chunks' fine detail in dune valleys, creating a
+visible "second terrain" with no collider; fog at the chunk-band edge
+(~99% opaque at 1200m) is the visible horizon now. D52 superseded by
+D56. `SAVE_VERSION 3 → 4`. Decisions D56-D57. World-rework arc
+(EE scoping → FF chunks → GG biomes → HH procgen) is now complete.
+
+**Prior milestone**: Session GG — World rework #2: biome rescale +
+scatter retune. `BIOME_NOISE_FREQ 1/220 → 1/900` so biome regions are
+vast (~2.67 per 2400m axis) — salt / rocky / dune now form
+recognisable broad swaths. New `findBiomeCentroid` in biomes.ts;
+waterSources uses greedy `excludeCenters` to plant 3 wells across
+separate salt regions. 10 cacti / 30 dead trees / 15-20 hero
+landmarks / scatter radii out to ~1100m. `SAVE_VERSION 2 → 3`.
+Decisions D53-D55.
 
 **Prior milestone**: Session FF — World rework #1: chunked terrain +
 bigger map. Replaced the single 800m heightfield with a 3×3 grid of
-800m heightfield chunks (2400m world span), all sharing one
-`createNoise2D` instance + world-space sampling so chunk-boundary
-heights are bit-identical. Added `src/world/terrainLod.ts` (coarse
-80×80 LOD plane to ±2000m, biased to y=-0.15 so chunks always win the
-z-fight). `FAR_PLANE 600→1800`, `WORLD_RADIUS 280→900`,
-`FOG_DENSITY_CLEAR 0.0035→0.0018`. `SAVE_VERSION` 1 → 2. Decisions
-D50–D52.
+800m heightfield chunks (2400m world span). `FAR_PLANE 600→1800`,
+`WORLD_RADIUS 280→900`, `FOG_DENSITY_CLEAR 0.0035→0.0018`.
+`SAVE_VERSION 1 → 2`. Decisions D50–D52 (D52 superseded by D56 in HH).
 
 **Prior milestone**: Session EE — scoping pass for the world rework.
 Split the 10-15h "world + biome rework" roadmap item into three
-sub-sessions; roadmap updated, session-1 plan authored, sessions FF
-and GG then executed against it.
+sub-sessions, which then shipped as FF/GG/HH.
 
 **Prior milestone**: Session DD — roaming Dune-style sand worm boss.
 First boss-tier enemy: 24m segmented worm with continuously-tapered

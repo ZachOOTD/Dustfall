@@ -3,6 +3,29 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session HH — 2026-05-16 — World rework #3: procgen POIs + biome-aware AI spawns (+ FF LOD removed)
+`partially verified` — tsc clean; numeric checks confirm 28 lizards (was
+4 hardcoded), 0 in salt, min radius from origin 74m (above 25m buffer);
+48 salvageables (was 33) with procgen-vs-anchor min separation 265m
+(above 250m); 9 terrain chunks present, no LOD mesh; visual screenshot
+in a 13m dune valley shows single continuous terrain surface, no
+floating second-ground / pop-through. New `src/world/procgenPoi.ts`:
+rejection-sample placement of ~15 procgen POIs across the chunk band,
+min-separation 250m against all already-registered salvageables
+(anchors + hero landmarks). `placeProcgenPOIs` reuses the FF/EE
+`placeWreck` API + the GG `findBiomeCentroid`-style exclusion pattern.
+New `spawnLizardsProcgen` in `src/enemies/lizard.ts`: clusters 1-2
+lizards per POI (any biome != salt), tops up via global scatter with
+25m spawn buffer, deterministic from the shared scatter RNG. Replaced
+4 hardcoded lizards in main.ts. **Also removed the FF LOD ring**
+(`src/world/terrainLod.ts` deleted) — its coarse 50m linear interp
+poked 10m+ above the chunks' fine detail in dune valleys, causing a
+visible "second terrain" with no collider; fog at the chunk-band edge
+(density 0.0018 → ~99% opaque at 1200m) serves as the visible horizon.
+D52 superseded by D56. `SAVE_VERSION 3 → 4` (pure marker, loader
+accepts v1/v2/v3/v4 — id-based scatter persistence handles lizards
+4→28 without migration per D55). Decisions D56-D57.
+
 ## Session GG — 2026-05-16 — World rework #2: biome rescale + scatter retune
 `partially verified` — tsc clean; numeric checks confirm 10 cacti (was 3),
 30 dead trees (was 12), 3 wells (was 1) pairwise-separated 1112-1413m (min

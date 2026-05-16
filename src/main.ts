@@ -14,9 +14,9 @@ import { makePlayer } from './physics/bodies.ts';
 import { installPhysicsDebug, updatePhysicsDebug } from './physics/debug.ts';
 import { preloadAssets } from './assets/loader.ts';
 import { createTerrain } from './world/terrain.ts';
-import { createTerrainLod } from './world/terrainLod.ts';
 import { createBiomeSampler } from './world/biomes.ts';
-import { placePOIs } from './world/poi.ts';
+import { placePOIs, getAnchorPOIPositions } from './world/poi.ts';
+import { placeProcgenPOIs } from './world/procgenPoi.ts';
 import { placeHeroLandmarks } from './world/heroLandmarks.ts';
 import { createSalvageableRegistry } from './world/salvage.ts';
 import { createSky, updateSky } from './world/sky.ts';
@@ -36,7 +36,7 @@ import { updatePlayer } from './player/controller.ts';
 import { createShelterRegistry, updateShelter } from './shelter/shelterZones.ts';
 import { updateSoundscape } from './audio/soundscape.ts';
 import { updateRaiders, type Raider } from './enemies/raider.ts';
-import { spawnLizard, updateLizards } from './enemies/lizard.ts';
+import { spawnLizardsProcgen, updateLizards } from './enemies/lizard.ts';
 import { spawnSandWorm, updateSandWorm } from './enemies/sandWorm.ts';
 import { updateCombat } from './player/combat.ts';
 import { createViewModel, updateViewModel } from './player/viewModel.ts';
@@ -85,10 +85,10 @@ const shelter = createShelterRegistry();
 // scatter stream so the world is fully deterministic from RNG_SEED.
 const biomes = createBiomeSampler(makeRng(Tuning.RNG_SEED + 17));
 const terrain = createTerrain(three.scene, physics.world, terrainRand, biomes);
-// EE — coarse far-LOD ring outside the chunk band so the horizon doesn't
-// drop off at the chunk edge. Sits at y = -0.15 so chunks always win the
-// z-fight inside the chunk band.
-createTerrainLod(three.scene, terrain.noise, biomes);
+// HH — the FF LOD ring was removed: its coarse 50m interpolation poked above
+// the chunks' fine detail in dune valleys (D52 superseded). Fog at the
+// chunk-band edge (1200m, density 0.0018 ≈ 99% opaque) is the visible
+// horizon now.
 // Session T — salvage registry. Built up-front so hero landmarks + POIs
 // can register their wrecks as they're placed.
 const salvageables = createSalvageableRegistry();
@@ -106,17 +106,32 @@ const cacti = spawnCacti(three.scene, physics.world, terrain, scatterRand, biome
 // abandoned camp. Massive POI wrecks register as salvageables too.
 placePOIs(three.scene, physics.world, terrain, scatterRand, pickupList, salvageables, shelter);
 
+// HH (world rework #3) — procgen POI layer scattered across the chunk band.
+// ~15 wrecks via rejection sampling. Reject against anchor POI coords AND
+// any already-registered salvageable position (hero landmarks placed
+// earlier in the boot) so procgen POIs don't land on existing wrecks.
+const anchorPois = getAnchorPOIPositions();
+const existingObstacles: Array<{ x: number; z: number }> = [
+  ...anchorPois,
+  ...salvageables.list.map((s) => ({ x: s.pos.x, z: s.pos.z })),
+];
+const procgenPoiPositions = placeProcgenPOIs(
+  three.scene, physics.world, terrain, scatterRand, salvageables, existingObstacles,
+);
+
 // Session U — raiders deprioritized (world is sandbox / "only survivor").
 // Code path stays so we can revisit later; just don't spawn one at boot.
 const raiders: Raider[] = [];
 
-// Spawn 4 lizards at distributed positions ~20-60m from origin.
-const lizards = [
-  spawnLizard(three.scene, physics.world, terrain, { x: 18, z: 12 }),
-  spawnLizard(three.scene, physics.world, terrain, { x: -28, z: 8 }),
-  spawnLizard(three.scene, physics.world, terrain, { x: -14, z: -34 }),
-  spawnLizard(three.scene, physics.world, terrain, { x: 36, z: -22 }),
+// HH — procgen lizard scatter: clusters 1-2 per POI + sparse global density
+// up to LIZARD_TARGET_COUNT. Salt biome rejected, 25m buffer from spawn.
+const allPoiPositions: THREE.Vector3[] = [
+  ...anchorPois.map((p) => new THREE.Vector3(p.x, terrain.heightAt(p.x, p.z), p.z)),
+  ...procgenPoiPositions,
 ];
+const lizards = spawnLizardsProcgen(
+  three.scene, physics.world, terrain, biomes, scatterRand, allPoiPositions,
+);
 
 // Session DD-2 — roaming sand worm. The home anchor (patrol center) is
 // configured in tuning.ts; we verify it lands in the dune biome at boot
