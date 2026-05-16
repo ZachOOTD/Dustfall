@@ -13,6 +13,7 @@ import type { Terrain } from './terrain.ts';
 import type { BiomeSampler } from './biomes.ts';
 import type { Pickup } from '../pickups/pickups.ts';
 import { spawnBranchAt } from '../pickups/pickups.ts';
+import { Tuning } from '../config/tuning.ts';
 
 const _trunkMat = new THREE.MeshLambertMaterial({
   color: 0x8a8278,
@@ -89,15 +90,17 @@ export function spawnDeadTrees(
   rand: Rng,
   branchList: Pickup[],
   biomes: BiomeSampler,
-  count = 12,
+  count = Tuning.DEAD_TREE_TARGET_COUNT,
 ): THREE.Group[] {
   const trees: THREE.Group[] = [];
   const MAX_ATTEMPTS = count * 25;
   const FLATNESS_THRESHOLD = 0.7;
+  const RADIUS_MIN = Tuning.DEAD_TREE_SCATTER_RADIUS_MIN;
+  const RADIUS_SPAN = Tuning.DEAD_TREE_SCATTER_RADIUS_MAX - RADIUS_MIN;
   let attempts = 0;
   while (trees.length < count && attempts < MAX_ATTEMPTS) {
     attempts++;
-    const radius = 20 + rand() * 200;
+    const radius = RADIUS_MIN + rand() * RADIUS_SPAN;
     const angle = rand() * Math.PI * 2;
     const x = Math.cos(angle) * radius;
     const z = Math.sin(angle) * radius;

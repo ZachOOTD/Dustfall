@@ -803,3 +803,56 @@ visible. The 0.15m bias is invisible at the LOD's viewing distance
 **Trade-off**: at the chunk-band edge, the LOD sits 0.15m below the
 chunks — a tiny vertical step. Visually undetectable; nobody will see
 a 15cm shelf at 1200m.
+
+## D53 — `findBiomeCentroid` drops the origin-distance bias (Session GG)
+**When**: Session GG.
+**Why**: The pre-EE `findSaltCentroid` scored cells as
+`score = biomes.rawAt(x, z) - dist * 0.001` to bias the well toward
+spawn ("anchors near spawn rather than at the edge"). That penalty
+was tuned for `RANGE = 220` (max dist 220 × 0.001 = 0.22, comparable
+to biome thresholds at ±0.22/0.32). At GG's `RANGE = 1100`, the same
+0.001 penalty becomes 1.1 at the edge — completely swamps biome
+scoring and would push the centroid to origin regardless of biome.
+**Fix**: drop the penalty entirely. Score is pure `biomes.rawAt`.
+Multi-well placement now uses greedy `excludeCenters` to spread
+across separate regions instead of relying on origin bias.
+**Trade-off**: the single well is no longer anchored near spawn.
+Players may need to travel further to reach the first well —
+intentional for the bigger-world feel. If a future polish session
+wants a "starter well near spawn", add a `bias` option that
+re-introduces the penalty when called with `searchRadius ≤ ~400`.
+
+## D54 — Greedy `excludeCenters` for multi-well placement (Session GG)
+**When**: Session GG (`WELL_TARGET_COUNT 1 → 3`).
+**Why**: Three alternatives considered:
+(a) Top-K by score — find the K best cells globally. Risk: K
+clustered cells in the same salt region instead of K spread regions.
+(b) Per-region scoring — partition the world into N regions, find
+the best cell in each. Complex region detection logic.
+(c) Greedy with exclusion radius — find best cell, mark
+`WELL_MIN_SEPARATION = 400m` around it, find next-best, repeat.
+**Pick**: (c). Simplest implementation, naturally distributes across
+separate biome regions, and stops cleanly when salt runs out (the
+loop breaks on `null` return). The `excludeCenters: Array<{ x, z,
+radius }>` API in `findBiomeCentroid` is reusable — session #3 will
+use it for Poisson-disk-like POI placement.
+
+## D55 — id-based scatter persistence absorbs count growth (Session GG)
+**When**: Session GG.
+**Why**: Sessions #2 + #3 grow scatter counts substantially (cacti
+3→10, eventually lizards 4→28). The scoping plan called for an
+ordinal-mapping migration (`min(savedCount, newCount)` walk). On
+inspection, the existing save schema is already robust: `cacti`,
+`lizards`, `salvageables`, `lootContainers` save by `id`, not
+ordinal index. The `_nextId` counter resets per boot, and rejection
+sampling is deterministic from `RNG_SEED`, so the first N cacti
+spawned post-bump always have ids 1..N. On load, `find((c) => c.id
+=== saved.id)` matches saved state to the correctly-indexed new
+spawn. Count growth → new ids beyond the saved set are simply
+un-harvested. Count shrinks (won't happen in #2/#3) → saved ids
+without matching spawns are silently skipped.
+**Apply**: future scaling sessions (e.g. raider re-spawn in some
+later session, more cacti, more POI salvageables) don't need
+migration code. Just bump `SAVE_VERSION` as a marker and trust the
+id-based lookup. The version bump exists so future tooling can
+distinguish saves from different world layouts.

@@ -35,15 +35,16 @@ import { spawnTentAt } from '../world/tent.ts';
 import { removeShelterZone } from '../shelter/shelterZones.ts';
 
 export const SAVE_KEY = 'dustfall.save.v1';
-// EE — bumped to 2 with the world-rework chunked terrain. Schema is unchanged
-// between v1 and v2; the bump is a marker so future tools can tell pre- vs
-// post-bigger-world saves apart. The loader accepts either version.
-export const SAVE_VERSION = 2;
+// EE/FF — v2 marked the world-rework chunked-terrain layout.
+// GG — v3 marks the biome-rescale + scatter-retune. Schema is unchanged
+// between all three; bumps exist so future tools can tell pre- vs
+// post-rework saves apart. The loader accepts versions 1, 2, AND 3.
+export const SAVE_VERSION = 3;
 
 type V3 = { x: number; y: number; z: number };
 
 export interface SaveV1 {
-  version: 1 | 2;
+  version: 1 | 2 | 3;
   seed: number;
   savedAt: number;
 
@@ -245,10 +246,10 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
     return { ok: false, error: 'save file is corrupt' };
   }
 
-  // EE — accept v1 saves alongside v2. Schema is identical; the bump only
-  // marks the chunked-terrain world. Reject newer/unknown versions to keep
-  // future schema migrations safe.
-  if (save.version !== 1 && save.version !== 2) {
+  // EE/FF/GG — accept v1, v2, and v3 saves. Schema is identical; bumps
+  // only mark world-rework checkpoints. Reject newer/unknown versions to
+  // keep future schema migrations safe.
+  if (save.version !== 1 && save.version !== 2 && save.version !== 3) {
     return { ok: false, error: `unsupported save version ${save.version}` };
   }
   if (save.seed !== Tuning.RNG_SEED) {

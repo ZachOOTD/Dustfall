@@ -10,6 +10,7 @@ import type { Terrain } from './terrain.ts';
 import { placeWreck, type WreckKind } from './wrecks.ts';
 import { makeStaticBox } from '../physics/bodies.ts';
 import { registerSalvageable, type SalvageableRegistry } from './salvage.ts';
+import { Tuning } from '../config/tuning.ts';
 
 const _q = new THREE.Quaternion();
 function getQuat(o: THREE.Object3D): { x: number; y: number; z: number; w: number } {
@@ -100,10 +101,14 @@ export function placeHeroLandmarks(
   rand: Rng,
   salvageables?: SalvageableRegistry,
 ): void {
-  const count = 7 + Math.floor(rand() * 3); // 7-9
+  const minCount = Tuning.HERO_LANDMARK_COUNT_MIN;
+  const maxCount = Tuning.HERO_LANDMARK_COUNT_MAX;
+  const count = minCount + Math.floor(rand() * (maxCount - minCount + 1));
+  const radiusMin = Tuning.HERO_LANDMARK_RADIUS_MIN;
+  const radiusSpan = Tuning.HERO_LANDMARK_RADIUS_MAX - radiusMin;
   for (let i = 0; i < count; i++) {
     const angle = (i / count) * Math.PI * 2 + (rand() - 0.5) * 0.8;
-    const radius = 70 + rand() * 180;
+    const radius = radiusMin + rand() * radiusSpan;
     const x = Math.cos(angle) * radius;
     const z = Math.sin(angle) * radius;
     const y = terrain.heightAt(x, z);

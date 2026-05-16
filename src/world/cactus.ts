@@ -147,16 +147,19 @@ export function spawnCacti(
   biomes: BiomeSampler,
 ): Cactus[] {
   const list: Cactus[] = [];
-  // CC-4 — alien cactus is now the ONLY variant, rare (3 across the salt
-  // flats), and restricted to flat-enough salt ground. Rejection-sample
-  // candidate spots until we hit TARGET placements or burn MAX_ATTEMPTS.
-  const TARGET = 3;
-  const MAX_ATTEMPTS = 200;
-  const FLATNESS_THRESHOLD = 0.6;  // max |dY/1.2m| sampled in 4 directions
+  // CC-4 — alien cactus is the ONLY variant, restricted to flat-enough
+  // salt ground. GG — count + radius bounds rescaled for the 2400m world.
+  // Rejection-sample candidate spots until we hit TARGET placements or
+  // burn MAX_ATTEMPTS.
+  const TARGET = Tuning.CACTUS_TARGET_COUNT;
+  const MAX_ATTEMPTS = TARGET * 60;        // keep the 60 attempts/target ratio from CC-4
+  const FLATNESS_THRESHOLD = 0.6;          // max |dY/1.2m| sampled in 4 directions
+  const RADIUS_MIN = Tuning.CACTUS_SCATTER_RADIUS_MIN;
+  const RADIUS_SPAN = Tuning.CACTUS_SCATTER_RADIUS_MAX - RADIUS_MIN;
   let attempts = 0;
   while (list.length < TARGET && attempts < MAX_ATTEMPTS) {
     attempts++;
-    const radius = 12 + rand() * 240;
+    const radius = RADIUS_MIN + rand() * RADIUS_SPAN;
     const angle = rand() * Math.PI * 2;
     const x = Math.cos(angle) * radius;
     const z = Math.sin(angle) * radius;

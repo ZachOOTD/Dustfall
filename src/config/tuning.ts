@@ -180,8 +180,8 @@ export const Tuning = {
   DUNE_ASYMMETRY_AMOUNT: 26.0,         // organic u-warp (m); curves ridges
   DUNE_WARP_SCALE: 420,                // wavelength of the warp noise channel
 
-  // Biomes (Session P)
-  BIOME_NOISE_FREQ: 1 / 220,           // ~220m wavelength → big regions
+  // Biomes (Session P; GG — rescaled for 2400m world)
+  BIOME_NOISE_FREQ: 1 / 900,           // GG — 1/220 → 1/900; vast biome regions (~2.67 per 2400m axis)
   BIOME_THRESHOLD_ROCKY: -0.22,        // noise < this → rocky
   BIOME_THRESHOLD_SALT: 0.32,          // noise > this → salt; in-between → dune
   // Per-biome terrain-height multiplier. Salt flats are nearly featureless;
@@ -232,7 +232,25 @@ export const Tuning = {
   NEAR_PLANE: 0.1,
   FAR_PLANE: 1800,  // EE — bumped from 600 with the larger world
   RNG_SEED: 1337,
-  LANDMARK_COUNT: 180,
+  // (legacy LANDMARK_COUNT removed in GG — was never read; hero landmark
+  // count now lives below in HERO_LANDMARK_COUNT_MIN/MAX.)
+
+  // Scatter — world rework #2 (Session GG). All bounds + counts rescaled
+  // for the 2400m world; chunk bounds are [-1200, +1200] so 1100m radial
+  // sampling stays safely inside the chunk band.
+  CACTUS_TARGET_COUNT: 10,
+  CACTUS_SCATTER_RADIUS_MIN: 12,
+  CACTUS_SCATTER_RADIUS_MAX: 1100,
+  DEAD_TREE_TARGET_COUNT: 30,
+  DEAD_TREE_SCATTER_RADIUS_MIN: 20,
+  DEAD_TREE_SCATTER_RADIUS_MAX: 1100,
+  HERO_LANDMARK_COUNT_MIN: 15,
+  HERO_LANDMARK_COUNT_MAX: 20,
+  HERO_LANDMARK_RADIUS_MIN: 70,
+  HERO_LANDMARK_RADIUS_MAX: 1050,
+  WELL_MIN_SEPARATION: 400,            // greedy exclusion radius for multi-well placement
+  BIOME_CENTROID_SEARCH_RADIUS: 1100,  // grid sweep half-extent in findBiomeCentroid
+  BIOME_CENTROID_GRID_STEP: 24,        // sample spacing in findBiomeCentroid
 
   // Pickups
   CANTEEN_COUNT: 35,
@@ -277,7 +295,7 @@ export const Tuning = {
 
   // Stone-well rework (Session Z) — wells confined to salt-flats biome.
   // Visual: ring of perturbed icosahedra stones + an askew wooden plank hatch.
-  WELL_TARGET_COUNT: 1,                 // CC-4 — single well at salt-flats center
+  WELL_TARGET_COUNT: 3,                 // GG — one per major salt region in the 2400m world
   WELL_RING_RADIUS: 0.78,               // center-to-stone radius (m)
   WELL_STONE_COUNT: 9,                  // stones per ring
   WELL_STONE_RINGS: 3,                  // CC-4 — stacked vertically (chest-high well)

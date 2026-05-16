@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import type { Rng } from '../core/rng.ts';
 import type { Terrain } from '../world/terrain.ts';
 import type { BiomeSampler } from './biomes.ts';
+import { findBiomeCentroid } from './biomes.ts';
 import { perturbOutward } from './sculpt.ts';
 import { Tuning } from '../config/tuning.ts';
 
@@ -144,27 +145,6 @@ function makeWell(rand: Rng): THREE.Group {
   return g;
 }
 
-/** Find the salt-biome cell with the highest raw biome-noise value (the
- *  "deepest" salt — most central to the flat). Search is a grid sweep of
- *  the explorable disc; ties are broken toward smaller distance-from-
- *  origin so the well anchors near spawn rather than at the edge. */
-function findSaltCentroid(biomes: BiomeSampler): { x: number; z: number } | null {
-  const RANGE = 220;
-  const STEP = 8;
-  let best: { x: number; z: number; score: number } | null = null;
-  for (let z = -RANGE; z <= RANGE; z += STEP) {
-    for (let x = -RANGE; x <= RANGE; x += STEP) {
-      if (biomes.biomeAt(x, z) !== 'salt') continue;
-      // Higher rawAt = deeper into salt territory. Subtract a small
-      // distance-from-origin penalty so we prefer central salt patches.
-      const dist = Math.sqrt(x * x + z * z);
-      const score = biomes.rawAt(x, z) - dist * 0.001;
-      if (!best || score > best.score) best = { x, z, score };
-    }
-  }
-  return best ? { x: best.x, z: best.z } : null;
-}
-
 export function spawnWaterSources(
   scene: THREE.Scene,
   terrain: Terrain,
@@ -172,23 +152,22 @@ export function spawnWaterSources(
   biomes: BiomeSampler,
 ): WaterSource[] {
   const list: WaterSource[] = [];
-  // CC-4 — exactly ONE well, placed at the densest salt-biome point we can
-  // find on the explorable disc. The old random-scatter (up to 5 wells)
-  // sprinkled wells across the entire salt region; the new "one big well
-  // at the center of the flats" reads as the player's destination instead
-  // of a routine point of interest. WELL_TARGET_COUNT is now 1 — the loop
-  // still respects it so a future tuning bump could re-introduce more.
+  // GG — multi-well across the larger 2400m world. Greedy salt-centroid
+  // search: pick the deepest-salt cell, mark a WELL_MIN_SEPARATION
+  // exclusion around it, then find the next-best cell outside the
+  // exclusion. Wells naturally land in separate salt regions instead of
+  // clustering. If the world ever runs out of un-excluded salt, we stop
+  // early (loop returns null centroid).
   const TARGET_WELLS = Tuning.WELL_TARGET_COUNT;
-  const center = findSaltCentroid(biomes);
-  if (!center) return list; // no salt in range — silently skip
+  const centers: Array<{ x: number; z: number; radius: number }> = [];
 
   for (let i = 0; i < TARGET_WELLS; i++) {
-    // For >1 wells we'd want jittered offsets; with 1 we just plant at the
-    // centroid. Offset for additional wells if WELL_TARGET_COUNT ever bumps.
-    const angle = rand() * Math.PI * 2;
-    const offsetR = i === 0 ? 0 : 8 + rand() * 12;
-    const x = center.x + Math.cos(angle) * offsetR;
-    const z = center.z + Math.sin(angle) * offsetR;
+    const center = findBiomeCentroid(biomes, 'salt', { excludeCenters: centers });
+    if (!center) break; // no more salt region — stop early
+    centers.push({ x: center.x, z: center.z, radius: Tuning.WELL_MIN_SEPARATION });
+
+    const x = center.x;
+    const z = center.z;
     const groundY = terrain.heightAt(x, z);
     const mesh = makeWell(rand);
     // Sink the well slightly so its stone base sits flush even on a slope.

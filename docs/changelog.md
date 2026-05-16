@@ -3,6 +3,25 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session GG — 2026-05-16 — World rework #2: biome rescale + scatter retune
+`partially verified` — tsc clean; numeric checks confirm 10 cacti (was 3),
+30 dead trees (was 12), 3 wells (was 1) pairwise-separated 1112-1413m (min
+400m), all wells + cacti in salt, sandworm home still in dune; visual
+screenshot shows vast bone-white salt regions interleaving with dune
+sections; save round-trip not exercised but loader accepts v1/v2/v3.
+`BIOME_NOISE_FREQ 1/220 → 1/900` (vast ~2.67-region-per-axis biomes in
+the 2400m world). New `findBiomeCentroid(biomes, target, options)` in
+biomes.ts generalises the old `findSaltCentroid` with greedy
+`excludeCenters` for multi-pass placement; waterSources uses it to plant
+3 wells across separate salt regions (≥400m apart). Cactus / dead-tree /
+hero-landmark counts + radius bounds promoted to tuning constants and
+rescaled for the 2400m world (`CACTUS_TARGET_COUNT: 10`,
+`DEAD_TREE_TARGET_COUNT: 30`, `HERO_LANDMARK_COUNT_MIN/MAX: 15-20`,
+radii out to ~1100m). `SAVE_VERSION 2 → 3` (pure marker bump, loader
+accepts v1/v2/v3, no migration code — id-based scatter persistence
+handles count growth automatically). Dropped dead `LANDMARK_COUNT: 180`
+from tuning (verified unused). Decisions D53-D55.
+
 ## Session FF — 2026-05-16 — World rework #1: chunked terrain + bigger map
 `partially verified` — tsc clean; seam check passed numerically (Δ <
 0.0004m across all four chunk boundaries x=±400, z=±400, and the corner);
