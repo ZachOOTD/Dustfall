@@ -45,25 +45,36 @@ Run with `npm run dev` (port 5173). Type-check with `npx tsc --noEmit`.
 
 ## Where we are now
 
-**Last shipped**: Session CC-2 — hover speeder polish pass. Visual
-tilt (pitch + roll lerped, camera roll undo/reapply), 2-phase smooth
-jump with soft descent, camera height tuned to 1.0m, toggleable
-headlight (L key, SpotLight + emissive disc), full rusty-scoutbike
-model redesign (forward arm + headlamp, sunken cockpit + windshield,
-angled handlebar stem, fuel canister, foot pegs, side saddlebag with
-9-piece wrap-around straps + junction buckle, antenna with attached
-red tip light). NEW shared 3D engine-bell mesh helper in `wrecks.ts`
-— replaces the flat-CircleGeometry disc pattern across speeder (2
-bells), megaShip (1), megaWreck (2), and reused inside the standalone
-`makeEngineBell` + `makeEngineCluster`. Mount prompt via new `'mount'`
-InteractType + `'speeder'` registry. Nose + bell colliders on the
-speeder; bell colliders on world wrecks. Prior milestones: CC (hover
-speeder shell), BB-4 (storm + fog rework), BB-2 + BB-3 (Jakku-scale
-mega-wreck), BB (small mega-ship + plan), AA (torch + flashlight,
-opening-scene rebuild), Z (stone-well + salvage panels), Y
-(footprints + lizard tracks), X (audio sample-stem architecture, .ogg
-files pending in `public/audio/`), W (opening scene), V (atmosphere), U
-(UX + empty world), N (rigged raider infra). See
+**Last shipped**: Session CC-3 — animated main menu (title screen).
+Dedicated `src/world/titleScene.ts` (own THREE.Scene + camera, decoupled
+from game world) — camera atop a Gaussian-hero-dune perched on an 800m
+displaced-plane dune field, sky 2/3 / desert 1/3 composition. Tiny pod
+streaks in like a shooting star (additive Line trail + glow sprite) and a
+procedural **pyre** (nested cones + tongues + coal bed + ember/smoke
+pools, `fog: false` to punch through 200m haze) engulfs it on impact. Day/
+night cycle uses the **real in-game sky** (shader-sphere gradient + sun
+sprite + moon sprite + 800 stars + planet + shooter pool) — `sky.ts`
+exports its helpers so the title can build its own bundle without
+disturbing the game's singleton. Sun arc rebuilt around the camera-forward
+axis so it actually crosses the fixed view; left-shifted via
+`LEFT_SHIFT=0.50`. Boot starts in pre-dawn (`cycleOffset=0.19`, sun 18°
+below horizon, red glow building). **Moon now crescent + larger** in
+`sky.ts` (canvas `destination-out` carve, `MOON_DISC_SIZE` 16 → 32,
+`depthTest: true` so terrain occludes it — affects in-game too). NEW
+`src/ui/titleOverlay.ts` — DUSTFALL wordmark + subtitle + CONTINUE
+(when save exists) + NEW GAME. `startLoop` accepts an optional render-
+target getter that swaps title/game scenes by `ctx.flags.titleActive`.
+**Save/load round-trips speeder pose** (pos + rotationQuat + mounted +
+headlamp); `setupOpeningScene` now runs on every boot (was gated on
+`!hasSave`) so the starter wreck + speeder always exist, and
+`loadGameState` patches over the default placement on Continue. NEW GAME
+from a save wipes save + reloads (clean slate). Decisions D41–D44. Prior
+milestones: CC-2 (speeder polish), CC (hover speeder shell), BB-4 (storm +
+fog rework), BB-2/BB-3 (Jakku-scale mega-wreck), BB (small mega-ship), AA
+(torch + flashlight, opening-scene rebuild), Z (stone-well + salvage
+panels), Y (footprints + lizard tracks), X (audio sample-stem
+architecture, .ogg files pending in `public/audio/`), W (opening scene),
+V (atmosphere), U (UX + empty world), N (rigged raider infra). See
 [docs/changelog.md](docs/changelog.md) for full history;
 [docs/roadmap.md](docs/roadmap.md) for what's next.
 

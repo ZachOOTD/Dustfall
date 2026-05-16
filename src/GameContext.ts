@@ -99,6 +99,10 @@ export interface GameContext {
     /** Wall-clock-elapsed timestamp until which the damage vignette is shown.
      *  Raider hits set this to `ctx.time.elapsed + 0.33`. HUD reads it. */
     damageFlashUntil: number;
+    /** Session-CC-3 (animated main menu) — true while the title screen is up.
+     *  Render loop routes through a separate title scene + camera; game tick
+     *  short-circuits before the pause check. Cleared when NEW GAME pressed. */
+    titleActive: boolean;
   };
 }
 

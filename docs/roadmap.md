@@ -17,11 +17,10 @@ Pick whatever feels most missing after the polish + atmosphere arc.
 - Giant sand worm enemy
 - Base-building mechanics
 - Small red creature companion (pocketable + re-deployable)
-- Animated main menu (pod crash + flickering fire + day/night loop)
 - Weapon variants (pipe staff / scrap machete / scrap gun / energy pistol)
 - Trading / NPC economy
 - 7-day storm countdown
-- Bounties
+- Bounties (template: D39 `'mount'` singleton-interactable pattern from CC-2)
 - Procedural world generation (idea — POIs randomized per seed)
 - Remove HUD stat bars in favor of audio/visual/text cues (idea)
 
@@ -36,3 +35,7 @@ Pick whatever feels most missing after the polish + atmosphere arc.
 - HUD micro-polish: low-stat warning vignettes (cold = blue tint, thirst =
   brown), interact-prompt fade, low-stamina screen wobble.
 - Crosshair feedback: thicken on interactable, red on enemy.
+- **Title screen — "real-world render" variant** (idea, deferred from
+  CC-3): instead of the dedicated title scene, render the actual game
+  world behind the menu — camera floating around the opening-scene wreck,
+  parallax on the pod-crash narrative. Higher-effort cinematic intro.

@@ -55,6 +55,11 @@ import { createInventoryOverlay } from './ui/inventoryOverlay.ts';
 import { createPerfHud, updatePerfHud } from './ui/perfHud.ts';
 import { createTutorial } from './ui/tutorial.ts';
 import { installDebugPanel } from './debug/debugPanel.ts';
+import { createTitleScene } from './world/titleScene.ts';
+import { createTitleOverlay } from './ui/titleOverlay.ts';
+import { ensureAudioStarted } from './audio/audio.ts';
+import { startSoundscape } from './audio/soundscape.ts';
+import { clearSave, loadGameState } from './persistence/save.ts';
 
 // --- Bootstrap (async — Rapier WASM + asset preload before world build) ---
 const [physics, assets] = await Promise.all([
@@ -198,7 +203,7 @@ const ctx: GameContext = {
   speeder: null,                 // populated by setupOpeningScene on fresh worlds
   footprints,
   journals: { list: [] as Journal[] },
-  flags: { started: false, paused: false, damageFlashUntil: 0 },
+  flags: { started: false, paused: false, damageFlashUntil: 0, titleActive: true },
 };
 
 // First-person viewmodel — must come after scene is built; consumes ctx.
@@ -211,19 +216,18 @@ addItem(ctx.inventory, 'machete');
 addItem(ctx.inventory, 'canteen', { fillLevel: 1 });
 ctx.inventory.selectedIdx = 0;
 
-// Session W — fresh-world opening scene. The wreck + skeleton + journal
-// are placed on every boot when no save exists (so a "new game" replays
-// the opening). Continue-from-save skips it entirely so a player resuming
-// doesn't get teleported into the cinematic. The opening also seeds the
-// sandstorm and points the camera at the wreck.
-if (!hasSave()) {
-  const result = setupOpeningScene(
-    three.scene, physics.world, terrain, shelter, weather, three.camera, scatterRand,
-    playerBody,
-  );
-  ctx.journals.list.push(result.journal);
-  ctx.speeder = result.speeder;
-}
+// Opening scene runs on EVERY boot — the wreck + skeleton + journal +
+// speeder are deterministic-from-seed props and would be missing from a
+// save-loaded world otherwise (the user would land in a Continue with no
+// starter bike or wreck). On Continue, loadGameState() then patches the
+// player position + speeder pose OVER this default placement, so the
+// player resumes where they saved rather than at the opening cinematic.
+const openingResult = setupOpeningScene(
+  three.scene, physics.world, terrain, shelter, weather, three.camera, scatterRand,
+  playerBody,
+);
+ctx.journals.list.push(openingResult.journal);
+ctx.speeder = openingResult.speeder;
 
 // IMPORTANT: createMenus must run BEFORE wireOverlays — the unlock handler
 // in input.ts calls showPauseOverlay which needs the menu DOM in place.
@@ -241,8 +245,90 @@ wireOverlays(ctx);
 installDebugPanel(ctx);
 installPhysicsDebug(ctx);
 
+// --- Session CC-3: animated title screen ---
+// Freeze the game world (paused=true) and stack a dedicated title scene on
+// top. NEW GAME on the title is now the SOLE gesture into gameplay — it
+// starts audio, locks the pointer, and unpauses the world. The legacy
+// #start-overlay stays hidden permanently from boot.
+ctx.flags.paused = true;
+const startOverlayEl = document.getElementById('start-overlay');
+const controlsPanelEl = document.getElementById('controls-panel');
+startOverlayEl?.classList.add('hidden');
+controlsPanelEl?.classList.add('hidden');
+// Hide in-game HUD elements (stats bars + clock + crosshair + hotbar) while
+// the title is up — they read as game furniture and don't belong on the
+// menu. Each becomes visible again on NEW GAME.
+const inGameElIds = ['hud', 'hotbar', 'crosshair'];
+const inGameEls = inGameElIds
+  .map((id) => document.getElementById(id))
+  .filter((el): el is HTMLElement => el !== null);
+inGameEls.forEach((el) => { el.style.visibility = 'hidden'; });
+
+const title = createTitleScene();
+// Expose the title scene for debug/preview tools (read-only handles).
+(window as unknown as { __title?: { scene: unknown; camera: unknown; update: (dt: number) => void } }).__title = {
+  scene: title.scene,
+  camera: title.camera,
+  update: title.update,
+};
+
+// Whether a save existed when this boot started. setupOpeningScene now
+// runs on EVERY boot so the wreck + speeder always exist; this flag only
+// drives the menu (show CONTINUE button + treat NEW GAME as "wipe + restart"
+// so the player's previously-saved progress, inventory, etc. doesn't leak
+// into a "new" run).
+const hadSaveAtBoot = hasSave();
+
+function handoffToGame(): void {
+  titleOverlay.hide();
+  ctx.flags.titleActive = false;
+  inGameEls.forEach((el) => { el.style.visibility = ''; });
+  ensureAudioStarted();
+  startSoundscape();
+  ctx.input.controls.lock();
+  setTimeout(() => {
+    title.dispose();
+    (window as unknown as { __title?: unknown }).__title = undefined;
+  }, 0);
+}
+
+const titleOverlay = createTitleOverlay(ctx, {
+  onNewGame: () => {
+    // "New game" should be a clean slate, so wipe any existing save and
+    // reload — the next boot rebuilds the opening scene + default
+    // inventory + clean stats from scratch. On a fresh boot (no save),
+    // we just hand off directly.
+    if (hadSaveAtBoot) {
+      clearSave();
+      location.reload();
+      return;
+    }
+    handoffToGame();
+  },
+  onContinue: hadSaveAtBoot ? () => {
+    // Patch the already-built world (wreck + speeder placed by
+    // setupOpeningScene above) with saved player pos + speeder pose +
+    // inventory + etc. If load fails we toast the error and leave the
+    // title up so the player can fall back to NEW GAME.
+    const result = loadGameState(ctx);
+    if (!result.ok) {
+      ctx.ui.showToast(result.error ?? 'load failed');
+      return;
+    }
+    handoffToGame();
+  } : undefined,
+});
+
 // --- Per-frame tick: order matters ---
 startLoop(ctx, (c, dt) => {
+  // Title screen owns the frame until NEW GAME is pressed. Game systems
+  // stay frozen behind the title — `paused` is set true during title — and
+  // the render-target getter below routes to the title scene + camera.
+  if (c.flags.titleActive) {
+    title.update(dt);
+    endInputFrame(c.input);
+    return;
+  }
   // Skip ALL game logic while paused. Render still runs (after this callback).
   if (c.flags.paused) {
     endInputFrame(c.input);
@@ -275,4 +361,8 @@ startLoop(ctx, (c, dt) => {
   updatePhysicsDebug(c, dt);     // wireframe overlay if toggled
   updatePerfHud(c, dt);          // F1 dev overlay
   endInputFrame(c.input);        // clear per-frame input state LAST
-});
+}, () =>
+  ctx.flags.titleActive
+    ? { scene: title.scene, camera: title.camera }
+    : { scene: ctx.three.scene, camera: ctx.three.camera },
+);

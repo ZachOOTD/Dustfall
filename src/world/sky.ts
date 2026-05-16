@@ -59,7 +59,7 @@ const _planetPos = new THREE.Vector3();
 const _tmpOrigin = new THREE.Vector3();
 const _tmpTravel = new THREE.Vector3();
 
-const SKY_VERTEX = /* glsl */ `
+export const SKY_VERTEX = /* glsl */ `
 varying vec3 vDir;
 void main() {
   vDir = normalize(position);
@@ -67,7 +67,7 @@ void main() {
 }
 `;
 
-const SKY_FRAGMENT = /* glsl */ `
+export const SKY_FRAGMENT = /* glsl */ `
 varying vec3 vDir;
 uniform vec3 uTopColor;
 uniform vec3 uHorizonColor;
@@ -93,7 +93,7 @@ void main() {
 }
 `;
 
-function makeSunTexture(): THREE.CanvasTexture {
+export function makeSunTexture(): THREE.CanvasTexture {
   const c = document.createElement('canvas');
   c.width = c.height = 128;
   const g = c.getContext('2d');
@@ -111,36 +111,52 @@ function makeSunTexture(): THREE.CanvasTexture {
   return tex;
 }
 
-// Cool, slightly bluish moon — solid pale core with a soft halo. A few
-// darker speckles for "maria" so it doesn't read as a flat disc.
-function makeMoonTexture(): THREE.CanvasTexture {
+// Cool, slightly bluish CRESCENT moon — pale lit-side body with a soft halo,
+// and a darker "shadowed" inner crescent erased from the disc. Larger than
+// the old full-disc moon so the silhouette reads at SUN_DISC_DISTANCE.
+export function makeMoonTexture(): THREE.CanvasTexture {
   const c = document.createElement('canvas');
   c.width = c.height = 128;
   const g = c.getContext('2d');
   if (!g) throw new Error('canvas 2d context unavailable');
-  // Outer halo
-  const halo = g.createRadialGradient(64, 64, 24, 64, 64, 64);
+  // Outer halo first (so the erase step at the end carves through it
+  // too — the dark side of the crescent has no halo bloom, which reads
+  // more lunar than a full halo with a bite missing). Halo is kept tight
+  // (radius 28→56) so the erase disk can swallow it entirely on the
+  // shadowed side without needing to span the whole texture.
+  const halo = g.createRadialGradient(64, 64, 28, 64, 64, 56);
   halo.addColorStop(0, 'rgba(220,228,240,0.55)');
   halo.addColorStop(0.55, 'rgba(180,200,224,0.18)');
   halo.addColorStop(1, 'rgba(180,200,224,0)');
   g.fillStyle = halo;
   g.fillRect(0, 0, 128, 128);
-  // Solid disc body
+  // Solid disc body — pale, with slightly off-center radial highlight.
   g.beginPath();
-  g.arc(64, 64, 26, 0, Math.PI * 2);
-  const body = g.createRadialGradient(58, 58, 6, 64, 64, 28);
+  g.arc(64, 64, 34, 0, Math.PI * 2);
+  const body = g.createRadialGradient(54, 56, 6, 64, 64, 36);
   body.addColorStop(0, 'rgba(248,250,255,1)');
   body.addColorStop(0.7, 'rgba(214,222,236,1)');
   body.addColorStop(1, 'rgba(176,188,208,0.95)');
   g.fillStyle = body;
   g.fill();
-  // Maria speckles (deliberately quiet — no high contrast)
-  g.fillStyle = 'rgba(160,172,196,0.35)';
-  for (const [x, y, r] of [[58, 60, 4], [70, 64, 3], [62, 72, 5], [74, 56, 2.5]]) {
+  // A couple of subtle maria on the LIT (left) side so the crescent isn't
+  // a perfectly clean shape — gives a hint of surface texture.
+  g.fillStyle = 'rgba(160,172,196,0.30)';
+  for (const [x, y, r] of [[52, 58, 4], [50, 70, 3.5], [56, 78, 3]]) {
     g.beginPath();
     g.arc(x, y, r, 0, Math.PI * 2);
     g.fill();
   }
+  // Carve the crescent. Erase disk is bigger and offset further right
+  // than the body radius so it swallows both the body's right edge AND
+  // the halo bleed on that side — otherwise a thin glow ring leaks past
+  // the shadowed side of the crescent.
+  g.globalCompositeOperation = 'destination-out';
+  g.beginPath();
+  g.arc(86, 62, 40, 0, Math.PI * 2);
+  g.fillStyle = 'rgba(0,0,0,1)';
+  g.fill();
+  g.globalCompositeOperation = 'source-over';
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
@@ -148,7 +164,7 @@ function makeMoonTexture(): THREE.CanvasTexture {
 
 // Distant planet — rust-tinged, banded radial gradient. Reads as a small
 // reddish dot on the horizon by day; warmer + slightly more visible at dusk.
-function makePlanetTexture(): THREE.CanvasTexture {
+export function makePlanetTexture(): THREE.CanvasTexture {
   const c = document.createElement('canvas');
   c.width = c.height = 128;
   const g = c.getContext('2d');
@@ -178,7 +194,7 @@ function makePlanetTexture(): THREE.CanvasTexture {
 
 // Build a sphere of star positions with magnitude jitter. Points are placed
 // just inside the sky sphere so they sit behind everything else.
-function buildStarGeometry(): THREE.BufferGeometry {
+export function buildStarGeometry(): THREE.BufferGeometry {
   const count = Tuning.STAR_COUNT;
   const radius = Tuning.STAR_SPHERE_RADIUS;
   const positions = new Float32Array(count * 3);
@@ -239,14 +255,19 @@ export function createSky(scene: THREE.Scene): void {
   sun.frustumCulled = false;
   scene.add(sun);
 
-  // Moon — same sprite pattern, opposite the sun.
+  // Moon — same sprite pattern, opposite the sun. depthTest:true so
+  // dunes/wrecks properly occlude it when the moon's direction passes
+  // behind nearby terrain (without this, the sprite punched through any
+  // ground it crossed). depthWrite stays off so the moon doesn't write
+  // into the depth buffer itself — keeps far-distance sprite-on-sprite
+  // ordering clean (stars + planet behind it still render correctly).
   const moonMat = new THREE.SpriteMaterial({
     map: makeMoonTexture(),
     color: 0xffffff,
     transparent: true,
     opacity: 0,
     depthWrite: false,
-    depthTest: false,
+    depthTest: true,
     fog: false,
     toneMapped: false,
     blending: THREE.NormalBlending,

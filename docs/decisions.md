@@ -578,3 +578,71 @@ exactly one DoubleSide clone per source material. Trade-off: 3 meshes
 per bell instead of 2 — negligible perf cost, big visual upgrade. The
 helper's local +Y orientation is the convention — callers rotate as
 needed (most use `rotation.x = π/2` to point the mouth at +Z).
+
+## D41 — Dedicated title 3D scene, not "render game world behind menu" (Session CC-3)
+**When**: Session CC-3.
+**Why**: The animated main-menu bucket entry had two paths: (A) decoupled
+THREE.Scene + camera; (B) render the live game world behind the title with
+a cinematic camera rig. Picked A because (1) the title needs a fixed
+cinematic composition (camera atop a hero dune, horizon at bottom-third)
+that the player's real spawn camera + WASD-controlled view can't match;
+(2) the title sky needs a custom day/night cycle independent of
+`ctx.time.dayTime` (the title runs while `ctx.flags.paused=true` and
+the game world's time should freeze with it); (3) the in-game opening-
+scene wreck has a specific narrative role we don't want to upstage. Cost
+of A: ~600 LoC of inline scene assembly + helper exports from sky.ts so
+the title can build its own SkyBundle without disturbing the game's
+module-singleton. (B) is preserved as a deferred polish idea in roadmap.
+
+## D42 — Title sun arc rebuilt around camera-forward axis (Session CC-3)
+**When**: Session CC-3.
+**Why**: The in-game sun direction is `(cos(angle), sin(angle), 0.18)`
+— a flat east-west sweep in the X-Y plane that works because the player
+can turn to look at it. The title camera is FIXED forward (lookAt rig),
+so the in-game arc only crosses the visible frustum near sunrise/sunset
+and even then misses the screen most of the day. Rebuilt the title sun
+as `sunDir = dawnAxis * cos(angle) + upPerp * sin(angle)` where
+`dawnAxis` is the camera-forward direction (shifted ~LEFT_SHIFT camera-
+right units left of pure forward) and `upPerp` is the world-up
+component perpendicular to it. Result: sun rises in front of camera, arcs
+up-and-over, sets behind. Moon = -sun, so moon emerges as sun sets, also
+in-frame. Day-night brightness math still uses `sin(sunAngle)` so the
+cycle has full -1..+1 swing — only the VISUAL direction changes. This is
+a title-only patch; the in-game sky stays on its original arc.
+
+## D43 — setupOpeningScene runs on every boot; load patches over (Session CC-3)
+**When**: Session CC-3.
+**Why**: The original gate was `if (!hasSave()) setupOpeningScene(...)`
+— so when the player saved + reloaded + clicked Continue, they landed in
+a world with NO starter wreck, journal, skeleton, or speeder. Bug surfaced
+as "clicked NEW GAME, the game had no hover bike or starting wreck".
+Two fixes considered: (A) save the wreck/speeder/journal explicitly to
+save data; (B) always run setupOpeningScene and have loadGameState patch
+the speeder position over the default placement (the wreck/skeleton/
+journal are static so the default placement IS the save state). Picked B
+— wreck/skeleton/journal are deterministic from `scatterRand`, so the
+placement is byte-identical across boots. Only the speeder moves, and
+its pose is now an optional field in SaveV1 that loadGameState restores
+via `body.setTranslation/setRotation`. NEW GAME from a save calls
+`clearSave() + location.reload()` so a "new game" is a real fresh boot,
+not a hot reset that could leak partial state.
+
+## D44 — Crescent moon via canvas destination-out + tight halo (Session CC-3)
+**When**: Session CC-3.
+**Why**: User wanted a crescent moon visible at distance in both the
+title and the game. Options: (A) load a moon GLB / PNG sprite; (B)
+rebuild `makeMoonTexture` to draw a crescent via 2D canvas. Picked B —
+zero asset shipping, matches the existing makeSunTexture / makePlanetTexture
+pattern (all canvas-procedural). Implementation: halo radial gradient
+(radius 28→56, kept tight so the erase disk can swallow it), full body
+disc + maria, then `globalCompositeOperation = 'destination-out'` to
+carve a circle offset (84, 60, r=40) to the right of body center. The
+erase carves the halo on the shadowed side too — intentional (a real
+crescent moon has NO bloom on its dark side). Earlier iterations had
+the erase disk too small (r=32) and the halo too wide (radius 64) so
+the right side of the halo bled past the carved shape; bumped both to
+fix. `MOON_DISC_SIZE` 16 → 32 so the crescent reads at SUN_DISC_DISTANCE.
+Also flipped `depthTest: false → true` on the moon material so terrain
+occludes it (matching stars + planet) — the previous setting was a
+copy-paste from the sun material and caused the moon to render through
+dunes in-game.

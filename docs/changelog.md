@@ -3,6 +3,47 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session CC-3 — 2026-05-15 — Animated main menu (title screen)
+NEW `src/world/titleScene.ts` — dedicated THREE.Scene + camera, decoupled
+from the game world. Camera atop a Gaussian-bump hero dune on a 800m
+displaced-plane dune field looking out across the basin, tilted up so the
+horizon falls at the bottom-third of frame (sky 2/3 / desert 1/3). Tiny
+escape-pod streaks in like a shooting star (scale 0.04, 9s cubic-ease
+descent from 280m out) with a 28-segment additive Line trail + glow
+sprite, impacts far out, and a procedural **pyre** engulfs it (4 nested
+cones + 5 random tongues + glowing coal-bed + 16-ember pool + 14-smoke
+pool + warm PointLight, all `fog: false` so it punches through atmospheric
+haze at 200m). Day/night cycle uses the **real in-game sky package**
+(sphere-shader gradient + sun sprite + moon sprite + 800-star points +
+planet + 4-shooter pool) ported into the title via exported helpers from
+`sky.ts`. Sun arc rebuilt (`dawnAxis * cos + upPerp * sin` instead of
+`(cos, sin, 0.18)`) so the sun crosses the fixed camera view; both bodies
+left-shifted via `LEFT_SHIFT=0.50`. Boot starts at `cycleOffset=0.19`
+(astronomical twilight, sun 18° below horizon → user watches sunrise ~15s
+in). **Moon overhauled** in `sky.ts` (affects in-game too): canvas
+`destination-out` carves a crescent from the disc + halo, `MOON_DISC_SIZE`
+16 → 32, `depthTest: false → true` so terrain properly occludes the moon.
+Title-only night-brightness boosts (3× moon directional + 4× ambient
+night gain + ground multiplier 0.30 → 0.55) keep dunes legible under
+moonlight. NEW `src/ui/titleOverlay.ts` — DOM overlay (z=250) with
+DUSTFALL wordmark + "a desert is patient" subtitle + CONTINUE (only
+when save exists) + NEW GAME. Render-loop change: `startLoop` accepts an
+optional render-target getter that swaps between title and game scenes
+based on `ctx.flags.titleActive`. **Save/load round-trips speeder pose**:
+added `speeder?` field to SaveV1 (pos + rotationQuat + mounted +
+headlampOn); `setupOpeningScene` now runs on EVERY boot (was gated on
+`!hasSave`), and `loadGameState` patches over the default placement on
+Continue. NEW GAME with an existing save calls `clearSave() + reload()`
+for a clean slate. Two glitch fixes: `#title-overlay { display: flex }`
+was id-specificity beating `.overlay.hidden { display: none }` so the
+title never actually hid after NEW GAME — added matching id-specificity
+`#title-overlay.hidden { display: none }` rule; HUD/hotbar/crosshair
+hidden via `style.visibility` while the title is up so they don't bleed
+through the gradient. Decisions D41–D44. `verified` (tsc clean, screenshots
+confirmed pre-dawn red glow + sun visible morning + crescent moon + night
+brightness + button layout, save→reload→Continue round-trip restored
+speeder to (123,5,-45) exactly).
+
 ## Session CC-2 — 2026-05-15 — Hover speeder polish (model, tilt, jump, bells, colliders)
 Long iteration pass on the speeder. **Tilt**: visual-only pitch/roll
 quaternion composed on top of the body's yaw (the X+Z rotation locks

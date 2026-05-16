@@ -78,6 +78,16 @@ export interface SaveV1 {
   // Player-placed — recreated from scratch on load.
   fires: Array<{ id: number; pos: V3; fuelSeconds: number; alive: boolean }>;
   tents: Array<{ id: number; pos: V3; rotationY: number }>;
+
+  /** Hover speeder pose. Optional so v1 saves written before this field
+   *  was added still load cleanly (the speeder just stays at the default
+   *  position from setupOpeningScene). */
+  speeder?: {
+    pos: V3;
+    rotationQuat: { x: number; y: number; z: number; w: number };
+    mounted: boolean;
+    headlampOn: boolean;
+  };
 }
 
 export function hasSave(): boolean {
@@ -170,6 +180,16 @@ export function saveGameState(ctx: GameContext): { ok: boolean; error?: string }
         pos: { x: t.pos.x, y: t.pos.y, z: t.pos.z },
         rotationY: t.mesh.rotation.y,
       })),
+      speeder: ctx.speeder ? (() => {
+        const tr = ctx.speeder!.body.translation();
+        const rt = ctx.speeder!.body.rotation();
+        return {
+          pos: { x: tr.x, y: tr.y, z: tr.z },
+          rotationQuat: { x: rt.x, y: rt.y, z: rt.z, w: rt.w },
+          mounted: ctx.speeder!.mounted,
+          headlampOn: ctx.speeder!.headlampOn,
+        };
+      })() : undefined,
     };
 
     localStorage.setItem(SAVE_KEY, JSON.stringify(save));
@@ -354,6 +374,23 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
   for (const saved of save.tents) {
     const pos = new THREE.Vector3(saved.pos.x, saved.pos.y, saved.pos.z);
     spawnTentAt(ctx, pos, saved.rotationY);
+  }
+
+  // ── Speeder: patch position / rotation / mount state from save. The
+  //    bike was placed by setupOpeningScene at the default opening spot
+  //    on boot — we now move it to where the player parked it. Zero out
+  //    velocity so it doesn't drift from whatever physics state was at
+  //    save time. ──
+  if (save.speeder && ctx.speeder) {
+    ctx.speeder.body.setTranslation(save.speeder.pos, true);
+    ctx.speeder.body.setRotation(save.speeder.rotationQuat, true);
+    ctx.speeder.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+    ctx.speeder.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+    ctx.speeder.mounted = save.speeder.mounted;
+    ctx.speeder.headlampOn = save.speeder.headlampOn;
+    // Headlamp visual sync — updateSpeeder reads .headlampOn each frame
+    // and toggles the SpotLight + emissive disc, so just setting the flag
+    // is enough. Same for mounted: the next updateSpeeder applies.
   }
 
   // ── Reset transients ──

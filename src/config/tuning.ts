@@ -190,7 +190,7 @@ export const Tuning = {
   SUN_DISC_DISTANCE: 400,
   SUN_DISC_SIZE: 22,
   // Session V — moon, stars, shooting stars, distant planet
-  MOON_DISC_SIZE: 16,
+  MOON_DISC_SIZE: 32,                 // larger crescent (was 16 full disc)
   MOON_DISC_DISTANCE: 400,
   STAR_COUNT: 800,
   STAR_SPHERE_RADIUS: 460,            // just inside sky sphere
@@ -299,6 +299,52 @@ export const Tuning = {
   FLASHLIGHT_LIGHT_ANGLE_RAD: 0.45,     // SpotLight `angle` — narrow beam
   FLASHLIGHT_LIGHT_PENUMBRA: 0.3,
   FLASHLIGHT_LIGHT_COLOR_HEX: 0xe4f0ff, // cool white
+
+  // Title screen (animated main menu) — Session CC-3.
+  // Wide-vista dune scene: camera atop a hero dune, tilted up to push the
+  // horizon down (desert ~bottom-third / sky ~top-two-thirds). A tiny pod
+  // streaks in like a shooting star and lands far away, where a big pyre
+  // engulfs it. All animations run in a dedicated THREE.Scene.
+  TITLE_DAY_CYCLE_SEC: 240,                 // full sun rotation period (slow, cinematic)
+  // Camera atop the hero dune (sits at world (0,0); hero-bump adds height).
+  TITLE_CAMERA_POS_X: 0,
+  TITLE_CAMERA_POS_Y: 2.2,                  // EYE height above the dune surface (added to terrainY at camera xz)
+  TITLE_CAMERA_POS_Z: 4,
+  // Look target — X/Z are absolute world coords, Y is OFFSET above camera
+  // (so the pitch stays constant if the dune height changes). Pitch is
+  // arctan(LOOKAT_Y / horizontalDist) — tuned so horizon falls at the
+  // bottom-third line (≈ +10–11° up).
+  TITLE_CAMERA_LOOKAT_X: 30,
+  TITLE_CAMERA_LOOKAT_Y: 20,
+  TITLE_CAMERA_LOOKAT_Z: -100,
+  TITLE_FOV: 62,
+  TITLE_FAR: 700,
+  TITLE_FOG_DENSITY: 0.0015,                // lighter haze — distant dunes read clearly
+  // Dune terrain — large plane, displaced by layered sines + a Gaussian
+  // hero bump centered on the origin (so the camera dune is tall).
+  TITLE_GROUND_SIZE: 800,
+  TITLE_GROUND_SEGMENTS: 120,
+  TITLE_HERO_DUNE_HEIGHT: 8,
+  TITLE_HERO_DUNE_WIDTH: 16,                // Gaussian sigma
+  // Pod — vanishingly small, far-away shooting-star streak.
+  TITLE_POD_SCALE: 0.04,
+  TITLE_POD_START_X: 280,
+  TITLE_POD_START_Y: 170,
+  TITLE_POD_START_Z: -280,
+  TITLE_POD_IMPACT_X: 90,
+  TITLE_POD_IMPACT_Z: -180,
+  TITLE_POD_TRAIL_LEN: 28,                  // # of segments in glow trail
+  TITLE_FLY_IN_SEC: 9.0,                    // slow, deliberate descent
+  TITLE_IMPACT_SEC: 0.3,
+  TITLE_SETTLE_SEC: 1.6,
+  // Pyre — replaces the campfire on the title scene. Tall column of flame
+  // big enough to be visible from camera distance (~150m).
+  TITLE_PYRE_HEIGHT: 6.0,
+  TITLE_PYRE_BASE_RADIUS: 2.0,
+  TITLE_PYRE_LIGHT_RANGE: 18,
+  TITLE_DUST_COUNT: 80,
+  TITLE_SMOKE_POOL: 24,
+  TITLE_SHAKE_DECAY: 8.0,                   // higher = faster shake decay
 } as const;
 
 // Sky gradient colors (top vs horizon) per time of day. Horizon stays close to

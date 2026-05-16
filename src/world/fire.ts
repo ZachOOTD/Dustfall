@@ -43,7 +43,7 @@ function tag(root: THREE.Object3D, id: number, type: 'cook' | 'relight'): void {
   });
 }
 
-function makeFireVisual(): { group: THREE.Group; flameGroup: THREE.Group; light: THREE.PointLight; ember: THREE.Mesh } {
+export function makeFireVisual(): { group: THREE.Group; flameGroup: THREE.Group; light: THREE.PointLight; ember: THREE.Mesh } {
   const g = new THREE.Group();
 
   // 3-4 short logs arranged in a tee-pee
