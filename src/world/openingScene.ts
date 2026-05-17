@@ -37,11 +37,8 @@ import { placeSpeeder, type SpeederState } from './speeder.ts';
 const WRECK_SEARCH_CENTER = new THREE.Vector3(-50, 0, 0);
 
 /** How far in front of the entrance the player spawns. The player faces
- *  the entrance via camera.lookAt at boot. JJ-2 — pulled in from 6 → 3
- *  so the wreck dominates the opening view (was reading as distant in
- *  playtest, especially after the WALK_SPEED bump changed perceived
- *  distance). */
-const PLAYER_SPAWN_OFFSET_FROM_ENTRANCE = 3;
+ *  the entrance via camera.lookAt at boot. */
+const PLAYER_SPAWN_OFFSET_FROM_ENTRANCE = 4;
 
 /** Compute terrain-height variance over a 5×5 patch centered on (cx, cz).
  *  Lower = flatter. Used to pick a flat landing spot for the wreck. */
@@ -192,7 +189,15 @@ export function setupOpeningScene(
   const spawnZ = entranceWorld.z + entranceOutward.z * PLAYER_SPAWN_OFFSET_FROM_ENTRANCE;
   const spawnGroundY = terrain.heightAt(spawnX, spawnZ);
   const spawnY = spawnGroundY + Tuning.PLAYER_CAPSULE_HALF_HEIGHT + Tuning.PLAYER_CAPSULE_RADIUS;
-  playerBody.body.setNextKinematicTranslation({ x: spawnX, y: spawnY, z: spawnZ });
+  // JJ-3 — use setTranslation (immediate) rather than setNextKinematicTranslation
+  // (scheduled). The game boots PAUSED at the title screen, so the scheduled
+  // kinematic translation never gets a physics step to apply it. On NEW GAME
+  // the controller reads the body's current translation (which would still be
+  // the makePlayer placeholder origin) and calls setNextKinematicTranslation
+  // itself, overwriting any pending opening-scene teleport. Immediate
+  // setTranslation writes the position synchronously so the controller sees
+  // the correct starting pose on its first tick.
+  playerBody.body.setTranslation({ x: spawnX, y: spawnY, z: spawnZ }, true);
 
   // ── Camera lookAt — orient first-frame view toward the entrance. The
   // camera follows the player body each frame; this just sets initial
@@ -201,7 +206,10 @@ export function setupOpeningScene(
   // very first frame the camera still sits at the original spawn point.
   // Reposition it so lookAt anchors from the new player location.
   camera.position.set(spawnX, spawnY, spawnZ);
-  camera.lookAt(entranceWorld.x, entranceWorld.y, entranceWorld.z);
+  // JJ-3 — lookAt held at the camera's own Y so the view is level
+  // (looking straight forward at the entrance, no upward tilt from the
+  // entrance arch being above eye height).
+  camera.lookAt(entranceWorld.x, spawnY, entranceWorld.z);
 
   // ── Speeder (Session CC) — spawn 8m to the side of the wreck so it's
   // visible from the entrance but not in the player's spawn path.

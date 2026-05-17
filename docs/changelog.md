@@ -3,6 +3,26 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session JJ-2 — 2026-05-16 — Spawn teleport fix + level opening camera
+`verified` — tsc clean; preview confirms player teleports to wreck
+entrance immediately at boot (was stuck at placeholder origin), and
+the opening camera now looks level/forward instead of tilting up at
+the entrance arch. **Bug**: `setupOpeningScene` called
+`playerBody.body.setNextKinematicTranslation(...)` to teleport the
+player, but the game boots PAUSED (title screen up), so no physics
+step ever applied the scheduled translation. On NEW GAME the
+character controller takes over and overwrites the scheduled
+translation with its own (computed from the still-placeholder body
+position at origin). Result: player permanently spawned at world
+origin, ~52m from the opening wreck. Fix: use `setTranslation(pos,
+true)` — immediate, synchronous write — so the body's current
+translation is already at the wreck entrance when the controller
+first ticks. Also: `PLAYER_SPAWN_OFFSET_FROM_ENTRANCE 1 → 4` so the
+wreck reads at a comfortable framing distance, and
+`camera.lookAt(entrance.x, spawnY, entrance.z)` (held at camera-Y)
+so the opening view is level, no upward tilt onto the arch.
+Decision D59.
+
 ## Session JJ — 2026-05-16 — UI overlap fixes + scatter clustering + movement-feel tuning + spawn polish
 `verified` — tsc clean; preview confirms toast and shelter indicator
 both clear the hotbar / stat bars respectively (numerically and

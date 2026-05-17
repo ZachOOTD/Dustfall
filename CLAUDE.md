@@ -45,22 +45,27 @@ Run with `npm run dev` (port 5173). Type-check with `npx tsc --noEmit`.
 
 ## Where we are now
 
-**Last shipped**: Session JJ — UI overlap fixes + scatter clustering +
-movement-feel tuning + spawn polish. Toast (`bottom 32 → 100px`) and
-shelter indicator (`bottom 100 → 200px`) lifted clear of the hotbar
-and stat-bar column respectively. Dead trees spawn in a two-pass
-scheme (3 dense groves × 6 trees + 12 sporadic uniform scatter for
-organic "thickets + lone trees" mix); alien cacti spread across 4
-patches × 2-3 each instead of one tight clump.
-`'antenna_spire'` removed from `HERO_WRECK_TYPES` +
-`PROCGEN_WRECK_KINDS` (hand-placed `antenna_outpost` stays as the
-single antenna). Movement: `WALK_SPEED 4.2 → 6.0`,
-`SPRINT_MULTIPLIER 1.7 → 2.2` (sprint 13.2 m/s); new
-`DEBUG_UNLIMITED_STAMINA` flag for testing; footstep cadence
-`1.7 / 1.4m → 3.0 / 4.5m` so audio lands at natural ~2 / 2.9 steps
-per second at the new speeds. Spawn offset 6 → 3m so the opening
-wreck dominates the first view. Backlog cleared of the 5 shipped
-items.
+**Last shipped**: Session JJ-2 — Spawn teleport bug fix + level
+opening camera. `setupOpeningScene` was using
+`setNextKinematicTranslation` to teleport the player at boot, but the
+game boots paused — no physics step ever applied the scheduled
+translation, and on NEW GAME the controller overwrote it. Player was
+permanently stuck at world origin ~52m from the opening wreck. Fix:
+`setTranslation(pos, true)` (immediate write). Also bumped
+`PLAYER_SPAWN_OFFSET_FROM_ENTRANCE 3 → 4` and held the camera
+`lookAt` at the spawn Y so the opening view is level, not tilted up
+at the entrance arch. Decision D59.
+
+**Prior milestone**: Session JJ — UI overlap fixes + scatter
+clustering + movement-feel tuning + spawn polish. Toast (`bottom 32
+→ 100px`) and shelter indicator (`bottom 100 → 200px`) lifted clear
+of the hotbar / stat-bar column respectively. Dead trees: two-pass
+scheme (3 dense groves × 6 trees + 12 sporadic for organic mix).
+Cacti: 4 patches × 2-3 each. `'antenna_spire'` removed from
+`HERO_WRECK_TYPES` + `PROCGEN_WRECK_KINDS` (anchor `antenna_outpost`
+stays). Movement: `WALK_SPEED 4.2 → 6.0`, `SPRINT_MULTIPLIER 1.7 →
+2.2` (sprint 13.2 m/s); new `DEBUG_UNLIMITED_STAMINA`. Footstep
+cadence retuned for the new speeds.
 
 **Prior milestone**: Session II — Lizard-on-a-stick cooking system +
 dead-lizard model + animated held cooking. New `lizard_on_a_stick_raw`

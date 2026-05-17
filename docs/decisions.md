@@ -933,3 +933,28 @@ interaction.ts wouldn't be running. Acceptable — the player can just
 re-aim at a fire to resume cooking, and the partial progress is
 preserved naturally. If this surfaces as a real bug, clear cookProgress
 in saveGameState.
+
+## D59 — Boot-time teleports of kinematic bodies use setTranslation, not setNextKinematicTranslation (Session JJ-2)
+**When**: Session JJ-2 — opening-scene spawn bug fix.
+**Why**: `setupOpeningScene` ran `playerBody.body.setNextKinematicTranslation({...})`
+to teleport the player to the wreck entrance at boot. Rapier's
+`setNextKinematicTranslation` SCHEDULES a translation that's applied
+on the next physics step. The game boots PAUSED (title screen up,
+`ctx.flags.titleActive`/`paused` both true). Physics doesn't step
+while paused, so the scheduled teleport never applies. On NEW GAME
+the player controller in `controller.ts` takes over: it reads the
+body's current translation (still the placeholder from `makePlayer`,
+i.e. world origin), computes its own desired translation (origin + 0
+movement), and calls `setNextKinematicTranslation` itself —
+overwriting whatever the opening scene had pending. Result: player
+permanently spawned at (0, ground+capsule, 0), ~52m from the wreck.
+**Fix**: use `setTranslation(pos, true)` — immediate, synchronous
+write. The body's actual position is updated before any controller
+tick reads it, so the controller's first tick reads the wreck-entrance
+position and writes its own translation around that.
+**Apply**: any future boot-time teleport of a kinematic body needs
+`setTranslation` (immediate) NOT `setNextKinematicTranslation`
+(scheduled). The latter only works once physics is actively stepping.
+This includes future opening-scene variants, custom start positions,
+debug spawn helpers — anywhere you want to place a body BEFORE the
+controller has a chance to step.
