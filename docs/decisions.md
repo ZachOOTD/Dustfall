@@ -903,3 +903,33 @@ session ordering ever changes (e.g. hero landmarks placed AFTER
 procgen POIs), the exclusion logic must be re-audited. Equivalent rule
 holds for anything else with positional uniqueness — read the registry,
 don't trust a static layout list.
+
+## D58 — Cook animation driven by slot.meta.cookProgress, not a separate ctx state (Session II)
+**When**: Session II — lizard-on-a-stick cooking.
+**Why**: The held-cooking flow needs three things coordinated:
+(a) interaction.ts owns the cook timer (started by aim-at-fire + E,
+canceled if the slot changes or the player switches selection),
+(b) viewModel.ts owns the per-frame held-item pose, (c) items.ts owns
+the per-item animation shape. Three options for plumbing the cook
+state from (a) to (b):
+1. Add a `ctx.flags.cooking: { itemId, progress } | null`. Clean but
+   adds a global field that has to be cleared on every cancel path.
+2. Have viewModel.ts import + poll `getCookingState()` from
+   interaction.ts. Couples two systems that otherwise don't talk.
+3. Write progress directly onto `slot.meta.cookProgress` (a field
+   already in `ItemMeta` from a discarded auto-cook attempt). Both
+   tickCooking and the viewmodel read the slot; the slot is the
+   shared bus.
+**Pick**: (3). The cook progress is conceptually a property of the
+slot being cooked (same way `fillLevel` is a property of a canteen
+slot, `lit` of a torch). Cancel paths just clear the field. The
+viewmodel doesn't import from interaction.ts. Each item declares its
+own `playCookAnim(itemRoot, t)` so animation shape is colocated with
+the item.
+**Trade-off**: cook progress persists in the save schema (it's on
+slot.meta). If a player saves mid-cook and reloads, the meat would
+appear partially cooked on the held skewer but the cook timer in
+interaction.ts wouldn't be running. Acceptable — the player can just
+re-aim at a fire to resume cooking, and the partial progress is
+preserved naturally. If this surfaces as a real bug, clear cookProgress
+in saveGameState.

@@ -256,6 +256,28 @@ addItem(ctx.inventory, 'machete');
 addItem(ctx.inventory, 'canteen', { fillLevel: 1 });
 ctx.inventory.selectedIdx = 0;
 
+// II — DEBUG starter loadout for crafting + cooking iteration. Toggle off
+// (Tuning.DEBUG_STARTER_LOADOUT = false) before a "real" playthrough. Stacks
+// fill hotbar slots 2-3 first (branch + cloth) then spill into backpack.
+if (Tuning.DEBUG_STARTER_LOADOUT) {
+  // Crafting materials — enough for every recipe in craftingMenu.ts plus extra.
+  for (let i = 0; i < 6; i++) addItem(ctx.inventory, 'branch');
+  for (let i = 0; i < 6; i++) addItem(ctx.inventory, 'cloth');
+  for (let i = 0; i < 6; i++) addItem(ctx.inventory, 'scrap');
+  // Cookable food — drives the cook-over-fire + lizard-on-a-stick paths.
+  for (let i = 0; i < 3; i++) addItem(ctx.inventory, 'raw_lizard_meat');
+  for (let i = 0; i < 2; i++) addItem(ctx.inventory, 'raw_worm_meat');
+  for (let i = 0; i < 2; i++) addItem(ctx.inventory, 'cactus_pulp');
+  for (let i = 0; i < 2; i++) addItem(ctx.inventory, 'alien_fruit');
+  // Pre-made deployables — skip the craft step when iterating on fire/tent
+  // mechanics directly.
+  for (let i = 0; i < 2; i++) addItem(ctx.inventory, 'fire_kit');
+  addItem(ctx.inventory, 'tent_kit');
+  // Light sources for night testing.
+  addItem(ctx.inventory, 'torch');
+  addItem(ctx.inventory, 'flashlight');
+}
+
 // Opening scene runs on EVERY boot — the wreck + skeleton + journal +
 // speeder are deterministic-from-seed props and would be missing from a
 // save-loaded world otherwise (the user would land in a Continue with no

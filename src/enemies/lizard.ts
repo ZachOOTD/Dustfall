@@ -64,7 +64,10 @@ function untag(root: THREE.Object3D): void {
   });
 }
 
-function makeLizardVisual(): THREE.Group {
+/** Build a fresh lizard mesh group. Exported (Session II) so the
+ *  inventory pickup item + lizard-on-a-stick viewmodel can show the
+ *  actual lizard model instead of an abstract meat slab. */
+export function makeLizardVisual(): THREE.Group {
   const g = new THREE.Group();
   const bodyMat = new THREE.MeshLambertMaterial({ color: 0xa89878 });
   const darkMat = new THREE.MeshLambertMaterial({ color: 0x7a6a4a });

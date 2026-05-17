@@ -161,10 +161,15 @@ export function spawnCanteens(
 // ────────────────────────────────────────────────────────────────
 function makePrimitiveBranch(rand: Rng): THREE.Group {
   const g = new THREE.Group();
+  // II — grey to match the dead trees branches actually come from
+  // (deadTree.ts _branchMat = 0x6e685f). Reads as "this branch fell off
+  // that tree" instead of "random brown stick."
   const mat = new THREE.MeshStandardMaterial({
-    color: 0x5a3a22, roughness: 0.95, flatShading: true,
+    color: 0x6e685f, roughness: 0.95, flatShading: true,
   });
-  const len = 0.28 + rand() * 0.10;
+  // II — longer sticks so branches read as real fuel + craftable material
+  // rather than tiny twigs.
+  const len = 0.40 + rand() * 0.15;
   const stick = new THREE.Mesh(
     new THREE.CylinderGeometry(0.018, 0.022, len, 6),
     mat,

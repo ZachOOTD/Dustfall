@@ -3,6 +3,37 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session II — 2026-05-16 — Lizard-on-a-stick cooking + dead-lizard model + held-cook animation + debug starter loadout
+`verified` — tsc clean; preview screenshots confirm DEAD LIZARD held as
+the lizard mesh, vertical skewer with lizard impaled belly-to-back, cook
+animation centered over the fire with twist envelope (still while
+extending/retracting, spinning only while held over flames), lizard
+hovering above flames not phasing through; numeric craft + eat-recover-
+branch verified. Two new items: `lizard_on_a_stick_raw` +
+`lizard_on_a_stick_cooked`. `raw_lizard_meat` renamed to DEAD LIZARD
+with the actual lizard mesh as viewmodel (no longer an abstract meat
+slab); `makeLizardVisual` exported from `enemies/lizard.ts` to share
+the geometry. New `buildSkewerMesh(cooked)` helper in items.ts: vertical
+0.55m stick (grey grey to match dead-tree palette), lizard impaled at
+73% up the stick, slight 3-axis slump tilt + Y=π so the head faces
+left. Cooked variant clones the lizard materials and tints them to
+charred brown. **Cook architecture** (D58): cook duration bumped 0.6s
+→ 3.5s, `lizard_on_a_stick_raw` added to `COOK_MAP`, `tickCooking`
+writes `slot.meta.cookProgress` each frame, `viewModel.ts` reads it
+and drives a new `playCookAnim` hook on the item def. Skewer
+animation: extend forward + pitch down, shifted left to cancel
+`VIEWMODEL_OFFSET_X` so the tip lands on the crosshair; twist gated
+to t∈[~0.25, 0.75]; lifted Y so lizard hovers above flames. Worm meat
++ cactus pulp got matching extend-and-twist cook anims. Branch
+viewmodel + world pickup recolored grey (`0x6e685f`) to match the dead
+trees they shed from; branch model + skewer stick both lengthened.
+Crafting recipe: 1 branch + 1 raw_lizard_meat → 1 raw skewer.
+Eat cooked skewer → +0.35 hunger + 1 branch returned via `addItem`.
+**Debug starter loadout** behind `Tuning.DEBUG_STARTER_LOADOUT = true`:
+spawn with branches/cloth/scrap/meat/cactus/fruit/fire_kit/tent_kit/
+torch/flashlight stocked for crafting iteration without scavenging.
+Decisions D58.
+
 ## Session HH — 2026-05-16 — World rework #3: procgen POIs + biome-aware AI spawns (+ FF LOD removed)
 `partially verified` — tsc clean; numeric checks confirm 28 lizards (was
 4 hardcoded), 0 in salt, min radius from origin 74m (above 25m buffer);

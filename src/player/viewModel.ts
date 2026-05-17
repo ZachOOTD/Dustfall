@@ -179,6 +179,20 @@ export function updateViewModel(ctx: GameContext, dt: number): void {
     if (def.updateHeld) def.updateHeld(vm.itemRoot, heldSlot, ctx, dt);
   }
 
+  // 4b. Cook animation (Session II). When the player is cooking the
+  // held item over a fire, interaction.ts writes a 0..1 progress value
+  // to slot.meta.cookProgress. Drive the item's playCookAnim against it.
+  // Skipped when a use-anim is active to avoid pose fights.
+  if (heldSlot.item !== null && !vm.anim.active) {
+    const def = getItemDef(heldSlot.item);
+    const progress = heldSlot.meta?.cookProgress;
+    if (def.playCookAnim && progress !== undefined && progress > 0 && progress < 1) {
+      vm.itemRoot.position.set(0, 0, 0);
+      vm.itemRoot.rotation.set(0, 0, 0);
+      def.playCookAnim(vm.itemRoot, progress);
+    }
+  }
+
   // 5. Drive active animation.
   if (vm.anim.active) {
     const now = performance.now() / 1000;

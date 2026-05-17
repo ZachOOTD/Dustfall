@@ -45,20 +45,32 @@ Run with `npm run dev` (port 5173). Type-check with `npx tsc --noEmit`.
 
 ## Where we are now
 
-**Last shipped**: Session HH — World rework #3: procgen POIs + biome-
-aware AI spawns. ~15 procgen wrecks scattered across the chunk band
-via rejection sampling with `POI_MIN_SEPARATION = 250m` against ALL
-already-registered salvageables (anchor POIs + hero landmarks +
-mega-ship parts). Lizards bumped from 4 hardcoded → 28 procgen, salt
-biome rejected, 25m buffer around player spawn, clustered ~1.5 per
-POI plus sparse global density. New `src/world/procgenPoi.ts` and
-`spawnLizardsProcgen` in `lizard.ts`. **Also deleted FF's
-`src/world/terrainLod.ts`**: its 50m linear interpolation poked
-10m+ above the chunks' fine detail in dune valleys, creating a
-visible "second terrain" with no collider; fog at the chunk-band edge
-(~99% opaque at 1200m) is the visible horizon now. D52 superseded by
-D56. `SAVE_VERSION 3 → 4`. Decisions D56-D57. World-rework arc
-(EE scoping → FF chunks → GG biomes → HH procgen) is now complete.
+**Last shipped**: Session II — Lizard-on-a-stick cooking system + dead-
+lizard model + animated held cooking. New `lizard_on_a_stick_raw` /
+`_cooked` items with vertical-stick + impaled-lizard viewmodel
+(`buildSkewerMesh` helper, reuses the shared `makeLizardVisual`).
+`raw_lizard_meat` renamed DEAD LIZARD and viewmodel swapped to the
+actual lizard mesh. Cook duration 0.6s → 3.5s; `tickCooking` writes
+`slot.meta.cookProgress` each frame; `viewModel.ts` reads it and
+drives a new `ItemDef.playCookAnim` hook (D58). Skewer cook anim:
+extend forward + pitch down + shift left to cancel
+`VIEWMODEL_OFFSET_X` so the tip lands on the crosshair; twist
+envelope gates spin to the held-over-flames middle phase; lifted Y
+so the lizard hovers above flames. Worm meat + cactus pulp got
+matching cook anims. Craft recipe (1 branch + 1 raw_lizard_meat → 1
+raw skewer); eat cooked skewer returns 1 branch + 0.35 hunger.
+Branches recolored grey (`0x6e685f`) to match dead trees + lengthened
+in both world pickup + viewmodel + skewer stick.
+`Tuning.DEBUG_STARTER_LOADOUT = true` spawns the player with full
+crafting materials for fast iteration. Decisions D58.
+
+**Prior milestone**: Session HH — World rework #3: procgen POIs +
+biome-aware AI spawns. ~15 procgen wrecks across the chunk band via
+rejection sampling, lizards 4 hardcoded → 28 procgen (salt-excluded,
+25m spawn buffer). FF's LOD ring deleted (it poked above chunks in
+dune valleys; D52 superseded by D56). `SAVE_VERSION 3 → 4`. Decisions
+D56–D57. World-rework arc (EE scoping → FF chunks → GG biomes → HH
+procgen) is complete.
 
 **Prior milestone**: Session GG — World rework #2: biome rescale +
 scatter retune. `BIOME_NOISE_FREQ 1/220 → 1/900` so biome regions are

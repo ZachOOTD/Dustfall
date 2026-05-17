@@ -65,7 +65,13 @@ const COOK_MAP: Partial<Record<ItemId, ItemId>> = {
   'raw_lizard_meat': 'cooked_lizard_meat',
   'cactus_pulp': 'cooked_cactus_pulp',
   'raw_worm_meat': 'cooked_worm_meat',
+  'lizard_on_a_stick_raw': 'lizard_on_a_stick_cooked',
 };
+
+// II — extended from 0.6s to give the cook animation time to read.
+// Items define `playCookAnim` to drive their viewmodel during this window
+// (see viewModel.ts step 5).
+const COOK_DURATION = 3.5;
 
 // Module-level cooking state — null when no cook in progress.
 let _cooking: {
@@ -266,7 +272,7 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
       if (!l) return;
       l.hovered = true;
       if (l.state === 'dead') {
-        ctx.inventory.hover = { type: 'take', distance: info.distance, promptNoun: 'meat', itemId: 'raw_lizard_meat' };
+        ctx.inventory.hover = { type: 'take', distance: info.distance, promptNoun: 'dead lizard', itemId: 'raw_lizard_meat' };
         if (ctx.input.pressed.has('KeyE')) {
           const slotIdx = addItem(ctx.inventory, 'raw_lizard_meat', undefined, ctx);
           if (slotIdx < 0) {
@@ -368,8 +374,12 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
             fromId: selItem,
             toId: COOK_MAP[selItem]!,
             fireId: f.id,
-            completeAt: ctx.time.elapsed + 0.6,
+            completeAt: ctx.time.elapsed + COOK_DURATION,
           };
+          // Seed cook progress on the slot so viewModel.ts can drive
+          // the per-frame cook animation against it.
+          if (!selSlot.meta) selSlot.meta = {};
+          selSlot.meta.cookProgress = 0;
           playCookSizzle();
           ctx.ui.showToast('cooking...');
         }
@@ -462,11 +472,18 @@ function tickCooking(ctx: GameContext): void {
   // Cancel conditions
   const stillSelected = ctx.inventory.slots[ctx.inventory.selectedIdx] === c.slot;
   if (!stillSelected || c.slot.item !== c.fromId) {
+    if (c.slot.meta) c.slot.meta.cookProgress = undefined;
     _cooking = null;
     return;
   }
+  // Update cook progress on the slot so the viewmodel animation can read it.
+  const remaining = c.completeAt - ctx.time.elapsed;
+  const progress = Math.max(0, Math.min(1, 1 - remaining / COOK_DURATION));
+  if (!c.slot.meta) c.slot.meta = {};
+  c.slot.meta.cookProgress = progress;
   if (ctx.time.elapsed >= c.completeAt) {
     c.slot.item = c.toId;
+    if (c.slot.meta) c.slot.meta.cookProgress = undefined;
     const def = getItemDef(c.toId);
     ctx.ui.showToast(`you cook the ${def.name.toLowerCase()}`);
     playFireCrackle();

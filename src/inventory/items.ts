@@ -8,6 +8,8 @@ import { playDrink, playPour } from '../audio/audio.ts';
 import { deployFire } from '../world/fire.ts';
 import { deployTent } from '../world/tent.ts';
 import { easeOutBack, easeInOutCubic, easeOutQuad } from '../core/ease.ts';
+import { addItem } from './inventory.ts';
+import { makeLizardVisual } from '../enemies/lizard.ts';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -29,6 +31,63 @@ function svgEl<K extends keyof SVGElementTagNameMap>(
   const el = document.createElementNS(SVG_NS, tag);
   for (const k in attrs) el.setAttribute(k, attrs[k]);
   return el;
+}
+
+/** Shared viewmodel builder for the lizard-on-a-stick item (raw + cooked).
+ *  Vertical stick gripped at the bottom; the actual lizard mesh is impaled
+ *  near the top of the stick, body roughly horizontal so it looks pierced.
+ *  Cooked variant darkens both the stick (charred) and the lizard tint. */
+function buildSkewerMesh(cooked: boolean): THREE.Group {
+  const group = new THREE.Group();
+  const stickColor = cooked ? 0x4a3a30 : 0x6e685f;
+  const stickMat = new THREE.MeshLambertMaterial({ color: stickColor });
+  // II — longer stick so there's visible branch above + below the lizard.
+  const stickLen = 0.55;
+  const stick = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.012, 0.018, stickLen, 6),
+    stickMat,
+  );
+  // Stick is vertical (default cylinder is along Y). Grip lives at the
+  // group origin → push the stick up so its base sits there.
+  stick.position.y = stickLen * 0.5;
+  group.add(stick);
+
+  // Lizard impaled near the top of the stick. Use the shared
+  // makeLizardVisual so changing the lizard model elsewhere keeps the
+  // skewer in sync. Right-side-up so the stick pierces underbelly →
+  // back; slid down the stick so a clear tip of branch protrudes above
+  // the lizard.
+  const lizard = makeLizardVisual();
+  lizard.scale.setScalar(0.85);
+  // Side-on view of the lizard skewered through belly → back. Y = π
+  // flips the lizard's local +X (its head) to point to the player's
+  // LEFT, putting the tail on the right. Small X and Z tilts keep the
+  // body from sitting perfectly axis-aligned ("slumped on the spit"
+  // look) without disturbing the belly-to-back stick orientation.
+  lizard.rotation.set(0.14, Math.PI, -0.18);
+  // Position the lizard's center at ~73% up the stick so ~0.15 of
+  // stick is visible above its back.
+  lizard.position.set(0, stickLen * 0.73, 0);
+  group.add(lizard);
+
+  // If cooked, walk the lizard meshes and darken their materials toward
+  // a roasted brown. We clone material so the source helper's instances
+  // aren't mutated.
+  if (cooked) {
+    lizard.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      const mat = m.material as THREE.MeshLambertMaterial;
+      const cloned = mat.clone();
+      cloned.color.setHex(0x3a2418);  // charred brown
+      m.material = cloned;
+    });
+  }
+
+  // Tilt the whole skewer slightly forward so the lizard hangs out
+  // toward where the player is looking (away from body, per the spec).
+  group.rotation.set(-0.15, 0, -0.05);
+  return group;
 }
 
 const _DEFS: Record<ItemId, ItemDef> = {
@@ -246,6 +305,15 @@ const _DEFS: Record<ItemId, ItemDef> = {
       ctx.stats.hunger = Math.min(1, ctx.stats.hunger + 0.18);
       return { consumed: true, message: 'you chew the bitter pulp' };
     },
+    playCookAnim(itemRoot, t) {
+      // Hold the pulp out over the fire and twist gently — you're charring
+      // it bare-handed, no skewer. Shift LEFT to cancel the rightward
+      // viewmodel offset so the pulp lands over the crosshair / fire.
+      const reach = t < 0.5 ? easeInOutCubic(t * 2) : 1 - easeInOutCubic((t - 0.5) * 2);
+      itemRoot.position.set(-0.30 * reach, 0.0 * reach, -0.28 * reach);
+      const twist = Math.sin(t * Math.PI * 6) * 0.35;
+      itemRoot.rotation.set(-0.4 * reach, twist, 0);
+    },
     makeViewModel() {
       const group = new THREE.Group();
       const mat = new THREE.MeshLambertMaterial({ color: 0x4a6a3a });
@@ -304,29 +372,41 @@ const _DEFS: Record<ItemId, ItemDef> = {
 
   raw_lizard_meat: {
     id: 'raw_lizard_meat',
-    name: 'RAW MEAT',
-    glyph: '~',
-    description: 'a fleshy strip of lizard',
+    name: 'DEAD LIZARD',
+    glyph: 'ʟ',
+    description: 'a fresh kill — limp body, still warm',
     stackable: true,
     maxStack: 4,
     onUse(ctx, _slot) {
+      // Eating a whole raw lizard is still raw meat — same penalty as before.
       ctx.stats.hunger = Math.min(1, ctx.stats.hunger + 0.12);
       ctx.stats.health = Math.max(0, ctx.stats.health - 0.05);
       return { consumed: true, message: 'raw meat — you gag a little' };
     },
     makeViewModel() {
+      // II — show the actual lizard mesh (held dangling) instead of a meat
+      // slab. Rotated belly-up + slightly tilted to read as "dead" in-hand.
       const group = new THREE.Group();
-      const mat = new THREE.MeshLambertMaterial({ color: 0x9a4a3a });
-      const slab = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.025, 0.06), mat);
-      slab.rotation.set(0.1, 0.4, 0.05);
-      group.add(slab);
+      const lizard = makeLizardVisual();
+      lizard.scale.setScalar(0.9);
+      lizard.rotation.set(Math.PI * 0.05, 0.4, Math.PI);  // upside-down dangle, slight yaw
+      group.add(lizard);
       return group;
     },
     makeIcon() {
       const s = svg();
-      // Irregular cut slab
-      s.appendChild(svgEl('polygon', { points: '5,11 8,7 16,8 19,11 17,15 13,17 7,16' }));
-      s.appendChild(svgEl('line', { x1: '9', y1: '11', x2: '15', y2: '13', 'stroke-width': '1' }));
+      // Stylised dead lizard silhouette — elongated body + 4 legs splayed +
+      // tail, oriented horizontally as if held by the tail.
+      s.appendChild(svgEl('ellipse', { cx: '12', cy: '13', rx: '6', ry: '2.4' }));
+      s.appendChild(svgEl('circle', { cx: '18', cy: '13', r: '1.6' }));      // head
+      s.appendChild(svgEl('path', { d: 'M6 13 L3 15' }));                    // tail
+      s.appendChild(svgEl('line', { x1: '9',  y1: '15', x2: '8',  y2: '18' }));
+      s.appendChild(svgEl('line', { x1: '15', y1: '15', x2: '14', y2: '18' }));
+      s.appendChild(svgEl('line', { x1: '9',  y1: '11', x2: '8',  y2: '8'  }));
+      s.appendChild(svgEl('line', { x1: '15', y1: '11', x2: '14', y2: '8'  }));
+      // X for eye = dead
+      s.appendChild(svgEl('line', { x1: '17.2', y1: '12.2', x2: '18.2', y2: '13.2', 'stroke-width': '1' }));
+      s.appendChild(svgEl('line', { x1: '18.2', y1: '12.2', x2: '17.2', y2: '13.2', 'stroke-width': '1' }));
       return s;
     },
   },
@@ -373,6 +453,15 @@ const _DEFS: Record<ItemId, ItemDef> = {
       ctx.stats.hunger = Math.min(1, ctx.stats.hunger + 0.18);
       ctx.stats.health = Math.max(0, ctx.stats.health - 0.08);
       return { consumed: true, message: 'raw worm — your stomach turns' };
+    },
+    playCookAnim(itemRoot, t) {
+      // Heavier slab — slower twist, deeper reach over the flames.
+      // Shift LEFT (same reason as the skewer + pulp) so the meat ends
+      // up over the crosshair / fire instead of right of it.
+      const reach = t < 0.5 ? easeInOutCubic(t * 2) : 1 - easeInOutCubic((t - 0.5) * 2);
+      itemRoot.position.set(-0.30 * reach, 0.0 * reach, -0.32 * reach);
+      const twist = Math.sin(t * Math.PI * 5) * 0.4;
+      itemRoot.rotation.set(-0.5 * reach, twist, 0);
     },
     makeViewModel() {
       const group = new THREE.Group();
@@ -434,13 +523,16 @@ const _DEFS: Record<ItemId, ItemDef> = {
     },
     makeViewModel() {
       const group = new THREE.Group();
-      const mat = new THREE.MeshLambertMaterial({ color: 0x6a4a2a });
-      const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.018, 0.22, 6), mat);
+      // II — grey to match the dead trees branches actually come from
+      // (deadTree.ts _branchMat = 0x6e685f). Length bumped so it reads
+      // as a useable stick rather than a twig.
+      const mat = new THREE.MeshLambertMaterial({ color: 0x6e685f });
+      const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.018, 0.34, 6), mat);
       stick.rotation.set(0, 0, Math.PI / 2.4);
       group.add(stick);
       // A small offshoot twig
-      const twig = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.008, 0.06, 4), mat);
-      twig.position.set(0.05, 0.02, 0);
+      const twig = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.008, 0.09, 4), mat);
+      twig.position.set(0.08, 0.03, 0);
       twig.rotation.set(0, 0, -0.6);
       group.add(twig);
       return group;
@@ -781,6 +873,85 @@ const _DEFS: Record<ItemId, ItemDef> = {
     },
   },
 
+  // ─── Session II — lizard-on-a-stick (wielded cooking) ───────────────────
+
+  lizard_on_a_stick_raw: {
+    id: 'lizard_on_a_stick_raw',
+    name: 'RAW LIZARD-ON-A-STICK',
+    glyph: '✱',
+    description: 'a lizard speared on a branch — look at a fire to roast',
+    stackable: false,
+    maxStack: 1,
+    onUse(_ctx, _slot) {
+      return { consumed: false, message: 'aim at a fire to roast it' };
+    },
+    makeViewModel() {
+      // II — vertical skewer: hand grips the bottom, the lizard is
+      // impaled near the top and held away from the body. Stick tilts
+      // slightly forward so the lizard hangs out toward whatever the
+      // player is looking at (e.g. the fire they're about to cook on).
+      return buildSkewerMesh(/* cooked */ false);
+    },
+    makeIcon() {
+      const s = svg();
+      // Vertical skewer + lizard at top + heat lines
+      s.appendChild(svgEl('line', { x1: '12', y1: '20', x2: '12', y2: '5' }));
+      s.appendChild(svgEl('ellipse', { cx: '12', cy: '6', rx: '5', ry: '2' }));
+      s.appendChild(svgEl('circle', { cx: '16', cy: '6', r: '1.2' }));
+      s.appendChild(svgEl('path', { d: 'M9 3 Q10 1 11 3', 'stroke-width': '1' }));
+      return s;
+    },
+    playCookAnim(itemRoot, t) {
+      // Extend the skewer forward (-Z) over the fire and rotate around
+      // its long axis (Y) back-and-forth so the lizard turns over the
+      // flames. Ease in/out so it doesn't snap. The skewer also slides
+      // LEFT to cancel VIEWMODEL_OFFSET_X (+0.32) — without this shift
+      // the tip lands well right of the crosshair. A small upward bias
+      // keeps the lizard hovering ABOVE the flames rather than dipping
+      // into them.
+      const reach = t < 0.5 ? easeInOutCubic(t * 2) : 1 - easeInOutCubic((t - 0.5) * 2);
+      itemRoot.position.set(-0.30 * reach, 0.06 * reach, -0.35 * reach);
+      const pitch = -0.7 * reach;
+      // Twist envelope: stay still while extending toward + retracting
+      // from the fire, only spin the meat during the held-over-flames
+      // middle phase (~t∈[0.30, 0.75]). Reads as "place it, turn it,
+      // pull it back" rather than spinning the stick all the way in.
+      const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
+      const smooth = (x: number) => { const c = clamp01(x); return c * c * (3 - 2 * c); };
+      const twistAmp = smooth((t - 0.25) / 0.10) * (1 - smooth((t - 0.70) / 0.10));
+      const spin = Math.sin(t * Math.PI * 8) * 0.7 * twistAmp;
+      itemRoot.rotation.set(pitch, spin, 0);
+    },
+  },
+
+  lizard_on_a_stick_cooked: {
+    id: 'lizard_on_a_stick_cooked',
+    name: 'COOKED LIZARD-ON-A-STICK',
+    glyph: '※',
+    description: 'roasted lizard on a charred branch — eat to recover the stick',
+    stackable: false,
+    maxStack: 1,
+    onUse(ctx, _slot) {
+      ctx.stats.hunger = Math.min(1, ctx.stats.hunger + 0.35);
+      // Recover the branch so the skewer is reusable.
+      addItem(ctx.inventory, 'branch', undefined, ctx);
+      return { consumed: true, message: 'you eat — the stick goes back in your pack' };
+    },
+    makeViewModel() {
+      return buildSkewerMesh(/* cooked */ true);
+    },
+    makeIcon() {
+      const s = svg();
+      s.appendChild(svgEl('line', { x1: '12', y1: '20', x2: '12', y2: '5' }));
+      s.appendChild(svgEl('ellipse', { cx: '12', cy: '6', rx: '5', ry: '2' }));
+      s.appendChild(svgEl('circle', { cx: '16', cy: '6', r: '1.2' }));
+      // Two heat lines (cooked = more smoke)
+      s.appendChild(svgEl('path', { d: 'M9 3 Q10 1 11 3', 'stroke-width': '1' }));
+      s.appendChild(svgEl('path', { d: 'M13 3 Q14 1 15 3', 'stroke-width': '1' }));
+      return s;
+    },
+  },
+
   tent_kit: {
     id: 'tent_kit',
     name: 'TENT KIT',
@@ -833,4 +1004,5 @@ export const ALL_ITEM_IDS: ReadonlyArray<ItemId> = [
   'branch', 'cloth', 'fire_kit', 'tent_kit',
   'alien_fruit',
   'torch', 'flashlight',
+  'lizard_on_a_stick_raw', 'lizard_on_a_stick_cooked',
 ];

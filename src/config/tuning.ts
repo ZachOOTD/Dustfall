@@ -16,6 +16,7 @@ export const Tuning = {
 
   // Debug — flip back to false before any "real" play test.
   GOD_MODE: true,                    // never dies; die() floors stats instead
+  DEBUG_STARTER_LOADOUT: true,       // II — spawn with ample crafting/cooking materials
 
   // Day/night
   DAY_LENGTH_SECONDS: 720,  // CC-4 — was 480 (8 min); now 12 min for less rushed pacing

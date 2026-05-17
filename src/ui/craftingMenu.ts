@@ -57,6 +57,16 @@ const RECIPES: Recipe[] = [
       { id: 'cloth', count: 1 },
     ],
   },
+  // II — combine a branch + raw meat into a wielded skewer; held near a
+  // fire it auto-cooks (updateHeld hook on the raw skewer).
+  {
+    result: 'lizard_on_a_stick_raw',
+    resultCount: 1,
+    ingredients: [
+      { id: 'branch', count: 1 },
+      { id: 'raw_lizard_meat', count: 1 },
+    ],
+  },
 ];
 
 let _root: HTMLDivElement | null = null;

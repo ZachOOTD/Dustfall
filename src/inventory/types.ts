@@ -23,7 +23,10 @@ export type ItemId =
   | 'alien_fruit'
   // Session AA — light sources for night gameplay
   | 'torch'
-  | 'flashlight';
+  | 'flashlight'
+  // Session II — lizard-on-a-stick wielded cooking
+  | 'lizard_on_a_stick_raw'
+  | 'lizard_on_a_stick_cooked';
 
 /** Per-slot metadata for stateful items (canteen fill level, cook state, light state). */
 export interface ItemMeta {
@@ -37,6 +40,11 @@ export interface ItemMeta {
   burnRemaining?: number;
   /** 0..1 fuel level for rechargeable flashlights. Drains while lit, recharges while held + off. */
   fuelLevel?: number;
+  /** 0..1 cook progress for the lizard-on-a-stick (Session II). Ticks
+   *  up while the raw skewer is held near a fire; at 1 the slot flips
+   *  to the cooked variant. Persists with the slot so cooking can be
+   *  resumed across save/load. */
+  cookProgress?: number;
 }
 
 export interface UseResult {
@@ -81,6 +89,13 @@ export interface ItemDef {
    *  (e.g., torch/flashlight light state, fuel depletion). Called from
    *  `updateViewModel` only while this item is the equipped slot. */
   updateHeld?: (itemRoot: THREE.Object3D, slot: Slot, ctx: GameContext, dt: number) => void;
+
+  /** Drive the per-frame pose during the cook-over-fire timer (Session II).
+   *  `t` ∈ [0,1] runs from cook start to cook complete. Mutate
+   *  `itemRoot.position` / `.rotation` directly. Reset is handled by the
+   *  caller. Only items present in interaction.ts's `COOK_MAP` are ever
+   *  cooked, so most items don't need this. */
+  playCookAnim?: (itemRoot: THREE.Object3D, t: number) => void;
 }
 
 export interface Slot {

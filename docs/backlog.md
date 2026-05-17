@@ -28,8 +28,11 @@ Use `/triage-ideas` to bulk-classify a free-form dump.
 [feat] portable sled — drag along the ground to carry extra items
 [feat] rope item — wield in hands, attach to speeder to tow objects
 [feat] scrap-metal sled — tow with rope, doubles as physical inventory + speeder trailer
-[feat] lizard-on-a-stick cooking — branch + raw lizard → hold over fire to cook; eat to recover branch, or store cooked
 [idea] world + biome rework: larger map, vaster biomes, spaced-out POIs, procgen terrain/biomes/POI/AI spawns
 [polish] wreck POI rework: accurate collision, connected geometry (no floaters), less boxy, more curves + detail
 [debt] remove antenna tower landmarks
 [feat] wrecked satellite dish POI
+[bug] toast text (e.g., "you cook the cooked lizard meat") sometimes renders behind / overlapping the hotbar — needs to sit above the hotbar Y
+[bug] shelter "+E SHELTER" text overlaps the stat bars (thirst / hunger / temperature / stamina / health) — move it above the stat bar group so it's readable
+[polish] cluster dead trees in the salt-flats biome (currently scattered uniformly) — bunch into 1-2 grove areas per region so they read as "a grove" rather than "ambient scatter"
+[polish] cluster alien cacti in the salt-flats biome (same pattern) — pick a centroid per region and bunch the cacti within ~30m, so the cactus patch reads as a destination worth exploring
