@@ -45,24 +45,31 @@ Run with `npm run dev` (port 5173). Type-check with `npx tsc --noEmit`.
 
 ## Where we are now
 
-**Last shipped**: Session II — Lizard-on-a-stick cooking system + dead-
-lizard model + animated held cooking. New `lizard_on_a_stick_raw` /
-`_cooked` items with vertical-stick + impaled-lizard viewmodel
+**Last shipped**: Session JJ — UI overlap fixes + scatter clustering +
+movement-feel tuning + spawn polish. Toast (`bottom 32 → 100px`) and
+shelter indicator (`bottom 100 → 200px`) lifted clear of the hotbar
+and stat-bar column respectively. Dead trees spawn in a two-pass
+scheme (3 dense groves × 6 trees + 12 sporadic uniform scatter for
+organic "thickets + lone trees" mix); alien cacti spread across 4
+patches × 2-3 each instead of one tight clump.
+`'antenna_spire'` removed from `HERO_WRECK_TYPES` +
+`PROCGEN_WRECK_KINDS` (hand-placed `antenna_outpost` stays as the
+single antenna). Movement: `WALK_SPEED 4.2 → 6.0`,
+`SPRINT_MULTIPLIER 1.7 → 2.2` (sprint 13.2 m/s); new
+`DEBUG_UNLIMITED_STAMINA` flag for testing; footstep cadence
+`1.7 / 1.4m → 3.0 / 4.5m` so audio lands at natural ~2 / 2.9 steps
+per second at the new speeds. Spawn offset 6 → 3m so the opening
+wreck dominates the first view. Backlog cleared of the 5 shipped
+items.
+
+**Prior milestone**: Session II — Lizard-on-a-stick cooking system +
+dead-lizard model + animated held cooking. New `lizard_on_a_stick_raw`
+/ `_cooked` items with vertical-stick + impaled-lizard viewmodel
 (`buildSkewerMesh` helper, reuses the shared `makeLizardVisual`).
 `raw_lizard_meat` renamed DEAD LIZARD and viewmodel swapped to the
 actual lizard mesh. Cook duration 0.6s → 3.5s; `tickCooking` writes
 `slot.meta.cookProgress` each frame; `viewModel.ts` reads it and
-drives a new `ItemDef.playCookAnim` hook (D58). Skewer cook anim:
-extend forward + pitch down + shift left to cancel
-`VIEWMODEL_OFFSET_X` so the tip lands on the crosshair; twist
-envelope gates spin to the held-over-flames middle phase; lifted Y
-so the lizard hovers above flames. Worm meat + cactus pulp got
-matching cook anims. Craft recipe (1 branch + 1 raw_lizard_meat → 1
-raw skewer); eat cooked skewer returns 1 branch + 0.35 hunger.
-Branches recolored grey (`0x6e685f`) to match dead trees + lengthened
-in both world pickup + viewmodel + skewer stick.
-`Tuning.DEBUG_STARTER_LOADOUT = true` spawns the player with full
-crafting materials for fast iteration. Decisions D58.
+drives a new `ItemDef.playCookAnim` hook (D58). Decisions D58.
 
 **Prior milestone**: Session HH — World rework #3: procgen POIs +
 biome-aware AI spawns. ~15 procgen wrecks across the chunk band via

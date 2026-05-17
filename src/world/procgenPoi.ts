@@ -25,12 +25,13 @@ import { Tuning } from '../config/tuning.ts';
 
 // Wreck-kind palette for procgen POIs. Cargo containers are intentionally
 // excluded — the anchor POIs don't use them either, and they read more
-// like ground props than hero silhouettes.
+// like ground props than hero silhouettes. JJ — 'antenna_spire' dropped
+// too (per backlog "remove antenna tower landmarks"). The hand-placed
+// `antenna_outpost` anchor POI is the only remaining antenna spire.
 const PROCGEN_WRECK_KINDS: ReadonlyArray<WreckKind> = [
   'engine_bell',
   'fuselage',
   'escape_pod',
-  'antenna_spire',
   'engine_cluster',
 ];
 

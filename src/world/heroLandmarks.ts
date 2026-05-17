@@ -84,12 +84,14 @@ export function placeRibcage(
 // ────────────────────────────────────────────────────────────────
 // Public entry — mix of wrecks + ribcages around the ring
 // ────────────────────────────────────────────────────────────────
+// JJ — 'antenna_spire' dropped from hero-landmark rotation (per backlog
+// "remove antenna tower landmarks"). The hand-placed `antenna_outpost`
+// anchor POI in poi.ts still uses the spire mesh — that single one stays.
 const HERO_WRECK_TYPES: ReadonlyArray<WreckKind> = [
   'engine_cluster',
   'fuselage',
   'escape_pod',
   'cargo_container',
-  'antenna_spire',
   'engine_bell',
 ];
 const RIBCAGE_PROBABILITY = 0.15;  // ribcages sprinkled in; most spots are wrecks

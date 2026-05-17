@@ -49,8 +49,11 @@ export function createHud(): HudApi {
 
   const toast = document.createElement('div');
   toast.id = 'toast';
+  // JJ — bottom bumped 32 → 100 so the toast clears the hotbar (which
+  // sits at bottom 28 with 52px-tall slots → top edge at ~80px). Old
+  // value rendered toast text inside the hotbar's vertical band.
   toast.style.cssText = `
-    position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%);
+    position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%);
     font-family: 'Cormorant Garamond', serif; font-style: italic;
     color: #e8dcc0; font-size: 18px; letter-spacing: 1px;
     opacity: 0; transition: opacity 0.6s; z-index: 20; pointer-events: none;

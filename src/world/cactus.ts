@@ -9,6 +9,7 @@ import type { Terrain } from '../world/terrain.ts';
 import type { BiomeSampler } from './biomes.ts';
 import type { GameContext } from '../GameContext.ts';
 import { Tuning } from '../config/tuning.ts';
+import { findBiomeCentroid } from './biomes.ts';
 
 // CC-4 — only the alien variant spawns now (old green saguaro retired).
 // Kept as a union for forward-compat if more cactus species ship later.
@@ -148,59 +149,71 @@ export function spawnCacti(
 ): Cactus[] {
   const list: Cactus[] = [];
   // CC-4 — alien cactus is the ONLY variant, restricted to flat-enough
-  // salt ground. GG — count + radius bounds rescaled for the 2400m world.
-  // Rejection-sample candidate spots until we hit TARGET placements or
-  // burn MAX_ATTEMPTS.
+  // salt ground. GG — count + radius bounds rescaled for the 2400m
+  // world. JJ — cluster into 1+ patches around salt-biome centroids
+  // instead of scattering uniformly. Each patch gets TARGET/PATCH_COUNT
+  // cacti (rounded up) within CLUSTER_RADIUS of its centroid. Greedy
+  // exclusion separates patch centroids when PATCH_COUNT > 1.
   const TARGET = Tuning.CACTUS_TARGET_COUNT;
-  const MAX_ATTEMPTS = TARGET * 60;        // keep the 60 attempts/target ratio from CC-4
   const FLATNESS_THRESHOLD = 0.6;          // max |dY/1.2m| sampled in 4 directions
-  const RADIUS_MIN = Tuning.CACTUS_SCATTER_RADIUS_MIN;
-  const RADIUS_SPAN = Tuning.CACTUS_SCATTER_RADIUS_MAX - RADIUS_MIN;
-  let attempts = 0;
-  while (list.length < TARGET && attempts < MAX_ATTEMPTS) {
-    attempts++;
-    const radius = RADIUS_MIN + rand() * RADIUS_SPAN;
-    const angle = rand() * Math.PI * 2;
-    const x = Math.cos(angle) * radius;
-    const z = Math.sin(angle) * radius;
-    if (biomes.biomeAt(x, z) !== 'salt') continue;
-    if (terrainFlatnessAt(terrain, x, z) > FLATNESS_THRESHOLD) continue;
-    const y = terrain.heightAt(x, z);
+  const patchCount = Tuning.CACTUS_PATCH_COUNT;
+  const clusterRadius = Tuning.CACTUS_PATCH_CLUSTER_RADIUS;
+  const minSep = Tuning.CACTUS_PATCH_MIN_SEPARATION;
+  const perPatch = Math.ceil(TARGET / patchCount);
+  const triesPerPatch = perPatch * 60;     // keep the 60 attempts/target ratio
 
-    const kind: CactusKind = 'alien';
-    const built = makeAlienCactus(rand);
-    const mesh = built.group;
-    // Bury the base ~0.25m so the pod doesn't show a gap on slight slopes.
-    mesh.position.set(x, y - 0.25, z);
-    mesh.rotation.y = rand() * Math.PI * 2;
-    mesh.traverse((o) => {
-      const m = o as THREE.Mesh;
-      if (m.isMesh) {
-        m.castShadow = true;
-        m.receiveShadow = true;
-      }
-    });
+  const centroids: Array<{ x: number; z: number; radius: number }> = [];
+  for (let p = 0; p < patchCount; p++) {
+    const c = findBiomeCentroid(biomes, 'salt', { excludeCenters: centroids });
+    if (!c) break;
+    centroids.push({ x: c.x, z: c.z, radius: minSep });
 
-    // Static collider — single cylinder approximating the pod.
-    const bodyDesc = RAPIER.RigidBodyDesc.fixed().setTranslation(x, y + 1, z);
-    const body = physicsWorld.createRigidBody(bodyDesc);
-    const colliderDesc = RAPIER.ColliderDesc.cylinder(1, 0.20);
-    physicsWorld.createCollider(colliderDesc, body);
+    let placedHere = 0;
+    let attempts = 0;
+    while (placedHere < perPatch && attempts < triesPerPatch && list.length < TARGET) {
+      attempts++;
+      const localAng = rand() * Math.PI * 2;
+      const localR = Math.sqrt(rand()) * clusterRadius; // sqrt → uniform area
+      const x = c.x + Math.cos(localAng) * localR;
+      const z = c.z + Math.sin(localAng) * localR;
+      if (biomes.biomeAt(x, z) !== 'salt') continue;
+      if (terrainFlatnessAt(terrain, x, z) > FLATNESS_THRESHOLD) continue;
+      const y = terrain.heightAt(x, z);
 
-    const id = _nextId++;
-    tag(mesh, id);
-    scene.add(mesh);
+      const kind: CactusKind = 'alien';
+      const built = makeAlienCactus(rand);
+      const mesh = built.group;
+      mesh.position.set(x, y - 0.25, z);
+      mesh.rotation.y = rand() * Math.PI * 2;
+      mesh.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (m.isMesh) {
+          m.castShadow = true;
+          m.receiveShadow = true;
+        }
+      });
 
-    list.push({
-      id,
-      kind,
-      mesh,
-      pos: new THREE.Vector3(x, y, z),
-      harvested: false,
-      hovered: false,
-      _fruitMeshes: built.fruitMeshes,
-      _harvestedAt: 0,
-    });
+      const bodyDesc = RAPIER.RigidBodyDesc.fixed().setTranslation(x, y + 1, z);
+      const body = physicsWorld.createRigidBody(bodyDesc);
+      const colliderDesc = RAPIER.ColliderDesc.cylinder(1, 0.20);
+      physicsWorld.createCollider(colliderDesc, body);
+
+      const id = _nextId++;
+      tag(mesh, id);
+      scene.add(mesh);
+
+      list.push({
+        id,
+        kind,
+        mesh,
+        pos: new THREE.Vector3(x, y, z),
+        harvested: false,
+        hovered: false,
+        _fruitMeshes: built.fruitMeshes,
+        _harvestedAt: 0,
+      });
+      placedHere++;
+    }
   }
   return list;
 }

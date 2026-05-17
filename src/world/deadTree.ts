@@ -14,6 +14,7 @@ import type { BiomeSampler } from './biomes.ts';
 import type { Pickup } from '../pickups/pickups.ts';
 import { spawnBranchAt } from '../pickups/pickups.ts';
 import { Tuning } from '../config/tuning.ts';
+import { findBiomeCentroid } from './biomes.ts';
 
 const _trunkMat = new THREE.MeshLambertMaterial({
   color: 0x8a8278,
@@ -93,43 +94,72 @@ export function spawnDeadTrees(
   count = Tuning.DEAD_TREE_TARGET_COUNT,
 ): THREE.Group[] {
   const trees: THREE.Group[] = [];
-  const MAX_ATTEMPTS = count * 25;
   const FLATNESS_THRESHOLD = 0.7;
-  const RADIUS_MIN = Tuning.DEAD_TREE_SCATTER_RADIUS_MIN;
-  const RADIUS_SPAN = Tuning.DEAD_TREE_SCATTER_RADIUS_MAX - RADIUS_MIN;
-  let attempts = 0;
-  while (trees.length < count && attempts < MAX_ATTEMPTS) {
-    attempts++;
-    const radius = RADIUS_MIN + rand() * RADIUS_SPAN;
-    const angle = rand() * Math.PI * 2;
-    const x = Math.cos(angle) * radius;
-    const z = Math.sin(angle) * radius;
-    if (biomes.biomeAt(x, z) !== 'salt') continue;
-    if (terrainFlatnessAt(terrain, x, z) > FLATNESS_THRESHOLD) continue;
-    const groundY = terrain.heightAt(x, z);
+  const groveCount = Tuning.TREE_GROVE_COUNT;
+  const perGrove = Tuning.TREE_PER_GROVE;
+  const clusterRadius = Tuning.TREE_GROVE_CLUSTER_RADIUS;
+  const minSep = Tuning.TREE_GROVE_MIN_SEPARATION;
 
+  // Place a single dead tree at world (x, z) — shared between the two
+  // passes below. Returns true if the placement attempt was accepted.
+  const placeTreeAt = (x: number, z: number): boolean => {
+    if (biomes.biomeAt(x, z) !== 'salt') return false;
+    if (terrainFlatnessAt(terrain, x, z) > FLATNESS_THRESHOLD) return false;
+    const groundY = terrain.heightAt(x, z);
     const tree = makeDeadTree(rand);
     tree.position.set(x, groundY - 0.05, z);
     tree.rotation.y = rand() * Math.PI * 2;
     tree.traverse((o) => {
       const m = o as THREE.Mesh;
-      if (m.isMesh) {
-        m.castShadow = true;
-        m.receiveShadow = true;
-      }
+      if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; }
     });
     scene.add(tree);
     trees.push(tree);
-
-    // Drop 2-4 branches in a ring at the base.
+    // 2-4 branches in a ring at the base.
     const branchN = 2 + Math.floor(rand() * 3);
     for (let b = 0; b < branchN; b++) {
       const a = rand() * Math.PI * 2;
       const r = 1.5 + rand() * 1.5;
-      const bx = x + Math.cos(a) * r;
-      const bz = z + Math.sin(a) * r;
-      spawnBranchAt(scene, terrain, bx, bz, rand, branchList);
+      spawnBranchAt(scene, terrain, x + Math.cos(a) * r, z + Math.sin(a) * r, rand, branchList);
     }
+    return true;
+  };
+
+  // JJ-2 — two-pass spawn so the dead-tree distribution reads as
+  // organic (some trees clustered as groves around salt centroids,
+  // others scattered uniformly across salt regions as lone trees).
+  // Pass 1: dense groves at greedily-spaced salt centroids.
+  const centroids: Array<{ x: number; z: number; radius: number }> = [];
+  for (let g = 0; g < groveCount; g++) {
+    const c = findBiomeCentroid(biomes, 'salt', { excludeCenters: centroids });
+    if (!c) break;
+    centroids.push({ x: c.x, z: c.z, radius: minSep });
+    let placedHere = 0;
+    const triesPerGrove = perGrove * 30;
+    let attempts = 0;
+    while (placedHere < perGrove && attempts < triesPerGrove && trees.length < count) {
+      attempts++;
+      const ang = rand() * Math.PI * 2;
+      const r = Math.sqrt(rand()) * clusterRadius;  // sqrt → uniform area
+      const x = c.x + Math.cos(ang) * r;
+      const z = c.z + Math.sin(ang) * r;
+      if (placeTreeAt(x, z)) placedHere++;
+    }
+  }
+
+  // Pass 2: sporadic lone trees scattered uniformly across all salt
+  // regions until we hit the target count. Reaches into salt regions
+  // that didn't get a grove + adds randomness around the groves
+  // themselves so the world doesn't read as "groves + nothing else".
+  const RADIUS_MIN = Tuning.DEAD_TREE_SCATTER_RADIUS_MIN;
+  const RADIUS_SPAN = Tuning.DEAD_TREE_SCATTER_RADIUS_MAX - RADIUS_MIN;
+  const sporadicTries = (count - trees.length) * 30;
+  let sporadicAttempts = 0;
+  while (trees.length < count && sporadicAttempts < sporadicTries) {
+    sporadicAttempts++;
+    const radius = RADIUS_MIN + rand() * RADIUS_SPAN;
+    const angle = rand() * Math.PI * 2;
+    placeTreeAt(Math.cos(angle) * radius, Math.sin(angle) * radius);
   }
   return trees;
 }

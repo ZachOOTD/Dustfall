@@ -20,8 +20,14 @@ const desired = new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0);
 const GRAVITY = -25; // m/s^2
 
-const STEP_DISTANCE = 1.7;       // meters between footsteps (walking)
-const STEP_DISTANCE_SPRINT = 1.4; // shorter cadence when sprinting
+// JJ-2 — step distances bumped to land at natural cadence with the
+// faster movement speeds (WALK_SPEED 6.0 / sprint 13.2 m/s).
+// Walk: 3.0m / 6.0 m/s ≈ 2 steps/sec (typical human pace).
+// Sprint: 4.5m / 13.2 m/s ≈ 2.9 steps/sec (typical run pace).
+// Old values produced ~3.5 / ~9.4 steps/sec, which read as a rapid-fire
+// rattle.
+const STEP_DISTANCE = 3.0;       // meters between footsteps (walking)
+const STEP_DISTANCE_SPRINT = 4.5; // longer cadence per sprint stride
 let _stepAccum = 0;
 let _stepParity = 0;             // alternates 0/1 → ±lateral offset for L/R foot
 
@@ -65,8 +71,12 @@ export function updatePlayer(ctx: GameContext, dt: number): void {
   if (sprinting) speed *= Tuning.SPRINT_MULTIPLIER;
   else if (ctx.player.crouching) speed *= Tuning.CROUCH_SPEED_MULTIPLIER;
 
-  // Stamina: drains while sprinting; recovers otherwise.
-  if (sprinting) {
+  // Stamina: drains while sprinting; recovers otherwise. JJ-2 — gated
+  // by DEBUG_UNLIMITED_STAMINA for testing (pins stamina at 1.0 so the
+  // sprint gate at line ~62 always passes).
+  if (Tuning.DEBUG_UNLIMITED_STAMINA) {
+    ctx.stats.stamina = 1;
+  } else if (sprinting) {
     ctx.stats.stamina = Math.max(0, ctx.stats.stamina - Tuning.STAMINA_DRAIN_SPRINT * dt);
   } else {
     ctx.stats.stamina = Math.min(1, ctx.stats.stamina + Tuning.STAMINA_RECOVER_PER_SEC * dt);

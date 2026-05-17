@@ -8,8 +8,8 @@ export const Tuning = {
   PLAYER_CAPSULE_HALF_HEIGHT: 0.5,   // cylindrical part halved
   PLAYER_CAPSULE_RADIUS: 0.35,
   PLAYER_EYE_OFFSET: 0.85,           // camera Y above body center
-  WALK_SPEED: 4.2,
-  SPRINT_MULTIPLIER: 1.7,
+  WALK_SPEED: 6.0,                   // JJ-2 — bumped 4.2 → 6.0 (felt sluggish in playtest)
+  SPRINT_MULTIPLIER: 2.2,             // JJ-2 — bumped 1.7 → 2.2 (sprint = 13.2 m/s)
   JUMP_VELOCITY: 7.0,                // m/s upward kick on jump (~1m apex)
   CROUCH_EYE_OFFSET: 0.40,           // camera Y above body center while crouched
   CROUCH_SPEED_MULTIPLIER: 0.5,      // walk speed * this while crouched
@@ -17,6 +17,7 @@ export const Tuning = {
   // Debug — flip back to false before any "real" play test.
   GOD_MODE: true,                    // never dies; die() floors stats instead
   DEBUG_STARTER_LOADOUT: true,       // II — spawn with ample crafting/cooking materials
+  DEBUG_UNLIMITED_STAMINA: true,     // JJ-2 — skip sprint stamina drain so testing isn't gated on rest
 
   // Day/night
   DAY_LENGTH_SECONDS: 720,  // CC-4 — was 480 (8 min); now 12 min for less rushed pacing
@@ -240,9 +241,22 @@ export const Tuning = {
   CACTUS_TARGET_COUNT: 10,
   CACTUS_SCATTER_RADIUS_MIN: 12,
   CACTUS_SCATTER_RADIUS_MAX: 1100,
+  // JJ — cluster cacti into patches around salt-biome centroids (was uniform scatter).
+  // JJ-2 — spread across multiple salt regions (2-3 cacti per region) instead of
+  // packing all 10 into one tight patch.
+  CACTUS_PATCH_COUNT: 4,
+  CACTUS_PATCH_CLUSTER_RADIUS: 12,       // m — rejection-sample cacti within this of each centroid
+  CACTUS_PATCH_MIN_SEPARATION: 300,      // m — greedy exclusion between patch centroids
   DEAD_TREE_TARGET_COUNT: 30,
   DEAD_TREE_SCATTER_RADIUS_MIN: 20,
   DEAD_TREE_SCATTER_RADIUS_MAX: 1100,
+  // JJ — cluster dead trees into groves around salt-biome centroids (was uniform scatter).
+  // JJ-2 — split spawn between dense groves (~60%) and sporadic uniform scatter
+  // (~40%) across salt regions, for a more organic mix of "thicket" + "lone tree".
+  TREE_GROVE_COUNT: 3,
+  TREE_PER_GROVE: 6,                     // 3 groves × 6 trees = 18 clustered; remainder (12) scattered
+  TREE_GROVE_CLUSTER_RADIUS: 40,         // m — rejection-sample trees within this of each centroid
+  TREE_GROVE_MIN_SEPARATION: 500,        // m — greedy exclusion between grove centroids
   HERO_LANDMARK_COUNT_MIN: 15,
   HERO_LANDMARK_COUNT_MAX: 20,
   HERO_LANDMARK_RADIUS_MIN: 70,

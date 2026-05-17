@@ -3,6 +3,34 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session JJ — 2026-05-16 — UI overlap fixes + scatter clustering + movement-feel tuning + spawn polish
+`verified` — tsc clean; preview confirms toast and shelter indicator
+both clear the hotbar / stat bars respectively (numerically and
+visually); cluster verification numbers show 30 trees across 13
+sub-clusters with density mix 0→5 (groves + lone trees), 10 cacti
+across 4 patches with 2-3 each; exactly 1 antenna_spire salvageable
+remains (the hand-placed `antenna_outpost`); spawn ~5.3m from wreck
+entrance with the wreck dominating the opening view. **UI**: toast
+bottom `32 → 100px` (clears the hotbar at top ~80px); shelter
+indicator bottom `100 → 200px` (clears the stat-bar column at top
+~185px). **Clustering**: dead trees now spawn in a two-pass scheme —
+3 dense groves (6 trees each = 18) at greedy salt centroids via
+`findBiomeCentroid` + a sporadic uniform pass for the remaining 12 so
+the world reads as "thickets + lone trees" instead of either
+"uniform scatter" or "all-in-one-spot"; cacti spread across 4
+patches × 2-3 each (was 1 patch × 10). **Antenna cleanup**: removed
+`'antenna_spire'` from `HERO_WRECK_TYPES` and `PROCGEN_WRECK_KINDS`;
+hand-placed `antenna_outpost` POI stays as the single antenna in the
+world (per backlog "remove antenna tower landmarks"). **Movement**:
+`WALK_SPEED 4.2 → 6.0`, `SPRINT_MULTIPLIER 1.7 → 2.2` (sprint 13.2
+m/s), new `DEBUG_UNLIMITED_STAMINA` flag pins `stats.stamina = 1`
+when set so the sprint gate always passes (for testing); footstep
+cadence `1.7 / 1.4m → 3.0 / 4.5m` so step audio at the new speeds
+lands at natural 2 / 2.9 steps-per-sec rather than 3.5 / 9.4. **Spawn
+polish**: `PLAYER_SPAWN_OFFSET_FROM_ENTRANCE 6 → 3m` so the opening
+wreck dominates the player's first view. Cleared the 5 backlog items
+that landed.
+
 ## Session II — 2026-05-16 — Lizard-on-a-stick cooking + dead-lizard model + held-cook animation + debug starter loadout
 `verified` — tsc clean; preview screenshots confirm DEAD LIZARD held as
 the lizard mesh, vertical skewer with lizard impaled belly-to-back, cook

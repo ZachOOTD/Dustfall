@@ -37,8 +37,11 @@ import { placeSpeeder, type SpeederState } from './speeder.ts';
 const WRECK_SEARCH_CENTER = new THREE.Vector3(-50, 0, 0);
 
 /** How far in front of the entrance the player spawns. The player faces
- *  the entrance via camera.lookAt at boot. */
-const PLAYER_SPAWN_OFFSET_FROM_ENTRANCE = 6;
+ *  the entrance via camera.lookAt at boot. JJ-2 — pulled in from 6 → 3
+ *  so the wreck dominates the opening view (was reading as distant in
+ *  playtest, especially after the WALK_SPEED bump changed perceived
+ *  distance). */
+const PLAYER_SPAWN_OFFSET_FROM_ENTRANCE = 3;
 
 /** Compute terrain-height variance over a 5×5 patch centered on (cx, cz).
  *  Lower = flatter. Used to pick a flat landing spot for the wreck. */

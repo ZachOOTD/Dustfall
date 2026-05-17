@@ -357,7 +357,11 @@ canvas {
    ────────────────────────────────────────────────────────── */
 #shelter-indicator {
   position: fixed;
-  bottom: 100px;
+  /* JJ — bumped 100px → 200px so this clears the stat-bar column
+     (#stats at bottom: 32px, extends ~153px upward → top ~185px).
+     Old value landed in the middle of the stat bars and overlapped
+     THIRST / HUNGER / TEMPERATURE labels. */
+  bottom: 200px;
   left: 32px;
   font-family: 'Cormorant Garamond', serif;
   font-style: italic;
