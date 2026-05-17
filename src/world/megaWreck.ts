@@ -1205,7 +1205,7 @@ export function placeMegaWreck(
   // parent group, updateWorldMatrix, then registerSalvageable with the
   // matrix-derived world position.
   const registerNested = (
-    panelGroup: THREE.Group, parent: THREE.Object3D, kind: 'massive' | 'engine_bell' | 'antenna_spire',
+    panelGroup: THREE.Group, parent: THREE.Object3D, kind: 'massive' | 'engine_bell',
   ) => {
     parent.add(panelGroup);
     addAccessPanel(panelGroup, 0, 0, 0, 1, 0);
@@ -1273,7 +1273,11 @@ export function placeMegaWreck(
     const p = new THREE.Group();
     p.position.set(0.6, TOWER_BASE_Y + TOWER_HALF_H * 2 + ROOF_HALF_T * 2 + 0.4, towerCenterZ_geom);
     p.rotation.y = -Math.PI / 2;
-    registerNested(p, group, 'antenna_spire');
+    // KK — was 'antenna_spire' (now retired). The structure stays
+    // (it's a mega-wreck spire silhouette, not a satellite dish), but
+    // the salvage panel uses 'massive' to roll the mega-wreck loot
+    // table — consistent with the wreck's other panels.
+    registerNested(p, group, 'massive');
   }
 
   // ── Surrounding debris field — 40 small pieces in a 50m radius.

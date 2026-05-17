@@ -23,6 +23,7 @@ import { attachCompoundCollider } from '../physics/bodies.ts';
 import { registerSalvageable, type SalvageableRegistry } from './salvage.ts';
 import { placeMegaShip } from './megaShip.ts';
 import { placeMegaWreck } from './megaWreck.ts';
+import { placeSatelliteDish } from './satelliteDish.ts';
 import type { ShelterRegistry } from '../shelter/shelterZones.ts';
 
 // ────────────────────────────────────────────────────────────────
@@ -203,7 +204,7 @@ function terrainVarAtWide(terrain: Terrain, cx: number, cz: number): number {
 }
 
 interface POISpec {
-  kind: 'engine_block' | 'camp' | 'antenna_outpost' | 'crashed_hull' | 'mega_ship' | 'mega_wreck';
+  kind: 'engine_block' | 'camp' | 'satellite_dish' | 'crashed_hull' | 'mega_ship' | 'mega_wreck';
   x: number;
   z: number;
 }
@@ -214,7 +215,7 @@ interface POISpec {
 const POI_LAYOUT: ReadonlyArray<POISpec> = [
   { kind: 'engine_block',     x:  95, z:  -8 },
   { kind: 'camp',             x: -42, z:  78 },
-  { kind: 'antenna_outpost',  x: -88, z: -50 },
+  { kind: 'satellite_dish',   x: -88, z: -50 },
   { kind: 'crashed_hull',     x:  18, z: -110 },
   { kind: 'mega_ship',        x:-120, z:  30 },
   { kind: 'mega_wreck',       x:-180, z:-130 },
@@ -256,14 +257,14 @@ export function placePOIs(
         if (salvageables) registerSalvageable(salvageables, fuselage, 'fuselage', pos, rand);
         break;
       }
-      case 'antenna_outpost': {
-        const group = placeWreck(scene, world, terrain, pos, 'antenna_spire', rand, {
-          scale: 1.4,
-          buryY: 0.5,
-          tiltZ: 0.08,
-        });
-        placeDebrisField(scene, terrain, pos, 8, rand, 5);
-        if (salvageables) registerSalvageable(salvageables, group, 'massive', pos, rand);
+      case 'satellite_dish': {
+        // KK — flagship POI: large rusted dish on a tripod over a
+        // hollow concrete base, half-reclaimed by dunes. Dedicated
+        // module (placeSatelliteDish) handles the geometry + walkable
+        // colliders + shelter zone + two salvage panels internally.
+        if (!shelter) break;
+        placeSatelliteDish(scene, world, terrain, pos, rand, shelter, salvageables);
+        placeDebrisField(scene, terrain, pos, 14, rand, 18);
         break;
       }
       case 'crashed_hull': {

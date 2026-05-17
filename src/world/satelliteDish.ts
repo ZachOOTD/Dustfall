@@ -1,0 +1,798 @@
+// Wrecked satellite dish — flagship POI (Session KK). Large parabolic
+// dish on a steel tripod, mounted on a hollow concrete base, half-
+// reclaimed by the dunes. Designed to read as a destination from far
+// across the map: tilted ~30° forward + 10° roll, ~20m total height,
+// 16m-diameter dish with multiple missing panels exposing the radial
+// framework underneath. Player can climb the base, enter a small
+// sand-flooded interior shelter, and salvage two access panels.
+//
+// Heavy inspiration: Rust's satellite-dish monument, Arecibo
+// post-collapse, abandoned Soviet radio telescopes. Visual cues:
+//   - Rusted radial dish panels (some missing, exposed ribs underneath)
+//   - Tilted gimbal at tripod apex
+//   - Broken feed-arm assembly at the focal point
+//   - Concrete pedestal with weathered tan-grey color
+//   - One bent tripod leg (broken-mount story beat)
+//   - Sand mound around the base + heavy bury so the structure feels
+//     "settled in" rather than dropped on the surface
+
+import * as THREE from 'three';
+import RAPIER from '@dimforge/rapier3d-compat';
+import type { Rng } from '../core/rng.ts';
+import type { Terrain } from './terrain.ts';
+import type { SalvageableRegistry } from './salvage.ts';
+import { registerSalvageable } from './salvage.ts';
+import type { ShelterRegistry } from '../shelter/shelterZones.ts';
+import { addShelterZone } from '../shelter/shelterZones.ts';
+import { makeStaticBox } from '../physics/bodies.ts';
+import { Tuning } from '../config/tuning.ts';
+
+// ── Materials — local copies so we can keep the rusted/concrete
+// palette here without polluting the generic wreck materials. ────────
+const _concreteMat = new THREE.MeshLambertMaterial({
+  color: 0x8a7e68,           // weathered tan-grey concrete
+  flatShading: true,
+});
+const _concreteDarkMat = new THREE.MeshLambertMaterial({
+  color: 0x5a4f3e,           // shadow / interior concrete
+  flatShading: true,
+});
+const _rustedSteelMat = new THREE.MeshLambertMaterial({
+  color: 0x6b3a22,           // saturated rust orange-brown
+  flatShading: true,
+});
+const _dishPanelMat = new THREE.MeshLambertMaterial({
+  color: 0x7a4628,           // dish panel rust
+  side: THREE.DoubleSide,
+  flatShading: true,
+});
+const _dishPanelDarkMat = new THREE.MeshLambertMaterial({
+  color: 0x4a2818,           // darker patchwork panel (alternates around rim)
+  side: THREE.DoubleSide,
+  flatShading: true,
+});
+const _frameMat = new THREE.MeshLambertMaterial({
+  color: 0x2a1e14,           // dark exposed steel framework
+  flatShading: true,
+});
+const _interiorBlackMat = new THREE.MeshBasicMaterial({
+  color: 0x080604,            // pitch-dark interior wall (suggests depth past sand)
+});
+const _sandPileMat = new THREE.MeshLambertMaterial({
+  color: 0xb89870,            // matches dune sand
+  flatShading: true,
+});
+const _panelBodyMat = new THREE.MeshLambertMaterial({
+  color: Tuning.SALVAGE_PANEL_BODY_HEX,
+});
+const _panelRimMat = new THREE.MeshLambertMaterial({
+  color: Tuning.SALVAGE_PANEL_RIM_HEX,
+});
+
+// Dimensions — tweak here if balancing.
+const BASE_W = 8.0;            // concrete base width (X)
+const BASE_D = 8.0;            // concrete base depth (Z)
+const BASE_H = 5.0;            // total base height
+const BASE_WALL_T = 0.6;       // wall thickness
+const INTERIOR_W = BASE_W - BASE_WALL_T * 2;   // 6.8
+const INTERIOR_H = 2.8;        // interior cavity height
+
+const ENTRANCE_W = 1.8;
+const ENTRANCE_H = 2.2;
+
+const TRIPOD_R = 0.30;         // strut radius
+const TRIPOD_APEX_Y = BASE_H + 11.0;   // pivot point Y in mesh-local space
+
+const DISH_R = 8.0;            // 16m diameter
+const DISH_DEPTH = 2.6;
+const DISH_SEGMENTS = 12;      // radial panel segments
+const MISSING_PANELS = [2, 7, 10]; // indices of removed panels (exposes framework)
+
+// ── Helpers ──────────────────────────────────────────────────────────
+
+/** Build a single radial dish panel covering one angular wedge of the
+ *  parabolic surface. Uses LatheGeometry with a limited phiLength so
+ *  each panel is a separate mesh (some can be omitted to read as
+ *  "missing" from the wreck). */
+function makeDishPanel(phiStart: number, phiLength: number, mat: THREE.Material): THREE.Mesh {
+  const profile: THREE.Vector2[] = [];
+  const segs = 8;
+  for (let i = 0; i <= segs; i++) {
+    const t = i / segs;
+    profile.push(new THREE.Vector2(t * DISH_R, t * t * DISH_DEPTH));
+  }
+  const geo = new THREE.LatheGeometry(profile, 4, phiStart, phiLength);
+  return new THREE.Mesh(geo, mat);
+}
+
+/** Build the framework behind the dish: radial spokes + concentric
+ *  rings. Visible where the panels are missing — sells the "wrecked"
+ *  silhouette by exposing the dish skeleton. */
+function makeDishFramework(): THREE.Group {
+  const g = new THREE.Group();
+  const RING_COUNT = 3;
+  // Concentric rings (rusted iron bands holding the structure together)
+  for (let r = 1; r <= RING_COUNT; r++) {
+    const radius = (r / RING_COUNT) * DISH_R * 0.95;
+    const depth = (radius / DISH_R) * (radius / DISH_R) * DISH_DEPTH;
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(radius, 0.08, 4, 24),
+      _frameMat,
+    );
+    ring.rotation.x = Math.PI / 2;
+    ring.position.y = depth;
+    g.add(ring);
+  }
+  // Radial spokes
+  const SPOKE_COUNT = 16;
+  for (let i = 0; i < SPOKE_COUNT; i++) {
+    const phi = (i / SPOKE_COUNT) * Math.PI * 2;
+    const profile: THREE.Vector2[] = [];
+    const segs = 6;
+    for (let s = 0; s <= segs; s++) {
+      const t = s / segs;
+      profile.push(new THREE.Vector2(t * DISH_R, t * t * DISH_DEPTH));
+    }
+    const len = DISH_R;
+    // Use a thin box that follows the profile by approximating the
+    // chord — for visibility purposes, a flat spoke from center to rim
+    // reads fine even though the true profile is curved.
+    const spoke = new THREE.Mesh(
+      new THREE.BoxGeometry(0.10, 0.10, len),
+      _frameMat,
+    );
+    spoke.position.set(Math.cos(phi) * len * 0.5, DISH_DEPTH * 0.5, Math.sin(phi) * len * 0.5);
+    spoke.lookAt(Math.cos(phi) * len, DISH_DEPTH, Math.sin(phi) * len);
+    g.add(spoke);
+    void profile;  // (kept for future curved-spoke upgrade)
+  }
+  return g;
+}
+
+/** Tag a panel mesh as the salvage access panel for this POI. Mirrors
+ *  the addAccessPanel pattern in wrecks.ts but inlined so this module
+ *  doesn't pull the whole wrecks.ts surface area. */
+function makeAccessPanel(): THREE.Group {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(
+      Tuning.SALVAGE_PANEL_SIZE_X,
+      Tuning.SALVAGE_PANEL_SIZE_Y,
+      Tuning.SALVAGE_PANEL_SIZE_Z,
+    ),
+    _panelBodyMat,
+  );
+  g.add(body);
+  const rim = new THREE.Mesh(
+    new THREE.BoxGeometry(
+      Tuning.SALVAGE_PANEL_SIZE_X * 1.1,
+      Tuning.SALVAGE_PANEL_SIZE_Y * 0.18,
+      Tuning.SALVAGE_PANEL_SIZE_Z * 0.4,
+    ),
+    _panelRimMat,
+  );
+  rim.position.set(0, -Tuning.SALVAGE_PANEL_SIZE_Y * 0.42, Tuning.SALVAGE_PANEL_SIZE_Z * 0.35);
+  g.add(rim);
+  return g;
+}
+
+// ── Main entry ───────────────────────────────────────────────────────
+
+export function placeSatelliteDish(
+  scene: THREE.Scene,
+  world: RAPIER.World,
+  terrain: Terrain,
+  pos: THREE.Vector3,
+  rand: Rng,
+  shelter: ShelterRegistry,
+  salvageables?: SalvageableRegistry,
+): THREE.Group {
+  const group = new THREE.Group();
+  // Bury offset — base sits 2.5m below ground so the bottom half of the
+  // concrete is reclaimed by dunes; the upper half + interior + tripod
+  // + dish all sit above ground level.
+  const BURY_Y = 2.5;
+  // Whole-structure tilt — sells "sinking into the sand" feel.
+  const PITCH = 0.18 + rand() * 0.05;
+  const ROLL = 0.10 + rand() * 0.04;
+
+  // ── 1. Concrete base — 4 walls + roof + floor, with an entrance gap
+  // in the -Z (north) wall. Modeled as separate boxes so we can leave
+  // a hole and so each piece becomes its own collider. ──
+  const baseAnchorY = BASE_H * 0.5 - BURY_Y;  // base center y after bury
+
+  const baseGroup = new THREE.Group();
+
+  // Floor (full footprint)
+  const floor = new THREE.Mesh(
+    new THREE.BoxGeometry(BASE_W, BASE_WALL_T, BASE_D),
+    _concreteDarkMat,
+  );
+  floor.position.y = -BASE_H * 0.5 + BASE_WALL_T * 0.5;
+  baseGroup.add(floor);
+
+  // Roof (walkable top — player can climb onto it)
+  const roof = new THREE.Mesh(
+    new THREE.BoxGeometry(BASE_W, BASE_WALL_T, BASE_D),
+    _concreteMat,
+  );
+  roof.position.y = BASE_H * 0.5 - BASE_WALL_T * 0.5;
+  baseGroup.add(roof);
+
+  // South wall (+Z) — full
+  const sWall = new THREE.Mesh(
+    new THREE.BoxGeometry(BASE_W, BASE_H - BASE_WALL_T * 2, BASE_WALL_T),
+    _concreteMat,
+  );
+  sWall.position.set(0, 0, BASE_D * 0.5 - BASE_WALL_T * 0.5);
+  baseGroup.add(sWall);
+
+  // East wall (+X) — full
+  const eWall = new THREE.Mesh(
+    new THREE.BoxGeometry(BASE_WALL_T, BASE_H - BASE_WALL_T * 2, BASE_D - BASE_WALL_T * 2),
+    _concreteMat,
+  );
+  eWall.position.set(BASE_W * 0.5 - BASE_WALL_T * 0.5, 0, 0);
+  baseGroup.add(eWall);
+
+  // West wall (-X) — full
+  const wWall = new THREE.Mesh(
+    new THREE.BoxGeometry(BASE_WALL_T, BASE_H - BASE_WALL_T * 2, BASE_D - BASE_WALL_T * 2),
+    _concreteMat,
+  );
+  wWall.position.set(-BASE_W * 0.5 + BASE_WALL_T * 0.5, 0, 0);
+  baseGroup.add(wWall);
+
+  // North wall (-Z) — split into 3 boxes leaving an entrance hole.
+  // Left segment
+  const nWallSide = (BASE_W - ENTRANCE_W) * 0.5;
+  const nWallL = new THREE.Mesh(
+    new THREE.BoxGeometry(nWallSide, BASE_H - BASE_WALL_T * 2, BASE_WALL_T),
+    _concreteMat,
+  );
+  nWallL.position.set(-(BASE_W * 0.5 - nWallSide * 0.5), 0, -BASE_D * 0.5 + BASE_WALL_T * 0.5);
+  baseGroup.add(nWallL);
+  // Right segment
+  const nWallR = new THREE.Mesh(
+    new THREE.BoxGeometry(nWallSide, BASE_H - BASE_WALL_T * 2, BASE_WALL_T),
+    _concreteMat,
+  );
+  nWallR.position.set((BASE_W * 0.5 - nWallSide * 0.5), 0, -BASE_D * 0.5 + BASE_WALL_T * 0.5);
+  baseGroup.add(nWallR);
+  // Lintel above the entrance (header)
+  const lintelH = BASE_H - BASE_WALL_T * 2 - ENTRANCE_H;
+  const lintel = new THREE.Mesh(
+    new THREE.BoxGeometry(ENTRANCE_W, lintelH, BASE_WALL_T),
+    _concreteMat,
+  );
+  lintel.position.set(0, BASE_H * 0.5 - BASE_WALL_T - lintelH * 0.5, -BASE_D * 0.5 + BASE_WALL_T * 0.5);
+  baseGroup.add(lintel);
+
+  // ── Base detail — KK-2 — breaking up the flat-cube silhouette ───
+  // Corner buttress columns — 4 octagonal-feeling concrete pillars
+  // standing slightly proud of each corner, running floor → roof.
+  // They read as "this isn't just a box, it's a real engineered
+  // structure" and they add silhouette interest from any angle.
+  const buttressR = 0.55;
+  const buttressH = BASE_H + 0.6;        // pokes 0.3m above the roof
+  const buttressOffset = BASE_W * 0.5 - buttressR * 0.6;
+  for (const [bx, bz] of [
+    [-buttressOffset, -buttressOffset],
+    [ buttressOffset, -buttressOffset],
+    [-buttressOffset,  buttressOffset],
+    [ buttressOffset,  buttressOffset],
+  ] as Array<[number, number]>) {
+    const col = new THREE.Mesh(
+      new THREE.CylinderGeometry(buttressR, buttressR * 1.15, buttressH, 8),
+      _concreteMat,
+    );
+    col.position.set(bx, 0, bz);
+    baseGroup.add(col);
+    // A small chamfered cap on top of each buttress.
+    const cap = new THREE.Mesh(
+      new THREE.CylinderGeometry(buttressR * 1.1, buttressR * 0.9, 0.25, 8),
+      _concreteDarkMat,
+    );
+    cap.position.set(bx, BASE_H * 0.5 + 0.15, bz);
+    baseGroup.add(cap);
+  }
+
+  // Raised roof rim — a thin lip running around the perimeter of the
+  // roof. Stops the roof reading as "flat plate" and gives the player
+  // a visible edge to navigate when climbing on top.
+  const rimT = 0.25;
+  const rimH = 0.35;
+  const rimYTop = BASE_H * 0.5 + rimH * 0.5;
+  // South + North rim bars
+  for (const rz of [-BASE_D * 0.5 + rimT * 0.5, BASE_D * 0.5 - rimT * 0.5]) {
+    const rimBar = new THREE.Mesh(
+      new THREE.BoxGeometry(BASE_W, rimH, rimT),
+      _concreteDarkMat,
+    );
+    rimBar.position.set(0, rimYTop, rz);
+    baseGroup.add(rimBar);
+  }
+  // East + West rim bars
+  for (const rx of [-BASE_W * 0.5 + rimT * 0.5, BASE_W * 0.5 - rimT * 0.5]) {
+    const rimBar = new THREE.Mesh(
+      new THREE.BoxGeometry(rimT, rimH, BASE_D - rimT * 2),
+      _concreteDarkMat,
+    );
+    rimBar.position.set(rx, rimYTop, 0);
+    baseGroup.add(rimBar);
+  }
+
+  // Collapsed roof corner — break the +X / +Z corner of the rim so
+  // one section reads as "damaged, fell in years ago." Replaces a
+  // small portion of the rim with a chunk dropped at an angle on the
+  // roof itself.
+  const collapsed = new THREE.Mesh(
+    new THREE.BoxGeometry(1.6, 0.4, 1.6),
+    _concreteDarkMat,
+  );
+  collapsed.position.set(BASE_W * 0.5 - 1.1, BASE_H * 0.5 + 0.2, BASE_D * 0.5 - 1.1);
+  collapsed.rotation.set(0.3, 0.5, 0.2);
+  baseGroup.add(collapsed);
+  // A smaller chunk that fell off and lies further inboard
+  const chunk2 = new THREE.Mesh(
+    new THREE.BoxGeometry(0.8, 0.3, 0.8),
+    _concreteDarkMat,
+  );
+  chunk2.position.set(BASE_W * 0.5 - 2.5, BASE_H * 0.5 + 0.15, BASE_D * 0.5 - 2.0);
+  chunk2.rotation.set(0, 0.8, 0.1);
+  baseGroup.add(chunk2);
+
+  // Recessed door frame around the entrance — a darker box sitting
+  // just inside the entrance opening that reads as a frame / weather
+  // seal. Adds depth to the entrance silhouette.
+  const doorFrameT = 0.18;
+  // Top piece
+  const frameTop = new THREE.Mesh(
+    new THREE.BoxGeometry(ENTRANCE_W + doorFrameT * 2, doorFrameT, doorFrameT),
+    _concreteDarkMat,
+  );
+  frameTop.position.set(0, -BASE_H * 0.5 + BASE_WALL_T + ENTRANCE_H - doorFrameT * 0.5, -BASE_D * 0.5 + BASE_WALL_T * 0.5);
+  baseGroup.add(frameTop);
+  // Left + right vertical jambs
+  for (const fx of [-ENTRANCE_W * 0.5 - doorFrameT * 0.5, ENTRANCE_W * 0.5 + doorFrameT * 0.5]) {
+    const jamb = new THREE.Mesh(
+      new THREE.BoxGeometry(doorFrameT, ENTRANCE_H, doorFrameT),
+      _concreteDarkMat,
+    );
+    jamb.position.set(fx, -BASE_H * 0.5 + BASE_WALL_T + ENTRANCE_H * 0.5, -BASE_D * 0.5 + BASE_WALL_T * 0.5);
+    baseGroup.add(jamb);
+  }
+
+  // A few exterior side-pipes — rusted conduits running up the +X
+  // wall, capped with valve wheels. Reads as "this was a serviced
+  // facility."
+  for (let i = 0; i < 3; i++) {
+    const pipe = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.10, 0.10, BASE_H * 0.85, 5),
+      _rustedSteelMat,
+    );
+    pipe.position.set(
+      BASE_W * 0.5 + 0.15,
+      0,
+      -BASE_D * 0.3 + i * BASE_D * 0.3,
+    );
+    baseGroup.add(pipe);
+    // Small valve handle near the top — sits flush on the pipe surface
+    // (pipe X = BASE_W*0.5 + 0.15, valve X = pipe X + 0.10 so it just
+    // protrudes off the pipe instead of floating in space beside it).
+    const valve = new THREE.Mesh(
+      new THREE.TorusGeometry(0.18, 0.05, 4, 8),
+      _rustedSteelMat,
+    );
+    valve.position.set(
+      BASE_W * 0.5 + 0.25,
+      BASE_H * 0.3,
+      -BASE_D * 0.3 + i * BASE_D * 0.3,
+    );
+    valve.rotation.y = Math.PI / 2;
+    baseGroup.add(valve);
+  }
+
+  // Interior darkness backstop — a black box just inside the entrance
+  // so the interior reads as deep + suggesting unseen space past the sand.
+  const interiorBackstop = new THREE.Mesh(
+    new THREE.BoxGeometry(INTERIOR_W * 0.9, INTERIOR_H * 0.9, BASE_WALL_T * 0.5),
+    _interiorBlackMat,
+  );
+  interiorBackstop.position.set(0, -BASE_H * 0.5 + BASE_WALL_T + INTERIOR_H * 0.5, BASE_D * 0.5 - BASE_WALL_T * 1.5);
+  baseGroup.add(interiorBackstop);
+
+  // ── Interior props — KK-2 — makes the room feel like a real
+  // operations cabin instead of an empty concrete box. Everything
+  // sits on the walkable strip near the entrance (between the
+  // entrance and the sand pile).
+  // Broken console — small angled box on the floor, knocked over.
+  const consoleBody = new THREE.Mesh(
+    new THREE.BoxGeometry(1.2, 0.7, 0.8),
+    _rustedSteelMat,
+  );
+  consoleBody.position.set(
+    -INTERIOR_W * 0.35,
+    -BASE_H * 0.5 + BASE_WALL_T + 0.35,
+    -BASE_D * 0.5 + BASE_WALL_T + 1.4,
+  );
+  consoleBody.rotation.set(0.1, 0.6, 0.18);
+  baseGroup.add(consoleBody);
+  // A monitor screen on top of the console (broken / dark)
+  const consoleScreen = new THREE.Mesh(
+    new THREE.BoxGeometry(0.7, 0.5, 0.08),
+    _frameMat,
+  );
+  consoleScreen.position.set(
+    -INTERIOR_W * 0.35 + 0.05,
+    -BASE_H * 0.5 + BASE_WALL_T + 0.95,
+    -BASE_D * 0.5 + BASE_WALL_T + 1.1,
+  );
+  consoleScreen.rotation.set(0.4, 0.6, 0.18);
+  baseGroup.add(consoleScreen);
+
+  // Ladder rungs on the east interior wall — short stack going up,
+  // suggests there used to be roof access. 5 rungs, evenly spaced.
+  for (let i = 0; i < 5; i++) {
+    const rung = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.04, 0.04, 0.45, 5),
+      _rustedSteelMat,
+    );
+    rung.position.set(
+      BASE_W * 0.5 - BASE_WALL_T - 0.10,
+      -BASE_H * 0.5 + BASE_WALL_T + 0.4 + i * 0.45,
+      -BASE_D * 0.5 + BASE_WALL_T + 1.0,
+    );
+    rung.rotation.z = Math.PI / 2;
+    baseGroup.add(rung);
+  }
+
+  // Exposed ceiling pipes — 2 pipes running along the +X to -X axis
+  // just under the roof, capped at the wall ends.
+  for (let i = 0; i < 2; i++) {
+    const pipe = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.12, 0.12, INTERIOR_W - 0.2, 6),
+      _rustedSteelMat,
+    );
+    pipe.position.set(
+      0,
+      BASE_H * 0.5 - BASE_WALL_T - 0.25,
+      -BASE_D * 0.5 + BASE_WALL_T + 0.5 + i * 0.6,
+    );
+    pipe.rotation.z = Math.PI / 2;
+    baseGroup.add(pipe);
+  }
+
+  // Sand pile piled against the back wall — leaves a much larger
+  // walkable strip near the entrance so the player can actually move
+  // around inside. KK-2 — was 5.2m deep × 1.96m tall (only 1.6m
+  // walkable, felt like a blocked closet); now 3m deep × 1.6m tall
+  // (3.8m × 6.8m walkable area = a proper room).
+  const sandPileLen = 3.0;
+  const sandPileH = INTERIOR_H * 0.55;
+  const sandPile = new THREE.Mesh(
+    new THREE.BoxGeometry(INTERIOR_W, sandPileH, sandPileLen),
+    _sandPileMat,
+  );
+  sandPile.position.set(
+    0,
+    -BASE_H * 0.5 + BASE_WALL_T + sandPileH * 0.5,
+    BASE_D * 0.5 - BASE_WALL_T - sandPileLen * 0.5,
+  );
+  baseGroup.add(sandPile);
+
+  // Sand-slope wedge — a tilted box riding the front edge of the pile
+  // so the dune SLOPES from floor up to the pile top, instead of
+  // hitting the player as a vertical wall. Purely visual; the collider
+  // box for the main pile already keeps the player from going further.
+  const sandSlopeLen = 1.4;
+  const sandSlope = new THREE.Mesh(
+    new THREE.BoxGeometry(INTERIOR_W, sandPileH, sandSlopeLen),
+    _sandPileMat,
+  );
+  sandSlope.position.set(
+    0,
+    -BASE_H * 0.5 + BASE_WALL_T + sandPileH * 0.5,
+    BASE_D * 0.5 - BASE_WALL_T - sandPileLen - sandSlopeLen * 0.5,
+  );
+  // Pivot the slope around its top-back edge so the front falls toward
+  // the floor — the back edge stays flush with the main pile face.
+  sandSlope.rotation.x = -0.6;  // tilts the front down toward the floor
+  // Lower it slightly so the front edge sinks below the floor (the
+  // floor mesh will clip it cleanly).
+  sandSlope.position.y -= 0.35;
+  baseGroup.add(sandSlope);
+
+  baseGroup.position.y = baseAnchorY;
+  group.add(baseGroup);
+
+  // ── 2. Tripod struts — 3 angled steel legs from the base top
+  // corners up to the dish-mount apex. One is bent/broken.
+  const apexY = TRIPOD_APEX_Y - BURY_Y;
+  const baseTopY = BASE_H - BURY_Y;
+  const tripodFootR = BASE_W * 0.40;  // radius at base where the feet plant
+
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2 + Math.PI / 2;  // first leg in -Z direction
+    const footX = Math.cos(a) * tripodFootR;
+    const footZ = Math.sin(a) * tripodFootR;
+    const footY = baseTopY;
+    const dx = -footX, dy = apexY - footY, dz = -footZ;
+    const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    const strut = new THREE.Mesh(
+      new THREE.CylinderGeometry(TRIPOD_R * 0.9, TRIPOD_R, len, 6),
+      _rustedSteelMat,
+    );
+    strut.position.set(footX * 0.5, (footY + apexY) * 0.5, footZ * 0.5);
+    const up = new THREE.Vector3(0, 1, 0);
+    const dir = new THREE.Vector3(dx, dy, dz).normalize();
+    strut.quaternion.setFromUnitVectors(up, dir);
+    group.add(strut);
+
+    // Cross-brace half-way up between this leg and the next
+    if (i < 3) {
+      const aNext = ((i + 1) / 3) * Math.PI * 2 + Math.PI / 2;
+      const midA = (a + aNext) * 0.5;
+      const midR = tripodFootR * 0.65;
+      const midX = Math.cos(midA) * midR;
+      const midZ = Math.sin(midA) * midR;
+      const braceY = baseTopY + (apexY - baseTopY) * 0.55;
+      // Span between this leg's midpoint and next leg's midpoint —
+      // approximate using a single strut centered between the legs.
+      const aFootNextX = Math.cos(aNext) * tripodFootR;
+      const aFootNextZ = Math.sin(aNext) * tripodFootR;
+      const adx = aFootNextX - footX;
+      const adz = aFootNextZ - footZ;
+      const brace = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.12, 0.12, Math.sqrt(adx * adx + adz * adz) * 0.85, 5),
+        _frameMat,
+      );
+      brace.position.set(midX, braceY, midZ);
+      const bDir = new THREE.Vector3(adx, 0, adz).normalize();
+      brace.quaternion.setFromUnitVectors(up, bDir);
+      group.add(brace);
+    }
+  }
+
+  // Bent / broken extra strut anchored at the FIRST tripod leg's foot
+  // (i=0 leg foot was at angle Math.PI/2 → world -Z direction from
+  // base center). KK-3 — proper anchor via geometry.translate(0,
+  // halfL, 0). After translating the geo, the cylinder's origin (and
+  // hence rotation pivot) is at its BOTTOM end. Then any rotation
+  // around the mesh origin pivots the strut around that anchor point,
+  // keeping the foot end firmly at (footX1, baseTopY, footZ1).
+  const bentLen = 4 + rand() * 1.5;
+  const bentGeo = new THREE.CylinderGeometry(TRIPOD_R * 0.6, TRIPOD_R * 0.7, bentLen, 5);
+  bentGeo.translate(0, bentLen * 0.5, 0);   // anchor at bottom
+  const bent = new THREE.Mesh(bentGeo, _rustedSteelMat);
+  const footX1 = 0;
+  const footZ1 = -tripodFootR;
+  bent.position.set(footX1, baseTopY, footZ1);
+  bent.rotation.set(0.7 + rand() * 0.3, rand() * Math.PI * 2, 0.4);
+  group.add(bent);
+
+  // ── 3. Dish mount / yoke at the tripod apex ──────────────────────
+  // KK-2 — yoke is taller (1.2 instead of 0.8) so its top reaches up
+  // to where the dish pivot sits; this eliminates the visible gap
+  // between yoke and dish.
+  const yoke = new THREE.Mesh(
+    new THREE.BoxGeometry(1.8, 1.2, 1.8),
+    _frameMat,
+  );
+  yoke.position.y = apexY;
+  group.add(yoke);
+
+  // ── 4. Parabolic dish — DISH_SEGMENTS radial panels around the
+  // axis, with MISSING_PANELS skipped to expose the framework. KK-2
+  // — dishPivot sits AT apexY (was apexY + 0.4) so the dish-back
+  // sits flush against the yoke top with no gap.
+  const dishPivot = new THREE.Group();
+  dishPivot.position.y = apexY;
+  // The dish is sharply tilted forward + slight roll — looks like it
+  // collapsed forward off its mount over the decades. Local +Y is the
+  // dish's outward axis (its "aim direction").
+  dishPivot.rotation.set(-Math.PI * 0.32, 0, 0.18);
+
+  for (let i = 0; i < DISH_SEGMENTS; i++) {
+    if (MISSING_PANELS.includes(i)) continue;
+    const phi = (i / DISH_SEGMENTS) * Math.PI * 2;
+    const length = (2 * Math.PI) / DISH_SEGMENTS;
+    // Alternate panel material so adjacent panels read as patched-up
+    // mismatched repairs (different rust shades).
+    const mat = (i % 2 === 0) ? _dishPanelMat : _dishPanelDarkMat;
+    dishPivot.add(makeDishPanel(phi, length, mat));
+  }
+
+  // Framework rib + spokes (visible through missing panels)
+  dishPivot.add(makeDishFramework());
+
+  // Feed horn assembly at the focal point
+  const focalDist = (DISH_R * DISH_R) / (4 * DISH_DEPTH);
+  const feedHorn = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.35, 0.55, 1.2, 8),
+    _rustedSteelMat,
+  );
+  feedHorn.position.y = focalDist;
+  dishPivot.add(feedHorn);
+  // Three feed arms (one broken — only two visible)
+  for (let i = 0; i < 2; i++) {
+    const ang = (i / 3) * Math.PI * 2;
+    const armDx = Math.cos(ang) * DISH_R * 0.92;
+    const armDz = Math.sin(ang) * DISH_R * 0.92;
+    const armDy = DISH_DEPTH - focalDist;
+    const armLen = Math.sqrt(armDx * armDx + armDy * armDy + armDz * armDz);
+    const arm = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.06, 0.06, armLen, 4),
+      _frameMat,
+    );
+    arm.position.set(armDx * 0.5, focalDist + armDy * 0.5, armDz * 0.5);
+    const aUp = new THREE.Vector3(0, 1, 0);
+    const aDir = new THREE.Vector3(armDx, armDy, armDz).normalize();
+    arm.quaternion.setFromUnitVectors(aUp, aDir);
+    dishPivot.add(arm);
+  }
+  // Broken third arm — anchored AT the feed horn (focal point) and
+  // dangling outward + downward like a snapped support cable. KK-3 —
+  // proper anchor via geometry.translate. Previous attempt computed
+  // the rotated +Y axis manually but used the wrong Euler-order
+  // formula, leaving the bottom end ~1.9m off the feed horn.
+  const brokenArmLen = 2.4;
+  const brokenArmGeo = new THREE.CylinderGeometry(0.06, 0.06, brokenArmLen, 4);
+  brokenArmGeo.translate(0, brokenArmLen * 0.5, 0);   // anchor at bottom
+  const brokenArm = new THREE.Mesh(brokenArmGeo, _frameMat);
+  brokenArm.position.set(0, focalDist, 0);
+  brokenArm.rotation.set(1.1, 2.1, 0);
+  dishPivot.add(brokenArm);
+
+  group.add(dishPivot);
+
+  // (Sand-mound apron is added AFTER the group is positioned + tilted,
+  // so each mound can be terrain-snapped to its own XZ — see the
+  // mounds block below the rotation section. Keeping them out of the
+  // rotated group avoids the "mound floats above the dune" problem
+  // when the structure pitches.)
+
+  // ── 6. Salvage panels ───────────────────────────────────────────
+  // (A) On the south wall of the base, eye-height.
+  const basePanel = makeAccessPanel();
+  basePanel.position.set(
+    BASE_W * 0.22,
+    baseAnchorY + BASE_H * 0.5 - BASE_WALL_T - 1.0,
+    BASE_D * 0.5 - BASE_WALL_T * 0.5 + Tuning.SALVAGE_PANEL_SIZE_Z * 0.5,
+  );
+  basePanel.rotation.y = 0;
+  basePanel.userData.accessPanel = basePanel;
+  group.add(basePanel);
+
+  // (B) On the back of the dish (only reachable by climbing).
+  const dishPanel = makeAccessPanel();
+  // Position on the BACK (convex side) of the dish at mid-radius —
+  // attach it to the dishPivot so it inherits the tilt.
+  dishPanel.position.set(DISH_R * 0.5, -Tuning.SALVAGE_PANEL_SIZE_Z * 0.5, 0);
+  dishPanel.rotation.set(Math.PI / 2, 0, 0);
+  dishPanel.userData.accessPanel = dishPanel;
+  dishPivot.add(dishPanel);
+
+  // ── Position, tilt, and add to scene ─────────────────────────────
+  group.position.copy(pos);
+  group.position.y = terrain.heightAt(pos.x, pos.z);
+  group.rotation.set(PITCH, rand() * Math.PI * 2, ROLL);
+
+  group.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (m.isMesh) {
+      m.castShadow = true;
+      m.receiveShadow = true;
+    }
+  });
+  scene.add(group);
+
+  // Sand mounds — added as direct scene children AFTER the dish group
+  // is placed, so each mound's Y is terrain-snapped independently.
+  // This avoids the "mound floats" problem the rotated group caused
+  // (when the dish group pitched 15-30°, mounds on the up-side floated
+  // 1m above ground, mounds on the down-side sank 1m below). Each
+  // mound now lives in its own scene position derived from the dish
+  // POI's world XZ + a random outward offset, with Y sampled at that
+  // exact spot.
+  for (let i = 0; i < 9; i++) {
+    const a = (i / 9) * Math.PI * 2 + rand() * 0.35;
+    const r = BASE_W * 0.55 + rand() * 2.0;
+    const moundX = pos.x + Math.cos(a) * r;
+    const moundZ = pos.z + Math.sin(a) * r;
+    const moundY = terrain.heightAt(moundX, moundZ);
+    const mound = new THREE.Mesh(
+      new THREE.ConeGeometry(1.2 + rand() * 0.7, 0.7 + rand() * 0.5, 6),
+      _sandPileMat,
+    );
+    // Mound sits with its BASE on the terrain (cone origin at center,
+    // height/2 below origin is the tip-bottom; ConeGeometry has the
+    // apex at +Y and the base at -Y by default).
+    mound.position.set(moundX, moundY - 0.15, moundZ);
+    mound.rotation.y = rand() * Math.PI * 2;
+    mound.castShadow = true;
+    mound.receiveShadow = true;
+    scene.add(mound);
+  }
+
+  // ── Colliders — give the base walls + roof + floor static bodies
+  // so the player can stand on the roof, walk inside, and bump into
+  // the walls. Use the group's world transform via getWorldQuaternion
+  // so the rotation is preserved.
+  const groupWorldQuat = new THREE.Quaternion();
+  group.getWorldQuaternion(groupWorldQuat);
+  const groupWorldPos = group.position.clone();
+
+  const addBaseCollider = (localPos: THREE.Vector3, halfExtents: { x: number; y: number; z: number }): void => {
+    // Apply group's rotation to the local-space center to get world center.
+    const worldCenter = localPos.clone()
+      .add(new THREE.Vector3(0, baseAnchorY, 0))  // baseGroup's local Y offset
+      .applyQuaternion(groupWorldQuat)
+      .add(groupWorldPos);
+    makeStaticBox(world, halfExtents, worldCenter, {
+      x: groupWorldQuat.x, y: groupWorldQuat.y, z: groupWorldQuat.z, w: groupWorldQuat.w,
+    });
+  };
+
+  // Roof — walkable top of the base
+  addBaseCollider(
+    new THREE.Vector3(0, BASE_H * 0.5 - BASE_WALL_T * 0.5, 0),
+    { x: BASE_W * 0.5, y: BASE_WALL_T * 0.5, z: BASE_D * 0.5 },
+  );
+  // Walls — South / East / West (block player from clipping through)
+  addBaseCollider(
+    new THREE.Vector3(0, 0, BASE_D * 0.5 - BASE_WALL_T * 0.5),
+    { x: BASE_W * 0.5, y: (BASE_H - BASE_WALL_T * 2) * 0.5, z: BASE_WALL_T * 0.5 },
+  );
+  addBaseCollider(
+    new THREE.Vector3(BASE_W * 0.5 - BASE_WALL_T * 0.5, 0, 0),
+    { x: BASE_WALL_T * 0.5, y: (BASE_H - BASE_WALL_T * 2) * 0.5, z: (BASE_D - BASE_WALL_T * 2) * 0.5 },
+  );
+  addBaseCollider(
+    new THREE.Vector3(-BASE_W * 0.5 + BASE_WALL_T * 0.5, 0, 0),
+    { x: BASE_WALL_T * 0.5, y: (BASE_H - BASE_WALL_T * 2) * 0.5, z: (BASE_D - BASE_WALL_T * 2) * 0.5 },
+  );
+  // North wall: left segment + right segment (entrance hole between)
+  addBaseCollider(
+    new THREE.Vector3(-(BASE_W * 0.5 - nWallSide * 0.5), 0, -BASE_D * 0.5 + BASE_WALL_T * 0.5),
+    { x: nWallSide * 0.5, y: (BASE_H - BASE_WALL_T * 2) * 0.5, z: BASE_WALL_T * 0.5 },
+  );
+  addBaseCollider(
+    new THREE.Vector3((BASE_W * 0.5 - nWallSide * 0.5), 0, -BASE_D * 0.5 + BASE_WALL_T * 0.5),
+    { x: nWallSide * 0.5, y: (BASE_H - BASE_WALL_T * 2) * 0.5, z: BASE_WALL_T * 0.5 },
+  );
+  // Sand pile — solid (player can walk on top via the slope wedge but
+  // can't push through the main pile). KK-2 — sized to match the
+  // shrunk pile so it doesn't extend past the actual mesh.
+  addBaseCollider(
+    new THREE.Vector3(0, -BASE_H * 0.5 + BASE_WALL_T + sandPileH * 0.5,
+      BASE_D * 0.5 - BASE_WALL_T - sandPileLen * 0.5),
+    { x: INTERIOR_W * 0.5, y: sandPileH * 0.5, z: sandPileLen * 0.5 },
+  );
+
+  // ── Shelter zone — covers the small walkable strip just inside
+  // the entrance (between the entrance hole and the sand pile).
+  const shelterCenter = new THREE.Vector3(0, 1.0, -BASE_D * 0.5 + BASE_WALL_T + 0.8)
+    .add(new THREE.Vector3(0, baseAnchorY, 0))
+    .applyQuaternion(groupWorldQuat)
+    .add(groupWorldPos);
+  addShelterZone(shelter, shelterCenter, {
+    x: ENTRANCE_W * 0.6, y: INTERIOR_H * 0.5, z: 0.7,
+  });
+
+  // ── Salvageable registration — both panels register as 'massive'
+  // so they share the rich-loot table other anchor POIs use. Use
+  // each panel's world position (it's been re-parented via the
+  // dishPivot for the dish panel, so derive from matrixWorld).
+  if (salvageables) {
+    basePanel.updateWorldMatrix(true, false);
+    const basePanelWorld = new THREE.Vector3().setFromMatrixPosition(basePanel.matrixWorld);
+    registerSalvageable(salvageables, basePanel, 'massive', basePanelWorld, rand);
+
+    dishPanel.updateWorldMatrix(true, false);
+    const dishPanelWorld = new THREE.Vector3().setFromMatrixPosition(dishPanel.matrixWorld);
+    registerSalvageable(salvageables, dishPanel, 'massive', dishPanelWorld, rand);
+  }
+
+  return group;
+}

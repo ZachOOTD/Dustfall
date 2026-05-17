@@ -958,3 +958,30 @@ position and writes its own translation around that.
 This includes future opening-scene variants, custom start positions,
 debug spawn helpers — anywhere you want to place a body BEFORE the
 controller has a chance to step.
+
+## D60 — Anchor angled cylinders via geometry.translate, not manual rotation math (Session KK)
+**When**: Session KK — wrecked satellite dish, the bent strut + broken
+feed arm both ended up floating after rotation.
+**Why**: When you want a cylinder (or any geo) to have ONE END at a
+known anchor point and the other end pointing wherever the rotation
+sends it, the naive approach is:
+1. Compute the rotated +Y axis (the cylinder's long-axis direction
+   after rotation) using sin/cos of the Euler angles.
+2. Set `mesh.position = anchor + rotatedAxis * halfLength`.
+3. Set `mesh.rotation = the_intended_Euler`.
+This bit me TWICE in session KK because Three.js's XYZ Euler order
+composes as `R_x * R_y * R_z` (Z applied first to the vector, then
+Y, then X). My manual derivations both times used the wrong
+composition order, leaving the anchor end ~1-2m offset from where I
+expected. Visually = "floating piece next to base" or "broken arm
+dangling away from feed horn."
+**Fix**: skip the rotation math entirely. Use
+`geometry.translate(0, halfLength, 0)` once, which moves the
+cylinder's geometric origin to its BOTTOM end. Then
+`mesh.position = anchor` and `mesh.rotation = anything` — the bottom
+end stays at the anchor because that's where the mesh origin (and
+hence the rotation pivot) sits.
+**Apply**: any future "I want one end anchored, other end free to
+rotate" pattern should use this trick. Don't try to compute rotated
+axes — too easy to get the Euler order wrong, and you don't need to
+care anyway.

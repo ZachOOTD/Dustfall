@@ -120,7 +120,10 @@ export function placeHeroLandmarks(
       const kind = HERO_WRECK_TYPES[Math.floor(rand() * HERO_WRECK_TYPES.length)];
       const pos = new THREE.Vector3(x, y, z);
       const group = placeWreck(scene, world, terrain, pos, kind, rand, {
-        scale: kind === 'antenna_spire' ? 1.0 : 0.9 + rand() * 0.3,
+        // KK — antenna_spire retired; was the only kind needing a fixed
+        // 1.0× scale. All current hero-landmark wreck kinds use the
+        // randomised 0.9-1.2× range.
+        scale: 0.9 + rand() * 0.3,
       });
       if (salvageables) registerSalvageable(salvageables, group, kind, pos, rand);
     }

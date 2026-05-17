@@ -3,6 +3,31 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session KK — 2026-05-17 — Wrecked satellite dish flagship POI
+`verified` — tsc clean; multi-angle browser screenshots confirm the
+dish silhouette reads as a Rust-style monumental wreck, no floating
+pieces remain across 5 verified angles, walkable interior strip ~3.8m
+× 6.8m, all expected colliders + shelter zone + 2 salvage panels
+register. Antenna spire retired entirely (zero `'antenna_spire'`
+salvageables in the world). Swapped the anchor `antenna_outpost` POI
+at (-88, -50) for a new flagship-scale wrecked satellite dish in a
+dedicated module `src/world/satelliteDish.ts`: 8×8×5m concrete base
+(half-buried) with hollow interior + entrance + sand pile + slope
+wedge + shelter zone, 4 corner buttress columns, raised roof rim,
+collapsed roof corner chunks, recessed door frame, 3 exterior side
+pipes with valve handles; 14m steel tripod (3 legs + cross-bracing +
+1 bent broken strut anchored to a leg foot); 16m-diameter parabolic
+dish (12 radial panels, 3 missing exposing radial framework + 3
+concentric rings underneath, patchwork rust shades); feed horn +
+2 feed arms + 1 broken arm anchored at the focal point; interior
+props (broken console + monitor + ladder rungs + ceiling pipes);
+9 terrain-snapped sand mounds in an apron around the base. Static
+colliders for roof + 6 walls + sand pile so player can climb on top
+and shelter inside. `'satellite_dish'` removed from `WreckKind` since
+this POI is bespoke (matches `placeMegaShip` / `placeMegaWreck`
+pattern). Decision D60 (anchor angled cylinders via geometry.translate
+instead of manual rotation math — bit me twice).
+
 ## Session JJ-2 — 2026-05-16 — Spawn teleport fix + level opening camera
 `verified` — tsc clean; preview confirms player teleports to wreck
 entrance immediately at boot (was stuck at placeholder origin), and

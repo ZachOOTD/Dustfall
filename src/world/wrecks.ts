@@ -345,61 +345,13 @@ export function makeCargoContainer(rand: Rng, scale = 1): THREE.Group {
   return g;
 }
 
-// ────────────────────────────────────────────────────────────────
-// 5. Antenna spire — tall comm tower built on a buried wreck base.
-// Replaces the old radio-tower hero landmark; ship-themed now.
-// ────────────────────────────────────────────────────────────────
-export function makeAntennaSpire(rand: Rng, scale = 1): THREE.Group {
-  const g = new THREE.Group();
-  // Buried base (chunk of hull)
-  const baseW = (2.2 + rand() * 0.4) * scale;
-  const baseH = (0.9 + rand() * 0.3) * scale;
-  const base = new THREE.Mesh(
-    new THREE.BoxGeometry(baseW, baseH, baseW * 0.85),
-    _hullMat,
-  );
-  base.position.y = baseH * 0.35; // mostly buried
-  base.rotation.y = rand() * Math.PI;
-  g.add(base);
-  // Vertical mast
-  const mastH = (8 + rand() * 4) * scale;
-  const mast = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.10 * scale, 0.14 * scale, mastH, 8),
-    _antennaMat,
-  );
-  mast.position.set(0, baseH * 0.5 + mastH / 2, 0);
-  mast.rotation.z = (rand() - 0.5) * 0.08; // slight lean
-  g.add(mast);
-  // Cross-bracing slats
-  for (const t of [0.25, 0.55, 0.82]) {
-    const y = baseH * 0.5 + mastH * t;
-    const len = (0.7 - t * 0.45) * scale;
-    const slat = new THREE.Mesh(
-      new THREE.BoxGeometry(len * 2, 0.05 * scale, 0.05 * scale),
-      _antennaMat,
-    );
-    slat.position.set(0, y, 0);
-    slat.rotation.y = rand() * Math.PI;
-    g.add(slat);
-  }
-  // Dish at the top — wide flat disc tilted toward horizon
-  const dish = new THREE.Mesh(
-    new THREE.ConeGeometry((1.1 + rand() * 0.3) * scale, 0.25 * scale, 16, 1, true),
-    _hullDarkMat,
-  );
-  dish.position.set(0, baseH * 0.5 + mastH + 0.1, 0);
-  dish.rotation.z = -0.6 + rand() * 0.4;
-  g.add(dish);
-  // Salvage access panel — on the buried base box, player-eye height.
-  // Scale is already baked into baseW/baseH so the panel `scale` arg is 1.
-  addAccessPanel(
-    g,
-    baseW * 0.42, baseH * 0.5, baseW * 0.30,
-    scale,
-    0,
-  );
-  return g;
-}
+// KK — the small `makeSatelliteDish` factory that used to live here
+// was superseded by the dedicated `placeSatelliteDish` module
+// (src/world/satelliteDish.ts), which builds a flagship-scale POI
+// with a walkable base, hollow interior + shelter zone, and detailed
+// rusted/patchwork panels. The small variant was deleted: procgen /
+// hero-landmark rotations don't use satellite dishes, so there's
+// no remaining caller.
 
 // ────────────────────────────────────────────────────────────────
 // 6. Engine-bell ring — single huge engine bell torus, half-buried.
@@ -509,7 +461,6 @@ export type WreckKind =
   | 'fuselage'
   | 'escape_pod'
   | 'cargo_container'
-  | 'antenna_spire'
   | 'engine_bell';
 
 interface PlaceWreckOpts {
@@ -538,7 +489,6 @@ export function placeWreck(
     case 'fuselage':        group = makeFuselage(rand, scale); break;
     case 'escape_pod':      group = makeEscapePod(rand, scale); break;
     case 'cargo_container': group = makeCargoContainer(rand, scale); break;
-    case 'antenna_spire':   group = makeAntennaSpire(rand, scale); break;
     case 'engine_bell':     group = makeEngineBell(rand, scale); break;
   }
 

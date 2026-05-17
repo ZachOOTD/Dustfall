@@ -41,7 +41,6 @@ export function shortNameFor(kind: SalvageKind): string {
     case 'fuselage':        return 'fuselage';
     case 'escape_pod':      return 'escape pod';
     case 'cargo_container': return 'cargo container';
-    case 'antenna_spire':   return 'antenna spire';
     case 'engine_bell':     return 'engine bell';
     case 'massive':         return 'wreck';
   }
@@ -131,10 +130,6 @@ const TABLES: Record<SalvageKind, LootRoll[]> = {
     { id: 'bandage',  chance: 0.25 },
     { id: 'branch',   chance: 0.15 },
     { id: 'tent_kit', chance: 0.03 },
-  ],
-  antenna_spire: [
-    { id: 'scrap', chance: 0.55, count: 2 },
-    { id: 'cloth', chance: 0.40 },
   ],
   engine_bell: [
     { id: 'scrap', chance: 0.90, count: 2 },

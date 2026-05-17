@@ -45,16 +45,28 @@ Run with `npm run dev` (port 5173). Type-check with `npx tsc --noEmit`.
 
 ## Where we are now
 
-**Last shipped**: Session JJ-2 — Spawn teleport bug fix + level
+**Last shipped**: Session KK — Wrecked satellite dish flagship POI.
+Swapped the hand-placed `antenna_outpost` at (-88, -50) for a
+Rust-inspired wrecked satellite dish in a dedicated module
+`src/world/satelliteDish.ts`. ~20m tall structure: 8×8×5m half-buried
+concrete base (with buttress columns + roof rim + entrance + hollow
+interior + sand pile + 1 shelter zone + interior props), 14m steel
+tripod (3 legs + bracing + 1 bent strut), 16m-diameter parabolic
+dish (12 panels w/ 3 missing exposing the radial framework, patchwork
+rust shades), feed horn + 2 arms + 1 broken arm, 9 terrain-snapped
+sand mounds in an apron. Walkable roof + interior colliders +
+2 salvage panels (base wall + dish back). `'satellite_dish'` removed
+from `WreckKind` since this POI is bespoke (matches `placeMegaShip` /
+`placeMegaWreck` pattern). D60 logs the lesson: anchor angled
+cylinders via `geometry.translate(0, halfL, 0)` instead of
+sin/cos-of-Euler math (it bit me twice in one session before I
+gave up on manual computation).
+
+**Prior milestone**: Session JJ-2 — Spawn teleport bug fix + level
 opening camera. `setupOpeningScene` was using
-`setNextKinematicTranslation` to teleport the player at boot, but the
-game boots paused — no physics step ever applied the scheduled
-translation, and on NEW GAME the controller overwrote it. Player was
-permanently stuck at world origin ~52m from the opening wreck. Fix:
-`setTranslation(pos, true)` (immediate write). Also bumped
-`PLAYER_SPAWN_OFFSET_FROM_ENTRANCE 3 → 4` and held the camera
-`lookAt` at the spawn Y so the opening view is level, not tilted up
-at the entrance arch. Decision D59.
+`setNextKinematicTranslation` (scheduled translation, never applied
+because game boots paused). Fix: `setTranslation(pos, true)`.
+`PLAYER_SPAWN_OFFSET_FROM_ENTRANCE 3 → 4`. Decision D59.
 
 **Prior milestone**: Session JJ — UI overlap fixes + scatter
 clustering + movement-feel tuning + spawn polish. Toast (`bottom 32
