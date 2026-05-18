@@ -1016,3 +1016,33 @@ double-check the door's world-Y range *with the tilt + bury combined*
 to confirm the opening clears terrain. The KK bug was a static-
 analysis miss — bury looked fine in isolation, tilt looked fine in
 isolation, but combined they buried the door.
+
+## D62 — Terrain shader uses world-space normal + per-vertex biome attribute (Session MM-2)
+**When**: Session MM-2.
+**Why**: Two coupled bugs in the first terrain-shader pass that took
+an embarrassingly long diagnostic loop to find:
+1. **`vNormal` is view space.** Three.js's built-in `vNormal` varying
+   is the normal post-`normalMatrix` multiply — i.e. view space.
+   When the camera looked straight down at flat terrain, world up
+   (0, 1, 0) became (0, ~0, ~1) in view space, so
+   `smoothstep(0.86, 0.99, vNormal.y)` collapsed flatness to 0 and
+   silently masked off cracks/ripples/any flatness-gated effect.
+2. **Biome detection via interpolated vertex color is fragile.**
+   `saltness = smoothstep(0.60, 0.82, diffuseColor.b)` worked away
+   from biome boundaries but failed deep inside salt where adjacent
+   vertices in the dune-salt blend zone dragged the interpolated B
+   down to ~0.60. saltness → 0 → no cracks.
+**Fix**: terrain shader now injects two project-owned channels:
+- `vWorldNormal = normalize(mat3(modelMatrix) * normal)` for any
+  slope-direction-based effects.
+- `aBiomeRaw` per-vertex Float attribute (sampled from
+  `biomes.rawAt(worldX, worldZ)` at mesh build) → `vBiomeRaw`
+  varying for biome-strength detection. Threshold matches
+  `BIOME_THRESHOLD_SALT ± BIOME_BLEND_WIDTH` so cracks ramp on
+  exactly where the color blend ramps.
+**Apply**: future shader work that needs world-space slope info, OR
+classifies fragments by biome / region / surface type, should use
+these patterns from the start. See
+`memory/dustfall_shader_gotchas.md` for the full diagnostic-stack
+pattern (4-step debug: vWorldPos → hash → noise primitive → each
+mask) that would have caught this in 15 minutes instead of hours.

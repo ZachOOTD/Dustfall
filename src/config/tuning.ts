@@ -414,30 +414,34 @@ export const Tuning = {
   TITLE_SMOKE_POOL: 24,
   TITLE_SHAKE_DECAY: 8.0,                   // higher = faster shake decay
 
-  // Sand worm (Session DD-2) — roaming Dune-style ambush. Patrols a home
-  // zone underground; surfaces in lunge arcs or vertical stationary breaches.
-  SANDWORM_HOME_POS: { x: 60, z: 0 },        // anchor for patrol circle (dune biome)
-  SANDWORM_PATROL_RADIUS: 60,                // m — patrol circle radius around home
-  SANDWORM_DETECTION_RADIUS: 50,             // m — player triggers alert at this dist from worm
-  SANDWORM_DISENGAGE_RADIUS: 80,             // m — player escapes by exceeding this
-  SANDWORM_PATROL_SPEED: 3,                  // m/s — slow patrol traversal
-  SANDWORM_ALERT_SPEED: 5,                   // m/s — slow orienting movement
-  SANDWORM_CHARGE_SPEED: 8,                  // m/s — rush at player (player sprints 7.1) — dodgeable perpendicular
-  SANDWORM_RETREAT_SPEED: 7,                 // m/s — disengage movement
+  // Sand worm (Session DD-2; rescaled boss-tier Session MM, body 24→240m).
+  // Roaming Dune-style ambush. Patrols a home zone underground; surfaces in
+  // lunge arcs or vertical stationary breaches. Speeds DELIBERATELY unchanged
+  // from the original 1× scale (D49 — combat must stay dodgeable; player
+  // sprint is 13.2 m/s, charge stays at 8 m/s so a perpendicular sidestep
+  // still works against the snapshotted-target charge).
+  SANDWORM_HOME_POS: { x: 60, z: 0 },        // anchor for patrol circle (dune biome — fits comfortably within ~900m biome region)
+  SANDWORM_PATROL_RADIUS: 200,               // m — patrol circle radius (~3.3× scale; bounded by dune biome footprint)
+  SANDWORM_DETECTION_RADIUS: 150,            // m — player triggers alert at this dist (3× scale; long-range boss aggro)
+  SANDWORM_DISENGAGE_RADIUS: 200,            // m — player escapes by exceeding this (2.5×)
+  SANDWORM_PATROL_SPEED: 3,                  // m/s — slow patrol traversal (UNCHANGED — see header note)
+  SANDWORM_ALERT_SPEED: 5,                   // m/s — slow orienting movement (UNCHANGED)
+  SANDWORM_CHARGE_SPEED: 8,                  // m/s — rush at player (UNCHANGED — dodgeable perpendicular)
+  SANDWORM_RETREAT_SPEED: 7,                 // m/s — disengage movement (UNCHANGED)
   SANDWORM_ALERT_DURATION: 2.0,              // s — long windup so player can react
-  SANDWORM_LUNGE_RANGE: 7,                   // m — trigger lunge when this close to player
+  SANDWORM_LUNGE_RANGE: 30,                  // m — trigger lunge when this close to player (~4× scale; climactic strike for 240m body)
   SANDWORM_LUNGE_DURATION: 2.6,              // s — slower arc gives a real damage window
-  SANDWORM_BREACH_ARC_PEAK: 5,               // m — peak Y of lunge arc above ground
+  SANDWORM_BREACH_ARC_PEAK: 40,              // m — peak Y of lunge arc above ground (8× scale; clears 40m-thick body in flight)
   SANDWORM_STATIONARY_BREACH_DURATION: 5.5,  // s — vertical hold during stationary breach (longer w/ side-to-side sway)
-  SANDWORM_STATIONARY_BREACH_HEIGHT: 8,      // m — head rises this far above ground
+  SANDWORM_STATIONARY_BREACH_HEIGHT: 50,     // m — head rises dramatically above the dunes (~6× scale; cobra-rear silhouette)
   SANDWORM_STATIONARY_BREACH_EVERY: 3,       // every Nth retreat → stationary breach
-  SANDWORM_RETREAT_DISTANCE: 25,             // m — distance to retreat before next attack
-  SANDWORM_BITE_RANGE: 4.0,                  // m from worm body center for bite to land
-  SANDWORM_BITE_DAMAGE: 0.35,                // player health unit per bite
-  SANDWORM_MAX_HEALTH: 6.0,                  // 6 machete hits to kill
-  SANDWORM_LENGTH: 24,                       // m — total body length head-to-tail
-  SANDWORM_MAX_RADIUS: 2.0,                  // m — peak body radius
-  SANDWORM_UNDERGROUND_DEPTH: 5,             // m below ground while submerged
+  SANDWORM_RETREAT_DISTANCE: 150,            // m — distance to retreat before next attack (6× scale)
+  SANDWORM_BITE_RANGE: 25.0,                 // m from worm body center for bite to land (~6× scale; player escapes by being >25m from body spine at lunge impact)
+  SANDWORM_BITE_DAMAGE: 0.50,                // player health unit per bite (+43% — boss feels deadlier without one-shotting)
+  SANDWORM_MAX_HEALTH: 12.0,                 // 12 machete hits to kill (2× — boss tankiness without tedium)
+  SANDWORM_LENGTH: 240,                      // m — total body length head-to-tail (10× boss-tier scale)
+  SANDWORM_MAX_RADIUS: 20.0,                 // m — peak body radius (10×)
+  SANDWORM_UNDERGROUND_DEPTH: 25,            // m below ground while submerged (5× — proportional to thicker body)
 } as const;
 
 // Sky gradient colors (top vs horizon) per time of day. Horizon stays close to

@@ -22,6 +22,7 @@ Pick whatever feels most missing after the polish + atmosphere arc.
 - Bounties (template: D39 `'mount'` singleton-interactable pattern from CC-2)
 - Procedural world generation (idea — POIs randomized per seed)
 - Wreck POI rework continued: `crashed_hull` dedicated module (LL did `engine_block`; `camp` deferred — already lean + functional). crashed_hull pairs `makeFuselage(3.2)` + `placeWreck(engine_bell, 2.4)` so reworking means replacing 2 shared wreck builders in lockstep; consider a `src/world/crashedHull.ts` matching the dish/engine_block template (LatheGeometry/curved primitives, per-piece tilted colliders, 2 salvage panels).
+- Extend procedural-shader treatment beyond terrain: wreck hulls (rust-streak shader, paneled wear patches via onBeforeCompile patches on the shared wreck material) and/or satellite-dish concrete (weathered patches, salt-leach staining). Pattern from MM's `terrainMaterial.ts` is the template — inject world-position varying + custom attributes via onBeforeCompile, no bundle cost. Also worth: aeolian wind-streak overlay shader for the dune surface (long thin streaks running with `DUNE_WIND_DIR_RAD`), and a rocky-biome shader (currently rocky just inherits slope effects with no dedicated pattern).
 - Sled / rope / scrap-metal sled (physical-inventory drag-along, towable behind speeder)
 - Lizard-on-a-stick cooking system (raw lizard + branch → roast over fire)
 - Remove HUD stat bars in favor of audio/visual/text cues (idea)

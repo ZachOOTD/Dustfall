@@ -458,7 +458,7 @@ export function spawnSandWorm(
     pitch: 0,
     sway: 0,
     bend: 0,
-    particles: makePuffPool(scene, 56),
+    particles: makePuffPool(scene, 140),     // bumped 56 → 140 for boss-tier bursts (Session MM rescale)
     nextWakePuffAt: 0,
     nextTremorDustAt: 0,
   };
@@ -490,10 +490,12 @@ function transitionToDead(worm: SandWorm, ctx: GameContext): void {
   // Lay the worm on its side at the breach surface position.
   worm.pitch = 0;
   applySandWormDeadPose(worm);
+  // Death burst — scaled for boss-tier body (Session MM): 28→70 particles,
+  // velY 2.5→5, spread 3.0→6 so the cloud reads proportional to the 240m corpse.
   burstPuffs(
     worm.particles,
     new THREE.Vector3(worm.basePos.x, worm.surfaceGroundY + 0.4, worm.basePos.z),
-    28, 2.5, 3.0,
+    70, 5.0, 6.0,
   );
   playWormRoar();
   ctx.ui.showToast('the worm shudders and goes still');
@@ -598,15 +600,19 @@ function applyTremorEffects(worm: SandWorm, ctx: GameContext): void {
   const dx = playerTr.x - worm.basePos.x;
   const dz = playerTr.z - worm.basePos.z;
   const dist = Math.hypot(dx, dz);
-  const TREMOR_FAR = 35;
-  const TREMOR_NEAR = 4;
+  // Scaled with the body geometry rescale (Session MM, body 24→240m).
+  // FAR matches detection radius (150m) so the player feels the boss the
+  // moment it commits to threat states. NEAR matches the bite range (25m)
+  // so peak shake hits in the danger zone.
+  const TREMOR_FAR = 150;
+  const TREMOR_NEAR = 25;
   if (dist > TREMOR_FAR) return;
   // Intensity 0..1, 0 at TREMOR_FAR, 1 at TREMOR_NEAR.
   const intensity = Math.max(0, Math.min(1,
     1 - (dist - TREMOR_NEAR) / (TREMOR_FAR - TREMOR_NEAR),
   ));
-  // Camera position jitter — small, snappy.
-  const shakeAmt = 0.06 * intensity;
+  // Camera position jitter — bumped for boss-tier presence (0.06→0.10).
+  const shakeAmt = 0.10 * intensity;
   const cam = ctx.three.camera;
   cam.position.x += (Math.random() - 0.5) * shakeAmt;
   cam.position.y += (Math.random() - 0.5) * shakeAmt;
@@ -709,10 +715,12 @@ function tickCharging(
   if (ctx.time.elapsed >= worm.nextWakePuffAt) {
     worm.nextWakePuffAt = ctx.time.elapsed + 0.15;
     const surfaceY = worm.basePos.y + Tuning.SANDWORM_MAX_RADIUS * 0.6;
+    // Wake puff during charge — bumped 3→8, spread 1.2→3.5 for the
+    // bigger boss kicking up more sand as it tracks underground.
     burstPuffs(
       worm.particles,
       new THREE.Vector3(worm.basePos.x, surfaceY, worm.basePos.z),
-      3, 1.2, 1.2,
+      8, 1.6, 3.5,
     );
   }
   // Trigger lunge when the worm reaches its committed target (not the
@@ -752,10 +760,12 @@ function enterLunge(worm: SandWorm, ctx: GameContext): void {
   worm.mesh.visible = true;
   worm.surfaceGroundY = ctx.terrain.heightAt(worm.target.x, worm.target.z);
   // Big sand burst at the breach point.
+  // Lunge burst at breach-start — bumped 24→65 particles, velY 3.5→7, spread
+  // 2.0→4.5 so the eruption matches the 240m boss bursting from the dunes.
   burstPuffs(
     worm.particles,
     new THREE.Vector3(worm.lungeStart.x, worm.surfaceGroundY + 0.3, worm.lungeStart.z),
-    24, 3.5, 2.0,
+    65, 7.0, 4.5,
   );
   playWormRoar();
 }
@@ -848,10 +858,12 @@ function enterStationaryBreach(worm: SandWorm, ctx: GameContext): void {
   worm.surfaceGroundY = ctx.terrain.heightAt(worm.basePos.x, worm.basePos.z);
   worm.mesh.visible = true;
   worm._biteDealt = false;
+  // Stationary-breach burst — bumped 30→85 particles, velY 4.5→9, spread
+  // 2.5→5.5 for the cobra-rear erupting from the dunes.
   burstPuffs(
     worm.particles,
     new THREE.Vector3(worm.basePos.x, worm.surfaceGroundY + 0.3, worm.basePos.z),
-    30, 4.5, 2.5,
+    85, 9.0, 5.5,
   );
   playWormRoar();
 }

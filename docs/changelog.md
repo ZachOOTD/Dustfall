@@ -3,6 +3,53 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session MM — 2026-05-18 — Sandworm boss-tier rescale + procedural terrain shader (dunes + salt cracks)
+`verified` — tsc clean; multi-angle browser screenshots confirm
+sandworm body 240m rearing 50m above the dunes in stationaryBreach,
+patrol orbit 140m around (60, 0), detection transitions to alert at
+the new 150m range; terrain shader shows dune sand with subtle grain
++ slope coloring at all camera pitches and salt flats with textbook
+polygonal desiccation crack pattern (multi-resolution: ~0.67m primary
++ ~0.22m secondary), wet-zone patches, polygon edge-curl rim
+brightening. **Thread 1 — Sandworm 10× boss rescale** (D49-preserving):
+all SANDWORM_* tuning constants rescaled per a sheet (body 24→240m,
+max radius 2→20m, patrol 60→200m, detection 50→150m, lunge range
+7→30m, breach arc 5→40m, stationary breach height 8→50m, bite range
+4→25m, HP 6→12, bite damage 0.35→0.50). Speeds DELIBERATELY unchanged
+(D49: combat must stay dodgeable — player sprint 13.2 m/s vs charge
+8 m/s preserves the perpendicular-sidestep dodge window). Hardcoded
+sandWorm.ts values that don't belong in tuning also scaled: TREMOR_FAR
+35→150 + TREMOR_NEAR 4→25 (match new detection+bite), camera shake
+0.06→0.10, particle pool 56→140, burst counts 24-30 → 60-85.
+**Thread 2 — Procedural terrain shader** in new
+`src/world/terrainMaterial.ts` (~280 LOC): patches stock
+`MeshLambertMaterial` via `onBeforeCompile` to inject world-space
+noise on top of biome vertex colors. Zero bundle cost (no textures
+shipped) — matches the project's procedural-everything ethos (Web
+Audio already procedural). Dune effects: domain-warped multi-scale
+FBM grain, macro mineral zones, asymmetric scallop ripples (`pow`-
+skewed), warm-amber/cool-pale tint shift, slip-face vs stoss-face
+slope coloring, heterogeneous grain specks (magnetite/iron/quartz).
+Salt effects: multi-resolution Voronoi cracks (primary + secondary
+suppressed inside primary), per-cell crack-width variation, polygon
+edge-curl brightening (raised crust rim), wet-zone darker patches,
+salt-crystal sparkle. **Critical bug fix mid-session** (D62, memory
+note): first shader iteration silently MASKED OFF all effects at
+extreme camera pitches because `vNormal` in Three.js fragment
+shaders is in VIEW space, not world space — looking straight down,
+world-up (0,1,0) projects to vNormal.y ≈ 0, killing
+flatness-gated effects. Also discovered that
+`saltness = smoothstep(0.6, 0.82, diffuseColor.b)` was unreliable
+deep in salt biome because vertex color interpolation dragged B
+below threshold near biome edges. Fix: terrain.ts now writes a
+per-vertex `aBiomeRaw` Float32 attribute (biome noise value); the
+shader injects `vWorldNormal = normalize(mat3(modelMatrix) * normal)`
++ `vBiomeRaw` varying and uses both for slope/flatness/biome
+detection. Decisions D61 done in LL — this session D62. Memory:
+`dustfall_shader_gotchas.md` added with the 4-step shader-debug
+stack (vWorldPos → hash → noise primitive → each mask) so the
+6-round diagnosis loop doesn't repeat.
+
 ## Session LL — 2026-05-17 — Satellite dish polish + engine_block POI rework
 `verified` — tsc clean; multi-angle browser screenshots confirm
 doorway accessible (lintel mostly above grade, sill 0.4m below

@@ -16,6 +16,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import type { Rng } from '../core/rng.ts';
 import type { BiomeSampler } from './biomes.ts';
 import { Tuning } from '../config/tuning.ts';
+import { createTerrainMaterial } from './terrainMaterial.ts';
 
 // Per-biome ground colors (Session P). Punchier than first-pass so the
 // regions read clearly from a distance: dune = saturated orange-sand,
@@ -144,6 +145,11 @@ export function createTerrain(
       const vertCount = stride * stride;
       const positions = new Float32Array(vertCount * 3);
       const colors = new Float32Array(vertCount * 3);
+      // Per-vertex raw biome noise value — feeds the fragment shader's
+      // biome-detection (terrainMaterial). Independent of vertex color
+      // so the shader can detect biome correctly even where adjacent
+      // vertices have blended colors.
+      const biomeRaws = new Float32Array(vertCount);
       for (let i = 0; i <= CELLS; i++) {
         for (let j = 0; j <= CELLS; j++) {
           const idx = (i * stride + j) * 3;
@@ -157,6 +163,7 @@ export function createTerrain(
           colors[idx]     = c[0];
           colors[idx + 1] = c[1];
           colors[idx + 2] = c[2];
+          biomeRaws[i * stride + j] = n;
         }
       }
       const indices: number[] = [];
@@ -172,10 +179,16 @@ export function createTerrain(
       const geo = new THREE.BufferGeometry();
       geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
       geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+      // Custom per-vertex biome noise — read by terrainMaterial shader.
+      geo.setAttribute('aBiomeRaw', new THREE.BufferAttribute(biomeRaws, 1));
       geo.setIndex(indices);
       geo.computeVertexNormals();
 
-      const mat = new THREE.MeshLambertMaterial({ vertexColors: true });
+      // Session MM-2 — procedural detail layer via onBeforeCompile shader
+      // patches. Vertex colors (biome blend) feed the base diffuse, the
+      // shader adds sand grain + wind ripples + slope-based darkening on
+      // top. Zero bundle cost — no textures shipped.
+      const mat = createTerrainMaterial();
       const mesh = new THREE.Mesh(geo, mat);
       mesh.position.set(centerX, 0, centerZ);
       scene.add(mesh);

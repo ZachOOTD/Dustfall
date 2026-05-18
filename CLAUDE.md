@@ -45,25 +45,37 @@ Run with `npm run dev` (port 5173). Type-check with `npx tsc --noEmit`.
 
 ## Where we are now
 
-**Last shipped**: Session LL — Satellite dish polish + engine_block
-POI rework. Thread A polished KK's satellite dish in `satelliteDish
-.ts`: exterior 45° ladder + composed-quat ramp collider (climb to
-roof to reach the dish-back salvage panel KK left unreachable),
-warm interior `PointLight(0xffa844, 0.6, 6)` + emissive lantern
-prop, 2 droopy `TubeGeometry`/`CatmullRomCurve3` cables on the feed
-assembly (cable B anchor bug fixed — was missing focalDist offset),
-rust variation expanded from `i % 2` to `i % 4` with 2 new shades.
-`BURY_Y` 2.5 → 1.0 (D61) so the 2.2m doorway opening sits mostly
-above grade — KK had it trapped 1.9m underground; ladder auto-
-rescales. Thread B engine_block rework: new `src/world/engineBlock.
-ts` (~370 LOC) replaces the 31-LOC inline `placeEngineBlock` in
-`poi.ts` with `LatheGeometry`-tapered bells (throat → bulged shoulder
-→ pinch → flared rim) + `BackSide` emissive throats + backstop disc
-(D48 maw trick) + char/scar rings, cooling-shroud tori + 4
-lengthwise ribs sleeving the box thrust frame, ablative heat-shield,
-2 `TubeGeometry` fuel hoses, 4 per-piece tilted box colliders (was
-single AABB), 2 salvage panels (frame face + recessed inside center
-bell throat). Decisions D61.
+**Last shipped**: Session MM — Sandworm boss-tier rescale +
+procedural terrain shader. **Sandworm 10× scale**: all SANDWORM_*
+tuning constants rescaled (body 24→240m, max radius 2→20m, patrol
+60→200m, detection 50→150m, lunge range 7→30m, breach arc 5→40m,
+stationary breach 8→50m, bite range 4→25m, HP 6→12, damage 0.35→
+0.50). Speeds UNCHANGED (D49: dodgeability — sprint 13 m/s vs
+charge 8 m/s preserves perpendicular-sidestep). TREMOR_FAR/NEAR
+scaled in sandWorm.ts; burst counts + particle pool sized up for
+the bigger boss. **Procedural terrain shader** in new
+`src/world/terrainMaterial.ts` — patches stock MeshLambertMaterial
+via onBeforeCompile to add GPU noise on top of biome vertex colors,
+zero bundle cost. Dunes: domain-warped multi-scale FBM grain + macro
+mineral zones + asymmetric ripples + warm/cool tint + slip/stoss
+slope tint + heterogeneous grain specks (magnetite/iron/quartz).
+Salt: multi-resolution Voronoi cracks (primary + secondary) +
+per-cell width variation + edge-curl rim brightening + wet-zone
+patches + crystal sparkle. **Bug fix mid-session** (D62): Three.js
+`vNormal` is VIEW space — silently killed flatness-gated effects
+when looking straight down. Fix: terrain.ts writes per-vertex
+`aBiomeRaw` attribute, shader injects `vWorldNormal` +
+`vBiomeRaw` varyings. Memory note `dustfall_shader_gotchas.md`
+documents the 4-step shader-debug stack so this gotcha takes 15
+min next time, not hours.
+
+**Prior milestone**: Session LL — Satellite dish polish + engine_block
+POI rework. Thread A polished KK's satellite dish (exterior ladder,
+interior lantern, droopy cables, rust variation, BURY_Y 2.5→1.0 so
+doorway is reachable). Thread B `src/world/engineBlock.ts` replaces
+boxy inline cluster with LatheGeometry bells + cooling shroud +
+heat shield + fuel hoses + per-piece tilted colliders + 2 panels.
+Decisions D61.
 
 **Prior milestone**: Session KK — Wrecked satellite dish flagship POI.
 Swapped the hand-placed `antenna_outpost` at (-88, -50) for a
