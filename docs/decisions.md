@@ -985,3 +985,34 @@ hence the rotation pivot) sits.
 rotate" pattern should use this trick. Don't try to compute rotated
 axes — too easy to get the Euler order wrong, and you don't need to
 care anyway.
+
+## D61 — Satellite dish BURY_Y reduced to 1.0m so the doorway opens above grade (Session LL)
+**When**: Session LL.
+**Why**: KK shipped `BURY_Y = 2.5` which gave a dramatic "settled in
+dunes" silhouette but trapped the 2.2m doorway opening 1.9m below
+terrain (only ~0.3m of the lintel area peeked above ground). The
+interior was geometrically unreachable from outside — verification at
+KK ship time was synthetic (the player was teleported into the
+shelter zone rather than walking through the door, so nobody noticed).
+LL drops `BURY_Y` to 1.0m. New geometry: doorway sill 0.4m below
+terrain (small step-down, character drops in naturally), interior
+floor 0.7m below terrain, rim top ~3.7m above terrain. The PITCH +
+ROLL whole-structure tilt continues to sell "settled in the desert"
+character independently of bury depth — the bury depth was never
+doing the heavy visual lifting that the tilt was.
+**Why not shallower (0.5m)**: corner-float risk. With max PITCH+ROLL
+of ~(13°, 8°), the high-tilt corner of the 8×8m base lifts ~1.3m
+above baseGroup origin. At `BURY_Y = 0.5`, that high corner sits 0.8m
+above terrain — a visible floater. At 1.0m bury the worst-case lift
+is ~0.3m, hidden by the existing 9 apron sand mounds (each 0.7-1.2m
+tall) placed at corners.
+**Why not deeper bury + carved sand path into the entrance**: more
+code, and the tilt sells the "settled" look on its own. Defer the
+carved-path approach if a future POI specifically needs a more
+dramatic bury (e.g., a "fully entombed" structure where the doorway
+is meant to feel excavated).
+**Apply**: any future POI that has an enterable doorway should
+double-check the door's world-Y range *with the tilt + bury combined*
+to confirm the opening clears terrain. The KK bug was a static-
+analysis miss — bury looked fine in isolation, tilt looked fine in
+isolation, but combined they buried the door.

@@ -42,12 +42,22 @@ const _rustedSteelMat = new THREE.MeshLambertMaterial({
   flatShading: true,
 });
 const _dishPanelMat = new THREE.MeshLambertMaterial({
-  color: 0x7a4628,           // dish panel rust
+  color: 0x7a4628,           // dish panel rust (mid)
   side: THREE.DoubleSide,
   flatShading: true,
 });
 const _dishPanelDarkMat = new THREE.MeshLambertMaterial({
-  color: 0x4a2818,           // darker patchwork panel (alternates around rim)
+  color: 0x4a2818,           // darker patchwork panel
+  side: THREE.DoubleSide,
+  flatShading: true,
+});
+const _dishPanelRustLight = new THREE.MeshLambertMaterial({
+  color: 0x8a5a38,           // lighter orange-tan rust (sun-bleached)
+  side: THREE.DoubleSide,
+  flatShading: true,
+});
+const _dishPanelRustEdge = new THREE.MeshLambertMaterial({
+  color: 0x3a1e10,           // darker oxidized edge (deeply weathered)
   side: THREE.DoubleSide,
   flatShading: true,
 });
@@ -188,10 +198,16 @@ export function placeSatelliteDish(
   salvageables?: SalvageableRegistry,
 ): THREE.Group {
   const group = new THREE.Group();
-  // Bury offset — base sits 2.5m below ground so the bottom half of the
-  // concrete is reclaimed by dunes; the upper half + interior + tripod
-  // + dish all sit above ground level.
-  const BURY_Y = 2.5;
+  // Bury offset — base sits 1.0m below ground so the doorway opening
+  // (cut from y_local -1.9 to +0.3) is mostly above grade — its sill
+  // sits 0.4m below terrain, so the player steps DOWN through the
+  // doorway into the interior. KK shipped with BURY_Y=2.5 which read
+  // as "settled in dunes" visually but trapped the entrance 1.9m
+  // underground (interior unreachable from outside). 1.0m bury + the
+  // PITCH/ROLL tilt still sells "settled in the desert" while keeping
+  // entry usable. Going much shallower would expose a high-tilt corner
+  // of the base floating above terrain.
+  const BURY_Y = 1.0;
   // Whole-structure tilt — sells "sinking into the sand" feel.
   const PITCH = 0.18 + rand() * 0.05;
   const ROLL = 0.10 + rand() * 0.04;
@@ -463,6 +479,38 @@ export function placeSatelliteDish(
     baseGroup.add(pipe);
   }
 
+  // Hanging lantern — warm dim PointLight + small emissive prop so the
+  // interior reads as a livable shelter at night and in the dim diurnal
+  // doorway shadow. Placed back-upper corner so its glow throws across
+  // the sand pile and walls without spotlighting the player's path.
+  // Intensity/range deliberately half of fire (which is PointLight at
+  // 1.3 intensity, 8m range) — fire is hearth-bright, this is a
+  // hold-over emergency lantern. No flicker (low cost; lantern, not
+  // flame).
+  const lanternX = INTERIOR_W * 0.32;                              // off-center toward east
+  const lanternY = -BASE_H * 0.5 + BASE_WALL_T + INTERIOR_H - 0.55; // just below ceiling
+  const lanternZ = BASE_D * 0.5 - BASE_WALL_T - 0.6;               // pinned to back wall
+  const lanternLight = new THREE.PointLight(0xffa844, 0.6, 6);
+  lanternLight.position.set(lanternX, lanternY, lanternZ);
+  lanternLight.castShadow = false;                                 // perf — small interior, shadowless is fine
+  baseGroup.add(lanternLight);
+  // Emissive lantern body — a small glowing box at the light's source so
+  // the player sees WHERE the light is coming from (otherwise it reads
+  // as ambient warmth with no source).
+  const lanternBody = new THREE.Mesh(
+    new THREE.BoxGeometry(0.18, 0.22, 0.18),
+    new THREE.MeshBasicMaterial({ color: 0xffc266 }),
+  );
+  lanternBody.position.set(lanternX, lanternY, lanternZ);
+  baseGroup.add(lanternBody);
+  // A short steel hanger from the ceiling down to the lantern.
+  const lanternHanger = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.02, 0.02, 0.30, 4),
+    _frameMat,
+  );
+  lanternHanger.position.set(lanternX, lanternY + 0.26, lanternZ);
+  baseGroup.add(lanternHanger);
+
   // Sand pile piled against the back wall — leaves a much larger
   // walkable strip near the entrance so the player can actually move
   // around inside. KK-2 — was 5.2m deep × 1.96m tall (only 1.6m
@@ -502,6 +550,55 @@ export function placeSatelliteDish(
   // floor mesh will clip it cleanly).
   sandSlope.position.y -= 0.35;
   baseGroup.add(sandSlope);
+
+  // Exterior climbing ladder — leans against the +X (east) wall at 45°,
+  // foot at terrain level, top punching just above the roof rim so the
+  // player can step onto the roof. Without this, KK's dish-back salvage
+  // panel was unreachable. The ladder is purely a visual — the actual
+  // climbable surface is a tilted box collider added below alongside
+  // the roof + wall colliders.
+  // Geometry coords are in baseGroup-local space. Terrain world Y =
+  // group.position.y + baseAnchorY + Y_local. So terrain corresponds to
+  // baseGroup-local Y = -baseAnchorY. Ladder sub-group is rotated Z by
+  // -45° so its local +X axis points from rim-top DOWN to the sand foot.
+  const rampAngle = Math.PI / 4;                       // 45°, under controller's 50° max slope
+  const rampTopX = BASE_W * 0.5 - 0.15;                // 0.15m inboard of east roof edge
+  const rampTopY = BASE_H * 0.5;                       // = roof top face (baseGroup-local Y)
+  const rampFootY = -baseAnchorY;                       // terrain in baseGroup-local Y
+  const rampRise = rampTopY - rampFootY;                // total Y rise (= BASE_H/2 + baseAnchorY)
+  const rampFootX = rampTopX + rampRise;                // 45° → horizontal run = rise
+  const rampLen = rampRise * Math.SQRT2;
+  const rampMidX = (rampTopX + rampFootX) * 0.5;
+  const rampMidY = (rampFootY + rampTopY) * 0.5;
+  const ladderGroup = new THREE.Group();
+  ladderGroup.position.set(rampMidX, rampMidY, 0);
+  ladderGroup.rotation.z = -rampAngle;                 // local +X → (+cos,−sin,0) = down-the-slope
+  // Two parallel rails along local +X.
+  const railR = 0.06;
+  for (const dz of [-0.25, 0.25]) {
+    const rail = new THREE.Mesh(
+      new THREE.CylinderGeometry(railR, railR, rampLen, 5),
+      _rustedSteelMat,
+    );
+    rail.rotation.z = Math.PI / 2;                     // cylinder default Y axis → local +X
+    rail.position.set(0, 0, dz);
+    ladderGroup.add(rail);
+  }
+  // Rungs evenly spaced along the rail at ~0.32m centers so the spacing
+  // reads as a real ladder regardless of overall ramp length.
+  const rungCount = Math.max(8, Math.round(rampLen / 0.32));
+  for (let i = 0; i < rungCount; i++) {
+    const t = (i + 0.5) / rungCount;
+    const xLocal = (t - 0.5) * rampLen;
+    const rung = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.04, 0.04, 0.55, 5),
+      _rustedSteelMat,
+    );
+    rung.rotation.x = Math.PI / 2;                     // cylinder Y axis → local +Z
+    rung.position.set(xLocal, 0, 0);
+    ladderGroup.add(rung);
+  }
+  baseGroup.add(ladderGroup);
 
   baseGroup.position.y = baseAnchorY;
   group.add(baseGroup);
@@ -597,9 +694,11 @@ export function placeSatelliteDish(
     if (MISSING_PANELS.includes(i)) continue;
     const phi = (i / DISH_SEGMENTS) * Math.PI * 2;
     const length = (2 * Math.PI) / DISH_SEGMENTS;
-    // Alternate panel material so adjacent panels read as patched-up
-    // mismatched repairs (different rust shades).
-    const mat = (i % 2 === 0) ? _dishPanelMat : _dishPanelDarkMat;
+    // Rotate through 4 rust shades so adjacent panels read as patched-up
+    // mismatched repairs — sun-bleached / mid-rust / dark-rust / heavily
+    // oxidized edge. Cycles `i % 4` (was `i % 2` — flat 2-tone read).
+    const panelMats = [_dishPanelMat, _dishPanelRustLight, _dishPanelDarkMat, _dishPanelRustEdge];
+    const mat = panelMats[i % 4];
     dishPivot.add(makeDishPanel(phi, length, mat));
   }
 
@@ -643,6 +742,53 @@ export function placeSatelliteDish(
   brokenArm.position.set(0, focalDist, 0);
   brokenArm.rotation.set(1.1, 2.1, 0);
   dishPivot.add(brokenArm);
+
+  // Snapped cables — 2 droopy wires hanging off the feed assembly to
+  // narrate "something tore loose decades ago." TubeGeometry over a
+  // CatmullRomCurve3 spline lets the cable sag naturally between its
+  // anchor and unfastened tip; no rotation math needed (the curve
+  // endpoints define orientation, not the cylinder anchor pattern). All
+  // curve coords are in dishPivot-local frame so the cables inherit the
+  // dish's pitch + roll.
+  const _cableMat = new THREE.MeshLambertMaterial({
+    color: 0x1a1612,        // matte black rubber-coated wire
+    flatShading: true,
+  });
+  // Cable A: from feed-horn body, drooping toward the dish surface.
+  // Anchor at feed-horn lower rim, sags 0.4m, ends mid-air about 1.3m
+  // out (cut wire that fell short of the dish).
+  const cableACurve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(0.30, focalDist - 0.5, 0),                    // anchor on feed horn body
+    new THREE.Vector3(0.95, focalDist - 1.0, 0.10),                 // mid-sag
+    new THREE.Vector3(1.55, focalDist - 1.3, 0.15),                 // unfastened tip
+    new THREE.Vector3(1.65, focalDist - 1.55, 0.18),                // gravity pull on tip
+  ]);
+  const cableA = new THREE.Mesh(
+    new THREE.TubeGeometry(cableACurve, 16, 0.045, 5, false),
+    _cableMat,
+  );
+  dishPivot.add(cableA);
+  // Cable B: from the snapped broken-arm stub tip, longer droop curving
+  // past the dish edge. The broken arm mesh is positioned at
+  // (0, focalDist, 0) in dishPivot-local, with its geometry pre-
+  // translated so y=0 is the anchor and y=brokenArmLen is the tip.
+  // After rotation by Euler(1.1, 2.1, 0), the tip's offset from the
+  // mesh position is the rotated (0, brokenArmLen, 0) vector. World tip
+  // in dishPivot-local = mesh position + rotated offset.
+  const brokenTipOffset = new THREE.Vector3(0, brokenArmLen, 0)
+    .applyEuler(new THREE.Euler(1.1, 2.1, 0));
+  const brokenTip = new THREE.Vector3(0, focalDist, 0).add(brokenTipOffset);
+  const cableBCurve = new THREE.CatmullRomCurve3([
+    brokenTip.clone(),
+    brokenTip.clone().add(new THREE.Vector3(0.4, -0.7, 0.2)),       // initial droop
+    brokenTip.clone().add(new THREE.Vector3(0.7, -1.6, 0.3)),       // mid-arc
+    brokenTip.clone().add(new THREE.Vector3(0.8, -2.6, 0.35)),      // settled tip
+  ]);
+  const cableB = new THREE.Mesh(
+    new THREE.TubeGeometry(cableBCurve, 20, 0.045, 5, false),
+    _cableMat,
+  );
+  dishPivot.add(cableB);
 
   group.add(dishPivot);
 
@@ -715,6 +861,10 @@ export function placeSatelliteDish(
     scene.add(mound);
   }
 
+  // (Wrapping sand burial dune removed — read as a fake-looking sphere
+  // berm against the base. Defer to a later session for a more
+  // convincing dune approach, possibly applied to other POIs.)
+
   // ── Colliders — give the base walls + roof + floor static bodies
   // so the player can stand on the roof, walk inside, and bump into
   // the walls. Use the group's world transform via getWorldQuaternion
@@ -739,6 +889,29 @@ export function placeSatelliteDish(
     new THREE.Vector3(0, BASE_H * 0.5 - BASE_WALL_T * 0.5, 0),
     { x: BASE_W * 0.5, y: BASE_WALL_T * 0.5, z: BASE_D * 0.5 },
   );
+  // Ladder ramp — tilted 45° box collider that the player can walk up
+  // from terrain to roof. addBaseCollider doesn't support local
+  // rotations (it only applies the parent group's world quat), so we
+  // compose the local Z-tilt manually and call makeStaticBox directly.
+  // Center / half-extents / tilt all match the visual ladderGroup
+  // above. Slope = 45° is under the character controller's 50° max
+  // slope (see makePlayer in physics/bodies.ts), so the player can
+  // walk up under normal movement input.
+  {
+    const rampLocalCenter = new THREE.Vector3(rampMidX, rampMidY + baseAnchorY, 0);
+    const rampWorldCenter = rampLocalCenter.clone()
+      .applyQuaternion(groupWorldQuat)
+      .add(groupWorldPos);
+    const rampLocalQuat = new THREE.Quaternion()
+      .setFromAxisAngle(new THREE.Vector3(0, 0, 1), -rampAngle);
+    const rampComposedQuat = groupWorldQuat.clone().multiply(rampLocalQuat);
+    makeStaticBox(
+      world,
+      { x: rampLen * 0.5, y: 0.05, z: 0.30 },
+      rampWorldCenter,
+      { x: rampComposedQuat.x, y: rampComposedQuat.y, z: rampComposedQuat.z, w: rampComposedQuat.w },
+    );
+  }
   // Walls — South / East / West (block player from clipping through)
   addBaseCollider(
     new THREE.Vector3(0, 0, BASE_D * 0.5 - BASE_WALL_T * 0.5),

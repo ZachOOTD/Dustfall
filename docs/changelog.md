@@ -3,6 +3,41 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session LL — 2026-05-17 — Satellite dish polish + engine_block POI rework
+`verified` — tsc clean; multi-angle browser screenshots confirm
+doorway accessible (lintel mostly above grade, sill 0.4m below
+terrain), interior lantern glow visible on walls, dish-back panel
+reachable via new exterior ladder, cable B properly anchored to
+broken arm tip, 4-tone rust variation visible around dish rim,
+engine_block reads as curved 5-bell cluster with recessed emissive
+throats + cooling-shroud rings (was boxy 5-cylinder cluster). 49
+salvageables register (was 48 → +1 from engine_block going 1→2
+panels). **Thread A — dish polish** in `satelliteDish.ts`: exterior
+45° ladder on +X wall (rails + auto-spaced rungs) + tilted ramp
+collider via composed quaternion (climb to roof, reach the dish-back
+salvage panel KK left unreachable); warm interior PointLight
+(`0xffa844` × 0.6) + emissive lantern body + steel ceiling hanger;
+2 droopy `TubeGeometry`-over-`CatmullRomCurve3` cables on the feed
+assembly (cable B anchor bug fixed — was missing focalDist offset);
+rust variation `i % 2 → i % 4` (added `_dishPanelRustLight` +
+`_dishPanelRustEdge`). `BURY_Y` 2.5 → 1.0 (D61) so the 2.2m doorway
+opening sits mostly above grade — KK had it trapped 1.9m
+underground; ladder dimensions auto-rescale to the new exterior
+height (rise 2.5 → 4.5m). Removed a wrapping `SphereGeometry` burial
+dune on user feedback (read as fake — defer for refinement on other
+POIs). **Thread B — engine_block rework**: new
+`src/world/engineBlock.ts` (~370 LOC) replaces the 31-LOC inline
+`placeEngineBlock` in `poi.ts`. `LatheGeometry`-tapered nozzle bells
+(throat → bulged shoulder → pinch → flared rim) with `BackSide`
+emissive throats + dark backstop disc (D48 sandworm-maw trick) +
+char/scar rings; cooling-shroud `TorusGeometry` rings + 4 lengthwise
+ribs sleeving the box thrust frame; `LatheGeometry` ablative
+heat-shield; 2 `TubeGeometry` fuel hoses; 4 per-piece tilted box
+colliders via composed-quat helper (was single
+`attachCompoundCollider` AABB that overshot ~1.5m at tilted
+corners); 2 salvage panels (frame face + recessed inside center
+bell throat). `placeDebrisField` preserved. Decisions D61.
+
 ## Session KK — 2026-05-17 — Wrecked satellite dish flagship POI
 `verified` — tsc clean; multi-angle browser screenshots confirm the
 dish silhouette reads as a Rust-style monumental wreck, no floating

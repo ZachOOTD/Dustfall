@@ -14,7 +14,6 @@ import type { Terrain } from './terrain.ts';
 import type { Pickup } from '../pickups/pickups.ts';
 import { spawnDroppedPickup } from '../pickups/pickups.ts';
 import {
-  makeEngineCluster,
   makeFuselage,
   placeWreck,
   placeDebrisField,
@@ -24,43 +23,14 @@ import { registerSalvageable, type SalvageableRegistry } from './salvage.ts';
 import { placeMegaShip } from './megaShip.ts';
 import { placeMegaWreck } from './megaWreck.ts';
 import { placeSatelliteDish } from './satelliteDish.ts';
+import { placeEngineBlock } from './engineBlock.ts';
 import type { ShelterRegistry } from '../shelter/shelterZones.ts';
 
 // ────────────────────────────────────────────────────────────────
-// The Engine Block — massive engine cluster tipped at ~30° into a dune.
-// Iconic Jakku-Star-Destroyer silhouette: nozzles pointing skyward.
+// The Engine Block POI is built by `placeEngineBlock` in
+// `./engineBlock.ts` (Session LL — dedicated module, LatheGeometry
+// bells + cooling shroud + per-piece colliders + 2 salvage panels).
 // ────────────────────────────────────────────────────────────────
-function placeEngineBlock(
-  scene: THREE.Scene,
-  world: RAPIER.World,
-  terrain: Terrain,
-  pos: THREE.Vector3,
-  rand: Rng,
-): THREE.Group {
-  const cluster = makeEngineCluster(rand, 4.2);   // hero scale
-  // Compose into a parent group so we can rotate cleanly.
-  const parent = new THREE.Group();
-  parent.add(cluster);
-  // Forward the cluster's access panel up to the parent so registerSalvageable
-  // can find it (Session Z — `salvageables` reads `group.userData.accessPanel`).
-  parent.userData.accessPanel = cluster.userData.accessPanel;
-  parent.position.copy(pos);
-  parent.position.y -= 1.4;                       // deep bury on one side
-  parent.rotation.y = -0.6;
-  // Tip leeward — pitch around X so the nozzles point up-and-out.
-  parent.rotation.x = -0.55;
-  parent.rotation.z = -0.18;
-  parent.traverse((o) => {
-    const m = o as THREE.Mesh;
-    if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; }
-  });
-  scene.add(parent);
-  // AABB collider auto-fits the tilted engine cluster.
-  attachCompoundCollider(world, parent);
-  // Debris field around the impact site.
-  placeDebrisField(scene, terrain, pos, 14, rand, 10);
-  return parent;
-}
 
 // ────────────────────────────────────────────────────────────────
 // Scavenger camp — small fuselage chunk + lean-to fire ring + bandage.
@@ -245,8 +215,11 @@ export function placePOIs(
     const pos = new THREE.Vector3(p.x, y, p.z);
     switch (p.kind) {
       case 'engine_block': {
-        const group = placeEngineBlock(scene, world, terrain, pos, rand);
-        if (salvageables) registerSalvageable(salvageables, group, 'massive', pos, rand);
+        // LL — flagship POI: massive 5-nozzle engine cluster tipped
+        // into a dune. Dedicated module (placeEngineBlock) handles the
+        // LatheGeometry bells + per-piece colliders + 2 salvage panels
+        // internally. Mirrors the dish dispatch shape.
+        placeEngineBlock(scene, world, terrain, pos, rand, salvageables);
         break;
       }
       case 'camp': {

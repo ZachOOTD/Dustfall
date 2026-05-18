@@ -45,22 +45,33 @@ Run with `npm run dev` (port 5173). Type-check with `npx tsc --noEmit`.
 
 ## Where we are now
 
-**Last shipped**: Session KK — Wrecked satellite dish flagship POI.
+**Last shipped**: Session LL — Satellite dish polish + engine_block
+POI rework. Thread A polished KK's satellite dish in `satelliteDish
+.ts`: exterior 45° ladder + composed-quat ramp collider (climb to
+roof to reach the dish-back salvage panel KK left unreachable),
+warm interior `PointLight(0xffa844, 0.6, 6)` + emissive lantern
+prop, 2 droopy `TubeGeometry`/`CatmullRomCurve3` cables on the feed
+assembly (cable B anchor bug fixed — was missing focalDist offset),
+rust variation expanded from `i % 2` to `i % 4` with 2 new shades.
+`BURY_Y` 2.5 → 1.0 (D61) so the 2.2m doorway opening sits mostly
+above grade — KK had it trapped 1.9m underground; ladder auto-
+rescales. Thread B engine_block rework: new `src/world/engineBlock.
+ts` (~370 LOC) replaces the 31-LOC inline `placeEngineBlock` in
+`poi.ts` with `LatheGeometry`-tapered bells (throat → bulged shoulder
+→ pinch → flared rim) + `BackSide` emissive throats + backstop disc
+(D48 maw trick) + char/scar rings, cooling-shroud tori + 4
+lengthwise ribs sleeving the box thrust frame, ablative heat-shield,
+2 `TubeGeometry` fuel hoses, 4 per-piece tilted box colliders (was
+single AABB), 2 salvage panels (frame face + recessed inside center
+bell throat). Decisions D61.
+
+**Prior milestone**: Session KK — Wrecked satellite dish flagship POI.
 Swapped the hand-placed `antenna_outpost` at (-88, -50) for a
 Rust-inspired wrecked satellite dish in a dedicated module
 `src/world/satelliteDish.ts`. ~20m tall structure: 8×8×5m half-buried
-concrete base (with buttress columns + roof rim + entrance + hollow
-interior + sand pile + 1 shelter zone + interior props), 14m steel
-tripod (3 legs + bracing + 1 bent strut), 16m-diameter parabolic
-dish (12 panels w/ 3 missing exposing the radial framework, patchwork
-rust shades), feed horn + 2 arms + 1 broken arm, 9 terrain-snapped
-sand mounds in an apron. Walkable roof + interior colliders +
-2 salvage panels (base wall + dish back). `'satellite_dish'` removed
-from `WreckKind` since this POI is bespoke (matches `placeMegaShip` /
-`placeMegaWreck` pattern). D60 logs the lesson: anchor angled
-cylinders via `geometry.translate(0, halfL, 0)` instead of
-sin/cos-of-Euler math (it bit me twice in one session before I
-gave up on manual computation).
+concrete base, 14m steel tripod, 16m parabolic dish (12 panels w/ 3
+missing), feed horn + 2 arms + 1 broken arm, 9 terrain-snapped sand
+mounds. Walkable roof + interior colliders + 2 salvage panels. D60.
 
 **Prior milestone**: Session JJ-2 — Spawn teleport bug fix + level
 opening camera. `setupOpeningScene` was using

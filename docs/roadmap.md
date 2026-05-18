@@ -21,8 +21,7 @@ Pick whatever feels most missing after the polish + atmosphere arc.
 - 7-day storm countdown
 - Bounties (template: D39 `'mount'` singleton-interactable pattern from CC-2)
 - Procedural world generation (idea — POIs randomized per seed)
-- Wreck POI rework: accurate collision, connected geometry (no floaters), less boxy, more curves + detail
-- New POI: wrecked satellite dish
+- Wreck POI rework continued: `crashed_hull` dedicated module (LL did `engine_block`; `camp` deferred — already lean + functional). crashed_hull pairs `makeFuselage(3.2)` + `placeWreck(engine_bell, 2.4)` so reworking means replacing 2 shared wreck builders in lockstep; consider a `src/world/crashedHull.ts` matching the dish/engine_block template (LatheGeometry/curved primitives, per-piece tilted colliders, 2 salvage panels).
 - Sled / rope / scrap-metal sled (physical-inventory drag-along, towable behind speeder)
 - Lizard-on-a-stick cooking system (raw lizard + branch → roast over fire)
 - Remove HUD stat bars in favor of audio/visual/text cues (idea)
