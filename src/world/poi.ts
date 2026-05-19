@@ -24,6 +24,7 @@ import { placeMegaShip } from './megaShip.ts';
 import { placeMegaWreck } from './megaWreck.ts';
 import { placeSatelliteDish } from './satelliteDish.ts';
 import { placeEngineBlock } from './engineBlock.ts';
+import { placeCrashedHull } from './crashedHull.ts';
 import type { ShelterRegistry } from '../shelter/shelterZones.ts';
 
 // ────────────────────────────────────────────────────────────────
@@ -97,50 +98,11 @@ function placeScavengerCamp(
 }
 
 // ────────────────────────────────────────────────────────────────
-// Crashed Hull — long fuselage with engine bell on the tail.
-// Two wrecks paired so the silhouette reads as "one big ship."
+// The Crashed Hull POI is built by `placeCrashedHull` in
+// `./crashedHull.ts` (Session NN — dedicated module, LatheGeometry-
+// tapered fuselage + custom engine bell + per-piece tilted colliders
+// + 2 salvage panels).
 // ────────────────────────────────────────────────────────────────
-function placeCrashedHull(
-  scene: THREE.Scene,
-  world: RAPIER.World,
-  terrain: Terrain,
-  pos: THREE.Vector3,
-  rand: Rng,
-): { hull: THREE.Group; bell: THREE.Group } {
-  // Main fuselage — hero scale, partly buried + tilted.
-  const fuselage = makeFuselage(rand, 3.2);
-  const parent = new THREE.Group();
-  parent.add(fuselage);
-  // Forward the fuselage's access panel up to the parent for registerSalvageable.
-  parent.userData.accessPanel = fuselage.userData.accessPanel;
-  parent.position.copy(pos);
-  parent.position.y -= 1.6;
-  parent.rotation.y = 0.9;
-  parent.rotation.z = -0.18;
-  parent.rotation.x = 0.08;
-  parent.traverse((o) => {
-    const m = o as THREE.Mesh;
-    if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; }
-  });
-  scene.add(parent);
-  attachCompoundCollider(world, parent);
-
-  // Engine bell off the "tail," angled.
-  const bellPos = new THREE.Vector3(
-    pos.x + Math.cos(parent.rotation.y) * 8.0,
-    terrain.heightAt(pos.x + Math.cos(parent.rotation.y) * 8.0, pos.z + Math.sin(parent.rotation.y) * 8.0),
-    pos.z + Math.sin(parent.rotation.y) * 8.0,
-  );
-  const bell = placeWreck(scene, world, terrain, bellPos, 'engine_bell', rand, {
-    scale: 2.4,
-    buryY: 1.0,
-    tiltZ: 0.4,
-  });
-
-  // Debris field stretching from the impact site.
-  placeDebrisField(scene, terrain, pos, 16, rand, 12);
-  return { hull: parent, bell };
-}
 
 // ────────────────────────────────────────────────────────────────
 // Public entry — hand-picked positions + dispatch
@@ -241,14 +203,11 @@ export function placePOIs(
         break;
       }
       case 'crashed_hull': {
-        const { hull, bell } = placeCrashedHull(scene, world, terrain, pos, rand);
-        if (salvageables) {
-          registerSalvageable(salvageables, hull, 'massive', pos, rand);
-          // Also register the engine bell tail as its own salvageable so
-          // both halves of the wreck are interactable.
-          const bellPos = new THREE.Vector3().setFromMatrixPosition(bell.matrixWorld);
-          registerSalvageable(salvageables, bell, 'engine_bell', bellPos, rand);
-        }
+        // NN — flagship POI: tapered LatheGeometry fuselage with
+        // custom tail bell. Dedicated module (placeCrashedHull)
+        // handles geometry + per-piece colliders + 2 salvage panels
+        // internally. Mirrors the dish + engineBlock dispatch shape.
+        placeCrashedHull(scene, world, terrain, pos, rand, salvageables);
         break;
       }
       case 'mega_ship': {

@@ -45,29 +45,36 @@ Run with `npm run dev` (port 5173). Type-check with `npx tsc --noEmit`.
 
 ## Where we are now
 
-**Last shipped**: Session MM — Sandworm boss-tier rescale +
-procedural terrain shader. **Sandworm 10× scale**: all SANDWORM_*
-tuning constants rescaled (body 24→240m, max radius 2→20m, patrol
-60→200m, detection 50→150m, lunge range 7→30m, breach arc 5→40m,
-stationary breach 8→50m, bite range 4→25m, HP 6→12, damage 0.35→
-0.50). Speeds UNCHANGED (D49: dodgeability — sprint 13 m/s vs
-charge 8 m/s preserves perpendicular-sidestep). TREMOR_FAR/NEAR
-scaled in sandWorm.ts; burst counts + particle pool sized up for
-the bigger boss. **Procedural terrain shader** in new
-`src/world/terrainMaterial.ts` — patches stock MeshLambertMaterial
-via onBeforeCompile to add GPU noise on top of biome vertex colors,
-zero bundle cost. Dunes: domain-warped multi-scale FBM grain + macro
-mineral zones + asymmetric ripples + warm/cool tint + slip/stoss
-slope tint + heterogeneous grain specks (magnetite/iron/quartz).
-Salt: multi-resolution Voronoi cracks (primary + secondary) +
-per-cell width variation + edge-curl rim brightening + wet-zone
-patches + crystal sparkle. **Bug fix mid-session** (D62): Three.js
-`vNormal` is VIEW space — silently killed flatness-gated effects
-when looking straight down. Fix: terrain.ts writes per-vertex
-`aBiomeRaw` attribute, shader injects `vWorldNormal` +
-`vBiomeRaw` varyings. Memory note `dustfall_shader_gotchas.md`
-documents the 4-step shader-debug stack so this gotcha takes 15
-min next time, not hours.
+**Last shipped**: Session NN — Crashed_hull dedicated module.
+Wreck POI rework arc now complete (LL did engine_block, NN does
+crashed_hull, camp deferred as intentionally lean). New
+`src/world/crashedHull.ts` (~430 LOC) replaces the 41-LOC inline
+`placeCrashedHull` in `poi.ts`. **LatheGeometry-tapered fuselage**
+(tail neck → mid-body waist → cockpit bulge → nose tip) + hull
+ribs + cockpit windows + hull breach + 2 broken antenna stubs
+(D60 anchored). **Custom tail engine bell** local to the module
+(NOT reusing shared `placeWreck(engine_bell)`): mirrors
+engineBlock.ts's LatheGeometry bell pattern with BackSide throat +
+backstop disc + rim/scar rings (D48 maw trick). 2 salvage panels
+(visible hull side + recessed inside bell throat). 4 per-piece
+tilted colliders via composed-quaternion `addCHCollider` helper.
+No interior + no shelter zone (dish stays the lone shelter POI).
+`partially verified` — tsc clean, 49 salvageables register
+correctly (matches MM baseline), gl.readPixels confirms renderer
+working, but browser screenshot tool stalled this session
+(preview-env regression, not code). Architecture identical to LL's
+proven engineBlock.ts pattern.
+
+**Prior milestone**: Session MM — Sandworm boss-tier rescale +
+procedural terrain shader. Sandworm body 24→240m, ranges rescaled
+3-8× per D49 dodgeability rules (speeds unchanged). New
+`src/world/terrainMaterial.ts` patches MeshLambertMaterial via
+onBeforeCompile for dune sand grain + ripples + slope tint +
+salt-flat multi-resolution Voronoi cracks. Mid-session bug fix
+(D62): Three.js `vNormal` is VIEW space — silently killed
+flatness-gated effects looking down. Fix: per-vertex `aBiomeRaw`
+attribute + `vWorldNormal` varying. Memory:
+`dustfall_shader_gotchas.md` with 4-step shader-debug stack.
 
 **Prior milestone**: Session LL — Satellite dish polish + engine_block
 POI rework. Thread A polished KK's satellite dish (exterior ladder,

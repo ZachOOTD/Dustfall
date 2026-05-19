@@ -3,6 +3,44 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session NN — 2026-05-18 — Crashed_hull dedicated module (Wreck POI rework arc complete)
+`partially verified` — tsc clean; 49 salvageables total (matches MM
+baseline, net zero — old crashed_hull registered 1 'massive' + 1
+'engine_bell' = 2, new module registers 2 'massive' panels = 2);
+`gl.readPixels` grid sampling confirms renderer drawing terrain +
+geometry; **browser screenshot tool stalled** every attempt this
+session (two fresh server restarts, visibility-API override,
+manual renderer.setSize all failed to unblock) — preview-environment
+regression vs. MM, NOT a code issue. Architecture identical to the
+proven LL engineBlock.ts pattern. New module
+`src/world/crashedHull.ts` (~430 LOC) replaces the 41-LOC inline
+`placeCrashedHull` in `poi.ts`. **LatheGeometry-tapered fuselage**
+— 14-point profile sweeping tail seal → HULL_R_TAIL 1.2m neck →
+HULL_R_MID 2.6m mid-body waist → pinch → cockpit bulge HULL_R_FRONT
+1.4m → nose tip; lathe rotated Z=-π/2 so the Y-length axis aligns
+with world +X. **Hull detail**: rust band torus + 4 structural rib
+torus rings (radius-matched to local profile via interpolation) +
+3 cockpit window strips wrapping the upper-front + darkened hull
+breach + 2 broken antenna stubs (D60 anchored — `geometry.translate
+(0, halfL, 0)` so the foot stays planted when the stub leans).
+**Custom tail engine bell** local to the module (NOT reusing the
+shared `placeWreck(engine_bell)`): LatheGeometry mirroring
+engineBlock.ts (throat → bulged shoulder → pinch → flared rim) +
+BackSide inner cylinder + dark backstop disc + rim torus + scar
+ring (D48 sandworm-maw trick). Bell rotated Z=+π/2 so mouth opens
+in world -X (away from hull). **2 salvage panels**: Panel A on
+upper-mid hull (visible from dune approach), Panel B recessed
+inside the bell throat (hidden loot — climb the hull, peer into
+the bell). **4 per-piece tilted box colliders** via composed-
+quaternion `addCHCollider` helper (mirrors engineBlock's pattern):
+main fuselage cuboid + walkable upper-hull strip + bell cuboid +
+underside wedge. Drops the prior single `attachCompoundCollider`
+AABB. No interior + no shelter zone — open landmark (dish stays the
+lone shelter POI). `placeDebrisField` preserved (16m, 12 pieces).
+`makeFuselage` import kept in poi.ts — still used by
+`placeScavengerCamp`. Wreck POI rework arc (LL engine_block + NN
+crashed_hull) is now complete; camp deferred as intentionally lean.
+
 ## Session MM — 2026-05-18 — Sandworm boss-tier rescale + procedural terrain shader (dunes + salt cracks)
 `verified` — tsc clean; multi-angle browser screenshots confirm
 sandworm body 240m rearing 50m above the dunes in stationaryBreach,
