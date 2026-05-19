@@ -1046,3 +1046,31 @@ these patterns from the start. See
 `memory/dustfall_shader_gotchas.md` for the full diagnostic-stack
 pattern (4-step debug: vWorldPos → hash → noise primitive → each
 mask) that would have caught this in 15 minutes instead of hours.
+
+## D63 — Rocky biome character via scatter geometry, NOT a shader pattern (Session OO)
+**When**: Session OO.
+**Why**: First pass at rocky biome (OO-3) added a procedural shader
+layer — Voronoi fissures + horizontal stratification bands + boulder
+mottling — gated on `rockiness = 1.0 - smoothstep(-0.44, 0.0,
+vBiomeRaw)`. The fissure pattern read TOO similarly to the salt-flat
+desiccation cracks (MM polish work). Both produced polygonal cell
+patterns with darkened edges, just at different scales and tints.
+Standing on rocky terrain, you couldn't visually distinguish "rocky"
+from "salt at a distance" without checking the biome tag.
+**Fix**: Reverted the rocky-specific shader block entirely. Rocky
+now inherits the sand-detail effects (gated on `1 - saltness` which
+is 1 across rocky territory), giving rocky terrain the same grain +
+ripple + wind-streak texture as dune. Differentiation now comes from
+two sources: (a) the natural dark-brown rocky vertex color (already
+in the biome palette), and (b) actual rock scatter geometry — 520
+small IcosahedronGeometry rocks placed via new
+`src/world/rockScatter.ts` (two size tiers, random rotation +
+Y-flatten, no colliders). Rocky biome NOW reads as: "sand-like
+ground with rocks strewn across it." Visually distinct from salt
+("crackled flat with wells") and dune ("smooth dunes with ripples").
+**Apply**: when a procedural shader pattern collides visually with
+another biome's pattern (regardless of palette / scale tweaks), pivot
+to a DIFFERENT modality — scatter geometry, vertex color shift, audio
+cue, distinct light treatment, etc. Don't try to push two similar
+shader patterns to be "different enough" via parameter tuning; the
+underlying grammar is the same so they'll always read related.

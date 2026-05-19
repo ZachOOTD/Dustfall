@@ -3,6 +3,55 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session OO — 2026-05-19 — Procedural shader expansion: hull rust + concrete weathering + dune wind streaks + rocky biome via scatter
+`verified` — tsc clean; multi-angle browser screenshots via a new
+toDataURL workflow (preview_screenshot tool stalls in hidden tabs;
+fallback documented in
+`memory/dustfall_preview_screenshot_workaround.md` so future sessions
+don't re-investigate). Major procedural-shader pass building on MM's
+pattern. **Three new shared material helpers + four terrain/biome
+upgrades + a screenshot workflow fix.** New
+`src/world/hullMaterial.ts` (~190 LOC) — `createRustedHullMaterial
+({baseColor, rustHex?, bleachHex?, streakIntensity?, wearAmplitude?})`
+patches MeshLambertMaterial via onBeforeCompile with vertical rust
+streaks attenuated by `(1 - vWorldNormal.y)` (drips run DOWN only),
+low-freq panel wear, sun bleach via `smoothstep(0.60, 0.95,
+vWorldNormal.y)`. D62 baked in. Applied to all 3 flagship wreck
+modules (satelliteDish.ts, engineBlock.ts, crashedHull.ts) AND to
+shared wrecks.ts hull/rust materials — every procgen wreck inherits
+the weathering. Flat-shaded primitives produce per-triangle effect
+bands (intentional: reads as per-panel wear states on a riveted plated
+hull). New `src/world/concreteMaterial.ts` (~165 LOC) —
+`createWeatheredConcreteMaterial({baseColor, leachHex?, stainHex?,
+leachIntensity?, aggregateAmplitude?})`. Aggregate noise + mineral
+mottling + salt-leach efflorescence (paler streaks, low-Y biased —
+salt wicks up from groundwater) + edge grime. Applied to dish
+`_concreteMat` + `_concreteDarkMat`. `terrainMaterial.ts` extended:
+**wind-streak overlay** on dunes — `(u, v) = world XZ in along-wind /
+perpendicular-wind frame`, long primary streaks (`u*0.03, v*0.45`) +
+secondary (`u*0.13, v*1.20`) blended at 0.35, brightness ±11% plus a
+directional tint shift (warmer on streak ridges, cooler in troughs).
+**Rocky biome shader REVERTED** (D63) — first pass at Voronoi
+fissures + strata bands + boulder mottling read too similarly to the
+salt-flat desiccation pattern. Replaced with the dune-effect path
+(gated on `1 - saltness`, which is 1 in rocky) so rocky inherits sand
+grain + ripples + wind streaks, with natural dark-brown rocky vertex
+color carrying the differentiation. New `src/world/rockScatter.ts`
+(~90 LOC) places 520 small IcosahedronGeometry rocks across rocky
+biome regions (two tiers: pebbles 0.15-0.4m + medium 0.5-1.2m, random
+rotation + Y-flatten, no colliders — deadTree pattern). Rocky biome
+now reads as "sand-like ground with rocks strewn across it" — visually
+distinct from salt ("crackled flat with wells") and dune ("smooth
+dunes with ripples"). Wired into `main.ts` after `spawnCacti`.
+**Screenshot workflow fix**: `mcp__Claude_Preview__preview_screenshot`
+stalls (hidden-tab issue, reproduced across NN + OO with fresh server
+restarts + visibility-API spoofing). `mcp__Claude_in_Chrome` returned
+no connected browsers. Pivoted to render → `canvas.toDataURL` →
+auto-saved tool-results file → python base64 decode → Read PNG. ~7
+captures this session via the new flow. Memory note added with the
+full incantation. Decisions D63. Memory:
+`dustfall_preview_screenshot_workaround.md` added.
+
 ## Session NN — 2026-05-18 — Crashed_hull dedicated module (Wreck POI rework arc complete)
 `partially verified` — tsc clean; 49 salvageables total (matches MM
 baseline, net zero — old crashed_hull registered 1 'massive' + 1

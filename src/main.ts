@@ -26,6 +26,7 @@ import { createHotbar, updateHotbar } from './ui/hotbar.ts';
 import { createInteractPrompt, updateInteractPrompt } from './ui/interactPrompt.ts';
 import { spawnBranches } from './pickups/pickups.ts';
 import { spawnDeadTrees } from './world/deadTree.ts';
+import { spawnRockScatter } from './world/rockScatter.ts';
 import { setupOpeningScene } from './world/openingScene.ts';
 import { hasSave } from './persistence/save.ts';
 import { createJournalPanel } from './ui/journalPanel.ts';
@@ -101,6 +102,10 @@ const pickupList = spawnBranches(three.scene, terrain, scatterRand, 0);
 spawnDeadTrees(three.scene, terrain, scatterRand, pickupList, biomes);
 const waterSources = spawnWaterSources(three.scene, terrain, scatterRand, biomes);
 const cacti = spawnCacti(three.scene, physics.world, terrain, scatterRand, biomes);
+// OO-4 — rocky biome rocks. Replaces the cracked-rock procedural
+// shader with actual scatter geometry (read too similarly to salt
+// flats as a shader pattern). No colliders — visual props only.
+spawnRockScatter(three.scene, terrain, biomes, scatterRand);
 
 // Hand-placed distant POIs (Session P). Adds a bandage pickup at the
 // abandoned camp. Massive POI wrecks register as salvageables too.

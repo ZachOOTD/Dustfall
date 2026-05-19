@@ -29,13 +29,17 @@ import { registerSalvageable } from './salvage.ts';
 import { makeStaticBox } from '../physics/bodies.ts';
 import { Tuning } from '../config/tuning.ts';
 import { placeDebrisField } from './wrecks.ts';
+import { createRustedHullMaterial } from './hullMaterial.ts';
 
 // ── Materials — local copies so this module's palette can drift from
 // the generic wrecks.ts hulls (e.g., deeper charring on the bells)
 // without touching the shared pack. ──────────────────────────────────
-const _hullMat = new THREE.MeshLambertMaterial({
-  color: Tuning.WRECK_HULL_HEX,
-  flatShading: true,
+// Session OO — procedural rust shader on the thrust frame body.
+// Frame box + cooling shroud tori inherit panel wear + side rust
+// streaks; the upper face gets sun bleach since it's the walkable
+// lookout perch.
+const _hullMat = createRustedHullMaterial({
+  baseColor: Tuning.WRECK_HULL_HEX,
 });
 const _hullDarkMat = new THREE.MeshLambertMaterial({
   color: Tuning.WRECK_HULL_DARK_HEX,
@@ -45,9 +49,12 @@ const _charredMat = new THREE.MeshLambertMaterial({
   color: 0x1a1410,           // near-black with a touch of warmth — bell exterior near throat
   flatShading: true,
 });
-const _bellOuterMat = new THREE.MeshLambertMaterial({
-  color: 0x3a2820,           // weathered bell exterior — rust over carbon scoring
-  flatShading: true,
+// Session OO — bell exteriors get the rust shader too, with a darker
+// rust hue (heat scoring deepens the rust near nozzles) and minimal
+// bleach (bells are face-down once the cluster tilts).
+const _bellOuterMat = createRustedHullMaterial({
+  baseColor: 0x3a2820,       // weathered bell exterior — rust over carbon scoring
+  rustHex: 0x0a0402,         // near-black for deep heat-burn streaks
 });
 const _nozzleInteriorMat = new THREE.MeshBasicMaterial({
   color: 0x180a06,           // dark interior, slight warmth (carbon + faint rust glow)

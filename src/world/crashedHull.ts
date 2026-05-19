@@ -50,16 +50,21 @@ import { registerSalvageable } from './salvage.ts';
 import { makeStaticBox } from '../physics/bodies.ts';
 import { Tuning } from '../config/tuning.ts';
 import { placeDebrisField } from './wrecks.ts';
+import { createRustedHullMaterial } from './hullMaterial.ts';
 
 // ── Materials — local copies so this module's palette can drift from
 // the generic wrecks.ts hulls without polluting the shared pack. ────
-const _hullMat = new THREE.MeshLambertMaterial({
-  color: Tuning.WRECK_HULL_HEX,
-  flatShading: true,
+// Session OO — procedural rust shader on the fuselage hull. The
+// fuselage uses LatheGeometry which has SMOOTH normals (continuous
+// surface) so the streak attenuation reads as a smooth gradient
+// down the flanks rather than per-triangle bands. Upper hull gets
+// sun bleach, side flanks get streaks, panel wear everywhere.
+const _hullMat = createRustedHullMaterial({
+  baseColor: Tuning.WRECK_HULL_HEX,
 });
-const _hullDarkMat = new THREE.MeshLambertMaterial({
-  color: Tuning.WRECK_HULL_DARK_HEX,
-  flatShading: true,
+const _hullDarkMat = createRustedHullMaterial({
+  baseColor: Tuning.WRECK_HULL_DARK_HEX,
+  streakIntensity: 0.35,     // ribs already darker — quieter streaks
 });
 const _rustMat = new THREE.MeshLambertMaterial({
   color: 0x6a3a1f,           // saturated rust band on the hull

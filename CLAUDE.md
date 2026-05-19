@@ -45,25 +45,32 @@ Run with `npm run dev` (port 5173). Type-check with `npx tsc --noEmit`.
 
 ## Where we are now
 
-**Last shipped**: Session NN — Crashed_hull dedicated module.
-Wreck POI rework arc now complete (LL did engine_block, NN does
-crashed_hull, camp deferred as intentionally lean). New
-`src/world/crashedHull.ts` (~430 LOC) replaces the 41-LOC inline
-`placeCrashedHull` in `poi.ts`. **LatheGeometry-tapered fuselage**
-(tail neck → mid-body waist → cockpit bulge → nose tip) + hull
-ribs + cockpit windows + hull breach + 2 broken antenna stubs
-(D60 anchored). **Custom tail engine bell** local to the module
-(NOT reusing shared `placeWreck(engine_bell)`): mirrors
-engineBlock.ts's LatheGeometry bell pattern with BackSide throat +
-backstop disc + rim/scar rings (D48 maw trick). 2 salvage panels
-(visible hull side + recessed inside bell throat). 4 per-piece
-tilted colliders via composed-quaternion `addCHCollider` helper.
-No interior + no shelter zone (dish stays the lone shelter POI).
-`partially verified` — tsc clean, 49 salvageables register
-correctly (matches MM baseline), gl.readPixels confirms renderer
-working, but browser screenshot tool stalled this session
-(preview-env regression, not code). Architecture identical to LL's
-proven engineBlock.ts pattern.
+**Last shipped**: Session OO — Procedural shader expansion across
+hull rust, concrete weathering, dune wind streaks, rocky biome via
+scatter, plus a screenshot-workflow fix. **3 new shared material
+helpers**: `hullMaterial.ts` (rust streaks + panel wear + sun bleach)
+applied to all 3 flagship wrecks AND shared wrecks.ts (every procgen
+wreck inherits weathering); `concreteMaterial.ts` (aggregate +
+mottling + salt-leach efflorescence + edge grime) applied to dish
+base. **terrainMaterial.ts extended** with along-wind streak overlay
+(brightness ±11% + warm/cool tint). **Rocky biome REVERTED** from
+shader pattern to scatter geometry (D63 — fissures read too similarly
+to salt cracks) — new `rockScatter.ts` places 520 IcosahedronGeometry
+rocks across rocky biome. **Screenshot workflow fixed** via toDataURL
+→ tool-results file → python decode → Read PNG (preview_screenshot
+stalls in hidden tabs); workflow documented in
+`memory/dustfall_preview_screenshot_workaround.md`. tsc clean, 7+
+verified captures, `verified` status restored after 2 sessions of
+`partially verified`.
+
+**Prior milestone**: Session NN — Crashed_hull dedicated module
+(Wreck POI rework arc complete). New `src/world/crashedHull.ts`
+(~430 LOC) replaces inline `placeCrashedHull` in `poi.ts` with
+LatheGeometry-tapered fuselage + custom tail bell + per-piece tilted
+colliders + 2 salvage panels. No interior (dish stays lone shelter
+POI). `partially verified` — tsc clean + 49 salvageables register
+correctly + gl.readPixels confirms renderer working, but
+preview_screenshot tool stalled (later fixed in OO).
 
 **Prior milestone**: Session MM — Sandworm boss-tier rescale +
 procedural terrain shader. Sandworm body 24→240m, ranges rescaled

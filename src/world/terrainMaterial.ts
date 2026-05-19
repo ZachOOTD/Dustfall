@@ -284,6 +284,28 @@ export function createTerrainMaterial(): THREE.MeshLambertMaterial {
         // for them to form). Amplitude bumped slightly for visibility.
         float rippleMod = mix(1.0, 0.92 + rippleAsym * 0.14, flatness);
 
+        // Aeolian wind streaks — long thin streaks running ALONG the
+        // wind direction (parallel, not perpendicular like ripples).
+        // Two scales blended: primary streaks ~30m long, secondary
+        // streaks ~8m for finer detail. v at low frequency stretches
+        // the noise perpendicular to wind, producing long elongated
+        // streak bands. Work on slopes too — wind blasts sand across
+        // faces — so no flatness gate.
+        float streakPrimary = terrainFbm(vec2(u * 0.03, v * 0.45));
+        float streakSecondary = terrainFbm(vec2(u * 0.13, v * 1.20 + 7.0));
+        float windStreak = mix(streakPrimary, streakSecondary, 0.35);
+        // ±11% brightness — bumped from ±5% so streaks read at
+        // mid-distance, not just up close.
+        float windStreakMod = mix(0.89, 1.11, windStreak);
+        // Color shift along streaks: high-streak (windward exposed)
+        // pixels read slightly warmer/redder (sun-baked, iron sand
+        // gets concentrated), low-streak (sheltered troughs) read
+        // slightly cooler/paler. Multiplicative tint amplifies the
+        // visual signal without overdoing the brightness.
+        vec3 streakWarm = vec3(1.05, 0.99, 0.94);
+        vec3 streakCool = vec3(0.96, 0.99, 1.03);
+        vec3 windStreakTint = mix(streakCool, streakWarm, smoothstep(0.35, 0.65, windStreak));
+
         // Slip-face vs stoss-face — surfaces tilted INTO the wind
         // (windward / stoss) read darker + warmer (packed compact);
         // surfaces tilted AWAY (lee / slip) read lighter + cooler
@@ -303,8 +325,9 @@ export function createTerrainMaterial(): THREE.MeshLambertMaterial {
         vec3 faceTint  = mix(vec3(1.0), mix(leeTint, stossTint, 0.5 + 0.5 * windFacing), slopeWeight);
 
         // Compose the sand modulation: brightness × tint × ripples
-        // × grain speck × slip/stoss face.
-        vec3 sandMod = vec3(sandBright) * sandTint * rippleMod * grainSpeck * faceTint;
+        // × wind streaks (brightness + tint) × grain speck × slip/
+        // stoss face.
+        vec3 sandMod = vec3(sandBright) * sandTint * rippleMod * windStreakMod * windStreakTint * grainSpeck * faceTint;
         float sandStrength = 1.0 - saltness;
         diffuseColor.rgb *= mix(vec3(1.0), sandMod, sandStrength);
 
@@ -382,6 +405,16 @@ export function createTerrainMaterial(): THREE.MeshLambertMaterial {
         // Mask: only apply on actual salt biome AND on flat surfaces.
         float saltStrength = saltness * flatness;
         diffuseColor.rgb *= mix(vec3(1.0), saltMod, saltStrength);
+
+        // ROCKY BIOME — no biome-specific texture. The sand-detail
+        // block above already runs on rocky (gated on 1 - saltness),
+        // giving the same grain + ripple + wind streaks. The natural
+        // dark-brown rocky vertex color carries the visual difference
+        // from dune. The "rocky" character comes from scattered rock
+        // geometry on the ground (see rockScatter.ts) — not from a
+        // shader pattern. A previous Voronoi-fissure approach (D63?)
+        // read too similarly to the salt-flat crack pattern, so it
+        // was removed and replaced with the rock-scatter scheme.
 
         // ============================================================
         // SLOPE EFFECTS — apply across all biomes

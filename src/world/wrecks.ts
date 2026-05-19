@@ -15,22 +15,29 @@ import type { Terrain } from './terrain.ts';
 import { Tuning } from '../config/tuning.ts';
 import { perturbOutward } from './sculpt.ts';
 import { attachCompoundCollider } from '../physics/bodies.ts';
+import { createRustedHullMaterial } from './hullMaterial.ts';
 
 // ────────────────────────────────────────────────────────────────
 // Shared materials. Same materials reused across wrecks so we don't
-// hammer the scene with redundant material objects.
+// hammer the scene with redundant material objects. OO-4 — main
+// hull + rust materials now use the procedural rust-streak shader
+// (see hullMaterial.ts) so every procgen wreck gets vertical drip
+// streaks + panel wear + sun bleach without bundle bloat. Hull-
+// dark uses a quieter streak intensity since darker base needs
+// less contrast to read. Nozzle interior + rim + antenna keep
+// their plain materials (small accent pieces don't benefit much).
 // ────────────────────────────────────────────────────────────────
-const _hullMat = new THREE.MeshLambertMaterial({
-  color: Tuning.WRECK_HULL_HEX,
-  flatShading: true,
+const _hullMat = createRustedHullMaterial({
+  baseColor: Tuning.WRECK_HULL_HEX,
 });
-const _hullDarkMat = new THREE.MeshLambertMaterial({
-  color: Tuning.WRECK_HULL_DARK_HEX,
-  flatShading: true,
+const _hullDarkMat = createRustedHullMaterial({
+  baseColor: Tuning.WRECK_HULL_DARK_HEX,
+  streakIntensity: 0.35,
 });
-const _rustMat = new THREE.MeshLambertMaterial({
-  color: Tuning.WRECK_RUST_HEX,
-  flatShading: true,
+const _rustMat = createRustedHullMaterial({
+  baseColor: Tuning.WRECK_RUST_HEX,
+  rustHex: 0x0e0603,         // deeper rust on already-rust surfaces (saturate)
+  streakIntensity: 0.45,
 });
 const _nozzleInteriorMat = new THREE.MeshBasicMaterial({
   color: Tuning.WRECK_NOZZLE_INTERIOR_HEX,

@@ -26,20 +26,33 @@ import type { ShelterRegistry } from '../shelter/shelterZones.ts';
 import { addShelterZone } from '../shelter/shelterZones.ts';
 import { makeStaticBox } from '../physics/bodies.ts';
 import { Tuning } from '../config/tuning.ts';
+import { createRustedHullMaterial } from './hullMaterial.ts';
+import { createWeatheredConcreteMaterial } from './concreteMaterial.ts';
 
 // ── Materials — local copies so we can keep the rusted/concrete
 // palette here without polluting the generic wreck materials. ────────
-const _concreteMat = new THREE.MeshLambertMaterial({
-  color: 0x8a7e68,           // weathered tan-grey concrete
-  flatShading: true,
+// Session OO-2 — procedural concrete shader. Adds aggregate noise +
+// mineral mottling + salt-leach efflorescence streaks (paler, low-
+// bias) + edge grime. See concreteMaterial.ts for shader detail.
+// Used by: base floor, roof, all 4 walls, north-wall lintel +
+// segments, buttress columns, buttress caps, raised roof rim,
+// collapsed roof chunks, recessed door frame, interior backstop,
+// interior backstop, interior console + screen.
+const _concreteMat = createWeatheredConcreteMaterial({
+  baseColor: 0x8a7e68,       // weathered tan-grey concrete
 });
-const _concreteDarkMat = new THREE.MeshLambertMaterial({
-  color: 0x5a4f3e,           // shadow / interior concrete
-  flatShading: true,
+const _concreteDarkMat = createWeatheredConcreteMaterial({
+  baseColor: 0x5a4f3e,       // shadow / interior concrete
+  leachIntensity: 0.30,      // interior surfaces stay drier — quieter streaks
 });
-const _rustedSteelMat = new THREE.MeshLambertMaterial({
-  color: 0x6b3a22,           // saturated rust orange-brown
-  flatShading: true,
+// Session OO — procedural rust shader. Replaces the plain
+// MeshLambertMaterial with one that adds vertical rust streaks on
+// side-facing surfaces, panel wear patches, and sun-bleach on top
+// surfaces. See hullMaterial.ts for the shader detail. Used by
+// tripod struts, bent strut, exterior pipes + valves, feed horn,
+// interior ladder rungs, and the LL exterior ladder rails + rungs.
+const _rustedSteelMat = createRustedHullMaterial({
+  baseColor: 0x6b3a22,       // saturated rust orange-brown
 });
 const _dishPanelMat = new THREE.MeshLambertMaterial({
   color: 0x7a4628,           // dish panel rust (mid)
