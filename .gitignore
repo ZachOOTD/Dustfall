@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Transient screenshot capture from preview-toDataURL workflow
+.claude/preview-shot.png
