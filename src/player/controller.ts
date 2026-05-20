@@ -31,6 +31,15 @@ const STEP_DISTANCE_SPRINT = 4.5; // longer cadence per sprint stride
 let _stepAccum = 0;
 let _stepParity = 0;             // alternates 0/1 → ±lateral offset for L/R foot
 
+/** QQ — true iff the player is the active endpoint of a sled rope.
+ *  Cheap O(sleds), n is a handful. */
+function isTowingOnFoot(ctx: GameContext): boolean {
+  for (const s of ctx.sleds.list) {
+    if (s.tether.kind === 'player') return true;
+  }
+  return false;
+}
+
 export function updatePlayer(ctx: GameContext, dt: number): void {
   // Mounted on speeder (Session CC): updateSpeeder already wrote the
   // camera position from the rider seat. Skip syncCameraToBody (player
@@ -73,11 +82,14 @@ export function updatePlayer(ctx: GameContext, dt: number): void {
 
   // Stamina: drains while sprinting; recovers otherwise. JJ-2 — gated
   // by DEBUG_UNLIMITED_STAMINA for testing (pins stamina at 1.0 so the
-  // sprint gate at line ~62 always passes).
+  // sprint gate at line ~62 always passes). QQ — towing a sled on foot
+  // multiplies sprint drain by STAMINA_TOW_FACTOR.
   if (Tuning.DEBUG_UNLIMITED_STAMINA) {
     ctx.stats.stamina = 1;
   } else if (sprinting) {
-    ctx.stats.stamina = Math.max(0, ctx.stats.stamina - Tuning.STAMINA_DRAIN_SPRINT * dt);
+    let drain = Tuning.STAMINA_DRAIN_SPRINT;
+    if (isTowingOnFoot(ctx)) drain *= Tuning.STAMINA_TOW_FACTOR;
+    ctx.stats.stamina = Math.max(0, ctx.stats.stamina - drain * dt);
   } else {
     ctx.stats.stamina = Math.min(1, ctx.stats.stamina + Tuning.STAMINA_RECOVER_PER_SEC * dt);
   }

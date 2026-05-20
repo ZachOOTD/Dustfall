@@ -31,7 +31,10 @@ export type ItemId =
   | 'pipe_staff'
   | 'scrap_gun'
   | 'scrap_bullet'
-  | 'energy_pistol';
+  | 'energy_pistol'
+  // Session QQ — sled + rope
+  | 'rope'
+  | 'sled_kit';
 
 /** Per-slot metadata for stateful items (canteen fill level, cook state, light state). */
 export interface ItemMeta {
@@ -54,6 +57,11 @@ export interface ItemMeta {
    *  per shot; reload via consuming a `scrap_bullet` while the gun
    *  is the equipped slot. Persists across save/load. */
   ammoRemaining?: number;
+  /** Session QQ — set on the wielded `rope` slot while one end is
+   *  tied to a sled. Identifies which Sled.id the rope is bound to;
+   *  cleared on detach. Persists across save/load so towing survives
+   *  a reload. */
+  attachedSledId?: number;
 }
 
 export interface UseResult {
@@ -135,7 +143,9 @@ export type InteractType =
   | 'relight'   // dead fire + branch selected → E reignites with 30s fuel
   | 'salvage'   // wreck (Session T) — E starts a 1.5s salvage
   | 'read'      // journal (Session W) — E opens the journal panel
-  | 'mount';    // speeder seat (Session CC-3.1) — E mounts the bike
+  | 'mount'     // speeder seat (Session CC-3.1) — E mounts the bike
+  | 'open_sled' // sled cargo deck (Session QQ) — E opens the sled inventory
+  | 'attach_rope'; // sled rope stub (Session QQ) — LMB w/ rope equipped attaches/detaches
 
 export interface HoverState {
   type: InteractType;

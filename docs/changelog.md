@@ -3,6 +3,30 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session QQ — 2026-05-19 — Sled mechanic — rope-tow flatbed cargo
+`partially verified` — tsc clean; eval-driven verification confirmed
+all critical paths (deploy / attachRopeToSled / detachRope / spring tow
+velocity / snap-distance auto-detach at 8m / transferTetherOnMount +
+Dismount / save v5 / load roundtrip restoring tether + cargo + ropeLine
++ rope's `meta.attachedSledId`). Pointer-locked input chain wasn't
+exercised — document.hidden throttling + Vite dynamic-import module
+isolation are the same gaps NN/OO hit. **New module
+`src/world/sled.ts`** (~395 LOC) mirrors tent/fire placement + loot-
+container cargo + speeder velocity-follow idiom. Two new ItemIds:
+`rope` (wieldable, ties to a sled's rope stub via LMB) and `sled_kit`
+(deploys a flatbed entity). Three tagged sub-meshes: cargo deck +
+front yoke + rope stub. **Tow physics: one-way spring-damper impulse**
+on a dynamic Rapier body with CCD enabled. Mid-impl tuning fix: K=90
++ friction=0.8 caused static-friction stiction (μmg ≈ 78N >
+spring 60N at 0.7m err) → bumped to K=220, damp=28, friction=0.25 so
+sleds glide on dunes. Lootmenu widened to `OpenContainer` structural
+type so both `LootContainer` and `Sled` satisfy. Mount/dismount auto-
+promotes a `player` tether to `speeder` and vice versa. Save format
+`SAVE_VERSION 4 → 5` — `sleds?` field is optional so v1-v4 saves load.
+Recipes: rope = 2 cloth + 1 branch; sled_kit = 2 scrap + 1 branch + 1
+rope. Trimmed pipe_staff + energy_pistol from DEBUG_STARTER_LOADOUT to
+fit (14/14 cap). Decisions D65-D66.
+
 ## Session PP — 2026-05-19 — Weapon variants + combat generalization + dev rAF fallback
 `verified` — tsc clean; rAF fallback enables hidden-tab combat
 verification for the first time (`ctx.time.elapsed` advances at ~60Hz

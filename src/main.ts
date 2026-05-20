@@ -45,6 +45,7 @@ import { createWeather, updateWeather } from './world/weather.ts';
 import { createAmbientDust, updateAmbientDust } from './world/ambientDust.ts';
 import { createStormVignette, updateStormVignette } from './world/stormVignette.ts';
 import { updateSpeeder } from './world/speeder.ts';
+import { updateSleds } from './world/sled.ts';
 import { spawnWaterSources } from './world/waterSources.ts';
 import { spawnCacti, updateCacti } from './world/cactus.ts';
 import { updateFires } from './world/fire.ts';
@@ -241,6 +242,8 @@ const ctx: GameContext = {
   lootContainers: { list: [], open: null },
   fires: { list: [] },
   tents: { list: [] },
+  sleds: { list: [], open: null },   // Session QQ
+
   salvageables,
   weather,
   ambientDust,
@@ -284,10 +287,15 @@ if (Tuning.DEBUG_STARTER_LOADOUT) {
   // Trimmed alien_fruit + tent_kit from the loadout to free inventory
   // slots — those items are unaffected by combat work and the player
   // can craft them anyway.
-  addItem(ctx.inventory, 'pipe_staff');
+  // QQ — trimmed pipe_staff + energy_pistol from the starter so sled_kit
+  // + rope fit (inventory is 14/14 with full weapon set). Player can
+  // still craft them.
   addItem(ctx.inventory, 'scrap_gun', { ammoRemaining: Tuning.WEAPON_SCRAP_GUN_MAX_AMMO });
-  for (let i = 0; i < 8; i++) addItem(ctx.inventory, 'scrap_bullet');
-  addItem(ctx.inventory, 'energy_pistol');
+  for (let i = 0; i < 6; i++) addItem(ctx.inventory, 'scrap_bullet');
+  // Session QQ — sled mechanic. Kit deploys the world entity; rope is
+  // the wieldable that ties the player or speeder to it.
+  addItem(ctx.inventory, 'sled_kit');
+  addItem(ctx.inventory, 'rope');
 }
 
 // Opening scene runs on EVERY boot — the wreck + skeleton + journal +
@@ -427,6 +435,7 @@ startLoop(ctx, (c, dt) => {
   updateFootprints(c.footprints, c.time.elapsed); // age + fade pooled decals
   updateFires(c, dt);            // flicker + fuel decrement + burnout
   updateCacti(c);                // CC-4 — regrow harvested alien-cactus fruit after a day cycle
+  updateSleds(c, dt);            // QQ — per-sled tow spring + rope visual; must run AFTER updateSpeeder + updatePlayer
   updateInteraction(c, dt);      // raycast hover + E to take/refill/search/harvest/cook/sleep
   updateInventoryInput(c, dt);   // 1-4, wheel, Q to use
   updateCombat(c, dt);           // LMB swing → damage raider

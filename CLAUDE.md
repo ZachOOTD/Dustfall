@@ -45,7 +45,37 @@ Run with `npm run dev` (port 5173). Type-check with `npx tsc --noEmit`.
 
 ## Where we are now
 
-**Last shipped**: Session PP — Weapon variants + combat
+**Last shipped**: Session QQ — Sled mechanic — rope-tow flatbed
+cargo. New world entity `src/world/sled.ts` (~395 LOC) mirrors
+tent/fire placement, loot-container cargo, and speeder velocity-
+follow idiom. Two ItemIds shipped: `rope` (wieldable; LMB on a
+sled's rope stub ties/unties one end) and `sled_kit` (deploys a
+flatbed sled in front of the player). Two interactable sub-meshes:
+cargo deck (`interactType: 'open_sled'`, E opens the existing loot
+menu via a new `OpenContainer` structural type) + front rope stub
+(`interactType: 'attach_rope'`, LMB w/ rope wielded). **Tow physics:
+one-way spring-damper impulse** on a dynamic Rapier body with CCD
+enabled. Per-frame in `updateSleds`: `target = anchor − forward ×
+SLED_TOW_DISTANCE`; `force = err × K − vel × DAMP`; `body.applyImpulse
+(force × dt)`. Player tether anchors hip-behind; speeder tether
+anchors 1m behind seat with a reverse-guard (drops the spring when
+bike velocity opposes its forward). Snap auto-detach at 8m via
+`SLED_TOW_MAX_DIST`. Rope's `Slot.meta.attachedSledId` round-trips
+through save; `updateSleds` auto-detaches if no slot holds it
+(handles "rope dropped while tethered"). Mid-impl tuning fix: K=90
++ friction=0.8 caused **static-friction stiction** (μmg ≈ 78N >
+spring 60N at 0.7m err) → bumped K=220, damp=28, friction=0.25 so
+sleds glide on dunes. Mount/dismount auto-promote tether
+'player'↔'speeder' via `transferTetherOnMount` / `Dismount` hooks
+in `speeder.ts`. Stamina drain × `STAMINA_TOW_FACTOR` (2.0) while
+sprinting on foot tethered (no walk-speed cut per scope decision).
+`SAVE_VERSION 4 → 5` — `sleds?` array (id/pos/rotationY/contents/
+tether) is optional so v1-v4 saves still load. Recipes:
+`rope = 2 cloth + 1 branch`; `sled_kit = 2 scrap + 1 branch + 1 rope`.
+Trimmed `pipe_staff` + `energy_pistol` from DEBUG_STARTER_LOADOUT
+to fit the new items. Decisions D65-D66.
+
+**Prior milestone**: Session PP — Weapon variants + combat
 generalization + dev rAF fallback. **3 new weapons** (first combat
 content since the machete originally shipped): `pipe_staff` (melee,
 2.6m reach + 3m knockback on lizards/raiders), `scrap_gun` (30m

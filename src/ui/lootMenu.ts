@@ -3,17 +3,29 @@
 // Pauses the game while open. Close re-locks pointer and resumes.
 
 import type { GameContext } from '../GameContext.ts';
-import type { LootContainer, LootEntry } from '../world/lootContainers.ts';
+import type { LootEntry } from '../world/lootContainers.ts';
 import { getItemDef } from '../inventory/items.ts';
 import { addItem } from '../inventory/inventory.ts';
 import { playPickup, playUiClick, playUiHover } from '../audio/audio.ts';
 import { resumeFromPause } from './menus.ts';
 
+/** Structural type — both LootContainer (wreckage) and Sled (Session QQ)
+ *  satisfy this, so the menu can render either without knowing which is
+ *  open. Optional `title` lets the sled show "SLED CARGO" while loot
+ *  containers default to "WRECKAGE". */
+export interface OpenContainer {
+  id: number;
+  contents: LootEntry[];
+  opened: boolean;
+  title?: string;
+}
+
 let _root: HTMLDivElement | null = null;
+let _titleEl: HTMLDivElement | null = null;
 let _rowsContainer: HTMLDivElement | null = null;
 let _emptyLabel: HTMLDivElement | null = null;
 let _ctx: GameContext | null = null;
-let _current: LootContainer | null = null;
+let _current: OpenContainer | null = null;
 
 function makeCloseBtn(label: string, onClick: () => void): HTMLButtonElement {
   const b = document.createElement('button');
@@ -34,6 +46,7 @@ export function createLootMenu(ctx: GameContext): void {
   title.className = 'title small';
   title.textContent = 'WRECKAGE';
   root.appendChild(title);
+  _titleEl = title;
 
   const rows = document.createElement('div');
   rows.className = 'loot-rows';
@@ -121,10 +134,11 @@ function takeRow(idx: number, entry: LootEntry): void {
   renderRows();
 }
 
-export function openLootMenu(ctx: GameContext, container: LootContainer): void {
+export function openLootMenu(ctx: GameContext, container: OpenContainer): void {
   if (!_root) return;
   _current = container;
   container.opened = true;
+  if (_titleEl) _titleEl.textContent = container.title ?? 'WRECKAGE';
   // Releasing pointer lock triggers the unlock handler → showPauseOverlay
   // → paused=true. The loot menu sits on top of the pause overlay (higher
   // z-index in CSS). closeLootMenu hides both and re-locks.

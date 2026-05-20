@@ -7,6 +7,7 @@ import { Tuning } from '../config/tuning.ts';
 import { playDrink, playPour } from '../audio/audio.ts';
 import { deployFire } from '../world/fire.ts';
 import { deployTent } from '../world/tent.ts';
+import { deploySled } from '../world/sled.ts';
 import { easeOutBack, easeInOutCubic, easeOutQuad } from '../core/ease.ts';
 import { addItem } from './inventory.ts';
 import { makeLizardVisual } from '../enemies/lizard.ts';
@@ -1322,6 +1323,104 @@ const _DEFS: Record<ItemId, ItemDef> = {
       return s;
     },
   },
+
+  // ── Session QQ — sled + rope ────────────────────────────────
+  // sled_kit: one-shot deployer (mirrors tent_kit / fire_kit).
+  // rope: wielded item. LMB while aimed at a sled's rope stub attaches
+  // (or detaches). The actual attach/detach is handled in
+  // interaction.ts — onUse here is just an explanatory hint.
+  sled_kit: {
+    id: 'sled_kit',
+    name: 'SLED KIT',
+    glyph: '⛷',
+    description: 'a folded flatbed sled with skids',
+    stackable: false,
+    maxStack: 1,
+    onUse(ctx, _slot) {
+      const sled = deploySled(ctx);
+      if (!sled) {
+        return { consumed: false, message: 'no room to deploy a sled here' };
+      }
+      return { consumed: true, message: 'sled deployed' };
+    },
+    makeViewModel() {
+      const group = new THREE.Group();
+      // Folded planks bundled together — a small flat stack.
+      const plankMat = new THREE.MeshLambertMaterial({ color: 0x6b4a2c });
+      for (let i = 0; i < 3; i++) {
+        const plank = new THREE.Mesh(
+          new THREE.BoxGeometry(0.22, 0.018, 0.08),
+          plankMat,
+        );
+        plank.position.y = -0.02 + i * 0.022;
+        group.add(plank);
+      }
+      // Twin runners strapped underneath.
+      const runnerMat = new THREE.MeshLambertMaterial({ color: 0x3a2a1a });
+      for (const sz of [-1, 1]) {
+        const runner = new THREE.Mesh(
+          new THREE.BoxGeometry(0.24, 0.012, 0.018),
+          runnerMat,
+        );
+        runner.position.set(0, -0.05, sz * 0.024);
+        group.add(runner);
+      }
+      return group;
+    },
+    makeIcon() {
+      const s = svg();
+      // Flatbed sled silhouette: rectangle + two short runners
+      s.appendChild(svgEl('rect', { x: '4', y: '10', width: '16', height: '4' }));
+      s.appendChild(svgEl('line', { x1: '5', y1: '17', x2: '19', y2: '17' }));
+      s.appendChild(svgEl('line', { x1: '6', y1: '14', x2: '6', y2: '17' }));
+      s.appendChild(svgEl('line', { x1: '18', y1: '14', x2: '18', y2: '17' }));
+      return s;
+    },
+  },
+
+  rope: {
+    id: 'rope',
+    name: 'ROPE',
+    glyph: '~',
+    description: 'aim at a sled and click to tow',
+    stackable: false,
+    maxStack: 1,
+    onUse(_ctx, _slot) {
+      // E does nothing — attach is LMB-driven via interaction.ts (the
+      // wielded-rope special case in case 'sleds'). Toast as a hint.
+      return { consumed: false, message: 'aim at a sled and click to tie' };
+    },
+    makeViewModel() {
+      const group = new THREE.Group();
+      // Coiled rope — a torus held in the off-hand position.
+      const coilMat = new THREE.MeshLambertMaterial({ color: 0x6e4a2a });
+      const coil = new THREE.Mesh(
+        new THREE.TorusGeometry(0.07, 0.022, 8, 16),
+        coilMat,
+      );
+      coil.rotation.x = Math.PI / 2;
+      coil.rotation.z = 0.2;
+      group.add(coil);
+      // Two cross-bound strands.
+      for (let i = 0; i < 2; i++) {
+        const strand = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.012, 0.012, 0.18, 6),
+          coilMat,
+        );
+        strand.rotation.x = Math.PI / 2;
+        strand.position.set((i - 0.5) * 0.06, 0, 0);
+        group.add(strand);
+      }
+      return group;
+    },
+    makeIcon() {
+      const s = svg();
+      // Coiled rope: concentric circles
+      s.appendChild(svgEl('circle', { cx: '12', cy: '12', r: '7' }));
+      s.appendChild(svgEl('circle', { cx: '12', cy: '12', r: '4' }));
+      return s;
+    },
+  },
 };
 
 export function getItemDef(id: ItemId): ItemDef {
@@ -1338,4 +1437,5 @@ export const ALL_ITEM_IDS: ReadonlyArray<ItemId> = [
   'torch', 'flashlight',
   'lizard_on_a_stick_raw', 'lizard_on_a_stick_cooked',
   'pipe_staff', 'scrap_gun', 'scrap_bullet', 'energy_pistol',
+  'rope', 'sled_kit',
 ];

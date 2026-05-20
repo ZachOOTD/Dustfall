@@ -32,6 +32,7 @@ import {
 } from '../enemies/sandWorm.ts';
 import { spawnFireAt } from '../world/fire.ts';
 import { spawnTentAt } from '../world/tent.ts';
+import { spawnSledAt, setNextSledId } from '../world/sled.ts';
 import { removeShelterZone } from '../shelter/shelterZones.ts';
 
 export const SAVE_KEY = 'dustfall.save.v1';
@@ -39,13 +40,16 @@ export const SAVE_KEY = 'dustfall.save.v1';
 // GG — v3 marks the biome-rescale + scatter-retune.
 // HH — v4 marks the procgen-POI + biome-aware-lizard layout. Schema is
 // unchanged across all four versions; bumps exist so future tooling can
-// tell pre- vs post-rework saves apart. Loader accepts v1, v2, v3, v4.
-export const SAVE_VERSION = 4;
+// tell pre- vs post-rework saves apart.
+// QQ — v5 adds the `sleds` array (placed sled entities + their tether
+// state + cargo). Pre-v5 saves load fine (sleds field is optional and
+// just stays empty). Loader accepts v1-v5.
+export const SAVE_VERSION = 5;
 
 type V3 = { x: number; y: number; z: number };
 
 export interface SaveV1 {
-  version: 1 | 2 | 3 | 4;
+  version: 1 | 2 | 3 | 4 | 5;
   seed: number;
   savedAt: number;
 
@@ -87,6 +91,15 @@ export interface SaveV1 {
   // Player-placed — recreated from scratch on load.
   fires: Array<{ id: number; pos: V3; fuelSeconds: number; alive: boolean }>;
   tents: Array<{ id: number; pos: V3; rotationY: number }>;
+  /** Session QQ — placed sleds with their cargo + tether state. Optional
+   *  so pre-v5 saves still load (sleds field is just absent). */
+  sleds?: Array<{
+    id: number;
+    pos: V3;
+    rotationY: number;
+    contents: LootEntry[];
+    tether: 'none' | 'player' | 'speeder';
+  }>;
 
   /** Hover speeder pose. Optional so v1 saves written before this field
    *  was added still load cleanly (the speeder just stays at the default
@@ -203,6 +216,21 @@ export function saveGameState(ctx: GameContext): { ok: boolean; error?: string }
         pos: { x: t.pos.x, y: t.pos.y, z: t.pos.z },
         rotationY: t.mesh.rotation.y,
       })),
+      sleds: ctx.sleds.list.map((s) => {
+        const tr = s.body.translation();
+        return {
+          id: s.id,
+          // pos = ground position (subtract the body Y offset back out).
+          pos: {
+            x: tr.x,
+            y: tr.y - 0.08 - Tuning.SLED_HALF_EXTENTS_Y,
+            z: tr.z,
+          },
+          rotationY: s.group.rotation.y,
+          contents: s.contents.map((e) => ({ ...e })),
+          tether: s.tether.kind,
+        };
+      }),
       speeder: ctx.speeder ? (() => {
         const tr = ctx.speeder!.body.translation();
         const rt = ctx.speeder!.body.rotation();
@@ -247,10 +275,10 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
     return { ok: false, error: 'save file is corrupt' };
   }
 
-  // EE/FF/GG/HH — accept v1, v2, v3, and v4 saves. Schema is identical;
-  // bumps only mark world-rework checkpoints. Reject newer/unknown
-  // versions to keep future schema migrations safe.
-  if (save.version !== 1 && save.version !== 2 && save.version !== 3 && save.version !== 4) {
+  // EE/FF/GG/HH/QQ — accept v1-v5 saves. Schema is forward-only:
+  // each new version adds optional fields, so pre-v5 saves load
+  // cleanly (missing `sleds` is treated as empty).
+  if (save.version !== 1 && save.version !== 2 && save.version !== 3 && save.version !== 4 && save.version !== 5) {
     return { ok: false, error: `unsupported save version ${save.version}` };
   }
   if (save.seed !== Tuning.RNG_SEED) {
@@ -414,6 +442,37 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
   for (const saved of save.tents) {
     const pos = new THREE.Vector3(saved.pos.x, saved.pos.y, saved.pos.z);
     spawnTentAt(ctx, pos, saved.rotationY);
+  }
+
+  // ── Sleds (Session QQ): clear anything placed in this session, then
+  //    re-spawn from the save. Optional field — pre-v5 saves arrive with
+  //    `sleds === undefined`. ──
+  for (const s of ctx.sleds.list) {
+    ctx.three.scene.remove(s.group);
+    ctx.physics.world.removeRigidBody(s.body);
+    if (s.ropeLine) {
+      ctx.three.scene.remove(s.ropeLine);
+      s.ropeLine.geometry.dispose();
+      (s.ropeLine.material as THREE.Material).dispose();
+    }
+  }
+  ctx.sleds.list.length = 0;
+  ctx.sleds.open = null;
+  if (save.sleds) {
+    let maxId = 0;
+    for (const saved of save.sleds) {
+      const pos = new THREE.Vector3(saved.pos.x, saved.pos.y, saved.pos.z);
+      spawnSledAt(
+        ctx,
+        pos,
+        saved.rotationY,
+        saved.contents.map((e) => ({ ...e })),
+        { kind: saved.tether },
+        saved.id,
+      );
+      if (saved.id > maxId) maxId = saved.id;
+    }
+    if (maxId > 0) setNextSledId(maxId);
   }
 
   // ── Sand worm (DD-2): worm now roams, so we restore its saved XZ.

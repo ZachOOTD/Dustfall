@@ -78,6 +78,26 @@ const RECIPES: Recipe[] = [
       { id: 'scrap', count: 1 },
     ],
   },
+  // QQ — rope: wielded item used to tow a sled.
+  {
+    result: 'rope',
+    resultCount: 1,
+    ingredients: [
+      { id: 'cloth', count: 2 },
+      { id: 'branch', count: 1 },
+    ],
+  },
+  // QQ — sled kit: deploys a flatbed cargo sled. One rope is consumed
+  // in the kit; player still needs a separate rope to tow.
+  {
+    result: 'sled_kit',
+    resultCount: 1,
+    ingredients: [
+      { id: 'scrap', count: 2 },
+      { id: 'branch', count: 1 },
+      { id: 'rope', count: 1 },
+    ],
+  },
 ];
 
 let _root: HTMLDivElement | null = null;

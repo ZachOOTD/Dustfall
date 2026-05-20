@@ -12,15 +12,14 @@ and promotes the second.
 ## Next — Big-ticket bucket (1–2 picks per session at ~4–7h each)
 Pick whatever feels most missing after the polish + atmosphere arc.
 
+- Small red creature companion (pocketable + re-deployable) — charm + character, no combat surface area, scoped at one session
 - Raider variants (scout / ambusher / brute) — *if* we decide to bring raiders back
 - Q2: Rigged hands + lizard (GLB-dependent — deferred with N's asset work)
 - Base-building mechanics
-- Small red creature companion (pocketable + re-deployable)
 - Trading / NPC economy
 - 7-day storm countdown
 - Bounties (template: D39 `'mount'` singleton-interactable pattern from CC-2)
 - Procedural world generation (idea — POIs randomized per seed)
-- Sled / rope / scrap-metal sled (physical-inventory drag-along, towable behind speeder)
 - Remove HUD stat bars in favor of audio/visual/text cues (idea)
 
 ---

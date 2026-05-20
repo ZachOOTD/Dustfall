@@ -25,6 +25,7 @@ import type { SandWorm } from './enemies/sandWorm.ts';
 import type { LootContainer } from './world/lootContainers.ts';
 import type { Fire } from './world/fire.ts';
 import type { Tent } from './world/tent.ts';
+import type { Sled } from './world/sled.ts';
 import type { BiomeSampler } from './world/biomes.ts';
 import type { SalvageableRegistry } from './world/salvage.ts';
 import type { FootprintRegistry } from './world/footprints.ts';
@@ -90,6 +91,9 @@ export interface GameContext {
   lootContainers: { list: LootContainer[]; open: LootContainer | null };
   fires: { list: Fire[] };
   tents: { list: Tent[] };
+  /** Session QQ — placed sleds. `open` is the one currently shown in the
+   *  loot menu overlay (parallel to lootContainers.open). */
+  sleds: { list: Sled[]; open: Sled | null };
   salvageables: SalvageableRegistry;
   weather: Weather;
   ambientDust: AmbientDust;

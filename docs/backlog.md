@@ -25,9 +25,6 @@ Use `/triage-ideas` to bulk-classify a free-form dump.
 [idea] remove HUD stat bars in favor of audio/visual/text cues ("you could use a drink")
 [feat] larger enterable tent that shelters the player from inside during sandstorms
 [polish] opening wreck: add more small holes to the roof + walls so additional shafts of light reach the interior
-[feat] portable sled — drag along the ground to carry extra items
-[feat] rope item — wield in hands, attach to speeder to tow objects
-[feat] scrap-metal sled — tow with rope, doubles as physical inventory + speeder trailer
 [idea] world + biome rework: larger map, vaster biomes, spaced-out POIs, procgen terrain/biomes/POI/AI spawns
 [polish] wreck POI rework: accurate collision, connected geometry (no floaters), less boxy, more curves + detail
 [feat] wrecked satellite dish POI

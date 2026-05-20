@@ -1108,3 +1108,57 @@ need the game loop to run while the browser thinks the tab is
 hidden) should follow this pattern — guard with `import.meta.env
 .DEV` and use a wall-clock timer fallback that the browser doesn't
 throttle.
+
+
+## D65 — Sled tow uses one-way spring-damper, no Rapier joints (Session QQ)
+**When**: Session QQ.
+**Why**: A towed sled needs to follow either the player capsule
+(kinematic) or the speeder (dynamic) at a fixed offset. Three
+candidate approaches existed: (a) RAPIER fixed/distance joints,
+(b) two-way spring-damper between both bodies, (c) one-way
+spring-damper applied to the sled only. Joints were ruled out
+because they are not used anywhere else in the codebase
+(velocity-follow is the idiom across raiders/lizards/speeder
+hover) — introducing the dependency just for the sled would
+fragment the physics surface. Two-way force was ruled out
+because the speeder is a dynamic body with its own PD hover
+controller — coupling sled back-reaction into the speeder
+would either oscillate or fight the hover loop, and the player
+capsule is kinematic so back-reaction on it is undefined anyway.
+**Decision**: One-way spring-damper impulse on the sled body
+only, per frame in `updateSleds`:
+`force = errVec * SLED_TOW_SPRING_K - sledVel * SLED_TOW_SPRING_DAMP`;
+`body.applyImpulse(force * dt)`. Speeder/player feels no
+back-reaction; sled accelerates toward a target pos behind the
+tether. `applyImpulse` (not `setLinvel`) so gravity, terrain
+contact, and contacts from other bodies still apply normally.
+Snap-distance auto-detach (`SLED_TOW_MAX_DIST = 8m`) prevents
+unrecoverable separation if the speeder boosts through a wreck.
+**Apply**: future tethered entities (companion creatures,
+chained sleds, lanterns swinging from a hook) should follow
+the same pattern — apply force to the dependent body only,
+no joints, mass tuned so the dependent feels weighty without
+slowing the puller.
+
+## D66 — Static-friction stiction in physics tow: K must exceed μmg (Session QQ)
+**When**: Session QQ.
+**Why**: First sled tuning pass used K=90, friction=0.8. The
+sled body's mass ≈ ρV ≈ 30 × (1.0×0.2×1.8) = 10.8 kg. Static
+friction ceiling = μ × m × g = 0.8 × 10.8 × 9.81 ≈ 85 N.
+Spring force at a 0.7m settle gap = 90 × 0.7 = 63 N. **Less
+than the friction ceiling** → the sled refused to move at
+small errors, settling at ~4m past target instead of catching
+up to the 3m offset. The simulation showed velocity dropping
+toward zero and the body locked in place, while the spring
+math said force was being applied.
+**Fix**: dropped collider friction to 0.25 (sleds glide on
+dunes) AND bumped spring K to 220, damp to 28. New static
+ceiling = 0.25 × 10.8 × 9.81 = 26.5 N. Spring at 0.5m err =
+110 N — 4× the friction ceiling, so the body slides.
+**Apply**: for any spring-driven dynamic body resting on
+terrain, sanity-check `spring_K * typical_err > μ * m * g`
+BEFORE tuning damping. If the body sits on the ground with
+friction, static friction is the dominant failure mode at
+small errors — not damping or damping-overshoot. Inspect the
+trace: if velocity drops to ~0 with non-zero spring force,
+it's stiction, not overdamping.

@@ -477,6 +477,26 @@ export const Tuning = {
   SANDWORM_LENGTH: 240,                      // m — total body length head-to-tail (10× boss-tier scale)
   SANDWORM_MAX_RADIUS: 20.0,                 // m — peak body radius (10×)
   SANDWORM_UNDERGROUND_DEPTH: 25,            // m below ground while submerged (5× — proportional to thicker body)
+
+  // Sled (Session QQ) — placed flatbed sled with rope-tow + cargo
+  // inventory. Mirrors tent/fire placement; uses a dynamic Rapier body
+  // with a one-way spring-damper impulse pulling it toward a target pos
+  // behind the tether (player on foot, or speeder when mounted). No
+  // joints (none used elsewhere in the codebase).
+  SLED_DENSITY: 30,                          // ~10kg sled at 1×0.2×1.8 m — light enough to accelerate well under the spring
+  SLED_LINEAR_DAMP: 1.8,                     // resists coasting — sled settles when player stops
+  SLED_ANGULAR_DAMP: 4.0,                    // resists yaw spin from terrain bumps
+  SLED_HALF_EXTENTS_X: 0.5,                  // cargo bed half-width
+  SLED_HALF_EXTENTS_Y: 0.10,                 // flat
+  SLED_HALF_EXTENTS_Z: 0.9,                  // longer than wide — runner-shaped
+  SLED_TOW_DISTANCE: 3.0,                    // m behind tether — clears speeder rear (z≈2.075) + visible rope length
+  SLED_TOW_SPRING_K: 220,                    // N/m. Tuned in-engine: must overcome static friction (μ·m·g ≈ 24N at μ=0.3, m=10kg) for the sled to move under small position errors.
+  SLED_TOW_SPRING_DAMP: 28,                  // velocity damping along rope axis — proportional to higher K to keep underdamped response without overshoot
+  SLED_TOW_MAX_DIST: 8.0,                    // rope snaps beyond this — auto-detach + toast
+  SLED_TOW_ATTACH_RANGE: 3.0,                // raycast distance for clicking the rope stub with wielded rope
+  SLED_ROPE_COLOR_HEX: 0x6e4a2a,             // matches branch/wood palette
+  NEAR_SLED_DISTANCE_SQ: 4.0,                // 2m exclusion when placing a new sled near an existing one
+  STAMINA_TOW_FACTOR: 2.0,                   // sprint+tow on foot drains stamina × this (no walk-speed cut per scope)
 } as const;
 
 // Sky gradient colors (top vs horizon) per time of day. Horizon stays close to

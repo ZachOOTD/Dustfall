@@ -27,6 +27,7 @@ import {
   setSpeederThrustSpeed,
   stopSpeederThrust,
 } from '../audio/audio.ts';
+import { transferTetherOnMount, transferTetherOnDismount } from './sled.ts';
 
 export interface SpeederState {
   body: RAPIER.RigidBody;
@@ -760,6 +761,8 @@ export function updateSpeeder(ctx: GameContext, dt: number): void {
       // with the bike collider. We'll teleport it back on dismount.
       ctx.player.body.body.setNextKinematicTranslation({ x: 0, y: -2000, z: 0 });
       startSpeederThrust();
+      // QQ — promote any 'player'-tethered sled to follow the speeder.
+      transferTetherOnMount(ctx);
     }
     return;
   }
@@ -791,6 +794,8 @@ export function updateSpeeder(ctx: GameContext, dt: number): void {
     }
     s.visualPitch = 0;
     s.visualRoll = 0;
+    // QQ — demote any 'speeder'-tethered sled back to the player.
+    transferTetherOnDismount(ctx);
     return;
   }
 

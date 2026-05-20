@@ -22,6 +22,7 @@ import { lootSandWorm } from '../enemies/sandWorm.ts';
 import { findLootContainerById } from '../world/lootContainers.ts';
 import { findFireById, addFuel, relightFire } from '../world/fire.ts';
 import { findTentById } from '../world/tent.ts';
+import { findSledById, attachRopeToSled, detachRope } from '../world/sled.ts';
 import {
   findSalvageableById,
   markSalvageStripped,
@@ -54,7 +55,7 @@ const _dir = new THREE.Vector3();
 interface InteractHit {
   type: InteractType;
   id: number;
-  registry: 'pickups' | 'waterSources' | 'cacti' | 'lizards' | 'sandWorms' | 'lootContainers' | 'fires' | 'tents' | 'salvageables' | 'journals' | 'speeder';
+  registry: 'pickups' | 'waterSources' | 'cacti' | 'lizards' | 'sandWorms' | 'lootContainers' | 'fires' | 'tents' | 'salvageables' | 'journals' | 'speeder' | 'sleds';
   distance: number;
 }
 
@@ -119,6 +120,7 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
   for (const f of ctx.fires.list) f.hovered = false;
   for (const t of ctx.tents.list) t.hovered = false;
   for (const s of ctx.salvageables.list) s.hovered = false;
+  for (const sl of ctx.sleds.list) sl.hovered = false;
   ctx.inventory.hover = null;
 
   // Drive any in-progress cooking forward.
@@ -157,6 +159,7 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
   // Both alive (cook/add_fuel) and dead (relight) fires are interactable.
   for (const f of ctx.fires.list) targets.push(f.mesh);
   for (const t of ctx.tents.list) targets.push(t.mesh);
+  for (const sl of ctx.sleds.list) targets.push(sl.group);
   for (const s of ctx.salvageables.list) targets.push(s.panel);
   for (const j of ctx.journals.list) targets.push(j.mesh);
   // CC-3.1 — speeder seat is interactable when not already mounted; the
@@ -410,6 +413,69 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
       ctx.inventory.hover = { type: 'sleep', distance: info.distance, promptNoun: 'tent' };
       if (ctx.input.pressed.has('KeyE')) {
         openSleepOverlay(ctx);
+      }
+      return;
+    }
+
+    case 'sleds': {
+      const sled = findSledById(ctx.sleds.list, info.id);
+      if (!sled) return;
+      sled.hovered = true;
+      // Sub-dispatch by the tagged interactType — info.type is either
+      // 'open_sled' (cargo deck) or 'attach_rope' (front yoke).
+      if (info.type === 'attach_rope') {
+        const equipped = ctx.inventory.slots[ctx.inventory.selectedIdx];
+        const ropeEquipped = equipped.item === 'rope';
+        const attached = sled.tether.kind !== 'none';
+        if (!ropeEquipped) {
+          // Show a soft prompt — equip rope to engage.
+          ctx.inventory.hover = {
+            type: 'attach_rope',
+            distance: info.distance,
+            promptNoun: 'sled towrope (equip rope)',
+            passive: true,
+          };
+          return;
+        }
+        ctx.inventory.hover = {
+          type: 'attach_rope',
+          distance: info.distance,
+          promptNoun: attached ? 'detach rope' : 'attach rope',
+        };
+        if (ctx.input.mousePressed.has(0)) {
+          if (attached) {
+            detachRope(ctx, sled, 'rope untied');
+          } else {
+            const endpoint: 'player' | 'speeder' =
+              ctx.speeder && ctx.speeder.mounted ? 'speeder' : 'player';
+            attachRopeToSled(ctx, sled, endpoint);
+          }
+        }
+        return;
+      }
+      // Default: cargo-deck open.
+      const empty = sled.contents.length === 0;
+      ctx.inventory.hover = {
+        type: 'open_sled',
+        distance: info.distance,
+        promptNoun: empty ? 'sled (empty)' : 'sled cargo',
+      };
+      if (ctx.input.pressed.has('KeyE')) {
+        if (empty) {
+          ctx.ui.showToast('the sled is empty');
+          return;
+        }
+        sled.opened = true;
+        ctx.sleds.open = sled;
+        // Pass an explicit OpenContainer wrapper so the menu reads the
+        // sled's contents BY REFERENCE (item takes mutate sled.contents
+        // directly). Title overrides the default 'WRECKAGE'.
+        openLootMenu(ctx, {
+          id: sled.id,
+          contents: sled.contents,
+          opened: sled.opened,
+          title: 'SLED CARGO',
+        });
       }
       return;
     }
