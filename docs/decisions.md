@@ -1074,3 +1074,37 @@ to a DIFFERENT modality — scatter geometry, vertex color shift, audio
 cue, distinct light treatment, etc. Don't try to push two similar
 shader patterns to be "different enough" via parameter tuning; the
 underlying grammar is the same so they'll always read related.
+
+## D64 — Dev-mode rAF fallback to setTimeout when document.hidden (Session PP)
+**When**: Session PP.
+**Why**: Browsers throttle `requestAnimationFrame` to ~1Hz (or pause it
+entirely) when `document.hidden = true`. The Claude_Preview MCP tool
+runs the game in a hidden iframe — so the per-frame tick runs at 1Hz
+instead of 60Hz, and combat / physics / weather / lighting all
+effectively freeze. Verifying combat logic (mouse press →
+updateCombat fires → ammo decrements → damage applies) was impossible
+in the preview environment across NN, OO and the first part of PP.
+Spoofing `document.hidden = false` via `Object.defineProperty` does
+NOT trick the browser's underlying visibility tracking; the throttle
+sits below user-space.
+**Fix**: in `core/loop.ts`, the next-frame scheduler now picks
+between rAF and `setTimeout(16)` based on visibility:
+```ts
+function scheduleFrame(cb): void {
+  if (import.meta.env.DEV && document.hidden) setTimeout(cb, 16);
+  else requestAnimationFrame(cb);
+}
+```
+`setTimeout` is not throttled in hidden tabs (unless the page is
+fully backgrounded for several minutes, at which point browsers
+start throttling timers to 1Hz — but that's well past our
+verification windows).
+**Production untouched**: `import.meta.env.DEV` gates the fallback
+out of `vite build` output. Real players see real rAF behavior —
+when their tab is hidden, the game pauses to save CPU/battery,
+which is the right behavior.
+**Apply**: future preview-env shenanigans (verification tools that
+need the game loop to run while the browser thinks the tab is
+hidden) should follow this pattern — guard with `import.meta.env
+.DEV` and use a wall-clock timer fallback that the browser doesn't
+throttle.

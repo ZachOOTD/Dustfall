@@ -16,6 +16,10 @@ export interface InputBundle {
   wheel: number;
   /** Mouse buttons that were just pressed this frame (0=left, 1=middle, 2=right). */
   mousePressed: Set<number>;
+  /** Mouse buttons currently held DOWN (Session PP — charged weapons
+   *  need this since mousePressed clears each frame). Set on mousedown,
+   *  cleared on mouseup. NOT cleared by endInputFrame. */
+  mouseHeld: Set<number>;
   controls: PointerLockControls;
 }
 
@@ -27,7 +31,8 @@ export function createInput(
   const keys: Record<string, boolean> = {};
   const pressed = new Set<string>();
   const mousePressed = new Set<number>();
-  const bundle: InputBundle = { keys, pressed, wheel: 0, mousePressed, controls };
+  const mouseHeld = new Set<number>();
+  const bundle: InputBundle = { keys, pressed, wheel: 0, mousePressed, mouseHeld, controls };
 
   window.addEventListener('keydown', (e) => {
     if (!e.repeat) pressed.add(e.code);
@@ -53,7 +58,16 @@ export function createInput(
   }, { passive: true });
 
   window.addEventListener('mousedown', (e) => {
-    if (controls.isLocked) mousePressed.add(e.button);
+    if (controls.isLocked) {
+      mousePressed.add(e.button);
+      mouseHeld.add(e.button);
+    }
+  });
+  // PP — track release for charged-weapon hold/release. Always listen
+  // (don't gate on isLocked) so a release that happens just after a
+  // lock-loss still clears the held state.
+  window.addEventListener('mouseup', (e) => {
+    mouseHeld.delete(e.button);
   });
 
   return bundle;

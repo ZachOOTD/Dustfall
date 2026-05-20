@@ -463,6 +463,25 @@ export function damageRaider(r: Raider, dmg: number, ctx: GameContext): void {
   transitionTo(r, 'stagger');
 }
 
+/** Session PP — pipe-staff knockback. Shoves the raider `distance` meters
+ *  along the horizontal projection of `dir`. Translates body + group together.
+ *  Live raiders get knocked back AND staggered; dead ones still get visually
+ *  flung (mirrors knockbackLizard). */
+export function knockbackRaider(
+  r: Raider,
+  dir: THREE.Vector3,
+  distance: number,
+  _ctx: GameContext,
+): void {
+  const horizLen = Math.hypot(dir.x, dir.z) || 1;
+  const dx = (dir.x / horizLen) * distance;
+  const dz = (dir.z / horizLen) * distance;
+  const cur = r.body.translation();
+  r.body.setTranslation({ x: cur.x + dx, y: cur.y, z: cur.z + dz }, true);
+  r.group.position.x += dx;
+  r.group.position.z += dz;
+}
+
 // ─────────────────────────────────────────────────────────────
 // Per-frame raider update
 // ─────────────────────────────────────────────────────────────

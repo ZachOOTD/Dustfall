@@ -45,23 +45,35 @@ Run with `npm run dev` (port 5173). Type-check with `npx tsc --noEmit`.
 
 ## Where we are now
 
-**Last shipped**: Session OO — Procedural shader expansion across
-hull rust, concrete weathering, dune wind streaks, rocky biome via
-scatter, plus a screenshot-workflow fix. **3 new shared material
-helpers**: `hullMaterial.ts` (rust streaks + panel wear + sun bleach)
-applied to all 3 flagship wrecks AND shared wrecks.ts (every procgen
-wreck inherits weathering); `concreteMaterial.ts` (aggregate +
-mottling + salt-leach efflorescence + edge grime) applied to dish
-base. **terrainMaterial.ts extended** with along-wind streak overlay
-(brightness ±11% + warm/cool tint). **Rocky biome REVERTED** from
-shader pattern to scatter geometry (D63 — fissures read too similarly
-to salt cracks) — new `rockScatter.ts` places 520 IcosahedronGeometry
-rocks across rocky biome. **Screenshot workflow fixed** via toDataURL
-→ tool-results file → python decode → Read PNG (preview_screenshot
-stalls in hidden tabs); workflow documented in
-`memory/dustfall_preview_screenshot_workaround.md`. tsc clean, 7+
-verified captures, `verified` status restored after 2 sessions of
-`partially verified`.
+**Last shipped**: Session PP — Weapon variants + combat
+generalization + dev rAF fallback. **3 new weapons** (first combat
+content since the machete originally shipped): `pipe_staff` (melee,
+2.6m reach + 3m knockback on lizards/raiders), `scrap_gun` (30m
+ranged, 6-round magazine via `slot.meta.ammoRemaining` + craftable
+bullets), `energy_pistol` (charged 0.5→2.0 damage over 1.2s hold,
+glowing chamber via shader `updateHeld` hook). **Combat refactor**:
+old machete-only `combat.ts` (100 LOC) replaced with generalized
+`_WEAPON_SPECS` dispatch by `WeaponKind` ('melee' | 'ranged' |
+'charged'). Shared `fireMelee()` / `fireRanged()` / `dispatchHit()`
+helpers. **Dev-mode rAF fallback** (D64) in `core/loop.ts`:
+`setTimeout(16)` replaces `requestAnimationFrame` when
+`document.hidden && import.meta.env.DEV`, so hidden preview tabs
+tick at 60Hz — unblocks combat verification that plagued NN+OO.
+New `mouseHeld: Set<number>` on InputBundle (mousePressed clears
+each frame so couldn't track held-state for charged weapons). New
+`knockbackLizard()` + `knockbackRaider()` (sandworm exempt — 240m
+body doesn't budge). 16 new Tuning constants centralize weapon
+specs. Inventory bumped to 14/14; trimmed torch + tent_kit +
+alien_fruit from DEBUG_STARTER_LOADOUT to fit weapons.
+
+**Prior milestone**: Session OO — Procedural shader expansion: hull
+rust + concrete weathering + dune wind streaks + rocky biome via
+scatter. 3 new shared material helpers (hullMaterial, concreteMaterial,
+extended terrainMaterial), zero-bundle-cost weathering on every
+flagship + procgen wreck. Rocky biome REVERTED from shader fissures
+(D63 — read too similarly to salt cracks) to actual scatter geometry
+(`rockScatter.ts`, 520 rocks). Screenshot workflow fix via toDataURL
+documented in `memory/dustfall_preview_screenshot_workaround.md`.
 
 **Prior milestone**: Session NN — Crashed_hull dedicated module
 (Wreck POI rework arc complete). New `src/world/crashedHull.ts`

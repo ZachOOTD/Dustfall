@@ -16,13 +16,11 @@ Pick whatever feels most missing after the polish + atmosphere arc.
 - Q2: Rigged hands + lizard (GLB-dependent — deferred with N's asset work)
 - Base-building mechanics
 - Small red creature companion (pocketable + re-deployable)
-- Weapon variants (pipe staff / scrap machete / scrap gun / energy pistol)
 - Trading / NPC economy
 - 7-day storm countdown
 - Bounties (template: D39 `'mount'` singleton-interactable pattern from CC-2)
 - Procedural world generation (idea — POIs randomized per seed)
 - Sled / rope / scrap-metal sled (physical-inventory drag-along, towable behind speeder)
-- Lizard-on-a-stick cooking system (raw lizard + branch → roast over fire)
 - Remove HUD stat bars in favor of audio/visual/text cues (idea)
 
 ---

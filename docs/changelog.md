@@ -3,6 +3,45 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session PP — 2026-05-19 — Weapon variants + combat generalization + dev rAF fallback
+`verified` — tsc clean; rAF fallback enables hidden-tab combat
+verification for the first time (`ctx.time.elapsed` advances at ~60Hz
+even with `document.hidden = true`); confirmed scrap_gun ammo
+decrements 6→5 on single LMB press; energy_pistol chargeProgress hits
+expected 0.594 at 700ms hold (charge_time 1.2s), clears to 0 on
+release; all 5 weapons load with correct meta. **Combat refactor**:
+old machete-only `combat.ts` (100 LOC) replaced with a generalized
+`_WEAPON_SPECS` lookup table dispatching by `WeaponKind` (`'melee'` |
+`'ranged'` | `'charged'`). Shared `fireMelee()` / `fireRanged()` /
+`dispatchHit()` helpers. Machete numbers lifted into Tuning constants
+(`WEAPON_MACHETE_RANGE/DAMAGE/COOLDOWN`) — no behavior change for the
+existing weapon. **3 new weapons** (PP = first combat content since
+the machete shipped):
+- `pipe_staff` — melee, 2.6m reach (+44%), 0.85s cooldown, 0.55
+  damage, **3m knockback** via new `knockbackLizard()` +
+  `knockbackRaider()` (sandworm exempt — 240m body doesn't budge).
+- `scrap_gun` — ranged raycast, 30m, 1.5 damage, 1.2s cooldown,
+  6-round magazine via `slot.meta.ammoRemaining`. Empty-click toast
+  + half-cooldown. New `scrap_bullet` item: hold the gun + use
+  bullet to reload. Crafting recipe 1 scrap → 2 bullets.
+- `energy_pistol` — charged ranged, 18m, 0.50→2.00 damage scaled
+  over 1.2s charge time, 0.3s post-fire cooldown. Hold LMB to
+  charge (tracked via new `mouseHeld: Set<number>` on InputBundle
+  since `mousePressed` clears each frame). Release fires. Chamber
+  glow shader interpolates dark→warm-orange→hot-blue-white via
+  `updateHeld` hook reading `window.__chargeProgress` (exposed by
+  combat.ts to avoid import cycle).
+**Dev-mode rAF fallback** (D64) in `core/loop.ts`: when
+`document.hidden && import.meta.env.DEV`, `setTimeout(16)` replaces
+`requestAnimationFrame` so the game tick runs at full speed in
+hidden preview tabs. Production keeps rAF (no CPU burn when user
+isn't looking). Unblocks the verification gap that plagued NN+OO
+combat work. **Inventory housekeeping**: bumped to 14/14 slots
+used (max capacity); trimmed `torch` + `tent_kit` + `alien_fruit`
+from DEBUG_STARTER_LOADOUT to fit the new weapons. Player starts
+with all 5 weapons + 8 bullets + full magazine in the gun. Decisions
+D64.
+
 ## Session OO — 2026-05-19 — Procedural shader expansion: hull rust + concrete weathering + dune wind streaks + rocky biome via scatter
 `verified` — tsc clean; multi-angle browser screenshots via a new
 toDataURL workflow (preview_screenshot tool stalls in hidden tabs;

@@ -299,6 +299,41 @@ export const Tuning = {
   VIEWMODEL_CANTEEN_ANIM_S: 1.2,
   VIEWMODEL_MACHETE_ANIM_S: 0.4,
   VIEWMODEL_BANDAGE_ANIM_S: 0.8,
+  // Session PP — weapon variants
+  VIEWMODEL_PIPE_STAFF_ANIM_S: 0.7,    // slow heavy swing
+  VIEWMODEL_SCRAP_GUN_ANIM_S: 0.3,     // sharp recoil
+  VIEWMODEL_SCRAP_BULLET_ANIM_S: 0.6,  // reload pantomime
+  // Weapon mechanic specs — combat.ts looks these up via the equipped ItemId.
+  // MACHETE keeps the historical numbers from inline combat.ts constants
+  // (hardcoded SWING_RANGE=1.8, DAMAGE=0.45, COOLDOWN=0.5).
+  WEAPON_MACHETE_RANGE: 1.8,
+  WEAPON_MACHETE_DAMAGE: 0.45,
+  WEAPON_MACHETE_COOLDOWN: 0.5,
+  // PIPE STAFF — slower, longer reach, knockback. Lizard (1 HP) still dies
+  // in one hit; sandworm (12 HP) takes 12 swings same as machete but each
+  // swing knocks the worm back ~3m (only meaningful on small enemies).
+  WEAPON_PIPE_STAFF_RANGE: 2.6,
+  WEAPON_PIPE_STAFF_DAMAGE: 0.55,
+  WEAPON_PIPE_STAFF_COOLDOWN: 0.85,
+  WEAPON_PIPE_STAFF_KNOCKBACK_M: 3.0,
+  // SCRAP GUN — ranged raycast, single big hit, finite ammo. Damage 1.5
+  // one-shots lizards and chunks 12.5% off a sandworm per shot. 4 starting
+  // rounds; reload by consuming a scrap_bullet item.
+  WEAPON_SCRAP_GUN_RANGE: 30.0,
+  WEAPON_SCRAP_GUN_DAMAGE: 1.5,
+  WEAPON_SCRAP_GUN_COOLDOWN: 1.2,
+  WEAPON_SCRAP_GUN_MAX_AMMO: 6,
+  // ENERGY PISTOL — charge-up ranged. Hold LMB to charge over
+  // CHARGE_TIME seconds; release to fire. Damage scales from
+  // MIN_DAMAGE (tap fire) to MAX_DAMAGE (fully charged). 0.3s
+  // post-fire cooldown — fast. No ammo (sci-fi energy weapon).
+  // Range slightly shorter than scrap_gun (18m vs 30m).
+  WEAPON_ENERGY_PISTOL_RANGE: 18.0,
+  WEAPON_ENERGY_PISTOL_MIN_DAMAGE: 0.50,
+  WEAPON_ENERGY_PISTOL_MAX_DAMAGE: 2.00,
+  WEAPON_ENERGY_PISTOL_CHARGE_TIME: 1.2,
+  WEAPON_ENERGY_PISTOL_COOLDOWN: 0.3,
+  VIEWMODEL_ENERGY_PISTOL_ANIM_S: 0.35,
 
   // Idle breath (Session Q) — slow vertical sine on the viewmodel Y so the
   // held item gently rises and falls when the player is still.

@@ -209,6 +209,27 @@ export function damageLizard(lizard: Lizard, _dmg: number, _ctx: GameContext): v
   applyDeadPose(lizard);
 }
 
+/** Session PP — pipe-staff knockback. Shoves the lizard `distance` meters
+ *  along the horizontal projection of `dir`. Applied alongside damageLizard.
+ *  Works on both live + dead lizards; dead ones get visually flung when
+ *  struck. */
+export function knockbackLizard(
+  lizard: Lizard,
+  dir: THREE.Vector3,
+  distance: number,
+  _ctx: GameContext,
+): void {
+  const horizLen = Math.hypot(dir.x, dir.z) || 1;
+  const dx = (dir.x / horizLen) * distance;
+  const dz = (dir.z / horizLen) * distance;
+  const cur = lizard.body.translation();
+  // Translate body + mesh together. setTranslation(true) wakes any
+  // sleeping body so the new position takes effect immediately.
+  lizard.body.setTranslation({ x: cur.x + dx, y: cur.y, z: cur.z + dz }, true);
+  lizard.mesh.position.x += dx;
+  lizard.mesh.position.z += dz;
+}
+
 /** Apply the dead-lizard visual + interaction retag. Safe to call from a
  *  fresh restore where state is already 'dead' — does not bump position.y. */
 export function applyDeadPose(lizard: Lizard): void {

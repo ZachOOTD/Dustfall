@@ -273,14 +273,21 @@ if (Tuning.DEBUG_STARTER_LOADOUT) {
   for (let i = 0; i < 3; i++) addItem(ctx.inventory, 'raw_lizard_meat');
   for (let i = 0; i < 2; i++) addItem(ctx.inventory, 'raw_worm_meat');
   for (let i = 0; i < 2; i++) addItem(ctx.inventory, 'cactus_pulp');
-  for (let i = 0; i < 2; i++) addItem(ctx.inventory, 'alien_fruit');
-  // Pre-made deployables — skip the craft step when iterating on fire/tent
+  // Pre-made deployables — skip the craft step when iterating on fire
   // mechanics directly.
   for (let i = 0; i < 2; i++) addItem(ctx.inventory, 'fire_kit');
-  addItem(ctx.inventory, 'tent_kit');
-  // Light sources for night testing.
-  addItem(ctx.inventory, 'torch');
+  // Light sources for night testing (PP — trimmed torch; flashlight
+  // covers night and we need the slot for the energy_pistol).
   addItem(ctx.inventory, 'flashlight');
+  // Session PP — weapon variants for combat testing. Gun starts with
+  // a full magazine via the meta.ammoRemaining field combat.ts reads.
+  // Trimmed alien_fruit + tent_kit from the loadout to free inventory
+  // slots — those items are unaffected by combat work and the player
+  // can craft them anyway.
+  addItem(ctx.inventory, 'pipe_staff');
+  addItem(ctx.inventory, 'scrap_gun', { ammoRemaining: Tuning.WEAPON_SCRAP_GUN_MAX_AMMO });
+  for (let i = 0; i < 8; i++) addItem(ctx.inventory, 'scrap_bullet');
+  addItem(ctx.inventory, 'energy_pistol');
 }
 
 // Opening scene runs on EVERY boot — the wreck + skeleton + journal +

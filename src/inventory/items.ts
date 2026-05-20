@@ -292,6 +292,338 @@ const _DEFS: Record<ItemId, ItemDef> = {
     useAnimDuration: Tuning.VIEWMODEL_MACHETE_ANIM_S,
   },
 
+  // Session PP — pipe staff. Slower heavy swing, longer reach, knockback.
+  pipe_staff: {
+    id: 'pipe_staff',
+    name: 'PIPE STAFF',
+    glyph: '⊓',
+    description: 'a length of scrap pipe with cloth grip',
+    stackable: false,
+    maxStack: 1,
+    onUse(_ctx, _slot) {
+      return { consumed: false };
+    },
+    makeViewModel() {
+      const group = new THREE.Group();
+      const pipeMat = new THREE.MeshLambertMaterial({ color: 0x6a6055, emissive: 0x0a0907 });
+      const gripMat = new THREE.MeshLambertMaterial({ color: 0x382820 });
+      const capMat = new THREE.MeshLambertMaterial({ color: 0x4a4035 });
+      // Main pipe — long thin cylinder along Y.
+      const pipe = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.018, 0.018, 0.46, 8),
+        pipeMat,
+      );
+      pipe.position.y = 0.10;
+      group.add(pipe);
+      // End cap at the top (the striking end) — slightly fatter.
+      const cap = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.026, 0.022, 0.04, 8),
+        capMat,
+      );
+      cap.position.y = 0.34;
+      group.add(cap);
+      // Cloth grip wrap at the bottom — 3 thin bands.
+      for (let i = 0; i < 3; i++) {
+        const band = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.022, 0.022, 0.018, 6),
+          gripMat,
+        );
+        band.position.y = -0.10 + i * 0.022;
+        group.add(band);
+      }
+      // Rest pose mirrors the machete tilt.
+      group.rotation.set(-0.2, 0.0, 0.15);
+      return group;
+    },
+    makeIcon() {
+      const s = svg();
+      s.appendChild(svgEl('line', { x1: '6', y1: '20', x2: '18', y2: '4' }));
+      s.appendChild(svgEl('rect', { x: '4', y: '18', width: '5', height: '4' }));
+      return s;
+    },
+    playUseAnim(itemRoot, t) {
+      // Slower wind-up + heavier follow-through than the machete.
+      // Strike phase 0..0.5 (slow wind-up overshoot), recovery 0.5..1.
+      const p = t < 0.5
+        ? easeOutBack(t / 0.5)
+        : 1 - easeInOutCubic((t - 0.5) / 0.5);
+      itemRoot.position.set(-0.06 * p, 0.05 * p, -0.30 * p);
+      itemRoot.rotation.set(-1.05 * p, -0.18 * p, 0.15);
+    },
+    useAnimDuration: Tuning.VIEWMODEL_PIPE_STAFF_ANIM_S,
+  },
+
+  // Session PP — scrap gun. Single-shot ranged. Ammo via slot.meta.
+  scrap_gun: {
+    id: 'scrap_gun',
+    name: 'SCRAP GUN',
+    glyph: '⌐',
+    description: 'a crude single-shot scrap-iron pistol',
+    stackable: false,
+    maxStack: 1,
+    onUse(_ctx, _slot) {
+      // Firing is driven by combat.ts via LMB — `onUse` (E key) is a
+      // no-op for ranged weapons.
+      return { consumed: false };
+    },
+    makeViewModel() {
+      const group = new THREE.Group();
+      const bodyMat = new THREE.MeshLambertMaterial({ color: 0x4a4640, emissive: 0x0a0907 });
+      const barrelMat = new THREE.MeshLambertMaterial({ color: 0x2c2924 });
+      const gripMat = new THREE.MeshLambertMaterial({ color: 0x382820 });
+      // Receiver — short rectangular block. Z is forward (camera +Z is
+      // into the screen via Three.js — viewmodel renders in -Z space so
+      // the barrel points away from the camera along its own +Z).
+      const receiver = new THREE.Mesh(
+        new THREE.BoxGeometry(0.04, 0.06, 0.10),
+        bodyMat,
+      );
+      receiver.position.set(0, 0, -0.04);
+      group.add(receiver);
+      // Barrel — thin cylinder extending forward from receiver.
+      const barrel = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.012, 0.012, 0.18, 8),
+        barrelMat,
+      );
+      barrel.rotation.x = Math.PI / 2;          // align cylinder Y → +Z (forward)
+      barrel.position.set(0, 0.012, -0.18);
+      group.add(barrel);
+      // Front sight — tiny bump on top of the barrel near the muzzle.
+      const sight = new THREE.Mesh(
+        new THREE.BoxGeometry(0.005, 0.012, 0.012),
+        bodyMat,
+      );
+      sight.position.set(0, 0.028, -0.26);
+      group.add(sight);
+      // Grip — angled downward from receiver.
+      const grip = new THREE.Mesh(
+        new THREE.BoxGeometry(0.026, 0.090, 0.030),
+        gripMat,
+      );
+      grip.position.set(0, -0.062, -0.005);
+      grip.rotation.x = -0.30;                  // canted slightly forward for a real pistol angle
+      group.add(grip);
+      // Trigger guard — small loop hanging below the receiver.
+      const guard = new THREE.Mesh(
+        new THREE.BoxGeometry(0.028, 0.014, 0.040),
+        bodyMat,
+      );
+      guard.position.set(0, -0.024, -0.022);
+      group.add(guard);
+      // Rest pose — pistol angled slightly upward + canted as if held
+      // at the hip-ish ready position.
+      group.rotation.set(-0.08, 0.02, 0.10);
+      return group;
+    },
+    makeIcon() {
+      const s = svg();
+      // Pistol silhouette: barrel + grip
+      s.appendChild(svgEl('rect', { x: '4', y: '8', width: '14', height: '5' }));
+      s.appendChild(svgEl('rect', { x: '6', y: '13', width: '6', height: '8' }));
+      s.appendChild(svgEl('line', { x1: '18', y1: '10.5', x2: '21', y2: '10.5' }));
+      return s;
+    },
+    playUseAnim(itemRoot, t) {
+      // Sharp recoil — quick kick back, fast return. Easing favors a
+      // snap on the kick and a softer settle.
+      const kick = t < 0.25
+        ? easeOutBack(t / 0.25)
+        : 1 - easeOutQuad((t - 0.25) / 0.75);
+      // Pull back along -Z (toward camera), slight up-Y, small CCW yaw.
+      itemRoot.position.set(0.01 * kick, 0.025 * kick, 0.10 * kick);
+      itemRoot.rotation.set(-0.25 * kick, 0.05 * kick, 0.10);
+    },
+    useAnimDuration: Tuning.VIEWMODEL_SCRAP_GUN_ANIM_S,
+  },
+
+  // Session PP — scrap bullets. Consumable ammo for the scrap gun.
+  // `onUse` (E key) tops up the gun's slot.meta.ammoRemaining if the
+  // gun is currently the equipped slot. Stackable.
+  scrap_bullet: {
+    id: 'scrap_bullet',
+    name: 'SCRAP BULLET',
+    glyph: '*',
+    description: 'a hand-loaded scrap-iron round',
+    stackable: true,
+    maxStack: 12,
+    onUse(ctx, _slot) {
+      // Find the equipped scrap_gun and increment its ammo by 1.
+      // If the equipped item ISN'T a scrap_gun, this is a no-op
+      // (we don't want to silently consume a bullet).
+      const equipped = ctx.inventory.slots[ctx.inventory.selectedIdx];
+      if (equipped.item !== 'scrap_gun') {
+        return { consumed: false, message: 'equip the scrap gun first' };
+      }
+      const maxAmmo = Tuning.WEAPON_SCRAP_GUN_MAX_AMMO;
+      const cur = equipped.meta?.ammoRemaining ?? 0;
+      if (cur >= maxAmmo) {
+        return { consumed: false, message: 'gun is full' };
+      }
+      if (!equipped.meta) equipped.meta = {};
+      equipped.meta.ammoRemaining = cur + 1;
+      return { consumed: true, message: `loaded (${cur + 1}/${maxAmmo})` };
+    },
+    makeViewModel() {
+      // A single bullet held in the fingertips — small cylinder.
+      const group = new THREE.Group();
+      const brassMat = new THREE.MeshLambertMaterial({ color: 0xa28860, emissive: 0x100a04 });
+      const tipMat = new THREE.MeshLambertMaterial({ color: 0x484035 });
+      const case_ = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.014, 0.014, 0.035, 8),
+        brassMat,
+      );
+      case_.position.y = 0.018;
+      group.add(case_);
+      const tip = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.013, 0.0, 0.020, 8),
+        tipMat,
+      );
+      tip.position.y = 0.045;
+      group.add(tip);
+      group.rotation.set(-0.4, 0.0, 0.20);
+      return group;
+    },
+    makeIcon() {
+      const s = svg();
+      s.appendChild(svgEl('rect', { x: '10', y: '8', width: '4', height: '10' }));
+      s.appendChild(svgEl('polygon', { points: '10,8 14,8 12,4' }));
+      return s;
+    },
+    playUseAnim(itemRoot, t) {
+      // Reload pantomime — short tip-forward as if seating the round.
+      const p = Math.sin(t * Math.PI);
+      itemRoot.position.set(0, -0.02 * p, -0.05 * p);
+      itemRoot.rotation.set(-0.4 - 0.3 * p, 0.0, 0.20);
+    },
+    useAnimDuration: Tuning.VIEWMODEL_SCRAP_BULLET_ANIM_S,
+  },
+
+  // Session PP — energy pistol. Hold LMB to charge; release to fire
+  // with damage scaled by hold time (0.5 tap → 2.0 fully charged over
+  // 1.2s). No ammo. The viewmodel's chamber pulses brighter as the
+  // charge ramps up — driven by updateHeld + chargeProgress().
+  energy_pistol: {
+    id: 'energy_pistol',
+    name: 'ENERGY PISTOL',
+    glyph: '⌬',
+    description: 'a salvaged sci-fi sidearm; hold to charge, release to fire',
+    stackable: false,
+    maxStack: 1,
+    onUse(_ctx, _slot) {
+      return { consumed: false };
+    },
+    makeViewModel() {
+      const group = new THREE.Group();
+      const bodyMat = new THREE.MeshLambertMaterial({ color: 0x2a3540, emissive: 0x0a0d12 });
+      const accentMat = new THREE.MeshLambertMaterial({ color: 0x4a5560 });
+      const gripMat = new THREE.MeshLambertMaterial({ color: 0x18202a });
+      // Chamber mat is emissive so we can pulse it via updateHeld as
+      // the weapon charges. Stash it on group.userData so updateHeld
+      // can find it.
+      const chamberMat = new THREE.MeshBasicMaterial({ color: 0x1a1410 });
+      // Receiver — short angular body.
+      const receiver = new THREE.Mesh(
+        new THREE.BoxGeometry(0.045, 0.055, 0.085),
+        bodyMat,
+      );
+      receiver.position.set(0, 0, -0.05);
+      group.add(receiver);
+      // Barrel — flat-topped emitter rather than a round muzzle.
+      const barrel = new THREE.Mesh(
+        new THREE.BoxGeometry(0.028, 0.022, 0.10),
+        accentMat,
+      );
+      barrel.position.set(0, 0.01, -0.14);
+      group.add(barrel);
+      // Emitter cap at the muzzle — small bright disc that glows
+      // when fired (could be tied to swingViewKick later).
+      const emitter = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.011, 0.011, 0.004, 8),
+        chamberMat,
+      );
+      emitter.rotation.x = Math.PI / 2;
+      emitter.position.set(0, 0.01, -0.193);
+      group.add(emitter);
+      // Charge chamber — small box on top of the receiver that glows
+      // brighter as the charge ramps. We tint chamberMat from dark to
+      // hot blue-white via updateHeld below.
+      const chamber = new THREE.Mesh(
+        new THREE.BoxGeometry(0.020, 0.012, 0.025),
+        chamberMat,
+      );
+      chamber.position.set(0, 0.04, -0.045);
+      group.add(chamber);
+      group.userData.chamberMat = chamberMat;
+      group.userData.emitterMat = chamberMat;     // share for now
+      // Grip — angled down.
+      const grip = new THREE.Mesh(
+        new THREE.BoxGeometry(0.028, 0.085, 0.030),
+        gripMat,
+      );
+      grip.position.set(0, -0.060, -0.015);
+      grip.rotation.x = -0.28;
+      group.add(grip);
+      // Trigger guard.
+      const guard = new THREE.Mesh(
+        new THREE.BoxGeometry(0.030, 0.012, 0.038),
+        bodyMat,
+      );
+      guard.position.set(0, -0.022, -0.030);
+      group.add(guard);
+      // Rest pose — similar to scrap_gun.
+      group.rotation.set(-0.08, 0.02, 0.10);
+      return group;
+    },
+    makeIcon() {
+      const s = svg();
+      s.appendChild(svgEl('rect', { x: '4', y: '8', width: '14', height: '5' }));
+      s.appendChild(svgEl('rect', { x: '8', y: '5', width: '5', height: '3' }));
+      s.appendChild(svgEl('rect', { x: '6', y: '13', width: '6', height: '8' }));
+      s.appendChild(svgEl('line', { x1: '18', y1: '10.5', x2: '22', y2: '10.5' }));
+      return s;
+    },
+    playUseAnim(itemRoot, t) {
+      // Quick recoil pulse on fire. Smaller than scrap_gun (less
+      // mechanical, more "vrrm").
+      const kick = t < 0.3
+        ? easeOutBack(t / 0.3)
+        : 1 - easeOutQuad((t - 0.3) / 0.7);
+      itemRoot.position.set(0.008 * kick, 0.018 * kick, 0.06 * kick);
+      itemRoot.rotation.set(-0.18 * kick, 0.04 * kick, 0.10);
+    },
+    useAnimDuration: Tuning.VIEWMODEL_ENERGY_PISTOL_ANIM_S,
+    // Per-frame: drive the chamber+emitter glow based on combat.ts's
+    // exposed chargeProgress (0..1). At t=0 → dark. At t=1 → hot
+    // blue-white. Color lerps through warm orange in the middle so
+    // the player gets a visible warning before the shot maxes out.
+    updateHeld(itemRoot, _slot, ctx, _dt) {
+      const chamberMat = itemRoot.userData.chamberMat as THREE.MeshBasicMaterial | undefined;
+      const emitterMat = itemRoot.userData.emitterMat as THREE.MeshBasicMaterial | undefined;
+      if (!chamberMat) return;
+      // Lazy-import the combat module to avoid a static import cycle.
+      // Cache on window so we only pay the dynamic-import cost once.
+      // (Combat module is small + already loaded by main; this is
+      // effectively a free property lookup after the first frame.)
+      const cp = (window as unknown as { __chargeProgress?: (c: typeof ctx) => number }).__chargeProgress;
+      const t = cp ? cp(ctx) : 0;
+      // Cold dark → warm orange (0.5) → hot blue-white (1.0).
+      let r: number, g: number, b: number;
+      if (t < 0.5) {
+        const u = t / 0.5;
+        r = 0.10 + u * (1.10 - 0.10);
+        g = 0.08 + u * (0.45 - 0.08);
+        b = 0.06 + u * (0.10 - 0.06);
+      } else {
+        const u = (t - 0.5) / 0.5;
+        r = 1.10 - u * (1.10 - 0.65);
+        g = 0.45 + u * (0.95 - 0.45);
+        b = 0.10 + u * (1.15 - 0.10);
+      }
+      chamberMat.color.setRGB(r, g, b);
+      if (emitterMat && emitterMat !== chamberMat) emitterMat.color.setRGB(r, g, b);
+    },
+  },
+
   // ─── Food items (new in Session F) ────────────────────────────────────────
 
   cactus_pulp: {
@@ -1005,4 +1337,5 @@ export const ALL_ITEM_IDS: ReadonlyArray<ItemId> = [
   'alien_fruit',
   'torch', 'flashlight',
   'lizard_on_a_stick_raw', 'lizard_on_a_stick_cooked',
+  'pipe_staff', 'scrap_gun', 'scrap_bullet', 'energy_pistol',
 ];

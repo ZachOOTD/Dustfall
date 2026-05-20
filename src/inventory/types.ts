@@ -26,7 +26,12 @@ export type ItemId =
   | 'flashlight'
   // Session II — lizard-on-a-stick wielded cooking
   | 'lizard_on_a_stick_raw'
-  | 'lizard_on_a_stick_cooked';
+  | 'lizard_on_a_stick_cooked'
+  // Session PP — weapon variants
+  | 'pipe_staff'
+  | 'scrap_gun'
+  | 'scrap_bullet'
+  | 'energy_pistol';
 
 /** Per-slot metadata for stateful items (canteen fill level, cook state, light state). */
 export interface ItemMeta {
@@ -45,6 +50,10 @@ export interface ItemMeta {
    *  to the cooked variant. Persists with the slot so cooking can be
    *  resumed across save/load. */
   cookProgress?: number;
+  /** Rounds remaining for ranged weapons (Session PP). Decrements
+   *  per shot; reload via consuming a `scrap_bullet` while the gun
+   *  is the equipped slot. Persists across save/load. */
+  ammoRemaining?: number;
 }
 
 export interface UseResult {

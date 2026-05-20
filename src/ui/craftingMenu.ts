@@ -67,6 +67,17 @@ const RECIPES: Recipe[] = [
       { id: 'raw_lizard_meat', count: 1 },
     ],
   },
+  // PP — ammo crafting. 1 scrap → 2 scrap_bullets so the scrap_gun
+  // stays viable through extended play. Bullets are loaded into the
+  // gun by holding the gun + pressing E on a scrap_bullet stack
+  // (handled by scrap_bullet's onUse hook).
+  {
+    result: 'scrap_bullet',
+    resultCount: 2,
+    ingredients: [
+      { id: 'scrap', count: 1 },
+    ],
+  },
 ];
 
 let _root: HTMLDivElement | null = null;
