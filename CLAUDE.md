@@ -45,7 +45,34 @@ Run with `npm run dev` (port 5173). Type-check with `npx tsc --noEmit`.
 
 ## Where we are now
 
-**Last shipped**: Session QQ — Sled mechanic — rope-tow flatbed
+**Last shipped**: Session QQ-2 — Sled feel pass + sandworm rescale +
+hotbar tooltips. Follow-up to QQ addressing the "rope too elastic,
+sled spins around character" feel problems. **Rope physics rewritten
+(supersedes D65)**: one-way spring-damper replaced with an
+**inextensible-rope constraint** — slack rope = no force; taut rope =
+position-snap inward by the stretch + project out outward radial
+velocity. Sled body rotations LOCKED via `setEnabledRotations(false,
+false, false, true)`. Visual yaw lerped each frame toward "face the
+anchor" via `SLED_YAW_LERP = 0.12`. Friction back to **0.6**
+(metal-on-sand) since static friction correctly holds slack-rope
+sleds. Rope length 3 → 5m. **Rope visual**: 2-vertex `THREE.Line`
+replaced with `Mesh(TubeGeometry)` along a 5-point
+`CatmullRomCurve3` with parabolic mid-point sag scaled by slack.
+New **speeder back-bar** (`speederTowBar`) — `updateSleds`
+speeder-tether branch reads `towBar.getWorldPosition()` so the rope
+visually attaches to the bar mesh. **Sandworm halved** (240m →
+120m); all size-scaled ranges halved (BITE 25→12.5, LUNGE_RANGE
+30→15, BREACH_ARC_PEAK 40→20, STATIONARY_BREACH_HEIGHT 50→25,
+PATROL/DETECTION/DISENGAGE halved). Speeds + durations + HP
+unchanged per D49. **Sled cargo bidirectional**: `lootMenu`
+widened with `allowDeposit` flag → two-column layout (CARGO + YOU).
+Click left = take, click right = deposit. Empty sleds now open
+(so the player can stash). **Hotbar tooltips**: hover any non-empty
+slot → custom-styled tooltip above the slot showing item name +
+description. **Backlog cleanup**: struck 4 shipped entries.
+Decision D67.
+
+**Prior milestone**: Session QQ — Sled mechanic — rope-tow flatbed
 cargo. New world entity `src/world/sled.ts` (~395 LOC) mirrors
 tent/fire placement, loot-container cargo, and speeder velocity-
 follow idiom. Two ItemIds shipped: `rope` (wieldable; LMB on a
@@ -53,27 +80,13 @@ sled's rope stub ties/unties one end) and `sled_kit` (deploys a
 flatbed sled in front of the player). Two interactable sub-meshes:
 cargo deck (`interactType: 'open_sled'`, E opens the existing loot
 menu via a new `OpenContainer` structural type) + front rope stub
-(`interactType: 'attach_rope'`, LMB w/ rope wielded). **Tow physics:
-one-way spring-damper impulse** on a dynamic Rapier body with CCD
-enabled. Per-frame in `updateSleds`: `target = anchor − forward ×
-SLED_TOW_DISTANCE`; `force = err × K − vel × DAMP`; `body.applyImpulse
-(force × dt)`. Player tether anchors hip-behind; speeder tether
-anchors 1m behind seat with a reverse-guard (drops the spring when
-bike velocity opposes its forward). Snap auto-detach at 8m via
-`SLED_TOW_MAX_DIST`. Rope's `Slot.meta.attachedSledId` round-trips
-through save; `updateSleds` auto-detaches if no slot holds it
-(handles "rope dropped while tethered"). Mid-impl tuning fix: K=90
-+ friction=0.8 caused **static-friction stiction** (μmg ≈ 78N >
-spring 60N at 0.7m err) → bumped K=220, damp=28, friction=0.25 so
-sleds glide on dunes. Mount/dismount auto-promote tether
-'player'↔'speeder' via `transferTetherOnMount` / `Dismount` hooks
-in `speeder.ts`. Stamina drain × `STAMINA_TOW_FACTOR` (2.0) while
-sprinting on foot tethered (no walk-speed cut per scope decision).
-`SAVE_VERSION 4 → 5` — `sleds?` array (id/pos/rotationY/contents/
-tether) is optional so v1-v4 saves still load. Recipes:
-`rope = 2 cloth + 1 branch`; `sled_kit = 2 scrap + 1 branch + 1 rope`.
-Trimmed `pipe_staff` + `energy_pistol` from DEBUG_STARTER_LOADOUT
-to fit the new items. Decisions D65-D66.
+(`interactType: 'attach_rope'`, LMB w/ rope wielded). Tow physics
+v1 used a one-way spring-damper impulse — replaced by the
+inextensible constraint in QQ-2. `SAVE_VERSION 4 → 5` — `sleds?`
+array (id/pos/rotationY/contents/tether) is optional so v1-v4 saves
+still load. Recipes: `rope = 2 cloth + 1 branch`;
+`sled_kit = 2 scrap + 1 branch + 1 rope`. Decisions D65-D66 (D65
+since superseded by D67).
 
 **Prior milestone**: Session PP — Weapon variants + combat
 generalization + dev rAF fallback. **3 new weapons** (first combat

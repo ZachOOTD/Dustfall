@@ -453,7 +453,9 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
         }
         return;
       }
-      // Default: cargo-deck open.
+      // Default: cargo-deck open. QQ-2 — sled is bidirectional storage
+      // (deposit + take), so empty sleds also open the menu so the
+      // player can stash items into them.
       const empty = sled.contents.length === 0;
       ctx.inventory.hover = {
         type: 'open_sled',
@@ -461,20 +463,18 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
         promptNoun: empty ? 'sled (empty)' : 'sled cargo',
       };
       if (ctx.input.pressed.has('KeyE')) {
-        if (empty) {
-          ctx.ui.showToast('the sled is empty');
-          return;
-        }
         sled.opened = true;
         ctx.sleds.open = sled;
         // Pass an explicit OpenContainer wrapper so the menu reads the
         // sled's contents BY REFERENCE (item takes mutate sled.contents
-        // directly). Title overrides the default 'WRECKAGE'.
+        // directly). `allowDeposit: true` enables the second column
+        // showing the player's inventory for deposits.
         openLootMenu(ctx, {
           id: sled.id,
           contents: sled.contents,
           opened: sled.opened,
           title: 'SLED CARGO',
+          allowDeposit: true,
         });
       }
       return;

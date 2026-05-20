@@ -450,10 +450,11 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
   for (const s of ctx.sleds.list) {
     ctx.three.scene.remove(s.group);
     ctx.physics.world.removeRigidBody(s.body);
-    if (s.ropeLine) {
-      ctx.three.scene.remove(s.ropeLine);
-      s.ropeLine.geometry.dispose();
-      (s.ropeLine.material as THREE.Material).dispose();
+    if (s.ropeMesh) {
+      ctx.three.scene.remove(s.ropeMesh);
+      s.ropeMesh.geometry.dispose();
+      // Material is shared (module-level _ropeMaterial in sled.ts) —
+      // don't dispose here. Same convention as detachRope.
     }
   }
   ctx.sleds.list.length = 0;

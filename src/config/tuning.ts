@@ -456,27 +456,31 @@ export const Tuning = {
   // sprint is 13.2 m/s, charge stays at 8 m/s so a perpendicular sidestep
   // still works against the snapshotted-target charge).
   SANDWORM_HOME_POS: { x: 60, z: 0 },        // anchor for patrol circle (dune biome — fits comfortably within ~900m biome region)
-  SANDWORM_PATROL_RADIUS: 200,               // m — patrol circle radius (~3.3× scale; bounded by dune biome footprint)
-  SANDWORM_DETECTION_RADIUS: 150,            // m — player triggers alert at this dist (3× scale; long-range boss aggro)
-  SANDWORM_DISENGAGE_RADIUS: 200,            // m — player escapes by exceeding this (2.5×)
-  SANDWORM_PATROL_SPEED: 3,                  // m/s — slow patrol traversal (UNCHANGED — see header note)
+  // QQ-2 — Sandworm rescaled −50% from MM (boss-tier 240m felt too
+  // big in play). Length 240→120, radius 20→10. All RANGES that scale
+  // with body size halved proportionally; speeds + durations + HP
+  // unchanged per D49 (combat must stay dodgeable).
+  SANDWORM_PATROL_RADIUS: 100,               // m — patrol circle radius (was 200)
+  SANDWORM_DETECTION_RADIUS: 75,             // m — player triggers alert at this dist (was 150)
+  SANDWORM_DISENGAGE_RADIUS: 100,            // m — player escapes by exceeding this (was 200)
+  SANDWORM_PATROL_SPEED: 3,                  // m/s — slow patrol traversal (UNCHANGED per D49)
   SANDWORM_ALERT_SPEED: 5,                   // m/s — slow orienting movement (UNCHANGED)
   SANDWORM_CHARGE_SPEED: 8,                  // m/s — rush at player (UNCHANGED — dodgeable perpendicular)
   SANDWORM_RETREAT_SPEED: 7,                 // m/s — disengage movement (UNCHANGED)
-  SANDWORM_ALERT_DURATION: 2.0,              // s — long windup so player can react
-  SANDWORM_LUNGE_RANGE: 30,                  // m — trigger lunge when this close to player (~4× scale; climactic strike for 240m body)
-  SANDWORM_LUNGE_DURATION: 2.6,              // s — slower arc gives a real damage window
-  SANDWORM_BREACH_ARC_PEAK: 40,              // m — peak Y of lunge arc above ground (8× scale; clears 40m-thick body in flight)
-  SANDWORM_STATIONARY_BREACH_DURATION: 5.5,  // s — vertical hold during stationary breach (longer w/ side-to-side sway)
-  SANDWORM_STATIONARY_BREACH_HEIGHT: 50,     // m — head rises dramatically above the dunes (~6× scale; cobra-rear silhouette)
+  SANDWORM_ALERT_DURATION: 2.0,              // s — long windup so player can react (UNCHANGED — timing-based)
+  SANDWORM_LUNGE_RANGE: 15,                  // m — trigger lunge when this close to player (was 30)
+  SANDWORM_LUNGE_DURATION: 2.6,              // s — slower arc gives a real damage window (UNCHANGED)
+  SANDWORM_BREACH_ARC_PEAK: 20,              // m — peak Y of lunge arc above ground (was 40)
+  SANDWORM_STATIONARY_BREACH_DURATION: 5.5,  // s — vertical hold during stationary breach (UNCHANGED)
+  SANDWORM_STATIONARY_BREACH_HEIGHT: 25,     // m — head rises above the dunes (was 50)
   SANDWORM_STATIONARY_BREACH_EVERY: 3,       // every Nth retreat → stationary breach
-  SANDWORM_RETREAT_DISTANCE: 150,            // m — distance to retreat before next attack (6× scale)
-  SANDWORM_BITE_RANGE: 25.0,                 // m from worm body center for bite to land (~6× scale; player escapes by being >25m from body spine at lunge impact)
-  SANDWORM_BITE_DAMAGE: 0.50,                // player health unit per bite (+43% — boss feels deadlier without one-shotting)
-  SANDWORM_MAX_HEALTH: 12.0,                 // 12 machete hits to kill (2× — boss tankiness without tedium)
-  SANDWORM_LENGTH: 240,                      // m — total body length head-to-tail (10× boss-tier scale)
-  SANDWORM_MAX_RADIUS: 20.0,                 // m — peak body radius (10×)
-  SANDWORM_UNDERGROUND_DEPTH: 25,            // m below ground while submerged (5× — proportional to thicker body)
+  SANDWORM_RETREAT_DISTANCE: 75,             // m — distance to retreat before next attack (was 150)
+  SANDWORM_BITE_RANGE: 12.5,                 // m from worm body center for bite to land (was 25)
+  SANDWORM_BITE_DAMAGE: 0.50,                // player health unit per bite (UNCHANGED — gameplay tuning)
+  SANDWORM_MAX_HEALTH: 12.0,                 // 12 machete hits to kill (UNCHANGED — gameplay tuning)
+  SANDWORM_LENGTH: 120,                      // m — total body length head-to-tail (was 240)
+  SANDWORM_MAX_RADIUS: 10.0,                 // m — peak body radius (was 20)
+  SANDWORM_UNDERGROUND_DEPTH: 12.5,          // m below ground while submerged (was 25)
 
   // Sled (Session QQ) — placed flatbed sled with rope-tow + cargo
   // inventory. Mirrors tent/fire placement; uses a dynamic Rapier body
@@ -489,12 +493,13 @@ export const Tuning = {
   SLED_HALF_EXTENTS_X: 0.5,                  // cargo bed half-width
   SLED_HALF_EXTENTS_Y: 0.10,                 // flat
   SLED_HALF_EXTENTS_Z: 0.9,                  // longer than wide — runner-shaped
-  SLED_TOW_DISTANCE: 3.0,                    // m behind tether — clears speeder rear (z≈2.075) + visible rope length
-  SLED_TOW_SPRING_K: 220,                    // N/m. Tuned in-engine: must overcome static friction (μ·m·g ≈ 24N at μ=0.3, m=10kg) for the sled to move under small position errors.
-  SLED_TOW_SPRING_DAMP: 28,                  // velocity damping along rope axis — proportional to higher K to keep underdamped response without overshoot
-  SLED_TOW_MAX_DIST: 8.0,                    // rope snaps beyond this — auto-detach + toast
+  SLED_TOW_DISTANCE: 5.0,                    // rope length (m). The sled is constrained to within this distance of the anchor — slack inside, snaps taut at exactly this length. QQ-2 lengthened 3 → 5 for visible drape.
+  SLED_TOW_MAX_DIST: 10.0,                   // hard snap threshold beyond which the rope tears free (anchor moved way too fast for the constraint to keep up). Auto-detach + toast.
   SLED_TOW_ATTACH_RANGE: 3.0,                // raycast distance for clicking the rope stub with wielded rope
   SLED_ROPE_COLOR_HEX: 0x6e4a2a,             // matches branch/wood palette
+  SLED_ROPE_RADIUS: 0.04,                    // QQ-2 tube radius — thicker than the previous 2-vertex Line
+  SLED_ROPE_SAG: 0.45,                       // QQ-2 max midpoint drop (m) when the rope is taut; scales with slack to 0 at fully-stretched
+  SLED_YAW_LERP: 0.12,                       // QQ-2 — per-frame lerp toward "face the anchor" yaw. Higher = snappier; lower = the sled trails laggily
   NEAR_SLED_DISTANCE_SQ: 4.0,                // 2m exclusion when placing a new sled near an existing one
   STAMINA_TOW_FACTOR: 2.0,                   // sprint+tow on foot drains stamina × this (no walk-speed cut per scope)
 } as const;

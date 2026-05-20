@@ -39,9 +39,10 @@ export interface Sled {
   opened: boolean;
   hovered: boolean;
   tether: SledTether;
-  /** Straight Line from tether anchor to sled front-yoke. Allocated on
-   *  attach, disposed on detach. */
-  ropeLine: THREE.Line | null;
+  /** QQ-2 — Tube-mesh rope from anchor to sled front-yoke, rebuilt each
+   *  frame in updateSleds via a 5-point CatmullRomCurve3 with mid-point
+   *  sag. Allocated on attach, disposed on detach. */
+  ropeMesh: THREE.Mesh | null;
 }
 
 let _nextId = 1;
@@ -239,26 +240,29 @@ export function spawnSledAt(
   if (idOverride !== undefined) setNextSledId(idOverride);
   tag(group, deck, ropeStub, id);
 
-  // Dynamic body — center at the cargo-deck center so the spring force
-  // applies through a sensible point. Body y = pos.y + hy + bottomClearance.
+  // Dynamic body — center at the cargo-deck center so position correction
+  // applies through the right point. QQ-2: ROTATIONS LOCKED so the sled
+  // can't spin around the player as the rope yanks it from off-center.
+  // Yaw is driven manually each frame via group.rotation.y in updateSleds.
   const hx = Tuning.SLED_HALF_EXTENTS_X;
   const hy = Tuning.SLED_HALF_EXTENTS_Y;
   const hz = Tuning.SLED_HALF_EXTENTS_Z;
   const bodyDesc = RAPIER.RigidBodyDesc.dynamic()
     .setTranslation(pos.x, pos.y + 0.08 + hy, pos.z)
-    .setRotation({
-      // Rotation around Y only — quaternion (0, sin(y/2), 0, cos(y/2)).
-      x: 0, y: Math.sin(rotationY * 0.5), z: 0, w: Math.cos(rotationY * 0.5),
-    })
     .setLinearDamping(Tuning.SLED_LINEAR_DAMP)
     .setAngularDamping(Tuning.SLED_ANGULAR_DAMP)
     .setCcdEnabled(true); // sled can be yanked at speeder speeds → CCD on
   const body = ctx.physics.world.createRigidBody(bodyDesc);
+  // Lock all rotation axes. Body translates only; visual yaw is managed
+  // separately by updateSleds so it always faces the rope anchor.
+  body.setEnabledRotations(false, false, false, true);
   const colDesc = RAPIER.ColliderDesc.cuboid(hx, hy, hz)
     .setDensity(Tuning.SLED_DENSITY)
-    // Low friction — sleds glide on dunes. 0.8 caused static-friction
-    // stiction that the spring couldn't overcome at small errors.
-    .setFriction(0.25);
+    // QQ-2 — friction back up to 0.6: metal sled on sand. With locked
+    // rotations + inextensible-rope constraint replacing the spring,
+    // we no longer need to fight static friction at small errors —
+    // the rope only pulls when stretched past `SLED_TOW_DISTANCE`.
+    .setFriction(0.6);
   const collider = ctx.physics.world.createCollider(colDesc, body);
 
   const sled: Sled = {
@@ -271,37 +275,49 @@ export function spawnSledAt(
     opened: false,
     hovered: false,
     tether: { kind: tether.kind },
-    ropeLine: null,
+    ropeMesh: null,
   };
   ctx.sleds.list.push(sled);
 
-  // If save restored a sled in the tethered state, allocate the rope line
+  // If save restored a sled in the tethered state, allocate the rope mesh
   // so it'll be visible on the very first frame after load.
   if (tether.kind !== 'none') {
-    sled.ropeLine = makeRopeLine();
-    ctx.three.scene.add(sled.ropeLine);
+    sled.ropeMesh = makeRopeMesh();
+    ctx.three.scene.add(sled.ropeMesh);
   }
 
   return sled;
 }
 
 // ─────────────────────────────────────────────────────────────
-// Rope visual
+// Rope visual (QQ-2 — thick tube along a sagging curve)
 // ─────────────────────────────────────────────────────────────
 
-function makeRopeLine(): THREE.Line {
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
-  const mat = new THREE.LineBasicMaterial({ color: Tuning.SLED_ROPE_COLOR_HEX });
-  const line = new THREE.Line(geo, mat);
-  line.frustumCulled = false; // rope endpoints can be near camera → keep on screen
-  return line;
+const _ropeMaterial = new THREE.MeshLambertMaterial({
+  color: Tuning.SLED_ROPE_COLOR_HEX,
+  flatShading: true,
+});
+
+function makeRopeMesh(): THREE.Mesh {
+  // Placeholder geometry — rebuilt each frame in rebuildRopeMesh.
+  // Tiny 2-point curve so we can construct a valid TubeGeometry up
+  // front; first updateSleds tick replaces it with the real thing.
+  const curve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(0, 0, 0),
+    new THREE.Vector3(0, 0, 0.01),
+  ]);
+  const geo = new THREE.TubeGeometry(curve, 1, Tuning.SLED_ROPE_RADIUS, 6, false);
+  const mesh = new THREE.Mesh(geo, _ropeMaterial);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  mesh.frustumCulled = false; // rope endpoints can sit just outside the frustum
+  return mesh;
 }
 
-function disposeRopeLine(ctx: GameContext, line: THREE.Line): void {
-  ctx.three.scene.remove(line);
-  line.geometry.dispose();
-  (line.material as THREE.Material).dispose();
+function disposeRopeMesh(ctx: GameContext, mesh: THREE.Mesh): void {
+  ctx.three.scene.remove(mesh);
+  mesh.geometry.dispose();
+  // Material is shared (_ropeMaterial) — don't dispose.
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -325,21 +341,21 @@ export function attachRopeToSled(
     slot.meta.attachedSledId = sled.id;
   }
 
-  if (!sled.ropeLine) {
-    sled.ropeLine = makeRopeLine();
-    ctx.three.scene.add(sled.ropeLine);
+  if (!sled.ropeMesh) {
+    sled.ropeMesh = makeRopeMesh();
+    ctx.three.scene.add(sled.ropeMesh);
   }
   ctx.ui.showToast(endpoint === 'speeder' ? 'rope attached to speeder' : 'rope attached');
 }
 
-/** Untie the rope. Clears tether + ropeLine + the wielded rope slot's
+/** Untie the rope. Clears tether + ropeMesh + the wielded rope slot's
  *  meta.attachedSledId. */
 export function detachRope(ctx: GameContext, sled: Sled, reason?: string): void {
   if (sled.tether.kind === 'none') return;
   sled.tether = { kind: 'none' };
-  if (sled.ropeLine) {
-    disposeRopeLine(ctx, sled.ropeLine);
-    sled.ropeLine = null;
+  if (sled.ropeMesh) {
+    disposeRopeMesh(ctx, sled.ropeMesh);
+    sled.ropeMesh = null;
   }
 
   // Clear meta.attachedSledId on any slot still pointing at this sled.
@@ -363,11 +379,8 @@ export function detachRope(ctx: GameContext, sled: Sled, reason?: string): void 
 // ─────────────────────────────────────────────────────────────
 
 const _anchor = new THREE.Vector3();
-const _tetherForward = new THREE.Vector3();
-const _target = new THREE.Vector3();
-const _err = new THREE.Vector3();
-const _camFwd = new THREE.Vector3();
-const _ropePts = new Float32Array(6);
+const _sledAttach = new THREE.Vector3();
+const _towBarTmp = new THREE.Vector3();
 
 function ropeIsStillHeld(ctx: GameContext, sledId: number): boolean {
   for (const s of ctx.inventory.slots) {
@@ -379,22 +392,47 @@ function ropeIsStillHeld(ctx: GameContext, sledId: number): boolean {
   return false;
 }
 
-/** Per-frame: apply spring-damper impulse on every tethered sled and
- *  rebuild its rope Line. Insertion point in main.ts is AFTER
- *  updateSpeeder + updatePlayer so the tether endpoint positions are
- *  finalized for this frame. */
-export function updateSleds(ctx: GameContext, dt: number): void {
+/** Shortest signed wrap of an angle delta into (-π, π]. */
+function wrapAngle(a: number): number {
+  while (a > Math.PI) a -= 2 * Math.PI;
+  while (a < -Math.PI) a += 2 * Math.PI;
+  return a;
+}
+
+/** Sled's local-forward direction in world space, derived from the
+ *  manually-controlled group yaw (body rotation is locked). Sled's
+ *  local front (where the rope ties on) is +Z in the makeSledVisual
+ *  layout (yokeBase at z = -hz, so the FRONT is local -Z). We treat
+ *  group.rotation.y as the yaw of the local -Z forward axis around
+ *  world Y. */
+function sledForward(yaw: number): { x: number; z: number } {
+  return { x: -Math.sin(yaw), z: -Math.cos(yaw) };
+}
+
+/** Per-frame: enforce the inextensible-rope constraint on every
+ *  tethered sled and rebuild its rope mesh.
+ *
+ *  Insertion point in main.ts is AFTER updateSpeeder + updatePlayer
+ *  so both possible anchor endpoints have finalized this-frame pose.
+ *
+ *  Constraint model (replaces the previous spring-damper — QQ-2):
+ *  - If `dist(anchor, sled_front) <= SLED_TOW_DISTANCE`: rope is
+ *    slack, no force applied. Sled stays put on the sand (friction
+ *    holds it).
+ *  - If `dist > SLED_TOW_DISTANCE`: position-snap the sled body
+ *    inward by the stretch amount + zero out any velocity component
+ *    pointing AWAY from the anchor.
+ *  - If `dist > SLED_TOW_MAX_DIST`: rope tears free, auto-detach.
+ *
+ *  Visual yaw: each frame, the sled's group is lerped toward "face
+ *  the anchor" so the bow of the sled tracks the pull direction. */
+export function updateSleds(ctx: GameContext, _dt: number): void {
   for (const sled of ctx.sleds.list) {
-    // Cheap sync: visuals follow the body each frame (incl. detached sleds
-    // that may have been bumped by raiders or settled on a slope).
     const tr = sled.body.translation();
     const hy = Tuning.SLED_HALF_EXTENTS_Y;
+    // Sync group position to body each frame. group.rotation.y is
+    // managed manually below (body rotation is locked).
     sled.group.position.set(tr.x, tr.y - 0.08 - hy, tr.z);
-    // Y-only yaw from quaternion.
-    const rot = sled.body.rotation();
-    const sy = 2 * (rot.w * rot.y);
-    const cy = 1 - 2 * (rot.y * rot.y);
-    sled.group.rotation.y = Math.atan2(sy, cy);
     sled.pos.set(tr.x, sled.group.position.y, tr.z);
 
     if (sled.tether.kind === 'none') continue;
@@ -405,92 +443,152 @@ export function updateSleds(ctx: GameContext, dt: number): void {
       continue;
     }
 
-    // Compute anchor + forward of the current tether endpoint.
+    // Resolve the world anchor (where the rope ties on the puller).
     if (sled.tether.kind === 'speeder') {
       const s = ctx.speeder;
       if (!s) {
         detachRope(ctx, sled, 'speeder gone — sled untied');
         continue;
       }
-      const bikePos = s.body.translation();
-      // Bike forward = (-sin(yaw), 0, -cos(yaw)). Anchor 1m BEHIND seat.
-      const bfx = -Math.sin(s.yaw);
-      const bfz = -Math.cos(s.yaw);
-      _anchor.set(bikePos.x - bfx * 1.0, bikePos.y, bikePos.z - bfz * 1.0);
-      _tetherForward.set(bfx, 0, bfz);
-      // Speeder reverse guard: zero spring force when bike is moving
-      // backward along its own forward axis. Sled just drifts under damping.
-      const lv = s.body.linvel();
-      const fwdDot = lv.x * bfx + lv.z * bfz;
-      if (fwdDot < -0.2) {
-        // skip spring impulse this frame — still rebuild rope visual below
-        rebuildRopeLine(sled, _anchor, tr);
-        continue;
-      }
+      // QQ-2 — anchor = world position of the bar mesh behind the seat.
+      // We use the mesh's matrixWorld so the position reflects the
+      // current frame's body translation + visual quaternion (the
+      // group is sync'd inside updateSpeeder, which runs before us).
+      s.towBar.getWorldPosition(_towBarTmp);
+      _anchor.copy(_towBarTmp);
     } else {
-      // Player endpoint — anchor at hip height behind capsule.
+      // Player endpoint — anchor at hip height behind capsule. Use the
+      // capsule's center (-0.2 down so the rope drops naturally to
+      // belt height, not the eye-level the camera lives at).
       const ppos = ctx.player.body.body.translation();
-      ctx.three.camera.getWorldDirection(_camFwd);
-      _camFwd.y = 0;
-      if (_camFwd.lengthSq() < 1e-6) _camFwd.set(0, 0, -1);
-      _camFwd.normalize();
       _anchor.set(ppos.x, ppos.y - 0.2, ppos.z);
-      _tetherForward.copy(_camFwd);
     }
 
-    _target.set(
-      _anchor.x - _tetherForward.x * Tuning.SLED_TOW_DISTANCE,
-      _anchor.y,
-      _anchor.z - _tetherForward.z * Tuning.SLED_TOW_DISTANCE,
+    // Sled attach point in world space — front of the sled. Uses the
+    // manually-tracked group yaw (body rotation is locked at identity).
+    const yaw = sled.group.rotation.y;
+    const fwd = sledForward(yaw);
+    _sledAttach.set(
+      tr.x + fwd.x * Tuning.SLED_HALF_EXTENTS_Z,
+      tr.y + 0.20,
+      tr.z + fwd.z * Tuning.SLED_HALF_EXTENTS_Z,
     );
 
-    // Snap-distance check (anchor → sled).
-    const dx = tr.x - _anchor.x;
-    const dz = tr.z - _anchor.z;
+    // Horizontal distance from anchor to sled attach point.
+    const dx = _sledAttach.x - _anchor.x;
+    const dz = _sledAttach.z - _anchor.z;
     const dist = Math.hypot(dx, dz);
+
+    // Hard snap — rope tears free if we're way past the constraint
+    // (anchor teleported / speeder boosted through a wreck).
     if (dist > Tuning.SLED_TOW_MAX_DIST) {
       detachRope(ctx, sled, 'rope snapped');
       continue;
     }
 
-    // Spring-damper impulse on the sled body.
-    _err.set(_target.x - tr.x, 0, _target.z - tr.z);
-    const lv = sled.body.linvel();
-    const fx = _err.x * Tuning.SLED_TOW_SPRING_K - lv.x * Tuning.SLED_TOW_SPRING_DAMP;
-    const fz = _err.z * Tuning.SLED_TOW_SPRING_K - lv.z * Tuning.SLED_TOW_SPRING_DAMP;
-    sled.body.applyImpulse({ x: fx * dt, y: 0, z: fz * dt }, true);
+    // Inextensible-rope constraint. Slack rope = no force.
+    if (dist > Tuning.SLED_TOW_DISTANCE && dist > 1e-4) {
+      const stretch = dist - Tuning.SLED_TOW_DISTANCE;
+      // Unit vector FROM sled-attach TOWARD anchor.
+      const ux = -dx / dist;
+      const uz = -dz / dist;
 
-    rebuildRopeLine(sled, _anchor, tr);
+      // 1) Position correction: translate the sled body inward by the
+      //    full stretch. The body has locked rotations + CCD so this
+      //    teleport is well-behaved.
+      sled.body.setTranslation(
+        { x: tr.x + ux * stretch, y: tr.y, z: tr.z + uz * stretch },
+        true,
+      );
+
+      // 2) Velocity correction: project out the outward radial
+      //    component. Positive `vRadial` = sled moving TOWARD anchor;
+      //    negative = away. We only remove the negative part — the
+      //    sled is free to drift toward the anchor on its own
+      //    momentum (rare in practice).
+      const lv = sled.body.linvel();
+      const vRadial = lv.x * ux + lv.z * uz;
+      if (vRadial < 0) {
+        sled.body.setLinvel(
+          { x: lv.x - vRadial * ux, y: lv.y, z: lv.z - vRadial * uz },
+          true,
+        );
+      }
+    }
+
+    // Visual yaw — lerp the sled to face the anchor so its bow tracks
+    // the rope. Reads the post-correction body position so the orient
+    // is consistent with the rope direction we'll draw this frame.
+    {
+      const trAfter = sled.body.translation();
+      const adx = _anchor.x - trAfter.x;
+      const adz = _anchor.z - trAfter.z;
+      if (adx * adx + adz * adz > 1e-4) {
+        // Sled's local -Z should point toward the anchor → yaw =
+        // atan2(adx, adz). (For "-Z forward" model: world fwd =
+        // (-sin yaw, -cos yaw), so to point at (adx, adz) we want
+        // -sin yaw = adx/|d|, -cos yaw = adz/|d| → yaw = atan2(-adx, -adz).)
+        const targetYaw = Math.atan2(-adx, -adz);
+        const err = wrapAngle(targetYaw - sled.group.rotation.y);
+        sled.group.rotation.y += err * Tuning.SLED_YAW_LERP;
+      }
+    }
+
+    rebuildRopeMesh(sled, _anchor);
   }
 }
 
-function rebuildRopeLine(
-  sled: Sled,
-  anchor: THREE.Vector3,
-  sledBodyTr: { x: number; y: number; z: number },
-): void {
-  if (!sled.ropeLine) return;
-  // Sled attach point ≈ ropeStub world position. Approximated via body
-  // pose: forward of body = (-sin(yaw), 0, -cos(yaw)) where yaw is from
-  // the group's already-synced rotation.y; stub is 0.33m up and HZ
-  // forward of center.
-  const yaw = sled.group.rotation.y;
-  const fx = -Math.sin(yaw);
-  const fz = -Math.cos(yaw);
-  const ax = sledBodyTr.x + fx * Tuning.SLED_HALF_EXTENTS_Z;
-  const ay = sledBodyTr.y + 0.25;
-  const az = sledBodyTr.z + fz * Tuning.SLED_HALF_EXTENTS_Z;
+/** Rebuild the sled's rope tube along a sagging Catmull-Rom curve
+ *  between the anchor and the sled's front attach point. Mid-points
+ *  sag downward proportional to the slack in the rope (taut = max
+ *  sag, fully stretched = zero sag). */
+const _ropeCurvePoints: THREE.Vector3[] = [
+  new THREE.Vector3(), new THREE.Vector3(),
+  new THREE.Vector3(), new THREE.Vector3(),
+  new THREE.Vector3(),
+];
 
-  _ropePts[0] = anchor.x;
-  _ropePts[1] = anchor.y;
-  _ropePts[2] = anchor.z;
-  _ropePts[3] = ax;
-  _ropePts[4] = ay;
-  _ropePts[5] = az;
-  const attr = sled.ropeLine.geometry.getAttribute('position') as THREE.BufferAttribute;
-  attr.array = _ropePts;
-  attr.needsUpdate = true;
-  sled.ropeLine.geometry.computeBoundingSphere();
+function rebuildRopeMesh(sled: Sled, anchor: THREE.Vector3): void {
+  if (!sled.ropeMesh) return;
+  const tr = sled.body.translation();
+  const yaw = sled.group.rotation.y;
+  const fwd = sledForward(yaw);
+  const attachX = tr.x + fwd.x * Tuning.SLED_HALF_EXTENTS_Z;
+  const attachY = tr.y + 0.20;
+  const attachZ = tr.z + fwd.z * Tuning.SLED_HALF_EXTENTS_Z;
+
+  const dx = attachX - anchor.x;
+  const dz = attachZ - anchor.z;
+  const horizDist = Math.hypot(dx, dz);
+  // Sag is 0 at fully-stretched (rope is straight + horizontal), max
+  // at slack. Use the rope's normalized slack as the sag factor.
+  const slack = Math.max(0, Tuning.SLED_TOW_DISTANCE - horizDist);
+  const sagFrac = Math.min(1, slack / Tuning.SLED_TOW_DISTANCE);
+  const sag = Tuning.SLED_ROPE_SAG * sagFrac;
+
+  // 5-point Catmull-Rom: endpoints + 3 evenly spaced midpoints with
+  // a parabolic sag profile (max at the middle).
+  _ropeCurvePoints[0].set(anchor.x, anchor.y, anchor.z);
+  _ropeCurvePoints[4].set(attachX, attachY, attachZ);
+  for (let i = 1; i <= 3; i++) {
+    const t = i / 4;
+    const px = anchor.x + (attachX - anchor.x) * t;
+    const py = anchor.y + (attachY - anchor.y) * t;
+    const pz = anchor.z + (attachZ - anchor.z) * t;
+    // Parabolic drop — sin(π·t) peaks at t=0.5.
+    _ropeCurvePoints[i].set(px, py - Math.sin(Math.PI * t) * sag, pz);
+  }
+  const curve = new THREE.CatmullRomCurve3(_ropeCurvePoints, false, 'catmullrom', 0.5);
+
+  // Dispose previous geometry + replace with a fresh tube.
+  sled.ropeMesh.geometry.dispose();
+  sled.ropeMesh.geometry = new THREE.TubeGeometry(
+    curve,
+    /* tubularSegments */ 16,
+    Tuning.SLED_ROPE_RADIUS,
+    /* radialSegments */ 6,
+    /* closed */ false,
+  );
 }
 
 /** Speeder mount hook — promote any 'player'-tethered sleds to 'speeder'.

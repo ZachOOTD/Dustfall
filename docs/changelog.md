@@ -3,6 +3,52 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session QQ-2 — 2026-05-20 — Sled feel pass + sandworm rescale + hotbar tooltips
+`partially verified` — tsc clean; eval-driven verification of the new
+rope physics (lockedRotations + inextensible constraint) and HMR
+playtest by the user for the visual + UI changes. Follow-up to QQ
+addressing the "rope too elastic, sled spins around character" feel
+problems. **Rope physics rewritten** (supersedes D65): one-way spring-
+damper replaced with an **inextensible-rope constraint**. If `dist <=
+SLED_TOW_DISTANCE` the rope is slack and applies no force; if `>`,
+position-snap the sled body inward by the stretch + project out the
+outward radial velocity component. Sled body rotations LOCKED via
+`setEnabledRotations(false, false, false, true)` — verified
+applyTorqueImpulse(50) → angvel stays (0,0,0). Visual yaw lerped
+each frame toward "face the anchor" via `SLED_YAW_LERP = 0.12` so
+the bow tracks the pull direction without physics-driven spin.
+Friction back to **0.6** (metal-on-sand) since static friction now
+correctly holds slack-rope sleds in place. Rope length 3 → 5m.
+**Visual upgrade**: 2-vertex `THREE.Line` replaced with
+`Mesh(TubeGeometry, MeshLambertMaterial)` along a 5-point
+`CatmullRomCurve3` with parabolic mid-point sag scaled by rope
+slack. Radius 0.04m, rebuilt each frame. **New speeder back-bar**:
+two short uprights + horizontal crossbar at (0, 0.38, 0.95), named
+`speederTowBar`, ref exposed on `SpeederState.towBar`. `updateSleds`
+speeder-tether branch now reads `s.towBar.getWorldPosition()` so the
+rope visually attaches to the bar mesh. **Sandworm halved**
+(MM 240m → QQ-2 120m). All ranges scaled with body size halved
+proportionally (BITE_RANGE 25→12.5, LUNGE_RANGE 30→15,
+BREACH_ARC_PEAK 40→20, STATIONARY_BREACH_HEIGHT 50→25,
+PATROL/DETECTION/DISENGAGE_RADIUS halved). Speeds + durations + HP
+unchanged per D49. **Sled cargo bidirectional**: lootMenu widened
+with optional `allowDeposit` flag → two-column layout (CARGO + YOU).
+Click left = take from sled, click right = deposit from player
+inventory. Stackable meta-less items merge with existing entries;
+meta-bearing items (canteen fill, ammo, attached-sled-id) push as
+new entries to preserve per-stack state. Empty sleds now open
+(so the player can stash into them — previously refused). New CSS
+classes `.loot-columns`, `.loot-column`, `.loot-col-header`.
+**Hotbar tooltips**: hover any non-empty slot → custom-styled
+tooltip floats above the slot showing item name (large, beige)
++ description (small, muted). Replaces the native browser `title`.
+Position computed via `getBoundingClientRect()` at hover time;
+content refreshes if the hovered slot's item changes. **Backlog
+cleanup**: struck 4 shipped entries (sand worm, weapon variants,
+world+biome rework, satellite dish POI). Replaced generic
+"wreck POI rework" with specific "opening wreck full redo" feat
+per user direction. Decision D67.
+
 ## Session QQ — 2026-05-19 — Sled mechanic — rope-tow flatbed cargo
 `partially verified` — tsc clean; eval-driven verification confirmed
 all critical paths (deploy / attachRopeToSled / detachRope / spring tow

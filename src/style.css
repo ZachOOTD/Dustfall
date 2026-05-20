@@ -307,6 +307,43 @@ canvas {
   letter-spacing: 1px;
 }
 
+/* QQ-2 — hotbar hover tooltip (singleton, positioned via JS at hover).
+   Floats above the hovered slot showing item name + description. */
+#hotbar-tooltip {
+  position: fixed;
+  transform: translateX(-50%);
+  background: rgba(8, 6, 4, 0.94);
+  border: 1px solid rgba(232, 220, 192, 0.30);
+  padding: 8px 12px;
+  font-family: 'JetBrains Mono', monospace;
+  color: #e8dcc0;
+  pointer-events: none;        /* must NOT block clicks on the slot */
+  z-index: 50;                 /* above hotbar (z=10), below menus (z=100+) */
+  max-width: 280px;
+  text-align: center;
+  opacity: 1;
+  transition: opacity 0.12s ease-out;
+}
+
+#hotbar-tooltip.hidden {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.hotbar-tooltip-name {
+  font-size: 12px;
+  letter-spacing: 3px;
+  color: #f0e4c8;
+  margin-bottom: 4px;
+}
+
+.hotbar-tooltip-desc {
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: #a89878;
+  line-height: 1.4;
+}
+
 /* ──────────────────────────────────────────────────────────
    Interact prompt — small text under crosshair
    ────────────────────────────────────────────────────────── */
@@ -563,12 +600,39 @@ canvas {
   gap: 14px;
 }
 
+/* QQ-2 — wrapper that holds 1 or 2 columns. Sleds use both; loot
+   containers use only the left column. */
+.loot-columns {
+  display: flex;
+  flex-direction: row;
+  gap: 32px;
+  margin-top: 16px;
+  margin-bottom: 24px;
+  align-items: flex-start;
+  pointer-events: auto;
+}
+
+.loot-column {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 320px;
+}
+
+.loot-col-header {
+  color: #8a7a5e;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 3px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(232, 220, 192, 0.18);
+}
+
 .loot-rows {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-top: 24px;
-  margin-bottom: 24px;
+  margin-top: 8px;
   width: 380px;
   pointer-events: auto;
 }

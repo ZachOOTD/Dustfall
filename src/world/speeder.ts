@@ -58,6 +58,10 @@ export interface SpeederState {
   /** CC-3.1 — seat mesh, tagged as interactable so the interaction
    *  system shows a "[E] mount speeder" prompt when looked at. */
   seat: THREE.Mesh;
+  /** QQ-2 — small horizontal bar behind the seat used as the rope
+   *  anchor when towing a sled. Mesh ref kept so updateSleds can
+   *  read its world position each frame. */
+  towBar: THREE.Mesh;
 }
 
 // ── Materials — same palette as the wrecks so the bike feels in-universe.
@@ -197,6 +201,25 @@ export function makeSpeeder(_rand: Rng): THREE.Group {
     const cushion = box(0.34, 0.04, 0.50, _rustDarkMat);
     cushion.position.set(0, 0.37, 0.50);
     g.add(cushion);
+    // QQ-2 — tow-bar: small horizontal crossbar behind the backrest,
+    // bolted to two short uprights. Used as the rope-attach point when
+    // towing a sled. Sits just above the fuselage between the backrest
+    // and the engine pods so it reads as a deliberate tow rig.
+    {
+      // Two vertical posts.
+      for (const sx of [-1, 1]) {
+        const post = cyl(0.025, 0.025, 0.16, _nozzleRimMat, 6);
+        post.position.set(sx * 0.13, 0.30, 0.95);
+        g.add(post);
+      }
+      // Horizontal cross-bar — runs left-right at the top of the posts.
+      // Named so placeSpeeder can grab the ref for the rope anchor.
+      const bar = cyl(0.030, 0.030, 0.34, _nozzleRimMat, 8);
+      bar.rotation.z = Math.PI / 2;
+      bar.position.set(0, 0.38, 0.95);
+      bar.name = 'speederTowBar';
+      g.add(bar);
+    }
   }
 
   // ────────────────────────────────────────────────────────────────────
@@ -593,6 +616,8 @@ export function placeSpeeder(
   const headlampDisc = group.getObjectByName('headlampDisc') as THREE.Mesh;
   // CC-3.1 — seat ref for the interaction system to raycast against.
   const seat = group.getObjectByName('speederSeat') as THREE.Mesh;
+  // QQ-2 — tow-bar ref for the rope anchor when towing a sled.
+  const towBar = group.getObjectByName('speederTowBar') as THREE.Mesh;
 
   return {
     body,
@@ -609,6 +634,7 @@ export function placeSpeeder(
     headlamp,
     headlampDisc,
     seat,
+    towBar,
   };
 }
 

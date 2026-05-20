@@ -1162,3 +1162,52 @@ friction, static friction is the dominant failure mode at
 small errors — not damping or damping-overshoot. Inspect the
 trace: if velocity drops to ~0 with non-zero spring force,
 it's stiction, not overdamping.
+
+## D67 — Inextensible rope constraint replaces spring-damper (Session QQ-2; supersedes D65)
+**When**: Session QQ-2.
+**Why**: D65's one-way spring-damper produced the right velocity-
+follow behavior on paper but felt wrong in play: the rope was
+visibly elastic (sled bouncing toward the anchor on slack), the
+sled rotated freely around the player as the spring pulled it from
+the body center, and small static-friction tweaks (D66) only
+masked the elasticity issue. The user's playtest feedback was
+"rope very elastic, sled spins around character and moves
+erratically — we need realistic rope pulling metal sled on sand".
+The spring model fundamentally cannot represent an inextensible
+rope: any spring with finite stiffness will stretch.
+**Decision**: Replace the spring impulse with a hard constraint.
+Per frame, measure `dist(anchor, sled_attach_point)`. If `<=
+SLED_TOW_DISTANCE`: rope is slack, no force applied — sand
+friction holds the sled in place. If `>`:
+  1. **Position-snap**: translate the sled body inward by the
+     stretch amount (`body.setTranslation(...)`), enforcing the
+     rope length exactly.
+  2. **Velocity-correct**: project out the outward radial
+     component of the sled's linear velocity (only when
+     `vDotU < 0`), so the constraint also prevents the sled from
+     accelerating away from the anchor.
+This is the standard impulse-based rope-constraint approach (cf.
+XPBD) implemented manually because Rapier doesn't expose XPBD
+joints + we don't want a dependency on its joint API for one
+mechanic.
+
+**Companion changes that make the constraint stable**:
+- `body.setEnabledRotations(false, false, false, true)` — the
+  sled body cannot rotate from physics forces. Visual yaw is
+  managed manually via `group.rotation.y` lerping toward "face the
+  anchor" each frame. This kills the "spinning around the puller"
+  failure mode entirely.
+- Friction back to 0.6 (was dropped to 0.25 under D66). Static
+  friction now correctly holds slack-rope sleds in place — without
+  the spring, there's no force fighting friction at small errors.
+- Rope length 3 → 5m, so the slack zone is visibly readable.
+- Rope visual replaced with `TubeGeometry` along a `CatmullRomCurve3`
+  with mid-point sag scaled by slack — taut rope = straight,
+  slack rope = parabolic drop.
+
+**Apply**: when a tether's "feel" matters (rope, chain, leash,
+fixed-length cable), prefer position-based constraints over
+spring models. Springs are great for soft-bodies and bumpers, not
+ropes. The two cheap stabilizers — locked rotation + manual visual
+yaw — should always travel with this constraint pattern for body
+shapes longer than their width.

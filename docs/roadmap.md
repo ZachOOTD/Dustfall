@@ -9,9 +9,22 @@ and promotes the second.
 
 ---
 
-## Next — Big-ticket bucket (1–2 picks per session at ~4–7h each)
+## Next — Opening wreck full redo
+User direction at end of QQ-2: the original opening-scene wreck is now
+visibly cruder than the procedural wreck modules built in KK/LL/NN
+(LatheGeometry hulls, tilted colliders, salvage panels, light-shaft
+holes baked into geometry). Rebuild it from scratch with the same
+toolkit. Bake in extra holes for god-rays as part of the new
+geometry, not added on top. Files: `src/world/openingScene.ts` (or
+wherever the wreck mesh is built — look at `setupOpeningScene`).
+Critical: the wreck contains the spawn point + the journal + opening
+narrative props, so the rebuild must preserve those anchors.
+
+## Big-ticket bucket (1–2 picks per session at ~4–7h each)
 Pick whatever feels most missing after the polish + atmosphere arc.
 
+- Crafting rework — combine up to 4 items to discover recipes (no grid); chooser for overlapping outputs. Replaces the current bloating recipe list.
+- Control scheme overhaul — modern survival parity, LMB-leaning (hold to drink, click to place kits, etc.) instead of E for everything.
 - Small red creature companion (pocketable + re-deployable) — charm + character, no combat surface area, scoped at one session
 - Raider variants (scout / ambusher / brute) — *if* we decide to bring raiders back
 - Q2: Rigged hands + lizard (GLB-dependent — deferred with N's asset work)
