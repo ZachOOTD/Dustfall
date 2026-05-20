@@ -4,6 +4,18 @@ Numbered key calls — why + when. Don't re-explain in chat — link here.
 
 When adding: append at the bottom with the next D-number. Don't renumber.
 
+Each entry carries a `**friction-score:**` (0-5) reflecting how often the
+decision will cause future rework or pain. Added in the gamedev-framework
+v0.3.x retrofit (2026-05-20). The `/audit-debt` skill surfaces high-friction
+unresolved entries.
+
+- **0** = trivial, reversible (color, UI copy, tuning number)
+- **1** = small, locally-reversible
+- **2** = moderate; touches one subsystem
+- **3** = workaround that ships visibly-wrong-but-shippable
+- **4** = architectural, hard to reverse
+- **5** = foundational; reversing means rewriting multiple subsystems
+
 ---
 
 ## D1 — Browser-first runtime (Three.js + TS + Vite)
@@ -12,35 +24,41 @@ When adding: append at the bottom with the next D-number. Don't renumber.
 URL. Procedural Web Audio + GLTF + Rapier all run cleanly in the same page.
 Migrating to Godot / Unity / Bevy gives no FPS headroom that hardware-
 accelerated Chrome doesn't already have (see `architecture.md` perf notes).
+**friction-score:** 5
 
 ## D2 — Rapier for physics, not custom
 **When**: Session A.
 **Why**: Kinematic character controller + heightfield collider + raycasts
 out of the box. Building these from scratch would be a multi-week detour.
 Trade-off: WASM bundle is ~500 KB.
+**friction-score:** 5
 
 ## D3 — Procedural Web Audio, no sample files
 **When**: Session C.
 **Why**: Keeps the bundle tiny (no audio assets). Every sfx is a function
 in `src/audio/audio.ts` that synthesises via filtered noise + oscillator
 nodes. Easy to A/B feel by tweaking envelope numbers.
+**friction-score:** 4
 
 ## D4 — Magic numbers go in `tuning.ts` only
 **When**: Session A (rule), reinforced every session.
 **Why**: Game-feel iteration is "tweak number → reload → feel". Numbers
 sprinkled across files make this exhausting. One file = one place to
 search.
+**friction-score:** 4
 
 ## D5 — `GameContext` is the spine, not arg-passing
 **When**: Session A.
 **Why**: A 3D survival game touches every subsystem from every other.
 Threading params through call chains becomes spaghetti. One `ctx` object
 on every `init` and `update`.
+**friction-score:** 5
 
 ## D6 — Rejected Kenney asset packs ("too cartoony")
 **When**: Session P.
 **Why**: The user wants Dune / Mad Max tone. Kenney's low-poly survival
 pack reads as gamey, not bleak. Drove the **D7 barren-desert pivot**.
+**friction-score:** 2
 
 ## D7 — Barren-desert tonal pivot
 **When**: Session P.
@@ -48,6 +66,7 @@ pack reads as gamey, not bleak. Drove the **D7 barren-desert pivot**.
 clutter. Removed 134 rocks/trunks + truck wreck + standalone loot crates.
 Replaced with ridged dunes + biomes + perimeter mountains + hand-placed
 hero landmarks.
+**friction-score:** 4
 
 ## D8 — Sci-fi scavenger pivot
 **When**: Session S.
@@ -55,6 +74,7 @@ hero landmarks.
 populated layer on the barren desert. Half-buried hulls become the
 recognisable silhouettes; replaced ribcage/obelisk/tower with crashed-ship
 wrecks as everyday landmarks.
+**friction-score:** 3
 
 ## D9 — Salvageables are finite (drives exploration economy)
 **When**: Session T.
@@ -62,6 +82,7 @@ wrecks as everyday landmarks.
 `salvageRemaining` counter (2-3 hero, 4-6 massive) ties art to mechanics:
 walking to a wreck rewards you, but only finitely. Combined with wells
 (thirst) this gives the survival loop its full economy.
+**friction-score:** 3
 
 ## D10 — Single-slot save, no death autosave
 **When**: Session M.
@@ -69,6 +90,7 @@ walking to a wreck rewards you, but only finitely. Combined with wells
 (single Continue button on the start overlay). **No autosave on death** —
 dying means you load your last save or start a new run. Matches the
 Long Dark / DayZ contract. Sleep is the natural autosave point.
+**friction-score:** 3
 
 ## D11 — Confirm on New-Game-while-save-exists
 **When**: Session M (post-ship adjustment).
@@ -76,12 +98,14 @@ Long Dark / DayZ contract. Sleep is the natural autosave point.
 overwrite. User identified the footgun: click New Game by accident,
 sleep once, old run is gone. Inline `[yes, new game] / [cancel]` prompt
 fires only when `hasSave()`.
+**friction-score:** 1
 
 ## D12 — GOD_MODE stays on through Session M
 **When**: Sessions A–M.
 **Why**: Iterating game feel requires not dying constantly. `Tuning.GOD_MODE`
 in `tuning.ts` floors stats in `die()` so the player survives. Will flip
 off when balance tuning starts (post-O / win-condition session).
+**friction-score:** 1
 
 ## D13 — Sandbox pivot: raiders deprioritized, win condition dropped
 **When**: Session U (mid-session direction shift).
@@ -93,6 +117,7 @@ The single spawned raider at boot was removed too. Raider AI + rigged-
 animation code in `src/enemies/raider.ts` STAYS — we may revisit (raider
 variants moved to the Later bucket). `Tuning.GOD_MODE` stays on
 indefinitely; no balance pass on the horizon.
+**friction-score:** 5
 
 ## D14 — Music disabled as placeholder; full audio overhaul pending
 **When**: Session V (built it), Session W bugfix (disabled it).
@@ -104,6 +129,7 @@ are commented out in `audio/soundscape.ts` with restore points. The next
 session (X) is the overhaul. Tonally we likely need sample-based stems
 rather than pure synthesis — procedural music is hard to make feel like a
 soundtrack.
+**friction-score:** 2
 
 ## D15 — Opening wreck is intentionally non-salvageable
 **When**: Session W.
@@ -114,6 +140,7 @@ giving them scrap reward for stripping it down would conflict with the
 not registered in the salvageables registry. All other wrecks (registered
 via `salvage.ts` in T) still salvage normally. If we later want it
 salvageable, just register it in `openingScene.ts`.
+**friction-score:** 3
 
 ## D16 — Fog: near and far BOTH move with storm intensity
 **When**: Session W bugfix.
@@ -124,6 +151,7 @@ surface clamped to full fog color, painting the wreck and surroundings
 red-brown even at 12 m distance. Fix: at peak storm, `fog.near = 15`,
 `fog.far = 30` — math stays sane, fog still feels claustrophobic. Going
 forward, always pair fog far + near changes; never let one cross the other.
+**friction-score:** 1
 
 ## D17 — CC0 sample stems over procedural for ambient + music (Session X)
 **When**: Session X.
@@ -137,6 +165,7 @@ and 2 music variants. SFX stay procedural. Stems are crossfaded by
 weather.intensity + sunHeight at runtime — no timeline, no DAW, no stem
 sync. The loader tolerates missing files so the architecture can ship
 ahead of the asset pack (same pattern as Session N rigged-raider GLB).
+**friction-score:** 4
 
 ## D18 — Continuous quiet music over silent-calm baseline (Session X)
 **When**: Session X.
@@ -149,6 +178,7 @@ quiet always-on pad sets the lonely-desert tone without competing with
 SFX. Risk recorded in archived plan: if 30s of calm listening grates,
 drop `MUSIC_CALM_TARGET` to 0.10 or switch to a sparse fade-in/out
 cycle.
+**friction-score:** 1
 
 ## D19 — Footprint decals via InstancedMesh + onBeforeCompile, not DecalGeometry or RenderTarget (Session Y)
 **When**: Session Y.
@@ -172,6 +202,7 @@ cycle.
 The choice favors a known scaling cap (pool size) + minimal renderer
 surface area over visually-perfect terrain-conforming decals. Revisit if
 we need much larger or more-detailed decals later.
+**friction-score:** 4
 
 ## D20 — No footprints on rocky biome (Session Y)
 **When**: Session Y.
@@ -183,6 +214,7 @@ crusted-mud reads like a flat impression — close enough for v1).
 Trade-off: walking from dune onto rock and back leaves a visible gap
 in the trail. Acceptable — reads as "the terrain doesn't take the
 print" rather than a bug.
+**friction-score:** 1
 
 ## D21 — Wells hard-confined to salt biome, no quota fallback (Session Z)
 **When**: Session Z.
@@ -196,6 +228,7 @@ scatter strays into wrong-feeling biomes. Side-effect: total well count
 may now be < 5 if the salt patches are tight; balance-wise this is fine
 because canteens are reusable and water sources are deliberately scarce
 in this game.
+**friction-score:** 2
 
 ## D22 — Salvage interact tag moves from wreck root to a small panel mesh (Session Z)
 **When**: Session Z.
@@ -218,6 +251,7 @@ Players must aim at the panel deliberately. Architectural rules:
 If a future wreck constructor forgets to call `addAccessPanel`,
 `registerSalvageable` falls back to tagging the group root (legacy
 behavior) so the wreck is still salvageable, just not tactile.
+**friction-score:** 3
 
 ## D23 — `panelWithHole` helper for real geometry holes, not fake emissive shafts (Session AA)
 **When**: Session AA.
@@ -236,6 +270,7 @@ positions that would float over a now-empty gap. Trade-off:
 panel-with-hole only supports ONE rectangular hole per call — multiple
 holes per wall would need a recursive rectangle decomposition. v1 places
 at most one hole per wall, which is enough.
+**friction-score:** 3
 
 ## D24 — Back roof as translucent flat tarp, not gabled hull (Session AA)
 **When**: Session AA.
@@ -258,6 +293,7 @@ overwriting any `userData.noShadow` flags. main.ts's global shadow walk
 runs at boot BEFORE `setupOpeningScene`, so the wreck's local walk is
 the authoritative source. Updated the local walk to
 `m.castShadow = !m.userData.noShadow`.
+**friction-score:** 2
 
 ## D25 — Opening wreck placement: hardcoded yaw + post-placement player teleport (Session AA)
 **When**: Session AA.
@@ -277,6 +313,7 @@ up to 16m from the search center. Two related decisions:
       entrance gives a deterministic first-frame view.
 Save-load path unaffected — `setupOpeningScene` is skipped when
 `hasSave()` is true.
+**friction-score:** 3
 
 ## D26 — Sand-reclaimed floor: terrain IS the cavity floor (Session BB)
 **When**: Session BB.
@@ -292,6 +329,7 @@ existing terrain heightfield collider supports the player both outside
 and inside the wreck. Walls extend WALL_BURY (2m) below the wreck
 origin so no gap is visible on sloped dunes. Wreck origin = mean terrain
 in footprint, so terrain rises into the cavity for the reclaimed look.
+**friction-score:** 2
 
 ## D27 — Wreck pose: terrain-normal tilt + per-section burial (Session BB)
 **When**: Session BB.
@@ -306,6 +344,7 @@ fixed-body rotation. Cap exists so the wreck doesn't tip absurdly on
 steep slopes. For the BB-2 mega-wreck, the cap tightens further to
 ~5.7° (0.10 rad) since 0.25 rad on a 120m structure exposes 30m of
 underside on the high end — see BB plan section "Architectural risks."
+**friction-score:** 2
 
 ## D28 — Mega-wreck visual reference: Force Awakens Jakku Inflictor (Session BB plan)
 **When**: Session BB (plan-mode research).
@@ -326,6 +365,7 @@ For Dustfall's scale (literal 1.6km Star Destroyer impossible in 280m
 playable radius), the BB-2/BB-3 mega-wreck targets 120m long × 45m wide
 × 30m tall above sand — ~10× linear vs current mega-ship, dominates
 skyline, visible from much of the playable area through fog.
+**friction-score:** 2
 
 ## D29 — Bow Y-offset anchored at runtime to terrain at the entrance (Session BB-2)
 **When**: Session BB-2.
@@ -347,6 +387,7 @@ this scale), tightened tilt cap to 0.10 rad (vs 0.25), bumped
 within the bow footprint. True tilted-bow geometry (rotating the bow
 section around X) deferred to a future session; the current static-
 height bow with runtime Y-offset is stable and shippable.
+**friction-score:** 2
 
 ## D31 — FogExp2 over linear THREE.Fog for storm density (Session BB-4)
 **When**: Session BB-4.
@@ -366,6 +407,7 @@ lerp to dust from 0.45 → 0.70 so the foreground tint matches the sky
 tint instead of reading bichromatic. Switching back to linear is a
 1-line revert in scene.ts if a future session wants a bigger
 visibility range without dust feeling.
+**friction-score:** 3
 
 ## D32 — Three stacked dust layers (near/mid/far) over single layer + per-particle variance (Session BB-4)
 **When**: Session BB-4.
@@ -386,6 +428,7 @@ with their own bulk size/color/speed/spread. Picked (b). Reasons:
 Future sessions can collapse to single-layer if perf becomes a problem
 on weaker hardware — the layer config is centralized in tuning.ts and
 the layer setup is symmetric.
+**friction-score:** 3
 
 ## D34 — Speeder: velocity-controlled motion over force/torque (Session CC)
 **When**: Session CC.
@@ -421,6 +464,7 @@ add stacked-crate physics where you can ram the bike into something
 and have IT react, we'd need a hybrid: external impulses route
 through forces, our control inputs route through setLinvel. Not
 needed for v1.
+**friction-score:** 4
 
 ## D35 — Speeder input: mouse turns bike + A/D strafe (not A/D turn) (Session CC)
 **When**: Session CC.
@@ -438,6 +482,7 @@ sideways relative to the bike's heading. Net effect: steering feels
 turn input. Boost still maps to Shift. Lost: ability to spin in place
 without the camera moving (which was buggy anyway). Re-adoptable if
 ever needed by adding a "free-look" modifier key.
+**friction-score:** 3
 
 ## D36 — Speeder: camera at +1.45m above bike body, player capsule parked off-world (Session CC)
 **When**: Session CC.
@@ -462,6 +507,7 @@ On dismount, the player body is teleported back via `body.setTranslation`
 runs LATER in the same frame and would clobber a deferred kinematic
 update by reading the stale parked position (-2000) and rewriting
 it. Subtle but cost an hour to track down.
+**friction-score:** 3
 
 ## D33 — Storm vignette as in-scene clip-space quad, not CSS overlay (Session BB-4)
 **When**: Session BB-4.
@@ -485,6 +531,7 @@ vignette to CSS or render HUD via a separate Three.js orthographic
 overlay. Not addressing now — current HUD reads fine over the
 ~55%-opacity dust-rust vignette since HUD elements are bright/contrast-
 high already.
+**friction-score:** 2
 
 ## D30 — Mega-wreck skylights via 3 strip-panels (not multi-hole panel) (Session BB-3)
 **When**: Session BB-3.
@@ -500,6 +547,7 @@ collider splits (up to 4 cuboids each — front/back of hole + left/right
 in hole Z band). Worth it: each strip's cv (hole Z offset) is
 independent so skylights can be staggered for visual interest. Same
 pattern can be applied to walls if multi-hole walls are ever needed.
+**friction-score:** 3
 
 ## D37 — Speeder tilt as visual-only quaternion (not physics body rotation) (Session CC-2)
 **When**: Session CC-2.
@@ -518,6 +566,7 @@ input-driven targets (`±SPEEDER_TILT_PITCH_MAX`, `±SPEEDER_TILT_ROLL_MAX`)
 with `SPEEDER_TILT_LERP = 0.12`. Two free benefits: tilt is
 deterministic (no physics surprises), and reverting to "no tilt" is
 just setting the constants to 0 — no body re-config needed.
+**friction-score:** 2
 
 ## D38 — Speeder camera roll: tracked-undo + re-apply (not naive multiply) (Session CC-2)
 **When**: Session CC-2.
@@ -533,6 +582,7 @@ with exactly the current roll applied (regardless of what
 PointerLockControls has done since), and the user can mouse-look
 normally without losing the roll. On dismount, undo any residual
 roll so the on-foot player doesn't inherit a banked horizon.
+**friction-score:** 3
 
 ## D39 — `'mount'` InteractType + `'speeder'` registry (Session CC-2)
 **When**: Session CC-2.
@@ -554,6 +604,7 @@ existing crosshair-anchored interact prompt (D23 chain). Extended:
     check). The interaction system is purely showing the prompt.
 This pattern (singleton interactable with `interactId=0` + custom
 registry) is the template for future singletons like a bounty board.
+**friction-score:** 3
 
 ## D40 — Shared 3D engine bell mesh helper (Session CC-3)
 **When**: Session CC-3 (part of CC-2 long iteration).
@@ -578,6 +629,7 @@ exactly one DoubleSide clone per source material. Trade-off: 3 meshes
 per bell instead of 2 — negligible perf cost, big visual upgrade. The
 helper's local +Y orientation is the convention — callers rotate as
 needed (most use `rotation.x = π/2` to point the mouth at +Z).
+**friction-score:** 3
 
 ## D41 — Dedicated title 3D scene, not "render game world behind menu" (Session CC-3)
 **When**: Session CC-3.
@@ -593,6 +645,7 @@ scene wreck has a specific narrative role we don't want to upstage. Cost
 of A: ~600 LoC of inline scene assembly + helper exports from sky.ts so
 the title can build its own SkyBundle without disturbing the game's
 module-singleton. (B) is preserved as a deferred polish idea in roadmap.
+**friction-score:** 3
 
 ## D42 — Title sun arc rebuilt around camera-forward axis (Session CC-3)
 **When**: Session CC-3.
@@ -609,6 +662,7 @@ up-and-over, sets behind. Moon = -sun, so moon emerges as sun sets, also
 in-frame. Day-night brightness math still uses `sin(sunAngle)` so the
 cycle has full -1..+1 swing — only the VISUAL direction changes. This is
 a title-only patch; the in-game sky stays on its original arc.
+**friction-score:** 2
 
 ## D43 — setupOpeningScene runs on every boot; load patches over (Session CC-3)
 **When**: Session CC-3.
@@ -626,6 +680,7 @@ its pose is now an optional field in SaveV1 that loadGameState restores
 via `body.setTranslation/setRotation`. NEW GAME from a save calls
 `clearSave() + location.reload()` so a "new game" is a real fresh boot,
 not a hot reset that could leak partial state.
+**friction-score:** 4
 
 ## D44 — Crescent moon via canvas destination-out + tight halo (Session CC-3)
 **When**: Session CC-3.
@@ -646,6 +701,7 @@ Also flipped `depthTest: false → true` on the moon material so terrain
 occludes it (matching stars + planet) — the previous setting was a
 copy-paste from the sun material and caused the moon to render through
 dunes in-game.
+**friction-score:** 2
 
 ## D45 — Single well at the salt-flats centroid (not scattered) (Session CC-4)
 **When**: Session CC-4.
@@ -661,6 +717,7 @@ stayed configurable (default 1) so a future tuning bump could re-
 introduce scatter without code surgery. Trade-off: the world loses
 some 'multiple watering holes' feel, but gains a clear pilgrimage-
 type goal — walk far enough across the salt and you'll find THE well.
+**friction-score:** 2
 
 ## D46 — GitHub Pages via Actions (not Cloudflare / Netlify / itch.io) (Session CC-4)
 **When**: Session CC-4.
@@ -680,6 +737,7 @@ deploy.yml` (build with `npm ci` + `npm run build` → upload `dist/`
 → `actions/deploy-pages@v4`), Vite config gains mode-based base `/Dustfall/`
 for production-only (dev stays at `/`). One-time UI toggle: Settings
 → Pages → Source = 'GitHub Actions'.
+**friction-score:** 2
 
 ## D47 — Phantom `simplex-noise` dep (resolved from parent node_modules) (Session CC-4)
 **When**: Session CC-4.
@@ -700,6 +758,7 @@ package.json + ran `npm install` to update the lockfile.
 C:/Users/Zach/node_modules/` — that directory should be empty for a
 project like this. Stray packages there will mask CI bugs forever
 because locally they 'just work.'
+**friction-score:** 1
 
 ## D48 — Sand worm collider is a sensor (no contact forces) (Session DD)
 **When**: Session DD.
@@ -721,6 +780,7 @@ regresses if a future Rapier version changes the default.
 **Rejected alternatives**: collision groups (would require touching
 player + speeder collider configs); reducing collider size (doesn't
 solve the lunge-arc-above case).
+**friction-score:** 4
 
 ## D49 — Charge commits at enterCharging snapshot (not live-tracked) (Session DD)
 **When**: Session DD.
@@ -742,6 +802,7 @@ at arc midpoint, so a player who didn't dodge gets bitten.
 hit, but a moving / aware player has a real defensive option. That's
 the intended game-feel split. If raiders ever get a "charge" attack
 later, mirror this commit pattern.
+**friction-score:** 3
 
 ## D50 — 3×3 fixed-resident chunks (not streaming, not one big heightfield) (Session FF)
 **When**: Session FF — world rework #1.
@@ -763,6 +824,7 @@ pipelines.
 the user wants 4000m+ ("real" exploration scale), revisit with
 streaming. For now, 2400m gives 9× the area of the old world — plenty
 of room for vaster biomes + spread POIs.
+**friction-score:** 4
 
 ## D51 — Seam invisibility via shared noise + world-space sampling (Session FF)
 **When**: Session FF.
@@ -784,6 +846,7 @@ corner (residual is floating-point bilinear interp error).
 **Apply**: any future chunked / streamed terrain logic MUST honor
 both rules. If session #2 or #3 introduces a per-chunk noise seed, it
 breaks seam invisibility.
+**friction-score:** 4
 
 ## D52 — LOD ring slotted under chunks (no donut carving) (Session FF)
 **When**: Session FF.
@@ -803,6 +866,7 @@ visible. The 0.15m bias is invisible at the LOD's viewing distance
 **Trade-off**: at the chunk-band edge, the LOD sits 0.15m below the
 chunks — a tiny vertical step. Visually undetectable; nobody will see
 a 15cm shelf at 1200m.
+**friction-score:** 3
 
 ## D53 — `findBiomeCentroid` drops the origin-distance bias (Session GG)
 **When**: Session GG.
@@ -821,6 +885,7 @@ Players may need to travel further to reach the first well —
 intentional for the bigger-world feel. If a future polish session
 wants a "starter well near spawn", add a `bias` option that
 re-introduces the penalty when called with `searchRadius ≤ ~400`.
+**friction-score:** 3
 
 ## D54 — Greedy `excludeCenters` for multi-well placement (Session GG)
 **When**: Session GG (`WELL_TARGET_COUNT 1 → 3`).
@@ -836,6 +901,7 @@ separate biome regions, and stops cleanly when salt runs out (the
 loop breaks on `null` return). The `excludeCenters: Array<{ x, z,
 radius }>` API in `findBiomeCentroid` is reusable — session #3 will
 use it for Poisson-disk-like POI placement.
+**friction-score:** 3
 
 ## D55 — id-based scatter persistence absorbs count growth (Session GG)
 **When**: Session GG.
@@ -856,6 +922,7 @@ later session, more cacti, more POI salvageables) don't need
 migration code. Just bump `SAVE_VERSION` as a marker and trust the
 id-based lookup. The version bump exists so future tooling can
 distinguish saves from different world layouts.
+**friction-score:** 3
 
 ## D56 — LOD ring removed (D52 superseded) (Session HH)
 **When**: Session HH.
@@ -883,6 +950,7 @@ at the current fog density.
 the user wants to see distant terrain past 1200m), the right move is
 EITHER a donut-carved LOD (vertex-aligned at the chunk-band boundary)
 OR streaming chunks. Don't reintroduce the overlap-with-bias approach.
+**friction-score:** 3
 
 ## D57 — Procgen POI rejection covers all salvageables, not just anchor POIs (Session HH)
 **When**: Session HH (mid-flight bug-fix).
@@ -903,6 +971,7 @@ session ordering ever changes (e.g. hero landmarks placed AFTER
 procgen POIs), the exclusion logic must be re-audited. Equivalent rule
 holds for anything else with positional uniqueness — read the registry,
 don't trust a static layout list.
+**friction-score:** 3
 
 ## D58 — Cook animation driven by slot.meta.cookProgress, not a separate ctx state (Session II)
 **When**: Session II — lizard-on-a-stick cooking.
@@ -933,6 +1002,7 @@ interaction.ts wouldn't be running. Acceptable — the player can just
 re-aim at a fire to resume cooking, and the partial progress is
 preserved naturally. If this surfaces as a real bug, clear cookProgress
 in saveGameState.
+**friction-score:** 3
 
 ## D59 — Boot-time teleports of kinematic bodies use setTranslation, not setNextKinematicTranslation (Session JJ-2)
 **When**: Session JJ-2 — opening-scene spawn bug fix.
@@ -958,6 +1028,7 @@ position and writes its own translation around that.
 This includes future opening-scene variants, custom start positions,
 debug spawn helpers — anywhere you want to place a body BEFORE the
 controller has a chance to step.
+**friction-score:** 3
 
 ## D60 — Anchor angled cylinders via geometry.translate, not manual rotation math (Session KK)
 **When**: Session KK — wrecked satellite dish, the bent strut + broken
@@ -985,6 +1056,7 @@ hence the rotation pivot) sits.
 rotate" pattern should use this trick. Don't try to compute rotated
 axes — too easy to get the Euler order wrong, and you don't need to
 care anyway.
+**friction-score:** 3
 
 ## D61 — Satellite dish BURY_Y reduced to 1.0m so the doorway opens above grade (Session LL)
 **When**: Session LL.
@@ -1016,6 +1088,7 @@ double-check the door's world-Y range *with the tilt + bury combined*
 to confirm the opening clears terrain. The KK bug was a static-
 analysis miss — bury looked fine in isolation, tilt looked fine in
 isolation, but combined they buried the door.
+**friction-score:** 2
 
 ## D62 — Terrain shader uses world-space normal + per-vertex biome attribute (Session MM-2)
 **When**: Session MM-2.
@@ -1046,6 +1119,7 @@ these patterns from the start. See
 `memory/dustfall_shader_gotchas.md` for the full diagnostic-stack
 pattern (4-step debug: vWorldPos → hash → noise primitive → each
 mask) that would have caught this in 15 minutes instead of hours.
+**friction-score:** 4
 
 ## D63 — Rocky biome character via scatter geometry, NOT a shader pattern (Session OO)
 **When**: Session OO.
@@ -1074,6 +1148,7 @@ to a DIFFERENT modality — scatter geometry, vertex color shift, audio
 cue, distinct light treatment, etc. Don't try to push two similar
 shader patterns to be "different enough" via parameter tuning; the
 underlying grammar is the same so they'll always read related.
+**friction-score:** 3
 
 ## D64 — Dev-mode rAF fallback to setTimeout when document.hidden (Session PP)
 **When**: Session PP.
@@ -1108,7 +1183,7 @@ need the game loop to run while the browser thinks the tab is
 hidden) should follow this pattern — guard with `import.meta.env
 .DEV` and use a wall-clock timer fallback that the browser doesn't
 throttle.
-
+**friction-score:** 4
 
 ## D65 — Sled tow uses one-way spring-damper, no Rapier joints (Session QQ)
 **When**: Session QQ.
@@ -1139,6 +1214,7 @@ chained sleds, lanterns swinging from a hook) should follow
 the same pattern — apply force to the dependent body only,
 no joints, mass tuned so the dependent feels weighty without
 slowing the puller.
+**friction-score:** 3
 
 ## D66 — Static-friction stiction in physics tow: K must exceed μmg (Session QQ)
 **When**: Session QQ.
@@ -1162,6 +1238,7 @@ friction, static friction is the dominant failure mode at
 small errors — not damping or damping-overshoot. Inspect the
 trace: if velocity drops to ~0 with non-zero spring force,
 it's stiction, not overdamping.
+**friction-score:** 2
 
 ## D67 — Inextensible rope constraint replaces spring-damper (Session QQ-2; supersedes D65)
 **When**: Session QQ-2.
@@ -1211,6 +1288,7 @@ spring models. Springs are great for soft-bodies and bumpers, not
 ropes. The two cheap stabilizers — locked rotation + manual visual
 yaw — should always travel with this constraint pattern for body
 shapes longer than their width.
+**friction-score:** 4
 
 ## D68 — Angular-slice LatheGeometry for "lathe with holes" (Session RR)
 **When**: Session RR.
@@ -1259,3 +1337,5 @@ author the wreck in wreck-local space throughout and skip the
 group-rotation gymnastics — `RotateZ(profile)` baked into the
 geometry at construction time would have avoided the axis confusion
 entirely.
+**friction-score:** 4
+
