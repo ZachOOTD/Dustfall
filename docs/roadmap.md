@@ -7,6 +7,15 @@ they're archived + summarised in [changelog.md](changelog.md).
 When done with a session, the `/session-end` skill removes the "Next" entry
 and promotes the second.
 
+> **Framework note** (retrofit 2026-05-20): Dustfall opts out of the
+> gamedev-framework v0.3.x tier-ladder structure (Tier 1/2/3/4 with
+> explicit success criteria + verify commands). At 17 shipped sessions
+> Dustfall is post-MVP; the per-session "Next + Big-ticket bucket"
+> structure already validated stays in use. Skills `/plan-vertical-slice`
+> and `/verify-tier` do not apply. The Scope-cut section at the bottom
+> exists to satisfy framework-skill expectations and may be populated
+> per-session by `/plan-game` or its successor.
+
 ---
 
 ## Next — Big-ticket bucket (1–2 picks per session at ~4–7h each)
@@ -39,3 +48,14 @@ Pick whatever feels most missing after the polish + atmosphere arc.
   CC-3): instead of the dedicated title scene, render the actual game
   world behind the menu — camera floating around the opening-scene wreck,
   parallax on the pod-crash narrative. Higher-effort cinematic intro.
+
+---
+
+## Scope-cut candidates (pre-committed)
+
+Per the framework's autonomy convention: if a session's verify fails 3x
+or time pressure trips, `/scope-cutter` (or its successor) is authorized
+to cut from this list in order. Top entry cut first.
+
+Currently empty. Populate at the start of each session if the session
+plan has scope risk worth pre-committing cuts for.
