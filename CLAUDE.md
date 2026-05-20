@@ -2,6 +2,16 @@
 
 Browser first-person desert survival game. Long Dark / Mad Max / Dune tone.
 
+This project uses **gamedev-framework v0.3.x** (retrofitted 2026-05-20).
+The framework provides session-lifecycle skills (`/session-start`,
+`/session-end`, `/triage-ideas`, `/audit-debt`, …), an autonomy
+convention for agentic sessions, and shared design patterns. See
+`~/.claude/plugins/.../gamedev-framework/` for plugin source and
+`~/projects/gamedev-framework/docs/` for framework docs. Dustfall
+**opts out** of the framework's tier-ladder verification model — see
+[docs/roadmap.md](docs/roadmap.md) for the rationale (post-MVP, the
+per-session "Next + Big-ticket bucket" structure stays in use).
+
 ## Tech stack
 
 Three.js + TypeScript + Vite + `@dimforge/rapier3d-compat` + `simplex-noise` + procedural Web Audio (no sample files).
@@ -10,14 +20,17 @@ Three.js + TypeScript + Vite + `@dimforge/rapier3d-compat` + `simplex-noise` + p
 
 `C:\Users\Zach\projects\dustfall`
 
-Run with `npm run dev` (port 5173). Type-check with `npx tsc --noEmit`.
+Run with `npm run dev` (port 5173). Type-check / verify with
+`npm run typecheck` or `npm run verify` (both = `tsc --noEmit`).
 
 **Reference docs** (read on demand):
+- [docs/GDD.md](docs/GDD.md) — game design truth document (hydrated at retrofit).
 - [docs/architecture.md](docs/architecture.md) — file map, footguns, FPS-debug path.
 - [docs/changelog.md](docs/changelog.md) — what shipped per session.
 - [docs/roadmap.md](docs/roadmap.md) — what's next.
-- [docs/decisions.md](docs/decisions.md) — why we made key calls.
+- [docs/decisions.md](docs/decisions.md) — why we made key calls (with friction-scores).
 - [docs/backlog.md](docs/backlog.md) — unprioritized ideas / bugs / polish / debt.
+- [docs/next-session-prompt.md](docs/next-session-prompt.md) — queued direction for the upcoming session.
 
 ## Architecture rules
 
@@ -301,10 +314,29 @@ for full history; [docs/roadmap.md](docs/roadmap.md) for what's next.
 
 ## Session workflow
 
-- **Start of session**: invoke `/session-start` skill. It reads [roadmap.md](docs/roadmap.md) top entry + last 2 [changelog.md](docs/changelog.md) entries + 3-5 critical files for the active session.
-- **End of session**: invoke `/session-end` skill. Verifies, writes changelog entry, updates roadmap, archives plan, prints commit + `git tag session-<X>` commands.
-- **Idea dumping**: invoke `/triage-ideas` and paste free-form text. Classifies + appends to [backlog.md](docs/backlog.md).
-- Memory upkeep: every ~5 shipped sessions, run `consolidate-memory` (built-in).
+Skills come from the **gamedev-framework plugin**, not local
+`.claude/skills/`. Local copies of session-start, session-end, and
+triage-ideas were removed at retrofit — invoke the framework versions:
+
+- **Start of session**: `/session-start`. Reads
+  [docs/next-session-prompt.md](docs/next-session-prompt.md) if
+  present (written by the previous session-end), else falls back to
+  [roadmap.md](docs/roadmap.md). Surfaces the last 2 changelog
+  entries + 3-5 critical files for the active session.
+- **End of session**: `/session-end`. Verifies (`npm run verify`),
+  writes changelog entry, updates roadmap, archives plan, prints +
+  auto-runs commit + `git tag session-<X>` + push.
+- **Idea dumping**: `/triage-ideas` — paste free-form text;
+  classifies + appends to [backlog.md](docs/backlog.md).
+- **Audit debt**: `/audit-debt` — surfaces high-friction unresolved
+  decisions from [decisions.md](docs/decisions.md).
+- Memory upkeep: every ~5 shipped sessions, run
+  `consolidate-shared-memory`.
+
+Framework skills that DON'T apply to Dustfall (post-MVP, opt-out from
+the tier-ladder): `/plan-vertical-slice`, `/verify-tier`,
+`/scope-cutter` (until the Scope-cut section in roadmap is populated
+per-session).
 
 ## Sub-agent policy
 
