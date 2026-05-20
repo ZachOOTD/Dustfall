@@ -3,6 +3,47 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session RR — 2026-05-20 — Opening wreck full redo (cockpit + tail stub)
+`partially verified` — tsc clean; eval-driven structural verification
+(wreck spawns at (-53.5, 15.2, -2) with yaw=π/2; 22 of 24 lathe
+slices present, the two top slices intentionally omitted for the
+skylight; 50+ supporting meshes; save/load roundtrip preserves
+player + speeder positions; 51 salvageables registered including 2
+new opening-wreck panels) + side-angle + top-down screenshots
+confirming the new silhouette. Pointer-locked walk-in test deferred
+to the user. Full rewrite of `src/world/openingWreck.ts` (~440 LOC,
+replaces the 534-LOC W-era box-walled module) following the
+KK/LL/NN/MM modelling vocabulary. **Silhouette**: tapered fuselage
+cockpit dome at +Z transitioning through a neck pinch to a tail-
+stub body at -Z, with the tail-stub torn open as the entrance.
+Hull built as **24 angular LatheGeometry slices** (15° each); the
+two slices straddling true vertical are omitted, leaving a genuine
+30° stress-fracture skylight running the full length of the upper
+hull — real god-rays pass through this gap into the interior.
+**Procedural rust shader** (`createRustedHullMaterial` from OO)
+applied; alternating slice materials read as panel joints. **3
+cockpit window boxes** wrapping the upper-front cockpit shoulder.
+**Lateral breach patches** on side flanks at world ±X (initial
+implementation had a lathe-local/world-Y axis confusion that
+buried half of them — fixed by parametrizing in flank-centric
+phi ranges around 0 and π). **7 torn hull-plate fragments**
+around the rear entrance rim, with a bottom-110° arc skipped
+(`sin(ang) < -0.3`) so the player has an unobstructed walk-in
+path. **Antenna stub + crossbar** on the upper cockpit hull;
+**rust-band torus** wrapping the tail body. **Per-piece tilted
+colliders**: floor slab + cockpit front cap + 2 tilted boxes per
+side (lower wall + roof-angled upper wall) + ceiling plate; rear
+opening uncollided so the player walks in. **2 salvage panels**
+registered as `'fuselage'` salvage kind (upper-rear hull + side
+flank) — story-prop opening wreck is now also salvageable per the
+session direction; narrative read: "the previous occupant
+cannibalized panels for parts before they died". `OPENING_WRECK_EXTENTS`
+preserved as the orchestrator contract with new dimensions
+(halfX=1.7 / halfY=1.35 / halfZ=3.0 / backZ=2.4). 11 new
+OPENING_WRECK_* Tuning constants. `openingScene.ts` + `main.ts`
+updated to thread `salvageables` through and use the new
+OPENING_WRECK_PLAYER_SPAWN_OFFSET=4.5 constant. Decision D68.
+
 ## Session QQ-2 — 2026-05-20 — Sled feel pass + sandworm rescale + hotbar tooltips
 `partially verified` — tsc clean; eval-driven verification of the new
 rope physics (lockedRotations + inextensible constraint) and HMR

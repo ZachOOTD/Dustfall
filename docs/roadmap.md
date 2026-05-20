@@ -9,18 +9,7 @@ and promotes the second.
 
 ---
 
-## Next — Opening wreck full redo
-User direction at end of QQ-2: the original opening-scene wreck is now
-visibly cruder than the procedural wreck modules built in KK/LL/NN
-(LatheGeometry hulls, tilted colliders, salvage panels, light-shaft
-holes baked into geometry). Rebuild it from scratch with the same
-toolkit. Bake in extra holes for god-rays as part of the new
-geometry, not added on top. Files: `src/world/openingScene.ts` (or
-wherever the wreck mesh is built — look at `setupOpeningScene`).
-Critical: the wreck contains the spawn point + the journal + opening
-narrative props, so the rebuild must preserve those anchors.
-
-## Big-ticket bucket (1–2 picks per session at ~4–7h each)
+## Next — Big-ticket bucket (1–2 picks per session at ~4–7h each)
 Pick whatever feels most missing after the polish + atmosphere arc.
 
 - Crafting rework — combine up to 4 items to discover recipes (no grid); chooser for overlapping outputs. Replaces the current bloating recipe list.

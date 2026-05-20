@@ -306,7 +306,7 @@ if (Tuning.DEBUG_STARTER_LOADOUT) {
 // player resumes where they saved rather than at the opening cinematic.
 const openingResult = setupOpeningScene(
   three.scene, physics.world, terrain, shelter, weather, three.camera, scatterRand,
-  playerBody,
+  playerBody, salvageables,
 );
 ctx.journals.list.push(openingResult.journal);
 ctx.speeder = openingResult.speeder;

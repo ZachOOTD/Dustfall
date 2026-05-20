@@ -1211,3 +1211,51 @@ spring models. Springs are great for soft-bodies and bumpers, not
 ropes. The two cheap stabilizers — locked rotation + manual visual
 yaw — should always travel with this constraint pattern for body
 shapes longer than their width.
+
+## D68 — Angular-slice LatheGeometry for "lathe with holes" (Session RR)
+**When**: Session RR.
+**Why**: The opening wreck redo needed "light-shaft holes baked into
+the geometry" (per user direction) on a tapered curved hull. Three
+candidate approaches: (a) CSG subtraction of hole-shapes from a
+single full lathe — heavy, introduces a CSG library dependency
+just for one mesh; (b) flat-panel approximation via `panelWithHole`
+giving up the curve on the upper hull — visually inconsistent with
+the rest of the wreck; (c) **build the lathe as N angular slices
+(`phiStart` + `phiLength` < 2π each) and omit specific slices for
+holes** — keeps the curved silhouette intact for present slices,
+gives genuine empty space where slices are missing, no dependencies.
+**Decision**: Approach (c). Implementation pattern:
+```ts
+const sliceArc = (Math.PI * 2) / SLICE_COUNT;
+for (let i = 0; i < SLICE_COUNT; i++) {
+  if (i === SKYLIGHT_SLICE || i === SKYLIGHT_SLICE + 1) continue;
+  const phiStart = i * sliceArc;
+  const geo = new THREE.LatheGeometry(profile, segments, phiStart, sliceArc);
+  group.add(new THREE.Mesh(geo, material));
+}
+```
+With SLICE_COUNT=24 (15° per slice), skipping two adjacent slices
+gives a 30° gap that aligns symmetrically with true vertical when
+the SKYLIGHT_SLICE boundary lands on the world-UP angle (phi=270°
+in lathe-local under our X=+π/2 group rotation).
+**Mid-impl gotcha**: lathe-local axis directions are NOT the same as
+world directions after the group's rotation. Under our convention
+(`group.rotation.x = +π/2`, mapping lathe local +Y → world +Z),
+lathe-local +Z lands at world -Y and lathe-local -Z at world +Y.
+"World UP" corresponds to lathe-local phi=-π/2 (= 3π/2). Any detail
+mesh placed in lathe-local coordinates (cockpit windows, breach
+patches) must be authored with these angles in mind — first
+implementation had breach patches at lathe-phi ∈ [π/4, 3π/4]
+thinking they were "side flanks" when they were actually mapping
+to world-Y near zero on one side and below-floor on the other.
+**Apply**: future modules that need partial-coverage lathes (rib
+sections, broken hull pieces, partial domes) should use this
+pattern. Avoid mixing lathe-local and parent-group-local angle
+conventions in the same function — pick one and stick to it,
+ideally placing all detail meshes in the SAME coordinate space
+the lathe slices use (then the angles transfer directly).
+Alternative simpler approach when curve fidelity matters less:
+author the wreck in wreck-local space throughout and skip the
+group-rotation gymnastics — `RotateZ(profile)` baked into the
+geometry at construction time would have avoided the axis confusion
+entirely.

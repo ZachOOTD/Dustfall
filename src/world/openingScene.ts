@@ -21,6 +21,7 @@ import { addShelterZone } from '../shelter/shelterZones.ts';
 import type { PlayerBody } from '../physics/bodies.ts';
 import { Tuning } from '../config/tuning.ts';
 import { placeSpeeder, type SpeederState } from './speeder.ts';
+import type { SalvageableRegistry } from './salvage.ts';
 // Session AA — opening storm seed removed; player now boots into calm weather
 // so the wreck and surrounding terrain read clearly on first impression.
 // `seedOpeningStorm` is still exported from weather.ts for future re-use.
@@ -37,8 +38,9 @@ import { placeSpeeder, type SpeederState } from './speeder.ts';
 const WRECK_SEARCH_CENTER = new THREE.Vector3(-50, 0, 0);
 
 /** How far in front of the entrance the player spawns. The player faces
- *  the entrance via camera.lookAt at boot. */
-const PLAYER_SPAWN_OFFSET_FROM_ENTRANCE = 4;
+ *  the entrance via camera.lookAt at boot. Sourced from Tuning so the
+ *  RR overhaul can tune it alongside the new wreck dimensions. */
+const PLAYER_SPAWN_OFFSET_FROM_ENTRANCE = Tuning.OPENING_WRECK_PLAYER_SPAWN_OFFSET;
 
 /** Compute terrain-height variance over a 5×5 patch centered on (cx, cz).
  *  Lower = flatter. Used to pick a flat landing spot for the wreck. */
@@ -112,6 +114,7 @@ export function setupOpeningScene(
   camera: THREE.PerspectiveCamera,
   rand: Rng,
   playerBody: PlayerBody,
+  salvageables?: SalvageableRegistry,
 ): OpeningSceneResult {
   // ── Find the flattest landing spot near the nominal position so the
   // wreck doesn't clip into a dune slope, then RAISE the wreck so the
@@ -132,8 +135,10 @@ export function setupOpeningScene(
   // toward world -X (west) — player is teleported there below. ─────────
   const yaw = Math.PI / 2;
 
-  // ── Place the wreck (mesh + collider, with yaw rotation applied). ─────
-  const wreck = placeOpeningWreck(scene, world, terrain, wreckOrigin, yaw, rand);
+  // ── Place the wreck (mesh + collider, with yaw rotation applied).
+  // Session RR — pass salvageables so the new salvage panels register
+  // on the rebuild. ─────────────────────────────────────────────────
+  const wreck = placeOpeningWreck(scene, world, terrain, wreckOrigin, yaw, rand, salvageables);
 
   // ── Register a shelter zone covering the rotated interior. We use a
   // slightly oversized AABB (radius = diagonal of the interior) so the

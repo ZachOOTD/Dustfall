@@ -482,6 +482,26 @@ export const Tuning = {
   SANDWORM_MAX_RADIUS: 10.0,                 // m — peak body radius (was 20)
   SANDWORM_UNDERGROUND_DEPTH: 12.5,          // m below ground while submerged (was 25)
 
+  // Opening wreck (Session RR — full redo using KK/LL/NN modelling
+  // vocabulary). Cockpit + tail-stub composition built as N angular
+  // slices of LatheGeometry — one slice on the top is intentionally
+  // omitted to leave a genuine stress-fracture skylight running the
+  // length of the upper hull. The lathe is rotated X = -π/2 so its
+  // axial Y maps to world +Z; lathe Y=0 lands at the torn-open rear
+  // (player enters), lathe Y=HULL_LEN lands at the cockpit nose.
+  OPENING_WRECK_HULL_LEN: 6.0,               // m — total fuselage length (rear → nose)
+  OPENING_WRECK_AXIS_Y: 1.0,                 // m — height of lathe axis above interior floor
+  OPENING_WRECK_R_TAIL_RIM: 1.4,             // m — torn-stump rim radius (entrance)
+  OPENING_WRECK_R_TAIL_BODY: 1.5,            // m — tail-stub body radius
+  OPENING_WRECK_R_NECK: 1.30,                // m — pinch between tail and cockpit
+  OPENING_WRECK_R_COCKPIT: 1.7,              // m — cockpit max radius (widest point)
+  OPENING_WRECK_R_NOSE: 0.55,                // m — pre-nose-tip radius (before final taper)
+  OPENING_WRECK_SLICE_COUNT: 24,             // angular slices of the lathe (15° each)
+  OPENING_WRECK_SKYLIGHT_SLICE: 17,          // index of the FIRST slice to omit (top of hull). The wreck builder omits this slice AND the next one for a 30° gap centered on true UP (phi=270° after the X=+π/2 group rotation).
+  OPENING_WRECK_LATERAL_PUNCTURES: 3,        // number of small breach-hole patches scattered on side flanks
+  OPENING_WRECK_FLOOR_THICK: 0.18,           // m — flat slab thickness below the cavity
+  OPENING_WRECK_PLAYER_SPAWN_OFFSET: 4.5,    // m — distance in front of the torn entrance where the player spawns (replaces hardcoded openingScene constant)
+
   // Sled (Session QQ) — placed flatbed sled with rope-tow + cargo
   // inventory. Mirrors tent/fire placement; uses a dynamic Rapier body
   // with a one-way spring-damper impulse pulling it toward a target pos

@@ -1,79 +1,62 @@
-# Session RR — Opening wreck full redo
+# Session SS — Open direction (big-ticket bucket)
 
-**Direction locked at end of QQ-2** by the user: "for [adding light shaft
-holes to the wreck] think we need a full redo/overhaul of the opening
-wreck now that we've improved our modelling capabilities, so that will
-likely be another session."
+**No locked-in direction.** Session RR shipped the opening wreck redo
+(the last queued big-ticket item from QQ-2). The roadmap "Next" is now
+the open big-ticket bucket — user picks from the list at session start.
 
-## Scope
+## Bucket candidates (in approximate order of recency / freshness)
 
-Replace the current `setupOpeningScene` wreck mesh with one built using
-the techniques from the KK/LL/NN/MM wreck-rework arc:
-- `LatheGeometry` for tapered fuselage / engine bell sections
-- Per-piece tilted colliders so the collision shape matches the visible
-  silhouette (no more "boxy" stand-in)
-- Salvage panels embedded in the hull
-- Light-shaft holes baked into the geometry (was a backlog [polish]
-  entry; folding it into the redo since "added on top of boxy hull"
-  doesn't fit the new modelling vocabulary)
-- Procedural shader weathering already shipped (OO):
-  `createRustedHullMaterial` for the hull + `createWeatheredConcreteMaterial`
-  for any embedded ground/foundation pieces
+1. **Crafting rework** — combine up to 4 items to discover recipes (no
+   grid); chooser when multiple recipes match the same inputs.
+   Replaces the current bloating `RECIPES` array. Most-recent backlog
+   add, scoped at one session. Files: `src/ui/craftingMenu.ts`,
+   probably new `src/inventory/recipeDiscovery.ts`.
+2. **Control scheme overhaul** — modern survival parity. Lean on LMB
+   more (hold to drink canteen, click to place kits/sled, etc.)
+   instead of E for every interaction. Touches `combat.ts`,
+   `interaction.ts`, plus all the per-item `onUse` handlers.
+3. **Small red creature companion** — pocketable + re-deployable.
+   Charm + character, no combat surface area. Mirrors lizard
+   visual/AI shape; uses the speeder velocity-follow idiom for the
+   "follow at offset" behavior. Was the recommended pick before the
+   opening-wreck overhaul was promoted in QQ-2.
+4. **Raider variants** (scout / ambusher / brute) — still hedged;
+   user vetoed raiders at start of QQ. Revisit only with explicit
+   go-ahead.
+5. Other bucket items: Q2 rigged hands (GLB-dependent), base-building,
+   trading/NPC economy, 7-day storm countdown, bounties, procgen
+   world generation, remove HUD stat bars.
 
-## Critical to preserve
-- Player spawn point in front of the wreck entrance
-- Journal placement inside the wreck (Session W)
-- Skeleton + opening narrative props
-- Speeder spawn location (the opening wreck is what `setupOpeningScene`
-  places EVERY boot — including loads — so position drift here will
-  break save/load player-pose restoration)
-- `findFlattestSpot` placement logic + `PLAYER_SPAWN_OFFSET_FROM_ENTRANCE`
-  (JJ-2 D59)
+## Carry-overs from RR worth surfacing
 
-## Files to touch
-- `src/world/openingScene.ts` (or wherever `setupOpeningScene` lives —
-  Grep to confirm)
-- Maybe a new `src/world/openingWreck.ts` to mirror the
-  `crashedHull.ts` / `engineBlock.ts` / `satelliteDish.ts` pattern of
-  one module per flagship POI
-- Probably small touches to `main.ts` if the spawn-offset constant
-  needs adjusting
+1. **Opening wreck pointer-locked walk-in not yet playtested** —
+   structural verification was eval-driven (positions, salvageable
+   count, save/load roundtrip, side + top screenshots). The actual
+   "walk in through the torn entrance" experience hasn't been
+   exercised. Worth a quick boot + walk before starting unrelated
+   work. Specifically check: (a) collider geometry doesn't leave any
+   wall gaps the player can clip through, (b) the entrance is wide
+   enough for the player capsule, (c) the cockpit interior reads as
+   intimate not cramped, (d) the god-ray skylight visibly streams
+   through during midday.
+2. **Angular-slice lathe pattern** is documented in D68 — reach for
+   it if a future module needs "lathe with holes" geometry (broken
+   hulls, partial domes, ribbed sections with missing teeth).
+3. **Lathe-local vs wreck-local axis confusion** also caught in D68 —
+   detail meshes (windows, breach patches, antenna) must be authored
+   in the same coordinate space the lathe slices use to avoid
+   accidental world-up vs lathe-up swaps that bury features below
+   the floor.
+4. **Opening wreck is now salvageable** (2 `'fuselage'` panels). If
+   the salvage UX feels at odds with the narrative weight of "this
+   is where someone died alone", consider gating the wreck's panels
+   behind reading the journal first.
+5. **HMR may have been triggered during RR** — if anything looks off
+   on the first boot of the next session, do a hard reload.
 
-## Carry-overs from QQ-2 worth noting
-1. **Inextensible rope constraint** (D67) is the new tow physics
-   model. If raiders or other entities later need to "drag" something
-   (e.g., a captive sled, a pulled door), reach for the same
-   position-snap-plus-velocity-project pattern rather than springs.
-   Locked rotations + manual visual yaw should travel with this
-   constraint pattern.
-2. **lootMenu now supports `allowDeposit: true`** — bidirectional
-   storage UI is a one-liner away for any future container that wants
-   it (raider corpses, mailbox shrines, etc.).
-3. **Hotbar tooltip** is automatic for any item with `name` +
-   `description` (every existing ItemDef has both). New items get
-   tooltips for free.
-4. **Sandworm halved** — if combat tuning feels too easy now (smaller
-   target), bump HP rather than rescaling further. D49 still applies.
-5. **The opening wreck overhaul should also reconsider** the wreck's
-   collision shape relative to the current opening-cinematic camera
-   sweep; the swept camera flies through interior space that may not
-   exist in the new mesh.
-
-## Out of scope
-- Touch other flagship wrecks (crashed hull, satellite dish, engine
-  block) — those were redone in NN/LL.
-- New procgen wreck variants (the bucket is full at the existing 7
-  types).
-- Interior modelling of the wreck's deeper sections — keep the opening
-  intimate, not a full ship to explore.
-
-## Verification
+## Verification checklist for whatever ships next
 - tsc clean
-- Boot fresh game, confirm the wreck silhouette reads as more
-  detailed (specifically: no boxy ends, visible god-ray holes in the
-  new mesh, salvage panels accessible)
-- Save mid-explore, reload — player + speeder + journal should land
-  in the same spots (regression: `setNextKinematicTranslation` bug
-  from JJ-2 should NOT come back; use `setTranslation(pos, true)`)
-- `gl.readPixels` sanity check inside the wreck to confirm light
-  shafts are visible from interior camera angles
+- HMR-aware playtest in the user's tab if changes are visible
+- Save/load roundtrip if the change touches persisted state
+- gl.readPixels sanity check if the change is visual-only and the
+  preview_screenshot tool stalls

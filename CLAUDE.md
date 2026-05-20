@@ -45,7 +45,34 @@ Run with `npm run dev` (port 5173). Type-check with `npx tsc --noEmit`.
 
 ## Where we are now
 
-**Last shipped**: Session QQ-2 — Sled feel pass + sandworm rescale +
+**Last shipped**: Session RR — Opening wreck full redo (cockpit +
+tail stub). Replaces the 534-LOC W-era box-walled wreck with a
+~440 LOC rewrite using the KK/LL/NN modelling vocabulary
+(LatheGeometry hull, procedural rust shader, per-piece tilted
+colliders, salvage panels). **Silhouette**: tapered fuselage with
+cockpit dome at +Z and torn-open tail stub at -Z (entrance).
+**Skylight**: hull built as **24 angular LatheGeometry slices**;
+the two top slices straddling true vertical are omitted, leaving a
+genuine 30° stress-fracture gap running the full length of the
+upper hull — real god-rays pass into the interior. **Detail**:
+`createRustedHullMaterial` weathering on alternating slice
+materials (panel-joint read), 3 cockpit window boxes, lateral
+breach patches on world ±X flanks (initial impl had a
+lathe-local/world-Y axis confusion that buried half of them —
+fixed), 7 torn hull-plate fragments around the rear rim with a
+bottom-110° walk-in gap, antenna stub + crossbar on the cockpit,
+rust-band torus wrapping the tail body. **Colliders**: floor +
+cockpit front cap + 2 tilted boxes per side (lower wall + roof-
+angled upper wall) + ceiling; rear opening uncollided. **Salvage**:
+2 panels registered as `'fuselage'` kind — story-prop opening
+wreck is now also salvageable per the session direction (narrative:
+"the previous occupant cannibalized panels before they died").
+`OPENING_WRECK_EXTENTS` preserved as orchestrator contract;
+11 new OPENING_WRECK_* Tuning constants. `openingScene.ts` +
+`main.ts` updated to thread `salvageables` through. Save/load
+roundtrip verified. Decision D68.
+
+**Prior milestone**: Session QQ-2 — Sled feel pass + sandworm rescale +
 hotbar tooltips. Follow-up to QQ addressing the "rope too elastic,
 sled spins around character" feel problems. **Rope physics rewritten
 (supersedes D65)**: one-way spring-damper replaced with an
