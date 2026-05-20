@@ -1,6 +1,6 @@
 ---
 name: session-start
-description: Begin a Dustfall dev session. Reads roadmap top entry + last 2 changelog entries, identifies the 3-5 critical files for the upcoming session, asks for the next-session prompt if not pasted. Invoke at the start of every coding session.
+description: Begin a Dustfall dev session. Reads `.claude/plans/next-session.md` (written by the previous session-end) if present, falls back to the roadmap "Next" entry otherwise, then reads last 2 changelog entries + identifies the 3-5 critical files for the session. Invoke at the start of every coding session.
 ---
 
 # Session start — Dustfall
@@ -10,20 +10,33 @@ touching any code.
 
 ## Steps
 
-1. **Read [docs/roadmap.md](../../../docs/roadmap.md)** — get the "Next"
-   entry (one-liner + scope notes). That's the working scope for this
-   session unless the user overrides via a pasted "next session prompt".
+1. **Check for a pending next-session prompt** at
+   `.claude/plans/next-session.md`. If the file exists, read it — it's
+   the authoritative working scope for this session (written by the
+   previous session-end based on roadmap state at end-of-shipping plus
+   any carry-overs that came up). After reading, move the file to
+   `.claude/plans/archive/session-<X>-prompt.md` (X = the session
+   letter we're about to start, e.g. `session-QQ-prompt.md`) so it
+   doesn't shadow the NEXT session if the user forgets to invoke
+   session-end. If the file doesn't exist, fall back to step 2.
 
-2. **Read the top 2 entries of [docs/changelog.md](../../../docs/changelog.md)**
+2. **Read [docs/roadmap.md](../../../docs/roadmap.md)** — get the "Next"
+   entry (one-liner + scope notes). Only consulted when there's no
+   pending next-session prompt file (i.e., previous session-end was
+   skipped, or this is a fresh project).
+
+3. **Read the top 2 entries of [docs/changelog.md](../../../docs/changelog.md)**
    — establishes recent state. Don't read older entries (they're history,
    not state).
 
-3. **Resolve scope conflicts**: if the user pasted a next-session prompt
-   that disagrees with roadmap.md, the user wins. Note the discrepancy so
-   roadmap.md gets updated.
+4. **Resolve scope conflicts**: precedence order is (a) user-pasted
+   prompt args > (b) `.claude/plans/next-session.md` > (c) roadmap
+   "Next". When the user pastes something inline and there's ALSO a
+   file, the user wins; note the file was overridden so session-end
+   can update the roadmap accordingly.
 
-4. **Identify the 3-5 critical files** for the session by inspecting the
-   roadmap scope notes:
+5. **Identify the 3-5 critical files** for the session by inspecting the
+   working prompt's scope notes:
    - For a "rigged Quaternius raider" entry → `src/enemies/raider.ts`,
      `src/assets/loader.ts`, `src/assets/manifest.ts`, `src/main.ts`.
    - For a "save format v2" entry → `src/persistence/save.ts`,
@@ -31,9 +44,9 @@ touching any code.
    - Use the file-map in [docs/architecture.md](../../../docs/architecture.md)
      only if you genuinely don't know where a system lives.
 
-5. **Read those 3-5 files**.
+6. **Read those 3-5 files**.
 
-6. **Either start work OR ask clarifying questions** — don't assume.
+7. **Either start work OR ask clarifying questions** — don't assume.
 
 ## Don't
 
