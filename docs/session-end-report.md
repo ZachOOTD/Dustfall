@@ -4,19 +4,18 @@ Cumulative state. Rewritten end-to-end at each `/session-end`. A
 reviewer who's never seen the project should be able to read this +
 `CLAUDE.md` + `docs/GDD.md` and understand where Dustfall is.
 
-**Current state**: Session SS shipped (2026-05-20). First framework-
-managed session post-retrofit. tsc clean. Working tree has uncommitted
-changes pending the user's git decision (see `## Commit handoff` at
-the bottom).
+**Current state**: Session TT shipped (2026-05-21). 20 sessions
+post-MVP. tsc clean. Working tree has uncommitted changes pending the
+user's git decision (see `## Commit handoff` at the bottom).
 
 ---
 
 ## Tier progress table
 
 Dustfall opts out of the gamedev-framework v0.3.x tier-ladder structure
-(see `docs/roadmap.md` framework note). The project is **17 sessions
-past MVP** and operates on a per-session "Big-ticket bucket + Polish"
-model. Retroactive tier mapping for orientation only:
+(see `docs/roadmap.md` framework note). The project is post-MVP and
+operates on a per-session "Big-ticket bucket + Polish" model.
+Retroactive tier mapping for orientation only:
 
 | Era | Sessions | Status | What it proved |
 |---|---|---|---|
@@ -24,7 +23,7 @@ model. Retroactive tier mapping for orientation only:
 | Tier 1 — Vertical slice | I–W | ✓ shipped | Inventory, crafting, interactions, opening scene, journal |
 | Tier 2 — Target | X–CC | ✓ shipped | Audio architecture, atmosphere, speeder, animated title |
 | Tier 3 — Expected | DD–PP | ✓ shipped | Sand worm boss, weapon variants, procgen POIs, biome rework |
-| Tier 4 — Stretch / polish | QQ–SS | ✓ in progress | Sled mechanic, sandworm rescale, opening wreck redo + playtest |
+| Tier 4 — Stretch / polish | QQ–TT | ✓ in progress | Sled mechanic, sandworm rescale, opening wreck redo + playtest, crafting rework |
 
 **Verify status**: `npm run verify` = `tsc --noEmit`. Single check
 (no tier breakdown). Currently PASS.
@@ -37,93 +36,102 @@ Fresh-game start (the de-facto Tier 1 — Session W shipped):
 
 1. **Boot title**: animated 3D title scene (Session CC-3) with a pod
    shooting-star + landing on a hero dune. NEW GAME / CONTINUE
-   buttons. CC0 stems are wired but `.ogg` files not sourced yet —
-   game boots in soft ambient silence with procedural wind layered in.
-2. **Opening cinematic**: player spawns ~4.5m in front of the new
-   opening-wreck rebuild (Session RR + Session SS DoubleSide fix).
-   Camera lookAt at the torn rear entrance. The wreck is a tapered
-   cockpit + tail-stub silhouette with a 30° stress-fracture skylight
-   running the upper hull. Inside: skeleton slumped at cockpit front,
-   journal at its outstretched hand, tally marks on the curved
-   interior wall, ash pile + branch stubs + empty canteen as
-   environmental storytelling. Reads as "the last occupant".
-3. **First interactions**: pickup E to take items from the floor; E on
-   the journal to read the opening note; E on the rear-hull salvage
-   panel (2 panels registered as `'fuselage'` kind in RR — 2-3 rolls
-   each).
-4. **Speeder**: parked ~12m from the wreck entrance with a deliberate
-   yaw aimed at the SW. Mountable via E on the seat (Session CC-2,
-   D39 singleton-interactable pattern). Hover physics via PD
-   terrain-tracking (D34 velocity-controlled). Has a `speederTowBar`
-   mesh behind the seat for rope attachment (Session QQ-2).
-5. **Survival loop**: thirst/heat/hunger/stamina/health all decaying
-   on time-elapsed. Canteen drinks from a well in the salt-flats
-   biome (Session CC-4 — single well at salt centroid, D45). Fire
-   warms + cooks meat (fire_kit deploys via E from inventory). Tent
-   sleeps off dayTime + cools temperature.
-6. **Combat**: 5 weapons across 3 kinds (PP):
-   - `machete` — melee, 1.8m, 0.45 dmg
-   - `pipe_staff` — melee, 2.6m, 0.55 dmg + 3m knockback
-   - `scrap_gun` — ranged, 30m raycast, 1.5 dmg, 6-round mag
-   - `energy_pistol` — charged ranged, 18m, 0.50→2.00 dmg over 1.2s
-     hold
-   - Sand worm exempt from knockback (240m → 120m body in QQ-2 still
-     too massive to budge)
-   Lizards (1 HP) one-shot from any weapon. Sand worm boss (Session
-   DD + MM rescale + QQ-2 halving) takes 12 hits, sensor collider
-   (D48) so no contact-impulse exploits.
-7. **Sled mechanic** (Session QQ + QQ-2): craft rope (2 cloth + 1
-   branch) + sled_kit (2 scrap + 1 branch + 1 rope). Deploy sled.
-   Wield rope, click sled rope-stub to tie. Inextensible rope
-   constraint (D67) — slack = no force, taut = position-snap +
-   velocity project. Locked rotation + manual yaw to face the
-   anchor. Bidirectional cargo: open sled for two-pane CARGO + YOU
-   transfer. Mount speeder while tethered → auto-promotes tether
-   to `speederTowBar`.
-8. **Save / load**: single-slot localStorage (`dustfall.save.v1`),
-   `SAVE_VERSION = 5`. Death does not auto-save (D10). Continue
-   restores player + speeder pose, journal state, all sled tethers
-   + cargo, salvage progress, harvested cacti, dead lizards, sand
-   worm state.
+   buttons.
+2. **Opening cinematic**: player spawns ~4.5m in front of the
+   redesigned opening wreck (Session RR + SS DoubleSide fix). Tapered
+   cockpit + tail-stub silhouette, 30° stress-fracture skylight
+   running the upper hull. Inside: skeleton + journal at cockpit
+   front, tally marks on the curved interior wall, ash pile + branch
+   stubs + empty canteen.
+3. **First interactions**: pickup E, journal E, salvage panel E.
+4. **Speeder**: parked ~12m from the wreck entrance. Mountable via E
+   (Session CC-2). Has a `speederTowBar` mesh for rope attachment
+   (Session QQ-2).
+5. **Survival loop**: thirst/heat/hunger/stamina/health all decaying.
+   Canteen drinks from a well in the salt-flats biome (D45). Fire +
+   tent placement. Sleep skips dayTime + cools temperature.
+6. **Combat**: 5 weapons (Session PP — machete, pipe_staff, scrap_gun,
+   energy_pistol, plus scrap_bullet ammo). Lizards 1-shot from any
+   weapon. Sand worm boss (Session DD + MM rescale + QQ-2 halving)
+   takes 12 hits; sensor collider (D48); 120m body / 10m radius.
+7. **Sled mechanic** (Session QQ + QQ-2): craft rope + sled_kit
+   (now via the new combine-to-discover UI, D70). Wield rope, click
+   sled rope-stub to tie. Inextensible rope constraint (D67) — slack
+   = no force, taut = position-snap + velocity project. Locked
+   rotation + manual yaw. Bidirectional cargo via the loot menu's
+   `allowDeposit` mode. Speeder mount auto-promotes tether to
+   `speederTowBar`.
+8. **Crafting** (Session TT rework): open the menu (C). 4 input
+   slots — click bag rows to add items, click input slots to remove.
+   Output preview shows `?` for unknown-valid combinations, the
+   actual output icon for discovered ones, "nothing happens" for
+   invalid. CRAFT button consumes inputs + produces output + (first
+   time) marks the recipe discovered with a toast. 9 seed recipes;
+   stable numeric ids 1-9 (D71); discovery is gated on successful
+   output add (D72).
+9. **Save / load**: single-slot localStorage (`dustfall.save.v1`),
+   `SAVE_VERSION = 6`. Death does not auto-save (D10). Continue
+   restores player + speeder pose, journal state, sled tethers +
+   cargo, salvage progress, harvested cacti, dead lizards, sand worm
+   state, AND (new in TT) `inventory.discoveredRecipes`. Pre-v6
+   saves get all 9 recipe ids seeded on load so existing playtesters
+   keep their knowledge.
 
 ---
 
-## What's freshly shipped (Session SS deltas)
+## What's freshly shipped (Session TT deltas)
 
-**Fix**: `_hullMat` and `_hullDarkMat` in `src/world/openingWreck.ts`
-now set `side: THREE.DoubleSide` + `shadowSide: THREE.FrontSide`.
-This unbroke the cockpit interior — RR's eval-only verification missed
-that the procedural rust shader returned a `MeshLambertMaterial` with
-default `FrontSide`, which back-face-culled the 22 lathe slices when
-viewed from inside. Players walking in via pointer-lock would have
-seen "open desert + floating debris" instead of the enclosed hull.
-See D69 for the full architectural rule.
+**Crafting rework — combine-to-discover** replaces the explicit
+recipe-list UI. Detailed breakdown:
 
-**Polish**: entrance torn-fragments reduced from 7 evenly-distributed
-to 4 upper-biased + one-flank-clustered. Was reading as a "saw-blade
-crown around rim"; now reads as asymmetric torn metal. Fragment plate
-size slightly bumped (`w: 0.55+rand*0.55` was `0.35+rand*0.45`).
+- New module: `src/inventory/recipeDiscovery.ts` (~170 LOC). Defines
+  `Recipe { id, displayName, inputs[], output }`. Stable numeric ids
+  (1-9 for the seed set). `canonicalInputKey()` sorts inputs by id
+  then serializes as `"id:count,id:count,..."`. `matchRecipes()`
+  returns array (zero / one / many) supporting the chooser UI for
+  future overlapping recipes (none of the current 9 overlap).
+- `craftingMenu.ts` rewritten end-to-end (319 → ~330 LOC). 4 input
+  slots + output preview + CRAFT button + player-bag column. Click
+  bag rows to add (stacks onto existing input slot of same item or
+  occupies first empty); click input slot to remove (returns to bag).
+  Close-button flushes remaining inputs back to bag (no material
+  loss).
+- New CSS: `.craft-combine-row`, `.craft-input-slot`,
+  `.craft-output-slot`, `.craft-output-unknown`, `.craft-chooser`,
+  `.craft-bag-row`, etc.
+- `InventoryState.discoveredRecipes: number[]` — added (TT).
+- Save format `SAVE_VERSION 5 → 6`. Persists
+  `inventory.discoveredRecipes`. Pre-v6 loads seed `ALL_RECIPE_IDS`
+  so existing playtesters keep all 9 recipes as discovered.
+- Backlog cleanup: struck "crafting rework" entry.
+
+**Decisions D70-D72** logged: (D70) the model change itself;
+(D71) recipe id stability rule — never reuse, never renumber;
+(D72) discovery gated on successful output add, not on input matching.
 
 ---
 
 ## Known issues / partials
 
-- **No source audio files yet**: `public/audio/*.ogg` slots are wired
-  via Session X's stem architecture but not committed. The soundscape
-  has procedural fallbacks but the full atmospheric experience is
-  pending CC0 sourcing. See `docs/backlog.md` [feat] entry.
-- **Skylight god-ray subtlety**: the 30° stress-fracture gap admits
-  real sunlight, but without atmospheric dust scattering the
-  interior beam isn't visually dramatic at midday. Looks OK at
-  golden hour. Possible polish: add a volumetric-fog-pass for the
-  beam visual (deferred — would need a new shader pass).
-- **`docs/session-end-report.md`** (this file) is brand new at
-  Session SS. Older sessions don't have a per-session retro entry —
-  only the cumulative state above. The plans-archive directory has
-  per-session frozen retros from before the retrofit.
-- **Older-session screenshots in `docs/playtest-shots/`** (SS-01
-  through SS-07) — debug artifacts from the SS playtest. Useful
-  evidence; small (~2MB). Not strictly state.
+- **No source audio files yet** (`public/audio/*.ogg`). Soundscape
+  has procedural fallbacks; full atmospheric experience pending CC0
+  sourcing. See `docs/backlog.md`.
+- **Skylight god-rays subtle**: opening wreck's 30° gap admits real
+  sunlight, but without atmospheric dust scattering the interior beam
+  isn't visually dramatic at midday. Possible polish via volumetric
+  fog pass — deferred.
+- **No "recipe book" panel yet**: a stretch goal from TT — showing a
+  list of all discovered recipes (separate hotkey, e.g. Tab) — was
+  skipped. The combine-mode UI is currently discover-only. If
+  playtesting reveals players forget what they've discovered, add
+  this in a follow-up.
+- **No hover tooltips on the bag rows** showing which inputs go with
+  what — another TT stretch deferred. Could land alongside the
+  recipe book.
+- **Opening wreck pointer-locked walk-in not yet playtested by a
+  human**: eval-driven verification passed, but the actual "walk
+  through the torn entrance" experience still hasn't been tried.
+  Worth a quick boot in the user's tab before a major polish session.
 
 ---
 
@@ -135,56 +143,59 @@ Recent ones (session-tagged):
 |---|---|---|---|
 | `OPENING_WRECK_HULL_LEN` | RR | 6.0 | Tapered fuselage length |
 | `OPENING_WRECK_SLICE_COUNT` | RR | 24 | Angular slices (15°/slice) |
-| `OPENING_WRECK_SKYLIGHT_SLICE` | RR | 17 | First slice to omit; SS skips 17+18 for 30° gap |
+| `OPENING_WRECK_SKYLIGHT_SLICE` | RR | 17 | First slice to omit; SS skips 17+18 |
 | `SLED_TOW_DISTANCE` | QQ-2 | 5.0 | Inextensible rope length |
 | `SLED_TOW_MAX_DIST` | QQ-2 | 10.0 | Hard snap-detach threshold |
-| `SLED_YAW_LERP` | QQ-2 | 0.12 | Manual visual yaw lerp toward anchor |
-| `STAMINA_TOW_FACTOR` | QQ | 2.0 | Sprint stamina drain × this while tethered on foot |
-| `SANDWORM_LENGTH` | QQ-2 | 120 | Was 240 in MM; halved per playtest direction |
+| `SLED_YAW_LERP` | QQ-2 | 0.12 | Visual yaw lerp |
+| `STAMINA_TOW_FACTOR` | QQ | 2.0 | Stamina drain × this while tethered on foot |
+| `SANDWORM_LENGTH` | QQ-2 | 120 | Halved from MM's 240 |
+| `RECIPES` array | TT | 9 entries | Stable numeric ids 1-9; new recipes append at id ≥ 10 |
 
 ---
 
 ## Suggested next session (1-3 directions in priority order)
 
-1. **Crafting rework** — combine up to 4 items to discover recipes
-   (no grid); chooser when multiple recipes match the same inputs.
-   Replaces the current bloating `RECIPES` array. Most recent
-   backlog add, scoped at one session. Files:
-   `src/ui/craftingMenu.ts`, probably new
-   `src/inventory/recipeDiscovery.ts`. Touches no combat or physics
-   so blast radius is contained.
-2. **Control scheme overhaul** — modern-survival-game parity, LMB-
-   leaning (hold to drink, click to place kits, etc.). Touches every
-   per-item `onUse` plus `combat.ts` + `interaction.ts`. Highest
-   blast radius of the bucket.
-3. **Small red creature companion** — pocketable + re-deployable,
-   no combat surface area. Mirrors lizard visual/AI shape; reuses
-   the speeder velocity-follow idiom. Was the pre-RR recommendation.
+1. **Control scheme overhaul** — modern-survival-game parity,
+   LMB-leaning (hold to drink canteen, click to place kits/sled,
+   etc.) instead of E for every interaction. Touches every per-item
+   `onUse`, plus `combat.ts` + `interaction.ts`. Highest blast radius
+   of the bucket — affects every existing player interaction. Plan
+   for ~4-6h.
+2. **Small red creature companion** — pocketable + re-deployable.
+   Charm + character, no combat surface area. Mirrors lizard
+   visual/AI shape; reuses speeder velocity-follow idiom. New module
+   `src/enemies/companion.ts`, new ItemId `companion_pod`, save
+   schema bump v6 → v7. Was the pre-RR recommendation.
+3. **Audio + atmospheric stems**: source 5-7 CC0 .ogg files for wind
+   / dust / day / night / music-calm / music-tense. Architecture is
+   in (Session X); only the files are missing. Lower implementation
+   cost than the others; bigger atmospheric uplift.
 
-The top pick (crafting rework) is the recommended default for
-Session TT.
+The top pick (control scheme overhaul) is the recommended default
+for Session UU.
 
 ---
 
 ## Time spent
 
-19 sessions shipped, ~4-7h each = ~80-130h elapsed game-development
-time across roughly 3 weeks of calendar time. Session SS itself was
-a short polish session — ~1h post-RR-rebuild verification + fix.
+20 sessions shipped (A–TT). Approx ~80-130h elapsed dev time across
+roughly 3 weeks of calendar time. Session TT was a medium-scope
+session — ~2-3h: data model + UI rewrite + save migration + playtest.
 
 ---
 
 ## State at session end
 
-- **Git status**: working tree dirty (uncommitted) per "Commit handoff"
-  below. Branch: `master`.
-- **Last commit**: `7c36699` retrofit step 7 (delete local skills).
-  Session SS work is uncommitted as of writing.
-- **Tags on origin**: `session-A` through `session-RR`, with sub-tags
-  (`session-BB-2`, `session-CC-3`, etc.). `session-SS` not yet tagged.
+- **Git status**: working tree dirty (uncommitted) per "Commit
+  handoff" below. Branch: `master`.
+- **Last commit**: `fce5ff9` (Session SS) on origin/master. Session
+  TT work is uncommitted as of writing.
+- **Tags on origin**: `session-A` through `session-SS`. `session-TT`
+  not yet tagged.
 - **Ports bound**: none (preview server stopped at end of playtest).
-- **Save state**: ephemeral (Session SS save was eval-driven; no
-  persisted save expected to survive).
+- **Save state**: localStorage has a v6 save from the TT playtest
+  (player inside cockpit, rope crafted, discoveredRecipes=[8]). If
+  you boot fresh + click CONTINUE, you'll land in that state.
 
 ---
 
@@ -192,16 +203,15 @@ a short polish session — ~1h post-RR-rebuild verification + fix.
 
 Rough estimate (Claude doesn't expose live counts to the agent):
 
-- Input: ~150K-200K tokens (heavy reads — decisions.md is now 80KB,
-  changelog 100KB; multi-file reads + preview tool roundtrips)
-- Output: ~30K-50K tokens (one full openingWreck.ts edit, one
-  decisions.md append, multiple smaller edits, screenshots base64
-  decode pipeline)
+- Input: ~120K-160K tokens (state-of-the-build reads + 4 source files
+  read + interview-question round + playtest tool roundtrips)
+- Output: ~25K-40K tokens (one new module, one full file rewrite,
+  CSS append, save.ts edits, docs/changelog/decisions writes)
 - Cached input: substantial (CLAUDE.md, recent files re-read across
   turns)
-- Cost (Sonnet 4 rates, rough): $0.50-$1.20
+- Cost (Sonnet 4 rates, rough): $0.40-$1.00
 
-Not flagged — within baseline range for a polish session.
+Not flagged — within baseline range for a medium-scope session.
 
 ---
 

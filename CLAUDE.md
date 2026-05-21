@@ -58,7 +58,23 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session SS — Opening wreck playtest + polish.
+**Last shipped**: Session TT — Crafting rework (combine-to-discover).
+Replaces the explicit `RECIPES` list UI with a 4-slot multiset combine
+model: throw items in, see "?" for unknown-but-valid combinations,
+click CRAFT to consume inputs + produce output + add the recipe to
+`inventory.discoveredRecipes` (persisted across save/load). New
+module `src/inventory/recipeDiscovery.ts` defines `Recipe` shape with
+stable numeric ids 1-9 (current 9 recipes) + `matchRecipes()` returning
+array so overlap-chooser UI works for future recipes that share input
+multisets. Save format `SAVE_VERSION 5 → 6` — pre-v6 saves get
+`ALL_RECIPE_IDS` seeded on load so existing playtesters don't lose
+their recipe knowledge. UI rewritten end-to-end (`craftingMenu.ts` +
+new CSS classes). Inventory-full refund path verified (DEBUG starter
+loadout fills 14/14 slots; first craft hit it; behavior correct —
+inputs returned, discovery NOT marked, toast "no room"). Decisions
+D70-D72.
+
+**Prior milestone**: Session SS — Opening wreck playtest + polish.
 Caught a latent RR bug (the procedural rust shader defaults to
 `side: FrontSide`, so the 22 lathe slices were back-face-culled from
 inside the cockpit — the interior rendered as "open desert + floating

@@ -12,6 +12,7 @@ import * as THREE from 'three';
 import type { GameContext } from '../GameContext.ts';
 import { Tuning } from '../config/tuning.ts';
 import type { Slot } from '../inventory/types.ts';
+import { ALL_RECIPE_IDS } from '../inventory/recipeDiscovery.ts';
 import type { LootEntry } from '../world/lootContainers.ts';
 
 import { despawnPickup } from '../pickups/pickups.ts';
@@ -43,13 +44,17 @@ export const SAVE_KEY = 'dustfall.save.v1';
 // tell pre- vs post-rework saves apart.
 // QQ — v5 adds the `sleds` array (placed sled entities + their tether
 // state + cargo). Pre-v5 saves load fine (sleds field is optional and
-// just stays empty). Loader accepts v1-v5.
-export const SAVE_VERSION = 5;
+// just stays empty).
+// TT — v6 adds `inventory.discoveredRecipes: number[]` for the
+// combine-to-discover crafting rework. Pre-v6 saves get the FULL
+// recipe set as discovered on load so existing playtesters don't
+// lose their accumulated recipe knowledge. Loader accepts v1-v6.
+export const SAVE_VERSION = 6;
 
 type V3 = { x: number; y: number; z: number };
 
 export interface SaveV1 {
-  version: 1 | 2 | 3 | 4 | 5;
+  version: 1 | 2 | 3 | 4 | 5 | 6;
   seed: number;
   savedAt: number;
 
@@ -72,6 +77,11 @@ export interface SaveV1 {
     slots: Slot[];
     backpack: Slot[];
     selectedIdx: number;
+    /** Session TT — Recipe.id ledger for the combine-to-discover
+     *  system. Pre-v6 saves arrive without this field; loader seeds
+     *  it with ALL_RECIPE_IDS so existing playtesters keep their
+     *  recipe knowledge across the migration. */
+    discoveredRecipes?: number[];
   };
 
   time: {
@@ -169,6 +179,10 @@ export function saveGameState(ctx: GameContext): { ok: boolean; error?: string }
         slots: ctx.inventory.slots.map(cloneSlot),
         backpack: ctx.inventory.backpack.map(cloneSlot),
         selectedIdx: ctx.inventory.selectedIdx,
+        // TT — copy the array so subsequent in-game discoveries can
+        // mutate ctx.inventory.discoveredRecipes without affecting
+        // the just-written save.
+        discoveredRecipes: ctx.inventory.discoveredRecipes.slice(),
       },
       time: {
         dayTime: ctx.time.dayTime,
@@ -275,10 +289,12 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
     return { ok: false, error: 'save file is corrupt' };
   }
 
-  // EE/FF/GG/HH/QQ — accept v1-v5 saves. Schema is forward-only:
-  // each new version adds optional fields, so pre-v5 saves load
-  // cleanly (missing `sleds` is treated as empty).
-  if (save.version !== 1 && save.version !== 2 && save.version !== 3 && save.version !== 4 && save.version !== 5) {
+  // EE/FF/GG/HH/QQ/TT — accept v1-v6 saves. Schema is forward-only:
+  // each new version adds optional fields, so pre-v6 saves load
+  // cleanly (missing `sleds` treated as empty; missing
+  // `inventory.discoveredRecipes` seeded with ALL_RECIPE_IDS so
+  // pre-TT playtesters keep their recipe knowledge).
+  if (save.version !== 1 && save.version !== 2 && save.version !== 3 && save.version !== 4 && save.version !== 5 && save.version !== 6) {
     return { ok: false, error: `unsupported save version ${save.version}` };
   }
   if (save.seed !== Tuning.RNG_SEED) {
@@ -332,6 +348,14 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
   }
   ctx.inventory.selectedIdx = save.inventory.selectedIdx;
   ctx.inventory.hover = null;
+  // TT — discoveredRecipes restore. v6+ persists the array. Pre-v6
+  // saves (no field) get the full seed set so existing playtesters
+  // keep their recipe knowledge.
+  if (save.inventory.discoveredRecipes !== undefined) {
+    ctx.inventory.discoveredRecipes = save.inventory.discoveredRecipes.slice();
+  } else {
+    ctx.inventory.discoveredRecipes = ALL_RECIPE_IDS.slice();
+  }
 
   // ── Time ──
   ctx.time.dayTime = save.time.dayTime;

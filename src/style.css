@@ -779,6 +779,197 @@ canvas {
 }
 
 /* ──────────────────────────────────────────────────────────
+   Crafting menu — combine-to-discover (Session TT)
+   ────────────────────────────────────────────────────────── */
+.craft-combine-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 16px;
+  margin-bottom: 8px;
+}
+
+.craft-inputs-row {
+  display: flex;
+  flex-direction: row;
+  gap: 8px;
+}
+
+.craft-input-slot,
+.craft-output-slot {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  background: rgba(232, 220, 192, 0.06);
+  border: 1px solid rgba(232, 220, 192, 0.35);
+  color: #e8dcc0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.craft-input-slot.empty {
+  background: rgba(232, 220, 192, 0.02);
+  border-color: rgba(232, 220, 192, 0.18);
+  border-style: dashed;
+  cursor: default;
+}
+
+.craft-input-slot:hover:not(.empty) {
+  border-color: #e8dcc0;
+  background: rgba(232, 220, 192, 0.14);
+}
+
+.craft-input-count {
+  position: absolute;
+  bottom: 2px;
+  right: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: #b8a888;
+  letter-spacing: 1px;
+}
+
+.craft-flow-arrow {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 18px;
+  color: #8a7a5e;
+  padding: 0 6px;
+}
+
+.craft-output-slot {
+  border-color: #c8a868;             /* warmer rim — reads as the result */
+  background: rgba(200, 168, 104, 0.06);
+  cursor: default;
+}
+
+.craft-output-slot.empty {
+  background: rgba(200, 168, 104, 0.02);
+  border-color: rgba(200, 168, 104, 0.18);
+  border-style: dashed;
+}
+
+.craft-output-unknown {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 28px;
+  color: #c8a868;
+}
+
+.craft-output-label {
+  text-align: center;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 3px;
+  color: #b8a888;
+  min-height: 14px;
+  margin-bottom: 12px;
+}
+
+.craft-chooser {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.craft-chooser.hidden {
+  display: none;
+}
+
+.craft-chooser-btn {
+  font-size: 10px;
+  letter-spacing: 1px;
+  padding: 6px 10px;
+}
+
+.craft-chooser-btn.selected {
+  border-color: #c8a868;
+  color: #f0e4c8;
+}
+
+.craft-go-btn {
+  align-self: center;
+  margin-bottom: 16px;
+  min-width: 120px;
+}
+
+.craft-go-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.craft-col-header {
+  color: #8a7a5e;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 3px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(232, 220, 192, 0.18);
+  width: 320px;
+  align-self: center;
+}
+
+.craft-bag-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 320px;
+  align-self: center;
+  margin-top: 8px;
+  margin-bottom: 24px;
+  pointer-events: auto;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.craft-bag-row {
+  display: grid;
+  grid-template-columns: 32px 1fr;
+  align-items: center;
+  gap: 12px;
+  background: rgba(232, 220, 192, 0.04);
+  border: 1px solid rgba(232, 220, 192, 0.25);
+  color: #e8dcc0;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 2px;
+  padding: 8px 12px;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.craft-bag-row:hover {
+  border-color: #e8dcc0;
+  background: rgba(232, 220, 192, 0.10);
+}
+
+.craft-bag-name {
+  color: #e8dcc0;
+}
+
+.craft-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  color: rgba(232, 220, 192, 0.85);
+}
+
+.craft-icon svg {
+  width: 24px;
+  height: 24px;
+  display: block;
+}
+
+/* ──────────────────────────────────────────────────────────
    Inventory overlay (backpack + hotbar)
    ────────────────────────────────────────────────────────── */
 #inventory-overlay {

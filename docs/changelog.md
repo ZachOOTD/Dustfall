@@ -3,6 +3,38 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session TT — 2026-05-21 — Crafting rework — combine-to-discover ✓ verify pass
+`verified` — tsc clean; eval-driven playtest exercised the full
+discovery flow + save/load roundtrip + v5→v6 migration path.
+Replaces the explicit `RECIPES` list UI with a **Minecraft-style
+combine-to-discover** model: 4 input slots (multiset, order-
+insensitive), 1 output preview slot, CRAFT button. Player clicks
+inventory rows to add items; clicks input slot to remove. Output
+preview shows `?` for valid-but-undiscovered combos, the actual
+output icon for discovered, "nothing happens" for invalid. On first
+successful craft of an unknown recipe, the recipe id is added to
+`inventory.discoveredRecipes` with a toast ("you've figured out how
+to make X"). **Data model**: new `src/inventory/recipeDiscovery.ts`
+(~170 LOC) — `Recipe` shape with stable numeric ids (1-9 for the
+existing recipes), `canonicalInputKey()` sorts + serializes the
+input multiset, `matchRecipes()` returns array (zero / one / many)
+so the chooser UI handles future recipe overlaps. None of the 9
+current recipes overlap; the chooser path is architectural-only.
+**Save schema**: `SAVE_VERSION 5 → 6`. `inventory.discoveredRecipes:
+number[]` persists. Pre-v6 saves get `ALL_RECIPE_IDS` seeded on
+load so existing playtesters keep their accumulated knowledge.
+**UI rewrite**: `src/ui/craftingMenu.ts` end-to-end (319 → ~330 LOC);
+new CSS classes (`.craft-combine-row`, `.craft-input-slot`,
+`.craft-output-slot`, `.craft-output-unknown`, `.craft-chooser`,
+`.craft-bag-row`). Close-button flushes remaining inputs back to
+the player's bag. **Edge case verified**: inventory-full refund —
+if `addItem` returns -1 on output, the consumed inputs are returned
+to inventory AND discovery is NOT recorded (gated on successful
+output). The original DEBUG_STARTER_LOADOUT fills all 14 slots, so
+the first playtest run hit this path; behavior was correct
+(toast "no room for the result", inventory restored). Decisions
+D70-D72.
+
 ## Session SS — 2026-05-20 — Opening wreck playtest + polish ✓ verify pass
 `verified` — tsc clean; first framework-managed session post-retrofit;
 eval-driven playtest from interior camera positions caught a latent

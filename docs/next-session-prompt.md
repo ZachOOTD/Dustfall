@@ -1,119 +1,132 @@
-# Session TT — Kickoff Brief
+# Session UU — Kickoff Brief
 
 ## Read these now (in order)
 
 1. `CLAUDE.md` (auto-loaded) — project manual, current state, architecture rules
-2. `docs/session-end-report.md` — cumulative state through Session SS, the "what works end-to-end" reference
-3. `docs/decisions.md` — D1-D69, with friction-scores. Pay attention to **friction ≥ 4** entries (architectural lock-ins worth respecting)
+2. `docs/session-end-report.md` — cumulative state through Session TT, the "what works end-to-end" reference
+3. `docs/decisions.md` — D1-D72, with friction-scores. Pay attention to **friction ≥ 4** entries — D70 in particular for the just-shipped crafting model + D71 for recipe id stability
 4. `docs/roadmap.md` — "Next — Big-ticket bucket" lists the remaining big-ticket items
 5. `docs/backlog.md` — unprioritized ideas / bugs / polish / debt
 6. `docs/architecture.md` — file map; consult only if you don't know where a system lives
 
 ## What's already built
 
-Dustfall is 19 sessions past start, post-MVP. The lone-survivor sandbox loop
+Dustfall is 20 sessions past start, post-MVP. The lone-survivor sandbox loop
 works end-to-end: spawn at the redesigned opening wreck → read the journal at
 the dead survivor's hand → exit to the speeder → cross the 2400m world via
 hover speeder + on-foot → harvest at the salt-flats well → salvage at procgen
-wrecks → fight lizards / sand worm boss with one of 5 weapons → craft fire +
-tent + sled + rope → save + reload. The hull material side-flag bug from RR
-was fixed in SS so the cockpit interior renders correctly from inside. No
-known critical bugs.
+wrecks → fight lizards / sand worm boss with one of 5 weapons → craft (now via
+combine-to-discover) → save + reload. Just-shipped TT replaced the explicit
+recipe list UI with a 4-slot combine-mode UI; save format v5→v6 with
+ALL_RECIPE_IDS seeded as legacy fallback. No known critical bugs.
 
-## Session TT focus
+## Session UU focus
 
-**Crafting rework — combine-to-discover** (replaces the current `RECIPES`
-explicit-list system with a Minecraft-style "throw items in, see what comes
-out" interface; no spatial grid; up to 4 input slots; chooser when multiple
-recipes match the inputs). This is the top-priority bucket item per
-session-end-report's suggested-next list. Most recent backlog add, scoped at
-one session, no combat or physics surface area.
+**Control scheme overhaul — LMB-leaning, modern-survival parity.** Replace
+the "E for every interaction" pattern with a more granular click-driven
+model: hold LMB to drink the canteen, click LMB to place a kit/sled, click
+LMB to pick up a pickup, etc. E stays for opening containers / sleeping /
+reading the journal (the "open this thing" actions). The goal is a control
+scheme closer to The Long Dark / Rust / Subnautica defaults where the
+mouse owns most action verbs and the keyboard owns movement + a small set
+of meta actions.
+
+This is the **highest blast radius** of any remaining bucket item — it
+touches every per-item `onUse`, plus `combat.ts` + `interaction.ts`. Plan
+for ~4-6h.
 
 ## Priority items (in order)
 
-1. **Data model** (~30 min)
-   - `src/inventory/recipeDiscovery.ts` (new) — define `Recipe { inputs:
-     ItemId[]; output: { itemId: ItemId; count: number }; discoveredOn?:
-     number }`. The `inputs` array is order-insensitive — match by sorted
-     tuple. Migrate the existing `RECIPES` array from `craftingMenu.ts` to
-     the new shape; include the existing 5 recipes as the seed set.
-   - `src/inventory/types.ts` — add `discoveredRecipes: Set<RecipeId> |
-     number[]` to `InventoryState` (the player's known-recipes ledger).
-2. **Discovery UI** (~1.5h)
-   - Rewrite `src/ui/craftingMenu.ts` from explicit recipe list to combine-
-     mode. 4 input slots + 1 output preview slot. Click hotbar/backpack items
-     to add to inputs; click an input slot to remove. Show "?" output preview
-     until the input set matches a known recipe; show the actual output if
-     the recipe is in `discoveredRecipes`, OR show "unknown" + a CRAFT button
-     for undiscovered combinations.
-   - Discovery flow: clicking CRAFT on an unknown valid combination consumes
-     inputs, produces output, adds the recipe to `discoveredRecipes` with a
-     toast ("you've figured out how to make X"). Clicking CRAFT on an
-     invalid combination consumes nothing + shows "nothing happens" toast.
-3. **Overlap chooser** (~30 min)
-   - If `Recipe[]` has multiple entries with the same `inputs` (rare but
-     possible), the UI shows a small selector: "this combination can make X
-     or Y" with two click buttons. Pre-commit which output the player wants.
-4. **Save schema migration** (~30 min)
-   - `SAVE_VERSION 5 → 6`. Persist `discoveredRecipes` in the save. Pre-v6
-     saves load with the seed set as discovered (the 5 original recipes
-     stay known).
-5. **Backlog cleanup** (~5 min)
-   - Strike the "crafting rework" backlog entry on ship.
+1. **Audit + categorize current E-actions** (~30 min)
+   - Read every per-item `onUse` in `src/inventory/items.ts` and every
+     `case` in `src/player/interaction.ts`'s `case 'lootContainers' /
+     'tents' / 'sleds' / 'speeder' / ...` dispatch. Classify each as
+     either:
+     - **Take/use** (drink canteen, deploy fire_kit, use bandage) →
+       migrate to LMB-while-wielded (hold for sustained actions, click
+       for one-shot).
+     - **Open** (loot container, sled cargo, tent for sleep, journal) →
+       keep on E.
+     - **Pick up** (item pickup) → migrate to LMB on the world item.
+     - **Tool use** (machete swing, scrap_gun fire) → already LMB; no
+       change.
+   - Write the audit to a working scratch file or as comments in
+     `interaction.ts`; the next priority items act on it.
+2. **Hold-LMB sustained-action infrastructure** (~1h)
+   - The canteen drinks one gulp per LMB click currently. The new
+     model is "hold to drink" — drink while LMB is held, stop when
+     released. Mirror the existing `chargeProgress` pattern from the
+     energy_pistol (Session PP). Files: `combat.ts` (or a new
+     `wieldAction.ts` if combat.ts gets too crowded),
+     `inventory/items.ts` (canteen.onUse signature extends with a
+     `holdProgress` flag or similar).
+3. **LMB-driven placement** (~1.5h)
+   - Currently E (or wielded-item.onUse fired via E) deploys
+     fire_kit / tent_kit / sled_kit. Rewire so LMB while the kit is
+     equipped triggers placement. Crosshair shows a ghost preview of
+     where the kit would land at the camera-forward 2.2m mark.
+4. **LMB-driven pickup** (~30 min)
+   - Pickups on the ground currently take via E. Switch to LMB on
+     the pickup's mesh, with a passive prompt "[click] take ..."
+     that doesn't show the [E] chip.
+5. **E semantics tightened to "OPEN"** (~30 min)
+   - Loot containers, sled cargo, tents (sleep overlay), journal,
+     speeder mount — all stay on E. Update the interact-prompt verbs
+     to communicate "open" / "mount" / "read" / "sleep in" (most
+     already do).
+6. **Save format check** (~15 min)
+   - No persisted state changes expected. `SAVE_VERSION` stays at 6.
+     But: hotbar-selected-while-mid-hold state must NOT persist
+     across save (cleared on save serialize).
 
 ## Stretch goals (if budget allows)
 
-- "Recipe book" panel showing all discovered recipes (separate hotkey, e.g.
-  Tab). Skip if you're tight on time.
-- Hover tooltips on discovered recipes showing the input glyphs in the
-  combine UI before the player has all the inputs.
-- Add 2-3 new recipes that the new discovery flow can showcase (e.g.,
-  `bandage` from `cloth + cloth`, `branch_bundle` from `branch × 3`).
+- **Right-mouse context action**: e.g., RMB on a tent → "pack up" + return
+  to inventory. RMB on a sled → "release rope from speeder". Adds a third
+  verb for advanced players without bloating the LMB menu.
+- **In-game controls hint card** that reflects the new scheme (the existing
+  one at `__game.showControls()` needs updating).
 
 ## Autonomy contract
 
-- When ambiguous: pick the option closest to GDD pillars + decisions.md
-  realism dial, append a new D-entry, keep going.
-- D7 (barren-desert pivot) + D9 (salvageables are finite) + D13 (sandbox
-  pivot) all reinforce: crafting is a survival pressure, not a min-maxing
-  vector. Don't add 30 recipes; keep the seed set tight (5-8 total). The
-  discovery feel matters more than the recipe count.
-- Never ask the human mid-session. Surface uncertainty as a D-entry and a
-  scope-cut candidate.
+- When ambiguous: pick the option closest to GDD pillars (Pillar 4 —
+  tactile world / every object earns its mesh) + D7/D9/D13 (sandbox tone,
+  combat-isn't-the-point). Append a D-entry, keep going.
+- Footgun: **moving an interaction off E may break muscle memory** for the
+  user. Surface the migration in the changelog explicitly so they can
+  adjust expectations on first boot. Document any tutorial / hints panel
+  updates.
+- Never ask the human mid-session.
 
 ## Stop conditions (gated mode default)
 
-- Tier boundary reached (= the 5 priority items above shipped + verify
-  passes)
-- 3-strike wall (same fix attempted 3x without success) — invoke
-  `game-verifier`
+- All 6 priority items shipped + verify passes
+- 3-strike wall (same fix attempted 3x) → invoke `game-verifier`
 - Catastrophic block (tsc broken, dev server won't start)
-- Destructive action attempt (git push/force/amend without explicit user grant)
+- Destructive action attempt (git push/force/amend without user grant)
 
 ## On stop
 
-Invoke `/gamedev-framework:session-end` to verify + append changelog + bump
-"Last shipped" + rewrite session-end-report + write next-session-prompt +
-print commit handoff.
+Invoke `/gamedev-framework:session-end` to verify + append changelog +
+bump "Last shipped" + rewrite session-end-report + write next-session-prompt
++ print commit handoff.
 
 ## Notable footguns
 
-- **HMR can show stale module state** for state held in module-level closures
-  (lootMenu's `_current`, hotbar tooltip's `_latestCtx`). If the crafting UI
-  uses module-level singletons, full reload is safer than HMR during dev.
-- **Save format bumps**: pre-v6 saves MUST still load cleanly with the seed
-  recipes as discovered, or existing playtesters lose their save. Test with a
-  v5 save file deliberately.
-- **Recipe input ordering**: a recipe input set `[scrap, cloth, branch]` and
-  `[branch, cloth, scrap]` must match the same recipe. Sort the input ItemIds
-  alphabetically before hash comparison.
-- **Lathe-local vs world-Y axis** (D68) — not relevant to this session unless
-  you're touching mesh code, but if a polish detour leads there, re-read D68.
-- **`docs/GDD.md` design pillars** — Pillar 2 (procedural everything) means
-  the crafting UI itself must be authored in code (DOM via `createElement`,
-  no `innerHTML` per the architecture rules). Pillar 4 (tactile world)
-  means each recipe should feel like the player figured something out, not
-  unlocked it from a list.
+- **D70 (combine-to-discover)** just shipped. The crafting menu's CRAFT
+  button intentionally uses LMB-click on a DOM button — that's UI, NOT
+  game-world LMB. The control scheme overhaul should NOT touch the
+  crafting UI's button behavior. Distinguish in-world LMB from menu LMB.
+- **D34 (speeder velocity-controlled motion)** — mounted speeder's W/S/A/D
+  + Shift inputs are already LMB-independent. Don't break that.
+- **D67 (sled inextensible rope)** — wielded rope LMB on a sled rope-stub
+  attaches/detaches. That's already LMB-driven; no change needed but
+  verify the new LMB-action infrastructure doesn't double-fire.
+- **Combat LMB** already wired (Session PP). The new LMB-pickup + LMB-place
+  paths must NOT fire when a weapon is the wielded item.
+- **HMR can show stale singleton state** for module-level closures.
+  Anything touching `_ctx` / `_selectedRecipe` / similar should expect
+  a hard reload during dev.
 
 ## Verification protocol
 
@@ -122,19 +135,23 @@ npm run verify  # = tsc --noEmit; Dustfall opts out of tier-ladder verification
 ```
 
 Plus eval-driven + HMR-aware playtest:
-1. tsc clean
-2. Open crafting menu (C). Confirm 4 input slots are visible.
-3. Add 2 cloth + 1 branch → preview slot shows the rope outcome.
-4. Click CRAFT → rope appears in inventory, ingredients consumed, recipe
-   marks as discovered.
-5. Add 2 cloth + 1 branch again → preview shows the rope (now known).
-6. Add an undefined combination (e.g., 2 scrap + 1 alien_fruit) → preview
-   shows "?" until CRAFT, then "nothing happens".
-7. Save + reload → discoveredRecipes persists.
+1. tsc clean.
+2. Wield canteen → hold LMB → thirst stat drops continuously while held →
+   release LMB → drinking stops. Toast on first sip.
+3. Wield fire_kit → click LMB → fire spawns 2.2m in front. Toast "fire lit".
+4. Look at a pickup → click LMB → item enters inventory (without the [E]
+   chip).
+5. Look at a loot container → E opens the menu (unchanged).
+6. Wield machete → LMB on a lizard → still swings, no double-fire.
+7. Wield rope → LMB on sled rope-stub → still attaches (unchanged).
+8. Mount speeder → LMB still fires combat weapons (no LMB hijack).
+9. Save + reload → no persisted state corruption.
 
 ## Begin block
 
-Read CLAUDE.md (already auto-loaded) → `docs/session-end-report.md` →
-`docs/decisions.md` (friction ≥ 4 in particular) → this brief. Create a
-TaskCreate top-level list with the 5 priority items. Mark item 1
-`in_progress`. Begin work on `src/inventory/recipeDiscovery.ts`.
+Read CLAUDE.md (auto-loaded) → `docs/session-end-report.md` →
+`docs/decisions.md` (especially D70 + D72 since they just shipped). Create
+a TaskCreate top-level list with the 6 priority items. Mark item 1
+`in_progress` (the audit). Begin work on `src/inventory/items.ts` +
+`src/player/interaction.ts` — read both first, then classify each
+interaction in scratch comments.

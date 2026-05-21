@@ -1374,3 +1374,97 @@ single-sided lathe / cylinder / cone geometries (cockpits, hatches,
 domes, tubes). If a player can ever stand INSIDE the volume bounded
 by the surface, set both `side` and `shadowSide` flags.
 **friction-score:** 3
+
+## D70 — Combine-to-discover replaces explicit recipe list (Session TT)
+**When**: Session TT.
+**Why**: The Session G `RECIPES` array shipped as an explicit list:
+each recipe had its own row in the crafting UI, showing the output
+plus the ingredient counts; the player saw every possible craft from
+day one. By Session QQ-2 the list had grown to 9 recipes and was
+already feeling bloated per user direction ("current list is getting
+bloated... should move away from the current list of recipes and
+more to a combining different items together to discover new recipes
+system"). The explicit-list model has two problems: (a) zero
+discovery feel — the player knows everything upfront, robbing the
+moment of "I wonder if I can combine these?", and (b) UI grows
+linearly with recipe count.
+**Decision**: Replace the list UI with a **combine-to-discover**
+model. 4 input slots (multiset, order-insensitive). Output preview
+shows `?` for valid-but-undiscovered combinations, the actual output
+icon for discovered ones, "nothing happens" for invalid combinations.
+Clicking CRAFT consumes inputs + produces output + (if first time)
+adds the recipe id to `inventory.discoveredRecipes`. Pillars enforced:
+the 9 seed recipes stay tight per D7/D9/D13 — discovery feel matters
+more than recipe count. Future sessions add recipes by appending to
+the `RECIPES` array with the next stable numeric id.
+**Considered alternatives**:
+- Hybrid (combine-mode + a "recipe book" panel showing discovered
+  recipes for reference) — deferred to stretch goal status; could
+  ship in a follow-up session if the discovery-only mode feels too
+  opaque.
+- Minecraft-style 3×3 grid — rejected as too positional / fiddly for
+  Dustfall's tone. Flat multiset matches the survival-game pattern
+  better.
+- Auto-discovery (recipes unlock when the player owns all required
+  items) — rejected because it strips the "I tried something" agency
+  that's the whole point.
+**Apply**: when adding a new recipe in a future session, just append
+to `RECIPES` in `src/inventory/recipeDiscovery.ts` with the next
+unused numeric id. The UI auto-picks it up; save/load handles it via
+the existing `discoveredRecipes` ledger.
+**friction-score:** 3
+
+## D71 — Recipe id stability rule (never reuse, never renumber) (Session TT)
+**When**: Session TT.
+**Why**: `inventory.discoveredRecipes: number[]` is persisted in
+save format v6. If a recipe is removed in a future session and its
+id is reused for a different recipe, EVERY existing save's
+"discovered" ledger would silently mean a different thing — the
+player would have rope marked discovered but the recipe id 8 might
+now point at "explosive charge" or whatever. Subtle, hard to detect,
+breaks the trust contract of save files.
+**Decision**: Recipe ids are STABLE. Once assigned, an id is never
+reused even if the recipe is retired. New recipes get the next-highest
+unused id. To remove a recipe: comment it out of `RECIPES` but
+preserve the id slot. If a recipe is materially CHANGED (different
+inputs or output), bump it to a new id and leave the old one as a
+no-op (or removed entirely + tombstoned in code comments).
+**Considered alternatives**:
+- String ids (`'rope'`, `'tent_kit'`) — more readable in save inspection
+  but every recipe rename then has the same cross-save-breakage risk,
+  with the additional pitfall of string typos.
+- Hash of canonical input key as id — collision risk; if two recipes
+  ever collide in the multiset (the chooser case the system supports),
+  they'd have the same hash.
+- Migrate ids on every save load — pushes complexity into the loader;
+  one bug in migration logic corrupts every save.
+**Apply**: when editing `RECIPES`, never change the `id` field of an
+existing entry. The numeric ids are the save schema, just like
+column names in a SQL table.
+**friction-score:** 4
+
+## D72 — Crafting discovery is gated on successful output addition (Session TT)
+**When**: Session TT (discovered during eval-driven playtest).
+**Why**: The first playtest run hit a non-obvious edge case:
+`DEBUG_STARTER_LOADOUT` fills all 14 inventory slots, so `addItem`
+returned -1 when trying to add the crafted rope. The `performCraft`
+function correctly refunded the consumed cloth + branch back to the
+player's inventory — but the question was whether to ALSO mark the
+recipe as discovered. Two interpretations:
+(a) The player tried the combination + saw what would happen, so it
+counts as a discovery. Mark discovered + skip the output.
+(b) The craft didn't actually complete (no output was produced), so
+no discovery — try again when you have room.
+**Decision**: (b). Discovery is gated on `addItem returning ≥ 0`. If
+the output couldn't be added, the inputs are refunded AND the recipe
+stays undiscovered. Rationale: discovery is a moment of CONFIRMATION
+("I made this thing"); a failed craft is the universe rejecting
+your attempt, not granting you knowledge of a recipe you didn't
+actually produce. The player has to retry when they have room.
+**Apply**: any future craft-adjacent system (cooking, salvaging,
+infusing, etc.) that marks "discovered" state should similarly gate
+on successful output side-effect, not on input matching. The
+canonical pattern: `consume inputs → try produce output → if
+success, mark discovered; if failure, refund inputs + skip
+discovery + toast`.
+**friction-score:** 2

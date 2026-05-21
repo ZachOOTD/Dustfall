@@ -128,6 +128,14 @@ export interface InventoryState {
   selectedIdx: number;    // 0..3, indexes into slots only
   /** The pickup the player is currently aiming at (set by player/interaction). */
   hover: HoverState | null;
+  /** Session TT — set of Recipe.id numbers the player has personally
+   *  crafted at least once via the combine-to-discover UI. Persisted
+   *  across save/load. Used by `craftingMenu.ts` to decide whether to
+   *  show the actual output icon (discovered) or "?" (unknown) on the
+   *  output preview slot for a given input combination. Pre-v6 saves
+   *  get the full seed set on load (see save.ts) so existing
+   *  playtesters keep their accumulated recipe knowledge. */
+  discoveredRecipes: number[];
 }
 
 /** What kind of interaction is the player currently aimed at? */

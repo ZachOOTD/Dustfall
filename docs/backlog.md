@@ -21,5 +21,4 @@ Use `/triage-ideas` to bulk-classify a free-form dump.
 [feat] small red creature companion — follows player, pocketable into backpack, re-deployable
 [idea] remove HUD stat bars in favor of audio/visual/text cues ("you could use a drink")
 [feat] larger enterable tent that shelters the player from inside during sandstorms
-[feat] crafting rework: combine up to 4 items to discover recipes (no grid); chooser when multiple recipes match the same inputs — replaces the current bloating recipe list
 [feat] control scheme overhaul: bring closer to modern survival games — lean on LMB more (hold to drink, click to place kits, etc.) instead of E for everything

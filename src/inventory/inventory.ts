@@ -18,6 +18,11 @@ export function createInventory(): InventoryState {
     backpack: Array.from({ length: BACKPACK_SLOT_COUNT }, empty),
     selectedIdx: 0,
     hover: null,
+    // TT — Empty on fresh game; the combine-to-discover UI populates
+    // this as the player crafts. Save load may seed it with the full
+    // recipe set on v5→v6 migration so existing playtesters keep
+    // their recipe knowledge.
+    discoveredRecipes: [],
   };
 }
 
