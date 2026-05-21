@@ -42,14 +42,25 @@ import { createRustedHullMaterial } from './hullMaterial.ts';
 // ── Materials ───────────────────────────────────────────────────────
 // Hull uses the procedural rust shader (Session OO) — vertical streaks
 // down the flanks, sun bleach on the upper hull, panel-wear noise.
+//
+// Session SS — hull MUST be `DoubleSide` because the wreck is enterable:
+// from inside the cockpit the player looks at the hull's BACK faces,
+// which would be culled with the default FrontSide. `shadowSide: FrontSide`
+// keeps shadow casting from the outer surface only — DoubleSide for
+// shadow casting causes the interior surface to cast shadows back into
+// the cavity (the "double-cast" artifact).
 const _hullMat = createRustedHullMaterial({
   baseColor: Tuning.WRECK_HULL_HEX,
   streakIntensity: 0.55,
 });
+_hullMat.side = THREE.DoubleSide;
+_hullMat.shadowSide = THREE.FrontSide;
 const _hullDarkMat = createRustedHullMaterial({
   baseColor: Tuning.WRECK_HULL_DARK_HEX,
   streakIntensity: 0.35,
 });
+_hullDarkMat.side = THREE.DoubleSide;
+_hullDarkMat.shadowSide = THREE.FrontSide;
 const _floorMat = new THREE.MeshLambertMaterial({
   color: 0x2a2620,
   flatShading: true,
@@ -273,30 +284,43 @@ function makeBreachPatches(rand: Rng): THREE.Group {
 function makeEntranceFragments(rand: Rng): THREE.Group {
   const g = new THREE.Group();
   const r = R_TAIL_RIM;
-  const fragCount = 7;
+  // Session SS — was 7 evenly-distributed fragments which read as a
+  // "saw-blade crown" around the rim rather than torn metal. Reduced
+  // to 4 fragments clustered on the UPPER half + ONE side, with the
+  // other side mostly clean. Combined with the bottom-110° skip
+  // (player walk-in path) this leaves the rim asymmetric — one side
+  // looks torn open, the other looks slightly cleaner — closer to
+  // "this hull section sheared off violently in one direction" than
+  // "the rim is uniformly serrated".
+  const fragCount = 4;
+  // Bias the angles toward the upper-right of the rim (phi roughly
+  // 0..π so cos > 0 ish): start each fragment at base angle 0..π
+  // with light jitter. The bottom-skip below still applies.
   for (let i = 0; i < fragCount; i++) {
-    const ang = (i / fragCount) * Math.PI * 2 + rand() * 0.3;
+    const ang = (i / fragCount) * Math.PI + rand() * 0.5;
     // Skip fragments that would block the entrance opening at the
     // bottom of the rim — the rim's circular profile in WRECK-LOCAL
     // X/Y space has its bottom at angle θ where sin(θ) is most
     // negative (sin(θ) < -0.3 → bottom ~110° arc). Keeping that band
     // clear gives the player an unobstructed walk-in path.
     if (Math.sin(ang) < -0.3) continue;
-    const w = 0.35 + rand() * 0.45;
-    const h = 0.25 + rand() * 0.35;
+    // Larger, more "plate-like" pieces. Smaller w + h gave a confetti
+    // read; bigger plates read as actual torn hull sections.
+    const w = 0.55 + rand() * 0.55;
+    const h = 0.40 + rand() * 0.45;
     const frag = new THREE.Mesh(
-      new THREE.BoxGeometry(w, h, 0.04),
+      new THREE.BoxGeometry(w, h, 0.05),
       _rustDarkMat,
     );
     frag.position.set(
-      Math.cos(ang) * (r + 0.05),
-      Math.sin(ang) * (r + 0.05) + AXIS_Y,
+      Math.cos(ang) * (r + 0.08),
+      Math.sin(ang) * (r + 0.08) + AXIS_Y,
       -HULL_LEN / 2 - 0.05,
     );
     // Tilt the fragment outward + sideways for chaotic torn-edge look.
-    frag.rotation.z = ang + Math.PI / 2 + (rand() - 0.5) * 0.6;
-    frag.rotation.y = (rand() - 0.5) * 0.5;
-    frag.rotation.x = (rand() - 0.5) * 0.3;
+    frag.rotation.z = ang + Math.PI / 2 + (rand() - 0.5) * 0.8;
+    frag.rotation.y = (rand() - 0.5) * 0.6;
+    frag.rotation.x = (rand() - 0.5) * 0.4;
     g.add(frag);
   }
   return g;

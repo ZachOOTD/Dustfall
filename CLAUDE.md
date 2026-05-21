@@ -58,7 +58,23 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session RR — Opening wreck full redo (cockpit +
+**Last shipped**: Session SS — Opening wreck playtest + polish.
+Caught a latent RR bug (the procedural rust shader defaults to
+`side: FrontSide`, so the 22 lathe slices were back-face-culled from
+inside the cockpit — the interior rendered as "open desert + floating
+debris" when viewed from a player-eye position). Patched
+`openingWreck.ts` `_hullMat`/`_hullDarkMat` to `side: DoubleSide` +
+`shadowSide: FrontSide` (shadowSide prevents interior surface from
+casting shadows back into the cavity). Also tightened the entrance
+torn-fragments: reduced 7→4, biased to upper half + one side, larger
+plates — was reading as a "saw-blade crown around rim", now reads
+as asymmetric torn metal. RR's verification was eval-driven from
+external camera positions only; this session's interior camera
+shots caught both issues. Save/load roundtrip + 51 salvageables +
+22 wreck slices verified post-fix. Decision D69. First session
+running on the gamedev-framework v0.3.x workflow post-retrofit.
+
+**Prior milestone**: Session RR — Opening wreck full redo (cockpit +
 tail stub). Replaces the 534-LOC W-era box-walled wreck with a
 ~440 LOC rewrite using the KK/LL/NN modelling vocabulary
 (LatheGeometry hull, procedural rust shader, per-piece tilted

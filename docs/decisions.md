@@ -1339,3 +1339,38 @@ geometry at construction time would have avoided the axis confusion
 entirely.
 **friction-score:** 4
 
+
+## D69 — Enterable lathe wrecks need `side: DoubleSide` on hull materials (Session SS)
+**When**: Session SS — caught while playtesting the RR opening-wreck
+rebuild from an interior camera position.
+**Why**: `createRustedHullMaterial` (Session OO) builds a
+`MeshLambertMaterial` which defaults to `side: FrontSide`. For
+non-enterable wrecks (crashedHull, satelliteDish, engineBlock) this
+is correct — the player never sees the hull from inside, and
+FrontSide cuts fragment-shader cost by half. But the opening wreck
+is **enterable**: a player walks into the cockpit through the torn
+rear. From an interior position, FrontSide back-face-culls the
+inside of the lathe slices → the cockpit renders as "open desert +
+floating debris" with the wall material completely absent. RR's
+verification missed this because all screenshots were eval-driven
+from external camera positions; the first interior render under SS
+exposed it immediately.
+**Decision**: enterable wrecks set both `material.side =
+THREE.DoubleSide` (so interior surfaces render) AND `material.shadowSide
+= THREE.FrontSide` (so shadows project from the outer surface only,
+not from the inside hull surface casting back into the cavity).
+Currently the only enterable lathe-based wreck. Future flagship
+wrecks that become enterable (e.g., a larger transport-pod redesign,
+a satellite-dish-interior session) MUST set both flags or the
+interior will render hollow.
+**Considered alternatives**: (a) clone the materials per-mesh and
+set per-slice — over-engineered for a shared hull aesthetic; (b)
+use `BackSide` instead of `DoubleSide` and add a second inner
+lathe for the inside surface — doubles geometry cost; (c) use a
+`Group` of multiple lathe arcs with explicit front/back face mat
+pairs — fragile and hard to maintain.
+**Apply**: also relevant for future enterable shapes built from
+single-sided lathe / cylinder / cone geometries (cockpits, hatches,
+domes, tubes). If a player can ever stand INSIDE the volume bounded
+by the surface, set both `side` and `shadowSide` flags.
+**friction-score:** 3

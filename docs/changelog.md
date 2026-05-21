@@ -3,6 +3,31 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session SS — 2026-05-20 — Opening wreck playtest + polish ✓ verify pass
+`verified` — tsc clean; first framework-managed session post-retrofit;
+eval-driven playtest from interior camera positions caught a latent
+RR bug (interior was invisible). **Critical fix**:
+`createRustedHullMaterial` returns `MeshLambertMaterial` with default
+`side: FrontSide`. The 22 lathe slices of the opening wreck were
+back-face-culled from inside the cockpit — players walking in would
+have seen "open desert + floating debris" instead of the enclosed
+hull. Patched `openingWreck.ts` to set `_hullMat.side =
+THREE.DoubleSide` + `shadowSide: FrontSide` on both `_hullMat` and
+`_hullDarkMat` (shadowSide prevents the interior surface from casting
+shadows back into the cavity). RR was eval-verified from outside
+positions only; never rendered from an interior camera. **Polish**:
+entrance fragments reduced 7 → 4 with upper-half bias — was a
+"saw-blade crown" around the rim, now reads as asymmetric torn metal
+on one flank. Plate size slightly bumped (`w 0.55+rand*0.55` was
+`0.35+rand*0.45`) so fragments read as hull plates not confetti.
+**Verified**: tsc clean; interior renders with curved ceiling +
+ribbed slice seams + tally marks + salvage panel B + entrance
+opening visible from inside; spawn-toward-entrance silhouette reads
+as torn-open wreck; save/load roundtrip preserves player + speeder
++ 22 wreck slices + 51 salvageables. **Backlog cleanup**: struck 2
+shipped entries ("opening wreck more holes", "opening wreck full
+redo"). Decision D69.
+
 ## Session RR — 2026-05-20 — Opening wreck full redo (cockpit + tail stub)
 `partially verified` — tsc clean; eval-driven structural verification
 (wreck spawns at (-53.5, 15.2, -2) with yaw=π/2; 22 of 24 lathe
