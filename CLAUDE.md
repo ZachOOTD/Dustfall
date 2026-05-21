@@ -58,7 +58,24 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session UU — Control scheme overhaul (LMB-leaning).
+**Last shipped**: Session VV — Tuning lift + crosshair feedback +
+as-any fix. Palette-cleanser between UU and UU-2 (both interaction-
+dispatch sessions). **fire.ts constants lifted** to Tuning: 5
+constants (initial fuel, fuel per branch, shelter radius/height,
+near-distance reject sq) → `Tuning.FIRE_*`. **tent.ts constants
+lifted**: 2 (shelter half-extents object, near-distance reject sq) →
+`Tuning.TENT_*`. Values preserved. **Crosshair feedback**:
+`#crosshair` gains `.interactable` (brighter + larger) and `.kill`
+(red + larger) classes; toggled by new `updateCrosshair` logic
+inside `updateInteractPrompt` (same per-frame cadence, derives from
+`ctx.inventory.hover`). **`as any` fix**: `src/world/wrecks.ts:137`
+cleaned up — `(cached as any).side = THREE.DoubleSide` → direct
+`cached.side = THREE.DoubleSide` (three.js's Material.side is in the
+typedef; cast was unnecessary). `eslint-disable` comment dropped.
+**Codebase**: `Grep "as any" src` now returns 0 matches. Decision
+D76 logged. Second of 5 overnight sessions (UU-2 next).
+
+**Prior milestone**: Session UU — Control scheme overhaul (LMB-leaning).
 Migrates "E for every interaction" → click-driven scheme closer to
 Long Dark / Rust / Subnautica. **Architecture (D73)**: new
 `src/player/wieldAction.ts` is the SOLE LMB-while-wielded dispatcher

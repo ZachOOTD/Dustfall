@@ -1,135 +1,123 @@
-# Session VV — Kickoff Brief
+# Session UU-2 — Kickoff Brief
 
 ## Read these now (in order)
 
 1. `CLAUDE.md` (auto-loaded) — project manual, current state, architecture rules
-2. `docs/session-end-report.md` — cumulative state through Session UU, the "what works end-to-end" reference
-3. `docs/decisions.md` — D1-D75 with friction-scores. Pay attention to **friction ≥ 4** entries — especially D73 (wieldAction.ts dispatcher) + D74 (wieldLmb field) which just shipped.
-4. `docs/roadmap.md` — "Overnight queue" lists the 5-session sequence (UU shipped; VV/UU-2/WW/XX queued)
-5. `docs/backlog.md` — unprioritized ideas / bugs / polish / debt
-6. `docs/architecture.md` — file map; consult only if you don't know where a system lives
+2. `docs/session-end-report.md` — cumulative state through Session VV
+3. `docs/decisions.md` — D1-D76. Critical for UU-2: D73 (wieldAction.ts dispatcher) + D74 (wieldLmb field) — UU-2 EXTENDS the wieldAction dispatcher to also handle RMB.
+4. `docs/roadmap.md` — "Overnight queue" — UU-2 is up next
+5. `docs/backlog.md` — open items
+6. `docs/architecture.md` — only if you need a system you don't know
 
 ## What's already built
 
-Dustfall is 21 sessions past start, post-MVP. The lone-survivor sandbox loop
-works end-to-end. Session UU just shipped the control scheme overhaul:
-LMB-leaning interactions via the new `wieldAction.ts` dispatcher. Hold-LMB
-to drink the canteen, click-LMB to deploy a kit, click-LMB to pick up
-ground items. E retained for "open this thing" — loot containers, sleep,
-mount, read, refill, harvest, cook, salvage. No known critical bugs.
+Dustfall is 22 sessions past start, post-MVP. UU just shipped the
+LMB-leaning control scheme via `src/player/wieldAction.ts` (the SOLE
+LMB-while-wielded dispatcher). VV shipped tuning lifts + crosshair
+feedback + zero-`as any`. Codebase is clean: `Grep "as any" src` = 0.
 
-## Session VV focus
+## Session UU-2 focus
 
-**Tuning lift + crosshair feedback + `as any` fix** (~1.5h). Architecture
-hygiene + first-impression polish. Three discrete shippable improvements
-bundled. Acts as a palette cleanser between UU and UU-2 (both interaction-
-dispatch sessions). Different files, different mental model.
+**RMB context actions + controls panel hint refresh** (~1.5h). Add
+RMB as a third interaction verb for power users:
+- **RMB on tent** → pack up (build `packUpTent(ctx, tent)` symmetric
+  to `deployTent`)
+- **RMB on sled (when rope is attached to speeder)** → release rope
+  (reuse existing `detachRope(ctx, sled, 'rope released')`)
+- Refresh `src/ui/tutorial.ts:44-59` CONTROLS table to reflect UU's
+  LMB scheme + UU-2's RMB additions
 
-This is a low-risk session by design — no novel architecture. Mostly
-mechanical refactors + one small UI polish item.
+This is a power-user verb layer. Old E-actions on tent (sleep) and
+sled (cargo) still work — RMB is additive, not replacing.
 
 ## Priority items (in order)
 
-1. **Lift `src/world/fire.ts` local constants to `Tuning.FIRE_*`** (~20 min).
-   - Lines 32-36 hold 5 local constants:
-     - `FIRE_INITIAL_FUEL = 90` → `Tuning.FIRE_INITIAL_FUEL_S`
-     - `FIRE_FUEL_PER_BRANCH = 30` → `Tuning.FIRE_FUEL_PER_BRANCH_S`
-     - `SHELTER_RADIUS = 2.2` → `Tuning.FIRE_SHELTER_RADIUS_M`
-     - `SHELTER_HEIGHT = 1.5` → `Tuning.FIRE_SHELTER_HEIGHT_M`
-     - `NEAR_FIRE_DISTANCE_SQ = 1.5 * 1.5` → `Tuning.FIRE_NEAR_DISTANCE_SQ`
-   - Acceptance: tsc clean, fire deploy works identically (values preserved).
+1. **Extend `wieldAction.ts` to dispatch RMB** (~20 min).
+   - Add a parallel `mousePressed.has(2)` read in `updateWieldAction`.
+   - RMB needs hover-state context (which tent/sled is targeted), so
+     dispatch through a new helper `handleContextAction(ctx)` that
+     reads `ctx.inventory.hover` similarly to how `handlePickupTake`
+     does for LMB.
+   - All existing gates (overlay, mounted, isPlaying) apply to RMB
+     the same way they do to LMB.
 
-2. **Lift `src/world/tent.ts` local constants to `Tuning.TENT_*`** (~10 min).
-   - Lines 21-22 hold 2 local constants:
-     - `TENT_SHELTER_HALF = { x: 1.8, y: 1.4, z: 1.8 }` → `Tuning.TENT_SHELTER_HALF_X/Y/Z`
-     - `NEAR_TENT_DISTANCE_SQ = 2.0 * 2.0` → `Tuning.TENT_NEAR_DISTANCE_SQ`
-   - Acceptance: tsc clean, tent deploy works identically.
+2. **`packUpTent(ctx, tent)` in src/world/tent.ts** (~45 min — bulk of session).
+   - Symmetric to `deployTent`: remove shelter zone via
+     `removeShelterZone(ctx.shelter, tent.shelterZone)`, remove mesh
+     from scene via `ctx.three.scene.remove(tent.mesh)`, splice out
+     of `ctx.tents.list`, and add `tent_kit` back to inventory via
+     `addItem(ctx.inventory, 'tent_kit')`.
+   - Handle inventory-full: if `addItem` returns -1, toast "no room
+     in your bag" and DO NOT remove the tent (refuse the operation).
+   - RMB-dispatch reads `ctx.inventory.hover?.type === 'sleep'` (the
+     tent hover type from interaction.ts) and the registry to find
+     the tent.
 
-3. **Crosshair feedback** (~45 min — largest item).
-   - `#crosshair` in `src/style.css` (around line 141) — the current
-     crosshair is a thin static dot/cross.
-   - Add an `updateCrosshair(ctx)` hook in `src/ui/interactPrompt.ts`
-     (or a new tiny `src/ui/crosshair.ts` if you prefer separation).
-     Wire it into `main.ts` per-frame tick.
-   - States to render:
-     - Default (no hover): thin dot.
-     - On `ctx.inventory.hover !== null`: thicker / brighter (signals
-       "interactable in view").
-     - On `ctx.inventory.hover?.type === 'kill'`: red (signals enemy
-       in view; lizards are the only target this fires on currently).
-   - New Tuning constants: `CROSSHAIR_THICKEN_PX`, `CROSSHAIR_KILL_COLOR_HEX`.
-   - Acceptance: visible color/size change on hover, tsc clean.
+3. **`releaseSledRope(ctx, sled)` glue** (~15 min — reuses `detachRope`).
+   - When `hover.type === 'open_sled'` or `'attach_rope'` AND
+     `sled.tether.kind === 'speeder'`, RMB calls `detachRope(ctx,
+     sled, 'rope released')`. If no rope attached or not to speeder,
+     RMB on the sled is a no-op.
 
-4. **Fix the lone `as any` cast in `src/world/wrecks.ts:137`** (~10 min).
-   - Replace with a proper typed assertion or extend the cached-material
-     interface. The cast is on a `MeshLambertMaterial` to set `side =
-     THREE.DoubleSide` (SS-era fix for the opening wreck interior
-     rendering). The Material type has `side` — the `as any` is likely
-     a relic of a stricter type elsewhere.
-   - Also drop the `// eslint-disable-next-line` comment on line 136.
-   - Acceptance: `Grep "as any" src` returns 0 matches; tsc clean;
-     `Grep "eslint-disable" src` returns 0 matches (or just one fewer).
+4. **Controls panel hint refresh** (~25 min — pure DOM/data edit).
+   - Read `src/ui/tutorial.ts` CONTROLS table (~lines 44-59).
+   - Update entries: the E line should now say "open / sleep /
+     mount / read / refill / harvest" (not "interact / pick up /
+     refill / search / harvest / cook / sleep").
+   - Add LMB row(s): "attack / drink / place / take" depending on
+     what the player is wielding.
+   - Add RMB row: "pack up tent / release sled rope".
+   - Keep the existing Q row ("use selected item").
 
 ## Stretch goals (if budget allows)
 
-- Lift `src/world/sled.ts` near-distance / yaw-lerp local constants
-  to `Tuning.SLED_*` (some are already in Tuning per the QQ-2 work,
-  but check for any lingering locals).
-- Audit `src/audio/audio.ts` for the most-tuned magic numbers
-  (master gain, footstep gain) — lift 5-10 to `Tuning.AUDIO_*`
-  if there's time. The full audio.ts lift is WW-tier work; don't
-  bite off more than 30 min here.
+- Visual feedback when RMB packs up a tent — small dust puff, fade.
+- Sled rope-release toast could include a 1-line flavor message
+  ("untethered — the sled drifts").
 
 ## Autonomy contract
 
-- When ambiguous: pick the option closest to GDD pillars (Pillar 4 —
-  tactile world) + D-entries D73/D74/D75 just shipped. Append a new
-  D-entry if you make a non-obvious call. Keep going.
-- Footgun: **VV does NOT touch `src/persistence/save.ts`**. Save
-  schema stays at v6. If you find yourself reading save.ts, you've
-  scope-crept; back up and reconsider.
+- When ambiguous: pick the option closest to GDD pillars + D73/D74
+  patterns. New verb dispatch lives in `wieldAction.ts` — do not
+  scatter RMB handling across modules.
+- Footgun: do NOT touch `src/persistence/save.ts` (UU-2 ships no
+  save schema change). UU-2 keeps `SAVE_VERSION = 6`.
+- Footgun: `packUpTent` must NOT despawn the tent if `addItem`
+  returns -1 — refuse the operation. Otherwise the player loses a
+  tent forever.
 - Never ask the human mid-session.
 
 ## Stop conditions (overnight mode)
 
 - All 4 priority items shipped + verify passes → `/session-end`.
-- 3-strike wall (same fix attempted 3x) → invoke `/scope-cut` against
-  the pre-committed list in `.claude/plans/i-want-to-set-floating-dusk.md`
-  Session VV section.
-- Catastrophic block (tsc broken, dev server crashes) → halt + write
-  a CAUTION entry in `next-session-prompt.md` for the morning.
+- 3-strike wall → invoke `/scope-cut` against pre-committed list in
+  `.claude/plans/i-want-to-set-floating-dusk.md` Session UU-2 section.
+- Catastrophic block → halt + write CAUTION in next-session-prompt.
 - Destructive action attempt → halt unconditionally.
 
-## On stop
+## Pre-committed scope cuts (cut top-first)
 
-Invoke `/gamedev-framework:session-end` to verify + append changelog +
-bump "Last shipped" + rewrite session-end-report + write next-session-
-prompt for UU-2 + commit + tag `session-VV` + push.
-
-## Pre-committed scope cuts (cut top-first on 3-strike wall)
-
-1. **Red-on-enemy crosshair color** (the `kill` hover path). Cut means
-   crosshair thickens but doesn't go red. Easier debug; cosmetic loss.
-2. **Crosshair feedback entirely**. Cut means VV ships just the tuning
-   lifts + `as any` fix — ~40 min session that frees budget for UU-2.
-3. **Tent constants lift** (only 2 constants). Cut means just fire
-   constants lifted; tent stays for WW.
-4. **`as any` fix**. Cut means the codebase keeps its lone `as any`.
-   Last cut — 10-minute change with zero feel impact.
+1. **RMB-on-sled (release rope)**. Cut means sled rope detach stays
+   in the LMB-on-rope-stub path from QQ-2; RMB only works on tents.
+2. **RMB-on-tent (pack up)**. Cut means tent stays one-way deployable.
+   Highest blast-radius cut — `packUpTent` is the bulk of UU-2's
+   work. If cut, UU-2 becomes just RMB dispatch wiring + sled-release
+   + controls panel refresh (~30 min total).
+3. **Controls panel hint refresh**. Cut means table stays stale.
+   Documented in backlog as a follow-up. Cost: morning-review
+   confusion when user presses H.
 
 ## Notable footguns
 
-- **D62 (terrain shader vNormal is VIEW space)** still applies if you
-  touch any shader; not expected for VV.
-- **D75 (PLACEMENT_DISTANCE_M = 2.2)** just shipped. Do NOT re-locally-
-  constant placement distances in fire/tent/sled — they're already on
-  the Tuning constant.
-- **D73 (wieldAction.ts as sole LMB dispatcher)** just shipped. Do NOT
-  add LMB handling to other modules; future LMB behaviors go into
-  wieldAction's switch.
-- **VV doesn't touch interaction.ts or wieldAction.ts** unless adding
-  the crosshair hook there. If you find yourself editing dispatch
-  logic, you've scope-crept.
+- **D73 (wieldAction.ts as sole LMB dispatcher)** — extend it for
+  RMB; do NOT scatter mousePressed.has(2) reads across other modules.
+- **D67 (sled inextensible rope)** — `detachRope` is the canonical
+  release path; don't re-implement.
+- **`packUpTent` inventory-full case** — refuse the operation; never
+  silently destroy a tent.
+- **`isPlaying(ctx)` gate** — RMB must respect overlay + mounted
+  gates same as LMB. Inheriting via `wieldAction.ts`'s existing
+  early-return gives this for free.
 
 ## Verification protocol
 
@@ -139,20 +127,27 @@ npm run verify  # = tsc --noEmit
 
 Plus eval-driven preview verification:
 1. tsc clean.
-2. Deploy a fire — works identically (proves fire.ts constants lift didn't change behavior).
-3. Pitch a tent — works identically.
-4. Look at a lizard → crosshair turns red.
-5. Look at a pickup → crosshair thickens.
-6. Look away from both → crosshair returns to default.
-7. `Grep "as any" src` returns 0 matches.
-8. Save + reload → save schema unchanged (still v6).
+2. Wield nothing → look at tent → RMB → tent packs up, tent_kit
+   returns to inventory, shelter zone removed, tent gone from scene.
+3. Fill inventory + look at tent → RMB → toast "no room", tent
+   stays in place.
+4. Wield nothing → look at sled with rope attached to speeder → RMB
+   → rope detaches, sled coasts per QQ-2 physics.
+5. Old E-actions still work: E on tent opens sleep overlay; E on
+   sled cargo opens loot menu. RMB is purely additive.
+6. Mount speeder → RMB on tent → no pack-up (mount-gate).
+7. Open crafting menu → RMB on tent (visible behind overlay) → no
+   pack-up (overlay-gate).
+8. Press H → controls panel reflects new LMB-leaning scheme + RMB
+   additions.
+9. Save + reload → save schema unchanged (still v6); tents persist
+   correctly (deploy + pack-up workflow doesn't corrupt save).
 
 ## Begin block
 
 Read CLAUDE.md (auto-loaded) → `docs/session-end-report.md` →
-`docs/decisions.md` (especially D73-D75 just shipped). Create
-a TaskCreate top-level list with the 4 priority items. Mark item 1
-(`fire.ts constants lift`) as `in_progress`. Begin with `Read
-src/world/fire.ts` to confirm the 5 constants on lines 32-36, then
-edit `src/config/tuning.ts` to add the `FIRE_*` block, then edit
-fire.ts to reference them.
+`docs/decisions.md` (especially D73-D76 just shipped). Create
+TaskCreate top-level list with the 4 priority items. Mark item 1
+(`wieldAction.ts RMB dispatch`) as `in_progress`. Read
+`src/player/wieldAction.ts` to confirm structure, then begin extending
+`updateWieldAction` to handle RMB.

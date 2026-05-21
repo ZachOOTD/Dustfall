@@ -147,6 +147,20 @@ canvas {
   font-size: 22px;
   pointer-events: none;
   z-index: 5;
+  /* VV — feedback transitions tied to hover state (interactable / kill). */
+  transition: color 0.12s ease-out, font-size 0.12s ease-out;
+}
+
+/* VV — interactable in view: brighter + slightly larger middle-dot. */
+#crosshair.interactable {
+  color: rgba(232, 220, 192, 0.95);
+  font-size: 26px;
+}
+
+/* VV — enemy (lizard) in view: red. Overrides .interactable color. */
+#crosshair.kill {
+  color: rgba(220, 70, 60, 0.95);
+  font-size: 26px;
 }
 
 .overlay {

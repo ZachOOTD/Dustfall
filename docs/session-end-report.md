@@ -4,9 +4,9 @@ Cumulative state. Rewritten end-to-end at each `/session-end`. A
 reviewer who's never seen the project should be able to read this +
 `CLAUDE.md` + `docs/GDD.md` and understand where Dustfall is.
 
-**Current state**: Session UU shipped (2026-05-21). 21 sessions
-post-MVP. tsc clean. First of 5 overnight sessions (VV → UU-2 → WW →
-XX queued — see `docs/roadmap.md` "Overnight queue"). Working tree
+**Current state**: Session VV shipped (2026-05-21). 22 sessions
+post-MVP. tsc clean. Second of 5 overnight sessions (UU-2 → WW → XX
+queued — see `docs/roadmap.md` "Overnight queue"). Working tree
 dirty pending the user's commit (see `## Commit handoff` below).
 
 ---
@@ -24,7 +24,7 @@ Retroactive tier mapping for orientation only:
 | Tier 1 — Vertical slice | I–W | ✓ shipped | Inventory, crafting, interactions, opening scene, journal |
 | Tier 2 — Target | X–CC | ✓ shipped | Audio architecture, atmosphere, speeder, animated title |
 | Tier 3 — Expected | DD–PP | ✓ shipped | Sand worm boss, weapon variants, procgen POIs, biome rework |
-| Tier 4 — Stretch / polish | QQ–UU | ✓ in progress | Sled mechanic, sandworm rescale, opening wreck redo, crafting rework, control scheme overhaul |
+| Tier 4 — Stretch / polish | QQ–VV | ✓ in progress | Sled mechanic, sandworm rescale, opening wreck redo, crafting rework, control scheme overhaul, hygiene/crosshair polish |
 
 **Verify status**: `npm run verify` = `tsc --noEmit`. Single check
 (no tier breakdown). Currently PASS.
@@ -83,6 +83,29 @@ Fresh-game start (the de-facto Tier 1 — Session W shipped):
    captured mid-drink doesn't resume drinking on reload.
 
 ---
+
+## What's freshly shipped (Session VV deltas)
+
+Palette-cleanser between UU and UU-2. Three discrete improvements:
+
+- **fire.ts constants → `Tuning.FIRE_*`**: 5 constants lifted
+  (`FIRE_INITIAL_FUEL_S`, `FIRE_FUEL_PER_BRANCH_S`,
+  `FIRE_SHELTER_RADIUS_M`, `FIRE_SHELTER_HEIGHT_M`,
+  `FIRE_NEAR_DISTANCE_SQ`). Values unchanged.
+- **tent.ts constants → `Tuning.TENT_*`**: 2 constants lifted
+  (`TENT_SHELTER_HALF_X/Y/Z`, `TENT_NEAR_DISTANCE_SQ`). The
+  `TENT_SHELTER_HALF` object remains as a local readability helper
+  composing the Tuning fields.
+- **Crosshair feedback** (`src/style.css` + `src/ui/interactPrompt.ts`):
+  `#crosshair` gains `.interactable` (brighter + larger middle-dot)
+  and `.kill` (red + larger) modifier classes. `updateInteractPrompt`
+  now ALSO toggles these classes from `ctx.inventory.hover`. Cached
+  DOM ref + last-state guard for cheap per-frame transitions.
+- **`as any` cleanup**: lone cast in `src/world/wrecks.ts:137`
+  replaced with direct property assignment. `eslint-disable` line
+  dropped. **`Grep "as any" src` returns 0 matches** as of VV.
+
+Decision D76 logged (friction-0 — pure CLAUDE.md rule compliance).
 
 ## What's freshly shipped (Session UU deltas)
 
@@ -199,35 +222,34 @@ Recent ones (session-tagged):
 
 ## Suggested next session (1-3 directions in priority order)
 
-1. **Session VV — Tuning lift + crosshair feedback + `as any` fix**
-   (~1.5h). Palette-cleanser between UU and UU-2 (both interaction-
-   dispatch sessions). Three discrete wins: (a) lift fire.ts +
-   tent.ts local constants to `Tuning.FIRE_*` / `Tuning.TENT_*`;
-   (b) crosshair feedback — thicken on interactable, red on enemy
-   (`hover.type === 'kill'`); (c) fix the lone `as any` in
-   `src/world/wrecks.ts:137`. See `docs/next-session-prompt.md`.
-2. **Session UU-2 — RMB context actions + controls panel refresh**
-   (~1.5h). RMB on tent → pack up (build `packUpTent`); RMB on sled
-   (when rope is attached to speeder) → release rope. Update
-   `src/ui/tutorial.ts:44-59` CONTROLS table to reflect UU's
-   LMB-leaning scheme + RMB additions.
-3. **Session WW — HUD micro-polish** (~1.5h). Low-stat warning
+1. **Session UU-2 — RMB context actions + controls panel refresh**
+   (~1.5h). Extend `wieldAction.ts` to dispatch RMB (`mousePressed.has(2)`).
+   RMB on tent → pack up (build `packUpTent(ctx, tent)` symmetric to
+   `deployTent`). RMB on sled (when rope is attached to speeder) →
+   release rope (reuse existing `detachRope`). Update
+   `src/ui/tutorial.ts:44-59` CONTROLS table to reflect UU's LMB
+   scheme + RMB additions. See `docs/next-session-prompt.md`.
+2. **Session WW — HUD micro-polish** (~1.5h). Low-stat warning
    vignettes (cold = blue, thirst = brown — clone stormVignette
    pattern), low-stamina screen wobble (mirror sandworm-tremor),
    interact-prompt fade.
+3. **Session XX — Larger enterable tent** (~3h). New `large_tent_kit`
+   ItemDef + recipe (id 10) + `src/world/largeTent.ts` module +
+   `weather.perceivedIntensity` split + `SAVE_VERSION 6 → 7` additive
+   migration.
 
-The top pick (VV) is the recommended default for the next session.
+The top pick (UU-2) is the next session in the overnight queue.
 Plan file at `.claude/plans/i-want-to-set-floating-dusk.md`.
 
 ---
 
 ## Time spent
 
-21 sessions shipped (A–UU). Approx ~85-140h elapsed dev time across
-roughly 3 weeks of calendar time. Session UU was a medium-large-scope
-session — ~4-5h: architecture refactor (wieldAction.ts) + items.ts
-annotations + placement-distance unification + eval-driven
-verification + docs.
+22 sessions shipped (A–VV). Approx ~87-142h elapsed dev time across
+roughly 3 weeks of calendar time. Session VV was a tight palette-
+cleanser — ~1h: tuning lifts + crosshair feedback + as-any fix +
+eval-driven verification + docs. UU + VV combined = ~5-6h of the
+overnight queue (~3 sessions remaining).
 
 ---
 

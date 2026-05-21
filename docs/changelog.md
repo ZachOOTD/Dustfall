@@ -3,6 +3,39 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session VV — 2026-05-21 — Tuning lift + crosshair feedback + as-any fix ✓ verify pass
+`verified` — tsc clean; eval-driven preview confirmed crosshair class
+toggling across hover states (interactable / kill / cleared).
+Palette-cleanser session between UU and UU-2 (both interaction-
+dispatch refactors) — different files, different mental model.
+Three discrete shippable wins bundled. **Fire constants lifted**:
+src/world/fire.ts's 5 local constants (`FIRE_INITIAL_FUEL=90`,
+`FIRE_FUEL_PER_BRANCH=30`, `SHELTER_RADIUS=2.2`, `SHELTER_HEIGHT=1.5`,
+`NEAR_FIRE_DISTANCE_SQ=1.5²`) → `Tuning.FIRE_INITIAL_FUEL_S` /
+`FUEL_PER_BRANCH_S` / `SHELTER_RADIUS_M` / `SHELTER_HEIGHT_M` /
+`NEAR_DISTANCE_SQ`. Values unchanged. **Tent constants lifted**:
+src/world/tent.ts's 2 local constants
+(`TENT_SHELTER_HALF={x:1.8,y:1.4,z:1.8}`, `NEAR_TENT_DISTANCE_SQ=2²`)
+→ `Tuning.TENT_SHELTER_HALF_X/Y/Z` + `TENT_NEAR_DISTANCE_SQ`. The
+`TENT_SHELTER_HALF` object kept locally for readability — it now
+just composes Tuning values. **Crosshair feedback**: `#crosshair`
+in `src/style.css` extended with `.interactable` and `.kill`
+modifier classes (brighter+larger / red+larger). New `updateCrosshair`
+logic appended to `updateInteractPrompt` in `src/ui/interactPrompt.ts`
+— same per-frame cadence, derives state from `ctx.inventory.hover`
+(null → default; type='kill' → kill; otherwise → interactable).
+Cached DOM ref + last-state guard so we only flip classes on
+transitions, not every frame. **`as any` fix**: lone cast in
+`src/world/wrecks.ts:137` (`(cached as any).side = THREE.DoubleSide`)
+replaced with direct `cached.side = THREE.DoubleSide` — three.js's
+`Material.side` exists in the typedef; the cast was a leftover from
+a stricter ambient type. `eslint-disable-next-line` comment also
+dropped. **Codebase status**: `Grep "as any" src` returns 0 matches.
+**Decision D76** logged: fire+tent constants migrated to tuning.ts
+(CLAUDE.md rule compliance).
+Plan called out 4 pre-committed scope-cuts; none triggered. Session
+shipped on the fast-path. Second of 5 overnight sessions; UU-2 next.
+
 ## Session UU — 2026-05-21 — Control scheme overhaul — LMB-leaning ✓ verify pass
 `verified` — tsc clean; eval-driven preview verification exercised every
 LMB scenario (hold-drinking trajectory, kit placement, pickup-take,

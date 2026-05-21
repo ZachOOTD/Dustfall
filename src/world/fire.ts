@@ -30,11 +30,8 @@ export interface Fire {
 
 let _nextId = 1;
 
-const FIRE_INITIAL_FUEL = 90;          // seconds
-const FIRE_FUEL_PER_BRANCH = 30;
-const SHELTER_RADIUS = 2.2;
-const SHELTER_HEIGHT = 1.5;
-const NEAR_FIRE_DISTANCE_SQ = 1.5 * 1.5; // can't deploy another fire within 1.5m
+// VV — local constants lifted to Tuning.FIRE_* (per CLAUDE.md "magic
+// numbers → tuning.ts ONLY" rule). Values unchanged.
 
 function tag(root: THREE.Object3D, id: number, type: 'cook' | 'relight'): void {
   root.traverse((o) => {
@@ -121,12 +118,12 @@ export function deployFire(ctx: GameContext): Fire | null {
 
   // Reject if too close to an existing fire
   for (const f of ctx.fires.list) {
-    if (f.alive && f.pos.distanceToSquared(pos) < NEAR_FIRE_DISTANCE_SQ) {
+    if (f.alive && f.pos.distanceToSquared(pos) < Tuning.FIRE_NEAR_DISTANCE_SQ) {
       return null;
     }
   }
 
-  const fire = spawnFireAt(ctx, pos, FIRE_INITIAL_FUEL, true);
+  const fire = spawnFireAt(ctx, pos, Tuning.FIRE_INITIAL_FUEL_S, true);
   playFireIgnite();
   return fire;
 }
@@ -151,8 +148,8 @@ export function spawnFireAt(
   if (alive) {
     shelterZone = addShelterZone(
       ctx.shelter,
-      { x: pos.x, y: pos.y + SHELTER_HEIGHT / 2, z: pos.z },
-      { x: SHELTER_RADIUS, y: SHELTER_HEIGHT, z: SHELTER_RADIUS },
+      { x: pos.x, y: pos.y + Tuning.FIRE_SHELTER_HEIGHT_M / 2, z: pos.z },
+      { x: Tuning.FIRE_SHELTER_RADIUS_M, y: Tuning.FIRE_SHELTER_HEIGHT_M, z: Tuning.FIRE_SHELTER_RADIUS_M },
     );
   } else {
     // Dead fire visual — match the burn-out path in updateFires.
@@ -187,7 +184,7 @@ export function setNextFireId(n: number): void {
 }
 
 /** Add fuel (a branch worth = 30s). */
-export function addFuel(fire: Fire, seconds: number = FIRE_FUEL_PER_BRANCH): void {
+export function addFuel(fire: Fire, seconds: number = Tuning.FIRE_FUEL_PER_BRANCH_S): void {
   if (!fire.alive) return;
   fire.fuelSeconds += seconds;
   playFireCrackle();
@@ -198,7 +195,7 @@ export function addFuel(fire: Fire, seconds: number = FIRE_FUEL_PER_BRANCH): voi
 export function relightFire(fire: Fire, ctx: GameContext): boolean {
   if (fire.alive) return false;
   fire.alive = true;
-  fire.fuelSeconds = FIRE_FUEL_PER_BRANCH;
+  fire.fuelSeconds = Tuning.FIRE_FUEL_PER_BRANCH_S;
   fire.flameGroup.visible = true;
   fire.light.intensity = 1.3;
   fire.light.color.set(0xff9040);
@@ -207,8 +204,8 @@ export function relightFire(fire: Fire, ctx: GameContext): boolean {
   // Re-register shelter zone.
   fire.shelterZone = addShelterZone(
     ctx.shelter,
-    { x: fire.pos.x, y: fire.pos.y + SHELTER_HEIGHT / 2, z: fire.pos.z },
-    { x: SHELTER_RADIUS, y: SHELTER_HEIGHT, z: SHELTER_RADIUS },
+    { x: fire.pos.x, y: fire.pos.y + Tuning.FIRE_SHELTER_HEIGHT_M / 2, z: fire.pos.z },
+    { x: Tuning.FIRE_SHELTER_RADIUS_M, y: Tuning.FIRE_SHELTER_HEIGHT_M, z: Tuning.FIRE_SHELTER_RADIUS_M },
   );
   // Switch tag back to cook (alive fire is cookable).
   tag(fire.mesh, fire.id, 'cook');

@@ -1537,3 +1537,17 @@ were lifted to this single Tuning constant.
 shelter types) uses `Tuning.PLACEMENT_DISTANCE_M` — do not introduce
 local placement distances.
 **friction-score:** 1
+
+## D76 — fire + tent constants migrated to tuning.ts (Session VV)
+**When**: Session VV.
+**Why**: CLAUDE.md rule says "Magic numbers → tuning.ts ONLY".
+`src/world/fire.ts` had 5 local constants pre-VV (fuel seconds,
+shelter radius/height, near-fire reject distance); `src/world/tent.ts`
+had 2 (shelter half-extents, near-tent reject distance). Both were
+in violation. VV's palette-cleanser slot was a natural opportunity
+to fix without scope risk. Values preserved exactly — pure refactor.
+**Apply**: when adding new world entities (XX's large tent etc.),
+declare constants in `tuning.ts` from the start. Don't ship local
+constants as "placeholder" expecting to lift later — the lift never
+happens unless explicitly scoped (like VV did).
+**friction-score:** 0

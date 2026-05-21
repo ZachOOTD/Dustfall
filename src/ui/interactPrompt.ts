@@ -31,6 +31,10 @@ let _keyEl: HTMLSpanElement | null = null;
 let _progressBar: HTMLDivElement | null = null;
 let _lastShown = false;
 let _lastLabel = '';
+// VV — crosshair feedback. Cached DOM ref + last-applied class state so we
+// only toggle when state changes (avoids per-frame classList churn).
+let _crosshairEl: HTMLDivElement | null = null;
+let _lastCrosshairState: '' | 'interactable' | 'kill' = '';
 
 export function createInteractPrompt(): void {
   const root = document.createElement('div');
@@ -93,5 +97,20 @@ export function updateInteractPrompt(ctx: GameContext, _dt: number): void {
       _label.textContent = label;
       _lastLabel = label;
     }
+  }
+
+  // VV — crosshair feedback hook. Same per-frame cadence as the prompt;
+  // state is derived from the same hover read so they stay coherent.
+  if (!_crosshairEl) {
+    _crosshairEl = document.getElementById('crosshair') as HTMLDivElement | null;
+  }
+  const next: '' | 'interactable' | 'kill' =
+    hover === null ? '' :
+    hover.type === 'kill' ? 'kill' :
+    'interactable';
+  if (_crosshairEl && next !== _lastCrosshairState) {
+    _crosshairEl.classList.toggle('interactable', next === 'interactable');
+    _crosshairEl.classList.toggle('kill', next === 'kill');
+    _lastCrosshairState = next;
   }
 }

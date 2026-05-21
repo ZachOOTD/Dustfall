@@ -133,8 +133,7 @@ function _bellOuterMat(src: THREE.Material): THREE.Material {
   let cached = _bellOuterMatCache.get(src);
   if (cached) return cached;
   cached = src.clone();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (cached as any).side = THREE.DoubleSide;
+  cached.side = THREE.DoubleSide;
   _bellOuterMatCache.set(src, cached);
   return cached;
 }

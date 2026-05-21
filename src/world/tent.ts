@@ -19,8 +19,12 @@ export interface Tent {
 
 let _nextId = 1;
 
-const TENT_SHELTER_HALF = { x: 1.8, y: 1.4, z: 1.8 };
-const NEAR_TENT_DISTANCE_SQ = 2.0 * 2.0;
+// VV — local constants lifted to Tuning.TENT_*. Values unchanged.
+const TENT_SHELTER_HALF = {
+  x: Tuning.TENT_SHELTER_HALF_X,
+  y: Tuning.TENT_SHELTER_HALF_Y,
+  z: Tuning.TENT_SHELTER_HALF_Z,
+};
 
 function tag(root: THREE.Object3D, id: number): void {
   root.traverse((o) => {
@@ -101,7 +105,7 @@ export function deployTent(ctx: GameContext): Tent | null {
 
   // Reject if too close to existing tent
   for (const existing of ctx.tents.list) {
-    if (existing.pos.distanceToSquared(pos) < NEAR_TENT_DISTANCE_SQ) {
+    if (existing.pos.distanceToSquared(pos) < Tuning.TENT_NEAR_DISTANCE_SQ) {
       return null;
     }
   }

@@ -74,6 +74,19 @@ export const Tuning = {
   // expect to walk INTO the fire's shelter zone.
   PLACEMENT_DISTANCE_M: 2.2,
 
+  // Session VV — fire entity constants (lifted from src/world/fire.ts).
+  FIRE_INITIAL_FUEL_S: 90,           // burn time on fresh-kit deploy
+  FIRE_FUEL_PER_BRANCH_S: 30,        // burn time added per branch
+  FIRE_SHELTER_RADIUS_M: 2.2,        // shelter zone half-extent X/Z
+  FIRE_SHELTER_HEIGHT_M: 1.5,        // shelter zone half-extent Y
+  FIRE_NEAR_DISTANCE_SQ: 1.5 * 1.5,  // reject deploy within sqrt(this)m of another fire
+
+  // Session VV — tent entity constants (lifted from src/world/tent.ts).
+  TENT_SHELTER_HALF_X: 1.8,
+  TENT_SHELTER_HALF_Y: 1.4,
+  TENT_SHELTER_HALF_Z: 1.8,
+  TENT_NEAR_DISTANCE_SQ: 2.0 * 2.0,  // reject deploy within 2m of another tent
+
   // Atmosphere
   FOG_NEAR: 25,                       // legacy linear-fog values (kept for reference)
   FOG_FAR: 170,

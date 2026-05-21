@@ -18,16 +18,15 @@ and promotes the second.
 
 ---
 
-## Overnight queue (in flight — Session UU shipped 2026-05-21)
+## Overnight queue (in flight — UU+VV shipped 2026-05-21)
 
-5-session overnight run plan archived at `.claude/plans/i-want-to-set-floating-dusk.md`. UU shipped ✓. Up next:
+5-session overnight run plan archived at `.claude/plans/i-want-to-set-floating-dusk.md`. UU + VV shipped ✓. Up next:
 
-- **VV — Tuning lift + crosshair feedback + `as any` fix** (~1.5h palette cleanser between UU/UU-2 interaction-dispatch sessions).
 - **UU-2 — RMB context actions + controls panel hint refresh** (~1.5h).
 - **WW — HUD micro-polish** (low-stat warning vignettes + low-stamina screen wobble + interact-prompt fade) (~1.5h).
 - **XX — Larger enterable tent w/ interior storm shelter** (~3h; bumps `SAVE_VERSION 6 → 7` additive only).
 
-See `docs/next-session-prompt.md` for the VV kickoff brief.
+See `docs/next-session-prompt.md` for the UU-2 kickoff brief.
 
 ## Next — Big-ticket bucket (1–2 picks per session at ~4–7h each)
 Pick whatever feels most missing after the polish + atmosphere arc.
