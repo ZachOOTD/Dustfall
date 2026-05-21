@@ -58,7 +58,30 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session AAK — AAI multi-seed playtest + flagship
+**Last shipped**: Session AAL — Project-wide audit pass (visual + bugs
++ quick wins + tuning lift). Three Explore agents ran in parallel at
+boot (gameplay loop / visuals / debt sweep); user picked "do everything
+above". 13 files touched across 4 bundles. **Quick wins**: deleted 8
+unused Tuning constants (6 godray + 2 legacy speeder), companion
+receiveShadow=true, footprint-puffs HMR guard, silenced samples.ts
+console.warn. **Gameplay bugfixes**: energy_pistol wired into salvage
+(was orphaned PP-era ItemDef + combat spec); scrap_bullet drops bumped
+on engine_cluster + added to massive; sleep temperature now respects
+shelter state (open-air recovery factor 0.25 vs sheltered 0.7).
+**DoubleSide sweep**: crashedHull bell outer + engineBlock heat shield
+flipped to FrontSide (inner shells / occlusion cover the back faces);
+sandWorm body material SPLIT (closed segments FrontSide, openEnded head
+segments DoubleSide for maw visibility); tent + largeTent walls + roof
+converted from PlaneGeometry + DoubleSide to thin BoxGeometry +
+ExtrudeGeometry (4cm fabric thickness) — no longer paper-thin from
+oblique angles. Satellite dish kept DoubleSide (parabolic — legitimate
+both-sides view). **Magic-number lift**: lootContainers.ts loot drop
+balance (entries-per-container, 4 drop thresholds, count maxes, canteen
+fill range) lifted to Tuning.LOOT_CONTAINER_*. Pipe-staff knockback
+audit was a false positive (knockbackRaider IS exported). No schema
+change. tsc clean.
+
+**Prior milestone**: Session AAK — AAI multi-seed playtest + flagship
 placement tightening. Booted 5 seeds (100/200/300/4242/99999) via the
 localStorage `pendingSeed` handshake from the AAI snapshot harness;
 captured flagship positions + distance-from-spawn + local terrain

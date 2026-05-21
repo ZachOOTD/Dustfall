@@ -31,6 +31,17 @@ interface FootprintPuffSystem {
 
 let _system: FootprintPuffSystem | null = null;
 
+// AAL — HMR guard. When tuning.ts hot-reloads (changing PUFF_VERTICAL_VEL
+// etc.), Vite re-runs this module but `_system` still holds a stale
+// FootprintPuffSystem with its old Tuning-baked particle pool. The
+// dispose hook clears the singleton so the next createFootprintPuffs
+// call rebuilds with current Tuning values. No-op in production builds.
+if ((import.meta as { hot?: { dispose: (cb: () => void) => void } }).hot) {
+  (import.meta as { hot: { dispose: (cb: () => void) => void } }).hot.dispose(() => {
+    _system = null;
+  });
+}
+
 export function createFootprintPuffs(scene: THREE.Scene): void {
   if (_system) return;
   const count = Tuning.FOOTPRINT_PUFF_COUNT;

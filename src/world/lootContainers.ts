@@ -10,6 +10,7 @@ import * as THREE from 'three';
 import type { Rng } from '../core/rng.ts';
 import type { Terrain } from '../world/terrain.ts';
 import type { ItemId, ItemMeta } from '../inventory/types.ts';
+import { Tuning } from '../config/tuning.ts';
 
 export interface LootEntry {
   itemId: ItemId;
@@ -37,17 +38,19 @@ function tag(root: THREE.Object3D, id: number): void {
 
 function rollLoot(rand: Rng): LootEntry[] {
   const contents: LootEntry[] = [];
-  const entries = 1 + Math.floor(rand() * 3); // 1-3 items per container
+  // AAL — entries-per-container + drop balance lifted to Tuning.LOOT_CONTAINER_*.
+  const entries = Tuning.LOOT_CONTAINER_ENTRIES_MIN +
+    Math.floor(rand() * (Tuning.LOOT_CONTAINER_ENTRIES_MAX - Tuning.LOOT_CONTAINER_ENTRIES_MIN + 1));
   for (let i = 0; i < entries; i++) {
     const r = rand();
-    if (r < 0.25) {
+    if (r < Tuning.LOOT_CONTAINER_BANDAGE_THRESHOLD) {
       contents.push({ itemId: 'bandage', count: 1 });
-    } else if (r < 0.55) {
-      contents.push({ itemId: 'cloth', count: 1 + Math.floor(rand() * 2) });
-    } else if (r < 0.75) {
-      contents.push({ itemId: 'scrap', count: 1 + Math.floor(rand() * 3) });
-    } else if (r < 0.92) {
-      const fill = 0.3 + rand() * 0.5;
+    } else if (r < Tuning.LOOT_CONTAINER_CLOTH_THRESHOLD) {
+      contents.push({ itemId: 'cloth', count: 1 + Math.floor(rand() * Tuning.LOOT_CONTAINER_CLOTH_COUNT_MAX) });
+    } else if (r < Tuning.LOOT_CONTAINER_SCRAP_THRESHOLD) {
+      contents.push({ itemId: 'scrap', count: 1 + Math.floor(rand() * Tuning.LOOT_CONTAINER_SCRAP_COUNT_MAX) });
+    } else if (r < Tuning.LOOT_CONTAINER_CANTEEN_THRESHOLD) {
+      const fill = Tuning.LOOT_CONTAINER_CANTEEN_FILL_MIN + rand() * Tuning.LOOT_CONTAINER_CANTEEN_FILL_RANGE;
       contents.push({ itemId: 'canteen', count: 1, meta: { fillLevel: fill } });
     } else {
       contents.push({ itemId: 'machete', count: 1 });

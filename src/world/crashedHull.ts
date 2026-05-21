@@ -73,7 +73,10 @@ const _rustMat = new THREE.MeshLambertMaterial({
 const _bellOuterMat = new THREE.MeshLambertMaterial({
   color: 0x3a2820,           // weathered bell exterior
   flatShading: true,
-  side: THREE.DoubleSide,
+  // AAL — was DoubleSide; the bell already has _bellInnerMat (BackSide)
+  // + _bellBackstopMat covering the interior so DoubleSide was redundant
+  // (and gave the outer shell a paper-thin read from oblique angles).
+  side: THREE.FrontSide,
 });
 const _bellInnerMat = new THREE.MeshBasicMaterial({
   color: 0x180a06,           // dark interior, slight warmth

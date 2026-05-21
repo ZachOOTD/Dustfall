@@ -4,7 +4,7 @@ Cumulative state. Rewritten end-to-end at each `/session-end`. A
 reviewer who's never seen the project should be able to read this +
 `CLAUDE.md` + `docs/GDD.md` and understand where Dustfall is.
 
-**Current state**: Session AAK shipped (2026-05-21). 38 sessions
+**Current state**: Session AAL shipped (2026-05-21). 39 sessions
 post-MVP. tsc clean. SAVE_VERSION v9 (unchanged).
 Post-overnight: UU/VV/UU-2/WW/XX/YY/ZZ + AAA (polish) + AAB (world
 depth) + AAC (craftable home) + AAD (kit playtest polish) + AAE
@@ -87,6 +87,29 @@ Fresh-game start (the de-facto Tier 1 — Session W shipped):
    captured mid-drink doesn't resume drinking on reload.
 
 ---
+
+## What's freshly shipped (Session AAL deltas)
+
+Project-wide audit pass. 3 Explore agents ran in parallel covering
+gameplay loop, visuals, and code/debt. 13 files touched across 4 bundles.
+
+- **Hygiene**: deleted 8 unused Tuning constants (6 godray + 2 legacy
+  speeder). Companion `receiveShadow = true` (was false). Footprint
+  puffs HMR-dispose guard. `samples.ts` console.warn silenced.
+- **Gameplay**: `energy_pistol` added to massive salvage table at 3%
+  (was orphaned). `scrap_bullet` drops bumped on engine_cluster (0.05
+  → 0.12) + added to massive (0.15). Sleep temperature now reads
+  `ctx.player.inShelter`: sheltered factor 0.7, open-air 0.25.
+- **DoubleSide sweep**: crashedHull bell + engineBlock heat shield →
+  FrontSide; sandWorm body material split (closed segs FrontSide,
+  openEnded DoubleSide); tent + largeTent walls converted to thin
+  BoxGeometry / ExtrudeGeometry (4cm fabric thickness); satelliteDish
+  panels documented as legitimate-DoubleSide case.
+- **Magic-number lift**: lootContainers.ts loot drop balance lifted
+  to Tuning.LOOT_CONTAINER_* (9 new constants covering entries +
+  drop thresholds + counts + canteen fill).
+
+No schema change.
 
 ## What's freshly shipped (Session AAK deltas)
 

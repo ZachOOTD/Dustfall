@@ -150,8 +150,7 @@ export const Tuning = {
   // ramp up under hold, smooth deceleration on release.
   SPEEDER_HOVER_HEIGHT: 1.2,
   SPEEDER_HOVER_K_P: 55,                // proportional gain (×0.1 inside the controller, so effective gain 5.5)
-  SPEEDER_HOVER_K_D: 14,                // unused after BB-CC velocity-control switch; kept for shape
-  SPEEDER_HOVER_VY_MAX: 12,             // m/s — max upward/downward target velocity (was 8; catches up dune slopes faster)
+  SPEEDER_HOVER_VY_MAX: 12,             // m/s — max upward/downward target velocity (was 8; catches up dune slopes faster). AAL — SPEEDER_HOVER_K_D removed; unused since BB-CC velocity-control switch.
   // Terrain look-ahead — sample N points along the bike's velocity
   // vector and take MAX(terrain) so the bike anticipates dunes ahead
   // and rises BEFORE the slope. Times in seconds; spacing roughly
@@ -169,7 +168,7 @@ export const Tuning = {
   SPEEDER_TURN_LERP: 0.30,              // per-frame lerp toward target ang vel (snappier than linear lerp)
   SPEEDER_LINEAR_DAMP: 0,               // disabled — velocity is fully driven
   SPEEDER_ANGULAR_DAMP: 0,              // disabled — angvel is fully driven
-  SPEEDER_HOP_IMPULSE: 1800,            // unused after CC-2 (jump replaced with 2-phase pulse/recover); kept for migration
+  // AAL — SPEEDER_HOP_IMPULSE removed; unused since CC-2 (jump replaced with 2-phase pulse/recover).
   SPEEDER_MOUNT_RANGE: 3.5,
   SPEEDER_DISMOUNT_OFFSET: 1.8,
   SPEEDER_RIDER_SEAT_X: 0,              // local rider offset relative to bike center
@@ -236,16 +235,10 @@ export const Tuning = {
   // The beam tip sits at the gap on the upper hull; the base spreads
   // outward to roughly the floor width. Intensity scales with sunHeight
   // so the beam is invisible at night and peaks at high sun.
-  // AAB godray constants retained for documentation (cone removed in
-  // AAJ — read as unrealistic, theatrical; natural skylight-gap lighting
-  // suffices). If re-introducing a god-ray effect, use these as a
-  // starting baseline.
-  OPENING_WRECK_GODRAY_BEAM_RADIUS_TOP: 0.15,    // beam tip at the gap (unused post-AAJ)
-  OPENING_WRECK_GODRAY_BEAM_RADIUS_BOTTOM: 1.2,  // beam base at the floor (unused post-AAJ)
-  OPENING_WRECK_GODRAY_BEAM_LENGTH_M: 5.5,       // tip-to-base vertical (unused post-AAJ)
-  OPENING_WRECK_GODRAY_COLOR_HEX: 0xffd9a0,      // warm dusty gold (unused post-AAJ)
-  OPENING_WRECK_GODRAY_MAX_OPACITY: 0.22,        // at peak sun (unused post-AAJ)
-  OPENING_WRECK_GODRAY_SUN_THRESHOLD: 0.1,       // sunHeight below this = beam off (unused post-AAJ)
+  // AAL — 6 godray constants deleted (AAB feature removed in AAJ; "kept for
+  // documentation" turned out to be permanent debt). If re-introducing a
+  // skylight beam, start fresh — the original values are in the AAB
+  // changelog entry if needed.
 
   // Session AAC — craftable home placeables.
   // Bedroll — low-profile cloth pad on the ground. Small shelter zone
@@ -417,6 +410,23 @@ export const Tuning = {
   RNG_SEED: 1337,
   // (legacy LANDMARK_COUNT removed in GG — was never read; hero landmark
   // count now lives below in HERO_LANDMARK_COUNT_MIN/MAX.)
+
+  // AAL — loot container drop balance (was hardcoded in lootContainers.ts:38).
+  // entries-per-container: random 1..max. Drop bucket boundaries: bandage <
+  // BANDAGE, cloth < CLOTH, scrap < SCRAP, canteen < CANTEEN, else machete.
+  // Tune to shift player progression pacing (more healing vs. more crafting
+  // material vs. more weapons).
+  LOOT_CONTAINER_ENTRIES_MIN: 1,
+  LOOT_CONTAINER_ENTRIES_MAX: 3,
+  LOOT_CONTAINER_BANDAGE_THRESHOLD: 0.25,   // 0..0.25 → bandage (25%)
+  LOOT_CONTAINER_CLOTH_THRESHOLD: 0.55,     // 0.25..0.55 → cloth (30%)
+  LOOT_CONTAINER_SCRAP_THRESHOLD: 0.75,     // 0.55..0.75 → scrap (20%)
+  LOOT_CONTAINER_CANTEEN_THRESHOLD: 0.92,   // 0.75..0.92 → canteen (17%)
+  // remaining 0.92..1.0 → machete (8% rare drop)
+  LOOT_CONTAINER_CLOTH_COUNT_MAX: 2,        // 1 + rand() * this
+  LOOT_CONTAINER_SCRAP_COUNT_MAX: 3,        // 1 + rand() * this
+  LOOT_CONTAINER_CANTEEN_FILL_MIN: 0.3,     // 0.3..0.8 fill level on loot canteens
+  LOOT_CONTAINER_CANTEEN_FILL_RANGE: 0.5,
 
   // Scatter — world rework #2 (Session GG). All bounds + counts rescaled
   // for the 2400m world; chunk bounds are [-1200, +1200] so 1100m radial

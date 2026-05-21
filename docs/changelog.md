@@ -3,6 +3,87 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session AAL — 2026-05-21 — Project-wide audit pass (visual + bugs + quick wins + tuning lift) ✓ verify pass
+`verified` — tsc clean. Three Explore agents ran in parallel at session
+start (gameplay loop / visuals / quick-wins-debt-sweep); user picked
+"do everything above". 13 files touched across 4 bundles.
+
+**Bundle 1 — Quick wins (hygiene)**:
+- Deleted 6 unused `OPENING_WRECK_GODRAY_*` Tuning constants (AAB cone
+  was removed in AAJ; "kept for documentation" turned into permanent
+  debt).
+- Deleted 2 unused legacy speeder constants (`SPEEDER_HOVER_K_D`,
+  `SPEEDER_HOP_IMPULSE` — orphaned since BB-CC and CC-2 respectively).
+- Companion `receiveShadow = false → true` for proper ground contact.
+- Footprint puffs gained an `import.meta.hot.dispose` HMR guard so the
+  `_system` singleton clears on Vite hot-reload (previously stale
+  particle pool survived Tuning tweaks).
+- `samples.ts` console.warn → silent fallback (was flooding preview
+  tab when .ogg samples not shipped); soundscape already handles null
+  buffers gracefully.
+
+**Bundle 2 — Gameplay bugfixes**:
+- **energy_pistol wired into salvage** (was orphaned ItemDef + combat
+  spec from PP). Added to `massive` wreck table at 3% drop (rare
+  hero-tier weapon).
+- **scrap_bullet drops bumped** on engine_cluster (0.05 → 0.12) and
+  added to `massive` (0.15) so ammo isn't gated entirely on the
+  scrap recipe pipeline.
+- **Sleep temperature now respects shelter state**
+  (`src/ui/sleepOverlay.ts`). Pre-AAL `temperature *= 0.3` at 8h
+  regardless of location — sleeping in the open desert recovered as
+  well as a tent. Now: sheltered recovers fast (factor 0.7), open-air
+  recovers slow (factor 0.25). Reads `ctx.player.inShelter` set by
+  `updateShelter` each frame.
+- **Pipe-staff knockback on raiders**: audit was a false positive —
+  `knockbackRaider` IS exported from `raider.ts:470` and the dynamic
+  import in `combat.ts:253` works correctly. No fix needed.
+
+**Bundle 3 — DoubleSide sweep**:
+- `crashedHull.ts` bell outer: DoubleSide → FrontSide (inner shell +
+  backstop already covered interior visibility, so DoubleSide was
+  redundant + made the outer read paper-thin from oblique angles).
+- `engineBlock.ts` heat shield: DoubleSide → FrontSide (shield is
+  occluded from behind by other engine geometry; FrontSide alone reads
+  correctly).
+- `sandWorm.ts` body material **split** — closed segments use new
+  FrontSide-only `bodyMat`, the 2 openEnded head segments use new
+  `bodyMatOpen` (DoubleSide) so the maw cavity stays visible. Pre-AAL
+  the whole body was DoubleSide (12-segment overkill).
+- `tent.ts` walls + end triangles converted from PlaneGeometry +
+  DoubleSide to BoxGeometry + ExtrudeGeometry (4cm fabric thickness).
+  Reads as real canvas at oblique angles instead of paper.
+- `largeTent.ts` back/side walls + roof converted from
+  PlaneGeometry + DoubleSide to thin BoxGeometry (4cm). Same fix.
+- `satelliteDish.ts` 4 panel materials: kept DoubleSide with comment
+  documenting the legitimate use case (parabolic dish is approached
+  from both sides — convex back from above, concave reflector from
+  below). Backlogged: structural framework geometry for the back face.
+- `wrecks.ts:136` + `titleScene.ts` + `ghostPreview.ts`: DoubleSide
+  retained (legacy small-wreck path with open-faced pieces; title
+  scene is transient; ghost ring needs both sides visible).
+
+**Bundle 4 — Magic-number lift (rule-2 compliance, focused on
+gameplay-impactful)**:
+- `lootContainers.ts:38-57` loot drop balance lifted to Tuning:
+  `LOOT_CONTAINER_ENTRIES_MIN/MAX` (1, 3), 4 drop thresholds
+  (`BANDAGE_THRESHOLD = 0.25`, etc.), 2 count maxes, 2 canteen-fill
+  constants. Loot drop balance is now Tuning-tunable.
+- Cosmetic dimensional constants (deadTree.ts, fire.ts, megaWreck.ts,
+  poi.ts decorative pieces) left in their modules — the tuning surface
+  benefit doesn't justify the Tuning bloat. Backlogged note: revisit
+  if a "rebalance world density" session ships.
+
+**Audit follow-ups deferred** (in backlog):
+- Stamina tow factor 2x: dialog-only decision (would change sled
+  travel feel; needs playtest signal first).
+- Satellite dish structural-framework backing (~1h refactor for cosmetic
+  win).
+- Engine block heat-shield back-panel modeling (similar scope).
+
+No save schema change. tsc clean. 13 files touched (12 src + 1 docs
+archive).
+
 ## Session AAK — 2026-05-21 — AAI multi-seed playtest + flagship placement tightening ✓ verify pass
 `verified` — tsc clean; multi-seed snapshot harness ran 5 seeds
 (100/200/300/4242/99999) before + after the fixes. All three issues

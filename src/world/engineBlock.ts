@@ -73,7 +73,10 @@ const _scarRingMat = new THREE.MeshBasicMaterial({
 const _heatShieldMat = new THREE.MeshLambertMaterial({
   color: 0x6b3520,           // warm rust-orange ablative plate
   flatShading: true,
-  side: THREE.DoubleSide,
+  // AAL — was DoubleSide; the shield is mostly occluded by other engine
+  // geometry from behind, so FrontSide alone reads correctly from
+  // approachable angles + no longer looks paper-thin from oblique views.
+  side: THREE.FrontSide,
 });
 const _hoseMat = new THREE.MeshLambertMaterial({
   color: 0x141210,           // matte black rubber-coated fuel line

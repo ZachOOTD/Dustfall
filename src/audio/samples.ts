@@ -36,8 +36,10 @@ export async function preloadSamples(ctx: AudioContext): Promise<void> {
         const buf = await ctx.decodeAudioData(arr);
         _buffers.set(id, buf);
       } catch (e) {
-        // eslint-disable-next-line no-console
-        console.warn(`[audio] sample "${id}" unavailable:`, e instanceof Error ? e.message : e);
+        // AAL — was console.warn (flooded the preview tab when .ogg
+        // samples aren't shipped). Silent fallback to null; soundscape.ts
+        // already gracefully skips samples whose buffer is null.
+        void e;
         _buffers.set(id, null);
       }
     }),

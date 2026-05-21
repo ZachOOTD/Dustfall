@@ -67,8 +67,13 @@ function sleep(hours: number): void {
   ctx.stats.thirst = Math.max(0, ctx.stats.thirst * thirstScale);
   ctx.stats.hunger = Math.max(0, ctx.stats.hunger * hungerScale);
   ctx.stats.stamina = 1;
-  // Temperature drifts toward 0
-  ctx.stats.temperature = ctx.stats.temperature * (1 - 0.7 * fraction);
+  // Temperature drifts toward 0. AAL — only the strong (×0.3 at 8h) drift
+  // applies if the player is sheltered; sleeping in the open desert gets
+  // a much weaker recovery (×0.7 at 8h) because there's no warmth source.
+  // ctx.player.inShelter is updated by updateShelter each frame, so it
+  // reflects the player's location when the sleep dialog was opened.
+  const tempRecoverFactor = ctx.player.inShelter ? 0.7 : 0.25;
+  ctx.stats.temperature = ctx.stats.temperature * (1 - tempRecoverFactor * fraction);
 
   ctx.ui.showToast(`you sleep ${hours} hours — the world keeps turning`);
   // Sleep autosave — fired AFTER stat/time mutations complete so the save

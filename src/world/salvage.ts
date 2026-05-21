@@ -125,7 +125,7 @@ const TABLES: Record<SalvageKind, LootRoll[]> = {
     { id: 'scrap',         chance: 0.90, count: 2 },
     { id: 'scrap',         chance: 0.50 },
     { id: 'rope',          chance: 0.10 },
-    { id: 'scrap_bullet',  chance: 0.05 },
+    { id: 'scrap_bullet',  chance: 0.12 },   // AAL — bumped 0.05 → 0.12; ammo was scrap_bullet-recipe-dependent in practice
   ],
   // Fuselage — interior textiles + bulkhead cabling. The cloth/rope
   // wreck of choice.
@@ -160,16 +160,21 @@ const TABLES: Record<SalvageKind, LootRoll[]> = {
     { id: 'scrap', chance: 0.60 },
     { id: 'rope',  chance: 0.05 },
   ],
-  // Massive POIs — richer rolls, includes rope.
+  // Massive POIs — richer rolls, includes rope. AAL — added energy_pistol
+  // (was an orphan ItemDef + combat spec that never spawned in world) +
+  // scrap_bullet on massive wrecks so ammo isn't gated on the scrap recipe
+  // pipeline alone.
   massive: [
-    { id: 'scrap',      chance: 0.95, count: 2 },
-    { id: 'scrap',      chance: 0.75 },
-    { id: 'cloth',      chance: 0.65 },
-    { id: 'bandage',    chance: 0.45 },
-    { id: 'branch',     chance: 0.25 },
-    { id: 'rope',       chance: 0.20 },
-    { id: 'fire_kit',   chance: 0.05 },
-    { id: 'flashlight', chance: 0.08 },
+    { id: 'scrap',         chance: 0.95, count: 2 },
+    { id: 'scrap',         chance: 0.75 },
+    { id: 'cloth',         chance: 0.65 },
+    { id: 'bandage',       chance: 0.45 },
+    { id: 'branch',        chance: 0.25 },
+    { id: 'rope',          chance: 0.20 },
+    { id: 'scrap_bullet',  chance: 0.15 },
+    { id: 'fire_kit',      chance: 0.05 },
+    { id: 'flashlight',    chance: 0.08 },
+    { id: 'energy_pistol', chance: 0.03 },   // rare hero-tier weapon drop
   ],
 };
 

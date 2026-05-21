@@ -165,10 +165,16 @@ function segmentRadius(idx: number): number {
 
 function makeWormMesh(): { group: THREE.Group } {
   const group = new THREE.Group();
-  // DoubleSide on the body so the INSIDE of the openEnded head segments
-  // also renders — otherwise looking down the maw you'd see through the
-  // worm out the back at the rim of the throat.
+  // AAL — split body material: closed segments use FrontSide (cheaper +
+  // doesn't look paper-thin on the visible body taper); openEnded head
+  // segments use DoubleSide so the inside of the maw cavity renders
+  // when looking down the throat. Pre-AAL the whole body was DoubleSide.
   const bodyMat = new THREE.MeshLambertMaterial({
+    color: 0xa89878,
+    flatShading: true,
+    side: THREE.FrontSide,
+  });
+  const bodyMatOpen = new THREE.MeshLambertMaterial({
     color: 0xa89878,
     flatShading: true,
     side: THREE.DoubleSide,
@@ -204,9 +210,11 @@ function makeWormMesh(): { group: THREE.Group } {
     // looking into the front of the worm. Earlier segments are closed cylinders.
     const openEnded = i >= SEGMENT_COUNT - 2;
     // After rotation.z = π/2: cylinder's +Y (radiusTop) rotates to +X (head side).
+    // AAL — use the open-mat variant for the 2 openEnded head segments so
+    // their inner surface is visible from inside the maw.
     const cyl = new THREE.Mesh(
       new THREE.CylinderGeometry(rHead, rTail, segmentLen, 14, 1, openEnded),
-      bodyMat,
+      openEnded ? bodyMatOpen : bodyMat,
     );
     cyl.rotation.z = Math.PI / 2;
     cyl.position.x = xCenter;

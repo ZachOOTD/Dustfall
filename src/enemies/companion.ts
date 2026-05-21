@@ -157,7 +157,7 @@ export function spawnCompanionAt(
     const m = o as THREE.Mesh;
     if (m.isMesh) {
       m.castShadow = true;
-      m.receiveShadow = false;       // tiny creature; receiving shadows isn't worth the cost
+      m.receiveShadow = true;        // AAL — enabled for ground-contact cue (cost is negligible per-mesh in modern three.js)
     }
     // Tag for raycast interaction (RMB pack-up).
     o.userData.interactType = 'pet_companion';

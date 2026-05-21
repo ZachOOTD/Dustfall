@@ -42,27 +42,35 @@ function makeTentVisual(): THREE.Group {
   const darkMat = new THREE.MeshLambertMaterial({ color: 0x6a5a48 });
   const poleMat = new THREE.MeshLambertMaterial({ color: 0x3a2a1a });
 
+  // AAL — fabric thickness via thin BoxGeometry. Pre-AAL the walls were
+  // PlaneGeometry + DoubleSide which made the tent look paper-thin at
+  // oblique angles. 4cm-thick boxes give realistic fabric depth without
+  // a per-side inner-shell pattern (overkill for a small kit-tent).
+  const FABRIC_THICK = 0.04;
+
   // Two sloped wall panels forming a triangular profile
   const wallW = 2.0;
   const wallH = 1.6;
   const wallTilt = 0.6; // radians from vertical
   for (const sx of [-1, 1]) {
-    const wall = new THREE.Mesh(new THREE.PlaneGeometry(wallW, wallH), canvasMat);
-    wall.rotation.y = -Math.PI / 2;
-    wall.rotation.x = 0;
+    const wall = new THREE.Mesh(
+      new THREE.BoxGeometry(FABRIC_THICK, wallH, wallW),  // thin slab; X = depth into canvas
+      canvasMat,
+    );
     wall.position.set(0, wallH / 2 * Math.cos(wallTilt), sx * (wallH / 2) * Math.sin(wallTilt));
     wall.rotation.z = sx * wallTilt;
-    wall.material.side = THREE.DoubleSide;
     g.add(wall);
   }
 
-  // Ground footprint — darker fabric
+  // Ground footprint — darker fabric. Stays as a thin plane (one-sided,
+  // viewed from above only).
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(wallW, wallH * Math.sin(wallTilt) * 2), darkMat);
   floor.rotation.x = -Math.PI / 2;
   floor.position.y = 0.02;
   g.add(floor);
 
-  // Two end triangles (entrance + back)
+  // Two end triangles (entrance + back). AAL — extruded ShapeGeometry
+  // for fabric thickness; entrance brighter, back darker.
   for (const sz of [-1, 1]) {
     const triShape = new THREE.Shape();
     const halfW = wallH * Math.sin(wallTilt);
@@ -71,13 +79,12 @@ function makeTentVisual(): THREE.Group {
     triShape.lineTo(halfW, 0);
     triShape.lineTo(0, peakY);
     triShape.closePath();
-    const tri = new THREE.Mesh(
-      new THREE.ShapeGeometry(triShape),
-      sz === 1 ? canvasMat : darkMat,  // entrance brighter, back darker
-    );
-    tri.position.set(0, 0, sz * (wallW / 2));
+    const triGeo = new THREE.ExtrudeGeometry(triShape, { depth: FABRIC_THICK, bevelEnabled: false });
+    const tri = new THREE.Mesh(triGeo, sz === 1 ? canvasMat : darkMat);
+    // ExtrudeGeometry extrudes along +Z by `depth`; center it on the tent's
+    // Z plane by translating -FABRIC_THICK/2 then position on the end.
+    tri.position.set(0, 0, sz * (wallW / 2) - sz * FABRIC_THICK / 2);
     if (sz === -1) tri.rotation.y = Math.PI;
-    tri.material.side = THREE.DoubleSide;
     g.add(tri);
   }
 

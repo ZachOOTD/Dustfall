@@ -47,11 +47,16 @@ function makeLargeTentVisual(): THREE.Group {
   const D = Tuning.LARGE_TENT_DEPTH_M;
   const H = Tuning.LARGE_TENT_HEIGHT_M;
 
-  const canvasMat = new THREE.MeshLambertMaterial({ color: 0xa89878, side: THREE.DoubleSide });
-  const darkMat = new THREE.MeshLambertMaterial({ color: 0x6a5a48, side: THREE.DoubleSide });
+  // AAL — fabric materials are now FrontSide (was DoubleSide which made
+  // the walls look paper-thin from inside the walk-in cavity). Wall +
+  // roof geometry switched from PlaneGeometry to thin BoxGeometry so
+  // the canvas reads as real fabric thickness at oblique angles.
+  const canvasMat = new THREE.MeshLambertMaterial({ color: 0xa89878 });
+  const darkMat = new THREE.MeshLambertMaterial({ color: 0x6a5a48 });
   const poleMat = new THREE.MeshLambertMaterial({ color: 0x3a2a1a });
+  const FABRIC_THICK = 0.04;
 
-  // Floor (dark fabric)
+  // Floor (dark fabric) — stays a plane (one-sided, viewed from above).
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(W, D), darkMat);
   floor.rotation.x = -Math.PI / 2;
   floor.position.y = 0.02;
@@ -59,22 +64,22 @@ function makeLargeTentVisual(): THREE.Group {
 
   // Back wall (faces -Z if tent's front is +Z; we'll rotate the whole
   // group at deploy time so "+Z is forward" = "+Z is the open entrance").
-  const backWall = new THREE.Mesh(new THREE.PlaneGeometry(W, H), canvasMat);
-  backWall.position.set(0, H * 0.5, -D * 0.5);
+  // AAL — thin box so the canvas has real thickness.
+  const backWall = new THREE.Mesh(new THREE.BoxGeometry(W, H, FABRIC_THICK), canvasMat);
+  backWall.position.set(0, H * 0.5, -D * 0.5 - FABRIC_THICK * 0.5);
   g.add(backWall);
 
   // Side walls (left/right) — face +/-X. Cloth draped from corner posts.
   for (const sx of [-1, 1]) {
-    const wall = new THREE.Mesh(new THREE.PlaneGeometry(D, H), canvasMat);
-    wall.rotation.y = sx > 0 ? -Math.PI / 2 : Math.PI / 2;
-    wall.position.set(sx * W * 0.5, H * 0.5, 0);
+    const wall = new THREE.Mesh(new THREE.BoxGeometry(FABRIC_THICK, H, D), canvasMat);
+    wall.position.set(sx * (W * 0.5 + FABRIC_THICK * 0.5), H * 0.5, 0);
     g.add(wall);
   }
 
   // Roof (slightly pitched). Single piece since the tent is short.
-  const roof = new THREE.Mesh(new THREE.PlaneGeometry(W, D + 0.1), darkMat);
-  roof.rotation.x = -Math.PI / 2;
-  roof.position.set(0, H, 0);
+  // AAL — thin box so roof reads as fabric not a paper plane.
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(W, FABRIC_THICK, D + 0.1), darkMat);
+  roof.position.set(0, H + FABRIC_THICK * 0.5, 0);
   g.add(roof);
 
   // Four corner posts (visible wood)

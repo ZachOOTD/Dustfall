@@ -54,6 +54,13 @@ const _concreteDarkMat = createWeatheredConcreteMaterial({
 const _rustedSteelMat = createRustedHullMaterial({
   baseColor: 0x6b3a22,       // saturated rust orange-brown
 });
+// AAL — the 4 panel materials below LEGITIMATELY use DoubleSide because
+// the parabolic dish is approached from both above (player looking up
+// at the convex back) and below (player walking through the tripod
+// looking at the concave reflector face). Both faces share the same
+// rusted-fabric look in reality. Backlogged: add structural framework
+// geometry visible on the back face for "panel ribs visible from
+// outside" detail.
 const _dishPanelMat = new THREE.MeshLambertMaterial({
   color: 0x7a4628,           // dish panel rust (mid)
   side: THREE.DoubleSide,
