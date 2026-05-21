@@ -4,8 +4,8 @@ Cumulative state. Rewritten end-to-end at each `/session-end`. A
 reviewer who's never seen the project should be able to read this +
 `CLAUDE.md` + `docs/GDD.md` and understand where Dustfall is.
 
-**Current state**: Session AAL shipped (2026-05-21). 39 sessions
-post-MVP. tsc clean. SAVE_VERSION v9 (unchanged).
+**Current state**: Session AAM shipped (2026-05-21). 40 sessions
+post-MVP. tsc clean. SAVE_VERSION v10 (additive: per-fire hasGrill).
 Post-overnight: UU/VV/UU-2/WW/XX/YY/ZZ + AAA (polish) + AAB (world
 depth) + AAC (craftable home) + AAD (kit playtest polish) + AAE
 (creature companion + v9) + AAF (7-day storm countdown) + AAG
@@ -87,6 +87,33 @@ Fresh-game start (the de-facto Tier 1 — Session W shipped):
    captured mid-drink doesn't resume drinking on reload.
 
 ---
+
+## What's freshly shipped (Session AAM deltas)
+
+Fire grill attachment + multi-cook. Backlog item from AAG. Save schema
+v9 → v10 (additive). Also caught + fixed a leftover AAI bug.
+
+- **grill_kit** ItemId + ItemDef (recipe id 14, scrap×2 + branch×2).
+  wieldLmb='click_use'; onUse attaches to hovered fire via new
+  `attachGrillToFire(ctx, fire)`.
+- **`Fire.hasGrill: boolean` + `grillMesh: THREE.Group | null`** fields.
+  `attachGrillToFire` builds the grate via `makeGrillMesh()` (4 iron
+  bars + 2 side rails, 0.55×0.45m at Y=0.45 above fire base) and
+  parents it to the fire group. 5 new `FIRE_GRILL_*` Tuning constants.
+- **`_cooking` singleton → `_cooks: CookState[]` list** in
+  `interaction.ts`. tickCooking iterates + removes completed/cancelled.
+  Cook cap = 1 without grill, 4 with grill. Slot-switch cancel dropped
+  (single-cook UX limitation; grill needs the player to switch slots
+  freely to load more raw items).
+- **SAVE_VERSION 9 → 10**. Additive `hasGrill?: boolean` per fire.
+  Loader re-calls attachGrillToFire on restored fires that had it.
+  Pre-v10 saves load with hasGrill=false default.
+- **Bug fix (AAI debt)**: loader's seed-validity check compared against
+  `Tuning.RNG_SEED` instead of `ctx.seed`, so saves from any non-1337
+  world (effectively all post-AAI worlds) failed to load. Now compares
+  to ctx.seed correctly.
+
+7 files touched. No new modules.
 
 ## What's freshly shipped (Session AAL deltas)
 

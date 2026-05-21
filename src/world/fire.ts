@@ -26,6 +26,13 @@ export interface Fire {
   pos: THREE.Vector3;
   /** Wall-clock timestamp of next random crackle sound. */
   _nextCrackleAt: number;
+  /** Session AAM — true when a grill_kit has been attached. Allows
+   *  multiple parallel cooks instead of the single-cook default. The
+   *  grill mesh is added when hasGrill flips false→true (see
+   *  attachGrillToFire). Persists in save schema v10+. */
+  hasGrill: boolean;
+  /** AAM — the visible grate group, lazily created when grill attaches. */
+  grillMesh: THREE.Group | null;
 }
 
 let _nextId = 1;
@@ -172,6 +179,8 @@ export function spawnFireAt(
     hovered: false,
     pos: pos.clone(),
     _nextCrackleAt: ctx.time.elapsed + 0.5 + Math.random() * 2,
+    hasGrill: false,       // AAM — grill attached later via attachGrillToFire
+    grillMesh: null,
   };
   ctx.fires.list.push(fire);
   return fire;
@@ -217,6 +226,57 @@ export function relightFire(fire: Fire, ctx: GameContext): boolean {
 export function findFireById(list: Fire[], id: number | undefined): Fire | undefined {
   if (id === undefined) return undefined;
   return list.find((f) => f.id === id);
+}
+
+/** AAM — build the visible grate that sits above the fire ring once a
+ *  grill_kit has been attached. 4 horizontal iron bars + 2 side rails
+ *  forming a small grate, hovering ~0.45m above the fire base so it sits
+ *  over the flames without poking out of the silhouette. */
+function makeGrillMesh(): THREE.Group {
+  const g = new THREE.Group();
+  const ironMat = new THREE.MeshLambertMaterial({ color: 0x2a241c, flatShading: true });
+  const W = Tuning.FIRE_GRILL_WIDTH_M;
+  const D = Tuning.FIRE_GRILL_DEPTH_M;
+  const BAR_R = Tuning.FIRE_GRILL_BAR_RADIUS_M;
+  const Y = Tuning.FIRE_GRILL_HEIGHT_M;
+  // 4 cross-bars spanning W (along X), spaced evenly along Z.
+  for (let i = 0; i < 4; i++) {
+    const z = -D / 2 + (i + 0.5) * (D / 4);
+    const bar = new THREE.Mesh(
+      new THREE.CylinderGeometry(BAR_R, BAR_R, W, 6),
+      ironMat,
+    );
+    bar.rotation.z = Math.PI / 2;
+    bar.position.set(0, Y, z);
+    bar.castShadow = true;
+    g.add(bar);
+  }
+  // 2 side rails (along Z) at the edges of W — frame the grate.
+  for (const sx of [-1, 1]) {
+    const rail = new THREE.Mesh(
+      new THREE.CylinderGeometry(BAR_R * 1.1, BAR_R * 1.1, D + BAR_R * 4, 6),
+      ironMat,
+    );
+    rail.rotation.x = Math.PI / 2;
+    rail.position.set(sx * (W / 2), Y, 0);
+    rail.castShadow = true;
+    g.add(rail);
+  }
+  return g;
+}
+
+/** AAM — attach a grill to a fire. Builds the grate mesh, parents it to
+ *  the fire group so it inherits the fire's world position, and flips
+ *  `hasGrill` so the cook system allows parallel cooks. No-op if already
+ *  attached. Survives save/load via the hasGrill field on Fire +
+ *  loadGameState's call to attachGrillToFire on flagged fires. */
+export function attachGrillToFire(ctx: GameContext, fire: Fire): void {
+  void ctx;
+  if (fire.hasGrill) return;
+  const grill = makeGrillMesh();
+  fire.mesh.add(grill);
+  fire.grillMesh = grill;
+  fire.hasGrill = true;
 }
 
 export function updateFires(ctx: GameContext, dt: number): void {

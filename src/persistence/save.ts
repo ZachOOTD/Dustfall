@@ -31,7 +31,7 @@ import {
   applySandWormDeadPose,
   type SandWormState,
 } from '../enemies/sandWorm.ts';
-import { spawnFireAt } from '../world/fire.ts';
+import { spawnFireAt, attachGrillToFire } from '../world/fire.ts';
 import { spawnTentAt } from '../world/tent.ts';
 import { spawnSledAt, setNextSledId } from '../world/sled.ts';
 import { spawnLargeTentAt, setNextLargeTentId } from '../world/largeTent.ts';
@@ -61,14 +61,16 @@ export const SAVE_KEY = 'dustfall.save.v1';
 // AAE — v9 adds `companion?: { pos, state }` for the Rocky-inspired
 // pocketable creature (singleton per save). When the player has the
 // pod in inventory, the field is undefined; the companion_pod ItemId
-// in the inventory serialization captures that state. Loader accepts
-// v1-v9.
-export const SAVE_VERSION = 9;
+// in the inventory serialization captures that state.
+// AAM — v10 adds optional `hasGrill?: boolean` to each fire entry
+// (grill attachment for multi-cook). Pre-v10 saves omit the field;
+// loader defaults to false. Additive change per D81. Loader accepts v1-v10.
+export const SAVE_VERSION = 10;
 
 type V3 = { x: number; y: number; z: number };
 
 export interface SaveV1 {
-  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
   seed: number;
   savedAt: number;
 
@@ -113,7 +115,9 @@ export interface SaveV1 {
   lootContainers: Array<{ id: number; opened: boolean; contents: LootEntry[] }>;
 
   // Player-placed — recreated from scratch on load.
-  fires: Array<{ id: number; pos: V3; fuelSeconds: number; alive: boolean }>;
+  // AAM (v10) — optional hasGrill boolean per fire. Pre-v10 saves omit the
+  // field; loader defaults to false. Additive change per D81.
+  fires: Array<{ id: number; pos: V3; fuelSeconds: number; alive: boolean; hasGrill?: boolean }>;
   tents: Array<{ id: number; pos: V3; rotationY: number }>;
   /** Session QQ — placed sleds with their cargo + tether state. Optional
    *  so pre-v5 saves still load (sleds field is just absent). */
@@ -309,6 +313,7 @@ export function saveGameState(ctx: GameContext): { ok: boolean; error?: string }
         pos: { x: f.pos.x, y: f.pos.y, z: f.pos.z },
         fuelSeconds: f.fuelSeconds,
         alive: f.alive,
+        hasGrill: f.hasGrill,    // AAM — v10 additive
       })),
       tents: ctx.tents.list.map((t) => ({
         id: t.id,
@@ -404,13 +409,17 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
   // cleanly (missing `sleds` / `largeTents` treated as empty; missing
   // `inventory.discoveredRecipes` seeded with ALL_RECIPE_IDS so
   // pre-TT playtesters keep their recipe knowledge).
-  if (save.version !== 1 && save.version !== 2 && save.version !== 3 && save.version !== 4 && save.version !== 5 && save.version !== 6 && save.version !== 7 && save.version !== 8 && save.version !== 9) {
+  if (save.version !== 1 && save.version !== 2 && save.version !== 3 && save.version !== 4 && save.version !== 5 && save.version !== 6 && save.version !== 7 && save.version !== 8 && save.version !== 9 && save.version !== 10) {
     return { ok: false, error: `unsupported save version ${save.version}` };
   }
-  if (save.seed !== Tuning.RNG_SEED) {
+  // AAM — was `Tuning.RNG_SEED` (legacy from pre-AAI); should be `ctx.seed`
+  // (the per-game seed resolved at boot from save.seed via peekSavedSeed,
+  // or from pendingSeed, or inline-rolled). Pre-AAM this check almost
+  // always failed for any non-1337 saved world.
+  if (save.seed !== ctx.seed) {
     return {
       ok: false,
-      error: `save was built for a different world (seed ${save.seed}, current ${Tuning.RNG_SEED}) — start a new game`,
+      error: `save was built for a different world (seed ${save.seed}, current ${ctx.seed}) — start a new game`,
     };
   }
 
@@ -571,7 +580,12 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
 
   for (const saved of save.fires) {
     const pos = new THREE.Vector3(saved.pos.x, saved.pos.y, saved.pos.z);
-    spawnFireAt(ctx, pos, saved.fuelSeconds, saved.alive);
+    const fire = spawnFireAt(ctx, pos, saved.fuelSeconds, saved.alive);
+    // AAM (v10) — re-attach grill if the saved fire had one. Pre-v10
+    // saves omit the field; defaults to false (no-op).
+    if (saved.hasGrill) {
+      attachGrillToFire(ctx, fire);
+    }
   }
   for (const saved of save.tents) {
     const pos = new THREE.Vector3(saved.pos.x, saved.pos.y, saved.pos.z);

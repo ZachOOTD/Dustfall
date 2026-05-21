@@ -3,6 +3,56 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session AAM — 2026-05-21 — Fire grill attachment (multi-cook) + SAVE_VERSION v10 ✓ verify pass
+`verified` — tsc clean; preview-eval confirmed grill_kit ItemDef registered,
+recipe id 14 added to ALL_RECIPE_IDS, Fire.hasGrill persists in v10
+save format (savedFireHasGrill=true), save+reload restores hasGrill +
+re-attaches grill mesh on load, grill mesh has 6 children (4 bars + 2
+rails). Loader seed-check bug from AAI also fixed.
+
+**Feature** (backlog item from AAG): a craftable iron grate that attaches
+to a fire and lets the player cook multiple raw items in parallel
+instead of one at a time.
+
+- **`grill_kit` ItemId + ItemDef** (`src/inventory/items.ts`). Recipe
+  id 14 (`scrap×2 + branch×2`). `wieldLmb: 'click_use'`; onUse checks
+  for a hovered fire (`hover.type === 'add_fuel'`), refuses if no
+  fire or already has grill. Custom viewModel (4 stacked bars) +
+  SVG icon (grate motif).
+- **`Fire.hasGrill: boolean` + `grillMesh: THREE.Group | null`**
+  fields. `attachGrillToFire(ctx, fire)` builds the grate via new
+  `makeGrillMesh()` helper (4 horizontal iron cross-bars + 2 side
+  rails forming a 0.55×0.45m grate at Y=0.45 above fire base), parents
+  it to the fire group so it inherits the fire's world position, and
+  flips `hasGrill = true`. 5 new Tuning constants
+  (`FIRE_GRILL_WIDTH_M`, `_DEPTH_M`, `_HEIGHT_M`, `_BAR_RADIUS_M`,
+  `_MAX_PARALLEL_COOKS = 4`).
+- **`_cooking` singleton → `_cooks: CookState[]` list**
+  (`src/player/interaction.ts`). Each cook tracks its own slot +
+  fireId + completeAt. `tickCooking` iterates the list; per-cook
+  cancel = slot.item changes (consumed/swapped) OR fire dies. Pre-AAM
+  the slot-switch cancel was a single-cook UX limitation; with the
+  grill running 4 parallel cooks the player must be able to switch
+  slots to add more raw items, so that cancel was dropped.
+- **Cook-start gate**: per-fire cap = 1 without grill,
+  `FIRE_GRILL_MAX_PARALLEL_COOKS` (4) with grill. Also reject if the
+  exact slot is already cooking (no double-stack). Toast variants:
+  "cooking...", "added to grill", "grill is full", "this item is
+  already cooking", "a cook is already running here".
+- **SAVE_VERSION 9 → 10** (additive only per D81). Optional
+  `hasGrill?: boolean` on each saved fire. Pre-v10 saves omit the
+  field; loader defaults to false. Loader re-calls `attachGrillToFire`
+  on restored fires that had `hasGrill: true`. Loader's version-list
+  union accepts 1-10.
+- **Bug fix (incidental, AAI debt)**: loader's seed-validity check
+  was comparing `save.seed !== Tuning.RNG_SEED` (legacy from pre-AAI
+  when there was only ever one world seed). Post-AAI, `ctx.seed` is
+  the per-game source of truth. Check now reads `save.seed !== ctx.seed`.
+  Pre-AAM this almost always failed for any non-1337 world (saves were
+  effectively non-loadable after the AAI per-seed work).
+
+**No new modules**. 7 files touched.
+
 ## Session AAL — 2026-05-21 — Project-wide audit pass (visual + bugs + quick wins + tuning lift) ✓ verify pass
 `verified` — tsc clean. Three Explore agents ran in parallel at session
 start (gameplay loop / visuals / quick-wins-debt-sweep); user picked

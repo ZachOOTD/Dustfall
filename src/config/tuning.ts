@@ -79,6 +79,12 @@ export const Tuning = {
   FIRE_FUEL_PER_BRANCH_S: 30,        // burn time added per branch
   FIRE_SHELTER_RADIUS_M: 2.2,        // shelter zone half-extent X/Z
   FIRE_SHELTER_HEIGHT_M: 1.5,        // shelter zone half-extent Y
+  // Session AAM — grill attachment dimensions + multi-cook capacity.
+  FIRE_GRILL_WIDTH_M: 0.55,          // grate span across X
+  FIRE_GRILL_DEPTH_M: 0.45,          // grate span across Z
+  FIRE_GRILL_HEIGHT_M: 0.45,         // grate Y above fire base
+  FIRE_GRILL_BAR_RADIUS_M: 0.012,    // iron bar thickness
+  FIRE_GRILL_MAX_PARALLEL_COOKS: 4,  // how many items can cook simultaneously on a gridded fire
   FIRE_NEAR_DISTANCE_SQ: 1.5 * 1.5,  // reject deploy within sqrt(this)m of another fire
 
   // Session VV — tent entity constants (lifted from src/world/tent.ts).

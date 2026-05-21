@@ -196,6 +196,18 @@ export const RECIPES: Recipe[] = [
     ],
     output: { id: 'locker_kit', count: 1 },
   },
+  // Session AAM — grill attachment for a fire. Allows multiple raw
+  // items to cook in parallel. companion_pod (Session AAE) was never
+  // craftable (singleton spawn-only), so id 14 was free per D71.
+  {
+    id: 14,
+    displayName: 'grill kit',
+    inputs: [
+      { id: 'scrap', count: 2 },
+      { id: 'branch', count: 2 },
+    ],
+    output: { id: 'grill_kit', count: 1 },
+  },
 ];
 
 /** All currently-defined recipe ids. Used by save.ts on v5→v6

@@ -33,6 +33,7 @@ and promotes the second.
 - **Session AAJ** (2026-05-21): opening wreck bugfix pass — AAB godray removed (theatrical), entrance enterable (rim bumped, fragments reduced, floor collider reaches rim), hull thickness (drop DoubleSide for inner-shell + FrontSide approach), tally marks repositioned to side wall.
 - **Session AAK** (2026-05-21): AAI multi-seed playtest + flagship placement tightening — flagship scatter band narrowed (200-800m), larger spawn-exclusion (200m for flagships vs 80m for procgen wrecks), terrain-roughness gate (max 0.7).
 - **Session AAL** (2026-05-21): project-wide audit pass — 8 unused Tuning consts removed, energy_pistol wired into salvage, sleep temp respects shelter state, DoubleSide sweep (crashedHull bell + engineBlock heat shield + sandWorm body split + tent/largeTent thickness), lootContainers drop balance lifted to Tuning. 13 files touched.
+- **Session AAM** (2026-05-21): fire grill attachment + multi-cook + SAVE_VERSION v10 — grill_kit recipe id 14, Fire.hasGrill field, _cooking singleton lifted to _cooks list with per-fire cap (1 without grill, 4 with). Incidentally fixed AAI loader bug (seed check used Tuning.RNG_SEED instead of ctx.seed).
 
 ## Up next
 

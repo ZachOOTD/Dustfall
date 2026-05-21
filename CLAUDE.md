@@ -58,8 +58,26 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session AAL — Project-wide audit pass (visual + bugs
-+ quick wins + tuning lift). Three Explore agents ran in parallel at
+**Last shipped**: Session AAM — Fire grill attachment (multi-cook) +
+SAVE_VERSION v10. Backlog item from AAG. New `grill_kit` ItemId
+(recipe id 14: scrap×2 + branch×2, wieldLmb='click_use'); onUse
+attaches to a hovered fire via new `attachGrillToFire()`. `Fire`
+gained `hasGrill: boolean` + `grillMesh: THREE.Group | null`. Grill
+mesh = 4 horizontal iron cross-bars + 2 side rails (0.55×0.45m grate
+at Y=0.45 above fire base). 5 new `FIRE_GRILL_*` Tuning constants
+including `MAX_PARALLEL_COOKS = 4`. **`_cooking` singleton lifted to
+`_cooks: CookState[]` list** — each cook tracks its own slot/fireId/
+completeAt, tickCooking iterates and removes completed/cancelled.
+Cook-start cap: 1 without grill, 4 with grill. Pre-AAM slot-switch
+cancel was dropped (would break multi-cook UX). **SAVE_VERSION 9 →
+10** additive — optional `hasGrill?: boolean` per fire; loader
+re-attaches grill on restored fires that had it. **Bug fix
+(AAI debt)**: loader's seed check used `Tuning.RNG_SEED` instead of
+`ctx.seed`, breaking save/load for any non-1337 world. Now reads
+ctx.seed. 7 files touched.
+
+**Prior milestone**: Session AAL — Project-wide audit pass (visual +
+bugs + quick wins + tuning lift). Three Explore agents ran in parallel at
 boot (gameplay loop / visuals / debt sweep); user picked "do everything
 above". 13 files touched across 4 bundles. **Quick wins**: deleted 8
 unused Tuning constants (6 godray + 2 legacy speeder), companion

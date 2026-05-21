@@ -79,14 +79,20 @@ const COOK_MAP: Partial<Record<ItemId, ItemId>> = {
 // (see viewModel.ts step 5).
 const COOK_DURATION = 3.5;
 
-// Module-level cooking state — null when no cook in progress.
-let _cooking: {
+// AAM — cooking state is now a LIST so a grilled fire can run multiple
+// parallel cooks. Pre-AAM was a single `_cooking` singleton (one cook
+// in the world). Each entry tracks its own slot + fire + completion.
+// Cancel condition: slot.item changes (item consumed / swapped out) —
+// slot-switch no longer cancels because that was a single-cook UX
+// limitation that the grill UX needs to bypass.
+interface CookState {
   slot: Slot;
   fromId: ItemId;
   toId: ItemId;
   fireId: number;
   completeAt: number;
-} | null = null;
+}
+const _cooks: CookState[] = [];
 
 // Module-level salvage state — set when the player starts an E hold on a
 // salvageable. Cleared on completion, on hover loss, or on player death.
@@ -421,20 +427,33 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
       if (selItem && COOK_MAP[selItem]) {
         // Raw food selected → cook prompt
         ctx.inventory.hover = { type: 'cook', distance: info.distance, promptNoun: 'fire' };
-        if (ctx.input.pressed.has('KeyE') && !_cooking) {
-          _cooking = {
-            slot: selSlot,
-            fromId: selItem,
-            toId: COOK_MAP[selItem]!,
-            fireId: f.id,
-            completeAt: ctx.time.elapsed + COOK_DURATION,
-          };
-          // Seed cook progress on the slot so viewModel.ts can drive
-          // the per-frame cook animation against it.
-          if (!selSlot.meta) selSlot.meta = {};
-          selSlot.meta.cookProgress = 0;
-          playCookSizzle();
-          ctx.ui.showToast('cooking...');
+        if (ctx.input.pressed.has('KeyE')) {
+          // AAM — multi-cook gate. Without grill: max 1 cook on this fire.
+          // With grill: max FIRE_GRILL_MAX_PARALLEL_COOKS on this fire.
+          // Also reject if this exact slot is already being cooked
+          // (don't double-stack on the same item).
+          const cooksOnThisFire = _cooks.filter((c) => c.fireId === f.id);
+          const cap = f.hasGrill ? Tuning.FIRE_GRILL_MAX_PARALLEL_COOKS : 1;
+          const alreadyCookingThisSlot = _cooks.some((c) => c.slot === selSlot);
+          if (alreadyCookingThisSlot) {
+            ctx.ui.showToast('this item is already cooking');
+          } else if (cooksOnThisFire.length >= cap) {
+            ctx.ui.showToast(f.hasGrill ? 'grill is full' : 'a cook is already running here');
+          } else {
+            _cooks.push({
+              slot: selSlot,
+              fromId: selItem,
+              toId: COOK_MAP[selItem]!,
+              fireId: f.id,
+              completeAt: ctx.time.elapsed + COOK_DURATION,
+            });
+            // Seed cook progress on the slot so viewModel.ts can drive
+            // the per-frame cook animation against it.
+            if (!selSlot.meta) selSlot.meta = {};
+            selSlot.meta.cookProgress = 0;
+            playCookSizzle();
+            ctx.ui.showToast(f.hasGrill && cooksOnThisFire.length > 0 ? 'added to grill' : 'cooking...');
+          }
         }
       } else if (selItem === 'branch') {
         // Branch selected → add fuel prompt
@@ -666,30 +685,41 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
   }
 }
 
-/** Per-frame cook timer. Completes when elapsed > completeAt; cancels if
- *  the player switches slots or the slot's item changes. */
+/** Per-frame cook timer. AAM — iterates the _cooks list and ticks each.
+ *  Each cook cancels when its slot.item changes (item swapped/consumed)
+ *  OR when its fire dies or vanishes; completes when elapsed > completeAt.
+ *  AAM dropped the slot-switch cancel: when a grilled fire is running 4
+ *  parallel cooks, the player will switch slots to load more raw items —
+ *  that shouldn't kill the in-progress cooks. */
 function tickCooking(ctx: GameContext): void {
-  if (!_cooking) return;
-  const c = _cooking;
-  // Cancel conditions
-  const stillSelected = ctx.inventory.slots[ctx.inventory.selectedIdx] === c.slot;
-  if (!stillSelected || c.slot.item !== c.fromId) {
-    if (c.slot.meta) c.slot.meta.cookProgress = undefined;
-    _cooking = null;
-    return;
-  }
-  // Update cook progress on the slot so the viewmodel animation can read it.
-  const remaining = c.completeAt - ctx.time.elapsed;
-  const progress = Math.max(0, Math.min(1, 1 - remaining / COOK_DURATION));
-  if (!c.slot.meta) c.slot.meta = {};
-  c.slot.meta.cookProgress = progress;
-  if (ctx.time.elapsed >= c.completeAt) {
-    c.slot.item = c.toId;
-    if (c.slot.meta) c.slot.meta.cookProgress = undefined;
-    const def = getItemDef(c.toId);
-    ctx.ui.showToast(`you cook the ${def.name.toLowerCase()}`);
-    playFireCrackle();
-    _cooking = null;
+  for (let i = _cooks.length - 1; i >= 0; i--) {
+    const c = _cooks[i];
+    // Cancel: item was swapped out or consumed.
+    if (c.slot.item !== c.fromId) {
+      if (c.slot.meta) c.slot.meta.cookProgress = undefined;
+      _cooks.splice(i, 1);
+      continue;
+    }
+    // Cancel: the fire died or was removed (e.g. ran out of fuel).
+    const fire = findFireById(ctx.fires.list, c.fireId);
+    if (!fire || !fire.alive) {
+      if (c.slot.meta) c.slot.meta.cookProgress = undefined;
+      _cooks.splice(i, 1);
+      continue;
+    }
+    // Update cook progress on the slot so the viewmodel animation can read it.
+    const remaining = c.completeAt - ctx.time.elapsed;
+    const progress = Math.max(0, Math.min(1, 1 - remaining / COOK_DURATION));
+    if (!c.slot.meta) c.slot.meta = {};
+    c.slot.meta.cookProgress = progress;
+    if (ctx.time.elapsed >= c.completeAt) {
+      c.slot.item = c.toId;
+      if (c.slot.meta) c.slot.meta.cookProgress = undefined;
+      const def = getItemDef(c.toId);
+      ctx.ui.showToast(`you cook the ${def.name.toLowerCase()}`);
+      playFireCrackle();
+      _cooks.splice(i, 1);
+    }
   }
 }
 

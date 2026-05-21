@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import type { ItemDef, ItemId } from './types.ts';
 import { Tuning } from '../config/tuning.ts';
 import { playDrink, playPour } from '../audio/audio.ts';
-import { deployFire } from '../world/fire.ts';
+import { deployFire, findFireById, attachGrillToFire } from '../world/fire.ts';
 import { deployTent } from '../world/tent.ts';
 import { deploySled } from '../world/sled.ts';
 import { deployLargeTent } from '../world/largeTent.ts';
@@ -985,6 +985,61 @@ const _DEFS: Record<ItemId, ItemDef> = {
       s.appendChild(svgEl('line', { x1: '8', y1: '14', x2: '16', y2: '14' }));
       // A small spark
       s.appendChild(svgEl('circle', { cx: '12', cy: '11', r: '0.8', fill: 'currentColor', stroke: 'none' }));
+      return s;
+    },
+  },
+
+  // Session AAM — grill attachment for a fire (multi-cook).
+  grill_kit: {
+    id: 'grill_kit',
+    name: 'GRILL KIT',
+    glyph: '⛻',
+    description: 'iron crossbars for a fire — cook multiple meats in parallel',
+    stackable: true,
+    maxStack: 2,
+    wieldLmb: 'click_use',
+    onUse(ctx, _slot) {
+      // Look at a fire to attach. If the player isn't hovering a fire,
+      // refuse with a hint.
+      const hover = ctx.inventory.hover;
+      if (!hover || hover.type !== 'add_fuel') {
+        return { consumed: false, message: 'face a fire to attach the grill' };
+      }
+      const fire = findFireById(ctx.fires.list, (hover as { id?: number }).id ?? -1);
+      if (!fire) return { consumed: false, message: 'no fire found' };
+      if (fire.hasGrill) {
+        return { consumed: false, message: 'this fire already has a grill' };
+      }
+      attachGrillToFire(ctx, fire);
+      return { consumed: true, message: 'grill attached' };
+    },
+    makeViewModel() {
+      const group = new THREE.Group();
+      const mat = new THREE.MeshLambertMaterial({ color: 0x3a342a });
+      // 4 short bars stacked + a frame loop suggesting the grate
+      for (let i = 0; i < 4; i++) {
+        const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.16, 6), mat);
+        bar.rotation.z = Math.PI / 2;
+        bar.position.set(0, -0.015 + i * 0.012, 0);
+        group.add(bar);
+      }
+      // Side rails (perpendicular)
+      for (const sz of [-1, 1]) {
+        const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.04, 6), mat);
+        rail.position.set(0, 0.003, sz * 0.075);
+        group.add(rail);
+      }
+      return group;
+    },
+    makeIcon() {
+      const s = svg();
+      // Grate icon: 4 horizontal bars + 2 side rails
+      for (let i = 0; i < 4; i++) {
+        const y = 9 + i * 2;
+        s.appendChild(svgEl('line', { x1: '6', y1: String(y), x2: '18', y2: String(y) }));
+      }
+      s.appendChild(svgEl('line', { x1: '6', y1: '8', x2: '6', y2: '17' }));
+      s.appendChild(svgEl('line', { x1: '18', y1: '8', x2: '18', y2: '17' }));
       return s;
     },
   },
