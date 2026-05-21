@@ -28,6 +28,7 @@ import { spawnBranches } from './pickups/pickups.ts';
 import { spawnDeadTrees } from './world/deadTree.ts';
 import { spawnRockScatter } from './world/rockScatter.ts';
 import { setupOpeningScene } from './world/openingScene.ts';
+import { updateOpeningWreckGodRay } from './world/openingWreck.ts';
 import { hasSave } from './persistence/save.ts';
 import { createJournalPanel } from './ui/journalPanel.ts';
 import { createRecipeBookPanel } from './ui/recipeBookPanel.ts';
@@ -432,6 +433,7 @@ startLoop(ctx, (c, dt) => {
   updateStatVignette(c);         // WW — cold/thirst tint when stats low
   updateLighting(c, dt);         // sun + lights + sunDir/sunHeight
   updateSky(c, dt);              // sky sphere + sun disc (reads weather)
+  updateOpeningWreckGodRay(c);   // AAB — skylight beam opacity tracks sun height + storm intensity
   updateSpeeder(c, dt);          // hover speeder forces + mount/dismount (CC) — must run BEFORE updatePlayer so the player capsule is teleported to the rider seat before camera-sync
   updatePlayer(c, dt);           // movement + camera + advance dayTime
   updateStaminaWobble(c);        // WW — sin-driven camera jitter when stamina low (must run AFTER updatePlayer's camera-anchor)

@@ -108,40 +108,66 @@ interface LootRoll {
   count?: number;
 }
 
+// Session AAB — tables rebalanced for stronger per-kind identity, so
+// players gain real exploration choice ("I need rope → fuselages /
+// cargo / massive are best" instead of strip-anything-nearby). Each
+// kind now has a clear thematic signature:
+//   engine kinds        → scrap-pure metal (cabling = occasional rope)
+//   fuselage            → cloth + bandage + rope (interior textiles + wiring)
+//   escape_pod          → medical (bandages first, cloth secondary)
+//   cargo_container     → varied lottery (scrap, cloth, branch, tent_kit chance, rope)
+//   massive             → rich mix of everything including rope
 const TABLES: Record<SalvageKind, LootRoll[]> = {
+  // Engine wrecks — pure metal. Rope drops are cabling/hoses pulled
+  // from the engine bay. Occasional scrap_bullet from ammunition stowed
+  // near the engine block.
   engine_cluster: [
-    { id: 'scrap', chance: 0.80, count: 2 },
-    { id: 'cloth', chance: 0.30 },
+    { id: 'scrap',         chance: 0.90, count: 2 },
+    { id: 'scrap',         chance: 0.50 },
+    { id: 'rope',          chance: 0.10 },
+    { id: 'scrap_bullet',  chance: 0.05 },
   ],
+  // Fuselage — interior textiles + bulkhead cabling. The cloth/rope
+  // wreck of choice.
   fuselage: [
-    { id: 'scrap',      chance: 0.60, count: 2 },
-    { id: 'cloth',      chance: 0.50 },
-    { id: 'bandage',    chance: 0.15 },
-    { id: 'flashlight', chance: 0.05 },
+    { id: 'cloth',      chance: 0.70 },
+    { id: 'cloth',      chance: 0.30 },
+    { id: 'scrap',      chance: 0.35 },
+    { id: 'bandage',    chance: 0.25 },
+    { id: 'rope',       chance: 0.15 },
+    { id: 'flashlight', chance: 0.04 },
   ],
+  // Escape pod — medical kit + survival gear. Bandage-heavy.
   escape_pod: [
-    { id: 'bandage', chance: 0.70 },
-    { id: 'cloth',   chance: 0.40 },
-    { id: 'scrap',   chance: 0.30 },
+    { id: 'bandage', chance: 0.80 },
+    { id: 'bandage', chance: 0.30 },
+    { id: 'cloth',   chance: 0.35 },
+    { id: 'scrap',   chance: 0.20 },
+    { id: 'branch',  chance: 0.08 },
   ],
+  // Cargo container — varied lottery + rope (lashing material).
   cargo_container: [
-    { id: 'scrap',    chance: 0.50 },
-    { id: 'cloth',    chance: 0.40 },
-    { id: 'bandage',  chance: 0.25 },
-    { id: 'branch',   chance: 0.15 },
-    { id: 'tent_kit', chance: 0.03 },
+    { id: 'scrap',    chance: 0.45 },
+    { id: 'cloth',    chance: 0.35 },
+    { id: 'bandage',  chance: 0.20 },
+    { id: 'branch',   chance: 0.25 },
+    { id: 'rope',     chance: 0.15 },
+    { id: 'tent_kit', chance: 0.04 },
   ],
+  // Engine bell — pure scrap, occasional rope (cabling around the nozzle).
   engine_bell: [
-    { id: 'scrap', chance: 0.90, count: 2 },
-    { id: 'scrap', chance: 0.40 },
+    { id: 'scrap', chance: 1.00, count: 2 },
+    { id: 'scrap', chance: 0.60 },
+    { id: 'rope',  chance: 0.05 },
   ],
-  // Massive POIs — richer rolls, more guaranteed scrap.
+  // Massive POIs — richer rolls, includes rope.
   massive: [
     { id: 'scrap',      chance: 0.95, count: 2 },
     { id: 'scrap',      chance: 0.75 },
     { id: 'cloth',      chance: 0.65 },
     { id: 'bandage',    chance: 0.45 },
     { id: 'branch',     chance: 0.25 },
+    { id: 'rope',       chance: 0.20 },
     { id: 'fire_kit',   chance: 0.05 },
     { id: 'flashlight', chance: 0.08 },
   ],

@@ -35,6 +35,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import type { Rng } from '../core/rng.ts';
 import type { Terrain } from './terrain.ts';
 import type { SalvageableRegistry } from './salvage.ts';
+import type { GameContext } from '../GameContext.ts';
 import { registerSalvageable } from './salvage.ts';
 import { Tuning } from '../config/tuning.ts';
 import { createRustedHullMaterial } from './hullMaterial.ts';
@@ -105,6 +106,13 @@ const _panelBodyMat = new THREE.MeshLambertMaterial({
 const _panelRimMat = new THREE.MeshLambertMaterial({
   color: Tuning.SALVAGE_PANEL_RIM_HEX,
 });
+
+// Session AAB — module-level refs to the god-ray mesh + material so
+// the per-frame updateOpeningWreckGodRay(ctx) can adjust opacity by
+// sun height without traversing the scene each frame. Single-instance
+// (one opening wreck per save).
+let _godRayMesh: THREE.Mesh | null = null;
+let _godRayMat: THREE.MeshBasicMaterial | null = null;
 
 // ── Dimensions ───────────────────────────────────────────────────────
 const HULL_LEN = Tuning.OPENING_WRECK_HULL_LEN;
@@ -528,6 +536,45 @@ export function makeOpeningWreck(rand: Rng): THREE.Group {
   // ── Interior props ──
   g.add(makeInteriorProps(rand));
 
+  // ── AAB — skylight god-rays. Additive cone from the gap (top of
+  // hull) tapering down to the floor. Visible from inside the wreck
+  // when sun is up; opacity driven by ctx.time.sunHeight via
+  // updateOpeningWreckGodRay (called from main.ts tick).
+  const beamLen = Tuning.OPENING_WRECK_GODRAY_BEAM_LENGTH_M;
+  const beamGeo = new THREE.CylinderGeometry(
+    Tuning.OPENING_WRECK_GODRAY_BEAM_RADIUS_TOP,
+    Tuning.OPENING_WRECK_GODRAY_BEAM_RADIUS_BOTTOM,
+    beamLen,
+    16,
+    1,
+    true,  // openEnded so it's just walls (additive shaft of light)
+  );
+  const beamMat = new THREE.MeshBasicMaterial({
+    color: Tuning.OPENING_WRECK_GODRAY_COLOR_HEX,
+    transparent: true,
+    opacity: 0,                   // starts invisible; updateOpeningWreckGodRay sets per-frame
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    fog: false,
+    toneMapped: false,
+  });
+  const beam = new THREE.Mesh(beamGeo, beamMat);
+  // Position: tip at the gap (top of hull, central axial position).
+  // The gap runs along world Z over the full hull length; center at
+  // approximately the shoulder (lathe Y ≈ 0.5 HULL_LEN → world Z ≈ 0).
+  // beamY: bottom of cylinder = AXIS_Y - beamLen/2 + topY_offset. Want
+  // tip at the hull's top surface (AXIS_Y + profileRadiusAt(shoulder)).
+  const shoulderLatheY = 0.50 * HULL_LEN;
+  const shoulderR = profileRadiusAt(shoulderLatheY);
+  const beamTipY = AXIS_Y + shoulderR;
+  beam.position.set(0, beamTipY - beamLen * 0.5, shoulderLatheY - HULL_LEN / 2);
+  beam.name = 'opening-wreck-godray';
+  beam.renderOrder = 5;           // after world geometry, before HUD
+  _godRayMesh = beam;
+  _godRayMat = beamMat;
+  g.add(beam);
+
   // ── Salvage panels — refs are returned so placeOpeningWreck can
   //    register them. We mark them via userData so they can be found
   //    later via traverse. ──
@@ -685,4 +732,30 @@ export function placeOpeningWreck(
   }
 
   return group;
+}
+
+/** Session AAB — per-frame intensity update for the skylight god-ray.
+ *  Opacity scales linearly with sunHeight above the night threshold,
+ *  capped at OPENING_WRECK_GODRAY_MAX_OPACITY at peak sun. Beam is
+ *  hidden entirely below the threshold (night / dusk). Storm dampens
+ *  the beam too — sun doesn't reach through the dust at peak storm.
+ *  Called from main.ts tick after updateWeather (which writes
+ *  weather.perceivedIntensity). */
+export function updateOpeningWreckGodRay(ctx: GameContext): void {
+  if (!_godRayMesh || !_godRayMat) return;
+  const sy = ctx.time.sunHeight;
+  const threshold = Tuning.OPENING_WRECK_GODRAY_SUN_THRESHOLD;
+  if (sy < threshold) {
+    if (_godRayMesh.visible) _godRayMesh.visible = false;
+    return;
+  }
+  // Linear ramp from threshold..1.0 → 0..1.0 normalized
+  const t = Math.min(1, (sy - threshold) / (1 - threshold));
+  // Storm dampens the beam — peak storm = no visible rays. Read
+  // ctx.weather.intensity (world-truth) since the sun's penetration
+  // through dust is a world physics concern, not a perception one.
+  const stormDampen = 1 - Math.min(1, ctx.weather.intensity);
+  const opacity = t * stormDampen * Tuning.OPENING_WRECK_GODRAY_MAX_OPACITY;
+  _godRayMat.opacity = opacity;
+  _godRayMesh.visible = opacity > 0.001;
 }

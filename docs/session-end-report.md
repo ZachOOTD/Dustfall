@@ -4,11 +4,10 @@ Cumulative state. Rewritten end-to-end at each `/session-end`. A
 reviewer who's never seen the project should be able to read this +
 `CLAUDE.md` + `docs/GDD.md` and understand where Dustfall is.
 
-**Current state**: Session AAA shipped (2026-05-21). 28 sessions
+**Current state**: Session AAB shipped (2026-05-21). 29 sessions
 post-MVP. tsc clean. Post-overnight: UU/VV/UU-2/WW/XX/YY/ZZ + AAA
-first-impression polish bundle (E-take revert + ghost preview +
-vignette threshold + recipe book + crosshair .dead). Working tree
-dirty pending the user's commit.
+(first-impression polish) + AAB (world depth — salvage yield diff
++ skylight god-rays). Working tree dirty pending the user's commit.
 
 ---
 
@@ -84,6 +83,24 @@ Fresh-game start (the de-facto Tier 1 — Session W shipped):
    captured mid-drink doesn't resume drinking on reload.
 
 ---
+
+## What's freshly shipped (Session AAB deltas)
+
+World depth pass — two complementary improvements:
+
+- **Salvage yield differentiation** (`src/world/salvage.ts`).
+  TABLES rebalanced so each wreck kind has a distinct profile:
+  engines = scrap-pure (+ rope/bullet rare), fuselage = cloth-heavy
+  (+ rope), escape_pod = medical (bandage), cargo = lottery (+ rope),
+  massive = rich mix (+ rope/fire_kit/flashlight). Adds `rope` to
+  the salvage pool — previously craft-only. Drives real player
+  choice on which wrecks to strip based on what they need.
+- **Skylight god-rays for the opening wreck** (`src/world/openingWreck.ts`).
+  Additive cone inside the wreck, tip at the stress-fracture gap,
+  base near the floor. Module-level mesh + per-frame
+  `updateOpeningWreckGodRay(ctx)` scales opacity by sunHeight × (1 -
+  storm.intensity). 6 new Tuning constants. Visible at high sun on
+  clear days; invisible at night or peak storm.
 
 ## What's freshly shipped (Session AAA deltas)
 
@@ -342,25 +359,21 @@ Recent ones (session-tagged):
 
 ## Suggested next session (1-3 directions in priority order)
 
-User-prioritized lineup (post-AAA):
+User-prioritized lineup (post-AAB):
 
-1. **Session AAB — World depth (~2-3h)**. Skylight god-rays for the
-   opening wreck (additive cone geometry from the 30° stress-fracture
-   slice gap), and salvage yield differentiation by wreck kind
-   (engine = scrap-heavy, fuselage = cloth-heavy, antenna = rope/wire).
-   Adds real exploration motivation — players choose which wrecks to
-   strip based on what they need.
-2. **Session AAC — Craftable home (~4-6h, may split)**. Reframed
-   from "large tent props" to general placeable kits: bedroll_kit,
-   lantern_kit, locker_kit. Mirror tent_kit/sled_kit/fire_kit
+1. **Session AAC — Craftable home (~4-6h, may split)**. Bedroll,
+   lantern, locker as placeable kits mirroring tent/sled/fire
    patterns. New recipes id 11/12/13. Save schema v7→v8 additive.
-   Bedroll = portable sleep affordance; lantern = standing light;
-   locker = additional storage chest (extends inventory).
-3. Big-ticket bucket items remain available (creature companion,
-   7-day countdown, etc.).
+   Bedroll = portable sleep affordance; lantern = standing light
+   source; locker = additional storage chest (extends inventory).
+   Player gets to customize their temporary home anywhere.
+2. Big-ticket bucket items remain available (creature companion,
+   7-day countdown, trading, etc.).
 
-Top pick: AAB (world depth). Lower risk than AAC's new-system work;
-visible improvement to existing exploration loop.
+Top pick: AAC. Bigger scope — may want to split into sub-sessions
+(bedroll first, then lantern, then locker) so each ships independently
+verifiable. Each kit follows the same pattern (item def + new world
+module + deploy/pack + recipe + save migration).
 
 ---
 

@@ -231,6 +231,18 @@ export const Tuning = {
   // Lowered to 0.3 so partial-shelter still shows some vignette presence.
   STORM_VIGNETTE_RAMP_START: 0.3,
 
+  // Session AAB — opening wreck skylight god-rays. Additive cone visible
+  // from the 30° stress-fracture slice gap (slices 17+18 omitted; RR+SS).
+  // The beam tip sits at the gap on the upper hull; the base spreads
+  // outward to roughly the floor width. Intensity scales with sunHeight
+  // so the beam is invisible at night and peaks at high sun.
+  OPENING_WRECK_GODRAY_BEAM_RADIUS_TOP: 0.15,    // beam tip at the gap
+  OPENING_WRECK_GODRAY_BEAM_RADIUS_BOTTOM: 1.2,  // beam base at the floor
+  OPENING_WRECK_GODRAY_BEAM_LENGTH_M: 5.5,       // tip-to-base vertical
+  OPENING_WRECK_GODRAY_COLOR_HEX: 0xffd9a0,      // warm dusty gold
+  OPENING_WRECK_GODRAY_MAX_OPACITY: 0.22,        // at peak sun
+  OPENING_WRECK_GODRAY_SUN_THRESHOLD: 0.1,       // sunHeight below this = beam off
+
   // Dune terrain (Session P) — ridged + wind-warped noise.
   // Ridges run perpendicular to the wind direction; aniso < 1 elongates them.
   // Asymmetry biases ridge crests in the wind direction (steeper leeward face).

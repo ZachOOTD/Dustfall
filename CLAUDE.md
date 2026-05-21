@@ -58,7 +58,24 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session AAA — First-impression polish bundle. Five
+**Last shipped**: Session AAB — World depth (salvage yield diff +
+skylight god-rays). Salvage TABLES in `src/world/salvage.ts`
+rebalanced to give each wreck kind a clear thematic identity:
+engine_cluster/engine_bell = scrap-pure metal w/ rope (cabling) +
+rare bullet; fuselage = cloth-heavy w/ rope + bandage; escape_pod =
+medical (bandage-heavy); cargo_container = varied lottery + rope;
+massive = rich mix. `rope` added to salvage pool (previously
+craft-only). 200-roll verification confirmed strong identity per
+kind. Skylight god-rays: new additive cone geometry inside opening
+wreck, tip at the 30° stress-fracture gap (slices 17+18), base at
+floor. 6 new Tuning constants (BEAM_RADIUS_TOP/BOTTOM/LENGTH_M +
+COLOR_HEX + MAX_OPACITY=0.22 + SUN_THRESHOLD=0.1). Module-level
+`_godRayMesh/_godRayMat` refs; exported
+`updateOpeningWreckGodRay(ctx)` runs in main.ts tick after
+updateSky. Opacity = sunHeight × (1 - storm.intensity) × maxOpacity.
+Beam invisible at night and at peak storm.
+
+**Prior milestone**: Session AAA — First-impression polish bundle. Five
 items: (1) UU pickup migration REVERTED — E is the canonical take
 button again; LMB's role narrows to "use the wielded item"
 (attack/place/hold_use); UU's wieldAction.ts dispatcher + wieldLmb

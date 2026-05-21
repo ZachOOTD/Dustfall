@@ -3,6 +3,52 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session AAB — 2026-05-21 — World depth (salvage yield diff + skylight god-rays) ✓ verify pass
+`verified` — tsc clean; preview-eval confirmed salvage distribution
+profiles + god-ray visibility states.
+
+**Salvage yield differentiation** (`src/world/salvage.ts` TABLES
+rebalanced). Each wreck kind now has a clear thematic signature
+that drives real exploration choice:
+- `engine_cluster` / `engine_bell` — scrap-pure metal. 90-100% scrap×2
+  + 50-60% extra scrap + occasional rope (cabling/hoses) + rare
+  scrap_bullet (ammo stowed near the engine).
+- `fuselage` — cloth-heavy interior textiles. 70% cloth + 30% extra
+  cloth + 35% scrap + 25% bandage + 15% rope + 4% flashlight.
+- `escape_pod` — medical/survival. 80% bandage + 30% extra bandage
+  + 35% cloth + 20% scrap + 8% branch (rare wood scrap).
+- `cargo_container` — varied lottery + rope. 45% scrap + 35% cloth
+  + 20% bandage + 25% branch + 15% rope + 4% tent_kit.
+- `massive` — rich mix including rope (20%) and the rare fire_kit
+  (5%) / flashlight (8%) drops.
+- **Adds `rope` to the salvage pool** (previously craft-only). Players
+  seeking rope can now target fuselages, cargo, or massive POIs.
+
+Distribution verified via 200-roll sampling: engine_bell yields 510
+scrap + 11 rope + 0 cloth (essentially pure metal); fuselage yields
+199 cloth + 77 scrap + 50 bandage + 32 rope (cloth dominant);
+escape_pod yields 221 bandage + 74 cloth + 56 scrap (medical bias);
+each kind's profile is now distinct enough that players will notice
+"I need rope → these wrecks have it" instead of strip-anything-
+nearby.
+
+**Skylight god-rays for the opening wreck** (`src/world/openingWreck.ts`).
+Additive cone geometry inside the wreck — narrow tip at the upper
+hull surface (where slices 17+18 are omitted = the 30° stress-
+fracture from SS), broad base near the floor. Default-down
+orientation; warm gold tint (`OPENING_WRECK_GODRAY_COLOR_HEX =
+0xffd9a0`). Module-level `_godRayMesh` + `_godRayMat` refs;
+exported `updateOpeningWreckGodRay(ctx)` runs each frame after
+`updateSky`, computes opacity from `ctx.time.sunHeight` (linear ramp
+above `OPENING_WRECK_GODRAY_SUN_THRESHOLD = 0.1`) × `(1 - storm
+intensity)` × `OPENING_WRECK_GODRAY_MAX_OPACITY = 0.22`. Beam is
+hidden at night and dampened by peak storm (dust blocks the light).
+6 new Tuning constants centralize the feel: BEAM_RADIUS_TOP=0.15,
+BEAM_RADIUS_BOTTOM=1.2, BEAM_LENGTH_M=5.5, COLOR_HEX, MAX_OPACITY,
+SUN_THRESHOLD. Opacity dynamics verified: 0.171 at sunHeight=0.8 clear,
+0 at sunHeight=0.05 night, 0 at intensity=1.0 storm peak (regardless
+of sun).
+
 ## Session AAA — 2026-05-21 — First-impression polish bundle (E-take revert + ghost preview + vignette threshold + recipe book + crosshair .dead) ✓ verify pass
 `verified` — tsc clean; preview confirmed 4/5 surfaces (E-take static-
 verified, raycast-driven path not eval-testable without camera-pointing

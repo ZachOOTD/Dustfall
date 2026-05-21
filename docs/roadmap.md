@@ -25,8 +25,7 @@ and promotes the second.
 
 ## Up next
 
-- **Session AAB — World depth** (~2-3h, plan in `docs/next-session-prompt.md`). Skylight god-rays for the opening wreck + salvage yield differentiation by wreck kind.
-- **Session AAC — Craftable home** (~4-6h, may split). Bedroll/lantern/locker as placeable kits mirroring tent/sled/fire patterns. Save schema v7→v8 additive.
+- **Session AAC — Craftable home** (~4-6h, may split). Bedroll/lantern/locker as placeable kits mirroring tent/sled/fire patterns. Save schema v7→v8 additive. See `docs/next-session-prompt.md`.
 
 ## Next — Big-ticket bucket (1–2 picks per session at ~4–7h each)
 Pick whatever feels most missing after the polish + atmosphere arc.
