@@ -18,11 +18,11 @@ and promotes the second.
 
 ---
 
-## Overnight queue + follow-on (COMPLETE — UU+VV+UU-2+WW+XX+YY shipped 2026-05-21)
+## Overnight era (COMPLETE — 7 sessions UU/VV/UU-2/WW/XX/YY/ZZ shipped 2026-05-21)
 
-5-session overnight run + 1 follow-on polish session. Plan archived at `.claude/plans/i-want-to-set-floating-dusk.md`. All sessions shipped ✓. The overnight era is closed.
+5-session overnight queue + 2 follow-on polish sessions (YY visual + ZZ audio dampening). Plan archived at `.claude/plans/i-want-to-set-floating-dusk.md`. All sessions shipped ✓. The overnight era is closed.
 
-Next session pick is open — pick from "Next — Big-ticket bucket" below or `docs/backlog.md` polish items (e.g., wind audio off `intensity` → `perceivedIntensity` as a small completion of YY's split).
+Next session pick is open — pick from "Next — Big-ticket bucket" below.
 
 ## Next — Big-ticket bucket (1–2 picks per session at ~4–7h each)
 Pick whatever feels most missing after the polish + atmosphere arc.

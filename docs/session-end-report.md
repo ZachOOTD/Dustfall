@@ -4,11 +4,11 @@ Cumulative state. Rewritten end-to-end at each `/session-end`. A
 reviewer who's never seen the project should be able to read this +
 `CLAUDE.md` + `docs/GDD.md` and understand where Dustfall is.
 
-**Current state**: Session YY shipped (2026-05-21). 26 sessions
-post-MVP. tsc clean. Overnight queue (UU-XX) COMPLETE + one
-follow-on polish session (YY) realizing XX's deferred scope-cut.
-Working tree dirty pending the user's commit (see `## Commit
-handoff` below).
+**Current state**: Session ZZ shipped (2026-05-21). 27 sessions
+post-MVP. tsc clean. Overnight era (UU-ZZ, 7 sessions): UU-XX
+(original 5-session queue) + YY (visual half of perceivedIntensity
+split) + ZZ (audio half — soundscape now coherent with the visual
+dampening). Working tree dirty pending the user's commit.
 
 ---
 

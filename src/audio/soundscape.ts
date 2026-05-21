@@ -147,8 +147,13 @@ export function updateSoundscape(ctx: GameContext, dt: number): void {
   if (!_state) return;
   const s = _state;
 
-  // Signals
-  const storm = clamp01(ctx.weather.intensity);
+  // Signals. Session ZZ — soundscape reads `perceivedIntensity` (D79),
+  // so inside a large tent the wind + ambient-life suppression + tense
+  // music all dampen together. The visual storm (dust + vignette,
+  // wired in YY) already does the same. Fog + stats + AI stay on
+  // authoritative intensity — those represent the world's state, not
+  // the player's perception of it.
+  const storm = clamp01(ctx.weather.perceivedIntensity);
   const sy = ctx.time.sunHeight;
   const day = clamp01(sy * 1.5 + 0.1);
   const night = clamp01(-sy * 1.5 + 0.1);
@@ -209,7 +214,9 @@ export interface AudioStateSnapshot {
 export function getAudioStateSnapshot(ctx: GameContext): AudioStateSnapshot | null {
   if (!_state) return null;
   const s = _state;
-  const storm = clamp01(ctx.weather.intensity);
+  // ZZ — match the live tick path: snapshot reflects what the player
+  // is actually hearing (perceived), not world-truth intensity.
+  const storm = clamp01(ctx.weather.perceivedIntensity);
   const sy = ctx.time.sunHeight;
   const day = clamp01(sy * 1.5 + 0.1);
   const night = clamp01(-sy * 1.5 + 0.1);

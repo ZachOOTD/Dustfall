@@ -1,4 +1,4 @@
-# Next Session — Kickoff Brief (post-ZZ)
+# Next Session — Kickoff Brief (post-YY)
 
 ## Read these now (in order)
 
@@ -25,10 +25,11 @@ The era is closed; next session is open. A few small completions
 and a few larger directions:
 
 ### Quick polish completions (~30-60min each)
+- Wind audio off `intensity` → `perceivedIntensity` (backlog item) —
+  large-tent interior currently dampens dust + vignette but wind
+  audio stays full. Completes the perceivedIntensity split.
 - Post-mortem of the overnight run via `/gamedev-framework:post-mortem`
   — recurring patterns worth promoting to framework canon.
-- (audio dampening + visual dampening both shipped — perceivedIntensity
-  split is fully wired now.)
 
 ### Medium picks (1-3h)
 - Audio sample stems (.ogg sourcing) — architecture exists since X

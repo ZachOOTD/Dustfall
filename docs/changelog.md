@@ -3,6 +3,26 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ZZ — 2026-05-21 — Soundscape reads perceivedIntensity (audio half of YY's split) ✓ verify pass
+`verified` — tsc clean. Tiny follow-on session: completes YY's audio
+side. `src/audio/soundscape.ts`'s `storm` local variable (used by
+the wind layer + ambient-life suppression + tense music ramp) now
+reads `ctx.weather.perceivedIntensity` instead of `intensity`. Two
+lines changed (live tick at line 151 + debug snapshot at line 212).
+**Effect**: inside a large tent during a peak storm, the wind layer
+crossfades down toward the calm/breeze baseline, ambient life
+suppression eases (you might hear distant birds again at lower
+storm levels), and tense music doesn't swell as hard — the entire
+soundscape relaxes coherently with the visual dampening shipped in
+YY. Inside a small tent / fire shelter (legacy fully-enclosed →
+perceivedIntensity = 0), wind/music both go to the calm baseline
+immediately. Outside any shelter, unchanged. **Note**: the
+`AudioStateSnapshot.storm` field (exposed via `__game.audioState()`)
+now reports perceived rather than world-truth — keeps the debug
+view aligned with what the player is actually hearing. **Backlog**:
+the audio-extension item closed. Sixth (and final?) session of the
+overnight era.
+
 ## Session YY — 2026-05-21 — Storm visual dampening inside large tent (perceivedIntensity split) ✓ verify pass
 `verified` — tsc clean; eval-driven preview confirmed routing: outside any
 shelter → perceivedIntensity = intensity (full storm); inside small

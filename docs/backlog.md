@@ -20,4 +20,3 @@ Use `/triage-ideas` to bulk-classify a free-form dump.
 [feat] base-building mechanics
 [feat] small red creature companion — follows player, pocketable into backpack, re-deployable
 [idea] remove HUD stat bars in favor of audio/visual/text cues ("you could use a drink")
-[polish] move wind audio off `intensity` to `perceivedIntensity` so large-tent interior also muffles the wind sound layer (currently dust + vignette dampen but audio stays at full)

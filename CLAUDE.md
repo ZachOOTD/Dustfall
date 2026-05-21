@@ -58,7 +58,19 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session YY — Storm visual dampening inside large
+**Last shipped**: Session ZZ — Soundscape reads perceivedIntensity
+(audio half of YY's split). Tiny follow-on: `src/audio/soundscape.ts`'s
+`storm` local variable (drives wind + ambient-life + tense music)
+now reads `ctx.weather.perceivedIntensity` instead of intensity. Two
+lines (live tick + debug snapshot). Inside large tent during peak
+storm: wind layer crossfades toward calm baseline, ambient life
+suppression eases, tense music doesn't swell as hard — the entire
+soundscape relaxes coherently with YY's visual dampening. Inside
+small tent / fire: perceived = 0 → calm baseline immediately. Closes
+the audio side of the perceivedIntensity split. Backlog audio item
+closed.
+
+**Prior milestone**: Session YY — Storm visual dampening inside large
 tent (perceivedIntensity split). Continuation work after the overnight
 queue closed; completes XX's vision by realizing the scope-cut #1
 item. New `weather.perceivedIntensity: number` field — player-context-
