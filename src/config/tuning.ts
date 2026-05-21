@@ -728,8 +728,8 @@ export const Tuning = {
   OPENING_WRECK_R_COCKPIT: 1.7,              // m — cockpit max radius (widest point)
   OPENING_WRECK_R_NOSE: 0.55,                // m — pre-nose-tip radius (before final taper)
   OPENING_WRECK_SLICE_COUNT: 24,             // angular slices of the lathe (15° each)
-  OPENING_WRECK_SKYLIGHT_SLICE: 16,          // index of the FIRST slice to omit (top of hull). AAM-followup #2: gap widened to 4 slices (omits SKYLIGHT through SKYLIGHT+3) — phi=240°-300°, 60° wide CENTERED on true UP (270°). User feedback: the 3-slice off-axis version still read as a "hole on the side"; this is wider and properly overhead, letting noticeably more sun in.
-  OPENING_WRECK_SKYLIGHT_WIDTH: 4,           // AAM-followup #2: number of consecutive slices to omit for the skylight gap (was implicit 2 in AAJ, then 3, now 4 — 60° opening on top).
+  OPENING_WRECK_SKYLIGHT_SLICE: 15,          // index of the FIRST slice to omit (top of hull). AAM-followup #3: bumped to width 6 to make the gap unmistakably "top of the hull is broken open" — user kept seeing the 4-slice version as a side hole. With SLICE=15 + WIDTH=6 the gap covers slices 15-20 = phi 225°-315° = 90° wide, CENTERED on true UP (270°). Quarter of the upper hull is open to sky.
+  OPENING_WRECK_SKYLIGHT_WIDTH: 6,           // AAM-followup #3: 6 slices = 90° gap. Was 2 (AAJ) → 3 → 4 → 6. Each bump made the interior brighter + the "top is broken" silhouette clearer.
   OPENING_WRECK_LATERAL_PUNCTURES: 3,        // number of small breach-hole patches scattered on side flanks
   OPENING_WRECK_FLOOR_THICK: 0.18,           // m — flat slab thickness below the cavity
   // AAM-followup — terrain-bridging ramp at the entrance. Pre-followup,
@@ -737,14 +737,12 @@ export const Tuning = {
   // > 0.3m autostep, blocking entry. The ramp = a thin tilted box
   // collider + matching visible rust-dark plate just outside the rim,
   // sloping from terrain level up to floor top.
-  // AAM-followup #2: original LEN/DROP (1.2/0.3) wasn't enough — if outside
-  // terrain dipped > 0.3m below wreck origin, player still hit a step at
-  // the ramp's outer end. Bumped to 3.0/1.0 — outer end now sits 1m below
-  // floor top, which is buried in terrain in most cases. Player meets the
-  // ramp wherever terrain crosses it. Slope = atan2(1.0, 3.0) = ~18°,
-  // well within the 50° slope-climb limit.
-  OPENING_WRECK_RAMP_LEN_M: 3.0,             // m — extent in -Z (outward from entrance)
-  OPENING_WRECK_RAMP_DROP_M: 1.0,            // m — how much the outer edge drops below floor top
+  // AAM-followup #3: REVERTED the AAM-followup #2 bump back to 1.2/0.3 per
+  // user feedback ("ramp was fine before"). The actual blocker was the
+  // upper side wall colliders pinching the cavity at head height, not
+  // the ramp. See followup #3's side-wall collider redesign.
+  OPENING_WRECK_RAMP_LEN_M: 1.2,             // m — extent in -Z (outward from entrance)
+  OPENING_WRECK_RAMP_DROP_M: 0.3,            // m — how much the outer edge drops below floor top
   OPENING_WRECK_RAMP_THICK_M: 0.05,          // m — plate thickness
   // AAJ — hull wall thickness. Pre-AAJ the hull was a single LatheGeometry
   // rendered DoubleSide; from inside the cavity that read as paper-thin

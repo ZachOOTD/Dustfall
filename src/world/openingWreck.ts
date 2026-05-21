@@ -742,28 +742,30 @@ export function placeOpeningWreck(
     { x: 0, y: AXIS_Y * 0.7, z: HULL_LEN / 2 - 0.05 },
   );
 
-  // (3-6) Side walls — 2 tilted boxes per side approximating the
-  // curved hull cross-section. Lower (vertical) + upper (angled inward
-  // toward the ceiling). The rear (-Z) end is OPEN — colliders span
-  // most of the length but stop short of the entrance.
-  const sideHalfZ = HULL_LEN / 2 - 0.3;        // collider half-length
-  const sideCenterZ = 0.1;                      // shifted slightly toward +Z so rear gap is wider
+  // (3-4) Side walls — AAM-followup #3: simplified to a single VERTICAL
+  // wall per side, positioned at the inner shell radius so the player's
+  // physical cavity matches what they SEE. Previous design (AAJ) used 2
+  // tilted boxes per side (lower near-vertical, upper at ~49° tilt). The
+  // upper tilt squeezed the cavity at head height to ±0.5m wide — player
+  // capsule (0.35m radius) had only 15cm clearance per side. User reported
+  // "too small to fit inside" with no visible blockage; the colliders
+  // were tighter than the visual interior. Vertical walls at the inner
+  // shell radius (R_COCKPIT - HULL_WALL_THICKNESS) give the player the
+  // full cavity width they can see. Some headroom is lost at very high Y
+  // (near the dome ceiling) but the silhouette at player height is correct.
+  const sideHalfZ = HULL_LEN / 2 - 0.3;        // collider half-length (unchanged)
+  const sideCenterZ = 0.1;                      // shifted slightly toward +Z so rear gap is wider (unchanged)
+  const sideHalfY = (AXIS_Y + R_COCKPIT * 0.85) * 0.5; // wall extends floor → ceiling
+  const sideCenterY = sideHalfY;                // bottom at Y=0 (floor top)
+  const sideWallX = R_COCKPIT - HULL_WALL_THICKNESS; // flush with the inner hull shell
   for (const side of [-1, 1] as const) {
-    // Lower wall — near-vertical, slight inward tilt at top via rot.z.
     addColl(
-      { x: 0.08, y: AXIS_Y * 0.7, z: sideHalfZ },
-      { x: side * (R_COCKPIT * 0.78), y: AXIS_Y * 0.55, z: sideCenterZ },
-      { z: -side * 0.15 },
-    );
-    // Upper wall — angled inward more steeply, forms the curved roof.
-    addColl(
-      { x: 0.08, y: AXIS_Y * 0.55, z: sideHalfZ },
-      { x: side * (R_COCKPIT * 0.45), y: AXIS_Y + R_COCKPIT * 0.55, z: sideCenterZ },
-      { z: -side * 0.85 },
+      { x: 0.08, y: sideHalfY, z: sideHalfZ },
+      { x: side * sideWallX, y: sideCenterY, z: sideCenterZ },
     );
   }
 
-  // (7) Ceiling — flat plate at the top of the cavity, narrower than
+  // (5) Ceiling — flat plate at the top of the cavity, narrower than
   // the floor (the curved roof comes in toward the center).
   addColl(
     { x: R_COCKPIT * 0.35, y: 0.06, z: sideHalfZ },
