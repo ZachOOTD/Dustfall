@@ -50,6 +50,12 @@ export function placeProcgenPOIs(
   const rMax = Tuning.POI_SCATTER_RADIUS_MAX;
   const target = Tuning.POI_PROCGEN_COUNT;
   const maxTries = Tuning.POI_MAX_PLACEMENT_TRIES;
+  // AAI — player-spawn exclusion: procgen wrecks (smaller than flagships
+  // but still tall props) shouldn't crowd the opening cinematic. Uses the
+  // same anchor + radius as the flagship sampler.
+  const spawnX = Tuning.OPENING_SCENE_ANCHOR_X;
+  const spawnZ = Tuning.OPENING_SCENE_ANCHOR_Z;
+  const spawnExcludeSq = Tuning.PLAYER_SPAWN_EXCLUSION_RADIUS * Tuning.PLAYER_SPAWN_EXCLUSION_RADIUS;
 
   // Combined exclusion list — anchors are fixed obstacles, accepted
   // procgen POIs become obstacles for subsequent picks.
@@ -64,6 +70,9 @@ export function placeProcgenPOIs(
       const a = rand() * Math.PI * 2;
       const x = Math.cos(a) * r;
       const z = Math.sin(a) * r;
+      // AAI — spawn-zone exclusion (per D83).
+      const sdx = x - spawnX, sdz = z - spawnZ;
+      if (sdx * sdx + sdz * sdz < spawnExcludeSq) continue;
       let blocked = false;
       for (const c of allCenters) {
         const dx = x - c.x;

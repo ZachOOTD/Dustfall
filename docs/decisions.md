@@ -1686,3 +1686,74 @@ read `intensity`. Audio could go either way — currently on `intensity`;
 moving it to `perceivedIntensity` would make wind sound dampen
 inside the large tent (probably desirable as a future polish item).
 **friction-score:** 2
+
+## D82 — Flagship POIs unified into the rejection sampler (Session AAI)
+**When**: Session AAI.
+**Why**: Pre-AAI, six flagship POIs (engine_block, camp, satellite_dish,
+crashed_hull, mega_ship, mega_wreck) had hardcoded coordinates in
+`poi.ts:147-154` while procgen wrecks went through a rejection sampler in
+`procgenPoi.ts`. Two placement paths meant flagship+procgen min-separation
+broke whenever seeds shuffled — the procgen layer correctly avoided
+flagships (it knew their coords), but the flagships couldn't move per-seed
+at all. Unified catalog (`FLAGSHIP_KINDS` + `sampleFlagshipPositions`)
+gives one source of placement truth: flagships go through the same
+Poisson-disk-character sampler as procgen wrecks. Procgen wrecks then
+receive the placed flagship positions as exclusion seeds, so the entire
+wreck layout is rejection-sampled together and consistent under any seed.
+**Considered alternatives**:
+- Keep flagship coords hardcoded, only randomize procgen wrecks +
+  scatter. Smallest scope. Rejected: scope-cut-5 fallback, not first
+  choice — leaves the "different worlds" feel weak because the most
+  iconic landmarks always sit at the same spots.
+- Per-kind constraint records (flag tag for "must be on flat ground",
+  "must be in dune biome", etc.). Over-engineered for 6 kinds; the
+  existing per-kind dispatch code in `placePOIs` already handles its
+  own flat-spot drift inside each spawn fn (mega_ship/mega_wreck do
+  their own search). Constraints stay inline.
+**Apply**: future flagship additions land in `FLAGSHIP_KINDS` array.
+The rejection sampler honors `POI_MIN_SEPARATION` between flagships
+and `PLAYER_SPAWN_EXCLUSION_RADIUS` from the opening anchor.
+**friction-score:** 2
+
+## D83 — Opening scene is seed-stable as narrative anchor (Session AAI)
+**When**: Session AAI.
+**Why**: Player's first 30 seconds of every new game should be a
+consistent experience — same opening wreck silhouette, same cockpit
+journal, same companion pod position, same speeder pose. Per-seed
+randomization of the opening would break tonal continuity
+("Dustfall opens like this") and require regression-testing the
+narrative beat for every seed. The cheapest implementation: lock
+`OPENING_SCENE_ANCHOR_X/Z = -50, 0` in Tuning, and
+`PLAYER_SPAWN_EXCLUSION_RADIUS = 80` keeps procgen content out of the
+immediate viewshed so the opening isn't crowded. The wreck's
+`findFlattestSpot` drift up to 16m is preserved.
+**Apply**: never randomize player spawn, opening wreck, opening companion
+pod, opening speeder placement.
+**friction-score:** 1
+
+## D84 — Seed source: auto-roll on NEW GAME + advanced UI entry (Session AAI)
+**When**: Session AAI.
+**Why**: Default flow needs to be friction-free — a player clicks NEW
+GAME and gets a fresh random world without thinking about seeds. Power
+users want to share + reproduce specific worlds, so the title overlay
+gains a collapsed "Advanced ▾" disclosure with a uint32 seed input.
+Browser `Math.random() * 0x100000000 >>> 0` is "good enough" entropy —
+we're not cryptographic, just want variety. The pendingSeed handshake
+through localStorage survives page reloads (which the existing NEW GAME
+flow uses to wipe + rebuild the procgen world cleanly).
+**Apply**: don't add seed display to the default title UI (would clutter
+the minimal aesthetic); seed shows in the controls panel (H key) for
+post-spawn sharing.
+**friction-score:** 1
+
+## D85 — `Tuning.RNG_SEED` retained as fallback only (Session AAI)
+**When**: Session AAI.
+**Why**: Production NEW GAME inline-rolls a random seed on first-ever
+boot + persists per-game seeds via save. `Tuning.RNG_SEED = 1337` is
+no longer the production world seed. Keeping it as a Tuning constant
+documents the historic default + provides a dev/test path: setting
+`localStorage['dustfall.pendingSeed'] = '1337'` reproduces the
+pre-AAI world for regression testing.
+**Apply**: don't delete; reference via `void Tuning.RNG_SEED` for
+unused-import discipline. Don't read it in any other module post-AAI.
+**friction-score:** 0

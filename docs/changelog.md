@@ -3,6 +3,72 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session AAI — 2026-05-21 — Procedural world generation (standard 2400m world) ✓ verify pass
+`verified` — tsc clean; preview-eval confirmed (1) two fresh boots produce
+two different random seeds, (2) custom seed via localStorage produces an
+identical world across reloads (flagship + lizard positions match exactly
+when re-seeded), (3) save+reload restores seed correctly, (4) all 6
+flagship POI types present per seed, (5) speeder/opening scene at the
+seed-stable anchor.
+
+**Per-seed worlds within the existing 2400m grid.** No save schema bump
+(v9 already had `seed: number`; AAI finally uses it).
+
+**Seed flow** (`src/main.ts:91-126`). New `resolveSeed()` reads:
+(1) `localStorage['dustfall.pendingSeed']` if set by titleOverlay's
+Advanced entry; (2) existing save's `seed` field via new
+`peekSavedSeed()`; (3) inline-rolls a random uint32 if neither. All
+3 RNG streams (terrain=seed, scatter=seed+1, biome=seed+17) derive
+from this. `ctx.seed` is set at boot; `saveGameState` writes
+`ctx.seed` instead of `Tuning.RNG_SEED`. D85 retains
+`Tuning.RNG_SEED = 1337` as dev/test fallback (set
+`localStorage['dustfall.pendingSeed'] = '1337'` to reproduce pre-AAI
+world).
+
+**Flagship POI rejection sampler** (`src/world/poi.ts`, D82). Hardcoded
+`POI_LAYOUT` array (6 flagships at fixed coords pre-AAI) replaced with
+`FLAGSHIP_KINDS` array + `sampleFlagshipPositions(rand)`. Positions
+rejection-sampled in scatterRand stream with
+`Tuning.POI_MIN_SEPARATION = 250m` between flagships +
+`Tuning.PLAYER_SPAWN_EXCLUSION_RADIUS = 80m` from the opening anchor.
+Procgen wrecks (`procgenPoi.ts`) extended to honor the same spawn
+exclusion. `_placedFlagshipPositions` cached at module level so
+`getAnchorPOIPositions()` returns the rejection-sampled positions for
+procgen wrecks + lizard clustering.
+
+**Opening scene seed-stable anchor** (D83). New Tuning constants
+`OPENING_SCENE_ANCHOR_X/Z = -50, 0` document the narrative anchor.
+Existing `findFlattestSpot` drift (up to 16m) preserved; small enough
+to keep the opening recognizable while letting the wreck settle on
+non-clipping terrain per seed.
+
+**Title screen Advanced section + seed entry** (`src/ui/titleOverlay.ts`,
+D84). Collapsed disclosure under NEW GAME with a uint32 text input
+(placeholder = current world's seed). Reveals on click. NEW GAME with
+valid input + different from current seed → `localStorage.setItem('dustfall.pendingSeed', ...)`
++ wipe save + page-reload. NEW GAME blank input + save exists → auto-roll
+random seed + reload. NEW GAME blank input + no save → handoff (world
+was auto-rolled at boot). 6 new CSS classes for the disclosure styling.
+
+**World seed display in controls panel** (`src/ui/tutorial.ts`). New
+`#controls-seed-line` div at the bottom of the controls panel; refreshed
+on each `showControlsPanel` call to read current `ctx.seed`.
+`user-select: text` so players can copy + share. Pure read-only.
+
+**Density bumps** (per user direction; world stays 2400m²).
+`POI_PROCGEN_COUNT: 15 → 22`, `CACTUS_TARGET_COUNT: 10 → 14`,
+`DEAD_TREE_TARGET_COUNT: 30 → 45`. Procgen worlds now feel denser per
+seed without expanding the chunk grid.
+
+**Decisions D82-D85 logged** (4 entries: rejection-sampler unification
+friction-2, opening anchor friction-1, seed source flow friction-1,
+Tuning.RNG_SEED retained as fallback friction-0).
+
+**Out of scope** (deferred): infinite chunk streaming (Minecraft-style),
+seed UI on first-boot reload friction (acceptable trade for randomness),
+biome-specific flagship placement constraints (existing per-kind
+flat-spot drift handles the worst cases).
+
 ## Session AAH — 2026-05-21 — Playtest polish for AAG (Tuning lift + feel tweaks) ✓ verify pass
 `verified` — tsc clean; preview confirmed Tuning lift took effect at
 runtime (dust motes opacity reads 0.22 in `__game.ctx.dustMotes.

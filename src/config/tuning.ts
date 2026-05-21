@@ -417,7 +417,7 @@ export const Tuning = {
   // Scatter — world rework #2 (Session GG). All bounds + counts rescaled
   // for the 2400m world; chunk bounds are [-1200, +1200] so 1100m radial
   // sampling stays safely inside the chunk band.
-  CACTUS_TARGET_COUNT: 10,
+  CACTUS_TARGET_COUNT: 14,          // AAI: was 10 — density bump for procgen worlds
   CACTUS_SCATTER_RADIUS_MIN: 12,
   CACTUS_SCATTER_RADIUS_MAX: 1100,
   // JJ — cluster cacti into patches around salt-biome centroids (was uniform scatter).
@@ -426,7 +426,7 @@ export const Tuning = {
   CACTUS_PATCH_COUNT: 4,
   CACTUS_PATCH_CLUSTER_RADIUS: 12,       // m — rejection-sample cacti within this of each centroid
   CACTUS_PATCH_MIN_SEPARATION: 300,      // m — greedy exclusion between patch centroids
-  DEAD_TREE_TARGET_COUNT: 30,
+  DEAD_TREE_TARGET_COUNT: 45,       // AAI: was 30 — density bump for procgen worlds
   DEAD_TREE_SCATTER_RADIUS_MIN: 20,
   DEAD_TREE_SCATTER_RADIUS_MAX: 1100,
   // JJ — cluster dead trees into groves around salt-biome centroids (was uniform scatter).
@@ -449,11 +449,19 @@ export const Tuning = {
   // rejection sampling with min-separation enforcement (Poisson-disk
   // character at this density). Vocabulary is the existing wreck kinds —
   // no new art.
-  POI_PROCGEN_COUNT: 15,
+  POI_PROCGEN_COUNT: 22,               // AAI: was 15 — density bump for procgen worlds
   POI_MIN_SEPARATION: 250,             // m — rejection-sample min distance between any two POIs
   POI_MAX_PLACEMENT_TRIES: 80,         // per-target attempt budget
   POI_SCATTER_RADIUS_MIN: 120,         // m — leave room for spawn cluster + anchor POIs
   POI_SCATTER_RADIUS_MAX: 1100,        // m — safely inside chunk band
+
+  // AAI — opening-scene anchor (player + opening wreck + companion pod +
+  // speeder). Per D83, this position stays seed-stable as a narrative anchor.
+  // PLAYER_SPAWN_EXCLUSION_RADIUS keeps procgen flagships + procgen wrecks
+  // out of the immediate viewshed so the opening cinematic isn't crowded.
+  OPENING_SCENE_ANCHOR_X: -50,
+  OPENING_SCENE_ANCHOR_Z: 0,
+  PLAYER_SPAWN_EXCLUSION_RADIUS: 80,   // m — no procgen content within this of anchor
 
   // Lizard procgen — Session HH. Replaces 4 hard-coded spawns with
   // density-based scatter that clusters near POIs + sparse global density.

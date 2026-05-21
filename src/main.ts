@@ -73,7 +73,7 @@ import { createTitleScene } from './world/titleScene.ts';
 import { createTitleOverlay } from './ui/titleOverlay.ts';
 import { ensureAudioStarted } from './audio/audio.ts';
 import { startSoundscape } from './audio/soundscape.ts';
-import { clearSave, loadGameState } from './persistence/save.ts';
+import { clearSave, loadGameState, peekSavedSeed } from './persistence/save.ts';
 
 // --- Bootstrap (async — Rapier WASM + asset preload before world build) ---
 const [physics, assets] = await Promise.all([
@@ -88,14 +88,46 @@ const hud = createHud();
 createHotbar();
 createInteractPrompt();
 
-// Two RNG streams: terrain shape vs prop scatter. Stable across reloads.
-const terrainRand = makeRng(Tuning.RNG_SEED);
-const scatterRand = makeRng(Tuning.RNG_SEED + 1);
+// AAI — resolve the world seed BEFORE building any procgen system. Three
+// sources, in priority order:
+//   1. localStorage['dustfall.pendingSeed'] — set by titleOverlay's
+//      Advanced seed entry OR by the NEW GAME button auto-roll. Consumed
+//      (removed) here so a refresh after gameplay re-uses the saved seed.
+//   2. peekSavedSeed() — the seed of the existing save (Continue path).
+//   3. Tuning.RNG_SEED — dev/test fallback (effectively only when both
+//      localStorage and save are empty, i.e., first-ever boot).
+function resolveSeed(): number {
+  const PENDING_KEY = 'dustfall.pendingSeed';
+  const pending = localStorage.getItem(PENDING_KEY);
+  if (pending !== null) {
+    localStorage.removeItem(PENDING_KEY);
+    const n = parseInt(pending, 10);
+    if (!Number.isNaN(n) && Number.isFinite(n) && n >= 0) {
+      return n >>> 0;
+    }
+  }
+  const saved = peekSavedSeed();
+  if (saved !== null) return saved;
+  // No pending seed + no save — fresh-first-boot. Inline-roll so the
+  // first-ever NEW GAME plays a random world (not the dev-fallback 1337).
+  // Tuning.RNG_SEED is retained for dev/test paths that explicitly set
+  // pendingSeed to that value, but it's not the production default.
+  return Math.floor(Math.random() * 0x100000000) >>> 0;
+}
+const worldSeed = resolveSeed();
+// Reference Tuning.RNG_SEED to silence unused-import; it's the documented
+// dev/test fallback (per D85) used when localStorage is pre-seeded to it.
+void Tuning.RNG_SEED;
+
+// Three RNG streams: terrain shape, prop scatter, biome noise. All
+// derived from worldSeed so the same seed regenerates the same world.
+const terrainRand = makeRng(worldSeed);
+const scatterRand = makeRng(worldSeed + 1);
 
 const shelter = createShelterRegistry();
-// Biome sampler is independent of terrain heights but seeded from the same
-// scatter stream so the world is fully deterministic from RNG_SEED.
-const biomes = createBiomeSampler(makeRng(Tuning.RNG_SEED + 17));
+// Biome sampler is independent of terrain heights but derived from the
+// same root seed so the world is fully deterministic.
+const biomes = createBiomeSampler(makeRng(worldSeed + 17));
 const terrain = createTerrain(three.scene, physics.world, terrainRand, biomes);
 // HH — the FF LOD ring was removed: its coarse 50m interpolation poked above
 // the chunks' fine detail in dune valleys (D52 superseded). Fog at the
@@ -217,6 +249,7 @@ for (const m of terrain.meshes) {
 createSky(three.scene);
 
 const ctx: GameContext = {
+  seed: worldSeed,    // AAI — single source of truth for world seed
   three,
   lights,
   input,
@@ -400,16 +433,29 @@ function handoffToGame(): void {
 }
 
 const titleOverlay = createTitleOverlay(ctx, {
-  onNewGame: () => {
-    // "New game" should be a clean slate, so wipe any existing save and
-    // reload — the next boot rebuilds the opening scene + default
-    // inventory + clean stats from scratch. On a fresh boot (no save),
-    // we just hand off directly.
+  onNewGame: (seedOverride?: number) => {
+    // AAI — per-game seed handling. Three paths:
+    //   1. Advanced seed entered + different from current → store pending
+    //      seed + wipe save + reload (boot will use the new seed).
+    //   2. Save existed at boot → user wants a fresh world; roll a random
+    //      seed (or use override) + wipe + reload.
+    //   3. No save at boot, no seed override → world was auto-rolled this
+    //      boot already; just hand off (no reload).
+    const wantOverride = seedOverride !== undefined && (seedOverride >>> 0) !== ctx.seed;
+    if (wantOverride) {
+      localStorage.setItem('dustfall.pendingSeed', String(seedOverride! >>> 0));
+      if (hadSaveAtBoot) clearSave();
+      location.reload();
+      return;
+    }
     if (hadSaveAtBoot) {
+      const rolled = Math.floor(Math.random() * 0x100000000) >>> 0;
+      localStorage.setItem('dustfall.pendingSeed', String(rolled));
       clearSave();
       location.reload();
       return;
     }
+    // Fresh-boot, no override: this world was auto-rolled; play it.
     handoffToGame();
   },
   onContinue: hadSaveAtBoot ? () => {

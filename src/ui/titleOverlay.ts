@@ -13,8 +13,10 @@ export interface TitleOverlayApi {
 }
 
 export interface TitleOverlayOptions {
-  /** Always required. Fired when the player clicks NEW GAME. */
-  onNewGame: () => void;
+  /** Always required. Fired when the player clicks NEW GAME.
+   *  AAI — optional `seedOverride` carries a uint32 the user entered
+   *  via the Advanced panel. Undefined means "auto-roll a fresh seed". */
+  onNewGame: (seedOverride?: number) => void;
   /** Optional. When provided, a CONTINUE button is shown above NEW GAME. */
   onContinue?: () => void;
 }
@@ -52,17 +54,62 @@ export function createTitleOverlay(
     panel.appendChild(contBtn);
   }
 
+  // AAI — read the parsed seed from the Advanced input (if shown +
+  // populated). Returns undefined if empty/invalid → caller auto-rolls.
+  let seedInput: HTMLInputElement | null = null;
+  const readAdvancedSeed = (): number | undefined => {
+    if (!seedInput) return undefined;
+    const raw = seedInput.value.trim();
+    if (raw === '') return undefined;
+    const n = parseInt(raw, 10);
+    if (Number.isNaN(n) || !Number.isFinite(n) || n < 0) return undefined;
+    return n >>> 0;
+  };
+
   const newGameBtn = document.createElement('button');
   newGameBtn.className = 'title-new-game';
   newGameBtn.textContent = 'NEW GAME';
   newGameBtn.addEventListener('mouseenter', playUiHover);
   newGameBtn.addEventListener('click', () => {
     playUiClick();
-    options.onNewGame();
+    options.onNewGame(readAdvancedSeed());
   });
   panel.appendChild(newGameBtn);
 
-  void ctx;
+  // AAI — Advanced disclosure with seed entry. Default-collapsed; click
+  // the disclosure to reveal a text input for a uint32 seed. Leaving the
+  // input blank + clicking NEW GAME auto-rolls.
+  const advWrap = document.createElement('div');
+  advWrap.className = 'title-advanced';
+  const advToggle = document.createElement('button');
+  advToggle.type = 'button';
+  advToggle.className = 'title-advanced-toggle';
+  advToggle.textContent = 'advanced ▾';
+  advWrap.appendChild(advToggle);
+
+  const advPanel = document.createElement('div');
+  advPanel.className = 'title-advanced-panel hidden';
+
+  const seedLabel = document.createElement('label');
+  seedLabel.className = 'title-advanced-label';
+  seedLabel.textContent = 'seed (blank = random)';
+  advPanel.appendChild(seedLabel);
+
+  seedInput = document.createElement('input');
+  seedInput.type = 'text';
+  seedInput.inputMode = 'numeric';
+  seedInput.maxLength = 10;
+  seedInput.className = 'title-advanced-seed';
+  seedInput.placeholder = String(ctx.seed);  // hint: current world's seed
+  advPanel.appendChild(seedInput);
+
+  advWrap.appendChild(advPanel);
+  panel.appendChild(advWrap);
+
+  advToggle.addEventListener('click', () => {
+    const hidden = advPanel.classList.toggle('hidden');
+    advToggle.textContent = hidden ? 'advanced ▾' : 'advanced ▴';
+  });
 
   document.body.appendChild(panel);
 

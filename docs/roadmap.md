@@ -29,10 +29,11 @@ and promotes the second.
 - **Session AAF** (2026-05-21): 7-day storm countdown ("THE LONG STORM") — escalating-storm endgame.
 - **Session AAG** (2026-05-21): atmospheric polish + inventory swap-on-full — footprint puffs, dust motes, mirage shader, hold-E swap-on-pickup-full.
 - **Session AAH** (2026-05-21): playtest polish for AAG — Tuning lifts (footprintPuffs + interaction.ts swap-duration) + 5 feel tweaks (puff height ↑, motes opacity ↑, swap snappier, mirage near-edge ↓, motes storm cross-fade softened).
+- **Session AAI** (2026-05-21): procedural world generation (standard 2400m) — per-seed auto-roll on NEW GAME + advanced UI seed entry + flagship POIs unified into rejection sampler + opening scene as seed-stable anchor + density bumps. D82-D85.
 
 ## Up next
 
-Procedural world generation (POI randomization per seed) is the next-recommended architectural lift — the user has called it "the logical next step" with the caveat that it needs careful work. See `docs/next-session-prompt.md` for the kickoff brief and the fire-grill-attachment fallback if a smaller session is preferred.
+Infinite chunk streaming (Minecraft-style) is the natural follow-on to AAI's per-seed world. AAI locks the per-seed contract; the next session would extend to per-chunk seed derivation + JIT chunk load/unload + GPU memory budget. Alternatively: fire grill attachment (multi-cook), trading/NPC economy design exploration, or the AAI playtest pass at multiple seeds.
 
 ## Next — Big-ticket bucket (1–2 picks per session at ~4–7h each)
 Pick whatever feels most missing after the polish + atmosphere arc.

@@ -37,6 +37,11 @@ import type { SalvageableRegistry } from './world/salvage.ts';
 import type { FootprintRegistry } from './world/footprints.ts';
 
 export interface GameContext {
+  /** Session AAI — world seed. Drives all 3 RNG streams (terrain,
+   *  scatter, biome). Set at boot from localStorage['dustfall.pendingSeed']
+   *  (NEW GAME with custom seed) → existing save.seed (Continue) →
+   *  Tuning.RNG_SEED (dev/test fallback). Persisted in save schema v9+. */
+  seed: number;
   three: {
     scene: THREE.Scene;
     camera: THREE.PerspectiveCamera;

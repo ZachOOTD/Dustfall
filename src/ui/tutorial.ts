@@ -128,6 +128,14 @@ function buildPanel(): HTMLDivElement {
   }
   panel.appendChild(rows);
 
+  // AAI — world seed line (shown for share/debug). Populated in
+  // showControlsPanel since it depends on ctx.seed.
+  const seedLine = document.createElement('div');
+  seedLine.id = 'controls-seed-line';
+  seedLine.className = 'controls-seed-line';
+  seedLine.textContent = 'world seed: —';
+  panel.appendChild(seedLine);
+
   const closeBtn = document.createElement('button');
   closeBtn.className = 'menu-btn';
   closeBtn.textContent = 'close';
@@ -157,6 +165,11 @@ export function createTutorial(ctx: GameContext): void {
 
 export function showControlsPanel(ctx: GameContext): void {
   if (!_panel) return;
+  // AAI — refresh seed display on each open (seed is stable per-boot
+  // but the panel is built once before ctx.seed is finalized in test
+  // paths; safer to update on show).
+  const seedLine = _panel.querySelector('#controls-seed-line');
+  if (seedLine) seedLine.textContent = `world seed: ${ctx.seed >>> 0}`;
   _panel.classList.remove('hidden');
   _open = true;
   // Mid-game (started + alive): unlocking the pointer triggers the pause

@@ -1245,6 +1245,17 @@ canvas {
   text-align: left;
 }
 
+/* AAI — world seed line at the bottom of the controls panel. */
+.controls-seed-line {
+  margin-top: 18px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  color: rgba(184, 168, 136, 0.65);
+  text-align: center;
+  user-select: text;       /* let players copy + share the seed */
+}
+
 /* ──────────────────────────────────────────────────────────
    Journal panel (Session W)
    ────────────────────────────────────────────────────────── */
@@ -1369,6 +1380,59 @@ button.title-new-game:hover {
   border-color: #f0e2c4;
   background: rgba(232, 220, 192, 0.10);
   letter-spacing: 10px;
+}
+
+/* AAI — Advanced disclosure under the title buttons (seed entry). */
+.title-advanced {
+  margin-top: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: auto;
+}
+.title-advanced-toggle {
+  background: none;
+  border: none;
+  color: rgba(232, 220, 192, 0.45);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 2px;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+.title-advanced-toggle:hover {
+  color: #f0e2c4;
+}
+.title-advanced-panel {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+}
+.title-advanced-panel.hidden {
+  display: none;
+}
+.title-advanced-label {
+  color: rgba(232, 220, 192, 0.70);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 1px;
+}
+.title-advanced-seed {
+  background: rgba(8, 6, 4, 0.55);
+  border: 1px solid rgba(232, 220, 192, 0.45);
+  color: #f0e2c4;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  padding: 8px 12px;
+  width: 220px;
+  text-align: center;
+  letter-spacing: 1px;
+}
+.title-advanced-seed:focus {
+  outline: none;
+  border-color: #f0e2c4;
 }
 
 /* ──────────────────────────────────────────────────────────

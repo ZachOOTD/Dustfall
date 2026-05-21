@@ -4,13 +4,15 @@ Cumulative state. Rewritten end-to-end at each `/session-end`. A
 reviewer who's never seen the project should be able to read this +
 `CLAUDE.md` + `docs/GDD.md` and understand where Dustfall is.
 
-**Current state**: Session AAH shipped (2026-05-21). 35 sessions
-post-MVP. tsc clean. SAVE_VERSION v9 (unchanged). Post-overnight:
-UU/VV/UU-2/WW/XX/YY/ZZ + AAA (polish) + AAB (world depth) + AAC
-(craftable home) + AAD (kit playtest polish) + AAE (creature
-companion + v9) + AAF (7-day storm countdown) + AAG (atmospheric
-polish + inventory swap-on-full) + AAH (playtest polish for AAG).
-Working tree dirty pending the user's commit.
+**Current state**: Session AAI shipped (2026-05-21). 36 sessions
+post-MVP. tsc clean. SAVE_VERSION v9 (unchanged — the v9 `seed` field
+finally gets per-game values instead of always `Tuning.RNG_SEED`).
+Post-overnight: UU/VV/UU-2/WW/XX/YY/ZZ + AAA (polish) + AAB (world
+depth) + AAC (craftable home) + AAD (kit playtest polish) + AAE
+(creature companion + v9) + AAF (7-day storm countdown) + AAG
+(atmospheric polish + inventory swap-on-full) + AAH (playtest
+polish for AAG) + AAI (procedural world generation). Working tree
+dirty pending the user's commit.
 
 ---
 
@@ -86,6 +88,46 @@ Fresh-game start (the de-facto Tier 1 — Session W shipped):
    captured mid-drink doesn't resume drinking on reload.
 
 ---
+
+## What's freshly shipped (Session AAI deltas)
+
+Procedural world generation (standard 2400m world). Per-seed worlds
+within the existing 3×3 chunk grid; no schema bump. 4 decisions logged
+(D82-D85).
+
+- **`ctx.seed` + boot seed-derivation** (`src/main.ts`). New
+  `resolveSeed()` reads localStorage pendingSeed → save seed → inline-
+  roll. New `peekSavedSeed()` in save.ts reads the seed field without
+  doing a full load (so the procgen world can be built at boot from
+  the saved seed, not after Continue patches state). `saveGameState`
+  now writes `ctx.seed` instead of `Tuning.RNG_SEED`.
+- **Flagship POI rejection sampler** (`src/world/poi.ts`, D82). 6
+  flagship coords were hardcoded; now they go through
+  `sampleFlagshipPositions(rand)` with the same min-separation (250m)
+  + Poisson-disk character as the procgen wreck sampler. Player-spawn
+  exclusion (80m around `-50, 0`) keeps the opening cinematic clear.
+- **`procgenPoi.ts` extended** with the same spawn-exclusion check
+  (per-candidate rejection if within 80m of `OPENING_SCENE_ANCHOR_X/Z`).
+- **Opening scene seed-stable** (D83). New Tuning
+  `OPENING_SCENE_ANCHOR_X/Z = -50, 0` + `PLAYER_SPAWN_EXCLUSION_RADIUS = 80`.
+  Player spawn, opening wreck, companion pod, speeder all preserved
+  across seeds. Existing `findFlattestSpot` drift (16m) untouched.
+- **Title Advanced seed entry** (`src/ui/titleOverlay.ts`, D84).
+  Collapsed disclosure under NEW GAME with a uint32 text input
+  (placeholder = current seed). Valid + different from `ctx.seed`
+  triggers pendingSeed + clearSave + reload. Auto-roll when blank
+  + save exists. Handoff when blank + no save (world was inline-rolled
+  at boot). 6 new CSS classes for the disclosure styling.
+- **World seed in controls panel** (`src/ui/tutorial.ts`). New
+  `#controls-seed-line` shown at bottom of the H-key panel, refreshed
+  on each open. `user-select: text` for sharing.
+- **Density bumps**. `POI_PROCGEN_COUNT: 15 → 22`,
+  `CACTUS_TARGET_COUNT: 10 → 14`, `DEAD_TREE_TARGET_COUNT: 30 → 45`.
+- **`Tuning.RNG_SEED` retained as fallback only** (D85). Documented
+  via `void Tuning.RNG_SEED` in main.ts; reproduces pre-AAI world if
+  pendingSeed is manually set to 1337.
+
+No save schema change — v9 stays. tsc clean. 9 files touched.
 
 ## What's freshly shipped (Session AAH deltas)
 

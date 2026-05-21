@@ -1,52 +1,109 @@
-# Next Session — Kickoff Brief (post-AAH)
+# Next Session — Kickoff Brief (post-AAI)
 
 ## Read these now (in order)
 
 1. `CLAUDE.md` (auto-loaded)
-2. `docs/session-end-report.md` — cumulative state through AAH
-3. `docs/changelog.md` — read AAG / AAH entries at the top
-4. `docs/decisions.md` — D73-D81. Especially D71 (recipe id stability — next recipe is id 15), D75 (PLACEMENT_DISTANCE_M), D81 (save migration additive only — SAVE_VERSION is now v9).
+2. `docs/session-end-report.md` — cumulative state through AAI
+3. `docs/changelog.md` — read AAH / AAI entries at the top
+4. `docs/decisions.md` — D82-D85 (the AAI procgen + seed decisions). Also D71 (recipe id stability — next recipe is id 15), D81 (save migration additive only — SAVE_VERSION is now v9).
 5. `docs/roadmap.md`
 6. `docs/backlog.md`
 
 ## What's already built
 
-35 sessions. The overnight era + AAA/AAB/AAC polish/depth/home + AAD playtest polish + AAE creature companion + AAF storm countdown + AAG atmospheric polish + AAH AAG-polish all shipped. Codebase: tsc clean, 0 `as any`, SAVE_VERSION 9, 14 recipes, 5 placeable kits + companion_pod as deployable creature. Atmosphere is rich (mirage shader, dust motes, footprint puffs, god-rays, perceivedIntensity-driven visuals + audio).
+36 sessions. Per-seed worlds within the 2400m grid now shipped (AAI):
+auto-roll on NEW GAME, custom seed via Advanced UI, 6 flagship POIs +
+procgen wrecks all rejection-sampled per seed, opening scene as
+seed-stable anchor. Codebase: tsc clean, 0 `as any`, SAVE_VERSION 9
+(unchanged — v9 already had `seed: number`), 14 recipes, 5 placeable
+kits + companion. Atmosphere stack: mirage shader, dust motes,
+footprint puffs, god-rays, perceivedIntensity-driven visuals + audio.
 
 ## Suggested focus (pick one)
 
-The next-most-likely architectural lift is **procedural world generation** — POI layout randomized per new-game seed. The user has called this out twice as "the logical next step" with the caveat "need to put in the work to get it right." This is meaty (5-8h) and merits a planning pass.
+The natural next architectural lift is **infinite chunk streaming**
+(Minecraft-style). AAI's per-seed contract is the foundation; this
+session would extend to per-chunk seed derivation + JIT chunk load/
+unload + GPU memory budget. Big lift (6-10h).
 
-### Big-ticket (recommended — pick if you have a long block)
+### Big-ticket (recommended for a long block)
 
-- **Procedural world generation** (`[idea]` from backlog). World is procgen-flavored (chunks + biomes from FF/GG/HH) but POI layout is hand-placed (opening wreck, satellite dish, engine block) + procgen wreck rejection-sampler. Goal: every new-game seed produces a freshly-shuffled POI layout. Save the seed in v10 (additive). Open questions: does the opening scene stay seed-fixed (so the player's spawn experience is stable)? Recommend keeping opening fixed + flagship POIs constant-count, randomize positions + procgen wreck distribution.
+- **Infinite chunk streaming**. Today: 3×3 fixed grid loaded at boot,
+  world span 2400m, hard horizon at chunk-band edge. Goal: when player
+  approaches world boundary, generate the next 800m chunk lazily +
+  free oldest/farthest chunk. Architecture:
+  - Per-chunk seed: `chunkSeed(x, z) = hash(worldSeed, chunkX, chunkZ)`
+    using a fast 32-bit mix (e.g., MurmurHash3 finalizer).
+  - Chunk lifecycle: `loadChunk(x, z)` → terrain + colliders + scatter
+    + maybe POI. `unloadChunk(x, z)` → dispose meshes + colliders.
+  - Frame budget: cap chunk generation cost to ~16ms; spill across
+    frames if over.
+  - GPU memory: track chunk count, evict farthest when above threshold
+    (default 49 = 7×7 around player; 5.6km × 5.6km loaded radius).
+  - POIs per-chunk: each chunk gets 0-2 procgen wrecks via per-chunk seed.
+    Flagship POIs become "spawn once" at a deterministic chunk; subsequent
+    visits don't re-spawn. (Tracked via `placedFlagships: Set<string>`
+    persisted in save.)
+  - Save schema bump v9 → v10: chunks-loaded-state, placed-flagship-chunks set.
+  - Open questions: lizard population — keep per-chunk or world-wide?
+    Sandworm — single boss-tier, where does it live in infinite world?
 
 ### Medium picks (2-3h)
 
-- **Fire grill attachment** (deferred AAG item — backlogged). Craftable add-on; multi-slot cook state on fire instead of single `_cooking` module var. Lift `_cooking` to per-fire `fire.cookSlots: Array<CookState>`. Save schema bump v9 → v10 (additive). New recipe id 15. Grill mesh = 4 metal cross-bars on the fire ring.
-- **First-recipe-discovery fanfare**. The recipe-book modal exists (AAA) but discovery is still a toast. A visual flourish on first craft (icon scale-up + screen flash?) would make the moment land.
-- **Trading / NPC economy** — design exploration (probably warrants a dedicated planning session before code).
+- **AAI multi-seed playtest pass**. Boot 5+ different seeds, screenshot
+  opening views + walking tours. Surface tuning issues (flagship density,
+  scatter clutter, biome distribution unevenness). Tune Tuning constants.
+- **Fire grill attachment** (backlog from AAG). Craftable add-on; multi-
+  slot cook state per fire. Lift `_cooking` module var to
+  `fire.cookSlots: Array<CookState>`. Save schema v9 → v10 (additive).
+  Recipe id 15 (next per D71). 4 metal cross-bar mesh on fire ring.
+- **First-recipe-discovery fanfare**. Recipe-book modal exists (AAA) but
+  discovery is just a toast. Add icon scale-up + screen flash on first
+  craft.
+- **Trading / NPC economy** — design exploration; warrants planning pass.
 
-### Quick polish (~30-60min)
+### Quick polish (~30-90min)
 
-- **AAH validation playtest**. The AAG polish tweaks (puff height, motes opacity, swap snappier, mirage near-edge, storm cross-fade) were tuned from math + brief preview-tool verification. Walk through each in real play and confirm; revert any that feel off.
-- **More CLAUDE.md rule-2 sweeps**. Search src/ for hardcoded magic numbers in modules with no Tuning import — there are likely more violations from older sessions that AAH only fixed the 2 obvious ones.
-- **PointsMaterial constants in footprintPuffs** — color `0xb89878`, size 0.10, opacity 0.55 are still inline. Lift if iterating on look. (Scope-cut from AAH plan.)
+- **Seed display in pause overlay too**. AAI puts the seed in the H-key
+  controls panel; the pause overlay (Esc) doesn't show it. Players pause
+  more than they hit H — copy the seed line there.
+- **More CLAUDE.md rule-2 sweeps**. AAH cleaned 2 violations; there
+  may be more in older modules (`raider.ts`, `sandWorm.ts`, etc.).
+- **Companion pathing polish** (AAE follow-on). Recently re-playtest
+  the rolling→walking→idle state machine; does companion path
+  smoothly around obstacles?
 
 ## Autonomy contract
 
-When ambiguous, pick the option closest to the GDD pillars + decisions.md realism dial (D45+, D49, D67), append a new D-entry, keep going. The user has authorized "work without stopping for clarifying questions, make the reasonable call and continue; they'll redirect if needed."
+When ambiguous, pick the option closest to the GDD pillars + decisions.md realism dial (D45+, D49, D67, **D82-D85**), append a new D-entry, keep going. The user has authorized "work without stopping for clarifying questions, make the reasonable call and continue; they'll redirect if needed."
 
 Stop conditions: wall-clock limit, 3-strike fix wall, catastrophic block (tsc broken in main, dev server crashes), destructive-action attempt (push --force, reset --hard, etc.).
 
-## Notable footguns (from AAH + recent sessions)
+## Notable footguns (from AAI + recent sessions)
 
-- **`_shaderRefs` is a module-level Set** — Vite HMR re-imports of terrainMaterial.ts will leave old shaders orphaned. Hard-reload the preview tab after touching that module.
-- **`controller.ts` footstep block fires twice per stride** (left+right) — spawnFootprintPuff is called twice, not once per "step." Account for this in pool sizing or pile-up reasoning.
-- **First-boot NEW GAME auto-shows the tutorial controls panel** (`#controls-panel`). For preview eval that depends on view of the scene, dismiss it (key H, or `.classList.add('hidden')`) before screenshotting.
-- **Mirage shader templates the amp/distance/sun masks into shader source at material-construction time** — runtime constant-change requires a hard reload, not just HMR.
-- **`PICKUP_SWAP_DURATION_S` is now Tuning** (was module-local in interaction.ts pre-AAH). Code paths reference `Tuning.PICKUP_SWAP_DURATION_S` not the old `PICKUP_SWAP_DURATION` symbol.
-- **Save schema is v9.** v9 → v10 is fine if needed (additive only per D81). Recipe id stability per D71 — next id is 15.
+- **`scatterRand` consumption order matters for determinism.** AAI's
+  `sampleFlagshipPositions` consumes scatterRand BEFORE `placeProcgenPOIs`.
+  Changing this order would silently reshuffle every existing seed's
+  scatter layout. If adding new procgen passes, append at the end
+  (or document the reshuffle).
+- **First-ever boot inline-rolls a random seed.** The `Tuning.RNG_SEED = 1337`
+  fallback (D85) is only hit when localStorage is pre-seeded to 1337.
+  Devs who want a known world: `localStorage['dustfall.pendingSeed'] = '1337'; location.reload()`.
+- **NEW GAME with save existing → always reloads.** No way to "play
+  the current world" if save already exists; it's always a fresh seed
+  unless the user enters one in Advanced.
+- **flagship rejection sampler can fail** (rare — 6 flagships in 2400m at
+  250m min-sep is well within budget). Fallback ignores min-sep but
+  still respects spawn exclusion. If 3-strike walls land here, may need
+  to relax POI_MIN_SEPARATION or split the sampler into multiple passes.
+- **`_placedFlagshipPositions` is module-level state in poi.ts.** Vite HMR
+  re-imports leave this stale. Hard-reload on poi.ts edits.
+- **mega_ship/mega_wreck have their own flat-spot drift** (up to 60m).
+  After rejection sampling picks a position, the actual placement may
+  drift; min-separation is checked against the picked position, not
+  the drifted one. Worst-case violation is rare but possible.
+- **Save schema is v9.** v9 → v10 is fine if needed (additive only per
+  D81). Recipe id stability per D71 — next id is 15.
 
 ## Verification protocol
 
@@ -56,9 +113,11 @@ npm run verify     # = tsc --noEmit
 
 For substantial features:
 1. Boot game, exercise the feature (use `__game` console handle).
-2. Save + reload roundtrip if any persisted state changed.
-3. If touching atmospherics: high-sun + storm-peak both.
+2. Save + reload roundtrip if persisted state changed.
+3. For seed-related work: boot multiple seeds via `localStorage['dustfall.pendingSeed']`; confirm same-seed → identical world; verify `ctx.seed` matches the entered value.
 
 ## Begin block
 
-Read CLAUDE.md (auto), session-end-report, AAG/AAH changelog. Pick focus from the suggestions (procgen recommended). TaskCreate sub-tasks. Start coding.
+Read CLAUDE.md (auto), session-end-report, AAH/AAI changelog. Pick focus
+from the suggestions (infinite chunks recommended). TaskCreate sub-tasks.
+Start coding.

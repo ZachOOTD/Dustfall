@@ -200,6 +200,24 @@ export function hasSave(): boolean {
   return localStorage.getItem(SAVE_KEY) !== null;
 }
 
+/** AAI — peek the seed field of the saved game without doing a full
+ *  load. Used by main.ts at boot to seed the procgen world BEFORE
+ *  the title-overlay's Continue path runs (since systems like terrain
+ *  and POI placement need the seed up-front, not after Continue). */
+export function peekSavedSeed(): number | null {
+  const raw = localStorage.getItem(SAVE_KEY);
+  if (raw === null) return null;
+  try {
+    const obj = JSON.parse(raw) as Partial<SaveV1>;
+    if (typeof obj.seed === 'number' && Number.isFinite(obj.seed)) {
+      return obj.seed >>> 0;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export function clearSave(): void {
   localStorage.removeItem(SAVE_KEY);
 }
@@ -227,7 +245,7 @@ export function saveGameState(ctx: GameContext): { ok: boolean; error?: string }
 
     const save: SaveV1 = {
       version: SAVE_VERSION,
-      seed: Tuning.RNG_SEED,
+      seed: ctx.seed,    // AAI — was hardcoded Tuning.RNG_SEED; now ctx.seed (per-game)
       savedAt: Date.now(),
       player: {
         pos: { x: playerTr.x, y: playerTr.y, z: playerTr.z },

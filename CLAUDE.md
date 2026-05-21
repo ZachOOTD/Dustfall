@@ -58,7 +58,34 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session AAH — Playtest polish for AAG. Quick post-
+**Last shipped**: Session AAI — Procedural world generation (standard
+2400m world). Per-seed worlds within the existing 3×3 chunk grid; no
+save schema bump (v9 already had the `seed` field, AAI finally uses
+it). New `resolveSeed()` in main.ts reads
+`localStorage['dustfall.pendingSeed']` (from titleOverlay's Advanced
+entry) → existing save's `seed` via new `peekSavedSeed()` → inline-
+rolls a random uint32 if neither. All 3 RNG streams (terrain=seed,
+scatter=seed+1, biome=seed+17) derive from this; `ctx.seed` is the
+single source of truth. **Flagship POI rejection sampler** (D82):
+hardcoded `POI_LAYOUT` (6 flagships pre-AAI: engine_block, camp,
+satellite_dish, crashed_hull, mega_ship, mega_wreck) replaced with
+`FLAGSHIP_KINDS` + `sampleFlagshipPositions(rand)` that
+rejection-samples per seed with `POI_MIN_SEPARATION = 250m` between
+flagships + `PLAYER_SPAWN_EXCLUSION_RADIUS = 80m` from the opening
+anchor. Procgen wrecks honor the same exclusion. **Opening scene
+seed-stable** (D83): `OPENING_SCENE_ANCHOR_X/Z = -50, 0` Tuning
+constants document the narrative anchor; opening wreck, speeder,
+companion pod, player spawn all preserved across seeds. **Title
+Advanced section + seed entry UI** (D84): collapsed disclosure under
+NEW GAME with a uint32 input; valid+different seed → pendingSeed +
+reload. **World seed in controls panel** (H key) for share/debug.
+**Density bumps**: POI_PROCGEN_COUNT 15→22, CACTUS_TARGET_COUNT 10→14,
+DEAD_TREE_TARGET_COUNT 30→45. D85: Tuning.RNG_SEED retained as
+dev/test fallback only. Verified across multiple boots — random
+seeds differ, same seed = identical world, save+reload preserves
+seed, all 6 flagship kinds present per seed.
+
+**Prior milestone**: Session AAH — Playtest polish for AAG. Quick post-
 ship tuning pass. Two CLAUDE.md rule-2 violations fixed:
 **footprintPuffs.ts** had 6 hardcoded constants (PARTICLE_COUNT,
 PARTICLES_PER_PUFF, PUFF_LIFE_S, PUFF_VERTICAL_VEL, PUFF_LATERAL_VEL,

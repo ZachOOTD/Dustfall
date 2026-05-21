@@ -26,6 +26,7 @@ import { placeSatelliteDish } from './satelliteDish.ts';
 import { placeEngineBlock } from './engineBlock.ts';
 import { placeCrashedHull } from './crashedHull.ts';
 import type { ShelterRegistry } from '../shelter/shelterZones.ts';
+import { Tuning } from '../config/tuning.ts';
 
 // ────────────────────────────────────────────────────────────────
 // The Engine Block POI is built by `placeEngineBlock` in
@@ -135,32 +136,83 @@ function terrainVarAtWide(terrain: Terrain, cx: number, cz: number): number {
   return samples.reduce((s, v) => s + (v - mean) ** 2, 0) / samples.length;
 }
 
-interface POISpec {
-  kind: 'engine_block' | 'camp' | 'satellite_dish' | 'crashed_hull' | 'mega_ship' | 'mega_wreck';
-  x: number;
-  z: number;
-}
+type FlagshipKind = 'engine_block' | 'camp' | 'satellite_dish' | 'crashed_hull' | 'mega_ship' | 'mega_wreck';
 
-// Hand-picked POIs spread across the compass. mega_ship (Session BB) sits
-// in the western dunes, ~79m from the nearest other POI and chosen
-// empirically so all 8 probes within 10m sample as dune biome.
-const POI_LAYOUT: ReadonlyArray<POISpec> = [
-  { kind: 'engine_block',     x:  95, z:  -8 },
-  { kind: 'camp',             x: -42, z:  78 },
-  { kind: 'satellite_dish',   x: -88, z: -50 },
-  { kind: 'crashed_hull',     x:  18, z: -110 },
-  { kind: 'mega_ship',        x:-120, z:  30 },
-  { kind: 'mega_wreck',       x:-180, z:-130 },
+// AAI — flagship POI catalog. Per D82, the 6 flagships go through the
+// same rejection-sampler infrastructure as the procgen wrecks (was
+// hardcoded coordinates in POI_LAYOUT pre-AAI). Positions are seeded
+// per-game from the scatterRand stream; same seed = same flagship layout.
+const FLAGSHIP_KINDS: ReadonlyArray<FlagshipKind> = [
+  'engine_block',
+  'camp',
+  'satellite_dish',
+  'crashed_hull',
+  'mega_ship',
+  'mega_wreck',
 ];
 
-/** Anchor POI coords exposed for the HH procgen layer + lizard procgen
- *  spawn, so they can do min-separation rejection / lizard clustering
- *  without re-stating the hand-placed positions. mega_ship and mega_wreck
- *  do flat-spot searches and may drift up to 60m from these nominal
- *  coords, but for `POI_MIN_SEPARATION = 250m` that's well within the
- *  separation budget. */
+// AAI — module-level cache for the positions picked during placePOIs.
+// getAnchorPOIPositions() returns this for procgenPoi + lizard cluster
+// use. Cleared between sessions if hot-reloading.
+let _placedFlagshipPositions: Array<{ x: number; z: number }> = [];
+
+/** Sample positions for all 6 flagships via rejection. Honors
+ *  POI_MIN_SEPARATION between flagships + PLAYER_SPAWN_EXCLUSION_RADIUS
+ *  from the opening-scene anchor. */
+function sampleFlagshipPositions(rand: Rng): Array<{ x: number; z: number }> {
+  const minSep = Tuning.POI_MIN_SEPARATION;
+  const minSepSq = minSep * minSep;
+  const rMin = Tuning.POI_SCATTER_RADIUS_MIN;
+  const rMax = Tuning.POI_SCATTER_RADIUS_MAX;
+  const maxTries = Tuning.POI_MAX_PLACEMENT_TRIES;
+  const spawnX = Tuning.OPENING_SCENE_ANCHOR_X;
+  const spawnZ = Tuning.OPENING_SCENE_ANCHOR_Z;
+  const spawnExcludeSq = Tuning.PLAYER_SPAWN_EXCLUSION_RADIUS * Tuning.PLAYER_SPAWN_EXCLUSION_RADIUS;
+  const result: Array<{ x: number; z: number }> = [];
+  for (let k = 0; k < FLAGSHIP_KINDS.length; k++) {
+    let accepted: { x: number; z: number } | null = null;
+    for (let t = 0; t < maxTries; t++) {
+      const r = rMin + rand() * (rMax - rMin);
+      const a = rand() * Math.PI * 2;
+      const x = Math.cos(a) * r;
+      const z = Math.sin(a) * r;
+      // Player-spawn exclusion (per-flagship — flagships are big, the
+      // spawn area should be quiet so the opening reads as intentional).
+      const sdx = x - spawnX, sdz = z - spawnZ;
+      if (sdx * sdx + sdz * sdz < spawnExcludeSq) continue;
+      // Flagship-to-flagship min-separation.
+      let blocked = false;
+      for (const c of result) {
+        const dx = x - c.x, dz = z - c.z;
+        if (dx * dx + dz * dz < minSepSq) { blocked = true; break; }
+      }
+      if (!blocked) { accepted = { x, z }; break; }
+    }
+    if (accepted) {
+      result.push(accepted);
+    } else {
+      // Fallback: place at a position respecting spawn exclusion but
+      // ignoring flagship min-sep (only happens in a saturated world,
+      // which shouldn't occur for 6 flagships in 2400m at 250m min-sep).
+      let fx = 0, fz = 0;
+      for (let t = 0; t < maxTries; t++) {
+        const r = rMin + rand() * (rMax - rMin);
+        const a = rand() * Math.PI * 2;
+        const x = Math.cos(a) * r;
+        const z = Math.sin(a) * r;
+        const sdx = x - spawnX, sdz = z - spawnZ;
+        if (sdx * sdx + sdz * sdz >= spawnExcludeSq) { fx = x; fz = z; break; }
+      }
+      result.push({ x: fx, z: fz });
+    }
+  }
+  return result;
+}
+
+/** AAI — positions picked by the most recent placePOIs() call. Used by
+ *  procgenPoi (min-sep exclusion) + lizard procgen (per-POI cluster). */
 export function getAnchorPOIPositions(): ReadonlyArray<{ x: number; z: number }> {
-  return POI_LAYOUT.map((p) => ({ x: p.x, z: p.z }));
+  return _placedFlagshipPositions;
 }
 
 export function placePOIs(
@@ -172,9 +224,20 @@ export function placePOIs(
   salvageables?: SalvageableRegistry,
   shelter?: ShelterRegistry,
 ): void {
-  for (const p of POI_LAYOUT) {
-    const y = terrain.heightAt(p.x, p.z);
-    const pos = new THREE.Vector3(p.x, y, p.z);
+  // AAI — rejection-sample positions for the 6 flagships in a single
+  // pass, then dispatch each kind's spawn fn against its sampled position.
+  const positions = sampleFlagshipPositions(rand);
+  _placedFlagshipPositions = positions;
+  for (let i = 0; i < FLAGSHIP_KINDS.length; i++) {
+    const kind = FLAGSHIP_KINDS[i];
+    const pickedX = positions[i].x;
+    const pickedZ = positions[i].z;
+    const y = terrain.heightAt(pickedX, pickedZ);
+    const pos = new THREE.Vector3(pickedX, y, pickedZ);
+    // Shadowing `p` from the old POI_LAYOUT entry — the existing dispatch
+    // code below reads p.x/p.z + p.kind. Keep the shape so the cases stay
+    // a clean diff.
+    const p = { kind, x: pickedX, z: pickedZ };
     switch (p.kind) {
       case 'engine_block': {
         // LL — flagship POI: massive 5-nozzle engine cluster tipped
