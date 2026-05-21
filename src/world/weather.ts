@@ -24,7 +24,15 @@ interface DustLayer {
 
 export interface Weather {
   state: WeatherState;
-  intensity: number;     // 0..1, drives fog/sky/thirst/audio everywhere
+  intensity: number;     // 0..1, drives fog/sky/thirst/audio (world truth)
+  /** Session YY — player-context-aware storm intensity. Equals
+   *  `intensity` outside any shelter. Inside a fully-enclosed shelter
+   *  (small tent / fire) = 0 (legacy binary suppression). Inside a
+   *  large tent (open front) = `intensity * LARGE_TENT_STORM_DAMPEN`
+   *  (partial — storm visible but dampened). Read by dust layers +
+   *  stormVignette; NOT read by fog / stats / AI (those stay on
+   *  authoritative `intensity`). D79. */
+  perceivedIntensity: number;
   stateTimer: number;
   nextStormAt: number;   // ctx.time.elapsed when next storm should start
   layers: { near: DustLayer; mid: DustLayer; far: DustLayer };
@@ -150,6 +158,7 @@ export function createWeather(
   return {
     state: 'clear',
     intensity: 0,
+    perceivedIntensity: 0,
     stateTimer: 0,
     nextStormAt:
       STORM_INTERVAL_MIN + Math.random() * (STORM_INTERVAL_MAX - STORM_INTERVAL_MIN),
@@ -247,23 +256,24 @@ export function updateWeather(ctx: GameContext, dt: number): void {
 
   // Per-layer opacity ramps. Far comes in first (provides distant haze
   // before the player is "inside" the storm); near comes in last (the
-  // wind reaching you signals the storm's arrival).
-  const inShelter = ctx.player.inShelter;
+  // wind reaching you signals the storm's arrival). Session YY — reads
+  // `perceivedIntensity` (not `intensity`) so fully-enclosed shelters
+  // suppress dust (perceivedIntensity=0) and large tents partially
+  // dampen it (perceivedIntensity = intensity * 0.4).
   _camPos.copy(w.cameraRef.position);
+  const pi = w.perceivedIntensity;
 
   const farOp =
-    ramp(w.intensity, Tuning.STORM_FAR_RAMP_LO, Tuning.STORM_FAR_RAMP_HI) *
+    ramp(pi, Tuning.STORM_FAR_RAMP_LO, Tuning.STORM_FAR_RAMP_HI) *
     Tuning.STORM_DUST_FAR_OPACITY;
-  const midOp = w.intensity * Tuning.STORM_DUST_MID_OPACITY;
+  const midOp = pi * Tuning.STORM_DUST_MID_OPACITY;
   const nearOp =
-    ramp(w.intensity, Tuning.STORM_NEAR_RAMP_LO, Tuning.STORM_NEAR_RAMP_HI) *
+    ramp(pi, Tuning.STORM_NEAR_RAMP_LO, Tuning.STORM_NEAR_RAMP_HI) *
     Tuning.STORM_DUST_NEAR_OPACITY;
 
-  // Inside shelter: kill all dust layers (player is roofed; visible dust
-  // breaks immersion). Outside: each layer driven by its own ramp.
-  stepLayer(w.layers.far, inShelter ? 0 : farOp, !inShelter && farOp > 0.001, dt);
-  stepLayer(w.layers.mid, inShelter ? 0 : midOp, !inShelter && midOp > 0.001, dt);
-  stepLayer(w.layers.near, inShelter ? 0 : nearOp, !inShelter && nearOp > 0.001, dt);
+  stepLayer(w.layers.far, farOp, farOp > 0.001, dt);
+  stepLayer(w.layers.mid, midOp, midOp > 0.001, dt);
+  stepLayer(w.layers.near, nearOp, nearOp > 0.001, dt);
 }
 
 /** Convenience: trigger a storm immediately. Used by debug panel. */

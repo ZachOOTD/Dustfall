@@ -1648,3 +1648,41 @@ the contract; future sessions inherit it from XX. D71 (recipe id
 stability) is a related principle: never break the meaning of
 existing data.
 **friction-score:** 3
+
+## D79 — `weather.perceivedIntensity` split from `intensity` (Session YY)
+**When**: Session YY (was reserved as a placeholder in the XX plan;
+this entry actualizes the call).
+**Why**: Pre-YY, the storm-visual systems (dust + vignette) used a
+binary `ctx.player.inShelter` check to suppress themselves entirely
+when the player was inside any shelter zone. XX added a walk-in
+large tent (open front face); binary suppression made the inside-
+the-tent experience feel wrong — you'd expect to see SOME storm
+through the open front. The split: `intensity` stays the authoritative
+world-truth value (drives fog density, thirst drain rate, AI
+triggers — things the world itself "knows"); a new
+`perceivedIntensity` field tracks the player-context-aware version
+(drives dust opacity + screen vignette — things the player's
+senses report). `updateShelter` writes perceivedIntensity each
+frame: full intensity if not sheltered; 0 if inside a fully-enclosed
+shelter (small tent / fire); `intensity * LARGE_TENT_STORM_DAMPEN`
+if inside a "partial" shelter (only large tents currently). The
+small tent + fire keep their legacy zero-out feel; the large tent
+shows ~40% storm presence — you're sheltered, you can see it, the
+contrast sells the shelter feel.
+**Considered alternatives**:
+- Tag dust + vignette per-tier and have them each read their own
+  conditional logic — scatters the rule across modules. Centralizing
+  in updateShelter keeps the contract in one place.
+- Run dust ramps off `intensity` and add a "muffle" multiplier in
+  each dust layer — same scatter problem.
+- Per-shelter-zone `dampenMultiplier: number` — over-engineered for
+  the current 2 categories (fully enclosed vs. partial). If a third
+  shelter type ships (cave with opening, ruin with collapsed roof),
+  revisit.
+**Apply**: future shelter types declare their `isLargeTent?` flag
+(misnomer if more types come; rename to `dampenFactor?` then).
+Visual-only systems read `perceivedIntensity`; world-truth systems
+read `intensity`. Audio could go either way — currently on `intensity`;
+moving it to `perceivedIntensity` would make wind sound dampen
+inside the large tent (probably desirable as a future polish item).
+**friction-score:** 2

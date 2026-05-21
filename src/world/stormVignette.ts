@@ -84,14 +84,18 @@ export function createStormVignette(scene: THREE.Scene): StormVignette {
 export function updateStormVignette(ctx: GameContext): void {
   const v = ctx.stormVignette;
   if (!v) return;
+  // YY — read `perceivedIntensity` instead of `intensity`. The
+  // shelter handling (full-kill for small tent / fire; partial
+  // dampening for large tent's open-front cabin) is now baked into
+  // perceivedIntensity itself; the prior `inShelter ? 0 : ...`
+  // branch is redundant.
+  const pi = ctx.weather.perceivedIntensity;
   // Smoothstep ramp so the vignette only really shows in the upper half
   // of the storm intensity range — feels like "the storm is overwhelming
   // me", not "any storm pulls a tint."
-  const t = Math.max(0, (ctx.weather.intensity - 0.4) / 0.6);
+  const t = Math.max(0, (pi - 0.4) / 0.6);
   const eased = t * t * (3 - 2 * t);
-  // Kill the vignette entirely when in shelter (player is roofed; no
-  // storm in their face).
-  const targetOp = ctx.player.inShelter ? 0 : eased * Tuning.STORM_VIGNETTE_MAX_OPACITY;
+  const targetOp = eased * Tuning.STORM_VIGNETTE_MAX_OPACITY;
   v.mat.uniforms.uOpacity.value = targetOp;
   v.mesh.visible = targetOp > 0.001;
 }

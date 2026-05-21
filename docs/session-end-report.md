@@ -4,10 +4,11 @@ Cumulative state. Rewritten end-to-end at each `/session-end`. A
 reviewer who's never seen the project should be able to read this +
 `CLAUDE.md` + `docs/GDD.md` and understand where Dustfall is.
 
-**Current state**: Session XX shipped (2026-05-21). 25 sessions
-post-MVP. tsc clean. **Overnight queue COMPLETE** — all 5 sessions
-(UU, VV, UU-2, WW, XX) shipped. Working tree dirty pending the
-user's final commit (see `## Commit handoff` below).
+**Current state**: Session YY shipped (2026-05-21). 26 sessions
+post-MVP. tsc clean. Overnight queue (UU-XX) COMPLETE + one
+follow-on polish session (YY) realizing XX's deferred scope-cut.
+Working tree dirty pending the user's commit (see `## Commit
+handoff` below).
 
 ---
 
@@ -83,6 +84,29 @@ Fresh-game start (the de-facto Tier 1 — Session W shipped):
    captured mid-drink doesn't resume drinking on reload.
 
 ---
+
+## What's freshly shipped (Session YY deltas)
+
+The scope-cut #1 from XX, realized. Storm visual dampening
+distinguishes large tent (open-front, partial dampening) from small
+tent / fire (legacy fully-enclosed kill):
+
+- **`weather.perceivedIntensity`** field added to the Weather
+  interface. Player-context-aware storm intensity (vs.
+  `intensity` which stays the world-truth).
+- **`ShelterZone.isLargeTent?`** flag added. `addShelterZone`
+  accepts new `opts?: { isLargeTent }` parameter. `largeTent.ts`
+  passes `{ isLargeTent: true }` when registering its zone.
+- **`updateShelter`** walks zones once via new `classifyShelter`
+  helper, writes perceivedIntensity per the routing rule.
+- **`weather.ts` dust layers + `stormVignette.ts`** read
+  `perceivedIntensity` instead of `intensity` (and drop the binary
+  `inShelter` override — it's baked into perceivedIntensity now).
+- **Fog + stats + AI stay on `intensity`** (world-truth).
+
+Decision D79 (placeholder reserved in plan; now realized; friction-2).
+New Tuning constant `LARGE_TENT_STORM_DAMPEN = 0.4`. Backlog now
+notes the audio extension as a future polish item.
 
 ## What's freshly shipped (Session XX deltas)
 
@@ -331,12 +355,13 @@ clean, 0 `as any`, save schema v7 with full migration coverage, all
 
 ## Time spent
 
-25 sessions shipped (A–XX). Approx ~92-147h elapsed dev time across
+26 sessions shipped (A–YY). Approx ~93-148h elapsed dev time across
 roughly 3 weeks of calendar time. Overnight queue (UU through XX)
-ran in one continuous push of ~8-10h, landing 5 sessions clean. XX
-was the largest of the polish-tier sessions at ~1.5h core work (new
-ItemId + module + recipe + save migration + dispatch wiring +
-verification).
+ran in one continuous push of ~8-10h, landing 5 sessions clean.
+YY was a tight ~45min follow-on session realizing XX's deferred
+scope-cut #1 (perceivedIntensity split). Total overnight-era haul:
+6 sessions, 9 D-entries (D73-D81 from overnight + D79-realization
+in YY).
 
 ---
 

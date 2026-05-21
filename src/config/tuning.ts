@@ -112,6 +112,13 @@ export const Tuning = {
   LARGE_TENT_SHELTER_HALF_Y: 1.0,
   LARGE_TENT_SHELTER_HALF_Z: 1.0,
   LARGE_TENT_NEAR_DISTANCE_SQ: 4.0 * 4.0,  // reject deploy within 4m of another large tent
+  // Session YY — storm "perceived intensity" multiplier when player is
+  // inside a large tent. 0.4 = 40% of authoritative storm intensity
+  // visible (dust + screen vignette dampened) while fog + stats stay
+  // on the world-truth intensity. Reads as "I'm sheltered but I can
+  // see the storm through the open front." Small tents + fires use the
+  // legacy 0 (fully shielded) — D79.
+  LARGE_TENT_STORM_DAMPEN: 0.4,
 
   // Atmosphere
   FOG_NEAR: 25,                       // legacy linear-fog values (kept for reference)

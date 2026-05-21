@@ -154,7 +154,9 @@ export function spawnLargeTentAt(
   tag(mesh, id);
 
   // Shelter zone covers the interior cavity only (player must be inside).
-  // Centered just above the floor at half-height.
+  // Centered just above the floor at half-height. YY — flagged
+  // isLargeTent=true so updateShelter routes a dampened perceived
+  // storm intensity (not the full kill the small tent / fire get).
   const shelterZone = addShelterZone(
     ctx.shelter,
     { x: pos.x, y: pos.y + Tuning.LARGE_TENT_SHELTER_HALF_Y, z: pos.z },
@@ -163,6 +165,7 @@ export function spawnLargeTentAt(
       y: Tuning.LARGE_TENT_SHELTER_HALF_Y,
       z: Tuning.LARGE_TENT_SHELTER_HALF_Z,
     },
+    { isLargeTent: true },
   );
 
   const tent: LargeTent = {

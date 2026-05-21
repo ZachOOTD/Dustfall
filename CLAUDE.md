@@ -58,7 +58,23 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session XX — Larger enterable tent + SAVE_VERSION
+**Last shipped**: Session YY — Storm visual dampening inside large
+tent (perceivedIntensity split). Continuation work after the overnight
+queue closed; completes XX's vision by realizing the scope-cut #1
+item. New `weather.perceivedIntensity: number` field — player-context-
+aware storm intensity. New `isLargeTent?: boolean` flag on
+`ShelterZone`; `addShelterZone` accepts `opts?: { isLargeTent }`.
+`updateShelter` walks zones once via `classifyShelter` helper +
+writes perceivedIntensity: outside any shelter = intensity (full);
+inside fully-enclosed shelter (small tent / fire) = 0; inside large
+tent (open-front) = `intensity × LARGE_TENT_STORM_DAMPEN = 0.4`.
+`weather.ts` dust-layer ramps + `stormVignette.ts` both read
+perceivedIntensity (was inShelter binary). Fog + stats + AI stay on
+authoritative intensity. New Tuning constant
+`LARGE_TENT_STORM_DAMPEN = 0.4`. Decision D79 (now realized;
+friction-2).
+
+**Prior milestone**: Session XX — Larger enterable tent + SAVE_VERSION
 v7. Final session of the 5-session overnight queue. New ItemId
 `large_tent_kit` + recipe id 10 (cloth×4+branch×3+rope×1). New
 module `src/world/largeTent.ts` (~250 LOC) mirrors tent.ts with

@@ -3,6 +3,39 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session YY — 2026-05-21 — Storm visual dampening inside large tent (perceivedIntensity split) ✓ verify pass
+`verified` — tsc clean; eval-driven preview confirmed routing: outside any
+shelter → perceivedIntensity = intensity (full storm); inside small
+tent / fire (legacy fully-enclosed) → 0 (current behavior preserved);
+inside large tent (open-front cabin) → intensity × 0.4 (40% dampened).
+**Completes XX's vision** — the scope-cut #1 from XX (storm visual
+dampening when inside the new walk-in tent). The pre-YY system used
+a binary `player.inShelter` check to suppress dust + vignette
+entirely when in any shelter. Now the system distinguishes by
+"openness" of the shelter. **`weather.perceivedIntensity: number`**
+added to the Weather interface. Computed by `updateShelter` each
+frame (after the existing inShelter check). **`isLargeTent?: boolean`**
+flag added to `ShelterZone`; `addShelterZone` accepts new `opts?:
+{ isLargeTent?: boolean }` parameter. `largeTent.ts` passes
+`{ isLargeTent: true }` when registering its zone; small tent + fire
+zones leave the flag default-undefined (= fully enclosed).
+**`updateShelter` extended**: walks zones once via new
+`classifyShelter` helper returning `{ inShelter, inLargeTent }`. The
+write order: `inLargeTent → perceived = intensity × LARGE_TENT_STORM_DAMPEN
+= 0.4`; `inShelter → perceived = 0`; otherwise `perceived = intensity`.
+**`weather.ts` updateWeather** now reads `perceivedIntensity` for
+the 3 dust-layer opacity ramps (replacing the prior `inShelter ? 0
+: ...` binary). **`stormVignette.ts`** also reads `perceivedIntensity`
+instead of `intensity` and drops the `inShelter` override — both
+checks are now baked into perceivedIntensity itself. **Fog stays on
+`intensity`** (world-truth state — outside the tent the air IS
+still that thick; the tent doesn't change the world, just what the
+player perceives from inside). Stats + AI also still on intensity.
+**Decision D79** logged. New Tuning constant
+`LARGE_TENT_STORM_DAMPEN = 0.4`. Continuation work after the
+overnight queue closed; one polish session realizing the deferred
+XX item.
+
 ## Session XX — 2026-05-21 — Larger enterable tent + SAVE_VERSION v7 ✓ verify pass
 `verified` — tsc clean; eval-driven preview confirmed deploy + pack-up +
 inventory-full refuse + inside-tent refuse path + save round-trip with
