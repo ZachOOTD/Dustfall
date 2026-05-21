@@ -26,6 +26,7 @@ import type { LootContainer } from './world/lootContainers.ts';
 import type { Fire } from './world/fire.ts';
 import type { Tent } from './world/tent.ts';
 import type { Sled } from './world/sled.ts';
+import type { LargeTent } from './world/largeTent.ts';
 import type { BiomeSampler } from './world/biomes.ts';
 import type { SalvageableRegistry } from './world/salvage.ts';
 import type { FootprintRegistry } from './world/footprints.ts';
@@ -94,6 +95,10 @@ export interface GameContext {
   /** Session QQ — placed sleds. `open` is the one currently shown in the
    *  loot menu overlay (parallel to lootContainers.open). */
   sleds: { list: Sled[]; open: Sled | null };
+  /** Session XX — placed large enterable tents (walk-in shelter). Separate
+   *  list from `tents` since they have distinct geometry + interaction
+   *  semantics (D80). */
+  largeTents: { list: LargeTent[] };
   salvageables: SalvageableRegistry;
   weather: Weather;
   ambientDust: AmbientDust;

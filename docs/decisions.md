@@ -1600,3 +1600,51 @@ speeder tint) follow the CSS-overlay pattern; atmosphere-tier
 effects (storm vignette, mirage shader) follow the in-scene shader
 pattern.
 **friction-score:** 1
+
+## D80 — `largeTent.ts` as a distinct module, not a parameterized `tent.ts` (Session XX)
+**When**: Session XX.
+**Why**: The straightforward refactor when adding a tent variant
+would be `tent.ts` parameterized by a `kind: 'small' | 'large'` arg
+threaded through `deployTent` / `spawnTentAt` / `packUpTent`. But
+the collider geometry diverges substantially: small tent is a
+double-pyramid with two angled wall panels and no real interior;
+large tent is a 3-walled cabin with a roof and 4 corner posts and a
+walk-in cavity. The shelter-zone math differs too (small tent zone
+covers the footprint approximating; large tent zone covers ONLY the
+interior cavity since "inside the tent" matters). Forcing both into
+one parameterized function would either bloat the function with
+branches OR ship a degenerate "large pyramid" that doesn't fit the
+walk-in spec. Two modules with shared types (LargeTent shaped like
+Tent) is cheaper for the lifetime of the code than the abstraction.
+**Considered alternatives**:
+- `kind`-parameterized `tent.ts` — see above.
+- Inheritance / class hierarchy — overkill for two cases.
+- Shared base function + per-kind specializers — reasonable but
+  more indirection than three callers (deploy / spawn / pack)
+  warrant.
+**Apply**: if a THIRD tent variant ships (e.g., a tarp lean-to),
+revisit this call. With three callers + 2-3 divergent geometry
+parameters, a shared builder might pay off. With 2, keep the
+clone-not-abstract pattern (matches D78 for vignettes).
+**friction-score:** 2
+
+## D81 — `SAVE_VERSION 6 → 7`, additive only (Session XX)
+**When**: Session XX.
+**Why**: XX added a new world entity (large tents) that the player
+can place + the save must restore. The save schema needed a new
+field. The migration is **strictly additive**: a new optional
+`largeTents?: Array<...>` on `SaveV1`. Existing fields are untouched.
+Pre-v7 saves load with `largeTents === undefined` → loader treats
+as empty array. No data loss on either direction.
+**Apply**: future save migrations follow this discipline. Never
+rearrange existing fields, never remove fields without a deprecation
+path, always make new fields optional + provide a default on load.
+The SAVE_VERSION bump is a tooling marker (tells external tools
+"this save has the new field if you need it"); the loader's
+backward-compat code is what actually matters. Pre-XX, the loader
+already supported v1-v6 cleanly via this exact pattern (sleds
+optional, discoveredRecipes optional w/ seeded default). XX inherits
+the contract; future sessions inherit it from XX. D71 (recipe id
+stability) is a related principle: never break the meaning of
+existing data.
+**friction-score:** 3

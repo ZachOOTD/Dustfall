@@ -245,6 +245,7 @@ const ctx: GameContext = {
   fires: { list: [] },
   tents: { list: [] },
   sleds: { list: [], open: null },   // Session QQ
+  largeTents: { list: [] },          // Session XX
 
   salvageables,
   weather,

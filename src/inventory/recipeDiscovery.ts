@@ -152,6 +152,18 @@ export const RECIPES: Recipe[] = [
     ],
     output: { id: 'sled_kit', count: 1 },
   },
+  // Session XX — larger enterable shelter tent. Id 10 per D71
+  // (never reuse ids 1-9, even if they look unused).
+  {
+    id: 10,
+    displayName: 'shelter tent',
+    inputs: [
+      { id: 'cloth', count: 4 },
+      { id: 'branch', count: 3 },
+      { id: 'rope', count: 1 },
+    ],
+    output: { id: 'large_tent_kit', count: 1 },
+  },
 ];
 
 /** All currently-defined recipe ids. Used by save.ts on v5→v6

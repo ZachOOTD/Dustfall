@@ -34,7 +34,9 @@ export type ItemId =
   | 'energy_pistol'
   // Session QQ — sled + rope
   | 'rope'
-  | 'sled_kit';
+  | 'sled_kit'
+  // Session XX — larger enterable tent (walk-in interior)
+  | 'large_tent_kit';
 
 /** Per-slot metadata for stateful items (canteen fill level, cook state, light state). */
 export interface ItemMeta {

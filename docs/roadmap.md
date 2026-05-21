@@ -18,13 +18,11 @@ and promotes the second.
 
 ---
 
-## Overnight queue (in flight — UU+VV+UU-2+WW shipped 2026-05-21)
+## Overnight queue (COMPLETE — UU+VV+UU-2+WW+XX shipped 2026-05-21)
 
-5-session overnight run plan archived at `.claude/plans/i-want-to-set-floating-dusk.md`. UU + VV + UU-2 + WW shipped ✓. Up next (final session):
+5-session overnight run plan archived at `.claude/plans/i-want-to-set-floating-dusk.md`. All 5 sessions shipped ✓. The overnight queue is closed.
 
-- **XX — Larger enterable tent w/ interior storm shelter** (~3h; bumps `SAVE_VERSION 6 → 7` additive only). Last session of the overnight queue.
-
-See `docs/next-session-prompt.md` for the XX kickoff brief.
+Next session pick is open — see `docs/next-session-prompt.md` for the suggested direction (post-overnight polish + perceivedIntensity split deferred from XX, or pick from "Next — Big-ticket bucket" below).
 
 ## Next — Big-ticket bucket (1–2 picks per session at ~4–7h each)
 Pick whatever feels most missing after the polish + atmosphere arc.

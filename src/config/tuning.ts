@@ -101,6 +101,18 @@ export const Tuning = {
   STAMINA_WOBBLE_MAX_M: 0.04,          // peak amplitude (meters)
   STAMINA_WOBBLE_FREQ_HZ: 6,           // shake cadence
 
+  // Session XX — larger enterable tent. Frame ~3.5×2.5×2.2m; walls and
+  // roof colliders; front face is open for walk-in entry.
+  LARGE_TENT_WIDTH_M: 3.5,
+  LARGE_TENT_DEPTH_M: 2.5,
+  LARGE_TENT_HEIGHT_M: 2.2,
+  // Shelter zone covers the interior cavity (smaller than the tent's
+  // external footprint — the player must actually be inside).
+  LARGE_TENT_SHELTER_HALF_X: 1.5,
+  LARGE_TENT_SHELTER_HALF_Y: 1.0,
+  LARGE_TENT_SHELTER_HALF_Z: 1.0,
+  LARGE_TENT_NEAR_DISTANCE_SQ: 4.0 * 4.0,  // reject deploy within 4m of another large tent
+
   // Atmosphere
   FOG_NEAR: 25,                       // legacy linear-fog values (kept for reference)
   FOG_FAR: 170,

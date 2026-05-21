@@ -58,7 +58,24 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session WW — HUD micro-polish (stat vignettes +
+**Last shipped**: Session XX — Larger enterable tent + SAVE_VERSION
+v7. Final session of the 5-session overnight queue. New ItemId
+`large_tent_kit` + recipe id 10 (cloth×4+branch×3+rope×1). New
+module `src/world/largeTent.ts` (~250 LOC) mirrors tent.ts with
+walk-in 3.5×2.5×2.2m frame, shelter zone covers interior cavity
+only. `packUpLargeTent` refuses if player inside (toast: "can't pack
+— you're inside the tent"). `ctx.largeTents` added to GameContext.
+interaction.ts gains `'largeTents'` case (reuses 'sleep' verb); UU-2's
+RMB pack-up dispatch extended to iterate large tents.
+**SAVE_VERSION 6→7** (D81 — additive only): new optional
+`largeTents?` field; pre-v7 saves load with empty array. D80 (two
+modules vs. parameterized, friction-2) + D81 (save migration
+discipline, friction-3) logged. **Scope-cut #1 taken**:
+`weather.perceivedIntensity` split deferred — large tents shelter
+via ShelterZone (cold drain etc.), but storm visuals inside stay
+at full intensity. Backlog item for future polish.
+
+**Prior milestone**: Session WW — HUD micro-polish (stat vignettes +
 stamina wobble + prompt fade). New `src/ui/statVignette.ts` — two
 CSS-overlay `<div>`s (`#stat-vignette-cold` blue, `#stat-vignette-thirst`
 brown). Linear opacity ramp to `STAT_VIGNETTE_MAX_OPACITY = 0.35` as

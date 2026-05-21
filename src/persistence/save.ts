@@ -34,6 +34,7 @@ import {
 import { spawnFireAt } from '../world/fire.ts';
 import { spawnTentAt } from '../world/tent.ts';
 import { spawnSledAt, setNextSledId } from '../world/sled.ts';
+import { spawnLargeTentAt, setNextLargeTentId } from '../world/largeTent.ts';
 import { removeShelterZone } from '../shelter/shelterZones.ts';
 
 export const SAVE_KEY = 'dustfall.save.v1';
@@ -48,13 +49,15 @@ export const SAVE_KEY = 'dustfall.save.v1';
 // TT — v6 adds `inventory.discoveredRecipes: number[]` for the
 // combine-to-discover crafting rework. Pre-v6 saves get the FULL
 // recipe set as discovered on load so existing playtesters don't
-// lose their accumulated recipe knowledge. Loader accepts v1-v6.
-export const SAVE_VERSION = 6;
+// lose their accumulated recipe knowledge.
+// XX — v7 adds `largeTents?: Array<...>` (D81 — additive only). Pre-v7
+// saves load with an empty largeTents array. Loader accepts v1-v7.
+export const SAVE_VERSION = 7;
 
 type V3 = { x: number; y: number; z: number };
 
 export interface SaveV1 {
-  version: 1 | 2 | 3 | 4 | 5 | 6;
+  version: 1 | 2 | 3 | 4 | 5 | 6 | 7;
   seed: number;
   savedAt: number;
 
@@ -109,6 +112,15 @@ export interface SaveV1 {
     rotationY: number;
     contents: LootEntry[];
     tether: 'none' | 'player' | 'speeder';
+  }>;
+
+  /** Session XX — placed large enterable tents. Optional so pre-v7
+   *  saves still load (largeTents field is just absent, defaults to
+   *  empty array on load). D81: additive only — never remove. */
+  largeTents?: Array<{
+    id: number;
+    pos: V3;
+    rotationY: number;
   }>;
 
   /** Hover speeder pose. Optional so v1 saves written before this field
@@ -237,6 +249,11 @@ export function saveGameState(ctx: GameContext): { ok: boolean; error?: string }
         pos: { x: t.pos.x, y: t.pos.y, z: t.pos.z },
         rotationY: t.mesh.rotation.y,
       })),
+      largeTents: ctx.largeTents.list.map((t) => ({
+        id: t.id,
+        pos: { x: t.pos.x, y: t.pos.y, z: t.pos.z },
+        rotationY: t.rotationY,
+      })),
       sleds: ctx.sleds.list.map((s) => {
         const tr = s.body.translation();
         return {
@@ -296,12 +313,12 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
     return { ok: false, error: 'save file is corrupt' };
   }
 
-  // EE/FF/GG/HH/QQ/TT — accept v1-v6 saves. Schema is forward-only:
-  // each new version adds optional fields, so pre-v6 saves load
-  // cleanly (missing `sleds` treated as empty; missing
+  // EE/FF/GG/HH/QQ/TT/XX — accept v1-v7 saves. Schema is forward-only:
+  // each new version adds optional fields, so pre-v7 saves load
+  // cleanly (missing `sleds` / `largeTents` treated as empty; missing
   // `inventory.discoveredRecipes` seeded with ALL_RECIPE_IDS so
   // pre-TT playtesters keep their recipe knowledge).
-  if (save.version !== 1 && save.version !== 2 && save.version !== 3 && save.version !== 4 && save.version !== 5 && save.version !== 6) {
+  if (save.version !== 1 && save.version !== 2 && save.version !== 3 && save.version !== 4 && save.version !== 5 && save.version !== 6 && save.version !== 7) {
     return { ok: false, error: `unsupported save version ${save.version}` };
   }
   if (save.seed !== Tuning.RNG_SEED) {
@@ -488,6 +505,24 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
       // don't dispose here. Same convention as detachRope.
     }
   }
+  // XX — large tents: clear anything placed this session, then re-spawn
+  // from the save. Optional field — pre-v7 saves arrive with
+  // `largeTents === undefined`.
+  for (const lt of ctx.largeTents.list) {
+    ctx.three.scene.remove(lt.mesh);
+    removeShelterZone(ctx.shelter, lt.shelterZone);
+  }
+  ctx.largeTents.list.length = 0;
+  if (save.largeTents) {
+    let maxLargeTentId = 0;
+    for (const saved of save.largeTents) {
+      const pos = new THREE.Vector3(saved.pos.x, saved.pos.y, saved.pos.z);
+      spawnLargeTentAt(ctx, pos, saved.rotationY);
+      if (saved.id > maxLargeTentId) maxLargeTentId = saved.id;
+    }
+    if (maxLargeTentId > 0) setNextLargeTentId(maxLargeTentId);
+  }
+
   ctx.sleds.list.length = 0;
   ctx.sleds.open = null;
   if (save.sleds) {

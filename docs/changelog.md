@@ -3,6 +3,45 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session XX — 2026-05-21 — Larger enterable tent + SAVE_VERSION v7 ✓ verify pass
+`verified` — tsc clean; eval-driven preview confirmed deploy + pack-up +
+inventory-full refuse + inside-tent refuse path + save round-trip with
+v7 written. Final session of the 5-session overnight queue. **New
+ItemId `large_tent_kit`** — wieldLmb='place', LMB-click deploys via
+`deployLargeTent`. **Recipe id 10** in `recipeDiscovery.ts` (cloth×4
++ branch×3 + rope×1 → large_tent_kit). D71 contract preserved: ids
+1-9 untouched, new recipe gets next-highest unused id. **New module
+`src/world/largeTent.ts`** (~250 LOC) mirrors `tent.ts` but with
+walk-in interior: 3.5×2.5×2.2m frame, 4 corner posts, cloth-draped
+walls (back + 2 sides + roof), open front face. `deployLargeTent`,
+`spawnLargeTentAt`, `packUpLargeTent`, `findLargeTentById` exported.
+Shelter zone covers interior cavity only (smaller than external
+footprint — player must actually be inside). `packUpLargeTent`
+**refuses if player is currently inside** the tent's shelter zone
+(toast: "can't pack — you're inside the tent"). **D80** logged: two
+modules cheaper than one parameterized tent.ts (the collider
+geometry diverges). **GameContext extended**: `largeTents: { list:
+LargeTent[] }`. `main.ts` initializes empty list on boot.
+**`interaction.ts`** gains a `'largeTents'` registry case — same
+'sleep' hover verb so E opens the sleep overlay identically; UU-2's
+RMB pack-up dispatch in `wieldAction.ts` extended to also iterate
+ctx.largeTents.list when hover.type='sleep'. **Save schema v6→v7**
+(D81): new optional `largeTents?: Array<{id, pos, rotationY}>` field.
+Loader accepts v1-v7. Pre-v7 saves arrive with `largeTents===
+undefined` → loader treats as empty array. Save: serialize
+`ctx.largeTents.list`; Load: clear current, replay `spawnLargeTentAt`
++ `setNextLargeTentId` for each entry. Additive-only migration —
+no existing fields touched. **Pre-committed scope-cut #1 taken**:
+`weather.perceivedIntensity` split (storm visual dampening when
+inside the tent) DEFERRED — large tents shelter via the existing
+ShelterZone mechanism (cold drain etc. handled), but storm visuals
+inside the tent stay at full intensity. Documented as a future
+polish item. **Verification**: recipe match correct; ItemDef shape
+correct (name SHELTER TENT, wieldLmb=place); deploy adds 1 tent + 1
+shelter zone; pack-up removes both + returns kit; save writes v7 +
+1 largeTents entry. **Fifth and final** of the 5-session overnight
+queue. Decisions D80 + D81 logged.
+
 ## Session WW — 2026-05-21 — HUD micro-polish (stat vignettes + stamina wobble + prompt fade) ✓ verify pass
 `verified` — tsc clean; eval-driven preview confirmed all 3 polish items
 ramp + suppress correctly. Three visible-at-first-boot wins. **Stat

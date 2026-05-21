@@ -22,6 +22,7 @@ import { lootSandWorm } from '../enemies/sandWorm.ts';
 import { findLootContainerById } from '../world/lootContainers.ts';
 import { findFireById, addFuel, relightFire } from '../world/fire.ts';
 import { findTentById } from '../world/tent.ts';
+import { findLargeTentById } from '../world/largeTent.ts';
 import { findSledById, attachRopeToSled, detachRope } from '../world/sled.ts';
 import {
   findSalvageableById,
@@ -55,7 +56,7 @@ const _dir = new THREE.Vector3();
 interface InteractHit {
   type: InteractType;
   id: number;
-  registry: 'pickups' | 'waterSources' | 'cacti' | 'lizards' | 'sandWorms' | 'lootContainers' | 'fires' | 'tents' | 'salvageables' | 'journals' | 'speeder' | 'sleds';
+  registry: 'pickups' | 'waterSources' | 'cacti' | 'lizards' | 'sandWorms' | 'lootContainers' | 'fires' | 'tents' | 'largeTents' | 'salvageables' | 'journals' | 'speeder' | 'sleds';
   distance: number;
 }
 
@@ -119,6 +120,7 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
   if (ctx.sandWorm) ctx.sandWorm.hovered = false;
   for (const f of ctx.fires.list) f.hovered = false;
   for (const t of ctx.tents.list) t.hovered = false;
+  for (const t of ctx.largeTents.list) t.hovered = false;
   for (const s of ctx.salvageables.list) s.hovered = false;
   for (const sl of ctx.sleds.list) sl.hovered = false;
   ctx.inventory.hover = null;
@@ -159,6 +161,7 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
   // Both alive (cook/add_fuel) and dead (relight) fires are interactable.
   for (const f of ctx.fires.list) targets.push(f.mesh);
   for (const t of ctx.tents.list) targets.push(t.mesh);
+  for (const t of ctx.largeTents.list) targets.push(t.mesh);
   for (const sl of ctx.sleds.list) targets.push(sl.group);
   for (const s of ctx.salvageables.list) targets.push(s.panel);
   for (const j of ctx.journals.list) targets.push(j.mesh);
@@ -404,6 +407,20 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
       if (!t) return;
       t.hovered = true;
       ctx.inventory.hover = { type: 'sleep', distance: info.distance, promptNoun: 'tent' };
+      if (ctx.input.pressed.has('KeyE')) {
+        openSleepOverlay(ctx);
+      }
+      return;
+    }
+
+    case 'largeTents': {
+      // XX — walk-in shelter tent. Reuses 'sleep' verb so E opens the
+      // sleep overlay (identical UX to small tent). RMB pack-up is
+      // handled by wieldAction.ts/handleContextAction.
+      const t = findLargeTentById(ctx.largeTents.list, info.id);
+      if (!t) return;
+      t.hovered = true;
+      ctx.inventory.hover = { type: 'sleep', distance: info.distance, promptNoun: 'shelter' };
       if (ctx.input.pressed.has('KeyE')) {
         openSleepOverlay(ctx);
       }

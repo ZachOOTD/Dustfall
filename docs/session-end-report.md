@@ -4,10 +4,10 @@ Cumulative state. Rewritten end-to-end at each `/session-end`. A
 reviewer who's never seen the project should be able to read this +
 `CLAUDE.md` + `docs/GDD.md` and understand where Dustfall is.
 
-**Current state**: Session WW shipped (2026-05-21). 24 sessions
-post-MVP. tsc clean. Fourth of 5 overnight sessions (XX queued — see
-`docs/roadmap.md` "Overnight queue"). Working tree dirty pending the
-user's commit (see `## Commit handoff` below).
+**Current state**: Session XX shipped (2026-05-21). 25 sessions
+post-MVP. tsc clean. **Overnight queue COMPLETE** — all 5 sessions
+(UU, VV, UU-2, WW, XX) shipped. Working tree dirty pending the
+user's final commit (see `## Commit handoff` below).
 
 ---
 
@@ -24,7 +24,7 @@ Retroactive tier mapping for orientation only:
 | Tier 1 — Vertical slice | I–W | ✓ shipped | Inventory, crafting, interactions, opening scene, journal |
 | Tier 2 — Target | X–CC | ✓ shipped | Audio architecture, atmosphere, speeder, animated title |
 | Tier 3 — Expected | DD–PP | ✓ shipped | Sand worm boss, weapon variants, procgen POIs, biome rework |
-| Tier 4 — Stretch / polish | QQ–UU-2 | ✓ in progress | Sled, sandworm rescale, opening wreck redo, crafting rework, control scheme overhaul, hygiene/crosshair, RMB context verbs |
+| Tier 4 — Stretch / polish | QQ–XX | ✓ in progress | Sled, sandworm rescale, opening wreck redo, crafting rework, control scheme overhaul, hygiene/crosshair, RMB context verbs, HUD micro-polish, larger enterable tent + save v7 |
 
 **Verify status**: `npm run verify` = `tsc --noEmit`. Single check
 (no tier breakdown). Currently PASS.
@@ -83,6 +83,41 @@ Fresh-game start (the de-facto Tier 1 — Session W shipped):
    captured mid-drink doesn't resume drinking on reload.
 
 ---
+
+## What's freshly shipped (Session XX deltas)
+
+Final session of the overnight queue. New ItemId, new world entity,
+save schema bump:
+
+- **`large_tent_kit`** ItemId + ItemDef (wieldLmb='place', LMB to
+  deploy). Recipe id 10 (cloth×4 + branch×3 + rope×1).
+- **`src/world/largeTent.ts`** (new ~250 LOC) — mirrors tent.ts but
+  with a walk-in 3-walled cabin (back + 2 sides + roof + 4 corner
+  posts + front lintel; front face open). Shelter zone covers
+  interior cavity only — player must be inside to get the warmth
+  bubble. D80 documents the "two modules vs. parameterized" call.
+- **`packUpLargeTent(ctx, tent)`** mirrors UU-2's `packUpTent`:
+  atomic, inventory-full refuse, **plus** refuses if player is
+  currently inside the tent (toast "can't pack — you're inside the
+  tent" — don't yank shelter out from under the player).
+- **`ctx.largeTents.list`** added to GameContext; initialized in
+  main.ts.
+- **`interaction.ts`** gains a `'largeTents'` registry case — same
+  'sleep' hover verb so E opens the sleep overlay identically.
+- **`wieldAction.ts` `handleContextAction`** extended to iterate
+  `ctx.largeTents.list` when `hover.type === 'sleep'`. RMB pack-up
+  works for both small + large tents.
+- **`SAVE_VERSION 6 → 7`** (D81 — additive only). New optional
+  `largeTents?: Array<{id, pos, rotationY}>` on SaveV1. Loader
+  accepts v1-v7; pre-v7 saves load with empty large-tents array.
+
+**Scope-cut #1 taken**: `weather.perceivedIntensity` split deferred.
+Large tents already shelter via the ShelterZone mechanism (cold
+drain etc.) but storm visuals inside the tent stay at full
+intensity. Backlogged as a future polish item.
+
+Decisions D80 (clone-not-parameterize, friction-2) + D81 (save
+migration additive discipline, friction-3) logged.
 
 ## What's freshly shipped (Session WW deltas)
 
@@ -265,35 +300,43 @@ Recent ones (session-tagged):
 
 ## Suggested next session (1-3 directions in priority order)
 
-1. **Session XX — Larger enterable tent** (~3h). FINAL session of
-   the overnight queue. New `large_tent_kit` ItemDef + recipe (id 10)
-   + `src/world/largeTent.ts` module mirroring tent.ts but with
-   walk-in interior volume. New `weather.perceivedIntensity` field
-   on GameContext that visual + audio systems read when player is
-   inside the large tent. **Only session in this plan authorized
-   to bump `SAVE_VERSION 6 → 7`** (additive: empty large-tents
-   array on load of pre-v7 saves). See `docs/next-session-prompt.md`.
-2. Audio sample stems (.ogg sourcing) — architecture exists since X;
-   blocked on asset-pipeline external dependency. Not actionable
-   without source files.
-3. Post-mortem pass on the overnight run — wieldAction dispatcher +
-   RMB extension + CSS-overlay HUD vignettes form a recurring
-   "centralized dispatch via predicate-on-context-state" pattern.
-   Worth promoting to gamedev-framework shared-memory after XX.
+The overnight queue is closed. Open options:
 
-The top pick (XX) is the final session in the overnight queue.
-Plan file at `.claude/plans/i-want-to-set-floating-dusk.md`.
+1. **Storm visual dampening inside large tent** (the scope-cut #1
+   deferred from XX, ~1-1.5h). Add `weather.perceivedIntensity`
+   field; updateShelter sets it to `intensity * LARGE_TENT_STORM_DAMPEN
+   = 0.4` when player is in a large-tent shelter. Wire stormVignette
+   + ambientDust + (optionally) soundscape to read perceivedIntensity
+   instead of intensity. Storm physics + stats keep reading intensity
+   (world-state stays authoritative). Decision D79 (placeholder
+   reserved in the plan) becomes its actual entry.
+2. **Post-mortem of the overnight run** — five sessions in a row
+   produced recurring patterns worth promoting to gamedev-framework
+   shared-memory:
+   - "Centralized dispatch on equipped-item predicate" (wieldAction.ts
+     D73 + RMB extension D77)
+   - "Clone-not-abstract for N=2-3 callers" (D78 + D80)
+   - "Additive-only save migration discipline" (D81)
+   - "slot.meta for HMR-safe transient state" (D74 onHoldTick)
+   Run `/gamedev-framework:post-mortem` to evaluate.
+3. **Audio sample stems** (.ogg sourcing) — architecture exists
+   since Session X; blocked on asset-pipeline external dependency.
+   Not actionable without source files.
+
+Pick whichever feels right. The codebase is in excellent shape: tsc
+clean, 0 `as any`, save schema v7 with full migration coverage, all
+5 overnight sessions verified end-to-end.
 
 ---
 
 ## Time spent
 
-23 sessions shipped (A–UU-2). Approx ~89-144h elapsed dev time across
-roughly 3 weeks of calendar time. Session UU-2 was a tight RMB-layer
-session — ~1h: wieldAction extension + packUpTent + controls refresh
-+ eval-driven verification + docs. UU + VV + UU-2 combined = ~6-7h
-of the overnight queue (~2 sessions remaining: WW polish ~1.5h + XX
-larger tent ~3h).
+25 sessions shipped (A–XX). Approx ~92-147h elapsed dev time across
+roughly 3 weeks of calendar time. Overnight queue (UU through XX)
+ran in one continuous push of ~8-10h, landing 5 sessions clean. XX
+was the largest of the polish-tier sessions at ~1.5h core work (new
+ItemId + module + recipe + save migration + dispatch wiring +
+verification).
 
 ---
 

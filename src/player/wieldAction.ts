@@ -37,6 +37,7 @@ import { getItemDef } from '../inventory/items.ts';
 import { addItem } from '../inventory/inventory.ts';
 import { despawnPickup } from '../pickups/pickups.ts';
 import { packUpTent } from '../world/tent.ts';
+import { packUpLargeTent } from '../world/largeTent.ts';
 import { detachRope } from '../world/sled.ts';
 import { isLootMenuOpen } from '../ui/lootMenu.ts';
 import { isSleepOverlayOpen } from '../ui/sleepOverlay.ts';
@@ -135,11 +136,18 @@ function handleContextAction(ctx: GameContext): void {
   const hover = ctx.inventory.hover;
   if (!hover) return;
 
-  // RMB on a tent → pack it up (refuses if inventory full).
+  // RMB on a tent (small or large) → pack it up (refuses if inventory full).
   if (hover.type === 'sleep') {
     for (const t of ctx.tents.list) {
       if (t.hovered) {
         packUpTent(ctx, t);
+        return;
+      }
+    }
+    // XX — also check large tents (same 'sleep' hover type)
+    for (const t of ctx.largeTents.list) {
+      if (t.hovered) {
+        packUpLargeTent(ctx, t);
         return;
       }
     }

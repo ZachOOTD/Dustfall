@@ -8,6 +8,7 @@ import { playDrink, playPour } from '../audio/audio.ts';
 import { deployFire } from '../world/fire.ts';
 import { deployTent } from '../world/tent.ts';
 import { deploySled } from '../world/sled.ts';
+import { deployLargeTent } from '../world/largeTent.ts';
 import { easeOutBack, easeInOutCubic, easeOutQuad } from '../core/ease.ts';
 import { addItem } from './inventory.ts';
 import { makeLizardVisual } from '../enemies/lizard.ts';
@@ -1416,6 +1417,50 @@ const _DEFS: Record<ItemId, ItemDef> = {
     },
   },
 
+  // Session XX — larger enterable tent. Walk-in shelter; LMB-click to
+  // deploy at the camera-forward 2.2m+depth/2 distance. RMB to pack
+  // (handled by wieldAction.ts/handleContextAction).
+  large_tent_kit: {
+    id: 'large_tent_kit',
+    name: 'SHELTER TENT',
+    glyph: '⌂',
+    description: 'a frame + canvas — large enough to walk inside',
+    stackable: false,
+    maxStack: 1,
+    wieldLmb: 'place',
+    onUse(ctx, _slot) {
+      const tent = deployLargeTent(ctx);
+      if (!tent) {
+        return { consumed: false, message: 'no room to pitch a shelter here' };
+      }
+      return { consumed: true, message: 'shelter pitched' };
+    },
+    makeViewModel() {
+      const group = new THREE.Group();
+      // Scaled-up tent_kit viewmodel — bigger canvas roll + 4 poles.
+      const mat = new THREE.MeshLambertMaterial({ color: 0xa89878 });
+      const roll = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.30, 12), mat);
+      roll.rotation.z = Math.PI / 2;
+      group.add(roll);
+      const poleMat = new THREE.MeshLambertMaterial({ color: 0x4a3a2a });
+      for (let i = 0; i < 4; i++) {
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.010, 0.010, 0.32, 4), poleMat);
+        pole.rotation.z = Math.PI / 2;
+        pole.position.set(0, -0.06, (i - 1.5) * 0.025);
+        group.add(pole);
+      }
+      return group;
+    },
+    makeIcon() {
+      const s = svg();
+      // House-shape outline (larger than tent_kit's pyramid)
+      s.appendChild(svgEl('rect', { x: '5', y: '10', width: '14', height: '11' }));
+      s.appendChild(svgEl('polygon', { points: '5,10 12,4 19,10' }));
+      s.appendChild(svgEl('rect', { x: '10', y: '14', width: '4', height: '7' }));
+      return s;
+    },
+  },
+
   rope: {
     id: 'rope',
     name: 'ROPE',
@@ -1481,4 +1526,5 @@ export const ALL_ITEM_IDS: ReadonlyArray<ItemId> = [
   'lizard_on_a_stick_raw', 'lizard_on_a_stick_cooked',
   'pipe_staff', 'scrap_gun', 'scrap_bullet', 'energy_pistol',
   'rope', 'sled_kit',
+  'large_tent_kit',  // Session XX
 ];
