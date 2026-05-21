@@ -30,6 +30,7 @@ and promotes the second.
 - **Session AAG** (2026-05-21): atmospheric polish + inventory swap-on-full — footprint puffs, dust motes, mirage shader, hold-E swap-on-pickup-full.
 - **Session AAH** (2026-05-21): playtest polish for AAG — Tuning lifts (footprintPuffs + interaction.ts swap-duration) + 5 feel tweaks (puff height ↑, motes opacity ↑, swap snappier, mirage near-edge ↓, motes storm cross-fade softened).
 - **Session AAI** (2026-05-21): procedural world generation (standard 2400m) — per-seed auto-roll on NEW GAME + advanced UI seed entry + flagship POIs unified into rejection sampler + opening scene as seed-stable anchor + density bumps. D82-D85.
+- **Session AAJ** (2026-05-21): opening wreck bugfix pass — AAB godray removed (theatrical), entrance enterable (rim bumped, fragments reduced, floor collider reaches rim), hull thickness (drop DoubleSide for inner-shell + FrontSide approach), tally marks repositioned to side wall.
 
 ## Up next
 

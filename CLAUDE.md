@@ -58,7 +58,30 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session AAI — Procedural world generation (standard
+**Last shipped**: Session AAJ — Opening wreck bugfix pass. Four fixes
+flagged from a playtest screenshot. **AAB godray cone removed** —
+read as theatrical; `updateOpeningWreckGodRay` stubbed to no-op
+(preserves main.ts import); 6 godray Tuning constants retained as
+commented baseline. **Entrance enterable** — `R_TAIL_RIM 1.4 → 1.6m`,
+`R_TAIL_BODY 1.5 → 1.65m`, entrance fragments reduced 4 → 2 with
+smaller dims (they read as "wings/fins" obscuring the entrance from
+head-on); floor collider half-Z bumped `HULL_LEN/2 - 0.2 →
+HULL_LEN/2 - 0.05` so it reaches the rim (was a 0.2m terrain gap).
+**Hull thickness** — outer hull materials switched DoubleSide →
+FrontSide; new `_hullInteriorMat` (BackSide, darker interior tone);
+new inner shell built as a SECOND set of LatheGeometry slices at
+reduced radii (`PROFILE.x - HULL_WALL_THICKNESS`, 0.04m). From
+outside: rusted exterior; from inside: darker interior wall; the
+4cm gap reads as visible wall thickness at the entrance + skylight
+openings. Entrance rim torus closes the cross-section ring. 2 new
+Tuning constants. **Tally marks repositioned** — pre-AAJ at z=2.85
+where hull radius was only ~0.45m (marks floated past wall); now on
+LEFT cockpit interior side wall just behind the skeleton (z=1.55-2.55),
+per-cluster X computed from local hull profile at chest-height.
+Cluster runs fore-aft along Z. No save schema change. 2 files
+touched.
+
+**Prior milestone**: Session AAI — Procedural world generation (standard
 2400m world). Per-seed worlds within the existing 3×3 chunk grid; no
 save schema bump (v9 already had the `seed` field, AAI finally uses
 it). New `resolveSeed()` in main.ts reads

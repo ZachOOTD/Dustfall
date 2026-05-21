@@ -4,9 +4,8 @@ Cumulative state. Rewritten end-to-end at each `/session-end`. A
 reviewer who's never seen the project should be able to read this +
 `CLAUDE.md` + `docs/GDD.md` and understand where Dustfall is.
 
-**Current state**: Session AAI shipped (2026-05-21). 36 sessions
-post-MVP. tsc clean. SAVE_VERSION v9 (unchanged — the v9 `seed` field
-finally gets per-game values instead of always `Tuning.RNG_SEED`).
+**Current state**: Session AAJ shipped (2026-05-21). 37 sessions
+post-MVP. tsc clean. SAVE_VERSION v9 (unchanged).
 Post-overnight: UU/VV/UU-2/WW/XX/YY/ZZ + AAA (polish) + AAB (world
 depth) + AAC (craftable home) + AAD (kit playtest polish) + AAE
 (creature companion + v9) + AAF (7-day storm countdown) + AAG
@@ -88,6 +87,30 @@ Fresh-game start (the de-facto Tier 1 — Session W shipped):
    captured mid-drink doesn't resume drinking on reload.
 
 ---
+
+## What's freshly shipped (Session AAJ deltas)
+
+Opening wreck bugfix pass. Four fixes flagged from a playtest screenshot.
+No new modules, no schema bump, no D-entries (small visual + collider
+adjustments to an existing system).
+
+- **AAB godray cone removed** (`src/world/openingWreck.ts`). Read as
+  theatrical/unrealistic; natural skylight-gap lighting is sufficient.
+  `updateOpeningWreckGodRay` stubbed to no-op preserving the main.ts
+  import. 6 OPENING_WRECK_GODRAY_* Tuning constants retained as
+  commented baseline.
+- **Entrance enterable** — `R_TAIL_RIM 1.4 → 1.6m`,
+  `R_TAIL_BODY 1.5 → 1.65m`; entrance fragments reduced 4 → 2 with
+  smaller dims; floor collider half-Z bumped to reach the rim
+  (eliminates the 0.2m terrain gap pre-AAJ).
+- **Hull thickness** — outer materials switched DoubleSide →
+  FrontSide; new `_hullInteriorMat` (BackSide, darker tone); inner
+  shell built as a second set of LatheGeometry slices at radii
+  reduced by `HULL_WALL_THICKNESS = 0.04`; new entrance rim torus
+  closes the cross-section gap. 2 new Tuning constants.
+- **Tally marks repositioned** to LEFT cockpit interior side wall
+  with per-cluster X computed from local profile radius (pre-AAJ
+  they floated centered at z=2.85 where hull radius was only ~0.45m).
 
 ## What's freshly shipped (Session AAI deltas)
 

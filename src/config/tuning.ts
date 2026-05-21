@@ -236,12 +236,16 @@ export const Tuning = {
   // The beam tip sits at the gap on the upper hull; the base spreads
   // outward to roughly the floor width. Intensity scales with sunHeight
   // so the beam is invisible at night and peaks at high sun.
-  OPENING_WRECK_GODRAY_BEAM_RADIUS_TOP: 0.15,    // beam tip at the gap
-  OPENING_WRECK_GODRAY_BEAM_RADIUS_BOTTOM: 1.2,  // beam base at the floor
-  OPENING_WRECK_GODRAY_BEAM_LENGTH_M: 5.5,       // tip-to-base vertical
-  OPENING_WRECK_GODRAY_COLOR_HEX: 0xffd9a0,      // warm dusty gold
-  OPENING_WRECK_GODRAY_MAX_OPACITY: 0.22,        // at peak sun
-  OPENING_WRECK_GODRAY_SUN_THRESHOLD: 0.1,       // sunHeight below this = beam off
+  // AAB godray constants retained for documentation (cone removed in
+  // AAJ — read as unrealistic, theatrical; natural skylight-gap lighting
+  // suffices). If re-introducing a god-ray effect, use these as a
+  // starting baseline.
+  OPENING_WRECK_GODRAY_BEAM_RADIUS_TOP: 0.15,    // beam tip at the gap (unused post-AAJ)
+  OPENING_WRECK_GODRAY_BEAM_RADIUS_BOTTOM: 1.2,  // beam base at the floor (unused post-AAJ)
+  OPENING_WRECK_GODRAY_BEAM_LENGTH_M: 5.5,       // tip-to-base vertical (unused post-AAJ)
+  OPENING_WRECK_GODRAY_COLOR_HEX: 0xffd9a0,      // warm dusty gold (unused post-AAJ)
+  OPENING_WRECK_GODRAY_MAX_OPACITY: 0.22,        // at peak sun (unused post-AAJ)
+  OPENING_WRECK_GODRAY_SUN_THRESHOLD: 0.1,       // sunHeight below this = beam off (unused post-AAJ)
 
   // Session AAC — craftable home placeables.
   // Bedroll — low-profile cloth pad on the ground. Small shelter zone
@@ -678,8 +682,8 @@ export const Tuning = {
   // (player enters), lathe Y=HULL_LEN lands at the cockpit nose.
   OPENING_WRECK_HULL_LEN: 6.0,               // m — total fuselage length (rear → nose)
   OPENING_WRECK_AXIS_Y: 1.0,                 // m — height of lathe axis above interior floor
-  OPENING_WRECK_R_TAIL_RIM: 1.4,             // m — torn-stump rim radius (entrance)
-  OPENING_WRECK_R_TAIL_BODY: 1.5,            // m — tail-stub body radius
+  OPENING_WRECK_R_TAIL_RIM: 1.6,             // m — torn-stump rim radius (entrance). AAJ: was 1.4 — entrance felt cramped + visually hidden by fragments; widened so the player capsule (0.7m diameter) clearly fits the opening
+  OPENING_WRECK_R_TAIL_BODY: 1.65,           // m — tail-stub body radius (AAJ: was 1.5 — matches the wider rim)
   OPENING_WRECK_R_NECK: 1.30,                // m — pinch between tail and cockpit
   OPENING_WRECK_R_COCKPIT: 1.7,              // m — cockpit max radius (widest point)
   OPENING_WRECK_R_NOSE: 0.55,                // m — pre-nose-tip radius (before final taper)
@@ -687,6 +691,13 @@ export const Tuning = {
   OPENING_WRECK_SKYLIGHT_SLICE: 17,          // index of the FIRST slice to omit (top of hull). The wreck builder omits this slice AND the next one for a 30° gap centered on true UP (phi=270° after the X=+π/2 group rotation).
   OPENING_WRECK_LATERAL_PUNCTURES: 3,        // number of small breach-hole patches scattered on side flanks
   OPENING_WRECK_FLOOR_THICK: 0.18,           // m — flat slab thickness below the cavity
+  // AAJ — hull wall thickness. Pre-AAJ the hull was a single LatheGeometry
+  // rendered DoubleSide; from inside the cavity that read as paper-thin
+  // and unrealistic. AAJ adds an inner shell at R - HULL_WALL_THICKNESS
+  // with BackSide interior material, plus an entrance rim torus closing
+  // the cross-section gap. 4cm reads as plausible riveted-plate hull.
+  OPENING_WRECK_HULL_WALL_THICKNESS: 0.04,
+  OPENING_WRECK_HULL_INTERIOR_HEX: 0x2a2218, // darker interior tone (the inside of a buried hull)
   OPENING_WRECK_PLAYER_SPAWN_OFFSET: 4.5,    // m — distance in front of the torn entrance where the player spawns (replaces hardcoded openingScene constant)
 
   // Sled (Session QQ) — placed flatbed sled with rope-tow + cargo

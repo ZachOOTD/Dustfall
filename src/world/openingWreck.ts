@@ -44,24 +44,30 @@ import { createRustedHullMaterial } from './hullMaterial.ts';
 // Hull uses the procedural rust shader (Session OO) — vertical streaks
 // down the flanks, sun bleach on the upper hull, panel-wear noise.
 //
-// Session SS — hull MUST be `DoubleSide` because the wreck is enterable:
-// from inside the cockpit the player looks at the hull's BACK faces,
-// which would be culled with the default FrontSide. `shadowSide: FrontSide`
-// keeps shadow casting from the outer surface only — DoubleSide for
-// shadow casting causes the interior surface to cast shadows back into
-// the cavity (the "double-cast" artifact).
+// AAJ — outer hull uses FrontSide (was DoubleSide in SS — read as
+// paper-thin from inside the cavity). An inner shell at slightly
+// smaller radius with BackSide material renders the interior wall
+// as a separate surface. Together they give the hull actual thickness
+// (visible at the entrance + skylight gap), with different exterior
+// + interior materials.
 const _hullMat = createRustedHullMaterial({
   baseColor: Tuning.WRECK_HULL_HEX,
   streakIntensity: 0.55,
 });
-_hullMat.side = THREE.DoubleSide;
-_hullMat.shadowSide = THREE.FrontSide;
+_hullMat.side = THREE.FrontSide;
 const _hullDarkMat = createRustedHullMaterial({
   baseColor: Tuning.WRECK_HULL_DARK_HEX,
   streakIntensity: 0.35,
 });
-_hullDarkMat.side = THREE.DoubleSide;
-_hullDarkMat.shadowSide = THREE.FrontSide;
+_hullDarkMat.side = THREE.FrontSide;
+// AAJ — interior wall material. Darker tone, flat shading, BackSide so
+// it renders only from inside the cavity (where the player looks at the
+// inner face of the inner shell, which faces inward = back side).
+const _hullInteriorMat = new THREE.MeshLambertMaterial({
+  color: Tuning.OPENING_WRECK_HULL_INTERIOR_HEX,
+  side: THREE.BackSide,
+  flatShading: true,
+});
 const _floorMat = new THREE.MeshLambertMaterial({
   color: 0x2a2620,
   flatShading: true,
@@ -107,12 +113,11 @@ const _panelRimMat = new THREE.MeshLambertMaterial({
   color: Tuning.SALVAGE_PANEL_RIM_HEX,
 });
 
-// Session AAB — module-level refs to the god-ray mesh + material so
-// the per-frame updateOpeningWreckGodRay(ctx) can adjust opacity by
-// sun height without traversing the scene each frame. Single-instance
-// (one opening wreck per save).
-let _godRayMesh: THREE.Mesh | null = null;
-let _godRayMat: THREE.MeshBasicMaterial | null = null;
+// Session AAB godray refs removed in AAJ — the additive light cone read
+// as unrealistic and didn't fit the tone. Natural lighting through the
+// skylight slice gap is sufficient. updateOpeningWreckGodRay is now a
+// no-op to preserve the main.ts import (deleting it would force a coupled
+// main.ts change for no behavior gain).
 
 // ── Dimensions ───────────────────────────────────────────────────────
 const HULL_LEN = Tuning.OPENING_WRECK_HULL_LEN;
@@ -125,6 +130,16 @@ const R_NOSE = Tuning.OPENING_WRECK_R_NOSE;
 const SLICE_COUNT = Tuning.OPENING_WRECK_SLICE_COUNT;
 const SKYLIGHT_SLICE = Tuning.OPENING_WRECK_SKYLIGHT_SLICE;
 const FLOOR_THICK = Tuning.OPENING_WRECK_FLOOR_THICK;
+const HULL_WALL_THICKNESS = Tuning.OPENING_WRECK_HULL_WALL_THICKNESS;
+
+/** AAJ — inner-shell profile: same shape as PROFILE but radii reduced
+ *  by HULL_WALL_THICKNESS. Computed lazily so we use the latest Tuning
+ *  values. The taper at the nose tip + tail rim is preserved (radii
+ *  clamped to 0). */
+function makeInteriorProfile(): THREE.Vector2[] {
+  const t = HULL_WALL_THICKNESS;
+  return PROFILE.map((p) => new THREE.Vector2(Math.max(0, p.x - t), p.y));
+}
 
 /** Lathe profile (radius, axial-Y). y=0 is the torn tail-stump,
  *  y=HULL_LEN is the cockpit nose. Sampled densely so the curve reads
@@ -193,6 +208,7 @@ export const OPENING_WRECK_EXTENTS: OpeningWreckExtents = {
 function makeSlicedHull(): THREE.Group {
   const g = new THREE.Group();
   const sliceArc = (Math.PI * 2) / SLICE_COUNT;
+  const interiorProfile = makeInteriorProfile();
 
   // Skip TWO adjacent slices centered on true UP — 30° gap from slice
   // boundaries at 255°/285° straddling 270° (= world +Y after the
@@ -205,9 +221,16 @@ function makeSlicedHull(): THREE.Group {
     // joints rather than disappearing into the curve. Even = base hull,
     // odd = dark hull.
     const mat = (i % 2 === 0) ? _hullMat : _hullDarkMat;
-    const geo = new THREE.LatheGeometry(PROFILE, 4, phiStart, sliceArc);
-    const slice = new THREE.Mesh(geo, mat);
-    g.add(slice);
+    const outerGeo = new THREE.LatheGeometry(PROFILE, 4, phiStart, sliceArc);
+    const outerSlice = new THREE.Mesh(outerGeo, mat);
+    g.add(outerSlice);
+    // AAJ — inner shell at smaller radius with interior material. The
+    // BackSide material renders only when viewed from inside the cavity.
+    // Together with the FrontSide outer shell this gives the hull
+    // visible wall thickness at the entrance + skylight openings.
+    const innerGeo = new THREE.LatheGeometry(interiorProfile, 4, phiStart, sliceArc);
+    const innerSlice = new THREE.Mesh(innerGeo, _hullInteriorMat);
+    g.add(innerSlice);
   }
 
   return g;
@@ -294,13 +317,12 @@ function makeEntranceFragments(rand: Rng): THREE.Group {
   const r = R_TAIL_RIM;
   // Session SS — was 7 evenly-distributed fragments which read as a
   // "saw-blade crown" around the rim rather than torn metal. Reduced
-  // to 4 fragments clustered on the UPPER half + ONE side, with the
-  // other side mostly clean. Combined with the bottom-110° skip
-  // (player walk-in path) this leaves the rim asymmetric — one side
-  // looks torn open, the other looks slightly cleaner — closer to
-  // "this hull section sheared off violently in one direction" than
-  // "the rim is uniformly serrated".
-  const fragCount = 4;
+  // to 4 fragments clustered on the UPPER half + ONE side. AAJ — further
+  // reduced to 2 because 4 read as "wings/fins" obscuring the entrance
+  // from a head-on view, leading the player to think the wreck was sealed.
+  // 2 fragments at the upper-rim still suggest torn metal without blocking
+  // the visual line into the cavity.
+  const fragCount = 2;
   // Bias the angles toward the upper-right of the rim (phi roughly
   // 0..π so cos > 0 ish): start each fragment at base angle 0..π
   // with light jitter. The bottom-skip below still applies.
@@ -314,8 +336,11 @@ function makeEntranceFragments(rand: Rng): THREE.Group {
     if (Math.sin(ang) < -0.3) continue;
     // Larger, more "plate-like" pieces. Smaller w + h gave a confetti
     // read; bigger plates read as actual torn hull sections.
-    const w = 0.55 + rand() * 0.55;
-    const h = 0.40 + rand() * 0.45;
+    // AAJ — sized down (was 0.55+0.55w / 0.40+0.45h, now 0.40+0.35w /
+    // 0.30+0.30h) so a head-on player view doesn't see the fragments
+    // crowding the entrance silhouette.
+    const w = 0.40 + rand() * 0.35;
+    const h = 0.30 + rand() * 0.30;
     const frag = new THREE.Mesh(
       new THREE.BoxGeometry(w, h, 0.05),
       _rustDarkMat,
@@ -391,33 +416,49 @@ function makeInteriorProps(rand: Rng): THREE.Group {
     g.add(stub);
   }
 
-  // Tally marks on the cockpit interior wall — just below the cockpit
-  // window strip on the inside, where the previous occupant tallied
-  // days. Anchored at the +Z end of the wreck, on a curved wall
-  // approximated by a flat tangent plane at the tally Z.
-  const tallyZ = HULL_LEN / 2 - 0.15;   // just inside the nose interior
-  const tallyY = AXIS_Y + 0.2;           // chest-height inside the cockpit
-  const tallyXOffset = 0.6;              // off-center to the left
+  // Tally marks — AAJ rework. Pre-AAJ these were on a flat tangent plane
+  // at z=2.85 (just inside the nose), where the hull radius after the
+  // RR redesign + AAJ thickening is only ~0.45m. Marks spanning X up
+  // to 0.78 floated past the hull surface. Now placed on the LEFT
+  // interior side wall, just above the skeleton (z ~1.6-2.2 in
+  // wreck-local). At that lathe-Y the hull radius is ~1.4-1.5m,
+  // plenty of room. Cluster runs fore-aft along Z; marks remain
+  // vertical bars (long axis = world Y).
+  const tallyY = AXIS_Y + 0.10;          // just above wreck axis (chest-height)
+  const tallyZStart = 1.55;              // just behind the skeleton (at z=1.95)
+  const clusterZSpacing = 0.34;
+  const markZSpacing = 0.05;
+  const yOffsetFromAxis = tallyY - AXIS_Y;
   let totalMarks = 0;
   for (let cluster = 0; cluster < 4 && totalMarks < 17; cluster++) {
-    const baseX = -tallyXOffset + cluster * 0.32;
+    const clusterZBase = tallyZStart + cluster * clusterZSpacing;
     const inThisCluster = Math.min(5, 17 - totalMarks);
+    // Per-cluster: compute interior wall X (left side) using the local
+    // hull radius at this Z. Inner shell radius = R - WALL_THICKNESS;
+    // marks sit just inside the inner shell so they don't z-fight.
+    const latheY = clusterZBase + HULL_LEN / 2;
+    const rInner = Math.max(0.3, profileRadiusAt(latheY) - HULL_WALL_THICKNESS);
+    const wallX = -Math.sqrt(Math.max(0.01, rInner * rInner - yOffsetFromAxis * yOffsetFromAxis));
+    const markX = wallX + 0.02;          // inset 2cm from the wall surface
     for (let m = 0; m < Math.min(4, inThisCluster); m++) {
       const bar = new THREE.Mesh(
-        new THREE.BoxGeometry(0.016, 0.20, 0.015),
+        // X = depth into wall (thin), Y = vertical (tall), Z = spacing (thin)
+        new THREE.BoxGeometry(0.015, 0.20, 0.016),
         _scratchMat,
       );
-      bar.position.set(baseX + m * 0.045, tallyY, tallyZ);
+      bar.position.set(markX, tallyY, clusterZBase + m * markZSpacing);
       g.add(bar);
       totalMarks++;
     }
     if (inThisCluster === 5) {
+      // Crossing slash — diagonal across the 4 bars. Long axis = Z, tilted
+      // around X axis so it slopes top-front to bottom-back across the bars.
       const cross = new THREE.Mesh(
-        new THREE.BoxGeometry(0.22, 0.016, 0.015),
+        new THREE.BoxGeometry(0.015, 0.016, 0.22),
         _scratchMat,
       );
-      cross.position.set(baseX + 0.07, tallyY, tallyZ);
-      cross.rotation.z = 0.45;
+      cross.position.set(markX, tallyY, clusterZBase + markZSpacing * 1.5);
+      cross.rotation.x = 0.45;
       g.add(cross);
       totalMarks++;
     }
@@ -508,6 +549,24 @@ export function makeOpeningWreck(rand: Rng): THREE.Group {
   // ── Entrance fragments — jagged plates around the torn rim. ──
   g.add(makeEntranceFragments(rand));
 
+  // ── AAJ — entrance rim torus. Closes the cross-section gap between
+  //    the outer hull (at R_TAIL_RIM) and the inner shell (at
+  //    R_TAIL_RIM - HULL_WALL_THICKNESS). Without this ring, looking
+  //    into the entrance from outside, the gap between outer and inner
+  //    edges renders as background (sky/terrain). The ring fills it,
+  //    giving a clean torn-metal edge with visible thickness. ──
+  const rimMajorR = R_TAIL_RIM - HULL_WALL_THICKNESS * 0.5;
+  const rimMinorR = HULL_WALL_THICKNESS * 0.5;
+  const rim = new THREE.Mesh(
+    new THREE.TorusGeometry(rimMajorR, rimMinorR, 4, 24),
+    _rustDarkMat,
+  );
+  // Position: entrance rim is at lathe Y=0 = world Z = -HULL_LEN/2.
+  // Torus default ring is in XY plane (axis = +Z); since the hull's
+  // length runs along world Z, that's already correct.
+  rim.position.set(0, AXIS_Y, -HULL_LEN / 2);
+  g.add(rim);
+
   // ── Antenna stub on the upper cockpit hull, leaning forward. ──
   const stubLen = 1.4;
   const stubGeo = new THREE.CylinderGeometry(0.04, 0.06, stubLen, 6);
@@ -536,44 +595,9 @@ export function makeOpeningWreck(rand: Rng): THREE.Group {
   // ── Interior props ──
   g.add(makeInteriorProps(rand));
 
-  // ── AAB — skylight god-rays. Additive cone from the gap (top of
-  // hull) tapering down to the floor. Visible from inside the wreck
-  // when sun is up; opacity driven by ctx.time.sunHeight via
-  // updateOpeningWreckGodRay (called from main.ts tick).
-  const beamLen = Tuning.OPENING_WRECK_GODRAY_BEAM_LENGTH_M;
-  const beamGeo = new THREE.CylinderGeometry(
-    Tuning.OPENING_WRECK_GODRAY_BEAM_RADIUS_TOP,
-    Tuning.OPENING_WRECK_GODRAY_BEAM_RADIUS_BOTTOM,
-    beamLen,
-    16,
-    1,
-    true,  // openEnded so it's just walls (additive shaft of light)
-  );
-  const beamMat = new THREE.MeshBasicMaterial({
-    color: Tuning.OPENING_WRECK_GODRAY_COLOR_HEX,
-    transparent: true,
-    opacity: 0,                   // starts invisible; updateOpeningWreckGodRay sets per-frame
-    side: THREE.DoubleSide,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-    fog: false,
-    toneMapped: false,
-  });
-  const beam = new THREE.Mesh(beamGeo, beamMat);
-  // Position: tip at the gap (top of hull, central axial position).
-  // The gap runs along world Z over the full hull length; center at
-  // approximately the shoulder (lathe Y ≈ 0.5 HULL_LEN → world Z ≈ 0).
-  // beamY: bottom of cylinder = AXIS_Y - beamLen/2 + topY_offset. Want
-  // tip at the hull's top surface (AXIS_Y + profileRadiusAt(shoulder)).
-  const shoulderLatheY = 0.50 * HULL_LEN;
-  const shoulderR = profileRadiusAt(shoulderLatheY);
-  const beamTipY = AXIS_Y + shoulderR;
-  beam.position.set(0, beamTipY - beamLen * 0.5, shoulderLatheY - HULL_LEN / 2);
-  beam.name = 'opening-wreck-godray';
-  beam.renderOrder = 5;           // after world geometry, before HUD
-  _godRayMesh = beam;
-  _godRayMat = beamMat;
-  g.add(beam);
+  // AAJ — AAB godray cone removed. Natural lighting via the skylight
+  // slice gap is the read now; the explicit additive cone read as
+  // unrealistic + theatrical.
 
   // ── Salvage panels — refs are returned so placeOpeningWreck can
   //    register them. We mark them via userData so they can be found
@@ -672,9 +696,13 @@ export function placeOpeningWreck(
     );
   };
 
-  // (1) Floor slab — flat, covers the cavity.
+  // (1) Floor slab — flat, covers the cavity. AAJ: half-Z bumped from
+  // (HULL_LEN/2 - 0.2) to (HULL_LEN/2 - 0.05) so the floor reaches all
+  // the way to the entrance rim. Previous 0.2m gap meant the player
+  // briefly stepped onto terrain between the rim and the floor, which
+  // depending on terrain dips made entry feel sticky.
   addColl(
-    { x: R_COCKPIT * 0.85, y: FLOOR_THICK / 2, z: HULL_LEN / 2 - 0.2 },
+    { x: R_COCKPIT * 0.85, y: FLOOR_THICK / 2, z: HULL_LEN / 2 - 0.05 },
     { x: 0, y: -FLOOR_THICK / 2, z: 0 },
   );
 
@@ -734,28 +762,8 @@ export function placeOpeningWreck(
   return group;
 }
 
-/** Session AAB — per-frame intensity update for the skylight god-ray.
- *  Opacity scales linearly with sunHeight above the night threshold,
- *  capped at OPENING_WRECK_GODRAY_MAX_OPACITY at peak sun. Beam is
- *  hidden entirely below the threshold (night / dusk). Storm dampens
- *  the beam too — sun doesn't reach through the dust at peak storm.
- *  Called from main.ts tick after updateWeather (which writes
- *  weather.perceivedIntensity). */
-export function updateOpeningWreckGodRay(ctx: GameContext): void {
-  if (!_godRayMesh || !_godRayMat) return;
-  const sy = ctx.time.sunHeight;
-  const threshold = Tuning.OPENING_WRECK_GODRAY_SUN_THRESHOLD;
-  if (sy < threshold) {
-    if (_godRayMesh.visible) _godRayMesh.visible = false;
-    return;
-  }
-  // Linear ramp from threshold..1.0 → 0..1.0 normalized
-  const t = Math.min(1, (sy - threshold) / (1 - threshold));
-  // Storm dampens the beam — peak storm = no visible rays. Read
-  // ctx.weather.intensity (world-truth) since the sun's penetration
-  // through dust is a world physics concern, not a perception one.
-  const stormDampen = 1 - Math.min(1, ctx.weather.intensity);
-  const opacity = t * stormDampen * Tuning.OPENING_WRECK_GODRAY_MAX_OPACITY;
-  _godRayMat.opacity = opacity;
-  _godRayMesh.visible = opacity > 0.001;
+/** AAJ — no-op. The AAB godray cone was removed; this stub keeps
+ *  the export so main.ts's import doesn't need a coupled change. */
+export function updateOpeningWreckGodRay(_ctx: GameContext): void {
+  // intentionally empty
 }

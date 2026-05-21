@@ -3,6 +3,56 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session AAJ — 2026-05-21 — Opening wreck bugfix pass ✓ verify pass
+`verified` — tsc clean; preview-eval confirmed (1) godrayCount=0 in
+scene (was 1), (2) latheCount=44 (22 outer + 22 inner shells; was 22),
+(3) torusCount=2 (rust band + entrance rim; was 1), (4) doubleSideHulls=0
+(was 22), (5) tallyBars=14 all with leftSideTallyBars=14 (all marks
+on the left wall; pre-AAJ they were centered floating in midair).
+
+Four bugfixes on the opening wreck flagged from a playtest screenshot.
+
+- **AAB godray cone removed**. The additive light beam from the
+  skylight gap to the floor read as theatrical / unrealistic.
+  `updateOpeningWreckGodRay` stubbed to no-op (preserves main.ts
+  import without coupled change). The 6 OPENING_WRECK_GODRAY_*
+  Tuning constants retained as commented baseline for any future
+  re-introduction. Natural lighting through the skylight slice gap
+  is now the only interior illumination.
+- **Entrance enterable**. Three changes together: `R_TAIL_RIM 1.4 →
+  1.6m` (player capsule diameter 0.7m now has comfortable clearance);
+  `R_TAIL_BODY 1.5 → 1.65m` (matches the wider rim); entrance
+  fragments reduced 4 → 2 with smaller dims (was 0.55+0.55w / 0.40+0.45h,
+  now 0.40+0.35w / 0.30+0.30h) — they were reading as "wings/fins"
+  obscuring the entrance from a head-on view; floor collider half-Z
+  bumped `HULL_LEN/2 - 0.2 → HULL_LEN/2 - 0.05` so the floor reaches
+  the entrance rim (was a 0.2m terrain gap where the player briefly
+  stepped onto bumpy terrain).
+- **Hull thickness (drop DoubleSide trick)**. Outer hull materials
+  switched from `DoubleSide` → `FrontSide`. New `_hullInteriorMat`
+  (BackSide, color 0x2a2218 darker interior tone). New inner shell
+  built as a SECOND set of LatheGeometry slices at reduced radii
+  (`PROFILE.x - HULL_WALL_THICKNESS`, default 0.04m). From outside
+  you see the rusted exterior; from inside the cavity you see the
+  darker interior wall; the 4cm gap between them shows as visible
+  wall thickness at the entrance + skylight openings. New entrance
+  rim torus closes the cross-section gap so looking into the
+  entrance from outside reads as a clean torn-metal ring rather
+  than a void to the sky. 2 new Tuning constants:
+  `OPENING_WRECK_HULL_WALL_THICKNESS` + `OPENING_WRECK_HULL_INTERIOR_HEX`.
+- **Tally marks repositioned**. Pre-AAJ they sat on a flat tangent
+  plane at z=2.85 (just inside the nose) — but after the RR redesign
+  + AAJ thickening, the hull radius there is only ~0.45m and the
+  marks (spanning X up to 0.78) floated past the wall surface. Now
+  placed on the LEFT cockpit interior side wall just behind the
+  skeleton (z=1.55-2.55), with per-cluster X computed from the local
+  profile radius at chest-height. Marks remain vertical 0.20m bars;
+  cluster runs fore-aft along Z; crossing slash now tilts on the X
+  axis instead of Z.
+
+No save schema change. No new modules. tsc clean. 2 files touched
+(openingWreck.ts, tuning.ts).
+
 ## Session AAI — 2026-05-21 — Procedural world generation (standard 2400m world) ✓ verify pass
 `verified` — tsc clean; preview-eval confirmed (1) two fresh boots produce
 two different random seeds, (2) custom seed via localStorage produces an
