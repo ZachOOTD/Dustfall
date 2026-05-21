@@ -163,6 +163,14 @@ canvas {
   font-size: 26px;
 }
 
+/* AAA — corpse loot (dead lizard / sandworm carcass): muted brown,
+   distinct from the bright red .kill (which fires for LIVE enemies).
+   Reads as "loot this dead thing" rather than "attack this thing". */
+#crosshair.dead {
+  color: rgba(180, 140, 100, 0.85);
+  font-size: 26px;
+}
+
 .overlay {
   position: fixed;
   inset: 0;

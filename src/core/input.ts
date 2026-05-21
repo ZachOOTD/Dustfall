@@ -147,5 +147,18 @@ export function wireOverlays(ctx: GameContext): void {
     })();
   });
 
+  // AAA — TAB toggles the recipe book panel. Suppressed while death
+  // screen is up or game not yet started. e.preventDefault() so TAB
+  // doesn't escape pointer-lock or shift browser focus.
+  window.addEventListener('keydown', (e) => {
+    if (e.code !== 'Tab' || e.repeat) return;
+    if (ctx.stats.dead || !ctx.flags.started) return;
+    e.preventDefault();
+    void import('../ui/recipeBookPanel.ts').then((m) => {
+      if (m.isRecipeBookPanelOpen()) m.closeRecipeBookPanel(ctx);
+      else m.openRecipeBookPanel(ctx);
+    });
+  });
+
   ctx.three.scene.add(ctx.input.controls.object);
 }

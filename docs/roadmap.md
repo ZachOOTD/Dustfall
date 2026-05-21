@@ -18,11 +18,15 @@ and promotes the second.
 
 ---
 
-## Overnight era (COMPLETE — 7 sessions UU/VV/UU-2/WW/XX/YY/ZZ shipped 2026-05-21)
+## Recently shipped (overnight + post-overnight)
 
-5-session overnight queue + 2 follow-on polish sessions (YY visual + ZZ audio dampening). Plan archived at `.claude/plans/i-want-to-set-floating-dusk.md`. All sessions shipped ✓. The overnight era is closed.
+- **Overnight era** (UU through ZZ, 7 sessions, 2026-05-21): control scheme overhaul, RMB context verbs, HUD polish, larger enterable tent, perceivedIntensity split (visual + audio halves).
+- **Session AAA** (2026-05-21): first-impression polish bundle — UU pickup migration reverted (E takes again), ghost preview for LMB-place, vignette threshold lowered, recipe book panel, crosshair `.dead` state.
 
-Next session pick is open — pick from "Next — Big-ticket bucket" below.
+## Up next
+
+- **Session AAB — World depth** (~2-3h, plan in `docs/next-session-prompt.md`). Skylight god-rays for the opening wreck + salvage yield differentiation by wreck kind.
+- **Session AAC — Craftable home** (~4-6h, may split). Bedroll/lantern/locker as placeable kits mirroring tent/sled/fire patterns. Save schema v7→v8 additive.
 
 ## Next — Big-ticket bucket (1–2 picks per session at ~4–7h each)
 Pick whatever feels most missing after the polish + atmosphere arc.

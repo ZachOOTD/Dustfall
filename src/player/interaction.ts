@@ -14,7 +14,7 @@ import * as THREE from 'three';
 import type { GameContext } from '../GameContext.ts';
 import { isPlaying } from '../GameContext.ts';
 import { addItem } from '../inventory/inventory.ts';
-import { findPickupById } from '../pickups/pickups.ts';
+import { despawnPickup, findPickupById } from '../pickups/pickups.ts';
 import { findWaterSourceById } from '../world/waterSources.ts';
 import { findCactusById, harvestCactus } from '../world/cactus.ts';
 import { findLizardById, lootLizard } from '../enemies/lizard.ts';
@@ -47,6 +47,7 @@ import { isCraftingMenuOpen } from '../ui/craftingMenu.ts';
 import { isInventoryOverlayOpen } from '../ui/inventoryOverlay.ts';
 import { isControlsPanelOpen } from '../ui/tutorial.ts';
 import { isJournalPanelOpen } from '../ui/journalPanel.ts';
+import { isRecipeBookPanelOpen } from '../ui/recipeBookPanel.ts';
 import type { InteractType, ItemId, Slot } from '../inventory/types.ts';
 
 const RAYCAST_DISTANCE = 2.5;
@@ -135,7 +136,7 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
     return;
   }
   // Overlay menus suppress interaction (pointer is unlocked anyway).
-  if (isLootMenuOpen() || isSleepOverlayOpen() || isCraftingMenuOpen() || isInventoryOverlayOpen() || isControlsPanelOpen() || isJournalPanelOpen()) {
+  if (isLootMenuOpen() || isSleepOverlayOpen() || isCraftingMenuOpen() || isInventoryOverlayOpen() || isControlsPanelOpen() || isJournalPanelOpen() || isRecipeBookPanelOpen()) {
     if (_salvaging) cancelSalvage();
     return;
   }
@@ -195,10 +196,10 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
   // Dispatch to set hover state + prompt + handle E
   switch (info.registry) {
     case 'pickups': {
-      // UU — pickup-take moved to LMB (see src/player/wieldAction.ts).
-      // We still set hover state here so the prompt shows + wieldAction
-      // can find the hovered pickup via p.hovered. The E-press handler
-      // was removed; pickup is LMB-only now.
+      // AAA — E is the take/pickup button (UU's LMB-take reverted).
+      // LMB stays for "use the wielded item" (attack/place/hold_use);
+      // pickups go back to E so LMB never collides with the natural
+      // "I want to grab this thing" muscle memory.
       const p = findPickupById(ctx.pickups.list, info.id);
       if (!p) return;
       p.hovered = true;
@@ -209,6 +210,17 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
         itemId: p.itemId,
         promptNoun: def.name.toLowerCase(),
       };
+      if (ctx.input.pressed.has('KeyE')) {
+        const slotIdx = addItem(ctx.inventory, p.itemId, p.meta, ctx);
+        if (slotIdx < 0) {
+          ctx.ui.showToast('your bag is full');
+          return;
+        }
+        const where = slotIdx >= 100 ? 'stowed' : 'taken';
+        ctx.ui.showToast(`${where} — ${def.description}`);
+        playPickup();
+        despawnPickup(ctx, p);
+      }
       return;
     }
 

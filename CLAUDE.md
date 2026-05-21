@@ -58,7 +58,25 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session ZZ — Soundscape reads perceivedIntensity
+**Last shipped**: Session AAA — First-impression polish bundle. Five
+items: (1) UU pickup migration REVERTED — E is the canonical take
+button again; LMB's role narrows to "use the wielded item"
+(attack/place/hold_use); UU's wieldAction.ts dispatcher + wieldLmb
+field stay intact. (2) Ghost preview for LMB-place — new
+src/player/ghostPreview.ts (~135 LOC), gold ring + vertical pole at
+camera-forward 2.2m, scaled per kit (fire_kit 0.35m, tent_kit 1.0m,
+large_tent_kit 1.6m, sled_kit 0.9m). Closes UU's deferred scope-cut.
+(3) Storm vignette ramp start lowered 0.4→0.3 (new
+Tuning.STORM_VIGNETTE_RAMP_START) so partial-shelter (perceived
+capped at 0.4 inside large tent) still shows ~0.03 opacity. Closes
+D79's last visual gap. (4) Recipe book panel — new
+src/ui/recipeBookPanel.ts (~145 LOC), TAB-key modal listing
+discoveredRecipes with output ← inputs row format. Closes TT's
+deferred stretch. (5) Crosshair `.dead` state — distinguishes
+corpse-loot (muted brown) from ground-pickup (gold) from live enemy
+(red). Closes ZZ-era polish gap. tsc clean; preview-verified.
+
+**Prior milestone**: Session ZZ — Soundscape reads perceivedIntensity
 (audio half of YY's split). Tiny follow-on: `src/audio/soundscape.ts`'s
 `storm` local variable (drives wind + ambient-life + tense music)
 now reads `ctx.weather.perceivedIntensity` instead of intensity. Two

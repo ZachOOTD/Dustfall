@@ -30,6 +30,7 @@ import { spawnRockScatter } from './world/rockScatter.ts';
 import { setupOpeningScene } from './world/openingScene.ts';
 import { hasSave } from './persistence/save.ts';
 import { createJournalPanel } from './ui/journalPanel.ts';
+import { createRecipeBookPanel } from './ui/recipeBookPanel.ts';
 import type { Journal } from './world/journal.ts';
 import { createInventory, updateInventoryInput } from './inventory/inventory.ts';
 import { updateInteraction } from './player/interaction.ts';
@@ -40,6 +41,7 @@ import { updateRaiders, type Raider } from './enemies/raider.ts';
 import { spawnLizardsProcgen, updateLizards } from './enemies/lizard.ts';
 import { spawnSandWorm, updateSandWorm } from './enemies/sandWorm.ts';
 import { updateWieldAction } from './player/wieldAction.ts';
+import { createGhostPreview, updateGhostPreview } from './player/ghostPreview.ts';
 import { createViewModel, updateViewModel } from './player/viewModel.ts';
 import { createWeather, updateWeather } from './world/weather.ts';
 import { createAmbientDust, updateAmbientDust } from './world/ambientDust.ts';
@@ -322,8 +324,10 @@ createCraftingMenu(ctx);
 createSleepOverlay(ctx);
 createInventoryOverlay(ctx);
 createJournalPanel(ctx);
+createRecipeBookPanel(ctx);  // AAA — TAB-key modal listing discovered recipes
 createPerfHud(ctx);
 createStatVignette();  // WW — must come after HUD creation so it overlays correctly
+createGhostPreview(ctx); // AAA — kit-placement preview ring + marker
 // Tutorial panel must exist before wireOverlays so the lock handler can call
 // noteIntroSeen() — and before installDebugPanel so __game.showControls works.
 createTutorial(ctx);
@@ -444,7 +448,8 @@ startLoop(ctx, (c, dt) => {
   updateSleds(c, dt);            // QQ — per-sled tow spring + rope visual; must run AFTER updateSpeeder + updatePlayer
   updateInteraction(c, dt);      // raycast hover + E to open/refill/harvest/cook/sleep/etc (UU — pickup-take moved to LMB)
   updateInventoryInput(c, dt);   // 1-4, wheel, Q to use (Q still drives def.onUse as backup)
-  updateWieldAction(c, dt);      // UU — sole LMB dispatcher: attack/place/hold_use/pickup-take. Calls updateCombat internally for 'attack' items.
+  updateWieldAction(c, dt);      // UU — sole LMB dispatcher: attack/place/hold_use. Calls updateCombat internally for 'attack' items.
+  updateGhostPreview(c);         // AAA — preview ring + marker at kit deploy position
   updateViewModel(c, dt);        // first-person hands + held item (after camera + combat)
   updateHud(c, dt);              // HUD bars + clock
   updateHotbar(c, dt);           // hotbar slots

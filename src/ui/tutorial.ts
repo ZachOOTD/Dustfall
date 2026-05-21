@@ -41,21 +41,23 @@ const HINTS: Partial<Record<ItemId, string>> = {
 };
 
 // Each row is [key label, description]. Updated in UU (LMB-leaning
-// scheme) + UU-2 (RMB context verbs).
+// scheme) + UU-2 (RMB context verbs) + AAA (E takes pickups again;
+// LMB is strictly "use the wielded item").
 const CONTROLS: ReadonlyArray<readonly [string, string]> = [
   ['WASD', 'move'],
   ['SHIFT', 'sprint'],
   ['SPACE', 'jump'],
   ['MOUSE', 'look'],
-  ['LMB', 'attack / place kit / take pickup'],
+  ['LMB', 'attack / place kit'],
   ['HOLD LMB', 'drink canteen continuously'],
   ['RMB', 'pack tent / release sled rope'],
-  ['E', 'open / sleep / mount / read / refill / harvest / cook / salvage'],
+  ['E', 'take / open / sleep / mount / read / refill / harvest / cook / salvage'],
   ['Q', 'use selected item (backup)'],
   ['G', 'drop selected item'],
   ['1 – 4 / WHEEL', 'select hotbar slot'],
   ['C', 'open crafting menu'],
   ['I', 'open backpack'],
+  ['TAB', 'open recipe book'],
   ['ESC', 'pause'],
   ['H', 'show controls'],
   ['F1', 'performance HUD (dev)'],

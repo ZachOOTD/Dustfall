@@ -4,11 +4,11 @@ Cumulative state. Rewritten end-to-end at each `/session-end`. A
 reviewer who's never seen the project should be able to read this +
 `CLAUDE.md` + `docs/GDD.md` and understand where Dustfall is.
 
-**Current state**: Session ZZ shipped (2026-05-21). 27 sessions
-post-MVP. tsc clean. Overnight era (UU-ZZ, 7 sessions): UU-XX
-(original 5-session queue) + YY (visual half of perceivedIntensity
-split) + ZZ (audio half — soundscape now coherent with the visual
-dampening). Working tree dirty pending the user's commit.
+**Current state**: Session AAA shipped (2026-05-21). 28 sessions
+post-MVP. tsc clean. Post-overnight: UU/VV/UU-2/WW/XX/YY/ZZ + AAA
+first-impression polish bundle (E-take revert + ghost preview +
+vignette threshold + recipe book + crosshair .dead). Working tree
+dirty pending the user's commit.
 
 ---
 
@@ -84,6 +84,24 @@ Fresh-game start (the de-facto Tier 1 — Session W shipped):
    captured mid-drink doesn't resume drinking on reload.
 
 ---
+
+## What's freshly shipped (Session AAA deltas)
+
+Five-item first-impression polish bundle, closing loose ends from the overnight era:
+
+- **UU pickup migration reverted**: E is the canonical take button again.
+  LMB narrows to "use the wielded item" (attack/place/hold_use).
+  UU's wieldAction.ts + wieldLmb dispatcher stays intact.
+- **Ghost preview** (`src/player/ghostPreview.ts`, new): gold ring +
+  vertical pole at camera-forward 2.2m, sized per kit. Closes UU's
+  deferred scope-cut #1.
+- **Vignette ramp lowered** 0.4 → 0.3 (`Tuning.STORM_VIGNETTE_RAMP_START`):
+  inside-large-tent perceived=0.4 now produces non-zero vignette
+  opacity. Closes D79's visual gap.
+- **Recipe book panel** (`src/ui/recipeBookPanel.ts`, new): TAB-key
+  modal listing discoveredRecipes. Closes TT's deferred stretch.
+- **Crosshair `.dead` state**: distinguishes corpse-loot from
+  ground-pickup hover.
 
 ## What's freshly shipped (Session YY deltas)
 
@@ -324,32 +342,25 @@ Recent ones (session-tagged):
 
 ## Suggested next session (1-3 directions in priority order)
 
-The overnight queue is closed. Open options:
+User-prioritized lineup (post-AAA):
 
-1. **Storm visual dampening inside large tent** (the scope-cut #1
-   deferred from XX, ~1-1.5h). Add `weather.perceivedIntensity`
-   field; updateShelter sets it to `intensity * LARGE_TENT_STORM_DAMPEN
-   = 0.4` when player is in a large-tent shelter. Wire stormVignette
-   + ambientDust + (optionally) soundscape to read perceivedIntensity
-   instead of intensity. Storm physics + stats keep reading intensity
-   (world-state stays authoritative). Decision D79 (placeholder
-   reserved in the plan) becomes its actual entry.
-2. **Post-mortem of the overnight run** — five sessions in a row
-   produced recurring patterns worth promoting to gamedev-framework
-   shared-memory:
-   - "Centralized dispatch on equipped-item predicate" (wieldAction.ts
-     D73 + RMB extension D77)
-   - "Clone-not-abstract for N=2-3 callers" (D78 + D80)
-   - "Additive-only save migration discipline" (D81)
-   - "slot.meta for HMR-safe transient state" (D74 onHoldTick)
-   Run `/gamedev-framework:post-mortem` to evaluate.
-3. **Audio sample stems** (.ogg sourcing) — architecture exists
-   since Session X; blocked on asset-pipeline external dependency.
-   Not actionable without source files.
+1. **Session AAB — World depth (~2-3h)**. Skylight god-rays for the
+   opening wreck (additive cone geometry from the 30° stress-fracture
+   slice gap), and salvage yield differentiation by wreck kind
+   (engine = scrap-heavy, fuselage = cloth-heavy, antenna = rope/wire).
+   Adds real exploration motivation — players choose which wrecks to
+   strip based on what they need.
+2. **Session AAC — Craftable home (~4-6h, may split)**. Reframed
+   from "large tent props" to general placeable kits: bedroll_kit,
+   lantern_kit, locker_kit. Mirror tent_kit/sled_kit/fire_kit
+   patterns. New recipes id 11/12/13. Save schema v7→v8 additive.
+   Bedroll = portable sleep affordance; lantern = standing light;
+   locker = additional storage chest (extends inventory).
+3. Big-ticket bucket items remain available (creature companion,
+   7-day countdown, etc.).
 
-Pick whichever feels right. The codebase is in excellent shape: tsc
-clean, 0 `as any`, save schema v7 with full migration coverage, all
-5 overnight sessions verified end-to-end.
+Top pick: AAB (world depth). Lower risk than AAC's new-system work;
+visible improvement to existing exploration loop.
 
 ---
 

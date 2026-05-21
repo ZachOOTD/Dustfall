@@ -14,12 +14,12 @@
 //   attack    → updateCombat(ctx, dt)
 //   place     → on mousePressed: invoke def.onUse + handle consumed/anim
 //   hold_use  → on mouseHeld: bump slot.meta.holdProgress; call onHoldTick
-//   click_use → no LMB action on the wielded item; LMB on a hovered
-//               pickup takes it. (Q still calls onUse via inventory.ts.)
-//   none      → same as click_use: pickup-take still works (e.g. wielding
-//               rope and clicking a ground pickup). Items where LMB has
-//               special hover-state semantics (rope→sled-stub) handle
-//               their case directly in interaction.ts.
+//   click_use → no LMB action on the wielded item (Q still calls onUse via inventory.ts)
+//   none      → same as click_use; items where LMB has special hover-state
+//               semantics (rope→sled-stub) handle their case directly in interaction.ts.
+//
+// AAA — pickup-take is back on E (interaction.ts case 'pickups'). LMB's
+// role is "use the wielded item" only; LMB no longer takes pickups.
 //
 // Footgun pre-empts:
 //   - Crafting menu's CRAFT button is a DOM LMB, NOT in-world LMB. The
@@ -34,8 +34,6 @@ import type { GameContext } from '../GameContext.ts';
 import { isPlaying } from '../GameContext.ts';
 import { updateCombat } from './combat.ts';
 import { getItemDef } from '../inventory/items.ts';
-import { addItem } from '../inventory/inventory.ts';
-import { despawnPickup } from '../pickups/pickups.ts';
 import { packUpTent } from '../world/tent.ts';
 import { packUpLargeTent } from '../world/largeTent.ts';
 import { detachRope } from '../world/sled.ts';
@@ -45,7 +43,7 @@ import { isCraftingMenuOpen } from '../ui/craftingMenu.ts';
 import { isInventoryOverlayOpen } from '../ui/inventoryOverlay.ts';
 import { isControlsPanelOpen } from '../ui/tutorial.ts';
 import { isJournalPanelOpen } from '../ui/journalPanel.ts';
-import { playPickup } from '../audio/audio.ts';
+import { isRecipeBookPanelOpen } from '../ui/recipeBookPanel.ts';
 
 function overlayOpen(): boolean {
   return isLootMenuOpen()
@@ -53,7 +51,8 @@ function overlayOpen(): boolean {
     || isCraftingMenuOpen()
     || isInventoryOverlayOpen()
     || isControlsPanelOpen()
-    || isJournalPanelOpen();
+    || isJournalPanelOpen()
+    || isRecipeBookPanelOpen();
 }
 
 export function updateWieldAction(ctx: GameContext, dt: number): void {
@@ -75,11 +74,8 @@ export function updateWieldAction(ctx: GameContext, dt: number): void {
   handleContextAction(ctx);
 
   const slot = ctx.inventory.slots[ctx.inventory.selectedIdx];
-  if (!slot.item) {
-    // No item equipped → LMB on a pickup takes it.
-    handlePickupTake(ctx);
-    return;
-  }
+  if (!slot.item) return;  // AAA — no item equipped = no LMB action. Pickups go to E.
+
   const def = getItemDef(slot.item);
   const wield = def.wieldLmb ?? 'click_use';
 
@@ -120,9 +116,9 @@ export function updateWieldAction(ctx: GameContext, dt: number): void {
 
     case 'click_use':
     case 'none':
-      // No LMB action on the wielded item; LMB on a hovered pickup
-      // takes it. Q still drives def.onUse via inventory.ts.
-      handlePickupTake(ctx);
+      // AAA — LMB does nothing for these wieldLmb values. Q still
+      // drives def.onUse via inventory.ts (bandage etc. still works).
+      // Pickups are taken via E (interaction.ts case 'pickups').
       return;
   }
 }
@@ -166,30 +162,3 @@ function handleContextAction(ctx: GameContext): void {
   }
 }
 
-/** LMB on a hovered pickup takes it. Mirrors the take logic that
- *  previously lived in interaction.ts's case 'pickups' E-press block;
- *  E-press for pickups was removed in UU. Dead-lizard / dead-worm
- *  meat-taking stays on E (corpses are "open this thing", not "pick
- *  up the ground item"). */
-function handlePickupTake(ctx: GameContext): void {
-  if (!ctx.input.mousePressed.has(0)) return;
-  const hover = ctx.inventory.hover;
-  if (!hover || hover.type !== 'take') return;
-  // Only act on actual ground pickups. The hover.type='take' is also
-  // set by dead lizards + the sand worm corpse; those have no `hovered`
-  // flag on the pickups list and stay on E (see interaction.ts).
-  for (const p of ctx.pickups.list) {
-    if (!p.hovered) continue;
-    const def = getItemDef(p.itemId);
-    const slotIdx = addItem(ctx.inventory, p.itemId, p.meta, ctx);
-    if (slotIdx < 0) {
-      ctx.ui.showToast('your bag is full');
-      return;
-    }
-    const where = slotIdx >= 100 ? 'stowed' : 'taken';
-    ctx.ui.showToast(`${where} — ${def.description}`);
-    playPickup();
-    despawnPickup(ctx, p);
-    return;
-  }
-}

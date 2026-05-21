@@ -224,6 +224,12 @@ export const Tuning = {
   STORM_VIGNETTE_MAX_OPACITY: 0.55,
   STORM_VIGNETTE_INNER: 0.30,        // alpha=0 inside this normalized radius
   STORM_VIGNETTE_OUTER: 0.85,        // alpha=full beyond this radius
+  // AAA — start of the smoothstep ramp on perceivedIntensity. Pre-AAA
+  // was 0.4 (vignette only inside the upper half of storm range), but
+  // YY+ZZ's perceivedIntensity split capped large-tent shelter at 0.4
+  // — meaning the vignette NEVER fired inside the open-front cabin.
+  // Lowered to 0.3 so partial-shelter still shows some vignette presence.
+  STORM_VIGNETTE_RAMP_START: 0.3,
 
   // Dune terrain (Session P) — ridged + wind-warped noise.
   // Ridges run perpendicular to the wind direction; aniso < 1 elongates them.

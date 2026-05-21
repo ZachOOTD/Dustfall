@@ -3,6 +3,60 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session AAA — 2026-05-21 — First-impression polish bundle (E-take revert + ghost preview + vignette threshold + recipe book + crosshair .dead) ✓ verify pass
+`verified` — tsc clean; preview confirmed 4/5 surfaces (E-take static-
+verified, raycast-driven path not eval-testable without camera-pointing
+gymnastics; code path canonical pre-UU shape). Five discrete polish
+items bundled, closing loose ends from the overnight era.
+
+**UU pickup migration reverted**: E is the canonical take/pickup
+button again. `interaction.ts` case 'pickups' restores the addItem +
+despawnPickup E-press handler. `VERBS['take'] = 'take'` so the [E]
+chip shows. `wieldAction.ts` `handlePickupTake()` removed; LMB's role
+narrows to "use the wielded item" (attack/place/hold_use). `tutorial.ts`
+CONTROLS table reflects: LMB "attack / place kit"; E "take / open /
+sleep / mount / read / refill / harvest / cook / salvage". The UU
+architecture (wieldAction.ts dispatcher + wieldLmb field on ItemDef)
+stays — only the pickup-take piece reverts.
+
+**Ghost preview for LMB-place** (`src/player/ghostPreview.ts`, new
+~135 LOC). A single reusable Group on the scene (RingGeometry + small
+vertical pole, additive gold tint). Per-frame: positioned at camera
++ forward × PLACEMENT_DISTANCE_M, Y projected via terrain.heightAt.
+Ring scaled per kit via `KIT_PREVIEW_RADIUS` table (fire_kit 0.35m,
+tent_kit 1.0m, large_tent_kit 1.6m, sled_kit 0.9m). Hidden when no
+kit wielded / overlay open / mounted / not isPlaying. Closes UU's
+deferred scope-cut #1 — players now SEE where the kit will land.
+
+**Storm vignette ramp lowered** (D79 follow-up): `STORM_VIGNETTE_RAMP_START`
+new Tuning constant = 0.3 (was hardcoded 0.4 inline). At perceived
+0.4 (large-tent shelter peak), vignette opacity now ≈ 0.03 (was
+exactly 0). Closes D79's last visual gap — players inside the
+open-front cabin during a peak storm now see SOME tint.
+
+**Recipe book panel** (`src/ui/recipeBookPanel.ts`, new ~145 LOC).
+TAB-key modal listing `ctx.inventory.discoveredRecipes` as rows with
+output icon + name + ← + input icons. Sorted by recipe id. Closes
+on TAB / Esc / close button. Empty state: "(no recipes discovered
+yet — try combining items via C)". Reuses existing `.craft-*` CSS
+classes for consistency. Closes TT's deferred stretch. New CONTROLS
+row added in tutorial.ts. Overlay-open gates extended across
+interaction.ts + wieldAction.ts + ghostPreview.ts.
+
+**Crosshair .dead state**: distinguishes corpse-loot from
+ground-pickup hover. New `_lastCrosshairState` enum extended:
+'interactable' (ground pickup) | 'kill' (live enemy, red) | 'dead'
+(corpse, muted brown). Hover dispatch checks `hover.type === 'take'
+AND hover.itemId ∈ CORPSE_ITEM_IDS` (raw_lizard_meat / raw_worm_meat)
+to fire .dead. CSS rule in style.css.
+
+**Verification**: tsc clean across all 5 items. Preview-eval
+confirmed ghost preview shows/hides correctly per wielded item;
+vignette opacity at perceived=0.4 = 0.03 (>0); recipe book opens
+with 3 rows from discoveredRecipes=[1,3,10] + closes properly;
+crosshair fires 'dead' on raw_lizard_meat hover and 'interactable'
+on branch hover. First-impression polish bundle shipped.
+
 ## Session ZZ — 2026-05-21 — Soundscape reads perceivedIntensity (audio half of YY's split) ✓ verify pass
 `verified` — tsc clean. Tiny follow-on session: completes YY's audio
 side. `src/audio/soundscape.ts`'s `storm` local variable (used by

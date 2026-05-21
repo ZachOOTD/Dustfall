@@ -90,10 +90,11 @@ export function updateStormVignette(ctx: GameContext): void {
   // perceivedIntensity itself; the prior `inShelter ? 0 : ...`
   // branch is redundant.
   const pi = ctx.weather.perceivedIntensity;
-  // Smoothstep ramp so the vignette only really shows in the upper half
-  // of the storm intensity range — feels like "the storm is overwhelming
-  // me", not "any storm pulls a tint."
-  const t = Math.max(0, (pi - 0.4) / 0.6);
+  // Smoothstep ramp. AAA — start point lowered from 0.4 to 0.3 so the
+  // partial-shelter case (inside large tent → max perceived 0.4) still
+  // shows SOME vignette presence. Closes D79's last visual gap; before
+  // this, the vignette never fired inside the open-front cabin.
+  const t = Math.max(0, (pi - Tuning.STORM_VIGNETTE_RAMP_START) / (1 - Tuning.STORM_VIGNETTE_RAMP_START));
   const eased = t * t * (3 - 2 * t);
   const targetOp = eased * Tuning.STORM_VIGNETTE_MAX_OPACITY;
   v.mat.uniforms.uOpacity.value = targetOp;

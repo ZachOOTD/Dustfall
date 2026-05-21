@@ -6,10 +6,9 @@ import type { GameContext } from '../GameContext.ts';
 import type { InteractType } from '../inventory/types.ts';
 
 const VERBS: Record<InteractType, string> = {
-  // UU — `take` migrated from E to LMB. Empty verb = the [E] chip hides
-  // (see updateInteractPrompt below), promptNoun stands alone. The
-  // controls panel (refreshed in UU-2) communicates LMB-to-take.
-  take: '',
+  // AAA — restored to 'take' (UU's LMB-take reverted). E is the
+  // canonical take/pickup button; [E] chip shows again.
+  take: 'take',
   refill: 'refill',
   search: 'open',       // UU.5 — tightened from "search" (loot containers OPEN, not search)
   harvest: 'harvest',
@@ -33,8 +32,16 @@ let _lastShown = false;
 let _lastLabel = '';
 // VV — crosshair feedback. Cached DOM ref + last-applied class state so we
 // only toggle when state changes (avoids per-frame classList churn).
+// AAA — added 'dead' state for corpse loot (vs. 'interactable' for ground
+// pickups and 'kill' for living enemies).
 let _crosshairEl: HTMLDivElement | null = null;
-let _lastCrosshairState: '' | 'interactable' | 'kill' = '';
+let _lastCrosshairState: '' | 'interactable' | 'kill' | 'dead' = '';
+
+// ItemIds that come from a corpse (dead lizard, sandworm corpse). Hovering
+// these with hover.type='take' triggers the .dead crosshair state rather
+// than the generic .interactable. Ground pickups (branches, dropped items)
+// stay on .interactable.
+const CORPSE_ITEM_IDS = new Set(['raw_lizard_meat', 'raw_worm_meat']);
 
 export function createInteractPrompt(): void {
   const root = document.createElement('div');
@@ -101,16 +108,19 @@ export function updateInteractPrompt(ctx: GameContext, _dt: number): void {
 
   // VV — crosshair feedback hook. Same per-frame cadence as the prompt;
   // state is derived from the same hover read so they stay coherent.
+  // AAA — added 'dead' state for corpse loot (dead lizard / sandworm).
   if (!_crosshairEl) {
     _crosshairEl = document.getElementById('crosshair') as HTMLDivElement | null;
   }
-  const next: '' | 'interactable' | 'kill' =
+  const next: '' | 'interactable' | 'kill' | 'dead' =
     hover === null ? '' :
     hover.type === 'kill' ? 'kill' :
+    (hover.type === 'take' && hover.itemId && CORPSE_ITEM_IDS.has(hover.itemId)) ? 'dead' :
     'interactable';
   if (_crosshairEl && next !== _lastCrosshairState) {
     _crosshairEl.classList.toggle('interactable', next === 'interactable');
     _crosshairEl.classList.toggle('kill', next === 'kill');
+    _crosshairEl.classList.toggle('dead', next === 'dead');
     _lastCrosshairState = next;
   }
 }
