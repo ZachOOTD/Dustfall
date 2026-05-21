@@ -129,6 +129,7 @@ const R_COCKPIT = Tuning.OPENING_WRECK_R_COCKPIT;
 const R_NOSE = Tuning.OPENING_WRECK_R_NOSE;
 const SLICE_COUNT = Tuning.OPENING_WRECK_SLICE_COUNT;
 const SKYLIGHT_SLICE = Tuning.OPENING_WRECK_SKYLIGHT_SLICE;
+const SKYLIGHT_WIDTH = Tuning.OPENING_WRECK_SKYLIGHT_WIDTH;
 const FLOOR_THICK = Tuning.OPENING_WRECK_FLOOR_THICK;
 const HULL_WALL_THICKNESS = Tuning.OPENING_WRECK_HULL_WALL_THICKNESS;
 
@@ -210,14 +211,13 @@ function makeSlicedHull(): THREE.Group {
   const sliceArc = (Math.PI * 2) / SLICE_COUNT;
   const interiorProfile = makeInteriorProfile();
 
-  // Skip THREE adjacent slices straddling-but-offset-from true UP —
-  // 45° gap from slice boundaries 240°/285° (slices 16+17+18). Centered
-  // on phi=262.5° = 7.5° off true UP toward the lathe-local +X side.
-  // Pre-AAM-followup the gap was 2 slices (30°) symmetric on UP, which
-  // only caught noon sun. The wider+offset gap catches noon AND more
-  // morning/evening low-angle light, brightening the interior.
+  // Skip SKYLIGHT_WIDTH adjacent slices for the top stress-fracture gap.
+  // AAM-followup #2: width bumped to 4 (60° gap, slices 16-19 covering
+  // phi 240°-300°, CENTERED on true UP). The earlier 3-slice gap was
+  // offset 7.5° and read as a "hole on the side"; the wider centered
+  // gap is unambiguously overhead AND lets noticeably more sun in.
   for (let i = 0; i < SLICE_COUNT; i++) {
-    if (i === SKYLIGHT_SLICE || i === SKYLIGHT_SLICE + 1 || i === SKYLIGHT_SLICE + 2) continue;
+    if (i >= SKYLIGHT_SLICE && i < SKYLIGHT_SLICE + SKYLIGHT_WIDTH) continue;
     const phiStart = i * sliceArc;
     // Alternate hull / dark material so the slice seams read as panel
     // joints rather than disappearing into the curve. Even = base hull,
