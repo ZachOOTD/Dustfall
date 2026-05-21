@@ -36,7 +36,11 @@ export type ItemId =
   | 'rope'
   | 'sled_kit'
   // Session XX — larger enterable tent (walk-in interior)
-  | 'large_tent_kit';
+  | 'large_tent_kit'
+  // Session AAC — craftable home placeables
+  | 'bedroll_kit'
+  | 'lantern_kit'
+  | 'locker_kit';
 
 /** Per-slot metadata for stateful items (canteen fill level, cook state, light state). */
 export interface ItemMeta {
@@ -188,7 +192,8 @@ export type InteractType =
   | 'read'      // journal (Session W) — E opens the journal panel
   | 'mount'     // speeder seat (Session CC-3.1) — E mounts the bike
   | 'open_sled' // sled cargo deck (Session QQ) — E opens the sled inventory
-  | 'attach_rope'; // sled rope stub (Session QQ) — LMB w/ rope equipped attaches/detaches
+  | 'attach_rope' // sled rope stub (Session QQ) — LMB w/ rope equipped attaches/detaches
+  | 'open_locker'; // locker chest (Session AAC) — E opens the locker inventory
 
 export interface HoverState {
   type: InteractType;

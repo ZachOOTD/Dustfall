@@ -9,6 +9,9 @@ import { deployFire } from '../world/fire.ts';
 import { deployTent } from '../world/tent.ts';
 import { deploySled } from '../world/sled.ts';
 import { deployLargeTent } from '../world/largeTent.ts';
+import { deployBedroll } from '../world/bedroll.ts';
+import { deployLantern } from '../world/lantern.ts';
+import { deployLocker } from '../world/locker.ts';
 import { easeOutBack, easeInOutCubic, easeOutQuad } from '../core/ease.ts';
 import { addItem } from './inventory.ts';
 import { makeLizardVisual } from '../enemies/lizard.ts';
@@ -1461,6 +1464,125 @@ const _DEFS: Record<ItemId, ItemDef> = {
     },
   },
 
+  // Session AAC — craftable home placeables (bedroll/lantern/locker).
+  // Each mirrors tent_kit/sled_kit/fire_kit: wieldLmb='place', LMB-click
+  // to deploy, RMB to pack up (handled by wieldAction.ts/handleContextAction).
+  bedroll_kit: {
+    id: 'bedroll_kit',
+    name: 'BEDROLL',
+    glyph: '═',
+    description: 'a rolled cloth pad — lay it down to sleep',
+    stackable: false,
+    maxStack: 1,
+    wieldLmb: 'place',
+    onUse(ctx, _slot) {
+      const b = deployBedroll(ctx);
+      if (!b) return { consumed: false, message: 'no room to lay it down here' };
+      return { consumed: true, message: 'bedroll laid out' };
+    },
+    makeViewModel() {
+      const group = new THREE.Group();
+      const cloth = new THREE.MeshLambertMaterial({ color: 0x9a7b5a });
+      const roll = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.26, 12), cloth);
+      roll.rotation.z = Math.PI / 2;
+      group.add(roll);
+      // Cord wrapping the roll
+      const cordMat = new THREE.MeshLambertMaterial({ color: 0x5a4030 });
+      for (let i = 0; i < 2; i++) {
+        const cord = new THREE.Mesh(new THREE.TorusGeometry(0.065, 0.005, 6, 12), cordMat);
+        cord.position.set((i - 0.5) * 0.10, 0, 0);
+        cord.rotation.y = Math.PI / 2;
+        group.add(cord);
+      }
+      return group;
+    },
+    makeIcon() {
+      const s = svg();
+      s.appendChild(svgEl('rect', { x: '4', y: '11', width: '16', height: '4', rx: '0.6' }));
+      s.appendChild(svgEl('line', { x1: '6', y1: '11', x2: '6', y2: '15' }));
+      s.appendChild(svgEl('line', { x1: '18', y1: '11', x2: '18', y2: '15' }));
+      return s;
+    },
+  },
+
+  lantern_kit: {
+    id: 'lantern_kit',
+    name: 'LANTERN',
+    glyph: '✦',
+    description: 'a glass-globe lantern on a wooden post — never burns out',
+    stackable: false,
+    maxStack: 1,
+    wieldLmb: 'place',
+    onUse(ctx, _slot) {
+      const l = deployLantern(ctx);
+      if (!l) return { consumed: false, message: 'no room for the lantern here' };
+      return { consumed: true, message: 'lantern set' };
+    },
+    makeViewModel() {
+      const group = new THREE.Group();
+      const postMat = new THREE.MeshLambertMaterial({ color: 0x5a4030 });
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.014, 0.22, 6), postMat);
+      group.add(post);
+      // Tiny globe near the top
+      const globeMat = new THREE.MeshBasicMaterial({
+        color: 0xffc080,
+        transparent: true,
+        opacity: 0.9,
+        toneMapped: false,
+      });
+      const globe = new THREE.Mesh(new THREE.SphereGeometry(0.04, 10, 8), globeMat);
+      globe.position.y = 0.08;
+      group.add(globe);
+      group.rotation.z = -0.15;
+      return group;
+    },
+    makeIcon() {
+      const s = svg();
+      // Lantern silhouette — stem + globe + cap
+      s.appendChild(svgEl('line', { x1: '12', y1: '20', x2: '12', y2: '13' }));
+      s.appendChild(svgEl('circle', { cx: '12', cy: '10', r: '4' }));
+      s.appendChild(svgEl('rect', { x: '10', y: '4', width: '4', height: '2' }));
+      s.appendChild(svgEl('line', { x1: '12', y1: '6', x2: '12', y2: '7' }));
+      return s;
+    },
+  },
+
+  locker_kit: {
+    id: 'locker_kit',
+    name: 'LOCKER',
+    glyph: '▣',
+    description: 'a wooden chest — stash gear inside',
+    stackable: false,
+    maxStack: 1,
+    wieldLmb: 'place',
+    onUse(ctx, _slot) {
+      const l = deployLocker(ctx);
+      if (!l) return { consumed: false, message: 'no room for the locker here' };
+      return { consumed: true, message: 'locker placed' };
+    },
+    makeViewModel() {
+      const group = new THREE.Group();
+      const wood = new THREE.MeshLambertMaterial({ color: 0x6a4a2c });
+      const box = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.12, 0.12), wood);
+      group.add(box);
+      // Metal band
+      const band = new THREE.Mesh(
+        new THREE.BoxGeometry(0.19, 0.018, 0.13),
+        new THREE.MeshLambertMaterial({ color: 0x3a3a3a }),
+      );
+      band.position.y = 0;
+      group.add(band);
+      return group;
+    },
+    makeIcon() {
+      const s = svg();
+      s.appendChild(svgEl('rect', { x: '4', y: '8', width: '16', height: '12' }));
+      s.appendChild(svgEl('line', { x1: '4', y1: '14', x2: '20', y2: '14' }));
+      s.appendChild(svgEl('rect', { x: '11', y: '13', width: '2', height: '3' }));
+      return s;
+    },
+  },
+
   rope: {
     id: 'rope',
     name: 'ROPE',
@@ -1527,4 +1649,5 @@ export const ALL_ITEM_IDS: ReadonlyArray<ItemId> = [
   'pipe_staff', 'scrap_gun', 'scrap_bullet', 'energy_pistol',
   'rope', 'sled_kit',
   'large_tent_kit',  // Session XX
+  'bedroll_kit', 'lantern_kit', 'locker_kit',  // Session AAC
 ];

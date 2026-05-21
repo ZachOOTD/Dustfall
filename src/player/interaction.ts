@@ -23,6 +23,8 @@ import { findLootContainerById } from '../world/lootContainers.ts';
 import { findFireById, addFuel, relightFire } from '../world/fire.ts';
 import { findTentById } from '../world/tent.ts';
 import { findLargeTentById } from '../world/largeTent.ts';
+import { findBedrollById } from '../world/bedroll.ts';
+import { findLockerById } from '../world/locker.ts';
 import { findSledById, attachRopeToSled, detachRope } from '../world/sled.ts';
 import {
   findSalvageableById,
@@ -57,7 +59,7 @@ const _dir = new THREE.Vector3();
 interface InteractHit {
   type: InteractType;
   id: number;
-  registry: 'pickups' | 'waterSources' | 'cacti' | 'lizards' | 'sandWorms' | 'lootContainers' | 'fires' | 'tents' | 'largeTents' | 'salvageables' | 'journals' | 'speeder' | 'sleds';
+  registry: 'pickups' | 'waterSources' | 'cacti' | 'lizards' | 'sandWorms' | 'lootContainers' | 'fires' | 'tents' | 'largeTents' | 'bedrolls' | 'lanterns' | 'lockers' | 'salvageables' | 'journals' | 'speeder' | 'sleds';
   distance: number;
 }
 
@@ -122,6 +124,9 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
   for (const f of ctx.fires.list) f.hovered = false;
   for (const t of ctx.tents.list) t.hovered = false;
   for (const t of ctx.largeTents.list) t.hovered = false;
+  for (const b of ctx.bedrolls.list) b.hovered = false;
+  for (const l of ctx.lanterns.list) l.hovered = false;
+  for (const l of ctx.lockers.list) l.hovered = false;
   for (const s of ctx.salvageables.list) s.hovered = false;
   for (const sl of ctx.sleds.list) sl.hovered = false;
   ctx.inventory.hover = null;
@@ -163,6 +168,9 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
   for (const f of ctx.fires.list) targets.push(f.mesh);
   for (const t of ctx.tents.list) targets.push(t.mesh);
   for (const t of ctx.largeTents.list) targets.push(t.mesh);
+  for (const b of ctx.bedrolls.list) targets.push(b.mesh);
+  for (const l of ctx.lanterns.list) targets.push(l.mesh);
+  for (const l of ctx.lockers.list) targets.push(l.mesh);
   for (const sl of ctx.sleds.list) targets.push(sl.group);
   for (const s of ctx.salvageables.list) targets.push(s.panel);
   for (const j of ctx.journals.list) targets.push(j.mesh);
@@ -435,6 +443,62 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
       ctx.inventory.hover = { type: 'sleep', distance: info.distance, promptNoun: 'shelter' };
       if (ctx.input.pressed.has('KeyE')) {
         openSleepOverlay(ctx);
+      }
+      return;
+    }
+
+    case 'bedrolls': {
+      // AAC — bedroll. Same 'sleep' verb as tents; E opens the sleep overlay.
+      const b = findBedrollById(ctx.bedrolls.list, info.id);
+      if (!b) return;
+      b.hovered = true;
+      ctx.inventory.hover = { type: 'sleep', distance: info.distance, promptNoun: 'bedroll' };
+      if (ctx.input.pressed.has('KeyE')) {
+        openSleepOverlay(ctx);
+      }
+      return;
+    }
+
+    case 'lanterns': {
+      // AAC — lantern. Passive hover (no E action). RMB pack-up via
+      // wieldAction.ts/handleContextAction. Tagged 'sleep' type in the
+      // module for hover discovery, but here we set the actual hover
+      // to a passive sleep prompt with empty verb (so the [E] chip
+      // hides — the controls panel's RMB-pack-up row is enough hint).
+      const l = ctx.lanterns.list.find((x) => x.id === info.id);
+      if (!l) return;
+      l.hovered = true;
+      ctx.inventory.hover = {
+        type: 'sleep',
+        distance: info.distance,
+        promptNoun: 'lantern',
+        passive: true,
+      };
+      // No E-action — lantern is purely a light source.
+      return;
+    }
+
+    case 'lockers': {
+      // AAC — locker chest. E opens the loot menu with allowDeposit:true
+      // (same shape as sled cargo from QQ-2 — bidirectional).
+      const l = findLockerById(ctx.lockers.list, info.id);
+      if (!l) return;
+      l.hovered = true;
+      const empty = l.contents.length === 0;
+      ctx.inventory.hover = {
+        type: 'open_locker',
+        distance: info.distance,
+        promptNoun: empty ? 'locker (empty)' : 'locker',
+      };
+      if (ctx.input.pressed.has('KeyE')) {
+        ctx.lockers.open = l;
+        openLootMenu(ctx, {
+          id: l.id,
+          contents: l.contents,
+          opened: true,
+          title: 'LOCKER',
+          allowDeposit: true,
+        });
       }
       return;
     }

@@ -36,6 +36,9 @@ import { updateCombat } from './combat.ts';
 import { getItemDef } from '../inventory/items.ts';
 import { packUpTent } from '../world/tent.ts';
 import { packUpLargeTent } from '../world/largeTent.ts';
+import { packUpBedroll } from '../world/bedroll.ts';
+import { packUpLantern } from '../world/lantern.ts';
+import { packUpLocker } from '../world/locker.ts';
 import { detachRope } from '../world/sled.ts';
 import { isLootMenuOpen } from '../ui/lootMenu.ts';
 import { isSleepOverlayOpen } from '../ui/sleepOverlay.ts';
@@ -132,7 +135,7 @@ function handleContextAction(ctx: GameContext): void {
   const hover = ctx.inventory.hover;
   if (!hover) return;
 
-  // RMB on a tent (small or large) → pack it up (refuses if inventory full).
+  // RMB on a tent / bedroll / lantern (all tagged 'sleep' hover type) → pack up.
   if (hover.type === 'sleep') {
     for (const t of ctx.tents.list) {
       if (t.hovered) {
@@ -140,10 +143,33 @@ function handleContextAction(ctx: GameContext): void {
         return;
       }
     }
-    // XX — also check large tents (same 'sleep' hover type)
     for (const t of ctx.largeTents.list) {
       if (t.hovered) {
         packUpLargeTent(ctx, t);
+        return;
+      }
+    }
+    // AAC — bedrolls + lanterns share the 'sleep' hover type for
+    // discovery; pack-up dispatch via hovered-flag check.
+    for (const b of ctx.bedrolls.list) {
+      if (b.hovered) {
+        packUpBedroll(ctx, b);
+        return;
+      }
+    }
+    for (const l of ctx.lanterns.list) {
+      if (l.hovered) {
+        packUpLantern(ctx, l);
+        return;
+      }
+    }
+  }
+
+  // AAC — RMB on a locker → pack up (refuses if non-empty).
+  if (hover.type === 'open_locker') {
+    for (const l of ctx.lockers.list) {
+      if (l.hovered) {
+        packUpLocker(ctx, l);
         return;
       }
     }

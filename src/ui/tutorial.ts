@@ -38,6 +38,10 @@ const HINTS: Partial<Record<ItemId, string>> = {
   tent_kit: 'select it and LMB-click to pitch a tent — E to sleep, RMB to pack',
   cactus_pulp: 'raw food — cook at a fire for more hunger',
   raw_lizard_meat: 'raw meat — cook at a fire to make it safe to eat',
+  // Session AAC — craftable home placeables.
+  bedroll_kit: 'LMB-click to lay it down — E to sleep, RMB to roll it back up',
+  lantern_kit: 'LMB-click to place — gives off warm light, RMB to pack later',
+  locker_kit: 'LMB-click to place — E to stash gear inside (empty it before packing)',
 };
 
 // Each row is [key label, description]. Updated in UU (LMB-leaning

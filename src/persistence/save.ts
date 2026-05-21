@@ -35,6 +35,9 @@ import { spawnFireAt } from '../world/fire.ts';
 import { spawnTentAt } from '../world/tent.ts';
 import { spawnSledAt, setNextSledId } from '../world/sled.ts';
 import { spawnLargeTentAt, setNextLargeTentId } from '../world/largeTent.ts';
+import { spawnBedrollAt, setNextBedrollId } from '../world/bedroll.ts';
+import { spawnLanternAt, setNextLanternId } from '../world/lantern.ts';
+import { spawnLockerAt, setNextLockerId } from '../world/locker.ts';
 import { removeShelterZone } from '../shelter/shelterZones.ts';
 
 export const SAVE_KEY = 'dustfall.save.v1';
@@ -50,14 +53,16 @@ export const SAVE_KEY = 'dustfall.save.v1';
 // combine-to-discover crafting rework. Pre-v6 saves get the FULL
 // recipe set as discovered on load so existing playtesters don't
 // lose their accumulated recipe knowledge.
-// XX — v7 adds `largeTents?: Array<...>` (D81 — additive only). Pre-v7
-// saves load with an empty largeTents array. Loader accepts v1-v7.
-export const SAVE_VERSION = 7;
+// XX — v7 adds `largeTents?: Array<...>` (D81 — additive only).
+// AAC — v8 adds `bedrolls?` + `lanterns?` + `lockers?` (additive only,
+// D81 discipline preserved). Pre-v8 saves load with empty arrays for
+// each. Loader accepts v1-v8.
+export const SAVE_VERSION = 8;
 
 type V3 = { x: number; y: number; z: number };
 
 export interface SaveV1 {
-  version: 1 | 2 | 3 | 4 | 5 | 6 | 7;
+  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
   seed: number;
   savedAt: number;
 
@@ -121,6 +126,31 @@ export interface SaveV1 {
     id: number;
     pos: V3;
     rotationY: number;
+  }>;
+
+  /** Session AAC — placed bedrolls. Pre-v8 saves arrive with empty
+   *  array. D81 additive. */
+  bedrolls?: Array<{
+    id: number;
+    pos: V3;
+    rotationY: number;
+  }>;
+
+  /** Session AAC — placed lanterns. Pre-v8 saves arrive empty. */
+  lanterns?: Array<{
+    id: number;
+    pos: V3;
+    rotationY: number;
+  }>;
+
+  /** Session AAC — placed lockers + their contents. Pre-v8 saves
+   *  arrive empty. Contents persisted by-value so a chest's stored
+   *  items survive save/load. */
+  lockers?: Array<{
+    id: number;
+    pos: V3;
+    rotationY: number;
+    contents: LootEntry[];
   }>;
 
   /** Hover speeder pose. Optional so v1 saves written before this field
@@ -254,6 +284,22 @@ export function saveGameState(ctx: GameContext): { ok: boolean; error?: string }
         pos: { x: t.pos.x, y: t.pos.y, z: t.pos.z },
         rotationY: t.rotationY,
       })),
+      bedrolls: ctx.bedrolls.list.map((b) => ({
+        id: b.id,
+        pos: { x: b.pos.x, y: b.pos.y, z: b.pos.z },
+        rotationY: b.rotationY,
+      })),
+      lanterns: ctx.lanterns.list.map((l) => ({
+        id: l.id,
+        pos: { x: l.pos.x, y: l.pos.y, z: l.pos.z },
+        rotationY: l.rotationY,
+      })),
+      lockers: ctx.lockers.list.map((l) => ({
+        id: l.id,
+        pos: { x: l.pos.x, y: l.pos.y, z: l.pos.z },
+        rotationY: l.rotationY,
+        contents: l.contents.map((e) => ({ ...e })),
+      })),
       sleds: ctx.sleds.list.map((s) => {
         const tr = s.body.translation();
         return {
@@ -318,7 +364,7 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
   // cleanly (missing `sleds` / `largeTents` treated as empty; missing
   // `inventory.discoveredRecipes` seeded with ALL_RECIPE_IDS so
   // pre-TT playtesters keep their recipe knowledge).
-  if (save.version !== 1 && save.version !== 2 && save.version !== 3 && save.version !== 4 && save.version !== 5 && save.version !== 6 && save.version !== 7) {
+  if (save.version !== 1 && save.version !== 2 && save.version !== 3 && save.version !== 4 && save.version !== 5 && save.version !== 6 && save.version !== 7 && save.version !== 8) {
     return { ok: false, error: `unsupported save version ${save.version}` };
   }
   if (save.seed !== Tuning.RNG_SEED) {
@@ -521,6 +567,52 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
       if (saved.id > maxLargeTentId) maxLargeTentId = saved.id;
     }
     if (maxLargeTentId > 0) setNextLargeTentId(maxLargeTentId);
+  }
+
+  // AAC — bedrolls / lanterns / lockers: clear then re-spawn from save.
+  // Pre-v8 saves arrive with these fields undefined → default empty.
+  for (const b of ctx.bedrolls.list) {
+    ctx.three.scene.remove(b.mesh);
+    removeShelterZone(ctx.shelter, b.shelterZone);
+  }
+  ctx.bedrolls.list.length = 0;
+  if (save.bedrolls) {
+    let maxId = 0;
+    for (const saved of save.bedrolls) {
+      const pos = new THREE.Vector3(saved.pos.x, saved.pos.y, saved.pos.z);
+      spawnBedrollAt(ctx, pos, saved.rotationY);
+      if (saved.id > maxId) maxId = saved.id;
+    }
+    if (maxId > 0) setNextBedrollId(maxId);
+  }
+
+  for (const l of ctx.lanterns.list) {
+    ctx.three.scene.remove(l.mesh);
+  }
+  ctx.lanterns.list.length = 0;
+  if (save.lanterns) {
+    let maxId = 0;
+    for (const saved of save.lanterns) {
+      const pos = new THREE.Vector3(saved.pos.x, saved.pos.y, saved.pos.z);
+      spawnLanternAt(ctx, pos, saved.rotationY);
+      if (saved.id > maxId) maxId = saved.id;
+    }
+    if (maxId > 0) setNextLanternId(maxId);
+  }
+
+  for (const l of ctx.lockers.list) {
+    ctx.three.scene.remove(l.mesh);
+  }
+  ctx.lockers.list.length = 0;
+  ctx.lockers.open = null;
+  if (save.lockers) {
+    let maxId = 0;
+    for (const saved of save.lockers) {
+      const pos = new THREE.Vector3(saved.pos.x, saved.pos.y, saved.pos.z);
+      spawnLockerAt(ctx, pos, saved.rotationY, saved.contents.map((e) => ({ ...e })));
+      if (saved.id > maxId) maxId = saved.id;
+    }
+    if (maxId > 0) setNextLockerId(maxId);
   }
 
   ctx.sleds.list.length = 0;

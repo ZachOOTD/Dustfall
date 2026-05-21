@@ -3,6 +3,70 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session AAC — 2026-05-21 — Craftable home (bedroll + lantern + locker) + SAVE_VERSION v8 ✓ verify pass
+`verified` — tsc clean; preview-eval confirmed recipes 11/12/13 +
+deploy/pack of all 3 kits + lantern flicker + locker pack-refuse-
+when-non-empty + save round-trip at v8 with all new fields.
+
+**Three new craftable+placeable+packable kits.** Player builds their
+own customized temporary home anywhere — lay a bedroll, set a
+lantern, place a locker — and packs them up when moving on.
+
+**`bedroll_kit`** (ItemId + ItemDef wieldLmb='place'; recipe id 11
+= cloth×3 + branch×1). New `src/world/bedroll.ts` (~145 LOC) — flat
+cloth pad + pillow + subtle fold lines. ShelterZone covers the pad
+(small zone, full-kill storm dampening like small tent). Tagged
+'sleep' so E opens the sleep overlay (reuses existing UX). Deploy
+at `Tuning.PLACEMENT_DISTANCE_M = 2.2` with rotation 90° to the
+player's facing (head-end perpendicular to approach direction).
+
+**`lantern_kit`** (id 12 = cloth×2 + scrap×2 + branch×1). New
+`src/world/lantern.ts` (~175 LOC) — vertical wood post with glass
+globe, warm PointLight (intensity 1.6, distance 14m, color
+`0xffc080`). Never burns out. New per-frame
+`updateLanterns(ctx)` in main.ts tick — sin-driven flicker on
+intensity + globe opacity (two desynced sines per-instance via
+random `flickerSeed`, ±10% amplitude). NO shelter zone — lantern
+illuminates but doesn't shelter. Hover is passive (no E-action; RMB
+to pack).
+
+**`locker_kit`** (id 13 = scrap×4 + branch×2). New
+`src/world/locker.ts` (~160 LOC) — wooden chest + 3 metal banding
+strips + latch. New `InteractType: 'open_locker'`. E opens the
+existing loot menu with `allowDeposit: true` (same pattern as sled
+cargo from QQ-2; bidirectional). `Locker.contents: LootEntry[]`
+persists in save. **Pack-up refuses if non-empty** (toast: "empty
+it first — the chest still has things in it") — prevents
+unrecoverable cargo-in-packed-kit state.
+
+**SAVE_VERSION 7 → 8** (D81 — additive only). New optional fields
+on `SaveV1`: `bedrolls?`, `lanterns?`, `lockers?` (with contents).
+Loader accepts v1-v8. Pre-v8 saves load with empty arrays for all
+three. Each kit follows the same save/load shape as small/large
+tent: clear current → replay `spawnXAt` per saved entry →
+`setNextXId(maxId)`.
+
+**Plumbing**: `ctx.bedrolls`, `ctx.lanterns`, `ctx.lockers` (with
+`open` reference) added to GameContext; initialized in `main.ts`.
+`interaction.ts` gains three new registry cases (bedrolls, lanterns,
+lockers) + hover-reset + raycast-target additions. Lanterns use a
+passive 'sleep' hover (promptNoun only, no [E] chip). Lockers use
+new 'open_locker' verb (added to `VERBS` table = "open").
+`wieldAction.ts` `handleContextAction` extended: RMB on
+'sleep'-hover iterates bedrolls + lanterns (alongside tents);
+RMB on 'open_locker'-hover iterates lockers. Tutorial HINTS gain
+three entries explaining how to use each new kit. Save loader at
+end of file replays all three in order after large tents.
+
+**Verification**: tsc clean. Recipe matches confirmed (id 11/12/13
+present, inputs correct). All three kits deploy + occupy correct
+lists + spawn shelter zone (bedroll only). Lantern flicker
+intensity changed from 1.6 → 1.698 after 0.5s simulated tick.
+Locker pack-up refused when contents=[scrap×3]; succeeded when
+emptied; kit returned to inventory. Save written at v8 with
+bedrolls.length=1 + lanterns.length=1 + lockers.length=0 (locker
+was test-packed before save).
+
 ## Session AAB — 2026-05-21 — World depth (salvage yield diff + skylight god-rays) ✓ verify pass
 `verified` — tsc clean; preview-eval confirmed salvage distribution
 profiles + god-ray visibility states.

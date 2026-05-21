@@ -29,6 +29,7 @@ import { spawnDeadTrees } from './world/deadTree.ts';
 import { spawnRockScatter } from './world/rockScatter.ts';
 import { setupOpeningScene } from './world/openingScene.ts';
 import { updateOpeningWreckGodRay } from './world/openingWreck.ts';
+import { updateLanterns } from './world/lantern.ts';
 import { hasSave } from './persistence/save.ts';
 import { createJournalPanel } from './ui/journalPanel.ts';
 import { createRecipeBookPanel } from './ui/recipeBookPanel.ts';
@@ -249,6 +250,9 @@ const ctx: GameContext = {
   tents: { list: [] },
   sleds: { list: [], open: null },   // Session QQ
   largeTents: { list: [] },          // Session XX
+  bedrolls: { list: [] },            // Session AAC
+  lanterns: { list: [] },            // Session AAC
+  lockers: { list: [], open: null }, // Session AAC
 
   salvageables,
   weather,
@@ -446,6 +450,7 @@ startLoop(ctx, (c, dt) => {
   updateSandWorm(c, dt);         // DD — buried boss; breaches when player enters territory
   updateFootprints(c.footprints, c.time.elapsed); // age + fade pooled decals
   updateFires(c, dt);            // flicker + fuel decrement + burnout
+  updateLanterns(c);             // AAC — sin-driven flicker on placed lanterns
   updateCacti(c);                // CC-4 — regrow harvested alien-cactus fruit after a day cycle
   updateSleds(c, dt);            // QQ — per-sled tow spring + rope visual; must run AFTER updateSpeeder + updatePlayer
   updateInteraction(c, dt);      // raycast hover + E to open/refill/harvest/cook/sleep/etc (UU — pickup-take moved to LMB)

@@ -164,6 +164,38 @@ export const RECIPES: Recipe[] = [
     ],
     output: { id: 'large_tent_kit', count: 1 },
   },
+  // Session AAC — craftable home placeables. D71: never reuse 1-10.
+  // Bedroll = portable cloth pad. Cheap recipe — early-game accessible.
+  {
+    id: 11,
+    displayName: 'bedroll',
+    inputs: [
+      { id: 'cloth', count: 3 },
+      { id: 'branch', count: 1 },
+    ],
+    output: { id: 'bedroll_kit', count: 1 },
+  },
+  // Lantern = standing light source. Scrap + cloth for the globe wrap.
+  {
+    id: 12,
+    displayName: 'lantern',
+    inputs: [
+      { id: 'cloth', count: 2 },
+      { id: 'scrap', count: 2 },
+      { id: 'branch', count: 1 },
+    ],
+    output: { id: 'lantern_kit', count: 1 },
+  },
+  // Locker = wooden chest with metal banding.
+  {
+    id: 13,
+    displayName: 'locker',
+    inputs: [
+      { id: 'scrap', count: 4 },
+      { id: 'branch', count: 2 },
+    ],
+    output: { id: 'locker_kit', count: 1 },
+  },
 ];
 
 /** All currently-defined recipe ids. Used by save.ts on v5→v6

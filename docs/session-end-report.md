@@ -4,10 +4,11 @@ Cumulative state. Rewritten end-to-end at each `/session-end`. A
 reviewer who's never seen the project should be able to read this +
 `CLAUDE.md` + `docs/GDD.md` and understand where Dustfall is.
 
-**Current state**: Session AAB shipped (2026-05-21). 29 sessions
-post-MVP. tsc clean. Post-overnight: UU/VV/UU-2/WW/XX/YY/ZZ + AAA
-(first-impression polish) + AAB (world depth — salvage yield diff
-+ skylight god-rays). Working tree dirty pending the user's commit.
+**Current state**: Session AAC shipped (2026-05-21). 30 sessions
+post-MVP. tsc clean. SAVE_VERSION v8. Post-overnight: UU/VV/UU-2/
+WW/XX/YY/ZZ + AAA (polish) + AAB (world depth) + AAC (craftable
+home — bedroll/lantern/locker placeables). Working tree dirty
+pending the user's commit.
 
 ---
 
@@ -83,6 +84,25 @@ Fresh-game start (the de-facto Tier 1 — Session W shipped):
    captured mid-drink doesn't resume drinking on reload.
 
 ---
+
+## What's freshly shipped (Session AAC deltas)
+
+Three new craftable+placeable+packable kits. Player builds their own home.
+
+- **`bedroll_kit`** — id 11 (`cloth×3 + branch×1`). New
+  `src/world/bedroll.ts` (~145 LOC). Cloth pad + pillow + fold lines.
+  Small shelter zone, E to sleep, RMB to pack.
+- **`lantern_kit`** — id 12 (`cloth×2 + scrap×2 + branch×1`). New
+  `src/world/lantern.ts` (~175 LOC). Standing post + glass globe +
+  warm PointLight + sin-driven flicker. Never burns out. RMB to pack.
+- **`locker_kit`** — id 13 (`scrap×4 + branch×2`). New
+  `src/world/locker.ts` (~160 LOC). Wooden chest + metal banding +
+  latch. New `InteractType: 'open_locker'`. Bidirectional cargo via
+  lootMenu allowDeposit:true. Pack-up refuses if non-empty.
+- **SAVE_VERSION 7 → 8** (D81 additive). New optional bedrolls/
+  lanterns/lockers fields. Pre-v8 saves load with empty arrays.
+- Plumbing: GameContext, main.ts ctx init, interaction.ts cases,
+  wieldAction.ts RMB extension, tutorial.ts HINTS.
 
 ## What's freshly shipped (Session AAB deltas)
 

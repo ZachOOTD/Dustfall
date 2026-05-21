@@ -58,7 +58,23 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session AAB — World depth (salvage yield diff +
+**Last shipped**: Session AAC — Craftable home (bedroll + lantern +
+locker) + SAVE_VERSION v8. Three new placeable kits — bedroll
+(`cloth×3 + branch×1` → recipe id 11), lantern (`cloth×2 + scrap×2
++ branch×1` → id 12), locker (`scrap×4 + branch×2` → id 13). Each
+follows the tent_kit/sled_kit pattern: wieldLmb='place', LMB-click
+deploys, RMB packs up. Bedroll = portable cloth pad w/ small
+shelter zone + sleep affordance. Lantern = standing post + glass
+globe + warm PointLight + sin-driven flicker (never burns out).
+Locker = wooden chest with bidirectional cargo via lootMenu
+allowDeposit:true (mirrors sled cargo from QQ-2); pack-up refuses
+if non-empty. SAVE_VERSION 7→8 additive (D81): new optional
+bedrolls/lanterns/lockers fields. Pre-v8 saves load cleanly with
+empty arrays. New module count: 3 (bedroll.ts/lantern.ts/locker.ts)
+mirroring the established placeable pattern. Player builds their
+own customized temporary home anywhere.
+
+**Prior milestone**: Session AAB — World depth (salvage yield diff +
 skylight god-rays). Salvage TABLES in `src/world/salvage.ts`
 rebalanced to give each wreck kind a clear thematic identity:
 engine_cluster/engine_bell = scrap-pure metal w/ rope (cabling) +

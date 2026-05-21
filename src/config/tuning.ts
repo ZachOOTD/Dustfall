@@ -243,6 +243,32 @@ export const Tuning = {
   OPENING_WRECK_GODRAY_MAX_OPACITY: 0.22,        // at peak sun
   OPENING_WRECK_GODRAY_SUN_THRESHOLD: 0.1,       // sunHeight below this = beam off
 
+  // Session AAC — craftable home placeables.
+  // Bedroll — low-profile cloth pad on the ground. Small shelter zone
+  // (gives partial cold-drain protection while sleeping but isn't a
+  // full tent). Pack-up always works (no inside-the-shelter refuse —
+  // it's flat ground geometry, not enclosing).
+  BEDROLL_WIDTH_M: 1.6,                  // long axis (head-to-foot)
+  BEDROLL_DEPTH_M: 0.7,                  // short axis (shoulder-to-shoulder)
+  BEDROLL_SHELTER_HALF_X: 0.9,
+  BEDROLL_SHELTER_HALF_Y: 0.6,
+  BEDROLL_SHELTER_HALF_Z: 0.5,
+  BEDROLL_NEAR_DISTANCE_SQ: 1.2 * 1.2,   // reject deploy within 1.2m of another bedroll
+  // Lantern — standing post + glass globe + PointLight. Never burns out.
+  // Flicker amp small enough to feel organic without being distracting.
+  LANTERN_HEIGHT_M: 1.1,                 // total height (post + globe)
+  LANTERN_LIGHT_INTENSITY: 1.6,
+  LANTERN_LIGHT_DISTANCE: 14,            // attenuation radius
+  LANTERN_LIGHT_COLOR_HEX: 0xffc080,     // warm yellow-orange
+  LANTERN_FLICKER_AMP: 0.10,             // intensity multiplier amplitude
+  LANTERN_NEAR_DISTANCE_SQ: 1.0 * 1.0,
+  // Locker — wooden chest. Bidirectional storage; pack-up refuses if
+  // contents are non-empty.
+  LOCKER_WIDTH_M: 1.0,
+  LOCKER_DEPTH_M: 0.6,
+  LOCKER_HEIGHT_M: 0.7,
+  LOCKER_NEAR_DISTANCE_SQ: 1.5 * 1.5,
+
   // Dune terrain (Session P) — ridged + wind-warped noise.
   // Ridges run perpendicular to the wind direction; aniso < 1 elongates them.
   // Asymmetry biases ridge crests in the wind direction (steeper leeward face).

@@ -25,7 +25,7 @@ and promotes the second.
 
 ## Up next
 
-- **Session AAC — Craftable home** (~4-6h, may split). Bedroll/lantern/locker as placeable kits mirroring tent/sled/fire patterns. Save schema v7→v8 additive. See `docs/next-session-prompt.md`.
+The post-overnight push has fully shipped. The next session is open — pick from the big-ticket bucket below (creature companion, 7-day countdown, trading, etc.) or surface a polish item from playtest. See `docs/next-session-prompt.md` for direction notes.
 
 ## Next — Big-ticket bucket (1–2 picks per session at ~4–7h each)
 Pick whatever feels most missing after the polish + atmosphere arc.

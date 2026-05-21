@@ -27,6 +27,9 @@ import type { Fire } from './world/fire.ts';
 import type { Tent } from './world/tent.ts';
 import type { Sled } from './world/sled.ts';
 import type { LargeTent } from './world/largeTent.ts';
+import type { Bedroll } from './world/bedroll.ts';
+import type { Lantern } from './world/lantern.ts';
+import type { Locker } from './world/locker.ts';
 import type { BiomeSampler } from './world/biomes.ts';
 import type { SalvageableRegistry } from './world/salvage.ts';
 import type { FootprintRegistry } from './world/footprints.ts';
@@ -99,6 +102,12 @@ export interface GameContext {
    *  list from `tents` since they have distinct geometry + interaction
    *  semantics (D80). */
   largeTents: { list: LargeTent[] };
+  /** Session AAC — craftable home placeables. Each is its own registry
+   *  list mirroring tent/sled patterns. Save schema v8 persists all three
+   *  additive fields. */
+  bedrolls: { list: Bedroll[] };
+  lanterns: { list: Lantern[] };
+  lockers: { list: Locker[]; open: Locker | null };
   salvageables: SalvageableRegistry;
   weather: Weather;
   ambientDust: AmbientDust;
