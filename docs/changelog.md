@@ -3,6 +3,38 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session WW — 2026-05-21 — HUD micro-polish (stat vignettes + stamina wobble + prompt fade) ✓ verify pass
+`verified` — tsc clean; eval-driven preview confirmed all 3 polish items
+ramp + suppress correctly. Three visible-at-first-boot wins. **Stat
+warning vignettes** — new `src/ui/statVignette.ts` (CSS-overlay, not
+in-scene shader since stat warnings are HUD-tier not atmosphere; D78).
+Two `<div>` overlays (`#stat-vignette-cold` blue, `#stat-vignette-thirst`
+brown/sepia) with radial-gradient backgrounds; opacity tweaked per
+frame from `ctx.stats`. Cold triggers when `ctx.stats.temperature <
+-Tuning.COLD_VIGNETTE_THRESHOLD` (i.e. `< -0.3`); thirst triggers when
+`ctx.stats.thirst < Tuning.THIRST_VIGNETTE_THRESHOLD` (0.25). Linear
+ramp to `STAT_VIGNETTE_MAX_OPACITY = 0.35` at the extreme.
+**Suppressed when `ctx.weather.intensity > 0.7`** so peak storm tint
+isn't triple-stacked. Hooked into main.ts tick after
+`updateStormVignette`. **Stamina screen wobble** — new
+`src/player/staminaWobble.ts`. Sin-driven camera-position jitter when
+`stamina < Tuning.STAMINA_WOBBLE_THRESHOLD = 0.2`. Two desynced sines
+(X at base freq, Y at 1.37× with +1.3 phase offset, half amplitude)
+read as "ragged breathing" rather than digital noise. Magnitude
+scales with depth into the danger zone, capped at
+`STAMINA_WOBBLE_MAX_M = 0.04`. Frequency `STAMINA_WOBBLE_FREQ_HZ = 6`.
+Hooked AFTER `updatePlayer` so the player-controller's camera-anchor
+runs first; additive jitter is fresh each frame (no cumulative
+drift). Suppressed when paused or mounted. **Interact-prompt fade**:
+`#interact-prompt` CSS transition bumped from `0.15s` → `0.12s
+ease-out` (matches brief spec). **Verification**: cold vignette
+0→0.35 across temp 0→-1; thirst vignette 0→0.35 across thirst 1→0;
+storm peak forces both to 0; wobble produces non-zero Δ when stamina
+low; wobble suppressed by mount-gate; prompt CSS transition reads
+`opacity 0.12s ease-out`. Decision D78 logged (vignette pattern
+clone vs. unify). Fourth of 5 overnight sessions; XX (larger
+enterable tent) next.
+
 ## Session UU-2 — 2026-05-21 — RMB context actions + controls panel refresh ✓ verify pass
 `verified` — tsc clean; eval-driven preview confirmed RMB pack-up + full-
 inventory refuse + mounted gate. **RMB dispatch** added to

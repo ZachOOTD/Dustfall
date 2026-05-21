@@ -4,10 +4,10 @@ Cumulative state. Rewritten end-to-end at each `/session-end`. A
 reviewer who's never seen the project should be able to read this +
 `CLAUDE.md` + `docs/GDD.md` and understand where Dustfall is.
 
-**Current state**: Session UU-2 shipped (2026-05-21). 23 sessions
-post-MVP. tsc clean. Third of 5 overnight sessions (WW → XX queued —
-see `docs/roadmap.md` "Overnight queue"). Working tree dirty pending
-the user's commit (see `## Commit handoff` below).
+**Current state**: Session WW shipped (2026-05-21). 24 sessions
+post-MVP. tsc clean. Fourth of 5 overnight sessions (XX queued — see
+`docs/roadmap.md` "Overnight queue"). Working tree dirty pending the
+user's commit (see `## Commit handoff` below).
 
 ---
 
@@ -83,6 +83,25 @@ Fresh-game start (the de-facto Tier 1 — Session W shipped):
    captured mid-drink doesn't resume drinking on reload.
 
 ---
+
+## What's freshly shipped (Session WW deltas)
+
+HUD micro-polish — three visible-at-first-boot wins:
+
+- **`src/ui/statVignette.ts` (new)** — CSS-overlay vignettes (D78
+  vs. clone-not-abstract). Two divs: `#stat-vignette-cold` blue,
+  `#stat-vignette-thirst` brown. Linear opacity ramp to 0.35 as
+  the stat worsens past threshold. Suppressed during peak storm
+  (intensity > 0.7) so the stormVignette has the screen.
+- **`src/player/staminaWobble.ts` (new)** — sin-driven camera
+  jitter when stamina < 0.2. Two desynced sines (X base, Y at
+  1.37× freq + phase offset, half amp). Caps at 0.04m at 6Hz.
+  Mounted-suppressed. Ticks AFTER `updatePlayer` so the
+  camera-anchor runs first.
+- **`#interact-prompt` CSS** — opacity transition bumped 0.15s →
+  0.12s ease-out (snappier feedback per brief spec).
+
+Decision D78 logged (CSS overlay vs. in-scene shader; friction-1).
 
 ## What's freshly shipped (Session UU-2 deltas)
 
@@ -246,22 +265,23 @@ Recent ones (session-tagged):
 
 ## Suggested next session (1-3 directions in priority order)
 
-1. **Session WW — HUD micro-polish** (~1.5h). Three visible-at-first-
-   boot wins: (a) low-stat warning vignettes (cold = blue, thirst =
-   brown) — clone stormVignette.ts pattern; (b) low-stamina screen
-   wobble — mirror the sandworm-tremor pattern; (c) interact-prompt
-   fade refinement (opacity transition over ~120ms). See
-   `docs/next-session-prompt.md`.
-2. **Session XX — Larger enterable tent** (~3h). New `large_tent_kit`
-   ItemDef + recipe (id 10) + `src/world/largeTent.ts` module +
-   `weather.perceivedIntensity` split + `SAVE_VERSION 6 → 7` additive
-   migration. **Only session in this plan authorized to bump
-   SAVE_VERSION.**
-3. Audio sample stems (.ogg sourcing) — architecture exists since X;
+1. **Session XX — Larger enterable tent** (~3h). FINAL session of
+   the overnight queue. New `large_tent_kit` ItemDef + recipe (id 10)
+   + `src/world/largeTent.ts` module mirroring tent.ts but with
+   walk-in interior volume. New `weather.perceivedIntensity` field
+   on GameContext that visual + audio systems read when player is
+   inside the large tent. **Only session in this plan authorized
+   to bump `SAVE_VERSION 6 → 7`** (additive: empty large-tents
+   array on load of pre-v7 saves). See `docs/next-session-prompt.md`.
+2. Audio sample stems (.ogg sourcing) — architecture exists since X;
    blocked on asset-pipeline external dependency. Not actionable
    without source files.
+3. Post-mortem pass on the overnight run — wieldAction dispatcher +
+   RMB extension + CSS-overlay HUD vignettes form a recurring
+   "centralized dispatch via predicate-on-context-state" pattern.
+   Worth promoting to gamedev-framework shared-memory after XX.
 
-The top pick (WW) is the next session in the overnight queue.
+The top pick (XX) is the final session in the overnight queue.
 Plan file at `.claude/plans/i-want-to-set-floating-dusk.md`.
 
 ---

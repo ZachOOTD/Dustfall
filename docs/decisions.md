@@ -1574,3 +1574,29 @@ inherits ALL UU gates (overlay, mounted, isPlaying) automatically.
 or "release what you tethered" semantic) land in `handleContextAction`.
 The hover-state dispatch is the pattern; the hover.type discriminates.
 **friction-score:** 2
+
+## D78 — Stat vignettes as CSS overlay, not in-scene shader (Session WW)
+**When**: Session WW.
+**Why**: `stormVignette.ts` is an in-scene ShaderMaterial because the
+storm is atmosphere — it composites with the world AND tone-maps with
+the renderer. Stat vignettes are HUD-tier: they're a UI warning, not
+part of the world. CSS divs with radial-gradient backgrounds + opacity
+tweens are cheaper (no shader draw call, no scene graph node) and
+correct for the HUD tier (overlay the screen post-render, no tone
+mapping). Also a pure-clone approach — separate file, no abstraction
+attempt to unify storm + stat into a "vignette manager" for 3 callers
+(would have been premature).
+**Considered alternatives**:
+- Clone the in-scene shader path — gets free tone-mapping but is
+  overkill for a HUD warning, and would compete with stormVignette
+  for the same fullscreen quad slot.
+- Single shader with multi-channel uniforms (storm + cold + thirst
+  in one pass) — couples three independent systems; any change to
+  one ripples to the shader.
+- Three.js post-processing pipeline (EffectComposer) — heavy
+  dependency for what is fundamentally screen-space CSS.
+**Apply**: future HUD-tier warnings (health-low pulse, low-fuel-on-
+speeder tint) follow the CSS-overlay pattern; atmosphere-tier
+effects (storm vignette, mirage shader) follow the in-scene shader
+pattern.
+**friction-score:** 1

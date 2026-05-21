@@ -87,6 +87,20 @@ export const Tuning = {
   TENT_SHELTER_HALF_Z: 1.8,
   TENT_NEAR_DISTANCE_SQ: 2.0 * 2.0,  // reject deploy within 2m of another tent
 
+  // Session WW — low-stat warning vignettes (cold = blue, thirst = brown).
+  // Cloned from stormVignette pattern but lives in CSS overlay-land
+  // (HUD-tier, not atmosphere) so it doesn't tone-map with the renderer.
+  COLD_VIGNETTE_THRESHOLD: 0.3,        // temperature below this triggers blue tint
+  THIRST_VIGNETTE_THRESHOLD: 0.25,     // thirst below this triggers brown tint
+  STAT_VIGNETTE_MAX_OPACITY: 0.35,     // peak opacity at stat=0
+  // (colors hardcoded in statVignette.ts CSS since they're tone-locked)
+
+  // Session WW — low-stamina screen wobble. Sin-driven sub-cm camera
+  // jitter that mirrors the sandworm-tremor pattern in scale + shape.
+  STAMINA_WOBBLE_THRESHOLD: 0.2,       // stamina below this starts wobble
+  STAMINA_WOBBLE_MAX_M: 0.04,          // peak amplitude (meters)
+  STAMINA_WOBBLE_FREQ_HZ: 6,           // shake cadence
+
   // Atmosphere
   FOG_NEAR: 25,                       // legacy linear-fog values (kept for reference)
   FOG_FAR: 170,

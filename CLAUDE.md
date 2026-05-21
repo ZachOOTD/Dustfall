@@ -58,8 +58,23 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session UU-2 — RMB context actions + controls panel
-refresh. New `handleContextAction()` in `src/player/wieldAction.ts`
+**Last shipped**: Session WW — HUD micro-polish (stat vignettes +
+stamina wobble + prompt fade). New `src/ui/statVignette.ts` — two
+CSS-overlay `<div>`s (`#stat-vignette-cold` blue, `#stat-vignette-thirst`
+brown). Linear opacity ramp to `STAT_VIGNETTE_MAX_OPACITY = 0.35` as
+temperature dips below `-COLD_VIGNETTE_THRESHOLD = -0.3` or thirst
+drops below `THIRST_VIGNETTE_THRESHOLD = 0.25`. Suppressed when
+`weather.intensity > 0.7` (storm peak owns the screen). New
+`src/player/staminaWobble.ts` — sin-driven camera-position jitter
+when stamina < 0.2, two desynced sines for "ragged breathing" feel,
+peak amp 0.04m at 6Hz; mounted-suppressed. Ticks AFTER updatePlayer
+so the camera-anchor runs first (additive jitter, no drift).
+`#interact-prompt` CSS transition bumped 0.15s → 0.12s ease-out.
+Decision D78 (CSS overlay vs in-scene shader: clone-not-abstract for
+3 callers, friction-1). Fourth of 5 overnight sessions (XX next).
+
+**Prior milestone**: Session UU-2 — RMB context actions + controls
+panel refresh. New `handleContextAction()` in `src/player/wieldAction.ts`
 dispatches RMB (mousePressed.has(2)) off `ctx.inventory.hover` —
 inherits all UU gates (overlay, mounted, isPlaying). New
 `packUpTent(ctx, tent)` in tent.ts symmetric to deployTent: addItem

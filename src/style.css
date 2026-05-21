@@ -373,7 +373,9 @@ canvas {
   z-index: 12;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 0.15s;
+  /* WW — explicit ease-out, slightly snappier than the pre-WW 0.15s
+     (matches the kickoff brief's 120ms target). */
+  transition: opacity 0.12s ease-out;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1085,6 +1087,38 @@ canvas {
   background: #5a7a9a;
   pointer-events: none;
   max-width: calc(100% - 8px);
+}
+
+/* ──────────────────────────────────────────────────────────
+   Session WW — low-stat warning vignettes (cold + thirst)
+   Layer over the world; tone-locked colors. Opacity driven by
+   src/ui/statVignette.ts each frame from ctx.stats.
+   ────────────────────────────────────────────────────────── */
+#stat-vignette-cold,
+#stat-vignette-thirst {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 17;                /* below damage-vignette (18), above HUD (10-15) */
+  transition: opacity 0.4s ease-out;
+}
+
+#stat-vignette-cold {
+  /* Blue cold tint, strongest at the corners, transparent at center */
+  background: radial-gradient(
+    ellipse at center,
+    rgba(64, 96, 160, 0) 38%,
+    rgba(64, 96, 160, 0.65) 100%
+  );
+}
+
+#stat-vignette-thirst {
+  /* Brown/sepia thirst tint, same falloff shape */
+  background: radial-gradient(
+    ellipse at center,
+    rgba(138, 96, 56, 0) 38%,
+    rgba(138, 96, 56, 0.65) 100%
+  );
 }
 
 /* ──────────────────────────────────────────────────────────

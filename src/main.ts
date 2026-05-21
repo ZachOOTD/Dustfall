@@ -44,6 +44,8 @@ import { createViewModel, updateViewModel } from './player/viewModel.ts';
 import { createWeather, updateWeather } from './world/weather.ts';
 import { createAmbientDust, updateAmbientDust } from './world/ambientDust.ts';
 import { createStormVignette, updateStormVignette } from './world/stormVignette.ts';
+import { createStatVignette, updateStatVignette } from './ui/statVignette.ts';
+import { updateStaminaWobble } from './player/staminaWobble.ts';
 import { updateSpeeder } from './world/speeder.ts';
 import { updateSleds } from './world/sled.ts';
 import { spawnWaterSources } from './world/waterSources.ts';
@@ -320,6 +322,7 @@ createSleepOverlay(ctx);
 createInventoryOverlay(ctx);
 createJournalPanel(ctx);
 createPerfHud(ctx);
+createStatVignette();  // WW — must come after HUD creation so it overlays correctly
 // Tutorial panel must exist before wireOverlays so the lock handler can call
 // noteIntroSeen() — and before installDebugPanel so __game.showControls works.
 createTutorial(ctx);
@@ -421,10 +424,12 @@ startLoop(ctx, (c, dt) => {
   updateWeather(c, dt);          // sandstorm intensity (drives sky + audio + thirst)
   updateAmbientDust(c, dt);      // toned-down drift, suppressed by sandstorm
   updateStormVignette(c);        // screen-edge tint at peak storm (BB-4)
+  updateStatVignette(c);         // WW — cold/thirst tint when stats low
   updateLighting(c, dt);         // sun + lights + sunDir/sunHeight
   updateSky(c, dt);              // sky sphere + sun disc (reads weather)
   updateSpeeder(c, dt);          // hover speeder forces + mount/dismount (CC) — must run BEFORE updatePlayer so the player capsule is teleported to the rider seat before camera-sync
   updatePlayer(c, dt);           // movement + camera + advance dayTime
+  updateStaminaWobble(c);        // WW — sin-driven camera jitter when stamina low (must run AFTER updatePlayer's camera-anchor)
   updateShelter(c, dt);          // before stats so heat path sees inShelter
   updateStats(c, dt);            // thirst/heat/health drain + death
   updateSoundscape(c, dt);       // wind volume tracks day/night
