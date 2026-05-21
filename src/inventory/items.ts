@@ -99,7 +99,9 @@ const _DEFS: Record<ItemId, ItemDef> = {
     description: 'a half-empty canteen',
     stackable: false,
     maxStack: 1,
+    wieldLmb: 'hold_use',
     onUse(ctx, slot) {
+      // Q-key single-gulp path (backward compatibility post-UU).
       const fill = slot.meta?.fillLevel ?? 1;
       if (fill <= 0.001) {
         return { consumed: false, message: 'the canteen is empty' };
@@ -117,6 +119,33 @@ const _DEFS: Record<ItemId, ItemDef> = {
         consumed: false,
         message: empty ? 'you drink the last of it' : 'you drink — the water is warm',
       };
+    },
+    // Session UU — hold-LMB sustained drinking. Deliver one gulp each
+    // time holdSeconds crosses a multiple of CANTEEN_DRINK_INTERVAL_S.
+    // No bookkeeping field needed — derive the crossing from (now, now-dt).
+    onHoldTick(ctx, slot, holdSeconds, dt) {
+      const interval = Tuning.CANTEEN_DRINK_INTERVAL_S;
+      const prev = Math.max(0, holdSeconds - dt);
+      const gulpsAfter = Math.floor(holdSeconds / interval);
+      const gulpsBefore = Math.floor(prev / interval);
+      if (gulpsAfter <= gulpsBefore) return;
+      const fill = slot.meta?.fillLevel ?? 1;
+      if (fill <= 0.001) {
+        // Empty — toast on the first attempted gulp of this hold.
+        if (gulpsBefore === 0) ctx.ui.showToast('the canteen is empty');
+        return;
+      }
+      const drink = Math.min(fill, Tuning.CANTEEN_DRINK_DELTA);
+      if (!slot.meta) slot.meta = { fillLevel: 1 };
+      slot.meta.fillLevel = Math.max(0, fill - drink);
+      const restorePerUnit = Tuning.CANTEEN_THIRST_RESTORE / Tuning.CANTEEN_DRINK_DELTA;
+      ctx.stats.thirst = Math.min(1, ctx.stats.thirst + drink * restorePerUnit);
+      playPour();
+      playDrink();
+      ctx.player.viewModel?.triggerUse();
+      if (slot.meta.fillLevel <= 0.001) {
+        ctx.ui.showToast('you drink the last of it');
+      }
     },
     makeViewModel() {
       const group = new THREE.Group();
@@ -249,6 +278,7 @@ const _DEFS: Record<ItemId, ItemDef> = {
     description: 'a notched, weighted blade',
     stackable: false,
     maxStack: 1,
+    wieldLmb: 'attack',
     onUse(_ctx, _slot) {
       return { consumed: false };
     },
@@ -301,6 +331,7 @@ const _DEFS: Record<ItemId, ItemDef> = {
     description: 'a length of scrap pipe with cloth grip',
     stackable: false,
     maxStack: 1,
+    wieldLmb: 'attack',
     onUse(_ctx, _slot) {
       return { consumed: false };
     },
@@ -362,6 +393,7 @@ const _DEFS: Record<ItemId, ItemDef> = {
     description: 'a crude single-shot scrap-iron pistol',
     stackable: false,
     maxStack: 1,
+    wieldLmb: 'attack',
     onUse(_ctx, _slot) {
       // Firing is driven by combat.ts via LMB — `onUse` (E key) is a
       // no-op for ranged weapons.
@@ -510,6 +542,7 @@ const _DEFS: Record<ItemId, ItemDef> = {
     description: 'a salvaged sci-fi sidearm; hold to charge, release to fire',
     stackable: false,
     maxStack: 1,
+    wieldLmb: 'attack',
     onUse(_ctx, _slot) {
       return { consumed: false };
     },
@@ -917,6 +950,7 @@ const _DEFS: Record<ItemId, ItemDef> = {
     description: 'kindling, flint, and a striker',
     stackable: true,
     maxStack: 2,
+    wieldLmb: 'place',
     onUse(ctx, _slot) {
       const fire = deployFire(ctx);
       if (!fire) {
@@ -1010,6 +1044,7 @@ const _DEFS: Record<ItemId, ItemDef> = {
     description: 'wrapped cloth on a branch — burns for a few minutes',
     stackable: false,
     maxStack: 1,
+    wieldLmb: 'none',
     onUse(_ctx, slot) {
       if (!slot.meta) slot.meta = { lit: false, burnRemaining: 1 };
       // Refuse to light a torch with no fuel left (defensive — burn-out path
@@ -1114,6 +1149,7 @@ const _DEFS: Record<ItemId, ItemDef> = {
     description: 'a salvaged hand-light — drains, recharges while off',
     stackable: false,
     maxStack: 1,
+    wieldLmb: 'none',
     onUse(_ctx, slot) {
       if (!slot.meta) slot.meta = { lit: false, fuelLevel: 1 };
       if (!slot.meta.lit && (slot.meta.fuelLevel ?? 0) < 0.02) {
@@ -1292,6 +1328,7 @@ const _DEFS: Record<ItemId, ItemDef> = {
     description: 'a roll of canvas and poles',
     stackable: false,
     maxStack: 1,
+    wieldLmb: 'place',
     onUse(ctx, _slot) {
       const tent = deployTent(ctx);
       if (!tent) {
@@ -1336,6 +1373,7 @@ const _DEFS: Record<ItemId, ItemDef> = {
     description: 'a folded flatbed sled with skids',
     stackable: false,
     maxStack: 1,
+    wieldLmb: 'place',
     onUse(ctx, _slot) {
       const sled = deploySled(ctx);
       if (!sled) {
@@ -1385,6 +1423,11 @@ const _DEFS: Record<ItemId, ItemDef> = {
     description: 'aim at a sled and click to tow',
     stackable: false,
     maxStack: 1,
+    // wieldLmb='none' — rope's LMB-on-sled-stub stays in interaction.ts
+    // (it needs hover-state to dispatch). wieldAction.ts skips this item
+    // for LMB-place / LMB-take so the existing rope-attach flow is
+    // unchanged (D67 / QQ-2 preserved).
+    wieldLmb: 'none',
     onUse(_ctx, _slot) {
       // E does nothing — attach is LMB-driven via interaction.ts (the
       // wielded-rope special case in case 'sleds'). Toast as a hint.

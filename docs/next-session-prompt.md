@@ -1,157 +1,158 @@
-# Session UU — Kickoff Brief
+# Session VV — Kickoff Brief
 
 ## Read these now (in order)
 
 1. `CLAUDE.md` (auto-loaded) — project manual, current state, architecture rules
-2. `docs/session-end-report.md` — cumulative state through Session TT, the "what works end-to-end" reference
-3. `docs/decisions.md` — D1-D72, with friction-scores. Pay attention to **friction ≥ 4** entries — D70 in particular for the just-shipped crafting model + D71 for recipe id stability
-4. `docs/roadmap.md` — "Next — Big-ticket bucket" lists the remaining big-ticket items
+2. `docs/session-end-report.md` — cumulative state through Session UU, the "what works end-to-end" reference
+3. `docs/decisions.md` — D1-D75 with friction-scores. Pay attention to **friction ≥ 4** entries — especially D73 (wieldAction.ts dispatcher) + D74 (wieldLmb field) which just shipped.
+4. `docs/roadmap.md` — "Overnight queue" lists the 5-session sequence (UU shipped; VV/UU-2/WW/XX queued)
 5. `docs/backlog.md` — unprioritized ideas / bugs / polish / debt
 6. `docs/architecture.md` — file map; consult only if you don't know where a system lives
 
 ## What's already built
 
-Dustfall is 20 sessions past start, post-MVP. The lone-survivor sandbox loop
-works end-to-end: spawn at the redesigned opening wreck → read the journal at
-the dead survivor's hand → exit to the speeder → cross the 2400m world via
-hover speeder + on-foot → harvest at the salt-flats well → salvage at procgen
-wrecks → fight lizards / sand worm boss with one of 5 weapons → craft (now via
-combine-to-discover) → save + reload. Just-shipped TT replaced the explicit
-recipe list UI with a 4-slot combine-mode UI; save format v5→v6 with
-ALL_RECIPE_IDS seeded as legacy fallback. No known critical bugs.
+Dustfall is 21 sessions past start, post-MVP. The lone-survivor sandbox loop
+works end-to-end. Session UU just shipped the control scheme overhaul:
+LMB-leaning interactions via the new `wieldAction.ts` dispatcher. Hold-LMB
+to drink the canteen, click-LMB to deploy a kit, click-LMB to pick up
+ground items. E retained for "open this thing" — loot containers, sleep,
+mount, read, refill, harvest, cook, salvage. No known critical bugs.
 
-## Session UU focus
+## Session VV focus
 
-**Control scheme overhaul — LMB-leaning, modern-survival parity.** Replace
-the "E for every interaction" pattern with a more granular click-driven
-model: hold LMB to drink the canteen, click LMB to place a kit/sled, click
-LMB to pick up a pickup, etc. E stays for opening containers / sleeping /
-reading the journal (the "open this thing" actions). The goal is a control
-scheme closer to The Long Dark / Rust / Subnautica defaults where the
-mouse owns most action verbs and the keyboard owns movement + a small set
-of meta actions.
+**Tuning lift + crosshair feedback + `as any` fix** (~1.5h). Architecture
+hygiene + first-impression polish. Three discrete shippable improvements
+bundled. Acts as a palette cleanser between UU and UU-2 (both interaction-
+dispatch sessions). Different files, different mental model.
 
-This is the **highest blast radius** of any remaining bucket item — it
-touches every per-item `onUse`, plus `combat.ts` + `interaction.ts`. Plan
-for ~4-6h.
+This is a low-risk session by design — no novel architecture. Mostly
+mechanical refactors + one small UI polish item.
 
 ## Priority items (in order)
 
-1. **Audit + categorize current E-actions** (~30 min)
-   - Read every per-item `onUse` in `src/inventory/items.ts` and every
-     `case` in `src/player/interaction.ts`'s `case 'lootContainers' /
-     'tents' / 'sleds' / 'speeder' / ...` dispatch. Classify each as
-     either:
-     - **Take/use** (drink canteen, deploy fire_kit, use bandage) →
-       migrate to LMB-while-wielded (hold for sustained actions, click
-       for one-shot).
-     - **Open** (loot container, sled cargo, tent for sleep, journal) →
-       keep on E.
-     - **Pick up** (item pickup) → migrate to LMB on the world item.
-     - **Tool use** (machete swing, scrap_gun fire) → already LMB; no
-       change.
-   - Write the audit to a working scratch file or as comments in
-     `interaction.ts`; the next priority items act on it.
-2. **Hold-LMB sustained-action infrastructure** (~1h)
-   - The canteen drinks one gulp per LMB click currently. The new
-     model is "hold to drink" — drink while LMB is held, stop when
-     released. Mirror the existing `chargeProgress` pattern from the
-     energy_pistol (Session PP). Files: `combat.ts` (or a new
-     `wieldAction.ts` if combat.ts gets too crowded),
-     `inventory/items.ts` (canteen.onUse signature extends with a
-     `holdProgress` flag or similar).
-3. **LMB-driven placement** (~1.5h)
-   - Currently E (or wielded-item.onUse fired via E) deploys
-     fire_kit / tent_kit / sled_kit. Rewire so LMB while the kit is
-     equipped triggers placement. Crosshair shows a ghost preview of
-     where the kit would land at the camera-forward 2.2m mark.
-4. **LMB-driven pickup** (~30 min)
-   - Pickups on the ground currently take via E. Switch to LMB on
-     the pickup's mesh, with a passive prompt "[click] take ..."
-     that doesn't show the [E] chip.
-5. **E semantics tightened to "OPEN"** (~30 min)
-   - Loot containers, sled cargo, tents (sleep overlay), journal,
-     speeder mount — all stay on E. Update the interact-prompt verbs
-     to communicate "open" / "mount" / "read" / "sleep in" (most
-     already do).
-6. **Save format check** (~15 min)
-   - No persisted state changes expected. `SAVE_VERSION` stays at 6.
-     But: hotbar-selected-while-mid-hold state must NOT persist
-     across save (cleared on save serialize).
+1. **Lift `src/world/fire.ts` local constants to `Tuning.FIRE_*`** (~20 min).
+   - Lines 32-36 hold 5 local constants:
+     - `FIRE_INITIAL_FUEL = 90` → `Tuning.FIRE_INITIAL_FUEL_S`
+     - `FIRE_FUEL_PER_BRANCH = 30` → `Tuning.FIRE_FUEL_PER_BRANCH_S`
+     - `SHELTER_RADIUS = 2.2` → `Tuning.FIRE_SHELTER_RADIUS_M`
+     - `SHELTER_HEIGHT = 1.5` → `Tuning.FIRE_SHELTER_HEIGHT_M`
+     - `NEAR_FIRE_DISTANCE_SQ = 1.5 * 1.5` → `Tuning.FIRE_NEAR_DISTANCE_SQ`
+   - Acceptance: tsc clean, fire deploy works identically (values preserved).
+
+2. **Lift `src/world/tent.ts` local constants to `Tuning.TENT_*`** (~10 min).
+   - Lines 21-22 hold 2 local constants:
+     - `TENT_SHELTER_HALF = { x: 1.8, y: 1.4, z: 1.8 }` → `Tuning.TENT_SHELTER_HALF_X/Y/Z`
+     - `NEAR_TENT_DISTANCE_SQ = 2.0 * 2.0` → `Tuning.TENT_NEAR_DISTANCE_SQ`
+   - Acceptance: tsc clean, tent deploy works identically.
+
+3. **Crosshair feedback** (~45 min — largest item).
+   - `#crosshair` in `src/style.css` (around line 141) — the current
+     crosshair is a thin static dot/cross.
+   - Add an `updateCrosshair(ctx)` hook in `src/ui/interactPrompt.ts`
+     (or a new tiny `src/ui/crosshair.ts` if you prefer separation).
+     Wire it into `main.ts` per-frame tick.
+   - States to render:
+     - Default (no hover): thin dot.
+     - On `ctx.inventory.hover !== null`: thicker / brighter (signals
+       "interactable in view").
+     - On `ctx.inventory.hover?.type === 'kill'`: red (signals enemy
+       in view; lizards are the only target this fires on currently).
+   - New Tuning constants: `CROSSHAIR_THICKEN_PX`, `CROSSHAIR_KILL_COLOR_HEX`.
+   - Acceptance: visible color/size change on hover, tsc clean.
+
+4. **Fix the lone `as any` cast in `src/world/wrecks.ts:137`** (~10 min).
+   - Replace with a proper typed assertion or extend the cached-material
+     interface. The cast is on a `MeshLambertMaterial` to set `side =
+     THREE.DoubleSide` (SS-era fix for the opening wreck interior
+     rendering). The Material type has `side` — the `as any` is likely
+     a relic of a stricter type elsewhere.
+   - Also drop the `// eslint-disable-next-line` comment on line 136.
+   - Acceptance: `Grep "as any" src` returns 0 matches; tsc clean;
+     `Grep "eslint-disable" src` returns 0 matches (or just one fewer).
 
 ## Stretch goals (if budget allows)
 
-- **Right-mouse context action**: e.g., RMB on a tent → "pack up" + return
-  to inventory. RMB on a sled → "release rope from speeder". Adds a third
-  verb for advanced players without bloating the LMB menu.
-- **In-game controls hint card** that reflects the new scheme (the existing
-  one at `__game.showControls()` needs updating).
+- Lift `src/world/sled.ts` near-distance / yaw-lerp local constants
+  to `Tuning.SLED_*` (some are already in Tuning per the QQ-2 work,
+  but check for any lingering locals).
+- Audit `src/audio/audio.ts` for the most-tuned magic numbers
+  (master gain, footstep gain) — lift 5-10 to `Tuning.AUDIO_*`
+  if there's time. The full audio.ts lift is WW-tier work; don't
+  bite off more than 30 min here.
 
 ## Autonomy contract
 
 - When ambiguous: pick the option closest to GDD pillars (Pillar 4 —
-  tactile world / every object earns its mesh) + D7/D9/D13 (sandbox tone,
-  combat-isn't-the-point). Append a D-entry, keep going.
-- Footgun: **moving an interaction off E may break muscle memory** for the
-  user. Surface the migration in the changelog explicitly so they can
-  adjust expectations on first boot. Document any tutorial / hints panel
-  updates.
+  tactile world) + D-entries D73/D74/D75 just shipped. Append a new
+  D-entry if you make a non-obvious call. Keep going.
+- Footgun: **VV does NOT touch `src/persistence/save.ts`**. Save
+  schema stays at v6. If you find yourself reading save.ts, you've
+  scope-crept; back up and reconsider.
 - Never ask the human mid-session.
 
-## Stop conditions (gated mode default)
+## Stop conditions (overnight mode)
 
-- All 6 priority items shipped + verify passes
-- 3-strike wall (same fix attempted 3x) → invoke `game-verifier`
-- Catastrophic block (tsc broken, dev server won't start)
-- Destructive action attempt (git push/force/amend without user grant)
+- All 4 priority items shipped + verify passes → `/session-end`.
+- 3-strike wall (same fix attempted 3x) → invoke `/scope-cut` against
+  the pre-committed list in `.claude/plans/i-want-to-set-floating-dusk.md`
+  Session VV section.
+- Catastrophic block (tsc broken, dev server crashes) → halt + write
+  a CAUTION entry in `next-session-prompt.md` for the morning.
+- Destructive action attempt → halt unconditionally.
 
 ## On stop
 
 Invoke `/gamedev-framework:session-end` to verify + append changelog +
-bump "Last shipped" + rewrite session-end-report + write next-session-prompt
-+ print commit handoff.
+bump "Last shipped" + rewrite session-end-report + write next-session-
+prompt for UU-2 + commit + tag `session-VV` + push.
+
+## Pre-committed scope cuts (cut top-first on 3-strike wall)
+
+1. **Red-on-enemy crosshair color** (the `kill` hover path). Cut means
+   crosshair thickens but doesn't go red. Easier debug; cosmetic loss.
+2. **Crosshair feedback entirely**. Cut means VV ships just the tuning
+   lifts + `as any` fix — ~40 min session that frees budget for UU-2.
+3. **Tent constants lift** (only 2 constants). Cut means just fire
+   constants lifted; tent stays for WW.
+4. **`as any` fix**. Cut means the codebase keeps its lone `as any`.
+   Last cut — 10-minute change with zero feel impact.
 
 ## Notable footguns
 
-- **D70 (combine-to-discover)** just shipped. The crafting menu's CRAFT
-  button intentionally uses LMB-click on a DOM button — that's UI, NOT
-  game-world LMB. The control scheme overhaul should NOT touch the
-  crafting UI's button behavior. Distinguish in-world LMB from menu LMB.
-- **D34 (speeder velocity-controlled motion)** — mounted speeder's W/S/A/D
-  + Shift inputs are already LMB-independent. Don't break that.
-- **D67 (sled inextensible rope)** — wielded rope LMB on a sled rope-stub
-  attaches/detaches. That's already LMB-driven; no change needed but
-  verify the new LMB-action infrastructure doesn't double-fire.
-- **Combat LMB** already wired (Session PP). The new LMB-pickup + LMB-place
-  paths must NOT fire when a weapon is the wielded item.
-- **HMR can show stale singleton state** for module-level closures.
-  Anything touching `_ctx` / `_selectedRecipe` / similar should expect
-  a hard reload during dev.
+- **D62 (terrain shader vNormal is VIEW space)** still applies if you
+  touch any shader; not expected for VV.
+- **D75 (PLACEMENT_DISTANCE_M = 2.2)** just shipped. Do NOT re-locally-
+  constant placement distances in fire/tent/sled — they're already on
+  the Tuning constant.
+- **D73 (wieldAction.ts as sole LMB dispatcher)** just shipped. Do NOT
+  add LMB handling to other modules; future LMB behaviors go into
+  wieldAction's switch.
+- **VV doesn't touch interaction.ts or wieldAction.ts** unless adding
+  the crosshair hook there. If you find yourself editing dispatch
+  logic, you've scope-crept.
 
 ## Verification protocol
 
 ```
-npm run verify  # = tsc --noEmit; Dustfall opts out of tier-ladder verification
+npm run verify  # = tsc --noEmit
 ```
 
-Plus eval-driven + HMR-aware playtest:
+Plus eval-driven preview verification:
 1. tsc clean.
-2. Wield canteen → hold LMB → thirst stat drops continuously while held →
-   release LMB → drinking stops. Toast on first sip.
-3. Wield fire_kit → click LMB → fire spawns 2.2m in front. Toast "fire lit".
-4. Look at a pickup → click LMB → item enters inventory (without the [E]
-   chip).
-5. Look at a loot container → E opens the menu (unchanged).
-6. Wield machete → LMB on a lizard → still swings, no double-fire.
-7. Wield rope → LMB on sled rope-stub → still attaches (unchanged).
-8. Mount speeder → LMB still fires combat weapons (no LMB hijack).
-9. Save + reload → no persisted state corruption.
+2. Deploy a fire — works identically (proves fire.ts constants lift didn't change behavior).
+3. Pitch a tent — works identically.
+4. Look at a lizard → crosshair turns red.
+5. Look at a pickup → crosshair thickens.
+6. Look away from both → crosshair returns to default.
+7. `Grep "as any" src` returns 0 matches.
+8. Save + reload → save schema unchanged (still v6).
 
 ## Begin block
 
 Read CLAUDE.md (auto-loaded) → `docs/session-end-report.md` →
-`docs/decisions.md` (especially D70 + D72 since they just shipped). Create
-a TaskCreate top-level list with the 6 priority items. Mark item 1
-`in_progress` (the audit). Begin work on `src/inventory/items.ts` +
-`src/player/interaction.ts` — read both first, then classify each
-interaction in scratch comments.
+`docs/decisions.md` (especially D73-D75 just shipped). Create
+a TaskCreate top-level list with the 4 priority items. Mark item 1
+(`fire.ts constants lift`) as `in_progress`. Begin with `Read
+src/world/fire.ts` to confirm the 5 constants on lines 32-36, then
+edit `src/config/tuning.ts` to add the `FIRE_*` block, then edit
+fire.ts to reference them.

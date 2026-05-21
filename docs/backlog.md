@@ -20,5 +20,4 @@ Use `/triage-ideas` to bulk-classify a free-form dump.
 [feat] base-building mechanics
 [feat] small red creature companion — follows player, pocketable into backpack, re-deployable
 [idea] remove HUD stat bars in favor of audio/visual/text cues ("you could use a drink")
-[feat] larger enterable tent that shelters the player from inside during sandstorms
-[feat] control scheme overhaul: bring closer to modern survival games — lean on LMB more (hold to drink, click to place kits, etc.) instead of E for everything
+[feat] larger enterable tent that shelters the player from inside during sandstorms (queued as Session XX in overnight run)

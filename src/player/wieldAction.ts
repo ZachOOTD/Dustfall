@@ -1,0 +1,148 @@
+// Session UU (D73) — sole LMB-while-wielded dispatcher.
+//
+// Replaces scattered LMB handling across combat.ts + interaction.ts +
+// per-item onUse with a single centralized dispatch. Reads the equipped
+// item's `wieldLmb` (D74; ItemDef.wieldLmb in inventory/types.ts) to
+// pick a behavior; all overlay/mount/isPlaying gates live here in ONE
+// place.
+//
+// Tick order (see main.ts): runs AFTER updateInteraction (so
+// ctx.inventory.hover is current) and REPLACES the direct updateCombat
+// call — combat is invoked from here when wieldLmb === 'attack'.
+//
+// Behaviors:
+//   attack    → updateCombat(ctx, dt)
+//   place     → on mousePressed: invoke def.onUse + handle consumed/anim
+//   hold_use  → on mouseHeld: bump slot.meta.holdProgress; call onHoldTick
+//   click_use → no LMB action on the wielded item; LMB on a hovered
+//               pickup takes it. (Q still calls onUse via inventory.ts.)
+//   none      → same as click_use: pickup-take still works (e.g. wielding
+//               rope and clicking a ground pickup). Items where LMB has
+//               special hover-state semantics (rope→sled-stub) handle
+//               their case directly in interaction.ts.
+//
+// Footgun pre-empts:
+//   - Crafting menu's CRAFT button is a DOM LMB, NOT in-world LMB. The
+//     overlay-open gate short-circuits before any dispatch reads
+//     mousePressed.
+//   - HMR-stale module singletons: hold-state lives in slot.meta
+//     (mirrors D58 cookProgress), NOT in module-level vars.
+//   - While mounted on the speeder, combat owns LMB unconditionally
+//     (weapons still fire while riding; place/drink/take do not).
+
+import type { GameContext } from '../GameContext.ts';
+import { isPlaying } from '../GameContext.ts';
+import { updateCombat } from './combat.ts';
+import { getItemDef } from '../inventory/items.ts';
+import { addItem } from '../inventory/inventory.ts';
+import { despawnPickup } from '../pickups/pickups.ts';
+import { isLootMenuOpen } from '../ui/lootMenu.ts';
+import { isSleepOverlayOpen } from '../ui/sleepOverlay.ts';
+import { isCraftingMenuOpen } from '../ui/craftingMenu.ts';
+import { isInventoryOverlayOpen } from '../ui/inventoryOverlay.ts';
+import { isControlsPanelOpen } from '../ui/tutorial.ts';
+import { isJournalPanelOpen } from '../ui/journalPanel.ts';
+import { playPickup } from '../audio/audio.ts';
+
+function overlayOpen(): boolean {
+  return isLootMenuOpen()
+    || isSleepOverlayOpen()
+    || isCraftingMenuOpen()
+    || isInventoryOverlayOpen()
+    || isControlsPanelOpen()
+    || isJournalPanelOpen();
+}
+
+export function updateWieldAction(ctx: GameContext, dt: number): void {
+  if (!isPlaying(ctx)) return;
+  if (overlayOpen()) return;
+
+  // While mounted on the speeder, combat owns LMB. Other LMB actions
+  // (place/drink/take) are intentionally suppressed — you don't pitch
+  // tents from horseback. updateCombat early-returns for non-weapon
+  // items so wielding a kit while mounted is just a no-op.
+  if (ctx.speeder?.mounted) {
+    updateCombat(ctx, dt);
+    return;
+  }
+
+  const slot = ctx.inventory.slots[ctx.inventory.selectedIdx];
+  if (!slot.item) {
+    // No item equipped → LMB on a pickup takes it.
+    handlePickupTake(ctx);
+    return;
+  }
+  const def = getItemDef(slot.item);
+  const wield = def.wieldLmb ?? 'click_use';
+
+  switch (wield) {
+    case 'attack':
+      updateCombat(ctx, dt);
+      return;
+
+    case 'place': {
+      // Single-click to deploy. Reuse the existing onUse path so each
+      // kit's deployFire/deployTent/deploySled handles proximity +
+      // toast + consumed.
+      if (!ctx.input.mousePressed.has(0)) return;
+      const result = def.onUse(ctx, slot);
+      if (result.message) ctx.ui.showToast(result.message);
+      ctx.player.viewModel?.triggerUse();
+      if (result.consumed) {
+        slot.count--;
+        if (slot.count <= 0) {
+          slot.item = null;
+          slot.count = 0;
+          delete slot.meta;
+        }
+      }
+      return;
+    }
+
+    case 'hold_use':
+      if (ctx.input.mouseHeld.has(0)) {
+        if (!slot.meta) slot.meta = {};
+        slot.meta.holdProgress = (slot.meta.holdProgress ?? 0) + dt;
+        def.onHoldTick?.(ctx, slot, slot.meta.holdProgress, dt);
+      } else if (slot.meta?.holdProgress !== undefined) {
+        // Released: clear hold progress so the next press starts fresh.
+        slot.meta.holdProgress = undefined;
+      }
+      return;
+
+    case 'click_use':
+    case 'none':
+      // No LMB action on the wielded item; LMB on a hovered pickup
+      // takes it. Q still drives def.onUse via inventory.ts.
+      handlePickupTake(ctx);
+      return;
+  }
+}
+
+/** LMB on a hovered pickup takes it. Mirrors the take logic that
+ *  previously lived in interaction.ts's case 'pickups' E-press block;
+ *  E-press for pickups was removed in UU. Dead-lizard / dead-worm
+ *  meat-taking stays on E (corpses are "open this thing", not "pick
+ *  up the ground item"). */
+function handlePickupTake(ctx: GameContext): void {
+  if (!ctx.input.mousePressed.has(0)) return;
+  const hover = ctx.inventory.hover;
+  if (!hover || hover.type !== 'take') return;
+  // Only act on actual ground pickups. The hover.type='take' is also
+  // set by dead lizards + the sand worm corpse; those have no `hovered`
+  // flag on the pickups list and stay on E (see interaction.ts).
+  for (const p of ctx.pickups.list) {
+    if (!p.hovered) continue;
+    const def = getItemDef(p.itemId);
+    const slotIdx = addItem(ctx.inventory, p.itemId, p.meta, ctx);
+    if (slotIdx < 0) {
+      ctx.ui.showToast('your bag is full');
+      return;
+    }
+    const where = slotIdx >= 100 ? 'stowed' : 'taken';
+    ctx.ui.showToast(`${where} — ${def.description}`);
+    playPickup();
+    despawnPickup(ctx, p);
+    return;
+  }
+}

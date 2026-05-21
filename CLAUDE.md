@@ -58,7 +58,32 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session TT — Crafting rework (combine-to-discover).
+**Last shipped**: Session UU — Control scheme overhaul (LMB-leaning).
+Migrates "E for every interaction" → click-driven scheme closer to
+Long Dark / Rust / Subnautica. **Architecture (D73)**: new
+`src/player/wieldAction.ts` is the SOLE LMB-while-wielded dispatcher
+— all gates (overlay-open, mounted, isPlaying) in one file;
+`updateCombat` invoked FROM wieldAction (removed from main.ts tick).
+**Schema (D74)**: optional `wieldLmb?: 'attack' | 'place' | 'hold_use'
+| 'click_use' | 'none'` field on ItemDef, default `'click_use'`.
+**Shipped behaviors**: (1) Hold-LMB sustained drinking on canteen via
+`slot.meta.holdProgress` + new `ItemDef.onHoldTick` hook (D58 cook-
+progress pattern, NOT module singletons — HMR-safe). One gulp per
+`Tuning.CANTEEN_DRINK_INTERVAL_S = 0.7`s. (2) LMB-click placement for
+fire_kit/tent_kit/sled_kit, routed via wieldAction → existing onUse.
+(3) LMB-take on hovered ground pickup when wielding a non-attack
+item; E-press take removed from `interaction.ts:case 'pickups'`.
+(4) `[E]` chip hides for `hover.type === 'take'`. **Unified
+placement distance (D75)**: `Tuning.PLACEMENT_DISTANCE_M = 2.2` lifts
+fire.ts's previously-1.5m + tent.ts/sled.ts's 2.2m to one constant —
+all kits now deploy at 2.2m. **Save format preserved**:
+`SAVE_VERSION` stays at 6; `slot.meta.holdProgress` stripped in
+`cloneSlot()` (transient input state, never persists). Verb table
+tightened — `VERBS['search'] = 'open'` for loot containers. Q-key
+path preserved as backward-compat. Decisions D73-D75. First of 5
+overnight sessions (VV → UU-2 → WW → XX queued).
+
+**Prior milestone**: Session TT — Crafting rework (combine-to-discover).
 Replaces the explicit `RECIPES` list UI with a 4-slot multiset combine
 model: throw items in, see "?" for unknown-but-valid combinations,
 click CRAFT to consume inputs + produce output + add the recipe to

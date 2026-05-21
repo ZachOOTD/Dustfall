@@ -14,7 +14,7 @@ import * as THREE from 'three';
 import type { GameContext } from '../GameContext.ts';
 import { isPlaying } from '../GameContext.ts';
 import { addItem } from '../inventory/inventory.ts';
-import { despawnPickup, findPickupById } from '../pickups/pickups.ts';
+import { findPickupById } from '../pickups/pickups.ts';
 import { findWaterSourceById } from '../world/waterSources.ts';
 import { findCactusById, harvestCactus } from '../world/cactus.ts';
 import { findLizardById, lootLizard } from '../enemies/lizard.ts';
@@ -192,6 +192,10 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
   // Dispatch to set hover state + prompt + handle E
   switch (info.registry) {
     case 'pickups': {
+      // UU — pickup-take moved to LMB (see src/player/wieldAction.ts).
+      // We still set hover state here so the prompt shows + wieldAction
+      // can find the hovered pickup via p.hovered. The E-press handler
+      // was removed; pickup is LMB-only now.
       const p = findPickupById(ctx.pickups.list, info.id);
       if (!p) return;
       p.hovered = true;
@@ -202,17 +206,6 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
         itemId: p.itemId,
         promptNoun: def.name.toLowerCase(),
       };
-      if (ctx.input.pressed.has('KeyE')) {
-        const slotIdx = addItem(ctx.inventory, p.itemId, p.meta, ctx);
-        if (slotIdx < 0) {
-          ctx.ui.showToast('your bag is full');
-          return;
-        }
-        const where = slotIdx >= 100 ? 'stowed' : 'taken';
-        ctx.ui.showToast(`${where} — ${def.description}`);
-        playPickup();
-        despawnPickup(ctx, p);
-      }
       return;
     }
 

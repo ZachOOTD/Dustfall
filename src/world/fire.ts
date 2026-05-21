@@ -5,6 +5,7 @@
 
 import * as THREE from 'three';
 import type { GameContext } from '../GameContext.ts';
+import { Tuning } from '../config/tuning.ts';
 import {
   addShelterZone,
   removeShelterZone,
@@ -103,8 +104,9 @@ export function makeFireVisual(): { group: THREE.Group; flameGroup: THREE.Group;
   return { group: g, flameGroup, light, ember };
 }
 
-/** Deploy a fire 1.5m in front of the player. Returns null if too close to
- *  an existing fire or if the player isn't ready. */
+/** Deploy a fire `Tuning.PLACEMENT_DISTANCE_M` in front of the player (D75 — 2.2m,
+ *  was 1.5m pre-UU). Returns null if too close to an existing fire or if the player
+ *  isn't ready. */
 export function deployFire(ctx: GameContext): Fire | null {
   const cam = ctx.three.camera;
   const dir = new THREE.Vector3();
@@ -114,7 +116,7 @@ export function deployFire(ctx: GameContext): Fire | null {
   dir.normalize();
   const pos = new THREE.Vector3()
     .copy(cam.position)
-    .addScaledVector(dir, 1.5);
+    .addScaledVector(dir, Tuning.PLACEMENT_DISTANCE_M);
   pos.y = ctx.terrain.heightAt(pos.x, pos.z);
 
   // Reject if too close to an existing fire

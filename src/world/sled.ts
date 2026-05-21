@@ -208,7 +208,7 @@ export function deploySled(ctx: GameContext): Sled | null {
   dir.normalize();
   const pos = new THREE.Vector3()
     .copy(cam.position)
-    .addScaledVector(dir, 2.2);
+    .addScaledVector(dir, Tuning.PLACEMENT_DISTANCE_M);
   pos.y = ctx.terrain.heightAt(pos.x, pos.z);
 
   for (const existing of ctx.sleds.list) {

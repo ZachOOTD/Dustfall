@@ -59,7 +59,20 @@ export const Tuning = {
   COLD_SHELTER_RECOVER: 1 / 30,      // recover toward 0 in shelter
   COLD_DAMAGE_PER_SEC: 1 / 35,       // when temperature ≤ -1
   // Canteen (container)
-  CANTEEN_DRINK_DELTA: 0.25,         // fillLevel consumed per drink
+  CANTEEN_DRINK_DELTA: 0.25,         // fillLevel consumed per drink (Q-key single-gulp)
+  // Session UU — hold-LMB sustained drinking. Time between automatic
+  // "gulps" while LMB is held with the canteen wielded. Each gulp drains
+  // CANTEEN_DRINK_DELTA (or remaining fill if less) and restores thirst
+  // proportionally. 0.7s gives an intentional cadence — not instant, not
+  // sluggish. See src/player/wieldAction.ts.
+  CANTEEN_DRINK_INTERVAL_S: 0.7,
+
+  // Session UU (D75) — distance ahead of the player where placed kits
+  // land (fire_kit, tent_kit, sled_kit). Replaces the 1.5m local constant
+  // in fire.ts and the 2.2m locals in tent.ts / sled.ts. 2.2m places the
+  // kit just outside arm's reach, at the edge of where the player would
+  // expect to walk INTO the fire's shelter zone.
+  PLACEMENT_DISTANCE_M: 2.2,
 
   // Atmosphere
   FOG_NEAR: 25,                       // legacy linear-fog values (kept for reference)

@@ -62,6 +62,13 @@ export interface ItemMeta {
    *  cleared on detach. Persists across save/load so towing survives
    *  a reload. */
   attachedSledId?: number;
+  /** Session UU — seconds accumulated while LMB has been held on a
+   *  `wieldLmb: 'hold_use'` item (e.g., canteen). Reset to 0 on each
+   *  new press; cleared (undefined) on release. Mirrors the cookProgress
+   *  pattern (D58): slot.meta survives HMR, module-level singletons
+   *  don't. NOT persisted across save (transient input state — see
+   *  save.ts serialize). */
+  holdProgress?: number;
 }
 
 export interface UseResult {
@@ -70,6 +77,22 @@ export interface UseResult {
   /** Optional toast message shown to the player. */
   message?: string;
 }
+
+/** Session UU (D74) — declares how LMB dispatches when this item is the
+ *  equipped slot. Read by `src/player/wieldAction.ts` (the sole LMB-while-
+ *  wielded dispatcher). Defaults to `'click_use'` if omitted.
+ *
+ *  - `'attack'`    — delegate to `updateCombat` (machete, pipe_staff, scrap_gun, energy_pistol).
+ *  - `'place'`     — single LMB-click invokes `onUse` (kits: fire_kit, tent_kit, sled_kit).
+ *  - `'hold_use'`  — hold LMB to drive `onHoldTick` continuously (canteen).
+ *  - `'click_use'` — default. No LMB action on the wielded item; LMB on a
+ *                    hovered pickup takes it. Q still calls `onUse`.
+ *  - `'none'`      — neither LMB nor pickup-take fires for this item (rope:
+ *                    LMB-on-sled-stub is handled by `interaction.ts` because
+ *                    it needs hover-state; torch/flashlight: Q toggles, LMB
+ *                    is inert).
+ */
+export type WieldLmb = 'attack' | 'place' | 'hold_use' | 'click_use' | 'none';
 
 export interface ItemDef {
   id: ItemId;
@@ -80,6 +103,8 @@ export interface ItemDef {
   description: string;
   stackable: boolean;
   maxStack: number;
+  /** Session UU (D74) — LMB-dispatch behavior. Optional; defaults to 'click_use'. */
+  wieldLmb?: WieldLmb;
   /**
    * Invoked when the player triggers `use`. Mutate ctx.stats / slot.meta freely.
    * `slot` is the inventory slot containing this item — useful for stateful
@@ -87,6 +112,14 @@ export interface ItemDef {
    * Return consumed=false to keep the item in the slot (e.g. machete, partially-full canteen).
    */
   onUse: (ctx: GameContext, slot: Slot) => UseResult;
+
+  /** Session UU — per-frame hook for `wieldLmb: 'hold_use'` items. Called
+   *  every frame while LMB is held. `holdSeconds` is the cumulative time
+   *  since the press started (cleared on release). The hook mutates
+   *  `ctx.stats` / `slot.meta` as needed; toasts via `ctx.ui.showToast`.
+   *  The wieldAction module also bumps `slot.meta.holdProgress` for the
+   *  viewmodel system to read (cook-progress-style animation hook). */
+  onHoldTick?: (ctx: GameContext, slot: Slot, holdSeconds: number, dt: number) => void;
 
   /** Build the held mesh shown in the first-person viewmodel. Optional —
    *  items without a viewmodel render only the hands. */

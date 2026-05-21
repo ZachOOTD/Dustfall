@@ -146,7 +146,14 @@ export function clearSave(): void {
 
 function cloneSlot(s: Slot): Slot {
   const out: Slot = { item: s.item, count: s.count };
-  if (s.meta) out.meta = { ...s.meta };
+  if (s.meta) {
+    // UU — holdProgress is transient input state (resets on LMB release).
+    // Strip it on save so a reload doesn't resume mid-hold with stale
+    // accumulated time. Other meta fields (fillLevel, ammoRemaining,
+    // cookProgress, etc.) ARE persisted.
+    const { holdProgress: _hp, ...metaToSave } = s.meta;
+    out.meta = metaToSave;
+  }
   return out;
 }
 

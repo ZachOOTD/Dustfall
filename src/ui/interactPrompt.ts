@@ -6,9 +6,12 @@ import type { GameContext } from '../GameContext.ts';
 import type { InteractType } from '../inventory/types.ts';
 
 const VERBS: Record<InteractType, string> = {
-  take: 'take',
+  // UU — `take` migrated from E to LMB. Empty verb = the [E] chip hides
+  // (see updateInteractPrompt below), promptNoun stands alone. The
+  // controls panel (refreshed in UU-2) communicates LMB-to-take.
+  take: '',
   refill: 'refill',
-  search: 'search',
+  search: 'open',       // UU.5 — tightened from "search" (loot containers OPEN, not search)
   harvest: 'harvest',
   kill: '',     // living lizard — no prompt action (LMB does it); we show just the noun
   cook: 'cook at',

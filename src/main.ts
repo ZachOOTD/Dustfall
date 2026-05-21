@@ -39,7 +39,7 @@ import { updateSoundscape } from './audio/soundscape.ts';
 import { updateRaiders, type Raider } from './enemies/raider.ts';
 import { spawnLizardsProcgen, updateLizards } from './enemies/lizard.ts';
 import { spawnSandWorm, updateSandWorm } from './enemies/sandWorm.ts';
-import { updateCombat } from './player/combat.ts';
+import { updateWieldAction } from './player/wieldAction.ts';
 import { createViewModel, updateViewModel } from './player/viewModel.ts';
 import { createWeather, updateWeather } from './world/weather.ts';
 import { createAmbientDust, updateAmbientDust } from './world/ambientDust.ts';
@@ -436,9 +436,9 @@ startLoop(ctx, (c, dt) => {
   updateFires(c, dt);            // flicker + fuel decrement + burnout
   updateCacti(c);                // CC-4 — regrow harvested alien-cactus fruit after a day cycle
   updateSleds(c, dt);            // QQ — per-sled tow spring + rope visual; must run AFTER updateSpeeder + updatePlayer
-  updateInteraction(c, dt);      // raycast hover + E to take/refill/search/harvest/cook/sleep
-  updateInventoryInput(c, dt);   // 1-4, wheel, Q to use
-  updateCombat(c, dt);           // LMB swing → damage raider
+  updateInteraction(c, dt);      // raycast hover + E to open/refill/harvest/cook/sleep/etc (UU — pickup-take moved to LMB)
+  updateInventoryInput(c, dt);   // 1-4, wheel, Q to use (Q still drives def.onUse as backup)
+  updateWieldAction(c, dt);      // UU — sole LMB dispatcher: attack/place/hold_use/pickup-take. Calls updateCombat internally for 'attack' items.
   updateViewModel(c, dt);        // first-person hands + held item (after camera + combat)
   updateHud(c, dt);              // HUD bars + clock
   updateHotbar(c, dt);           // hotbar slots

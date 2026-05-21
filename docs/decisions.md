@@ -1468,3 +1468,72 @@ canonical pattern: `consume inputs → try produce output → if
 success, mark discovered; if failure, refund inputs + skip
 discovery + toast`.
 **friction-score:** 2
+
+## D73 — `wieldAction.ts` as the sole LMB-while-wielded dispatcher (Session UU)
+**When**: Session UU.
+**Why**: Pre-UU, LMB handling was scattered: `combat.ts` read
+`mousePressed.has(0)` directly for weapons; `interaction.ts` read it
+for the rope-on-sled attach case; `inventory.ts`'s Q-key path
+indirectly drove canteen drinking + kit deployment. Extending this
+pattern to support LMB-place + LMB-pickup-take + hold-LMB-drinking
+would have meant editing 3+ files PLUS each per-item `onUse` —
+linear blast radius. The new `wieldAction.ts` centralizes ALL
+LMB-while-wielded dispatch in one file. All gates (overlay-open,
+speeder-mounted, isPlaying) live there. `updateCombat` is now
+delegated FROM wieldAction (and removed from `main.ts`'s tick).
+**Considered alternatives**:
+- Extend each item's `onUse` with LMB semantics — scatters logic
+  across 25 items, footgun risk scales linearly.
+- Make `updateCombat` the dispatcher and add place/pickup paths to
+  it — pollutes a module that should stay weapons-only.
+- A `Map<ItemId, LMBHandler>` registry outside ItemDef — fine but
+  duplicates the indexing that already happens via `getItemDef`.
+**Apply**: future LMB behaviors (RMB for UU-2, charge-and-throw,
+etc.) land in `wieldAction.ts`'s switch, not new modules. New gates
+(e.g., "while sleeping" if that's ever a thing) get added once in
+`updateWieldAction`'s early-return block.
+**friction-score:** 4
+
+## D74 — `wieldLmb` field on ItemDef (Session UU)
+**When**: Session UU.
+**Why**: wieldAction.ts needs to know what LMB does for each item.
+Options were a Map<ItemId, behavior> registry (extrinsic) or a field
+on ItemDef (intrinsic). Intrinsic wins because: (1) per-item LMB
+behavior lives next to the per-item `onUse` / `makeViewModel` etc. —
+one place to read all behavior of an item; (2) adding a new item
+involves declaring its full behavior in one block, including LMB —
+the registry pattern would silently default the LMB handling and
+the new item would have surprising-default behavior; (3) the type
+union (`'attack' | 'place' | 'hold_use' | 'click_use' | 'none'`)
+makes the system exhaustively switchable. Default `'click_use'`
+chosen so items not yet annotated keep working (pickup-take still
+fires for them; Q still drives onUse).
+**Considered alternatives**:
+- Bit flags (attack + can-place + ...) — over-engineered for 5
+  mutually-exclusive behaviors.
+- Per-item callback `onLmb?(ctx, slot, isHeld, dt)` — gives max
+  flexibility but loses the centralization win (each callback can
+  do anything; can't audit the LMB surface area).
+**Apply**: new items declare `wieldLmb` explicitly when their LMB
+behavior differs from `click_use`. The `hold_use` path uses the
+companion `onHoldTick` hook on ItemDef. The `place` path reuses
+`onUse` (no separate `onPlace` — kits already do their work in
+onUse).
+**friction-score:** 3
+
+## D75 — `Tuning.PLACEMENT_DISTANCE_M = 2.2` (Session UU)
+**When**: Session UU.
+**Why**: Pre-UU, `fire.ts` placed at 1.5m, `tent.ts` at 2.2m,
+`sled.ts` at 2.2m. Three hardcoded local constants for the same
+concept. Tents and sleds felt right; fires placed slightly too
+close — they'd spawn at the edge of the player's collider. UU's
+LMB-place was an opportunity to unify: all kits now deploy at 2.2m
+(just outside arm's reach, at the edge of the fire's shelter
+zone). Fire's 1.5 → 2.2 is a perceptible feel change; documented
+here so future tuning sessions know the constants were intentionally
+unified. Local constants in fire.ts/tent.ts/sled.ts deploy paths
+were lifted to this single Tuning constant.
+**Apply**: any new placeable kit (large_tent_kit in XX, future
+shelter types) uses `Tuning.PLACEMENT_DISTANCE_M` — do not introduce
+local placement distances.
+**friction-score:** 1

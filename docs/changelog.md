@@ -3,6 +3,50 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session UU — 2026-05-21 — Control scheme overhaul — LMB-leaning ✓ verify pass
+`verified` — tsc clean; eval-driven preview verification exercised every
+LMB scenario (hold-drinking trajectory, kit placement, pickup-take,
+overlay gate, mounted gate, save round-trip with holdProgress strip,
+weapon-LMB-doesn't-take, rope-wieldLmb-none preserves QQ-2 attach path).
+Migrates the "E for every interaction" model to a click-driven scheme
+closer to The Long Dark / Rust / Subnautica. **Architecture (D73)**:
+new `src/player/wieldAction.ts` is the SOLE LMB-while-wielded
+dispatcher. All gates (overlay-open, mounted, isPlaying) live in one
+file. `updateCombat` is invoked FROM wieldAction when the equipped
+item's `wieldLmb === 'attack'` — removed from `main.ts`'s direct tick.
+**Schema (D74)**: new optional `wieldLmb?: 'attack' | 'place' |
+'hold_use' | 'click_use' | 'none'` field on `ItemDef`. Default
+`'click_use'`. Per-item overrides: weapons (machete/pipe_staff/
+scrap_gun/energy_pistol) = `'attack'`; canteen = `'hold_use'`; kits
+(fire_kit/tent_kit/sled_kit) = `'place'`; torch/flashlight/rope =
+`'none'`. **Behaviors shipped**: (1) hold-LMB sustained drinking via
+`slot.meta.holdProgress` + new `ItemDef.onHoldTick` hook — mirrors
+D58 cook-progress pattern, NOT module singletons (HMR-safe). New
+Tuning constant `CANTEEN_DRINK_INTERVAL_S = 0.7` — one gulp per
+0.7s of hold. (2) LMB-click placement for kits — reuses each kit's
+existing `onUse` (deployFire/deployTent/deploySled) routed via
+wieldAction. (3) LMB-take a hovered ground pickup when wielding a
+non-attack item — replaces the E-press take in `interaction.ts`'s
+case `'pickups'` (E removed from that block). (4) `[E]` chip
+auto-hides for `hover.type === 'take'` since `VERBS['take']` is now
+empty. **Placement distance unified (D75)**: new
+`Tuning.PLACEMENT_DISTANCE_M = 2.2` lifted to fire.ts/tent.ts/sled.ts;
+fire.ts previously placed at 1.5m, which felt closer than the other
+kits — now all three deploy at 2.2m (just past arm's reach, at the
+edge of the fire's shelter zone). **Verb table tightened**:
+`VERBS['search'] = 'open'` (loot containers OPEN, not search).
+**Save schema preserved**: `SAVE_VERSION` stays at 6;
+`slot.meta.holdProgress` is stripped in `cloneSlot()` so transient
+input state never persists (a save during a hold doesn't resume
+mid-drink). **Footguns pre-empted**: crafting menu CRAFT button's
+DOM-LMB is gated by overlay-check; mounted speeder routes LMB to
+combat unconditionally (kits don't deploy from the speeder); rope's
+LMB-on-sled-stub stays in `interaction.ts` (needs hover-state to
+dispatch, can't move to wieldAction). Q-key path (`updateInventoryInput`)
+preserved as backward-compat — Q + canteen = one gulp, Q + kit =
+deploy, same as pre-UU. Decisions D73-D75. First of 5 overnight
+sessions queued (VV → UU-2 → WW → XX next).
+
 ## Session TT — 2026-05-21 — Crafting rework — combine-to-discover ✓ verify pass
 `verified` — tsc clean; eval-driven playtest exercised the full
 discovery flow + save/load roundtrip + v5→v6 migration path.
