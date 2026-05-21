@@ -728,8 +728,8 @@ export const Tuning = {
   OPENING_WRECK_R_COCKPIT: 1.7,              // m — cockpit max radius (widest point)
   OPENING_WRECK_R_NOSE: 0.55,                // m — pre-nose-tip radius (before final taper)
   OPENING_WRECK_SLICE_COUNT: 24,             // angular slices of the lathe (15° each)
-  OPENING_WRECK_SKYLIGHT_SLICE: 15,          // index of the FIRST slice to omit (top of hull). AAM-followup #3: bumped to width 6 to make the gap unmistakably "top of the hull is broken open" — user kept seeing the 4-slice version as a side hole. With SLICE=15 + WIDTH=6 the gap covers slices 15-20 = phi 225°-315° = 90° wide, CENTERED on true UP (270°). Quarter of the upper hull is open to sky.
-  OPENING_WRECK_SKYLIGHT_WIDTH: 6,           // AAM-followup #3: 6 slices = 90° gap. Was 2 (AAJ) → 3 → 4 → 6. Each bump made the interior brighter + the "top is broken" silhouette clearer.
+  OPENING_WRECK_SKYLIGHT_SLICE: 9,           // index of the FIRST slice to omit (top of hull). AAM-followup #4: HARD FIX after the user kept reporting "hole on the side". Root cause: AAJ's comments had the LatheGeometry phi convention wrong. Three.js LatheGeometry uses x=R*sin(phi), z=R*cos(phi) — so phi=0 → +Z, phi=π → -Z, phi=π/2 → +X, phi=3π/2 → -X. After the hull's X-rotation (+π/2), TRUE UP in wreck-local is at phi=π (180°), NOT phi=270°. With SLICE=9 + WIDTH=6, the gap covers slices 9-14 = phi 135°-225° = 90° wide, properly CENTERED on UP. Every previous SLICE value (17 → 16 → 15) was actually shifting along the left side, never overhead.
+  OPENING_WRECK_SKYLIGHT_WIDTH: 6,           // 6 slices = 90° gap. Quarter of the upper hull open to sky.
   OPENING_WRECK_LATERAL_PUNCTURES: 3,        // number of small breach-hole patches scattered on side flanks
   OPENING_WRECK_FLOOR_THICK: 0.18,           // m — flat slab thickness below the cavity
   // AAM-followup — terrain-bridging ramp at the entrance. Pre-followup,

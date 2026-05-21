@@ -212,10 +212,13 @@ function makeSlicedHull(): THREE.Group {
   const interiorProfile = makeInteriorProfile();
 
   // Skip SKYLIGHT_WIDTH adjacent slices for the top stress-fracture gap.
-  // AAM-followup #2: width bumped to 4 (60° gap, slices 16-19 covering
-  // phi 240°-300°, CENTERED on true UP). The earlier 3-slice gap was
-  // offset 7.5° and read as a "hole on the side"; the wider centered
-  // gap is unambiguously overhead AND lets noticeably more sun in.
+  // AAM-followup #4: corrected the phi convention — Three.js LatheGeometry
+  // uses x=R*sin(phi), z=R*cos(phi). So phi=π (slice 12) is the -Z direction
+  // in lathe-local, which after the hull's X=+π/2 group rotation becomes
+  // wreck-local +Y (= UP). Previous AAJ comments incorrectly assumed
+  // phi=3π/2 was UP; resulting gaps were on the wreck's LEFT side. With
+  // SKYLIGHT_SLICE=9 + WIDTH=6, omitted slices 9-14 = phi 135°-225° are
+  // centered on phi=180° = true UP.
   for (let i = 0; i < SLICE_COUNT; i++) {
     if (i >= SKYLIGHT_SLICE && i < SKYLIGHT_SLICE + SKYLIGHT_WIDTH) continue;
     const phiStart = i * sliceArc;
