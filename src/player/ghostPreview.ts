@@ -44,6 +44,10 @@ const KIT_PREVIEW_RADIUS: Partial<Record<ItemId, number>> = {
   tent_kit: 1.0,           // small tent footprint
   large_tent_kit: 1.6,     // larger walk-in shelter
   sled_kit: 0.9,           // sled flatbed
+  // Session AAD — AAC kits' preview radii (polish pass).
+  bedroll_kit: 0.95,       // long axis of 1.6m pad → half-length ≈ 0.8, ring ≈ 0.95 to include pillow
+  lantern_kit: 0.30,       // small footprint (just the base disc)
+  locker_kit: 0.65,        // chest footprint ~1.0 × 0.6
 };
 
 function makePreviewMesh(): GhostPreview {

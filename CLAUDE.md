@@ -58,8 +58,20 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session AAC — Craftable home (bedroll + lantern +
-locker) + SAVE_VERSION v8. Three new placeable kits — bedroll
+**Last shipped**: Session AAD — Polish playtest pass for AAC kits.
+Screenshot-driven inspection of the new bedroll/lantern/locker
+surfaced two visible issues, both fixed inline. (1) Ghost preview
+ring sizes were all defaulting to 0.80m; added per-kit entries to
+`KIT_PREVIEW_RADIUS` in `ghostPreview.ts` (bedroll 0.95, lantern
+0.30, locker 0.65). (2) Bedroll was nearly invisible against sand
+terrain — pad too thin (6cm) + too light (`0x9a7b5a` tan-on-tan).
+Fixed in `bedroll.ts`: pad darkened to `0x4a3a26` deep brown,
+thickness 0.06→0.12m, pillow taller, new foot-end folded-blanket
+mesh so bedroll reads as a clear "head + pad + foot" silhouette.
+No schema bump, no new modules.
+
+**Prior milestone**: Session AAC — Craftable home (bedroll + lantern
++ locker) + SAVE_VERSION v8. Three new placeable kits — bedroll
 (`cloth×3 + branch×1` → recipe id 11), lantern (`cloth×2 + scrap×2
 + branch×1` → id 12), locker (`scrap×4 + branch×2` → id 13). Each
 follows the tent_kit/sled_kit pattern: wieldLmb='place', LMB-click

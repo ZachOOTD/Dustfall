@@ -46,32 +46,47 @@ function makeBedrollVisual(): THREE.Group {
   const W = Tuning.BEDROLL_WIDTH_M;
   const D = Tuning.BEDROLL_DEPTH_M;
 
-  // Main pad — flat, dusty-canvas brown.
-  const padMat = new THREE.MeshLambertMaterial({ color: 0x9a7b5a });
+  // AAD polish — darker dusty-canvas brown (was 0x9a7b5a). The lighter
+  // tone disappeared into the sand terrain from above. Darker reads
+  // against both salt-flat (light) and dune (medium) ground.
+  const padMat = new THREE.MeshLambertMaterial({ color: 0x4a3a26 });
+  // Pad thickness bumped from 0.06 → 0.12 so the silhouette reads from
+  // oblique angles (previously was paper-thin and invisible head-on).
   const pad = new THREE.Mesh(
-    new THREE.BoxGeometry(W, 0.06, D),
+    new THREE.BoxGeometry(W, 0.12, D),
     padMat,
   );
-  pad.position.y = 0.03;     // flush to ground top
+  pad.position.y = 0.06;
   g.add(pad);
 
-  // Pillow — smaller cloth roll at one end (head).
-  const pillowMat = new THREE.MeshLambertMaterial({ color: 0xb89878 });
+  // Pillow — bigger + taller so it visibly rises above the pad as a
+  // distinct head-end marker.
+  const pillowMat = new THREE.MeshLambertMaterial({ color: 0x7a5a3a });
   const pillow = new THREE.Mesh(
-    new THREE.BoxGeometry(W * 0.30, 0.10, D * 0.85),
+    new THREE.BoxGeometry(W * 0.30, 0.16, D * 0.85),
     pillowMat,
   );
-  pillow.position.set(-W * 0.30, 0.10, 0);   // head-end is -X locally; spawn aligns this
+  pillow.position.set(-W * 0.30, 0.20, 0);   // head-end at -X locally
   g.add(pillow);
 
-  // Subtle blanket fold lines — two thin darker strips across the pad.
-  const foldMat = new THREE.MeshLambertMaterial({ color: 0x7a5f44 });
+  // Folded blanket at the foot end — gives the bedroll a clear
+  // "head + body + foot" silhouette so it reads as a sleeping spot.
+  const blanketMat = new THREE.MeshLambertMaterial({ color: 0x5e4830 });
+  const blanket = new THREE.Mesh(
+    new THREE.BoxGeometry(W * 0.32, 0.10, D * 0.92),
+    blanketMat,
+  );
+  blanket.position.set(W * 0.30, 0.17, 0);   // foot-end at +X
+  g.add(blanket);
+
+  // Cross-fold strips on the main pad for visual texture.
+  const foldMat = new THREE.MeshLambertMaterial({ color: 0x3a2c1a });
   for (let i = 0; i < 2; i++) {
     const fold = new THREE.Mesh(
-      new THREE.BoxGeometry(W * 0.95, 0.005, 0.04),
+      new THREE.BoxGeometry(W * 0.95, 0.008, 0.05),
       foldMat,
     );
-    fold.position.set(0, 0.062, (i - 0.5) * D * 0.4);
+    fold.position.set(0, 0.122, (i - 0.5) * D * 0.4);
     g.add(fold);
   }
 

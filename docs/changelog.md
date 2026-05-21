@@ -3,6 +3,46 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session AAD — 2026-05-21 — Polish playtest pass for AAC kits ✓ verify pass
+`verified` — tsc clean; screenshot-driven inspection confirmed both fixes
+visually + ghost preview ring sizes now per-kit.
+
+Polish playtest of the AAC home-building loop surfaced two real
+issues. Both fixed inline.
+
+**Issue 1 — Ghost preview rings sized 0.80m for all 3 new kits.**
+`KIT_PREVIEW_RADIUS` in `src/player/ghostPreview.ts` only had entries
+for the pre-AAC kits (fire/tent/largeTent/sled), so the new
+bedroll/lantern/locker fell through to the default radius — too big
+for lantern, too small for bedroll's long axis, sort-of-right for
+locker. Added three entries: `bedroll_kit: 0.95` (covers the 1.6m
+pad's half-length + pillow), `lantern_kit: 0.30` (small footprint
+matching just the base disc), `locker_kit: 0.65` (chest footprint
+~1.0 × 0.6).
+
+**Issue 2 — Bedroll was nearly invisible against sand terrain.**
+Top-down screenshot revealed the 6cm-thick pad in tan `0x9a7b5a`
+blended into the salt-flat / dune terrain colors. From oblique
+gameplay angles the pad essentially disappeared. **Fixes in
+`src/world/bedroll.ts`**: (1) pad color darkened to `0x4a3a26`
+(deep brown), reads against any biome's ground. (2) pad thickness
+bumped 0.06 → 0.12m so the silhouette holds at oblique angles.
+(3) pillow taller (0.10 → 0.16m) for a clearer head-end marker.
+(4) added a folded-blanket mesh at the foot end (`0x5e4830`, slightly
+shorter than the pillow) so the bedroll now reads as a clear
+"head + body + foot" sleeping spot rather than a blob.
+(5) cross-fold strips on the pad darkened to `0x3a2c1a` for visible
+texture against the new pad color.
+
+Screenshot before-and-after: pre-fix top-down showed only the
+lantern light pool + locker box, no bedroll silhouette. Post-fix
+top-down shows three distinct objects; eye-level oblique view
+shows the bedroll with clear pillow / pad / folded-blanket
+structure at the foot.
+
+No save schema changes, no new modules, no new D-entries — purely
+visible polish on existing AAC work.
+
 ## Session AAC — 2026-05-21 — Craftable home (bedroll + lantern + locker) + SAVE_VERSION v8 ✓ verify pass
 `verified` — tsc clean; preview-eval confirmed recipes 11/12/13 +
 deploy/pack of all 3 kits + lantern flicker + locker pack-refuse-
