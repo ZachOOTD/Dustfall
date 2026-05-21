@@ -51,6 +51,7 @@ import { isControlsPanelOpen } from '../ui/tutorial.ts';
 import { isJournalPanelOpen } from '../ui/journalPanel.ts';
 import { isRecipeBookPanelOpen } from '../ui/recipeBookPanel.ts';
 import type { InteractType, ItemId, Slot } from '../inventory/types.ts';
+import { Tuning } from '../config/tuning.ts';
 
 const RAYCAST_DISTANCE = 2.5;
 const _ray = new THREE.Raycaster();
@@ -97,15 +98,15 @@ let _salvaging: {
 
 // AAG — pickup-swap-on-hold-E state. Started when player presses E on a
 // pickup but bag is full (and selected slot is non-empty). After
-// PICKUP_SWAP_DURATION of held-E, the selected slot is dropped at the
-// player's feet and the pickup goes into that slot. Cancels on E
+// Tuning.PICKUP_SWAP_DURATION_S of held-E, the selected slot is dropped
+// at the player's feet and the pickup goes into that slot. Cancels on E
 // release, hover loss, slot change, or player death.
+// (AAH: PICKUP_SWAP_DURATION constant lifted to Tuning.)
 let _pickupSwap: {
   pickupId: number;
   startedAt: number;
   completeAt: number;
 } | null = null;
-const PICKUP_SWAP_DURATION = 1.5;
 
 function resolveInteractable(obj: THREE.Object3D): InteractHit | null {
   let cur: THREE.Object3D | null = obj;
@@ -249,7 +250,7 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
             _pickupSwap = {
               pickupId: p.id,
               startedAt: ctx.time.elapsed,
-              completeAt: ctx.time.elapsed + PICKUP_SWAP_DURATION,
+              completeAt: ctx.time.elapsed + Tuning.PICKUP_SWAP_DURATION_S,
             };
             ctx.ui.showToast('hold E to swap with selected slot');
           } else {
@@ -784,7 +785,7 @@ function tickPickupSwap(ctx: GameContext): void {
   const sel = ctx.inventory.slots[ctx.inventory.selectedIdx];
   if (sel.item === null) { cancelPickupSwap(); return; }
   const elapsed = ctx.time.elapsed - s.startedAt;
-  const t01 = Math.min(1, elapsed / PICKUP_SWAP_DURATION);
+  const t01 = Math.min(1, elapsed / Tuning.PICKUP_SWAP_DURATION_S);
   showSalvageProgress(t01);
   if (ctx.time.elapsed >= s.completeAt) {
     completePickupSwap(ctx, p);

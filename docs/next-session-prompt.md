@@ -1,38 +1,37 @@
-# Next Session — Kickoff Brief (post-AAG)
+# Next Session — Kickoff Brief (post-AAH)
 
 ## Read these now (in order)
 
 1. `CLAUDE.md` (auto-loaded)
-2. `docs/session-end-report.md` — cumulative state through AAG
-3. `docs/changelog.md` — read AAF / AAG entries at the top
+2. `docs/session-end-report.md` — cumulative state through AAH
+3. `docs/changelog.md` — read AAG / AAH entries at the top
 4. `docs/decisions.md` — D73-D81. Especially D71 (recipe id stability — next recipe is id 15), D75 (PLACEMENT_DISTANCE_M), D81 (save migration additive only — SAVE_VERSION is now v9).
 5. `docs/roadmap.md`
 6. `docs/backlog.md`
 
 ## What's already built
 
-34 sessions. The overnight era + AAA/AAB/AAC polish/depth/home + AAD playtest polish + AAE creature companion + AAF storm countdown + AAG atmospheric polish all shipped. Codebase: tsc clean, 0 `as any`, SAVE_VERSION 9, 14 recipes, 5 placeable kits (fire/tent/large-tent/sled/bedroll/lantern/locker — and `companion_pod` as a deployable creature). Atmosphere is at its richest yet (mirage shader, dust motes, footprint puffs, god-rays inside opening wreck, perceivedIntensity-driven storm visuals + audio).
+35 sessions. The overnight era + AAA/AAB/AAC polish/depth/home + AAD playtest polish + AAE creature companion + AAF storm countdown + AAG atmospheric polish + AAH AAG-polish all shipped. Codebase: tsc clean, 0 `as any`, SAVE_VERSION 9, 14 recipes, 5 placeable kits + companion_pod as deployable creature. Atmosphere is rich (mirage shader, dust motes, footprint puffs, god-rays, perceivedIntensity-driven visuals + audio).
 
 ## Suggested focus (pick one)
 
-The biggest remaining architectural lift is **procedural world generation** — POIs randomized per new-game seed. The user has called this out twice as "the logical next step" with the caveat "need to put in the work to get it right." This is a meaty session (likely 5-8h on its own) and merits a planning pass before coding.
+The next-most-likely architectural lift is **procedural world generation** — POI layout randomized per new-game seed. The user has called this out twice as "the logical next step" with the caveat "need to put in the work to get it right." This is meaty (5-8h) and merits a planning pass.
 
 ### Big-ticket (recommended — pick if you have a long block)
 
-- **Procedural world generation** (`[idea]` from backlog). Currently the world is procgen-flavored (chunks + biomes from FF/GG/HH) but POI layout is hand-placed (opening wreck, satellite dish, engine block, etc.) plus the procgen wreck rejection-sampler from HH. Goal: every new-game seed produces a freshly-shuffled POI layout — pickup distribution, wreck variety, biome shapes, scatter density all derive from `seed`. Save the seed in v10 (additive). Open questions to settle before coding: does the opening scene stay seeded-fixed (so the player's spawn experience is stable) or also randomize? Does the satellite-dish + engine-block + opening wreck pair count stay constant (one each) or randomize? Recommend keeping the opening fixed + flagship POIs constant-count to preserve narrative arc, but randomize positions + procgen-wreck distribution.
+- **Procedural world generation** (`[idea]` from backlog). World is procgen-flavored (chunks + biomes from FF/GG/HH) but POI layout is hand-placed (opening wreck, satellite dish, engine block) + procgen wreck rejection-sampler. Goal: every new-game seed produces a freshly-shuffled POI layout. Save the seed in v10 (additive). Open questions: does the opening scene stay seed-fixed (so the player's spawn experience is stable)? Recommend keeping opening fixed + flagship POIs constant-count, randomize positions + procgen wreck distribution.
 
 ### Medium picks (2-3h)
 
-- **Fire grill attachment** (the deferred AAG item). Craftable add-on; multi-slot cook state on fire instead of single `_cooking` module var. Lift `_cooking` to per-fire `fire.cookSlots: Array<CookState>`. Save schema bump v9 → v10 (additive). New recipe (id 15 — suggest scrap×2 + branch×2). Grill mesh = 4 metal cross-bars sitting on the fire ring. Each slot independently cooks one item; LMB on fire while wielding raw food places it in the next empty slot. Player gets parallel cooking — feeds the "set up camp + cook your day's haul" loop.
+- **Fire grill attachment** (deferred AAG item — backlogged). Craftable add-on; multi-slot cook state on fire instead of single `_cooking` module var. Lift `_cooking` to per-fire `fire.cookSlots: Array<CookState>`. Save schema bump v9 → v10 (additive). New recipe id 15. Grill mesh = 4 metal cross-bars on the fire ring.
 - **First-recipe-discovery fanfare**. The recipe-book modal exists (AAA) but discovery is still a toast. A visual flourish on first craft (icon scale-up + screen flash?) would make the moment land.
 - **Trading / NPC economy** — design exploration (probably warrants a dedicated planning session before code).
-- **Bounties** — design exploration (template: D39 `'mount'` singleton-interactable pattern from CC-2).
 
-### Quick polish (~30-90min)
+### Quick polish (~30-60min)
 
-- **Playtest pass on AAG additions.** Walk the salt-flats at midday and confirm the mirage feels right; sprint through dunes and check footprint puffs are visible but not over-the-top; force the bag full and verify the swap UX feels good with a heavy held item vs a stack of light ones. Surface anything off and fix in a 30-60min polish pass.
-- **Mirage shader tuning** — the current 0.18m peak amp + 15-80m distance band might need playtest adjustment. Cheap if the math is solid but reads "too much/too little."
-- **Companion polish** — re-playtest from AAE. Does it path well around obstacles? Does the ROLLING→WALKING transition feel smooth?
+- **AAH validation playtest**. The AAG polish tweaks (puff height, motes opacity, swap snappier, mirage near-edge, storm cross-fade) were tuned from math + brief preview-tool verification. Walk through each in real play and confirm; revert any that feel off.
+- **More CLAUDE.md rule-2 sweeps**. Search src/ for hardcoded magic numbers in modules with no Tuning import — there are likely more violations from older sessions that AAH only fixed the 2 obvious ones.
+- **PointsMaterial constants in footprintPuffs** — color `0xb89878`, size 0.10, opacity 0.55 are still inline. Lift if iterating on look. (Scope-cut from AAH plan.)
 
 ## Autonomy contract
 
@@ -40,12 +39,14 @@ When ambiguous, pick the option closest to the GDD pillars + decisions.md realis
 
 Stop conditions: wall-clock limit, 3-strike fix wall, catastrophic block (tsc broken in main, dev server crashes), destructive-action attempt (push --force, reset --hard, etc.).
 
-## Notable footguns (from AAG + recent sessions)
+## Notable footguns (from AAH + recent sessions)
 
-- **`_shaderRefs` is a module-level Set** — if Vite HMR re-imports terrainMaterial.ts, the existing shaders won't be in the new module's Set. Hard-reload the preview tab after touching that module. (Generic Vite-HMR rule that bites repeatedly across the codebase — see also `_chargeStartedAt` in combat.ts, `_cooking` in fire.ts, `_salvaging` + `_pickupSwap` in interaction.ts.)
-- **`controller.ts` footstep block fires on the player's left+right alternation** — `spawnFootprintPuff` is called twice per stride, not once. If you adjust pool size or burst count, account for that.
-- **`updateInteraction` resets `ctx.inventory.hover` at the top of every frame, then re-raycasts.** Test mocks that set hover state get wiped before any downstream code reads them — call the downstream code path directly with a constructed hover, or hook into a verification-only path that snapshots before reset.
-- **Save schema is v9.** v9 → v10 is fine if the next session needs a new persisted field (additive only per D81). Recipe id stability per D71 — next id is 15. Do NOT bump `SAVE_VERSION` for runtime-only state.
+- **`_shaderRefs` is a module-level Set** — Vite HMR re-imports of terrainMaterial.ts will leave old shaders orphaned. Hard-reload the preview tab after touching that module.
+- **`controller.ts` footstep block fires twice per stride** (left+right) — spawnFootprintPuff is called twice, not once per "step." Account for this in pool sizing or pile-up reasoning.
+- **First-boot NEW GAME auto-shows the tutorial controls panel** (`#controls-panel`). For preview eval that depends on view of the scene, dismiss it (key H, or `.classList.add('hidden')`) before screenshotting.
+- **Mirage shader templates the amp/distance/sun masks into shader source at material-construction time** — runtime constant-change requires a hard reload, not just HMR.
+- **`PICKUP_SWAP_DURATION_S` is now Tuning** (was module-local in interaction.ts pre-AAH). Code paths reference `Tuning.PICKUP_SWAP_DURATION_S` not the old `PICKUP_SWAP_DURATION` symbol.
+- **Save schema is v9.** v9 → v10 is fine if needed (additive only per D81). Recipe id stability per D71 — next id is 15.
 
 ## Verification protocol
 
@@ -53,11 +54,11 @@ Stop conditions: wall-clock limit, 3-strike fix wall, catastrophic block (tsc br
 npm run verify     # = tsc --noEmit
 ```
 
-Then for substantial features:
-1. Boot game, exercise the feature (use `__game` console handle for state forcing).
-2. Save + reload roundtrip to confirm no schema regression.
-3. If touching atmospherics (vignettes, dust, shader): high-sun + storm-peak both, since masks gate behavior.
+For substantial features:
+1. Boot game, exercise the feature (use `__game` console handle).
+2. Save + reload roundtrip if any persisted state changed.
+3. If touching atmospherics: high-sun + storm-peak both.
 
 ## Begin block
 
-Read CLAUDE.md (auto), session-end-report.md, the AAG changelog entry. Pick a session focus from the suggestions above (procgen recommended). TaskCreate the sub-tasks. Start coding.
+Read CLAUDE.md (auto), session-end-report, AAG/AAH changelog. Pick focus from the suggestions (procgen recommended). TaskCreate sub-tasks. Start coding.

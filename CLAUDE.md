@@ -58,34 +58,41 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session AAG — Atmospheric polish + inventory swap-
+**Last shipped**: Session AAH — Playtest polish for AAG. Quick post-
+ship tuning pass. Two CLAUDE.md rule-2 violations fixed:
+**footprintPuffs.ts** had 6 hardcoded constants (PARTICLE_COUNT,
+PARTICLES_PER_PUFF, PUFF_LIFE_S, PUFF_VERTICAL_VEL, PUFF_LATERAL_VEL,
+PUFF_GRAVITY) lifted to `Tuning.FOOTPRINT_PUFF_*`. **interaction.ts**
+module-local `PICKUP_SWAP_DURATION = 1.5` lifted to
+`Tuning.PICKUP_SWAP_DURATION_S` (with new Tuning import on the file).
+Five feel tweaks: **FOOTPRINT_PUFF_VERTICAL_VEL 0.6 → 0.9** (peak
+height 15cm → 34cm — original was barely above foot);
+**DUST_MOTES_OPACITY 0.18 → 0.22** (more present in lit interiors);
+**PICKUP_SWAP_DURATION_S 1.5 → 1.2** (snappier hold-and-move-on
+rhythm); **MIRAGE_NEAR_M 15 → 10** (wobble engages on immediate
+horizon rather than only far field); **dust-motes storm cross-fade
+hard-cut at 0.8 replaced with smoothstep [0.7, 0.9]** (new Tuning
+constants DUST_MOTES_STORM_FADE_START/END). No save schema change,
+no new modules. tsc clean.
+
+**Prior milestone**: Session AAG — Atmospheric polish + inventory swap-
 on-full. Four-item interim bundle. **Footprint puffs**
 (`src/world/footprintPuffs.ts`, new ~120 LOC) — 60-particle pool, 5
 per burst, 0.6s life, gravity-affected upward dust; spawned from
 controller.ts's footstep block when `!wet`. **Ambient dust motes**
-(`src/world/dustMotes.ts`, new ~85 LOC) — 120 bone-warm particles
-(0xe8dcc0) finer than ambientDust, opacity 0.18, slower drift,
-suppresses at storm intensity > 0.8 so the two atmospheric layers
-cross-fade. **Mirage shader on salt-flat biome**
+(`src/world/dustMotes.ts`, new ~85 LOC) — bone-warm particles
+(0xe8dcc0) finer than ambientDust. **Mirage shader on salt-flat biome**
 (`src/world/terrainMaterial.ts`) — vertex shader gains a heat-wobble
 Y displacement that activates only on hot salt-flats at high sun.
 Module-level `_shaderRefs: Set<ShaderRef>` captures onBeforeCompile
 shader instances; new `updateTerrainShaderUniforms(time, cameraX,
-cameraZ, sunHeight)` ticked from main.ts each frame. Distance mask
-(15→80m smoothstep), saltness mask (aBiomeRaw 0.10→0.54), sun mask
-(0.3→0.9), sin×cos space-frequency wobble. Peak amp 0.18m. **Inventory
-swap on pickup-full** (`src/player/interaction.ts`) — E on a ground
-pickup with full bag + non-empty selected slot now starts a 1.5s
-hold-E swap (mirrors existing `_salvaging` hold-pattern via
-`_pickupSwap` module state). On completion: drops the selected
-slot's items at the player's feet via `spawnDroppedPickup` (one
-per stack unit), clears the slot, then `addItem`s the world pickup
-into the now-empty slot. Cancels on E-release. **Cooking multi-per-
-fire deferred** per user direction — added to backlog as future
-"grill attachment to the fire" feature (craftable add-on enabling
-multi-slot parallel cooking). 5 new Tuning constants (MIRAGE_NEAR_M/
-FAR_M/AMP_M + DUST_MOTES_COUNT/SPREAD/OPACITY + PICKUP_SWAP_DURATION_S).
-No save schema change.
+cameraZ, sunHeight)` ticked from main.ts each frame. **Inventory swap
+on pickup-full** (`src/player/interaction.ts`) — E on a ground pickup
+with full bag + non-empty selected slot starts a hold-E swap timer;
+on completion drops the selected slot's items at player's feet and
+adds the new pickup into the now-empty slot. **Cooking multi-per-fire
+deferred** per user direction — added to backlog as future "grill
+attachment to the fire" feature. No save schema change.
 
 **Prior milestone**: Session AAF — 7-day storm countdown ("THE LONG
 STORM"). Escalating-storm endgame in `src/world/weather.ts`. New

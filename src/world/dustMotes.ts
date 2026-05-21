@@ -66,12 +66,26 @@ export function updateDustMotes(ctx: GameContext): void {
   const m = ctx.dustMotes;
   if (!m) return;
 
-  // Suppress during peak storm only — at intensity > 0.8 the storm dust
-  // dominates anyway and motes add visual noise without value.
+  // AAH — soft cross-fade against peak storm via opacity smoothstep over
+  // [STORM_FADE_START, STORM_FADE_END]. Above the end threshold the storm
+  // dust dominates anyway; below the start, motes hold full opacity. The
+  // previous hard cut at 0.8 (AAG) popped visibly during storm onset.
   const storm = ctx.weather.intensity;
-  const wantVisible = storm < 0.8;
-  if (m.particles.visible !== wantVisible) m.particles.visible = wantVisible;
-  if (!wantVisible) return;
+  const fadeStart = Tuning.DUST_MOTES_STORM_FADE_START;
+  const fadeEnd = Tuning.DUST_MOTES_STORM_FADE_END;
+  const t = (storm - fadeStart) / (fadeEnd - fadeStart);
+  const k = Math.max(0, Math.min(1, t));
+  const fade = 1 - k * k * (3 - 2 * k);   // smoothstep falloff (1 → 0)
+  const targetOpacity = Tuning.DUST_MOTES_OPACITY * fade;
+  if (Math.abs(m.particleMat.opacity - targetOpacity) > 1e-3) {
+    m.particleMat.opacity = targetOpacity;
+  }
+  // Skip drift compute entirely when fully invisible to save GPU writes.
+  if (fade <= 0) {
+    if (m.particles.visible) m.particles.visible = false;
+    return;
+  }
+  if (!m.particles.visible) m.particles.visible = true;
 
   _camPos.copy(m.cameraRef.position);
   const spread = Tuning.DUST_MOTES_SPREAD;

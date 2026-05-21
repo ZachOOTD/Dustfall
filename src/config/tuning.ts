@@ -371,15 +371,40 @@ export const Tuning = {
   // surrounding surfaces (no shader required — pure visual contrast).
   DUST_MOTES_COUNT: 120,
   DUST_MOTES_SPREAD: 25,
-  DUST_MOTES_OPACITY: 0.18,
+  DUST_MOTES_OPACITY: 0.22,        // AAH: was 0.18 — too easily missed; 0.22 reads in lit interiors
+
+  // AAH — dust-motes storm cross-fade window. Hard cut at 0.8 (AAG)
+  // is jarring; smoothstep 0.7→0.9 cross-fades into ambientDust's
+  // peak-storm dominance instead of popping out.
+  DUST_MOTES_STORM_FADE_START: 0.7,
+  DUST_MOTES_STORM_FADE_END: 0.9,
 
   // Session AAG — salt-flat mirage shader. Vertex-level wobble on the
   // existing terrain mesh — subtle Y displacement gated by distance from
   // camera + saltness + sun height. Reads as heat-haze shimmer at the
   // horizon when looking across salt flats at midday.
-  MIRAGE_NEAR_M: 15,      // closer than this = no wobble (immediate ground stable)
+  MIRAGE_NEAR_M: 10,      // AAH: was 15. closer ramp-in so wobble reads on the immediate horizon when walking salt-flats
   MIRAGE_FAR_M: 80,       // beyond this = peak wobble
   MIRAGE_AMP_M: 0.18,     // peak vertex Y displacement
+
+  // Session AAG / AAH — footprint puffs. Small upward dust burst on each
+  // footstep. Constants lifted from src/world/footprintPuffs.ts in AAH
+  // (CLAUDE.md rule 2 — magic numbers in tuning.ts only). AAH bumped
+  // VERTICAL_VEL 0.6 → 0.9 — original peak height v²/(2g) = 15cm was
+  // barely above foot; 0.9 lands ~34cm peak which reads clearly.
+  FOOTPRINT_PUFF_COUNT: 60,        // particle-pool capacity
+  FOOTPRINT_PUFF_PER_PUFF: 5,      // particles emitted per footstep
+  FOOTPRINT_PUFF_LIFE_S: 0.6,      // particle lifespan
+  FOOTPRINT_PUFF_VERTICAL_VEL: 0.9,// m/s upward at spawn (AAH: was 0.6)
+  FOOTPRINT_PUFF_LATERAL_VEL: 0.25,// ±m/s lateral drift
+  FOOTPRINT_PUFF_GRAVITY: 1.2,     // m/s² downward
+
+  // Session AAH — inventory swap-on-pickup-full. Hold E this long on a
+  // pickup with full bag + non-empty selected slot to drop the slot
+  // and take the pickup. Lifted from interaction.ts (was a module-local
+  // const). AAH tuned 1.5 → 1.2 for a touch snappier "hold and move
+  // on" rhythm; longer than salvage (1.0s), shorter than the original.
+  PICKUP_SWAP_DURATION_S: 1.2,
 
   // Scene
   FOV: 78,

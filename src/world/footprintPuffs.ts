@@ -11,6 +11,7 @@
 import * as THREE from 'three';
 import type { GameContext } from '../GameContext.ts';
 import { isPlaying } from '../GameContext.ts';
+import { Tuning } from '../config/tuning.ts';
 
 interface Particle {
   active: boolean;
@@ -28,21 +29,15 @@ interface FootprintPuffSystem {
   nextIdx: number;
 }
 
-const PARTICLE_COUNT = 60;
-const PARTICLES_PER_PUFF = 5;
-const PUFF_LIFE_S = 0.6;
-const PUFF_VERTICAL_VEL = 0.6;       // m/s upward at spawn
-const PUFF_LATERAL_VEL = 0.25;       // ±m/s lateral drift
-const PUFF_GRAVITY = 1.2;            // m/s² downward
-
 let _system: FootprintPuffSystem | null = null;
 
 export function createFootprintPuffs(scene: THREE.Scene): void {
   if (_system) return;
-  const positions = new Float32Array(PARTICLE_COUNT * 3);
+  const count = Tuning.FOOTPRINT_PUFF_COUNT;
+  const positions = new Float32Array(count * 3);
   // Init all particles offscreen (large negative Y) so the initial frame
   // doesn't show a cluster at origin.
-  for (let i = 0; i < PARTICLE_COUNT; i++) {
+  for (let i = 0; i < count; i++) {
     positions[i * 3]     = 0;
     positions[i * 3 + 1] = -10000;
     positions[i * 3 + 2] = 0;
@@ -64,31 +59,38 @@ export function createFootprintPuffs(scene: THREE.Scene): void {
   scene.add(points);
 
   const particles: Particle[] = [];
-  for (let i = 0; i < PARTICLE_COUNT; i++) {
+  const lifeS = Tuning.FOOTPRINT_PUFF_LIFE_S;
+  for (let i = 0; i < count; i++) {
     particles.push({
       active: false,
       pos: new THREE.Vector3(),
       vel: new THREE.Vector3(),
       life: 0,
-      initialLife: PUFF_LIFE_S,
+      initialLife: lifeS,
     });
   }
 
   _system = { points, geo, positions, particles, nextIdx: 0 };
 }
 
-/** Spawn a single puff (5 particles) at a footstep position. Called
- *  from src/player/controller.ts on each footstep beat. */
+/** Spawn a single puff at a footstep position. Called from
+ *  src/player/controller.ts on each footstep beat. Emits
+ *  Tuning.FOOTPRINT_PUFF_PER_PUFF particles. */
 export function spawnFootprintPuff(x: number, y: number, z: number): void {
   if (!_system) return;
   const s = _system;
-  for (let i = 0; i < PARTICLES_PER_PUFF; i++) {
+  const count = Tuning.FOOTPRINT_PUFF_COUNT;
+  const perPuff = Tuning.FOOTPRINT_PUFF_PER_PUFF;
+  const lifeS = Tuning.FOOTPRINT_PUFF_LIFE_S;
+  const verticalVel = Tuning.FOOTPRINT_PUFF_VERTICAL_VEL;
+  const lateralVel = Tuning.FOOTPRINT_PUFF_LATERAL_VEL;
+  for (let i = 0; i < perPuff; i++) {
     const idx = s.nextIdx;
-    s.nextIdx = (s.nextIdx + 1) % PARTICLE_COUNT;
+    s.nextIdx = (s.nextIdx + 1) % count;
     const p = s.particles[idx];
     p.active = true;
-    p.life = PUFF_LIFE_S;
-    p.initialLife = PUFF_LIFE_S;
+    p.life = lifeS;
+    p.initialLife = lifeS;
     // Spawn at the ground point with a small random offset.
     p.pos.set(
       x + (Math.random() - 0.5) * 0.08,
@@ -96,9 +98,9 @@ export function spawnFootprintPuff(x: number, y: number, z: number): void {
       z + (Math.random() - 0.5) * 0.08,
     );
     p.vel.set(
-      (Math.random() - 0.5) * 2 * PUFF_LATERAL_VEL,
-      PUFF_VERTICAL_VEL + (Math.random() - 0.5) * 0.2,
-      (Math.random() - 0.5) * 2 * PUFF_LATERAL_VEL,
+      (Math.random() - 0.5) * 2 * lateralVel,
+      verticalVel + (Math.random() - 0.5) * 0.2,
+      (Math.random() - 0.5) * 2 * lateralVel,
     );
   }
 }
@@ -108,9 +110,11 @@ export function updateFootprintPuffs(ctx: GameContext, dt: number): void {
   if (!_system) return;
   if (!isPlaying(ctx)) return;
   const s = _system;
+  const count = Tuning.FOOTPRINT_PUFF_COUNT;
+  const gravity = Tuning.FOOTPRINT_PUFF_GRAVITY;
 
   let anyActive = false;
-  for (let i = 0; i < PARTICLE_COUNT; i++) {
+  for (let i = 0; i < count; i++) {
     const p = s.particles[i];
     if (!p.active) continue;
     p.life -= dt;
@@ -126,7 +130,7 @@ export function updateFootprintPuffs(ctx: GameContext, dt: number): void {
     p.pos.x += p.vel.x * dt;
     p.pos.y += p.vel.y * dt;
     p.pos.z += p.vel.z * dt;
-    p.vel.y -= PUFF_GRAVITY * dt;
+    p.vel.y -= gravity * dt;
     s.positions[i * 3]     = p.pos.x;
     s.positions[i * 3 + 1] = p.pos.y;
     s.positions[i * 3 + 2] = p.pos.z;

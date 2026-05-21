@@ -3,6 +3,47 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session AAH — 2026-05-21 — Playtest polish for AAG (Tuning lift + feel tweaks) ✓ verify pass
+`verified` — tsc clean; preview confirmed Tuning lift took effect at
+runtime (dust motes opacity reads 0.22 in `__game.ctx.dustMotes.
+particleMat.opacity`) + salt-flat terrain renders correctly with the
+new MIRAGE_NEAR_M ramp + tutorial controls panel correctly intercepts
+NEW GAME first-boot.
+
+**Polish pass for AAG.** No new features, no schema bumps. Two CLAUDE.md
+rule-2 violations cleaned up + five feel adjustments based on math
+analysis of the AAG values.
+
+**Rule 2 lifts (compliance fixes)**:
+- **footprintPuffs.ts** — 6 hardcoded constants (PARTICLE_COUNT,
+  PARTICLES_PER_PUFF, PUFF_LIFE_S, PUFF_VERTICAL_VEL, PUFF_LATERAL_VEL,
+  PUFF_GRAVITY) lifted to `Tuning.FOOTPRINT_PUFF_*`. The module now
+  reads them per-call so future tuning iterations land via tuning.ts.
+- **interaction.ts** — module-local `PICKUP_SWAP_DURATION = 1.5`
+  lifted to `Tuning.PICKUP_SWAP_DURATION_S`. New Tuning import.
+
+**Feel tweaks**:
+- **FOOTPRINT_PUFF_VERTICAL_VEL: 0.6 → 0.9**. Original peak height
+  v²/(2g) = 0.6²/(2·1.2) = 15cm — barely above the foot mesh. 0.9
+  lands ~34cm peak which reads clearly while still feeling like
+  "kicked dust" rather than "an explosion."
+- **DUST_MOTES_OPACITY: 0.18 → 0.22**. AAG default was too easily
+  missed in plain daylight; 0.22 reads in lit interiors (lantern,
+  fire, skylight beams) and still stays subtle outdoors.
+- **PICKUP_SWAP_DURATION_S: 1.5 → 1.2**. Snappier "hold and move on"
+  rhythm; longer than salvage (1.0s, the comparison anchor), shorter
+  than the original 1.5 which felt like a deliberation pause.
+- **MIRAGE_NEAR_M: 15 → 10**. Closer ramp-in so the wobble registers
+  on the immediate horizon when walking the salt pan, instead of
+  only at the far field.
+- **Dust motes storm cross-fade softened** — hard cut at `storm > 0.8`
+  (AAG) replaced with smoothstep `[0.7, 0.9]`. New Tuning constants
+  DUST_MOTES_STORM_FADE_START/END. Dust motes now cross-fade into
+  ambientDust's storm-peak dominance instead of popping out at the
+  hard threshold.
+
+**No save schema change**. No new modules. tsc clean.
+
 ## Session AAG — 2026-05-21 — Atmospheric polish + inventory swap-on-full ✓ verify pass
 `verified` — tsc clean; preview-eval confirmed footprint puff pool
 spawns + dust mote layer particle count + mirage shader uniform

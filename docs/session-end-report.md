@@ -4,13 +4,13 @@ Cumulative state. Rewritten end-to-end at each `/session-end`. A
 reviewer who's never seen the project should be able to read this +
 `CLAUDE.md` + `docs/GDD.md` and understand where Dustfall is.
 
-**Current state**: Session AAG shipped (2026-05-21). 34 sessions
-post-MVP. tsc clean. SAVE_VERSION v9 (unchanged this session).
-Post-overnight: UU/VV/UU-2/WW/XX/YY/ZZ + AAA (polish) + AAB (world
-depth) + AAC (craftable home) + AAD (kit playtest polish) + AAE
-(creature companion + v9) + AAF (7-day storm countdown) + AAG
-(atmospheric polish + inventory swap-on-full). Working tree dirty
-pending the user's commit.
+**Current state**: Session AAH shipped (2026-05-21). 35 sessions
+post-MVP. tsc clean. SAVE_VERSION v9 (unchanged). Post-overnight:
+UU/VV/UU-2/WW/XX/YY/ZZ + AAA (polish) + AAB (world depth) + AAC
+(craftable home) + AAD (kit playtest polish) + AAE (creature
+companion + v9) + AAF (7-day storm countdown) + AAG (atmospheric
+polish + inventory swap-on-full) + AAH (playtest polish for AAG).
+Working tree dirty pending the user's commit.
 
 ---
 
@@ -86,6 +86,39 @@ Fresh-game start (the de-facto Tier 1 — Session W shipped):
    captured mid-drink doesn't resume drinking on reload.
 
 ---
+
+## What's freshly shipped (Session AAH deltas)
+
+Playtest polish pass for AAG. Quick post-ship tuning session — no new
+features, no schema bumps. Two CLAUDE.md rule-2 violations cleaned up
++ five feel adjustments based on math analysis.
+
+- **footprintPuffs.ts constants lifted to Tuning**. 6 module-local
+  consts (PARTICLE_COUNT, PARTICLES_PER_PUFF, PUFF_LIFE_S,
+  PUFF_VERTICAL_VEL, PUFF_LATERAL_VEL, PUFF_GRAVITY) → 6 new
+  `Tuning.FOOTPRINT_PUFF_*` entries. Module reads them per-call so
+  future iterations don't need module edits.
+- **interaction.ts swap duration lifted**. `PICKUP_SWAP_DURATION = 1.5`
+  was hardcoded module-local in AAG. Lifted to
+  `Tuning.PICKUP_SWAP_DURATION_S`. New `Tuning` import on the file.
+- **FOOTPRINT_PUFF_VERTICAL_VEL: 0.6 → 0.9** — peak height
+  v²/(2g) goes from 15cm to 34cm; original was barely above the foot
+  mesh, new value reads as a clear "kicked dust" beat.
+- **DUST_MOTES_OPACITY: 0.18 → 0.22** — 0.18 was too easily missed in
+  bright daylight; 0.22 reads in lit interiors (lantern, fire,
+  skylight beams) while still subtle outdoors.
+- **PICKUP_SWAP_DURATION_S: 1.5 → 1.2** — snappier hold-and-move-on
+  rhythm; longer than salvage (1.0s) but shorter than the original
+  1.5 which felt like a deliberation pause.
+- **MIRAGE_NEAR_M: 15 → 10** — wobble engages on the immediate
+  horizon when walking salt-flats, instead of only in the far field.
+- **Dust motes storm cross-fade softened** — hard cut at `storm > 0.8`
+  (AAG) replaced with smoothstep `[0.7, 0.9]`. New Tuning constants
+  `DUST_MOTES_STORM_FADE_START/END`. Cleaner transition into
+  ambientDust's storm-peak dominance.
+
+No save schema change. tsc clean. 4 files touched: tuning.ts,
+footprintPuffs.ts, dustMotes.ts, interaction.ts.
 
 ## What's freshly shipped (Session AAG deltas)
 
