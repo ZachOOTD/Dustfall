@@ -37,6 +37,42 @@ export interface Weather {
   nextStormAt: number;   // ctx.time.elapsed when next storm should start
   layers: { near: DustLayer; mid: DustLayer; far: DustLayer };
   cameraRef: THREE.PerspectiveCamera;
+  /** AAF — current storm's duration in seconds. Set when entering the
+   *  'building' state from `stormCurveAt(daysSurvived).duration`.
+   *  Captured at storm-start so a day-rollover mid-storm doesn't
+   *  shorten the current storm. */
+  currentStormDuration: number;
+  /** AAF — has the "the long storm has come" toast fired this session?
+   *  Transient (not persisted) — on save+reload after day 7 the toast
+   *  re-fires once, which is fine for an atmospheric beat. */
+  longStormAnnounced: boolean;
+}
+
+/** AAF — storm-curve values at a given daysSurvived. Lerps linearly
+ *  from day-0 to day-LONG_STORM_DAY-1, then plateaus at long-storm
+ *  values from LONG_STORM_DAY onward. Returns durations in seconds. */
+export function stormCurveAt(daysSurvived: number): {
+  intervalMin: number;
+  intervalMax: number;
+  duration: number;
+} {
+  const longDay = Tuning.LONG_STORM_DAY;
+  if (daysSurvived >= longDay) {
+    return {
+      intervalMin: Tuning.LONG_STORM_INTERVAL_MIN,
+      intervalMax: Tuning.LONG_STORM_INTERVAL_MAX,
+      duration: Tuning.LONG_STORM_DURATION_S,
+    };
+  }
+  // Lerp from day 0 to day LONG_STORM_DAY-1 (so day 6 = nearly the
+  // worst pre-doom state; day 7 = the plateau).
+  const t = daysSurvived / (longDay - 1);
+  const lerp = (a: number, b: number) => a + (b - a) * Math.min(1, Math.max(0, t));
+  return {
+    intervalMin: lerp(Tuning.STORM_INTERVAL_DAY0_MIN, Tuning.STORM_INTERVAL_DAY7_MIN),
+    intervalMax: lerp(Tuning.STORM_INTERVAL_DAY0_MAX, Tuning.STORM_INTERVAL_DAY7_MAX),
+    duration: lerp(Tuning.STORM_DURATION_DAY0_S, Tuning.STORM_DURATION_DAY7_S),
+  };
 }
 
 // Soft circular dust mote — radial gradient. Without this, PointsMaterial
@@ -69,10 +105,10 @@ const _sharedDustTex = (() => {
 })();
 
 const BUILD_DURATION = 8;
-const STORM_DURATION = 90;
 const SETTLE_DURATION = 12;
-const STORM_INTERVAL_MIN = 360;  // earliest restart (6 min)
-const STORM_INTERVAL_MAX = 600;  // latest (10 min)
+// AAF — storm duration + interval are now per-day-curve-driven via
+// `stormCurveAt(daysSurvived)`. Helpers below compute values from
+// Tuning.STORM_*_DAY0/DAY7/LONG_STORM_* constants.
 
 interface LayerConfig {
   count: number;
@@ -155,15 +191,19 @@ export function createWeather(
     velSpread: [0.8, 0.3, 0.7],
   });
 
+  // Initial nextStormAt uses day-0 curve (the player just started).
+  const initCurve = stormCurveAt(0);
   return {
     state: 'clear',
     intensity: 0,
     perceivedIntensity: 0,
     stateTimer: 0,
     nextStormAt:
-      STORM_INTERVAL_MIN + Math.random() * (STORM_INTERVAL_MAX - STORM_INTERVAL_MIN),
+      initCurve.intervalMin + Math.random() * (initCurve.intervalMax - initCurve.intervalMin),
     layers: { near, mid, far },
     cameraRef: camera,
+    currentStormDuration: initCurve.duration,
+    longStormAnnounced: false,
   };
 }
 
@@ -210,12 +250,26 @@ export function updateWeather(ctx: GameContext, dt: number): void {
   const w = ctx.weather;
   w.stateTimer += dt;
 
+  // AAF — fire the one-shot "long storm has come" toast on first
+  // day-7 tick. Persists for the rest of the session via longStormAnnounced.
+  if (!w.longStormAnnounced && ctx.time.daysSurvived >= Tuning.LONG_STORM_DAY) {
+    w.longStormAnnounced = true;
+    ctx.ui.showToast('the long storm has come — find shelter');
+  }
+
+  // AAF — current-day storm curve. Recomputed each tick so the calm-
+  // gap interval shrinks as days pass even if we're already in 'clear'.
+  const curve = stormCurveAt(ctx.time.daysSurvived);
+
   switch (w.state) {
     case 'clear':
       w.intensity = 0;
       if (ctx.time.elapsed >= w.nextStormAt) {
         w.state = 'building';
         w.stateTimer = 0;
+        // Capture this storm's duration at start so a day-rollover
+        // mid-storm doesn't shorten what the player's already enduring.
+        w.currentStormDuration = curve.duration;
       }
       break;
     case 'building':
@@ -227,7 +281,7 @@ export function updateWeather(ctx: GameContext, dt: number): void {
       break;
     case 'storm':
       w.intensity = 1;
-      if (w.stateTimer >= STORM_DURATION) {
+      if (w.stateTimer >= w.currentStormDuration) {
         w.state = 'settling';
         w.stateTimer = 0;
       }
@@ -239,8 +293,8 @@ export function updateWeather(ctx: GameContext, dt: number): void {
         w.stateTimer = 0;
         w.nextStormAt =
           ctx.time.elapsed +
-          STORM_INTERVAL_MIN +
-          Math.random() * (STORM_INTERVAL_MAX - STORM_INTERVAL_MIN);
+          curve.intervalMin +
+          Math.random() * (curve.intervalMax - curve.intervalMin);
       }
       break;
   }
@@ -295,5 +349,7 @@ export function seedOpeningStorm(weather: Weather): void {
   weather.state = 'storm';
   weather.intensity = 1.0;
   // 18s of full storm + 12s of settling = 30s total opening sandstorm.
-  weather.stateTimer = STORM_DURATION - 18;
+  // AAF — day-0 storm duration; opening cinematic uses the gentlest curve.
+  weather.currentStormDuration = Tuning.STORM_DURATION_DAY0_S;
+  weather.stateTimer = Tuning.STORM_DURATION_DAY0_S - 18;
 }

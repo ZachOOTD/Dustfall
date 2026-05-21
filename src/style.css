@@ -138,6 +138,37 @@ canvas {
   font-weight: 300;
 }
 
+/* AAF — long-storm countdown indicator. Sits below #day-counter.
+   JS controls inline `color` (warm-ramp pre-day-7; warning red post-day-7).
+   The .imminent class adds a slow pulse animation once the long storm hits. */
+#long-storm-indicator {
+  position: fixed;
+  top: 84px;
+  right: 32px;
+  font-family: 'Cormorant Garamond', serif;
+  font-style: italic;
+  font-size: 12px;
+  letter-spacing: 2px;
+  font-weight: 300;
+  z-index: 11;
+  pointer-events: none;
+  text-align: right;
+  transition: color 0.6s ease-out;
+}
+
+#long-storm-indicator.imminent {
+  font-style: normal;
+  letter-spacing: 5px;
+  font-size: 13px;
+  font-weight: 400;
+  animation: longStormPulse 2.4s ease-in-out infinite;
+}
+
+@keyframes longStormPulse {
+  0%, 100% { opacity: 0.75; }
+  50% { opacity: 1; }
+}
+
 #crosshair {
   position: fixed;
   top: 50%;

@@ -58,7 +58,31 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session AAE — Creature companion (Rocky-inspired)
+**Last shipped**: Session AAF — 7-day storm countdown ("THE LONG
+STORM"). Escalating-storm endgame in `src/world/weather.ts`. New
+exported `stormCurveAt(daysSurvived)` returns interval/duration
+that lerps from day-0 baseline (90s storms, 360-600s intervals) to
+day-7-endpoint (300s storms, 60-180s intervals) over days 0-6, then
+plateaus onto LONG_STORM values (480s storms, 30-90s intervals)
+from day 7+. Storm state machine captures `currentStormDuration` at
+storm-start so day-rollover doesn't shorten ongoing storms. 9 new
+Tuning constants centralize the curve.
+
+New `#long-storm-indicator` HUD DOM (below day counter, top-right)
+shows "the long storm in N days" pre-doom with color lerping
+muted-brown → warning-red as days dwindle; reads "THE LONG STORM"
+in red with slow-pulse animation from day 7+. One-shot toast "the
+long storm has come — find shelter" fires at day-7 transition via
+new `weather.longStormAnnounced` transient flag. No save schema
+change (uses existing `time.daysSurvived`).
+
+Design: escalation via frequency + duration, NOT raising peak
+intensity (fog already maxes out visibility). The long-storm
+phase = "storms never really end," not "storms hit harder."
+Preserves player agency — survivors can still play, but life is
+hard. Bucket-tier feature shipped.
+
+**Prior milestone**: Session AAE — Creature companion (Rocky-inspired)
 + SAVE_VERSION v9. New `src/enemies/companion.ts` (~290 LOC) — small
 red exoskeleton creature with 5 radially-symmetric legs. **Dual
 locomotion state machine**: rolling (legs retracted, body rolls,

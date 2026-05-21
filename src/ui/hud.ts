@@ -1,6 +1,7 @@
 // HUD bars + clock + toast + death screen — owns its DOM refs.
 
 import type { GameContext } from '../GameContext.ts';
+import { Tuning } from '../config/tuning.ts';
 
 interface HudRefs {
   thirst: HTMLDivElement;
@@ -17,6 +18,10 @@ interface HudRefs {
   damageVignette: HTMLDivElement;
   toast: HTMLDivElement;
   shelter: HTMLDivElement;
+  /** AAF — long-storm countdown shown under the day counter.
+   *  Pre-day-7 reads "the long storm in N days"; on/after day 7
+   *  reads "THE LONG STORM" (warning state). */
+  longStorm: HTMLDivElement;
 }
 
 let refs: HudRefs | null = null;
@@ -65,10 +70,17 @@ export function createHud(): HudApi {
   shelter.textContent = 'SHELTER';
   document.body.appendChild(shelter);
 
+  // AAF — long-storm countdown indicator. Sits below #day-counter
+  // (top-right of the screen). Color shifts warmer as days dwindle;
+  // post-day-7 reads as a warning banner.
+  const longStorm = document.createElement('div');
+  longStorm.id = 'long-storm-indicator';
+  document.body.appendChild(longStorm);
+
   refs = {
     thirst, hunger, tempCold, tempHeat, stamina, health,
     clock, dayCounter, deathScreen, deathCause, daysSummary,
-    damageVignette, toast, shelter,
+    damageVignette, toast, shelter, longStorm,
   };
 
   return {
@@ -115,6 +127,27 @@ export function updateHud(ctx: GameContext, _dt: number): void {
   refs.clock.textContent =
     `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
   refs.dayCounter.textContent = `day ${ctx.time.daysSurvived + 1}`;
+
+  // AAF — long-storm countdown. Pre-doom: "the long storm in N days"
+  // (text reddens as N decreases). On/after doom day: "THE LONG STORM"
+  // as a warning banner.
+  const daysUntil = Tuning.LONG_STORM_DAY - ctx.time.daysSurvived;
+  if (daysUntil > 0) {
+    refs.longStorm.textContent =
+      daysUntil === 1 ? 'the long storm in 1 day' : `the long storm in ${daysUntil} days`;
+    // Color ramps from muted brown (far away) toward warning orange-red
+    // (imminent) as days dwindle.
+    const t = Math.min(1, Math.max(0, 1 - (daysUntil - 1) / (Tuning.LONG_STORM_DAY - 1)));
+    const r = Math.round(138 + (200 - 138) * t);
+    const g = Math.round(120 + (90 - 120) * t);
+    const b = Math.round(94 + (50 - 94) * t);
+    refs.longStorm.style.color = `rgb(${r}, ${g}, ${b})`;
+    refs.longStorm.classList.remove('imminent');
+  } else {
+    refs.longStorm.textContent = 'THE LONG STORM';
+    refs.longStorm.style.color = 'rgb(200, 70, 50)';
+    refs.longStorm.classList.add('imminent');
+  }
 
   if (ctx.player.inShelter !== _lastShelterShown) {
     refs.shelter.classList.toggle('show', ctx.player.inShelter);

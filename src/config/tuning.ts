@@ -287,6 +287,22 @@ export const Tuning = {
   COMPANION_LEG_GAIT_FREQ_HZ: 4.0,       // legs sin-wave when walking
   COMPANION_LEG_GAIT_AMP: 0.06,          // peak leg lift while walking
 
+  // Session AAF — "the long storm" — 7-day escalating-storm endgame.
+  // Storm interval shrinks + duration grows over 7 days of survival.
+  // Day 7+ = permanent dust-choked endgame state. Player can survive
+  // but must stay sheltered most of the time.
+  LONG_STORM_DAY: 7,                  // daysSurvived at which the long storm hits
+  STORM_INTERVAL_DAY0_MIN: 360,       // 6 min minimum calm at day 0
+  STORM_INTERVAL_DAY0_MAX: 600,       // 10 min maximum
+  STORM_INTERVAL_DAY7_MIN: 60,        // 1 min minimum calm just before doom
+  STORM_INTERVAL_DAY7_MAX: 180,       // 3 min maximum
+  STORM_DURATION_DAY0_S: 90,          // 1.5 min storm at day 0
+  STORM_DURATION_DAY7_S: 300,         // 5 min storm just before doom
+  // Post-LONG_STORM_DAY: storms are nearly back-to-back.
+  LONG_STORM_INTERVAL_MIN: 30,
+  LONG_STORM_INTERVAL_MAX: 90,
+  LONG_STORM_DURATION_S: 480,         // 8 min storms
+
   // Dune terrain (Session P) — ridged + wind-warped noise.
   // Ridges run perpendicular to the wind direction; aniso < 1 elongates them.
   // Asymmetry biases ridge crests in the wind direction (steeper leeward face).

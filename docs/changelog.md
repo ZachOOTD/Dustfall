@@ -3,6 +3,69 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session AAF — 2026-05-21 — 7-day storm countdown ("THE LONG STORM") ✓ verify pass
+`verified` — tsc clean; preview-eval confirmed storm curve at multiple
+days + HUD text/color states + one-shot toast at day-7 transition.
+
+**Bucket-tier feature**: an escalating-storm endgame that gives
+Dustfall a narrative arc. Days 0-6 see storms grow gradually more
+frequent and longer; day 7+ enters a permanent dust-choked "long
+storm" state where leaving shelter is genuine danger.
+
+**Storm curve** in `src/world/weather.ts`. New exported
+`stormCurveAt(daysSurvived)` returns `{intervalMin, intervalMax,
+duration}` based on the day. Linear lerp from day-0 values to
+day-7-endpoint values across days 0-6 (so day 6 ≈ day-7-endpoint
+of the lerp), then plateau onto LONG_STORM values from day 7+. 9
+new Tuning constants centralize the curve: LONG_STORM_DAY=7,
+STORM_INTERVAL_DAY0_MIN/MAX=360/600, STORM_INTERVAL_DAY7_MIN/MAX=
+60/180, STORM_DURATION_DAY0_S=90, STORM_DURATION_DAY7_S=300,
+LONG_STORM_INTERVAL_MIN/MAX=30/90, LONG_STORM_DURATION_S=480.
+
+**Storm state machine updated**: `case 'clear' → building`
+transition captures `w.currentStormDuration = curve.duration` at
+storm-start (so a day-rollover mid-storm doesn't shorten what the
+player's already enduring). `case 'storm'` uses
+`currentStormDuration` instead of the old fixed `STORM_DURATION`
+constant. `case 'settling' → clear` transition computes nextStormAt
+from the current-day curve. `seedOpeningStorm` updated to use
+`Tuning.STORM_DURATION_DAY0_S` (the gentlest curve) for the opening
+cinematic.
+
+**HUD countdown indicator**: new `#long-storm-indicator` DOM in
+`src/ui/hud.ts` (created at boot, positioned below the day counter,
+top-right of the screen). Pre-day-7: reads "the long storm in N
+days" with color lerping from muted brown (far away) to warning
+red-orange (imminent) as days dwindle. On/after day 7: reads
+"THE LONG STORM" in warning red with a 2.4s slow-pulse animation
+(`.imminent` class). Updated each frame in updateHud from
+`ctx.time.daysSurvived`. New CSS rules in `src/style.css`.
+
+**One-shot atmospheric beat**: new `weather.longStormAnnounced:
+boolean` transient flag. When `updateWeather` sees daysSurvived ≥
+LONG_STORM_DAY for the first time, fires `ctx.ui.showToast('the
+long storm has come — find shelter')` then sets the flag. Not
+persisted across save/load (re-fires once on load if the player is
+already in the long storm — acceptable for an atmospheric beat).
+
+**No save schema change** — uses existing `time.daysSurvived` (saved
+since A-era) for the day reference.
+
+**Design dial chosen**: escalation via frequency + duration, NOT
+raising the peak intensity cap (fog at intensity=1 already chokes
+visibility to ~30m). The long-storm phase is about "the storms
+never really end" rather than "the storms hit harder." Preserves
+player agency — survivors can still play, but life is much harder.
+
+**Verification**: tsc clean. `stormCurveAt(0)` returns baseline
+day-0 values (90s storms, 360-600s intervals). `stormCurveAt(3)`
+returns mid-curve (195s, 210-390s). `stormCurveAt(7)` returns
+long-storm plateau (480s, 30-90s). HUD reads "the long storm in 7
+days" with muted brown color at day 0; "the long storm in 1 day"
+with warning orange at day 6; "THE LONG STORM" warning banner with
+.imminent class from day 7. One-shot toast: NOT announced at day 6
+(correctly); announced at day 7 transition (correctly).
+
 ## Session AAE — 2026-05-21 — Creature companion (Rocky-inspired) + SAVE_VERSION v9 ✓ verify pass
 `verified` — tsc clean; preview-eval confirmed AI state transitions
 (rolling at distance / walking mid / idle close), pack-up + redeploy,
