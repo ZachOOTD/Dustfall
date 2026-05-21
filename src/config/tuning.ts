@@ -728,9 +728,18 @@ export const Tuning = {
   OPENING_WRECK_R_COCKPIT: 1.7,              // m — cockpit max radius (widest point)
   OPENING_WRECK_R_NOSE: 0.55,                // m — pre-nose-tip radius (before final taper)
   OPENING_WRECK_SLICE_COUNT: 24,             // angular slices of the lathe (15° each)
-  OPENING_WRECK_SKYLIGHT_SLICE: 17,          // index of the FIRST slice to omit (top of hull). The wreck builder omits this slice AND the next one for a 30° gap centered on true UP (phi=270° after the X=+π/2 group rotation).
+  OPENING_WRECK_SKYLIGHT_SLICE: 16,          // index of the FIRST slice to omit (top of hull). AAM-followup: gap widened from 2 slices to 3 slices (omits SKYLIGHT, +1, +2), offset 7.5° from true UP — phi=240°-285° centered on 262.5°. Wider opening + slight off-axis bias brightens the interior across more of the day.
   OPENING_WRECK_LATERAL_PUNCTURES: 3,        // number of small breach-hole patches scattered on side flanks
   OPENING_WRECK_FLOOR_THICK: 0.18,           // m — flat slab thickness below the cavity
+  // AAM-followup — terrain-bridging ramp at the entrance. Pre-followup,
+  // outside terrain dipping below maxFootprintY could create a step
+  // > 0.3m autostep, blocking entry. The ramp = a thin tilted box
+  // collider + matching visible rust-dark plate just outside the rim,
+  // sloping from terrain level up to floor top. Player walks up the
+  // plate naturally; autostep at the rim ↔ ramp transition is < 5cm.
+  OPENING_WRECK_RAMP_LEN_M: 1.2,             // m — extent in -Z (outward from entrance)
+  OPENING_WRECK_RAMP_DROP_M: 0.3,            // m — how much the outer edge drops below floor top
+  OPENING_WRECK_RAMP_THICK_M: 0.05,          // m — plate thickness
   // AAJ — hull wall thickness. Pre-AAJ the hull was a single LatheGeometry
   // rendered DoubleSide; from inside the cavity that read as paper-thin
   // and unrealistic. AAJ adds an inner shell at R - HULL_WALL_THICKNESS

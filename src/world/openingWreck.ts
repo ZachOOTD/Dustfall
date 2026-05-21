@@ -210,12 +210,14 @@ function makeSlicedHull(): THREE.Group {
   const sliceArc = (Math.PI * 2) / SLICE_COUNT;
   const interiorProfile = makeInteriorProfile();
 
-  // Skip TWO adjacent slices centered on true UP — 30° gap from slice
-  // boundaries at 255°/285° straddling 270° (= world +Y after the
-  // X=+π/2 group rotation). One-slice gap was offset 7.5° from
-  // vertical; two-slice gap is symmetric around true UP.
+  // Skip THREE adjacent slices straddling-but-offset-from true UP —
+  // 45° gap from slice boundaries 240°/285° (slices 16+17+18). Centered
+  // on phi=262.5° = 7.5° off true UP toward the lathe-local +X side.
+  // Pre-AAM-followup the gap was 2 slices (30°) symmetric on UP, which
+  // only caught noon sun. The wider+offset gap catches noon AND more
+  // morning/evening low-angle light, brightening the interior.
   for (let i = 0; i < SLICE_COUNT; i++) {
-    if (i === SKYLIGHT_SLICE || i === SKYLIGHT_SLICE + 1) continue;
+    if (i === SKYLIGHT_SLICE || i === SKYLIGHT_SLICE + 1 || i === SKYLIGHT_SLICE + 2) continue;
     const phiStart = i * sliceArc;
     // Alternate hull / dark material so the slice seams read as panel
     // joints rather than disappearing into the curve. Even = base hull,
@@ -416,14 +418,14 @@ function makeInteriorProps(rand: Rng): THREE.Group {
     g.add(stub);
   }
 
-  // Tally marks — AAJ rework. Pre-AAJ these were on a flat tangent plane
-  // at z=2.85 (just inside the nose), where the hull radius after the
-  // RR redesign + AAJ thickening is only ~0.45m. Marks spanning X up
-  // to 0.78 floated past the hull surface. Now placed on the LEFT
-  // interior side wall, just above the skeleton (z ~1.6-2.2 in
-  // wreck-local). At that lathe-Y the hull radius is ~1.4-1.5m,
-  // plenty of room. Cluster runs fore-aft along Z; marks remain
-  // vertical bars (long axis = world Y).
+  // Tally marks — AAJ rework, refined post-AAM. Pre-AAJ these were on a
+  // flat tangent plane that floated past the hull. AAJ moved them to a
+  // side wall but used `markX = wallX + 0.02` which left a 2cm gap
+  // between the mark and the inner shell — still floating, just by a
+  // smaller amount. AAM-followup (this revision): (1) flip to the RIGHT
+  // interior side wall per user direction, (2) place marks FLUSH with
+  // the inner shell so the box geometry straddles the wall and reads
+  // as engraved/scratched relief rather than a hovering icon.
   const tallyY = AXIS_Y + 0.10;          // just above wreck axis (chest-height)
   const tallyZStart = 1.55;              // just behind the skeleton (at z=1.95)
   const clusterZSpacing = 0.34;
@@ -433,13 +435,17 @@ function makeInteriorProps(rand: Rng): THREE.Group {
   for (let cluster = 0; cluster < 4 && totalMarks < 17; cluster++) {
     const clusterZBase = tallyZStart + cluster * clusterZSpacing;
     const inThisCluster = Math.min(5, 17 - totalMarks);
-    // Per-cluster: compute interior wall X (left side) using the local
-    // hull radius at this Z. Inner shell radius = R - WALL_THICKNESS;
-    // marks sit just inside the inner shell so they don't z-fight.
+    // Per-cluster: compute interior wall X using local hull radius at
+    // this Z. Inner shell at R - WALL_THICKNESS; mark position is the
+    // inner shell X so the box mesh straddles the wall (half hidden
+    // behind the wall geometry, half raised relief into the cavity).
     const latheY = clusterZBase + HULL_LEN / 2;
     const rInner = Math.max(0.3, profileRadiusAt(latheY) - HULL_WALL_THICKNESS);
-    const wallX = -Math.sqrt(Math.max(0.01, rInner * rInner - yOffsetFromAxis * yOffsetFromAxis));
-    const markX = wallX + 0.02;          // inset 2cm from the wall surface
+    // RIGHT-side wall (local +X). Player enters from -X facing +X; after
+    // the wreck's yaw=π/2 rotation, world-Z mapping puts local +X on
+    // the player's RIGHT hand side as they walk in.
+    const wallX = Math.sqrt(Math.max(0.01, rInner * rInner - yOffsetFromAxis * yOffsetFromAxis));
+    const markX = wallX;                 // FLUSH with inner shell (straddles the wall surface)
     for (let m = 0; m < Math.min(4, inThisCluster); m++) {
       const bar = new THREE.Mesh(
         // X = depth into wall (thin), Y = vertical (tall), Z = spacing (thin)
@@ -545,6 +551,29 @@ export function makeOpeningWreck(rand: Rng): THREE.Group {
   );
   floor.position.set(0, -FLOOR_THICK / 2, 0.1);  // slight forward shift toward cockpit
   g.add(floor);
+
+  // ── AAM-followup — entrance ramp plate. A thin rust-dark plate just
+  //    outside the rim, sloping from terrain level up to floor top.
+  //    Plays as a "fallen hull panel that bridges to the entrance" —
+  //    fixes the autostep blockage when outside terrain dips below the
+  //    wreck floor's elevation. Collider added separately in
+  //    placeOpeningWreck for the physics path. ──
+  const rampLen = Tuning.OPENING_WRECK_RAMP_LEN_M;
+  const rampDrop = Tuning.OPENING_WRECK_RAMP_DROP_M;
+  const rampThick = Tuning.OPENING_WRECK_RAMP_THICK_M;
+  const rampWidth = R_COCKPIT * 1.4;     // wider than entrance for visual cover
+  const rampTilt = Math.atan2(rampDrop, rampLen); // inclination so outer end is rampDrop below inner end
+  const rampCenterZ = -HULL_LEN / 2 + 0.05 - rampLen / 2; // inner edge at rim; extends -Z outward
+  const rampCenterY = -rampDrop / 2 - rampThick / 2;       // inner edge top at Y=0, outer edge top at Y=-rampDrop
+  const ramp = new THREE.Mesh(
+    new THREE.BoxGeometry(rampWidth, rampThick, rampLen),
+    _rustDarkMat,
+  );
+  ramp.position.set(0, rampCenterY, rampCenterZ);
+  ramp.rotation.x = -rampTilt;           // tilt so the -Z end drops
+  ramp.castShadow = true;
+  ramp.receiveShadow = true;
+  g.add(ramp);
 
   // ── Entrance fragments — jagged plates around the torn rim. ──
   g.add(makeEntranceFragments(rand));
@@ -739,6 +768,22 @@ export function placeOpeningWreck(
   addColl(
     { x: R_COCKPIT * 0.35, y: 0.06, z: sideHalfZ },
     { x: 0, y: AXIS_Y + R_COCKPIT * 0.85, z: sideCenterZ },
+  );
+
+  // (8) AAM-followup — entrance ramp collider. Matches the visible plate
+  // added in makeOpeningWreck. Tilted box bridging outside terrain to
+  // the floor edge. Half-extents + position mirror the mesh exactly.
+  const rampLen = Tuning.OPENING_WRECK_RAMP_LEN_M;
+  const rampDrop = Tuning.OPENING_WRECK_RAMP_DROP_M;
+  const rampThick = Tuning.OPENING_WRECK_RAMP_THICK_M;
+  const rampWidth = R_COCKPIT * 1.4;
+  const rampTilt = Math.atan2(rampDrop, rampLen);
+  const rampCenterZ = -HULL_LEN / 2 + 0.05 - rampLen / 2;
+  const rampCenterY = -rampDrop / 2 - rampThick / 2;
+  addColl(
+    { x: rampWidth / 2, y: rampThick / 2, z: rampLen / 2 },
+    { x: 0, y: rampCenterY, z: rampCenterZ },
+    { x: -rampTilt },
   );
 
   // ── Register salvageables ─────────────────────────────────────────
