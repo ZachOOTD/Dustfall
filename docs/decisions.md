@@ -1757,3 +1757,46 @@ pre-AAI world for regression testing.
 **Apply**: don't delete; reference via `void Tuning.RNG_SEED` for
 unused-import discipline. Don't read it in any other module post-AAI.
 **friction-score:** 0
+
+## D86 — Cook state as a list, not a singleton (Session AAM)
+**When**: Session AAM.
+**Why**: Pre-AAM, `_cooking` was a module-level singleton — only one
+cook could run in the entire world at a time. Adequate when fires
+were single-cook devices, but the AAM grill attachment needed
+parallel cooks per fire. Lifting to `_cooks: CookState[]` allows
+N cooks per fire (capped by `Tuning.FIRE_GRILL_MAX_PARALLEL_COOKS = 4`
+when grill is attached, 1 otherwise). Each entry tracks its own slot,
+fireId, and completeAt; `tickCooking` iterates and removes
+completed/cancelled entries.
+**Considered alternatives**:
+- Per-fire cook-list (`fire.cookSlots: CookState[]`) — keeps cook state
+  with the entity. Rejected because the cook references a player
+  inventory slot (slot.meta.cookProgress drives viewmodel animation),
+  not just the fire. A module-level list with a `fireId` link is
+  simpler to iterate + removes the entity-fire-ownership ambiguity
+  on save/load.
+- Map<fireId, CookState[]> — over-engineered for the current 4-cook
+  cap. Linear scan over a small array is fast.
+**Apply**: future cook-related additions (e.g. cookable recipe variations,
+mid-cook stat hooks) extend `CookState` rather than reverting to a
+singleton. Slot-switch no longer cancels cooks (it was a single-cook
+UX limitation that multi-cook breaks).
+**friction-score:** 2
+
+## D87 — Save-load seed check reads ctx.seed, not Tuning.RNG_SEED (Session AAM)
+**When**: Session AAM (incidental bug fix surfaced while testing v10
+save/load).
+**Why**: AAI introduced per-game seeds (`ctx.seed`) but the loader's
+"different world" guard (`save.ts:415`) still compared
+`save.seed !== Tuning.RNG_SEED`. Result: any non-1337 saved world
+failed to load — saves were effectively non-loadable post-AAI for
+the entire AAI/AAK era. Now reads `save.seed !== ctx.seed`. This
+was AAI debt the AAI-end verification missed (the test save/load
+roundtrip used seed 42 by setting pendingSeed → boot ctx.seed = 42
+→ loader's `Tuning.RNG_SEED === 1337` check should have failed, but
+the AAI eval-test apparently passed somehow; possibly the test
+didn't exercise the loader path).
+**Apply**: when adding ctx.X fields that supersede a Tuning constant,
+grep the codebase for `Tuning.X` and audit each remaining reference.
+**friction-score:** 1
+
