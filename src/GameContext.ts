@@ -30,6 +30,7 @@ import type { LargeTent } from './world/largeTent.ts';
 import type { Bedroll } from './world/bedroll.ts';
 import type { Lantern } from './world/lantern.ts';
 import type { Locker } from './world/locker.ts';
+import type { Companion } from './enemies/companion.ts';
 import type { BiomeSampler } from './world/biomes.ts';
 import type { SalvageableRegistry } from './world/salvage.ts';
 import type { FootprintRegistry } from './world/footprints.ts';
@@ -108,6 +109,10 @@ export interface GameContext {
   bedrolls: { list: Bedroll[] };
   lanterns: { list: Lantern[] };
   lockers: { list: Locker[]; open: Locker | null };
+  /** Session AAE — pocketable Rocky-inspired creature companion.
+   *  Singleton (one creature per save). Null when in inventory or
+   *  never picked up; non-null when deployed in the world. */
+  companion: Companion | null;
   salvageables: SalvageableRegistry;
   weather: Weather;
   ambientDust: AmbientDust;

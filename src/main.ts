@@ -30,6 +30,7 @@ import { spawnRockScatter } from './world/rockScatter.ts';
 import { setupOpeningScene } from './world/openingScene.ts';
 import { updateOpeningWreckGodRay } from './world/openingWreck.ts';
 import { updateLanterns } from './world/lantern.ts';
+import { updateCompanion, spawnCompanionAt } from './enemies/companion.ts';
 import { hasSave } from './persistence/save.ts';
 import { createJournalPanel } from './ui/journalPanel.ts';
 import { createRecipeBookPanel } from './ui/recipeBookPanel.ts';
@@ -253,6 +254,7 @@ const ctx: GameContext = {
   bedrolls: { list: [] },            // Session AAC
   lanterns: { list: [] },            // Session AAC
   lockers: { list: [], open: null }, // Session AAC
+  companion: null,                   // Session AAE
 
   salvageables,
   weather,
@@ -320,6 +322,10 @@ const openingResult = setupOpeningScene(
 );
 ctx.journals.list.push(openingResult.journal);
 ctx.speeder = openingResult.speeder;
+// AAE — spawn the creature companion at the position computed by
+// setupOpeningScene. Singleton; loadGameState may despawn this if the
+// save says the player had the pod in inventory.
+spawnCompanionAt(ctx, openingResult.companionSpawnPos, 'idle');
 
 // IMPORTANT: createMenus must run BEFORE wireOverlays — the unlock handler
 // in input.ts calls showPauseOverlay which needs the menu DOM in place.
@@ -447,6 +453,7 @@ startLoop(ctx, (c, dt) => {
   // (bobPickups removed — items now rest flat on the ground; no float/spin)
   updateRaiders(c, dt);          // AI state machine + raider movement
   updateLizards(c, dt);          // small flee-AI wildlife
+  updateCompanion(c, dt);        // AAE — Rocky-inspired creature follows player
   updateSandWorm(c, dt);         // DD — buried boss; breaches when player enters territory
   updateFootprints(c.footprints, c.time.elapsed); // age + fade pooled decals
   updateFires(c, dt);            // flicker + fuel decrement + burnout

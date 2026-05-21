@@ -40,7 +40,9 @@ export type ItemId =
   // Session AAC — craftable home placeables
   | 'bedroll_kit'
   | 'lantern_kit'
-  | 'locker_kit';
+  | 'locker_kit'
+  // Session AAE — pocketable creature companion
+  | 'companion_pod';
 
 /** Per-slot metadata for stateful items (canteen fill level, cook state, light state). */
 export interface ItemMeta {
@@ -193,7 +195,8 @@ export type InteractType =
   | 'mount'     // speeder seat (Session CC-3.1) — E mounts the bike
   | 'open_sled' // sled cargo deck (Session QQ) — E opens the sled inventory
   | 'attach_rope' // sled rope stub (Session QQ) — LMB w/ rope equipped attaches/detaches
-  | 'open_locker'; // locker chest (Session AAC) — E opens the locker inventory
+  | 'open_locker' // locker chest (Session AAC) — E opens the locker inventory
+  | 'pet_companion'; // creature companion (Session AAE) — passive hover, RMB packs it up
 
 export interface HoverState {
   type: InteractType;

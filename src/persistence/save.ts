@@ -38,6 +38,7 @@ import { spawnLargeTentAt, setNextLargeTentId } from '../world/largeTent.ts';
 import { spawnBedrollAt, setNextBedrollId } from '../world/bedroll.ts';
 import { spawnLanternAt, setNextLanternId } from '../world/lantern.ts';
 import { spawnLockerAt, setNextLockerId } from '../world/locker.ts';
+import type { CompanionState } from '../enemies/companion.ts';
 import { removeShelterZone } from '../shelter/shelterZones.ts';
 
 export const SAVE_KEY = 'dustfall.save.v1';
@@ -56,13 +57,18 @@ export const SAVE_KEY = 'dustfall.save.v1';
 // XX — v7 adds `largeTents?: Array<...>` (D81 — additive only).
 // AAC — v8 adds `bedrolls?` + `lanterns?` + `lockers?` (additive only,
 // D81 discipline preserved). Pre-v8 saves load with empty arrays for
-// each. Loader accepts v1-v8.
-export const SAVE_VERSION = 8;
+// each.
+// AAE — v9 adds `companion?: { pos, state }` for the Rocky-inspired
+// pocketable creature (singleton per save). When the player has the
+// pod in inventory, the field is undefined; the companion_pod ItemId
+// in the inventory serialization captures that state. Loader accepts
+// v1-v9.
+export const SAVE_VERSION = 9;
 
 type V3 = { x: number; y: number; z: number };
 
 export interface SaveV1 {
-  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
   seed: number;
   savedAt: number;
 
@@ -152,6 +158,18 @@ export interface SaveV1 {
     rotationY: number;
     contents: LootEntry[];
   }>;
+
+  /** Session AAE — Rocky-inspired creature companion. Singleton.
+   *  Present iff the creature is currently deployed in the world.
+   *  When the player has the companion_pod in inventory, this field
+   *  is undefined and the pod's ItemId is captured in the inventory
+   *  serialization instead. Pre-v9 saves have undefined here →
+   *  setupOpeningScene's default spawn stays (player encounters the
+   *  creature for the first time on load). */
+  companion?: {
+    pos: V3;
+    state: CompanionState;
+  };
 
   /** Hover speeder pose. Optional so v1 saves written before this field
    *  was added still load cleanly (the speeder just stays at the default
@@ -300,6 +318,10 @@ export function saveGameState(ctx: GameContext): { ok: boolean; error?: string }
         rotationY: l.rotationY,
         contents: l.contents.map((e) => ({ ...e })),
       })),
+      companion: ctx.companion ? {
+        pos: { x: ctx.companion.pos.x, y: ctx.companion.pos.y, z: ctx.companion.pos.z },
+        state: ctx.companion.state,
+      } : undefined,
       sleds: ctx.sleds.list.map((s) => {
         const tr = s.body.translation();
         return {
@@ -364,7 +386,7 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
   // cleanly (missing `sleds` / `largeTents` treated as empty; missing
   // `inventory.discoveredRecipes` seeded with ALL_RECIPE_IDS so
   // pre-TT playtesters keep their recipe knowledge).
-  if (save.version !== 1 && save.version !== 2 && save.version !== 3 && save.version !== 4 && save.version !== 5 && save.version !== 6 && save.version !== 7 && save.version !== 8) {
+  if (save.version !== 1 && save.version !== 2 && save.version !== 3 && save.version !== 4 && save.version !== 5 && save.version !== 6 && save.version !== 7 && save.version !== 8 && save.version !== 9) {
     return { ok: false, error: `unsupported save version ${save.version}` };
   }
   if (save.seed !== Tuning.RNG_SEED) {
@@ -614,6 +636,35 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
     }
     if (maxId > 0) setNextLockerId(maxId);
   }
+
+  // AAE — companion. setupOpeningScene's default spawn already placed
+  // the companion in the world (singleton). If the save says the player
+  // had the pod in inventory (save.companion === undefined for a v9+
+  // save AND the inventory already has companion_pod from the slot
+  // load above), despawn the default companion. Otherwise (v9+ with
+  // companion field, or pre-v9), restore/keep it at the saved position
+  // and state.
+  const playerHasPod = ctx.inventory.slots.some(s => s.item === 'companion_pod')
+                    || ctx.inventory.backpack.some(s => s.item === 'companion_pod');
+  if (save.version >= 9 && playerHasPod && save.companion === undefined) {
+    // v9+ save with no companion field + pod in inventory → player picked
+    // it up before saving. Despawn the just-spawned default companion.
+    if (ctx.companion) {
+      ctx.three.scene.remove(ctx.companion.group);
+      ctx.companion = null;
+    }
+  } else if (save.version >= 9 && save.companion) {
+    // v9+ with companion field → restore exact pos + state.
+    if (ctx.companion) {
+      ctx.companion.pos.set(save.companion.pos.x, save.companion.pos.y, save.companion.pos.z);
+      ctx.companion.group.position.copy(ctx.companion.pos);
+      ctx.companion.state = save.companion.state;
+      ctx.companion.stateTimer = 0;
+    }
+  }
+  // Pre-v9 saves: keep the default-spawned companion at the
+  // opening-scene location. Player encounters the creature for the
+  // first time on this load.
 
   ctx.sleds.list.length = 0;
   ctx.sleds.open = null;

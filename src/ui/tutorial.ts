@@ -42,6 +42,8 @@ const HINTS: Partial<Record<ItemId, string>> = {
   bedroll_kit: 'LMB-click to lay it down — E to sleep, RMB to roll it back up',
   lantern_kit: 'LMB-click to place — gives off warm light, RMB to pack later',
   locker_kit: 'LMB-click to place — E to stash gear inside (empty it before packing)',
+  // Session AAE — pocketable creature companion.
+  companion_pod: 'something alive curled inside a stone egg — LMB-click to set it free, RMB on the creature to call it back',
 };
 
 // Each row is [key label, description]. Updated in UU (LMB-leaning

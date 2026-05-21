@@ -3,6 +3,80 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session AAE — 2026-05-21 — Creature companion (Rocky-inspired) + SAVE_VERSION v9 ✓ verify pass
+`verified` — tsc clean; preview-eval confirmed AI state transitions
+(rolling at distance / walking mid / idle close), pack-up + redeploy,
+save v9 round-trip with companion field.
+
+**Bucket item — pocketable creature companion** modeled on Rocky from
+Project Hail Mary. A small (~0.4m) red exoskeleton creature with
+5 radially-symmetric legs that follows the player around. **Dual
+locomotion state machine**: ROLLING (legs retracted, body rolls
+around lateral axis, ~5.5 m/s, kicks in at ≥6m from player) →
+WALKING (legs extended + gait sin-wave animation, ~1.8 m/s,
+2-6m band) → IDLE (breathing-style body bob, leg-twitch idle
+animation, <2m). Hysteresis on transitions so the creature
+doesn't oscillate at thresholds.
+
+**New module `src/enemies/companion.ts`** (~290 LOC) — Companion
+interface + makeCompanionVisual + spawnCompanionAt + deployCompanion
++ packUpCompanion + updateCompanion. Visual is an IcosahedronGeometry
+body with flat-shading (rocky carapace), darker inner shell, single
+black eye + white glint near the "front" (+Z local), 5 leg pivots
+arranged pentagonally with cylinder+tip geometry. Each leg is its
+own Group so it can be lifted/hidden per state. Body uses world
+heading rotation; rolling animates `body.rotation.x` accumulating by
+`speed / radius` rad/sec; walking animates each leg's local Y
+via `sin(t·ω + phase)` with 72° phase offset between legs; idle
+uses a slower bob frequency for breathing and quarter-amplitude
+leg-twitch.
+
+**Lifecycle**: pre-deployed on every boot at a position computed by
+`setupOpeningScene` (3m camera-right of the player's spawn, on the
+opening-scene flat ground). Player encounters the creature on first
+look-around. New `companion_pod` ItemId + ItemDef in items.ts
+(wieldLmb='place', viewmodel = stone-egg shape with warm-red veining
+suggesting something alive inside). Player RMBs the deployed
+companion to convert it to a pod in inventory; LMBs the wielded
+pod to redeploy. Singleton — only one companion per save.
+
+**New `InteractType 'pet_companion'`** in types.ts (passive hover,
+no E action, just a noun-only prompt). interaction.ts gains a
+`case 'companion'` block + raycast-targets + hover-reset wiring.
+wieldAction.ts `handleContextAction` extended: RMB on
+hover.type==='pet_companion' AND ctx.companion.hovered →
+packUpCompanion. tutorial.ts HINTS entry explains the pod.
+
+**SAVE_VERSION 8 → 9** (D81 additive). New optional `companion?: {
+pos, state }` field on `SaveV1`. Serialize iff ctx.companion is
+non-null. Loader logic: setupOpeningScene's default spawn runs on
+every boot (placing the creature). On v9+ save with companion field
+→ teleport the default-spawned creature to the saved pos + state.
+On v9+ save WITHOUT companion field + companion_pod in inventory →
+despawn the default creature (player carried it before saving).
+Pre-v9 saves → keep the default-spawned creature; player meets the
+creature for the first time on this load (graceful introduction).
+
+**Plumbing**: ctx.companion: Companion | null on GameContext;
+initialized null in main.ts ctx; `spawnCompanionAt(ctx, ...)` called
+right after `setupOpeningScene` using the returned
+`companionSpawnPos`; `updateCompanion(c, dt)` in tick after
+`updateLizards`. New Tuning constants: COMPANION_BODY_RADIUS=0.20,
+LEG_LENGTH=0.14, COLOR_HEX=0xb04030, DARK_COLOR_HEX=0x6e2818,
+ROLLING_SPEED=5.5, WALKING_SPEED=1.8, CLOSE_DISTANCE=2.0,
+FAR_DISTANCE=6.0, FOLLOW_OFFSET=1.5, IDLE_BOB_AMP=0.04,
+IDLE_BOB_FREQ_HZ=1.2, LEG_GAIT_FREQ_HZ=4.0, LEG_GAIT_AMP=0.06.
+
+**Verification**: tsc clean. Spawned at boot in 'idle'. Player
+teleported 20m away → state switched to 'rolling', creature rolled
+5.50m in 1.0s (matches spec speed exactly). Player back within
+2m → state switched to 'idle'. Pack-up: companion → null, pod
+added to inventory. Redeploy: new Companion object created. Save
+written at v9 with companion field populated. (Screenshot capture
+hit the known preview-tool timeout from
+`memory/dustfall_preview_gotchas.md`; mesh is conventionally-
+constructed so visual is trusted.)
+
 ## Session AAD — 2026-05-21 — Polish playtest pass for AAC kits ✓ verify pass
 `verified` — tsc clean; screenshot-driven inspection confirmed both fixes
 visually + ghost preview ring sizes now per-kit.

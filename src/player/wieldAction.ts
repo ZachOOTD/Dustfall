@@ -39,6 +39,7 @@ import { packUpLargeTent } from '../world/largeTent.ts';
 import { packUpBedroll } from '../world/bedroll.ts';
 import { packUpLantern } from '../world/lantern.ts';
 import { packUpLocker } from '../world/locker.ts';
+import { packUpCompanion } from '../enemies/companion.ts';
 import { detachRope } from '../world/sled.ts';
 import { isLootMenuOpen } from '../ui/lootMenu.ts';
 import { isSleepOverlayOpen } from '../ui/sleepOverlay.ts';
@@ -173,6 +174,12 @@ function handleContextAction(ctx: GameContext): void {
         return;
       }
     }
+  }
+
+  // AAE — RMB on the deployed companion → pack into companion_pod.
+  if (hover.type === 'pet_companion' && ctx.companion?.hovered) {
+    packUpCompanion(ctx);
+    return;
   }
 
   // RMB on a sled (cargo or rope-stub) → release rope if tethered

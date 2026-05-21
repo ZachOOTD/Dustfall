@@ -12,6 +12,7 @@ import { deployLargeTent } from '../world/largeTent.ts';
 import { deployBedroll } from '../world/bedroll.ts';
 import { deployLantern } from '../world/lantern.ts';
 import { deployLocker } from '../world/locker.ts';
+import { deployCompanion } from '../enemies/companion.ts';
 import { easeOutBack, easeInOutCubic, easeOutQuad } from '../core/ease.ts';
 import { addItem } from './inventory.ts';
 import { makeLizardVisual } from '../enemies/lizard.ts';
@@ -1583,6 +1584,64 @@ const _DEFS: Record<ItemId, ItemDef> = {
     },
   },
 
+  // Session AAE — pocketable creature companion. Pre-deployed at boot
+  // near the opening wreck. Player picks up via RMB on the deployed
+  // creature, which converts it to a `companion_pod` in inventory.
+  // LMB on the wielded pod redeploys.
+  companion_pod: {
+    id: 'companion_pod',
+    name: 'STONE EGG',
+    glyph: '◓',
+    description: 'a small carved stone egg — something alive curls inside',
+    stackable: false,
+    maxStack: 1,
+    wieldLmb: 'place',
+    onUse(ctx, _slot) {
+      const c = deployCompanion(ctx);
+      if (!c) {
+        // Already deployed — refuse silently (only one companion at a time).
+        return { consumed: false, message: 'the creature is already out somewhere' };
+      }
+      return { consumed: true, message: 'the egg cracks — something rolls out' };
+    },
+    makeViewModel() {
+      const group = new THREE.Group();
+      // Egg-shape — slightly elongated icosahedron. Dark stone with
+      // subtle warm-red veining (the creature curled inside).
+      const stoneMat = new THREE.MeshLambertMaterial({
+        color: 0x4a3a2c,
+        flatShading: true,
+      });
+      const veinMat = new THREE.MeshLambertMaterial({
+        color: 0xb04030,
+        emissive: 0x4a1408,
+        emissiveIntensity: 0.4,
+      });
+      const egg = new THREE.Mesh(new THREE.IcosahedronGeometry(0.085, 0), stoneMat);
+      egg.scale.set(1, 1.25, 1);
+      group.add(egg);
+      // Two thin veins running around the egg
+      const v1 = new THREE.Mesh(new THREE.TorusGeometry(0.075, 0.006, 4, 18), veinMat);
+      v1.rotation.x = Math.PI / 2;
+      v1.scale.set(1, 1, 1.2);
+      group.add(v1);
+      const v2 = new THREE.Mesh(new THREE.TorusGeometry(0.072, 0.005, 4, 16), veinMat);
+      v2.rotation.x = Math.PI / 2.5;
+      v2.rotation.z = 0.4;
+      v2.scale.set(1, 1, 1.2);
+      group.add(v2);
+      return group;
+    },
+    makeIcon() {
+      const s = svg();
+      // Egg shape with central crack
+      s.appendChild(svgEl('ellipse', { cx: '12', cy: '13', rx: '5', ry: '7' }));
+      s.appendChild(svgEl('path', { d: 'M12 7 L11 10 L13 12 L11 14 L13 17 L12 19', 'stroke-width': '1' }));
+      s.appendChild(svgEl('circle', { cx: '12', cy: '12.5', r: '0.8', fill: 'currentColor', stroke: 'none' }));
+      return s;
+    },
+  },
+
   rope: {
     id: 'rope',
     name: 'ROPE',
@@ -1650,4 +1709,5 @@ export const ALL_ITEM_IDS: ReadonlyArray<ItemId> = [
   'rope', 'sled_kit',
   'large_tent_kit',  // Session XX
   'bedroll_kit', 'lantern_kit', 'locker_kit',  // Session AAC
+  'companion_pod',  // Session AAE
 ];

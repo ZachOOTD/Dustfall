@@ -103,6 +103,12 @@ export interface OpeningSceneResult {
   skeleton: THREE.Group;
   journal: Journal;
   speeder: SpeederState;
+  /** Session AAE — world position where the creature companion should
+   *  spawn on a fresh game. main.ts calls spawnCompanionAt(ctx, this)
+   *  after setupOpeningScene returns. Sits perpendicular to the
+   *  player's entrance-facing direction so the player notices the
+   *  creature in their peripheral vision on first look. */
+  companionSpawnPos: THREE.Vector3;
 }
 
 export function setupOpeningScene(
@@ -230,5 +236,15 @@ export function setupOpeningScene(
   speederWorld.y = speederGroundY + Tuning.SPEEDER_HOVER_HEIGHT;
   const speeder = placeSpeeder(scene, world, terrain, speederWorld, speederYaw, rand);
 
-  return { wreck, skeleton, journal, speeder };
+  // ── AAE — companion creature spawn position. Sits 3m perpendicular
+  // to the player's spawn-to-entrance axis, on the camera-right side
+  // (north, +Z world after yaw=π/2). Visible from the player's first
+  // look-around without being directly in the entrance line.
+  const companionSpawnPos = new THREE.Vector3(
+    spawnX,
+    terrain.heightAt(spawnX, spawnZ + 3),
+    spawnZ + 3,
+  );
+
+  return { wreck, skeleton, journal, speeder, companionSpawnPos };
 }

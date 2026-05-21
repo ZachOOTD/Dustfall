@@ -269,6 +269,24 @@ export const Tuning = {
   LOCKER_HEIGHT_M: 0.7,
   LOCKER_NEAR_DISTANCE_SQ: 1.5 * 1.5,
 
+  // Session AAE — creature companion (Rocky-inspired from Project Hail Mary).
+  // Pentagonal-symmetric body with 5 radial legs. Two locomotion states:
+  // rolling (legs retracted, body rolls) for fast follow at distance;
+  // walking (legs out, upright) for close-range. Idle at very close.
+  COMPANION_BODY_RADIUS: 0.20,           // ~0.4m diameter creature
+  COMPANION_LEG_LENGTH: 0.14,
+  COMPANION_COLOR_HEX: 0xb04030,         // deep coral red — pops against sand
+  COMPANION_DARK_COLOR_HEX: 0x6e2818,    // shadow tone on alternating facets
+  COMPANION_ROLLING_SPEED_M_S: 5.5,      // sprint follow
+  COMPANION_WALKING_SPEED_M_S: 1.8,      // close-range stride
+  COMPANION_CLOSE_DISTANCE_M: 2.0,       // < this = idle (chill out)
+  COMPANION_FAR_DISTANCE_M: 6.0,         // > this = roll to catch up
+  COMPANION_FOLLOW_OFFSET_M: 1.5,        // target sits this far BESIDE the player (not on top)
+  COMPANION_IDLE_BOB_AMP: 0.04,          // breathing-style body bob amplitude
+  COMPANION_IDLE_BOB_FREQ_HZ: 1.2,       // breathing rate
+  COMPANION_LEG_GAIT_FREQ_HZ: 4.0,       // legs sin-wave when walking
+  COMPANION_LEG_GAIT_AMP: 0.06,          // peak leg lift while walking
+
   // Dune terrain (Session P) — ridged + wind-warped noise.
   // Ridges run perpendicular to the wind direction; aniso < 1 elongates them.
   // Asymmetry biases ridge crests in the wind direction (steeper leeward face).

@@ -59,7 +59,7 @@ const _dir = new THREE.Vector3();
 interface InteractHit {
   type: InteractType;
   id: number;
-  registry: 'pickups' | 'waterSources' | 'cacti' | 'lizards' | 'sandWorms' | 'lootContainers' | 'fires' | 'tents' | 'largeTents' | 'bedrolls' | 'lanterns' | 'lockers' | 'salvageables' | 'journals' | 'speeder' | 'sleds';
+  registry: 'pickups' | 'waterSources' | 'cacti' | 'lizards' | 'sandWorms' | 'lootContainers' | 'fires' | 'tents' | 'largeTents' | 'bedrolls' | 'lanterns' | 'lockers' | 'salvageables' | 'journals' | 'speeder' | 'sleds' | 'companion';
   distance: number;
 }
 
@@ -127,6 +127,7 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
   for (const b of ctx.bedrolls.list) b.hovered = false;
   for (const l of ctx.lanterns.list) l.hovered = false;
   for (const l of ctx.lockers.list) l.hovered = false;
+  if (ctx.companion) ctx.companion.hovered = false;
   for (const s of ctx.salvageables.list) s.hovered = false;
   for (const sl of ctx.sleds.list) sl.hovered = false;
   ctx.inventory.hover = null;
@@ -171,6 +172,7 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
   for (const b of ctx.bedrolls.list) targets.push(b.mesh);
   for (const l of ctx.lanterns.list) targets.push(l.mesh);
   for (const l of ctx.lockers.list) targets.push(l.mesh);
+  if (ctx.companion) targets.push(ctx.companion.group);
   for (const sl of ctx.sleds.list) targets.push(sl.group);
   for (const s of ctx.salvageables.list) targets.push(s.panel);
   for (const j of ctx.journals.list) targets.push(j.mesh);
@@ -475,6 +477,22 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
         passive: true,
       };
       // No E-action — lantern is purely a light source.
+      return;
+    }
+
+    case 'companion': {
+      // AAE — pocketable creature. Passive hover (no E action; just
+      // shows the prompt noun so the player knows it's interactable).
+      // RMB pack-up via wieldAction.ts/handleContextAction.
+      const c = ctx.companion;
+      if (!c) return;
+      c.hovered = true;
+      ctx.inventory.hover = {
+        type: 'pet_companion',
+        distance: info.distance,
+        promptNoun: '(your companion)',
+        passive: true,
+      };
       return;
     }
 

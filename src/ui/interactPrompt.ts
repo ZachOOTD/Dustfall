@@ -23,6 +23,7 @@ const VERBS: Record<InteractType, string> = {
   open_sled: 'open',    // QQ — E opens the sled cargo (sled inventory menu)
   attach_rope: '',      // QQ — LMB-driven; verb is empty so the [E] chip is hidden. promptNoun carries the click-to-attach copy.
   open_locker: 'open',  // AAC — E opens the locker (chest inventory menu)
+  pet_companion: '',    // AAE — passive hover; RMB packs up (no E action)
 };
 
 let _root: HTMLDivElement | null = null;

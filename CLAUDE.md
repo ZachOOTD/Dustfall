@@ -58,7 +58,27 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session AAD — Polish playtest pass for AAC kits.
+**Last shipped**: Session AAE — Creature companion (Rocky-inspired)
++ SAVE_VERSION v9. New `src/enemies/companion.ts` (~290 LOC) — small
+red exoskeleton creature with 5 radially-symmetric legs. **Dual
+locomotion state machine**: rolling (legs retracted, body rolls,
+~5.5 m/s, ≥6m from player), walking (legs extended + gait, ~1.8 m/s,
+2-6m), idle (breathing bob, leg twitch, <2m). Hysteresis on
+thresholds. Pre-deployed at boot via `setupOpeningScene`'s new
+`companionSpawnPos` (3m camera-right of player spawn). New
+`companion_pod` ItemId (wieldLmb='place'; stone-egg viewmodel with
+warm-red veining) — RMB on deployed companion converts to pod;
+LMB on wielded pod redeploys. Singleton per save. New
+`InteractType 'pet_companion'` (passive hover). **SAVE_VERSION v9**
+adds optional `companion?: { pos, state }` field. Loader: v9+
+with field → teleport default-spawned creature to saved
+pos+state; v9+ without field but companion_pod in inventory →
+despawn default (player carried it); pre-v9 → keep default (graceful
+introduction). 13 new Tuning constants centralize feel. Verified
+mechanically: rolling at distance, walking close, idle at <2m,
+pack/redeploy cycle, save round-trip clean. Bucket item shipped.
+
+**Prior milestone**: Session AAD — Polish playtest pass for AAC kits.
 Screenshot-driven inspection of the new bedroll/lantern/locker
 surfaced two visible issues, both fixed inline. (1) Ghost preview
 ring sizes were all defaulting to 0.80m; added per-kit entries to
