@@ -20,3 +20,4 @@ Use `/triage-ideas` to bulk-classify a free-form dump.
 [feat] base-building mechanics
 [feat] small red creature companion — follows player, pocketable into backpack, re-deployable
 [idea] remove HUD stat bars in favor of audio/visual/text cues ("you could use a drink")
+[feat] fire grill attachment — craftable add-on that fires accept; lets player cook multiple raw items in parallel (multi-slot cook state on fire instead of single _cooking module var)

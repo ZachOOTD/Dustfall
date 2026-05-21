@@ -3,6 +3,72 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session AAG — 2026-05-21 — Atmospheric polish + inventory swap-on-full ✓ verify pass
+`verified` — tsc clean; preview-eval confirmed footprint puff pool
+spawns + dust mote layer particle count + mirage shader uniform
+update + swap-on-pickup-full code path (test-mock raycast pollution
+is a known eval-methodology limitation, not a real defect).
+
+**Four-item interim polish bundle** — atmosphere + UX QoL. Continuous-
+polish items from the roadmap, plus the swap-on-pickup-full feature
+called out in the post-AAC kickoff brief.
+
+**Footprint puffs** (`src/world/footprintPuffs.ts`, new ~120 LOC).
+Upward dust burst on each player footstep. 60-particle pool, 5
+particles per burst, 0.6s life, gravity-affected. Spawned from
+`src/player/controller.ts` footstep block when `!wet` (so wet salt-
+flats don't kick dust). Sits next to the existing footprint-decal
+spawn — same trigger, different visual layer (decal = persistent
+print on ground, puff = transient upward burst). Mirrors fire's
+ember-particle architecture (pool + reuse + per-frame integration).
+
+**Ambient dust motes** (`src/world/dustMotes.ts`, new ~85 LOC).
+Complementary atmospheric layer to existing `ambientDust.ts`. 120
+bone-warm-white particles (0xe8dcc0, vs ambientDust's orange-tan),
+0.04m size (finer), 0.18 opacity (subtler), slower vertical drift,
+persists through storms until intensity > 0.8 (where ambientDust
+goes full-opacity and dust motes step back to avoid double-up).
+Sits at camera height + 25m spread cube re-centered around the
+player each frame. Clone-not-abstract — two atmospheric layers
+with different palettes and storm-response curves stay separate
+rather than parameterizing one.
+
+**Mirage shader on salt-flat biome** (`src/world/terrainMaterial.ts`).
+Vertex shader gains a heat-wobble Y displacement that activates only
+on hot salt-flats during high sun. New module-level
+`_shaderRefs: Set<ShaderRef>` captures `onBeforeCompile` shader
+instances; new `updateTerrainShaderUniforms(time, cameraX, cameraZ,
+sunHeight)` exported and ticked from main.ts each frame. Displacement
+formula multiplies four masks: distance-from-camera (smoothstep 15→80m
+so near-field stays solid), saltness (smoothstep 0.10→0.54 on
+`aBiomeRaw`), sun height (smoothstep 0.3→0.9 so only high sun shimmers),
+and a sin×cos space-frequency wobble (0.30 + 0.22 spatial freqs, 3.0
++ 2.3 temporal freqs). Peak amplitude 0.18m. 3 new Tuning constants
+(MIRAGE_NEAR_M/FAR_M/AMP_M).
+
+**Inventory swap on pickup-full** (`src/player/interaction.ts`). When
+the player presses E on a ground pickup but `addItem` returns -1 AND
+the currently selected hotbar slot is non-empty, the old behavior
+was a "your bag is full" toast — now starts a 1.5s hold-E swap
+timer (mirrors the existing `_salvaging` module-singleton pattern).
+On completion: drops N copies of the selected slot's item at the
+player's feet via `spawnDroppedPickup` (one per stack unit), clears
+the slot, then `addItem`s the world pickup into the now-empty slot.
+Cancels on key-release. New `_pickupSwap` module state + 4 helper
+functions + 1 Tuning constant (PICKUP_SWAP_DURATION_S = 1.5). Closes
+a UX rough edge during exploration — full bag now offers a clear
+escalation rather than a hard refusal.
+
+**Cooking multi-per-fire deferred**: the user's direction was "hold
+off on cooking multi per fire. maybe we can make a grill attachment
+to the fire in the future". Added `[feat] fire grill attachment` to
+backlog.md as the future vision — craftable add-on that fires accept
+to enable parallel cooking (multi-slot cook state on fire instead
+of the current single `_cooking` module var).
+
+**No save schema change**. All four items are runtime-only / module-
+state / transient.
+
 ## Session AAF — 2026-05-21 — 7-day storm countdown ("THE LONG STORM") ✓ verify pass
 `verified` — tsc clean; preview-eval confirmed storm curve at multiple
 days + HUD text/color states + one-shot toast at day-7 transition.

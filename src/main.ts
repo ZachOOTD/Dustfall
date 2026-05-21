@@ -31,6 +31,7 @@ import { setupOpeningScene } from './world/openingScene.ts';
 import { updateOpeningWreckGodRay } from './world/openingWreck.ts';
 import { updateLanterns } from './world/lantern.ts';
 import { updateCompanion, spawnCompanionAt } from './enemies/companion.ts';
+import { createFootprintPuffs, updateFootprintPuffs } from './world/footprintPuffs.ts';
 import { hasSave } from './persistence/save.ts';
 import { createJournalPanel } from './ui/journalPanel.ts';
 import { createRecipeBookPanel } from './ui/recipeBookPanel.ts';
@@ -48,6 +49,8 @@ import { createGhostPreview, updateGhostPreview } from './player/ghostPreview.ts
 import { createViewModel, updateViewModel } from './player/viewModel.ts';
 import { createWeather, updateWeather } from './world/weather.ts';
 import { createAmbientDust, updateAmbientDust } from './world/ambientDust.ts';
+import { createDustMotes, updateDustMotes } from './world/dustMotes.ts';
+import { updateTerrainShaderUniforms } from './world/terrainMaterial.ts';
 import { createStormVignette, updateStormVignette } from './world/stormVignette.ts';
 import { createStatVignette, updateStatVignette } from './ui/statVignette.ts';
 import { updateStaminaWobble } from './player/staminaWobble.ts';
@@ -164,6 +167,7 @@ const sandWorm = spawnSandWorm(three.scene, physics.world, terrain);
 
 const weather = createWeather(three.scene, three.camera);
 const ambientDust = createAmbientDust(three.scene, three.camera);
+const dustMotes = createDustMotes(three.scene, three.camera);
 const stormVignette = createStormVignette(three.scene);
 const footprints = createFootprintRegistry(three.scene, terrain);
 
@@ -259,6 +263,7 @@ const ctx: GameContext = {
   salvageables,
   weather,
   ambientDust,
+  dustMotes,
   stormVignette,
   speeder: null,                 // populated by setupOpeningScene on fresh worlds
   footprints,
@@ -339,6 +344,7 @@ createRecipeBookPanel(ctx);  // AAA — TAB-key modal listing discovered recipes
 createPerfHud(ctx);
 createStatVignette();  // WW — must come after HUD creation so it overlays correctly
 createGhostPreview(ctx); // AAA — kit-placement preview ring + marker
+createFootprintPuffs(three.scene); // AAG — upward dust burst on each footstep
 // Tutorial panel must exist before wireOverlays so the lock handler can call
 // noteIntroSeen() — and before installDebugPanel so __game.showControls works.
 createTutorial(ctx);
@@ -439,6 +445,14 @@ startLoop(ctx, (c, dt) => {
   c.physics.step(dt);            // physics first
   updateWeather(c, dt);          // sandstorm intensity (drives sky + audio + thirst)
   updateAmbientDust(c, dt);      // toned-down drift, suppressed by sandstorm
+  updateDustMotes(c);            // AAG — bone-white motes layer, persists through light storms
+  // AAG — salt-flat mirage shader uniforms.
+  updateTerrainShaderUniforms(
+    c.time.elapsed,
+    c.three.camera.position.x,
+    c.three.camera.position.z,
+    c.time.sunHeight,
+  );
   updateStormVignette(c);        // screen-edge tint at peak storm (BB-4)
   updateStatVignette(c);         // WW — cold/thirst tint when stats low
   updateLighting(c, dt);         // sun + lights + sunDir/sunHeight
@@ -456,6 +470,7 @@ startLoop(ctx, (c, dt) => {
   updateCompanion(c, dt);        // AAE — Rocky-inspired creature follows player
   updateSandWorm(c, dt);         // DD — buried boss; breaches when player enters territory
   updateFootprints(c.footprints, c.time.elapsed); // age + fade pooled decals
+  updateFootprintPuffs(c, dt);   // AAG — particle puffs from each footstep
   updateFires(c, dt);            // flicker + fuel decrement + burnout
   updateLanterns(c);             // AAC — sin-driven flicker on placed lanterns
   updateCacti(c);                // CC-4 — regrow harvested alien-cactus fruit after a day cycle

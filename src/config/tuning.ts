@@ -364,6 +364,23 @@ export const Tuning = {
   AMBIENT_DUST_OPACITY: 0.10,
   AMBIENT_DUST_SUPPRESS_STORM: 0.15,  // hide above this storm intensity
 
+  // Session AAG — fine dust motes (complementary to ambientDust).
+  // Bone-warm white, smaller particles, persists through storms until
+  // intensity > 0.8. Motes visibly catch lantern/fire/sun light because
+  // their near-white color stands out only where lighting brightens
+  // surrounding surfaces (no shader required — pure visual contrast).
+  DUST_MOTES_COUNT: 120,
+  DUST_MOTES_SPREAD: 25,
+  DUST_MOTES_OPACITY: 0.18,
+
+  // Session AAG — salt-flat mirage shader. Vertex-level wobble on the
+  // existing terrain mesh — subtle Y displacement gated by distance from
+  // camera + saltness + sun height. Reads as heat-haze shimmer at the
+  // horizon when looking across salt flats at midday.
+  MIRAGE_NEAR_M: 15,      // closer than this = no wobble (immediate ground stable)
+  MIRAGE_FAR_M: 80,       // beyond this = peak wobble
+  MIRAGE_AMP_M: 0.18,     // peak vertex Y displacement
+
   // Scene
   FOV: 78,
   NEAR_PLANE: 0.1,

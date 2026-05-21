@@ -43,6 +43,13 @@
 import * as THREE from 'three';
 import { Tuning } from '../config/tuning.ts';
 
+// AAG — captured shader refs for the per-frame mirage uniform updates.
+// One shader instance per material instance; each call to
+// createTerrainMaterial registers its shader here when onBeforeCompile
+// fires. updateTerrainShaderUniforms (main.ts tick) iterates the set.
+type ShaderRef = { uniforms: Record<string, { value: unknown }> };
+const _shaderRefs = new Set<ShaderRef>();
+
 /**
  * Build the patched terrain material. Use exactly like a normal
  * `MeshLambertMaterial({ vertexColors: true })` — accepts vertex colors
@@ -60,6 +67,12 @@ export function createTerrainMaterial(): THREE.MeshLambertMaterial {
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uWindCos = { value: windCos };
     shader.uniforms.uWindSin = { value: windSin };
+    // AAG — mirage uniforms. Updated per-frame in main.ts tick via
+    // updateTerrainShaderUniforms. Initial values harmless (no wobble).
+    shader.uniforms.uTime = { value: 0 };
+    shader.uniforms.uCameraPosXZ = { value: new THREE.Vector2(0, 0) };
+    shader.uniforms.uSunHeight = { value: 0 };
+    _shaderRefs.add(shader as unknown as ShaderRef);
 
     // ── Vertex shader: forward world position + WORLD-SPACE normal +
     //    per-vertex biome raw noise to the fragment stage.
@@ -82,6 +95,9 @@ export function createTerrainMaterial(): THREE.MeshLambertMaterial {
         varying vec3 vWorldPositionTerrain;
         varying vec3 vWorldNormal;
         varying float vBiomeRaw;
+        uniform float uTime;
+        uniform vec2 uCameraPosXZ;
+        uniform float uSunHeight;
       `,
     );
     shader.vertexShader = shader.vertexShader.replace(
@@ -91,6 +107,25 @@ export function createTerrainMaterial(): THREE.MeshLambertMaterial {
         vWorldPositionTerrain = (modelMatrix * vec4(position, 1.0)).xyz;
         vWorldNormal = normalize(mat3(modelMatrix) * normal);
         vBiomeRaw = aBiomeRaw;
+
+        // AAG — salt-flat mirage. Vertical wobble on far salt-flat
+        // vertices, animated, gated by sun height. Subtle — peak amp
+        // ~0.18m at full effect. Reads as heat shimmer at the horizon
+        // when looking across the salt pan at midday.
+        float mirageDist = distance(vWorldPositionTerrain.xz, uCameraPosXZ);
+        float mirageDistFactor = smoothstep(${Tuning.MIRAGE_NEAR_M.toFixed(1)}, ${Tuning.MIRAGE_FAR_M.toFixed(1)}, mirageDist);
+        // Saltness: match the fragment's smoothstep window so the wobble
+        // fades in over the same biome-boundary band as the visual cracks.
+        float mirageSaltness = smoothstep(0.10, 0.54, aBiomeRaw);
+        // Sun-height gate: invisible at night/dawn, peak at midday.
+        float mirageSun = smoothstep(0.3, 0.9, uSunHeight);
+        // Wobble: two crossed sin waves at different freqs, time-driven.
+        float mirageWobble =
+          sin(vWorldPositionTerrain.x * 0.30 + uTime * 3.0) *
+          cos(vWorldPositionTerrain.z * 0.22 + uTime * 2.3);
+        float mirageDisp = mirageWobble * ${Tuning.MIRAGE_AMP_M.toFixed(2)}
+                         * mirageDistFactor * mirageSaltness * mirageSun;
+        transformed.y += mirageDisp;
       `,
     );
 
@@ -437,4 +472,25 @@ export function createTerrainMaterial(): THREE.MeshLambertMaterial {
   };
 
   return mat;
+}
+
+/** AAG — per-frame mirage uniform update. Called from main.ts tick.
+ *  Pushes `time.elapsed`, the camera's XZ position, and the current
+ *  `time.sunHeight` to every registered terrain-material shader so the
+ *  mirage wobble animates and gates correctly. */
+export function updateTerrainShaderUniforms(
+  time: number,
+  cameraX: number,
+  cameraZ: number,
+  sunHeight: number,
+): void {
+  for (const s of _shaderRefs) {
+    const u = s.uniforms;
+    if (u.uTime) (u.uTime as { value: number }).value = time;
+    if (u.uCameraPosXZ) {
+      const v = (u.uCameraPosXZ as { value: THREE.Vector2 }).value;
+      v.set(cameraX, cameraZ);
+    }
+    if (u.uSunHeight) (u.uSunHeight as { value: number }).value = sunHeight;
+  }
 }

@@ -14,7 +14,7 @@ import * as THREE from 'three';
 import type { GameContext } from '../GameContext.ts';
 import { isPlaying } from '../GameContext.ts';
 import { addItem } from '../inventory/inventory.ts';
-import { despawnPickup, findPickupById } from '../pickups/pickups.ts';
+import { despawnPickup, findPickupById, spawnDroppedPickup } from '../pickups/pickups.ts';
 import { findWaterSourceById } from '../world/waterSources.ts';
 import { findCactusById, harvestCactus } from '../world/cactus.ts';
 import { findLizardById, lootLizard } from '../enemies/lizard.ts';
@@ -95,6 +95,18 @@ let _salvaging: {
   completeAt: number;
 } | null = null;
 
+// AAG — pickup-swap-on-hold-E state. Started when player presses E on a
+// pickup but bag is full (and selected slot is non-empty). After
+// PICKUP_SWAP_DURATION of held-E, the selected slot is dropped at the
+// player's feet and the pickup goes into that slot. Cancels on E
+// release, hover loss, slot change, or player death.
+let _pickupSwap: {
+  pickupId: number;
+  startedAt: number;
+  completeAt: number;
+} | null = null;
+const PICKUP_SWAP_DURATION = 1.5;
+
 function resolveInteractable(obj: THREE.Object3D): InteractHit | null {
   let cur: THREE.Object3D | null = obj;
   while (cur) {
@@ -136,14 +148,19 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
   tickCooking(ctx);
   // Drive any in-progress salvage forward (cancelled later if hover drops).
   tickSalvage(ctx);
+  // AAG — drive any in-progress pickup-swap forward (similarly cancelled
+  // later if hover/key drops or completes).
+  tickPickupSwap(ctx);
 
   if (!isPlaying(ctx)) {
     if (_salvaging) cancelSalvage();
+    if (_pickupSwap) cancelPickupSwap();
     return;
   }
   // Overlay menus suppress interaction (pointer is unlocked anyway).
   if (isLootMenuOpen() || isSleepOverlayOpen() || isCraftingMenuOpen() || isInventoryOverlayOpen() || isControlsPanelOpen() || isJournalPanelOpen() || isRecipeBookPanelOpen()) {
     if (_salvaging) cancelSalvage();
+    if (_pickupSwap) cancelPickupSwap();
     return;
   }
 
@@ -220,10 +237,24 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
         itemId: p.itemId,
         promptNoun: def.name.toLowerCase(),
       };
-      if (ctx.input.pressed.has('KeyE')) {
+      if (ctx.input.pressed.has('KeyE') && !_pickupSwap) {
         const slotIdx = addItem(ctx.inventory, p.itemId, p.meta, ctx);
         if (slotIdx < 0) {
-          ctx.ui.showToast('your bag is full');
+          // AAG — bag is full. If the selected slot has something to
+          // drop, start a hold-E swap timer instead of giving up.
+          // (If selected is empty, addItem would have succeeded, so
+          // this branch implies sel.item !== null.)
+          const sel = ctx.inventory.slots[ctx.inventory.selectedIdx];
+          if (sel.item !== null) {
+            _pickupSwap = {
+              pickupId: p.id,
+              startedAt: ctx.time.elapsed,
+              completeAt: ctx.time.elapsed + PICKUP_SWAP_DURATION,
+            };
+            ctx.ui.showToast('hold E to swap with selected slot');
+          } else {
+            ctx.ui.showToast('your bag is full');
+          }
           return;
         }
         const where = slotIdx >= 100 ? 'stowed' : 'taken';
@@ -723,4 +754,84 @@ function cancelSalvage(): void {
   if (!_salvaging) return;
   _salvaging = null;
   hideSalvageProgress();
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// AAG — pickup-swap-on-hold-E
+// ─────────────────────────────────────────────────────────────────────
+
+const _dropDir = new THREE.Vector3();
+
+function cancelPickupSwap(): void {
+  if (!_pickupSwap) return;
+  _pickupSwap = null;
+  hideSalvageProgress();
+}
+
+/** Per-frame: advance the swap timer, cancel on key/hover/slot change,
+ *  complete on timer hit. */
+function tickPickupSwap(ctx: GameContext): void {
+  if (!_pickupSwap) return;
+  const s = _pickupSwap;
+  // Cancel if key released. We use the held-state `keys` map (not
+  // `pressed` which only fires on the initial press frame).
+  if (!ctx.input.keys['KeyE']) { cancelPickupSwap(); return; }
+  // Cancel if the target pickup is gone (taken by another path, despawned).
+  const p = findPickupById(ctx.pickups.list, s.pickupId);
+  if (!p) { cancelPickupSwap(); return; }
+  // Cancel if selected slot is now empty (player changed slots or used
+  // the selected item) — there'd be nothing to swap.
+  const sel = ctx.inventory.slots[ctx.inventory.selectedIdx];
+  if (sel.item === null) { cancelPickupSwap(); return; }
+  const elapsed = ctx.time.elapsed - s.startedAt;
+  const t01 = Math.min(1, elapsed / PICKUP_SWAP_DURATION);
+  showSalvageProgress(t01);
+  if (ctx.time.elapsed >= s.completeAt) {
+    completePickupSwap(ctx, p);
+  }
+}
+
+function completePickupSwap(
+  ctx: GameContext,
+  p: import('../pickups/pickups.ts').Pickup,
+): void {
+  const slot = ctx.inventory.slots[ctx.inventory.selectedIdx];
+  if (!slot.item) { cancelPickupSwap(); return; }
+  const droppedId = slot.item;
+  const droppedMeta = slot.meta ? { ...slot.meta } : undefined;
+  const droppedCount = slot.count;
+  const droppedDef = getItemDef(droppedId);
+  // Compute drop position — same forward-from-camera math as
+  // inventory.ts dropSelected. Project to terrain Y.
+  const cam = ctx.three.camera;
+  cam.getWorldDirection(_dropDir);
+  _dropDir.y = 0;
+  if (_dropDir.lengthSq() < 1e-4) _dropDir.set(0, 0, -1);
+  _dropDir.normalize();
+  const dx = cam.position.x + _dropDir.x * 0.8;
+  const dz = cam.position.z + _dropDir.z * 0.8;
+  // Spawn one dropped pickup per stack unit (matches dropSelected's
+  // per-unit-spawn pattern; stacks of N items appear as N pickups
+  // clustered at the drop spot).
+  for (let i = 0; i < droppedCount; i++) {
+    const dropped = spawnDroppedPickup(ctx.three.scene, ctx.terrain, { x: dx, z: dz }, droppedId, droppedMeta);
+    ctx.pickups.list.push(dropped);
+  }
+  // Clear the slot.
+  slot.item = null;
+  slot.count = 0;
+  delete slot.meta;
+  // Take the world pickup into the now-empty slot (addItem will pick
+  // the first empty slot, which is the one we just cleared).
+  const slotIdx = addItem(ctx.inventory, p.itemId, p.meta, ctx);
+  if (slotIdx < 0) {
+    // Should be impossible — we just freed the selected slot. Defensive.
+    ctx.ui.showToast('the swap failed somehow');
+  } else {
+    const pickedDef = getItemDef(p.itemId);
+    ctx.ui.showToast(`swapped — dropped ${droppedDef.name.toLowerCase()} for ${pickedDef.name.toLowerCase()}`);
+    playPickup();
+    despawnPickup(ctx, p);
+  }
+  cancelPickupSwap();
 }

@@ -4,10 +4,12 @@ Cumulative state. Rewritten end-to-end at each `/session-end`. A
 reviewer who's never seen the project should be able to read this +
 `CLAUDE.md` + `docs/GDD.md` and understand where Dustfall is.
 
-**Current state**: Session AAC shipped (2026-05-21). 30 sessions
-post-MVP. tsc clean. SAVE_VERSION v8. Post-overnight: UU/VV/UU-2/
-WW/XX/YY/ZZ + AAA (polish) + AAB (world depth) + AAC (craftable
-home — bedroll/lantern/locker placeables). Working tree dirty
+**Current state**: Session AAG shipped (2026-05-21). 34 sessions
+post-MVP. tsc clean. SAVE_VERSION v9 (unchanged this session).
+Post-overnight: UU/VV/UU-2/WW/XX/YY/ZZ + AAA (polish) + AAB (world
+depth) + AAC (craftable home) + AAD (kit playtest polish) + AAE
+(creature companion + v9) + AAF (7-day storm countdown) + AAG
+(atmospheric polish + inventory swap-on-full). Working tree dirty
 pending the user's commit.
 
 ---
@@ -84,6 +86,86 @@ Fresh-game start (the de-facto Tier 1 — Session W shipped):
    captured mid-drink doesn't resume drinking on reload.
 
 ---
+
+## What's freshly shipped (Session AAG deltas)
+
+Atmospheric polish + UX QoL bundle — four items from the continuous-
+polish list plus the swap-on-pickup-full from the post-AAC kickoff
+brief. Cooking multi-per-fire deferred per user direction.
+
+- **Footprint puffs** (`src/world/footprintPuffs.ts`, new ~120 LOC).
+  Particle pool of 60; 5 particles per footstep burst; 0.6s life;
+  gravity-affected upward dust. Spawned from `controller.ts`'s
+  footstep block when `!wet` (salt-flat wet conditions don't kick
+  dust). Lives alongside the existing footprint-decal (decal =
+  persistent print, puff = transient burst).
+- **Ambient dust motes** (`src/world/dustMotes.ts`, new ~85 LOC).
+  Complementary atmospheric layer to existing ambientDust.ts. 120
+  bone-warm particles (0xe8dcc0), 0.04m size, opacity 0.18, slower
+  vertical drift. Suppresses when storm intensity > 0.8 (ambientDust
+  takes the lead at storm peak; dust motes fade so the two layers
+  cross-fade rather than double up). Re-centers around the camera
+  each frame within a 25m cube. Clone-not-abstract — two layers with
+  different palettes and storm-response curves stay separate rather
+  than parameterizing one.
+- **Mirage shader on salt-flat biome** (`src/world/terrainMaterial.ts`).
+  Vertex shader heat-wobble Y displacement. Module-level
+  `_shaderRefs: Set<ShaderRef>` captures `onBeforeCompile` shader
+  instances; exported `updateTerrainShaderUniforms(time, cameraX,
+  cameraZ, sunHeight)` ticked each frame from main.ts. Four
+  multiplicative masks: distance (15→80m smoothstep), saltness
+  (`aBiomeRaw` 0.10→0.54), sun height (0.3→0.9), and a sin×cos
+  spatial+temporal wobble. Peak amp 0.18m. Activates only on hot
+  salt-flats under high sun — your dunes stay solid.
+- **Inventory swap on pickup-full** (`src/player/interaction.ts`).
+  When `addItem` returns -1 (bag full) AND the currently selected
+  hotbar slot is non-empty, the old "your bag is full" toast is
+  replaced with a 1.5s hold-E timer. New module state `_pickupSwap`
+  + `tickPickupSwap` + `cancelPickupSwap` + `completePickupSwap`,
+  mirroring the existing `_salvaging` pattern. On completion:
+  drops the selected slot's items at the player's feet via
+  `spawnDroppedPickup` (one drop per stack unit), clears the slot,
+  then addItems the world pickup into the now-empty slot. Cancels
+  cleanly on E-release.
+- **Cooking multi-per-fire deferred**: user direction — "hold off on
+  cooking multi per fire. maybe we can make a grill attachment to the
+  fire in the future to cook multiple at once." Added
+  `[feat] fire grill attachment` to backlog as the future vision.
+
+No save schema change. 5 new Tuning constants (MIRAGE_NEAR_M/FAR_M/
+AMP_M, DUST_MOTES_COUNT/SPREAD/OPACITY, PICKUP_SWAP_DURATION_S).
+Pattern reused: ambientDust's particle pool + _salvaging's
+module-singleton hold-progress + fire's ember-pool architecture.
+
+## What's freshly shipped (Session AAF deltas)
+
+7-day storm countdown ("THE LONG STORM") shipped — first real
+endgame pressure mechanic. New `stormCurveAt(daysSurvived)` exported
+from `src/world/weather.ts` returns `{intervalMin, intervalMax,
+duration}` lerping day-0 baseline → day-7-endpoint over days 0-6,
+plateauing onto LONG_STORM values from day 7+. 9 new Tuning
+constants. State machine captures `currentStormDuration` at
+storm-start. New `#long-storm-indicator` HUD DOM. One-shot toast on
+day-7 transition via `weather.longStormAnnounced` transient flag.
+No save schema change (uses existing `time.daysSurvived`).
+
+## What's freshly shipped (Session AAE deltas)
+
+Creature companion (Rocky-inspired) shipped + SAVE_VERSION v9.
+Small (~0.4m) red exoskeleton creature, 5 radially-symmetric legs.
+Dual locomotion state machine: rolling (≥6m, ~5.5 m/s) → walking
+(2-6m, ~1.8 m/s, gait sin-wave) → idle (<2m, breathing bob). New
+ItemId `companion_pod` (recipe id 14 — cloth×2 + scrap×2 +
+branch×1). New `src/enemies/companion.ts` (~290 LOC). RMB on
+companion → packs to `companion_pod`. v9 schema additive
+companion field. Spawned at boot in opening scene 3m camera-right
+of player.
+
+## What's freshly shipped (Session AAD deltas)
+
+Polish playtest for AAC kits. Bedroll ghost-ring 0.55→0.65m;
+lantern ghost-ring opacity 0.85→0.5 (lantern itself is tall enough
+to read); bedroll mesh height 0.06→0.10m. No save schema change.
 
 ## What's freshly shipped (Session AAC deltas)
 

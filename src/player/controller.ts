@@ -13,6 +13,7 @@ import {
   playFootstepSalt,
   playFootstepWet,
 } from '../audio/audio.ts';
+import { spawnFootprintPuff } from '../world/footprintPuffs.ts';
 
 const fwd = new THREE.Vector3();
 const right = new THREE.Vector3();
@@ -162,6 +163,13 @@ export function updatePlayer(ctx: GameContext, dt: number): void {
         const toeOut = Tuning.FOOTPRINT_PLAYER_TOEOUT_RAD * sign;
         ctx.footprints.spawn('player', tr.x + offX, tr.z + offZ, yaw + toeOut, ctx.time.elapsed);
         _stepParity ^= 1;
+        // AAG — small upward dust puff at the foot position (same skip-on-rocky
+        // logic as the decal). Wet ground (near water sources) also dampens
+        // dust kicks — skip there.
+        if (!wet) {
+          const groundY = ctx.terrain.heightAt(tr.x + offX, tr.z + offZ);
+          spawnFootprintPuff(tr.x + offX, groundY, tr.z + offZ);
+        }
       }
     }
   } else {

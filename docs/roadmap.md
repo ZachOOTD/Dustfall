@@ -22,10 +22,16 @@ and promotes the second.
 
 - **Overnight era** (UU through ZZ, 7 sessions, 2026-05-21): control scheme overhaul, RMB context verbs, HUD polish, larger enterable tent, perceivedIntensity split (visual + audio halves).
 - **Session AAA** (2026-05-21): first-impression polish bundle — UU pickup migration reverted (E takes again), ghost preview for LMB-place, vignette threshold lowered, recipe book panel, crosshair `.dead` state.
+- **Session AAB** (2026-05-21): world depth — salvage yield differentiation per wreck kind + skylight god-rays for opening wreck.
+- **Session AAC** (2026-05-21): craftable home — bedroll/lantern/locker kits, SAVE_VERSION v8.
+- **Session AAD** (2026-05-21): playtest polish for AAC kits — ghost-ring sizes + bedroll visibility.
+- **Session AAE** (2026-05-21): creature companion (Rocky-inspired), SAVE_VERSION v9.
+- **Session AAF** (2026-05-21): 7-day storm countdown ("THE LONG STORM") — escalating-storm endgame.
+- **Session AAG** (2026-05-21): atmospheric polish + inventory swap-on-full — footprint puffs, dust motes, mirage shader, hold-E swap-on-pickup-full.
 
 ## Up next
 
-The post-overnight push has fully shipped. The next session is open — pick from the big-ticket bucket below (creature companion, 7-day countdown, trading, etc.) or surface a polish item from playtest. See `docs/next-session-prompt.md` for direction notes.
+Procedural world generation (POI randomization per seed) is the next-recommended architectural lift — the user has called it "the logical next step" with the caveat that it needs careful work. See `docs/next-session-prompt.md` for the kickoff brief and the fire-grill-attachment fallback if a smaller session is preferred.
 
 ## Next — Big-ticket bucket (1–2 picks per session at ~4–7h each)
 Pick whatever feels most missing after the polish + atmosphere arc.

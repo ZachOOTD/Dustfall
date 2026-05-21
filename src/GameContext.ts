@@ -14,6 +14,7 @@ import type { ShelterRegistry } from './shelter/shelterZones.ts';
 import type { Raider } from './enemies/raider.ts';
 import type { Weather } from './world/weather.ts';
 import type { AmbientDust } from './world/ambientDust.ts';
+import type { DustMotes } from './world/dustMotes.ts';
 import type { StormVignette } from './world/stormVignette.ts';
 import type { SpeederState } from './world/speeder.ts';
 import type { Journal } from './world/journal.ts';
@@ -116,6 +117,10 @@ export interface GameContext {
   salvageables: SalvageableRegistry;
   weather: Weather;
   ambientDust: AmbientDust;
+  /** Session AAG — fine bone-white dust motes layer, complementary
+   *  to the tan ambientDust drift. Visible in lit areas via lighting
+   *  contrast (no shader, just color choice). */
+  dustMotes: DustMotes;
   stormVignette: StormVignette;
   speeder: SpeederState | null;       // null until the opening scene spawns it
   footprints: FootprintRegistry;
