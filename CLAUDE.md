@@ -58,7 +58,19 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session VV — Tuning lift + crosshair feedback +
+**Last shipped**: Session UU-2 — RMB context actions + controls panel
+refresh. New `handleContextAction()` in `src/player/wieldAction.ts`
+dispatches RMB (mousePressed.has(2)) off `ctx.inventory.hover` —
+inherits all UU gates (overlay, mounted, isPlaying). New
+`packUpTent(ctx, tent)` in tent.ts symmetric to deployTent: addItem
+'tent_kit' first → if full, refuse + toast "no room" + tent stays;
+else removeShelterZone, scene.remove, splice list, toast "tent
+packed". RMB-on-sled with `tether.kind === 'speeder'` reuses
+existing detachRope. CONTROLS table in tutorial.ts updated for the
+new scheme (LMB / HOLD LMB / RMB / E rows). Decision D77 (RMB as
+power-user verb, friction-2). Third of 5 overnight sessions (WW next).
+
+**Prior milestone**: Session VV — Tuning lift + crosshair feedback +
 as-any fix. Palette-cleanser between UU and UU-2 (both interaction-
 dispatch sessions). **fire.ts constants lifted** to Tuning: 5
 constants (initial fuel, fuel per branch, shelter radius/height,

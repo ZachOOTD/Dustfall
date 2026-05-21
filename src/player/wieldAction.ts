@@ -36,6 +36,8 @@ import { updateCombat } from './combat.ts';
 import { getItemDef } from '../inventory/items.ts';
 import { addItem } from '../inventory/inventory.ts';
 import { despawnPickup } from '../pickups/pickups.ts';
+import { packUpTent } from '../world/tent.ts';
+import { detachRope } from '../world/sled.ts';
 import { isLootMenuOpen } from '../ui/lootMenu.ts';
 import { isSleepOverlayOpen } from '../ui/sleepOverlay.ts';
 import { isCraftingMenuOpen } from '../ui/craftingMenu.ts';
@@ -65,6 +67,11 @@ export function updateWieldAction(ctx: GameContext, dt: number): void {
     updateCombat(ctx, dt);
     return;
   }
+
+  // UU-2 — RMB context action (additive verb; independent of wielded item).
+  // Inherits all gates above. Runs BEFORE the LMB dispatch so RMB-on-tent
+  // never collides with LMB-place (different mouse button).
+  handleContextAction(ctx);
 
   const slot = ctx.inventory.slots[ctx.inventory.selectedIdx];
   if (!slot.item) {
@@ -116,6 +123,38 @@ export function updateWieldAction(ctx: GameContext, dt: number): void {
       // takes it. Q still drives def.onUse via inventory.ts.
       handlePickupTake(ctx);
       return;
+  }
+}
+
+/** Session UU-2 — RMB context action. Independent of wielded item:
+ *  power-user verb for tent pack-up + sled rope release. Reads
+ *  `ctx.inventory.hover` (set by interaction.ts the same way LMB-take
+ *  reads it). Gates already applied by `updateWieldAction`. */
+function handleContextAction(ctx: GameContext): void {
+  if (!ctx.input.mousePressed.has(2)) return;
+  const hover = ctx.inventory.hover;
+  if (!hover) return;
+
+  // RMB on a tent → pack it up (refuses if inventory full).
+  if (hover.type === 'sleep') {
+    for (const t of ctx.tents.list) {
+      if (t.hovered) {
+        packUpTent(ctx, t);
+        return;
+      }
+    }
+  }
+
+  // RMB on a sled (cargo or rope-stub) → release rope if tethered
+  // to the speeder. No-op if untethered or player-tethered (those use
+  // the existing LMB-on-rope-stub detach path from QQ-2 / D67).
+  if (hover.type === 'open_sled' || hover.type === 'attach_rope') {
+    for (const sled of ctx.sleds.list) {
+      if (sled.hovered && sled.tether.kind === 'speeder') {
+        detachRope(ctx, sled, 'rope released');
+        return;
+      }
+    }
   }
 }
 

@@ -3,6 +3,32 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session UU-2 — 2026-05-21 — RMB context actions + controls panel refresh ✓ verify pass
+`verified` — tsc clean; eval-driven preview confirmed RMB pack-up + full-
+inventory refuse + mounted gate. **RMB dispatch** added to
+`src/player/wieldAction.ts` via new `handleContextAction(ctx)` helper —
+runs between mount-gate and the LMB wieldLmb switch, reads
+`mousePressed.has(2)`, dispatches off `ctx.inventory.hover`. All
+existing gates (overlay-open, mounted, isPlaying) inherit from
+`updateWieldAction`'s early-returns — RMB respects them automatically.
+**`packUpTent(ctx, tent)`** in `src/world/tent.ts` mirrors `deployTent`:
+try `addItem('tent_kit')` FIRST — if inventory full (-1), refuse with
+toast "no room in your bag" + tent stays placed (no silent
+destruction). On success: `removeShelterZone`, `scene.remove(mesh)`,
+`splice` from tents.list, toast "tent packed". **RMB-on-sled (speeder
+tether only)**: reuses existing `detachRope(ctx, sled, 'rope released')`
+when `hover.type === 'open_sled' || 'attach_rope'` AND `sled.tether.kind
+=== 'speeder'`. **Controls panel refresh** (`src/ui/tutorial.ts`):
+CONTROLS table updated — LMB row "attack / place kit / take pickup",
+new HOLD LMB row "drink canteen continuously", new RMB row "pack tent /
+release sled rope", E row tightened to "open / sleep / mount / read /
+refill / harvest / cook / salvage". Q demoted to "use selected item
+(backup)". HINTS table: canteen hint references hold-LMB; fire_kit /
+tent_kit hints reference LMB-click + RMB pack-up. **Verification
+PASS**: tents 1→0 on RMB pack-up, scene -1 child, tent_kit back in
+inventory; full-inventory refuse leaves tent intact; mounted=true
+blocks RMB. Third of 5 overnight sessions; WW (HUD micro-polish) next.
+
 ## Session VV — 2026-05-21 — Tuning lift + crosshair feedback + as-any fix ✓ verify pass
 `verified` — tsc clean; eval-driven preview confirmed crosshair class
 toggling across hover states (interactable / kill / cleared).

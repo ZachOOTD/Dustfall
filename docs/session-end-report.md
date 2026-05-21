@@ -4,10 +4,10 @@ Cumulative state. Rewritten end-to-end at each `/session-end`. A
 reviewer who's never seen the project should be able to read this +
 `CLAUDE.md` + `docs/GDD.md` and understand where Dustfall is.
 
-**Current state**: Session VV shipped (2026-05-21). 22 sessions
-post-MVP. tsc clean. Second of 5 overnight sessions (UU-2 → WW → XX
-queued — see `docs/roadmap.md` "Overnight queue"). Working tree
-dirty pending the user's commit (see `## Commit handoff` below).
+**Current state**: Session UU-2 shipped (2026-05-21). 23 sessions
+post-MVP. tsc clean. Third of 5 overnight sessions (WW → XX queued —
+see `docs/roadmap.md` "Overnight queue"). Working tree dirty pending
+the user's commit (see `## Commit handoff` below).
 
 ---
 
@@ -24,7 +24,7 @@ Retroactive tier mapping for orientation only:
 | Tier 1 — Vertical slice | I–W | ✓ shipped | Inventory, crafting, interactions, opening scene, journal |
 | Tier 2 — Target | X–CC | ✓ shipped | Audio architecture, atmosphere, speeder, animated title |
 | Tier 3 — Expected | DD–PP | ✓ shipped | Sand worm boss, weapon variants, procgen POIs, biome rework |
-| Tier 4 — Stretch / polish | QQ–VV | ✓ in progress | Sled mechanic, sandworm rescale, opening wreck redo, crafting rework, control scheme overhaul, hygiene/crosshair polish |
+| Tier 4 — Stretch / polish | QQ–UU-2 | ✓ in progress | Sled, sandworm rescale, opening wreck redo, crafting rework, control scheme overhaul, hygiene/crosshair, RMB context verbs |
 
 **Verify status**: `npm run verify` = `tsc --noEmit`. Single check
 (no tier breakdown). Currently PASS.
@@ -83,6 +83,30 @@ Fresh-game start (the de-facto Tier 1 — Session W shipped):
    captured mid-drink doesn't resume drinking on reload.
 
 ---
+
+## What's freshly shipped (Session UU-2 deltas)
+
+RMB layer on top of UU's LMB scheme. Power-user verbs:
+
+- **`handleContextAction(ctx)`** in `src/player/wieldAction.ts` — runs
+  between mount-gate and the LMB switch. Reads `mousePressed.has(2)`
+  + `ctx.inventory.hover`. RMB on tent (`hover.type === 'sleep'`) →
+  `packUpTent`. RMB on sled (`'open_sled' | 'attach_rope'`) with
+  `sled.tether.kind === 'speeder'` → `detachRope(ctx, sled,
+  'rope released')`. All overlay/mount/isPlaying gates inherited.
+- **`packUpTent(ctx, tent)`** in `src/world/tent.ts` symmetric to
+  `deployTent`. Atomic: tries `addItem('tent_kit')` FIRST; if -1
+  (inventory full), aborts BEFORE touching scene/shelter/list +
+  toasts "no room in your bag". On success: removeShelterZone,
+  scene.remove, splice list, toast "tent packed".
+- **Sled rope release via RMB**: reuses existing `detachRope`. No
+  new function; just dispatch wiring.
+- **CONTROLS table refresh** in `src/ui/tutorial.ts:44-59`. Captures
+  the new LMB scheme + RMB additions + Q-as-backup. HINTS table
+  also updated: canteen "hold LMB to drink", kits reference
+  LMB-click + RMB pack-up.
+
+Decision D77 logged (RMB as additive power-user verb, friction-2).
 
 ## What's freshly shipped (Session VV deltas)
 
@@ -222,34 +246,34 @@ Recent ones (session-tagged):
 
 ## Suggested next session (1-3 directions in priority order)
 
-1. **Session UU-2 — RMB context actions + controls panel refresh**
-   (~1.5h). Extend `wieldAction.ts` to dispatch RMB (`mousePressed.has(2)`).
-   RMB on tent → pack up (build `packUpTent(ctx, tent)` symmetric to
-   `deployTent`). RMB on sled (when rope is attached to speeder) →
-   release rope (reuse existing `detachRope`). Update
-   `src/ui/tutorial.ts:44-59` CONTROLS table to reflect UU's LMB
-   scheme + RMB additions. See `docs/next-session-prompt.md`.
-2. **Session WW — HUD micro-polish** (~1.5h). Low-stat warning
-   vignettes (cold = blue, thirst = brown — clone stormVignette
-   pattern), low-stamina screen wobble (mirror sandworm-tremor),
-   interact-prompt fade.
-3. **Session XX — Larger enterable tent** (~3h). New `large_tent_kit`
+1. **Session WW — HUD micro-polish** (~1.5h). Three visible-at-first-
+   boot wins: (a) low-stat warning vignettes (cold = blue, thirst =
+   brown) — clone stormVignette.ts pattern; (b) low-stamina screen
+   wobble — mirror the sandworm-tremor pattern; (c) interact-prompt
+   fade refinement (opacity transition over ~120ms). See
+   `docs/next-session-prompt.md`.
+2. **Session XX — Larger enterable tent** (~3h). New `large_tent_kit`
    ItemDef + recipe (id 10) + `src/world/largeTent.ts` module +
    `weather.perceivedIntensity` split + `SAVE_VERSION 6 → 7` additive
-   migration.
+   migration. **Only session in this plan authorized to bump
+   SAVE_VERSION.**
+3. Audio sample stems (.ogg sourcing) — architecture exists since X;
+   blocked on asset-pipeline external dependency. Not actionable
+   without source files.
 
-The top pick (UU-2) is the next session in the overnight queue.
+The top pick (WW) is the next session in the overnight queue.
 Plan file at `.claude/plans/i-want-to-set-floating-dusk.md`.
 
 ---
 
 ## Time spent
 
-22 sessions shipped (A–VV). Approx ~87-142h elapsed dev time across
-roughly 3 weeks of calendar time. Session VV was a tight palette-
-cleanser — ~1h: tuning lifts + crosshair feedback + as-any fix +
-eval-driven verification + docs. UU + VV combined = ~5-6h of the
-overnight queue (~3 sessions remaining).
+23 sessions shipped (A–UU-2). Approx ~89-144h elapsed dev time across
+roughly 3 weeks of calendar time. Session UU-2 was a tight RMB-layer
+session — ~1h: wieldAction extension + packUpTent + controls refresh
++ eval-driven verification + docs. UU + VV + UU-2 combined = ~6-7h
+of the overnight queue (~2 sessions remaining: WW polish ~1.5h + XX
+larger tent ~3h).
 
 ---
 

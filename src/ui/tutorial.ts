@@ -28,27 +28,30 @@ interface TutorialState {
 }
 
 const HINTS: Partial<Record<ItemId, string>> = {
-  canteen: 'press Q to drink — refill at water sources',
+  canteen: 'hold LMB to drink — refill at water sources',
   branch: 'branches fuel fires — craft 3 + scrap into a fire kit with C',
   cloth: 'press C to open the crafting menu',
   scrap: 'scrap is a crafting material — press C',
   bandage: 'press Q to bandage a wound',
   machete: 'left-click swings the machete',
-  fire_kit: 'select it and press Q to light a fire here',
-  tent_kit: 'select it and press Q to pitch a tent — E on it to sleep',
+  fire_kit: 'select it and LMB-click to light a fire — RMB to pack later',
+  tent_kit: 'select it and LMB-click to pitch a tent — E to sleep, RMB to pack',
   cactus_pulp: 'raw food — cook at a fire for more hunger',
   raw_lizard_meat: 'raw meat — cook at a fire to make it safe to eat',
 };
 
-// Each row is [key label, description].
+// Each row is [key label, description]. Updated in UU (LMB-leaning
+// scheme) + UU-2 (RMB context verbs).
 const CONTROLS: ReadonlyArray<readonly [string, string]> = [
   ['WASD', 'move'],
   ['SHIFT', 'sprint'],
   ['SPACE', 'jump'],
   ['MOUSE', 'look'],
-  ['LMB', 'attack'],
-  ['Q', 'use selected item'],
-  ['E', 'interact / pick up / refill / search / harvest / cook / sleep'],
+  ['LMB', 'attack / place kit / take pickup'],
+  ['HOLD LMB', 'drink canteen continuously'],
+  ['RMB', 'pack tent / release sled rope'],
+  ['E', 'open / sleep / mount / read / refill / harvest / cook / salvage'],
+  ['Q', 'use selected item (backup)'],
   ['G', 'drop selected item'],
   ['1 – 4 / WHEEL', 'select hotbar slot'],
   ['C', 'open crafting menu'],

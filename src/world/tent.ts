@@ -6,8 +6,10 @@ import type { GameContext } from '../GameContext.ts';
 import { Tuning } from '../config/tuning.ts';
 import {
   addShelterZone,
+  removeShelterZone,
   type ShelterZone,
 } from '../shelter/shelterZones.ts';
+import { addItem } from '../inventory/inventory.ts';
 
 export interface Tent {
   id: number;
@@ -161,4 +163,26 @@ export function setNextTentId(n: number): void {
 export function findTentById(list: Tent[], id: number | undefined): Tent | undefined {
   if (id === undefined) return undefined;
   return list.find((t) => t.id === id);
+}
+
+/** Session UU-2 — symmetric to `deployTent`. RMB on a tent invokes
+ *  this via wieldAction.ts. Refuses if inventory can't hold the
+ *  returned `tent_kit` (no silent destruction of the player's tent). */
+export function packUpTent(ctx: GameContext, tent: Tent): boolean {
+  // Try to give the kit back first — if this fails, we abort BEFORE
+  // touching scene / shelter / list so the tent stays placed.
+  const slotIdx = addItem(ctx.inventory, 'tent_kit', undefined, ctx);
+  if (slotIdx < 0) {
+    ctx.ui.showToast('no room in your bag');
+    return false;
+  }
+  // Remove shelter zone (player loses the warmth bubble immediately).
+  removeShelterZone(ctx.shelter, tent.shelterZone);
+  // Remove the mesh from the scene.
+  ctx.three.scene.remove(tent.mesh);
+  // Splice out of the registry.
+  const i = ctx.tents.list.indexOf(tent);
+  if (i >= 0) ctx.tents.list.splice(i, 1);
+  ctx.ui.showToast('tent packed');
+  return true;
 }

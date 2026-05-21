@@ -1551,3 +1551,26 @@ declare constants in `tuning.ts` from the start. Don't ship local
 constants as "placeholder" expecting to lift later — the lift never
 happens unless explicitly scoped (like VV did).
 **friction-score:** 0
+
+## D77 — RMB as additive power-user verb (Session UU-2)
+**When**: Session UU-2.
+**Why**: After UU shipped the LMB-leaning scheme, two power-user
+actions had no clean home: tent pack-up and speeder-tethered sled
+rope release. Adding them to the E menu would have made E feel
+overloaded again (the very thing UU just fixed). Adding new keyboard
+keys would have grown the binding sheet without proportional
+ergonomic value. RMB as a context-action verb is the natural third
+button: same hover-state dispatch as LMB-take, different button.
+The dispatcher lives in `wieldAction.ts`'s `handleContextAction()` —
+inherits ALL UU gates (overlay, mounted, isPlaying) automatically.
+**Considered alternatives**:
+- Long-press E for pack-up (à la inventory weight-drop in some
+  survival games) — clashes with the existing salvage 1.5s E-hold;
+  player can't tell which E-hold they're doing.
+- Combo keys (Shift+E to pack) — keyboard-shortcut bloat.
+- A "tent menu" UI on E (with sleep/pack/cancel options) — extra UI
+  layer for what should be a single-click action.
+**Apply**: future power-user verbs (any "take back what you placed"
+or "release what you tethered" semantic) land in `handleContextAction`.
+The hover-state dispatch is the pattern; the hover.type discriminates.
+**friction-score:** 2
