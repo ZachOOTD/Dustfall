@@ -21,3 +21,7 @@ Use `/triage-ideas` to bulk-classify a free-form dump.
 [feat] small red creature companion — follows player, pocketable into backpack, re-deployable
 [idea] remove HUD stat bars in favor of audio/visual/text cues ("you could use a drink")
 [feat] fire grill attachment — craftable add-on that fires accept; lets player cook multiple raw items in parallel (multi-slot cook state on fire instead of single _cooking module var)
+[feat] sandworm overhaul — AAL moved home to (900, 0) at world edge as a quick test fix. Real overhaul: procgen biome-seeded spawn (dune-biome rejection sampler, like wells in salt); possibly multiple worms per world; smarter detection (sound-based? footstep cadence?); deeper encounter design beyond "sees player → charges"
+[feat] satellite dish structural-framework backing geometry — visible from above when player approaches from the convex side; currently uses DoubleSide as a known cheat (documented in satelliteDish.ts AAL comment)
+[feat] engine block heat shield back panel — modeled thickness instead of FrontSide-only (AAL switched DoubleSide → FrontSide; back face is mostly occluded but a thin back layer would improve oblique-angle reads)
+[idea] stamina tow factor playtest — current 2.0× drain discourages sled travel; audit flagged this; needs in-play signal before tuning

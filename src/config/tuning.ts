@@ -671,7 +671,16 @@ export const Tuning = {
   // from the original 1× scale (D49 — combat must stay dodgeable; player
   // sprint is 13.2 m/s, charge stays at 8 m/s so a perpendicular sidestep
   // still works against the snapshotted-target charge).
-  SANDWORM_HOME_POS: { x: 60, z: 0 },        // anchor for patrol circle (dune biome — fits comfortably within ~900m biome region)
+  // AAL — moved sandworm home from (60, 0) to (900, 0) — was triggering
+  // every test boot because player spawn at (-50, 0) was ~110m from the
+  // old home with a 75m detection radius. New position is ~950m from
+  // spawn, on the +X edge of the 2400m world (chunk band ends at 1200m).
+  // Player has to deliberately walk out to encounter it. A future
+  // session will overhaul the sandworm to be a procgen biome-seeded
+  // spawn (currently fixed; falls outside the procgen pipeline). The
+  // biome-check warn in main.ts will fire on seeds where +X edge isn't
+  // dune — acceptable as a known footgun until the overhaul.
+  SANDWORM_HOME_POS: { x: 900, z: 0 },       // anchor for patrol circle (world-edge for low-aggro testing)
   // QQ-2 — Sandworm rescaled −50% from MM (boss-tier 240m felt too
   // big in play). Length 240→120, radius 20→10. All RANGES that scale
   // with body size halved proportionally; speeds + durations + HP
