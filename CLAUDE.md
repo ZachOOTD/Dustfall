@@ -58,7 +58,26 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session AAJ — Opening wreck bugfix pass. Four fixes
+**Last shipped**: Session AAK — AAI multi-seed playtest + flagship
+placement tightening. Booted 5 seeds (100/200/300/4242/99999) via the
+localStorage `pendingSeed` handshake from the AAI snapshot harness;
+captured flagship positions + distance-from-spawn + local terrain
+roughness per seed. Three issues surfaced + fixed: (1) flagships
+landing past 1km from origin (seed 200 engine_block at 1077m, undiscoverable
+in normal play), (2) mega_ship landing 108m from player spawn (seed
+99999 — would dominate the opening view), (3) flagships on steep dune
+slopes (roughness up to 1.27, awkward tilts). Fixes: new Tuning
+`FLAGSHIP_SCATTER_RADIUS_MIN = 200` / `_MAX = 800` (separates flagship
+scatter band from procgen-wreck's wider 120-1100m), `FLAGSHIP_SPAWN_EXCLUSION_RADIUS = 200`
+(vs procgen 80m — keeps big landmarks outside immediate viewshed),
+`FLAGSHIP_MAX_ROUGHNESS = 0.7` with new `localRoughness()` helper in
+poi.ts that samples a 5m patch around each candidate. Post-fix
+verification across all 5 seeds: max distance 786m (was 1077), min
+distance from spawn 307m (was 108), max roughness 0.68 (was 1.27).
+`sampleFlagshipPositions(rand, terrain)` signature gained terrain.
+No schema change. 2 files touched.
+
+**Prior milestone**: Session AAJ — Opening wreck bugfix pass. Four fixes
 flagged from a playtest screenshot. **AAB godray cone removed** —
 read as theatrical; `updateOpeningWreckGodRay` stubbed to no-op
 (preserves main.ts import); 6 godray Tuning constants retained as

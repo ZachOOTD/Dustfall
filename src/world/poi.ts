@@ -156,18 +156,41 @@ const FLAGSHIP_KINDS: ReadonlyArray<FlagshipKind> = [
 // use. Cleared between sessions if hot-reloading.
 let _placedFlagshipPositions: Array<{ x: number; z: number }> = [];
 
+/** Mean per-meter terrain height delta in a 5m patch. Flat ≈ 0; steep
+ *  dune slope ≈ 1.0+. AAK — used by sampleFlagshipPositions to reject
+ *  candidate positions on steep slopes so flagship wrecks don't tilt
+ *  awkwardly past the per-spawn flat-spot drift's compensation range. */
+function localRoughness(terrain: Terrain, cx: number, cz: number): number {
+  const center = terrain.heightAt(cx, cz);
+  let sum = 0;
+  let n = 0;
+  for (const dx of [-5, 0, 5]) for (const dz of [-5, 0, 5]) {
+    sum += Math.abs(terrain.heightAt(cx + dx, cz + dz) - center);
+    n++;
+  }
+  return sum / n;
+}
+
 /** Sample positions for all 6 flagships via rejection. Honors
- *  POI_MIN_SEPARATION between flagships + PLAYER_SPAWN_EXCLUSION_RADIUS
- *  from the opening-scene anchor. */
-function sampleFlagshipPositions(rand: Rng): Array<{ x: number; z: number }> {
+ *  POI_MIN_SEPARATION between flagships + FLAGSHIP_SPAWN_EXCLUSION_RADIUS
+ *  from the opening-scene anchor + FLAGSHIP_MAX_ROUGHNESS sanity gate.
+ *  AAK — tightened the scatter band + spawn-exclusion + added roughness
+ *  check after multi-seed playtest surfaced flagships landing too far
+ *  (>1km), too close to spawn (60m mega_ship ~108m away), or on steep
+ *  dunes (roughness > 1.0). */
+function sampleFlagshipPositions(rand: Rng, terrain: Terrain): Array<{ x: number; z: number }> {
   const minSep = Tuning.POI_MIN_SEPARATION;
   const minSepSq = minSep * minSep;
-  const rMin = Tuning.POI_SCATTER_RADIUS_MIN;
-  const rMax = Tuning.POI_SCATTER_RADIUS_MAX;
+  // AAK — flagship-specific scatter bounds (tighter than procgen-wreck bounds).
+  const rMin = Tuning.FLAGSHIP_SCATTER_RADIUS_MIN;
+  const rMax = Tuning.FLAGSHIP_SCATTER_RADIUS_MAX;
   const maxTries = Tuning.POI_MAX_PLACEMENT_TRIES;
   const spawnX = Tuning.OPENING_SCENE_ANCHOR_X;
   const spawnZ = Tuning.OPENING_SCENE_ANCHOR_Z;
-  const spawnExcludeSq = Tuning.PLAYER_SPAWN_EXCLUSION_RADIUS * Tuning.PLAYER_SPAWN_EXCLUSION_RADIUS;
+  // AAK — flagship spawn exclusion is larger than procgen-wreck exclusion
+  // because flagship structures are visually dominant (60m+).
+  const spawnExcludeSq = Tuning.FLAGSHIP_SPAWN_EXCLUSION_RADIUS * Tuning.FLAGSHIP_SPAWN_EXCLUSION_RADIUS;
+  const maxRoughness = Tuning.FLAGSHIP_MAX_ROUGHNESS;
   const result: Array<{ x: number; z: number }> = [];
   for (let k = 0; k < FLAGSHIP_KINDS.length; k++) {
     let accepted: { x: number; z: number } | null = null;
@@ -176,10 +199,11 @@ function sampleFlagshipPositions(rand: Rng): Array<{ x: number; z: number }> {
       const a = rand() * Math.PI * 2;
       const x = Math.cos(a) * r;
       const z = Math.sin(a) * r;
-      // Player-spawn exclusion (per-flagship — flagships are big, the
-      // spawn area should be quiet so the opening reads as intentional).
+      // Player-spawn exclusion (flagship-specific, larger than procgen-wreck).
       const sdx = x - spawnX, sdz = z - spawnZ;
       if (sdx * sdx + sdz * sdz < spawnExcludeSq) continue;
+      // AAK — terrain-roughness gate. Reject candidates on steep slopes.
+      if (localRoughness(terrain, x, z) > maxRoughness) continue;
       // Flagship-to-flagship min-separation.
       let blocked = false;
       for (const c of result) {
@@ -192,8 +216,8 @@ function sampleFlagshipPositions(rand: Rng): Array<{ x: number; z: number }> {
       result.push(accepted);
     } else {
       // Fallback: place at a position respecting spawn exclusion but
-      // ignoring flagship min-sep (only happens in a saturated world,
-      // which shouldn't occur for 6 flagships in 2400m at 250m min-sep).
+      // ignoring flagship min-sep + roughness (only happens in a
+      // saturated/rough world, which is rare for 6 flagships).
       let fx = 0, fz = 0;
       for (let t = 0; t < maxTries; t++) {
         const r = rMin + rand() * (rMax - rMin);
@@ -226,7 +250,8 @@ export function placePOIs(
 ): void {
   // AAI — rejection-sample positions for the 6 flagships in a single
   // pass, then dispatch each kind's spawn fn against its sampled position.
-  const positions = sampleFlagshipPositions(rand);
+  // AAK — passes terrain so the sampler can apply a roughness gate.
+  const positions = sampleFlagshipPositions(rand, terrain);
   _placedFlagshipPositions = positions;
   for (let i = 0; i < FLAGSHIP_KINDS.length; i++) {
     const kind = FLAGSHIP_KINDS[i];

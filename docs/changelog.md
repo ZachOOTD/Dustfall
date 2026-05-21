@@ -3,6 +3,50 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session AAK — 2026-05-21 — AAI multi-seed playtest + flagship placement tightening ✓ verify pass
+`verified` — tsc clean; multi-seed snapshot harness ran 5 seeds
+(100/200/300/4242/99999) before + after the fixes. All three issues
+resolved on every test seed.
+
+**AAI procgen playtest pass.** Booted 5 seeds via the localStorage
+pendingSeed handshake, captured flagship positions + distance from
+spawn + local terrain roughness for each. Three classes of issue
+surfaced + fixed:
+
+1. **Flagships landing past 1km from origin** (seed 200 engine_block
+   at 1077m, seed 300 satellite_dish at 1033m, seed 4242 crashed_hull
+   at 950m). Undiscoverable in normal play. **Fix**: separated
+   flagship scatter bounds from procgen-wreck bounds. New Tuning
+   constants `FLAGSHIP_SCATTER_RADIUS_MIN = 200`,
+   `FLAGSHIP_SCATTER_RADIUS_MAX = 800`. Procgen wrecks still use the
+   wider 120-1100m band.
+
+2. **Mega-ship landing too close to spawn** (seed 99999: 60m-long
+   mega_ship at distance 130m from origin, ~108m from player spawn —
+   would dominate the opening cinematic view). **Fix**: new Tuning
+   `FLAGSHIP_SPAWN_EXCLUSION_RADIUS = 200` (vs procgen-wreck's 80m).
+   The 200m exclusion keeps large hero-tier landmarks outside the
+   player's immediate ~150m sight zone so the opening reads as
+   intentional.
+
+3. **Flagships on steep dune slopes** (seed 100 camp at roughness
+   1.27, seed 300 crashed_hull at 0.99, seed 99999 engine_block at
+   1.11). Per-spawn flat-spot drift (mega_ship/mega_wreck only)
+   couldn't compensate for the worst cases. **Fix**: new Tuning
+   `FLAGSHIP_MAX_ROUGHNESS = 0.7` + a `localRoughness(terrain, x, z)`
+   helper in `poi.ts` that samples a 5m patch around each candidate
+   and rejects positions exceeding the threshold. After fix, max
+   roughness across all 5 test seeds is 0.68 (was 1.27).
+
+**Verification across all 5 seeds (before → after)**:
+- Max distance from origin: 1077 → 786m (all under 800m cap)
+- Min distance from spawn: 108 → 307m (all over 200m exclusion)
+- Max local roughness: 1.27 → 0.68 (all under 0.7 gate)
+
+`sampleFlagshipPositions` signature changed to take `terrain` (was
+just `rand`); placePOIs call site updated. No save schema change.
+2 files touched (tuning.ts + poi.ts).
+
 ## Session AAJ — 2026-05-21 — Opening wreck bugfix pass ✓ verify pass
 `verified` — tsc clean; preview-eval confirmed (1) godrayCount=0 in
 scene (was 1), (2) latheCount=44 (22 outer + 22 inner shells; was 22),

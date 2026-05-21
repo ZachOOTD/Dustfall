@@ -465,7 +465,22 @@ export const Tuning = {
   // out of the immediate viewshed so the opening cinematic isn't crowded.
   OPENING_SCENE_ANCHOR_X: -50,
   OPENING_SCENE_ANCHOR_Z: 0,
-  PLAYER_SPAWN_EXCLUSION_RADIUS: 80,   // m — no procgen content within this of anchor
+  PLAYER_SPAWN_EXCLUSION_RADIUS: 80,   // m — no procgen wrecks within this of anchor
+
+  // AAK — multi-seed playtest of AAI surfaced three issues:
+  //  (1) flagships landing past 1km from origin → undiscoverable in normal play.
+  //  (2) a 60m-long mega_ship spawning ~108m from player spawn → dominated
+  //      the opening view (seed 99999 in the AAK harness).
+  //  (3) flagships ending up on steep dune slopes (roughness > 1.0) → awkward
+  //      tilts despite mega_ship/mega_wreck's per-spawn flat-spot drift.
+  // Flagship-specific guards (separate from the procgen-wreck constants).
+  // Flagships ship as hero-tier landmarks; the player should be able to
+  // discover them via medium-range exploration without trekking to the
+  // chunk-band edge.
+  FLAGSHIP_SCATTER_RADIUS_MIN: 200,    // m — past the spawn exclusion AND past immediate sight
+  FLAGSHIP_SCATTER_RADIUS_MAX: 800,    // m — tightened from POI_SCATTER_RADIUS_MAX 1100; keeps flagships in a discoverable band
+  FLAGSHIP_SPAWN_EXCLUSION_RADIUS: 200,// m — larger than PLAYER_SPAWN_EXCLUSION_RADIUS so big flagships don't loom over the opening
+  FLAGSHIP_MAX_ROUGHNESS: 0.7,         // average per-meter terrain height delta in a 5m patch (flat=0, steep dune slope ~1.2)
 
   // Lizard procgen — Session HH. Replaces 4 hard-coded spawns with
   // density-based scatter that clusters near POIs + sparse global density.

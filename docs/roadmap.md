@@ -31,10 +31,11 @@ and promotes the second.
 - **Session AAH** (2026-05-21): playtest polish for AAG — Tuning lifts (footprintPuffs + interaction.ts swap-duration) + 5 feel tweaks (puff height ↑, motes opacity ↑, swap snappier, mirage near-edge ↓, motes storm cross-fade softened).
 - **Session AAI** (2026-05-21): procedural world generation (standard 2400m) — per-seed auto-roll on NEW GAME + advanced UI seed entry + flagship POIs unified into rejection sampler + opening scene as seed-stable anchor + density bumps. D82-D85.
 - **Session AAJ** (2026-05-21): opening wreck bugfix pass — AAB godray removed (theatrical), entrance enterable (rim bumped, fragments reduced, floor collider reaches rim), hull thickness (drop DoubleSide for inner-shell + FrontSide approach), tally marks repositioned to side wall.
+- **Session AAK** (2026-05-21): AAI multi-seed playtest + flagship placement tightening — flagship scatter band narrowed (200-800m), larger spawn-exclusion (200m for flagships vs 80m for procgen wrecks), terrain-roughness gate (max 0.7).
 
 ## Up next
 
-Infinite chunk streaming (Minecraft-style) is the natural follow-on to AAI's per-seed world. AAI locks the per-seed contract; the next session would extend to per-chunk seed derivation + JIT chunk load/unload + GPU memory budget. Alternatively: fire grill attachment (multi-cook), trading/NPC economy design exploration, or the AAI playtest pass at multiple seeds.
+Infinite chunk streaming (Minecraft-style) remains the natural follow-on to AAI's per-seed world. Alternatively: fire grill attachment (multi-cook), trading/NPC economy design exploration, or more AAI/AAK-style playtest passes at higher seed counts.
 
 ## Next — Big-ticket bucket (1–2 picks per session at ~4–7h each)
 Pick whatever feels most missing after the polish + atmosphere arc.

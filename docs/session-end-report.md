@@ -4,7 +4,7 @@ Cumulative state. Rewritten end-to-end at each `/session-end`. A
 reviewer who's never seen the project should be able to read this +
 `CLAUDE.md` + `docs/GDD.md` and understand where Dustfall is.
 
-**Current state**: Session AAJ shipped (2026-05-21). 37 sessions
+**Current state**: Session AAK shipped (2026-05-21). 38 sessions
 post-MVP. tsc clean. SAVE_VERSION v9 (unchanged).
 Post-overnight: UU/VV/UU-2/WW/XX/YY/ZZ + AAA (polish) + AAB (world
 depth) + AAC (craftable home) + AAD (kit playtest polish) + AAE
@@ -87,6 +87,31 @@ Fresh-game start (the de-facto Tier 1 — Session W shipped):
    captured mid-drink doesn't resume drinking on reload.
 
 ---
+
+## What's freshly shipped (Session AAK deltas)
+
+AAI multi-seed playtest pass. Built a snapshot harness (boots N seeds
+sequentially via pendingSeed + reload, captures per-seed flagship
+positions / distances / roughness). Ran 5 fixed seeds. Three classes
+of issue surfaced + fixed.
+
+- **Flagship-specific scatter band** — new `FLAGSHIP_SCATTER_RADIUS_MIN/MAX`
+  Tuning constants (200m / 800m). Procgen wrecks keep their wider
+  120-1100m band; flagships now stay discoverable in normal exploration.
+- **Larger flagship spawn-exclusion** — new `FLAGSHIP_SPAWN_EXCLUSION_RADIUS = 200`
+  (vs `PLAYER_SPAWN_EXCLUSION_RADIUS = 80` for procgen wrecks). Big
+  hero-tier landmarks (mega_ship at 60m, mega_wreck at 120m) no longer
+  dominate the opening cinematic.
+- **Terrain-roughness gate** — new `FLAGSHIP_MAX_ROUGHNESS = 0.7` +
+  `localRoughness(terrain, x, z)` helper. Samples a 5m patch around
+  each candidate; rejects positions on steep dune slopes that the
+  per-spawn flat-spot drift can't fully compensate for.
+- **`sampleFlagshipPositions` signature** changed `(rand)` → `(rand, terrain)`.
+  Call site in `placePOIs` updated.
+
+Verification ran the same 5-seed harness post-fix. Max distance dropped
+1077m → 786m, min distance from spawn 108m → 307m, max roughness 1.27 →
+0.68. No save schema change. 2 files touched (tuning.ts + poi.ts).
 
 ## What's freshly shipped (Session AAJ deltas)
 
