@@ -1911,3 +1911,49 @@ layouts. Only commit to new POI modules when the silhouette demands it
 (e.g. a "research outpost" needs a unique flat-roof concrete block that
 no existing primitive provides).
 **friction-score:** 1
+
+## D94 — Visible depletion via index-order component hiding, no per-save tracking (Session AAR)
+**When**: Session AAR (salvage mechanics overhaul).
+**Why**: New panel design has 5 visible interior components; each
+extract hides one. Question: which one? And how does this persist
+across save/load?
+**Considered alternatives**:
+- Random per-extract pick (looks more organic, but needs
+  per-extract RNG seed for save-stability — extra state).
+- Track extractedComponentIndices: number[] in Salvageable + save
+  (full fidelity reload, but additive schema bump v10 → v11 just
+  for visual state).
+- Fixed index order (0 → 4) hiding, no save tracking.
+**Picked**: fixed index order. Save format stays v10 (zero schema
+risk); reload reconstructs visible state from `salvageRemaining` alone
+(extracted count = 5 - salvageRemaining clamped to kindMaxExtracts;
+hide components [0, extractedCount)). Two acceptable migration
+limits documented in changelog: (1) pre-AAR partial saves show all
+components visible but capped extracts; (2) open-door state doesn't
+persist. Players re-pry; no cost.
+**Apply**: future content visual state should default to deriving
+from existing persisted counters rather than adding bespoke schema
+fields. Visible inconsistency on partial saves beats a schema bump
+for cosmetic state.
+**friction-score:** 2
+
+## D95 — Salvage prying composes with movement noise (Session AAR)
+**When**: Session AAR (risk/reward polish on salvage overhaul).
+**Why**: AAP added a noise-multiplier on the sandworm's detection
+radius (mounted=1.85, sprinting=1.45, walking=1.0, still=0.55).
+AAR's pry is also loud (metal-on-metal scrape). Question: should
+prying REPLACE the movement multiplier or COMPOSE with it?
+**Picked**: compose. Standing still while prying = STILL × 1.3 = 0.72
+multiplier (slightly quieter than walking). Mounted while prying =
+MOUNTED × 1.3 = 2.4 multiplier (very loud — the bike's hum + the
+pry creak stack). The composition rule reads as physical-sound-source
+additivity: louder activities add to other louder activities.
+**Considered alternatives**:
+- Replace: prying overrides movement multiplier to a flat 1.5×.
+  Simpler but loses the "mounted-while-prying is double-bad" beat.
+- Pure addition (multipliers summed): wrong shape — would make
+  still+pry quieter than walking (0.55 + 0.3 = 0.85 vs walking 1.0).
+**Apply**: future activity-modifiers on detection follow the same
+multiplicative composition. The base movement multiplier IS the
+floor; activities scale ABOVE it.
+**friction-score:** 1

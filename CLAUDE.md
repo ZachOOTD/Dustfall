@@ -59,7 +59,35 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session AAQ — POI overhaul slice: themed clusters.
+**Last shipped**: Session AAR — Salvage mechanics overhaul: tactile pry
++ extract. Salvage flow rewritten from one-press-roll into two-stage
+interaction. New `scrap_bar` ItemId (recipe id 15: scrap×2 + branch×1,
+wieldLmb='click_use') gates panel-prying — without it equipped,
+panels stay sealed. **New panel model**: rusted fuse-box (0.55×0.55×
+0.18m, larger than pre-AAR 0.32×0.24×0.15) with a HINGED DOOR on the
+left edge (rivets + handle on right) covering a deep cavity. Interior
+holds 5 detail components: 2 wire bundles (red + yellow), PCB chip
+with faint emissive, ceramic fuse cylinder, scrap chunk. Each tagged
+with `panelComponentIndex` for index-order hiding on extract.
+**Pry stage**: E-hold for `SALVAGE_PANEL_PRY_DURATION_S = 0.85s` while
+scrap_bar equipped. Progress bar fills; `playPryCreak` 2-layer SFX
+(420→1400→380Hz scrape + 160→60Hz thump at the door-pops-free moment).
+Per-frame door angle lerp (`SALVAGE_PANEL_DOOR_OPEN_LERP = 4.5/s`)
+swings door to `SALVAGE_PANEL_DOOR_OPEN_ANGLE = 2.1 rad` (~120°).
+Mid-pry slot-switch cancels. **Extract stage**: once open, E-press
+extracts the next visible interior component, rolls a single loot
+entry from the existing kind-table, hides the mesh. Visible
+depletion derived from `salvageRemaining` (no schema bump per D94).
+Inventory-full path keeps component visible + toasts so player can
+retry. **Risk/reward** (D95): pry composes with AAP's noise system —
+`SALVAGE_NOISE_MULTIPLIER_DURING_PRY = 1.3` multiplies the existing
+movement multiplier (mounted+pry = 2.4× detection, still+pry = 0.72×).
+**New SFX**: `playPryCreak`, `playComponentExtract`. Save schema
+stays v10. Acceptable migration: pre-AAR partial saves show all 5
+components visible but extracts capped; open-door state doesn't
+persist. D94/D95. 8 files touched.
+
+**Prior milestone**: Session AAQ — POI overhaul slice: themed clusters.
 Two cluster kinds shipped. **military_convoy**: 4-6 wrecks aligned
 along a 28-48m crash trajectory — lead `engine_cluster` (truck), 2-4
 `cargo_container` middles (freight), `fuselage` tail (comms); shared

@@ -4,7 +4,7 @@ Cumulative state. Rewritten end-to-end at each `/session-end`. A
 reviewer who's never seen the project should be able to read this +
 `CLAUDE.md` + `docs/GDD.md` and understand where Dustfall is.
 
-**Current state**: Session AAQ shipped (2026-05-22). 44 sessions
+**Current state**: Session AAR shipped (2026-05-22). 45 sessions
 post-MVP. tsc clean. SAVE_VERSION v10 (additive: per-fire hasGrill).
 Working tree dirty pending the user's commit.
 
@@ -82,6 +82,32 @@ Fresh-game start (the de-facto Tier 1 — Session W shipped):
     additive per D81.
 
 ---
+
+## What's freshly shipped (Session AAR deltas)
+
+Salvage mechanics overhaul — the previous "press E → roll loot table"
+gets rewritten into a tactile two-stage interaction. 8 files touched.
+Two new D-entries (D94, D95).
+
+- **`scrap_bar` ItemId + recipe** (id 15: scrap×2 + branch×1). Heavy
+  iron lever, `wieldLmb='click_use'`. Required to pry panels.
+- **New panel model** (`addAccessPanel` rewrite in `wrecks.ts`):
+  rusted fuse-box at 0.55×0.55×0.18m with hinged door + interior
+  cavity holding 5 detail components (wires + chip + fuse + scrap).
+  Door tagged on `body.userData.panelDoor`; components tagged with
+  `panelComponentIndex`. Animation state on `panelDoorAngle`/
+  `panelDoorTarget`.
+- **Two-stage interaction** (`interaction.ts` salvageables case +
+  new helpers `completePry`, `extractOneComponent`, `updatePanelDoors`):
+  scrap_bar equipped → E-hold 0.85s to pry → door lerps open → E
+  extracts one component at a time. Component meshes hide in index
+  order; loot rolls per-component from existing kind tables.
+- **`playPryCreak`** + **`playComponentExtract`** SFX in `audio.ts`.
+- **Sandworm noise composition** (D95): prying multiplies detection
+  radius by 1.3× on top of movement multipliers. Standing still
+  while prying ≈ walking detection; mounted+pry hits ~360m.
+- **No schema bump** (D94): visible depletion derived from
+  `salvageRemaining`. Acceptable migration loss documented.
 
 ## What's freshly shipped (Session AAQ deltas)
 

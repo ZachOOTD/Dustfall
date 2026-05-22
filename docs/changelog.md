@@ -3,6 +3,83 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session AAR — 2026-05-22 — Salvage mechanics overhaul: tactile pry + extract ✓ verify pass
+`verified` — tsc clean. Salvage flow rewritten from "press E → roll
+loot table → done" into a tactile two-stage interaction: pry the door
+open with a scrap_bar, then search inside for individual components
+that visibly disappear as you extract them. 8 files touched; no new
+modules. Two new D-entries (D94, D95). Save schema stays v10.
+
+**New item + recipe**:
+- **`scrap_bar` ItemId** (id 16 in the recipe ladder). Recipe id 15:
+  `scrap×2 + branch×1`. `wieldLmb='click_use'` so LMB triggers the pry
+  attempt when hovering a salvage panel. Viewmodel: bent iron lever
+  with forked claws + leather grip. Per D71 next id is 16.
+
+**New panel model** (`src/world/wrecks.ts` — `addAccessPanel` rewrite):
+- Panel body bumped from 0.32×0.24×0.15m to 0.55×0.55×0.18m (larger,
+  square-ish fuse-box silhouette).
+- **Hinged door** on the left edge — full-cover plate with 4 rivets +
+  a recessed handle on the right edge. Door is its own Group rotating
+  around a hinge offset to the panel's left edge; per-frame angle lerp
+  in interaction.ts drives the open animation.
+- **Visible cavity** behind the door — deep black backplate + 5
+  interior detail components: 2 wire bundles (red + yellow), a PCB
+  chip with faint emissive, a ceramic fuse cylinder, and a scrap
+  chunk. Each tagged with `panelComponentIndex` so interaction.ts
+  can hide them as extracted.
+- `body.userData` extended: `panelDoor`, `panelInterior`,
+  `panelComponents[]`, `panelDoorAngle`, `panelDoorTarget`,
+  `panelOpened`. Contract for the per-frame lerp.
+
+**Two-stage interaction** (`src/player/interaction.ts` rewrite —
+salvageables case + new helpers):
+- **Stage 1 (pry)**: scrap_bar must be equipped to pry. Without it,
+  the hover prompt reads `(name) (need a scrap bar)` and E is inert.
+  With scrap_bar: E starts a 0.85s hold (`SALVAGE_PANEL_PRY_DURATION_S`);
+  progress bar fills; pry creak SFX plays. On completion, `panelOpened`
+  flips and `panelDoorTarget` → `SALVAGE_PANEL_DOOR_OPEN_ANGLE = 2.1
+  rad` (~120°). Door lerps open over ~1s via per-frame exponential
+  decay (`SALVAGE_PANEL_DOOR_OPEN_LERP = 4.5/s`). Mid-pry slot-switch
+  cancels (you can't pry without the lever).
+- **Stage 2 (extract)**: once door is open, E-press extracts ONE
+  component per press. New `extractOneComponent` finds the next
+  visible component in index order, hides it, rolls a single loot
+  entry from the existing kind table (`rollWreckLoot`), adds to
+  inventory. Inventory-full path keeps the component visible and
+  toasts "your bag is full" so the player can drop and retry.
+- **Visible depletion**: components hide in index order (0 → 4) as
+  the player extracts. Kinds with fewer max-extracts than 5 leave
+  some components visible at strip time — reads as "the rest is too
+  damaged to bother with" rather than a clean empty cavity. Per D94
+  this is intentional.
+
+**Polish**:
+- **`playPryCreak`** (new in audio.ts) — 2-layer SFX: bandpassed
+  noise scrape sweeping 420 → 1400 → 380 Hz over 0.85s + low triangle
+  thump (160 → 60 Hz) at the END for the door-pops-free moment.
+  Aligns exactly with the pry duration.
+- **`playComponentExtract`** (new) — short highpass click + ringing
+  sine clink (~1400 Hz with ±200Hz jitter). ~0.18s per extract.
+- **Risk/reward**: prying multiplies the sandworm's detection radius
+  by `SALVAGE_NOISE_MULTIPLIER_DURING_PRY = 1.3` for the duration of
+  the pry (composes with movement multipliers). New
+  `isPryingActive()` exported from interaction.ts; sandWorm.ts's
+  `playerNoiseMultiplier` reads it. Standing still while prying ≈
+  walking detection range; mounted while prying ≈ 360m detection. D95.
+
+**Save schema**: stays v10. Acceptable migration: pre-AAR partially-
+salvaged panels (`salvageRemaining < initialMax`) reload with all 5
+component meshes visible but capped extract count. Visible-vs-extract
+inconsistency only on partial saves. Open-door state doesn't persist
+(panels close on load); player re-prys to reopen (no resource cost).
+
+**Out of scope** (future sessions): electrical-flicker PointLight on
+panel open; variant interiors per wreck kind (fuselage gets different
+components than cargo); condition tiers (corroded panel: easier pry,
+fewer components / pristine: harder pry, premium loot); thermal-cut
+tier with fire-starter for sealed panels; rare key-card panels.
+
 ## Session AAQ — 2026-05-22 — POI overhaul: themed clusters (military convoy + refugee caravan) ✓ verify pass
 `verified` — tsc clean. POI overhaul slice — first of three angles from
 the long-standing backlog item (clusters, narrative beats, biome-specific

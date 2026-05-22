@@ -278,6 +278,83 @@ const _DEFS: Record<ItemId, ItemDef> = {
     },
   },
 
+  // Session AAR — scrap bar: heavy iron lever used to pry open salvage
+  // access panels. Without this equipped, panels stay sealed (the new
+  // tactile salvage flow gates open-panel on tool). wieldLmb='click_use'
+  // routes through wieldAction → fires a one-shot pry attempt when the
+  // crosshair is on a salvageable panel. Otherwise inert (no LMB attack;
+  // it's not a weapon).
+  scrap_bar: {
+    id: 'scrap_bar',
+    name: 'SCRAP BAR',
+    glyph: '/',
+    description: 'a length of bent iron, perfect for prying',
+    stackable: false,
+    maxStack: 1,
+    wieldLmb: 'click_use',
+    onUse(_ctx, _slot) {
+      // The actual pry logic lives in interaction.ts's 'salvageables'
+      // case — onUse returns "do nothing" because the interaction.ts
+      // path handles the hover-aware action. If LMB fires without a
+      // salvageable hovered, this is a no-op (no toast, no consumption).
+      return { consumed: false };
+    },
+    makeViewModel() {
+      const group = new THREE.Group();
+      const ironMat = new THREE.MeshLambertMaterial({
+        color: 0x6e5a4a,
+        emissive: 0x0a0806,
+        flatShading: true,
+      });
+      const tipMat = new THREE.MeshLambertMaterial({
+        color: 0x8a7a64,
+        flatShading: true,
+      });
+      // Main shaft — long bar, square cross-section, slight bend at the tip.
+      const shaft = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.34, 0.022), ironMat);
+      shaft.position.y = 0.05;
+      group.add(shaft);
+      // Bent prying tip — angled 25° at the top end.
+      const tip = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.08, 0.022), tipMat);
+      tip.position.set(-0.018, 0.24, 0);
+      tip.rotation.z = -0.44;       // ~25° bend toward the hook
+      group.add(tip);
+      // Forked hook at the very end — splits into 2 small claws.
+      const claw1 = new THREE.Mesh(new THREE.BoxGeometry(0.010, 0.020, 0.010), tipMat);
+      claw1.position.set(-0.038, 0.28, 0.008);
+      claw1.rotation.z = -0.44;
+      group.add(claw1);
+      const claw2 = new THREE.Mesh(new THREE.BoxGeometry(0.010, 0.020, 0.010), tipMat);
+      claw2.position.set(-0.038, 0.28, -0.008);
+      claw2.rotation.z = -0.44;
+      group.add(claw2);
+      // Grip wrap — leather binding at the base of the shaft.
+      const grip = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.10, 0.026),
+        new THREE.MeshLambertMaterial({ color: 0x2a1e16, flatShading: true }));
+      grip.position.y = -0.10;
+      group.add(grip);
+      group.rotation.set(-0.15, 0.0, 0.10);
+      return group;
+    },
+    makeIcon() {
+      const s = svg();
+      // Long shaft
+      s.appendChild(svgEl('line', { x1: '12', y1: '4', x2: '12', y2: '20', 'stroke-width': '2.2' }));
+      // Bent hook tip
+      s.appendChild(svgEl('polyline', { points: '12,4 8,2 6,4' }));
+      return s;
+    },
+    playUseAnim(itemRoot, t) {
+      // Pry-thrust animation — forward jab + slight roll, recovers cubic.
+      const p = t < 0.35
+        ? easeOutBack(t / 0.35)
+        : 1 - easeInOutCubic((t - 0.35) / 0.65);
+      itemRoot.position.set(-0.06 * p, 0.03 * p, -0.16 * p);
+      itemRoot.rotation.set(-0.5 * p, -0.15 * p, 0.10 + 0.4 * p);
+    },
+    useAnimDuration: Tuning.VIEWMODEL_MACHETE_ANIM_S,
+  },
+
   machete: {
     id: 'machete',
     name: 'MACHETE',

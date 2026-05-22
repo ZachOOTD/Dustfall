@@ -614,6 +614,80 @@ export function playSalvage(): void {
   osc.stop(t + 0.32);
 }
 
+/** Pry creak — heavy metal-on-metal scrape with a low thump tail. AAR.
+ *  Triggered when scrap_bar levers a salvage panel open. ~0.85s total
+ *  to align with SALVAGE_PANEL_PRY_DURATION_S — the audio matches the
+ *  hold duration. */
+export function playPryCreak(): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  // Layer 1 — metal scrape: bandpassed noise sweeping low→high then back.
+  const src = a.ctx.createBufferSource();
+  src.buffer = a.noiseBuffer;
+  src.playbackRate.value = 0.55;
+  const bp = a.ctx.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.setValueAtTime(420, t);
+  bp.frequency.linearRampToValueAtTime(1400, t + 0.30);
+  bp.frequency.linearRampToValueAtTime(380, t + 0.85);
+  bp.Q.value = 4.5;
+  const scrapeEnv = a.ctx.createGain();
+  scrapeEnv.gain.setValueAtTime(0.0, t);
+  scrapeEnv.gain.linearRampToValueAtTime(0.18, t + 0.05);
+  scrapeEnv.gain.linearRampToValueAtTime(0.20, t + 0.55);
+  scrapeEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.90);
+  src.connect(bp).connect(scrapeEnv).connect(a.sfx);
+  src.start(t);
+  src.stop(t + 0.92);
+  // Layer 2 — low thump at the END (door pops free). Triangle 120 → 60Hz.
+  const osc = a.ctx.createOscillator();
+  osc.type = 'triangle';
+  osc.frequency.setValueAtTime(160, t + 0.70);
+  osc.frequency.exponentialRampToValueAtTime(60, t + 0.92);
+  const thumpEnv = a.ctx.createGain();
+  thumpEnv.gain.setValueAtTime(0.0, t + 0.70);
+  thumpEnv.gain.linearRampToValueAtTime(0.18, t + 0.75);
+  thumpEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.95);
+  osc.connect(thumpEnv).connect(a.sfx);
+  osc.start(t + 0.70);
+  osc.stop(t + 0.97);
+}
+
+/** Component extract — short clink + tiny click as a part is removed
+ *  from the panel. AAR. Fired per-component when the player E-presses
+ *  on an open panel. ~0.18s. */
+export function playComponentExtract(): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  // Quick metal click — highpassed noise burst.
+  const src = a.ctx.createBufferSource();
+  src.buffer = a.noiseBuffer;
+  src.playbackRate.value = 1.4 + Math.random() * 0.2;
+  const hp = a.ctx.createBiquadFilter();
+  hp.type = 'highpass';
+  hp.frequency.value = 2200;
+  const clickEnv = a.ctx.createGain();
+  clickEnv.gain.setValueAtTime(0.0, t);
+  clickEnv.gain.linearRampToValueAtTime(0.10, t + 0.003);
+  clickEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.10);
+  src.connect(hp).connect(clickEnv).connect(a.sfx);
+  src.start(t);
+  src.stop(t + 0.12);
+  // Pitched clink — small bell-like tone for the metal-ringing-after-disconnect.
+  const osc = a.ctx.createOscillator();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(1320 + Math.random() * 200, t + 0.02);
+  const oscEnv = a.ctx.createGain();
+  oscEnv.gain.setValueAtTime(0.0, t + 0.02);
+  oscEnv.gain.linearRampToValueAtTime(0.06, t + 0.025);
+  oscEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+  osc.connect(oscEnv).connect(a.sfx);
+  osc.start(t + 0.02);
+  osc.stop(t + 0.20);
+}
+
 /** Recipe discovery chime — bright triadic arpeggio (root → fifth →
  *  octave) that pulses for ~0.6s. Distinct from playCraft's single tick.
  *  Use ONLY on first-time discovery of a recipe; re-crafts get playCraft.

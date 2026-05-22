@@ -615,9 +615,18 @@ export const Tuning = {
   // replaces the "raycast hits any mesh" salvage trigger. Each wreck
   // constructor sets a kind-specific local offset; placeholder default fits
   // most. Panel = small dark plate with a brighter rim/handle for affordance.
-  SALVAGE_PANEL_SIZE_X: 0.32,           // width (m)
-  SALVAGE_PANEL_SIZE_Y: 0.24,           // height
-  SALVAGE_PANEL_SIZE_Z: 0.15,           // depth (sticks out from hull). AAM-followup #8: bumped 0.06 → 0.15 to match hull wall thickness. Previous 6cm read paper-thin from oblique angles; 15cm reads as a substantial access hatch.
+  // AAR — panel sizes bumped for the new tactile fuse-box redesign.
+  // Pre-AAR was 0.32×0.24×0.15 (small access hatch). New design is a
+  // larger rusted box with a hinged door + visible interior; needs
+  // more screen real-estate to make the door + interior detail
+  // readable from interaction distance.
+  SALVAGE_PANEL_SIZE_X: 0.55,           // width (m)
+  SALVAGE_PANEL_SIZE_Y: 0.55,           // height (square-ish fuse-box look)
+  SALVAGE_PANEL_SIZE_Z: 0.18,           // depth (sticks out from hull)
+  SALVAGE_PANEL_DOOR_OPEN_ANGLE: 2.1,   // rad — door swings ~120° on hinges
+  SALVAGE_PANEL_PRY_DURATION_S: 0.85,   // hold-LMB duration to lever the door open
+  SALVAGE_PANEL_DOOR_OPEN_LERP: 4.5,    // per-second exponential lerp toward target angle
+  SALVAGE_NOISE_MULTIPLIER_DURING_PRY: 1.3, // sandworm detection radius boost while prying
   SALVAGE_PANEL_BODY_HEX: 0x2a2622,     // dark metal plate
   SALVAGE_PANEL_RIM_HEX: 0xa28860,      // warm brass rim — visible affordance
 

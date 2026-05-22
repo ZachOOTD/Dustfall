@@ -39,7 +39,8 @@ import {
   playHarvest,
   playCookSizzle,
   playFireCrackle,
-  playSalvage,
+  playPryCreak,
+  playComponentExtract,
 } from '../audio/audio.ts';
 import { maybeShowEventHint } from '../ui/tutorial.ts';
 import { showSalvageProgress, hideSalvageProgress, showCookProgresses, hideCookProgresses } from '../ui/interactPrompt.ts';
@@ -64,7 +65,7 @@ interface InteractHit {
   distance: number;
 }
 
-const SALVAGE_DURATION = 1.5;
+const SALVAGE_DURATION = 1.5;        // legacy fallback; AAR pry uses Tuning.SALVAGE_PANEL_PRY_DURATION_S
 
 // Map raw → cooked ItemIds (only items the player can actually cook here).
 const COOK_MAP: Partial<Record<ItemId, ItemId>> = {
@@ -94,12 +95,22 @@ interface CookState {
 }
 const _cooks: CookState[] = [];
 
+/** AAR — is the player currently prying a salvage panel? sandWorm reads
+ *  this to amplify detection radius during a pry (loud metal scraping
+ *  attracts the worm). Multiplier lives in Tuning.SALVAGE_NOISE_MULTIPLIER_DURING_PRY. */
+export function isPryingActive(): boolean {
+  return _salvaging?.mode === 'pry';
+}
+
 // Module-level salvage state — set when the player starts an E hold on a
-// salvageable. Cleared on completion, on hover loss, or on player death.
+// salvageable. AAR — modal: 'pry' (open the door, requires scrap_bar)
+// vs no in-progress timer for 'extract' (extracts are instant per-press).
+// Cleared on completion, on hover loss, or on player death.
 let _salvaging: {
   salvageableId: number;
   startedAt: number;     // ctx.time.elapsed when started
   completeAt: number;
+  mode: 'pry';           // AAR — extracts are instant, no held timer
 } | null = null;
 
 // AAG — pickup-swap-on-hold-E state. Started when player presses E on a
@@ -134,6 +145,11 @@ function resolveInteractable(obj: THREE.Object3D): InteractHit | null {
 }
 
 export function updateInteraction(ctx: GameContext, _dt: number): void {
+  // AAR — animate all salvage-panel doors toward their targets regardless
+  // of hover state. Cheap iteration (~50 panels), one float compare per
+  // panel for the no-op case.
+  updatePanelDoors(ctx, _dt);
+
   // Reset hover flags on every registry each frame.
   for (const p of ctx.pickups.list) p.hovered = false;
   for (const w of ctx.waterSources.list) w.hovered = false;
@@ -663,14 +679,45 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
         };
         return;
       }
-      ctx.inventory.hover = { type: 'salvage', distance: info.distance, promptNoun: name };
-      if (ctx.input.pressed.has('KeyE') && !_salvaging) {
-        _salvaging = {
-          salvageableId: s.id,
-          startedAt: ctx.time.elapsed,
-          completeAt: ctx.time.elapsed + SALVAGE_DURATION,
+      // AAR — two-stage flow: door must be pried open before components
+      // can be extracted. Pry requires scrap_bar equipped (gates the
+      // entire salvage loop behind tool acquisition). Once open, any
+      // E-press extracts a single component until panel is stripped.
+      const panelBody = s.panel as THREE.Object3D;
+      const isOpen = panelBody.userData.panelOpened === true;
+      if (!isOpen) {
+        const sel = ctx.inventory.slots[ctx.inventory.selectedIdx];
+        if (sel.item !== 'scrap_bar') {
+          ctx.inventory.hover = {
+            type: 'salvage',
+            distance: info.distance,
+            promptNoun: `${name} (need a scrap bar)`,
+            passive: true,
+          };
+          return;
+        }
+        ctx.inventory.hover = {
+          type: 'salvage',
+          distance: info.distance,
+          promptNoun: `${name} — pry open`,
         };
-        playSalvage();
+        if (ctx.input.pressed.has('KeyE') && !_salvaging) {
+          _salvaging = {
+            salvageableId: s.id,
+            startedAt: ctx.time.elapsed,
+            completeAt: ctx.time.elapsed + Tuning.SALVAGE_PANEL_PRY_DURATION_S,
+            mode: 'pry',
+          };
+          // AAR — metal pry creak. Plays once at pry start; the
+          // ~0.85s envelope aligns with SALVAGE_PANEL_PRY_DURATION_S.
+          playPryCreak();
+        }
+        return;
+      }
+      // Door open — extract a component per E-press.
+      ctx.inventory.hover = { type: 'salvage', distance: info.distance, promptNoun: `${name} — search` };
+      if (ctx.input.pressed.has('KeyE')) {
+        extractOneComponent(ctx, s);
       }
       return;
     }
@@ -746,8 +793,10 @@ function findRefillableCanteen(ctx: GameContext): import('../inventory/types.ts'
   return null;
 }
 
-/** Per-frame salvage timer. Drives the progress bar, completes on time-up,
- *  cancels if the target vanishes from the registry. */
+/** Per-frame salvage timer. AAR — drives the PRY animation. Extracts
+ *  are instant per-press (no timer), so this only ticks when mode='pry'.
+ *  Drives the progress bar, completes on time-up, cancels if the target
+ *  vanishes from the registry. */
 function tickSalvage(ctx: GameContext): void {
   if (!_salvaging) return;
   const c = _salvaging;
@@ -756,43 +805,104 @@ function tickSalvage(ctx: GameContext): void {
     cancelSalvage();
     return;
   }
+  // AAR — cancel pry if scrap_bar is no longer equipped (player swapped slots).
+  if (c.mode === 'pry') {
+    const sel = ctx.inventory.slots[ctx.inventory.selectedIdx];
+    if (sel.item !== 'scrap_bar') {
+      cancelSalvage();
+      return;
+    }
+  }
   const elapsed = ctx.time.elapsed - c.startedAt;
-  const t01 = Math.min(1, elapsed / SALVAGE_DURATION);
+  const dur = c.mode === 'pry' ? Tuning.SALVAGE_PANEL_PRY_DURATION_S : SALVAGE_DURATION;
+  const t01 = Math.min(1, elapsed / dur);
   showSalvageProgress(t01);
   if (ctx.time.elapsed >= c.completeAt) {
-    completeSalvage(ctx, s);
+    if (c.mode === 'pry') {
+      completePry(ctx, s);
+    }
   }
 }
 
-function completeSalvage(ctx: GameContext, s: import('../world/salvage.ts').Salvageable): void {
+/** AAR — pry complete: flip the panel's door to "opening" state.
+ *  Per-frame door angle lerp happens in updatePanelDoors (separate
+ *  from _salvaging — the door keeps animating even if the player
+ *  walks away from the panel after the pry). */
+function completePry(_ctx: GameContext, s: import('../world/salvage.ts').Salvageable): void {
+  const panel = s.panel as THREE.Object3D;
+  panel.userData.panelOpened = true;
+  panel.userData.panelDoorTarget = Tuning.SALVAGE_PANEL_DOOR_OPEN_ANGLE;
+  _salvaging = null;
+  hideSalvageProgress();
+}
+
+/** AAR — extract one component from an already-open panel. Hides the
+ *  next un-extracted component mesh and rolls a single loot entry from
+ *  the kind's table. Decrements salvageRemaining; strips panel at zero. */
+function extractOneComponent(ctx: GameContext, s: import('../world/salvage.ts').Salvageable): void {
+  const panel = s.panel as THREE.Object3D;
+  const components = (panel.userData.panelComponents as THREE.Mesh[] | undefined) ?? [];
+  // Find next visible (not-yet-extracted) component, ordered by index.
+  let nextIdx = -1;
+  for (let i = 0; i < components.length; i++) {
+    if (components[i].visible) { nextIdx = i; break; }
+  }
+  if (nextIdx < 0) {
+    // No visible components — shouldn't happen if salvageRemaining > 0,
+    // but defensive: force-strip.
+    s.salvageRemaining = 0;
+    markSalvageStripped(s);
+    return;
+  }
+  // Roll one loot entry. Iterate the kind's table once and pick the
+  // first hit; if nothing hits, fall back to scrap. Cheaper than
+  // calling rollWreckLoot (which can produce 0..N entries — we want exactly 1).
   const loot = rollWreckLoot(s.kind, Math.random);
-  const got: string[] = [];
-  for (const entry of loot) {
-    const n = entry.count ?? 1;
-    let added = 0;
-    for (let i = 0; i < n; i++) {
-      const idx = addItem(ctx.inventory, entry.id, entry.meta, ctx);
-      if (idx < 0) break;
-      added++;
-    }
-    if (added > 0) {
-      const def = getItemDef(entry.id);
-      got.push(added > 1 ? `${added} ${def.name.toLowerCase()}` : def.name.toLowerCase());
-    }
+  const entry = loot.length > 0 ? loot[0] : { id: 'scrap' as const, count: 1 };
+  const count = entry.count ?? 1;
+  let added = 0;
+  for (let i = 0; i < count; i++) {
+    const idx = addItem(ctx.inventory, entry.id, entry.meta, ctx);
+    if (idx < 0) break;
+    added++;
   }
-  s.salvageRemaining--;
-  if (got.length === 0) {
+  if (added === 0) {
     ctx.ui.showToast('your bag is full');
-  } else {
-    ctx.ui.showToast(`salvaged: ${got.join(', ')}`);
+    return;            // don't hide the component or decrement; player can retry after dropping
   }
-  playSalvage();
+  // Hide the extracted component visually.
+  components[nextIdx].visible = false;
+  s.salvageRemaining--;
+  const def = getItemDef(entry.id);
+  const got = added > 1 ? `${added} ${def.name.toLowerCase()}` : def.name.toLowerCase();
+  ctx.ui.showToast(`salvaged: ${got}`);
+  // AAR — small metallic clink rather than the heavy playSalvage scrape;
+  // matches the "tweezed a part out" feel for single-component extracts.
+  playComponentExtract();
   if (s.salvageRemaining <= 0) {
     markSalvageStripped(s);
   }
-  maybeShowEventHint(ctx, 'first_salvage', 'wrecks can be stripped — press E to salvage them');
-  _salvaging = null;
-  hideSalvageProgress();
+  maybeShowEventHint(ctx, 'first_salvage', 'wrecks can be stripped — pry open + search');
+}
+
+/** AAR — per-frame animation lerp on all salvageable panel doors.
+ *  Iterates `ctx.salvageables.list` and steps each door's angle toward
+ *  its target. Exponential lerp gives a satisfying decel as the door
+ *  reaches the open position. Skipped doors (already at target) are
+ *  near-free (one float compare). */
+function updatePanelDoors(ctx: GameContext, dt: number): void {
+  const k = Tuning.SALVAGE_PANEL_DOOR_OPEN_LERP;
+  for (const s of ctx.salvageables.list) {
+    const panel = s.panel as THREE.Object3D;
+    const target = (panel.userData.panelDoorTarget as number | undefined) ?? 0;
+    const current = (panel.userData.panelDoorAngle as number | undefined) ?? 0;
+    if (Math.abs(target - current) < 0.001) continue;
+    // Exponential decay toward target: angle += (target - angle) * (1 - exp(-k*dt))
+    const next = current + (target - current) * (1 - Math.exp(-k * dt));
+    panel.userData.panelDoorAngle = next;
+    const door = panel.userData.panelDoor as THREE.Object3D | undefined;
+    if (door) door.rotation.y = next;
+  }
 }
 
 function cancelSalvage(): void {

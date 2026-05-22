@@ -208,6 +208,20 @@ export const RECIPES: Recipe[] = [
     ],
     output: { id: 'grill_kit', count: 1 },
   },
+  // Session AAR — scrap bar: heavy iron lever used to pry open salvage
+  // access panels. The new tactile salvage flow (D94) requires this
+  // tool equipped to lever a panel open; without it, panels stay
+  // sealed. Cheap to craft so it's not a gate, just a "find the
+  // crowbar first" beat early in the run.
+  {
+    id: 15,
+    displayName: 'scrap bar',
+    inputs: [
+      { id: 'scrap', count: 2 },
+      { id: 'branch', count: 1 },
+    ],
+    output: { id: 'scrap_bar', count: 1 },
+  },
 ];
 
 /** All currently-defined recipe ids. Used by save.ts on v5→v6

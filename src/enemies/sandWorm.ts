@@ -33,6 +33,7 @@ import { die } from '../stats/survival.ts';
 import type { BiomeSampler } from '../world/biomes.ts';
 import { findBiomeCentroid } from '../world/biomes.ts';
 import type { Rng } from '../core/rng.ts';
+import { isPryingActive } from '../player/interaction.ts';
 
 export type SandWormState =
   | 'patrol'
@@ -712,22 +713,27 @@ function applyTremorEffects(worm: SandWorm, ctx: GameContext): void {
  *  sprinting is loud; walking is baseline; standing still or crouching
  *  without moving shrinks the detection radius. */
 function playerNoiseMultiplier(ctx: GameContext): number {
+  // AAR — prying a salvage panel is LOUD (metal scrape). Multiplies the
+  // base movement noise so a player prying near a worm is heard from
+  // farther than a player walking. The multiplier composes with the
+  // movement multiplier below.
+  const pryBoost = isPryingActive() ? Tuning.SALVAGE_NOISE_MULTIPLIER_DURING_PRY : 1.0;
   // Mounted on the speeder — loudest signal, dominates other modes.
-  if (ctx.speeder?.mounted) return Tuning.SANDWORM_DETECTION_MULT_MOUNTED;
+  if (ctx.speeder?.mounted) return Tuning.SANDWORM_DETECTION_MULT_MOUNTED * pryBoost;
   const keys = ctx.input.keys;
   const moving = !!(keys['KeyW'] || keys['KeyS'] || keys['KeyA'] || keys['KeyD']);
   if (!moving) {
     // Standing still or crouching-and-still — quieter regardless of
     // whether the player is crouched (the crouch is a UX modifier; the
     // signal here is "is the player making footstep noise right now?").
-    return Tuning.SANDWORM_DETECTION_MULT_STILL;
+    return Tuning.SANDWORM_DETECTION_MULT_STILL * pryBoost;
   }
   const sprinting =
     !ctx.player.crouching &&
     (keys['ShiftLeft'] || keys['ShiftRight']) &&
     ctx.stats.stamina > Tuning.STAMINA_SPRINT_THRESHOLD;
-  if (sprinting) return Tuning.SANDWORM_DETECTION_MULT_SPRINTING;
-  return Tuning.SANDWORM_DETECTION_MULT_WALKING;
+  if (sprinting) return Tuning.SANDWORM_DETECTION_MULT_SPRINTING * pryBoost;
+  return Tuning.SANDWORM_DETECTION_MULT_WALKING * pryBoost;
 }
 
 function tickPatrol(worm: SandWorm, ctx: GameContext, dt: number, distToPlayer: number): void {

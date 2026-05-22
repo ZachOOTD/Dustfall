@@ -44,7 +44,9 @@ export type ItemId =
   // Session AAE — pocketable creature companion
   | 'companion_pod'
   // Session AAM — craftable fire grill attachment (multi-cook)
-  | 'grill_kit';
+  | 'grill_kit'
+  // Session AAR — heavy iron lever for prying salvage panels open
+  | 'scrap_bar';
 
 /** Per-slot metadata for stateful items (canteen fill level, cook state, light state). */
 export interface ItemMeta {
