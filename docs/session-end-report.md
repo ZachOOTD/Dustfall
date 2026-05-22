@@ -4,7 +4,7 @@ Cumulative state. Rewritten end-to-end at each `/session-end`. A
 reviewer who's never seen the project should be able to read this +
 `CLAUDE.md` + `docs/GDD.md` and understand where Dustfall is.
 
-**Current state**: Session AAT shipped (2026-05-22). 47 sessions
+**Current state**: Session AAU shipped (2026-05-22). 48 sessions
 post-MVP. tsc clean. SAVE_VERSION v10. Working tree dirty pending
 the user's commit.
 
@@ -82,6 +82,22 @@ Fresh-game start (the de-facto Tier 1 — Session W shipped):
     additive per D81.
 
 ---
+
+## What's freshly shipped (Session AAU deltas)
+
+Salvage panel polish — 4 playtest-surfaced issues addressed. 4 files;
+no new modules; no schema bump; no D-entries.
+
+- **Taller rectangular panels** — 0.45×0.70×0.20 (was 0.55×0.55×0.18).
+  House access-panel proportions.
+- **Recessed into hull** — body.position.z shift by sz/2 along panel-
+  local Z (rotated by faceYaw). Front face flush with hull surface,
+  only rim + door proud. "Integrated, not stuck on."
+- **scrap_bar in DEBUG_STARTER_LOADOUT** — closes the testability gap;
+  player can hit panels from boot and exercise the new pry flow.
+- **Door lerp slower + pry-complete toast** — 4.5/s → 3.0/s so the
+  ~1.5s swing is visibly readable; explicit toast on completePry
+  makes the two-stage pry→extract flow unmissable.
 
 ## What's freshly shipped (Session AAT deltas)
 

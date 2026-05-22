@@ -285,8 +285,24 @@ export function addAccessPanel(
   // Panel root mesh — the body. Used as the interact target.
   // The body itself is the rusted RECESSED CAVITY box; the door covers
   // it. From the front-on view the door reads as "the panel" until pried.
+  //
+  // AAU — body shifted BACK along local Z by sz/2 so its FRONT face is
+  // flush with the hull surface (callers position `localZ` at the hull
+  // surface). The rim + closed door sit just proud of the hull; the
+  // body cavity recesses INTO the hull. Reads as "integrated, not
+  // stuck on" rather than the AAR/AAS protrusion. All children of body
+  // stay at their unchanged body-local positions and move with it.
   const body = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), _panelBodyMat);
-  body.position.set(localX, localY, localZ);
+  // Build a small offset vector in panel-LOCAL Z and rotate it by
+  // faceYaw so the "back" direction matches the panel's facing.
+  const recessZ = -sz / 2;
+  const cosY = Math.cos(faceYaw);
+  const sinY = Math.sin(faceYaw);
+  body.position.set(
+    localX + recessZ * sinY,    // local +Z direction after yaw rotation
+    localY,
+    localZ + recessZ * cosY,
+  );
   body.rotation.y = faceYaw;
   body.userData.noCollider = true;
 

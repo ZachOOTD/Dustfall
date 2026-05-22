@@ -59,7 +59,25 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session AAT — Salvage condition tiers (corroded /
+**Last shipped**: Session AAU — Salvage panel polish from playtest
+feedback. Four user-reported issues fixed: (1) panels too small +
+square → 0.45×0.70×0.20 taller-rectangular access-panel shape per
+new Tuning.SALVAGE_PANEL_SIZE_*; (2) panels stuck on hulls clipping
+forward → body recessed INTO hull via panel-local Z shift in
+addAccessPanel (body.position.z = localZ - sz/2, rotated by faceYaw
+so the shift respects panel orientation); front face flush with hull,
+only rim + closed door read proud; (3) scrap_bar not testable (no
+crafted instance to equip) → added to DEBUG_STARTER_LOADOUT so the
+AAR pry flow is reachable from boot; (4) two-stage flow read as
+"old mechanic" → door swing lerp slowed (4.5→3.0/s) so the ~1.5s
+swing is visibly readable + new completePry toast "the panel pries
+open — search inside" makes the pry→extract transition explicit.
+Panel-height audit deferred — most panels at body-height (~1m); the
+megaWreck catwalk-mounted ones at 7-11m are reachable via interior
+stairs. 4 files touched (tuning + main + interaction + wrecks); no
+schema bump. No new D-entries.
+
+**Prior milestone**: Session AAT — Salvage condition tiers (corroded /
 standard / pristine). Each panel rolls one of 3 conditions
 deterministically at boot via `pickCondition(rand, pos)` in
 salvage.ts (per D96 — derive from save-stable inputs, no schema

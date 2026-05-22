@@ -3,6 +3,49 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session AAU — 2026-05-22 — Salvage panel polish: shape + recess + testability + flow visibility ✓ verify pass
+`verified` — tsc clean. Four playtest-feedback fixes on top of the
+AAR/AAS/AAT salvage stack. 4 files touched; no new modules; no schema
+bump.
+
+**User complaints addressed**:
+1. *"Panels need to be larger and more of a rectangle, like a house access panel"*
+2. *"Panels need to be incorporated into the wrecks so they don't float or clip on the side — integrated seamlessly"*
+3. *"I tried salvaging but it was just using the old mechanic of only pressing E"* (likely: no scrap_bar equipped; secondary: pry-to-extract was too subtle to notice the two-stage flow)
+4. *"Some panels are too high to reach"* (audited; catwalk-mounted panels at 7-11m in megaWreck reachable via stairs; flagged for future per-panel height review)
+
+**Shipped**:
+- **Taller rectangular panel proportions** (`Tuning.SALVAGE_PANEL_SIZE_*`):
+  0.55×0.55×0.18 → 0.45×0.70×0.20. Vertical access-panel shape like
+  a house breaker box.
+- **Body recessed into hull** (`addAccessPanel`): body.position.z
+  shifted back by sz/2 (in panel-local Z, rotated by faceYaw so the
+  shift respects panel orientation). Body's FRONT face now sits flush
+  with the hull surface; rim + closed door read as the panel face,
+  body cavity recesses INTO the hull. Reads as "integrated, not stuck
+  on." `Tuning.SALVAGE_PANEL_RECESS_DEPTH` documents the depth though
+  it derives from sz/2.
+- **scrap_bar in DEBUG_STARTER_LOADOUT**: the AAR salvage flow gates
+  on scrap_bar equipped; without it the player saw "need a scrap bar"
+  passive prompt + no salvage. Starter loadout now ships scrap_bar so
+  the new flow is testable from boot.
+- **Door swing lerp slowed** (`SALVAGE_PANEL_DOOR_OPEN_LERP`):
+  4.5/s → 3.0/s. Door reaches open in ~1.5s instead of ~0.7s. The
+  swing now reads as a deliberate animation rather than an instant
+  pop.
+- **Pry-complete toast** (`completePry` in interaction.ts): explicit
+  "the panel pries open — search inside" toast on pry completion.
+  Makes the two-stage flow (pry → search) unmissable to first-time
+  players who otherwise mistook the sequence for "just press E."
+
+**Out of scope** (future sessions):
+- Per-panel height review for unreachable catwalk-only panels in
+  megaWreck (engine bell panels at 7.7m, catwalk-stub panels at 11.5m).
+  Reachable from catwalks; ground-level secondary panels could be a
+  follow-on if catwalk navigation feels too gated.
+- New panel materials (deeper rust streaks, brushed metal pristine
+  variant) — current solid-color materials read clearly enough.
+
 ## Session AAT — 2026-05-22 — Salvage condition tiers (corroded / standard / pristine) ✓ verify pass
 `verified` — tsc clean. Per-panel condition tier added on top of the
 AAR pry-and-extract foundation. Each panel rolls one of 3 conditions

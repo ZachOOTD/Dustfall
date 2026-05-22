@@ -352,6 +352,11 @@ if (Tuning.DEBUG_STARTER_LOADOUT) {
   // the wieldable that ties the player or speeder to it.
   addItem(ctx.inventory, 'sled_kit');
   addItem(ctx.inventory, 'rope');
+  // Session AAU — scrap_bar tool, required to pry open salvage panels
+  // (AAR salvage rework). Without this the player hits a tool gate on
+  // every panel and can't test the salvage flow. Cheap to craft if
+  // omitted; including in starter loadout speeds iteration.
+  addItem(ctx.inventory, 'scrap_bar');
 }
 
 // Opening scene runs on EVERY boot — the wreck + skeleton + journal +

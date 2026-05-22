@@ -615,17 +615,23 @@ export const Tuning = {
   // replaces the "raycast hits any mesh" salvage trigger. Each wreck
   // constructor sets a kind-specific local offset; placeholder default fits
   // most. Panel = small dark plate with a brighter rim/handle for affordance.
-  // AAR — panel sizes bumped for the new tactile fuse-box redesign.
-  // Pre-AAR was 0.32×0.24×0.15 (small access hatch). New design is a
-  // larger rusted box with a hinged door + visible interior; needs
-  // more screen real-estate to make the door + interior detail
-  // readable from interaction distance.
-  SALVAGE_PANEL_SIZE_X: 0.55,           // width (m)
-  SALVAGE_PANEL_SIZE_Y: 0.55,           // height (square-ish fuse-box look)
-  SALVAGE_PANEL_SIZE_Z: 0.18,           // depth (sticks out from hull)
+  // AAU — panel proportions redesigned for "house access panel" feel:
+  // taller-than-wide rectangle, ~70cm tall × 45cm wide × 20cm deep.
+  // Body is now recessed INTO the hull (RECESS_DEPTH controls how
+  // deep) so only the rim + door read proud of the hull surface
+  // when closed. AAR was 0.55×0.55×0.18 (square fuse-box); felt
+  // small + stuck-on at oblique angles.
+  SALVAGE_PANEL_SIZE_X: 0.45,           // width (m)
+  SALVAGE_PANEL_SIZE_Y: 0.70,           // height — taller than wide for access-panel proportions
+  SALVAGE_PANEL_SIZE_Z: 0.20,           // depth — total cavity depth into the hull
+  SALVAGE_PANEL_RECESS_DEPTH: 0.16,     // how much of the body is sunken into the hull surface
   SALVAGE_PANEL_DOOR_OPEN_ANGLE: 2.1,   // rad — door swings ~120° on hinges
   SALVAGE_PANEL_PRY_DURATION_S: 0.85,   // hold-LMB duration to lever the door open
-  SALVAGE_PANEL_DOOR_OPEN_LERP: 4.5,    // per-second exponential lerp toward target angle
+  // AAU — slowed door lerp 4.5 → 3.0/s so the swing-open animation is
+  // visibly readable. At 3.0/s the door reaches target in ~1.5s,
+  // which is enough time for the player to see the swing rather than
+  // perceiving it as "instant pop."
+  SALVAGE_PANEL_DOOR_OPEN_LERP: 3.0,
   SALVAGE_NOISE_MULTIPLIER_DURING_PRY: 1.3, // sandworm detection radius boost while prying
   // AAS — electrical-flicker glow on panel open. A small amber PointLight
   // ignites in the cavity when the door pries open, flickers via two

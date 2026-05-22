@@ -850,6 +850,12 @@ function completePry(ctx: GameContext, s: import('../world/salvage.ts').Salvagea
   // the intensity envelope (peak → flicker → fade to 0 over
   // SALVAGE_PANEL_GLOW_FADE_DURATION_S).
   panel.userData.panelGlowStartedAt = ctx.time.elapsed;
+  // AAU — explicit toast so the player recognizes the two-stage flow:
+  // pry opens the panel (stage 1), then E-press extracts components
+  // (stage 2). Pre-AAU the door swung open silently and players
+  // mistook the pry+extract sequence for the old "just press E"
+  // mechanic.
+  ctx.ui.showToast('the panel pries open — search inside');
   _salvaging = null;
   hideSalvageProgress();
 }
