@@ -1800,3 +1800,34 @@ didn't exercise the loader path).
 grep the codebase for `Tuning.X` and audit each remaining reference.
 **friction-score:** 1
 
+
+## D88 — Hover state always wins the crosshair feedback channel (Session AAN)
+**When**: Session AAN (scrap_gun empty-state crosshair).
+**Why**: AAN added a `.no_ammo` crosshair state — dim warning-red when
+the equipped weapon is a ranged gun with empty magazine. Question: when
+the player is hovering an interactable AND holding a dry gun, which
+state shows? Chose hover wins: kill / dead / interactable is the more
+actionable signal (you can DO something at the corpse / pickup; the
+empty gun is a passive concern). `.no_ammo` only fires when
+`hover === null`. This keeps the crosshair channel as a single-state
+indicator (mutually exclusive classes) rather than stacking warnings.
+**Apply**: future crosshair states (e.g. low-stamina-no-attack, broken-
+weapon) follow the same precedence — hover-derived states win over
+equipped-derived states.
+**friction-score:** 1
+
+## D89 — Toast.kind variants instead of separate UI elements (Session AAN)
+**When**: Session AAN (first-recipe-discovery fanfare).
+**Why**: First-time recipe discovery wanted a "moment" — larger font,
+warm glow, longer hold. Considered (a) separate `#discovery-modal`
+overlay vs (b) extending `#toast` with a `.discovery` class variant.
+Picked (b): the existing toast pipeline already handles timing,
+fade, opacity transitions. A new modal would need its own create/
+mount/teardown + clash with other DOM (hotbar, hud). One DOM element
++ CSS class swap = 5 LOC for the same player-visible result.
+HudApi.showToast signature gained optional `opts?: { kind?: 'discovery' }`
+arg, so existing call sites are unchanged.
+**Apply**: future short-lived "moment" feedback (first kill, first
+sleep through a storm, etc.) reuses showToast with new `kind` values
+rather than introducing new overlay modules.
+**friction-score:** 0

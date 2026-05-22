@@ -28,7 +28,9 @@ let refs: HudRefs | null = null;
 let toastTimeout: number | undefined;
 
 export interface HudApi {
-  showToast: (text: string) => void;
+  /** Standard toast: muted text, 1.6s. Optional `opts.kind='discovery'`
+   *  surfaces a larger, glowing variant held longer (AAN). */
+  showToast: (text: string, opts?: { kind?: 'discovery' }) => void;
   setDeathCause: (cause: string, daysSurvived?: number) => void;
 }
 
@@ -84,14 +86,21 @@ export function createHud(): HudApi {
   };
 
   return {
-    showToast(text: string): void {
+    showToast(text: string, opts?: { kind?: 'discovery' }): void {
       if (!refs) return;
       refs.toast.textContent = text;
       refs.toast.style.opacity = '1';
+      // AAN — `discovery` variant uses a CSS class so styling is owned
+      // declaratively (size + warm glow + slow fade) rather than via
+      // per-call inline style. Held longer (3.2s vs 1.6s) so the
+      // moment lands.
+      const isDiscovery = opts?.kind === 'discovery';
+      refs.toast.classList.toggle('discovery', isDiscovery);
+      const heldMs = isDiscovery ? 3200 : 1600;
       if (toastTimeout !== undefined) clearTimeout(toastTimeout);
       toastTimeout = window.setTimeout(() => {
         if (refs) refs.toast.style.opacity = '0';
-      }, 1600);
+      }, heldMs);
     },
     setDeathCause(cause: string, daysSurvived?: number): void {
       if (!refs) return;

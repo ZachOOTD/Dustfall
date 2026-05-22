@@ -614,6 +614,81 @@ export function playSalvage(): void {
   osc.stop(t + 0.32);
 }
 
+/** Recipe discovery chime — bright triadic arpeggio (root → fifth →
+ *  octave) that pulses for ~0.6s. Distinct from playCraft's single tick.
+ *  Use ONLY on first-time discovery of a recipe; re-crafts get playCraft.
+ *  AAN. */
+export function playRecipeDiscovery(): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  // Three sine notes forming a rising arpeggio. Tuned bright + clean.
+  const notes = [523.25, 783.99, 1046.50]; // C5, G5, C6
+  notes.forEach((freq, i) => {
+    const noteT = t + i * 0.10;
+    const osc = a.ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(freq, noteT);
+    const env = a.ctx.createGain();
+    env.gain.setValueAtTime(0.0, noteT);
+    env.gain.linearRampToValueAtTime(0.12, noteT + 0.008);
+    env.gain.exponentialRampToValueAtTime(0.001, noteT + 0.30);
+    osc.connect(env).connect(a.sfx);
+    osc.start(noteT);
+    osc.stop(noteT + 0.34);
+  });
+  // Faint harmonic glow underneath — square at the root one octave down,
+  // very quiet, gives the chime a warm pad bed.
+  const pad = a.ctx.createOscillator();
+  pad.type = 'triangle';
+  pad.frequency.setValueAtTime(261.63, t); // C4
+  const padEnv = a.ctx.createGain();
+  padEnv.gain.setValueAtTime(0.0, t);
+  padEnv.gain.linearRampToValueAtTime(0.04, t + 0.05);
+  padEnv.gain.linearRampToValueAtTime(0.04, t + 0.35);
+  padEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.55);
+  pad.connect(padEnv).connect(a.sfx);
+  pad.start(t);
+  pad.stop(t + 0.58);
+}
+
+/** Bandage — cloth-tear burst + soft pad pat. AAN. Used when the player
+ *  uses a bandage to restore health. Two layers: a short highpassed
+ *  noise burst (the cloth ripping) followed by a low triangle blip
+ *  (the pad pressing down). */
+export function playBandageUse(): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  // Cloth-tear layer: highpass noise burst, brief rising sweep.
+  const src = a.ctx.createBufferSource();
+  src.buffer = a.noiseBuffer;
+  src.playbackRate.value = 1.1 + Math.random() * 0.2;
+  const hp = a.ctx.createBiquadFilter();
+  hp.type = 'highpass';
+  hp.frequency.setValueAtTime(900, t);
+  hp.frequency.exponentialRampToValueAtTime(1800, t + 0.18);
+  const tearEnv = a.ctx.createGain();
+  tearEnv.gain.setValueAtTime(0.0, t);
+  tearEnv.gain.linearRampToValueAtTime(0.13, t + 0.02);
+  tearEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+  src.connect(hp).connect(tearEnv).connect(a.sfx);
+  src.start(t);
+  src.stop(t + 0.24);
+  // Soft pad pat — low triangle blip after the tear.
+  const osc = a.ctx.createOscillator();
+  osc.type = 'triangle';
+  osc.frequency.setValueAtTime(220, t + 0.20);
+  osc.frequency.exponentialRampToValueAtTime(110, t + 0.34);
+  const padEnv = a.ctx.createGain();
+  padEnv.gain.setValueAtTime(0.0, t + 0.20);
+  padEnv.gain.linearRampToValueAtTime(0.09, t + 0.22);
+  padEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.36);
+  osc.connect(padEnv).connect(a.sfx);
+  osc.start(t + 0.20);
+  osc.stop(t + 0.38);
+}
+
 /** Harvest (cactus snap) — short crackly snap. */
 export function playHarvest(): void {
   const a = getAudioInternals();

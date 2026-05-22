@@ -202,6 +202,28 @@ canvas {
   font-size: 26px;
 }
 
+/* AAN — empty-gun state. Crosshair turns dim warning-red + slightly
+   smaller so the player reads "this weapon won't fire" before mashing
+   LMB on a dry magazine. Only fires when no interactable is hovered
+   (hover state always wins — kill/dead/interactable is the more
+   actionable signal). */
+#crosshair.no_ammo {
+  color: rgba(180, 80, 70, 0.45);
+  font-size: 20px;
+}
+
+/* AAN — first-time recipe discovery toast variant. Larger, warm-gold,
+   glowing — distinct from the muted-cream standard toast. Held 3.2s
+   instead of 1.6s so the "you've figured out X" moment lands. */
+#toast.discovery {
+  font-size: 26px;
+  color: #f4d98a;
+  text-shadow: 0 0 12px rgba(244, 217, 138, 0.55),
+               0 0 24px rgba(244, 217, 138, 0.25);
+  letter-spacing: 2px;
+  transition: opacity 1.0s;
+}
+
 .overlay {
   position: fixed;
   inset: 0;

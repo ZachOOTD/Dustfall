@@ -29,7 +29,7 @@ import {
   type Recipe,
   type RecipeInput,
 } from '../inventory/recipeDiscovery.ts';
-import { playCraft, playUiClick, playUiHover } from '../audio/audio.ts';
+import { playCraft, playUiClick, playUiHover, playRecipeDiscovery } from '../audio/audio.ts';
 import { resumeFromPause } from './menus.ts';
 
 // ── Input-slot model. Each slot holds one ItemId + count. Meta is
@@ -427,12 +427,20 @@ function performCraft(): void {
     return;
   }
 
-  playCraft();
   const wasDiscovered = ctx.inventory.discoveredRecipes.includes(recipe.id);
   if (!wasDiscovered) {
+    // AAN — first-time discovery is a moment: distinct rising-arp chime
+    // (not the routine playCraft tick) + larger, warm-gold toast held
+    // longer. Subsequent crafts of the same recipe fall back to the
+    // standard playCraft + muted toast.
     ctx.inventory.discoveredRecipes.push(recipe.id);
-    ctx.ui.showToast(`you've figured out how to make ${recipe.displayName}`);
+    playRecipeDiscovery();
+    ctx.ui.showToast(
+      `you've figured out how to make ${recipe.displayName}`,
+      { kind: 'discovery' },
+    );
   } else {
+    playCraft();
     ctx.ui.showToast(`crafted ${recipe.displayName}`);
   }
   _selectedRecipe = null;

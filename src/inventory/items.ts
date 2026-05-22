@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import type { ItemDef, ItemId } from './types.ts';
 import { Tuning } from '../config/tuning.ts';
-import { playDrink, playPour } from '../audio/audio.ts';
+import { playDrink, playPour, playBandageUse } from '../audio/audio.ts';
 import { deployFire, findFireById, attachGrillToFire } from '../world/fire.ts';
 import { deployTent } from '../world/tent.ts';
 import { deploySled } from '../world/sled.ts';
@@ -210,6 +210,8 @@ const _DEFS: Record<ItemId, ItemDef> = {
     maxStack: 4,
     onUse(ctx, _slot) {
       ctx.stats.health = Math.min(1, ctx.stats.health + 0.25);
+      // AAN — cloth-tear + soft pad SFX so the use lands audibly.
+      playBandageUse();
       return { consumed: true, message: 'you bind a wound' };
     },
     makeViewModel() {

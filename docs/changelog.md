@@ -3,6 +3,48 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session AAN — 2026-05-21 — Systems review + quick-win polish bundle ✓ verify pass
+`verified` — tsc clean. Four quick wins from a fresh three-agent systems
+audit. No new modules; 8 files touched.
+
+**Session shape**: user asked for a comprehensive review (bugs / model +
+texture issues / quick wins / gameplay loop). Three parallel Explore
+agents covered (a) gameplay loop + systems, (b) models/materials, (c)
+UX/audio/save quick-wins. Audit surfaced: paper-thin decorations on
+procgen wrecks (CLAUDE.md rule 7 violations) + 5 quick wins. Shipped
+the top 4.
+
+- **Paper-thin wrecks.ts fixes** (CLAUDE.md rule 7 audit). Five
+  violations on procgen wrecks bumped to ≥0.10m depth + the fuselage
+  end cap rewritten from CircleGeometry (zero depth — 2D disc) to a
+  0.10m-thick CylinderGeometry. Affected: engine_cluster rusty panel
+  (0.06 → 0.15), escape pod hatch (0.04 → 0.12), escape pod rust
+  patch (0.05 → 0.12), cargo container door (0.04 → 0.10 width),
+  debris hull plate (0.04 → 0.10 Y), fuselage end cap (Circle → 0.10m
+  Cylinder). All read as real metal at oblique angles now.
+- **Scrap gun empty-state crosshair** (`src/ui/interactPrompt.ts` +
+  `style.css`). New `.no_ammo` crosshair state. Fires when there's no
+  hover AND the equipped slot is `scrap_gun` with
+  `ammoRemaining <= 0`. Visually: dim warning-red, slightly smaller
+  than baseline. Hover state always wins (kill/dead/interactable is
+  the more actionable signal). Player now reads "this won't fire"
+  before mashing LMB on a dry magazine.
+- **Bandage SFX** (`src/audio/audio.ts`, `src/inventory/items.ts`).
+  New `playBandageUse()` — two-layer cloth-tear noise burst (highpass
+  900 → 1800 Hz) + soft pad triangle blip (220 → 110 Hz). Wired into
+  bandage onUse. Closes a long-standing silent-use gap (bandage was
+  crafted early + used repeatedly with no audio feedback).
+- **First-recipe-discovery fanfare** (`src/ui/craftingMenu.ts`,
+  `src/audio/audio.ts`, `src/ui/hud.ts`, `src/GameContext.ts`,
+  `src/style.css`). On first-time discovery of a recipe: distinct
+  rising-arpeggio chime (C5 → G5 → C6 sines + C4 triangle pad,
+  ~0.6s) replaces the routine playCraft tick; toast renders in
+  warm-gold with glow + larger font, held 3.2s instead of 1.6s.
+  HudApi.showToast extended with optional `{ kind?: 'discovery' }`
+  options arg; standard call sites unchanged. Closes the AAM
+  next-session-prompt "Add icon scale-up + screen flash on first
+  craft" stretch.
+
 ## Session AAM — 2026-05-21 — Fire grill attachment (multi-cook) + SAVE_VERSION v10 ✓ verify pass
 `verified` — tsc clean; preview-eval confirmed grill_kit ItemDef registered,
 recipe id 14 added to ALL_RECIPE_IDS, Fire.hasGrill persists in v10

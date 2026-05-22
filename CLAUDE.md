@@ -59,7 +59,29 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session AAM — Fire grill attachment (multi-cook) +
+**Last shipped**: Session AAN — Systems review + quick-win polish bundle.
+User asked for a comprehensive review. Three parallel Explore agents
+(gameplay loop / models+materials / UX-audio-quick-wins) surfaced 4
+quick wins, all shipped. **Paper-thin wrecks.ts fixes** (CLAUDE.md
+rule 7 audit on procgen wrecks) — engine_cluster panel 0.06→0.15,
+escape pod hatch 0.04→0.12, escape pod rust 0.05→0.12, cargo door
+0.04→0.10, debris hull plate 0.04→0.10; **fuselage end cap rewritten**
+from `CircleGeometry` (zero depth — 2D disc) to a 0.10m-thick
+`CylinderGeometry` so it reads as real metal at edge angles. **Scrap
+gun empty-state crosshair** (`src/ui/interactPrompt.ts` + style.css) —
+new `.no_ammo` state, dim warning-red + smaller font, fires when no
+hover AND equipped scrap_gun has `ammoRemaining <= 0`. Hover state
+always wins (D88). **Bandage SFX** (`src/audio/audio.ts` +
+`src/inventory/items.ts`) — two-layer cloth-tear noise burst (highpass
+900→1800Hz) + soft pad triangle blip (220→110Hz); wired into bandage
+onUse. **First-recipe-discovery fanfare** (`src/ui/craftingMenu.ts` +
+audio.ts + hud.ts + GameContext.ts + style.css) — distinct rising-arp
+chime (C5/G5/C6 sines + C4 triangle pad) replaces the routine
+playCraft tick; toast renders in warm-gold with glow + larger font,
+held 3.2s instead of 1.6s. HudApi.showToast extended with optional
+`{ kind?: 'discovery' }` opts arg (D89). 8 files; no new modules.
+
+**Prior milestone**: Session AAM — Fire grill attachment (multi-cook) +
 SAVE_VERSION v10. Backlog item from AAG. New `grill_kit` ItemId
 (recipe id 14: scrap×2 + branch×2, wieldLmb='click_use'); onUse
 attaches to a hovered fire via new `attachGrillToFire()`. `Fire`

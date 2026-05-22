@@ -34,10 +34,11 @@ and promotes the second.
 - **Session AAK** (2026-05-21): AAI multi-seed playtest + flagship placement tightening — flagship scatter band narrowed (200-800m), larger spawn-exclusion (200m for flagships vs 80m for procgen wrecks), terrain-roughness gate (max 0.7).
 - **Session AAL** (2026-05-21): project-wide audit pass — 8 unused Tuning consts removed, energy_pistol wired into salvage, sleep temp respects shelter state, DoubleSide sweep (crashedHull bell + engineBlock heat shield + sandWorm body split + tent/largeTent thickness), lootContainers drop balance lifted to Tuning. 13 files touched.
 - **Session AAM** (2026-05-21): fire grill attachment + multi-cook + SAVE_VERSION v10 — grill_kit recipe id 14, Fire.hasGrill field, _cooking singleton lifted to _cooks list with per-fire cap (1 without grill, 4 with). Incidentally fixed AAI loader bug (seed check used Tuning.RNG_SEED instead of ctx.seed).
+- **Session AAN** (2026-05-21): systems review + quick-win polish bundle — three-agent audit (gameplay loop / models / UX-audio-debt) → shipped top 4 quick wins. Paper-thin wrecks.ts fixes (5 violations + fuselage CircleGeometry → 0.10m Cylinder), scrap_gun empty-state crosshair (.no_ammo class), bandage SFX (cloth-tear + pad pat), first-recipe-discovery fanfare (rising-arp chime + warm-gold toast variant held 3.2s). D88-D89. 8 files; no new modules.
 
 ## Up next
 
-Infinite chunk streaming (Minecraft-style) remains the natural follow-on to AAI's per-seed world. Alternatively: fire grill attachment (multi-cook), trading/NPC economy design exploration, or more AAI/AAK-style playtest passes at higher seed counts.
+Infinite chunk streaming (Minecraft-style) remains the natural follow-on to AAI's per-seed world. Alternatively: sandworm overhaul (procgen biome-seeded spawn — long-standing backlog), audio-music pass (atmospheric tracks for day/storm/night per AAN's audio agent suggestion), or another quick-wins polish bundle (cook-progress-per-fire HUD, tutorial coverage gaps for grill/companion/RMB context actions, satellite dish + engine block back-panel geometry).
 
 ## Next — Big-ticket bucket (1–2 picks per session at ~4–7h each)
 Pick whatever feels most missing after the polish + atmosphere arc.

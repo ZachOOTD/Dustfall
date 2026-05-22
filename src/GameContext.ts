@@ -84,7 +84,10 @@ export interface GameContext {
   };
   inventory: InventoryState;
   ui: {
-    showToast: (text: string) => void;
+    /** Standard toast: muted text, 1.6s. Optional opts.kind='discovery'
+     *  surfaces a larger, glowing variant held longer (AAN — first-time
+     *  recipe discovery). */
+    showToast: (text: string, opts?: { kind?: 'discovery' }) => void;
     setDeathCause: (cause: string, daysSurvived?: number) => void;
   };
   physics: PhysicsBundle;

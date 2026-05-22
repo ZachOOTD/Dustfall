@@ -202,12 +202,13 @@ export function makeEngineCluster(rand: Rng, scale = 1): THREE.Group {
   );
   frame.position.set(0, nozzleH + baseR * 0.45, 0);
   g.add(frame);
-  // Rusty side panel
+  // Rusty side panel. AAN: depth bumped 0.06 → 0.15 per CLAUDE.md rule 7
+  // (sub-10cm decorations read paper-thin at oblique angles).
   const panel = new THREE.Mesh(
-    new THREE.BoxGeometry(baseR * 2.2, baseR * 0.7, 0.06),
+    new THREE.BoxGeometry(baseR * 2.2, baseR * 0.7, 0.15),
     _rustMat,
   );
-  panel.position.set(0, nozzleH + baseR * 0.45, baseR * 1.05);
+  panel.position.set(0, nozzleH + baseR * 0.45, baseR * 1.02);
   panel.rotation.y = (rand() - 0.5) * 0.2;
   g.add(panel);
   // Salvage access panel — on the rusty side panel face, off-center.
@@ -254,13 +255,17 @@ export function makeFuselage(rand: Rng, scale = 1): THREE.Group {
     stub.rotation.z = (rand() - 0.5) * 0.4;
     g.add(stub);
   }
-  // End-cap disc on the open end (other end implied buried)
+  // End-cap on the open end (other end implied buried). AAN: was a
+  // CircleGeometry (zero depth — paper-thin disc visible from edge
+  // angles). Replaced with a short cylinder so the cap reads as
+  // metal-with-thickness from any angle.
+  const capDepth = 0.10;
   const cap = new THREE.Mesh(
-    new THREE.CircleGeometry(radius * 0.92, 14),
+    new THREE.CylinderGeometry(radius * 0.92, radius * 0.92, capDepth, 14),
     _hullDarkMat,
   );
-  cap.rotation.y = -Math.PI / 2;
-  cap.position.set(-length / 2 + 0.01, radius * 0.55, 0);
+  cap.rotation.z = Math.PI / 2;
+  cap.position.set(-length / 2 + capDepth / 2, radius * 0.55, 0);
   g.add(cap);
   // Salvage access panel — on the side of the tube, near the rust band.
   addAccessPanel(
@@ -284,20 +289,21 @@ export function makeEscapePod(rand: Rng, scale = 1): THREE.Group {
   const hull = new THREE.Mesh(hullGeo, _hullMat);
   hull.position.y = r * 0.42; // partly buried
   g.add(hull);
-  // Open hatch — a small rotated box punched out the front
+  // Open hatch — a small rotated box punched out the front. AAN:
+  // depth bumped 0.04 → 0.12 (CLAUDE.md rule 7).
   const hatch = new THREE.Mesh(
-    new THREE.BoxGeometry(r * 0.7, r * 0.7, 0.04),
+    new THREE.BoxGeometry(r * 0.7, r * 0.7, 0.12),
     _hullDarkMat,
   );
-  hatch.position.set(r * 0.85, r * 0.5, 0);
+  hatch.position.set(r * 0.82, r * 0.5, 0);
   hatch.rotation.y = -0.4;
   g.add(hatch);
-  // Rust patch
+  // Rust patch. AAN: depth bumped 0.05 → 0.12.
   const patch = new THREE.Mesh(
-    new THREE.BoxGeometry(r * 0.5, r * 0.4, 0.05),
+    new THREE.BoxGeometry(r * 0.5, r * 0.4, 0.12),
     _rustMat,
   );
-  patch.position.set(-r * 0.5, r * 0.65, r * 0.3);
+  patch.position.set(-r * 0.5, r * 0.65, r * 0.28);
   patch.rotation.set(0.3, -0.4, 0.1);
   g.add(patch);
   // Salvage access panel — opposite side from the broken hatch so both ends
@@ -333,12 +339,13 @@ export function makeCargoContainer(rand: Rng, scale = 1): THREE.Group {
       g.add(strut);
     }
   }
-  // Hinge door rectangle on one face
+  // Hinge door rectangle on one face. AAN: width bumped 0.04 → 0.10
+  // so the door reads as solid metal from oblique angles.
   const door = new THREE.Mesh(
-    new THREE.BoxGeometry(0.04, h * 0.78, d * 0.7),
+    new THREE.BoxGeometry(0.10, h * 0.78, d * 0.7),
     _hullDarkMat,
   );
-  door.position.set(w / 2 + 0.02, h * 0.45, 0);
+  door.position.set(w / 2 + 0.05, h * 0.45, 0);
   g.add(door);
   // Salvage access panel — beside the door, lower on the box so you crouch
   // a touch to align (reads as "scavenger-modified access point").
@@ -429,11 +436,12 @@ export function placeDebrisField(
       );
       mesh.rotation.z = Math.PI / 2;
     } else if (kind < 0.70) {
-      // Hull plate fragment
+      // Hull plate fragment. AAN: thickness bumped 0.04 → 0.10 so it
+      // reads as a real piece of metal at oblique angles (rule 7).
       const w = 0.4 + rand() * 0.4;
       const d = 0.3 + rand() * 0.3;
       mesh = new THREE.Mesh(
-        new THREE.BoxGeometry(w, 0.04, d),
+        new THREE.BoxGeometry(w, 0.10, d),
         _hullMat,
       );
     } else {

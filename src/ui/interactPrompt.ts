@@ -36,8 +36,11 @@ let _lastLabel = '';
 // only toggle when state changes (avoids per-frame classList churn).
 // AAA — added 'dead' state for corpse loot (vs. 'interactable' for ground
 // pickups and 'kill' for living enemies).
+// AAN — added 'no_ammo' state. Fires when player has the scrap_gun equipped
+// and slot.meta.ammoRemaining === 0 AND there's no hover overriding. Tells
+// the player "you'll click and nothing happens" before they mash LMB.
 let _crosshairEl: HTMLDivElement | null = null;
-let _lastCrosshairState: '' | 'interactable' | 'kill' | 'dead' = '';
+let _lastCrosshairState: '' | 'interactable' | 'kill' | 'dead' | 'no_ammo' = '';
 
 // ItemIds that come from a corpse (dead lizard, sandworm corpse). Hovering
 // these with hover.type='take' triggers the .dead crosshair state rather
@@ -111,18 +114,33 @@ export function updateInteractPrompt(ctx: GameContext, _dt: number): void {
   // VV — crosshair feedback hook. Same per-frame cadence as the prompt;
   // state is derived from the same hover read so they stay coherent.
   // AAA — added 'dead' state for corpse loot (dead lizard / sandworm).
+  // AAN — added 'no_ammo' state. Hover always wins (kill/dead/interactable
+  // is the more actionable signal); no_ammo fires only when there's no
+  // hover and the equipped weapon is a ranged gun with empty magazine.
   if (!_crosshairEl) {
     _crosshairEl = document.getElementById('crosshair') as HTMLDivElement | null;
   }
-  const next: '' | 'interactable' | 'kill' | 'dead' =
-    hover === null ? '' :
-    hover.type === 'kill' ? 'kill' :
-    (hover.type === 'take' && hover.itemId && CORPSE_ITEM_IDS.has(hover.itemId)) ? 'dead' :
-    'interactable';
+  let next: '' | 'interactable' | 'kill' | 'dead' | 'no_ammo';
+  if (hover !== null) {
+    next =
+      hover.type === 'kill' ? 'kill' :
+      (hover.type === 'take' && hover.itemId && CORPSE_ITEM_IDS.has(hover.itemId)) ? 'dead' :
+      'interactable';
+  } else {
+    // No hover — check for empty-gun state. Only scrap_gun uses ammo
+    // today (energy_pistol charges; machete/pipe_staff are melee).
+    const sel = ctx.inventory.slots[ctx.inventory.selectedIdx];
+    if (sel.item === 'scrap_gun' && (sel.meta?.ammoRemaining ?? 0) <= 0) {
+      next = 'no_ammo';
+    } else {
+      next = '';
+    }
+  }
   if (_crosshairEl && next !== _lastCrosshairState) {
     _crosshairEl.classList.toggle('interactable', next === 'interactable');
     _crosshairEl.classList.toggle('kill', next === 'kill');
     _crosshairEl.classList.toggle('dead', next === 'dead');
+    _crosshairEl.classList.toggle('no_ammo', next === 'no_ammo');
     _lastCrosshairState = next;
   }
 }
