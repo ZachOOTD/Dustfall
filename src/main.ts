@@ -420,6 +420,15 @@ const inGameEls = inGameElIds
   .filter((el): el is HTMLElement => el !== null);
 inGameEls.forEach((el) => { el.style.visibility = 'hidden'; });
 
+// AAW — persistent DEV MODE badge. Built once at boot; only made visible
+// on handoff if the devMode flag is set. The earlier dev-mode UX shipped
+// in AAV had no in-game indicator, so the player couldn't tell which
+// branch (vanilla vs dev) they were on after the reload + title cycle.
+const devModeBadge = document.createElement('div');
+devModeBadge.id = 'dev-mode-badge';
+devModeBadge.textContent = '[ DEV MODE ]';
+document.body.appendChild(devModeBadge);
+
 const title = createTitleScene();
 // Expose the title scene for debug/preview tools (read-only handles).
 (window as unknown as { __title?: { scene: unknown; camera: unknown; update: (dt: number) => void } }).__title = {
@@ -439,6 +448,13 @@ function handoffToGame(): void {
   titleOverlay.hide();
   ctx.flags.titleActive = false;
   inGameEls.forEach((el) => { el.style.visibility = ''; });
+  // AAW — surface the DEV MODE badge only if the devMode flag is set.
+  // (Recompute the flag each handoff in case the user toggled it during
+  // the title screen via dev-tools or a reload-less code path.)
+  const devActive = typeof localStorage !== 'undefined'
+    && localStorage.getItem('dustfall.devMode') === 'true';
+  if (devActive) devModeBadge.classList.add('visible');
+  else devModeBadge.classList.remove('visible');
   ensureAudioStarted();
   startSoundscape();
   // AAP — atmospheric music tracks. Three procedural Web Audio tracks
@@ -509,6 +525,16 @@ const titleOverlay = createTitleOverlay(ctx, {
     location.reload();
   },
 });
+
+// AAW — auto-bypass the title overlay when the devMode flag is set. The
+// AAV DEV MODE click path does the reload + loadout but then dropped the
+// player back onto the title screen, where a second click on NEW GAME
+// would have cleared the flag and erased the loadout. Auto-bypass means
+// one click → in the game. Quit-to-menu (in menus.ts) clears the flag so
+// vanilla play stays one click away too.
+if (_devModeFlag) {
+  handoffToGame();
+}
 
 // --- Per-frame tick: order matters ---
 startLoop(ctx, (c, dt) => {

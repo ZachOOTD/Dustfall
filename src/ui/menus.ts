@@ -208,6 +208,7 @@ export function createMenus(ctx: GameContext): void {
   for (const [label, action] of [
     ['resume', 'resume'],
     ['save', 'save'],
+    ['controls', 'controls'],
     ['settings', 'settings'],
     ['quit to menu', 'quit'],
   ] as const) {
@@ -226,7 +227,22 @@ export function createMenus(ctx: GameContext): void {
         b.textContent = msg;
         window.setTimeout(() => { b.textContent = 'save'; }, 1600);
       } else if (action === 'settings') openSettings();
-      else if (action === 'quit') location.reload();
+      else if (action === 'controls') {
+        // AAW — open the controls panel as an overlay on top of the
+        // pause menu. The panel's close handler reads `returnToPause`
+        // and skips resumeFromPause so the player lands back on the
+        // pause menu instead of unpausing.
+        if (!_ctx) return;
+        void import('./tutorial.ts').then((t) => t.showControlsPanel(_ctx!, { returnToPause: true }));
+      }
+      else if (action === 'quit') {
+        // AAW — clear the DEV MODE flag on quit so the next boot lands
+        // on a vanilla title screen. Re-entry to DEV MODE is one click
+        // on the title. Pre-AAW the flag persisted across reloads, so a
+        // dev-mode quit looped back into dev-mode silently.
+        try { localStorage.removeItem('dustfall.devMode'); } catch { /* ignore */ }
+        location.reload();
+      }
     });
     pauseBtns.appendChild(b);
   }

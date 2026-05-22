@@ -73,6 +73,10 @@ let _state: TutorialState = loadState();
 let _ctx: GameContext | null = null;
 let _panel: HTMLDivElement | null = null;
 let _open = false;
+// AAW — when set, hideControlsPanel skips resumeFromPause and leaves the
+// pause overlay visible (the panel was opened from the pause-menu's
+// CONTROLS button). Cleared on next hide.
+let _returnToPause = false;
 
 function loadState(): TutorialState {
   try {
@@ -163,8 +167,11 @@ export function createTutorial(ctx: GameContext): void {
   }
 }
 
-export function showControlsPanel(ctx: GameContext): void {
+export function showControlsPanel(ctx: GameContext, opts?: { returnToPause?: boolean }): void {
   if (!_panel) return;
+  // AAW — track whether this open came from the pause menu so the close
+  // handler can keep the player paused instead of unpausing.
+  _returnToPause = !!opts?.returnToPause;
   // AAI — refresh seed display on each open (seed is stable per-boot
   // but the panel is built once before ctx.seed is finalized in test
   // paths; safer to update on show).
@@ -175,8 +182,10 @@ export function showControlsPanel(ctx: GameContext): void {
   // Mid-game (started + alive): unlocking the pointer triggers the pause
   // overlay; our panel sits above it (z-index 200). Don't do this during the
   // first-boot flow — the game isn't started yet, so we just stack on the
-  // start overlay.
-  if (ctx.flags.started && !ctx.stats.dead) {
+  // start overlay. When opened from the pause menu, the pointer is already
+  // unlocked and the pause overlay is already up — skip unlock to avoid
+  // re-triggering the pause flow.
+  if (ctx.flags.started && !ctx.stats.dead && !_returnToPause) {
     ctx.input.controls.unlock();
   }
 }
@@ -185,6 +194,14 @@ export function hideControlsPanel(ctx: GameContext): void {
   if (!_panel) return;
   _panel.classList.add('hidden');
   _open = false;
+  // AAW — if opened from pause-menu CONTROLS, fall back to the pause menu
+  // rather than unpausing. Pause overlay is already visible beneath the
+  // controls overlay (controls is z:200, pause is z:100), so we just hide
+  // ourselves and the player sees the pause menu again.
+  if (_returnToPause) {
+    _returnToPause = false;
+    return;
+  }
   // Mid-game: resume + re-lock pointer. Lazy-import to avoid menus.ts ↔
   // tutorial.ts circular dep (menus.ts already imports nothing from here, but
   // future maintenance may add it).

@@ -212,6 +212,30 @@ canvas {
   font-size: 20px;
 }
 
+/* AAW — DEV MODE indicator. Persistent corner badge surfaced only when
+   `localStorage['dustfall.devMode'] === 'true'` (set by the title-screen
+   DEV MODE button + cleared by quit-to-menu / regular NEW GAME). Muted
+   amber so it reads as a status chip, not an alert. Created hidden;
+   handoffToGame adds .visible when the flag is set. */
+#dev-mode-badge {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 5px;
+  font-weight: 400;
+  padding: 5px 12px 5px 14px;
+  color: #d97a4a;
+  background: rgba(8, 6, 4, 0.55);
+  border: 1px dashed rgba(217, 122, 74, 0.75);
+  z-index: 18;
+  pointer-events: none;
+  /* Hidden until JS opt-in. */
+  display: none;
+}
+#dev-mode-badge.visible { display: block; }
+
 /* AAN — first-time recipe discovery toast variant. Larger, warm-gold,
    glowing — distinct from the muted-cream standard toast. Held 3.2s
    instead of 1.6s so the "you've figured out X" moment lands. */
@@ -1017,7 +1041,23 @@ canvas {
   padding-bottom: 6px;
   border-bottom: 1px solid rgba(232, 220, 192, 0.18);
   width: 320px;
-  align-self: center;
+}
+
+/* AAW — two-column row inside the crafting menu (YOUR BAG | RECIPES).
+   Replaces the pre-AAW vertical bag-only column. Each column owns its
+   own header + scrollable rows, side-by-side under the combine row. */
+.craft-two-col {
+  display: flex;
+  flex-direction: row;
+  gap: 28px;
+  align-items: flex-start;
+  margin-top: 8px;
+  margin-bottom: 16px;
+}
+
+.craft-col {
+  display: flex;
+  flex-direction: column;
 }
 
 .craft-bag-rows {
@@ -1025,12 +1065,109 @@ canvas {
   flex-direction: column;
   gap: 6px;
   width: 320px;
-  align-self: center;
   margin-top: 8px;
-  margin-bottom: 24px;
   pointer-events: auto;
-  max-height: 280px;
+  max-height: 320px;
   overflow-y: auto;
+}
+
+/* AAW — recipe-list panel on the right. Slightly wider than the bag so
+   the per-ingredient have/need readout fits without wrapping. */
+.craft-recipes-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 360px;
+  margin-top: 8px;
+  pointer-events: auto;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.craft-recipes-empty {
+  font-family: 'Cormorant Garamond', serif;
+  font-style: italic;
+  font-size: 13px;
+  color: #6e6149;
+  padding: 14px 4px;
+  text-align: center;
+}
+
+.craft-recipes-category {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 3px;
+  color: #c9a26a;
+  padding: 8px 0 4px 2px;
+  border-bottom: 1px solid rgba(201, 162, 106, 0.22);
+  margin-top: 4px;
+}
+.craft-recipes-category.missing {
+  color: #6e6149;
+  border-bottom-color: rgba(110, 97, 73, 0.30);
+}
+
+.craft-recipe-row {
+  display: grid;
+  grid-template-columns: 30px 1fr;
+  align-items: center;
+  gap: 10px;
+  background: rgba(232, 220, 192, 0.04);
+  border: 1px solid rgba(232, 220, 192, 0.25);
+  color: #e8dcc0;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 1px;
+  padding: 6px 10px;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s, background 0.15s;
+}
+.craft-recipe-row:hover:not(:disabled) {
+  border-color: #e8dcc0;
+  background: rgba(232, 220, 192, 0.10);
+}
+.craft-recipe-row.insufficient {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.craft-recipe-output-icon {
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.craft-recipe-output-icon svg {
+  width: 22px;
+  height: 22px;
+  display: block;
+}
+
+.craft-recipe-name-col {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.craft-recipe-name {
+  color: #e8dcc0;
+  letter-spacing: 2px;
+}
+.craft-recipe-ings {
+  display: flex;
+  flex-direction: row;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.craft-recipe-ing {
+  font-size: 10px;
+  letter-spacing: 0;
+  color: #b8a888;
+}
+.craft-recipe-ing.missing {
+  color: #c84a3a;
 }
 
 .craft-bag-row {

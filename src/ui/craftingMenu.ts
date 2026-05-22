@@ -55,6 +55,11 @@ let _outputLabelEl: HTMLDivElement | null = null;
 let _chooserEl: HTMLDivElement | null = null;
 let _craftBtn: HTMLButtonElement | null = null;
 let _bagRowsEl: HTMLDivElement | null = null;
+// AAW — recipe list panel on the right of the crafting menu. Lists every
+// recipe in `ctx.inventory.discoveredRecipes`, categorized CRAFTABLE vs
+// MISSING INGREDIENTS based on the player's current bag totals. Clicking a
+// CRAFTABLE row auto-fills the input slots so the player can hit CRAFT.
+let _recipesRowsEl: HTMLDivElement | null = null;
 let _ctx: GameContext | null = null;
 let _open = false;
 
@@ -150,16 +155,41 @@ export function createCraftingMenu(ctx: GameContext): void {
   root.appendChild(craftBtn);
   _craftBtn = craftBtn;
 
-  // ── Player inventory column ──
+  // ── AAW — Two-column row: YOUR BAG (left) + RECIPES (right) ──
+  // Each column owns its own header + scrollable rows list. The bag is
+  // still click-to-add-input as before; recipes is new and click-to-
+  // auto-fill (for CRAFTABLE rows; MISSING rows are read-only).
+  const twoCol = document.createElement('div');
+  twoCol.className = 'craft-two-col';
+  root.appendChild(twoCol);
+
+  // Left column: bag.
+  const bagCol = document.createElement('div');
+  bagCol.className = 'craft-col';
   const bagHeader = document.createElement('div');
   bagHeader.className = 'craft-col-header';
   bagHeader.textContent = 'YOUR BAG';
-  root.appendChild(bagHeader);
+  bagCol.appendChild(bagHeader);
 
   const bagRows = document.createElement('div');
   bagRows.className = 'craft-bag-rows';
-  root.appendChild(bagRows);
+  bagCol.appendChild(bagRows);
   _bagRowsEl = bagRows;
+  twoCol.appendChild(bagCol);
+
+  // Right column: known recipes (categorized craftable / missing).
+  const recCol = document.createElement('div');
+  recCol.className = 'craft-col';
+  const recHeader = document.createElement('div');
+  recHeader.className = 'craft-col-header';
+  recHeader.textContent = 'RECIPES';
+  recCol.appendChild(recHeader);
+
+  const recRows = document.createElement('div');
+  recRows.className = 'craft-recipes-rows';
+  recCol.appendChild(recRows);
+  _recipesRowsEl = recRows;
+  twoCol.appendChild(recCol);
 
   // Close button — returns any items still in input slots back to bag.
   root.appendChild(makeBtn('close', closeCraftingMenu));
@@ -355,13 +385,140 @@ function renderBag(): void {
   }
 }
 
+/** AAW — render the right-side recipe list. Categorizes every discovered
+ *  recipe as CRAFTABLE (player has all ingredients) or MISSING INGREDIENTS,
+ *  and lets the player click a CRAFTABLE row to auto-fill the inputs. Pre-AAW
+ *  the only place to see discovered recipes was the TAB-key recipe book, which
+ *  was a separate screen — players had to remember ingredients while crafting. */
+function renderRecipes(): void {
+  if (!_recipesRowsEl || !_ctx) return;
+  clearChildren(_recipesRowsEl);
+  const inv = _ctx.inventory;
+  const known = inv.discoveredRecipes;
+  if (known.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'craft-recipes-empty';
+    empty.textContent = '(no recipes discovered yet — combine items in the input slots to learn one)';
+    _recipesRowsEl.appendChild(empty);
+    return;
+  }
+
+  // Aggregate player inventory totals once (same exclusion rule as renderBag —
+  // skip meta-bearing slots so canteens / loaded guns don't count as crafting
+  // material).
+  const allSlots: Slot[] = [...inv.slots, ...inv.backpack];
+  const totals = new Map<ItemId, number>();
+  for (const s of allSlots) {
+    if (!s.item || s.count <= 0 || s.meta) continue;
+    totals.set(s.item, (totals.get(s.item) ?? 0) + s.count);
+  }
+
+  // Partition discovered recipes into craftable vs missing buckets. Sort each
+  // bucket by recipe id (stable display order as new recipes get added).
+  const craftable: Recipe[] = [];
+  const missing: Recipe[] = [];
+  const sortedKnown = [...known].sort((a, b) => a - b);
+  for (const id of sortedKnown) {
+    const recipe = RECIPES.find((r) => r.id === id);
+    if (!recipe) continue;
+    let canCraft = true;
+    for (const inp of recipe.inputs) {
+      if ((totals.get(inp.id) ?? 0) < inp.count) { canCraft = false; break; }
+    }
+    (canCraft ? craftable : missing).push(recipe);
+  }
+
+  if (craftable.length > 0) {
+    const h = document.createElement('div');
+    h.className = 'craft-recipes-category';
+    h.textContent = `CRAFTABLE (${craftable.length})`;
+    _recipesRowsEl.appendChild(h);
+    for (const r of craftable) _recipesRowsEl.appendChild(buildRecipeRow(r, true, totals));
+  }
+  if (missing.length > 0) {
+    const h = document.createElement('div');
+    h.className = 'craft-recipes-category missing';
+    h.textContent = `MISSING INGREDIENTS (${missing.length})`;
+    _recipesRowsEl.appendChild(h);
+    for (const r of missing) _recipesRowsEl.appendChild(buildRecipeRow(r, false, totals));
+  }
+}
+
+/** AAW — build a single recipe row for the right-side panel. CRAFTABLE
+ *  rows hover-react + click to auto-fill; MISSING rows are visually muted
+ *  and not clickable. Per-ingredient `have/need` is displayed inline; the
+ *  missing ones tint red so the eye lands on what's still needed. */
+function buildRecipeRow(
+  recipe: Recipe,
+  canCraft: boolean,
+  totals: Map<ItemId, number>,
+): HTMLButtonElement {
+  const row = document.createElement('button');
+  row.className = 'craft-recipe-row' + (canCraft ? '' : ' insufficient');
+  row.disabled = !canCraft;
+
+  // Output icon (compact — 28px).
+  const outIcon = makeItemIcon(recipe.output.id);
+  outIcon.classList.add('craft-recipe-output-icon');
+  row.appendChild(outIcon);
+
+  // Name + ingredient line stacked in a vertical sub-column.
+  const nameCol = document.createElement('div');
+  nameCol.className = 'craft-recipe-name-col';
+  const name = document.createElement('div');
+  name.className = 'craft-recipe-name';
+  const cnt = recipe.output.count > 1 ? ` ×${recipe.output.count}` : '';
+  name.textContent = recipe.displayName + cnt;
+  nameCol.appendChild(name);
+
+  const ings = document.createElement('div');
+  ings.className = 'craft-recipe-ings';
+  for (const inp of recipe.inputs) {
+    const def = getItemDef(inp.id);
+    const have = totals.get(inp.id) ?? 0;
+    const ok = have >= inp.count;
+    const span = document.createElement('span');
+    span.className = 'craft-recipe-ing' + (ok ? '' : ' missing');
+    span.textContent = `${have}/${inp.count} ${def.name.toLowerCase()}`;
+    ings.appendChild(span);
+  }
+  nameCol.appendChild(ings);
+  row.appendChild(nameCol);
+
+  if (canCraft) {
+    row.addEventListener('mouseenter', playUiHover);
+    row.addEventListener('click', () => autoFillFromRecipe(recipe));
+  }
+  return row;
+}
+
 function renderAll(): void {
   renderInputs();
   renderOutputPreview();
   renderBag();
+  renderRecipes();
 }
 
 // ── Input-slot mutation ──────────────────────────────────────────
+
+/** Core stacking logic — extracted in AAW so the auto-fill from a recipe
+ *  click can drive N additions without paying N renderAll() + N playUiClick
+ *  costs. Returns true if the item was added, false if the player has
+ *  none of it OR all input slots are full. */
+function addToInputCore(itemId: ItemId): boolean {
+  if (!_ctx) return false;
+  if (countItems(_ctx.inventory, itemId) <= 0) return false;
+  let slot = _inputs.find((s) => s.item === itemId);
+  if (!slot) {
+    slot = _inputs.find((s) => s.item === null);
+    if (!slot) return false;
+    slot.item = itemId;
+    slot.count = 0;
+  }
+  slot.count++;
+  removeItems(_ctx.inventory, itemId, 1);
+  return true;
+}
 
 /** Add 1 of `itemId` to the input slots. Stacks onto an existing
  *  input slot of the same item if one exists, otherwise occupies
@@ -371,21 +528,29 @@ function renderAll(): void {
 function addToInput(itemId: ItemId): void {
   if (!_ctx) return;
   if (countItems(_ctx.inventory, itemId) <= 0) return;
-
-  // Find existing input slot with this item.
-  let slot = _inputs.find((s) => s.item === itemId);
-  if (!slot) {
-    // First empty slot.
-    slot = _inputs.find((s) => s.item === null);
-    if (!slot) {
-      _ctx.ui.showToast('input slots full');
-      return;
-    }
-    slot.item = itemId;
-    slot.count = 0;
+  if (!addToInputCore(itemId)) {
+    _ctx.ui.showToast('input slots full');
+    return;
   }
-  slot.count++;
-  removeItems(_ctx.inventory, itemId, 1);
+  playUiClick();
+  renderAll();
+}
+
+/** AAW — auto-fill the input slots with all ingredients for `recipe`.
+ *  Used by the right-side recipe list — click a CRAFTABLE recipe and
+ *  the inputs jump straight to the ready-to-craft configuration. The
+ *  caller is responsible for ensuring the player actually has the
+ *  ingredients (the row click handler hides this behind the CRAFTABLE
+ *  predicate). Returns silently if a partial fill happens; CRAFT button
+ *  gating still keeps the craft from firing in that edge case. */
+function autoFillFromRecipe(recipe: Recipe): void {
+  if (!_ctx) return;
+  flushInputsToBag();
+  for (const inp of recipe.inputs) {
+    for (let i = 0; i < inp.count; i++) {
+      if (!addToInputCore(inp.id)) break;
+    }
+  }
   playUiClick();
   renderAll();
 }
