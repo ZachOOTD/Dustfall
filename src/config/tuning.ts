@@ -699,6 +699,27 @@ export const Tuning = {
   // spawn (currently fixed; falls outside the procgen pipeline). The
   // biome-check warn in main.ts will fire on seeds where +X edge isn't
   // dune — acceptable as a known footgun until the overhaul.
+  // AAQ — themed POI clusters. Each world rolls N cluster anchors via
+  // rejection sampling against flagships + spawn exclusion + each other.
+  // Each cluster type is built from existing wreck/camp modules.
+  CLUSTER_COUNT_PER_WORLD: 3,                // 1-2 military convoys + 1-2 caravans
+  CLUSTER_SCATTER_RADIUS_MIN: 250,           // same band as flagships (200-800m)
+  CLUSTER_SCATTER_RADIUS_MAX: 800,
+  CLUSTER_MIN_SEPARATION: 320,               // cluster ↔ cluster (wider than flagships' 250)
+  CLUSTER_SPAWN_EXCLUSION_RADIUS: 250,       // cluster ↔ player spawn (same as flagships)
+  CLUSTER_FLAGSHIP_MIN_SEPARATION: 200,      // cluster ↔ flagship (slightly less — clusters smaller than flagships)
+  CLUSTER_MAX_ROUGHNESS: 0.7,                // same gate as flagships — clusters need a level-ish patch
+  // military_convoy — 3-5 wrecks aligned along a crash trajectory.
+  MILITARY_CONVOY_LENGTH_MIN: 28,
+  MILITARY_CONVOY_LENGTH_MAX: 48,
+  MILITARY_CONVOY_WRECK_COUNT_MIN: 4,        // inclusive
+  MILITARY_CONVOY_WRECK_COUNT_MAX: 6,        // inclusive
+  // refugee_caravan — camp + 2-3 cargo + extra fuselage at tight radius.
+  REFUGEE_CARAVAN_CARGO_COUNT_MIN: 2,
+  REFUGEE_CARAVAN_CARGO_COUNT_MAX: 3,
+  REFUGEE_CARAVAN_RADIUS_MIN: 6,             // cargo crates ring around the camp at this distance
+  REFUGEE_CARAVAN_RADIUS_MAX: 12,
+
   SANDWORM_HOME_POS: { x: 900, z: 0 },       // AAP — legacy fallback only (was AAL test-fix world-edge anchor). Production uses sampleSandwormHome(rand, biomes, terrain) per AAP D-entry.
   // AAP — sandworm spawn-exclusion radius around the opening scene
   // anchor. Wider than flagship POIs (D82: 200m) because the player

@@ -59,7 +59,28 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session AAP — Sandworm overhaul + atmospheric music
+**Last shipped**: Session AAQ — POI overhaul slice: themed clusters.
+Two cluster kinds shipped. **military_convoy**: 4-6 wrecks aligned
+along a 28-48m crash trajectory — lead `engine_cluster` (truck), 2-4
+`cargo_container` middles (freight), `fuselage` tail (comms); shared
+trajectory yaw with ±0.5rad per-wreck jitter + ±2m lateral skid;
+12m debris field at impact end. **refugee_caravan**: `placeScavengerCamp`
+at center (includes fuselage windbreak + fire ring + bandage pickup),
+ringed by 2-3 `cargo_container`s at 6-12m radius pointed inward
+toward the camp center. New `sampleClusterPositions(rand, terrain,
+flagshipPositions)` rejection sampler with cluster-specific exclusion
+radii (CLUSTER_MIN_SEPARATION=320m, CLUSTER_SPAWN_EXCLUSION=250m,
+CLUSTER_FLAGSHIP_MIN_SEPARATION=200m, CLUSTER_MAX_ROUGHNESS=0.7).
+3 clusters per world (CLUSTER_COUNT_PER_WORLD=3) with shuffled kind
+rotation. Cluster anchors push onto _placedFlagshipPositions so
+procgenPoi naturally excludes them via existing POI_MIN_SEPARATION
+mechanism — no procgenPoi changes. Composition-over-creation per D93:
+no new POI modules, just coordinated layouts of existing primitives.
+Out of scope (POI overhaul follow-on sessions): narrative beats
+(lone-survivor journals, hostile holdouts), biome-specific kinds,
+comm-relay cluster. Save schema unchanged; 2 files touched.
+
+**Prior milestone**: Session AAP — Sandworm overhaul + atmospheric music
 tracks (overnight). **Sandworm**: replaces AAL's world-edge test-fix
 with real procgen placement. New `sampleSandwormHome(rand, biomes,
 terrain)` uses `findBiomeCentroid` on the dune biome with a 350m

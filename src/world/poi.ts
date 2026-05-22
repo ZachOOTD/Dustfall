@@ -17,6 +17,7 @@ import {
   makeFuselage,
   placeWreck,
   placeDebrisField,
+  type WreckKind,
 } from './wrecks.ts';
 import { attachCompoundCollider } from '../physics/bodies.ts';
 import { registerSalvageable, type SalvageableRegistry } from './salvage.ts';
@@ -234,9 +235,213 @@ function sampleFlagshipPositions(rand: Rng, terrain: Terrain): Array<{ x: number
 }
 
 /** AAI — positions picked by the most recent placePOIs() call. Used by
- *  procgenPoi (min-sep exclusion) + lizard procgen (per-POI cluster). */
+ *  procgenPoi (min-sep exclusion) + lizard procgen (per-POI cluster).
+ *  AAQ — extended to include cluster anchor positions (treated as
+ *  flagship-equivalent obstacles by procgen wrecks). */
 export function getAnchorPOIPositions(): ReadonlyArray<{ x: number; z: number }> {
   return _placedFlagshipPositions;
+}
+
+// ────────────────────────────────────────────────────────────────
+// AAQ — themed POI clusters
+// ────────────────────────────────────────────────────────────────
+// A cluster is multiple existing wreck/camp primitives placed in a
+// coordinated layout that reads as a narrative beat: convoy crash, refugee
+// stopover, etc. Anchors sample via the same rejection-sampler family as
+// flagships + procgen wrecks, but with cluster-specific exclusion radii
+// so the linear/wide footprints don't collide with neighbors.
+//
+// Reuses placeWreck (wrecks.ts) + placeScavengerCamp (above) — no new
+// 3D models. The "theme" is the SHAPE of the layout (line vs ring) +
+// the choice of wreck kinds.
+
+type ClusterKind = 'military_convoy' | 'refugee_caravan';
+const CLUSTER_KINDS: ReadonlyArray<ClusterKind> = ['military_convoy', 'refugee_caravan'];
+
+/** military_convoy: 4-6 wrecks aligned along a "crash trajectory" line.
+ *  Mix of engine_clusters (the trucks), cargo_containers (the cargo
+ *  they were hauling), and a fuselage at the back end (the comms/
+ *  command vehicle that punched a divot when it broke up). Yaw locks
+ *  all wrecks to the trajectory direction so they read as a coordinated
+ *  formation that crashed together, not a random scatter.
+ *
+ *  Anchor = center of the convoy line. Wrecks placed at evenly-spaced
+ *  offsets from -halfLen to +halfLen along the trajectory direction,
+ *  with small per-wreck lateral jitter for the "skid" feel.
+ */
+function placeMilitaryConvoy(
+  scene: THREE.Scene,
+  world: RAPIER.World,
+  terrain: Terrain,
+  rand: Rng,
+  anchor: { x: number; z: number },
+  salvageables: SalvageableRegistry | undefined,
+): void {
+  const lenMin = Tuning.MILITARY_CONVOY_LENGTH_MIN;
+  const lenSpan = Tuning.MILITARY_CONVOY_LENGTH_MAX - lenMin;
+  const length = lenMin + rand() * lenSpan;
+  const halfLen = length / 2;
+  // Crash trajectory yaw — random per cluster, but locked across all
+  // wrecks in this cluster. Atan2 unused; just a uniform radian pick.
+  const trajYaw = rand() * Math.PI * 2;
+  const dx = Math.cos(trajYaw);
+  const dz = Math.sin(trajYaw);
+  // Perpendicular for lateral skid jitter
+  const px = -dz;
+  const pz = dx;
+  const wreckCountMin = Tuning.MILITARY_CONVOY_WRECK_COUNT_MIN;
+  const wreckSpan = Tuning.MILITARY_CONVOY_WRECK_COUNT_MAX - wreckCountMin;
+  const n = wreckCountMin + Math.floor(rand() * (wreckSpan + 1));
+  // Kind palette for the convoy. Cargo containers form the BODY of the
+  // formation; the lead vehicle is an engine_cluster ("the truck"); the
+  // tail is a fuselage ("comms"). Distribution: lead + middle cargo +
+  // possibly a fuselage at the tail.
+  const kinds: WreckKind[] = [];
+  // Lead vehicle = engine_cluster (always)
+  kinds.push('engine_cluster');
+  // Middle = cargo_container × (n - 2)
+  for (let i = 0; i < n - 2; i++) kinds.push('cargo_container');
+  // Tail = fuselage (always)
+  kinds.push('fuselage');
+  // If we ended up with too few middle cargos for the count, pad with
+  // engine_clusters (rare path, only when n=3 — gives 1 lead + 1 middle
+  // + 1 tail, which is fine without padding).
+  while (kinds.length < n) kinds.push('cargo_container');
+  // Place each wreck along the trajectory.
+  for (let i = 0; i < n; i++) {
+    // Even spacing from -halfLen to +halfLen along trajectory.
+    const t = n > 1 ? i / (n - 1) : 0.5;
+    const dist = -halfLen + t * length;
+    // Lateral skid: ±2m perpendicular jitter
+    const lat = (rand() - 0.5) * 4.0;
+    const x = anchor.x + dx * dist + px * lat;
+    const z = anchor.z + dz * dist + pz * lat;
+    const y = terrain.heightAt(x, z);
+    const pos = new THREE.Vector3(x, y, z);
+    // Wreck yaw aligned to trajectory + small per-wreck jitter (skidding
+    // crash, not all dead-on aligned).
+    const wreckYaw = trajYaw + (rand() - 0.5) * 0.5;
+    const tiltZ = (rand() - 0.5) * 0.3;        // crash-tilt
+    const buryY = 0.4 + rand() * 0.5;
+    const scale = i === 0 ? 1.2 : 0.95 + rand() * 0.3; // lead a bit bigger
+    const group = placeWreck(scene, world, terrain, pos, kinds[i], rand, {
+      scale, buryY, tiltZ, yaw: wreckYaw,
+    });
+    if (salvageables) registerSalvageable(salvageables, group, kinds[i], pos, rand);
+  }
+  // Optional debris field at the lead-end of the convoy ("impact zone").
+  const impactX = anchor.x + dx * halfLen;
+  const impactZ = anchor.z + dz * halfLen;
+  placeDebrisField(scene, terrain, new THREE.Vector3(impactX, 0, impactZ), 12, rand, 8);
+}
+
+/** refugee_caravan: a scavenger camp at the center + 2-3 cargo containers
+ *  ringed around it at 6-12m + (placeScavengerCamp already includes
+ *  a fuselage windbreak). Reads as "this was the last place they
+ *  stopped — set up camp, watched the dust, never got back on the road."
+ */
+function placeRefugeeCaravan(
+  scene: THREE.Scene,
+  world: RAPIER.World,
+  terrain: Terrain,
+  rand: Rng,
+  anchor: { x: number; z: number },
+  pickupList: Pickup[],
+  salvageables: SalvageableRegistry | undefined,
+): void {
+  const y = terrain.heightAt(anchor.x, anchor.z);
+  const center = new THREE.Vector3(anchor.x, y, anchor.z);
+  // Camp at center — includes fuselage windbreak + fire stones + bandage.
+  const { pickup, fuselage } = placeScavengerCamp(scene, world, terrain, rand, center);
+  pickupList.push(pickup);
+  if (salvageables) registerSalvageable(salvageables, fuselage, 'fuselage', center, rand);
+  // Ring of cargo containers around the camp.
+  const cargoMin = Tuning.REFUGEE_CARAVAN_CARGO_COUNT_MIN;
+  const cargoSpan = Tuning.REFUGEE_CARAVAN_CARGO_COUNT_MAX - cargoMin;
+  const cargoN = cargoMin + Math.floor(rand() * (cargoSpan + 1));
+  const rMin = Tuning.REFUGEE_CARAVAN_RADIUS_MIN;
+  const rSpan = Tuning.REFUGEE_CARAVAN_RADIUS_MAX - rMin;
+  for (let i = 0; i < cargoN; i++) {
+    // Distribute angles evenly with small jitter — avoid all cargos
+    // landing on one side.
+    const baseA = (i / cargoN) * Math.PI * 2;
+    const a = baseA + (rand() - 0.5) * 0.6;
+    const r = rMin + rand() * rSpan;
+    const cx = anchor.x + Math.cos(a) * r;
+    const cz = anchor.z + Math.sin(a) * r;
+    const cy = terrain.heightAt(cx, cz);
+    const cargoPos = new THREE.Vector3(cx, cy, cz);
+    // Cargo containers point INWARD (toward the camp center) — gives
+    // the formation a coherent "stowed around the fire" read rather
+    // than random orientations.
+    const cargoYaw = a + Math.PI;
+    const group = placeWreck(scene, world, terrain, cargoPos, 'cargo_container', rand, {
+      scale: 0.95 + rand() * 0.2,
+      buryY: 0.3 + rand() * 0.3,
+      tiltZ: (rand() - 0.5) * 0.15,
+      yaw: cargoYaw,
+    });
+    if (salvageables) registerSalvageable(salvageables, group, 'cargo_container', cargoPos, rand);
+  }
+}
+
+/** AAQ — sample anchor positions for N clusters via rejection. Avoids
+ *  flagship positions, player spawn, and other clusters. Roughness-gated
+ *  so clusters don't land on steep dune slopes (their multi-wreck
+ *  footprint amplifies tilt issues more than single-wreck flagships do). */
+function sampleClusterPositions(
+  rand: Rng,
+  terrain: Terrain,
+  flagshipPositions: ReadonlyArray<{ x: number; z: number }>,
+): Array<{ x: number; z: number; kind: ClusterKind }> {
+  const result: Array<{ x: number; z: number; kind: ClusterKind }> = [];
+  const n = Tuning.CLUSTER_COUNT_PER_WORLD;
+  const rMin = Tuning.CLUSTER_SCATTER_RADIUS_MIN;
+  const rMax = Tuning.CLUSTER_SCATTER_RADIUS_MAX;
+  const maxTries = Tuning.POI_MAX_PLACEMENT_TRIES;
+  const spawnX = Tuning.OPENING_SCENE_ANCHOR_X;
+  const spawnZ = Tuning.OPENING_SCENE_ANCHOR_Z;
+  const spawnExcludeSq = Tuning.CLUSTER_SPAWN_EXCLUSION_RADIUS * Tuning.CLUSTER_SPAWN_EXCLUSION_RADIUS;
+  const clusterSepSq = Tuning.CLUSTER_MIN_SEPARATION * Tuning.CLUSTER_MIN_SEPARATION;
+  const flagshipSepSq = Tuning.CLUSTER_FLAGSHIP_MIN_SEPARATION * Tuning.CLUSTER_FLAGSHIP_MIN_SEPARATION;
+  const maxRoughness = Tuning.CLUSTER_MAX_ROUGHNESS;
+  for (let i = 0; i < n; i++) {
+    let accepted: { x: number; z: number } | null = null;
+    for (let t = 0; t < maxTries; t++) {
+      const r = rMin + rand() * (rMax - rMin);
+      const a = rand() * Math.PI * 2;
+      const x = Math.cos(a) * r;
+      const z = Math.sin(a) * r;
+      const sdx = x - spawnX, sdz = z - spawnZ;
+      if (sdx * sdx + sdz * sdz < spawnExcludeSq) continue;
+      if (localRoughness(terrain, x, z) > maxRoughness) continue;
+      // Cluster ↔ flagship exclusion
+      let blocked = false;
+      for (const f of flagshipPositions) {
+        const dx = x - f.x, dz = z - f.z;
+        if (dx * dx + dz * dz < flagshipSepSq) { blocked = true; break; }
+      }
+      if (blocked) continue;
+      // Cluster ↔ cluster exclusion
+      for (const c of result) {
+        const dx = x - c.x, dz = z - c.z;
+        if (dx * dx + dz * dz < clusterSepSq) { blocked = true; break; }
+      }
+      if (!blocked) { accepted = { x, z }; break; }
+    }
+    if (!accepted) break;   // saturated world — ship with what we have
+    // Pick kind from the rotation — first half military_convoy, rest
+    // refugee_caravan (so a 3-cluster world gets 1-2 of each). Random
+    // tiebreaker per cluster so the order varies seed-to-seed.
+    const kind: ClusterKind = CLUSTER_KINDS[i % CLUSTER_KINDS.length];
+    result.push({ x: accepted.x, z: accepted.z, kind });
+  }
+  // Shuffle the kinds so the rotation doesn't bias by sample order.
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [result[i].kind, result[j].kind] = [result[j].kind, result[i].kind];
+  }
+  return result;
 }
 
 export function placePOIs(
@@ -408,5 +613,24 @@ export function placePOIs(
         break;
       }
     }
+  }
+
+  // ── AAQ — themed POI clusters ────────────────────────────────────
+  // After flagships are placed, sample N cluster anchors avoiding both
+  // the flagships and the player spawn. Each cluster is built from
+  // existing wreck/camp primitives in a coordinated layout. Cluster
+  // anchors are pushed onto `_placedFlagshipPositions` so procgenPoi's
+  // rejection sampler treats them as obstacles too (procgen wrecks
+  // won't intrude on a convoy crash site).
+  const clusterAnchors = sampleClusterPositions(rand, terrain, positions);
+  for (const c of clusterAnchors) {
+    if (c.kind === 'military_convoy') {
+      placeMilitaryConvoy(scene, world, terrain, rand, { x: c.x, z: c.z }, salvageables);
+    } else {
+      placeRefugeeCaravan(scene, world, terrain, rand, { x: c.x, z: c.z }, pickupList, salvageables);
+    }
+    // Add cluster anchor to the flagship-position list so procgenPoi
+    // honors it via the same min-sep mechanism (POI_MIN_SEPARATION).
+    _placedFlagshipPositions = [..._placedFlagshipPositions, { x: c.x, z: c.z }];
   }
 }

@@ -4,10 +4,9 @@ Cumulative state. Rewritten end-to-end at each `/session-end`. A
 reviewer who's never seen the project should be able to read this +
 `CLAUDE.md` + `docs/GDD.md` and understand where Dustfall is.
 
-**Current state**: Session AAP shipped (2026-05-22, overnight). 43
-sessions post-MVP. tsc clean. SAVE_VERSION v10 (additive: per-fire
-hasGrill). Working tree dirty pending the user's commit (includes AAO
-which never got separately committed — AAP's commit covers both).
+**Current state**: Session AAQ shipped (2026-05-22). 44 sessions
+post-MVP. tsc clean. SAVE_VERSION v10 (additive: per-fire hasGrill).
+Working tree dirty pending the user's commit.
 
 ---
 
@@ -83,6 +82,33 @@ Fresh-game start (the de-facto Tier 1 — Session W shipped):
     additive per D81.
 
 ---
+
+## What's freshly shipped (Session AAQ deltas)
+
+POI overhaul slice — first of three angles (clusters / narrative beats /
+biome-specific kinds). 2 files touched; no new modules; one new D-entry
+(D93 composition-over-creation).
+
+- **2 new cluster kinds**: `military_convoy` (linear crash trajectory,
+  4-6 wrecks: engine_cluster lead + cargo container middles + fuselage
+  tail; ±2m lateral skid, 12m debris field at impact end) and
+  `refugee_caravan` (scavenger_camp center + 2-3 inward-facing cargo
+  containers at 6-12m radius).
+- **`sampleClusterPositions`** sampler — rejection sampler with cluster-
+  specific exclusion radii: `CLUSTER_MIN_SEPARATION = 320m` (cluster ↔
+  cluster), `CLUSTER_SPAWN_EXCLUSION_RADIUS = 250m` (cluster ↔ spawn),
+  `CLUSTER_FLAGSHIP_MIN_SEPARATION = 200m` (cluster ↔ flagship),
+  `CLUSTER_MAX_ROUGHNESS = 0.7` (terrain-flatness gate). Post-sample
+  shuffle of cluster kinds avoids deterministic rotation order.
+- **Integration**: cluster pass runs in `placePOIs` after flagships and
+  before procgen wrecks. Cluster anchors push onto
+  `_placedFlagshipPositions` so procgenPoi naturally excludes them via
+  the existing `POI_MIN_SEPARATION` mechanism. No procgenPoi changes
+  needed.
+- **D93**: themed clusters reuse existing wreck/camp primitives in
+  coordinated layouts — composition-over-creation. New POI modules
+  reserved for cases where silhouette demands them (future
+  biome-specific kinds).
 
 ## What's freshly shipped (Session AAP deltas — overnight)
 

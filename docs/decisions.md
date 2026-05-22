@@ -1885,3 +1885,29 @@ is needed; today only the procedural layer is audible.
 calls, mechanical hums) get their own modules connected to the same
 `a.ambient` bus rather than threading variants through soundscape.ts.
 **friction-score:** 1
+
+## D93 — Themed POI clusters compose existing primitives, not new modules (Session AAQ)
+**When**: Session AAQ (POI overhaul — themed clusters slice).
+**Why**: AAQ shipped 2 cluster kinds (military_convoy, refugee_caravan).
+Each is a coordinated layout of EXISTING wreck/camp primitives
+(engine_cluster, cargo_container, fuselage, scavenger_camp) rather
+than new POI modules. The "theme" comes from layout shape (linear
+crash trajectory vs ring around a camp) + kind selection, not from
+new 3D geometry.
+**Considered alternatives**:
+- New model modules per cluster type (e.g. `militaryConvoy.ts` with
+  custom truck + jeep + watchtower meshes). Rejected — would balloon
+  module count and require new model authoring for every new cluster
+  theme. The "convoy" silhouette reads fine with engine_cluster trucks
+  + cargo containers + fuselage — the FORMATION is what makes it
+  read as a convoy, not the specific vehicle silhouettes.
+- Procedural mesh composition (e.g. dynamically attach gun-turrets to
+  cargo containers for "military" theming). Rejected — too much complexity
+  for too little visible payoff at this scale; would need a per-kind
+  mesh-mutation vocabulary.
+**Apply**: future cluster themes (comm-relay, military outpost, refugee
+caravan extensions) start by composing existing wreck/camp kinds in new
+layouts. Only commit to new POI modules when the silhouette demands it
+(e.g. a "research outpost" needs a unique flat-roof concrete block that
+no existing primitive provides).
+**friction-score:** 1

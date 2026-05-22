@@ -3,6 +3,62 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session AAQ — 2026-05-22 — POI overhaul: themed clusters (military convoy + refugee caravan) ✓ verify pass
+`verified` — tsc clean. POI overhaul slice — first of three angles from
+the long-standing backlog item (clusters, narrative beats, biome-specific
+kinds). 2 files touched; no new modules. One new D-entry (D93).
+
+**Themed POI clusters** are coordinated layouts of existing wreck/camp
+primitives that read as narrative beats — a convoy that crashed
+together, a caravan that camped together — rather than the previous
+all-scatter-no-context placement. Layouts use the rejection-sampler
+infrastructure (D82/AAI/AAK) extended with cluster-specific exclusion
+radii.
+
+- **`ClusterKind` union** + 2 cluster builders in `src/world/poi.ts`.
+  `military_convoy`: 4-6 wrecks aligned along a 28-48m "crash trajectory"
+  line — lead `engine_cluster` (the truck), 2-4 `cargo_container`
+  middles (the freight), `fuselage` tail (comms vehicle). All wrecks
+  share the trajectory yaw (with ±0.5rad per-wreck jitter) and ±2m
+  lateral skid. Closes with a 12m debris field at the impact end.
+  `refugee_caravan`: `placeScavengerCamp` at center (which already
+  bundles a fuselage windbreak + fire ring + bandage pickup), ringed
+  by 2-3 `cargo_container`s at 6-12m, each pointed INWARD toward the
+  camp center for "stowed around the fire" coherence.
+- **`sampleClusterPositions(rand, terrain, flagshipPositions)`** —
+  rejection sampler with cluster-specific exclusion radii:
+  `CLUSTER_SCATTER_RADIUS 250-800m` (same band as flagships),
+  `CLUSTER_MIN_SEPARATION = 320m` (wider than POI_MIN_SEPARATION since
+  clusters span 30-50m of layout), `CLUSTER_SPAWN_EXCLUSION = 250m`
+  (same as flagships), `CLUSTER_FLAGSHIP_MIN_SEPARATION = 200m`
+  (clusters slightly smaller than flagships, can sit closer),
+  `CLUSTER_MAX_ROUGHNESS = 0.7` (same terrain-flatness gate). Post-
+  sampler kind rotation is shuffled per-seed so a 3-cluster world
+  doesn't always alternate military / caravan / military.
+- **Integration** in `placePOIs()`: cluster pass runs AFTER flagships,
+  BEFORE procgenPoi. Cluster anchor XZ pushed onto
+  `_placedFlagshipPositions` so the procgenPoi rejection sampler
+  excludes them via the existing `POI_MIN_SEPARATION` mechanism —
+  procgen wrecks won't intrude on a convoy crash site or scatter
+  inside a caravan radius. No procgenPoi change needed.
+- **`CLUSTER_COUNT_PER_WORLD = 3`** — a 3-cluster world adds ~12-18
+  extra wrecks (across the convoys) + reuses 1-2 scavenger camps as
+  caravan centers. Density on top of the existing 22 procgen wrecks +
+  6 flagships feels appropriate; can dial down to 2 if playtest reveals
+  crowding.
+- **D93** (composition-over-creation): themed clusters reuse the
+  existing wreck/camp vocabulary rather than introducing new POI
+  modules. Layout shape + kind selection IS the theme.
+- **Save schema**: no change. Clusters are deterministically
+  re-rolled from `ctx.seed` on every boot, same as flagships and
+  procgen wrecks. Save format stays v10.
+
+**Out of scope** (other POI-overhaul angles, future sessions):
+narrative beats (lone-survivor journal entries, hostile holdouts,
+hermit NPCs); biome-specific POI kinds (salt = corroded scientific
+outpost, rocky = subterranean entrance); a third cluster kind
+(comm-relay).
+
 ## Session AAP — 2026-05-22 — Sandworm overhaul + atmospheric music tracks ✓ verify pass
 `verified` — tsc clean. Overnight session pairing two long-deferred
 big-ticket items. 5 files modified + 1 new module (`src/audio/music.ts`,
