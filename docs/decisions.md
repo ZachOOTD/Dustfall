@@ -1831,3 +1831,57 @@ arg, so existing call sites are unchanged.
 sleep through a storm, etc.) reuses showToast with new `kind` values
 rather than introducing new overlay modules.
 **friction-score:** 0
+
+## D90 — Companion reads weather.intensity, not perceivedIntensity, for huddle state (Session AAO)
+**When**: Session AAO (companion storm-peak huddle).
+**Why**: AAO added a huddle state at `weather.intensity > 0.80`. Question:
+read `weather.intensity` (world truth, D79) or `weather.perceivedIntensity`
+(player-context-aware, dampened inside large tents)? Chose `intensity`.
+The companion is an outdoor creature; whether the PLAYER is sheltered
+doesn't change whether the COMPANION is being hit by storm dust. Reading
+perceivedIntensity would have the companion stop huddling when the player
+walks into a tent — wrong reading. This matches the state-split shared-
+memory rule: physics/AI read truth, visual/audio read perceived.
+**Apply**: future companion behavior gated on weather (cower, retreat
+to shelter, mood drop) reads `weather.intensity`. The companion's own
+shelter check (future: "is the companion under a tent?") would be a
+separate per-companion lookup, not the player-perceived value.
+**friction-score:** 1
+
+## D91 — Sandworm home sampled from dune biome via rejection sampler (Session AAP)
+**When**: Session AAP (sandworm overhaul).
+**Why**: AAL's world-edge test-fix (`SANDWORM_HOME_POS = (900, 0)`) was
+shipped as a "ship-stable-not-correct" patch. AAP replaces it with a
+real procgen placement: `sampleSandwormHome(rand, biomes, terrain)`
+uses `findBiomeCentroid` on the dune biome (mirror of wells-in-salt
+per D55) with a player-spawn-exclusion ring at 350m (wider than
+flagship POIs at 200m per D82 because the worm's detection radius
+alone is 150m — a 200m exclusion still allows alert within ~50m of
+spawn). Per-seed ±30m jitter so different seeds with the same centroid
+cell still produce distinct positions. Falls back to
+`Tuning.SANDWORM_HOME_POS` only if no dune centroid is reachable
+(world is mostly dunes; rare).
+**Apply**: future enemy/boss procgen placements use this 3-step pattern
+— rejection sampler on biome centroid + spawn-exclusion ring +
+per-seed jitter to avoid same-cell-always behavior.
+**friction-score:** 1
+
+## D92 — Procedural music stays separate from soundscape's sample-stem layer (Session AAP)
+**When**: Session AAP (atmospheric music tracks).
+**Why**: The pre-AAP soundscape.ts already had a sample-stem music
+layer (music-calm + music-tense .ogg loops crossfaded by storm). That
+layer never shipped audio (no .ogg pack was ever added) but the
+architecture stayed in case CC0 music landed someday. AAP needed to
+fill the music slot NOW per D3 (no .ogg files); options were
+(a) gut the stem layer entirely and replace with procedural, or
+(b) add procedural as a separate module that runs alongside the
+silent stems. Chose (b). Reasons: (1) preserves the stem path for
+future .ogg adoption without a re-architecture; (2) procedural music
+has a different scope (3 tracks vs 2 stems) and different signal
+mix (sun-height-aware vs storm-only); (3) clone-not-abstract per the
+project convention. If both layers ever play simultaneously a toggle
+is needed; today only the procedural layer is audible.
+**Apply**: future audio additions (music genres, ambient creature
+calls, mechanical hums) get their own modules connected to the same
+`a.ambient` bus rather than threading variants through soundscape.ts.
+**friction-score:** 1

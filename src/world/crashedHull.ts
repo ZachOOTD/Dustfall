@@ -308,12 +308,13 @@ function makeTailBell(): THREE.Group {
 
   // Backstop disc — pitch-dark cap at throat end so the bell isn't
   // see-through from oblique angles.
+  // AAO: was CircleGeometry (zero depth); replaced with a short Cylinder
+  // so the throat cap has real thickness at grazing angles (rule 7).
   const backstop = new THREE.Mesh(
-    new THREE.CircleGeometry(innerR * 0.95, 14),
+    new THREE.CylinderGeometry(innerR * 0.95, innerR * 0.95, 0.10, 14),
     _bellBackstopMat,
   );
-  backstop.position.y = 0.05;
-  backstop.rotation.x = -Math.PI / 2;
+  backstop.position.y = 0.10;
   g.add(backstop);
 
   // Rim torus + scar ring for silhouette legibility from distance.

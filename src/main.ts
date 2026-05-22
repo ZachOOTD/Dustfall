@@ -41,9 +41,10 @@ import { updateInteraction } from './player/interaction.ts';
 import { updatePlayer } from './player/controller.ts';
 import { createShelterRegistry, updateShelter } from './shelter/shelterZones.ts';
 import { updateSoundscape } from './audio/soundscape.ts';
+import { startMusic, updateMusic } from './audio/music.ts';
 import { updateRaiders, type Raider } from './enemies/raider.ts';
 import { spawnLizardsProcgen, updateLizards } from './enemies/lizard.ts';
-import { spawnSandWorm, updateSandWorm } from './enemies/sandWorm.ts';
+import { spawnSandWorm, sampleSandwormHome, updateSandWorm } from './enemies/sandWorm.ts';
 import { updateWieldAction } from './player/wieldAction.ts';
 import { createGhostPreview, updateGhostPreview } from './player/ghostPreview.ts';
 import { createViewModel, updateViewModel } from './player/viewModel.ts';
@@ -73,6 +74,7 @@ import { createTitleScene } from './world/titleScene.ts';
 import { createTitleOverlay } from './ui/titleOverlay.ts';
 import { ensureAudioStarted } from './audio/audio.ts';
 import { startSoundscape } from './audio/soundscape.ts';
+// AAP — startMusic imported above (alongside updateMusic).
 import { clearSave, loadGameState, peekSavedSeed } from './persistence/save.ts';
 
 // --- Bootstrap (async — Rapier WASM + asset preload before world build) ---
@@ -181,21 +183,21 @@ const lizards = spawnLizardsProcgen(
   three.scene, physics.world, terrain, biomes, scatterRand, allPoiPositions,
 );
 
-// Session DD-2 — roaming sand worm. The home anchor (patrol center) is
-// configured in tuning.ts; we verify it lands in the dune biome at boot
-// and warn if it doesn't (future world-gen changes that shift biome
-// boundaries are caught visibly rather than silently breaking the
-// encounter).
+// AAP — sandworm home is now sampled per-seed from the dune biome via
+// sampleSandwormHome (mirrors wells-in-salt). Falls back to
+// Tuning.SANDWORM_HOME_POS if no dune centroid is reachable (rare —
+// world is mostly dunes). Player-spawn exclusion = 350m so the worm
+// isn't in the initial viewshed.
+const sandWormHome = sampleSandwormHome(scatterRand, biomes, terrain);
 {
-  const hp = Tuning.SANDWORM_HOME_POS;
-  const biome = biomes.biomeAt(hp.x, hp.z);
+  const biome = biomes.biomeAt(sandWormHome.x, sandWormHome.z);
   if (biome !== 'dune') {
     console.warn(
-      `[sandWorm] home pos (${hp.x}, ${hp.z}) is in biome '${biome}', not 'dune'. Encounter may feel wrong.`,
+      `[sandWorm] home pos (${sandWormHome.x.toFixed(0)}, ${sandWormHome.z.toFixed(0)}) is in biome '${biome}', not 'dune'. Encounter may feel wrong.`,
     );
   }
 }
-const sandWorm = spawnSandWorm(three.scene, physics.world, terrain);
+const sandWorm = spawnSandWorm(three.scene, physics.world, terrain, sandWormHome);
 
 const weather = createWeather(three.scene, three.camera);
 const ambientDust = createAmbientDust(three.scene, three.camera);
@@ -425,6 +427,11 @@ function handoffToGame(): void {
   inGameEls.forEach((el) => { el.style.visibility = ''; });
   ensureAudioStarted();
   startSoundscape();
+  // AAP — atmospheric music tracks. Three procedural Web Audio tracks
+  // (day/storm/night) crossfaded by sun height + perceivedIntensity.
+  // Independent of soundscape's sample-stem music layer (which has been
+  // silent since X-era — no .ogg pack ever shipped). Per D3.
+  startMusic();
   ctx.input.controls.lock();
   setTimeout(() => {
     title.dispose();
@@ -510,6 +517,7 @@ startLoop(ctx, (c, dt) => {
   updateShelter(c, dt);          // before stats so heat path sees inShelter
   updateStats(c, dt);            // thirst/heat/health drain + death
   updateSoundscape(c, dt);       // wind volume tracks day/night
+  updateMusic(c, dt);            // AAP — procedural music tracks crossfade by sun + storm
   // (bobPickups removed — items now rest flat on the ground; no float/spin)
   updateRaiders(c, dt);          // AI state machine + raider movement
   updateLizards(c, dt);          // small flee-AI wildlife

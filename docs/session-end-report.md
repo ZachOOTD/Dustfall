@@ -4,9 +4,10 @@ Cumulative state. Rewritten end-to-end at each `/session-end`. A
 reviewer who's never seen the project should be able to read this +
 `CLAUDE.md` + `docs/GDD.md` and understand where Dustfall is.
 
-**Current state**: Session AAN shipped (2026-05-21). 41 sessions
-post-MVP. tsc clean. SAVE_VERSION v10 (additive: per-fire hasGrill).
-Working tree dirty pending the user's commit.
+**Current state**: Session AAP shipped (2026-05-22, overnight). 43
+sessions post-MVP. tsc clean. SAVE_VERSION v10 (additive: per-fire
+hasGrill). Working tree dirty pending the user's commit (includes AAO
+which never got separately committed — AAP's commit covers both).
 
 ---
 
@@ -82,6 +83,73 @@ Fresh-game start (the de-facto Tier 1 — Session W shipped):
     additive per D81.
 
 ---
+
+## What's freshly shipped (Session AAP deltas — overnight)
+
+Overnight session pairing two big-ticket items. 5 files modified + 1
+new module (`src/audio/music.ts`). Two new D-entries (D91, D92).
+
+- **Sandworm overhaul** (D91). New `sampleSandwormHome(rand, biomes,
+  terrain)` — rejection-sampler placement on the dune biome with a
+  350m player-spawn-exclusion ring (wider than flagship POIs at 200m
+  since detection range = 150m). Per-seed ±30m jitter so the same
+  centroid cell across multiple seeds still produces distinct
+  positions. Falls back to `Tuning.SANDWORM_HOME_POS` if no dune
+  centroid is reachable. `spawnSandWorm` signature gained optional
+  `homeXZ` parameter; main.ts now passes the sampled home through.
+- **Noise-scaled sandworm detection**. New `playerNoiseMultiplier(ctx)`
+  helper. tickPatrol's detection check reads
+  `SANDWORM_DETECTION_RADIUS × multiplier` instead of the raw 150m.
+  Multipliers: still=0.55, walking=1.0, sprinting=1.45, mounted=1.85.
+  Player can sneak past at ~80m standing still; gets chased from ~280m
+  mounted.
+- **Procedural music** (D92, new module `src/audio/music.ts` ~240 LOC).
+  Three continuous Web Audio tracks per D3 (no .ogg files):
+  - Day: C2+G2+Eb3 triangle drones through 800Hz lowpass with slow
+    LFO tremolos (~0.07-0.13Hz). Rising-fifth motif (C5→G5, 1.5s decay)
+    fires every 12-18s.
+  - Storm: C2+Db2 sawtooth dissonance through 300Hz lowpass + low
+    rumble (lowpassed noise loop). Ramps in at perceivedIntensity > 0.30.
+  - Night: C3+Eb4 sine pads with slow LFO. Soft C6 chime (3.5s decay)
+    fires every 20-30s.
+  Crossfaded by sun height × perceivedIntensity. 1.5s ramp times.
+  Master gain `MUSIC_BUS_TARGET = 0.45`, fades in over 5s on first
+  audio gesture. Sample-stem music layer (silent in production)
+  preserved alongside per D92. `__game.musicState()` debug snapshot
+  surfaces per-track gains.
+- **Cut**: multi-worm population (overnight scope-cut tier 3). Single-
+  worm baseline shipped; multi-worm needs save-schema bump + playtest.
+  Backlogged.
+
+## What's freshly shipped (Session AAO deltas)
+
+Another quick-wins bundle (user picked "quick-wins bundle" from a 4-option
+direction prompt). Four items closed; one new D-entry (D90). 10 files
+touched, no new modules.
+
+- **Flagship paper-thin sweep** (CLAUDE.md rule 7). AAN closed wrecks.ts;
+  AAO closes the remaining flagships. 15 fixes total. megaShip.ts: 8
+  fixes (hull seams 5cm → 10cm, rust streaks + patches, entrance
+  fragments, bridge fins, viewport). megaWreck.ts: 6 fixes (aft seams +
+  horizontals + streaks + roof patches + doorway fragments, all 6-8cm
+  → 10cm). crashedHull.ts + engineBlock.ts: bell-throat backstop
+  `CircleGeometry` → `CylinderGeometry(r, r, 0.10)`. satelliteDish.ts:
+  clean (audit false positive). Offsets bumped proportionally so seams
+  still sit proud of the wall.
+- **Cook-progress-per-fire HUD**: new `showCookProgresses` + 4 pre-built
+  mini-bars above the [E] prompt; per-frame width updates only.
+  Surfaced from interaction.ts's 'fires' case — filters `_cooks` by
+  fireId. Closes AAM gap (grilled fires showed only one cook's progress).
+- **Companion storm-peak huddle**: new `'huddle'` state at
+  `weather.intensity > 0.80` (±0.05 hysteresis). Legs tuck, body
+  presses to ground, slow breathing bob. One-shot toast "Rocky huddles
+  down" per deploy. Uses world-truth `intensity`, not perceivedIntensity
+  (D90) — companion is outdoors regardless of player shelter.
+- **Rule-2 magic-number sweep** on deadTree.ts: 5 module-locals lifted
+  to `Tuning.DEAD_TREE_*` (FLATNESS_THRESHOLD + branch count + ring
+  radius). poi.ts scavenger-camp constants assessed and deferred —
+  one-off aesthetic numbers, lifting would bloat Tuning without future
+  iteration value.
 
 ## What's freshly shipped (Session AAN deltas)
 

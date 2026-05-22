@@ -466,6 +466,34 @@ canvas {
   pointer-events: none;
 }
 
+/* AAO — per-cook progress bars. Row of mini-bars above the [E] prompt
+   when hovering a fire with active cooks (up to 4 with grill attachment).
+   Each fill animates 0%→100% over the 3.5s cook duration. Warm amber
+   gradient reads as "cooking heat" without competing with the muted
+   prompt text below. */
+#interact-prompt .cook-bars {
+  position: absolute;
+  left: 50%;
+  bottom: 100%;
+  transform: translateX(-50%);
+  margin-bottom: 6px;
+  display: flex;
+  gap: 3px;
+  pointer-events: none;
+}
+#interact-prompt .cook-bar {
+  width: 28px;
+  height: 4px;
+  background: rgba(232, 220, 192, 0.18);
+  border: 1px solid rgba(232, 220, 192, 0.32);
+}
+#interact-prompt .cook-bar-fill {
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, #c8783a, #f4b35e);
+  transition: width 0.10s linear;
+}
+
 /* ──────────────────────────────────────────────────────────
    Shelter indicator
    ────────────────────────────────────────────────────────── */

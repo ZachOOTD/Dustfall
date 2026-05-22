@@ -153,12 +153,14 @@ function makeNozzleBell(): THREE.Group {
   g.add(inner);
   // Backstop disc — pitch-dark cap at the throat end so the bell isn't
   // see-through from oblique angles below the mouth.
+  // AAO: was CircleGeometry (zero depth); replaced with a short Cylinder
+  // so the throat backstop reads as a real metal cap from any view angle
+  // including grazing shots from below the mouth (CLAUDE.md rule 7).
   const backstop = new THREE.Mesh(
-    new THREE.CircleGeometry(innerR * 0.95, 14),
+    new THREE.CylinderGeometry(innerR * 0.95, innerR * 0.95, 0.10, 14),
     _nozzleBackstopMat,
   );
-  backstop.position.y = 0.05;
-  backstop.rotation.x = -Math.PI / 2;       // disc lies horizontal, facing +Y
+  backstop.position.y = 0.10;                // sits just above the floor
   g.add(backstop);
   // Rim torus — thin band wrapping the mouth, reads as a structural
   // welded rim for silhouette legibility from distance.

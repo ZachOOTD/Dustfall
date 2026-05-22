@@ -189,45 +189,49 @@ export function makeMegaShip(rand: Rng): THREE.Group {
 
   // Hull-plate seams on the right wall (5 verticals + 2 horizontals). The
   // crosshatch makes the wall read as plated armour rather than one slab.
+  // AAO: 5cm seams read paper-thin at oblique angles → bumped to 10cm
+  // (CLAUDE.md rule 7). They now read as chunkier welded ribs.
   for (let i = 0; i < 5; i++) {
-    const seam = box(0.05, HALF_H * 2 - 0.2, 0.05, _hullDarkMat);
+    const seam = box(0.10, HALF_H * 2 - 0.2, 0.10, _hullDarkMat);
     seam.position.set(
-      HALF_W + WALL_THICK + 0.025,
+      HALF_W + WALL_THICK + 0.05,
       HALF_H,
       -HALF_L + 1.0 + i * 2.4,
     );
     g.add(seam);
   }
   for (const y of [0.5, 2.0]) {
-    const seam = box(0.05, 0.05, HALF_L * 2 - 0.4, _hullDarkMat);
-    seam.position.set(HALF_W + WALL_THICK + 0.025, y, 0);
+    const seam = box(0.10, 0.10, HALF_L * 2 - 0.4, _hullDarkMat);
+    seam.position.set(HALF_W + WALL_THICK + 0.05, y, 0);
     g.add(seam);
   }
   // Mirror seams on the LEFT side too (sparser since the wall has an entrance).
   for (const z of [-HALF_L + 1.0, -HALF_L + 2.2, HALF_L - 1.0, HALF_L - 2.2]) {
-    const seam = box(0.05, HALF_H * 2 - 0.2, 0.05, _hullDarkMat);
-    seam.position.set(-HALF_W - WALL_THICK - 0.025, HALF_H, z);
+    const seam = box(0.10, HALF_H * 2 - 0.2, 0.10, _hullDarkMat);
+    seam.position.set(-HALF_W - WALL_THICK - 0.05, HALF_H, z);
     g.add(seam);
   }
 
   // Rust streaks — random vertical drips on both sides + roof. More than
   // the opening wreck: this thing's been baking longer.
+  // AAO: 5cm × 0.05 thickness → 10cm thickness (rule 7).
   for (let i = 0; i < 14; i++) {
     const side = rand() < 0.5 ? -1 : 1;
-    const streak = box(0.05, 0.5 + rand() * 1.2, 0.10 + rand() * 0.10, _rustMat);
+    const streak = box(0.10, 0.5 + rand() * 1.2, 0.10 + rand() * 0.10, _rustMat);
     streak.position.set(
-      side * (HALF_W + WALL_THICK + 0.028),
+      side * (HALF_W + WALL_THICK + 0.05),
       HALF_H * 0.4 + rand() * (HALF_H * 1.3),
       -HALF_L + rand() * (HALF_L * 2),
     );
     g.add(streak);
   }
   // Rust patches scattered on the roof.
+  // AAO: 4cm patch → 10cm (rule 7).
   for (let i = 0; i < 5; i++) {
-    const patch = box(0.5 + rand() * 0.6, 0.04, 0.4 + rand() * 0.5, _rustDarkMat);
+    const patch = box(0.5 + rand() * 0.6, 0.10, 0.4 + rand() * 0.5, _rustDarkMat);
     patch.position.set(
       (rand() - 0.5) * (HALF_W * 1.4),
-      HALF_H * 2 + 0.27,
+      HALF_H * 2 + 0.30,
       (rand() - 0.5) * (HALF_L * 1.6),
     );
     patch.rotation.y = rand() * Math.PI;
@@ -281,15 +285,16 @@ export function makeMegaShip(rand: Rng): THREE.Group {
 
   // Broken hull-plate fragments around the entrance — tilted boxes around
   // the torn opening like the hull was peeled back.
+  // AAO: 5cm fragments → 10cm (rule 7).
   for (let i = 0; i < 6; i++) {
     const w = 0.35 + rand() * 0.5;
     const h = 0.22 + rand() * 0.4;
-    const frag = box(0.05, h, w, _rustDarkMat);
+    const frag = box(0.10, h, w, _rustDarkMat);
     // Around the entrance (Z ≈ 0, X = -HALF_W outward)
     const r = 1.6 + rand() * 0.5;
     const a = (rand() - 0.5) * Math.PI * 0.9;
     frag.position.set(
-      -HALF_W - WALL_THICK - 0.05 - Math.cos(a) * 0.1,
+      -HALF_W - WALL_THICK - 0.08 - Math.cos(a) * 0.1,
       HALF_H + Math.sin(a) * r * 0.5,
       Math.sin(a) * r,
     );
@@ -313,17 +318,19 @@ export function makeMegaShip(rand: Rng): THREE.Group {
   const bridgeNose = box(HALF_W * 0.8, HALF_H * 1.0, 1.4, _hullDarkMat);
   bridgeNose.position.z = -1.1;
   bridgeG.add(bridgeNose);
-  // Two side-fin panels
+  // Two side-fin panels. AAO: 8cm → 10cm (rule 7).
   for (const side of [-1, 1] as const) {
-    const fin = box(0.08, HALF_H * 0.7, 1.0, _hullMat);
+    const fin = box(0.10, HALF_H * 0.7, 1.0, _hullMat);
     fin.position.set(side * HALF_W * 0.8, 0.2, -0.4);
     fin.rotation.z = side * 0.18;
     bridgeG.add(fin);
   }
-  // Viewport — small dark glass-like slab on the nose
+  // Viewport — small dark glass-like slab on the nose. AAO: 5cm slab read
+  // as a 2D decal at oblique angles → 10cm (rule 7); offset bumped a touch
+  // so the viewport still sits proud of the nose face.
   const viewportMat = new THREE.MeshBasicMaterial({ color: 0x14181c });
-  const viewport = new THREE.Mesh(new THREE.BoxGeometry(HALF_W * 0.5, 0.30, 0.05), viewportMat);
-  viewport.position.set(0, 0.45, -1.78);
+  const viewport = new THREE.Mesh(new THREE.BoxGeometry(HALF_W * 0.5, 0.30, 0.10), viewportMat);
+  viewport.position.set(0, 0.45, -1.80);
   bridgeG.add(viewport);
   g.add(bridgeG);
 

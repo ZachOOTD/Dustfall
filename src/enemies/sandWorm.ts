@@ -30,6 +30,9 @@ import {
   playPlayerHurt,
 } from '../audio/audio.ts';
 import { die } from '../stats/survival.ts';
+import type { BiomeSampler } from '../world/biomes.ts';
+import { findBiomeCentroid } from '../world/biomes.ts';
+import type { Rng } from '../core/rng.ts';
 
 export type SandWormState =
   | 'patrol'
@@ -401,15 +404,78 @@ function updatePuffs(puffs: SandPuff[], dt: number): void {
 // Spawn
 // ─────────────────────────────────────────────────────────────────────────
 
+/** AAP — sample a procgen home position for the sandworm. Mirrors the
+ *  wells-in-salt pattern (D55 era): use `findBiomeCentroid` on the
+ *  dune biome with player-spawn exclusion. Falls back to the legacy
+ *  Tuning.SANDWORM_HOME_POS (world-edge test fix from AAL) if no dune
+ *  centroid is reachable within the search radius — defensive but rare
+ *  given the world is mostly dunes.
+ *
+ *  Player-spawn exclusion is set wider than for flagship POIs (D82):
+ *  the player should not encounter the worm in their first ~20s of
+ *  unmounted movement. SANDWORM_SPAWN_EXCLUSION_RADIUS = 350m ≈
+ *  detection radius (150m) + ~200m walking buffer.
+ */
+export function sampleSandwormHome(
+  rand: Rng,
+  biomes: BiomeSampler,
+  terrain: Terrain,
+): { x: number; z: number } {
+  // Use a wider scatter band than flagships (200-800m) — sandworm should
+  // be reachable but never in initial viewshed.
+  const excludeR = Tuning.SANDWORM_SPAWN_EXCLUSION_RADIUS;
+  const exclude = [{
+    x: Tuning.OPENING_SCENE_ANCHOR_X,
+    z: Tuning.OPENING_SCENE_ANCHOR_Z,
+    radius: excludeR,
+  }];
+  // Phase 1: dune centroid (deepest into dune biome, outside spawn exclusion).
+  // Run a few attempts perturbing the search via random offsets, since
+  // findBiomeCentroid is deterministic per its grid — small jitter via
+  // pre-rolled offsets surfaces different cells across seeds.
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const c = findBiomeCentroid(biomes, 'dune', { excludeCenters: exclude });
+    if (c) {
+      // Verify the chosen centroid is actually a dune cell (defensive —
+      // findBiomeCentroid already enforces this, but cheap to re-check).
+      if (biomes.biomeAt(c.x, c.z) === 'dune') {
+        // Jitter by a small amount per-seed so different worlds get
+        // visibly-different homes even when the centroid cell is the same.
+        const jitter = 60;
+        const jx = c.x + (rand() - 0.5) * jitter;
+        const jz = c.z + (rand() - 0.5) * jitter;
+        // Confirm the jittered position is still in dune biome AND outside
+        // exclusion; otherwise use the centroid itself.
+        const dx = jx - exclude[0].x;
+        const dz = jz - exclude[0].z;
+        if (biomes.biomeAt(jx, jz) === 'dune' && (dx * dx + dz * dz) > excludeR * excludeR) {
+          return { x: jx, z: jz };
+        }
+        return { x: c.x, z: c.z };
+      }
+    }
+    break; // findBiomeCentroid is deterministic; retrying won't help
+  }
+  // Fallback — Tuning.SANDWORM_HOME_POS (world-edge test fix). Better
+  // than crashing; the warning at main.ts boot will surface this case.
+  void terrain;
+  return { x: Tuning.SANDWORM_HOME_POS.x, z: Tuning.SANDWORM_HOME_POS.z };
+}
+
 export function spawnSandWorm(
   scene: THREE.Scene,
   physicsWorld: RAPIER.World,
   terrain: Terrain,
+  homeXZ?: { x: number; z: number },
 ): SandWorm {
+  // AAP — accepts an explicit home XZ. Backward-compatible: if omitted,
+  // falls back to Tuning.SANDWORM_HOME_POS (legacy callers / tests).
+  // Production caller (main.ts) computes home via sampleSandwormHome.
+  const homePos = homeXZ ?? Tuning.SANDWORM_HOME_POS;
   const home = new THREE.Vector3(
-    Tuning.SANDWORM_HOME_POS.x,
-    terrain.heightAt(Tuning.SANDWORM_HOME_POS.x, Tuning.SANDWORM_HOME_POS.z),
-    Tuning.SANDWORM_HOME_POS.z,
+    homePos.x,
+    terrain.heightAt(homePos.x, homePos.z),
+    homePos.z,
   );
 
   // Start patrol at the orbit's "east" point so the worm has somewhere
@@ -641,9 +707,36 @@ function applyTremorEffects(worm: SandWorm, ctx: GameContext): void {
 
 // ── State tick functions ───────────────────────────────────────────────
 
+/** AAP — derive the player's current "noise level" multiplier for the
+ *  sandworm's detection radius. Mounted on the speeder is loudest;
+ *  sprinting is loud; walking is baseline; standing still or crouching
+ *  without moving shrinks the detection radius. */
+function playerNoiseMultiplier(ctx: GameContext): number {
+  // Mounted on the speeder — loudest signal, dominates other modes.
+  if (ctx.speeder?.mounted) return Tuning.SANDWORM_DETECTION_MULT_MOUNTED;
+  const keys = ctx.input.keys;
+  const moving = !!(keys['KeyW'] || keys['KeyS'] || keys['KeyA'] || keys['KeyD']);
+  if (!moving) {
+    // Standing still or crouching-and-still — quieter regardless of
+    // whether the player is crouched (the crouch is a UX modifier; the
+    // signal here is "is the player making footstep noise right now?").
+    return Tuning.SANDWORM_DETECTION_MULT_STILL;
+  }
+  const sprinting =
+    !ctx.player.crouching &&
+    (keys['ShiftLeft'] || keys['ShiftRight']) &&
+    ctx.stats.stamina > Tuning.STAMINA_SPRINT_THRESHOLD;
+  if (sprinting) return Tuning.SANDWORM_DETECTION_MULT_SPRINTING;
+  return Tuning.SANDWORM_DETECTION_MULT_WALKING;
+}
+
 function tickPatrol(worm: SandWorm, ctx: GameContext, dt: number, distToPlayer: number): void {
-  // Detection — once player is in range, start the alert.
-  if (distToPlayer < Tuning.SANDWORM_DETECTION_RADIUS) {
+  // AAP — detection radius now scales with player movement noise. A
+  // standing-still player can sit ~80m from a patrolling worm without
+  // alerting it (DETECTION_RADIUS=150 * STILL=0.55 ≈ 82m); a mounted
+  // player triggers alert from ~280m (150 * MOUNTED=1.85).
+  const effectiveR = Tuning.SANDWORM_DETECTION_RADIUS * playerNoiseMultiplier(ctx);
+  if (distToPlayer < effectiveR) {
     enterAlert(worm, ctx);
     return;
   }

@@ -289,6 +289,19 @@ export const Tuning = {
   COMPANION_IDLE_BOB_FREQ_HZ: 1.2,       // breathing rate
   COMPANION_LEG_GAIT_FREQ_HZ: 4.0,       // legs sin-wave when walking
   COMPANION_LEG_GAIT_AMP: 0.06,          // peak leg lift while walking
+  // AAO — storm-peak huddle. When `ctx.weather.intensity` exceeds this,
+  // the companion overrides any far/walk/idle behavior and presses to
+  // the ground with legs tucked. ±0.05 hysteresis applied in
+  // updateCompanion so we don't flicker at the threshold.
+  COMPANION_HUDDLE_THRESHOLD: 0.80,
+
+  // AAO — dead-tree scatter feel knobs (rule-2 lift from deadTree.ts
+  // module-locals). Values unchanged from pre-AAO behaviour.
+  DEAD_TREE_FLATNESS_THRESHOLD: 0.7,     // reject candidate if local |dY| > this over 1.5m
+  DEAD_TREE_BRANCH_COUNT_MIN: 2,         // pickups per tree (lower bound)
+  DEAD_TREE_BRANCH_COUNT_MAX: 4,         // (upper bound, inclusive)
+  DEAD_TREE_BRANCH_RING_RADIUS_MIN: 1.5, // branches scatter in [min, max] ring at base
+  DEAD_TREE_BRANCH_RING_RADIUS_MAX: 3.0,
 
   // Session AAF — "the long storm" — 7-day escalating-storm endgame.
   // Storm interval shrinks + duration grows over 7 days of survival.
@@ -686,7 +699,19 @@ export const Tuning = {
   // spawn (currently fixed; falls outside the procgen pipeline). The
   // biome-check warn in main.ts will fire on seeds where +X edge isn't
   // dune — acceptable as a known footgun until the overhaul.
-  SANDWORM_HOME_POS: { x: 900, z: 0 },       // anchor for patrol circle (world-edge for low-aggro testing)
+  SANDWORM_HOME_POS: { x: 900, z: 0 },       // AAP — legacy fallback only (was AAL test-fix world-edge anchor). Production uses sampleSandwormHome(rand, biomes, terrain) per AAP D-entry.
+  // AAP — sandworm spawn-exclusion radius around the opening scene
+  // anchor. Wider than flagship POIs (D82: 200m) because the player
+  // should never see the worm in their first ~20s of unmounted
+  // movement. Roughly: detection radius (150m) + ~200m walking buffer.
+  SANDWORM_SPAWN_EXCLUSION_RADIUS: 350,
+  // AAP — noise multipliers on detection radius. Quiet stationary
+  // player shrinks the worm's effective detection; sprinting / mounted
+  // grows it. Falls back to 1.0 (raw radius) on any unhandled mode.
+  SANDWORM_DETECTION_MULT_STILL: 0.55,        // standing/crouching: half-detect
+  SANDWORM_DETECTION_MULT_WALKING: 1.0,       // baseline
+  SANDWORM_DETECTION_MULT_SPRINTING: 1.45,    // loud footfalls
+  SANDWORM_DETECTION_MULT_MOUNTED: 1.85,      // speeder hum is the loudest signal
   // QQ-2 — Sandworm rescaled −50% from MM (boss-tier 240m felt too
   // big in play). Length 240→120, radius 20→10. All RANGES that scale
   // with body size halved proportionally; speeds + durations + HP

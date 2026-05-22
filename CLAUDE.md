@@ -59,27 +59,65 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session AAN — Systems review + quick-win polish bundle.
-User asked for a comprehensive review. Three parallel Explore agents
-(gameplay loop / models+materials / UX-audio-quick-wins) surfaced 4
-quick wins, all shipped. **Paper-thin wrecks.ts fixes** (CLAUDE.md
-rule 7 audit on procgen wrecks) — engine_cluster panel 0.06→0.15,
-escape pod hatch 0.04→0.12, escape pod rust 0.05→0.12, cargo door
-0.04→0.10, debris hull plate 0.04→0.10; **fuselage end cap rewritten**
-from `CircleGeometry` (zero depth — 2D disc) to a 0.10m-thick
-`CylinderGeometry` so it reads as real metal at edge angles. **Scrap
-gun empty-state crosshair** (`src/ui/interactPrompt.ts` + style.css) —
-new `.no_ammo` state, dim warning-red + smaller font, fires when no
-hover AND equipped scrap_gun has `ammoRemaining <= 0`. Hover state
-always wins (D88). **Bandage SFX** (`src/audio/audio.ts` +
-`src/inventory/items.ts`) — two-layer cloth-tear noise burst (highpass
-900→1800Hz) + soft pad triangle blip (220→110Hz); wired into bandage
-onUse. **First-recipe-discovery fanfare** (`src/ui/craftingMenu.ts` +
-audio.ts + hud.ts + GameContext.ts + style.css) — distinct rising-arp
-chime (C5/G5/C6 sines + C4 triangle pad) replaces the routine
-playCraft tick; toast renders in warm-gold with glow + larger font,
-held 3.2s instead of 1.6s. HudApi.showToast extended with optional
-`{ kind?: 'discovery' }` opts arg (D89). 8 files; no new modules.
+**Last shipped**: Session AAP — Sandworm overhaul + atmospheric music
+tracks (overnight). **Sandworm**: replaces AAL's world-edge test-fix
+with real procgen placement. New `sampleSandwormHome(rand, biomes,
+terrain)` uses `findBiomeCentroid` on the dune biome with a 350m
+player-spawn-exclusion ring (wider than flagship POIs since
+detection range = 150m). Per-seed ±30m jitter so same-centroid
+seeds still get distinct positions (D91). Noise-scaled detection
+via `playerNoiseMultiplier(ctx)` — still=0.55, walking=1.0,
+sprinting=1.45, mounted=1.85 multiplier on the 150m radius. Standing
+still ~80m from a worm no longer triggers alert; mounted player
+heard from ~280m. Multi-worm cut per scope-cut tier 3, backlogged.
+**Music**: new `src/audio/music.ts` (~240 LOC). 3 procedural Web
+Audio tracks per D3 — day (C-minor drone + rising-fifth motif every
+~15s), storm (C+Db dissonance + lowpassed rumble noise), night
+(sparse sine pads + soft C6 chime every ~25s). Crossfaded by sun
+height × perceivedIntensity, 1.5s ramps. Soundscape's sample-stem
+music layer stays silent + intact per D92 — procedural runs alongside.
+`__game.musicState()` debug snapshot added. 5 files + 1 new module.
+
+**Prior milestone**: Session AAO — Another quick-wins bundle (flagship
+paper-thin sweep + grill HUD + companion huddle + deadTree rule-2).
+**Flagship paper-thin sweep** (CLAUDE.md rule 7 follow-on to AAN's
+wrecks.ts): 15 fixes — megaShip.ts hull seams + streaks + rust patches
++ fragments + bridge fins + viewport (8 fixes, 4-8cm → 10cm),
+megaWreck.ts aft seams + horizontals + streaks + roof patches +
+doorway fragments (6 fixes, 4-8cm → 10cm), crashedHull.ts +
+engineBlock.ts bell-throat backstop CircleGeometry → 0.10m Cylinder.
+satelliteDish clean (audit false positive). **Cook-progress-per-fire
+HUD** (`src/ui/interactPrompt.ts` + style.css + interaction.ts) — new
+`showCookProgresses(progresses[])` pre-builds 4 mini-bars above the
+[E] prompt; per-frame width updates only. Wired into 'fires' case —
+filters `_cooks` by fireId and surfaces each cook's progress. Closes
+the AAM grilled-fire visibility gap (previously only one cook showed).
+**Companion storm-peak huddle** (`src/enemies/companion.ts` + tuning) —
+new `'huddle'` state at `weather.intensity > COMPANION_HUDDLE_THRESHOLD
+= 0.80` (±0.05 hysteresis). Overrides all other states; legs tuck,
+body presses to ground with slow breathing bob (35% of idle rate).
+One-shot toast "Rocky huddles down" on first transition per deploy.
+Reads world-truth `weather.intensity`, not perceivedIntensity, per
+state-split (D90) — companion is outdoors regardless of player
+shelter. **Rule-2 magic-number sweep on deadTree.ts**: lifted
+FLATNESS_THRESHOLD + branch-count + ring-radius (5 constants total)
+to `Tuning.DEAD_TREE_*`. poi.ts scavenger-camp constants assessed +
+deferred (one-off aesthetic numbers, not feel-tunable). 10 files
+touched. D90.
+
+**Prior milestone**: Session AAN — Systems review + quick-win polish
+bundle. User asked for a comprehensive review. Three parallel Explore
+agents (gameplay loop / models+materials / UX-audio-quick-wins)
+surfaced 4 quick wins, all shipped. Paper-thin wrecks.ts fixes
+(engine_cluster panel 0.06→0.15, escape pod hatch 0.04→0.12, escape
+pod rust 0.05→0.12, cargo door 0.04→0.10, debris hull plate 0.04→0.10);
+fuselage end cap rewritten from `CircleGeometry` (zero depth) to a
+0.10m-thick `CylinderGeometry`. Scrap gun empty-state crosshair
+(`.no_ammo` state when no hover + scrap_gun ammoRemaining ≤ 0,
+hover always wins per D88). Bandage SFX (cloth-tear + pad pat).
+First-recipe-discovery fanfare (rising-arp chime + warm-gold toast
+variant with `{ kind: 'discovery' }` opts arg per D89, held 3.2s).
+8 files; no new modules.
 
 **Prior milestone**: Session AAM — Fire grill attachment (multi-cook) +
 SAVE_VERSION v10. Backlog item from AAG. New `grill_kit` ItemId

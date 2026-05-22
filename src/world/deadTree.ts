@@ -94,7 +94,9 @@ export function spawnDeadTrees(
   count = Tuning.DEAD_TREE_TARGET_COUNT,
 ): THREE.Group[] {
   const trees: THREE.Group[] = [];
-  const FLATNESS_THRESHOLD = 0.7;
+  // AAO — was module-local const; lifted to Tuning.DEAD_TREE_FLATNESS_THRESHOLD
+  // per CLAUDE.md rule 2.
+  const FLATNESS_THRESHOLD = Tuning.DEAD_TREE_FLATNESS_THRESHOLD;
   const groveCount = Tuning.TREE_GROVE_COUNT;
   const perGrove = Tuning.TREE_PER_GROVE;
   const clusterRadius = Tuning.TREE_GROVE_CLUSTER_RADIUS;
@@ -115,11 +117,17 @@ export function spawnDeadTrees(
     });
     scene.add(tree);
     trees.push(tree);
-    // 2-4 branches in a ring at the base.
-    const branchN = 2 + Math.floor(rand() * 3);
+    // AAO — branch count + ring radius lifted to Tuning. Span is
+    // inclusive of MIN..MAX so the original 2..4 (3-value range) is
+    // preserved when MIN=2, MAX=4.
+    const minN = Tuning.DEAD_TREE_BRANCH_COUNT_MIN;
+    const maxN = Tuning.DEAD_TREE_BRANCH_COUNT_MAX;
+    const branchN = minN + Math.floor(rand() * (maxN - minN + 1));
+    const ringMin = Tuning.DEAD_TREE_BRANCH_RING_RADIUS_MIN;
+    const ringSpan = Tuning.DEAD_TREE_BRANCH_RING_RADIUS_MAX - ringMin;
     for (let b = 0; b < branchN; b++) {
       const a = rand() * Math.PI * 2;
-      const r = 1.5 + rand() * 1.5;
+      const r = ringMin + rand() * ringSpan;
       spawnBranchAt(scene, terrain, x + Math.cos(a) * r, z + Math.sin(a) * r, rand, branchList);
     }
     return true;

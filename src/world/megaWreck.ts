@@ -528,51 +528,55 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
   // EXTERIOR DETAIL pass — seams, rust, pipes, vents, antenna stubs.
   // ────────────────────────────────────────────────────────────────────
   // Hull-plate seams on aft +Z back wall (5 verticals + 2 horizontals).
+  // AAO: 6cm welds read paper-thin at oblique angles → bumped to 10cm
+  // (CLAUDE.md rule 7). Seam offset bumped 0.03 → 0.05 so the outer
+  // face still sits proud of the wall by the same margin.
   for (let i = 0; i < 5; i++) {
-    const seam = box(0.06, AFT_HALF_H * 2 - 0.4, 0.06, _hullDarkMat);
+    const seam = box(0.10, AFT_HALF_H * 2 - 0.4, 0.10, _hullDarkMat);
     seam.position.set(
       -AFT_HALF_W + (i + 1) * (AFT_HALF_W * 2 / 6),
       AFT_HALF_H,
-      AFT_ORIGIN_Z + AFT_HALF_L + WALL_THICK + 0.03,
+      AFT_ORIGIN_Z + AFT_HALF_L + WALL_THICK + 0.05,
     );
     g.add(seam);
   }
   for (const y of [3.0, 11.0, 18.0]) {
-    const seam = box(AFT_HALF_W * 2 - 0.4, 0.06, 0.06, _hullDarkMat);
-    seam.position.set(0, y, AFT_ORIGIN_Z + AFT_HALF_L + WALL_THICK + 0.03);
+    const seam = box(AFT_HALF_W * 2 - 0.4, 0.10, 0.10, _hullDarkMat);
+    seam.position.set(0, y, AFT_ORIGIN_Z + AFT_HALF_L + WALL_THICK + 0.05);
     g.add(seam);
   }
   // Hull-plate seams on aft -X wall.
   for (let i = 0; i < 6; i++) {
-    const seam = box(0.06, AFT_HALF_H * 2 - 0.4, 0.06, _hullDarkMat);
+    const seam = box(0.10, AFT_HALF_H * 2 - 0.4, 0.10, _hullDarkMat);
     seam.position.set(
-      -AFT_HALF_W - WALL_THICK - 0.03,
+      -AFT_HALF_W - WALL_THICK - 0.05,
       AFT_HALF_H,
       AFT_ORIGIN_Z - AFT_HALF_L + (i + 1) * (AFT_HALF_L * 2 / 7),
     );
     g.add(seam);
   }
   for (const y of [3.0, 11.0, 18.0]) {
-    const seam = box(0.06, 0.06, AFT_HALF_L * 2 - 0.4, _hullDarkMat);
-    seam.position.set(-AFT_HALF_W - WALL_THICK - 0.03, y, AFT_ORIGIN_Z);
+    const seam = box(0.10, 0.10, AFT_HALF_L * 2 - 0.4, _hullDarkMat);
+    seam.position.set(-AFT_HALF_W - WALL_THICK - 0.05, y, AFT_ORIGIN_Z);
     g.add(seam);
   }
   // Rust streaks scattered on aft + bow + tower walls.
+  // AAO: 6cm thickness → 10cm (rule 7). Offsets bumped accordingly.
   for (let i = 0; i < 25; i++) {
     const side = _rand() < 0.5 ? -1 : 1;
     const surface = _rand();
-    const streak = box(0.06, 0.8 + _rand() * 1.6, 0.12 + _rand() * 0.15, _rustMat);
+    const streak = box(0.10, 0.8 + _rand() * 1.6, 0.12 + _rand() * 0.15, _rustMat);
     if (surface < 0.5) {
       // Aft side wall
       streak.position.set(
-        side * (AFT_HALF_W + WALL_THICK + 0.04),
+        side * (AFT_HALF_W + WALL_THICK + 0.06),
         AFT_HALF_H * 0.3 + _rand() * (AFT_HALF_H * 1.3),
         AFT_ORIGIN_Z - AFT_HALF_L + _rand() * AFT_HALF_L * 2,
       );
     } else if (surface < 0.8) {
       // Bow side wall
       streak.position.set(
-        side * (BOW_HALF_W + WALL_THICK + 0.04),
+        side * (BOW_HALF_W + WALL_THICK + 0.06),
         BOW_HALF_H * 0.4 + _rand() * (BOW_HALF_H * 1.3),
         BOW_ORIGIN_Z - BOW_HALF_L + _rand() * BOW_HALF_L * 2,
       );
@@ -581,7 +585,7 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
     } else {
       // Tower wall
       streak.position.set(
-        side * (TOWER_HALF_W + WALL_THICK + 0.04),
+        side * (TOWER_HALF_W + WALL_THICK + 0.06),
         TOWER_BASE_Y + _rand() * TOWER_HALF_H * 1.6,
         towerCenterZ_geom - TOWER_HALF_L + _rand() * TOWER_HALF_L * 2,
       );
@@ -589,11 +593,12 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
     g.add(streak);
   }
   // Rust patches on aft roof (between strips, on the solid parts).
+  // AAO: 4cm patch → 10cm (rule 7).
   for (let i = 0; i < 6; i++) {
-    const patch = box(0.6 + _rand() * 0.8, 0.04, 0.5 + _rand() * 0.7, _rustDarkMat);
+    const patch = box(0.6 + _rand() * 0.8, 0.10, 0.5 + _rand() * 0.7, _rustDarkMat);
     patch.position.set(
       (_rand() - 0.5) * (AFT_HALF_W * 1.4),
-      AFT_HALF_H * 2 + ROOF_HALF_T * 2 + 0.03,
+      AFT_HALF_H * 2 + ROOF_HALF_T * 2 + 0.06,
       AFT_ORIGIN_Z - AFT_HALF_L + _rand() * AFT_HALF_L * 2,
     );
     patch.rotation.y = _rand() * Math.PI;
@@ -698,10 +703,11 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
     g.add(top);
   }
   // Hull-plate fragments around aft front doorway.
+  // AAO: 8cm fragments → 10cm (rule 7).
   for (let i = 0; i < 5; i++) {
     const w = 0.6 + _rand() * 0.8;
     const h = 0.4 + _rand() * 0.7;
-    const frag = box(0.08, h, w, _rustDarkMat);
+    const frag = box(0.10, h, w, _rustDarkMat);
     frag.position.set(
       (_rand() - 0.5) * 6,
       6.5 + _rand() * 2.5,

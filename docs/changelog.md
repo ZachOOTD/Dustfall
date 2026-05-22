@@ -3,6 +3,126 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session AAP — 2026-05-22 — Sandworm overhaul + atmospheric music tracks ✓ verify pass
+`verified` — tsc clean. Overnight session pairing two long-deferred
+big-ticket items. 5 files modified + 1 new module (`src/audio/music.ts`,
+~240 LOC). Two new D-entries (D91, D92).
+
+**Sandworm overhaul** (deferred from AAL/AAM/AAN/AAO). Replaces the
+world-edge test-fix (`SANDWORM_HOME_POS = (900, 0)` from AAL) with a
+real procgen biome-seeded spawn + noise-scaled detection.
+
+- **Procgen biome-seeded spawn** (D91, `src/enemies/sandWorm.ts`). New
+  `sampleSandwormHome(rand, biomes, terrain)` — mirrors the wells-in-
+  salt rejection-sampler pattern (D55). Uses `findBiomeCentroid` on
+  the dune biome with a player-spawn-exclusion ring
+  (`SANDWORM_SPAWN_EXCLUSION_RADIUS = 350m` — wider than flagship
+  POIs at 200m, since detection range alone is 150m). Per-seed jitter
+  (±30m) so different seeds with the same centroid cell still get
+  visibly-distinct positions. Falls back to `Tuning.SANDWORM_HOME_POS`
+  if no dune centroid is reachable (rare).
+- **`spawnSandWorm` signature** gained optional `homeXZ` param. main.ts
+  computes it via `sampleSandwormHome(scatterRand, biomes, terrain)`
+  and passes it through. Backward-compatible — pre-AAP callers
+  without the arg fall through to the Tuning fallback.
+- **Noise-scaled detection** (`src/enemies/sandWorm.ts`,
+  `src/config/tuning.ts`). New `playerNoiseMultiplier(ctx)` helper
+  reads player movement state (mounted / sprinting / walking / still)
+  and returns a detection-radius multiplier. tickPatrol's detection
+  check now reads `SANDWORM_DETECTION_RADIUS × multiplier` instead of
+  the raw radius. Four new Tuning constants
+  (`SANDWORM_DETECTION_MULT_*`): still=0.55, walking=1.0,
+  sprinting=1.45, mounted=1.85. Standing still ~80m from a worm
+  no longer triggers alert; mounted players are heard from ~280m.
+- **Multi-worm + per-seed N**: cut from scope (overnight tier-3
+  scope-cut). Single-worm baseline is the right ship — multi-worm
+  needs playtesting + save-schema bump. Backlogged.
+
+**Atmospheric music tracks** (long-standing backlog from at least AAG-
+era, surfaced repeatedly in AAN/AAO audits). 3 procedural Web Audio
+tracks per D3 (no .ogg files); fills the actual music slot for the
+first time since X-era's sample stems went silent for lack of an .ogg
+pack.
+
+- **New module `src/audio/music.ts`** (~240 LOC). Builds 3 always-
+  running tracks at boot via `startMusic()`. Each track = a set of
+  oscillators + filters routed through a per-track gain bus + a
+  shared master `MUSIC_BUS_TARGET = 0.45` bus. Master fades in over
+  5s on first audio gesture.
+- **Day track**: warm C-minor harmonic drone (C2 + G2 + Eb3 triangles
+  through 800Hz lowpass), each with a slow LFO tremolo (~0.07-0.13Hz
+  incommensurable rates so it never feels metronomic). Sparse rising-
+  fifth motif (C5 → G5 sines, ~1.5s decay) fires every 12-18s when
+  the track is meaningfully audible.
+- **Storm track**: chromatic dissonance (C2 + Db2 sawtooths — semitone
+  clash) through 300Hz lowpass + low rumble (lowpassed noise loop at
+  0.45 playback rate, 180Hz cutoff). Builds tension; ramps in at
+  perceivedIntensity > 0.30, dominates at > 0.65.
+- **Night track**: sparse sine pads (C3 + Eb4) with very slow LFO.
+  Soft high-tone chime (C6, 3.5s decay) fires every 20-30s.
+- **Crossfade logic**: weight = (sunHeight, perceivedIntensity).
+  Storm wins on intensity; day/night blend on sun height at low
+  intensity. 1.5s crossfade ramps (slower than soundscape's stem
+  ramps so musical transitions feel held, not jumpy).
+- **Soundscape independence** (D92). The existing soundscape.ts
+  sample-stem music layer (music-calm/music-tense via .ogg files) is
+  preserved unchanged but stays silent in production (no .ogg pack
+  ever shipped — getSample returns null). AAP's music module runs
+  alongside; it doesn't replace the stem layer. If a future session
+  adds .ogg music files the stems will activate; AAP will need a
+  toggle then.
+- **Debug snapshot**: `__game.musicState()` returns per-track gain
+  values for tuning. Mirrors `__game.audioState()` shape.
+
+## Session AAO — 2026-05-21 — Flagship paper-thin sweep + grill HUD + companion huddle ✓ verify pass
+`verified` — tsc clean. Four quick wins from the AAN audit backlog,
+all shipped in one session. 10 files touched, no new modules.
+
+- **Flagship paper-thin sweep** (CLAUDE.md rule 7). AAN closed wrecks.ts;
+  AAO closes the remaining flagships. Five files audited; 15 fixes
+  across 4 of them. **megaShip.ts** (8 fixes): hull seams (5cm → 10cm)
+  on right + left walls + horizontals, rust streaks (5cm → 10cm),
+  rust patches (4cm → 10cm), entrance fragments (5cm → 10cm),
+  bridge side-fins (8cm → 10cm), viewport (5cm → 10cm). **megaWreck.ts**
+  (6 fixes): hull seams on aft +Z/-X walls (6cm → 10cm), horizontal
+  seams (6cm → 10cm), rust streaks (6cm → 10cm), roof rust patches
+  (4cm → 10cm), aft doorway fragments (8cm → 10cm). Offsets bumped
+  proportionally so seams still sit proud of the wall by the same
+  margin. **crashedHull.ts** + **engineBlock.ts**: bell-throat
+  backstop `CircleGeometry` → `CylinderGeometry(r, r, 0.10)` (the
+  canonical AAN fuselage-cap pattern). **satelliteDish.ts**: clean
+  (audit agent flagged a false positive at L312; no CircleGeometry
+  found via grep — was actually in crashedHull at L312).
+- **Cook-progress-per-fire HUD** (AAM-deferred polish). New
+  `showCookProgresses(progresses: readonly number[])` /
+  `hideCookProgresses()` in `interactPrompt.ts`. Pre-builds 4 mini-bars
+  in a row above the [E] prompt; per-frame width updates only (no DOM
+  churn). Wired into `interaction.ts` 'fires' case — when hovering a
+  fire, filters `_cooks` by `fireId === f.id` and surfaces each cook's
+  `slot.meta.cookProgress`. Bars hide by default each frame; show only
+  when ≥1 cook active on the hovered fire. Warm amber gradient
+  (#c8783a → #f4b35e) reads as "cooking heat." Closes the AAM gap
+  where multi-cook grilled fires showed only one cook's progress.
+- **Companion storm-peak huddle** (D90). New `'huddle'` state on the
+  `CompanionState` union, gated by `weather.intensity >
+  Tuning.COMPANION_HUDDLE_THRESHOLD = 0.80` with ±0.05 hysteresis.
+  Overrides all other states. Animation: legs tucked beneath body
+  (y near 0, light shimmer ~10% gait amplitude), body pressed down
+  to `-COMPANION_BODY_RADIUS * 0.35` with very slow breathing bob
+  (35% of idle rate). One-shot toast "Rocky huddles down" on first
+  transition per deploy (`_huddleToastShown` module flag, reset on
+  pack-up). Uses raw `weather.intensity` not `perceivedIntensity`
+  per state-split shared-memory: companion is outdoors regardless of
+  player shelter (D90).
+- **Rule-2 magic-number sweep** (deadTree.ts). Lifted 5 module-local
+  constants to Tuning: `DEAD_TREE_FLATNESS_THRESHOLD` (0.7),
+  `DEAD_TREE_BRANCH_COUNT_MIN/MAX` (2/4),
+  `DEAD_TREE_BRANCH_RING_RADIUS_MIN/MAX` (1.5/3.0). poi.ts
+  scavenger-camp constants assessed and deferred — the hand-coded
+  one-off camp's values aren't really feel-tunable and would bloat
+  Tuning without aiding future iteration. Backlogged as "true
+  magic-number sweep when scavenger camp is reworked."
+
 ## Session AAN — 2026-05-21 — Systems review + quick-win polish bundle ✓ verify pass
 `verified` — tsc clean. Four quick wins from a fresh three-agent systems
 audit. No new modules; 8 files touched.

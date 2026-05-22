@@ -22,7 +22,10 @@ import { isPlaying } from '../GameContext.ts';
 import { Tuning } from '../config/tuning.ts';
 import { addItem } from '../inventory/inventory.ts';
 
-export type CompanionState = 'rolling' | 'walking' | 'idle';
+// AAO — `huddle` added. At storm peak (`weather.intensity > HUDDLE_THRESHOLD`)
+// the companion overrides any far/close logic and presses to the ground
+// with legs tucked. Reads as "Rocky is weathering the storm with you."
+export type CompanionState = 'rolling' | 'walking' | 'idle' | 'huddle';
 
 export interface Companion {
   /** Root group. Position tracks the creature's world location each frame. */
@@ -194,6 +197,8 @@ export function packUpCompanion(ctx: GameContext): boolean {
   }
   ctx.three.scene.remove(c.group);
   ctx.companion = null;
+  // AAO — reset huddle toast so a fresh deploy can re-trigger the moment.
+  _huddleToastShown = false;
   ctx.ui.showToast('the creature curls back into its pod');
   return true;
 }
@@ -227,6 +232,12 @@ export function deployCompanion(ctx: GameContext): Companion | null {
 const _toPlayer = new THREE.Vector3();
 const _moveVec = new THREE.Vector3();
 
+// AAO — one-shot toast flag for the first time the companion huddles in
+// a storm. Reset on companion despawn (pod up) so a fresh deploy can
+// re-trigger the moment.
+let _huddleToastShown = false;
+export function resetCompanionHuddleToast(): void { _huddleToastShown = false; }
+
 export function updateCompanion(ctx: GameContext, dt: number): void {
   if (!isPlaying(ctx)) return;
   const c = ctx.companion;
@@ -258,7 +269,18 @@ export function updateCompanion(ctx: GameContext, dt: number): void {
   const close = Tuning.COMPANION_CLOSE_DISTANCE_M;
   const far = Tuning.COMPANION_FAR_DISTANCE_M;
   let nextState: CompanionState = c.state;
-  if (dist > far) {
+  // AAO — storm-peak huddle overrides every other state. Hysteresis at
+  // ±0.05 so we don't flicker around the threshold. Uses raw
+  // weather.intensity (world truth) since the companion is outdoors and
+  // exposed regardless of player shelter (perceivedIntensity would dampen
+  // here, which is the wrong reading — see state-split shared-memory).
+  const stormI = ctx.weather.intensity;
+  const huddleEnter = Tuning.COMPANION_HUDDLE_THRESHOLD;
+  const huddleExit = Tuning.COMPANION_HUDDLE_THRESHOLD - 0.05;
+  const inHuddle = c.state === 'huddle' ? stormI > huddleExit : stormI > huddleEnter;
+  if (inHuddle) {
+    nextState = 'huddle';
+  } else if (dist > far) {
     nextState = 'rolling';
   } else if (dist < close) {
     nextState = 'idle';
@@ -274,11 +296,21 @@ export function updateCompanion(ctx: GameContext, dt: number): void {
     }
   }
   if (nextState !== c.state) {
+    // AAO — first time entering huddle this deploy: one-shot toast so
+    // the moment lands. Subsequent huddles are silent (Rocky just does
+    // its thing).
+    if (nextState === 'huddle' && !_huddleToastShown) {
+      ctx.ui.showToast('Rocky huddles down');
+      _huddleToastShown = true;
+    }
     c.state = nextState;
     c.stateTimer = 0;
   }
 
   // ── Movement ──
+  // AAO — huddle state pins the creature in place (speed = 0). Idle is
+  // similar but allows the small per-frame nudge that keeps it beside
+  // the player; huddle freezes completely.
   let speed = 0;
   if (c.state === 'rolling') speed = Tuning.COMPANION_ROLLING_SPEED_M_S;
   else if (c.state === 'walking') speed = Tuning.COMPANION_WALKING_SPEED_M_S;
@@ -337,6 +369,23 @@ export function updateCompanion(ctx: GameContext, dt: number): void {
     // Slight body bob with the gait — every other leg lift pulses the body.
     const t = ctx.time.elapsed * Tuning.COMPANION_LEG_GAIT_FREQ_HZ * _PI2;
     c.body.position.y = Math.sin(t) * 0.01;
+  } else if (c.state === 'huddle') {
+    // AAO — storm-peak huddle. Body pressed to ground, legs tucked
+    // (set y=0 so they retract under the body's lowest vertex). Very
+    // slow breathing bob (~1/4 the idle rate). No rotation.
+    c.body.rotation.x = 0;
+    for (let i = 0; i < c.legs.length; i++) {
+      c.legs[i].visible = true;
+      // Legs tucked beneath the body (y near 0). Slight phase-shimmer
+      // for "alive but still" rather than "dead".
+      const phase = (i / 5) * _PI2;
+      const t = ctx.time.elapsed * 0.35 * _PI2;
+      const tuck = Math.max(0, Math.sin(t + phase)) * Tuning.COMPANION_LEG_GAIT_AMP * 0.10;
+      c.legs[i].position.y = tuck;
+    }
+    // Body pressed down — sit near ground, very small breathing bob.
+    const t = ctx.time.elapsed * Tuning.COMPANION_IDLE_BOB_FREQ_HZ * 0.35 * _PI2;
+    c.body.position.y = -Tuning.COMPANION_BODY_RADIUS * 0.35 + Math.sin(t) * (Tuning.COMPANION_IDLE_BOB_AMP * 0.4);
   } else {
     // Idle. Legs visible, breathing-style body bob. Legs gently
     // shimmer (small phase shift on the gait, no real lift).

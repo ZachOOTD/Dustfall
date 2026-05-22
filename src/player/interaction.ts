@@ -42,7 +42,7 @@ import {
   playSalvage,
 } from '../audio/audio.ts';
 import { maybeShowEventHint } from '../ui/tutorial.ts';
-import { showSalvageProgress, hideSalvageProgress } from '../ui/interactPrompt.ts';
+import { showSalvageProgress, hideSalvageProgress, showCookProgresses, hideCookProgresses } from '../ui/interactPrompt.ts';
 import { openLootMenu, isLootMenuOpen } from '../ui/lootMenu.ts';
 import { openSleepOverlay, isSleepOverlayOpen } from '../ui/sleepOverlay.ts';
 import { isCraftingMenuOpen } from '../ui/craftingMenu.ts';
@@ -150,6 +150,11 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
   for (const s of ctx.salvageables.list) s.hovered = false;
   for (const sl of ctx.sleds.list) sl.hovered = false;
   ctx.inventory.hover = null;
+  // AAO — default cook bars to hidden each frame; re-shown inside the
+  // 'fires' hover branch below when the player is looking at a fire
+  // with active cooks. (Cooks themselves keep ticking regardless of
+  // hover; this just controls the per-fire HUD visibility.)
+  hideCookProgresses();
 
   // Drive any in-progress cooking forward.
   tickCooking(ctx);
@@ -401,6 +406,15 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
       const f = findFireById(ctx.fires.list, info.id);
       if (!f) return;
       f.hovered = true;
+      // AAO — surface per-cook progress bars for this fire, if any cooks
+      // are running on it. AAM's grilled fires can have up to 4 parallel
+      // cooks; the salvage-progress bar pattern was a single-cook UI hangover.
+      // Pre-AAM saw only "the currently-driven cook's progress"; now the
+      // player sees all of them at once.
+      const cooksHere = _cooks.filter((c) => c.fireId === f.id);
+      if (cooksHere.length > 0) {
+        showCookProgresses(cooksHere.map((c) => c.slot.meta?.cookProgress ?? 0));
+      }
       // Dead fire — show relight prompt (requires branch).
       if (!f.alive) {
         const selSlot = ctx.inventory.slots[ctx.inventory.selectedIdx];
