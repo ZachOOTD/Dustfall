@@ -143,6 +143,13 @@ export interface GameContext {
      *  Render loop routes through a separate title scene + camera; game tick
      *  short-circuits before the pause check. Cleared when NEW GAME pressed. */
     titleActive: boolean;
+    /** AAX — DEV MODE active for the current run. Set true when the player
+     *  clicks DEV MODE on the title (loadout applied in-memory) or when the
+     *  code-level `Tuning.DEBUG_STARTER_LOADOUT` is true at boot. Drives the
+     *  persistent corner badge in the HUD. In-memory only — does not persist
+     *  across reloads or into the save file (a Continue from a dev-saved
+     *  game shows no badge by design; the inventory items survive though). */
+    devMode: boolean;
   };
 }
 

@@ -307,7 +307,15 @@ const ctx: GameContext = {
   speeder: null,                 // populated by setupOpeningScene on fresh worlds
   footprints,
   journals: { list: [] as Journal[] },
-  flags: { started: false, paused: false, damageFlashUntil: 0, titleActive: true },
+  flags: {
+    started: false,
+    paused: false,
+    damageFlashUntil: 0,
+    titleActive: true,
+    // AAX — devMode is set true by the title DEV MODE button OR by the
+    // Tuning.DEBUG_STARTER_LOADOUT code-level flag. Drives the HUD badge.
+    devMode: Tuning.DEBUG_STARTER_LOADOUT,
+  },
 };
 
 // First-person viewmodel — must come after scene is built; consumes ctx.
@@ -320,48 +328,43 @@ addItem(ctx.inventory, 'machete');
 addItem(ctx.inventory, 'canteen', { fillLevel: 1 });
 ctx.inventory.selectedIdx = 0;
 
-// II — DEBUG starter loadout for crafting + cooking iteration. Toggle off
-// (Tuning.DEBUG_STARTER_LOADOUT = false) before a "real" playthrough. Stacks
-// fill hotbar slots 2-3 first (branch + cloth) then spill into backpack.
-// AAV — apply debug starter loadout if either:
-//   - Tuning.DEBUG_STARTER_LOADOUT === true (dev override flag in code), OR
-//   - localStorage['dustfall.devMode'] === 'true' (set by DEV MODE button on title)
-// Regular NEW GAME clears the localStorage flag → empty start.
-const _devModeFlag = typeof localStorage !== 'undefined' && localStorage.getItem('dustfall.devMode') === 'true';
-if (Tuning.DEBUG_STARTER_LOADOUT || _devModeFlag) {
+// AAX — dev loadout extracted into a helper so it can be invoked from
+// both the code-level Tuning.DEBUG_STARTER_LOADOUT path (boot-time) AND
+// the DEV MODE title button (inside the user-click gesture so audio +
+// pointer-lock work). Pre-AAX this lived inline at boot and was gated on
+// `localStorage['dustfall.devMode']`; that gate is removed in AAX in
+// favor of an in-memory `ctx.flags.devMode` driven by the title click.
+function applyDevLoadout(c: GameContext): void {
   // Crafting materials — enough for every recipe in craftingMenu.ts plus extra.
-  for (let i = 0; i < 6; i++) addItem(ctx.inventory, 'branch');
-  for (let i = 0; i < 6; i++) addItem(ctx.inventory, 'cloth');
-  for (let i = 0; i < 6; i++) addItem(ctx.inventory, 'scrap');
+  for (let i = 0; i < 6; i++) addItem(c.inventory, 'branch');
+  for (let i = 0; i < 6; i++) addItem(c.inventory, 'cloth');
+  for (let i = 0; i < 6; i++) addItem(c.inventory, 'scrap');
   // Cookable food — drives the cook-over-fire + lizard-on-a-stick paths.
-  for (let i = 0; i < 3; i++) addItem(ctx.inventory, 'raw_lizard_meat');
-  for (let i = 0; i < 2; i++) addItem(ctx.inventory, 'raw_worm_meat');
-  for (let i = 0; i < 2; i++) addItem(ctx.inventory, 'cactus_pulp');
+  for (let i = 0; i < 3; i++) addItem(c.inventory, 'raw_lizard_meat');
+  for (let i = 0; i < 2; i++) addItem(c.inventory, 'raw_worm_meat');
+  for (let i = 0; i < 2; i++) addItem(c.inventory, 'cactus_pulp');
   // Pre-made deployables — skip the craft step when iterating on fire
   // mechanics directly.
-  for (let i = 0; i < 2; i++) addItem(ctx.inventory, 'fire_kit');
-  // Light sources for night testing (PP — trimmed torch; flashlight
-  // covers night and we need the slot for the energy_pistol).
-  addItem(ctx.inventory, 'flashlight');
-  // Session PP — weapon variants for combat testing. Gun starts with
-  // a full magazine via the meta.ammoRemaining field combat.ts reads.
-  // Trimmed alien_fruit + tent_kit from the loadout to free inventory
-  // slots — those items are unaffected by combat work and the player
-  // can craft them anyway.
-  // QQ — trimmed pipe_staff + energy_pistol from the starter so sled_kit
-  // + rope fit (inventory is 14/14 with full weapon set). Player can
-  // still craft them.
-  addItem(ctx.inventory, 'scrap_gun', { ammoRemaining: Tuning.WEAPON_SCRAP_GUN_MAX_AMMO });
-  for (let i = 0; i < 6; i++) addItem(ctx.inventory, 'scrap_bullet');
-  // Session QQ — sled mechanic. Kit deploys the world entity; rope is
-  // the wieldable that ties the player or speeder to it.
-  addItem(ctx.inventory, 'sled_kit');
-  addItem(ctx.inventory, 'rope');
-  // Session AAU — scrap_bar tool, required to pry open salvage panels
-  // (AAR salvage rework). Without this the player hits a tool gate on
-  // every panel and can't test the salvage flow. Cheap to craft if
-  // omitted; including in starter loadout speeds iteration.
-  addItem(ctx.inventory, 'scrap_bar');
+  for (let i = 0; i < 2; i++) addItem(c.inventory, 'fire_kit');
+  // Light sources for night testing.
+  addItem(c.inventory, 'flashlight');
+  // Combat testing — gun starts with a full magazine (ammo in meta).
+  addItem(c.inventory, 'scrap_gun', { ammoRemaining: Tuning.WEAPON_SCRAP_GUN_MAX_AMMO });
+  for (let i = 0; i < 6; i++) addItem(c.inventory, 'scrap_bullet');
+  // Sled mechanic — kit deploys the world entity; rope ties it.
+  addItem(c.inventory, 'sled_kit');
+  addItem(c.inventory, 'rope');
+  // Salvage tool (AAR pry flow) — without this the panels stay sealed.
+  addItem(c.inventory, 'scrap_bar');
+}
+
+// Tuning-level dev override (code-level, on by default false). When true,
+// every boot starts with the dev loadout AND the badge — useful for the
+// developer's iteration loop without clicking through the title menu each
+// reload. The runtime DEV MODE button on the title is the player-facing
+// equivalent (set in the onDevMode callback below).
+if (Tuning.DEBUG_STARTER_LOADOUT) {
+  applyDevLoadout(ctx);
 }
 
 // Opening scene runs on EVERY boot — the wreck + skeleton + journal +
@@ -448,12 +451,12 @@ function handoffToGame(): void {
   titleOverlay.hide();
   ctx.flags.titleActive = false;
   inGameEls.forEach((el) => { el.style.visibility = ''; });
-  // AAW — surface the DEV MODE badge only if the devMode flag is set.
-  // (Recompute the flag each handoff in case the user toggled it during
-  // the title screen via dev-tools or a reload-less code path.)
-  const devActive = typeof localStorage !== 'undefined'
-    && localStorage.getItem('dustfall.devMode') === 'true';
-  if (devActive) devModeBadge.classList.add('visible');
+  // AAX — surface the DEV MODE badge from the in-memory flag (set by the
+  // DEV MODE button's onDevMode callback or by Tuning.DEBUG_STARTER_LOADOUT
+  // at boot). Replaces the AAW localStorage-driven check, which got out of
+  // sync with the actual loadout state (onNewGame clears the flag → badge
+  // hides → but the boot loadout was already applied).
+  if (ctx.flags.devMode) devModeBadge.classList.add('visible');
   else devModeBadge.classList.remove('visible');
   ensureAudioStarted();
   startSoundscape();
@@ -479,9 +482,9 @@ const titleOverlay = createTitleOverlay(ctx, {
     //   3. No save at boot, no seed override → world was auto-rolled this
     //      boot already; just hand off (no reload).
     //
-    // AAV — regular NEW GAME always clears the devMode flag so the
-    // next boot starts EMPTY. DEV MODE button sets the flag.
-    localStorage.removeItem('dustfall.devMode');
+    // AAX — devMode is an in-memory flag (ctx.flags.devMode) that does NOT
+    // need clearing here. NEW GAME → fresh boot → ctx.flags.devMode = false
+    // by default. Reload paths drop in-memory state automatically.
     const wantOverride = seedOverride !== undefined && (seedOverride >>> 0) !== ctx.seed;
     if (wantOverride) {
       localStorage.setItem('dustfall.pendingSeed', String(seedOverride! >>> 0));
@@ -497,9 +500,6 @@ const titleOverlay = createTitleOverlay(ctx, {
       return;
     }
     // Fresh-boot, no override: this world was auto-rolled; play it.
-    // But ALSO ensure devMode flag is cleared if we're in the
-    // auto-rolled path — player may have last clicked DEV MODE
-    // then refreshed; this path is the "play vanilla" intent.
     handoffToGame();
   },
   onContinue: hadSaveAtBoot ? () => {
@@ -512,29 +512,33 @@ const titleOverlay = createTitleOverlay(ctx, {
       ctx.ui.showToast(result.error ?? 'load failed');
       return;
     }
+    // AAX — Continue overwrites the boot inventory with the save's
+    // contents. If Tuning.DEBUG_STARTER_LOADOUT pre-set flags.devMode at
+    // boot, the dev items are gone now (replaced by save) — clear the
+    // flag so the badge doesn't lie about the run's state. (The save
+    // itself doesn't track dev-mode by design — a dev-saved session
+    // becomes a regular saved game.)
+    ctx.flags.devMode = false;
     handoffToGame();
   } : undefined,
-  // AAV — DEV MODE button. Same NEW GAME reload path but sets a
-  // localStorage flag so the next boot applies the debug starter
-  // loadout. Regular NEW GAME clears this flag → starts empty.
-  onDevMode: (seedOverride?: number) => {
-    localStorage.setItem('dustfall.devMode', 'true');
-    const seed = seedOverride !== undefined ? (seedOverride >>> 0) : Math.floor(Math.random() * 0x100000000) >>> 0;
-    localStorage.setItem('dustfall.pendingSeed', String(seed));
-    if (hadSaveAtBoot) clearSave();
-    location.reload();
+  // AAX — DEV MODE button. Pre-AAX this set a localStorage flag + cleared
+  // the save + reloaded; the boot-time loadout block then fired from the
+  // flag. AAW tried to bypass the post-reload title (no user gesture →
+  // pointer-lock fails silently → flags.paused stays true → frozen game).
+  //
+  // AAX: apply the loadout in-memory RIGHT HERE inside the click gesture
+  // and hand off directly. No reload, no localStorage, no save wipe (the
+  // existing save survives until the player saves again in dev mode). One
+  // click → enter dev session. Seed override is intentionally not honored
+  // by this button — for "DEV MODE with custom seed", use NEW GAME with
+  // the seed first (reloads to that seed), then click DEV MODE on the new
+  // title.
+  onDevMode: () => {
+    applyDevLoadout(ctx);
+    ctx.flags.devMode = true;
+    handoffToGame();
   },
 });
-
-// AAW — auto-bypass the title overlay when the devMode flag is set. The
-// AAV DEV MODE click path does the reload + loadout but then dropped the
-// player back onto the title screen, where a second click on NEW GAME
-// would have cleared the flag and erased the loadout. Auto-bypass means
-// one click → in the game. Quit-to-menu (in menus.ts) clears the flag so
-// vanilla play stays one click away too.
-if (_devModeFlag) {
-  handoffToGame();
-}
 
 // --- Per-frame tick: order matters ---
 startLoop(ctx, (c, dt) => {

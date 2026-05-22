@@ -236,11 +236,10 @@ export function createMenus(ctx: GameContext): void {
         void import('./tutorial.ts').then((t) => t.showControlsPanel(_ctx!, { returnToPause: true }));
       }
       else if (action === 'quit') {
-        // AAW — clear the DEV MODE flag on quit so the next boot lands
-        // on a vanilla title screen. Re-entry to DEV MODE is one click
-        // on the title. Pre-AAW the flag persisted across reloads, so a
-        // dev-mode quit looped back into dev-mode silently.
-        try { localStorage.removeItem('dustfall.devMode'); } catch { /* ignore */ }
+        // AAX — ctx.flags.devMode is in-memory; a reload drops it
+        // automatically and the next title is vanilla by default. No
+        // localStorage cleanup needed here. (The AAW localStorage flag
+        // was removed in AAX — see main.ts onDevMode.)
         location.reload();
       }
     });

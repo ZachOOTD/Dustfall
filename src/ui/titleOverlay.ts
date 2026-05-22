@@ -23,8 +23,14 @@ export interface TitleOverlayOptions {
    *  NEW GAME. Spawns a new game with the debug starter loadout
    *  (scrap_bar + materials + weapons + kits) — for testing systems
    *  without grinding the early progression. Regular NEW GAME starts
-   *  empty. */
-  onDevMode?: (seedOverride?: number) => void;
+   *  empty.
+   *
+   *  AAX — no seedOverride: DEV MODE intentionally ignores the Advanced
+   *  seed input. For "DEV MODE with custom seed", click NEW GAME with
+   *  the seed first (reloads to that seed), then DEV MODE on the new
+   *  title. This keeps DEV MODE a single-click no-reload action so
+   *  pointer-lock + audio start under the live user gesture. */
+  onDevMode?: () => void;
 }
 
 export function createTitleOverlay(
@@ -94,7 +100,7 @@ export function createTitleOverlay(
     devBtn.addEventListener('mouseenter', playUiHover);
     devBtn.addEventListener('click', () => {
       playUiClick();
-      options.onDevMode!(readAdvancedSeed());
+      options.onDevMode!();
     });
     panel.appendChild(devBtn);
   }
