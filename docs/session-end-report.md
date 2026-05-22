@@ -4,9 +4,9 @@ Cumulative state. Rewritten end-to-end at each `/session-end`. A
 reviewer who's never seen the project should be able to read this +
 `CLAUDE.md` + `docs/GDD.md` and understand where Dustfall is.
 
-**Current state**: Session AAR shipped (2026-05-22). 45 sessions
-post-MVP. tsc clean. SAVE_VERSION v10 (additive: per-fire hasGrill).
-Working tree dirty pending the user's commit.
+**Current state**: Session AAS shipped (2026-05-22). 46 sessions
+post-MVP. tsc clean. SAVE_VERSION v10. Working tree dirty pending
+the user's commit.
 
 ---
 
@@ -82,6 +82,24 @@ Fresh-game start (the de-facto Tier 1 — Session W shipped):
     additive per D81.
 
 ---
+
+## What's freshly shipped (Session AAS deltas)
+
+Salvage polish bundle building on AAR. 5 files; no new modules; no
+schema bump.
+
+- **Per-component loot mapping**: deterministic `COMPONENT_LOOT` map
+  keyed by `panelComponentKind`. Player sees the cavity and knows
+  what they'll get (red_wire→rope, chip→bullet, bandage_pack→
+  bandage). Replaces AAR's random kind-table roll.
+- **Variant interiors per wreck kind**: `addAccessPanel(kind)` +
+  `PANEL_COMPONENT_PALETTES` table. Engine kinds get cabling+ammo,
+  escape pods get medical, cargo gets lottery, massive gets diversity.
+  New `cloth_scrap` and `bandage_pack` meshes round out the
+  vocabulary. All callers updated (wrecks/megaShip/megaWreck).
+- **Electrical-flicker glow on pry**: amber PointLight in cavity,
+  ignites on `completePry`, fades over 3.2s with 2-sine detuned
+  flicker. Animation in existing per-frame `updatePanelDoors` walk.
 
 ## What's freshly shipped (Session AAR deltas)
 

@@ -86,31 +86,197 @@ const _panelFuseMat = new THREE.MeshLambertMaterial({
   color: 0xb8a880,             // ceramic pale
   flatShading: true,
 });
+// AAS — variant component materials. cloth_scrap = folded fabric;
+// bandage_pack = small white medical kit. Each maps deterministically
+// to a single loot item via COMPONENT_LOOT (see interaction.ts).
+const _panelClothScrapMat = new THREE.MeshLambertMaterial({
+  color: 0xc4ad88,             // weathered linen
+  flatShading: true,
+});
+const _panelBandagePackMat = new THREE.MeshLambertMaterial({
+  color: 0xe8dcc0,             // off-white gauze
+  flatShading: true,
+});
+const _panelBandageCrossMat = new THREE.MeshLambertMaterial({
+  color: 0xa83a2a,             // red cross stripe
+  flatShading: true,
+});
+
+/** AAS — per-component kind discriminator. Each interior detail mesh
+ *  is tagged with one of these on `userData.panelComponentKind`; the
+ *  interaction system reads it to look up the exact loot item via
+ *  COMPONENT_LOOT. The 5 entries cover the visual + loot vocabulary;
+ *  per-kind palettes pick 5 of them in PANEL_COMPONENT_PALETTES. */
+export type PanelComponentKind =
+  | 'red_wire'        // → rope
+  | 'yellow_wire'     // → cloth
+  | 'chip'            // → scrap_bullet (rarer: scrap)
+  | 'fuse'            // → scrap_bullet
+  | 'scrap_chunk'     // → scrap×2
+  | 'cloth_scrap'     // → cloth×2
+  | 'bandage_pack';   // → bandage
+
+/** AAS — kind hint for variant interior layouts. Mirrors SalvageKind
+ *  (WreckKind | 'massive') from salvage.ts, redeclared here to avoid
+ *  circular imports (salvage.ts imports WreckKind from this file). */
+export type PanelKind = WreckKind | 'massive';
+
+/** AAS — per-wreck-kind 5-component palettes. The interior of a
+ *  fuselage panel looks different from a cargo-container panel; the
+ *  loot it yields differs accordingly (red_wire→rope; bandage_pack→
+ *  bandage). Each palette has exactly 5 entries to match the fixed
+ *  5-component-mesh layout. */
+const PANEL_COMPONENT_PALETTES: Record<PanelKind, ReadonlyArray<PanelComponentKind>> = {
+  // Engine kinds — heavy on cabling + ammo. No medical, no cloth.
+  engine_cluster: ['red_wire', 'red_wire', 'yellow_wire', 'fuse', 'scrap_chunk'],
+  engine_bell:    ['red_wire', 'yellow_wire', 'fuse', 'fuse', 'scrap_chunk'],
+  // Fuselage — interior cabling + textiles.
+  fuselage:       ['red_wire', 'yellow_wire', 'chip', 'cloth_scrap', 'scrap_chunk'],
+  // Escape pod — medical leaning.
+  escape_pod:     ['bandage_pack', 'bandage_pack', 'cloth_scrap', 'chip', 'fuse'],
+  // Cargo container — lottery mix.
+  cargo_container:['chip', 'cloth_scrap', 'fuse', 'scrap_chunk', 'red_wire'],
+  // Massive flagships — full mix incl medical + ammo.
+  massive:        ['red_wire', 'yellow_wire', 'chip', 'fuse', 'bandage_pack'],
+};
+
+/** AAS — build one interior component mesh for the given kind at the
+ *  given panel slot index (0..4). The 5 slots map to fixed positions
+ *  inside the cavity so the layout reads consistently across kind
+ *  variants (a fuselage panel and a cargo panel both have "something
+ *  in the top-right slot" — they just look different). */
+function makePanelComponent(
+  kind: PanelComponentKind,
+  slot: number,
+  sx: number, sy: number, sz: number,
+): THREE.Mesh {
+  // 5 slot positions inside the cavity. The slot picks WHERE the
+  // component lives; the kind picks WHAT it looks like. Some slot/kind
+  // pairings need geometric overrides (e.g. a wire in the top-right
+  // slot reads as horizontal not vertical) but the simplest first pass
+  // is "kind dictates geometry, slot dictates position."
+  const slotPositions: ReadonlyArray<{ x: number; y: number; z: number }> = [
+    { x: -sx * 0.30, y:  sy * 0.05, z: sz * 0.32 },  // slot 0: top-left wire-bay
+    { x: -sx * 0.18, y: -sy * 0.18, z: sz * 0.32 },  // slot 1: lower-left wire-bay
+    { x:  sx * 0.18, y:  sy * 0.20, z: sz * 0.32 },  // slot 2: top-right chip-bay
+    { x:  sx * 0.18, y: -sy * 0.18, z: sz * 0.34 },  // slot 3: lower-right fuse-bay
+    { x: -sx * 0.02, y: -sy * 0.05, z: sz * 0.30 },  // slot 4: lower-center misc
+  ];
+  const p = slotPositions[slot];
+  switch (kind) {
+    case 'red_wire': {
+      // Vertical-ish red insulated cable bundle.
+      const m = new THREE.Mesh(
+        new THREE.BoxGeometry(sx * 0.06, sy * 0.40, sz * 0.08),
+        _panelWireMat,
+      );
+      m.position.set(p.x, p.y, p.z);
+      m.rotation.z = (slot % 2 === 0) ? 0.15 : -0.20;
+      return m;
+    }
+    case 'yellow_wire': {
+      // Slightly thinner yellow cable bundle.
+      const m = new THREE.Mesh(
+        new THREE.BoxGeometry(sx * 0.05, sy * 0.30, sz * 0.06),
+        new THREE.MeshLambertMaterial({ color: 0xc8a830, flatShading: true }),
+      );
+      m.position.set(p.x, p.y, p.z);
+      m.rotation.z = (slot % 2 === 0) ? -0.25 : 0.18;
+      return m;
+    }
+    case 'chip': {
+      // Flat PCB rectangle.
+      const m = new THREE.Mesh(
+        new THREE.BoxGeometry(sx * 0.25, sy * 0.18, sz * 0.06),
+        _panelChipMat,
+      );
+      m.position.set(p.x, p.y, p.z);
+      return m;
+    }
+    case 'fuse': {
+      // Horizontal ceramic cylinder.
+      const m = new THREE.Mesh(
+        new THREE.CylinderGeometry(sy * 0.06, sy * 0.06, sx * 0.22, 8),
+        _panelFuseMat,
+      );
+      m.rotation.z = Math.PI / 2;
+      m.position.set(p.x, p.y, p.z);
+      return m;
+    }
+    case 'scrap_chunk': {
+      // Irregular plate of bare metal.
+      const m = new THREE.Mesh(
+        new THREE.BoxGeometry(sx * 0.18, sy * 0.12, sz * 0.10),
+        new THREE.MeshLambertMaterial({ color: 0x6e5a4a, flatShading: true }),
+      );
+      m.rotation.z = 0.3;
+      m.position.set(p.x, p.y, p.z);
+      return m;
+    }
+    case 'cloth_scrap': {
+      // Folded fabric square.
+      const m = new THREE.Mesh(
+        new THREE.BoxGeometry(sx * 0.20, sy * 0.20, sz * 0.05),
+        _panelClothScrapMat,
+      );
+      m.rotation.z = (slot % 2 === 0) ? 0.12 : -0.18;
+      m.position.set(p.x, p.y, p.z);
+      return m;
+    }
+    case 'bandage_pack': {
+      // Small white medical kit with a red cross stripe.
+      const m = new THREE.Mesh(
+        new THREE.BoxGeometry(sx * 0.18, sy * 0.14, sz * 0.10),
+        _panelBandagePackMat,
+      );
+      m.position.set(p.x, p.y, p.z);
+      // Red cross stripe on the face.
+      const crossH = new THREE.Mesh(
+        new THREE.BoxGeometry(sx * 0.16, sy * 0.03, sz * 0.005),
+        _panelBandageCrossMat,
+      );
+      crossH.position.set(0, 0, sz * 0.055);
+      crossH.userData.noCollider = true;
+      m.add(crossH);
+      const crossV = new THREE.Mesh(
+        new THREE.BoxGeometry(sx * 0.03, sy * 0.12, sz * 0.005),
+        _panelBandageCrossMat,
+      );
+      crossV.position.set(0, 0, sz * 0.055);
+      crossV.userData.noCollider = true;
+      m.add(crossV);
+      return m;
+    }
+  }
+}
 
 /**
- * Build a salvage access panel — AAR: rusted fuse-box with a hinged door
- * that swings open on player pry, revealing interior detail (wires + chips
- * + a fuse cylinder). The panel body is the interaction target. The door
+ * Build a salvage access panel — AAR + AAS: rusted fuse-box with a
+ * hinged door that swings open on player pry, revealing kind-specific
+ * interior detail (wires + chips + fuse + cloth + bandages varying
+ * per wreck kind). The panel body is the interaction target. The door
  * + interior live as children:
- *   - body.userData.accessPanel    = body (interaction target — Session Z contract)
- *   - body.userData.panelDoor      = door Group (hinged, animated)
- *   - body.userData.panelInterior  = interior Group (revealed when door opens)
- *   - body.userData.panelComponents = array of interior detail meshes (wires +
- *     chips + fuse), indexed so the interaction system can hide them
- *     one-by-one as components are extracted
+ *   - body.userData.accessPanel       = body (interaction target — Session Z)
+ *   - body.userData.panelDoor         = door Group (hinged, animated)
+ *   - body.userData.panelInterior     = interior Group (revealed when door opens)
+ *   - body.userData.panelComponents   = array of 5 interior detail meshes,
+ *     each tagged with `panelComponentIndex` (0..4) and `panelComponentKind`
+ *     (the AAS PanelComponentKind for loot lookup).
  *
  * Animation state lives in `body.userData.panelDoorAngle` (current rad) and
  * `body.userData.panelDoorTarget` (rad — 0 closed, OPEN_ANGLE open). Per-
- * frame lerp happens in interaction.ts updateInteraction (or a dedicated
- * panel ticker — TBD).
+ * frame lerp happens in interaction.ts updatePanelDoors.
  *
  * `faceYaw` rotates the panel around Y so it presents face-out from the wreck.
+ * `kind` selects the AAS variant palette; defaults to 'fuselage' for
+ *   pre-AAS callers that haven't been updated.
  */
 export function addAccessPanel(
   group: THREE.Group,
   localX: number, localY: number, localZ: number,
   scale = 1,
   faceYaw = 0,
+  kind: PanelKind = 'fuselage',
 ): THREE.Mesh {
   const sx = Tuning.SALVAGE_PANEL_SIZE_X * scale;
   const sy = Tuning.SALVAGE_PANEL_SIZE_Y * scale;
@@ -148,65 +314,25 @@ export function addAccessPanel(
   backplate.userData.noCollider = true;
   interior.add(backplate);
 
-  // Interior detail components — wires + chips + fuse. Each tagged with
-  // panelComponentIndex so interaction.ts can hide them as the player
-  // extracts components. Layout: 2 wires on left + 1 chip top-right +
-  // 1 fuse cylinder bottom-right + 1 scrap chip lower-center.
+  // AAS — interior detail components driven by per-kind palette. Each
+  // component is built by `makePanelComponent(kind, idx, slot, dims)`
+  // which picks one of 5 fixed cavity slots (top-left wire, lower-left
+  // wire, top-right chip, lower-right fuse, lower-center scrap) and
+  // emits the appropriate mesh for the requested PanelComponentKind.
+  // Both `panelComponentIndex` and `panelComponentKind` are tagged on
+  // each mesh; the latter drives loot mapping in interaction.ts via
+  // COMPONENT_LOOT.
+  const palette = PANEL_COMPONENT_PALETTES[kind];
   const components: THREE.Mesh[] = [];
-  // Component 0: red wire bundle (vertical curve on left edge of cavity).
-  const wire0 = new THREE.Mesh(
-    new THREE.BoxGeometry(sx * 0.06, sy * 0.45, sz * 0.08),
-    _panelWireMat,
-  );
-  wire0.position.set(-sx * 0.30, sy * 0.05, sz * 0.32);
-  wire0.rotation.z = 0.15;
-  wire0.userData.noCollider = true;
-  wire0.userData.panelComponentIndex = 0;
-  interior.add(wire0);
-  components.push(wire0);
-  // Component 1: yellow wire — second cable bundle, lower-left.
-  const wire1 = new THREE.Mesh(
-    new THREE.BoxGeometry(sx * 0.05, sy * 0.30, sz * 0.06),
-    new THREE.MeshLambertMaterial({ color: 0xc8a830, flatShading: true }),
-  );
-  wire1.position.set(-sx * 0.18, -sy * 0.18, sz * 0.32);
-  wire1.rotation.z = -0.25;
-  wire1.userData.noCollider = true;
-  wire1.userData.panelComponentIndex = 1;
-  interior.add(wire1);
-  components.push(wire1);
-  // Component 2: PCB chip — small flat rectangle, top-right.
-  const chip = new THREE.Mesh(
-    new THREE.BoxGeometry(sx * 0.25, sy * 0.18, sz * 0.06),
-    _panelChipMat,
-  );
-  chip.position.set(sx * 0.18, sy * 0.20, sz * 0.32);
-  chip.userData.noCollider = true;
-  chip.userData.panelComponentIndex = 2;
-  interior.add(chip);
-  components.push(chip);
-  // Component 3: ceramic fuse cylinder — bottom-right, mounted horizontally.
-  const fuse = new THREE.Mesh(
-    new THREE.CylinderGeometry(sy * 0.06, sy * 0.06, sx * 0.22, 8),
-    _panelFuseMat,
-  );
-  fuse.rotation.z = Math.PI / 2;
-  fuse.position.set(sx * 0.18, -sy * 0.18, sz * 0.34);
-  fuse.userData.noCollider = true;
-  fuse.userData.panelComponentIndex = 3;
-  interior.add(fuse);
-  components.push(fuse);
-  // Component 4: scrap chunk — irregular plate, lower-center.
-  const scrap = new THREE.Mesh(
-    new THREE.BoxGeometry(sx * 0.18, sy * 0.12, sz * 0.10),
-    new THREE.MeshLambertMaterial({ color: 0x6e5a4a, flatShading: true }),
-  );
-  scrap.position.set(-sx * 0.02, -sy * 0.05, sz * 0.30);
-  scrap.rotation.z = 0.3;
-  scrap.userData.noCollider = true;
-  scrap.userData.panelComponentIndex = 4;
-  interior.add(scrap);
-  components.push(scrap);
+  for (let i = 0; i < 5; i++) {
+    const compKind = palette[i];
+    const comp = makePanelComponent(compKind, i, sx, sy, sz);
+    comp.userData.noCollider = true;
+    comp.userData.panelComponentIndex = i;
+    comp.userData.panelComponentKind = compKind;
+    interior.add(comp);
+    components.push(comp);
+  }
 
   body.add(interior);
 
@@ -253,10 +379,28 @@ export function addAccessPanel(
 
   body.add(hinge);
 
+  // AAS — electrical-flicker glow PointLight. Lives inside the cavity,
+  // ignites on pry-complete, flickers + fades over ~3s. Shadows OFF
+  // for perf (50+ panels with shadow lights would be expensive).
+  // Starts at intensity=0 — interaction.ts flips panelGlowStartedAt
+  // to ctx.time.elapsed on pry-complete; updatePanelDoors ticks the
+  // intensity envelope from there.
+  const glow = new THREE.PointLight(
+    Tuning.SALVAGE_PANEL_GLOW_COLOR_HEX,
+    0,
+    Tuning.SALVAGE_PANEL_GLOW_RANGE_M,
+    2.0,    // decay
+  );
+  glow.position.set(0, 0, sz * 0.45);   // near the front of the cavity
+  glow.castShadow = false;
+  body.add(glow);
+
   // Stash refs + animation state on body.userData so interaction.ts
   // can drive the door + hide components as they're extracted.
   body.userData.panelDoor = hinge;
   body.userData.panelInterior = interior;
+  body.userData.panelGlow = glow;
+  body.userData.panelGlowStartedAt = -1;        // -1 = not yet ignited
   body.userData.panelComponents = components;
   body.userData.panelDoorAngle = 0;            // current angle (rad)
   body.userData.panelDoorTarget = 0;           // target angle (0 closed, OPEN_ANGLE open)
@@ -367,6 +511,7 @@ export function makeEngineCluster(rand: Rng, scale = 1): THREE.Group {
     baseR * 0.55, nozzleH + baseR * 0.45, baseR * 1.12,
     scale,
     0,
+    'engine_cluster',
   );
   return g;
 }
@@ -423,6 +568,7 @@ export function makeFuselage(rand: Rng, scale = 1): THREE.Group {
     length * 0.32, radius * 1.05, radius * 0.05,
     scale,
     0,
+    'fuselage',
   );
   return g;
 }
@@ -463,6 +609,7 @@ export function makeEscapePod(rand: Rng, scale = 1): THREE.Group {
     -r * 0.75, r * 0.45, -r * 0.15,
     scale,
     Math.PI,
+    'escape_pod',
   );
   return g;
 }
@@ -504,6 +651,7 @@ export function makeCargoContainer(rand: Rng, scale = 1): THREE.Group {
     w / 2 + 0.08, h * 0.30, d * 0.30,
     scale,
     Math.PI / 2,
+    'cargo_container',
   );
   return g;
 }
@@ -547,7 +695,7 @@ export function makeEngineBell(rand: Rng, scale = 1): THREE.Group {
     g.add(strut);
   }
   // Salvage access panel — on the outer rim, midline.
-  addAccessPanel(g, R * 1.05, midY, 0, scale, Math.PI / 2);
+  addAccessPanel(g, R * 1.05, midY, 0, scale, Math.PI / 2, 'engine_bell');
   return g;
 }
 

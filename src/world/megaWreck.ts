@@ -1191,7 +1191,7 @@ export function placeMegaWreck(
   aftPanel.position.set(-AFT_HALF_W * 0.5, 1.0, AFT_ORIGIN_Z + AFT_HALF_L - WALL_THICK - 0.05);
   aftPanel.rotation.y = Math.PI;       // face -Z, into the bay
   group.add(aftPanel);
-  addAccessPanel(aftPanel, 0, 0, 0, 1, 0);
+  addAccessPanel(aftPanel, 0, 0, 0, 1, 0, 'massive');
   registerSalvageable(salvageables, aftPanel, 'massive', worldPos(aftPanel.position), rand);
 
   // 2. Bow chamber — front interior wall (-Z tip), facing into chamber.
@@ -1200,7 +1200,7 @@ export function placeMegaWreck(
   const bowPanel = new THREE.Group();
   bowPanel.position.set(0.5, 1.0, BOW_ORIGIN_Z - BOW_HALF_L + WALL_THICK + 0.05);
   if (bowGroup) bowGroup.add(bowPanel); else group.add(bowPanel);
-  addAccessPanel(bowPanel, 0, 0, 0, 1, 0);
+  addAccessPanel(bowPanel, 0, 0, 0, 1, 0, 'massive');
   bowPanel.updateWorldMatrix(true, false);
   const bowPanelWorld = new THREE.Vector3().setFromMatrixPosition(bowPanel.matrixWorld);
   registerSalvageable(salvageables, bowPanel, 'massive', bowPanelWorld, rand);
@@ -1214,7 +1214,7 @@ export function placeMegaWreck(
     panelGroup: THREE.Group, parent: THREE.Object3D, kind: 'massive' | 'engine_bell',
   ) => {
     parent.add(panelGroup);
-    addAccessPanel(panelGroup, 0, 0, 0, 1, 0);
+    addAccessPanel(panelGroup, 0, 0, 0, 1, 0, kind);
     panelGroup.updateWorldMatrix(true, false);
     const wp = new THREE.Vector3().setFromMatrixPosition(panelGroup.matrixWorld);
     registerSalvageable(salvageables, panelGroup, kind, wp, rand);

@@ -621,19 +621,19 @@ export function placeMegaShip(
   const bridgePanel = new THREE.Group();
   bridgePanel.position.set(-1.5, 1.0, -HALF_L + 0.12);
   group.add(bridgePanel);
-  addAccessPanel(bridgePanel, 0, 0, 0, 1, 0);
+  addAccessPanel(bridgePanel, 0, 0, 0, 1, 0, 'massive');
   // 2. Cargo chamber — panel on the back wall interior, lower right.
   const cargoPanel = new THREE.Group();
   cargoPanel.position.set(1.5, 1.0, HALF_L - 0.12);
   cargoPanel.rotation.y = Math.PI;
   group.add(cargoPanel);
-  addAccessPanel(cargoPanel, 0, 0, 0, 1, 0);
+  addAccessPanel(cargoPanel, 0, 0, 0, 1, 0, 'massive');
   // 3. Engine bell — panel on the bell's rim, exterior.
   const bellPanel = new THREE.Group();
   bellPanel.position.set(1.4, HALF_H * 0.9, HALF_L + WALL_THICK + 1.8);
   bellPanel.rotation.y = Math.PI / 2;
   group.add(bellPanel);
-  addAccessPanel(bellPanel, 0, 0, 0, 1, 0);
+  addAccessPanel(bellPanel, 0, 0, 0, 1, 0, 'massive');
 
   // Compute each panel's WORLD position (accounting for yaw + tilt + ship pos)
   // for the Salvageable.pos field.

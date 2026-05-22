@@ -59,7 +59,34 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session AAR — Salvage mechanics overhaul: tactile pry
+**Last shipped**: Session AAS — Salvage polish bundle. Three AAR follow-on
+items shipped in one session. **Per-component loot mapping**: new
+`COMPONENT_LOOT` map in interaction.ts replaces AAR's
+`rollWreckLoot`-per-extract (random + opaque) with deterministic lookup
+keyed by `panelComponentKind`: red_wire→rope, yellow_wire→cloth×2,
+chip→scrap_bullet, fuse→scrap_bullet, scrap_chunk→scrap×2,
+cloth_scrap→cloth×2, bandage_pack→bandage. Player can read the cavity
+at a glance and know what they'll get. Fallback to AAR's roll path
+for any pre-AAS panels missing the kind tag. **Variant interiors per
+wreck kind**: `addAccessPanel` gained `kind: PanelKind` parameter (now
+8th arg, defaults to 'fuselage'); new `PANEL_COMPONENT_PALETTES` table
+defines 5-component spreads per kind — engine_cluster gets cabling-
+heavy (2 red_wire + yellow_wire + fuse + scrap_chunk), escape_pod
+gets medical (2 bandage_pack + cloth_scrap + chip + fuse), cargo a
+lottery mix, massive a full diversity. New `makePanelComponent(kind,
+slot, sx, sy, sz)` helper; 5 slot positions stay fixed across kinds
+so the layout reads consistent. 2 new component meshes: cloth_scrap
+(folded fabric) + bandage_pack (white box with red cross stripes). All
+callers updated (wrecks.ts × 5, megaShip.ts × 3, megaWreck.ts × 3).
+**Electrical-flicker glow on pry**: amber PointLight (`0xff9a40`,
+range 1.2m, shadows OFF for perf) ignites in the cavity on
+`completePry`, fades over `SALVAGE_PANEL_GLOW_FADE_DURATION_S = 3.2s`
+with a 2-sine flicker (23Hz + 7.3Hz detuned). Self-marks `-1` to
+stop ticking after fade. Animation in existing `updatePanelDoors`
+walk. 4 new SALVAGE_PANEL_GLOW_* Tuning constants. No schema bump
+(D94 still applies). 5 files touched.
+
+**Prior milestone**: Session AAR — Salvage mechanics overhaul: tactile pry
 + extract. Salvage flow rewritten from one-press-roll into two-stage
 interaction. New `scrap_bar` ItemId (recipe id 15: scrap×2 + branch×1,
 wieldLmb='click_use') gates panel-prying — without it equipped,

@@ -627,6 +627,15 @@ export const Tuning = {
   SALVAGE_PANEL_PRY_DURATION_S: 0.85,   // hold-LMB duration to lever the door open
   SALVAGE_PANEL_DOOR_OPEN_LERP: 4.5,    // per-second exponential lerp toward target angle
   SALVAGE_NOISE_MULTIPLIER_DURING_PRY: 1.3, // sandworm detection radius boost while prying
+  // AAS — electrical-flicker glow on panel open. A small amber PointLight
+  // ignites in the cavity when the door pries open, flickers via two
+  // detuned sines, then fades over ~3s. Spec: peak intensity, fade
+  // duration, flicker frequencies. Shadows OFF (50+ panels with shadow
+  // lights would be expensive).
+  SALVAGE_PANEL_GLOW_PEAK_INTENSITY: 0.55,
+  SALVAGE_PANEL_GLOW_FADE_DURATION_S: 3.2,
+  SALVAGE_PANEL_GLOW_RANGE_M: 1.2,           // PointLight range — tight to the cavity
+  SALVAGE_PANEL_GLOW_COLOR_HEX: 0xff9a40,    // amber, matches fire palette
   SALVAGE_PANEL_BODY_HEX: 0x2a2622,     // dark metal plate
   SALVAGE_PANEL_RIM_HEX: 0xa28860,      // warm brass rim — visible affordance
 

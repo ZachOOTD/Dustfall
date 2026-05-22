@@ -3,6 +3,71 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session AAS — 2026-05-22 — Salvage polish bundle: variant interiors + per-component loot + electrical glow ✓ verify pass
+`verified` — tsc clean. Three salvage-polish items closed in one
+session, building on AAR's tactile pry-and-extract foundation. 5 files
+touched; no new modules; no schema bump (D94 still applies).
+
+**Per-component loot mapping** (AAS.1). Replaces AAR's
+`rollWreckLoot(kind, Math.random)`-per-extract path (random + opaque
+to the player) with deterministic per-component lookup. New
+`COMPONENT_LOOT` map in `interaction.ts`:
+- `red_wire` → rope
+- `yellow_wire` → cloth × 2
+- `chip` → scrap_bullet
+- `fuse` → scrap_bullet
+- `scrap_chunk` → scrap × 2
+- `cloth_scrap` → cloth × 2
+- `bandage_pack` → bandage
+
+Player can now read the cavity at a glance — "I see a red wire and a
+bandage pack, I'll get rope and a bandage." Fallback path preserved
+for any panel without a kind tag (defensive): rolls
+`rollWreckLoot(kind)` once and uses the first entry.
+
+**Variant interiors per wreck kind** (AAS.2). `addAccessPanel` gained
+a `kind: PanelKind` parameter (defaults to 'fuselage'). New
+`PANEL_COMPONENT_PALETTES` table maps each kind to a 5-entry component
+roster:
+- `engine_cluster`: 2 red_wire + yellow_wire + fuse + scrap_chunk
+  (cabling-heavy, electrical)
+- `engine_bell`: red_wire + yellow_wire + 2 fuse + scrap_chunk (more
+  ammo)
+- `fuselage`: red_wire + yellow_wire + chip + cloth_scrap + scrap_chunk
+  (interior cabling + textiles)
+- `escape_pod`: 2 bandage_pack + cloth_scrap + chip + fuse (medical)
+- `cargo_container`: chip + cloth_scrap + fuse + scrap_chunk + red_wire
+  (lottery mix)
+- `massive` (flagships): red_wire + yellow_wire + chip + fuse +
+  bandage_pack (full diversity)
+
+All call sites updated to pass kind: `wrecks.ts` (5 makeXxx
+functions), `megaShip.ts` (3 panels = 'massive'), `megaWreck.ts`
+(aft + bow + nested registerNested = 'massive' / 'engine_bell').
+New `makePanelComponent(kind, slot, sx, sy, sz)` helper builds the
+mesh; 5 slot positions inside the cavity stay fixed so the layout
+reads consistently across kinds (top-left wire-bay, top-right chip-
+bay, etc.). Two new component meshes: `cloth_scrap` (folded fabric
+square) + `bandage_pack` (white box with red cross stripes).
+
+**Electrical-flicker glow on pry-complete** (AAS.3). New
+`THREE.PointLight` per panel, attached inside the cavity. Ignites on
+`completePry`: peak intensity `SALVAGE_PANEL_GLOW_PEAK_INTENSITY = 0.55`,
+amber color (`0xff9a40`, fire-palette), range 1.2m. Fades over
+`SALVAGE_PANEL_GLOW_FADE_DURATION_S = 3.2s` with a 2-sine flicker
+(23Hz + 7.3Hz detuned) modulating the envelope. `castShadow: false`
+for perf — 50+ panels with shadow-casting lights would be expensive.
+Animation lives in the existing `updatePanelDoors` per-frame walk;
+when `panelGlowStartedAt` hits the fade window it self-marks `-1` to
+stop ticking. 4 new Tuning constants
+(`SALVAGE_PANEL_GLOW_PEAK_INTENSITY/FADE_DURATION_S/RANGE_M/COLOR_HEX`).
+
+**Player-visible result**: panel pries open → 3s of "this fuse-box has
+residual juice" amber flicker fading to dark, while the player picks
+through a kind-specific component spread and watches each piece
+disappear with a clear loot outcome. The previous "open box, get random
+soup of items" reads as "this is a specific thing I'm taking apart."
+
 ## Session AAR — 2026-05-22 — Salvage mechanics overhaul: tactile pry + extract ✓ verify pass
 `verified` — tsc clean. Salvage flow rewritten from "press E → roll
 loot table → done" into a tactile two-stage interaction: pry the door

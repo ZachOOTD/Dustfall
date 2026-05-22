@@ -828,17 +828,38 @@ function tickSalvage(ctx: GameContext): void {
  *  Per-frame door angle lerp happens in updatePanelDoors (separate
  *  from _salvaging — the door keeps animating even if the player
  *  walks away from the panel after the pry). */
-function completePry(_ctx: GameContext, s: import('../world/salvage.ts').Salvageable): void {
+function completePry(ctx: GameContext, s: import('../world/salvage.ts').Salvageable): void {
   const panel = s.panel as THREE.Object3D;
   panel.userData.panelOpened = true;
   panel.userData.panelDoorTarget = Tuning.SALVAGE_PANEL_DOOR_OPEN_ANGLE;
+  // AAS — ignite the electrical-flicker glow. updatePanelDoors ticks
+  // the intensity envelope (peak → flicker → fade to 0 over
+  // SALVAGE_PANEL_GLOW_FADE_DURATION_S).
+  panel.userData.panelGlowStartedAt = ctx.time.elapsed;
   _salvaging = null;
   hideSalvageProgress();
 }
 
-/** AAR — extract one component from an already-open panel. Hides the
- *  next un-extracted component mesh and rolls a single loot entry from
- *  the kind's table. Decrements salvageRemaining; strips panel at zero. */
+/** AAS — per-component loot mapping. Each interior detail mesh's
+ *  PanelComponentKind tag (set in wrecks.ts addAccessPanel) maps
+ *  deterministically to a specific loot item. Replaces the AAR
+ *  rollWreckLoot-once-per-extract path which was random + opaque to
+ *  the player. Now: "I see a red wire — I get rope. I see a chip — I
+ *  get a bullet." */
+const COMPONENT_LOOT: Record<string, { id: ItemId; count?: number }> = {
+  red_wire:     { id: 'rope' },
+  yellow_wire:  { id: 'cloth', count: 2 },
+  chip:         { id: 'scrap_bullet' },
+  fuse:         { id: 'scrap_bullet' },
+  scrap_chunk:  { id: 'scrap', count: 2 },
+  cloth_scrap:  { id: 'cloth', count: 2 },
+  bandage_pack: { id: 'bandage' },
+};
+
+/** AAR + AAS — extract one component from an already-open panel.
+ *  Hides the next un-extracted component mesh, looks up its loot via
+ *  COMPONENT_LOOT (deterministic per kind, not a roll), adds to
+ *  inventory. Decrements salvageRemaining; strips panel at zero. */
 function extractOneComponent(ctx: GameContext, s: import('../world/salvage.ts').Salvageable): void {
   const panel = s.panel as THREE.Object3D;
   const components = (panel.userData.panelComponents as THREE.Mesh[] | undefined) ?? [];
@@ -854,15 +875,26 @@ function extractOneComponent(ctx: GameContext, s: import('../world/salvage.ts').
     markSalvageStripped(s);
     return;
   }
-  // Roll one loot entry. Iterate the kind's table once and pick the
-  // first hit; if nothing hits, fall back to scrap. Cheaper than
-  // calling rollWreckLoot (which can produce 0..N entries — we want exactly 1).
-  const loot = rollWreckLoot(s.kind, Math.random);
-  const entry = loot.length > 0 ? loot[0] : { id: 'scrap' as const, count: 1 };
+  // AAS — look up the component's deterministic loot mapping via its
+  // panelComponentKind tag. Fallback for pre-AAS panels (saves loaded
+  // from older formats with the AAR-era generic palette): roll the
+  // kind-table once and grab the first entry, then scrap.
+  const compMesh = components[nextIdx];
+  const compKind = compMesh.userData.panelComponentKind as string | undefined;
+  let entry: { id: ItemId; count?: number };
+  if (compKind && COMPONENT_LOOT[compKind]) {
+    entry = COMPONENT_LOOT[compKind];
+  } else {
+    const fallback = rollWreckLoot(s.kind, Math.random);
+    entry = fallback.length > 0 ? fallback[0] : { id: 'scrap' as const, count: 1 };
+  }
   const count = entry.count ?? 1;
   let added = 0;
+  // AAS — the deterministic COMPONENT_LOOT entries don't carry meta;
+  // fallback rollWreckLoot entries might. Pass-through if present.
+  const entryMeta = (entry as { meta?: import('../inventory/types.ts').ItemMeta }).meta;
   for (let i = 0; i < count; i++) {
-    const idx = addItem(ctx.inventory, entry.id, entry.meta, ctx);
+    const idx = addItem(ctx.inventory, entry.id, entryMeta, ctx);
     if (idx < 0) break;
     added++;
   }
@@ -892,16 +924,37 @@ function extractOneComponent(ctx: GameContext, s: import('../world/salvage.ts').
  *  near-free (one float compare). */
 function updatePanelDoors(ctx: GameContext, dt: number): void {
   const k = Tuning.SALVAGE_PANEL_DOOR_OPEN_LERP;
+  const glowPeak = Tuning.SALVAGE_PANEL_GLOW_PEAK_INTENSITY;
+  const glowFade = Tuning.SALVAGE_PANEL_GLOW_FADE_DURATION_S;
   for (const s of ctx.salvageables.list) {
     const panel = s.panel as THREE.Object3D;
+    // Door angle lerp (cheap no-op when target reached).
     const target = (panel.userData.panelDoorTarget as number | undefined) ?? 0;
     const current = (panel.userData.panelDoorAngle as number | undefined) ?? 0;
-    if (Math.abs(target - current) < 0.001) continue;
-    // Exponential decay toward target: angle += (target - angle) * (1 - exp(-k*dt))
-    const next = current + (target - current) * (1 - Math.exp(-k * dt));
-    panel.userData.panelDoorAngle = next;
-    const door = panel.userData.panelDoor as THREE.Object3D | undefined;
-    if (door) door.rotation.y = next;
+    if (Math.abs(target - current) >= 0.001) {
+      // Exponential decay toward target: angle += (target - angle) * (1 - exp(-k*dt))
+      const next = current + (target - current) * (1 - Math.exp(-k * dt));
+      panel.userData.panelDoorAngle = next;
+      const door = panel.userData.panelDoor as THREE.Object3D | undefined;
+      if (door) door.rotation.y = next;
+    }
+    // AAS — electrical-flicker glow envelope. While glowElapsed < fade,
+    // intensity = peak × fadeFactor × flicker. The flicker is two
+    // detuned high-frequency sines so it never settles into a pattern;
+    // fadeFactor linearly drops peak → 0 over the fade duration.
+    const startedAt = (panel.userData.panelGlowStartedAt as number | undefined) ?? -1;
+    if (startedAt < 0) continue;
+    const glowElapsed = ctx.time.elapsed - startedAt;
+    if (glowElapsed > glowFade) {
+      const glow = panel.userData.panelGlow as THREE.PointLight | undefined;
+      if (glow && glow.intensity !== 0) glow.intensity = 0;
+      panel.userData.panelGlowStartedAt = -1;    // mark spent so we stop ticking
+      continue;
+    }
+    const fadeFactor = Math.max(0, 1 - glowElapsed / glowFade);
+    const flicker = 0.7 + 0.30 * Math.sin(glowElapsed * 23) * Math.sin(glowElapsed * 7.3);
+    const glow = panel.userData.panelGlow as THREE.PointLight | undefined;
+    if (glow) glow.intensity = glowPeak * fadeFactor * Math.max(0.2, flicker);
   }
 }
 
