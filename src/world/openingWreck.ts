@@ -242,16 +242,21 @@ function makeSlicedHull(): THREE.Group {
 }
 
 /** Build the cockpit window strip — 3 thin dark boxes wrapped around
- *  the upper-front of the hull, suggesting a broken canopy. Anchors
- *  on the hull radius at the cockpit shoulder (lathe Y = 0.78·HULL_LEN). */
+ *  the upper-FRONT-RIGHT of the hull, suggesting a broken canopy. Anchors
+ *  on the hull radius at the cockpit shoulder (lathe Y = 0.78·HULL_LEN).
+ *  AAM-followup #5: baseAng shifted from -π/2 (top-center) to -π/4
+ *  (upper-right) so the windows live on the OPPOSITE side from the
+ *  skylight gap, avoiding floating-window meshes where the hull is open. */
 function makeCockpitWindows(): THREE.Group {
   const g = new THREE.Group();
   const windowY = 0.80 * HULL_LEN;
   const radiusAtWindow = profileRadiusAt(windowY);
-  // 3 horizontal segments wrapped over the top-front arc.
-  // Angles chosen to span phi ∈ [3π/2 - 0.55, 3π/2 + 0.55] — i.e.,
-  // straddling the UP direction (phi = 3π/2 with the X=-π/2 rotation).
-  const baseAng = -Math.PI / 2;  // lathe-local phi for "world up" = -π/2 (= 3π/2)
+  // 3 horizontal segments wrapped over the upper-right arc.
+  // baseAng=-π/4 puts the center window at lathe phi=135° (upper-right
+  // in wreck-local hull-group). The skylight gap occupies phi 165°-225°
+  // (upper-left). Window arc (~±23°) lands at phi 112°-158°, fully
+  // outside the skylight.
+  const baseAng = -Math.PI / 4;
   for (let i = -1; i <= 1; i++) {
     const ang = baseAng + i * 0.40;
     const win = new THREE.Mesh(
@@ -332,7 +337,11 @@ function makeEntranceFragments(rand: Rng): THREE.Group {
   // 0..π so cos > 0 ish): start each fragment at base angle 0..π
   // with light jitter. The bottom-skip below still applies.
   for (let i = 0; i < fragCount; i++) {
-    const ang = (i / fragCount) * Math.PI + rand() * 0.5;
+    // AAM-followup #5: shifted fragment angles to RIGHT-side only
+    // (lathe phi ~60°-150°) so fragments don't sit in the skylight gap
+    // (phi 165°-225°) where the rim ends and the fragment would float
+    // without hull behind it.
+    const ang = 0.15 + (i / fragCount) * (Math.PI * 0.55) + rand() * 0.3;
     // Skip fragments that would block the entrance opening at the
     // bottom of the rim — the rim's circular profile in WRECK-LOCAL
     // X/Y space has its bottom at angle θ where sin(θ) is most
@@ -599,29 +608,43 @@ export function makeOpeningWreck(rand: Rng): THREE.Group {
   rim.position.set(0, AXIS_Y, -HULL_LEN / 2);
   g.add(rim);
 
-  // ── Antenna stub on the upper cockpit hull, leaning forward. ──
+  // ── Antenna stub on the upper-RIGHT cockpit hull, tilted radially
+  //    outward. AAM-followup #5: moved from top-center (was floating in
+  //    the skylight gap after that gap shifted off-axis) to upper-right
+  //    (lathe phi=135°). Now anchored on the same side as the cockpit
+  //    windows + panel-A, opposite the skylight (which sits on the
+  //    upper-LEFT at phi=195°). ──
   const stubLen = 1.4;
   const stubGeo = new THREE.CylinderGeometry(0.04, 0.06, stubLen, 6);
   stubGeo.translate(0, stubLen * 0.5, 0);   // D60 — anchor at foot
   const stub = new THREE.Mesh(stubGeo, _antennaMat);
   const stubLatheY = 0.72 * HULL_LEN;
   const stubR = profileRadiusAt(stubLatheY);
-  // World position: lathe Y → world Z (translated); top of hull = +Y in lathe local
-  // = -Z in lathe local under our X=-π/2 rotation. So the world-up point on the
-  // hull surface at axial Z = stubLatheY - HULL_LEN/2 has world Y = AXIS_Y + stubR.
-  stub.position.set(0, AXIS_Y + stubR - 0.05, stubLatheY - HULL_LEN / 2);
-  stub.rotation.x = 0.18;  // lean slightly forward (toward +Z)
+  // Anchor point: wreck-local upper-right at 45° off-axis. Lathe phi=135°
+  // → wreck-local (sin*R, AXIS_Y - cos*R, _) → (0.707R, AXIS_Y + 0.707R, _).
+  const stubCos = Math.cos(Math.PI / 4);   // 0.707
+  stub.position.set(
+    stubCos * stubR,
+    AXIS_Y + stubCos * stubR - 0.05,
+    stubLatheY - HULL_LEN / 2,
+  );
+  // Tilt the cylinder so it points radially outward (= upper-right at 45°).
+  // Default cylinder is +Y; rotate around Z by -π/4 to align with the
+  // outward direction in wreck-local XY plane.
+  stub.rotation.z = -Math.PI / 4;
   g.add(stub);
-  // Small crossbar near the top
+  // Small crossbar near the top — follows the same radial direction.
   const crossbar = new THREE.Mesh(
     new THREE.BoxGeometry(0.45, 0.04, 0.04),
     _antennaMat,
   );
+  const stubTipDist = stubLen * 0.88;
   crossbar.position.set(
-    0,
-    AXIS_Y + stubR - 0.05 + stubLen * 0.88,
-    stubLatheY - HULL_LEN / 2 + Math.sin(0.18) * stubLen * 0.88,
+    stubCos * stubR + stubCos * stubTipDist,
+    AXIS_Y + stubCos * stubR - 0.05 + stubCos * stubTipDist,
+    stubLatheY - HULL_LEN / 2,
   );
+  crossbar.rotation.z = -Math.PI / 4;   // perpendicular to the antenna shaft
   g.add(crossbar);
 
   // ── Interior props ──
@@ -638,10 +661,19 @@ export function makeOpeningWreck(rand: Rng): THREE.Group {
   // gap. Player approaching from outside sees it perched on the tail-
   // stub. Sits on top of the hull at the panel's axial Z. Panel B sits
   // at panelB-angle on the side flank — see below.
+  // AAM-followup #5: panel A moved from straight-up (lathe phi=180°) to
+  // upper-right (lathe phi=135°, same side as antenna + windows) so it
+  // doesn't float in the off-center skylight gap on the upper-LEFT.
   const panelA = makeAccessPanel();
   const panelALatheY = 0.30 * HULL_LEN;
   const panelAR = profileRadiusAt(panelALatheY) + Tuning.SALVAGE_PANEL_SIZE_Z * 0.4;
-  panelA.position.set(0, AXIS_Y + panelAR, panelALatheY - HULL_LEN / 2);
+  const panelAAng = Math.PI * 0.25;     // 45° off-axis on the right flank (upper-right)
+  panelA.position.set(
+    Math.cos(panelAAng) * panelAR,
+    AXIS_Y + Math.sin(panelAAng) * panelAR,
+    panelALatheY - HULL_LEN / 2,
+  );
+  panelA.lookAt(0, AXIS_Y, panelALatheY - HULL_LEN / 2);
   panelA.userData.openingWreckPanel = 'A';
   g.add(panelA);
 
