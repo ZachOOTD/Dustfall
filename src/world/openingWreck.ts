@@ -669,8 +669,10 @@ export function makeOpeningWreck(rand: Rng): THREE.Group {
   stub.rotation.z = -Math.PI / 4;
   g.add(stub);
   // Small crossbar near the top — follows the same radial direction.
+  // AAM-followup #9: cross-section bumped 0.04×0.04 → 0.08×0.08. Matchstick-
+  // thin pre-followup; now reads as a chunky steel crossbar at viewing distance.
   const crossbar = new THREE.Mesh(
-    new THREE.BoxGeometry(0.45, 0.04, 0.04),
+    new THREE.BoxGeometry(0.45, 0.08, 0.08),
     _antennaMat,
   );
   const stubTipDist = stubLen * 0.88;

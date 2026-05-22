@@ -743,7 +743,7 @@ export const Tuning = {
   // the ramp. See followup #3's side-wall collider redesign.
   OPENING_WRECK_RAMP_LEN_M: 1.2,             // m — extent in -Z (outward from entrance)
   OPENING_WRECK_RAMP_DROP_M: 0.3,            // m — how much the outer edge drops below floor top
-  OPENING_WRECK_RAMP_THICK_M: 0.05,          // m — plate thickness
+  OPENING_WRECK_RAMP_THICK_M: 0.12,          // m — plate thickness. AAM-followup #9: bumped 0.05 → 0.12 (matches CLAUDE.md rule 7) so the ramp doesn't read paper-thin from oblique angles.
   // AAJ — hull wall thickness. Pre-AAJ the hull was a single LatheGeometry
   // rendered DoubleSide; from inside the cavity that read as paper-thin
   // and unrealistic. AAJ adds an inner shell at R - HULL_WALL_THICKNESS
