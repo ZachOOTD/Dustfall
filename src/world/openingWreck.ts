@@ -474,16 +474,35 @@ function makeInteriorProps(rand: Rng): THREE.Group {
       totalMarks++;
     }
     if (inThisCluster === 5) {
-      // Crossing slash — diagonal across the 4 bars. Long axis = Z, tilted
-      // around X axis so it slopes top-front to bottom-back across the bars.
-      // Position at the midpoint of the 4 bars; per-Z wallX still applies.
-      const crossZ = clusterZBase + markZSpacing * 1.5;
+      // Crossing slash — diagonal across the 4 bars. AAM-followup #7:
+      // pre-followup the cross was a rigid 0.22m box tilted only on X,
+      // so its endpoints couldn't follow the wall's curvature. One end
+      // poked into the cavity, the other into the wall. Now we compute
+      // each endpoint on the curved wall (with the Y offset for the
+      // diagonal slash effect), then align the cross's long axis with
+      // the endpoint-to-endpoint direction via quaternion. Box length
+      // matches the actual distance between endpoints (≈ 0.22m but
+      // varies slightly with wall curvature).
+      const crossCenterZ = clusterZBase + markZSpacing * 1.5;
+      const crossHalfLen = 0.11;
+      const slashTilt = 0.45;                // radians — diagonal slope around X
+      const yOff = Math.sin(slashTilt) * crossHalfLen;
+      const z1 = crossCenterZ - crossHalfLen;
+      const z2 = crossCenterZ + crossHalfLen;
+      const x1 = wallXAt(z1);
+      const x2 = wallXAt(z2);
+      const y1 = tallyY + yOff;            // upper end at lower Z
+      const y2 = tallyY - yOff;            // lower end at higher Z
+      const dir = new THREE.Vector3(x2 - x1, y2 - y1, z2 - z1);
+      const dirLen = dir.length();
+      dir.normalize();
       const cross = new THREE.Mesh(
-        new THREE.BoxGeometry(0.015, 0.016, 0.22),
+        new THREE.BoxGeometry(0.015, 0.016, dirLen),
         _scratchMat,
       );
-      cross.position.set(wallXAt(crossZ), tallyY, crossZ);
-      cross.rotation.x = 0.45;
+      cross.position.set((x1 + x2) / 2, (y1 + y2) / 2, (z1 + z2) / 2);
+      // Align the box's default +Z with the endpoint-to-endpoint direction.
+      cross.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir);
       g.add(cross);
       totalMarks++;
     }
