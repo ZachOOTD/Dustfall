@@ -443,39 +443,46 @@ function makeInteriorProps(rand: Rng): THREE.Group {
   const clusterZSpacing = 0.34;
   const markZSpacing = 0.05;
   const yOffsetFromAxis = tallyY - AXIS_Y;
+  // AAM-followup #6: wallX is now computed PER-MARK (not per-cluster).
+  // Pre-followup, all 5 marks in a cluster shared the wallX computed at
+  // clusterZBase. But the hull radius shrinks significantly toward the
+  // nose — between cluster 1 (Z=1.55, R≈1.48) and cluster 4 (Z=2.57,
+  // R≈0.58) the wall pulls in ~90cm, and WITHIN cluster 4 the wall
+  // curves another ~10cm across its 0.15m Z span. Marks at the end of
+  // a cluster were floating up to 10cm inside the cavity. Fixing per-mark.
+  const wallXAt = (markZ: number): number => {
+    const latheY = markZ + HULL_LEN / 2;
+    const rInner = Math.max(0.3, profileRadiusAt(latheY) - HULL_WALL_THICKNESS);
+    return Math.sqrt(Math.max(0.01, rInner * rInner - yOffsetFromAxis * yOffsetFromAxis));
+  };
   let totalMarks = 0;
   for (let cluster = 0; cluster < 4 && totalMarks < 17; cluster++) {
     const clusterZBase = tallyZStart + cluster * clusterZSpacing;
     const inThisCluster = Math.min(5, 17 - totalMarks);
-    // Per-cluster: compute interior wall X using local hull radius at
-    // this Z. Inner shell at R - WALL_THICKNESS; mark position is the
-    // inner shell X so the box mesh straddles the wall (half hidden
-    // behind the wall geometry, half raised relief into the cavity).
-    const latheY = clusterZBase + HULL_LEN / 2;
-    const rInner = Math.max(0.3, profileRadiusAt(latheY) - HULL_WALL_THICKNESS);
     // RIGHT-side wall (local +X). Player enters from -X facing +X; after
     // the wreck's yaw=π/2 rotation, world-Z mapping puts local +X on
     // the player's RIGHT hand side as they walk in.
-    const wallX = Math.sqrt(Math.max(0.01, rInner * rInner - yOffsetFromAxis * yOffsetFromAxis));
-    const markX = wallX;                 // FLUSH with inner shell (straddles the wall surface)
     for (let m = 0; m < Math.min(4, inThisCluster); m++) {
+      const markZ = clusterZBase + m * markZSpacing;
       const bar = new THREE.Mesh(
         // X = depth into wall (thin), Y = vertical (tall), Z = spacing (thin)
         new THREE.BoxGeometry(0.015, 0.20, 0.016),
         _scratchMat,
       );
-      bar.position.set(markX, tallyY, clusterZBase + m * markZSpacing);
+      bar.position.set(wallXAt(markZ), tallyY, markZ);
       g.add(bar);
       totalMarks++;
     }
     if (inThisCluster === 5) {
       // Crossing slash — diagonal across the 4 bars. Long axis = Z, tilted
       // around X axis so it slopes top-front to bottom-back across the bars.
+      // Position at the midpoint of the 4 bars; per-Z wallX still applies.
+      const crossZ = clusterZBase + markZSpacing * 1.5;
       const cross = new THREE.Mesh(
         new THREE.BoxGeometry(0.015, 0.016, 0.22),
         _scratchMat,
       );
-      cross.position.set(markX, tallyY, clusterZBase + markZSpacing * 1.5);
+      cross.position.set(wallXAt(crossZ), tallyY, crossZ);
       cross.rotation.x = 0.45;
       g.add(cross);
       totalMarks++;
