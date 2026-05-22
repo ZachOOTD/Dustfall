@@ -19,6 +19,12 @@ export interface TitleOverlayOptions {
   onNewGame: (seedOverride?: number) => void;
   /** Optional. When provided, a CONTINUE button is shown above NEW GAME. */
   onContinue?: () => void;
+  /** AAV — optional. When provided, a DEV MODE button is shown below
+   *  NEW GAME. Spawns a new game with the debug starter loadout
+   *  (scrap_bar + materials + weapons + kits) — for testing systems
+   *  without grinding the early progression. Regular NEW GAME starts
+   *  empty. */
+  onDevMode?: (seedOverride?: number) => void;
 }
 
 export function createTitleOverlay(
@@ -75,6 +81,23 @@ export function createTitleOverlay(
     options.onNewGame(readAdvancedSeed());
   });
   panel.appendChild(newGameBtn);
+
+  // AAV — DEV MODE button. Same flow as NEW GAME but the boot path
+  // applies the debug starter loadout (scrap_bar + materials +
+  // weapons + kits + ammo). For testing systems without grinding the
+  // early game. Visually styled lighter so it reads as a debug
+  // affordance, not a primary action.
+  if (options.onDevMode) {
+    const devBtn = document.createElement('button');
+    devBtn.className = 'title-new-game title-dev-mode';
+    devBtn.textContent = 'DEV MODE';
+    devBtn.addEventListener('mouseenter', playUiHover);
+    devBtn.addEventListener('click', () => {
+      playUiClick();
+      options.onDevMode!(readAdvancedSeed());
+    });
+    panel.appendChild(devBtn);
+  }
 
   // AAI — Advanced disclosure with seed entry. Default-collapsed; click
   // the disclosure to reveal a text input for a uint32 seed. Leaving the

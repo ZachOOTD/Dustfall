@@ -3,6 +3,68 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session AAV — 2026-05-22 — Inventory + crafting overhaul + dev mode ✓ verify pass
+`verified` — tsc clean. Four playtest-driven features. 7 files touched;
+no new modules; no schema bump.
+
+**Bigger backpack** (AAV.1): `BACKPACK_SLOT_COUNT 10 → 20` lifted to
+`Tuning.BACKPACK_SLOT_COUNT`. Hotbar stays at 4 (UI laid out for 4
+across the screen bottom). Total inventory 14 → 24. 5-column × 4-row
+grid in the inventory overlay. Save format unchanged — existing v10
+saves load with whatever slot count they were saved at; new boots use
+the larger inventory.
+
+**Craft drops output on full bag** (AAV.2): pre-AAV behavior was
+"output won't fit → refund inputs + abort with 'no room' toast." New
+behavior: inputs are already consumed at this point in performCraft;
+if some/all of the output can't fit, the overflow spawns as
+`spawnDroppedPickup` at the player's feet (~0.8m forward from camera,
+projected to terrain). Toast varies: "crafted X — dropped at your
+feet (bag full)" if NONE fit; "crafted X — partial drop at your feet"
+if some fit. Player keeps craft progress + recipe discovery; the
+output just lands on the ground.
+
+**Crafting partial-match suggestions** (AAV.3, `recipeDiscovery.ts` +
+`craftingMenu.ts`):
+- New `partialMatchRecipes(inputs)` — returns recipes where the
+  player's current inputs are a SUB-MULTISET of the recipe's inputs
+  (every player item appears in the recipe with count ≥ player's
+  count; player has no items not in the recipe). Excludes exact
+  matches (handled by `matchRecipes`).
+- New `missingForRecipe(inputs, recipe)` — diff helper returning
+  the list of (itemId, needed-more-count) the player needs to
+  complete a recipe.
+- `renderOutputPreview` now extends the "no match" branch with
+  partial-match hints:
+  - **Discovered partial match**: name the recipe + show diff
+    explicitly. Example: "tent kit: need 2 branch + 1 cloth (+ 1
+    other possible)".
+  - **Undiscovered partial matches only**: show count, not names —
+    preserves the discovery beat. Example: "3 possible recipes —
+    add more ingredients".
+  - **No partial matches**: original "nothing happens" stays.
+- Net effect: multi-of-same-item recipes (branch×3+cloth×2 → tent)
+  are no longer pure trial-and-error. Once a recipe is discovered,
+  partial-progress states get a clear "you need X more Y" hint.
+  Undiscovered partials get a "you're on the right track" signal
+  without spoiling the recipe.
+
+**DEV MODE title button** (AAV.4, `titleOverlay.ts` + `main.ts` +
+`style.css` + tuning):
+- New "DEV MODE" button on the title screen, styled with a dashed
+  border + muted color so it reads as a debug affordance (not a
+  primary action).
+- Click DEV MODE → sets `localStorage['dustfall.devMode'] = 'true'`
+  → clears save + reloads → boot path detects the flag + applies
+  the starter loadout (scrap_bar + materials + weapons + kits).
+- Regular NEW GAME explicitly clears the flag → starts EMPTY (the
+  pre-AAV `DEBUG_STARTER_LOADOUT` was hardcoded true; now flipped
+  to false default per `Tuning.DEBUG_STARTER_LOADOUT`).
+- Three paths total now: NEW GAME (empty start, real progression),
+  CONTINUE (resume save), DEV MODE (debug loadout for system
+  testing). Maps directly to the user's "I want to test gameplay
+  loop from scratch vs systems test" workflow split.
+
 ## Session AAU — 2026-05-22 — Salvage panel polish: shape + recess + testability + flow visibility ✓ verify pass
 `verified` — tsc clean. Four playtest-feedback fixes on top of the
 AAR/AAS/AAT salvage stack. 4 files touched; no new modules; no schema

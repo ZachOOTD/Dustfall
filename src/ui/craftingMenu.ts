@@ -19,13 +19,17 @@
 // toast. None of the current 9 recipes overlap; the chooser exists
 // for future recipes that might.
 
+import * as THREE from 'three';
 import type { GameContext } from '../GameContext.ts';
 import type { ItemId, ItemMeta, Slot } from '../inventory/types.ts';
 import { addItem, countItems, removeItems } from '../inventory/inventory.ts';
 import { getItemDef } from '../inventory/items.ts';
+import { spawnDroppedPickup } from '../pickups/pickups.ts';
 import {
   RECIPES,
   matchRecipes,
+  partialMatchRecipes,
+  missingForRecipe,
   type Recipe,
   type RecipeInput,
 } from '../inventory/recipeDiscovery.ts';
@@ -210,8 +214,37 @@ function renderOutputPreview(): void {
 
   const matches = matchRecipes(inputs);
   if (matches.length === 0) {
-    // No recipe — show "nothing happens" hint.
-    _outputLabelEl.textContent = 'nothing happens';
+    // No exact recipe — but maybe the player is partway to one.
+    // AAV — partial-match suggestions: if the current inputs are a
+    // sub-multiset of any recipe's inputs, surface a hint. For
+    // DISCOVERED partial matches we can name the recipe + show what's
+    // missing ("tent_kit needs 2 more branch + 1 more cloth"). For
+    // UNDISCOVERED partial matches we only show the count ("3 possible
+    // recipes — keep adding ingredients") to preserve discovery.
+    const partials = partialMatchRecipes(inputs);
+    if (partials.length === 0) {
+      _outputLabelEl.textContent = 'nothing happens';
+    } else {
+      // Find the first DISCOVERED partial; if any, name it + show diff.
+      const discoveredPartial = partials.find((r) =>
+        _ctx!.inventory.discoveredRecipes.includes(r.id),
+      );
+      if (discoveredPartial) {
+        const missing = missingForRecipe(inputs, discoveredPartial);
+        const missStr = missing
+          .map((m) => `${m.count} ${getItemDef(m.id).name.toLowerCase()}`)
+          .join(' + ');
+        const others = partials.length - 1;
+        const tail = others > 0 ? ` (+ ${others} other possible)` : '';
+        _outputLabelEl.textContent = `${discoveredPartial.displayName}: need ${missStr}${tail}`;
+      } else {
+        // All partial matches are undiscovered — preserve discovery.
+        _outputLabelEl.textContent =
+          partials.length === 1
+            ? '1 possible recipe — add more ingredients'
+            : `${partials.length} possible recipes — add more ingredients`;
+      }
+    }
     _selectedRecipe = null;
     return;
   }
@@ -415,16 +448,31 @@ function performCraft(): void {
     if (result < 0) break;
     added++;
   }
-  if (added === 0) {
-    // No room — return the consumed inputs to inventory.
-    for (const inp of recipe.inputs) {
-      for (let i = 0; i < inp.count; i++) {
-        addItem(ctx.inventory, inp.id, undefined, ctx);
-      }
+  // AAV — if some/all of the output didn't fit, DROP the overflow at
+  // the player's feet instead of the pre-AAV "refund inputs + abort"
+  // path. Player keeps the craft progress; bag is just full and the
+  // result lands on the ground for them to pick up later. Inputs are
+  // already consumed at this point (line 405-409 above).
+  const dropped = recipe.output.count - added;
+  if (dropped > 0) {
+    // Drop position: ~0.8m in front of camera, projected to terrain.
+    const cam = ctx.three.camera;
+    const fwd = new THREE.Vector3();
+    cam.getWorldDirection(fwd);
+    fwd.y = 0;
+    if (fwd.lengthSq() < 1e-4) fwd.set(0, 0, -1);
+    fwd.normalize();
+    const dx = cam.position.x + fwd.x * 0.8;
+    const dz = cam.position.z + fwd.z * 0.8;
+    for (let i = 0; i < dropped; i++) {
+      const p = spawnDroppedPickup(ctx.three.scene, ctx.terrain, { x: dx, z: dz }, recipe.output.id);
+      ctx.pickups.list.push(p);
     }
-    ctx.ui.showToast('no room for the result');
-    renderAll();
-    return;
+    if (added === 0) {
+      ctx.ui.showToast(`crafted ${recipe.displayName} — dropped at your feet (bag full)`);
+    } else {
+      ctx.ui.showToast(`crafted ${recipe.displayName} — partial drop at your feet`);
+    }
   }
 
   const wasDiscovered = ctx.inventory.discoveredRecipes.includes(recipe.id);

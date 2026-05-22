@@ -4,7 +4,7 @@ Cumulative state. Rewritten end-to-end at each `/session-end`. A
 reviewer who's never seen the project should be able to read this +
 `CLAUDE.md` + `docs/GDD.md` and understand where Dustfall is.
 
-**Current state**: Session AAU shipped (2026-05-22). 48 sessions
+**Current state**: Session AAV shipped (2026-05-22). 49 sessions
 post-MVP. tsc clean. SAVE_VERSION v10. Working tree dirty pending
 the user's commit.
 
@@ -82,6 +82,23 @@ Fresh-game start (the de-facto Tier 1 — Session W shipped):
     additive per D81.
 
 ---
+
+## What's freshly shipped (Session AAV deltas)
+
+Inventory + crafting overhaul + dev mode. 7 files; no schema bump.
+
+- **Bigger backpack**: BACKPACK_SLOT_COUNT 10 → 20 (hotbar stays 4;
+  total 24). 5×4 grid in overlay.
+- **Craft drops on full bag**: overflow output spawns as dropped
+  pickup at player feet instead of refund + abort.
+- **Crafting partial-match suggestions**: partialMatchRecipes +
+  missingForRecipe in recipeDiscovery.ts. UI hints "X possible
+  recipes — add more ingredients" (undiscovered) or "tent kit: need
+  2 branch + 1 cloth" (discovered partial). Closes multi-of-same-
+  item recipe trial-and-error gap.
+- **DEV MODE button** on title screen. Starter loadout via
+  localStorage flag. Regular NEW GAME starts empty (DEBUG_STARTER_LOADOUT
+  flipped to false default).
 
 ## What's freshly shipped (Session AAU deltas)
 

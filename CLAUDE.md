@@ -59,7 +59,29 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session AAU — Salvage panel polish from playtest
+**Last shipped**: Session AAV — Inventory + crafting overhaul + dev
+mode. Four playtest-driven items. **Bigger backpack**:
+`BACKPACK_SLOT_COUNT 10 → 20` (lifted to Tuning); hotbar stays at 4;
+total inventory 14 → 24 with 5×4 grid in the overlay. **Craft drops
+on full bag**: performCraft now spawns overflow output as a dropped
+pickup at the player's feet (~0.8m forward, projected to terrain)
+instead of refunding inputs + aborting. Toast varies by full/partial
+drop. Inputs are still consumed; player keeps progress + discovery.
+**Crafting partial-match suggestions**: new
+`partialMatchRecipes(inputs)` + `missingForRecipe(inputs, recipe)` in
+recipeDiscovery.ts. UI's "no exact match" branch now shows:
+discovered partial → "tent kit: need 2 branch + 1 cloth (+ 1 other
+possible)"; undiscovered partials → "N possible recipes — add more
+ingredients" (preserves discovery without spoiling). Closes the
+multi-of-same-item recipe trial-and-error gap. **DEV MODE button** on
+title screen — dashed border + muted color (reads as debug
+affordance); click sets `localStorage['dustfall.devMode']` + clears
+save + reloads → boot applies starter loadout. Regular NEW GAME
+explicitly clears the flag → starts EMPTY (Tuning.DEBUG_STARTER_LOADOUT
+flipped false default). Three paths: NEW GAME (empty), CONTINUE
+(save), DEV MODE (debug). 7 files; no schema bump.
+
+**Prior milestone**: Session AAU — Salvage panel polish from playtest
 feedback. Four user-reported issues fixed: (1) panels too small +
 square → 0.45×0.70×0.20 taller-rectangular access-panel shape per
 new Tuning.SALVAGE_PANEL_SIZE_*; (2) panels stuck on hulls clipping

@@ -16,7 +16,7 @@ export const Tuning = {
 
   // Debug — flip back to false before any "real" play test.
   GOD_MODE: true,                    // never dies; die() floors stats instead
-  DEBUG_STARTER_LOADOUT: true,       // II — spawn with ample crafting/cooking materials
+  DEBUG_STARTER_LOADOUT: false,      // AAV — flipped to false; regular NEW GAME starts empty. DEV MODE title-menu button sets the localStorage flag to override and apply the starter loadout for testing.
   DEBUG_UNLIMITED_STAMINA: true,     // JJ-2 — skip sprint stamina drain so testing isn't gated on rest
 
   // Day/night
@@ -633,6 +633,14 @@ export const Tuning = {
   // perceiving it as "instant pop."
   SALVAGE_PANEL_DOOR_OPEN_LERP: 3.0,
   SALVAGE_NOISE_MULTIPLIER_DURING_PRY: 1.3, // sandworm detection radius boost while prying
+  // AAV — inventory size (slot counts). Hotbar is the 4 numbered slots
+  // visible at the screen bottom; backpack is the larger overflow grid
+  // shown in the inventory overlay (TAB-key). Pre-AAV was 4+10=14
+  // total; AAV bumps backpack to 20 (5-col × 4-row grid) so the
+  // player has room to carry diverse loot from the iterated salvage
+  // system without constant inventory thrashing.
+  HOTBAR_SLOT_COUNT: 4,
+  BACKPACK_SLOT_COUNT: 20,
   // AAS — electrical-flicker glow on panel open. A small amber PointLight
   // ignites in the cavity when the door pries open, flickers via two
   // detuned sines, then fades over ~3s. Spec: peak intensity, fade

@@ -323,7 +323,12 @@ ctx.inventory.selectedIdx = 0;
 // II — DEBUG starter loadout for crafting + cooking iteration. Toggle off
 // (Tuning.DEBUG_STARTER_LOADOUT = false) before a "real" playthrough. Stacks
 // fill hotbar slots 2-3 first (branch + cloth) then spill into backpack.
-if (Tuning.DEBUG_STARTER_LOADOUT) {
+// AAV — apply debug starter loadout if either:
+//   - Tuning.DEBUG_STARTER_LOADOUT === true (dev override flag in code), OR
+//   - localStorage['dustfall.devMode'] === 'true' (set by DEV MODE button on title)
+// Regular NEW GAME clears the localStorage flag → empty start.
+const _devModeFlag = typeof localStorage !== 'undefined' && localStorage.getItem('dustfall.devMode') === 'true';
+if (Tuning.DEBUG_STARTER_LOADOUT || _devModeFlag) {
   // Crafting materials — enough for every recipe in craftingMenu.ts plus extra.
   for (let i = 0; i < 6; i++) addItem(ctx.inventory, 'branch');
   for (let i = 0; i < 6; i++) addItem(ctx.inventory, 'cloth');
@@ -457,6 +462,10 @@ const titleOverlay = createTitleOverlay(ctx, {
     //      seed (or use override) + wipe + reload.
     //   3. No save at boot, no seed override → world was auto-rolled this
     //      boot already; just hand off (no reload).
+    //
+    // AAV — regular NEW GAME always clears the devMode flag so the
+    // next boot starts EMPTY. DEV MODE button sets the flag.
+    localStorage.removeItem('dustfall.devMode');
     const wantOverride = seedOverride !== undefined && (seedOverride >>> 0) !== ctx.seed;
     if (wantOverride) {
       localStorage.setItem('dustfall.pendingSeed', String(seedOverride! >>> 0));
@@ -472,6 +481,9 @@ const titleOverlay = createTitleOverlay(ctx, {
       return;
     }
     // Fresh-boot, no override: this world was auto-rolled; play it.
+    // But ALSO ensure devMode flag is cleared if we're in the
+    // auto-rolled path — player may have last clicked DEV MODE
+    // then refreshed; this path is the "play vanilla" intent.
     handoffToGame();
   },
   onContinue: hadSaveAtBoot ? () => {
@@ -486,6 +498,16 @@ const titleOverlay = createTitleOverlay(ctx, {
     }
     handoffToGame();
   } : undefined,
+  // AAV — DEV MODE button. Same NEW GAME reload path but sets a
+  // localStorage flag so the next boot applies the debug starter
+  // loadout. Regular NEW GAME clears this flag → starts empty.
+  onDevMode: (seedOverride?: number) => {
+    localStorage.setItem('dustfall.devMode', 'true');
+    const seed = seedOverride !== undefined ? (seedOverride >>> 0) : Math.floor(Math.random() * 0x100000000) >>> 0;
+    localStorage.setItem('dustfall.pendingSeed', String(seed));
+    if (hadSaveAtBoot) clearSave();
+    location.reload();
+  },
 });
 
 // --- Per-frame tick: order matters ---

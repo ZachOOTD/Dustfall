@@ -1432,6 +1432,18 @@ button.title-new-game:hover {
   letter-spacing: 10px;
 }
 
+/* AAV — DEV MODE button: muted color + dashed border so it reads as a
+ * debug affordance, not a primary action. Same hover lift as NEW GAME. */
+button.title-new-game.title-dev-mode {
+  border-style: dashed;
+  color: rgba(232, 220, 192, 0.55);
+  border-color: rgba(232, 220, 192, 0.35);
+}
+button.title-new-game.title-dev-mode:hover {
+  border-color: rgba(232, 220, 192, 0.75);
+  color: #f0e2c4;
+}
+
 /* AAI — Advanced disclosure under the title buttons (seed entry). */
 .title-advanced {
   margin-top: 24px;

@@ -270,3 +270,80 @@ export function findRecipeById(id: number): Recipe | undefined {
   for (const r of RECIPES) if (r.id === id) return r;
   return undefined;
 }
+
+/** AAV — partial-match recipes for the "you're on the right track" hint
+ *  system in the crafting UI. Returns recipes where the player's current
+ *  inputs are a SUB-MULTISET of the recipe's input multiset (every item
+ *  the player has appears in the recipe with at least the same count;
+ *  no extra items not in the recipe).
+ *
+ *  Empty inputs return [] (otherwise everything would match every recipe).
+ *  Exact matches are EXCLUDED — those are handled by matchRecipes.
+ *
+ *  Use case: player has dropped 1 branch + 1 cloth. A torch recipe
+ *  needs 1 branch + 1 cloth — that's an exact match (matchRecipes).
+ *  A tent_kit needs 3 branch + 2 cloth — player has 1/3 and 1/2,
+ *  partial match. A rope needs 1 cloth + 2 branch — player has 1/1
+ *  but only 1/2 branch — partial match too.
+ *
+ *  UI shows count of partial matches as "X possible recipes — add more
+ *  ingredients" without revealing which (preserves discovery), but if
+ *  ANY partial match is DISCOVERED the UI can name it + show what's
+ *  missing.
+ */
+export function partialMatchRecipes(inputs: RecipeInput[]): Recipe[] {
+  // Aggregate player's current inputs into a Map for fast lookup.
+  const playerCounts = new Map<ItemId, number>();
+  for (const inp of inputs) {
+    if (inp.count > 0) {
+      playerCounts.set(inp.id, (playerCounts.get(inp.id) ?? 0) + inp.count);
+    }
+  }
+  if (playerCounts.size === 0) return [];
+  const totalPlayer = Array.from(playerCounts.values()).reduce((a, b) => a + b, 0);
+  const matches: Recipe[] = [];
+  for (const r of RECIPES) {
+    // Build recipe count map.
+    const recipeCounts = new Map<ItemId, number>();
+    for (const inp of r.inputs) {
+      recipeCounts.set(inp.id, inp.count);
+    }
+    // Check player ⊆ recipe (every player item appears in recipe
+    // with count ≥ player's count; player has no items not in recipe).
+    let isSubset = true;
+    for (const [id, pCount] of playerCounts) {
+      const rCount = recipeCounts.get(id) ?? 0;
+      if (rCount === 0 || pCount > rCount) { isSubset = false; break; }
+    }
+    if (!isSubset) continue;
+    // Exclude exact matches (handled by matchRecipes).
+    const totalRecipe = r.inputs.reduce((a, b) => a + b.count, 0);
+    if (totalPlayer >= totalRecipe) continue;
+    matches.push(r);
+  }
+  return matches;
+}
+
+/** AAV — diff helper for partial-match UI hints. Given the player's
+ *  current inputs + a target recipe, returns the list of (itemId,
+ *  needed-more-count) that the player needs to add to complete it.
+ *  Used for the "tent_kit needs 2 more branch + 1 more cloth" hint
+ *  on DISCOVERED partial matches. */
+export function missingForRecipe(
+  inputs: RecipeInput[],
+  recipe: Recipe,
+): Array<{ id: ItemId; count: number }> {
+  const playerCounts = new Map<ItemId, number>();
+  for (const inp of inputs) {
+    if (inp.count > 0) {
+      playerCounts.set(inp.id, (playerCounts.get(inp.id) ?? 0) + inp.count);
+    }
+  }
+  const missing: Array<{ id: ItemId; count: number }> = [];
+  for (const inp of recipe.inputs) {
+    const have = playerCounts.get(inp.id) ?? 0;
+    const need = inp.count - have;
+    if (need > 0) missing.push({ id: inp.id, count: need });
+  }
+  return missing;
+}

@@ -7,9 +7,13 @@ import type { InventoryState, ItemId, ItemMeta, Slot } from './types.ts';
 import { getItemDef } from './items.ts';
 import { spawnDroppedPickup } from '../pickups/pickups.ts';
 import { playDrop } from '../audio/audio.ts';
+import { Tuning } from '../config/tuning.ts';
 
-const HOTBAR_SLOT_COUNT = 4;
-const BACKPACK_SLOT_COUNT = 10;
+// AAV — slot counts lifted to Tuning. Hotbar stays at 4 (UI is laid
+// out for 4 chip-style slots across the bottom-center). Backpack
+// bumped to 20 for "bigger pack" feedback — 5-column grid × 4 rows.
+const HOTBAR_SLOT_COUNT = Tuning.HOTBAR_SLOT_COUNT;
+const BACKPACK_SLOT_COUNT = Tuning.BACKPACK_SLOT_COUNT;
 
 export function createInventory(): InventoryState {
   const empty = (): Slot => ({ item: null, count: 0 });
