@@ -604,7 +604,7 @@ export const Tuning = {
   // most. Panel = small dark plate with a brighter rim/handle for affordance.
   SALVAGE_PANEL_SIZE_X: 0.32,           // width (m)
   SALVAGE_PANEL_SIZE_Y: 0.24,           // height
-  SALVAGE_PANEL_SIZE_Z: 0.06,           // depth (sticks out from hull)
+  SALVAGE_PANEL_SIZE_Z: 0.15,           // depth (sticks out from hull). AAM-followup #8: bumped 0.06 → 0.15 to match hull wall thickness. Previous 6cm read paper-thin from oblique angles; 15cm reads as a substantial access hatch.
   SALVAGE_PANEL_BODY_HEX: 0x2a2622,     // dark metal plate
   SALVAGE_PANEL_RIM_HEX: 0xa28860,      // warm brass rim — visible affordance
 

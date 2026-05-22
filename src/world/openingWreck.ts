@@ -260,7 +260,10 @@ function makeCockpitWindows(): THREE.Group {
   for (let i = -1; i <= 1; i++) {
     const ang = baseAng + i * 0.40;
     const win = new THREE.Mesh(
-      new THREE.BoxGeometry(0.55, 0.20, 0.05),
+      // AAM-followup #8: depth bumped 0.05 → 0.15 to match HULL_WALL_THICKNESS.
+      // Pre-followup the windows read paper-thin at oblique angles; now they
+      // appear as proper recessed canopy pieces with real depth.
+      new THREE.BoxGeometry(0.55, 0.20, 0.15),
       _windowMat,
     );
     // Position on the hull surface at angle `ang`. In lathe-local space
@@ -309,7 +312,9 @@ function makeBreachPatches(rand: Rng): THREE.Group {
     const y = HULL_LEN * (0.20 + rand() * 0.40);
     const r = profileRadiusAt(y);
     const patch = new THREE.Mesh(
-      new THREE.BoxGeometry(0.5 + rand() * 0.3, 0.4 + rand() * 0.25, 0.10),
+      // AAM-followup #8: depth 0.10 → 0.18 (slightly more than hull
+      // thickness so the patch reads as a sunken rusted-through hole).
+      new THREE.BoxGeometry(0.5 + rand() * 0.3, 0.4 + rand() * 0.25, 0.18),
       _breachMat,
     );
     patch.position.set(Math.cos(ang) * r, y, Math.sin(ang) * r);
@@ -356,7 +361,11 @@ function makeEntranceFragments(rand: Rng): THREE.Group {
     const w = 0.40 + rand() * 0.35;
     const h = 0.30 + rand() * 0.30;
     const frag = new THREE.Mesh(
-      new THREE.BoxGeometry(w, h, 0.05),
+      // AAM-followup #8: depth 0.05 → 0.10. Torn metal plates ARE
+      // realistically thin, but 5cm read paper-thin at oblique angles.
+      // 10cm is still believably thin while having enough depth to
+      // catch shading on the edges.
+      new THREE.BoxGeometry(w, h, 0.10),
       _rustDarkMat,
     );
     frag.position.set(
