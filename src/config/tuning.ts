@@ -636,6 +636,26 @@ export const Tuning = {
   SALVAGE_PANEL_GLOW_FADE_DURATION_S: 3.2,
   SALVAGE_PANEL_GLOW_RANGE_M: 1.2,           // PointLight range — tight to the cavity
   SALVAGE_PANEL_GLOW_COLOR_HEX: 0xff9a40,    // amber, matches fire palette
+  // AAT — salvage condition tiers. Each panel gets one of 3 conditions
+  // deterministically at boot (per id + biome + rand). Conditions affect
+  // pry duration, extract count cap, loot tier, and visual appearance.
+  // Distribution: base 35/50/15 (corroded/standard/pristine); salt-flat
+  // wrecks +20% corroded (water + minerals); dune wrecks +10% pristine
+  // (dry preservation).
+  SALVAGE_CONDITION_PRY_MUL_CORRODED: 0.6,   // easier (rusty hinges give way)
+  SALVAGE_CONDITION_PRY_MUL_STANDARD: 1.0,   // baseline
+  SALVAGE_CONDITION_PRY_MUL_PRISTINE: 1.4,   // harder (sealed, fresh)
+  SALVAGE_CONDITION_MAX_EXTRACTS_CORRODED: 2,  // few survivors of the rot
+  SALVAGE_CONDITION_MAX_EXTRACTS_PRISTINE: 5,  // full panel + premium last component
+  // Distribution roll thresholds (cumulative). Base ordering: pristine
+  // first (15%), then standard (next 50%, cumulative 65%), then
+  // corroded (remaining 35%). Biome biases shift the thresholds.
+  SALVAGE_CONDITION_BASE_PRISTINE_THRESHOLD: 0.15,
+  SALVAGE_CONDITION_BASE_STANDARD_THRESHOLD: 0.65,   // pristine ends, standard ends here
+  SALVAGE_CONDITION_SALT_PRISTINE_THRESHOLD: 0.05,   // salt biome: less pristine
+  SALVAGE_CONDITION_SALT_STANDARD_THRESHOLD: 0.45,   // salt biome: more corroded
+  SALVAGE_CONDITION_DUNE_PRISTINE_THRESHOLD: 0.25,   // dune biome: more pristine
+  SALVAGE_CONDITION_DUNE_STANDARD_THRESHOLD: 0.75,   // dune biome: less corroded
   SALVAGE_PANEL_BODY_HEX: 0x2a2622,     // dark metal plate
   SALVAGE_PANEL_RIM_HEX: 0xa28860,      // warm brass rim — visible affordance
 

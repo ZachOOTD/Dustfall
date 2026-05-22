@@ -18,7 +18,7 @@ import { createBiomeSampler } from './world/biomes.ts';
 import { placePOIs, getAnchorPOIPositions } from './world/poi.ts';
 import { placeProcgenPOIs } from './world/procgenPoi.ts';
 import { placeHeroLandmarks } from './world/heroLandmarks.ts';
-import { createSalvageableRegistry } from './world/salvage.ts';
+import { createSalvageableRegistry, setSalvageBiomesContext } from './world/salvage.ts';
 import { createSky, updateSky } from './world/sky.ts';
 import { updateStats } from './stats/survival.ts';
 import { createHud, updateHud } from './ui/hud.ts';
@@ -130,6 +130,10 @@ const shelter = createShelterRegistry();
 // Biome sampler is independent of terrain heights but derived from the
 // same root seed so the world is fully deterministic.
 const biomes = createBiomeSampler(makeRng(worldSeed + 17));
+// AAT — salvage condition picker needs biome lookups at registerSalvageable
+// time. Wire it once here so the salvage module has access without a
+// signature change to every registerSalvageable caller.
+setSalvageBiomesContext(biomes);
 const terrain = createTerrain(three.scene, physics.world, terrainRand, biomes);
 // HH — the FF LOD ring was removed: its coarse 50m interpolation poked above
 // the chunks' fine detail in dune valleys (D52 superseded). Fog at the

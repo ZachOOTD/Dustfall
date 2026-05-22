@@ -4,7 +4,7 @@ Cumulative state. Rewritten end-to-end at each `/session-end`. A
 reviewer who's never seen the project should be able to read this +
 `CLAUDE.md` + `docs/GDD.md` and understand where Dustfall is.
 
-**Current state**: Session AAS shipped (2026-05-22). 46 sessions
+**Current state**: Session AAT shipped (2026-05-22). 47 sessions
 post-MVP. tsc clean. SAVE_VERSION v10. Working tree dirty pending
 the user's commit.
 
@@ -82,6 +82,26 @@ Fresh-game start (the de-facto Tier 1 — Session W shipped):
     additive per D81.
 
 ---
+
+## What's freshly shipped (Session AAT deltas)
+
+Salvage condition tiers — third polish pass on the AAR salvage
+foundation. 4 files; no new modules; no schema bump. One new D-entry
+(D96).
+
+- **Per-panel condition** (`corroded` / `standard` / `pristine`) set
+  deterministically at registerSalvageable from id + biome + rand.
+  No save field — derives from save-stable inputs (D96 extends D94's
+  "derive from existing counters" rule).
+- **Biome-driven distribution**: salt-flat panels skew corroded (55%
+  vs 35% baseline); dune panels skew pristine (25% vs 15% baseline).
+  Rocky uses base.
+- **Per-condition effects**: pry duration scales (×0.6 / ×1.0 / ×1.4);
+  max extracts (1-2 / kind-default / 5); loot tables shift (corroded
+  downgrades everything; pristine last-extract gets premium bonus);
+  door material variants (heavy rust / weathered iron / cooler steel).
+- **Hover prompt annotation**: condition adjective in the prompt
+  noun, so the player can read pry cost vs reward before committing.
 
 ## What's freshly shipped (Session AAS deltas)
 

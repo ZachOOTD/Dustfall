@@ -1957,3 +1957,30 @@ additivity: louder activities add to other louder activities.
 multiplicative composition. The base movement multiplier IS the
 floor; activities scale ABOVE it.
 **friction-score:** 1
+
+## D96 — Salvage condition derived from save-stable inputs, no schema bump (Session AAT)
+**When**: Session AAT (salvage condition tiers).
+**Why**: New per-panel condition field affects pry duration + loot +
+visuals. Question: persist condition in save (additive v10→v11) or
+derive deterministically from existing save-stable inputs?
+**Picked**: derive. Condition comes from `(id + biome-at-pos + a
+rand() call during registerSalvageable)`. The id is stable per-seed
+(registration order), the biome is stable per-seed (terrain doesn't
+change), and the scatterRand stream is per-seed-deterministic.
+Result: same seed → same condition on every reload. Save format
+stays v10.
+**Considered alternatives**:
+- Additive field on Salvageable + save schema v10→v11. Full
+  fidelity but another migration to track + an additional save
+  field that's purely derivable.
+- Per-condition module-level Map<id, condition>. Same effect but
+  worse — couples the salvage module to the registry size and
+  doesn't survive HMR / hot module replace cleanly.
+**Apply**: pattern extends D94 — "derive cosmetic / deterministic-
+from-seed state from existing inputs, skip the schema bump." Future
+per-entity fields that are seed-stable can use the same dodge.
+Caveat: if condition ever becomes player-mutable (e.g. "weld this
+corroded panel back to standard with scrap") it must move to a save
+field, since player edits aren't seed-derivable. The line is
+"does the player change it?" — no = derive; yes = persist.
+**friction-score:** 1

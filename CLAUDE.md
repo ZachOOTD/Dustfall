@@ -59,7 +59,31 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session AAS — Salvage polish bundle. Three AAR follow-on
+**Last shipped**: Session AAT — Salvage condition tiers (corroded /
+standard / pristine). Each panel rolls one of 3 conditions
+deterministically at boot via `pickCondition(rand, pos)` in
+salvage.ts (per D96 — derive from save-stable inputs, no schema
+bump). Base distribution 35/50/15; salt biome biases corroded (55%);
+dune biases pristine (25%). Module-level `_biomes` singleton wired
+via `setSalvageBiomesContext(biomes)` at boot — no
+registerSalvageable signature changes. Per-condition effects: **pry
+duration** scales ×0.6 / ×1.0 / ×1.4 (corroded easier, pristine
+harder); **max extracts** 1-2 / kind-default / 5; **loot tables**
+shift — corroded `COMPONENT_LOOT_CORRODED` downgrades each entry
+(red_wire→cloth, chip→scrap, bandage_pack→cloth, every tier-down),
+pristine last-extract triggers `COMPONENT_LOOT_PRISTINE_BONUS`
+(scrap_bullet×3 premium ammo bundle); **visual** door material
+variants — corroded heavy rust orange-brown (0x8a4a28), pristine
+cooler steel with faint emissive sheen (0x7a7a82 + 0x080a0e),
+applied in `applyConditionVisuals(panel, condition)` after
+registerSalvageable. Hover prompt annotated — "fuselage (rusted)
+— pry open" / "fuselage — pry open" / "fuselage (pristine) — pry
+open". Progress bar scales correctly via
+`pryDurationMultiplier(condition)`. 10 new Tuning constants
+(SALVAGE_CONDITION_*). D96. 4 files touched; no schema bump (D94/D96
+pattern).
+
+**Prior milestone**: Session AAS — Salvage polish bundle. Three AAR follow-on
 items shipped in one session. **Per-component loot mapping**: new
 `COMPONENT_LOOT` map in interaction.ts replaces AAR's
 `rollWreckLoot`-per-extract (random + opaque) with deterministic lookup

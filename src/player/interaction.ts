@@ -31,6 +31,8 @@ import {
   markSalvageStripped,
   rollWreckLoot,
   shortNameFor,
+  conditionAdjective,
+  type SalvageCondition,
 } from '../world/salvage.ts';
 import { getItemDef } from '../inventory/items.ts';
 import {
@@ -669,12 +671,17 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
       const s = findSalvageableById(ctx.salvageables.list, info.id);
       if (!s) return;
       s.hovered = true;
-      const name = shortNameFor(s.kind);
+      // AAT — annotate the prompt noun with condition adjective so
+      // the player can read the pry cost at a glance. Empty for
+      // standard panels (no decoration); "rusted" / "pristine" else.
+      const baseName = shortNameFor(s.kind);
+      const adj = conditionAdjective(s.condition);
+      const name = adj ? `${baseName} (${adj})` : baseName;
       if (s.salvageRemaining <= 0) {
         ctx.inventory.hover = {
           type: 'salvage',
           distance: info.distance,
-          promptNoun: `${name} (stripped)`,
+          promptNoun: `${name} — stripped`,
           passive: true,
         };
         return;
@@ -691,7 +698,7 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
           ctx.inventory.hover = {
             type: 'salvage',
             distance: info.distance,
-            promptNoun: `${name} (need a scrap bar)`,
+            promptNoun: `${name} — need a scrap bar`,
             passive: true,
           };
           return;
@@ -702,10 +709,13 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
           promptNoun: `${name} — pry open`,
         };
         if (ctx.input.pressed.has('KeyE') && !_salvaging) {
+          // AAT — per-condition pry duration multiplier. Corroded
+          // panels open faster (rusty hinges); pristine resist.
+          const pryMul = pryDurationMultiplier(s.condition);
           _salvaging = {
             salvageableId: s.id,
             startedAt: ctx.time.elapsed,
-            completeAt: ctx.time.elapsed + Tuning.SALVAGE_PANEL_PRY_DURATION_S,
+            completeAt: ctx.time.elapsed + Tuning.SALVAGE_PANEL_PRY_DURATION_S * pryMul,
             mode: 'pry',
           };
           // AAR — metal pry creak. Plays once at pry start; the
@@ -814,7 +824,11 @@ function tickSalvage(ctx: GameContext): void {
     }
   }
   const elapsed = ctx.time.elapsed - c.startedAt;
-  const dur = c.mode === 'pry' ? Tuning.SALVAGE_PANEL_PRY_DURATION_S : SALVAGE_DURATION;
+  // AAT — pry duration scales by condition; compute the same duration
+  // we used to set completeAt so the progress bar fills smoothly to
+  // 100% regardless of condition.
+  const baseDur = c.mode === 'pry' ? Tuning.SALVAGE_PANEL_PRY_DURATION_S : SALVAGE_DURATION;
+  const dur = c.mode === 'pry' ? baseDur * pryDurationMultiplier(s.condition) : baseDur;
   const t01 = Math.min(1, elapsed / dur);
   showSalvageProgress(t01);
   if (ctx.time.elapsed >= c.completeAt) {
@@ -846,6 +860,16 @@ function completePry(ctx: GameContext, s: import('../world/salvage.ts').Salvagea
  *  rollWreckLoot-once-per-extract path which was random + opaque to
  *  the player. Now: "I see a red wire — I get rope. I see a chip — I
  *  get a bullet." */
+/** AAT — per-condition pry duration multiplier. Composed against
+ *  the baseline SALVAGE_PANEL_PRY_DURATION_S. */
+function pryDurationMultiplier(c: SalvageCondition): number {
+  switch (c) {
+    case 'corroded': return Tuning.SALVAGE_CONDITION_PRY_MUL_CORRODED;
+    case 'pristine': return Tuning.SALVAGE_CONDITION_PRY_MUL_PRISTINE;
+    case 'standard': return Tuning.SALVAGE_CONDITION_PRY_MUL_STANDARD;
+  }
+}
+
 const COMPONENT_LOOT: Record<string, { id: ItemId; count?: number }> = {
   red_wire:     { id: 'rope' },
   yellow_wire:  { id: 'cloth', count: 2 },
@@ -854,6 +878,29 @@ const COMPONENT_LOOT: Record<string, { id: ItemId; count?: number }> = {
   scrap_chunk:  { id: 'scrap', count: 2 },
   cloth_scrap:  { id: 'cloth', count: 2 },
   bandage_pack: { id: 'bandage' },
+};
+
+/** AAT — corroded variant of COMPONENT_LOOT. Rusted panels yield
+ *  degraded items: wires → cloth (the insulation rotted off), chips
+ *  → scrap (silicon disintegrated), bandages → cloth (the gauze
+ *  weathered). Reads as "this stuff has been sitting too long." */
+const COMPONENT_LOOT_CORRODED: Record<string, { id: ItemId; count?: number }> = {
+  red_wire:     { id: 'cloth' },               // rope → cloth (degraded)
+  yellow_wire:  { id: 'cloth' },               // cloth×2 → cloth×1 (less)
+  chip:         { id: 'scrap' },               // bullet → scrap (silicon shot)
+  fuse:         { id: 'scrap' },               // bullet → scrap
+  scrap_chunk:  { id: 'scrap' },               // scrap×2 → scrap×1
+  cloth_scrap:  { id: 'cloth' },               // cloth×2 → cloth×1
+  bandage_pack: { id: 'cloth' },               // bandage → cloth (gauze rotted)
+};
+
+/** AAT — pristine bonus loot. Last component on a pristine panel
+ *  upgrades to a premium roll: rare scrap_bullet bundles, or even
+ *  a hero-tier weapon spawn. Player learns "pristine panels are
+ *  worth the longer pry." Applied only to the LAST extract from a
+ *  pristine panel (when salvageRemaining = 1 after decrement = 0). */
+const COMPONENT_LOOT_PRISTINE_BONUS: { id: ItemId; count?: number } = {
+  id: 'scrap_bullet', count: 3,                // mostly ammo bundles
 };
 
 /** AAR + AAS — extract one component from an already-open panel.
@@ -882,8 +929,20 @@ function extractOneComponent(ctx: GameContext, s: import('../world/salvage.ts').
   const compMesh = components[nextIdx];
   const compKind = compMesh.userData.panelComponentKind as string | undefined;
   let entry: { id: ItemId; count?: number };
-  if (compKind && COMPONENT_LOOT[compKind]) {
-    entry = COMPONENT_LOOT[compKind];
+  if (compKind) {
+    // AAT — pick the loot table by condition. Pristine + last-component
+    // gets the bonus upgrade for the "find the rare wreck" beat.
+    const isLastExtract = s.salvageRemaining === 1;
+    if (s.condition === 'pristine' && isLastExtract) {
+      entry = COMPONENT_LOOT_PRISTINE_BONUS;
+    } else if (s.condition === 'corroded' && COMPONENT_LOOT_CORRODED[compKind]) {
+      entry = COMPONENT_LOOT_CORRODED[compKind];
+    } else if (COMPONENT_LOOT[compKind]) {
+      entry = COMPONENT_LOOT[compKind];
+    } else {
+      const fallback = rollWreckLoot(s.kind, Math.random);
+      entry = fallback.length > 0 ? fallback[0] : { id: 'scrap' as const, count: 1 };
+    }
   } else {
     const fallback = rollWreckLoot(s.kind, Math.random);
     entry = fallback.length > 0 ? fallback[0] : { id: 'scrap' as const, count: 1 };

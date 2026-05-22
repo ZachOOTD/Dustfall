@@ -3,6 +3,71 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session AAT — 2026-05-22 — Salvage condition tiers (corroded / standard / pristine) ✓ verify pass
+`verified` — tsc clean. Per-panel condition tier added on top of the
+AAR pry-and-extract foundation. Each panel rolls one of 3 conditions
+deterministically at boot (per id + biome + scatterRand). Conditions
+affect pry duration, max-extract count, loot quality, and visual
+appearance. 4 files touched; no new modules; no schema bump. One new
+D-entry (D96).
+
+**Condition assignment** (D96): `pickCondition(rand, pos)` in
+salvage.ts. Base distribution: 35% corroded / 50% standard / 15%
+pristine. Biome biases (salt corrodes, dune preserves):
+- Salt biome: 55% corroded / 40% standard / 5% pristine
+- Dune biome: 25% corroded / 50% standard / 25% pristine
+- Rocky biome: base (35/50/15)
+
+Module-level `_biomes: BiomeSampler | null` singleton, set via new
+`setSalvageBiomesContext(biomes)` called once at boot from main.ts.
+No registerSalvageable signature change — every existing caller (15+
+across wrecks/poi/megaShip/megaWreck/crashedHull/etc.) still compiles
+unchanged. Condition derives from save-stable inputs (id + biome +
+scatterRand) so it persists across save/load with no schema field
+needed — same pattern as AAR's "derive cosmetic state from existing
+counters" (D94).
+
+**Tunables per condition**:
+- Corroded: pry × 0.6 (0.51s), max extracts = 1-2, loot DOWNGRADED
+- Standard: pry × 1.0 (0.85s, AAR baseline), full extracts, AAR loot
+- Pristine: pry × 1.4 (1.19s), full 5 extracts, last component has
+  bonus loot
+
+**Per-condition loot tables** (`interaction.ts`):
+- `COMPONENT_LOOT` — standard (AAS baseline): red_wire→rope,
+  yellow_wire→cloth×2, chip→scrap_bullet, etc.
+- `COMPONENT_LOOT_CORRODED` — degraded: red_wire→cloth (insulation
+  rotted), chip→scrap (silicon shot), bandage_pack→cloth (gauze
+  rotted), every entry tier-down.
+- `COMPONENT_LOOT_PRISTINE_BONUS` — last extract on a pristine panel
+  upgrades to scrap_bullet×3 (premium ammo bundle).
+
+**Visual differentiation** (`salvage.ts:applyConditionVisuals`):
+- Corroded: door material → heavy rust orange-brown (0x8a4a28)
+- Standard: door material unchanged (AAR weathered iron 0x5a4a3a)
+- Pristine: door material → cooler grey steel (0x7a7a82) + faint
+  emissive (0x080a0e) for "this thing still has power" sheen
+
+**Player-readable prompt annotation**: hover prompt now includes
+condition adjective. "fuselage (rusted) — pry open" / "fuselage —
+pry open" (standard, no decoration) / "fuselage (pristine) — pry
+open". Lets the player judge the pry cost vs reward at a glance
+before committing.
+
+**Progress bar correctness**: tickSalvage scales the displayed
+duration by `pryDurationMultiplier(s.condition)` so the bar still
+fills 0→100% across the actual pry duration regardless of
+condition.
+
+10 new Tuning constants under `SALVAGE_CONDITION_*` (3 pry mults +
+2 extract caps + 6 distribution thresholds).
+
+**Player-visible result**: every wreck in the world now has a
+visible condition. Player can spot "ooh, that's a pristine cargo
+container in the dunes — worth the longer pry for the premium drop"
+or "skip that rusted escape pod in the salt-flats, only cloth in
+there." Wreck-shopping becomes a real activity.
+
 ## Session AAS — 2026-05-22 — Salvage polish bundle: variant interiors + per-component loot + electrical glow ✓ verify pass
 `verified` — tsc clean. Three salvage-polish items closed in one
 session, building on AAR's tactile pry-and-extract foundation. 5 files
