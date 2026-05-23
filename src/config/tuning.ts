@@ -545,12 +545,14 @@ export const Tuning = {
   POI_SCATTER_RADIUS_MAX: 1100,        // m — safely inside chunk band
   // Session ABA — share of procgen POIs that use the new composite
   // wreck system (procgenWreck.ts) vs. the legacy hand-modeled
-  // wreck-kind palette. 0.35 means ~7 of 22 procgen POIs per world
-  // get a procedurally-assembled corvette/freighter; the rest stay on
-  // engine_cluster / fuselage / escape_pod / engine_bell. Start
-  // modest so the new system can be evaluated alongside the proven
-  // legacy palette before ramping up the mix.
-  PROCGEN_COMPOSITE_SHARE: 0.35,
+  // wreck-kind palette. Session ABC bumped 0.35 → 0.50 after the part
+  // vocabulary expanded (3 → 5 hullSegment variants, 2 → 3 wreck classes
+  // with gunship added, breach-patch decoration layer wired into 2 of the
+  // hull variants). At 0.50 ~11 of 22 procgen POIs per world get
+  // composites; the rest stay on legacy engine_cluster / fuselage /
+  // escape_pod / cargo_container. Ramp again past 0.65 once a multi-seed
+  // playtest validates that the expanded variety doesn't read repetitive.
+  PROCGEN_COMPOSITE_SHARE: 0.50,
 
   // AAI — opening-scene anchor (player + opening wreck + companion pod +
   // speeder). Per D83, this position stays seed-stable as a narrative anchor.

@@ -265,6 +265,46 @@ const COCKPIT_VARIANTS: ReadonlyArray<PartBuilder> = [
   },
 ];
 
+// ── Breach-patch decoration helper ───────────────────────────────────
+//
+// Session ABC — adds 1-2 ragged dark patches on the +Z visible flank of a
+// part suggesting impact / battle damage. Each patch is a real-depth box
+// (≥10cm per CLAUDE.md rule 7) tilted at a slight random yaw so it doesn't
+// read as a rectangular sticker. No collider impact (cosmetic only). Called
+// from inside select hullSegment + cockpit variants to add per-seed visual
+// variety without growing the variant count.
+const _breachMat = _hullDarkMat;
+function addBreachPatches(
+  g: THREE.Group,
+  partLength: number,
+  radius: number,
+  rand: Rng,
+  count: number,
+): void {
+  for (let i = 0; i < count; i++) {
+    const w = 0.5 + rand() * 0.7;          // 0.5–1.2m wide
+    const h = 0.3 + rand() * 0.5;          // 0.3–0.8m tall
+    const d = 0.10 + rand() * 0.05;        // 10–15cm depth (rule 7)
+    const patch = new THREE.Mesh(
+      new THREE.BoxGeometry(w, h, d),
+      _breachMat,
+    );
+    // Position on +Z flank, biased to upper half (0.4–0.95 of radius for Y).
+    const px = partLength * (0.15 + rand() * 0.7);
+    const py = radius * (0.40 + rand() * 0.55);
+    const pz = radius * 0.92 + d * 0.5;     // pull patch outward so it pokes through hull skin
+    patch.position.set(px, py, pz);
+    // Slight random rotation in all 3 axes so the patch reads "torn open"
+    // rather than a perfectly-aligned rectangle.
+    patch.rotation.set(
+      (rand() - 0.5) * 0.35,
+      (rand() - 0.5) * 0.45,
+      (rand() - 0.5) * 0.30,
+    );
+    g.add(patch);
+  }
+}
+
 // ── Hull-segment variants ────────────────────────────────────────────
 
 const HULL_SEGMENT_VARIANTS: ReadonlyArray<PartBuilder> = [
@@ -294,6 +334,8 @@ const HULL_SEGMENT_VARIANTS: ReadonlyArray<PartBuilder> = [
         ring.position.set(len * t, r * 0.55, 0);
         g.add(ring);
       }
+      // 50% chance of 1 breach patch on the upper flank.
+      if (rand() < 0.5) addBreachPatches(g, len, r, rand, 1);
       return {
         mesh: g,
         partLength: len,
@@ -331,6 +373,8 @@ const HULL_SEGMENT_VARIANTS: ReadonlyArray<PartBuilder> = [
         plate.position.set(len * t, r * 0.7 + (rand() - 0.5) * r * 0.3, r * 0.9 + 0.06);
         g.add(plate);
       }
+      // 40% chance of 1-2 breach patches between the plates.
+      if (rand() < 0.4) addBreachPatches(g, len, r, rand, 1 + Math.floor(rand() * 2));
       return {
         mesh: g,
         partLength: len,
@@ -371,6 +415,152 @@ const HULL_SEGMENT_VARIANTS: ReadonlyArray<PartBuilder> = [
         partLength: len,
         radius: rEnd,
         panelAnchor: null,                  // taper looks too narrow for a panel
+      };
+    },
+  },
+  // Variant 4 — OPEN TRUSS. Session ABC. Exposed structural frame with
+  // no skin — 4 longitudinal struts at the corners + 3 transverse rings.
+  // Reads as a gutted hull section, the kind of thing that has been
+  // stripped of panels by previous scavengers. No panel anchor (no skin
+  // to weld one to); panel-bearing parts elsewhere on the wreck still
+  // host loot.
+  {
+    build(rand: Rng, prevRadius: number): BuiltPart {
+      const g = new THREE.Group();
+      const len = 2.4 + rand() * 1.0;
+      const r = Math.max(prevRadius * 0.95, 0.85 + rand() * 0.15);
+      const strutR = 0.10;                 // 10cm structural strut radius
+      // 4 longitudinal struts at the corners of a square frame (in YZ).
+      // Y offset shifts the frame up so the bottom struts clear y=0
+      // (matches the cylinder-hull convention of body center at y = r*0.55).
+      const cy = r * 0.55;
+      for (const [sy, sz] of [
+        [+r * 0.55, +r * 0.85],
+        [+r * 0.55, -r * 0.85],
+        [-r * 0.55, +r * 0.85],
+        [-r * 0.55, -r * 0.85],
+      ] as const) {
+        const strut = new THREE.Mesh(
+          new THREE.CylinderGeometry(strutR, strutR, len, 6),
+          _hullDarkMat,
+        );
+        strut.rotation.z = Math.PI / 2;
+        strut.position.set(len * 0.5, cy + sy, sz);
+        g.add(strut);
+      }
+      // 3 transverse rings (square frames in YZ at evenly-spaced X positions).
+      const ringCount = 3;
+      for (let i = 0; i < ringCount; i++) {
+        const t = (i + 0.5) / ringCount;
+        const rx = len * t;
+        // Build the ring from 4 short cross-beams; torus would round-feel
+        // wrong for a square truss frame.
+        for (const [a, b, axis] of [
+          [[+r * 0.55, +r * 0.85], [+r * 0.55, -r * 0.85], 'z'] as const,
+          [[-r * 0.55, +r * 0.85], [-r * 0.55, -r * 0.85], 'z'] as const,
+          [[+r * 0.55, +r * 0.85], [-r * 0.55, +r * 0.85], 'y'] as const,
+          [[+r * 0.55, -r * 0.85], [-r * 0.55, -r * 0.85], 'y'] as const,
+        ]) {
+          const beamLen = axis === 'z' ? Math.abs(a[1] - b[1]) : Math.abs(a[0] - b[0]);
+          const beam = new THREE.Mesh(
+            new THREE.CylinderGeometry(strutR * 0.7, strutR * 0.7, beamLen, 6),
+            _hullDarkMat,
+          );
+          if (axis === 'z') {
+            // Beam runs along Z direction; cylinder long axis defaults to Y,
+            // so rotate it by π/2 around X.
+            beam.rotation.x = Math.PI / 2;
+            beam.position.set(rx, cy + a[0], (a[1] + b[1]) / 2);
+          } else {
+            // Beam runs along Y direction; cylinder already long-axis Y.
+            beam.position.set(rx, cy + (a[0] + b[0]) / 2, a[1]);
+          }
+          g.add(beam);
+        }
+      }
+      // One diagonal cross-brace across the +Z visible face for character.
+      const diagLen = Math.hypot(len, r * 1.1);
+      const diag = new THREE.Mesh(
+        new THREE.CylinderGeometry(strutR * 0.55, strutR * 0.55, diagLen, 6),
+        _rustMat,
+      );
+      diag.position.set(len * 0.5, cy, r * 0.85);
+      diag.rotation.x = Math.PI / 2;
+      diag.rotation.y = Math.atan2(r * 1.1, len);
+      g.add(diag);
+      return {
+        mesh: g,
+        partLength: len,
+        radius: r,
+        panelAnchor: null,                  // no skin = no panel weld site
+      };
+    },
+  },
+  // Variant 5 — FUEL BARRELS. Session ABC. A cluster of 2-3 large
+  // cylindrical tanks strapped on top of a low base, suggesting external
+  // fuel/water/cryo storage. Each tank has a rim torus + one has an
+  // open dark hatch (already-scavenged tank). Tank sides offer a flat
+  // panel anchor.
+  {
+    build(rand: Rng, prevRadius: number): BuiltPart {
+      const g = new THREE.Group();
+      const len = 2.6 + rand() * 1.0;
+      const r = Math.max(prevRadius * 0.95, 0.95 + rand() * 0.15);
+      // Low base plate carrying the tanks.
+      const baseW = len;
+      const baseH = r * 0.30;
+      const baseD = r * 1.6;
+      const base = new THREE.Mesh(
+        new THREE.BoxGeometry(baseW, baseH, baseD),
+        _hullMat,
+      );
+      base.position.set(len * 0.5, baseH * 0.5, 0);
+      g.add(base);
+      // 2-3 tanks along +X.
+      const tankCount = 2 + Math.floor(rand() * 2);
+      const tankR = r * 0.42;
+      const tankH = r * 1.20;
+      const tankSpacing = (len - tankR * 2 * tankCount) / (tankCount + 1) + tankR * 2;
+      let opened = false;                     // ensure exactly one open hatch
+      for (let i = 0; i < tankCount; i++) {
+        const tx = tankR + (i + 0.5) * tankSpacing - tankR;
+        // Tank body — vertical cylinder.
+        const tank = new THREE.Mesh(
+          new THREE.CylinderGeometry(tankR, tankR, tankH, 12),
+          _hullMat,
+        );
+        tank.position.set(tx, baseH + tankH * 0.5, 0);
+        g.add(tank);
+        // Rim torus at top for "tank cap" detail.
+        const rim = new THREE.Mesh(
+          new THREE.TorusGeometry(tankR * 0.95, 0.08, 4, 14),
+          _rustMat,
+        );
+        rim.rotation.x = Math.PI / 2;
+        rim.position.set(tx, baseH + tankH + 0.04, 0);
+        g.add(rim);
+        // Open hatch on top of one tank (already scavenged).
+        if (!opened && (i === tankCount - 1 || rand() < 0.5)) {
+          opened = true;
+          const hatch = new THREE.Mesh(
+            new THREE.CylinderGeometry(tankR * 0.6, tankR * 0.6, 0.12, 10),
+            _hullDarkMat,
+          );
+          hatch.position.set(tx, baseH + tankH + 0.06, 0);
+          g.add(hatch);
+        }
+      }
+      return {
+        mesh: g,
+        partLength: len,
+        radius: r,
+        panelAnchor: {
+          // Anchor on the base side panel (+Z face of base plate), between tanks.
+          x: len * 0.5,
+          y: baseH * 0.5,
+          z: baseD * 0.5,
+          faceYaw: Math.PI / 2,
+        },
       };
     },
   },
@@ -522,7 +712,7 @@ function pickPart(rand: Rng, kind: PartKind): PartBuilder {
 
 // ── Wreck classes (recipes) ──────────────────────────────────────────
 
-export type ProcgenWreckClass = 'corvette' | 'freighter';
+export type ProcgenWreckClass = 'corvette' | 'freighter' | 'gunship';
 
 interface WreckRecipe {
   /** Ordered part kinds. Cockpit goes first (nose end at x=0), tail
@@ -542,6 +732,19 @@ function recipeFor(rand: Rng, cls: ProcgenWreckClass): WreckRecipe {
     const parts: PartKind[] = ['cockpit'];
     for (let i = 0; i < hullCount; i++) parts.push('hullSegment');
     if (hasEngine) parts.push('engineModule');
+    parts.push('tailStub');
+    return { parts, panelCountMin: 1, panelCountMax: 2 };
+  }
+  if (cls === 'gunship') {
+    // Session ABC. 1 cockpit + 1-2 hull + 1-2 engine + 1 tail = 4-6 parts,
+    // 8-14m. Sits between corvette and freighter in scale; distinguished
+    // by GUARANTEED engine cluster (corvette has 70% engine, gunship has
+    // 100% + can stack 2) — reads as a small, engine-heavy fighter.
+    const hullCount = 1 + Math.floor(rand() * 2);     // 1-2
+    const engineCount = 1 + Math.floor(rand() * 2);   // 1-2
+    const parts: PartKind[] = ['cockpit'];
+    for (let i = 0; i < hullCount; i++) parts.push('hullSegment');
+    for (let i = 0; i < engineCount; i++) parts.push('engineModule');
     parts.push('tailStub');
     return { parts, panelCountMin: 1, panelCountMax: 2 };
   }
@@ -664,7 +867,15 @@ export function placeProcgenComposite(
   salvageables: SalvageableRegistry | undefined,
   opts: PlaceProcgenOpts = {},
 ): THREE.Group {
-  const cls: ProcgenWreckClass = opts.cls ?? (rand() < 0.55 ? 'corvette' : 'freighter');
+  // Session ABC — class roulette is now 3-way: 45% corvette, 30% gunship,
+  // 25% freighter. Skews toward smaller silhouettes (cheaper per-mesh) but
+  // keeps freighter as the largest reward when it spawns.
+  const cls: ProcgenWreckClass = opts.cls ?? (() => {
+    const r = rand();
+    if (r < 0.45) return 'corvette';
+    if (r < 0.75) return 'gunship';
+    return 'freighter';
+  })();
   const recipe = recipeFor(rand, cls);
   const { group } = assembleWreck(rand, recipe, cls);
 
@@ -694,10 +905,15 @@ export function placeProcgenComposite(
   // descendants looking for userData.accessPanel; each PART mesh that
   // has one (its own panel from addAccessPanel) becomes its own
   // Salvageable entry. Use the wreck class to pick a thematic
-  // SalvageKind (corvettes are 'fuselage'-themed loot tables;
-  // freighters get 'cargo_container').
+  // SalvageKind. Session ABC — gunships are engine-heavy so map to
+  // 'engine_cluster' (cabling + chip + bullet interior per AAS palette);
+  // corvettes stay 'fuselage' (medium-mix interior); freighters stay
+  // 'cargo_container' (lottery interior).
   if (salvageables) {
-    const salvageKind = cls === 'corvette' ? 'fuselage' : 'cargo_container';
+    const salvageKind =
+      cls === 'corvette' ? 'fuselage' :
+      cls === 'gunship' ? 'engine_cluster' :
+      'cargo_container';
     const seen = new Set<THREE.Object3D>();
     group.traverse((o) => {
       const panel = o.userData.accessPanel;
