@@ -334,8 +334,10 @@ const HULL_SEGMENT_VARIANTS: ReadonlyArray<PartBuilder> = [
         ring.position.set(len * t, r * 0.55, 0);
         g.add(ring);
       }
-      // 50% chance of 1 breach patch on the upper flank.
-      if (rand() < 0.5) addBreachPatches(g, len, r, rand, 1);
+      // Session ABD — 50% → 70% (was reading as ~15% of hulls breached in
+      // a 10-composite seed sweep — too few to sell "scavenged battle
+      // damage" feel). Now ~40% of all ribbed-cylinder hulls show a patch.
+      if (rand() < 0.7) addBreachPatches(g, len, r, rand, 1);
       return {
         mesh: g,
         partLength: len,
@@ -373,8 +375,10 @@ const HULL_SEGMENT_VARIANTS: ReadonlyArray<PartBuilder> = [
         plate.position.set(len * t, r * 0.7 + (rand() - 0.5) * r * 0.3, r * 0.9 + 0.06);
         g.add(plate);
       }
-      // 40% chance of 1-2 breach patches between the plates.
-      if (rand() < 0.4) addBreachPatches(g, len, r, rand, 1 + Math.floor(rand() * 2));
+      // Session ABD — 40% → 60% (see ribbed-cyl rationale). Plated_rect
+      // already supports 1-2 patches per call, so this pushes plate-and-
+      // breach-bearing hulls to ~60% of plated hulls.
+      if (rand() < 0.6) addBreachPatches(g, len, r, rand, 1 + Math.floor(rand() * 2));
       return {
         mesh: g,
         partLength: len,
