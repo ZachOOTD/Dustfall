@@ -51,6 +51,10 @@ const HINTS: Partial<Record<ItemId, string>> = {
   // Session AAR — pry-bar for two-stage salvage. The scrap_bar is the
   // gating tool; without it equipped, salvage panels stay sealed.
   scrap_bar: 'face an old salvage panel on a wreck and hold E to pry the door open — then E again to extract each component inside',
+  // Session ABE — sled mechanic affordances. Players were missing the
+  // rope-stub vs cargo-deck distinction on sleds (QQ era).
+  rope: 'select the rope and LMB-click a sled\'s front stub or a speeder\'s back bar to tie one end — LMB on the same stub later to untie',
+  sled_kit: 'LMB-click to set down a flatbed sled — tie a rope to the front stub, open the cargo deck with E, RMB packs the sled back up when empty',
 };
 
 // Each row is [key label, description]. Updated in UU (LMB-leaning
@@ -66,6 +70,7 @@ const CONTROLS: ReadonlyArray<readonly [string, string]> = [
   ['RMB', 'pack tent / release sled rope'],
   ['E', 'take / open / sleep / mount / read / refill / harvest / cook / salvage'],
   ['Q', 'use selected item (backup)'],
+  ['R', 'reload scrap gun (when equipped)'],
   ['G', 'drop selected item'],
   ['1 – 4 / WHEEL', 'select hotbar slot'],
   ['C', 'open crafting menu'],

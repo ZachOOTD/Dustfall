@@ -21,7 +21,7 @@ import type { ItemId } from '../inventory/types.ts';
 import { damageRaider, getRaiderForCollider } from '../enemies/raider.ts';
 import { damageLizard, getLizardForCollider, knockbackLizard } from '../enemies/lizard.ts';
 import { damageSandWorm, getSandWormForCollider } from '../enemies/sandWorm.ts';
-import { playSwing, playHit, playLizardSquish } from '../audio/audio.ts';
+import { playSwing, playHit, playLizardSquish, playReloadGun } from '../audio/audio.ts';
 
 type WeaponKind = 'melee' | 'ranged' | 'charged';
 
@@ -279,4 +279,54 @@ function dispatchHit(
 /** Returns current crosshair pulse intensity (0..1) — used by HUD/crosshair. */
 export function swingViewKick(): number {
   return _swingViewKick;
+}
+
+/** Session ABE — scrap_gun reload action. Press R while scrap_gun is the
+ *  equipped slot to drain scrap_bullet stacks from the bag and refill
+ *  the gun's slot.meta.ammoRemaining up to maxAmmo. Closes the AAN
+ *  no_ammo-crosshair loop (which signalled empty but offered no bulk
+ *  reload — players had to E-press each bullet individually).
+ *
+ *  Gated on isPlaying — no reload while paused/overlay-open. Runs in
+ *  the main tick after updateCombat; safe to invoke per-frame because
+ *  it short-circuits when R isn't pressed. */
+export function updateReload(ctx: GameContext): void {
+  if (!isPlaying(ctx)) return;
+  if (!ctx.input.pressed.has('KeyR')) return;
+  const slot = ctx.inventory.slots[ctx.inventory.selectedIdx];
+  if (slot.item !== 'scrap_gun') return;
+  const spec = _WEAPON_SPECS['scrap_gun'];
+  if (!spec || spec.maxAmmo === undefined) return;
+  const maxAmmo = spec.maxAmmo;
+  const cur = slot.meta?.ammoRemaining ?? 0;
+  if (cur >= maxAmmo) {
+    ctx.ui.showToast('gun is full');
+    return;
+  }
+  // Drain scrap_bullet stacks across the bag (hotbar slots 0-3, then
+  // backpack 4+) until either the gun is full or no bullets remain.
+  let need = maxAmmo - cur;
+  let loaded = 0;
+  for (const s of ctx.inventory.slots) {
+    if (need <= 0) break;
+    if (s.item !== 'scrap_bullet') continue;
+    const take = Math.min(s.count, need);
+    s.count -= take;
+    if (s.count <= 0) {
+      // Empty stack — clear the slot.
+      s.item = null;
+      s.count = 0;
+      if (s.meta) delete (s as { meta?: unknown }).meta;
+    }
+    loaded += take;
+    need -= take;
+  }
+  if (loaded === 0) {
+    ctx.ui.showToast('no scrap bullets');
+    return;
+  }
+  if (!slot.meta) slot.meta = {};
+  slot.meta.ammoRemaining = cur + loaded;
+  playReloadGun();
+  ctx.ui.showToast(`reloaded (${cur + loaded}/${maxAmmo})`);
 }

@@ -44,6 +44,16 @@ export interface RecipeOutput {
   count: number;
 }
 
+/** Session ABE — recipe category for UI grouping. Persisted nowhere
+ *  (purely a display attribute). New recipes pick the closest fit:
+ *    - 'tool' — wieldable utility items (torch, rope, scrap_bar)
+ *    - 'ammo' — consumable munitions for weapons (scrap_bullet)
+ *    - 'shelter' — placeable home/camp kits (fire, tent, bedroll, …)
+ *    - 'consumable' — health/food items (bandage, cooked meat skewer)
+ *  Order in the right-side panel is tool → ammo → shelter → consumable.
+ */
+export type RecipeCategory = 'tool' | 'ammo' | 'shelter' | 'consumable';
+
 /** A recipe entry. `id` is a stable numeric identifier persisted in
  *  `inventory.discoveredRecipes` — never reuse a retired id, never
  *  renumber. New recipes get the next-highest unused id. */
@@ -56,6 +66,8 @@ export interface Recipe {
   inputs: RecipeInput[];
   /** Output stack. */
   output: RecipeOutput;
+  /** Session ABE — UI category for the right-side recipe list grouping. */
+  category: RecipeCategory;
 }
 
 // ── Seed recipes ──────────────────────────────────────────────────
@@ -75,6 +87,7 @@ export const RECIPES: Recipe[] = [
       { id: 'scrap', count: 1 },
     ],
     output: { id: 'bandage', count: 1 },
+    category: 'consumable',
   },
   {
     id: 2,
@@ -84,6 +97,7 @@ export const RECIPES: Recipe[] = [
       { id: 'scrap', count: 1 },
     ],
     output: { id: 'fire_kit', count: 1 },
+    category: 'shelter',
   },
   {
     id: 3,
@@ -93,6 +107,7 @@ export const RECIPES: Recipe[] = [
       { id: 'branch', count: 2 },
     ],
     output: { id: 'tent_kit', count: 1 },
+    category: 'shelter',
   },
   // Session AA — light sources.
   {
@@ -103,6 +118,7 @@ export const RECIPES: Recipe[] = [
       { id: 'cloth', count: 1 },
     ],
     output: { id: 'torch', count: 1 },
+    category: 'tool',
   },
   {
     id: 5,
@@ -112,6 +128,7 @@ export const RECIPES: Recipe[] = [
       { id: 'cloth', count: 1 },
     ],
     output: { id: 'flashlight', count: 1 },
+    category: 'tool',
   },
   // Session II — wielded skewer.
   {
@@ -122,6 +139,7 @@ export const RECIPES: Recipe[] = [
       { id: 'raw_lizard_meat', count: 1 },
     ],
     output: { id: 'lizard_on_a_stick_raw', count: 1 },
+    category: 'consumable',
   },
   // Session PP — ammo.
   {
@@ -131,6 +149,7 @@ export const RECIPES: Recipe[] = [
       { id: 'scrap', count: 1 },
     ],
     output: { id: 'scrap_bullet', count: 2 },
+    category: 'ammo',
   },
   // Session QQ — sled + rope.
   {
@@ -141,6 +160,7 @@ export const RECIPES: Recipe[] = [
       { id: 'branch', count: 1 },
     ],
     output: { id: 'rope', count: 1 },
+    category: 'tool',
   },
   {
     id: 9,
@@ -151,6 +171,7 @@ export const RECIPES: Recipe[] = [
       { id: 'rope', count: 1 },
     ],
     output: { id: 'sled_kit', count: 1 },
+    category: 'shelter',
   },
   // Session XX — larger enterable shelter tent. Id 10 per D71
   // (never reuse ids 1-9, even if they look unused).
@@ -163,6 +184,7 @@ export const RECIPES: Recipe[] = [
       { id: 'rope', count: 1 },
     ],
     output: { id: 'large_tent_kit', count: 1 },
+    category: 'shelter',
   },
   // Session AAC — craftable home placeables. D71: never reuse 1-10.
   // Bedroll = portable cloth pad. Cheap recipe — early-game accessible.
@@ -174,6 +196,7 @@ export const RECIPES: Recipe[] = [
       { id: 'branch', count: 1 },
     ],
     output: { id: 'bedroll_kit', count: 1 },
+    category: 'shelter',
   },
   // Lantern = standing light source. Scrap + cloth for the globe wrap.
   {
@@ -185,6 +208,7 @@ export const RECIPES: Recipe[] = [
       { id: 'branch', count: 1 },
     ],
     output: { id: 'lantern_kit', count: 1 },
+    category: 'shelter',
   },
   // Locker = wooden chest with metal banding.
   {
@@ -195,6 +219,7 @@ export const RECIPES: Recipe[] = [
       { id: 'branch', count: 2 },
     ],
     output: { id: 'locker_kit', count: 1 },
+    category: 'shelter',
   },
   // Session AAM — grill attachment for a fire. Allows multiple raw
   // items to cook in parallel. companion_pod (Session AAE) was never
@@ -207,6 +232,7 @@ export const RECIPES: Recipe[] = [
       { id: 'branch', count: 2 },
     ],
     output: { id: 'grill_kit', count: 1 },
+    category: 'shelter',
   },
   // Session AAR — scrap bar: heavy iron lever used to pry open salvage
   // access panels. The new tactile salvage flow (D94) requires this
@@ -221,8 +247,28 @@ export const RECIPES: Recipe[] = [
       { id: 'branch', count: 1 },
     ],
     output: { id: 'scrap_bar', count: 1 },
+    category: 'tool',
   },
 ];
+
+/** Session ABE — display order for category sub-headers. Recipes within
+ *  each (craftable / missing) bucket render grouped by category in this
+ *  order. */
+export const CATEGORY_ORDER: ReadonlyArray<RecipeCategory> = [
+  'tool',
+  'ammo',
+  'shelter',
+  'consumable',
+];
+
+/** Session ABE — display label for each category. Used as sub-header
+ *  text within the right-side recipe panel. */
+export const CATEGORY_LABEL: Record<RecipeCategory, string> = {
+  tool: 'TOOLS',
+  ammo: 'AMMO',
+  shelter: 'SHELTER & CAMP',
+  consumable: 'CONSUMABLES',
+};
 
 /** All currently-defined recipe ids. Used by save.ts on v5→v6
  *  migration to seed `discoveredRecipes` with the full set so

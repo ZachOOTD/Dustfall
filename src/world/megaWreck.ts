@@ -1259,6 +1259,21 @@ export function placeMegaWreck(
     p.rotation.y = Math.PI / 2;        // face +X
     registerNested(p, group, 'engine_bell');
   }
+  // Session ABE — 7b. Ground-level secondary panel between the engine
+  // bells. The two exterior bell panels above sit at ~AFT_HALF_H*0.7
+  // (≈7.7m up) — only reachable by climbing the catwalk stairs. This
+  // adds a ground-reachable alternative on the AFT BACK WALL exterior,
+  // centred between the bells, at chest height (y≈1.5m). Players can
+  // walk up to the wreck from the rear and pry this without scaling
+  // the structure. Same 'massive' loot kind as the aft bay panel.
+  {
+    const p = new THREE.Group();
+    const groundY = 1.5;
+    const backWallZ = AFT_ORIGIN_Z + AFT_HALF_L + WALL_THICK + 0.05;
+    p.position.set(0, groundY, backWallZ);
+    p.rotation.y = 0;                  // face +Z (away from hull = outward)
+    registerNested(p, group, 'massive');
+  }
   // 8. Antenna spire atop bridge tower — exterior, climb to reach.
   {
     // Visual antenna spire on the tower roof for the salvage to attach to.

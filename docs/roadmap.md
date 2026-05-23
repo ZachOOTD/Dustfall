@@ -90,5 +90,14 @@ Per the framework's autonomy convention: if a session's verify fails 3x
 or time pressure trips, `/scope-cutter` (or its successor) is authorized
 to cut from this list in order. Top entry cut first.
 
-Currently empty. Populate at the start of each session if the session
-plan has scope risk worth pre-committing cuts for.
+**Session ABE overnight bundle** (5 items, ~5-8h scope, cut order on
+3-strike or wall-clock):
+
+1. **CUT FIRST**: P5 megaWreck catwalk panel reachability — biggest
+   scope of the bundle. Defer to dedicated session if hit.
+2. **CUT SECOND**: P4 crafting categorization — UX polish, can ship
+   as its own session cleanly.
+3. **CUT THIRD**: P3 scrap_gun reload action — useful but not blocking
+   gameplay; the .no_ammo crosshair already signals empty state.
+4. Keep: P1 tutorial coverage gaps (small, high value).
+5. Keep: P2 wind shimmer shader on fabric (atmospheric win, contained).

@@ -763,6 +763,42 @@ export function playBandageUse(): void {
   osc.stop(t + 0.38);
 }
 
+/** Session ABE — scrap_gun reload. Mechanical clack + chamber click.
+ *  Two-stage envelope: hard metal-on-metal clack (highpass noise burst)
+ *  followed by a soft bullet-in-chamber tick (low-pitched click). ~0.45s
+ *  total. */
+export function playReloadGun(): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  // Clack — metal slide hitting frame. Highpass noise burst.
+  const clackSrc = a.ctx.createBufferSource();
+  clackSrc.buffer = a.noiseBuffer;
+  clackSrc.playbackRate.value = 1.6;
+  const clackHp = a.ctx.createBiquadFilter();
+  clackHp.type = 'highpass';
+  clackHp.frequency.value = 1600;
+  const clackEnv = a.ctx.createGain();
+  clackEnv.gain.setValueAtTime(0.0, t);
+  clackEnv.gain.linearRampToValueAtTime(0.18, t + 0.003);
+  clackEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+  clackSrc.connect(clackHp).connect(clackEnv).connect(a.sfx);
+  clackSrc.start(t);
+  clackSrc.stop(t + 0.10);
+  // Chamber tick — short low percussive blip.
+  const tickOsc = a.ctx.createOscillator();
+  tickOsc.type = 'square';
+  tickOsc.frequency.setValueAtTime(180, t + 0.30);
+  tickOsc.frequency.exponentialRampToValueAtTime(90, t + 0.38);
+  const tickEnv = a.ctx.createGain();
+  tickEnv.gain.setValueAtTime(0.0, t + 0.30);
+  tickEnv.gain.linearRampToValueAtTime(0.10, t + 0.31);
+  tickEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.42);
+  tickOsc.connect(tickEnv).connect(a.sfx);
+  tickOsc.start(t + 0.30);
+  tickOsc.stop(t + 0.44);
+}
+
 /** Harvest (cactus snap) — short crackly snap. */
 export function playHarvest(): void {
   const a = getAudioInternals();

@@ -30,6 +30,8 @@ import {
   matchRecipes,
   partialMatchRecipes,
   missingForRecipe,
+  CATEGORY_ORDER,
+  CATEGORY_LABEL,
   type Recipe,
   type RecipeInput,
 } from '../inventory/recipeDiscovery.ts';
@@ -428,20 +430,45 @@ function renderRecipes(): void {
     (canCraft ? craftable : missing).push(recipe);
   }
 
-  if (craftable.length > 0) {
+  // Session ABE — within each (craftable / missing) bucket, group by
+  // category in CATEGORY_ORDER. Sub-headers render between categories
+  // when more than one category has entries in that bucket; single-
+  // category buckets skip the sub-header to avoid noise.
+  const rowsEl = _recipesRowsEl;       // local non-null capture for the closure
+  const renderBucket = (
+    bucket: Recipe[],
+    canCraft: boolean,
+    headerText: string,
+    headerCls: string,
+  ): void => {
+    if (bucket.length === 0) return;
     const h = document.createElement('div');
-    h.className = 'craft-recipes-category';
-    h.textContent = `CRAFTABLE (${craftable.length})`;
-    _recipesRowsEl.appendChild(h);
-    for (const r of craftable) _recipesRowsEl.appendChild(buildRecipeRow(r, true, totals));
-  }
-  if (missing.length > 0) {
-    const h = document.createElement('div');
-    h.className = 'craft-recipes-category missing';
-    h.textContent = `MISSING INGREDIENTS (${missing.length})`;
-    _recipesRowsEl.appendChild(h);
-    for (const r of missing) _recipesRowsEl.appendChild(buildRecipeRow(r, false, totals));
-  }
+    h.className = 'craft-recipes-category' + (headerCls ? ' ' + headerCls : '');
+    h.textContent = `${headerText} (${bucket.length})`;
+    rowsEl.appendChild(h);
+    // Partition by category.
+    const byCat = new Map<string, Recipe[]>();
+    for (const r of bucket) {
+      const arr = byCat.get(r.category) ?? [];
+      arr.push(r);
+      byCat.set(r.category, arr);
+    }
+    const presentCats = CATEGORY_ORDER.filter((c) => byCat.has(c));
+    const showSubHeaders = presentCats.length > 1;
+    for (const cat of presentCats) {
+      if (showSubHeaders) {
+        const sh = document.createElement('div');
+        sh.className = 'craft-recipes-subcategory';
+        sh.textContent = CATEGORY_LABEL[cat];
+        rowsEl.appendChild(sh);
+      }
+      for (const r of byCat.get(cat)!) {
+        rowsEl.appendChild(buildRecipeRow(r, canCraft, totals));
+      }
+    }
+  };
+  renderBucket(craftable, true,  'CRAFTABLE', '');
+  renderBucket(missing,   false, 'MISSING INGREDIENTS', 'missing');
 }
 
 /** AAW — build a single recipe row for the right-side panel. CRAFTABLE

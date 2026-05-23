@@ -32,6 +32,14 @@
 
 import * as THREE from 'three';
 
+// Session ABE — wind shimmer uniforms. updateFabricShaderUniforms
+// (main.ts tick) pushes time.elapsed + perceivedWindStrength to every
+// registered fabric-material shader so the ripple animates and gates.
+// Per-instance shader registration mirrors terrainMaterial.ts's
+// _shaderRefs pattern (D62).
+type FabricShaderRef = { uniforms: Record<string, { value: unknown }> };
+const _shaderRefs = new Set<FabricShaderRef>();
+
 /** Build the patched fabric material. Drop-in replacement for
  *  `new MeshLambertMaterial({ color, side })` on any cloth surface. */
 export function createFabricMaterial(color: number, side?: THREE.Side): THREE.MeshLambertMaterial {
@@ -41,7 +49,11 @@ export function createFabricMaterial(color: number, side?: THREE.Side): THREE.Me
   });
 
   mat.onBeforeCompile = (shader) => {
-    // ── Vertex shader: forward world position to the fragment stage. ──
+    shader.uniforms.uTime = { value: 0 };
+    shader.uniforms.uWindStrength = { value: 0 };
+    _shaderRefs.add(shader as unknown as FabricShaderRef);
+    // ── Vertex shader: forward world position to the fragment stage,
+    //    plus apply a small normal-direction shimmer driven by wind. ──
     // BoxGeometry has identity model rotation at material-build time
     // (the rotation happens later via mesh.rotation), so the world
     // position is recomputed per-frame from the live modelMatrix.
@@ -50,13 +62,29 @@ export function createFabricMaterial(color: number, side?: THREE.Side): THREE.Me
       /* glsl */ `
         #include <common>
         varying vec3 vWorldFabric;
+        uniform float uTime;
+        uniform float uWindStrength;
       `,
     );
     shader.vertexShader = shader.vertexShader.replace(
       '#include <begin_vertex>',
       /* glsl */ `
         #include <begin_vertex>
-        vWorldFabric = (modelMatrix * vec4(position, 1.0)).xyz;
+        vec3 _fabricWorld = (modelMatrix * vec4(position, 1.0)).xyz;
+        vWorldFabric = _fabricWorld;
+
+        // Session ABE — wind shimmer. Sum of two phase-offset sin waves
+        // in world-XZ at ~1m wavelength, driven by uTime, displaces the
+        // vertex along its (model-space) normal. Amplitude scales with
+        // uWindStrength: calm ≈ 0.5cm, storm peak ≈ 4cm. Reads as a
+        // breathing/billowing fabric panel without needing real Verlet
+        // sim. Per-instance variation comes from the world-space input
+        // — different tents at different positions wobble out-of-phase.
+        float _fabRipple =
+          sin(_fabricWorld.x * 6.28 + uTime * 1.7) +
+          sin(_fabricWorld.z * 6.28 * 0.83 + uTime * 1.3 + 0.7);
+        float _fabAmp = mix(0.005, 0.04, clamp(uWindStrength, 0.0, 1.0));
+        transformed += normal * (_fabRipple * _fabAmp * 0.5);
       `,
     );
 
@@ -153,4 +181,20 @@ export function createFabricMaterial(color: number, side?: THREE.Side): THREE.Me
   };
 
   return mat;
+}
+
+/** Session ABE — per-frame update for fabric wind shimmer. Pushes
+ *  `time.elapsed` + the current wind strength (typically clamped from
+ *  `weather.intensity` plus a small calm baseline) to every registered
+ *  fabric-material shader so the ripple animates and gates correctly.
+ *  Called from main.ts after weather + before render. */
+export function updateFabricShaderUniforms(
+  time: number,
+  windStrength: number,
+): void {
+  for (const s of _shaderRefs) {
+    const u = s.uniforms;
+    if (u.uTime) (u.uTime as { value: number }).value = time;
+    if (u.uWindStrength) (u.uWindStrength as { value: number }).value = windStrength;
+  }
 }

@@ -48,12 +48,14 @@ import { updateRaiders, type Raider } from './enemies/raider.ts';
 import { spawnLizardsProcgen, updateLizards } from './enemies/lizard.ts';
 import { spawnSandWorm, sampleSandwormHome, updateSandWorm } from './enemies/sandWorm.ts';
 import { updateWieldAction } from './player/wieldAction.ts';
+import { updateReload } from './player/combat.ts';
 import { createGhostPreview, updateGhostPreview } from './player/ghostPreview.ts';
 import { createViewModel, updateViewModel } from './player/viewModel.ts';
 import { createWeather, updateWeather } from './world/weather.ts';
 import { createAmbientDust, updateAmbientDust } from './world/ambientDust.ts';
 import { createDustMotes, updateDustMotes } from './world/dustMotes.ts';
 import { updateTerrainShaderUniforms } from './world/terrainMaterial.ts';
+import { updateFabricShaderUniforms } from './world/fabricMaterial.ts';
 import { createStormVignette, updateStormVignette } from './world/stormVignette.ts';
 import { createStatVignette, updateStatVignette } from './ui/statVignette.ts';
 import { updateStaminaWobble } from './player/staminaWobble.ts';
@@ -587,6 +589,13 @@ startLoop(ctx, (c, dt) => {
     c.three.camera.position.z,
     c.time.sunHeight,
   );
+  // Session ABE — fabric wind shimmer. Calm baseline 0.10 keeps a
+  // gentle breathing motion even on still days; weather.intensity
+  // pushes amplitude up to the 0.04m shader cap at peak storm.
+  updateFabricShaderUniforms(
+    c.time.elapsed,
+    0.10 + 0.90 * c.weather.intensity,
+  );
   updateStormVignette(c);        // screen-edge tint at peak storm (BB-4)
   updateStatVignette(c);         // WW — cold/thirst tint when stats low
   updateLighting(c, dt);         // sun + lights + sunDir/sunHeight
@@ -614,6 +623,7 @@ startLoop(ctx, (c, dt) => {
   updateInteraction(c, dt);      // raycast hover + E to open/refill/harvest/cook/sleep/etc (UU — pickup-take moved to LMB)
   updateInventoryInput(c, dt);   // 1-4, wheel, Q to use (Q still drives def.onUse as backup)
   updateWieldAction(c, dt);      // UU — sole LMB dispatcher: attack/place/hold_use. Calls updateCombat internally for 'attack' items.
+  updateReload(c);               // ABE — R-key scrap_gun reload (drains scrap_bullet → slot.meta.ammoRemaining)
   updateGhostPreview(c);         // AAA — preview ring + marker at kit deploy position
   updateViewModel(c, dt);        // first-person hands + held item (after camera + combat)
   updateHud(c, dt);              // HUD bars + clock
