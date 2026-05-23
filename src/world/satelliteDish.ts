@@ -22,10 +22,10 @@ import type { Rng } from '../core/rng.ts';
 import type { Terrain } from './terrain.ts';
 import type { SalvageableRegistry } from './salvage.ts';
 import { registerSalvageable } from './salvage.ts';
+import { addAccessPanel } from './wrecks.ts';
 import type { ShelterRegistry } from '../shelter/shelterZones.ts';
 import { addShelterZone } from '../shelter/shelterZones.ts';
 import { makeStaticBox } from '../physics/bodies.ts';
-import { Tuning } from '../config/tuning.ts';
 import { createRustedHullMaterial } from './hullMaterial.ts';
 import { createWeatheredConcreteMaterial } from './concreteMaterial.ts';
 
@@ -92,12 +92,11 @@ const _sandPileMat = new THREE.MeshLambertMaterial({
   color: 0xb89870,            // matches dune sand
   flatShading: true,
 });
-const _panelBodyMat = new THREE.MeshLambertMaterial({
-  color: Tuning.SALVAGE_PANEL_BODY_HEX,
-});
-const _panelRimMat = new THREE.MeshLambertMaterial({
-  color: Tuning.SALVAGE_PANEL_RIM_HEX,
-});
+// Session ABA — _panelBodyMat / _panelRimMat removed. The legacy
+// makeAccessPanel below has been migrated to addAccessPanel (from
+// wrecks.ts) which gives panels hinged doors + interior detail +
+// glow + AAU recess uniformly. The materials are now owned by
+// wrecks.ts.
 
 // Dimensions — tweak here if balancing.
 const BASE_W = 8.0;            // concrete base width (X)
@@ -179,32 +178,16 @@ function makeDishFramework(): THREE.Group {
   return g;
 }
 
-/** Tag a panel mesh as the salvage access panel for this POI. Mirrors
- *  the addAccessPanel pattern in wrecks.ts but inlined so this module
- *  doesn't pull the whole wrecks.ts surface area. */
-function makeAccessPanel(): THREE.Group {
-  const g = new THREE.Group();
-  const body = new THREE.Mesh(
-    new THREE.BoxGeometry(
-      Tuning.SALVAGE_PANEL_SIZE_X,
-      Tuning.SALVAGE_PANEL_SIZE_Y,
-      Tuning.SALVAGE_PANEL_SIZE_Z,
-    ),
-    _panelBodyMat,
-  );
-  g.add(body);
-  const rim = new THREE.Mesh(
-    new THREE.BoxGeometry(
-      Tuning.SALVAGE_PANEL_SIZE_X * 1.1,
-      Tuning.SALVAGE_PANEL_SIZE_Y * 0.18,
-      Tuning.SALVAGE_PANEL_SIZE_Z * 0.4,
-    ),
-    _panelRimMat,
-  );
-  rim.position.set(0, -Tuning.SALVAGE_PANEL_SIZE_Y * 0.42, Tuning.SALVAGE_PANEL_SIZE_Z * 0.35);
-  g.add(rim);
-  return g;
-}
+// Session ABA — legacy `makeAccessPanel` helper deleted. The two panel
+// callsites (basePanel, dishPanel) now use addAccessPanel from
+// wrecks.ts which gives them hinged doors + interior detail + glow +
+// AAU recess uniformly with all other salvage panels in the world.
+// Wrapper-Group pattern: each callsite constructs an empty Group +
+// calls addAccessPanel(wrapper, 0, 0, 0, 1, 0, kind), then positions
+// + rotates the wrapper. The wrapper's local +Z is the panel's
+// outward direction; addAccessPanel recesses the body INTO -Z so the
+// front face sits at the wrapper's origin (flush with the hull
+// surface).
 
 // ── Main entry ───────────────────────────────────────────────────────
 
@@ -819,24 +802,37 @@ export function placeSatelliteDish(
   // when the structure pitches.)
 
   // ── 6. Salvage panels ───────────────────────────────────────────
-  // (A) On the south wall of the base, eye-height.
-  const basePanel = makeAccessPanel();
+  // Session ABA — migrated from legacy makeAccessPanel() (simple
+  // box + horizontal rim, no hinge / interior / loot) to the rich
+  // addAccessPanel() flow. Two panel kinds picked for thematic
+  // interior palettes: basePanel uses 'fuselage' (cabling-heavy —
+  // reads as a satellite control-room access panel); dishPanel uses
+  // 'fuselage' too (electronics inside the dish backing).
+  //
+  // (A) On the south wall (+Z face of the BASE_D-wide base), eye-
+  //     height. Wrapper +Z = base's +Z (no rotation) = outward from
+  //     wall. Position the wrapper at the wall exterior surface so
+  //     the body recesses INTO the wall.
+  const basePanel = new THREE.Group();
+  addAccessPanel(basePanel, 0, 0, 0, 1, 0, 'fuselage');
   basePanel.position.set(
     BASE_W * 0.22,
     baseAnchorY + BASE_H * 0.5 - BASE_WALL_T - 1.0,
-    BASE_D * 0.5 - BASE_WALL_T * 0.5 + Tuning.SALVAGE_PANEL_SIZE_Z * 0.5,
+    BASE_D * 0.5,                  // exterior wall surface; body recesses into wall
   );
-  basePanel.rotation.y = 0;
-  basePanel.userData.accessPanel = basePanel;
   group.add(basePanel);
 
-  // (B) On the back of the dish (only reachable by climbing).
-  const dishPanel = makeAccessPanel();
-  // Position on the BACK (convex side) of the dish at mid-radius —
-  // attach it to the dishPivot so it inherits the tilt.
-  dishPanel.position.set(DISH_R * 0.5, -Tuning.SALVAGE_PANEL_SIZE_Z * 0.5, 0);
-  dishPanel.rotation.set(Math.PI / 2, 0, 0);
-  dishPanel.userData.accessPanel = dishPanel;
+  // (B) On the back (convex side) of the dish, mid-radius. Attached
+  //     to dishPivot so it inherits the dish's tilt. Lathe-local +Y is
+  //     UP from the apex (toward the concave / bowl opening), so the
+  //     CONVEX back faces lathe -Y. Rotation around X by +π/2 takes
+  //     wrapper +Z = (0,0,1) → (0,-1,0) — i.e. dishPivot's -Y direction
+  //     = outward from the convex back surface. Body recesses INTO the
+  //     dish (toward concave side, +Y).
+  const dishPanel = new THREE.Group();
+  addAccessPanel(dishPanel, 0, 0, 0, 1, 0, 'fuselage');
+  dishPanel.position.set(DISH_R * 0.5, 0, 0);
+  dishPanel.rotation.x = Math.PI / 2;
   dishPivot.add(dishPanel);
 
   // ── Position, tilt, and add to scene ─────────────────────────────

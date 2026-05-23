@@ -1067,7 +1067,18 @@ function updatePanelDoors(ctx: GameContext, dt: number): void {
       const next = current + (target - current) * (1 - Math.exp(-k * dt));
       panel.userData.panelDoorAngle = next;
       const door = panel.userData.panelDoor as THREE.Object3D | undefined;
-      if (door) door.rotation.y = next;
+      // Session ABA — bugfix. The hinge in addAccessPanel is at the
+      // panel's LEFT edge (body local -X) following real fuse-box
+      // convention; the door extends to body's +X with the handle on
+      // the right. Three.js's Y-rotation right-hand-rule means a
+      // positive Y rotation around that hinge axis swings the door's
+      // free (handle) edge from +X toward -Z — i.e. INTO the hull.
+      // We want OUTWARD swing (toward +Z, away from the hull surface)
+      // so apply the negative sign here. `panelDoorAngle` /
+      // `panelDoorTarget` stay positive magnitudes; the convention
+      // (positive = outward open) is encoded once at this application
+      // site. All callsites of addAccessPanel inherit the fix.
+      if (door) door.rotation.y = -next;
     }
     // AAS — electrical-flicker glow envelope. While glowElapsed < fade,
     // intensity = peak × fadeFactor × flicker. The flicker is two

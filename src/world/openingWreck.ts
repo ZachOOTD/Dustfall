@@ -39,6 +39,7 @@ import type { GameContext } from '../GameContext.ts';
 import { registerSalvageable } from './salvage.ts';
 import { Tuning } from '../config/tuning.ts';
 import { createRustedHullMaterial } from './hullMaterial.ts';
+import { addAccessPanel } from './wrecks.ts';
 
 // ── Materials ───────────────────────────────────────────────────────
 // Hull uses the procedural rust shader (Session OO) — vertical streaks
@@ -106,12 +107,8 @@ const _emptyCanteenMat = new THREE.MeshLambertMaterial({
 const _scratchMat = new THREE.MeshLambertMaterial({
   color: 0xb8a888,            // chalky off-white — reads on the dark interior wall
 });
-const _panelBodyMat = new THREE.MeshLambertMaterial({
-  color: Tuning.SALVAGE_PANEL_BODY_HEX,
-});
-const _panelRimMat = new THREE.MeshLambertMaterial({
-  color: Tuning.SALVAGE_PANEL_RIM_HEX,
-});
+// Session ABA — _panelBodyMat / _panelRimMat removed; addAccessPanel
+// (wrecks.ts) owns the panel materials uniformly.
 
 // Session AAB godray refs removed in AAJ — the additive light cone read
 // as unrealistic and didn't fit the tone. Natural lighting through the
@@ -382,30 +379,13 @@ function makeEntranceFragments(rand: Rng): THREE.Group {
   return g;
 }
 
-/** Salvage access panel — local copy of the dish/engineBlock pattern. */
-function makeAccessPanel(): THREE.Group {
-  const g = new THREE.Group();
-  const body = new THREE.Mesh(
-    new THREE.BoxGeometry(
-      Tuning.SALVAGE_PANEL_SIZE_X,
-      Tuning.SALVAGE_PANEL_SIZE_Y,
-      Tuning.SALVAGE_PANEL_SIZE_Z,
-    ),
-    _panelBodyMat,
-  );
-  g.add(body);
-  const rim = new THREE.Mesh(
-    new THREE.BoxGeometry(
-      Tuning.SALVAGE_PANEL_SIZE_X * 1.1,
-      Tuning.SALVAGE_PANEL_SIZE_Y * 0.18,
-      Tuning.SALVAGE_PANEL_SIZE_Z * 0.4,
-    ),
-    _panelRimMat,
-  );
-  rim.position.set(0, -Tuning.SALVAGE_PANEL_SIZE_Y * 0.42, Tuning.SALVAGE_PANEL_SIZE_Z * 0.35);
-  g.add(rim);
-  return g;
-}
+// Session ABA — legacy makeAccessPanel deleted; both callsites
+// (panelA on upper hull, panelB on lower flank) migrated to
+// addAccessPanel via the wrapper-Group pattern. The wrapper's lookAt
+// orients its local -Z toward the hull axis (target), so wrapper +Z
+// points OUTWARD from the curved hull surface — matching what
+// addAccessPanel expects for the recess to push the body INTO the
+// hull body.
 
 /** Interior props — ash pile + branch stubs (a long-dead campfire),
  *  tally marks on the cockpit interior wall, an empty canteen on the
@@ -701,9 +681,17 @@ export function makeOpeningWreck(rand: Rng): THREE.Group {
   // AAM-followup #5: panel A moved from straight-up (lathe phi=180°) to
   // upper-right (lathe phi=135°, same side as antenna + windows) so it
   // doesn't float in the off-center skylight gap on the upper-LEFT.
-  const panelA = makeAccessPanel();
+  // Session ABA — migrated to addAccessPanel via wrapper-Group +
+  // lookAt. The wrapper's lookAt(hullAxisPoint) orients its local -Z
+  // toward the hull axis → local +Z = outward from the curved hull
+  // surface. addAccessPanel recesses the body INTO -Z, so body sits
+  // inside the hull and the rim + door + hinge protrude outward.
+  // Place the wrapper AT the hull-surface point (no +Z offset; the
+  // recess inside addAccessPanel handles it).
+  const panelA = new THREE.Group();
+  addAccessPanel(panelA, 0, 0, 0, 1, 0, 'fuselage');
   const panelALatheY = 0.30 * HULL_LEN;
-  const panelAR = profileRadiusAt(panelALatheY) + Tuning.SALVAGE_PANEL_SIZE_Z * 0.4;
+  const panelAR = profileRadiusAt(panelALatheY);
   const panelAAng = Math.PI * 0.25;     // 45° off-axis on the right flank (upper-right)
   panelA.position.set(
     Math.cos(panelAAng) * panelAR,
@@ -716,10 +704,11 @@ export function makeOpeningWreck(rand: Rng): THREE.Group {
 
   // Panel B — recessed on the lower-side flank, mid-body. Suggests a
   // service hatch accessed from outside (player walks around the wreck).
+  const panelB = new THREE.Group();
+  addAccessPanel(panelB, 0, 0, 0, 1, 0, 'fuselage');
   const panelBLatheY = 0.50 * HULL_LEN;
   const panelBR = profileRadiusAt(panelBLatheY);
   const panelBAng = Math.PI * 0.20;  // off-axis right flank
-  const panelB = makeAccessPanel();
   panelB.position.set(
     Math.cos(panelBAng) * panelBR,
     AXIS_Y + Math.sin(panelBAng) * panelBR,

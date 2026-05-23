@@ -28,7 +28,7 @@ import type { SalvageableRegistry } from './salvage.ts';
 import { registerSalvageable } from './salvage.ts';
 import { makeStaticBox } from '../physics/bodies.ts';
 import { Tuning } from '../config/tuning.ts';
-import { placeDebrisField } from './wrecks.ts';
+import { placeDebrisField, addAccessPanel } from './wrecks.ts';
 import { createRustedHullMaterial } from './hullMaterial.ts';
 
 // ── Materials — local copies so this module's palette can drift from
@@ -86,12 +86,8 @@ const _frameRibMat = new THREE.MeshLambertMaterial({
   color: 0x2a2520,           // dark steel ribs sleeving the frame
   flatShading: true,
 });
-const _panelBodyMat = new THREE.MeshLambertMaterial({
-  color: Tuning.SALVAGE_PANEL_BODY_HEX,
-});
-const _panelRimMat = new THREE.MeshLambertMaterial({
-  color: Tuning.SALVAGE_PANEL_RIM_HEX,
-});
+// Session ABA — _panelBodyMat / _panelRimMat removed; addAccessPanel
+// (wrecks.ts) owns the panel materials.
 
 // ── Dimensions — flagship-scale, deliberate (no per-cluster rand).
 // All sizes already pre-multiplied by the CLUSTER_SCALE the prior
@@ -269,31 +265,9 @@ function makeFuelHose(
   );
 }
 
-/** Salvage access panel — local copy of the dish's pattern so the
- *  module is self-contained. */
-function makeEBAccessPanel(): THREE.Group {
-  const g = new THREE.Group();
-  const body = new THREE.Mesh(
-    new THREE.BoxGeometry(
-      Tuning.SALVAGE_PANEL_SIZE_X,
-      Tuning.SALVAGE_PANEL_SIZE_Y,
-      Tuning.SALVAGE_PANEL_SIZE_Z,
-    ),
-    _panelBodyMat,
-  );
-  g.add(body);
-  const rim = new THREE.Mesh(
-    new THREE.BoxGeometry(
-      Tuning.SALVAGE_PANEL_SIZE_X * 1.1,
-      Tuning.SALVAGE_PANEL_SIZE_Y * 0.18,
-      Tuning.SALVAGE_PANEL_SIZE_Z * 0.4,
-    ),
-    _panelRimMat,
-  );
-  rim.position.set(0, -Tuning.SALVAGE_PANEL_SIZE_Y * 0.42, Tuning.SALVAGE_PANEL_SIZE_Z * 0.35);
-  g.add(rim);
-  return g;
-}
+// Session ABA — legacy makeEBAccessPanel deleted; both callsites
+// (panelA on thrust frame, panelB inside bell mouth) migrated to
+// addAccessPanel (wrecks.ts).
 
 // ── Main entry ───────────────────────────────────────────────────────
 
@@ -361,28 +335,36 @@ export function placeEngineBlock(
   group.add(makeFuelHose(hose2Start, hose2End, 1.4));
 
   // ── 5. Salvage panels (2) ────────────────────────────────────────
+  // Session ABA — migrated to addAccessPanel via wrapper-Group pattern.
+  // Panel A uses 'engine_cluster' kind (cabling + chip + wire interior
+  // — reads as engine-bay electronics); panel B uses 'engine_bell'
+  // (bell-themed interior palette).
+  //
   // Panel A — on the +Z (frame's "visible" long-edge) face of the
-  // thrust frame, off-center toward +X. Eye-level once the player walks
-  // up the dune ramp onto the upturned frame.
-  const panelA = makeEBAccessPanel();
+  // thrust frame, off-center toward +X. Wrapper at default rotation
+  // → local +Z = world +Z = outward from frame face. Position wrapper
+  // origin AT the frame surface; body recesses INTO the frame.
+  const panelA = new THREE.Group();
+  addAccessPanel(panelA, 0, 0, 0, 1, 0, 'engine_cluster');
   panelA.position.set(
     FRAME_W * 0.18,
     FRAME_Y,
-    FRAME_D * 0.5 + Tuning.SALVAGE_PANEL_SIZE_Z * 0.5,
+    FRAME_D * 0.5,                            // frame surface; body recesses into frame
   );
-  panelA.userData.accessPanel = panelA;
   group.add(panelA);
   // Panel B — recessed inside the center bell's mouth, ~0.5m below the
-  // rim, facing outward (mounted on the inner wall). Player has to
-  // climb up and peer down into the bell to find this one.
-  const panelB = makeEBAccessPanel();
+  // rim. The panel mounts to the bell's inner wall on the +Z side, so
+  // its outward face should point radially INWARD (toward the bell
+  // axis, world -Z). Rotation: π around Y flips +Z to -Z. Position is
+  // on the inner wall surface; body recesses INTO the wall (+Z).
+  const panelB = new THREE.Group();
+  addAccessPanel(panelB, 0, 0, 0, 1, 0, 'engine_bell');
   panelB.position.set(
     0,
-    NOZZLE_H - 0.5,                          // 0.5m below mouth rim
-    BELL_RIM_R * 0.70,                       // pinned to the inner wall on the +Z side
+    NOZZLE_H - 0.5,                           // 0.5m below mouth rim
+    BELL_RIM_R * 0.70,                        // inner wall on +Z side
   );
-  panelB.rotation.x = -Math.PI / 2;          // face panel outward through the throat
-  panelB.userData.accessPanel = panelB;
+  panelB.rotation.y = Math.PI;                // face -Z (toward bell axis); body recesses +Z (into wall)
   group.add(panelB);
 
   // ── 6. Position, tilt, add to scene ──────────────────────────────

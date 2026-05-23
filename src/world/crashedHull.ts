@@ -49,7 +49,7 @@ import type { SalvageableRegistry } from './salvage.ts';
 import { registerSalvageable } from './salvage.ts';
 import { makeStaticBox } from '../physics/bodies.ts';
 import { Tuning } from '../config/tuning.ts';
-import { placeDebrisField } from './wrecks.ts';
+import { placeDebrisField, addAccessPanel } from './wrecks.ts';
 import { createRustedHullMaterial } from './hullMaterial.ts';
 
 // ── Materials — local copies so this module's palette can drift from
@@ -99,12 +99,8 @@ const _antennaMat = new THREE.MeshLambertMaterial({
 const _windowMat = new THREE.MeshBasicMaterial({
   color: 0x0a0d10,           // dark cockpit window (broken / unlit)
 });
-const _panelBodyMat = new THREE.MeshLambertMaterial({
-  color: Tuning.SALVAGE_PANEL_BODY_HEX,
-});
-const _panelRimMat = new THREE.MeshLambertMaterial({
-  color: Tuning.SALVAGE_PANEL_RIM_HEX,
-});
+// Session ABA — _panelBodyMat / _panelRimMat removed; addAccessPanel
+// (wrecks.ts) owns the panel materials.
 
 // ── Dimensions ──────────────────────────────────────────────────────
 // Hull oriented along local +X (tail at X=0, nose at X=HULL_LEN).
@@ -337,32 +333,10 @@ function makeTailBell(): THREE.Group {
   return g;
 }
 
-/** Salvage access panel — local copy of the dish/engineBlock pattern
- *  so this module is self-contained (doesn't reach into wrecks.ts's
- *  addAccessPanel which has its own conventions). */
-function makeCHAccessPanel(): THREE.Group {
-  const g = new THREE.Group();
-  const body = new THREE.Mesh(
-    new THREE.BoxGeometry(
-      Tuning.SALVAGE_PANEL_SIZE_X,
-      Tuning.SALVAGE_PANEL_SIZE_Y,
-      Tuning.SALVAGE_PANEL_SIZE_Z,
-    ),
-    _panelBodyMat,
-  );
-  g.add(body);
-  const rim = new THREE.Mesh(
-    new THREE.BoxGeometry(
-      Tuning.SALVAGE_PANEL_SIZE_X * 1.1,
-      Tuning.SALVAGE_PANEL_SIZE_Y * 0.18,
-      Tuning.SALVAGE_PANEL_SIZE_Z * 0.4,
-    ),
-    _panelRimMat,
-  );
-  rim.position.set(0, -Tuning.SALVAGE_PANEL_SIZE_Y * 0.42, Tuning.SALVAGE_PANEL_SIZE_Z * 0.35);
-  g.add(rim);
-  return g;
-}
+// Session ABA — legacy makeCHAccessPanel deleted; the two callsites
+// (panelA on top of fuselage, panelB inside bell throat) migrated to
+// addAccessPanel via the wrapper-Group pattern. See wrecks.ts
+// addAccessPanel for the rich hinged-door + interior + glow flow.
 
 // ── Main entry ──────────────────────────────────────────────────────
 
@@ -398,24 +372,35 @@ export function placeCrashedHull(
   group.add(bell);
 
   // ── 3. Salvage panels (2) ──────────────────────────────────────
+  // Session ABA — migrated to addAccessPanel. Wrapper-Group pattern
+  // (see satelliteDish.ts comments). Panel A uses 'fuselage' kind
+  // (cabling-heavy interior — reads as ship-side electronics);
+  // panel B uses 'engine_bell' (bell-themed interior).
+  //
   // Panel A — visible side hatch on the upper-mid hull. After the
   // parent group's roll, this sits eye-height-ish from the dune
-  // approach side.
-  const panelA = makeCHAccessPanel();
-  // Place on the upper hull surface, mid-body. World X = HULL_LEN * 0.55,
-  // upper-Y = HULL_R_MID + small offset, Z = 0 (centered top).
-  panelA.position.set(HULL_LEN * 0.55, HULL_R_MID + Tuning.SALVAGE_PANEL_SIZE_Z * 0.5, 0);
-  panelA.userData.accessPanel = panelA;
+  // approach side. Wrapper at default rotation → local +Z = world
+  // +Z. To make the panel face UP (along world +Y from the hull's
+  // top), rotate the wrapper -π/2 around X so local +Z = world +Y.
+  const panelA = new THREE.Group();
+  addAccessPanel(panelA, 0, 0, 0, 1, 0, 'fuselage');
+  panelA.position.set(HULL_LEN * 0.55, HULL_R_MID, 0);
+  panelA.rotation.x = -Math.PI / 2;     // panel face +Y (up); body recesses INTO hull (-Y)
   group.add(panelA);
   // Panel B — recessed inside the bell throat (climb the hull, peer
   // down into the bell). After the bell.rotation.z = +π/2, the bell's
   // throat is at world (0, 0, 0) and mouth at (-BELL_DEPTH, 0, 0).
   // Place panel B at world X = -BELL_DEPTH * 0.55 (mid-depth), upper
-  // inner wall.
-  const panelB = makeCHAccessPanel();
+  // inner wall (Y > 0). We want the panel FACE pointing radially toward
+  // the bell axis (which is at Y=0 from this position) so a player
+  // peering into the bell from the open end sees the panel. That means
+  // wrapper +Z = -Y (downward, toward axis). Rotation around X by
+  // +π/2 takes local +Z = (0,0,1) → (0,-1,0) — exactly what we want.
+  // Body recesses INTO the wall in wrapper -Z direction = +Y.
+  const panelB = new THREE.Group();
+  addAccessPanel(panelB, 0, 0, 0, 1, 0, 'engine_bell');
   panelB.position.set(-BELL_DEPTH * 0.55, BELL_THROAT_R * 0.45, 0);
-  panelB.rotation.z = Math.PI / 2;        // panel face perpendicular to bell axis
-  panelB.userData.accessPanel = panelB;
+  panelB.rotation.x = Math.PI / 2;     // wrapper +Z → -Y (toward bell axis); body recesses +Y (into wall)
   group.add(panelB);
 
   // ── 4. Position, tilt, add to scene ────────────────────────────

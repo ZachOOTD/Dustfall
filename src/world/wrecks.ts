@@ -354,9 +354,20 @@ export function addAccessPanel(
 
   // ── Hinged door (covers the cavity when closed) ──────────────────
   // The door is parented to a HINGE group offset to the LEFT edge of
-  // the panel. Rotating the hinge group around its local Y axis swings
-  // the door open like a real cabinet door. Door thickness = sz * 0.30
-  // so it reads as a real iron plate, not paper-thin (rule 7).
+  // the panel (body local -X), following real fuse-box convention
+  // (hinge LEFT, handle RIGHT looking at the panel from outside).
+  // Door thickness = sz * 0.30 so it reads as a real iron plate, not
+  // paper-thin (rule 7).
+  //
+  // Session ABA — hinge convention. The hinge axis is +Y; the door
+  // extends to body's +X (handle side). With three.js's right-hand
+  // rule on +Y, a positive Y rotation around the hinge swings the
+  // door's free edge from +X toward -Z (i.e. INTO the hull body).
+  // We want OUTWARD swing (toward +Z, away from the hull surface),
+  // so updatePanelDoors in interaction.ts applies the NEGATIVE of
+  // `panelDoorAngle` to the hinge's `rotation.y`. The state field
+  // stays positive (it's a magnitude); the sign is encoded once at
+  // the application site. Don't change the rotation axis here.
   const hinge = new THREE.Group();
   hinge.position.set(-sx * 0.5, 0, sz * 0.60);   // hinge axis = left edge, slightly proud
   hinge.userData.noCollider = true;
