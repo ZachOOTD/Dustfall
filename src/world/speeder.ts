@@ -765,13 +765,38 @@ export function updateSpeeder(ctx: GameContext, dt: number): void {
     const pulseFloor = Tuning.SPEEDER_JUMP_PULSE_VY * tNorm;
     if (newVy < pulseFloor) newVy = pulseFloor;
   }
-  body.setLinvel({ x: lv.x, y: newVy, z: lv.z }, true);
+  // Session ABA — damp horizontal velocity when not mounted. Without
+  // this, a player-capsule collision (or any external push) gives the
+  // bike a one-way velocity it keeps forever — no friction, no
+  // ground-contact (hover), no rider input to brake. Frame-rate-
+  // independent exponential decay: vNew = v * exp(-rate*dt). At rate
+  // 1.8/s a 3 m/s nudge decays to ~0.4 m/s in 1s and to ~0.05 m/s in
+  // 2s. When mounted, the input-driven setLinvel at line ~874 fully
+  // overrides this anyway, so skip the damping cost.
+  let unmountedDampedVx = lv.x;
+  let unmountedDampedVz = lv.z;
+  if (!s.mounted) {
+    const damp = Math.exp(-Tuning.SPEEDER_UNMOUNTED_LINEAR_DAMP_RATE_PER_S * dt);
+    unmountedDampedVx *= damp;
+    unmountedDampedVz *= damp;
+  }
+  body.setLinvel({ x: unmountedDampedVx, y: newVy, z: unmountedDampedVz }, true);
 
   // ── Cache horizontal speed for HUD / audio.
-  s.speed = Math.hypot(lv.x, lv.z);
+  s.speed = Math.hypot(unmountedDampedVx, unmountedDampedVz);
 
-  // ── If not mounted, nothing else to do (bike just hovers in place).
+  // ── If not mounted, nothing else to do beyond damping ang/lin
+  //    velocity + checking for a mount key-press.
   if (!s.mounted) {
+    // Session ABA — also damp angular velocity (Y-axis only; X+Z are
+    // locked by setEnabledRotations(false, true, false, ...) earlier
+    // in placeSpeeder). A bumped bike that started spinning would
+    // otherwise spin forever. Angular damps faster than linear since
+    // a spinning hover bike looks especially wrong.
+    const angDamp = Math.exp(-Tuning.SPEEDER_UNMOUNTED_ANGULAR_DAMP_RATE_PER_S * dt);
+    const av = body.angvel();
+    body.setAngvel({ x: 0, y: av.y * angDamp, z: 0 }, true);
+
     // Allow mount via E within range.
     const playerPos = ctx.player.body.body.translation();
     const dx = playerPos.x - pos.x;

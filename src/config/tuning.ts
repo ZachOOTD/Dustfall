@@ -208,6 +208,16 @@ export const Tuning = {
   SPEEDER_TURN_LERP: 0.30,              // per-frame lerp toward target ang vel (snappier than linear lerp)
   SPEEDER_LINEAR_DAMP: 0,               // disabled — velocity is fully driven
   SPEEDER_ANGULAR_DAMP: 0,              // disabled — angvel is fully driven
+  // Session ABA — UNMOUNTED damping. Body-friction-free hover bike,
+  // when bumped by the player capsule, accumulates linear + angular
+  // velocity it never sheds (Rapier dynamic body with damp=0 +
+  // no ground contact). Apply exponential-decay damping only while
+  // unmounted; mounted state has input-driven setLinvel/setAngvel
+  // that fully override these. Frame-rate-independent: vNew = v *
+  // exp(-rate*dt). Angular damps faster than linear because a
+  // spinning parked bike reads more wrong than a drifting one.
+  SPEEDER_UNMOUNTED_LINEAR_DAMP_RATE_PER_S: 1.8,    // ~0.4 m/s remaining after 1s from 3 m/s bump
+  SPEEDER_UNMOUNTED_ANGULAR_DAMP_RATE_PER_S: 2.5,   // ~0.08 rad/s remaining after 1s from 1 rad/s spin
   // AAL — SPEEDER_HOP_IMPULSE removed; unused since CC-2 (jump replaced with 2-phase pulse/recover).
   SPEEDER_MOUNT_RANGE: 3.5,
   SPEEDER_DISMOUNT_OFFSET: 1.8,

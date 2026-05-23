@@ -44,6 +44,13 @@ const HINTS: Partial<Record<ItemId, string>> = {
   locker_kit: 'LMB-click to place — E to stash gear inside (empty it before packing)',
   // Session AAE — pocketable creature companion.
   companion_pod: 'something alive curled inside a stone egg — LMB-click to set it free, RMB on the creature to call it back',
+  // Session XX — large enterable tent with the operational doorway (AAY).
+  large_tent_kit: 'LMB-click to pitch a walk-in tent — face the front flap and press E to roll the canvas open or closed (closed = full storm shelter)',
+  // Session AAM — grill attachment for parallel cooking.
+  grill_kit: 'face a live fire and LMB-click (or E) to bolt a grill on top — lets you cook up to 4 meats in parallel',
+  // Session AAR — pry-bar for two-stage salvage. The scrap_bar is the
+  // gating tool; without it equipped, salvage panels stay sealed.
+  scrap_bar: 'face an old salvage panel on a wreck and hold E to pry the door open — then E again to extract each component inside',
 };
 
 // Each row is [key label, description]. Updated in UU (LMB-leaning
