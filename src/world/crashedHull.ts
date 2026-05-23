@@ -397,9 +397,17 @@ export function placeCrashedHull(
   // wrapper +Z = -Y (downward, toward axis). Rotation around X by
   // +π/2 takes local +Z = (0,0,1) → (0,-1,0) — exactly what we want.
   // Body recesses INTO the wall in wrapper -Z direction = +Y.
+  //
+  // Session ABB — Y was BELL_THROAT_R * 0.45 ≈ 0.47, but the bell inner
+  // wall at lathe-Y = BELL_DEPTH * 0.55 (interpolated between profile
+  // points THROAT*1.35 @ 0.50 and THROAT*1.45 @ 0.62) sits near
+  // THROAT*1.37 ≈ 1.44m. The panel was floating ~1m inside the bell
+  // cavity, far from the wall it was supposed to be mounted to. Reset
+  // wrapper Y to the bell inner wall radius at this lathe depth so the
+  // body's outward face is flush with the wall.
   const panelB = new THREE.Group();
   addAccessPanel(panelB, 0, 0, 0, 1, 0, 'engine_bell');
-  panelB.position.set(-BELL_DEPTH * 0.55, BELL_THROAT_R * 0.45, 0);
+  panelB.position.set(-BELL_DEPTH * 0.55, BELL_THROAT_R * 1.37, 0);
   panelB.rotation.x = Math.PI / 2;     // wrapper +Z → -Y (toward bell axis); body recesses +Y (into wall)
   group.add(panelB);
 

@@ -357,12 +357,20 @@ export function placeEngineBlock(
   // its outward face should point radially INWARD (toward the bell
   // axis, world -Z). Rotation: π around Y flips +Z to -Z. Position is
   // on the inner wall surface; body recesses INTO the wall (+Z).
+  //
+  // Session ABB — Z was BELL_RIM_R * 0.70 ≈ 1.31m. The bell inner cylinder
+  // at lathe-Y = NOZZLE_H - 0.5 (~0.912 of NOZZLE_H) tapers from innerR
+  // BELL_THROAT_R*1.15 = 1.46 at the throat end to BELL_RIM_R*0.85 = 1.59
+  // at the rim end; at the panel's lathe-Y it sits at ~1.58m. The panel
+  // was floating ~0.27m inside the bell cavity, off the inner wall. Move
+  // wrapper Z to the inner cylinder radius so the body's front face sits
+  // flush with the wall the player sees from the mouth.
   const panelB = new THREE.Group();
   addAccessPanel(panelB, 0, 0, 0, 1, 0, 'engine_bell');
   panelB.position.set(
     0,
     NOZZLE_H - 0.5,                           // 0.5m below mouth rim
-    BELL_RIM_R * 0.70,                        // inner wall on +Z side
+    BELL_RIM_R * 0.85,                        // inner cylinder wall near +Z rim end
   );
   panelB.rotation.y = Math.PI;                // face -Z (toward bell axis); body recesses +Z (into wall)
   group.add(panelB);

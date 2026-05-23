@@ -829,9 +829,18 @@ export function placeSatelliteDish(
   //     wrapper +Z = (0,0,1) → (0,-1,0) — i.e. dishPivot's -Y direction
   //     = outward from the convex back surface. Body recesses INTO the
   //     dish (toward concave side, +Y).
+  //
+  // Session ABB — Y was 0 (apex level), but the dish profile is parabolic
+  // y = (r/R)² · DEPTH, so at radius DISH_R*0.5 the dish back sits at
+  // y = 0.25 · DISH_DEPTH = 0.65m above the apex. With Y=0 the panel
+  // floated ~0.65m below the dish back. Reposition wrapper Y to the
+  // dish surface at the panel radius so the body's front face is flush.
+  const dishPanelT = 0.5;
+  const dishPanelR = DISH_R * dishPanelT;
+  const dishPanelY = dishPanelT * dishPanelT * DISH_DEPTH;
   const dishPanel = new THREE.Group();
   addAccessPanel(dishPanel, 0, 0, 0, 1, 0, 'fuselage');
-  dishPanel.position.set(DISH_R * 0.5, 0, 0);
+  dishPanel.position.set(dishPanelR, dishPanelY, 0);
   dishPanel.rotation.x = Math.PI / 2;
   dishPivot.add(dishPanel);
 
