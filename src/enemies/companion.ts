@@ -21,6 +21,7 @@ import type { GameContext } from '../GameContext.ts';
 import { isPlaying } from '../GameContext.ts';
 import { Tuning } from '../config/tuning.ts';
 import { addItem } from '../inventory/inventory.ts';
+import { alignToTerrain } from '../util/terrainAlign.ts';
 
 // AAO — `huddle` added. At storm peak (`weather.intensity > HUDDLE_THRESHOLD`)
 // the companion overrides any far/close logic and presses to the ground
@@ -67,43 +68,10 @@ export interface Companion {
 
 const _PI2 = Math.PI * 2;
 
-// AAZ-fix-2 — terrain-slope alignment scratch vectors (allocated once,
-// reused per frame to avoid per-tick GC churn). Same pattern as tents:
-// sample terrain at 4 cardinal points, compute the gradient → normal,
-// build a basis with up=normal and forward=projection of the heading
-// direction onto the tilted plane, set the object's quaternion.
-const _alignN = new THREE.Vector3();
-const _alignF = new THREE.Vector3();
-const _alignR = new THREE.Vector3();
-const _alignTmp = new THREE.Vector3();
-const _alignBasis = new THREE.Matrix4();
-
-function alignCompanionToTerrain(
-  obj: THREE.Object3D,
-  terrain: { heightAt: (x: number, z: number) => number },
-  px: number,
-  pz: number,
-  yaw: number,
-  radius: number,
-): void {
-  const hE = terrain.heightAt(px + radius, pz);
-  const hW = terrain.heightAt(px - radius, pz);
-  const hN = terrain.heightAt(px, pz + radius);
-  const hS = terrain.heightAt(px, pz - radius);
-  const dxGrad = (hE - hW) / (2 * radius);
-  const dzGrad = (hN - hS) / (2 * radius);
-  _alignN.set(-dxGrad, 1, -dzGrad).normalize();
-  _alignF.set(Math.sin(yaw), 0, Math.cos(yaw));
-  // Project forward onto plane perpendicular to normal.
-  _alignTmp.copy(_alignN).multiplyScalar(_alignF.dot(_alignN));
-  _alignF.sub(_alignTmp);
-  if (_alignF.lengthSq() < 1e-6) _alignF.set(0, 0, 1);
-  _alignF.normalize();
-  _alignR.crossVectors(_alignN, _alignF).normalize();
-  _alignF.crossVectors(_alignR, _alignN).normalize();
-  _alignBasis.makeBasis(_alignR, _alignN, _alignF);
-  obj.quaternion.setFromRotationMatrix(_alignBasis);
-}
+// Session ABA — alignCompanionToTerrain + its module-level scratch
+// vectors deleted; the shared helper (with the same scratch-vector
+// allocator pattern internally so per-frame callers pay no GC) lives
+// in src/util/terrainAlign.ts now. Imported at top of file.
 
 /** Build the creature's visual. Returns the root group + bodyShell +
  *  per-leg outer pivots + per-leg inner hip pivots so the AI can
@@ -458,7 +426,7 @@ export function updateCompanion(ctx: GameContext, dt: number): void {
   // the ground. The terrain-align helper samples 4 cardinal heights at
   // a body-radius scale and tilts the body so its local +Y matches the
   // terrain normal while local +Z still points along the heading.
-  alignCompanionToTerrain(
+  alignToTerrain(
     c.group,
     ctx.terrain,
     c.pos.x,

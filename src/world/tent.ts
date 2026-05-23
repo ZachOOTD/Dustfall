@@ -29,6 +29,7 @@ import {
 } from '../shelter/shelterZones.ts';
 import { addItem } from '../inventory/inventory.ts';
 import { createFabricMaterial } from './fabricMaterial.ts';
+import { alignToTerrain } from '../util/terrainAlign.ts';
 
 export interface Tent {
   id: number;
@@ -56,33 +57,9 @@ function tag(root: THREE.Object3D, id: number): void {
   });
 }
 
-/** AAZ-fix — terrain-slope alignment helper. Same logic as largeTent.ts.
- *  Could be lifted to a shared module once a third caller wants it. */
-function alignMeshToTerrain(
-  mesh: THREE.Object3D,
-  terrain: { heightAt: (x: number, z: number) => number },
-  pos: THREE.Vector3,
-  yaw: number,
-  radius: number,
-): void {
-  const hE = terrain.heightAt(pos.x + radius, pos.z);
-  const hW = terrain.heightAt(pos.x - radius, pos.z);
-  const hN = terrain.heightAt(pos.x, pos.z + radius);
-  const hS = terrain.heightAt(pos.x, pos.z - radius);
-  const dxGrad = (hE - hW) / (2 * radius);
-  const dzGrad = (hN - hS) / (2 * radius);
-  const normal = new THREE.Vector3(-dxGrad, 1, -dzGrad).normalize();
-  const desiredForward = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
-  const forward = desiredForward
-    .clone()
-    .sub(normal.clone().multiplyScalar(desiredForward.dot(normal)));
-  if (forward.lengthSq() < 1e-6) forward.set(0, 0, 1);
-  forward.normalize();
-  const right = new THREE.Vector3().crossVectors(normal, forward).normalize();
-  forward.crossVectors(right, normal).normalize();
-  const basis = new THREE.Matrix4().makeBasis(right, normal, forward);
-  mesh.quaternion.setFromRotationMatrix(basis);
-}
+// Session ABA — local alignMeshToTerrain deleted; the shared helper
+// lives in src/util/terrainAlign.ts now (lifted from 3 duplicates per
+// D98). Imported at top of file.
 
 /** AAZ-fix — sagged fabric panel helper. Mirrors the same-named helper in
  *  largeTent.ts; subdivided BoxGeometry with vertex displacement along
@@ -320,10 +297,11 @@ export function spawnTentAt(
   mesh.position.copy(pos);
   // AAZ-fix — terrain-slope alignment so the tent tilts with the ground
   // and the guy stakes contact the surface.
-  alignMeshToTerrain(
+  alignToTerrain(
     mesh,
     ctx.terrain,
-    pos,
+    pos.x,
+    pos.z,
     rotationY,
     Tuning.TENT_LENGTH_M * 0.5,
   );

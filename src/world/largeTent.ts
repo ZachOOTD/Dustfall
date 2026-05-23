@@ -39,6 +39,7 @@ import {
 import { addItem } from '../inventory/inventory.ts';
 import { playBandageUse } from '../audio/audio.ts';
 import { createFabricMaterial } from './fabricMaterial.ts';
+import { alignToTerrain } from '../util/terrainAlign.ts';
 
 export interface LargeTent {
   id: number;
@@ -73,56 +74,9 @@ function tag(root: THREE.Object3D, id: number): void {
   });
 }
 
-/** AAY — align a placeable mesh's local up (+Y) to the terrain normal so
- *  it tilts with the slope instead of floating vertically on slanted
- *  ground. Pre-AAY the tent stood straight up regardless of terrain,
- *  leaving rope stakes hanging in midair on the uphill side. Samples 4
- *  cardinal heights at `radius` and computes a finite-difference gradient
- *  → up-vector. The mesh's facing direction (yaw around world Y) is
- *  preserved by projecting the desired forward onto the tilted plane.
- *
- *  Could be lifted into a shared helper for bedroll / locker / fire later;
- *  kept inline here until a second caller wants it. */
-function alignMeshToTerrain(
-  mesh: THREE.Object3D,
-  terrain: { heightAt: (x: number, z: number) => number },
-  pos: THREE.Vector3,
-  yaw: number,
-  radius: number,
-): void {
-  const hE = terrain.heightAt(pos.x + radius, pos.z);
-  const hW = terrain.heightAt(pos.x - radius, pos.z);
-  const hN = terrain.heightAt(pos.x, pos.z + radius);
-  const hS = terrain.heightAt(pos.x, pos.z - radius);
-  // Slope gradient (height-per-meter along each axis).
-  const dxGrad = (hE - hW) / (2 * radius);
-  const dzGrad = (hN - hS) / (2 * radius);
-  // Terrain normal (right-handed, +Y up). When the ground rises in +X,
-  // the normal tilts toward -X.
-  const normal = new THREE.Vector3(-dxGrad, 1, -dzGrad).normalize();
-
-  // Desired forward in world XZ-plane (matches the legacy `rotation.y = yaw`
-  // semantics — local +Z maps to (sin yaw, 0, cos yaw) in world).
-  const desiredForward = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
-  // Project onto the plane perpendicular to `normal` so forward + up are
-  // orthogonal. If the forward is nearly parallel to the normal (steep
-  // cliff), the projection collapses — fall back to world forward.
-  const forward = desiredForward
-    .clone()
-    .sub(normal.clone().multiplyScalar(desiredForward.dot(normal)));
-  if (forward.lengthSq() < 1e-6) forward.set(0, 0, 1);
-  forward.normalize();
-  // Right vector completes the right-handed basis: right = up × forward.
-  const right = new THREE.Vector3().crossVectors(normal, forward).normalize();
-  // Reproject forward = right × up to guarantee orthonormality after the
-  // initial projection's rounding.
-  forward.crossVectors(right, normal).normalize();
-
-  // Apply: rotation built from the three orthonormal basis vectors. We
-  // don't touch position here — caller sets pos before/after.
-  const basis = new THREE.Matrix4().makeBasis(right, normal, forward);
-  mesh.quaternion.setFromRotationMatrix(basis);
-}
+// Session ABA — local alignMeshToTerrain deleted; the shared helper
+// lives in src/util/terrainAlign.ts now (lifted from 3 duplicates per
+// D98). Imported at top of file.
 
 /** AAZ — smooth, deterministic noise for fabric micro-wrinkles. Three
  *  sin waves at incommensurable frequencies produce a natural-looking
@@ -524,10 +478,11 @@ export function spawnLargeTentAt(
   const id = _nextId++;
   const { group: mesh, doorPanel, doorRoll } = makeLargeTentVisual(id);
   mesh.position.copy(pos);
-  alignMeshToTerrain(
+  alignToTerrain(
     mesh,
     ctx.terrain,
-    pos,
+    pos.x,
+    pos.z,
     rotationY,
     Tuning.LARGE_TENT_WIDTH_M * 0.5,
   );
