@@ -92,6 +92,18 @@ export const Tuning = {
   TENT_SHELTER_HALF_Y: 1.4,
   TENT_SHELTER_HALF_Z: 1.8,
   TENT_NEAR_DISTANCE_SQ: 2.0 * 2.0,  // reject deploy within 2m of another tent
+  // AAZ-fix — small-tent visual constants. Geometry mirrors the AAY/AAZ
+  // large tent (peaked ridge along the long axis, sagged side walls,
+  // guy ropes) but scaled down for a one-person pup tent. The shelter
+  // zone above is wider than the visual — the player sleeps NEXT to
+  // the tent, not inside it, so the bubble extends past the mesh.
+  TENT_LENGTH_M: 2.2,                  // along the ridge (long axis)
+  TENT_BASE_WIDTH_M: 1.55,              // base-to-base across (short axis)
+  TENT_RIDGE_HEIGHT_M: 1.15,            // ridge peak height
+  TENT_POLE_PROTRUDE_M: 0.20,           // ridge poles stick this far above the apex
+  TENT_GUY_REACH_M: 0.90,                // distance from base corner to ground stake
+  TENT_ROOF_SAG_M: 0.18,                 // catenary dip at the center of each slanted wall
+  TENT_PATCH_COUNT_UNUSED: 0,            // patch system removed (AAZ-polish)
 
   // Session WW — low-stat warning vignettes (cold = blue, thirst = brown).
   // Cloned from stormVignette pattern but lives in CSS overlay-land
@@ -125,6 +137,28 @@ export const Tuning = {
   // see the storm through the open front." Small tents + fires use the
   // legacy 0 (fully shielded) — D79.
   LARGE_TENT_STORM_DAMPEN: 0.4,
+  // Session AAY — Bedouin-style tent visual constants. The shelter zone
+  // dimensions above are unchanged (gameplay-stable); these drive the
+  // peaked-roof + ridge-pole + guy-rope geometry that replaces the
+  // pre-AAY featureless box.
+  LARGE_TENT_SIDE_WALL_H_M: 1.55,        // vertical wall height before roof slope begins
+  LARGE_TENT_RIDGE_PEAK_Y_M: 2.55,       // ridge apex (above floor) — taller than legacy 2.2 to read as "peaked"
+  LARGE_TENT_POLE_PROTRUDE_M: 0.40,      // how far ridge poles stick up above the apex
+  LARGE_TENT_POLE_RADIUS_M: 0.05,        // ridge / corner pole radius
+  LARGE_TENT_GUY_REACH_M: 1.10,          // distance from tent footprint to ground stake
+  LARGE_TENT_GUY_RADIUS_M: 0.015,        // rope cylinder radius
+  LARGE_TENT_STAKE_H_M: 0.18,            // ground stake length (tip pokes up ~0.12m)
+  LARGE_TENT_PATCH_COUNT: 7,             // weathered patches scattered on the canvas
+  // AAZ — visual polish: off-white canvas + cloth sag + operational doorway.
+  // Sag amounts bumped substantially in the second polish pass — wrinkles
+  // were dropped entirely (set to 0) because they read as noise more than
+  // texture. The catenary droop is now the primary "this is heavy cloth"
+  // signal, so it needs to be large enough to actually deflect the
+  // silhouette in the screenshot.
+  LARGE_TENT_ROOF_SAG_M: 0.32,           // catenary dip at the center of each roof panel — ~16% of the 2m slant length, visibly droopy
+  LARGE_TENT_WALL_BOW_M: 0.14,           // outward bow of the walls at mid-span — visible "pulled between poles" silhouette
+  LARGE_TENT_FABRIC_WRINKLE_M: 0,        // per-vertex wrinkle amplitude — disabled (read as noise, not fabric texture)
+  LARGE_TENT_DOOR_ANIM_SPEED: 2.4,       // door open/close lerp speed (1/s) — full transition in ~0.42s
 
   // Atmosphere
   FOG_NEAR: 25,                       // legacy linear-fog values (kept for reference)
@@ -277,7 +311,19 @@ export const Tuning = {
   // rolling (legs retracted, body rolls) for fast follow at distance;
   // walking (legs out, upright) for close-range. Idle at very close.
   COMPANION_BODY_RADIUS: 0.20,           // ~0.4m diameter creature
-  COMPANION_LEG_LENGTH: 0.14,
+  COMPANION_LEG_LENGTH: 0.14,            // restored to original short value (per user feedback)
+  // AAZ-fix — leg-lift mechanic switched from translating the pivot
+  // upward (legs slid as a unit under the body) to rotating each leg
+  // around its body-attachment hinge. To keep the legs SHORT (per user
+  // request) AND have their tips reach the ground, the attachment is
+  // moved BELOW the body equator: pivot Y = LL·sin(rest) puts the leg
+  // tip on the ground at the resting down-angle. With LL=0.14 and
+  // rest=0.795rad (~46°), the pivot sits ~10cm above ground (=R·0.5)
+  // on the sphere surface, and the leg extends 14cm outward + downward
+  // to touch ground. Pre-AAZ-fix attached at the equator (R=20cm above
+  // ground) where 14cm legs couldn't span the drop — tips floated.
+  COMPANION_LEG_REST_ANGLE_RAD: 0.795,   // down-angle at rest (tip touches ground)
+  COMPANION_LEG_LIFT_ANGLE_RAD: 0.45,    // walk-gait peak lift amplitude (rotation toward horizontal)
   COMPANION_COLOR_HEX: 0xb04030,         // deep coral red — pops against sand
   COMPANION_DARK_COLOR_HEX: 0x6e2818,    // shadow tone on alternating facets
   COMPANION_ROLLING_SPEED_M_S: 5.5,      // sprint follow

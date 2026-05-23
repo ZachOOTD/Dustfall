@@ -59,27 +59,39 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session AAV — Inventory + crafting overhaul + dev
-mode. Four playtest-driven items. **Bigger backpack**:
-`BACKPACK_SLOT_COUNT 10 → 20` (lifted to Tuning); hotbar stays at 4;
-total inventory 14 → 24 with 5×4 grid in the overlay. **Craft drops
-on full bag**: performCraft now spawns overflow output as a dropped
-pickup at the player's feet (~0.8m forward, projected to terrain)
-instead of refunding inputs + aborting. Toast varies by full/partial
-drop. Inputs are still consumed; player keeps progress + discovery.
-**Crafting partial-match suggestions**: new
-`partialMatchRecipes(inputs)` + `missingForRecipe(inputs, recipe)` in
-recipeDiscovery.ts. UI's "no exact match" branch now shows:
-discovered partial → "tent kit: need 2 branch + 1 cloth (+ 1 other
-possible)"; undiscovered partials → "N possible recipes — add more
-ingredients" (preserves discovery without spoiling). Closes the
-multi-of-same-item recipe trial-and-error gap. **DEV MODE button** on
-title screen — dashed border + muted color (reads as debug
-affordance); click sets `localStorage['dustfall.devMode']` + clears
-save + reloads → boot applies starter loadout. Regular NEW GAME
-explicitly clears the flag → starts EMPTY (Tuning.DEBUG_STARTER_LOADOUT
-flipped false default). Three paths: NEW GAME (empty), CONTINUE
-(save), DEV MODE (debug). 7 files; no schema bump.
+**Last shipped**: Session AAY — Visual overhaul pass: tents + fabric
+shader + lantern + companion + grill bug. Multi-iteration polish covering
+the entire placeable-cloth surface plus a couple of long-standing
+bugs. **Large tent**: Bedouin beit-al-sha'ar redesign (peaked ridge,
+off-white canvas, sagged subdivided roof panels, ridge poles,
+interior beam, guy ropes + ground stakes, interior rug, terrain-slope
+tilt). **Operational doorway**: hover entry → "open/close doorway";
+E toggles. Rolled-up canvas flap animates open ↔ closed; closed door
+drops shelter-zone storm dampening to 0 (full enclosure), open
+restores 0.4. New `HoverState.verb` + `InteractHit.subKind` for
+sub-mesh dispatch. **Procedural fabric shader** (new
+`fabricMaterial.ts`): four layered effects — weave cross-hatch,
+mid-scale color variation, sparse stain patches, micro-grain. Drop-in
+`createFabricMaterial(color, side)` replacement for plain
+MeshLambertMaterial on every cloth surface. Mirrors terrainMaterial
+shader pattern. **Small tent rewrite**: same fabric shader + off-white
+canvas + sagged side walls + ridge poles + guy ropes + terrain tilt.
++X gable open as entrance; deploy yaw shifted -π/2 so the open end
+faces the player. Fixed panel-rotation bug (used quaternion alignment
+instead of the wrong `π/2 - SLANT_ANGLE`) + sag-sign flip per side.
+**Lantern**: salvaged-tech power-cell redesign — hand-forged iron
+tripod with rivets, vertical post with red+yellow conduit cables,
+metal cage holding a glowing crystalline core, top cap + carry hook.
+Reads as rustic + sci-fi. **Companion fixes**: new `bodyShell` group
+(rolling rotates around body center, not ground point — no more
+bobbing-into-sand); new per-leg `hipGroup` (legs hinge at body
+attachment instead of sliding under body, attached BELOW equator so
+short legs reach ground); new `alignCompanionToTerrain` (body tilts
+with slope). **Grill kit attach bug**: added `HoverState.entityId`
++ new fire-case branch for grill_kit; works via E and LMB now.
+**Dev mode crafting**: pre-discovers all recipes; clicking any recipe
+row (CRAFTABLE or MISSING) produces output without consuming inputs
+(direct-craft path). 12 files, 1 new module, no schema bump. D97-D100.
 
 **Prior milestone**: Session AAU — Salvage panel polish from playtest
 feedback. Four user-reported issues fixed: (1) panels too small +

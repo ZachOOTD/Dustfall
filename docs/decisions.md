@@ -1984,3 +1984,104 @@ corroded panel back to standard with scrap") it must move to a save
 field, since player edits aren't seed-derivable. The line is
 "does the player change it?" — no = derive; yes = persist.
 **friction-score:** 1
+
+## D97 — Procedural fabric shader via onBeforeCompile patch (Session AAY)
+**When**: AAY tent redesign — needed cloth surfaces to read as fabric,
+not painted cardboard. Considered baked textures vs. shader vs. just
+better Lambert colors.
+**Picked**: shader. New `src/world/fabricMaterial.ts` exports
+`createFabricMaterial(color, side)` — drop-in replacement for
+`MeshLambertMaterial`. Patches the standard material via
+`onBeforeCompile`: vertex shader forwards a world-space varying;
+fragment shader injects weave cross-hatch (2.5cm cycle) + FBM mid-scale
+color variation + stain patches + per-pixel micro-grain. Mirrors the
+`terrainMaterial.ts` pattern (D62) with the same IQ-style hash for
+precision-robust noise at large world coords.
+**Why**: zero bundle cost (no texture files shipped), preserves Lambert
+lighting + fog + shadows, world-space sampling means different tents at
+different positions get free per-instance variation. Bakes textures
+were the alternative — would need a PBR pipeline + memory budget +
+file authoring; not worth it when the procedural version reads well at
+the camera distances Dustfall plays at.
+**Apply**: any new cloth surface (sails, banners, future scavenger-camp
+canopies) should use `createFabricMaterial` instead of plain Lambert.
+Pattern is composable — the four layered effects can be tuned via
+literals at the top of `fabricMaterial.ts` for different cloth kinds
+(e.g. tighter weave for canvas, looser for goat-hair).
+**friction-score:** 1
+
+## D98 — Terrain-slope alignment helper duplicated across 3 callers (Session AAY)
+**When**: AAY companion fix — third copy of `alignMeshToTerrain` /
+`alignCompanionToTerrain` (4-cardinal-sample gradient → terrain
+normal → basis with up=normal, forward=projected heading, set
+quaternion). Already in `tent.ts` and `largeTent.ts`.
+**Picked**: leave inline in all three for now; defer extraction to a
+shared util until a fourth caller wants it.
+**Why**: extracting now is a refactor without a clear payoff — each
+copy is ~30 LOC, the scratch-vector allocation patterns vary slightly
+(tent + largeTent use locals, companion uses module-level for per-
+frame), and the right shape of the shared module isn't obvious yet
+(does it own the vectors? does it allocate per-call? does it accept
+custom radii?). Three duplicate copies is small enough debt to leave;
+four would push it into refactor-worthwhile territory.
+**Apply**: when adding the 4th caller, lift to `src/util/terrainAlign.ts`
+(or similar) with a clear API: `alignToTerrain(obj, terrain, pos,
+yaw, sampleRadius)`. Migrate all callers; update this entry.
+**Considered alternatives**: lift now into a shared util. Rejected
+because (a) no third caller demonstrated a divergent need yet, and
+(b) the existing terrainMaterial / vNormal D62 pattern showed how
+sharing GLSL helpers via duplication is sometimes simpler than a
+shared abstraction.
+**friction-score:** 2
+
+## D99 — HoverState.entityId — generic registry-id passthrough (Session AAY)
+**When**: AAY grill-kit attach bug. `grill_kit.onUse` tried to read
+`(hover as { id?: number }).id` — a TypeScript cast onto a property
+that didn't exist on `HoverState`. Symptom: grill_kit attach silently
+failed because the fire lookup returned undefined.
+**Picked**: add `entityId?: number` to `HoverState`. Set it on every
+fire interaction branch (cook / add_fuel / relight / passive). Item
+`onUse` handlers that need the hovered entity read `hover.entityId`.
+**Why**: the existing fix was a stale cast — the field was needed but
+never declared. Making it a proper optional field surfaces the
+dependency in the type system, prevents the same bug from recurring
+silently, and works for any future onUse handler that needs to act on
+a hovered entity (apply paint to a placed sled, fertilize a cactus,
+upgrade a deployed locker, etc.).
+**Apply**: any new InteractType that an item.onUse handler may act
+upon should set `entityId` in its `interaction.ts` case branch.
+Generic across registries; the consumer reads it without needing to
+know which registry the entity belongs to (it can also check
+`hover.type` or `hover.promptNoun` if needed).
+**friction-score:** 2
+
+## D100 — Companion architecture — body-shell + hip-group decomposition (Session AAY)
+**When**: AAY companion polish — two visual bugs (legs floating flat
+under body; rolling looked like bobbing into sand) traced to the same
+root cause: the body group's origin was at GROUND level, and rolling
+rotated this group → meshes orbited the ground point instead of
+spinning around the body center.
+**Picked**: split the body Group into TWO sub-groups:
+- `bodyShell` (origin at `y=R` inside body group) holds all body
+  meshes at `y=0` relative to its own origin. Rolling rotates the
+  shell — meshes orbit the shell's origin = body center.
+- `hipGroup` (one per leg, inside `legPivot`) rotates around its Z
+  axis to lift the leg around its body attachment. Walk gait modulates
+  hip rotation instead of translating the leg pivot.
+The leg pivots themselves moved to the body surface BELOW the equator
+(at the latitude where short legs at the resting down-angle reach
+the ground), and were recessed ~3cm into the sphere for visual leg-
+body embedment.
+**Why**: separating "rolls around its center" from "presses to ground"
+keeps the two motions independent. Pre-AAY the body group did both,
+which is why rolling looked like bobbing — the rotation pivot was the
+wrong axis. The leg hinge fix is the same principle (a foot hinges at
+the hip, not via whole-leg translation).
+**Apply**: any future radial-symmetric creature (a different
+companion variant, an enemy crab, etc.) should use the same
+body-shell + per-leg hip-group decomposition. The pattern generalizes:
+- Body group: world position + slope alignment
+- Body shell: meshes that roll/spin (rotation around body center)
+- Per-limb pivot: world-positioned at body surface
+- Per-limb hip: rotates to animate the limb via hinge motion
+**friction-score:** 1

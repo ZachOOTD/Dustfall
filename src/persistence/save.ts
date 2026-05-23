@@ -318,7 +318,12 @@ export function saveGameState(ctx: GameContext): { ok: boolean; error?: string }
       tents: ctx.tents.list.map((t) => ({
         id: t.id,
         pos: { x: t.pos.x, y: t.pos.y, z: t.pos.z },
-        rotationY: t.mesh.rotation.y,
+        // AAZ-fix — was t.mesh.rotation.y; mesh quaternion now carries
+        // terrain-tilt as well, so the decomposed Euler.y no longer
+        // matches the pure yaw input. Tent.rotationY is the original
+        // yaw passed into spawnTentAt; round-tripping through it
+        // preserves the exact deploy orientation across save/load.
+        rotationY: t.rotationY,
       })),
       largeTents: ctx.largeTents.list.map((t) => ({
         id: t.id,

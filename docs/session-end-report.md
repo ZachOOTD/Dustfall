@@ -4,9 +4,27 @@ Cumulative state. Rewritten end-to-end at each `/session-end`. A
 reviewer who's never seen the project should be able to read this +
 `CLAUDE.md` + `docs/GDD.md` and understand where Dustfall is.
 
-**Current state**: Session AAV shipped (2026-05-22). 49 sessions
-post-MVP. tsc clean. SAVE_VERSION v10. Working tree dirty pending
-the user's commit.
+**Current state**: Session AAY shipped (2026-05-23). 54 sessions
+post-MVP (AAW + AAX + AAY since last report). tsc + production build
+clean. SAVE_VERSION v10 (unchanged across the three new sessions —
+all derivation-pattern fixes or in-memory state per D94/D96/AAX).
+Working tree dirty pending the user's AAY commit; AAW + AAX already
+committed (`455f3b3`, `fb36bb9`).
+
+**Since last report (AAV → AAY)**: DEV MODE UX overhaul (in-memory
+flag, in-game badge, freeze fix); right-side recipe list in crafting
+menu (CRAFTABLE/MISSING + click-auto-fill); CONTROLS button in pause;
+**big visual overhaul pass** — Bedouin large + small tents (peaked
+ridge, off-white canvas, sagged cloth panels, ridge poles, guy ropes,
+terrain tilt, fabric shader, operational doorway with shelter-zone
+toggle), salvaged-tech lantern (iron tripod + cage + glowing core),
+companion fixes (rolling now actually rolls instead of bobbing into
+sand; legs hinge at body attachment instead of sliding flat), terrain-
+slope alignment on companion + tents, grill-kit attach bug fix
+(HoverState.entityId field). Dev mode crafting upgrades (all recipes
+pre-discovered + free direct-craft on click). D97-D100. 1 new module
+(`fabricMaterial.ts` — procedural cloth shader pattern, drop-in
+replacement for MeshLambertMaterial on any fabric surface).
 
 ---
 

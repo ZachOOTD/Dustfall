@@ -20,9 +20,9 @@ import { findCactusById, harvestCactus } from '../world/cactus.ts';
 import { findLizardById, lootLizard } from '../enemies/lizard.ts';
 import { lootSandWorm } from '../enemies/sandWorm.ts';
 import { findLootContainerById } from '../world/lootContainers.ts';
-import { findFireById, addFuel, relightFire } from '../world/fire.ts';
+import { findFireById, addFuel, relightFire, attachGrillToFire } from '../world/fire.ts';
 import { findTentById } from '../world/tent.ts';
-import { findLargeTentById } from '../world/largeTent.ts';
+import { findLargeTentById, toggleLargeTentDoor } from '../world/largeTent.ts';
 import { findBedrollById } from '../world/bedroll.ts';
 import { findLockerById } from '../world/locker.ts';
 import { findSledById, attachRopeToSled, detachRope } from '../world/sled.ts';
@@ -65,6 +65,10 @@ interface InteractHit {
   id: number;
   registry: 'pickups' | 'waterSources' | 'cacti' | 'lizards' | 'sandWorms' | 'lootContainers' | 'fires' | 'tents' | 'largeTents' | 'bedrolls' | 'lanterns' | 'lockers' | 'salvageables' | 'journals' | 'speeder' | 'sleds' | 'companion';
   distance: number;
+  /** AAZ — optional sub-mesh discriminator. When the hit object's
+   *  userData.interactSubKind is set, it's captured here so case handlers
+   *  can branch within the same registry — e.g. large-tent door vs body. */
+  subKind?: string;
 }
 
 const SALVAGE_DURATION = 1.5;        // legacy fallback; AAR pry uses Tuning.SALVAGE_PANEL_PRY_DURATION_S
@@ -129,12 +133,20 @@ let _pickupSwap: {
 
 function resolveInteractable(obj: THREE.Object3D): InteractHit | null {
   let cur: THREE.Object3D | null = obj;
+  // AAZ — track sub-kind on the way up so a sub-mesh's discriminator wins
+  // over the parent's defaults. The first non-undefined subKind we see
+  // along the walk-up belongs to the leaf-most marker.
+  let subKind: string | undefined;
   while (cur) {
+    if (subKind === undefined) {
+      const sk = cur.userData.interactSubKind as string | undefined;
+      if (sk !== undefined) subKind = sk;
+    }
     const t = cur.userData.interactType as InteractType | undefined;
     const id = cur.userData.interactId as number | undefined;
     const reg = cur.userData.interactRegistry as InteractHit['registry'] | undefined;
     if (t !== undefined && id !== undefined && reg !== undefined) {
-      return { type: t, id, registry: reg, distance: 0 };
+      return { type: t, id, registry: reg, distance: 0, subKind };
     }
     // Legacy pickup tagging
     const pickupId = cur.userData.pickupId as number | undefined;
@@ -437,7 +449,7 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
       if (!f.alive) {
         const selSlot = ctx.inventory.slots[ctx.inventory.selectedIdx];
         if (selSlot.item === 'branch') {
-          ctx.inventory.hover = { type: 'relight', distance: info.distance, promptNoun: 'fire' };
+          ctx.inventory.hover = { type: 'relight', distance: info.distance, promptNoun: 'fire', entityId: f.id };
           if (ctx.input.pressed.has('KeyE')) {
             if (relightFire(f, ctx)) {
               selSlot.count--;
@@ -449,16 +461,51 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
             }
           }
         } else {
-          ctx.inventory.hover = { type: 'relight', distance: info.distance, promptNoun: 'fire (cold — need a branch)' };
+          ctx.inventory.hover = { type: 'relight', distance: info.distance, promptNoun: 'fire (cold — need a branch)', entityId: f.id };
         }
         return;
       }
       // Inspect equipped slot to decide what action this fire offers.
       const selSlot = ctx.inventory.slots[ctx.inventory.selectedIdx];
       const selItem = selSlot.item;
+      // AAZ-fix — grill_kit selected → attach grill prompt. Pre-AAZ-fix
+      // this fell into the "no usable item" branch (passive 'cook' prompt),
+      // and grill_kit.onUse failed to find the fire via a missing
+      // HoverState.entityId. Now the E-key path works directly + the
+      // LMB-click path (wieldAction → onUse) works via hover.entityId.
+      if (selItem === 'grill_kit') {
+        if (f.hasGrill) {
+          ctx.inventory.hover = {
+            type: 'cook',
+            distance: info.distance,
+            promptNoun: 'fire (already has a grill)',
+            entityId: f.id,
+            passive: true,
+          };
+        } else {
+          ctx.inventory.hover = {
+            type: 'cook',
+            distance: info.distance,
+            promptNoun: 'fire',
+            verb: 'attach grill to',
+            entityId: f.id,
+          };
+          if (ctx.input.pressed.has('KeyE')) {
+            attachGrillToFire(ctx, f);
+            // Consume the grill_kit slot — one kit per attachment.
+            selSlot.count--;
+            if (selSlot.count <= 0) {
+              selSlot.item = null;
+              selSlot.count = 0;
+            }
+            ctx.ui.showToast('grill attached');
+          }
+        }
+        return;
+      }
       if (selItem && COOK_MAP[selItem]) {
         // Raw food selected → cook prompt
-        ctx.inventory.hover = { type: 'cook', distance: info.distance, promptNoun: 'fire' };
+        ctx.inventory.hover = { type: 'cook', distance: info.distance, promptNoun: 'fire', entityId: f.id };
         if (ctx.input.pressed.has('KeyE')) {
           // AAM — multi-cook gate. Without grill: max 1 cook on this fire.
           // With grill: max FIRE_GRILL_MAX_PARALLEL_COOKS on this fire.
@@ -489,7 +536,7 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
         }
       } else if (selItem === 'branch') {
         // Branch selected → add fuel prompt
-        ctx.inventory.hover = { type: 'add_fuel', distance: info.distance, promptNoun: 'fire' };
+        ctx.inventory.hover = { type: 'add_fuel', distance: info.distance, promptNoun: 'fire', entityId: f.id };
         if (ctx.input.pressed.has('KeyE')) {
           addFuel(f);
           // Decrement the branch slot
@@ -502,7 +549,7 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
         }
       } else {
         // No usable item — show passive prompt
-        ctx.inventory.hover = { type: 'cook', distance: info.distance, promptNoun: 'fire (hold raw food)' };
+        ctx.inventory.hover = { type: 'cook', distance: info.distance, promptNoun: 'fire (hold raw food)', entityId: f.id };
       }
       return;
     }
@@ -522,9 +569,28 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
       // XX — walk-in shelter tent. Reuses 'sleep' verb so E opens the
       // sleep overlay (identical UX to small tent). RMB pack-up is
       // handled by wieldAction.ts/handleContextAction.
+      //
+      // AAZ — when the hover lands on the door sub-mesh (interactSubKind
+      // === 'door'), branch into the toggle path: prompt shows "open" or
+      // "close" depending on doorOpen state, E flips it. The HoverState
+      // gets a `verb` override since both states share the same
+      // InteractType ('sleep'); the override lets the prompt show the
+      // state-dependent verb instead of the static VERBS['sleep'].
       const t = findLargeTentById(ctx.largeTents.list, info.id);
       if (!t) return;
       t.hovered = true;
+      if (info.subKind === 'door') {
+        ctx.inventory.hover = {
+          type: 'sleep',
+          distance: info.distance,
+          promptNoun: 'doorway',
+          verb: t.doorOpen ? 'close' : 'open',
+        };
+        if (ctx.input.pressed.has('KeyE')) {
+          toggleLargeTentDoor(ctx, t);
+        }
+        return;
+      }
       ctx.inventory.hover = { type: 'sleep', distance: info.distance, promptNoun: 'shelter' };
       if (ctx.input.pressed.has('KeyE')) {
         openSleepOverlay(ctx);

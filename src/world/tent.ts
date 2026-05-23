@@ -1,5 +1,23 @@
 // Placeable tent — created when a tent_kit is used.
 // Provides: a shelter zone + a 'sleep' interactable.
+//
+// AAZ-fix — visual rebuild to match the AAY/AAZ large-tent style. The
+// pre-AAZ-fix small tent was a hand-rolled A-frame with flat BoxGeometry
+// walls + a center pole — it looked like a cardboard prop next to the
+// detailed shelter tent. AAZ-fix gives it:
+//   * Off-white canvas color + the procedural fabric shader
+//     (createFabricMaterial — weave, color variation, stains, micro-grain)
+//   * Catenary-sagged side walls (visible cloth drape between the ridge
+//     and the ground)
+//   * Horizontal ridge pole + two upright end poles + guy ropes to
+//     ground stakes (one per base corner)
+//   * Terrain-slope alignment so it sits flush + the stakes drive in
+//   * Camera-facing deploy rotation (pre-AAZ-fix was random — players
+//     couldn't predict orientation)
+//
+// Gameplay is unchanged: shelter zone dimensions and "sleep next to it"
+// semantics stay the same; the tent is NOT enterable (use the large
+// shelter tent for walk-in).
 
 import * as THREE from 'three';
 import type { GameContext } from '../GameContext.ts';
@@ -10,12 +28,14 @@ import {
   type ShelterZone,
 } from '../shelter/shelterZones.ts';
 import { addItem } from '../inventory/inventory.ts';
+import { createFabricMaterial } from './fabricMaterial.ts';
 
 export interface Tent {
   id: number;
   mesh: THREE.Group;
   shelterZone: ShelterZone;
   pos: THREE.Vector3;
+  rotationY: number;
   hovered: boolean;
 }
 
@@ -36,66 +56,222 @@ function tag(root: THREE.Object3D, id: number): void {
   });
 }
 
+/** AAZ-fix — terrain-slope alignment helper. Same logic as largeTent.ts.
+ *  Could be lifted to a shared module once a third caller wants it. */
+function alignMeshToTerrain(
+  mesh: THREE.Object3D,
+  terrain: { heightAt: (x: number, z: number) => number },
+  pos: THREE.Vector3,
+  yaw: number,
+  radius: number,
+): void {
+  const hE = terrain.heightAt(pos.x + radius, pos.z);
+  const hW = terrain.heightAt(pos.x - radius, pos.z);
+  const hN = terrain.heightAt(pos.x, pos.z + radius);
+  const hS = terrain.heightAt(pos.x, pos.z - radius);
+  const dxGrad = (hE - hW) / (2 * radius);
+  const dzGrad = (hN - hS) / (2 * radius);
+  const normal = new THREE.Vector3(-dxGrad, 1, -dzGrad).normalize();
+  const desiredForward = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
+  const forward = desiredForward
+    .clone()
+    .sub(normal.clone().multiplyScalar(desiredForward.dot(normal)));
+  if (forward.lengthSq() < 1e-6) forward.set(0, 0, 1);
+  forward.normalize();
+  const right = new THREE.Vector3().crossVectors(normal, forward).normalize();
+  forward.crossVectors(right, normal).normalize();
+  const basis = new THREE.Matrix4().makeBasis(right, normal, forward);
+  mesh.quaternion.setFromRotationMatrix(basis);
+}
+
+/** AAZ-fix — sagged fabric panel helper. Mirrors the same-named helper in
+ *  largeTent.ts; subdivided BoxGeometry with vertex displacement along
+ *  the panel's local +Y to produce a catenary droop between supports. */
+function makeSaggedFabricPanel(
+  w: number,
+  thickness: number,
+  d: number,
+  segW: number,
+  segD: number,
+  sagAmount: number,
+  material: THREE.Material,
+): THREE.Mesh {
+  const geo = new THREE.BoxGeometry(w, thickness, d, segW, 1, segD);
+  const positions = geo.attributes.position;
+  for (let i = 0; i < positions.count; i++) {
+    const x = positions.getX(i);
+    const z = positions.getZ(i);
+    const u = x / w + 0.5;
+    const v = z / d + 0.5;
+    const bump = sagAmount * Math.sin(Math.PI * u) * Math.sin(Math.PI * v);
+    positions.setY(i, positions.getY(i) + bump);
+  }
+  positions.needsUpdate = true;
+  geo.computeVertexNormals();
+  return new THREE.Mesh(geo, material);
+}
+
+/** AAZ-fix — small Bedouin-style pup tent visual. Two slanted side walls
+ *  meeting at a horizontal ridge along the long (X) axis, with cloth
+ *  sag, fabric shader, end-cap gables, ridge + end poles, and guy ropes.
+ *  Returns the assembled group; spawnTentAt handles positioning + shadow
+ *  setup + terrain tilt + interaction tagging. */
 function makeTentVisual(): THREE.Group {
   const g = new THREE.Group();
-  const canvasMat = new THREE.MeshLambertMaterial({ color: 0xa89878 });
-  const darkMat = new THREE.MeshLambertMaterial({ color: 0x6a5a48 });
-  const poleMat = new THREE.MeshLambertMaterial({ color: 0x3a2a1a });
+  const L = Tuning.TENT_LENGTH_M;          // along X (ridge axis)
+  const BW = Tuning.TENT_BASE_WIDTH_M;     // base-to-base across Z
+  const RIDGE_Y = Tuning.TENT_RIDGE_HEIGHT_M;
+  const POLE_RISE = Tuning.TENT_POLE_PROTRUDE_M;
+  const POLE_R = 0.035;                    // small pup-tent pole
+  const GUY_REACH = Tuning.TENT_GUY_REACH_M;
+  const GUY_R = 0.012;
+  const STAKE_H = 0.14;
+  const SAG = Tuning.TENT_ROOF_SAG_M;
+  const FABRIC_THICK = 0.03;
 
-  // AAL — fabric thickness via thin BoxGeometry. Pre-AAL the walls were
-  // PlaneGeometry + DoubleSide which made the tent look paper-thin at
-  // oblique angles. 4cm-thick boxes give realistic fabric depth without
-  // a per-side inner-shell pattern (overkill for a small kit-tent).
-  const FABRIC_THICK = 0.04;
+  // Each slanted side spans from (ridge at z=0, y=RIDGE_Y) down to
+  // (base at z=±BW/2, y=0). Slope length + angle drive both the panel
+  // geometry and the side rotation.
+  const HALF_BW = BW * 0.5;
+  const SLANT_LEN = Math.hypot(HALF_BW, RIDGE_Y);
+  const SLANT_ANGLE = Math.atan2(RIDGE_Y, HALF_BW);
 
-  // Two sloped wall panels forming a triangular profile
-  const wallW = 2.0;
-  const wallH = 1.6;
-  const wallTilt = 0.6; // radians from vertical
-  for (const sx of [-1, 1]) {
-    const wall = new THREE.Mesh(
-      new THREE.BoxGeometry(FABRIC_THICK, wallH, wallW),  // thin slab; X = depth into canvas
-      canvasMat,
+  // Materials — same off-white canvas + fabric shader as the large
+  // shelter tent so they read as the same material family.
+  const fabricMat = createFabricMaterial(0xd4c5a8, THREE.DoubleSide);
+  const poleMat = new THREE.MeshLambertMaterial({ color: 0x4a3320 });
+  const ropeMat = new THREE.MeshLambertMaterial({ color: 0x4a3a26 });
+  const stakeMat = new THREE.MeshLambertMaterial({ color: 0x3a2818 });
+
+  // ── Two slanted side walls. Built flat (XZ in panel-local frame),
+  // sagged along Y (downward at the center), then rotated so the
+  // panel's local +Z aligns with the ridge→base slope direction in
+  // world space. The ridge runs along world X; sides slope outward to
+  // ±Z.
+  //
+  // AAZ-fix-2 — was `rotation.x = side * (PI/2 - SLANT_ANGLE)`, which
+  // tilted the panel by ~34° when the slope angle needed ~56° for this
+  // geometry. Result: each panel sat half-way between ridge and base
+  // and the two sides crossed over each other in the middle of the
+  // tent. Replaced with a quaternion that aligns the panel's local +Z
+  // directly to the desired slope unit vector — handles the asymmetric
+  // rotation between +Z and -Z sides cleanly (side=+1 needs ~+α around
+  // +X, side=-1 needs ~+(π-α), both around +X). setFromUnitVectors does
+  // the math for us; local +X stays along the ridge axis as required.
+  const upZ = new THREE.Vector3(0, 0, 1);
+  const sinA = Math.sin(SLANT_ANGLE);
+  const cosA = Math.cos(SLANT_ANGLE);
+  for (const side of [-1, 1]) {
+    // Panel dimensions: X = ridge length, Z = slant length (from ridge to
+    // base), Y = fabric thickness. The sag pushes the cloth downward
+    // (into the structure interior) at the panel center.
+    //
+    // Sag sign per side: setFromUnitVectors rotates differently for the
+    // two sides (+α vs π-α around +X), and the panel's local Y axis
+    // flips between them. For side=+1, local -Y → down-and-inward
+    // (correct gravity direction); for side=-1, local +Y → down-and-
+    // inward (sign inverted). Multiplying the sag amplitude by `side`
+    // keeps the visible droop downward on both panels.
+    const panel = makeSaggedFabricPanel(
+      L + 0.05, FABRIC_THICK, SLANT_LEN + 0.04,
+      10, 5,
+      -SAG * side,
+      fabricMat,
     );
-    wall.position.set(0, wallH / 2 * Math.cos(wallTilt), sx * (wallH / 2) * Math.sin(wallTilt));
-    wall.rotation.z = sx * wallTilt;
-    g.add(wall);
+    // Centroid in world space: midpoint between ridge and base along
+    // the side's diagonal. Y = halfway up to the ridge; Z = halfway out
+    // to the base edge on the relevant side.
+    panel.position.set(0, RIDGE_Y * 0.5, side * HALF_BW * 0.5);
+    // Slope direction: from ridge (y=RIDGE_Y, z=0) to base (y=0,
+    // z=±HALF_BW). Normalized: (0, -sin α, side·cos α). Aligning the
+    // panel's local +Z to this puts the +Z edge at the base and the
+    // -Z edge at the ridge.
+    const slopeDir = new THREE.Vector3(0, -sinA, side * cosA);
+    panel.quaternion.setFromUnitVectors(upZ, slopeDir);
+    g.add(panel);
   }
 
-  // Ground footprint — darker fabric. Stays as a thin plane (one-sided,
-  // viewed from above only).
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(wallW, wallH * Math.sin(wallTilt) * 2), darkMat);
-  floor.rotation.x = -Math.PI / 2;
-  floor.position.y = 0.02;
-  g.add(floor);
-
-  // Two end triangles (entrance + back). AAL — extruded ShapeGeometry
-  // for fabric thickness; entrance brighter, back darker.
-  for (const sz of [-1, 1]) {
-    const triShape = new THREE.Shape();
-    const halfW = wallH * Math.sin(wallTilt);
-    const peakY = wallH * Math.cos(wallTilt);
-    triShape.moveTo(-halfW, 0);
-    triShape.lineTo(halfW, 0);
-    triShape.lineTo(0, peakY);
-    triShape.closePath();
-    const triGeo = new THREE.ExtrudeGeometry(triShape, { depth: FABRIC_THICK, bevelEnabled: false });
-    const tri = new THREE.Mesh(triGeo, sz === 1 ? canvasMat : darkMat);
-    // ExtrudeGeometry extrudes along +Z by `depth`; center it on the tent's
-    // Z plane by translating -FABRIC_THICK/2 then position on the end.
-    tri.position.set(0, 0, sz * (wallW / 2) - sz * FABRIC_THICK / 2);
-    if (sz === -1) tri.rotation.y = Math.PI;
-    g.add(tri);
+  // ── Back gable only — the +X end is the entrance and stays open.
+  // ExtrudeGeometry on a 2D triangle (apex at the ridge, base spanning
+  // the full BW), positioned at -X with its extrusion facing outward.
+  {
+    const tri = new THREE.Shape();
+    tri.moveTo(-HALF_BW, 0);
+    tri.lineTo(HALF_BW, 0);
+    tri.lineTo(0, RIDGE_Y);
+    tri.closePath();
+    const triGeo = new THREE.ExtrudeGeometry(tri, { depth: FABRIC_THICK, bevelEnabled: false });
+    const gable = new THREE.Mesh(triGeo, fabricMat);
+    gable.position.set(-L * 0.5, 0, 0);
+    gable.rotation.y = -Math.PI / 2;   // gable plane perpendicular to X, facing -X
+    g.add(gable);
   }
 
-  // Center pole
-  const peakY = wallH * Math.cos(wallTilt);
-  const pole = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.02, 0.02, peakY + 0.05, 6),
-    poleMat,
-  );
-  pole.position.y = (peakY + 0.05) / 2;
-  g.add(pole);
+  // (Rolled-up flap removed — the small tent is too small for a tied-
+  // open door cloth to read sensibly; the open +X gable is enough on
+  // its own to signal "this is the entrance".)
+
+  // ── Ridge poles: two upright poles at the long-axis ends, protruding
+  // above the apex by POLE_RISE. Visible structural marker that ties
+  // the silhouette to the large tent.
+  for (const sx of [-1, 1]) {
+    const totalH = RIDGE_Y + POLE_RISE;
+    const pole = new THREE.Mesh(
+      new THREE.CylinderGeometry(POLE_R, POLE_R * 1.2, totalH, 6),
+      poleMat,
+    );
+    pole.position.set(sx * (L * 0.5 - 0.02), totalH * 0.5, 0);
+    g.add(pole);
+  }
+
+  // ── Interior ridge beam: horizontal pole connecting the two upright
+  // pole tops along world +X. Visible inside if the player crouches +
+  // peers in from an end.
+  {
+    const beam = new THREE.Mesh(
+      new THREE.CylinderGeometry(POLE_R * 0.7, POLE_R * 0.7, L - 0.04, 6),
+      poleMat,
+    );
+    beam.rotation.z = Math.PI / 2;   // align cylinder axis with world X
+    beam.position.set(0, RIDGE_Y - POLE_R * 0.5, 0);
+    g.add(beam);
+  }
+
+  // ── Guy ropes + stakes. Four anchors: corners of the base rectangle,
+  // each guy angled diagonally outward to a ground stake. Pup-tent
+  // canonical setup.
+  const anchors: Array<{ ax: number; ay: number; az: number; dx: number; dz: number }> = [
+    { ax: -L * 0.5, ay: 0.05, az: -HALF_BW, dx: -GUY_REACH * 0.6, dz: -GUY_REACH * 0.6 },
+    { ax:  L * 0.5, ay: 0.05, az: -HALF_BW, dx:  GUY_REACH * 0.6, dz: -GUY_REACH * 0.6 },
+    { ax: -L * 0.5, ay: 0.05, az:  HALF_BW, dx: -GUY_REACH * 0.6, dz:  GUY_REACH * 0.6 },
+    { ax:  L * 0.5, ay: 0.05, az:  HALF_BW, dx:  GUY_REACH * 0.6, dz:  GUY_REACH * 0.6 },
+  ];
+  const upVec = new THREE.Vector3(0, 1, 0);
+  for (const a of anchors) {
+    const sx = a.ax + a.dx;
+    const sz = a.az + a.dz;
+    const sy = 0;
+    const dx = sx - a.ax;
+    const dy = sy - a.ay;
+    const dz = sz - a.az;
+    const len = Math.hypot(dx, dy, dz);
+    const rope = new THREE.Mesh(
+      new THREE.CylinderGeometry(GUY_R, GUY_R, len, 4),
+      ropeMat,
+    );
+    rope.position.set((a.ax + sx) * 0.5, (a.ay + sy) * 0.5, (a.az + sz) * 0.5);
+    const dir = new THREE.Vector3(dx, dy, dz).normalize();
+    const q = new THREE.Quaternion().setFromUnitVectors(upVec, dir);
+    rope.quaternion.copy(q);
+    g.add(rope);
+
+    const stake = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.016, 0.035, STAKE_H, 4),
+      stakeMat,
+    );
+    stake.position.set(sx, STAKE_H * 0.35, sz);
+    g.add(stake);
+  }
 
   return g;
 }
@@ -119,11 +295,22 @@ export function deployTent(ctx: GameContext): Tent | null {
     }
   }
 
-  return spawnTentAt(ctx, pos, Math.random() * Math.PI * 2);
+  // AAZ-fix — face the camera. The pre-AAZ-fix random yaw made
+  // placement feel arbitrary; deploying via camera-forward matches the
+  // large tent's convention (entry predictable from where the player
+  // is looking).
+  //
+  // Open-entrance variant: the small tent has its entrance at the +X
+  // gable end (the -X gable is closed). To put +X TOWARD the camera
+  // we rotate -π/2 off the large-tent yaw — the original aligned local
+  // +Z toward the player, this aligns local +X toward the player so
+  // the entrance is what they see first.
+  const rotationY = Math.atan2(-dir.x, -dir.z) - Math.PI / 2;
+  return spawnTentAt(ctx, pos, rotationY);
 }
 
 /** Materialise a tent at the given world position + Y rotation. Used by
- *  both deployTent (random rotation) and save/load (saved rotation). */
+ *  both deployTent (camera-forward) and save/load (saved rotation). */
 export function spawnTentAt(
   ctx: GameContext,
   pos: THREE.Vector3,
@@ -131,7 +318,15 @@ export function spawnTentAt(
 ): Tent {
   const mesh = makeTentVisual();
   mesh.position.copy(pos);
-  mesh.rotation.y = rotationY;
+  // AAZ-fix — terrain-slope alignment so the tent tilts with the ground
+  // and the guy stakes contact the surface.
+  alignMeshToTerrain(
+    mesh,
+    ctx.terrain,
+    pos,
+    rotationY,
+    Tuning.TENT_LENGTH_M * 0.5,
+  );
   mesh.traverse((o) => {
     const m = o as THREE.Mesh;
     if (m.isMesh) {
@@ -155,6 +350,7 @@ export function spawnTentAt(
     mesh,
     shelterZone,
     pos: pos.clone(),
+    rotationY,
     hovered: false,
   };
   ctx.tents.list.push(tent);

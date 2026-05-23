@@ -157,7 +157,10 @@ export function updateInteractPrompt(ctx: GameContext, _dt: number): void {
   }
 
   if (show && hover) {
-    const verb = hover.passive ? '' : VERBS[hover.type];
+    // AAZ — verb override: callers can set hover.verb to swap the static
+    // VERBS[type] mapping out (e.g. tent doorway switches between "open"
+    // and "close" depending on doorOpen state). Ignored when `passive`.
+    const verb = hover.passive ? '' : (hover.verb ?? VERBS[hover.type]);
     const label = verb ? `${verb} ${hover.promptNoun}` : hover.promptNoun;
     // Hide the key chip for passive prompts (kill = no E action; stripped wrecks)
     _keyEl.style.display = verb ? '' : 'none';

@@ -1078,14 +1078,24 @@ const _DEFS: Record<ItemId, ItemDef> = {
     maxStack: 2,
     wieldLmb: 'click_use',
     onUse(ctx, _slot) {
-      // Look at a fire to attach. If the player isn't hovering a fire,
-      // refuse with a hint.
+      // AAZ-fix — grill attaches to any LIVE fire the player is facing.
+      // Pre-AAZ-fix the check was `hover.type !== 'add_fuel'` which only
+      // matched when the player had a BRANCH selected (not grill_kit), so
+      // attempting to attach always failed. Now any fire-related hover
+      // (cook / add_fuel / relight) routes here, gated on the fire being
+      // alive (relight is for dead fires → reject). The hover.entityId
+      // field is set in interaction.ts case 'fires' on every branch.
       const hover = ctx.inventory.hover;
-      if (!hover || hover.type !== 'add_fuel') {
+      const isFireHover = !!hover && (hover.type === 'cook' || hover.type === 'add_fuel');
+      if (!isFireHover) {
         return { consumed: false, message: 'face a fire to attach the grill' };
       }
-      const fire = findFireById(ctx.fires.list, (hover as { id?: number }).id ?? -1);
+      const fireId = hover.entityId ?? -1;
+      const fire = findFireById(ctx.fires.list, fireId);
       if (!fire) return { consumed: false, message: 'no fire found' };
+      if (!fire.alive) {
+        return { consumed: false, message: 'fire is cold — relight it first' };
+      }
       if (fire.hasGrill) {
         return { consumed: false, message: 'this fire already has a grill' };
       }

@@ -53,65 +53,196 @@ function makeLanternVisual(): {
   const g = new THREE.Group();
   const H = Tuning.LANTERN_HEIGHT_M;
 
-  // Base — small wooden disc
-  const baseMat = new THREE.MeshLambertMaterial({ color: 0x4a3220 });
-  const base = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.10, 0.12, 0.04, 8),
-    baseMat,
-  );
-  base.position.y = 0.02;
-  g.add(base);
+  // AAZ-fix — salvaged-tech power-cell lantern. Reads as both rustic
+  // (hand-forged tripod, weathered iron, exposed cables, rivets) and
+  // sci-fi (glowing crystalline core in a metal cage, visible
+  // conduits). Replaces the pre-AAZ-fix wooden-post-with-bulb design,
+  // which read as "renaissance fair garden lamp" against Dustfall's
+  // post-apocalyptic palette.
+  //
+  // Stack (bottom-up):
+  //   1. Tripod (3 splayed iron legs meeting at a junction node)
+  //   2. Junction rivets (small metal detail)
+  //   3. Vertical post connecting junction to lantern head
+  //   4. Side conduit cables (red + yellow wire pair, salvage-themed)
+  //   5. Cage assembly (4 bars + top/bottom rings holding the core)
+  //   6. Glowing crystalline core (vertical capsule, MeshBasic)
+  //   7. Top cap + carry hook ring
 
-  // Vertical post
-  const postMat = new THREE.MeshLambertMaterial({ color: 0x5a4030 });
-  const postH = H - 0.30;
-  const post = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.025, 0.025, postH, 6),
-    postMat,
-  );
-  post.position.y = 0.04 + postH * 0.5;
-  g.add(post);
-
-  // Crossbar at top (rest the globe on it)
-  const crossbar = new THREE.Mesh(
-    new THREE.BoxGeometry(0.20, 0.025, 0.025),
-    postMat,
-  );
-  crossbar.position.y = 0.04 + postH;
-  g.add(crossbar);
-
-  // Glass globe — slightly translucent additive sphere
+  // Materials. Weathered iron for the structural pieces, slightly
+  // brighter rivet color for accents, salvage cable colors carried
+  // over from the AAR fuse-box wires for material consistency.
+  const ironMat = new THREE.MeshLambertMaterial({ color: 0x4a4238 });
+  const rivetMat = new THREE.MeshLambertMaterial({ color: 0x726658 });
+  const wireRedMat = new THREE.MeshLambertMaterial({ color: 0x8a3a26 });
+  const wireYellowMat = new THREE.MeshLambertMaterial({ color: 0xb89028 });
+  const glowColor = Tuning.LANTERN_LIGHT_COLOR_HEX;
   const globeMat = new THREE.MeshBasicMaterial({
-    color: Tuning.LANTERN_LIGHT_COLOR_HEX,
+    color: glowColor,
     transparent: true,
-    opacity: 0.85,
+    opacity: 0.92,
     toneMapped: false,
     fog: false,
   });
-  const globe = new THREE.Mesh(
-    new THREE.SphereGeometry(0.10, 12, 10),
+
+  // Geometry constants (lifted locally for readability; can be promoted
+  // to Tuning later if the design wants knobs).
+  const TRIPOD_H = 0.42;
+  const TRIPOD_SPLAY = 0.16;      // outward radius at the ground
+  const JUNCTION_Y = TRIPOD_H;
+  const HEAD_Y = H - 0.08;        // bottom of the cage
+  const CAGE_H = 0.18;
+  const CORE_H = 0.13;
+  const CORE_R = 0.034;
+
+  // ── 1. Tripod: 3 legs at 120° spacing, splayed outward to
+  // TRIPOD_SPLAY at the ground, converging at the junction node.
+  for (let i = 0; i < 3; i++) {
+    const theta = (i / 3) * Math.PI * 2;
+    const groundX = Math.cos(theta) * TRIPOD_SPLAY;
+    const groundZ = Math.sin(theta) * TRIPOD_SPLAY;
+    const legLen = Math.hypot(TRIPOD_SPLAY, TRIPOD_H);
+    const leg = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.012, 0.018, legLen, 5),
+      ironMat,
+    );
+    // Mid-point of the leg in world space.
+    leg.position.set(groundX * 0.5, TRIPOD_H * 0.5, groundZ * 0.5);
+    // Align cylinder's local +Y with the (ground → junction) vector.
+    const dir = new THREE.Vector3(-groundX, TRIPOD_H, -groundZ).normalize();
+    const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+    leg.quaternion.copy(q);
+    g.add(leg);
+  }
+
+  // ── 2. Junction node + rivets where the legs meet the post.
+  const junction = new THREE.Mesh(
+    new THREE.SphereGeometry(0.042, 8, 6),
+    ironMat,
+  );
+  junction.position.y = JUNCTION_Y;
+  g.add(junction);
+  // Three rivet accents around the junction equator.
+  for (let i = 0; i < 3; i++) {
+    const theta = (i / 3) * Math.PI * 2 + 0.4;
+    const rivet = new THREE.Mesh(
+      new THREE.SphereGeometry(0.0085, 5, 4),
+      rivetMat,
+    );
+    rivet.position.set(
+      Math.cos(theta) * 0.042,
+      JUNCTION_Y,
+      Math.sin(theta) * 0.042,
+    );
+    g.add(rivet);
+  }
+
+  // ── 3. Vertical post: junction up to the cage base.
+  const postH = HEAD_Y - JUNCTION_Y;
+  const post = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.022, 0.022, postH, 6),
+    ironMat,
+  );
+  post.position.y = JUNCTION_Y + postH * 0.5;
+  g.add(post);
+
+  // ── 4. Side conduit cables — a red + yellow wire pair running
+  // alongside the post from junction up to the cage base. Slight stagger
+  // so they don't look identical. Reads as "salvaged power leads
+  // wired to the core" — same visual language as the AAR fuse-box
+  // interior cables.
+  for (const [matRef, offX, offZ] of [
+    [wireRedMat, 0.028, 0.012],
+    [wireYellowMat, -0.024, 0.018],
+  ] as const) {
+    const wire = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.005, 0.005, postH * 0.92, 5),
+      matRef,
+    );
+    wire.position.set(offX, JUNCTION_Y + postH * 0.5 + 0.02, offZ);
+    g.add(wire);
+  }
+
+  // ── 5. Cage assembly: bottom + top rings (open torus shapes) holding
+  // 4 vertical bars at the corners. The bars + open sides let the core
+  // light spill out radially.
+  const ringMat = ironMat;
+  const ringBottom = new THREE.Mesh(
+    new THREE.TorusGeometry(0.072, 0.008, 4, 12),
+    ringMat,
+  );
+  ringBottom.rotation.x = Math.PI / 2;
+  ringBottom.position.y = HEAD_Y;
+  g.add(ringBottom);
+  const ringTop = new THREE.Mesh(
+    new THREE.TorusGeometry(0.072, 0.008, 4, 12),
+    ringMat,
+  );
+  ringTop.rotation.x = Math.PI / 2;
+  ringTop.position.y = HEAD_Y + CAGE_H;
+  g.add(ringTop);
+  for (let i = 0; i < 4; i++) {
+    const theta = (i / 4) * Math.PI * 2 + Math.PI / 4;   // 45° offset → bars at corners
+    const bar = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.007, 0.007, CAGE_H, 4),
+      ringMat,
+    );
+    bar.position.set(
+      Math.cos(theta) * 0.072,
+      HEAD_Y + CAGE_H * 0.5,
+      Math.sin(theta) * 0.072,
+    );
+    g.add(bar);
+  }
+
+  // ── 6. Glowing crystalline core inside the cage. Vertical capsule;
+  // the MeshBasicMaterial keeps it bright regardless of scene lighting,
+  // toneMapped:false stops the renderer from darkening it. Width +
+  // height tuned so the cage bars frame it without occluding it.
+  const core = new THREE.Mesh(
+    new THREE.CylinderGeometry(CORE_R, CORE_R * 0.85, CORE_H, 8),
     globeMat,
   );
-  globe.position.y = 0.04 + postH - 0.10;
-  g.add(globe);
+  core.position.y = HEAD_Y + CAGE_H * 0.5;
+  g.add(core);
+  // Hemispherical end caps on the core so it doesn't read as a chopped-
+  // off can. Cheap — two spheres flattened slightly.
+  for (const sy of [-1, 1]) {
+    const cap = new THREE.Mesh(
+      new THREE.SphereGeometry(CORE_R, 8, 5, 0, Math.PI * 2, 0, Math.PI * 0.5),
+      globeMat,
+    );
+    cap.position.y = HEAD_Y + CAGE_H * 0.5 + sy * CORE_H * 0.5;
+    if (sy < 0) cap.rotation.x = Math.PI;   // flip the bottom cap
+    g.add(cap);
+  }
 
-  // Top cap above the globe
-  const capMat = new THREE.MeshLambertMaterial({ color: 0x4a3a26 });
-  const cap = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.07, 0.10, 0.035, 6),
-    capMat,
+  // ── 7. Top cap + carry hook. Truncated cone over the top ring, plus
+  // a small torus ring suggesting the lantern could be hung from a
+  // beam. Pure rustic accent — no light function.
+  const topCap = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.045, 0.075, 0.04, 6),
+    ironMat,
   );
-  cap.position.y = 0.04 + postH + 0.025;
-  g.add(cap);
+  topCap.position.y = HEAD_Y + CAGE_H + 0.02;
+  g.add(topCap);
+  const hook = new THREE.Mesh(
+    new THREE.TorusGeometry(0.024, 0.006, 4, 8),
+    ironMat,
+  );
+  hook.rotation.x = Math.PI / 2;
+  hook.position.y = HEAD_Y + CAGE_H + 0.06;
+  g.add(hook);
 
-  // PointLight at the globe center
+  // ── PointLight at the core center. Same intensity / range / falloff
+  // as pre-AAZ-fix so the lighting balance doesn't shift.
   const light = new THREE.PointLight(
-    Tuning.LANTERN_LIGHT_COLOR_HEX,
+    glowColor,
     Tuning.LANTERN_LIGHT_INTENSITY,
     Tuning.LANTERN_LIGHT_DISTANCE,
     1.8,
   );
-  light.position.copy(globe.position);
+  light.position.copy(core.position);
   light.castShadow = false;
   g.add(light);
 

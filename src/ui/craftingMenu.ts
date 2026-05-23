@@ -446,16 +446,28 @@ function renderRecipes(): void {
 
 /** AAW — build a single recipe row for the right-side panel. CRAFTABLE
  *  rows hover-react + click to auto-fill; MISSING rows are visually muted
- *  and not clickable. Per-ingredient `have/need` is displayed inline; the
- *  missing ones tint red so the eye lands on what's still needed. */
+ *  and (in vanilla play) not clickable. Per-ingredient `have/need` is
+ *  displayed inline; the missing ones tint red so the eye lands on what's
+ *  still needed.
+ *
+ *  AAZ — in dev mode (`ctx.flags.devMode === true`), every row becomes
+ *  clickable AND the click skips the input-slot auto-fill in favor of
+ *  `directCraft` which produces the output immediately without consuming
+ *  any materials. The CRAFTABLE / MISSING categorization is kept for
+ *  reference but doesn't gate the click. */
 function buildRecipeRow(
   recipe: Recipe,
   canCraft: boolean,
   totals: Map<ItemId, number>,
 ): HTMLButtonElement {
   const row = document.createElement('button');
+  const devMode = _ctx?.flags.devMode ?? false;
+  // In dev mode, treat every row as clickable — the styled "insufficient"
+  // muting still surfaces so the dev can see at a glance which recipes
+  // would require materials in vanilla play.
+  const effectiveCraftable = canCraft || devMode;
   row.className = 'craft-recipe-row' + (canCraft ? '' : ' insufficient');
-  row.disabled = !canCraft;
+  row.disabled = !effectiveCraftable;
 
   // Output icon (compact — 28px).
   const outIcon = makeItemIcon(recipe.output.id);
@@ -485,9 +497,12 @@ function buildRecipeRow(
   nameCol.appendChild(ings);
   row.appendChild(nameCol);
 
-  if (canCraft) {
+  if (effectiveCraftable) {
     row.addEventListener('mouseenter', playUiHover);
-    row.addEventListener('click', () => autoFillFromRecipe(recipe));
+    row.addEventListener('click', () => {
+      if (devMode) directCraft(recipe);
+      else autoFillFromRecipe(recipe);
+    });
   }
   return row;
 }
@@ -552,6 +567,48 @@ function autoFillFromRecipe(recipe: Recipe): void {
     }
   }
   playUiClick();
+  renderAll();
+}
+
+/** AAZ — dev-mode free-craft path. Produces `recipe.output` directly,
+ *  no input consumption, no input-slot mutation. Used by the recipe
+ *  panel when ctx.flags.devMode is true — one click on any discovered
+ *  recipe produces the item even with empty inventory. Mirrors
+ *  performCraft's drop-on-full + SFX + toast paths so the feedback
+ *  matches a normal craft. */
+function directCraft(recipe: Recipe): void {
+  if (!_ctx) return;
+  const ctx = _ctx;
+  let added = 0;
+  for (let i = 0; i < recipe.output.count; i++) {
+    const result = addItem(ctx.inventory, recipe.output.id, undefined, ctx);
+    if (result < 0) break;
+    added++;
+  }
+  const dropped = recipe.output.count - added;
+  if (dropped > 0) {
+    // Drop overflow at the player's feet (same path as performCraft).
+    const cam = ctx.three.camera;
+    const fwd = new THREE.Vector3();
+    cam.getWorldDirection(fwd);
+    fwd.y = 0;
+    if (fwd.lengthSq() < 1e-4) fwd.set(0, 0, -1);
+    fwd.normalize();
+    const dx = cam.position.x + fwd.x * 0.8;
+    const dz = cam.position.z + fwd.z * 0.8;
+    for (let i = 0; i < dropped; i++) {
+      const p = spawnDroppedPickup(ctx.three.scene, ctx.terrain, { x: dx, z: dz }, recipe.output.id);
+      ctx.pickups.list.push(p);
+    }
+    ctx.ui.showToast(
+      added === 0
+        ? `${recipe.displayName} dropped at your feet — bag full`
+        : `${recipe.displayName} (dev) — partial drop at your feet`,
+    );
+  } else {
+    ctx.ui.showToast(`${recipe.displayName} (dev craft)`);
+  }
+  playCraft();
   renderAll();
 }
 

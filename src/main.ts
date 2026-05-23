@@ -30,6 +30,7 @@ import { spawnRockScatter } from './world/rockScatter.ts';
 import { setupOpeningScene } from './world/openingScene.ts';
 import { updateOpeningWreckGodRay } from './world/openingWreck.ts';
 import { updateLanterns } from './world/lantern.ts';
+import { updateLargeTents } from './world/largeTent.ts';
 import { updateCompanion, spawnCompanionAt } from './enemies/companion.ts';
 import { createFootprintPuffs, updateFootprintPuffs } from './world/footprintPuffs.ts';
 import { hasSave } from './persistence/save.ts';
@@ -76,6 +77,7 @@ import { ensureAudioStarted } from './audio/audio.ts';
 import { startSoundscape } from './audio/soundscape.ts';
 // AAP — startMusic imported above (alongside updateMusic).
 import { clearSave, loadGameState, peekSavedSeed } from './persistence/save.ts';
+import { ALL_RECIPE_IDS } from './inventory/recipeDiscovery.ts';
 
 // --- Bootstrap (async — Rapier WASM + asset preload before world build) ---
 const [physics, assets] = await Promise.all([
@@ -356,6 +358,15 @@ function applyDevLoadout(c: GameContext): void {
   addItem(c.inventory, 'rope');
   // Salvage tool (AAR pry flow) — without this the panels stay sealed.
   addItem(c.inventory, 'scrap_bar');
+  // AAZ — pre-discover every recipe. The right-side crafting panel
+  // (AAW) groups recipes into CRAFTABLE / MISSING — without this every
+  // dev-mode boot would start with an empty list until the player ran
+  // through each combination. Skip duplicates if a save load already
+  // seeded them.
+  const known = c.inventory.discoveredRecipes;
+  for (const id of ALL_RECIPE_IDS) {
+    if (!known.includes(id)) known.push(id);
+  }
 }
 
 // Tuning-level dev override (code-level, on by default false). When true,
@@ -588,6 +599,7 @@ startLoop(ctx, (c, dt) => {
   updateFootprintPuffs(c, dt);   // AAG — particle puffs from each footstep
   updateFires(c, dt);            // flicker + fuel decrement + burnout
   updateLanterns(c);             // AAC — sin-driven flicker on placed lanterns
+  updateLargeTents(c, dt);       // AAZ — doorway open/close lerp on placed shelter tents
   updateCacti(c);                // CC-4 — regrow harvested alien-cactus fruit after a day cycle
   updateSleds(c, dt);            // QQ — per-sled tow spring + rope visual; must run AFTER updateSpeeder + updatePlayer
   updateInteraction(c, dt);      // raycast hover + E to open/refill/harvest/cook/sleep/etc (UU — pickup-take moved to LMB)

@@ -208,8 +208,20 @@ export interface HoverState {
   distance: number;
   /** Pickup-specific: the item that would be taken. */
   itemId?: ItemId;
+  /** AAZ-fix — optional registry-id of the hovered entity (fire id,
+   *  cactus id, etc.). Lets item `onUse` callbacks resolve back to the
+   *  hovered entity without doing their own raycast. Previously
+   *  grill_kit.onUse tried to read this off the hover via a stale type
+   *  assertion (`(hover as { id?: number }).id`) — the field never
+   *  actually existed, so the lookup always failed. */
+  entityId?: number;
   /** Display noun shown in the prompt — "canteen", "wreckage", "water", etc. */
   promptNoun: string;
+  /** AAZ — optional verb override. When set, the prompt uses this string
+   *  instead of the static VERBS[type] mapping. Lets the same InteractType
+   *  carry a state-dependent verb (e.g. tent doorway shows "open" or
+   *  "close" depending on doorOpen). Ignored when `passive` is true. */
+  verb?: string;
   /** When true, the prompt suppresses both the [E] key chip and the verb,
    *  showing only the noun. Used for passive/no-op prompts like a stripped wreck. */
   passive?: boolean;

@@ -30,10 +30,25 @@ export type CompanionState = 'rolling' | 'walking' | 'idle' | 'huddle';
 export interface Companion {
   /** Root group. Position tracks the creature's world location each frame. */
   group: THREE.Group;
-  /** Sub-group of body + legs that's rotated/translated per state. */
+  /** Sub-group of body + legs that's translated per state (breathing bob,
+   *  huddle press-down). Origin sits at the creature's ground position. */
   body: THREE.Group;
-  /** Each leg's pivot group for the gait animation. */
+  /** AAZ-fix — inner sub-group whose origin is at the body's CENTER
+   *  (y=R inside the body group's frame). The body sphere + eye live
+   *  inside this; rolling-state rotation is applied here so the ball
+   *  pivots around its own center, not the body group's origin (which
+   *  sits at the creature's feet). Pre-AAZ-fix the roll rotated the body
+   *  group itself, making the sphere orbit the ground point — the visual
+   *  read as "creature bobbing into and out of the sand", not rolling. */
+  bodyShell: THREE.Group;
+  /** Each leg's outer pivot (positioned at the body surface, yawed to
+   *  point radially outward). Visibility is toggled here for rolling. */
   legs: THREE.Group[];
+  /** AAZ-fix — each leg's inner hip pivot. Rotates around its local Z
+   *  axis to lift the leg in a walk cycle. Pre-AAZ-fix the legs translated
+   *  vertically as a unit, which read as the legs floating flat under
+   *  the body instead of pivoting at the body attachment. */
+  hips: THREE.Group[];
   /** World-space position. Authoritative for movement; group.position
    *  is synced from this each frame. */
   pos: THREE.Vector3;
@@ -52,12 +67,72 @@ export interface Companion {
 
 const _PI2 = Math.PI * 2;
 
-/** Build the creature's visual. Returns the root group + per-leg pivots
- *  so the AI can animate them per state. */
+// AAZ-fix-2 — terrain-slope alignment scratch vectors (allocated once,
+// reused per frame to avoid per-tick GC churn). Same pattern as tents:
+// sample terrain at 4 cardinal points, compute the gradient → normal,
+// build a basis with up=normal and forward=projection of the heading
+// direction onto the tilted plane, set the object's quaternion.
+const _alignN = new THREE.Vector3();
+const _alignF = new THREE.Vector3();
+const _alignR = new THREE.Vector3();
+const _alignTmp = new THREE.Vector3();
+const _alignBasis = new THREE.Matrix4();
+
+function alignCompanionToTerrain(
+  obj: THREE.Object3D,
+  terrain: { heightAt: (x: number, z: number) => number },
+  px: number,
+  pz: number,
+  yaw: number,
+  radius: number,
+): void {
+  const hE = terrain.heightAt(px + radius, pz);
+  const hW = terrain.heightAt(px - radius, pz);
+  const hN = terrain.heightAt(px, pz + radius);
+  const hS = terrain.heightAt(px, pz - radius);
+  const dxGrad = (hE - hW) / (2 * radius);
+  const dzGrad = (hN - hS) / (2 * radius);
+  _alignN.set(-dxGrad, 1, -dzGrad).normalize();
+  _alignF.set(Math.sin(yaw), 0, Math.cos(yaw));
+  // Project forward onto plane perpendicular to normal.
+  _alignTmp.copy(_alignN).multiplyScalar(_alignF.dot(_alignN));
+  _alignF.sub(_alignTmp);
+  if (_alignF.lengthSq() < 1e-6) _alignF.set(0, 0, 1);
+  _alignF.normalize();
+  _alignR.crossVectors(_alignN, _alignF).normalize();
+  _alignF.crossVectors(_alignR, _alignN).normalize();
+  _alignBasis.makeBasis(_alignR, _alignN, _alignF);
+  obj.quaternion.setFromRotationMatrix(_alignBasis);
+}
+
+/** Build the creature's visual. Returns the root group + bodyShell +
+ *  per-leg outer pivots + per-leg inner hip pivots so the AI can
+ *  animate them per state.
+ *
+ *  AAZ-fix hierarchy (bottom-up):
+ *
+ *     root (world position, world yaw via rotation.y)
+ *      └─ body (vertical bob/press-down translation)
+ *         ├─ bodyShell (positioned at y=R; rolling rotation pivots HERE
+ *         │   so the sphere orbits its own center, not the ground)
+ *         │   ├─ main carapace (centered at shell origin)
+ *         │   ├─ inner shadow shell
+ *         │   ├─ eye + glint
+ *         │   └─ ...
+ *         └─ legPivot[5] (at body equator surface, yawed to point
+ *             radially outward)
+ *             └─ hipGroup (rotates around its Z axis = body's
+ *                 tangential axis at this leg → swings the leg up/down
+ *                 in the radial-vertical plane)
+ *                 ├─ leg segment (along hipGroup local +X)
+ *                 └─ tip sphere
+ */
 function makeCompanionVisual(): {
   group: THREE.Group;
   body: THREE.Group;
+  bodyShell: THREE.Group;
   legs: THREE.Group[];
+  hips: THREE.Group[];
 } {
   const root = new THREE.Group();
   const body = new THREE.Group();
@@ -65,11 +140,35 @@ function makeCompanionVisual(): {
 
   const R = Tuning.COMPANION_BODY_RADIUS;
   const LL = Tuning.COMPANION_LEG_LENGTH;
+  const REST_DOWN = Tuning.COMPANION_LEG_REST_ANGLE_RAD;
+  // AAZ-fix-2 — leg attachment moved BELOW the equator so short legs
+  // (LL=0.14) can still reach the ground at the resting down-angle.
+  // The attachment Y is exactly the vertical leg span at rest, so the
+  // tip sits on the ground (y=0 inside body frame); the attachment
+  // radial is the body's horizontal cross-section at that Y (= ON the
+  // sphere surface). Clamped to a small offset from body top so the
+  // legs never originate at the apex.
+  const ATTACH_Y = Math.min(R * 0.92, LL * Math.sin(REST_DOWN));
+  const ON_SURFACE_RADIAL = Math.sqrt(Math.max(0, R * R - (R - ATTACH_Y) * (R - ATTACH_Y)));
+  // AAZ-fix-3 — pull the pivot slightly inside the body sphere so the
+  // leg's inner end visibly EMBEDS into the carapace instead of
+  // hovering off the surface. Pre-AAZ-fix-3 a 1cm-radius cylinder
+  // meeting a curving sphere surface read as a small gap (the cylinder
+  // is straight, the sphere falls away); recessing the pivot ~3cm
+  // makes the inner end disappear into the body silhouette.
+  const ATTACH_RECESS_M = 0.03;
+  const ATTACH_RADIAL = Math.max(0.02, ON_SURFACE_RADIAL - ATTACH_RECESS_M);
 
-  // Body — IcosahedronGeometry with flat-shading reads as a rocky
-  // crystalline carapace. Two materials alternated across facets for
-  // shadow variation (no per-face split, just a darker secondary mesh
-  // at slight offset for highlight contrast).
+  // bodyShell — origin AT body center (y=R inside body group). All body
+  // meshes parent to it at y=0 (their own centers coincide with the
+  // shell's origin), so when rolling rotates the shell, the meshes
+  // orbit the shell's center, not the ground.
+  const bodyShell = new THREE.Group();
+  bodyShell.position.y = R;
+  body.add(bodyShell);
+
+  // Body materials — IcosahedronGeometry with flat-shading reads as a
+  // rocky crystalline carapace.
   const bodyMat = new THREE.MeshLambertMaterial({
     color: Tuning.COMPANION_COLOR_HEX,
     flatShading: true,
@@ -78,30 +177,32 @@ function makeCompanionVisual(): {
     color: Tuning.COMPANION_DARK_COLOR_HEX,
     flatShading: true,
   });
-  // Main carapace
+  // Main carapace — centered at the shell origin (so rolls cleanly).
   const main = new THREE.Mesh(new THREE.IcosahedronGeometry(R, 0), bodyMat);
-  main.position.y = R;             // sit on ground (lowest vertex at y=0)
-  body.add(main);
-  // Slightly smaller darker inner shell for shadow detail
+  bodyShell.add(main);
+  // Inner darker shell, slightly oblate, offset down a hair for shadow.
   const inner = new THREE.Mesh(new THREE.IcosahedronGeometry(R * 0.85, 0), darkMat);
-  inner.position.y = R - 0.01;
-  inner.scale.set(1, 0.9, 1);      // slight oblate for shape variation
-  body.add(inner);
+  inner.position.y = -0.01;
+  inner.scale.set(1, 0.9, 1);
+  bodyShell.add(inner);
 
-  // Single eye — small dark dot near the body's "front" (+Z local).
+  // Eye — small dark dot at the body "front" (+Z local). Sits slightly
+  // above equator within the shell.
   const eyeMat = new THREE.MeshBasicMaterial({ color: 0x140808 });
   const eye = new THREE.Mesh(new THREE.SphereGeometry(0.024, 8, 6), eyeMat);
-  eye.position.set(0, R + 0.05, R * 0.92);
-  body.add(eye);
-  // Slight white glint above the eye
+  eye.position.set(0, R * 0.25, R * 0.92);
+  bodyShell.add(eye);
   const glintMat = new THREE.MeshBasicMaterial({ color: 0xf0e8d0 });
   const glint = new THREE.Mesh(new THREE.SphereGeometry(0.006, 6, 4), glintMat);
-  glint.position.set(0.01, R + 0.07, R * 0.95);
-  body.add(glint);
+  glint.position.set(0.01, R * 0.35, R * 0.95);
+  bodyShell.add(glint);
 
-  // 5 radial legs. Each is its own pivot group so we can animate them
-  // (lift+lower in a walking gait, retract in rolling state).
+  // 5 radial legs. Each consists of an OUTER pivot (positioned at the
+  // body surface + yawed to face outward) and an INNER hip pivot
+  // (rotates around its Z axis for the gait lift). The leg segment +
+  // tip live inside the hip group, extending along local +X.
   const legs: THREE.Group[] = [];
+  const hips: THREE.Group[] = [];
   const legMat = new THREE.MeshLambertMaterial({
     color: Tuning.COMPANION_DARK_COLOR_HEX,
     flatShading: true,
@@ -113,38 +214,50 @@ function makeCompanionVisual(): {
   for (let i = 0; i < 5; i++) {
     const angle = (i / 5) * _PI2;
     const legPivot = new THREE.Group();
+    // AAZ-fix-2 — attach BELOW the equator (at ATTACH_Y / ATTACH_RADIAL
+    // computed above) so the short legs can reach the ground at the
+    // resting down-angle. Visually: the legs come out of the lower
+    // half of the body sphere, like crab legs.
     legPivot.position.set(
-      Math.cos(angle) * R * 0.7,
-      R * 0.4,                            // attach near the body's equator
-      Math.sin(angle) * R * 0.7,
+      Math.cos(angle) * ATTACH_RADIAL,
+      ATTACH_Y,
+      Math.sin(angle) * ATTACH_RADIAL,
     );
-    // Leg points outward + slightly down. The leg's local +Y axis
-    // aligns to the outward direction; we use a CylinderGeometry along
-    // local +Y then rotate it to lay outward.
+    // Yaw the pivot so its local +X points radially outward from the
+    // body. Negative so the leg's "front" (eye direction) maps to world
+    // +Z when angle=0.
+    legPivot.rotation.y = -angle;
+    body.add(legPivot);
+
+    // Hip group: rotates around its local Z (after the pivot's Y
+    // rotation, this is the tangential direction at the leg's body
+    // attachment). Rotating -REST_DOWN puts the leg's +X axis (along
+    // which the segment extends) tilted downward, making the tip touch
+    // the ground. The walk-gait animation modulates this rotation.
+    const hipGroup = new THREE.Group();
+    hipGroup.rotation.z = -REST_DOWN;
+    legPivot.add(hipGroup);
+
+    // Leg segment: cylinder along the hip group's local +X (the leg's
+    // "outward" direction after the down-tilt).
     const legSegment = new THREE.Mesh(
       new THREE.CylinderGeometry(0.018, 0.025, LL, 5),
       legMat,
     );
-    legSegment.position.y = -LL * 0.5;     // attach tip at the pivot+leg-end
-    // Default cylinder is along local +Y; we want the leg to point AWAY
-    // from the body's center. Rotate around Z to lay it down at the
-    // angle's outward direction. Slight downward tilt (8° below
-    // horizontal) for a "standing" pose.
-    legSegment.rotation.z = -Math.PI / 2;
+    legSegment.rotation.z = -Math.PI / 2;     // cylinder's +Y axis → local +X
     legSegment.position.set(LL * 0.5, 0, 0);
-    // Now rotate the WHOLE pivot around Y so the leg points in the
-    // angle direction (not just along +X).
-    legPivot.rotation.y = -angle;          // negative so +Z faces world correctly
-    legPivot.add(legSegment);
-    // Tip — small sphere at the end of the leg.
+    hipGroup.add(legSegment);
+
+    // Tip — small sphere at the end of the leg (foot pad / claw).
     const tip = new THREE.Mesh(new THREE.SphereGeometry(0.025, 6, 5), tipMat);
     tip.position.set(LL, 0, 0);
-    legPivot.add(tip);
-    body.add(legPivot);
+    hipGroup.add(tip);
+
     legs.push(legPivot);
+    hips.push(hipGroup);
   }
 
-  return { group: root, body, legs };
+  return { group: root, body, bodyShell, legs, hips };
 }
 
 /** Spawn a companion at a world position with an initial state. Used by
@@ -172,7 +285,9 @@ export function spawnCompanionAt(
   const companion: Companion = {
     group: visual.group,
     body: visual.body,
+    bodyShell: visual.bodyShell,
     legs: visual.legs,
+    hips: visual.hips,
     pos: pos.clone(),
     heading: 0,
     state,
@@ -336,73 +451,102 @@ export function updateCompanion(ctx: GameContext, dt: number): void {
 
   // ── Animate per state ──
   c.group.position.copy(c.pos);
-  // World Y rotation aligns the body's local +Z to heading direction.
-  c.group.rotation.y = c.heading;
+  // AAZ-fix-2 — orient the body to BOTH the heading direction AND the
+  // terrain slope. Pre-AAZ-fix-2 used `c.group.rotation.y = c.heading`,
+  // which kept the body vertical regardless of slope — on a dune ramp
+  // the creature looked like it was floating instead of standing on
+  // the ground. The terrain-align helper samples 4 cardinal heights at
+  // a body-radius scale and tilts the body so its local +Y matches the
+  // terrain normal while local +Z still points along the heading.
+  alignCompanionToTerrain(
+    c.group,
+    ctx.terrain,
+    c.pos.x,
+    c.pos.z,
+    c.heading,
+    Tuning.COMPANION_BODY_RADIUS * 1.2,
+  );
+
+  // AAZ-fix — per-state animation. Common pre-loop state resets:
+  //   bodyShell.rotation.x → 0 (unless rolling)
+  //   body.position.y → 0 (unless an explicit bob/press-down sets it)
+  //   hips[i].rotation.z → -REST_DOWN (unless lifted)
+  // Each branch sets only what it needs to.
+  const REST = Tuning.COMPANION_LEG_REST_ANGLE_RAD;
+  const LIFT = Tuning.COMPANION_LEG_LIFT_ANGLE_RAD;
 
   if (c.state === 'rolling') {
-    // Roll the body around the LATERAL axis (perpendicular to travel
-    // direction). After group.rotation.y aligns +Z with heading, the
-    // lateral axis is local +X. Rotate body.rotation.x accumulating
-    // by speed/circumference per dt.
-    const rollRate = speed / (Tuning.COMPANION_BODY_RADIUS);  // rad/s
+    // Roll the bodyShell around the LATERAL axis (perpendicular to
+    // travel direction). After group.rotation.y aligns +Z with heading,
+    // the lateral axis in body-local space is +X. Accumulating roll =
+    // speed / circumference per dt.
+    //
+    // AAZ-fix — rotate `bodyShell` (origin at body center, y=R) instead
+    // of `body` (origin at ground). Pre-AAZ-fix the ball orbited the
+    // ground point, so it dipped below + rose above the sand each cycle
+    // — the user read this as "bobbing up and down in the sand", which
+    // it literally was.
+    const rollRate = speed / Tuning.COMPANION_BODY_RADIUS;  // rad/s
     c.rollAngle = (c.rollAngle + rollRate * dt) % _PI2;
-    c.body.rotation.x = -c.rollAngle;      // negative so top of body rolls FORWARD
-    // Legs retract — hide them while rolling (body is a ball).
+    c.bodyShell.rotation.x = -c.rollAngle;
+    // Legs retract — hidden while rolling.
     for (const leg of c.legs) leg.visible = false;
-    // Body bob disabled while rolling (the rotation IS the motion).
+    // No vertical bob in rolling state.
     c.body.position.y = 0;
   } else if (c.state === 'walking') {
-    // Legs visible + animate gait. Each leg lifts on a sin-wave with
-    // a phase offset of 2π/5 = 72° per leg (5 legs).
-    c.body.rotation.x = 0;
+    c.bodyShell.rotation.x = 0;
+    // Animate each leg's hip rotation around its Z axis (the tangential
+    // axis at the leg's body attachment). Each leg lifts on a sin-wave
+    // with a 72° phase offset (2π/5 across the 5 legs) so the body
+    // always has some feet planted.
+    const t = ctx.time.elapsed * Tuning.COMPANION_LEG_GAIT_FREQ_HZ * _PI2;
     for (let i = 0; i < c.legs.length; i++) {
       c.legs[i].visible = true;
       const phase = (i / 5) * _PI2;
-      const t = ctx.time.elapsed * Tuning.COMPANION_LEG_GAIT_FREQ_HZ * _PI2;
-      // Lift = absolute sin so the leg always lifts UPWARD (not down).
-      // We lift the leg pivot in local +Y (relative to the body group
-      // orientation). For a more "creature-y" feel, also tilt the leg
-      // slightly forward as it lifts.
-      const lift = Math.max(0, Math.sin(t + phase)) * Tuning.COMPANION_LEG_GAIT_AMP;
-      c.legs[i].position.y = Tuning.COMPANION_BODY_RADIUS * 0.4 + lift;
+      // Lift in [0, 1] — only positive sin lobe so the leg always lifts
+      // UPWARD from rest, never plunges into the ground.
+      const lift = Math.max(0, Math.sin(t + phase));
+      // Rotation: rest is -REST; lift adds toward 0 (horizontal).
+      c.hips[i].rotation.z = -REST + lift * LIFT;
     }
-    // Slight body bob with the gait — every other leg lift pulses the body.
-    const t = ctx.time.elapsed * Tuning.COMPANION_LEG_GAIT_FREQ_HZ * _PI2;
-    c.body.position.y = Math.sin(t) * 0.01;
+    // Subtle body bob in time with the gait.
+    c.body.position.y = Math.sin(t) * 0.012;
   } else if (c.state === 'huddle') {
     // AAO — storm-peak huddle. Body pressed to ground, legs tucked
-    // (set y=0 so they retract under the body's lowest vertex). Very
-    // slow breathing bob (~1/4 the idle rate). No rotation.
-    c.body.rotation.x = 0;
+    // (rotated almost straight down so they shorten visually + hide
+    // under the body's lowest vertex). Slow breathing bob (~1/3 idle rate).
+    c.bodyShell.rotation.x = 0;
+    const t = ctx.time.elapsed * 0.35 * _PI2;
     for (let i = 0; i < c.legs.length; i++) {
       c.legs[i].visible = true;
-      // Legs tucked beneath the body (y near 0). Slight phase-shimmer
-      // for "alive but still" rather than "dead".
       const phase = (i / 5) * _PI2;
-      const t = ctx.time.elapsed * 0.35 * _PI2;
-      const tuck = Math.max(0, Math.sin(t + phase)) * Tuning.COMPANION_LEG_GAIT_AMP * 0.10;
-      c.legs[i].position.y = tuck;
+      // Tuck: rotate the hip past rest so the leg points more steeply
+      // downward. Slight per-leg shimmer so the huddle reads as
+      // "alive but still" rather than "dead".
+      const shimmer = Math.max(0, Math.sin(t + phase)) * 0.06;
+      c.hips[i].rotation.z = -(REST + 0.55) + shimmer;
     }
-    // Body pressed down — sit near ground, very small breathing bob.
-    const t = ctx.time.elapsed * Tuning.COMPANION_IDLE_BOB_FREQ_HZ * 0.35 * _PI2;
-    c.body.position.y = -Tuning.COMPANION_BODY_RADIUS * 0.35 + Math.sin(t) * (Tuning.COMPANION_IDLE_BOB_AMP * 0.4);
+    // Body pressed down.
+    const tBob = ctx.time.elapsed * Tuning.COMPANION_IDLE_BOB_FREQ_HZ * 0.35 * _PI2;
+    c.body.position.y =
+      -Tuning.COMPANION_BODY_RADIUS * 0.35 +
+      Math.sin(tBob) * (Tuning.COMPANION_IDLE_BOB_AMP * 0.4);
   } else {
-    // Idle. Legs visible, breathing-style body bob. Legs gently
-    // shimmer (small phase shift on the gait, no real lift).
-    c.body.rotation.x = 0;
+    // Idle. Legs visible, hips at rest with tiny shimmer; breathing bob
+    // on the body group.
+    c.bodyShell.rotation.x = 0;
+    const t = ctx.time.elapsed * 0.7 * _PI2;
     for (let i = 0; i < c.legs.length; i++) {
       c.legs[i].visible = true;
       const phase = (i / 5) * _PI2;
-      const t = ctx.time.elapsed * 0.7 * _PI2;
-      // Small idle twitch — half-amplitude of walking gait.
-      const twitch = Math.max(0, Math.sin(t + phase)) * Tuning.COMPANION_LEG_GAIT_AMP * 0.25;
-      c.legs[i].position.y = Tuning.COMPANION_BODY_RADIUS * 0.4 + twitch;
+      // Small twitch — ~10% of walking lift amplitude.
+      const twitch = Math.max(0, Math.sin(t + phase)) * LIFT * 0.10;
+      c.hips[i].rotation.z = -REST + twitch;
     }
-    // Breathing bob on the body.
-    const t = ctx.time.elapsed * Tuning.COMPANION_IDLE_BOB_FREQ_HZ * _PI2;
-    c.body.position.y = Math.sin(t) * Tuning.COMPANION_IDLE_BOB_AMP;
+    const tBob = ctx.time.elapsed * Tuning.COMPANION_IDLE_BOB_FREQ_HZ * _PI2;
+    c.body.position.y = Math.sin(tBob) * Tuning.COMPANION_IDLE_BOB_AMP;
   }
-  // Reference playerY so the linter / future shelter logic can use it
+  // Reference playerY so the linter / future shelter logic can use it.
   void playerY;
 }
 

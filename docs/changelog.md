@@ -3,6 +3,181 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session AAY — 2026-05-23 — Visual overhaul: tents + fabric shader + lantern + companion fix + grill bug ✓ verify pass
+`verified` — tsc clean + production build clean. Multi-iteration polish pass
+covering both tent kinds, a new procedural fabric shader, the lantern
+rebuild, companion animation fixes, and the long-standing grill-attach
+bug. 12 files modified, 1 new module (`fabricMaterial.ts`). No schema bump.
+
+**Bedouin large-tent visual** (research-driven redesign): replaces the
+pre-AAY featureless box with a beit-al-sha'ar silhouette — peaked ridge
+along the long axis, off-white canvas color (was deep goat-hair brown),
+subdivided BoxGeometry roof panels with catenary sag (`ROOF_SAG = 0.32m`,
+bumped from initial 0.07-0.13 after playtest), visible ridge poles
+protruding above the apex, interior horizontal beam, low side walls with
+slight outward bow, five guy ropes to ground stakes (front-ridge guy
+omitted so the entry stays clear), interior rug, terrain-slope tilt so
+the tent sits flush + stakes contact the ground. 11 new
+`LARGE_TENT_*` Tuning constants.
+
+**Operational doorway on large tent**: hover the entry → prompt shows
+"open"/"close doorway"; E toggles. Rolled-up canvas flap at the gable
+apex (full width, no longer floating) animates open ↔ closed via lerp
+(`DOOR_ANIM_SPEED = 2.4 /s`, ~0.4s transition). Door panel hangs from
+the top + bows OUTWARD when closed (corrected from initial inward
+bow). Shelter zone's `isLargeTent` flag toggled dynamically — closed
+door drops storm dampening to 0 (full enclosure); open door restores
+the 0.4 dampening (open-fronted, perceived intensity visible). New
+`HoverState.verb` field lets the same InteractType carry a state-
+dependent verb. New `InteractHit.subKind` lets the same registry
+dispatch differently per sub-mesh.
+
+**Procedural fabric shader** (`src/world/fabricMaterial.ts`, new ~120
+LOC): mirrors `terrainMaterial.ts` pattern (onBeforeCompile patches
+MeshLambertMaterial, IQ-style noise hash, value-noise FBM, world-space
+varyings). 4 layered effects on every cloth surface:
+- Weave cross-hatch (~2.5cm cycle, ±4% brightness)
+- Mid-scale color variation (FBM picks between sun-bleached cream + warm
+  tan at ~1.5m features)
+- Stain patches (sparse darker brown on ~15% of surface)
+- Per-pixel micro-grain sparkle (±2%)
+Applied to both fabric + patch materials. Sampled in world-space coords
+so different tents at different positions get visibly different surface
+patterns for free. Wrinkle-displacement on geometry was tried + cut
+(read as noise, not texture); shader-only texture works better.
+
+**Small tent rewrite** (`src/world/tent.ts`): same off-white canvas +
+fabric shader + sagged subdivided side walls + ridge poles + interior
+beam + four guy ropes + terrain tilt. Ridge runs along X with two end
+gables; +X gable is OPEN (entry) + -X gable closed. Deploy rotation
+shifted -π/2 so the open end faces the player when placed. Fixed a
+panel-rotation bug where the original `(π/2 - SLANT_ANGLE)` only
+tilted ~34° instead of the needed ~56° — both panels hovered in the
+middle of the tent crossing each other near the apex. Replaced with
+`Quaternion.setFromUnitVectors` aligning each panel's local +Z to the
+ridge-to-base slope direction (asymmetric rotation per side, handled
+by the quaternion). Sag amplitude multiplied by `side` to compensate
+for the asymmetric Y-axis flip between the two sides. `Tent.rotationY`
+added to the interface so save/load uses the pure yaw input (the live
+`mesh.quaternion` now also carries terrain-tilt, so the Euler-decomposed
+Y no longer round-trips cleanly).
+
+**Lantern salvaged-tech redesign** (`src/world/lantern.ts`): replaces
+the wooden-post-with-bulb design that read as "garden lamp" with a
+salvaged-tech power-cell on a hand-forged metal tripod. Three iron
+legs splay outward to a junction node with rivet detail, vertical
+post with red + yellow conduit cables alongside (carried over from
+AAR salvage panel wires for material consistency), metal cage (torus
+rings + 4 vertical bars) holding a glowing crystalline core (MeshBasic
+amber capsule with hemispherical end caps), top cap + carry hook ring.
+Same `PointLight` + flicker tick as before — only the geometry +
+materials changed. Reads as both rustic + sci-fi.
+
+**Companion legs + rolling + slope alignment fix**: three bugs found by
+playtest.
+- *Legs not visibly attached*: pre-AAY pivots sat at `(R*0.7, R*0.4)` —
+  INSIDE the body sphere — and leg segments were horizontal. Tips
+  floated ~10cm above ground.
+- *Rolling looked like bobbing*: `c.body.rotation.x` was the roll
+  rotation, but the body group's origin is at the creature's GROUND
+  position; the sphere (positioned at `body.position.y = R`) orbited
+  the ground point during roll, dipping below + rising above the sand.
+- *Body didn't align to slope*: `c.group.rotation.y = c.heading` kept
+  the body vertical regardless of terrain — creature looked like it
+  was floating on dune ramps.
+
+Fixes:
+- New `bodyShell` sub-group at `y=R` inside body; all body meshes
+  parent to it at y=0 (their centers coincide with shell origin); roll
+  rotation moved to `bodyShell.rotation.x` so the sphere pivots around
+  its own center.
+- New `hipGroup` inside each leg pivot. Pivots positioned at
+  `(R*sin(φ)*cos(θ), R(1-cos(φ)), R*sin(φ)*sin(θ))` — below the
+  equator (latitude φ ≈ 60° from top) — so short legs (`LL=0.14`)
+  can angle outward + downward and the tips actually touch the ground
+  at the resting `0.795rad` down-angle. Walk gait rotates the hip
+  around its Z axis (the tangential axis at the attachment) — leg
+  hinges UP from the body, not slides under it. Pivots also recessed
+  3cm INTO the body sphere so the leg's inner end visibly embeds
+  into the carapace instead of meeting the curved surface at a
+  tangent point.
+- New `alignCompanionToTerrain` helper samples 4 cardinal heights at
+  body-radius scale, builds a basis (up = terrain normal, forward =
+  heading projected onto tilted plane), sets `c.group.quaternion`
+  every frame. Pre-allocated scratch vectors. Third call site for
+  this pattern (tent, large tent, companion) — lift to shared util is
+  a backlog item.
+
+**Grill kit attach bug** (`items.ts` + `interaction.ts` + `types.ts`):
+two compounding bugs. (1) `grill_kit.onUse` required `hover.type ===
+'add_fuel'`, which only fires when the player has a BRANCH selected
+— with grill_kit selected, the fire's hover fell into the "no usable
+item" branch (type=`'cook'`), so the check rejected. (2) The handler
+read `(hover as { id?: number }).id ?? -1` — a TypeScript cast onto a
+property that didn't exist on `HoverState`. Even if the type check had
+passed, the fire lookup would have returned undefined.
+
+Fix:
+- Added `entityId?: number` to `HoverState`. Set it on every fire
+  hover branch (cook / add_fuel / relight / passive).
+- New grill_kit branch in `interaction.ts` case 'fires': prompt
+  reads "attach grill to fire" (verb override), E attaches +
+  consumes one slot.
+- Fixed `grill_kit.onUse` (LMB path) to accept any live-fire hover
+  type and use `hover.entityId`. Gated on `fire.alive` + `!fire.hasGrill`.
+
+**Dev mode crafting upgrades**: (1) `applyDevLoadout` pre-discovers all
+recipes (`ALL_RECIPE_IDS` push) so the right-side recipe panel is
+populated from the first crafting menu open. (2) New `directCraft`
+path in `craftingMenu.ts` — in dev mode, clicking any recipe row
+(CRAFTABLE *or* MISSING) produces the output directly with no input
+consumption. Toast suffixed `(dev craft)`. MISSING rows are still
+visually muted but no longer disabled. Vanilla play unchanged.
+
+## Session AAX — 2026-05-23 — Fix DEV MODE freeze + redesign as in-memory flag ✓ verify pass
+`verified` — tsc + production build clean. Critical fix + small
+architectural cleanup. 4 files, +94/-78. Save schema unchanged.
+
+AAW shipped an auto-bypass of the title overlay when
+`localStorage.devMode` was set, but called `handoffToGame()` at module
+init — outside any user gesture. Browsers reject pointer-lock + audio-
+context-start without a gesture, so the `'lock'` event never fired,
+`flags.paused` stayed true, and the game looked frozen.
+
+Fix: remove the auto-bypass entirely. Kill `localStorage.devMode` in
+favor of in-memory `ctx.flags.devMode: boolean`. DEV MODE button now
+applies the dev loadout INSIDE its click handler (gesture intact), sets
+the flag, and hands off directly — one click, no reload, no save wipe.
+NEW GAME and CONTINUE no longer touch any devMode state. CONTINUE
+explicitly clears the flag so a save load doesn't show a stale boot
+badge. Dev loadout extracted to `applyDevLoadout(ctx)` helper, reused
+by both `Tuning.DEBUG_STARTER_LOADOUT` boot path and the runtime title
+click.
+
+## Session AAW — 2026-05-23 — DEV MODE clarity + crafting recipe list + controls in pause menu ✓ verify pass
+`verified` — tsc clean. Three playtest-driven UX items. 5 files,
++384/-23. No schema bump. (Note: AAW's "auto-bypass title on devMode"
+introduced the freeze fixed in AAX.)
+
+**DEV MODE clarity**: persistent amber `[ DEV MODE ]` badge in HUD
+top-left when the localStorage flag is set. Title auto-bypasses on
+dev-mode boot (one click → in game, no NEW-GAME-after-DEV-MODE
+confusion). Pause-menu quit-to-menu clears the flag so quit returns
+to a vanilla title.
+
+**Right-side recipe list in crafting menu**: new column shows every
+discovered recipe categorized CRAFTABLE (N) / MISSING INGREDIENTS (N).
+Per-row have/need per ingredient with missing ones tinted red. Click a
+CRAFTABLE row to auto-fill the input slots, then hit CRAFT. Sister to
+the TAB-key recipe book panel which still exists for full-screen view.
+New helpers `addToInputCore` + `autoFillFromRecipe` extracted so the
+auto-fill skips per-item playUiClick + renderAll churn.
+
+**Controls in pause menu**: new "controls" button between save and
+settings. Opens the existing controls panel on top of pause; close
+returns to pause instead of unpausing. `tutorial.showControlsPanel`
+gained a `{ returnToPause }` opt.
+
 ## Session AAV — 2026-05-22 — Inventory + crafting overhaul + dev mode ✓ verify pass
 `verified` — tsc clean. Four playtest-driven features. 7 files touched;
 no new modules; no schema bump.
