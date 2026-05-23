@@ -543,6 +543,14 @@ export const Tuning = {
   POI_MAX_PLACEMENT_TRIES: 80,         // per-target attempt budget
   POI_SCATTER_RADIUS_MIN: 120,         // m — leave room for spawn cluster + anchor POIs
   POI_SCATTER_RADIUS_MAX: 1100,        // m — safely inside chunk band
+  // Session ABA — share of procgen POIs that use the new composite
+  // wreck system (procgenWreck.ts) vs. the legacy hand-modeled
+  // wreck-kind palette. 0.35 means ~7 of 22 procgen POIs per world
+  // get a procedurally-assembled corvette/freighter; the rest stay on
+  // engine_cluster / fuselage / escape_pod / engine_bell. Start
+  // modest so the new system can be evaluated alongside the proven
+  // legacy palette before ramping up the mix.
+  PROCGEN_COMPOSITE_SHARE: 0.35,
 
   // AAI — opening-scene anchor (player + opening wreck + companion pod +
   // speeder). Per D83, this position stays seed-stable as a narrative anchor.

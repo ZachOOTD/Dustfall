@@ -21,6 +21,7 @@ import type { Terrain } from './terrain.ts';
 import type { SalvageableRegistry } from './salvage.ts';
 import { registerSalvageable } from './salvage.ts';
 import { placeWreck, type WreckKind } from './wrecks.ts';
+import { placeProcgenComposite } from './procgenWreck.ts';
 import { Tuning } from '../config/tuning.ts';
 
 // Wreck-kind palette for procgen POIs. Cargo containers are intentionally
@@ -86,19 +87,31 @@ export function placeProcgenPOIs(
 
     const y = terrain.heightAt(accepted.x, accepted.z);
     const pos = new THREE.Vector3(accepted.x, y, accepted.z);
-    const kind = PROCGEN_WRECK_KINDS[Math.floor(rand() * PROCGEN_WRECK_KINDS.length)];
-    // Modest size + bury variation so procgen POIs read as varied silhouettes
-    // but stay smaller than the hero anchors (mega-ship / mega-wreck).
-    const scale = 0.9 + rand() * 0.5;
-    const buryY = 0.3 + rand() * 0.6;
-    const tiltZ = (rand() - 0.5) * 0.25;
-    const group = placeWreck(scene, world, terrain, pos, kind, rand, {
-      scale, buryY, tiltZ,
-    });
-    if (salvageables) {
-      // Use the wreck kind directly — registerSalvageable accepts the
-      // same union as placeWreck.
-      registerSalvageable(salvageables, group, kind, pos, rand);
+    // Session ABA — split procgen wrecks between hand-modeled (legacy
+    // ~65%) and composite (new procgen system ~35%). The composite
+    // wrecks come from `placeProcgenComposite` in `procgenWreck.ts`
+    // which assembles 3-9 parts from a part vocabulary (cockpit +
+    // hullSegment + engineModule + tailStub) per-seed for ~100s of
+    // unique silhouettes vs. the legacy 4-kind palette. Composite
+    // wrecks register their own salvageables internally.
+    if (rand() < Tuning.PROCGEN_COMPOSITE_SHARE) {
+      const buryY = 0.3 + rand() * 0.4;
+      placeProcgenComposite(scene, world, terrain, pos, rand, salvageables, { buryY });
+    } else {
+      const kind = PROCGEN_WRECK_KINDS[Math.floor(rand() * PROCGEN_WRECK_KINDS.length)];
+      // Modest size + bury variation so procgen POIs read as varied silhouettes
+      // but stay smaller than the hero anchors (mega-ship / mega-wreck).
+      const scale = 0.9 + rand() * 0.5;
+      const buryY = 0.3 + rand() * 0.6;
+      const tiltZ = (rand() - 0.5) * 0.25;
+      const group = placeWreck(scene, world, terrain, pos, kind, rand, {
+        scale, buryY, tiltZ,
+      });
+      if (salvageables) {
+        // Use the wreck kind directly — registerSalvageable accepts the
+        // same union as placeWreck.
+        registerSalvageable(salvageables, group, kind, pos, rand);
+      }
     }
     placed.push(pos);
   }
