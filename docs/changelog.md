@@ -3,6 +3,99 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ABA — 2026-05-23 — Overnight: salvage cleanup + procgen wreck system ✓ verify pass
+`verified` — tsc clean + production build clean. 7-item overnight bundle:
+4 bug fixes + 2 architecture cleanups + 1 new system. 14 files touched, 2
+new modules (`src/core/lightPool.ts`, `src/util/terrainAlign.ts`,
+`src/world/procgenWreck.ts`). No save schema bump.
+
+**P1 — Light-pool refactor** (`src/core/lightPool.ts`, new ~95 LOC). The
+lantern-placement freeze (multi-hundred-ms hitch on every fire / lantern
+deploy) traced to Three.js bumping its renderer's `lightsHash` whenever
+the scene's light count changed → every lit material (terrain shader,
+fabric shader, hulls, sand, tents, sand worm — ~30 unique materials in
+view) recompiled. Fix: pre-allocate 24 PointLights at boot, parked
+invisible (intensity=0, y=-10000). `claimLight` / `releaseLight` hand
+out + return slots; scene light count never changes after boot. Fires +
+lanterns guard the nullable light field (graceful pool-exhaustion
+fallback). save.ts releases on the "clear before re-spawn" path so
+Continue doesn't leak slots. lantern.ts also trimmed a blanket
+`castShadow=true` traversal to receiveShadow-only on the rivets / cage
+bars / hook torus.
+
+**P2 — Salvage panel door open-direction bug**. The hinge in
+addAccessPanel is at the panel's LEFT edge (body-local -X) following
+real fuse-box convention; the door extends to body's +X with the
+handle on the right. With Three.js's right-hand rule on +Y, a POSITIVE
+Y rotation around that hinge axis swings the door's free edge from +X
+toward -Z — INTO the hull. `updatePanelDoors` now applies the NEGATIVE
+of `panelDoorAngle` to `hinge.rotation.y` so positive open-magnitude =
+outward swing. State fields stay positive; convention documented at
+both the application site and the geometry-definition site. D101.
+
+**P3 — Legacy panel migration**. The 4 modules
+satelliteDish / crashedHull / engineBlock / openingWreck each had
+their own inline `make*AccessPanel` helper that built a simple
+Box body + horizontal rim — WITHOUT the AAR hinged door + interior
+detail components + AAU recess + AAS glow. Result: 8 legacy panels
+(2 per module) were pry-able but the extract path found NO
+`panelComponents` → force-stripped with no loot (latent bug,
+confirmed via code-trace). All 8 callsites migrated to addAccessPanel
+via a **wrapper-Group pattern**: the wrapper's local +Z encodes the
+panel's outward direction, the wrapper's position is the hull surface,
+addAccessPanel recesses the body INTO -Z. Each PanelKind picked
+thematically (control-room 'fuselage', engine-bay 'engine_cluster',
+bell interior 'engine_bell'). Inherited fixes: P2's door direction,
+AAU recess, AAS electrical glow, AAS+AAT condition tiers + per-
+component loot. D102.
+
+**P4 — Speeder damping when unmounted**. Body-friction-free hover bike
++ no ground contact + no input override when not riding → a player-
+capsule collision gives the bike one-way velocity it never sheds.
+Frame-rate-independent exponential decay applied only while
+`!s.mounted`: `SPEEDER_UNMOUNTED_LINEAR_DAMP_RATE_PER_S = 1.8` (~0.4
+m/s after 1s from a 3 m/s nudge) + `SPEEDER_UNMOUNTED_ANGULAR_DAMP_RATE_PER_S
+= 2.5` (spinning damps faster — a spinning parked hover bike reads
+extra wrong). Mounted state's input-driven `setLinvel` / `setAngvel`
+fully override these.
+
+**P5 — Tutorial coverage refresh**. Added HINTS entries for
+`large_tent_kit` (walk-in doorway), `grill_kit` (multi-parallel
+cooking), `scrap_bar` (two-stage pry+extract). These were ItemIds that
+shipped after the original HINTS table set and had been collecting
+playtest "wait, what does this do?" moments.
+
+**P6 — alignMeshToTerrain lift to shared util** (`src/util/terrainAlign.ts`,
+new ~70 LOC). D98 triggered the extraction: the 4th caller would be
+P7's procgen wreck system. Extracted from 3 duplicates (`tent.ts` /
+`largeTent.ts` / `companion.ts`). Module-level scratch vectors inside
+the util (Vector3 × 4 + Matrix4 × 1) preserve the no-allocation
+per-frame behavior the companion's local copy had. API: `alignToTerrain(obj,
+terrain, x, z, yaw, sampleRadius)` — dropped the Vector3 `pos` param
+in favor of (x, z) scalars to match companion's existing signature +
+let scattered-positioning callers avoid Vector3 allocation. D103.
+
+**P7 — Procgen wreck-POI modelling system, first cut**
+(`src/world/procgenWreck.ts`, new ~430 LOC). Composable part-vocabulary
+approach unlocks ~100s of unique wreck silhouettes per seed. Part
+kinds: cockpit (3 variants: tapered_nose, blocky_pilot_bubble,
+bulbous_escape_capsule), hullSegment (3: ribbed_cylinder,
+plated_rectangular, paneled_tapered), engineModule (2: single_bell,
+twin_bell), tailStub (2: torn_ragged, sealed_cap). Each variant
+returns `BuiltPart { mesh, partLength, radius, panelAnchor? }`.
+Assembler lays parts along +X, centers the wreck around its position,
+welds salvage panels onto parts that offered a panelAnchor. Two
+recipes (wreck classes): **corvette** (3-5 parts, 6-12m, ~50% mix)
+and **freighter** (5-9 parts, 14-22m). Each panel-bearing part becomes
+its own Salvageable via post-assembly `userData.accessPanel`
+traversal. `procgenPoi.ts` splits each procgen slot 35/65 between
+composite (new) and legacy hand-modeled palette — `Tuning.PROCGEN_COMPOSITE_SHARE
+= 0.35`. New constant lets the share ramp in future sessions. D102 +
+D104.
+
+**P8 — Verify + session-end**. tsc clean, vite build clean, all 7
+items committed across 6 commits (P1, P2+P3, P4+P5, P6, P7).
+
 ## Session AAY — 2026-05-23 — Visual overhaul: tents + fabric shader + lantern + companion fix + grill bug ✓ verify pass
 `verified` — tsc clean + production build clean. Multi-iteration polish pass
 covering both tent kinds, a new procedural fabric shader, the lantern

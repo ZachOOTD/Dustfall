@@ -59,39 +59,40 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session AAY — Visual overhaul pass: tents + fabric
-shader + lantern + companion + grill bug. Multi-iteration polish covering
-the entire placeable-cloth surface plus a couple of long-standing
-bugs. **Large tent**: Bedouin beit-al-sha'ar redesign (peaked ridge,
-off-white canvas, sagged subdivided roof panels, ridge poles,
-interior beam, guy ropes + ground stakes, interior rug, terrain-slope
-tilt). **Operational doorway**: hover entry → "open/close doorway";
-E toggles. Rolled-up canvas flap animates open ↔ closed; closed door
-drops shelter-zone storm dampening to 0 (full enclosure), open
-restores 0.4. New `HoverState.verb` + `InteractHit.subKind` for
-sub-mesh dispatch. **Procedural fabric shader** (new
-`fabricMaterial.ts`): four layered effects — weave cross-hatch,
-mid-scale color variation, sparse stain patches, micro-grain. Drop-in
-`createFabricMaterial(color, side)` replacement for plain
-MeshLambertMaterial on every cloth surface. Mirrors terrainMaterial
-shader pattern. **Small tent rewrite**: same fabric shader + off-white
-canvas + sagged side walls + ridge poles + guy ropes + terrain tilt.
-+X gable open as entrance; deploy yaw shifted -π/2 so the open end
-faces the player. Fixed panel-rotation bug (used quaternion alignment
-instead of the wrong `π/2 - SLANT_ANGLE`) + sag-sign flip per side.
-**Lantern**: salvaged-tech power-cell redesign — hand-forged iron
-tripod with rivets, vertical post with red+yellow conduit cables,
-metal cage holding a glowing crystalline core, top cap + carry hook.
-Reads as rustic + sci-fi. **Companion fixes**: new `bodyShell` group
-(rolling rotates around body center, not ground point — no more
-bobbing-into-sand); new per-leg `hipGroup` (legs hinge at body
-attachment instead of sliding under body, attached BELOW equator so
-short legs reach ground); new `alignCompanionToTerrain` (body tilts
-with slope). **Grill kit attach bug**: added `HoverState.entityId`
-+ new fire-case branch for grill_kit; works via E and LMB now.
-**Dev mode crafting**: pre-discovers all recipes; clicking any recipe
-row (CRAFTABLE or MISSING) produces output without consuming inputs
-(direct-craft path). 12 files, 1 new module, no schema bump. D97-D100.
+**Last shipped**: Session ABA — Overnight: salvage cleanup + procgen
+wreck system. 7-item overnight bundle. **P1 light-pool refactor**:
+pre-allocate 24 PointLights at boot, parked invisible; fires + lanterns
+claim/release from the pool instead of constructing new PointLights at
+placement time. Eliminates the multi-hundred-ms freeze on each
+fire / lantern deploy (Three.js's `lightsHash` bump was forcing every
+lit material — terrain shader, fabric shader, hulls, sand, tents,
+sand worm, ~30 unique materials — to recompile). **P2 salvage door
+direction bugfix**: with the hinge on the panel's LEFT edge (real
+fuse-box convention), positive Y rotation swung the door's free edge
+INTO the hull. Fix: apply the NEGATIVE of `panelDoorAngle` at
+`updatePanelDoors`. D101. **P3 legacy panel migration**: 4 modules
+(satelliteDish / crashedHull / engineBlock / openingWreck) had inline
+make*AccessPanel helpers that built simple Box+rim panels — no
+hinged door, no interior detail, no AAU recess, NO LOOT (silent bug
+in the extract path). All 8 callsites migrated to addAccessPanel via
+wrapper-Group pattern. D102. **P4 speeder unmount damping**:
+`SPEEDER_UNMOUNTED_LINEAR_DAMP_RATE_PER_S = 1.8` +
+`SPEEDER_UNMOUNTED_ANGULAR_DAMP_RATE_PER_S = 2.5` apply
+exponential-decay damping only while not mounted (bumps damp to rest
+in ~2s instead of accelerating indefinitely). **P5 tutorial coverage**:
+added HINTS for grill_kit, scrap_bar, large_tent_kit. **P6
+alignToTerrain lift**: extracted from 3 duplicates (`tent.ts` /
+`largeTent.ts` / `companion.ts`) to new `src/util/terrainAlign.ts`
+with module-level scratch vectors preserving per-frame zero-GC. D103.
+**P7 procgen wreck-POI modelling system, first cut**: new
+`src/world/procgenWreck.ts` (~430 LOC) — composable part vocabulary
+(cockpit / hullSegment / engineModule / tailStub with 2-3 variants
+each). Two recipes (corvette + freighter) drive seeded assembly along
++X axis. Each panel-bearing part becomes its own Salvageable.
+`Tuning.PROCGEN_COMPOSITE_SHARE = 0.35` mixes composite vs legacy
+hand-modeled wrecks 35/65 in procgenPoi.ts. D104. 14 files touched,
+3 new modules (`core/lightPool.ts`, `util/terrainAlign.ts`,
+`world/procgenWreck.ts`). No schema bump. D101–D104.
 
 **Prior milestone**: Session AAU — Salvage panel polish from playtest
 feedback. Four user-reported issues fixed: (1) panels too small +

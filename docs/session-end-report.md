@@ -4,27 +4,32 @@ Cumulative state. Rewritten end-to-end at each `/session-end`. A
 reviewer who's never seen the project should be able to read this +
 `CLAUDE.md` + `docs/GDD.md` and understand where Dustfall is.
 
-**Current state**: Session AAY shipped (2026-05-23). 54 sessions
-post-MVP (AAW + AAX + AAY since last report). tsc + production build
-clean. SAVE_VERSION v10 (unchanged across the three new sessions —
-all derivation-pattern fixes or in-memory state per D94/D96/AAX).
-Working tree dirty pending the user's AAY commit; AAW + AAX already
-committed (`455f3b3`, `fb36bb9`).
+**Current state**: Session ABA shipped (2026-05-23, overnight). 55
+sessions post-MVP. tsc + production build clean. SAVE_VERSION v10
+(unchanged — all 7 ABA items either bugfixes or net-new systems with
+no save-field implications). All commits pushed; working tree dirty
+only for the session-end docs updates.
 
-**Since last report (AAV → AAY)**: DEV MODE UX overhaul (in-memory
-flag, in-game badge, freeze fix); right-side recipe list in crafting
-menu (CRAFTABLE/MISSING + click-auto-fill); CONTROLS button in pause;
-**big visual overhaul pass** — Bedouin large + small tents (peaked
-ridge, off-white canvas, sagged cloth panels, ridge poles, guy ropes,
-terrain tilt, fabric shader, operational doorway with shelter-zone
-toggle), salvaged-tech lantern (iron tripod + cage + glowing core),
-companion fixes (rolling now actually rolls instead of bobbing into
-sand; legs hinge at body attachment instead of sliding flat), terrain-
-slope alignment on companion + tents, grill-kit attach bug fix
-(HoverState.entityId field). Dev mode crafting upgrades (all recipes
-pre-discovered + free direct-craft on click). D97-D100. 1 new module
-(`fabricMaterial.ts` — procedural cloth shader pattern, drop-in
-replacement for MeshLambertMaterial on any fabric surface).
+**Since last report (AAY → ABA)**: 7-item overnight bundle.
+**P1 light-pool refactor** eliminates the lantern-placement freeze
+(Three.js `lightsHash` bump → shader recompile across all lit
+materials). **P2 salvage door direction bug** (real fuse-box hinge
+convention requires negative open-angle to swing outward).
+**P3 legacy panel migration** — 4 modules
+(satelliteDish/crashedHull/engineBlock/openingWreck) migrated from
+inline `make*AccessPanel` helpers to the AAR pipeline via wrapper-
+Group pattern. Fixes a silent no-loot bug + inherits hinged doors +
+interior components + AAU recess + AAS glow + AAT condition tiers.
+**P4 speeder unmount damping** prevents indefinite drift after
+collisions. **P5 tutorial hints** for grill_kit / scrap_bar /
+large_tent_kit. **P6 `alignToTerrain` lift** to
+`src/util/terrainAlign.ts` (4th-caller threshold per D98).
+**P7 procgen wreck-POI modelling system, first cut** — composable
+part vocabulary (cockpit / hullSegment / engineModule / tailStub
+with 2-3 variants each) + 2 wreck classes (corvette / freighter) +
+35/65 composite-vs-legacy split via `Tuning.PROCGEN_COMPOSITE_SHARE`.
+D101–D104. 14 files touched, 3 new modules (`core/lightPool.ts`,
+`util/terrainAlign.ts`, `world/procgenWreck.ts`).
 
 ---
 
@@ -100,6 +105,47 @@ Fresh-game start (the de-facto Tier 1 — Session W shipped):
     additive per D81.
 
 ---
+
+## What's freshly shipped (Session ABA deltas — overnight)
+
+7-item overnight bundle: 4 bugfixes + 2 architecture cleanups + 1 new
+system. 14 files touched, 3 new modules. No save schema bump. D101-D104.
+
+- **P1 light-pool refactor** (`src/core/lightPool.ts`, ~95 LOC). Pre-
+  allocate 24 PointLights at boot, parked invisible. `claimLight` /
+  `releaseLight` hand out + return slots. Fires + lanterns guard the
+  now-nullable light field. save.ts releases on the "clear before
+  re-spawn" path. Eliminates the multi-hundred-ms freeze on each
+  fire / lantern deploy (Three.js's `lightsHash` bump → shader
+  recompile across all lit materials).
+- **P2 salvage door direction bugfix** — applied `-panelDoorAngle` at
+  `door.rotation.y` to preserve the real-world hinge convention
+  (LEFT-edge hinge, handle on RIGHT) while making positive open-angle
+  swing outward. D101.
+- **P3 legacy panel migration** — 4 modules
+  (satelliteDish / crashedHull / engineBlock / openingWreck) migrated
+  from inline `make*AccessPanel` helpers to `addAccessPanel` via
+  wrapper-Group pattern. Fixes latent no-loot bug + inherits AAR/AAS/
+  AAT/AAU pipeline. Each panel-bearing PART becomes its own
+  Salvageable via `userData.accessPanel` tagging. D102.
+- **P4 speeder unmount damping** — frame-rate-independent exponential
+  decay only while not mounted. `SPEEDER_UNMOUNTED_LINEAR_DAMP_RATE_PER_S
+  = 1.8`, `SPEEDER_UNMOUNTED_ANGULAR_DAMP_RATE_PER_S = 2.5`.
+- **P5 tutorial hints** — HINTS entries for grill_kit (multi-cook
+  parallel), scrap_bar (two-stage pry+extract), large_tent_kit
+  (walk-in doorway).
+- **P6 `alignToTerrain` lift** (`src/util/terrainAlign.ts`, ~70 LOC).
+  Extracted from 3 duplicates (tent / largeTent / companion). Module-
+  level scratch vectors preserve zero-allocation per-frame behavior.
+  D103.
+- **P7 procgen wreck-POI modelling system, first cut**
+  (`src/world/procgenWreck.ts`, ~430 LOC). Composable part vocabulary:
+  cockpit (3 variants) / hullSegment (3) / engineModule (2) /
+  tailStub (2). Recipes: corvette (3-5 parts, 6-12m) + freighter (5-9
+  parts, 14-22m). Assembler lays parts along +X with cursor advance.
+  Each panel-bearing part registers its own Salvageable. Integrated
+  in procgenPoi.ts at 35/65 vs legacy palette per
+  `Tuning.PROCGEN_COMPOSITE_SHARE`. D104.
 
 ## What's freshly shipped (Session AAV deltas)
 

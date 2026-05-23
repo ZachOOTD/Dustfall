@@ -2085,3 +2085,130 @@ body-shell + per-leg hip-group decomposition. The pattern generalizes:
 - Per-limb pivot: world-positioned at body surface
 - Per-limb hip: rotates to animate the limb via hinge motion
 **friction-score:** 1
+
+## D101 — Salvage panel door open-direction convention (Session ABA)
+**When**: ABA bugfix — the door's free edge (with the handle) was
+swinging INTO the hull instead of OUT toward the player, making the
+pry stage read backwards. Root cause: addAccessPanel positions the
+hinge at the panel's LEFT edge (body-local -X), the door extends to
+body's +X with the handle on the right — real fuse-box convention.
+Three.js's right-hand rule on +Y means a positive Y rotation around
+that hinge swings the +X point toward -Z = INTO the hull.
+**Picked**: keep the geometry as-is (preserves the real-world hinge
+convention) + apply the NEGATIVE of `panelDoorAngle` at
+`door.rotation.y` in `updatePanelDoors`. State field stays a positive
+magnitude; the sign convention is encoded once at the application
+site, documented inline at both the application site and the geometry
+definition.
+**Why**: a one-line fix that preserves the original geometry's
+real-world convention (hinges on the LEFT, handle on the RIGHT —
+matches actual fuse boxes when viewed from outside). Alternative
+("flip the geometry") would have swapped the hinge to RIGHT edge +
+moved handle to LEFT + moved 4 rivets — visually identical when
+closed but 6+ lines of changes per callsite and a violation of
+the real-world convention.
+**Apply**: don't introduce a new positive-vs-negative-rotation
+convention; the negative is the docstring-blessed encoding of the
+hinge-frame ↔ open-direction relationship. Future panels added via
+addAccessPanel inherit the fix.
+**friction-score:** 1
+
+## D102 — addAccessPanel as the universal salvage-panel pipeline (Session ABA)
+**When**: ABA legacy panel migration + procgen wreck system. Pre-ABA
+the 4 flagship modules (satelliteDish, crashedHull, engineBlock,
+openingWreck) each had their own inline `make*AccessPanel` helper
+that built a simple Box body + horizontal rim — none of them
+participated in the AAR hinged-door / AAS interior detail / AAT
+condition tiers / AAU recess / AAS glow pipeline. Latent bug
+discovered during P2/P3 audit: legacy panels were pry-able but the
+extract path found NO `panelComponents` → force-stripped with no
+loot.
+**Picked**: every salvage panel in the project goes through
+`addAccessPanel(parent, localX, localY, localZ, scale, faceYaw, kind)`.
+Legacy callsites migrate via a **wrapper-Group pattern**: each
+callsite constructs an empty Group → calls addAccessPanel(wrapper,
+0, 0, 0, 1, 0, kind) → positions + rotates the wrapper. The
+wrapper's local +Z encodes the panel's outward direction;
+addAccessPanel recesses the body INTO -Z so the front face sits at
+the wrapper's origin (flush with hull surface).
+**Why**: ONE source of truth for the panel pipeline means future
+features (P2-style fixes, new condition tiers, glow effects, panel
+material variants) land everywhere automatically. Procgen wreck
+system in the same session was the 4th-and-final caller using the
+panel pipeline, and benefitted from the same uniformity.
+**Considered alternatives**:
+- Keep the inline copies + manually backport AAR/AAS/AAT/AAU fixes
+  to each (rejected — already missed the AAU recess sweep, would
+  miss future ones).
+- Extract a shared `buildAccessPanel(scale, kind)` returning the
+  Group + body (rejected — addAccessPanel already does this, just
+  with a parent arg). The wrapper-Group pattern uses what's there.
+- Extend addAccessPanel to take a Quaternion for full 3-axis
+  rotation (rejected — wrapper-Group pattern handles all 3 axes
+  trivially via the parent's transform).
+**Apply**: any module needing a salvage panel must call addAccessPanel
+via the wrapper-Group pattern. The wrapper's local +Z = outward
+direction. Don't recreate panel materials or hinge geometry locally.
+**friction-score:** 2
+
+## D103 — Shared `terrainAlign` util — when to extract (Session ABA)
+**When**: ABA. The terrain-slope alignment helper (4-cardinal
+heightAt sample → finite-difference gradient → normal → project
+heading onto tangent plane → orthonormal basis → setFromRotationMatrix)
+existed in 3 places: `tent.ts`, `largeTent.ts`, `companion.ts`. Each
+had different argument conventions: tents took a `pos: Vector3`,
+companion took `px, pz` scalars. Per D98, the 4th caller triggers
+extraction; P7's procgen wreck system in the same session would be
+the 4th.
+**Picked**: extract to `src/util/terrainAlign.ts` exporting
+`alignToTerrain(obj, terrain, x, z, yaw, sampleRadius)`. Module-level
+scratch vectors preserve the no-allocation per-frame behavior the
+companion's local copy had. Dropped the Vector3 `pos` param in favor
+of (x, z) scalars — matches companion's pattern and lets future
+scattered-positioning callers avoid Vector3 allocation just to call
+the helper.
+**Why**: 3 copies is the cost-tolerable threshold; 4 means at least
+one copy will drift. The shared util captures the proven 4-cardinal
++ projection pattern so the next caller (and the one after) gets it
+right for free. Once-only scratch vectors mean per-frame callers
+(companion) keep paying zero GC.
+**Apply**: lift the 5th-caller-shaped helper if you spot it. Don't
+extract at 2 callers — the cost of generalizing the API outweighs
+the savings until the 4th would land within the same session as the
+3rd.
+**friction-score:** 1
+
+## D104 — Procgen wreck composite system — coexists with hand-modeled (Session ABA)
+**When**: ABA P7 first-cut delivery. The composite system
+(procgenWreck.ts) is fundamentally different from the legacy
+hand-modeled wreck-kind palette (engine_cluster / fuselage /
+escape_pod / cargo_container / engine_bell): composite builds a
+wreck from a sequenced part vocabulary, legacy is a finished single
+silhouette. Both are valid; both have different visual profiles.
+**Picked**: integrate composite as a SHARE of procgen slots
+(`Tuning.PROCGEN_COMPOSITE_SHARE = 0.35`) rather than replacing the
+legacy palette. ~7 of 22 procgen POIs per world get composite
+silhouettes; the rest stay on the proven 4-kind palette. Hand-
+modeled flagship modules (satelliteDish, crashedHull, engineBlock,
+megaShip, megaWreck) are NOT touched.
+**Why**: gradual ramp lets multi-seed playtests evaluate the
+composite system's visual quality alongside the proven legacy
+palette before raising the share. Hand-modeled flagships have
+deliberate silhouettes + interior shelter zones + custom colliders
+that don't fit the part-vocabulary mold — keeping them out of scope
+keeps this session's surface focused on procgen slots.
+**Considered alternatives**:
+- Replace legacy palette outright (rejected — multi-seed risk, no
+  visual A/B data yet).
+- Replace one specific legacy kind (e.g. `engine_cluster`) with the
+  composite (rejected — splits the rollout decision into two: "is
+  composite good enough" + "does engine_cluster have remaining
+  value", harder to reason about).
+- Composite system replaces flagship modules (rejected — flagships
+  have hand-tuned narrative + interior + collider work that's not in
+  scope; future-session expansion if the system proves out).
+**Apply**: when adding new wreck-creation systems, default to
+coexistence with the existing palette via a Tuning share constant.
+Migration to "replace all" comes after playtest data validates the
+new system, not at first ship.
+**friction-score:** 2
