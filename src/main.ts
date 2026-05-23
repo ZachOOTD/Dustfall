@@ -7,6 +7,7 @@ import { Tuning } from './config/tuning.ts';
 import { makeRng } from './core/rng.ts';
 import { createScene } from './core/scene.ts';
 import { createLights, updateLighting } from './core/lighting.ts';
+import { createLightPool } from './core/lightPool.ts';
 import { createInput, wireOverlays, endInputFrame } from './core/input.ts';
 import { startLoop } from './core/loop.ts';
 import { createPhysicsWorld } from './physics/world.ts';
@@ -87,6 +88,13 @@ const [physics, assets] = await Promise.all([
 
 const three = createScene();
 const lights = createLights(three.scene);
+// AAY-fix — pre-allocated PointLight pool. MUST be created BEFORE any
+// world entity that uses a light (salvage panels, fires, lanterns), so
+// the pool lights are part of the initial scene state and don't bump
+// the renderer's lightsHash at runtime (which would force a multi-
+// hundred-ms shader recompile across every lit material). See
+// src/core/lightPool.ts. Size 24 covers worst-case simultaneous use.
+const lightPool = createLightPool(three.scene, 24);
 const input = createInput(three.camera, three.renderer.domElement);
 const hud = createHud();
 createHotbar();
@@ -308,6 +316,7 @@ const ctx: GameContext = {
   stormVignette,
   speeder: null,                 // populated by setupOpeningScene on fresh worlds
   footprints,
+  lightPool,
   journals: { list: [] as Journal[] },
   flags: {
     started: false,

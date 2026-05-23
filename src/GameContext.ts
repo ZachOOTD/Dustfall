@@ -35,6 +35,7 @@ import type { Companion } from './enemies/companion.ts';
 import type { BiomeSampler } from './world/biomes.ts';
 import type { SalvageableRegistry } from './world/salvage.ts';
 import type { FootprintRegistry } from './world/footprints.ts';
+import type { LightPool } from './core/lightPool.ts';
 
 export interface GameContext {
   /** Session AAI — world seed. Drives all 3 RNG streams (terrain,
@@ -132,6 +133,12 @@ export interface GameContext {
   stormVignette: StormVignette;
   speeder: SpeederState | null;       // null until the opening scene spawns it
   footprints: FootprintRegistry;
+  /** AAY-fix — pre-allocated PointLight pool. Fires + lanterns claim
+   *  from this instead of `new THREE.PointLight()` per spawn (the
+   *  add-light-to-scene path triggers shader recompile across every lit
+   *  material — multi-hundred-ms freeze per placement). See
+   *  `src/core/lightPool.ts`. */
+  lightPool: LightPool;
   journals: { list: Journal[] };
   flags: {
     started: boolean;     // true once the player has clicked into the game

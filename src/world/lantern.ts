@@ -11,11 +11,15 @@ import * as THREE from 'three';
 import type { GameContext } from '../GameContext.ts';
 import { Tuning } from '../config/tuning.ts';
 import { addItem } from '../inventory/inventory.ts';
+import { claimLight, releaseLight } from '../core/lightPool.ts';
 
 export interface Lantern {
   id: number;
   mesh: THREE.Group;
-  light: THREE.PointLight;
+  /** AAY-fix — claimed from ctx.lightPool. `null` only if the pool was
+   *  exhausted at spawn (graceful fallback — lantern still visible,
+   *  just no scene illumination contribution). */
+  light: THREE.PointLight | null;
   globeMat: THREE.MeshBasicMaterial;
   pos: THREE.Vector3;
   rotationY: number;
@@ -47,7 +51,6 @@ function tag(root: THREE.Object3D, id: number): void {
 
 function makeLanternVisual(): {
   group: THREE.Group;
-  light: THREE.PointLight;
   globeMat: THREE.MeshBasicMaterial;
 } {
   const g = new THREE.Group();
@@ -234,19 +237,14 @@ function makeLanternVisual(): {
   hook.position.y = HEAD_Y + CAGE_H + 0.06;
   g.add(hook);
 
-  // ── PointLight at the core center. Same intensity / range / falloff
-  // as pre-AAZ-fix so the lighting balance doesn't shift.
-  const light = new THREE.PointLight(
-    glowColor,
-    Tuning.LANTERN_LIGHT_INTENSITY,
-    Tuning.LANTERN_LIGHT_DISTANCE,
-    1.8,
-  );
-  light.position.copy(core.position);
-  light.castShadow = false;
-  g.add(light);
+  // AAY-fix — PointLight no longer created here. Claimed from
+  // ctx.lightPool in spawnLanternAt and positioned in WORLD space (the
+  // pool light is a scene-direct child, not a member of this lantern
+  // group, so add/remove of the group doesn't change the scene's
+  // lightsHash and trigger shader recompilation).
+  void glowColor;
 
-  return { group: g, light, globeMat };
+  return { group: g, globeMat };
 }
 
 /** Deploy a lantern PLACEMENT_DISTANCE_M ahead. Returns null if too
@@ -281,22 +279,45 @@ export function spawnLanternAt(
   const visual = makeLanternVisual();
   visual.group.position.copy(pos);
   visual.group.rotation.y = rotationY;
+  // AAY-fix — receiveShadow on everything is cheap, but blanket
+  // castShadow=true on 20+ small meshes (cage bars, rivets, hook torus,
+  // glowing core caps) bloats the shadow-map render pass. Set
+  // castShadow only on the silhouette-defining members. The cage,
+  // rivets, conduit wires, and core hemispheres don't need to cast
+  // shadows — they're tiny / inside the cage / glowing.
   visual.group.traverse((o) => {
     const m = o as THREE.Mesh;
-    if (m.isMesh) {
-      m.castShadow = true;
-      m.receiveShadow = true;
-    }
+    if (m.isMesh) m.receiveShadow = true;
   });
   ctx.three.scene.add(visual.group);
 
   const id = _nextId++;
   tag(visual.group, id);
 
+  // AAY-fix — claim a pool light + configure for the lantern.
+  // Positioned at the world location of the core (lantern world position
+  // + the core's local y offset).
+  const light = claimLight(ctx.lightPool);
+  if (light) {
+    light.color.setHex(Tuning.LANTERN_LIGHT_COLOR_HEX);
+    light.distance = Tuning.LANTERN_LIGHT_DISTANCE;
+    light.decay = 1.8;
+    light.intensity = Tuning.LANTERN_LIGHT_INTENSITY;
+    // Core position inside the lantern: HEAD_Y + CAGE_H * 0.5 (see
+    // makeLanternVisual). Recomputed here to avoid leaking the local
+    // layout constants into this scope; HEAD_Y is LANTERN_HEIGHT_M -
+    // 0.08, CAGE_H is 0.18 → core Y ≈ LANTERN_HEIGHT_M + 0.01.
+    light.position.set(
+      pos.x,
+      pos.y + Tuning.LANTERN_HEIGHT_M - 0.08 + 0.09,
+      pos.z,
+    );
+  }
+
   const lantern: Lantern = {
     id,
     mesh: visual.group,
-    light: visual.light,
+    light,
     globeMat: visual.globeMat,
     pos: pos.clone(),
     rotationY,
@@ -322,11 +343,26 @@ export function packUpLantern(ctx: GameContext, lantern: Lantern): boolean {
     ctx.ui.showToast('no room in your bag');
     return false;
   }
+  // AAY-fix — release the pool light back so the next lantern can use it.
+  if (lantern.light) {
+    releaseLight(ctx.lightPool, lantern.light);
+    lantern.light = null;
+  }
   ctx.three.scene.remove(lantern.mesh);
   const i = ctx.lanterns.list.indexOf(lantern);
   if (i >= 0) ctx.lanterns.list.splice(i, 1);
   ctx.ui.showToast('lantern packed');
   return true;
+}
+
+/** AAY-fix — release a lantern's pool light without consuming a kit. Used
+ *  by save.ts's "clear before re-spawn" path so Continue doesn't leak
+ *  pool slots. */
+export function releaseLanternLight(ctx: GameContext, lantern: Lantern): void {
+  if (lantern.light) {
+    releaseLight(ctx.lightPool, lantern.light);
+    lantern.light = null;
+  }
 }
 
 /** Per-frame: sin-driven flicker on intensity + globe opacity. Two
@@ -341,7 +377,7 @@ export function updateLanterns(ctx: GameContext): void {
     const phase = l.flickerSeed;
     const wobble = Math.sin(t * 13.7 + phase) * 0.5 + Math.sin(t * 21.3 + phase * 0.7) * 0.5;
     const factor = 1 + wobble * amp;
-    l.light.intensity = baseInt * factor;
+    if (l.light) l.light.intensity = baseInt * factor;
     l.globeMat.opacity = 0.78 + wobble * amp * 0.5;
   }
 }

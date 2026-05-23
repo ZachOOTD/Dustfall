@@ -12,11 +12,15 @@ import {
   type ShelterZone,
 } from '../shelter/shelterZones.ts';
 import { playFireIgnite, playFireCrackle } from '../audio/audio.ts';
+import { claimLight, releaseLight } from '../core/lightPool.ts';
 
 export interface Fire {
   id: number;
   mesh: THREE.Group;
-  light: THREE.PointLight;
+  /** AAY-fix — claimed from ctx.lightPool. `null` only if the pool was
+   *  exhausted at spawn time (graceful fallback — fire still works,
+   *  just no illumination contribution to the scene). */
+  light: THREE.PointLight | null;
   flameGroup: THREE.Group;     // hide/show on death
   emberMesh: THREE.Mesh;       // glows red when dead
   shelterZone: ShelterZone | null;
@@ -48,7 +52,7 @@ function tag(root: THREE.Object3D, id: number, type: 'cook' | 'relight'): void {
   });
 }
 
-export function makeFireVisual(): { group: THREE.Group; flameGroup: THREE.Group; light: THREE.PointLight; ember: THREE.Mesh } {
+export function makeFireVisual(): { group: THREE.Group; flameGroup: THREE.Group; ember: THREE.Mesh } {
   const g = new THREE.Group();
 
   // 3-4 short logs arranged in a tee-pee
@@ -99,13 +103,12 @@ export function makeFireVisual(): { group: THREE.Group; flameGroup: THREE.Group;
   }
   g.add(flameGroup);
 
-  // Warm flickering PointLight
-  const light = new THREE.PointLight(0xff9040, 1.3, 8, 1.6);
-  light.position.set(0, 0.4, 0);
-  light.castShadow = false; // perf
-  g.add(light);
+  // AAY-fix — PointLight no longer created here. Claimed from
+  // ctx.lightPool inside spawnFireAt and positioned in WORLD space (the
+  // pool light is a scene-direct child, not a member of this fire group,
+  // so add/remove of the group doesn't change the scene's lightsHash).
 
-  return { group: g, flameGroup, light, ember };
+  return { group: g, flameGroup, ember };
 }
 
 /** Deploy a fire `Tuning.PLACEMENT_DISTANCE_M` in front of the player (D75 — 2.2m,
@@ -151,6 +154,21 @@ export function spawnFireAt(
   const id = _nextId++;
   tag(visual.group, id, alive ? 'cook' : 'relight');
 
+  // AAY-fix — claim a pool light + configure for fire (warm color,
+  // 8m range, 1.6 decay = inverse-square). Positioned in WORLD space
+  // at the flame center (pos + ~0.4m up). Fires don't move, so set
+  // once at spawn. If the pool is exhausted, `light` stays null —
+  // visual still works, just no illumination contribution.
+  const light = claimLight(ctx.lightPool);
+  if (light) {
+    light.color.set(0xff9040);
+    light.distance = 8;
+    light.decay = 1.6;
+    light.intensity = alive ? 1.3 : 0.2;
+    if (!alive) light.color.set(0x5a1810);
+    light.position.set(pos.x, pos.y + 0.4, pos.z);
+  }
+
   let shelterZone: ShelterZone | null = null;
   if (alive) {
     shelterZone = addShelterZone(
@@ -161,8 +179,6 @@ export function spawnFireAt(
   } else {
     // Dead fire visual — match the burn-out path in updateFires.
     visual.flameGroup.visible = false;
-    visual.light.intensity = 0.2;
-    visual.light.color.set(0x5a1810);
     (visual.ember.material as THREE.MeshBasicMaterial).opacity = 0.45;
     (visual.ember.material as THREE.MeshBasicMaterial).color.set(0x4a1810);
   }
@@ -171,7 +187,7 @@ export function spawnFireAt(
     id,
     mesh: visual.group,
     flameGroup: visual.flameGroup,
-    light: visual.light,
+    light,
     emberMesh: visual.ember,
     shelterZone,
     fuelSeconds,
@@ -192,6 +208,16 @@ export function setNextFireId(n: number): void {
   if (n > _nextId) _nextId = n;
 }
 
+/** AAY-fix — release the fire's pool light. Called from save.ts's
+ *  "clear before re-spawn" path so the pool doesn't leak slots across
+ *  Continue. Safe to call even if the light is null. */
+export function releaseFireLight(ctx: GameContext, fire: Fire): void {
+  if (fire.light) {
+    releaseLight(ctx.lightPool, fire.light);
+    fire.light = null;
+  }
+}
+
 /** Add fuel (a branch worth = 30s). */
 export function addFuel(fire: Fire, seconds: number = Tuning.FIRE_FUEL_PER_BRANCH_S): void {
   if (!fire.alive) return;
@@ -206,8 +232,10 @@ export function relightFire(fire: Fire, ctx: GameContext): boolean {
   fire.alive = true;
   fire.fuelSeconds = Tuning.FIRE_FUEL_PER_BRANCH_S;
   fire.flameGroup.visible = true;
-  fire.light.intensity = 1.3;
-  fire.light.color.set(0xff9040);
+  if (fire.light) {
+    fire.light.intensity = 1.3;
+    fire.light.color.set(0xff9040);
+  }
   (fire.emberMesh.material as THREE.MeshBasicMaterial).opacity = 0.85;
   (fire.emberMesh.material as THREE.MeshBasicMaterial).color.set(0xb84020);
   // Re-register shelter zone.
@@ -288,8 +316,10 @@ export function updateFires(ctx: GameContext, dt: number): void {
         // Burn out
         fire.alive = false;
         fire.flameGroup.visible = false;
-        fire.light.intensity = 0.2;       // a faint ember glow
-        fire.light.color.set(0x5a1810);
+        if (fire.light) {
+          fire.light.intensity = 0.2;       // a faint ember glow
+          fire.light.color.set(0x5a1810);
+        }
         (fire.emberMesh.material as THREE.MeshBasicMaterial).opacity = 0.45;
         (fire.emberMesh.material as THREE.MeshBasicMaterial).color.set(0x4a1810);
         if (fire.shelterZone) {
@@ -303,7 +333,7 @@ export function updateFires(ctx: GameContext, dt: number): void {
       }
       // Flicker: combine two sine waves for organic motion
       const flicker = 1 + Math.sin(t * 9) * 0.18 + Math.sin(t * 23.7) * 0.07;
-      fire.light.intensity = 1.3 * flicker;
+      if (fire.light) fire.light.intensity = 1.3 * flicker;
       // Slight flame scale wobble
       const sc = 1 + Math.sin(t * 12) * 0.08;
       fire.flameGroup.scale.set(sc, 1 + Math.sin(t * 8.5) * 0.10, sc);

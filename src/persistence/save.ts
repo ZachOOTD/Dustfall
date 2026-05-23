@@ -31,12 +31,12 @@ import {
   applySandWormDeadPose,
   type SandWormState,
 } from '../enemies/sandWorm.ts';
-import { spawnFireAt, attachGrillToFire } from '../world/fire.ts';
+import { spawnFireAt, attachGrillToFire, releaseFireLight } from '../world/fire.ts';
 import { spawnTentAt } from '../world/tent.ts';
 import { spawnSledAt, setNextSledId } from '../world/sled.ts';
 import { spawnLargeTentAt, setNextLargeTentId } from '../world/largeTent.ts';
 import { spawnBedrollAt, setNextBedrollId } from '../world/bedroll.ts';
-import { spawnLanternAt, setNextLanternId } from '../world/lantern.ts';
+import { spawnLanternAt, setNextLanternId, releaseLanternLight } from '../world/lantern.ts';
 import { spawnLockerAt, setNextLockerId } from '../world/locker.ts';
 import type { CompanionState } from '../enemies/companion.ts';
 import { removeShelterZone } from '../shelter/shelterZones.ts';
@@ -575,6 +575,8 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
   for (const f of ctx.fires.list) {
     ctx.three.scene.remove(f.mesh);
     if (f.shelterZone) removeShelterZone(ctx.shelter, f.shelterZone);
+    // AAY-fix — release the pool light so the next spawn can claim it.
+    releaseFireLight(ctx, f);
   }
   ctx.fires.list.length = 0;
   for (const t of ctx.tents.list) {
@@ -647,6 +649,8 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
 
   for (const l of ctx.lanterns.list) {
     ctx.three.scene.remove(l.mesh);
+    // AAY-fix — release the pool light so the next spawn can claim it.
+    releaseLanternLight(ctx, l);
   }
   ctx.lanterns.list.length = 0;
   if (save.lanterns) {
