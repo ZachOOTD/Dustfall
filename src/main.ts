@@ -446,6 +446,12 @@ installPhysicsDebug(ctx);
 // starts audio, locks the pointer, and unpauses the world. The legacy
 // #start-overlay stays hidden permanently from boot.
 ctx.flags.paused = true;
+// ABL — defensive: if a prior preview-tool session left a stale
+// pointer lock on this document (cursor stuck in 0×0 hidden canvas
+// top-left), release it on boot. No-op when no lock is active.
+if (typeof document !== 'undefined' && document.exitPointerLock) {
+  try { document.exitPointerLock(); } catch { /* ignore */ }
+}
 const startOverlayEl = document.getElementById('start-overlay');
 const controlsPanelEl = document.getElementById('controls-panel');
 startOverlayEl?.classList.add('hidden');
@@ -525,7 +531,22 @@ function handoffToGame(): void {
   // Independent of soundscape's sample-stem music layer (which has been
   // silent since X-era — no .ogg pack ever shipped). Per D3.
   startMusic();
-  ctx.input.controls.lock();
+  // ABL — guard pointer-lock acquisition against hidden/0-size preview
+  // tabs. When `preview_eval` programmatically clicks NEW GAME in the
+  // Claude Preview iframe (which is `document.hidden===true` AND
+  // renders to a 0×0 canvas in the top-left), acquiring pointer lock
+  // there confines the OS cursor to the (0, 0)-anchored 0×0 rect →
+  // the user's cursor appears "stuck in an invisible box in the top-
+  // left" until they alt-tab to force PointerLock release. The lock
+  // is useless in a hidden tab anyway (no user there to look around).
+  // Real visible-window sessions hit the else branch and lock normally.
+  const canvas = three.renderer.domElement;
+  const isPreviewLike = import.meta.env.DEV && (
+    document.hidden || canvas.width === 0 || canvas.height === 0
+  );
+  if (!isPreviewLike) {
+    ctx.input.controls.lock();
+  }
   setTimeout(() => {
     title.dispose();
     (window as unknown as { __title?: unknown }).__title = undefined;
