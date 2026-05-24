@@ -49,11 +49,25 @@ export function createLights(scene: THREE.Scene): LightsBundle {
 
 const _sunDir = new THREE.Vector3();
 const _playerPos = new THREE.Vector3();
+// ABL — perf: throttled shadow map updates. autoUpdate is OFF in
+// scene.ts; we set needsUpdate=true every N frames so the shadow pass
+// runs at ~10Hz instead of ~144Hz. The sun moves slowly enough that
+// stale shadows for ~6 frames are imperceptible.
+let _shadowUpdateCounter = 0;
 
 /** Runs every frame. Mutates ctx.time.sunHeight + ctx.time.sunDir + sky/light state. */
 export function updateLighting(ctx: GameContext, _dt: number): void {
   const { sun, moon, ambient } = ctx.lights;
-  const { scene } = ctx.three;
+  const { scene, renderer } = ctx.three;
+
+  // ABL — perf: throttle shadow-map regen. Tag the renderer's
+  // shadowMap.needsUpdate every N frames; in-between frames reuse the
+  // already-rendered depth map. Invisible at the sun's angular speed.
+  _shadowUpdateCounter++;
+  if (_shadowUpdateCounter >= Tuning.SHADOW_UPDATE_EVERY_N_FRAMES) {
+    renderer.shadowMap.needsUpdate = true;
+    _shadowUpdateCounter = 0;
+  }
 
   // Sun rises at dayTime=0.25 (06:00), peaks at 0.5 (noon), sets at 0.75 (18:00).
   // The sun moves in the X-Y plane (slight Z bias for visual depth).

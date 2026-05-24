@@ -56,12 +56,16 @@ export function saveSettings(s: Settings): void {
 }
 
 /** Map a render-quality preset to concrete renderer values.
- *  `devicePR` is `window.devicePixelRatio` (Three.js uses it for "native" pixel-perfect rendering). */
+ *  `devicePR` is `window.devicePixelRatio` (Three.js uses it for "native" pixel-perfect rendering).
+ *  ABL — perf: medium preset (default) shadow map 2048 → 1024 to hit
+ *  144fps target on mid-tier hardware. 2048 is preserved on "high"
+ *  for players who explicitly opt in. The shadow quality drop is
+ *  imperceptible at our flat-shaded low-mid-fi art style. */
 export function presetValues(q: RenderQuality, devicePR: number): {
   pixelRatio: number;
   shadowMapSize: number;
 } {
-  if (q === 'low')  return { pixelRatio: 0.75, shadowMapSize: 1024 };
+  if (q === 'low')  return { pixelRatio: 0.75, shadowMapSize: 512 };
   if (q === 'high') return { pixelRatio: Math.min(devicePR, 2.0), shadowMapSize: 2048 };
-  /* medium */      return { pixelRatio: 1.00, shadowMapSize: 2048 };
+  /* medium */      return { pixelRatio: 1.00, shadowMapSize: 1024 };
 }

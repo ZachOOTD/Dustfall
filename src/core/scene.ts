@@ -34,6 +34,11 @@ export function createScene(): SceneBundle {
   // Real-time shadows from the sun. PCFSoft is a good price/quality default.
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  // ABL — perf: shadows updated manually (see updateLighting) at
+  // SHADOW_UPDATE_EVERY_N_FRAMES cadence instead of every frame. Sun
+  // moves slowly enough (0.5°/sec) that a 6-frame stale shadow is
+  // invisible; the savings are major toward 144fps.
+  renderer.shadowMap.autoUpdate = false;
 
   // Mild tone mapping so the brighter sun + ambient don't clip to white.
   renderer.toneMapping = THREE.ReinhardToneMapping;

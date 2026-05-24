@@ -474,6 +474,20 @@ document.body.appendChild(devModeBadge);
 // payoff: click→first-game-frame is near-instant.
 three.renderer.compile(three.scene, three.camera);
 
+// ABL — perf: pre-warm the Rapier physics broadphase. The first
+// physics.step() of a session is significantly more expensive than
+// subsequent steps because Rapier builds collision acceleration
+// structures (BVH, broadphase pair cache) on the first tick against
+// the ~68 wreck colliders + terrain. Pre-walking one step here while
+// the title is shown means the first GAME tick steps fast.
+physics.world.step();
+
+// ABL — perf: also prime one shadow map render so the first GAME
+// frame doesn't pay the shadow-pass cold cost on top of the regular
+// game render. needsUpdate is set true so the throttled cadence in
+// updateLighting doesn't matter for this warmup pass.
+three.renderer.shadowMap.needsUpdate = true;
+
 const title = createTitleScene();
 // Expose the title scene for debug/preview tools (read-only handles).
 (window as unknown as { __title?: { scene: unknown; camera: unknown; update: (dt: number) => void } }).__title = {

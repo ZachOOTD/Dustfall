@@ -33,7 +33,18 @@ export const Tuning = {
   SHADOW_CAM_HALF: 60,
   SHADOW_CAM_NEAR: 1,
   SHADOW_CAM_FAR: 300,
-  SHADOW_MAP_SIZE: 2048,
+  // ABL — perf: 2048 → 1024 cuts shadow-pass fill rate by 4x. The art
+  // style is low-mid-fi flatshaded; shadow edges go from sharp to
+  // slightly soft, which actually reads BETTER for our atmospheric
+  // tone (sharp shadows on dunes look gamey). Big perf win toward 144fps.
+  SHADOW_MAP_SIZE: 1024,
+  // ABL — shadow update cadence in frames. autoUpdate=true regens the
+  // shadow map every frame. Sun moves slowly (DAY_LENGTH_SECONDS=720
+  // → sun sweeps 360° per 12min real = 0.5°/sec). Updating shadows
+  // every 6 frames (~10Hz) is invisibly different but cuts shadow
+  // work to 1/6. Set in main.ts via renderer.shadowMap.autoUpdate=false
+  // + per-frame counter.
+  SHADOW_UPDATE_EVERY_N_FRAMES: 6,
   SUN_DISTANCE: 100,        // how far the directional light sits from its target
   /** Landmarks placed beyond this distance from origin won't cast shadows
    *  (fog hides their shadows anyway and they make up the bulk of the cost). */
