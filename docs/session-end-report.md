@@ -4,15 +4,17 @@ Cumulative state. Rewritten end-to-end at each `/session-end`. A
 reviewer who's never seen the project should be able to read this +
 `CLAUDE.md` + `docs/GDD.md` and understand where Dustfall is.
 
-**Current state**: Session ABK shipped (2026-05-24, overnight). 66
-sessions post-MVP. tsc clean. SAVE_VERSION v11 unchanged through ABK
-(no schema-affecting work this session). ABJ + ABI pushed; ABK
-commit `f36fcf2` + this session-end commit pending.
+**Current state**: Session ABL shipped (2026-05-24, overnight ~3h of
+6h budget). 67 sessions post-MVP. tsc clean. SAVE_VERSION v11
+unchanged. All commits ABK + ABK-tail + ABL on master.
 
-**ABK scope**: tight 6h-budget session focused on completing the
-biome-specific POI family (closing ABJ A4 Tier 5 stretch). Salt
-outpost + rocky subterranean entrance shipped as 2 new modules.
-Multi-seed verified at 12345 + 7777.
+**ABL scope**: megaWreck visual rebuild — closes the last visually-
+behind-the-rest-of-the-world hand-modeled prop (BB-2/BB-3 era). Edit-
+in-place refactor preserving collider layout + 8 salvage panels +
+shelter zone + journal. Visual lift via ABH procedural shaders +
+tapered ellipsoidal cylinder hull shell + 6 rust band wraps +
+exposed-rib + torn-plate fragments at hull break. 1 file, +166/-22.
+Ship well under budget; remaining time available next session.
 
 ---
 

@@ -3,6 +3,36 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ABL — 2026-05-24 — megaWreck visual rebuild ✓ verify pass
+`verified` — tsc clean. 1 file (megaWreck.ts, +166/-22). Closes the
+"megaWreck rebuild" backlog item (BB-2/BB-3 era model was visually
+behind the rest of the world post-OO procedural shaders). Edit-in-
+place refactor — preserved existing collider layout + all 8 salvage
+panels + shelter zone + journal location for zero gameplay impact;
+pure visual lift.
+
+- **Procedural shader vocab applied to all hull materials**:
+  _hullMat + _hullDarkMat → createRustedHullMaterial (drip streaks
+  + worn highlights); _rustMat → createPaintedMetalMaterial (paint
+  chips reveal rust); _rustDarkMat / _pipeMat / _nozzleRimMat /
+  _antennaMat → createMetalMaterial (brushed scratches + grain).
+  Same WRECK_* color palette so faction reads stay identical.
+- **Tapered aft-section hull shell** (CylinderGeometry rotated
+  axis=Z, ellipsoidally scaled to fit wider-than-tall aft body).
+  Drapes OVER the existing box-wall structure — breaks up the
+  stack-of-boxes silhouette. Slightly flared at rear for crash
+  deformation feel. No collider.
+- **6 rust band wraps** (TorusGeometry, ellipsoidally scaled to
+  match hull cross-section): 4 around aft + 2 around bow.
+- **Hull-break decoration**: 3 exposed vertical ribs + 5 torn
+  hull-plate fragments at random tilts in the mid-hull break zone
+  (Z=-25 to -10). Reads as "internal beams exposed where the skin
+  peeled away on impact."
+
+Verified: tsc clean. Multi-seed boot + visual screenshots confirm
+curved shell + tower + spire + engine bells + ribs all read cleanly
+from multiple angles. No collider changes — gameplay path unchanged.
+
 ## Session ABK-tail — 2026-05-24 — Post-ship perf pass + bugfixes ✓ verify pass
 `verified` — tsc clean. 4 commits between ABK session-end and ABL
 session-start, all direct-paste (no /session-end between). Catch-up

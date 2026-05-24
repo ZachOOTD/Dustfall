@@ -1,66 +1,58 @@
-# Session ABL — Kickoff Brief (post-ABK)
+# Session ABM — Kickoff Brief (post-ABL)
 
 ## Read these now (in order)
 
 1. `CLAUDE.md` (auto-loaded)
-2. `docs/session-end-report.md` — cumulative state through ABK
-3. `docs/changelog.md` — ABK + ABJ entries at top
+2. `docs/session-end-report.md` — cumulative state through ABL
+3. `docs/changelog.md` — ABL + ABK-tail + ABK entries at top
 4. `docs/decisions.md` — D108 still the latest
 5. `docs/roadmap.md`
 6. `docs/backlog.md`
 
-## What's already built (post-ABK snapshot)
+## What's already built (post-ABL snapshot)
 
-66 sessions. Tactile salvage + 6 narrative journals + 4 procgen wreck
+67 sessions. Tactile salvage + 6 narrative journals + 4 procgen wreck
 classes + biome-bias on hullSegment variants + 5 weapon variants +
-procedural world seed-stable + 7 procedural shader factories +
-3 themed POI clusters (military_convoy / refugee_caravan / comm_relay)
-+ **complete biome-specific POI family**: dune buried cockpit (ABJ),
-salt corroded outpost (ABK), rocky subterranean entrance with shelter
-zone (ABK). Sandworm bait-and-strike feeding loop (ABJ B12).
-SAVE_VERSION v11.
+procedural world seed-stable + 7 procedural shader factories (now
+applied across ALL major hand-modeled props — last holdout megaWreck
+closed ABL) + 3 themed POI cluster kinds + **complete biome-specific
+POI family** (dune cockpit + salt outpost + rocky entrance with
+shelter zone) + sandworm bait-and-strike feeding loop + scrap_bar
+starter inventory. SAVE_VERSION v11. Perf-pass tuned (96→31 scene
+PointLights, throttled shadow updates, Rapier pre-warm; targeting
+144fps).
 
 ## Suggested focus (pick one)
 
 ### Big-ticket (single session, 3-10h)
 
-- **A5 megaWreck rebuild** (~4-6h dedicated). BB-2 era model is the
-  last visually-behind-the-rest-of-the-world hand-modeled prop.
-  Rebuild with higher fidelity + better silhouette + ABH metal/paint
-  + ABJ wood-grain/bone shaders.
 - **A1 infinite chunk streaming** (~6-10h). Last major architectural
-  lift. Lazy 800m chunks at boundaries; free farthest; per-chunk seed
-  derivation; GPU memory budget. Save bump v11→v12.
-- **B7 dropped-item rigid-body physics** (~3h). Items roll/fall/
-  settle. Add Pickup.body field + dynamic spawn + per-frame sync.
-  Save round-trip preserves positions.
-- **B8 generalized rope attachment** (~3h). Extend SledTether to
-  support arbitrary world-object endpoints. Reuses inextensible-rope
-  constraint.
+  lift. Lazy 800m chunks at boundaries; free farthest; per-chunk
+  seed derivation; GPU memory budget. Save bump v11→v12.
 - **B5 flagship NPC beats** (~4-6h). Hostile raider holdouts +
-  friendly hermit NPCs at hand-modeled flagships. ABF shipped journal
-  narrative; NPC beats remain.
+  friendly hermit NPCs at hand-modeled flagships. ABF shipped
+  journals; this adds the live NPCs.
+- **B7 + B8 paired** (~5-6h). Dropped-item rigid-body physics +
+  generalized rope attachment to arbitrary world endpoints.
 
 ### Medium (~2-4h)
 
 - **B6 5th wreck class** (`bulk_hauler` — wide cargo-heavy frame).
 - **B9 salvage durability per-wreck** — finite mass across panels;
-  deplete completely → "corpse" wreck dim entirely.
-- **B11 rare key-card panels** — gated behind a quest item; long-tail
-  salvage variety.
-- **megaWreck catwalk panel reachability (panels 3 + 4)** — ABE
-  shipped 1 ground-level panel; catwalk-mounted ones at ~11.5m still
-  require stair climb.
+  deplete → "corpse" wreck dim entirely.
+- **B11 rare key-card panels** — gated behind a quest item.
+- **megaWreck catwalk panel reachability (panels 3 + 4)**.
+- **Add machete back as wreck loot** — ABK-tail swap left player
+  with no starter melee weapon. If playtest feels too punishing,
+  add machete as a small-chance procgen wreck drop.
 
 ### Polish / quick wins (~1-2h)
 
 - **B10 restore corroded panels via weld kit** — inverts D96.
 - **Item viewmodel fidelity pass (continuation)** — ABJ shipped 5
-  items (cloth/scrap/branch/bandage/rope); ~25 remaining ItemDefs
-  could benefit from similar shader-vocab uplift.
-- **POI count tuning** — ABK shipped 1 each of salt/rocky/dune
-  biome POIs. Playtest signal may justify SALT_OUTPOST_COUNT or
-  ROCKY_ENTRANCE_COUNT > 1 in larger worlds.
+  items; ~25 remaining ItemDefs could benefit.
+- **megaWreck full hull-shell extension to bow** — ABL added shell
+  to aft only; bow still has its prior box silhouette.
 
 ## Autonomy contract
 
@@ -71,27 +63,26 @@ D-entry, keep going.
 Stop conditions: wall-clock limit, 3-strike fix wall, catastrophic
 block, destructive-action attempt.
 
-## Notable footguns (carried)
+## Notable footguns
 
-- **ABK biome POI family complete**: 3 biome POIs (dune/salt/rocky)
-  are now shipped. Dispatch in `poi.ts` goes dune→salt→rocky for
-  greedy multi-region spread — preserve this order if adding 4th
-  biome POIs (none planned).
-- **ABK rocky entrance has interior + shelter zone**: First non-
-  flagship POI with a sheltered chamber. If adding sheltered POIs
-  next, follow the BackSide-cavity pattern (`_interiorMat.side =
-  THREE.BackSide; shadowSide = THREE.FrontSide`) + `addShelterZone`
-  for the interior bounds.
-- **ABJ D108 combined v11 bump**: when adding ANOTHER schema-
-  affecting field, decide upfront whether to bundle it with other
-  pending fields (D108 rule) or ship its own bump.
-- **ABJ B4 biome-bias on procgen recipes**: HULL_SEGMENT_BIOME_WEIGHTS
-  indexes by array position — adding a 6th hullSegment variant
-  requires 6 entries per biome.
-- **Salvage panel design**: BackSide body + 4-bar hollow rim +
-  flush-with-hull positioning. Verify panel POSITION isn't buried
-  inside parent geometry (see ABI report).
-- **Preview screenshot rule 4**: always set `ctx.time.dayTime = 0.5`
+- **ABK-tail starter swap**: player starts with scrap_bar + canteen
+  (no machete). Unarmed for melee until pipe_staff crafted. Add
+  machete to wreck loot pool if playtest feels too punishing.
+- **ABK-tail pointer-lock guard**: `handoffToGame()` skips
+  `controls.lock()` in DEV+hidden/0×0 preview tabs. Real-user
+  gameplay unaffected. If you add other lock-acquisition points,
+  apply the same guard pattern.
+- **ABK-tail perf pass**: 96 → 31 scene PointLights (panel glows
+  pooled). lightPool size 30. If adding new panel-glow consumers,
+  use the pool, don't allocate new per-entity PointLights.
+- **ABL megaWreck shell**: tapered cylinder shell drapes over aft
+  only. If extending to bow, mirror the pattern (smaller radii,
+  attached to bowGroup so bowYOffset applies).
+- **ABJ D108 combined v11 bump**: combine additive fields when 2+
+  ship same session.
+- **ABJ B12 sandworm feeding**: damageSandWorm allows 2× damage
+  during 'feeding' state.
+- **Preview screenshot rule 5**: always set `ctx.time.dayTime = 0.5`
   + unpause briefly before any visual screenshot.
 
 ## Verification protocol
@@ -108,6 +99,6 @@ For substantial features:
 
 ## Begin block
 
-Read CLAUDE.md (auto), session-end-report (through ABK), recent
-changelog (ABK + ABJ entries), decisions D106-D108. Pick focus from
-the menu above. TaskCreate sub-tasks. Start coding.
+Read CLAUDE.md (auto), session-end-report (through ABL), recent
+changelog (ABL + ABK-tail + ABK entries), decisions D106-D108. Pick
+focus from the menu above. TaskCreate sub-tasks. Start coding.

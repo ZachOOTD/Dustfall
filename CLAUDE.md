@@ -59,7 +59,18 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session ABK-tail — Post-ship perf pass + bugfixes.
+**Last shipped**: Session ABL — megaWreck visual rebuild. Closes the
+"megaWreck rebuild" backlog item (BB-2/BB-3 era model was visually
+behind the rest of the world post-OO procedural shaders). Edit-in-
+place refactor preserving the existing collider layout + all 8 salvage
+panels + shelter zone + journal — pure visual lift via (1) ABH
+procedural shaders applied to all hull/rust/pipe/antenna materials,
+(2) tapered aft-section hull shell (ellipsoidally scaled cylinder)
+draping over the box-wall structure to break up the silhouette,
+(3) 6 rust band wraps around aft + bow, (4) exposed vertical ribs +
+torn hull-plate fragments at the mid-hull break zone. 1 file, +166/-22.
+
+**Prior milestone**: Session ABK-tail — Post-ship perf pass + bugfixes.
 4 direct-paste commits between ABK session-end and ABL session-start.
 **Perf pass** (`76413b6` + `7f2cbc1`): scene PointLights 96 → 31 (panel
 glows pooled), StandardMaterials 215 → 0 (Lambert downgrade), shadow
