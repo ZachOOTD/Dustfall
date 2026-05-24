@@ -4,17 +4,17 @@ Cumulative state. Rewritten end-to-end at each `/session-end`. A
 reviewer who's never seen the project should be able to read this +
 `CLAUDE.md` + `docs/GDD.md` and understand where Dustfall is.
 
-**Current state**: Session ABH shipped (2026-05-23, late). 62 sessions
-post-MVP. tsc + production build clean. SAVE_VERSION v10 (unchanged
-through ABB-ABH). All commits pushed to origin; tags `session-ABB`
-through `session-ABH` live. Working tree dirty only for this catch-up
-session-end pass (docs updates).
+**Current state**: Session ABJ shipped (2026-05-24, overnight). 65
+sessions post-MVP. tsc clean across all 4 ABJ tier boundaries.
+SAVE_VERSION v11 (D108 — combined bump from v10 covering huddleState
++ journalReadKinds + bornInDevMode). All ABB-ABI commits pushed to
+origin. ABJ commits (`0f64fc1`, `83c353a`, `fadc78e`, `b22d98d`) +
+this session-end commit not yet pushed.
 
-**Catch-up scope**: `/session-end` was skipped from ABB through ABH (7
-sessions). This session-end is the bundled catch-up — appends 7
-changelog entries, updates CLAUDE.md to reflect ABH, moves 7 roadmap
-items to Shipped, adds D105-D107, and rewrites this report + the next-
-session-prompt end-to-end.
+**ABJ scope**: 6h aggressive overnight bundle, 14 of 19 selected items
+shipped across 4 tiers. Tier 5 stretch items (salt outpost, rocky
+entrance, megaWreck rebuild, dropped-item physics, generalized rope)
+pre-committed to defer and remain in backlog.
 
 ---
 
@@ -30,7 +30,7 @@ operates on a per-session "Big-ticket bucket + Polish" model.
 | Tier 1 — Vertical slice | I–W | ✓ shipped | Inventory, crafting, interactions, opening scene, journal |
 | Tier 2 — Target | X–CC | ✓ shipped | Audio architecture, atmosphere, speeder, animated title |
 | Tier 3 — Expected | DD–PP | ✓ shipped | Sand worm boss, weapon variants, procgen POIs, biome rework |
-| Tier 4 — Polish + breadth | QQ–ABH | ✓ ongoing | Sled, crafting rework, control overhaul, creature companion, long-storm countdown, procgen world, salvage tactile pry+extract+conditions, procgen wreck system, fire grill multi-cook, narrative journals, texture-overhaul shader vocabulary |
+| Tier 4 — Polish + breadth | QQ–ABJ | ✓ ongoing | Sled, crafting rework, control overhaul, creature companion, long-storm countdown, procgen world, salvage tactile pry+extract+conditions, procgen wreck system, fire grill multi-cook, narrative journals, texture-overhaul shader vocabulary, biome-specific POIs (dune cockpit), sandworm bait-and-strike feeding loop, comm-relay cluster, science_vessel wreck class, v11 schema (huddleState + journalReadKinds + bornInDevMode) |
 
 **Verify status**: `npm run verify` = `tsc --noEmit`. Single check
 (no tier breakdown). Currently PASS.

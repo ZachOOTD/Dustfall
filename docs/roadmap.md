@@ -54,10 +54,23 @@ and promotes the second.
 - **Session ABF** (2026-05-23, overnight): POI narrative beats. 5 lone-survivor journals at hand-modeled flagships (megaShip cargo handler, megaWreck captain, satelliteDish radio op, crashedHull pilot, engineBlock engineer). Extended W-era Journal with `kind: JournalKind` discriminator; mesh tags interactSubKind; journalPanel.ts uses `Map<JournalKind, JournalContent>`. D106.
 - **Session ABG** (2026-05-23): Panel interior visibility bug fix + opening-wreck panels removed. (1) addAccessPanel body uses BackSide-cloned material so cavity interior is visible when door pries open (front face was occluding 5 components since AAS). D105. (2) Opening-wreck salvage panels removed (D15 restored — opening wreck is a story prop).
 - **Session ABH** (2026-05-23): Texture overhaul via procedural shader vocabulary. 4 new factory modules (`metalMaterial.ts`, `paintMaterial.ts`, `stoneMaterial.ts`, `skinMaterial.ts`) following the terrainMaterial.ts / fabricMaterial.ts onBeforeCompile pattern. Zero new texture files (preserves D3 + formalizes per D107). Applied to weapons (metal), placeables (metal + painted), world stone (rocks + well stones), creatures (sandworm + lizard + companion). Bundle +11KB (4 shader sources, zero asset bytes). 14 files, 4 new modules.
+- **Session ABI** (2026-05-24): Salvage panel rim opacity fix (rim was solid plate covering cavity post-ABG BackSide body) + 3 procgen wreck panel relocations (cargo_container overlap with sibling decoration, fuselage buried inside cylinder, escape pod buried inside icosahedron). 1 file, +66/-16.
+- **Session ABJ** (2026-05-24, overnight): Aggressive 14-item bundle across 4 tiers in ~6h. **Tier 1**: v10→v11 schema (combined huddleState + journalReadKinds + bornInDevMode per D108) + biome-bias on procgen recipe pick + 5 small polish/debt items. **Tier 2**: 3 new procedural shader factories (woodGrain + bone + glass) extending ABH vocab to 7. **Tier 3**: science_vessel wreck class + sandworm 'feeding' state (bait-and-strike loop, 2× damage window) + 5 item viewmodel upgrades. **Tier 4**: comm-relay cluster (3rd ClusterKind) + NEW src/world/buriedCockpit.ts (first biome-specific POI, dune-biome centroid placement). Tier 5 stretch (salt outpost / rocky entrance / megaWreck rebuild / dropped-item physics / generalized rope) DEFERRED per pre-committed cut order. 12 files + 4 new modules.
 
 ## Up next
 
-Pick from the remaining big-ticket / medium backlog. ABH closed the texture-overhaul big-ticket. Top candidates: **infinite chunk streaming** (last major architectural lift, ~6-10h); **multi-worm population** (AAP scope-cut; ~3-4h medium, needs additive schema bump); **sandworm encounter depth** (ambush state, retreat-and-stalk loop, dawn/dusk surfacing); **biome-specific POI kinds** (~6-8h big-ticket); **megaWreck rebuild** (BB-2 era model is visually behind the rest of the world). See `docs/next-session-prompt.md` for full ABI brief.
+ABJ closed a huge surface area in one overnight (14 items including
+2 new POI families, sandworm feeding loop, schema bump, 3 new
+shaders). The Tier 5 stretch items from ABJ are the natural next
+targets: **A4 salt outpost** (medium, ~2.5h) + **A4 rocky
+subterranean entrance** (~3.5h, largest A4 remaining) — completes
+the biome-specific POI family. Other big-ticket candidates:
+**A5 megaWreck rebuild** (BB-2 model is visually behind everything
+else, ~4-6h dedicated session), **B7 dropped-item rigid-body physics**
+(items roll/fall/settle, ~3h touches physics layer), **B8 generalized
+rope attachment** (anchor either end to arbitrary world objects, ~3h),
+**A1 infinite chunk streaming** (the last major architectural lift,
+~6-10h). See `docs/next-session-prompt.md` for full ABK brief.
 
 ## Next — Big-ticket bucket (1–2 picks per session at ~4–7h each)
 Pick whatever feels most missing after the polish + atmosphere arc.

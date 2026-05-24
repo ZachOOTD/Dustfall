@@ -59,7 +59,40 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session ABH — Texture overhaul via procedural shader
+**Last shipped**: Session ABJ — Aggressive overnight bundle (14 items
+shipped across 4 tiers; ~6h budget). **Tier 1**: v10→v11 schema bump
+combining huddleState + journalReadKinds + bornInDevMode (D108) +
+biome-bias on procgen recipe pick (salt→corroded plates / rocky→open
+truss / dune→fuel barrels) + tutorial RMB hints + stamina tow tune
+2.0×→1.5× + scavenger-camp magic-number lift + CLAUDE.md doc-drift
+guardrail. **Tier 2**: 3 new procedural shader factories extending
+ABH's vocabulary — woodGrainMaterial (sled+locker), boneMaterial
+(skeleton), glassMaterial (used in Tier 4 cockpit window). **Tier 3**:
+science_vessel wreck class (4th in roulette 40/25/20/15) + sandworm
+bait-and-strike loop (new 'feeding' state; 2× damage vulnerability
+window when feeding on meat pickups) + 5 item viewmodel upgrades
+(cloth/scrap/branch/bandage/rope all upgraded with shader vocab + more
+detail). **Tier 4**: comm-relay cluster (3rd ClusterKind alongside
+military_convoy + refugee_caravan) + NEW dune buried cockpit POI
+(`src/world/buriedCockpit.ts` — first biome-specific POI; icosahedron
+hull half-buried 28° forward, cracked-glass canopy via glassMaterial,
+escape_pod salvage palette). **Tier 5 stretch DEFERRED** per pre-
+committed cut order: salt outpost, rocky entrance, megaWreck rebuild,
+dropped-item rigid bodies, generalized rope attachment.
+
+**Prior milestone**: Session ABI — Salvage panel rim fix + 3 wreck
+relocations. Two bugs surfaced by ABG's BackSide body fix: (1) the
+"brass rim" was a single solid BoxGeometry covering the full panel
+face — when ABG made the body's front face invisible the rim stayed
+in front of the cavity as an opaque tan plate. Rebuilt as 4 thin bars
+(top/bottom span full width, left/right inset). (2) Three procgen
+panels were either overlapping with sibling decorations or buried
+inside their wreck volume: cargo_container moved from +X face (door
+overlap) to clear +Z face; fuselage moved from inside-the-cylinder to
+flush side; escape pod pushed from 0.77r to 1.05r so it sits on the
+hull surface. Verified visually for all 4 wreck kinds.
+
+**Prior milestone**: Session ABH — Texture overhaul via procedural shader
 vocabulary. Adds 4 new procedural material factories then applies them
 across the game's surfaces. Zero new texture files (preserves D3 and
 formalizes the no-asset extension to materials per D107). New shaders:

@@ -2319,3 +2319,16 @@ now formal policy for materials, not just audio. To revisit, a future
 session would need to consciously break D3+D107 and budget for the
 full PBR pipeline.
 **friction-score:** 3
+
+
+## D108 — Combined v10→v11 schema bump (huddleState + journalReadKinds + bornInDevMode)
+
+**Rule**: When 3 additive-only fields ship in the same overnight bundle and target different ctx subtrees (companion / inventory / flags), they SHOULD be combined into a single SAVE_VERSION bump rather than 3 sequential bumps (v11/v12/v13).
+
+**When**: Session ABJ overnight, 2026-05-24. Schema-affecting items were C1 (companion huddle persistence), C2 (per-kind journal-read tracking), and C12 (DEV mode flag persistence). All 3 followed D81's additive-only discipline (optional fields, defaults on load).
+
+**Why**: Reduces migration overhead — 3 separate bumps would force the agent to write 3 separate "accept v11/v12/v13" version checks + 3 separate load blocks, each with its own correctness review. Combining means one diff, one save round-trip test, one decision entry. Pre-v11 saves load identically across either approach (additive fields default to undefined regardless). The risk reduction is small (additive bumps are low-risk) but the boilerplate savings are real.
+
+**Considered alternatives**: Sequential 3-bump (v11→v12→v13). Rejected as boilerplate-heavy with no upside. The "atomic blame" property of one-field-per-bump matters when the bump is a SCHEMA SHAPE CHANGE (e.g., renaming a field); for additive optional fields, the blame radius stays at the file level regardless of bump count.
+
+**Apply**: When the next overnight session has multiple additive-only fields targeting the schema, combine into one bump. When even ONE field requires non-trivial migration (e.g., renaming, restructuring), break that field into its own bump and combine the rest. friction-score: 1

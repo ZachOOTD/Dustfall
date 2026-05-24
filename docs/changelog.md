@@ -3,6 +3,69 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ABJ — 2026-05-24 — Aggressive overnight bundle (14 items across 4 tiers) ✓ verify pass
+`verified` — tsc clean across all 4 tier boundaries + save round-trip
+verified (v10 → v11). 19 selected items, 14 shipped within 6h budget;
+5 stretch items pre-committed and deferred per scope-cut tier.
+
+**Tier 1 (foundation + low-risk wins, ~1.5h, 6 items)** — D108:
+
+- **C1+C2+C12 combined v10→v11 schema bump** (D81 additive-only): adds
+  3 optional fields in ONE migration. `bornInDevMode?: boolean` (DEV
+  badge survives Continue), `inventory.journalReadKinds?:
+  JournalKind[]` (per-kind read set; openJournalPanel marks the kind
+  read, interaction.ts dims hover to "journal (read)" for read kinds),
+  `companion.huddleState?: boolean` (storm-saved companion reloads
+  into 'huddle' state; weather logic re-validates next tick). Pre-v11
+  saves load with defaults.
+- **B4 biome-bias on recipe pick** — `placeProcgenComposite` queries
+  `biomes.biomeAt(pos.x, pos.z)` and threads to assembleWreck →
+  pickPart → pickVariantBiased. HULL_SEGMENT_BIOME_WEIGHTS: salt →
+  +30% PLATED_RECTANGULAR (corrosion plates), rocky → +20% OPEN_TRUSS,
+  dune → +20% FUEL_BARRELS.
+- **C13 RMB tutorial hint** — locker_kit + large_tent_kit HINTS extended.
+- **C6 stamina tow factor tune** — STAMINA_TOW_FACTOR 2.0→1.5 (sprint
+  duration when towing 3s→4s).
+- **D1 scavenger-camp magic-number lift** — 12 hardcoded numbers in
+  placeScavengerCamp lifted to Tuning.SCAVENGER_CAMP_*.
+- **D2 doc-drift guardrail** — CLAUDE.md note: pause for /session-end
+  after 3+ direct-paste commits.
+
+**Tier 2 (shader vocabulary, ~2h, 3 new factories)**:
+
+- **`src/world/woodGrainMaterial.ts`** (~165 LOC) — `createWoodGrainMaterial(color, opts)`. Anisotropic grain stripes along configurable axis + concentric growth rings (FBM-warped radial modulation) + micro-grain + sun-bleach weathering. Applied to sled deck/rails/runners + locker body+lid (4 callsites; pre-ABJ flat Lambert).
+- **`src/world/boneMaterial.ts`** (~155 LOC) — `createBoneMaterial(color, opts)`. Cracked hairline network (dual-FBM AND threshold) + mineralization spots + age-bleach (world-Y gradient + FBM patchiness) + micro-grain. Applied to opening-wreck skeleton.
+- **`src/world/glassMaterial.ts`** (~150 LOC) — `createGlassMaterial(color, opts)`. Frosted distortion (small-scale FBM brightness mod) + edge-rim highlights (fresnel via dot(world-normal, cameraPosition - fragPos)) + dust-layer on horizontal facets. Transparent + double-sided. Applied to dune cockpit's cracked window in Tier 4 (canteen + lantern globe deferred — no actual glass surface).
+
+**Tier 3 (medium features, ~2h, 3 items)**:
+
+- **B6 science_vessel wreck class** — 4th ProcgenWreckClass. Recipe: 1 cockpit + 2-3 hullSegment + 1 engine + 1 tail (5-7 parts, ~10-16m). Salvage palette 'fuselage'. Class roulette 40/25/20/15 (corvette/gunship/freighter/science_vessel).
+- **B12 sandworm feeding behavior** — adds 'feeding' state (8th SandWormState). While patrolling, worm scans for meat pickups within FEED_DETECT_RADIUS=30m (raw/cooked lizard meat + raw/cooked worm meat + lizard-on-a-stick raw/cooked) and surfaces to feed. 3-phase animation (rise 20% → hold 60% → descend 20% of FEED_DURATION_S=4.5s); slow sway during hold; consume bait at t=0.85. `damageSandWorm` allows hits during 'feeding' at 2× damage. New _feedBaitPickupId field; new SFX playWormChomp.
+- **B13 item viewmodel fidelity pass** (5 items within 1.5h cap): cloth (3 folds + tag via fabricMaterial), scrap (metalMaterial + 2 bolts + bent edge), branch (woodGrainMaterial + 2 offshoots), bandage (fabricMaterial × 3 + red cross), rope (woodGrainMaterial + concentric coil + fraying tail).
+
+**Tier 4 (procgen world expansion, ~2h, 2 items)**:
+
+- **B3 comm-relay cluster** — 3rd ClusterKind. Half-buried concrete base + 6m antenna spire + crossbar + red beacon + 3 guy-wires (TubeGeometry catmull) + 1 'engine_cluster' salvage panel + 2-3 radial dish reflectors at 8-12m + debris field.
+- **A4 dune buried cockpit POI** — NEW `src/world/buriedCockpit.ts` (~225 LOC). 1 per dune-biome centroid via findBiomeCentroid + greedy multi-region exclusion. IcosahedronGeometry hull + canopy with cracked glass dome (createGlassMaterial) + 2-3 crack lines (TubeGeometry) + optional broken antenna + 28° forward tilt + 60% Y buried + 'escape_pod' salvage panel + 4-6 debris fragments. First biome-specific POI.
+
+**Tier 5 stretch (DEFERRED per pre-committed cut order)**: A4 salt outpost, A4 rocky entrance, A5 megaWreck rebuild, B7 dropped-item rigid-body physics, B8 generalized rope attachment.
+
+**Files**: 12 modified + 4 new modules (woodGrainMaterial, boneMaterial, glassMaterial, buriedCockpit). D108. SAVE_VERSION 10→11.
+
+## Session ABI — 2026-05-24 — Salvage panel rim fix + 3 wreck relocations ✓ verify pass
+`verified` — tsc clean. 1 file touched (`src/world/wrecks.ts`, +66/-16).
+Two interconnected bugs surfaced by ABG's BackSide body fix:
+- **Rim was opaque plate, not frame**: single solid BoxGeometry covering
+  the full panel face area was occluding the cavity once ABG made the
+  body's front face invisible. Rebuilt as 4 thin bars (top/bottom span
+  full width, left/right inset). Outer silhouette unchanged.
+- **3 procgen panels misplaced**: cargo_container z=d*0.30 overlapped
+  the wreck's own "door decoration" (centered z=0, depth d*0.7). Moved
+  to clear +Z face. Fuselage panel buried inside the cylinder volume —
+  moved to flush side at midline. Escape pod panel inside icosahedron
+  hull (dist 0.77r) — pushed out to ~1.05r. Verified visually via
+  preview screenshots for all affected kinds.
+
 ## Session ABH — 2026-05-23 — Texture overhaul via procedural shader vocabulary ✓ verify pass
 `verified` — tsc clean + `npx vite build` clean. 14 files touched, 4
 new modules. Bundle impact +11KB (4 shader source files; zero asset
