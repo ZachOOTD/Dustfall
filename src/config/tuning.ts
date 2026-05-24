@@ -890,6 +890,11 @@ export const Tuning = {
   // centroid). Future increases (e.g. 2-3 across larger maps) are
   // possible — the sampler does greedy multi-region placement.
   BURIED_COCKPIT_COUNT: 1,
+  // ABK — A4 continuation: salt outpost + rocky entrance counts.
+  // Same greedy multi-region pattern as the dune cockpit; counts
+  // can be bumped per playtest signal if biomes feel under-populated.
+  SALT_OUTPOST_COUNT: 1,
+  ROCKY_ENTRANCE_COUNT: 1,
 
   // Opening wreck (Session RR — full redo using KK/LL/NN modelling
   // vocabulary). Cockpit + tail-stub composition built as N angular

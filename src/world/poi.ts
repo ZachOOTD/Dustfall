@@ -30,6 +30,8 @@ import { placeCrashedHull } from './crashedHull.ts';
 import type { ShelterRegistry } from '../shelter/shelterZones.ts';
 import { Tuning } from '../config/tuning.ts';
 import { placeBuriedCockpit, sampleBuriedCockpitPositions } from './buriedCockpit.ts';
+import { placeSaltOutpost, sampleSaltOutpostPositions } from './saltOutpost.ts';
+import { placeRockyEntrance, sampleRockyEntrancePositions } from './rockyEntrance.ts';
 
 // ────────────────────────────────────────────────────────────────
 // The Engine Block POI is built by `placeEngineBlock` in
@@ -655,18 +657,20 @@ export function placePOIs(
     _placedFlagshipPositions = [..._placedFlagshipPositions, { x: c.x, z: c.z }];
   }
 
-  // ── ABJ — A4: dune buried cockpit POI ────────────────────────────
-  // 1 per world (cap at Tuning.BURIED_COCKPIT_COUNT). Sampled at dune
-  // biome centroid via findBiomeCentroid (greedy w/ exclusion of
-  // flagships, clusters, player spawn). First of a planned biome-
-  // specific POI family (salt outpost + rocky entrance deferred to
-  // future sessions per scope-cut tier).
+  // ── ABJ + ABK — A4: biome-specific POI family ───────────────────
+  // ABJ shipped dune buried cockpit (first biome POI). ABK completes
+  // the family: salt corroded outpost + rocky subterranean entrance.
+  // Each samples its own biome centroid via findBiomeCentroid with
+  // greedy multi-region exclusion. Ordering matters: dune→salt→rocky
+  // so earlier POIs are added to the exclusion list, naturally
+  // spreading the three across separate biome regions.
   if (biomes) {
-    const cockpitExcludes = _placedFlagshipPositions.map(p => ({
+    const initialExcludes = _placedFlagshipPositions.map(p => ({
       x: p.x, z: p.z, radius: Tuning.POI_MIN_SEPARATION,
     }));
+    // Dune (ABJ A4)
     const cockpitCenters = sampleBuriedCockpitPositions(
-      biomes, cockpitExcludes, Tuning.BURIED_COCKPIT_COUNT,
+      biomes, initialExcludes, Tuning.BURIED_COCKPIT_COUNT,
     );
     for (const c of cockpitCenters) {
       const y = terrain.heightAt(c.x, c.z);
@@ -674,6 +678,38 @@ export function placePOIs(
         scene, world, terrain,
         new THREE.Vector3(c.x, y, c.z),
         rand, salvageables,
+      );
+      _placedFlagshipPositions = [..._placedFlagshipPositions, { x: c.x, z: c.z }];
+    }
+    // Salt (ABK A4)
+    const saltExcludes = _placedFlagshipPositions.map(p => ({
+      x: p.x, z: p.z, radius: Tuning.POI_MIN_SEPARATION,
+    }));
+    const saltCenters = sampleSaltOutpostPositions(
+      biomes, saltExcludes, Tuning.SALT_OUTPOST_COUNT,
+    );
+    for (const c of saltCenters) {
+      const y = terrain.heightAt(c.x, c.z);
+      placeSaltOutpost(
+        scene, world, terrain,
+        new THREE.Vector3(c.x, y, c.z),
+        rand, salvageables,
+      );
+      _placedFlagshipPositions = [..._placedFlagshipPositions, { x: c.x, z: c.z }];
+    }
+    // Rocky (ABK A4)
+    const rockyExcludes = _placedFlagshipPositions.map(p => ({
+      x: p.x, z: p.z, radius: Tuning.POI_MIN_SEPARATION,
+    }));
+    const rockyCenters = sampleRockyEntrancePositions(
+      biomes, rockyExcludes, Tuning.ROCKY_ENTRANCE_COUNT,
+    );
+    for (const c of rockyCenters) {
+      const y = terrain.heightAt(c.x, c.z);
+      placeRockyEntrance(
+        scene, world, terrain,
+        new THREE.Vector3(c.x, y, c.z),
+        rand, salvageables, shelter,
       );
       _placedFlagshipPositions = [..._placedFlagshipPositions, { x: c.x, z: c.z }];
     }
