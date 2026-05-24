@@ -2212,3 +2212,110 @@ coexistence with the existing palette via a Tuning share constant.
 Migration to "replace all" comes after playtest data validates the
 new system, not at first ship.
 **friction-score:** 2
+
+## D105 — BackSide rendering for "open cavity" boxes (Session ABG)
+**When**: ABG salvage panel interior bug fix.
+**Why**: Salvage panels rendered as blank boxes when the door pried open
+— the `body` mesh was a solid `BoxGeometry` with default `FrontSide`
+material; its front face occluded the interior components even though
+they were correctly positioned inside the box. The original design
+intent (per the addAccessPanel comment "the body itself is the rusted
+RECESSED CAVITY box") was for body to be an open-front cavity, but
+BoxGeometry is always solid 6-faced.
+
+**Picked**: render the body's material with `side: THREE.BackSide` and
+`shadowSide: THREE.FrontSide`. From a player POV outside the panel:
+the front face becomes invisible (BackSide doesn't render when viewed
+from the +normal side, which is from outside-the-box), but the interior
+walls (back face + 4 sides) DO render (player viewing from outside is
+on the -normal side of those faces = "behind" them = BackSide). Door
+covers when closed; opens to reveal the cavity contents.
+shadowSide=FrontSide preserves normal shadow casting (BackSide self-
+shadow can produce weird artifacts on small boxes). Material is
+module-cached so all panels share one instance.
+
+**Considered alternatives**:
+- Replace BoxGeometry with a 5-sided shell (back + 4 walls, no front).
+  Cleanest visually but breaks the body as a single raycast target
+  + tagged interactable. Would have required restructuring panel
+  geometry + child positions + collider conventions.
+- Make body invisible + add separate "cavity walls" group. Same
+  raycast problem (invisible meshes get skipped by raycaster).
+- Move the body further back so its front face is below the hull
+  surface. Breaks AAU recess convention + changes interact bounds.
+
+**Apply**: any future "open-cavity" primitive that needs to be visible
+from outside but appear hollow when opened can use the BackSide trick
+on a solid BoxGeometry. Cache the BackSide-cloned material at module
+scope. Set shadowSide=FrontSide unless self-shadowing is desired.
+**friction-score:** 2
+
+## D106 — Per-POI narrative content via Journal.kind + interactSubKind (Session ABF)
+**When**: ABF POI narrative beats — 5 lone-survivor journals at hand-
+modeled flagships (megaShip, megaWreck, satelliteDish, crashedHull,
+engineBlock), each with a distinct narrator voice.
+
+**Why**: 6 journals (1 W-era opening + 5 flagship) need to share the
+SAME interaction handler (E-press → open modal panel) but render
+DIFFERENT content per journal. Two approaches considered:
+(a) 6 separate journal types each with its own placeXxxJournal +
+its own openXxxJournalPanel function. Massive duplication.
+(b) One Journal type with a `kind: JournalKind` discriminator; one
+placeJournal that tags `mesh.userData.interactSubKind = kind`; one
+openJournalPanel(ctx, kind) that looks up content in
+`Map<JournalKind, JournalContent>`.
+
+**Picked**: (b). The W-era system already had Journal as a single type
++ interactRegistry='journals' routing; ABF just extended it with the
+kind discriminator. Interaction.ts case 'journals' reads `info.subKind`
+(set by `placeJournal` via the existing `interactSubKind` userData
+convention from AAY) and passes it to openJournalPanel.
+
+**Apply**: any "many entities, one interaction handler, content varies
+by tag" pattern follows this shape. Use `userData.interactSubKind` as
+the canonical tag — interaction.ts surfaces it as `info.subKind`
+without needing a registry lookup. Per-content lookup via a
+`Map<Kind, Content>` exported from the UI module. The discriminator
+type lives with the entity (Journal in journal.ts), not the UI.
+**friction-score:** 1
+
+## D107 — Procedural shader vocabulary as the formal extension of D3 (Session ABH)
+**When**: ABH texture overhaul — needed to decide whether to (a) extend
+the existing OO-era procedural shader pattern (terrainMaterial.ts,
+hullMaterial.ts, fabricMaterial.ts) to more surfaces, or (b) revisit
+D3's zero-asset-files policy to allow real PBR textures with normal
+maps + albedo.
+
+**Why**: Real PBR has the higher visual ceiling but two practical
+problems against Dustfall: (1) the geometry is almost entirely
+PROGRAMMATIC (Lathe, Cylinder, custom Box composites with no
+meaningful UVs); applying normal/albedo textures would require
+either custom UV generation per primitive type (substantial
+engineering) or triplanar sampling (which IS effectively the
+procedural shader approach with extra steps). (2) Bundle-size growth
+of 50-200MB for CC0 PBR asset libraries, conflicting with the
+zero-asset principle that started as D3 for audio and has been
+informally extended to materials since the OO procedural shader era.
+
+**Picked**: extend the procedural shader vocabulary. 4 new factory
+modules (`metalMaterial.ts`, `paintMaterial.ts`, `stoneMaterial.ts`,
+`skinMaterial.ts`), each following the proven onBeforeCompile pattern
+(D62: world-space varyings + IQ hash + value noise + FBM). Applied
+across weapons, placeables, world props, and creatures. Zero new
+texture files; +11KB total bundle impact (just the shader source).
+
+**Considered alternatives**:
+- Path 1: Full PBR with per-mesh UV authoring. Rejected — 15-25h
+  scope across 3-4 sessions, breaks D3, requires asset license vetting.
+- Path 2: Hybrid with one small CC0 noise/grime atlas sampled via
+  triplanar. Rejected this session as overkill — the procedural
+  vocabulary covers the visual goal without breaking D3 at all.
+
+**Apply**: any future surface that needs material detail uses one of
+the existing factories or extends the vocabulary with a new factory
+following the same pattern (IQ hash + value noise + FBM in world-space
++ multiplicative layer composition). The "no texture files" stance is
+now formal policy for materials, not just audio. To revisit, a future
+session would need to consciously break D3+D107 and budget for the
+full PBR pipeline.
+**friction-score:** 3

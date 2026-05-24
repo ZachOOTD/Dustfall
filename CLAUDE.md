@@ -59,40 +59,96 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session ABA — Overnight: salvage cleanup + procgen
+**Last shipped**: Session ABH — Texture overhaul via procedural shader
+vocabulary. Adds 4 new procedural material factories then applies them
+across the game's surfaces. Zero new texture files (preserves D3 and
+formalizes the no-asset extension to materials per D107). New shaders:
+**`metalMaterial.ts`** (`createMetalMaterial(color, opts)` — brushed
+scratches + worn highlights + grain + edge dirt; for weapons / tools /
+grill / lantern iron / antenna). **`paintMaterial.ts`**
+(`createPaintedMetalMaterial` — paint chips reveal rust + faded
+gradient + vertical drip-streaks; for speeder hull / locker bands).
+**`stoneMaterial.ts`** (`createStoneMaterial` — aggregate + cracks +
+dust-on-top-facing-surfaces via world-up normal + sun-bleach; for rock
+scatter / well stones / future scavenger-camp stones).
+**`skinMaterial.ts`** (`createSkinMaterial` — scale-cell FBM + pigment
+blotches + vein lines + sheen; for sandworm body / lizard / companion
+carapace). All 4 follow terrainMaterial.ts / fabricMaterial.ts
+onBeforeCompile pattern (D62) and sample world-space coords so different
+instances get visibly different surface variation for free. Bundle
+impact +11KB (4 shader source files; zero asset bytes). 14 files
+touched, 4 new modules. D107.
+
+**Prior milestone**: Session ABG — Fix panel interior visibility +
+remove opening-wreck salvage panels. Two related panel changes. (1)
+salvage panels rendered as blank boxes when pried — body BoxGeometry
+front face occluded the 5 interior components AAS shipped. Fixed by
+rendering body's material with `side: BackSide` + `shadowSide:
+FrontSide` (front invisible from outside, interior walls visible).
+Module-cached BackSide clone shared across all panels. D105. (2)
+opening-wreck salvage panels removed (restored D15 — opening wreck is
+a story prop, not a salvage site). Net -24 lines.
+
+**Prior milestone**: Session ABF — Overnight: POI narrative beats.
+5 lone-survivor journals at the hand-modeled flagships (megaShip /
+megaWreck / satelliteDish / crashedHull / engineBlock), each with a
+distinct narrator voice (cargo handler / captain / radio op / pilot /
+engineer). Extended W-era Journal type with `kind: JournalKind`
+discriminator; `placeJournal` tags `mesh.userData.interactSubKind` so
+interaction.ts routes by tag; `journalPanel.ts` rewritten to support
+per-kind `JournalContent` lookup. Each flagship module accepts an
+optional `journals?: { list: Journal[] }` arg. No schema bump. D106.
+
+**Prior milestone**: Session ABE — Overnight: 5-item polish bundle.
+**P1** tutorial HINTS for rope + sled_kit. **P2** wind shimmer shader
+on fabric (sin-driven normal displacement keyed to weather.intensity,
+0.5cm calm → 4cm storm peak). **P3** scrap_gun R-key reload — drains
+scrap_bullet stacks, refills `slot.meta.ammoRemaining`. New
+`playReloadGun` SFX. Closes AAN's `.no_ammo` crosshair loop. **P4**
+crafting recipe categorization — tool/ammo/shelter/consumable sub-
+headers within CRAFTABLE/MISSING buckets via new `Recipe.category`
+field. **P5** megaWreck ground-level secondary panel between engine
+bells (~1.5m chest height). All 5 P items shipped without scope-cuts
+firing.
+
+**Prior milestone**: Session ABD — Procgen breach-patch frequency
+bump. Data-driven playtest of ABC composites across seeds 12345 +
+7777 showed only 15% of hull parts had breach patches. Bumped
+ribbed_cylinder 0.50 → 0.70 + plated_rectangular 0.40 → 0.60.
+Post-tweak ~41% of eligible hulls show breaches.
+
+**Prior milestone**: Session ABC — Procgen wreck expansion. ABA P7
+follow-on. 2 new hullSegment variants (`OPEN_TRUSS` skeletal frame,
+`FUEL_BARRELS` tank cluster); new wreck class `gunship` (engine-heavy
+short hull); new `addBreachPatches` decoration helper; 3-way class
+roulette 45/30/25; `PROCGEN_COMPOSITE_SHARE: 0.35 → 0.50`.
+
+**Prior milestone**: Session ABB — ABA P3 visual audit. 3 migrated
+flagship panels had wrapper positions using arbitrary constants
+instead of the actual hull/wall surface radius at that lathe depth —
+panels floating in cavities or off the dish back. Recomputed each
+position from the underlying lathe profile so the body front face
+sits flush. satelliteDish back-of-dish y=0 → 0.65; crashedHull bell-
+throat r=0.47 → 1.44; engineBlock bell-wall r=1.31 → 1.59. openingWreck
+panels used `lookAt` against actual `profileRadiusAt` — already correct.
+
+**Prior milestone**: Session ABA — Overnight: salvage cleanup + procgen
 wreck system. 7-item overnight bundle. **P1 light-pool refactor**:
 pre-allocate 24 PointLights at boot, parked invisible; fires + lanterns
-claim/release from the pool instead of constructing new PointLights at
-placement time. Eliminates the multi-hundred-ms freeze on each
-fire / lantern deploy (Three.js's `lightsHash` bump was forcing every
-lit material — terrain shader, fabric shader, hulls, sand, tents,
-sand worm, ~30 unique materials — to recompile). **P2 salvage door
-direction bugfix**: with the hinge on the panel's LEFT edge (real
-fuse-box convention), positive Y rotation swung the door's free edge
-INTO the hull. Fix: apply the NEGATIVE of `panelDoorAngle` at
-`updatePanelDoors`. D101. **P3 legacy panel migration**: 4 modules
-(satelliteDish / crashedHull / engineBlock / openingWreck) had inline
-make*AccessPanel helpers that built simple Box+rim panels — no
-hinged door, no interior detail, no AAU recess, NO LOOT (silent bug
-in the extract path). All 8 callsites migrated to addAccessPanel via
-wrapper-Group pattern. D102. **P4 speeder unmount damping**:
-`SPEEDER_UNMOUNTED_LINEAR_DAMP_RATE_PER_S = 1.8` +
-`SPEEDER_UNMOUNTED_ANGULAR_DAMP_RATE_PER_S = 2.5` apply
-exponential-decay damping only while not mounted (bumps damp to rest
-in ~2s instead of accelerating indefinitely). **P5 tutorial coverage**:
-added HINTS for grill_kit, scrap_bar, large_tent_kit. **P6
-alignToTerrain lift**: extracted from 3 duplicates (`tent.ts` /
-`largeTent.ts` / `companion.ts`) to new `src/util/terrainAlign.ts`
-with module-level scratch vectors preserving per-frame zero-GC. D103.
-**P7 procgen wreck-POI modelling system, first cut**: new
+claim/release from the pool. Eliminates the multi-hundred-ms freeze on
+each fire / lantern deploy (Three.js's `lightsHash` bump was forcing
+every lit material to recompile). **P2 salvage door direction bugfix**
+(D101). **P3 legacy panel migration**: 4 modules
+(satelliteDish / crashedHull / engineBlock / openingWreck) migrated
+to addAccessPanel via wrapper-Group pattern (D102). **P4 speeder
+unmount damping**. **P5 tutorial coverage** for grill_kit, scrap_bar,
+large_tent_kit. **P6 alignToTerrain lift** to `src/util/terrainAlign.ts`
+(D103). **P7 procgen wreck-POI modelling system, first cut**: new
 `src/world/procgenWreck.ts` (~430 LOC) — composable part vocabulary
-(cockpit / hullSegment / engineModule / tailStub with 2-3 variants
-each). Two recipes (corvette + freighter) drive seeded assembly along
-+X axis. Each panel-bearing part becomes its own Salvageable.
+(cockpit / hullSegment / engineModule / tailStub × 2-3 variants each),
+2 recipes (corvette + freighter), seeded assembly along +X axis.
 `Tuning.PROCGEN_COMPOSITE_SHARE = 0.35` mixes composite vs legacy
-hand-modeled wrecks 35/65 in procgenPoi.ts. D104. 14 files touched,
-3 new modules (`core/lightPool.ts`, `util/terrainAlign.ts`,
-`world/procgenWreck.ts`). No schema bump. D101–D104.
+35/65 (later bumped to 0.50 in ABC). D104.
 
 **Prior milestone**: Session AAU — Salvage panel polish from playtest
 feedback. Four user-reported issues fixed: (1) panels too small +

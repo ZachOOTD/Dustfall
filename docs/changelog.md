@@ -3,6 +3,152 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ABH — 2026-05-23 — Texture overhaul via procedural shader vocabulary ✓ verify pass
+`verified` — tsc clean + `npx vite build` clean. 14 files touched, 4
+new modules. Bundle impact +11KB (4 shader source files; zero asset
+bytes — preserves D3 + extends it as D107). Adds 4 new procedural
+material factories then applies them across the game's surfaces.
+
+- **`src/world/metalMaterial.ts`** (new, ~159 LOC) — `createMetalMaterial(color, opts)`.
+  Brushed scratches along configurable angle + worn-FBM highlights +
+  per-pixel grain + sparse edge-dirt patches. Drop-in replacement for
+  MeshLambertMaterial. Mirrors terrainMaterial.ts / fabricMaterial.ts
+  onBeforeCompile pattern.
+- **`src/world/paintMaterial.ts`** (new, ~143 LOC) — `createPaintedMetalMaterial(color, opts)`.
+  Paint chips reveal rust substrate, faded paint gradient, vertical
+  drip-streaks from chip locations.
+- **`src/world/stoneMaterial.ts`** (new, ~156 LOC) — `createStoneMaterial(color, opts)`.
+  Aggregate noise + 2-axis crack noise + dust accumulation gated on
+  world-up normal (top-facing surfaces only) + sun-bleach.
+- **`src/world/skinMaterial.ts`** (new, ~151 LOC) — `createSkinMaterial(color, opts)`.
+  Scale-cell FBM threshold + pigment blotches + thin vein lines +
+  sheen highlights.
+
+**Applications**: weapons (scrap_bar, machete, pipe_staff, scrap_gun,
+energy_pistol, scrap_bullet) → metal. Placeables (lantern iron, locker
+bands, grill bars, speeder hull) → metal + painted. World (rockScatter
+both tiers, well stones) → stone. Creatures (sandworm body, lizard,
+companion carapace) → skin. All shaders sample world-space so different
+instances get visibly different surface variation for free. D107.
+
+## Session ABG — 2026-05-23 — Fix panel interior visibility + remove opening-wreck panels ✓ verify pass
+`verified` — tsc clean. 2 files touched (`src/world/wrecks.ts`,
+`src/world/openingWreck.ts`). Net -24 lines.
+
+- **Panel interior bug**: salvage panels rendered as blank boxes when
+  pried — body `BoxGeometry` was solid `FrontSide`, its front face
+  occluded the 5 interior components + backplate that AAS shipped.
+  Fix: render body's material with `side: BackSide` (front face
+  invisible from outside, interior walls visible). `shadowSide:
+  FrontSide` preserves normal shadow casting. Module-cached BackSide
+  clone so all panels share one material. Verified in preview: red_wire
+  + yellow_wire + scrap_chunk now visible inside opened procgen panel.
+  D105.
+- **Opening-wreck salvage panels removed**: D15 originally established
+  the opening wreck as a non-salvageable story prop; Session RR + ABA
+  P3 added 2 access panels there as part of the unified addAccessPanel
+  migration. With the panel-interior bug fixed (panels visibly stripped
+  on extract), they conflicted with the "this was someone's last
+  shelter" tone. Reverted to D15. Other flagships keep their panels.
+
+## Session ABF — 2026-05-23 — Overnight: POI narrative beats — 5 flagship journals ✓ verify pass
+`verified` — tsc clean + production build clean. 11 files touched, 0
+new modules. No save schema bump (journals re-spawn from flagship
+placement, same as opening journal).
+
+- **Journal system**: extended W-era Journal type with `kind: JournalKind`
+  discriminator (`opening` | `mega_ship` | `mega_wreck` | `satellite_dish`
+  | `crashed_hull` | `engine_block`). `placeJournal(scene, pos, yaw, kind?)`
+  tags `mesh.userData.interactSubKind` so the interaction system routes
+  by tag. `journalPanel.ts` rewritten to support `Map<JournalKind,
+  JournalContent>` + `renderContent()` rebuilds on each open. D106.
+- **5 flagship journals**, each with a distinct narrator voice + 4-6
+  short entries. megaShip: cargo handler ("logged the manifest anyway").
+  megaWreck: ship's captain Cmdr. K. Selene ("good crew. wrong orders").
+  satelliteDish: radio operator WREN ("they are not coming"). crashedHull:
+  veteran pilot ("a fine place to stop"). engineBlock: chief engineer
+  ("two minutes from chamber breach").
+- Each flagship module gained an optional `journals?: { list: Journal[] }`
+  arg mirroring the `salvageables?` convention. `poi.ts` + `main.ts`
+  thread `ctx.journals` through `placePOIs`.
+- Anchors picked for thematic interiors: megaShip aft bay, megaWreck
+  aft bay (dodged bowYOffset complexity), satelliteDish base chamber,
+  crashedHull upper hull seam, engineBlock thrust frame top.
+
+## Session ABE — 2026-05-23 — Overnight: 5-item polish bundle ✓ verify pass
+`verified` — tsc clean. 11 files touched, +429/-18 lines. Scope-cut
+list pre-populated in roadmap; all 5 P items shipped without cuts firing.
+
+- **P1 — Tutorial HINTS** for `rope` + `sled_kit`. Closes the sled
+  affordance gap (QQ-era stub vs deck distinction).
+- **P2 — Wind shimmer shader on fabric** (`fabricMaterial.ts`,
+  `main.ts`). Sin-driven normal displacement keyed to `weather.intensity`
+  (0.5cm calm → 4cm storm peak). Mirrors terrainMaterial.ts _shaderRefs
+  pattern. Ticked from main.ts each frame.
+- **P3 — Scrap_gun R-key reload** (`combat.ts`, `audio.ts`, `main.ts`,
+  `tutorial.ts`). Drains scrap_bullet stacks across the bag, refills
+  `slot.meta.ammoRemaining` up to max. New `playReloadGun` SFX (clack
+  + chamber tick). Closes AAN's `.no_ammo` crosshair loop.
+- **P4 — Crafting recipe categorization** (`recipeDiscovery.ts`,
+  `craftingMenu.ts`, `style.css`). New `Recipe.category: 'tool' | 'ammo'
+  | 'shelter' | 'consumable'` field; sub-headers within CRAFTABLE /
+  MISSING buckets. `CATEGORY_ORDER` + `CATEGORY_LABEL` exports. Display-
+  only — no save persistence.
+- **P5 — megaWreck ground-level panel** (`megaWreck.ts`). New panel
+  between the engine bells on the back exterior at ~1.5m chest height.
+  First-cut reachability fix; catwalk panels 3 + 4 (at ~11.5m) still
+  need ground alternatives in a follow-on.
+
+## Session ABD — 2026-05-23 — Procgen breach-patch frequency bump ✓ verify pass
+`verified` — tsc clean. 1 file touched (`src/world/procgenWreck.ts`,
++8/-4). Data-driven playtest of ABC composite wrecks across 2 seeds
+(12345, 7777) showed only 15% of hull parts had breach patches — too
+low to sell "battle damage" feel. Bumped per-variant chances:
+ribbed_cylinder 0.50 → 0.70, plated_rectangular 0.40 → 0.60. Post-tweak
+sweep verified ~41% of eligible hulls now show breaches. Visual playtest
+via preview_screenshot blocked (canvas 0×0 in hidden tab); pivoted to
+mesh-signature inspection (open_truss + fuel_barrels variants confirmed
+active across multiple seeds, class roulette splits to all 3 classes).
+Memory note `dustfall_preview_gotchas.md` updated.
+
+## Session ABC — 2026-05-23 — Procgen wreck expansion — variants + gunship + breach patches ✓ verify pass
+`verified` — tsc clean. 3 files touched (procgenWreck.ts +226,
+tuning.ts +5, no new modules). ABA P7 follow-on.
+
+- **2 new hullSegment variants**: `OPEN_TRUSS` (gutted skeletal frame:
+  4 longitudinal struts + 3 transverse beam rings + 1 diagonal
+  cross-brace), `FUEL_BARRELS` (2-3 vertical tanks on a base plate,
+  one with an open hatch). HullSegment variants: 3 → 5.
+- **Breach-patch decoration helper** (`addBreachPatches`). Adds 1-2
+  ragged dark-box patches on the +Z flank with slight random rotation.
+  ≥10cm depth per CLAUDE.md rule 7. Wired into RIBBED_CYLINDER (50%
+  chance) and PLATED_RECTANGULAR (40% chance, 1-2 patches). Tuned up
+  in ABD.
+- **Gunship recipe**: new `ProcgenWreckClass = 'gunship'`. 4-6 parts,
+  GUARANTEED engine cluster (corvette is 70%). Maps to `engine_cluster`
+  salvageKind (cabling+chip+bullet interior).
+- **3-way class roulette**: 45% corvette / 30% gunship / 25% freighter.
+- **Composite share bumped** `PROCGEN_COMPOSITE_SHARE: 0.35 → 0.50`
+  now that the part vocabulary has variety.
+
+## Session ABB — 2026-05-23 — ABA visual audit — fix 3 migrated panel positions ✓ verify pass
+`verified` — tsc clean. 3 files touched (satelliteDish, crashedHull,
+engineBlock), +28 lines. ABA P3 visual audit. The 4 migrated wrapper-
+Group panels had wrapper positions that used arbitrary constants
+(e.g. `BELL_RIM_R * 0.70`) instead of the actual hull/wall surface
+radius at that lathe depth. Panels were floating in cavities or off the
+dish back. Recomputed each panel position from the underlying lathe
+profile so the body front face sits flush with the hull.
+
+- **satelliteDish back-of-dish**: y=0 → `t²·DISH_DEPTH` (~0.65m for
+  radius 4). Verified via preview screenshot — panel now flush with
+  dish back.
+- **crashedHull bell-throat**: r=THROAT*0.45 (~0.47m) → THROAT*1.37
+  (~1.44m). ~1m correction; panel was floating inside the bell cavity.
+- **engineBlock bell-wall**: r=RIM*0.70 (~1.31m) → RIM*0.85 (~1.59m).
+  ~0.27m correction. openingWreck panels used `lookAt` against actual
+  `profileRadiusAt` — already correct, no change needed.
+
 ## Session ABA — 2026-05-23 — Overnight: salvage cleanup + procgen wreck system ✓ verify pass
 `verified` — tsc clean + production build clean. 7-item overnight bundle:
 4 bug fixes + 2 architecture cleanups + 1 new system. 14 files touched, 2

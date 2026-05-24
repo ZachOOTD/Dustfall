@@ -4,32 +4,17 @@ Cumulative state. Rewritten end-to-end at each `/session-end`. A
 reviewer who's never seen the project should be able to read this +
 `CLAUDE.md` + `docs/GDD.md` and understand where Dustfall is.
 
-**Current state**: Session ABA shipped (2026-05-23, overnight). 55
-sessions post-MVP. tsc + production build clean. SAVE_VERSION v10
-(unchanged — all 7 ABA items either bugfixes or net-new systems with
-no save-field implications). All commits pushed; working tree dirty
-only for the session-end docs updates.
+**Current state**: Session ABH shipped (2026-05-23, late). 62 sessions
+post-MVP. tsc + production build clean. SAVE_VERSION v10 (unchanged
+through ABB-ABH). All commits pushed to origin; tags `session-ABB`
+through `session-ABH` live. Working tree dirty only for this catch-up
+session-end pass (docs updates).
 
-**Since last report (AAY → ABA)**: 7-item overnight bundle.
-**P1 light-pool refactor** eliminates the lantern-placement freeze
-(Three.js `lightsHash` bump → shader recompile across all lit
-materials). **P2 salvage door direction bug** (real fuse-box hinge
-convention requires negative open-angle to swing outward).
-**P3 legacy panel migration** — 4 modules
-(satelliteDish/crashedHull/engineBlock/openingWreck) migrated from
-inline `make*AccessPanel` helpers to the AAR pipeline via wrapper-
-Group pattern. Fixes a silent no-loot bug + inherits hinged doors +
-interior components + AAU recess + AAS glow + AAT condition tiers.
-**P4 speeder unmount damping** prevents indefinite drift after
-collisions. **P5 tutorial hints** for grill_kit / scrap_bar /
-large_tent_kit. **P6 `alignToTerrain` lift** to
-`src/util/terrainAlign.ts` (4th-caller threshold per D98).
-**P7 procgen wreck-POI modelling system, first cut** — composable
-part vocabulary (cockpit / hullSegment / engineModule / tailStub
-with 2-3 variants each) + 2 wreck classes (corvette / freighter) +
-35/65 composite-vs-legacy split via `Tuning.PROCGEN_COMPOSITE_SHARE`.
-D101–D104. 14 files touched, 3 new modules (`core/lightPool.ts`,
-`util/terrainAlign.ts`, `world/procgenWreck.ts`).
+**Catch-up scope**: `/session-end` was skipped from ABB through ABH (7
+sessions). This session-end is the bundled catch-up — appends 7
+changelog entries, updates CLAUDE.md to reflect ABH, moves 7 roadmap
+items to Shipped, adds D105-D107, and rewrites this report + the next-
+session-prompt end-to-end.
 
 ---
 
@@ -45,7 +30,7 @@ operates on a per-session "Big-ticket bucket + Polish" model.
 | Tier 1 — Vertical slice | I–W | ✓ shipped | Inventory, crafting, interactions, opening scene, journal |
 | Tier 2 — Target | X–CC | ✓ shipped | Audio architecture, atmosphere, speeder, animated title |
 | Tier 3 — Expected | DD–PP | ✓ shipped | Sand worm boss, weapon variants, procgen POIs, biome rework |
-| Tier 4 — Polish + breadth | QQ–AAN | ✓ ongoing | Sled, opening wreck redo, crafting rework, control overhaul, larger tent, perceivedIntensity split, ghost previews, recipe book, craftable home (bedroll/lantern/locker), creature companion, long-storm countdown, atmospheric polish, procgen world generation, opening wreck enterable + thick hull, AAI flagship-tightening, project-wide audit, fire grill multi-cook, systems review quick-wins |
+| Tier 4 — Polish + breadth | QQ–ABH | ✓ ongoing | Sled, crafting rework, control overhaul, creature companion, long-storm countdown, procgen world, salvage tactile pry+extract+conditions, procgen wreck system, fire grill multi-cook, narrative journals, texture-overhaul shader vocabulary |
 
 **Verify status**: `npm run verify` = `tsc --noEmit`. Single check
 (no tier breakdown). Currently PASS.
@@ -54,447 +39,170 @@ operates on a per-session "Big-ticket bucket + Polish" model.
 
 ## What works end-to-end (singleplayer flow)
 
-Fresh-game start (the de-facto Tier 1 — Session W shipped):
-
 1. **Boot title**: animated 3D title scene (CC-3) with a pod
-   shooting-star + landing on a hero dune. NEW GAME / CONTINUE
-   buttons. AAI added an Advanced disclosure for typing a custom
-   uint32 seed (per-seed worlds).
+   shooting-star + landing on a hero dune. NEW GAME / DEV MODE
+   buttons. Advanced disclosure for typing a custom uint32 seed
+   (per-seed worlds — AAI).
 2. **Opening cinematic**: player spawns ~4.5m in front of the
    redesigned opening wreck (RR + SS DoubleSide fix + AAJ thick-hull
    + tally-mark repositioning). Tapered cockpit + tail-stub silhouette,
    30° stress-fracture skylight running the upper hull. Inside:
-   skeleton + journal at cockpit front, tally marks on the curved
-   interior side wall, ash pile + branch stubs + empty canteen.
-   Companion (AAE — Rocky-inspired) deployed 3m camera-right of
-   the player.
-3. **First interactions**: pickup E (AAA reverted UU's LMB-pickup),
-   journal E, salvage panel hold-E.
+   skeleton + journal at cockpit front, tally marks on the interior
+   side wall, ash pile + branch stubs + empty canteen. Companion
+   (AAE — Rocky-inspired) deployed 3m camera-right. Opening wreck is
+   non-salvageable (D15 restored in ABG).
+3. **First interactions**: pickup E, journal E (reads the W-era
+   survivor entries via the new ABF journal-kind system).
 4. **Speeder**: parked ~12m from the wreck entrance. Mountable via E
-   (CC-2). Has `speederTowBar` mesh for rope attachment (QQ-2).
+   (CC-2). speederTowBar mesh for rope attachment (QQ-2). Hull now
+   renders with painted-corroded shader per ABH.
 5. **Survival loop**: thirst/heat/hunger/stamina/health all decaying.
-   Canteen drinks **hold-LMB continuously** (UU) — one gulp per
-   0.7s. Wells in salt-flats refill via E. Fires/tents/sleds/
-   bedrolls/lanterns/lockers/grill — all **LMB-click placement**
-   with ghost preview ring (AAA). Sleep cools temperature; respects
-   shelter state (AAL).
+   Canteen drinks hold-LMB continuously (UU) — one gulp per 0.7s.
+   Wells in salt-flats refill via E (well rim stones now render with
+   stone shader per ABH). Fires/tents/sleds/bedrolls/lanterns/lockers/
+   grill — all LMB-click placement with ghost preview ring (AAA).
+   Sleep cools temperature; respects shelter state (AAL).
 6. **Combat**: 5 weapons (PP — machete, pipe_staff, scrap_gun,
    energy_pistol, plus scrap_bullet ammo). LMB swings/fires; combat
-   dispatched from `wieldAction.ts` (UU). Lizards 1-shot; sand worm
-   boss (DD + MM + QQ-2 + AAL test-fix moving it to world edge) takes
-   12 hits; sensor collider (D48); 120m body.
-7. **Sled mechanic** (QQ + QQ-2): craft rope + sled_kit. Rope wield +
-   click sled rope-stub to tie. Inextensible rope constraint (D67).
+   dispatched from `wieldAction.ts` (UU). R-key reload for scrap_gun
+   (ABE) — drains scrap_bullet stacks. Lizards 1-shot; sand worm
+   boss takes 12 hits; sensor collider (D48); 120m body. All weapons
+   now render with metal shader per ABH.
+7. **Sled mechanic** (QQ + QQ-2): craft rope + sled_kit. Rope wield
+   + click sled rope-stub to tie. Inextensible rope constraint (D67).
    Bidirectional cargo via lootMenu's `allowDeposit`.
 8. **Crafting** (TT rework): combine-to-discover via 4-slot multiset.
-   14 recipes shipped through AAM. Recipe Book panel TAB-key (AAA).
-   **First-recipe discovery** now triggers a fanfare (AAN): rising-
-   arpeggio chime + warm-gold glowing toast held 3.2s (D89).
-9. **Cooking** (II + AAM): equip raw meat → E on lit fire to start
-   cook (3.5s). Grill attachment (AAM) raises per-fire cap to 4
-   parallel cooks.
-10. **Long Storm** (AAF): escalating storm schedule from day 0 → 6
-    plateau day 7+. HUD countdown indicator at top-right. Player
-    must reach a stable home with stored water + fuel by day ~5-6.
-11. **Save / load**: single-slot localStorage (`dustfall.save.v1`),
-    `SAVE_VERSION = 10`. Death does not auto-save (D10). Continue
-    restores player + speeder pose, journal state, sled tethers +
-    cargo, salvage progress, harvested cacti, dead lizards, sand worm
-    state, AND `inventory.discoveredRecipes`, AND `companion.pos/state`
-    (AAE), AND `fire.hasGrill` per saved fire (AAM). Save bump v9→v10
-    additive per D81.
+   15 recipes shipped through AAR (scrap_bar). ABE added categorization
+   sub-headers (tool/ammo/shelter/consumable) within CRAFTABLE/MISSING
+   buckets. AAV added partial-match suggestions. Recipe Book panel
+   TAB-key (AAA). First-recipe discovery fanfare (AAN).
+9. **Salvage** (AAR + AAS + AAT + AAU + ABA + ABB + ABG): tactile
+   pry+extract flow. Equip scrap_bar, hold E to pry door open (0.85s),
+   then E presses extract individual components (per-component loot
+   mapping via PANEL_COMPONENT_PALETTES). Condition tiers
+   (corroded/standard/pristine) per D96. Electrical-flicker glow on
+   pry-complete (AAS). All flagship panels migrated to addAccessPanel
+   (ABA P3). ABB fixed 3 panel placement bugs. ABG fixed the
+   interior-visibility bug (BackSide rendering — D105) so components
+   are now actually visible inside opened panels.
+10. **Cooking** (II + AAM): equip raw meat → E on lit fire to start
+    cook (3.5s). Grill attachment (AAM) raises per-fire cap to 4
+    parallel cooks. Grill bars now render with metal shader per ABH.
+11. **Long Storm** (AAF): escalating storm schedule from day 0 → 6
+    plateau day 7+. HUD countdown indicator at top-right.
+12. **POI narrative** (ABF): 5 lone-survivor journals at hand-modeled
+    flagships (megaShip / megaWreck / satelliteDish / crashedHull /
+    engineBlock), each with a distinct narrator voice. Plus the W-era
+    opening journal. Per-kind content via Journal.kind discriminator
+    (D106).
+13. **Procgen wrecks** (ABA P7 + ABC + ABD): composite wreck system
+    (cockpit + hullSegment + engineModule + tailStub vocabulary,
+    5 hullSegment variants including OPEN_TRUSS + FUEL_BARRELS, 3
+    classes: corvette/gunship/freighter). Breach patches as a
+    decoration layer (~41% of eligible hulls). PROCGEN_COMPOSITE_SHARE
+    = 0.50.
+14. **Save / load**: single-slot localStorage (`dustfall.save.v1`),
+    `SAVE_VERSION = 10` (unchanged through ABB-ABH — no schema bumps
+    this catch-up). Pre-v10 saves load cleanly with hasGrill=false
+    default.
 
 ---
 
-## What's freshly shipped (Session ABA deltas — overnight)
+## What's freshly shipped (ABH delta)
 
-7-item overnight bundle: 4 bugfixes + 2 architecture cleanups + 1 new
-system. 14 files touched, 3 new modules. No save schema bump. D101-D104.
+**Texture overhaul via procedural shader vocabulary**. 4 new factory
+modules + applied across the game's surfaces. Zero new texture files
+(preserves D3 + formalizes D107).
 
-- **P1 light-pool refactor** (`src/core/lightPool.ts`, ~95 LOC). Pre-
-  allocate 24 PointLights at boot, parked invisible. `claimLight` /
-  `releaseLight` hand out + return slots. Fires + lanterns guard the
-  now-nullable light field. save.ts releases on the "clear before
-  re-spawn" path. Eliminates the multi-hundred-ms freeze on each
-  fire / lantern deploy (Three.js's `lightsHash` bump → shader
-  recompile across all lit materials).
-- **P2 salvage door direction bugfix** — applied `-panelDoorAngle` at
-  `door.rotation.y` to preserve the real-world hinge convention
-  (LEFT-edge hinge, handle on RIGHT) while making positive open-angle
-  swing outward. D101.
-- **P3 legacy panel migration** — 4 modules
-  (satelliteDish / crashedHull / engineBlock / openingWreck) migrated
-  from inline `make*AccessPanel` helpers to `addAccessPanel` via
-  wrapper-Group pattern. Fixes latent no-loot bug + inherits AAR/AAS/
-  AAT/AAU pipeline. Each panel-bearing PART becomes its own
-  Salvageable via `userData.accessPanel` tagging. D102.
-- **P4 speeder unmount damping** — frame-rate-independent exponential
-  decay only while not mounted. `SPEEDER_UNMOUNTED_LINEAR_DAMP_RATE_PER_S
-  = 1.8`, `SPEEDER_UNMOUNTED_ANGULAR_DAMP_RATE_PER_S = 2.5`.
-- **P5 tutorial hints** — HINTS entries for grill_kit (multi-cook
-  parallel), scrap_bar (two-stage pry+extract), large_tent_kit
-  (walk-in doorway).
-- **P6 `alignToTerrain` lift** (`src/util/terrainAlign.ts`, ~70 LOC).
-  Extracted from 3 duplicates (tent / largeTent / companion). Module-
-  level scratch vectors preserve zero-allocation per-frame behavior.
-  D103.
-- **P7 procgen wreck-POI modelling system, first cut**
-  (`src/world/procgenWreck.ts`, ~430 LOC). Composable part vocabulary:
-  cockpit (3 variants) / hullSegment (3) / engineModule (2) /
-  tailStub (2). Recipes: corvette (3-5 parts, 6-12m) + freighter (5-9
-  parts, 14-22m). Assembler lays parts along +X with cursor advance.
-  Each panel-bearing part registers its own Salvageable. Integrated
-  in procgenPoi.ts at 35/65 vs legacy palette per
-  `Tuning.PROCGEN_COMPOSITE_SHARE`. D104.
+- `src/world/metalMaterial.ts` (159 LOC): `createMetalMaterial`.
+  Brushed scratches + worn highlights + grain + edge dirt. Applied to
+  scrap_bar, machete, pipe_staff, scrap_gun, energy_pistol, scrap_bullet
+  brass, lantern iron, grill bars, antenna.
+- `src/world/paintMaterial.ts` (143 LOC): `createPaintedMetalMaterial`.
+  Paint chips revealing rust + faded gradient + vertical drip-streaks.
+  Applied to speeder hull, locker bands.
+- `src/world/stoneMaterial.ts` (156 LOC): `createStoneMaterial`.
+  Aggregate noise + cracks + dust-on-top-facing-surfaces (world-up
+  normal check) + sun-bleach. Applied to rockScatter (both tiers),
+  well rim stones.
+- `src/world/skinMaterial.ts` (151 LOC): `createSkinMaterial`. Scale-
+  cell FBM + pigment blotches + vein lines + sheen. Applied to
+  sandworm body, lizard, companion carapace.
 
-## What's freshly shipped (Session AAV deltas)
+All 4 follow terrainMaterial.ts / fabricMaterial.ts onBeforeCompile
+pattern (D62). Bundle impact +11KB (4 shader source files; zero asset
+bytes).
 
-Inventory + crafting overhaul + dev mode. 7 files; no schema bump.
+## ABB-ABG deltas (condensed)
 
-- **Bigger backpack**: BACKPACK_SLOT_COUNT 10 → 20 (hotbar stays 4;
-  total 24). 5×4 grid in overlay.
-- **Craft drops on full bag**: overflow output spawns as dropped
-  pickup at player feet instead of refund + abort.
-- **Crafting partial-match suggestions**: partialMatchRecipes +
-  missingForRecipe in recipeDiscovery.ts. UI hints "X possible
-  recipes — add more ingredients" (undiscovered) or "tent kit: need
-  2 branch + 1 cloth" (discovered partial). Closes multi-of-same-
-  item recipe trial-and-error gap.
-- **DEV MODE button** on title screen. Starter loadout via
-  localStorage flag. Regular NEW GAME starts empty (DEBUG_STARTER_LOADOUT
-  flipped to false default).
+- **ABG** (panel interior bugfix + opening-wreck panel removal): body
+  BoxGeometry's front face was occluding the 5 interior components
+  shipped in AAS — fixed by rendering body material with `side:
+  BackSide` (D105). Module-cached BackSide clone. Opening-wreck salvage
+  panels removed per D15 (story prop, not salvage site).
+- **ABF** (5 flagship journals overnight): added `Journal.kind`
+  discriminator; placeJournal tags `userData.interactSubKind` so
+  interaction.ts routes by tag; journalPanel.ts uses `Map<JournalKind,
+  JournalContent>`. 5 narrator voices: cargo handler, captain, radio
+  operator, pilot, engineer. D106.
+- **ABE** (5-item polish overnight): P1 tutorial HINTS for rope +
+  sled_kit. P2 wind shimmer shader on fabric (sin displacement keyed
+  to weather.intensity). P3 scrap_gun R-key reload + playReloadGun
+  SFX. P4 crafting category sub-headers. P5 megaWreck ground-level
+  secondary panel between engine bells.
+- **ABD** (breach freq tune): data-driven sweep across seeds 12345 +
+  7777 showed only 15% breached. Bumped ribbed_cylinder 0.50 → 0.70,
+  plated_rectangular 0.40 → 0.60. Post-tweak ~41%.
+- **ABC** (procgen wreck expansion): 2 new hullSegment variants
+  (OPEN_TRUSS, FUEL_BARRELS), gunship class (engine-heavy 4-6 parts),
+  3-way class roulette 45/30/25, addBreachPatches helper,
+  PROCGEN_COMPOSITE_SHARE 0.35 → 0.50.
+- **ABB** (visual audit): 3 migrated flagship panels (satelliteDish
+  back-of-dish, crashedHull bell-throat, engineBlock bell-wall) had
+  wrapper positions using arbitrary constants instead of actual lathe
+  profile values. Recomputed each from the surface formula. openingWreck
+  panels were already correct (used lookAt + profileRadiusAt).
 
-## What's freshly shipped (Session AAU deltas)
+## Older sessions (condensed, see changelog for detail)
 
-Salvage panel polish — 4 playtest-surfaced issues addressed. 4 files;
-no new modules; no schema bump; no D-entries.
-
-- **Taller rectangular panels** — 0.45×0.70×0.20 (was 0.55×0.55×0.18).
-  House access-panel proportions.
-- **Recessed into hull** — body.position.z shift by sz/2 along panel-
-  local Z (rotated by faceYaw). Front face flush with hull surface,
-  only rim + door proud. "Integrated, not stuck on."
-- **scrap_bar in DEBUG_STARTER_LOADOUT** — closes the testability gap;
-  player can hit panels from boot and exercise the new pry flow.
-- **Door lerp slower + pry-complete toast** — 4.5/s → 3.0/s so the
-  ~1.5s swing is visibly readable; explicit toast on completePry
-  makes the two-stage pry→extract flow unmissable.
-
-## What's freshly shipped (Session AAT deltas)
-
-Salvage condition tiers — third polish pass on the AAR salvage
-foundation. 4 files; no new modules; no schema bump. One new D-entry
-(D96).
-
-- **Per-panel condition** (`corroded` / `standard` / `pristine`) set
-  deterministically at registerSalvageable from id + biome + rand.
-  No save field — derives from save-stable inputs (D96 extends D94's
-  "derive from existing counters" rule).
-- **Biome-driven distribution**: salt-flat panels skew corroded (55%
-  vs 35% baseline); dune panels skew pristine (25% vs 15% baseline).
-  Rocky uses base.
-- **Per-condition effects**: pry duration scales (×0.6 / ×1.0 / ×1.4);
-  max extracts (1-2 / kind-default / 5); loot tables shift (corroded
-  downgrades everything; pristine last-extract gets premium bonus);
-  door material variants (heavy rust / weathered iron / cooler steel).
-- **Hover prompt annotation**: condition adjective in the prompt
-  noun, so the player can read pry cost vs reward before committing.
-
-## What's freshly shipped (Session AAS deltas)
-
-Salvage polish bundle building on AAR. 5 files; no new modules; no
-schema bump.
-
-- **Per-component loot mapping**: deterministic `COMPONENT_LOOT` map
-  keyed by `panelComponentKind`. Player sees the cavity and knows
-  what they'll get (red_wire→rope, chip→bullet, bandage_pack→
-  bandage). Replaces AAR's random kind-table roll.
-- **Variant interiors per wreck kind**: `addAccessPanel(kind)` +
-  `PANEL_COMPONENT_PALETTES` table. Engine kinds get cabling+ammo,
-  escape pods get medical, cargo gets lottery, massive gets diversity.
-  New `cloth_scrap` and `bandage_pack` meshes round out the
-  vocabulary. All callers updated (wrecks/megaShip/megaWreck).
-- **Electrical-flicker glow on pry**: amber PointLight in cavity,
-  ignites on `completePry`, fades over 3.2s with 2-sine detuned
-  flicker. Animation in existing per-frame `updatePanelDoors` walk.
-
-## What's freshly shipped (Session AAR deltas)
-
-Salvage mechanics overhaul — the previous "press E → roll loot table"
-gets rewritten into a tactile two-stage interaction. 8 files touched.
-Two new D-entries (D94, D95).
-
-- **`scrap_bar` ItemId + recipe** (id 15: scrap×2 + branch×1). Heavy
-  iron lever, `wieldLmb='click_use'`. Required to pry panels.
-- **New panel model** (`addAccessPanel` rewrite in `wrecks.ts`):
-  rusted fuse-box at 0.55×0.55×0.18m with hinged door + interior
-  cavity holding 5 detail components (wires + chip + fuse + scrap).
-  Door tagged on `body.userData.panelDoor`; components tagged with
-  `panelComponentIndex`. Animation state on `panelDoorAngle`/
-  `panelDoorTarget`.
-- **Two-stage interaction** (`interaction.ts` salvageables case +
-  new helpers `completePry`, `extractOneComponent`, `updatePanelDoors`):
-  scrap_bar equipped → E-hold 0.85s to pry → door lerps open → E
-  extracts one component at a time. Component meshes hide in index
-  order; loot rolls per-component from existing kind tables.
-- **`playPryCreak`** + **`playComponentExtract`** SFX in `audio.ts`.
-- **Sandworm noise composition** (D95): prying multiplies detection
-  radius by 1.3× on top of movement multipliers. Standing still
-  while prying ≈ walking detection; mounted+pry hits ~360m.
-- **No schema bump** (D94): visible depletion derived from
-  `salvageRemaining`. Acceptable migration loss documented.
-
-## What's freshly shipped (Session AAQ deltas)
-
-POI overhaul slice — first of three angles (clusters / narrative beats /
-biome-specific kinds). 2 files touched; no new modules; one new D-entry
-(D93 composition-over-creation).
-
-- **2 new cluster kinds**: `military_convoy` (linear crash trajectory,
-  4-6 wrecks: engine_cluster lead + cargo container middles + fuselage
-  tail; ±2m lateral skid, 12m debris field at impact end) and
-  `refugee_caravan` (scavenger_camp center + 2-3 inward-facing cargo
-  containers at 6-12m radius).
-- **`sampleClusterPositions`** sampler — rejection sampler with cluster-
-  specific exclusion radii: `CLUSTER_MIN_SEPARATION = 320m` (cluster ↔
-  cluster), `CLUSTER_SPAWN_EXCLUSION_RADIUS = 250m` (cluster ↔ spawn),
-  `CLUSTER_FLAGSHIP_MIN_SEPARATION = 200m` (cluster ↔ flagship),
-  `CLUSTER_MAX_ROUGHNESS = 0.7` (terrain-flatness gate). Post-sample
-  shuffle of cluster kinds avoids deterministic rotation order.
-- **Integration**: cluster pass runs in `placePOIs` after flagships and
-  before procgen wrecks. Cluster anchors push onto
-  `_placedFlagshipPositions` so procgenPoi naturally excludes them via
-  the existing `POI_MIN_SEPARATION` mechanism. No procgenPoi changes
-  needed.
-- **D93**: themed clusters reuse existing wreck/camp primitives in
-  coordinated layouts — composition-over-creation. New POI modules
-  reserved for cases where silhouette demands them (future
-  biome-specific kinds).
-
-## What's freshly shipped (Session AAP deltas — overnight)
-
-Overnight session pairing two big-ticket items. 5 files modified + 1
-new module (`src/audio/music.ts`). Two new D-entries (D91, D92).
-
-- **Sandworm overhaul** (D91). New `sampleSandwormHome(rand, biomes,
-  terrain)` — rejection-sampler placement on the dune biome with a
-  350m player-spawn-exclusion ring (wider than flagship POIs at 200m
-  since detection range = 150m). Per-seed ±30m jitter so the same
-  centroid cell across multiple seeds still produces distinct
-  positions. Falls back to `Tuning.SANDWORM_HOME_POS` if no dune
-  centroid is reachable. `spawnSandWorm` signature gained optional
-  `homeXZ` parameter; main.ts now passes the sampled home through.
-- **Noise-scaled sandworm detection**. New `playerNoiseMultiplier(ctx)`
-  helper. tickPatrol's detection check reads
-  `SANDWORM_DETECTION_RADIUS × multiplier` instead of the raw 150m.
-  Multipliers: still=0.55, walking=1.0, sprinting=1.45, mounted=1.85.
-  Player can sneak past at ~80m standing still; gets chased from ~280m
-  mounted.
-- **Procedural music** (D92, new module `src/audio/music.ts` ~240 LOC).
-  Three continuous Web Audio tracks per D3 (no .ogg files):
-  - Day: C2+G2+Eb3 triangle drones through 800Hz lowpass with slow
-    LFO tremolos (~0.07-0.13Hz). Rising-fifth motif (C5→G5, 1.5s decay)
-    fires every 12-18s.
-  - Storm: C2+Db2 sawtooth dissonance through 300Hz lowpass + low
-    rumble (lowpassed noise loop). Ramps in at perceivedIntensity > 0.30.
-  - Night: C3+Eb4 sine pads with slow LFO. Soft C6 chime (3.5s decay)
-    fires every 20-30s.
-  Crossfaded by sun height × perceivedIntensity. 1.5s ramp times.
-  Master gain `MUSIC_BUS_TARGET = 0.45`, fades in over 5s on first
-  audio gesture. Sample-stem music layer (silent in production)
-  preserved alongside per D92. `__game.musicState()` debug snapshot
-  surfaces per-track gains.
-- **Cut**: multi-worm population (overnight scope-cut tier 3). Single-
-  worm baseline shipped; multi-worm needs save-schema bump + playtest.
-  Backlogged.
-
-## What's freshly shipped (Session AAO deltas)
-
-Another quick-wins bundle (user picked "quick-wins bundle" from a 4-option
-direction prompt). Four items closed; one new D-entry (D90). 10 files
-touched, no new modules.
-
-- **Flagship paper-thin sweep** (CLAUDE.md rule 7). AAN closed wrecks.ts;
-  AAO closes the remaining flagships. 15 fixes total. megaShip.ts: 8
-  fixes (hull seams 5cm → 10cm, rust streaks + patches, entrance
-  fragments, bridge fins, viewport). megaWreck.ts: 6 fixes (aft seams +
-  horizontals + streaks + roof patches + doorway fragments, all 6-8cm
-  → 10cm). crashedHull.ts + engineBlock.ts: bell-throat backstop
-  `CircleGeometry` → `CylinderGeometry(r, r, 0.10)`. satelliteDish.ts:
-  clean (audit false positive). Offsets bumped proportionally so seams
-  still sit proud of the wall.
-- **Cook-progress-per-fire HUD**: new `showCookProgresses` + 4 pre-built
-  mini-bars above the [E] prompt; per-frame width updates only.
-  Surfaced from interaction.ts's 'fires' case — filters `_cooks` by
-  fireId. Closes AAM gap (grilled fires showed only one cook's progress).
-- **Companion storm-peak huddle**: new `'huddle'` state at
-  `weather.intensity > 0.80` (±0.05 hysteresis). Legs tuck, body
-  presses to ground, slow breathing bob. One-shot toast "Rocky huddles
-  down" per deploy. Uses world-truth `intensity`, not perceivedIntensity
-  (D90) — companion is outdoors regardless of player shelter.
-- **Rule-2 magic-number sweep** on deadTree.ts: 5 module-locals lifted
-  to `Tuning.DEAD_TREE_*` (FLATNESS_THRESHOLD + branch count + ring
-  radius). poi.ts scavenger-camp constants assessed and deferred —
-  one-off aesthetic numbers, lifting would bloat Tuning without future
-  iteration value.
-
-## What's freshly shipped (Session AAN deltas)
-
-Systems review + quick-win polish bundle. User asked for a comprehensive
-audit. Three parallel Explore agents (gameplay loop / models+materials
-/ UX-audio-debt) ran at boot; user said "ship the top wins." 8 files
-touched, no new modules. Two new D-entries (D88-D89).
-
-- **Paper-thin wrecks.ts fixes** (CLAUDE.md rule 7 audit on procgen
-  wrecks). Five sub-10cm BoxGeometry violations bumped to ≥0.10m
-  depth + the fuselage end cap rewritten from `CircleGeometry`
-  (zero depth — completely 2D disc!) to a 0.10m-thick
-  `CylinderGeometry`. Affected: engine_cluster rusty panel (0.06 →
-  0.15), escape pod hatch (0.04 → 0.12), escape pod rust patch
-  (0.05 → 0.12), cargo container door (0.04 → 0.10 width), debris
-  hull plate (0.04 → 0.10 Y). All read as real metal at edge angles
-  now. AAJ + AAM-followup #8 covered opening wreck; AAL covered
-  tent fabric; AAN covers procgen wrecks. Remaining: megaShip,
-  megaWreck, crashedHull, engineBlock, satelliteDish flagships.
-- **Scrap gun empty-state crosshair** (`src/ui/interactPrompt.ts` +
-  `style.css`). New `.no_ammo` crosshair state (dim warning-red,
-  smaller font). Fires when there's no hover AND the equipped
-  slot is `scrap_gun` with `ammoRemaining <= 0`. Hover state always
-  wins (kill/dead/interactable — D88: the actionable signal beats
-  the passive concern). Crosshair state union extended; per-frame
-  classList toggle cached as `_lastCrosshairState`.
-- **Bandage SFX** (`src/audio/audio.ts`, `src/inventory/items.ts`).
-  New `playBandageUse()` — two-layer cloth-tear noise burst
-  (highpass 900 → 1800 Hz) + soft pad triangle blip (220 → 110 Hz).
-  Wired into bandage onUse. Closes a long-standing silent-use gap
-  (bandage was crafted early + used often with no feedback).
-- **First-recipe-discovery fanfare** (`src/ui/craftingMenu.ts`,
-  `src/audio/audio.ts`, `src/ui/hud.ts`, `src/GameContext.ts`,
-  `src/style.css`). On first-time discovery of a recipe: distinct
-  rising-arpeggio chime `playRecipeDiscovery()` (C5 → G5 → C6 sines
-  + C4 triangle pad, ~0.6s total) replaces the routine playCraft
-  tick; toast renders in warm-gold with text-shadow glow + larger
-  26px font, held 3.2s instead of 1.6s. `HudApi.showToast` extended
-  with optional `{ kind?: 'discovery' }` opts arg (D89). Existing
-  single-arg call sites are unchanged. Closes the AAM next-session-
-  prompt "screen flash on first craft" stretch.
-
-## What's freshly shipped (Session AAM deltas)
-
-Fire grill attachment + multi-cook. Backlog item from AAG. Save schema
-v9 → v10 (additive). Also caught + fixed a leftover AAI bug.
-
-- **grill_kit** ItemId + ItemDef (recipe id 14, scrap×2 + branch×2).
-  wieldLmb='click_use'; onUse attaches to hovered fire via new
-  `attachGrillToFire(ctx, fire)`.
-- **`Fire.hasGrill: boolean` + `grillMesh: THREE.Group | null`** fields.
-  `attachGrillToFire` builds the grate via `makeGrillMesh()` (4 iron
-  bars + 2 side rails, 0.55×0.45m at Y=0.45 above fire base) and
-  parents it to the fire group. 5 new `FIRE_GRILL_*` Tuning constants.
-- **`_cooking` singleton → `_cooks: CookState[]` list** in
-  `interaction.ts` (D86). tickCooking iterates + removes completed/
-  cancelled. Cook cap = 1 without grill, 4 with grill. Slot-switch
-  cancel dropped (single-cook UX limitation; grill needs the player
-  to switch slots freely to load more raw items).
-- **SAVE_VERSION 9 → 10**. Additive `hasGrill?: boolean` per fire.
-  Loader re-calls attachGrillToFire on restored fires that had it.
-  Pre-v10 saves load with hasGrill=false default.
-- **Bug fix (AAI debt, D87)**: loader's seed-validity check compared
-  against `Tuning.RNG_SEED` instead of `ctx.seed`. Saves from any
-  non-1337 world failed to load post-AAI. Now compares to ctx.seed.
-
-## What's freshly shipped (Session AAL deltas)
-
-Project-wide audit pass. 3 Explore agents in parallel (gameplay loop /
-visuals / code-debt). 13 files touched across 4 bundles.
-
-- **Hygiene**: deleted 8 unused Tuning constants. Companion
-  receiveShadow=true. Footprint-puffs HMR-dispose guard. samples.ts
-  console.warn silenced.
-- **Gameplay bugfixes**: energy_pistol added to massive salvage
-  table (was orphaned). scrap_bullet drops bumped on engine_cluster
-  + added to massive. Sleep temperature reads `ctx.player.inShelter`
-  (sheltered factor 0.7, open-air 0.25).
-- **DoubleSide sweep**: crashedHull bell + engineBlock heat shield
-  → FrontSide. sandWorm body material split (closed segs FrontSide,
-  openEnded DoubleSide). Tent + largeTent walls → thin BoxGeometry /
-  ExtrudeGeometry (4cm fabric thickness). satelliteDish documented as
-  legitimate-DoubleSide case.
-- **Magic-number lift**: lootContainers.ts loot drop balance lifted
-  to `Tuning.LOOT_CONTAINER_*` (9 new constants).
-
-## What's shipped (older sessions, condensed)
-
-- **AAK** (multi-seed playtest): snapshot harness across 5 seeds.
-  Three issues + fixes: FLAGSHIP_SCATTER_RADIUS_MIN/MAX (200-800m
-  band), FLAGSHIP_SPAWN_EXCLUSION_RADIUS=200, FLAGSHIP_MAX_ROUGHNESS=0.7
-  + new `localRoughness` helper. Max distance dropped 1077m → 786m.
-- **AAJ** (opening wreck bugfixes): godray cone removed, entrance
-  enterable (rim bumped + floor collider reaches rim), hull
-  thickness via inner-shell + FrontSide drop, tally marks repositioned
-  to LEFT cockpit interior wall.
-- **AAI** (procedural world gen, D82-D85): per-seed worlds within
-  standard 2400m grid. `ctx.seed` is single source of truth; 3 RNG
-  streams derive from it. Flagship POIs unified into rejection
-  sampler. Title Advanced section for seed entry. Density bumps.
-- **AAH** (AAG playtest polish): footprintPuffs constants lifted,
-  5 feel tweaks (puff height ↑, motes opacity ↑, swap snappier).
-- **AAG** (atmospheric polish): footprint puffs, ambient dust motes,
-  mirage shader on salt-flat, inventory swap-on-pickup-full hold-E.
-- **AAF** (long storm countdown): `stormCurveAt(daysSurvived)` lerps
-  day 0 baseline → day 7 endpoint → plateau. HUD countdown indicator.
-- **AAE** (creature companion + v9): pocketable Rocky-inspired
-  creature with dual locomotion state machine (rolling / walking /
-  idle). `companion_pod` ItemId. SAVE_VERSION v9 additive.
-- **AAD** (AAC playtest polish): bedroll visibility + ghost ring sizes.
-- **AAC** (craftable home + v8): bedroll/lantern/locker placeable kits.
-  Recipes id 11/12/13. SAVE_VERSION v8 additive.
-- **AAB** (world depth): salvage yield differentiation per wreck
-  kind + skylight god-rays for opening wreck.
-- **AAA** (first-impression polish): UU pickup migration reverted,
-  ghost preview for LMB-place, vignette threshold lowered, recipe
-  book panel TAB-key, crosshair `.dead` state.
-- **Overnight era** (UU/VV/UU-2/WW/XX/YY/ZZ): control scheme overhaul
-  (LMB-leaning), RMB context verbs, HUD micro-polish (stat vignettes
-  + stamina wobble + prompt fade), larger enterable tent + v7,
-  perceivedIntensity split (visual + audio halves).
-- **TT** (crafting rework): combine-to-discover replaces explicit
-  recipe-list UI. SAVE_VERSION 5 → 6. Recipe id stability per D71.
-- **SS, RR** (opening wreck): DoubleSide fix for slice culling; full
-  redo with LatheGeometry hull + procedural rust shader + tilted
-  per-piece colliders.
-- **QQ + QQ-2** (sled mechanic): rope-tow flatbed cargo + sandworm
-  rescale + hotbar tooltips + inextensible-rope constraint (D67).
-- **PP** (weapon variants): 3 new weapons (pipe_staff, scrap_gun,
-  energy_pistol) + combat generalization + dev rAF fallback (D64).
-- **OO** (procedural shader expansion): hull rust + concrete weathering
-  + dune wind streaks + rocky biome via scatter.
-- **NN, LL, KK** (POI rework arc): dedicated crashedHull, engineBlock,
-  satelliteDish modules with full geometry detail.
-- **MM** (sandworm rescale + terrain shader): 24m → 240m worm, ranges
-  rescaled. Procedural terrain shader (dune grain, salt cracks).
-- **DD–JJ-2** (boss + scatter + early polish): sandworm boss DD,
-  scatter retuning JJ, spawn teleport bug fix JJ-2.
-- **A–CC-4** (foundations + atmosphere): Rapier setup, GameContext,
-  inventory, crafting, combat, audio architecture, speeder,
-  animated title, GH Pages deploy.
+- **ABA**: overnight 7-item bundle. Light-pool refactor (eliminates
+  the lantern-deploy freeze). Salvage door direction bugfix (D101).
+  Legacy panel migration to addAccessPanel (D102). Speeder damping.
+  Tutorial hints. alignToTerrain lift (D103). Procgen wreck system
+  first cut (D104).
+- **AAY** (visual overhaul): tents + fabric shader + lantern + companion
+  + grill bug. D97-D100.
+- **AAR/AAS/AAT/AAU/AAV** (salvage stack): tactile pry+extract,
+  variant interiors, condition tiers, panel polish, inventory overhaul.
+- **AAA-AAQ** (polish + atmosphere arc): ghost previews, recipe book,
+  craftable home (bedroll/lantern/locker), creature companion (AAE),
+  7-day storm countdown (AAF), atmospheric polish (AAG), procedural
+  world (AAI), flagship tightening (AAK), grill multi-cook (AAM),
+  POI clusters (AAQ).
+- **QQ-ZZ**: control scheme overhaul, RMB context verbs, larger tent,
+  perceivedIntensity split, crafting rework, opening wreck rebuild,
+  sled mechanic, weapon variants.
+- **DD-PP**: sandworm boss, weapon variants (PP), procgen POIs (HH),
+  POI rework arc (KK/LL/NN), terrain shader (MM), procedural shader
+  expansion (OO).
+- **A-CC-4**: foundations + atmosphere + speeder + animated title +
+  GH Pages deploy.
 
 ---
 
 ## Known issues / partials
 
-- **Sandworm at (900, 0)** as a test-fix only (AAL). Backlog: real
-  procgen biome-seeded overhaul.
-- **Paper-thin flagship sweep** still incomplete (megaShip, megaWreck,
-  crashedHull, engineBlock, satelliteDish). AAN closed wrecks.ts.
-- **_cooks module-level state** in interaction.ts survives HMR
-  badly. Hard-reload the preview tab if editing.
-- **Cook progress per-fire HUD missing** — multi-cook grill shows
-  only one cook's progress (deferred from AAN audit).
-- **Music tracks** still missing (deferred from AAL; long-standing
-  backlog item).
-- **Tutorial gaps**: grill_kit / companion_pod / RMB context / sled
-  cargo could use clearer first-discovery hints.
+- **Sandworm at procgen-seeded position** (AAP); multi-worm population
+  still backlog (needs schema bump).
+- **_cooks module-level state** in interaction.ts survives HMR badly.
+  Hard-reload the preview tab if editing.
+- **megaWreck catwalk panels 3 + 4** (~11.5m up) still require stairs.
+  ABE added 1 ground panel between bells; full sweep deferred.
+- **preview_screenshot tool blocked in hidden tabs** — canvas 0×0
+  problem. Workarounds documented in `dustfall_preview_gotchas.md`
+  (data-driven verification preferred).
+- **megaWreck visual quality** lags rest of the game (BB-2 era model,
+  pre-OO shaders). Rebuild flagged in backlog.
 
 See `docs/backlog.md` for full open list.
 
@@ -506,86 +214,83 @@ Recent (session-tagged):
 
 | Constant | Session | Default | Notes |
 |---|---|---|---|
+| `PROCGEN_COMPOSITE_SHARE` | ABC | 0.50 | Composite vs legacy procgen wreck mix (was 0.35 in ABA) |
+| `ribbed_cylinder breach chance` | ABD | 0.70 | Per-variant in procgenWreck.ts (was 0.50 in ABC) |
+| `plated_rectangular breach chance` | ABD | 0.60 | Per-variant (was 0.40 in ABC) |
+| Wind shimmer amplitude | ABE | 0.5cm–4cm | fabricMaterial.ts; calm baseline + storm peak |
+| Metal shader `wornScale` | ABH | 5-14 per surface | Larger = smaller worn-spot pattern |
+| Paint shader `wearLevel` | ABH | 0.55-0.65 | How chipped the paint is |
+| Stone shader `dustStrength` | ABH | 0.6-0.75 | Top-facing surface dust accumulation |
+| Skin shader `scaleSize` | ABH | 12-40 per creature | Larger = smaller scale cells (lizard tiny, worm large) |
 | `FIRE_GRILL_MAX_PARALLEL_COOKS` | AAM | 4 | Per-fire cook cap with grill attached |
-| `FIRE_GRILL_*` (5 constants) | AAM | various | Grate dimensions + bar radius |
 | `FLAGSHIP_SCATTER_RADIUS_MIN/MAX` | AAK | 200/800 | Flagship POI scatter band |
-| `FLAGSHIP_SPAWN_EXCLUSION_RADIUS` | AAK | 200 | Bigger than procgen 80m |
-| `FLAGSHIP_MAX_ROUGHNESS` | AAK | 0.7 | Reject candidates on steep dune |
-| `OPENING_WRECK_HULL_WALL_THICKNESS` | AAJ | 0.15 | Inner-shell offset |
-| `PLAYER_SPAWN_EXCLUSION_RADIUS` | AAI | 80 | Opening anchor ± 80m |
-| `POI_PROCGEN_COUNT` | AAI | 22 | Bumped from 15 (density) |
-| `CACTUS_TARGET_COUNT` | AAI | 14 | Bumped from 10 |
-| `DEAD_TREE_TARGET_COUNT` | AAI | 45 | Bumped from 30 |
-| `LARGE_TENT_STORM_DAMPEN` | YY | 0.4 | Perceived storm intensity inside large tent |
-| `PICKUP_SWAP_DURATION_S` | AAH | 1.2 | Hold-E swap-on-pickup-full |
-| `MIRAGE_NEAR_M` | AAH | 10 | Mirage starts at this radius |
-| `LONG_STORM_DAY` | AAF | 7 | Days until plateau |
-| `PLACEMENT_DISTANCE_M` | UU | 2.2 | All kit deploys |
 
 ---
 
 ## Suggested next session (1-3 directions in priority order)
 
-1. **Infinite chunk streaming** (still queued from post-AAI, ~6-10h
-   big-ticket). Generate 800m chunks lazily as player approaches
+1. **Multi-worm population** (~3-4h medium). Needs save schema bump
+   (sandWorm → sandWorms[]); per-worm min-separation logic; playtest
+   pass to confirm N>1 doesn't ruin the early game. Closes AAP scope-
+   cut. Highest gameplay impact per hour of the medium picks.
+2. **Sandworm encounter depth** (~3-5h medium). Ambush state, retreat-
+   and-stalk loop, weakness/feeding behavior, dawn/dusk surfacing.
+   Builds on AAP's procgen spawn + noise detection. Could combine
+   with #1 as a multi-session sandworm arc.
+3. **Infinite chunk streaming** (~6-10h big-ticket). The last major
+   architectural lift. Generate 800m chunks lazily as player nears
    boundary; free farthest chunks. Per-chunk seed derivation. GPU
    memory budget. Save bump v10→v11.
-2. **Sandworm overhaul** (deferred from AAL/AAM/AAN, ~3-5h medium).
-   Procgen biome-seeded spawn via dune-biome rejection sampler
-   (mirror of wells-in-salt). Multiple worms per world. Sound-based
-   detection. Deeper encounter beats.
-3. **Atmospheric music tracks** (long-standing backlog, ~4-6h
-   medium). 3 procedural Web Audio tracks (day / storm / night) via
-   slow drones + sparse motifs. Biggest atmospheric ROI per LOC.
 
-Top pick: infinite chunks if the user wants the big architectural
-lift; otherwise sandworm overhaul has the highest gameplay-impact
-per hour. See `docs/next-session-prompt.md` for the full brief.
+Top pick: multi-worm if the user wants gameplay; infinite chunks if
+architecture. See `docs/next-session-prompt.md` for the full ABI brief.
 
 ---
 
 ## Time spent
 
-41 sessions shipped (A–AAN). Approx ~150-200h elapsed dev time across
-roughly 4 weeks of calendar time. Overnight era (UU–ZZ, 7 sessions)
-ran in one ~8-10h push. The audit/polish arc (AAL → AAM → AAN) has
-been tight per-session (1-3h each).
+62 sessions shipped (A through ABH). Approx ~240-300h elapsed dev time
+across ~5 weeks of calendar time. The ABB-ABH arc (7 sessions) ran in
+one ~12-14h push including 2 overnights. The texture overhaul (ABH)
+was the heaviest single session at ~3-4h actual work.
 
 ---
 
 ## State at session end
 
-- **Git status**: working tree dirty (uncommitted). Branch: `master`.
-- **Last commit**: session-AAM (or whatever the user tagged).
-  `session-AAN` not yet tagged.
+- **Git status**: working tree dirty (this session-end's docs updates).
+  Branch: `master`. Up to date with origin through `session-ABH` tag.
+- **Last commit**: `d720b4b` (session ABH).
+- **Last tag**: `session-ABH` (pushed to origin).
 - **Ports bound**: none.
-- **Save state**: localStorage v10 (or pre-existing v9/v10 depending
-  on last play). Pre-v10 saves load cleanly with hasGrill=false
-  default.
+- **Save state**: localStorage v10. ABB-ABH made zero save-schema
+  changes; any pre-ABB save loads identically.
 
 ---
 
 ## Token spend this session (estimated)
 
-Rough estimate (Claude doesn't expose live counts to the agent):
+This conversation has been very long — 8 sessions of work (ABB through
+ABH) in one continuous Claude session, plus this session-end catch-up.
 
-- Input: ~120K-160K tokens (three parallel Explore agents at session
-  start, then file reads for the 4 quick-win implementations,
-  decisions/changelog/backlog reads at session end)
-- Output: ~25K-40K tokens (audit synthesis, 5 wrecks.ts edits + 8
-  files of quick-win code + multi-paragraph .md docs rewrites + 2
-  D-entries + changelog entry + next-session-prompt)
-- Cached input: substantial (CLAUDE.md, tuning.ts, decisions.md
-  re-read across agent + main turns)
-- Cost (Opus 4.7 rates, rough): $2-$4
+- Input: ~600-800K tokens cumulative (heavy file reads across 8
+  sessions, multiple Explore agents, runtime eval inspection)
+- Output: ~150-220K tokens cumulative (8 sessions of code + 7
+  changelog entries + 3 D-entries + full report rewrite)
+- Cached input: substantial (CLAUDE.md, decisions.md, tuning.ts all
+  read repeatedly across sessions)
+- Cost (Opus 4.7 rates, very rough): $30-50 cumulative for the 8
+  sessions + catch-up
 
-Within baseline. The audit phase did the heavy reading; implementation
-phase was tight (4 targeted edits in known files).
+The catch-up session-end alone is ~50-70K tokens (read backlog, read
+decisions, read changelog, rewrite report + brief + roadmap entries).
+Within reasonable budget given the 7-session backlog of docs.
 
 ---
 
 ## Commit handoff
 
 Print-hints mode (Dustfall CLAUDE.md does not have `auto-commit: on`).
-Commit + tag commands surfaced to the user as the final step of this
-report.
+ABB-ABH commits + tags are already pushed; only this catch-up session-
+end's doc updates need committing. Commands surfaced to the user as
+the final step of this report.
