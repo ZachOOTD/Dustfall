@@ -4,17 +4,15 @@ Cumulative state. Rewritten end-to-end at each `/session-end`. A
 reviewer who's never seen the project should be able to read this +
 `CLAUDE.md` + `docs/GDD.md` and understand where Dustfall is.
 
-**Current state**: Session ABJ shipped (2026-05-24, overnight). 65
-sessions post-MVP. tsc clean across all 4 ABJ tier boundaries.
-SAVE_VERSION v11 (D108 — combined bump from v10 covering huddleState
-+ journalReadKinds + bornInDevMode). All ABB-ABI commits pushed to
-origin. ABJ commits (`0f64fc1`, `83c353a`, `fadc78e`, `b22d98d`) +
-this session-end commit not yet pushed.
+**Current state**: Session ABK shipped (2026-05-24, overnight). 66
+sessions post-MVP. tsc clean. SAVE_VERSION v11 unchanged through ABK
+(no schema-affecting work this session). ABJ + ABI pushed; ABK
+commit `f36fcf2` + this session-end commit pending.
 
-**ABJ scope**: 6h aggressive overnight bundle, 14 of 19 selected items
-shipped across 4 tiers. Tier 5 stretch items (salt outpost, rocky
-entrance, megaWreck rebuild, dropped-item physics, generalized rope)
-pre-committed to defer and remain in backlog.
+**ABK scope**: tight 6h-budget session focused on completing the
+biome-specific POI family (closing ABJ A4 Tier 5 stretch). Salt
+outpost + rocky subterranean entrance shipped as 2 new modules.
+Multi-seed verified at 12345 + 7777.
 
 ---
 

@@ -1,75 +1,66 @@
-# Session ABK — Kickoff Brief (post-ABJ)
+# Session ABL — Kickoff Brief (post-ABK)
 
 ## Read these now (in order)
 
 1. `CLAUDE.md` (auto-loaded)
-2. `docs/session-end-report.md` — cumulative state through ABJ
-3. `docs/changelog.md` — ABJ entry at top (substantial — 4 tiers, 14 items)
-4. `docs/decisions.md` — D108 (combined v11 schema bump rationale)
+2. `docs/session-end-report.md` — cumulative state through ABK
+3. `docs/changelog.md` — ABK + ABJ entries at top
+4. `docs/decisions.md` — D108 still the latest
 5. `docs/roadmap.md`
 6. `docs/backlog.md`
 
-## What's already built (post-ABJ snapshot)
+## What's already built (post-ABK snapshot)
 
-65 sessions. Tactile salvage + 6 narrative journals + 4 procgen wreck
-classes (corvette/gunship/freighter/science_vessel) with breach
-patches + biome-bias on hullSegment variants + 5 weapon variants + procedural
-world seed-stable + **7 procedural shader factories** covering all major
-surface types (metal/paint/stone/skin/fabric/terrain/hull/concrete +
-ABJ's wood-grain/bone/glass). 3 themed POI cluster kinds
-(military_convoy / refugee_caravan / comm_relay) + first biome-
-specific POI (dune buried cockpit, ABJ A4). Sandworm now has a
-bait-and-strike feeding loop (B12 — 2× damage vulnerability window
-when feeding on meat pickups). SAVE_VERSION v11 (combined huddleState
-+ journalReadKinds + bornInDevMode per D108).
+66 sessions. Tactile salvage + 6 narrative journals + 4 procgen wreck
+classes + biome-bias on hullSegment variants + 5 weapon variants +
+procedural world seed-stable + 7 procedural shader factories +
+3 themed POI clusters (military_convoy / refugee_caravan / comm_relay)
++ **complete biome-specific POI family**: dune buried cockpit (ABJ),
+salt corroded outpost (ABK), rocky subterranean entrance with shelter
+zone (ABK). Sandworm bait-and-strike feeding loop (ABJ B12).
+SAVE_VERSION v11.
 
 ## Suggested focus (pick one)
 
-### Big-ticket (single session, 4-10h)
+### Big-ticket (single session, 3-10h)
 
 - **A5 megaWreck rebuild** (~4-6h dedicated). BB-2 era model is the
   last visually-behind-the-rest-of-the-world hand-modeled prop.
   Rebuild with higher fidelity + better silhouette + ABH metal/paint
-  shaders. Listed in ABJ Tier 5 stretch but explicitly deferred to
-  its own session.
+  + ABJ wood-grain/bone shaders.
 - **A1 infinite chunk streaming** (~6-10h). Last major architectural
-  lift. Lazy 800m chunks generated at boundaries; free farthest
-  chunks; per-chunk seed derivation; GPU memory budget. Save bump
-  v11→v12.
-- **A4 salt outpost POI** (~2.5h) + **A4 rocky entrance POI** (~3.5h)
-  — completes the biome-specific POI family started in ABJ. Salt =
-  concrete base + corroded antenna + sample crates. Rocky = cave-
-  mouth + descending stair geometry (needs interior — largest of 3).
+  lift. Lazy 800m chunks at boundaries; free farthest; per-chunk seed
+  derivation; GPU memory budget. Save bump v11→v12.
 - **B7 dropped-item rigid-body physics** (~3h). Items roll/fall/
-  settle. Needs Pickup.body field + dynamic-body spawn + per-frame
-  sync. Save-state round-trip preserves body positions.
+  settle. Add Pickup.body field + dynamic spawn + per-frame sync.
+  Save round-trip preserves positions.
 - **B8 generalized rope attachment** (~3h). Extend SledTether to
-  support `{ kind: 'anchor', anchorEntityId }` for arbitrary world-
-  object endpoints (bike + items + props). Reuses inextensible-rope
+  support arbitrary world-object endpoints. Reuses inextensible-rope
   constraint.
+- **B5 flagship NPC beats** (~4-6h). Hostile raider holdouts +
+  friendly hermit NPCs at hand-modeled flagships. ABF shipped journal
+  narrative; NPC beats remain.
 
 ### Medium (~2-4h)
 
 - **B6 5th wreck class** (`bulk_hauler` — wide cargo-heavy frame).
-- **B5 flagship NPC beats** — hostile raider holdouts + friendly
-  hermit NPCs at hand-modeled flagships (ABF shipped journals; NPC
-  beats remain).
-- **B9 salvage durability per-wreck** — finite mass across all
-  panels; deplete completely → "corpse" wreck dim entirely.
-- **B11 rare key-card panels** — gated behind a quest item; adds
-  long-tail salvage variety.
+- **B9 salvage durability per-wreck** — finite mass across panels;
+  deplete completely → "corpse" wreck dim entirely.
+- **B11 rare key-card panels** — gated behind a quest item; long-tail
+  salvage variety.
 - **megaWreck catwalk panel reachability (panels 3 + 4)** — ABE
-  shipped 1 ground-level panel; the catwalk-mounted ones at ~11.5m
-  still require stair climb.
+  shipped 1 ground-level panel; catwalk-mounted ones at ~11.5m still
+  require stair climb.
 
 ### Polish / quick wins (~1-2h)
 
-- **B10 restore corroded panels via weld kit** — inverts D96
-  (condition becomes player-mutable, must move to save).
+- **B10 restore corroded panels via weld kit** — inverts D96.
 - **Item viewmodel fidelity pass (continuation)** — ABJ shipped 5
   items (cloth/scrap/branch/bandage/rope); ~25 remaining ItemDefs
   could benefit from similar shader-vocab uplift.
-- **Tier 5 backlog stretch from ABJ** — any of the 5 deferred items.
+- **POI count tuning** — ABK shipped 1 each of salt/rocky/dune
+  biome POIs. Playtest signal may justify SALT_OUTPOST_COUNT or
+  ROCKY_ENTRANCE_COUNT > 1 in larger worlds.
 
 ## Autonomy contract
 
@@ -80,37 +71,28 @@ D-entry, keep going.
 Stop conditions: wall-clock limit, 3-strike fix wall, catastrophic
 block, destructive-action attempt.
 
-## Notable footguns (carried + new)
+## Notable footguns (carried)
 
-- **ABJ D108 combined v11 bump**: when adding ANOTHER schema-affecting
-  field next session, decide upfront whether to bundle it with other
-  pending fields (D108 rule) or ship its own bump. For non-trivial
-  migrations (renames, restructures), prefer atomic bumps.
-- **ABJ B4 biome-bias**: procgenWreck's `pickPart` now takes an
-  optional `biome` arg. Default (no biome) preserves uniform variant
-  selection. If adding new part variants to HULL_SEGMENT_VARIANTS,
-  update HULL_SEGMENT_BIOME_WEIGHTS too (it indexes by array
-  position — adding a 6th variant would need 6 entries per biome).
-- **ABJ B12 sandworm 'feeding' state**: damageSandWorm now allows
-  hits during 'feeding' at 2× damage. If adding new SandWormState
-  values, audit damageSandWorm's gate to confirm intended damage
-  window. New _feedBaitPickupId field on the SandWorm interface.
-- **ABJ A4 buriedCockpit.ts**: first POI module to integrate the
-  glassMaterial. If adding more glass-surfaced POIs, reuse
-  `createGlassMaterial` from `src/world/glassMaterial.ts` (DON'T
-  re-roll the factory — it's the standard now).
-- **ABG/ABI/ABJ salvage panel design**: BackSide body + 4-bar hollow
-  rim + flush-with-hull positioning. When placing new salvage panels
-  on new wreck modules, verify the panel POSITION isn't buried
-  inside the parent geometry (see ABI report for the 3 fixes).
-- **AAB legacy preview_screenshot blocker**: canvas 0×0 in hidden
-  tabs. Per `dustfall_preview_gotchas.md`: use data-driven
-  verification via preview_eval. Rule 4 (added ABI): always set
-  `ctx.time.dayTime = 0.5` + unpause briefly before any visual
-  screenshot, otherwise scene is too dark.
-- **Save schema v11**. If a session needs to persist new state, bump
-  additively per D81 + D108. ABJ's combined bump pattern is the
-  template.
+- **ABK biome POI family complete**: 3 biome POIs (dune/salt/rocky)
+  are now shipped. Dispatch in `poi.ts` goes dune→salt→rocky for
+  greedy multi-region spread — preserve this order if adding 4th
+  biome POIs (none planned).
+- **ABK rocky entrance has interior + shelter zone**: First non-
+  flagship POI with a sheltered chamber. If adding sheltered POIs
+  next, follow the BackSide-cavity pattern (`_interiorMat.side =
+  THREE.BackSide; shadowSide = THREE.FrontSide`) + `addShelterZone`
+  for the interior bounds.
+- **ABJ D108 combined v11 bump**: when adding ANOTHER schema-
+  affecting field, decide upfront whether to bundle it with other
+  pending fields (D108 rule) or ship its own bump.
+- **ABJ B4 biome-bias on procgen recipes**: HULL_SEGMENT_BIOME_WEIGHTS
+  indexes by array position — adding a 6th hullSegment variant
+  requires 6 entries per biome.
+- **Salvage panel design**: BackSide body + 4-bar hollow rim +
+  flush-with-hull positioning. Verify panel POSITION isn't buried
+  inside parent geometry (see ABI report).
+- **Preview screenshot rule 4**: always set `ctx.time.dayTime = 0.5`
+  + unpause briefly before any visual screenshot.
 
 ## Verification protocol
 
@@ -124,12 +106,8 @@ For substantial features:
 2. Save + reload roundtrip if persisted state changed.
 3. Multi-seed sanity if the change touches world generation.
 
-Preview screenshot tool: per `memory/dustfall_preview_gotchas.md`
-rule 4, always pre-set `ctx.time.dayTime = 0.5` + unpause briefly +
-re-pause before the screenshot.
-
 ## Begin block
 
-Read CLAUDE.md (auto), session-end-report (current state through ABJ),
-recent changelog (ABJ + ABI + ABH entries), decisions D106-D108.
-Pick focus from the menu above. TaskCreate sub-tasks. Start coding.
+Read CLAUDE.md (auto), session-end-report (through ABK), recent
+changelog (ABK + ABJ entries), decisions D106-D108. Pick focus from
+the menu above. TaskCreate sub-tasks. Start coding.

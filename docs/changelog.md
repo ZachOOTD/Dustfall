@@ -3,6 +3,35 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ABK — 2026-05-24 — Complete biome-specific POI family (salt + rocky) ✓ verify pass
+`verified` — tsc clean. 5 files (2 new modules). Closes the biome-POI
+family ABJ A4 started (dune buried cockpit shipped ABJ; ABK adds the
+remaining 2). Multi-seed boot verified.
+
+- **`src/world/saltOutpost.ts`** (new, ~165 LOC) — `placeSaltOutpost`
+  + `sampleSaltOutpostPositions`. Half-buried concrete base
+  (createStoneMaterial weathered) + 4.5m antenna spire
+  (createMetalMaterial rust-mottled) + angled dish + 2-3 corroded
+  sample crates (createPaintedMetal wearLevel 0.75) + 1
+  `cargo_container` salvage panel + 2-3 debris fragments. Placement
+  via findBiomeCentroid('salt') with greedy multi-region exclusion.
+- **`src/world/rockyEntrance.ts`** (new, ~210 LOC) — `placeRockyEntrance`
+  + `sampleRockyEntrancePositions`. Surface: 6-8 lumpy stone
+  boulders forming a hill. Cave-mouth arch (verticals + lintel) on
+  +Z face. 4 descending stairs (~0.5m drop each) into a sunken
+  4×2.5×3m interior chamber. BackSide stone walls per ABG cavity-
+  pattern so player INSIDE sees the cavity. Solid floor. 1
+  `escape_pod` salvage panel on the back wall. addShelterZone for
+  the chamber interior (full enclosure — third sheltered POI
+  alongside tents + flagship interiors).
+- **Wire-up**: `Tuning.SALT_OUTPOST_COUNT=1`,
+  `Tuning.ROCKY_ENTRANCE_COUNT=1`. Dispatch in `poi.ts` goes
+  dune→salt→rocky so earlier POIs join the exclusion list, spreading
+  across separate biome regions.
+
+Verified: multi-seed boot at 12345 (69 panels, 5 shelter zones) + 7777
+(70 panels, 5 shelter zones). 22-23 shader programs compile cleanly.
+
 ## Session ABJ — 2026-05-24 — Aggressive overnight bundle (14 items across 4 tiers) ✓ verify pass
 `verified` — tsc clean across all 4 tier boundaries + save round-trip
 verified (v10 → v11). 19 selected items, 14 shipped within 6h budget;

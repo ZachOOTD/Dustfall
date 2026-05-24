@@ -59,7 +59,20 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session ABJ — Aggressive overnight bundle (14 items
+**Last shipped**: Session ABK — Complete biome-specific POI family.
+ABJ A4 shipped the dune buried cockpit (first biome POI); ABK closes
+the family with **salt corroded scientific outpost** (concrete base +
+corroded antenna spire + 2-3 sample crates + 1 cargo_container salvage
+panel — `src/world/saltOutpost.ts`) and **rocky subterranean entrance**
+(boulder outcrop + cave-mouth arch + 4 descending stairs + sunken
+interior chamber with BackSide stone walls + shelter zone + escape_pod
+panel on back wall — `src/world/rockyEntrance.ts`). Dispatch in
+`poi.ts` goes dune→salt→rocky so earlier POIs naturally exclude later
+ones from overlapping their biome regions. Multi-seed verified at
+12345 + 7777: both 5 shelter zones (+1 from rocky entrance) and
+consistent salvage distribution. 5 files, 2 new modules.
+
+**Prior milestone**: Session ABJ — Aggressive overnight bundle (14 items
 shipped across 4 tiers; ~6h budget). **Tier 1**: v10→v11 schema bump
 combining huddleState + journalReadKinds + bornInDevMode (D108) +
 biome-bias on procgen recipe pick (salt→corroded plates / rocky→open
