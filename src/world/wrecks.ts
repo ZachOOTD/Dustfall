@@ -460,27 +460,22 @@ export function addAccessPanel(
 
   body.add(hinge);
 
-  // AAS — electrical-flicker glow PointLight. Lives inside the cavity,
-  // ignites on pry-complete, flickers + fades over ~3s. Shadows OFF
-  // for perf (50+ panels with shadow lights would be expensive).
-  // Starts at intensity=0 — interaction.ts flips panelGlowStartedAt
-  // to ctx.time.elapsed on pry-complete; updatePanelDoors ticks the
-  // intensity envelope from there.
-  const glow = new THREE.PointLight(
-    Tuning.SALVAGE_PANEL_GLOW_COLOR_HEX,
-    0,
-    Tuning.SALVAGE_PANEL_GLOW_RANGE_M,
-    2.0,    // decay
-  );
-  glow.position.set(0, 0, sz * 0.45);   // near the front of the cavity
-  glow.castShadow = false;
-  body.add(glow);
+  // AAS — electrical-flicker glow. Pre-ABL each panel got its own
+  // PointLight parented here (intensity=0 until pry). With ~68 panels
+  // in-world that drove total scene PointLights to ~96, inflating
+  // every lit fragment shader by 68 always-evaluated lights. ABL —
+  // perf: lights now claimed from the shared lightPool on pry-complete
+  // and released on fade-complete (mirrors fires + lanterns). The
+  // cavity ANCHOR position (in body-local) is stashed here; the glow
+  // tick in interaction.ts uses it to position the claimed light each
+  // ignite. Shadows still OFF when claimed (interaction sets this).
+  body.userData.panelGlow = null;               // ABL — pool light when active, null when idle
+  body.userData.panelGlowAnchorLocal = new THREE.Vector3(0, 0, sz * 0.45);
 
   // Stash refs + animation state on body.userData so interaction.ts
   // can drive the door + hide components as they're extracted.
   body.userData.panelDoor = hinge;
   body.userData.panelInterior = interior;
-  body.userData.panelGlow = glow;
   body.userData.panelGlowStartedAt = -1;        // -1 = not yet ignited
   body.userData.panelComponents = components;
   body.userData.panelDoorAngle = 0;            // current angle (rad)

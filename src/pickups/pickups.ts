@@ -53,22 +53,24 @@ function alignToTerrainNormal(mesh: THREE.Object3D, terrain: Terrain, x: number,
 // ────────────────────────────────────────────────────────────────
 function makePrimitiveCanteen(): THREE.Group {
   const g = new THREE.Group();
-  const bodyMat = new THREE.MeshStandardMaterial({
+  // ABL — perf: downgraded from MeshStandardMaterial (PBR) to
+  // MeshLambertMaterial. Visual diff is negligible for matte-canvas
+  // canteens at world scale; Lambert is significantly cheaper in the
+  // fragment shader (no metallic/roughness sampling). Emissive
+  // preserved via .emissive + .emissiveIntensity (Lambert supports
+  // both). flatShading equivalent.
+  const bodyMat = new THREE.MeshLambertMaterial({
     color: 0x6f3622,
     emissive: 0x281106,
     emissiveIntensity: 0.55,
-    roughness: 0.85,
-    metalness: 0.15,
     flatShading: true,
   });
-  const trimMat = new THREE.MeshStandardMaterial({
+  const trimMat = new THREE.MeshLambertMaterial({
     color: 0x1a1208,
-    roughness: 0.95,
     flatShading: true,
   });
-  const strapMat = new THREE.MeshStandardMaterial({
+  const strapMat = new THREE.MeshLambertMaterial({
     color: 0x2e1a0e,
-    roughness: 1,
     flatShading: true,
   });
 
@@ -164,8 +166,10 @@ function makePrimitiveBranch(rand: Rng): THREE.Group {
   // II — grey to match the dead trees branches actually come from
   // (deadTree.ts _branchMat = 0x6e685f). Reads as "this branch fell off
   // that tree" instead of "random brown stick."
-  const mat = new THREE.MeshStandardMaterial({
-    color: 0x6e685f, roughness: 0.95, flatShading: true,
+  // ABL — perf: PBR Standard → Lambert. Matte grey branches look
+  // identical; ~200 in-world instances drove a measurable fragment cost.
+  const mat = new THREE.MeshLambertMaterial({
+    color: 0x6e685f, flatShading: true,
   });
   // II — longer sticks so branches read as real fuel + craftable material
   // rather than tiny twigs.
@@ -275,9 +279,11 @@ export function spawnDroppedPickup(
     mesh = def.makeViewModel();
     mesh.scale.set(1.5, 1.5, 1.5);
   } else {
+    // ABL — perf: PBR Standard → Lambert for the no-viewmodel fallback
+    // pickup. Matte tan box; identical visually.
     const fallback = new THREE.Mesh(
       new THREE.BoxGeometry(0.12, 0.08, 0.10),
-      new THREE.MeshStandardMaterial({ color: 0x8a7a5e, roughness: 0.9 }),
+      new THREE.MeshLambertMaterial({ color: 0x8a7a5e }),
     );
     mesh = fallback;
   }

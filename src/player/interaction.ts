@@ -26,6 +26,7 @@ import { findLargeTentById, toggleLargeTentDoor } from '../world/largeTent.ts';
 import { findBedrollById } from '../world/bedroll.ts';
 import { findLockerById } from '../world/locker.ts';
 import { findSledById, attachRopeToSled, detachRope } from '../world/sled.ts';
+import { claimLight, releaseLight } from '../core/lightPool.ts';
 import {
   findSalvageableById,
   markSalvageStripped,
@@ -1097,18 +1098,45 @@ function updatePanelDoors(ctx: GameContext, dt: number): void {
     // intensity = peak × fadeFactor × flicker. The flicker is two
     // detuned high-frequency sines so it never settles into a pattern;
     // fadeFactor linearly drops peak → 0 over the fade duration.
+    // ABL — perf: glow PointLights now claimed from the shared
+    // lightPool on first ignite tick (was per-panel before; ~68
+    // always-in-scene-lights drove fragment cost). Released on fade
+    // complete. Panel's `panelGlowAnchorLocal` stores the cavity
+    // offset; we transform to world coords at claim time.
     const startedAt = (panel.userData.panelGlowStartedAt as number | undefined) ?? -1;
     if (startedAt < 0) continue;
     const glowElapsed = ctx.time.elapsed - startedAt;
     if (glowElapsed > glowFade) {
-      const glow = panel.userData.panelGlow as THREE.PointLight | undefined;
-      if (glow && glow.intensity !== 0) glow.intensity = 0;
+      // Fade complete — release the claimed pool light, if any.
+      const glow = panel.userData.panelGlow as THREE.PointLight | null;
+      if (glow) {
+        releaseLight(ctx.lightPool, glow);
+        panel.userData.panelGlow = null;
+      }
       panel.userData.panelGlowStartedAt = -1;    // mark spent so we stop ticking
       continue;
     }
+    // First tick of this glow → claim from pool + position at cavity.
+    let glow = panel.userData.panelGlow as THREE.PointLight | null;
+    if (!glow) {
+      glow = claimLight(ctx.lightPool);
+      if (glow) {
+        glow.color.setHex(Tuning.SALVAGE_PANEL_GLOW_COLOR_HEX);
+        glow.distance = Tuning.SALVAGE_PANEL_GLOW_RANGE_M;
+        glow.decay = 2.0;
+        glow.castShadow = false;
+        // Transform the cavity-local anchor into world space.
+        const anchorLocal = panel.userData.panelGlowAnchorLocal as THREE.Vector3 | undefined;
+        if (anchorLocal) {
+          panel.updateWorldMatrix(true, false);
+          const worldPos = anchorLocal.clone().applyMatrix4(panel.matrixWorld);
+          glow.position.copy(worldPos);
+        }
+        panel.userData.panelGlow = glow;
+      }
+    }
     const fadeFactor = Math.max(0, 1 - glowElapsed / glowFade);
     const flicker = 0.7 + 0.30 * Math.sin(glowElapsed * 23) * Math.sin(glowElapsed * 7.3);
-    const glow = panel.userData.panelGlow as THREE.PointLight | undefined;
     if (glow) glow.intensity = glowPeak * fadeFactor * Math.max(0.2, flicker);
   }
 }

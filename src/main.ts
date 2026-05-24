@@ -96,7 +96,12 @@ const lights = createLights(three.scene);
 // the renderer's lightsHash at runtime (which would force a multi-
 // hundred-ms shader recompile across every lit material). See
 // src/core/lightPool.ts. Size 24 covers worst-case simultaneous use.
-const lightPool = createLightPool(three.scene, 24);
+// ABL — perf: bumped 24 → 30 to absorb salvage-panel cavity glows
+// (previously each of ~68 panels had its own per-panel PointLight,
+// driving scene PointLight count to ~96 and inflating per-fragment
+// shader cost for every lit material). Salvage glows now claim/
+// release from the pool like fires + lanterns.
+const lightPool = createLightPool(three.scene, 30);
 const input = createInput(three.camera, three.renderer.domElement);
 const hud = createHud();
 createHotbar();
@@ -458,6 +463,16 @@ const devModeBadge = document.createElement('div');
 devModeBadge.id = 'dev-mode-badge';
 devModeBadge.textContent = '[ DEV MODE ]';
 document.body.appendChild(devModeBadge);
+
+// ABL — perf: pre-warm shader compilation against the game scene
+// BEFORE the title is shown. Three.js compiles shader programs lazily
+// on first render; without this, the FIRST frame after the player
+// clicks NEW GAME stalls for 100ms-2s while ~16 programs compile cold.
+// `renderer.compile(scene, camera)` walks all visible materials and
+// submits them for compile against the current light/material setup.
+// Cost: adds ~200-500ms to boot (invisible — title comes up after);
+// payoff: click→first-game-frame is near-instant.
+three.renderer.compile(three.scene, three.camera);
 
 const title = createTitleScene();
 // Expose the title scene for debug/preview tools (read-only handles).
