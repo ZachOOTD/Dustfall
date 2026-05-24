@@ -38,40 +38,58 @@ import { addAccessPanel, placeDebrisField, makeEngineBellMesh } from './wrecks.t
 import { addShelterZone, type ShelterRegistry } from '../shelter/shelterZones.ts';
 import { registerSalvageable, type SalvageableRegistry } from './salvage.ts';
 import { placeJournal, type Journal } from './journal.ts';
+// ABL — visual rebuild: apply ABH procedural shaders + tapered hull shell.
+import { createMetalMaterial } from './metalMaterial.ts';
+import { createPaintedMetalMaterial } from './paintMaterial.ts';
+import { createRustedHullMaterial } from './hullMaterial.ts';
 
-// ── Shared materials — same palette as megaShip.
-const _hullMat = new THREE.MeshLambertMaterial({
-  color: Tuning.WRECK_HULL_HEX,
-  flatShading: true,
+// ── Shared materials.
+// ABL — visual rebuild: BB-2/BB-3 era flat-Lambert hulls upgraded to
+// the ABH procedural shader vocabulary (metalMaterial + paintMaterial
+// + hullMaterial). Same color palette per Tuning.WRECK_* hexes so
+// gameplay clarity / faction-color reads stay identical; the lift is
+// surface detail (scratches, worn highlights, paint chips, rust drips
+// via the shader's onBeforeCompile patches).
+const _hullMat = createRustedHullMaterial({
+  baseColor: Tuning.WRECK_HULL_HEX,
+  streakIntensity: 0.55,
 });
-const _hullDarkMat = new THREE.MeshLambertMaterial({
-  color: Tuning.WRECK_HULL_DARK_HEX,
-  flatShading: true,
+const _hullDarkMat = createRustedHullMaterial({
+  baseColor: Tuning.WRECK_HULL_DARK_HEX,
+  streakIntensity: 0.40,
 });
-const _rustMat = new THREE.MeshLambertMaterial({
-  color: Tuning.WRECK_RUST_HEX,
-  flatShading: true,
+const _rustMat = createPaintedMetalMaterial(Tuning.WRECK_RUST_HEX, {
+  wearLevel: 0.65,
 });
-const _rustDarkMat = new THREE.MeshLambertMaterial({
-  color: Tuning.WRECK_RUST_DARK_HEX,
-  flatShading: true,
+const _rustDarkMat = createMetalMaterial(Tuning.WRECK_RUST_DARK_HEX, {
+  wornScale: 5.0,
+  scratchStrength: 0.06,
 });
 const _nozzleInteriorMat = new THREE.MeshBasicMaterial({
   color: Tuning.WRECK_NOZZLE_INTERIOR_HEX,
 });
-const _nozzleRimMat = new THREE.MeshLambertMaterial({
-  color: Tuning.WRECK_NOZZLE_RIM_HEX,
-  flatShading: true,
+const _nozzleRimMat = createMetalMaterial(Tuning.WRECK_NOZZLE_RIM_HEX, {
+  wornScale: 4.0,
+  scratchStrength: 0.05,
 });
-const _antennaMat = new THREE.MeshLambertMaterial({
-  color: Tuning.WRECK_ANTENNA_HEX,
-  flatShading: true,
+const _antennaMat = createMetalMaterial(Tuning.WRECK_ANTENNA_HEX, {
+  wornScale: 6.0,
+  scratchStrength: 0.04,
 });
-const _pipeMat = new THREE.MeshLambertMaterial({
-  color: 0x3a3028,
-  flatShading: true,
+const _pipeMat = createMetalMaterial(0x3a3028, {
+  wornScale: 5.0,
+  scratchStrength: 0.04,
 });
 const _viewportMat = new THREE.MeshBasicMaterial({ color: 0x14181c });
+
+// ABL — rust-band wrap material. Slightly darker + stronger streaks
+// than the main hull so the wraps read as discrete weathering bands
+// against the panel surface.
+const _bandMat = createRustedHullMaterial({
+  baseColor: Tuning.WRECK_RUST_DARK_HEX,
+  streakIntensity: 0.75,
+  rustHex: 0x1a0e08,
+});
 
 // ── Burial + wall thickness. WALL_BURY scaled up from megaShip's 2.0m
 // because at 120m length even small terrain variation otherwise exposes
@@ -737,6 +755,132 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
       conduit.rotation.x = Math.PI / 2;
       conduit.position.set(BOW_HALF_W - 0.1, 2.5, BOW_ORIGIN_Z + (zs[i] + zs[i + 1]) / 2);
       bowGroup.add(conduit);
+    }
+  }
+
+  // ── ABL — silhouette improvement pass. Drape decorative meshes
+  // OVER the existing box-wall structure to improve the silhouette
+  // without touching colliders or interior layout. Three layers:
+  //   (a) Tapered LatheGeometry hull shell over the aft section —
+  //       reads as a curved cargo-ship hull instead of a box
+  //   (b) Rust band wraps around aft + mid-hull break — discrete
+  //       weathering bands that read as "this ship has weathered
+  //       for years"
+  //   (c) Exposed rib bumps at the hull break — small cylinder
+  //       struts visible where the hull is torn open between bow
+  //       and aft, suggesting the hull cracked here on impact
+
+  // (a) Tapered aft-section hull shell. CylinderGeometry rotated so
+  // its axis is along Z; scaled to ellipsoidal cross-section to fit
+  // the wider-than-tall aft body. Slightly tapered (smaller at front
+  // edge of aft, wider at rear) for crash-deformation read. Material
+  // is FrontSide-only outer shell — interior box walls remain visible
+  // from inside the bay.
+  {
+    const shellLen = AFT_HALF_L * 2.0;
+    const shellRTop = AFT_HALF_W * 0.95;     // narrower at front
+    const shellRBot = AFT_HALF_W * 1.05;     // wider at rear (crash flare)
+    const shell = new THREE.Mesh(
+      new THREE.CylinderGeometry(shellRTop, shellRBot, shellLen, 16, 1, true),
+      _hullMat,
+    );
+    // Cylinder default axis = Y. Rotate around X to make axis = Z.
+    shell.rotation.x = Math.PI / 2;
+    // Position: centered on the aft section. Y centered vertically.
+    shell.position.set(0, AFT_HALF_H, AFT_ORIGIN_Z);
+    // Scale to ellipsoidal cross-section: keep X radius, flatten Y so the
+    // shell hugs the box top + bottom rather than overshooting upward.
+    shell.scale.set(1.0, 0.62, 1.0);
+    shell.userData.noCollider = true;
+    g.add(shell);
+  }
+
+  // (b) Rust band wraps. 4 thick bands around the aft + 2 around bow.
+  // Each is a thin torus oriented so it wraps the body cross-section.
+  // Using torus over cylinder slice because the torus reads as a real
+  // 3D wrapping band, not a flat ring.
+  {
+    // Aft bands at different Z positions along the aft length.
+    const aftBandZs = [
+      AFT_ORIGIN_Z - AFT_HALF_L * 0.7,
+      AFT_ORIGIN_Z - AFT_HALF_L * 0.25,
+      AFT_ORIGIN_Z + AFT_HALF_L * 0.15,
+      AFT_ORIGIN_Z + AFT_HALF_L * 0.55,
+    ];
+    for (const z of aftBandZs) {
+      const band = new THREE.Mesh(
+        new THREE.TorusGeometry(AFT_HALF_W * 1.02, 0.35, 6, 18),
+        _bandMat,
+      );
+      band.rotation.y = Math.PI / 2;       // torus default in XY plane → rotate so it's in YZ
+      band.position.set(0, AFT_HALF_H, z);
+      band.scale.set(1.0, 0.62, 1.0);      // match ellipsoidal hull cross-section
+      band.userData.noCollider = true;
+      g.add(band);
+    }
+    // Bow bands (smaller — bow is thinner).
+    const bowBandZs = [
+      BOW_ORIGIN_Z - BOW_HALF_L * 0.5,
+      BOW_ORIGIN_Z + BOW_HALF_L * 0.4,
+    ];
+    for (const z of bowBandZs) {
+      const band = new THREE.Mesh(
+        new THREE.TorusGeometry(BOW_HALF_W * 1.05, 0.22, 5, 14),
+        _bandMat,
+      );
+      band.rotation.y = Math.PI / 2;
+      band.position.set(0, BOW_HALF_H + 0.5, z);
+      band.scale.set(1.0, 0.7, 1.0);
+      band.userData.noCollider = true;
+      bowGroup.add(band);
+    }
+  }
+
+  // (c) Exposed rib bumps at the hull break. The mid-hull break sits
+  // between bow (Z = BOW_ORIGIN_Z + BOW_HALF_L = -25) and aft
+  // (Z = AFT_ORIGIN_Z - AFT_HALF_L = -10), so the break is the gap
+  // Z ∈ [-25, -10]. Place 3 short vertical ribs spanning Y from ground
+  // up to mid-height — reads as "internal hull beams exposed where
+  // the skin peeled away."
+  {
+    const ribZs = [-22, -17, -12];
+    for (const z of ribZs) {
+      const rib = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.25, 0.32, AFT_HALF_H * 1.5, 6),
+        _hullDarkMat,
+      );
+      rib.position.set(
+        // Alternate left/right slightly so they don't look perfectly aligned
+        (z % 5) - 2.5,
+        AFT_HALF_H * 0.6,
+        z,
+      );
+      rib.rotation.z = (z * 0.13) % 0.3 - 0.15;     // slight random tilt
+      rib.userData.noCollider = true;
+      g.add(rib);
+    }
+    // Plus a few torn-plate fragments arching over the break — small
+    // boxes positioned at the break zone with random tilts.
+    for (let i = 0; i < 5; i++) {
+      const frag = new THREE.Mesh(
+        new THREE.BoxGeometry(
+          1.5 + _rand() * 1.2,
+          0.15,
+          0.8 + _rand() * 0.6,
+        ),
+        _rustDarkMat,
+      );
+      const z = -22 + _rand() * 12;
+      const x = (_rand() - 0.5) * AFT_HALF_W * 1.5;
+      const y = AFT_HALF_H * (0.7 + _rand() * 0.4);
+      frag.position.set(x, y, z);
+      frag.rotation.set(
+        (_rand() - 0.5) * 0.8,
+        (_rand() - 0.5) * Math.PI,
+        (_rand() - 0.5) * 0.6,
+      );
+      frag.userData.noCollider = true;
+      g.add(frag);
     }
   }
 
