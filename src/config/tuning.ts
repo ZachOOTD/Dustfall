@@ -885,6 +885,12 @@ export const Tuning = {
   SANDWORM_FEED_DETECT_RADIUS_M: 30,         // m — meat pickup detection radius (bait scent range)
   SANDWORM_FEED_DURATION_S: 4.5,             // s — total feeding state duration (rise + hold + descend)
 
+  // ABJ — A4: dune buried cockpit POI. Count is the number of cockpit
+  // POIs to spawn per world; 1 is the baseline (one per dune-biome
+  // centroid). Future increases (e.g. 2-3 across larger maps) are
+  // possible — the sampler does greedy multi-region placement.
+  BURIED_COCKPIT_COUNT: 1,
+
   // Opening wreck (Session RR — full redo using KK/LL/NN modelling
   // vocabulary). Cockpit + tail-stub composition built as N angular
   // slices of LatheGeometry — one slice on the top is intentionally

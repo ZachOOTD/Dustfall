@@ -17,6 +17,7 @@ import {
   makeFuselage,
   placeWreck,
   placeDebrisField,
+  addAccessPanel,
   type WreckKind,
 } from './wrecks.ts';
 import { attachCompoundCollider } from '../physics/bodies.ts';
@@ -28,6 +29,7 @@ import { placeEngineBlock } from './engineBlock.ts';
 import { placeCrashedHull } from './crashedHull.ts';
 import type { ShelterRegistry } from '../shelter/shelterZones.ts';
 import { Tuning } from '../config/tuning.ts';
+import { placeBuriedCockpit, sampleBuriedCockpitPositions } from './buriedCockpit.ts';
 
 // ────────────────────────────────────────────────────────────────
 // The Engine Block POI is built by `placeEngineBlock` in
@@ -261,8 +263,11 @@ export function getAnchorPOIPositions(): ReadonlyArray<{ x: number; z: number }>
 // 3D models. The "theme" is the SHAPE of the layout (line vs ring) +
 // the choice of wreck kinds.
 
-type ClusterKind = 'military_convoy' | 'refugee_caravan';
-const CLUSTER_KINDS: ReadonlyArray<ClusterKind> = ['military_convoy', 'refugee_caravan'];
+// ABJ — B3: 'comm_relay' added as 3rd cluster kind. Central antenna
+// spire + radial dish reflectors + collapse debris + 1 salvage panel.
+// Reads as "abandoned signal relay — the operator went silent."
+type ClusterKind = 'military_convoy' | 'refugee_caravan' | 'comm_relay';
+const CLUSTER_KINDS: ReadonlyArray<ClusterKind> = ['military_convoy', 'refugee_caravan', 'comm_relay'];
 
 /** military_convoy: 4-6 wrecks aligned along a "crash trajectory" line.
  *  Mix of engine_clusters (the trucks), cargo_containers (the cargo
@@ -462,6 +467,10 @@ export function placePOIs(
   // flagship's module (megaShip / megaWreck / satelliteDish / etc.).
   // Optional so legacy callers stay source-compatible.
   journals?: { list: import('./journal.ts').Journal[] },
+  // Session ABJ — A4: biome sampler is threaded so we can place the
+  // dune buried cockpit at biome centroids. Optional so any pre-ABJ
+  // callers (none in main.ts now, but defensive) stay source-compat.
+  biomes?: import('./biomes.ts').BiomeSampler,
 ): void {
   // AAI — rejection-sample positions for the 6 flagships in a single
   // pass, then dispatch each kind's spawn fn against its sampled position.
@@ -636,6 +645,8 @@ export function placePOIs(
   for (const c of clusterAnchors) {
     if (c.kind === 'military_convoy') {
       placeMilitaryConvoy(scene, world, terrain, rand, { x: c.x, z: c.z }, salvageables);
+    } else if (c.kind === 'comm_relay') {
+      placeCommRelayCluster(scene, world, terrain, rand, { x: c.x, z: c.z }, salvageables);
     } else {
       placeRefugeeCaravan(scene, world, terrain, rand, { x: c.x, z: c.z }, pickupList, salvageables);
     }
@@ -643,4 +654,180 @@ export function placePOIs(
     // honors it via the same min-sep mechanism (POI_MIN_SEPARATION).
     _placedFlagshipPositions = [..._placedFlagshipPositions, { x: c.x, z: c.z }];
   }
+
+  // ── ABJ — A4: dune buried cockpit POI ────────────────────────────
+  // 1 per world (cap at Tuning.BURIED_COCKPIT_COUNT). Sampled at dune
+  // biome centroid via findBiomeCentroid (greedy w/ exclusion of
+  // flagships, clusters, player spawn). First of a planned biome-
+  // specific POI family (salt outpost + rocky entrance deferred to
+  // future sessions per scope-cut tier).
+  if (biomes) {
+    const cockpitExcludes = _placedFlagshipPositions.map(p => ({
+      x: p.x, z: p.z, radius: Tuning.POI_MIN_SEPARATION,
+    }));
+    const cockpitCenters = sampleBuriedCockpitPositions(
+      biomes, cockpitExcludes, Tuning.BURIED_COCKPIT_COUNT,
+    );
+    for (const c of cockpitCenters) {
+      const y = terrain.heightAt(c.x, c.z);
+      placeBuriedCockpit(
+        scene, world, terrain,
+        new THREE.Vector3(c.x, y, c.z),
+        rand, salvageables,
+      );
+      _placedFlagshipPositions = [..._placedFlagshipPositions, { x: c.x, z: c.z }];
+    }
+  }
+}
+
+// ── ABJ — B3: comm_relay cluster ─────────────────────────────────────
+// Central antenna spire + 2-3 small dish reflectors at 8-12m radius +
+// debris pieces (relay went down) + 1 salvage panel on the spire base.
+// Composes existing primitives (no new wreck modules per D93).
+function placeCommRelayCluster(
+  scene: THREE.Scene,
+  world: RAPIER.World,
+  terrain: Terrain,
+  rand: Rng,
+  anchor: { x: number; z: number },
+  salvageables: SalvageableRegistry | undefined,
+): void {
+  const y = terrain.heightAt(anchor.x, anchor.z);
+  const center = new THREE.Vector3(anchor.x, y, anchor.z);
+
+  // Central concrete base — half-buried cube with antenna spire on top.
+  const baseGroup = new THREE.Group();
+  baseGroup.position.copy(center);
+  const baseSize = 1.8;
+  const baseH = 1.0;
+  const baseMat = new THREE.MeshLambertMaterial({
+    color: 0x6e6660, flatShading: true,
+  });
+  const baseBox = new THREE.Mesh(
+    new THREE.BoxGeometry(baseSize, baseH, baseSize),
+    baseMat,
+  );
+  baseBox.position.y = baseH * 0.35;     // half-buried
+  baseBox.castShadow = true;
+  baseBox.receiveShadow = true;
+  baseGroup.add(baseBox);
+
+  // Antenna spire — tall slim cylinder
+  const spireMat = new THREE.MeshLambertMaterial({
+    color: 0x4a4640, flatShading: true,
+  });
+  const spireH = 6.0;
+  const spire = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.06, 0.08, spireH, 8),
+    spireMat,
+  );
+  spire.position.y = baseH + spireH / 2;
+  spire.castShadow = true;
+  baseGroup.add(spire);
+  // Cross-bar near the top
+  const crossbar = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.03, 0.03, 0.8, 6),
+    spireMat,
+  );
+  crossbar.rotation.z = Math.PI / 2;
+  crossbar.position.y = baseH + spireH * 0.85;
+  baseGroup.add(crossbar);
+  // Beacon stub at the very top (small box; could glow at night in a
+  // future polish pass).
+  const beacon = new THREE.Mesh(
+    new THREE.BoxGeometry(0.10, 0.14, 0.10),
+    new THREE.MeshLambertMaterial({ color: 0xc04030 }),
+  );
+  beacon.position.y = baseH + spireH + 0.07;
+  baseGroup.add(beacon);
+
+  // 3 guy-wires (tube geometry along catmull curves from spire-top to
+  // ground 120° apart).
+  const wireMat = new THREE.MeshLambertMaterial({
+    color: 0x2a2622, flatShading: true,
+  });
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2 + 0.3;
+    const groundR = 2.5;
+    const top = new THREE.Vector3(0, baseH + spireH * 0.92, 0);
+    const bot = new THREE.Vector3(Math.cos(a) * groundR, 0, Math.sin(a) * groundR);
+    const curve = new THREE.CatmullRomCurve3([
+      top,
+      new THREE.Vector3(
+        Math.cos(a) * groundR * 0.5,
+        (top.y + bot.y) * 0.5 - 0.15,
+        Math.sin(a) * groundR * 0.5,
+      ),
+      bot,
+    ]);
+    const tube = new THREE.Mesh(
+      new THREE.TubeGeometry(curve, 8, 0.015, 4, false),
+      wireMat,
+    );
+    baseGroup.add(tube);
+  }
+
+  // Salvage panel on the concrete base — front face (+Z)
+  addAccessPanel(
+    baseGroup,
+    0, baseH * 0.65, baseSize / 2,
+    1,
+    0,
+    'engine_cluster',     // cabling-heavy palette fits comm equipment
+  );
+  scene.add(baseGroup);
+  attachCompoundCollider(world, baseGroup);
+  if (salvageables) {
+    registerSalvageable(salvageables, baseGroup, 'engine_cluster', center, rand);
+  }
+
+  // Radial dish reflectors — 2-3 placed at 8-12m radius pointed inward
+  // toward the spire. Each is a small Lathe parabola (simpler than
+  // satelliteDish flagship, just for silhouette).
+  const dishCount = 2 + Math.floor(rand() * 2);    // 2-3
+  for (let i = 0; i < dishCount; i++) {
+    const a = (i / dishCount) * Math.PI * 2 + rand() * 0.5;
+    const r = 8 + rand() * 4;                       // 8-12m
+    const dx = Math.cos(a) * r;
+    const dz = Math.sin(a) * r;
+    const dy = terrain.heightAt(anchor.x + dx, anchor.z + dz);
+
+    const dishGroup = new THREE.Group();
+    dishGroup.position.set(anchor.x + dx, dy, anchor.z + dz);
+    // Pole
+    const pole = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.04, 0.05, 1.2, 6),
+      spireMat,
+    );
+    pole.position.y = 0.6;
+    dishGroup.add(pole);
+    // Dish — small parabolic Lathe
+    const dishR = 0.55;
+    const dishPts: THREE.Vector2[] = [];
+    for (let p = 0; p <= 8; p++) {
+      const t = p / 8;
+      const x = t * dishR;
+      const y = -t * t * 0.20;       // shallow parabola
+      dishPts.push(new THREE.Vector2(x, y));
+    }
+    const dishGeom = new THREE.LatheGeometry(dishPts, 12);
+    const dish = new THREE.Mesh(
+      dishGeom,
+      new THREE.MeshLambertMaterial({
+        color: 0x9a8a78, side: THREE.DoubleSide, flatShading: true,
+      }),
+    );
+    dish.position.y = 1.2;
+    dishGroup.add(dish);
+    // Point inward toward the spire — rotate around Y so the dish "looks at" the center.
+    const yawToCenter = Math.atan2(-dz, -dx) + Math.PI / 2;
+    dishGroup.rotation.y = yawToCenter;
+    // Slight terrain tilt
+    dishGroup.rotation.z = (rand() - 0.5) * 0.15;
+    scene.add(dishGroup);
+    attachCompoundCollider(world, dishGroup);
+  }
+
+  // Debris field at impact site — 6 pieces around the base showing the relay collapsed.
+  placeDebrisField(scene, terrain, center, 4.0, rand, 6);
 }

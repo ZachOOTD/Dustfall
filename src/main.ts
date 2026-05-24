@@ -175,7 +175,7 @@ spawnRockScatter(three.scene, terrain, biomes, scatterRand);
 // placePOIs, then attached to ctx.journals below so the interaction
 // system can resolve hits to it.
 const journalsList: Journal[] = [];
-placePOIs(three.scene, physics.world, terrain, scatterRand, pickupList, salvageables, shelter, { list: journalsList });
+placePOIs(three.scene, physics.world, terrain, scatterRand, pickupList, salvageables, shelter, { list: journalsList }, biomes);
 
 // HH (world rework #3) — procgen POI layer scattered across the chunk band.
 // ~15 wrecks via rejection sampling. Reject against anchor POI coords AND
