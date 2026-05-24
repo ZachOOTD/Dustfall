@@ -18,6 +18,7 @@ import type { GameContext } from '../GameContext.ts';
 import { Tuning } from '../config/tuning.ts';
 import type { LootEntry } from './lootContainers.ts';
 import { createPaintedMetalMaterial } from './paintMaterial.ts';
+import { createWoodGrainMaterial } from './woodGrainMaterial.ts';
 import { addItem } from '../inventory/inventory.ts';
 
 export interface Locker {
@@ -45,8 +46,16 @@ function makeLockerVisual(): THREE.Group {
   const D = Tuning.LOCKER_DEPTH_M;
   const H = Tuning.LOCKER_HEIGHT_M;
 
-  // Main wooden box
-  const woodMat = new THREE.MeshLambertMaterial({ color: 0x6a4a2c });
+  // ABJ — Tier 2 C3: wood-grain procedural shader on locker body + lid.
+  // Pre-ABJ these were plain Lambert. Body grain runs along +X (chest
+  // long axis); lid uses tighter ring density to read as a separate
+  // plank cover. World-space sampling = each locker shows distinct
+  // grain pattern for free.
+  const woodMat = createWoodGrainMaterial(0x6a4a2c, {
+    grainAxis: 0,
+    ringDensity: 7.0,
+    weatherLevel: 0.40,
+  });
   const body = new THREE.Mesh(
     new THREE.BoxGeometry(W, H, D),
     woodMat,
@@ -55,7 +64,11 @@ function makeLockerVisual(): THREE.Group {
   g.add(body);
 
   // Lid — slightly raised, darker, suggesting a separable cover
-  const lidMat = new THREE.MeshLambertMaterial({ color: 0x5a3a22 });
+  const lidMat = createWoodGrainMaterial(0x5a3a22, {
+    grainAxis: 0,
+    ringDensity: 9.0,
+    weatherLevel: 0.55,
+  });
   const lid = new THREE.Mesh(
     new THREE.BoxGeometry(W + 0.03, 0.05, D + 0.03),
     lidMat,

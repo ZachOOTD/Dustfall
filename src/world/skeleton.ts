@@ -9,10 +9,16 @@
 // toward where the journal lies.
 
 import * as THREE from 'three';
+import { createBoneMaterial } from './boneMaterial.ts';
 
-const _boneMat = new THREE.MeshLambertMaterial({
-  color: 0xd6c8a8,
-  flatShading: true,
+// ABJ — Tier 2 C4: procedural bone shader (cracks + mineralization +
+// age-bleach + micro-grain). Pre-ABJ the skeleton was flat Lambert
+// (one ivory tone). World-space sampling means cracks vary across
+// each bone instance for free.
+const _boneMat = createBoneMaterial(0xd6c8a8, {
+  crackDensity: 1.2,
+  marrowHint: 0.55,
+  ageBleach: 0.4,
 });
 const _socketMat = new THREE.MeshLambertMaterial({
   color: 0x14110a,

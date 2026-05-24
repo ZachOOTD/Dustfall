@@ -23,6 +23,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import type { GameContext } from '../GameContext.ts';
 import { Tuning } from '../config/tuning.ts';
 import type { LootEntry } from './lootContainers.ts';
+import { createWoodGrainMaterial } from './woodGrainMaterial.ts';
 
 export type SledTether =
   | { kind: 'none' }
@@ -62,9 +63,26 @@ export function findSledById(list: Sled[], id: number | undefined): Sled | undef
 // Visual
 // ─────────────────────────────────────────────────────────────
 
-const _plankMat = new THREE.MeshLambertMaterial({ color: 0x6b4a2c, flatShading: true });
-const _plankDarkMat = new THREE.MeshLambertMaterial({ color: 0x4a3220, flatShading: true });
-const _runnerMat = new THREE.MeshLambertMaterial({ color: 0x3a2a1a, flatShading: true });
+// ABJ — Tier 2 C3: apply wood-grain procedural shader to sled deck +
+// rails + runners. Pre-ABJ these were plain Lambert (one flat tone per
+// plank). World-space sampling means each sled gets free per-instance
+// variation. Runners get tighter ring density + stronger weathering to
+// read as "dragged through sand for years".
+const _plankMat = createWoodGrainMaterial(0x6b4a2c, {
+  grainAxis: 0,                  // grain along +X (sled long axis)
+  ringDensity: 6.0,
+  weatherLevel: 0.35,
+});
+const _plankDarkMat = createWoodGrainMaterial(0x4a3220, {
+  grainAxis: 0,
+  ringDensity: 7.0,
+  weatherLevel: 0.45,
+});
+const _runnerMat = createWoodGrainMaterial(0x3a2a1a, {
+  grainAxis: 0,
+  ringDensity: 9.0,
+  weatherLevel: 0.6,
+});
 const _scrapMat = new THREE.MeshLambertMaterial({
   color: 0x8a7050, metalness: 0.2, roughness: 0.85, flatShading: true,
 } as THREE.MeshLambertMaterialParameters);
