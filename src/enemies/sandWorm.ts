@@ -43,6 +43,7 @@ export type SandWormState =
   | 'lunge'
   | 'stationaryBreach'
   | 'retreat'
+  | 'feeding'         // ABJ — B12: bait-and-strike loop; worm surfaces at a meat pickup
   | 'dead';
 
 const SEGMENT_COUNT = 12;
@@ -99,6 +100,10 @@ export interface SandWorm {
   nextWakePuffAt: number;
   /** Next time to emit tremor dust at the player's feet. */
   nextTremorDustAt: number;
+  /** ABJ — B12: pickup id of the meat bait the worm is currently
+   *  feeding on. Cleared on consume (mid-descent). Undefined outside
+   *  the feeding state. */
+  _feedBaitPickupId?: number;
 }
 
 interface SandPuff {
@@ -558,14 +563,24 @@ export function damageSandWorm(
   _hitWorldY: number,
   ctx: GameContext,
 ): void {
-  if (worm.state !== 'lunge' && worm.state !== 'stationaryBreach') return;
-  worm.health -= 1.0;
+  // ABJ — B12: feeding state is the new "vulnerable window" — worm has
+  // its head out + is distracted by the meat. Hits land here at 2x
+  // damage to reward the bait-and-strike play loop. Lunge + breach
+  // still hit at 1x (the pre-ABJ damage gates).
+  const damage =
+    worm.state === 'feeding' ? 2.0 :
+    (worm.state === 'lunge' || worm.state === 'stationaryBreach') ? 1.0 :
+    0;
+  if (damage === 0) return;
+  worm.health -= damage;
   if (worm.health <= 0) {
     worm.health = 0;
     transitionToDead(worm, ctx);
     return;
   }
-  ctx.ui.showToast('the blade bites into chitin');
+  ctx.ui.showToast(
+    damage === 2.0 ? 'the blade bites deep — it didn\'t see you' : 'the blade bites into chitin',
+  );
 }
 
 function transitionToDead(worm: SandWorm, ctx: GameContext): void {
@@ -663,6 +678,9 @@ export function updateSandWorm(ctx: GameContext, dt: number): void {
     case 'retreat':
       tickRetreat(worm, ctx, dt, distToPlayer);
       break;
+    case 'feeding':
+      tickFeeding(worm, ctx, elapsed);
+      break;
   }
 
   applyMeshTransform(worm);
@@ -745,6 +763,17 @@ function playerNoiseMultiplier(ctx: GameContext): number {
 }
 
 function tickPatrol(worm: SandWorm, ctx: GameContext, dt: number, distToPlayer: number): void {
+  // ABJ — B12: scan for nearby meat pickups (player bait). If one is
+  // within FEED_DETECT_RADIUS the worm surfaces to feed, opening a
+  // 2x-damage vulnerability window. Meat items: raw/cooked lizard +
+  // raw/cooked worm + lizard_on_a_stick raw/cooked. Player detection
+  // still takes precedence (alert beats feeding) — a player closing
+  // in while the worm is already feeding can interrupt the bait play.
+  const meatPickup = findNearbyMeat(worm, ctx);
+  if (meatPickup) {
+    enterFeeding(worm, ctx, meatPickup.x, meatPickup.z, meatPickup.id);
+    return;
+  }
   // AAP — detection radius now scales with player movement noise. A
   // standing-still player can sit ~80m from a patrolling worm without
   // alerting it (DETECTION_RADIUS=150 * STILL=0.55 ≈ 82m); a mounted
@@ -1026,6 +1055,118 @@ function tickStationaryBreach(worm: SandWorm, ctx: GameContext, elapsed: number)
     pitchTarget = (Math.PI / 2) * (1 - p);
     yTarget = peakY - p * (Tuning.SANDWORM_STATIONARY_BREACH_HEIGHT - Tuning.SANDWORM_MAX_RADIUS);
     worm.sway = 0;
+  }
+  worm.pitch = pitchTarget;
+  worm.basePos.y = yTarget;
+}
+
+// ── ABJ — B12: feeding state (bait-and-strike loop) ─────────────────
+
+/** Scan ctx.pickups.list for the nearest meat pickup within FEED_DETECT_RADIUS
+ *  of the worm. Returns {x, z, id} of the nearest one, or null if none. */
+function findNearbyMeat(worm: SandWorm, ctx: GameContext): { x: number; z: number; id: number } | null {
+  const meatItems = new Set([
+    'raw_lizard_meat',
+    'cooked_lizard_meat',
+    'raw_worm_meat',
+    'cooked_worm_meat',
+    'lizard_on_a_stick_raw',
+    'lizard_on_a_stick_cooked',
+  ]);
+  const detectR = Tuning.SANDWORM_FEED_DETECT_RADIUS_M;
+  let best: { x: number; z: number; id: number; distSq: number } | null = null;
+  for (const p of ctx.pickups.list) {
+    if (!meatItems.has(p.itemId)) continue;
+    const dx = p.pos.x - worm.basePos.x;
+    const dz = p.pos.z - worm.basePos.z;
+    const distSq = dx * dx + dz * dz;
+    if (distSq > detectR * detectR) continue;
+    if (best === null || distSq < best.distSq) {
+      best = { x: p.pos.x, z: p.pos.z, id: p.id, distSq };
+    }
+  }
+  return best ? { x: best.x, z: best.z, id: best.id } : null;
+}
+
+function enterFeeding(worm: SandWorm, ctx: GameContext, x: number, z: number, pickupId: number): void {
+  worm.state = 'feeding';
+  worm.phaseStartedAt = ctx.time.elapsed;
+  // Snap basePos to the meat XZ so the surface emergence is at the bait.
+  worm.basePos.x = x;
+  worm.basePos.z = z;
+  worm.surfaceGroundY = ctx.terrain.heightAt(x, z);
+  // Stash the pickup id on attackCount slot (re-using an existing field
+  // for the consume-on-end check; cleaner than adding a field for a
+  // single state). Use _biteDealt as a "consumed-on-this-cycle" gate.
+  worm._biteDealt = false;
+  worm.target.set(x, 0, z);
+  worm.mesh.visible = true;
+  // Burst on emergence — smaller than stationaryBreach (the worm is
+  // distracted, not aggressive). ~30 particles vs 85 for breach.
+  burstPuffs(
+    worm.particles,
+    new THREE.Vector3(x, worm.surfaceGroundY + 0.3, z),
+    30, 4.0, 4.0,
+  );
+  playWormChomp();
+  // Store the bait pickup id on a dedicated field — see SandWorm interface
+  // additions below (_feedBaitPickupId).
+  worm._feedBaitPickupId = pickupId;
+}
+
+function tickFeeding(worm: SandWorm, ctx: GameContext, elapsed: number): void {
+  const dur = Tuning.SANDWORM_FEED_DURATION_S;
+  const t = (elapsed - worm.phaseStartedAt) / dur;
+  // Three phases:
+  //   t in [0, 0.20]:  rise — pitch up to +π/4, basePos.y → near surface
+  //   t in [0.20, 0.80]: hold — head partially raised, slow sway
+  //   t in [0.80, 1.0]: descend — pitch back to 0, basePos.y → underground
+  let pitchTarget = 0;
+  let yTarget = worm.surfaceGroundY - Tuning.SANDWORM_UNDERGROUND_DEPTH;
+  // Feeding peak: ~40% of stationaryBreach height (worm is partly exposed,
+  // not fully vertical).
+  const peakY = worm.surfaceGroundY + Tuning.SANDWORM_STATIONARY_BREACH_HEIGHT * 0.40
+                - Tuning.SANDWORM_LENGTH / 2;
+  if (t < 0.20) {
+    const p = t / 0.20;
+    pitchTarget = (Math.PI / 4) * p;
+    yTarget = (worm.surfaceGroundY - Tuning.SANDWORM_UNDERGROUND_DEPTH)
+              + p * (peakY - (worm.surfaceGroundY - Tuning.SANDWORM_UNDERGROUND_DEPTH));
+  } else if (t < 0.80) {
+    pitchTarget = Math.PI / 4;
+    yTarget = peakY;
+    // Slow sway — half the rate of stationaryBreach (worm is feeding,
+    // not threatening). Sway period ~3s.
+    worm.sway = Math.sin((elapsed - worm.phaseStartedAt) * 1.5) * 0.15;
+  } else if (t < 1.0) {
+    const p = (t - 0.80) / 0.20;
+    pitchTarget = (Math.PI / 4) * (1 - p);
+    yTarget = peakY - p * (peakY - (worm.surfaceGroundY - Tuning.SANDWORM_UNDERGROUND_DEPTH));
+    worm.sway = 0;
+    // Despawn the meat pickup mid-descent (around t=0.85). Worm
+    // "consumed" the bait. Guard with _biteDealt so it only fires once.
+    if (!worm._biteDealt && t >= 0.85) {
+      worm._biteDealt = true;
+      const baitId = worm._feedBaitPickupId;
+      if (baitId !== undefined) {
+        const idx = ctx.pickups.list.findIndex((p) => p.id === baitId);
+        if (idx >= 0) {
+          const p = ctx.pickups.list[idx];
+          ctx.three.scene.remove(p.mesh);
+          ctx.pickups.list.splice(idx, 1);
+        }
+        worm._feedBaitPickupId = undefined;
+      }
+      ctx.ui.showToast('the worm takes the bait');
+    }
+  } else {
+    // Done — return to patrol (NOT retreat; feeding is non-hostile).
+    worm.state = 'patrol';
+    worm.phaseStartedAt = elapsed;
+    worm.mesh.visible = false;
+    worm.sway = 0;
+    worm.pitch = 0;
+    return;
   }
   worm.pitch = pitchTarget;
   worm.basePos.y = yTarget;

@@ -17,6 +17,8 @@ import { easeOutBack, easeInOutCubic, easeOutQuad } from '../core/ease.ts';
 import { addItem } from './inventory.ts';
 import { makeLizardVisual } from '../enemies/lizard.ts';
 import { createMetalMaterial } from '../world/metalMaterial.ts';
+import { createFabricMaterial } from '../world/fabricMaterial.ts';
+import { createWoodGrainMaterial } from '../world/woodGrainMaterial.ts';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -216,9 +218,14 @@ const _DEFS: Record<ItemId, ItemDef> = {
       return { consumed: true, message: 'you bind a wound' };
     },
     makeViewModel() {
+      // ABJ — B13: applied fabric shader (weave + color variation +
+      // stains). Pad gets the weave reading; binding stripes show
+      // distinct cloth weave for free. Added a small red cross stripe
+      // for the "medical kit" silhouette.
       const group = new THREE.Group();
-      const cloth = new THREE.MeshLambertMaterial({ color: 0xe8dcc0 });
-      const stripe = new THREE.MeshLambertMaterial({ color: 0xc8b89a });
+      const cloth = createFabricMaterial(0xe8dcc0);
+      const stripe = createFabricMaterial(0xc8b89a);
+      const crossMat = new THREE.MeshLambertMaterial({ color: 0xa83a2a });
       const pad = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.04, 0.08), cloth);
       group.add(pad);
       const s1 = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.041, 0.082), stripe);
@@ -227,6 +234,13 @@ const _DEFS: Record<ItemId, ItemDef> = {
       const s2 = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.041, 0.082), stripe);
       s2.position.x = 0.03;
       group.add(s2);
+      // Red cross — small horizontal + vertical bar atop the pad
+      const crossH = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.005, 0.011), crossMat);
+      crossH.position.set(0, 0.021, 0);
+      group.add(crossH);
+      const crossV = new THREE.Mesh(new THREE.BoxGeometry(0.011, 0.005, 0.045), crossMat);
+      crossV.position.set(0, 0.021, 0);
+      group.add(crossV);
       return group;
     },
     makeIcon() {
@@ -257,18 +271,37 @@ const _DEFS: Record<ItemId, ItemDef> = {
       return { consumed: false, message: 'no use for it yet' };
     },
     makeViewModel() {
+      // ABJ — B13: upgraded from 1-box + 1-bolt flat Lambert to weathered-
+      // metal chunk + 2 bolts + a small bent fragment. Reads as actual
+      // salvaged plate scrap rather than a brick. ABH metal shader gives
+      // scratches + edge dirt.
       const group = new THREE.Group();
-      const mat = new THREE.MeshLambertMaterial({ color: 0x6e5a4a });
+      const mat = createMetalMaterial(0x6e5a4a, { wornScale: 6.0 });
+      const accentMat = createMetalMaterial(0x4a3a2a, { wornScale: 6.0, scratchStrength: 0.03 });
+      // Main plate — slightly trapezoidal silhouette via small tilted slice
       const chunk = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.04, 0.07), mat);
       chunk.rotation.set(0.2, 0.4, 0.1);
       group.add(chunk);
+      // Bent edge fragment — adds asymmetry; sits over one corner
+      const bend = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.025, 0.06), accentMat);
+      bend.position.set(-0.045, 0.025, 0);
+      bend.rotation.set(0.5, 0.3, 0.2);
+      group.add(bend);
+      // 2 bolts — main rivet + secondary
       const bolt = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.012, 0.012, 0.02, 6),
-        mat,
+        new THREE.CylinderGeometry(0.012, 0.012, 0.020, 6),
+        accentMat,
       );
       bolt.position.set(0.04, 0.025, 0.02);
       bolt.rotation.x = Math.PI / 2;
       group.add(bolt);
+      const bolt2 = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.010, 0.010, 0.016, 6),
+        accentMat,
+      );
+      bolt2.position.set(0.02, 0.022, -0.025);
+      bolt2.rotation.x = Math.PI / 2;
+      group.add(bolt2);
       return group;
     },
     makeIcon() {
@@ -985,19 +1018,27 @@ const _DEFS: Record<ItemId, ItemDef> = {
       return { consumed: false, message: 'aim at a fire to add fuel' };
     },
     makeViewModel() {
+      // ABJ — B13: applied wood-grain shader (grain + rings + weathering).
+      // Reads as actual woody fiber not painted plastic. Added one more
+      // small offshoot for asymmetric "natural twig" silhouette.
       const group = new THREE.Group();
-      // II — grey to match the dead trees branches actually come from
-      // (deadTree.ts _branchMat = 0x6e685f). Length bumped so it reads
-      // as a useable stick rather than a twig.
-      const mat = new THREE.MeshLambertMaterial({ color: 0x6e685f });
+      const mat = createWoodGrainMaterial(0x6e685f, {
+        grainAxis: Math.PI / 2.4,     // grain aligns with the stick's tilt
+        ringDensity: 12.0,            // tight rings → small-diameter branch
+        weatherLevel: 0.55,           // dead-tree branches are weathered grey
+      });
       const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.018, 0.34, 6), mat);
       stick.rotation.set(0, 0, Math.PI / 2.4);
       group.add(stick);
-      // A small offshoot twig
       const twig = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.008, 0.09, 4), mat);
       twig.position.set(0.08, 0.03, 0);
       twig.rotation.set(0, 0, -0.6);
       group.add(twig);
+      // Second smaller offshoot on the opposite side
+      const twig2 = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.007, 0.06, 4), mat);
+      twig2.position.set(-0.04, 0.02, 0.01);
+      twig2.rotation.set(0, 0, 0.75);
+      group.add(twig2);
       return group;
     },
     makeIcon() {
@@ -1021,14 +1062,26 @@ const _DEFS: Record<ItemId, ItemDef> = {
       return { consumed: false, message: 'press C to craft' };
     },
     makeViewModel() {
+      // ABJ — B13: upgraded from 2-box flat Lambert to 3-fold composite
+      // with fabric shader (weave + color variation). Reads as actual
+      // folded cloth bundle rather than a stack of paint chips.
       const group = new THREE.Group();
-      const mat = new THREE.MeshLambertMaterial({ color: 0xc8b89a });
-      const fold = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.025, 0.08), mat);
+      const mat = createFabricMaterial(0xc8b89a);
+      const matInner = createFabricMaterial(0xb8a888);
+      const matInnermost = createFabricMaterial(0xa8987c);
+      const fold = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.025, 0.085), mat);
       group.add(fold);
-      const inner = new THREE.Mesh(new THREE.BoxGeometry(0.085, 0.015, 0.065),
-        new THREE.MeshLambertMaterial({ color: 0xb8a888 }));
-      inner.position.y = 0.018;
+      const inner = new THREE.Mesh(new THREE.BoxGeometry(0.095, 0.018, 0.072), matInner);
+      inner.position.y = 0.020;
       group.add(inner);
+      const innermost = new THREE.Mesh(new THREE.BoxGeometry(0.080, 0.014, 0.060), matInnermost);
+      innermost.position.y = 0.036;
+      group.add(innermost);
+      // Small fabric "tag" sticking out one side — adds asymmetry.
+      const tag = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.008, 0.022), matInner);
+      tag.position.set(0.060, 0.020, 0);
+      tag.rotation.z = -0.20;
+      group.add(tag);
       return group;
     },
     makeIcon() {
@@ -1817,9 +1870,17 @@ const _DEFS: Record<ItemId, ItemDef> = {
       return { consumed: false, message: 'aim at a sled and click to tie' };
     },
     makeViewModel() {
+      // ABJ — B13: applied wood-grain shader for hempy-fiber reading
+      // (tight rings + weathering read as twisted rope strands). Added
+      // a second concentric coil loop for "looped multiple times"
+      // silhouette + a fraying tail strand at one end.
       const group = new THREE.Group();
-      // Coiled rope — a torus held in the off-hand position.
-      const coilMat = new THREE.MeshLambertMaterial({ color: 0x6e4a2a });
+      const coilMat = createWoodGrainMaterial(0x6e4a2a, {
+        grainAxis: 0,           // grain along the rope's circumference
+        ringDensity: 24.0,      // very tight — reads as fiber striations
+        weatherLevel: 0.45,
+      });
+      // Main coil
       const coil = new THREE.Mesh(
         new THREE.TorusGeometry(0.07, 0.022, 8, 16),
         coilMat,
@@ -1827,7 +1888,16 @@ const _DEFS: Record<ItemId, ItemDef> = {
       coil.rotation.x = Math.PI / 2;
       coil.rotation.z = 0.2;
       group.add(coil);
-      // Two cross-bound strands.
+      // Second inner coil — smaller torus stacked behind for "wound
+      // multiple times" depth.
+      const coil2 = new THREE.Mesh(
+        new THREE.TorusGeometry(0.055, 0.018, 6, 14),
+        coilMat,
+      );
+      coil2.rotation.x = Math.PI / 2;
+      coil2.rotation.z = 0.35;
+      coil2.position.z = -0.012;
+      group.add(coil2);
       for (let i = 0; i < 2; i++) {
         const strand = new THREE.Mesh(
           new THREE.CylinderGeometry(0.012, 0.012, 0.18, 6),
@@ -1837,6 +1907,14 @@ const _DEFS: Record<ItemId, ItemDef> = {
         strand.position.set((i - 0.5) * 0.06, 0, 0);
         group.add(strand);
       }
+      // Fraying tail strand sticking out (asymmetric break).
+      const tail = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.008, 0.005, 0.06, 5),
+        coilMat,
+      );
+      tail.position.set(0.08, 0.02, 0.04);
+      tail.rotation.set(0.3, 0.5, 0.8);
+      group.add(tail);
       return group;
     },
     makeIcon() {

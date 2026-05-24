@@ -876,6 +876,14 @@ export const Tuning = {
   SANDWORM_LENGTH: 120,                      // m — total body length head-to-tail (was 240)
   SANDWORM_MAX_RADIUS: 10.0,                 // m — peak body radius (was 20)
   SANDWORM_UNDERGROUND_DEPTH: 12.5,          // m below ground while submerged (was 25)
+  // ABJ — B12: feeding state. While in 'patrol', the worm scans for
+  // meat pickups within FEED_DETECT_RADIUS and surfaces to feed (2x
+  // damage vulnerability window for the player who baited it). Detect
+  // radius is INDEPENDENT of player noise; the worm smells the meat
+  // not the player. Duration matches stationaryBreach scale so the
+  // bait-and-strike loop has the same dramatic window.
+  SANDWORM_FEED_DETECT_RADIUS_M: 30,         // m — meat pickup detection radius (bait scent range)
+  SANDWORM_FEED_DURATION_S: 4.5,             // s — total feeding state duration (rise + hold + descend)
 
   // Opening wreck (Session RR — full redo using KK/LL/NN modelling
   // vocabulary). Cockpit + tail-stub composition built as N angular
