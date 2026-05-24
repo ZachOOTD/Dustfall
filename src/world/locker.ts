@@ -17,6 +17,7 @@ import * as THREE from 'three';
 import type { GameContext } from '../GameContext.ts';
 import { Tuning } from '../config/tuning.ts';
 import type { LootEntry } from './lootContainers.ts';
+import { createPaintedMetalMaterial } from './paintMaterial.ts';
 import { addItem } from '../inventory/inventory.ts';
 
 export interface Locker {
@@ -62,8 +63,10 @@ function makeLockerVisual(): THREE.Group {
   lid.position.y = H + 0.025;
   g.add(lid);
 
-  // Metal banding strips around the body (3 horizontal)
-  const metalMat = new THREE.MeshLambertMaterial({ color: 0x3a3a3a });
+  // Metal banding strips around the body (3 horizontal). ABH — bands
+  // get the painted-corroded procedural shader (industrial banding
+  // would have started painted, now flaked + rust-bled).
+  const metalMat = createPaintedMetalMaterial(0x3a3a3a, { wearLevel: 0.65 });
   for (let i = 0; i < 3; i++) {
     const band = new THREE.Mesh(
       new THREE.BoxGeometry(W + 0.02, 0.03, D + 0.02),

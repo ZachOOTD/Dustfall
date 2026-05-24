@@ -22,6 +22,8 @@ import type { Rng } from '../core/rng.ts';
 import type { Terrain } from './terrain.ts';
 import { Tuning } from '../config/tuning.ts';
 import { makeEngineBellMesh } from './wrecks.ts';
+import { createMetalMaterial } from './metalMaterial.ts';
+import { createPaintedMetalMaterial } from './paintMaterial.ts';
 import {
   startSpeederThrust,
   setSpeederThrustSpeed,
@@ -65,14 +67,12 @@ export interface SpeederState {
 }
 
 // ── Materials — same palette as the wrecks so the bike feels in-universe.
-const _hullMat = new THREE.MeshLambertMaterial({
-  color: Tuning.WRECK_HULL_HEX,
-  flatShading: true,
-});
-const _hullDarkMat = new THREE.MeshLambertMaterial({
-  color: Tuning.WRECK_HULL_DARK_HEX,
-  flatShading: true,
-});
+// ABH — speeder hull is the PAINTED industrial archetype the paint shader
+// was designed for. Hull + dark variants get painted-corroded; rust patches
+// stay raw rust (they're already the substrate exposed); antenna gets
+// weathered metal (small accent, no paint).
+const _hullMat = createPaintedMetalMaterial(Tuning.WRECK_HULL_HEX, { wearLevel: 0.55 });
+const _hullDarkMat = createPaintedMetalMaterial(Tuning.WRECK_HULL_DARK_HEX, { wearLevel: 0.55 });
 const _rustMat = new THREE.MeshLambertMaterial({
   color: Tuning.WRECK_RUST_HEX,
   flatShading: true,
@@ -81,10 +81,7 @@ const _rustDarkMat = new THREE.MeshLambertMaterial({
   color: Tuning.WRECK_RUST_DARK_HEX,
   flatShading: true,
 });
-const _antennaMat = new THREE.MeshLambertMaterial({
-  color: Tuning.WRECK_ANTENNA_HEX,
-  flatShading: true,
-});
+const _antennaMat = createMetalMaterial(Tuning.WRECK_ANTENNA_HEX, { wornScale: 12.0 });
 const _nozzleInteriorMat = new THREE.MeshBasicMaterial({
   color: Tuning.WRECK_NOZZLE_INTERIOR_HEX,
 });

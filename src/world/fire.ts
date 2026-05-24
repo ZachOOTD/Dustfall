@@ -13,6 +13,7 @@ import {
 } from '../shelter/shelterZones.ts';
 import { playFireIgnite, playFireCrackle } from '../audio/audio.ts';
 import { claimLight, releaseLight } from '../core/lightPool.ts';
+import { createMetalMaterial } from './metalMaterial.ts';
 
 export interface Fire {
   id: number;
@@ -262,7 +263,10 @@ export function findFireById(list: Fire[], id: number | undefined): Fire | undef
  *  over the flames without poking out of the silhouette. */
 function makeGrillMesh(): THREE.Group {
   const g = new THREE.Group();
-  const ironMat = new THREE.MeshLambertMaterial({ color: 0x2a241c, flatShading: true });
+  // ABH — grill iron gets the weathered-metal procedural shader.
+  // Heavy worn scale (10) — grill bars take a lot of use, lots of
+  // worn-highlight spots where pots and meat sat.
+  const ironMat = createMetalMaterial(0x2a241c, { wornScale: 10.0, scratchStrength: 0.05 });
   const W = Tuning.FIRE_GRILL_WIDTH_M;
   const D = Tuning.FIRE_GRILL_DEPTH_M;
   const BAR_R = Tuning.FIRE_GRILL_BAR_RADIUS_M;

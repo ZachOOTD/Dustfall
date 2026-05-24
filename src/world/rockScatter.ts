@@ -17,17 +17,23 @@
 import * as THREE from 'three';
 import type { Rng } from '../core/rng.ts';
 import type { Terrain } from './terrain.ts';
+import { createStoneMaterial } from './stoneMaterial.ts';
 import type { BiomeSampler } from './biomes.ts';
 
 // Two grey-brown rock palettes for variety. Sharing one material per
-// size tier keeps draw-call count low.
-const _rockSmallMat = new THREE.MeshLambertMaterial({
-  color: 0x4a3a2a,           // dark warm-grey (matches title-scene silhouette rocks)
-  flatShading: true,
+// size tier keeps draw-call count low. ABH — both tiers get the
+// procedural stone shader (aggregate grain + cracks + dust-on-top
+// per world-up normal + sun-bleach). The dust color matches the
+// surrounding dune sand so rocks integrate visually with the biome.
+const _rockSmallMat = createStoneMaterial(0x4a3a2a, {
+  dustColor: 0xb89870,
+  dustStrength: 0.7,
+  crackDensity: 0.5,
 });
-const _rockMediumMat = new THREE.MeshLambertMaterial({
-  color: 0x554635,           // slightly lighter / warmer for medium rocks
-  flatShading: true,
+const _rockMediumMat = createStoneMaterial(0x554635, {
+  dustColor: 0xb89870,
+  dustStrength: 0.6,
+  crackDensity: 0.5,
 });
 
 const TARGET_COUNT = 520;          // total rock count across rocky biome

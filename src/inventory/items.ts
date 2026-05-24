@@ -16,6 +16,7 @@ import { deployCompanion } from '../enemies/companion.ts';
 import { easeOutBack, easeInOutCubic, easeOutQuad } from '../core/ease.ts';
 import { addItem } from './inventory.ts';
 import { makeLizardVisual } from '../enemies/lizard.ts';
+import { createMetalMaterial } from '../world/metalMaterial.ts';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -301,15 +302,12 @@ const _DEFS: Record<ItemId, ItemDef> = {
     },
     makeViewModel() {
       const group = new THREE.Group();
-      const ironMat = new THREE.MeshLambertMaterial({
-        color: 0x6e5a4a,
-        emissive: 0x0a0806,
-        flatShading: true,
-      });
-      const tipMat = new THREE.MeshLambertMaterial({
-        color: 0x8a7a64,
-        flatShading: true,
-      });
+      // ABH — scrap bar metal gets the weathered-metal procedural shader
+      // (scratches + worn highlights + edge dirt). Keeps emissive for the
+      // moody dark tone the original ironMat had.
+      const ironMat = createMetalMaterial(0x6e5a4a, { wornScale: 6.0 });
+      ironMat.emissive = new THREE.Color(0x0a0806);
+      const tipMat = createMetalMaterial(0x8a7a64, { wornScale: 6.0 });
       // Main shaft — long bar, square cross-section, slight bend at the tip.
       const shaft = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.34, 0.022), ironMat);
       shaft.position.y = 0.05;
@@ -368,10 +366,14 @@ const _DEFS: Record<ItemId, ItemDef> = {
     },
     makeViewModel() {
       const group = new THREE.Group();
-      const bladeMat = new THREE.MeshLambertMaterial({
-        color: 0xa8aab0,
-        emissive: 0x10100e,
+      // ABH — machete blade gets weathered-metal shader (brushed scratches
+      // perpendicular to the blade length give the "honed edge" read).
+      const bladeMat = createMetalMaterial(0xa8aab0, {
+        scratchAngle: 0,           // scratches along world X — perpendicular to blade as held
+        wornScale: 8.0,
+        scratchStrength: 0.07,
       });
+      bladeMat.emissive = new THREE.Color(0x10100e);
       const handleMat = new THREE.MeshLambertMaterial({ color: 0x2a1e16 });
       const blade = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.28, 0.006), bladeMat);
       blade.position.y = 0.10;
@@ -421,9 +423,12 @@ const _DEFS: Record<ItemId, ItemDef> = {
     },
     makeViewModel() {
       const group = new THREE.Group();
-      const pipeMat = new THREE.MeshLambertMaterial({ color: 0x6a6055, emissive: 0x0a0907 });
+      // ABH — pipe staff: metal pipe + cap get weathered-metal; grip stays
+      // wrapped-cord look (plain Lambert).
+      const pipeMat = createMetalMaterial(0x6a6055, { wornScale: 5.0 });
+      pipeMat.emissive = new THREE.Color(0x0a0907);
       const gripMat = new THREE.MeshLambertMaterial({ color: 0x382820 });
-      const capMat = new THREE.MeshLambertMaterial({ color: 0x4a4035 });
+      const capMat = createMetalMaterial(0x4a4035, { wornScale: 5.0 });
       // Main pipe — long thin cylinder along Y.
       const pipe = new THREE.Mesh(
         new THREE.CylinderGeometry(0.018, 0.018, 0.46, 8),
@@ -485,8 +490,11 @@ const _DEFS: Record<ItemId, ItemDef> = {
     },
     makeViewModel() {
       const group = new THREE.Group();
-      const bodyMat = new THREE.MeshLambertMaterial({ color: 0x4a4640, emissive: 0x0a0907 });
-      const barrelMat = new THREE.MeshLambertMaterial({ color: 0x2c2924 });
+      // ABH — scrap gun: receiver + barrel get weathered-metal (heavy worn
+      // around the action). Grip stays plain wrapped-cord.
+      const bodyMat = createMetalMaterial(0x4a4640, { wornScale: 7.0 });
+      bodyMat.emissive = new THREE.Color(0x0a0907);
+      const barrelMat = createMetalMaterial(0x2c2924, { wornScale: 7.0, scratchAngle: Math.PI / 2 });
       const gripMat = new THREE.MeshLambertMaterial({ color: 0x382820 });
       // Receiver — short rectangular block. Z is forward (camera +Z is
       // into the screen via Three.js — viewmodel renders in -Z space so
@@ -583,8 +591,10 @@ const _DEFS: Record<ItemId, ItemDef> = {
     makeViewModel() {
       // A single bullet held in the fingertips — small cylinder.
       const group = new THREE.Group();
-      const brassMat = new THREE.MeshLambertMaterial({ color: 0xa28860, emissive: 0x100a04 });
-      const tipMat = new THREE.MeshLambertMaterial({ color: 0x484035 });
+      // ABH — bullet brass case gets weathered metal with tight scratches.
+      const brassMat = createMetalMaterial(0xa28860, { wornScale: 14.0, scratchStrength: 0.03 });
+      brassMat.emissive = new THREE.Color(0x100a04);
+      const tipMat = createMetalMaterial(0x484035, { wornScale: 14.0 });
       const case_ = new THREE.Mesh(
         new THREE.CylinderGeometry(0.014, 0.014, 0.035, 8),
         brassMat,
@@ -632,8 +642,11 @@ const _DEFS: Record<ItemId, ItemDef> = {
     },
     makeViewModel() {
       const group = new THREE.Group();
-      const bodyMat = new THREE.MeshLambertMaterial({ color: 0x2a3540, emissive: 0x0a0d12 });
-      const accentMat = new THREE.MeshLambertMaterial({ color: 0x4a5560 });
+      // ABH — energy pistol: alloy body + accent get weathered-metal with
+      // a finer scale (high-tech tool, less worn than scrap gear).
+      const bodyMat = createMetalMaterial(0x2a3540, { wornScale: 10.0, scratchStrength: 0.04 });
+      bodyMat.emissive = new THREE.Color(0x0a0d12);
+      const accentMat = createMetalMaterial(0x4a5560, { wornScale: 10.0, scratchStrength: 0.04 });
       const gripMat = new THREE.MeshLambertMaterial({ color: 0x18202a });
       // Chamber mat is emissive so we can pulse it via updateHeld as
       // the weapon charges. Stash it on group.userData so updateHeld

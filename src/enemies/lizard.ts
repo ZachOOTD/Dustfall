@@ -11,6 +11,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import type { GameContext } from '../GameContext.ts';
 import { isPlaying } from '../GameContext.ts';
 import { Tuning } from '../config/tuning.ts';
+import { createSkinMaterial } from '../world/skinMaterial.ts';
 import type { Terrain } from '../world/terrain.ts';
 
 export type LizardState = 'idle' | 'flee' | 'dead';
@@ -69,8 +70,20 @@ function untag(root: THREE.Object3D): void {
  *  actual lizard model instead of an abstract meat slab. */
 export function makeLizardVisual(): THREE.Group {
   const g = new THREE.Group();
-  const bodyMat = new THREE.MeshLambertMaterial({ color: 0xa89878 });
-  const darkMat = new THREE.MeshLambertMaterial({ color: 0x7a6a4a });
+  // ABH — lizard body gets the organic-skin shader. Small scale (40)
+  // because the lizard is tiny (~18cm long) — large cells would read
+  // as one cell per side. Higher sheen because lizards naturally
+  // have shiny scales.
+  const bodyMat = createSkinMaterial(0xa89878, {
+    accentColor: 0x6a5638,
+    scaleSize: 40.0,
+    sheen: 0.7,
+  });
+  const darkMat = createSkinMaterial(0x7a6a4a, {
+    accentColor: 0x4a3a26,
+    scaleSize: 40.0,
+    sheen: 0.5,
+  });
 
   const body = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.05, 0.10), bodyMat);
   body.position.y = 0.04;

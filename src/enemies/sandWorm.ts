@@ -23,6 +23,7 @@ import type { GameContext } from '../GameContext.ts';
 import { isPlaying } from '../GameContext.ts';
 import { Tuning } from '../config/tuning.ts';
 import type { Terrain } from '../world/terrain.ts';
+import { createSkinMaterial } from '../world/skinMaterial.ts';
 import {
   playWormRoar,
   playWormChomp,
@@ -173,15 +174,22 @@ function makeWormMesh(): { group: THREE.Group } {
   // doesn't look paper-thin on the visible body taper); openEnded head
   // segments use DoubleSide so the inside of the maw cavity renders
   // when looking down the throat. Pre-AAL the whole body was DoubleSide.
-  const bodyMat = new THREE.MeshLambertMaterial({
-    color: 0xa89878,
-    flatShading: true,
-    side: THREE.FrontSide,
+  // ABH — sandworm body gets the organic-skin procedural shader
+  // (scale-cell pattern + pigment blotches + faint veins + sheen).
+  // The accent color shifts toward the ridge-band brown so the
+  // pigment blotches read as natural skin variation, not random.
+  // Large scale size (12) suits the worm's massive radius — scales
+  // visible from medium distance without becoming a graphic pattern.
+  const bodyMat = createSkinMaterial(0xa89878, {
+    accentColor: 0x6a5232,
+    scaleSize: 12.0,
+    sheen: 0.35,
   });
-  const bodyMatOpen = new THREE.MeshLambertMaterial({
-    color: 0xa89878,
-    flatShading: true,
-    side: THREE.DoubleSide,
+  const bodyMatOpen = createSkinMaterial(0xa89878, {
+    accentColor: 0x6a5232,
+    scaleSize: 12.0,
+    sheen: 0.35,
+    doubleSide: true,
   });
   const ridgeMat = new THREE.MeshLambertMaterial({ color: 0x5c4a32, flatShading: true });
   const throatMat = new THREE.MeshLambertMaterial({

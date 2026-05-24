@@ -20,6 +20,7 @@ import * as THREE from 'three';
 import type { GameContext } from '../GameContext.ts';
 import { isPlaying } from '../GameContext.ts';
 import { Tuning } from '../config/tuning.ts';
+import { createSkinMaterial } from '../world/skinMaterial.ts';
 import { addItem } from '../inventory/inventory.ts';
 import { alignToTerrain } from '../util/terrainAlign.ts';
 
@@ -136,14 +137,17 @@ function makeCompanionVisual(): {
   body.add(bodyShell);
 
   // Body materials — IcosahedronGeometry with flat-shading reads as a
-  // rocky crystalline carapace.
-  const bodyMat = new THREE.MeshLambertMaterial({
-    color: Tuning.COMPANION_COLOR_HEX,
-    flatShading: true,
+  // rocky crystalline carapace. ABH — gets the skin shader (treated
+  // as a living crystalline creature; high sheen + tight scale cells
+  // sells the crystalline scale plates).
+  const bodyMat = createSkinMaterial(Tuning.COMPANION_COLOR_HEX, {
+    accentColor: Tuning.COMPANION_DARK_COLOR_HEX,
+    scaleSize: 18.0,
+    sheen: 0.85,
   });
-  const darkMat = new THREE.MeshLambertMaterial({
-    color: Tuning.COMPANION_DARK_COLOR_HEX,
-    flatShading: true,
+  const darkMat = createSkinMaterial(Tuning.COMPANION_DARK_COLOR_HEX, {
+    scaleSize: 18.0,
+    sheen: 0.65,
   });
   // Main carapace — centered at the shell origin (so rolls cleanly).
   const main = new THREE.Mesh(new THREE.IcosahedronGeometry(R, 0), bodyMat);

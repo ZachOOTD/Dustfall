@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import type { Rng } from '../core/rng.ts';
 import type { Terrain } from '../world/terrain.ts';
 import type { BiomeSampler } from './biomes.ts';
+import { createStoneMaterial } from './stoneMaterial.ts';
 import { findBiomeCentroid } from './biomes.ts';
 import { perturbOutward } from './sculpt.ts';
 import { Tuning } from '../config/tuning.ts';
@@ -33,13 +34,19 @@ function tag(root: THREE.Object3D, id: number): void {
 }
 
 // Shared materials — instances reused across all wells.
-const _stoneMatLight = new THREE.MeshLambertMaterial({
-  color: Tuning.WELL_STONE_LIGHT_HEX,
-  flatShading: true,
+// ABH — well rim stones get the procedural stone shader (aggregate +
+// cracks + dust accumulation on top-facing surfaces, which fits the
+// well-stone topology where each ring stone has a flat top exposed to
+// settling sand from the salt-flat surroundings).
+const _stoneMatLight = createStoneMaterial(Tuning.WELL_STONE_LIGHT_HEX, {
+  dustColor: 0xe0c89a,
+  dustStrength: 0.75,
+  crackDensity: 0.3,
 });
-const _stoneMatDark = new THREE.MeshLambertMaterial({
-  color: Tuning.WELL_STONE_DARK_HEX,
-  flatShading: true,
+const _stoneMatDark = createStoneMaterial(Tuning.WELL_STONE_DARK_HEX, {
+  dustColor: 0xe0c89a,
+  dustStrength: 0.75,
+  crackDensity: 0.4,
 });
 const _woodMat = new THREE.MeshLambertMaterial({
   color: Tuning.WELL_WOOD_HEX,

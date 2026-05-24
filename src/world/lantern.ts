@@ -12,6 +12,7 @@ import type { GameContext } from '../GameContext.ts';
 import { Tuning } from '../config/tuning.ts';
 import { addItem } from '../inventory/inventory.ts';
 import { claimLight, releaseLight } from '../core/lightPool.ts';
+import { createMetalMaterial } from './metalMaterial.ts';
 
 export interface Lantern {
   id: number;
@@ -75,8 +76,10 @@ function makeLanternVisual(): {
   // Materials. Weathered iron for the structural pieces, slightly
   // brighter rivet color for accents, salvage cable colors carried
   // over from the AAR fuse-box wires for material consistency.
-  const ironMat = new THREE.MeshLambertMaterial({ color: 0x4a4238 });
-  const rivetMat = new THREE.MeshLambertMaterial({ color: 0x726658 });
+  // ABH — iron + rivet get the weathered-metal procedural shader for
+  // scratches + worn highlights + grain. Wires stay flat colored.
+  const ironMat = createMetalMaterial(0x4a4238, { wornScale: 5.0 });
+  const rivetMat = createMetalMaterial(0x726658, { wornScale: 5.0, scratchStrength: 0.03 });
   const wireRedMat = new THREE.MeshLambertMaterial({ color: 0x8a3a26 });
   const wireYellowMat = new THREE.MeshLambertMaterial({ color: 0xb89028 });
   const glowColor = Tuning.LANTERN_LIGHT_COLOR_HEX;
