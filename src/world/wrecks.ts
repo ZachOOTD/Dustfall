@@ -61,6 +61,23 @@ const _panelBodyMat = new THREE.MeshLambertMaterial({
   color: Tuning.SALVAGE_PANEL_BODY_HEX,
   flatShading: true,
 });
+// Session ABG bugfix — body BoxGeometry's front face was occluding the
+// cavity interior (backplate + 5 components) even when the door pried
+// open. Intent per the addAccessPanel comment was for `body` to be a
+// "rusted RECESSED CAVITY box" — i.e. an open-front shell viewable
+// from outside once the door swings away. Render the body's material
+// with side: BackSide so only the INSIDE faces (back wall + 4 side
+// walls) draw from a player-outside POV. The front face becomes
+// invisible — the closed door (FrontSide) still reads as the surface
+// when shut, and the opened door reveals the cavity interior. Shadows
+// stay on FrontSide via shadowSide to avoid the BackSide self-shadow
+// artifacts on a small box. Cached so all panels share one material.
+const _panelBodyMatBackSide = (() => {
+  const m = _panelBodyMat.clone();
+  m.side = THREE.BackSide;
+  m.shadowSide = THREE.FrontSide;
+  return m;
+})();
 const _panelRimMat = new THREE.MeshLambertMaterial({
   color: Tuning.SALVAGE_PANEL_RIM_HEX,
   flatShading: true,
@@ -292,7 +309,12 @@ export function addAccessPanel(
   // body cavity recesses INTO the hull. Reads as "integrated, not
   // stuck on" rather than the AAR/AAS protrusion. All children of body
   // stay at their unchanged body-local positions and move with it.
-  const body = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), _panelBodyMat);
+  // ABG bugfix — use the BackSide-cloned body material so the box's
+  // front face doesn't occlude the cavity interior. See material
+  // comment above. The box geometry itself is unchanged so colliders,
+  // raycast bounds, and child positions (door / rim / interior / glow)
+  // all keep their existing wrapper-local layouts.
+  const body = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), _panelBodyMatBackSide);
   // Build a small offset vector in panel-LOCAL Z and rotate it by
   // faceYaw so the "back" direction matches the panel's facing.
   const recessZ = -sz / 2;

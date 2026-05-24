@@ -36,10 +36,11 @@ import type { Rng } from '../core/rng.ts';
 import type { Terrain } from './terrain.ts';
 import type { SalvageableRegistry } from './salvage.ts';
 import type { GameContext } from '../GameContext.ts';
-import { registerSalvageable } from './salvage.ts';
+// Session ABG — registerSalvageable + addAccessPanel imports removed.
+// The opening wreck no longer hosts salvage panels (D15 restored — story
+// prop, not a salvage site). Other flagships keep their access panels.
 import { Tuning } from '../config/tuning.ts';
 import { createRustedHullMaterial } from './hullMaterial.ts';
-import { addAccessPanel } from './wrecks.ts';
 
 // ── Materials ───────────────────────────────────────────────────────
 // Hull uses the procedural rust shader (Session OO) — vertical streaks
@@ -671,52 +672,16 @@ export function makeOpeningWreck(rand: Rng): THREE.Group {
   // slice gap is the read now; the explicit additive cone read as
   // unrealistic + theatrical.
 
-  // ── Salvage panels — refs are returned so placeOpeningWreck can
-  //    register them. We mark them via userData so they can be found
-  //    later via traverse. ──
-  // Panel A — visible on the upper-rear hull, just behind the skylight
-  // gap. Player approaching from outside sees it perched on the tail-
-  // stub. Sits on top of the hull at the panel's axial Z. Panel B sits
-  // at panelB-angle on the side flank — see below.
-  // AAM-followup #5: panel A moved from straight-up (lathe phi=180°) to
-  // upper-right (lathe phi=135°, same side as antenna + windows) so it
-  // doesn't float in the off-center skylight gap on the upper-LEFT.
-  // Session ABA — migrated to addAccessPanel via wrapper-Group +
-  // lookAt. The wrapper's lookAt(hullAxisPoint) orients its local -Z
-  // toward the hull axis → local +Z = outward from the curved hull
-  // surface. addAccessPanel recesses the body INTO -Z, so body sits
-  // inside the hull and the rim + door + hinge protrude outward.
-  // Place the wrapper AT the hull-surface point (no +Z offset; the
-  // recess inside addAccessPanel handles it).
-  const panelA = new THREE.Group();
-  addAccessPanel(panelA, 0, 0, 0, 1, 0, 'fuselage');
-  const panelALatheY = 0.30 * HULL_LEN;
-  const panelAR = profileRadiusAt(panelALatheY);
-  const panelAAng = Math.PI * 0.25;     // 45° off-axis on the right flank (upper-right)
-  panelA.position.set(
-    Math.cos(panelAAng) * panelAR,
-    AXIS_Y + Math.sin(panelAAng) * panelAR,
-    panelALatheY - HULL_LEN / 2,
-  );
-  panelA.lookAt(0, AXIS_Y, panelALatheY - HULL_LEN / 2);
-  panelA.userData.openingWreckPanel = 'A';
-  g.add(panelA);
-
-  // Panel B — recessed on the lower-side flank, mid-body. Suggests a
-  // service hatch accessed from outside (player walks around the wreck).
-  const panelB = new THREE.Group();
-  addAccessPanel(panelB, 0, 0, 0, 1, 0, 'fuselage');
-  const panelBLatheY = 0.50 * HULL_LEN;
-  const panelBR = profileRadiusAt(panelBLatheY);
-  const panelBAng = Math.PI * 0.20;  // off-axis right flank
-  panelB.position.set(
-    Math.cos(panelBAng) * panelBR,
-    AXIS_Y + Math.sin(panelBAng) * panelBR,
-    panelBLatheY - HULL_LEN / 2,
-  );
-  panelB.lookAt(0, AXIS_Y, panelBLatheY - HULL_LEN / 2);
-  panelB.userData.openingWreckPanel = 'B';
-  g.add(panelB);
+  // Session ABG — opening-wreck salvage panels REMOVED. The opening
+  // wreck was originally a non-salvageable story prop (D15); Session RR
+  // + ABA P3 added two panels here as part of the unified addAccessPanel
+  // migration. With the panel-interior bug now fixed (so panels are
+  // visibly stripped-of-loot when prized), the panels conflict with the
+  // "this was someone's last shelter" tone again. Reverting to D15:
+  // the opening wreck is a JOURNAL site, not a salvage site. All other
+  // flagships (mega_ship / mega_wreck / satellite_dish / crashed_hull /
+  // engine_block) keep their migrated panels — those reads as anonymous
+  // crash sites, not personal narrative ones.
 
   // ── Shadow flags. Most meshes cast; the wreck interior breach
   //    patches don't (their job is to read as dark holes, not shadowy
@@ -849,23 +814,12 @@ export function placeOpeningWreck(
     { x: -rampTilt },
   );
 
-  // ── Register salvageables ─────────────────────────────────────────
-  // Opening wreck reads as a "fuselage" salvage kind (matches the
-  // shortName + loot table; gives 2-3 salvage rolls per panel). The
-  // wreck was historically untagged because it's a story prop, but
-  // user direction for Session RR explicitly requested salvage panels
-  // — the narrative read becomes "the previous occupant cannibalized
-  // some panels for parts before they died".
-  if (salvageables) {
-    group.traverse((o) => {
-      const tag = o.userData.openingWreckPanel;
-      if (tag === 'A' || tag === 'B') {
-        o.updateWorldMatrix(true, false);
-        const worldPos = new THREE.Vector3().setFromMatrixPosition(o.matrixWorld);
-        registerSalvageable(salvageables, o, 'fuselage', worldPos, rand);
-      }
-    });
-  }
+  // Session ABG — salvageable registration walk REMOVED. Was a traverse
+  // for openingWreckPanel='A'|'B' tagged sub-groups, registering them
+  // as 'fuselage' kind. Per D15 (restored), the opening wreck is a
+  // non-salvageable story prop. `salvageables` arg kept on the function
+  // signature for source-compatibility with the caller (openingScene.ts).
+  void salvageables;
 
   return group;
 }
