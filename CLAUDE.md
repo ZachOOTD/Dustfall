@@ -59,7 +59,19 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session ABK — Complete biome-specific POI family.
+**Last shipped**: Session ABK-tail — Post-ship perf pass + bugfixes.
+4 direct-paste commits between ABK session-end and ABL session-start.
+**Perf pass** (`76413b6` + `7f2cbc1`): scene PointLights 96 → 31 (panel
+glows pooled), StandardMaterials 215 → 0 (Lambert downgrade), shadow
+fill ~24× cheaper (1024 map + 6-frame cadence), `renderer.compile()`
+pre-warm at boot, Rapier pre-warm at boot. Click→game-frame seconds
+→ 14ms. **Starter swap** (`52dcb7d`): machete → scrap_bar in slot 0
+(scrap is panel-gated; player needs scrap_bar to bootstrap crafting).
+**Dev-cursor fix** (`f1a8bba`): `handoffToGame()` skips pointer-lock
+in hidden/0×0 preview tabs (the cursor-stuck-in-invisible-top-left-
+box symptom during preview_eval testing).
+
+**Prior milestone**: Session ABK — Complete biome-specific POI family.
 ABJ A4 shipped the dune buried cockpit (first biome POI); ABK closes
 the family with **salt corroded scientific outpost** (concrete base +
 corroded antenna spire + 2-3 sample crates + 1 cargo_container salvage

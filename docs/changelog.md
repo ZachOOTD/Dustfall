@@ -3,6 +3,50 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ABK-tail — 2026-05-24 — Post-ship perf pass + bugfixes ✓ verify pass
+`verified` — tsc clean. 4 commits between ABK session-end and ABL
+session-start, all direct-paste (no /session-end between). Catch-up
+documented per the doc-drift guardrail (D2 from ABJ).
+
+- **`76413b6` perf: pre-warm shaders + pool panel glows + Lambert downgrade.**
+  Three quick wins eliminating the click-NEW-GAME freeze.
+  `renderer.compile(scene, camera)` at boot pre-compiles 38 game-
+  scene shader programs (was 5 at title; first game frame would
+  cold-compile 16 programs → multi-second stall). Salvage panel
+  cavity glows refactored to claim/release from the shared
+  lightPool (pool bumped 24 → 30); scene PointLight count drops
+  96 → 31 (-65 always-evaluated lights → ~3× cheaper fragment
+  shader for every lit material). MeshStandardMaterial → Lambert
+  on pickups.ts (215 instances; PBR overhead eliminated; visually
+  identical at our flat-shaded scale).
+- **`7f2cbc1` perf: throttled shadow updates + smaller shadow map + Rapier pre-warm.**
+  `renderer.shadowMap.autoUpdate=false` + manual needsUpdate every
+  6 frames (~10Hz instead of 144Hz; sun moves 0.5°/sec so stale
+  shadows are imperceptible). Settings preset 2048 → 1024 for
+  medium (default), 1024 → 512 for low; high preserves 2048 for
+  opt-in. Rapier pre-warm with one synchronous physics.step() at
+  boot eliminates first-tick collision-acceleration-structure
+  stutter. Combined with ABK-tail commit above: scene PointLights
+  96 → 31, StandardMaterials 215 → 0, shadow fill ~24× cheaper
+  (4× map size × 6× cadence), click→game frame seconds → 14ms.
+- **`52dcb7d` fix: starter inventory machete → scrap_bar.** Player
+  starts with scrap_bar (slot 0) + canteen (slot 1) instead of
+  machete + canteen. After AAR's salvage-pry overhaul, scrap is
+  gated behind salvage panels and panels require a scrap_bar to
+  pry — making a new game unable to acquire scrap (= unable to
+  craft anything that needs scrap). Trade-off: player starts
+  unarmed for melee, must craft pipe_staff for combat (early-
+  game survival pressure).
+- **`f1a8bba` fix: don't acquire pointer lock in hidden/0-size preview tabs.**
+  Developer-cursor-stuck-in-invisible-top-left-box bug. When
+  `preview_eval` programmatically clicked NEW GAME, `handoffToGame()`
+  acquired PointerLock on the hidden 0×0 game canvas at screen
+  (0, 0), pinning the OS cursor there until alt-tab. Fix: in DEV
+  mode skip `controls.lock()` when `document.hidden` OR canvas
+  size is 0×0. Defensive `document.exitPointerLock()` at boot to
+  release any stale lock leaked from prior preview-tool sessions.
+  Real-user gameplay unchanged.
+
 ## Session ABK — 2026-05-24 — Complete biome-specific POI family (salt + rocky) ✓ verify pass
 `verified` — tsc clean. 5 files (2 new modules). Closes the biome-POI
 family ABJ A4 started (dune buried cockpit shipped ABJ; ABK adds the
