@@ -329,14 +329,46 @@ export function addAccessPanel(
   body.userData.noCollider = true;
 
   // Brass rim — thin frame around the panel face, sticking forward like
-  // a fuse-box mounting ring.
-  const rim = new THREE.Mesh(
-    new THREE.BoxGeometry(sx * 1.10, sy * 1.10, sz * 0.20),
-    _panelRimMat,
-  );
-  rim.position.set(0, 0, sz * 0.55);
-  rim.userData.noCollider = true;
-  body.add(rim);
+  // a fuse-box mounting ring. ABI bugfix — pre-ABI implementation was a
+  // single SOLID BoxGeometry covering the entire panel face area which,
+  // combined with ABG's BackSide body fix, occluded the cavity even
+  // when the door was swung open (the rim mesh stayed in front of the
+  // cavity as an opaque brass plate). Rebuilt here as 4 separate thin
+  // bars (top / bottom / left / right) forming an actual hollow
+  // rectangular frame so the door-opening interior is unobstructed
+  // when the door swings out of the way. Outer extent matches the
+  // pre-ABI footprint (sx*1.10 × sy*1.10) so silhouette + closed-door
+  // appearance are unchanged from outside.
+  const rimDepth = sz * 0.20;
+  const rimZ = sz * 0.55;
+  const rimBorderX = sx * 0.10;   // left/right bar thickness
+  const rimBorderY = sy * 0.10;   // top/bottom bar thickness
+  const rimOuterX = sx * 1.10;
+  const rimOuterY = sy * 1.10;
+  // Top + bottom bars span the full outer width.
+  for (const yy of [rimOuterY * 0.5 - rimBorderY * 0.5,
+                    -(rimOuterY * 0.5 - rimBorderY * 0.5)]) {
+    const bar = new THREE.Mesh(
+      new THREE.BoxGeometry(rimOuterX, rimBorderY, rimDepth),
+      _panelRimMat,
+    );
+    bar.position.set(0, yy, rimZ);
+    bar.userData.noCollider = true;
+    body.add(bar);
+  }
+  // Left + right bars span only the interior height (so we don't
+  // double-stack with top/bottom at the corners).
+  const sideBarH = rimOuterY - 2 * rimBorderY;
+  for (const xx of [rimOuterX * 0.5 - rimBorderX * 0.5,
+                    -(rimOuterX * 0.5 - rimBorderX * 0.5)]) {
+    const bar = new THREE.Mesh(
+      new THREE.BoxGeometry(rimBorderX, sideBarH, rimDepth),
+      _panelRimMat,
+    );
+    bar.position.set(xx, 0, rimZ);
+    bar.userData.noCollider = true;
+    body.add(bar);
+  }
 
   // ── Interior cavity (visible when door is open) ──────────────────
   // A dark backplate set deep inside the body. Sits at -Z (back face)
@@ -611,10 +643,17 @@ export function makeFuselage(rand: Rng, scale = 1): THREE.Group {
   cap.rotation.z = Math.PI / 2;
   cap.position.set(-length / 2 + capDepth / 2, radius * 0.55, 0);
   g.add(cap);
-  // Salvage access panel — on the side of the tube, near the rust band.
+  // Salvage access panel — ABI bugfix: pre-fix at (length*0.32, radius*1.05,
+  // radius*0.05) the panel face sat INSIDE the cylinder body (at y=1.05r
+  // the cylinder cross-section extends to z=±0.866r, so z=0.05r is well
+  // inside). Cylinder's opaque FrontSide outer surface hid the panel face
+  // entirely from outside angles. Moved to the +Z side surface at cylinder
+  // midline height; pushed face out to z=radius*1.05 so it clears the rust
+  // band (which sits at radius*1.02 ± panel sz/2 = 0.10) without sticking
+  // proud of the band by more than 0.03m.
   addAccessPanel(
     g,
-    length * 0.32, radius * 1.05, radius * 0.05,
+    length * 0.32, radius * 0.55, radius * 1.05,
     scale,
     0,
     'fuselage',
@@ -652,10 +691,15 @@ export function makeEscapePod(rand: Rng, scale = 1): THREE.Group {
   patch.rotation.set(0.3, -0.4, 0.1);
   g.add(patch);
   // Salvage access panel — opposite side from the broken hatch so both ends
-  // of the pod feel utilized.
+  // of the pod feel utilized. ABI bugfix: pre-fix x position -r*0.75 sat
+  // INSIDE the icosahedron hull (centered at y=r*0.42, radius r — distance
+  // from hull center to (-0.75r, 0.03r, -0.15r) was ~0.77r, inside the r
+  // hull surface). Hull's opaque FrontSide rendering hid the panel face.
+  // Pushed face out to ~1.05r distance so it sits flush with the hull
+  // surface on the -X side.
   addAccessPanel(
     g,
-    -r * 0.75, r * 0.45, -r * 0.15,
+    -r * 1.05, r * 0.45, -r * 0.15,
     scale,
     Math.PI,
     'escape_pod',
@@ -693,13 +737,19 @@ export function makeCargoContainer(rand: Rng, scale = 1): THREE.Group {
   );
   door.position.set(w / 2 + 0.05, h * 0.45, 0);
   g.add(door);
-  // Salvage access panel — beside the door, lower on the box so you crouch
-  // a touch to align (reads as "scavenger-modified access point").
+  // Salvage access panel — ABI bugfix: previously sat on the +X face at
+  // z=d*0.30 which overlapped the door decoration (centered z=0, depth
+  // d*0.7 → spans ±d*0.35). With the door's box poking into the panel
+  // cavity, ABG's BackSide body left the door visible through the
+  // opened panel. Moved to the front +Z face which has no decorations
+  // (only thin 0.08m corner struts at ±(w/2-0.05)), so the panel sits
+  // flush + unobstructed. Off-center X reads as "scavenger-modified
+  // access point" rather than centered factory door.
   addAccessPanel(
     g,
-    w / 2 + 0.08, h * 0.30, d * 0.30,
+    w * 0.20, h * 0.40, d / 2,
     scale,
-    Math.PI / 2,
+    0,
     'cargo_container',
   );
   return g;
