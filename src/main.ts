@@ -344,10 +344,14 @@ const ctx: GameContext = {
 // First-person viewmodel — must come after scene is built; consumes ctx.
 ctx.player.viewModel = createViewModel(ctx);
 
-// Player starts with a machete (slot 0) and a full canteen (slot 1). Scattered
-// canteens were removed from the world — the starter canteen + wells are the
-// player's only water sources at boot.
-addItem(ctx.inventory, 'machete');
+// Player starts with a scrap_bar (slot 0) and a full canteen (slot 1).
+// ABL — swapped machete → scrap_bar because the only source of scrap
+// in the world is behind salvage panels (AAR pry flow), and scrap_bar
+// is the gating tool to pry. Without it as starter loot the player
+// has no way to bootstrap any crafting (scrap is a near-universal
+// recipe input). Machete is now found-only (could be added as wreck
+// loot or quest reward in a future session).
+addItem(ctx.inventory, 'scrap_bar');
 addItem(ctx.inventory, 'canteen', { fillLevel: 1 });
 ctx.inventory.selectedIdx = 0;
 
