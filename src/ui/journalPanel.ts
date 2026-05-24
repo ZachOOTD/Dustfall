@@ -212,6 +212,10 @@ export function openJournalPanel(ctx: GameContext, kind: JournalKind = 'opening'
   if (!_panel || _open) return;
   _open = true;
   renderContent(CONTENT_BY_KIND[kind]);
+  // ABJ — C2 (v11): mark this kind as read. The HUD's hover prompt
+  // reads ctx.inventory.journalReadKinds to dim already-read entries.
+  // Persisted across save/load via SaveV1.inventory.journalReadKinds.
+  ctx.inventory.journalReadKinds.add(kind);
   ctx.input.controls.unlock();
   _panel.classList.remove('hidden');
 }

@@ -938,7 +938,26 @@ export const Tuning = {
   SLED_ROPE_SAG: 0.45,                       // QQ-2 max midpoint drop (m) when the rope is taut; scales with slack to 0 at fully-stretched
   SLED_YAW_LERP: 0.12,                       // QQ-2 — per-frame lerp toward "face the anchor" yaw. Higher = snappier; lower = the sled trails laggily
   NEAR_SLED_DISTANCE_SQ: 4.0,                // 2m exclusion when placing a new sled near an existing one
-  STAMINA_TOW_FACTOR: 2.0,                   // sprint+tow on foot drains stamina × this (no walk-speed cut per scope)
+  STAMINA_TOW_FACTOR: 1.5,                   // sprint+tow on foot drains stamina × this. ABJ: 2.0→1.5 (sprint duration when towing 3s→4s; reads less punishing for short tow runs while still discouraging long sled hauls at sprint)
+
+  // ────────────────────────────────────────────────────────────────
+  // ABJ — D1: scavenger-camp magic-number lift from poi.ts.
+  // Spatial / size constants for placeScavengerCamp. Lifted to
+  // Tuning so future scavenger-camp redesigns can iterate without
+  // hunting through poi.ts.
+  // ────────────────────────────────────────────────────────────────
+  SCAVENGER_CAMP_RING_RADIUS_M: 0.55,        // fire ring radius
+  SCAVENGER_CAMP_RING_JITTER_M: 0.06,        // per-stone radial jitter half-range
+  SCAVENGER_CAMP_STONE_SIZE_MIN_M: 0.10,     // icosahedron stone — min radius
+  SCAVENGER_CAMP_STONE_SIZE_RANGE_M: 0.04,   // size range above min (size = min + rand*range)
+  SCAVENGER_CAMP_ASH_RADIUS_FRACTION: 0.85,  // ash disc radius = ringR × this
+  SCAVENGER_CAMP_BANDAGE_OFFSET_X_MIN_M: 1.0,
+  SCAVENGER_CAMP_BANDAGE_OFFSET_X_RANGE_M: 0.4, // x = center.x + min + rand*range
+  SCAVENGER_CAMP_BANDAGE_OFFSET_Z_MIN_M: 0.8,
+  SCAVENGER_CAMP_BANDAGE_OFFSET_Z_RANGE_M: 0.6,
+  SCAVENGER_CAMP_FUSELAGE_OFFSET_X_M: -1.4,  // fuselage windbreak placement offset from center
+  SCAVENGER_CAMP_FUSELAGE_OFFSET_Y_M: -0.35, // partly buried
+  SCAVENGER_CAMP_FUSELAGE_YAW_RAD: 0.4,      // rotated for "crash-tilt" reading
 } as const;
 
 // Sky gradient colors (top vs horizon) per time of day. Horizon stays close to

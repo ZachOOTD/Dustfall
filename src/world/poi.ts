@@ -49,9 +49,9 @@ function placeScavengerCamp(
   // Small fuselage section as the windbreak the camp is built against.
   const fuselage = makeFuselage(rand, 0.9);
   fuselage.position.copy(center);
-  fuselage.position.x -= 1.4;
-  fuselage.position.y -= 0.35;
-  fuselage.rotation.y = 0.4;
+  fuselage.position.x += Tuning.SCAVENGER_CAMP_FUSELAGE_OFFSET_X_M;
+  fuselage.position.y += Tuning.SCAVENGER_CAMP_FUSELAGE_OFFSET_Y_M;
+  fuselage.rotation.y = Tuning.SCAVENGER_CAMP_FUSELAGE_YAW_RAD;
   fuselage.traverse((o) => {
     const m = o as THREE.Mesh;
     if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; }
@@ -64,14 +64,16 @@ function placeScavengerCamp(
     color: new THREE.Color().setHSL(0.07, 0.05, 0.12),
     flatShading: true,
   });
-  const ringR = 0.55;
+  const ringR = Tuning.SCAVENGER_CAMP_RING_RADIUS_M;
   for (let i = 0; i < 8; i++) {
     const a = (i / 8) * Math.PI * 2 + rand() * 0.2;
-    const r = ringR + (rand() - 0.5) * 0.06;
+    const r = ringR + (rand() - 0.5) * Tuning.SCAVENGER_CAMP_RING_JITTER_M;
     const sx = center.x + Math.cos(a) * r;
     const sz = center.z + Math.sin(a) * r;
+    const stoneSize = Tuning.SCAVENGER_CAMP_STONE_SIZE_MIN_M
+      + rand() * Tuning.SCAVENGER_CAMP_STONE_SIZE_RANGE_M;
     const stone = new THREE.Mesh(
-      new THREE.IcosahedronGeometry(0.10 + rand() * 0.04, 0),
+      new THREE.IcosahedronGeometry(stoneSize, 0),
       stoneMat,
     );
     stone.position.set(sx, terrain.heightAt(sx, sz) - 0.02, sz);
@@ -82,7 +84,7 @@ function placeScavengerCamp(
   }
   // Ash patch — small dark disc, terrain-aligned.
   const ash = new THREE.Mesh(
-    new THREE.CircleGeometry(ringR * 0.85, 16),
+    new THREE.CircleGeometry(ringR * Tuning.SCAVENGER_CAMP_ASH_RADIUS_FRACTION, 16),
     new THREE.MeshBasicMaterial({ color: 0x14100c }),
   );
   ash.position.set(center.x, terrain.heightAt(center.x, center.z) + 0.015, center.z);
@@ -93,8 +95,12 @@ function placeScavengerCamp(
   scene.add(ash);
 
   // Bandage pickup on the far side of the fire.
-  const bandageX = center.x + 1.0 + rand() * 0.4;
-  const bandageZ = center.z + 0.8 + rand() * 0.6;
+  const bandageX = center.x
+    + Tuning.SCAVENGER_CAMP_BANDAGE_OFFSET_X_MIN_M
+    + rand() * Tuning.SCAVENGER_CAMP_BANDAGE_OFFSET_X_RANGE_M;
+  const bandageZ = center.z
+    + Tuning.SCAVENGER_CAMP_BANDAGE_OFFSET_Z_MIN_M
+    + rand() * Tuning.SCAVENGER_CAMP_BANDAGE_OFFSET_Z_RANGE_M;
   const pickup = spawnDroppedPickup(scene, terrain, { x: bandageX, z: bandageZ }, 'bandage');
   return { pickup, fuselage };
 }

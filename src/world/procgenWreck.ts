@@ -48,6 +48,7 @@ import * as THREE from 'three';
 import type RAPIER from '@dimforge/rapier3d-compat';
 import type { Rng } from '../core/rng.ts';
 import type { Terrain } from './terrain.ts';
+import type { BiomeId } from './biomes.ts';
 import type { SalvageableRegistry } from './salvage.ts';
 import { registerSalvageable } from './salvage.ts';
 import { Tuning } from '../config/tuning.ts';
@@ -705,10 +706,47 @@ function pickVariant(rand: Rng, pool: ReadonlyArray<PartBuilder>): PartBuilder {
   return pool[Math.floor(rand() * pool.length)];
 }
 
-function pickPart(rand: Rng, kind: PartKind): PartBuilder {
+/** Session ABJ — biased variant pick. `weights[i]` is the relative weight
+ *  for `pool[i]` (default 1.0). Used by hullSegment picks to bias per-biome
+ *  toward thematic variants (salt → corrosion-resistant plates, rocky →
+ *  open trusses, dune → fuel barrels). Weights are multiplicative on a
+ *  uniform baseline, so passing `[1, 1.3, 1, 1, 1]` makes index 1 about
+ *  30% more likely vs uniform. */
+function pickVariantBiased(
+  rand: Rng,
+  pool: ReadonlyArray<PartBuilder>,
+  weights: ReadonlyArray<number>,
+): PartBuilder {
+  let total = 0;
+  for (let i = 0; i < pool.length; i++) total += weights[i] ?? 1.0;
+  let r = rand() * total;
+  for (let i = 0; i < pool.length; i++) {
+    r -= weights[i] ?? 1.0;
+    if (r <= 0) return pool[i];
+  }
+  return pool[pool.length - 1];   // numerical-precision fallback
+}
+
+/** Session ABJ — biome-specific hullSegment weights (indices: 0=RIBBED_CYLINDER,
+ *  1=PLATED_RECTANGULAR, 2=PANELED_TAPERED, 3=OPEN_TRUSS, 4=FUEL_BARRELS).
+ *  Salt: +30% PLATED (corrosion-resistant plates fit salt-flat lore).
+ *  Rocky: +20% OPEN_TRUSS (mining-mod / skeletal frame feel).
+ *  Dune: +20% FUEL_BARRELS (caravan tanker silhouette in the dunes). */
+const HULL_SEGMENT_BIOME_WEIGHTS: Record<BiomeId, ReadonlyArray<number>> = {
+  salt:  [1.0, 1.3, 1.0, 1.0, 1.0],
+  rocky: [1.0, 1.0, 1.0, 1.2, 1.0],
+  dune:  [1.0, 1.0, 1.0, 1.0, 1.2],
+};
+
+function pickPart(rand: Rng, kind: PartKind, biome?: BiomeId): PartBuilder {
   switch (kind) {
     case 'cockpit':       return pickVariant(rand, COCKPIT_VARIANTS);
-    case 'hullSegment':   return pickVariant(rand, HULL_SEGMENT_VARIANTS);
+    case 'hullSegment': {
+      if (biome) {
+        return pickVariantBiased(rand, HULL_SEGMENT_VARIANTS, HULL_SEGMENT_BIOME_WEIGHTS[biome]);
+      }
+      return pickVariant(rand, HULL_SEGMENT_VARIANTS);
+    }
     case 'engineModule':  return pickVariant(rand, ENGINE_MODULE_VARIANTS);
     case 'tailStub':      return pickVariant(rand, TAIL_STUB_VARIANTS);
   }
@@ -773,6 +811,7 @@ function assembleWreck(
   rand: Rng,
   recipe: WreckRecipe,
   cls: ProcgenWreckClass,
+  biome?: BiomeId,
 ): AssembleResult {
   const root = new THREE.Group();
 
@@ -786,7 +825,7 @@ function assembleWreck(
   let cursor = 0;
   let prevRadius = 0.9;                  // seed for the first part's interface
   for (const kind of recipe.parts) {
-    const builder = pickPart(rand, kind);
+    const builder = pickPart(rand, kind, biome);
     const built = builder.build(rand, prevRadius);
     built.mesh.position.x = cursor;
     root.add(built.mesh);
@@ -849,6 +888,11 @@ interface PlaceProcgenOpts {
   cls?: ProcgenWreckClass;
   /** Bury offset (subtracted from terrain y). Default 0.4. */
   buryY?: number;
+  /** ABJ — biome at the placement position. When set, the hullSegment
+   *  variant pick is biased per `HULL_SEGMENT_BIOME_WEIGHTS` so different
+   *  biomes ship visually distinct procgen wrecks (corrosion-resistant
+   *  plates in salt, skeletal trusses in rocky, fuel barrels in dune). */
+  biome?: BiomeId;
 }
 
 /** Place a procgen composite wreck at the given world position.
@@ -881,7 +925,12 @@ export function placeProcgenComposite(
     return 'freighter';
   })();
   const recipe = recipeFor(rand, cls);
-  const { group } = assembleWreck(rand, recipe, cls);
+  // Session ABJ — B4: query biome at the wreck position and thread to
+  // assembler. assembleWreck → pickPart → pickVariantBiased weights
+  // hullSegment variant selection per biome (salt→PLATED corrosion,
+  // rocky→OPEN_TRUSS skeletal, dune→FUEL_BARRELS tanker).
+  const biome = opts.biome;
+  const { group } = assembleWreck(rand, recipe, cls, biome);
 
   // Position + terrain-align + bury + yaw.
   group.position.copy(pos);

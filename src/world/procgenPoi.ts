@@ -18,6 +18,7 @@ import * as THREE from 'three';
 import type RAPIER from '@dimforge/rapier3d-compat';
 import type { Rng } from '../core/rng.ts';
 import type { Terrain } from './terrain.ts';
+import type { BiomeSampler } from './biomes.ts';
 import type { SalvageableRegistry } from './salvage.ts';
 import { registerSalvageable } from './salvage.ts';
 import { placeWreck, type WreckKind } from './wrecks.ts';
@@ -43,6 +44,7 @@ export function placeProcgenPOIs(
   rand: Rng,
   salvageables: SalvageableRegistry | undefined,
   anchorPositions: ReadonlyArray<{ x: number; z: number }>,
+  biomes: BiomeSampler,
 ): THREE.Vector3[] {
   const placed: THREE.Vector3[] = [];
   const minSep = Tuning.POI_MIN_SEPARATION;
@@ -96,7 +98,10 @@ export function placeProcgenPOIs(
     // wrecks register their own salvageables internally.
     if (rand() < Tuning.PROCGEN_COMPOSITE_SHARE) {
       const buryY = 0.3 + rand() * 0.4;
-      placeProcgenComposite(scene, world, terrain, pos, rand, salvageables, { buryY });
+      // ABJ — B4: thread the biome at the placement position so the
+      // composite assembler can bias hullSegment variant selection.
+      const biome = biomes.biomeAt(accepted.x, accepted.z);
+      placeProcgenComposite(scene, world, terrain, pos, rand, salvageables, { buryY, biome });
     } else {
       const kind = PROCGEN_WRECK_KINDS[Math.floor(rand() * PROCGEN_WRECK_KINDS.length)];
       // Modest size + bury variation so procgen POIs read as varied silhouettes

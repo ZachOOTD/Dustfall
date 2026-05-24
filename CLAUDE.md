@@ -998,6 +998,14 @@ the tier-ladder): `/plan-vertical-slice`, `/verify-tier`,
 `/scope-cutter` (until the Scope-cut section in roadmap is populated
 per-session).
 
+**Doc-drift guardrail** — print-hints commits (the default per
+Dustfall's git policy) can drift from the docs when `/session-end` is
+skipped between commits. Precedent: AAW+AAX backfilled in AAY; ABB-ABH
+7-session bundle backfilled before ABI. **If the agent finds itself
+with 3+ direct-paste commits since the last `/session-end` invocation,
+it should pause and surface to the user that a docs catch-up is due
+before continuing further code commits.**
+
 ## Sub-agent policy
 
 - **Aggressive Explore** agents for "where is X" / "map Y" — separate context budget.

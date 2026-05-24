@@ -27,6 +27,10 @@ export function createInventory(): InventoryState {
     // recipe set on v5→v6 migration so existing playtesters keep
     // their recipe knowledge.
     discoveredRecipes: [],
+    // ABJ (v11) — populated as the player reads journals. Per-kind
+    // (not per-id) since journal ids regenerate per-seed but the 6
+    // JournalKind variants are stable across worlds.
+    journalReadKinds: new Set(),
   };
 }
 

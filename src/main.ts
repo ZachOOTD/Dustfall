@@ -187,7 +187,7 @@ const existingObstacles: Array<{ x: number; z: number }> = [
   ...salvageables.list.map((s) => ({ x: s.pos.x, z: s.pos.z })),
 ];
 const procgenPoiPositions = placeProcgenPOIs(
-  three.scene, physics.world, terrain, scatterRand, salvageables, existingObstacles,
+  three.scene, physics.world, terrain, scatterRand, salvageables, existingObstacles, biomes,
 );
 
 // Session U — raiders deprioritized (world is sandbox / "only survivor").

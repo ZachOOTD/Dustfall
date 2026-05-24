@@ -181,6 +181,12 @@ export interface InventoryState {
    *  get the full seed set on load (see save.ts) so existing
    *  playtesters keep their accumulated recipe knowledge. */
   discoveredRecipes: number[];
+  /** Session ABJ (v11) — set of journal kinds the player has read at
+   *  least once. Mutated by openJournalPanel; persisted across save/
+   *  load as JournalKind[]. Used by HUD (interact prompt) to dim the
+   *  hover hint for already-read journals. Per-kind rather than per-id
+   *  because journal ids regenerate per-seed but kinds are stable. */
+  journalReadKinds: Set<import('../world/journal.ts').JournalKind>;
 }
 
 /** What kind of interaction is the player currently aimed at? */

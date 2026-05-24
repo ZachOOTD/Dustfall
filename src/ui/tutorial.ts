@@ -41,11 +41,11 @@ const HINTS: Partial<Record<ItemId, string>> = {
   // Session AAC — craftable home placeables.
   bedroll_kit: 'LMB-click to lay it down — E to sleep, RMB to roll it back up',
   lantern_kit: 'LMB-click to place — gives off warm light, RMB to pack later',
-  locker_kit: 'LMB-click to place — E to stash gear inside (empty it before packing)',
+  locker_kit: 'LMB-click to place — E to stash gear inside, RMB packs the empty locker back up',
   // Session AAE — pocketable creature companion.
   companion_pod: 'something alive curled inside a stone egg — LMB-click to set it free, RMB on the creature to call it back',
   // Session XX — large enterable tent with the operational doorway (AAY).
-  large_tent_kit: 'LMB-click to pitch a walk-in tent — face the front flap and press E to roll the canvas open or closed (closed = full storm shelter)',
+  large_tent_kit: 'LMB-click to pitch a walk-in tent — face the front flap and press E to roll the canvas open or closed (closed = full storm shelter); RMB packs it back up when you\'re outside',
   // Session AAM — grill attachment for parallel cooking.
   grill_kit: 'face a live fire and LMB-click (or E) to bolt a grill on top — lets you cook up to 4 meats in parallel',
   // Session AAR — pry-bar for two-stage salvage. The scrap_bar is the

@@ -803,11 +803,19 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
       // Session ABF — journal kind is encoded as the interactable's
       // subKind (set by placeJournal); pass it to openJournalPanel so
       // each flagship's journal renders its own narrator voice.
-      ctx.inventory.hover = { type: 'read', distance: info.distance, promptNoun: 'journal' };
+      // ABJ — C2 (v11): suffix " (read)" to the prompt noun when this
+      // kind has been read at least once on this save. journalReadKinds
+      // is a Set<JournalKind> on ctx.inventory (persisted v11+).
+      const journalKind = (info.subKind ?? 'opening') as
+        'opening' | 'mega_ship' | 'mega_wreck' | 'satellite_dish' | 'crashed_hull' | 'engine_block';
+      const alreadyRead = ctx.inventory.journalReadKinds.has(journalKind);
+      ctx.inventory.hover = {
+        type: 'read',
+        distance: info.distance,
+        promptNoun: alreadyRead ? 'journal (read)' : 'journal',
+      };
       if (ctx.input.pressed.has('KeyE')) {
-        const kind = (info.subKind ?? 'opening') as
-          'opening' | 'mega_ship' | 'mega_wreck' | 'satellite_dish' | 'crashed_hull' | 'engine_block';
-        void import('../ui/journalPanel.ts').then((m) => m.openJournalPanel(ctx, kind));
+        void import('../ui/journalPanel.ts').then((m) => m.openJournalPanel(ctx, journalKind));
       }
       return;
     }

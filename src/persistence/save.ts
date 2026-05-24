@@ -31,6 +31,7 @@ import {
   applySandWormDeadPose,
   type SandWormState,
 } from '../enemies/sandWorm.ts';
+import type { JournalKind } from '../world/journal.ts';
 import { spawnFireAt, attachGrillToFire, releaseFireLight } from '../world/fire.ts';
 import { spawnTentAt } from '../world/tent.ts';
 import { spawnSledAt, setNextSledId } from '../world/sled.ts';
@@ -65,14 +66,29 @@ export const SAVE_KEY = 'dustfall.save.v1';
 // AAM — v10 adds optional `hasGrill?: boolean` to each fire entry
 // (grill attachment for multi-cook). Pre-v10 saves omit the field;
 // loader defaults to false. Additive change per D81. Loader accepts v1-v10.
-export const SAVE_VERSION = 10;
+// ABJ — v11 adds 3 optional fields in one combined bump (D108):
+//   - `companion?.huddleState?: boolean` — was the companion actively
+//     huddled at save time? On load, forces the companion back into
+//     huddle state so a storm-saved game doesn't lose the pose.
+//   - `inventory.journalReadKinds?: JournalKind[]` — compact set of
+//     journal kinds the player has read at least once. Used by HUD
+//     to dim the interact prompt for already-read journals (per-kind
+//     not per-id since ids regenerate per-seed).
+//   - `bornInDevMode?: boolean` — was this save written from a dev-
+//     mode run? Carries the DEV badge across save/load.
+// Loader accepts v1-v11.
+export const SAVE_VERSION = 11;
 
 type V3 = { x: number; y: number; z: number };
 
 export interface SaveV1 {
-  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
+  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11;
   seed: number;
   savedAt: number;
+  /** ABJ — v11: persist the dev-mode flag so a Continue from a
+   *  dev-saved game keeps the DEV badge + behavior. Pre-v11 saves
+   *  omit the field; loader defaults to false (regular game). */
+  bornInDevMode?: boolean;
 
   player: {
     pos: V3;
@@ -98,6 +114,11 @@ export interface SaveV1 {
      *  it with ALL_RECIPE_IDS so existing playtesters keep their
      *  recipe knowledge across the migration. */
     discoveredRecipes?: number[];
+    /** ABJ — v11: set of journal kinds the player has read at least
+     *  once. Compact per-kind (not per-id since ids regenerate per-
+     *  seed). Pre-v11 saves arrive without this field; loader seeds
+     *  it as an empty set (all journals read as unread). */
+    journalReadKinds?: JournalKind[];
   };
 
   time: {
@@ -173,6 +194,11 @@ export interface SaveV1 {
   companion?: {
     pos: V3;
     state: CompanionState;
+    /** ABJ — v11: was the companion actively in huddle state at save
+     *  time? Restored verbatim on load; weather-gated huddle logic
+     *  re-validates next tick (if storm has passed, the state will
+     *  transition back to idle/walking naturally). */
+    huddleState?: boolean;
   };
 
   /** Hover speeder pose. Optional so v1 saves written before this field
@@ -251,6 +277,7 @@ export function saveGameState(ctx: GameContext): { ok: boolean; error?: string }
       version: SAVE_VERSION,
       seed: ctx.seed,    // AAI — was hardcoded Tuning.RNG_SEED; now ctx.seed (per-game)
       savedAt: Date.now(),
+      bornInDevMode: ctx.flags.devMode,   // ABJ — v11
       player: {
         pos: { x: playerTr.x, y: playerTr.y, z: playerTr.z },
         cameraQuat: { x: cq.x, y: cq.y, z: cq.z, w: cq.w },
@@ -272,6 +299,9 @@ export function saveGameState(ctx: GameContext): { ok: boolean; error?: string }
         // mutate ctx.inventory.discoveredRecipes without affecting
         // the just-written save.
         discoveredRecipes: ctx.inventory.discoveredRecipes.slice(),
+        // ABJ — v11: serialize the per-kind journal-read set as an
+        // array. Empty array if no journals have been opened.
+        journalReadKinds: Array.from(ctx.inventory.journalReadKinds),
       },
       time: {
         dayTime: ctx.time.dayTime,
@@ -349,6 +379,11 @@ export function saveGameState(ctx: GameContext): { ok: boolean; error?: string }
       companion: ctx.companion ? {
         pos: { x: ctx.companion.pos.x, y: ctx.companion.pos.y, z: ctx.companion.pos.z },
         state: ctx.companion.state,
+        // ABJ — v11: persist huddle so a storm-saved game reloads
+        // with the companion still tucked. If weather has cleared,
+        // huddle re-validates within the first tick and transitions
+        // to idle/walking naturally.
+        huddleState: ctx.companion.state === 'huddle',
       } : undefined,
       sleds: ctx.sleds.list.map((s) => {
         const tr = s.body.translation();
@@ -414,7 +449,8 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
   // cleanly (missing `sleds` / `largeTents` treated as empty; missing
   // `inventory.discoveredRecipes` seeded with ALL_RECIPE_IDS so
   // pre-TT playtesters keep their recipe knowledge).
-  if (save.version !== 1 && save.version !== 2 && save.version !== 3 && save.version !== 4 && save.version !== 5 && save.version !== 6 && save.version !== 7 && save.version !== 8 && save.version !== 9 && save.version !== 10) {
+  // ABJ — v11 adds 3 optional fields (bornInDevMode + journalReadKinds + companion.huddleState).
+  if (save.version !== 1 && save.version !== 2 && save.version !== 3 && save.version !== 4 && save.version !== 5 && save.version !== 6 && save.version !== 7 && save.version !== 8 && save.version !== 9 && save.version !== 10 && save.version !== 11) {
     return { ok: false, error: `unsupported save version ${save.version}` };
   }
   // AAM — was `Tuning.RNG_SEED` (legacy from pre-AAI); should be `ctx.seed`
@@ -480,6 +516,17 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
   } else {
     ctx.inventory.discoveredRecipes = ALL_RECIPE_IDS.slice();
   }
+  // ABJ — v11: journalReadKinds. Pre-v11 saves arrive without this
+  // field; seed an empty set so all journals read as unread.
+  ctx.inventory.journalReadKinds.clear();
+  if (save.inventory.journalReadKinds) {
+    for (const k of save.inventory.journalReadKinds) {
+      ctx.inventory.journalReadKinds.add(k);
+    }
+  }
+  // ABJ — v11: bornInDevMode. Restored before any UI badge ticks.
+  // Pre-v11 → false (regular game).
+  ctx.flags.devMode = save.bornInDevMode === true;
 
   // ── Time ──
   ctx.time.dayTime = save.time.dayTime;
@@ -700,6 +747,13 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
       ctx.companion.pos.set(save.companion.pos.x, save.companion.pos.y, save.companion.pos.z);
       ctx.companion.group.position.copy(ctx.companion.pos);
       ctx.companion.state = save.companion.state;
+      // ABJ — v11: if huddleState was set true at save, force the
+      // companion back into 'huddle' even if `state` field would say
+      // otherwise (defensive — `state` should already be 'huddle' but
+      // we double-confirm). Weather-gated logic re-validates next tick.
+      if (save.version >= 11 && save.companion.huddleState === true) {
+        ctx.companion.state = 'huddle';
+      }
       ctx.companion.stateTimer = 0;
     }
   }
