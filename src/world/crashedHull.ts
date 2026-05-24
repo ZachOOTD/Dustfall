@@ -47,6 +47,7 @@ import type { Rng } from '../core/rng.ts';
 import type { Terrain } from './terrain.ts';
 import type { SalvageableRegistry } from './salvage.ts';
 import { registerSalvageable } from './salvage.ts';
+import { placeJournal, type Journal } from './journal.ts';
 import { makeStaticBox } from '../physics/bodies.ts';
 import { Tuning } from '../config/tuning.ts';
 import { placeDebrisField, addAccessPanel } from './wrecks.ts';
@@ -347,6 +348,7 @@ export function placeCrashedHull(
   pos: THREE.Vector3,
   rand: Rng,
   salvageables?: SalvageableRegistry,
+  journals?: { list: Journal[] },
 ): THREE.Group {
   // We don't randomize the hero hull's silhouette — flagship reads as
   // a deliberate placement. `rand` is still threaded so future
@@ -484,6 +486,27 @@ export function placeCrashedHull(
   // ── 7. Debris field — preserve the prior 16m / 12-piece debris
   //    apron from the impact site. ──
   placeDebrisField(scene, terrain, pos, 16, rand, 12);
+
+  // Session ABF — pilot's journal tucked into a hull-seam recess on the
+  // upper-mid hull (no real interior on this POI). Sits just behind the
+  // visible breach (placed by makeFuselageBody at HULL_LEN * 0.48) on
+  // the +Z flank, suggesting the pilot wedged it where it would shelter
+  // from sand. After the group rotation (YAW/PITCH/ROLL), this reads as
+  // a small book resting in a sloped seam. The hull's lathe runs along
+  // local +X (HULL_LEN units long) after the Z=-π/2 rotation inside
+  // makeFuselageBody, so panel A's position pattern is the reference.
+  if (journals) {
+    group.updateMatrixWorld(true);
+    const journalLocal = new THREE.Vector3(
+      HULL_LEN * 0.50,         // mid-hull, behind the breach
+      HULL_R_MID * 0.85,       // upper flank, near the top of the hull
+      HULL_R_MID * 0.45,       // off-axis on the +Z side
+    );
+    const journalWorld = journalLocal.clone().applyMatrix4(group.matrixWorld);
+    // Yaw face toward the hull axis so the cover orients along the slope.
+    const journalYaw = YAW + Math.PI;
+    journals.list.push(placeJournal(scene, journalWorld, journalYaw, 'crashed_hull'));
+  }
 
   return group;
 }

@@ -452,6 +452,10 @@ export function placePOIs(
   pickupList: Pickup[],
   salvageables?: SalvageableRegistry,
   shelter?: ShelterRegistry,
+  // Session ABF — flagship-specific journals are placed by each
+  // flagship's module (megaShip / megaWreck / satelliteDish / etc.).
+  // Optional so legacy callers stay source-compatible.
+  journals?: { list: import('./journal.ts').Journal[] },
 ): void {
   // AAI — rejection-sample positions for the 6 flagships in a single
   // pass, then dispatch each kind's spawn fn against its sampled position.
@@ -474,7 +478,7 @@ export function placePOIs(
         // into a dune. Dedicated module (placeEngineBlock) handles the
         // LatheGeometry bells + per-piece colliders + 2 salvage panels
         // internally. Mirrors the dish dispatch shape.
-        placeEngineBlock(scene, world, terrain, pos, rand, salvageables);
+        placeEngineBlock(scene, world, terrain, pos, rand, salvageables, journals);
         break;
       }
       case 'camp': {
@@ -491,7 +495,7 @@ export function placePOIs(
         // module (placeSatelliteDish) handles the geometry + walkable
         // colliders + shelter zone + two salvage panels internally.
         if (!shelter) break;
-        placeSatelliteDish(scene, world, terrain, pos, rand, shelter, salvageables);
+        placeSatelliteDish(scene, world, terrain, pos, rand, shelter, salvageables, journals);
         placeDebrisField(scene, terrain, pos, 14, rand, 18);
         break;
       }
@@ -500,7 +504,7 @@ export function placePOIs(
         // custom tail bell. Dedicated module (placeCrashedHull)
         // handles geometry + per-piece colliders + 2 salvage panels
         // internally. Mirrors the dish + engineBlock dispatch shape.
-        placeCrashedHull(scene, world, terrain, pos, rand, salvageables);
+        placeCrashedHull(scene, world, terrain, pos, rand, salvageables, journals);
         break;
       }
       case 'mega_ship': {
@@ -545,7 +549,7 @@ export function placePOIs(
         }
         // Yaw chosen so the entrance (-X side) faces toward player spawn.
         const yaw = Math.PI;
-        placeMegaShip(scene, world, terrain, buryPos, yaw, tilt, rand, shelter, salvageables);
+        placeMegaShip(scene, world, terrain, buryPos, yaw, tilt, rand, shelter, salvageables, journals);
         break;
       }
       case 'mega_wreck': {
@@ -591,7 +595,7 @@ export function placePOIs(
         const dxSpawn = -55 - bestX;
         const dzSpawn = 0 - bestZ;
         const yaw = Math.atan2(dxSpawn, dzSpawn) + Math.PI;
-        placeMegaWreck(scene, world, terrain, buryPos, yaw, tilt, rand, shelter, salvageables);
+        placeMegaWreck(scene, world, terrain, buryPos, yaw, tilt, rand, shelter, salvageables, journals);
         // 3 small companion wrecks at 30-60m around the mega-wreck (BB-3
         // polish — scale-reference props that suggest "crashed in formation").
         const companions: ReadonlyArray<{ kind: 'fuselage' | 'engine_cluster' | 'escape_pod'; dx: number; dz: number; scale: number; tiltX?: number; tiltZ?: number; }> = [

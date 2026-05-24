@@ -37,6 +37,7 @@ import { panelWithHole } from './panelUtils.ts';
 import { addAccessPanel, placeDebrisField, makeEngineBellMesh } from './wrecks.ts';
 import { addShelterZone, type ShelterRegistry } from '../shelter/shelterZones.ts';
 import { registerSalvageable, type SalvageableRegistry } from './salvage.ts';
+import { placeJournal, type Journal } from './journal.ts';
 
 // ── Shared materials — same palette as megaShip.
 const _hullMat = new THREE.MeshLambertMaterial({
@@ -767,6 +768,7 @@ export function placeMegaWreck(
   rand: Rng,
   shelter: ShelterRegistry,
   salvageables: SalvageableRegistry,
+  journals?: { list: Journal[] },
 ): THREE.Group {
   const group = makeMegaWreck(rand);
   group.position.copy(pos);
@@ -1303,6 +1305,23 @@ export function placeMegaWreck(
 
   // ── Surrounding debris field — 40 small pieces in a 50m radius.
   placeDebrisField(scene, _terrain, pos, 50, rand, 40);
+
+  // Session ABF — captain's log journal in the aft bay, mid-floor on
+  // the +X side at chest-station distance from the existing aftPanel.
+  // Picked a position well inside the bay (not against a wall) so the
+  // player encounters it walking the floor rather than searching panel
+  // edges. The bow chamber has its own panel + bowYOffset complication;
+  // keeping the journal in the simpler aft bay avoids that math.
+  if (journals) {
+    const journalLocal = new THREE.Vector3(
+      AFT_HALF_W * 0.3,
+      0.0,
+      AFT_ORIGIN_Z + AFT_HALF_L * 0.4,
+    );
+    const journalWorld = journalLocal.clone().applyQuaternion(finalQ).add(pos);
+    const journalYaw = yaw + Math.PI / 2;
+    journals.list.push(placeJournal(scene, journalWorld, journalYaw, 'mega_wreck'));
+  }
 
   return group;
 }

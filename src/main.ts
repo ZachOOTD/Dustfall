@@ -170,7 +170,12 @@ spawnRockScatter(three.scene, terrain, biomes, scatterRand);
 
 // Hand-placed distant POIs (Session P). Adds a bandage pickup at the
 // abandoned camp. Massive POI wrecks register as salvageables too.
-placePOIs(three.scene, physics.world, terrain, scatterRand, pickupList, salvageables, shelter);
+// Session ABF — flagship modules also drop narrative-beat journals into
+// `journalsList`. The registry is created here, threaded through
+// placePOIs, then attached to ctx.journals below so the interaction
+// system can resolve hits to it.
+const journalsList: Journal[] = [];
+placePOIs(three.scene, physics.world, terrain, scatterRand, pickupList, salvageables, shelter, { list: journalsList });
 
 // HH (world rework #3) — procgen POI layer scattered across the chunk band.
 // ~15 wrecks via rejection sampling. Reject against anchor POI coords AND
@@ -319,7 +324,7 @@ const ctx: GameContext = {
   speeder: null,                 // populated by setupOpeningScene on fresh worlds
   footprints,
   lightPool,
-  journals: { list: [] as Journal[] },
+  journals: { list: journalsList },
   flags: {
     started: false,
     paused: false,

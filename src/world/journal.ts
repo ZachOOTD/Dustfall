@@ -3,25 +3,44 @@
 // the opening wreck. Re-readable in place — tagged with
 // interactType='read', interactRegistry='journals'.
 //
-// Only one journal exists in the world right now (placed by openingScene),
-// but the registry pattern matches cacti/lizards/etc. so a future content
-// pass can scatter more.
+// Session ABF — extended to support per-POI journal kinds. The W-era
+// "opening" wreck journal stays the default; flagship modules pass their
+// own kind so the panel can render different entries per landmark. The
+// kind is encoded both on the Journal object (for ctx.journals.list
+// consumers) AND on the mesh's userData.interactSubKind (so the
+// interaction system surfaces it via info.subKind without a registry
+// lookup, matching the salvage-panel sub-kind pattern).
 
 import * as THREE from 'three';
+
+/** Session ABF — discriminator for which journal entries to render in
+ *  the modal panel. `'opening'` is the legacy W-era survivor journal
+ *  inside the opening wreck; the rest tag the corresponding hand-modeled
+ *  flagship's narrator voice. */
+export type JournalKind =
+  | 'opening'
+  | 'mega_ship'
+  | 'mega_wreck'
+  | 'satellite_dish'
+  | 'crashed_hull'
+  | 'engine_block';
 
 export interface Journal {
   id: number;
   mesh: THREE.Group;
   pos: THREE.Vector3;
+  /** Session ABF — picks the entries array in journalPanel.ts. */
+  kind: JournalKind;
 }
 
 let _nextId = 1;
 
-function tag(root: THREE.Object3D, id: number): void {
+function tag(root: THREE.Object3D, id: number, kind: JournalKind): void {
   root.traverse((o) => {
     o.userData.interactType = 'read';
     o.userData.interactId = id;
     o.userData.interactRegistry = 'journals';
+    o.userData.interactSubKind = kind;
   });
 }
 
@@ -67,7 +86,12 @@ function makeJournal(): THREE.Group {
   return g;
 }
 
-export function placeJournal(scene: THREE.Scene, pos: THREE.Vector3, yaw = 0): Journal {
+export function placeJournal(
+  scene: THREE.Scene,
+  pos: THREE.Vector3,
+  yaw = 0,
+  kind: JournalKind = 'opening',
+): Journal {
   const mesh = makeJournal();
   mesh.position.copy(pos);
   mesh.rotation.y = yaw;
@@ -79,13 +103,14 @@ export function placeJournal(scene: THREE.Scene, pos: THREE.Vector3, yaw = 0): J
     }
   });
   const id = _nextId++;
-  tag(mesh, id);
+  tag(mesh, id, kind);
   scene.add(mesh);
 
   return {
     id,
     mesh,
     pos: pos.clone(),
+    kind,
   };
 }
 

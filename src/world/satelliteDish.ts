@@ -22,6 +22,7 @@ import type { Rng } from '../core/rng.ts';
 import type { Terrain } from './terrain.ts';
 import type { SalvageableRegistry } from './salvage.ts';
 import { registerSalvageable } from './salvage.ts';
+import { placeJournal, type Journal } from './journal.ts';
 import { addAccessPanel } from './wrecks.ts';
 import type { ShelterRegistry } from '../shelter/shelterZones.ts';
 import { addShelterZone } from '../shelter/shelterZones.ts';
@@ -199,6 +200,7 @@ export function placeSatelliteDish(
   rand: Rng,
   shelter: ShelterRegistry,
   salvageables?: SalvageableRegistry,
+  journals?: { list: Journal[] },
 ): THREE.Group {
   const group = new THREE.Group();
   // Bury offset — base sits 1.0m below ground so the doorway opening
@@ -990,6 +992,25 @@ export function placeSatelliteDish(
     dishPanel.updateWorldMatrix(true, false);
     const dishPanelWorld = new THREE.Vector3().setFromMatrixPosition(dishPanel.matrixWorld);
     registerSalvageable(salvageables, dishPanel, 'massive', dishPanelWorld, rand);
+  }
+
+  // Session ABF — radio operator's journal inside the concrete base
+  // chamber. Sits on the floor along the -X interior wall, mid-depth,
+  // near where the operator would have crouched watching the dish lose
+  // signal. Group is already positioned + rotated; the journal mesh
+  // gets added directly to the scene with the group's world transform
+  // baked in via updateMatrixWorld walk.
+  if (journals) {
+    group.updateMatrixWorld(true);
+    const journalLocal = new THREE.Vector3(
+      -BASE_W * 0.30,
+      baseAnchorY - BASE_H * 0.5 + BASE_WALL_T + 0.04,   // 4cm above the interior floor
+      BASE_D * 0.10,
+    );
+    const journalWorld = journalLocal.clone().applyMatrix4(group.matrixWorld);
+    // Yaw face into the chamber (+X relative to group, after group's yaw).
+    const journalYaw = group.rotation.y + Math.PI / 2;
+    journals.list.push(placeJournal(scene, journalWorld, journalYaw, 'satellite_dish'));
   }
 
   return group;

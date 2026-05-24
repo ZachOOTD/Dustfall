@@ -800,9 +800,14 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
 
     case 'journals': {
       // Re-readable journal (Session W). E opens the modal lore panel.
+      // Session ABF — journal kind is encoded as the interactable's
+      // subKind (set by placeJournal); pass it to openJournalPanel so
+      // each flagship's journal renders its own narrator voice.
       ctx.inventory.hover = { type: 'read', distance: info.distance, promptNoun: 'journal' };
       if (ctx.input.pressed.has('KeyE')) {
-        void import('../ui/journalPanel.ts').then((m) => m.openJournalPanel(ctx));
+        const kind = (info.subKind ?? 'opening') as
+          'opening' | 'mega_ship' | 'mega_wreck' | 'satellite_dish' | 'crashed_hull' | 'engine_block';
+        void import('../ui/journalPanel.ts').then((m) => m.openJournalPanel(ctx, kind));
       }
       return;
     }

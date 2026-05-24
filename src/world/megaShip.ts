@@ -35,6 +35,7 @@ import { panelWithHole } from './panelUtils.ts';
 import { addAccessPanel, placeDebrisField, makeEngineBellMesh } from './wrecks.ts';
 import { addShelterZone, type ShelterRegistry } from '../shelter/shelterZones.ts';
 import { registerSalvageable, type SalvageableRegistry } from './salvage.ts';
+import { placeJournal, type Journal } from './journal.ts';
 
 // ── Shared materials — reuse the wreck palette + a darker rust for accents.
 const _hullMat = new THREE.MeshLambertMaterial({
@@ -481,6 +482,7 @@ export function placeMegaShip(
   rand: Rng,
   shelter: ShelterRegistry,
   salvageables: SalvageableRegistry,
+  journals?: { list: Journal[] },
 ): THREE.Group {
   const group = makeMegaShip(rand);
   group.position.copy(pos);
@@ -646,6 +648,19 @@ export function placeMegaShip(
 
   // ── Debris field around the wreck — denser than other POIs.
   placeDebrisField(scene, _terrain, pos, 22, rand, 24);
+
+  // Session ABF — narrative beat. Lone-survivor cargo-handler journal
+  // sits on the cargo-chamber floor near the cargoPanel, suggesting the
+  // last person here stayed with the manifest after the lifeboat left.
+  // Local position (1.0, 0, HALF_L - 1.5) is on the +X side of the
+  // cargo bay, 1.5m in from the back wall. Yaw faces +X so a player
+  // entering from the bow doorway sees the journal's cover.
+  if (journals) {
+    const journalLocal = new THREE.Vector3(1.0, 0.0, HALF_L - 1.5);
+    const journalWorld = journalLocal.clone().applyQuaternion(finalQ).add(pos);
+    const journalYaw = yaw + Math.PI / 2;
+    journals.list.push(placeJournal(scene, journalWorld, journalYaw, 'mega_ship'));
+  }
 
   return group;
 }

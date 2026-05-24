@@ -26,6 +26,7 @@ import type { Rng } from '../core/rng.ts';
 import type { Terrain } from './terrain.ts';
 import type { SalvageableRegistry } from './salvage.ts';
 import { registerSalvageable } from './salvage.ts';
+import { placeJournal, type Journal } from './journal.ts';
 import { makeStaticBox } from '../physics/bodies.ts';
 import { Tuning } from '../config/tuning.ts';
 import { placeDebrisField, addAccessPanel } from './wrecks.ts';
@@ -278,6 +279,7 @@ export function placeEngineBlock(
   pos: THREE.Vector3,
   rand: Rng,
   salvageables?: SalvageableRegistry,
+  journals?: { list: Journal[] },
 ): THREE.Group {
   const group = new THREE.Group();
 
@@ -448,6 +450,25 @@ export function placeEngineBlock(
   // ── 9. Debris field — preserve the original 14m / 10-piece debris
   // apron around the impact site. ──
   placeDebrisField(scene, terrain, pos, 14, rand, 10);
+
+  // Session ABF — engineer's maintenance log. Sits on the thrust frame
+  // top (FRAME_Y, on a mounting bracket beside panel A on the +Z face).
+  // After group rotation (YAW/PITCH/ROLL — the cluster tips leeward),
+  // the journal reads as wedged into the frame's cooling-tori area
+  // where the engineer would have made their last notes before the
+  // bell-deck access door. No interior on this POI; the frame top is
+  // the most thematic anchor.
+  if (journals) {
+    group.updateMatrixWorld(true);
+    const journalLocal = new THREE.Vector3(
+      FRAME_W * 0.08,                      // close to centerline, slight +X bias
+      FRAME_Y + FRAME_H * 0.5 + 0.03,      // 3cm above the frame top
+      FRAME_D * 0.30,                      // forward on the +Z face, near panel A
+    );
+    const journalWorld = journalLocal.clone().applyMatrix4(group.matrixWorld);
+    const journalYaw = YAW + Math.PI / 4;
+    journals.list.push(placeJournal(scene, journalWorld, journalYaw, 'engine_block'));
+  }
 
   return group;
 }
