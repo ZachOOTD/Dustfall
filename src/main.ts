@@ -531,18 +531,27 @@ function handoffToGame(): void {
   // Independent of soundscape's sample-stem music layer (which has been
   // silent since X-era — no .ogg pack ever shipped). Per D3.
   startMusic();
-  // ABL — guard pointer-lock acquisition against hidden/0-size preview
-  // tabs. When `preview_eval` programmatically clicks NEW GAME in the
-  // Claude Preview iframe (which is `document.hidden===true` AND
-  // renders to a 0×0 canvas in the top-left), acquiring pointer lock
-  // there confines the OS cursor to the (0, 0)-anchored 0×0 rect →
-  // the user's cursor appears "stuck in an invisible box in the top-
-  // left" until they alt-tab to force PointerLock release. The lock
-  // is useless in a hidden tab anyway (no user there to look around).
-  // Real visible-window sessions hit the else branch and lock normally.
+  // ABL/ABN — guard pointer-lock acquisition against agent-automated
+  // clicks in preview/dev windows. When `preview_eval` (Claude Preview
+  // MCP, Playwright, etc.) programmatically clicks NEW GAME in a
+  // preview window that's visible-but-unfocused (user is working in
+  // Claude Code chat, preview window sits to the side), acquiring
+  // PointerLock there confines the OS cursor to the canvas region —
+  // even though the user is interacting with a different app — until
+  // they alt-tab to force release.
+  //
+  // Original ABL guard checked `document.hidden || canvas.width === 0`
+  // but missed the visible-but-unfocused case (which is the COMMON
+  // one — Claude Preview windows are usually visible). The right
+  // signal is `document.hasFocus()`: true only when this window owns
+  // OS focus. A real user clicking NEW GAME has focus by definition
+  // (the click itself focuses the window first); an agent's
+  // synthesized click in a side-window doesn't.
   const canvas = three.renderer.domElement;
   const isPreviewLike = import.meta.env.DEV && (
-    document.hidden || canvas.width === 0 || canvas.height === 0
+    document.hidden ||
+    canvas.width === 0 || canvas.height === 0 ||
+    !document.hasFocus()
   );
   if (!isPreviewLike) {
     ctx.input.controls.lock();
