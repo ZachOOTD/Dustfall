@@ -4,17 +4,19 @@ Cumulative state. Rewritten end-to-end at each `/session-end`. A
 reviewer who's never seen the project should be able to read this +
 `CLAUDE.md` + `docs/GDD.md` and understand where Dustfall is.
 
-**Current state**: Session ABL shipped (2026-05-24, overnight ~3h of
-6h budget). 67 sessions post-MVP. tsc clean. SAVE_VERSION v11
-unchanged. All commits ABK + ABK-tail + ABL on master.
+**Current state**: Session ABM shipped (2026-05-24, overnight ~2h of
+6h budget). 68 sessions post-MVP. tsc clean. SAVE_VERSION v11
+unchanged (additive `droppedPickups` field per D108 — no version
+bump). All commits through ABM on master, ABM not yet pushed.
 
-**ABL scope**: megaWreck visual rebuild — closes the last visually-
-behind-the-rest-of-the-world hand-modeled prop (BB-2/BB-3 era). Edit-
-in-place refactor preserving collider layout + 8 salvage panels +
-shelter zone + journal. Visual lift via ABH procedural shaders +
-tapered ellipsoidal cylinder hull shell + 6 rust band wraps +
-exposed-rib + torn-plate fragments at hull break. 1 file, +166/-22.
-Ship well under budget; remaining time available next session.
+**ABM scope**: B7 dropped-item rigid-body physics. Pickup gains optional
+Rapier body, spawnDroppedPickup opts arg, per-frame sync tick,
+despawn cleanup, save round-trip via new `droppedPickups` v11
+additive field. Player-drop / craft-overflow / pickup-swap paths
+all create bodies; seed-spawn stays static (140+ branches at boot
+would burn step budget). B8 (generalized rope) cut per pre-committed
+scope-cut tier 3 — re-scoped in backlog (~4-5h with UX decisions,
+not the original 3h). 7 files.
 
 ---
 

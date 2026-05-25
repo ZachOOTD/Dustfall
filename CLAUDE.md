@@ -59,7 +59,20 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session ABL — megaWreck visual rebuild. Closes the
+**Last shipped**: Session ABM — B7 dropped-item rigid-body physics.
+Player drops + crafting overflow + pickup-swap now spawn pickups with
+Rapier dynamic bodies — items roll, fall, settle naturally on dunes
++ wreck floors. Per-frame `updatePickups(ctx)` syncs mesh transform
+from body. `despawnPickup` cleans up bodies on take. Save schema v11
+additive: `droppedPickups?: [...]` array preserves dropped-item
+transforms across save/load (verified round-trip exact). Seed-spawn
+pickups (140+ branches at boot, scavenger-camp bandage) stay static
+to preserve Rapier step budget. B8 (generalized rope attachment) cut
+per pre-committed scope-cut tier 3 and re-scoped in backlog for ABN —
+needs new UX path (no rope-stub on pickups) + bigger data-model
+refactor than the 3h estimate captured.
+
+**Prior milestone**: Session ABL — megaWreck visual rebuild. Closes the
 "megaWreck rebuild" backlog item (BB-2/BB-3 era model was visually
 behind the rest of the world post-OO procedural shaders). Edit-in-
 place refactor preserving the existing collider layout + all 8 salvage

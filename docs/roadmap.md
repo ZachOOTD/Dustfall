@@ -56,20 +56,20 @@ and promotes the second.
 - **Session ABH** (2026-05-23): Texture overhaul via procedural shader vocabulary. 4 new factory modules (`metalMaterial.ts`, `paintMaterial.ts`, `stoneMaterial.ts`, `skinMaterial.ts`) following the terrainMaterial.ts / fabricMaterial.ts onBeforeCompile pattern. Zero new texture files (preserves D3 + formalizes per D107). Applied to weapons (metal), placeables (metal + painted), world stone (rocks + well stones), creatures (sandworm + lizard + companion). Bundle +11KB (4 shader sources, zero asset bytes). 14 files, 4 new modules.
 - **Session ABI** (2026-05-24): Salvage panel rim opacity fix (rim was solid plate covering cavity post-ABG BackSide body) + 3 procgen wreck panel relocations (cargo_container overlap with sibling decoration, fuselage buried inside cylinder, escape pod buried inside icosahedron). 1 file, +66/-16.
 - **Session ABJ** (2026-05-24, overnight): Aggressive 14-item bundle across 4 tiers in ~6h. **Tier 1**: v10→v11 schema (combined huddleState + journalReadKinds + bornInDevMode per D108) + biome-bias on procgen recipe pick + 5 small polish/debt items. **Tier 2**: 3 new procedural shader factories (woodGrain + bone + glass) extending ABH vocab to 7. **Tier 3**: science_vessel wreck class + sandworm 'feeding' state (bait-and-strike loop, 2× damage window) + 5 item viewmodel upgrades. **Tier 4**: comm-relay cluster (3rd ClusterKind) + NEW src/world/buriedCockpit.ts (first biome-specific POI, dune-biome centroid placement). Tier 5 stretch (salt outpost / rocky entrance / megaWreck rebuild / dropped-item physics / generalized rope) DEFERRED per pre-committed cut order. 12 files + 4 new modules.
+- **Session ABM** (2026-05-24, overnight ~2h of 6h budget): B7 dropped-item rigid-body physics. Pickup gains optional Rapier body; spawnDroppedPickup gets opts arg for world+initialVel+yOverride; per-frame updatePickups syncs transforms; despawnPickup cleans bodies; v11 additive `droppedPickups` save field for round-trip. Player drops + crafting overflow + pickup-swap all use bodies; seed-spawn stays static. B8 generalized rope cut per pre-committed scope-cut tier 3 (re-scoped in backlog for ABN — needs UX path + bigger refactor). 7 files. Verified seed 7777 + drop/save/reload round-trip exact.
 - **Session ABL** (2026-05-24, overnight ~3h of 6h budget): megaWreck visual rebuild. Edit-in-place refactor preserving collider layout + 8 panels + shelter zone + journal — pure visual lift. Procedural shader vocab applied to all hull/rust/pipe materials; tapered ellipsoidal cylinder shell drapes over the box-wall aft section; 6 rust band wraps; exposed vertical ribs + torn hull-plate fragments at the mid-hull break. Closes the "megaWreck rebuild" backlog item. 1 file, +166/-22.
 - **Session ABK** (2026-05-24, overnight 6h): Close the biome-specific POI family. NEW `src/world/saltOutpost.ts` (concrete base + corroded antenna spire + sample crates + cargo_container panel) + NEW `src/world/rockyEntrance.ts` (boulder outcrop + cave-mouth arch + descending stairs + sunken interior chamber via BackSide stone walls + shelter zone + escape_pod panel). Dispatch in poi.ts goes dune→salt→rocky for greedy multi-region spread. Multi-seed verified at 12345 + 7777 (both 5 shelter zones with +1 from rocky entrance). 5 files, 2 new modules.
 
 ## Up next
 
-ABL closed the megaWreck rebuild — last visually-behind prop is now
-on the procedural shader vocab + has a curved silhouette. Remaining
-big-ticket candidates: **A1 infinite chunk streaming** (last major
-architectural lift, ~6-10h, save bump v11→v12), **B7 dropped-item
-rigid-body physics** (items roll/fall/settle, ~3h touches physics
-layer), **B8 generalized rope attachment** (anchor either end to
-arbitrary world objects, ~3h), **B5 flagship NPC beats** (hostile
-raider holdouts + friendly hermits at hand-modeled flagships, ~4-6h).
-See `docs/next-session-prompt.md` for full ABM brief.
+ABM closed B7 dropped-item physics. Remaining big-ticket candidates:
+**A1 infinite chunk streaming** (last major architectural lift,
+~6-10h, save bump v11→v12), **B8 generalized rope attachment**
+(re-scoped — needs UX path for non-sled-stub anchors + bigger
+refactor; ~4-5h vs original 3h estimate), **B5 flagship NPC beats**
+(hostile raider holdouts + friendly hermits at hand-modeled
+flagships, ~4-6h). See `docs/next-session-prompt.md` for full ABN
+brief.
 
 ## Next — Big-ticket bucket (1–2 picks per session at ~4–7h each)
 Pick whatever feels most missing after the polish + atmosphere arc.

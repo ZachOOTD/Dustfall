@@ -1,26 +1,24 @@
-# Session ABM — Kickoff Brief (post-ABL)
+# Session ABN — Kickoff Brief (post-ABM)
 
 ## Read these now (in order)
 
 1. `CLAUDE.md` (auto-loaded)
-2. `docs/session-end-report.md` — cumulative state through ABL
-3. `docs/changelog.md` — ABL + ABK-tail + ABK entries at top
+2. `docs/session-end-report.md` — cumulative state through ABM
+3. `docs/changelog.md` — ABM + ABL + ABK-tail entries at top
 4. `docs/decisions.md` — D108 still the latest
 5. `docs/roadmap.md`
 6. `docs/backlog.md`
 
-## What's already built (post-ABL snapshot)
+## What's already built (post-ABM snapshot)
 
-67 sessions. Tactile salvage + 6 narrative journals + 4 procgen wreck
+68 sessions. Tactile salvage + 6 narrative journals + 4 procgen wreck
 classes + biome-bias on hullSegment variants + 5 weapon variants +
-procedural world seed-stable + 7 procedural shader factories (now
-applied across ALL major hand-modeled props — last holdout megaWreck
-closed ABL) + 3 themed POI cluster kinds + **complete biome-specific
-POI family** (dune cockpit + salt outpost + rocky entrance with
-shelter zone) + sandworm bait-and-strike feeding loop + scrap_bar
-starter inventory. SAVE_VERSION v11. Perf-pass tuned (96→31 scene
-PointLights, throttled shadow updates, Rapier pre-warm; targeting
-144fps).
+procedural world seed-stable + 7 procedural shader factories + 3
+themed POI cluster kinds + complete biome-specific POI family +
+sandworm bait-and-strike feeding loop + scrap_bar starter inventory
++ megaWreck on procedural shader vocab + curved hull shell. **NEW**:
+dropped items have rigid-body physics — they roll/fall/settle on
+dunes + survive save/load round-trip (ABM). SAVE_VERSION v11.
 
 ## Suggested focus (pick one)
 
@@ -30,10 +28,12 @@ PointLights, throttled shadow updates, Rapier pre-warm; targeting
   lift. Lazy 800m chunks at boundaries; free farthest; per-chunk
   seed derivation; GPU memory budget. Save bump v11→v12.
 - **B5 flagship NPC beats** (~4-6h). Hostile raider holdouts +
-  friendly hermit NPCs at hand-modeled flagships. ABF shipped
-  journals; this adds the live NPCs.
-- **B7 + B8 paired** (~5-6h). Dropped-item rigid-body physics +
-  generalized rope attachment to arbitrary world endpoints.
+  friendly hermit NPCs at hand-modeled flagships.
+- **B8 generalized rope attachment (re-scoped)** (~4-5h). Now that
+  B7 shipped, items have positions + bodies to act as rope anchors.
+  Needs new UX path (no rope-stub mesh on pickups) + gameplay
+  decisions (can a piece of cloth pull a sled?) + data-model
+  refactor splitting Tether into Endpoint pairs.
 
 ### Medium (~2-4h)
 
@@ -42,9 +42,9 @@ PointLights, throttled shadow updates, Rapier pre-warm; targeting
   deplete → "corpse" wreck dim entirely.
 - **B11 rare key-card panels** — gated behind a quest item.
 - **megaWreck catwalk panel reachability (panels 3 + 4)**.
-- **Add machete back as wreck loot** — ABK-tail swap left player
-  with no starter melee weapon. If playtest feels too punishing,
-  add machete as a small-chance procgen wreck drop.
+- **Add machete back as wreck loot** — player still starts unarmed
+  for melee per ABK-tail; small-chance procgen wreck drop closes
+  the loop.
 
 ### Polish / quick wins (~1-2h)
 
@@ -53,6 +53,9 @@ PointLights, throttled shadow updates, Rapier pre-warm; targeting
   items; ~25 remaining ItemDefs could benefit.
 - **megaWreck full hull-shell extension to bow** — ABL added shell
   to aft only; bow still has its prior box silhouette.
+- **Dropped-item playtest tune** — ABM defaults (damping 0.6/0.8,
+  friction 0.85, density 0.6) need in-play signal. May need to bump
+  friction higher if items roll forever on slopes.
 
 ## Autonomy contract
 
@@ -65,25 +68,25 @@ block, destructive-action attempt.
 
 ## Notable footguns
 
-- **ABK-tail starter swap**: player starts with scrap_bar + canteen
-  (no machete). Unarmed for melee until pipe_staff crafted. Add
-  machete to wreck loot pool if playtest feels too punishing.
+- **ABM dropped-item bodies**: only PLAYER-FACING drops use bodies
+  (player drop / craft overflow / pickup-swap). Seed-spawn (branches,
+  scavenger-camp bandage) stays static — adding bodies to all 140+
+  seeded pickups would burn Rapier step budget. If adding new drop
+  paths, decide deliberately whether to thread `opts.world`.
+- **ABM save round-trip**: `droppedPickups` is additive on v11. If
+  changing Pickup interface fields, audit save serialization to
+  ensure they're persisted.
+- **ABL megaWreck shell**: tapered cylinder over aft only. Bow still
+  has box silhouette. Could extend symmetrically if time.
 - **ABK-tail pointer-lock guard**: `handoffToGame()` skips
-  `controls.lock()` in DEV+hidden/0×0 preview tabs. Real-user
-  gameplay unaffected. If you add other lock-acquisition points,
-  apply the same guard pattern.
-- **ABK-tail perf pass**: 96 → 31 scene PointLights (panel glows
-  pooled). lightPool size 30. If adding new panel-glow consumers,
-  use the pool, don't allocate new per-entity PointLights.
-- **ABL megaWreck shell**: tapered cylinder shell drapes over aft
-  only. If extending to bow, mirror the pattern (smaller radii,
-  attached to bowGroup so bowYOffset applies).
-- **ABJ D108 combined v11 bump**: combine additive fields when 2+
-  ship same session.
-- **ABJ B12 sandworm feeding**: damageSandWorm allows 2× damage
-  during 'feeding' state.
-- **Preview screenshot rule 5**: always set `ctx.time.dayTime = 0.5`
-  + unpause briefly before any visual screenshot.
+  `controls.lock()` in DEV+hidden/0×0 preview tabs. Apply same
+  guard if adding new lock-acquisition points.
+- **ABK-tail perf pass**: 31 scene PointLights via panel-glow pool.
+  If adding new lights, use pool.
+- **ABJ D108**: combine multiple additive save fields into one bump.
+- **ABJ B12**: sandworm 'feeding' state, 2× damage during feeding.
+- **Preview screenshot rule 5**: `ctx.time.dayTime = 0.5` + unpause
+  briefly before screenshots.
 
 ## Verification protocol
 
@@ -99,6 +102,6 @@ For substantial features:
 
 ## Begin block
 
-Read CLAUDE.md (auto), session-end-report (through ABL), recent
-changelog (ABL + ABK-tail + ABK entries), decisions D106-D108. Pick
+Read CLAUDE.md (auto), session-end-report (through ABM), recent
+changelog (ABM + ABL + ABK-tail entries), decisions D106-D108. Pick
 focus from the menu above. TaskCreate sub-tasks. Start coding.

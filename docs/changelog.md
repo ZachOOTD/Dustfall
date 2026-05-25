@@ -3,6 +3,44 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ABM — 2026-05-24 — B7 dropped-item rigid-body physics ✓ verify pass
+`verified` — tsc clean. 6 files touched. Closes the B7 backlog item;
+B8 (generalized rope) cut per pre-committed scope-cut tier 3 — UX
+needs more thought; carry-forward to ABN.
+
+- **Pickup gains optional Rapier dynamic body** — cuboid collider sized
+  to mesh AABB, linear damping 0.6 / angular 0.8 / friction 0.85 /
+  restitution 0.15 / density 0.6. Settles cleanly on dunes without
+  jitter; Rapier auto-sleeps once at rest.
+- **spawnDroppedPickup gains opts arg** — `{ world?, initialVel?,
+  yOverride? }`. When `world` is provided, body is created + spawn
+  Y bumped +0.6m so items fall + settle (tossed-from-inventory
+  feel). When omitted, original static-mesh behavior preserved.
+- **Callers updated**: player drop (inventory.ts), craft overflow
+  drops (craftingMenu.ts × 2), pickup-swap drop (interaction.ts) all
+  thread `world`. Seed-spawn callers (spawnBranches, scavenger-camp
+  bandage) stay static (140+ branches at boot would burn Rapier
+  step budget; deterministic placement doesn't need physics).
+- **Per-frame sync** via `updatePickups(ctx)` in main.ts tick after
+  physics.step. Copies body.translation + rotation → mesh.position +
+  quaternion. Skips pickups without a body (cheap branch).
+- **despawnPickup** removes the body from Rapier world when present
+  (no leak on take).
+- **Save schema v11 additive** (no version bump per D108):
+  `droppedPickups?: Array<{ itemId, pos, quat, meta? }>` serializes
+  only physics-bodied pickups. On load, respawn each with body +
+  override rotation/velocity to settled state. Pre-ABM saves arrive
+  without the field → empty list (acceptable migration limit).
+
+Verified: tsc clean, seed 7777 boot (75 panels, 5 shelter zones, no
+regression), drop+save+reload round-trip preserves position exactly
+(verified -67.31, 8.81, 11.31 before save = same after reload).
+
+**B8 carry-forward**: generalized rope attachment needs new UX path
+(no rope-stub mesh on pickups), gameplay decisions (can a piece of
+cloth pull a sled?), and bigger data-model refactor than ABL's 3h
+estimate captured. Re-scoped in backlog for ABN.
+
 ## Session ABL — 2026-05-24 — megaWreck visual rebuild ✓ verify pass
 `verified` — tsc clean. 1 file (megaWreck.ts, +166/-22). Closes the
 "megaWreck rebuild" backlog item (BB-2/BB-3 era model was visually
