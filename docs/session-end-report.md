@@ -4,11 +4,37 @@ Cumulative state. Rewritten end-to-end at each `/session-end`. A
 reviewer who's never seen the project should be able to read this +
 `CLAUDE.md` + `docs/GDD.md` and understand where Dustfall is.
 
-**Current state**: Session ABN shipped (2026-05-24, smaller post-
-compaction scope ~1.5h). 69 sessions post-MVP. tsc clean. SAVE_VERSION
-v11 unchanged (no schema changes this session — all 3 bug fixes are
-pure code/shader changes; B6 + bow shell are visual-only additions).
-All commits through ABN pushed to `origin/master`.
+**Current state**: Session ABO shipped (2026-05-25, long-overnight
+~10h budget scope-cut-from-bottom). 70 sessions post-MVP. tsc clean.
+SAVE_VERSION v11 unchanged (no schema changes this session — A3 rig
+state is purely visual; ambush + dawn/dusk are sandworm runtime state;
+B6 POC reuses existing composite system + journal pattern). 7 of 8
+selected items shipped; B1 generalized rope CUT per pre-committed cut #1.
+
+**ABO scope**:
+- **Tier 1 (4 polish items)**: C1 scavenger camp strip + C5 engine
+  heat-shield back panel + C4 dish backing framework + collision +
+  C3 viewmodel pass (6 of 8 worst items).
+- **Tier 2 (A3 full)**: procedural primitive player rig (NEW
+  `src/player/playerRig.ts` ~270 LOC) + F-key 3P camera toggle +
+  3P spring-arm offset in `syncCameraToBody`.
+- **Tier 3 (B3 ambush + dawn/dusk)**: new 'ambush' state in
+  SandWormState union (now 9 values) + twilight surfacing modifier.
+  Retreat-stalk deferred per cut #3.
+- **Tier 4 (B6 POC)**: engineBlock migration to composite procgen
+  via new `'flagship_engineBlock'` class + `placeProcgenCompositeForFlagship`
+  wrapper.
+- **Tier 5 (B1 CUT)**: deferred to ABP.
+
+**D110 added** (3P camera = single-camera-with-position-offset, not
+dual cameras). 12 files (11 modified + 1 new). All commits pending
+push.
+
+**Prior state**: ABN shipped (2026-05-24, smaller post-compaction
+scope ~1.5h). 69 sessions. B6 5th procgen class bulk_hauler +
+megaWreck bow shell + 3 bug fixes from triage (companion stale-mount-
+target + procedural shader crawl on moving entities + viewmodel
+fabric breathing). D109 (procedural-shader localSpace opt).
 
 **ABN scope**: Procgen wreck family expansion + megaWreck bow shell +
 3 bug fixes from user playtest report.
@@ -249,20 +275,20 @@ Recent (session-tagged):
 
 ## Suggested next session (1-3 directions in priority order)
 
-1. **A1 infinite chunk streaming** (~6-10h big-ticket). Last major
-   architectural lift. Lazy 800m chunks at boundaries; free farthest;
-   per-chunk seed derivation; GPU memory budget. Save bump v11→v12.
-   This is the biggest remaining architectural debt.
-2. **B8 generalized rope attachment, re-scoped** (~4-5h medium-big).
-   Now that B7 dropped-item physics shipped (ABM), items HAVE
-   positions + bodies suitable as rope anchors. Needs new UX path (no
-   rope-stub on pickups) + gameplay decisions (can cloth pull a
-   sled?) + Tether → Endpoint refactor.
-3. **Stale fire+cloth POI** (~30 min once user identifies it). Quick
-   win — needs user to name the POI then strip the content.
+1. **B1 generalized rope (re-scoped from ABO cut)** (~4-5h medium-big).
+   Pre-committed cut #1 from ABO bundle. RopeEndpoint union + Tether
+   {endpointA, endpointB} + resolveEndpointWorldPos + RMB-on-item
+   two-stage UX + additive save migration. Full plan still in the
+   ABO plan file. Highest near-term value (gameplay unblock).
+2. **A1 infinite chunk streaming** (~6-10h big-ticket). Last major
+   architectural lift. Save bump v11→v12. Architectural payoff but
+   higher risk.
+3. **Migrate remaining 4 flagships to composite procgen** (~6-8h
+   medium-big). If ABO B6 engineBlock POC reads well in playtest,
+   sweep megaShip / megaWreck / satelliteDish / crashedHull.
 
-Top pick depends on user appetite: A1 if architecture, B8 if
-gameplay, the POI fix as a low-cost warm-up.
+Top pick: B1 (cleanest single-session win). A1 if user wants the
+architecture lift. Flagship sweep if POC visual reads good.
 
 ---
 

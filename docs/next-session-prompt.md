@@ -1,27 +1,27 @@
-# Session ABO — Kickoff Brief (post-ABN)
+# Session ABP — Kickoff Brief (post-ABO)
 
 ## Read these now (in order)
 
 1. `CLAUDE.md` (auto-loaded)
-2. `docs/session-end-report.md` — cumulative state through ABN
-3. `docs/changelog.md` — ABN entry at top
-4. `docs/decisions.md` — D109 (procedural-shader localSpace opt) is
-   the latest
+2. `docs/session-end-report.md` — cumulative state through ABO
+3. `docs/changelog.md` — ABO entry at top (substantial — 7 items)
+4. `docs/decisions.md` — D110 (3P camera architecture) is the latest
 5. `docs/roadmap.md`
 6. `docs/backlog.md`
 
-## What's already built (post-ABN snapshot)
+## What's already built (post-ABO snapshot)
 
-69 sessions. Procgen wreck system at **5 classes** (corvette /
-gunship / freighter / science_vessel / **bulk_hauler** — added ABN);
-class roulette 35/20/18/12/15. megaWreck has aft hull-shell (ABL) +
-**bow hull-shell** (ABN, half-cylinder preserving -X entrance).
-Companion follows speeder in real time when player mounts (ABN bug
-fix). Moving entities (companion, sandworm, lizard, speeder) have
-**static-relative shader detail** via D109 `localSpace` opt — no
-more crawling textures. Cloth + bandage viewmodels no longer expand
-on movement (ABN `disableShimmer` opt). Dropped items have rigid-
-body physics (ABM). SAVE_VERSION v11 unchanged through ABN.
+70 sessions. **NEW**: player has a visible rigged body (procedural
+primitive rig — capsule torso + sphere head + 4 limb pivots with
+hand-coded walk cycle); **F-key toggles 3rd-person camera** (2.5m
+behind + 1.5m above, no spring-arm collision yet). Sandworm has an
+'ambush' state (silent submerged → snap to lunge within 12m) +
+dawn/dusk surfacing modifier (×1.30 detection in twilight). engineBlock
+flagship is now a COMPOSITE procgen wreck (flagship_engineBlock fixed-
+recipe class) — first POC migration off the hand-modeled wrecks. Plus
+4 polish items (scavenger camp stripped; engine heat-shield back panel;
+dish backing framework + collision; 6 cooked-meat + kit viewmodel
+upgrades). B1 generalized rope CUT from ABO — deferred to ABP.
 
 ## Suggested focus (pick one)
 
@@ -30,36 +30,39 @@ body physics (ABM). SAVE_VERSION v11 unchanged through ABN.
 - **A1 infinite chunk streaming** (~6-10h). Last major architectural
   lift. Lazy 800m chunks at boundaries; free farthest; per-chunk seed
   derivation; GPU memory budget. Save bump v11→v12.
-- **B8 generalized rope attachment (re-scoped)** (~4-5h). B7 (dropped
-  item physics) shipped — items HAVE positions + bodies to act as
-  rope anchors. Needs new UX path (no rope-stub on pickups) +
-  gameplay decisions (can cloth pull a sled?) + data-model refactor
-  splitting Tether into Endpoint pairs.
+- **B1 generalized rope attachment (re-scoped)** (~4-5h). Pre-committed
+  ABO cut #1. RopeEndpoint union + Tether{endpointA, endpointB} +
+  resolveEndpointWorldPos helper (lift getPlayerPos to util/) + RMB-
+  on-item two-stage UX + additive save migration. Full plan still in
+  the ABO plan file.
 
-### Medium (~2-4h)
+### Medium (~2-5h)
 
-- **Migrate flagship modules into composite system** — retire the
-  wrecks.ts procgen palette (engineBlock, crashedHull, etc.) into
-  the bulk_hauler-style 5-class composite vocabulary. The procgen
-  wreck system has now proven out across 5 classes; the legacy
-  palette can be retired or kept for hand-tuned narrative POIs only.
-- **megaWreck catwalk panel reachability (panels 3 + 4)** — 1-2
-  more ground-level alternatives.
+- **Migrate remaining 4 flagships to composite procgen** (~6-8h) — if
+  the ABO B6 engineBlock POC reads well in playtest, sweep megaShip /
+  megaWreck / satelliteDish / crashedHull using the same
+  `flagship_<kind>` fixed-recipe pattern. Risk: each one has a unique
+  silhouette that may need new vocabulary parts (satelliteDish dish
+  silhouette, megaShip interior + shelter, etc.).
+- **B5 flagship NPC beats** (~4-6h) — hostile raider holdouts + friendly
+  hermits at hand-modeled flagships. From the Archive section
+  (parked 2026-05-24 — unparkable if appetite exists).
+- **3P camera spring-arm collision** (~1-2h) — ABO debt. Raycast from
+  player head toward intended camera position; clamp to first hit.
 
 ### Polish / quick wins (~30 min – 2h)
 
-- **Identify + remove stale fire+cloth wreck POI** (deferred from
-  ABN triage) — needs user to name the POI; then strip the content
-  in 1-2 file edits.
-- **Item viewmodel fidelity pass (continuation)** — ABJ shipped 5
-  items; ~25 ItemDefs remaining could benefit.
-- **Dropped-item playtest tune** — ABM defaults (damping 0.6/0.8,
-  friction 0.85, density 0.6) need in-play signal.
+- **Item viewmodel pass remainder** — ~19 ItemDefs at primitive
+  complexity. Suggested next batch: large_tent_kit, bedroll_kit,
+  lantern_kit.
+- **B3 retreat-stalk loop** (~1h) — extension to ABO B3. tickRetreat
+  optionally re-enters 'alert' at retreat-end if player still close.
+- **Dropped-item playtest tune** — ABM defaults need in-play signal.
 
 ## Autonomy contract
 
 When ambiguous, pick the option closest to the GDD pillars +
-decisions.md realism dial (D45+, D49, D67, D86–D109), append a new
+decisions.md realism dial (D45+, D49, D67, D86–D110), append a new
 D-entry, keep going.
 
 Stop conditions: wall-clock limit, 3-strike fix wall, catastrophic
@@ -67,25 +70,26 @@ block, destructive-action attempt.
 
 ## Notable footguns
 
-- **ABN D109 localSpace pattern**: when adding a new procedural
-  shader factory, expose `localSpace?` opt UP FRONT even if no
-  current caller is a moving entity. Future-proofing one interface
-  field beats refactoring after a "textures crawl" bug report. Same
-  for any vertex displacement (`disableShimmer` precedent) — viewmodel
-  callers need to suppress without forking the factory.
-- **ABN bow shell theta**: bow uses HALF-cylinder
-  (`thetaStart=0, thetaLength=Math.PI`) NOT full cylinder, so the
-  open underside preserves the -X side entrance. If adding more shell
-  geometry to other openings, audit theta direction first.
-- **ABM dropped-item bodies**: only PLAYER-FACING drops use bodies
-  (player drop / craft overflow / pickup-swap). Seed-spawn stays
-  static (140+ branches at boot would burn Rapier step budget).
-- **ABM save round-trip**: `droppedPickups` is additive on v11. If
-  changing Pickup interface fields, audit save serialization.
+- **ABO D110 single-camera arch**: 3P camera reuses the FP camera
+  with a position offset; PointerLockControls owns yaw+pitch on the
+  shared camera. If adding a new camera mode (free-cam, photo), follow
+  the same branch-in-syncCameraToBody pattern — DO NOT introduce a
+  second THREE.PerspectiveCamera.
+- **ABO A3 player rig localSpace**: `createSkinMaterial` calls in
+  `playerRig.ts` use `localSpace: true` per D109. If forking a new
+  creature with similar code, MUST keep localSpace=true for moving
+  entities (else texture-crawl).
+- **ABO B6 reversibility**: `engineBlock.ts` kept on disk; `poi.ts`
+  has commented `placeEngineBlock` import + replaced dispatch line.
+  Revert one line + uncomment import to restore hand-modeled.
+- **ABN D109 localSpace pattern**: applies to skinMaterial +
+  paintMaterial. fabricMaterial has the sibling `disableShimmer` opt
+  for viewmodels.
+- **ABM dropped-item bodies**: only PLAYER-FACING drops use bodies.
+  Seed-spawn stays static (Rapier step budget).
 - **ABK-tail pointer-lock guard**: `handoffToGame()` skips
-  `controls.lock()` in DEV+hidden/0×0/!hasFocus preview tabs. Apply
-  same guard if adding new lock-acquisition points.
-- **ABJ D108**: combine multiple additive save fields into one bump.
+  `controls.lock()` in DEV+hidden/0×0/!hasFocus preview tabs. F-key
+  3P toggle DOES NOT change pointer-lock state.
 - **Preview screenshot rule**: `ctx.time.dayTime = 0.5` + unpause
   briefly before screenshots.
 
@@ -101,8 +105,16 @@ For substantial features:
 2. Save + reload roundtrip if persisted state changed.
 3. Multi-seed sanity if the change touches world generation.
 
+For ABO-specific playtest:
+- F-key toggle from FP → 3P, confirm rig visible + viewmodel hidden.
+- Walk around in 3P — confirm walk cycle visible, body shadow casts.
+- Mount speeder in 3P — rig should follow (parented to body via
+  per-frame translation).
+- Inspect engine_block POI on seeds 12345 + 7777 — confirm new
+  composite silhouette + journal still readable + 3 salvage panels.
+
 ## Begin block
 
-Read CLAUDE.md (auto), session-end-report (through ABN), recent
-changelog (ABN + ABM + ABL entries), decisions D107-D109. Pick focus
+Read CLAUDE.md (auto), session-end-report (through ABO), recent
+changelog (ABO + ABN + ABM entries), decisions D108-D110. Pick focus
 from the menu above. TaskCreate sub-tasks. Start coding.

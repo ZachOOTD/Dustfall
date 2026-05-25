@@ -3,6 +3,139 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ABO — 2026-05-25 — A3 rigged player + 3P camera + sandworm ambush + B6 engineBlock POC + 4 polish items ✓ verify pass
+`verified` — tsc clean. 12 files (11 modified + 1 new) across 4 tiers
+of 5 planned. Tier 5 (B1 generalized rope) CUT per pre-committed
+scope-cut #1 — deferred to ABP. Long-overnight scope-cut-from-bottom
+plan; 7 of 8 selected items shipped.
+
+**Tier 1 — Polish foundation (4 items)**
+
+- **C1 — Scavenger camp strip** (`src/world/poi.ts:placeScavengerCamp`):
+  removed 8-stone fire ring + ash patch + bandage pickup (legacy
+  iteration content per ABN triage); kept fuselage windbreak.
+  `placeScavengerCamp` signature now returns `THREE.Group` (was
+  `{ pickup, fuselage }`). 2 callers updated (refugee_caravan cluster
+  + standalone 'camp' flagship dispatch). 9 stale SCAVENGER_CAMP_*
+  Tuning constants struck (RING/STONE/ASH/BANDAGE families);
+  FUSELAGE_* kept. Drops `spawnDroppedPickup` import.
+- **C5 — Engine heat-shield back panel** (`src/world/engineBlock.ts:makeHeatShield`):
+  `makeHeatShield` returns `THREE.Group` (was `THREE.Mesh`) with paired
+  FRONT + BACK lathe shields offset 0.10m (rule 7). Back uses
+  `_heatShieldBackMat` — BackSide clone of `_heatShieldMat` darkened
+  to 0x3a1d10. Reads as real double-wall plate from oblique angles
+  (was paper-thin in AAL).
+- **C4 — Satellite dish framework + collision** (`src/world/satelliteDish.ts`):
+  added 6 radial backing struts on the convex back side via
+  `createMetalMaterial` (worn-iron) + central back hub cylinder.
+  4 dish panel materials switched DoubleSide → FrontSide (the legacy
+  AAL cheat is closed by the new struts covering the convex read).
+  Compound collider on `dishPivot` via `attachAabbCollider` blocks
+  walk-through-the-dish from the climbed-up tripod path.
+- **C3 — Item viewmodel fidelity pass** (`src/inventory/items.ts`, 6 viewmodels
+  rewritten): **cooked_cactus_pulp** (charred metalMaterial crust +
+  pulp pocket + fiber strand); **cooked_lizard_meat** (3 stacked
+  sliced-meat layers char/interior alternating + bone shard via
+  `createBoneMaterial`); **cooked_worm_meat** (char-crusted slab +
+  rendered fat exposed + 3 char-blister bumps); **fire_kit** (wood-grain
+  sticks + flint chip OctahedronGeometry + metal-shader striker shard);
+  **grill_kit** (metal-shader bars + cooked-residue rust bar + 3-link
+  dangling chain); **locker_kit** (wood-grain body + metal band + 2
+  hinges + latch + torus handle). Hard 1.5h cap respected; 8 worst
+  viewmodels flagged in exploration, 6 shipped, 2 deferred. New
+  `createBoneMaterial` import.
+
+**Tier 2 — A3: rigged third-person player (full)**
+
+- NEW `src/player/playerRig.ts` (~270 LOC) — procedural primitive rig
+  (no GLB per D107). Hierarchy follows companion.ts AAE/AAZ pattern:
+  root (yaw) → body (bob) → torso (capsule via cylinder + 2 sphere
+  caps) + head (sphere + neck stub) + 2 hipPivots + 2 shoulderPivots.
+  `createSkinMaterial` with `localSpace: true` (per D109 — moving entity).
+- Hand-coded walk cycle: ±0.4 rad hip rotation @ 1.6 Hz (walking) or
+  ±0.55 rad @ 2.4 Hz (running); arms swing opposite phase; ±3.5cm body
+  bob at 2× gait freq. Idle: gentle breathing bob + arms hang slightly
+  forward. Crouching: legs bent forward + body lowered 35cm.
+- State machine (`'idle' | 'walking' | 'running' | 'crouching'`)
+  derived per-frame from `ctx.player.body.linvel` magnitude +
+  `ctx.player.crouching`.
+- `GameContext.player.rig: PlayerRig | null` + `GameContext.flags.thirdPerson: boolean`.
+  Rig built post-context-construction in `main.ts`; ticked AFTER
+  `updateViewModel` so camera anchor is final.
+- **F-key toggle** in `src/core/input.ts` (pause-gated, dead/!started
+  ignored). Hides first-person viewmodel group on 3P, shows on FP.
+- **3P camera** in `src/player/controller.ts:syncCameraToBody`: FP
+  unchanged. 3P offsets camera 2.5m behind + 1.5m above the player
+  head position using `cam.getWorldDirection` as the spring-arm
+  direction. No spring-arm collision yet (camera can clip dunes —
+  flagged as polish debt for ABP).
+- Rig invisible at boot (FP default). Casts ground shadow when visible.
+
+**Tier 3 — B3: sandworm ambush + dawn/dusk modifier**
+
+- New `'ambush'` state in `SandWormState` union (now 9 values). New
+  `enterAmbush(worm, ctx)` + `tickAmbush(worm, ctx, distToPlayer, playerTr)`.
+- Ambush trigger from `tickPatrol`: when player within `ambushTriggerR=25m`
+  + `noiseMult < 0.7` (still/walking; sprinting/mounted players don't
+  trigger) + cooldown elapsed + 5% per-second probability fires,
+  worm enters ambush instead of alert.
+- Ambush behavior: worm freezes at current basePos, stays submerged
+  + invisible, no audio cue, no telegraph. If player closes to within
+  `AMBUSH_LUNGE_RADIUS=12m`, snap directly to `enterLunge` (skips
+  alert + charging). If player retreats past `AMBUSH_CANCEL_RADIUS=40m`,
+  return to patrol. Either path sets `_ambushCooldownUntil =
+  ctx.time.elapsed + 90s`.
+- `_ambushCooldownUntil` field added to `SandWorm` interface;
+  initialized in `spawnSandWorm`.
+- **Dawn/dusk surfacing modifier** via new `twilightActivityMultiplier(ctx)`
+  helper. When `ctx.time.dayTime` in `[0.18, 0.22]` (dawn) or
+  `[0.78, 0.82]` (dusk) windows, returns 1.30; else 1.0. Applied to
+  `tickPatrol`'s effective detection radius (`SANDWORM_DETECTION_RADIUS *
+  playerNoiseMultiplier(ctx) * twilightMult`). Outside windows: no-op.
+- Retreat-and-stalk loop deferred per pre-committed scope-cut #3
+  (was a stretch within Tier 3; ambush + dawn/dusk are the
+  high-value pieces).
+
+**Tier 4 — B6: engineBlock POC migration to composite system**
+
+- New `'flagship_engineBlock'` ProcgenWreckClass with FIXED recipe
+  in `recipeFor`: cockpit + 2 hullSegment + engineModule + tailStub
+  = 5 parts, ~9-13m, 3 panels.
+- `panelKindPool` dispatch: `flagship_engineBlock` → `['engine_cluster']`
+  only (preserves engineBlock's original engine_cluster loot palette).
+- `salvageKind` dispatch: `flagship_engineBlock` → `'massive'` (rich-loot
+  table, matches engineBlock's pre-ABO behavior).
+- NEW exported `placeProcgenCompositeForFlagship(...)` wrapper. Calls
+  `placeProcgenComposite` with `cls: 'flagship_engineBlock'` + `buryY:
+  1.0` for the tipped-into-dune feel + attaches the `'engine_block'`
+  journal at a wreck-local offset post-assembly.
+- `src/world/poi.ts` engine_block dispatch case: replaces
+  `placeEngineBlock(...)` call with `placeProcgenCompositeForFlagship(...)`.
+  `placeEngineBlock` import commented out (one-line revert path
+  preserved); `engineBlock.ts` module kept on disk.
+- POC validates the migration shape WITHOUT committing to migrate all
+  5 flagships. If silhouette reads wrong in playtest: revert one
+  import + one dispatch line to restore hand-modeled engineBlock.
+
+**Tier 5 — B1 generalized rope: CUT per scope-cut #1 (top of cut list)**
+
+Deferred to session ABP. B7 (ABM dropped-item physics) already
+shipped the data-side dependency; B1's UX path + Tether→Endpoint
+refactor + save migration is the remaining ~4-5h. Pre-committed in
+the plan as the first cut so an overnight overrun doesn't risk
+shipping a half-finished save-schema change.
+
+**Item viewmodel pass remainder**: 2 of 8 worst-flagged items
+deferred (cactus_pulp raw, raw_lizard_meat — already shipped or
+mid-tier complexity). Future viewmodel sessions can sweep ~19
+remaining ItemDefs.
+
+Verified: tsc clean across all tiers. No save-schema changes; v11
+saves load unchanged. Boot tested via tsc only — playtest validation
+deferred to user (multi-seed boot + F-key 3P toggle + force-ambush
+console eval + engine_block POI inspection).
+**D110** captures the 3P camera architecture decision.
+
 ## Session ABN — 2026-05-24 — Procgen wreck family + megaWreck bow shell + shader-crawl bug fixes ✓ verify pass
 `verified` — tsc clean. 10 files touched across 3 thematic commits.
 Picked smaller-than-overnight scope post-context-compaction; shipped 3

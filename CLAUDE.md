@@ -59,7 +59,36 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session ABN — Procgen wreck family + megaWreck bow
+**Last shipped**: Session ABO — Long-overnight 7-item bundle across 4
+tiers (~10h budget, scope-cut-from-bottom). **Tier 1 polish (4 items)**:
+C1 scavenger camp strip (fire ring + bandage removed; fuselage kept) +
+C5 engine heat-shield back panel (paired BackSide-cloned lathe, rule 7
+double-wall) + C4 satellite dish backing framework + collision (6
+radial back struts via createMetalMaterial + `attachAabbCollider` on
+dishPivot; dish panels FrontSide now) + C3 viewmodel pass (6 worst:
+cooked_cactus/lizard/worm, fire_kit, grill_kit, locker_kit upgraded
+with metal+bone+wood-grain+fabric shaders). **Tier 2 A3 rigged player
++ 3P camera (full)**: NEW src/player/playerRig.ts (~270 LOC, procedural
+primitive rig — capsule torso + sphere head + 2 hip pivots + 2 shoulder
+pivots, hand-coded walk cycle at 1.6/2.4 Hz, idle breathing bob, crouch
+state); `ctx.player.rig` + `ctx.flags.thirdPerson`; F-key toggles 3P
+(pause-gated, hides viewmodel); `syncCameraToBody` branches 3P with
+2.5m-behind + 1.5m-above offset using camera direction as spring-arm.
+D110 captures the single-camera-with-offset architecture call. **Tier 3
+B3 sandworm encounter**: new 'ambush' state in SandWormState union (9
+values total); enterAmbush + tickAmbush — submerged invisible, snaps
+to lunge within 12m, returns to patrol past 40m, 90s cooldown; dawn/dusk
+modifier (×1.30 detection radius in [0.18,0.22] dawn + [0.78,0.82]
+dusk windows). Retreat-stalk loop deferred per cut #3. **Tier 4 B6
+engineBlock POC migration**: new 'flagship_engineBlock' procgen class
+with fixed 5-part recipe + 'engine_cluster' palette + 'massive'
+salvageKind; placeProcgenCompositeForFlagship wrapper attaches journal
+post-assembly; poi.ts dispatch swaps placeEngineBlock → composite call
+(engineBlock.ts kept on disk for one-line revert). **Tier 5 B1
+generalized rope CUT** per pre-committed scope-cut #1 (deferred to
+ABP). 12 files (11 modified + 1 new). D110 added.
+
+**Prior milestone**: Session ABN — Procgen wreck family + megaWreck bow
 shell + shader-crawl fixes. **B6**: `bulk_hauler` 5th procgen wreck
 class (1 cockpit + 4-5 hullSegment + 1 engine + 1 tail = 7-8 parts,
 ~14-21m — longest silhouette; 3-4 panels with `cargo_container` loot

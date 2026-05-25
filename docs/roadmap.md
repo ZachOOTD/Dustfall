@@ -58,24 +58,28 @@ and promotes the second.
 - **Session ABJ** (2026-05-24, overnight): Aggressive 14-item bundle across 4 tiers in ~6h. **Tier 1**: v10→v11 schema (combined huddleState + journalReadKinds + bornInDevMode per D108) + biome-bias on procgen recipe pick + 5 small polish/debt items. **Tier 2**: 3 new procedural shader factories (woodGrain + bone + glass) extending ABH vocab to 7. **Tier 3**: science_vessel wreck class + sandworm 'feeding' state (bait-and-strike loop, 2× damage window) + 5 item viewmodel upgrades. **Tier 4**: comm-relay cluster (3rd ClusterKind) + NEW src/world/buriedCockpit.ts (first biome-specific POI, dune-biome centroid placement). Tier 5 stretch (salt outpost / rocky entrance / megaWreck rebuild / dropped-item physics / generalized rope) DEFERRED per pre-committed cut order. 12 files + 4 new modules.
 - **Session ABM** (2026-05-24, overnight ~2h of 6h budget): B7 dropped-item rigid-body physics. Pickup gains optional Rapier body; spawnDroppedPickup gets opts arg for world+initialVel+yOverride; per-frame updatePickups syncs transforms; despawnPickup cleans bodies; v11 additive `droppedPickups` save field for round-trip. Player drops + crafting overflow + pickup-swap all use bodies; seed-spawn stays static. B8 generalized rope cut per pre-committed scope-cut tier 3 (re-scoped in backlog for ABN — needs UX path + bigger refactor). 7 files. Verified seed 7777 + drop/save/reload round-trip exact.
 - **Session ABN** (2026-05-24, smaller post-compaction scope ~1.5h): Procgen wreck family + megaWreck bow shell + 3 bug fixes. B6 5th procgen class `bulk_hauler` (longest hull 7-8 parts, 3-4 panels, cargo_container palette; roulette 4-way → 5-way 35/20/18/12/15). megaWreck bow hull-shell (half-cylinder thetaStart=0..π preserves -X side entrance; matches aft ellipsoidal scale — closes ABL deferred item). 3 bug fixes from /triage-ideas: (1) companion getPlayerPos helper fixes stale-target on speeder mount; (2) D109 `opts.localSpace` added to skinMaterial + paintMaterial (applied to companion + sandworm + lizard + speeder, eliminates moving-entity texture-crawl); (3) fabricMaterial `opts.disableShimmer` applied to cloth + bandage viewmodels (fixes camera-relative wind-displacement breathing). 10 files, 4 commits. D109. 1 of 4 triage entries deferred (stale fire+cloth POI — needs user POI identification).
+- **Session ABO** (2026-05-25, long-overnight scope-cut-from-bottom): 7 of 8 items shipped across 4 of 5 tiers. **Tier 1 polish (4 items)**: C1 scavenger camp strip + C5 engine heat-shield back panel + C4 dish backing framework + collision + C3 viewmodel pass (6 of 8 worst items). **Tier 2 A3 (full)**: procedural primitive player rig (NEW src/player/playerRig.ts ~270 LOC) + F-key 3P toggle + 3P spring-arm camera offset. D110 captures the single-camera-with-offset architecture. **Tier 3 B3**: sandworm 'ambush' state (9th in SandWormState) + dawn/dusk surfacing modifier (×1.30 detection in twilight windows); retreat-stalk loop deferred per cut #3. **Tier 4 B6**: engineBlock POC migration to composite procgen via 'flagship_engineBlock' fixed-recipe class + placeProcgenCompositeForFlagship wrapper (engineBlock.ts kept on disk for one-line revert). **Tier 5 B1 (full)** CUT per pre-committed cut #1 — generalized rope deferred to ABP. 12 files (11 modified + 1 new). D110.
 - **Session ABL** (2026-05-24, overnight ~3h of 6h budget): megaWreck visual rebuild. Edit-in-place refactor preserving collider layout + 8 panels + shelter zone + journal — pure visual lift. Procedural shader vocab applied to all hull/rust/pipe materials; tapered ellipsoidal cylinder shell drapes over the box-wall aft section; 6 rust band wraps; exposed vertical ribs + torn hull-plate fragments at the mid-hull break. Closes the "megaWreck rebuild" backlog item. 1 file, +166/-22.
 - **Session ABK** (2026-05-24, overnight 6h): Close the biome-specific POI family. NEW `src/world/saltOutpost.ts` (concrete base + corroded antenna spire + sample crates + cargo_container panel) + NEW `src/world/rockyEntrance.ts` (boulder outcrop + cave-mouth arch + descending stairs + sunken interior chamber via BackSide stone walls + shelter zone + escape_pod panel). Dispatch in poi.ts goes dune→salt→rocky for greedy multi-region spread. Multi-seed verified at 12345 + 7777 (both 5 shelter zones with +1 from rocky entrance). 5 files, 2 new modules.
 
 ## Up next
 
-ABN closed B6 5th wreck class + megaWreck bow shell + 3 bug fixes
-(companion mount target + shader localSpace + viewmodel disableShimmer).
-Remaining big-ticket candidates: **A1 infinite chunk streaming** (last
-major architectural lift, ~6-10h, save bump v11→v12), **B8 generalized
-rope attachment** (re-scoped — needs UX path for non-sled-stub anchors;
+ABO shipped 7-item bundle: A3 rigged player + 3P toggle (full), B3
+sandworm ambush + dawn/dusk modifier, B6 engineBlock POC migration to
+composite procgen, 4 polish (C1+C3+C4+C5). B1 generalized rope CUT per
+pre-committed scope-cut. Remaining big-ticket candidates:
+**A1 infinite chunk streaming** (last major architectural lift, ~6-10h,
+save bump v11→v12), **B1 generalized rope attachment** (re-scoped from
+ABO — Tether → Endpoint refactor + RMB-on-item UX + save migration;
 ~4-5h), **B5 flagship NPC beats** (hostile raider holdouts + friendly
-hermits at hand-modeled flagships, ~4-6h). Medium picks: identify
-+ remove the stale fire+cloth wreck POI (deferred from ABN; needs user
-to name the POI), megaWreck catwalk panel reachability (panels 3+4),
-remaining item viewmodel fidelity pass (~25 ItemDefs left from ABJ
-Tier 3). Polish: dropped-item playtest tune (ABM damping/friction
-defaults need in-play signal). See `docs/next-session-prompt.md` for
-full ABO brief.
+hermits at hand-modeled flagships, ~4-6h). Medium picks: **migrate
+remaining 4 flagships to composite procgen** (megaShip / megaWreck /
+satelliteDish / crashedHull — ~6-8h if B6 POC reads well), megaWreck
+catwalk panel reachability (panels 3+4), remaining 19 item viewmodels.
+Polish: 3P camera spring-arm collision (ABO debt), dropped-item
+playtest tune, identify + remove stale fire+cloth POI (was ABN
+deferred — now likely the scavenger camp itself which ABO stripped).
+See `docs/next-session-prompt.md` for full ABP brief.
 
 ## Next — Big-ticket bucket (1–2 picks per session at ~4–7h each)
 Pick whatever feels most missing after the polish + atmosphere arc.

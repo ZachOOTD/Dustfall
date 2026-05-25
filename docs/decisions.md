@@ -2349,3 +2349,26 @@ full PBR pipeline.
 
 **Apply**: ANY future procedural shader factory MUST consider both static and moving callers up front. Default to world-space sampling (existing convention). Expose `localSpace` opt at the factory signature even if no current caller is a moving entity — the cost is one extra interface field + one shader-string branch, and the alternative (the user reporting "the texture crawls" after the fact and having to refactor the factory) is more expensive. Same applies to vertex displacements (ABE wind shimmer): if the factory does ANY vertex-level animation keyed off the noise input, expose a `disable*` opt so viewmodel + non-physical callers can suppress it without forking the factory.
 **friction-score:** 2
+
+## D110 — Third-person camera as offset-from-FP-camera (no separate camera) (Session ABO)
+**When**: ABO A3 — added third-person camera mode + F-key toggle alongside the procedural primitive player rig.
+
+**Why**: Two natural architectures for adding a 3P camera mode on top of an established FP pipeline:
+(a) Maintain TWO PerspectiveCameras (`fpCamera` + `tpCamera`); swap which one the renderer uses per-frame based on `ctx.flags.thirdPerson`. Each camera owns its own pose; mouse-look + PointerLockControls would need to drive both.
+(b) Keep the ONE existing PerspectiveCamera. Reuse its quaternion (set by PointerLockControls) as the spring-arm direction; in `syncCameraToBody`, branch on `ctx.flags.thirdPerson` and offset the camera's POSITION behind+above the player while preserving the rotation. The player rig appears in front of the camera because the camera is now positioned behind the player but facing the same direction.
+
+**Picked**: (b). Reasons:
+- No changes needed to PointerLockControls (still owns rotation via the single camera).
+- No fork in render path (renderer always uses `ctx.three.camera`).
+- Audio listener (Web Audio AudioListener is camera-attached) doesn't get teleported between cameras on mode swap.
+- Cheaper to implement (~10 LOC `syncCameraToBody` branch vs ~50 LOC for dual-camera management + render-path switching).
+
+**Trade-off**: 3P camera has no spring-arm collision (camera can clip into dunes / wreck walls when the player is against a surface). Documented as polish debt for ABP. The dual-camera path would have made adding collision easier (separate update loop) but the cost is high vs the benefit at this scope.
+
+**Considered alternatives**:
+- Dual cameras (option a above). Rejected per the audio listener + render path complexity + PointerLockControls integration overhead.
+- 3rd-person ONLY mode (no FP at all). Rejected — FP is the canonical mode and the viewmodel/HUD is built around it; making 3P optional is a polish add, not a replacement.
+- Spring-arm raycast for camera collision. Deferred to ABP polish session — the basic toggle ships now; collision joins it when the player feedback says "the camera clips into walls."
+
+**Apply**: future camera mode additions (free-cam, photo-mode, top-down) follow the same pattern: branch in `syncCameraToBody` with mode-specific position+lookAt math; keep the single PerspectiveCamera as the renderer's eye. Add a new `ctx.flags.<mode>` boolean + a keybind handler that toggles it pause-gated.
+**friction-score:** 2
