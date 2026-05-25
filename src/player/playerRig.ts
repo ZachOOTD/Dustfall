@@ -68,6 +68,16 @@ export interface PlayerRig {
   /** ABP — elbow sub-pivots inside each shoulder; rotate around X for
    *  elbow bend during arm swing + aim-IK (Tier 5). */
   elbows: THREE.Group[];
+  /** ABV — wrist sub-pivots inside each elbow → before handGroup; rotate
+   *  around X for wrist hang/aim. Enables natural hand orientation. */
+  wrists: THREE.Group[];
+  /** ABV — ankle sub-pivots inside each knee → before foot box; rotate
+   *  around X for heel-toe roll (toes up at heel-strike, down at toe-off). */
+  ankles: THREE.Group[];
+  /** ABV — spine bend pivot inside body → parent of headGroup +
+   *  shoulders. Rotates Z for sway during walk, X for sprint lean.
+   *  Isolates upper body from leg pivots. */
+  spineBend: THREE.Group;
   /** ABP — right-hand world attachment point for 3P held items (Tier 4). */
   rightHandAttach: THREE.Group;
   /** Current animation state. */
@@ -119,11 +129,21 @@ function buildRigVisual(): {
   shoulders: THREE.Group[];
   knees: THREE.Group[];
   elbows: THREE.Group[];
+  wrists: THREE.Group[];
+  ankles: THREE.Group[];
+  spineBend: THREE.Group;
   rightHandAttach: THREE.Group;
 } {
   const root = new THREE.Group();
   const body = new THREE.Group();
   root.add(body);
+  // ABV — spine bend pivot. Sits between body and the upper-body
+  // children (headGroup, shoulders, torso visuals). Animation tick
+  // rotates this for subtle sway during walk + sprint lean. Legs
+  // remain children of body (not spineBend) so leg pivots aren't
+  // affected by spine sway.
+  const spineBend = new THREE.Group();
+  body.add(spineBend);
 
   // ── Materials ──
   // Skin: face + hands. localSpace=true per D109 (moving entity).
@@ -197,7 +217,7 @@ function buildRigVisual(): {
     torsoLatheMat,
   );
   torsoMesh.position.y = TORSO_CENTER_Y;
-  body.add(torsoMesh);
+  spineBend.add(torsoMesh);   // ABV — upper body bends with spine
 
   // ── Head: ABT P5 R1 — LatheGeometry profile for organic skull shape.
   // Pre-R1: scaled sphere + flat box jaw = "egg with cartoon mouth board".
@@ -206,7 +226,7 @@ function buildRigVisual(): {
   // Profile in head-local Y (HEAD_R = 0.12 is reference scale).
   const headGroup = new THREE.Group();
   headGroup.position.y = HEAD_Y;
-  body.add(headGroup);
+  spineBend.add(headGroup);   // ABV — head bends with spine
   const headProfile = [
     // [radial, axial] — axial 0 = head center
     new THREE.Vector2(0, +HEAD_R * 1.10),          // crown cap top
@@ -271,15 +291,40 @@ function buildRigVisual(): {
   headGroup.add(hoodCrown);
   // Drape: [225°, 315°] = back-only 90° (was 180° back+sides which covered
   // the cheeks). Front + sides now open so face + bandana read.
-  const hoodDrape = new THREE.Mesh(
-    new THREE.CylinderGeometry(
-      HEAD_R * 1.25, HEAD_R * 1.55,
-      HEAD_R * 1.80,
-      14, 1, true,
-      Math.PI * 1.25, Math.PI * 0.50,    // [225°, 315°] = back only
-    ),
-    hoodMat,
+  // ABV P2 — hood drape gets D117 cloth-fold treatment matching the
+  // poncho's pattern, scaled to head size. Subdivided 14×1 → 18×8 +
+  // per-vertex sin-wave radial offsets.
+  const hoodDrapeGeom = new THREE.CylinderGeometry(
+    HEAD_R * 1.25, HEAD_R * 1.55,
+    HEAD_R * 1.80,
+    18, 8, true,                          // was 14×1 — now subdivided
+    Math.PI * 1.25, Math.PI * 0.50,       // [225°, 315°] = back only
   );
+  {
+    const posAttr = hoodDrapeGeom.attributes.position as THREE.BufferAttribute;
+    const HOOD_FOLD_WAVES = 4;            // fewer waves for smaller mesh
+    const HOOD_AMP_HEM = 0.012;           // 1.2cm at hem (scaled for head)
+    const HOOD_AMP_TOP = 0.003;           // 0.3cm at top
+    const hoodHalfH = HEAD_R * 0.90;      // half of HEAD_R * 1.80
+    for (let i = 0; i < posAttr.count; i++) {
+      const x = posAttr.getX(i);
+      const y = posAttr.getY(i);
+      const z = posAttr.getZ(i);
+      const r = Math.hypot(x, z);
+      if (r < 1e-4) continue;
+      const theta = Math.atan2(z, x);
+      const tt = (y + hoodHalfH) / (hoodHalfH * 2);
+      const amp = HOOD_AMP_HEM * (1 - tt) + HOOD_AMP_TOP * tt;
+      const foldOffset = Math.sin(HOOD_FOLD_WAVES * theta) * amp;
+      const newR = r + foldOffset;
+      const scale = newR / r;
+      posAttr.setX(i, x * scale);
+      posAttr.setZ(i, z * scale);
+    }
+    posAttr.needsUpdate = true;
+    hoodDrapeGeom.computeVertexNormals();
+  }
+  const hoodDrape = new THREE.Mesh(hoodDrapeGeom, hoodMat);
   hoodDrape.position.y = -HEAD_R * 0.55;
   headGroup.add(hoodDrape);
 
@@ -338,7 +383,7 @@ function buildRigVisual(): {
   ponchoGeom.computeVertexNormals();
   const poncho = new THREE.Mesh(ponchoGeom, ponchoMat);
   poncho.position.y = TORSO_CENTER_Y + 0.05;
-  body.add(poncho);
+  spineBend.add(poncho);   // ABV — poncho bends with spine
 
   // ── Bandolier: TubeGeometry along a CLOSED Catmull-Rom loop wrapping
   // over the left shoulder, diagonally across the chest to the right hip,
@@ -364,7 +409,7 @@ function buildRigVisual(): {
     new THREE.TubeGeometry(bandolierCurve, 36, 0.020, 8, true),               // closed=true
     strapMat,
   );
-  body.add(bandolier);
+  spineBend.add(bandolier);   // ABV — bandolier bends with spine
   // Pouches: 4 small boxes along the FRONT strap (t∈[0.0, 0.5] is front
   // half of the loop). Spaced for chest-cluster + one at right hip.
   for (let i = 0; i < 4; i++) {
@@ -377,7 +422,7 @@ function buildRigVisual(): {
     );
     pouch.position.copy(pos);
     pouch.lookAt(pos.clone().add(tangent));
-    body.add(pouch);
+    spineBend.add(pouch);   // ABV — pouches bend with spine
   }
 
   // ── Right shoulder pauldron (ASYMMETRIC — D-entry: scavenger silhouette
@@ -395,7 +440,7 @@ function buildRigVisual(): {
       pauldronAnchor.z,
     );
     plate.rotation.z = -0.3 - i * 0.05;        // tilt outward
-    body.add(plate);
+    spineBend.add(plate);   // ABV — pauldron bends with spine
   }
 
   // ── Hips: 2 leg pivots with NEW knee sub-pivots ──
@@ -429,10 +474,11 @@ function buildRigVisual(): {
   ];
   const upperLegMat = underclothMat.clone();  upperLegMat.side = THREE.DoubleSide;
   const lowerLegMat = underclothMat.clone();  lowerLegMat.side = THREE.DoubleSide;
+  const ankles: THREE.Group[] = [];   // ABV
   for (const side of [-1, 1]) {
     const hipPivot = new THREE.Group();
     hipPivot.position.set(side * HIP_LATERAL, HIP_Y, 0);
-    body.add(hipPivot);
+    body.add(hipPivot);     // legs stay on body, NOT spineBend
     // Upper leg — tapered lathe
     const upperLeg = new THREE.Mesh(
       new THREE.LatheGeometry(upperLegProfile, 16),
@@ -451,21 +497,27 @@ function buildRigVisual(): {
     );
     lowerLeg.position.y = -LOWER_LEG_LEN / 2;
     kneeGroup.add(lowerLeg);
-    // Foot: foot box + toe box
+    // ABV — ankle sub-pivot at end of lower leg. Foot + toe attach
+    // here so ankle rotation around X drives heel-toe roll.
+    const ankleGroup = new THREE.Group();
+    ankleGroup.position.y = -LOWER_LEG_LEN;
+    kneeGroup.add(ankleGroup);
+    // Foot: foot box + toe box (now children of ankle)
     const foot = new THREE.Mesh(
       new THREE.BoxGeometry(0.095, 0.05, 0.16),
       underclothMat,
     );
-    foot.position.set(0, -LOWER_LEG_LEN - 0.025, 0.045);
-    kneeGroup.add(foot);
+    foot.position.set(0, -0.025, 0.045);
+    ankleGroup.add(foot);
     const toe = new THREE.Mesh(
       new THREE.BoxGeometry(0.08, 0.04, 0.05),
       underclothMat,
     );
-    toe.position.set(0, -LOWER_LEG_LEN - 0.025, 0.155);
-    kneeGroup.add(toe);
+    toe.position.set(0, -0.025, 0.155);
+    ankleGroup.add(toe);
     hips.push(hipPivot);
     knees.push(kneeGroup);
+    ankles.push(ankleGroup);
   }
 
   // ── Shoulders: 2 arm pivots with NEW elbow sub-pivots ──
@@ -494,10 +546,11 @@ function buildRigVisual(): {
   ];
   const upperArmMat = underclothMat.clone();  upperArmMat.side = THREE.DoubleSide;
   const forearmMat = underclothMat.clone();   forearmMat.side = THREE.DoubleSide;
+  const wrists: THREE.Group[] = [];   // ABV
   for (const side of [-1, 1]) {
     const shoulderPivot = new THREE.Group();
     shoulderPivot.position.set(side * SHOULDER_LATERAL, SHOULDER_Y, 0);
-    body.add(shoulderPivot);
+    spineBend.add(shoulderPivot);   // ABV — arms bend with spine
     // Upper arm — tapered lathe
     const upperArm = new THREE.Mesh(
       new THREE.LatheGeometry(upperArmProfile, 14),
@@ -538,12 +591,18 @@ function buildRigVisual(): {
       wrap.rotation.x = Math.PI / 2;
       elbowGroup.add(wrap);
     }
+    // ABV — wrist sub-pivot inserted between elbow and hand. Rotation X
+    // = palm-up/down hang; rotation Z = wrist-roll for grip orientation.
+    const wristGroup = new THREE.Group();
+    wristGroup.position.y = -LOWER_ARM_LEN - 0.02;
+    elbowGroup.add(wristGroup);
+    wrists.push(wristGroup);
     // Hand: ABS P3 R1 — replaced 6 boxes with palm-lathe + tapered-
     // cylinder fingers + knuckle ridge for "real hand" silhouette at
     // close 3P / FP range.
     const handGroup = new THREE.Group();
-    handGroup.position.y = -LOWER_ARM_LEN - 0.04;
-    elbowGroup.add(handGroup);
+    handGroup.position.y = -0.02;   // small hand-attach offset from wrist
+    wristGroup.add(handGroup);
     // Palm — wider + slightly thicker box for proper proportions
     // (real hand is ~85mm wide × 25mm thick × 100mm deep including
     // fingers). Box here is the palm-back only; fingers cylinder-tapered.
@@ -616,9 +675,11 @@ function buildRigVisual(): {
   if (!rightHandAttach) rightHandAttach = new THREE.Group();
 
   // Slight forward lean — modern weight-bearing pose vs stick-straight
-  body.rotation.x = 0.04;
+  // ABV: moved from body.rotation.x to spineBend.rotation.x so legs
+  // aren't tilted with the lean.
+  spineBend.rotation.x = 0.04;
 
-  return { group: root, body, headGroup, hips, shoulders, knees, elbows, rightHandAttach };
+  return { group: root, body, headGroup, hips, shoulders, knees, elbows, wrists, ankles, spineBend, rightHandAttach };
 }
 
 /** Build the player rig + spawn it into the scene. Initially invisible
@@ -644,6 +705,9 @@ export function buildPlayerRig(ctx: GameContext): PlayerRig {
     shoulders: visual.shoulders,
     knees: visual.knees,
     elbows: visual.elbows,
+    wrists: visual.wrists,
+    ankles: visual.ankles,
+    spineBend: visual.spineBend,
     rightHandAttach: visual.rightHandAttach,
     state: 'idle',
     heading: 0,
@@ -732,10 +796,16 @@ export function updatePlayerRig(ctx: GameContext, dt: number): void {
       // at heel-strike (π/2), mid-stance (π), and toe-off (3π/2).
       const kneeBend = Math.max(0, Math.cos(legPhase)) * 0.65;
       rig.knees[i].rotation.x = kneeBend;
+      // ABV — ankle heel-toe roll. cos(legPhase) is +1 at heel-strike
+      // (toes UP for dorsiflexion), -1 at toe-off (toes DOWN for
+      // plantarflexion push-off). Scale: +0.30 / -0.45 rad.
+      const cosPhase = Math.cos(legPhase);
+      rig.ankles[i].rotation.x = cosPhase > 0
+        ? cosPhase * 0.30      // heel-strike side: toes up
+        : cosPhase * 0.45;     // toe-off side: toes more aggressively down
     }
 
     // Arm swing: opposite phase to legs (left arm + right leg together)
-    // Plus small forward-back position translation (swing arc, not just rotate)
     for (let i = 0; i < 2; i++) {
       const armPhase = phase + (i === 0 ? Math.PI : 0);   // opposite to same-side leg
       const swing = Math.sin(armPhase) * armAmp;
@@ -743,18 +813,24 @@ export function updatePlayerRig(ctx: GameContext, dt: number): void {
       // Elbow bend: forearm bends during forward swing
       const elbowBend = Math.max(0, Math.sin(armPhase + Math.PI / 4)) * 0.35;
       rig.elbows[i].rotation.x = elbowBend;
+      // ABV — wrist subtle hang + slight inward roll during forward swing
+      rig.wrists[i].rotation.x = -0.10 + swing * 0.15;   // base hang + lerp w/ swing
     }
 
     // Hip sway — body rolls slightly opposite to lifting leg.
-    // ABQ R1: bumped 0.012 → 0.020 (was 1.2cm, barely visible).
     rig.body.position.x = Math.sin(phase) * 0.020;
 
     // Body bob (vertical). ABQ R1: 0.035 → 0.045 walking, 0.060 → 0.075 running.
     const bobAmp = rig.state === 'walking' ? 0.045 : 0.075;
     rig.body.position.y = Math.abs(Math.sin(phase)) * bobAmp;
 
-    // Forward lean during run
-    rig.body.rotation.x = rig.state === 'running' ? 0.16 : 0.05;
+    // ABV — spine bend: subtle Z-axis sway (lateral) opposite to hip
+    // lift + X-axis forward lean during sprint (replaces ABQ
+    // body.rotation.x which tilted whole body including legs).
+    rig.spineBend.rotation.z = -Math.sin(phase) * 0.05;   // opposite roll
+    rig.spineBend.rotation.x = rig.state === 'running' ? 0.16 : 0.05;
+    // Keep body.rotation.x at 0 — lean now lives in spineBend only.
+    rig.body.rotation.x = 0;
 
     // Head counter-bob — head Y inverse of body Y so head stays stable
     rig.headGroup.position.y = HEAD_Y - rig.body.position.y * 0.7;
@@ -771,22 +847,30 @@ export function updatePlayerRig(ctx: GameContext, dt: number): void {
       rig.knees[i].rotation.x = 0.85;        // big bend
       rig.shoulders[i].rotation.x = 0.10;
       rig.elbows[i].rotation.x = 0.20;
+      rig.wrists[i].rotation.x = -0.10;      // ABV — relaxed hang
+      rig.ankles[i].rotation.x = 0;          // ABV — feet flat in crouch
     }
     rig.body.position.set(0, -0.32, 0);
-    rig.body.rotation.x = 0.10;
+    rig.body.rotation.x = 0;
+    rig.spineBend.rotation.x = 0.10;         // ABV — crouch lean lives in spine
+    rig.spineBend.rotation.z = 0;
     rig.headGroup.position.y = HEAD_Y;
 
   } else {
     // Idle — gentle breathing bob + minimal arm sway
     const bobPhase = t * 0.8 * _PI2;
     rig.body.position.set(0, Math.sin(bobPhase) * 0.012, 0);
-    rig.body.rotation.x = 0.04;
+    rig.body.rotation.x = 0;
+    rig.spineBend.rotation.x = 0.04;         // ABV — idle lean lives in spine
+    rig.spineBend.rotation.z = 0;
     rig.headGroup.position.y = HEAD_Y - rig.body.position.y * 0.6;
     for (let i = 0; i < 2; i++) {
       rig.hips[i].rotation.x = 0;
       rig.knees[i].rotation.x = 0.02;        // tiny knee softness
       rig.shoulders[i].rotation.x = 0.08;
       rig.elbows[i].rotation.x = 0.05;
+      rig.wrists[i].rotation.x = -0.15;      // ABV — relaxed hang in idle
+      rig.ankles[i].rotation.x = 0;          // ABV — feet flat in idle
     }
   }
 }
