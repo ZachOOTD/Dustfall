@@ -52,6 +52,10 @@ Use `/triage-ideas` to bulk-classify a free-form dump.
 <!-- (saved journal read/unread state — shipped ABJ C2: per-kind set persisted v11; interact prompt suffixes "(read)" for already-read kinds) -->
 [feat] megaWreck catwalk panel reachability (panels 3 + 4) — ABE shipped 1 ground-level panel between engine bells; the catwalk panels at ~11.5m still require climbing the stairs. Adding 1-2 more ground-level alternatives would complete the reachability sweep.
 <!-- (additional shader variants — shipped ABJ Tier 2: woodGrainMaterial + boneMaterial + glassMaterial all added. Applications: sled deck/rails/runners + locker body+lid (wood-grain), opening-wreck skeleton (bone), dune cockpit cracked-window (glass). Canteen + lantern globe deferred — no actual glass surface in those meshes.) -->
+[bug] companion runs to player's pre-mount position instead of current position when player mounts speeder (target stale across mount transition)
+[polish] procedural shaders crawl on moving entities (companion skin + speeder paint) — ABH shaders sample world-space coords, should switch to object-local for moving meshes so detail stays static-relative
+[bug] cloth + bandage viewmodels appear to expand/distort during player movement (likely fabric wind-shimmer or world-sampled shader animating in camera-relative space)
+[bug] remove stale fire + cloth pickup spawning from an old-iteration wreck POI (leftover content from prior design)
 
 ---
 
