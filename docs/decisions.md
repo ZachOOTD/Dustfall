@@ -2503,3 +2503,22 @@ With WAVES=6, AMP_HEM=4.5cm, AMP_TOP=0.8cm: clear visible fold ridges + scallope
 **Apply**: any roughly-cylindrical procedural mesh that should read as cloth (poncho, robe, banner, flag, curtain, sail, hood-drape) follows this displacement pattern. Tune amplitudes per use case. For meshes with multiple physical sections (e.g., a robe with a separate sleeve), apply per-section. For meshes that should ALSO have wind animation, layer this displacement underneath the wind shader so the static folds stay stable while the wind perturbs on top.
 
 This is the cloth-quality unlock that lets procedural primitives + Lathes (D115) + this displacement (D117) cover most low-poly stylized character outfit needs. **friction-score:** 1
+
+## D118 — Procedural rigging sub-pivot architecture (Session ABV)
+**When**: ABV — pursuit of "real video game quality rigging" required adding wrist + ankle + spine bend pivots beyond the basic hip/knee/shoulder/elbow hierarchy shipped in ABP. Sub-pivots had been deferred 3 sessions running because they're code-heavier than geometry iteration.
+
+**Why**: Low-poly stylized 3rd-person game character rigs use ~12-15 bone joints (hip × 2, knee × 2, ankle × 2, spine, neck, shoulder × 2, elbow × 2, wrist × 2). The procedural rig had 8 (hip × 2, knee × 2, shoulder × 2, elbow × 2) — missing the foot articulation, hand orientation, and spine motion that distinguish "puppet" from "character". Adding the missing 5 pivots (ankle × 2, wrist × 2, spine bend) puts the rig at parity with that low-poly-rig joint count.
+
+**Picked**: Three.Group hierarchy with strategic insertion points:
+- `wrists[2]` — child of each elbowGroup, parent of handGroup. Inserts between elbow and hand so wrist rotation moves the hand without affecting the forearm. Drives: subtle hang + opposite roll during arm swing.
+- `ankles[2]` — child of each kneeGroup, parent of foot + toe meshes. Inserts between knee and foot so ankle pitch rotates the foot without affecting the shin. Drives: ASYMMETRIC plantarflexion (toes UP × 0.30 at heel-strike via cos>0, toes DOWN × 0.45 at toe-off via cos<0 — push-off should be MORE aggressive than landing).
+- `spineBend` — child of body, parent of headGroup + shoulders + torso visuals + cloth (poncho/bandolier/pauldron). Hips/legs stay direct children of body. This lets the upper body bend with spine motion without dragging legs sideways. Drives: Z-sway opposite hip lift (-sin(phase) × 0.05) + X-lean (0.05 walking / 0.16 running, replaces the previous whole-body lean which tilted legs too).
+
+**Considered alternatives**:
+- Add fewer pivots (just ankle, say) — rejected: spine bend is what distinguishes "robot walk" from "human walk"; wrist hang is what distinguishes "puppet" from "person".
+- Full IK chain (analytical inverse kinematics for limbs) — overkill for the gait quality we need; simple per-joint sin curves give 80% of the visual benefit at 5% of the complexity.
+- Skeletal animation with bone weights — would require switching to GLB asset path, violates D107.
+
+**Apply**: future creature rigs (companion, raider variants, NPC humanoids) that want animation parity follow the same insertion pattern. Insert sub-pivots between primary joints; drive with phase-locked sin/cos curves. ASYMMETRIC scale factors are important — biological motion isn't symmetric (push-off vs landing has different angles).
+
+The combination of D107 (procedural-only) + D109 (skin localSpace) + D111 (asymmetric clothing) + D113 (dual-mesh items) + D114 (knee bend formula) + D115 (Lathe organic primitive) + D116 (over-shoulder cam) + D117 (cloth drape displacement) + D118 (sub-pivot architecture) is the full procedural-character pipeline that gets to low-poly stylized 3P game quality within zero-asset. **friction-score:** 2

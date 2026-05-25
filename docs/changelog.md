@@ -3,6 +3,58 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ABV — 2026-05-25 — Rig sub-pivots (wrist + ankle + spine bend) + hood drape D117 ✓ verify pass
+`verified` — tsc clean. 1 file modified (`src/player/playerRig.ts`).
+**Seventh session under iteration discipline**. 2 elements iterated.
+**Major rigging milestone**: the procedural character now has full
+sub-pivot rig hierarchy on par with low-poly stylized 3rd-person-game
+character rigging. D118.
+
+**P1 — Rig sub-pivots + animation (1 round + verification)**.
+**Hierarchy additions** to `PlayerRig` type: `wrists[2]` (between
+elbow and hand), `ankles[2]` (between knee and foot), `spineBend`
+(between body and upper-body children). Re-parented upper-body
+visuals (torso, headGroup, poncho, bandolier+pouches, pauldron,
+shoulders) onto spineBend; legs stay on body so leg pivots aren't
+affected by spine sway. Moved the 0.04-rad forward-lean from
+`body.rotation.x` to `spineBend.rotation.x` so legs stay vertical.
+**Animation tick wiring**:
+- Ankle heel-toe roll: `cos(legPhase) > 0 ? × 0.30 : × 0.45` —
+  toes UP (dorsiflexion) at heel-strike, toes DOWN (plantarflexion)
+  at toe-off. More aggressive on push-off (real gait).
+- Wrist hang + roll: `-0.10 + swing × 0.15` — base relaxed hang,
+  subtle roll opposite arm swing.
+- Spine sway: Z-axis `-sin(phase) × 0.05` — gentle lateral sway
+  opposite hip lift.
+- Spine lean: X-axis 0.16 running / 0.05 walking — replaces old
+  whole-body lean (now upper-body only).
+Verified at phase=π: left ankle -0.45 (toe-off plantarflexed),
+right ankle +0.30 (heel-strike dorsiflexed). Idle pose: feet flat,
+arms hang naturally with wrist-hang, spine lean preserved.
+
+**P2 — Hood drape D117 cloth folds (1 round)**. Applied the D117
+cloth-drape pattern to hood-back-cylinder. Subdivided 14×1 → 18×8.
+HOOD_FOLD_WAVES=4 (fewer than poncho's 6 for smaller mesh),
+HOOD_AMP_HEM=1.2cm, HOOD_AMP_TOP=0.3cm (scaled for head dimensions).
+Folds subtle but consistent with poncho fold pattern across outfit.
+
+**D118 added** — Procedural rigging sub-pivot architecture. Codifies
+the wrist/ankle/spineBend hierarchy + the animation drive formulas
+(ankle plantarflexion-asymmetric, wrist swing-lerp, spine sway
+opposite hip-lift). Pattern composes with any humanoid procedural
+rig that wants animation parity with low-poly stylized 3P games.
+
+**Achievement unlocked**: 7 sessions of continuous iteration
+discipline (ABP→ABQ→ABR→ABS→ABT→ABU→ABV) have taken the procedural
+rig from "blocky scavenger figure" to "low-poly stylized 3rd-person-
+game character with organic body geometry + draped cloth + sub-pivot
+rig hierarchy + animation cycles" — all within D107 zero-asset.
+
+**Deferred to ABW (queued lower-priority polish)**:
+- Bandolier strap detail (leather wear)
+- Walk-cycle to footstep cadence sync (ABR backlog)
+- Per-item viewmodel readability at 3P (ABR backlog)
+
 ## Session ABU — 2026-05-25 — Realistic cloth drape + body polish (deltoid bridge + neck cap + finger knuckles) ✓ verify pass
 `verified` — tsc clean. 1 file modified (`src/player/playerRig.ts`).
 **Sixth session under iteration discipline**. 2 elements fully iterated;

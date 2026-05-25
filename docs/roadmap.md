@@ -62,6 +62,7 @@ and promotes the second.
 - **Session ABP** (2026-05-25, long-overnight stay-procedural 3P + rig polish): 4 of 5 tiers shipped (Tier 5 CUT). Tier 0 research deliverables × 2 (3p-cameras-in-games.md + sci-fi-desert-scavenger-aesthetic.md). Tier 1 rig overhaul: playerRig.ts rewrite ~270 → ~470 LOC — tapered torso + elongated head + finger hands + 7 mismatched-scavenger clothing layers (hood + poncho + bandolier + asymmetric pauldron + bandana + forearm wraps + more) + knee/elbow sub-pivots. Tier 2 animation: 3-phase walk cycle + hip sway + run lean + body bob + head counter-bob + FOOT IK to terrain. Tier 3 3P camera: Rapier raycast collision + smoothed follow + 3.2m/1.8m offsets + 3P pitch clamp + snap-on-teleport flag. Tier 4 held items: PlayerRig.rightHandAttach + dual-mesh item swap + visibility gate per frame + NEW viewModelHands.ts for FP forearm wraps continuity. D111-D113. 5 files + 2 new + 2 research docs.
 - **Session ABQ** (2026-05-25, ABP iterative polish under new iteration discipline): **First session under the discipline** baked into framework after ABP shallow-ship critique. 3 elements fully iterated > 6 shallow. 1 file modified (playerRig.ts). **P3 Poncho geometry (2 rounds)**: shrank from barrel to shawl — top radius 1.25→1.08, hem 2.0→1.6, height 1.4→0.85. Arms now hang OUTSIDE silhouette + legs visible below hem. **P4 Bandolier wrap (1 round)**: front-only 3 waypoints → 6-waypoint CLOSED Catmull-Rom loop over left shoulder + diagonal chest + right hip + around right flank + diagonal back + back of left shoulder. **P6 Walk cycle knee bend (CRITICAL BUG, D114)**: pre-fix `max(0, sin(legPhase - π/3)) * 0.6` peaked at MID-STANCE (weight-bearing). New `max(0, cos(legPhase)) * 0.65` peaks at mid-swing (foot in air). Amplitudes bumped: hipAmp 0.40→0.48, armAmp ratio 0.85→0.95, hip sway 0.012→0.020, body bob 0.035→0.045. D114.
 - **Session ABR** (2026-05-25, ABP+ABQ verification pass under discipline): **Second session under the discipline**, verification-focused (not new-feature). 5 P-items shipped. 2 files modified (speeder.ts + save.ts). **P1 walk cycle in motion**: verified at 3 phases — ABQ D114 knee-bend fix lands visually. **P2 3P camera teleport snap wiring**: `ctx.player.cameraSnapNextFrame=true` now set at speeder mount + dismount + save-load. Camera snaps across teleports instead of lerping. **P3 held items dual-mesh swap**: verified (scrap_bar 5 meshes → branch 3 meshes incl CylinderGeometry). **P4 FP forearm wraps**: positioning correct out of the box from ABP, no tuning needed. **P5 pauldron**: baseline reading well + MORE visible after ABQ poncho shrink. Discipline net: 5 items verified in ~45min; only 2 needed code changes.
+- **Session ABV** (2026-05-25, sub-pivot rigging + hood drape under discipline): **Seventh session under discipline**. 2 elements iterated. 1 file modified (playerRig.ts). D118. **P1 sub-pivots**: added wrists[2] + ankles[2] + spineBend to PlayerRig hierarchy. Re-parented upper-body to spineBend (legs stay on body). Animation tick wires ankle asymmetric heel-toe (0.30 dorsi / 0.45 plantar), wrist hang+roll, spine Z-sway + X-lean. Major rigging milestone: procedural rig now at low-poly stylized 3P character joint-count parity. **P2 hood D117**: subdivided hood drape 14×1 → 18×8 + cloth-fold formula scaled for head size.
 - **Session ABU** (2026-05-25, cloth drape + body polish under discipline): **Sixth session under discipline**. 2 elements iterated; P3 sub-pivots deferred to ABV. 1 file modified (playerRig.ts). D117. **P1 cloth drape (2 rounds)**: Poncho subdivided 16×1 → 24×10. Per-vertex sin-wave radial offsets (WAVES=6, hem 4.5cm, top 0.8cm) for vertical fold ridges + scalloped hem. computeVertexNormals after displacement. Poncho went from "plastic tube" to "wrapped fabric with drape folds". **P2 body polish (1 round, 3 fixes)**: neck-cap profile blend (3 intermediate points), deltoid bridge spheres (per shoulder, bridges arm-torso gap), finger knuckle bumps (2 per finger). D117.
 - **Session ABT** (2026-05-25, over-shoulder cam + feet-on-ground bug fix + head Lathe): **Fifth session under discipline**. 3 user-reported issues fixed. **P1 over-shoulder camera (D116)**: 3.2m/1.8m → 1.8m back + 0.30m above + 0.40m lateral right-shoulder + 0.25m shoulder drop + new `shoulderAnchor` target. Modern TLOU/GoW over-shoulder cam. **P2 feet on ground**: bug fix — `tr.y - eyeOffset - 0.5` magic number replaced with `terrain.heightAt()` direct query. Feet now plant on sand exactly. **P5 head Lathe**: scaled-sphere + flat-box-jaw → 11-point LatheGeometry profile (crown → cranium → brow → cheek → jaw → chin), 18 radial segments, DoubleSide per D115. Reads as real human skull. 2 files modified. D116.
 - **Session ABS** (2026-05-25, body geometry realism push under discipline): **Fourth session under discipline**. User direction "real video game quality model + rigging, not blocky figures and cylinders". 3 elements fully iterated; 3 deferred to ABT. 1 file modified (playerRig.ts). D115. **P1 Lathe torso (4 rounds)**: 4-piece composite ("cans stacked") → single LatheGeometry from 14-point profile. DoubleSide for poncho-V visibility. Real body silhouette. **P2 tapered Lathe limbs (1 round)**: all 4 limbs → Lathe profiles with thigh/quad/calf/bicep/forearm muscle contours. **P3 tapered cylinder fingers (1 round)**: palm proportions fixed + knuckle ridge + tapered cylinder fingers replacing box stacks. Major quality threshold crossed — rig reads as real human figure within D107 zero-asset.
@@ -70,21 +71,22 @@ and promotes the second.
 
 ## Up next
 
-ABU shipped realistic cloth drape (D117) + body polish (deltoid
-bridges + neck cap + finger knuckles). Poncho now reads as wrapped
-fabric with folds, not a tube. **ABV picks up rig sub-pivots + any
-remaining body polish**:
-**Polish / quick wins** (~30-90min each):
-- **P1 ABV: rig sub-pivots (1-2 rounds, code-heavier)** — add wrist
-  rotation, ankle flex, spine bend pivots. Wire animation to use them
-  (foot heel-toe roll at heel-strike, subtle spine sway during walk).
-  Highest remaining "rigging" deliverable.
-- **P2 ABV: hood drape cloth folds** — apply D117 cloth-drape pattern
-  to the hood drape cylinder for matching scallop on the back of head.
-- **P3 ABV: bandolier strap detail** — currently smooth Tube. Could
-  add subtle leather wear/cracks or stitching detail.
-- **P4 ABV: walk-cycle to footstep cadence sync** (ABR backlog).
-- **P5 ABV: per-item viewmodel readability at 3P** (ABR backlog).
+ABV shipped sub-pivot rigging (D118) — wrists + ankles + spineBend +
+animation drives — completing the rigging deliverable. After 7 sessions
+of discipline-driven iteration the procedural character is at low-poly
+stylized 3P game quality within D107. **ABW = pivot point** — either
+continue polish OR ship a non-rig feature.
+**Polish wrap-up** (~30-60min each):
+- **ABW-A: bandolier strap leather wear** — currently smooth Tube;
+  add subtle radial perturbation for cracks/wear or stitching detail.
+- **ABW-B: walk-cycle to footstep cadence sync** (ABR backlog).
+- **ABW-C: per-item viewmodel readability at 3P** (ABR backlog).
+- **ABW-D: 3P camera collision real-playtest** (ABR backlog).
+- **ABW-E: limb R2 refinements** (calf bulge, bicep peak smoothing).
+**Big-ticket pivots** (4-10h+):
+- A1 infinite chunk streaming — last major architectural lift
+- B1 generalized rope attachment — re-scoped from ABO/ABP
+- B5 flagship NPC beats — raider holdouts + hermits
 **Big-ticket candidates** (4-10h, for ABU or later):
 - A1 infinite chunk streaming (last major architectural lift)
 - B1 generalized rope attachment

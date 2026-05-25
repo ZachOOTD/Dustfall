@@ -60,7 +60,33 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session ABU — Realistic cloth drape + body polish.
+**Last shipped**: Session ABV — Rig sub-pivots (wrist + ankle + spine
+bend) + hood drape D117. **Seventh session under iteration discipline**.
+2 elements iterated. **Major rigging milestone**: procedural character
+now has full sub-pivot rig hierarchy on par with low-poly stylized
+3rd-person-game character rigging. 1 file modified (playerRig.ts). tsc
+clean. D118 added. **P1 sub-pivots (1 round)**: added wrists[2] (between
+elbow + hand), ankles[2] (between knee + foot), spineBend (between body
++ upper-body children: torso/headGroup/poncho/bandolier/pauldron/
+shoulders). Legs stay on body. Lean moved from body.rotation.x to
+spineBend.rotation.x so legs stay vertical. Animation tick: ankle
+asymmetric (heel-strike +0.30 dorsi vs toe-off -0.45 plantar — push-
+off more aggressive); wrist hang (-0.10 + swing*0.15); spine sway
+(-sin(phase)*0.05) + lean (0.16 running / 0.05 walking). Verified at
+phase=π: ankles correctly mirror plantar/dorsi. Idle pose: feet flat,
+arms hang naturally, spine lean preserved. **P2 hood drape D117 (1
+round)**: subdivided hood-back-cylinder 14×1 → 18×8, applied D117
+cloth-fold formula at HOOD_FOLD_WAVES=4 + scaled amplitudes for head
+size. Folds subtle but consistent with poncho across outfit. **D118
+added**: procedural rigging sub-pivot architecture codifies the
+wrist/ankle/spineBend insertion pattern + asymmetric ankle drive +
+spine sway formula. **7-session arc summary**: ABP baseline blocky →
+ABQ poncho shawl + walk bug fix → ABR motion verify + snap → ABS
+Lathe body geometry → ABT over-shoulder cam + feet plant + head Lathe
+→ ABU cloth drape + body polish → ABV sub-pivot rigging. Procedural
+character now at low-poly stylized 3P game quality within D107.
+
+**Prior milestone**: Session ABU — Realistic cloth drape + body polish.
 **Sixth session under iteration discipline**. 2 elements fully iterated;
 P3 sub-pivots deferred to ABV. 1 file modified (playerRig.ts). tsc
 clean. **P1 cloth drape (2 rounds, D117)**: Poncho CylinderGeometry
