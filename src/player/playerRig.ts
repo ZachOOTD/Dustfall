@@ -258,47 +258,65 @@ function buildRigVisual(): {
   hoodDrape.position.y = -HEAD_R * 0.55;
   headGroup.add(hoodDrape);
 
-  // ── Poncho: tapered open cylinder draping shoulders to thighs ──
+  // ── Poncho: tapered open cylinder draping shoulders to upper hip ──
   // thetaLength less than 2π for open sides (mismatched-scavenger feel
   // per research; doesn't fully wrap the body).
-  const ponchoR_top = TORSO_CHEST_R * 1.25;
-  const ponchoR_bot = TORSO_WAIST_R * 2.0;     // flares out at hem
-  const ponchoH = TORSO_H * 1.4;
+  // ABQ R1: shrunk from barrel (1.25/2.0/1.4) → shawl. Top radius now
+  // tighter than chest so arms hang OUTSIDE the silhouette; bottom
+  // flare gentle (1.4× not 2×); height = 0.85× torso so legs are
+  // visible below the hem (was reaching mid-thigh and hiding feet).
+  // ABQ R2: hem flare bumped 1.4 → 1.6 for a more visible "draped cloth"
+  // read (R1's 1.4 was correct shape but read as a tube at distance).
+  const ponchoR_top = TORSO_CHEST_R * 1.08;
+  const ponchoR_bot = TORSO_WAIST_R * 1.6;     // hem flare — drape reads
+  const ponchoH = TORSO_H * 0.85;              // shoulder to upper-hip
   const poncho = new THREE.Mesh(
     new THREE.CylinderGeometry(
       ponchoR_top, ponchoR_bot, ponchoH,
-      14, 1, true,             // open-ended (no caps)
+      16, 1, true,             // open-ended (no caps); +2 segments for smoother taper
       Math.PI * 0.15, Math.PI * 1.7,   // ~3/4 wrap; opens toward +X side
     ),
     ponchoMat,
   );
-  poncho.position.y = TORSO_CENTER_Y - 0.03;
+  poncho.position.y = TORSO_CENTER_Y + 0.05;   // pulled up so hem sits at hip
   body.add(poncho);
 
-  // ── Bandolier: TubeGeometry along a Catmull-Rom curve from one shoulder
-  // to opposite hip ──
+  // ── Bandolier: TubeGeometry along a CLOSED Catmull-Rom loop wrapping
+  // over the left shoulder, diagonally across the chest to the right hip,
+  // around the back, and back up to the left shoulder. ABQ R1 fix:
+  // pre-R1 the strap was front-only (3 waypoints all +Z) → invisible from
+  // behind. Now wraps the torso so the strap reads from any angle.
   const bandolierPoints = [
-    new THREE.Vector3(-TORSO_CHEST_R * 0.95, TORSO_CENTER_Y + TORSO_H * 0.35, 0.05),   // left shoulder
-    new THREE.Vector3(-0.04, TORSO_CENTER_Y - 0.05, TORSO_CHEST_R * 0.85),             // mid chest (forward sag)
-    new THREE.Vector3(TORSO_WAIST_R * 0.95, TORSO_CENTER_Y - TORSO_H * 0.30, 0.08),    // right hip
+    // Left shoulder TOP — point of contact over the shoulder ridge
+    new THREE.Vector3(-TORSO_CHEST_R * 0.85, TORSO_CENTER_Y + TORSO_H * 0.38, 0.0),
+    // Front-mid chest (visible from front; slight forward sag for cloth weight)
+    new THREE.Vector3(-0.04, TORSO_CENTER_Y - 0.04, TORSO_CHEST_R * 0.85),
+    // Right hip FRONT
+    new THREE.Vector3(TORSO_WAIST_R * 0.95, TORSO_CENTER_Y - TORSO_H * 0.32, TORSO_WAIST_R * 0.55),
+    // Right hip SIDE — wrap around the right flank
+    new THREE.Vector3(TORSO_WAIST_R * 1.05, TORSO_CENTER_Y - TORSO_H * 0.30, -TORSO_WAIST_R * 0.20),
+    // Back-mid (visible from behind; diagonal across the back)
+    new THREE.Vector3(-0.02, TORSO_CENTER_Y - 0.06, -TORSO_CHEST_R * 0.90),
+    // Left shoulder BACK — wrap over the back of the left shoulder back to start
+    new THREE.Vector3(-TORSO_CHEST_R * 0.95, TORSO_CENTER_Y + TORSO_H * 0.30, -TORSO_CHEST_R * 0.20),
   ];
-  const bandolierCurve = new THREE.CatmullRomCurve3(bandolierPoints);
+  const bandolierCurve = new THREE.CatmullRomCurve3(bandolierPoints, true);   // closed loop
   const bandolier = new THREE.Mesh(
-    new THREE.TubeGeometry(bandolierCurve, 20, 0.018, 6, false),
+    new THREE.TubeGeometry(bandolierCurve, 36, 0.020, 8, true),               // closed=true
     strapMat,
   );
   body.add(bandolier);
-  // Pouches: 4 small boxes along the strap path
+  // Pouches: 4 small boxes along the FRONT strap (t∈[0.0, 0.5] is front
+  // half of the loop). Spaced for chest-cluster + one at right hip.
   for (let i = 0; i < 4; i++) {
-    const t = 0.20 + i * 0.18;
+    const t = 0.05 + i * 0.11;            // front-half spacing
     const pos = bandolierCurve.getPoint(t);
     const tangent = bandolierCurve.getTangent(t);
     const pouch = new THREE.Mesh(
-      new THREE.BoxGeometry(0.055, 0.06, 0.035),
+      new THREE.BoxGeometry(0.055, 0.065, 0.038),
       i % 2 === 0 ? pouchPaintMat : strapMat,
     );
     pouch.position.copy(pos);
-    // Orient pouch loosely along strap tangent
     pouch.lookAt(pos.clone().add(tangent));
     body.add(pouch);
   }
@@ -516,22 +534,32 @@ export function updatePlayerRig(ctx: GameContext, dt: number): void {
   const isWalking = rig.state === 'walking' || rig.state === 'running';
 
   if (isWalking) {
+    // ABQ R1: amplitudes bumped — pre-R1 read as "subtle" rather than
+    // a clear walk; was hipAmp=0.40/0.55, armAmp=hipAmp*0.85. Walk now
+    // reads at 3P distance.
     const gaitFreq = rig.state === 'walking' ? 1.6 : 2.4;
     const phase = t * gaitFreq * _PI2;
-    const hipAmp = rig.state === 'walking' ? 0.40 : 0.55;
-    const armAmp = hipAmp * 0.85;
+    const hipAmp = rig.state === 'walking' ? 0.48 : 0.62;
+    const armAmp = hipAmp * 0.95;
 
-    // 3-phase walk cycle per leg via 2 sin curves (hip + knee phase-shifted)
+    // 3-phase walk cycle per leg via 2 sin curves (hip + knee phase-locked
+    // so knee bends during MID-SWING — foot in air, leg recovering forward —
+    // and STRAIGHTENS at heel-strike + mid-stance + toe-off).
     // Left leg (index 0) phase = phase
     // Right leg (index 1) phase = phase + π
+    //
+    // ABQ R1 fix: pre-R1 formula `max(0, sin(legPhase - π/3)) * 0.6` peaked
+    // knee bend at legPhase=π+π/3 (≈ MID-STANCE, weight-bearing — WRONG).
+    // New formula `max(0, cos(legPhase)) * KNEE_AMP` peaks knee at
+    // legPhase=0/2π (= mid-swing transition through vertical) — correct.
     for (let i = 0; i < 2; i++) {
       const legPhase = phase + i * Math.PI;
       // Hip rotation: positive on lift (leg forward), negative on extend
       const hipLift = Math.sin(legPhase) * hipAmp;
       rig.hips[i].rotation.x = hipLift;
-      // Knee bend: phase-shifted by ~π/3 so knee flexes WHEN leg is lifted
-      // (mid-swing) and straightens for heel-strike. ±0.5 rad max.
-      const kneeBend = Math.max(0, Math.sin(legPhase - Math.PI / 3)) * 0.6;
+      // Knee bend: peak at mid-swing (legPhase wraps through 0). Straight
+      // at heel-strike (π/2), mid-stance (π), and toe-off (3π/2).
+      const kneeBend = Math.max(0, Math.cos(legPhase)) * 0.65;
       rig.knees[i].rotation.x = kneeBend;
     }
 
@@ -546,11 +574,12 @@ export function updatePlayerRig(ctx: GameContext, dt: number): void {
       rig.elbows[i].rotation.x = elbowBend;
     }
 
-    // Hip sway — body rolls slightly opposite to lifting leg
-    rig.body.position.x = Math.sin(phase) * 0.012;
+    // Hip sway — body rolls slightly opposite to lifting leg.
+    // ABQ R1: bumped 0.012 → 0.020 (was 1.2cm, barely visible).
+    rig.body.position.x = Math.sin(phase) * 0.020;
 
-    // Body bob (vertical)
-    const bobAmp = rig.state === 'walking' ? 0.035 : 0.060;
+    // Body bob (vertical). ABQ R1: 0.035 → 0.045 walking, 0.060 → 0.075 running.
+    const bobAmp = rig.state === 'walking' ? 0.045 : 0.075;
     rig.body.position.y = Math.abs(Math.sin(phase)) * bobAmp;
 
     // Forward lean during run
