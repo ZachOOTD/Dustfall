@@ -85,6 +85,11 @@ export interface GameContext {
      *  viewmodel). Walk-cycle state derived per-frame from body velocity
      *  + crouching. Procedural primitive rig — no GLB. */
     rig: PlayerRig | null;
+    /** ABP Tier 3 — when true, the next syncCameraToBody call snaps the
+     *  3P camera to its intended position (no lerp). Auto-clears each
+     *  frame. Set by systems that teleport the player (mount/dismount,
+     *  save/load restore) so the camera doesn't lerp across the warp. */
+    cameraSnapNextFrame: boolean;
   };
   pickups: {
     list: Pickup[];

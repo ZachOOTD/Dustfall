@@ -10,6 +10,7 @@ import type { ItemId } from '../inventory/types.ts';
 import { Tuning } from '../config/tuning.ts';
 import { getItemDef } from '../inventory/items.ts';
 import { playInventorySelect, playEquip } from '../audio/audio.ts';
+import { createForearmWraps } from './viewModelHands.ts';
 
 export interface ViewModel {
   group: THREE.Group;
@@ -65,10 +66,13 @@ export function createViewModel(ctx: GameContext): ViewModel {
   group.name = 'viewmodel';
   ctx.three.scene.add(group);
 
-  // Hands group kept for future rigged-hand work (Session Q2). For now it's
-  // empty — the held item alone reads cleanly. The visibility toggle in
-  // swapEquippedMesh still flips this group so re-enabling later is trivial.
+  // ABP Tier 4 — FP viewmodel continuity with the 3P rig outfit. The
+  // `hands` group now hosts the forearm wraps + palm bulge so the FP
+  // view feels continuous with the wrapped-scavenger silhouette. Visible
+  // when an item is equipped (matches the existing toggle in swapEquippedMesh).
   const hands = new THREE.Group();
+  hands.add(createForearmWraps('right'));
+  configureViewModelObject(hands);
   hands.visible = false;
   group.add(hands);
 
@@ -97,22 +101,33 @@ export function createViewModel(ctx: GameContext): ViewModel {
   return vm;
 }
 
-function swapEquippedMesh(vm: ViewModel, newId: ItemId | null): void {
-  // Clear current item meshes
+function swapEquippedMesh(vm: ViewModel, newId: ItemId | null, ctx: GameContext): void {
+  // Clear current item meshes (FP viewmodel)
   while (vm.itemRoot.children.length > 0) {
     const c = vm.itemRoot.children[0];
     vm.itemRoot.remove(c);
     if ((c as THREE.Mesh).isMesh) {
       const mesh = c as THREE.Mesh;
       mesh.geometry?.dispose();
-      // Material may be shared — don't dispose here. Each makeViewModel
-      // creates fresh materials, so disposing would be safe; skipping is
-      // also safe and avoids accidental shared-material disposal later.
     }
   }
   vm.itemRoot.position.set(0, 0, 0);
   vm.itemRoot.rotation.set(0, 0, 0);
   vm.itemRoot.scale.set(1, 1, 1);
+
+  // ABP Tier 4 — clear 3P hand-attach mesh as well. The rig's
+  // rightHandAttach Group hosts a separate instance of the same
+  // makeViewModel mesh; gets swapped in lockstep with the FP viewmodel.
+  const rig = ctx.player.rig;
+  if (rig) {
+    while (rig.rightHandAttach.children.length > 0) {
+      const c = rig.rightHandAttach.children[0];
+      rig.rightHandAttach.remove(c);
+      if ((c as THREE.Mesh).isMesh) {
+        (c as THREE.Mesh).geometry?.dispose();
+      }
+    }
+  }
 
   if (newId === null) {
     vm.hands.visible = false;
@@ -122,9 +137,27 @@ function swapEquippedMesh(vm: ViewModel, newId: ItemId | null): void {
 
   const def = getItemDef(newId);
   if (def.makeViewModel) {
-    const mesh = def.makeViewModel();
-    configureViewModelObject(mesh);
-    vm.itemRoot.add(mesh);
+    // FP instance — camera-relative, viewmodel material conventions
+    const fpMesh = def.makeViewModel();
+    configureViewModelObject(fpMesh);
+    vm.itemRoot.add(fpMesh);
+
+    // 3P instance — second copy of the same mesh attached to the rig's
+    // right hand. NOT configured with viewmodel conventions (depthTest
+    // stays on, renderOrder default, fog enabled, shadows cast) so it
+    // reads as a real world-space item.
+    if (rig) {
+      const tpMesh = def.makeViewModel();
+      // Walk the mesh + enable shadows (viewmodel meshes had them off)
+      tpMesh.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (m.isMesh) {
+          m.castShadow = true;
+          m.receiveShadow = true;
+        }
+      });
+      rig.rightHandAttach.add(tpMesh);
+    }
   }
   vm.hands.visible = true;
   vm.currentItem = newId;
@@ -166,10 +199,22 @@ export function updateViewModel(ctx: GameContext, dt: number): void {
   // 3. Observe equipped-item change.
   const equippedId = inv.slots[inv.selectedIdx]?.item ?? null;
   if (equippedId !== vm.currentItem) {
-    swapEquippedMesh(vm, equippedId);
+    swapEquippedMesh(vm, equippedId, ctx);
     // Don't fire equip sound on the very first observation.
     if (_lastEquippedId !== undefined && equippedId !== null) playEquip();
     _lastEquippedId = equippedId;
+  }
+
+  // ABP Tier 4 — dual-mesh visibility gate. FP viewmodel visible only
+  // when 3P is OFF; 3P hand-attach mesh visible only when 3P is ON. The
+  // F-key handler in input.ts also flips vm.group.visible directly, but
+  // per-frame is the authoritative reset (handles save-load + initial boot).
+  const tp = ctx.flags.thirdPerson;
+  if (vm.group.visible !== (visible && !tp)) {
+    vm.group.visible = visible && !tp;
+  }
+  if (ctx.player.rig) {
+    ctx.player.rig.rightHandAttach.visible = tp;
   }
 
   // 4. Per-frame hook for held items (torch/flashlight react to slot.meta).

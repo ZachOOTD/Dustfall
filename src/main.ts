@@ -299,6 +299,7 @@ const ctx: GameContext = {
     inShelter: false,
     viewModel: null,
     rig: null,                       // ABO A3 — built post-context construction
+    cameraSnapNextFrame: true,       // ABP Tier 3 — first frame is a "teleport"
   },
   pickups: { list: pickupList },
   inventory: createInventory(),

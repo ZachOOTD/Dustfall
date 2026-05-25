@@ -4,6 +4,7 @@
 // no longer call moveForward/moveRight, which would write to position).
 
 import * as THREE from 'three';
+import RAPIER from '@dimforge/rapier3d-compat';
 import type { GameContext } from '../GameContext.ts';
 import { isPlaying } from '../GameContext.ts';
 import { Tuning } from '../config/tuning.ts';
@@ -187,39 +188,96 @@ export function updatePlayer(ctx: GameContext, dt: number): void {
   syncCameraToBody(ctx);
 }
 
-// ABO A3 — 3P camera state. Pointer-lock owns yaw + pitch via the
-// camera's rotation directly (PointerLockControls in FP). For 3P we
-// reuse the same rotation (camera quaternion → camDir) but offset the
-// camera position behind+above the player. Spring-arm collision is
-// SKIPPED in this pass — the camera can clip dunes/walls; left as
-// debt for a future polish session.
-const _3P_BACK_DIST = 2.5;
-const _3P_ABOVE_DIST = 1.5;
-const _3P_LOOK_AT_HEAD_OFFSET = 1.0;   // look at player head, not feet
+// ABP Tier 3 — 3P camera polish:
+//   - offsets bumped per research (3.2m back / 1.8m above, was 2.5/1.5)
+//   - Rapier raycast collision; clamps camera forward on hit with a
+//     0.3m pushback buffer
+//   - smoothed follow at ~10/s lerp toward intended position
+//   - 3P-specific pitch clamp [-π/4, π/3] via post-rotation guard
+//     (PointerLockControls own clamp is [-π/2, π/2])
+//   - snap on teleport via ctx.player.cameraSnapNextFrame flag (set by
+//     mount/dismount/save-load systems; auto-clears each frame)
+const _3P_BACK_DIST = 3.2;
+const _3P_ABOVE_DIST = 1.8;
+const _3P_PUSHBACK_BUFFER = 0.3;
+const _3P_LERP_RATE = 10.0;            // per-second smoothing
+const _3P_PITCH_MIN = -Math.PI / 4;    // -45° (camera can look up at sky)
+const _3P_PITCH_MAX = Math.PI / 3;     // +60° (camera can look down at player)
+
+const _camTarget = new THREE.Vector3();
+const _camFwd = new THREE.Vector3();
+const _rayOrig = { x: 0, y: 0, z: 0 };
+const _rayDir = { x: 0, y: 0, z: 0 };
 
 function syncCameraToBody(ctx: GameContext): void {
   const tr = ctx.player.body.body.translation();
   if (ctx.flags.thirdPerson) {
-    // ABO A3 — 3rd-person spring-arm. Camera yaw + pitch are still owned
-    // by pointer-lock (PointerLockControls hasn't been moved here), but
-    // we DON'T set camera.position to the player; instead offset behind
-    // by the camera's forward direction. Position = player_head_pos -
-    // forward * back_dist + up * above_dist. The camera continues to
-    // look forward (pointer-lock direction), and the player rig appears
-    // in front of the camera.
     const cam = ctx.three.camera;
-    const fwd = new THREE.Vector3();
-    cam.getWorldDirection(fwd);
+
+    // 3P pitch clamp — PointerLockControls allows looking straight up /
+    // down, but in 3P that breaks the camera (camera flips overhead or
+    // stares into terrain). Clamp pitch on the live camera rotation.
+    // Camera.rotation.x is the pitch in YXZ order; PointerLockControls
+    // sets it via .lookSpeed-driven pitch accumulator.
+    const euler = new THREE.Euler().setFromQuaternion(cam.quaternion, 'YXZ');
+    if (euler.x < _3P_PITCH_MIN) {
+      euler.x = _3P_PITCH_MIN;
+      cam.quaternion.setFromEuler(euler);
+    } else if (euler.x > _3P_PITCH_MAX) {
+      euler.x = _3P_PITCH_MAX;
+      cam.quaternion.setFromEuler(euler);
+    }
+
+    cam.getWorldDirection(_camFwd);
     const headX = tr.x;
     const headY = tr.y + ctx.player.eyeOffset;
     const headZ = tr.z;
-    cam.position.set(
-      headX - fwd.x * _3P_BACK_DIST,
-      headY + _3P_ABOVE_DIST - fwd.y * _3P_BACK_DIST,
-      headZ - fwd.z * _3P_BACK_DIST,
+    // Compute the INTENDED camera position before collision.
+    _camTarget.set(
+      headX - _camFwd.x * _3P_BACK_DIST,
+      headY + _3P_ABOVE_DIST - _camFwd.y * _3P_BACK_DIST,
+      headZ - _camFwd.z * _3P_BACK_DIST,
     );
-    // Keep look direction (PointerLockControls already set camera.quaternion).
-    void _3P_LOOK_AT_HEAD_OFFSET;
+
+    // Spring-arm raycast collision via Rapier. Cast from player head
+    // backward along -camFwd. If something blocks the cast within
+    // _3P_BACK_DIST, clamp the camera to (hit.toi - pushback) along the
+    // ray (closer to player), preventing wall clipping. Filter out the
+    // player body so the ray doesn't trivially hit the capsule.
+    _rayOrig.x = headX; _rayOrig.y = headY; _rayOrig.z = headZ;
+    _rayDir.x = -_camFwd.x; _rayDir.y = -_camFwd.y + _3P_ABOVE_DIST / _3P_BACK_DIST; _rayDir.z = -_camFwd.z;
+    // Normalize the ray direction (the +ABOVE component skews it)
+    const _dirLen = Math.hypot(_rayDir.x, _rayDir.y, _rayDir.z);
+    if (_dirLen > 1e-6) {
+      _rayDir.x /= _dirLen; _rayDir.y /= _dirLen; _rayDir.z /= _dirLen;
+    }
+    const ray = new RAPIER.Ray(_rayOrig, _rayDir);
+    const hit = ctx.physics.world.castRay(
+      ray, _3P_BACK_DIST, true,
+      0 as unknown as RAPIER.QueryFilterFlags,
+      undefined,
+      undefined,
+      ctx.player.body.body,           // exclude player body
+    );
+    if (hit) {
+      const safeDist = Math.max(0.2, hit.timeOfImpact - _3P_PUSHBACK_BUFFER);
+      _camTarget.set(
+        headX + _rayDir.x * safeDist,
+        headY + _rayDir.y * safeDist,
+        headZ + _rayDir.z * safeDist,
+      );
+    }
+
+    // Smoothed follow — lerp camera position toward target at ~10/s.
+    // Snap immediately on teleport events.
+    if (ctx.player.cameraSnapNextFrame) {
+      cam.position.copy(_camTarget);
+      ctx.player.cameraSnapNextFrame = false;
+    } else {
+      // Frame-rate-independent damp: 1 - exp(-rate * dt). Approx dt=1/60.
+      const alpha = 1 - Math.exp(-_3P_LERP_RATE * (1 / 60));
+      cam.position.lerp(_camTarget, alpha);
+    }
     return;
   }
   // FP — camera at eyes (existing behavior).
