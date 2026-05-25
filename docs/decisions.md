@@ -2438,3 +2438,20 @@ full PBR pipeline.
 **Apply**: any future per-leg gait curve (creature animation, NPC walk cycles, mount stride) follows this principle: knee bend peaks at MID-SWING (transition through vertical, leg-in-air phase), not at MID-STANCE. The `max(0, cos(legPhase))` shape is the canonical pattern.
 
 This D-entry exists primarily as a memo for the iteration discipline: a bug like this is the kind of thing `tsc clean` will never catch, but per-element screenshot critique catches in one round. It was missed in ABP because that session shipped with `verify` as the only gate. **friction-score:** 1
+
+## D115 — LatheGeometry as the canonical organic-body-shape primitive (Session ABS)
+**When**: ABS — user direction "real video game quality model + rigging, not blocky figures and cylinders" required pushing the procedural rig past its primitive ceiling within D107 (zero-asset). Replaced 4 limb cylinders + 4-piece torso composite with single LatheGeometry meshes from hand-crafted profile curves.
+
+**Why**: Three.js's primitive geometries (Box, Cylinder, Sphere) are uniform tubes/blocks. No taper, no muscle swell, no organic contour. Hand-crafting profile curves and rotating them via LatheGeometry gives smooth, controlled organic shapes at low poly cost (~250 tris per limb at 16 radial segments). The pattern composes well — body parts are mostly rotational solids (torso, arms, legs, fingers, hood crown, lantern globes) so a Lathe profile + rotation count is sufficient for the bulk of organic geometry needs.
+
+**Picked**: LatheGeometry with hand-tuned profile arrays. Each profile is an array of Vector2(radial, axial) points. Profiles MUST start + end at radius=0 to close the mesh (open endpoints leave a visible interior cavity). For meshes that will be seen through cutouts (e.g., torso visible through poncho V), the material MUST be `side: DoubleSide` so the back-interior renders (otherwise FrontSide single-sided shows a black hole). Profile design tips: (1) shoulder/hip points are widest, (2) waist/knee/elbow are narrowest, (3) add multiple intermediate points for smooth curves not piecewise-linear edges, (4) 14-24 radial segments for smooth read at FP/close-3P range; lower for distant rigs.
+
+**Considered alternatives**:
+- Stay with primitives — already maxed out at "blocky scavenger silhouette" per ABP-ABR feedback. Path doesn't reach "real human body".
+- Custom BufferGeometry per body part — full control over every vertex but maintenance cost dominates. The profile-array approach gets 90% of the look at 10% of the code.
+- Subdivision modifier on primitives — Three.js doesn't have native subdivision; would need to write/include the algorithm. Heavy.
+- Switch to GLB assets — violates D107 zero-asset policy. Off the table without explicit user re-vote.
+
+**Apply**: future organic body parts (creature variants, NPC outfits, alien anatomy) use profile-array Lathes. Cylinder primitives reserved for genuinely-uniform tubes (poles, posts, simple ropes). Box for genuinely flat surfaces (panels, signs, armor plates). Sphere for genuinely spherical objects (balls, eyes, planets). The procedural rig file `playerRig.ts` is the reference implementation — torsoProfile / upperLegProfile / lowerLegProfile / upperArmProfile / forearmProfile arrays are the templates to copy from.
+
+This is the architectural shift that lets the procedural rig actually approach video-game-rig quality within D107. **friction-score:** 2

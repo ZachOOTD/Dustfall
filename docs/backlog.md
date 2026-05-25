@@ -19,6 +19,12 @@ Use `/triage-ideas` to bulk-classify a free-form dump.
 
 [polish] ABQ deferred iteration items (all on src/player/playerRig.ts; verified statically in ABQ, need in-motion verification): (1) walk cycle in real motion — ABQ verified at static phase=π/4 + 5π/4; the math is correct but in-motion may need amplitude tweaks once running tick-driven (vs eval-pose). (2) Pauldron R1+ — was already reading well in baseline, untouched in ABQ. (3) Hood drape one-side asymmetry — minor cosmetic gap noted but cuttable. (4) Side-by-side gait cadence: footstep audio fires on separate timer from animation; sync would lock them at heel-strike. (5) Foot IK mid-state transition snap (idle→walking on slope shows brief reset to flat) — cosmetic, low-priority.
 
+[polish] ABS deferred items — realism push continuation (all `src/player/playerRig.ts`):
+- Real head geometry: scaled sphere + flat box jaw → LatheGeometry profile for cranium/cheekbones/jaw. Hood covers most so lower visual priority but visible at close range. 3-5 rounds.
+- Realistic cloth drape: single-segment CylinderGeometry poncho → subdivided (8+ height × 24 radial) + per-vertex offsets at hem + shoulder anchor for gravity-pulled folds. Static no-physics. 3-5 rounds.
+- Rig sub-pivots: add wrist rotation pivot at hand attach, ankle flex at foot, spine bend in torso. Wire animation tick to use them (foot heel-toe at heel-strike, subtle spine sway). Code-heavier than geometry iteration.
+- ABS limb R2: optional refinements — slightly bigger calf bulge, more pronounced bicep peak, smoother shoulder-arm transition.
+
 [polish] Per-item viewmodel readability at 3P distance — ABR P3 verified the dual-mesh swap mechanism works correctly (scrap_bar 5 meshes → branch 3 meshes incl CylinderGeometry attached to rig's rightHandAttach). But held items can be small/dark at 3P distance + blend with rig from a few meters away. Per-item scale or brightness review needed for 3P context. Items to review: canteen, machete, scrap_gun, scrap_bar, bandage. Could add a "thirdPersonScale" or "thirdPersonColorBoost" hint to ItemDef for items that need 3P-specific tuning.
 
 [polish] ABP Tier 5 stretch CUT (queued for ABR or later) — (1) upper-body aim twist-IK: rotate rig.shoulders[1] (right shoulder) toward camera direction during aim. Reads as character physically aiming. (2) Footstep dust at foot terrain contact: move dust emit point from player-center to foot mid-stance world position via Tier 2's foot IK. Reads as dust kicking from FEET specifically.

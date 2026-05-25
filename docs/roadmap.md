@@ -62,16 +62,36 @@ and promotes the second.
 - **Session ABP** (2026-05-25, long-overnight stay-procedural 3P + rig polish): 4 of 5 tiers shipped (Tier 5 CUT). Tier 0 research deliverables × 2 (3p-cameras-in-games.md + sci-fi-desert-scavenger-aesthetic.md). Tier 1 rig overhaul: playerRig.ts rewrite ~270 → ~470 LOC — tapered torso + elongated head + finger hands + 7 mismatched-scavenger clothing layers (hood + poncho + bandolier + asymmetric pauldron + bandana + forearm wraps + more) + knee/elbow sub-pivots. Tier 2 animation: 3-phase walk cycle + hip sway + run lean + body bob + head counter-bob + FOOT IK to terrain. Tier 3 3P camera: Rapier raycast collision + smoothed follow + 3.2m/1.8m offsets + 3P pitch clamp + snap-on-teleport flag. Tier 4 held items: PlayerRig.rightHandAttach + dual-mesh item swap + visibility gate per frame + NEW viewModelHands.ts for FP forearm wraps continuity. D111-D113. 5 files + 2 new + 2 research docs.
 - **Session ABQ** (2026-05-25, ABP iterative polish under new iteration discipline): **First session under the discipline** baked into framework after ABP shallow-ship critique. 3 elements fully iterated > 6 shallow. 1 file modified (playerRig.ts). **P3 Poncho geometry (2 rounds)**: shrank from barrel to shawl — top radius 1.25→1.08, hem 2.0→1.6, height 1.4→0.85. Arms now hang OUTSIDE silhouette + legs visible below hem. **P4 Bandolier wrap (1 round)**: front-only 3 waypoints → 6-waypoint CLOSED Catmull-Rom loop over left shoulder + diagonal chest + right hip + around right flank + diagonal back + back of left shoulder. **P6 Walk cycle knee bend (CRITICAL BUG, D114)**: pre-fix `max(0, sin(legPhase - π/3)) * 0.6` peaked at MID-STANCE (weight-bearing). New `max(0, cos(legPhase)) * 0.65` peaks at mid-swing (foot in air). Amplitudes bumped: hipAmp 0.40→0.48, armAmp ratio 0.85→0.95, hip sway 0.012→0.020, body bob 0.035→0.045. D114.
 - **Session ABR** (2026-05-25, ABP+ABQ verification pass under discipline): **Second session under the discipline**, verification-focused (not new-feature). 5 P-items shipped. 2 files modified (speeder.ts + save.ts). **P1 walk cycle in motion**: verified at 3 phases — ABQ D114 knee-bend fix lands visually. **P2 3P camera teleport snap wiring**: `ctx.player.cameraSnapNextFrame=true` now set at speeder mount + dismount + save-load. Camera snaps across teleports instead of lerping. **P3 held items dual-mesh swap**: verified (scrap_bar 5 meshes → branch 3 meshes incl CylinderGeometry). **P4 FP forearm wraps**: positioning correct out of the box from ABP, no tuning needed. **P5 pauldron**: baseline reading well + MORE visible after ABQ poncho shrink. Discipline net: 5 items verified in ~45min; only 2 needed code changes.
+- **Session ABS** (2026-05-25, body geometry realism push under discipline): **Fourth session under discipline**. User direction "real video game quality model + rigging, not blocky figures and cylinders". 3 elements fully iterated; 3 deferred to ABT. 1 file modified (playerRig.ts). D115. **P1 Lathe torso (4 rounds)**: 4-piece composite ("cans stacked") → single LatheGeometry from 14-point profile. DoubleSide for poncho-V visibility. Real body silhouette. **P2 tapered Lathe limbs (1 round)**: all 4 limbs → Lathe profiles with thigh/quad/calf/bicep/forearm muscle contours. **P3 tapered cylinder fingers (1 round)**: palm proportions fixed + knuckle ridge + tapered cylinder fingers replacing box stacks. Major quality threshold crossed — rig reads as real human figure within D107 zero-asset.
 - **Session ABL** (2026-05-24, overnight ~3h of 6h budget): megaWreck visual rebuild. Edit-in-place refactor preserving collider layout + 8 panels + shelter zone + journal — pure visual lift. Procedural shader vocab applied to all hull/rust/pipe materials; tapered ellipsoidal cylinder shell drapes over the box-wall aft section; 6 rust band wraps; exposed vertical ribs + torn hull-plate fragments at the mid-hull break. Closes the "megaWreck rebuild" backlog item. 1 file, +166/-22.
 - **Session ABK** (2026-05-24, overnight 6h): Close the biome-specific POI family. NEW `src/world/saltOutpost.ts` (concrete base + corroded antenna spire + sample crates + cargo_container panel) + NEW `src/world/rockyEntrance.ts` (boulder outcrop + cave-mouth arch + descending stairs + sunken interior chamber via BackSide stone walls + shelter zone + escape_pod panel). Dispatch in poi.ts goes dune→salt→rocky for greedy multi-region spread. Multi-seed verified at 12345 + 7777 (both 5 shelter zones with +1 from rocky entrance). 5 files, 2 new modules.
 
 ## Up next
 
-ABR verified ABP+ABQ work under the iteration discipline + wired 3P
-camera teleport snap at 3 callsites. Rig + 3P + held items are now
-shipping-quality across the discipline gate. **ABS session candidates**:
-remaining ABP polish backlog + first-look at new architecture work.
-Top picks:
+ABS crossed the major procedural-rig quality threshold (Lathe torso +
+tapered Lathe limbs + tapered cylinder fingers). Rig now reads as real
+human figure. **ABT continues the realism push** — deferred items from
+ABS plan need their own focused iterations per discipline:
+**Polish / quick wins** (~30-90min each, all on `src/player/playerRig.ts`):
+- **P1 ABT: real head geometry (3-5 rounds)** — currently scaled
+  sphere + flat box jaw. Replace with LatheGeometry profile for
+  cranium → cheekbones → jaw line. Hood covers most so lower priority
+  than torso/limbs but still visible at close range.
+- **P2 ABT: realistic cloth drape (3-5 rounds)** — current poncho
+  is single-segment CylinderGeometry tube. Subdivide (8+ height ×
+  24 radial) + per-vertex offsets at hem + shoulder anchor for
+  gravity-pulled folds. Static (no physics) but reads as cloth.
+- **P3 ABT: rig sub-pivots (1-2 rounds, code-heavier)** — add wrist
+  rotation, ankle flex, spine bend pivots. Wire animation to use them
+  (foot heel-toe roll at heel-strike, subtle spine sway during walk).
+- **P4 ABT: ABS limb R2 refinements** — bumps/notes from ABS could
+  include slightly bigger calf bulge, more pronounced bicep peak,
+  smoother shoulder-arm transition. 1-2 quick tuning rounds.
+**Big-ticket candidates** (4-10h, for ABU or later):
+- A1 infinite chunk streaming (last major architectural lift)
+- B1 generalized rope attachment
+- B5 flagship NPC beats
+See `docs/next-session-prompt.md` for full ABT brief.
 **Polish / quick wins** (~30 min – 2h each):
 - Per-item viewmodel readability at 3P distance (ABR P3 NOTE) — canteen
   / machete / scrap_gun / bandage all small/dark from a few meters

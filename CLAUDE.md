@@ -60,7 +60,29 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session ABR — ABP+ABQ verification pass under the
+**Last shipped**: Session ABS — Body geometry realism push. **Fourth
+session under iteration discipline**. User direction: "push toward real
+video game quality model + rigging, not blocky figures and cylinders".
+3 elements fully iterated per discipline; 3 deferred to ABT.
+**P1 Lathe torso (4 rounds)**: 4-piece composite (2 cyl + 2 sphere
+caps = "cans stacked") → single LatheGeometry from 14-point profile
+curve (cap → neck → shoulders → pectoral swell → ribcage taper → waist
+narrow → hip flare → crotch → cap). 24 radial segments. DoubleSide
+material so back-interior renders through poncho V cut. Front view:
+real body silhouette. **P2 tapered Lathe limbs (1 round)**: all 4 limb
+meshes (upper/lower leg × upper/lower arm) replaced uniform cylinders
+with Lathe profiles — thigh/quad swell, calf-muscle peak, deltoid/
+bicep bulk, forearm + wrist taper. 14-16 radial segs. **P3 tapered
+cylinder fingers (1 round)**: palm box widened + thinned to real-hand
+proportions + knuckle ridge box. 4 fingers + thumb: single boxes →
+tapered CylinderGeometry (0.0075 tip → 0.010 base, 8 segs, variable
+lengths). Reads as hands at FP/close-3P. **D115 added** — LatheGeometry
+as canonical organic-body-shape primitive within D107 zero-asset.
+1 file modified (playerRig.ts). tsc clean. **Deferred to ABT**:
+P4 real head geometry, P5 realistic cloth drape with weight folds,
+P6 rig sub-pivots (wrist/ankle/spine bend).
+
+**Prior milestone**: Session ABR — ABP+ABQ verification pass under the
 iteration discipline + 3P camera teleport snap wiring at 3 callsites.
 **Second session under the discipline**, verification-focused. 5 P-items
 shipped, all verified via screenshot critique cadence (build/screenshot/

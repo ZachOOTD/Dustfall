@@ -3,6 +3,58 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ABS — 2026-05-25 — Body geometry realism push (Lathe torso + Lathe limbs + tapered fingers) ✓ verify pass
+`verified` — tsc clean. 1 file modified (`src/player/playerRig.ts`).
+**Fourth session under iteration discipline**. User direction: "push
+toward real video game quality model + rigging, not just blocky figures
+and cylinders". 3 elements fully iterated per discipline; 3 elements
+explicitly deferred to ABT to preserve depth-over-breadth. Major
+quality threshold crossed — rig now reads as a recognizable human
+figure within D107 zero-asset policy. D115.
+
+**P1 — Torso: organic Lathe profile (4 rounds)**. Replaced 4-piece
+composite (2 cylinders + 2 sphere caps = "cans stacked" silhouette)
+with single LatheGeometry from a hand-crafted profile curve. R1: 9
+profile points, found open top/bottom + interior-visible-through-
+poncho. R2: added radius=0 endpoints to close mesh. R3: switched to
+DoubleSide material so back-interior renders when seen through poncho
+V cut. R4: refined contours to 14 points — pectoral swell 1.18×
+chest-r (was 1.08), sharper ribcage taper, flared hip 1.35× waist-r,
+smoother neck-base transition. 24 radial segments. Front view: real
+body (chest swell + narrow waist + rounded hip dome through poncho V).
+Back view: strong shoulder-narrow-waist-hip silhouette.
+
+**P2 — Limbs: tapered Lathe profiles (1 round, shipped clean)**. All
+4 limb meshes converted from uniform CylinderGeometry to tapered
+LatheGeometry. Upper leg: cap → hip 0.095 → quad peak 0.105 → mid
+0.088 → lower 0.068 → knee 0.058 → cap (7 points). Lower leg: cap →
+knee 0.058 → upper calf 0.068 → CALF MUSCLE PEAK 0.075 → mid 0.06 →
+lower 0.045 → ankle 0.04 → cap (8 points). Upper arm: deltoid 0.07 →
+bicep peak 0.075 → taper 0.06 → elbow 0.046 (6 points). Forearm:
+elbow 0.046 → forearm bulk 0.054 → wrist 0.034 (6 points). 14-16
+radial segments. DoubleSide cloned materials. Reads as muscle
+silhouette vs uniform tubes.
+
+**P3 — Hands: tapered cylinder fingers (1 round)**. Palm: 0.07x0.06x
+0.04 BoxGeometry → 0.078x0.028x0.062 (wider, thinner, deeper proper
+hand proportions) + 0.075x0.022x0.022 knuckle ridge box at finger-
+attach line. 4 fingers: single boxes → tapered CylinderGeometry
+(0.0075 tip → 0.010 base, 8 segments, lengths 0.050-0.062 with
+middle finger longest). Thumb: tapered cylinder, angled outward
+(-0.7 z-rot) + forward tilt (PI/2 - 0.5 x-rot). All skinMat. Hands
+now read as hands at FP/close-3P range, not box stacks.
+
+**Deferred to ABT (per discipline — better as own focused sessions)**:
+- P4 Real head geometry (face contours + jaw line; currently scaled
+  sphere + flat box jaw)
+- P5 Realistic cloth drape (subdivided poncho with weight folds)
+- P6 Rig sub-pivots (wrist, ankle, spine bend — requires hierarchy +
+  animation tick updates)
+
+**D115 added** — LatheGeometry as the canonical organic-body-shape
+primitive (vs BoxGeometry/CylinderGeometry). Friction-1: documents
+the pattern for future creatures, NPCs, etc.
+
 ## Session ABR — 2026-05-25 — ABP+ABQ verification pass + 3P camera teleport snap wiring ✓ verify pass
 `verified` — tsc clean. 2 files modified (`src/world/speeder.ts` +
 `src/persistence/save.ts`). **Second session under the iteration
