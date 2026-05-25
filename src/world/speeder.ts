@@ -815,6 +815,8 @@ export function updateSpeeder(ctx: GameContext, dt: number): void {
       startSpeederThrust();
       // QQ — promote any 'player'-tethered sled to follow the speeder.
       transferTetherOnMount(ctx);
+      // ABR P2 — snap 3P camera (no lerp across mount teleport).
+      ctx.player.cameraSnapNextFrame = true;
     }
     return;
   }
@@ -835,6 +837,8 @@ export function updateSpeeder(ctx: GameContext, dt: number): void {
     const offY = offGround +
       ctx.player.body.halfHeight + ctx.player.body.radius + 0.05;
     ctx.player.body.body.setTranslation({ x: offX, y: offY, z: offZ }, true);
+    // ABR P2 — snap 3P camera (no lerp across dismount teleport).
+    ctx.player.cameraSnapNextFrame = true;
     ctx.ui.showToast?.('dismounted');
     stopSpeederThrust();
     // CC-2.1 — undo any residual camera roll so the player on foot

@@ -493,6 +493,9 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
 
   // ── Player body + camera ──
   ctx.player.body.body.setTranslation(save.player.pos, true);
+  // ABR P2 — snap 3P camera (no lerp from default boot position to
+  // restored player position).
+  ctx.player.cameraSnapNextFrame = true;
   ctx.three.camera.position.set(
     save.player.pos.x,
     save.player.pos.y + save.player.eyeOffset,
