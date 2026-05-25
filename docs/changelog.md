@@ -3,6 +3,54 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ABT — 2026-05-25 — Over-shoulder camera + feet-on-ground bug fix + head Lathe geometry ✓ verify pass
+`verified` — tsc clean. 2 files modified (`src/player/controller.ts` +
+`src/player/playerRig.ts`). **Fifth session under iteration
+discipline**. User flagged 3 issues post-ABS: "model still needs much
+more polish", "camera in weird position way above the player, should be
+closer behind over-the-shoulder like most 3p games", "legs/feet are
+under the sand". 3 substantive fixes shipped. D116.
+
+**P1 — Over-the-shoulder camera (1 round)**. Pre-ABT: 3.2m back +
+1.8m above + no lateral offset. Read as "way above player". Rewrote
+`syncCameraToBody` in controller.ts: new constants `_3P_BACK_DIST=1.8`
+(was 3.2), `_3P_ABOVE_DIST=0.30` (was 1.8), NEW `_3P_LATERAL_OFFSET=
+0.40` (over right shoulder), NEW `_3P_SHOULDER_DROP=0.25` (shoulder
+is below eye). Camera now targets a `shoulderAnchor` (eye - drop +
+lateral) rather than head, and pulls back from there. Reads as
+modern TLOU/GoW over-the-shoulder cam — player fills right side of
+frame, camera at shoulder height, tight 1.8m distance. Spring-arm
+collision raycasts updated to fire from shoulderAnchor not headPos.
+
+**P2 — Feet on ground bug fix (1 round)**. `rig.group.position.y` was
+`tr.y - eyeOffset - 0.5` — a magic number (`0.5`) that didn't match
+actual capsule halfHeight + radius. Result: feet ended up under the
+sand. Fixed by querying `terrain.heightAt(tr.x, tr.z)` directly and
+planting `rig.group.position.y = terrainY` so the feet sit ON the
+sand exactly. Foot IK helper still does per-foot variation on top.
+Verified visually — feet/toes clearly on terrain surface, not buried.
+
+**P5 — Real head geometry (1 round)**. Pre-ABT: `SphereGeometry`
+scaled (1.0, 1.15, 0.95) + `BoxGeometry` flat plane for jaw. Read as
+"egg with cartoon mouth board". Replaced with `LatheGeometry` from
+11-point profile: crown cap → cranium top → cranium widest (temple)
+→ brow ridge → cheek mid → cheek taper → jaw line → CHIN POINT →
+under-chin → cap bottom. 18 radial segments. DoubleSide per D115.
+Ears repositioned slightly forward + raised. Reads as real human
+skull silhouette with cheekbones + jaw + chin contours.
+
+**Deferred to ABU**:
+- More body model polish — shoulder-arm transition smoothness, neck
+  cap blend, hand-wrist joint, finger knuckle inflections.
+- Realistic cloth drape (subdivided poncho with weight folds) — own
+  substantial focused element.
+- Rig sub-pivots (wrist, ankle, spine bend + animation tick wiring).
+
+**D116 added** — Over-the-shoulder camera convention (close behind +
+shoulder-anchor target + lateral offset). Codifies the constants +
+the shoulder-anchor pattern for future camera modes (debug-cam,
+photo-mode, replay-cam).
+
 ## Session ABS — 2026-05-25 — Body geometry realism push (Lathe torso + Lathe limbs + tapered fingers) ✓ verify pass
 `verified` — tsc clean. 1 file modified (`src/player/playerRig.ts`).
 **Fourth session under iteration discipline**. User direction: "push

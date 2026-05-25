@@ -2455,3 +2455,21 @@ This D-entry exists primarily as a memo for the iteration discipline: a bug like
 **Apply**: future organic body parts (creature variants, NPC outfits, alien anatomy) use profile-array Lathes. Cylinder primitives reserved for genuinely-uniform tubes (poles, posts, simple ropes). Box for genuinely flat surfaces (panels, signs, armor plates). Sphere for genuinely spherical objects (balls, eyes, planets). The procedural rig file `playerRig.ts` is the reference implementation — torsoProfile / upperLegProfile / lowerLegProfile / upperArmProfile / forearmProfile arrays are the templates to copy from.
 
 This is the architectural shift that lets the procedural rig actually approach video-game-rig quality within D107. **friction-score:** 2
+
+## D116 — Over-the-shoulder camera convention (Session ABT)
+**When**: ABT — user reported the pre-ABT 3P camera (3.2m back + 1.8m above, research-recommended in ABP) read as "weird position way above the player". Rewrote to match modern over-the-shoulder convention.
+
+**Why**: Research in `docs/research/3p-cameras-in-games.md` recommended the wider 3.2m/1.8m offsets generically, but Dustfall's actual feel — survival exploration with combat focus — matches the TLOU/GoW/Souls over-the-shoulder convention better than the Souls/MGS distant-cam style. The two patterns differ in three axes:
+- BACK distance: distant ~3.2m / over-shoulder ~1.5-2.0m
+- ABOVE offset: distant ~1.8m / over-shoulder ~0.2-0.5m
+- LATERAL: distant 0 / over-shoulder ~0.3-0.5m (offset to one side)
+- TARGET: distant aims at player center / over-shoulder aims at shoulder anchor
+
+**Picked**: Over-the-shoulder with shoulder-anchor target. Constants: `_3P_BACK_DIST=1.8`, `_3P_ABOVE_DIST=0.30`, `_3P_LATERAL_OFFSET=0.40` (right shoulder, perpendicular to camFwd in XZ), `_3P_SHOULDER_DROP=0.25` (shoulder is below eye). Camera position formula: cam = shoulderAnchor - camFwd × BACK + ABOVE upward, where shoulderAnchor = (playerPos + eyeOffset - shoulderDrop) + camRight × lateralOffset. Spring-arm collision rays fire from shoulderAnchor (not playerHead) so collision is symmetric with the offset.
+
+**Considered alternatives**:
+- Stay with distant-cam — rejected per user direct feedback
+- Make it user-configurable (slider in settings) — premature; can add later if multiple users want different presets
+- Souls-style high-pitch shoulder cam — picked the lower TLOU/GoW pitch since survival exploration benefits from horizon visibility
+
+**Apply**: future camera modes in Dustfall (debug-cam, photo-mode, replay-cam, mounted-on-creature-cam) use the same shoulder-anchor pattern: target a body-anchor not a math-center, offset laterally for over-shoulder feel, keep back-distance tight (1.5-2.5m range). The lateral offset can flip to left shoulder for left-handed weapon swap, or to 0 for symmetric "behind" mode. **friction-score:** 1

@@ -19,6 +19,8 @@ Use `/triage-ideas` to bulk-classify a free-form dump.
 
 [polish] ABQ deferred iteration items (all on src/player/playerRig.ts; verified statically in ABQ, need in-motion verification): (1) walk cycle in real motion — ABQ verified at static phase=π/4 + 5π/4; the math is correct but in-motion may need amplitude tweaks once running tick-driven (vs eval-pose). (2) Pauldron R1+ — was already reading well in baseline, untouched in ABQ. (3) Hood drape one-side asymmetry — minor cosmetic gap noted but cuttable. (4) Side-by-side gait cadence: footstep audio fires on separate timer from animation; sync would lock them at heel-strike. (5) Foot IK mid-state transition snap (idle→walking on slope shows brief reset to flat) — cosmetic, low-priority.
 
+[polish] ABT shipped over-shoulder camera + feet plant + head Lathe. ABU should pick up the remaining ABS-deferred items + ABT-noted polish: (1) realistic cloth drape (subdivided poncho + per-vertex weight folds — biggest remaining visual lift), (2) rig sub-pivots (wrist + ankle + spine bend + animation tick wiring), (3) shoulder-arm transition smoothness (visible gap where upper arm meets torso), (4) neck Lathe cap blend (small visible lip), (5) finger knuckle inflections.
+
 [polish] ABS deferred items — realism push continuation (all `src/player/playerRig.ts`):
 - Real head geometry: scaled sphere + flat box jaw → LatheGeometry profile for cranium/cheekbones/jaw. Hood covers most so lower visual priority but visible at close range. 3-5 rounds.
 - Realistic cloth drape: single-segment CylinderGeometry poncho → subdivided (8+ height × 24 radial) + per-vertex offsets at hem + shoulder anchor for gravity-pulled folds. Static no-physics. 3-5 rounds.

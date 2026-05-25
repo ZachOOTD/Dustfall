@@ -60,7 +60,28 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session ABS — Body geometry realism push. **Fourth
+**Last shipped**: Session ABT — Over-shoulder camera + feet-on-ground
+bug fix + head Lathe geometry. **Fifth session under iteration
+discipline**. 3 substantive fixes shipped from user feedback ("model
+needs more polish", "camera weird position way above player", "feet
+under sand"). 2 files modified. tsc clean. **P1 over-shoulder camera
+(controller.ts)**: 3.2m/1.8m + no lateral → 1.8m back + 0.30m above
++ 0.40m lateral offset (right shoulder) + 0.25m shoulder drop.
+Reads as modern TLOU/GoW over-shoulder cam. Spring-arm raycast
+collision rays now fire from shoulderAnchor not playerHead. D116.
+**P2 feet on ground (playerRig.ts)**: was `tr.y - eyeOffset - 0.5`
+(magic number didn't match actual capsule geometry → feet under
+sand). Now `terrain.heightAt(tr.x, tr.z)` direct query plants feet
+on sand exactly. Foot IK still does per-foot variation. **P5 head
+Lathe geometry**: scaled-sphere + flat-box-jaw → 11-point Lathe
+profile (crown cap → cranium widest → brow → cheek → jaw → chin →
+under-chin → cap) + 18 radial segments + DoubleSide per D115. Reads
+as real human skull silhouette with cheekbones + jaw + chin.
+**Deferred to ABU**: more body polish (shoulder-arm transition,
+neck cap blend, hand-wrist joint, finger knuckle inflections),
+realistic cloth drape, rig sub-pivots (wrist/ankle/spine bend).
+
+**Prior milestone**: Session ABS — Body geometry realism push. **Fourth
 session under iteration discipline**. User direction: "push toward real
 video game quality model + rigging, not blocky figures and cylinders".
 3 elements fully iterated per discipline; 3 deferred to ABT.
