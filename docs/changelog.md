@@ -3,6 +3,47 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ABU — 2026-05-25 — Realistic cloth drape + body polish (deltoid bridge + neck cap + finger knuckles) ✓ verify pass
+`verified` — tsc clean. 1 file modified (`src/player/playerRig.ts`).
+**Sixth session under iteration discipline**. 2 elements fully iterated;
+P3 rig sub-pivots deferred to ABV (different kind of work — code +
+animation tick, deserves own session).
+
+**P1 — Realistic cloth drape (2 rounds)**. Poncho `CylinderGeometry`
+subdivided from 16×1 segments to 24 radial × 10 height (240 verts
+before open-side cut). Walked the position attribute and applied
+per-vertex sine-wave radial offsets:
+`foldOffset = sin(WAVES × θ) × amplitude(t)` where amplitude
+attenuates from hem (deepest) to top (gentle). R1: WAVES=5, hem 2.2cm
+top 0.5cm — too subtle. R2: WAVES=6, hem 4.5cm top 0.8cm — clear
+vertical fold ridges + scalloped wavy hem. `computeVertexNormals()`
+after displacement so lighting catches ridge highlights + valley
+shadows. Poncho went from "plastic tube" to "wrapped fabric with
+drape folds". D117.
+
+**P2 — Body polish refinements (1 round, 3 fixes)**. (a) Neck cap
+blend: added 3 intermediate points to torsoProfile (0.025 / 0.055 /
+0.085) so the lathe rolls smoothly from cap (r=0) to neck-base
+(r=0.110). Eliminates the visible lip at the very top. (b) Deltoid
+bridge spheres: NEW `SphereGeometry(0.085)` per shoulder, scaled
+(1.0, 0.75, 1.0), positioned at shoulderPivot. Bridges the visible
+arm-to-torso gap that the bare upper-arm cap-cylinder created. (c)
+Finger knuckle bumps: 2 small `SphereGeometry(0.011)` per finger at
+1/3 and 2/3 marks along the finger forward direction (computed from
+the cylinder's rotation). Reads as joint articulation, not smooth
+tubes.
+
+**D117 added** — Procedural cloth drape via subdivided geometry +
+per-vertex sine-wave radial offsets. Codifies the per-vertex
+displacement pattern (walk position attribute, compute polar coords
+from XZ, apply sin-wave offset modulated by height, recompute normals).
+Pattern composes with any roughly-cylindrical procedural mesh that
+should read as cloth (banner, flag, curtain, sail, robe).
+
+**Deferred to ABV (P3 sub-pivots)**: wrist + ankle + spine bend
+hierarchy + animation tick wiring. Code-heavier than geometry
+iteration; merits its own focused session.
+
 ## Session ABT — 2026-05-25 — Over-shoulder camera + feet-on-ground bug fix + head Lathe geometry ✓ verify pass
 `verified` — tsc clean. 2 files modified (`src/player/controller.ts` +
 `src/player/playerRig.ts`). **Fifth session under iteration

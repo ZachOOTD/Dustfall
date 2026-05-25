@@ -60,7 +60,27 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session ABT — Over-shoulder camera + feet-on-ground
+**Last shipped**: Session ABU — Realistic cloth drape + body polish.
+**Sixth session under iteration discipline**. 2 elements fully iterated;
+P3 sub-pivots deferred to ABV. 1 file modified (playerRig.ts). tsc
+clean. **P1 cloth drape (2 rounds, D117)**: Poncho CylinderGeometry
+subdivided 16×1 → 24×10 (240 verts). Per-vertex sine-wave radial
+offsets: `foldOffset = sin(WAVES × θ) × amp(t)` where amp attenuates
+hem→top. R2 final: WAVES=6, hem 4.5cm, top 0.8cm. computeVertexNormals
+after displacement. Poncho went from "plastic tube" to "wrapped fabric
+with drape folds + scalloped hem". **P2 body polish (1 round, 3 fixes)**:
+(a) Neck cap blend — 3 intermediate torsoProfile points (0.025/0.055/
+0.085) eliminate visible cap lip. (b) Deltoid bridge spheres — new
+SphereGeometry(0.085) per shoulder scaled (1.0, 0.75, 1.0) bridges
+arm-to-torso gap. (c) Finger knuckle bumps — 2 SphereGeometry(0.011)
+per finger at 1/3 + 2/3 marks. **D117 added** — procedural cloth drape
+via subdivided geometry + per-vertex sin-wave offsets. Pattern composes
+with any cylindrical mesh that should read as cloth (robe, banner,
+flag, sail). **Deferred to ABV**: rig sub-pivots (wrist + ankle + spine
+bend + animation tick wiring) — different KIND of work (code-heavy +
+animation), deserves own focused session.
+
+**Prior milestone**: Session ABT — Over-shoulder camera + feet-on-ground
 bug fix + head Lathe geometry. **Fifth session under iteration
 discipline**. 3 substantive fixes shipped from user feedback ("model
 needs more polish", "camera weird position way above player", "feet

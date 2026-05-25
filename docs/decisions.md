@@ -2473,3 +2473,33 @@ This is the architectural shift that lets the procedural rig actually approach v
 - Souls-style high-pitch shoulder cam — picked the lower TLOU/GoW pitch since survival exploration benefits from horizon visibility
 
 **Apply**: future camera modes in Dustfall (debug-cam, photo-mode, replay-cam, mounted-on-creature-cam) use the same shoulder-anchor pattern: target a body-anchor not a math-center, offset laterally for over-shoulder feel, keep back-distance tight (1.5-2.5m range). The lateral offset can flip to left shoulder for left-handed weapon swap, or to 0 for symmetric "behind" mode. **friction-score:** 1
+
+## D117 — Procedural cloth drape via subdivided geometry + per-vertex offsets (Session ABU)
+**When**: ABU — user direction to push procedural rig toward real video game quality required realistic cloth (not a smooth uniform tube). Within D107 zero-asset, no physics simulation budget — needed static geometry that READS as draped cloth.
+
+**Why**: A single-segment CylinderGeometry tube can't read as cloth no matter how it's textured/colored — the silhouette is wrong. Real cloth has vertical fold ridges + valleys + a wavy hem from gravity-pull. Three procedural options:
+(a) Modify the geometry's position attribute with hand-tuned per-vertex offsets
+(b) Vertex shader displacement (procedural in shader code)
+(c) Real physics simulation (Verlet/spring-mass on each vertex)
+
+**Picked**: (a) — geometry-side per-vertex displacement. Walk the position attribute, compute polar coords from XZ, apply a sin-wave offset modulated by height. Then `computeVertexNormals()` so the lighting catches the displacement. Cost: ~240 verts processed once at build time. Result: static cloth that READS as draped + folded.
+
+Formula:
+```ts
+for each vertex (x, y, z):
+  r = sqrt(x² + z²)
+  θ = atan2(z, x)
+  t = (y - minY) / (maxY - minY)              // 0 at hem, 1 at top
+  amp = AMP_HEM * (1 - t) + AMP_TOP * t        // attenuate top-ward
+  newR = r + sin(WAVES × θ) × amp
+  x *= newR/r;  z *= newR/r
+```
+With WAVES=6, AMP_HEM=4.5cm, AMP_TOP=0.8cm: clear visible fold ridges + scalloped hem, gentle near shoulders.
+
+**Considered alternatives**:
+- (b) Shader displacement — would need a custom vertex shader (or onBeforeCompile injection) just for poncho. Higher integration cost; cheaper per-frame but not needed (no animation). Reserved for cloth that needs wind-driven displacement (like the existing `fabricMaterial.ts` shimmer).
+- (c) Real physics — way out of budget for a survival exploration game. Cloth physics is its own 400-LOC system. Cheap static-geometry-with-displacement gets 80% of the visual benefit at <50 LOC.
+
+**Apply**: any roughly-cylindrical procedural mesh that should read as cloth (poncho, robe, banner, flag, curtain, sail, hood-drape) follows this displacement pattern. Tune amplitudes per use case. For meshes with multiple physical sections (e.g., a robe with a separate sleeve), apply per-section. For meshes that should ALSO have wind animation, layer this displacement underneath the wind shader so the static folds stay stable while the wind perturbs on top.
+
+This is the cloth-quality unlock that lets procedural primitives + Lathes (D115) + this displacement (D117) cover most low-poly stylized character outfit needs. **friction-score:** 1
