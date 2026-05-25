@@ -102,7 +102,7 @@ const TORSO_CENTER_Y = HIP_Y + TORSO_H / 2 + 0.04;
 // ── Color palette (per docs/research/sci-fi-desert-scavenger-aesthetic.md) ──
 const SKIN_COLOR = 0xc9a876;           // weathered tan
 const SKIN_ACCENT = 0x8a7048;          // shadow tone
-const PONCHO_COLOR = 0xb8860b;         // sun-bleached ochre
+const PONCHO_COLOR = 0xd9a85a;         // ABP-polish R4: 0xb8860b read as dark brown after fabricMaterial multipliers; bumped to lighter golden ochre for the actual "sun-bleached" silhouette
 const HOOD_COLOR = 0xd2b48c;           // desert tan (lighter than poncho)
 const BANDANA_COLOR = 0x3a3a3a;        // dark cloth
 const STRAP_COLOR = 0x505050;          // dark metal/leather
@@ -227,26 +227,35 @@ function buildRigVisual(): {
   bandana.scale.set(1.0, 0.85, 0.55);     // flatten + push back to wrap face
   headGroup.add(bandana);
 
-  // ── Hood: inverted ConeGeometry, open base, draping over head ──
-  // ConeGeometry default has apex at +Y, base at -Y. To make an "inverted"
-  // hood with the apex on the head crown, we keep the default orientation
-  // (apex up) but scale it. thetaLength<2π would let us cut a face opening,
-  // but for a back-drape look we keep full and rely on transparency at the
-  // bottom edge. Use open=true so no base cap.
-  const hood = new THREE.Mesh(
-    new THREE.ConeGeometry(HEAD_R * 1.7, HEAD_R * 2.0, 12, 1, true),
+  // ── Hood: hemisphere crown + back-half drape (ABP-polish R1).
+  // Pre-polish was ConeGeometry apex-up = wizard hat silhouette. Now:
+  //   1. Upper-hemisphere crown sitting OVER the head (phi 0..0.55π)
+  //   2. Partial cylinder back drape covering ~180° of the back+sides,
+  //      open at the FRONT so the face reads. thetaStart=π (left ear),
+  //      thetaLength=π → cylinder occupies [180°, 360°] going through
+  //      the back (270°), leaving the front half open.
+  // ABP-polish R3: phiLength shrunk 0.55π → 0.42π so crown ends ABOVE
+  // brow (forehead visible). Crown also raised slightly + radius 1.30 →
+  // 1.22 for a tighter cap. Drape's front opening widened so face fully
+  // reads from front; drape top brought forward 0.05 to peek over brow.
+  const hoodCrown = new THREE.Mesh(
+    new THREE.SphereGeometry(HEAD_R * 1.22, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.42),
     hoodMat,
   );
-  hood.position.y = HEAD_R * 0.55;
-  headGroup.add(hood);
-  // Hood drape — small cylinder behind head (cloth hanging down at the back
-  // of the hood; sells "hood draped" rather than "cone hat")
+  hoodCrown.position.y = HEAD_R * 0.18;
+  headGroup.add(hoodCrown);
+  // Drape: [225°, 315°] = back-only 90° (was 180° back+sides which covered
+  // the cheeks). Front + sides now open so face + bandana read.
   const hoodDrape = new THREE.Mesh(
-    new THREE.CylinderGeometry(HEAD_R * 1.4, HEAD_R * 1.65, HEAD_R * 1.5, 10, 1, true, 0, Math.PI * 1.0),
+    new THREE.CylinderGeometry(
+      HEAD_R * 1.25, HEAD_R * 1.55,
+      HEAD_R * 1.80,
+      14, 1, true,
+      Math.PI * 1.25, Math.PI * 0.50,    // [225°, 315°] = back only
+    ),
     hoodMat,
   );
-  hoodDrape.position.set(0, -HEAD_R * 0.3, -HEAD_R * 0.4);
-  hoodDrape.rotation.y = Math.PI;     // open side faces +Z (away from face)
+  hoodDrape.position.y = -HEAD_R * 0.55;
   headGroup.add(hoodDrape);
 
   // ── Poncho: tapered open cylinder draping shoulders to thighs ──
