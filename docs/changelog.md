@@ -3,6 +3,100 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ABN — 2026-05-24 — Procgen wreck family + megaWreck bow shell + shader-crawl bug fixes ✓ verify pass
+`verified` — tsc clean. 10 files touched across 3 thematic commits.
+Picked smaller-than-overnight scope post-context-compaction; shipped 3
+contained items + 1 triage pass instead of a single big-ticket. D109
+captures the procedural-shader localSpace pattern.
+
+**B6 — 5th procgen wreck class (`bulk_hauler`)** (`src/world/procgenWreck.ts`)
+- New `ProcgenWreckClass = 'bulk_hauler'`. Recipe: 1 cockpit + 4-5
+  hullSegment + 1 engineModule + 1 tailStub = 7-8 parts, ~14-21m
+  (longest silhouette in the procgen pool — reads as freight train /
+  cargo hauler with extra hull where freighter would have engines).
+- 3-4 salvage panels (richest loot density of any procgen class).
+- Salvage palette: `'cargo_container'` (lottery loot mix).
+- Class roulette 4-way → 5-way: 35/20/18/12/15 (corvette / gunship /
+  freighter / science_vessel / bulk_hauler). Pre-ABN split was
+  40/25/20/15 (ABJ).
+- Cargo-heavy flavor lands naturally via existing biome bias (salt →
+  PLATED, dune → FUEL_BARRELS) given the high hullSegment count;
+  didn't need to thread a per-class variant bias.
+
+**megaWreck bow hull-shell** (`src/world/megaWreck.ts`)
+- Closes the ABL deferred item (aft-only shell). Half-cylinder
+  (CylinderGeometry with `thetaStart=0, thetaLength=π`) caps the
+  upper portion of the bow's box silhouette; OPEN UNDERSIDE preserves
+  visual access to the -X side entrance (entrance top at Y=4m sits at
+  the shell's open bottom edge, so the player still walks into a
+  clean doorway).
+- Same ellipsoidal flatten (1.0, 0.62, 1.0) as the aft shell so bow +
+  aft read as one continuous silhouette family despite the very
+  different scales (BOW_HALF_W ~9m vs AFT_HALF_W ~20m).
+- Attached to `bowGroup` so it tracks the bow's terrain Y-offset (the
+  bow rides several meters lower than aft on tilted seeds).
+- No collider (`userData.noCollider = true` matches aft pattern).
+
+**3 bug fixes shipped from `/triage-ideas` user dump**
+
+**(1) Companion stale-target on speeder mount** (`src/enemies/companion.ts`)
+- Companion's `updateCompanion` was reading
+  `ctx.player.body.body.translation()` directly. When player mounts
+  the speeder the capsule parks at Y=-2000 (CC-4) but X/Z freeze at
+  the mount position → companion follows the mount-position stale
+  target, not the moving speeder.
+- New `getPlayerPos(ctx)` helper local to companion.ts mirrors
+  sandWorm.ts's pattern (`if (ctx.speeder?.mounted) tr =
+  ctx.speeder.body.translation()`). Companion now follows the speeder
+  in real time.
+- Helper duplicated rather than lifted to util (only 2 consumers; if
+  a 3rd arrives, lift to `src/util/playerPos.ts`).
+
+**(2) Procedural shaders crawl on moving entities** (`src/world/skinMaterial.ts`, `paintMaterial.ts`)
+- D109. ABH's shader vocabulary samples noise in WORLD coords via
+  `(modelMatrix * vec4(position, 1.0)).xyz`. Static surfaces benefit
+  (adjacent walls get coherent world-aligned weathering). MOVING
+  entities (creatures, vehicle) see the texture detail crawl across
+  the surface as the body translates.
+- Added `opts.localSpace?: boolean` to both factories. When true,
+  varying is set to `position` (object-local). Branch is at the
+  shader-string assembly level; zero runtime cost.
+- Applied to companion (skin × 2), speeder hull (paint × 2), sandworm
+  body (skin × 2), lizard body (skin × 2). All callers cite ABN +
+  D109 in comments.
+- Static callers (locker, rock scatter, well rim, megaWreck panels)
+  unchanged — keep coherent world-space weathering.
+
+**(3) Cloth + bandage viewmodels expand during movement** (`src/world/fabricMaterial.ts`, `src/inventory/items.ts`)
+- ABE's wind-shimmer vertex displacement keys off
+  `(modelMatrix * vec4(position, 1.0)).xyz`. For viewmodel meshes
+  (camera-relative) the "world" position is the CAMERA's path, so the
+  shimmer animates against player movement → cloth/bandage appear to
+  breathe.
+- Added `opts.disableShimmer?: boolean` (3rd positional arg —
+  preserves the existing `side?` second arg for tent + largeTent
+  callers). When true: skips the vertex displacement AND the
+  `_shaderRefs.add()` registration (no per-frame uniform-tick cost),
+  and switches the fragment-shader noise to object-local sampling
+  (`vWorldFabric = position`).
+- Applied to bandage viewmodel (2 fabric materials) + cloth
+  viewmodel (3 fabric materials). World fabric (tents, tarps) keeps
+  shimmer on — the storm-intensity-keyed billow is the point.
+
+**Triage** (`docs/backlog.md`): 4 entries from `/triage-ideas` dump.
+3 of 4 shipped this session; 1 deferred (stale fire+cloth POI — code-
+only inspection couldn't pinpoint; needs user identification).
+
+**Procgen / shader stats**:
+- `bulk_hauler` adds a 5th class to the procgen pool; combined with
+  ABJ's `science_vessel` the pool is now ~2× the ABC-era 3-class set.
+- `localSpace` opt now in 2 of the 7 procedural shader factories
+  (skin + paint). When future factories add MOVING-entity surfaces
+  (creature variants, more vehicles), follow the same pattern.
+
+Commits: `efab6df` (3 bug fixes) → `353f69b` (B6 + bow shell) →
+`ab86e0d` (triage + brief archive). Plus this session-end commit.
+
 ## Session ABM — 2026-05-24 — B7 dropped-item rigid-body physics ✓ verify pass
 `verified` — tsc clean. 6 files touched. Closes the B7 backlog item;
 B8 (generalized rope) cut per pre-committed scope-cut tier 3 — UX

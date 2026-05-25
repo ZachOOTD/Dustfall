@@ -2332,3 +2332,20 @@ full PBR pipeline.
 **Considered alternatives**: Sequential 3-bump (v11→v12→v13). Rejected as boilerplate-heavy with no upside. The "atomic blame" property of one-field-per-bump matters when the bump is a SCHEMA SHAPE CHANGE (e.g., renaming a field); for additive optional fields, the blame radius stays at the file level regardless of bump count.
 
 **Apply**: When the next overnight session has multiple additive-only fields targeting the schema, combine into one bump. When even ONE field requires non-trivial migration (e.g., renaming, restructuring), break that field into its own bump and combine the rest. friction-score: 1
+
+## D109 — Procedural-shader `localSpace` opt for moving entities (Session ABN)
+**When**: ABN bug-fix session, after user playtest report: "the companion's texture detail moves around when it moves, also the texture on the speeder bike moves around when the speeder moves — the textures should be more static but detailed."
+
+**Why**: The ABH procedural shader vocabulary (skinMaterial, paintMaterial, metalMaterial, stoneMaterial, fabricMaterial, etc.) follows D62/D107: sample noise in WORLD-SPACE coords via `(modelMatrix * vec4(position, 1.0)).xyz`. For STATIC surfaces this is the right call — adjacent wall panels of the same wreck get coherent weathering that "matches up across seams" without needing UV authoring, and different instances at different world positions get free per-instance variation. For MOVING entities (creatures, vehicles), the same world-space sampling means the noise pattern re-evaluates at the body's NEW position each frame, so the texture detail visibly slides across the surface as the body translates. Reads as "the skin is crawling" / "the paint is sliding."
+
+**Picked**: add `opts.localSpace?: boolean` to each procedural shader factory. When true, the vertex-stage assignment becomes `varying = position` (object-local) instead of the world-space transform. Branch is at the GLSL string-assembly level; zero runtime cost vs the static path. Default false preserves existing static-entity behavior + coherent world-aligned weathering.
+
+**Applied this session**: skinMaterial.ts + paintMaterial.ts. Callers updated: companion (skin), sandworm (skin), lizard (skin), speeder hull (paint). Also added `disableShimmer?: boolean` to fabricMaterial.ts for VIEWMODEL fabric — same root cause (camera-relative "world" coords on viewmodels) but the shimmer also adds vertex displacement that has to be skipped.
+
+**Considered alternatives**:
+- Make every shader local-space by default. Rejected — would break the seam-coherent weathering on multi-panel static surfaces (megaWreck hull panels, locker bands, well rim stones) where world-space sampling is the feature, not the bug.
+- Pass a per-mesh "isMoving" flag at uniform tick time. Rejected — would mean every static call pays uniform-update overhead + adds a runtime branch. Compile-time opt is cleaner.
+- Use UV coords instead of either world or local position. Rejected — most procedural geometry (Lathe, custom Box composites) lacks meaningful UVs; would force per-primitive UV authoring (which is exactly what D107 rejected).
+
+**Apply**: ANY future procedural shader factory MUST consider both static and moving callers up front. Default to world-space sampling (existing convention). Expose `localSpace` opt at the factory signature even if no current caller is a moving entity — the cost is one extra interface field + one shader-string branch, and the alternative (the user reporting "the texture crawls" after the fact and having to refactor the factory) is more expensive. Same applies to vertex displacements (ABE wind shimmer): if the factory does ANY vertex-level animation keyed off the noise input, expose a `disable*` opt so viewmodel + non-physical callers can suppress it without forking the factory.
+**friction-score:** 2

@@ -59,18 +59,34 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session ABM — B7 dropped-item rigid-body physics.
+**Last shipped**: Session ABN — Procgen wreck family + megaWreck bow
+shell + shader-crawl fixes. **B6**: `bulk_hauler` 5th procgen wreck
+class (1 cockpit + 4-5 hullSegment + 1 engine + 1 tail = 7-8 parts,
+~14-21m — longest silhouette; 3-4 panels with `cargo_container` loot
+palette); class roulette 4-way → 5-way (35/20/18/12/15). **megaWreck
+bow hull-shell**: half-cylinder (`thetaStart=0..π`) caps the upper
+bow box; open underside preserves -X side entrance visibility; matches
+aft shell's ellipsoidal scale for one continuous silhouette family;
+closes the ABL deferred item. **3 bug fixes from /triage-ideas**:
+(1) companion mount target — new `getPlayerPos(ctx)` helper in
+companion.ts mirrors sandWorm.ts pattern, fixes companion chasing
+pre-mount position when player rides speeder. (2) Procedural shader
+crawl — D109: added `opts.localSpace?: boolean` to skinMaterial +
+paintMaterial; default false preserves coherent world-aligned
+weathering for static surfaces; applied to companion + sandworm +
+lizard + speeder so texture detail stays anchored to the body as it
+moves. (3) Viewmodel fabric expand — added `opts.disableShimmer?` to
+fabricMaterial; skips wind displacement + uniform-tick registration
++ switches noise sampling to object-local; applied to cloth + bandage
+viewmodels. 10 files, 4 commits. **Deferred**: 1 of 4 triage entries
+— stale fire+cloth POI — needs user to identify which POI.
+
+**Prior milestone**: Session ABM — B7 dropped-item rigid-body physics.
 Player drops + crafting overflow + pickup-swap now spawn pickups with
 Rapier dynamic bodies — items roll, fall, settle naturally on dunes
-+ wreck floors. Per-frame `updatePickups(ctx)` syncs mesh transform
-from body. `despawnPickup` cleans up bodies on take. Save schema v11
-additive: `droppedPickups?: [...]` array preserves dropped-item
-transforms across save/load (verified round-trip exact). Seed-spawn
-pickups (140+ branches at boot, scavenger-camp bandage) stay static
-to preserve Rapier step budget. B8 (generalized rope attachment) cut
-per pre-committed scope-cut tier 3 and re-scoped in backlog for ABN —
-needs new UX path (no rope-stub on pickups) + bigger data-model
-refactor than the 3h estimate captured.
++ wreck floors. Save schema v11 additive: `droppedPickups?: [...]`
+preserves transforms across save/load. Seed-spawn (140+ branches)
+stays static. B8 cut + re-scoped for future session.
 
 **Prior milestone**: Session ABL — megaWreck visual rebuild. Closes the
 "megaWreck rebuild" backlog item (BB-2/BB-3 era model was visually

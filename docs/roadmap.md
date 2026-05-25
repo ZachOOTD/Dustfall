@@ -57,19 +57,25 @@ and promotes the second.
 - **Session ABI** (2026-05-24): Salvage panel rim opacity fix (rim was solid plate covering cavity post-ABG BackSide body) + 3 procgen wreck panel relocations (cargo_container overlap with sibling decoration, fuselage buried inside cylinder, escape pod buried inside icosahedron). 1 file, +66/-16.
 - **Session ABJ** (2026-05-24, overnight): Aggressive 14-item bundle across 4 tiers in ~6h. **Tier 1**: v10→v11 schema (combined huddleState + journalReadKinds + bornInDevMode per D108) + biome-bias on procgen recipe pick + 5 small polish/debt items. **Tier 2**: 3 new procedural shader factories (woodGrain + bone + glass) extending ABH vocab to 7. **Tier 3**: science_vessel wreck class + sandworm 'feeding' state (bait-and-strike loop, 2× damage window) + 5 item viewmodel upgrades. **Tier 4**: comm-relay cluster (3rd ClusterKind) + NEW src/world/buriedCockpit.ts (first biome-specific POI, dune-biome centroid placement). Tier 5 stretch (salt outpost / rocky entrance / megaWreck rebuild / dropped-item physics / generalized rope) DEFERRED per pre-committed cut order. 12 files + 4 new modules.
 - **Session ABM** (2026-05-24, overnight ~2h of 6h budget): B7 dropped-item rigid-body physics. Pickup gains optional Rapier body; spawnDroppedPickup gets opts arg for world+initialVel+yOverride; per-frame updatePickups syncs transforms; despawnPickup cleans bodies; v11 additive `droppedPickups` save field for round-trip. Player drops + crafting overflow + pickup-swap all use bodies; seed-spawn stays static. B8 generalized rope cut per pre-committed scope-cut tier 3 (re-scoped in backlog for ABN — needs UX path + bigger refactor). 7 files. Verified seed 7777 + drop/save/reload round-trip exact.
+- **Session ABN** (2026-05-24, smaller post-compaction scope ~1.5h): Procgen wreck family + megaWreck bow shell + 3 bug fixes. B6 5th procgen class `bulk_hauler` (longest hull 7-8 parts, 3-4 panels, cargo_container palette; roulette 4-way → 5-way 35/20/18/12/15). megaWreck bow hull-shell (half-cylinder thetaStart=0..π preserves -X side entrance; matches aft ellipsoidal scale — closes ABL deferred item). 3 bug fixes from /triage-ideas: (1) companion getPlayerPos helper fixes stale-target on speeder mount; (2) D109 `opts.localSpace` added to skinMaterial + paintMaterial (applied to companion + sandworm + lizard + speeder, eliminates moving-entity texture-crawl); (3) fabricMaterial `opts.disableShimmer` applied to cloth + bandage viewmodels (fixes camera-relative wind-displacement breathing). 10 files, 4 commits. D109. 1 of 4 triage entries deferred (stale fire+cloth POI — needs user POI identification).
 - **Session ABL** (2026-05-24, overnight ~3h of 6h budget): megaWreck visual rebuild. Edit-in-place refactor preserving collider layout + 8 panels + shelter zone + journal — pure visual lift. Procedural shader vocab applied to all hull/rust/pipe materials; tapered ellipsoidal cylinder shell drapes over the box-wall aft section; 6 rust band wraps; exposed vertical ribs + torn hull-plate fragments at the mid-hull break. Closes the "megaWreck rebuild" backlog item. 1 file, +166/-22.
 - **Session ABK** (2026-05-24, overnight 6h): Close the biome-specific POI family. NEW `src/world/saltOutpost.ts` (concrete base + corroded antenna spire + sample crates + cargo_container panel) + NEW `src/world/rockyEntrance.ts` (boulder outcrop + cave-mouth arch + descending stairs + sunken interior chamber via BackSide stone walls + shelter zone + escape_pod panel). Dispatch in poi.ts goes dune→salt→rocky for greedy multi-region spread. Multi-seed verified at 12345 + 7777 (both 5 shelter zones with +1 from rocky entrance). 5 files, 2 new modules.
 
 ## Up next
 
-ABM closed B7 dropped-item physics. Remaining big-ticket candidates:
-**A1 infinite chunk streaming** (last major architectural lift,
-~6-10h, save bump v11→v12), **B8 generalized rope attachment**
-(re-scoped — needs UX path for non-sled-stub anchors + bigger
-refactor; ~4-5h vs original 3h estimate), **B5 flagship NPC beats**
-(hostile raider holdouts + friendly hermits at hand-modeled
-flagships, ~4-6h). See `docs/next-session-prompt.md` for full ABN
-brief.
+ABN closed B6 5th wreck class + megaWreck bow shell + 3 bug fixes
+(companion mount target + shader localSpace + viewmodel disableShimmer).
+Remaining big-ticket candidates: **A1 infinite chunk streaming** (last
+major architectural lift, ~6-10h, save bump v11→v12), **B8 generalized
+rope attachment** (re-scoped — needs UX path for non-sled-stub anchors;
+~4-5h), **B5 flagship NPC beats** (hostile raider holdouts + friendly
+hermits at hand-modeled flagships, ~4-6h). Medium picks: identify
++ remove the stale fire+cloth wreck POI (deferred from ABN; needs user
+to name the POI), megaWreck catwalk panel reachability (panels 3+4),
+remaining item viewmodel fidelity pass (~25 ItemDefs left from ABJ
+Tier 3). Polish: dropped-item playtest tune (ABM damping/friction
+defaults need in-play signal). See `docs/next-session-prompt.md` for
+full ABO brief.
 
 ## Next — Big-ticket bucket (1–2 picks per session at ~4–7h each)
 Pick whatever feels most missing after the polish + atmosphere arc.
