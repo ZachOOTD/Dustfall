@@ -197,28 +197,39 @@ function buildRigVisual(): {
   torsoMesh.position.y = TORSO_CENTER_Y;
   body.add(torsoMesh);
 
-  // ── Head: elongated oval + face plane + neck ──
+  // ── Head: ABT P5 R1 — LatheGeometry profile for organic skull shape.
+  // Pre-R1: scaled sphere + flat box jaw = "egg with cartoon mouth board".
+  // Now: profile-based lathe (cranium → temple → cheekbone → jaw → chin),
+  // 18 radial segments, DoubleSide per D115.
+  // Profile in head-local Y (HEAD_R = 0.12 is reference scale).
   const headGroup = new THREE.Group();
   headGroup.position.y = HEAD_Y;
   body.add(headGroup);
-  // Head shape: sphere with non-uniform scale for elongated read
+  const headProfile = [
+    // [radial, axial] — axial 0 = head center
+    new THREE.Vector2(0, +HEAD_R * 1.10),          // crown cap top
+    new THREE.Vector2(HEAD_R * 0.55, +HEAD_R * 1.05),  // top of cranium
+    new THREE.Vector2(HEAD_R * 0.90, +HEAD_R * 0.85),  // upper cranium widening
+    new THREE.Vector2(HEAD_R * 1.00, +HEAD_R * 0.55),  // cranium widest (temple region)
+    new THREE.Vector2(HEAD_R * 0.98, +HEAD_R * 0.20),  // brow ridge
+    new THREE.Vector2(HEAD_R * 0.96, -HEAD_R * 0.05),  // mid-face (cheekbone level)
+    new THREE.Vector2(HEAD_R * 0.92, -HEAD_R * 0.30),  // cheek taper
+    new THREE.Vector2(HEAD_R * 0.78, -HEAD_R * 0.55),  // jaw line
+    new THREE.Vector2(HEAD_R * 0.55, -HEAD_R * 0.85),  // chin point
+    new THREE.Vector2(HEAD_R * 0.30, -HEAD_R * 1.00),  // under-chin
+    new THREE.Vector2(0, -HEAD_R * 1.05),          // bottom cap
+  ];
+  const headMat = skinMat.clone();
+  headMat.side = THREE.DoubleSide;
   const head = new THREE.Mesh(
-    new THREE.SphereGeometry(HEAD_R, 16, 12),
-    skinMat,
+    new THREE.LatheGeometry(headProfile, 18),
+    headMat,
   );
-  head.scale.set(1.0, HEAD_SCALE_Y, 0.95);
   headGroup.add(head);
-  // Face flat plane (jaw line read) — small box pressed into face front
-  const jawline = new THREE.Mesh(
-    new THREE.BoxGeometry(HEAD_R * 1.4, HEAD_R * 0.4, 0.04),
-    skinMat,
-  );
-  jawline.position.set(0, -HEAD_R * 0.35, HEAD_R * 0.85);
-  headGroup.add(jawline);
   // Tiny ear bumps (sells "real head" silhouette from 3P)
   for (const sx of [-1, 1]) {
-    const ear = new THREE.Mesh(new THREE.SphereGeometry(0.022, 8, 6), skinMat);
-    ear.position.set(sx * (HEAD_R * 0.92), 0.01, 0);
+    const ear = new THREE.Mesh(new THREE.SphereGeometry(0.024, 8, 6), skinMat);
+    ear.position.set(sx * (HEAD_R * 0.95), HEAD_R * 0.05, -HEAD_R * 0.10);
     headGroup.add(ear);
   }
   // Neck — real cylinder (was a 4cm stub pre-ABP)
@@ -588,10 +599,15 @@ export function updatePlayerRig(ctx: GameContext, dt: number): void {
   rig.group.visible = ctx.flags.thirdPerson;
   if (!rig.group.visible) return;
 
-  // Position
+  // Position — ABT P2 fix: pre-fix used `tr.y - eyeOffset - 0.5` which
+  // is an approximate magic number that doesn't match actual capsule
+  // halfHeight + radius. Feet were ending up under terrain. Now we
+  // query terrain.heightAt(x, z) directly and plant rig.group.position.y
+  // at terrainY (feet sit ON sand, not under it). The foot IK helper
+  // still does per-foot variation on top of this.
   const tr = ctx.player.body.body.translation();
-  const feetY = tr.y - ctx.player.eyeOffset - 0.5;
-  rig.group.position.set(tr.x, feetY, tr.z);
+  const groundY = ctx.terrain.heightAt(tr.x, tr.z);
+  rig.group.position.set(tr.x, groundY, tr.z);
 
   // Heading — face the camera's horizontal direction.
   const cam = ctx.three.camera;

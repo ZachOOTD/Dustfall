@@ -197,8 +197,15 @@ export function updatePlayer(ctx: GameContext, dt: number): void {
 //     (PointerLockControls own clamp is [-π/2, π/2])
 //   - snap on teleport via ctx.player.cameraSnapNextFrame flag (set by
 //     mount/dismount/save-load systems; auto-clears each frame)
-const _3P_BACK_DIST = 3.2;
-const _3P_ABOVE_DIST = 1.8;
+// ABT P1 — Over-the-shoulder camera. Pre-ABT was 3.2m back + 1.8m
+// above (research-recommended) but read as "way above player" per user
+// feedback. New values match modern over-shoulder convention (TLOU2 /
+// GoW / Souls): close behind + barely above shoulder + lateral offset
+// over right shoulder. Anchor target on shoulder height, not above-head.
+const _3P_BACK_DIST = 1.8;             // was 3.2 — close-behind
+const _3P_ABOVE_DIST = 0.30;           // was 1.8 — barely above shoulder
+const _3P_LATERAL_OFFSET = 0.40;       // NEW — over right shoulder
+const _3P_SHOULDER_DROP = 0.25;        // NEW — shoulder is ~25cm below eye
 const _3P_PUSHBACK_BUFFER = 0.3;
 const _3P_LERP_RATE = 10.0;            // per-second smoothing
 const _3P_PITCH_MIN = -Math.PI / 4;    // -45° (camera can look up at sky)
@@ -206,6 +213,8 @@ const _3P_PITCH_MAX = Math.PI / 3;     // +60° (camera can look down at player)
 
 const _camTarget = new THREE.Vector3();
 const _camFwd = new THREE.Vector3();
+const _camRight = new THREE.Vector3();
+const _shoulderAnchor = new THREE.Vector3();
 const _rayOrig = { x: 0, y: 0, z: 0 };
 const _rayDir = { x: 0, y: 0, z: 0 };
 
@@ -217,8 +226,6 @@ function syncCameraToBody(ctx: GameContext): void {
     // 3P pitch clamp — PointerLockControls allows looking straight up /
     // down, but in 3P that breaks the camera (camera flips overhead or
     // stares into terrain). Clamp pitch on the live camera rotation.
-    // Camera.rotation.x is the pitch in YXZ order; PointerLockControls
-    // sets it via .lookSpeed-driven pitch accumulator.
     const euler = new THREE.Euler().setFromQuaternion(cam.quaternion, 'YXZ');
     if (euler.x < _3P_PITCH_MIN) {
       euler.x = _3P_PITCH_MIN;
@@ -229,24 +236,38 @@ function syncCameraToBody(ctx: GameContext): void {
     }
 
     cam.getWorldDirection(_camFwd);
-    const headX = tr.x;
-    const headY = tr.y + ctx.player.eyeOffset;
-    const headZ = tr.z;
-    // Compute the INTENDED camera position before collision.
-    _camTarget.set(
-      headX - _camFwd.x * _3P_BACK_DIST,
-      headY + _3P_ABOVE_DIST - _camFwd.y * _3P_BACK_DIST,
-      headZ - _camFwd.z * _3P_BACK_DIST,
+    // Camera-right in the horizontal plane (perpendicular to camFwd,
+    // ignoring pitch). Used to offset camera laterally (over right
+    // shoulder).
+    _camRight.set(_camFwd.z, 0, -_camFwd.x).normalize();
+
+    // Shoulder anchor: player position + eye height - shoulder drop +
+    // lateral offset over right shoulder. This is the AIM TARGET that
+    // the camera looks at, not the camera position.
+    _shoulderAnchor.set(
+      tr.x + _camRight.x * _3P_LATERAL_OFFSET,
+      tr.y + ctx.player.eyeOffset - _3P_SHOULDER_DROP,
+      tr.z + _camRight.z * _3P_LATERAL_OFFSET,
     );
 
-    // Spring-arm raycast collision via Rapier. Cast from player head
+    // Camera position: pull back from shoulder anchor along -camFwd,
+    // plus a small upward bias to look slightly down at the action.
+    _camTarget.set(
+      _shoulderAnchor.x - _camFwd.x * _3P_BACK_DIST,
+      _shoulderAnchor.y + _3P_ABOVE_DIST - _camFwd.y * _3P_BACK_DIST,
+      _shoulderAnchor.z - _camFwd.z * _3P_BACK_DIST,
+    );
+
+    // Spring-arm raycast collision via Rapier. Cast from shoulder anchor
     // backward along -camFwd. If something blocks the cast within
     // _3P_BACK_DIST, clamp the camera to (hit.toi - pushback) along the
-    // ray (closer to player), preventing wall clipping. Filter out the
-    // player body so the ray doesn't trivially hit the capsule.
-    _rayOrig.x = headX; _rayOrig.y = headY; _rayOrig.z = headZ;
-    _rayDir.x = -_camFwd.x; _rayDir.y = -_camFwd.y + _3P_ABOVE_DIST / _3P_BACK_DIST; _rayDir.z = -_camFwd.z;
-    // Normalize the ray direction (the +ABOVE component skews it)
+    // ray (closer to player), preventing wall clipping.
+    _rayOrig.x = _shoulderAnchor.x;
+    _rayOrig.y = _shoulderAnchor.y;
+    _rayOrig.z = _shoulderAnchor.z;
+    _rayDir.x = -_camFwd.x;
+    _rayDir.y = -_camFwd.y + _3P_ABOVE_DIST / _3P_BACK_DIST;
+    _rayDir.z = -_camFwd.z;
     const _dirLen = Math.hypot(_rayDir.x, _rayDir.y, _rayDir.z);
     if (_dirLen > 1e-6) {
       _rayDir.x /= _dirLen; _rayDir.y /= _dirLen; _rayDir.z /= _dirLen;
@@ -262,9 +283,9 @@ function syncCameraToBody(ctx: GameContext): void {
     if (hit) {
       const safeDist = Math.max(0.2, hit.timeOfImpact - _3P_PUSHBACK_BUFFER);
       _camTarget.set(
-        headX + _rayDir.x * safeDist,
-        headY + _rayDir.y * safeDist,
-        headZ + _rayDir.z * safeDist,
+        _shoulderAnchor.x + _rayDir.x * safeDist,
+        _shoulderAnchor.y + _rayDir.y * safeDist,
+        _shoulderAnchor.z + _rayDir.z * safeDist,
       );
     }
 
