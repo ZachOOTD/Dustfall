@@ -25,7 +25,7 @@ import { updateStats } from './stats/survival.ts';
 import { createHud, updateHud } from './ui/hud.ts';
 import { createHotbar, updateHotbar } from './ui/hotbar.ts';
 import { createInteractPrompt, updateInteractPrompt } from './ui/interactPrompt.ts';
-import { spawnBranches } from './pickups/pickups.ts';
+import { spawnBranches, updatePickups } from './pickups/pickups.ts';
 import { spawnDeadTrees } from './world/deadTree.ts';
 import { spawnRockScatter } from './world/rockScatter.ts';
 import { setupOpeningScene } from './world/openingScene.ts';
@@ -667,7 +667,11 @@ startLoop(ctx, (c, dt) => {
   updateStats(c, dt);            // thirst/heat/health drain + death
   updateSoundscape(c, dt);       // wind volume tracks day/night
   updateMusic(c, dt);            // AAP — procedural music tracks crossfade by sun + storm
-  // (bobPickups removed — items now rest flat on the ground; no float/spin)
+  // ABM (B7) — per-frame sync of dynamic-body pickups (dropped items
+  // roll/fall/settle). Cheap walk; skips pickups without a body.
+  // Runs AFTER physics.step (above) so the body transform reflects
+  // this tick's integration result.
+  updatePickups(c);
   updateRaiders(c, dt);          // AI state machine + raider movement
   updateLizards(c, dt);          // small flee-AI wildlife
   updateCompanion(c, dt);        // AAE — Rocky-inspired creature follows player

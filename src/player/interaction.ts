@@ -1205,7 +1205,15 @@ function completePickupSwap(
   // per-unit-spawn pattern; stacks of N items appear as N pickups
   // clustered at the drop spot).
   for (let i = 0; i < droppedCount; i++) {
-    const dropped = spawnDroppedPickup(ctx.three.scene, ctx.terrain, { x: dx, z: dz }, droppedId, droppedMeta);
+    // ABM (B7) — pickup-swap drops with physics so the dropped items
+    // tumble naturally rather than stacking at the cursor.
+    const dropped = spawnDroppedPickup(
+      ctx.three.scene, ctx.terrain, { x: dx, z: dz }, droppedId, droppedMeta,
+      {
+        world: ctx.physics.world,
+        initialVel: { x: _dropDir.x * 1.2, y: 0.6, z: _dropDir.z * 1.2 },
+      },
+    );
     ctx.pickups.list.push(dropped);
   }
   // Clear the slot.

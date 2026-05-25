@@ -624,7 +624,16 @@ function directCraft(recipe: Recipe): void {
     const dx = cam.position.x + fwd.x * 0.8;
     const dz = cam.position.z + fwd.z * 0.8;
     for (let i = 0; i < dropped; i++) {
-      const p = spawnDroppedPickup(ctx.three.scene, ctx.terrain, { x: dx, z: dz }, recipe.output.id);
+      // ABM (B7) — craft overflow drops with physics so the items
+      // scatter across the ground instead of stacking at one point.
+      const p = spawnDroppedPickup(
+        ctx.three.scene, ctx.terrain, { x: dx, z: dz }, recipe.output.id,
+        undefined,
+        {
+          world: ctx.physics.world,
+          initialVel: { x: (Math.random() - 0.5) * 0.6, y: 0.5, z: (Math.random() - 0.5) * 0.6 },
+        },
+      );
       ctx.pickups.list.push(p);
     }
     ctx.ui.showToast(
@@ -714,7 +723,16 @@ function performCraft(): void {
     const dx = cam.position.x + fwd.x * 0.8;
     const dz = cam.position.z + fwd.z * 0.8;
     for (let i = 0; i < dropped; i++) {
-      const p = spawnDroppedPickup(ctx.three.scene, ctx.terrain, { x: dx, z: dz }, recipe.output.id);
+      // ABM (B7) — craft overflow drops with physics so the items
+      // scatter across the ground instead of stacking at one point.
+      const p = spawnDroppedPickup(
+        ctx.three.scene, ctx.terrain, { x: dx, z: dz }, recipe.output.id,
+        undefined,
+        {
+          world: ctx.physics.world,
+          initialVel: { x: (Math.random() - 0.5) * 0.6, y: 0.5, z: (Math.random() - 0.5) * 0.6 },
+        },
+      );
       ctx.pickups.list.push(p);
     }
     if (added === 0) {

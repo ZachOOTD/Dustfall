@@ -172,7 +172,16 @@ export function dropSelected(ctx: GameContext): void {
   const px = cam.position.x + _dropDir.x * 1.0;
   const pz = cam.position.z + _dropDir.z * 1.0;
 
-  const pickup = spawnDroppedPickup(ctx.three.scene, ctx.terrain, { x: px, z: pz }, droppedId, droppedMeta);
+  // ABM (B7) — drop with physics body so the item falls + settles
+  // naturally (rolls down dunes, bounces off walls). Small forward
+  // toss velocity for "tossed from inventory" feel.
+  const pickup = spawnDroppedPickup(
+    ctx.three.scene, ctx.terrain, { x: px, z: pz }, droppedId, droppedMeta,
+    {
+      world: ctx.physics.world,
+      initialVel: { x: _dropDir.x * 1.5, y: 0.8, z: _dropDir.z * 1.5 },
+    },
+  );
   ctx.pickups.list.push(pickup);
   playDrop();
   const def = getItemDef(droppedId);

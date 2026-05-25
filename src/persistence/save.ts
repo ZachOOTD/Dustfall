@@ -15,7 +15,7 @@ import type { Slot } from '../inventory/types.ts';
 import { ALL_RECIPE_IDS } from '../inventory/recipeDiscovery.ts';
 import type { LootEntry } from '../world/lootContainers.ts';
 
-import { despawnPickup } from '../pickups/pickups.ts';
+import { despawnPickup, spawnDroppedPickup } from '../pickups/pickups.ts';
 import { harvestCactus } from '../world/cactus.ts';
 import { markSalvageStripped } from '../world/salvage.ts';
 import {
@@ -129,6 +129,19 @@ export interface SaveV1 {
 
   // Seeded entities — list current state by id. Missing ids = consumed/looted.
   pickupSurvivors: number[];
+  /** ABM (B7) — v11 additive: dropped-item pickups that have a physics
+   *  body (and therefore a runtime-mutable position). Each entry is
+   *  re-spawned via spawnDroppedPickup on load at the saved transform.
+   *  Seed-spawned pickups (no body) are NOT in this list — they're
+   *  recreated from the world build per `pickupSurvivors`. Pre-ABM
+   *  saves arrive without this field; loader defaults to empty array
+   *  (no dropped items restored). */
+  droppedPickups?: Array<{
+    itemId: string;
+    pos: V3;
+    quat: { x: number; y: number; z: number; w: number };
+    meta?: import('../inventory/types.ts').ItemMeta;
+  }>;
   cacti: Array<{ id: number; harvested: boolean }>;
   lizards: Array<{ id: number; pos: V3; state: LizardState; looted: boolean }>;
   raiders: Array<{ id: number; pos: V3; state: RaiderState; health: number }>;
@@ -309,6 +322,20 @@ export function saveGameState(ctx: GameContext): { ok: boolean; error?: string }
         elapsed: ctx.time.elapsed,
       },
       pickupSurvivors: ctx.pickups.list.map((p) => p.id),
+      // ABM (B7) — serialize only physics-bodied (= dropped) pickups.
+      // Seed-spawned ones (no body) restore from world build naturally.
+      droppedPickups: ctx.pickups.list
+        .filter((p) => p.body !== null)
+        .map((p) => {
+          const t = p.body!.translation();
+          const r = p.body!.rotation();
+          return {
+            itemId: p.itemId,
+            pos: { x: t.x, y: t.y, z: t.z },
+            quat: { x: r.x, y: r.y, z: r.z, w: r.w },
+            meta: p.meta ? { ...p.meta } : undefined,
+          };
+        }),
       cacti: ctx.cacti.list.map((c) => ({ id: c.id, harvested: c.harvested })),
       lizards: ctx.lizards.map((l) => {
         const tr = l.body.translation();
@@ -542,6 +569,35 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
   for (const p of ctx.pickups.list.slice()) {
     if (!survivorSet.has(p.id)) {
       despawnPickup(ctx, p);
+    }
+  }
+
+  // ABM (B7) — restore dropped-item pickups with their physics bodies
+  // at the saved transforms. Pre-ABM saves arrive without the field;
+  // skip silently in that case. Each entry is re-spawned via
+  // spawnDroppedPickup with opts.world so the body is recreated; the
+  // initial fall-from-above is overridden by the saved Y so items
+  // appear exactly where they settled, not from above.
+  if (save.droppedPickups) {
+    for (const saved of save.droppedPickups) {
+      const p = spawnDroppedPickup(
+        ctx.three.scene, ctx.terrain,
+        { x: saved.pos.x, z: saved.pos.z },
+        saved.itemId as import('../inventory/types.ts').ItemId,
+        saved.meta,
+        {
+          world: ctx.physics.world,
+          yOverride: saved.pos.y,
+        },
+      );
+      // Restore exact rotation from save (spawnDroppedPickup's body
+      // starts with the spawn position's identity rotation; overwrite).
+      if (p.body) {
+        p.body.setRotation({ x: saved.quat.x, y: saved.quat.y, z: saved.quat.z, w: saved.quat.w }, true);
+        p.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+        p.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+      }
+      ctx.pickups.list.push(p);
     }
   }
 

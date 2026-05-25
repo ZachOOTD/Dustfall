@@ -3,6 +3,7 @@
 // interaction module raycasts against this list to figure out what's hovered.
 
 import * as THREE from 'three';
+import RAPIER from '@dimforge/rapier3d-compat';
 import type { Rng } from '../core/rng.ts';
 import type { Terrain } from '../world/terrain.ts';
 import type { AssetRegistry } from '../assets/loader.ts';
@@ -21,6 +22,14 @@ export interface Pickup {
   pos: THREE.Vector3;         // resting position; bob is added each frame
   bobPhase: number;
   hovered: boolean;           // updated by player/interaction each frame
+  /** ABM (B7) — optional Rapier dynamic body for dropped items that roll/
+   *  fall/settle. Null for seed-spawned pickups (branches, scavenger-camp
+   *  bandage) which sit statically at deterministic positions. When non-
+   *  null, the per-frame `updatePickups` tick syncs mesh.position +
+   *  quaternion from the body. The body uses a cuboid collider sized to
+   *  the item's bounding box, and starts awake to settle into rest;
+   *  Rapier auto-sleeps it once stopped. */
+  body: RAPIER.RigidBody | null;
 }
 
 let _nextId = 1;
@@ -152,6 +161,7 @@ export function spawnCanteens(
       pos: new THREE.Vector3(x, restY, z),
       bobPhase: rand() * Math.PI * 2,
       hovered: false,
+      body: null,  // ABM (B7) — seed-spawned canteens stay static
     });
   }
   return list;
@@ -232,6 +242,7 @@ export function spawnBranchAt(
     pos: new THREE.Vector3(x, restY, z),
     bobPhase: rand() * Math.PI * 2,
     hovered: false,
+    body: null,  // ABM (B7) — seed-spawned branches stay static
   };
   list.push(pickup);
   return pickup;
@@ -264,14 +275,31 @@ export function bobPickups(
 }
 
 /** Spawn a Pickup at a given world position from any ItemId — used for
- *  player drops. Reuses the item's viewmodel mesh (scaled up) as the world
- *  visual; falls back to a primitive cube if no makeViewModel is defined. */
+ *  player drops, crafting drops, and inventory-full pickup swaps. Reuses
+ *  the item's viewmodel mesh (scaled up) as the world visual; falls back
+ *  to a primitive cube if no makeViewModel is defined.
+ *
+ *  ABM (B7) — when `opts.world` is provided, a Rapier DYNAMIC body is
+ *  attached so the item rolls/falls/settles naturally (e.g., dropped on
+ *  a slope rolls downhill). When omitted, original behavior preserved
+ *  (static mesh at the snapped-to-terrain position). Most player-facing
+ *  drops should pass opts.world; deterministic seed-spawn callers (poi.ts
+ *  scavenger camp) can leave it null for the static placement. */
 export function spawnDroppedPickup(
   scene: THREE.Scene,
   terrain: Terrain,
   pos: { x: number; z: number },
   itemId: ItemId,
   meta?: ItemMeta,
+  opts?: {
+    world?: RAPIER.World;
+    /** Optional initial linear velocity for the dynamic body (player
+     *  drops use a small forward + up impulse for "tossed" feel). */
+    initialVel?: { x: number; y: number; z: number };
+    /** Override the spawn Y (default: terrain height + 0.04 for static,
+     *  terrain + 0.6 for physics so items fall a bit). */
+    yOverride?: number;
+  },
 ): Pickup {
   const def = getItemDef(itemId);
   let mesh: THREE.Object3D;
@@ -288,10 +316,19 @@ export function spawnDroppedPickup(
     mesh = fallback;
   }
   const groundY = terrain.heightAt(pos.x, pos.z);
-  const restY = groundY + 0.04;
+  // For physics-attached pickups, spawn slightly higher so they fall +
+  // settle — gives the "tossed onto the ground" reading. Static pickups
+  // sit flush at +4cm (original behavior).
+  const defaultY = opts?.world ? groundY + 0.6 : groundY + 0.04;
+  const restY = opts?.yOverride ?? defaultY;
   mesh.position.set(pos.x, restY, pos.z);
   mesh.rotation.y = Math.random() * Math.PI * 2;
-  alignToTerrainNormal(mesh, terrain, pos.x, pos.z);
+  // Terrain-normal align only for static pickups; physics bodies derive
+  // rotation from the body each frame so an initial mesh rotation gets
+  // immediately overwritten.
+  if (!opts?.world) {
+    alignToTerrainNormal(mesh, terrain, pos.x, pos.z);
+  }
   // Dropped items inherit the pickup no-shadow rule.
   mesh.userData.noShadow = true;
   mesh.traverse((o) => {
@@ -306,6 +343,37 @@ export function spawnDroppedPickup(
   tagPickupMeshes(mesh, pickupId);
   scene.add(mesh);
 
+  // ABM (B7) — attach a Rapier dynamic body when world is provided.
+  // Cuboid collider sized to the mesh's bounding box (snug; pickups are
+  // small so the AABB approximation reads fine). Damping prevents
+  // jittery rolling on dunes; friction high so they grip slopes after
+  // settling rather than slowly creeping forever.
+  let body: RAPIER.RigidBody | null = null;
+  if (opts?.world) {
+    mesh.updateMatrixWorld(true);
+    const bbox = new THREE.Box3().setFromObject(mesh);
+    const size = new THREE.Vector3();
+    bbox.getSize(size);
+    const hx = Math.max(0.04, size.x * 0.5);
+    const hy = Math.max(0.04, size.y * 0.5);
+    const hz = Math.max(0.04, size.z * 0.5);
+    const bd = RAPIER.RigidBodyDesc.dynamic()
+      .setTranslation(pos.x, restY, pos.z)
+      .setLinearDamping(0.6)
+      .setAngularDamping(0.8);
+    if (opts.initialVel) {
+      bd.setLinvel(opts.initialVel.x, opts.initialVel.y, opts.initialVel.z);
+    }
+    body = opts.world.createRigidBody(bd);
+    opts.world.createCollider(
+      RAPIER.ColliderDesc.cuboid(hx, hy, hz)
+        .setFriction(0.85)
+        .setRestitution(0.15)
+        .setDensity(0.6),
+      body,
+    );
+  }
+
   return {
     id: pickupId,
     itemId,
@@ -314,7 +382,27 @@ export function spawnDroppedPickup(
     pos: new THREE.Vector3(pos.x, restY, pos.z),
     bobPhase: Math.random() * Math.PI * 2,
     hovered: false,
+    body,
   };
+}
+
+/** ABM (B7) — per-frame sync: copy each physics-bodied pickup's body
+ *  transform onto its mesh. Cheap walk; skips pickups without a body.
+ *  Also updates the persisted `pos` field so other systems (raycast
+ *  pickup detection, save serialization) read the live position. */
+const _pickupSyncPos = new THREE.Vector3();
+const _pickupSyncQuat = new THREE.Quaternion();
+export function updatePickups(ctx: import('../GameContext.ts').GameContext): void {
+  for (const p of ctx.pickups.list) {
+    if (!p.body) continue;
+    const t = p.body.translation();
+    const r = p.body.rotation();
+    _pickupSyncPos.set(t.x, t.y, t.z);
+    _pickupSyncQuat.set(r.x, r.y, r.z, r.w);
+    p.mesh.position.copy(_pickupSyncPos);
+    p.mesh.quaternion.copy(_pickupSyncQuat);
+    p.pos.copy(_pickupSyncPos);
+  }
 }
 
 /** Bump the module-level id counter past `n` so future spawns don't collide
@@ -333,12 +421,18 @@ export function findPickupById(
   return null;
 }
 
-/** Remove a pickup from the world + the list. Used when E-take fires. */
+/** Remove a pickup from the world + the list. Used when E-take fires.
+ *  ABM (B7) — also removes the Rapier body when present so dropped-item
+ *  bodies don't leak (Rapier doesn't GC removed scene objects). */
 export function despawnPickup(
   ctx: import('../GameContext.ts').GameContext,
   pickup: Pickup,
 ): void {
   ctx.three.scene.remove(pickup.mesh);
+  if (pickup.body) {
+    ctx.physics.world.removeRigidBody(pickup.body);
+    pickup.body = null;
+  }
   const idx = ctx.pickups.list.indexOf(pickup);
   if (idx >= 0) ctx.pickups.list.splice(idx, 1);
 }
