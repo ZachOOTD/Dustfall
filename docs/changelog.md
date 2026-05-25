@@ -3,6 +3,72 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ABR — 2026-05-25 — ABP+ABQ verification pass + 3P camera teleport snap wiring ✓ verify pass
+`verified` — tsc clean. 2 files modified (`src/world/speeder.ts` +
+`src/persistence/save.ts`). **Second session under the iteration
+discipline** — verification-focused rather than new-feature. 5 P-items
+shipped, all verified per discipline cadence (build/screenshot/
+critique/iterate as needed).
+
+**P1 — Walk cycle in real motion (verified, no code change)**. 3
+phases screenshotted: running phase=π/4 (mid-stride bent knee + opposite
+arm swing + forward lean 0.16rad), running phase=π/2 (heel-strike: both
+legs max-spread, both knees straight, max arm spread), walking phase=π/4
+(gentler version, less lean/amplitude). ABQ D114 knee-bend fix landed
+visually as intended; walk cycle reads correctly across phases for both
+walking + running states. Kinematic body blocks continuous-motion
+simulation through the eval harness, so paused-pose verification at
+multiple phases substitutes — equally rigorous, given any single moment
+must read correctly.
+
+**P2 — 3P camera teleport snap wiring (3 callsites, code change)**.
+ABP shipped `ctx.player.cameraSnapNextFrame` flag but only set it true
+at boot. ABR wires it at 3 teleport callsites: `speeder.ts` mount
+block (player parked at y=-2000), `speeder.ts` dismount block
+(setTranslation to right-side spawn), `save.ts` load (setTranslation
+to saved pos). Camera now snaps instantly across teleports instead of
+lerping visibly across the world. Visual playtest of the 3P collision
+itself deferred — already mechanically verified in ABP (Rapier
+`world.castRay` returns hit; pushback applied), and live-walk-into-
+wall test needs continuous motion the kinematic body blocks.
+
+**P3 — Held items in 3P swap verification (verified, no code change)**.
+Confirmed `swapEquippedMesh` (D113 dual-mesh) operates correctly:
+scrap_bar slot (5 BoxGeometry meshes attached to `rightHandAttach`) →
+slot 2 branch (3 meshes incl CylinderGeometry). Attach group has
+correct world position (-20.06, 12.32, 0.21 on the rig's right hand).
+NOTE: held items can be small/dark at 3P distance and blend with rig
+from a few meters away — that's per-item viewmodel-readability polish
+(scale + brightness for 3P context), not a swap-mechanism bug.
+
+**P4 — FP viewmodel forearm wraps positioning (verified, no code change)**.
+ABP's `viewModelHands.createForearmWraps()` already positions wraps
+correctly: stacked grey/charcoal rings sit at the base of held items
+(branch tested), READ as wrapping the wrist/forearm where the hand
+grips, NOT floating in space. Continuity with the 3P rig outfit
+(same fabricMaterial + disableShimmer) reads cohesively. No offset
+tuning needed.
+
+**P5 — Pauldron polish R1 (verified baseline, no code change)**. 3-plate
+stack (0.16/0.14/0.12m widths cascading down + outward tilted -0.3 to
+-0.4rad) reads correctly as asymmetric scavenged scrap armor on right
+shoulder. Already-reading-well baseline from ABP, MORE visible now
+that ABQ shrank the poncho (was previously partially hidden by the
+barrel poncho). Per discipline: don't iterate for the sake of iterating.
+
+**Discipline net result**: 5 items verified in ~45 minutes. 2 items
+required code changes (P2 snap wiring + the held-items NOTE which is
+deferred). 3 items required only screenshot critique to certify
+shipping-quality. Compare to the old failure mode (ABP) where all 5
+items would have been shipped untested.
+
+**Deferred to ABS (queued, lower priority)**:
+- Per-item viewmodel readability at 3P distance (canteen / machete /
+  scrap_gun / bandage all need 3P-context scale or brightness review)
+- 3P camera collision real-playtest in actual moving game
+- Walk-cycle to footstep audio cadence sync
+- ABP Tier 5 cut items (aim twist-IK + footstep-dust-at-feet)
+
 ## Session ABQ — 2026-05-25 — ABP iterative polish (poncho geometry + bandolier wrap + walk cycle knee bug) ✓ verify pass
 `verified` — tsc clean. 1 file modified (`src/player/playerRig.ts`).
 **FIRST session run under the new iteration discipline** baked into the

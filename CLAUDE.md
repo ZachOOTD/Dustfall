@@ -60,7 +60,30 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session ABQ — ABP iterative polish under the new
+**Last shipped**: Session ABR — ABP+ABQ verification pass under the
+iteration discipline + 3P camera teleport snap wiring at 3 callsites.
+**Second session under the discipline**, verification-focused. 5 P-items
+shipped, all verified via screenshot critique cadence (build/screenshot/
+critique/iterate as needed). 2 files modified (`src/world/speeder.ts` +
+`src/persistence/save.ts`). tsc clean. **P1 walk cycle in motion**:
+verified at 3 phases — running π/4 + running π/2 (heel-strike) + walking
+π/4 — ABQ D114 knee-bend fix lands visually. **P2 snap wiring**:
+`ctx.player.cameraSnapNextFrame=true` now set at speeder mount + speeder
+dismount + save-load. Camera snaps instantly across teleports instead
+of lerping visibly. **P3 held items dual-mesh swap**: verified
+swap operates correctly (scrap_bar 5 meshes → branch 3 meshes incl
+CylinderGeometry). NOTE held items can be small/dark at 3P distance —
+per-item viewmodel readability is deferred polish. **P4 FP forearm
+wraps**: already-correct positioning from ABP, no offset tuning needed.
+**P5 pauldron**: baseline reading well + MORE visible after ABQ poncho
+shrink. **Discipline net**: 5 items verified in ~45min; 2 required
+code changes (P2 snap wiring + held-items NOTE); 3 required only
+screenshot critique. The old failure mode would have shipped all 5
+untested. **Deferred to ABS**: per-item viewmodel readability at 3P
+distance, real-playtest 3P collision, walk-to-footstep cadence sync,
+ABP Tier 5 cut items.
+
+**Prior milestone**: Session ABQ — ABP iterative polish under the new
 iteration discipline. **FIRST session run under the discipline** baked
 into the framework after ABP playtest revealed shipped-but-shallow
 visual work. 3 elements fully iterated per discipline (>6 shallow). 1

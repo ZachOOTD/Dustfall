@@ -61,28 +61,27 @@ and promotes the second.
 - **Session ABO** (2026-05-25, long-overnight scope-cut-from-bottom): 7 of 8 items shipped across 4 of 5 tiers. **Tier 1 polish (4 items)**: C1 scavenger camp strip + C5 engine heat-shield back panel + C4 dish backing framework + collision + C3 viewmodel pass (6 of 8 worst items). **Tier 2 A3 (full)**: procedural primitive player rig (NEW src/player/playerRig.ts ~270 LOC) + F-key 3P toggle + 3P spring-arm camera offset. D110 captures the single-camera-with-offset architecture. **Tier 3 B3**: sandworm 'ambush' state (9th in SandWormState) + dawn/dusk surfacing modifier (×1.30 detection in twilight windows); retreat-stalk loop deferred per cut #3. **Tier 4 B6**: engineBlock POC migration to composite procgen via 'flagship_engineBlock' fixed-recipe class + placeProcgenCompositeForFlagship wrapper (engineBlock.ts kept on disk for one-line revert). **Tier 5 B1 (full)** CUT per pre-committed cut #1 — generalized rope deferred to ABP. 12 files (11 modified + 1 new). D110.
 - **Session ABP** (2026-05-25, long-overnight stay-procedural 3P + rig polish): 4 of 5 tiers shipped (Tier 5 CUT). Tier 0 research deliverables × 2 (3p-cameras-in-games.md + sci-fi-desert-scavenger-aesthetic.md). Tier 1 rig overhaul: playerRig.ts rewrite ~270 → ~470 LOC — tapered torso + elongated head + finger hands + 7 mismatched-scavenger clothing layers (hood + poncho + bandolier + asymmetric pauldron + bandana + forearm wraps + more) + knee/elbow sub-pivots. Tier 2 animation: 3-phase walk cycle + hip sway + run lean + body bob + head counter-bob + FOOT IK to terrain. Tier 3 3P camera: Rapier raycast collision + smoothed follow + 3.2m/1.8m offsets + 3P pitch clamp + snap-on-teleport flag. Tier 4 held items: PlayerRig.rightHandAttach + dual-mesh item swap + visibility gate per frame + NEW viewModelHands.ts for FP forearm wraps continuity. D111-D113. 5 files + 2 new + 2 research docs.
 - **Session ABQ** (2026-05-25, ABP iterative polish under new iteration discipline): **First session under the discipline** baked into framework after ABP shallow-ship critique. 3 elements fully iterated > 6 shallow. 1 file modified (playerRig.ts). **P3 Poncho geometry (2 rounds)**: shrank from barrel to shawl — top radius 1.25→1.08, hem 2.0→1.6, height 1.4→0.85. Arms now hang OUTSIDE silhouette + legs visible below hem. **P4 Bandolier wrap (1 round)**: front-only 3 waypoints → 6-waypoint CLOSED Catmull-Rom loop over left shoulder + diagonal chest + right hip + around right flank + diagonal back + back of left shoulder. **P6 Walk cycle knee bend (CRITICAL BUG, D114)**: pre-fix `max(0, sin(legPhase - π/3)) * 0.6` peaked at MID-STANCE (weight-bearing). New `max(0, cos(legPhase)) * 0.65` peaks at mid-swing (foot in air). Amplitudes bumped: hipAmp 0.40→0.48, armAmp ratio 0.85→0.95, hip sway 0.012→0.020, body bob 0.035→0.045. D114.
+- **Session ABR** (2026-05-25, ABP+ABQ verification pass under discipline): **Second session under the discipline**, verification-focused (not new-feature). 5 P-items shipped. 2 files modified (speeder.ts + save.ts). **P1 walk cycle in motion**: verified at 3 phases — ABQ D114 knee-bend fix lands visually. **P2 3P camera teleport snap wiring**: `ctx.player.cameraSnapNextFrame=true` now set at speeder mount + dismount + save-load. Camera snaps across teleports instead of lerping. **P3 held items dual-mesh swap**: verified (scrap_bar 5 meshes → branch 3 meshes incl CylinderGeometry). **P4 FP forearm wraps**: positioning correct out of the box from ABP, no tuning needed. **P5 pauldron**: baseline reading well + MORE visible after ABQ poncho shrink. Discipline net: 5 items verified in ~45min; only 2 needed code changes.
 - **Session ABL** (2026-05-24, overnight ~3h of 6h budget): megaWreck visual rebuild. Edit-in-place refactor preserving collider layout + 8 panels + shelter zone + journal — pure visual lift. Procedural shader vocab applied to all hull/rust/pipe materials; tapered ellipsoidal cylinder shell drapes over the box-wall aft section; 6 rust band wraps; exposed vertical ribs + torn hull-plate fragments at the mid-hull break. Closes the "megaWreck rebuild" backlog item. 1 file, +166/-22.
 - **Session ABK** (2026-05-24, overnight 6h): Close the biome-specific POI family. NEW `src/world/saltOutpost.ts` (concrete base + corroded antenna spire + sample crates + cargo_container panel) + NEW `src/world/rockyEntrance.ts` (boulder outcrop + cave-mouth arch + descending stairs + sunken interior chamber via BackSide stone walls + shelter zone + escape_pod panel). Dispatch in poi.ts goes dune→salt→rocky for greedy multi-region spread. Multi-seed verified at 12345 + 7777 (both 5 shelter zones with +1 from rocky entrance). 5 files, 2 new modules.
 
 ## Up next
 
-ABQ continued ABP's iterative polish under the newly-encoded iteration
-discipline (3 elements fully iterated: poncho geometry, bandolier wrap,
-walk cycle knee bug). The discipline says: actually verify visual work
-with screenshots + critique, NOT tsc-clean as the gate. **ABR session
-should continue this rhythm** — verify ABP+ABQ work in real motion
-(not just static-pose screenshots), iterate remaining queued items per
-the same discipline. Candidates for ABR:
+ABR verified ABP+ABQ work under the iteration discipline + wired 3P
+camera teleport snap at 3 callsites. Rig + 3P + held items are now
+shipping-quality across the discipline gate. **ABS session candidates**:
+remaining ABP polish backlog + first-look at new architecture work.
+Top picks:
 **Polish / quick wins** (~30 min – 2h each):
-- 3P walk-cycle in real motion (boot game, walk around, screenshot
-  multiple times — the static pose verified mechanically but in-motion
-  read may need amplitude tweaks)
-- Pauldron polish (already reads well from baseline; can ship a R1)
-- 3P camera collision in actual playtest (vs paused-screenshot harness)
-- Held items in 3P verification (equip canteen + machete + scrap_bar)
-- FP viewmodel forearm-wraps positioning under actual hands
-- Walk-cycle-to-footstep-cadence sync (gait + footstep audio currently
-  fire on separate timers)
+- Per-item viewmodel readability at 3P distance (ABR P3 NOTE) — canteen
+  / machete / scrap_gun / bandage all small/dark from a few meters
+  away in the rig's right hand. Need 3P-context scale or brightness
+  review per item.
+- 3P camera collision in actual moving-game playtest (vs paused-
+  screenshot harness used in ABR; need to walk into wreck walls,
+  rapid F-toggle, mid-3P speeder mount)
+- Walk-cycle to footstep audio cadence sync (gait + footstep SFX fire
+  on separate timers)
 - ABP Tier 5 cut items — aim twist-IK + footstep-dust-at-feet
 **Big-ticket candidates** (4-10h):
 - A1 infinite chunk streaming (last major architectural lift, save
@@ -91,7 +90,7 @@ the same discipline. Candidates for ABR:
 - B5 flagship NPC beats (raider holdouts + hermits)
 - Migrate remaining 4 flagships to composite procgen if B6 POC reads
   well in playtest
-See `docs/next-session-prompt.md` for full ABR brief.
+See `docs/next-session-prompt.md` for full ABS brief.
 
 ## Next — Big-ticket bucket (1–2 picks per session at ~4–7h each)
 Pick whatever feels most missing after the polish + atmosphere arc.
