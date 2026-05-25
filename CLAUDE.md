@@ -60,7 +60,33 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session ABP — Dedicated 3P + player rig polish
+**Last shipped**: Session ABQ — ABP iterative polish under the new
+iteration discipline. **FIRST session run under the discipline** baked
+into the framework after ABP playtest revealed shipped-but-shallow
+visual work. 3 elements fully iterated per discipline (>6 shallow). 1
+file modified (`src/player/playerRig.ts`). tsc clean. **Poncho
+geometry**: shrank from a barrel (1.25×chest top / 2.0×waist hem /
+1.4×torso height, mid-thigh) to a shawl (1.08 / 1.6 / 0.85,
+shoulder-to-hip) so arms hang OUTSIDE the silhouette + legs visible
+below the hem. **Bandolier wrap**: pre-fix the strap was front-only
+(3 waypoints all +Z) → invisible from back. Converted to a 6-waypoint
+CLOSED Catmull-Rom loop wrapping over left shoulder + diagonal chest +
+right hip + around right flank + diagonal back + over back of left
+shoulder closing the loop. TubeGeometry closed=true. **Walk cycle knee
+bend (CRITICAL BUG fix, D114)**: pre-fix formula `max(0, sin(legPhase
+- π/3))` peaked knee bend at MID-STANCE (weight-bearing leg — wrong;
+should be straight). New formula `max(0, cos(legPhase)) * 0.65` peaks
+at mid-swing (foot in air, leg recovering forward). Amplitudes bumped:
+hipAmp 0.40→0.48 walking, armAmp ratio 0.85→0.95, hip sway 0.012→0.020m,
+body bob 0.035→0.045m. Verified at phase=π/4 + mirror phase=5π/4. The
+discipline encoding (shared-memory + 3 SKILL updates) was committed by
+user out-of-band before this session. **Deferred to ABR**: pauldron
+polish (already reads well), 3P camera in actual playtest, held items
+in 3P verification, FP forearm wraps positioning, walk-cycle-to-
+footstep cadence sync, ABP Tier 5 cut items (aim twist-IK + footstep-
+dust-at-feet).
+
+**Prior milestone**: Session ABP — Dedicated 3P + player rig polish
 session (long-overnight, stay-procedural). 4 of 5 tiers shipped
 (Tier 5 stretch CUT). **Tier 0 research**: 2 new docs/research/ docs
 written by game-researcher agents in parallel (3p-cameras-in-games.md

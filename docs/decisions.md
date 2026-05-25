@@ -2423,3 +2423,18 @@ full PBR pipeline.
 
 **Apply**: future hand-attached or cross-mode meshes (e.g., NPC viewmodels for shoulder-cam mode, vehicle dashboards in cockpit vs external cam) follow the same dual-mesh + visibility-gate pattern. Avoid runtime re-parenting between camera-attached + scene-attached groups.
 **friction-score:** 2
+
+## D114 — Walk cycle knee bend formula: peak at mid-swing, not mid-stance (Session ABQ)
+**When**: ABQ — iterating ABP's walk cycle under the new iteration discipline. Static-pose screenshots at phase=π/4 and mirror phase=5π/4 revealed the knee was bending during the wrong half of the cycle.
+
+**Why**: ABP shipped `kneeBend = max(0, sin(legPhase - π/3)) * 0.6` which peaks at `legPhase = π + π/3` (≈ MID-STANCE — the weight-bearing leg moment, when the foot is planted under the hip + the leg should be STRAIGHT). The forward-swing leg got a straight knee at heel-strike but mid-stance back-leg got the max bend — inverted relative to a real gait. The mistake wasn't surfaced before because `tsc clean + tier shipped` was the success gate; static-pose screenshots through the iteration discipline caught it.
+
+**Picked**: `kneeBend = max(0, cos(legPhase)) * 0.65` — peaks at `legPhase = 0` (and 2π), which corresponds to MID-SWING (foot in air, leg recovering forward through the vertical), and is zero across `[π/2, 3π/2]` (heel-strike → mid-stance → toe-off, where the leg should be straight). Walk cycle now reads correctly: forward leg LIFTED with bent knee, back leg PLANTED with straight knee.
+
+**Considered alternatives**:
+- Tune the `-π/3` offset to a different value. Rejected — sin-with-shift cycles through both signs; whichever offset is chosen, the formula bends across HALF the cycle including stance phase. The `cos`-only formulation bends across the upper quadrant only (correctly the swing phase).
+- Two separate phase windows with explicit gates. Rejected — `max(0, cos)` is a single expression doing the same thing more concisely.
+
+**Apply**: any future per-leg gait curve (creature animation, NPC walk cycles, mount stride) follows this principle: knee bend peaks at MID-SWING (transition through vertical, leg-in-air phase), not at MID-STANCE. The `max(0, cos(legPhase))` shape is the canonical pattern.
+
+This D-entry exists primarily as a memo for the iteration discipline: a bug like this is the kind of thing `tsc clean` will never catch, but per-element screenshot critique catches in one round. It was missed in ABP because that session shipped with `verify` as the only gate. **friction-score:** 1

@@ -3,6 +3,58 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ABQ — 2026-05-25 — ABP iterative polish (poncho geometry + bandolier wrap + walk cycle knee bug) ✓ verify pass
+`verified` — tsc clean. 1 file modified (`src/player/playerRig.ts`).
+**FIRST session run under the new iteration discipline** baked into the
+framework after ABP playtest revealed shipped-but-shallow visual work.
+Per `shared-memory/iterative-polish-discipline.md`: 3 elements fully
+iterated > 6 shallowly. Per-element build → screenshot → critique →
+iterate, NOT `tsc clean` as success gate.
+
+**P3 — Poncho geometry (2 rounds, was the worst element from baseline)**.
+Baseline read: a barrel covering 90% of body — arms, legs, bandolier,
+pauldron all smothered. R1 shrunk to a shawl: top radius
+`TORSO_CHEST_R * 1.25 → 1.08` (arms hang OUTSIDE the silhouette), hem
+flare `TORSO_WAIST_R * 2.0 → 1.4`, height `TORSO_H * 1.4 → 0.85`
+(shoulder to upper-hip, not mid-thigh), centered up 0.08m. R2: hem flare
+`1.4 → 1.6` for visible drape. Verified front, back, side, 3/4 angles —
+all read as wrapped-scavenger. Color `0xd9a85a` (pre-existing) reads
+warm sun-bleached ochre in midday light now that geometry is right.
+
+**P4 — Bandolier wrap (1 round)**. Pre-fix the strap was front-only
+(3 waypoints all +Z) — invisible from back, half the wrap missing.
+Converted to a 6-waypoint CLOSED Catmull-Rom loop wrapping over the
+left shoulder + diagonal across chest + right hip + around right flank
++ diagonal across back + over back of left shoulder. TubeGeometry
+`closed=true`, 36 segments × 8 radial, strap radius `0.018 → 0.020`.
+Pouches respaced for front-half cluster. Back half is hidden BY THE
+PONCHO at runtime (realistic — cross-body strap worn under cloth).
+
+**P6 — Walk cycle knee bend (CRITICAL BUG, 1 round)**. Pre-fix formula
+`max(0, sin(legPhase - π/3)) * 0.6` peaked knee bend at MID-STANCE
+(weight-bearing leg — wrong; should be straight). New formula
+`max(0, cos(legPhase)) * 0.65` peaks at legPhase=0/2π (mid-swing — foot
+in air recovering forward). Verified at phase=π/4 + mirror phase=5π/4.
+Amplitudes bumped for readability at 3P distance: hipAmp `0.40→0.48`
+walking + `0.55→0.62` running; armAmp ratio `0.85→0.95`; hip sway
+`0.012→0.020m`; body bob `0.035→0.045m` walking / `0.060→0.075m`
+running. D114.
+
+**Iteration discipline framework encoded (cross-session impact)**. Prior
+session's deferred commit hint surfaced for user: shared-memory/
+iterative-polish-discipline.md + README index + 3 SKILL.md updates
+(session-start Step 7 / feature-slice plan template / session-end self-
+check). Framework repo follows print-hints discipline always; commit
+ran by user out-of-band.
+
+**Deferred (queued for ABR)**:
+- Pauldron polish — already reads well; not touched
+- 3P camera collision in actual playtest (vs paused-screenshot harness)
+- Held items in 3P (verify dual-mesh swap)
+- FP viewmodel forearm-wraps positioning
+- Walk-cycle to footstep cadence sync
+- ABP Tier 5 cut (aim twist-IK + footstep-dust-at-feet)
+
 ## Session ABP — 2026-05-25 — 3P + player rig polish (research + rig overhaul + camera collision + held items in 3P + FP continuity) ✓ verify pass
 `verified` — tsc clean. 5 files modified + 2 new + 2 research docs. 4 of
 5 tiers shipped (Tier 5 stretch CUT per pre-committed cut order). The

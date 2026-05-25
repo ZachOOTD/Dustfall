@@ -59,27 +59,39 @@ and promotes the second.
 - **Session ABM** (2026-05-24, overnight ~2h of 6h budget): B7 dropped-item rigid-body physics. Pickup gains optional Rapier body; spawnDroppedPickup gets opts arg for world+initialVel+yOverride; per-frame updatePickups syncs transforms; despawnPickup cleans bodies; v11 additive `droppedPickups` save field for round-trip. Player drops + crafting overflow + pickup-swap all use bodies; seed-spawn stays static. B8 generalized rope cut per pre-committed scope-cut tier 3 (re-scoped in backlog for ABN — needs UX path + bigger refactor). 7 files. Verified seed 7777 + drop/save/reload round-trip exact.
 - **Session ABN** (2026-05-24, smaller post-compaction scope ~1.5h): Procgen wreck family + megaWreck bow shell + 3 bug fixes. B6 5th procgen class `bulk_hauler` (longest hull 7-8 parts, 3-4 panels, cargo_container palette; roulette 4-way → 5-way 35/20/18/12/15). megaWreck bow hull-shell (half-cylinder thetaStart=0..π preserves -X side entrance; matches aft ellipsoidal scale — closes ABL deferred item). 3 bug fixes from /triage-ideas: (1) companion getPlayerPos helper fixes stale-target on speeder mount; (2) D109 `opts.localSpace` added to skinMaterial + paintMaterial (applied to companion + sandworm + lizard + speeder, eliminates moving-entity texture-crawl); (3) fabricMaterial `opts.disableShimmer` applied to cloth + bandage viewmodels (fixes camera-relative wind-displacement breathing). 10 files, 4 commits. D109. 1 of 4 triage entries deferred (stale fire+cloth POI — needs user POI identification).
 - **Session ABO** (2026-05-25, long-overnight scope-cut-from-bottom): 7 of 8 items shipped across 4 of 5 tiers. **Tier 1 polish (4 items)**: C1 scavenger camp strip + C5 engine heat-shield back panel + C4 dish backing framework + collision + C3 viewmodel pass (6 of 8 worst items). **Tier 2 A3 (full)**: procedural primitive player rig (NEW src/player/playerRig.ts ~270 LOC) + F-key 3P toggle + 3P spring-arm camera offset. D110 captures the single-camera-with-offset architecture. **Tier 3 B3**: sandworm 'ambush' state (9th in SandWormState) + dawn/dusk surfacing modifier (×1.30 detection in twilight windows); retreat-stalk loop deferred per cut #3. **Tier 4 B6**: engineBlock POC migration to composite procgen via 'flagship_engineBlock' fixed-recipe class + placeProcgenCompositeForFlagship wrapper (engineBlock.ts kept on disk for one-line revert). **Tier 5 B1 (full)** CUT per pre-committed cut #1 — generalized rope deferred to ABP. 12 files (11 modified + 1 new). D110.
+- **Session ABP** (2026-05-25, long-overnight stay-procedural 3P + rig polish): 4 of 5 tiers shipped (Tier 5 CUT). Tier 0 research deliverables × 2 (3p-cameras-in-games.md + sci-fi-desert-scavenger-aesthetic.md). Tier 1 rig overhaul: playerRig.ts rewrite ~270 → ~470 LOC — tapered torso + elongated head + finger hands + 7 mismatched-scavenger clothing layers (hood + poncho + bandolier + asymmetric pauldron + bandana + forearm wraps + more) + knee/elbow sub-pivots. Tier 2 animation: 3-phase walk cycle + hip sway + run lean + body bob + head counter-bob + FOOT IK to terrain. Tier 3 3P camera: Rapier raycast collision + smoothed follow + 3.2m/1.8m offsets + 3P pitch clamp + snap-on-teleport flag. Tier 4 held items: PlayerRig.rightHandAttach + dual-mesh item swap + visibility gate per frame + NEW viewModelHands.ts for FP forearm wraps continuity. D111-D113. 5 files + 2 new + 2 research docs.
+- **Session ABQ** (2026-05-25, ABP iterative polish under new iteration discipline): **First session under the discipline** baked into framework after ABP shallow-ship critique. 3 elements fully iterated > 6 shallow. 1 file modified (playerRig.ts). **P3 Poncho geometry (2 rounds)**: shrank from barrel to shawl — top radius 1.25→1.08, hem 2.0→1.6, height 1.4→0.85. Arms now hang OUTSIDE silhouette + legs visible below hem. **P4 Bandolier wrap (1 round)**: front-only 3 waypoints → 6-waypoint CLOSED Catmull-Rom loop over left shoulder + diagonal chest + right hip + around right flank + diagonal back + back of left shoulder. **P6 Walk cycle knee bend (CRITICAL BUG, D114)**: pre-fix `max(0, sin(legPhase - π/3)) * 0.6` peaked at MID-STANCE (weight-bearing). New `max(0, cos(legPhase)) * 0.65` peaks at mid-swing (foot in air). Amplitudes bumped: hipAmp 0.40→0.48, armAmp ratio 0.85→0.95, hip sway 0.012→0.020, body bob 0.035→0.045. D114.
 - **Session ABL** (2026-05-24, overnight ~3h of 6h budget): megaWreck visual rebuild. Edit-in-place refactor preserving collider layout + 8 panels + shelter zone + journal — pure visual lift. Procedural shader vocab applied to all hull/rust/pipe materials; tapered ellipsoidal cylinder shell drapes over the box-wall aft section; 6 rust band wraps; exposed vertical ribs + torn hull-plate fragments at the mid-hull break. Closes the "megaWreck rebuild" backlog item. 1 file, +166/-22.
 - **Session ABK** (2026-05-24, overnight 6h): Close the biome-specific POI family. NEW `src/world/saltOutpost.ts` (concrete base + corroded antenna spire + sample crates + cargo_container panel) + NEW `src/world/rockyEntrance.ts` (boulder outcrop + cave-mouth arch + descending stairs + sunken interior chamber via BackSide stone walls + shelter zone + escape_pod panel). Dispatch in poi.ts goes dune→salt→rocky for greedy multi-region spread. Multi-seed verified at 12345 + 7777 (both 5 shelter zones with +1 from rocky entrance). 5 files, 2 new modules.
 
 ## Up next
 
-ABP shipped the dedicated 3P + rig polish: procedural mismatched-
-scavenger rig + 3P camera collision + held items in hand + FP
-viewmodel continuity. Tier 5 stretch (aim twist-IK + footstep-at-feet)
-deferred to ABQ. Remaining big-ticket candidates:
-**A1 infinite chunk streaming** (last major architectural lift, ~6-10h,
-save bump v11→v12), **B1 generalized rope attachment** (re-scoped from
-ABO — Tether → Endpoint refactor + RMB-on-item UX + save migration;
-~4-5h), **B5 flagship NPC beats** (hostile raider holdouts + friendly
-hermits at hand-modeled flagships, ~4-6h). Medium picks: **migrate
-remaining 4 flagships to composite procgen** (megaShip / megaWreck /
-satelliteDish / crashedHull — ~6-8h if B6 POC reads well), megaWreck
-catwalk panel reachability (panels 3+4), remaining 19 item viewmodels.
-Polish: 3P camera spring-arm collision (ABO debt), dropped-item
-playtest tune, identify + remove stale fire+cloth POI (was ABN
-deferred — now likely the scavenger camp itself which ABO stripped).
-See `docs/next-session-prompt.md` for full ABP brief.
+ABQ continued ABP's iterative polish under the newly-encoded iteration
+discipline (3 elements fully iterated: poncho geometry, bandolier wrap,
+walk cycle knee bug). The discipline says: actually verify visual work
+with screenshots + critique, NOT tsc-clean as the gate. **ABR session
+should continue this rhythm** — verify ABP+ABQ work in real motion
+(not just static-pose screenshots), iterate remaining queued items per
+the same discipline. Candidates for ABR:
+**Polish / quick wins** (~30 min – 2h each):
+- 3P walk-cycle in real motion (boot game, walk around, screenshot
+  multiple times — the static pose verified mechanically but in-motion
+  read may need amplitude tweaks)
+- Pauldron polish (already reads well from baseline; can ship a R1)
+- 3P camera collision in actual playtest (vs paused-screenshot harness)
+- Held items in 3P verification (equip canteen + machete + scrap_bar)
+- FP viewmodel forearm-wraps positioning under actual hands
+- Walk-cycle-to-footstep-cadence sync (gait + footstep audio currently
+  fire on separate timers)
+- ABP Tier 5 cut items — aim twist-IK + footstep-dust-at-feet
+**Big-ticket candidates** (4-10h):
+- A1 infinite chunk streaming (last major architectural lift, save
+  bump v11→v12)
+- B1 generalized rope attachment (re-scoped from ABO/ABP)
+- B5 flagship NPC beats (raider holdouts + hermits)
+- Migrate remaining 4 flagships to composite procgen if B6 POC reads
+  well in playtest
+See `docs/next-session-prompt.md` for full ABR brief.
 
 ## Next — Big-ticket bucket (1–2 picks per session at ~4–7h each)
 Pick whatever feels most missing after the polish + atmosphere arc.

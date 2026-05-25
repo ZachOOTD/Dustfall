@@ -17,6 +17,16 @@ Use `/triage-ideas` to bulk-classify a free-form dump.
 <!-- (procedural world generation — shipped in AAI/AAK) -->
 <!-- (creature companion — shipped in AAE) -->
 
+[polish] ABQ deferred iteration items (all on src/player/playerRig.ts; verified statically in ABQ, need in-motion verification): (1) walk cycle in real motion — ABQ verified at static phase=π/4 + 5π/4; the math is correct but in-motion may need amplitude tweaks once running tick-driven (vs eval-pose). (2) Pauldron R1+ — was already reading well in baseline, untouched in ABQ. (3) Hood drape one-side asymmetry — minor cosmetic gap noted but cuttable. (4) Side-by-side gait cadence: footstep audio fires on separate timer from animation; sync would lock them at heel-strike. (5) Foot IK mid-state transition snap (idle→walking on slope shows brief reset to flat) — cosmetic, low-priority.
+
+[polish] ABP Tier 5 stretch CUT (queued for ABR or later) — (1) upper-body aim twist-IK: rotate rig.shoulders[1] (right shoulder) toward camera direction during aim. Reads as character physically aiming. (2) Footstep dust at foot terrain contact: move dust emit point from player-center to foot mid-stance world position via Tier 2's foot IK. Reads as dust kicking from FEET specifically.
+
+[polish] 3P camera real-playtest pass — ABP shipped Rapier raycast collision + smoothed follow + 3P pitch clamp; verified mechanically (eval gives correct camera positions for the static scenarios) but NOT yet verified in actual game playtest (walking into wreck walls, rapid F-toggles, mounting speeder mid-3P, etc). 30-60 min playtest pass would surface any edge cases. ABQ noted that mount/dismount/save-load should set ctx.player.cameraSnapNextFrame but the wiring isn't in place — camera will lerp across teleports as a visible glitch.
+
+[polish] Held items in 3P real-playtest pass — ABP shipped dual-mesh swap (D113) but only verified mechanically. In actual game: equip canteen + drink, equip machete + swing, equip scrap_gun + reload, equip bandage. Confirm all 4 swap into rig's right hand correctly + render visibly + FP viewmodel inverts visibility on F toggle.
+
+[polish] FP viewmodel forearm wraps positioning — ABP added createForearmWraps in viewModelHands.ts but the wraps are attached to viewmodel.itemRoot (camera-anchored) so positions are relative to FP camera, not the actual hand mesh. Need to verify they READ as "wrapping the hands" from FP first-person view, not floating in space. May need offset tweaks.
+
 [feat] base-building mechanics
 [idea] remove HUD stat bars in favor of audio/visual/text cues ("you could use a drink")
 [feat] multi-worm population — AAP shipped single-worm procgen biome-seeded spawn + noise-scaled detection. Extending to N worms per world needs save-schema bump (currently `sandWorm: { ... } | null` field; would become `sandWorms: [...]`), per-worm min-separation logic, and playtest pass to confirm N>1 doesn't ruin the early game.

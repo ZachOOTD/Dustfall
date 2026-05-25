@@ -4,94 +4,69 @@ Cumulative state. Rewritten end-to-end at each `/session-end`. A
 reviewer who's never seen the project should be able to read this +
 `CLAUDE.md` + `docs/GDD.md` and understand where Dustfall is.
 
-**Current state**: Session ABP shipped (2026-05-25, dedicated 3P + rig
-polish, long-overnight stay-procedural). 71 sessions post-MVP. tsc
-clean. SAVE_VERSION v11 unchanged (rig is purely visual; no schema
-changes). 4 of 5 tiers shipped; Tier 5 stretch CUT per pre-committed
-cut order. D107 zero-asset policy preserved.
+**Current state**: Session ABQ shipped (2026-05-25, ABP iterative polish
+under the new iteration discipline). 72 sessions post-MVP. tsc clean.
+SAVE_VERSION v11 unchanged (rig is purely visual; no schema changes).
+3 elements fully iterated > 6 shallow per the discipline. **First
+Dustfall session run under the iteration-polish discipline** baked
+into the gamedev-framework after ABP playtest revealed shipped-but-
+shallow visual work.
 
-**ABP scope**:
-- **Tier 0 (research)**: 2 new docs/research/ deliverables via
-  game-researcher agent in parallel — `3p-cameras-in-games.md` +
-  `sci-fi-desert-scavenger-aesthetic.md`. Concrete Three.js/Rapier
-  recommendations + 10-layer geometry table.
-- **Tier 1 (rig overhaul)**: src/player/playerRig.ts rewrite (~270 →
-  ~470 LOC). Better proportions (tapered torso + elongated head +
-  finger hands + foot/toe). 7 mismatched-scavenger clothing layers
-  (hood + poncho + bandolier + asymmetric pauldron + bandana +
-  forearm wraps + more). knee + elbow sub-pivots added.
-- **Tier 2 (animation)**: 3-phase walk cycle + hip sway + run lean +
-  body bob + head counter-bob + proper bent-knee crouch + **FOOT IK
-  to terrain** (the user-prioritized realism crown jewel).
-- **Tier 3 (3P camera)**: offsets bumped to 3.2m/1.8m per research +
-  Rapier raycast collision (0.3m pushback) + frame-rate-independent
-  smoothed follow at ~10/s + 3P pitch clamp + snap-on-teleport flag.
-- **Tier 4 (held items + FP continuity)**: PlayerRig.rightHandAttach +
-  dual-mesh item swap (FP viewmodel + 3P hand-attach instances) +
-  visibility gate per frame + NEW src/player/viewModelHands.ts for FP
-  forearm wraps continuity.
+**ABQ scope**: 1 file modified (`src/player/playerRig.ts`); 3 substantive
+iterations.
 
-**D-entries added**: D111 (procedural clothing layering as primitive
-composite), D112 (3P camera Rapier raycast collision arch), D113
-(dual-mesh held items with mode-gated visibility). All friction-2.
+- **P3 — Poncho geometry (2 rounds)**: baseline was a barrel covering
+  90% of the body — arms, legs, bandolier, pauldron all smothered.
+  R1 shrunk to a shawl: top radius `TORSO_CHEST_R * 1.25 → 1.08`
+  (arms hang OUTSIDE silhouette), hem flare `TORSO_WAIST_R * 2.0 →
+  1.4`, height `TORSO_H * 1.4 → 0.85` (shoulder-to-upper-hip).
+  R2: hem flare `1.4 → 1.6` for visible drape. Verified at 4 camera
+  angles — all read as wrapped-scavenger. **Highest single-impact
+  iteration of the session**: fixed the visual identity of the rig.
 
-5 files modified + 2 new src + 2 research docs.
+- **P4 — Bandolier wrap (1 round)**: pre-fix the strap was front-only
+  (3 waypoints all +Z) → invisible from back, half the wrap missing.
+  Converted to a 6-waypoint CLOSED Catmull-Rom loop over left
+  shoulder + diagonal chest + right hip + around right flank +
+  diagonal back + back of left shoulder closing the loop. TubeGeometry
+  closed=true; strap radius 0.018→0.020. Back-half is hidden BY THE
+  PONCHO at runtime (realistic — cross-body strap worn under cloth).
 
-**Prior state**: ABO shipped (2026-05-24, long-overnight ~10h budget
-scope-cut-from-bottom). 70 sessions post-MVP. tsc clean.
-SAVE_VERSION v11 unchanged (no schema changes this session — A3 rig
-state is purely visual; ambush + dawn/dusk are sandworm runtime state;
-B6 POC reuses existing composite system + journal pattern). 7 of 8
-selected items shipped; B1 generalized rope CUT per pre-committed cut #1.
+- **P6 — Walk cycle knee bend (CRITICAL BUG, 1 round, D114)**: pre-fix
+  formula `max(0, sin(legPhase - π/3)) * 0.6` peaked knee bend at
+  MID-STANCE (weight-bearing leg — wrong; should be straight).
+  New formula `max(0, cos(legPhase)) * 0.65` peaks at legPhase=0/2π
+  (mid-swing — foot in air recovering forward), zero across
+  `[π/2, 3π/2]` (heel-strike + mid-stance + toe-off). Verified at
+  phase=π/4 (left forward+bent + right back+straight) and mirror
+  phase=5π/4 (right forward+bent + left back+straight). Amplitudes
+  bumped: hipAmp 0.40→0.48 walking + 0.55→0.62 running; armAmp ratio
+  0.85→0.95; hip sway 0.012→0.020m; body bob 0.035→0.045m walking +
+  0.060→0.075m running.
 
-**ABO scope**:
-- **Tier 1 (4 polish items)**: C1 scavenger camp strip + C5 engine
-  heat-shield back panel + C4 dish backing framework + collision +
-  C3 viewmodel pass (6 of 8 worst items).
-- **Tier 2 (A3 full)**: procedural primitive player rig (NEW
-  `src/player/playerRig.ts` ~270 LOC) + F-key 3P camera toggle +
-  3P spring-arm offset in `syncCameraToBody`.
-- **Tier 3 (B3 ambush + dawn/dusk)**: new 'ambush' state in
-  SandWormState union (now 9 values) + twilight surfacing modifier.
-  Retreat-stalk deferred per cut #3.
-- **Tier 4 (B6 POC)**: engineBlock migration to composite procgen
-  via new `'flagship_engineBlock'` class + `placeProcgenCompositeForFlagship`
-  wrapper.
-- **Tier 5 (B1 CUT)**: deferred to ABP.
+**D-entries added**: D114 (walk cycle knee bend mid-swing-not-mid-
+stance, friction-1 — exists primarily as a memo for the iteration
+discipline; this is exactly the kind of bug `tsc clean` will never
+catch but per-element screenshot critique catches in one round).
 
-**D110 added** (3P camera = single-camera-with-position-offset, not
-dual cameras). 12 files (11 modified + 1 new). All commits pending
-push.
+**Deferred to ABR (queued)**:
+- Pauldron polish — was already reading well in ABP baseline; not
+  touched in ABQ.
+- Walk cycle in REAL motion (vs static-pose screenshots) — the math
+  was fixed but in-motion may need amplitude/cadence tweaks.
+- 3P camera collision in real playtest (vs paused-eval-harness).
+- Held items in 3P verification (canteen / machete / scrap_gun /
+  bandage all need actual swap test).
+- FP viewmodel forearm-wraps positioning under actual hands.
+- Walk-cycle-to-footstep-cadence sync.
+- ABP Tier 5 cut items: aim twist-IK + footstep-dust-at-feet.
 
-**Prior state**: ABN shipped (2026-05-24, smaller post-compaction
-scope ~1.5h). 69 sessions. B6 5th procgen class bulk_hauler +
-megaWreck bow shell + 3 bug fixes from triage (companion stale-mount-
-target + procedural shader crawl on moving entities + viewmodel
-fabric breathing). D109 (procedural-shader localSpace opt).
-
-**ABN scope**: Procgen wreck family expansion + megaWreck bow shell +
-3 bug fixes from user playtest report.
-- **B6**: 5th procgen wreck class `bulk_hauler` (longest hull, 7-8
-  parts, 3-4 panels, cargo_container loot palette). Class roulette
-  4-way → 5-way (35/20/18/12/15).
-- **megaWreck bow hull-shell**: half-cylinder (thetaStart=0..π) caps
-  upper bow box; open underside preserves -X side entrance; matches
-  aft shell ellipsoidal scale for continuous silhouette family.
-  Closes ABL deferred item.
-- **Bug 1**: companion follows stale pre-mount position when player
-  rides speeder — new `getPlayerPos(ctx)` helper in companion.ts
-  mirrors sandWorm.ts pattern (reads speeder body when mounted).
-- **Bug 2 (D109)**: procedural shaders crawl on moving entities —
-  added `opts.localSpace?: boolean` to skinMaterial + paintMaterial;
-  applied to companion + sandworm + lizard + speeder. Static surfaces
-  keep world-space sampling for coherent weathering.
-- **Bug 3**: cloth + bandage viewmodels expand during player movement
-  — added `opts.disableShimmer?: boolean` to fabricMaterial; applied
-  to cloth + bandage viewmodels (camera-relative world-coord
-  displacement was animating against player movement).
-- **Deferred**: 1 of 4 triage entries — "stale fire+cloth POI" —
-  code-only inspection couldn't pinpoint; needs user to identify.
-10 files, 4 commits. D109 added.
+**Cross-session impact**: The iteration discipline encoding done at the
+end of the prior ABP session (shared-memory/iterative-polish-
+discipline.md + 3 SKILL.md updates) was carried into this session's
+canon for the first time. ABQ proves the discipline works in practice:
+3 rounds of poncho iteration + 1 of bandolier + 1 of walk cycle
+shipped substantive fixes that would not have been caught by tsc.
 
 ---
 
@@ -107,7 +82,7 @@ operates on a per-session "Big-ticket bucket + Polish" model.
 | Tier 1 — Vertical slice | I–W | ✓ shipped | Inventory, crafting, interactions, opening scene, journal |
 | Tier 2 — Target | X–CC | ✓ shipped | Audio architecture, atmosphere, speeder, animated title |
 | Tier 3 — Expected | DD–PP | ✓ shipped | Sand worm boss, weapon variants, procgen POIs, biome rework |
-| Tier 4 — Polish + breadth | QQ–ABN | ✓ ongoing | Sled, crafting rework, control overhaul, creature companion, long-storm countdown, procgen world, salvage tactile pry+extract+conditions, procgen wreck system (now 5 classes), fire grill multi-cook, narrative journals, texture-overhaul shader vocabulary, biome-specific POIs (dune cockpit + salt outpost + rocky entrance), sandworm bait-and-strike feeding loop, comm-relay cluster, v11 schema, dropped-item physics, megaWreck rebuild (now aft + bow shell), shader-crawl fix for moving entities (D109) |
+| Tier 4 — Polish + breadth | QQ–ABQ | ✓ ongoing | Sled, crafting rework, control overhaul, creature companion, long-storm countdown, procgen world, salvage tactile pry+extract+conditions, procgen wreck system, fire grill multi-cook, narrative journals, texture-overhaul shader vocabulary, biome-specific POIs, sandworm bait-and-strike feeding loop, comm-relay cluster, v11 schema, dropped-item physics, megaWreck rebuild, shader-crawl fix for moving entities (D109), procedural rigged player (ABP) + iteration discipline encoded (ABP→ABQ pivot) |
 
 **Verify status**: `npm run verify` = `tsc --noEmit`. Single check
 (no tier breakdown). Currently PASS.
@@ -116,145 +91,110 @@ operates on a per-session "Big-ticket bucket + Polish" model.
 
 ## What works end-to-end (singleplayer flow)
 
-1. **Boot title**: animated 3D title scene (CC-3) with a pod
-   shooting-star + landing on a hero dune. NEW GAME / DEV MODE
-   buttons. Advanced disclosure for typing a custom uint32 seed
-   (per-seed worlds — AAI).
-2. **Opening cinematic**: player spawns ~4.5m in front of the
-   redesigned opening wreck. Tapered cockpit + tail-stub silhouette,
-   30° stress-fracture skylight running the upper hull. Inside:
-   skeleton + journal at cockpit front, tally marks on the interior
-   side wall, ash pile + branch stubs + empty canteen. Companion
-   (AAE — Rocky-inspired) deployed 3m camera-right. **ABN**:
-   companion follows speeder in real time when player mounts (was
-   chasing pre-mount position). Companion's crystalline carapace
-   pattern now stays anchored to the body as it walks/rolls (D109).
+1. **Boot title**: animated 3D title scene (CC-3). NEW GAME / DEV MODE
+   buttons; Advanced disclosure for seed entry (per-seed worlds via AAI).
+2. **Opening cinematic**: player spawns ~4.5m in front of redesigned
+   opening wreck. Companion (Rocky-inspired) deployed 3m camera-right.
 3. **First interactions**: pickup E, journal E (per-kind content via
    ABF Journal.kind discriminator).
-4. **Speeder**: parked ~12m from the wreck entrance. Mountable via E.
-   **ABN**: paint chips + drip streaks now stay anchored to hull as
-   speeder moves (D109 — no more crawling texture).
-5. **Survival loop**: thirst/heat/hunger/stamina/health all decaying.
-   Canteen drinks hold-LMB continuously. Wells in salt-flats refill
-   via E. Fires/tents/sleds/bedrolls/lanterns/lockers/grill — all
-   LMB-click placement with ghost preview ring. Sleep cools temp;
-   respects shelter state.
-6. **Combat**: 5 weapons. LMB swings/fires; combat dispatched from
-   `wieldAction.ts`. R-key reload for scrap_gun. Lizards 1-shot; sand
-   worm boss 12 hits (sensor collider, 120m body). All weapons render
-   with metal shader. **ABN**: sandworm + lizard skin patterns now
-   stay anchored to body as they move (D109).
-7. **Sled mechanic**: craft rope + sled_kit. Rope wield + click sled
-   rope-stub to tie. Inextensible rope constraint.
-8. **Crafting**: combine-to-discover via 4-slot multiset. 16 recipes
-   shipped (added scrap_bar AAR). Categorization sub-headers (ABE).
-   Partial-match suggestions (AAV). Recipe Book panel TAB-key. First-
-   recipe discovery fanfare.
-9. **Salvage**: tactile pry+extract flow. Equip scrap_bar, hold E
-   ~0.85s to pry door, E-presses extract components. Per-component
-   loot mapping. Condition tiers (corroded/standard/pristine). All
-   flagship panels migrated to addAccessPanel (ABA P3). ABG BackSide
-   body fix makes cavity interior visible.
-10. **Cooking**: equip raw meat → E on lit fire to start cook (3.5s).
-    Grill attachment raises per-fire cap to 4 parallel cooks.
-11. **Long Storm**: escalating storm schedule day 0 → 6 plateau day
-    7+. HUD countdown indicator.
+4. **Speeder**: parked ~12m from wreck entrance. Mountable via E.
+5. **Survival loop**: thirst/heat/hunger/stamina/health decay. Canteen
+   hold-LMB. Wells refill via E. Placeable kits — all LMB-click with
+   ghost preview.
+6. **Combat**: 5 weapons. R-key reload for scrap_gun. Lizards 1-shot;
+   sand worm boss 12 hits.
+7. **Sled mechanic**: rope + sled_kit. Inextensible rope constraint.
+8. **Crafting**: combine-to-discover. 16 recipes. Categorization
+   sub-headers. Recipe Book panel TAB-key.
+9. **Salvage**: tactile pry+extract. Equip scrap_bar, hold E to pry,
+   E-presses extract components.
+10. **Cooking**: grill attachment raises per-fire cap to 4 parallel.
+11. **Long Storm**: escalating storm day 0 → 6 plateau day 7+.
 12. **POI narrative**: 5 lone-survivor journals at hand-modeled
-    flagships, plus W-era opening journal. Per-kind content via
-    Journal.kind discriminator (D106).
-13. **Procgen wrecks** (ABA P7 → ABC → ABD → ABJ → **ABN**):
-    composite wreck system. Part vocabulary: cockpit (3 variants),
-    hullSegment (5 variants), engineModule (2 variants), tailStub
-    (2 variants). Decoration: breach patches (~41% of eligible
-    hulls). **5 wreck classes** (corvette / gunship / freighter /
-    science_vessel / **bulk_hauler ← ABN**); class roulette
-    35/20/18/12/15. PROCGEN_COMPOSITE_SHARE 0.50.
-14. **Biome POIs**: dune buried cockpit (ABJ), salt corroded outpost
-    + rocky subterranean entrance (ABK). Dispatch dune→salt→rocky.
-15. **megaWreck** (ABL rebuild + **ABN bow extension**): aft hull-
-    shell (ABL) + bow hull-shell (ABN, half-cylinder thetaStart=0..π
-    preserves -X entrance) now read as one continuous silhouette
-    family. All 8 salvage panels + shelter zone + journal intact.
-16. **Save / load**: single-slot localStorage. `SAVE_VERSION = 11`
-    (ABM additive `droppedPickups`; ABN added no schema fields).
+    flagships.
+13. **Procgen wrecks**: 5 wreck classes (corvette / gunship / freighter
+    / science_vessel / bulk_hauler); class roulette 35/20/18/12/15.
+14. **Biome POIs**: dune buried cockpit + salt corroded outpost +
+    rocky subterranean entrance.
+15. **megaWreck**: ABL aft hull-shell + ABN bow hull-shell read as
+    one continuous silhouette family.
+16. **Procedural rigged player + 3P camera** (ABP shipped + ABQ
+    iterated): mismatched-scavenger silhouette with hood + poncho +
+    bandolier + asymmetric pauldron + bandana + forearm wraps;
+    knee/elbow sub-pivots; 3-phase walk cycle with correct knee bend
+    timing (D114 — ABQ fix); FOOT IK to terrain; Rapier raycast
+    camera collision + smoothed follow + pitch clamp; dual-mesh
+    held items (FP viewmodel + 3P rig hand).
+17. **Save / load**: single-slot localStorage. `SAVE_VERSION = 11`.
 
 ---
 
-## What's freshly shipped (ABN delta)
+## What's freshly shipped (ABQ delta)
 
-- **`src/world/procgenWreck.ts`** (+55/-9): bulk_hauler class added,
-  class roulette expanded to 5-way, salvage palette dispatch updated.
-- **`src/world/megaWreck.ts`** (+25/-0): bow half-cylinder shell
-  added in parallel to aft shell block; attached to bowGroup for
-  terrain-Y tracking.
-- **`src/enemies/companion.ts`** (+27/-3): new `getPlayerPos(ctx)`
-  helper; replaces direct `ctx.player.body.body.translation()` read.
-  Plus `localSpace: true` on both createSkinMaterial calls.
-- **`src/world/skinMaterial.ts`** (+18/-4): added `localSpace?` opt
-  to SkinMaterialOpts + conditional vertex-shader replace.
-- **`src/world/paintMaterial.ts`** (+18/-4): same pattern.
-- **`src/enemies/sandWorm.ts`** (+10/-2): `localSpace: true` on both
-  body skin materials.
-- **`src/enemies/lizard.ts`** (+6/-2): same.
-- **`src/world/speeder.ts`** (+5/-2): `localSpace: true` on hull mats.
-- **`src/world/fabricMaterial.ts`** (+34/-9): added `disableShimmer?`
-  opt to new FabricMaterialOpts interface; conditional shimmer +
-  conditional shader-ref registration + local-space sampling branch.
-- **`src/inventory/items.ts`** (+8/-3): `disableShimmer: true` at
-  cloth + bandage viewmodel call sites (5 createFabricMaterial calls).
-- **`docs/backlog.md`** triage: 4 entries from user playtest dump,
-  3 of which shipped this session.
-- **`docs/plans-archive/session-ABN-prompt.md`** (new): archived ABN
-  brief per session-start convention.
+- **`src/player/playerRig.ts`** (1 file, 3 substantive iterations):
+  - Poncho: ponchoR_top × 1.25→1.08, ponchoR_bot × 2.0→1.6,
+    ponchoH × 1.4→0.85, position.y +0.08. Now reads as a shawl.
+  - Bandolier: 3 waypoints → 6 waypoints with `closed: true`;
+    TubeGeometry closed=true + 36 segs × 8 radial; strap radius
+    0.018→0.020; pouch spacing recalc.
+  - Walk cycle: knee bend formula `max(0, sin(legPhase-π/3)) * 0.6`
+    → `max(0, cos(legPhase)) * 0.65` (D114). Amplitudes bumped.
+- **`docs/changelog.md`** ABQ entry at top.
+- **`CLAUDE.md`** Last-shipped block updated.
+- **`docs/decisions.md`** D114 appended.
+- **`docs/roadmap.md`** ABQ row added; "Up next" rewritten for ABR.
+- **`docs/backlog.md`** 5 new entries (ABQ deferred items + ABP queued
+  polish items pulled into explicit form).
+- **`docs/session-end-report.md`** — this file.
+- **`docs/next-session-prompt.md`** ABR kickoff brief.
 
 ---
 
-## ABB-ABM deltas (condensed)
+## ABA-ABP deltas (condensed)
 
+- **ABP** (3P + rig polish, long-overnight, stay-procedural): 4 of 5
+  tiers shipped. 2 research docs (3p-cameras / scavenger-aesthetic).
+  Rig overhaul ~270 → ~470 LOC + 7 clothing layers + knee/elbow
+  sub-pivots. 3-phase walk + hip sway + run lean + head counter-bob
+  + FOOT IK. 3P Rapier raycast collision + smoothed follow + pitch
+  clamp + snap flag. Held items dual-mesh (FP viewmodel + 3P rig
+  hand). FP forearm-wraps continuity. D111-D113.
+- **ABO** (long-overnight 7-item bundle): C1 strip + C5 heat-shield +
+  C4 dish framework+collision + C3 viewmodel pass + A3 rigged player
+  + B3 sandworm ambush + B6 engineBlock POC. B1 generalized rope CUT.
+  D110.
+- **ABN** (post-compaction ~1.5h): bulk_hauler 5th procgen class +
+  megaWreck bow shell + 3 triage bug fixes (companion stale-mount,
+  shader-crawl on moving entities, viewmodel fabric breathing).
+  D109.
 - **ABM** (B7 dropped-item rigid-body physics): Pickup gains optional
-  Rapier body; spawnDroppedPickup opts arg; per-frame updatePickups;
-  v11 additive `droppedPickups` save field. Player drops / craft
-  overflow / pickup-swap all use bodies; seed-spawn stays static. B8
-  cut + re-scoped.
-- **ABL** (megaWreck visual rebuild): procedural shader vocab applied
-  to all hull/rust/pipe materials. Tapered aft-section hull shell.
-  6 rust bands + exposed ribs + torn fragments at mid-hull break.
-  ABN extended shell to bow.
-- **ABK-tail** (perf pass + bugfixes, 4 direct-paste commits):
-  shaders/Rapier pre-warm at boot (14ms handoff was multi-second
-  freeze); panel-glow PointLight pool (96 → 31); Lambert downgrade
-  (215 StandardMat → 0); shadow map 2048 → 1024 + 6-frame cadence;
-  starter swap machete → scrap_bar; pointer-lock dev guard.
-- **ABK** (biome POI family closed): saltOutpost + rockyEntrance
-  modules; dispatch dune→salt→rocky.
-- **ABJ** (aggressive overnight 14-item bundle): v10→v11 combined
-  bump (D108); biome-bias procgen recipes; 3 new shader factories
-  (wood/bone/glass) extending ABH; science_vessel wreck class;
-  sandworm feeding loop; 5 item viewmodel upgrades; comm-relay
-  cluster; buriedCockpit (first biome POI).
+  Rapier body; v11 additive droppedPickups field. B8 cut.
+- **ABL** (megaWreck visual rebuild): procedural shader vocab + aft
+  hull shell + rust bands + exposed ribs + torn fragments.
+- **ABK-tail** (perf pass + bugfixes, 4 direct-paste commits): shaders/
+  Rapier pre-warm at boot; PointLight pool 96→31; Lambert downgrade;
+  shadow map 2048→1024 + 6-frame cadence.
+- **ABK** (biome POI family closed): saltOutpost + rockyEntrance.
+- **ABJ** (aggressive overnight 14-item bundle): v10→v11 (D108);
+  biome-bias procgen recipes; wood/bone/glass shader factories;
+  science_vessel wreck class; sandworm feeding loop; 5 viewmodel
+  upgrades; comm-relay cluster; buriedCockpit (first biome POI).
 - **ABI** (panel rim fix + 3 procgen panel relocations).
-- **ABH** (texture overhaul): 4 new procedural shader factories
-  (metalMaterial + paintMaterial + stoneMaterial + skinMaterial)
-  applied across weapons + placeables + creatures. D107.
-- **ABG** (panel interior visibility BackSide fix — D105; opening-
-  wreck salvage panels removed).
+- **ABH** (texture overhaul): 4 procedural shader factories. D107.
+- **ABG** (panel interior visibility BackSide fix — D105).
 - **ABF** (5 flagship narrative journals — D106).
-- **ABE** (5-item polish overnight: tutorial hints + fabric wind
-  shimmer + scrap_gun reload + crafting categorization + megaWreck
-  ground-level secondary panel).
+- **ABE** (5-item polish overnight).
 - **ABD** (breach freq tune).
-- **ABC** (procgen wreck expansion: 2 hullSegment variants + gunship
-  class + breach patches helper).
-- **ABB** (visual audit: 3 migrated flagship panels recomputed from
-  lathe profile).
+- **ABC** (procgen wreck expansion: 2 hullSegment + gunship class).
+- **ABB** (visual audit: 3 migrated panel positions).
+- **ABA** (overnight 7-item bundle: light-pool + panel migration +
+  procgen wreck system). D101-D104.
 
 ## Older sessions (condensed, see changelog for detail)
 
-- **ABA**: overnight 7-item bundle. Light-pool refactor. D101-D104.
-- **AAY**: visual overhaul (tents + fabric shader + lantern +
-  companion). D97-D100.
-- **AAR/AAS/AAT/AAU/AAV**: salvage stack (tactile pry+extract,
-  variant interiors, condition tiers, panel polish, inventory).
+- **AAY** (visual overhaul: tents + fabric shader + lantern + companion).
+  D97-D100.
+- **AAR-AAV**: salvage stack.
 - **AAA-AAQ**: polish + atmosphere arc.
 - **QQ-ZZ**: control overhaul, RMB context verbs, larger tent,
   crafting rework, opening wreck rebuild, sled, weapons.
@@ -266,22 +206,27 @@ operates on a per-session "Big-ticket bucket + Polish" model.
 
 ## Known issues / partials
 
-- **Stale fire+cloth wreck POI** (ABN deferred triage): user reported
-  but code-only inspection couldn't pinpoint which POI. Needs user
-  identification (scavenger camp + opening wreck are closest
-  candidates but neither is a clean match for "fire AND cloth").
+- **ABP+ABQ items needing in-motion verification** (see backlog
+  "[polish] ABQ deferred iteration items"):
+  - Walk cycle in motion — math fixed in ABQ but in-motion may need
+    amplitude tweaks once running tick-driven (vs eval-pose).
+  - 3P camera collision in real playtest (walking into wreck walls,
+    rapid F-toggle, mount/dismount).
+  - Held items in 3P — verified mechanically; need swap test for
+    canteen + machete + scrap_gun + bandage.
+  - FP forearm wraps under actual hands.
+- **3P camera teleport snap wiring** — ctx.player.cameraSnapNextFrame
+  exists but isn't wired into mount/dismount/save-load callsites.
+  Camera will lerp visibly across teleports (cosmetic glitch).
+- **Pauldron polish** — was reading well in baseline, ABQ skipped per
+  discipline (3 elements fully iterated > 6 shallow).
+- **Foot IK mid-state transition** — idle→walking on slope shows brief
+  reset to flat reference. Cosmetic, low-priority.
 - **Sandworm at procgen-seeded position**; multi-worm population still
   backlog (needs schema bump).
-- **_cooks module-level state** in interaction.ts survives HMR badly.
-  Hard-reload preview tab if editing.
+- **Stale fire+cloth wreck POI** (ABN deferred triage): user reported
+  but code-only inspection couldn't pinpoint which POI.
 - **megaWreck catwalk panels 3 + 4** (~11.5m up) still require stairs.
-  ABE added 1 ground panel; full sweep deferred.
-- **preview_screenshot tool blocked in hidden tabs** — canvas 0×0
-  problem. Workarounds in `memory/dustfall_preview_gotchas.md`.
-- **Item viewmodel fidelity pass** — ABJ shipped 5; ~25 ItemDefs
-  remaining that could benefit.
-- **Dropped-item playtest tune** — ABM defaults need in-play signal;
-  friction may need bumping if items roll on slopes.
 
 See `docs/backlog.md` for full open list.
 
@@ -293,73 +238,73 @@ Recent (session-tagged):
 
 | Constant | Session | Default | Notes |
 |---|---|---|---|
-| Class roulette weights | ABN | 35/20/18/12/15 | 5-way procgen wreck class distribution (corvette/gunship/freighter/science_vessel/bulk_hauler) |
-| `bulk_hauler` panel count | ABN | 3-4 | Richest loot density of any procgen class |
-| `bulk_hauler` hullCount | ABN | 4-5 | Longest silhouette in the procgen pool (~14-21m) |
-| Bow shell `scale.y` | ABN | 0.62 | Ellipsoidal flatten; matches aft shell ratio |
-| `localSpace` opt (skin/paint) | ABN | true for moving entities | D109 — companion + sandworm + lizard + speeder all opt-in; static surfaces stay false |
-| `disableShimmer` opt (fabric) | ABN | true for viewmodels | Cloth + bandage viewmodel call sites only; world fabric (tents) keep shimmer |
+| Poncho top×waist×height | ABQ | 1.08 / 1.6 / 0.85× | Shawl proportions (was 1.25/2.0/1.4 = barrel) |
+| Bandolier strap radius | ABQ | 0.020 | Wrapped closed-loop TubeGeometry |
+| Walk cycle hipAmp | ABQ | 0.48 walking / 0.62 running | bumped 0.40/0.55 |
+| Walk cycle armAmp ratio | ABQ | 0.95 | bumped from 0.85 |
+| Walk cycle hip sway | ABQ | 0.020m | bumped from 0.012m |
+| Walk cycle body bob | ABQ | 0.045/0.075 | bumped from 0.035/0.060 |
+| Walk cycle knee bend formula | ABQ | `max(0, cos(legPhase))*0.65` | D114 — was inverted |
+| `_3P_BACK_DIST` / `_ABOVE_DIST` | ABP | 3.2m / 1.8m | 3P camera offsets |
+| `_3P_PUSHBACK_BUFFER` | ABP | 0.3m | Rapier raycast collision pushback |
+| Foot IK clamp | ABP | ±0.15m | per-hip Y adjustment max |
+| Class roulette weights | ABN | 35/20/18/12/15 | 5-way procgen wreck class distribution |
 | `PROCGEN_COMPOSITE_SHARE` | ABC | 0.50 | Composite vs legacy procgen wreck mix |
-| Wind shimmer amplitude | ABE | 0.5cm–4cm | calm baseline + storm peak |
-| `FIRE_GRILL_MAX_PARALLEL_COOKS` | AAM | 4 | Per-fire cap with grill |
-| `FLAGSHIP_SCATTER_RADIUS_MIN/MAX` | AAK | 200/800 | Flagship POI scatter band |
 
 ---
 
 ## Suggested next session (1-3 directions in priority order)
 
-1. **ABP polish follow-ups** (~30min-2h each, mix-and-match) — aim
-   twist-IK (Tier 5 cut), footstep-dust-at-feet (Tier 5 cut),
-   walk-cycle-to-footstep-cadence sync, camera-snap-on-teleport
-   wiring. Quick wins that tighten ABP's procedural polish.
+1. **ABR — continue ABP+ABQ polish under the discipline**: (~2-4h).
+   In-motion verification + remaining queued items per the iteration
+   discipline. Lock the rig + 3P + held items.
 2. **A1 infinite chunk streaming** (~6-10h big-ticket). Last major
    architectural lift. Save bump v11→v12.
-3. **B1 generalized rope (re-scoped from ABO cut)** (~4-5h medium-
-   big). RopeEndpoint union + Tether refactor + RMB-on-item UX.
+3. **B1 generalized rope (re-scoped from ABO/ABP cuts)** (~4-5h
+   medium-big). RopeEndpoint union + Tether refactor + RMB-on-item UX.
 4. **Migrate remaining 4 flagships to composite procgen** (~6-8h
    medium-big). If ABO B6 engineBlock POC reads well in playtest.
 
-Top pick: ABP follow-ups if playtest reveals specific 3P polish gaps.
-A1 if user wants the architecture lift. B1 if rope generalization
-moves to the front.
+Top pick: ABR continued polish. The iteration discipline is now load-
+bearing; running it through to "rig + 3P + held items all verified
+in motion" before moving to A1/B1 is the right next move.
 
 ---
 
 ## Time spent
 
-69 sessions shipped (A through ABN). Approx ~245-310h cumulative dev
-time across ~5 weeks calendar. ABN itself was a tight ~1.5h session
-(post-context-compaction, deliberately smaller scope than overnight).
+72 sessions shipped (A through ABQ). Approx ~248-313h cumulative dev
+time across ~5 weeks calendar. ABQ itself was ~30 minutes of active
+iteration + 15 minutes of session-end docs. The discipline value is
+that those 30 minutes shipped 3 fixed elements that would have
+otherwise required a full follow-up polish session each.
 
 ---
 
 ## State at session end
 
-- **Git status**: working tree dirty (this session-end's docs updates
-  about to be committed). Branch: `master`. Through `ab86e0d` pushed
-  to origin.
-- **Last commit**: `ab86e0d` (ABN: triage 4 backlog entries + archive
-  ABN session brief) — session-end commit will follow.
-- **Last tag**: `session-ABM` (per ABM session-end). No tag for ABN
-  yet — user runs `git tag session-ABN` if desired.
-- **Ports bound**: none.
-- **Save state**: localStorage v11 (ABM). ABN made zero save-schema
-  changes; any v11 save loads identically.
+- **Git status**: working tree dirty (this session-end's docs updates).
+  Branch: `master`. Through `6a52dfa` pushed to origin.
+- **Last commit**: `6a52dfa` (ABP-polish R1-R4: iterative discipline
+  encoded + hood overhaul + poncho color attempt) — pre-ABQ.
+- **Last tag**: `session-end-ABO`. No tag for ABN/ABP/ABQ yet; user
+  may run `git tag session-ABQ` if desired.
+- **Ports bound**: none (preview stopped).
+- **Save state**: localStorage v11. ABQ made zero save-schema changes.
 
 ---
 
 ## Token spend this session (estimated)
 
-ABN was a tight post-compaction session — most of the conversation
-was the inherited context summary + 3 small tasks (session-start +
-4 bug fixes + session-end). Rough estimates:
+ABQ was a focused iteration session. Compacted summary + framework
+catch-up reads + preview eval loop. Rough estimates:
 
-- Input: ~80-110K tokens (compacted summary + 3-4 file reads per
-  task + grep results)
-- Output: ~25-40K tokens (file edits + summary responses + this
-  session-end rewrite)
+- Input: ~120-160K tokens (compacted summary + multiple file reads
+  + screenshot tool calls + system reminders)
+- Output: ~25-35K tokens (file edits + iteration deliberation +
+  this session-end rewrite)
 - Cached input: substantial (CLAUDE.md, system reminders re-read)
-- Cost (Opus 4.7 rates, very rough): $5-9 for ABN itself
+- Cost (Opus 4.7 rates, very rough): $8-12 for ABQ itself
 
 Within normal range. Did NOT burn ≥2× baseline.
 
@@ -368,5 +313,5 @@ Within normal range. Did NOT burn ≥2× baseline.
 ## Commit handoff
 
 Print-hints mode (Dustfall CLAUDE.md does not have `auto-commit: on`).
-ABN's 3 work commits already pushed; this session-end commit will be
-the 4th and final ABN commit. Commands surfaced as the final step.
+ABQ ships 1 source change + 6 doc updates. Single commit suggested.
+Commands surfaced as the final step.
