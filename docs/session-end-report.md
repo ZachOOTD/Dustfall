@@ -4,8 +4,41 @@ Cumulative state. Rewritten end-to-end at each `/session-end`. A
 reviewer who's never seen the project should be able to read this +
 `CLAUDE.md` + `docs/GDD.md` and understand where Dustfall is.
 
-**Current state**: Session ABO shipped (2026-05-25, long-overnight
-~10h budget scope-cut-from-bottom). 70 sessions post-MVP. tsc clean.
+**Current state**: Session ABP shipped (2026-05-25, dedicated 3P + rig
+polish, long-overnight stay-procedural). 71 sessions post-MVP. tsc
+clean. SAVE_VERSION v11 unchanged (rig is purely visual; no schema
+changes). 4 of 5 tiers shipped; Tier 5 stretch CUT per pre-committed
+cut order. D107 zero-asset policy preserved.
+
+**ABP scope**:
+- **Tier 0 (research)**: 2 new docs/research/ deliverables via
+  game-researcher agent in parallel — `3p-cameras-in-games.md` +
+  `sci-fi-desert-scavenger-aesthetic.md`. Concrete Three.js/Rapier
+  recommendations + 10-layer geometry table.
+- **Tier 1 (rig overhaul)**: src/player/playerRig.ts rewrite (~270 →
+  ~470 LOC). Better proportions (tapered torso + elongated head +
+  finger hands + foot/toe). 7 mismatched-scavenger clothing layers
+  (hood + poncho + bandolier + asymmetric pauldron + bandana +
+  forearm wraps + more). knee + elbow sub-pivots added.
+- **Tier 2 (animation)**: 3-phase walk cycle + hip sway + run lean +
+  body bob + head counter-bob + proper bent-knee crouch + **FOOT IK
+  to terrain** (the user-prioritized realism crown jewel).
+- **Tier 3 (3P camera)**: offsets bumped to 3.2m/1.8m per research +
+  Rapier raycast collision (0.3m pushback) + frame-rate-independent
+  smoothed follow at ~10/s + 3P pitch clamp + snap-on-teleport flag.
+- **Tier 4 (held items + FP continuity)**: PlayerRig.rightHandAttach +
+  dual-mesh item swap (FP viewmodel + 3P hand-attach instances) +
+  visibility gate per frame + NEW src/player/viewModelHands.ts for FP
+  forearm wraps continuity.
+
+**D-entries added**: D111 (procedural clothing layering as primitive
+composite), D112 (3P camera Rapier raycast collision arch), D113
+(dual-mesh held items with mode-gated visibility). All friction-2.
+
+5 files modified + 2 new src + 2 research docs.
+
+**Prior state**: ABO shipped (2026-05-24, long-overnight ~10h budget
+scope-cut-from-bottom). 70 sessions post-MVP. tsc clean.
 SAVE_VERSION v11 unchanged (no schema changes this session — A3 rig
 state is purely visual; ambush + dawn/dusk are sandworm runtime state;
 B6 POC reuses existing composite system + journal pattern). 7 of 8
@@ -275,20 +308,20 @@ Recent (session-tagged):
 
 ## Suggested next session (1-3 directions in priority order)
 
-1. **B1 generalized rope (re-scoped from ABO cut)** (~4-5h medium-big).
-   Pre-committed cut #1 from ABO bundle. RopeEndpoint union + Tether
-   {endpointA, endpointB} + resolveEndpointWorldPos + RMB-on-item
-   two-stage UX + additive save migration. Full plan still in the
-   ABO plan file. Highest near-term value (gameplay unblock).
+1. **ABP polish follow-ups** (~30min-2h each, mix-and-match) — aim
+   twist-IK (Tier 5 cut), footstep-dust-at-feet (Tier 5 cut),
+   walk-cycle-to-footstep-cadence sync, camera-snap-on-teleport
+   wiring. Quick wins that tighten ABP's procedural polish.
 2. **A1 infinite chunk streaming** (~6-10h big-ticket). Last major
-   architectural lift. Save bump v11→v12. Architectural payoff but
-   higher risk.
-3. **Migrate remaining 4 flagships to composite procgen** (~6-8h
-   medium-big). If ABO B6 engineBlock POC reads well in playtest,
-   sweep megaShip / megaWreck / satelliteDish / crashedHull.
+   architectural lift. Save bump v11→v12.
+3. **B1 generalized rope (re-scoped from ABO cut)** (~4-5h medium-
+   big). RopeEndpoint union + Tether refactor + RMB-on-item UX.
+4. **Migrate remaining 4 flagships to composite procgen** (~6-8h
+   medium-big). If ABO B6 engineBlock POC reads well in playtest.
 
-Top pick: B1 (cleanest single-session win). A1 if user wants the
-architecture lift. Flagship sweep if POC visual reads good.
+Top pick: ABP follow-ups if playtest reveals specific 3P polish gaps.
+A1 if user wants the architecture lift. B1 if rope generalization
+moves to the front.
 
 ---
 

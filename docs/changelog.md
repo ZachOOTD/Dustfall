@@ -3,6 +3,102 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ABP — 2026-05-25 — 3P + player rig polish (research + rig overhaul + camera collision + held items in 3P + FP continuity) ✓ verify pass
+`verified` — tsc clean. 5 files modified + 2 new + 2 research docs. 4 of
+5 tiers shipped (Tier 5 stretch CUT per pre-committed cut order). The
+dedicated polish session user requested after ABO playtest feedback.
+
+**Tier 0 — Research (~1.5h)** — Two formal research docs via game-
+researcher in parallel. NEW `docs/research/3p-cameras-in-games.md`
+(6 sections, 8 sources): center-behind 3.2m/1.8m offsets, Rapier raycast
+collision + 0.3m pushback, center-screen crosshair + camera direction,
+dual-mesh held items, instant F-key snap preserving yaw, hard-follow
+rig. NEW `docs/research/sci-fi-desert-scavenger-aesthetic.md` (5
+sections, 7 sources): 10-layer geometry table with hex colors;
+asymmetric pauldron as design rule; Cobb Vanth / Rey / Kay Vess refs.
+
+**Tier 1 — Rig silhouette overhaul (~3-4h)** — Major rewrite of
+`src/player/playerRig.ts` (~270 → ~470 LOC).
+- **Better proportions**: tapered torso (chest 0.22r + waist 0.16r via
+  2-cylinder composite + shoulder cap + hip dome), elongated head
+  (sphere scaled 1.0/1.15/0.95) + flat jaw box + tiny ear bumps + real
+  10cm neck cylinder, hands rewritten as palm + 4 finger boxes +
+  thumb, feet as foot box + toe box, slight forward lean (0.04 rad).
+- **Clothing layers** (mismatched-scavenger per research):
+  - **Hood**: ConeGeometry + half-cylinder back drape; fabricMaterial
+    desert tan 0xd2b48c
+  - **Poncho**: tapered CylinderGeometry with thetaLength=1.7π for
+    open side; fabricMaterial sun-bleached ochre 0xb8860b; flares
+    at hem
+  - **Bandolier strap**: TubeGeometry along Catmull-Rom curve from
+    left shoulder → mid-chest sag → right hip; metalMaterial dark
+  - **Bandolier pouches**: 4 BoxGeometry pieces along strap path;
+    alternating paintMaterial rust + metal
+  - **Right shoulder pauldron** (ASYMMETRIC per D111): 3 curved
+    BoxGeometry plates layered + tilted outward
+  - **Face bandana**: TorusGeometry around lower face
+  - **Forearm wraps**: 2 fabric tori per elbow group
+- **Knee + elbow sub-pivots** (NEW hierarchy) enable Tier 2 walk-
+  cycle realism.
+- All cloth uses `disableShimmer: true` per ABN; all skin uses
+  `localSpace: true` per D109.
+
+**Tier 2 — Animation realism (~2-3h, shipped inline with Tier 1)**
+- **3-phase walk cycle**: 2 sin curves (hip + knee phase-shifted
+  π/3). Knee flexes during forward swing, straightens for heel-
+  strike. ±0.40 rad walking, ±0.55 rad running.
+- **Arm + elbow bend**: opposite-phase to legs + elbow groups bend
+  during forward swing.
+- **Hip sway** (±1.2cm lateral) + **run lean** (0.16 rad torso) +
+  **3.5cm walking / 6cm running body bob**.
+- **Head counter-bob** — head Y inverse of body Y (×0.7) so head
+  stays stable while body moves.
+- **Crouching**: proper bent knees (0.85 rad) + lowered body.
+- **FOOT IK to terrain** (user-prioritized): per-frame, each hip Y
+  adjusted by `terrain.heightAt(footX, footZ) - rootY`, clamped to
+  ±15cm. Only in walking/running states.
+
+**Tier 3 — 3P camera polish (~2-3h)** —
+`src/player/controller.ts:syncCameraToBody` rewritten.
+- Offsets bumped to research recommendation: 3.2m back / 1.8m above.
+- **Rapier raycast collision**: `world.castRay` from player head
+  along inverse camera direction, filtered to exclude player body.
+  Clamps camera to `hit.toi - 0.3m` pushback on collision.
+- **Smoothed follow**: frame-rate-independent damp via
+  `1 - exp(-10 * (1/60))` ≈ 0.155/frame lerp.
+- **Snap-on-teleport** via new `ctx.player.cameraSnapNextFrame`
+  flag (default true at boot, auto-clears).
+- **3P-specific pitch clamp**: post-rotation guard limits Euler.x to
+  [-π/4, π/3]. Prevents flip-overhead + stare-into-terrain.
+- **Rig rotation: hard-follow** per research (rig rotation lag was
+  CUT per scope-cut #6).
+
+**Tier 4 — Held items in 3P + FP continuity (~2-3h)**
+- `PlayerRig.rightHandAttach: THREE.Group` parented inside right
+  elbow → hand chain.
+- **Dual-mesh held items**: `swapEquippedMesh` now instances the
+  item's `makeViewModel()` TWICE — once for FP viewmodel (camera-
+  relative, depthTest off, no shadows) + once for 3P rig hand attach
+  (world-space, shadows on). Both swap in lockstep on item change.
+- **Visibility gate** in `updateViewModel`: `vm.group.visible =
+  started && !dead && !thirdPerson`;
+  `rig.rightHandAttach.visible = thirdPerson`.
+- **NEW `src/player/viewModelHands.ts`**: `createForearmWraps` exports
+  a forearm stub + 3 fabric wrap tori + palm bulge at viewmodel
+  scale. Added to `vm.hands` group (now visible when item equipped).
+  Color matches Tier 1 rig outfit. fabricMaterial with disableShimmer.
+
+**Tier 5 — STRETCH: CUT** per pre-committed scope-cut #1.
+Upper-body aim twist-IK + footstep-dust-at-feet deferred to ABQ.
+
+**D-entries**: D111 (procedural clothing layering as primitive
+composite, friction-2), D112 (3P camera = single-camera-with-offset
++ Rapier raycast collision per research, friction-2), D113 (dual-
+mesh held items with mode-gated visibility, friction-2).
+
+Verified: `npm run verify` clean. No save-schema changes — rig is
+purely visual. Playtest deferred to user.
+
 ## Session ABO — 2026-05-25 — A3 rigged player + 3P camera + sandworm ambush + B6 engineBlock POC + 4 polish items ✓ verify pass
 `verified` — tsc clean. 12 files (11 modified + 1 new) across 4 tiers
 of 5 planned. Tier 5 (B1 generalized rope) CUT per pre-committed

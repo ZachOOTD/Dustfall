@@ -1,27 +1,30 @@
-# Session ABP — Kickoff Brief (post-ABO)
+# Session ABQ — Kickoff Brief (post-ABP)
 
 ## Read these now (in order)
 
 1. `CLAUDE.md` (auto-loaded)
-2. `docs/session-end-report.md` — cumulative state through ABO
-3. `docs/changelog.md` — ABO entry at top (substantial — 7 items)
-4. `docs/decisions.md` — D110 (3P camera architecture) is the latest
+2. `docs/session-end-report.md` — cumulative state through ABP
+3. `docs/changelog.md` — ABP entry at top (substantial — tiered polish session)
+4. `docs/decisions.md` — D111-D113 are the latest (procedural clothing
+   layering, 3P camera collision arch, dual-mesh held items)
 5. `docs/roadmap.md`
 6. `docs/backlog.md`
+7. `docs/research/3p-cameras-in-games.md` (if touching 3P further)
+8. `docs/research/sci-fi-desert-scavenger-aesthetic.md` (if touching rig further)
 
-## What's already built (post-ABO snapshot)
+## What's already built (post-ABP snapshot)
 
-70 sessions. **NEW**: player has a visible rigged body (procedural
-primitive rig — capsule torso + sphere head + 4 limb pivots with
-hand-coded walk cycle); **F-key toggles 3rd-person camera** (2.5m
-behind + 1.5m above, no spring-arm collision yet). Sandworm has an
-'ambush' state (silent submerged → snap to lunge within 12m) +
-dawn/dusk surfacing modifier (×1.30 detection in twilight). engineBlock
-flagship is now a COMPOSITE procgen wreck (flagship_engineBlock fixed-
-recipe class) — first POC migration off the hand-modeled wrecks. Plus
-4 polish items (scavenger camp stripped; engine heat-shield back panel;
-dish backing framework + collision; 6 cooked-meat + kit viewmodel
-upgrades). B1 generalized rope CUT from ABO — deferred to ABP.
+71 sessions. **NEW**: procedural mismatched-scavenger player rig
+(hood + poncho + bandolier + asymmetric pauldron + face bandana +
+forearm wraps; tapered torso, elongated head, finger hands) +
+knee/elbow sub-pivots + 3-phase walk cycle + FOOT IK to terrain +
+hip sway / run lean / head counter-bob. **3P camera**: Rapier raycast
+collision (0.3m pushback) + smoothed follow at ~10/s + 3.2m/1.8m
+offsets + 3P pitch clamp. **Held items dual-mesh**: items render in
+the rig's right hand (3P) AND in the FP viewmodel (FP); both swap in
+lockstep on item change. **FP viewmodel forearm wraps** for outfit
+continuity. D107 zero-asset policy preserved — all procedural.
+SAVE_VERSION v11 unchanged.
 
 ## Suggested focus (pick one)
 
@@ -30,39 +33,36 @@ upgrades). B1 generalized rope CUT from ABO — deferred to ABP.
 - **A1 infinite chunk streaming** (~6-10h). Last major architectural
   lift. Lazy 800m chunks at boundaries; free farthest; per-chunk seed
   derivation; GPU memory budget. Save bump v11→v12.
-- **B1 generalized rope attachment (re-scoped)** (~4-5h). Pre-committed
-  ABO cut #1. RopeEndpoint union + Tether{endpointA, endpointB} +
-  resolveEndpointWorldPos helper (lift getPlayerPos to util/) + RMB-
-  on-item two-stage UX + additive save migration. Full plan still in
-  the ABO plan file.
+- **B1 generalized rope attachment (re-scoped)** (~4-5h). Re-deferred
+  from ABP cycle (was last cut from ABO). RopeEndpoint union + Tether
+  {endpointA, endpointB} + RMB-on-item UX. Plan still available.
 
 ### Medium (~2-5h)
 
-- **Migrate remaining 4 flagships to composite procgen** (~6-8h) — if
-  the ABO B6 engineBlock POC reads well in playtest, sweep megaShip /
-  megaWreck / satelliteDish / crashedHull using the same
-  `flagship_<kind>` fixed-recipe pattern. Risk: each one has a unique
-  silhouette that may need new vocabulary parts (satelliteDish dish
-  silhouette, megaShip interior + shelter, etc.).
-- **B5 flagship NPC beats** (~4-6h) — hostile raider holdouts + friendly
-  hermits at hand-modeled flagships. From the Archive section
-  (parked 2026-05-24 — unparkable if appetite exists).
-- **3P camera spring-arm collision** (~1-2h) — ABO debt. Raycast from
-  player head toward intended camera position; clamp to first hit.
+- **Migrate remaining 4 flagships to composite procgen** (~6-8h) —
+  if ABO B6 engineBlock POC reads well in playtest, sweep megaShip /
+  megaWreck / satelliteDish / crashedHull using flagship_<kind>
+  fixed-recipe pattern.
 
-### Polish / quick wins (~30 min – 2h)
+### Polish / quick wins (~30 min – 2h, ABP follow-ups)
 
-- **Item viewmodel pass remainder** — ~19 ItemDefs at primitive
-  complexity. Suggested next batch: large_tent_kit, bedroll_kit,
-  lantern_kit.
-- **B3 retreat-stalk loop** (~1h) — extension to ABO B3. tickRetreat
-  optionally re-enters 'alert' at retreat-end if player still close.
-- **Dropped-item playtest tune** — ABM defaults need in-play signal.
+- **3P upper-body aim twist-IK** (~1-2h) — ABP Tier 5 cut. Rotate
+  rig.shoulders[1] toward camera direction during aim. Reads as
+  character physically aiming.
+- **Footstep dust at foot terrain contact** (~30min-1h) — ABP Tier 5
+  cut. Move dust emit from player-center to foot mid-stance position.
+- **3P walk-cycle to footstep cadence sync** (~1-2h) — gait + footstep
+  audio currently fire on separate timers; lock them together.
+- **3P camera teleport snap wiring** (~30min) — wire mount/dismount/
+  save-load to set `ctx.player.cameraSnapNextFrame` so camera
+  doesn't lerp across teleports.
+- **3P mouse-look ergonomics** (~2-3h) — Souls-style orbit around
+  player vs current "aim from player". Make optional.
 
 ## Autonomy contract
 
 When ambiguous, pick the option closest to the GDD pillars +
-decisions.md realism dial (D45+, D49, D67, D86–D110), append a new
+decisions.md realism dial (D45+, D49, D67, D86–D113), append a new
 D-entry, keep going.
 
 Stop conditions: wall-clock limit, 3-strike fix wall, catastrophic
@@ -70,28 +70,28 @@ block, destructive-action attempt.
 
 ## Notable footguns
 
-- **ABO D110 single-camera arch**: 3P camera reuses the FP camera
-  with a position offset; PointerLockControls owns yaw+pitch on the
-  shared camera. If adding a new camera mode (free-cam, photo), follow
-  the same branch-in-syncCameraToBody pattern — DO NOT introduce a
-  second THREE.PerspectiveCamera.
-- **ABO A3 player rig localSpace**: `createSkinMaterial` calls in
-  `playerRig.ts` use `localSpace: true` per D109. If forking a new
-  creature with similar code, MUST keep localSpace=true for moving
-  entities (else texture-crawl).
-- **ABO B6 reversibility**: `engineBlock.ts` kept on disk; `poi.ts`
-  has commented `placeEngineBlock` import + replaced dispatch line.
-  Revert one line + uncomment import to restore hand-modeled.
-- **ABN D109 localSpace pattern**: applies to skinMaterial +
-  paintMaterial. fabricMaterial has the sibling `disableShimmer` opt
-  for viewmodels.
-- **ABM dropped-item bodies**: only PLAYER-FACING drops use bodies.
-  Seed-spawn stays static (Rapier step budget).
-- **ABK-tail pointer-lock guard**: `handoffToGame()` skips
-  `controls.lock()` in DEV+hidden/0×0/!hasFocus preview tabs. F-key
-  3P toggle DOES NOT change pointer-lock state.
-- **Preview screenshot rule**: `ctx.time.dayTime = 0.5` + unpause
-  briefly before screenshots.
+- **ABP D107 stand**: ALL procedural; no GLB. If a polish item starts
+  feeling like "I need a real animation", that's the signal to stop +
+  surface to user (don't quietly add asset loaders).
+- **D111 asymmetric pauldron**: scavenger silhouette signal. If
+  adding NPC variants with paired pauldrons, that's a SOLDIER outfit
+  — keep separate from the scavenger rig.
+- **D112 Rapier raycast collision**: 3P camera collision uses
+  `world.castRay` excluding `ctx.player.body.body`. If adding new
+  static colliders that should block camera, no extra tagging needed
+  (Rapier already sees them); if adding new DYNAMIC bodies that
+  should NOT block camera, add to the exclude filter chain.
+- **D113 dual-mesh items**: `swapEquippedMesh` is now responsible
+  for BOTH FP viewmodel AND 3P rig-hand-attach mesh lifecycle. If
+  changing item swap path, update both.
+- **ABP FP↔3P visibility**: per-frame in `updateViewModel`. The
+  F-key handler in input.ts also flips visibility but per-frame is
+  authoritative; can remove the F-key flip if needed.
+- **ABP foot IK**: only runs in walking/running states, not idle/
+  crouch. Mid-state transitions on slopes may show a brief snap to
+  flat reference — known cosmetic gap; deferred polish.
+- **ABO + ABN footguns still apply** (see prior next-session-prompts
+  + decisions.md).
 
 ## Verification protocol
 
@@ -105,16 +105,24 @@ For substantial features:
 2. Save + reload roundtrip if persisted state changed.
 3. Multi-seed sanity if the change touches world generation.
 
-For ABO-specific playtest:
-- F-key toggle from FP → 3P, confirm rig visible + viewmodel hidden.
-- Walk around in 3P — confirm walk cycle visible, body shadow casts.
-- Mount speeder in 3P — rig should follow (parented to body via
-  per-frame translation).
-- Inspect engine_block POI on seeds 12345 + 7777 — confirm new
-  composite silhouette + journal still readable + 3 salvage panels.
+For ABP-specific playtest (do these first, before any new ABQ work):
+- Boot game, press F to switch to 3P.
+- Walk around a flat area — confirm walk cycle (knees flex, arms
+  swing, hip sway).
+- Walk onto a sloped dune — confirm feet plant on slope (FOOT IK).
+- Walk into a wreck wall — camera should NOT clip through (Rapier
+  collision).
+- Rotate camera quickly — confirm smoothed follow (no snappy jerk).
+- Pitch camera up + down — should clamp at ~45° up / 60° down (no
+  flip-overhead).
+- Equip an item (canteen, machete) — should see it in the rig's
+  right hand from 3P + see it as FP viewmodel + see forearm wraps
+  around the FP viewmodel item.
+- Mount the speeder in 3P (currently camera will lerp across the
+  teleport — that's the deferred snap wiring item).
 
 ## Begin block
 
-Read CLAUDE.md (auto), session-end-report (through ABO), recent
-changelog (ABO + ABN + ABM entries), decisions D108-D110. Pick focus
-from the menu above. TaskCreate sub-tasks. Start coding.
+Read CLAUDE.md (auto), session-end-report (through ABP), recent
+changelog (ABP + ABO + ABN entries), decisions D110-D113. Pick
+focus from the menu above. TaskCreate sub-tasks. Start coding.

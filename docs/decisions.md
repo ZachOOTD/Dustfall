@@ -2372,3 +2372,54 @@ full PBR pipeline.
 
 **Apply**: future camera mode additions (free-cam, photo-mode, top-down) follow the same pattern: branch in `syncCameraToBody` with mode-specific position+lookAt math; keep the single PerspectiveCamera as the renderer's eye. Add a new `ctx.flags.<mode>` boolean + a keybind handler that toggles it pause-gated.
 **friction-score:** 2
+
+## D111 — Procedural clothing layering as primitive composite (Session ABP)
+**When**: ABP Tier 1 — overhauled the procedural player rig from blocky-primitives to mismatched-scavenger silhouette while staying within the D107 zero-asset policy.
+
+**Why**: User asked for "looks like a real person, moves like a real person, probably has clothes on" while constraining the asset stance to procedural-only. Real-person-quality is unreachable without GLB + mocap — the honest ceiling is "convincing silhouette + better animation feel". Within that ceiling, the right approach is layered procedural clothing on top of the existing primitive rig (vs trying to make the bare-primitive itself "look real", which it never will).
+
+**Picked**: Per-layer composition: torso under-cloth (existing skin material) + hood (ConeGeometry + half-cylinder back drape) + poncho (tapered CylinderGeometry with thetaLength<2π for open side) + bandolier strap (TubeGeometry along Catmull-Rom curve with natural sag — strap geometry matters; flat torus reads wrong) + pouches (4 BoxGeometry along strap path) + asymmetric pauldron (3 layered curved BoxGeometry plates RIGHT SIDE ONLY) + face bandana (TorusGeometry) + forearm wraps (per-elbow torus stack). Each layer uses the ABH shader vocabulary (fabric/metal/paint/skin) at appropriate weathering levels.
+
+**Considered alternatives**:
+- Single complex mesh per layer (e.g., a single MyPonchoGeometry custom buffer). Rejected — primitives compose faster, the shader vocab does the visual lift, and edits are localized to one geometry per layer.
+- Symmetric pauldrons (matched pair). Rejected — research (sci-fi-desert-scavenger-aesthetic.md) explicitly recommends ASYMMETRIC armor as the genre tell that distinguishes "scavenger" from "soldier". Asymmetry is the silhouette identity.
+
+**Apply**: future procedural character variants follow the same layer-per-mesh structure. If adding a new "outfit" variant (different faction / NPC), keep the rig hierarchy + replace/add layers. Avoid: complex CustomBufferGeometry (the maintenance cost dominates the visual gain at this aesthetic ceiling).
+**friction-score:** 2
+
+## D112 — 3P camera collision: Rapier raycast + 0.3m pushback (Session ABP)
+**When**: ABP Tier 3 — added spring-arm collision to the 3P camera (ABO shipped 3P without collision; camera could clip into dunes/wreck walls).
+
+**Why**: Three options were on the table:
+(a) Three.js Raycaster against scene meshes — separate from physics, requires tagging static meshes
+(b) Rapier `world.castRay` — uses the physics world, accurate per existing colliders, requires filtering player body
+(c) Volumetric sweep (multi-ray or convex cast) — most conservative, highest cost
+
+**Picked**: (b) Rapier raycast. Research (`docs/research/3p-cameras-in-games.md` section 4) explicitly recommends this for Three.js + Rapier projects — leverages existing collider tagging via the physics world, avoids duplicate scene queries, integrates with the same filter chain used by combat raycasts and sandworm detection. The 0.3m pushback buffer is the standard sweet-spot (0.2-0.5m range per research) — smaller buffers risk edge-hugging, larger buffers cramp the camera against the player.
+
+**Considered alternatives**:
+- (a) Three.js Raycaster — would require ADDING `userData.staticCollider` tags to every static mesh in the world, plus maintaining the filter as new POIs ship. Rapier already has every static collider registered; no additional tagging needed.
+- (c) Sweep test — overkill for a survival game's exploration camera. Reserve for cases where a single ray genuinely misses (e.g., camera passing through narrow gaps).
+
+**Apply**: any future camera-collision system in this project (debug-cam, photo-mode, replay-cam) uses Rapier raycast with the same exclude-player pattern. 0.3m pushback is the canonical buffer. If a use case ever needs volumetric correctness (e.g., a chunky drone camera), upgrade to multi-ray fan or proper sweep — single ray was sufficient for the standard 3P case.
+**friction-score:** 2
+
+## D113 — Dual-mesh held items with mode-gated visibility (Session ABP)
+**When**: ABP Tier 4 — needed to render held items in the 3P rig's hand while preserving the existing FP viewmodel.
+
+**Why**: Two architectures considered:
+(a) **Single mesh**, shared between FP + 3P. Move the existing viewmodel mesh per-frame between camera-attached (FP) and rig-attached (3P) based on the mode flag. Cheaper to instantiate but requires runtime parenting changes + scale tweaks (viewmodel meshes are sized for camera-close ~10cm; world-rig is sized for arm-length ~30cm).
+(b) **Dual mesh**: instantiate `def.makeViewModel()` TWICE on item swap — one for FP viewmodel (with viewmodel material conventions — depthTest off, renderOrder 999, no shadows) + one for 3P rig hand-attach (default render conventions, shadows on). Mode flag gates visibility, not parenting.
+
+**Picked**: (b) dual mesh. Reasons:
+- Viewmodel meshes need depthTest=false + renderOrder=999 to render on top of world geometry. Toggling those flags per-frame would force material recompile cycles (Three.js material hash changes). Keeping two separate material instances avoids this.
+- Item meshes are cheap to instantiate (most are <50 verts; ItemDef.makeViewModel returns a small composite). The 2x instantiation cost on item swap is negligible vs the per-frame parenting cost of (a).
+- The TWO meshes can be sized differently if needed (FP sized for close-camera; 3P sized for arm-length). Currently using same scale; future tuning can diverge.
+- Lifecycle is clean: `swapEquippedMesh(vm, newId, ctx)` disposes both old meshes + instances both new meshes in one function. Visibility gate in `updateViewModel` is one-line per frame.
+
+**Considered alternatives**:
+- (a) single mesh — rejected per above (material recompile + parenting churn).
+- (c) Three-layer render (camera-relative layer mask). Would require Three.js layer machinery (camera.layers) which Dustfall doesn't currently use. Higher integration cost for marginal benefit.
+
+**Apply**: future hand-attached or cross-mode meshes (e.g., NPC viewmodels for shoulder-cam mode, vehicle dashboards in cockpit vs external cam) follow the same dual-mesh + visibility-gate pattern. Avoid runtime re-parenting between camera-attached + scene-attached groups.
+**friction-score:** 2

@@ -64,10 +64,10 @@ and promotes the second.
 
 ## Up next
 
-ABO shipped 7-item bundle: A3 rigged player + 3P toggle (full), B3
-sandworm ambush + dawn/dusk modifier, B6 engineBlock POC migration to
-composite procgen, 4 polish (C1+C3+C4+C5). B1 generalized rope CUT per
-pre-committed scope-cut. Remaining big-ticket candidates:
+ABP shipped the dedicated 3P + rig polish: procedural mismatched-
+scavenger rig + 3P camera collision + held items in hand + FP
+viewmodel continuity. Tier 5 stretch (aim twist-IK + footstep-at-feet)
+deferred to ABQ. Remaining big-ticket candidates:
 **A1 infinite chunk streaming** (last major architectural lift, ~6-10h,
 save bump v11→v12), **B1 generalized rope attachment** (re-scoped from
 ABO — Tether → Endpoint refactor + RMB-on-item UX + save migration;

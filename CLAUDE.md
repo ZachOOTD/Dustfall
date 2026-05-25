@@ -59,7 +59,39 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session ABO — Long-overnight 7-item bundle across 4
+**Last shipped**: Session ABP — Dedicated 3P + player rig polish
+session (long-overnight, stay-procedural). 4 of 5 tiers shipped
+(Tier 5 stretch CUT). **Tier 0 research**: 2 new docs/research/ docs
+written by game-researcher agents in parallel (3p-cameras-in-games.md
++ sci-fi-desert-scavenger-aesthetic.md). **Tier 1 rig overhaul**:
+src/player/playerRig.ts rewrite (~270 → ~470 LOC) — tapered torso
+(2-cylinder + shoulder cap + hip dome), elongated head + flat jaw +
+ear bumps + real neck, hands as palm + 4 fingers + thumb, feet as
+foot+toe boxes, slight forward lean. Mismatched-scavenger clothing
+layers: hood (ConeGeometry + back drape) + poncho (open-side
+CylinderGeometry, ochre) + bandolier (TubeGeometry along Catmull-Rom
+curve with 4 pouches) + ASYMMETRIC right pauldron (3 plates) +
+face bandana + forearm wraps per arm. All cloth uses
+disableShimmer per ABN; all skin uses localSpace per D109. **Tier 2
+animation**: knee + elbow sub-pivots added; 3-phase walk cycle with
+phase-shifted knee bend; hip sway + run lean + body bob; head
+counter-bob; proper bent-knee crouch; FOOT IK to terrain (clamped
+±15cm) — biggest realism boost on uneven dunes. **Tier 3 3P camera**:
+offsets bumped 3.2m/1.8m per research; Rapier raycast collision
+with 0.3m pushback; frame-rate-independent smoothed follow at ~10/s;
+snap-on-teleport via new ctx.player.cameraSnapNextFrame flag; 3P
+pitch clamp [-π/4, π/3] via post-rotation guard. **Tier 4 held
+items**: PlayerRig.rightHandAttach Group; swapEquippedMesh
+dual-instances each item (FP viewmodel + 3P hand attach); per-frame
+visibility gate; NEW src/player/viewModelHands.ts adds forearm
+wraps + palm bulge to FP viewmodel (continuity with rig outfit).
+**D-entries**: D111 (procedural clothing layering), D112 (Rapier
+raycast collision arch), D113 (dual-mesh held items). 5 files
+modified + 2 new + 2 research docs. **Tier 5 stretch CUT** per
+pre-committed scope-cut #1 (aim twist-IK + footstep-at-feet
+deferred to ABQ).
+
+**Prior milestone**: Session ABO — Long-overnight 7-item bundle across 4
 tiers (~10h budget, scope-cut-from-bottom). **Tier 1 polish (4 items)**:
 C1 scavenger camp strip (fire ring + bandage removed; fuselage kept) +
 C5 engine heat-shield back panel (paired BackSide-cloned lathe, rule 7
