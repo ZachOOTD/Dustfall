@@ -27,8 +27,6 @@ dunes + survive save/load round-trip (ABM). SAVE_VERSION v11.
 - **A1 infinite chunk streaming** (~6-10h). Last major architectural
   lift. Lazy 800m chunks at boundaries; free farthest; per-chunk
   seed derivation; GPU memory budget. Save bump v11→v12.
-- **B5 flagship NPC beats** (~4-6h). Hostile raider holdouts +
-  friendly hermit NPCs at hand-modeled flagships.
 - **B8 generalized rope attachment (re-scoped)** (~4-5h). Now that
   B7 shipped, items have positions + bodies to act as rope anchors.
   Needs new UX path (no rope-stub mesh on pickups) + gameplay
@@ -38,17 +36,10 @@ dunes + survive save/load round-trip (ABM). SAVE_VERSION v11.
 ### Medium (~2-4h)
 
 - **B6 5th wreck class** (`bulk_hauler` — wide cargo-heavy frame).
-- **B9 salvage durability per-wreck** — finite mass across panels;
-  deplete → "corpse" wreck dim entirely.
-- **B11 rare key-card panels** — gated behind a quest item.
 - **megaWreck catwalk panel reachability (panels 3 + 4)**.
-- **Add machete back as wreck loot** — player still starts unarmed
-  for melee per ABK-tail; small-chance procgen wreck drop closes
-  the loop.
 
 ### Polish / quick wins (~1-2h)
 
-- **B10 restore corroded panels via weld kit** — inverts D96.
 - **Item viewmodel fidelity pass (continuation)** — ABJ shipped 5
   items; ~25 remaining ItemDefs could benefit.
 - **megaWreck full hull-shell extension to bow** — ABL added shell
@@ -56,6 +47,13 @@ dunes + survive save/load round-trip (ABM). SAVE_VERSION v11.
 - **Dropped-item playtest tune** — ABM defaults (damping 0.6/0.8,
   friction 0.85, density 0.6) need in-play signal. May need to bump
   friction higher if items roll forever on slopes.
+
+### Archived 2026-05-24 (parked, may revisit — see docs/backlog.md Archive section)
+
+flagship NPC beats / salvage durability per-wreck / rare key-card
+panels / weld-kit restore / machete-as-wreck-loot — all intentionally
+not in this session's menu. Detail preserved in backlog Archive for
+the day the call changes.
 
 ## Autonomy contract
 
