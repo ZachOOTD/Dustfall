@@ -754,7 +754,7 @@ function pickPart(rand: Rng, kind: PartKind, biome?: BiomeId): PartBuilder {
 
 // ── Wreck classes (recipes) ──────────────────────────────────────────
 
-export type ProcgenWreckClass = 'corvette' | 'freighter' | 'gunship' | 'science_vessel';
+export type ProcgenWreckClass = 'corvette' | 'freighter' | 'gunship' | 'science_vessel' | 'bulk_hauler';
 
 interface WreckRecipe {
   /** Ordered part kinds. Cockpit goes first (nose end at x=0), tail
@@ -802,6 +802,22 @@ function recipeFor(rand: Rng, cls: ProcgenWreckClass): WreckRecipe {
     parts.push('engineModule');
     parts.push('tailStub');
     return { parts, panelCountMin: 2, panelCountMax: 3 };
+  }
+  if (cls === 'bulk_hauler') {
+    // Session ABN — B6 (5th class). 1 cockpit + 4-5 hull + 1 engine +
+    // 1 tail = 7-8 parts, ~14-21m. Longest silhouette in the procgen
+    // pool — reads as a freight train / cargo hauler with extra hull
+    // segments where freighter would have engines. Cargo-heavy flavor
+    // comes from the high hullSegment count + biome bias (salt→PLATED
+    // corrosion-resistant plates, dune→FUEL_BARRELS tanker tanks) +
+    // 'cargo_container' salvage palette (lottery loot mix). 3-4 panels
+    // for the richest loot density of any procgen wreck class.
+    const hullCount = 4 + Math.floor(rand() * 2);     // 4-5
+    const parts: PartKind[] = ['cockpit'];
+    for (let i = 0; i < hullCount; i++) parts.push('hullSegment');
+    parts.push('engineModule');
+    parts.push('tailStub');
+    return { parts, panelCountMin: 3, panelCountMax: 4 };
   }
   // freighter
   const hullCount = 3 + Math.floor(rand() * 3);       // 3-5
@@ -928,16 +944,18 @@ export function placeProcgenComposite(
   salvageables: SalvageableRegistry | undefined,
   opts: PlaceProcgenOpts = {},
 ): THREE.Group {
-  // Session ABJ — class roulette is now 4-way: 40% corvette, 25% gunship,
-  // 20% freighter, 15% science_vessel. Skews toward smaller silhouettes
-  // (cheaper per-mesh) but adds the long-observation-hull science_vessel
-  // class for variety. Pre-ABJ split was 45/30/25.
+  // Session ABN — class roulette is now 5-way: 35% corvette, 20% gunship,
+  // 18% freighter, 12% science_vessel, 15% bulk_hauler. Still skews
+  // toward small silhouettes (cheaper per-mesh) but distributes ~15% to
+  // the new bulk_hauler (longest hull, richest loot). Pre-ABN split was
+  // 40/25/20/15 (ABJ); pre-ABJ was 45/30/25 (ABC).
   const cls: ProcgenWreckClass = opts.cls ?? (() => {
     const r = rand();
-    if (r < 0.40) return 'corvette';
-    if (r < 0.65) return 'gunship';
-    if (r < 0.85) return 'freighter';
-    return 'science_vessel';
+    if (r < 0.35) return 'corvette';
+    if (r < 0.55) return 'gunship';
+    if (r < 0.73) return 'freighter';
+    if (r < 0.85) return 'science_vessel';
+    return 'bulk_hauler';
   })();
   const recipe = recipeFor(rand, cls);
   // Session ABJ — B4: query biome at the wreck position and thread to
@@ -982,6 +1000,7 @@ export function placeProcgenComposite(
       cls === 'corvette' ? 'fuselage' :
       cls === 'gunship' ? 'engine_cluster' :
       cls === 'science_vessel' ? 'fuselage' :     // ABJ — observation hull → fuselage palette (mixed loot, no engine-cabling skew)
+      cls === 'bulk_hauler' ? 'cargo_container' : // ABN — cargo-heavy frame → cargo lottery palette
       'cargo_container';
     const seen = new Set<THREE.Object3D>();
     group.traverse((o) => {

@@ -795,6 +795,33 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
     g.add(shell);
   }
 
+  // (a-bow) Session ABN — bow hull shell, mirroring the aft pattern.
+  // HALF-CYLINDER (thetaStart=0, thetaLength=π) caps the upper portion
+  // of the bow's box silhouette; open underside keeps the -X side
+  // entrance visually clear (entrance top at Y=4m sits at shell's open
+  // bottom edge, so the player still walks into a clean doorway).
+  // Attached to bowGroup so it tracks the bow's terrain Y-offset.
+  {
+    const shellLen = BOW_HALF_L * 2.0;
+    const shellRTop = BOW_HALF_W * 0.95;
+    const shellRBot = BOW_HALF_W * 1.05;
+    const bowShell = new THREE.Mesh(
+      new THREE.CylinderGeometry(
+        shellRTop, shellRBot, shellLen,
+        14, 1, true,                 // open-ended, no caps
+        0, Math.PI,                  // half-cylinder (top hemicircle)
+      ),
+      _hullMat,
+    );
+    bowShell.rotation.x = Math.PI / 2;
+    bowShell.position.set(0, BOW_HALF_H, BOW_ORIGIN_Z);
+    // Same ellipsoidal flatten as aft, so bow + aft shells read as one
+    // continuous silhouette family despite the different scales.
+    bowShell.scale.set(1.0, 0.62, 1.0);
+    bowShell.userData.noCollider = true;
+    bowGroup.add(bowShell);
+  }
+
   // (b) Rust band wraps. 4 thick bands around the aft + 2 around bow.
   // Each is a thin torus oriented so it wraps the body cross-section.
   // Using torus over cylinder slice because the torus reads as a real
