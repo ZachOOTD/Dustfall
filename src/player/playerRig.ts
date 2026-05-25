@@ -155,35 +155,47 @@ function buildRigVisual(): {
   const pouchPaintMat = createPaintedMetalMaterial(POUCH_RUST, { wearLevel: 0.6 });
   const pauldronPaintMat = createPaintedMetalMaterial(PAULDRON_RUST, { wearLevel: 0.7 });
 
-  // ── Torso: tapered (wider chest, narrower waist) ──
-  // 2-cylinder composite: chest section + waist section, joined at mid.
-  // Cap top with sphere half (shoulder-cap), cap bottom with hip dome.
-  const chestSection = new THREE.Mesh(
-    new THREE.CylinderGeometry(TORSO_CHEST_R, TORSO_WAIST_R * 1.1, TORSO_H * 0.55, 14),
-    underclothMat,
+  // ── Torso: ORGANIC LATHE (ABS R1) ──
+  // Pre-ABS: 4-piece composite (2 cylinders + 2 sphere caps) read as
+  // "two cans stacked". Replaced with a single LatheGeometry from a
+  // profile curve hand-crafted to read as a human torso silhouette:
+  //   neck base → shoulder line → chest swell → ribcage taper → waist
+  //   narrow → hip flare → crotch.
+  // Profile sampled at 9 keypoints in TORSO_LOCAL_Y space (relative to
+  // TORSO_CENTER_Y). Radial segments=24 for smooth read.
+  // ABS R4: profile refined for more organic contours. Pectoral swell
+  // pushed wider (1.18× instead of 1.08×); ribcage taper to waist
+  // sharper; hip line more flared; smoother neck-base transition (add
+  // intermediate point to avoid hard lip).
+  const torsoProfile = [
+    // [radial, y-offset-from-center]
+    new THREE.Vector2(0.0, +0.395),     // CAP top
+    new THREE.Vector2(0.060, +0.380),   // neck-base smooth shoulder
+    new THREE.Vector2(0.105, +0.360),   // neck base
+    new THREE.Vector2(TORSO_CHEST_R * 1.05, +0.330),    // shoulder line (widest top)
+    new THREE.Vector2(TORSO_CHEST_R * 1.18, +0.230),    // upper chest (pectoral SWELL)
+    new THREE.Vector2(TORSO_CHEST_R * 1.15, +0.140),    // pec curve under
+    new THREE.Vector2(TORSO_CHEST_R * 1.04, +0.040),    // mid chest (sternum)
+    new THREE.Vector2(TORSO_CHEST_R * 0.88, -0.060),    // lower ribcage taper
+    new THREE.Vector2(TORSO_WAIST_R * 0.98, -0.150),    // natural waist (narrow)
+    new THREE.Vector2(TORSO_WAIST_R * 1.10, -0.220),    // upper hip
+    new THREE.Vector2(TORSO_WAIST_R * 1.35, -0.280),    // hip line (flared)
+    new THREE.Vector2(TORSO_WAIST_R * 1.20, -0.330),    // upper thigh attach
+    new THREE.Vector2(0.10, -0.380),                    // crotch
+    new THREE.Vector2(0.0, -0.395),                     // CAP bottom
+  ];
+  // ABS R3: DoubleSide so the interior wall renders too — through the
+  // open V of the poncho the camera sees inside-of-back-wall otherwise.
+  // Cost is negligible (same shader runs both faces; this is a small
+  // mesh ~250 tris).
+  const torsoLatheMat = underclothMat.clone();
+  torsoLatheMat.side = THREE.DoubleSide;
+  const torsoMesh = new THREE.Mesh(
+    new THREE.LatheGeometry(torsoProfile, 24),
+    torsoLatheMat,
   );
-  chestSection.position.y = TORSO_CENTER_Y + TORSO_H * 0.10;
-  body.add(chestSection);
-  const waistSection = new THREE.Mesh(
-    new THREE.CylinderGeometry(TORSO_WAIST_R * 1.1, TORSO_WAIST_R, TORSO_H * 0.45, 14),
-    underclothMat,
-  );
-  waistSection.position.y = TORSO_CENTER_Y - TORSO_H * 0.16;
-  body.add(waistSection);
-  // Shoulder cap (upper sphere half)
-  const shoulderCap = new THREE.Mesh(
-    new THREE.SphereGeometry(TORSO_CHEST_R, 14, 8, 0, _PI2, 0, Math.PI / 2),
-    underclothMat,
-  );
-  shoulderCap.position.y = TORSO_CENTER_Y + TORSO_H * 0.385;
-  body.add(shoulderCap);
-  // Hip dome (lower sphere half) — narrow
-  const hipDome = new THREE.Mesh(
-    new THREE.SphereGeometry(TORSO_WAIST_R, 12, 8, 0, _PI2, Math.PI / 2, Math.PI / 2),
-    underclothMat,
-  );
-  hipDome.position.y = TORSO_CENTER_Y - TORSO_H * 0.385;
-  body.add(hipDome);
+  torsoMesh.position.y = TORSO_CENTER_Y;
+  body.add(torsoMesh);
 
   // ── Head: elongated oval + face plane + neck ──
   const headGroup = new THREE.Group();
@@ -340,16 +352,44 @@ function buildRigVisual(): {
   }
 
   // ── Hips: 2 leg pivots with NEW knee sub-pivots ──
+  // ABS P2 R1: replaced uniform cylinders with tapered LatheGeometry
+  // profiles for muscle silhouette (thigh swell at hip, calf swell mid-shin).
   const hips: THREE.Group[] = [];
   const knees: THREE.Group[] = [];
+  // Upper leg profile (extends DOWN from hip → knee). Origin at mesh
+  // center (-UPPER_LEG_LEN/2 below hip pivot).
+  const halfUL = UPPER_LEG_LEN / 2;
+  const upperLegProfile = [
+    new THREE.Vector2(0, +halfUL),                  // cap top (hip)
+    new THREE.Vector2(0.095, +halfUL - 0.01),       // hip thigh top
+    new THREE.Vector2(0.105, +halfUL * 0.55),       // thigh widest (quad swell)
+    new THREE.Vector2(0.088, 0.0),                  // mid thigh
+    new THREE.Vector2(0.068, -halfUL * 0.65),       // lower thigh taper
+    new THREE.Vector2(0.058, -halfUL + 0.01),       // knee top
+    new THREE.Vector2(0, -halfUL),                  // cap bottom (knee)
+  ];
+  // Lower leg profile (knee → ankle).
+  const halfLL = LOWER_LEG_LEN / 2;
+  const lowerLegProfile = [
+    new THREE.Vector2(0, +halfLL),                  // cap top (knee)
+    new THREE.Vector2(0.058, +halfLL - 0.01),       // knee bottom
+    new THREE.Vector2(0.068, +halfLL * 0.45),       // upper calf
+    new THREE.Vector2(0.075, +halfLL * 0.10),       // calf widest (calf muscle)
+    new THREE.Vector2(0.060, -halfLL * 0.30),       // mid shin
+    new THREE.Vector2(0.045, -halfLL * 0.75),       // lower shin
+    new THREE.Vector2(0.040, -halfLL + 0.005),      // ankle
+    new THREE.Vector2(0, -halfLL),                  // cap bottom (ankle)
+  ];
+  const upperLegMat = underclothMat.clone();  upperLegMat.side = THREE.DoubleSide;
+  const lowerLegMat = underclothMat.clone();  lowerLegMat.side = THREE.DoubleSide;
   for (const side of [-1, 1]) {
     const hipPivot = new THREE.Group();
     hipPivot.position.set(side * HIP_LATERAL, HIP_Y, 0);
     body.add(hipPivot);
-    // Upper leg
+    // Upper leg — tapered lathe
     const upperLeg = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.085, 0.065, UPPER_LEG_LEN, 10),
-      underclothMat,
+      new THREE.LatheGeometry(upperLegProfile, 16),
+      upperLegMat,
     );
     upperLeg.position.y = -UPPER_LEG_LEN / 2;
     hipPivot.add(upperLeg);
@@ -357,10 +397,10 @@ function buildRigVisual(): {
     const kneeGroup = new THREE.Group();
     kneeGroup.position.y = -UPPER_LEG_LEN;
     hipPivot.add(kneeGroup);
-    // Lower leg
+    // Lower leg — tapered lathe
     const lowerLeg = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.065, 0.055, LOWER_LEG_LEN, 10),
-      underclothMat,
+      new THREE.LatheGeometry(lowerLegProfile, 16),
+      lowerLegMat,
     );
     lowerLeg.position.y = -LOWER_LEG_LEN / 2;
     kneeGroup.add(lowerLeg);
@@ -382,17 +422,39 @@ function buildRigVisual(): {
   }
 
   // ── Shoulders: 2 arm pivots with NEW elbow sub-pivots ──
+  // ABS P2 R1: tapered Lathe profiles for arms (deltoid/bicep swell + tricep,
+  // forearm bulk + wrist taper).
   const shoulders: THREE.Group[] = [];
   const elbows: THREE.Group[] = [];
   let rightHandAttach: THREE.Group | null = null;
+  const halfUA = UPPER_ARM_LEN / 2;
+  const upperArmProfile = [
+    new THREE.Vector2(0, +halfUA),                  // cap top (shoulder)
+    new THREE.Vector2(0.070, +halfUA - 0.01),       // deltoid top
+    new THREE.Vector2(0.075, +halfUA * 0.35),       // bicep peak
+    new THREE.Vector2(0.060, -halfUA * 0.30),       // mid arm taper
+    new THREE.Vector2(0.046, -halfUA + 0.01),       // elbow approach
+    new THREE.Vector2(0, -halfUA),                  // cap bottom (elbow)
+  ];
+  const halfLA = LOWER_ARM_LEN / 2;
+  const forearmProfile = [
+    new THREE.Vector2(0, +halfLA),                  // cap top (elbow)
+    new THREE.Vector2(0.046, +halfLA - 0.005),      // elbow bottom
+    new THREE.Vector2(0.054, +halfLA * 0.30),       // forearm bulk
+    new THREE.Vector2(0.045, -halfLA * 0.35),       // mid forearm
+    new THREE.Vector2(0.034, -halfLA + 0.005),      // wrist
+    new THREE.Vector2(0, -halfLA),                  // cap bottom (wrist)
+  ];
+  const upperArmMat = underclothMat.clone();  upperArmMat.side = THREE.DoubleSide;
+  const forearmMat = underclothMat.clone();   forearmMat.side = THREE.DoubleSide;
   for (const side of [-1, 1]) {
     const shoulderPivot = new THREE.Group();
     shoulderPivot.position.set(side * SHOULDER_LATERAL, SHOULDER_Y, 0);
     body.add(shoulderPivot);
-    // Upper arm
+    // Upper arm — tapered lathe
     const upperArm = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.058, 0.044, UPPER_ARM_LEN, 8),
-      underclothMat,
+      new THREE.LatheGeometry(upperArmProfile, 14),
+      upperArmMat,
     );
     upperArm.position.y = -UPPER_ARM_LEN / 2;
     shoulderPivot.add(upperArm);
@@ -400,10 +462,10 @@ function buildRigVisual(): {
     const elbowGroup = new THREE.Group();
     elbowGroup.position.y = -UPPER_ARM_LEN;
     shoulderPivot.add(elbowGroup);
-    // Forearm
+    // Forearm — tapered lathe
     const forearm = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.044, 0.038, LOWER_ARM_LEN, 8),
-      underclothMat,
+      new THREE.LatheGeometry(forearmProfile, 14),
+      forearmMat,
     );
     forearm.position.y = -LOWER_ARM_LEN / 2;
     elbowGroup.add(forearm);
@@ -418,23 +480,51 @@ function buildRigVisual(): {
       wrap.rotation.x = Math.PI / 2;
       elbowGroup.add(wrap);
     }
-    // Hand: palm + 4 finger boxes + thumb (replaces single box)
+    // Hand: ABS P3 R1 — replaced 6 boxes with palm-lathe + tapered-
+    // cylinder fingers + knuckle ridge for "real hand" silhouette at
+    // close 3P / FP range.
     const handGroup = new THREE.Group();
     handGroup.position.y = -LOWER_ARM_LEN - 0.04;
     elbowGroup.add(handGroup);
-    const palm = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.06, 0.04), skinMat);
+    // Palm — wider + slightly thicker box for proper proportions
+    // (real hand is ~85mm wide × 25mm thick × 100mm deep including
+    // fingers). Box here is the palm-back only; fingers cylinder-tapered.
+    // Hand-local: X = across knuckles (palm width), Z = wrist→knuckle
+    // (palm length), Y = palm thickness.
+    const palm = new THREE.Mesh(new THREE.BoxGeometry(0.078, 0.028, 0.062), skinMat);
     handGroup.add(palm);
-    // 4 fingers (slight curl)
+    // Knuckle ridge — narrow box at knuckle line where fingers attach
+    const knuckleRidge = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.022, 0.022), skinMat);
+    knuckleRidge.position.set(0, 0, -0.028);  // forward edge of palm (knuckle line)
+    handGroup.add(knuckleRidge);
+    // 4 fingers — tapered cylinders. Each finger extends FORWARD (-Z)
+    // from the knuckle line. Slight inward curl via rotation.x.
+    // Spacing: -0.027 to +0.027 across hand width (4 fingers @ 0.018 apart)
     for (let f = 0; f < 4; f++) {
-      const finger = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.06, 0.014), skinMat);
-      finger.position.set(-0.028 + f * 0.018, -0.05, 0.005);
-      finger.rotation.x = -0.4;     // curl
+      const fingerLen = 0.062 - Math.abs(f - 1.5) * 0.006;  // index+ring slightly shorter, middle longest
+      const finger = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.0075, 0.010, fingerLen, 8),
+        skinMat,
+      );
+      // Cylinder default axis = Y; rotate so it points along -Z (forward
+      // from knuckle line).
+      finger.rotation.x = Math.PI / 2 - 0.35;    // -Z forward + slight curl down
+      // Knuckle joint at palm front edge; finger tip extends forward
+      finger.position.set(
+        -0.027 + f * 0.018,
+        -fingerLen * 0.18,                       // slight drop for natural curl
+        -0.028 - fingerLen * 0.45,               // forward from knuckle
+      );
       handGroup.add(finger);
     }
-    // Thumb
-    const thumb = new THREE.Mesh(new THREE.BoxGeometry(0.016, 0.045, 0.014), skinMat);
-    thumb.position.set(0.038, -0.025, 0.015);
-    thumb.rotation.z = -0.5;
+    // Thumb — tapered cylinder angled outward + forward (opposable)
+    const thumb = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.009, 0.011, 0.054, 8),
+      skinMat,
+    );
+    thumb.rotation.z = -0.7;                     // outward angle
+    thumb.rotation.x = Math.PI / 2 - 0.5;        // forward tilt
+    thumb.position.set(0.038, -0.012, -0.014);
     handGroup.add(thumb);
     // ABP Tier 4 — right-hand attach point for 3P held items
     if (side === 1) {
