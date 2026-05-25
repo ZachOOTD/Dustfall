@@ -163,16 +163,18 @@ function buildRigVisual(): {
   //   narrow → hip flare → crotch.
   // Profile sampled at 9 keypoints in TORSO_LOCAL_Y space (relative to
   // TORSO_CENTER_Y). Radial segments=24 for smooth read.
-  // ABS R4: profile refined for more organic contours. Pectoral swell
-  // pushed wider (1.18× instead of 1.08×); ribcage taper to waist
-  // sharper; hip line more flared; smoother neck-base transition (add
-  // intermediate point to avoid hard lip).
+  // ABS R4: profile refined for more organic contours.
+  // ABU P2: smoother neck-cap transition — added 2 intermediate points
+  // between cap (0) and neck-base (0.105) to eliminate visible lip.
   const torsoProfile = [
     // [radial, y-offset-from-center]
-    new THREE.Vector2(0.0, +0.395),     // CAP top
-    new THREE.Vector2(0.060, +0.380),   // neck-base smooth shoulder
-    new THREE.Vector2(0.105, +0.360),   // neck base
-    new THREE.Vector2(TORSO_CHEST_R * 1.05, +0.330),    // shoulder line (widest top)
+    new THREE.Vector2(0.0, +0.398),     // CAP top
+    new THREE.Vector2(0.025, +0.395),   // ABU: very narrow at cap edge
+    new THREE.Vector2(0.055, +0.388),   // ABU: smooth roll into neck
+    new THREE.Vector2(0.085, +0.378),   // neck-base smooth (ABU: tighter)
+    new THREE.Vector2(0.110, +0.360),   // neck base full width
+    new THREE.Vector2(TORSO_CHEST_R * 1.00, +0.345),    // ABU: trapezius rise
+    new THREE.Vector2(TORSO_CHEST_R * 1.08, +0.320),    // shoulder line (widest top)
     new THREE.Vector2(TORSO_CHEST_R * 1.18, +0.230),    // upper chest (pectoral SWELL)
     new THREE.Vector2(TORSO_CHEST_R * 1.15, +0.140),    // pec curve under
     new THREE.Vector2(TORSO_CHEST_R * 1.04, +0.040),    // mid chest (sternum)
@@ -290,18 +292,52 @@ function buildRigVisual(): {
   // visible below the hem (was reaching mid-thigh and hiding feet).
   // ABQ R2: hem flare bumped 1.4 → 1.6 for a more visible "draped cloth"
   // read (R1's 1.4 was correct shape but read as a tube at distance).
+  // ABU P1 — Realistic cloth drape via subdivided geometry + per-vertex
+  // sine-wave fold offsets. Pre-ABU: single-segment CylinderGeometry
+  // (1 height segment, smooth tube). Now: 10 height segments × 24 radial
+  // (576 verts before open-side cut), with per-vertex radial offsets to
+  // fake gravity-pulled folds at the hem narrowing toward the shoulders.
   const ponchoR_top = TORSO_CHEST_R * 1.08;
-  const ponchoR_bot = TORSO_WAIST_R * 1.6;     // hem flare — drape reads
-  const ponchoH = TORSO_H * 0.85;              // shoulder to upper-hip
-  const poncho = new THREE.Mesh(
-    new THREE.CylinderGeometry(
-      ponchoR_top, ponchoR_bot, ponchoH,
-      16, 1, true,             // open-ended (no caps); +2 segments for smoother taper
-      Math.PI * 0.15, Math.PI * 1.7,   // ~3/4 wrap; opens toward +X side
-    ),
-    ponchoMat,
+  const ponchoR_bot = TORSO_WAIST_R * 1.6;
+  const ponchoH = TORSO_H * 0.85;
+  const ponchoGeom = new THREE.CylinderGeometry(
+    ponchoR_top, ponchoR_bot, ponchoH,
+    24, 10, true,             // 24 radial × 10 height (was 16 × 1)
+    Math.PI * 0.15, Math.PI * 1.7,
   );
-  poncho.position.y = TORSO_CENTER_Y + 0.05;   // pulled up so hem sits at hip
+  // Per-vertex fold offsets: walk position attribute, displace radially.
+  // Fold pattern: sin(N × θ) drives ridge/valley around perimeter,
+  // attenuated toward the top (folds deepest at hem, gentle at shoulder).
+  const posAttr = ponchoGeom.attributes.position as THREE.BufferAttribute;
+  // ABU R2: amplitude bumped (R1 hem 2.2cm read as too subtle).
+  const FOLD_WAVES = 6;          // 6 fold ridges + 6 valleys around perimeter
+  const FOLD_AMP_HEM = 0.045;    // 4.5cm at hem (was 2.2)
+  const FOLD_AMP_TOP = 0.008;    // 0.8cm at shoulder (was 0.5)
+  const halfH = ponchoH / 2;
+  for (let i = 0; i < posAttr.count; i++) {
+    const x = posAttr.getX(i);
+    const y = posAttr.getY(i);
+    const z = posAttr.getZ(i);
+    // Skip the seam vertices at y=±halfH (top + bottom rings) to avoid
+    // discontinuity at the open-side edges.
+    const r = Math.hypot(x, z);
+    if (r < 1e-4) continue;
+    const theta = Math.atan2(z, x);
+    // t = 0 at hem (y = -halfH), 1 at top (y = +halfH)
+    const t = (y + halfH) / ponchoH;
+    // Attenuate amplitude: deepest at hem, smallest at top
+    const amp = FOLD_AMP_HEM * (1 - t) + FOLD_AMP_TOP * t;
+    // Radial displacement — positive = ridge (push out), negative = valley
+    const foldOffset = Math.sin(FOLD_WAVES * theta) * amp;
+    const newR = r + foldOffset;
+    const scale = newR / r;
+    posAttr.setX(i, x * scale);
+    posAttr.setZ(i, z * scale);
+  }
+  posAttr.needsUpdate = true;
+  ponchoGeom.computeVertexNormals();
+  const poncho = new THREE.Mesh(ponchoGeom, ponchoMat);
+  poncho.position.y = TORSO_CENTER_Y + 0.05;
   body.add(poncho);
 
   // ── Bandolier: TubeGeometry along a CLOSED Catmull-Rom loop wrapping
@@ -469,6 +505,17 @@ function buildRigVisual(): {
     );
     upperArm.position.y = -UPPER_ARM_LEN / 2;
     shoulderPivot.add(upperArm);
+    // ABU P2 — deltoid bridge: small sphere at the very top of the
+    // shoulder that hides the cap-to-torso gap and adds a natural
+    // "shoulder cap" look. Slightly larger than the arm top radius so
+    // it bulges outward.
+    const deltoid = new THREE.Mesh(
+      new THREE.SphereGeometry(0.085, 14, 8),
+      underclothMat,
+    );
+    deltoid.position.set(0, 0.005, 0);   // at shoulder pivot, slight up
+    deltoid.scale.set(1.0, 0.75, 1.0);    // squashed for shoulder shape
+    shoulderPivot.add(deltoid);
     // Elbow sub-pivot
     const elbowGroup = new THREE.Group();
     elbowGroup.position.y = -UPPER_ARM_LEN;
@@ -521,12 +568,30 @@ function buildRigVisual(): {
       // from knuckle line).
       finger.rotation.x = Math.PI / 2 - 0.35;    // -Z forward + slight curl down
       // Knuckle joint at palm front edge; finger tip extends forward
-      finger.position.set(
-        -0.027 + f * 0.018,
-        -fingerLen * 0.18,                       // slight drop for natural curl
-        -0.028 - fingerLen * 0.45,               // forward from knuckle
-      );
+      const fingerX = -0.027 + f * 0.018;
+      const fingerY = -fingerLen * 0.18;
+      const fingerZ = -0.028 - fingerLen * 0.45;
+      finger.position.set(fingerX, fingerY, fingerZ);
       handGroup.add(finger);
+      // ABU P2 — knuckle bumps: 2 small spheres at 1/3 + 2/3 along each
+      // finger for visible joint inflections. Positioned in world space
+      // by stepping along finger's forward direction (which is the
+      // cylinder Y axis rotated by finger.rotation.x).
+      // Forward dir after rotation: Z component = sin(rot.x), Y component = -cos(rot.x)
+      const fwdZ = Math.sin(finger.rotation.x);
+      const fwdY = -Math.cos(finger.rotation.x);
+      for (const knuckleT of [-0.16, 0.10]) {
+        const knuckle = new THREE.Mesh(
+          new THREE.SphereGeometry(0.011, 8, 6),
+          skinMat,
+        );
+        knuckle.position.set(
+          fingerX,
+          fingerY + fwdY * knuckleT,
+          fingerZ + fwdZ * knuckleT,
+        );
+        handGroup.add(knuckle);
+      }
     }
     // Thumb — tapered cylinder angled outward + forward (opposable)
     const thumb = new THREE.Mesh(
