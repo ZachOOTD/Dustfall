@@ -31,6 +31,14 @@ export interface PaintMaterialOpts {
   wearLevel?: number;
   /** Whether to render double-sided. Default false. */
   doubleSide?: boolean;
+  /** ABN — when true, sample paint/rust/drip noise in OBJECT-LOCAL
+   *  coords instead of world-space. Required for MOVING entities (speeder
+   *  hull is the canonical case) — world-space sampling causes the chip
+   *  pattern + drip streaks to crawl across the painted surface as the
+   *  vehicle moves. Static painted surfaces (locker, well rim) should
+   *  leave this false so adjacent surfaces get coherent world-aligned
+   *  weathering. Default false. */
+  localSpace?: boolean;
 }
 
 /** Build the patched painted-corroded material. Drop-in replacement for
@@ -62,10 +70,19 @@ export function createPaintedMetalMaterial(
     );
     shader.vertexShader = shader.vertexShader.replace(
       '#include <begin_vertex>',
-      /* glsl */ `
-        #include <begin_vertex>
-        vWorldPaint = (modelMatrix * vec4(position, 1.0)).xyz;
-      `,
+      opts.localSpace
+        /* glsl */
+        ? `
+          #include <begin_vertex>
+          // ABN — localSpace: sample noise in object frame so paint chips
+          // + drip streaks stay anchored to the surface as it moves.
+          vWorldPaint = position;
+        `
+        /* glsl */
+        : `
+          #include <begin_vertex>
+          vWorldPaint = (modelMatrix * vec4(position, 1.0)).xyz;
+        `,
     );
 
     shader.fragmentShader = shader.fragmentShader.replace(

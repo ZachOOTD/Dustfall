@@ -74,15 +74,20 @@ export function makeLizardVisual(): THREE.Group {
   // because the lizard is tiny (~18cm long) — large cells would read
   // as one cell per side. Higher sheen because lizards naturally
   // have shiny scales.
+  // ABN — localSpace so scale pattern stays anchored to the lizard body
+  // as it scuttles. Same root cause as companion + sandworm — world-space
+  // sampling causes the texture detail to slide across the surface.
   const bodyMat = createSkinMaterial(0xa89878, {
     accentColor: 0x6a5638,
     scaleSize: 40.0,
     sheen: 0.7,
+    localSpace: true,
   });
   const darkMat = createSkinMaterial(0x7a6a4a, {
     accentColor: 0x4a3a26,
     scaleSize: 40.0,
     sheen: 0.5,
+    localSpace: true,
   });
 
   const body = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.05, 0.10), bodyMat);

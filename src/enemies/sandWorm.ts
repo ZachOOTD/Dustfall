@@ -185,16 +185,22 @@ function makeWormMesh(): { group: THREE.Group } {
   // pigment blotches read as natural skin variation, not random.
   // Large scale size (12) suits the worm's massive radius — scales
   // visible from medium distance without becoming a graphic pattern.
+  // ABN — localSpace so scale-cell pattern stays anchored to the worm
+  // body as it patrols / lunges. Without it the FBM noise re-samples in
+  // world coords each frame, making the texture detail crawl along the
+  // length of the worm as it moves.
   const bodyMat = createSkinMaterial(0xa89878, {
     accentColor: 0x6a5232,
     scaleSize: 12.0,
     sheen: 0.35,
+    localSpace: true,
   });
   const bodyMatOpen = createSkinMaterial(0xa89878, {
     accentColor: 0x6a5232,
     scaleSize: 12.0,
     sheen: 0.35,
     doubleSide: true,
+    localSpace: true,
   });
   const ridgeMat = new THREE.MeshLambertMaterial({ color: 0x5c4a32, flatShading: true });
   const throatMat = new THREE.MeshLambertMaterial({

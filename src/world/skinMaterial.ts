@@ -34,6 +34,14 @@ export interface SkinMaterialOpts {
   doubleSide?: boolean;
   /** Sheen intensity (0..1). Default 0.5. */
   sheen?: number;
+  /** ABN — when true, sample the noise pattern in OBJECT-LOCAL coords
+   *  instead of world-space. Required for MOVING entities (companion,
+   *  any creature that translates between frames) — world-space sampling
+   *  causes the texture detail to crawl across the surface as the body
+   *  moves, breaking the "static-but-detailed skin" read. Static entities
+   *  (a placed corpse, a wreck skeleton) should leave this false so
+   *  adjacent surfaces get coherent world-aligned noise. Default false. */
+  localSpace?: boolean;
 }
 
 /** Build the patched organic-skin material. Drop-in replacement for
@@ -66,10 +74,19 @@ export function createSkinMaterial(
     );
     shader.vertexShader = shader.vertexShader.replace(
       '#include <begin_vertex>',
-      /* glsl */ `
-        #include <begin_vertex>
-        vWorldSkin = (modelMatrix * vec4(position, 1.0)).xyz;
-      `,
+      opts.localSpace
+        /* glsl */
+        ? `
+          #include <begin_vertex>
+          // ABN — localSpace: sample noise in object frame so detail
+          // stays anchored to the body as it moves.
+          vWorldSkin = position;
+        `
+        /* glsl */
+        : `
+          #include <begin_vertex>
+          vWorldSkin = (modelMatrix * vec4(position, 1.0)).xyz;
+        `,
     );
 
     shader.fragmentShader = shader.fragmentShader.replace(

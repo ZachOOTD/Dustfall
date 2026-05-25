@@ -40,18 +40,37 @@ import * as THREE from 'three';
 type FabricShaderRef = { uniforms: Record<string, { value: unknown }> };
 const _shaderRefs = new Set<FabricShaderRef>();
 
+export interface FabricMaterialOpts {
+  /** ABN — skip the wind-shimmer vertex displacement. Required for
+   *  VIEWMODEL fabric (cloth + bandage held in hand) — the shimmer
+   *  samples in world coords, which become camera-relative for viewmodel
+   *  meshes, so the displacement animates against player movement and
+   *  reads as the held item "breathing" / expanding when the player
+   *  walks. World tents + tarps should leave this false so the wind
+   *  shimmer still sells the storm intensity. Default false. */
+  disableShimmer?: boolean;
+}
+
 /** Build the patched fabric material. Drop-in replacement for
- *  `new MeshLambertMaterial({ color, side })` on any cloth surface. */
-export function createFabricMaterial(color: number, side?: THREE.Side): THREE.MeshLambertMaterial {
+ *  `new MeshLambertMaterial({ color, side })` on any cloth surface.
+ *  ABN — third optional arg adds `disableShimmer` for viewmodel callers. */
+export function createFabricMaterial(
+  color: number,
+  side?: THREE.Side,
+  opts?: FabricMaterialOpts,
+): THREE.MeshLambertMaterial {
   const mat = new THREE.MeshLambertMaterial({
     color,
     side: side ?? THREE.FrontSide,
   });
+  const disableShimmer = opts?.disableShimmer ?? false;
 
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uTime = { value: 0 };
     shader.uniforms.uWindStrength = { value: 0 };
-    _shaderRefs.add(shader as unknown as FabricShaderRef);
+    // ABN — only register for per-frame uniform updates if shimmer is
+    // on. Viewmodel callers don't need the wind-tick.
+    if (!disableShimmer) _shaderRefs.add(shader as unknown as FabricShaderRef);
     // ── Vertex shader: forward world position to the fragment stage,
     //    plus apply a small normal-direction shimmer driven by wind. ──
     // BoxGeometry has identity model rotation at material-build time
@@ -68,24 +87,34 @@ export function createFabricMaterial(color: number, side?: THREE.Side): THREE.Me
     );
     shader.vertexShader = shader.vertexShader.replace(
       '#include <begin_vertex>',
-      /* glsl */ `
-        #include <begin_vertex>
-        vec3 _fabricWorld = (modelMatrix * vec4(position, 1.0)).xyz;
-        vWorldFabric = _fabricWorld;
+      disableShimmer
+        /* glsl */
+        ? `
+          #include <begin_vertex>
+          // ABN — viewmodel mode: no shimmer, use object-local coords
+          // for the fragment-shader noise so the weave + stains stay
+          // anchored to the held item as the player moves.
+          vWorldFabric = position;
+        `
+        /* glsl */
+        : `
+          #include <begin_vertex>
+          vec3 _fabricWorld = (modelMatrix * vec4(position, 1.0)).xyz;
+          vWorldFabric = _fabricWorld;
 
-        // Session ABE — wind shimmer. Sum of two phase-offset sin waves
-        // in world-XZ at ~1m wavelength, driven by uTime, displaces the
-        // vertex along its (model-space) normal. Amplitude scales with
-        // uWindStrength: calm ≈ 0.5cm, storm peak ≈ 4cm. Reads as a
-        // breathing/billowing fabric panel without needing real Verlet
-        // sim. Per-instance variation comes from the world-space input
-        // — different tents at different positions wobble out-of-phase.
-        float _fabRipple =
-          sin(_fabricWorld.x * 6.28 + uTime * 1.7) +
-          sin(_fabricWorld.z * 6.28 * 0.83 + uTime * 1.3 + 0.7);
-        float _fabAmp = mix(0.005, 0.04, clamp(uWindStrength, 0.0, 1.0));
-        transformed += normal * (_fabRipple * _fabAmp * 0.5);
-      `,
+          // Session ABE — wind shimmer. Sum of two phase-offset sin waves
+          // in world-XZ at ~1m wavelength, driven by uTime, displaces the
+          // vertex along its (model-space) normal. Amplitude scales with
+          // uWindStrength: calm ≈ 0.5cm, storm peak ≈ 4cm. Reads as a
+          // breathing/billowing fabric panel without needing real Verlet
+          // sim. Per-instance variation comes from the world-space input
+          // — different tents at different positions wobble out-of-phase.
+          float _fabRipple =
+            sin(_fabricWorld.x * 6.28 + uTime * 1.7) +
+            sin(_fabricWorld.z * 6.28 * 0.83 + uTime * 1.3 + 0.7);
+          float _fabAmp = mix(0.005, 0.04, clamp(uWindStrength, 0.0, 1.0));
+          transformed += normal * (_fabRipple * _fabAmp * 0.5);
+        `,
     );
 
     // ── Fragment shader: noise helpers + diffuse modulation. ──

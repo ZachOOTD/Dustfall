@@ -140,14 +140,20 @@ function makeCompanionVisual(): {
   // rocky crystalline carapace. ABH — gets the skin shader (treated
   // as a living crystalline creature; high sheen + tight scale cells
   // sells the crystalline scale plates).
+  // ABN — localSpace anchors the noise pattern to the body so the
+  // crystalline scale plates don't crawl across the carapace when Rocky
+  // walks/rolls. Without this, world-space sampling re-evaluates the
+  // pigment + cell pattern at the body's new position each frame.
   const bodyMat = createSkinMaterial(Tuning.COMPANION_COLOR_HEX, {
     accentColor: Tuning.COMPANION_DARK_COLOR_HEX,
     scaleSize: 18.0,
     sheen: 0.85,
+    localSpace: true,
   });
   const darkMat = createSkinMaterial(Tuning.COMPANION_DARK_COLOR_HEX, {
     scaleSize: 18.0,
     sheen: 0.65,
+    localSpace: true,
   });
   // Main carapace — centered at the shell origin (so rolls cleanly).
   const main = new THREE.Mesh(new THREE.IcosahedronGeometry(R, 0), bodyMat);
@@ -325,13 +331,28 @@ const _moveVec = new THREE.Vector3();
 let _huddleToastShown = false;
 export function resetCompanionHuddleToast(): void { _huddleToastShown = false; }
 
+/** ABN — mirrors sandWorm.ts's getPlayerPos. When the player is mounted
+ *  on the speeder, the capsule body parks at y=-2000 (CC-4) and its X/Z
+ *  freeze at the mount position. Companion previously read the capsule
+ *  directly → followed the player's pre-mount position instead of the
+ *  speeder's current position. Reading the speeder body when mounted
+ *  fixes the stale-target bug. */
+function getPlayerPos(ctx: GameContext): { x: number; y: number; z: number } {
+  if (ctx.speeder?.mounted) {
+    const tr = ctx.speeder.body.translation();
+    return { x: tr.x, y: tr.y, z: tr.z };
+  }
+  const tr = ctx.player.body.body.translation();
+  return { x: tr.x, y: tr.y, z: tr.z };
+}
+
 export function updateCompanion(ctx: GameContext, dt: number): void {
   if (!isPlaying(ctx)) return;
   const c = ctx.companion;
   if (!c) return;
 
   // ── Compute target position: beside the player, not on top of them. ──
-  const ptr = ctx.player.body.body.translation();
+  const ptr = getPlayerPos(ctx);
   const playerY = ptr.y - ctx.player.eyeOffset;  // ground level under player
   // Offset target laterally — small offset toward the camera-RIGHT so
   // the creature trots to the player's side (not directly in front of

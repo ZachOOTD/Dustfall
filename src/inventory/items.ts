@@ -223,8 +223,12 @@ const _DEFS: Record<ItemId, ItemDef> = {
       // distinct cloth weave for free. Added a small red cross stripe
       // for the "medical kit" silhouette.
       const group = new THREE.Group();
-      const cloth = createFabricMaterial(0xe8dcc0);
-      const stripe = createFabricMaterial(0xc8b89a);
+      // ABN — disableShimmer for viewmodels: shimmer + world-sampled
+      // noise read as "the bandage expands when I walk" because the
+      // shader sees a camera-relative position. Object-local sampling
+      // keeps the weave + stain pattern anchored to the pad as it bobs.
+      const cloth = createFabricMaterial(0xe8dcc0, undefined, { disableShimmer: true });
+      const stripe = createFabricMaterial(0xc8b89a, undefined, { disableShimmer: true });
       const crossMat = new THREE.MeshLambertMaterial({ color: 0xa83a2a });
       const pad = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.04, 0.08), cloth);
       group.add(pad);
@@ -1066,9 +1070,11 @@ const _DEFS: Record<ItemId, ItemDef> = {
       // with fabric shader (weave + color variation). Reads as actual
       // folded cloth bundle rather than a stack of paint chips.
       const group = new THREE.Group();
-      const mat = createFabricMaterial(0xc8b89a);
-      const matInner = createFabricMaterial(0xb8a888);
-      const matInnermost = createFabricMaterial(0xa8987c);
+      // ABN — disableShimmer for viewmodels (same reason as bandage:
+      // world-sampled shimmer animates against player movement).
+      const mat = createFabricMaterial(0xc8b89a, undefined, { disableShimmer: true });
+      const matInner = createFabricMaterial(0xb8a888, undefined, { disableShimmer: true });
+      const matInnermost = createFabricMaterial(0xa8987c, undefined, { disableShimmer: true });
       const fold = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.025, 0.085), mat);
       group.add(fold);
       const inner = new THREE.Mesh(new THREE.BoxGeometry(0.095, 0.018, 0.072), matInner);

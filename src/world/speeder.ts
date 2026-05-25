@@ -71,8 +71,12 @@ export interface SpeederState {
 // was designed for. Hull + dark variants get painted-corroded; rust patches
 // stay raw rust (they're already the substrate exposed); antenna gets
 // weathered metal (small accent, no paint).
-const _hullMat = createPaintedMetalMaterial(Tuning.WRECK_HULL_HEX, { wearLevel: 0.55 });
-const _hullDarkMat = createPaintedMetalMaterial(Tuning.WRECK_HULL_DARK_HEX, { wearLevel: 0.55 });
+// ABN — localSpace anchors the chip + drip pattern to the speeder hull
+// so paint streaks don't crawl as the player drives. Static painted
+// surfaces (locker, megaWreck panels) leave this false for coherent
+// world-aligned weathering.
+const _hullMat = createPaintedMetalMaterial(Tuning.WRECK_HULL_HEX, { wearLevel: 0.55, localSpace: true });
+const _hullDarkMat = createPaintedMetalMaterial(Tuning.WRECK_HULL_DARK_HEX, { wearLevel: 0.55, localSpace: true });
 const _rustMat = new THREE.MeshLambertMaterial({
   color: Tuning.WRECK_RUST_HEX,
   flatShading: true,
