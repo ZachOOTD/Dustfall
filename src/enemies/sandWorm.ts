@@ -44,6 +44,7 @@ export type SandWormState =
   | 'stationaryBreach'
   | 'retreat'
   | 'feeding'         // ABJ — B12: bait-and-strike loop; worm surfaces at a meat pickup
+  | 'ambush'          // ABO — B3: lurking submerged, skips alert+charging; snaps to lunge when player closes
   | 'dead';
 
 const SEGMENT_COUNT = 12;
@@ -104,6 +105,10 @@ export interface SandWorm {
    *  feeding on. Cleared on consume (mid-descent). Undefined outside
    *  the feeding state. */
   _feedBaitPickupId?: number;
+  /** ABO — B3: wall-clock seconds before which the worm cannot enter
+   *  ambush again. Set on ambush trigger (consume → retreat) so the
+   *  worm doesn't lock into a constant pop-up pattern. */
+  _ambushCooldownUntil: number;
 }
 
 interface SandPuff {
@@ -555,6 +560,7 @@ export function spawnSandWorm(
     particles: makePuffPool(scene, 140),     // bumped 56 → 140 for boss-tier bursts (Session MM rescale)
     nextWakePuffAt: 0,
     nextTremorDustAt: 0,
+    _ambushCooldownUntil: 0,                  // ABO B3
   };
   _colliderToWorm = worm;
   return worm;
@@ -687,6 +693,9 @@ export function updateSandWorm(ctx: GameContext, dt: number): void {
     case 'feeding':
       tickFeeding(worm, ctx, elapsed);
       break;
+    case 'ambush':
+      tickAmbush(worm, ctx, distToPlayer, playerTr);
+      break;
   }
 
   applyMeshTransform(worm);
@@ -768,6 +777,17 @@ function playerNoiseMultiplier(ctx: GameContext): number {
   return Tuning.SANDWORM_DETECTION_MULT_WALKING * pryBoost;
 }
 
+/** ABO B3 — dawn/dusk surfacing modifier. Returns a multiplier applied
+ *  to base detection radius + patrol speed during the dawn (sunrise) +
+ *  dusk (sunset) windows. Worm is "more active" near transitions — sells
+ *  the dawn/dusk feeding pattern many real desert predators follow. */
+function twilightActivityMultiplier(ctx: GameContext): number {
+  const t = ctx.time.dayTime;
+  const inDawn = t >= 0.18 && t <= 0.22;
+  const inDusk = t >= 0.78 && t <= 0.82;
+  return (inDawn || inDusk) ? 1.30 : 1.0;
+}
+
 function tickPatrol(worm: SandWorm, ctx: GameContext, dt: number, distToPlayer: number): void {
   // ABJ — B12: scan for nearby meat pickups (player bait). If one is
   // within FEED_DETECT_RADIUS the worm surfaces to feed, opening a
@@ -780,11 +800,32 @@ function tickPatrol(worm: SandWorm, ctx: GameContext, dt: number, distToPlayer: 
     enterFeeding(worm, ctx, meatPickup.x, meatPickup.z, meatPickup.id);
     return;
   }
+  // ABO B3 — dawn/dusk modifier scales detection radius for the worm
+  // being more active near twilight transitions.
+  const twilightMult = twilightActivityMultiplier(ctx);
   // AAP — detection radius now scales with player movement noise. A
   // standing-still player can sit ~80m from a patrolling worm without
   // alerting it (DETECTION_RADIUS=150 * STILL=0.55 ≈ 82m); a mounted
   // player triggers alert from ~280m (150 * MOUNTED=1.85).
-  const effectiveR = Tuning.SANDWORM_DETECTION_RADIUS * playerNoiseMultiplier(ctx);
+  const effectiveR = Tuning.SANDWORM_DETECTION_RADIUS * playerNoiseMultiplier(ctx) * twilightMult;
+  // ABO B3 — ambush trigger. When player is within AMBUSH_TRIGGER_RADIUS
+  // (smaller than detection radius — so ambush fires CLOSER than alert)
+  // + noise multiplier is low (still / walking, not sprinting / mounted)
+  // + cooldown not active + a small per-frame probability fires, the
+  // worm enters ambush instead of alert. Ambush is silent: skips the
+  // alert+charging telegraph, snaps to lunge when player closes further.
+  const noiseMult = playerNoiseMultiplier(ctx);
+  const ambushTriggerR = 25;       // metres
+  const ambushPerSecondChance = 0.05;
+  if (
+    distToPlayer < ambushTriggerR &&
+    noiseMult < 0.7 &&
+    ctx.time.elapsed >= worm._ambushCooldownUntil &&
+    Math.random() < ambushPerSecondChance * dt
+  ) {
+    enterAmbush(worm, ctx);
+    return;
+  }
   if (distToPlayer < effectiveR) {
     enterAlert(worm, ctx);
     return;
@@ -811,6 +852,52 @@ function enterAlert(worm: SandWorm, ctx: GameContext): void {
   const playerTr = getPlayerPos(ctx);
   worm.target.set(playerTr.x, 0, playerTr.z);
   playWormRoar();
+}
+
+/** ABO B3 — ambush. Worm enters this state from patrol when the player
+ *  is approaching quietly + within close range. Worm freezes at current
+ *  basePos (already submerged) + waits. If player closes further (within
+ *  ambush_lunge_radius) the worm transitions DIRECTLY to lunge — skipping
+ *  alert + charging. If player retreats past ambush_cancel_radius, return
+ *  to patrol. On lunge OR cancel, set the cooldown so the worm doesn't
+ *  immediately re-ambush. */
+function enterAmbush(worm: SandWorm, ctx: GameContext): void {
+  worm.state = 'ambush';
+  worm.phaseStartedAt = ctx.time.elapsed;
+  worm.mesh.visible = false;
+  worm.pitch = 0;
+  // basePos stays where the worm was patrolling — that becomes the
+  // ambush position. Submerged depth keeps it hidden from above.
+}
+
+function tickAmbush(
+  worm: SandWorm,
+  ctx: GameContext,
+  distToPlayer: number,
+  playerTr: { x: number; y: number; z: number },
+): void {
+  // Worm stays submerged + invisible.
+  worm.mesh.visible = false;
+
+  const AMBUSH_LUNGE_RADIUS = 12;   // metres — player closes inside this → snap to lunge
+  const AMBUSH_CANCEL_RADIUS = 40;  // metres — player escapes outside this → back to patrol
+  const AMBUSH_COOLDOWN_S = 90;     // seconds — minimum gap before another ambush
+
+  if (distToPlayer < AMBUSH_LUNGE_RADIUS) {
+    // Snap to lunge. Set the lunge target to the player's current XZ
+    // (no commitment-snapshot like charging — ambush is meant to land).
+    worm.target.set(playerTr.x, 0, playerTr.z);
+    worm._ambushCooldownUntil = ctx.time.elapsed + AMBUSH_COOLDOWN_S;
+    enterLunge(worm, ctx);
+    return;
+  }
+  if (distToPlayer > AMBUSH_CANCEL_RADIUS) {
+    // Player escaped — release back to patrol + apply cooldown.
+    worm._ambushCooldownUntil = ctx.time.elapsed + AMBUSH_COOLDOWN_S;
+    worm.state = 'patrol';
+    return;
+  }
+  // Hold position quietly — no movement, no sound, no telegraph.
 }
 
 function tickAlert(

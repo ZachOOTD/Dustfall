@@ -26,9 +26,10 @@ import { placeJournal, type Journal } from './journal.ts';
 import { addAccessPanel } from './wrecks.ts';
 import type { ShelterRegistry } from '../shelter/shelterZones.ts';
 import { addShelterZone } from '../shelter/shelterZones.ts';
-import { makeStaticBox } from '../physics/bodies.ts';
+import { makeStaticBox, attachAabbCollider } from '../physics/bodies.ts';
 import { createRustedHullMaterial } from './hullMaterial.ts';
 import { createWeatheredConcreteMaterial } from './concreteMaterial.ts';
+import { createMetalMaterial } from './metalMaterial.ts';
 
 // ── Materials — local copies so we can keep the rusted/concrete
 // palette here without polluting the generic wreck materials. ────────
@@ -55,33 +56,35 @@ const _concreteDarkMat = createWeatheredConcreteMaterial({
 const _rustedSteelMat = createRustedHullMaterial({
   baseColor: 0x6b3a22,       // saturated rust orange-brown
 });
-// AAL — the 4 panel materials below LEGITIMATELY use DoubleSide because
-// the parabolic dish is approached from both above (player looking up
-// at the convex back) and below (player walking through the tripod
-// looking at the concave reflector face). Both faces share the same
-// rusted-fabric look in reality. Backlogged: add structural framework
-// geometry visible on the back face for "panel ribs visible from
-// outside" detail.
+// AAL → ABO C4: panel materials were DoubleSide for the back-side viewing
+// of the parabolic dish. ABO adds real structural framework backing struts
+// (see _backingStrutMat + makeDishFramework backing struts), so back-side
+// reads now come from the framework geometry — panels can drop to
+// FrontSide. Reduces overdraw + sells "torn aluminium plate" depth from
+// grazing angles. Backing struts use the ABH metalMaterial shader.
 const _dishPanelMat = new THREE.MeshLambertMaterial({
   color: 0x7a4628,           // dish panel rust (mid)
-  side: THREE.DoubleSide,
+  side: THREE.FrontSide,
   flatShading: true,
 });
 const _dishPanelDarkMat = new THREE.MeshLambertMaterial({
   color: 0x4a2818,           // darker patchwork panel
-  side: THREE.DoubleSide,
+  side: THREE.FrontSide,
   flatShading: true,
 });
 const _dishPanelRustLight = new THREE.MeshLambertMaterial({
   color: 0x8a5a38,           // lighter orange-tan rust (sun-bleached)
-  side: THREE.DoubleSide,
+  side: THREE.FrontSide,
   flatShading: true,
 });
 const _dishPanelRustEdge = new THREE.MeshLambertMaterial({
   color: 0x3a1e10,           // darker oxidized edge (deeply weathered)
-  side: THREE.DoubleSide,
+  side: THREE.FrontSide,
   flatShading: true,
 });
+// ABO C4 — backing strut material (ABH metal shader): weathered iron
+// reads as a real structural rib visible from the convex (back) dish side.
+const _backingStrutMat = createMetalMaterial(0x4a3a2a, { wornScale: 8 });
 const _frameMat = new THREE.MeshLambertMaterial({
   color: 0x2a1e14,           // dark exposed steel framework
   flatShading: true,
@@ -176,6 +179,39 @@ function makeDishFramework(): THREE.Group {
     g.add(spoke);
     void profile;  // (kept for future curved-spoke upgrade)
   }
+  // ABO C4 — BACK-SIDE radial backing struts. 6 thicker box struts radiate
+  // from the dish hub outward on the convex (back) side, sitting below the
+  // parabolic profile by ~30cm so they read as real structural ribs holding
+  // the dish from underneath. Visible from the convex approach + closes
+  // the DoubleSide cheat. Same metal shader as future ABH applications.
+  const BACK_STRUT_COUNT = 6;
+  const BACK_STRUT_OFFSET = 0.30;          // metres below the dish profile
+  for (let i = 0; i < BACK_STRUT_COUNT; i++) {
+    const phi = (i / BACK_STRUT_COUNT) * Math.PI * 2 + Math.PI / BACK_STRUT_COUNT;  // half-offset from front spokes
+    const strut = new THREE.Mesh(
+      new THREE.BoxGeometry(0.18, 0.18, DISH_R * 0.95),
+      _backingStrutMat,
+    );
+    // Place at half-radius / mid-back position. The dish's convex back
+    // faces -Y at the dish profile (profile heights are +Y, so subtract
+    // BACK_STRUT_OFFSET to sit "under" the dish from the convex side).
+    strut.position.set(
+      Math.cos(phi) * DISH_R * 0.5,
+      -BACK_STRUT_OFFSET + DISH_DEPTH * 0.25,
+      Math.sin(phi) * DISH_R * 0.5,
+    );
+    strut.lookAt(Math.cos(phi) * DISH_R, -BACK_STRUT_OFFSET, Math.sin(phi) * DISH_R);
+    g.add(strut);
+  }
+  // Central back hub — short cylinder centred at dish back, mirrors the
+  // feed-arm mount on the convex side. Reads as the dish's structural
+  // attachment point.
+  const backHub = new THREE.Mesh(
+    new THREE.CylinderGeometry(DISH_R * 0.18, DISH_R * 0.22, 0.30, 12),
+    _backingStrutMat,
+  );
+  backHub.position.y = -BACK_STRUT_OFFSET - 0.05;
+  g.add(backHub);
   return g;
 }
 
@@ -859,6 +895,15 @@ export function placeSatelliteDish(
     }
   });
   scene.add(group);
+
+  // ABO C4 — attach a single AABB collider to the dishPivot. Pre-ABO the
+  // dish was visual-only (player could walk through the disc if they
+  // climbed the tripod / ladder). AABB is over-approximate at the tilt
+  // angle but the dish lives at TRIPOD_APEX_Y ≈ 16m so the over-approx
+  // doesn't conflict with anything at player-walk height; it just blocks
+  // through-the-dish penetration on the climbed-up path.
+  group.updateMatrixWorld(true);
+  attachAabbCollider(world, dishPivot);
 
   // Sand mounds — added as direct scene children AFTER the dish group
   // is placed, so each mound's Y is terrain-snapped independently.

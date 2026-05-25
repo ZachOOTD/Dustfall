@@ -19,6 +19,7 @@ import { makeLizardVisual } from '../enemies/lizard.ts';
 import { createMetalMaterial } from '../world/metalMaterial.ts';
 import { createFabricMaterial } from '../world/fabricMaterial.ts';
 import { createWoodGrainMaterial } from '../world/woodGrainMaterial.ts';
+import { createBoneMaterial } from '../world/boneMaterial.ts';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -851,11 +852,26 @@ const _DEFS: Record<ItemId, ItemDef> = {
       return { consumed: true, message: 'the smoke clings to your throat' };
     },
     makeViewModel() {
+      // ABO C3 — upgraded from single-box to composite: charred outer crust
+      // (metalMaterial dark) + lighter steamed pulp pocket showing through
+      // a split + a small green fiber for residual cactus identity.
       const group = new THREE.Group();
-      const mat = new THREE.MeshLambertMaterial({ color: 0x2a3a20 });
-      const wedge = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.05, 0.06), mat);
-      wedge.rotation.set(0.2, 0.3, 0.1);
-      group.add(wedge);
+      const charMat = createMetalMaterial(0x1e2418, { wornScale: 9.0, scratchStrength: 0.04 });
+      const innerMat = new THREE.MeshLambertMaterial({ color: 0x5a6a3a });
+      const outer = new THREE.Mesh(new THREE.BoxGeometry(0.085, 0.05, 0.062), charMat);
+      outer.rotation.set(0.2, 0.3, 0.1);
+      group.add(outer);
+      // Inner pulp pocket peeking through a split on top
+      const inner = new THREE.Mesh(new THREE.BoxGeometry(0.058, 0.018, 0.04), innerMat);
+      inner.position.set(0.008, 0.028, 0.002);
+      inner.rotation.set(0.2, 0.3, 0.1);
+      group.add(inner);
+      // Residual fiber strand sticking out
+      const fiber = new THREE.MeshLambertMaterial({ color: 0x4a6a3a });
+      const f = new THREE.Mesh(new THREE.BoxGeometry(0.002, 0.022, 0.002), fiber);
+      f.position.set(0.018, 0.038, 0);
+      f.rotation.z = -0.3;
+      group.add(f);
       return group;
     },
     makeIcon() {
@@ -923,11 +939,32 @@ const _DEFS: Record<ItemId, ItemDef> = {
       return { consumed: true, message: 'it tastes of smoke and salt' };
     },
     makeViewModel() {
+      // ABO C3 — upgraded from single-slab to sliced-meat composite:
+      // 3 layered cuts (alternating dark-char + lighter cooked-interior) +
+      // small bone shard exposed at one edge via boneMaterial.
       const group = new THREE.Group();
-      const mat = new THREE.MeshLambertMaterial({ color: 0x4a2a18 });
-      const slab = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.025, 0.06), mat);
-      slab.rotation.set(0.1, 0.4, 0.05);
-      group.add(slab);
+      const charMat = createMetalMaterial(0x2a1408, { wornScale: 10.0, scratchStrength: 0.05 });
+      const interiorMat = new THREE.MeshLambertMaterial({ color: 0x7a3a22 });
+      const boneMat = createBoneMaterial(0xcab8a0, { crackDensity: 0.5 });
+      // 3 slices stacked
+      for (let i = 0; i < 3; i++) {
+        const useChar = i % 2 === 0;
+        const slice = new THREE.Mesh(
+          new THREE.BoxGeometry(0.09 - i * 0.005, 0.011, 0.06 - i * 0.004),
+          useChar ? charMat : interiorMat,
+        );
+        slice.position.set(0, -0.004 + i * 0.011, 0);
+        slice.rotation.set(0.1, 0.4, 0.05);
+        group.add(slice);
+      }
+      // Small bone shard at one edge
+      const bone = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.005, 0.007, 0.048, 5),
+        boneMat,
+      );
+      bone.position.set(-0.04, 0.005, 0.01);
+      bone.rotation.set(0, 0.4, Math.PI / 2);
+      group.add(bone);
       return group;
     },
     makeIcon() {
@@ -992,11 +1029,28 @@ const _DEFS: Record<ItemId, ItemDef> = {
       return { consumed: true, message: 'rich, oily — it fills you' };
     },
     makeViewModel() {
+      // ABO C3 — upgraded from single-slab. Dense worm-flesh has no bone
+      // (worms are invertebrate) so composite is: thick char-crusted outer
+      // slab + lighter rendered-fat interior peeking through a crack +
+      // a few darker char-blister bumps on top.
       const group = new THREE.Group();
-      const mat = new THREE.MeshLambertMaterial({ color: 0x5a3a26 });
-      const slab = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.035, 0.07), mat);
+      const crustMat = createMetalMaterial(0x2e1810, { wornScale: 8.0, scratchStrength: 0.04 });
+      const fatMat = new THREE.MeshLambertMaterial({ color: 0xa07050 });
+      const slab = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.035, 0.07), crustMat);
       slab.rotation.set(0.1, 0.4, 0.05);
       group.add(slab);
+      // Rendered fat exposed through a crack along the top
+      const fat = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.008, 0.014), fatMat);
+      fat.position.set(0.005, 0.022, 0);
+      fat.rotation.set(0.1, 0.4, 0.05);
+      group.add(fat);
+      // Char-blister bumps (3 small dark domes)
+      for (let i = 0; i < 3; i++) {
+        const bump = new THREE.Mesh(new THREE.SphereGeometry(0.006, 6, 4), crustMat);
+        bump.position.set(-0.025 + i * 0.025, 0.024, -0.018 + (i % 2) * 0.012);
+        bump.rotation.set(0.1, 0.4, 0.05);
+        group.add(bump);
+      }
       return group;
     },
     makeIcon() {
@@ -1115,17 +1169,37 @@ const _DEFS: Record<ItemId, ItemDef> = {
       return { consumed: true, message: 'fire lit' };
     },
     makeViewModel() {
+      // ABO C3 — upgraded from plain Lambert sticks. Wood-grain shader on
+      // sticks + a flint chip near the base + a small striker (metal shard)
+      // wedged in the bundle. Reads as "kindling, flint, and a striker"
+      // per the item description.
       const group = new THREE.Group();
-      const mat = new THREE.MeshLambertMaterial({ color: 0x6a4a2a });
+      const woodMat = createWoodGrainMaterial(0x6a4a2a, {
+        grainAxis: 0,
+        ringDensity: 14.0,
+        weatherLevel: 0.45,
+      });
       // Bundle of 3 sticks in a tee-pee
       for (let i = 0; i < 3; i++) {
         const a = (i / 3) * Math.PI * 2;
-        const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.015, 0.16, 6), mat);
+        const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.015, 0.16, 6), woodMat);
         stick.position.set(Math.cos(a) * 0.025, 0, Math.sin(a) * 0.025);
         stick.rotation.x = 0.4 * Math.sin(a);
         stick.rotation.z = 0.4 * Math.cos(a);
         group.add(stick);
       }
+      // Flint chip — small dark angular fragment at the base
+      const flintMat = new THREE.MeshLambertMaterial({ color: 0x4a4a4e, flatShading: true });
+      const flint = new THREE.Mesh(new THREE.OctahedronGeometry(0.014, 0), flintMat);
+      flint.position.set(0.018, -0.06, -0.01);
+      flint.rotation.set(0.3, 0.5, 0.2);
+      group.add(flint);
+      // Striker — small metal shard wedged on the other side
+      const strikerMat = createMetalMaterial(0x9aa0a8, { wornScale: 12.0 });
+      const striker = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.008, 0.004), strikerMat);
+      striker.position.set(-0.022, -0.058, 0.008);
+      striker.rotation.set(0.1, -0.4, 0.6);
+      group.add(striker);
       return group;
     },
     makeIcon() {
@@ -1175,20 +1249,37 @@ const _DEFS: Record<ItemId, ItemDef> = {
       return { consumed: true, message: 'grill attached' };
     },
     makeViewModel() {
+      // ABO C3 — upgraded from plain Lambert. Metal shader on bars + rails
+      // (brushed iron with scratches + worn highlights) + a cooked-residue
+      // rust patch on one bar + small chain detail dangling from a side.
       const group = new THREE.Group();
-      const mat = new THREE.MeshLambertMaterial({ color: 0x3a342a });
+      const ironMat = createMetalMaterial(0x3a342a, { wornScale: 10.0, scratchStrength: 0.08 });
+      const rustyMat = createMetalMaterial(0x5a2a18, { wornScale: 10.0, scratchStrength: 0.12 });
       // 4 short bars stacked + a frame loop suggesting the grate
       for (let i = 0; i < 4; i++) {
-        const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.16, 6), mat);
+        const bar = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.008, 0.008, 0.16, 6),
+          i === 1 ? rustyMat : ironMat,
+        );
         bar.rotation.z = Math.PI / 2;
         bar.position.set(0, -0.015 + i * 0.012, 0);
         group.add(bar);
       }
       // Side rails (perpendicular)
       for (const sz of [-1, 1]) {
-        const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.04, 6), mat);
+        const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.04, 6), ironMat);
         rail.position.set(0, 0.003, sz * 0.075);
         group.add(rail);
+      }
+      // Small dangling chain link from one side — reads as "attach to fire"
+      for (let i = 0; i < 3; i++) {
+        const link = new THREE.Mesh(
+          new THREE.TorusGeometry(0.006, 0.0018, 4, 8),
+          ironMat,
+        );
+        link.position.set(0.08, -0.026 - i * 0.008, 0.075);
+        link.rotation.x = (i % 2) * Math.PI / 2;
+        group.add(link);
       }
       return group;
     },
@@ -1778,17 +1869,41 @@ const _DEFS: Record<ItemId, ItemDef> = {
       return { consumed: true, message: 'locker placed' };
     },
     makeViewModel() {
+      // ABO C3 — upgraded from plain Lambert box+band. Wood-grain shader
+      // on body, metal shader on band + hinges + latch, plus a small
+      // round handle on the front face. Reads as a real lidded chest.
       const group = new THREE.Group();
-      const wood = new THREE.MeshLambertMaterial({ color: 0x6a4a2c });
-      const box = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.12, 0.12), wood);
+      const woodMat = createWoodGrainMaterial(0x6a4a2c, {
+        grainAxis: 0,
+        ringDensity: 10.0,
+        weatherLevel: 0.45,
+      });
+      const metalMat = createMetalMaterial(0x3a3a3a, { wornScale: 8.0 });
+      // Body
+      const box = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.12, 0.12), woodMat);
       group.add(box);
-      // Metal band
-      const band = new THREE.Mesh(
-        new THREE.BoxGeometry(0.19, 0.018, 0.13),
-        new THREE.MeshLambertMaterial({ color: 0x3a3a3a }),
-      );
+      // Metal band around the middle
+      const band = new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.018, 0.13), metalMat);
       band.position.y = 0;
       group.add(band);
+      // 2 hinges on back face
+      for (const sx of [-1, 1]) {
+        const hinge = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.022, 0.014), metalMat);
+        hinge.position.set(sx * 0.06, 0.05, -0.063);
+        group.add(hinge);
+      }
+      // Latch on front face
+      const latch = new THREE.Mesh(new THREE.BoxGeometry(0.028, 0.020, 0.012), metalMat);
+      latch.position.set(0, 0.052, 0.066);
+      group.add(latch);
+      // Small round handle below latch
+      const handle = new THREE.Mesh(
+        new THREE.TorusGeometry(0.012, 0.003, 4, 12),
+        metalMat,
+      );
+      handle.position.set(0, 0.022, 0.067);
+      handle.rotation.x = Math.PI / 2;
+      group.add(handle);
       return group;
     },
     makeIcon() {

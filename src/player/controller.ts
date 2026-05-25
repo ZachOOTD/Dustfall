@@ -187,8 +187,42 @@ export function updatePlayer(ctx: GameContext, dt: number): void {
   syncCameraToBody(ctx);
 }
 
+// ABO A3 — 3P camera state. Pointer-lock owns yaw + pitch via the
+// camera's rotation directly (PointerLockControls in FP). For 3P we
+// reuse the same rotation (camera quaternion → camDir) but offset the
+// camera position behind+above the player. Spring-arm collision is
+// SKIPPED in this pass — the camera can clip dunes/walls; left as
+// debt for a future polish session.
+const _3P_BACK_DIST = 2.5;
+const _3P_ABOVE_DIST = 1.5;
+const _3P_LOOK_AT_HEAD_OFFSET = 1.0;   // look at player head, not feet
+
 function syncCameraToBody(ctx: GameContext): void {
   const tr = ctx.player.body.body.translation();
+  if (ctx.flags.thirdPerson) {
+    // ABO A3 — 3rd-person spring-arm. Camera yaw + pitch are still owned
+    // by pointer-lock (PointerLockControls hasn't been moved here), but
+    // we DON'T set camera.position to the player; instead offset behind
+    // by the camera's forward direction. Position = player_head_pos -
+    // forward * back_dist + up * above_dist. The camera continues to
+    // look forward (pointer-lock direction), and the player rig appears
+    // in front of the camera.
+    const cam = ctx.three.camera;
+    const fwd = new THREE.Vector3();
+    cam.getWorldDirection(fwd);
+    const headX = tr.x;
+    const headY = tr.y + ctx.player.eyeOffset;
+    const headZ = tr.z;
+    cam.position.set(
+      headX - fwd.x * _3P_BACK_DIST,
+      headY + _3P_ABOVE_DIST - fwd.y * _3P_BACK_DIST,
+      headZ - fwd.z * _3P_BACK_DIST,
+    );
+    // Keep look direction (PointerLockControls already set camera.quaternion).
+    void _3P_LOOK_AT_HEAD_OFFSET;
+    return;
+  }
+  // FP — camera at eyes (existing behavior).
   ctx.three.camera.position.set(
     tr.x,
     tr.y + ctx.player.eyeOffset,

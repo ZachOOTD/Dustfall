@@ -12,7 +12,7 @@ import type RAPIER from '@dimforge/rapier3d-compat';
 import type { Rng } from '../core/rng.ts';
 import type { Terrain } from './terrain.ts';
 import type { Pickup } from '../pickups/pickups.ts';
-import { spawnDroppedPickup } from '../pickups/pickups.ts';
+// ABO C1 — spawnDroppedPickup import dropped; scavenger camp no longer spawns the bandage pickup.
 import {
   makeFuselage,
   placeWreck,
@@ -25,7 +25,11 @@ import { registerSalvageable, type SalvageableRegistry } from './salvage.ts';
 import { placeMegaShip } from './megaShip.ts';
 import { placeMegaWreck } from './megaWreck.ts';
 import { placeSatelliteDish } from './satelliteDish.ts';
-import { placeEngineBlock } from './engineBlock.ts';
+// ABO B6 — placeEngineBlock retired in favor of placeProcgenCompositeForFlagship.
+// engineBlock.ts file kept on disk for POC reversibility (revert one line below
+// + uncomment this import to switch back).
+// import { placeEngineBlock } from './engineBlock.ts';
+import { placeProcgenCompositeForFlagship } from './procgenWreck.ts';
 import { placeCrashedHull } from './crashedHull.ts';
 import type { ShelterRegistry } from '../shelter/shelterZones.ts';
 import { Tuning } from '../config/tuning.ts';
@@ -40,17 +44,21 @@ import { placeRockyEntrance, sampleRockyEntrancePositions } from './rockyEntranc
 // ────────────────────────────────────────────────────────────────
 
 // ────────────────────────────────────────────────────────────────
-// Scavenger camp — small fuselage chunk + lean-to fire ring + bandage.
-// Returns the bandage pickup so the caller can register it.
+// Scavenger camp — ABO C1: stripped to just the fuselage windbreak.
+// Pre-ABO this POI also placed a fire ring (8 stones + ash patch) and
+// a bandage pickup — leftover from an earlier design iteration; user
+// requested removal in ABN triage. Fuselage remains so refugee_caravan
+// cluster + standalone camp dispatch still have a wreck centerpiece.
+// Returns just the fuselage group (was { pickup, fuselage } pre-ABO).
 // ────────────────────────────────────────────────────────────────
 function placeScavengerCamp(
   scene: THREE.Scene,
   world: RAPIER.World,
-  terrain: Terrain,
+  _terrain: Terrain,
   rand: Rng,
   center: THREE.Vector3,
-): { pickup: Pickup; fuselage: THREE.Group } {
-  // Small fuselage section as the windbreak the camp is built against.
+): THREE.Group {
+  // Small fuselage section as the wreck centerpiece.
   const fuselage = makeFuselage(rand, 0.9);
   fuselage.position.copy(center);
   fuselage.position.x += Tuning.SCAVENGER_CAMP_FUSELAGE_OFFSET_X_M;
@@ -62,51 +70,7 @@ function placeScavengerCamp(
   });
   scene.add(fuselage);
   attachCompoundCollider(world, fuselage);
-
-  // Fire ring — 8 small dark stones in a 1m circle, on the lee side.
-  const stoneMat = new THREE.MeshLambertMaterial({
-    color: new THREE.Color().setHSL(0.07, 0.05, 0.12),
-    flatShading: true,
-  });
-  const ringR = Tuning.SCAVENGER_CAMP_RING_RADIUS_M;
-  for (let i = 0; i < 8; i++) {
-    const a = (i / 8) * Math.PI * 2 + rand() * 0.2;
-    const r = ringR + (rand() - 0.5) * Tuning.SCAVENGER_CAMP_RING_JITTER_M;
-    const sx = center.x + Math.cos(a) * r;
-    const sz = center.z + Math.sin(a) * r;
-    const stoneSize = Tuning.SCAVENGER_CAMP_STONE_SIZE_MIN_M
-      + rand() * Tuning.SCAVENGER_CAMP_STONE_SIZE_RANGE_M;
-    const stone = new THREE.Mesh(
-      new THREE.IcosahedronGeometry(stoneSize, 0),
-      stoneMat,
-    );
-    stone.position.set(sx, terrain.heightAt(sx, sz) - 0.02, sz);
-    stone.rotation.y = rand() * Math.PI;
-    stone.castShadow = false;
-    stone.receiveShadow = true;
-    scene.add(stone);
-  }
-  // Ash patch — small dark disc, terrain-aligned.
-  const ash = new THREE.Mesh(
-    new THREE.CircleGeometry(ringR * Tuning.SCAVENGER_CAMP_ASH_RADIUS_FRACTION, 16),
-    new THREE.MeshBasicMaterial({ color: 0x14100c }),
-  );
-  ash.position.set(center.x, terrain.heightAt(center.x, center.z) + 0.015, center.z);
-  ash.quaternion.setFromUnitVectors(
-    new THREE.Vector3(0, 0, 1),
-    terrain.normalAt(center.x, center.z).clone(),
-  );
-  scene.add(ash);
-
-  // Bandage pickup on the far side of the fire.
-  const bandageX = center.x
-    + Tuning.SCAVENGER_CAMP_BANDAGE_OFFSET_X_MIN_M
-    + rand() * Tuning.SCAVENGER_CAMP_BANDAGE_OFFSET_X_RANGE_M;
-  const bandageZ = center.z
-    + Tuning.SCAVENGER_CAMP_BANDAGE_OFFSET_Z_MIN_M
-    + rand() * Tuning.SCAVENGER_CAMP_BANDAGE_OFFSET_Z_RANGE_M;
-  const pickup = spawnDroppedPickup(scene, terrain, { x: bandageX, z: bandageZ }, 'bandage');
-  return { pickup, fuselage };
+  return fuselage;
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -359,14 +323,13 @@ function placeRefugeeCaravan(
   terrain: Terrain,
   rand: Rng,
   anchor: { x: number; z: number },
-  pickupList: Pickup[],
+  _pickupList: Pickup[],     // ABO C1 — kept for signature stability with placePOIs caller; camp no longer spawns the bandage pickup
   salvageables: SalvageableRegistry | undefined,
 ): void {
   const y = terrain.heightAt(anchor.x, anchor.z);
   const center = new THREE.Vector3(anchor.x, y, anchor.z);
-  // Camp at center — includes fuselage windbreak + fire stones + bandage.
-  const { pickup, fuselage } = placeScavengerCamp(scene, world, terrain, rand, center);
-  pickupList.push(pickup);
+  // ABO C1 — camp now just the fuselage windbreak (fire ring + bandage stripped).
+  const fuselage = placeScavengerCamp(scene, world, terrain, rand, center);
   if (salvageables) registerSalvageable(salvageables, fuselage, 'fuselage', center, rand);
   // Ring of cargo containers around the camp.
   const cargoMin = Tuning.REFUGEE_CARAVAN_CARGO_COUNT_MIN;
@@ -491,16 +454,24 @@ export function placePOIs(
     const p = { kind, x: pickedX, z: pickedZ };
     switch (p.kind) {
       case 'engine_block': {
-        // LL — flagship POI: massive 5-nozzle engine cluster tipped
-        // into a dune. Dedicated module (placeEngineBlock) handles the
-        // LatheGeometry bells + per-piece colliders + 2 salvage panels
-        // internally. Mirrors the dish dispatch shape.
-        placeEngineBlock(scene, world, terrain, pos, rand, salvageables, journals);
+        // ABO B6 — POC migration to composite procgen system. Pre-ABO
+        // used placeEngineBlock (hand-modeled LatheGeometry bells + 2
+        // panels). Now placeProcgenCompositeForFlagship dispatches the
+        // flagship_engineBlock procgen class (fixed 5-part recipe:
+        // cockpit + 2 hullSegment + engineModule + tailStub, 3 panels,
+        // engine_cluster palette, journal attached at cockpit anchor).
+        // Validates that hand-modeled flagships CAN be expressed by the
+        // composite vocabulary. If silhouette reads wrong: revert the
+        // import + dispatch line above to restore placeEngineBlock.
+        placeProcgenCompositeForFlagship(scene, world, terrain, pos, rand, salvageables, {
+          flagshipKind: 'engineBlock',
+          journals,
+        });
         break;
       }
       case 'camp': {
-        const { pickup, fuselage } = placeScavengerCamp(scene, world, terrain, rand, pos);
-        pickupList.push(pickup);
+        // ABO C1 — camp stripped to fuselage windbreak only (fire + bandage removed).
+        const fuselage = placeScavengerCamp(scene, world, terrain, rand, pos);
         // The camp fuselage is small (0.9× scale) — register as a regular
         // fuselage salvageable rather than 'massive'.
         if (salvageables) registerSalvageable(salvageables, fuselage, 'fuselage', pos, rand);

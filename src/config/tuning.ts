@@ -976,15 +976,9 @@ export const Tuning = {
   // Tuning so future scavenger-camp redesigns can iterate without
   // hunting through poi.ts.
   // ────────────────────────────────────────────────────────────────
-  SCAVENGER_CAMP_RING_RADIUS_M: 0.55,        // fire ring radius
-  SCAVENGER_CAMP_RING_JITTER_M: 0.06,        // per-stone radial jitter half-range
-  SCAVENGER_CAMP_STONE_SIZE_MIN_M: 0.10,     // icosahedron stone — min radius
-  SCAVENGER_CAMP_STONE_SIZE_RANGE_M: 0.04,   // size range above min (size = min + rand*range)
-  SCAVENGER_CAMP_ASH_RADIUS_FRACTION: 0.85,  // ash disc radius = ringR × this
-  SCAVENGER_CAMP_BANDAGE_OFFSET_X_MIN_M: 1.0,
-  SCAVENGER_CAMP_BANDAGE_OFFSET_X_RANGE_M: 0.4, // x = center.x + min + rand*range
-  SCAVENGER_CAMP_BANDAGE_OFFSET_Z_MIN_M: 0.8,
-  SCAVENGER_CAMP_BANDAGE_OFFSET_Z_RANGE_M: 0.6,
+  // ABO C1 — fire-ring + bandage-pickup constants struck. Pre-ABO these drove
+  // the 8-stone fire ring + ash patch + bandage placement; all removed in ABN
+  // triage (scavenger camp now just the fuselage windbreak). FUSELAGE_* kept.
   SCAVENGER_CAMP_FUSELAGE_OFFSET_X_M: -1.4,  // fuselage windbreak placement offset from center
   SCAVENGER_CAMP_FUSELAGE_OFFSET_Y_M: -0.35, // partly buried
   SCAVENGER_CAMP_FUSELAGE_YAW_RAD: 0.4,      // rotated for "crash-tilt" reading

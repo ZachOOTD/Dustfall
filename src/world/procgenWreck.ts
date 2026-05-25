@@ -56,6 +56,7 @@ import { addAccessPanel, makeEngineBellMesh } from './wrecks.ts';
 import { createRustedHullMaterial } from './hullMaterial.ts';
 import { attachCompoundCollider } from '../physics/bodies.ts';
 import { alignToTerrain } from '../util/terrainAlign.ts';
+import { placeJournal, type Journal } from './journal.ts';
 
 // ── Local materials (procedural rust shader matches the hand-modeled
 //    wrecks.ts palette so composites blend visually). ────────────────
@@ -754,7 +755,7 @@ function pickPart(rand: Rng, kind: PartKind, biome?: BiomeId): PartBuilder {
 
 // ── Wreck classes (recipes) ──────────────────────────────────────────
 
-export type ProcgenWreckClass = 'corvette' | 'freighter' | 'gunship' | 'science_vessel' | 'bulk_hauler';
+export type ProcgenWreckClass = 'corvette' | 'freighter' | 'gunship' | 'science_vessel' | 'bulk_hauler' | 'flagship_engineBlock';
 
 interface WreckRecipe {
   /** Ordered part kinds. Cockpit goes first (nose end at x=0), tail
@@ -802,6 +803,15 @@ function recipeFor(rand: Rng, cls: ProcgenWreckClass): WreckRecipe {
     parts.push('engineModule');
     parts.push('tailStub');
     return { parts, panelCountMin: 2, panelCountMax: 3 };
+  }
+  if (cls === 'flagship_engineBlock') {
+    // ABO B6 — POC migration of engineBlock flagship into the composite
+    // system. Fixed recipe: 1 cockpit + 2 hullSegment + 1 engineModule
+    // (twin-bell pref) + 1 tailStub = 5 parts, ~9-13m. Closer to a
+    // "tipped engine cluster" silhouette than any of the random classes.
+    // 3 panels for the rich-loot engine_cluster palette.
+    const parts: PartKind[] = ['cockpit', 'hullSegment', 'hullSegment', 'engineModule', 'tailStub'];
+    return { parts, panelCountMin: 3, panelCountMax: 3 };
   }
   if (cls === 'bulk_hauler') {
     // Session ABN — B6 (5th class). 1 cockpit + 4-5 hull + 1 engine +
@@ -881,8 +891,12 @@ function assembleWreck(
     [indices[i], indices[j]] = [indices[j], indices[i]];
   }
   // Pick panel kind by wreck class — freighters get more bandages
-  // (medical bay flavor), corvettes get more engine kit.
-  const panelKindPool = cls === 'corvette'
+  // (medical bay flavor), corvettes get more engine kit. ABO B6 — the
+  // flagship_engineBlock POC class registers all panels as engine_cluster
+  // so the engineBlock palette flavor is preserved post-migration.
+  const panelKindPool = cls === 'flagship_engineBlock'
+    ? ['engine_cluster'] as const
+    : cls === 'corvette'
     ? ['fuselage', 'engine_cluster'] as const
     : ['fuselage', 'cargo_container'] as const;
   for (let i = 0; i < wantPanels; i++) {
@@ -997,6 +1011,7 @@ export function placeProcgenComposite(
   // 'cargo_container' (lottery interior).
   if (salvageables) {
     const salvageKind =
+      cls === 'flagship_engineBlock' ? 'massive' : // ABO B6 — POC migration: keep engineBlock's rich-loot 'massive' palette
       cls === 'corvette' ? 'fuselage' :
       cls === 'gunship' ? 'engine_cluster' :
       cls === 'science_vessel' ? 'fuselage' :     // ABJ — observation hull → fuselage palette (mixed loot, no engine-cabling skew)
@@ -1012,6 +1027,59 @@ export function placeProcgenComposite(
         registerSalvageable(salvageables, o, salvageKind, wp, rand);
       }
     });
+  }
+
+  return group;
+}
+
+// ── ABO B6 — flagship POC migration entry ───────────────────────────
+//
+// Drop-in replacement for one hand-modeled flagship (engineBlock per
+// user direction). Calls placeProcgenComposite with the fixed
+// flagship_engineBlock class + attaches the engineBlock journal at a
+// hand-curated anchor relative to the wreck. Other flagships
+// (megaShip / megaWreck / satelliteDish / crashedHull) stay hand-
+// modeled — if this POC proves out visually, future session can sweep
+// the remaining 4 using the same pattern (adding flagship_megaShip
+// etc. classes with appropriate fixed recipes).
+
+interface FlagshipPocOpts {
+  /** Override class for the migration target. Currently only
+   *  'flagship_engineBlock' is wired. */
+  flagshipKind: 'engineBlock';
+  /** Journals list to push the migrated journal onto (matches
+   *  engineBlock.ts's existing journals?: { list: Journal[] } pattern). */
+  journals?: { list: Journal[] };
+}
+
+export function placeProcgenCompositeForFlagship(
+  scene: THREE.Scene,
+  world: RAPIER.World,
+  terrain: Terrain,
+  pos: THREE.Vector3,
+  rand: Rng,
+  salvageables: SalvageableRegistry | undefined,
+  opts: FlagshipPocOpts,
+): THREE.Group {
+  // Currently only engineBlock is migrated; switch when more flagships
+  // get their own POC class.
+  void opts.flagshipKind;
+  const group = placeProcgenComposite(scene, world, terrain, pos, rand, salvageables, {
+    cls: 'flagship_engineBlock',
+    buryY: 1.0,                  // tipped-into-dune feel (engineBlock had heavy bury)
+  });
+
+  // Attach the engineBlock journal at a curated position relative to
+  // the wreck root. The wreck centers itself in X (assembleWreck shifts
+  // children -totalLength/2); place the journal near the cockpit end
+  // (-X direction) at ground level so the player finds it near the
+  // exposed cockpit / "pilot seat" implication.
+  if (opts.journals) {
+    group.updateMatrixWorld(true);
+    const localOffset = new THREE.Vector3(-2.0, 0.4, 0.8);
+    const worldOffset = localOffset.clone().applyMatrix4(group.matrixWorld);
+    const journalYaw = group.rotation.y + Math.PI / 2;
+    opts.journals.list.push(placeJournal(scene, worldOffset, journalYaw, 'engine_block'));
   }
 
   return group;

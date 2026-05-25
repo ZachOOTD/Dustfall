@@ -160,5 +160,18 @@ export function wireOverlays(ctx: GameContext): void {
     });
   });
 
+  // ABO A3 — F toggles 3rd-person camera. Pause-gated (no toggle while
+// menu/overlay open). Pre-game / dead / paused = ignore.
+  window.addEventListener('keydown', (e) => {
+    if (e.code !== 'KeyF' || e.repeat) return;
+    if (ctx.stats.dead || !ctx.flags.started || ctx.flags.paused) return;
+    e.preventDefault();
+    ctx.flags.thirdPerson = !ctx.flags.thirdPerson;
+    // Hide first-person hands in 3P; show in FP.
+    if (ctx.player.viewModel) {
+      ctx.player.viewModel.group.visible = !ctx.flags.thirdPerson;
+    }
+  });
+
   ctx.three.scene.add(ctx.input.controls.object);
 }

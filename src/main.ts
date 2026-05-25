@@ -51,6 +51,7 @@ import { updateWieldAction } from './player/wieldAction.ts';
 import { updateReload } from './player/combat.ts';
 import { createGhostPreview, updateGhostPreview } from './player/ghostPreview.ts';
 import { createViewModel, updateViewModel } from './player/viewModel.ts';
+import { buildPlayerRig, updatePlayerRig } from './player/playerRig.ts';
 import { createWeather, updateWeather } from './world/weather.ts';
 import { createAmbientDust, updateAmbientDust } from './world/ambientDust.ts';
 import { createDustMotes, updateDustMotes } from './world/dustMotes.ts';
@@ -297,6 +298,7 @@ const ctx: GameContext = {
     crouching: false,
     inShelter: false,
     viewModel: null,
+    rig: null,                       // ABO A3 — built post-context construction
   },
   pickups: { list: pickupList },
   inventory: createInventory(),
@@ -338,11 +340,17 @@ const ctx: GameContext = {
     // AAX — devMode is set true by the title DEV MODE button OR by the
     // Tuning.DEBUG_STARTER_LOADOUT code-level flag. Drives the HUD badge.
     devMode: Tuning.DEBUG_STARTER_LOADOUT,
+    // ABO A3 — third-person camera mode. Default false (FP at boot).
+    // Toggled by F-key (pause-gated).
+    thirdPerson: false,
   },
 };
 
 // First-person viewmodel — must come after scene is built; consumes ctx.
 ctx.player.viewModel = createViewModel(ctx);
+// ABO A3 — third-person rigged body. Built invisible (FP at boot);
+// becomes visible when F-key toggles ctx.flags.thirdPerson.
+ctx.player.rig = buildPlayerRig(ctx);
 
 // Player starts with a scrap_bar (slot 0) and a full canteen (slot 1).
 // ABL — swapped machete → scrap_bar because the only source of scrap
@@ -698,6 +706,7 @@ startLoop(ctx, (c, dt) => {
   updateReload(c);               // ABE — R-key scrap_gun reload (drains scrap_bullet → slot.meta.ammoRemaining)
   updateGhostPreview(c);         // AAA — preview ring + marker at kit deploy position
   updateViewModel(c, dt);        // first-person hands + held item (after camera + combat)
+  updatePlayerRig(c, dt);        // ABO A3 — third-person rigged body (no-op in FP mode)
   updateHud(c, dt);              // HUD bars + clock
   updateHotbar(c, dt);           // hotbar slots
   updateInteractPrompt(c, dt);   // [E] prompt visibility

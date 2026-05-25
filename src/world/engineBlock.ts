@@ -232,8 +232,21 @@ function makeThrustFrameCore(): THREE.Group {
 
 /** Ablative heat-shield plate — shallow LatheGeometry cone wedged on
  *  the visible side, reading as "the shield bank that protected the
- *  combustion chamber, half torn away." */
-function makeHeatShield(): THREE.Mesh {
+ *  combustion chamber, half torn away."
+ *
+ *  ABO C5 — returns a Group containing FRONT shield + BACK shield offset
+ *  0.10m behind (rule 7 — 10cm thickness floor). Back uses a BackSide
+ *  cloned material so the cavity between the two reads dark; from
+ *  grazing/oblique angles the pair reads as a real double-wall plate
+ *  instead of the pre-ABO paper-thin single sheet.
+ */
+const _heatShieldBackMat = (() => {
+  const m = _heatShieldMat.clone();
+  m.side = THREE.BackSide;
+  m.color = new THREE.Color(0x3a1d10);   // darker interior wall
+  return m;
+})();
+function makeHeatShield(): THREE.Group {
   const profile: THREE.Vector2[] = [];
   const SHIELD_R = BASE_R * 1.05;
   const SHIELD_DEPTH = BASE_R * 0.45;
@@ -242,11 +255,24 @@ function makeHeatShield(): THREE.Mesh {
     const t = i / segs;
     profile.push(new THREE.Vector2(t * SHIELD_R, t * t * SHIELD_DEPTH * 0.6));
   }
-  // phiLength = 0.7 * 2π — leaves a ~30% wedge missing ("torn off").
-  return new THREE.Mesh(
+  const g = new THREE.Group();
+  // Front shield — phiLength = 0.7 * 2π leaves ~30% wedge missing ("torn off").
+  const front = new THREE.Mesh(
     new THREE.LatheGeometry(profile, 12, 0, Math.PI * 2 * 0.7),
     _heatShieldMat,
   );
+  g.add(front);
+  // Back shield — same profile + phiLength, offset 0.10m below (lathe axis is +Y
+  // by default; we offset along -Y to sit "behind" the front from the viewer's
+  // approach side). Slightly smaller radius to mimic interior wall thickness.
+  const backProfile: THREE.Vector2[] = profile.map((p) => new THREE.Vector2(p.x * 0.96, p.y));
+  const back = new THREE.Mesh(
+    new THREE.LatheGeometry(backProfile, 12, 0, Math.PI * 2 * 0.7),
+    _heatShieldBackMat,
+  );
+  back.position.y = -0.10;
+  g.add(back);
+  return g;
 }
 
 /** Droopy fuel hose — TubeGeometry over a CatmullRomCurve3 from start

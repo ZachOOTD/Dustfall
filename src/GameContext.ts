@@ -19,6 +19,7 @@ import type { StormVignette } from './world/stormVignette.ts';
 import type { SpeederState } from './world/speeder.ts';
 import type { Journal } from './world/journal.ts';
 import type { ViewModel } from './player/viewModel.ts';
+import type { PlayerRig } from './player/playerRig.ts';
 import type { WaterSource } from './world/waterSources.ts';
 import type { Cactus } from './world/cactus.ts';
 import type { Lizard } from './enemies/lizard.ts';
@@ -79,6 +80,11 @@ export interface GameContext {
     crouching: boolean;    // set each frame from LeftControl
     inShelter: boolean;    // set each frame by shelter system
     viewModel: ViewModel | null;
+    /** ABO A3 — third-person rigged body. Null until rig is built at boot.
+     *  Visibility gated by ctx.flags.thirdPerson (FP hides rig; 3P hides
+     *  viewmodel). Walk-cycle state derived per-frame from body velocity
+     *  + crouching. Procedural primitive rig — no GLB. */
+    rig: PlayerRig | null;
   };
   pickups: {
     list: Pickup[];
@@ -157,6 +163,11 @@ export interface GameContext {
      *  across reloads or into the save file (a Continue from a dev-saved
      *  game shows no badge by design; the inventory items survive though). */
     devMode: boolean;
+    /** ABO A3 — third-person camera mode. Toggled by F-key (pause-gated).
+     *  Default false (boot fresh in FP). Not persisted — every reload is
+     *  first-person. When true: rig becomes visible, viewmodel hidden,
+     *  camera offsets behind+above player. */
+    thirdPerson: boolean;
   };
 }
 
