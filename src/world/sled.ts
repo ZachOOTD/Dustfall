@@ -23,17 +23,22 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import type { GameContext } from '../GameContext.ts';
 import { Tuning } from '../config/tuning.ts';
 import type { LootEntry } from './lootContainers.ts';
-import { createWoodGrainMaterial } from './woodGrainMaterial.ts';
+// ACA — sled visual reworked from wood planks to scrap metal sheet.
+// woodGrainMaterial import retired (no callers in this module now).
+import { createMetalMaterial } from './metalMaterial.ts';
+import { createPaintedMetalMaterial } from './paintMaterial.ts';
 
 // ABZ — B1 Generalized rope attachment. Extended union with 'companion'
 // kind so player can rope-tie the sled to the companion creature.
-// Future endpoint kinds (corpse, static-post, raider-pull) extend the
-// union same way + add anchor resolution in updateSleds.
+// ACA — B1 Phase 2 lite: added 'static-pos' kind. Tether sled to a
+// fixed world XZ point (like staking a sled into the sand). Foundation
+// for more endpoint kinds without the full RopeEndpoint refactor.
 export type SledTether =
   | { kind: 'none' }
   | { kind: 'player' }
   | { kind: 'speeder' }
-  | { kind: 'companion' };
+  | { kind: 'companion' }
+  | { kind: 'static-pos'; x: number; z: number };
 
 export interface Sled {
   id: number;
@@ -68,29 +73,17 @@ export function findSledById(list: Sled[], id: number | undefined): Sled | undef
 // Visual
 // ─────────────────────────────────────────────────────────────
 
-// ABJ — Tier 2 C3: apply wood-grain procedural shader to sled deck +
-// rails + runners. Pre-ABJ these were plain Lambert (one flat tone per
-// plank). World-space sampling means each sled gets free per-instance
-// variation. Runners get tighter ring density + stronger weathering to
-// read as "dragged through sand for years".
-const _plankMat = createWoodGrainMaterial(0x6b4a2c, {
-  grainAxis: 0,                  // grain along +X (sled long axis)
-  ringDensity: 6.0,
-  weatherLevel: 0.35,
-});
-const _plankDarkMat = createWoodGrainMaterial(0x4a3220, {
-  grainAxis: 0,
-  ringDensity: 7.0,
-  weatherLevel: 0.45,
-});
-const _runnerMat = createWoodGrainMaterial(0x3a2a1a, {
-  grainAxis: 0,
-  ringDensity: 9.0,
-  weatherLevel: 0.6,
-});
-const _scrapMat = new THREE.MeshLambertMaterial({
-  color: 0x8a7050, metalness: 0.2, roughness: 0.85, flatShading: true,
-} as THREE.MeshLambertMaterialParameters);
+// ACA — Sled visual rework. User feedback: "currently it actually looks
+// like a sled but I don't want it to actually look like a sled. I'd
+// rather it look like an old sheet of scrap metal with a handle and
+// maybe turned up and warped on the sides a bit". Replaced wood-plank
+// look with warped scrap metal sheet + welded handle yoke.
+//
+// Pre-ACA materials retired:
+//   _plankMat (wood deck), _plankDarkMat (slats), _runnerMat (rails).
+// New material is a single scrap-metal shader.
+const _sheetMat = createPaintedMetalMaterial(0x6e5e48, { wearLevel: 0.85 });
+const _sheetUnderMat = createMetalMaterial(0x4a3a28, { wornScale: 10.0, scratchStrength: 0.15 });
 const _ropeStubMat = new THREE.MeshLambertMaterial({
   color: Tuning.SLED_ROPE_COLOR_HEX, flatShading: true,
 });
@@ -110,77 +103,108 @@ function makeSledVisual(): {
   const hy = Tuning.SLED_HALF_EXTENTS_Y;
   const hz = Tuning.SLED_HALF_EXTENTS_Z;
 
-  // Two parallel runners along Z — slightly raise the deck above them.
-  const runnerLen = hz * 2 + 0.1;
-  for (const sx of [-1, 1]) {
-    const runner = new THREE.Mesh(
-      new THREE.BoxGeometry(0.12, 0.08, runnerLen),
-      _runnerMat,
-    );
-    runner.position.set(sx * (hx - 0.07), 0.04, 0);
-    g.add(runner);
-    // Runner curls up at the front — small tilted nose block.
-    const nose = new THREE.Mesh(
-      new THREE.BoxGeometry(0.12, 0.10, 0.18),
-      _runnerMat,
-    );
-    nose.position.set(sx * (hx - 0.07), 0.09, -(hz + 0.05));
-    nose.rotation.x = -0.55;
-    g.add(nose);
+  // ACA — Warped scrap-metal sheet sled. PlaneGeometry subdivided +
+  // per-vertex displacements at the LATERAL edges to curl them up
+  // (like a sheet that's been dented + warped). Top face is the deck.
+  // Below the sheet: a thin underside metal mesh for thickness +
+  // shadow casting.
+  //
+  // Geometry: PlaneGeometry rotated to be horizontal (XZ plane). Width
+  // segments give the resolution for the edge-curl displacement.
+  const SHEET_SEGS = 16;          // lateral subdivisions for smooth curl
+  const sheetGeom = new THREE.PlaneGeometry(hx * 2, hz * 2, SHEET_SEGS, 4);
+  sheetGeom.rotateX(-Math.PI / 2); // make horizontal (was vertical XY)
+  // Warp the lateral edges UP. Edge curl amount peaks at |x| = hx and
+  // falls off toward the center. Vary slightly by z so the warp isn't
+  // perfectly uniform (procedural noise look).
+  {
+    const pos = sheetGeom.attributes.position as THREE.BufferAttribute;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i);
+      const z = pos.getZ(i);
+      // Normalized distance from center along X, raised to power for
+      // sharper edge curl.
+      const nx = Math.abs(x) / hx;
+      const curl = Math.pow(nx, 2.3);
+      // Slight variation along z so the edges aren't perfectly straight
+      const variation = Math.sin(z * 8.0) * 0.04 + Math.cos(z * 11.0) * 0.02;
+      const yOffset = curl * (hy * 2.2 + variation);
+      // Also nudge the X slightly inward at the curl to suggest cloth-like fold
+      const xPinch = Math.sign(x) * curl * 0.02;
+      pos.setY(i, pos.getY(i) + yOffset);
+      pos.setX(i, x - xPinch);
+    }
+    pos.needsUpdate = true;
+    sheetGeom.computeVertexNormals();
   }
-
-  // Cargo deck — flat planked surface above the runners. Tagged
-  // 'open_sled' for the interaction system.
-  const deck = new THREE.Mesh(
-    new THREE.BoxGeometry(hx * 2, hy * 2, hz * 2),
-    _plankMat,
-  );
-  deck.position.set(0, 0.08 + hy, 0);
+  const deck = new THREE.Mesh(sheetGeom, _sheetMat);
+  // The deck "floats" slightly above ground (hy = thickness reference)
+  deck.position.set(0, 0.06 + hy, 0);
   g.add(deck);
 
-  // Plank slats — alternating dark planks across the deck for texture.
-  const slatCount = 4;
-  for (let i = 0; i < slatCount; i++) {
-    const slat = new THREE.Mesh(
-      new THREE.BoxGeometry(hx * 1.95, 0.012, (hz * 2) / slatCount * 0.8),
-      i % 2 === 0 ? _plankDarkMat : _plankMat,
-    );
-    const t = -hz + ((i + 0.5) * (hz * 2)) / slatCount;
-    slat.position.set(0, 0.08 + hy * 2 + 0.006, t);
-    g.add(slat);
-  }
+  // Under-side mesh — duplicate of the sheet, flipped so its top faces
+  // DOWN, slightly lower in Y. Gives the metal sheet visible thickness
+  // from below + side angles.
+  const underGeom = sheetGeom.clone();
+  underGeom.rotateZ(Math.PI);   // flip upside down
+  const underside = new THREE.Mesh(underGeom, _sheetUnderMat);
+  underside.position.set(0, 0.06 + hy - 0.018, 0); // ~1.8cm thickness
+  g.add(underside);
 
-  // Scrap-metal trim around the deck rim (just the front + rear ends, low cost).
+  // Rivets along the sheet edges — 4 along each lateral edge + 3 along
+  // front/back. Small dark metal hemispheres simulating bolts.
+  const rivetMat = _sheetUnderMat;
+  const RIVET_R = 0.012;
+  // Lateral edges (curled-up sides)
+  for (const sx of [-1, 1]) {
+    for (let i = 0; i < 4; i++) {
+      const t = -hz + (hz * 2 / 4) * (i + 0.5);
+      // Approximate Y at the curled edge — match the displacement formula
+      const yEdge = (hy * 2.2 + Math.sin(t * 8.0) * 0.04 + Math.cos(t * 11.0) * 0.02);
+      const rivet = new THREE.Mesh(new THREE.SphereGeometry(RIVET_R, 6, 4), rivetMat);
+      rivet.position.set(sx * (hx - 0.03), 0.06 + hy + yEdge * 0.9, t);
+      g.add(rivet);
+    }
+  }
+  // Front + back edge rivets (flat top)
   for (const sz of [-1, 1]) {
-    const trim = new THREE.Mesh(
-      new THREE.BoxGeometry(hx * 2 + 0.04, 0.06, 0.04),
-      _scrapMat,
-    );
-    trim.position.set(0, 0.08 + hy * 2 + 0.02, sz * hz);
-    g.add(trim);
+    for (let i = 0; i < 3; i++) {
+      const x = -hx * 0.5 + (hx * 0.5) * i;
+      const rivet = new THREE.Mesh(new THREE.SphereGeometry(RIVET_R, 6, 4), rivetMat);
+      rivet.position.set(x, 0.06 + hy + 0.018, sz * (hz - 0.04));
+      g.add(rivet);
+    }
   }
 
-  // Front yoke — small angled bracket where the rope ties on. Two short
-  // posts angled together with a horizontal cross-bar at the top. The
-  // cross-bar IS the raycast target (tagged 'attach_rope').
+  // ACA — Welded handle yoke. Simple bent-pipe handle: 2 vertical posts
+  // welded to the FRONT edge of the sheet (local -Z), joined by a
+  // horizontal cross-bar (the rope tie point). Metal not wood now.
   const yokeBase = new THREE.Group();
-  yokeBase.position.set(0, 0.08, -(hz - 0.05));
+  yokeBase.position.set(0, 0.06 + hy, -(hz - 0.05));
   g.add(yokeBase);
   for (const sx of [-1, 1]) {
     const post = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.025, 0.025, 0.36, 6),
-      _runnerMat,
+      new THREE.CylinderGeometry(0.022, 0.022, 0.40, 8),
+      _sheetUnderMat,
     );
-    post.position.set(sx * 0.18, 0.16, 0);
-    post.rotation.z = sx * 0.35;
+    post.position.set(sx * 0.18, 0.18, 0);
+    post.rotation.z = sx * 0.30;       // angled outward at top
     yokeBase.add(post);
+    // Weld-bead at base (small flattened sphere)
+    const weld = new THREE.Mesh(
+      new THREE.SphereGeometry(0.025, 6, 4),
+      _sheetUnderMat,
+    );
+    weld.position.set(sx * 0.16, 0.01, 0);
+    weld.scale.set(1.3, 0.5, 1.0);
+    yokeBase.add(weld);
   }
-  // The cross-bar — rope ties here. Slightly bulged ends suggest a knot.
+  // Horizontal cross-bar — rope ties here. Thicker than the posts.
   const ropeStub = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.05, 0.05, 0.42, 8),
+    new THREE.CylinderGeometry(0.04, 0.04, 0.46, 8),
     _ropeStubMat,
   );
-  ropeStub.position.set(0, 0.33, 0);
+  ropeStub.position.set(0, 0.37, 0);
   ropeStub.rotation.z = Math.PI / 2;
   yokeBase.add(ropeStub);
 
@@ -297,7 +321,7 @@ export function spawnSledAt(
     contents: contents.slice(),
     opened: false,
     hovered: false,
-    tether: { kind: tether.kind },
+    tether: tether,   // ACA — preserve full tether object (static-pos has x/z payload)
     ropeMesh: null,
   };
   ctx.sleds.list.push(sled);
@@ -490,6 +514,14 @@ export function updateSleds(ctx: GameContext, _dt: number): void {
         continue;
       }
       _anchor.set(c.pos.x, c.pos.y + 0.3, c.pos.z);
+    } else if (sled.tether.kind === 'static-pos') {
+      // ACA B1 Phase 2 lite — fixed-position endpoint. Anchor at the
+      // saved XZ at current terrain height (so the stake sits ON sand,
+      // not below it). Sled gets pulled back to this point if dragged.
+      const sx = sled.tether.x;
+      const sz = sled.tether.z;
+      const sy = ctx.terrain.heightAt(sx, sz);
+      _anchor.set(sx, sy + 0.4, sz);
     } else {
       // Player endpoint — anchor at hip height behind capsule. Use the
       // capsule's center (-0.2 down so the rope drops naturally to

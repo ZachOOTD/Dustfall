@@ -34,7 +34,7 @@ import {
 import type { JournalKind } from '../world/journal.ts';
 import { spawnFireAt, attachGrillToFire, releaseFireLight } from '../world/fire.ts';
 import { spawnTentAt } from '../world/tent.ts';
-import { spawnSledAt, setNextSledId } from '../world/sled.ts';
+import { spawnSledAt, setNextSledId, type SledTether } from '../world/sled.ts';
 import { spawnLargeTentAt, setNextLargeTentId } from '../world/largeTent.ts';
 import { spawnBedrollAt, setNextBedrollId } from '../world/bedroll.ts';
 import { spawnLanternAt, setNextLanternId, releaseLanternLight } from '../world/lantern.ts';
@@ -158,14 +158,18 @@ export interface SaveV1 {
   tents: Array<{ id: number; pos: V3; rotationY: number }>;
   /** Session QQ — placed sleds with their cargo + tether state. Optional
    *  so pre-v5 saves still load (sleds field is just absent).
-   *  ABZ — extended tether union with 'companion' kind (v12). Pre-v12
-   *  saves that lack 'companion' load unchanged. */
+   *  ABZ — extended tether union with 'companion' kind (v12).
+   *  ACA — added 'static-pos' kind + optional tetherX/tetherZ payload.
+   *  Pre-ACA saves that lack 'static-pos' load unchanged; tetherX/Z
+   *  are only read when tether === 'static-pos'. */
   sleds?: Array<{
     id: number;
     pos: V3;
     rotationY: number;
     contents: LootEntry[];
-    tether: 'none' | 'player' | 'speeder' | 'companion';
+    tether: 'none' | 'player' | 'speeder' | 'companion' | 'static-pos';
+    tetherX?: number;
+    tetherZ?: number;
   }>;
 
   /** Session XX — placed large enterable tents. Optional so pre-v7
@@ -430,6 +434,10 @@ export function saveGameState(ctx: GameContext): { ok: boolean; error?: string }
           rotationY: s.group.rotation.y,
           contents: s.contents.map((e) => ({ ...e })),
           tether: s.tether.kind,
+          // ACA — round-trip static-pos x/z payload. Only set when kind=static-pos.
+          ...(s.tether.kind === 'static-pos'
+            ? { tetherX: s.tether.x, tetherZ: s.tether.z }
+            : {}),
         };
       }),
       speeder: ctx.speeder ? (() => {
@@ -831,12 +839,17 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
     let maxId = 0;
     for (const saved of save.sleds) {
       const pos = new THREE.Vector3(saved.pos.x, saved.pos.y, saved.pos.z);
+      // ACA — reconstruct full SledTether (incl. static-pos x/z payload).
+      const tether: SledTether =
+        saved.tether === 'static-pos'
+          ? { kind: 'static-pos', x: saved.tetherX ?? 0, z: saved.tetherZ ?? 0 }
+          : { kind: saved.tether };
       spawnSledAt(
         ctx,
         pos,
         saved.rotationY,
         saved.contents.map((e) => ({ ...e })),
-        { kind: saved.tether },
+        tether,
         saved.id,
       );
       if (saved.id > maxId) maxId = saved.id;
