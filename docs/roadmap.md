@@ -62,6 +62,7 @@ and promotes the second.
 - **Session ABP** (2026-05-25, long-overnight stay-procedural 3P + rig polish): 4 of 5 tiers shipped (Tier 5 CUT). Tier 0 research deliverables × 2 (3p-cameras-in-games.md + sci-fi-desert-scavenger-aesthetic.md). Tier 1 rig overhaul: playerRig.ts rewrite ~270 → ~470 LOC — tapered torso + elongated head + finger hands + 7 mismatched-scavenger clothing layers (hood + poncho + bandolier + asymmetric pauldron + bandana + forearm wraps + more) + knee/elbow sub-pivots. Tier 2 animation: 3-phase walk cycle + hip sway + run lean + body bob + head counter-bob + FOOT IK to terrain. Tier 3 3P camera: Rapier raycast collision + smoothed follow + 3.2m/1.8m offsets + 3P pitch clamp + snap-on-teleport flag. Tier 4 held items: PlayerRig.rightHandAttach + dual-mesh item swap + visibility gate per frame + NEW viewModelHands.ts for FP forearm wraps continuity. D111-D113. 5 files + 2 new + 2 research docs.
 - **Session ABQ** (2026-05-25, ABP iterative polish under new iteration discipline): **First session under the discipline** baked into framework after ABP shallow-ship critique. 3 elements fully iterated > 6 shallow. 1 file modified (playerRig.ts). **P3 Poncho geometry (2 rounds)**: shrank from barrel to shawl — top radius 1.25→1.08, hem 2.0→1.6, height 1.4→0.85. Arms now hang OUTSIDE silhouette + legs visible below hem. **P4 Bandolier wrap (1 round)**: front-only 3 waypoints → 6-waypoint CLOSED Catmull-Rom loop over left shoulder + diagonal chest + right hip + around right flank + diagonal back + back of left shoulder. **P6 Walk cycle knee bend (CRITICAL BUG, D114)**: pre-fix `max(0, sin(legPhase - π/3)) * 0.6` peaked at MID-STANCE (weight-bearing). New `max(0, cos(legPhase)) * 0.65` peaks at mid-swing (foot in air). Amplitudes bumped: hipAmp 0.40→0.48, armAmp ratio 0.85→0.95, hip sway 0.012→0.020, body bob 0.035→0.045. D114.
 - **Session ABR** (2026-05-25, ABP+ABQ verification pass under discipline): **Second session under the discipline**, verification-focused (not new-feature). 5 P-items shipped. 2 files modified (speeder.ts + save.ts). **P1 walk cycle in motion**: verified at 3 phases — ABQ D114 knee-bend fix lands visually. **P2 3P camera teleport snap wiring**: `ctx.player.cameraSnapNextFrame=true` now set at speeder mount + dismount + save-load. Camera snaps across teleports instead of lerping. **P3 held items dual-mesh swap**: verified (scrap_bar 5 meshes → branch 3 meshes incl CylinderGeometry). **P4 FP forearm wraps**: positioning correct out of the box from ABP, no tuning needed. **P5 pauldron**: baseline reading well + MORE visible after ABQ poncho shrink. Discipline net: 5 items verified in ~45min; only 2 needed code changes.
+- **Session ACB** (2026-05-26, locker-on-sled mobile storage + static-pos UX): **Thirteenth session under discipline**. P1 locker-on-sled: new Sled.attachedLockerId field, attachLockerToSled helper, parenting + per-frame pos sync, save additive 2-pass load. P2 static-pos UX: maybeStakeSledAtFloor helper fires on LMB + rope wielded + sled tethered + no hover. Completes ACA gap. P3 throw-items deferred to ACC. 3 files modified.
 - **Session ACA** (2026-05-25, sled visual rework + B1 Phase 2 lite): **Twelfth session under discipline**. P1 sled visual: wood-plank look entirely replaced with warped scrap-metal sheet + welded handle yoke (per user "old sheet of scrap metal with a handle, warped on sides"). PlaneGeometry per-vertex curl displacement + underside mesh + 14 rivets + 2 weld-bead spheres + cross-bar rope-stub. P3 B1 Phase 2 lite: SledTether union extended with 'static-pos' { x, z } kind. Save schema additive (tetherX/Z optional). Foundation for ACB UX. P2 locker-on-sled deferred to ACB. 2 files modified.
 - **Session ABZ** (2026-05-25, B1 generalized rope Phase 1: companion tether + v12 schema): **Eleventh session under discipline**. Pivot to big-ticket feature work. P1 SledTether union extended with 'companion' kind. P2 interaction wire rope→companion (player-tethered sled transfers on LMB). P3 SAVE_VERSION 11→12 additive. 3 files modified. Phase 1 ships minimal architectural increment + first new endpoint kind. Future phases: full RopeEndpoint refactor + more endpoint kinds + RMB-on-rope raycast.
 - **Session ABY** (2026-05-25, Road A polish wrap-ups under discipline): **Tenth session under discipline**. 3 elements iterated. 5 files modified. **P1 footstep cadence sync**: STEP_DISTANCE values calibrated to match rig walk-cycle math (1.875m walking / 2.75m sprint). Added rig.stepCount infra for future precision. **P2 limb R2**: calf + bicep peak bumps + 2 intermediate Lathe points each for smoother muscle bulge. **P3 3P viewmodel readability**: new ItemDef.thirdPersonScale field, viewModel.ts applies to 3P hand-attach only, 5 items tagged (1.3-1.5×).
@@ -76,12 +77,18 @@ and promotes the second.
 
 ## Up next
 
-ACA shipped sled visual rework (scrap metal) + B1 static-pos endpoint.
-**ACB picks up the deferred items**:
-- Locker-on-sled (mobile storage)
-- Throw items on sled deck (physics)
-- LMB-on-empty-ground UX to create static-pos tether
-- ACB also has option to continue B1 with full RopeEndpoint refactor
+ACB shipped locker-on-sled + static-pos UX. **ACC picks up the last
+deferred tactile-sled item**:
+- Throw items on sled deck — items physics-settle + travel with sled.
+  Needs collider redesign + items-resting-on-sled save schema +
+  parenting dropped pickups to sled.group.
+
+Then ACD candidates:
+- Full RopeEndpoint refactor (replace SledTether with abstract
+  Tether {a, b} so non-sled things can be tethered)
+- A1 infinite chunk streaming
+- B5 flagship NPC beats
+- Apply procedural-character pipeline to NPCs
 
 Pre-ACA roadmap continues below:
 - B1 Phase 2: full RopeEndpoint refactor + more endpoint kinds

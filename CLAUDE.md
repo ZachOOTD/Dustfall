@@ -60,7 +60,20 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session ACA — Sled visual rework (scrap metal sheet)
+**Last shipped**: Session ACB — Locker-on-sled (mobile storage) +
+static-pos tether UX. **Thirteenth session under iteration discipline**.
+2 of 3 P-items shipped; throw-items-on-sled deferred to ACC. 3 files
+modified. tsc clean. **P1 locker-on-sled**: new Sled.attachedLockerId
+field, attachLockerToSled helper consumes locker_kit + spawns + parents
+locker.mesh to sled.group. Locker rides sled deck visually + per-frame
+locker.pos sync for hover-distance interactions. Save schema additive:
+sleds[].attachedLockerId?. Load 2-pass: spawn both first, then re-parent.
+**P2 static-pos UX**: maybeStakeSledAtFloor helper fires on LMB + rope
+wielded + player-tethered sled + no hover. Stake pos = player +
+cam-fwd × 2.5m. Completes ACA gap. **Deferred to ACC**: throw items
+on sled deck (collider redesign + parented pickup bodies + save schema).
+
+**Prior milestone**: Session ACA — Sled visual rework (scrap metal sheet)
 + B1 Phase 2 lite (static-pos endpoint kind). **Twelfth session under
 iteration discipline**. 2 of 3 P-items shipped; locker-on-sled deferred
 to ACB. 2 files modified. tsc clean. **P1 sled visual**: per user

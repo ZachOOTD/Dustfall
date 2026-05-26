@@ -3,6 +3,47 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ACB — 2026-05-26 — Locker-on-sled (mobile storage) + static-pos UX ✓ verify pass
+`verified` — tsc clean. 3 files modified (`src/world/sled.ts` +
+`src/player/interaction.ts` + `src/persistence/save.ts`).
+**Thirteenth session under iteration discipline**. 2 of 3 P-items
+shipped; throw-items-on-sled deferred to ACC.
+
+**P1 — Locker-on-sled (mobile storage)**. User direction: "place a
+locker on the sled and pull that around, kinda making the mobile
+storage more tactile".
+- New `Sled.attachedLockerId?: number | null` field on Sled.
+- `attachLockerToSled()` helper in sled.ts: consumes 1 locker_kit
+  from inventory, spawnLockerAt at sled world-pos, re-parents
+  locker.mesh from scene → sled.group with local pos on deck top.
+- New interaction case: hovering sled cargo deck (not the rope
+  stub) while wielding locker_kit + LMB → triggers
+  attachLockerToSled. Toast: "locker placed on sled".
+- updateSleds: per-frame sync locker.pos to mesh.worldPos (via
+  getWorldPosition) so distance-based hover interactions still work.
+  The mesh visually travels with the sled automatically because it's
+  parented to sled.group.
+- Save schema additive: `sleds[].attachedLockerId?: number` field.
+  Save write conditional. Load: 2-pass — sleds + lockers spawn at
+  saved positions first, then second pass re-parents each attached
+  locker under its host sled.group at deckTopLocal.
+
+**P2 — LMB-on-empty-ground UX for static-pos tether**. ACA shipped
+the static-pos tether kind but no interaction created one.
+- Added `maybeStakeSledAtFloor()` helper in interaction.ts. Triggers
+  on LMB + rope wielded + player-tethered sled exists + no other
+  interactable hit (fired from the `hits.length === 0` fallthrough).
+- Stake position = player.pos + camera-horizontal-forward × 2.5m.
+- Sets sled.tether to `{ kind: 'static-pos', x, z }`. Toast: "sled
+  staked". Completes the ACA gap.
+
+**Deferred to ACC**:
+- P3 throw items on sled deck — needs collider redesign (top-
+  friction friendly; current box is friction-OK bottom but items
+  would slide off the warped lateral curls) + items-resting-on-sled
+  save schema + parenting dropped pickups to sled.group while
+  keeping their Rapier bodies sane.
+
 ## Session ACA — 2026-05-25 — Sled visual rework (scrap metal sheet) + B1 Phase 2 lite (static-pos endpoint) ✓ verify pass
 `verified` — tsc clean. 2 files modified (`src/world/sled.ts` +
 `src/persistence/save.ts`). **Twelfth session under iteration
