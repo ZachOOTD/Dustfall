@@ -158,10 +158,8 @@ export interface SaveV1 {
   tents: Array<{ id: number; pos: V3; rotationY: number }>;
   /** Session QQ — placed sleds with their cargo + tether state. Optional
    *  so pre-v5 saves still load (sleds field is just absent).
-   *  ABZ — extended tether union with 'companion' kind (v12).
-   *  ACA — added 'static-pos' kind + optional tetherX/tetherZ payload.
-   *  Pre-ACA saves that lack 'static-pos' load unchanged; tetherX/Z
-   *  are only read when tether === 'static-pos'. */
+   *  ABZ — 'companion' kind (v12). ACA — 'static-pos' kind + tetherX/Z.
+   *  ACB — `attachedLockerId?` field for locker-on-sled (additive). */
   sleds?: Array<{
     id: number;
     pos: V3;
@@ -170,6 +168,7 @@ export interface SaveV1 {
     tether: 'none' | 'player' | 'speeder' | 'companion' | 'static-pos';
     tetherX?: number;
     tetherZ?: number;
+    attachedLockerId?: number;
   }>;
 
   /** Session XX — placed large enterable tents. Optional so pre-v7
@@ -437,6 +436,10 @@ export function saveGameState(ctx: GameContext): { ok: boolean; error?: string }
           // ACA — round-trip static-pos x/z payload. Only set when kind=static-pos.
           ...(s.tether.kind === 'static-pos'
             ? { tetherX: s.tether.x, tetherZ: s.tether.z }
+            : {}),
+          // ACB P1 — attached locker (mobile storage on sled deck)
+          ...(s.attachedLockerId !== null
+            ? { attachedLockerId: s.attachedLockerId }
             : {}),
         };
       }),
@@ -844,7 +847,7 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
         saved.tether === 'static-pos'
           ? { kind: 'static-pos', x: saved.tetherX ?? 0, z: saved.tetherZ ?? 0 }
           : { kind: saved.tether };
-      spawnSledAt(
+      const newSled = spawnSledAt(
         ctx,
         pos,
         saved.rotationY,
@@ -852,9 +855,32 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
         tether,
         saved.id,
       );
+      // ACB P1 — restore attachedLockerId reference. Re-parenting the
+      // locker mesh under sled.group happens in a SECOND pass below,
+      // after the lockers list has been populated by the locker-load
+      // section (which runs before this one — order matters).
+      if (saved.attachedLockerId !== undefined && newSled) {
+        newSled.attachedLockerId = saved.attachedLockerId;
+      }
       if (saved.id > maxId) maxId = saved.id;
     }
     if (maxId > 0) setNextSledId(maxId);
+    // ACB P1 — second pass: re-parent each attached locker under its
+    // host sled.group. Done after both sleds + lockers are spawned.
+    for (const sled of ctx.sleds.list) {
+      if (sled.attachedLockerId === null) continue;
+      const lk = ctx.lockers.list.find((l) => l.id === sled.attachedLockerId);
+      if (!lk) {
+        sled.attachedLockerId = null;   // dangling ref — clear
+        continue;
+      }
+      // Re-parent locker.mesh → sled.group with local-position on deck.
+      ctx.three.scene.remove(lk.mesh);
+      sled.group.add(lk.mesh);
+      const deckTopLocal = 0.06 + Tuning.SLED_HALF_EXTENTS_Y * 2 + 0.04;
+      lk.mesh.position.set(0, deckTopLocal, 0);
+      lk.mesh.rotation.y = 0;
+    }
   }
 
   // ── Sand worm (DD-2): worm now roams, so we restore its saved XZ.

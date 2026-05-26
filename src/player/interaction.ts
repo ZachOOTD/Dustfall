@@ -25,7 +25,7 @@ import { findTentById } from '../world/tent.ts';
 import { findLargeTentById, toggleLargeTentDoor } from '../world/largeTent.ts';
 import { findBedrollById } from '../world/bedroll.ts';
 import { findLockerById } from '../world/locker.ts';
-import { findSledById, attachRopeToSled, detachRope } from '../world/sled.ts';
+import { findSledById, attachRopeToSled, detachRope, attachLockerToSled } from '../world/sled.ts';
 import { claimLight, releaseLight } from '../core/lightPool.ts';
 import {
   findSalvageableById,
@@ -159,6 +159,28 @@ function resolveInteractable(obj: THREE.Object3D): InteractHit | null {
   return null;
 }
 
+// ACB P2 — stake the player-tethered sled at a point in front of the
+// player. Only fires when player wields rope + has player-tethered sled
+// + LMB pressed + no other interactable hovered. Creates a static-pos
+// tether so the sled stays parked there even when the player walks away.
+const _stakeFwd = new THREE.Vector3();
+function maybeStakeSledAtFloor(ctx: GameContext): void {
+  if (!ctx.input.mousePressed.has(0)) return;
+  if (ctx.inventory.slots[ctx.inventory.selectedIdx].item !== 'rope') return;
+  const sled = ctx.sleds.list.find((s) => s.tether.kind === 'player');
+  if (!sled) return;
+  // Compute stake point: player position + camera-horizontal-forward × 2.5m
+  const tr = ctx.player.body.body.translation();
+  ctx.three.camera.getWorldDirection(_stakeFwd);
+  _stakeFwd.y = 0;
+  if (_stakeFwd.lengthSq() < 1e-4) return;
+  _stakeFwd.normalize();
+  const stakeX = tr.x + _stakeFwd.x * 2.5;
+  const stakeZ = tr.z + _stakeFwd.z * 2.5;
+  sled.tether = { kind: 'static-pos', x: stakeX, z: stakeZ };
+  ctx.ui.showToast('sled staked');
+}
+
 export function updateInteraction(ctx: GameContext, _dt: number): void {
   // AAR — animate all salvage-panel doors toward their targets regardless
   // of hover state. Cheap iteration (~50 panels), one float compare per
@@ -248,6 +270,11 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
   const hits = _ray.intersectObjects(targets, true);
   if (hits.length === 0) {
     if (_salvaging) cancelSalvage();
+    // ACB P2 — fallthrough: LMB on empty ground while wielding rope
+    // with a player-tethered sled → stake the sled at a point in
+    // front of the player. Creates a 'static-pos' tether so the sled
+    // stays put even if the player walks away.
+    maybeStakeSledAtFloor(ctx);
     return;
   }
 
@@ -726,6 +753,25 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
         }
         return;
       }
+      // ACB P1 — locker-on-sled. If player wields locker_kit + hovers
+      // the sled cargo deck (not the rope stub), LMB attaches a fresh
+      // locker on top of the sled. The locker mesh parents to sled.group
+      // so it travels with the sled visually + physically.
+      // (info.type === 'attach_rope' branch already returned above, so
+      // we know we're on the cargo-deck hover from here.)
+      const eqLockerKit = ctx.inventory.slots[ctx.inventory.selectedIdx].item === 'locker_kit';
+      if (eqLockerKit && sled.attachedLockerId === null) {
+        ctx.inventory.hover = {
+          type: 'open_sled',
+          distance: info.distance,
+          promptNoun: 'place locker on sled',
+        };
+        if (ctx.input.mousePressed.has(0)) {
+          attachLockerToSled(ctx, sled);
+        }
+        return;
+      }
+
       // Default: cargo-deck open. QQ-2 — sled is bidirectional storage
       // (deposit + take), so empty sleds also open the menu so the
       // player can stash items into them.

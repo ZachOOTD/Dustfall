@@ -27,6 +27,9 @@ import type { LootEntry } from './lootContainers.ts';
 // woodGrainMaterial import retired (no callers in this module now).
 import { createMetalMaterial } from './metalMaterial.ts';
 import { createPaintedMetalMaterial } from './paintMaterial.ts';
+// ACB P1 — locker-on-sled needs to spawn + attach lockers to a sled.
+import { spawnLockerAt, findLockerById } from './locker.ts';
+import { removeItems } from '../inventory/inventory.ts';
 
 // ABZ — B1 Generalized rope attachment. Extended union with 'companion'
 // kind so player can rope-tie the sled to the companion creature.
@@ -54,6 +57,11 @@ export interface Sled {
    *  frame in updateSleds via a 5-point CatmullRomCurve3 with mid-point
    *  sag. Allocated on attach, disposed on detach. */
   ropeMesh: THREE.Mesh | null;
+  /** ACB P1 — locker attached on top of the sled deck for mobile
+   *  storage. When set, the locker's mesh is parented to sled.group
+   *  (visual follows automatically) and locker.pos is synced each
+   *  frame to sled.pos so interactions still work. null = no locker. */
+  attachedLockerId: number | null;
 }
 
 let _nextId = 1;
@@ -323,6 +331,7 @@ export function spawnSledAt(
     hovered: false,
     tether: tether,   // ACA — preserve full tether object (static-pos has x/z payload)
     ropeMesh: null,
+    attachedLockerId: null,   // ACB P1 — populated when player attaches a locker
   };
   ctx.sleds.list.push(sled);
 
@@ -398,6 +407,46 @@ export function attachRopeToSled(
     endpoint === 'companion' ? 'rope attached to companion' :
     'rope attached';
   ctx.ui.showToast(toastMsg);
+}
+
+// ─────────────────────────────────────────────────────────────
+// Locker attachment (ACB P1)
+// ─────────────────────────────────────────────────────────────
+
+/** Spawn a locker on top of the sled. Consumes one locker_kit from the
+ *  player's inventory. The locker mesh becomes a child of the sled's
+ *  group so it travels with the sled. The locker stays in
+ *  ctx.lockers.list so interactions still find it. */
+export function attachLockerToSled(ctx: GameContext, sled: Sled): boolean {
+  if (sled.attachedLockerId !== null) {
+    ctx.ui.showToast('sled already has a locker');
+    return false;
+  }
+  // Consume one locker_kit from inventory.
+  if (!removeItems(ctx.inventory, 'locker_kit', 1)) {
+    return false;
+  }
+  // Spawn locker at sled's world position. We compute the world pos
+  // before re-parenting so the visual lands at the correct spot.
+  const sledWorldPos = new THREE.Vector3();
+  sled.group.getWorldPosition(sledWorldPos);
+  // Locker rotation matches sled's group yaw (locker stays oriented
+  // with the sled).
+  const locker = spawnLockerAt(ctx, sledWorldPos, sled.group.rotation.y, []);
+  // Re-parent locker mesh from scene → sled.group. THREE preserves
+  // world transforms by default during .add(), but we want LOCAL pos
+  // = (0, deckHeight, 0) so the locker rides on top of the sled. So
+  // we set local pos AFTER parenting.
+  ctx.three.scene.remove(locker.mesh);
+  sled.group.add(locker.mesh);
+  // Local position on the sled deck top. Sled group origin sits at
+  // the bottom-center, so deck-top is ~0.08 + hy*2.
+  const deckTopLocal = 0.06 + Tuning.SLED_HALF_EXTENTS_Y * 2 + 0.04;
+  locker.mesh.position.set(0, deckTopLocal, 0);
+  locker.mesh.rotation.y = 0;        // local rotation (group already rotated)
+  sled.attachedLockerId = locker.id;
+  ctx.ui.showToast('locker placed on sled');
+  return true;
 }
 
 /** Untie the rope. Clears tether + ropeMesh + the wielded rope slot's
@@ -486,6 +535,19 @@ export function updateSleds(ctx: GameContext, _dt: number): void {
     // managed manually below (body rotation is locked).
     sled.group.position.set(tr.x, tr.y - 0.08 - hy, tr.z);
     sled.pos.set(tr.x, sled.group.position.y, tr.z);
+
+    // ACB P1 — sync attached locker's world-pos for distance checks.
+    // The mesh is parented to sled.group so the visual auto-follows,
+    // but locker.pos (used by interaction.ts for hover-distance math)
+    // needs explicit per-frame update.
+    if (sled.attachedLockerId !== null) {
+      const lk = findLockerById(ctx.lockers.list, sled.attachedLockerId);
+      if (lk) {
+        lk.mesh.getWorldPosition(lk.pos);
+      } else {
+        sled.attachedLockerId = null;  // locker gone (corrupt state); clear
+      }
+    }
 
     if (sled.tether.kind === 'none') continue;
 
