@@ -111,11 +111,12 @@ const TORSO_CENTER_Y = HIP_Y + TORSO_H / 2 + 0.04;
 
 // ── Color palette (per docs/research/sci-fi-desert-scavenger-aesthetic.md) ──
 const SKIN_COLOR = 0xc9a876;           // weathered tan
-const SKIN_ACCENT = 0x8a7048;          // shadow tone
+// ABX: SKIN_ACCENT retired — face/hand accent colors now inlined
+// per material (face = 0x6e4a26 sun-aged, hand = 0x4a3520 grimy).
 const PONCHO_COLOR = 0xd9a85a;         // ABP-polish R4: 0xb8860b read as dark brown after fabricMaterial multipliers; bumped to lighter golden ochre for the actual "sun-bleached" silhouette
 const HOOD_COLOR = 0xd2b48c;           // desert tan (lighter than poncho)
 const BANDANA_COLOR = 0x3a3a3a;        // dark cloth
-const STRAP_COLOR = 0x505050;          // dark metal/leather
+const STRAP_COLOR = 0x4a3220;          // ABX: brown leather (was 0x505050 dark metal)
 const POUCH_RUST = 0xa0522d;           // rust-orange
 const PAULDRON_METAL = 0x6a6a6a;       // dark grey metal
 const PAULDRON_RUST = 0x8a4a28;        // chipped paint reveals rust
@@ -147,10 +148,24 @@ function buildRigVisual(): {
 
   // ── Materials ──
   // Skin: face + hands. localSpace=true per D109 (moving entity).
+  // ABX P2 — face/hand skin tone weathering. Pre-ABX: uniform skinMat
+  // (warm tan + matching accent). Now: bumped accent to a richer
+  // sun-aged contrast (deeper tan-brown rather than just darker) +
+  // reduced sheen so skin reads matte/dry not oily. Pigment blotches
+  // (driven by accentColor) become more visible — reads as weathered
+  // sun-damaged skin per the scavenger aesthetic.
   const skinMat = createSkinMaterial(SKIN_COLOR, {
-    accentColor: SKIN_ACCENT,
+    accentColor: 0x6e4a26,       // ABX: deeper sun-aged brown (was 0x8a7048)
     scaleSize: 26.0,
-    sheen: 0.5,
+    sheen: 0.22,                 // ABX: matte/dry (was 0.5 — was reading oily)
+    localSpace: true,
+  });
+  // ABX — secondary hands-only skin: same base but with grime accent
+  // (dirty knuckles + palms). Per-region material variation.
+  const handSkinMat = createSkinMaterial(SKIN_COLOR, {
+    accentColor: 0x4a3520,       // grimy darker
+    scaleSize: 22.0,             // slightly larger "calluses"
+    sheen: 0.18,
     localSpace: true,
   });
   // Torso/limbs under poncho — same skin tone but slightly darker
@@ -169,11 +184,16 @@ function buildRigVisual(): {
   const bandanaMat = createFabricMaterial(BANDANA_COLOR, undefined, { disableShimmer: true });
   const wrapMat = createFabricMaterial(WRAP_COLOR, undefined, { disableShimmer: true });
   // Metal: bandolier strap + pauldron base
-  const strapMat = createMetalMaterial(STRAP_COLOR, { wornScale: 14.0, scratchStrength: 0.06 });
+  // ABX P4 — bandolier swapped from metalMaterial (was reading too
+  // shiny + grey) to fabricMaterial with disableShimmer (matte leather
+  // look — brown base, no metal sheen). Reads as worn leather strap.
+  const strapMat = createFabricMaterial(STRAP_COLOR, undefined, { disableShimmer: true });
   const pauldronMetalMat = createMetalMaterial(PAULDRON_METAL, { wornScale: 9.0, scratchStrength: 0.10 });
   // Painted-corroded: pouches + pauldron plates (chipped paint over rust)
   const pouchPaintMat = createPaintedMetalMaterial(POUCH_RUST, { wearLevel: 0.6 });
-  const pauldronPaintMat = createPaintedMetalMaterial(PAULDRON_RUST, { wearLevel: 0.7 });
+  // ABX P3 — bumped wearLevel 0.7 → 0.88 for more visible rust + paint
+  // chipping (more salvaged/battle-scarred read).
+  const pauldronPaintMat = createPaintedMetalMaterial(PAULDRON_RUST, { wearLevel: 0.88 });
 
   // ── Torso: ORGANIC LATHE (ABS R1) ──
   // Pre-ABS: 4-piece composite (2 cylinders + 2 sphere caps) read as
@@ -385,7 +405,44 @@ function buildRigVisual(): {
   }
   posAttr.needsUpdate = true;
   ponchoGeom.computeVertexNormals();
-  const poncho = new THREE.Mesh(ponchoGeom, ponchoMat);
+  // ABX P1 — Per-vertex dye stripe pattern. Hand-dyed cloth has
+  // visible vertical bands from dipping/wringing unevenness. 5 broad
+  // bands around the perimeter, each ±5% darker/lighter. Plus
+  // horizontal "wear gradient" (lighter at hem from sun-bleach, darker
+  // at shoulders from less exposure). Vertex colors multiply with the
+  // fabricMaterial's base color and existing shader layers.
+  const colorArr = new Float32Array(posAttr.count * 3);
+  const STRIPE_BANDS = 5;             // 5 distinct vertical bands
+  for (let i = 0; i < posAttr.count; i++) {
+    const x = posAttr.getX(i);
+    const y = posAttr.getY(i);
+    const z = posAttr.getZ(i);
+    const r = Math.hypot(x, z);
+    const theta = r < 1e-4 ? 0 : Math.atan2(z, x);
+    // 5-band stripe in [0, 1] — alternating slight tint shifts
+    // Normalize theta to [0, 2π], then bucket into bands
+    const thetaNorm = (theta + Math.PI * 2) % (Math.PI * 2);
+    const bandIdx = Math.floor((thetaNorm / (Math.PI * 2)) * STRIPE_BANDS);
+    // Band tints: cycle through subtle warm/cool variations
+    // Even bands slightly darker + warmer; odd bands slightly lighter + cooler
+    const bandTint = bandIdx % 2 === 0
+      ? { r: 0.93, g: 0.91, b: 0.86 }   // warm-darker (more saturated dye)
+      : { r: 1.05, g: 1.02, b: 0.97 };  // cool-lighter (sun-bleached)
+    // Vertical wear gradient — hem (t=0) is more sun-bleached, top (t=1)
+    // is more shaded. Slight ±3% brightness lerp.
+    const t = (y + halfH) / ponchoH;
+    const wearMul = 1.0 + (1 - t) * 0.05 - t * 0.03;  // hem brighter, top dimmer
+    colorArr[i * 3 + 0] = bandTint.r * wearMul;
+    colorArr[i * 3 + 1] = bandTint.g * wearMul;
+    colorArr[i * 3 + 2] = bandTint.b * wearMul;
+  }
+  ponchoGeom.setAttribute('color', new THREE.BufferAttribute(colorArr, 3));
+  // Clone ponchoMat to enable vertexColors without affecting other
+  // fabric instances (e.g., bandana, hood, forearm wraps share ponchoMat-
+  // adjacent materials).
+  const ponchoMatStriped = ponchoMat.clone();
+  ponchoMatStriped.vertexColors = true;
+  const poncho = new THREE.Mesh(ponchoGeom, ponchoMatStriped);
   poncho.position.y = TORSO_CENTER_Y + 0.05;
   spineBend.add(poncho);   // ABV — poncho bends with spine
 
@@ -445,6 +502,29 @@ function buildRigVisual(): {
     );
     plate.rotation.z = -0.3 - i * 0.05;        // tilt outward
     spineBend.add(plate);   // ABV — pauldron bends with spine
+    // ABX P3 — 4 rivets per plate (corners). Small dark metal spheres
+    // sell the "salvaged scrap-bolted-together armor" aesthetic.
+    const plateW = 0.16 - i * 0.02;
+    const plateD = 0.08 + i * 0.012;
+    const rivetSize = 0.006;
+    for (const rx of [-plateW * 0.40, plateW * 0.40]) {
+      for (const rz of [-plateD * 0.40, plateD * 0.40]) {
+        const rivet = new THREE.Mesh(
+          new THREE.SphereGeometry(rivetSize, 6, 4),
+          pauldronMetalMat,
+        );
+        // Position rivets on the OUTWARD face of the plate (camera-facing
+        // side), accounting for the plate's z-tilt rotation.
+        const cosZ = Math.cos(-0.3 - i * 0.05);
+        const sinZ = Math.sin(-0.3 - i * 0.05);
+        rivet.position.set(
+          pauldronAnchor.x + 0.01 * i + cosZ * rx - sinZ * 0.041,
+          pauldronAnchor.y - i * 0.03 + sinZ * rx + cosZ * 0.041,
+          pauldronAnchor.z + rz,
+        );
+        spineBend.add(rivet);
+      }
+    }
   }
 
   // ── Hips: 2 leg pivots with NEW knee sub-pivots ──
@@ -612,10 +692,10 @@ function buildRigVisual(): {
     // fingers). Box here is the palm-back only; fingers cylinder-tapered.
     // Hand-local: X = across knuckles (palm width), Z = wrist→knuckle
     // (palm length), Y = palm thickness.
-    const palm = new THREE.Mesh(new THREE.BoxGeometry(0.078, 0.028, 0.062), skinMat);
+    const palm = new THREE.Mesh(new THREE.BoxGeometry(0.078, 0.028, 0.062), handSkinMat);
     handGroup.add(palm);
     // Knuckle ridge — narrow box at knuckle line where fingers attach
-    const knuckleRidge = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.022, 0.022), skinMat);
+    const knuckleRidge = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.022, 0.022), handSkinMat);
     knuckleRidge.position.set(0, 0, -0.028);  // forward edge of palm (knuckle line)
     handGroup.add(knuckleRidge);
     // 4 fingers — tapered cylinders. Each finger extends FORWARD (-Z)
@@ -625,7 +705,7 @@ function buildRigVisual(): {
       const fingerLen = 0.062 - Math.abs(f - 1.5) * 0.006;  // index+ring slightly shorter, middle longest
       const finger = new THREE.Mesh(
         new THREE.CylinderGeometry(0.0075, 0.010, fingerLen, 8),
-        skinMat,
+        handSkinMat,
       );
       // Cylinder default axis = Y; rotate so it points along -Z (forward
       // from knuckle line).
@@ -646,7 +726,7 @@ function buildRigVisual(): {
       for (const knuckleT of [-0.16, 0.10]) {
         const knuckle = new THREE.Mesh(
           new THREE.SphereGeometry(0.011, 8, 6),
-          skinMat,
+          handSkinMat,
         );
         knuckle.position.set(
           fingerX,
@@ -659,7 +739,7 @@ function buildRigVisual(): {
     // Thumb — tapered cylinder angled outward + forward (opposable)
     const thumb = new THREE.Mesh(
       new THREE.CylinderGeometry(0.009, 0.011, 0.054, 8),
-      skinMat,
+      handSkinMat,
     );
     thumb.rotation.z = -0.7;                     // outward angle
     thumb.rotation.x = Math.PI / 2 - 0.5;        // forward tilt
