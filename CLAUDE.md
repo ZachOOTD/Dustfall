@@ -60,7 +60,22 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session ABX — Player model texture pass within D107
+**Last shipped**: Session ABY — Road A minor polish wrap-ups under
+iteration discipline. **Tenth session under discipline**. 3 elements
+iterated. 5 files modified. tsc clean. **P1 footstep cadence sync**:
+STEP_DISTANCE 3.0→1.875m walking + 4.5→2.75m sprint to match rig
+walk-cycle math (gait freq × 2 heel-strikes × WALK_SPEED). Added
+rig.stepCount infrastructure (phase-locked step counter) for future
+precision use. **P2 limb R2**: calf peak 0.075→0.082 + 2 smoother
+intermediates; bicep peak 0.075→0.082 + 2 smoother intermediates;
+deltoid 0.070→0.072. More pronounced muscle definition. **P3 3P
+viewmodel readability**: new ItemDef.thirdPersonScale field +
+viewModel.ts applies scale to 3P hand-attach only. Tagged 5 items
+(scrap_bar 1.4, canteen 1.3, machete 1.35, scrap_gun 1.35, bandage
+1.5). **10-session arc summary**: ABP→ABX procedural-character
+pipeline + ABY polish wrap-ups. Full visual stack landed.
+
+**Prior milestone**: Session ABX — Player model texture pass within D107
 zero-asset. **Ninth session under iteration discipline**. 4 elements
 iterated. **P1 poncho dye stripes**: per-vertex color attribute on
 poncho geometry (5 alternating warm/cool bands × wear gradient), cloned

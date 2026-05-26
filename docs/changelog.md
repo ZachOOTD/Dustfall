@@ -3,6 +3,43 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ABY — 2026-05-25 — Road A polish wrap-ups (footstep cadence sync + limb R2 + 3P item readability) ✓ verify pass
+`verified` — tsc clean. 5 files modified. **Tenth session under
+iteration discipline**. 3 elements iterated, all minor-polish per
+Road A direction (cadence sync, limb tuning, viewmodel readability).
+
+**P1 — Walk-cycle to footstep cadence sync**. Two changes: (1)
+`STEP_DISTANCE 3.0→1.875m` + `STEP_DISTANCE_SPRINT 4.5→2.75m` in
+controller.ts. Calibrated to match the rig walk-cycle visual gait
+math: walking gait freq 1.6 Hz × 2 heel-strikes per cycle = 3.2
+steps/sec; at WALK_SPEED=6.0 m/s → 1.875m per step. Sprint gait 2.4
+× 2 = 4.8 steps/sec at SPRINT 13.2 m/s → 2.75m per step. Pre-ABY
+values made audio fire ~60% as often as the visible foot motion.
+(2) Added `rig.stepCount` + `rig._lastStepPhase` infrastructure to
+PlayerRig type. Phase-locked step counter increments per heel-strike
+when 3P visible. Reserved for future precision use (footstep-dust-
+at-feet, gait-locked breathing audio).
+
+**P2 — Limb R2 refinements**. Calf profile: peak radius 0.075 →
+0.082 (was reading too straight) + 2 intermediate points (0.078
+upper, 0.072 post-peak) for smoother bulge curve. Bicep profile:
+peak 0.075 → 0.082 + 2 intermediates (0.080 upper, 0.072 post-peak).
+Deltoid top 0.070 → 0.072. Both limbs now have more pronounced
+muscle definition.
+
+**P3 — Per-item viewmodel 3P readability**. Added optional
+`thirdPersonScale?: number` field to ItemDef (default 1.0).
+viewModel.ts `swapEquippedMesh` applies `tpMesh.scale.multiplyScalar
+(def.thirdPersonScale)` to the 3P hand-attach mesh ONLY — FP
+viewmodel stays at original scale. Tagged 5 commonly-equipped items
+that were reading too small at 3P distance: scrap_bar 1.4, canteen
+1.3, machete 1.35, scrap_gun 1.35, bandage 1.5 (smallest/lightest
+needed biggest boost).
+
+**Cross-session count**: 10 sessions of iteration discipline running.
+9-session procedural-character pipeline (ABP→ABX) + ABY Road A
+wrap-ups = full visual polish stack landed.
+
 ## Session ABX — 2026-05-25 — Player model texture pass (poncho dye stripes + skin weathering + pauldron rivets + leather bandolier) ✓ verify pass
 `verified` — tsc clean. 1 file modified (`src/player/playerRig.ts`).
 **Ninth session under iteration discipline**. 4 elements iterated.
