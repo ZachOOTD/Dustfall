@@ -3,6 +3,43 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ABZ — 2026-05-25 — B1 generalized rope (Phase 1: companion tether kind) + SAVE_VERSION v12 ✓ verify pass
+`verified` — tsc clean. 3 files modified (`src/world/sled.ts` +
+`src/player/interaction.ts` + `src/persistence/save.ts`). **Eleventh
+session under iteration discipline**. Pivot to big-ticket feature
+work. Re-scoped B1 generalized rope from ABO/ABP cuts; ABZ delivers
+Phase 1 (minimal architectural increment + first new endpoint kind);
+future endpoint kinds queued for ABZ+1.
+
+**P1 — `companion` SledTether kind**. Extended `SledTether` union
+with `{ kind: 'companion' }`. Updated `updateSleds` anchor resolution
+to read `ctx.companion.pos` with +0.3y offset (back-top height).
+Auto-detach if companion gone. `attachRopeToSled` signature accepts
+new endpoint. Per-endpoint attach toast extended.
+
+**P2 — Interaction wire: rope → companion**. interaction.ts
+'companion' case extended: when player wields rope + has a player-
+tethered sled + hovers companion + LMB → transfers the tether to
+companion. Sled now follows the companion creature instead of the
+player. Toast: "rope transferred to companion". Falls back to
+existing passive pet_companion hover otherwise.
+
+**P3 — SAVE_VERSION v11 → v12**. Schema extended: `sleds[].tether`
+union now includes `'companion'`. SaveV1.version literal type
+extended `| 12`. Pre-v12 saves load unchanged (their tether stays
+among the old kinds). New v12 saves with companion tether persist +
+restore correctly. Migration: additive only per D81.
+
+**Phase 1 net result**: player can now tether sled to companion via
+the rope + click flow. Companion drags sled when it walks. Save
+round-trip preserves the new tether kind.
+
+**Deferred to ABZ+1 / future sessions**: full `RopeEndpoint` union
+refactor with abstract `Tether {a, b}` shape; new endpoint kinds
+(static-pos, raider corpse, sandworm carcass); RMB-on-wielded-rope
+raycast-pick UX; rope physics tuning for creature-puller (companion
+walks slower than player so tow constraint may behave differently).
+
 ## Session ABY — 2026-05-25 — Road A polish wrap-ups (footstep cadence sync + limb R2 + 3P item readability) ✓ verify pass
 `verified` — tsc clean. 5 files modified. **Tenth session under
 iteration discipline**. 3 elements iterated, all minor-polish per

@@ -2,10 +2,28 @@
 
 Cumulative state. Rewritten end-to-end at each `/session-end`.
 
-**Current state**: Session ABX shipped (2026-05-25, player model
-texture pass within D107 zero-asset). 79 sessions post-MVP. tsc clean.
-SAVE_VERSION v11 unchanged. **Ninth Dustfall session under iteration
-discipline**. 1 file modified (`src/player/playerRig.ts`).
+**Current state**: Session ABZ shipped (2026-05-25, B1 generalized
+rope Phase 1 — companion tether kind). 81 sessions post-MVP. tsc
+clean. **SAVE_VERSION v12** (additive — pre-v12 saves load unchanged).
+**Eleventh Dustfall session under iteration discipline**. 3 files
+modified.
+
+**ABZ scope (B1 Phase 1)**:
+- SledTether union extended with `'companion'` kind
+- updateSleds anchor resolution for companion (ctx.companion.pos +
+  0.3y back-top), auto-detach if companion gone
+- interaction.ts 'companion' case extended — rope-wielded + player-
+  tethered-sled + LMB transfers tether
+- SAVE_VERSION 11 → 12 additive
+- Sled now drags behind companion when player ties rope across
+
+Phase 1 delivers user-visible new capability + foundation for future
+endpoint kinds. Full refactor (RopeEndpoint union, abstract
+`Tether {a,b}`, RMB-rope-raycast UX, more endpoint kinds) queued
+for ACA Track A or future B1 sessions.
+
+**Prior state (ABY pre-ABZ)**: Session ABY shipped Road A polish
+wrap-ups (footstep cadence sync + limb R2 + 3P viewmodel readability).
 
 **ABX scope**: 4 elements iterated, all material/texture variation
 within zero-asset:

@@ -60,7 +60,23 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session ABY — Road A minor polish wrap-ups under
+**Last shipped**: Session ABZ — B1 generalized rope (Phase 1: companion
+tether kind) + SAVE_VERSION v12. **Eleventh session under iteration
+discipline**. Pivot to big-ticket feature work. Re-scoped B1 from
+ABO/ABP cuts; ABZ delivers Phase 1 minimal architectural increment
++ first new endpoint kind (companion). **P1 companion tether kind**:
+SledTether union extended with `{ kind: 'companion' }`. updateSleds
+anchor resolution reads ctx.companion.pos at +0.3y back-top height,
+auto-detach if companion gone. attachRopeToSled signature accepts
+new endpoint. **P2 interaction wire**: interaction.ts 'companion'
+case extended — wield rope + player-tethered sled + hover companion +
+LMB transfers tether. Sled now drags behind companion. **P3 save
+v11→v12**: schema additive, pre-v12 saves load unchanged. Per D81
+migration discipline. 3 files modified. tsc clean. **Deferred to
+ABZ+1**: full RopeEndpoint refactor, more endpoint kinds (static-pos,
+corpse, carcass), RMB-on-rope raycast-pick UX.
+
+**Prior milestone**: Session ABY — Road A minor polish wrap-ups under
 iteration discipline. **Tenth session under discipline**. 3 elements
 iterated. 5 files modified. tsc clean. **P1 footstep cadence sync**:
 STEP_DISTANCE 3.0→1.875m walking + 4.5→2.75m sprint to match rig
