@@ -109,6 +109,7 @@ const _DEFS: Record<ItemId, ItemDef> = {
     stackable: false,
     maxStack: 1,
     wieldLmb: 'hold_use',
+    thirdPersonScale: 1.3,    // ABY P3
     onUse(ctx, slot) {
       // Q-key single-gulp path (backward compatibility post-UU).
       const fill = slot.meta?.fillLevel ?? 1;
@@ -212,6 +213,7 @@ const _DEFS: Record<ItemId, ItemDef> = {
     description: 'a strip of clean fabric — torn from a hull pennant',
     stackable: true,
     maxStack: 4,
+    thirdPersonScale: 1.5,    // ABY P3 — small + light-colored, biggest boost needed
     onUse(ctx, _slot) {
       ctx.stats.health = Math.min(1, ctx.stats.health + 0.25);
       // AAN — cloth-tear + soft pad SFX so the use lands audibly.
@@ -331,6 +333,7 @@ const _DEFS: Record<ItemId, ItemDef> = {
     stackable: false,
     maxStack: 1,
     wieldLmb: 'click_use',
+    thirdPersonScale: 1.4,    // ABY P3 — small thin metal bar, boost for 3P visibility
     onUse(_ctx, _slot) {
       // The actual pry logic lives in interaction.ts's 'salvageables'
       // case — onUse returns "do nothing" because the interaction.ts
@@ -399,6 +402,7 @@ const _DEFS: Record<ItemId, ItemDef> = {
     stackable: false,
     maxStack: 1,
     wieldLmb: 'attack',
+    thirdPersonScale: 1.35,    // ABY P3
     onUse(_ctx, _slot) {
       return { consumed: false };
     },
@@ -521,6 +525,7 @@ const _DEFS: Record<ItemId, ItemDef> = {
     stackable: false,
     maxStack: 1,
     wieldLmb: 'attack',
+    thirdPersonScale: 1.35,    // ABY P3
     onUse(_ctx, _slot) {
       // Firing is driven by combat.ts via LMB — `onUse` (E key) is a
       // no-op for ranged weapons.

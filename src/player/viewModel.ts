@@ -156,6 +156,13 @@ function swapEquippedMesh(vm: ViewModel, newId: ItemId | null, ctx: GameContext)
           m.receiveShadow = true;
         }
       });
+      // ABY P3 — apply per-item 3P scale boost for visibility at distance.
+      // FP viewmodel mesh (fpMesh) stays at original scale; only the 3P
+      // hand-attach mesh is scaled.
+      const tpScale = def.thirdPersonScale ?? 1.0;
+      if (tpScale !== 1.0) {
+        tpMesh.scale.multiplyScalar(tpScale);
+      }
       rig.rightHandAttach.add(tpMesh);
     }
   }

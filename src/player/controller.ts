@@ -28,8 +28,15 @@ const GRAVITY = -25; // m/s^2
 // Sprint: 4.5m / 13.2 m/s ≈ 2.9 steps/sec (typical run pace).
 // Old values produced ~3.5 / ~9.4 steps/sec, which read as a rapid-fire
 // rattle.
-const STEP_DISTANCE = 3.0;       // meters between footsteps (walking)
-const STEP_DISTANCE_SPRINT = 4.5; // longer cadence per sprint stride
+// ABY P1 — STEP_DISTANCE values calibrated to match the rig walk
+// cycle visual gait. Walking gait freq 1.6 Hz × 2 heel-strikes per
+// cycle = 3.2 steps/sec. At WALK_SPEED=6.0 m/s, distance per step =
+// 6.0/3.2 = 1.875m. Running gait freq 2.4 × 2 = 4.8 steps/sec; at
+// SPRINT speed 13.2 m/s, distance per step = 13.2/4.8 = 2.75m.
+// Pre-ABY values (3.0/4.5) made audio fire ~60% as often as the
+// visible foot motion — visually-audibly desynced.
+const STEP_DISTANCE = 1.875;     // meters between footsteps (walking gait)
+const STEP_DISTANCE_SPRINT = 2.75; // meters between footsteps (sprint gait)
 let _stepAccum = 0;
 let _stepParity = 0;             // alternates 0/1 → ±lateral offset for L/R foot
 

@@ -86,6 +86,15 @@ export interface PlayerRig {
   heading: number;
   /** Velocity-derived horizontal speed (m/s). Drives state classification. */
   speedMag: number;
+  /** ABY P1 — monotonically-increasing step counter. Incremented once per
+   *  heel-strike during walking/running states. Controller compares this
+   *  to its previous value and fires the footstep audio + decal each time
+   *  the counter advances. Phase-locked to the gait so audio cadence
+   *  matches the rig's visible foot motion exactly. */
+  stepCount: number;
+  /** Internal — last raw phase used to derive stepCount. Reset on state
+   *  change to avoid spurious step on walk-resume. */
+  _lastStepPhase: number;
 }
 
 // ── Proportions (m) — slight tune toward more-human silhouette ──
@@ -545,12 +554,17 @@ function buildRigVisual(): {
     new THREE.Vector2(0, -halfUL),                  // cap bottom (knee)
   ];
   // Lower leg profile (knee → ankle).
+  // ABY P2: calf muscle peak bumped 0.075 → 0.082 for more pronounced
+  // muscle bulge; added intermediate point at +halfLL*0.25 for smoother
+  // curve through the calf swell.
   const halfLL = LOWER_LEG_LEN / 2;
   const lowerLegProfile = [
     new THREE.Vector2(0, +halfLL),                  // cap top (knee)
     new THREE.Vector2(0.058, +halfLL - 0.01),       // knee bottom
     new THREE.Vector2(0.068, +halfLL * 0.45),       // upper calf
-    new THREE.Vector2(0.075, +halfLL * 0.10),       // calf widest (calf muscle)
+    new THREE.Vector2(0.078, +halfLL * 0.25),       // ABY: intermediate for smoother bulge
+    new THREE.Vector2(0.082, +halfLL * 0.10),       // ABY: calf widest (was 0.075)
+    new THREE.Vector2(0.072, -halfLL * 0.10),       // ABY: intermediate post-peak
     new THREE.Vector2(0.060, -halfLL * 0.30),       // mid shin
     new THREE.Vector2(0.045, -halfLL * 0.75),       // lower shin
     new THREE.Vector2(0.040, -halfLL + 0.005),      // ankle
@@ -611,10 +625,14 @@ function buildRigVisual(): {
   const elbows: THREE.Group[] = [];
   let rightHandAttach: THREE.Group | null = null;
   const halfUA = UPPER_ARM_LEN / 2;
+  // ABY P2: bicep peak bumped 0.075 → 0.082 + intermediate point at
+  // halfUA * 0.20 for smoother bulge through bicep mass.
   const upperArmProfile = [
     new THREE.Vector2(0, +halfUA),                  // cap top (shoulder)
-    new THREE.Vector2(0.070, +halfUA - 0.01),       // deltoid top
-    new THREE.Vector2(0.075, +halfUA * 0.35),       // bicep peak
+    new THREE.Vector2(0.072, +halfUA - 0.01),       // ABY: deltoid top (was 0.070)
+    new THREE.Vector2(0.080, +halfUA * 0.45),       // ABY: intermediate upper-bicep
+    new THREE.Vector2(0.082, +halfUA * 0.20),       // ABY: bicep peak (was 0.075 at 0.35)
+    new THREE.Vector2(0.072, -halfUA * 0.05),       // ABY: post-peak fall
     new THREE.Vector2(0.060, -halfUA * 0.30),       // mid arm taper
     new THREE.Vector2(0.046, -halfUA + 0.01),       // elbow approach
     new THREE.Vector2(0, -halfUA),                  // cap bottom (elbow)
@@ -796,6 +814,8 @@ export function buildPlayerRig(ctx: GameContext): PlayerRig {
     state: 'idle',
     heading: 0,
     speedMag: 0,
+    stepCount: 0,
+    _lastStepPhase: 0,
   };
   return rig;
 }
@@ -860,6 +880,25 @@ export function updatePlayerRig(ctx: GameContext, dt: number): void {
     const phase = t * gaitFreq * _PI2;
     const hipAmp = rig.state === 'walking' ? 0.48 : 0.62;
     const armAmp = hipAmp * 0.95;
+
+    // ABY P1 — step counter increment. Heel-strikes happen at
+    // legPhase = π/2, 3π/2, 5π/2, ... (sin peaks of opposite-leg pair),
+    // so the GLOBAL phase passes a step-boundary every π radians offset
+    // from π/2. Track _lastStepPhase; count how many π-spaced
+    // boundaries (offset π/2) we've crossed since last frame.
+    {
+      const stepBoundary = Math.PI / 2;   // first heel-strike phase
+      const stepPeriod = Math.PI;          // one heel-strike every π
+      const prevSteps = Math.floor((rig._lastStepPhase - stepBoundary) / stepPeriod);
+      const curSteps = Math.floor((phase - stepBoundary) / stepPeriod);
+      const delta = curSteps - prevSteps;
+      if (delta > 0 && rig._lastStepPhase > 0) {
+        // First frame after state-change has _lastStepPhase ≈ 0 from idle
+        // reset — skip that frame's massive delta to avoid burst.
+        if (delta < 5) rig.stepCount += delta;
+      }
+      rig._lastStepPhase = phase;
+    }
 
     // 3-phase walk cycle per leg via 2 sin curves (hip + knee phase-locked
     // so knee bends during MID-SWING — foot in air, leg recovering forward —

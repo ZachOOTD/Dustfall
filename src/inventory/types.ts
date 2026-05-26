@@ -137,6 +137,12 @@ export interface ItemDef {
    *  items without a viewmodel render only the hands. */
   makeViewModel?: () => THREE.Object3D;
 
+  /** ABY P3 — scale multiplier applied to the 3P hand-attach mesh ONLY
+   *  (FP viewmodel stays at original scale). Items that read too small/
+   *  dark at 3P distance bump this to ~1.3-1.5 for visibility. Default
+   *  1.0 (no scale change). */
+  thirdPersonScale?: number;
+
   /** Build a fresh SVG element for the hotbar icon. Falls back to `glyph` if absent. */
   makeIcon?: () => SVGElement;
 
