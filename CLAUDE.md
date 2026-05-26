@@ -60,7 +60,20 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session ABV — Rig sub-pivots (wrist + ankle + spine
+**Last shipped**: Session ABW — Multi-angle polish audit + cape clipping
+fix. **Eighth session under iteration discipline**. User-reported bug:
+cape (poncho) clipping through the back of the body. Root cause: poncho
+top radius (TORSO_CHEST_R × 1.08 = 0.238m) was smaller than ABS Lathe
+torso pectoral swell (TORSO_CHEST_R × 1.18 = 0.260m). Fix: bumped
+ponchoR_top × 1.08 → 1.32 (0.290m, 3cm clearance over pectoral) +
+hem flare 1.6 → 1.75 for proportional drape. Verified front/side/back:
+body contained inside poncho, no breakthrough. Multi-angle audit also
+confirmed prior ABS+ABU+ABV polish reads correctly across angles.
+**Texture pass deferred to ABX** per user direction — its own focused
+session applying the existing procedural shader vocab (D107 zero-asset
+preserved). 1 file modified (playerRig.ts). tsc clean.
+
+**Prior milestone**: Session ABV — Rig sub-pivots (wrist + ankle + spine
 bend) + hood drape D117. **Seventh session under iteration discipline**.
 2 elements iterated. **Major rigging milestone**: procedural character
 now has full sub-pivot rig hierarchy on par with low-poly stylized

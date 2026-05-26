@@ -2,69 +2,55 @@
 
 Cumulative state. Rewritten end-to-end at each `/session-end`.
 
-**Current state**: Session ABV shipped (2026-05-25, sub-pivot rigging
-+ hood drape D117). 77 sessions post-MVP. tsc clean. SAVE_VERSION v11
-unchanged. **Seventh Dustfall session under iteration discipline**.
-D118 added. 1 file modified (`src/player/playerRig.ts`).
+**Current state**: Session ABW shipped (2026-05-25, cape clipping fix
++ multi-angle audit). 78 sessions post-MVP. tsc clean. SAVE_VERSION
+v11 unchanged. **Eighth Dustfall session under iteration discipline**.
+1 file modified (`src/player/playerRig.ts`).
 
-**ABV scope**: completed the rigging deliverable that was deferred 3
-sessions running. 2 elements iterated:
+**ABW scope**: focused fix-the-bug session. User direction: "another
+round of polish, screenshots from multiple angles, check for weird
+or unrealistic — cape clipping through back. Texture pass deferred
+to its own session."
 
-- **P1 — Rig sub-pivots + animation (1 round)**. Added 3 new pivot
-  Groups to `PlayerRig`: `wrists[2]` (between elbow + hand),
-  `ankles[2]` (between knee + foot), `spineBend` (between body +
-  upper-body children). Re-parented upper-body meshes (torso,
-  headGroup, poncho, bandolier+pouches, pauldron, shoulders) onto
-  spineBend; legs stay direct children of body so they aren't tilted
-  by spine motion. Moved forward-lean from `body.rotation.x` to
-  `spineBend.rotation.x`. Animation tick drives:
-  - Ankle: ASYMMETRIC heel-toe roll — `cos > 0 ? × 0.30 : × 0.45`
-    (toes UP at heel-strike, toes DOWN MORE at toe-off, push-off is
-    more aggressive than landing per real gait).
-  - Wrist: `-0.10 + swing × 0.15` (relaxed hang + opposite roll).
-  - Spine sway: Z-axis `-sin(phase) × 0.05` (opposite hip lift).
-  - Spine lean: X-axis 0.16 running / 0.05 walking.
-  Verified at phase=π: left ankle -0.45 plantarflexed (toes down),
-  right ankle +0.30 dorsiflexed (toes up). Idle pose preserved: feet
-  flat, arms hang naturally with wrist-hang, spine lean visible.
+- **P1 — Multi-angle audit (verification only)**. Captured rig from
+  front, side, back, back-3/4 angles in 3P over-shoulder cam.
+  Confirmed user-reported cape clipping. Verified prior-session
+  polish (ABS Lathe body geometry, ABU deltoid bridges + finger
+  knuckles + cloth folds, ABV sub-pivot rigging) all reading
+  correctly across angles — no critical secondary issues surfaced.
 
-- **P2 — Hood drape D117 cloth folds (1 round)**. Applied D117
-  cloth-drape pattern to hood-back-cylinder. Subdivided 14×1 → 18×8.
-  HOOD_FOLD_WAVES=4 (fewer than poncho 6 for smaller mesh),
-  HOOD_AMP_HEM=1.2cm, HOOD_AMP_TOP=0.3cm (scaled). Pattern matches
-  poncho across outfit.
+- **P2 — Cape clipping fix (1 round)**. Root cause analysis:
+  `ponchoR_top` was `TORSO_CHEST_R * 1.08 = 0.238m` but the ABS
+  Lathe torso has a pectoral swell at `TORSO_CHEST_R * 1.18 =
+  0.260m`. Chest geometry was wider than poncho — body poked
+  through the cloth at the front V cut + back. Fix: `ponchoR_top ×
+  1.08 → 1.32` (0.290m, 3cm clearance over pectoral swell). Hem
+  flare `1.6 → 1.75` proportionally so the drape shape stays
+  natural. Verified front, side, back: body fully contained inside
+  poncho, cape silhouette reads as proper draped cloth.
 
-**D-entry added**: D118 — Procedural rigging sub-pivot architecture.
-Documents wrist/ankle/spineBend insertion pattern + animation drive
-formulas + asymmetric ankle scaling. Pattern composes with any
-humanoid procedural rig wanting animation parity with low-poly
-stylized 3P games. Friction-2.
+**Deferred to ABX (per user direction)**: PLAYER MODEL TEXTURE PASS.
+Apply existing procedural shader vocabulary to specific rig elements
+for material variation + weathering detail. This is the natural next
+step now that rigging + geometry + cloth + animation are all in
+place. Shader vocab available: D107 (zero-asset) + ABH (metalMaterial
+/ paintMaterial / skinMaterial) + ABJ (woodGrain / bone / glass) +
+ABN (fabricMaterial disableShimmer) + ABU (D117 cloth-drape
+displacement). Texture work composes ON TOP without breaking D107.
 
-**Deferred to ABW** (minor polish wrap-up):
-- Bandolier strap leather wear / cracks / stitching
-- Walk-cycle to footstep cadence sync (ABR backlog)
-- Per-item viewmodel readability at 3P (ABR backlog)
-- 3P camera collision real-playtest (ABR backlog)
-- Limb R2 refinements (calf bulge, bicep peak smoothing)
-
-OR pivot to big-ticket: A1 infinite chunk streaming, B1 generalized
-rope, B5 flagship NPC beats.
-
-**Cross-session quality arc (7 sessions complete)**:
+**Cross-session quality arc (8 sessions complete)**:
 - ABP: baseline blocky procedural rig + 7 clothing layers
 - ABQ: poncho barrel→shawl + walk cycle D114 knee bug fix
-- ABR: motion verification + camera snap wiring
+- ABR: motion verification + camera-snap wiring
 - ABS: Lathe torso + Lathe limbs + tapered cylinder fingers (D115)
-- ABT: over-shoulder camera (D116) + feet plant + head Lathe
+- ABT: over-shoulder camera (D116) + feet plant fix + head Lathe
 - ABU: cloth drape (D117) + body polish (deltoid bridge + knuckles)
 - ABV: sub-pivot rigging (D118) + hood D117 drape
+- **ABW: cape clipping fix + multi-angle audit**
 
-Procedural character is now at **low-poly stylized 3rd-person-game
-character quality** within D107 zero-asset policy. Stack of D-entries
-D107 (zero-asset) + D109 (skin localSpace) + D111 (asymmetric
-clothing) + D113 (dual-mesh items) + D114 (knee bend) + D115 (Lathe
-organic primitive) + D116 (over-shoulder cam) + D117 (cloth drape) +
-D118 (sub-pivot rig) is the full procedural-character pipeline.
+Procedural character + rigging + animation are NOW SOLID. ABX
+(texture/material variation) closes out the visual side of the
+character pipeline.
 
 ---
 
@@ -78,7 +64,7 @@ Dustfall opts out of the gamedev-framework v0.3.x tier-ladder structure.
 | Tier 1 — Vertical slice | I–W | ✓ shipped | Inventory, crafting, interactions, opening scene, journal |
 | Tier 2 — Target | X–CC | ✓ shipped | Audio architecture, atmosphere, speeder, animated title |
 | Tier 3 — Expected | DD–PP | ✓ shipped | Sand worm boss, weapon variants, procgen POIs, biome rework |
-| Tier 4 — Polish + breadth | QQ–ABV | ✓ ongoing | Tier 4 + ABP→ABV 7-session procedural-character quality arc (rig at low-poly stylized 3P quality, D107 zero-asset preserved, D115/D116/D117/D118 codifying the pipeline) |
+| Tier 4 — Polish + breadth | QQ–ABW | ✓ ongoing | Plus ABP→ABW 8-session procedural-character quality arc (rig + cloth + animation + cape-fit all solid; D115/D116/D117/D118 codify the pipeline) |
 
 **Verify status**: `npm run verify` = `tsc --noEmit`. PASS.
 
@@ -86,56 +72,44 @@ Dustfall opts out of the gamedev-framework v0.3.x tier-ladder structure.
 
 ## What works end-to-end (singleplayer flow)
 
-[Previously-listed flows preserved; see ABU session-end-report]
+[Previously-listed flows preserved; see ABV session-end-report]
 
-**ABV delta to "what works"**:
-- 22. **Procedural rig has full sub-pivot hierarchy** — wrists,
-  ankles, spineBend in addition to hip/knee/shoulder/elbow. Foot
-  heel-toe rolls at heel-strike/toe-off. Spine sways during walk.
-  Wrists hang naturally + roll subtly with arm swing.
-- 23. **Hood drape has cloth folds matching the poncho** — D117
-  pattern applied at head scale.
+**ABW delta to "what works"**:
+- 24. **Cape clips no longer break the silhouette** — poncho top
+  radius now clears the pectoral swell at all angles. Body
+  contained inside the cloth, no breakthrough.
 
 ---
 
-## What's freshly shipped (ABV delta)
+## What's freshly shipped (ABW delta)
 
-- **`src/player/playerRig.ts`** (~+60/-20):
-  - `PlayerRig` type extended with wrists[2], ankles[2], spineBend.
-  - `buildRigVisual()` creates spineBend; re-parents upper-body
-    meshes onto it. Inserts wristGroup between elbowGroup + handGroup.
-    Inserts ankleGroup between kneeGroup + foot/toe meshes.
-  - Hood drape: 14×1 → 18×8 + D117 cloth-fold offsets.
-  - `updatePlayerRig` walking block: ankle/wrist/spine drives.
-  - Crouch + idle blocks: explicit sub-pivot resets.
-- **`docs/changelog.md`** ABV entry at top.
+- **`src/player/playerRig.ts`** (~+5/-3): `ponchoR_top` factor
+  1.08 → 1.32, hem flare 1.6 → 1.75. Single-bug-fix change.
+- **`docs/changelog.md`** ABW entry at top.
 - **`CLAUDE.md`** Last-shipped block updated.
-- **`docs/decisions.md`** D118 appended.
-- **`docs/roadmap.md`** ABV row + ABW "Up next" rewritten.
-- **`docs/backlog.md`** ABV followup entry added.
+- **`docs/roadmap.md`** ABW row + ABX "Up next" rewritten.
+- **`docs/backlog.md`** ABW followup entry noting texture pass next.
 - **`docs/session-end-report.md`** — this file.
-- **`docs/next-session-prompt.md`** ABW kickoff brief.
+- **`docs/next-session-prompt.md`** ABX kickoff brief.
 
 ---
 
-## ABO-ABU deltas (condensed)
+## ABP-ABV deltas (condensed)
 
-- **ABU** (cloth drape + body polish): D117 cloth drape via subdivided
-  geometry + per-vertex sin-wave radial offsets. Deltoid bridges +
-  neck cap + finger knuckles.
-- **ABT** (over-shoulder cam + feet + head Lathe): 3 user-flagged
-  fixes. D116.
-- **ABS** (body geometry realism push): Lathe torso + tapered Lathe
-  limbs + tapered cylinder fingers. D115.
-- **ABR** (ABP+ABQ verification + snap wiring).
-- **ABQ** (ABP iterative polish under new discipline): D114 walk
-  cycle knee bug fix.
+- **ABV** (sub-pivot rigging + hood D117): wrists + ankles +
+  spineBend + animation drives. D118.
+- **ABU** (cloth drape + body polish): D117 + deltoid bridges +
+  knuckles.
+- **ABT** (over-shoulder cam + feet + head Lathe): D116 + bug fix.
+- **ABS** (body geometry): Lathe torso + Lathe limbs + tapered
+  cylinder fingers. D115.
+- **ABR** (verification + snap wiring): 3P teleport snap callsites.
+- **ABQ** (iterative polish under new discipline): D114 knee fix.
 - **ABP** (3P + rig polish, long-overnight): D111-D113.
-- **ABO** (long-overnight 7-item bundle): A3 rigged player (ABP
-  precursor). D110.
 
 ## Older sessions (condensed — see changelog for detail)
 
+- **ABO**: long-overnight 7-item bundle; A3 rigged player. D110.
 - **ABN**: bulk_hauler + megaWreck bow + 3 triage fixes (D109).
 - **ABM**: B7 dropped-item physics; v11 schema.
 - **ABL**: megaWreck visual rebuild.
@@ -156,11 +130,11 @@ Dustfall opts out of the gamedev-framework v0.3.x tier-ladder structure.
 
 ## Known issues / partials
 
-- **Minor procedural-rig polish queued** (see backlog):
-  - Bandolier strap leather wear
-  - Limb R2 refinements (calf bulge, bicep smoothing)
-- **Per-item viewmodel readability at 3P distance** (ABR backlog)
+- **Texture pass owed (ABX)** — character has solid silhouette +
+  cloth + rigging but materials are still relatively uniform per
+  ABS+ABU work. Texture session brings per-element variation.
 - **Walk-cycle to footstep cadence sync** (ABR backlog)
+- **Per-item viewmodel readability at 3P distance** (ABR backlog)
 - **3P camera collision real-playtest** still owed
 - **Foot IK mid-state transition** — idle→walking on slope shows
   brief reset to flat. Cosmetic.
@@ -173,10 +147,11 @@ See `docs/backlog.md` for full open list.
 
 | Constant | Session | Default | Notes |
 |---|---|---|---|
-| Ankle plantar / dorsi | ABV | -0.45 / +0.30 | Asymmetric heel-toe — D118 |
+| `ponchoR_top` factor | ABW | × 1.32 | Was 1.08, expanded to clear pectoral |
+| `ponchoR_bot` factor | ABW | × 1.75 | Was 1.6, proportional bump |
+| Ankle plantar / dorsi | ABV | -0.45 / +0.30 | D118 |
 | Wrist hang base | ABV | -0.10 + swing × 0.15 | D118 |
 | Spine sway Z | ABV | -sin(phase) × 0.05 | D118 |
-| Spine lean X (run/walk) | ABV | 0.16 / 0.05 | D118 |
 | Hood D117 WAVES + amp | ABV | 4 / 1.2cm hem / 0.3cm top | Cloth drape on hood |
 | Poncho D117 WAVES + amp | ABU | 6 / 4.5cm / 0.8cm | D117 |
 | Poncho subdivision | ABU | 24 radial × 10 height | D117 |
@@ -191,44 +166,45 @@ See `docs/backlog.md` for full open list.
 
 ## Suggested next session (1-3 directions in priority order)
 
-1. **ABW — Wrap up minor procedural-rig polish** OR **pivot to big-
-   ticket** (~30min - 6h). User pick.
+1. **ABX — Texture pass** (~2-4h, user's stated next focus). Apply
+   procedural shader vocabulary to specific rig elements for
+   material variation + weathering. Per-element iteration per
+   discipline.
 2. **A1 infinite chunk streaming** (~6-10h big-ticket).
 3. **B1 generalized rope** (~4-5h).
-4. **B5 flagship NPC beats** (~4-6h).
 
-Top pick: ABW user-direction. Rigging arc is complete. If user wants
-to keep polishing → minor items remain. If user wants new feature →
-big-ticket A1/B1/B5 candidates.
+Top pick: ABX — user explicitly requested texture pass as the next
+focused session.
 
 ---
 
 ## Time spent
 
-77 sessions shipped (A through ABV). Approx ~255-322h cumulative dev
-time. ABV itself was ~30 minutes active iteration + 15 minutes docs.
+78 sessions shipped (A through ABW). Approx ~256-323h cumulative dev
+time. ABW itself was ~15 minutes active iteration + 10 minutes docs
+(focused single-bug fix session).
 
 ---
 
 ## State at session end
 
 - **Git status**: working tree dirty (this session-end's docs updates
-  + playerRig.ts edit). Through `9a69008` pushed to origin.
-- **Last commit**: `9a69008` (ABU session-end docs catch-up).
-- **Last tag**: `session-ABU`. ABV will be tagged at commit time.
+  + playerRig.ts edit). Through `141510a` pushed to origin.
+- **Last commit**: `141510a` (ABV session-end docs catch-up).
+- **Last tag**: `session-ABV`. ABW will be tagged at commit time.
 - **Ports bound**: none (preview stopped).
-- **Save state**: localStorage v11. ABV made zero save-schema changes.
+- **Save state**: localStorage v11. ABW made zero save-schema changes.
 
 ---
 
 ## Token spend this session (estimated)
 
-ABV was a focused 2-element iteration session.
+ABW was a focused fix-the-bug session.
 
-- Input: ~100-130K tokens (state-of-build + iteration screenshots)
-- Output: ~25-35K tokens (file edits + this session-end rewrite)
+- Input: ~80-100K tokens (mostly screenshot eval loops + audit)
+- Output: ~15-20K tokens (focused fix + docs)
 - Cached input: substantial
-- Cost (Opus 4.7 rates, very rough): $7-10 for ABV itself
+- Cost (Opus 4.7 rates, very rough): $5-7 for ABW itself
 
 Within normal range.
 
@@ -236,5 +212,5 @@ Within normal range.
 
 ## Commit handoff
 
-Print-hints mode. ABV ships 1 source change (playerRig.ts) + 6 doc
+Print-hints mode. ABW ships 1 source change (playerRig.ts) + 6 doc
 updates. Single source commit + session-end docs commit suggested.

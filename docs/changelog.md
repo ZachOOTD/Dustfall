@@ -3,6 +3,38 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ABW — 2026-05-25 — Multi-angle polish audit + cape clipping fix ✓ verify pass
+`verified` — tsc clean. 1 file modified (`src/player/playerRig.ts`).
+**Eighth session under iteration discipline**. User direction:
+"another round of polish, screenshots from multiple angles, check for
+weird/unrealistic — cape clipping through back. Texture pass deferred
+to its own session." Focused single-bug fix per discipline.
+
+**P1 — Multi-angle audit (verification only)**. Captured rig from
+front, side, back angles in 3P over-shoulder camera. Confirmed user-
+reported cape clipping. Verified other prior-session polish (ABS Lathe
+body geometry, ABU deltoid bridges + knuckles + cloth folds, ABV sub-
+pivot rigging) all reading correctly across angles — no secondary
+issues surfaced.
+
+**P2 — Cape clipping fix (1 round)**. Root cause: poncho top radius
+was `TORSO_CHEST_R * 1.08 = 0.238m` but the ABS Lathe torso pectoral
+swell is `TORSO_CHEST_R * 1.18 = 0.260m`. Chest geometry was wider
+than poncho top — body poked through the cloth at the front V cut +
+shoulder area. Fix: bumped `ponchoR_top * 1.08 → 1.32` (0.238 →
+0.290m, gives 3cm clearance over pectoral swell). Hem flare `1.6 →
+1.75` proportionally so the drape shape stays natural. Verified
+across front, side, back: body fully contained inside poncho, cape
+silhouette reads as proper draped cloth.
+
+**Deferred to ABX (per user direction)**: player model texture pass.
+This is its own substantial focused session — the procedural shader
+vocabulary (ABH metalMaterial/paintMaterial/skinMaterial + ABJ
+woodGrainMaterial/boneMaterial/glassMaterial + ABU fabricMaterial
+with disableShimmer + cloth-drape D117) gives texture tools; ABX
+applies them to specific rig elements (poncho weave, skin tone
+variation, metal pauldron weathering, leather strap detail).
+
 ## Session ABV — 2026-05-25 — Rig sub-pivots (wrist + ankle + spine bend) + hood drape D117 ✓ verify pass
 `verified` — tsc clean. 1 file modified (`src/player/playerRig.ts`).
 **Seventh session under iteration discipline**. 2 elements iterated.
