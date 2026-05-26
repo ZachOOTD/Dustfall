@@ -342,8 +342,12 @@ function buildRigVisual(): {
   // (1 height segment, smooth tube). Now: 10 height segments × 24 radial
   // (576 verts before open-side cut), with per-vertex radial offsets to
   // fake gravity-pulled folds at the hem narrowing toward the shoulders.
-  const ponchoR_top = TORSO_CHEST_R * 1.08;
-  const ponchoR_bot = TORSO_WAIST_R * 1.6;
+  // ABW P2: expanded ponchoR_top 1.08 → 1.32 to clear pectoral swell
+  // (torso lathe max radius is 1.18×chest_r=0.260 at upper-chest; previous
+  // poncho top 0.238 caused body to poke through the cloth). Hem flare
+  // bumped slightly 1.6 → 1.75 to keep the drape proportion natural.
+  const ponchoR_top = TORSO_CHEST_R * 1.32;     // ABW: clear pectoral swell
+  const ponchoR_bot = TORSO_WAIST_R * 1.75;
   const ponchoH = TORSO_H * 0.85;
   const ponchoGeom = new THREE.CylinderGeometry(
     ponchoR_top, ponchoR_bot, ponchoH,
