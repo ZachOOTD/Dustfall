@@ -637,6 +637,25 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
       const c = ctx.companion;
       if (!c) return;
       c.hovered = true;
+      // ABZ — B1 rope-to-companion: if player wields rope + has a sled
+      // currently player-tethered, LMB on companion transfers the
+      // tether. Sled then follows the companion instead of the player.
+      const eqRope = ctx.inventory.slots[ctx.inventory.selectedIdx].item === 'rope';
+      const playerTetheredSled = eqRope
+        ? ctx.sleds.list.find((s) => s.tether.kind === 'player')
+        : undefined;
+      if (eqRope && playerTetheredSled) {
+        ctx.inventory.hover = {
+          type: 'pet_companion',
+          distance: info.distance,
+          promptNoun: 'tie rope to companion',
+        };
+        if (ctx.input.mousePressed.has(0)) {
+          playerTetheredSled.tether = { kind: 'companion' };
+          ctx.ui.showToast('rope transferred to companion');
+        }
+        return;
+      }
       ctx.inventory.hover = {
         type: 'pet_companion',
         distance: info.distance,

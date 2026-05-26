@@ -77,12 +77,15 @@ export const SAVE_KEY = 'dustfall.save.v1';
 //   - `bornInDevMode?: boolean` — was this save written from a dev-
 //     mode run? Carries the DEV badge across save/load.
 // Loader accepts v1-v11.
-export const SAVE_VERSION = 11;
+// ABZ — v12: extended SledTether union with 'companion' kind. Pre-v12
+// saves load unchanged (their tether field stays 'none' | 'player' |
+// 'speeder' which is still valid in the v12 union).
+export const SAVE_VERSION = 12;
 
 type V3 = { x: number; y: number; z: number };
 
 export interface SaveV1 {
-  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11;
+  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12;
   seed: number;
   savedAt: number;
   /** ABJ — v11: persist the dev-mode flag so a Continue from a
@@ -154,13 +157,15 @@ export interface SaveV1 {
   fires: Array<{ id: number; pos: V3; fuelSeconds: number; alive: boolean; hasGrill?: boolean }>;
   tents: Array<{ id: number; pos: V3; rotationY: number }>;
   /** Session QQ — placed sleds with their cargo + tether state. Optional
-   *  so pre-v5 saves still load (sleds field is just absent). */
+   *  so pre-v5 saves still load (sleds field is just absent).
+   *  ABZ — extended tether union with 'companion' kind (v12). Pre-v12
+   *  saves that lack 'companion' load unchanged. */
   sleds?: Array<{
     id: number;
     pos: V3;
     rotationY: number;
     contents: LootEntry[];
-    tether: 'none' | 'player' | 'speeder';
+    tether: 'none' | 'player' | 'speeder' | 'companion';
   }>;
 
   /** Session XX — placed large enterable tents. Optional so pre-v7

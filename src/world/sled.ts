@@ -25,10 +25,15 @@ import { Tuning } from '../config/tuning.ts';
 import type { LootEntry } from './lootContainers.ts';
 import { createWoodGrainMaterial } from './woodGrainMaterial.ts';
 
+// ABZ — B1 Generalized rope attachment. Extended union with 'companion'
+// kind so player can rope-tie the sled to the companion creature.
+// Future endpoint kinds (corpse, static-post, raider-pull) extend the
+// union same way + add anchor resolution in updateSleds.
 export type SledTether =
   | { kind: 'none' }
   | { kind: 'player' }
-  | { kind: 'speeder' };
+  | { kind: 'speeder' }
+  | { kind: 'companion' };
 
 export interface Sled {
   id: number;
@@ -347,7 +352,7 @@ function disposeRopeMesh(ctx: GameContext, mesh: THREE.Mesh): void {
 export function attachRopeToSled(
   ctx: GameContext,
   sled: Sled,
-  endpoint: 'player' | 'speeder',
+  endpoint: 'player' | 'speeder' | 'companion',
 ): void {
   if (sled.tether.kind !== 'none') return;
   sled.tether = { kind: endpoint };
@@ -363,7 +368,12 @@ export function attachRopeToSled(
     sled.ropeMesh = makeRopeMesh();
     ctx.three.scene.add(sled.ropeMesh);
   }
-  ctx.ui.showToast(endpoint === 'speeder' ? 'rope attached to speeder' : 'rope attached');
+  // ABZ — per-endpoint attach toast.
+  const toastMsg =
+    endpoint === 'speeder' ? 'rope attached to speeder' :
+    endpoint === 'companion' ? 'rope attached to companion' :
+    'rope attached';
+  ctx.ui.showToast(toastMsg);
 }
 
 /** Untie the rope. Clears tether + ropeMesh + the wielded rope slot's
@@ -469,11 +479,17 @@ export function updateSleds(ctx: GameContext, _dt: number): void {
         continue;
       }
       // QQ-2 — anchor = world position of the bar mesh behind the seat.
-      // We use the mesh's matrixWorld so the position reflects the
-      // current frame's body translation + visual quaternion (the
-      // group is sync'd inside updateSpeeder, which runs before us).
       s.towBar.getWorldPosition(_towBarTmp);
       _anchor.copy(_towBarTmp);
+    } else if (sled.tether.kind === 'companion') {
+      // ABZ B1 — companion endpoint. Anchor at companion's back-top
+      // (slightly above its pos which is at ground level).
+      const c = ctx.companion;
+      if (!c) {
+        detachRope(ctx, sled, 'companion gone — sled untied');
+        continue;
+      }
+      _anchor.set(c.pos.x, c.pos.y + 0.3, c.pos.z);
     } else {
       // Player endpoint — anchor at hip height behind capsule. Use the
       // capsule's center (-0.2 down so the rope drops naturally to
