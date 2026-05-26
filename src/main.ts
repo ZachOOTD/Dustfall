@@ -61,7 +61,7 @@ import { createStormVignette, updateStormVignette } from './world/stormVignette.
 import { createStatVignette, updateStatVignette } from './ui/statVignette.ts';
 import { updateStaminaWobble } from './player/staminaWobble.ts';
 import { updateSpeeder } from './world/speeder.ts';
-import { updateSleds } from './world/sled.ts';
+import { updateSleds, updateSledRiders } from './world/sled.ts';
 import { spawnWaterSources } from './world/waterSources.ts';
 import { spawnCacti, updateCacti } from './world/cactus.ts';
 import { updateFires } from './world/fire.ts';
@@ -215,7 +215,11 @@ const lizards = spawnLizardsProcgen(
 // Tuning.SANDWORM_HOME_POS if no dune centroid is reachable (rare —
 // world is mostly dunes). Player-spawn exclusion = 350m so the worm
 // isn't in the initial viewshed.
-const sandWormHome = sampleSandwormHome(scatterRand, biomes, terrain);
+// ACB — debug override: Tuning.DEBUG_SANDWORM_NEAR_SPAWN forces a
+// close spawn (~75m from opening anchor) for fast encounter testing.
+const sandWormHome = Tuning.DEBUG_SANDWORM_NEAR_SPAWN
+  ? { x: Tuning.DEBUG_SANDWORM_NEAR_SPAWN_POS.x, z: Tuning.DEBUG_SANDWORM_NEAR_SPAWN_POS.z }
+  : sampleSandwormHome(scatterRand, biomes, terrain);
 {
   const biome = biomes.biomeAt(sandWormHome.x, sandWormHome.z);
   if (biome !== 'dune') {
@@ -701,6 +705,7 @@ startLoop(ctx, (c, dt) => {
   updateLargeTents(c, dt);       // AAZ — doorway open/close lerp on placed shelter tents
   updateCacti(c);                // CC-4 — regrow harvested alien-cactus fruit after a day cycle
   updateSleds(c, dt);            // QQ — per-sled tow spring + rope visual; must run AFTER updateSpeeder + updatePlayer
+  updateSledRiders(c);           // ACC P2 — drive any pickup riding a sled + promote settled pickups (must run AFTER updateSleds so sled.group transforms reflect this-frame's tow correction)
   updateInteraction(c, dt);      // raycast hover + E to open/refill/harvest/cook/sleep/etc (UU — pickup-take moved to LMB)
   updateInventoryInput(c, dt);   // 1-4, wheel, Q to use (Q still drives def.onUse as backup)
   updateWieldAction(c, dt);      // UU — sole LMB dispatcher: attack/place/hold_use. Calls updateCombat internally for 'attack' items.

@@ -23,6 +23,7 @@ import { Tuning } from '../config/tuning.ts';
 import { createSkinMaterial } from '../world/skinMaterial.ts';
 import { addItem } from '../inventory/inventory.ts';
 import { alignToTerrain } from '../util/terrainAlign.ts';
+import { getPlayerPos } from '../util/playerPos.ts';
 
 // AAO — `huddle` added. At storm peak (`weather.intensity > HUDDLE_THRESHOLD`)
 // the companion overrides any far/close logic and presses to the ground
@@ -331,20 +332,9 @@ const _moveVec = new THREE.Vector3();
 let _huddleToastShown = false;
 export function resetCompanionHuddleToast(): void { _huddleToastShown = false; }
 
-/** ABN — mirrors sandWorm.ts's getPlayerPos. When the player is mounted
- *  on the speeder, the capsule body parks at y=-2000 (CC-4) and its X/Z
- *  freeze at the mount position. Companion previously read the capsule
- *  directly → followed the player's pre-mount position instead of the
- *  speeder's current position. Reading the speeder body when mounted
- *  fixes the stale-target bug. */
-function getPlayerPos(ctx: GameContext): { x: number; y: number; z: number } {
-  if (ctx.speeder?.mounted) {
-    const tr = ctx.speeder.body.translation();
-    return { x: tr.x, y: tr.y, z: tr.z };
-  }
-  const tr = ctx.player.body.body.translation();
-  return { x: tr.x, y: tr.y, z: tr.z };
-}
+// B1 Phase 2 — getPlayerPos lifted to src/util/playerPos.ts (3rd consumer:
+// rope endpoint resolver triggered the lift, alongside sandWorm.ts). Old
+// ABN-era duplicate copy here removed; import from shared util.
 
 export function updateCompanion(ctx: GameContext, dt: number): void {
   if (!isPlaying(ctx)) return;

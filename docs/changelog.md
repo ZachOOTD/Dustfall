@@ -3,6 +3,107 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ACC — 2026-05-26 — Throw items on sled + sandworm twilight breach + B1 Phase 2 RopeEndpoint refactor ✓ verify pass
+
+`verified` — tsc clean. 10 files modified + 2 new files (`src/util/playerPos.ts`,
+`src/world/rope.ts`). **Long overnight session.** Both ACC + B1 Phase 2
+tiers shipped per the long-overnight plan; B1-P6 RMB UX cut per
+pre-committed scope-cut #1 (RMB metaphor conflict with the existing
+D77 "release/pack-up" convention).
+
+**Pre-ACC quick wins** (kicked off the session before the main work):
+- **Sandworm twilight breach** (`src/enemies/sandWorm.ts`,
+  `src/config/tuning.ts`). Ambient threat-display fires during the
+  ABO dawn/dusk windows (`dayTime ∈ [0.18, 0.22]` or `[0.78, 0.82]`)
+  when player is in the 180-400m visibility band (outside detection,
+  inside fog/draw range). Per-frame 1.2%/s probability + 8min
+  cooldown → roughly one ambient breach per in-game day or two.
+  Reuses `enterStationaryBreach` (full 5.5s cobra rear + roar +
+  85-particle sand burst); new `_isTwilightBreach` flag routes the
+  exit straight back to patrol instead of the retreat→alert combat
+  loop. Pure cosmetic — no engagement, no `attackCount` increment.
+  4 new Tuning constants (SANDWORM_TWILIGHT_BREACH_*).
+- **Sandworm debug spawn reverted** — `DEBUG_SANDWORM_NEAR_SPAWN: true → false`
+  after the testing session.
+
+**ACC P1 — Sled top-deck collider** (`src/world/sled.ts`,
+`src/config/tuning.ts`). Friction alone can't keep items on the sled
+at sprint speeds — the inextensible-rope position-snap teleports the
+sled ~0.1m/frame, faster than Coulomb friction can drag a Newtonian
+body along. New design: a 2nd cuboid collider attached to the same
+sled body, sitting just above the main cuboid's top face, with
+friction 0.95. Slightly inset on X/Z so the visual curled rim of
+the scrap-metal sheet appears to "hold items in the bed". Main
+collider keeps its existing 0.6 friction for sled-on-sand tow feel.
+4 new Tuning constants (SLED_TOP_DECK_*).
+
+**ACC P2 — Kinematic-rider promotion** (`src/world/sled.ts`,
+`src/pickups/pickups.ts`, `src/main.ts`). When a dropped pickup's body
+comes to rest on the sled top, "promote" it to kinematic: body type
+→ KinematicPositionBased, capture sled-local pose, drive world
+transform each frame from `sled.group.matrixWorld × ridingLocalPos`.
+New `updateSledRiders(ctx)` ticks AFTER updateSleds; `Pickup` gains
+`ridingSledId/Pos/Quat` fields. `updatePickups` gated to skip riders
+(updateSledRiders fully owns mesh + body sync for them). Player picks
+up a riding pickup → existing despawn flow handles kinematic body
+removal correctly. Sled gone → `releaseSledRider` switches body back
+to dynamic.
+
+**ACC P3 — Save items-on-sled** (`src/persistence/save.ts`). Additive
+schema (per D81): `droppedPickups[].ridingSledId/Pos/Quat` optional
+fields. Save serializes when a pickup is riding. Load: stash riding
+info on the spawned pickup, then a SECOND pass after the sleds load
+block converts the body to kinematic. Pre-ACC saves omit the fields
+and load as regular dynamic bodies. Dangling sled references on load
+cleared + pickup falls back to dynamic naturally.
+
+**ACC Stretch — Aimable throw arc** (`src/inventory/inventory.ts`,
+`src/player/interaction.ts`, `src/config/tuning.ts`). Drop velocity
+uses the FULL camera direction (Y preserved) so the player can AIM
+their throw: look down → item lands at feet; look at sled deck →
+item arcs onto it. Was 1.5 m/s horizontal-only push; now 3.2 m/s
+along cam direction + 1.0 m/s base upward kick. Pickup-swap drops
+match. 2 new Tuning constants (ITEM_TOSS_SPEED, ITEM_TOSS_BASE_UP).
+
+**B1 Phase 2 — RopeEndpoint refactor** (`src/world/rope.ts` NEW,
+`src/util/playerPos.ts` NEW, `src/world/sled.ts`,
+`src/enemies/sandWorm.ts`, `src/enemies/companion.ts`,
+`src/player/interaction.ts`, `src/persistence/save.ts`). The
+architectural lift of QQ's sled-specific tether vocabulary into a
+generalized rope endpoint vocabulary.
+- **NEW `src/world/rope.ts`** — `RopeEndpoint` union (`none | player |
+  speeder | companion | sled | static-pos`), `Tether {a, b}` shape
+  for future non-sled tethers, `resolveEndpointWorldPos(ctx, endpoint)`
+  helper centralising the per-kind world-position math.
+- **NEW `src/util/playerPos.ts`** — speeder-aware player position
+  helper. 3rd consumer (rope resolver) triggered the lift; old
+  copies in `companion.ts` + `sandWorm.ts` deleted, both now import
+  from the shared util.
+- **`Sled.tether: SledTether` is now an alias for `RopeEndpoint`**
+  (sled is implicit second endpoint). `attachRopeToSled` accepts a
+  `RopeEndpoint` instead of the old string union. `updateSleds`
+  resolves the anchor via `resolveEndpointWorldPos` — the old manual
+  switch on `sled.tether.kind` replaced with one resolver call.
+- **Save schema additive** — `sleds[].tether` discriminator extended
+  with 'sled' kind (logically impossible for sled's own tether but
+  needed for type-compat); new optional `tetherSledId` field.
+  Per D81 additive discipline, no version bump (SAVE_VERSION stays
+  at 12).
+
+**D-entries added**: D119 (kinematic-rider promotion pattern for
+moving-platform items), D120 (RopeEndpoint vocabulary — sled-as-
+implicit-second-endpoint convention), D121 (twilight-breach as
+ambient threat-display routes back to patrol via _isTwilightBreach
+flag bypass).
+
+**Cut from this session per pre-committed scope-cut #1**:
+- B1-P6 RMB-on-rope raycast-pick UX (conflicts with D77 RMB =
+  release/pack-up verb; LMB-on-hover already covers the attach
+  path; deferred to follow-up if needed).
+- Bigger Tier 3 STRETCH endpoint kinds (raider corpse, sandworm
+  carcass — would require additional constraint physics on the
+  towed-end body, not just the sled).
+
 ## Session ACB — 2026-05-26 — Locker-on-sled (mobile storage) + static-pos UX ✓ verify pass
 `verified` — tsc clean. 3 files modified (`src/world/sled.ts` +
 `src/player/interaction.ts` + `src/persistence/save.ts`).

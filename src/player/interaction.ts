@@ -26,6 +26,7 @@ import { findLargeTentById, toggleLargeTentDoor } from '../world/largeTent.ts';
 import { findBedrollById } from '../world/bedroll.ts';
 import { findLockerById } from '../world/locker.ts';
 import { findSledById, attachRopeToSled, detachRope, attachLockerToSled } from '../world/sled.ts';
+import type { RopeEndpoint } from '../world/rope.ts';
 import { claimLight, releaseLight } from '../core/lightPool.ts';
 import {
   findSalvageableById,
@@ -746,8 +747,8 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
           if (attached) {
             detachRope(ctx, sled, 'rope untied');
           } else {
-            const endpoint: 'player' | 'speeder' =
-              ctx.speeder && ctx.speeder.mounted ? 'speeder' : 'player';
+            const endpoint: RopeEndpoint =
+              ctx.speeder && ctx.speeder.mounted ? { kind: 'speeder' } : { kind: 'player' };
             attachRopeToSled(ctx, sled, endpoint);
           }
         }
@@ -1257,15 +1258,25 @@ function completePickupSwap(
   const droppedMeta = slot.meta ? { ...slot.meta } : undefined;
   const droppedCount = slot.count;
   const droppedDef = getItemDef(droppedId);
-  // Compute drop position — same forward-from-camera math as
+  // Compute drop position — same aimable-toss math as
   // inventory.ts dropSelected. Project to terrain Y.
+  // ACC Stretch — drop velocity uses the full camera direction so the
+  // player can aim a throw (look at sled deck → toss onto it).
   const cam = ctx.three.camera;
   cam.getWorldDirection(_dropDir);
-  _dropDir.y = 0;
-  if (_dropDir.lengthSq() < 1e-4) _dropDir.set(0, 0, -1);
-  _dropDir.normalize();
-  const dx = cam.position.x + _dropDir.x * 0.8;
-  const dz = cam.position.z + _dropDir.z * 0.8;
+  const horizX = _dropDir.x, horizZ = _dropDir.z;
+  const horizLenSq = horizX * horizX + horizZ * horizZ;
+  const horizLen = horizLenSq < 1e-4 ? 1 : Math.sqrt(horizLenSq);
+  const hx = horizLenSq < 1e-4 ? 0 : horizX / horizLen;
+  const hz = horizLenSq < 1e-4 ? -1 : horizZ / horizLen;
+  const dx = cam.position.x + hx * 0.8;
+  const dz = cam.position.z + hz * 0.8;
+  const TOSS = Tuning.ITEM_TOSS_SPEED;
+  const initialVel = {
+    x: _dropDir.x * TOSS,
+    y: _dropDir.y * TOSS + Tuning.ITEM_TOSS_BASE_UP,
+    z: _dropDir.z * TOSS,
+  };
   // Spawn one dropped pickup per stack unit (matches dropSelected's
   // per-unit-spawn pattern; stacks of N items appear as N pickups
   // clustered at the drop spot).
@@ -1276,7 +1287,7 @@ function completePickupSwap(
       ctx.three.scene, ctx.terrain, { x: dx, z: dz }, droppedId, droppedMeta,
       {
         world: ctx.physics.world,
-        initialVel: { x: _dropDir.x * 1.2, y: 0.6, z: _dropDir.z * 1.2 },
+        initialVel,
       },
     );
     ctx.pickups.list.push(dropped);

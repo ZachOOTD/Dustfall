@@ -30,18 +30,23 @@ import { createPaintedMetalMaterial } from './paintMaterial.ts';
 // ACB P1 — locker-on-sled needs to spawn + attach lockers to a sled.
 import { spawnLockerAt, findLockerById } from './locker.ts';
 import { removeItems } from '../inventory/inventory.ts';
+// ACC P2 — sled-rider promotion needs to read Pickup state.
+import type { Pickup } from '../pickups/pickups.ts';
 
-// ABZ — B1 Generalized rope attachment. Extended union with 'companion'
-// kind so player can rope-tie the sled to the companion creature.
-// ACA — B1 Phase 2 lite: added 'static-pos' kind. Tether sled to a
-// fixed world XZ point (like staking a sled into the sand). Foundation
-// for more endpoint kinds without the full RopeEndpoint refactor.
-export type SledTether =
-  | { kind: 'none' }
-  | { kind: 'player' }
-  | { kind: 'speeder' }
-  | { kind: 'companion' }
-  | { kind: 'static-pos'; x: number; z: number };
+// ACC B1 Phase 2 — Tether now uses the shared RopeEndpoint vocabulary
+// from world/rope.ts. The sled holds a SINGLE endpoint (the "other"
+// end — the puller / anchor); the sled itself is the implicit second
+// endpoint. For non-sled tethers (future kinds: corpse-to-stake,
+// pickup-to-pickup), see the Tether{a,b} type in rope.ts.
+//
+// SledTether is kept as a legacy alias to RopeEndpoint so old call sites
+// + save format keep compiling; new code should reference RopeEndpoint.
+// 'sled' kind is logically impossible for a sled's own tether (can't
+// tow yourself) but is allowed type-wise; defensive code paths handle
+// the impossible case as a no-op.
+import type { RopeEndpoint } from './rope.ts';
+import { resolveEndpointWorldPos } from './rope.ts';
+export type SledTether = RopeEndpoint;
 
 export interface Sled {
   id: number;
@@ -320,6 +325,26 @@ export function spawnSledAt(
     .setFriction(0.6);
   const collider = ctx.physics.world.createCollider(colDesc, body);
 
+  // ACC P1 — top deck collider. Items dropped on the sled physically
+  // rest here. Sits just above the main cuboid's top face (body-local
+  // Y = +hy + topHy + epsilon) so it's the highest surface; pickups
+  // settle on it. High friction so items grip the sled when it
+  // accelerates/turns. Slightly inset on X (inside the visual curled
+  // rim) + Z (avoid the welded yoke area at the front).
+  const topHy = Tuning.SLED_TOP_DECK_HALF_THICKNESS;
+  const topHx = hx * Tuning.SLED_TOP_DECK_INSET_X_FRAC;
+  const topHz = hz * Tuning.SLED_TOP_DECK_INSET_Z_FRAC;
+  const topColDesc = RAPIER.ColliderDesc.cuboid(topHx, topHy, topHz)
+    // Translation is in body-local space — body center is at body.y;
+    // bottom of top deck sits flush on top of the main cuboid.
+    .setTranslation(0, hy + topHy + 0.001, 0)
+    .setFriction(Tuning.SLED_TOP_DECK_FRICTION)
+    // Density 0 keeps the top deck inertially neutral — it's a
+    // "shelf" property of the sled, not a separate mass. The main
+    // cuboid already accounts for the sled's mass via SLED_DENSITY.
+    .setDensity(0);
+  ctx.physics.world.createCollider(topColDesc, body);
+
   const sled: Sled = {
     id,
     group,
@@ -381,14 +406,17 @@ function disposeRopeMesh(ctx: GameContext, mesh: THREE.Mesh): void {
 // ─────────────────────────────────────────────────────────────
 
 /** Tie the rope from the wielded slot to this sled. Caller is responsible
- *  for verifying the wielded slot is `rope`. */
+ *  for verifying the wielded slot is `rope`. `endpoint` is the OTHER end
+ *  of the rope (the puller / anchor); the sled itself is the implicit
+ *  second endpoint. */
 export function attachRopeToSled(
   ctx: GameContext,
   sled: Sled,
-  endpoint: 'player' | 'speeder' | 'companion',
+  endpoint: RopeEndpoint,
 ): void {
   if (sled.tether.kind !== 'none') return;
-  sled.tether = { kind: endpoint };
+  if (endpoint.kind === 'none') return;  // defensive: never attach to nothing
+  sled.tether = endpoint;
 
   // Stamp the wielded rope slot so save/reload + auto-detach guards work.
   const slot = ctx.inventory.slots[ctx.inventory.selectedIdx];
@@ -401,10 +429,11 @@ export function attachRopeToSled(
     sled.ropeMesh = makeRopeMesh();
     ctx.three.scene.add(sled.ropeMesh);
   }
-  // ABZ — per-endpoint attach toast.
+  // ABZ + ACC — per-endpoint attach toast.
   const toastMsg =
-    endpoint === 'speeder' ? 'rope attached to speeder' :
-    endpoint === 'companion' ? 'rope attached to companion' :
+    endpoint.kind === 'speeder' ? 'rope attached to speeder' :
+    endpoint.kind === 'companion' ? 'rope attached to companion' :
+    endpoint.kind === 'static-pos' ? 'rope staked' :
     'rope attached';
   ctx.ui.showToast(toastMsg);
 }
@@ -557,40 +586,23 @@ export function updateSleds(ctx: GameContext, _dt: number): void {
       continue;
     }
 
-    // Resolve the world anchor (where the rope ties on the puller).
-    if (sled.tether.kind === 'speeder') {
-      const s = ctx.speeder;
-      if (!s) {
-        detachRope(ctx, sled, 'speeder gone — sled untied');
-        continue;
-      }
-      // QQ-2 — anchor = world position of the bar mesh behind the seat.
-      s.towBar.getWorldPosition(_towBarTmp);
-      _anchor.copy(_towBarTmp);
-    } else if (sled.tether.kind === 'companion') {
-      // ABZ B1 — companion endpoint. Anchor at companion's back-top
-      // (slightly above its pos which is at ground level).
-      const c = ctx.companion;
-      if (!c) {
-        detachRope(ctx, sled, 'companion gone — sled untied');
-        continue;
-      }
-      _anchor.set(c.pos.x, c.pos.y + 0.3, c.pos.z);
-    } else if (sled.tether.kind === 'static-pos') {
-      // ACA B1 Phase 2 lite — fixed-position endpoint. Anchor at the
-      // saved XZ at current terrain height (so the stake sits ON sand,
-      // not below it). Sled gets pulled back to this point if dragged.
-      const sx = sled.tether.x;
-      const sz = sled.tether.z;
-      const sy = ctx.terrain.heightAt(sx, sz);
-      _anchor.set(sx, sy + 0.4, sz);
-    } else {
-      // Player endpoint — anchor at hip height behind capsule. Use the
-      // capsule's center (-0.2 down so the rope drops naturally to
-      // belt height, not the eye-level the camera lives at).
-      const ppos = ctx.player.body.body.translation();
-      _anchor.set(ppos.x, ppos.y - 0.2, ppos.z);
+    // ACC B1 Phase 2 — resolve via the shared rope endpoint resolver.
+    // Returns null when the endpoint's backing resource is gone (e.g.,
+    // companion picked back into a pod, speeder somehow despawned).
+    const resolved = resolveEndpointWorldPos(ctx, sled.tether);
+    if (!resolved) {
+      const reason =
+        sled.tether.kind === 'speeder' ? 'speeder gone — sled untied' :
+        sled.tether.kind === 'companion' ? 'companion gone — sled untied' :
+        'rope endpoint gone — sled untied';
+      detachRope(ctx, sled, reason);
+      continue;
     }
+    _anchor.set(resolved.x, resolved.y, resolved.z);
+    // `_towBarTmp` retained for backward-compat with any other code that
+    // may have read it as a side effect; not needed by this branch any
+    // more. (Module-local; safe to leave allocated.)
+    void _towBarTmp;
 
     // Sled attach point in world space — front of the sled. Uses the
     // manually-tracked group yaw (body rotation is locked at identity).
@@ -717,6 +729,144 @@ function rebuildRopeMesh(sled: Sled, anchor: THREE.Vector3): void {
     /* radialSegments */ 6,
     /* closed */ false,
   );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Riding pickups (ACC P2 — items physically rest on the sled deck
+// and travel with it)
+// ─────────────────────────────────────────────────────────────
+//
+// Friction alone can't keep items on the sled at sprint speeds: the
+// inextensible-rope position-snap teleports the sled body forward by
+// ~0.1m/frame, faster than Coulomb friction can drag a Newtonian body
+// along. Solution: when an ABM dropped pickup's body comes to rest on
+// the sled's top deck collider, "promote" it to a kinematic-rider:
+//
+//   1. Body type → KinematicPositionBased.
+//   2. Capture the pickup's world pose, map to sled.group local coords,
+//      store on pickup.ridingLocalPos + ridingLocalQuat.
+//   3. Each frame, recompute world pose from sled.group.matrixWorld
+//      applied to the captured local pose. Drive the body via
+//      setNextKinematicTranslation + setNextKinematicRotation; mirror
+//      onto mesh + pickup.pos so raycast / save / take all read correct.
+//
+// Player takes the pickup → existing despawn flow removes the body
+// (works for any body type). Sled gets garbage-collected → release rider
+// back to dynamic so it falls + settles on the ground.
+
+const _riderTmpVec = new THREE.Vector3();
+const _riderTmpQuat = new THREE.Quaternion();
+const _riderSledInvMat = new THREE.Matrix4();
+const _riderSledInvQuat = new THREE.Quaternion();
+
+/** Vertical band (relative to sled top face) within which a settled pickup
+ *  counts as "on the sled" for promotion. */
+const RIDE_ABOVE_MIN = -0.05;
+const RIDE_ABOVE_MAX = 0.6;
+
+/** Per-frame: drive any riding pickup's body + mesh from its sled's
+ *  current transform, and promote settled-on-sled pickups to riders.
+ *  Insertion point in main.ts is AFTER updateSleds so the sled.group
+ *  transforms reflect this-frame's tow correction. */
+export function updateSledRiders(ctx: GameContext): void {
+  for (const p of ctx.pickups.list) {
+    if (!p.body) continue;
+
+    // Existing rider: drive transform from sled.
+    if (p.ridingSledId !== null) {
+      const sled = findSledById(ctx.sleds.list, p.ridingSledId);
+      if (!sled || !p.ridingLocalPos || !p.ridingLocalQuat) {
+        releaseSledRider(p);
+        continue;
+      }
+      sled.group.updateMatrixWorld();
+      _riderTmpVec.copy(p.ridingLocalPos).applyMatrix4(sled.group.matrixWorld);
+      _riderTmpQuat.copy(sled.group.quaternion).multiply(p.ridingLocalQuat);
+      p.body.setNextKinematicTranslation({
+        x: _riderTmpVec.x, y: _riderTmpVec.y, z: _riderTmpVec.z,
+      });
+      p.body.setNextKinematicRotation({
+        x: _riderTmpQuat.x, y: _riderTmpQuat.y, z: _riderTmpQuat.z, w: _riderTmpQuat.w,
+      });
+      // Mirror onto mesh + pos so raycast hover / save read the right
+      // world position. (updatePickups was gated to skip riders, so
+      // we own the mesh sync here.)
+      p.mesh.position.copy(_riderTmpVec);
+      p.mesh.quaternion.copy(_riderTmpQuat);
+      p.pos.copy(_riderTmpVec);
+      continue;
+    }
+
+    // Non-rider: check if it has settled on a sled and should promote.
+    // Only inspect sleeping bodies — that's Rapier's signal that the
+    // pickup has come to rest from a drop / settle. Avoids promoting
+    // a body that's still in flight from a throw arc.
+    if (!p.body.isSleeping()) continue;
+    for (const sled of ctx.sleds.list) {
+      if (pickupIsOnSledTop(p, sled)) {
+        promoteSledRider(p, sled);
+        break;
+      }
+    }
+  }
+}
+
+/** XZ-and-Y range gate: pickup body translation lies above the sled's
+ *  top deck (in sled-local coordinates, within the top collider's
+ *  X/Z footprint + vertical band). */
+function pickupIsOnSledTop(p: Pickup, sled: Sled): boolean {
+  if (!p.body) return false;
+  const t = p.body.translation();
+  // Sled-local XZ. group.rotation.y is the sled's yaw; inverse-rotate
+  // the world-space offset to test against the axis-aligned top deck.
+  const dx = t.x - sled.pos.x;
+  const dz = t.z - sled.pos.z;
+  const yaw = sled.group.rotation.y;
+  const cosY = Math.cos(-yaw);
+  const sinY = Math.sin(-yaw);
+  const localX = dx * cosY - dz * sinY;
+  const localZ = dx * sinY + dz * cosY;
+  const limX = Tuning.SLED_HALF_EXTENTS_X * Tuning.SLED_TOP_DECK_INSET_X_FRAC + 0.05;
+  const limZ = Tuning.SLED_HALF_EXTENTS_Z * Tuning.SLED_TOP_DECK_INSET_Z_FRAC + 0.05;
+  if (Math.abs(localX) > limX) return false;
+  if (Math.abs(localZ) > limZ) return false;
+  // Vertical band relative to the sled body's top + top-deck thickness.
+  const sledBody = sled.body.translation();
+  const topY = sledBody.y
+    + Tuning.SLED_HALF_EXTENTS_Y
+    + Tuning.SLED_TOP_DECK_HALF_THICKNESS * 2;
+  const yDelta = t.y - topY;
+  return yDelta >= RIDE_ABOVE_MIN && yDelta <= RIDE_ABOVE_MAX;
+}
+
+function promoteSledRider(p: Pickup, sled: Sled): void {
+  if (!p.body) return;
+  // Capture current world pose; map into sled-local space.
+  sled.group.updateMatrixWorld();
+  _riderSledInvMat.copy(sled.group.matrixWorld).invert();
+  const localPos = new THREE.Vector3(p.pos.x, p.pos.y, p.pos.z)
+    .applyMatrix4(_riderSledInvMat);
+  _riderSledInvQuat.copy(sled.group.quaternion).invert();
+  const localQuat = _riderSledInvQuat.clone().multiply(p.mesh.quaternion);
+  // Switch body type to kinematic. From now on, position is driven by
+  // setNextKinematicTranslation each frame; gravity + collisions no
+  // longer move the body.
+  p.body.setBodyType(RAPIER.RigidBodyType.KinematicPositionBased, true);
+  p.ridingSledId = sled.id;
+  p.ridingLocalPos = localPos;
+  p.ridingLocalQuat = localQuat;
+}
+
+/** Release a pickup back to a free-falling dynamic body. Called when the
+ *  sled it was riding is gone (defensive — sleds don't despawn in normal
+ *  play but the auto-detach paths could conceivably get into a state
+ *  where ridingSledId points at a removed sled). */
+function releaseSledRider(p: Pickup): void {
+  if (!p.body) return;
+  p.body.setBodyType(RAPIER.RigidBodyType.Dynamic, true);
+  p.ridingSledId = null;
+  p.ridingLocalPos = undefined;
+  p.ridingLocalQuat = undefined;
 }
 
 /** Speeder mount hook — promote any 'player'-tethered sleds to 'speeder'.

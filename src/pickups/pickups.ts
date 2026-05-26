@@ -30,6 +30,16 @@ export interface Pickup {
    *  the item's bounding box, and starts awake to settle into rest;
    *  Rapier auto-sleeps it once stopped. */
   body: RAPIER.RigidBody | null;
+  /** ACC P2 — when set, this pickup is "riding" a sled: its body has
+   *  been switched to KinematicPositionBased and `updateSledRiders`
+   *  drives its world transform each frame from the sled's group
+   *  transform applied to `ridingLocalPos` + `ridingLocalQuat`. Set
+   *  null when not riding (the common case). */
+  ridingSledId: number | null;
+  /** ACC P2 — captured at promotion time. Pickup's pose in sled.group
+   *  local coords. Re-applied each frame to compute world pose. */
+  ridingLocalPos?: THREE.Vector3;
+  ridingLocalQuat?: THREE.Quaternion;
 }
 
 let _nextId = 1;
@@ -162,6 +172,7 @@ export function spawnCanteens(
       bobPhase: rand() * Math.PI * 2,
       hovered: false,
       body: null,  // ABM (B7) — seed-spawned canteens stay static
+      ridingSledId: null,
     });
   }
   return list;
@@ -243,6 +254,7 @@ export function spawnBranchAt(
     bobPhase: rand() * Math.PI * 2,
     hovered: false,
     body: null,  // ABM (B7) — seed-spawned branches stay static
+    ridingSledId: null,
   };
   list.push(pickup);
   return pickup;
@@ -383,6 +395,7 @@ export function spawnDroppedPickup(
     bobPhase: Math.random() * Math.PI * 2,
     hovered: false,
     body,
+    ridingSledId: null,
   };
 }
 
@@ -395,6 +408,10 @@ const _pickupSyncQuat = new THREE.Quaternion();
 export function updatePickups(ctx: import('../GameContext.ts').GameContext): void {
   for (const p of ctx.pickups.list) {
     if (!p.body) continue;
+    // ACC P2 — riding pickups are kinematic-driven by updateSledRiders.
+    // Skip them here so we don't overwrite this-frame's sled-driven pose
+    // with the stale body translation.
+    if (p.ridingSledId !== null) continue;
     const t = p.body.translation();
     const r = p.body.rotation();
     _pickupSyncPos.set(t.x, t.y, t.z);

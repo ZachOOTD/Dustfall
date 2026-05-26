@@ -9,6 +9,7 @@
 // Save key: dustfall.save.v1 — single slot. Death does NOT auto-save.
 
 import * as THREE from 'three';
+import RAPIER from '@dimforge/rapier3d-compat';
 import type { GameContext } from '../GameContext.ts';
 import { Tuning } from '../config/tuning.ts';
 import type { Slot } from '../inventory/types.ts';
@@ -144,6 +145,16 @@ export interface SaveV1 {
     pos: V3;
     quat: { x: number; y: number; z: number; w: number };
     meta?: import('../inventory/types.ts').ItemMeta;
+    /** ACC P3 — when set, this pickup was riding a sled at save time.
+     *  Loader re-promotes the pickup to kinematic + applies the saved
+     *  local pose AFTER the sled load pass populates ctx.sleds.list.
+     *  Optional + additive per D81 — pre-ACC saves omit these fields
+     *  and the pickup loads as a normal dynamic body. If the referenced
+     *  sled is gone on load, the rider falls back to dynamic and the
+     *  natural friction/settle path catches it. */
+    ridingSledId?: number;
+    ridingLocalPos?: V3;
+    ridingLocalQuat?: { x: number; y: number; z: number; w: number };
   }>;
   cacti: Array<{ id: number; harvested: boolean }>;
   lizards: Array<{ id: number; pos: V3; state: LizardState; looted: boolean }>;
@@ -159,15 +170,22 @@ export interface SaveV1 {
   /** Session QQ — placed sleds with their cargo + tether state. Optional
    *  so pre-v5 saves still load (sleds field is just absent).
    *  ABZ — 'companion' kind (v12). ACA — 'static-pos' kind + tetherX/Z.
-   *  ACB — `attachedLockerId?` field for locker-on-sled (additive). */
+   *  ACB — `attachedLockerId?` field for locker-on-sled (additive).
+   *  ACC — B1 Phase 2: 'sled' kind included in the discriminator for
+   *  type-compatibility with the shared RopeEndpoint union (sled-tethered-
+   *  to-sled is logically impossible for the sled's own tether and is
+   *  never serialized in practice — but TS needs the union to match). */
   sleds?: Array<{
     id: number;
     pos: V3;
     rotationY: number;
     contents: LootEntry[];
-    tether: 'none' | 'player' | 'speeder' | 'companion' | 'static-pos';
+    tether: 'none' | 'player' | 'speeder' | 'companion' | 'static-pos' | 'sled';
     tetherX?: number;
     tetherZ?: number;
+    /** ACC — B1 Phase 2: sled-id payload when tether === 'sled'. Optional;
+     *  defaults undefined for non-sled-kind tethers. */
+    tetherSledId?: number;
     attachedLockerId?: number;
   }>;
 
@@ -337,12 +355,31 @@ export function saveGameState(ctx: GameContext): { ok: boolean; error?: string }
         .map((p) => {
           const t = p.body!.translation();
           const r = p.body!.rotation();
-          return {
+          const entry: NonNullable<SaveV1['droppedPickups']>[number] = {
             itemId: p.itemId,
             pos: { x: t.x, y: t.y, z: t.z },
             quat: { x: r.x, y: r.y, z: r.z, w: r.w },
             meta: p.meta ? { ...p.meta } : undefined,
           };
+          // ACC P3 — riders: persist sled id + sled-local pose so we
+          // can re-promote to kinematic on load without depending on
+          // gravity/settle/auto-promote (which would cause a 1-2s
+          // visual jitter on each load).
+          if (
+            p.ridingSledId !== null &&
+            p.ridingLocalPos !== undefined &&
+            p.ridingLocalQuat !== undefined
+          ) {
+            entry.ridingSledId = p.ridingSledId;
+            entry.ridingLocalPos = {
+              x: p.ridingLocalPos.x, y: p.ridingLocalPos.y, z: p.ridingLocalPos.z,
+            };
+            entry.ridingLocalQuat = {
+              x: p.ridingLocalQuat.x, y: p.ridingLocalQuat.y,
+              z: p.ridingLocalQuat.z, w: p.ridingLocalQuat.w,
+            };
+          }
+          return entry;
         }),
       cacti: ctx.cacti.list.map((c) => ({ id: c.id, harvested: c.harvested })),
       lizards: ctx.lizards.map((l) => {
@@ -436,6 +473,13 @@ export function saveGameState(ctx: GameContext): { ok: boolean; error?: string }
           // ACA — round-trip static-pos x/z payload. Only set when kind=static-pos.
           ...(s.tether.kind === 'static-pos'
             ? { tetherX: s.tether.x, tetherZ: s.tether.z }
+            : {}),
+          // ACC — B1 Phase 2: sledId payload when tether kind === 'sled'.
+          // Won't fire under current gameplay (no sled-to-sled tether
+          // creation paths), but the union allows it so we round-trip
+          // defensively.
+          ...(s.tether.kind === 'sled'
+            ? { tetherSledId: s.tether.sledId }
             : {}),
           // ACB P1 — attached locker (mobile storage on sled deck)
           ...(s.attachedLockerId !== null
@@ -615,6 +659,24 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
         p.body.setRotation({ x: saved.quat.x, y: saved.quat.y, z: saved.quat.z, w: saved.quat.w }, true);
         p.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
         p.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+      }
+      // ACC P3 — stash saved riding info on the pickup so the post-sled
+      // re-promote pass below can convert it to kinematic. Done as a
+      // 2nd pass because sleds aren't loaded yet at this point and
+      // promoteSledRider needs a real Sled reference.
+      if (
+        saved.ridingSledId !== undefined &&
+        saved.ridingLocalPos !== undefined &&
+        saved.ridingLocalQuat !== undefined
+      ) {
+        p.ridingSledId = saved.ridingSledId;
+        p.ridingLocalPos = new THREE.Vector3(
+          saved.ridingLocalPos.x, saved.ridingLocalPos.y, saved.ridingLocalPos.z,
+        );
+        p.ridingLocalQuat = new THREE.Quaternion(
+          saved.ridingLocalQuat.x, saved.ridingLocalQuat.y,
+          saved.ridingLocalQuat.z, saved.ridingLocalQuat.w,
+        );
       }
       ctx.pickups.list.push(p);
     }
@@ -843,10 +905,20 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
     for (const saved of save.sleds) {
       const pos = new THREE.Vector3(saved.pos.x, saved.pos.y, saved.pos.z);
       // ACA — reconstruct full SledTether (incl. static-pos x/z payload).
-      const tether: SledTether =
-        saved.tether === 'static-pos'
-          ? { kind: 'static-pos', x: saved.tetherX ?? 0, z: saved.tetherZ ?? 0 }
-          : { kind: saved.tether };
+      // ACC — B1 Phase 2: tether is now a RopeEndpoint (sled.ts re-exports
+      // it as SledTether for back-compat). 'sled' kind carries a sledId
+      // payload; defaults to 'none' if a save somehow recorded a sled-tether
+      // without a sledId (shouldn't happen in practice).
+      let tether: SledTether;
+      if (saved.tether === 'static-pos') {
+        tether = { kind: 'static-pos', x: saved.tetherX ?? 0, z: saved.tetherZ ?? 0 };
+      } else if (saved.tether === 'sled') {
+        tether = saved.tetherSledId !== undefined
+          ? { kind: 'sled', sledId: saved.tetherSledId }
+          : { kind: 'none' };
+      } else {
+        tether = { kind: saved.tether };
+      }
       const newSled = spawnSledAt(
         ctx,
         pos,
@@ -881,6 +953,29 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
       lk.mesh.position.set(0, deckTopLocal, 0);
       lk.mesh.rotation.y = 0;
     }
+  }
+
+  // ACC P3 — re-promote saved sled-riding pickups. Done AFTER sleds are
+  // loaded so the rider's host sled exists. For each rider:
+  //   - find the sled by id; if missing, leave the pickup as dynamic
+  //     (it'll fall + settle naturally next frame; auto-promote may
+  //     catch it later, or it just becomes a ground pickup);
+  //   - if found, switch body to KinematicPositionBased + leave
+  //     ridingLocalPos/Quat in place (already restored above) so the
+  //     first updateSledRiders tick drives the world transform.
+  for (const p of ctx.pickups.list) {
+    if (p.ridingSledId === null || p.ridingSledId === undefined) continue;
+    if (!p.body) continue;
+    const sled = ctx.sleds.list.find((s) => s.id === p.ridingSledId);
+    if (!sled) {
+      // Dangling reference (host sled was somehow lost). Clear riding
+      // state and leave the pickup as dynamic — it'll fall + settle.
+      p.ridingSledId = null;
+      p.ridingLocalPos = undefined;
+      p.ridingLocalQuat = undefined;
+      continue;
+    }
+    p.body.setBodyType(RAPIER.RigidBodyType.KinematicPositionBased, true);
   }
 
   // ── Sand worm (DD-2): worm now roams, so we restore its saved XZ.

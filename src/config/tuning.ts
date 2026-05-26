@@ -850,6 +850,11 @@ export const Tuning = {
   REFUGEE_CARAVAN_RADIUS_MAX: 12,
 
   SANDWORM_HOME_POS: { x: 900, z: 0 },       // AAP — legacy fallback only (was AAL test-fix world-edge anchor). Production uses sampleSandwormHome(rand, biomes, terrain) per AAP D-entry.
+  // ACB debug flag — when true, sandworm spawns at a close position
+  // (~80m from opening scene anchor) for fast iteration on the
+  // encounter. Override of sampleSandwormHome. Set to false for ship.
+  DEBUG_SANDWORM_NEAR_SPAWN: false,
+  DEBUG_SANDWORM_NEAR_SPAWN_POS: { x: 20, z: 50 },
   // AAP — sandworm spawn-exclusion radius around the opening scene
   // anchor. Wider than flagship POIs (D82: 200m) because the player
   // should never see the worm in their first ~20s of unmounted
@@ -880,6 +885,21 @@ export const Tuning = {
   SANDWORM_STATIONARY_BREACH_DURATION: 5.5,  // s — vertical hold during stationary breach (UNCHANGED)
   SANDWORM_STATIONARY_BREACH_HEIGHT: 25,     // m — head rises above the dunes (was 50)
   SANDWORM_STATIONARY_BREACH_EVERY: 3,       // every Nth retreat → stationary breach
+  // ACC — ambient twilight breach. During the dawn/dusk activity windows
+  // (see twilightActivityMultiplier in sandWorm.ts: dayTime [0.18,0.22]
+  // and [0.78,0.82]), a low-probability per-frame roll fires a stationary
+  // breach at the worm's current patrol position — but ONLY if the
+  // player is in the visibility band (far enough to be outside even the
+  // mounted detection ring of ~139m, close enough to actually see the
+  // 25m-tall silhouette before the descent). After the breach completes,
+  // the worm returns straight to patrol (NOT the retreat→alert loop)
+  // because there's no engagement to wind down — it was pure threat-
+  // display. Long cooldown so the player sees this maybe once every
+  // few in-game days.
+  SANDWORM_TWILIGHT_BREACH_MIN_DIST: 180,       // m — player must be at least this far
+  SANDWORM_TWILIGHT_BREACH_MAX_DIST: 400,       // m — and at most this far (visibility)
+  SANDWORM_TWILIGHT_BREACH_PROB_PER_S: 0.012,   // per-second probability when both gates pass
+  SANDWORM_TWILIGHT_BREACH_COOLDOWN_S: 480,     // 8 min cooldown after each breach
   SANDWORM_RETREAT_DISTANCE: 75,             // m — distance to retreat before next attack (was 150)
   SANDWORM_BITE_RANGE: 12.5,                 // m from worm body center for bite to land (was 25)
   SANDWORM_BITE_DAMAGE: 0.50,                // player health unit per bite (UNCHANGED — gameplay tuning)
@@ -966,6 +986,24 @@ export const Tuning = {
   SLED_ROPE_COLOR_HEX: 0x6e4a2a,             // matches branch/wood palette
   SLED_ROPE_RADIUS: 0.04,                    // QQ-2 tube radius — thicker than the previous 2-vertex Line
   SLED_ROPE_SAG: 0.45,                       // QQ-2 max midpoint drop (m) when the rope is taut; scales with slack to 0 at fully-stretched
+  // ACC P1 — top deck collider. A 2nd cuboid attached to the sled body
+  // sits just above the main collider's top face. Items dropped on the
+  // sled land here (it's the highest surface). High friction so items
+  // grip during tow + sharp turns. The main collider keeps its existing
+  // 0.6 friction for the sled-on-sand tow feel. The top collider is
+  // slightly inset on X/Z so the visual curled rim of the scrap-metal
+  // sheet appears to "hold items in the bed".
+  SLED_TOP_DECK_HALF_THICKNESS: 0.015,       // m — 3cm thick top shelf
+  SLED_TOP_DECK_FRICTION: 0.95,              // high so items grip when sled accelerates
+  SLED_TOP_DECK_INSET_X_FRAC: 0.88,          // top collider X = SLED_HALF_EXTENTS_X × this (inside the curled rim)
+  SLED_TOP_DECK_INSET_Z_FRAC: 0.95,          // top collider Z = SLED_HALF_EXTENTS_Z × this (avoid the yoke region)
+  // ACC Stretch — drop / throw arc. Drop velocity is camera-direction
+  // based (Y component preserved) so the player can AIM their throw:
+  // look down → item lands at feet; look at the sled → item arcs onto
+  // the deck. Pre-ACC drops zeroed cam-Y and used a tiny 1.5 m/s push
+  // — now we lift the speed so the toss is functional for sled-loading.
+  ITEM_TOSS_SPEED: 3.2,                      // m/s along camera direction
+  ITEM_TOSS_BASE_UP: 1.0,                    // m/s baseline upward kick (keeps tossed items off the ground at low pitches)
   SLED_YAW_LERP: 0.12,                       // QQ-2 — per-frame lerp toward "face the anchor" yaw. Higher = snappier; lower = the sled trails laggily
   NEAR_SLED_DISTANCE_SQ: 4.0,                // 2m exclusion when placing a new sled near an existing one
   STAMINA_TOW_FACTOR: 1.5,                   // sprint+tow on foot drains stamina × this. ABJ: 2.0→1.5 (sprint duration when towing 3s→4s; reads less punishing for short tow runs while still discouraging long sled hauls at sprint)

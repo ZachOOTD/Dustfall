@@ -2,25 +2,70 @@
 
 Cumulative state. Rewritten end-to-end at each `/session-end`.
 
-**Current state**: Session ABZ shipped (2026-05-25, B1 generalized
-rope Phase 1 — companion tether kind). 81 sessions post-MVP. tsc
-clean. **SAVE_VERSION v12** (additive — pre-v12 saves load unchanged).
-**Eleventh Dustfall session under iteration discipline**. 3 files
-modified.
+**Current state**: Session ACC shipped (2026-05-26, long overnight:
+throw items on sled + sandworm twilight breach + B1 Phase 2
+RopeEndpoint refactor). 84 sessions post-MVP. tsc clean.
+**SAVE_VERSION still v12** (ACC additive only — no v13 bump). 10 files
+modified + 2 new (`src/util/playerPos.ts`, `src/world/rope.ts`).
 
-**ABZ scope (B1 Phase 1)**:
-- SledTether union extended with `'companion'` kind
-- updateSleds anchor resolution for companion (ctx.companion.pos +
-  0.3y back-top), auto-detach if companion gone
-- interaction.ts 'companion' case extended — rope-wielded + player-
-  tethered-sled + LMB transfers tether
-- SAVE_VERSION 11 → 12 additive
-- Sled now drags behind companion when player ties rope across
+**ACC scope** (long overnight):
+- **Pre-ACC ambient sandworm twilight breach**: fires during ABO
+  dawn/dusk windows when player is in 180-400m visibility band (out
+  of detection, in fog/draw range). 8min cooldown + 1.2%/s probability
+  → ~30% chance per twilight visit. Reuses `enterStationaryBreach`
+  but routes back to patrol via `_isTwilightBreach` flag bypass (D121)
+  so no engagement / no attackCount increment. Pure cosmetic threat-
+  display on the horizon.
+- **ACC P1 sled top deck collider**: 2nd cuboid attached to sled body,
+  sits above main collider, friction 0.95. Items physically rest here.
+  Inset to read as "inside the curled rim".
+- **ACC P2 kinematic-rider promotion (D119)**: when dropped pickup
+  body sleeps on the sled top, switch body type to
+  `KinematicPositionBased`, capture sled-local pose, drive world
+  transform each frame from `sled.group.matrixWorld × ridingLocalPos`.
+  New `updateSledRiders(ctx)` tick AFTER `updateSleds`. Pure friction
+  approach was insufficient — the inextensible-rope position-snap
+  teleports the sled ~0.1m/frame faster than Coulomb friction can
+  drag items.
+- **ACC P3 save items-on-sled**: additive schema
+  `droppedPickups[].ridingSledId/Pos/Quat?`. 2-pass load (pickups
+  spawn → sleds spawn → re-promote riders to kinematic). Dangling
+  sled refs cleared.
+- **ACC Stretch aimable throw**: drop velocity uses full camera
+  direction (Y preserved) at 3.2 m/s + 1.0 m/s base upward. Look at
+  sled to lob items onto deck.
+- **B1 Phase 2 RopeEndpoint refactor (D120)**: NEW `src/world/rope.ts`
+  with `RopeEndpoint` union + `Tether {a, b}` shape +
+  `resolveEndpointWorldPos` resolver. NEW `src/util/playerPos.ts`
+  lifting speeder-aware player position helper (3rd consumer
+  triggered lift; old copies in companion.ts + sandWorm.ts deleted).
+  `Sled.tether` is now `RopeEndpoint` (sled is implicit second
+  endpoint); `attachRopeToSled` signature changed to accept
+  RopeEndpoint; `updateSleds` resolves anchor via shared resolver
+  (replaces previous 4-case switch). Save additive: 'sled' kind in
+  tether discriminator + optional `tetherSledId`.
 
-Phase 1 delivers user-visible new capability + foundation for future
-endpoint kinds. Full refactor (RopeEndpoint union, abstract
-`Tether {a,b}`, RMB-rope-raycast UX, more endpoint kinds) queued
-for ACA Track A or future B1 sessions.
+**Cut from ACC per scope-cut #1**: B1-P6 RMB-on-rope raycast-pick UX
+(conflicts with D77 RMB = release/pack-up convention; LMB-on-hover
+already covers attach). Deferred to ACD or later. Bigger Tier 3
+stretch endpoint kinds (raider corpse, sandworm carcass) deferred —
+would require lifting the constraint physics out of `updateSleds`
+into a shared system that can apply to any towed-end body.
+
+The "tow a flatbed full of loot back to camp" gameplay loop is now
+complete: deploy sled → attach locker → tow by hand/speeder/companion
+→ stake anywhere → throw items onto deck → items ride along. Player
+expressed throw-items intuition in the ACB session direction; ACC
+delivers it.
+
+**Token spend ACC**: ~3-3.5h wall clock. Estimated 70-90K input
+tokens, 20-30K output. Cost ~$6-9.
+
+**Prior state (ABZ pre-ACC)**: Session ABZ shipped B1 generalized
+rope Phase 1 — companion tether kind, SAVE_VERSION v12. Then ACA
+(sled visual rework + static-pos endpoint kind) + ACB (locker-on-sled
++ static-pos UX) bridged the gap to ACC. Throw-items deferred across
+ACA-ACB landed in ACC.
 
 **Prior state (ABY pre-ABZ)**: Session ABY shipped Road A polish
 wrap-ups (footstep cadence sync + limb R2 + 3P viewmodel readability).

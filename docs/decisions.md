@@ -2522,3 +2522,48 @@ This is the cloth-quality unlock that lets procedural primitives + Lathes (D115)
 **Apply**: future creature rigs (companion, raider variants, NPC humanoids) that want animation parity follow the same insertion pattern. Insert sub-pivots between primary joints; drive with phase-locked sin/cos curves. ASYMMETRIC scale factors are important — biological motion isn't symmetric (push-off vs landing has different angles).
 
 The combination of D107 (procedural-only) + D109 (skin localSpace) + D111 (asymmetric clothing) + D113 (dual-mesh items) + D114 (knee bend formula) + D115 (Lathe organic primitive) + D116 (over-shoulder cam) + D117 (cloth drape displacement) + D118 (sub-pivot architecture) is the full procedural-character pipeline that gets to low-poly stylized 3P game quality within zero-asset. **friction-score:** 2
+
+## D119 — Kinematic-rider promotion for moving-platform items (Session ACC)
+**When**: ACC — items thrown onto a tow-sled need to ride the sled as it accelerates at sprint speeds. Pure-friction approach was insufficient because the inextensible-rope position-snap teleports the sled body ~0.1m/frame, faster than Coulomb friction can drag a Newtonian rigid body along.
+
+**Why**: For dynamic-on-dynamic carry, the carried body needs an explicit kinematic relationship to the carrier — not just frictional coupling. Three.js scene-graph parenting alone isn't enough because we want the carried body to remain physically collidable (so MORE items can be dropped onto the stack), so we keep the Rapier body and just change its mode.
+
+**Picked**: when a dropped pickup body settles on the sled top deck collider (Rapier reports `isSleeping()` + XZ-and-Y range check), promote the pickup to `KinematicPositionBased`: capture the sled-local pose, drive `setNextKinematicTranslation` + `setNextKinematicRotation` each frame from `sled.group.matrixWorld × ridingLocalPos`. Mirror onto mesh + `pickup.pos` so raycasts and saves read correct world coords.
+
+**Considered alternatives**:
+- Scene-graph parent (like the locker mesh) — loses physical collision; new items dropped on the sled wouldn't stack on existing riders.
+- Pure friction tuning — fails fundamentally at the per-frame position-snap (no friction coefficient can match a teleport).
+- Distance constraint (Rapier joint) — Rapier-compat doesn't expose constraint joints stably; would also tangle with the existing rope constraint.
+- Manual impulse per frame to match sled velocity — works in steady state but breaks on snap teleports.
+
+**Apply**: any "object rides another moving body" carry mechanic (locker on sled was a scene-graph variant of this for an item with no physics body; the generalization to physics-bodied carry items is the kinematic-rider pattern). Future: items on a speeder cargo rack, items in a tossed-grenade pouch, etc.
+
+Despawn flow works unchanged — Rapier `removeRigidBody` handles kinematic bodies the same as dynamic. Release-to-dynamic (sled gone) restores normal physics. **friction-score:** 2
+
+## D120 — RopeEndpoint vocabulary, sled-as-implicit-second-endpoint (Session ACC)
+**When**: B1 Phase 2 — generalising QQ's sled-specific `SledTether` union into a shared rope endpoint vocabulary. ACA had already added a 4th union member (static-pos), and the next natural step was non-sled tethers (corpse drag, lassoed pickup, etc.).
+
+**Why**: The 5-member SledTether union (`none | player | speeder | companion | static-pos`) was implicitly the "other end" of a sled rope — the sled itself was always the second endpoint, never represented in the type. Future kinds (corpse, pickup, world-anchor stake) would either tangle into SledTether or require parallel unions per carrier type.
+
+**Picked**: `RopeEndpoint` union in `src/world/rope.ts` covers all current and likely-future endpoint kinds (`none | player | speeder | companion | sled | static-pos`), with payload where needed (`sled.sledId`, `static-pos.x/z`). `Tether {a, b}` shape models a full rope as two endpoints, for future non-sled tethers. `Sled.tether` stays as a single RopeEndpoint (the "other end" view — sled is the implicit second endpoint of its own tether; same SledTether name kept as an alias for back-compat).
+
+**Considered alternatives**:
+- Full Tether{a,b} on every sled with sled-id explicit — works but doubles the storage + adds redundant info (sled always knows its own id; serialising it is waste).
+- Generic Constraint type with per-kind subclasses — over-engineered for the current "sled-as-anchor" centric system.
+- Lift the constraint logic out of `updateSleds` into a shared system — useful future move; deferred until non-sled tethers actually ship.
+
+**Apply**: any new endpoint kind needs (a) addition to `RopeEndpoint` union, (b) a case in `resolveEndpointWorldPos`, (c) save serialization. Adding pure new endpoint kinds is now ~30 LOC each. Non-sled constraint physics (e.g., rope between two pickups) is a separate larger lift that the Tether{a,b} model positions for. **friction-score:** 2
+
+## D121 — Twilight breach as ambient threat-display, bypass combat loop on exit (Session ACC)
+**When**: ACC pre-work — user asked for ambient breach drama at sunset/sunrise (visible at distance, no engagement). Existing `stationaryBreach` state was reachable only from the retreat → alert combat loop.
+
+**Why**: The existing exit path of `stationaryBreach` transitions to `retreat`, increments `attackCount`, picks a retreat target — all combat-loop side effects. For an AMBIENT (non-engagement) breach, those side effects are wrong — player wasn't detected, so there's no engagement to wind down.
+
+**Picked**: a single boolean flag `_isTwilightBreach` set in the patrol-trigger branch before calling `enterStationaryBreach`. The exit logic in `tickStationaryBreach` checks the flag: if true, route straight back to `patrol` (reset flag, no `attackCount` increment, no `pickRetreatTarget`); if false, the original retreat path runs.
+
+**Considered alternatives**:
+- A separate `twilightBreach` state with copied tick logic — works but duplicates ~50 LOC of the breach animation curve for one flag-difference.
+- New "ambient" sub-state inside `stationaryBreach` (a state-of-the-state) — overkill for one bit of variation.
+- Pure parameterization — would require a stateBag pattern, not justified here.
+
+**Apply**: when reusing a state-machine state for a variant outcome that bypasses normal transitions, flag the entry point + branch the exit. Cleaner than duplicating the tick logic, simpler than full sub-state. **friction-score:** 1

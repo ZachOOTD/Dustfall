@@ -35,6 +35,7 @@ import type { BiomeSampler } from '../world/biomes.ts';
 import { findBiomeCentroid } from '../world/biomes.ts';
 import type { Rng } from '../core/rng.ts';
 import { isPryingActive } from '../player/interaction.ts';
+import { getPlayerPos } from '../util/playerPos.ts';
 
 export type SandWormState =
   | 'patrol'
@@ -109,6 +110,14 @@ export interface SandWorm {
    *  ambush again. Set on ambush trigger (consume → retreat) so the
    *  worm doesn't lock into a constant pop-up pattern. */
   _ambushCooldownUntil: number;
+  /** ACC — twilight breach cooldown. Set on entering an ambient
+   *  twilight stationaryBreach (from patrol) so the worm doesn't
+   *  pop up repeatedly during a single dawn/dusk window. */
+  _twilightBreachCooldownUntil: number;
+  /** ACC — flag set on entering a twilight breach; checked at
+   *  breach exit so the worm returns straight to patrol instead of
+   *  the retreat→alert combat loop. */
+  _isTwilightBreach: boolean;
 }
 
 interface SandPuff {
@@ -561,6 +570,8 @@ export function spawnSandWorm(
     nextWakePuffAt: 0,
     nextTremorDustAt: 0,
     _ambushCooldownUntil: 0,                  // ABO B3
+    _twilightBreachCooldownUntil: 0,          // ACC — ambient twilight breach
+    _isTwilightBreach: false,                 // ACC
   };
   _colliderToWorm = worm;
   return worm;
@@ -641,19 +652,9 @@ export function lootSandWorm(worm: SandWorm, ctx: GameContext): void {
 
 const _toPlayer = new THREE.Vector3();
 const _heading = new THREE.Vector3();
-const _playerPos = { x: 0, y: 0, z: 0 };
-
-/** Effective player world position — when mounted on the speeder, the
- *  capsule body is parked at (0, -2000, 0), so the worm must read the
- *  speeder's position instead. */
-function getPlayerPos(ctx: GameContext): { x: number; y: number; z: number } {
-  if (ctx.speeder?.mounted) {
-    const tr = ctx.speeder.body.translation();
-    _playerPos.x = tr.x; _playerPos.y = tr.y; _playerPos.z = tr.z;
-    return _playerPos;
-  }
-  return ctx.player.body.body.translation();
-}
+// B1 Phase 2 — getPlayerPos lifted to src/util/playerPos.ts (3rd consumer
+// triggered the lift; previous in-file copy here + companion.ts + new
+// rope endpoint resolver). Import from the shared util.
 
 export function updateSandWorm(ctx: GameContext, dt: number): void {
   const worm = ctx.sandWorm;
@@ -803,6 +804,25 @@ function tickPatrol(worm: SandWorm, ctx: GameContext, dt: number, distToPlayer: 
   // ABO B3 — dawn/dusk modifier scales detection radius for the worm
   // being more active near twilight transitions.
   const twilightMult = twilightActivityMultiplier(ctx);
+  // ACC — ambient twilight breach. Pure threat-display: the worm rears
+  // up on the horizon at dawn/dusk where the player can see it, then
+  // descends back into the sand. Gates: in a twilight window, player
+  // in the visibility band (outside even the mounted detection ring
+  // but within sight), cooldown expired, low per-frame probability.
+  // Bypasses the retreat→alert loop on exit so this is purely cosmetic.
+  if (
+    twilightMult > 1.0 &&
+    ctx.time.elapsed >= worm._twilightBreachCooldownUntil &&
+    distToPlayer >= Tuning.SANDWORM_TWILIGHT_BREACH_MIN_DIST &&
+    distToPlayer <= Tuning.SANDWORM_TWILIGHT_BREACH_MAX_DIST &&
+    Math.random() < Tuning.SANDWORM_TWILIGHT_BREACH_PROB_PER_S * dt
+  ) {
+    worm._twilightBreachCooldownUntil =
+      ctx.time.elapsed + Tuning.SANDWORM_TWILIGHT_BREACH_COOLDOWN_S;
+    worm._isTwilightBreach = true;
+    enterStationaryBreach(worm, ctx);
+    return;
+  }
   // AAP — detection radius now scales with player movement noise. A
   // standing-still player can sit ~80m from a patrolling worm without
   // alerting it (DETECTION_RADIUS=150 * STILL=0.55 ≈ 82m); a mounted
@@ -1109,11 +1129,21 @@ function tickStationaryBreach(worm: SandWorm, ctx: GameContext, elapsed: number)
   const dur = Tuning.SANDWORM_STATIONARY_BREACH_DURATION;
   const t = (elapsed - worm.phaseStartedAt) / dur;
   if (t >= 1) {
+    worm.mesh.visible = false;
+    worm.sway = 0;
+    if (worm._isTwilightBreach) {
+      // ACC — ambient threat-display, no engagement to wind down.
+      // Drop back into patrol at current position; cooldown already
+      // gates the next twilight breach.
+      worm._isTwilightBreach = false;
+      worm.state = 'patrol';
+      worm.phaseStartedAt = elapsed;
+      worm.pitch = 0;
+      return;
+    }
     worm.state = 'retreat';
     worm.phaseStartedAt = elapsed;
-    worm.mesh.visible = false;
     worm.attackCount++;
-    worm.sway = 0;
     pickRetreatTarget(worm, ctx);
     return;
   }

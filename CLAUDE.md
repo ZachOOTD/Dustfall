@@ -60,7 +60,36 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session ACB — Locker-on-sled (mobile storage) +
+**Last shipped**: Session ACC — Throw items on sled + sandworm twilight
+breach + B1 Phase 2 RopeEndpoint refactor. **Long overnight session**.
+10 files modified + 2 new (`src/util/playerPos.ts`, `src/world/rope.ts`).
+tsc clean. **Pre-ACC**: ambient sandworm twilight breach (dawn/dusk
+visibility band 180-400m, 8min cooldown, ~30% per twilight window,
+threat-display routes back to patrol via `_isTwilightBreach` flag).
+**ACC P1**: 2nd cuboid top-deck collider on the sled body, friction
+0.95, slightly inset to read as "inside the curled rim". Main collider
+keeps friction 0.6 for tow-on-sand feel. **ACC P2**: kinematic-rider
+promotion — when a dropped pickup body sleeps on the sled top, switch
+to KinematicPositionBased + drive world transform each frame from
+sled.group's transform applied to a captured local pose. Friction
+alone can't keep up with the per-frame position-snap of the
+inextensible-rope constraint at sprint speeds. New `updateSledRiders`
+tick AFTER updateSleds. **ACC P3**: additive save schema for
+`droppedPickups[].ridingSledId/Pos/Quat`; 2-pass load (pickups → sleds
+→ re-promote riders). **ACC Stretch**: aimable throw arc — drop
+velocity uses full camera direction (Y preserved) at 3.2 m/s + 1.0 m/s
+upward base; look at sled to lob items onto it. **B1 Phase 2**:
+NEW `src/world/rope.ts` with `RopeEndpoint` union + `Tether{a,b}`
+shape + `resolveEndpointWorldPos` resolver. NEW `src/util/playerPos.ts`
+lifting speeder-aware player position helper (3rd consumer triggered
+the lift). `Sled.tether` is now `RopeEndpoint`; `attachRopeToSled`
+signature updated; `updateSleds` resolves anchor via shared resolver.
+Save additive: 'sled' kind in tether discriminator + optional
+`tetherSledId`. **D119-D121 added**. **Cut per scope-cut #1**:
+B1-P6 RMB-on-rope raycast UX (conflicts with D77 RMB metaphor;
+LMB-on-hover covers it).
+
+**Prior milestone**: Session ACB — Locker-on-sled (mobile storage) +
 static-pos tether UX. **Thirteenth session under iteration discipline**.
 2 of 3 P-items shipped; throw-items-on-sled deferred to ACC. 3 files
 modified. tsc clean. **P1 locker-on-sled**: new Sled.attachedLockerId

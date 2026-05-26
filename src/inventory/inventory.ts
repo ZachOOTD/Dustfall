@@ -164,22 +164,40 @@ export function dropSelected(ctx: GameContext): void {
   }
 
   // Compute drop position: camera + forward * 1m, projected to terrain.
+  // ACC Stretch — drop velocity uses the FULL camera direction (Y
+  // included) so the player can aim a throw: look at the sled deck +
+  // drop to lob the item onto it. Spawn pos still uses the
+  // horizontal-only projection (so the item starts in front of the
+  // player, not 1m into the sky above).
   const cam = ctx.three.camera;
   cam.getWorldDirection(_dropDir);
-  _dropDir.y = 0;
-  if (_dropDir.lengthSq() < 1e-4) _dropDir.set(0, 0, -1);
-  _dropDir.normalize();
-  const px = cam.position.x + _dropDir.x * 1.0;
-  const pz = cam.position.z + _dropDir.z * 1.0;
+  // Horizontal direction for spawn placement.
+  const horizX = _dropDir.x, horizZ = _dropDir.z;
+  const horizLenSq = horizX * horizX + horizZ * horizZ;
+  const horizLen = horizLenSq < 1e-4 ? 1 : Math.sqrt(horizLenSq);
+  const hx = horizLenSq < 1e-4 ? 0 : horizX / horizLen;
+  const hz = horizLenSq < 1e-4 ? -1 : horizZ / horizLen;
+  const px = cam.position.x + hx * 1.0;
+  const pz = cam.position.z + hz * 1.0;
+  // Aimable throw velocity — camera-direction × speed + base upward
+  // kick. _dropDir already has unit length (Three.js getWorldDirection
+  // returns a unit vector), so the cam.y component is just the sine
+  // of the camera pitch.
+  const TOSS = Tuning.ITEM_TOSS_SPEED;
+  const initialVel = {
+    x: _dropDir.x * TOSS,
+    y: _dropDir.y * TOSS + Tuning.ITEM_TOSS_BASE_UP,
+    z: _dropDir.z * TOSS,
+  };
 
   // ABM (B7) — drop with physics body so the item falls + settles
-  // naturally (rolls down dunes, bounces off walls). Small forward
-  // toss velocity for "tossed from inventory" feel.
+  // naturally (rolls down dunes, bounces off walls). Initial velocity
+  // is the aimable throw computed above; arc onto sled deck possible.
   const pickup = spawnDroppedPickup(
     ctx.three.scene, ctx.terrain, { x: px, z: pz }, droppedId, droppedMeta,
     {
       world: ctx.physics.world,
-      initialVel: { x: _dropDir.x * 1.5, y: 0.8, z: _dropDir.z * 1.5 },
+      initialVel,
     },
   );
   ctx.pickups.list.push(pickup);
