@@ -60,7 +60,25 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session ABZ — B1 generalized rope (Phase 1: companion
+**Last shipped**: Session ACA — Sled visual rework (scrap metal sheet)
++ B1 Phase 2 lite (static-pos endpoint kind). **Twelfth session under
+iteration discipline**. 2 of 3 P-items shipped; locker-on-sled deferred
+to ACB. 2 files modified. tsc clean. **P1 sled visual**: per user
+direction, wood-plank look entirely replaced with warped scrap-metal
+sheet + welded handle yoke. PlaneGeometry(16×4) subdivided + per-vertex
+Y-curl at lateral edges (formula `pow(|x|/hx, 2.3) * (hy*2.2 + sin/cos
+variation)`). Slight X-pinch for fold suggestion. Underside mesh for
+thickness. 14 rivets. Welded yoke with 2 weld-bead spheres + horizontal
+cross-bar. Retired woodGrainMaterial imports; uses paintMat +
+metalMaterial. **P3 static-pos endpoint**: SledTether union extended
+with `{ kind: 'static-pos'; x: number; z: number }`. updateSleds anchor
+at terrain Y + 0.4m. Save schema additive: tether 'static-pos' + new
+tetherX/Z optional fields. spawnSledAt accepts full tether obj. SledTether
+type imported into save.ts. Foundation for ACB to wire LMB-on-ground UX.
+**Deferred to ACB**: locker-on-sled (mobile storage), throw items on
+sled deck (physics + collider redesign), full RopeEndpoint refactor.
+
+**Prior milestone**: Session ABZ — B1 generalized rope (Phase 1: companion
 tether kind) + SAVE_VERSION v12. **Eleventh session under iteration
 discipline**. Pivot to big-ticket feature work. Re-scoped B1 from
 ABO/ABP cuts; ABZ delivers Phase 1 minimal architectural increment

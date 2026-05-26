@@ -3,6 +3,52 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ACA — 2026-05-25 — Sled visual rework (scrap metal sheet) + B1 Phase 2 lite (static-pos endpoint) ✓ verify pass
+`verified` — tsc clean. 2 files modified (`src/world/sled.ts` +
+`src/persistence/save.ts`). **Twelfth session under iteration
+discipline**. 2 of 3 P-items shipped; locker-on-sled deferred to ACB.
+
+**P1 — Sled visual rework**. User feedback: "currently it actually
+looks like a sled but I don't want it to look like a sled. I'd rather
+look like an old sheet of scrap metal with a handle and maybe turned
+up and warped on the sides a bit". Replaced wood-plank look entirely:
+- Retired `_plankMat`/`_plankDarkMat`/`_runnerMat` (woodGrainMaterial).
+- New deck: `PlaneGeometry(hx*2, hz*2, 16, 4)` rotated horizontal,
+  per-vertex Y-displacement at lateral edges via curl formula
+  `pow(|x|/hx, 2.3) * (hy*2.2 + sin/cos variation)`. Edges curl up to
+  ~25cm, varying along z for natural warp.
+- Slight X-pinch at curl for fold suggestion.
+- Underside mesh (flipped + 1.8cm offset) for visible thickness.
+- 14 rivets total: 8 on lateral curled edges + 6 on front/back.
+- Welded handle yoke: 2 angled posts (cylinder, with weld-bead
+  spheres at bases) + horizontal cross-bar rope-stub.
+- Materials: `createPaintedMetalMaterial(0x6e5e48, wearLevel 0.85)`
+  for top sheet + `createMetalMaterial(0x4a3a28)` for underside,
+  rivets, and handle.
+
+**P3 — B1 Phase 2 lite: static-pos endpoint kind**. Foundation for
+more endpoint kinds without the full RopeEndpoint refactor.
+- Extended `SledTether` union with `{ kind: 'static-pos'; x: number;
+  z: number }`. Tether sled to a fixed world XZ point (stake-out).
+- updateSleds anchor resolution: at static-pos x/z, terrain Y + 0.4m
+  vertical offset.
+- Save schema additive: `sleds[].tether` union includes 'static-pos'
+  + new `tetherX?`/`tetherZ?` optional fields (written only when
+  kind=static-pos, read on load to reconstruct full SledTether).
+- `spawnSledAt` accepts the full tether object (was wrapping into
+  `{ kind }` losing x/z payload).
+- `SledTether` type imported into save.ts.
+- ACB candidate: wire LMB-on-empty-ground UX to create static-pos
+  tether (currently no interaction creates one — it's data-only).
+
+**Deferred to ACB**:
+- P2 locker-on-sled (mobile storage) — needs Sled.attachedLocker
+  field + per-frame visual sync + save link + new interaction case
+- Throw items onto sled deck (per ABM physics) — needs collider
+  redesign + items-resting-on-sled save schema
+- Full RopeEndpoint refactor (replaces SledTether with abstract
+  Tether {a,b} so non-sled things can be tethered)
+
 ## Session ABZ — 2026-05-25 — B1 generalized rope (Phase 1: companion tether kind) + SAVE_VERSION v12 ✓ verify pass
 `verified` — tsc clean. 3 files modified (`src/world/sled.ts` +
 `src/player/interaction.ts` + `src/persistence/save.ts`). **Eleventh
