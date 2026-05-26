@@ -60,7 +60,27 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session ABW — Multi-angle polish audit + cape clipping
+**Last shipped**: Session ABX — Player model texture pass within D107
+zero-asset. **Ninth session under iteration discipline**. 4 elements
+iterated. **P1 poncho dye stripes**: per-vertex color attribute on
+poncho geometry (5 alternating warm/cool bands × wear gradient), cloned
+ponchoMat with vertexColors=true. Hand-dyed scavenger look. **P2 skin
+weathering**: face skinMat accent 0x8a7048 → 0x6e4a26 (deeper sun-aged
+brown), sheen 0.5 → 0.22 (matte). NEW handSkinMat (accent 0x4a3520
+grimy + scaleSize 22.0) applied to palm/knuckle ridge/fingers/thumbs.
+**P3 pauldron**: paintMat wearLevel 0.7 → 0.88 + 4 rivets per plate
+(12 total small SphereGeometry corner studs in metalMat). **P4
+bandolier leather**: STRAP_COLOR 0x505050 → 0x4a3220 + strapMat
+factory switched metalMaterial → fabricMaterial+disableShimmer.
+Matte brown leather strap + pouches. tsc clean. 1 file modified
+(playerRig.ts). All within D107 zero-asset (no GLB/PBR/UV files).
+
+**9-session arc summary**: ABP baseline blocky → ABV+ABW geometry+
+rigging+cloth+fit → **ABX material/texture variation**. Full procedural-
+character pipeline complete within zero-asset. Character now reads as
+lived-in scavenger, not mannequin.
+
+**Prior milestone**: Session ABW — Multi-angle polish audit + cape clipping
 fix. **Eighth session under iteration discipline**. User-reported bug:
 cape (poncho) clipping through the back of the body. Root cause: poncho
 top radius (TORSO_CHEST_R × 1.08 = 0.238m) was smaller than ABS Lathe

@@ -2,10 +2,43 @@
 
 Cumulative state. Rewritten end-to-end at each `/session-end`.
 
-**Current state**: Session ABW shipped (2026-05-25, cape clipping fix
-+ multi-angle audit). 78 sessions post-MVP. tsc clean. SAVE_VERSION
-v11 unchanged. **Eighth Dustfall session under iteration discipline**.
-1 file modified (`src/player/playerRig.ts`).
+**Current state**: Session ABX shipped (2026-05-25, player model
+texture pass within D107 zero-asset). 79 sessions post-MVP. tsc clean.
+SAVE_VERSION v11 unchanged. **Ninth Dustfall session under iteration
+discipline**. 1 file modified (`src/player/playerRig.ts`).
+
+**ABX scope**: 4 elements iterated, all material/texture variation
+within zero-asset:
+- **P1 — Poncho dye stripes**: per-vertex color attribute on poncho
+  geometry. 5 alternating tonal bands (warm-darker vs cool-lighter)
+  bucketed by theta + wear gradient (+5% hem, -3% top). Cloned
+  ponchoMat with `vertexColors=true`. Reads as hand-dyed cloth.
+- **P2 — Skin tone weathering**: face skinMat accent `0x8a7048 →
+  0x6e4a26` (sun-aged brown), sheen 0.5→0.22 (matte). NEW handSkinMat
+  with grimy accent `0x4a3520` + larger calluses, applied to all
+  hand parts. Face vs hands now visually distinct.
+- **P3 — Pauldron weathering + rivets**: wearLevel 0.7→0.88 + 4
+  rivet studs per plate (12 total small SphereGeometry corner studs).
+- **P4 — Bandolier leather**: STRAP_COLOR 0x505050→0x4a3220 +
+  strapMat factory switched metalMaterial → fabricMaterial+
+  disableShimmer. Reads as worn brown leather.
+
+**Cross-session arc COMPLETE**: 9 sessions of discipline-driven
+iteration (ABP→ABX). Full procedural-character pipeline:
+- Geometry: D115 Lathe body
+- Cloth: D117 drape displacement
+- Rigging: D118 sub-pivots + animation
+- Camera: D116 over-shoulder
+- Movement: D114 walk cycle
+- Items: D113 dual-mesh
+- Asymmetric clothing: D111
+- Moving-entity shader: D109
+- Zero-asset policy: D107
+
+ABX patterns (per-vertex color, per-region material variation,
+rivets-as-detail-decoration, leather-via-fabricMaterial) add
+texture/material variation to the pipeline without new D-entry —
+they're applications of existing decisions.
 
 **ABW scope**: focused fix-the-bug session. User direction: "another
 round of polish, screenshots from multiple angles, check for weird

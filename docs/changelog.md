@@ -3,6 +3,52 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ABX — 2026-05-25 — Player model texture pass (poncho dye stripes + skin weathering + pauldron rivets + leather bandolier) ✓ verify pass
+`verified` — tsc clean. 1 file modified (`src/player/playerRig.ts`).
+**Ninth session under iteration discipline**. 4 elements iterated.
+User direction: "texture pass" applying procedural shader vocabulary
+to rig elements for material variation + weathering. D107 zero-asset
+preserved throughout.
+
+**P1 — Poncho dye stripes (1 round)**. Added per-vertex color
+attribute to poncho geometry: 5 alternating tonal bands bucketed by
+theta (even=warm-darker 0.93/0.91/0.86, odd=cool-lighter 1.05/1.02/
+0.97). Wear gradient per-vertex (+5% hem, -3% top). Cloned ponchoMat
+with `vertexColors=true` so doesn't affect other fabric users
+(bandana, hood, wraps). Reads as hand-dyed scavenger cloth.
+
+**P2 — Skin tone weathering (1 round, 2 sub-fixes)**. Face skinMat
+accent bumped `0x8a7048 → 0x6e4a26` (deeper sun-aged brown), sheen
+`0.5 → 0.22` (matte/dry not oily). NEW `handSkinMat` separate
+instance with grimier accent `0x4a3520` + slightly larger calluses
+(`scaleSize 22.0`). All hand parts converted to handSkinMat: palm,
+knuckle ridge, 4 fingers × 2 sides, knuckle bumps × 2 per finger,
+thumbs. Face stays on original skinMat. Retired `SKIN_ACCENT` const
+(replaced with per-region inline values).
+
+**P3 — Pauldron weathering + rivets (1 round)**. Bumped
+`pauldronPaintMat wearLevel 0.7 → 0.88` for more visible rust + paint
+chipping. Added 4 rivets per plate (12 total): small
+`SphereGeometry(0.006)` at plate corners, positioned via the plate's
+z-tilt rotation transform so they sit on the outward face. Uses
+`pauldronMetalMat`. Reads as scrap-bolted-together armor.
+
+**P4 — Bandolier leather swap (1 round)**. `STRAP_COLOR 0x505050 →
+0x4a3220` (dark metal grey → brown leather). `strapMat` switched from
+`createMetalMaterial` → `createFabricMaterial(STRAP_COLOR, undefined,
+{ disableShimmer: true })`. Matte leather look (no metal sheen).
+Bandolier + odd-index pouches (which share strapMat) all now read
+as worn brown leather. Reads as scavenger leather strap, not
+industrial metal harness.
+
+**Cross-session arc (9 sessions complete)**: ABP→ABW shipped the
+procedural-character geometry + rigging + animation pipeline within
+D107 zero-asset. ABX closes out the **material/texture variation**
+side without breaking the zero-asset policy — all texture work was
+shader-parameter tuning + procedural vertex colors, no GLB/PBR/UV
+texture files. Full D-entry stack: D107 + D109 + D111 + D113 + D114
++ D115 + D116 + D117 + D118 + [implicit ABX patterns].
+
 ## Session ABW — 2026-05-25 — Multi-angle polish audit + cape clipping fix ✓ verify pass
 `verified` — tsc clean. 1 file modified (`src/player/playerRig.ts`).
 **Eighth session under iteration discipline**. User direction:
