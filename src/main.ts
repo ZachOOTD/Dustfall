@@ -217,18 +217,37 @@ const lizards = spawnLizardsProcgen(
 // isn't in the initial viewshed.
 // ACB — debug override: Tuning.DEBUG_SANDWORM_NEAR_SPAWN forces a
 // close spawn (~75m from opening anchor) for fast encounter testing.
-const sandWormHome = Tuning.DEBUG_SANDWORM_NEAR_SPAWN
-  ? { x: Tuning.DEBUG_SANDWORM_NEAR_SPAWN_POS.x, z: Tuning.DEBUG_SANDWORM_NEAR_SPAWN_POS.z }
-  : sampleSandwormHome(scatterRand, biomes, terrain);
-{
-  const biome = biomes.biomeAt(sandWormHome.x, sandWormHome.z);
-  if (biome !== 'dune') {
-    console.warn(
-      `[sandWorm] home pos (${sandWormHome.x.toFixed(0)}, ${sandWormHome.z.toFixed(0)}) is in biome '${biome}', not 'dune'. Encounter may feel wrong.`,
-    );
+// ACE Tier 2 — multi-worm population. Default Tuning.SANDWORM_COUNT = 2;
+// debug-near-spawn forces a single close worm (legacy single-encounter
+// testing mode). Per-worm rejection sampling uses SANDWORM_MIN_SEPARATION
+// to keep multiple worms from bunching in the same dune region.
+const sandWormHomes: Array<{ x: number; z: number }> = [];
+if (Tuning.DEBUG_SANDWORM_NEAR_SPAWN) {
+  sandWormHomes.push({
+    x: Tuning.DEBUG_SANDWORM_NEAR_SPAWN_POS.x,
+    z: Tuning.DEBUG_SANDWORM_NEAR_SPAWN_POS.z,
+  });
+} else {
+  const count = Tuning.SANDWORM_COUNT;
+  const sepRadius = Tuning.SANDWORM_MIN_SEPARATION;
+  for (let i = 0; i < count; i++) {
+    const home = sampleSandwormHome(scatterRand, biomes, terrain, {
+      excludeOtherWorms: sandWormHomes.map((p) => ({
+        x: p.x, z: p.z, radius: sepRadius,
+      })),
+    });
+    sandWormHomes.push(home);
+    const biome = biomes.biomeAt(home.x, home.z);
+    if (biome !== 'dune') {
+      console.warn(
+        `[sandWorm ${i}] home pos (${home.x.toFixed(0)}, ${home.z.toFixed(0)}) is in biome '${biome}', not 'dune'. Encounter may feel wrong.`,
+      );
+    }
   }
 }
-const sandWorm = spawnSandWorm(three.scene, physics.world, terrain, sandWormHome);
+const sandWorms = sandWormHomes.map((home) =>
+  spawnSandWorm(three.scene, physics.world, terrain, home),
+);
 
 const weather = createWeather(three.scene, three.camera);
 const ambientDust = createAmbientDust(three.scene, three.camera);
@@ -315,7 +334,7 @@ const ctx: GameContext = {
   shelter,
   raiders,
   lizards,
-  sandWorm,
+  sandWorms: { list: sandWorms },
   waterSources: { list: waterSources },
   cacti: { list: cacti },
   lootContainers: { list: [], open: null },
@@ -326,6 +345,7 @@ const ctx: GameContext = {
   bedrolls: { list: [] },            // Session AAC
   lanterns: { list: [] },            // Session AAC
   lockers: { list: [], open: null }, // Session AAC
+  stakes: { list: [] },              // Session ACE
   companion: null,                   // Session AAE
 
   salvageables,

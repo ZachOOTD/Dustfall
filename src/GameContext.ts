@@ -32,6 +32,7 @@ import type { LargeTent } from './world/largeTent.ts';
 import type { Bedroll } from './world/bedroll.ts';
 import type { Lantern } from './world/lantern.ts';
 import type { Locker } from './world/locker.ts';
+import type { Stake } from './world/stake.ts';
 import type { Companion } from './enemies/companion.ts';
 import type { BiomeSampler } from './world/biomes.ts';
 import type { SalvageableRegistry } from './world/salvage.ts';
@@ -109,9 +110,13 @@ export interface GameContext {
   shelter: ShelterRegistry;
   raiders: Raider[];
   lizards: Lizard[];
-  /** Session DD — single boss-tier sand worm. Null on boots where the worm
-   *  hasn't been spawned (shouldn't normally happen — main.ts spawns one). */
-  sandWorm: SandWorm | null;
+  /** Session DD — boss-tier sand worm(s). Singleton pre-ACE; ACE Tier 2
+   *  multi-worm refactor: now an array (mirrors ctx.sleds shape). Save
+   *  schema v13 stores `sandWorms[]`; v12 saves migrate by lifting the
+   *  legacy singleton into `sandWorms[0]`. Empty array = no worms in
+   *  the world. Each worm patrols its own home position with independent
+   *  AI state + cooldowns. */
+  sandWorms: { list: SandWorm[] };
   waterSources: { list: WaterSource[] };
   cacti: { list: Cactus[] };
   lootContainers: { list: LootContainer[]; open: LootContainer | null };
@@ -130,6 +135,13 @@ export interface GameContext {
   bedrolls: { list: Bedroll[] };
   lanterns: { list: Lantern[] };
   lockers: { list: Locker[]; open: Locker | null };
+  /** Session ACE — craftable world-anchor stakes (B1 Phase 3 RopeEndpoint).
+   *  Persistent across save/load via additive schema (no version bump).
+   *  Tetherable from the rope: RMB-on-stake with rope wielded ties one end
+   *  here. Stakes can hold a tethered sled in place even when the player
+   *  walks away (functionally a craftable + persistent upgrade of the
+   *  ACA `static-pos` tether kind). */
+  stakes: { list: Stake[] };
   /** Session AAE — pocketable Rocky-inspired creature companion.
    *  Singleton (one creature per save). Null when in inventory or
    *  never picked up; non-null when deployed in the world. */

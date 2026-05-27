@@ -327,6 +327,13 @@ export const Tuning = {
   LOCKER_HEIGHT_M: 0.7,
   LOCKER_NEAR_DISTANCE_SQ: 1.5 * 1.5,
 
+  // Session ACE — craftable world-anchor stake (B1 Phase 3).
+  STAKE_NEAR_DISTANCE_SQ: 0.5 * 0.5,     // reject deploy within 0.5m of another stake
+  /** Distance (m) the player must be within to attach/detach rope on a
+   *  stake. Tighter than typical interaction range so the stake doesn't
+   *  trigger from across a sled deck. */
+  STAKE_ROPE_ATTACH_DISTANCE: 2.5,
+
   // Session AAE — creature companion (Rocky-inspired from Project Hail Mary).
   // Pentagonal-symmetric body with 5 radial legs. Two locomotion states:
   // rolling (legs retracted, body rolls) for fast follow at distance;
@@ -879,6 +886,17 @@ export const Tuning = {
   // should never see the worm in their first ~20s of unmounted
   // movement. Roughly: detection radius (150m) + ~200m walking buffer.
   SANDWORM_SPAWN_EXCLUSION_RADIUS: 350,
+  // ACE Tier 2 — multi-worm population.
+  /** How many sandworms spawn per world. Default 2; 1 reverts to the
+   *  pre-ACE singleton encounter. Higher counts ramp the danger but
+   *  risk overwhelming early-game (~5-10min before player has tools). */
+  SANDWORM_COUNT: 2,
+  /** Minimum separation (m) between any two worm home positions.
+   *  Acts as exclusion radius in the per-worm rejection sampler. 400m
+   *  ≈ 2.6× detection radius — far enough that two worms can't
+   *  simultaneously engage the player unless they're charging from
+   *  opposite directions. */
+  SANDWORM_MIN_SEPARATION: 400,
   // AAP — noise multipliers on detection radius. Quiet stationary
   // player shrinks the worm's effective detection; sprinting / mounted
   // grows it. Falls back to 1.0 (raw radius) on any unhandled mode.

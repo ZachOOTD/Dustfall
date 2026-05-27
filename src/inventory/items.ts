@@ -12,6 +12,7 @@ import { deployLargeTent } from '../world/largeTent.ts';
 import { deployBedroll } from '../world/bedroll.ts';
 import { deployLantern } from '../world/lantern.ts';
 import { deployLocker } from '../world/locker.ts';
+import { deployStake } from '../world/stake.ts';
 import { deployCompanion } from '../enemies/companion.ts';
 import { easeOutBack, easeInOutCubic, easeOutQuad } from '../core/ease.ts';
 import { addItem } from './inventory.ts';
@@ -1166,6 +1167,7 @@ const _DEFS: Record<ItemId, ItemDef> = {
     stackable: true,
     maxStack: 2,
     wieldLmb: 'place',
+    thirdPersonScale: 1.35,   // ACE Tier 4B — small bundle reads dim at 3P
     onUse(ctx, _slot) {
       const fire = deployFire(ctx);
       if (!fire) {
@@ -1227,6 +1229,7 @@ const _DEFS: Record<ItemId, ItemDef> = {
     description: 'iron crossbars for a fire — cook multiple meats in parallel',
     stackable: true,
     maxStack: 2,
+    thirdPersonScale: 1.30,   // ACE Tier 4B — thin grate; bump for 3P silhouette
     wieldLmb: 'click_use',
     onUse(ctx, _slot) {
       // AAZ-fix — grill attaches to any LIVE fire the player is facing.
@@ -1361,6 +1364,7 @@ const _DEFS: Record<ItemId, ItemDef> = {
     description: 'wrapped cloth on a branch — burns for a few minutes',
     stackable: false,
     maxStack: 1,
+    thirdPersonScale: 1.30,   // ACE Tier 4B — thin stick reads dim at 3P (emissive flame helps but body needs boost)
     wieldLmb: 'none',
     onUse(_ctx, slot) {
       if (!slot.meta) slot.meta = { lit: false, burnRemaining: 1 };
@@ -1466,6 +1470,7 @@ const _DEFS: Record<ItemId, ItemDef> = {
     description: 'a salvaged hand-light — drains, recharges while off',
     stackable: false,
     maxStack: 1,
+    thirdPersonScale: 1.30,   // ACE Tier 4B — small handheld; boost for 3P readability
     wieldLmb: 'none',
     onUse(_ctx, slot) {
       if (!slot.meta) slot.meta = { lit: false, fuelLevel: 1 };
@@ -1645,6 +1650,7 @@ const _DEFS: Record<ItemId, ItemDef> = {
     description: 'a roll of canvas and poles',
     stackable: false,
     maxStack: 1,
+    thirdPersonScale: 1.25,   // ACE Tier 4B — rolled bundle; modest boost (already has some volume)
     wieldLmb: 'place',
     onUse(ctx, _slot) {
       const tent = deployTent(ctx);
@@ -1743,6 +1749,7 @@ const _DEFS: Record<ItemId, ItemDef> = {
     description: 'a frame + canvas — large enough to walk inside',
     stackable: false,
     maxStack: 1,
+    thirdPersonScale: 1.20,   // ACE Tier 4B — bigger bundle, smaller boost needed
     wieldLmb: 'place',
     onUse(ctx, _slot) {
       const tent = deployLargeTent(ctx);
@@ -1788,6 +1795,7 @@ const _DEFS: Record<ItemId, ItemDef> = {
     stackable: false,
     maxStack: 1,
     wieldLmb: 'place',
+    thirdPersonScale: 1.35,   // ACE Tier 4B — slim roll reads small at 3P
     onUse(ctx, _slot) {
       const b = deployBedroll(ctx);
       if (!b) return { consumed: false, message: 'no room to lay it down here' };
@@ -1826,6 +1834,7 @@ const _DEFS: Record<ItemId, ItemDef> = {
     stackable: false,
     maxStack: 1,
     wieldLmb: 'place',
+    thirdPersonScale: 1.30,   // ACE Tier 4B — thin post + small globe needs boost
     onUse(ctx, _slot) {
       const l = deployLantern(ctx);
       if (!l) return { consumed: false, message: 'no room for the lantern here' };
@@ -1978,6 +1987,77 @@ const _DEFS: Record<ItemId, ItemDef> = {
     },
   },
 
+  // Session ACE — craftable world-anchor stake. B1 Phase 3 RopeEndpoint.
+  // LMB-place drives the stake into the sand 2.2m in front of the player.
+  // RMB-on-stake with rope wielded ties the rope to the stake (interaction.ts
+  // routes via the stake's interactType='attach_rope' tag).
+  // RMB pack-up via wieldAction.ts/handleContextAction once the stake is
+  // a hovered registry entry.
+  stake_kit: {
+    id: 'stake_kit',
+    name: 'STAKE',
+    glyph: '⊥',
+    description: 'an iron stake — drive it into the sand to anchor a rope',
+    stackable: false,
+    maxStack: 1,
+    wieldLmb: 'place',
+    thirdPersonScale: 1.35,   // ACE Tier 4B — thin iron rod; needs boost at 3P
+    onUse(ctx, _slot) {
+      const s = deployStake(ctx);
+      if (!s) return { consumed: false, message: 'too close to another stake' };
+      return { consumed: true, message: 'stake driven into the sand' };
+    },
+    makeViewModel() {
+      // Held: a short iron stake with a rope-loop at the top + flared
+      // driven cap. Same vocab as the in-world mesh, scaled smaller for
+      // the FP viewmodel.
+      const group = new THREE.Group();
+      const ironMat = createMetalMaterial(0x4a4038, {
+        wornScale: 14.0,
+        scratchStrength: 0.35,
+      });
+      const shaft = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.014, 0.011, 0.22, 8),
+        ironMat,
+      );
+      shaft.rotation.z = Math.PI / 2;  // hold horizontally
+      group.add(shaft);
+      // Flared driven cap at one end
+      const cap = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.023, 0.018, 0.012, 10),
+        ironMat,
+      );
+      cap.rotation.z = Math.PI / 2;
+      cap.position.x = 0.10;
+      group.add(cap);
+      // Pointed tip at the other end
+      const tip = new THREE.Mesh(
+        new THREE.ConeGeometry(0.011, 0.05, 8),
+        ironMat,
+      );
+      tip.rotation.z = -Math.PI / 2;
+      tip.position.x = -0.13;
+      group.add(tip);
+      // Rope-loop welded near the cap
+      const loop = new THREE.Mesh(
+        new THREE.TorusGeometry(0.022, 0.005, 5, 12),
+        ironMat,
+      );
+      loop.position.set(0.06, 0.025, 0);
+      group.add(loop);
+      return group;
+    },
+    makeIcon() {
+      const s = svg();
+      // Vertical stake with a small loop at top + flared cap.
+      s.appendChild(svgEl('line', { x1: '12', y1: '5', x2: '12', y2: '18' }));
+      s.appendChild(svgEl('circle', { cx: '12', cy: '7', r: '2' }));
+      s.appendChild(svgEl('line', { x1: '10', y1: '4', x2: '14', y2: '4' }));
+      s.appendChild(svgEl('polyline', { points: '10,18 12,21 14,18' }));
+      return s;
+    },
+  },
+
   rope: {
     id: 'rope',
     name: 'ROPE',
@@ -2071,4 +2151,5 @@ export const ALL_ITEM_IDS: ReadonlyArray<ItemId> = [
   'large_tent_kit',  // Session XX
   'bedroll_kit', 'lantern_kit', 'locker_kit',  // Session AAC
   'companion_pod',  // Session AAE
+  'stake_kit',      // Session ACE
 ];

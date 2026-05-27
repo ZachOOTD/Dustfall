@@ -40,6 +40,7 @@ import { spawnLargeTentAt, setNextLargeTentId } from '../world/largeTent.ts';
 import { spawnBedrollAt, setNextBedrollId } from '../world/bedroll.ts';
 import { spawnLanternAt, setNextLanternId, releaseLanternLight } from '../world/lantern.ts';
 import { spawnLockerAt, setNextLockerId } from '../world/locker.ts';
+import { spawnStakeAt, setNextStakeId } from '../world/stake.ts';
 import type { CompanionState } from '../enemies/companion.ts';
 import { removeShelterZone } from '../shelter/shelterZones.ts';
 
@@ -81,12 +82,15 @@ export const SAVE_KEY = 'dustfall.save.v1';
 // ABZ — v12: extended SledTether union with 'companion' kind. Pre-v12
 // saves load unchanged (their tether field stays 'none' | 'player' |
 // 'speeder' which is still valid in the v12 union).
-export const SAVE_VERSION = 12;
+// ACE Tier 2 — v13: multi-worm population. `sandWorm` (singleton-or-null)
+// → `sandWorms` (array). Pre-v13 saves migrate at load time by lifting
+// the legacy singleton into sandWorms[0].
+export const SAVE_VERSION = 13;
 
 type V3 = { x: number; y: number; z: number };
 
 export interface SaveV1 {
-  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12;
+  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13;
   seed: number;
   savedAt: number;
   /** ABJ — v11: persist the dev-mode flag so a Continue from a
@@ -180,13 +184,26 @@ export interface SaveV1 {
     pos: V3;
     rotationY: number;
     contents: LootEntry[];
-    tether: 'none' | 'player' | 'speeder' | 'companion' | 'static-pos' | 'sled';
+    /** ACE — extended to include 'stake' kind (B1 Phase 3). Pre-ACE saves
+     *  load unchanged (their tether value remains in the older subset). */
+    tether: 'none' | 'player' | 'speeder' | 'companion' | 'static-pos' | 'sled' | 'stake';
     tetherX?: number;
     tetherZ?: number;
     /** ACC — B1 Phase 2: sled-id payload when tether === 'sled'. Optional;
      *  defaults undefined for non-sled-kind tethers. */
     tetherSledId?: number;
+    /** ACE — B1 Phase 3: stake-id payload when tether === 'stake'.
+     *  Optional; absent for non-stake tether kinds. */
+    tetherStakeId?: number;
     attachedLockerId?: number;
+  }>;
+
+  /** Session ACE — placed iron stakes (B1 Phase 3 world-anchor endpoint).
+   *  Pre-ACE saves arrive empty. D81 additive — no version bump. */
+  stakes?: Array<{
+    id: number;
+    pos: V3;
+    rotationY: number;
   }>;
 
   /** Session XX — placed large enterable tents. Optional so pre-v7
@@ -250,19 +267,37 @@ export interface SaveV1 {
     headlampOn: boolean;
   };
 
-  /** Sand worm — DD-2 (roaming). `pos` is the worm's current basePos at
-   *  save time. Mid-encounter sub-states collapse to `patrol` on load
-   *  (too brittle to restore mid-arc). If saved state is `dead`, the
-   *  corpse is restored at that exact pos.
+  /** Sand worm — DD-2 (roaming). LEGACY singleton field — present in
+   *  pre-v13 saves only. v13+ uses `sandWorms` (array) below. At load
+   *  time the loader checks both fields: v13+ → use sandWorms; pre-v13
+   *  with a sandWorm singleton → lift it into sandWorms[0]; neither →
+   *  no worm in this world (don't spawn a default — the boot path
+   *  already spawned the per-seed worms before load runs).
    *
-   *  Pre-DD-2 saves lack `pos` — handled in loadGameState by falling
-   *  back to the home anchor. */
+   *  Mid-encounter sub-states collapse to `patrol` on load (too brittle
+   *  to restore mid-arc). If saved state is `dead`, the corpse is
+   *  restored at that exact pos. Pre-DD-2 saves lack `pos` — handled
+   *  in loadGameState by falling back to the home anchor. */
   sandWorm?: {
     state: SandWormState;
     health: number;
     looted: boolean;
     pos?: V3;
   };
+
+  /** ACE Tier 2 — multi-worm population (v13+). Each worm carries its
+   *  own state + position + loot status + stable id. The boot path
+   *  spawns N worms before load runs; the loader matches saved ids
+   *  back to the boot-spawned instances. If saved count > spawned count,
+   *  extras are ignored; if spawned count > saved count, the extras
+   *  retain their default boot state (patrol). */
+  sandWorms?: Array<{
+    id: number;
+    state: SandWormState;
+    health: number;
+    looted: boolean;
+    pos: V3;
+  }>;
 }
 
 export function hasSave(): boolean {
@@ -484,12 +519,23 @@ export function saveGameState(ctx: GameContext): { ok: boolean; error?: string }
           ...(s.tether.kind === 'sled'
             ? { tetherSledId: s.tether.sledId }
             : {}),
+          // ACE — B1 Phase 3: stakeId payload when tether kind === 'stake'.
+          ...(s.tether.kind === 'stake'
+            ? { tetherStakeId: s.tether.stakeId }
+            : {}),
           // ACB P1 — attached locker (mobile storage on sled deck)
           ...(s.attachedLockerId !== null
             ? { attachedLockerId: s.attachedLockerId }
             : {}),
         };
       }),
+      // Session ACE — placed iron stakes (B1 Phase 3). Additive field;
+      // pre-ACE saves arrive without it and load with an empty list.
+      stakes: ctx.stakes.list.map((st) => ({
+        id: st.id,
+        pos: { x: st.pos.x, y: st.pos.y, z: st.pos.z },
+        rotationY: st.rotationY,
+      })),
       speeder: ctx.speeder ? (() => {
         const tr = ctx.speeder!.body.translation();
         const rt = ctx.speeder!.body.rotation();
@@ -500,16 +546,16 @@ export function saveGameState(ctx: GameContext): { ok: boolean; error?: string }
           headlampOn: ctx.speeder!.headlampOn,
         };
       })() : undefined,
-      sandWorm: ctx.sandWorm ? {
-        state: ctx.sandWorm.state,
-        health: ctx.sandWorm.health,
-        looted: ctx.sandWorm.looted,
-        pos: {
-          x: ctx.sandWorm.basePos.x,
-          y: ctx.sandWorm.basePos.y,
-          z: ctx.sandWorm.basePos.z,
-        },
-      } : undefined,
+      // ACE Tier 2 — v13 multi-worm. Each worm serialized independently
+      // with its stable id. Legacy `sandWorm` field is intentionally NOT
+      // written (v13 fully migrates); loader is backward-compatible.
+      sandWorms: ctx.sandWorms.list.map((w) => ({
+        id: w.id,
+        state: w.state,
+        health: w.health,
+        looted: w.looted,
+        pos: { x: w.basePos.x, y: w.basePos.y, z: w.basePos.z },
+      })),
     };
 
     localStorage.setItem(SAVE_KEY, JSON.stringify(save));
@@ -540,7 +586,7 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
   // `inventory.discoveredRecipes` seeded with ALL_RECIPE_IDS so
   // pre-TT playtesters keep their recipe knowledge).
   // ABJ — v11 adds 3 optional fields (bornInDevMode + journalReadKinds + companion.huddleState).
-  if (save.version !== 1 && save.version !== 2 && save.version !== 3 && save.version !== 4 && save.version !== 5 && save.version !== 6 && save.version !== 7 && save.version !== 8 && save.version !== 9 && save.version !== 10 && save.version !== 11) {
+  if (save.version !== 1 && save.version !== 2 && save.version !== 3 && save.version !== 4 && save.version !== 5 && save.version !== 6 && save.version !== 7 && save.version !== 8 && save.version !== 9 && save.version !== 10 && save.version !== 11 && save.version !== 12 && save.version !== 13) {
     return { ok: false, error: `unsupported save version ${save.version}` };
   }
   // AAM — was `Tuning.RNG_SEED` (legacy from pre-AAI); should be `ctx.seed`
@@ -901,6 +947,22 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
   // opening-scene location. Player encounters the creature for the
   // first time on this load.
 
+  // Session ACE — restore stakes BEFORE sleds, so any sled with a 'stake'
+  // tether finds its anchor in ctx.stakes.list when updateSleds runs.
+  for (const st of ctx.stakes.list) {
+    ctx.three.scene.remove(st.mesh);
+  }
+  ctx.stakes.list.length = 0;
+  if (save.stakes) {
+    let maxId = 0;
+    for (const saved of save.stakes) {
+      const pos = new THREE.Vector3(saved.pos.x, saved.pos.y, saved.pos.z);
+      spawnStakeAt(ctx, pos, saved.rotationY, saved.id);
+      if (saved.id > maxId) maxId = saved.id;
+    }
+    if (maxId > 0) setNextStakeId(maxId);
+  }
+
   ctx.sleds.list.length = 0;
   ctx.sleds.open = null;
   if (save.sleds) {
@@ -918,6 +980,14 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
       } else if (saved.tether === 'sled') {
         tether = saved.tetherSledId !== undefined
           ? { kind: 'sled', sledId: saved.tetherSledId }
+          : { kind: 'none' };
+      } else if (saved.tether === 'stake') {
+        // ACE — B1 Phase 3 stake-tether. Defensive: if the stake-id is
+        // missing or the stake was removed before save (shouldn't happen,
+        // but guard anyway), fall back to 'none' so the sled survives
+        // load without a dangling reference.
+        tether = saved.tetherStakeId !== undefined
+          ? { kind: 'stake', stakeId: saved.tetherStakeId }
           : { kind: 'none' };
       } else {
         tether = { kind: saved.tether };
@@ -981,26 +1051,62 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
     p.body.setBodyType(RAPIER.RigidBodyType.KinematicPositionBased, true);
   }
 
-  // ── Sand worm (DD-2): worm now roams, so we restore its saved XZ.
-  //    Mid-encounter sub-states (alert/charging/lunge/stationaryBreach/
-  //    retreat) collapse to `patrol` at the saved pos. Dead state
-  //    restores the corpse pose at the exact death location. ──
-  if (save.sandWorm && ctx.sandWorm) {
-    const worm = ctx.sandWorm;
-    const savedState = save.sandWorm.state;
-    worm.health = save.sandWorm.health;
-    worm.looted = save.sandWorm.looted;
-    // Restore XZ — falls back to home anchor for pre-DD-2 saves missing pos.
-    if (save.sandWorm.pos) {
-      worm.basePos.set(save.sandWorm.pos.x, save.sandWorm.pos.y, save.sandWorm.pos.z);
-    } else {
-      worm.basePos.set(worm.home.x, worm.home.y, worm.home.z);
+  // ── Sand worms (DD-2 + ACE Tier 2 multi-worm): each worm's saved
+  //    state is matched back to its boot-spawned instance. Mid-encounter
+  //    sub-states (alert/charging/lunge/stationaryBreach/retreat) collapse
+  //    to `patrol` at the saved pos. Dead state restores the corpse pose
+  //    at the exact death location.
+  //
+  //    Save schema migration: v13+ uses `save.sandWorms` (array); pre-v13
+  //    saves used `save.sandWorm` (singleton). At this point ctx.sandWorms.list
+  //    holds the boot-spawned worms (count from Tuning.SANDWORM_COUNT).
+  //    The loader walks the saved entries IN ORDER and applies state to
+  //    `ctx.sandWorms.list[i]` (boot-spawn order). Saved id is NOT used
+  //    to match — boot ids start from 1 each session and matching by
+  //    index keeps the migration simple. If saved count > spawned count,
+  //    extras are ignored; if spawned count > saved count, the extras
+  //    retain their default boot 'patrol' state.
+  type WormRestore = {
+    state: SandWormState;
+    health: number;
+    looted: boolean;
+    pos: V3;
+  };
+  const restoreEntries: WormRestore[] = [];
+  if (save.sandWorms) {
+    // v13+ canonical path.
+    for (const sw of save.sandWorms) {
+      restoreEntries.push({
+        state: sw.state,
+        health: sw.health,
+        looted: sw.looted,
+        pos: sw.pos,
+      });
     }
-    if (savedState === 'dead') {
+  } else if (save.sandWorm) {
+    // Pre-v13 singleton — lift into the first slot. Missing `pos` falls
+    // back to the boot worm's home anchor.
+    const boot0 = ctx.sandWorms.list[0];
+    restoreEntries.push({
+      state: save.sandWorm.state,
+      health: save.sandWorm.health,
+      looted: save.sandWorm.looted,
+      pos: save.sandWorm.pos ?? (boot0
+        ? { x: boot0.home.x, y: boot0.home.y, z: boot0.home.z }
+        : { x: 0, y: 0, z: 0 }),
+    });
+  }
+  for (let i = 0; i < restoreEntries.length && i < ctx.sandWorms.list.length; i++) {
+    const worm = ctx.sandWorms.list[i];
+    const saved = restoreEntries[i];
+    worm.health = saved.health;
+    worm.looted = saved.looted;
+    worm.basePos.set(saved.pos.x, saved.pos.y, saved.pos.z);
+    if (saved.state === 'dead') {
       worm.surfaceGroundY = ctx.terrain.heightAt(worm.basePos.x, worm.basePos.z);
       applySandWormDeadPose(worm);
       if (worm.looted) {
-        // Untag — corpse stays in world but no longer offers an [E] prompt.
+        // Untag — corpse stays but no longer offers an [E] prompt.
         worm.mesh.traverse((o) => {
           delete o.userData.interactType;
           delete o.userData.interactId;
@@ -1016,7 +1122,6 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
         worm.basePos.z - worm.home.z,
         worm.basePos.x - worm.home.x,
       );
-      // Snap Y to under-sand level at the restored XZ.
       worm.basePos.y =
         ctx.terrain.heightAt(worm.basePos.x, worm.basePos.z)
         - Tuning.SANDWORM_UNDERGROUND_DEPTH;

@@ -3,6 +3,86 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ACE — 2026-05-27 — Overnight: rope vocab + multi-worm + lizard pipeline + rig polish + procgen ✓ verify pass
+
+`verified` — tsc clean. 17 files (15 modified + 2 new modules). Comprehensive
+overnight bundle across 5 tiers; 4 fully shipped, 1 with one item deferred per
+pre-committed scope cuts. Sled riding mechanic remains tabled per user direction.
+
+**Tier 1 — B1 Phase 3 generalised rope** (~5h with iteration). NEW
+[src/world/ropeConstraint.ts](../src/world/ropeConstraint.ts) — inextensible-rope
+constraint extracted from `updateSleds` as a reusable helper (callers supply
+attach point + managed velocity scalars; helper handles position-snap +
+radial/perpendicular damping). NEW [src/world/stake.ts](../src/world/stake.ts) —
+craftable iron-stake world-anchor (recipe 16: scrap×3 + branch×1). New `stake`
+kind on `RopeEndpoint` union. Save schema additive (no version bump): new
+`stakes?` array + `tether` discriminator extended with `'stake'` + optional
+`tetherStakeId`. Interaction: LMB-on-stake with rope wielded + player-tethered
+sled ties the sled to the stake; RMB-on-stake pulls the stake up. Stake mesh
+iterated 3 rounds — chunky shaft, gunmetal-weathered hammered cap, rope-loop
+welded to side, sand-dome mound at base. End-to-end save/load verified.
+**Cut #3 applied**: 1C raider_corpse + 1D sandworm_carcass endpoint kinds
+deferred (foundation in place via the shared constraint helper). D126.
+
+**Tier 2 — Multi-worm population** (~3h). **SAVE_VERSION v12 → v13** —
+`ctx.sandWorm: SandWorm | null` → `ctx.sandWorms: { list: SandWorm[] }`. New
+`SandWorm.id` + `_nextWormId` allocator + `findSandWormById`. `_colliderToWorm`
+singleton → `Map<handle, SandWorm>`. `updateSandWorm` iterates the list;
+`applyClosestTremorEffect` picks the closest threat-state worm so the player's
+experience tracks immediate danger. `sampleSandwormHome` accepts
+`excludeOtherWorms` for multi-worm rejection sampling (`SANDWORM_MIN_SEPARATION`
+= 400m). New `Tuning.SANDWORM_COUNT = 2`. Per-worm rejection at boot; verified
+across seeds (worms land ~1500m apart in distinct dune-biome centroids).
+Save round-trip verified; pre-v13 backward compat verified (singleton →
+`sandWorms[0]`). Also fixed a latent version-check bug rejecting v12 saves.
+D127.
+
+**Tier 3 — Lizard procedural-character pipeline lift** (~3-4h with full
+iteration discipline). 5 iteration rounds on `makeLizardVisual`. R1 baseline
+Lathe body + head + tail (head orientation bug + body too ball-shaped). R2
+fixed head orientation, stretched body, longer snout. R3 body raised so feet
+make ground contact. R4 Y-squash for flatter belly-on-ground reptile
+silhouette. R5 overlapped head into body for smooth neck transition. New
+mesh: 8-point Lathe body profile (ribcage swell) + 6-point Lathe head
+(snout → eye area → neck-joint) + 5-point tapered Lathe tail + asymmetric
+legs (front shorter than rear, knee bumps, sprawl posture). Reads as
+anatomical reptile vs the pre-ACE Box+Sphere+Box brick. Per the iteration
+discipline (shared-memory/iterative-polish-discipline.md): screenshot/critique
+loop honored — agent can summarize round-1-vs-round-N before/after for each
+element. D128.
+
+**Tier 4 — Player rig polish wrap-ups** (~2-3h). **4A walk-cycle to footstep
+cadence sync** — controller.ts now drives footstep audio + decal + dust from
+`rig.stepCount` (phase-locked to visible heel-strikes) when rig is present;
+legacy `_stepAccum` kept as fallback. Audio always fires on the visible foot
+contact, not a parallel distance accumulator. **4B 3P viewmodel readability**
+— tagged 9 remaining items with `thirdPersonScale` (fire_kit 1.35, grill_kit
+1.30, torch 1.30, flashlight 1.30, tent_kit 1.25, large_tent_kit 1.20,
+bedroll_kit 1.35, lantern_kit 1.30, stake_kit 1.35). **4D footstep dust at
+foot terrain contact** — when rig present, `spawnFootprintPuff` emits at
+`rig.ankles[parity]` world position (terrain-clamped) instead of body-center
++ lateral-offset. **Cut #2 applied**: 4C aim twist-IK on right shoulder
+deferred (smallest impact, scope-cut to focus remaining budget).
+
+**Tier 5 — Procgen POI expansion** (~2h). **5A orbital_pod_cluster** (6th
+wreck class) — 1 cockpit + 1-2 hull + tail, no engine, escape_pod
+salvage palette ("rescue pods crashed together" silhouette vs the linear
+fuselage classes). Added to 6-way roulette at 12% share; class
+distribution re-balanced (30/18/16/11/13/12). **5B BRISTLE_ANTENNA** (6th
+hullSegment variant ~80 LOC) — hull cylinder with 3-5 antennas (alternating
+sides with bulb tips + 50%-chance crossbar) + 1-2 dish stubs on the -Z
+face. Reads as scout / science vessel surveillance module. Biome weight
+table extended to 6 entries (no biome bias on the new variant). **Cut #1
+applied**: 5C dune_drill_site biome-specific POI deferred (would need new
+module + iteration).
+
+**D-entries**: D126 (ropeConstraint extracted as shared helper),
+D127 (sandWorms array migration v13 — array-keyed wandering entities
+prepare future streaming work), D128 (procedural-character pipeline applied
+to lizard via D115 Lathe + asymmetric leg pattern), D129 (footstep
+audio driven from rig.stepCount), D130 (stake = craftable persistent
+RopeEndpoint alongside ad-hoc static-pos).
+
 ## Session ACD — 2026-05-26 — Sled physics polish + riding mechanic (tabled) ✓ verify pass
 
 `verified` — tsc clean. 10 files modified. Long playtest follow-up

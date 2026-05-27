@@ -249,6 +249,20 @@ export const RECIPES: Recipe[] = [
     output: { id: 'scrap_bar', count: 1 },
     category: 'tool',
   },
+  // Session ACE — iron stake: a craftable world-anchor for the rope.
+  // B1 Phase 3 RopeEndpoint. Lets the player tie a sled (or other
+  // tetherable entity) to a persistent point in the world that
+  // survives save/load. Cheap enough to deploy several across a run.
+  {
+    id: 16,
+    displayName: 'iron stake',
+    inputs: [
+      { id: 'scrap', count: 3 },
+      { id: 'branch', count: 1 },
+    ],
+    output: { id: 'stake_kit', count: 1 },
+    category: 'tool',
+  },
 ];
 
 /** Session ABE — display order for category sub-headers. Recipes within

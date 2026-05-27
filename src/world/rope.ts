@@ -23,14 +23,19 @@ import type { GameContext } from '../GameContext.ts';
 import { Tuning } from '../config/tuning.ts';
 import { getPlayerPos } from '../util/playerPos.ts';
 
-/** All endpoint kinds a rope can attach to. */
+/** All endpoint kinds a rope can attach to.
+ *
+ *  ACE (B1 Phase 3) added: `stake` (craftable persistent anchor).
+ *  Future Phase 3 additions per backlog: `raider_corpse`, `sandworm_carcass`
+ *  (lasso the carcass for tow / harvest). */
 export type RopeEndpoint =
   | { kind: 'none' }
   | { kind: 'player' }
   | { kind: 'speeder' }
   | { kind: 'companion' }
   | { kind: 'sled'; sledId: number }
-  | { kind: 'static-pos'; x: number; z: number };
+  | { kind: 'static-pos'; x: number; z: number }
+  | { kind: 'stake'; stakeId: number };
 
 /** A rope: two endpoints + the implicit physics behavior (inextensible
  *  constraint enforced by updateSleds for any tether where at least one
@@ -105,6 +110,15 @@ export function resolveEndpointWorldPos(
       // as draped over a knee-high stake rather than buried in sand.
       const sy = ctx.terrain.heightAt(endpoint.x, endpoint.z);
       return { x: endpoint.x, y: sy + 0.4, z: endpoint.z };
+    }
+    case 'stake': {
+      // ACE — craftable iron stake. The rope-loop on the stake visual
+      // sits ~55cm above terrain after Round-2 polish (taller shaft).
+      // Caller doesn't need to know the exact rope-loop offset — we
+      // resolve it from the stake's pos.
+      const stake = ctx.stakes.list.find((s) => s.id === endpoint.stakeId);
+      if (!stake) return null;
+      return { x: stake.pos.x, y: stake.pos.y + 0.55, z: stake.pos.z };
     }
   }
 }

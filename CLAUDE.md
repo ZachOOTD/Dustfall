@@ -60,37 +60,53 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session ACD — Sled physics polish + riding mechanic
-(tabled). Long playtest follow-up to ACC. tsc clean. 10 files modified.
-**Slope-slide rewrite**: managed-scalar XZ velocity (`_slideVx/Vz`)
-driven by slope-gravity + Coulomb friction + linear damping, applied
-via direct `setNextKinematicTranslation` — bypasses Rapier's velocity
-integrator (the previous setLinvel-based slide was being zeroed each
-frame by Rapier's contact solver against the heightfield's 0.6 static
-friction). Sled actually slides now. Faster gain (6.0) + threshold ≈
-1.4° = drifts on any visible slope. **Body type → kinematic position-
-based**: dynamic items can no longer push the sled (Newton 3rd-law
-friction impulses were accumulating in body.linvel and pre-empting
-our setTranslation each frame); player KCC also can't push it. D123.
-**Option B — body tilts to match terrain slope**: body rotation
-slerps to terrain normal each frame via `setNextKinematicRotation`;
-bottom face conforms to terrain plane, top face uniformly above
-terrain across footprint. Fixes the "uphill terrain pokes up through
-the sled deck" issue (player was walking on terrain inside the sled's
-XZ AABB instead of on the deck itself). **Other**: pickup CCD enabled
-(rope no longer tunnels through terrain when dropped — D124), back
-wall collider → sensor (player no longer perches on the 12cm lip when
-jumping on), ground clearance 6cm (corners don't clip undulations),
-`_frameDeltaX/Y/Z` tracking added to Sled (preserved for future ride
-attempts). **Riding mechanic TABLED**: tried multiple architectures
-(manual platform-ride detection + delta-add, post-KCC bypass, sticky
-state, full 3D delta); Rapier's KCC has no built-in moving-platform
-support and the slope-projection / autostep / contact-resolution
-interactions with a tilted moving kinematic body couldn't be fully
-countered. Removed from controller.ts; documented in backlog.md with
-tried-approaches + next-attempt ideas (full Option C parenting OR
-synthetic "ride peg" dynamic body mirroring the branch-on-sled
-trick). D125. **D122-D125 added**.
+**Last shipped**: Session ACE — Overnight bundle: rope vocab Phase 3 +
+multi-worm + lizard pipeline + rig polish + procgen POI. tsc clean. 17
+files (15 modified + 2 new modules). 5 tiers, 4 fully shipped + 1 with
+one item deferred per pre-committed scope cuts. **Tier 1 B1 Phase 3
+rope**: NEW `src/world/ropeConstraint.ts` extracts inextensible-rope
+constraint from `updateSleds` as a reusable helper (any callable can
+supply attach point + managed velocity scalars); NEW `src/world/stake.ts`
+craftable iron-stake world-anchor (recipe 16: scrap×3 + branch×1); new
+`stake` kind on RopeEndpoint union; save additive (no version bump);
+LMB-on-stake ties player-tethered sled, RMB-on-stake pulls it up.
+Stake mesh 3 iteration rounds. **Cut #3** — raider_corpse +
+sandworm_carcass deferred. **Tier 2 multi-worm**: SAVE_VERSION
+**v12 → v13**; `ctx.sandWorm: SandWorm | null` → `ctx.sandWorms:
+{ list: SandWorm[] }`; `SandWorm.id` + `_nextWormId` + `_colliderToWorm`
+Map; `applyClosestTremorEffect` picks closest threat-state worm;
+`SANDWORM_COUNT = 2` + `SANDWORM_MIN_SEPARATION = 400m`; rejection-sample
+placement verified across seeds (~1500m apart); pre-v13 saves migrate
+singleton → `sandWorms[0]`. Also fixed a latent version-check bug
+silently rejecting v12 saves. **Tier 3 lizard pipeline lift**: 5
+iteration rounds (R1 baseline, R2 head orientation + body stretch, R3
+feet ground contact, R4 belly-on-ground Y-squash, R5 head-body overlap
+for smooth neck). Lathe body (8-point profile, ribcage swell) + Lathe
+head (snout → eye area → neck) + tapered Lathe tail + asymmetric legs
+(front shorter than rear, knee bumps, sprawl). Lizard reads as
+anatomical reptile. **Tier 4 rig polish**: 4A footstep cadence sync
+via `rig.stepCount` (audio phase-locked to visible heel-strikes,
+legacy `_stepAccum` is fallback); 4B 9 items tagged with
+`thirdPersonScale`; 4D footstep dust at `rig.ankles[parity]` world
+position. **Cut #2** — 4C aim twist-IK deferred. **Tier 5 procgen
+POI**: 5A `orbital_pod_cluster` 6th wreck class (12% roulette share,
+escape_pod salvage palette); 5B `BRISTLE_ANTENNA` 6th hullSegment
+variant (3-5 antennas + 1-2 dish stubs). **Cut #1** — 5C
+dune_drill_site POI deferred. **D126-D130 added**.
+
+**Prior milestone**: Session ACD — Sled physics polish + riding
+mechanic (tabled). Long playtest follow-up to ACC. tsc clean. 10
+files modified. Slope-slide rewrite via managed-scalar XZ velocity
+(`_slideVx/Vz`) bypasses Rapier's velocity integrator; body type
+→ KinematicPositionBased (items can't push sled, Newton 3rd-law
+impulses no longer accumulate); Option B body tilts to match terrain
+normal each frame (deck conforms — no more uphill-terrain poking
+through). Pickup CCD enabled (rope no longer tunnels through terrain),
+back wall → sensor (no perching), ground clearance 6cm. Riding
+mechanic TABLED after multiple architectures (manual platform-ride
+detection + delta-add, post-KCC bypass, sticky state) — Rapier KCC
+has no moving-platform support. `_frameDeltaX/Y/Z` preserved on Sled
+for future ride attempts. D122-D125.
 
 **Prior milestone**: Session ACC — Throw items on sled + sandworm
 twilight breach + B1 Phase 2 RopeEndpoint refactor. Long overnight.

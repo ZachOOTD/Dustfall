@@ -570,6 +570,116 @@ const HULL_SEGMENT_VARIANTS: ReadonlyArray<PartBuilder> = [
       };
     },
   },
+  // Variant 6 — BRISTLE ANTENNA. Session ACE. A hull cylinder bristling
+  // with 3-5 sensor antennas + 1-2 comms dish stubs. Reads as a
+  // surveillance / sensor module from a scout or science vessel. Antennas
+  // are thin metal rods with small bulb tips; dish stubs are short
+  // mounting posts with shallow parabolic discs. Adds variety beyond
+  // the smooth + cargo + open + tank silhouettes.
+  {
+    build(rand: Rng, prevRadius: number): BuiltPart {
+      const g = new THREE.Group();
+      const len = 2.4 + rand() * 1.0;
+      const r = Math.max(prevRadius * 0.95, 0.85 + rand() * 0.22);
+      // Main hull cylinder — slightly thicker than the ribbed variant
+      // to compensate for the protruding antennas (silhouette stays
+      // chunky despite the bristly profile).
+      const tube = new THREE.Mesh(
+        new THREE.CylinderGeometry(r, r, len, 14),
+        _hullMat,
+      );
+      tube.rotation.z = Math.PI / 2;
+      tube.position.set(len * 0.5, r * 0.55, 0);
+      g.add(tube);
+      // 3-5 antennas distributed along the length, alternating sides.
+      const antennaCount = 3 + Math.floor(rand() * 3);
+      for (let i = 0; i < antennaCount; i++) {
+        const t = (i + 0.5) / antennaCount;
+        const antennaX = len * t;
+        const tilt = (rand() - 0.5) * 0.3;          // ±0.15 rad sway
+        const lenAnt = 0.7 + rand() * 0.6;          // 0.7-1.3m tall
+        // Mast — thin cylinder. Rust material for weathering contrast.
+        const mast = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.025, 0.030, lenAnt, 6),
+          _rustMat,
+        );
+        // Alternate sides: even i = top (+Y), odd i = +Z side
+        const topSide = i % 2 === 0;
+        if (topSide) {
+          mast.position.set(antennaX, r * 0.55 + r + lenAnt * 0.5, 0);
+          mast.rotation.z = tilt;
+        } else {
+          mast.position.set(antennaX, r * 0.55 + r * 0.3, r + lenAnt * 0.5);
+          mast.rotation.x = -Math.PI / 2 + tilt;
+        }
+        g.add(mast);
+        // Bulb tip at end of antenna — small sphere for the "sensor".
+        const bulb = new THREE.Mesh(
+          new THREE.SphereGeometry(0.045, 6, 5),
+          _hullDarkMat,
+        );
+        if (topSide) {
+          bulb.position.set(antennaX, r * 0.55 + r + lenAnt, 0);
+        } else {
+          bulb.position.set(antennaX, r * 0.55 + r * 0.3, r + lenAnt);
+        }
+        g.add(bulb);
+        // Crossbar near mid-mast for some antennas (signal-array look)
+        if (rand() < 0.5) {
+          const bar = new THREE.Mesh(
+            new THREE.BoxGeometry(0.012, 0.40, 0.012),
+            _rustMat,
+          );
+          if (topSide) {
+            bar.position.set(antennaX, r * 0.55 + r + lenAnt * 0.6, 0);
+            bar.rotation.x = Math.PI / 2;
+          } else {
+            bar.position.set(antennaX, r * 0.55 + r * 0.3, r + lenAnt * 0.6);
+            bar.rotation.y = Math.PI / 2;
+          }
+          g.add(bar);
+        }
+      }
+      // 1-2 dish stubs — short mast + shallow disc. Mounted on the -Z
+      // side so they don't overlap the panel-anchor +Z face.
+      const dishCount = 1 + Math.floor(rand() * 2);
+      for (let i = 0; i < dishCount; i++) {
+        const t = (i + 0.5) / dishCount;
+        const dishX = len * (0.2 + t * 0.6);
+        // Mounting post
+        const post = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.04, 0.05, 0.30, 8),
+          _hullMat,
+        );
+        post.position.set(dishX, r * 0.55 + r * 0.3, -r - 0.15);
+        post.rotation.x = -Math.PI / 2;
+        g.add(post);
+        // Shallow parabolic disc — open cylinder with one closed end.
+        const dishR = 0.22 + rand() * 0.08;
+        const dish = new THREE.Mesh(
+          new THREE.CylinderGeometry(dishR, dishR * 0.6, 0.12, 10, 1, true),
+          _rustMat,
+        );
+        dish.position.set(dishX, r * 0.55 + r * 0.3, -r - 0.30 - 0.06);
+        dish.rotation.x = -Math.PI / 2;
+        g.add(dish);
+      }
+      // Breach patches less common on this variant (the antennas + dishes
+      // already provide visual interest).
+      if (rand() < 0.35) addBreachPatches(g, len, r, rand, 1);
+      return {
+        mesh: g,
+        partLength: len,
+        radius: r,
+        panelAnchor: {
+          x: len * 0.45,
+          y: r * 0.55,
+          z: r * 1.02,
+          faceYaw: Math.PI / 2,
+        },
+      };
+    },
+  },
 ];
 
 // ── Engine module variants ───────────────────────────────────────────
@@ -728,15 +838,18 @@ function pickVariantBiased(
   return pool[pool.length - 1];   // numerical-precision fallback
 }
 
-/** Session ABJ — biome-specific hullSegment weights (indices: 0=RIBBED_CYLINDER,
- *  1=PLATED_RECTANGULAR, 2=PANELED_TAPERED, 3=OPEN_TRUSS, 4=FUEL_BARRELS).
+/** Session ABJ + ACE — biome-specific hullSegment weights (indices:
+ *  0=RIBBED_CYLINDER, 1=PLATED_RECTANGULAR, 2=PANELED_TAPERED,
+ *  3=OPEN_TRUSS, 4=FUEL_BARRELS, 5=BRISTLE_ANTENNA — added ACE).
  *  Salt: +30% PLATED (corrosion-resistant plates fit salt-flat lore).
  *  Rocky: +20% OPEN_TRUSS (mining-mod / skeletal frame feel).
- *  Dune: +20% FUEL_BARRELS (caravan tanker silhouette in the dunes). */
+ *  Dune: +20% FUEL_BARRELS (caravan tanker silhouette in the dunes).
+ *  BRISTLE_ANTENNA: no biome bias — appears uniformly across all biomes
+ *  as a "scout / science vessel" silhouette wherever wrecks crash. */
 const HULL_SEGMENT_BIOME_WEIGHTS: Record<BiomeId, ReadonlyArray<number>> = {
-  salt:  [1.0, 1.3, 1.0, 1.0, 1.0],
-  rocky: [1.0, 1.0, 1.0, 1.2, 1.0],
-  dune:  [1.0, 1.0, 1.0, 1.0, 1.2],
+  salt:  [1.0, 1.3, 1.0, 1.0, 1.0, 1.0],
+  rocky: [1.0, 1.0, 1.0, 1.2, 1.0, 1.0],
+  dune:  [1.0, 1.0, 1.0, 1.0, 1.2, 1.0],
 };
 
 function pickPart(rand: Rng, kind: PartKind, biome?: BiomeId): PartBuilder {
@@ -755,7 +868,7 @@ function pickPart(rand: Rng, kind: PartKind, biome?: BiomeId): PartBuilder {
 
 // ── Wreck classes (recipes) ──────────────────────────────────────────
 
-export type ProcgenWreckClass = 'corvette' | 'freighter' | 'gunship' | 'science_vessel' | 'bulk_hauler' | 'flagship_engineBlock';
+export type ProcgenWreckClass = 'corvette' | 'freighter' | 'gunship' | 'science_vessel' | 'bulk_hauler' | 'orbital_pod_cluster' | 'flagship_engineBlock';
 
 interface WreckRecipe {
   /** Ordered part kinds. Cockpit goes first (nose end at x=0), tail
@@ -812,6 +925,19 @@ function recipeFor(rand: Rng, cls: ProcgenWreckClass): WreckRecipe {
     // 3 panels for the rich-loot engine_cluster palette.
     const parts: PartKind[] = ['cockpit', 'hullSegment', 'hullSegment', 'engineModule', 'tailStub'];
     return { parts, panelCountMin: 3, panelCountMax: 3 };
+  }
+  if (cls === 'orbital_pod_cluster') {
+    // Session ACE — 6th class. Crashed cluster of escape pods + scattered
+    // hull debris. Different silhouette than the linear "fuselage" classes:
+    // 1 cockpit (acting as the lead pod) + 1-2 hullSegment (the pod
+    // cluster body) + NO engine + 1 tail = 3-4 parts, shorter overall
+    // (~6-10m). Reads as "rescue pods crashed together" rather than a
+    // single hull. 2 panels for medical-leaning escape_pod loot palette.
+    const hullCount = 1 + Math.floor(rand() * 2);     // 1-2
+    const parts: PartKind[] = ['cockpit'];
+    for (let i = 0; i < hullCount; i++) parts.push('hullSegment');
+    parts.push('tailStub');
+    return { parts, panelCountMin: 2, panelCountMax: 2 };
   }
   if (cls === 'bulk_hauler') {
     // Session ABN — B6 (5th class). 1 cockpit + 4-5 hull + 1 engine +
@@ -963,13 +1089,18 @@ export function placeProcgenComposite(
   // toward small silhouettes (cheaper per-mesh) but distributes ~15% to
   // the new bulk_hauler (longest hull, richest loot). Pre-ABN split was
   // 40/25/20/15 (ABJ); pre-ABJ was 45/30/25 (ABC).
+  // Session ACE — 6-way roulette: 30% corvette, 18% gunship, 16% freighter,
+  // 11% science_vessel, 13% bulk_hauler, 12% orbital_pod_cluster. The new
+  // pod-cluster variant offers a distinct silhouette (rescue pods clumped
+  // together) at modest frequency.
   const cls: ProcgenWreckClass = opts.cls ?? (() => {
     const r = rand();
-    if (r < 0.35) return 'corvette';
-    if (r < 0.55) return 'gunship';
-    if (r < 0.73) return 'freighter';
-    if (r < 0.85) return 'science_vessel';
-    return 'bulk_hauler';
+    if (r < 0.30) return 'corvette';
+    if (r < 0.48) return 'gunship';
+    if (r < 0.64) return 'freighter';
+    if (r < 0.75) return 'science_vessel';
+    if (r < 0.88) return 'bulk_hauler';
+    return 'orbital_pod_cluster';
   })();
   const recipe = recipeFor(rand, cls);
   // Session ABJ — B4: query biome at the wreck position and thread to
@@ -1016,6 +1147,7 @@ export function placeProcgenComposite(
       cls === 'gunship' ? 'engine_cluster' :
       cls === 'science_vessel' ? 'fuselage' :     // ABJ — observation hull → fuselage palette (mixed loot, no engine-cabling skew)
       cls === 'bulk_hauler' ? 'cargo_container' : // ABN — cargo-heavy frame → cargo lottery palette
+      cls === 'orbital_pod_cluster' ? 'escape_pod' : // ACE — pod cluster: medical-heavy palette
       'cargo_container';
     const seen = new Set<THREE.Object3D>();
     group.traverse((o) => {

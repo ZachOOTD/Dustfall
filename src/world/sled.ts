@@ -47,6 +47,10 @@ import type { Pickup } from '../pickups/pickups.ts';
 // the impossible case as a no-op.
 import type { RopeEndpoint } from './rope.ts';
 import { resolveEndpointWorldPos } from './rope.ts';
+// ACE B1 Phase 3 — extracted inextensible-rope constraint. Called below
+// in updateSleds (replacing the inline math); also available for new
+// non-sled endpoint kinds (raider_corpse, sandworm_carcass) to reuse.
+import { applyInextensibleConstraint } from './ropeConstraint.ts';
 export type SledTether = RopeEndpoint;
 
 export interface Sled {
@@ -580,11 +584,12 @@ export function attachRopeToSled(
     sled.ropeMesh = makeRopeMesh();
     ctx.three.scene.add(sled.ropeMesh);
   }
-  // ABZ + ACC — per-endpoint attach toast.
+  // ABZ + ACC + ACE — per-endpoint attach toast.
   const toastMsg =
     endpoint.kind === 'speeder' ? 'rope attached to speeder' :
     endpoint.kind === 'companion' ? 'rope attached to companion' :
     endpoint.kind === 'static-pos' ? 'rope staked' :
+    endpoint.kind === 'stake' ? 'rope tied to stake' :
     'rope attached';
   ctx.ui.showToast(toastMsg);
 }
@@ -958,81 +963,68 @@ export function updateSleds(ctx: GameContext, dt: number): void {
       tr.z + fwd.z * Tuning.SLED_HALF_EXTENTS_Z,
     );
 
-    // Horizontal distance from anchor to sled attach point.
+    // Horizontal distance from anchor to sled attach point (used for the
+    // slack-decay branch + yaw lerp gating below; constraint helper does
+    // its own distance check).
     const dx = _sledAttach.x - _anchor.x;
     const dz = _sledAttach.z - _anchor.z;
     const dist = Math.hypot(dx, dz);
 
-    // Hard snap — rope tears free if we're way past the constraint
-    // (anchor teleported / speeder boosted through a wreck).
-    if (dist > Tuning.SLED_TOW_MAX_DIST) {
-      detachRope(ctx, sled, 'rope snapped');
-      continue;
-    }
-
-    // ACC playtest follow-up — slack-decay now operates on the managed
-    // slide-velocity scalars (not body.linvel — body.linvel is no longer
-    // the source of XZ motion; see the managed-scalar block above).
-    // On slack rope + flat ground, snap the slide velocity to zero so a
-    // stationary sled stops quickly. On a slope, the SLED_LINEAR_DAMP
-    // exponential decay (folded into the scalar each frame) handles
-    // terminal velocity — overriding it here would fight gravity.
+    // ACC playtest follow-up — slack-decay operates on the managed
+    // slide-velocity scalars (not body.linvel). On slack rope + flat
+    // ground, snap the slide velocity to zero so a stationary sled stops
+    // quickly. On a slope, the SLED_LINEAR_DAMP exponential decay (folded
+    // into the scalar each frame) handles terminal velocity — overriding
+    // it here would fight gravity. Slack-decay stays sled-specific because
+    // it's about the sled's slope-slide model; the constraint helper
+    // below covers only the rope's taut-vs-broken end-of-line behavior.
     if (dist <= Tuning.SLED_TOW_DISTANCE && !onSlope) {
       sled._slideVx = (sled._slideVx ?? 0) * Tuning.SLED_SLACK_DECAY_PER_FRAME;
       sled._slideVz = (sled._slideVz ?? 0) * Tuning.SLED_SLACK_DECAY_PER_FRAME;
     }
 
-    // Inextensible-rope constraint. Slack rope = no force.
-    if (dist > Tuning.SLED_TOW_DISTANCE && dist > 1e-4) {
-      const stretch = dist - Tuning.SLED_TOW_DISTANCE;
-      // Unit vector FROM sled-attach TOWARD anchor.
-      const ux = -dx / dist;
-      const uz = -dz / dist;
-
-      // 1) Position correction: translate the sled body inward by the
-      //    full stretch. The body has locked rotations + CCD so this
-      //    teleport is well-behaved.
-      // ACC playtest — clamp the post-snap Y to be above terrain. Pre-
-      //    fix bug: when sled was towed UPHILL, the snap preserved the
-      //    pre-snap Y while moving XZ to a higher-terrain spot — sled
-      //    ended up BELOW the heightfield and fell through. Sampling
-      //    terrain.heightAt(newXZ) and clamping resolves it without
-      //    breaking downhill behavior (gravity drops the sled).
-      const newX = tr.x + ux * stretch;
-      const newZ = tr.z + uz * stretch;
-      const groundY = ctx.terrain.heightAt(newX, newZ);
-      // Body Y target = groundY + hy + clearance (consistent with the
-      // slope-slide block). Pre-fix bug: when towed uphill, the snap
-      // preserved pre-snap Y while moving XZ to a higher-terrain spot —
-      // sled ended up below terrain. Sampling at the destination resolves
-      // it cleanly.
-      const targetBodyY = groundY + hy + Tuning.SLED_GROUND_CLEARANCE;
-      sled.body.setNextKinematicTranslation({ x: newX, y: targetBodyY, z: newZ });
+    // ACE B1 Phase 3 — inextensible-rope constraint via the shared
+    // helper. Caller is responsible for resolving anchor + computing
+    // attach point + supplying managed velocity; the helper handles the
+    // position-snap + radial/perpendicular velocity damping. Same math
+    // as the pre-ACE inline block.
+    const _sledSlideVel = { vx: sled._slideVx ?? 0, vz: sled._slideVz ?? 0 };
+    const constraintResult = applyInextensibleConstraint(
+      {
+        attachX: _sledAttach.x,
+        attachY: _sledAttach.y,
+        attachZ: _sledAttach.z,
+        bodyX: tr.x,
+        bodyY: tr.y,
+        bodyZ: tr.z,
+        body: sled.body,
+        slideVel: _sledSlideVel,
+        hy: hy,
+        groundClearance: Tuning.SLED_GROUND_CLEARANCE,
+      },
+      { x: _anchor.x, y: _anchor.y, z: _anchor.z },
+      {
+        maxDist: Tuning.SLED_TOW_DISTANCE,
+        tearDist: Tuning.SLED_TOW_MAX_DIST,
+        snapPerpDamp: Tuning.SLED_SNAP_PERP_DAMP,
+        terrain: ctx.terrain,
+      },
+    );
+    if (constraintResult.torn) {
+      detachRope(ctx, sled, 'rope snapped');
+      continue;
+    }
+    // Write back any velocity mutations from the constraint snap.
+    sled._slideVx = _sledSlideVel.vx;
+    sled._slideVz = _sledSlideVel.vz;
+    if (constraintResult.snapped) {
       // Reflect the snap target onto `tr` so the yaw-track block below
       // reads the corrected position.
-      tr = { x: newX, y: targetBodyY, z: newZ } as ReturnType<typeof sled.body.translation>;
-
-      // 2) Velocity correction — operates on the managed slide-velocity
-      //    scalars (body.linvel is no longer the source of XZ motion).
-      //    Snap fires when the sled is past the rope's max length AND
-      //    moving AWAY from the anchor.
-      //    Sequence:
-      //      a) Zero the radial-away component (rope is inextensible —
-      //         the sled physically cannot move further away each frame,
-      //         and we don't want stored "outward energy" to keep firing
-      //         the snap every frame).
-      //      b) Damp the perpendicular component (rope holds sled at
-      //         end-of-line; perpendicular velocity from a sideways
-      //         slope made the sled "fly out to the side" downhill).
-      const svxNow = sled._slideVx ?? 0;
-      const svzNow = sled._slideVz ?? 0;
-      const vRadial = svxNow * ux + svzNow * uz;
-      if (vRadial < 0) {
-        const afterRadialX = svxNow - vRadial * ux;
-        const afterRadialZ = svzNow - vRadial * uz;
-        sled._slideVx = afterRadialX * Tuning.SLED_SNAP_PERP_DAMP;
-        sled._slideVz = afterRadialZ * Tuning.SLED_SNAP_PERP_DAMP;
-      }
+      tr = {
+        x: constraintResult.postX,
+        y: constraintResult.postY,
+        z: constraintResult.postZ,
+      } as ReturnType<typeof sled.body.translation>;
     }
 
     // Direct yaw lerp toward anchor. Body rotations are locked so

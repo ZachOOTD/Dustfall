@@ -48,6 +48,20 @@ const STEP_DISTANCE = 1.875;     // meters between footsteps (walking gait)
 const STEP_DISTANCE_SPRINT = 2.75; // meters between footsteps (sprint gait)
 let _stepAccum = 0;
 let _stepParity = 0;             // alternates 0/1 → ±lateral offset for L/R foot
+// ACE Tier 4A — step-count driven footstep cadence. Pre-ACE: _stepAccum
+// (distance accumulator in controller.ts) and rig.stepCount (gait-phase
+// counter in playerRig.ts) ran on independent timers — visually a
+// footstep audio could fire mid-air. ACE: when rig is present, footstep
+// audio + decal + dust are driven BY rig.stepCount so audio always
+// fires on the visible heel-strike. _stepAccum stays as the fallback
+// when rig is null (shouldn't happen post-ABP, but defensive).
+let _lastSeenStepCount = 0;
+// ACE Tier 4D — scratch buffer for reading rig foot world position for
+// the footprint puff emit point. Pre-ACE puffs emitted at body center
+// + small lateral offset; ACE reads the actual foot mesh world pos via
+// the ankle group, so the puff visibly lifts from the foot terrain
+// contact point.
+const _footWorld = new THREE.Vector3();
 
 /** QQ — true iff the player is the active endpoint of a sled rope.
  *  Cheap O(sleds), n is a handful. */
@@ -193,49 +207,94 @@ export function updatePlayer(ctx: GameContext, dt: number): void {
   ctx.player.onGround = controller.computedGrounded();
   if (ctx.player.onGround && ctx.player.velocityY < 0) ctx.player.velocityY = 0;
 
-  // Footsteps — accumulate horizontal distance moved while grounded; trigger
-  // a sound each time we cross the step threshold. Variant is picked from
-  // biomeAt + proximity to any water source (wet beats biome). Same beat
-  // also stamps a footprint decal — alternating L/R foot via _stepParity,
-  // skipped on rocky biome (Session Y).
+  // Footsteps — ACE Tier 4A: prefer rig.stepCount (phase-locked to the
+  // visible gait), fall back to _stepAccum if rig is unavailable. Pre-ACE
+  // ABY P1 calibrated STEP_DISTANCE values to MATCH the rig's gait math,
+  // but the two timers could still drift over distance; reading
+  // stepCount directly locks audio to the actual heel-strike frame.
   const horizontal = Math.hypot(corrected.x, corrected.z);
+  const rig = ctx.player.rig;
+  let stepsThisFrame = 0;
   if (ctx.player.onGround && moving) {
-    _stepAccum += horizontal;
-    const threshold = sprinting ? STEP_DISTANCE_SPRINT : STEP_DISTANCE;
-    if (_stepAccum >= threshold) {
-      _stepAccum = 0;
-      const tr = body.translation();
-      const wet = nearWaterSource(ctx, tr.x, tr.z);
-      const biome = ctx.biomes.biomeAt(tr.x, tr.z);
-      if (wet) {
-        playFootstepWet();
-      } else if (biome === 'rocky') {
-        playFootstepRock();
-      } else if (biome === 'salt') {
-        playFootstepSalt();
-      } else {
-        playFootstepSand();
+    if (rig) {
+      // ACE Tier 4A path — count rig step-count deltas. Multiple steps
+      // per frame are possible at very high speed; iterate them in case.
+      const cur = rig.stepCount;
+      const delta = cur - _lastSeenStepCount;
+      if (delta > 0 && delta < 5) {
+        stepsThisFrame = delta;
+      } else if (delta >= 5) {
+        // State change or huge jump — count one step and resync.
+        stepsThisFrame = 1;
       }
-      // Decal — skip on rocky (no impression in rock). Wet/salt/dune all stamp.
-      if (biome !== 'rocky') {
-        const yaw = Math.atan2(fwd.x, fwd.z);
-        const sign = _stepParity === 0 ? -1 : 1;
-        const offX = right.x * Tuning.FOOTPRINT_LATERAL_OFFSET * sign;
-        const offZ = right.z * Tuning.FOOTPRINT_LATERAL_OFFSET * sign;
-        const toeOut = Tuning.FOOTPRINT_PLAYER_TOEOUT_RAD * sign;
-        ctx.footprints.spawn('player', tr.x + offX, tr.z + offZ, yaw + toeOut, ctx.time.elapsed);
-        _stepParity ^= 1;
-        // AAG — small upward dust puff at the foot position (same skip-on-rocky
-        // logic as the decal). Wet ground (near water sources) also dampens
-        // dust kicks — skip there.
-        if (!wet) {
-          const groundY = ctx.terrain.heightAt(tr.x + offX, tr.z + offZ);
-          spawnFootprintPuff(tr.x + offX, groundY, tr.z + offZ);
-        }
+      _lastSeenStepCount = cur;
+    } else {
+      // Fallback: legacy distance accumulator (pre-rig boots).
+      _stepAccum += horizontal;
+      const threshold = sprinting ? STEP_DISTANCE_SPRINT : STEP_DISTANCE;
+      if (_stepAccum >= threshold) {
+        _stepAccum = 0;
+        stepsThisFrame = 1;
       }
     }
   } else {
     _stepAccum = 0;
+    // Keep _lastSeenStepCount in sync so a movement-resume doesn't fire
+    // a burst of catch-up steps. The rig clamps phase on state change,
+    // and stepCount may have been bumped by the prevSteps-resync code
+    // in playerRig.ts; just match it.
+    if (rig) _lastSeenStepCount = rig.stepCount;
+  }
+
+  for (let i = 0; i < stepsThisFrame; i++) {
+    const tr = body.translation();
+    const wet = nearWaterSource(ctx, tr.x, tr.z);
+    const biome = ctx.biomes.biomeAt(tr.x, tr.z);
+    if (wet) {
+      playFootstepWet();
+    } else if (biome === 'rocky') {
+      playFootstepRock();
+    } else if (biome === 'salt') {
+      playFootstepSalt();
+    } else {
+      playFootstepSand();
+    }
+    // Decal — skip on rocky (no impression in rock). Wet/salt/dune all stamp.
+    if (biome !== 'rocky') {
+      const yaw = Math.atan2(fwd.x, fwd.z);
+      const sign = _stepParity === 0 ? -1 : 1;
+      const offX = right.x * Tuning.FOOTPRINT_LATERAL_OFFSET * sign;
+      const offZ = right.z * Tuning.FOOTPRINT_LATERAL_OFFSET * sign;
+      const toeOut = Tuning.FOOTPRINT_PLAYER_TOEOUT_RAD * sign;
+      // ACE Tier 4D — read actual foot world position from the rig if
+      // available, for the footprint puff emit point. The decal still
+      // uses the lateral-offset approximation (it sits below the foot
+      // on the ground plane, and reading the rig pos here would shift
+      // the visible track laterally during turns — disruptive).
+      // Pre-ACE used the same lateral-offset point for the puff.
+      if (rig) {
+        rig.ankles[_stepParity].getWorldPosition(_footWorld);
+      }
+      ctx.footprints.spawn('player', tr.x + offX, tr.z + offZ, yaw + toeOut, ctx.time.elapsed);
+      _stepParity ^= 1;
+      // AAG / ACE Tier 4D — small upward dust puff. With rig available,
+      // emit AT THE FOOT (rig.ankles world pos); without, fall back to
+      // body-center + lateral offset.
+      if (!wet) {
+        if (rig) {
+          // Clamp puff Y to terrain so it doesn't emit mid-air during
+          // a foot lift phase (ankle world Y can be 5-15cm above
+          // terrain during the swing portion of the gait).
+          const groundY = ctx.terrain.heightAt(_footWorld.x, _footWorld.z);
+          spawnFootprintPuff(_footWorld.x, groundY, _footWorld.z);
+        } else {
+          const groundY = ctx.terrain.heightAt(tr.x + offX, tr.z + offZ);
+          spawnFootprintPuff(tr.x + offX, groundY, tr.z + offZ);
+        }
+      }
+    } else {
+      _stepParity ^= 1;
+    }
   }
 
   // Day/night clock advances only while playing.

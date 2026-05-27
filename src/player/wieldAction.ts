@@ -39,6 +39,7 @@ import { packUpLargeTent } from '../world/largeTent.ts';
 import { packUpBedroll } from '../world/bedroll.ts';
 import { packUpLantern } from '../world/lantern.ts';
 import { packUpLocker } from '../world/locker.ts';
+import { packUpStake } from '../world/stake.ts';
 import { packUpCompanion } from '../enemies/companion.ts';
 import { detachRope } from '../world/sled.ts';
 import { isLootMenuOpen } from '../ui/lootMenu.ts';
@@ -180,6 +181,19 @@ function handleContextAction(ctx: GameContext): void {
   if (hover.type === 'pet_companion' && ctx.companion?.hovered) {
     packUpCompanion(ctx);
     return;
+  }
+
+  // ACE — RMB on a stake → pull it up + return to inventory. Stake
+  // pack-up refuses if anything is currently tethered to it (caller
+  // surfaces "untie first" toast). Checked BEFORE the sled-attach_rope
+  // branch below because stake.hovered + sled.hovered are independent.
+  if (hover.type === 'attach_rope') {
+    for (const st of ctx.stakes.list) {
+      if (st.hovered) {
+        packUpStake(ctx, st);
+        return;
+      }
+    }
   }
 
   // RMB on a sled (cargo or rope-stub) → release rope if tethered

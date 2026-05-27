@@ -2625,3 +2625,60 @@ The fundamental issue: KCC's slope projection, autostep, and contact resolution 
 - **Synthetic "ride peg" dynamic body**: the user observed they CAN stand on a branch dropped on the sled. Branches are dynamic; the branch's irregular geometry creates a "depression" the capsule sits in, and gravity tracks the moving depression (a happy accident of contact resolution). Spawn a thin invisible dynamic cylinder anchored to the sled center; player capsule overlaps slightly with its upper portion; lateral motion of the cylinder shoves the capsule via Rapier's contact resolution. Mirrors the working "branch on sled" case directly.
 
 **Apply**: when a feature requires fighting the physics engine, evaluate whether to switch to a fundamentally different approach (bypass the engine for that motion). Don't keep adding bandages. **friction-score:** 3 — this is a real gameplay feature the user wants; tabled doesn't mean abandoned.
+
+## D126 — Inextensible-rope constraint extracted as shared helper (Session ACE)
+**When**: B1 Phase 3 — pre-ACE the constraint math (position-snap + radial/perpendicular damping) lived inline in `updateSleds`. ACE shipped the first new tetherable endpoint kind (stake), and additional kinds (raider_corpse, sandworm_carcass) are queued. Each new kind would need to apply the same end-of-line behavior to a different towed body type. Inline-in-updateSleds wouldn't scale.
+
+**Why**: The math is body-agnostic — given an attach point, an anchor, a max distance, and managed velocity scalars, the helper enforces the rope constraint regardless of what's at either end. Extracting it lets any callable system run the same logic against any body, while keeping sled-specific scaffolding (slope-slide velocity model, yaw-lerp, rope mesh rebuild) in updateSleds.
+
+**Picked**: `applyInextensibleConstraint(target, anchor, params)` in `src/world/ropeConstraint.ts`. Target shape captures the body + managed velocity scalars + terrain + clearance. Returns `{ snapped, torn, postX/Y/Z }` so the caller can react (detach on torn, update its post-snap state on snapped). Sled.ts refactor preserves behavior (verified via existing save reload + slope-slide regression check).
+
+**Considered alternatives**:
+- Class-based AbstractTetheredBody — over-engineered; the helper is pure data-in/data-out.
+- Embed constraint as a method on RopeEndpoint — anchors and towed-bodies aren't symmetric, so a method on the endpoint enum is awkward.
+
+**Apply**: when adding a new tetherable entity kind, populate the constraint target from its body + a managed velocity (or zero scalars if the body doesn't slide), call the helper, react to the result. The constraint vocabulary is the integration point, not new constraint math each time. **friction-score:** 2
+
+## D127 — Multi-worm v13 schema migration (singleton → array) (Session ACE)
+**When**: Tier 2 — extending the single boss-tier sandworm to N=2-3 worms per world per playtest signal that one worm felt gameable across long sessions. Also a strategic schema prep step: every wandering-entity class (lizards, raiders, dropped pickups, fires, tents, lockers, sleds) is array-keyed; the lone singleton was a future-streaming-refactor blocker.
+
+**Why**: Pre-v13 the schema field `sandWorm: { … } | null` couldn't grow additively (an additive field would conflict with the existing one). The cleanest path was a version bump that lifts singleton → `sandWorms[0]` on load and serializes the array going forward.
+
+**Picked**: SAVE_VERSION 12 → 13. Schema gains optional `sandWorms?: SandWormSave[]` field; legacy `sandWorm?` retained (loader checks both — v13+ uses array, pre-v13 lifts singleton). At load time the worms in `ctx.sandWorms.list` (boot-spawned per Tuning.SANDWORM_COUNT) are matched IN ORDER to saved entries (saved id NOT used — boot allocates fresh ids per session and matching by index is simpler). Mismatched counts: saved > spawned → extras ignored; spawned > saved → extras retain default boot 'patrol' state. Also fixed a latent version-check bug that was rejecting v12 saves entirely.
+
+**Considered alternatives**:
+- Match saved worms back to spawned worms via SAVED id → SPAWNED id mapping. Boot ids start from 1 each session; the in-order index approach is robust to seed changes and avoids stale-id concerns.
+- Keep singleton + add second-worm field — would require another migration when extending to N > 2; bad direction.
+
+**Apply**: when array-ifying a singleton, bump the schema version. Keep the legacy field in the type union so the loader can detect + migrate pre-bump saves. Match boot-spawned instances to saved entries by INDEX, not id. **friction-score:** 3
+
+## D128 — Procedural-character pipeline applied to lizard (Session ACE)
+**When**: Tier 3 — the player rig had a 10-session arc (ABP-ABY) ending at low-poly-stylized 3P character quality using D115 Lathe geometry + D117 cloth drape + D118 sub-pivot rigging. The same primitive-only pipeline applies to NPCs; lizard was the first lift (companion + raider held off per user direction).
+
+**Why**: NPCs (lizards, raiders, companion, sandworm) ship per D107 zero-asset, meaning no GLB / no PBR textures. Their visual quality ceiling was bounded by what could be expressed with primitives. D115 Lathe geometry unlocked anatomical body silhouettes for the player rig; the same Lathe vocabulary applied to NPCs lifts them past the Box+Sphere+Cylinder block-figure look.
+
+**Picked**: lizard body, head, tail all rebuilt as Lathe meshes. Body 8-point profile (tail-end → hip → ribcage-peak → shoulder → neck) rotated z=-π/2 so axis aligns with world +X. Head 6-point profile rotated z=+π/2 (FLIPPED relative to body) so snout sits at +X tip and neck-joint lands at body's neck-end. Tail tapered 5-point profile. Legs asymmetric (front shorter than rear, sprawl posture) with knee/ankle bumps. **5 iteration rounds** per the discipline (shared-memory/iterative-polish-discipline.md): R1 baseline, R2 fixed head orientation + stretched body, R3 ground contact, R4 belly-on-ground Y-squash, R5 head-body overlap for smooth neck transition.
+
+**Apply**: when applying the procedural-character pipeline to a new NPC: identify the anatomical landmarks (snout/neck/shoulder/ribcage/hip/tail-base/tip), build Lathe profiles for each major segment, verify orientation (Lathe spins around Y; rotation.z = ±π/2 puts axis along ±X), iterate per the discipline. The Z-squash trick (scale.set(1, Y, Z) where Z < 1) gives a wider-than-tall reptile cross-section without re-authoring the profile. **friction-score:** 2
+
+## D129 — Footstep audio + dust driven from rig.stepCount, not _stepAccum (Session ACE)
+**When**: Tier 4A — pre-ACE the controller's footstep audio fired on a distance accumulator (`_stepAccum`) while the rig's visual gait ran on a sin-wave timer (`gaitFreq * phase`). ABY P1 calibrated `STEP_DISTANCE` constants to match the rig's gait math, but the two timers were independent and could drift over distance.
+
+**Why**: A footstep is a single event that should fire ON the visible heel-strike, not on a parallel distance threshold that approximates the heel-strike. ABY introduced `rig.stepCount` (incremented per heel-strike in playerRig.ts), so reading it directly in controller.ts locks audio to the actual visible foot event.
+
+**Picked**: controller.ts checks `ctx.player.rig`; if present, derives `stepsThisFrame` from `rig.stepCount - _lastSeenStepCount`. Legacy `_stepAccum` path stays as fallback for cases where rig is null (defensive — shouldn't happen post-ABP). State-change burst guard (delta < 5 fires steps; delta >= 5 fires exactly 1 step then resyncs) prevents the lastSeenStepCount sync issue at state transitions. Foot dust now spawns at `rig.ankles[parity].getWorldPosition()` (terrain-clamped Y) instead of body-center + lateral-offset.
+
+**Apply**: when the agent needs an audio/effect event to fire on a visible animation beat, drive it from the visual system's beat counter, not from a separately-calibrated approximation of the same beat. Calibration drifts; direct reads don't. **friction-score:** 1
+
+## D130 — Stake as craftable persistent RopeEndpoint alongside ad-hoc static-pos (Session ACE)
+**When**: B1 Phase 3 — pre-ACE the `static-pos` RopeEndpoint kind (introduced ACA) anchored a sled to the player's foot XZ at the moment they dropped the rope (LMB-on-empty-ground with rope wielded). It's transient — no in-world entity, no save persistence of the anchor mesh, no way to interact with the anchor point afterward. ACE adds a craftable + persistent version: the iron stake.
+
+**Why**: Players were dropping the rope and forgetting where the sled was anchored. A visible in-world entity (the stake mesh + sand mound) gives the anchor a spatial identity. Crafting cost (scrap×3 + branch×1) gates it lightly so it's not free; pack-up via RMB recovers the kit so it's reusable.
+
+**Picked**: keep BOTH endpoint kinds — `static-pos` for ad-hoc "drop the rope here right now" UX (LMB-on-empty-ground), and `stake` for craftable persistent anchors (LMB-on-stake-with-rope-wielded re-anchors). Stake's interaction surface (a registered entity with hover state) is what gives it the spatial identity static-pos lacks. Save schema additive — both kinds round-trip independently.
+
+**Considered alternatives**:
+- Replace static-pos with stake entirely — would require crafting at game start, ruins the muscle-memory drop-rope flow.
+- Make static-pos persistent by adding a visual marker mesh — would re-create stake without crafting cost / pack-up symmetry.
+
+**Apply**: when adding a craftable upgrade of an existing mechanic, keep both — the craftable serves as a permanence/identity upgrade, not a replacement. The ad-hoc flow is the "every player can do this immediately" baseline. **friction-score:** 1

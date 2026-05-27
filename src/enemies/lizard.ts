@@ -67,7 +67,18 @@ function untag(root: THREE.Object3D): void {
 
 /** Build a fresh lizard mesh group. Exported (Session II) so the
  *  inventory pickup item + lizard-on-a-stick viewmodel can show the
- *  actual lizard model instead of an abstract meat slab. */
+ *  actual lizard model instead of an abstract meat slab.
+ *
+ *  ACE Tier 3 — procedural-character pipeline lift. Pre-ACE was a
+ *  BoxGeometry body + SphereGeometry head + BoxGeometry tail (flat
+ *  brick silhouette). Now: Lathe-based anatomical body (snout → eyes
+ *  → neck → shoulders → ribcage → hip → tail-base) + tapered Lathe
+ *  tail + asymmetric legs with knee bumps. D115 vocabulary applied
+ *  scaled to the lizard's ~32cm body length. Lathe geometry is
+ *  rotated 90° around Z so the rotational axis aligns with +X
+ *  (lizard's local forward, head at +X). All materials use
+ *  createSkinMaterial localSpace=true per D109 (lizard moves —
+ *  world-space sampling would crawl). */
 export function makeLizardVisual(): THREE.Group {
   const g = new THREE.Group();
   // ABH — lizard body gets the organic-skin shader. Small scale (40)
@@ -90,28 +101,145 @@ export function makeLizardVisual(): THREE.Group {
     localSpace: true,
   });
 
-  const body = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.05, 0.10), bodyMat);
-  body.position.y = 0.04;
+  // ── Body — Lathe profile rotated so axis is along +X (head forward).
+  // ACE R3: minor slim — ribcage peak 0.038 → 0.034 (less chunky vs the
+  // long thin snout from R2). Body Y raised 0.042 → 0.058 so the
+  // feet at the bottom of the legs (~5.6cm below body center) make
+  // ground contact at the mesh's terrain-offset origin.
+  const bodyProfile = [
+    new THREE.Vector2(0.016, 0.00),  // tail-end joint
+    new THREE.Vector2(0.025, 0.04),  // hip
+    new THREE.Vector2(0.031, 0.09),  // rear-ribcage
+    new THREE.Vector2(0.034, 0.14),  // ribcage peak (widest)
+    new THREE.Vector2(0.032, 0.18),  // front-ribcage
+    new THREE.Vector2(0.027, 0.22),  // shoulder
+    new THREE.Vector2(0.022, 0.26),  // neck pinch
+    new THREE.Vector2(0.018, 0.28),  // neck-to-head joint
+  ];
+  const body = new THREE.Mesh(
+    new THREE.LatheGeometry(bodyProfile, 14),
+    bodyMat,
+  );
+  body.rotation.z = -Math.PI / 2;
+  body.position.set(-0.14, 0.054, 0);   // R4: slightly lower (Y-squash compensates)
+  // R4: Y-squash on body (0.78) gives a flatter "belly-on-ground" reptile
+  // silhouette vs R3's torpedo-fish round cross-section. Z-squash 0.95
+  // keeps the body wider than tall (proper reptile proportion). After
+  // rotation.z = -π/2, body-local Y maps to world Z, body-local Z maps
+  // to world Y — so scale (X=1, Y=0.95, Z=0.78) lands as world-X=1
+  // (length unchanged), world-Y=0.78 (flattened spine), world-Z=0.95
+  // (slight wider-than-tall).
+  body.scale.set(1.0, 0.95, 0.78);
   g.add(body);
 
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.05, 6, 4), bodyMat);
-  head.position.set(0.11, 0.05, 0);
-  head.scale.set(1.2, 0.85, 0.9);
+  // ── Head — Lathe wedge. R2: oriented correctly (snout at FAR-FORWARD,
+  // neck-joint at body's front). rotation.z = +π/2 (not -π/2 like body)
+  // reverses the profile h-axis so neck-joint (h=0.13) lands BEHIND
+  // snout (h=0). Position.x = body's-front + head-length puts snout
+  // at +0.27 and neck-joint at +0.14 (meets body's neck).
+  // Also extended head length 0.10 → 0.13 for a longer snout.
+  const headProfile = [
+    new THREE.Vector2(0.000, 0.000),  // snout tip
+    new THREE.Vector2(0.012, 0.020),  // nose ridge
+    new THREE.Vector2(0.020, 0.045),  // upper jaw
+    new THREE.Vector2(0.025, 0.075),  // eye area
+    new THREE.Vector2(0.024, 0.105),  // behind eyes
+    new THREE.Vector2(0.020, 0.130),  // neck joint
+  ];
+  const head = new THREE.Mesh(
+    new THREE.LatheGeometry(headProfile, 12),
+    bodyMat,
+  );
+  head.rotation.z = Math.PI / 2;     // FLIPPED: profile h-axis goes -X
+  // R5: overlap head into body by 0.025m so the neck-joint sits inside
+  // the body's shoulder area (rather than perfectly butted against the
+  // narrow neck-end). Smooths the visual transition; the head's lower
+  // half is hidden inside the body, creating a continuous neck-to-head
+  // silhouette without the pinched gap visible from top-down.
+  head.position.set(0.245, 0.060, 0);
+  head.scale.set(1.0, 0.95, 0.80);
   g.add(head);
 
-  // Tail
-  const tail = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.025, 0.04), darkMat);
-  tail.position.set(-0.13, 0.04, 0);
+  // Eyes — small dark beads on the sides of the head behind the snout.
+  // R5: x adjusted -0.025 to match head's overlap shift.
+  const eyeMat = new THREE.MeshLambertMaterial({ color: 0x0a0a0a });
+  for (const sz of [-1, 1]) {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.0055, 6, 5), eyeMat);
+    eye.position.set(0.170, 0.078, sz * 0.018);
+    g.add(eye);
+  }
+
+  // ── Tail — tapered Lathe. R2: base matches body's tail-end radius
+  // 0.018 (was 0.020 — body shrank by R2 also). Position adjusted for
+  // body's new tail-end location (x = -0.14).
+  const tailProfile = [
+    new THREE.Vector2(0.018, 0.000),
+    new THREE.Vector2(0.014, 0.045),
+    new THREE.Vector2(0.010, 0.095),
+    new THREE.Vector2(0.005, 0.150),
+    new THREE.Vector2(0.000, 0.200),  // tip
+  ];
+  const tail = new THREE.Mesh(
+    new THREE.LatheGeometry(tailProfile, 10),
+    darkMat,
+  );
+  tail.rotation.z = Math.PI / 2;       // tail extends in -X
+  tail.position.set(-0.14, 0.048, 0);   // R4: matched body Y squash
+  tail.scale.set(1.0, 0.90, 0.85);     // R4: slight Y-squash on tail too
   g.add(tail);
 
-  // Legs — 4 small cylinders
-  const legGeo = new THREE.CylinderGeometry(0.012, 0.012, 0.05, 4);
-  const legPositions: Array<[number, number]> = [
-    [0.06, 0.04], [0.06, -0.04], [-0.04, 0.04], [-0.04, -0.04],
+  // ── Legs — asymmetric, sprawl posture. Front legs short (locomotor
+  // weight forward of CoG), rear legs longer + more powerful for the
+  // push. Each leg has an upper segment + knee bump + lower segment
+  // + flat foot disc.
+  function buildLeg(opts: { sideX: 1 | -1; pair: 'front' | 'rear' }): THREE.Group {
+    const leg = new THREE.Group();
+    const isFront = opts.pair === 'front';
+    const upperLen = isFront ? 0.026 : 0.032;
+    const upperR  = isFront ? 0.010 : 0.012;
+    const lowerLen = isFront ? 0.022 : 0.026;
+    const lowerR  = isFront ? 0.0085 : 0.0095;
+    // Upper segment — tilted outward at the shoulder/hip
+    const upperGeo = new THREE.CylinderGeometry(upperR * 0.9, upperR, upperLen, 6);
+    const upper = new THREE.Mesh(upperGeo, darkMat);
+    upper.position.y = -upperLen / 2;
+    upper.rotation.x = opts.sideX * 0.5;    // splay outward (reptilian sprawl)
+    leg.add(upper);
+    // Knee bump
+    const knee = new THREE.Mesh(new THREE.SphereGeometry(upperR * 1.05, 6, 4), darkMat);
+    knee.position.y = -upperLen;
+    knee.position.z = opts.sideX * upperLen * 0.45;  // sprawl offset
+    leg.add(knee);
+    // Lower segment — tilts inward + downward to the foot
+    const lowerGeo = new THREE.CylinderGeometry(lowerR, lowerR * 0.85, lowerLen, 6);
+    const lower = new THREE.Mesh(lowerGeo, darkMat);
+    lower.position.set(0, -upperLen - lowerLen / 2, opts.sideX * upperLen * 0.45);
+    leg.add(lower);
+    // Foot — flat box disc
+    const foot = new THREE.Mesh(
+      new THREE.BoxGeometry(0.024, 0.005, 0.014),
+      darkMat,
+    );
+    foot.position.set(0, -upperLen - lowerLen + 0.0025, opts.sideX * (upperLen * 0.45 + 0.005));
+    leg.add(foot);
+    return leg;
+  }
+  // Leg attachment points — front legs at shoulder area (x~+0.08),
+  // rear legs at hip area (x~-0.10). Y at body-bottom. R2: positions
+  // updated for the stretched 0.28m body (was 0.22m in R1).
+  const legAttach: Array<{ x: number; sz: 1 | -1; pair: 'front' | 'rear' }> = [
+    { x: 0.080, sz: 1, pair: 'front' },
+    { x: 0.080, sz: -1, pair: 'front' },
+    { x: -0.100, sz: 1, pair: 'rear' },
+    { x: -0.100, sz: -1, pair: 'rear' },
   ];
-  for (const [x, z] of legPositions) {
-    const leg = new THREE.Mesh(legGeo, darkMat);
-    leg.position.set(x, 0.015, z);
+  for (const att of legAttach) {
+    const leg = buildLeg({ sideX: att.sz, pair: att.pair });
+    // R3: leg attach Y bumped 0.038 → 0.054 (matches body lift) so the
+    // legs hang from the new body height. With body raised 16cm + leg
+    // total length ~5.6cm, the foot-disc sits very near the mesh
+    // origin (terrain + TERRAIN_OFFSET=0.06 → feet ~touch ground).
+    leg.position.set(att.x, 0.054, att.sz * 0.030);
     g.add(leg);
   }
   return g;

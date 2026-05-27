@@ -54,6 +54,11 @@ const SEGMENT_COUNT = 12;
 const HALF_LEN_FALLBACK = 12;
 
 export interface SandWorm {
+  /** ACE Tier 2 — stable per-spawn identifier so interaction.ts can
+   *  resolve the right worm from a raycast hit + save/load can match
+   *  saved worms back to their in-world instances. Allocated by the
+   *  module-level _nextWormId counter on spawn. */
+  id: number;
   state: SandWormState;
   health: number;
   /** World position of the worm's body center (mid-point along its length). */
@@ -130,11 +135,14 @@ interface SandPuff {
   baseScale: number;
 }
 
-let _colliderToWorm: SandWorm | null = null;
+// ACE Tier 2 — multi-worm. Pre-ACE was a singleton; now a Map so combat.ts
+// can look up which worm an LMB-cast hit belongs to. Populated in
+// spawnSandWorm; entries linger for the life of the program (worms aren't
+// destroyed, only state-transitioned to 'dead').
+const _colliderToWorm: Map<number, SandWorm> = new Map();
 
 export function getSandWormForCollider(handle: number): SandWorm | undefined {
-  if (!_colliderToWorm) return undefined;
-  return _colliderToWorm.collider.handle === handle ? _colliderToWorm : undefined;
+  return _colliderToWorm.get(handle);
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -158,12 +166,24 @@ function makePuffTexture(): THREE.Texture {
 
 const _puffTexture = makePuffTexture();
 
-function tag(root: THREE.Object3D, type: 'kill' | 'take'): void {
+function tag(root: THREE.Object3D, type: 'kill' | 'take', id: number): void {
   root.traverse((o) => {
     o.userData.interactType = type;
-    o.userData.interactId = 0;
+    o.userData.interactId = id;
     o.userData.interactRegistry = 'sandWorms';
   });
+}
+
+// ACE Tier 2 — module-level id allocator. Mirrors sled.ts / stake.ts.
+let _nextWormId = 1;
+
+export function setNextSandWormId(n: number): void {
+  if (n >= _nextWormId) _nextWormId = n + 1;
+}
+
+export function findSandWormById(list: SandWorm[], id: number | undefined): SandWorm | undefined {
+  if (id === undefined) return undefined;
+  return list.find((w) => w.id === id);
 }
 
 function untag(root: THREE.Object3D): void {
@@ -454,15 +474,22 @@ export function sampleSandwormHome(
   rand: Rng,
   biomes: BiomeSampler,
   terrain: Terrain,
+  opts?: { excludeOtherWorms?: Array<{ x: number; z: number; radius: number }> },
 ): { x: number; z: number } {
   // Use a wider scatter band than flagships (200-800m) — sandworm should
   // be reachable but never in initial viewshed.
   const excludeR = Tuning.SANDWORM_SPAWN_EXCLUSION_RADIUS;
-  const exclude = [{
+  const exclude: Array<{ x: number; z: number; radius: number }> = [{
     x: Tuning.OPENING_SCENE_ANCHOR_X,
     z: Tuning.OPENING_SCENE_ANCHOR_Z,
     radius: excludeR,
   }];
+  // ACE Tier 2 — multi-worm: caller passes already-placed worm homes so
+  // the rejection sampler avoids bunching. Each prior worm contributes
+  // its own exclusion ring.
+  if (opts?.excludeOtherWorms) {
+    for (const w of opts.excludeOtherWorms) exclude.push(w);
+  }
   // Phase 1: dune centroid (deepest into dune biome, outside spawn exclusion).
   // Run a few attempts perturbing the search via random offsets, since
   // findBiomeCentroid is deterministic per its grid — small jitter via
@@ -475,14 +502,27 @@ export function sampleSandwormHome(
       if (biomes.biomeAt(c.x, c.z) === 'dune') {
         // Jitter by a small amount per-seed so different worlds get
         // visibly-different homes even when the centroid cell is the same.
-        const jitter = 60;
+        // ACE Tier 2 — bumped jitter from 60→120m so multi-worm placements
+        // diverge further from each other even when both want the same
+        // centroid.
+        const jitter = 120;
         const jx = c.x + (rand() - 0.5) * jitter;
         const jz = c.z + (rand() - 0.5) * jitter;
         // Confirm the jittered position is still in dune biome AND outside
-        // exclusion; otherwise use the centroid itself.
-        const dx = jx - exclude[0].x;
-        const dz = jz - exclude[0].z;
-        if (biomes.biomeAt(jx, jz) === 'dune' && (dx * dx + dz * dz) > excludeR * excludeR) {
+        // ALL exclusion rings (player spawn + every prior worm).
+        if (biomes.biomeAt(jx, jz) !== 'dune') {
+          return { x: c.x, z: c.z };
+        }
+        let exclusionViolated = false;
+        for (const ex of exclude) {
+          const dx = jx - ex.x;
+          const dz = jz - ex.z;
+          if ((dx * dx + dz * dz) <= ex.radius * ex.radius) {
+            exclusionViolated = true;
+            break;
+          }
+        }
+        if (!exclusionViolated) {
           return { x: jx, z: jz };
         }
         return { x: c.x, z: c.z };
@@ -501,16 +541,21 @@ export function spawnSandWorm(
   physicsWorld: RAPIER.World,
   terrain: Terrain,
   homeXZ?: { x: number; z: number },
+  idOverride?: number,
 ): SandWorm {
   // AAP — accepts an explicit home XZ. Backward-compatible: if omitted,
   // falls back to Tuning.SANDWORM_HOME_POS (legacy callers / tests).
   // Production caller (main.ts) computes home via sampleSandwormHome.
+  // ACE Tier 2 — `idOverride` lets save/load restore worms with their
+  // saved ids preserved; otherwise a fresh id is allocated.
   const homePos = homeXZ ?? Tuning.SANDWORM_HOME_POS;
   const home = new THREE.Vector3(
     homePos.x,
     terrain.heightAt(homePos.x, homePos.z),
     homePos.z,
   );
+  const id = idOverride !== undefined ? idOverride : _nextWormId++;
+  if (idOverride !== undefined) setNextSandWormId(idOverride);
 
   // Start patrol at the orbit's "east" point so the worm has somewhere
   // sensible to drift from on first tick.
@@ -524,7 +569,7 @@ export function spawnSandWorm(
   group.position.set(startX, startY, startZ);
   group.visible = false;
   scene.add(group);
-  tag(group, 'kill');
+  tag(group, 'kill', id);
 
   // Cuboid collider sized to the worm's length × max diameter. The body's
   // rotation drives the cuboid's orientation in world space.
@@ -545,6 +590,7 @@ export function spawnSandWorm(
   collider.setSensor(true);
 
   const worm: SandWorm = {
+    id,
     state: 'patrol',
     health: Tuning.SANDWORM_MAX_HEALTH,
     basePos: new THREE.Vector3(startX, startY, startZ),
@@ -573,7 +619,7 @@ export function spawnSandWorm(
     _twilightBreachCooldownUntil: 0,          // ACC — ambient twilight breach
     _isTwilightBreach: false,                 // ACC
   };
-  _colliderToWorm = worm;
+  _colliderToWorm.set(worm.collider.handle, worm);
   return worm;
 }
 
@@ -636,7 +682,7 @@ export function applySandWormDeadPose(worm: SandWorm): void {
   });
   worm.mesh.visible = true;
   untag(worm.mesh);
-  tag(worm.mesh, 'take');
+  tag(worm.mesh, 'take', worm.id);
 }
 
 /** Called when the player loots the corpse — untag and mark looted. */
@@ -656,52 +702,88 @@ const _heading = new THREE.Vector3();
 // triggered the lift; previous in-file copy here + companion.ts + new
 // rope endpoint resolver). Import from the shared util.
 
+/** ACE Tier 2 — multi-worm. Iterates every worm in ctx.sandWorms.list,
+ *  ticking each independently. Particle pools, state machines, and
+ *  cooldowns are per-worm. Tremor effects + audio cues query the
+ *  CLOSEST threatening worm so the player's experience tracks the
+ *  immediate danger, not the sum of all worms. */
 export function updateSandWorm(ctx: GameContext, dt: number): void {
-  const worm = ctx.sandWorm;
-  if (!worm) return;
-  updatePuffs(worm.particles, dt);
+  for (const worm of ctx.sandWorms.list) {
+    updatePuffs(worm.particles, dt);
+  }
   if (!isPlaying(ctx)) return;
-  if (worm.state === 'dead') return;
 
   const playerTr = getPlayerPos(ctx);
-  _toPlayer.set(
-    playerTr.x - worm.basePos.x,
-    0,
-    playerTr.z - worm.basePos.z,
-  );
-  const distToPlayer = _toPlayer.length();
   const elapsed = ctx.time.elapsed;
 
-  switch (worm.state) {
-    case 'patrol':
-      tickPatrol(worm, ctx, dt, distToPlayer);
-      break;
-    case 'alert':
-      tickAlert(worm, ctx, dt, distToPlayer, playerTr);
-      break;
-    case 'charging':
-      tickCharging(worm, ctx, dt, distToPlayer, playerTr);
-      break;
-    case 'lunge':
-      tickLunge(worm, ctx, elapsed, distToPlayer);
-      break;
-    case 'stationaryBreach':
-      tickStationaryBreach(worm, ctx, elapsed);
-      break;
-    case 'retreat':
-      tickRetreat(worm, ctx, dt, distToPlayer);
-      break;
-    case 'feeding':
-      tickFeeding(worm, ctx, elapsed);
-      break;
-    case 'ambush':
-      tickAmbush(worm, ctx, distToPlayer, playerTr);
-      break;
-  }
+  for (const worm of ctx.sandWorms.list) {
+    if (worm.state === 'dead') continue;
+    _toPlayer.set(
+      playerTr.x - worm.basePos.x,
+      0,
+      playerTr.z - worm.basePos.z,
+    );
+    const distToPlayer = _toPlayer.length();
 
-  applyMeshTransform(worm);
-  syncBodyToMesh(worm, ctx);
-  applyTremorEffects(worm, ctx);
+    switch (worm.state) {
+      case 'patrol':
+        tickPatrol(worm, ctx, dt, distToPlayer);
+        break;
+      case 'alert':
+        tickAlert(worm, ctx, dt, distToPlayer, playerTr);
+        break;
+      case 'charging':
+        tickCharging(worm, ctx, dt, distToPlayer, playerTr);
+        break;
+      case 'lunge':
+        tickLunge(worm, ctx, elapsed, distToPlayer);
+        break;
+      case 'stationaryBreach':
+        tickStationaryBreach(worm, ctx, elapsed);
+        break;
+      case 'retreat':
+        tickRetreat(worm, ctx, dt, distToPlayer);
+        break;
+      case 'feeding':
+        tickFeeding(worm, ctx, elapsed);
+        break;
+      case 'ambush':
+        tickAmbush(worm, ctx, distToPlayer, playerTr);
+        break;
+    }
+
+    applyMeshTransform(worm);
+    syncBodyToMesh(worm, ctx);
+  }
+  // Tremor effects run once per frame against the closest threatening
+  // worm (multi-worm tremor stacking would feel chaotic — pick a single
+  // canonical source).
+  applyClosestTremorEffect(ctx, playerTr);
+}
+
+/** ACE Tier 2 — multi-worm tremor selection. Pick the worm in a threat
+ *  state with the smallest distance to the player and run the standard
+ *  applyTremorEffects against it. If no worm is in threat range, the
+ *  caller skips the tremor (no-op). */
+function applyClosestTremorEffect(
+  ctx: GameContext,
+  playerTr: { x: number; y: number; z: number },
+): void {
+  let closest: SandWorm | null = null;
+  let closestDistSq = Infinity;
+  for (const worm of ctx.sandWorms.list) {
+    if (worm.state !== 'alert' && worm.state !== 'charging' && worm.state !== 'retreat') {
+      continue;
+    }
+    const dx = playerTr.x - worm.basePos.x;
+    const dz = playerTr.z - worm.basePos.z;
+    const dSq = dx * dx + dz * dz;
+    if (dSq < closestDistSq) {
+      closestDistSq = dSq;
+      closest = worm;
+    }
+  }
+  if (closest) applyTremorEffects(closest, ctx);
 }
 
 /** Player-facing warning effect — camera shake + dust at the player's feet

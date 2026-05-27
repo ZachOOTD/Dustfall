@@ -26,6 +26,7 @@ import { findLargeTentById, toggleLargeTentDoor } from '../world/largeTent.ts';
 import { findBedrollById } from '../world/bedroll.ts';
 import { findLockerById } from '../world/locker.ts';
 import { findSledById, attachRopeToSled, detachRope, attachLockerToSled } from '../world/sled.ts';
+import { findStakeById } from '../world/stake.ts';
 import type { RopeEndpoint } from '../world/rope.ts';
 import { claimLight, releaseLight } from '../core/lightPool.ts';
 import {
@@ -65,7 +66,7 @@ const _dir = new THREE.Vector3();
 interface InteractHit {
   type: InteractType;
   id: number;
-  registry: 'pickups' | 'waterSources' | 'cacti' | 'lizards' | 'sandWorms' | 'lootContainers' | 'fires' | 'tents' | 'largeTents' | 'bedrolls' | 'lanterns' | 'lockers' | 'salvageables' | 'journals' | 'speeder' | 'sleds' | 'companion';
+  registry: 'pickups' | 'waterSources' | 'cacti' | 'lizards' | 'sandWorms' | 'lootContainers' | 'fires' | 'tents' | 'largeTents' | 'bedrolls' | 'lanterns' | 'lockers' | 'salvageables' | 'journals' | 'speeder' | 'sleds' | 'companion' | 'stakes';
   distance: number;
   /** AAZ — optional sub-mesh discriminator. When the hit object's
    *  userData.interactSubKind is set, it's captured here so case handlers
@@ -192,7 +193,7 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
   for (const w of ctx.waterSources.list) w.hovered = false;
   for (const c of ctx.cacti.list) c.hovered = false;
   for (const l of ctx.lizards) l.hovered = false;
-  if (ctx.sandWorm) ctx.sandWorm.hovered = false;
+  for (const w of ctx.sandWorms.list) w.hovered = false;
   for (const f of ctx.fires.list) f.hovered = false;
   for (const t of ctx.tents.list) t.hovered = false;
   for (const t of ctx.largeTents.list) t.hovered = false;
@@ -202,6 +203,7 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
   if (ctx.companion) ctx.companion.hovered = false;
   for (const s of ctx.salvageables.list) s.hovered = false;
   for (const sl of ctx.sleds.list) sl.hovered = false;
+  for (const st of ctx.stakes.list) st.hovered = false;
   ctx.inventory.hover = null;
   // AAO — default cook bars to hidden each frame; re-shown inside the
   // 'fires' hover branch below when the player is looking at a fire
@@ -240,11 +242,12 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
   for (const w of ctx.waterSources.list) targets.push(w.mesh);
   for (const c of ctx.cacti.list) if (!c.harvested) targets.push(c.mesh);
   for (const l of ctx.lizards) targets.push(l.mesh);
-  // Sand worm — only target the corpse when visible (dead state). The
-  // mesh stays in the scene throughout but is invisible while dormant,
-  // and the live worm is taken via LMB (machete), not [E].
-  if (ctx.sandWorm && ctx.sandWorm.mesh.visible && ctx.sandWorm.state === 'dead' && !ctx.sandWorm.looted) {
-    targets.push(ctx.sandWorm.mesh);
+  // Sand worm corpses — only target dead, visible, unlooted worm meshes.
+  // Live worms are LMB targets via combat.ts, not [E] interactions.
+  for (const w of ctx.sandWorms.list) {
+    if (w.mesh.visible && w.state === 'dead' && !w.looted) {
+      targets.push(w.mesh);
+    }
   }
   for (const lc of ctx.lootContainers.list) targets.push(lc.mesh);
   // Both alive (cook/add_fuel) and dead (relight) fires are interactable.
@@ -256,6 +259,7 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
   for (const l of ctx.lockers.list) targets.push(l.mesh);
   if (ctx.companion) targets.push(ctx.companion.group);
   for (const sl of ctx.sleds.list) targets.push(sl.group);
+  for (const st of ctx.stakes.list) targets.push(st.mesh);
   for (const s of ctx.salvageables.list) targets.push(s.panel);
   for (const j of ctx.journals.list) targets.push(j.mesh);
   // CC-3.1 — speeder seat is interactable when not already mounted; the
@@ -414,7 +418,9 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
     }
 
     case 'sandWorms': {
-      const worm = ctx.sandWorm;
+      // ACE Tier 2 — multi-worm. Resolve which worm was hit via the
+      // tagged interactId (set by sandWorm.ts/tag with worm.id).
+      const worm = ctx.sandWorms.list.find((w) => w.id === info.id);
       if (!worm || worm.state !== 'dead' || worm.looted) return;
       worm.hovered = true;
       ctx.inventory.hover = {
@@ -796,6 +802,80 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
           allowDeposit: true,
         });
       }
+      return;
+    }
+
+    case 'stakes': {
+      // Session ACE B1 Phase 3 — RopeEndpoint stake. Player needs rope
+      // wielded + a player-tethered sled to tie one end to the stake.
+      // Subtle UX choice: LMB attaches (mirrors the LMB-on-sled-stub
+      // metaphor for "engage the rope here"). RMB pack-up handled by
+      // wieldAction.ts/handleContextAction.
+      const stake = findStakeById(ctx.stakes.list, info.id);
+      if (!stake) return;
+      stake.hovered = true;
+      const equipped = ctx.inventory.slots[ctx.inventory.selectedIdx];
+      const ropeEquipped = equipped.item === 'rope';
+      // Find a sled currently tethered to the player (the one we'd
+      // re-anchor to the stake).
+      const playerSled = ctx.sleds.list.find((s) => s.tether.kind === 'player');
+      // Is some sled ALREADY tethered to this stake? If so, LMB un-ties
+      // (mirrors the sled-stub detach metaphor).
+      const stakedSled = ctx.sleds.list.find(
+        (s) => s.tether.kind === 'stake' && s.tether.stakeId === stake.id,
+      );
+      if (stakedSled) {
+        ctx.inventory.hover = {
+          type: 'attach_rope',
+          distance: info.distance,
+          promptNoun: 'untie sled from stake',
+        };
+        if (ctx.input.mousePressed.has(0)) {
+          // Restore the sled's tether to the player if they're holding
+          // rope; otherwise free-detach (sled stays put until something
+          // else moves it).
+          if (ropeEquipped) {
+            stakedSled.tether = { kind: 'player' };
+            // The rope slot's attachedSledId stays set (it's still tied
+            // to this sled, just from a different anchor end now).
+            const slot = ctx.inventory.slots[ctx.inventory.selectedIdx];
+            if (!slot.meta) slot.meta = {};
+            slot.meta.attachedSledId = stakedSled.id;
+            ctx.ui.showToast('rope untied from stake — sled in hand');
+          } else {
+            detachRope(ctx, stakedSled, 'rope untied');
+          }
+        }
+        return;
+      }
+      // Nothing tethered here yet. If player has a sled in hand + rope
+      // wielded, LMB re-anchors that sled to this stake.
+      if (ropeEquipped && playerSled) {
+        ctx.inventory.hover = {
+          type: 'attach_rope',
+          distance: info.distance,
+          promptNoun: 'tie sled to stake',
+        };
+        if (ctx.input.mousePressed.has(0)) {
+          // Replace the sled's player tether with a stake tether.
+          // Rope slot's attachedSledId already pointed at this sled —
+          // keep it set so the detach guard still works (rope-still-held).
+          playerSled.tether = { kind: 'stake', stakeId: stake.id };
+          ctx.ui.showToast('sled tied to stake');
+        }
+        return;
+      }
+      // Passive hover — stake is here but no actionable tether move.
+      const promptNoun =
+        ropeEquipped ? 'iron stake (drag a sled here to tie)' :
+        playerSled ? 'iron stake (equip rope to tie)' :
+        'iron stake';
+      ctx.inventory.hover = {
+        type: 'attach_rope',
+        distance: info.distance,
+        promptNoun,
+        passive: true,
+      };
       return;
     }
 
