@@ -22,6 +22,15 @@ const desired = new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0);
 const GRAVITY = -25; // m/s^2
 
+// ACC playtest — moving-platform-ride mechanic (player riding a sled
+// as it slides downhill) was attempted but couldn't be made robust
+// against KCC's slope-projection + detection consistency issues in a
+// reasonable number of iterations. Tabled for a future session — see
+// docs/backlog.md. The sled-side data (_frameDeltaX/Y/Z + body tilt to
+// match terrain via Option B) is preserved so the next attempt has a
+// solid foundation; what got removed here was the controller-side
+// detection + delta-application logic.
+
 // JJ-2 — step distances bumped to land at natural cadence with the
 // faster movement speeds (WALK_SPEED 6.0 / sprint 13.2 m/s).
 // Walk: 3.0m / 6.0 m/s ≈ 2 steps/sec (typical human pace).
@@ -79,8 +88,24 @@ export function updatePlayer(ctx: GameContext, dt: number): void {
   ctx.player.eyeOffset = ctx.player.crouching
     ? Tuning.CROUCH_EYE_OFFSET
     : Tuning.PLAYER_EYE_OFFSET;
+  // ACC playtest — player towing a sled on foot disables sprint +
+  // slows walk. Realism: dragging a loaded scrap-metal sled across
+  // sand is hard work. Engages only for player-tethered sleds (the
+  // player is physically pulling the rope); speeder-tow uses its own
+  // throttle. Multiplier composes (1) base empty-sled slowdown,
+  // (2) per-item cargo slowdown, (3) uphill slope resistance.
+  let pulledSled: { contents: number; sledY: number } | null = null;
+  for (const sled of ctx.sleds.list) {
+    if (sled.tether.kind === 'player') {
+      pulledSled = { contents: sled.contents.length, sledY: sled.pos.y };
+      break;
+    }
+  }
+  const isPullingSled = pulledSled !== null;
+  const sprintBlockedByTow = isPullingSled && Tuning.SLED_TOW_PLAYER_DISABLES_SPRINT;
   const sprinting =
     !ctx.player.crouching &&
+    !sprintBlockedByTow &&
     (keys['ShiftLeft'] || keys['ShiftRight']) &&
     ctx.stats.thirst > 0.02 &&
     ctx.stats.stamina > Tuning.STAMINA_SPRINT_THRESHOLD &&
@@ -88,6 +113,35 @@ export function updatePlayer(ctx: GameContext, dt: number): void {
   let speed = Tuning.WALK_SPEED;
   if (sprinting) speed *= Tuning.SPRINT_MULTIPLIER;
   else if (ctx.player.crouching) speed *= Tuning.CROUCH_SPEED_MULTIPLIER;
+  if (pulledSled) {
+    // Base + cargo
+    let towMult =
+      Tuning.SLED_TOW_PLAYER_WALK_MULTIPLIER -
+      Tuning.SLED_TOW_PER_ITEM_SLOWDOWN * pulledSled.contents;
+    // Slope-based modifier: uphill costs effort, downhill helps. Compare
+    // player Y vs sled Y; if sled is higher (player pulls uphill) apply
+    // resistance; if sled is lower (player pulls downhill) apply assist.
+    // Both proportional to terrain slope at sled position.
+    const playerY = ctx.player.body.body.translation().y;
+    const sledTr = ctx.sleds.list.find((s) => s.tether.kind === 'player');
+    if (sledTr) {
+      const normal = ctx.terrain.normalAt(sledTr.pos.x, sledTr.pos.z);
+      const slopeSin = Math.sqrt(Math.max(0, 1 - normal.y * normal.y));
+      if (pulledSled.sledY > playerY + 0.3) {
+        towMult -= slopeSin * Tuning.SLED_TOW_UPHILL_RESISTANCE;
+      } else if (pulledSled.sledY < playerY - 0.3) {
+        towMult += slopeSin * Tuning.SLED_TOW_DOWNHILL_ASSIST;
+      }
+    }
+    // Floor + ceiling: never below min (so player can't get stuck) and
+    // never above 1.0 (gravity-assist shouldn't let you sprint).
+    if (towMult < Tuning.SLED_TOW_MIN_WALK_MULTIPLIER) {
+      towMult = Tuning.SLED_TOW_MIN_WALK_MULTIPLIER;
+    } else if (towMult > 1.0) {
+      towMult = 1.0;
+    }
+    speed *= towMult;
+  }
 
   // Stamina: drains while sprinting; recovers otherwise. JJ-2 — gated
   // by DEBUG_UNLIMITED_STAMINA for testing (pins stamina at 1.0 so the

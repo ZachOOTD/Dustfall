@@ -2567,3 +2567,61 @@ Despawn flow works unchanged — Rapier `removeRigidBody` handles kinematic bodi
 - Pure parameterization — would require a stateBag pattern, not justified here.
 
 **Apply**: when reusing a state-machine state for a variant outcome that bypasses normal transitions, flag the entry point + branch the exit. Cleaner than duplicating the tick logic, simpler than full sub-state. **friction-score:** 1
+
+## D122 — Managed-scalar slope-slide bypasses Rapier velocity integrator (Session ACD)
+**When**: ACD playtest follow-up — pre-ACD slope-slide used `setLinvel` to push the sled downhill each frame, but the sled visibly didn't move. Diagnosed: Rapier's contact solver was zeroing the tangential velocity each step due to the body's 0.6 friction with the heightfield (static-friction angle atan(0.6)≈31°, swallowing every dune slope).
+
+**Why**: Direct setLinvel + Rapier contact resolution is fundamentally incompatible — anything we add via setLinvel gets eaten by friction the next step. The body's friction coefficient is what we want for towing feel (sled grips sand when stationary), so we can't just lower it.
+
+**Picked**: managed-scalar XZ velocity (`_slideVx`, `_slideVz` fields on Sled) driven entirely by our code — slope-gravity adds, Coulomb friction subtracts, linear damping decays. Position update via `setNextKinematicTranslation(currentXZ + slideV*dt)`. Bypasses Rapier's velocity-integration + contact-resolution path entirely; the body's collider friction now only matters for collisions with OTHER bodies.
+
+**Considered alternatives**:
+- Lower body collider friction to ~0 — would break tow feel.
+- Use `applyImpulse` instead of setLinvel — same problem (Rapier still resolves contacts after the impulse).
+- KinematicVelocityBased body type — setLinvel-driven kinematic; would still pass through contact resolution.
+
+**Apply**: when you need a body to move under "your physics" rather than Rapier's, drive position directly via `setNextKinematicTranslation` each frame and maintain motion state in your own data fields. Set the body type to KinematicPositionBased so Rapier doesn't integrate position from forces/linvel. **friction-score:** 2
+
+## D123 — Sled body KinematicPositionBased + tilts to match terrain slope (Session ACD)
+**When**: ACD playtest follow-up — (a) dynamic items on the sled deck were transferring lateral friction impulses to the sled body via Newton's 3rd law, accumulating in body.linvel and pre-empting our setTranslation; (b) the axis-aligned sled body on a slope had uphill terrain poking up through the body's XZ footprint, so players walking onto the sled landed on terrain inside the footprint, not on the deck.
+
+**Why**: (a) Kinematic bodies are immune to dynamic-body push impulses (one-way kinematic-vs-dynamic interaction). The user explicitly wanted the player to not push the sled either — kinematic gives this for free. (b) The body collider being axis-aligned while the visual deck tilted to match terrain was a visual-vs-physics mismatch. With the body itself tilting, the top face is uniformly 2*hy + clearance above terrain across the full footprint.
+
+**Picked**: body type → `KinematicPositionBased`; rotations driven each frame via `setNextKinematicRotation(slerp(currentRot, terrain-tilt × yaw, lerpRate))`. Both visual and physics conform to terrain slope. Items on the now-tilted deck stay put via top-deck friction (0.85) since atan(0.85)≈40° static threshold beats any reasonable dune slope. Player walks the tilted deck via KCC's normal slope-walking.
+
+**Considered alternatives**:
+- Keep body axis-aligned + sample terrain at all 4 corners + raise body Y to max corner (Option A) — works for terrain-poke-through but leaves sled visibly floating above the downhill side on steep slopes (up to 30-80cm at 10-20° slopes).
+- Dynamic body with huge density to resist item push — items still accumulate small pushes that compound; doesn't solve terrain-poke-through.
+
+**Apply**: for placeable objects on uneven terrain, tilt the body collider to match terrain normal (not just the visual). Conform-to-terrain physics is cleaner than work-around layers. **friction-score:** 2
+
+## D124 — CCD enabled on dropped-pickup bodies prevents thin-collider tunneling (Session ACD)
+**When**: ACD playtest follow-up — user reported rope (and any other flat-bbox item: cloth, bandage) falls THROUGH terrain when dropped via G.
+
+**Why**: Some viewmodels have very thin AABBs — the rope coil is a flat horizontal torus, bbox.y ≈ 6.6cm after 1.5× scale, so the cuboid collider half-height hits the 4cm `Math.max` floor. 8cm-thick collider + 60cm spawn height + downward throw velocity (camera-direction × 3.2 m/s when looking down) = body reaches 4+ m/s within 0.3 sec, per-frame travel at 60Hz = ~7cm, exceeding the 8cm collider thickness. Rapier's discrete collision detection misses the heightfield and the pickup tunnels through.
+
+**Picked**: enable CCD (`setCcdEnabled(true)`) on all dynamic dropped-pickup bodies. Rapier's swept-shape test catches the crossing regardless of step size. Cheap on the ~30 pickup max in flight; covers all flat-bbox items (rope, cloth, bandage) automatically.
+
+**Considered alternatives**:
+- Per-item collider sizing (bump min half-height to 0.06m+) — would make settled items visually float above terrain.
+- Cap initial throw velocity — kills the gameplay value of the aimable throw arc.
+
+**Apply**: any dynamic body with a thin AABB + initial velocity needs CCD. Cheap insurance. **friction-score:** 1
+
+## D125 — Sled riding mechanic tabled — Rapier KCC has no moving-platform support (Session ACD)
+**When**: ACD playtest follow-up — user wanted "stand on the sled, sled moves, player rides with it". Spent significant time trying multiple architectures; ultimately tabled.
+
+**Why**: Rapier's `KinematicCharacterController` has no built-in moving-platform tracking. Standing on a moving kinematic body doesn't auto-carry the player; the deck moves out from under the capsule each frame. Multiple manual platform-ride architectures were tried:
+1. Detect player on sled (raycast + AABB+Y fallback), add sled's per-frame XZ delta to KCC `desired` BEFORE `computeColliderMovement` — KCC's slope-projection ate ~20% of horizontal motion when standing on the tilted body (Option B), causing drift.
+2. Apply delta AFTER `computeColliderMovement` to bypass slope-projection — drift dropped to ~10% but the player's Y still followed gravity instead of the sled's Y change; gap built until detection dropped.
+3. Sticky ride state + full 3D delta (XYZ) + `_frameDeltaY` tracking — player still slid off after 5-10 frames.
+
+The fundamental issue: KCC's slope projection, autostep, and contact resolution interact with a tilted moving kinematic body in ways that no amount of detection + delta application could fully counter.
+
+**Picked**: TABLE the feature. Remove platform-ride code from controller.ts. Preserve the sled-side data (`_frameDeltaX/Y/Z` + Option B body tilt) as foundation for a future attempt. Document tried approaches + concrete next-attempt directions in backlog.md.
+
+**Considered next-attempt directions** (for whoever picks this up):
+- **Full Option C parenting**: when on sled, COMPLETELY override `setNextKinematicTranslation` to (sled.tr + savedLocalOffset + inputMotion). Skip KCC entirely while riding. Jump (Space) exits ride state. Most deterministic; bypasses KCC's interaction-with-moving-platform issues entirely.
+- **Synthetic "ride peg" dynamic body**: the user observed they CAN stand on a branch dropped on the sled. Branches are dynamic; the branch's irregular geometry creates a "depression" the capsule sits in, and gravity tracks the moving depression (a happy accident of contact resolution). Spawn a thin invisible dynamic cylinder anchored to the sled center; player capsule overlaps slightly with its upper portion; lateral motion of the cylinder shoves the capsule via Rapier's contact resolution. Mirrors the working "branch on sled" case directly.
+
+**Apply**: when a feature requires fighting the physics engine, evaluate whether to switch to a fundamentally different approach (bypass the engine for that motion). Don't keep adding bandages. **friction-score:** 3 — this is a real gameplay feature the user wants; tabled doesn't mean abandoned.

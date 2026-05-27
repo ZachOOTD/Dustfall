@@ -19,7 +19,7 @@ import * as THREE from 'three';
 import { Tuning } from '../config/tuning.ts';
 import type { Terrain } from './terrain.ts';
 
-export type FootprintKind = 'player' | 'lizard';
+export type FootprintKind = 'player' | 'lizard' | 'sled';
 
 interface FootprintInstance {
   active: boolean;
@@ -77,6 +77,44 @@ function makePlayerFootprintTexture(): THREE.CanvasTexture {
   g.beginPath();
   g.ellipse(64, 92, 18, 22, 0, 0, Math.PI * 2);
   g.fill();
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  return tex;
+}
+
+function makeSledTrackTexture(): THREE.CanvasTexture {
+  // ACC playtest — REWRITE v2. Gaussian lateral falloff with NO hard
+  // edges anywhere. Pre-fix the texture had a sharper falloff that
+  // made the rectangular decal shape visible at boundaries, which
+  // combined with the per-frame sled.yaw lerp produced visible
+  // rotational stair-stepping. Now the alpha smoothly decays from
+  // the center via gaussian to ~0 at the edges, blending into the
+  // sand without any sharp rectangular silhouette. Adjacent decals
+  // overlap in their soft-fade regions and read as one continuous
+  // mark with no discernable boundaries.
+  const c = document.createElement('canvas');
+  c.width = 128; c.height = 64;
+  const g = c.getContext('2d');
+  if (!g) throw new Error('canvas 2d unavailable');
+  g.clearRect(0, 0, 128, 64);
+  // Gaussian profile: alpha = exp(-(nx*sigma)^2). Sigma controls width.
+  // Smaller sigma = tighter peak; larger = wider spread. Pick to fit
+  // the visible "trail" within ~70% of the canvas width, with soft
+  // fade extending to the canvas edges.
+  const SIGMA = 1.6;
+  // ACC playtest — peak alpha dropped 0.45 → 0.18 to compensate for
+  // ~5× the decal density (cadence 0.30 → 0.12). Combined effective
+  // alpha at trail center ≈ 5 × 0.18 = 0.9 max — a strong but not
+  // black depression. With normal alpha blending the sum saturates
+  // smoothly rather than going opaque.
+  const PEAK_ALPHA = 0.18;
+  for (let x = 0; x < 128; x++) {
+    const nx = (x - 64) / 64;  // -1 to +1
+    const alpha = Math.exp(-nx * nx * SIGMA * SIGMA) * PEAK_ALPHA;
+    g.fillStyle = `rgba(255, 255, 255, ${alpha.toFixed(3)})`;
+    g.fillRect(x, 0, 1, 64);
+  }
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
@@ -164,21 +202,26 @@ function makePool(
   scene: THREE.Scene,
   kind: FootprintKind,
 ): KindPool {
-  const size = kind === 'player'
-    ? Tuning.FOOTPRINT_PLAYER_POOL
-    : Tuning.FOOTPRINT_LIZARD_POOL;
-  const sx = kind === 'player'
-    ? Tuning.FOOTPRINT_PLAYER_SIZE_X
-    : Tuning.FOOTPRINT_LIZARD_SIZE_X;
-  const sz = kind === 'player'
-    ? Tuning.FOOTPRINT_PLAYER_SIZE_Z
-    : Tuning.FOOTPRINT_LIZARD_SIZE_Z;
-  const colorHex = kind === 'player'
-    ? Tuning.FOOTPRINT_COLOR_PLAYER_HEX
-    : Tuning.FOOTPRINT_LIZARD_COLOR_HEX;
-  const tex = kind === 'player'
-    ? makePlayerFootprintTexture()
-    : makeLizardTrackTexture();
+  const size =
+    kind === 'player' ? Tuning.FOOTPRINT_PLAYER_POOL :
+    kind === 'lizard' ? Tuning.FOOTPRINT_LIZARD_POOL :
+    Tuning.FOOTPRINT_SLED_POOL;
+  const sx =
+    kind === 'player' ? Tuning.FOOTPRINT_PLAYER_SIZE_X :
+    kind === 'lizard' ? Tuning.FOOTPRINT_LIZARD_SIZE_X :
+    Tuning.FOOTPRINT_SLED_SIZE_X;
+  const sz =
+    kind === 'player' ? Tuning.FOOTPRINT_PLAYER_SIZE_Z :
+    kind === 'lizard' ? Tuning.FOOTPRINT_LIZARD_SIZE_Z :
+    Tuning.FOOTPRINT_SLED_SIZE_Z;
+  const colorHex =
+    kind === 'player' ? Tuning.FOOTPRINT_COLOR_PLAYER_HEX :
+    kind === 'lizard' ? Tuning.FOOTPRINT_LIZARD_COLOR_HEX :
+    Tuning.FOOTPRINT_SLED_COLOR_HEX;
+  const tex =
+    kind === 'player' ? makePlayerFootprintTexture() :
+    kind === 'lizard' ? makeLizardTrackTexture() :
+    makeSledTrackTexture();
 
   // Plane geometry. Default plane is in the XY plane; rotate to lie on the
   // ground (XZ plane). Width = sx (lateral), height = sz (forward).
@@ -232,6 +275,7 @@ export function createFootprintRegistry(
 ): FootprintRegistry {
   const player = makePool(scene, 'player');
   const lizard = makePool(scene, 'lizard');
+  const sled = makePool(scene, 'sled');
 
   function spawn(
     kind: FootprintKind,
@@ -239,7 +283,10 @@ export function createFootprintRegistry(
     yawRad: number,
     nowSec: number,
   ): void {
-    const pool = kind === 'player' ? player : lizard;
+    const pool =
+      kind === 'player' ? player :
+      kind === 'lizard' ? lizard :
+      sled;
     const i = pool.nextIdx;
     pool.nextIdx = (pool.nextIdx + 1) % pool.size;
 
@@ -266,6 +313,7 @@ export function createFootprintRegistry(
   function update(nowSec: number): void {
     tickPool(player, nowSec);
     tickPool(lizard, nowSec);
+    tickPool(sled, nowSec);
   }
 
   return { spawn, update };

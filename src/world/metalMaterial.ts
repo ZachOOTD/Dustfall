@@ -40,6 +40,13 @@ export interface MetalMaterialOpts {
   scratchStrength?: number;
   /** Whether to render double-sided (default false). */
   doubleSide?: boolean;
+  /** D109 — sample the noise textures in OBJECT-LOCAL coords instead
+   *  of world coords. Required for MOVING entities (sled body, raider
+   *  weapons swinging) — world-space sampling causes scratches +
+   *  worn highlights + dirt patches to crawl across the surface as
+   *  the entity moves. Default false (static surfaces get coherent
+   *  world-aligned weathering). */
+  localSpace?: boolean;
 }
 
 /** Build the patched weathered-metal material. Drop-in replacement for
@@ -71,10 +78,17 @@ export function createMetalMaterial(
     );
     shader.vertexShader = shader.vertexShader.replace(
       '#include <begin_vertex>',
-      /* glsl */ `
-        #include <begin_vertex>
-        vWorldMetal = (modelMatrix * vec4(position, 1.0)).xyz;
-      `,
+      opts.localSpace
+        ? /* glsl */ `
+          #include <begin_vertex>
+          // D109 — localSpace: sample noise in object frame so
+          // scratches/worn/dirt stay anchored to the surface as it moves.
+          vWorldMetal = position;
+        `
+        : /* glsl */ `
+          #include <begin_vertex>
+          vWorldMetal = (modelMatrix * vec4(position, 1.0)).xyz;
+        `,
     );
 
     shader.fragmentShader = shader.fragmentShader.replace(

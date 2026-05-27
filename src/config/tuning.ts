@@ -673,6 +673,25 @@ export const Tuning = {
   FOOTPRINT_LIZARD_SIZE_Z: 0.12,
   FOOTPRINT_LIZARD_CADENCE_M: 0.30,     // tracks every X meters during flee
   FOOTPRINT_LIZARD_COLOR_HEX: 0x1e1208, // very dark — small but visible
+  // ACC playtest — sled drag tracks. Wider than footprints (matches
+  // sled deck width); short Z dimension so consecutive decals tile
+  // into a continuous trail. Pool sized to ~160m of trail before
+  // recycling (160 / 0.4 = 400 decals would be max but we'll cap
+  // lower since the fade lifetime recycles older ones automatically).
+  // ACC playtest — pool bumped 240 → 600 to accommodate the much
+  // denser cadence below. At cadence 0.12m + walk speed ~4 m/s, this
+  // covers ~18 sec of trail before recycling — most of the 45s fade
+  // lifetime, so the player sees a long history behind them.
+  FOOTPRINT_SLED_POOL: 600,
+  FOOTPRINT_SLED_SIZE_X: 0.7,           // lateral — matches the flat center of the curled deck
+  FOOTPRINT_SLED_SIZE_Z: 0.6,           // forward chunk
+  // ACC playtest — cadence dropped 0.30 → 0.12 so consecutive gaussian
+  // peaks are well inside each other's falloff. Each pixel of trail is
+  // now covered by ~5 overlapping decals; their gaussian profiles sum
+  // to a smooth continuous depression with no visible periodic peaks.
+  FOOTPRINT_SLED_CADENCE_M: 0.12,
+  FOOTPRINT_SLED_COLOR_HEX: 0x3d2918,   // warmer brown — reads as sand depression, not paint
+
 
   // Stone-well rework (Session Z) — wells confined to salt-flats biome.
   // Visual: ring of perturbed icosahedra stones + an askew wooden plank hatch.
@@ -974,12 +993,124 @@ export const Tuning = {
   // with a one-way spring-damper impulse pulling it toward a target pos
   // behind the tether (player on foot, or speeder when mounted). No
   // joints (none used elsewhere in the codebase).
-  SLED_DENSITY: 30,                          // ~10kg sled at 1×0.2×1.8 m — light enough to accelerate well under the spring
+  // ACC playtest — moderated to 300 (~160kg, like a heavy metal sled).
+  // 2000 was overkill; 300 still resists KCC push noticeably (mass-
+  // inverse 1/160 vs the original 1/42), while being a sane physical
+  // weight that won't cause subtle integrator quirks. Slope physics
+  // are mass-independent (we set velocity directly), so density does
+  // not affect slide behavior.
+  SLED_DENSITY: 300,
   SLED_LINEAR_DAMP: 1.8,                     // resists coasting — sled settles when player stops
-  SLED_ANGULAR_DAMP: 4.0,                    // resists yaw spin from terrain bumps
-  SLED_HALF_EXTENTS_X: 0.5,                  // cargo bed half-width
+  // ACC playtest — yaw torque gain. Replaces the old SLED_YAW_LERP
+  // (which directly mutated group.rotation.y, conflicting with body
+  // physics rotation). Now applied as a torque impulse around world Y
+  // proportional to the cross product of (current sled forward) ×
+  // (desired forward = toward anchor). Higher = sled snaps to face
+  // anchor faster; lower = sled drifts more naturally behind.
+  SLED_YAW_TORQUE_GAIN: 0.35,
+  // ACC playtest — player-pulls-sled tuning. Realism: dragging a
+  // loaded scrap-metal sled across sand should feel heavy. Sprinting
+  // is fully disabled; walk speed is multiplied for slow-trudge feel.
+  // Engages when ANY sled has `tether.kind === 'player'` (i.e. the
+  // player is physically holding the rope on foot — speeder-tow uses
+  // its own throttle).
+  SLED_TOW_PLAYER_DISABLES_SPRINT: true,
+  SLED_TOW_PLAYER_WALK_MULTIPLIER: 0.78,    // base "empty sled" multiplier (was 0.65 flat; cargo adds more drag below)
+  // ACC playtest — cargo weight makes the sled harder to pull. Each
+  // item in the sled's cargo deck adds this much additional slowdown,
+  // clamped so even a fully-loaded sled is still walkable.
+  SLED_TOW_PER_ITEM_SLOWDOWN: 0.02,         // 2% per item
+  SLED_TOW_MIN_WALK_MULTIPLIER: 0.35,       // floor: never slower than 35% of normal walk speed
+  // ACC playtest — pulling uphill is significantly harder than flat.
+  // Multiplier scales with terrain slope at the SLED position
+  // (cos(slope angle) = terrain normal Y). Only applies when the sled
+  // is uphill of the player (player.y < sled.y); downhill or flat
+  // tows have no extra resistance.
+  SLED_TOW_UPHILL_RESISTANCE: 0.6,          // at vertical wall (slope=90°): full resistance × this (max 60% extra slowdown)
+  // ACC playtest — downhill assist. When the sled is meaningfully
+  // below the player (≥0.3m), gravity does some of the towing work
+  // for you and your effective walk speed increases proportional to
+  // slope. Caps at the base walk speed (towMult ≤ 1.0) so you can't
+  // sprint via gravity alone.
+  SLED_TOW_DOWNHILL_ASSIST: 0.4,
+  // ACC playtest — sled-on-slope gravity slide. Each frame, sample
+  // terrain normal at the sled's position; if the slope exceeds the
+  // threshold, apply a horizontal impulse in the downhill direction
+  // proportional to slope steepness. The sled accelerates naturally
+  // down hills (whether tethered or staked or just placed). Linear
+  // damping (SLED_LINEAR_DAMP) handles deceleration when the sled
+  // reaches flat ground — it coasts briefly then stops smoothly.
+  // ACC playtest — threshold dropped 0.04 → 0.02 (~2.3° → ~1.1°) so
+  // even very gentle dune slopes start the sled drifting. The
+  // acceleration is already proportional to slope, so this just gates
+  // "truly flat" (no drift on rolling sand) from "shallow incline"
+  // (slow but visible slide).
+  SLED_SLOPE_SLIDE_THRESHOLD: 0.02,
+  // ACC playtest — gain 1.4 → 2.0. With the downhill direction sign
+  // fix landed (was inverted, was pushing sled uphill), real slides
+  // can be faster without destabilizing. 2.0 gives ~1.8 m/s on 10°
+  // (gentle drift), ~3.8 m/s on 20° (close to player tow speed),
+  // ~5.5 m/s on 30° (sled outruns player a bit; rope snap-back
+  // damping handles it cleanly).
+  SLED_SLOPE_SLIDE_GAIN: 6.0,
+  // ACC playtest follow-up — Coulomb-style ground friction coefficient
+  // for slope-slide. Always opposes motion at a fixed deceleration of
+  // `9.81 × this` m/s² (independent of speed), capped to not reverse the
+  // velocity (Math.min(speed, frictionDeltaV) clamp). Combined with the
+  // gravity slope component this produces a STATIC friction threshold:
+  //   slide-accel > friction-decel  ⇔  sin(θ) × GAIN > KINETIC_FRICTION
+  // With GAIN=2.0 + KINETIC_FRICTION=0.15: angle threshold ≈ 4.3°. Below
+  // that, gentle slopes don't move a stationary sled / decelerate one
+  // already moving to a smooth stop. Above, the sled accelerates. Net
+  // terminal velocities (with SLED_LINEAR_DAMP=1.8 still applied):
+  //   5° → 0.13 m/s (basically still),
+  //  10° → 1.08 m/s (gentle drift),
+  //  15° → 2.0 m/s (walking pace),
+  //  20° → 2.91 m/s (brisk),
+  //  30° → 4.63 m/s (fast — still catchable on sprint).
+  // Bump to 0.20-0.25 to make slopes "stickier" (steeper threshold + more
+  // damping); drop to 0.08 for less ground drag / longer coasts.
+  SLED_KINETIC_FRICTION: 0.15,
+  // ACC playtest follow-up — per-frame retention factor applied to the
+  // managed slide-velocity scalars when the rope is slack on FLAT ground.
+  // Compounded at 60Hz, 0.82/frame ≈ 99.99% removed per second — snaps
+  // a stationary sled to rest almost immediately after the player stops
+  // towing. Bump toward 0.95 for more coast (sled glides longer after
+  // tow stop); drop toward 0.7 for snappier stops.
+  SLED_SLACK_DECAY_PER_FRAME: 0.82,
+  // ACC playtest follow-up — perpendicular-velocity damping applied when
+  // the rope-snap position-clamp fires. Without this, a sled sliding
+  // downhill on a slope whose downhill direction has any component
+  // perpendicular to the rope would store that perpendicular speed in
+  // _slideVx/Vz and "fly out to the side" each frame as the snap pulls
+  // it back radially. 0.55 retains 55% of perpendicular velocity per
+  // snap event — enough to let the sled track a curving slope, low
+  // enough to kill any catastrophic sideways drift.
+  SLED_SNAP_PERP_DAMP: 0.55,
+  // ACC playtest follow-up — visual ground clearance above terrain.
+  // Body Y is sampled from terrain.heightAt at the sled center, so on
+  // uneven ground the body's bottom face can sit at the local minimum
+  // while corners + the yoke posts extend across higher patches and
+  // clip into the sand. This Y offset lifts the whole body uniformly
+  // so a small terrain undulation across the 2.2m×1.2m footprint reads
+  // as "resting on top" instead of "buried into". 6cm is enough for
+  // typical dune micro-variation; bump higher if you see clipping on
+  // sharper transitions.
+  SLED_GROUND_CLEARANCE: 0.06,
+  // ACC playtest — visual-only terrain tilt. Pitch/roll axes are LOCKED
+  // on the body for physics stability (full unlocked rotations let item-
+  // impact torques flip the sled, which then escapes terrain bounds).
+  // The visual mesh tilts to match terrain normal at the sled position.
+  // SLERP rate = how fast group.quaternion lerps toward the target tilt
+  // each frame. Higher = snappier follow, lower = smoother on bumps.
+  SLED_VISUAL_TILT_LERP: 0.18,
+  // ACC playtest — bumped from 0.5×0.9 to 0.6×1.10 (+20% width, +22%
+  // length) per user feedback "items keep falling off the back". More
+  // landing area for thrown items + more room before the back rim
+  // catches them.
+  SLED_HALF_EXTENTS_X: 0.6,                  // cargo bed half-width (1.2m wide)
   SLED_HALF_EXTENTS_Y: 0.10,                 // flat
-  SLED_HALF_EXTENTS_Z: 0.9,                  // longer than wide — runner-shaped
+  SLED_HALF_EXTENTS_Z: 1.10,                 // longer than wide — runner-shaped (2.2m long)
   SLED_TOW_DISTANCE: 5.0,                    // rope length (m). The sled is constrained to within this distance of the anchor — slack inside, snaps taut at exactly this length. QQ-2 lengthened 3 → 5 for visible drape.
   SLED_TOW_MAX_DIST: 10.0,                   // hard snap threshold beyond which the rope tears free (anchor moved way too fast for the constraint to keep up). Auto-detach + toast.
   SLED_TOW_ATTACH_RANGE: 3.0,                // raycast distance for clicking the rope stub with wielded rope
@@ -997,6 +1128,14 @@ export const Tuning = {
   SLED_TOP_DECK_FRICTION: 0.95,              // high so items grip when sled accelerates
   SLED_TOP_DECK_INSET_X_FRAC: 0.88,          // top collider X = SLED_HALF_EXTENTS_X × this (inside the curled rim)
   SLED_TOP_DECK_INSET_Z_FRAC: 0.95,          // top collider Z = SLED_HALF_EXTENTS_Z × this (avoid the yoke region)
+  // ACC playtest — physical back-wall lip. Items on a towed sled slide
+  // REARWARD relative to the deck (inertia vs the inextensible-rope
+  // position-snap pulling the sled forward). Without a back wall they
+  // fall off. Visual back-rim curl alone isn't sufficient since items
+  // physically rest on the flat top deck collider, not the curved
+  // visual sheet. Thin tall lip just inside the rear edge.
+  SLED_BACK_WALL_HALF_HEIGHT: 0.04,          // m — 8cm wall height (catches small items, doesn't dominate look)
+  SLED_BACK_WALL_HALF_THICKNESS: 0.015,      // m — 3cm thick (matches top-deck thickness)
   // ACC Stretch — drop / throw arc. Drop velocity is camera-direction
   // based (Y component preserved) so the player can AIM their throw:
   // look down → item lands at feet; look at the sled → item arcs onto
@@ -1004,7 +1143,13 @@ export const Tuning = {
   // — now we lift the speed so the toss is functional for sled-loading.
   ITEM_TOSS_SPEED: 3.2,                      // m/s along camera direction
   ITEM_TOSS_BASE_UP: 1.0,                    // m/s baseline upward kick (keeps tossed items off the ground at low pitches)
-  SLED_YAW_LERP: 0.12,                       // QQ-2 — per-frame lerp toward "face the anchor" yaw. Higher = snappier; lower = the sled trails laggily
+  // ACC playtest — lowered 0.12 → 0.07 so the sled's bow takes longer
+  // to swing around when the player turns. Reads as a heavier, more
+  // realistic turning arc (real sleds drift wide when the puller
+  // changes direction). Combined with the rope-taut-only gate (lerp
+  // only fires when dist > 0.8 × TOW_DISTANCE), the sled has a
+  // natural "swing behind" feel.
+  SLED_YAW_LERP: 0.07,
   NEAR_SLED_DISTANCE_SQ: 4.0,                // 2m exclusion when placing a new sled near an existing one
   STAMINA_TOW_FACTOR: 1.5,                   // sprint+tow on foot drains stamina × this. ABJ: 2.0→1.5 (sprint duration when towing 3s→4s; reads less punishing for short tow runs while still discouraging long sled hauls at sprint)
 

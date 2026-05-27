@@ -60,34 +60,50 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 ## Where we are now
 
-**Last shipped**: Session ACC — Throw items on sled + sandworm twilight
-breach + B1 Phase 2 RopeEndpoint refactor. **Long overnight session**.
-10 files modified + 2 new (`src/util/playerPos.ts`, `src/world/rope.ts`).
-tsc clean. **Pre-ACC**: ambient sandworm twilight breach (dawn/dusk
-visibility band 180-400m, 8min cooldown, ~30% per twilight window,
-threat-display routes back to patrol via `_isTwilightBreach` flag).
-**ACC P1**: 2nd cuboid top-deck collider on the sled body, friction
-0.95, slightly inset to read as "inside the curled rim". Main collider
-keeps friction 0.6 for tow-on-sand feel. **ACC P2**: kinematic-rider
-promotion — when a dropped pickup body sleeps on the sled top, switch
-to KinematicPositionBased + drive world transform each frame from
-sled.group's transform applied to a captured local pose. Friction
-alone can't keep up with the per-frame position-snap of the
-inextensible-rope constraint at sprint speeds. New `updateSledRiders`
-tick AFTER updateSleds. **ACC P3**: additive save schema for
-`droppedPickups[].ridingSledId/Pos/Quat`; 2-pass load (pickups → sleds
-→ re-promote riders). **ACC Stretch**: aimable throw arc — drop
-velocity uses full camera direction (Y preserved) at 3.2 m/s + 1.0 m/s
-upward base; look at sled to lob items onto it. **B1 Phase 2**:
-NEW `src/world/rope.ts` with `RopeEndpoint` union + `Tether{a,b}`
-shape + `resolveEndpointWorldPos` resolver. NEW `src/util/playerPos.ts`
-lifting speeder-aware player position helper (3rd consumer triggered
-the lift). `Sled.tether` is now `RopeEndpoint`; `attachRopeToSled`
-signature updated; `updateSleds` resolves anchor via shared resolver.
-Save additive: 'sled' kind in tether discriminator + optional
-`tetherSledId`. **D119-D121 added**. **Cut per scope-cut #1**:
-B1-P6 RMB-on-rope raycast UX (conflicts with D77 RMB metaphor;
-LMB-on-hover covers it).
+**Last shipped**: Session ACD — Sled physics polish + riding mechanic
+(tabled). Long playtest follow-up to ACC. tsc clean. 10 files modified.
+**Slope-slide rewrite**: managed-scalar XZ velocity (`_slideVx/Vz`)
+driven by slope-gravity + Coulomb friction + linear damping, applied
+via direct `setNextKinematicTranslation` — bypasses Rapier's velocity
+integrator (the previous setLinvel-based slide was being zeroed each
+frame by Rapier's contact solver against the heightfield's 0.6 static
+friction). Sled actually slides now. Faster gain (6.0) + threshold ≈
+1.4° = drifts on any visible slope. **Body type → kinematic position-
+based**: dynamic items can no longer push the sled (Newton 3rd-law
+friction impulses were accumulating in body.linvel and pre-empting
+our setTranslation each frame); player KCC also can't push it. D123.
+**Option B — body tilts to match terrain slope**: body rotation
+slerps to terrain normal each frame via `setNextKinematicRotation`;
+bottom face conforms to terrain plane, top face uniformly above
+terrain across footprint. Fixes the "uphill terrain pokes up through
+the sled deck" issue (player was walking on terrain inside the sled's
+XZ AABB instead of on the deck itself). **Other**: pickup CCD enabled
+(rope no longer tunnels through terrain when dropped — D124), back
+wall collider → sensor (player no longer perches on the 12cm lip when
+jumping on), ground clearance 6cm (corners don't clip undulations),
+`_frameDeltaX/Y/Z` tracking added to Sled (preserved for future ride
+attempts). **Riding mechanic TABLED**: tried multiple architectures
+(manual platform-ride detection + delta-add, post-KCC bypass, sticky
+state, full 3D delta); Rapier's KCC has no built-in moving-platform
+support and the slope-projection / autostep / contact-resolution
+interactions with a tilted moving kinematic body couldn't be fully
+countered. Removed from controller.ts; documented in backlog.md with
+tried-approaches + next-attempt ideas (full Option C parenting OR
+synthetic "ride peg" dynamic body mirroring the branch-on-sled
+trick). D125. **D122-D125 added**.
+
+**Prior milestone**: Session ACC — Throw items on sled + sandworm
+twilight breach + B1 Phase 2 RopeEndpoint refactor. Long overnight.
+ACC P1: 2nd cuboid top-deck collider, friction 0.95. ACC P2:
+kinematic-rider promotion for items resting on the deck (D119).
+ACC P3: additive save schema for ridingSledId/Pos/Quat. ACC Stretch:
+aimable throw arc. B1 Phase 2: NEW `src/world/rope.ts` with
+`RopeEndpoint` union + `Tether{a,b}` shape + `resolveEndpointWorldPos`;
+NEW `src/util/playerPos.ts` lifting speeder-aware player position;
+`Sled.tether` is now `RopeEndpoint`; save additive (no version bump).
+Pre-ACC also added ambient sandworm twilight breach (dawn/dusk
+visibility band, 8min cooldown, routes back to patrol via
+`_isTwilightBreach` flag — D121). D119-D121.
 
 **Prior milestone**: Session ACB — Locker-on-sled (mobile storage) +
 static-pos tether UX. **Thirteenth session under iteration discipline**.

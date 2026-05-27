@@ -467,7 +467,10 @@ export function saveGameState(ctx: GameContext): { ok: boolean; error?: string }
             y: tr.y - 0.08 - Tuning.SLED_HALF_EXTENTS_Y,
             z: tr.z,
           },
-          rotationY: s.group.rotation.y,
+          // ACC playtest — read sled.yaw scalar (not group.rotation.y;
+          // group quaternion now composes terrain-tilt with yaw, so its
+          // Euler.y is no longer a pure yaw).
+          rotationY: s.yaw,
           contents: s.contents.map((e) => ({ ...e })),
           tether: s.tether.kind,
           // ACA — round-trip static-pos x/z payload. Only set when kind=static-pos.

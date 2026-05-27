@@ -170,16 +170,15 @@ function maybeStakeSledAtFloor(ctx: GameContext): void {
   if (ctx.inventory.slots[ctx.inventory.selectedIdx].item !== 'rope') return;
   const sled = ctx.sleds.list.find((s) => s.tether.kind === 'player');
   if (!sled) return;
-  // Compute stake point: player position + camera-horizontal-forward × 2.5m
+  // ACC playtest — drop rope AT player's feet (was: 2.5m in front).
+  // Reads as "letting go of the rope" — the free end stays where the
+  // player was standing. Sled remains tethered to that point; gravity
+  // can pull it downhill until the rope goes taut, holding it in
+  // place. Player can pick the rope back up by approaching + LMB.
   const tr = ctx.player.body.body.translation();
-  ctx.three.camera.getWorldDirection(_stakeFwd);
-  _stakeFwd.y = 0;
-  if (_stakeFwd.lengthSq() < 1e-4) return;
-  _stakeFwd.normalize();
-  const stakeX = tr.x + _stakeFwd.x * 2.5;
-  const stakeZ = tr.z + _stakeFwd.z * 2.5;
-  sled.tether = { kind: 'static-pos', x: stakeX, z: stakeZ };
-  ctx.ui.showToast('sled staked');
+  sled.tether = { kind: 'static-pos', x: tr.x, z: tr.z };
+  ctx.ui.showToast('rope dropped');
+  void _stakeFwd;  // keep the module-local var allocated; unused here now
 }
 
 export function updateInteraction(ctx: GameContext, _dt: number): void {

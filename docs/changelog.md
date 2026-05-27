@@ -3,6 +3,120 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ACD — 2026-05-26 — Sled physics polish + riding mechanic (tabled) ✓ verify pass
+
+`verified` — tsc clean. 10 files modified. Long playtest follow-up
+session iterating on the ACC sled mechanic from user-reported
+gameplay bugs. Major physics rework lands; the player-rides-sled
+mechanic was attempted across multiple architectures and tabled in
+backlog.md for a future session.
+
+**Sled physics rework** (`src/world/sled.ts`, `src/config/tuning.ts`):
+- **Managed-scalar slope-slide**. Pre-ACD slope-slide used `setLinvel`
+  to push the sled downhill each frame; with body friction 0.6
+  against the heightfield, Rapier's contact solver zeroed the
+  tangential velocity each step (static-friction angle atan(0.6)≈31°
+  swallowed every dune). New design: `_slideVx/_slideVz` managed
+  scalars driven by slope-gravity + Coulomb friction + linear
+  damping, applied via direct `setNextKinematicTranslation` each
+  frame. Bypasses Rapier's velocity integration entirely. Sled
+  actually slides now. D122.
+- **Coulomb friction model** for the slope-slide (`SLED_KINETIC_FRICTION
+  = 0.15`). Static-friction-threshold behavior emerges naturally:
+  below sin(θ)×GAIN < FRICTION, sled stays put / coasts to a stop.
+  Above, sled accelerates toward terminal velocity. Critical slope
+  for sliding ≈ atan(0.15/6.0) ≈ 1.4° with current gain.
+- **Body type → KinematicPositionBased**. Pre-ACD sled was Dynamic
+  with Y-locked translation + all rotations locked. Dynamic items
+  resting on the deck transferred lateral friction impulses to the
+  body via Newton's 3rd law; impulses accumulated in body.linvel and
+  the physics step integrated position BEFORE updateSleds re-set it,
+  compounding into wild downhill drift with multiple items on the
+  sled. Kinematic body can't be pushed by dynamic items (one-way
+  interaction); items still rest on the deck via friction with the
+  kinematic body's implicit velocity. Player KCC also can't push the
+  sled now. D123.
+- **Body tilts to match terrain slope (Option B)**. Pre-ACD the sled
+  body was axis-aligned with Y sampled at the sled's center; on a
+  slope, uphill terrain inside the sled's XZ footprint poked up
+  ABOVE the sled's flat top deck — player walking onto the sled
+  landed on terrain, not on the deck. Body now slerps its rotation
+  toward terrain normal each frame via `setNextKinematicRotation`;
+  the bottom face conforms to the terrain plane, top face uniformly
+  above terrain across the footprint. Visual group rotation mirrors
+  body directly (no separate slerp). D123.
+- **`SLED_GROUND_CLEARANCE = 0.06m`** — uniform Y lift above terrain.
+  Handles small terrain undulations across the 2.2m×1.2m footprint
+  so corners/yoke don't clip into sand.
+- **Back wall collider → sensor**. The 12cm-thick back-wall lip was
+  catching the player capsule when they jumped onto the sled — they
+  perched on the wall instead of landing flat on the deck. Items
+  still stay on the deck via top-deck friction (0.85) + the
+  kinematic-rider promotion.
+- **`_frameDeltaX/Y/Z` tracking on Sled**. Per-frame XYZ motion delta
+  computed at end of each updateSleds iteration. Currently unused
+  (the consuming player-ride logic was scrapped, see below) but
+  preserved as foundation for future ride attempts. Zero runtime cost.
+
+**Pickup tunneling fix** (`src/pickups/pickups.ts`): rope (and other
+flat-bbox items: cloth, bandage) dropped via G fell through terrain
+because the cuboid collider's bbox.y was small (rope coil is flat,
+~6.6cm tall after 1.5× scale) → collider half-height hit the 4cm
+`Math.max` floor → 8cm-thick collider + 60cm spawn height + downward
+throw velocity = per-frame travel exceeded collider thickness =
+discrete collision missed the heightfield. Enabled CCD on dynamic
+pickup bodies (`setCcdEnabled(true)`); Rapier's swept-shape test now
+catches any high-velocity crossing. D124.
+
+**Sled riding mechanic — tabled** (`src/player/controller.ts`,
+`docs/backlog.md`): user goal was "stand on sled, sled moves, player
+rides with it" (like standing on a moving platform). Attempted
+multiple architectures:
+- Manual platform-ride detection (raycast + AABB+Y fallback) +
+  delta-add to KCC `desired` — KCC's slope-projection ate ~20% of
+  horizontal motion when standing on the tilted body.
+- Apply delta AFTER `computeColliderMovement` (bypass slope-
+  projection) — drift dropped to ~10% but player's Y still followed
+  gravity instead of the sled's Y change; gap built until detection
+  dropped.
+- Sticky ride state + full 3D delta (XYZ) + `_frameDeltaY` tracking
+  — player still slid off after 5-10 frames.
+Root cause: Rapier's KinematicCharacterController has no built-in
+moving-platform tracking. KCC's slope projection, autostep, and
+contact resolution interact with a tilted moving kinematic body in
+ways that no amount of detection + delta application could fully
+counter. Mechanic removed from controller.ts; data preserved on
+Sled for next-attempt foundation; backlog entry documents tried
+approaches + next-attempt ideas (full Option C parenting, or
+synthetic "ride peg" dynamic body mirroring the branch-on-sled
+trick). D125.
+
+**Cleanup**: removed the platform-ride code from `controller.ts`
+(raycast buffers, AABB fallback, sticky state, debug logging,
+post-KCC delta application). Tabled feature documented in backlog.
+
+**Tuning constants added/lifted**:
+- `SLED_SLOPE_SLIDE_GAIN: 2.0 → 6.0` (user wanted faster slide)
+- `SLED_KINETIC_FRICTION = 0.15` (NEW — Coulomb friction model)
+- `SLED_SLACK_DECAY_PER_FRAME = 0.82` (NEW — lifted from inline magic)
+- `SLED_SNAP_PERP_DAMP = 0.55` (NEW — lifted from inline magic)
+- `SLED_GROUND_CLEARANCE = 0.06` (NEW)
+- `SLED_ANGULAR_DAMP` REMOVED (unused after kinematic switch)
+
+**D-entries added**: D122 (managed-scalar slope-slide bypass), D123
+(sled body kinematic + tilts to match terrain), D124 (pickup CCD to
+prevent thin-collider tunneling), D125 (riding mechanic tabled —
+documenting what was tried so the next attempt has direction).
+
+**Files touched**: `src/world/sled.ts` (~+560 LOC mostly the slope-
+slide + tilt rewrite), `src/config/tuning.ts` (NEW constants),
+`src/pickups/pickups.ts` (CCD), `src/player/controller.ts` (riding
+attempts then cleanup), `src/main.ts` (updateSleds reorder),
+`src/world/footprints.ts` (sled trail decals, earlier portion),
+`src/persistence/save.ts` (minor), `src/player/interaction.ts`
+(maybeStakeSledAtFloor drop-at-feet), `src/world/metalMaterial.ts`
+(D109 localSpace option), `docs/backlog.md` (tabled-feature entry).
+
 ## Session ACC — 2026-05-26 — Throw items on sled + sandworm twilight breach + B1 Phase 2 RopeEndpoint refactor ✓ verify pass
 
 `verified` — tsc clean. 10 files modified + 2 new files (`src/util/playerPos.ts`,

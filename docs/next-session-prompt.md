@@ -1,165 +1,70 @@
-# Session ACD — Kickoff Brief (post-ACC)
+# Session ACE — Kickoff Brief
 
 ## Read these now (in order)
 
-1. `CLAUDE.md` (auto-loaded; ACC Last-shipped — throw items on sled +
-   sandworm twilight breach + B1 Phase 2 RopeEndpoint refactor)
-2. `docs/session-end-report.md` — cumulative through ACC
-3. `docs/changelog.md` — ACC + ACB + ACA at top
-4. `docs/decisions.md` — D119-D121 latest (kinematic-rider, RopeEndpoint
-   vocabulary, twilight-breach flag bypass)
-5. `docs/roadmap.md`
-6. `docs/backlog.md` — ACC followup at top
+1. **CLAUDE.md** (auto-loaded) — project manual.
+2. **docs/session-end-report.md** — cumulative state through ACD.
+3. **docs/backlog.md** — open items. Note the **Sled riding mechanic — TABLED** entry near the top with tried-approaches + next-attempt directions.
+4. **docs/decisions.md** — D-entries through D125. ACD added D122 (managed-scalar slope-slide bypass), D123 (sled body kinematic + tilts to terrain), D124 (pickup CCD), D125 (riding mechanic tabled).
+5. **docs/roadmap.md** — "Up next" lists ACE candidates.
+6. **docs/architecture.md** — only if touching a system you don't already know.
 
-## What's already built (post-ACC snapshot)
+## What's already built (one paragraph)
 
-84 sessions. Tactile sled mechanics fully realized across ACA-ACC:
-- ACA: sled visual rework (warped scrap metal sheet) + B1 Phase 2 lite
-  (static-pos tether kind)
-- ACB: locker-on-sled (parented mobile storage) + static-pos LMB stake UX
-- ACC: throw items on sled (kinematic-rider promotion) + ambient
-  sandworm twilight breach + B1 Phase 2 architectural refactor
+ACD shipped a major sled physics rework: slope-slide via managed-scalar velocity bypassing Rapier's velocity integrator, sled body switched to `KinematicPositionBased` (immune to dynamic-item push impulses), body tilts each frame to match terrain slope (Option B — top face is uniformly above terrain across footprint), pickup CCD enabled (rope no longer tunnels through terrain when dropped), back wall as sensor (player doesn't perch on the lip when jumping on). `_frameDeltaX/Y/Z` tracking added to Sled as foundation for the future player-ride attempt. The "stand on sled and ride it" mechanic was attempted across 3+ architectures and tabled — Rapier KCC has no built-in moving-platform tracking and no amount of detection + delta application could fully counter its slope-projection/autostep/contact-resolution interactions with a tilted moving kinematic body. See `docs/backlog.md` + D125 for tried approaches and concrete next-attempt directions.
 
-The "tow a flatbed full of loot back to camp" gameplay loop is complete.
-You can: deploy a sled, attach a locker on top, tow it via rope by hand
-or speeder or companion, stake it down anywhere, throw items onto its
-deck and have them ride along, pick them back up.
+## Session ACE — pick at session-start
 
-SAVE_VERSION still v12 (ACC was additive only — no v13).
+User did not explicitly direct ACE. Pick at session-start based on what feels most missing. Top three candidates:
 
-## Session ACD focus — pick one direction
+**Option A — Sled riding mechanic, second attempt** (~3-5h). Take the D125 next-attempt directions:
+- Full Option C parenting: when ride detection fires, COMPLETELY override `setNextKinematicTranslation` on the player to `(sled.tr + savedLocalOffset + inputMotion)`. Skip KCC entirely while riding. Jump (Space) exits ride state. Most deterministic — eliminates all KCC-interaction issues.
+- OR: synthetic "ride peg" dynamic body anchored to the sled center. Thin invisible cylinder that overlaps slightly with the player capsule's lower hemisphere. Sled drags peg via friction; peg's lateral motion shoves the capsule via Rapier's contact resolution. Mirrors the working "branch on sled" trick the user discovered.
 
-ACD doesn't have a predetermined focus. Pick at session-start from the
-ACD candidates list in `docs/roadmap.md`. Recommended order of
-consideration:
+Acceptance: player can stand on a stationary sled and walk around freely on it. Player can stand on a sliding sled (downhill) and stays on it. Player can jump off to exit. No drift, no perching, no falling-through.
 
-### Option A — B1 Phase 3: non-sled tethers (~6-10h)
+**Option B — B1 Phase 3 generalised rope** (~4-6h). Lift the inextensible-rope constraint out of `updateSleds` into a shared system so NON-sled tethers work. Then add new endpoint kinds (`raider_corpse`, `sandworm_carcass`, `world_anchor` stake) + the gameplay around each. Big-ticket follow-up to ACC's Phase 2 architectural lift. Acceptance: drag a raider corpse on a rope; lasso a sandworm carcass for harvesting; tie a sled to a stake in the ground.
 
-The Phase 2 architectural lift positions for this but the actual
-constraint physics for non-sled towed bodies hasn't shipped. To make
-"drag a raider corpse" or "lasso a lizard" work:
-
-1. Lift the inextensible-rope position-snap from `updateSleds` into a
-   shared `updateTetherConstraints(ctx)` system that owns physics for
-   any towed-end body (not just sleds).
-2. Add new endpoint kinds (`raider_corpse`, `lizard`, `sandworm_carcass`,
-   `world_anchor` stake item) — each ~30 LOC per the D120 pattern.
-3. Gameplay around each: raider corpses spawn on death + can be dragged
-   to camp; world-anchor stake is a craftable item that creates a
-   `static-pos` endpoint anywhere.
-
-Big-ticket continuation. Lots of touch points but each one is mechanical.
-
-### Option B — A1 infinite chunk streaming (~6-10h)
-
-The 2400m world (3×3 chunks) feels small after 80+ sessions. Streaming
-new chunks at the world edge as the player walks would make the world
-truly explorable. Per-seed determinism preserved via the existing seed
-infrastructure.
-
-Risks: chunk lifecycle (loading + unloading meshes/bodies), POI
-distribution across newly-streamed chunks, save schema for current
-chunk grid.
-
-### Option C — Procedural pipeline applied to NPCs (~4-8h)
-
-The D115+D117+D118 stack (Lathe primitives + cloth drape +
-sub-pivots) currently only powers the player rig. Apply it to:
-- Raider variants (3-4 silhouettes with different clothing layers)
-- Companion (currently simple radial creature)
-- Lizards (currently simple body+head primitives)
-
-Visible payoff: world reads more populated + each creature has
-characterful animation.
-
-### Option D — Multi-worm population (~3-4h)
-
-Currently 1 worm per world. Extending to N (say 2-3) needs:
-- Save schema: `sandWorm: {...} | null` → `sandWorms: [...]`
-- Per-worm spawn separation (min 400m)
-- Detection radius shouldn't compound (already independent per worm)
-- Playtest: N>1 might ruin early game — start with N=2.
-
-### Option E — RMB-on-rope UX (was scope-cut from ACC) (~1-2h)
-
-If you want a focused small session, revisit the D77 metaphor conflict.
-Either (a) re-bind RMB-on-rope to a new button (Tab? Q?), (b) make RMB
-context-sensitive (release if attached, attach if not — but that's
-already what LMB does), or (c) decide it's not worth the disruption
-and remove from the backlog permanently.
-
-### Option F — Item viewmodel fidelity pass remainder (~3-5h)
-
-19 ItemDefs still at primitive/basic-shader complexity. List from
-ABO and ACC backlog: large_tent_kit, bedroll_kit, lantern_kit, torch,
-flashlight, etc. Apply procedural shader vocab (D107+D109+ABH) per
-item. Mechanical work.
-
-## Priority items (if Option A picked)
-
-### B1 Phase 3 P1 — Lift constraint to shared system (~2-3h)
-Move the inextensible-rope position-snap from `updateSleds` into a new
-`src/world/tetherConstraints.ts` module + `updateTetherConstraints(ctx)`
-tick. New `Tether {a, b}` records on a per-rope list (separate from
-sled.tether for now; sled.tether stays for current behavior). Each
-tick:
-- For each Tether, resolve a + b world positions via
-  `resolveEndpointWorldPos`.
-- If neither is the player or a sled (i.e., both endpoints are
-  non-locomotion-capable), apply the position-snap to the side
-  designated as "towed" — likely the one with a Rapier dynamic body.
-
-### B1 Phase 3 P2 — World anchor stake item (~1-2h)
-New craftable: `stake_kit` (recipe: scrap×1 + branch×1). On placement,
-creates a `world_anchor` Pickup-like entity at the placement position.
-Rope can be tied to a stake. Replaces / complements the ACB
-`maybeStakeSledAtFloor` UX with a tangible item.
-
-### B1 Phase 3 P3 — Raider corpse drag (~2-3h)
-On raider death, spawn a `raider_corpse` entity (procedural rig
-re-used from raider, scaled + rotated to face-up). Pickup-like
-hover detection; rope can tie to it. Towed via the new Phase 3
-constraint system. Use case: drag corpse off the road, to a pile,
-into a sled cargo deck for storage (corpse-as-pickup?).
-
-### B1 Phase 3 P4 — Save migration v12 → v13 (~30min)
-Per-rope tether persistence (separate from sled.tether). Schema
-addition: `tethers: [{ a: RopeEndpoint, b: RopeEndpoint }, ...]` for
-non-sled ropes. Bump version if needed.
+**Option C — Visual-polish wrap-ups + 3P camera real-playtest** (~2-3h). Remaining polish items from the ABP-ABX arc (per-item viewmodel 3P readability NOTE from ABY, 3P camera collision real-playtest, walk-cycle-to-footstep audio cadence sync).
 
 ## Autonomy contract
 
-Iteration discipline applies if visual/feel work (B1 Phase 3 raider
-corpse rig is visual). Pure data-model + save schema can verify via
-tsc + boot test.
+When ambiguous mid-session → pick the option closest to the GDD pillars + decisions.md realism dial, append a new D-entry explaining the call, keep going. Never block to ask the user mid-session for routine ambiguity. Surface only on:
+- Procedural-vs-asset question (D107 — stay procedural unless explicit user approval).
+- Save-schema bumps (D81 — additive only; flag if you need to bump SAVE_VERSION).
+- Destructive git operations.
+- Catastrophic block (a critical system breaks and the fix > 1h).
+
+## Stop conditions
+
+- Wall-clock 4-6h elapsed for a focused session, 8-14h for an overnight.
+- All priority items shipped + budget remains → escalate to next item from candidates.
+- 3 consecutive fix walls on the same gate → invoke `/scope-cutter` and pick a different path.
+- Catastrophic block — the kind that breaks main.ts boot or the save format.
+- Destructive-action attempt — STOP and surface immediately.
+
+## On stop — `/session-end`
+
+Run `/session-end`. It verifies (tsc clean), appends the changelog entry, updates CLAUDE.md / roadmap.md / decisions.md / backlog.md / session-end-report.md / next-session-prompt.md, runs `/post-mortem`, prints commit-message hints (print-hints mode per Dustfall's default git policy).
 
 ## Notable footguns
 
-- **D81 save migration**: schema at v12 (additive). Phase 3 may want
-  v13 bump if adding `tethers: [...]` field for per-rope persistence.
-- **Constraint lift risk**: the inextensible-rope position-snap in
-  `updateSleds` is finely tuned for sled physics (locked rotations,
-  CCD, body damping). Lifting to a shared system needs to preserve
-  these properties or each per-tether type needs its own body
-  configuration.
-- **Kinematic-rider doesn't apply to towed bodies** — D119 is for
-  STATIONARY (resting-on-something) items. Towed bodies (like a
-  raider corpse) need to remain dynamic (collide with terrain,
-  bounce, tumble). Don't accidentally promote a corpse to
-  kinematic-rider.
+- **D107 zero-asset**: No GLB, no PBR textures, no external assets. Everything procedural.
+- **D109 localSpace=true on moving entities**: any shader applied to a moving body (sled, companion, sandworm, lizard, speeder, player rig) MUST pass `localSpace: true` or texture detail will crawl across the surface as the body moves.
+- **D81 additive save discipline**: new fields are optional, no version bump unless schema is genuinely incompatible.
+- **D122 managed-scalar motion bypass**: if you setLinvel on a body with friction against the heightfield, expect the contact solver to eat it. Use kinematic + setNextKinematicTranslation instead.
+- **D123 body tilts to match terrain**: the sled body is now KinematicPositionBased and rotates each frame to terrain normal. Items on the deck stay via friction (0.85, atan = 40° threshold > any practical dune slope).
+- **D125 KCC moving platforms**: Rapier's KCC has no built-in moving-platform support. Don't expect setLinvel or friction on a moving kinematic body to drag the KCC capsule along.
+- **Sled `_frameDeltaX/Y/Z`**: tracked each frame in `updateSleds` but currently UNUSED. Preserved as foundation for the next ride-mechanic attempt. Free to read.
 
 ## Verification protocol
 
-```
-npm run verify     # = tsc --noEmit
-```
-
-For physics work, verify via boot test: place a sled, throw items
-onto deck, attach rope, walk → items follow sled. After Phase 3:
-kill a raider, tie rope to corpse, drag to a sled, deposit corpse,
-walk away pulling sled with corpse inside.
+Single command: `npm run verify` (= `tsc --noEmit`). Dustfall is post-MVP and opted out of the framework's tier-ladder verification model per the roadmap.md framework note.
 
 ## Begin block
 
-Read CLAUDE.md (auto) + recent changelog + decisions. Pick an
-option from the ACD candidates. TaskCreate sub-tasks. Start.
+1. Read CLAUDE.md (auto-loaded), session-end-report.md, backlog.md (note the TABLED riding entry), decisions.md (D125 especially), roadmap.md.
+2. Confirm `npm run verify` baseline passes.
+3. Decide on ACE direction (A / B / C above, or surface a different priority the user wants).
+4. TaskCreate covering the priority items.
+5. Begin coding.

@@ -75,14 +75,18 @@ and promotes the second.
 - **Session ABS** (2026-05-25, body geometry realism push under discipline): **Fourth session under discipline**. User direction "real video game quality model + rigging, not blocky figures and cylinders". 3 elements fully iterated; 3 deferred to ABT. 1 file modified (playerRig.ts). D115. **P1 Lathe torso (4 rounds)**: 4-piece composite ("cans stacked") → single LatheGeometry from 14-point profile. DoubleSide for poncho-V visibility. Real body silhouette. **P2 tapered Lathe limbs (1 round)**: all 4 limbs → Lathe profiles with thigh/quad/calf/bicep/forearm muscle contours. **P3 tapered cylinder fingers (1 round)**: palm proportions fixed + knuckle ridge + tapered cylinder fingers replacing box stacks. Major quality threshold crossed — rig reads as real human figure within D107 zero-asset.
 - **Session ABL** (2026-05-24, overnight ~3h of 6h budget): megaWreck visual rebuild. Edit-in-place refactor preserving collider layout + 8 panels + shelter zone + journal — pure visual lift. Procedural shader vocab applied to all hull/rust/pipe materials; tapered ellipsoidal cylinder shell drapes over the box-wall aft section; 6 rust band wraps; exposed vertical ribs + torn hull-plate fragments at the mid-hull break. Closes the "megaWreck rebuild" backlog item. 1 file, +166/-22.
 - **Session ABK** (2026-05-24, overnight 6h): Close the biome-specific POI family. NEW `src/world/saltOutpost.ts` (concrete base + corroded antenna spire + sample crates + cargo_container panel) + NEW `src/world/rockyEntrance.ts` (boulder outcrop + cave-mouth arch + descending stairs + sunken interior chamber via BackSide stone walls + shelter zone + escape_pod panel). Dispatch in poi.ts goes dune→salt→rocky for greedy multi-region spread. Multi-seed verified at 12345 + 7777 (both 5 shelter zones with +1 from rocky entrance). 5 files, 2 new modules.
+- **Session ACD** (2026-05-26): Sled physics polish + riding mechanic tabled. Long playtest follow-up. Slope-slide rewrite via managed-scalar velocity (`_slideVx/Vz` + Coulomb friction + direct setNextKinematicTranslation) — bypasses Rapier velocity integrator that was being zeroed by heightfield contact friction. Body type → KinematicPositionBased (items can't push sled); Option B body tilts to match terrain slope (top face uniformly above terrain in footprint). Pickup CCD prevents rope tunneling through terrain. Back wall → sensor (no player perching). `_frameDeltaX/Y/Z` tracking added (preserved for future). Riding mechanic tabled after multiple architectural attempts — Rapier KCC has no moving-platform support; documented in backlog with next-attempt ideas. D122-D125.
 
 ## Up next
 
-ACC shipped throw-items-on-sled + ambient twilight breach +
-architectural B1 Phase 2 RopeEndpoint refactor.
-See `docs/next-session-prompt.md` for the full ACD brief.
+ACD shipped the sled-physics polish + tabled the riding mechanic.
+The sled now slides realistically on slopes, items stay on the deck,
+and dropped items don't tunnel through terrain. The riding mechanic
+is documented in backlog.md with concrete next-attempt directions.
 
-**ACD candidates** (pick at session-start):
+See `docs/next-session-prompt.md` for the full ACE brief.
+
+**ACE candidates** (pick at session-start):
 - **B1 Phase 3** — lift the inextensible-rope constraint out of
   `updateSleds` into a shared system so NON-sled tethers (corpse drag,
   lassoed pickup) work. Then add new endpoint kinds (raider_corpse,

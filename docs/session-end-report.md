@@ -2,151 +2,44 @@
 
 Cumulative state. Rewritten end-to-end at each `/session-end`.
 
-**Current state**: Session ACC shipped (2026-05-26, long overnight:
-throw items on sled + sandworm twilight breach + B1 Phase 2
-RopeEndpoint refactor). 84 sessions post-MVP. tsc clean.
-**SAVE_VERSION still v12** (ACC additive only — no v13 bump). 10 files
-modified + 2 new (`src/util/playerPos.ts`, `src/world/rope.ts`).
+**Current state**: Session ACD shipped (2026-05-26 — sled physics polish + riding mechanic tabled). 85 sessions post-MVP. tsc clean. **SAVE_VERSION still v12** (ACD additive only — no schema changes). 10 files modified, no new modules.
 
-**ACC scope** (long overnight):
-- **Pre-ACC ambient sandworm twilight breach**: fires during ABO
-  dawn/dusk windows when player is in 180-400m visibility band (out
-  of detection, in fog/draw range). 8min cooldown + 1.2%/s probability
-  → ~30% chance per twilight visit. Reuses `enterStationaryBreach`
-  but routes back to patrol via `_isTwilightBreach` flag bypass (D121)
-  so no engagement / no attackCount increment. Pure cosmetic threat-
-  display on the horizon.
-- **ACC P1 sled top deck collider**: 2nd cuboid attached to sled body,
-  sits above main collider, friction 0.95. Items physically rest here.
-  Inset to read as "inside the curled rim".
-- **ACC P2 kinematic-rider promotion (D119)**: when dropped pickup
-  body sleeps on the sled top, switch body type to
-  `KinematicPositionBased`, capture sled-local pose, drive world
-  transform each frame from `sled.group.matrixWorld × ridingLocalPos`.
-  New `updateSledRiders(ctx)` tick AFTER `updateSleds`. Pure friction
-  approach was insufficient — the inextensible-rope position-snap
-  teleports the sled ~0.1m/frame faster than Coulomb friction can
-  drag items.
-- **ACC P3 save items-on-sled**: additive schema
-  `droppedPickups[].ridingSledId/Pos/Quat?`. 2-pass load (pickups
-  spawn → sleds spawn → re-promote riders to kinematic). Dangling
-  sled refs cleared.
-- **ACC Stretch aimable throw**: drop velocity uses full camera
-  direction (Y preserved) at 3.2 m/s + 1.0 m/s base upward. Look at
-  sled to lob items onto deck.
-- **B1 Phase 2 RopeEndpoint refactor (D120)**: NEW `src/world/rope.ts`
-  with `RopeEndpoint` union + `Tether {a, b}` shape +
-  `resolveEndpointWorldPos` resolver. NEW `src/util/playerPos.ts`
-  lifting speeder-aware player position helper (3rd consumer
-  triggered lift; old copies in companion.ts + sandWorm.ts deleted).
-  `Sled.tether` is now `RopeEndpoint` (sled is implicit second
-  endpoint); `attachRopeToSled` signature changed to accept
-  RopeEndpoint; `updateSleds` resolves anchor via shared resolver
-  (replaces previous 4-case switch). Save additive: 'sled' kind in
-  tether discriminator + optional `tetherSledId`.
+## ACD scope (this session)
 
-**Cut from ACC per scope-cut #1**: B1-P6 RMB-on-rope raycast-pick UX
-(conflicts with D77 RMB = release/pack-up convention; LMB-on-hover
-already covers attach). Deferred to ACD or later. Bigger Tier 3
-stretch endpoint kinds (raider corpse, sandworm carcass) deferred —
-would require lifting the constraint physics out of `updateSleds`
-into a shared system that can apply to any towed-end body.
+Long playtest follow-up session focused on iterating sled mechanics from user-reported gameplay bugs. Major physics rework lands; the player-rides-sled mechanic was attempted across 3+ architectures and tabled in backlog.md for a future session.
 
-The "tow a flatbed full of loot back to camp" gameplay loop is now
-complete: deploy sled → attach locker → tow by hand/speeder/companion
-→ stake anywhere → throw items onto deck → items ride along. Player
-expressed throw-items intuition in the ACB session direction; ACC
-delivers it.
+**Sled physics rework** (`src/world/sled.ts`):
 
-**Token spend ACC**: ~3-3.5h wall clock. Estimated 70-90K input
-tokens, 20-30K output. Cost ~$6-9.
+- **Managed-scalar slope-slide (D122)**. Pre-ACD slope-slide used `setLinvel` to push the sled downhill each frame; with body friction 0.6 against the heightfield, Rapier's contact solver zeroed the tangential velocity each step (atan(0.6)≈31° static friction angle swallowed every dune). New design: `_slideVx/_slideVz` managed scalars driven by slope-gravity + Coulomb friction + linear damping, applied via direct `setNextKinematicTranslation` each frame. Bypasses Rapier's velocity-integration + contact-resolution path entirely. Sled actually slides now.
 
-**Prior state (ABZ pre-ACC)**: Session ABZ shipped B1 generalized
-rope Phase 1 — companion tether kind, SAVE_VERSION v12. Then ACA
-(sled visual rework + static-pos endpoint kind) + ACB (locker-on-sled
-+ static-pos UX) bridged the gap to ACC. Throw-items deferred across
-ACA-ACB landed in ACC.
+- **Body type → KinematicPositionBased (D123)**. Pre-ACD sled was Dynamic with Y-locked translation + all rotations locked. Dynamic items resting on the deck transferred lateral friction impulses to the body via Newton's 3rd law; impulses accumulated in body.linvel and the physics step integrated position BEFORE updateSleds re-set it, compounding into wild downhill drift with multiple items on the sled. Kinematic body type means dynamic items can't push it (one-way kinematic-vs-dynamic interaction); items still rest on the deck via friction with the kinematic body's implicit velocity (`(next - current) / dt`). Player KCC also can't push the sled now.
 
-**Prior state (ABY pre-ABZ)**: Session ABY shipped Road A polish
-wrap-ups (footstep cadence sync + limb R2 + 3P viewmodel readability).
+- **Body tilts to match terrain slope — "Option B" (D123)**. Pre-ACD the sled body was axis-aligned with Y sampled at the sled's center; on a slope, uphill terrain inside the sled's XZ footprint poked up ABOVE the sled's flat top deck — player walking onto the sled landed on terrain, not on the deck. Body now slerps its rotation toward terrain normal each frame via `setNextKinematicRotation`; the bottom face conforms to the terrain plane, top face uniformly above terrain across the footprint. Visual group rotation mirrors body directly (no separate slerp).
 
-**ABX scope**: 4 elements iterated, all material/texture variation
-within zero-asset:
-- **P1 — Poncho dye stripes**: per-vertex color attribute on poncho
-  geometry. 5 alternating tonal bands (warm-darker vs cool-lighter)
-  bucketed by theta + wear gradient (+5% hem, -3% top). Cloned
-  ponchoMat with `vertexColors=true`. Reads as hand-dyed cloth.
-- **P2 — Skin tone weathering**: face skinMat accent `0x8a7048 →
-  0x6e4a26` (sun-aged brown), sheen 0.5→0.22 (matte). NEW handSkinMat
-  with grimy accent `0x4a3520` + larger calluses, applied to all
-  hand parts. Face vs hands now visually distinct.
-- **P3 — Pauldron weathering + rivets**: wearLevel 0.7→0.88 + 4
-  rivet studs per plate (12 total small SphereGeometry corner studs).
-- **P4 — Bandolier leather**: STRAP_COLOR 0x505050→0x4a3220 +
-  strapMat factory switched metalMaterial → fabricMaterial+
-  disableShimmer. Reads as worn brown leather.
+- **`SLED_GROUND_CLEARANCE = 0.06m`** — uniform Y lift above terrain. Handles small terrain undulations across the 2.2m×1.2m footprint so corners/yoke don't clip into sand.
 
-**Cross-session arc COMPLETE**: 9 sessions of discipline-driven
-iteration (ABP→ABX). Full procedural-character pipeline:
-- Geometry: D115 Lathe body
-- Cloth: D117 drape displacement
-- Rigging: D118 sub-pivots + animation
-- Camera: D116 over-shoulder
-- Movement: D114 walk cycle
-- Items: D113 dual-mesh
-- Asymmetric clothing: D111
-- Moving-entity shader: D109
-- Zero-asset policy: D107
+- **Back wall collider → sensor**. The 12cm-thick back-wall lip was catching the player capsule when they jumped onto the sled — they perched on the wall instead of landing flat on the deck. Items still stay on the deck via top-deck friction (0.85).
 
-ABX patterns (per-vertex color, per-region material variation,
-rivets-as-detail-decoration, leather-via-fabricMaterial) add
-texture/material variation to the pipeline without new D-entry —
-they're applications of existing decisions.
+- **`_frameDeltaX/Y/Z` tracking on Sled**. Per-frame XYZ motion delta computed at end of each updateSleds iteration. Currently unused (the consuming player-ride logic was scrapped) but preserved as foundation for future ride attempts. Zero runtime cost.
 
-**ABW scope**: focused fix-the-bug session. User direction: "another
-round of polish, screenshots from multiple angles, check for weird
-or unrealistic — cape clipping through back. Texture pass deferred
-to its own session."
+**Pickup tunneling fix (D124)** (`src/pickups/pickups.ts`): rope (and other flat-bbox items: cloth, bandage) dropped via G fell through terrain because the cuboid collider's bbox.y was small (~6.6cm) → collider half-height hit the 4cm `Math.max` floor → 8cm-thick collider + 60cm spawn height + downward throw velocity = per-frame travel exceeded collider thickness = discrete collision missed the heightfield. Enabled CCD on dynamic pickup bodies; Rapier's swept-shape test now catches any high-velocity crossing.
 
-- **P1 — Multi-angle audit (verification only)**. Captured rig from
-  front, side, back, back-3/4 angles in 3P over-shoulder cam.
-  Confirmed user-reported cape clipping. Verified prior-session
-  polish (ABS Lathe body geometry, ABU deltoid bridges + finger
-  knuckles + cloth folds, ABV sub-pivot rigging) all reading
-  correctly across angles — no critical secondary issues surfaced.
+**Sled riding mechanic — TABLED (D125)** (`src/player/controller.ts`, `docs/backlog.md`): user goal was "stand on sled, sled moves, player rides with it". Attempted multiple architectures:
+1. Manual platform-ride detection (raycast + AABB+Y fallback) + delta-add to KCC `desired` BEFORE compute — KCC's slope-projection ate ~20% of horizontal motion when standing on the tilted body.
+2. Apply delta AFTER `computeColliderMovement` (bypass slope-projection) — drift dropped to ~10% but the player's Y still followed gravity instead of the sled's Y change; gap built until detection dropped.
+3. Sticky ride state + full 3D delta (XYZ) + `_frameDeltaY` tracking — player still slid off after 5-10 frames.
 
-- **P2 — Cape clipping fix (1 round)**. Root cause analysis:
-  `ponchoR_top` was `TORSO_CHEST_R * 1.08 = 0.238m` but the ABS
-  Lathe torso has a pectoral swell at `TORSO_CHEST_R * 1.18 =
-  0.260m`. Chest geometry was wider than poncho — body poked
-  through the cloth at the front V cut + back. Fix: `ponchoR_top ×
-  1.08 → 1.32` (0.290m, 3cm clearance over pectoral swell). Hem
-  flare `1.6 → 1.75` proportionally so the drape shape stays
-  natural. Verified front, side, back: body fully contained inside
-  poncho, cape silhouette reads as proper draped cloth.
+Root cause: Rapier's KinematicCharacterController has no built-in moving-platform tracking. KCC's slope projection, autostep, and contact resolution interact with a tilted moving kinematic body in ways that no amount of detection + delta application could fully counter. Mechanic removed from controller.ts; data preserved on Sled for next-attempt foundation; backlog entry documents tried approaches + next-attempt ideas (full Option C parenting, or synthetic "ride peg" dynamic body mirroring the branch-on-sled trick the user discovered as an accidental working case).
 
-**Deferred to ABX (per user direction)**: PLAYER MODEL TEXTURE PASS.
-Apply existing procedural shader vocabulary to specific rig elements
-for material variation + weathering detail. This is the natural next
-step now that rigging + geometry + cloth + animation are all in
-place. Shader vocab available: D107 (zero-asset) + ABH (metalMaterial
-/ paintMaterial / skinMaterial) + ABJ (woodGrain / bone / glass) +
-ABN (fabricMaterial disableShimmer) + ABU (D117 cloth-drape
-displacement). Texture work composes ON TOP without breaking D107.
+**Tuning constants added/lifted**:
+- `SLED_SLOPE_SLIDE_GAIN: 2.0 → 6.0` (user wanted faster slide)
+- `SLED_KINETIC_FRICTION = 0.15` (NEW — Coulomb friction model)
+- `SLED_SLACK_DECAY_PER_FRAME = 0.82` (NEW — lifted from inline magic)
+- `SLED_SNAP_PERP_DAMP = 0.55` (NEW — lifted from inline magic)
+- `SLED_GROUND_CLEARANCE = 0.06` (NEW)
+- `SLED_ANGULAR_DAMP` REMOVED (unused after kinematic switch)
 
-**Cross-session quality arc (8 sessions complete)**:
-- ABP: baseline blocky procedural rig + 7 clothing layers
-- ABQ: poncho barrel→shawl + walk cycle D114 knee bug fix
-- ABR: motion verification + camera-snap wiring
-- ABS: Lathe torso + Lathe limbs + tapered cylinder fingers (D115)
-- ABT: over-shoulder camera (D116) + feet plant fix + head Lathe
-- ABU: cloth drape (D117) + body polish (deltoid bridge + knuckles)
-- ABV: sub-pivot rigging (D118) + hood D117 drape
-- **ABW: cape clipping fix + multi-angle audit**
-
-Procedural character + rigging + animation are NOW SOLID. ABX
-(texture/material variation) closes out the visual side of the
-character pipeline.
+**D-entries**: D122 (managed-scalar slope-slide), D123 (kinematic body + body-tilts-to-terrain), D124 (pickup CCD), D125 (riding mechanic tabled with next-attempt directions).
 
 ---
 
@@ -160,7 +53,7 @@ Dustfall opts out of the gamedev-framework v0.3.x tier-ladder structure.
 | Tier 1 — Vertical slice | I–W | ✓ shipped | Inventory, crafting, interactions, opening scene, journal |
 | Tier 2 — Target | X–CC | ✓ shipped | Audio architecture, atmosphere, speeder, animated title |
 | Tier 3 — Expected | DD–PP | ✓ shipped | Sand worm boss, weapon variants, procgen POIs, biome rework |
-| Tier 4 — Polish + breadth | QQ–ABW | ✓ ongoing | Plus ABP→ABW 8-session procedural-character quality arc (rig + cloth + animation + cape-fit all solid; D115/D116/D117/D118 codify the pipeline) |
+| Tier 4 — Polish + breadth | QQ–ACD | ✓ ongoing | Plus ABP→ABY 10-session procedural-character pipeline + ACA-ACD sled-mechanic arc (visual + locker + throw items + physics polish; riding tabled) |
 
 **Verify status**: `npm run verify` = `tsc --noEmit`. PASS.
 
@@ -168,57 +61,55 @@ Dustfall opts out of the gamedev-framework v0.3.x tier-ladder structure.
 
 ## What works end-to-end (singleplayer flow)
 
-[Previously-listed flows preserved; see ABV session-end-report]
+The full Dustfall gameplay loop:
 
-**ABW delta to "what works"**:
-- 24. **Cape clips no longer break the silhouette** — poncho top
-  radius now clears the pectoral swell at all angles. Body
-  contained inside the cloth, no breakthrough.
+1. **Boot → title → new game / continue**. Procedural world seeded; opening scene wakeup; companion at side.
+2. **Survival systems**: thirst / hunger / temperature / stamina / health with day-night curves, shelter system, weather (storm escalating over 7-day countdown).
+3. **Exploration**: 2400m procedurally-seeded world, 6 flagship POIs + 22 procgen wrecks + biome-specific POIs (salt outpost, rocky entrance, dune buried cockpit) + themed clusters (military convoy, refugee caravan, comm-relay).
+4. **Combat**: machete (melee), scrap_gun (ranged + magazine reload), energy_pistol (charged), pipe_staff (knockback). Hostile sandworm boss with bait-and-strike + ambush states. Hostile raiders, fleeing lizards. Companion creature follows.
+5. **Salvage**: scrap_bar pry + per-component extract on wreck panels; condition tiers (corroded / standard / pristine).
+6. **Crafting**: 4-slot combine-to-discover (no recipe grid), 15+ recipes, partial-match suggestions.
+7. **Placement**: fire / tent / large_tent / bedroll / lantern / locker / sled kits; ghost-preview ring at place position.
+8. **Mounts + tow**: hover speeder (CC), companion (AAE); both can tow a sled via rope (ACC B1 Phase 2 RopeEndpoint).
+9. **Sled mechanic** (ACA-ACD): scrap-metal-sheet visual, attachable locker for mobile storage, kinematic-rider promotion for items resting on the deck, aimable throw arc to lob items onto the deck, items roll/fall via Rapier dynamic bodies (Tarkov-style settle). **ACD adds**: slope-slide downhill via managed scalars (sled actually slides on dunes), body tilts to terrain (deck conforms), no item-push drift, no rope tunneling through terrain.
+10. **Player rig** (ABP-ABY): 10-session procedural-character pipeline. Lathe-based torso + tapered Lathe limbs, asymmetric scavenger clothing (hood + poncho + bandolier + pauldron + bandana + forearm wraps), foot IK, sub-pivot rigging (D118), cloth drape (D117), over-shoulder 3P camera (D116), dual-mesh held items (D113).
+11. **Audio**: Web Audio procedural soundscape + 3 music tracks crossfaded by sun + perceived storm intensity.
+12. **Save/load**: localStorage v12. Seed-stable across reloads. Additive-schema discipline (D81) preserves backwards compat.
+
+**ACD delta** (this session):
+- Sled now actually slides downhill on slopes (was inert pre-ACD).
+- Sled body tilts to match terrain slope (geometric improvement).
+- Rope no longer tunnels through terrain when dropped.
+- Sled-as-a-platform: items rest stably on tilted deck; player CAN'T currently ride the sled (mechanic tabled — see D125 + backlog).
 
 ---
 
-## What's freshly shipped (ABW delta)
+## ACC-ACA condensed deltas
 
-- **`src/player/playerRig.ts`** (~+5/-3): `ponchoR_top` factor
-  1.08 → 1.32, hem flare 1.6 → 1.75. Single-bug-fix change.
-- **`docs/changelog.md`** ABW entry at top.
-- **`CLAUDE.md`** Last-shipped block updated.
-- **`docs/roadmap.md`** ABW row + ABX "Up next" rewritten.
-- **`docs/backlog.md`** ABW followup entry noting texture pass next.
-- **`docs/session-end-report.md`** — this file.
-- **`docs/next-session-prompt.md`** ABX kickoff brief.
+- **ACC** (2026-05-26, long overnight): throw-items-on-sled + ambient sandworm twilight breach + B1 Phase 2 RopeEndpoint refactor (D119-D121). ACC P1 top-deck collider; P2 kinematic-rider promotion; P3 save items-on-sled; Stretch aimable throw arc. B1 Phase 2: NEW rope.ts + playerPos.ts; sled tether is now `RopeEndpoint`; save additive.
+- **ACB** (2026-05-26): locker-on-sled (mobile storage) + LMB-on-empty-ground UX for static-pos tether. Throw-items deferred to ACC.
+- **ACA** (2026-05-26): sled visual rework (warped scrap metal sheet + welded yoke) + B1 Phase 2 lite (static-pos endpoint kind).
 
----
+## ABZ-ABP condensed deltas (10-session procedural-character arc)
 
-## ABP-ABV deltas (condensed)
-
-- **ABV** (sub-pivot rigging + hood D117): wrists + ankles +
-  spineBend + animation drives. D118.
-- **ABU** (cloth drape + body polish): D117 + deltoid bridges +
-  knuckles.
-- **ABT** (over-shoulder cam + feet + head Lathe): D116 + bug fix.
-- **ABS** (body geometry): Lathe torso + Lathe limbs + tapered
-  cylinder fingers. D115.
-- **ABR** (verification + snap wiring): 3P teleport snap callsites.
-- **ABQ** (iterative polish under new discipline): D114 knee fix.
-- **ABP** (3P + rig polish, long-overnight): D111-D113.
+- **ABZ**: B1 Phase 1 (companion tether kind), SAVE_VERSION v12.
+- **ABY**: walk-cycle to footstep cadence sync + limb R2 + per-item viewmodel 3P readability.
+- **ABX**: player model texture pass (poncho dye stripes + skin weathering + pauldron rivets + leather bandolier) within D107 zero-asset.
+- **ABW**: multi-angle audit + cape clipping fix.
+- **ABV**: rig sub-pivots (wrists + ankles + spineBend + animation — D118) + hood D117 drape.
+- **ABU**: cloth drape (D117) + body polish (deltoid bridges + neck cap + finger knuckles).
+- **ABT**: over-shoulder camera (D116) + feet plant fix + head Lathe geometry.
+- **ABS**: Lathe torso + tapered Lathe limbs + tapered cylinder fingers (D115).
+- **ABR**: motion verification + 3P teleport snap callsites.
+- **ABQ**: iterative polish under new framework discipline; D114 walk-cycle knee bug fix.
+- **ABP** (long overnight): 3P + rig polish; primitive rig + 7 clothing layers; D111-D113.
 
 ## Older sessions (condensed — see changelog for detail)
 
-- **ABO**: long-overnight 7-item bundle; A3 rigged player. D110.
-- **ABN**: bulk_hauler + megaWreck bow + 3 triage fixes (D109).
-- **ABM**: B7 dropped-item physics; v11 schema.
-- **ABL**: megaWreck visual rebuild.
-- **ABK**: biome POI family closed.
-- **ABJ**: aggressive overnight 14-item bundle.
-- **ABH**: texture overhaul (4 shader factories). D107.
-- **ABG**: panel interior visibility BackSide fix.
-- **ABF**: 5 flagship narrative journals.
-- **ABA**: overnight 7-item bundle. D101-D104.
-- **AAY**: visual overhaul. D97-D100.
-- **AAR-AAV**: salvage stack.
+- **ABO-ABK**: long-overnight bundles (procgen + ABM dropped-item physics + biome POIs + megaWreck rebuild + texture overhaul). D101-D110.
+- **AAR-AAY**: salvage stack + visual overhaul. D93-D100.
 - **AAA-AAQ**: polish + atmosphere arc.
-- **QQ-ZZ**: control overhaul, RMB context verbs, larger tent, sled.
+- **QQ-ZZ**: control overhaul, RMB context verbs, larger tent, sled introduction.
 - **DD-PP**: sandworm boss, weapon variants, procgen POIs, biome rework.
 - **A-CC-4**: foundations + atmosphere + speeder + animated title.
 
@@ -226,87 +117,87 @@ Dustfall opts out of the gamedev-framework v0.3.x tier-ladder structure.
 
 ## Known issues / partials
 
-- **Texture pass owed (ABX)** — character has solid silhouette +
-  cloth + rigging but materials are still relatively uniform per
-  ABS+ABU work. Texture session brings per-element variation.
-- **Walk-cycle to footstep cadence sync** (ABR backlog)
-- **Per-item viewmodel readability at 3P distance** (ABR backlog)
-- **3P camera collision real-playtest** still owed
-- **Foot IK mid-state transition** — idle→walking on slope shows
-  brief reset to flat. Cosmetic.
+- **Sled riding mechanic tabled** (D125) — player can't ride the sled when it slides downhill or is towed. See backlog.md for tried approaches + next-attempt ideas. THIS IS THE TOP CANDIDATE FOR ACE.
+- **Walk-cycle to footstep cadence sync** (ABR backlog, polish wrap-up remaining).
+- **Per-item viewmodel readability at 3P distance** (ABR backlog).
+- **3P camera collision real-playtest** still owed.
+- **Foot IK mid-state transition** — idle→walking on slope shows brief reset to flat. Cosmetic.
 
-See `docs/backlog.md` for full open list.
+See `docs/backlog.md` for full open list (riding mechanic entry at top with detailed tried-approaches + next-attempt directions).
 
 ---
 
 ## Constants worth tuning
 
-| Constant | Session | Default | Notes |
-|---|---|---|---|
-| `ponchoR_top` factor | ABW | × 1.32 | Was 1.08, expanded to clear pectoral |
-| `ponchoR_bot` factor | ABW | × 1.75 | Was 1.6, proportional bump |
-| Ankle plantar / dorsi | ABV | -0.45 / +0.30 | D118 |
-| Wrist hang base | ABV | -0.10 + swing × 0.15 | D118 |
-| Spine sway Z | ABV | -sin(phase) × 0.05 | D118 |
-| Hood D117 WAVES + amp | ABV | 4 / 1.2cm hem / 0.3cm top | Cloth drape on hood |
-| Poncho D117 WAVES + amp | ABU | 6 / 4.5cm / 0.8cm | D117 |
-| Poncho subdivision | ABU | 24 radial × 10 height | D117 |
-| Deltoid bridge sphere | ABU | r=0.085 scaled (1, 0.75, 1) | Per shoulder |
-| Finger knuckle sphere | ABU | r=0.011 at 1/3 + 2/3 | Per finger |
-| `_3P_BACK_DIST` / `_ABOVE` | ABT | 1.8m / 0.30m | Over-shoulder — D116 |
-| `headProfile` | ABT | 11 points | Lathe head (D115) |
-| `torsoProfile` | ABU | 17 points | Lathe torso (D115) |
-| Walk cycle knee bend | ABQ | `max(0, cos)*0.65` | D114 |
+New from ACD:
+
+| Constant | Default | Notes |
+|---|---|---|
+| `SLED_SLOPE_SLIDE_GAIN` | 6.0 | Was 2.0. Raise for faster slide; ~3-4 is more conservative. |
+| `SLED_KINETIC_FRICTION` | 0.15 | Coulomb friction coefficient. Higher = stickier slopes. Critical slope ≈ atan(K/GAIN) ≈ 1.4° at current. |
+| `SLED_SLACK_DECAY_PER_FRAME` | 0.82 | When rope slack on flat ground, multiply `_slideVx/Vz` by this each frame. |
+| `SLED_SNAP_PERP_DAMP` | 0.55 | Perpendicular damping at rope-snap event. |
+| `SLED_GROUND_CLEARANCE` | 0.06 | Body Y lift above terrain to clear undulations. |
+
+Existing tunables of interest:
+
+| Constant | Default | Notes |
+|---|---|---|
+| `SLED_LINEAR_DAMP` | 1.8 | Now applies to managed-scalar slide velocity (not body.linvel). |
+| `SLED_VISUAL_TILT_LERP` | 0.18 | Slerp rate for body rotation toward terrain normal. |
+| `SLED_HALF_EXTENTS_Y` | 0.10 | Body Y half-extent. Affects deck height above terrain (= 2*Y + clearance). |
+| `SLED_TOP_DECK_HALF_THICKNESS` | 0.015 | Top deck collider thickness. |
+| `SLED_TOP_DECK_FRICTION` | 0.85 | Items + back wall sensor friction. Holds items on tilted decks up to 40°. |
 
 ---
 
 ## Suggested next session (1-3 directions in priority order)
 
-1. **ABX — Texture pass** (~2-4h, user's stated next focus). Apply
-   procedural shader vocabulary to specific rig elements for
-   material variation + weathering. Per-element iteration per
-   discipline.
-2. **A1 infinite chunk streaming** (~6-10h big-ticket).
-3. **B1 generalized rope** (~4-5h).
+1. **ACE — Sled riding mechanic, second attempt** (~3-5h). Top priority. The user explicitly wants to come back to this. Take D125's next-attempt directions: full Option C parenting (override player setNext entirely while riding), OR synthetic "ride peg" dynamic body. The slope-slide and tilted body are now solid foundations.
 
-Top pick: ABX — user explicitly requested texture pass as the next
-focused session.
+2. **B1 Phase 3 generalised rope** (~4-6h). Lift the inextensible-rope constraint out of `updateSleds` into a shared system so NON-sled tethers work. Then add new endpoint kinds (raider_corpse, sandworm_carcass, world_anchor stake) + gameplay around each. Big-ticket follow-up to ACC's Phase 2 architectural lift.
+
+3. **Visual-polish wrap-ups + 3P camera real-playtest** (~2-3h). Remaining polish items from the ABP-ABX arc.
+
+Top pick: **ACE = sled riding, attempt 2.** User repeatedly asked for this; tabled with explicit "come back to it later" — best to deliver before context fades.
 
 ---
 
 ## Time spent
 
-78 sessions shipped (A through ABW). Approx ~256-323h cumulative dev
-time. ABW itself was ~15 minutes active iteration + 10 minutes docs
-(focused single-bug fix session).
+85 sessions shipped (A through ACD). Approx ~280-340h cumulative dev time. ACD itself was ~5-7h wall clock (long playtest follow-up session with extensive iteration).
 
 ---
 
 ## State at session end
 
-- **Git status**: working tree dirty (this session-end's docs updates
-  + playerRig.ts edit). Through `141510a` pushed to origin.
-- **Last commit**: `141510a` (ABV session-end docs catch-up).
-- **Last tag**: `session-ABV`. ABW will be tagged at commit time.
+- **Git status**: working tree dirty (this session-end's docs updates + 10 source/Tuning files from ACD changes). Through `8ed92ef` pushed to origin (ACC).
+- **Last commit**: `8ed92ef` (ACC: throw items on sled + sandworm twilight breach + B1 Phase 2 rope refactor).
+- **Last tag**: (Dustfall's git policy doesn't establish a session-tag convention; user may tag manually if desired).
 - **Ports bound**: none (preview stopped).
-- **Save state**: localStorage v11. ABW made zero save-schema changes.
+- **Save state**: localStorage v12. ACD made zero save-schema changes (D81 additive discipline — no new fields needed).
 
 ---
 
 ## Token spend this session (estimated)
 
-ABW was a focused fix-the-bug session.
+ACD was a long playtest-driven iteration session with many rounds of "user reports bug → diagnose → fix → user tests → next bug". Plus extensive analysis of the riding mechanic attempts.
 
-- Input: ~80-100K tokens (mostly screenshot eval loops + audit)
-- Output: ~15-20K tokens (focused fix + docs)
-- Cached input: substantial
-- Cost (Opus 4.7 rates, very rough): $5-7 for ABW itself
+- Input: ~250-350K tokens (heavy reads on sled.ts + controller.ts iterations + multi-round playtest feedback)
+- Output: ~80-120K tokens (substantial code changes + multi-option discussions + extensive comments)
+- Cached input: substantial (sled.ts + controller.ts reads repeated across iterations)
+- Cost (Sonnet 4.5 rates): rough estimate $15-25 for ACD itself.
 
-Within normal range.
+Above the project baseline (typical session: ~$5-10). Justifiable for the depth of physics rework + the architectural exploration of the riding mechanic, even though the riding feature didn't ship.
 
 ---
 
 ## Commit handoff
 
-Print-hints mode. ABW ships 1 source change (playerRig.ts) + 6 doc
-updates. Single source commit + session-end docs commit suggested.
+Print-hints mode. ACD ships:
+- 1 backlog.md entry (sled riding tabled with next-attempt directions)
+- ~700 LOC net change in sled.ts (slope-slide rewrite + Option B body tilt + kinematic body switch + various cleanups)
+- ~155 LOC change in tuning.ts (new constants + comments + removals)
+- ~50 LOC in controller.ts (riding attempts then removal)
+- Smaller diffs in main.ts, pickups.ts, save.ts, interaction.ts, footprints.ts, metalMaterial.ts
+- Docs updates: changelog ACD entry, CLAUDE.md Last shipped, roadmap.md Up next, decisions.md D122-D125, backlog.md, session-end-report.md (this file), next-session-prompt.md ACE brief.

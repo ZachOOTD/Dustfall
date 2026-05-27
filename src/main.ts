@@ -683,6 +683,7 @@ startLoop(ctx, (c, dt) => {
   updateSky(c, dt);              // sky sphere + sun disc (reads weather)
   updateOpeningWreckGodRay(c);   // AAB — skylight beam opacity tracks sun height + storm intensity
   updateSpeeder(c, dt);          // hover speeder forces + mount/dismount (CC) — must run BEFORE updatePlayer so the player capsule is teleported to the rider seat before camera-sync
+  updateSleds(c, dt);            // QQ — per-sled tow spring + rope visual. Moved BEFORE updatePlayer so this-frame's sled XZ delta is fresh when updatePlayer reads it for moving-platform-ride. Tether endpoint resolution reads ctx.player.body.body.translation() = position committed by this-frame's physics.step (one frame behind setNext, but negligible at tow speeds).
   updatePlayer(c, dt);           // movement + camera + advance dayTime
   updateStaminaWobble(c);        // WW — sin-driven camera jitter when stamina low (must run AFTER updatePlayer's camera-anchor)
   updateShelter(c, dt);          // before stats so heat path sees inShelter
@@ -704,7 +705,6 @@ startLoop(ctx, (c, dt) => {
   updateLanterns(c);             // AAC — sin-driven flicker on placed lanterns
   updateLargeTents(c, dt);       // AAZ — doorway open/close lerp on placed shelter tents
   updateCacti(c);                // CC-4 — regrow harvested alien-cactus fruit after a day cycle
-  updateSleds(c, dt);            // QQ — per-sled tow spring + rope visual; must run AFTER updateSpeeder + updatePlayer
   updateSledRiders(c);           // ACC P2 — drive any pickup riding a sled + promote settled pickups (must run AFTER updateSleds so sled.group transforms reflect this-frame's tow correction)
   updateInteraction(c, dt);      // raycast hover + E to open/refill/harvest/cook/sleep/etc (UU — pickup-take moved to LMB)
   updateInventoryInput(c, dt);   // 1-4, wheel, Q to use (Q still drives def.onUse as backup)

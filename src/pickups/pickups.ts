@@ -372,7 +372,17 @@ export function spawnDroppedPickup(
     const bd = RAPIER.RigidBodyDesc.dynamic()
       .setTranslation(pos.x, restY, pos.z)
       .setLinearDamping(0.6)
-      .setAngularDamping(0.8);
+      .setAngularDamping(0.8)
+      // ACC playtest follow-up — CCD enabled to prevent tunneling through
+      // the heightfield. Some viewmodels (rope coil, cloth, bandage) have
+      // very flat AABBs — bbox.y ≈ 4-6cm so the collider half-height hits
+      // the 4cm Math.max floor. With the 60cm spawn height + aimable-throw
+      // downward velocity, the body can reach 4+ m/s within 0.3sec —
+      // per-frame travel at 60Hz = ~7cm, exceeding the 8cm collider
+      // thickness. Discrete collision misses the heightfield and the
+      // pickup tunnels through. CCD's swept-shape test catches the
+      // crossing regardless of step size. Cheap on the ~30 pickup max.
+      .setCcdEnabled(true);
     if (opts.initialVel) {
       bd.setLinvel(opts.initialVel.x, opts.initialVel.y, opts.initialVel.z);
     }
