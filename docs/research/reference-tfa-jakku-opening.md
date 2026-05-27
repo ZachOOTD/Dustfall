@@ -123,17 +123,37 @@ The Jakku scavenger outfit appears in 7/10 shots:
 
 ## Open visual questions raised by this reference
 
-1. **Reinstate godrays inside the opening wreck?** Removed in AAJ as theatrical; TFA reference says theatrical is right. Worth a re-evaluation in a future visual session.
+User direction recorded during the reference-capture pass (2026-05-26):
 
-2. **Primitive sled tier — textile + rope (à la Rey's tow-net)?** Currently the only sled is the ACA scrap-metal sheet. A starter sled crafted from cloth + rope (cheaper recipe) could precede the scrap-metal upgrade, matching the TFA tow-net visual.
+1. **Reinstate godrays inside the opening wreck?** ✗ REJECTED. User prefers the current no-godray state; AAJ removal stands.
 
-3. **Backpack mesh on player rig?** Rey's outfit prominently features a strapped backpack. Dustfall's current rig has no visible backpack — could be a small geometry addition without breaking D107 zero-asset.
+2. **Primitive sled tier — textile + rope (à la Rey's tow-net)?** ✗ REJECTED. User likes the ACA scrap-metal sheet sled as the Dustfall identity; no second tier needed.
 
-4. **Glove finger-cutouts.** Subtle but recurring in TFA outfits. The Dustfall rig currently uses solid wrap gloves; finger cutouts would add character detail.
+3. **Backpack mesh + glove finger-cutouts on the player rig?** ✓ INTERESTING / future work. Tagged for the player-model refinement effort (see top-priority action below). Backpack idea has a stretch: **make the SLED visually mountable on the player's back** (so the sled isn't always deployed on the ground — player carries it when undeployed, like a real prospector). Open design question but matches the wandering-scavenger silhouette.
 
-5. **Stronger far-distance haze.** Shot 8's Star Destroyer on the horizon has very strong atmospheric perspective (mid-ground noticeably bluer + lower contrast than fore). Dustfall's current fog ramps are tuned for storm intensity — a base "day haze" beyond ~500m could match.
+4. **Stronger far-distance atmospheric haze?** 🟡 EXPERIMENTAL / future. Worth playing with in a focused visual session.
 
-6. **Visible repair / welding tool.** Not necessary now but would unlock the welding aesthetic from shot 1 if ever pursued.
+5. **Visible repair / welding tool.** Not pursued now. Could reconsider if a repair mechanic ever ships.
+
+---
+
+## TOP ACTION ITEM (logged 2026-05-26)
+
+**Refine the player model to match Rey's Jakku outfit as a specific target.** User: "the player model is ok but needs a lot of refinement. think we can use the image of Rey's outfit as our goal to achieve when modelling."
+
+The current rig (post-ABP→ABY 10-session arc) has the silhouette right (hood / poncho / bandolier / pauldron / bandana / forearm wraps / leather details). The gap to Rey-tier is detail fidelity:
+
+- **Wraps** — Rey's are tightly bound with VISIBLE BAND SPACING; ours read as smoother cloth. Need per-arm-segment band geometry or per-vertex band displacement.
+- **Headscarf** — Rey's wraps the head + drapes down the back-shoulder. Ours has a hood + bandana; could be unified into a single more-naturalistic scarf piece.
+- **Goggles** — Rey's are positioned on the FOREHEAD by default, dropped over eyes in dust/welding situations. Ours are already there but could read crisper.
+- **Layered tunic + cinched belt + visible pouches** — Rey's silhouette has more layering depth. Add belt + pouches + tunic-edge variation.
+- **Gloves with finger cutouts at knuckles** — currently solid wraps; finger-cutout detail is small but tonal-defining.
+- **Visible backpack** — single mesh strapped on the player's back. Geometry could double as the "sled-on-back" idea (see open question #3 above).
+- **Boot wraps** — Rey's boots are cloth-wrapped; check Dustfall feet detail.
+
+This is the natural next visual-iteration arc when ACE candidates are picked.
+
+See `docs/backlog.md` for the tracked entry.
 
 ---
 

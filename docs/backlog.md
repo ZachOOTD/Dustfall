@@ -17,6 +17,16 @@ Use `/triage-ideas` to bulk-classify a free-form dump.
 <!-- (procedural world generation — shipped in AAI/AAK) -->
 <!-- (creature companion — shipped in AAE) -->
 
+[feat/polish] Player model refinement — Rey-Jakku-outfit target (logged 2026-05-26 from TFA reference pass, `docs/research/reference-tfa-jakku-opening.md`). User direction: "the player model is ok but needs a lot of refinement. think we can use the image of Rey's outfit as our goal to achieve when modelling." The current rig (post-ABP→ABY 10-session arc) has the silhouette right (hood/poncho/bandolier/pauldron/bandana/forearm wraps/leather details). The gap to Rey-tier is detail fidelity:
+- **Wraps with visible band spacing** — per-arm-segment geometry or per-vertex band displacement (Rey's are tightly bound with clear band separation; ours read as smoother cloth).
+- **Headscarf** — unify hood + bandana into a single more-naturalistic scarf that wraps the head and drapes the back-shoulder (Rey-style).
+- **Goggles polish** — already on forehead by default; verify they read crisper at 3P distance.
+- **Layered tunic + cinched belt + visible pouches** — add belt + pouch geometry + tunic-edge variation for layering depth.
+- **Glove finger-cutouts at knuckles** — small but tonal-defining detail; currently solid wraps.
+- **Visible backpack mesh** — strapped on player's back. Stretch idea: make the SLED visually mountable on the back (sled isn't always deployed on ground — player carries it when undeployed, like a real prospector). Design pass needed.
+- **Boot wraps** — check Dustfall feet detail; Rey's boots are cloth-wrapped.
+File: `src/player/playerRig.ts`. Approach: iterate per discipline (3-5 rounds per element with screenshot/critique cadence). Composes with existing D107 zero-asset + D109 localSpace + D111-D118 stack.
+
 [polish] Sled mechanics further tuning (post-ACD playtest). The ACD slope-slide + Option-B-tilt + item-rest-height fixes shipped the core feel, but a focused tuning session would benefit from:
 - **Slope-slide speed feel**: current `SLED_SLOPE_SLIDE_GAIN = 6.0` produces ~5 m/s at 10° and ~15 m/s at 30°. Might be too aggressive at very steep slopes; playtest with varied dune steepness and tune.
 - **Slope-slide friction / static threshold**: `SLED_KINETIC_FRICTION = 0.15` gives a ~1.4° static threshold. Could be raised for "stickier" slopes (sled stays put on gentle inclines until pushed).
