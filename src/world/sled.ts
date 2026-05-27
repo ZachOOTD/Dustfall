@@ -169,8 +169,10 @@ function makeSledVisual(): {
   const g = new THREE.Group();
 
   const hx = Tuning.SLED_HALF_EXTENTS_X;
-  const hy = Tuning.SLED_HALF_EXTENTS_Y;
   const hz = Tuning.SLED_HALF_EXTENTS_Z;
+  // ACD playtest follow-up — visual rim heights are now Tuning constants
+  // (SLED_VISUAL_LATERAL_CURL + _BACK_CURL), decoupled from body's hy
+  // which is much smaller post-fix.
 
   // ACA — Warped scrap-metal sheet sled. PlaneGeometry subdivided +
   // per-vertex displacements at the LATERAL edges to curl them up
@@ -192,10 +194,10 @@ function makeSledVisual(): {
   const sheetYAt = (x: number, z: number): number => {
     const nx = Math.abs(x) / hx;
     const lateralCurl = Math.pow(nx, 2.3);
-    const lateralY = lateralCurl * (hy * 2.6);
+    const lateralY = lateralCurl * Tuning.SLED_VISUAL_LATERAL_CURL;
     const nz_back = Math.max(0, z / hz);
     const backCurl = Math.pow(nz_back, 2.6);
-    const backY = backCurl * (hy * 1.9);
+    const backY = backCurl * Tuning.SLED_VISUAL_BACK_CURL;
     return Math.max(lateralY, backY);
   };
   // Warp the lateral edges UP. Edge curl amount peaks at |x| = hx and
@@ -217,7 +219,7 @@ function makeSledVisual(): {
       // ACC playtest — rim multiplier bumped 2.2 → 2.6 so the rim is
       // tall enough to contain items now that the visual deck is
       // lowered to terrain level (was 16cm above).
-      const lateralY = lateralCurl * (hy * 2.6 + lateralVar);
+      const lateralY = lateralCurl * (Tuning.SLED_VISUAL_LATERAL_CURL + lateralVar);
       // BACK curl (new): ramps from 0 in front half to peak at z = +hz.
       // Sharper exponent (2.6) localises the rise to the rear edge so
       // the cargo area stays flat. Slightly lower amplitude than the
@@ -226,7 +228,7 @@ function makeSledVisual(): {
       const nz_back = Math.max(0, z / hz);
       const backCurl = Math.pow(nz_back, 2.6);
       const backVar = Math.sin(x * 8.0) * 0.03 + Math.cos(x * 11.0) * 0.02;
-      const backY = backCurl * (hy * 1.9 + backVar);
+      const backY = backCurl * (Tuning.SLED_VISUAL_BACK_CURL + backVar);
       // Combine via max so corners don't stack to ~40cm. Smooth meet.
       const yOffset = Math.max(lateralY, backY);
       // Slight X-pinch at lateral edges (cloth-fold suggestion).

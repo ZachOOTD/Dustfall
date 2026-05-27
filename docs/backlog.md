@@ -17,6 +17,14 @@ Use `/triage-ideas` to bulk-classify a free-form dump.
 <!-- (procedural world generation — shipped in AAI/AAK) -->
 <!-- (creature companion — shipped in AAE) -->
 
+[polish] Sled mechanics further tuning (post-ACD playtest). The ACD slope-slide + Option-B-tilt + item-rest-height fixes shipped the core feel, but a focused tuning session would benefit from:
+- **Slope-slide speed feel**: current `SLED_SLOPE_SLIDE_GAIN = 6.0` produces ~5 m/s at 10° and ~15 m/s at 30°. Might be too aggressive at very steep slopes; playtest with varied dune steepness and tune.
+- **Slope-slide friction / static threshold**: `SLED_KINETIC_FRICTION = 0.15` gives a ~1.4° static threshold. Could be raised for "stickier" slopes (sled stays put on gentle inclines until pushed).
+- **Collision feel with world objects**: sled now slides freely downhill into wrecks / cacti / rocks; behavior at collision is "stop dead" (kinematic body, dynamic items bounce off). Could feel better with some elastic bounce, audible thump, or a brief slow-down ramp before contact. Test scenarios: sled slides into a wreck wall at 5 m/s, sled hits a rock outcrop while being towed, sled collides with another sled.
+- **Item rest height fine-tune**: ACD shrank the body cuboid hy 0.10 → 0.02 so items rest ~13cm above terrain (~7cm above visual deck base). Could go even tighter (hy=0.01 → items ~10cm above terrain) but body collider may become too thin for stable terrain contact. Playtest first.
+- **Sled-to-sled collision**: multiple sleds in the world could collide; behavior currently untested.
+- **Tow physics when blocked**: what happens when a towed sled hits an immovable obstacle (cliff face, megaWreck wall)? Currently the rope-snap-inward constraint should handle it (sled stops, rope-snap pulls it back if player keeps moving), but worth a focused playtest.
+
 [feat] Sled riding mechanic — TABLED. Goal: player stands on top of a sled, sled slides downhill (or is towed), player rides along with it. Multiple attempts in the ACC playtest follow-up couldn't make it robust:
 - Manual platform-ride detection (raycast + AABB+Y fallback): detection mostly worked but had per-frame misses that accumulated drift.
 - Adding the sled's per-frame XZ delta to player KCC's `desired` BEFORE compute: KCC's slope-projection ate ~20% of the delta when player stood on the tilted body (Option B), causing the player to drift off the sled.

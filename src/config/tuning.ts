@@ -1109,8 +1109,24 @@ export const Tuning = {
   // landing area for thrown items + more room before the back rim
   // catches them.
   SLED_HALF_EXTENTS_X: 0.6,                  // cargo bed half-width (1.2m wide)
-  SLED_HALF_EXTENTS_Y: 0.10,                 // flat
+  // ACD playtest follow-up — lowered 0.10 → 0.02. The body cuboid was
+  // 20cm tall, putting items resting on the top deck collider ~29cm
+  // above terrain (well above the visual scrap-sheet's flat center
+  // base, ~6cm above terrain). Items visibly floated above the deck.
+  // Shrinking body height to 4cm drops items to ~13cm above terrain
+  // (7cm above visual deck base), inside the visual U-bowl rather than
+  // floating above its rim. Visual lateral + back curl heights are
+  // now DECOUPLED from hy via SLED_VISUAL_*_CURL constants below so
+  // the visible rim shape doesn't shrink with the collider.
+  SLED_HALF_EXTENTS_Y: 0.02,                 // flat
   SLED_HALF_EXTENTS_Z: 1.10,                 // longer than wide — runner-shaped (2.2m long)
+  // ACD playtest follow-up — visual rim shape decoupled from hy. Pre-fix
+  // these were `hy * 2.6` and `hy * 1.9` inline in makeSledVisual, so
+  // shrinking the body's hy would also shrink the visual U-bowl rim.
+  // Explicit constants preserve the rim height regardless of collider
+  // size. Tweak independently of the physics geometry.
+  SLED_VISUAL_LATERAL_CURL: 0.26,            // m — lateral curl peak height above the visual deck base
+  SLED_VISUAL_BACK_CURL: 0.19,               // m — back curl peak height above the visual deck base
   SLED_TOW_DISTANCE: 5.0,                    // rope length (m). The sled is constrained to within this distance of the anchor — slack inside, snaps taut at exactly this length. QQ-2 lengthened 3 → 5 for visible drape.
   SLED_TOW_MAX_DIST: 10.0,                   // hard snap threshold beyond which the rope tears free (anchor moved way too fast for the constraint to keep up). Auto-detach + toast.
   SLED_TOW_ATTACH_RANGE: 3.0,                // raycast distance for clicking the rope stub with wielded rope
