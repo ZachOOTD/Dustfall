@@ -98,8 +98,10 @@ export interface PlayerRig {
 }
 
 // ── Proportions (m) — slight tune toward more-human silhouette ──
-const TORSO_CHEST_R = 0.22;     // upper torso wider for shoulders
-const TORSO_WAIST_R = 0.16;     // waist narrower
+// ACI PM-A.1: slimmed + more taper (was 0.22 / 0.16 — read as a wide barrel
+// with almost no waist). Chest narrower, waist much narrower → real trunk taper.
+const TORSO_CHEST_R = 0.185;    // upper torso (shoulders); was 0.22
+const TORSO_WAIST_R = 0.115;    // waist — clearly narrower than chest now; was 0.16
 const TORSO_H = 0.62;
 const HEAD_R = 0.12;
 const HEAD_SCALE_Y = 1.15;       // elongated oval
@@ -456,9 +458,13 @@ function buildRigVisual(): {
   // (torso lathe max radius is 1.18×chest_r=0.260 at upper-chest; previous
   // poncho top 0.238 caused body to poke through the cloth). Hem flare
   // bumped slightly 1.6 → 1.75 to keep the drape proportion natural.
-  const ponchoR_top = TORSO_CHEST_R * 1.32;     // ABW: clear pectoral swell
-  const ponchoR_bot = TORSO_WAIST_R * 1.75;
-  const ponchoH = TORSO_H * 0.85;
+  // ACI PM-A.2 first pass: narrower + longer drape so it reads as cloth hanging
+  // off the shoulders, not a wide barrel. (Resting shape only; real folds/sway
+  // come in PM-Cycle D cloth physics.) Multipliers bumped a touch since the
+  // torso constants shrank, but net width is much smaller than the old ~0.58 dia.
+  const ponchoR_top = TORSO_CHEST_R * 1.45;     // clears the (now-slimmer) chest
+  const ponchoR_bot = TORSO_WAIST_R * 1.95;     // modest hem flare off the slim waist
+  const ponchoH = TORSO_H * 1.05;               // hangs longer (was 0.85) → drapes, not a short tube
   const ponchoGeom = new THREE.CylinderGeometry(
     ponchoR_top, ponchoR_bot, ponchoH,
     24, 10, true,             // 24 radial × 10 height (was 16 × 1)
