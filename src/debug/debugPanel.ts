@@ -60,6 +60,14 @@ interface DebugApi {
    *  the rAF loop ticks + renders. Pass dev=true to apply the DEV loadout
    *  first. Enables autonomous build→screenshot→critique on visual work. */
   enterGame: (dev?: boolean) => void;
+  /** ACI (PM-Cycle A) — visual-audit "studio" for the player model. One call
+   *  ensures headless gameplay (enterGame) + a 900×1100 canvas + 3P + EVEN
+   *  studio lighting (ambient/key boosted + exposure ~2 — the in-game dusk
+   *  hides rig detail). With no `angle`: enters + lights, leaves UNPAUSED so
+   *  the rig settles at the body (call again with an angle after a beat).
+   *  With an `angle`: pauses + frames that canonical view for a screenshot.
+   *  The MVP-check verification loop (docs/feature-player-model.md) drives this. */
+  rigStudio: (angle?: 'front' | 'back' | 'left' | 'right' | '3q' | 'head') => unknown;
   /** Clear the tutorial localStorage flags so the controls panel + all
    *  pickup hints fire again. Refresh to see the first-boot overlay. */
   resetTutorial: () => void;
@@ -134,6 +142,63 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
     enterGame(dev) {
       if (hooks.enterGame) hooks.enterGame(dev);
       else { ctx.flags.titleActive = false; ctx.flags.paused = false; }  // fallback
+    },
+    rigStudio(angle) {
+      // enter + studio setup (idempotent)
+      if (hooks.enterGame) hooks.enterGame(true);
+      else { ctx.flags.titleActive = false; ctx.flags.paused = false; }
+      const three = ctx.three;
+      three.renderer.setSize(900, 1100, false);
+      const cam = three.camera as THREE.PerspectiveCamera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 900 / 1100; cam.updateProjectionMatrix(); }
+      ctx.flags.thirdPerson = true;
+      three.scene.traverse((o) => {
+        const l = o as THREE.Light;
+        if (!l.isLight) return;
+        if (l.type === 'AmbientLight') l.intensity = 2.2;
+        else if (l.type === 'DirectionalLight' && l.intensity > 0) l.intensity = 2.4;
+      });
+      three.renderer.toneMappingExposure = 2.0;
+      if (!angle) {
+        return 'studio entered + lit (UNPAUSED to settle the rig — call rigStudio(angle) after a beat to frame)';
+      }
+      // frame a canonical angle (pause so the 3P sync stops overwriting the camera)
+      ctx.flags.paused = true;
+      const rig = ctx.player.rig;
+      if (!rig) return { angle, framed: false, reason: 'no rig' };
+      rig.group.updateMatrixWorld(true);
+      const bp = ctx.player.body.body.translation();
+      const fwd = new THREE.Vector3();
+      rig.headGroup.getWorldPosition(new THREE.Vector3()); // ensure matrices fresh
+      rig.headGroup.getWorldDirection(fwd);
+      fwd.y = 0;
+      if (fwd.lengthSq() < 1e-4) fwd.set(1, 0, 0);
+      fwd.normalize();
+      const side = new THREE.Vector3(-fwd.z, 0, fwd.x);
+      const body = new THREE.Vector3(bp.x, bp.y - 0.05, bp.z);
+      const D = 2.6, UP = 0.35;
+      let camPos = new THREE.Vector3();
+      let tgt = body.clone();
+      if (angle === 'head') {
+        const hp = new THREE.Vector3();
+        rig.headGroup.getWorldPosition(hp);
+        camPos = hp.clone().addScaledVector(fwd, 0.55).addScaledVector(side, 0.22);
+        camPos.y += 0.05;
+        tgt = new THREE.Vector3(hp.x, hp.y - 0.05, hp.z);
+      } else if (angle === 'back') {
+        camPos = body.clone().addScaledVector(fwd, -D); camPos.y += UP;
+      } else if (angle === 'left') {
+        camPos = body.clone().addScaledVector(side, D); camPos.y += UP;
+      } else if (angle === 'right') {
+        camPos = body.clone().addScaledVector(side, -D); camPos.y += UP;
+      } else if (angle === '3q') {
+        camPos = body.clone().addScaledVector(fwd, D * 0.8).addScaledVector(side, D * 0.6); camPos.y += UP;
+      } else { // 'front'
+        camPos = body.clone().addScaledVector(fwd, D); camPos.y += UP;
+      }
+      cam.position.copy(camPos);
+      cam.lookAt(tgt);
+      return { angle, framed: true };
     },
     resetTutorial,
     showControls() { showControlsPanel(ctx); },
