@@ -17,15 +17,20 @@ Use `/triage-ideas` to bulk-classify a free-form dump.
 <!-- (procedural world generation — shipped in AAI/AAK) -->
 <!-- (creature companion — shipped in AAE) -->
 
-[feat/polish] Player model refinement — Rey-Jakku-outfit target (logged 2026-05-26 from TFA reference pass, `docs/research/reference-tfa-jakku-opening.md`). User direction: "the player model is ok but needs a lot of refinement. think we can use the image of Rey's outfit as our goal to achieve when modelling." The current rig (post-ABP→ABY 10-session arc) has the silhouette right (hood/poncho/bandolier/pauldron/bandana/forearm wraps/leather details). The gap to Rey-tier is detail fidelity:
-- **Wraps with visible band spacing** — per-arm-segment geometry or per-vertex band displacement (Rey's are tightly bound with clear band separation; ours read as smoother cloth).
-- **Headscarf** — unify hood + bandana into a single more-naturalistic scarf that wraps the head and drapes the back-shoulder (Rey-style).
-- **Goggles polish** — already on forehead by default; verify they read crisper at 3P distance.
-- **Layered tunic + cinched belt + visible pouches** — add belt + pouch geometry + tunic-edge variation for layering depth.
-- **Glove finger-cutouts at knuckles** — small but tonal-defining detail; currently solid wraps.
-- **Visible backpack mesh** — strapped on player's back. Stretch idea: make the SLED visually mountable on the back (sled isn't always deployed on ground — player carries it when undeployed, like a real prospector). Design pass needed.
-- **Boot wraps** — check Dustfall feet detail; Rey's boots are cloth-wrapped.
-File: `src/player/playerRig.ts`. Approach: iterate per discipline (3-5 rounds per element with screenshot/critique cadence). Composes with existing D107 zero-asset + D109 localSpace + D111-D118 stack.
+[feat/polish] Player model refinement — Rey-Jakku-outfit target (logged 2026-05-26; `docs/research/reference-tfa-jakku-opening.md`). **GEOMETRY largely SHIPPED in ACH (Cycle 2)**, self-verified via the headless screenshot loop (D134):
+- ✓ **Band-spaced forearm wraps** (2→7 tapered bands) — `66a061e`
+- ✓ **Unified headscarf** (bandana+crown+drape → one folded scarf) — `bd7ef7a`
+- ✓ **Cinched belt + hip pouches** — `3448360`
+- ✓ **Visible backpack + bedroll** — `2cc07db`
+- ✓ **Fingerless glove** (palm cloth, bare fingertips) — `66a061e`
+- ✓ **Boot wraps** — `7fd3076`
+**REMAINING (texture/material cycle — its own session per user):**
+- Skin tone + cloth weave/dye TEXTURE detail (procedural shaders per D107) — the model has the silhouette + layering; this is the surface-richness pass. The user explicitly wants "more realistic skin and cloth textures."
+- **Glove contrast** reads subtly at 3P (grey cloth vs skin both warm under midday) — consider a more contrasting glove tone.
+- **Backpack detail** — currently a plain box; add stitching/strap/wear detail.
+- **Goggles** — verify crisp at 3P.
+- Stretch: sled-on-back when undeployed (design pass touching sled deploy state — surface first).
+File: `src/player/playerRig.ts`. Per discipline + the `__game.enterGame` headless screenshot loop (D134).
 
 [polish] Sled mechanics further tuning (post-ACD playtest). The ACD slope-slide + Option-B-tilt + item-rest-height fixes shipped the core feel, but a focused tuning session would benefit from:
 - **Slope-slide speed feel**: current `SLED_SLOPE_SLIDE_GAIN = 6.0` produces ~5 m/s at 10° and ~15 m/s at 30°. Might be too aggressive at very steep slopes; playtest with varied dune steepness and tune.

@@ -2,9 +2,15 @@
 
 Cumulative state. Rewritten end-to-end at each `/session-end`.
 
-**Current state**: Session ACG shipped (2026-05-31 — Phase 2 **Cycle 1: drag verification**). 88 sessions post-MVP. tsc clean + human-playtest verified. **SAVE_VERSION still v13** (no schema changes). Post-MVP work is now sequenced by the 9-cycle Phase 2 iteration plan (`docs/iteration-plan.md`); Cycle 1 is the first shipped, Cycle 2 (Rig to Rey-tier) is next.
+**Current state**: Session ACH shipped (2026-05-31 — Phase 2 **Cycle 2: Rig to Rey-tier** + the headless self-verify tooling that unblocked it). 89 sessions post-MVP. tsc clean + self-verified via headless screenshots. **SAVE_VERSION still v13** (no schema changes). Phase 2 (9-cycle plan, `docs/iteration-plan.md`): Cycles 1+2 shipped. Next: finish the model with a skin/cloth TEXTURE pass + rig-debt, then the plan resumes at Cycle 3 (sled riding).
 
-## ACG scope (this session) — Cycle 1: drag verification
+## ACH scope (this session) — Cycle 2: Rig to Rey-tier + self-verify tooling
+
+The session's biggest outcome is a **headless self-verification loop**: `__game.enterGame(dev?)` (`debugPanel.ts` + `main.ts`) enters gameplay without the title button/pointer-lock so the rAF loop ticks + renders (the title handoff only clears `paused` via the pointer-lock event, which never fires for an agent click). Combined with `renderer.setSize` + `flags.thirdPerson` + posing `ctx.player.rig` joints, the agent can now edit → enter → pose → screenshot → critique → iterate with NO human in the loop (D134). This unblocks all future visual cycles.
+
+On that loop, the rig was pushed to the Rey-Jakku bar (`playerRig.ts`, each element screenshot-iterated per rule 8): forearm wraps (2→7 tapered bands) + fingerless glove; unified headscarf (dark bandana + tan crown + drape → one folded scarf); cinched belt + hip pouches; scavenger backpack + lashed bedroll (mounted outside the poncho drape so it isn't occluded); cloth-wrapped boots. Also fixed a latent ABU bug — finger knuckle-bumps floated off the fingertips (wrong-sign forward vector + 3×-oversized offsets), fixed by parenting them to the finger axis. Glove contrast reads subtly at 3P + the backpack is a plain box — both flagged for the texture cycle. Deferred: skin/cloth texture pass (own material cycle), 3P-rig-on-speeder bug, foot-IK slope-snap.
+
+## ACG scope (prior session) — Cycle 1: drag verification
 
 Closes ACF's rule-8 visual-triage debt (ACF shipped the corpse/carcass drag functionally but never iterated the *feel* or ran the raider path). First session under the Phase 2 iteration plan.
 
@@ -13,29 +19,9 @@ Closes ACF's rule-8 visual-triage debt (ACF shipped the corpse/carcass drag func
 - **Human playtest closed the cycle**: corpse drag (on-foot + sled), worm speeder-tow, orientation sign (no ±π flip), and in-progress-drag save round-trip all confirmed correct.
 - **Process**: `--mode=overnight` requested but correctly fell back to gated (GDD §12 opt-out + no token budget + human-in-loop visual work). The headless preview couldn't drive the game loop (pointer-lock handoff gating — `dustfall_preview_gotchas`), so the aesthetic sign-off went to a human rather than being self-certified on tsc.
 
-## ACF scope (prior session)
+## ACF + ACE + ACD condensed
 
-Closes ACE's deferred **Cut #3** — the `raider_corpse` + `sandworm_carcass` rope endpoint kinds. The interesting architectural call is that these are the first *towed-body* endpoint kinds (the rope drags them) rather than anchors.
-
-**Towed-body rope-drag** (`src/world/rope.ts`, NEW `src/world/killDrag.ts`, `main.ts`):
-- `RopeEndpoint` union gains `raider_corpse` (raiderId) + `sandworm_carcass` (wormId); `resolveEndpointWorldPos` resolves both (raider via `ctx.raiders[]`, worm via `ctx.sandWorms.list`, null→auto-detach if gone).
-- Drag state lives on the entity as `dragAnchor: RopeEndpoint` (the ANCHOR end), NOT on `sled.tether` — because the kill is towed *toward* the anchor, the opposite role from every prior endpoint kind (D131).
-- NEW `updateKillDrag` is the first non-sled caller of ACE's `applyInextensibleConstraint`. Runs after `updateRaiders`/`updateSandWorm` (both `continue` past dead entities → drag-movement is free to own) and before `updateSledRiders`. Syncs each kill's visual to the post-snap XZ. Draws a sagged rope tube per dragged kill (keyed by entity id, disposed on detach).
-
-**Interaction** (`src/player/interaction.ts`): new `raiders` registry; `applyRaiderDeadPose` tags the corpse (`attach_rope`). Rope-wielded LMB-on-corpse ties to a player-tethered sled (trails it) or to the player (drag on foot); LMB again drops it. The `sandWorms` case gains a rope+mounted LMB-on-carcass → tow / cut-loose branch (speeder-only — D132).
-
-**Save** (`src/persistence/save.ts`): additive, no version bump (D81). Serialized sled-tether union + payloads extended; `raider.dragAnchor` + `worm.dragAnchor` round-trip so an in-progress drag survives reload.
-
-**Tuning**: `KILL_DRAG_*` block (per-kind max/tear distance, body half-extents, shared snap-perp-damp + ground clearance).
-
-**Verification**: worm path runtime-verified in the live game via forced state (rope mesh spawns with correct geom/color; constraint snaps a 20m-yanked carcass back to the 14m leash; rope disposed on detach; no runtime errors). **NOT verified**: (1) aesthetic drag-feel/rope-sag from gameplay POV (pointer-lock gating + opening-wreck spawn occlusion block automated framing — `dustfall_preview_gotchas`); (2) raider corpse path at runtime (0 raiders spawn by default; no spawn hook) — code is tsc-clean + structurally identical to the verified worm path.
-
-**Iteration-discipline self-check (rule 8)**: the rope-mesh visual + corpse drag shipped with FUNCTIONAL verification only, NOT the build→screenshot→critique→iterate aesthetic loop. Drag-feel quality is unproven; a follow-up visual-triage is owed (see backlog + ACG brief).
-
-**D-entries**: D131 (towed-body kinds + entity-owned dragAnchor + killDrag system), D132 (worm carcass speeder-tow-only + tow-before-harvest edge).
-
-## ACE + ACD condensed
-
+- **ACF** (2026-05-31): B1 Phase 3 follow-up — corpse/carcass rope-drag (ACE Cut #3). `RopeEndpoint` gains `raider_corpse` + `sandworm_carcass`, the first *towed-body* kinds; drag state lives on the entity (`dragAnchor`), not `sled.tether` (D131). NEW `killDrag.ts` = first non-sled caller of ACE's `applyInextensibleConstraint`; sagged rope per kill. Worm carcass speeder-tow-only (D132). Save additive. Functionally verified; the drag *feel* + raider path were the rule-8 debt ACG/Cycle-1 closed.
 - **ACE** (2026-05-27, overnight): rope vocab Phase 3 (`ropeConstraint.ts` extraction + craftable `stake`) + multi-worm v12→v13 (ctx.sandWorms array, 2 worms) + lizard procedural-character pipeline lift + rig polish (footstep audio from `rig.stepCount`) + procgen POI (orbital_pod_cluster + BRISTLE_ANTENNA). D126-D130. ACF builds directly on ACE's `ropeConstraint` helper + the deferred Cut #3.
 - **ACD** (2026-05-26): sled physics polish — managed-scalar slope-slide (D122), KinematicPositionBased body + body-tilts-to-terrain (D123), pickup CCD anti-tunnel (D124), sled riding mechanic TABLED (D125, Rapier KCC has no moving-platform support; next-attempt ideas in backlog).
 
@@ -116,8 +102,10 @@ The full Dustfall gameplay loop:
 
 ## Known issues / partials
 
-- **ACF carcass tow blocked after harvest** — `lootSandWorm` untags the carcass, so towing works only before harvesting. Low severity. See backlog. (NOTE: ACF's drag visual-triage debt was CLOSED in ACG/Cycle 1.)
-- **Speeder bugs (from ACG playtest)** — E mounts the speeder without looking at the seat; 3P rig broken on the speeder (needs a seated stance). Both in backlog; the 3P one folds into Cycle 2.
+- **Player model — texture pass owed** (the model's GEOMETRY is Rey-tier as of ACH; surface richness is the gap the user wants next). Plus: glove contrast reads subtly at 3P; backpack is a plain box. See backlog Rey item.
+- **Speeder bugs (from ACG playtest, still open)** — E mounts the speeder without looking at the seat; 3P rig broken on the speeder (needs a seated stance pose). Both in backlog; bundle with the next (texture/rig-debt) session.
+- **Foot-IK slope-snap + 3P camera real-playtest** — rig-debt deferred from Cycle 2; bundle with next session.
+- **ACF carcass tow blocked after harvest** — `lootSandWorm` untags the carcass, so towing works only before harvesting. Low severity. See backlog.
 - **Sled riding mechanic tabled** (D125) — player can't ride the sled when it slides downhill or is towed. See backlog.md for tried approaches + next-attempt ideas.
 - **Walk-cycle to footstep cadence sync** (ABR backlog, polish wrap-up remaining).
 - **Per-item viewmodel readability at 3P distance** (ABR backlog).
@@ -166,43 +154,38 @@ Existing tunables of interest:
 
 ## Suggested next session (1-3 directions in priority order)
 
-Sequenced by the Phase 2 iteration plan (`docs/iteration-plan.md`). Cycle 1 shipped (ACG); next is:
+Cycles 1+2 shipped (ACG, ACH). Next:
 
-1. **Cycle 2 — Rig to Rey-tier** (~1-2 sessions). TOP. Push the ABP→ABY rig to the explicit Rey-Jakku bar (band-spaced wraps, unified headscarf, tunic/belt/pouches, backpack) + clear residual rig debt (3P camera real-playtest, foot-IK transition). Highest-leverage cycle: it's the gate for Cycle 5 (raider proc-character), Cycle 7 (companion), and Cycle 9 (sleep anims). The ACG-found 3P-rig-on-speeder bug folds in here. **Heavy visual-iteration cycle — honor rule 8 (1-2 fully-iterated elements/session, not 5 shallow).**
-
-2. **Cycle 3 — Ride the sled** (~1-2 sessions, architectural-risk). The D125-tabled riding mechanic; spike Option-C-parenting vs ride-peg in parallel branches.
-
+1. **Finish the player model — skin/cloth TEXTURE pass** (~1 session). TOP. The geometry is Rey-tier (ACH); this is the procedural-shader surface pass (skin weathering, cloth weave/dye) per D107 zero-asset — the user explicitly wants "more realistic skin and cloth textures." Bundle the cheap rig-debt: glove-contrast tone, backpack detail, **3P-rig-on-speeder seated stance + the E-mount bug** (both ACG playtest finds), foot-IK slope-snap, 3P-camera real-playtest. Use the `__game.enterGame` headless screenshot loop (D134). Completes the player-model arc.
+2. **Cycle 3 — Ride the sled** (~1-2 sessions, architectural-risk). The D125-tabled riding mechanic; spike Option-C-parenting vs ride-peg in parallel branches. (Plan resumes here.)
 3. **Cycle 4 — Real rope physics** (~1-2 sessions, architectural-risk). Verlet/segmented sim superseding D126, behind a `FEATURES.realRope` gate-and-wait. Precedes any new rope feature.
-
-Optionally interleave the two ACG-found speeder bugs (E-mount; 3P-on-speeder) as a quick pass — both small, don't need the rig work (the E-mount one is fully standalone).
 
 ---
 
 ## Time spent
 
-88 sessions shipped (A through ACG). Approx ~287-348h cumulative dev time. ACG was a small cycle (~1-2h equiv): the autonomous code slice (2 dev hooks + orientation) plus a human playtest to close the rule-8 gap.
+89 sessions shipped (A through ACH). Approx ~290-352h cumulative dev time. ACH was a substantial visual-iteration session: built the headless self-verify tooling, then 6 rig elements + a bug fix, each screenshot-iterated. (It rode the tail of one very long conversational session that also produced ACF + the Phase 2 plan + Cycle 1.)
 
 ---
 
 ## State at session end
 
-- **Git status**: ACG code committed `8a72e12` (debugPanel hooks + killDrag orientation + archived ACG brief); backlog batch `9020dff`. This session-end's docs updates uncommitted (commit handoff below).
-- **Last commit before session-end**: `9020dff` (backlog: 7 playtest finds). Tip of the ACF→ACG chain: `eb011a3` (decisions split) → `6d6775c` (iteration plan) → `8a72e12` (ACG code) → `9020dff` (backlog). All pushed to origin.
+- **Git status**: ACH code committed across 8 commits `12f2a36`..`7fd3076` (enterGame tooling + 6 rig elements + knuckle-bump fix). This session-end's docs updates uncommitted (commit handoff below).
+- **Last commit before session-end**: `7fd3076` (boot wraps). All ACH code pushed to origin.
 - **Last tag**: (Dustfall's git policy doesn't establish a session-tag convention; user may tag manually if desired).
 - **Ports bound**: none (preview stopped).
-- **Save state**: localStorage v13. ACG made zero save changes (the `dragAnchor` fields landed in ACF).
+- **Save state**: localStorage v13. ACH made zero save changes (pure rig geometry + dev tooling).
 
 ---
 
 ## Token spend this session (estimated)
 
-ACG was a long *conversational* session (framework smoke-test → ACF feature → backlog triage burst → iteration-plan → Cycle 1) rather than a single focused build. Cycle 1 itself was cheap; the surrounding planning + triage dominated.
+ACH was the visual-iteration tail of a marathon conversation. The rig work itself was screenshot-heavy (each element: edit → enter → pose → shoot → critique → iterate).
 
-- Output (Cycle 1 slice only): ~15-25K tokens (2 dev hooks + orientation + the docs).
-- The broader session (ACF + planning + ~17 backlog triages + iteration plan) was the bulk — see those commits.
-- Cost (Opus 4.8 rates): within baseline for the Cycle 1 portion.
+- Output (ACH slice): substantial — 8 commits of rig geometry + the tooling + many screenshot-critique rounds + these docs.
+- Cost (Opus 4.8 rates): above a normal session for the visual-iteration volume, justified — it both built the reusable self-verify tooling AND shipped 6 iterated rig elements.
 
-At/near baseline. Notable: this run doubled as a framework efficiency test — findings logged to backlog (`[debt] gamedev-framework feedback from ACF smoke-test`).
+Notable: the `enterGame` tooling (D134) is the high-leverage artifact — it makes every future visual cycle self-verifiable, paying back its cost immediately (it caught + verified the knuckle-bump fix this session).
 
 ---
 

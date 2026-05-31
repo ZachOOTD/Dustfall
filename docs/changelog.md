@@ -3,6 +3,48 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ACH — 2026-05-31 — Cycle 2: Rig to Rey-tier + headless self-verify tooling ✓ verify pass (tsc clean)
+
+`verified` — tsc clean + **self-verified via headless screenshots** (the new
+loop, below). Phase 2 Cycle 2. 8 commits (12f2a36..7fd3076); `playerRig.ts` +
+`debugPanel.ts` + `main.ts`.
+
+**Headless self-verification tooling (the session's biggest unlock)** —
+`__game.enterGame(dev?)` (`debugPanel.ts` + `main.ts`). The title handoff only
+clears `flags.paused` via the pointer-lock `'lock'` event (`input.ts`), which
+never fires for an agent/preview click → preview entries rendered the
+title-gone scene but never ticked. enterGame bypasses the button + pointer-lock
+and sets paused=false directly, so the rAF loop ticks + renders headlessly.
+Combined with `renderer.setSize` + `flags.thirdPerson` + posing joints via
+`ctx.player.rig`, this gives a full edit → enter → pose → screenshot → critique
+→ iterate loop with NO human-in-the-loop needed. D134. (Caveat: the preview-MCP
+screenshot itself wedged earlier in the session; a Claude Code restart cleared
+it.)
+
+**Rig to Rey-tier** (`playerRig.ts`, all self-verified, 1-3 iteration rounds each):
+- **Forearm wraps + fingerless glove**: 2 sparse tori → 7 tapered tight bands
+  (alternating thickness + tilt = hand-wrapped read); palm + knuckle ridge → wrap
+  cloth, fingers bare (fingerless glove, exposed tips).
+- **Unified headscarf**: merged the separate dark bandana + tan crown + back
+  drape into ONE tan cloth — face-wrap uses hoodMat, crown gets D117-style
+  fold displacement + squash so it reads as a wrapped cap not a helmet dome.
+  Retired BANDANA_COLOR/bandanaMat.
+- **Belt + hip pouches**: leather belt + buckle + 2 splayed pouches at the waist.
+- **Backpack + bedroll**: visible scavenger pack mounted OUTSIDE the poncho drape
+  (else occluded) + lashed bedroll clearing the shoulders + shoulder straps.
+- **Cloth-wrapped boots**: tapered band stack around each lower shin/ankle.
+
+**Bug fix** — `fix(rig)`: finger knuckle-bump spheres were floating off the
+fingertips (latent ABU bug: wrong-sign forward vector + offsets ~3× the finger
+length). Fixed by parenting bumps to the finger's local axis. Surfaced from a
+user visual report, diagnosed + fixed via the headless loop.
+
+**Iteration-discipline note (rule 8)**: every rig element was build → screenshot
+→ critique → iterate (the loop the tooling enabled), NOT shipped on tsc alone.
+Glove contrast reads subtly at 3P (warm light), and the backpack is a plain box
+— both flagged for the texture cycle. **Deferred**: skin/cloth texture pass
+(separate material cycle), 3P-rig-on-speeder bug, foot-IK slope-snap.
+
 ## Session ACG — 2026-05-31 — Cycle 1: drag verification (close ACF's rule-8 gap) ✓ verify pass (tsc clean)
 
 `verified` — tsc clean + **human playtest**. First session of the Phase 2
