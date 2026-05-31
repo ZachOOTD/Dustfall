@@ -682,15 +682,26 @@ function buildRigVisual(): {
     );
     forearm.position.y = -LOWER_ARM_LEN / 2;
     elbowGroup.add(forearm);
-    // Forearm wraps — 2 fabric tori per arm (stretch but worth shipping
-    // since they cover the otherwise-bare underclothMat read).
-    for (let w = 0; w < 2; w++) {
+    // Forearm wraps — ACH Cycle 2.1: Rey-tier tight band stack. Replaces the
+    // 2 sparse tori (read as smooth cloth) with a column of ~6 bands covering
+    // the forearm, tapering toward the wrist (follows the forearm lathe
+    // profile) with a small gap between each + slight alternating tilt so
+    // they read as hand-wrapped strips, not machined rings.
+    const WRAP_BANDS = 7;
+    for (let w = 0; w < WRAP_BANDS; w++) {
+      const t = w / (WRAP_BANDS - 1);              // 0 near elbow → 1 mid-forearm
+      const bandR = 0.052 - t * 0.012;             // taper 0.052 → 0.040
+      const bandTube = 0.0105 + (w % 2) * 0.0025;  // alternate thick/thin → uneven hand-wrap
       const wrap = new THREE.Mesh(
-        new THREE.TorusGeometry(0.045, 0.012, 4, 12),
+        new THREE.TorusGeometry(bandR, bandTube, 6, 14),
         wrapMat,
       );
-      wrap.position.y = -0.06 - w * 0.10;
+      // Tight stack over the mid-forearm only (stay OFF the wrist so bands
+      // don't droop past the hand). Step 0.019 vs tube-dia 0.022 → bands
+      // nearly touch, reading as continuous bound cloth with shallow grooves.
+      wrap.position.y = -0.05 - w * 0.019;         // span -0.05 → -0.164
       wrap.rotation.x = Math.PI / 2;
+      wrap.rotation.z = (w % 2 === 0 ? 1 : -1) * 0.05;  // hand-wrapped unevenness
       elbowGroup.add(wrap);
     }
     // ABV — wrist sub-pivot inserted between elbow and hand. Rotation X
@@ -710,10 +721,13 @@ function buildRigVisual(): {
     // fingers). Box here is the palm-back only; fingers cylinder-tapered.
     // Hand-local: X = across knuckles (palm width), Z = wrist→knuckle
     // (palm length), Y = palm thickness.
-    const palm = new THREE.Mesh(new THREE.BoxGeometry(0.078, 0.028, 0.062), handSkinMat);
+    // ACH Cycle 2.1: fingerless glove — palm + knuckle ridge in the wrap
+    // cloth (same scavenger material as the forearm wraps), fingers left bare
+    // skin → exposed fingertips, the "cutout at the knuckles" read.
+    const palm = new THREE.Mesh(new THREE.BoxGeometry(0.078, 0.028, 0.062), wrapMat);
     handGroup.add(palm);
-    // Knuckle ridge — narrow box at knuckle line where fingers attach
-    const knuckleRidge = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.022, 0.022), handSkinMat);
+    // Knuckle ridge — narrow box at knuckle line where fingers attach (glove edge)
+    const knuckleRidge = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.022, 0.022), wrapMat);
     knuckleRidge.position.set(0, 0, -0.028);  // forward edge of palm (knuckle line)
     handGroup.add(knuckleRidge);
     // 4 fingers — tapered cylinders. Each finger extends FORWARD (-Z)
