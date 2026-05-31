@@ -375,22 +375,28 @@ function buildRigVisual(): {
   // D117 treatment) so it reads as soft wrapped fabric, not a hard helmet
   // dome. phiLength 0.42π → 0.46π drops the crown edge slightly toward the
   // face wrap so the scarf reads continuous.
+  // PM-B.1 (ACI): hood that WRAPS the skull — crown + back + sides, with a
+  // front wedge open for the face — replacing the flat floating mushroom-disc
+  // cap. Hugs the head (radius ~1.1×, centered, no squash) and comes down past
+  // the ears (phi → 0.92π). The face opening is the missing theta-wedge,
+  // centered on +Z (the face/bandana side).
+  const FACE_GAP = Math.PI * 0.58;   // front opening (~104°) for the face
   const hoodCrownGeom = new THREE.SphereGeometry(
-    HEAD_R * 1.22, 22, 12, 0, Math.PI * 2, 0, Math.PI * 0.46,
+    HEAD_R * 1.10, 28, 18,
+    Math.PI / 2 + FACE_GAP / 2,        // thetaStart just past the +Z front
+    Math.PI * 2 - FACE_GAP,            // wrap all the way around except the face gap
+    0, Math.PI * 0.92,                 // crown down past the ears toward the jaw
   );
   {
     const pa = hoodCrownGeom.attributes.position as THREE.BufferAttribute;
-    const CROWN_WAVES = 6;
-    const CROWN_AMP = 0.017;
+    const CROWN_WAVES = 7;
+    const CROWN_AMP = 0.013;
     for (let i = 0; i < pa.count; i++) {
-      const x = pa.getX(i), y = pa.getY(i), z = pa.getZ(i);
+      const x = pa.getX(i), z = pa.getZ(i);
       const r = Math.hypot(x, z);
       if (r < 1e-4) continue;
       const theta = Math.atan2(z, x);
-      // folds reach most of the way up (only the very crown stays smooth)
-      const tt = Math.min(1, Math.max(0, y / (HEAD_R * 1.22)));
-      const amp = CROWN_AMP * (1 - tt * 0.4);
-      const off = Math.sin(CROWN_WAVES * theta) * amp;
+      const off = Math.sin(CROWN_WAVES * theta) * CROWN_AMP;
       pa.setX(i, x + (x / r) * off);
       pa.setZ(i, z + (z / r) * off);
     }
@@ -398,8 +404,7 @@ function buildRigVisual(): {
     hoodCrownGeom.computeVertexNormals();
   }
   const hoodCrown = new THREE.Mesh(hoodCrownGeom, hoodMat);
-  hoodCrown.position.y = HEAD_R * 0.18;
-  hoodCrown.scale.set(1.04, 0.9, 1.04);   // squash + widen → wrapped cap, not a helmet dome
+  hoodCrown.position.y = HEAD_R * 0.05;   // centered on the skull (was +0.18 floating)
   headGroup.add(hoodCrown);
   // Drape: [225°, 315°] = back-only 90° (was 180° back+sides which covered
   // the cheeks). Front + sides now open so face + bandana read.

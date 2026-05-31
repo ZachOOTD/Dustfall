@@ -169,11 +169,13 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
       rig.group.updateMatrixWorld(true);
       const bp = ctx.player.body.body.translation();
       const fwd = new THREE.Vector3();
-      rig.headGroup.getWorldPosition(new THREE.Vector3()); // ensure matrices fresh
       rig.headGroup.getWorldDirection(fwd);
       fwd.y = 0;
       if (fwd.lengthSq() < 1e-4) fwd.set(1, 0, 0);
       fwd.normalize();
+      // getWorldDirection points along the head's +Z (away from the face); the
+      // FACE is the other way. Negate so 'front'/'head' actually show the face.
+      fwd.negate();
       const side = new THREE.Vector3(-fwd.z, 0, fwd.x);
       const body = new THREE.Vector3(bp.x, bp.y - 0.05, bp.z);
       const D = 2.6, UP = 0.35;
