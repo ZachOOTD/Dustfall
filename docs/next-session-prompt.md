@@ -1,81 +1,82 @@
-# Session ACI — Finish the player model: skin/cloth texture pass + rig-debt
+# Session ACI — Player-model arc, PM-Cycle A: proportion + silhouette
 
-> Phase 2 iteration plan: **[docs/iteration-plan.md](iteration-plan.md)**. Cycles 1+2
-> shipped (ACG drag verification, ACH rig-to-Rey-tier). ACH got the model's GEOMETRY
-> to the Rey-Jakku silhouette; this session finishes it with the **material/texture
-> pass** + the small rig-debt, then the plan resumes at **Cycle 3 (sled riding)**.
+> The player model was honestly audited at the end of ACH and found **far from the
+> Rey/real-human bar** — a rigid barrel/sandwich-board silhouette on stick-legs. The
+> "Rig to Rey-tier" single cycle was re-planned into a **5-cycle arc**:
+> **[docs/feature-player-model.md](feature-player-model.md)** (A proportion/silhouette →
+> B head/face/scarf → C layered outfit → D cloth physics → E texture). This is **PM-Cycle A**,
+> the foundation: get a correct slim-human silhouette before any garment/detail/texture work.
 
 ## Read these now (in order)
 
-1. **CLAUDE.md** (auto-loaded) — esp. rule 8 (iteration discipline) — LOAD-BEARING.
-2. **docs/session-end-report.md** — cumulative state through ACH.
-3. **docs/backlog.md** — the `[feat/polish] Player model refinement` entry (geometry ✓; REMAINING = texture/material + the polish list).
-4. **docs/decisions.md** — recent tail; esp. **D134** (the `__game.enterGame` headless screenshot loop — USE IT this session), D107 (zero-asset → procedural shaders only), D109 (localSpace on moving entities), D117/D118 rig stack.
-5. **docs/iteration-plan.md** — Cycle 3 (next after this).
+1. **CLAUDE.md** (auto-loaded) — rule 8 is LOAD-BEARING this whole arc.
+2. **docs/feature-player-model.md** — THE plan. Esp. the **Model Verification Protocol (MVP-check)** + PM-Cycle A scope/pass-bar.
+3. **docs/research/reference-tfa-jakku-opening.md** — the Rey target (shots 4/7/10 = outfit; palette table).
+4. **docs/session-end-report.md** — cumulative state through ACH + the audit findings.
+5. **docs/decisions.md** — recent tail; esp. **D134** (the `__game.enterGame` headless screenshot loop you'll lean on), D107 (zero-asset), D109 (localSpace), D115/D117/D118 (the rig stack).
 
-## What's already built
+## What's already built / the problem
 
-The player rig is at the Rey-Jakku **silhouette**: hood→one unified tan scarf, 7-band
-forearm wraps + fingerless glove, cinched belt + hip pouches, scavenger backpack +
-bedroll, cloth-wrapped boots, plus the D115/D117/D118 Lathe+drape+sub-pivot stack. All
-self-verified via the headless screenshot loop. The gap now is **surface richness** —
-the cloth + skin read as flat single-color fabric; they need procedural shader detail.
+The rig has Rey-ish *detail* (band wraps, fingerless glove, one-cloth scarf, belt/pouches,
+backpack, boots) but the **silhouette is wrong**: torso is a wide rigid box with no waist taper,
+head too small, neck too long + bare, legs spindly, poncho juts out front+back as a hard slab.
+Detail is invisible under a wrong silhouette. **Fix the armature + garment resting-shape first.**
 
-## Session ACI — focus
+## PM-Cycle A focus — proportion + silhouette (the foundation)
 
-**Finish the player model: procedural skin + cloth TEXTURE pass** (per D107 zero-asset —
-NO image files; extend the `onBeforeCompile` shader vocabulary: `skinMaterial.ts`,
-`fabricMaterial.ts`, `paintMaterial.ts`, `metalMaterial.ts`). Heavy visual-iteration —
-honor rule 8, and **use the `__game.enterGame` headless loop (D134)** to self-verify
-every element (recipe below).
+Heavy visual-iteration. `tsc` is the type gate, NOT the quality gate. Use the MVP-check (6
+canonical frames + critique vs real-human + Rey + the adversarial second look) EVERY round.
+5–8 rounds for the rebuilt elements.
 
 ## Priority items (in order)
 
-1. **Skin weathering** (`skinMaterial.ts` params on face + hands) — sun-damage/dirt
-   gradient, grimier knuckles; currently flat. 3-5 screenshot rounds.
-2. **Cloth weave + dye** (`fabricMaterial.ts` on poncho/scarf/wraps) — subtle weave
-   density + stripe/dye variation + wear at edges; the cloth reads uniform now.
-3. **Glove contrast** — bump the glove cloth to a tone that reads distinct from skin at
-   3P distance (ACH flagged it as too subtle under warm light).
-4. **Backpack + pouch detail** — stitching/strap/wear on the plain box (paint/fabric shaders).
-5. **Rig-debt bundle** (cheap, fold in): 3P-rig-on-speeder **seated stance** + the
-   **E-mount-without-seat-hover bug** (`interaction.ts`/speeder mount range), foot-IK
-   idle→walk slope-snap, 3P-camera real-playtest.
+1. **`__game.rigStudio(angle?)` verification helper** (`debugPanel.ts` + `main.ts`) — FIRST. One
+   call = `enterGame(true)` + `setSize(900,1100)` + `thirdPerson` + EVEN studio lighting
+   (ambient ~2.2 + front key directional + exposure ~2.0 — the in-game dusk hid all detail in
+   the ACH audit) + frame a canonical angle (front/back/left/3q/head). Makes every later round's
+   verification one repeatable call. (DEV-gated; runtime lighting only.)
+2. **Slim the torso** (`playerRig.ts` `TORSO_CHEST_R`/`TORSO_WAIST_R` + lathe profile) — real
+   shoulder→waist taper; waist clearly narrower than chest. Kill the barrel. Acceptance: torso
+   reads as a tapered human trunk, shoulders > waist.
+3. **Poncho resting-shape rework** — from rigid wide box → narrower, body-following, gravity-draped
+   static geometry: hangs DOWN (taller than wide), soft/broken hem (not a flat cut), open front V,
+   slight asymmetry. (Full sim is PM-Cycle D — this is the correct *rest* shape.)
+4. **Fix ratios** — head bigger (~1/7.5 body height), neck shorter, legs more volume
+   (thigh/calf), feet → boot-shaped not flat slabs.
+5. **Re-verify rig consumers** after touching core constants: 3P camera offsets, held-item
+   attach, footstep cadence (these read rig dims).
 
 ## Stretch
-- Goggles crispness at 3P. Sled-on-back-when-undeployed (surface design fork first).
+- Posture: slight contrapposto / weight-shift for a less stiff stand.
 
-## Headless self-verify recipe (D134 — this is how you iterate)
-```js
-__game.enterGame(true)                                   // headless entry, loop ticks
-const r=__game.ctx.three.renderer; r.setSize(1200,1000,false)
-const cam=__game.ctx.three.camera; cam.aspect=1.2; cam.updateProjectionMatrix()
-__game.ctx.flags.thirdPerson=true; __game.setTime(0.5)   // 3P + midday light
-// let it run a frame, THEN: __game.ctx.flags.paused=true; pose rig joints; position cam; screenshot
-```
-Footgun: pause AFTER a frame settles the rig at the player (else joint world-pos is stale → camera aims at sky). Pose arms/legs out via `rig.shoulders[i]/elbows[i]` while paused to clear the poncho.
+## MVP-check verification (the quality gate — from feature-player-model.md)
+Every round + cycle gate: capture **6 frames** (front/back/left/3q/head + waist focus) via
+`rigStudio`, critique each vs **(a) real-human proportion** (~7–7.5 head-heights, shoulders>waist,
+proportional limbs, short neck) **and (b) the Rey reference**, then the **adversarial second look**
+("what still reads as barrel/board/mannequin?"). **PASS BAR**: at 3 m the full-body silhouette
+reads as a slim draped human — no barrel, no slab-poncho, no bare long neck, no stick-legs.
 
 ## Autonomy contract
-Ambiguous → GDD pillars + realism dial, append D-entry, continue. Surface only on:
-procedural-vs-asset (D107 — stay procedural), save bumps (D81), destructive git,
-the sled-on-back design fork.
+Ambiguous → GDD pillars + realism dial + the Rey reference, append a D-entry, continue. Surface
+only on: procedural-vs-asset (D107), save bumps (D81), destructive git.
 
 ## Stop conditions
-Wall-clock 2-4h. 3 fix-walls on one element → `/scope-cutter`. **Rule-8 self-check**:
-never mark a material element done on tsc alone — screenshot it.
+Wall-clock 2-4h. 3 fix-walls on one element → `/scope-cutter`. **Rule-8 self-check**: never mark
+the silhouette done on tsc alone, or without the adversarial second look passing.
 
 ## Notable footguns
-- **D107 zero-asset** — no image textures; procedural shaders only. **D109 localSpace**
-  on the rig (moving entity) or detail crawls.
-- **Preview**: if `preview_screenshot` wedges (it can, mid-session), restart Claude Code /
-  the preview MCP — it clears. State inspection via `__game.ctx` still works regardless.
+- **Touching `TORSO_*`/leg/neck constants ripples** to camera offsets, held-item attach, footstep
+  cadence — re-verify those (item 5).
+- **D107** procedural-only; **D109** localSpace on the moving rig.
+- **Preview**: if `preview_screenshot` wedges mid-session, restart Claude Code / the preview MCP
+  (it clears). State inspection via `ctx` keeps working. Pause AFTER a frame settles the rig
+  (else joint world-pos is stale → camera aims at sky) — D134 footguns.
 
 ## Verification protocol
-`npm run verify` (= tsc) is the type gate. QUALITY gate = the headless screenshot loop,
-3-5 rounds per material element.
+`npm run verify` (= tsc) = type gate. QUALITY gate = the MVP-check, 5–8 rounds.
 
 ## Begin block
-1. Read CLAUDE.md, session-end-report, backlog (Rey item), decisions (D134/D107/D109).
+1. Read CLAUDE.md, feature-player-model.md (MVP-check + Cycle A), the Rey reference, decisions (D134/D107/D109).
 2. `npm run verify` baseline.
-3. TaskCreate the 1-2 material elements you'll fully iterate + the rig-debt bundle.
-4. Start the preview, `enterGame`, and iterate per element.
+3. TaskCreate: rigStudio tool → torso taper → poncho rest-shape → ratios → re-verify consumers.
+4. Build `rigStudio` first, then iterate the silhouette with the MVP-check each round.

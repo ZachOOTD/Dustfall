@@ -76,7 +76,17 @@ eval and reposition the camera deliberately for screenshots.
 
 ---
 
-## Cycle 2: Rig to Rey-tier
+## Cycle 2: Rig to Rey-tier — ⚠ RE-SCOPED into a multi-cycle arc
+
+> **Status (post-ACH)**: ACH shipped rig *detail* (band wraps, fingerless glove, unified scarf,
+> belt/pouches, backpack, boots) + the `enterGame` headless self-verify tooling (D134) — but an
+> honest full-body audit found the result is **far from the Rey/real-human bar**: a rigid
+> barrel/sandwich-board silhouette on stick-legs, blank ovoid face, floating-disc scarf. The
+> single "Rig to Rey-tier" cycle was the wrong scope. **Re-planned as a 5-cycle arc → see
+> [docs/feature-player-model.md](feature-player-model.md)** (PM-Cycle A proportion/silhouette →
+> B head/face/scarf → C layered outfit → D cloth physics → E texture), each with a repeatable
+> Model Verification Protocol + adversarial pass-bar. PM-Cycle A is the next session. The
+> original single-cycle scope below is retained for history.
 
 **Why**: GDD Pillar 2 + Pillar 4 (every mesh earns its place; procedural-only). The ABP→ABY
 10-session arc reached "low-poly stylized 3P character" (D115/D117/D118), but the user set an
