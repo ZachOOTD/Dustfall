@@ -274,6 +274,33 @@ function buildRigVisual(): {
     spineBend.add(flap);
   }
 
+  // ── Backpack (ACH Cycle 2.3): scavenger pack lashed to the back. Front=+Z,
+  // so the pack rides -Z. Parented to spineBend so it moves with the torso.
+  const packMat = createFabricMaterial(0x6e5d44, undefined, { disableShimmer: true });
+  // Mounted OUTSIDE the poncho's back drape (further -Z) so it isn't occluded,
+  // and tall enough that the lashed bedroll clears the shoulders above the hood.
+  const packZ = -(TORSO_CHEST_R + 0.13);
+  const packY = TORSO_CENTER_Y + 0.06;
+  const packBody = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.32, 0.14), packMat);
+  packBody.position.set(0, packY, packZ);
+  spineBend.add(packBody);
+  // Top flap (leather)
+  const packFlap = new THREE.Mesh(new THREE.BoxGeometry(0.23, 0.07, 0.15), beltMat);
+  packFlap.position.set(0, packY + 0.16, packZ + 0.004);
+  spineBend.add(packFlap);
+  // Bedroll lashed across the top — horizontal cylinder in scarf cloth
+  const bedroll = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.052, 0.26, 10), hoodMat);
+  bedroll.rotation.z = Math.PI / 2;
+  bedroll.position.set(0, packY + 0.225, packZ);
+  spineBend.add(bedroll);
+  // Two shoulder straps crossing from the pack over the shoulders to the chest
+  for (const side of [-1, 1]) {
+    const strap = new THREE.Mesh(new THREE.BoxGeometry(0.034, 0.36, 0.02), beltMat);
+    strap.position.set(side * 0.09, packY + 0.06, -0.01);
+    strap.rotation.x = -0.32;                  // lean over the shoulder toward the front
+    spineBend.add(strap);
+  }
+
   // ── Head: ABT P5 R1 — LatheGeometry profile for organic skull shape.
   // Pre-R1: scaled sphere + flat box jaw = "egg with cartoon mouth board".
   // Now: profile-based lathe (cranium → temple → cheekbone → jaw → chin),
