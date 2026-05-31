@@ -123,8 +123,7 @@ const SKIN_COLOR = 0xc9a876;           // weathered tan
 // ABX: SKIN_ACCENT retired — face/hand accent colors now inlined
 // per material (face = 0x6e4a26 sun-aged, hand = 0x4a3520 grimy).
 const PONCHO_COLOR = 0xd9a85a;         // ABP-polish R4: 0xb8860b read as dark brown after fabricMaterial multipliers; bumped to lighter golden ochre for the actual "sun-bleached" silhouette
-const HOOD_COLOR = 0xd2b48c;           // desert tan (lighter than poncho)
-const BANDANA_COLOR = 0x3a3a3a;        // dark cloth
+const HOOD_COLOR = 0xd2b48c;           // desert tan (lighter than poncho) — unified scarf cloth (ACH: bandana folded into this)
 const STRAP_COLOR = 0x4a3220;          // ABX: brown leather (was 0x505050 dark metal)
 const POUCH_RUST = 0xa0522d;           // rust-orange
 const PAULDRON_METAL = 0x6a6a6a;       // dark grey metal
@@ -190,7 +189,6 @@ function buildRigVisual(): {
   // entity; shimmer would crawl per ABN/D109 sibling pattern).
   const ponchoMat = createFabricMaterial(PONCHO_COLOR, undefined, { disableShimmer: true });
   const hoodMat = createFabricMaterial(HOOD_COLOR, undefined, { disableShimmer: true });
-  const bandanaMat = createFabricMaterial(BANDANA_COLOR, undefined, { disableShimmer: true });
   const wrapMat = createFabricMaterial(WRAP_COLOR, undefined, { disableShimmer: true });
   // Metal: bandolier strap + pauldron base
   // ABX P4 — bandolier swapped from metalMaterial (was reading too
@@ -291,14 +289,18 @@ function buildRigVisual(): {
   neck.position.y = -HEAD_R * HEAD_SCALE_Y - NECK_H / 2 + 0.02;
   headGroup.add(neck);
 
-  // ── Bandana: torus around lower face (covers mouth + nose) ──
+  // ── Face wrap (lower edge of the unified scarf) — ACH Cycle 2.2 ──
+  // Was a separate dark bandana; now the SAME tan cloth as the hood, thicker,
+  // reading as the scarf's lower wrap coming down over the nose/mouth rather
+  // than a disconnected band. (Backlog: "unify hood + bandana into a single
+  // naturalistic scarf.")
   const bandana = new THREE.Mesh(
-    new THREE.TorusGeometry(HEAD_R * 0.85, 0.025, 6, 16),
-    bandanaMat,
+    new THREE.TorusGeometry(HEAD_R * 0.88, 0.032, 6, 16),
+    hoodMat,
   );
-  bandana.position.set(0, -HEAD_R * 0.25, HEAD_R * 0.15);
+  bandana.position.set(0, -HEAD_R * 0.22, HEAD_R * 0.14);
   bandana.rotation.x = Math.PI / 2;
-  bandana.scale.set(1.0, 0.85, 0.55);     // flatten + push back to wrap face
+  bandana.scale.set(1.0, 0.92, 0.62);     // flatten + push back to wrap face
   headGroup.add(bandana);
 
   // ── Hood: hemisphere crown + back-half drape (ABP-polish R1).
@@ -312,11 +314,35 @@ function buildRigVisual(): {
   // brow (forehead visible). Crown also raised slightly + radius 1.30 →
   // 1.22 for a tighter cap. Drape's front opening widened so face fully
   // reads from front; drape top brought forward 0.05 to peek over brow.
-  const hoodCrown = new THREE.Mesh(
-    new THREE.SphereGeometry(HEAD_R * 1.22, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.42),
-    hoodMat,
+  // ACH Cycle 2.2: cloth-fold displacement on the crown (matches the drape's
+  // D117 treatment) so it reads as soft wrapped fabric, not a hard helmet
+  // dome. phiLength 0.42π → 0.46π drops the crown edge slightly toward the
+  // face wrap so the scarf reads continuous.
+  const hoodCrownGeom = new THREE.SphereGeometry(
+    HEAD_R * 1.22, 22, 12, 0, Math.PI * 2, 0, Math.PI * 0.46,
   );
+  {
+    const pa = hoodCrownGeom.attributes.position as THREE.BufferAttribute;
+    const CROWN_WAVES = 6;
+    const CROWN_AMP = 0.017;
+    for (let i = 0; i < pa.count; i++) {
+      const x = pa.getX(i), y = pa.getY(i), z = pa.getZ(i);
+      const r = Math.hypot(x, z);
+      if (r < 1e-4) continue;
+      const theta = Math.atan2(z, x);
+      // folds reach most of the way up (only the very crown stays smooth)
+      const tt = Math.min(1, Math.max(0, y / (HEAD_R * 1.22)));
+      const amp = CROWN_AMP * (1 - tt * 0.4);
+      const off = Math.sin(CROWN_WAVES * theta) * amp;
+      pa.setX(i, x + (x / r) * off);
+      pa.setZ(i, z + (z / r) * off);
+    }
+    pa.needsUpdate = true;
+    hoodCrownGeom.computeVertexNormals();
+  }
+  const hoodCrown = new THREE.Mesh(hoodCrownGeom, hoodMat);
   hoodCrown.position.y = HEAD_R * 0.18;
+  hoodCrown.scale.set(1.04, 0.9, 1.04);   // squash + widen → wrapped cap, not a helmet dome
   headGroup.add(hoodCrown);
   // Drape: [225°, 315°] = back-only 90° (was 180° back+sides which covered
   // the cheeks). Front + sides now open so face + bandana read.
