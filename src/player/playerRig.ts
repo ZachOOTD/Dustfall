@@ -748,24 +748,19 @@ function buildRigVisual(): {
       const fingerZ = -0.028 - fingerLen * 0.45;
       finger.position.set(fingerX, fingerY, fingerZ);
       handGroup.add(finger);
-      // ABU P2 — knuckle bumps: 2 small spheres at 1/3 + 2/3 along each
-      // finger for visible joint inflections. Positioned in world space
-      // by stepping along finger's forward direction (which is the
-      // cylinder Y axis rotated by finger.rotation.x).
-      // Forward dir after rotation: Z component = sin(rot.x), Y component = -cos(rot.x)
-      const fwdZ = Math.sin(finger.rotation.x);
-      const fwdY = -Math.cos(finger.rotation.x);
-      for (const knuckleT of [-0.16, 0.10]) {
+      // ABU P2 / ACH Cycle 2.1 fix — knuckle bumps: 2 small spheres at ~1/3
+      // + 2/3 along each finger for visible joint inflections. PARENTED to the
+      // finger so they ride its local Y axis exactly. (The prior code placed
+      // them in world space via a wrong-sign forward vector + offsets ~3× the
+      // finger length — which left them floating off the fingertips, the bug
+      // surfaced in the ACH rig close-ups.)
+      for (const frac of [1 / 3, 2 / 3]) {
         const knuckle = new THREE.Mesh(
-          new THREE.SphereGeometry(0.011, 8, 6),
+          new THREE.SphereGeometry(0.0115, 6, 5),
           handSkinMat,
         );
-        knuckle.position.set(
-          fingerX,
-          fingerY + fwdY * knuckleT,
-          fingerZ + fwdZ * knuckleT,
-        );
-        handGroup.add(knuckle);
+        knuckle.position.y = (frac - 0.5) * fingerLen;  // along the finger's own axis
+        finger.add(knuckle);
       }
     }
     // Thumb — tapered cylinder angled outward + forward (opposable)
