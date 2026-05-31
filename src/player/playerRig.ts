@@ -246,6 +246,34 @@ function buildRigVisual(): {
   torsoMesh.position.y = TORSO_CENTER_Y;
   spineBend.add(torsoMesh);   // ABV — upper body bends with spine
 
+  // ── Belt + pouches (ACH Cycle 2.3): cinched leather belt at the waist with
+  // utilitarian hip pouches — Rey-scavenger layering depth. Parented to
+  // spineBend so it bends with the torso. Front = +Z (matches the face wrap).
+  const beltMat = createFabricMaterial(STRAP_COLOR, undefined, { disableShimmer: true });
+  const beltY = TORSO_CENTER_Y - 0.185;            // between natural waist + hip
+  const beltR = TORSO_WAIST_R * 1.06;
+  const belt = new THREE.Mesh(new THREE.TorusGeometry(beltR, 0.024, 6, 22), beltMat);
+  belt.position.y = beltY;
+  belt.rotation.x = Math.PI / 2;
+  belt.scale.set(1.0, 1.0, 0.88);                  // slight front-back flatten to hug the body
+  spineBend.add(belt);
+  // Buckle — small box at front center
+  const buckle = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.036, 0.022), beltMat);
+  buckle.position.set(0, beltY, beltR * 0.92);
+  spineBend.add(buckle);
+  // Two hip pouches hanging at the front-sides
+  for (const side of [-1, 1]) {
+    const pouch = new THREE.Mesh(new THREE.BoxGeometry(0.072, 0.090, 0.048), beltMat);
+    pouch.position.set(side * 0.105, beltY - 0.055, beltR * 0.62);
+    pouch.rotation.y = side * 0.25;                // splay outward to follow the hip curve
+    spineBend.add(pouch);
+    // pouch flap — thin box over the top edge
+    const flap = new THREE.Mesh(new THREE.BoxGeometry(0.076, 0.026, 0.052), beltMat);
+    flap.position.set(side * 0.105, beltY - 0.018, beltR * 0.62);
+    flap.rotation.y = side * 0.25;
+    spineBend.add(flap);
+  }
+
   // ── Head: ABT P5 R1 — LatheGeometry profile for organic skull shape.
   // Pre-R1: scaled sphere + flat box jaw = "egg with cartoon mouth board".
   // Now: profile-based lathe (cranium → temple → cheekbone → jaw → chin),
