@@ -52,6 +52,14 @@ interface DebugApi {
    *  path → dead pose + corpse interaction tag), so the corpse-drag flow is
    *  testable without melee aiming. Returns true if a live raider matched. */
   killRaider: (id: number) => boolean;
+  /** ACH (Cycle 2) — DEV-only: enter gameplay HEADLESS, bypassing the title
+   *  button + pointer-lock. The normal handoff only clears `flags.paused` via
+   *  the pointer-lock 'lock' event (input.ts), which never fires for an
+   *  agent/preview click → the game renders the title-gone scene but never
+   *  ticks. This runs the handoff side-effects + sets paused=false directly so
+   *  the rAF loop ticks + renders. Pass dev=true to apply the DEV loadout
+   *  first. Enables autonomous build→screenshot→critique on visual work. */
+  enterGame: (dev?: boolean) => void;
   /** Clear the tutorial localStorage flags so the controls panel + all
    *  pickup hints fire again. Refresh to see the first-boot overlay. */
   resetTutorial: () => void;
@@ -65,7 +73,14 @@ interface DebugApi {
   musicState: () => MusicStateSnapshot | null;
 }
 
-export function installDebugPanel(ctx: GameContext): void {
+/** Hooks main.ts supplies for actions that need its boot-scope closures
+ *  (handoffToGame, applyDevLoadout, the title scene) which aren't reachable
+ *  from here. */
+export interface DebugHooks {
+  enterGame?: (dev?: boolean) => void;
+}
+
+export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): void {
   window.__game = {
     setTime: (t) => { ctx.time.dayTime = t; },
     setStats: (s) => {
@@ -115,6 +130,10 @@ export function installDebugPanel(ctx: GameContext): void {
       if (!r || r.bb.state === 'dead') return false;
       damageRaider(r, 9999, ctx);  // drives transitionTo('dead') + applyRaiderDeadPose
       return true;
+    },
+    enterGame(dev) {
+      if (hooks.enterGame) hooks.enterGame(dev);
+      else { ctx.flags.titleActive = false; ctx.flags.paused = false; }  // fallback
     },
     resetTutorial,
     showControls() { showControlsPanel(ctx); },

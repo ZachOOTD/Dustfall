@@ -471,7 +471,19 @@ createFootprintPuffs(three.scene); // AAG — upward dust burst on each footstep
 // noteIntroSeen() — and before installDebugPanel so __game.showControls works.
 createTutorial(ctx);
 wireOverlays(ctx);
-installDebugPanel(ctx);
+installDebugPanel(ctx, {
+  // ACH (Cycle 2) — headless gameplay entry for agent/preview self-testing.
+  // Bypasses the title button + pointer-lock: the normal 'lock' event that
+  // clears flags.paused (input.ts) never fires for a synthetic click, so the
+  // game would render the title-gone scene but never tick. handoffToGame()
+  // already skips pointer-lock in preview-like contexts (isPreviewLike); we
+  // just add the paused=false the 'lock' handler would have set. Idempotent.
+  enterGame: (dev?: boolean) => {
+    if (dev && !ctx.flags.devMode) { applyDevLoadout(ctx); ctx.flags.devMode = true; }
+    if (ctx.flags.titleActive) handoffToGame();
+    ctx.flags.paused = false;
+  },
+});
 installPhysicsDebug(ctx);
 
 // --- Session CC-3: animated title screen ---
