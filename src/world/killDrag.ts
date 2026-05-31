@@ -134,11 +134,15 @@ export function updateKillDrag(ctx: GameContext): void {
     if (res.snapped) {
       // Dead raider visual sits flat on the sand — group Y is the terrain
       // height (the dead pose lays the body on the ground), not the body's
-      // capsule-center Y. (Orienting the corpse to trail head-first is a
-      // visual-triage refinement — deferred until verified against the
-      // flop/die-clip dead pose so we don't fight it.)
+      // capsule-center Y.
       const groundY = ctx.terrain.heightAt(res.postX, res.postZ);
       r.group.position.set(res.postX, groundY, res.postZ);
+      // ACG Cycle 1.3 — face the corpse toward the anchor so it trails
+      // head-first. Safe: the rig-path dead pose leaves group.rotation
+      // identity, and the primitive flop sets only .x (a world-Y yaw then
+      // rotates the flopped body in the ground plane). NOTE: head/tail sign
+      // (±π) confirmed by the 1.2 visual-triage screenshots.
+      r.group.rotation.y = Math.atan2(anchorPos.x - res.postX, anchorPos.z - res.postZ);
     }
 
     // Rope visual: anchor → corpse belt (a touch above the flopped body).
@@ -190,12 +194,15 @@ export function updateKillDrag(ctx: GameContext): void {
     if (res.snapped) {
       // Keep the carcass at its half-buried dead-pose depth at the new XZ
       // (mirrors transitionToDead's basePos.y math). mesh tracks basePos.
-      // (Yawing the long body to trail head-first is a visual-triage
-      // refinement — deferred until verified against applySandWormDeadPose's
-      // rotation so we don't fight it.)
       const surfaceY = ctx.terrain.heightAt(res.postX, res.postZ);
       w.basePos.set(res.postX, surfaceY - Tuning.SANDWORM_MAX_RADIUS * 0.5, res.postZ);
       w.mesh.position.copy(w.basePos);
+      // ACG Cycle 1.3 — yaw the carcass to trail head-first behind the tow.
+      // Safe: applySandWormDeadPose is yaw-only (mesh.rotation.set(0,yaw,0)),
+      // so setting w.yaw + matching the mesh doesn't fight the dead pose.
+      // NOTE: head(+X)/tail sign (±π) confirmed by the 1.4 visual-triage.
+      w.yaw = Math.atan2(anchorPos.x - res.postX, anchorPos.z - res.postZ);
+      w.mesh.rotation.set(0, w.yaw, 0);
     }
 
     // Rope visual: speeder tow-bar → carcass (on top of the hide).

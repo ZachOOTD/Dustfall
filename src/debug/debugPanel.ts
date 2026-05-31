@@ -1,7 +1,9 @@
 // Debug handles attached to window.__game so MCP preview tools can poke state.
 
+import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import type { GameContext } from '../GameContext.ts';
+import { spawnRaider as spawnRaiderEntity, damageRaider } from '../enemies/raider.ts';
 import { resetTutorial, showControlsPanel } from '../ui/tutorial.ts';
 import { getAudioStateSnapshot, type AudioStateSnapshot } from '../audio/soundscape.ts';
 import { getMusicStateSnapshot, type MusicStateSnapshot } from '../audio/music.ts';
@@ -40,6 +42,16 @@ interface DebugApi {
   };
   /** Trigger a sandstorm immediately for testing. */
   triggerStorm: () => void;
+  /** ACG (Cycle 1) — DEV-only: spawn a raider at world XZ (terrain Y
+   *  auto-sampled) and register it in ctx.raiders. Raiders are dormant by
+   *  design (D13 / Pillar 1) — this is a test affordance for exercising the
+   *  ACF corpse-drag path, NOT a return of raiders as a world threat.
+   *  Returns the new raider's id. */
+  spawnRaider: (x: number, z: number) => number;
+  /** ACG (Cycle 1) — DEV-only: kill a raider by id (drives the real death
+   *  path → dead pose + corpse interaction tag), so the corpse-drag flow is
+   *  testable without melee aiming. Returns true if a live raider matched. */
+  killRaider: (id: number) => boolean;
   /** Clear the tutorial localStorage flags so the controls panel + all
    *  pickup hints fire again. Refresh to see the first-boot overlay. */
   resetTutorial: () => void;
@@ -89,6 +101,20 @@ export function installDebugPanel(ctx: GameContext): void {
     triggerStorm() {
       ctx.weather.state = 'building';
       ctx.weather.stateTimer = 0;
+    },
+    spawnRaider(x, z) {
+      const r = spawnRaiderEntity(
+        ctx.three.scene, ctx.physics.world, ctx.terrain, ctx.assets,
+        new THREE.Vector3(x, 0, z),
+      );
+      ctx.raiders.push(r);
+      return r.id;
+    },
+    killRaider(id) {
+      const r = ctx.raiders.find((rr) => rr.id === id);
+      if (!r || r.bb.state === 'dead') return false;
+      damageRaider(r, 9999, ctx);  // drives transitionTo('dead') + applyRaiderDeadPose
+      return true;
     },
     resetTutorial,
     showControls() { showControlsPanel(ctx); },
