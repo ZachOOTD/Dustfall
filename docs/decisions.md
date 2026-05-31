@@ -949,3 +949,12 @@ The fundamental issue: KCC's slope projection, autostep, and contact resolution 
 **Footguns** (learned this session): (1) pause AFTER the rig has settled at the player position — pausing in the same tick as enterGame freezes before `updatePlayer` positions the rig, so joint world-positions are stale and the framed camera aims at empty sky; let it run a frame, then pause + pose + frame. (2) The preview-MCP screenshot capability can wedge independently (timed out even on a fresh title boot mid-session); a Claude Code / preview-MCP restart cleared it. (3) The continuous rAF render keeps painting, so rely on `enterGame` + state inspection for STATE verification even when pixel capture is flaky.
 
 **Considered alternatives**: clicking the real button (synthetic clicks are flaky + don't satisfy pointer-lock); making `handoffToGame` set `paused=false` in the preview branch (changes the prod-ish handoff path; a separate DEV hook is safer + explicit). **friction-score:** 1
+
+## D135 — `getWorldDirection` points AWAY from a character's face; negate for "front" framing (Session ACI)
+**When**: PM-Cycle B — the `rigStudio` verification helper (D134) framed `'front'`/`'head'` by placing the camera along `rig.headGroup.getWorldDirection()`. Every studio shot turned out to be the **BACK** of the character. The bug went unnoticed across the PM-Cycle A silhouette audit because the body is roughly front/back-symmetric — it only surfaced when the head got a face-opening (which appeared on the far side from the "front" camera).
+
+**Why**: `Object3D.getWorldDirection()` returns the world-space direction of the object's **+Z** axis. The rig is authored with the **face toward the head's local +Z... no — toward −Z relative to getWorldDirection's result**: empirically, the camera placed at `headPos + getWorldDirection()*d` saw the back of the hood, and `headPos − getWorldDirection()*d` saw the face. So the face is opposite the reported "world direction." (The exact local-axis convention is murky in this rig; the empirical test — screenshot both sides — is the reliable arbiter, not reasoning about the axis.)
+
+**Picked**: in `rigStudio`, negate the direction (`fwd.negate()`) so `'front'`/`'head'` look at the face. Lesson: when a headless framing tool aims via `getWorldDirection`, **verify which side is the face with a two-sided screenshot before trusting it** — don't reason about the local frame; a backwards verification camera silently audits the wrong side.
+
+**friction-score:** 1

@@ -17,20 +17,15 @@ Use `/triage-ideas` to bulk-classify a free-form dump.
 <!-- (procedural world generation — shipped in AAI/AAK) -->
 <!-- (creature companion — shipped in AAE) -->
 
-[feat/polish] Player model refinement — Rey-Jakku-outfit target (logged 2026-05-26; `docs/research/reference-tfa-jakku-opening.md`). **GEOMETRY largely SHIPPED in ACH (Cycle 2)**, self-verified via the headless screenshot loop (D134):
-- ✓ **Band-spaced forearm wraps** (2→7 tapered bands) — `66a061e`
-- ✓ **Unified headscarf** (bandana+crown+drape → one folded scarf) — `bd7ef7a`
-- ✓ **Cinched belt + hip pouches** — `3448360`
-- ✓ **Visible backpack + bedroll** — `2cc07db`
-- ✓ **Fingerless glove** (palm cloth, bare fingertips) — `66a061e`
-- ✓ **Boot wraps** — `7fd3076`
-**REMAINING (texture/material cycle — its own session per user):**
-- Skin tone + cloth weave/dye TEXTURE detail (procedural shaders per D107) — the model has the silhouette + layering; this is the surface-richness pass. The user explicitly wants "more realistic skin and cloth textures."
-- **Glove contrast** reads subtly at 3P (grey cloth vs skin both warm under midday) — consider a more contrasting glove tone.
-- **Backpack detail** — currently a plain box; add stitching/strap/wear detail.
-- **Goggles** — verify crisp at 3P.
-- Stretch: sled-on-back when undeployed (design pass touching sled deploy state — surface first).
-File: `src/player/playerRig.ts`. Per discipline + the `__game.enterGame` headless screenshot loop (D134).
+[feat/polish] Player model → Rey/real-human quality — **NOW TRACKED IN [docs/feature-player-model.md](feature-player-model.md)** (5-cycle arc; ACH's "Rig to Rey-tier" detail work shipped band-wraps/glove/scarf/belt/backpack/boots but an honest audit found a wrong silhouette — rigid barrel on stick-legs, blank face — so it was re-planned). Status:
+- ✓ **PM-A silhouette** (ACI): slim+taper torso, narrowed/folded poncho, bigger head → reads as a slim draped human.
+- ✓ **PM-B.1 hood** (ACI): wraps the skull (was a floating mushroom-disc).
+- ⬜ **PM-B.2** face planes + goggles (face is a blank ovoid) · **PM-B.3** face-wrap + neck
+- ⬜ **PM-C** layered outfit (tunic layers, visible arms, belt/pouches legible, integrated pack, fix shoulder bunching)
+- ⬜ **PM-D** cloth physics (Verlet drape — fixes the still-stiff poncho; shares a solver with Cycle 4 rope)
+- ⬜ **PM-E** texture pass (skin weathering, cloth weave/dye, leather, glove contrast, backpack detail, palette match)
+- Stretch: sled-on-back when undeployed (design fork — surface first).
+File: `src/player/playerRig.ts`. Verify via `__game.rigStudio()` (D134/D135) + the Model Verification Protocol in the plan.
 
 [polish] Sled mechanics further tuning (post-ACD playtest). The ACD slope-slide + Option-B-tilt + item-rest-height fixes shipped the core feel, but a focused tuning session would benefit from:
 - **Slope-slide speed feel**: current `SLED_SLOPE_SLIDE_GAIN = 6.0` produces ~5 m/s at 10° and ~15 m/s at 30°. Might be too aggressive at very steep slopes; playtest with varied dune steepness and tune.

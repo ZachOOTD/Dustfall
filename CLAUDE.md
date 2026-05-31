@@ -64,24 +64,24 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      Prior milestones live in docs/changelog.md — do NOT accumulate "Prior milestone"
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
-**Last shipped**: Session ACH — Cycle 2 (Rig to Rey-tier) + the headless
-self-verify tooling that unblocked it. tsc clean + self-verified via
-headless screenshots. 8 commits (`12f2a36`..`7fd3076`). **Tooling**:
-`__game.enterGame(dev?)` enters gameplay headless (no pointer-lock) so the
-rAF loop ticks + renders — with `renderer.setSize` + `thirdPerson` + joint
-posing this gives a full edit→enter→pose→screenshot→critique→iterate loop,
-no human needed (D134). **Rig** (all self-verified, per `playerRig.ts`):
-forearm wraps 2→7 tapered bands + fingerless glove; unified headscarf (dark
-bandana + crown + drape → one folded tan scarf); belt + hip pouches;
-scavenger backpack + bedroll (mounted outside the poncho drape); cloth-wrapped
-boots. **Fix**: floating finger knuckle-bumps (latent ABU bug, parented to
-the finger axis). Rule 8 honored — every element screenshot-iterated, not
-tsc-only. **Deferred**: skin/cloth TEXTURE pass (separate material cycle),
-3P-rig-on-speeder bug, foot-IK slope-snap.
+**Last shipped**: Session ACI — player-model re-plan + PM-Cycle A (silhouette)
++ PM-B.1 (hood). An honest audit found the ACH model far from Rey/real-human
+(rigid barrel on stick-legs, blank face, floating-disc scarf), so the single
+"Rig to Rey-tier" cycle became a **5-cycle arc** (NEW
+[docs/feature-player-model.md](docs/feature-player-model.md): A silhouette → B
+head/face/scarf → C outfit → D cloth physics → E texture), each with a
+repeatable Model Verification Protocol + adversarial pass-bar. **PM-A.0**:
+`__game.rigStudio(angle?)` — one-call headless studio-lit framed shot (the
+verification engine). **PM-Cycle A (pass-bar MET)**: slimmed+tapered torso
+(killed the barrel), poncho narrowed/lengthened + deeper folds + broken hem,
+bigger head → reads as a slim draped human. **PM-B.1**: hood rebuilt to WRAP
+the skull (was a floating mushroom-disc); face sits in a front opening. **Fix**:
+rigStudio framed backwards (showed the back) — negated (D135). Rule 8 honored
+every round. tsc clean; self-verified via rigStudio.
 
-**Next session**: finish the model — **player skin/cloth texture pass** +
-rig-debt (3P-on-speeder, foot-IK). Then the plan resumes at Cycle 3 (sled
-riding). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
+**Next session**: continue PM-Cycle B — **PM-B.2 face planes + goggles** (the
+face is a blank ovoid), then B.3 face-wrap/neck. See
+[docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 

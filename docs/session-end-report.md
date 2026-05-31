@@ -2,22 +2,22 @@
 
 Cumulative state. Rewritten end-to-end at each `/session-end`.
 
-**Current state**: Session ACH shipped (2026-05-31 — Phase 2 **Cycle 2: Rig to Rey-tier** + the headless self-verify tooling that unblocked it). 89 sessions post-MVP. tsc clean + self-verified via headless screenshots. **SAVE_VERSION still v13** (no schema changes). Phase 2 (9-cycle plan, `docs/iteration-plan.md`): Cycles 1+2 shipped. Next: finish the model with a skin/cloth TEXTURE pass + rig-debt, then the plan resumes at Cycle 3 (sled riding).
+**Current state**: Session ACI shipped (2026-05-31 — player-model re-plan + PM-Cycle A silhouette + PM-B.1 hood). 90 sessions post-MVP. tsc clean + self-verified via `rigStudio`. **SAVE_VERSION still v13**. The player model is mid-rework: an honest audit found the ACH "Rey-tier" result was a wrong silhouette (rigid barrel on stick-legs, blank face), so it's now a **5-cycle arc** (`docs/feature-player-model.md`): PM-A silhouette ✓, PM-B head/face/scarf (B.1 hood ✓; B.2 face next), PM-C outfit, PM-D cloth physics, PM-E texture. The broader Phase 2 plan (`docs/iteration-plan.md`) resumes at Cycle 3 (sled) after the model arc.
 
-## ACH scope (this session) — Cycle 2: Rig to Rey-tier + self-verify tooling
+## ACI scope (this session) — player-model re-plan + PM-A + PM-B.1
 
-The session's biggest outcome is a **headless self-verification loop**: `__game.enterGame(dev?)` (`debugPanel.ts` + `main.ts`) enters gameplay without the title button/pointer-lock so the rAF loop ticks + renders (the title handoff only clears `paused` via the pointer-lock event, which never fires for an agent click). Combined with `renderer.setSize` + `flags.thirdPerson` + posing `ctx.player.rig` joints, the agent can now edit → enter → pose → screenshot → critique → iterate with NO human in the loop (D134). This unblocks all future visual cycles.
+After ACH, a full-body audit (via `rigStudio`) honestly found the model far from the Rey/real-human bar: a rigid barrel/sandwich-board on stick-legs, blank ovoid face, floating mushroom-disc scarf. The single "Rig to Rey-tier" cycle was re-planned into a 5-cycle arc (`docs/feature-player-model.md`) with a repeatable **Model Verification Protocol** (6 canonical frames + critique vs real-human + Rey reference + adversarial pass-bar), 5–8 rounds/element.
 
-On that loop, the rig was pushed to the Rey-Jakku bar (`playerRig.ts`, each element screenshot-iterated per rule 8): forearm wraps (2→7 tapered bands) + fingerless glove; unified headscarf (dark bandana + tan crown + drape → one folded scarf); cinched belt + hip pouches; scavenger backpack + lashed bedroll (mounted outside the poncho drape so it isn't occluded); cloth-wrapped boots. Also fixed a latent ABU bug — finger knuckle-bumps floated off the fingertips (wrong-sign forward vector + 3×-oversized offsets), fixed by parenting them to the finger axis. Glove contrast reads subtly at 3P + the backpack is a plain box — both flagged for the texture cycle. Deferred: skin/cloth texture pass (own material cycle), 3P-rig-on-speeder bug, foot-IK slope-snap.
+- **PM-A.0 `__game.rigStudio(angle?)`** (`debugPanel.ts`): the verification engine — one call gives a headless, evenly studio-lit, framed full-body shot at a canonical angle. Used every round.
+- **PM-Cycle A — silhouette (pass-bar MET)** (`playerRig.ts`): `TORSO_CHEST_R` 0.22→0.185, `WAIST_R` 0.16→0.115 (killed the barrel, real taper); poncho narrowed + lengthened (H 0.85→1.05) + deeper folds (8 waves) + scalloped hem; `HEAD_R` 0.12→0.135. Reads as a slim draped human. Rig consumers unaffected (only mesh radii changed; skeletal constants untouched).
+- **PM-B.1 — hood wraps the skull** (`playerRig.ts`): crown rebuilt from a floating mushroom-disc → a sphere section wrapping top/back/sides (phi→0.92π) with a front face opening. Floating disc killed.
+- **Bug fix**: `rigStudio` framed via `getWorldDirection` (head's +Z, away from the face) → showed the BACK; negated (D135).
+- **Rule-8**: every element screenshot-iterated with honest deferrals (poncho stiffness → PM-D, face → PM-B.2, neck-wrap → PM-B.3, shoulder bunching → PM-C) — the correction for the ACH over-claim. **Deferred**: PM-B.2/B.3/C/D/E.
 
-## ACG scope (prior session) — Cycle 1: drag verification
+## ACH + ACG condensed
 
-Closes ACF's rule-8 visual-triage debt (ACF shipped the corpse/carcass drag functionally but never iterated the *feel* or ran the raider path). First session under the Phase 2 iteration plan.
-
-- **DEV test affordances** (`src/debug/debugPanel.ts`): `__game.spawnRaider(x,z)` + `__game.killRaider(id)`. Raiders stay dormant by design (D13 / Pillar 1) — these only let the ACF corpse-drag path be exercised (0 raiders spawn normally). The kill hook drives the real death path (`damageRaider` → dead pose + corpse interaction tag).
-- **Head-first drag orientation** (`src/world/killDrag.ts`): dragged raider corpse (`group.rotation.y`) + worm carcass (`yaw` + `mesh.rotation.y`) yaw to trail head-first toward the anchor. Dead-pose-safe (D133) — drives the entity's existing yaw channel, not a fresh transform.
-- **Human playtest closed the cycle**: corpse drag (on-foot + sled), worm speeder-tow, orientation sign (no ±π flip), and in-progress-drag save round-trip all confirmed correct.
-- **Process**: `--mode=overnight` requested but correctly fell back to gated (GDD §12 opt-out + no token budget + human-in-loop visual work). The headless preview couldn't drive the game loop (pointer-lock handoff gating — `dustfall_preview_gotchas`), so the aesthetic sign-off went to a human rather than being self-certified on tsc.
+- **ACH** (2026-05-31): "Rig to Rey-tier" detail + the `enterGame` headless self-verify tooling (D134). Shipped band-wraps/fingerless-glove/unified-scarf/belt-pouches/backpack/boots + a floating-knuckle-bump fix. NB: the audit (ACI) found the underlying silhouette wrong → re-planned. The `enterGame` loop (D134) is the lasting win.
+- **ACG** (2026-05-31): Cycle 1 drag verification — DEV `spawnRaider`/`killRaider` hooks (raiders dormant per D13), head-first drag orientation (D133), human-playtest-closed. Overnight correctly fell back to gated.
 
 ## ACF + ACE + ACD condensed
 
@@ -102,9 +102,9 @@ The full Dustfall gameplay loop:
 
 ## Known issues / partials
 
-- **Player model — texture pass owed** (the model's GEOMETRY is Rey-tier as of ACH; surface richness is the gap the user wants next). Plus: glove contrast reads subtly at 3P; backpack is a plain box. See backlog Rey item.
-- **Speeder bugs (from ACG playtest, still open)** — E mounts the speeder without looking at the seat; 3P rig broken on the speeder (needs a seated stance pose). Both in backlog; bundle with the next (texture/rig-debt) session.
-- **Foot-IK slope-snap + 3P camera real-playtest** — rig-debt deferred from Cycle 2; bundle with next session.
+- **Player model — mid-rework (5-cycle arc, `docs/feature-player-model.md`)**. ACI fixed the silhouette (PM-A) + hood (PM-B.1). REMAINING: PM-B.2 **blank ovoid face** (no features) + goggles, PM-B.3 face-wrap/neck, PM-C layered outfit (poncho still stiff panels + shoulder bunching + arms occluded), PM-D cloth physics, PM-E texture. Glove contrast subtle at 3P; backpack a plain box.
+- **Speeder bugs (ACG playtest, still open)** — E mounts the speeder without looking at the seat; 3P rig broken on the speeder (needs a seated stance). In backlog; fold into a PM cycle.
+- **Foot-IK slope-snap + 3P camera real-playtest** — rig-debt; fold into a PM cycle.
 - **ACF carcass tow blocked after harvest** — `lootSandWorm` untags the carcass, so towing works only before harvesting. Low severity. See backlog.
 - **Sled riding mechanic tabled** (D125) — player can't ride the sled when it slides downhill or is towed. See backlog.md for tried approaches + next-attempt ideas.
 - **Walk-cycle to footstep cadence sync** (ABR backlog, polish wrap-up remaining).
@@ -154,38 +154,38 @@ Existing tunables of interest:
 
 ## Suggested next session (1-3 directions in priority order)
 
-Cycles 1+2 shipped (ACG, ACH). Next:
+Player-model arc in progress (`docs/feature-player-model.md`). Next:
 
-1. **Finish the player model — skin/cloth TEXTURE pass** (~1 session). TOP. The geometry is Rey-tier (ACH); this is the procedural-shader surface pass (skin weathering, cloth weave/dye) per D107 zero-asset — the user explicitly wants "more realistic skin and cloth textures." Bundle the cheap rig-debt: glove-contrast tone, backpack detail, **3P-rig-on-speeder seated stance + the E-mount bug** (both ACG playtest finds), foot-IK slope-snap, 3P-camera real-playtest. Use the `__game.enterGame` headless screenshot loop (D134). Completes the player-model arc.
-2. **Cycle 3 — Ride the sled** (~1-2 sessions, architectural-risk). The D125-tabled riding mechanic; spike Option-C-parenting vs ride-peg in parallel branches. (Plan resumes here.)
-3. **Cycle 4 — Real rope physics** (~1-2 sessions, architectural-risk). Verlet/segmented sim superseding D126, behind a `FEATURES.realRope` gate-and-wait. Precedes any new rope feature.
+1. **PM-B.2 — face planes + goggles** (~1 session). TOP. The face is a blank ovoid; give the head lathe brow/nose/cheek/jaw definition so it reads as a face, + goggles on the forehead (Rey detail). Then PM-B.3 (face-wrap covers nose/mouth + connects to the scarf, neck covered). Use `rigStudio('head')` (D134/D135) + the Model Verification Protocol, 5–8 rounds. Honor rule 8 — faces are unforgiving; iterate honestly.
+2. **PM-C — layered outfit** (~1-2 sessions). Tunic layers, visible gloved arms (now that the torso is slim), legible belt/pouches, integrated backpack, fix the shoulder bunching.
+3. **PM-D — cloth physics** then **PM-E — texture**. (Then the Phase 2 plan resumes at Cycle 3 — sled riding.)
 
 ---
 
 ## Time spent
 
-89 sessions shipped (A through ACH). Approx ~290-352h cumulative dev time. ACH was a substantial visual-iteration session: built the headless self-verify tooling, then 6 rig elements + a bug fix, each screenshot-iterated. (It rode the tail of one very long conversational session that also produced ACF + the Phase 2 plan + Cycle 1.)
+90 sessions shipped (A through ACI). Approx ~292-355h cumulative dev time. ACI: an audit-driven re-plan + the `rigStudio` verification tool + PM-Cycle A (silhouette) + PM-B.1 (hood), screenshot-iterated. (Tail of one extraordinarily long conversation spanning the framework smoke-test → ACF → the Phase 2 plan → Cycles 1-2 → the audit → this re-plan → PM-A/B.1.)
 
 ---
 
 ## State at session end
 
-- **Git status**: ACH code committed across 8 commits `12f2a36`..`7fd3076` (enterGame tooling + 6 rig elements + knuckle-bump fix). This session-end's docs updates uncommitted (commit handoff below).
-- **Last commit before session-end**: `7fd3076` (boot wraps). All ACH code pushed to origin.
+- **Git status**: ACI code committed across the PM commits `ea1b85c` (rigStudio) → `54d8b18` (silhouette R1) → `591ae8c` (silhouette R2 + head) → `9263523` (hood + rigStudio fix); re-plan docs `6ec442a`. This session-end's docs updates uncommitted (commit handoff below).
+- **Last commit before session-end**: `9263523`. All ACI code pushed to origin.
 - **Last tag**: (Dustfall's git policy doesn't establish a session-tag convention; user may tag manually if desired).
 - **Ports bound**: none (preview stopped).
-- **Save state**: localStorage v13. ACH made zero save changes (pure rig geometry + dev tooling).
+- **Save state**: localStorage v13. ACI made zero save changes (pure rig geometry + dev tooling).
 
 ---
 
 ## Token spend this session (estimated)
 
-ACH was the visual-iteration tail of a marathon conversation. The rig work itself was screenshot-heavy (each element: edit → enter → pose → shoot → critique → iterate).
+ACI was a visual-iteration session on the tail of a marathon conversation: audit → re-plan → rigStudio tool → PM-A + PM-B.1, each element `rigStudio`-screenshot-iterated.
 
-- Output (ACH slice): substantial — 8 commits of rig geometry + the tooling + many screenshot-critique rounds + these docs.
-- Cost (Opus 4.8 rates): above a normal session for the visual-iteration volume, justified — it both built the reusable self-verify tooling AND shipped 6 iterated rig elements.
+- Output (ACI slice): substantial — the re-plan doc + rigStudio + ~5 silhouette/head iteration commits + many screenshot-critique rounds + these docs.
+- Cost (Opus 4.8 rates): above a normal session for the visual-iteration + planning volume.
 
-Notable: the `enterGame` tooling (D134) is the high-leverage artifact — it makes every future visual cycle self-verifiable, paying back its cost immediately (it caught + verified the knuckle-bump fix this session).
+Notable: the honest **audit → re-plan** was the key move — it caught the ACH "Rey-tier" over-claim and reset the model work onto a verifiable multi-cycle footing with `rigStudio` (D134/D135) as the engine. Quality-over-speed correction.
 
 ---
 

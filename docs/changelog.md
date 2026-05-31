@@ -3,6 +3,46 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ACI — 2026-05-31 — Player-model arc: re-plan + PM-Cycle A (silhouette) + PM-B.1 (hood) ✓ verify pass (tsc clean)
+
+`verified` — tsc clean + self-verified via the headless `rigStudio` loop. After an
+honest full-body audit found the ACH model **far from the Rey/real-human bar** (a
+rigid barrel/sandwich-board on stick-legs, blank ovoid face, floating mushroom-disc
+scarf), the single "Rig to Rey-tier" cycle was **re-planned into a 5-cycle arc**.
+
+**Re-plan** — NEW [docs/feature-player-model.md](feature-player-model.md): 5 cycles
+(A proportion/silhouette → B head/face/scarf → C layered outfit → D cloth physics →
+E texture), each with a repeatable **Model Verification Protocol** (6 canonical
+frames + critique vs real-human + the Rey reference + an adversarial pass-bar),
+5–8 rounds/element. iteration-plan Cycle 2 marked re-scoped.
+
+**PM-A.0 — `__game.rigStudio(angle?)`** (`debugPanel.ts`): the verification engine.
+One call → headless, evenly-lit (studio ambient/key + exposure ~2 — in-game dusk
+hid all detail), framed full-body shot at a canonical angle. Used every round.
+
+**PM-Cycle A — proportion + silhouette (pass-bar MET)** (`playerRig.ts`): slimmed +
+tapered the torso (`TORSO_CHEST_R` 0.22→0.185, `WAIST_R` 0.16→0.115) — killed the
+barrel, real shoulder→waist taper. Poncho narrowed + lengthened (H 0.85→1.05) +
+deeper folds (8 waves, 7.5cm hem) + scalloped/broken hem → drapes off the shoulders
+instead of a 0.58m tube. Head bigger/rounder (`HEAD_R` 0.12→0.135). Net: reads as a
+**slim draped human**, not a barrel. (Rig consumers unaffected — only mesh radii
+changed, skeletal constants untouched.)
+
+**PM-B.1 — hood wraps the skull** (`playerRig.ts`): rebuilt the headscarf crown from
+a flat floating mushroom-disc into a sphere section that WRAPS the skull (top/back/
+sides, phi→0.92π, hugging radius, centered) with a front theta-wedge open for the
+face. Floating disc killed; face sits in the opening.
+
+**Bug fix** — `rigStudio` framed `'front'`/`'head'` via `getWorldDirection` (the
+head's +Z, AWAY from the face) → every studio shot had shown the BACK. Negated it.
+D135.
+
+**Iteration-discipline note (rule 8)**: every element here was build → `rigStudio`
+screenshot → honest critique → iterate, with deferrals stated (poncho stiffness →
+PM-D cloth physics, face features → PM-B.2, neck-wrap → PM-B.3, shoulder bunching →
+PM-C) instead of false "done" claims — the correction for the ACH over-claim.
+**Deferred**: PM-B.2 face planes/goggles, B.3 face-wrap/neck, PM-C/D/E.
+
 ## Session ACH — 2026-05-31 — Cycle 2: Rig to Rey-tier + headless self-verify tooling ✓ verify pass (tsc clean)
 
 `verified` — tsc clean + **self-verified via headless screenshots** (the new
