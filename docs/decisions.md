@@ -925,3 +925,16 @@ The fundamental issue: KCC's slope projection, autostep, and contact resolution 
 - Cut the carcass drag entirely — loses the logistics beat; the speeder-only path keeps it cheaply.
 
 **friction-score:** 1
+
+## D133 — Dragged kills yaw head-first toward the anchor; orient via the entity's existing yaw, not a fresh transform (Session ACG)
+**When**: Cycle 1 (drag verification) — ACF deferred orienting the dragged corpse/carcass "until verified against the dead pose so we don't fight it." ACG confirmed it's safe and shipped it.
+
+**Why**: A dragged body that slides sideways reads wrong; it should trail head-first behind whatever pulls it. The deferral existed because a dragged kill's orientation could collide with the rotation its *dead pose* already applies. Reading the dead-pose code resolved it: `applySandWormDeadPose` sets `mesh.rotation.set(0, worm.yaw, 0)` (yaw-only), and the raider's rig-path dead pose leaves `group.rotation` at identity (only the primitive-flop fallback sets `.x`). So setting a world-Y yaw toward the anchor composes cleanly in every case — for the worm, drive its existing `worm.yaw` + match the mesh; for the raider, set `group.rotation.y`.
+
+**Picked**: in `updateKillDrag`'s snapped branch, `yaw = atan2(anchor.x − post.x, anchor.z − post.z)` (the raider faceTarget convention) applied to the entity's own yaw channel. Human playtest (ACG) confirmed the head/tail sign is correct (no ±π flip) for both kinds.
+
+**Considered alternatives**:
+- Compose a fresh quaternion on the mesh — would fight the dead-pose rotation; using the entity's existing yaw channel is the safe seam.
+- Orient continuously (even at slack) — chose snapped-only so a stationary dragged body doesn't swivel in place; it reorients only while actively pulled.
+
+**Apply**: when a system needs to reorient an entity that another system already poses (dead pose, ragdoll, animation), drive the SHARED rotation channel that pose uses, after confirming that pose's rotation convention — don't stack an independent transform. **friction-score:** 1

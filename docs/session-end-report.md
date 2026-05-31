@@ -2,9 +2,18 @@
 
 Cumulative state. Rewritten end-to-end at each `/session-end`.
 
-**Current state**: Session ACF shipped (2026-05-31 — B1 Phase 3 follow-up: corpse/carcass rope-drag). 87 sessions post-MVP. tsc clean. **SAVE_VERSION still v13** (ACF additive only — no schema bump). 9 files (7 modified + 1 new module `killDrag.ts` + 1 archived brief). **NB**: ACF began as a gamedev-framework smoke-test (Opus 4.8 + optimized CLAUDE.md) and grew into a real feature.
+**Current state**: Session ACG shipped (2026-05-31 — Phase 2 **Cycle 1: drag verification**). 88 sessions post-MVP. tsc clean + human-playtest verified. **SAVE_VERSION still v13** (no schema changes). Post-MVP work is now sequenced by the 9-cycle Phase 2 iteration plan (`docs/iteration-plan.md`); Cycle 1 is the first shipped, Cycle 2 (Rig to Rey-tier) is next.
 
-## ACF scope (this session)
+## ACG scope (this session) — Cycle 1: drag verification
+
+Closes ACF's rule-8 visual-triage debt (ACF shipped the corpse/carcass drag functionally but never iterated the *feel* or ran the raider path). First session under the Phase 2 iteration plan.
+
+- **DEV test affordances** (`src/debug/debugPanel.ts`): `__game.spawnRaider(x,z)` + `__game.killRaider(id)`. Raiders stay dormant by design (D13 / Pillar 1) — these only let the ACF corpse-drag path be exercised (0 raiders spawn normally). The kill hook drives the real death path (`damageRaider` → dead pose + corpse interaction tag).
+- **Head-first drag orientation** (`src/world/killDrag.ts`): dragged raider corpse (`group.rotation.y`) + worm carcass (`yaw` + `mesh.rotation.y`) yaw to trail head-first toward the anchor. Dead-pose-safe (D133) — drives the entity's existing yaw channel, not a fresh transform.
+- **Human playtest closed the cycle**: corpse drag (on-foot + sled), worm speeder-tow, orientation sign (no ±π flip), and in-progress-drag save round-trip all confirmed correct.
+- **Process**: `--mode=overnight` requested but correctly fell back to gated (GDD §12 opt-out + no token budget + human-in-loop visual work). The headless preview couldn't drive the game loop (pointer-lock handoff gating — `dustfall_preview_gotchas`), so the aesthetic sign-off went to a human rather than being self-certified on tsc.
+
+## ACF scope (prior session)
 
 Closes ACE's deferred **Cut #3** — the `raider_corpse` + `sandworm_carcass` rope endpoint kinds. The interesting architectural call is that these are the first *towed-body* endpoint kinds (the rope drags them) rather than anchors.
 
@@ -107,8 +116,8 @@ The full Dustfall gameplay loop:
 
 ## Known issues / partials
 
-- **ACF corpse/carcass drag — visual-triage owed** (rule 8). Functionally verified (worm path) but the drag-feel/rope-sag aesthetic was never iterated, and the raider path was never runtime-exercised (0 raiders spawn by default; no spawn hook). Body-trails-head-first orientation deferred. See backlog.
-- **ACF carcass tow blocked after harvest** — `lootSandWorm` untags the carcass, so towing works only before harvesting. Low severity. See backlog.
+- **ACF carcass tow blocked after harvest** — `lootSandWorm` untags the carcass, so towing works only before harvesting. Low severity. See backlog. (NOTE: ACF's drag visual-triage debt was CLOSED in ACG/Cycle 1.)
+- **Speeder bugs (from ACG playtest)** — E mounts the speeder without looking at the seat; 3P rig broken on the speeder (needs a seated stance). Both in backlog; the 3P one folds into Cycle 2.
 - **Sled riding mechanic tabled** (D125) — player can't ride the sled when it slides downhill or is towed. See backlog.md for tried approaches + next-attempt ideas.
 - **Walk-cycle to footstep cadence sync** (ABR backlog, polish wrap-up remaining).
 - **Per-item viewmodel readability at 3P distance** (ABR backlog).
@@ -157,39 +166,41 @@ Existing tunables of interest:
 
 ## Suggested next session (1-3 directions in priority order)
 
-1. **ACG — ACF drag polish + verification** (~2-3h). TOP. ACF shipped the drag functionally but skipped the rule-8 aesthetic loop. Visual-triage the rope sag + corpse/carcass orientation (trail head-first behind the anchor, verified against the dead-pose rotations), exercise the raider corpse path with a real kill (needs a raider-spawn path — none exists by default), confirm the in-progress-drag save round-trip. Optionally fix the `lootSandWorm`-untags-carcass edge.
+Sequenced by the Phase 2 iteration plan (`docs/iteration-plan.md`). Cycle 1 shipped (ACG); next is:
 
-2. **Sled riding mechanic, second attempt** (~3-5h). Still tabled per D125. Take the next-attempt directions: full Option C parenting (override player setNext entirely while riding), OR synthetic "ride peg" dynamic body. Slope-slide + tilted body are solid foundations.
+1. **Cycle 2 — Rig to Rey-tier** (~1-2 sessions). TOP. Push the ABP→ABY rig to the explicit Rey-Jakku bar (band-spaced wraps, unified headscarf, tunic/belt/pouches, backpack) + clear residual rig debt (3P camera real-playtest, foot-IK transition). Highest-leverage cycle: it's the gate for Cycle 5 (raider proc-character), Cycle 7 (companion), and Cycle 9 (sleep anims). The ACG-found 3P-rig-on-speeder bug folds in here. **Heavy visual-iteration cycle — honor rule 8 (1-2 fully-iterated elements/session, not 5 shallow).**
 
-3. **Apply procedural-character pipeline to companion + raider** (~5-7h). ACE delivered the lizard; companion + raider remain. Raider would retire the Quaternius GLB (retroactive D107 alignment) — and would also give the ACF raider-drag path a real entity to test against.
+2. **Cycle 3 — Ride the sled** (~1-2 sessions, architectural-risk). The D125-tabled riding mechanic; spike Option-C-parenting vs ride-peg in parallel branches.
 
-Top pick: **ACG = ACF drag polish** — close the rule-8 gap while the feature is fresh, and it's the cheapest path to actually proving the raider corpse drag.
+3. **Cycle 4 — Real rope physics** (~1-2 sessions, architectural-risk). Verlet/segmented sim superseding D126, behind a `FEATURES.realRope` gate-and-wait. Precedes any new rope feature.
+
+Optionally interleave the two ACG-found speeder bugs (E-mount; 3P-on-speeder) as a quick pass — both small, don't need the rig work (the E-mount one is fully standalone).
 
 ---
 
 ## Time spent
 
-87 sessions shipped (A through ACF). Approx ~285-345h cumulative dev time. ACF was a moderate session (~2-3h equiv) that began as a gamedev-framework smoke-test and grew into a real feature; most cost was efficient session-start reads + the feature build + a runtime verification pass.
+88 sessions shipped (A through ACG). Approx ~287-348h cumulative dev time. ACG was a small cycle (~1-2h equiv): the autonomous code slice (2 dev hooks + orientation) plus a human playtest to close the rule-8 gap.
 
 ---
 
 ## State at session end
 
-- **Git status**: working tree dirty — 7 modified source files (`rope.ts`, `killDrag.ts` new, `tuning.ts`, `raider.ts`, `sandWorm.ts`, `interaction.ts`, `save.ts`, `main.ts`) + this session-end's docs updates + `docs/plans-archive/session-ACF-prompt.md`.
-- **Last commit**: `b0d3ebd` (prune CLAUDE.md: milestone history → changelog). NOTE: a run of print-hints commits (b0d3ebd, 3ae5149, f3efd0d, 6a8f99e, 6df7aef) sits between the last full `/session-end` and ACF — ACF's docs are caught up here.
+- **Git status**: ACG code committed `8a72e12` (debugPanel hooks + killDrag orientation + archived ACG brief); backlog batch `9020dff`. This session-end's docs updates uncommitted (commit handoff below).
+- **Last commit before session-end**: `9020dff` (backlog: 7 playtest finds). Tip of the ACF→ACG chain: `eb011a3` (decisions split) → `6d6775c` (iteration plan) → `8a72e12` (ACG code) → `9020dff` (backlog). All pushed to origin.
 - **Last tag**: (Dustfall's git policy doesn't establish a session-tag convention; user may tag manually if desired).
 - **Ports bound**: none (preview stopped).
-- **Save state**: localStorage v13. ACF made zero save-schema *version* changes — additive fields only (`dragAnchor` on raider + worm; D81 discipline).
+- **Save state**: localStorage v13. ACG made zero save changes (the `dragAnchor` fields landed in ACF).
 
 ---
 
 ## Token spend this session (estimated)
 
-ACF was efficient — the session-start dispatch (grep recent D-entries vs reading 70K of decisions.md) kept reads lean, then a focused feature build + runtime verification.
+ACG was a long *conversational* session (framework smoke-test → ACF feature → backlog triage burst → iteration-plan → Cycle 1) rather than a single focused build. Cycle 1 itself was cheap; the surrounding planning + triage dominated.
 
-- Input: ~150-220K tokens (session-start docs + targeted source reads + preview-eval round-trips)
-- Output: ~40-60K tokens (the feature across 9 files + the framework-test analysis + these docs)
-- Cost (Opus 4.8 rates): rough estimate well within the project baseline.
+- Output (Cycle 1 slice only): ~15-25K tokens (2 dev hooks + orientation + the docs).
+- The broader session (ACF + planning + ~17 backlog triages + iteration plan) was the bulk — see those commits.
+- Cost (Opus 4.8 rates): within baseline for the Cycle 1 portion.
 
 At/near baseline. Notable: this run doubled as a framework efficiency test — findings logged to backlog (`[debt] gamedev-framework feedback from ACF smoke-test`).
 

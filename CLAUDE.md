@@ -64,24 +64,22 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      Prior milestones live in docs/changelog.md — do NOT accumulate "Prior milestone"
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
-**Last shipped**: Session ACF — B1 Phase 3 follow-up: corpse/carcass
-rope-drag (closes ACE's deferred Cut #3). tsc clean. 9 files (7 modified
-+ NEW `src/world/killDrag.ts` + archived brief). `RopeEndpoint` union
-gains `raider_corpse` + `sandworm_carcass` — the first *towed-body* kinds
-(rope drags them; they're not anchors). `updateKillDrag` is the first
-non-sled caller of ACE's `ropeConstraint` helper; drag state lives on the
-entity as `dragAnchor` (NOT `sled.tether`), hooked after `updateSandWorm`.
-Raider corpse: tagged on death, rope-LMB ties to player-tethered sled or
-player (drag on foot). Sandworm carcass: towable ONLY behind the speeder
-(24m carcass too heavy on foot). Sagged rope tube per dragged kill (keyed
-by id, disposed on detach). Save additive (no version bump): `dragAnchor`
-round-trips on raider + worm. `KILL_DRAG_*` tuning block. D131-D132.
-**Runtime-verified** the worm path (constraint snaps a 20m-yank back to
-the 14m leash; rope spawns/disposes; no errors). **NOT visually iterated**
-(rule 8): drag-feel/sag aesthetic + the raider path at runtime are owed to
-a human playtest. **NB**: session began as a gamedev-framework smoke-test.
+**Last shipped**: Session ACG — Cycle 1 (drag verification), first session
+of the Phase 2 iteration plan (`docs/iteration-plan.md`). Closes ACF's
+rule-8 visual-triage debt. tsc clean + **human playtest**. 2 files +
+archived brief; committed `8a72e12`. DEV test affordances
+`__game.spawnRaider(x,z)` + `__game.killRaider(id)` (raiders stay dormant
+per D13 — these only exercise the ACF corpse-drag path). Head-first drag
+orientation on dragged corpse + carcass (yaw toward anchor; dead-pose-safe
+— D133). Playtest confirmed: raider-corpse drag (on-foot + sled), worm-
+carcass speeder-tow, orientation sign, and in-progress-drag save round-trip
+all read correct. Cycle 1 closed. **Process**: `--mode=overnight` requested
+but correctly fell back to gated (GDD §12 opts out; no budget; visual work
+needs human-in-loop); preview loop wouldn't run headlessly so the aesthetic
+sign-off went to a human, not tsc.
 
-**Next session**: see [docs/next-session-prompt.md](docs/next-session-prompt.md).
+**Next session**: Cycle 2 — Rig to Rey-tier (the highest-leverage cycle; the
+gate for Cycles 5/7/9). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 

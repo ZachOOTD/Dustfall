@@ -1,110 +1,94 @@
-# Session ACG — Cycle 1: Drag verification
+# Session ACH — Cycle 2: Rig to Rey-tier
 
-> Phase 2 iteration plan now lives in **[docs/iteration-plan.md](iteration-plan.md)** — 9
-> theme-shaped cycles, ordered finish-what's-started-first. This session is **Cycle 1**
-> (the ACF-drag debt closure). After it, Cycle 2 = "Rig to Rey-tier" (the gate for several
-> later cycles). Run a playtest-driven priority refresh after Cycle 4.
+> Phase 2 iteration plan: **[docs/iteration-plan.md](iteration-plan.md)**. Cycle 1
+> (drag verification) shipped in ACG. This is **Cycle 2** — the highest-leverage
+> cycle: it's the user's explicit visual bar AND the gate for Cycle 5 (raider
+> proc-character), Cycle 7 (companion), and Cycle 9 (sleep anims). After it, run
+> a playtest-driven priority refresh (per the plan's cadence).
 
 ## Read these now (in order)
 
-1. **CLAUDE.md** (auto-loaded) — project manual.
-2. **docs/session-end-report.md** — cumulative state through ACF.
-3. **docs/backlog.md** — open items (top 3 are ACF follow-ups + the framework-feedback debt note).
-4. **docs/decisions.md** — D-entries through D132. **Grep, don't slurp** — the file is ~70K tokens; ACF added D131 (towed-body rope kinds + entity-owned `dragAnchor` + `killDrag` system) + D132 (worm carcass speeder-tow-only + tow-before-harvest edge).
-5. **docs/roadmap.md** — "Up next" lists ACG candidates.
-6. **docs/architecture.md** — only if touching a system you don't already know.
+1. **CLAUDE.md** (auto-loaded) — esp. rule 8 (iteration discipline) which is LOAD-BEARING this cycle.
+2. **docs/session-end-report.md** — cumulative state through ACG.
+3. **docs/backlog.md** — the `[feat/polish] Player model refinement — Rey-Jakku-outfit target` entry is the spec; also the 3P-on-speeder bug folds in here.
+4. **docs/decisions.md** — recent tail only (D-entries through D133; D107/D109/D111-D118 are the rig stack). **Grep, don't slurp** — older entries are in `docs/decisions-archive.md`.
+5. **docs/iteration-plan.md** — Cycle 2 scope + dependencies.
+6. **docs/research/reference-tfa-jakku-opening.md** — the Rey reference target.
 
 ## What's already built (one paragraph)
 
-ACF shipped the corpse/carcass rope-drag, closing ACE's deferred Cut #3. The
-`RopeEndpoint` union gained `raider_corpse` + `sandworm_carcass` — the first
-*towed-body* kinds (the rope drags them; they're not anchors). NEW
-`src/world/killDrag.ts` (`updateKillDrag`) is the first non-sled caller of
-ACE's `applyInextensibleConstraint`; drag state lives on the entity as
-`dragAnchor` (NOT `sled.tether`). A raider corpse drags on foot or trails a
-player-tethered sled; a worm carcass tows behind the speeder only (24m is too
-heavy on foot). Sagged rope tube per dragged kill; in-progress drags persist
-across save/load (additive, no version bump). The worm path was runtime-verified
-(constraint snaps a 20m-yank back to the 14m leash); the aesthetic + the raider
-path were NOT.
+The player rig (ABP→ABY, 10-session arc) reached "low-poly stylized 3P character"
+quality — Lathe torso + tapered limbs (D115), cloth drape (D117), sub-pivot
+rigging (D118), 7 mismatched-scavenger clothing layers, foot IK, over-shoulder
+3P camera (D116), dual-mesh held items (D113), all within D107 zero-asset. The
+silhouette is right (hood/poncho/bandolier/pauldron/bandana/wraps); the gap to
+Rey-tier is **detail fidelity**.
 
-## Session ACG — focus
+## Session ACH — focus
 
-**ACF drag polish + verification** — close the rule-8 gap ACF left open. ACF
-shipped functionally but never ran the build→screenshot→critique→iterate loop,
-and the raider corpse path was never runtime-exercised.
+**Push the rig to the Rey-Jakku bar.** This is a heavy VISUAL-ITERATION cycle —
+`tsc` is the type gate, NOT the quality gate. Honor rule 8 / the iteration
+discipline: build → screenshot → critique → iterate, **5-8 rounds per new
+element, 3-5 for tuning**. Ship **1-2 fully-iterated elements**, not 5 shallow
+ones (the ABP precedent). All work in `src/player/playerRig.ts` (+ `viewModelHands.ts`).
 
-## Priority items (in order)
+## Priority items (in order — pick 1-2 to FULLY iterate, don't shallow-ship all)
 
-1. **Raider-spawn path for testing** (`src/enemies/raider.ts`). 0 raiders spawn
-   by default (D13). Add a dev-only spawn (e.g. a `__game.spawnRaider(x,z)`
-   hook or a DEV-MODE starter raider near spawn) so the corpse-drag path can be
-   exercised at all. Acceptance: a raider exists in the world in DEV MODE.
-2. **Raider corpse drag — runtime verification + feel** (`killDrag.ts`,
-   `interaction.ts`). Kill it → wield rope → LMB-on-corpse → drag on foot, then
-   tie to a player-tethered sled. Visual-triage: rope sag, corpse position
-   relative to the rope, does it read as "dragging a body". 3-5 iteration rounds.
-3. **Body-trails-head-first orientation** (`killDrag.ts`). Deferred in ACF
-   pending verification against the dead-pose rotations. Orient the dragged
-   corpse (`r.group.rotation.y`) + carcass (`w.mesh.rotation.y`) to point away
-   from the anchor — but FIRST confirm it doesn't fight `applyRaiderDeadPose`
-   (flop / die-clip) or `applySandWormDeadPose`. Screenshot before/after.
-4. **Worm carcass tow — visual-triage** (mount speeder, slay/force a worm dead,
-   tow it). Judge the 24m carcass trailing on a 14m leash. Tune
-   `KILL_DRAG_WORM_*` if it reads wrong.
-5. **Save round-trip of an in-progress drag** — tie a corpse, save, reload,
-   confirm the drag resumes (or degrades gracefully). The fields are wired
-   (`dragAnchor` on raider + worm); confirm end-to-end.
+1. **Wraps with visible band spacing** — per-arm-segment geometry or per-vertex
+   band displacement (Rey's are tightly bound with clear separation; ours read
+   as smooth cloth). Reuses the D117 displacement technique. + glove
+   finger-cutouts at knuckles. Acceptance: bands read as distinct at 3P distance.
+2. **Unified headscarf** — merge hood + bandana into one naturalistic scarf that
+   wraps the head + drapes the back-shoulder (Rey-style). Builds on D117 hood drape.
+3. **Layered tunic + cinched belt + visible pouches** + tunic-edge variation +
+   boot wraps. Acceptance: reads as layered, not a single shell.
+4. **Visible backpack mesh** on the back. **SURFACE TO USER** before the
+   sled-on-back stretch (carry the sled undeployed) — that's a design pass on
+   sled deploy/undeploy state, not a pure rig edit.
+5. **Clear residual rig debt**: 3P camera collision real-playtest (walk into
+   wreck walls, rapid F-toggle, mid-3P speeder mount); foot-IK idle→walk slope
+   snap; **3P-rig-broken-on-speeder bug (ACG playtest find — needs a seated
+   stance pose)**.
 
 ## Stretch goals
 
-- Fix the `lootSandWorm`-untags-carcass edge (tow-after-harvest): keep an
-  `attach_rope` tag on a looted-but-towed carcass, or move cut-loose onto the speeder.
-- Drag SFX (rope creak + body-scrape on sand) when a kill is actively dragged.
+- Skin/material weathering pass per part (face/hands sun damage) — the old ABX
+  texture-pass items, if rig geometry lands early.
 
 ## Autonomy contract
 
-When ambiguous mid-session → pick the option closest to GDD pillars +
-decisions.md realism dial, append a new D-entry, keep going. Surface only on:
-- Procedural-vs-asset question (D107 — stay procedural unless explicit approval).
-- Save-schema *version* bumps (D81 — additive only; flag if you need to bump SAVE_VERSION).
-- Destructive git operations.
-- Catastrophic block (a critical system breaks and the fix > 1h).
+Ambiguous → pick the option closest to GDD pillars + realism dial, append a
+D-entry, keep going. Surface only on: procedural-vs-asset (D107 — stay
+procedural), save-schema bumps (D81), destructive git, catastrophic block, OR
+the sled-on-back design fork (item 4).
 
 ## Stop conditions
 
-- Wall-clock 2-4h for this focused polish scope.
-- 3 consecutive fix walls on the same gate → invoke `/scope-cutter`.
-- Catastrophic block / destructive-action attempt → STOP and surface.
+- Wall-clock 2-4h for focused; this cycle can run 1-2 sessions.
+- 3 consecutive fix walls on one element → `/scope-cutter`.
+- **Rule-8 self-check**: if you're about to mark an element done on `tsc` alone,
+  or wrote >150 LOC of rig geometry without screenshotting — STOP and iterate.
 
-## Notable footguns (carried forward)
+## Notable footguns
 
-- **D131 towed-body kinds**: corpse/carcass drag state lives on the ENTITY
-  (`dragAnchor`), NOT `sled.tether`. `updateKillDrag` owns dragged-dead-entity
-  movement (raiders/worms `continue` past dead in their own update).
-- **D132 worm speeder-only**: `killDrag` clears any non-speeder worm anchor;
-  `lootSandWorm` untags the carcass (tow-before-harvest only).
-- **D107 zero-asset**: no GLB / no PBR / no asset files. Everything procedural.
-- **D109 localSpace=true on moving entities**: any shader on a moving body MUST
-  pass `localSpace: true` or texture detail crawls.
-- **Preview gotchas** (`dustfall_preview_gotchas` memory): pointer-lock gating
-  blocks clean automated in-game framing; the opening-wreck spawn occludes the
-  forward view. For visual-triage, force state via `__game.ctx` + eval, and
-  reposition the camera/player deliberately for screenshots.
+- **D107 zero-asset** — no GLB/PBR; all procedural. **D109 localSpace** on moving
+  bodies. **D117/D118** the cloth-drape + sub-pivot stack to build on.
+- **Preview gotcha** (`dustfall_preview_gotchas`): pointer-lock handoff blocks
+  clean headless framing. For rig screenshots, force a 3P pose via `__game.ctx`
+  + eval and position the camera deliberately (the rig is best viewed paused-3P).
+- This is THE canonical "never mark a visual tier done on tsc alone" cycle.
 
 ## Verification protocol
 
-Single command: `npm run verify` (= `tsc --noEmit`). For the visual/feel work
-this session, `tsc` is the type gate, NOT the quality gate — honor the iteration
-discipline (`shared-memory/iterative-polish-discipline.md`): build → screenshot
-→ critique → iterate, 3-5 rounds per element. This session EXISTS to close
-ACF's rule-8 gap — do not repeat it.
+`npm run verify` (= tsc) is the type gate. The QUALITY gate is the iteration
+discipline: screenshot every element against the Rey reference, 3-5+ rounds each.
 
 ## Begin block
 
-1. Read CLAUDE.md (auto-loaded), session-end-report, backlog, decisions
-   (grep D131-D132), roadmap.
+1. Read CLAUDE.md (auto-loaded), session-end-report, backlog (Rey entry),
+   decisions (grep D107/D109/D115-D118 + D133), iteration-plan Cycle 2, the Rey
+   research doc.
 2. Confirm `npm run verify` baseline passes.
-3. TaskCreate covering priority items 1-5.
-4. Add the raider-spawn path FIRST (everything else depends on it).
-5. Begin coding + visual-triage.
+3. TaskCreate covering the 1-2 elements you'll fully iterate this session.
+4. Read `src/player/playerRig.ts`.
+5. Begin — build → screenshot → critique → iterate per element.

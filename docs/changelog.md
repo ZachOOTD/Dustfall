@@ -3,6 +3,35 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ACG — 2026-05-31 — Cycle 1: drag verification (close ACF's rule-8 gap) ✓ verify pass (tsc clean)
+
+`verified` — tsc clean + **human playtest**. First session of the Phase 2
+iteration plan (`docs/iteration-plan.md`). Closes ACF's deferred visual-triage
+debt. 3 files (2 modified + 1 archived brief); committed `8a72e12`.
+
+**DEV test affordances** (`src/debug/debugPanel.ts`) — `__game.spawnRaider(x,z)`
++ `__game.killRaider(id)`. Raiders stay dormant by design (D13 / Pillar 1);
+these only exercise the ACF corpse-drag path (0 raiders spawn normally, so the
+drag's raider path had never been runtime-exercised). The kill hook drives the
+real death path (`damageRaider` → dead pose + corpse interaction tag).
+
+**Head-first drag orientation** (`src/world/killDrag.ts`) — dragged raider
+corpse (`group.rotation.y`) + worm carcass (`yaw` + `mesh.rotation.y`) now yaw
+to trail head-first toward the anchor. Dead-pose-safe: `applySandWormDeadPose`
+is yaw-only; the raider rig-path leaves group rotation identity. D133.
+
+**Verified by human playtest** (the rule-8 gate ACF skipped): raider-corpse
+drag on-foot + tied-to-sled reads correct, head-first orientation sign confirmed
+right (no ±π flip), worm-carcass speeder-tow reads correct, in-progress-drag
+save round-trip resumes on reload. Cycle 1 **closed**.
+
+**Process note**: the agentic path behaved correctly — `--mode=overnight` was
+requested but the agent detected failed preconditions (GDD §12 opts out of
+overnight; no token budget set; Cycle 1 is human-in-loop visual work) and fell
+back to gated. The headless preview couldn't drive the game loop (pointer-lock
+handoff gating — `dustfall_preview_gotchas`), so the aesthetic sign-off was
+correctly handed to a human rather than self-certified on tsc.
+
 ## Session ACF — 2026-05-31 — B1 Phase 3 follow-up: corpse/carcass rope-drag ✓ verify pass (tsc clean)
 
 `verified` — tsc clean. 9 files (7 modified + 1 new module + 1 archived brief).
