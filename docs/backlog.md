@@ -141,6 +141,22 @@ NEXT-ATTEMPT IDEAS:
 
 [debt] gamedev-framework feedback from ACF smoke-test — two findings worth folding into the framework: (1) session-start step-5 dispatcher over-classifies ("fan out 2 agents") BEFORE reading code; ACF Option A turned out ~90% shared-serialization-point infra + lopsided per-entity remainder + observation-dependent visual-triage (single preview server) — none fannable. The skill needs a "re-classify after reading the architecture" beat so the a-priori guess isn't load-bearing. (2) `decisions.md` (~70K tokens) exceeds the whole session-start doc-read budget; the skill should say "grep recent D-entries" or the file should split recent/archive. Lives in `~/projects/gamedev-framework/`, not this repo.
 
+[feat] Dune-style sweeping sandstorm — visible storm wall approaches across the map (telegraphed prep window to pitch a tent / reach shelter), sweeps over the player, then continues past; reworks the current ambient intensity-ramp storm (composes with FogExp2 D31 + dust layers D32 + AAF 7-day countdown).
+[feat] in-storm movement penalty — disable sprint + slow the walk while the storm is overhead.
+[polish] in-storm sensory degradation — near-zero forward visibility + slight camera sway + wind/sandstorm SFX while engulfed.
+[feat] real rope physics with slack — segmented/Verlet rope sim instead of the current cosmetic catmull-rom sag + inextensible position-snap constraint (ACE ropeConstraint.ts); ropes should hang, drag, and go taut like real rope.
+[polish] night-sky stars drift slowly across the sky over the night cycle (celestial rotation), like real stars.
+[polish] subtle per-star twinkle on the night-sky star field.
+[feat] daytime sky variation — clear vs cloudy skies (no clouds exist yet; sky is a gradient shader + sun/moon/stars in sky.ts).
+[feat] rare "wreck yard" biome — ship-graveyard/junkyard with highly condensed wrecks (large + small); 4th biome alongside dune/salt/rocky, spawns rarely.
+[idea] wreck-yard-exclusive loot — items obtainable only in the wreck-yard biome; specific loot TBD, likely tied to a future mechanic.
+[idea] Sarlacc pit (Star Wars / Boba Fett style) — rare dune-biome hazard, falling in = death, throw items in for a TBD effect; exact mechanic unscoped.
+[feat] Amban-style pulse rifle — high-damage long-gun (Mandalorian Amban look), slow reload + scarce ammo; new weapon variant alongside scrap_gun/energy_pistol/pipe_staff.
+[feat] desert shrew critter (Dune Muad'Dib) — burrows into sand when the player nears; catchable + cookable on a stick like the lizard.
+[feat] rock-biome cave POI → descends to a findable companion egg that hatches the companion; the canonical acquisition path in the final game (replaces starting with the companion already at your side).
+[polish] rename the companion to "Pebble" (UI/journal/prompt copy).
+[feat] lie-down-to-sleep — camera lerps low to a fixed pose just above the bedroll, sleep, wake in the same pose + stand; replaces instant-sleep overlay. Needs lie-down/get-up anims (gated on player rigging progress).
+
 ---
 
 ## Archive (parked — may revisit)
