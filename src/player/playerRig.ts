@@ -103,8 +103,8 @@ export interface PlayerRig {
 const TORSO_CHEST_R = 0.185;    // upper torso (shoulders); was 0.22
 const TORSO_WAIST_R = 0.115;    // waist — clearly narrower than chest now; was 0.16
 const TORSO_H = 0.62;
-const HEAD_R = 0.12;
-const HEAD_SCALE_Y = 1.15;       // elongated oval
+const HEAD_R = 0.135;            // ACI PM-A.3: bumped 0.12→0.135 — head read small vs the (now-slim) body; better head-height ratio. Scales head + scarf together (relative).
+const HEAD_SCALE_Y = 1.12;       // slightly less elongated (was 1.15) — rounder skull
 const NECK_R = 0.055;
 const NECK_H = 0.10;
 const LEG_LEN = 0.85;
@@ -475,9 +475,11 @@ function buildRigVisual(): {
   // attenuated toward the top (folds deepest at hem, gentle at shoulder).
   const posAttr = ponchoGeom.attributes.position as THREE.BufferAttribute;
   // ABU R2: amplitude bumped (R1 hem 2.2cm read as too subtle).
-  const FOLD_WAVES = 6;          // 6 fold ridges + 6 valleys around perimeter
-  const FOLD_AMP_HEM = 0.045;    // 4.5cm at hem (was 2.2)
-  const FOLD_AMP_TOP = 0.008;    // 0.8cm at shoulder (was 0.5)
+  // ACI PM-A.2 round 2: deeper folds + broken hem so the resting poncho reads
+  // as draped cloth, not a smooth grooved tube. (Real motion-drape = PM-Cycle D.)
+  const FOLD_WAVES = 8;          // more, deeper vertical fold ridges
+  const FOLD_AMP_HEM = 0.075;    // 7.5cm at hem — folds now clearly read
+  const FOLD_AMP_TOP = 0.010;    // ~1cm at shoulder
   const halfH = ponchoH / 2;
   for (let i = 0; i < posAttr.count; i++) {
     const x = posAttr.getX(i);
@@ -498,6 +500,10 @@ function buildRigVisual(): {
     const scale = newR / r;
     posAttr.setX(i, x * scale);
     posAttr.setZ(i, z * scale);
+    // PM-A.2: break the hem — fold valleys hang lower toward the bottom edge,
+    // so the hem is a scalloped/uneven line instead of a clean horizontal ring.
+    const hemDip = Math.max(0, -Math.sin(FOLD_WAVES * theta)) * (1 - t) * (1 - t) * 0.06;
+    posAttr.setY(i, y - hemDip);
   }
   posAttr.needsUpdate = true;
   ponchoGeom.computeVertexNormals();
