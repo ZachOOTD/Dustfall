@@ -81,100 +81,39 @@ and promotes the second.
 
 ## Up next
 
-ACF shipped the corpse/carcass rope-drag (closing ACE's Cut #3), but with
-a real gap: the drag-feel was functionally verified, not visually iterated
-(rule 8), and the raider path was never runtime-exercised (0 raiders spawn
-by default). **The single highest-value ACG candidate is a focused
-visual-triage + raider-path playtest of the ACF drag** (see below). Other
-deferred items: aim twist-IK on right shoulder, dune_drill_site POI.
+**Phase 2 iteration plan → [docs/iteration-plan.md](iteration-plan.md).** After 87
+sessions the GDD vision is substantially shipped; what remains is depth + finish.
+That plan sequences the full backlog into **9 theme-shaped cycles**, ordered
+finish-what's-started-first (close debt → breadth on the solid base). This section
++ the old per-session "big-ticket bucket" lists are **superseded** by it; the
+"Recently shipped" baseline above is preserved. Per-cycle scope, verify criteria,
+dependencies, and risk live in the plan.
 
-See `docs/next-session-prompt.md` for the full ACG brief.
+**Phase 2a — close open debt:**
+1. **Cycle 1 — Drag verification** (= ACG, the immediate next; brief in `next-session-prompt.md`): ACF corpse/carcass-drag visual-triage + DEV raider-spawn hook + head-first orientation + save round-trip.
+2. **Cycle 2 — Rig to Rey-tier**: push the ABP→ABY rig to the Rey-Jakku bar; the gate for Cycles 5/7/9.
+3. **Cycle 3 — Ride the sled**: second attempt at the D125-tabled riding mechanic (spike Option-C-parenting vs ride-peg in parallel; architectural-risk).
+4. **Cycle 4 — Real rope physics**: Verlet/segmented sim superseding the D126 constraint, behind a `FEATURES.realRope` gate-and-wait (architectural-risk; precedes any new rope feature).
 
-**ACG candidates** (pick at session-start):
-- **ACF drag polish + verification** (TOP) — visual-triage the rope
-  sag / corpse + carcass orientation (trail head-first behind the
-  anchor), exercise the raider corpse path with a real kill (needs a
-  raider-spawn path — none exists by default), confirm save round-trip
-  of an in-progress drag. Address the `lootSandWorm`-untags-carcass edge
-  if tow-after-harvest is wanted.
-- **Sled riding mechanic, second attempt** — still tabled per D125
-  but with the slope-slide + body-tilts-to-terrain physics solid as
-  foundation. Try the Option C parenting approach (override
-  setNextKinematicTranslation entirely while riding).
-- **Apply procedural-character pipeline to companion + raider** —
-  ACE delivered lizard; companion + raider remaining. Raider would
-  drop the Quaternius GLB (retroactive D107 alignment).
-- **A1 infinite chunk streaming** — last major architectural lift.
-  Should come AFTER any remaining array-ification of wandering
-  entities (multi-worm done in ACE; lizards + raiders + dropped
-  pickups already arrays).
-- **Item viewmodel fidelity pass remainder** — ~19 ItemDefs still
-  at primitive/basic-shader complexity.
-- **Flagship migration to composite procgen (ABO B6b sweep)** —
-  megaShip / megaWreck / satelliteDish / crashedHull each into
-  flagship_<kind> fixed-recipe class.
-- **dune_drill_site biome-specific POI** — deferred from ACE Tier 5.
-- **Aim twist-IK on right shoulder** — deferred from ACE Tier 4C.
-- B5 flagship NPC beats (~4-6h)
-- Apply procedural-character pipeline to NPCs (~4-8h)
-**ABX texture pass** (~2-4h, the user's stated next focus):
-- Poncho weave detail — currently uniform fabricMaterial; could vary
-  weave density + add subtle stripe/dye pattern via vertex-shader UVs
-- Skin tone variation — face/hands could read with more weathering
-  (sun damage, dirt) via skinMaterial parameter tuning per part
-- Metal pauldron weathering — current paintMaterial wearLevel=0.7;
-  could go higher + add rivet detail
-- Leather strap detail — bandolier currently smooth metalMaterial;
-  switch to a leather-style variant with subtle grain
-- Hood drape stripe — broken weave near hem for "torn" feel
+**Phase 2b — new breadth on the base:**
+5. **Cycle 5 — Raider character + pulse rifle** (needs Cycles 1 + 2).
+6. **Cycle 6 — Dune storm rework** (sweeping front + sky variation; highest-leverage atmosphere lift).
+7. **Cycle 7 — Companion overhaul** (egg acquisition + "Pebble" rename + proc-character; needs Cycle 2).
+8. **Cycle 8 — Wreck-yard biome** (rare destination biome + exclusive loot + Sarlacc pit).
+9. **Cycle 9 — Shrew + sleep** (sleep half hard-gated on Cycle 2's rig).
 
-**Other polish wrap-ups** (~30-60min each):
-- Walk-cycle to footstep cadence sync (ABR backlog)
-- Per-item viewmodel readability at 3P (ABR backlog)
-- 3P camera collision real-playtest (ABR backlog)
-- Limb R2 refinements (calf bulge, bicep peak smoothing)
-**Big-ticket pivots** (4-10h+):
-- A1 infinite chunk streaming — last major architectural lift
-- B1 generalized rope attachment — re-scoped from ABO/ABP
-- B5 flagship NPC beats — raider holdouts + hermits
-**Big-ticket candidates** (4-10h, for ABU or later):
-- A1 infinite chunk streaming (last major architectural lift)
-- B1 generalized rope attachment
-- B5 flagship NPC beats
-See `docs/next-session-prompt.md` for full ABT brief.
-**Polish / quick wins** (~30 min – 2h each):
-- Per-item viewmodel readability at 3P distance (ABR P3 NOTE) — canteen
-  / machete / scrap_gun / bandage all small/dark from a few meters
-  away in the rig's right hand. Need 3P-context scale or brightness
-  review per item.
-- 3P camera collision in actual moving-game playtest (vs paused-
-  screenshot harness used in ABR; need to walk into wreck walls,
-  rapid F-toggle, mid-3P speeder mount)
-- Walk-cycle to footstep audio cadence sync (gait + footstep SFX fire
-  on separate timers)
-- ABP Tier 5 cut items — aim twist-IK + footstep-dust-at-feet
-**Big-ticket candidates** (4-10h):
-- A1 infinite chunk streaming (last major architectural lift, save
-  bump v11→v12)
-- B1 generalized rope attachment (re-scoped from ABO/ABP)
-- B5 flagship NPC beats (raider holdouts + hermits)
-- Migrate remaining 4 flagships to composite procgen if B6 POC reads
-  well in playtest
-See `docs/next-session-prompt.md` for full ABS brief.
+**Cadence**: playtest-driven priority refresh after Cycle 4 + after Cycle 6/7 (capture
+signal in the session-end report, reorder remaining cycles in iteration-plan.md).
 
-## Next — Big-ticket bucket (1–2 picks per session at ~4–7h each)
-Pick whatever feels most missing after the polish + atmosphere arc.
+**Interleaved between cycles** (continuous-polish + non-cycle backlog, per the plan's
+"didn't fit cleanly" note): A1 infinite chunk streaming (last big architectural lift),
+flagship→composite procgen sweep (ABO B6b), item-viewmodel fidelity remainder (~19
+ItemDefs), per-item accurate collision shapes, crafting combine-to-discover chooser UI,
+megaWreck catwalk panel reachability.
 
-- Crafting rework — combine up to 4 items to discover recipes (no grid); chooser for overlapping outputs. Replaces the current bloating recipe list. (shipped UU/TT-era; remaining work = chooser UI for overlapping outputs once two recipes share inputs)
-- Small red creature companion (pocketable + re-deployable) — charm + character, no combat surface area, scoped at one session
-- Raider variants (scout / ambusher / brute) — *if* we decide to bring raiders back
-- Q2: Rigged hands + lizard (GLB-dependent — deferred with N's asset work)
-- Base-building mechanics
-- Trading / NPC economy
-- 7-day storm countdown
-- Bounties (template: D39 `'mount'` singleton-interactable pattern from CC-2)
-- Procedural world generation (idea — POIs randomized per seed)
-- Remove HUD stat bars in favor of audio/visual/text cues (idea)
+**Parked speculative ideas** (not in Phase 2 cycles): opening-cutscene drop-pod sequence,
+craftable hover-bike, bounties (D39 singleton-interactable template). NOTE excluded as
+GDD §11 anti-features: base-building-primarily, trading / NPC economy.
 
 ---
 

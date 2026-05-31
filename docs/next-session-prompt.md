@@ -1,4 +1,9 @@
-# Session ACG — Kickoff Brief
+# Session ACG — Cycle 1: Drag verification
+
+> Phase 2 iteration plan now lives in **[docs/iteration-plan.md](iteration-plan.md)** — 9
+> theme-shaped cycles, ordered finish-what's-started-first. This session is **Cycle 1**
+> (the ACF-drag debt closure). After it, Cycle 2 = "Rig to Rey-tier" (the gate for several
+> later cycles). Run a playtest-driven priority refresh after Cycle 4.
 
 ## Read these now (in order)
 
