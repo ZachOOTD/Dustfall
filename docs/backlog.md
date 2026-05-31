@@ -156,6 +156,13 @@ NEXT-ATTEMPT IDEAS:
 [feat] rock-biome cave POI → descends to a findable companion egg that hatches the companion; the canonical acquisition path in the final game (replaces starting with the companion already at your side).
 [polish] rename the companion to "Pebble" (UI/journal/prompt copy).
 [feat] lie-down-to-sleep — camera lerps low to a fixed pose just above the bedroll, sleep, wake in the same pose + stand; replaces instant-sleep overlay. Needs lie-down/get-up anims (gated on player rigging progress).
+[feat] rope-attach to the speeder by clicking its rear mount bar (replaces the mount-while-holding-rope tether-transfer flow); lets the speeder be roped/pulled like other endpoints.
+[polish] rope item leaves inventory while deployed (both ends tied) + returns when re-grabbed — currently it stays in-slot via meta.attachedSledId.
+[feat] sandstorm wind pushes physics bodies — dropped items + speeder + sled get a wind force during storms (composes with the Dune storm rework).
+[bug] E near the speeder mounts it even when not looking at the seat — mount fires on SPEEDER_MOUNT_RANGE proximity, not gated on actually hovering the seat.
+[bug] 3rd-person rig broken while mounted on the speeder — needs a seated stance pose for 3P (controller/playerRig + speeder camera; relates to D116 3P cam).
+[polish] show control/button prompts in 3rd-person view (interact prompts currently FP-oriented).
+[polish] iron stake model fixes (stake.ts) — remove the sand mound; seat the rope-loop ring touching the top of the stake; make the rope visibly connect to the ring (align resolveEndpointWorldPos stake rope-loop offset to the actual ring position).
 
 ---
 
