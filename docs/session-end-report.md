@@ -2,44 +2,33 @@
 
 Cumulative state. Rewritten end-to-end at each `/session-end`.
 
-**Current state**: Session ACD shipped (2026-05-26 — sled physics polish + riding mechanic tabled). 85 sessions post-MVP. tsc clean. **SAVE_VERSION still v12** (ACD additive only — no schema changes). 10 files modified, no new modules.
+**Current state**: Session ACF shipped (2026-05-31 — B1 Phase 3 follow-up: corpse/carcass rope-drag). 87 sessions post-MVP. tsc clean. **SAVE_VERSION still v13** (ACF additive only — no schema bump). 9 files (7 modified + 1 new module `killDrag.ts` + 1 archived brief). **NB**: ACF began as a gamedev-framework smoke-test (Opus 4.8 + optimized CLAUDE.md) and grew into a real feature.
 
-## ACD scope (this session)
+## ACF scope (this session)
 
-Long playtest follow-up session focused on iterating sled mechanics from user-reported gameplay bugs. Major physics rework lands; the player-rides-sled mechanic was attempted across 3+ architectures and tabled in backlog.md for a future session.
+Closes ACE's deferred **Cut #3** — the `raider_corpse` + `sandworm_carcass` rope endpoint kinds. The interesting architectural call is that these are the first *towed-body* endpoint kinds (the rope drags them) rather than anchors.
 
-**Sled physics rework** (`src/world/sled.ts`):
+**Towed-body rope-drag** (`src/world/rope.ts`, NEW `src/world/killDrag.ts`, `main.ts`):
+- `RopeEndpoint` union gains `raider_corpse` (raiderId) + `sandworm_carcass` (wormId); `resolveEndpointWorldPos` resolves both (raider via `ctx.raiders[]`, worm via `ctx.sandWorms.list`, null→auto-detach if gone).
+- Drag state lives on the entity as `dragAnchor: RopeEndpoint` (the ANCHOR end), NOT on `sled.tether` — because the kill is towed *toward* the anchor, the opposite role from every prior endpoint kind (D131).
+- NEW `updateKillDrag` is the first non-sled caller of ACE's `applyInextensibleConstraint`. Runs after `updateRaiders`/`updateSandWorm` (both `continue` past dead entities → drag-movement is free to own) and before `updateSledRiders`. Syncs each kill's visual to the post-snap XZ. Draws a sagged rope tube per dragged kill (keyed by entity id, disposed on detach).
 
-- **Managed-scalar slope-slide (D122)**. Pre-ACD slope-slide used `setLinvel` to push the sled downhill each frame; with body friction 0.6 against the heightfield, Rapier's contact solver zeroed the tangential velocity each step (atan(0.6)≈31° static friction angle swallowed every dune). New design: `_slideVx/_slideVz` managed scalars driven by slope-gravity + Coulomb friction + linear damping, applied via direct `setNextKinematicTranslation` each frame. Bypasses Rapier's velocity-integration + contact-resolution path entirely. Sled actually slides now.
+**Interaction** (`src/player/interaction.ts`): new `raiders` registry; `applyRaiderDeadPose` tags the corpse (`attach_rope`). Rope-wielded LMB-on-corpse ties to a player-tethered sled (trails it) or to the player (drag on foot); LMB again drops it. The `sandWorms` case gains a rope+mounted LMB-on-carcass → tow / cut-loose branch (speeder-only — D132).
 
-- **Body type → KinematicPositionBased (D123)**. Pre-ACD sled was Dynamic with Y-locked translation + all rotations locked. Dynamic items resting on the deck transferred lateral friction impulses to the body via Newton's 3rd law; impulses accumulated in body.linvel and the physics step integrated position BEFORE updateSleds re-set it, compounding into wild downhill drift with multiple items on the sled. Kinematic body type means dynamic items can't push it (one-way kinematic-vs-dynamic interaction); items still rest on the deck via friction with the kinematic body's implicit velocity (`(next - current) / dt`). Player KCC also can't push the sled now.
+**Save** (`src/persistence/save.ts`): additive, no version bump (D81). Serialized sled-tether union + payloads extended; `raider.dragAnchor` + `worm.dragAnchor` round-trip so an in-progress drag survives reload.
 
-- **Body tilts to match terrain slope — "Option B" (D123)**. Pre-ACD the sled body was axis-aligned with Y sampled at the sled's center; on a slope, uphill terrain inside the sled's XZ footprint poked up ABOVE the sled's flat top deck — player walking onto the sled landed on terrain, not on the deck. Body now slerps its rotation toward terrain normal each frame via `setNextKinematicRotation`; the bottom face conforms to the terrain plane, top face uniformly above terrain across the footprint. Visual group rotation mirrors body directly (no separate slerp).
+**Tuning**: `KILL_DRAG_*` block (per-kind max/tear distance, body half-extents, shared snap-perp-damp + ground clearance).
 
-- **`SLED_GROUND_CLEARANCE = 0.06m`** — uniform Y lift above terrain. Handles small terrain undulations across the 2.2m×1.2m footprint so corners/yoke don't clip into sand.
+**Verification**: worm path runtime-verified in the live game via forced state (rope mesh spawns with correct geom/color; constraint snaps a 20m-yanked carcass back to the 14m leash; rope disposed on detach; no runtime errors). **NOT verified**: (1) aesthetic drag-feel/rope-sag from gameplay POV (pointer-lock gating + opening-wreck spawn occlusion block automated framing — `dustfall_preview_gotchas`); (2) raider corpse path at runtime (0 raiders spawn by default; no spawn hook) — code is tsc-clean + structurally identical to the verified worm path.
 
-- **Back wall collider → sensor**. The 12cm-thick back-wall lip was catching the player capsule when they jumped onto the sled — they perched on the wall instead of landing flat on the deck. Items still stay on the deck via top-deck friction (0.85).
+**Iteration-discipline self-check (rule 8)**: the rope-mesh visual + corpse drag shipped with FUNCTIONAL verification only, NOT the build→screenshot→critique→iterate aesthetic loop. Drag-feel quality is unproven; a follow-up visual-triage is owed (see backlog + ACG brief).
 
-- **`_frameDeltaX/Y/Z` tracking on Sled**. Per-frame XYZ motion delta computed at end of each updateSleds iteration. Currently unused (the consuming player-ride logic was scrapped) but preserved as foundation for future ride attempts. Zero runtime cost.
+**D-entries**: D131 (towed-body kinds + entity-owned dragAnchor + killDrag system), D132 (worm carcass speeder-tow-only + tow-before-harvest edge).
 
-**Pickup tunneling fix (D124)** (`src/pickups/pickups.ts`): rope (and other flat-bbox items: cloth, bandage) dropped via G fell through terrain because the cuboid collider's bbox.y was small (~6.6cm) → collider half-height hit the 4cm `Math.max` floor → 8cm-thick collider + 60cm spawn height + downward throw velocity = per-frame travel exceeded collider thickness = discrete collision missed the heightfield. Enabled CCD on dynamic pickup bodies; Rapier's swept-shape test now catches any high-velocity crossing.
+## ACE + ACD condensed
 
-**Sled riding mechanic — TABLED (D125)** (`src/player/controller.ts`, `docs/backlog.md`): user goal was "stand on sled, sled moves, player rides with it". Attempted multiple architectures:
-1. Manual platform-ride detection (raycast + AABB+Y fallback) + delta-add to KCC `desired` BEFORE compute — KCC's slope-projection ate ~20% of horizontal motion when standing on the tilted body.
-2. Apply delta AFTER `computeColliderMovement` (bypass slope-projection) — drift dropped to ~10% but the player's Y still followed gravity instead of the sled's Y change; gap built until detection dropped.
-3. Sticky ride state + full 3D delta (XYZ) + `_frameDeltaY` tracking — player still slid off after 5-10 frames.
-
-Root cause: Rapier's KinematicCharacterController has no built-in moving-platform tracking. KCC's slope projection, autostep, and contact resolution interact with a tilted moving kinematic body in ways that no amount of detection + delta application could fully counter. Mechanic removed from controller.ts; data preserved on Sled for next-attempt foundation; backlog entry documents tried approaches + next-attempt ideas (full Option C parenting, or synthetic "ride peg" dynamic body mirroring the branch-on-sled trick the user discovered as an accidental working case).
-
-**Tuning constants added/lifted**:
-- `SLED_SLOPE_SLIDE_GAIN: 2.0 → 6.0` (user wanted faster slide)
-- `SLED_KINETIC_FRICTION = 0.15` (NEW — Coulomb friction model)
-- `SLED_SLACK_DECAY_PER_FRAME = 0.82` (NEW — lifted from inline magic)
-- `SLED_SNAP_PERP_DAMP = 0.55` (NEW — lifted from inline magic)
-- `SLED_GROUND_CLEARANCE = 0.06` (NEW)
-- `SLED_ANGULAR_DAMP` REMOVED (unused after kinematic switch)
-
-**D-entries**: D122 (managed-scalar slope-slide), D123 (kinematic body + body-tilts-to-terrain), D124 (pickup CCD), D125 (riding mechanic tabled with next-attempt directions).
+- **ACE** (2026-05-27, overnight): rope vocab Phase 3 (`ropeConstraint.ts` extraction + craftable `stake`) + multi-worm v12→v13 (ctx.sandWorms array, 2 worms) + lizard procedural-character pipeline lift + rig polish (footstep audio from `rig.stepCount`) + procgen POI (orbital_pod_cluster + BRISTLE_ANTENNA). D126-D130. ACF builds directly on ACE's `ropeConstraint` helper + the deferred Cut #3.
+- **ACD** (2026-05-26): sled physics polish — managed-scalar slope-slide (D122), KinematicPositionBased body + body-tilts-to-terrain (D123), pickup CCD anti-tunnel (D124), sled riding mechanic TABLED (D125, Rapier KCC has no moving-platform support; next-attempt ideas in backlog).
 
 ---
 
@@ -74,13 +63,14 @@ The full Dustfall gameplay loop:
 9. **Sled mechanic** (ACA-ACD): scrap-metal-sheet visual, attachable locker for mobile storage, kinematic-rider promotion for items resting on the deck, aimable throw arc to lob items onto the deck, items roll/fall via Rapier dynamic bodies (Tarkov-style settle). **ACD adds**: slope-slide downhill via managed scalars (sled actually slides on dunes), body tilts to terrain (deck conforms), no item-push drift, no rope tunneling through terrain.
 10. **Player rig** (ABP-ABY): 10-session procedural-character pipeline. Lathe-based torso + tapered Lathe limbs, asymmetric scavenger clothing (hood + poncho + bandolier + pauldron + bandana + forearm wraps), foot IK, sub-pivot rigging (D118), cloth drape (D117), over-shoulder 3P camera (D116), dual-mesh held items (D113).
 11. **Audio**: Web Audio procedural soundscape + 3 music tracks crossfaded by sun + perceived storm intensity.
-12. **Save/load**: localStorage v12. Seed-stable across reloads. Additive-schema discipline (D81) preserves backwards compat.
+12. **Save/load**: localStorage v13. Seed-stable across reloads. Additive-schema discipline (D81) preserves backwards compat.
+13. **Rope vocabulary** (ACC-ACF): generalized `RopeEndpoint` union + shared inextensible-rope constraint. Anchor kinds (player/speeder/companion/sled/static-pos/stake) + towed-body kinds (raider_corpse, sandworm_carcass). Drag a slain raider corpse on foot or behind a sled; tow a worm carcass behind the speeder. Sagged rope visual per tether.
 
-**ACD delta** (this session):
-- Sled now actually slides downhill on slopes (was inert pre-ACD).
-- Sled body tilts to match terrain slope (geometric improvement).
-- Rope no longer tunnels through terrain when dropped.
-- Sled-as-a-platform: items rest stably on tilted deck; player CAN'T currently ride the sled (mechanic tabled — see D125 + backlog).
+**ACF delta** (this session):
+- Kill a raider → wield rope → LMB-on-corpse → drag it on foot, or tie it to a player-tethered sled so it trails along.
+- Slay a worm → mount the speeder → wield rope → LMB-on-carcass → tow the 24m carcass behind the bike (speeder-only — too heavy on foot).
+- Sagged rope tube renders between anchor and dragged kill; in-progress drags persist across save/load (no version bump).
+- **Caveat**: drag-feel/sag aesthetic NOT visually iterated (rule 8); raider path tsc-clean but not runtime-exercised (no raider spawns by default). Worm path runtime-verified.
 
 ---
 
@@ -117,7 +107,9 @@ The full Dustfall gameplay loop:
 
 ## Known issues / partials
 
-- **Sled riding mechanic tabled** (D125) — player can't ride the sled when it slides downhill or is towed. See backlog.md for tried approaches + next-attempt ideas. THIS IS THE TOP CANDIDATE FOR ACE.
+- **ACF corpse/carcass drag — visual-triage owed** (rule 8). Functionally verified (worm path) but the drag-feel/rope-sag aesthetic was never iterated, and the raider path was never runtime-exercised (0 raiders spawn by default; no spawn hook). Body-trails-head-first orientation deferred. See backlog.
+- **ACF carcass tow blocked after harvest** — `lootSandWorm` untags the carcass, so towing works only before harvesting. Low severity. See backlog.
+- **Sled riding mechanic tabled** (D125) — player can't ride the sled when it slides downhill or is towed. See backlog.md for tried approaches + next-attempt ideas.
 - **Walk-cycle to footstep cadence sync** (ABR backlog, polish wrap-up remaining).
 - **Per-item viewmodel readability at 3P distance** (ABR backlog).
 - **3P camera collision real-playtest** still owed.
@@ -129,7 +121,19 @@ See `docs/backlog.md` for full open list (riding mechanic entry at top with deta
 
 ## Constants worth tuning
 
-New from ACD:
+New from ACF (`KILL_DRAG_*`):
+
+| Constant | Default | Notes |
+|---|---|---|
+| `KILL_DRAG_RAIDER_MAX_DIST` | 3.2 | Leash length (m) for a dragged corpse — short so it trails close. |
+| `KILL_DRAG_RAIDER_TEAR_DIST` | 7.0 | Rope slips off the corpse beyond this. |
+| `KILL_DRAG_WORM_MAX_DIST` | 14.0 | Leash for a worm carcass towed behind the speeder (carcass is huge). |
+| `KILL_DRAG_WORM_TEAR_DIST` | 26.0 | Speeder can yank hard; tear only on extreme overstretch. |
+| `KILL_DRAG_SNAP_PERP_DAMP` | 0.6 | Perpendicular-swing damping at snap (both kinds). Higher = settles behind anchor faster. |
+| `KILL_DRAG_GROUND_CLEARANCE` | 0.05 | Visual lift above terrain for the dragged body. |
+| `KILL_DRAG_RAIDER_HY` / `KILL_DRAG_WORM_HY` | 0.25 / 1.5 | Body Y half-extents for the post-snap terrain clamp. |
+
+From ACD (sled):
 
 | Constant | Default | Notes |
 |---|---|---|
@@ -153,51 +157,52 @@ Existing tunables of interest:
 
 ## Suggested next session (1-3 directions in priority order)
 
-1. **ACE — Sled riding mechanic, second attempt** (~3-5h). Top priority. The user explicitly wants to come back to this. Take D125's next-attempt directions: full Option C parenting (override player setNext entirely while riding), OR synthetic "ride peg" dynamic body. The slope-slide and tilted body are now solid foundations.
+1. **ACG — ACF drag polish + verification** (~2-3h). TOP. ACF shipped the drag functionally but skipped the rule-8 aesthetic loop. Visual-triage the rope sag + corpse/carcass orientation (trail head-first behind the anchor, verified against the dead-pose rotations), exercise the raider corpse path with a real kill (needs a raider-spawn path — none exists by default), confirm the in-progress-drag save round-trip. Optionally fix the `lootSandWorm`-untags-carcass edge.
 
-2. **B1 Phase 3 generalised rope** (~4-6h). Lift the inextensible-rope constraint out of `updateSleds` into a shared system so NON-sled tethers work. Then add new endpoint kinds (raider_corpse, sandworm_carcass, world_anchor stake) + gameplay around each. Big-ticket follow-up to ACC's Phase 2 architectural lift.
+2. **Sled riding mechanic, second attempt** (~3-5h). Still tabled per D125. Take the next-attempt directions: full Option C parenting (override player setNext entirely while riding), OR synthetic "ride peg" dynamic body. Slope-slide + tilted body are solid foundations.
 
-3. **Visual-polish wrap-ups + 3P camera real-playtest** (~2-3h). Remaining polish items from the ABP-ABX arc.
+3. **Apply procedural-character pipeline to companion + raider** (~5-7h). ACE delivered the lizard; companion + raider remain. Raider would retire the Quaternius GLB (retroactive D107 alignment) — and would also give the ACF raider-drag path a real entity to test against.
 
-Top pick: **ACE = sled riding, attempt 2.** User repeatedly asked for this; tabled with explicit "come back to it later" — best to deliver before context fades.
+Top pick: **ACG = ACF drag polish** — close the rule-8 gap while the feature is fresh, and it's the cheapest path to actually proving the raider corpse drag.
 
 ---
 
 ## Time spent
 
-85 sessions shipped (A through ACD). Approx ~280-340h cumulative dev time. ACD itself was ~5-7h wall clock (long playtest follow-up session with extensive iteration).
+87 sessions shipped (A through ACF). Approx ~285-345h cumulative dev time. ACF was a moderate session (~2-3h equiv) that began as a gamedev-framework smoke-test and grew into a real feature; most cost was efficient session-start reads + the feature build + a runtime verification pass.
 
 ---
 
 ## State at session end
 
-- **Git status**: working tree dirty (this session-end's docs updates + 10 source/Tuning files from ACD changes). Through `8ed92ef` pushed to origin (ACC).
-- **Last commit**: `8ed92ef` (ACC: throw items on sled + sandworm twilight breach + B1 Phase 2 rope refactor).
+- **Git status**: working tree dirty — 7 modified source files (`rope.ts`, `killDrag.ts` new, `tuning.ts`, `raider.ts`, `sandWorm.ts`, `interaction.ts`, `save.ts`, `main.ts`) + this session-end's docs updates + `docs/plans-archive/session-ACF-prompt.md`.
+- **Last commit**: `b0d3ebd` (prune CLAUDE.md: milestone history → changelog). NOTE: a run of print-hints commits (b0d3ebd, 3ae5149, f3efd0d, 6a8f99e, 6df7aef) sits between the last full `/session-end` and ACF — ACF's docs are caught up here.
 - **Last tag**: (Dustfall's git policy doesn't establish a session-tag convention; user may tag manually if desired).
 - **Ports bound**: none (preview stopped).
-- **Save state**: localStorage v12. ACD made zero save-schema changes (D81 additive discipline — no new fields needed).
+- **Save state**: localStorage v13. ACF made zero save-schema *version* changes — additive fields only (`dragAnchor` on raider + worm; D81 discipline).
 
 ---
 
 ## Token spend this session (estimated)
 
-ACD was a long playtest-driven iteration session with many rounds of "user reports bug → diagnose → fix → user tests → next bug". Plus extensive analysis of the riding mechanic attempts.
+ACF was efficient — the session-start dispatch (grep recent D-entries vs reading 70K of decisions.md) kept reads lean, then a focused feature build + runtime verification.
 
-- Input: ~250-350K tokens (heavy reads on sled.ts + controller.ts iterations + multi-round playtest feedback)
-- Output: ~80-120K tokens (substantial code changes + multi-option discussions + extensive comments)
-- Cached input: substantial (sled.ts + controller.ts reads repeated across iterations)
-- Cost (Sonnet 4.5 rates): rough estimate $15-25 for ACD itself.
+- Input: ~150-220K tokens (session-start docs + targeted source reads + preview-eval round-trips)
+- Output: ~40-60K tokens (the feature across 9 files + the framework-test analysis + these docs)
+- Cost (Opus 4.8 rates): rough estimate well within the project baseline.
 
-Above the project baseline (typical session: ~$5-10). Justifiable for the depth of physics rework + the architectural exploration of the riding mechanic, even though the riding feature didn't ship.
+At/near baseline. Notable: this run doubled as a framework efficiency test — findings logged to backlog (`[debt] gamedev-framework feedback from ACF smoke-test`).
 
 ---
 
 ## Commit handoff
 
-Print-hints mode. ACD ships:
-- 1 backlog.md entry (sled riding tabled with next-attempt directions)
-- ~700 LOC net change in sled.ts (slope-slide rewrite + Option B body tilt + kinematic body switch + various cleanups)
-- ~155 LOC change in tuning.ts (new constants + comments + removals)
-- ~50 LOC in controller.ts (riding attempts then removal)
-- Smaller diffs in main.ts, pickups.ts, save.ts, interaction.ts, footprints.ts, metalMaterial.ts
-- Docs updates: changelog ACD entry, CLAUDE.md Last shipped, roadmap.md Up next, decisions.md D122-D125, backlog.md, session-end-report.md (this file), next-session-prompt.md ACE brief.
+Print-hints mode. ACF ships:
+- NEW `src/world/killDrag.ts` (~210 LOC) — kind-agnostic kill-drag system + self-contained rope visual.
+- `src/world/rope.ts` — 2 towed-body endpoint kinds + resolver cases.
+- `src/player/interaction.ts` — `raiders` registry + corpse case + worm speeder-tow branch.
+- `src/persistence/save.ts` — additive tether-union extension + `dragAnchor` round-trip on raider + worm.
+- `src/enemies/raider.ts` + `src/enemies/sandWorm.ts` — `dragAnchor` field; raider corpse interaction tag on death.
+- `src/config/tuning.ts` — `KILL_DRAG_*` block.
+- `src/main.ts` — `updateKillDrag` hooked into the tick.
+- Docs: changelog ACF entry, CLAUDE.md Last shipped, roadmap.md Up next (ACG), decisions.md D131-D132, backlog.md (3 new items), session-end-report.md (this file), next-session-prompt.md ACG brief, docs/plans-archive/session-ACF-prompt.md.

@@ -62,6 +62,7 @@ import { createStatVignette, updateStatVignette } from './ui/statVignette.ts';
 import { updateStaminaWobble } from './player/staminaWobble.ts';
 import { updateSpeeder } from './world/speeder.ts';
 import { updateSleds, updateSledRiders } from './world/sled.ts';
+import { updateKillDrag } from './world/killDrag.ts';
 import { spawnWaterSources } from './world/waterSources.ts';
 import { spawnCacti, updateCacti } from './world/cactus.ts';
 import { updateFires } from './world/fire.ts';
@@ -719,6 +720,7 @@ startLoop(ctx, (c, dt) => {
   updateLizards(c, dt);          // small flee-AI wildlife
   updateCompanion(c, dt);        // AAE — Rocky-inspired creature follows player
   updateSandWorm(c, dt);         // DD — buried boss; breaches when player enters territory
+  updateKillDrag(c);             // ACF — drag a slain raider corpse (on foot/sled) or worm carcass (speeder) via the shared rope constraint. AFTER updateRaiders/updateSandWorm (they skip dead entities, leaving drag-movement to this) + BEFORE updateSledRiders.
   updateFootprints(c.footprints, c.time.elapsed); // age + fade pooled decals
   updateFootprintPuffs(c, dt);   // AAG — particle puffs from each footstep
   updateFires(c, dt);            // flicker + fuel decrement + burnout

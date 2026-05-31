@@ -26,8 +26,11 @@ import { getPlayerPos } from '../util/playerPos.ts';
 /** All endpoint kinds a rope can attach to.
  *
  *  ACE (B1 Phase 3) added: `stake` (craftable persistent anchor).
- *  Future Phase 3 additions per backlog: `raider_corpse`, `sandworm_carcass`
- *  (lasso the carcass for tow / harvest). */
+ *  ACF (B1 Phase 3 follow-up) added: `raider_corpse`, `sandworm_carcass`
+ *  (lasso a kill and drag it on foot or behind a sled). Unlike the anchor
+ *  kinds above, these reference TOWED bodies — the rope drags them rather
+ *  than being anchored by them. The constraint owner picks which end is
+ *  driven (see ropeConstraint.ts). */
 export type RopeEndpoint =
   | { kind: 'none' }
   | { kind: 'player' }
@@ -35,7 +38,9 @@ export type RopeEndpoint =
   | { kind: 'companion' }
   | { kind: 'sled'; sledId: number }
   | { kind: 'static-pos'; x: number; z: number }
-  | { kind: 'stake'; stakeId: number };
+  | { kind: 'stake'; stakeId: number }
+  | { kind: 'raider_corpse'; raiderId: number }
+  | { kind: 'sandworm_carcass'; wormId: number };
 
 /** A rope: two endpoints + the implicit physics behavior (inextensible
  *  constraint enforced by updateSleds for any tether where at least one
@@ -119,6 +124,25 @@ export function resolveEndpointWorldPos(
       const stake = ctx.stakes.list.find((s) => s.id === endpoint.stakeId);
       if (!stake) return null;
       return { x: stake.pos.x, y: stake.pos.y + 0.55, z: stake.pos.z };
+    }
+    case 'raider_corpse': {
+      // ACF — a downed raider. Attach at the body center, lifted to
+      // belt height so the rope reads as cinched around the torso of a
+      // body lying on the sand. Returns null if the raider is gone
+      // (despawned), signalling the caller to auto-detach.
+      const r = ctx.raiders.find((rr) => rr.id === endpoint.raiderId);
+      if (!r) return null;
+      const tr = r.body.translation();
+      return { x: tr.x, y: tr.y + 0.2, z: tr.z };
+    }
+    case 'sandworm_carcass': {
+      // ACF — a slain worm carcass. basePos is the body center (mid-point
+      // along its length); the carcass lies on the surface after the
+      // death pose, so a modest lift puts the rope on top of the hide
+      // rather than buried in it. Returns null if the worm is gone.
+      const w = ctx.sandWorms.list.find((ww) => ww.id === endpoint.wormId);
+      if (!w) return null;
+      return { x: w.basePos.x, y: w.basePos.y + 1.0, z: w.basePos.z };
     }
   }
 }

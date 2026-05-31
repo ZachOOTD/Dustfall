@@ -15,6 +15,7 @@ import type { Terrain } from '../world/terrain.ts';
 import { die } from '../stats/survival.ts';
 import { playFootstep, playHit, playPlayerHurt } from '../audio/audio.ts';
 import { cloneAsset, type AssetRegistry } from '../assets/loader.ts';
+import type { RopeEndpoint } from '../world/rope.ts';
 
 export type RaiderState =
   | 'patrol'
@@ -61,6 +62,12 @@ export interface Raider {
   rig: RaiderRig | null;
   bb: RaiderBlackboard;
   health: number;
+  /** ACF — B1 Phase 3 follow-up: when this corpse is being dragged, the
+   *  rope's anchor end (player on foot, or a player-tethered sled). The
+   *  corpse is the TOWED body; updateKillDrag enforces the rope constraint.
+   *  { kind: 'none' } / undefined = not being dragged. Only meaningful when
+   *  bb.state === 'dead'. */
+  dragAnchor?: RopeEndpoint;
 }
 
 // Resolve a Three.js AnimationClip by lowercase-substring match across a
@@ -318,6 +325,14 @@ export function applyRaiderDeadPose(raider: Raider, ctx: GameContext): void {
     ctx.physics.world.removeCollider(raider.collider, false);
     _colliderToRaider.delete(raider.collider.handle);
   }
+  // ACF — B1 Phase 3 follow-up: tag the corpse so interaction.ts can route
+  // a rope-drag (registry 'raiders'). Applied on death + on load (both call
+  // this), so a restored dead raider is draggable too. Idempotent.
+  raider.group.traverse((o) => {
+    o.userData.interactType = 'attach_rope';
+    o.userData.interactId = raider.id;
+    o.userData.interactRegistry = 'raiders';
+  });
 }
 
 function pickPatrolTarget(center: { x: number; z: number }, radius: number): THREE.Vector3 {

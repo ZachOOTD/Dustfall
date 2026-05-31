@@ -76,21 +76,27 @@ and promotes the second.
 - **Session ABL** (2026-05-24, overnight ~3h of 6h budget): megaWreck visual rebuild. Edit-in-place refactor preserving collider layout + 8 panels + shelter zone + journal — pure visual lift. Procedural shader vocab applied to all hull/rust/pipe materials; tapered ellipsoidal cylinder shell drapes over the box-wall aft section; 6 rust band wraps; exposed vertical ribs + torn hull-plate fragments at the mid-hull break. Closes the "megaWreck rebuild" backlog item. 1 file, +166/-22.
 - **Session ABK** (2026-05-24, overnight 6h): Close the biome-specific POI family. NEW `src/world/saltOutpost.ts` (concrete base + corroded antenna spire + sample crates + cargo_container panel) + NEW `src/world/rockyEntrance.ts` (boulder outcrop + cave-mouth arch + descending stairs + sunken interior chamber via BackSide stone walls + shelter zone + escape_pod panel). Dispatch in poi.ts goes dune→salt→rocky for greedy multi-region spread. Multi-seed verified at 12345 + 7777 (both 5 shelter zones with +1 from rocky entrance). 5 files, 2 new modules.
 - **Session ACD** (2026-05-26): Sled physics polish + riding mechanic tabled. Long playtest follow-up. Slope-slide rewrite via managed-scalar velocity (`_slideVx/Vz` + Coulomb friction + direct setNextKinematicTranslation) — bypasses Rapier velocity integrator that was being zeroed by heightfield contact friction. Body type → KinematicPositionBased (items can't push sled); Option B body tilts to match terrain slope (top face uniformly above terrain in footprint). Pickup CCD prevents rope tunneling through terrain. Back wall → sensor (no player perching). `_frameDeltaX/Y/Z` tracking added (preserved for future). Riding mechanic tabled after multiple architectural attempts — Rapier KCC has no moving-platform support; documented in backlog with next-attempt ideas. D122-D125.
+- **Session ACF** (2026-05-31): B1 Phase 3 follow-up — corpse/carcass rope-drag (closes ACE Cut #3). 9 files (7 modified + NEW `killDrag.ts`). `RopeEndpoint` gains `raider_corpse` + `sandworm_carcass` — first *towed-body* kinds (D131). `updateKillDrag` is the first non-sled caller of ACE's `ropeConstraint`; drag state lives on the entity (`dragAnchor`), not `sled.tether`. Raider corpse: on-foot or sled drag. Worm carcass: speeder-tow only (24m too heavy on foot — D132). Sagged rope visual per kill. Save additive (no version bump): `dragAnchor` round-trips. Worm path runtime-verified (constraint snaps 20m→14m leash); **drag-feel aesthetic + raider runtime path NOT visually iterated (rule 8) — owed to a human playtest**. Session began as a gamedev-framework smoke-test. D131-D132.
 - **Session ACE** (2026-05-27, overnight): Rope vocab + multi-worm + lizard pipeline + rig polish + procgen. 5 tiers across 17 files (15 modified + 2 new modules: `ropeConstraint.ts` + `stake.ts`). **B1 Phase 3** — inextensible-rope constraint extracted as shared helper + stake endpoint kind shipped with 3 visual iteration rounds (Cut #3 deferred raider_corpse + sandworm_carcass). **Multi-worm v12→v13** schema migration — ctx.sandWorms array, per-worm rejection sampling, 2 worms at ~1500m separation. **Lizard pipeline lift** — 5 iteration rounds, Lathe body+head+tail + asymmetric sprawl legs vs pre-ACE Box brick. **Rig polish** — footstep audio driven from rig.stepCount, dust at foot terrain contact, 9 items tagged with thirdPersonScale (Cut #2 deferred aim twist-IK). **Procgen POI** — orbital_pod_cluster 6th wreck class + BRISTLE_ANTENNA 6th hullSegment variant (Cut #1 deferred dune_drill_site POI). D126-D130.
 
 ## Up next
 
-ACE shipped a comprehensive overnight bundle across 5 tiers. The big
-deferred items per scope cuts: raider_corpse + sandworm_carcass
-endpoint kinds (foundation in place via the shared constraint helper),
-aim twist-IK on right shoulder, dune_drill_site biome-specific POI.
+ACF shipped the corpse/carcass rope-drag (closing ACE's Cut #3), but with
+a real gap: the drag-feel was functionally verified, not visually iterated
+(rule 8), and the raider path was never runtime-exercised (0 raiders spawn
+by default). **The single highest-value ACG candidate is a focused
+visual-triage + raider-path playtest of the ACF drag** (see below). Other
+deferred items: aim twist-IK on right shoulder, dune_drill_site POI.
 
-See `docs/next-session-prompt.md` for the full ACF brief.
+See `docs/next-session-prompt.md` for the full ACG brief.
 
-**ACF candidates** (pick at session-start):
-- **B1 Phase 3 follow-up** — finish the deferred endpoint kinds
-  (raider_corpse, sandworm_carcass). Foundation is in place; each
-  needs kinematic body promotion + interaction routing + save schema.
+**ACG candidates** (pick at session-start):
+- **ACF drag polish + verification** (TOP) — visual-triage the rope
+  sag / corpse + carcass orientation (trail head-first behind the
+  anchor), exercise the raider corpse path with a real kill (needs a
+  raider-spawn path — none exists by default), confirm save round-trip
+  of an in-progress drag. Address the `lootSandWorm`-untags-carcass edge
+  if tow-after-harvest is wanted.
 - **Sled riding mechanic, second attempt** — still tabled per D125
   but with the slope-slide + body-tilts-to-terrain physics solid as
   foundation. Try the Option C parenting approach (override

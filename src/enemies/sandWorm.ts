@@ -36,6 +36,7 @@ import { findBiomeCentroid } from '../world/biomes.ts';
 import type { Rng } from '../core/rng.ts';
 import { isPryingActive } from '../player/interaction.ts';
 import { getPlayerPos } from '../util/playerPos.ts';
+import type { RopeEndpoint } from '../world/rope.ts';
 
 export type SandWormState =
   | 'patrol'
@@ -123,6 +124,12 @@ export interface SandWorm {
    *  breach exit so the worm returns straight to patrol instead of
    *  the retreat→alert combat loop. */
   _isTwilightBreach: boolean;
+  /** ACF — B1 Phase 3 follow-up: when this carcass is being towed behind
+   *  the speeder, the rope's anchor end (speeder only — too massive to drag
+   *  on foot). The carcass is the TOWED body; updateKillDrag enforces the
+   *  rope constraint. { kind: 'none' } / undefined = not being towed. Only
+   *  meaningful when state === 'dead'. */
+  dragAnchor?: RopeEndpoint;
 }
 
 interface SandPuff {

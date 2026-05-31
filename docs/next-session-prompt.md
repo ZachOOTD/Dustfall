@@ -1,117 +1,105 @@
-# Session ACF — Kickoff Brief
+# Session ACG — Kickoff Brief
 
 ## Read these now (in order)
 
 1. **CLAUDE.md** (auto-loaded) — project manual.
-2. **docs/session-end-report.md** — cumulative state through ACE (still on the ACD-era report at session-start; update to ACE shape on session-end if /session-end skipped).
-3. **docs/backlog.md** — open items.
-4. **docs/decisions.md** — D-entries through D130. ACE added D126 (ropeConstraint extracted), D127 (sandWorms v13 migration), D128 (procedural-character pipeline applied to lizard), D129 (footstep audio from rig.stepCount), D130 (stake = craftable persistent RopeEndpoint).
-5. **docs/roadmap.md** — "Up next" lists ACF candidates.
+2. **docs/session-end-report.md** — cumulative state through ACF.
+3. **docs/backlog.md** — open items (top 3 are ACF follow-ups + the framework-feedback debt note).
+4. **docs/decisions.md** — D-entries through D132. **Grep, don't slurp** — the file is ~70K tokens; ACF added D131 (towed-body rope kinds + entity-owned `dragAnchor` + `killDrag` system) + D132 (worm carcass speeder-tow-only + tow-before-harvest edge).
+5. **docs/roadmap.md** — "Up next" lists ACG candidates.
 6. **docs/architecture.md** — only if touching a system you don't already know.
 
 ## What's already built (one paragraph)
 
-ACE shipped a comprehensive overnight bundle across 5 tiers. **B1 Phase 3
-rope vocab**: `src/world/ropeConstraint.ts` (shared inextensible-rope helper,
-extracted from `updateSleds`) + `src/world/stake.ts` (craftable iron-stake
-world-anchor, recipe 16). New `stake` kind on RopeEndpoint union. Stake mesh
-visually iterated to 3 rounds. **Multi-worm v12→v13**: ctx.sandWorms array,
-per-worm rejection sampling (2 worms / world, 400m min separation), backward-
-compat verified (singleton → sandWorms[0]). **Lizard pipeline lift**: 5
-iteration rounds applying D115 Lathe vocabulary — anatomical body + tapered
-head + asymmetric sprawl legs vs pre-ACE Box brick. **Rig polish**: footstep
-audio + dust now driven from `rig.stepCount` (phase-locked to visible
-heel-strikes), 9 items tagged with `thirdPersonScale`. **Procgen POI**:
-orbital_pod_cluster 6th wreck class + BRISTLE_ANTENNA 6th hullSegment variant.
-Three items deferred per pre-committed scope cuts: raider_corpse +
-sandworm_carcass endpoint kinds (Cut #3), aim twist-IK (Cut #2),
-dune_drill_site POI (Cut #1).
+ACF shipped the corpse/carcass rope-drag, closing ACE's deferred Cut #3. The
+`RopeEndpoint` union gained `raider_corpse` + `sandworm_carcass` — the first
+*towed-body* kinds (the rope drags them; they're not anchors). NEW
+`src/world/killDrag.ts` (`updateKillDrag`) is the first non-sled caller of
+ACE's `applyInextensibleConstraint`; drag state lives on the entity as
+`dragAnchor` (NOT `sled.tether`). A raider corpse drags on foot or trails a
+player-tethered sled; a worm carcass tows behind the speeder only (24m is too
+heavy on foot). Sagged rope tube per dragged kill; in-progress drags persist
+across save/load (additive, no version bump). The worm path was runtime-verified
+(constraint snaps a 20m-yank back to the 14m leash); the aesthetic + the raider
+path were NOT.
 
-## Session ACF — pick at session-start
+## Session ACG — focus
 
-User has not pre-directed ACF. Top candidates:
+**ACF drag polish + verification** — close the rule-8 gap ACF left open. ACF
+shipped functionally but never ran the build→screenshot→critique→iterate loop,
+and the raider corpse path was never runtime-exercised.
 
-**Option A — B1 Phase 3 follow-up (~3-4h)**. Finish the deferred endpoint
-kinds. The shared `ropeConstraint.ts` helper is in place; each new kind
-needs (1) the body-side scaffolding (kinematic body promotion on raider
-death; tagging the sandworm corpse for drag), (2) interaction routing
-(RMB-on-corpse with rope wielded), (3) save schema (additive — tetherCorpseId
-+ tetherCarcassId), (4) playtest verification (does dragging actually feel
-correct). Acceptance: kill raider → wield rope → RMB-on-corpse → drag it
-on foot or attach to sled. Same for sandworm carcass.
+## Priority items (in order)
 
-**Option B — Sled riding mechanic, second attempt (~3-5h)**. Tabled in
-ACD per D125 with two next-attempt directions: full Option C parenting
-(override `setNextKinematicTranslation` on the player entirely while
-riding — skip KCC) OR synthetic "ride peg" dynamic body (mirror the
-branch-on-sled trick). The slope-slide + body-tilts-to-terrain from ACD
-makes this a meaningfully different second attempt.
+1. **Raider-spawn path for testing** (`src/enemies/raider.ts`). 0 raiders spawn
+   by default (D13). Add a dev-only spawn (e.g. a `__game.spawnRaider(x,z)`
+   hook or a DEV-MODE starter raider near spawn) so the corpse-drag path can be
+   exercised at all. Acceptance: a raider exists in the world in DEV MODE.
+2. **Raider corpse drag — runtime verification + feel** (`killDrag.ts`,
+   `interaction.ts`). Kill it → wield rope → LMB-on-corpse → drag on foot, then
+   tie to a player-tethered sled. Visual-triage: rope sag, corpse position
+   relative to the rope, does it read as "dragging a body". 3-5 iteration rounds.
+3. **Body-trails-head-first orientation** (`killDrag.ts`). Deferred in ACF
+   pending verification against the dead-pose rotations. Orient the dragged
+   corpse (`r.group.rotation.y`) + carcass (`w.mesh.rotation.y`) to point away
+   from the anchor — but FIRST confirm it doesn't fight `applyRaiderDeadPose`
+   (flop / die-clip) or `applySandWormDeadPose`. Screenshot before/after.
+4. **Worm carcass tow — visual-triage** (mount speeder, slay/force a worm dead,
+   tow it). Judge the 24m carcass trailing on a 14m leash. Tune
+   `KILL_DRAG_WORM_*` if it reads wrong.
+5. **Save round-trip of an in-progress drag** — tie a corpse, save, reload,
+   confirm the drag resumes (or degrades gracefully). The fields are wired
+   (`dragAnchor` on raider + worm); confirm end-to-end.
 
-**Option C — Apply procedural-character pipeline to companion + raider
-(~5-7h)**. Companion (currently primitive body with 5 radial legs) +
-raider (currently uses a Quaternius GLB from Session N, predating D107
-zero-asset) both stand to benefit from the same Lathe / sub-pivot stack
-the player rig + lizard now use. Raider in particular would retroactively
-align with D107.
+## Stretch goals
 
-**Option D — A1 infinite chunk streaming (~6-10h, multi-session arc)**.
-Strategically the right time per the ACE plan's analysis (multi-worm
-array-ified the schema in that direction). But this is properly a
-multi-session arc — scoping pass + chunked load + save migration + POI
-lifecycle + playtest hardening. Single overnight may not finish.
+- Fix the `lootSandWorm`-untags-carcass edge (tow-after-harvest): keep an
+  `attach_rope` tag on a looted-but-towed carcass, or move cut-loose onto the speeder.
+- Drag SFX (rope creak + body-scrape on sand) when a kill is actively dragged.
 
 ## Autonomy contract
 
 When ambiguous mid-session → pick the option closest to GDD pillars +
 decisions.md realism dial, append a new D-entry, keep going. Surface only on:
-- Procedural-vs-asset question (D107 — stay procedural unless explicit user approval).
-- Save-schema bumps (D81 — additive only; flag if you need to bump SAVE_VERSION).
+- Procedural-vs-asset question (D107 — stay procedural unless explicit approval).
+- Save-schema *version* bumps (D81 — additive only; flag if you need to bump SAVE_VERSION).
 - Destructive git operations.
 - Catastrophic block (a critical system breaks and the fix > 1h).
 
 ## Stop conditions
 
-- Wall-clock 4-6h for focused, 8-14h for overnight.
+- Wall-clock 2-4h for this focused polish scope.
 - 3 consecutive fix walls on the same gate → invoke `/scope-cutter`.
 - Catastrophic block / destructive-action attempt → STOP and surface.
 
 ## Notable footguns (carried forward)
 
-- **D107 zero-asset**: No GLB / no PBR / no asset files. Everything procedural.
-- **D109 localSpace=true on moving entities**: any shader applied to a moving
-  body MUST pass `localSpace: true` or texture detail crawls.
-- **D81 additive save discipline**: try additive; bump only if genuinely
-  incompatible.
-- **D125 KCC moving platforms**: Rapier KCC has no built-in moving-platform
-  support. Direct delta application via setLinvel or friction is fundamentally
-  incompatible.
-- **D126 ropeConstraint helper**: new tetherable kinds populate the constraint
-  target shape (attach point + managed velocity scalars + terrain + hy +
-  clearance) — don't re-implement the math.
-- **D127 multi-worm**: `ctx.sandWorms.list` is an array. Use `.find(...)` to
-  match by id at runtime; in save/load, match by INDEX not id (boot allocates
-  fresh ids each session).
-- **D128 procedural-character pipeline**: when applying Lathe geometry to a
-  body-along-X-axis entity, `rotation.z = ±π/2` controls profile axis
-  direction; verify orientation early (snout at +X, neck-joint at body's
-  front-end x).
+- **D131 towed-body kinds**: corpse/carcass drag state lives on the ENTITY
+  (`dragAnchor`), NOT `sled.tether`. `updateKillDrag` owns dragged-dead-entity
+  movement (raiders/worms `continue` past dead in their own update).
+- **D132 worm speeder-only**: `killDrag` clears any non-speeder worm anchor;
+  `lootSandWorm` untags the carcass (tow-before-harvest only).
+- **D107 zero-asset**: no GLB / no PBR / no asset files. Everything procedural.
+- **D109 localSpace=true on moving entities**: any shader on a moving body MUST
+  pass `localSpace: true` or texture detail crawls.
+- **Preview gotchas** (`dustfall_preview_gotchas` memory): pointer-lock gating
+  blocks clean automated in-game framing; the opening-wreck spawn occludes the
+  forward view. For visual-triage, force state via `__game.ctx` + eval, and
+  reposition the camera/player deliberately for screenshots.
 
 ## Verification protocol
 
-Single command: `npm run verify` (= `tsc --noEmit`). Dustfall is post-MVP
-and opted out of the framework's tier-ladder verification model.
-
-For visual/feel work: honor the iteration discipline
-(`shared-memory/iterative-polish-discipline.md`). Build → screenshot →
-critique → iterate, 5-8 rounds for new visual elements, 3-5 for tuning.
-tsc clean is the type-check gate, not the quality gate.
+Single command: `npm run verify` (= `tsc --noEmit`). For the visual/feel work
+this session, `tsc` is the type gate, NOT the quality gate — honor the iteration
+discipline (`shared-memory/iterative-polish-discipline.md`): build → screenshot
+→ critique → iterate, 3-5 rounds per element. This session EXISTS to close
+ACF's rule-8 gap — do not repeat it.
 
 ## Begin block
 
-1. Read CLAUDE.md (auto-loaded), backlog.md, decisions.md (D126-D130
-   especially), roadmap.md.
+1. Read CLAUDE.md (auto-loaded), session-end-report, backlog, decisions
+   (grep D131-D132), roadmap.
 2. Confirm `npm run verify` baseline passes.
-3. Decide ACF direction (A/B/C/D above, or surface a different priority
-   the user wants).
-4. TaskCreate covering priority items.
-5. Begin coding.
+3. TaskCreate covering priority items 1-5.
+4. Add the raider-spawn path FIRST (everything else depends on it).
+5. Begin coding + visual-triage.

@@ -66,7 +66,7 @@ const _dir = new THREE.Vector3();
 interface InteractHit {
   type: InteractType;
   id: number;
-  registry: 'pickups' | 'waterSources' | 'cacti' | 'lizards' | 'sandWorms' | 'lootContainers' | 'fires' | 'tents' | 'largeTents' | 'bedrolls' | 'lanterns' | 'lockers' | 'salvageables' | 'journals' | 'speeder' | 'sleds' | 'companion' | 'stakes';
+  registry: 'pickups' | 'waterSources' | 'cacti' | 'lizards' | 'sandWorms' | 'lootContainers' | 'fires' | 'tents' | 'largeTents' | 'bedrolls' | 'lanterns' | 'lockers' | 'salvageables' | 'journals' | 'speeder' | 'sleds' | 'companion' | 'stakes' | 'raiders';
   distance: number;
   /** AAZ — optional sub-mesh discriminator. When the hit object's
    *  userData.interactSubKind is set, it's captured here so case handlers
@@ -260,6 +260,10 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
   if (ctx.companion) targets.push(ctx.companion.group);
   for (const sl of ctx.sleds.list) targets.push(sl.group);
   for (const st of ctx.stakes.list) targets.push(st.mesh);
+  // ACF — dead raiders are rope-draggable corpses. Only push corpses (live
+  // raiders are combat targets, not interactables). The mesh tag (registry
+  // 'raiders', type 'attach_rope') is applied in raider.ts on death.
+  for (const r of ctx.raiders) if (r.bb.state === 'dead') targets.push(r.group);
   for (const s of ctx.salvageables.list) targets.push(s.panel);
   for (const j of ctx.journals.list) targets.push(j.mesh);
   // CC-3.1 — speeder seat is interactable when not already mounted; the
@@ -421,8 +425,51 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
       // ACE Tier 2 — multi-worm. Resolve which worm was hit via the
       // tagged interactId (set by sandWorm.ts/tag with worm.id).
       const worm = ctx.sandWorms.list.find((w) => w.id === info.id);
-      if (!worm || worm.state !== 'dead' || worm.looted) return;
+      if (!worm || worm.state !== 'dead') return;
       worm.hovered = true;
+      // ACF — B1 Phase 3 follow-up: tow the carcass behind the SPEEDER only
+      // (a 24m carcass is far too massive to drag on foot). Requires rope
+      // wielded + mounted. LMB ties/cuts. Takes priority over the loot
+      // prompt while the player is set up to tow.
+      {
+        const ropeEq = ctx.inventory.slots[ctx.inventory.selectedIdx].item === 'rope';
+        const towed = worm.dragAnchor?.kind === 'speeder';
+        const mounted = !!ctx.speeder?.mounted;
+        if (towed) {
+          ctx.inventory.hover = {
+            type: 'attach_rope',
+            distance: info.distance,
+            promptNoun: 'cut carcass loose',
+          };
+          if (ctx.input.mousePressed.has(0)) {
+            worm.dragAnchor = { kind: 'none' };
+            ctx.ui.showToast('carcass cut loose');
+          }
+          return;
+        }
+        if (ropeEq && mounted) {
+          ctx.inventory.hover = {
+            type: 'attach_rope',
+            distance: info.distance,
+            promptNoun: 'tie carcass to speeder',
+          };
+          if (ctx.input.mousePressed.has(0)) {
+            worm.dragAnchor = { kind: 'speeder' };
+            ctx.ui.showToast('carcass roped to the speeder');
+          }
+          return;
+        }
+        if (ropeEq && !mounted) {
+          // Soft hint — rope is wielded but they're on foot.
+          ctx.inventory.hover = {
+            type: 'attach_rope',
+            distance: info.distance,
+            promptNoun: 'too heavy to drag on foot — tow from the speeder',
+          };
+          return;
+        }
+      }
+      if (worm.looted) return;
       ctx.inventory.hover = {
         type: 'take',
         distance: info.distance,
@@ -442,6 +489,50 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
         }
         playPickup();
         lootSandWorm(worm, ctx);
+      }
+      return;
+    }
+
+    case 'raiders': {
+      // ACF — B1 Phase 3 follow-up: drag a downed raider corpse. Rope
+      // wielded → LMB ties the corpse to a player-tethered sled (so it
+      // trails the sled) if one is in hand, otherwise straight to the
+      // player (drag on foot). LMB again on a dragged corpse drops it.
+      const r = ctx.raiders.find((rr) => rr.id === info.id);
+      if (!r || r.bb.state !== 'dead') return;
+      const ropeEq = ctx.inventory.slots[ctx.inventory.selectedIdx].item === 'rope';
+      const dragging = !!r.dragAnchor && r.dragAnchor.kind !== 'none';
+      if (dragging) {
+        ctx.inventory.hover = {
+          type: 'attach_rope',
+          distance: info.distance,
+          promptNoun: 'drop the corpse',
+        };
+        if (ctx.input.mousePressed.has(0)) {
+          r.dragAnchor = { kind: 'none' };
+          ctx.ui.showToast('corpse dropped');
+        }
+        return;
+      }
+      if (!ropeEq) {
+        ctx.inventory.hover = {
+          type: 'attach_rope',
+          distance: info.distance,
+          promptNoun: 'corpse (equip rope to drag)',
+        };
+        return;
+      }
+      const playerSled = ctx.sleds.list.find((s) => s.tether.kind === 'player');
+      ctx.inventory.hover = {
+        type: 'attach_rope',
+        distance: info.distance,
+        promptNoun: playerSled ? 'tie corpse to sled' : 'drag corpse',
+      };
+      if (ctx.input.mousePressed.has(0)) {
+        r.dragAnchor = playerSled
+          ? { kind: 'sled', sledId: playerSled.id }
+          : { kind: 'player' };
+        ctx.ui.showToast(playerSled ? 'corpse roped to the sled' : 'dragging the corpse');
       }
       return;
     }

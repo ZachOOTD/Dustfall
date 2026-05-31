@@ -2682,3 +2682,27 @@ The fundamental issue: KCC's slope projection, autostep, and contact resolution 
 - Make static-pos persistent by adding a visual marker mesh — would re-create stake without crafting cost / pack-up symmetry.
 
 **Apply**: when adding a craftable upgrade of an existing mechanic, keep both — the craftable serves as a permanence/identity upgrade, not a replacement. The ad-hoc flow is the "every player can do this immediately" baseline. **friction-score:** 1
+
+## D131 — Corpse/carcass are TOWED-body RopeEndpoint kinds; drag state lives on the entity (Session ACF)
+**When**: B1 Phase 3 follow-up — adding `raider_corpse` + `sandworm_carcass` to the `RopeEndpoint` union (closing ACE's Cut #3). Every prior endpoint kind (player, speeder, companion, sled, static-pos, stake) is an ANCHOR — the thing the rope is tied *to*, that the sled is constrained *toward*. A corpse you drag is the opposite role: it's the TOWED body, and the anchor is the player/speeder/sled.
+
+**Why**: The naive read of "add corpse to RopeEndpoint" is to set `sled.tether = { kind: 'raider_corpse' }`. That's backwards — it would constrain the sled toward the corpse (sled towed *by* the corpse), which is not a gameplay flow. The actual relationship is corpse-towed-toward-anchor, so the tether state must live on the CORPSE, not the sled. Added `dragAnchor?: RopeEndpoint` to `Raider` + `SandWorm` (the anchor end; `{kind:'none'}`/undefined = not dragged). NEW `src/world/killDrag.ts` (`updateKillDrag`) is the first non-sled caller of D126's `applyInextensibleConstraint`: it treats the kill as the towed body and the `dragAnchor` as the anchor, runs each frame AFTER `updateRaiders`/`updateSandWorm` (both `continue` past dead entities, so drag-movement is unowned and free to take) and BEFORE `updateSledRiders`. Rope visual is self-contained in killDrag (keyed by entity id, disposed on detach) — no per-entity `ropeMesh` field needed.
+
+**Considered alternatives**:
+- Put the tether on `sled.tether` as `raider_corpse` — wrong role (see above); the save serializer still handles those kinds defensively (mirrors the existing 'sled' kind that "won't fire under current gameplay") but no flow sets them.
+- A generic `TowedBody` interface both sled + corpse implement — over-engineered; the constraint helper is already data-in/data-out, and sled keeps its own velocity-managing scalars (slope-slide) that a corpse doesn't have.
+
+**Apply**: when a new RopeEndpoint references something the rope DRAGS rather than is anchored to, store the anchor on that entity (`dragAnchor`) and drive it through `updateKillDrag` / `applyInextensibleConstraint` — do NOT put it on `sled.tether`. **friction-score:** 2
+
+## D132 — Sandworm carcass towable only behind the speeder; tow-before-harvest (Session ACF)
+**When**: B1 Phase 3 follow-up — surfaced at session-start as a design fork (the autonomy contract flagged it) and resolved with the user. The worm is a ~24m kinematic boss; "drag the carcass with a hand-rope on foot" clashes hard with the realism dial.
+
+**Why**: A human dragging a 24m carcass across dunes is absurd. But cutting the carcass-drag entirely loses a fun trophy/harvest-logistics beat. Compromise: the carcass is towable ONLY while the player is mounted on the speeder (the vehicle implies the power). `killDrag` guards `anchor.kind === 'speeder'` for worms (clears any stale non-speeder anchor); `interaction.ts` gates the tie on rope-wielded + `speeder.mounted`, with a soft on-foot hint ("too heavy to drag on foot — tow from the speeder"). The raider corpse (human-scale) keeps the full on-foot + sled drag.
+
+**Known edge (shippable, low-severity)**: `lootSandWorm` untags the carcass mesh on harvest, so a carcass is interactable (and thus towable / cut-loose-able) only BEFORE it's been harvested. The intended flow is tow-then-harvest; harvesting ends the carcass's interaction surface. A carcass already being towed when harvested keeps moving (killDrag doesn't need the tag) but can no longer be cut loose via interaction until the rope tears.
+
+**Considered alternatives**:
+- Tow on foot too — rejected on realism.
+- Cut the carcass drag entirely — loses the logistics beat; the speeder-only path keeps it cheaply.
+
+**friction-score:** 1

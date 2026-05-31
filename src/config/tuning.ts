@@ -1148,6 +1148,18 @@ export const Tuning = {
   SLED_TOW_DISTANCE: 5.0,                    // rope length (m). The sled is constrained to within this distance of the anchor — slack inside, snaps taut at exactly this length. QQ-2 lengthened 3 → 5 for visible drape.
   SLED_TOW_MAX_DIST: 10.0,                   // hard snap threshold beyond which the rope tears free (anchor moved way too fast for the constraint to keep up). Auto-detach + toast.
   SLED_TOW_ATTACH_RANGE: 3.0,                // raycast distance for clicking the rope stub with wielded rope
+  // ACF — B1 Phase 3 follow-up: corpse/carcass drag. The kill is the TOWED
+  // body (anchored to the player on foot, or the speeder for the worm) and
+  // rides the shared inextensible-rope constraint. Tuned looser than the
+  // sled (a body drags heavier / further behind than a yoked sled).
+  KILL_DRAG_RAIDER_MAX_DIST: 3.2,            // rope length (m) for a dragged raider corpse — short leash so the body trails close behind.
+  KILL_DRAG_RAIDER_TEAR_DIST: 7.0,           // beyond this the rope slips off the corpse (auto-detach + toast).
+  KILL_DRAG_RAIDER_HY: 0.25,                 // body Y half-extent used to clamp the corpse above terrain after a snap.
+  KILL_DRAG_WORM_MAX_DIST: 14.0,             // rope length (m) for a worm carcass towed behind the speeder — long, the carcass is enormous.
+  KILL_DRAG_WORM_TEAR_DIST: 26.0,            // speeder can yank hard; tear only on extreme overstretch.
+  KILL_DRAG_WORM_HY: 1.5,                    // worm body Y half-extent for terrain clamp.
+  KILL_DRAG_SNAP_PERP_DAMP: 0.6,             // perpendicular-swing damping at snap (shared by both kinds). Higher = the dragged body settles behind the anchor faster.
+  KILL_DRAG_GROUND_CLEARANCE: 0.05,          // visual lift above terrain so the dragged body doesn't sink into sand on a slope.
   SLED_ROPE_COLOR_HEX: 0x6e4a2a,             // matches branch/wood palette
   SLED_ROPE_RADIUS: 0.04,                    // QQ-2 tube radius — thicker than the previous 2-vertex Line
   SLED_ROPE_SAG: 0.45,                       // QQ-2 max midpoint drop (m) when the rope is taut; scales with slack to 0 at fully-stretched

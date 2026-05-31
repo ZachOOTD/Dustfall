@@ -162,7 +162,7 @@ export interface SaveV1 {
   }>;
   cacti: Array<{ id: number; harvested: boolean }>;
   lizards: Array<{ id: number; pos: V3; state: LizardState; looted: boolean }>;
-  raiders: Array<{ id: number; pos: V3; state: RaiderState; health: number }>;
+  raiders: Array<{ id: number; pos: V3; state: RaiderState; health: number; dragAnchor?: SledTether }>;
   salvageables: Array<{ id: number; salvageRemaining: number; stripped: boolean }>;
   lootContainers: Array<{ id: number; opened: boolean; contents: LootEntry[] }>;
 
@@ -184,9 +184,12 @@ export interface SaveV1 {
     pos: V3;
     rotationY: number;
     contents: LootEntry[];
-    /** ACE — extended to include 'stake' kind (B1 Phase 3). Pre-ACE saves
-     *  load unchanged (their tether value remains in the older subset). */
-    tether: 'none' | 'player' | 'speeder' | 'companion' | 'static-pos' | 'sled' | 'stake';
+    /** ACE — extended to include 'stake' kind (B1 Phase 3). ACF — extended
+     *  to include 'raider_corpse' | 'sandworm_carcass' (B1 Phase 3 follow-up).
+     *  Pre-ACF saves load unchanged (their tether value remains in the older
+     *  subset). */
+    tether: 'none' | 'player' | 'speeder' | 'companion' | 'static-pos' | 'sled' | 'stake'
+      | 'raider_corpse' | 'sandworm_carcass';
     tetherX?: number;
     tetherZ?: number;
     /** ACC — B1 Phase 2: sled-id payload when tether === 'sled'. Optional;
@@ -195,6 +198,12 @@ export interface SaveV1 {
     /** ACE — B1 Phase 3: stake-id payload when tether === 'stake'.
      *  Optional; absent for non-stake tether kinds. */
     tetherStakeId?: number;
+    /** ACF — B1 Phase 3 follow-up: raider-id payload when
+     *  tether === 'raider_corpse'. Additive; absent for other kinds. */
+    tetherRaiderId?: number;
+    /** ACF — B1 Phase 3 follow-up: worm-id payload when
+     *  tether === 'sandworm_carcass'. Additive; absent for other kinds. */
+    tetherWormId?: number;
     attachedLockerId?: number;
   }>;
 
@@ -297,6 +306,9 @@ export interface SaveV1 {
     health: number;
     looted: boolean;
     pos: V3;
+    /** ACF — B1 Phase 3 follow-up: speeder-tow state, if the carcass was
+     *  roped behind the speeder at save time. Additive. */
+    dragAnchor?: SledTether;
   }>;
 }
 
@@ -433,6 +445,10 @@ export function saveGameState(ctx: GameContext): { ok: boolean; error?: string }
           pos: { x: tr.x, y: tr.y, z: tr.z },
           state: r.bb.state,
           health: r.health,
+          // ACF — persist an in-progress corpse drag (additive).
+          ...(r.dragAnchor && r.dragAnchor.kind !== 'none'
+            ? { dragAnchor: r.dragAnchor }
+            : {}),
         };
       }),
       salvageables: ctx.salvageables.list.map((s) => ({
@@ -523,6 +539,13 @@ export function saveGameState(ctx: GameContext): { ok: boolean; error?: string }
           ...(s.tether.kind === 'stake'
             ? { tetherStakeId: s.tether.stakeId }
             : {}),
+          // ACF — B1 Phase 3 follow-up: corpse/carcass id payloads.
+          ...(s.tether.kind === 'raider_corpse'
+            ? { tetherRaiderId: s.tether.raiderId }
+            : {}),
+          ...(s.tether.kind === 'sandworm_carcass'
+            ? { tetherWormId: s.tether.wormId }
+            : {}),
           // ACB P1 — attached locker (mobile storage on sled deck)
           ...(s.attachedLockerId !== null
             ? { attachedLockerId: s.attachedLockerId }
@@ -555,6 +578,10 @@ export function saveGameState(ctx: GameContext): { ok: boolean; error?: string }
         health: w.health,
         looted: w.looted,
         pos: { x: w.basePos.x, y: w.basePos.y, z: w.basePos.z },
+        // ACF — persist an in-progress speeder tow (additive).
+        ...(w.dragAnchor && w.dragAnchor.kind !== 'none'
+          ? { dragAnchor: w.dragAnchor }
+          : {}),
       })),
     };
 
@@ -776,6 +803,10 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
     if (!raider) continue;
     raider.bb.state = saved.state;
     raider.health = saved.health;
+    // ACF — restore an in-progress corpse drag. killDrag resolves the
+    // anchor (player / sled) at tick time, so restore order vs sleds
+    // doesn't matter.
+    if (saved.dragAnchor) raider.dragAnchor = saved.dragAnchor;
     raider.group.position.set(saved.pos.x, saved.pos.y, saved.pos.z);
     raider.body.setTranslation(
       { x: saved.pos.x, y: saved.pos.y, z: saved.pos.z },
@@ -989,6 +1020,17 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
         tether = saved.tetherStakeId !== undefined
           ? { kind: 'stake', stakeId: saved.tetherStakeId }
           : { kind: 'none' };
+      } else if (saved.tether === 'raider_corpse') {
+        // ACF — B1 Phase 3 follow-up. Defensive: if the raider-id is
+        // missing, fall back to 'none'. The corpse itself is restored by
+        // the raider load path; here we only re-link the sled's tether.
+        tether = saved.tetherRaiderId !== undefined
+          ? { kind: 'raider_corpse', raiderId: saved.tetherRaiderId }
+          : { kind: 'none' };
+      } else if (saved.tether === 'sandworm_carcass') {
+        tether = saved.tetherWormId !== undefined
+          ? { kind: 'sandworm_carcass', wormId: saved.tetherWormId }
+          : { kind: 'none' };
       } else {
         tether = { kind: saved.tether };
       }
@@ -1071,6 +1113,7 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
     health: number;
     looted: boolean;
     pos: V3;
+    dragAnchor?: SledTether;
   };
   const restoreEntries: WormRestore[] = [];
   if (save.sandWorms) {
@@ -1081,6 +1124,7 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
         health: sw.health,
         looted: sw.looted,
         pos: sw.pos,
+        dragAnchor: sw.dragAnchor,
       });
     }
   } else if (save.sandWorm) {
@@ -1102,6 +1146,8 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
     worm.health = saved.health;
     worm.looted = saved.looted;
     worm.basePos.set(saved.pos.x, saved.pos.y, saved.pos.z);
+    // ACF — restore an in-progress speeder tow (speeder resolved at tick).
+    if (saved.dragAnchor) worm.dragAnchor = saved.dragAnchor;
     if (saved.state === 'dead') {
       worm.surfaceGroundY = ctx.terrain.heightAt(worm.basePos.x, worm.basePos.z);
       applySandWormDeadPose(worm);

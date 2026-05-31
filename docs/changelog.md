@@ -3,6 +3,56 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ACF — 2026-05-31 — B1 Phase 3 follow-up: corpse/carcass rope-drag ✓ verify pass (tsc clean)
+
+`verified` — tsc clean. 9 files (7 modified + 1 new module + 1 archived brief).
+Closes ACE's deferred **Cut #3** (raider_corpse + sandworm_carcass endpoint
+kinds). **NB**: this session began as a gamedev-framework smoke-test (Opus 4.8 +
+optimized CLAUDE.md) and grew into a real feature — see "process notes" below.
+
+**Towed-body rope kinds + drag system**. `RopeEndpoint` union
+([src/world/rope.ts](../src/world/rope.ts)) gains `raider_corpse` (raiderId) +
+`sandworm_carcass` (wormId) — the first kinds that are *towed bodies*, not
+anchors (the rope drags them). NEW [src/world/killDrag.ts](../src/world/killDrag.ts):
+kind-agnostic `updateKillDrag` — first non-sled caller of the ACE
+`ropeConstraint` helper. Drag state lives on the entity as `dragAnchor:
+RopeEndpoint` (NOT on `sled.tether`); hooked into `main.ts` after
+`updateSandWorm` (which skips dead entities) + before `updateSledRiders`. Each
+dragged kill gets a sagged rope tube (reuses the sled rope look, keyed by entity
+id, disposed on detach). D131.
+
+**Raider corpse** — `applyRaiderDeadPose` tags the corpse for interaction
+(registry `raiders`, type `attach_rope`); `interaction.ts` routes rope-wielded
+LMB-on-corpse → tie to a player-tethered sled (trails it) or to the player
+(drag on foot); LMB again drops it. **Sandworm carcass** — towable ONLY behind
+the speeder (a 24m carcass is too massive to drag on foot); `interaction.ts`
+extends the `sandWorms` case for rope+mounted LMB-on-carcass → tow / cut loose.
+D132.
+
+**Save** — additive, **no SAVE_VERSION bump** (D81): serialized sled tether
+union + payloads extended; `raider.dragAnchor` + `worm.dragAnchor` round-trip so
+an in-progress drag survives reload.
+
+**Tuning** — `KILL_DRAG_*` block (raider/worm max+tear dist, body half-extents,
+shared snap-perp-damp + ground clearance).
+
+**Verification** — runtime-verified the worm path in the live game via forced
+state: rope mesh spawns (correct geom/color), the inextensible constraint snaps
+a 20m-yanked carcass back to the 14m leash, rope disposed on detach, no runtime
+errors. **NOT verified**: (1) the aesthetic drag-feel/rope-sag from gameplay POV
+— pointer-lock gating + opening-wreck spawn occlusion block automated framing
+(per `dustfall_preview_gotchas`); (2) the raider-corpse path at runtime (0
+raiders spawn by default, no spawn hook) — code is tsc-clean + structurally
+identical to the verified worm path.
+
+**Process notes (iteration-discipline self-check, rule 8)**: the rope-mesh
+visual + corpse-drag shipped with FUNCTIONAL verification only — NOT the
+build→screenshot→critique→iterate aesthetic loop. Drag-feel quality is unproven;
+a follow-up visual-triage (kill a raider, tow a carcass, judge sag/orientation)
+is owed. Body-trails-head-first orientation was deliberately deferred (unverified
+against the dead-pose rotation). Known edge: `lootSandWorm` untags the carcass,
+so towing works only BEFORE harvesting (tow-then-harvest flow).
+
 ## Session ACE — 2026-05-27 — Overnight: rope vocab + multi-worm + lizard pipeline + rig polish + procgen ✓ verify pass
 
 `verified` — tsc clean. 17 files (15 modified + 2 new modules). Comprehensive

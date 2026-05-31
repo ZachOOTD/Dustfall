@@ -64,39 +64,22 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      Prior milestones live in docs/changelog.md — do NOT accumulate "Prior milestone"
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
-**Last shipped**: Session ACE — Overnight bundle: rope vocab Phase 3 +
-multi-worm + lizard pipeline + rig polish + procgen POI. tsc clean. 17
-files (15 modified + 2 new modules). 5 tiers, 4 fully shipped + 1 with
-one item deferred per pre-committed scope cuts. **Tier 1 B1 Phase 3
-rope**: NEW `src/world/ropeConstraint.ts` extracts inextensible-rope
-constraint from `updateSleds` as a reusable helper (any callable can
-supply attach point + managed velocity scalars); NEW `src/world/stake.ts`
-craftable iron-stake world-anchor (recipe 16: scrap×3 + branch×1); new
-`stake` kind on RopeEndpoint union; save additive (no version bump);
-LMB-on-stake ties player-tethered sled, RMB-on-stake pulls it up.
-Stake mesh 3 iteration rounds. **Cut #3** — raider_corpse +
-sandworm_carcass deferred. **Tier 2 multi-worm**: SAVE_VERSION
-**v12 → v13**; `ctx.sandWorm: SandWorm | null` → `ctx.sandWorms:
-{ list: SandWorm[] }`; `SandWorm.id` + `_nextWormId` + `_colliderToWorm`
-Map; `applyClosestTremorEffect` picks closest threat-state worm;
-`SANDWORM_COUNT = 2` + `SANDWORM_MIN_SEPARATION = 400m`; rejection-sample
-placement verified across seeds (~1500m apart); pre-v13 saves migrate
-singleton → `sandWorms[0]`. Also fixed a latent version-check bug
-silently rejecting v12 saves. **Tier 3 lizard pipeline lift**: 5
-iteration rounds (R1 baseline, R2 head orientation + body stretch, R3
-feet ground contact, R4 belly-on-ground Y-squash, R5 head-body overlap
-for smooth neck). Lathe body (8-point profile, ribcage swell) + Lathe
-head (snout → eye area → neck) + tapered Lathe tail + asymmetric legs
-(front shorter than rear, knee bumps, sprawl). Lizard reads as
-anatomical reptile. **Tier 4 rig polish**: 4A footstep cadence sync
-via `rig.stepCount` (audio phase-locked to visible heel-strikes,
-legacy `_stepAccum` is fallback); 4B 9 items tagged with
-`thirdPersonScale`; 4D footstep dust at `rig.ankles[parity]` world
-position. **Cut #2** — 4C aim twist-IK deferred. **Tier 5 procgen
-POI**: 5A `orbital_pod_cluster` 6th wreck class (12% roulette share,
-escape_pod salvage palette); 5B `BRISTLE_ANTENNA` 6th hullSegment
-variant (3-5 antennas + 1-2 dish stubs). **Cut #1** — 5C
-dune_drill_site POI deferred. **D126-D130 added**.
+**Last shipped**: Session ACF — B1 Phase 3 follow-up: corpse/carcass
+rope-drag (closes ACE's deferred Cut #3). tsc clean. 9 files (7 modified
++ NEW `src/world/killDrag.ts` + archived brief). `RopeEndpoint` union
+gains `raider_corpse` + `sandworm_carcass` — the first *towed-body* kinds
+(rope drags them; they're not anchors). `updateKillDrag` is the first
+non-sled caller of ACE's `ropeConstraint` helper; drag state lives on the
+entity as `dragAnchor` (NOT `sled.tether`), hooked after `updateSandWorm`.
+Raider corpse: tagged on death, rope-LMB ties to player-tethered sled or
+player (drag on foot). Sandworm carcass: towable ONLY behind the speeder
+(24m carcass too heavy on foot). Sagged rope tube per dragged kill (keyed
+by id, disposed on detach). Save additive (no version bump): `dragAnchor`
+round-trips on raider + worm. `KILL_DRAG_*` tuning block. D131-D132.
+**Runtime-verified** the worm path (constraint snaps a 20m-yank back to
+the 14m leash; rope spawns/disposes; no errors). **NOT visually iterated**
+(rule 8): drag-feel/sag aesthetic + the raider path at runtime are owed to
+a human playtest. **NB**: session began as a gamedev-framework smoke-test.
 
 **Next session**: see [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
