@@ -676,6 +676,19 @@ function buildRigVisual(): {
     );
     lowerLeg.position.y = -LOWER_LEG_LEN / 2;
     kneeGroup.add(lowerLeg);
+    // ACH Cycle 2.3: boot wraps — cloth bands around the lower shin/ankle
+    // (Rey cloth-wrapped boots), same hand-wrapped vocabulary as the forearm
+    // wraps. Added to kneeGroup so they ride the lower leg.
+    const BOOT_BANDS = 5;
+    for (let b = 0; b < BOOT_BANDS; b++) {
+      const t = b / (BOOT_BANDS - 1);
+      const bandR = 0.060 - t * 0.018;                 // taper toward the ankle
+      const bw = new THREE.Mesh(new THREE.TorusGeometry(bandR, 0.011, 6, 14), wrapMat);
+      bw.position.y = -LOWER_LEG_LEN * (0.46 + t * 0.46);  // lower-shin span
+      bw.rotation.x = Math.PI / 2;
+      bw.rotation.z = (b % 2 === 0 ? 1 : -1) * 0.05;   // hand-wrapped unevenness
+      kneeGroup.add(bw);
+    }
     // ABV — ankle sub-pivot at end of lower leg. Foot + toe attach
     // here so ankle rotation around X drives heel-toe roll.
     const ankleGroup = new THREE.Group();
