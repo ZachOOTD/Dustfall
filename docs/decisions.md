@@ -1094,3 +1094,14 @@ The fundamental issue: KCC's slope projection, autostep, and contact resolution 
 **Picked**: Node-driven scenario loops + canvas-shrink for numeric sampling + pre-dismiss LMB-gating overlays. This is the reusable recipe for live-feel verification, complementing D146 (static-only via the preview MCP). The rifle "didn't fire" was NOT a combat bug — it was the overlay gate; once dismissed, fire decrements ammo correctly.
 
 **friction-score:** 2
+
+## D150 — The headless harness CAN'T verify kinematic-body-velocity-dependent behavior (gait/footsteps/on-foot-speed); those need a foreground repro (Session ACO)
+**When**: ACO tried to reproduce the user's speeder-dismount-footprint bug + random-speed-spike via the rig-shot `--scenario` harness (the D149 recipe that worked for AI/weapon state).
+
+**Why**: The player body is `KinematicPositionBased`. On-foot movement is `setNextKinematicTranslation` (position-based, bounded by `speed*dt` with dt clamped to 0.1 in loop.ts), and the rig's gait reads `rig.speedMag` from `body.linvel()` — which Rapier derives from the per-frame kinematic position delta. In the headless harness the page is hidden so the game ticks via `setTimeout(16)` at an IRREGULAR/throttled rate; the kinematic `linvel` then reads ~0 even while the body is visibly translating (ACO `footprints` scenario: body moved 1.38m but `speedMag=0`, `state=idle`, `stepCount` Δ0 — even PRE-mount). So the gait→stepCount→footprint path can't be exercised at all headlessly, and the speed feel can't be observed. This is a SUPERSET limit beyond D146/D149: even the ticking harness (great for AI state machines like shrew-flee + weapon ammo state, which are position/event-based) fails for anything reading kinematic VELOCITY.
+
+**Picked**: gait/footstep/on-foot-speed/feel bugs are FOREGROUND-only (`npm run dev`, real 60fps, real kinematic linvel). Don't try to repro or "fix-and-claim" them through the harness — `speedMag=0` there is a harness artifact, not the bug. Static analysis still applies (the footstep block resyncs `_lastSeenStepCount` each frame + dt is clamped, so neither footprints nor speed has an obvious code fault) — but confirming the actual misbehavior + a fix needs real-rate observation. The night-dust gate shipped this session was verifiable headlessly precisely because it's RENDER-state (opacity vs sunHeight), not velocity.
+
+**Considered alternatives**: driving the body via direct `setTranslation` per Node step (bypasses the kinematic linvel computation entirely → still 0); forcing `rig.speedMag` manually (would fake the gait, not verify the real path). Both defeat the purpose.
+
+**friction-score:** 2

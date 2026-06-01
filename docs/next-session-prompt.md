@@ -1,51 +1,49 @@
-# Session ACO — Kickoff Brief: foreground feel-tune of dynamic aim-twist, then breadth
+# Session ACP — Kickoff Brief: foreground repro+fix of the velocity-dependent bugs, then the larger deferred bugs
 
-> ACN closed the ACL rule-8 visual-triage debt: it fixed the Playwright cursor-trap, built a ticking
-> `--scenario` harness, made aim-twist DYNAMIC, and verified shrew-flee / aim-twist / rifle-fire all
-> PASS. What remains is a light FEEL pass on the new dynamic aim-twist (the harness underestimates the
-> real continuous-turn peak), then the project is open for breadth or a player-model follow-up.
+> ACO took in 5 user-reported bugs, shipped the night ambient-dust gate (headless-verifiable), and
+> established that two of them — speeder-dismount footprints + the random speed spike — are
+> velocity/real-rate-dependent and CANNOT be reproduced in the headless harness (D150). Those, plus
+> the deferred dynamic-aim-twist feel-tune (D148), are FOREGROUND work this session.
 
 ## Read these now (in order)
-1. **CLAUDE.md** (auto-loaded) — rules; note rule 8 (visual iteration), the tick order.
-2. **docs/session-end-report.md** — cumulative state through ACN (top "Current state" + "ACN scope" + "Suggested next").
-3. **docs/decisions.md** tail — **D149** (live-feel harness recipe: Node-driven sampling + pre-clear LMB-gating overlays), **D148** (dynamic aim-twist), **D147** (automated entry must deterministically skip PointerLock), **D146** (preview MCP can't tick — use the harness or foreground), D142 (lighting mood = the big realism lever), D107 (zero-asset).
-4. **docs/backlog.md** — the aim-twist feel-tune item + the rest of the backlog for breadth.
-5. `shared-memory/iterative-polish-discipline.md` + `preview-screenshot-tips.md` (now documents the hidden-tab rAF freeze + the harness recipe).
+1. **CLAUDE.md** (auto-loaded) — rules; note the tick order + rule 8.
+2. **docs/session-end-report.md** — cumulative state through ACO (top "Current state" + "ACO scope" + "Suggested next").
+3. **docs/decisions.md** tail — **D150** (kinematic-velocity behavior is foreground-only to verify), **D148** (dynamic aim-twist), D147 (skipLock), D149 (live-feel harness recipe), D146 (preview MCP can't tick).
+4. **docs/backlog.md** — the "ACN user-reported bugs" block (footprints + speed-spike flagged foreground-repro; sled-POI + panel-clipping deferred-larger).
+5. `shared-memory/iterative-polish-discipline.md` + `preview-screenshot-tips.md`.
 
 ## What's already built
-A full singleplayer desert-survival loop + a believable stylized procedural player rig (skinned, dressed, PBR, with dynamic aim-twist). ACL's 8 features are shipped + now fully triaged (ACM static + ACN live): night-sky stars, sweeping sandstorm wall, in-storm penalty, amban rifle, desert shrew, speeder damping, worm-audio attenuation, megaWreck panels. SAVE_VERSION 14. A Playwright `rig-shot` harness with static pose/closeup shots + live `--scenario` mode (shrew-flee/aim-twist/rifle).
+A full singleplayer desert-survival loop + a believable stylized procedural player rig (skinned, dressed, PBR, dynamic aim-twist). Night sky now reads clean (ambient dust gated off at night). A Playwright `rig-shot` harness with static pose/closeup shots + live `--scenario` mode (shrew-flee/aim-twist/rifle/night-sky/footprints). SAVE_VERSION 14.
 
-## Session ACO focus — feel-tune dynamic aim-twist (foreground), then pick a breadth/polish direction
-The aim-twist mechanic is correct (turn-rate lead, D148) but its magnitude wants a human feel-judgment that the headless harness can't give (Node-side sampling is bursty/underestimates). This is a short top item; the bulk of ACO is whatever breadth/polish you pick after.
+## Session ACP focus — FOREGROUND repro+fix the velocity-dependent bugs + feel-tune aim-twist
+These need a real-rate `npm run dev` session with a human (you) at the keyboard — the headless harness can't exercise kinematic `linvel` (D150). Drive each, observe, fix, re-observe.
 
 ## Priority items (in order)
-1. **Foreground aim-twist feel-tune** (`tuning.ts` AIM_TWIST_* + `playerRig.ts`) — run `npm run dev` in a real browser tab, go 3P, turn/strafe, and judge: does the upper body lead into turns naturally (not too stiff, not whippy, no snap, doesn't fight the walk swing)? Tune `AIM_TWIST_TURN_GAIN` (0.10 — likely bump toward 0.15-0.25), `AIM_TWIST_BIAS` (0.18 resting), `AIM_TWIST_LERP` (0.12 smoothing). Acceptance: reads as an aim-ready torso lead in motion.
-2. **Pick a breadth/polish direction** (choose one, or fan out an overnight):
-   - Another **fanned-out breadth overnight** (D143 lane+integrator pattern) — more procgen/POI/biome, creatures, audio, polish.
-   - **In-game lighting mood** (D142 — the biggest remaining in-game realism lever; whole-game aesthetic, so surface the direction before committing).
-   - **PM-D cloth physics** or **PM-S.3 torso skinning** (player-model depth).
-3. **(Optional) extend the `--scenario` harness** for star-twinkle/storm-sweep in-motion feel if you want those verified without a foreground watch (the recipe is in D149 — Node-driven, shrink canvas for tick-only sampling).
+1. **Speeder-dismount footprints** (`controller.ts` footstep block + `speeder.ts` mount/dismount + `playerRig.ts` gait). Repro: `npm run dev`, 3P, walk (footprints appear) → mount speeder (E) → ride → dismount (E) → walk again. If footprints/`rig.stepCount` don't resume, the gait wedged on dismount. Static analysis found no obvious fault (controller resyncs `_lastSeenStepCount` each frame; gait phase is absolute-time; `velocityY` reset on dismount) — so observe what actually breaks. Likely candidates: rig `speedMag` reading 0 post-dismount, or a state/parity desync.
+2. **Random dramatic speed spike** (`controller.ts` on-foot `speed*dt` is bounded — dt clamped 0.1 in `loop.ts`; so suspect the SPEEDER, a dynamic body — `speeder.ts` `setLinvel` lerp / collision penetration). Repro: play on-foot AND on-bike; note when the spike happens (after collision? after dismount? during boost?) to localize. Fix the unbounded path (clamp linvel, or fix the state-leak).
+3. **Dynamic aim-twist feel-tune** (`tuning.ts` AIM_TWIST_*) — 3P turn/strafe; tune `AIM_TWIST_TURN_GAIN` (0.10, likely bump toward 0.15-0.25) / `AIM_TWIST_BIAS` (0.18) / `AIM_TWIST_LERP` (0.12) until the upper-body lead reads natural in continuous turns.
 
-## Stretch / then
-- The continuous-polish + non-cycle backlog (chunk streaming A1, flagship→composite procgen, item-viewmodel fidelity remainder, per-item colliders).
+## Stretch / then (larger deferred bugs)
+- **Sled-vs-POI collision** — the sled (KinematicPositionBased) passes through POI/wreck static colliders. Needs an explicit shapecast against POI colliders before the kinematic slide moves (non-trivial). `sled.ts`.
+- **Salvage-panel interior clipping** — sweep ALL panel kinds across ALL POIs; ensure interior components are visible (not buried in the hull) when the panel is open. A per-POI visual pass (the harness can screenshot POIs statically — drive the camera to each open panel).
 
 ## Autonomy contract
 Ambiguous → GDD pillars + decisions realism dial → D-entry → continue. Surface only on: D107 (asset), save bumps (D81), destructive git, whole-game aesthetic shifts (lighting mood — D142).
 
 ## Stop conditions
-Wall-clock / budget · 3 fix-walls on one feature (cut/log) · catastrophic block · destructive attempt.
+Wall-clock / budget · 3 fix-walls on one bug (cut/log) · catastrophic block · destructive attempt · **if a bug can't be reproduced foreground either, log the finding + move on (don't blind-fix — D150 discipline).**
 
-## Notable footguns (verification)
-- **D149**: to verify LIVE behavior, use `npm run rig-shot --scenario=<name>` (ticking) or a foreground tab — NOT the preview MCP (D146, hidden-tab rAF freeze). In the harness: drive/sample from Node (in-page rAF is throttled), and the tutorial overlay is auto-dismissed (else it gates LMB).
-- **D147**: the harness no longer traps the cursor (`enterGame` skips PointerLock). Don't re-introduce a lock on any automated-entry path.
-- **D148**: aim-twist is dynamic now — `_aimTwist` is driven by turn-rate, not a constant. Don't revert to a static bias.
+## Notable footguns
+- **D150**: footprint/speed/gait/feel bugs are FOREGROUND-only — the headless harness's kinematic `linvel` reads 0 (`speedMag=0`). Don't try to repro or fix-and-claim them via the harness.
+- **D149**: for AI/weapon-state live checks (position/event-based), the `--scenario` harness works — drive from Node, not in-page rAF; pre-dismiss the tutorial overlay (gates LMB). **D146**: preview MCP can't tick at all.
+- **D147**: the harness no longer traps the cursor (`enterGame` skips PointerLock) — don't re-add a lock on automated entry.
 - D107 procedural-only; rule 2 magic-numbers→tuning.ts; rule 6 no innerHTML; rule 7 box depth ≥10cm. SAVE_VERSION 14 (additive + bump to 15 for any save change).
 
 ## Verification protocol
-`npm run verify` (= `tsc --noEmit`) = type gate. FEEL gate for aim-twist = a foreground 3P playtest + honest critique + iterate (rule 8). Live behavior elsewhere = the `--scenario` harness.
+`npm run verify` (= `tsc --noEmit`) = type gate. The velocity/feel bugs' QUALITY gate = a foreground `npm run dev` repro + observe + iterate (rule 8). The night-dust-style render-state changes can still use the `--scenario` harness.
 
 ## Begin block
-1. Read CLAUDE.md, session-end-report, decisions tail (D146-D149), backlog, the discipline docs.
+1. Read CLAUDE.md, session-end-report, decisions tail (esp. D150), backlog bug block, the discipline docs.
 2. `npm run verify` baseline.
-3. Foreground `npm run dev`, feel-tune aim-twist (priority 1).
-4. TaskCreate the chosen breadth/polish direction; execute (fan out if independent — D143).
+3. Foreground `npm run dev`; repro the footprint bug (priority 1) → fix → re-observe.
+4. TaskCreate one task per priority item; work them in order.

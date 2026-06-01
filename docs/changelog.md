@@ -3,6 +3,38 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ACO — 2026-06-01 — Night ambient-dust gate (calm starry night) + 5 user-bugs logged + harness scenarios ✓ verify pass (tsc clean)
+
+`verified` — `npm run verify` (tsc) PASS + night-sky scenario confirms dust hidden at night (state +
+screenshot). A bug-intake + targeted-fix session: the user reported 5 bugs; one was a clean,
+verifiable fix (shipped), two need a foreground repro (the headless harness can't exercise them —
+D150), two are larger (deferred).
+
+**Logged (5 user-reported bugs → backlog):** speeder-dismount footprints, random speed spike,
+sled-vs-POI collision, ambient dust at night, salvage-panel interiors clipping through POI walls.
+
+**Shipped + verified:**
+- **Night ambient-dust gate** (`ambientDust.ts` + `tuning.ts`): the always-on tan drift now fades to
+  0 across dusk by `ctx.time.sunHeight` (new `AMBIENT_DUST_NIGHT_FADE_LO/HI` = 0.02/0.20) and the
+  layer hides entirely at night. Stars now read on a clean dark sky + the night feels calm. Verified
+  via the new `night-sky` scenario: at `sunHeight:-1`, `dustVisible:false` + a clean starfield shot.
+  (The near-white chest-height `dustMotes` — a deliberate firelight-air detail — were left on.)
+
+**Harness (`scripts/rig-shot.mjs`):** added `--scenario=night-sky` (sets midnight, confirms dust
+gated off, frames the stars) + `--scenario=footprints` (walk → mount → dismount → walk, samples
+`rig.stepCount`).
+
+**Investigated, NOT fixed (need a foreground repro — D150):**
+- **Speeder-dismount footprints** + **random speed spike**: both depend on the player body's KINEMATIC
+  `linvel()` (rig gait reads `speedMag` from it; movement is `speed*dt`). In the throttled headless
+  harness the kinematic `linvel` reads 0 (`speedMag=0`/`state=idle` even while the body moves), so the
+  gait/footstep path can't be exercised at all — even pre-mount. Static analysis: the footstep block
+  resyncs `_lastSeenStepCount` every frame + dt is clamped (loop.ts 0.1), so neither has an obvious
+  code fault; both need real-rate foreground observation. Carried to ACP.
+
+**Deferred (larger):** sled-vs-POI collision (kinematic-vs-static shapecast — non-trivial), salvage-
+panel interior clipping (a visual sweep across all POI × panel kinds).
+
 ## Session ACN — 2026-06-01 — Playwright cursor-trap fix + live-scenario harness + ACL live-feel triage (dynamic aim-twist) ✓ verify pass (tsc clean)
 
 `verified` — `npm run verify` (tsc) PASS + all three live-feel items exercised in a TICKING Playwright

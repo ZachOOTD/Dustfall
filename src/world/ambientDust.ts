@@ -60,16 +60,22 @@ export function updateAmbientDust(ctx: GameContext, dt: number): void {
   const a = ctx.ambientDust;
   if (!a) return;
 
-  // When the storm is building or active, hide our layer entirely.
+  // ACO — fade the dust out at night so stars read + night feels calm.
+  // Daylight factor from sun height (-1..1): 0 at/below LO (night), 1 by HI.
+  const lo = Tuning.AMBIENT_DUST_NIGHT_FADE_LO;
+  const hi = Tuning.AMBIENT_DUST_NIGHT_FADE_HI;
+  const dayFactor = Math.max(0, Math.min(1, (ctx.time.sunHeight - lo) / (hi - lo)));
+
+  // When the storm is building or active, OR it's night, hide our layer entirely.
   const storm = ctx.weather.intensity;
-  const wantVisible = storm < Tuning.AMBIENT_DUST_SUPPRESS_STORM;
+  const wantVisible = storm < Tuning.AMBIENT_DUST_SUPPRESS_STORM && dayFactor > 0;
   if (a.particles.visible !== wantVisible) a.particles.visible = wantVisible;
   if (!wantVisible) return;
 
   // Opacity fades down as we approach the storm suppression threshold so the
-  // handoff feels smooth instead of popping off.
+  // handoff feels smooth instead of popping off — and down to 0 across dusk.
   const fade = 1 - storm / Tuning.AMBIENT_DUST_SUPPRESS_STORM;
-  a.particleMat.opacity = Tuning.AMBIENT_DUST_OPACITY * fade;
+  a.particleMat.opacity = Tuning.AMBIENT_DUST_OPACITY * fade * dayFactor;
 
   // Drift + wrap. Identical structure to weather.ts.
   _camPos.copy(a.cameraRef.position);

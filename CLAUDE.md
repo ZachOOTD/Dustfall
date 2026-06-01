@@ -64,21 +64,19 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      Prior milestones live in docs/changelog.md — do NOT accumulate "Prior milestone"
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
-**Last shipped**: Session ACN — **Playwright cursor-trap fix + live-scenario harness + the ACL
-live-feel triage ACM couldn't reach**. Fixed the OS-cursor trap during `npm run rig-shot`: the
-DEV `enterGame()` path acquired PointerLock because the focus heuristic doesn't detect headless
-Playwright; `enterGame` now calls `handoffToGame({ skipLock: true })` (deterministic — D147).
-Extended `rig-shot.mjs` with a live `--scenario` mode (ticking env; drives + samples from Node,
-NOT in-page rAF which is throttled in the hidden tab — D149). **Made aim-twist DYNAMIC** — it was
-a constant 0.35-rad 3P shoulder bias; now leads INTO turns by camera turn-rate, relaxing to a
-resting bias (D148). Triaged all 3 ACL live-feel items in the ticking env (all PASS): shrew flee
-(bolts ~8m @ ~3.2 m/s, settles, resumes wander — ACM's "didn't flee" was the frozen-tick false
-alarm), aim-twist sweep, rifle fire/reload (ammo 3→2 on fire, →8 on reload). tsc clean.
+**Last shipped**: Session ACO — **night ambient-dust gate (calm starry night) + 5 user-bugs logged**.
+The user reported 5 bugs; logged all to backlog. Fixed + verified the **night ambient-dust gate**:
+the always-on tan drift now fades to 0 across dusk by `ctx.time.sunHeight` (`AMBIENT_DUST_NIGHT_FADE_
+LO/HI`) so stars read on a clean dark sky + the night feels calm (verified via a new `night-sky`
+harness scenario: `dustVisible:false` at night + a clean starfield shot). Extended the harness with
+`night-sky` + `footprints` scenarios. **Finding (D150)**: the speeder-dismount footprint bug + the
+random speed-spike both depend on the player body's KINEMATIC `linvel()`, which reads 0 in the
+throttled headless harness (`speedMag=0`/idle even while moving) — so they can't be verified
+headlessly; they need a FOREGROUND repro. tsc clean.
 
-**Next session (ACO)**: feel-tune the new dynamic aim-twist in a foreground playtest (the harness
-underestimates the continuous-turn peak; `AIM_TWIST_TURN_GAIN`/`BIAS` may want a bump), then more
-backlog breadth (another fanned-out overnight) or a player-model follow-up (PM-D cloth / in-game
-lighting mood — D142). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
+**Next session (ACP)**: foreground repro + fix the footprint + speed-spike bugs (real-rate `npm run
+dev`; D150), plus the deferred aim-twist feel-tune (D148). Then the larger deferred bugs: sled-vs-POI
+collision + salvage-panel interior clipping sweep. See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 

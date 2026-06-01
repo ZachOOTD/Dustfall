@@ -453,6 +453,11 @@ export const Tuning = {
   AMBIENT_DUST_SPREAD: 40,
   AMBIENT_DUST_OPACITY: 0.10,
   AMBIENT_DUST_SUPPRESS_STORM: 0.15,  // hide above this storm intensity
+  // ACO — fade the ambient tan drift OUT at night so the stars read + the
+  // night feels calm. Daylight factor from ctx.time.sunHeight (-1..1): fully
+  // gone at/below LO (sun below horizon), full by HI (well into day).
+  AMBIENT_DUST_NIGHT_FADE_LO: 0.02,   // sunHeight ≤ this → dust fully hidden (night)
+  AMBIENT_DUST_NIGHT_FADE_HI: 0.20,   // sunHeight ≥ this → dust at full day opacity
 
   // Session AAG — fine dust motes (complementary to ambientDust).
   // Bone-warm white, smaller particles, persists through storms until

@@ -243,6 +243,106 @@ const SCENARIOS = {
     await page.screenshot({ path, fullPage: false });
     console.log(`[rig-shot] saved ${path}`);
   },
+
+  // Night-sky (ACO): set deep night, let lighting settle sunHeight, confirm the
+  // ambient tan dust drift is hidden (gated on sun height) + capture the sky so
+  // the stars read. Camera pitched up toward the star field.
+  'night-sky': async (page) => {
+    const info = await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      ctx.three.renderer.setSize(900, 1100, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 900 / 1100; cam.updateProjectionMatrix(); }
+      window.__game.setTime(0.0);            // midnight
+      return { dayTime: ctx.time.dayTime };
+    });
+    await page.waitForTimeout(900);          // let lighting.update settle sunHeight + dust fade
+    const result = await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      const cam = ctx.three.camera;
+      // pitch the camera up ~35° to frame the star field
+      cam.quaternion.setFromEuler(new (cam.rotation.constructor)(0.6, 0, 0, 'YXZ'));
+      cam.updateMatrixWorld(true);
+      return {
+        sunHeight: +ctx.time.sunHeight.toFixed(3),
+        dustVisible: ctx.ambientDust ? ctx.ambientDust.particles.visible : null,
+        dustOpacity: ctx.ambientDust ? +ctx.ambientDust.particleMat.opacity.toFixed(4) : null,
+      };
+    });
+    console.log('[night-sky] ' + JSON.stringify(result));
+    await page.waitForTimeout(300);
+    const path = join(OUT, 'scen-night-sky.png');
+    await page.screenshot({ path, fullPage: false });
+    console.log(`[rig-shot] saved ${path}`);
+  },
+
+  // Footprints (ACO repro): walk → mount speeder → dismount → walk again, and
+  // sample rig.stepCount each phase. If stepCount stops climbing after the
+  // mount/dismount cycle, the gait (and thus footprint spawning) is wedged.
+  // Driven from Node (keys persist; pressed cleared each tick → re-inject E).
+  'footprints': async (page) => {
+    await page.evaluate(() => { window.__game.ctx.three.renderer.setSize(64, 64, false); });
+    const walk = async (label, ms) => {
+      const before = await page.evaluate(() => {
+        const c = window.__game.ctx;
+        c.input.keys['KeyW'] = true;          // hold forward (keys persist; not cleared by endInputFrame)
+        return { step: c.player.rig.stepCount, x: +c.player.body.body.translation().x.toFixed(2) };
+      });
+      await page.waitForTimeout(ms);
+      const after = await page.evaluate(() => {
+        const c = window.__game.ctx;
+        c.input.keys['KeyW'] = false;
+        return {
+          step: c.player.rig.stepCount, x: +c.player.body.body.translation().x.toFixed(2),
+          speedMag: +c.player.rig.speedMag.toFixed(2), state: c.player.rig.state,
+        };
+      });
+      console.log(`[footprints] ${label}: stepCount ${before.step}→${after.step} (Δ${after.step - before.step}), moved ${(after.x - before.x).toFixed(2)}m, speedMag=${after.speedMag} state=${after.state}`);
+      return after.step - before.step;
+    };
+    const dWalkA = await walk('walk-A (pre-mount)', 1600);
+    // Teleport adjacent to the speeder so the mount (proximity-gated) succeeds.
+    await page.evaluate(() => {
+      const c = window.__game.ctx;
+      const s = c.speeder;
+      if (s) {
+        const gy = c.terrain.heightAt(s.pos.x + 1.2, s.pos.z);
+        c.player.body.body.setTranslation({ x: s.pos.x + 1.2, y: gy + 1.6, z: s.pos.z }, true);
+      }
+    });
+    await page.waitForTimeout(150);
+    // Mount: re-inject E until mounted (updateSpeeder reads pressed.has('KeyE')).
+    let mounted = false;
+    for (let i = 0; i < 12 && !mounted; i++) {
+      mounted = await page.evaluate(() => {
+        const c = window.__game.ctx;
+        c.input.pressed.add('KeyE');
+        return !!(c.speeder && c.speeder.mounted);
+      });
+      await page.waitForTimeout(110);
+    }
+    const distInfo = await page.evaluate(() => {
+      const c = window.__game.ctx;
+      const p = c.player.body.body.translation();
+      const s = c.speeder;
+      return { mounted: !!(s && s.mounted), dist: s ? +Math.hypot(p.x - s.pos.x, p.z - s.pos.z).toFixed(1) : null };
+    });
+    console.log(`[footprints] after mount attempts: ${JSON.stringify(distInfo)}`);
+    await page.waitForTimeout(800); // ride a beat
+    // Dismount.
+    for (let i = 0; i < 12; i++) {
+      const stillMounted = await page.evaluate(() => {
+        const c = window.__game.ctx;
+        c.input.pressed.add('KeyE');
+        return !!(c.speeder && c.speeder.mounted);
+      });
+      await page.waitForTimeout(110);
+      if (!stillMounted) break;
+    }
+    await page.waitForTimeout(300);
+    const dWalkB = await walk('walk-B (post-dismount)', 1600);
+    console.log(`[footprints] VERDICT: pre-mount Δstep=${dWalkA}, post-dismount Δstep=${dWalkB} → ${dWalkB > 0 ? 'footprints RESUME (no bug here)' : 'footprints WEDGED (bug confirmed)'}`);
+  },
 };
 
 function startDev() {

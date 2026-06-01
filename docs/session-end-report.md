@@ -2,7 +2,17 @@
 
 Cumulative state. Rewritten end-to-end at each `/session-end`.
 
-**Current state**: Session ACN shipped (2026-06-01 — Playwright cursor-trap fix + live-scenario harness + the ACL live-feel triage). 95 sessions post-MVP. `npm run verify` (tsc) PASS. **SAVE_VERSION 14** (unchanged). ACN fixed the OS-cursor trap during `npm run rig-shot` (DEV `enterGame` acquired PointerLock because the focus heuristic misses headless Playwright → now `handoffToGame({skipLock:true})` deterministically — D147), extended `rig-shot.mjs` with a live `--scenario` mode that ticks the game + samples from Node (D149), made aim-twist **dynamic** (camera turn-rate lead, was a constant bias — D148), and verified all 3 ACL live-feel items in the ticking env (shrew flee, aim-twist sweep, rifle fire/reload — all PASS; ACM's frozen-tick concerns resolved). The ACM→ACN arc fully closes the ACL rule-8 visual-triage debt. **Next session (ACO) = foreground feel-tune of dynamic aim-twist**, then breadth or a player-model follow-up.
+**Current state**: Session ACO shipped (2026-06-01 — night ambient-dust gate + 5 user-bugs logged + harness scenarios). 96 sessions post-MVP. `npm run verify` (tsc) PASS. **SAVE_VERSION 14** (unchanged). ACO was a bug-intake + targeted-fix session: the user reported 5 bugs (all logged to backlog). Shipped + verified the **night ambient-dust gate** (the always-on tan drift fades to 0 across dusk by `ctx.time.sunHeight` → stars read on a clean dark sky + calm night; verified via a new `night-sky` harness scenario). **Finding (D150)**: the speeder-dismount footprint bug + the random speed-spike both depend on the player body's KINEMATIC `linvel()`, which reads 0 in the throttled headless harness — so they can't be verified headlessly and need a foreground repro (deferred to ACP, along with the larger sled-POI-collision + panel-clipping bugs). **Next session (ACP) = foreground repro+fix footprints + speed-spike + the deferred aim-twist feel-tune.**
+
+## ACO scope (this session) — night ambient-dust gate + bug intake
+
+The user reported 5 bugs; all logged to `backlog.md`. One was a clean headless-verifiable fix (shipped); two need a foreground repro; two are larger (deferred).
+- **Night ambient-dust gate** (`ambientDust.ts` + `tuning.ts`, SHIPPED): the always-on tan drift now multiplies opacity by a daylight factor from `ctx.time.sunHeight` (new `AMBIENT_DUST_NIGHT_FADE_LO/HI` = 0.02/0.20) and hides the layer entirely at night. Verified via the `night-sky` scenario (`sunHeight:-1` → `dustVisible:false` + a clean starfield shot). The near-white chest-height `dustMotes` (a deliberate firelight-air detail) were left on.
+- **Harness** (`rig-shot.mjs`): added `night-sky` + `footprints` scenarios.
+- **Footprints + speed-spike (D150, NOT fixed)**: both read the kinematic body's `linvel()`; the throttled headless tick makes `linvel` read 0 (`speedMag=0`/idle even while moving) so the gait/footstep path can't run there — even pre-mount. No obvious code fault on static read. Need foreground repro.
+- **Sled-POI collision + panel-clipping (deferred, larger)**: kinematic-vs-static shapecast / a visual sweep across all POIs.
+
+## ACN scope — cursor-trap fix + live-scenario harness + ACL live-feel triage ACN fixed the OS-cursor trap during `npm run rig-shot` (DEV `enterGame` acquired PointerLock because the focus heuristic misses headless Playwright → now `handoffToGame({skipLock:true})` deterministically — D147), extended `rig-shot.mjs` with a live `--scenario` mode that ticks the game + samples from Node (D149), made aim-twist **dynamic** (camera turn-rate lead, was a constant bias — D148), and verified all 3 ACL live-feel items in the ticking env (shrew flee, aim-twist sweep, rifle fire/reload — all PASS; ACM's frozen-tick concerns resolved). The ACM→ACN arc fully closes the ACL rule-8 visual-triage debt. **Next session (ACO) = foreground feel-tune of dynamic aim-twist**, then breadth or a player-model follow-up.
 
 ## ACN scope (this session) — cursor-trap fix + live-scenario harness + ACL live-feel triage
 
@@ -205,41 +215,41 @@ Existing tunables of interest:
 
 ## Suggested next session (1-3 directions in priority order)
 
-1. **Foreground feel-tune of the dynamic aim-twist** (TOP, Session ACO). ACN made aim-twist dynamic (D148) + harness-verified the directional response, but the Node-side sampling underestimates the real continuous-turn peak. Play a foreground `npm run dev` 3P session; tune `AIM_TWIST_TURN_GAIN`/`AIM_TWIST_BIAS`/`AIM_TWIST_LERP` for feel (likely a gain bump). Optionally add `--scenario`s for star twinkle/storm-sweep in-motion feel. The live-feel triage of shrew-flee + rifle is DONE (ACN, both PASS via the harness).
-2. **More backlog breadth** — another fanned-out overnight (the D143 file-ownership-lane + integrator pattern worked). Plenty remains (more procgen/POI/biome, creatures, audio, polish).
-3. **Player-model follow-ups** (optional) — PM-D cloth physics; or the game **lighting mood** (D142, biggest in-game realism lever, whole-game aesthetic — surface first); or the D107 asset fork (photoreal, user's call).
+1. **Foreground repro+fix the footprint + speed-spike bugs, + the deferred aim-twist feel-tune** (TOP, Session ACP). All three are foreground-only (D150 — kinematic-velocity / continuous-turn-feel can't be exercised headlessly). In `npm run dev`: (a) walk→mount→dismount→walk, confirm/fix footprints resuming; (b) play on-foot + on-bike to localize the speed spike; (c) 3P turn/strafe to feel-tune `AIM_TWIST_TURN_GAIN`/`BIAS`/`LERP` (D148, likely a gain bump).
+2. **The larger deferred bugs** — sled-vs-POI collision (kinematic-vs-static shapecast) + the salvage-panel interior-clipping sweep (per-POI visual pass; the harness can screenshot POIs statically).
+3. **More backlog breadth** — another fanned-out overnight (D143), or the game **lighting mood** (D142, biggest in-game realism lever — surface first), or PM-D cloth.
 
 ---
 
 ## Time spent
 
-95 sessions shipped (A through ACN). Approx ~300-370h cumulative human-facing dev time. ACN was a focused bug-fix + tooling + verification session (cursor-trap fix, scenario harness, dynamic aim-twist, live-feel triage; 5 files touched, no save change). (Tail of the same very long conversation: ACJ skinned rig → ACK realism → ACL overnight breadth → ACM static triage → ACN live triage.)
+96 sessions shipped (A through ACO). Approx ~300-371h cumulative human-facing dev time. ACO was a bug-intake + targeted-fix session (5 bugs logged; 1 shipped fix; 4 files touched, no save change). (Tail of the same very long conversation: ACJ skinned rig → ACK realism → ACL overnight breadth → ACM static triage → ACN live triage → ACO bug intake.)
 
 ---
 
 ## State at session end
 
-- **Git status**: ACM committed + tagged + pushed (`23fe238`, `session-ACM`). ACN dirty: `scripts/rig-shot.mjs` (scenario harness + cursor-trap tutorial-init), `src/config/tuning.ts` (aim-twist consts), `src/core/input.ts` (pointerLockSuppressed helper + start-overlay guard), `src/main.ts` (handoffToGame skipLock), `src/player/playerRig.ts` (dynamic aim-twist) + `docs/` updates. Commit handoff below.
+- **Git status**: ACN committed + tagged + pushed (`7e3b29a`, `session-ACN`). ACO dirty: `src/world/ambientDust.ts` (night gate) + `src/config/tuning.ts` (`AMBIENT_DUST_NIGHT_FADE_*`) + `scripts/rig-shot.mjs` (night-sky + footprints scenarios) + `docs/` updates. Commit handoff below.
 - **Branch**: `master`. **Save state**: localStorage **v14** (unchanged this session).
-- **Ports bound**: dev servers may linger from the preview-MCP (5180) / rig-shot harness (5191); both dev-only. The rig-shot harness now ticks safely without trapping the cursor (D147).
-- **Rule-8 status**: the ACL visual-triage debt is now FULLY CLOSED (ACM static layer + ACN live-feel). aim-twist became dynamic (D148) and wants only a foreground feel-tune of its gain/bias (ACO).
+- **Ports bound**: dev servers may linger from the preview-MCP (5180) / rig-shot harness (5191); both dev-only.
+- **Rule-8 status**: the night-dust gate is a render-state change (opacity vs sunHeight) — verified headlessly via the `night-sky` scenario (state + screenshot). The footprint/speed-spike bugs are velocity-dependent → foreground-only (D150), honestly deferred (NOT shipped/claimed).
 
 ---
 
 ## Token spend this session (estimated)
 
-ACN was a moderate bug-fix + tooling + verification session on the main loop (no fan-out, but several iterative Playwright runs — each ~30-60s of software-WebGL rendering).
+ACO was a moderate bug-intake + single-fix session (no fan-out; a few iterative Playwright runs).
 
-- Input: moderate-high (read combat/wieldAction/controller/playerRig/input source + iterative harness debug output + docs).
-- Output: moderate — the cursor-trap fix, the dynamic aim-twist, the `--scenario` harness (~120 LOC of new harness), and the session-end doc updates.
-- Cost (Opus 4.8 rates): around the project baseline; the iterative harness runs (find-and-fix the rAF-throttle + tutorial-overlay footguns) were the bulk. Not flagged ≥2×.
+- Input: high (read controller/speeder/footprints/playerRig/loop source to investigate the footprint + speed bugs + dust systems + docs).
+- Output: moderate — the night-dust gate, two harness scenarios, the bug-logging, and the session-end docs.
+- Cost (Opus 4.8 rates): around the project baseline. Not flagged ≥2×.
 
-Notable: ACN turned D146's "can't verify live behavior" ceiling into a working recipe (D149) — drive the ticking game from Node-side waits (the game survives the hidden-tab rAF throttle via its setTimeout fallback) + pre-clear the LMB-gating tutorial overlay. The rifle "didn't fire" scare was that overlay gate, not a combat bug.
+Notable: ACO extended the verification-ceiling canon to D150 — even the ticking harness can't exercise KINEMATIC-velocity-dependent behavior (the throttled tick makes `linvel` read 0), so gait/footstep/on-foot-speed bugs are foreground-only. The dust gate was shippable precisely because it's render-state, not velocity. Good restraint: did NOT blind-fix the 2 un-verifiable bugs.
 
 ---
 
 ## Commit handoff
 
-Per CLAUDE.md (session-end auto-runs commit + tag + push). ACN is a bug-fix + tooling + verification session:
-- Code: `src/core/input.ts` + `src/main.ts` (cursor-trap fix — deterministic skipLock, D147), `src/player/playerRig.ts` + `src/config/tuning.ts` (dynamic aim-twist, D148), `scripts/rig-shot.mjs` (live `--scenario` harness + tutorial pre-dismiss, D149).
-- Docs: changelog ACN, CLAUDE.md (Last shipped + ACO-next), roadmap (ACN shipped + visual-triage marked done), decisions **D147/D148/D149**, backlog (visual-triage done + aim-twist feel-tune follow-up), this report, next-session-prompt ACO.
+Per CLAUDE.md (session-end auto-runs commit + tag + push). ACO is a bug-intake + single-fix session:
+- Code: `src/world/ambientDust.ts` + `src/config/tuning.ts` (night ambient-dust gate), `scripts/rig-shot.mjs` (`night-sky` + `footprints` harness scenarios).
+- Docs: changelog ACO, CLAUDE.md (Last shipped + ACP-next), roadmap (ACO shipped), decisions **D150** (kinematic-velocity behavior is foreground-only to verify), backlog (5 bugs logged; night-dust shipped; footprint/speed flagged foreground-repro; sled/panel deferred), this report, next-session-prompt ACP.
