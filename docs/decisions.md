@@ -1056,3 +1056,14 @@ The fundamental issue: KCC's slope projection, autostep, and contact resolution 
 **Picked**: keep `weather.intensity` as the immutable contract; the wall is an upstream producer of it. **Don't** make downstream systems read wall geometry directly — that would fork the contract and break the parallel-lane independence.
 
 **friction-score:** 2
+
+## D146 — Live AI/feel verification can't run in the headless preview MCP (hidden-tab rAF freeze); use a foreground env (Session ACM)
+**When**: ACM tried to visual-triage the ACL features' live BEHAVIOR (shrew flee motion, aim-twist sweep, rifle fire/reload) through the preview MCP `__game.enterGame()` path.
+
+**Why**: The preview MCP tab runs with `document.visibilityState:"hidden"`, so the browser throttles `requestAnimationFrame` to ~zero — the game's rAF tick loop is FROZEN (`ctx.time.elapsed` does not advance; an rAF callback never fired within 30s). Nothing in the per-frame update path runs, so no AI/animation/combat can be exercised, regardless of pause/lock state. There are TWO gates to clear, and only the first is workaround-able: (1) `isPlaying(ctx)` requires `ctx.input.controls.isLocked` — the headless enter path never locks the pointer, so set `ctx.input.controls.isLocked = true` in an eval; (2) the rAF freeze itself is a hard browser-level block with no page-script override. STATIC verification still works (last-rendered frame persists for screenshots; sync evals read state; geometry/wiring inspectable) — that's how the shrew model, rifle viewmodel, and rig plumbing were confirmed this session.
+
+**Picked**: for anything requiring the tick to advance (motion, feel, timed state machines), verify in a TICKING environment — a foreground `npm run dev` browser tab the human drives, or the Playwright `rig-shot` harness (its Chromium page is `visible`, so rAF runs — extend it to equip items / set aim state for these specific checks). Do NOT attempt live-behavior triage through the preview MCP. **Corollary lesson** (the ACM bug): debug hooks that mutate state must call the REAL state-transition fn (e.g. `weather.triggerStorm`→`armWall`), not re-set fields inline — inline duplication silently rots when the real path gains side effects (the stale `triggerStorm` produced 0 intensity post-D145).
+
+**Considered alternatives**: spoofing `document.hidden`/visibility (read-only; throttle is enforced below page script); driving a manual tick from the eval (the main-loop closure isn't exposed; update fns aren't importable in page context). Both dead ends.
+
+**friction-score:** 3

@@ -7,6 +7,7 @@ import { spawnRaider as spawnRaiderEntity, damageRaider } from '../enemies/raide
 import { resetTutorial, showControlsPanel } from '../ui/tutorial.ts';
 import { getAudioStateSnapshot, type AudioStateSnapshot } from '../audio/soundscape.ts';
 import { getMusicStateSnapshot, type MusicStateSnapshot } from '../audio/music.ts';
+import { triggerStorm as triggerStormWeather } from '../world/weather.ts';
 
 declare global {
   interface Window {
@@ -122,8 +123,10 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
       };
     },
     triggerStorm() {
-      ctx.weather.state = 'building';
-      ctx.weather.stateTimer = 0;
+      // ACM fix: delegate to the real weather.triggerStorm, which ARMS the
+      // sweeping wall (ACL D145 — intensity is wall-derived; the old inline
+      // state-set left the wall dormant so a debug storm produced 0 intensity).
+      triggerStormWeather(ctx);
     },
     spawnRaider(x, z) {
       const r = spawnRaiderEntity(

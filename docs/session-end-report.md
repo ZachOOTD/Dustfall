@@ -2,9 +2,13 @@
 
 Cumulative state. Rewritten end-to-end at each `/session-end`.
 
-**Current state**: Session ACL shipped (2026-06-01 — overnight breadth, 8 backlog features via fanned-out agents). 93 sessions post-MVP. Full `tsc` PASS + runtime boot-clean (harness rendered, zero console errors). **SAVE_VERSION 14** (ACL bumped 13→14: additive shrew roster + storm-wall state, v13 back-compat — D144). ACL ran as **8 parallel file-ownership lanes + a single integrator** (~2M budget, 9 agents — methodology D143) and shipped: aim twist-IK, speeder angular damping, worm twilight-breach audio attenuation, megaWreck ground-level salvage panels, night-sky stars (twinkle/drift/cloud), Dune sweeping sandstorm (directional wall deriving the intensity carrier — D145), in-storm movement penalty, amban rifle (NEW ranged weapon) + viewmodel fidelity (3 kits), desert shrew (NEW ambient creature). The player-model arc remains complete (ACK ceiling = believable stylized human). **⚠ Rule-8 debt**: ACL's new VISUAL features shipped tsc+boot-clean but UN-iterated — a `/visual-triage` pass is the top next item. **Next session = `/visual-triage` the ACL visuals**, then more breadth or a player-model follow-up.
+**Current state**: Session ACM shipped (2026-06-01 — visual-triage of the ACL features, PARTIAL + a debug storm-hook fix). 94 sessions post-MVP. `npm run verify` (tsc) PASS. **SAVE_VERSION 14** (unchanged). ACM visually verified — via STATIC screenshots + runtime state inspection — the ACL visuals: night-sky stars, the sweeping storm wall, the desert-shrew MODEL, the amban-rifle viewmodel, and the aim-twist rig plumbing (all read correctly). It **fixed the stale debug `triggerStorm` hook** (set `weather.state` inline without arming the wall → 0 intensity; now delegates to `weather.triggerStorm`/`armWall`). **⚠ Live FEEL could NOT be verified** — shrew flee motion, the aim-twist sweep, and rifle fire/reload — because the headless preview tab is `document.visibilityState:"hidden"`, so the browser throttles rAF to zero and the **game tick is frozen** (the documented hidden-tab gotcha; **D146**). Those three are structurally sound but need a foreground `npm run dev` playtest or an extended Playwright harness. The player-model arc remains complete (ACK ceiling = believable stylized human). **Next session (ACN) = finish the live-feel triage in a TICKING environment**, then more breadth or a player-model follow-up.
 
-## ACL scope (this session) — overnight breadth: 8 features via fanned-out agents
+## ACM scope (this session) — visual-triage of the ACL features (partial) + debug storm-hook fix
+
+A `/visual-triage` pass to close ACL's rule-8 debt. **Verified clean** via static screenshots + sync state-evals (the only verification the environment allowed): night-sky stars, the sweeping sandstorm wall, the desert-shrew procedural model (renders as a recognizable small critter in-world, not broken/inside-out), the amban-rifle viewmodel (detailed, well-proportioned procedural rifle built from the metal/wood material factories), and the aim-twist rig plumbing (`_aimTwist` + `shoulders[1]` present). **Fixed**: the debug `triggerStorm` hook (`debugPanel.ts`) was stale post-ACL — it set state inline without arming the storm wall, so a debug storm produced 0 intensity; now delegates to the exported `weather.triggerStorm(ctx)` (which calls `armWall`). **Blocked (D146)**: live FEEL of shrew-flee / aim-twist-sweep / rifle-fire could not be exercised — the preview tab is `visibilityState:"hidden"` → rAF throttled to zero → tick frozen (`elapsed` stuck; an rAF callback never fired in 30s). Worked around the `isPlaying` pointer-lock gate but the rAF freeze is a hard browser-level block. Carried to ACN.
+
+## ACL scope — overnight breadth: 8 features via fanned-out agents
 
 Ran a long unattended overnight (~2M budget) as **8 disjoint file-ownership lanes in parallel + a single integrator** (D143): each lane edited only its own files + tsc + returned an integration manifest; the integrator applied all manifests to the shared seams (`main.ts` tick, `save.ts` v13→14, `GameContext.ts` `ctx.shrews`, `tuning.ts` ~40 promoted consts) and ran the authoritative full tsc (PASS). 9 agents, ~573k subagent tokens, ~12min wall.
 
@@ -190,7 +194,7 @@ Existing tunables of interest:
 
 ## Suggested next session (1-3 directions in priority order)
 
-1. **`/visual-triage` the ACL visual features** (TOP, Session ACM). Close the rule-8 debt: star twinkle/drift + cloud occlusion (night shot), Dune sweeping storm WALL (trigger + watch it sweep), desert shrew procedural model + flee AI (frame one), 3P aim-twist in motion. Iterate the ACL `tuning.ts` constants (AIM/STAR/STORM/SHREW) via `npm run rig-shot --lit=form` + preview. These shipped tsc+boot-clean but un-iterated.
+1. **Finish the ACL live-feel triage in a TICKING environment** (TOP, Session ACN). ACM verified the STATIC layer (geometry/wiring/viewmodels) but the rAF-frozen headless preview blocked live behavior (D146). Drive — via a foreground `npm run dev` browser tab OR an extended Playwright `rig-shot` harness (its page is `visible` so rAF runs) — the shrew flee MOTION (SHREW_FLEE_SPEED/DURATION), the 3P aim-twist SWEEP (AIM_TWIST_BIAS/LERP), rifle FIRE/RELOAD through the ranged path, and the in-motion feel of star twinkle/drift + storm-wall sweep timing. Iterate the ACL `tuning.ts` constants (AIM/STAR/STORM/SHREW). **Do NOT use the preview MCP for this — it's hidden-tab throttled.**
 2. **More backlog breadth** — another fanned-out overnight (the D143 file-ownership-lane + integrator pattern worked). Plenty remains (more procgen/POI/biome, creatures, audio, polish).
 3. **Player-model follow-ups** (optional) — PM-D cloth physics; or the game **lighting mood** (D142, biggest in-game realism lever, whole-game aesthetic — surface first); or the D107 asset fork (photoreal, user's call).
 
@@ -198,35 +202,33 @@ Existing tunables of interest:
 
 ## Time spent
 
-93 sessions shipped (A through ACL). Approx ~300-368h cumulative human-facing dev time (ACL itself was a ~12min fanned-out machine run on top of the planning). ACL: 8 backlog features via 8 parallel file-ownership lanes + an integrator (9 agents, ~573k subagent tokens). (Tail of the same very long conversation: ACJ skinned rig → ACK realism → ACL overnight breadth.)
+94 sessions shipped (A through ACM). Approx ~300-369h cumulative human-facing dev time. ACM was a short verification + bug-fix session (visual-triage of ACL's output; ~1 code file touched). (Tail of the same very long conversation: ACJ skinned rig → ACK realism → ACL overnight breadth → ACM triage.)
 
 ---
 
 ## State at session end
 
-- **Git status**: ACK committed at `dc233e3`; ACL uncommitted until this `/session-end`. Dirty (16): `playerRig.ts`, `speeder.ts`, `sandWorm.ts`, `audio.ts`, `megaWreck.ts`, `sky.ts`, `weather.ts`, `controller.ts`, `items.ts`, `types.ts`, `combat.ts`, `GameContext.ts`, `main.ts`, `save.ts`, `tuning.ts` + NEW `enemies/shrew.ts`. `verification/*.png` gitignored. Commit handoff below.
-- **Branch**: `master`. **Save state**: localStorage **v14** (ACL bumped 13→14 — additive shrew roster + storm-wall state, v13 back-compat — D144).
-- **Ports bound**: a dev server may linger from the preview-MCP (5180) / harness (5191); both dev-only.
-- **Rule-8 debt**: ACL's new visual features (stars/storm/shrew/aim-twist) shipped tsc+boot-clean but UN-iterated — `/visual-triage` owed (top next item).
+- **Git status**: ACL committed + tagged + pushed at its session-end. ACM dirty: `src/debug/debugPanel.ts` (storm-hook fix) + `docs/` updates (changelog/CLAUDE/roadmap/decisions/backlog/this report/next-session-prompt) + untracked `docs/plans-archive/session-ACM-prompt.md`. Commit handoff below.
+- **Branch**: `master`. **Save state**: localStorage **v14** (unchanged this session).
+- **Ports bound**: a dev server lingers from the preview-MCP (5180); dev-only and currently hidden-tab throttled (D146).
+- **Rule-8 status**: ACL's static visual layer now triaged clean (ACM); the live-FEEL remainder (shrew-flee / aim-twist-sweep / rifle-fire) is the ACN top item — blocked here by the hidden-tab rAF freeze, not by effort (D146).
 
 ---
 
 ## Token spend this session (estimated)
 
-ACL was a fanned-out overnight: 8 parallel lanes + integrator, ~573k subagent tokens (9 agents) over ~12min, plus the orchestration/exploration/planning + this session-end on the main loop.
+ACM was a light verification + single-bug-fix session on the main loop (no fan-out).
 
-- Output (ACL slice): very large by token volume (the fan-out), but high value-per-item — 8 shipped features + a new creature + a new weapon, all compiling + boot-clean, in one machine run.
-- Cost (Opus 4.8 rates): ~2M budget authorized; the fan-out is the bulk. Well above a normal session, by design (breadth sweep).
+- Input: moderate (resumed a compacted session; read shrew/combat/items source + docs for session-end).
+- Output: small — one code fix (`debugPanel.ts`, applied earlier) + the session-end doc updates.
+- Cost (Opus 4.8 rates): well under the project baseline; nowhere near 2× — a normal tight session.
 
-Notable: the **file-ownership-lane + manifest + single-integrator** orchestration (D143) shipped 8 parallel features with ZERO merge conflicts and a clean full tsc — the key methodological win. The honest cost: visual features got tsc+boot verification only, not rule-8 iteration (the breadth/depth tradeoff, flagged for follow-up).
+Notable: ACM's real finding was the **D146** verification ceiling — the headless preview MCP can't exercise per-frame behavior because the hidden tab freezes rAF. This is now canon so future sessions don't re-discover it; live-feel work routes to a foreground tab or the Playwright harness.
 
 ---
 
 ## Commit handoff
 
-Per CLAUDE.md (session-end auto-runs commit + tag + push). ACL ships 8 features across 15 modified files + NEW `src/enemies/shrew.ts`:
-- Player/feel: `playerRig.ts` (aim twist-IK), `speeder.ts` (angular damping), `controller.ts` (in-storm penalty).
-- World/audio: `sandWorm.ts`+`audio.ts` (worm roar attenuation), `megaWreck.ts` (ground panels), `sky.ts` (stars), `weather.ts` (sweeping storm wall).
-- Content: `items.ts`+`types.ts`+`combat.ts` (amban rifle + viewmodel fidelity), NEW `enemies/shrew.ts` (desert shrew).
-- Seams (integrator): `main.ts` (tick), `save.ts` (v13→14 + additive shrew/weatherWall), `GameContext.ts` (`ctx.shrews`), `tuning.ts` (~40 ACL consts).
-- Docs: changelog ACL, CLAUDE.md (Last shipped + tick order), roadmap (shipped + ACM-next), decisions D143-D145, backlog (ACL shipped + visual-triage/caveats follow-ups), this report, next-session-prompt ACM `/visual-triage` brief.
+Per CLAUDE.md (session-end auto-runs commit + tag + push). ACM is a tight verification + fix session:
+- Code: `src/debug/debugPanel.ts` (debug `triggerStorm` now delegates to `weather.triggerStorm`/`armWall`).
+- Docs: changelog ACM, CLAUDE.md (Last shipped + ACN-next), roadmap (ACM shipped + ACN-next pointer), decisions **D146** (headless-preview rAF freeze blocks live-feel verification; debug-hooks-must-delegate corollary), backlog (visual-triage now 🟡 partial + live-feel remainder), this report, next-session-prompt ACN.

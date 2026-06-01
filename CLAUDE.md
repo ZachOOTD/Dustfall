@@ -64,23 +64,22 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      Prior milestones live in docs/changelog.md — do NOT accumulate "Prior milestone"
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
-**Last shipped**: Session ACL — **overnight breadth: 8 backlog features via fanned-out
-agents**. Ran as **8 parallel file-ownership lanes + a single integrator** (~2M budget,
-9 agents, ~12min; methodology in **D143**). Shipped: aim twist-IK; speeder angular
-damping; worm twilight-breach audio attenuation; megaWreck ground-level salvage panels;
-**night-sky stars** (twinkle + drift + cloud occlusion); **Dune sweeping sandstorm** (a
-directional storm WALL that derives the existing `weather.intensity` carrier so all
-downstream readers are unchanged — **D145**); in-storm movement penalty; **amban rifle**
-(new ranged weapon) + viewmodel fidelity (3 kits); **desert shrew** (new ambient creature,
-`enemies/shrew.ts`). **SAVE_VERSION 13→14** (additive shrew roster + storm-wall state,
-v13 back-compat — **D144**). Full `tsc` PASS + runtime boot-clean. **⚠ Rule-8 debt**: the
-new VISUAL features (stars, sweeping storm, shrew, aim-twist) shipped tsc+boot-clean but
-NOT visually-iterated — a `/visual-triage` pass is owed.
+**Last shipped**: Session ACM — **visual-triage of the ACL features (partial) + a debug
+storm-hook fix**. Verified clean via static screenshots + state inspection: night-sky
+stars, the sweeping sandstorm wall, the desert-shrew **model**, the amban-rifle viewmodel,
+and the aim-twist rig plumbing. Fixed the stale debug `triggerStorm` hook (it set
+`weather.state` inline without arming the wall → 0 intensity; now delegates to
+`weather.triggerStorm`/`armWall`). **⚠ Could NOT live-verify** shrew flee *motion*, aim-twist
+*sweep*, or rifle *fire/reload* — the headless preview tab is `visibilityState:"hidden"` so
+the browser throttles rAF to zero and the **game tick is frozen** (the documented hidden-tab
+gotcha — **D146**). Those three are structurally sound but their live FEEL needs a foreground
+`npm run dev` playtest. tsc clean.
 
-**Next session**: **`/visual-triage` the ACL visual features first** (star twinkle/drift,
-sweeping storm wall, shrew model, aim-twist in motion) — close the rule-8 debt. Then more
-backlog breadth (another fanned-out overnight) or a player-model follow-up (PM-D cloth /
-in-game lighting mood). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
+**Next session (ACN)**: **finish the ACL visual-triage in a TICKING environment** — drive
+shrew flee, aim-twist sweep, and rifle fire/reload via a foreground `npm run dev` playtest
+or an extended Playwright `rig-shot` harness (NOT the hidden-tab preview MCP — D146). Then
+breadth (another fanned-out overnight) or a player-model follow-up (PM-D cloth / in-game
+lighting mood). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 

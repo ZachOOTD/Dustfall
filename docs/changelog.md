@@ -3,6 +3,29 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ACM — 2026-06-01 — Visual-triage of the ACL features (partial: rAF-block ceiling) + debug storm-hook fix ✓ verify pass (tsc clean)
+
+`verified` — `npm run verify` (tsc) PASS. A visual-triage pass on the ACL-shipped visual features to
+close the rule-8 debt. **Verified clean** (static screenshots + state inspection): night-sky stars,
+the sweeping sandstorm wall, the desert-shrew model (reads as a recognizable small critter in-world),
+the amban-rifle viewmodel (well-proportioned procedural rifle — receiver/barrel/muzzle/fore-grip/
+sights/stock/grip/guard/bolt via the metal+wood material factories), and the aim-twist rig plumbing
+(`_aimTwist` + `shoulders[1]` present, resting at the bias value).
+
+**Fixed:**
+- **Debug `triggerStorm` hook was stale** (`debugPanel.ts`): post-ACL it set `weather.state` inline
+  WITHOUT arming the storm wall, so a debug-triggered storm produced 0 intensity (the wall is the
+  intensity producer per D145). Now delegates to the exported `weather.triggerStorm(ctx)`, which calls
+  `armWall()`. (rigStudio's D135-negate removal also confirmed in place.)
+
+**⚠ Could NOT live-verify (environment block, not effort — D146):** shrew flee *motion/feel*, the
+aim-twist *sweep*, and rifle *fire/reload* + on-screen viewmodel. The headless preview tab is
+`document.visibilityState:"hidden"` → the browser throttles `requestAnimationFrame` to zero, so the
+game tick is frozen (`elapsed` stuck; an rAF callback never fired in 30s). Worked around the
+`isPlaying` pointer-lock gate, but the rAF freeze is a hard block. These three are structurally sound
+(correct wiring + sound geometry, shrew flee mirrors the proven lizard) but their live FEEL needs a
+foreground `npm run dev` playtest or an extended Playwright harness — carried forward to ACN.
+
 ## Session ACL — 2026-06-01 — Overnight breadth: 8 backlog features via fanned-out agents ✓ verify pass (tsc clean) + boot-clean
 
 `verified` — full `npm run verify` (tsc) PASS + runtime boot smoke-test clean (harness booted +
