@@ -1,9 +1,11 @@
-# Session ACP — Kickoff Brief: foreground repro+fix of the velocity-dependent bugs, then the larger deferred bugs
+# Session ACQ — Kickoff Brief: foreground repro+fix of the velocity-dependent bugs, then the larger deferred bugs
 
-> ACO took in 5 user-reported bugs, shipped the night ambient-dust gate (headless-verifiable), and
-> established that two of them — speeder-dismount footprints + the random speed spike — are
-> velocity/real-rate-dependent and CANNOT be reproduced in the headless harness (D150). Those, plus
-> the deferred dynamic-aim-twist feel-tune (D148), are FOREGROUND work this session.
+> Across ACO+ACP, two of the 5 user bugs shipped headless-verifiable fixes (night ambient-dust gate
+> ✓ACO; salvage-panel clipping → buriedCockpit faceYaw ✓ACP). What REMAINS is foreground-only: the
+> speeder-dismount footprints + the random speed spike are velocity/real-rate-dependent and CANNOT be
+> reproduced in the headless harness (D150); plus the dynamic-aim-twist feel-tune (D148). Then the
+> larger sled-vs-POI collision. (Panel-clipping: the audit found only buriedCockpit — if other panels
+> clip, the user should point at the POI.)
 
 ## Read these now (in order)
 1. **CLAUDE.md** (auto-loaded) — rules; note the tick order + rule 8.

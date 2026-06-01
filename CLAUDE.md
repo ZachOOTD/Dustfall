@@ -64,19 +64,19 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      Prior milestones live in docs/changelog.md — do NOT accumulate "Prior milestone"
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
-**Last shipped**: Session ACO — **night ambient-dust gate (calm starry night) + 5 user-bugs logged**.
-The user reported 5 bugs; logged all to backlog. Fixed + verified the **night ambient-dust gate**:
-the always-on tan drift now fades to 0 across dusk by `ctx.time.sunHeight` (`AMBIENT_DUST_NIGHT_FADE_
-LO/HI`) so stars read on a clean dark sky + the night feels calm (verified via a new `night-sky`
-harness scenario: `dustVisible:false` at night + a clean starfield shot). Extended the harness with
-`night-sky` + `footprints` scenarios. **Finding (D150)**: the speeder-dismount footprint bug + the
-random speed-spike both depend on the player body's KINEMATIC `linvel()`, which reads 0 in the
-throttled headless harness (`speedMag=0`/idle even while moving) — so they can't be verified
-headlessly; they need a FOREGROUND repro. tsc clean.
+**Last shipped**: Session ACP — **salvage-panel clipping investigation + buriedCockpit faceYaw fix**.
+Built a `panels` harness scenario (enumerate `ctx.salvageables.list` → force every door open →
+screenshot one panel per unique kind); confirmed the 6 common procgen kinds render interiors
+correctly (bug NOT systemic). Audited all 15 `addAccessPanel` call sites — the lone offender was
+`buriedCockpit.ts`: a -X-flank panel passed `faceYaw=Math.PI` (faces -Z) when it needs `-π/2` (cf.
+`saltOutpost`'s +X = `+π/2`); `π` made the cavity recess parallel to the flank → interior clipped
+through the hull. Fixed (geometrically certain; screenshot-confirmation owed — it registers as
+`escape_pod` kind + is seed-gated). tsc clean.
 
-**Next session (ACP)**: foreground repro + fix the footprint + speed-spike bugs (real-rate `npm run
-dev`; D150), plus the deferred aim-twist feel-tune (D148). Then the larger deferred bugs: sled-vs-POI
-collision + salvage-panel interior clipping sweep. See [docs/next-session-prompt.md](docs/next-session-prompt.md).
+**Next session (ACP-tail/ACQ)**: still FOREGROUND-only (D150) — footprint + speed-spike + aim-twist
+feel-tune via `npm run dev`. Then sled-vs-POI collision (larger; kinematic-vs-static shapecast). If
+the user sees other panels clip, point at the POI (the sweep + audit found only buriedCockpit). See
+[docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 

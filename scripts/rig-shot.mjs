@@ -276,6 +276,60 @@ const SCENARIOS = {
     console.log(`[rig-shot] saved ${path}`);
   },
 
+  // Panels (ACP): enumerate salvage panels, force every door open, then frame +
+  // screenshot the nearest N from the FRONT to spot interior-clipping-through-
+  // hull-wall. Static (pause after the door-lerp settles → free camera).
+  'panels': async (page) => {
+    await page.evaluate(() => { window.__game.ctx.three.renderer.setSize(900, 1100, false); window.__game.setTime(0.42); });
+    // Enumerate + force every door fully open for inspection.
+    const list = await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      const out = [];
+      ctx.salvageables.list.forEach((s, idx) => {
+        s.panel.userData.panelOpened = true;
+        s.panel.userData.panelDoorTarget = 2.2;   // ~126° — clearly open
+        if (idx < 8) out.push({ idx, kind: s.kind || s.wreckKind || '?', cond: s.condition || '?' });
+      });
+      return { count: ctx.salvageables.list.length, sample: out };
+    });
+    console.log(`[panels] count=${list.count} sample=${JSON.stringify(list.sample)}`);
+    await page.waitForTimeout(1400);             // let updatePanelDoors lerp them open
+    // Collect nearest-N panel world transforms, then pause + shoot each.
+    const targets = await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      const cam = ctx.three.camera;
+      const V = cam.position.constructor;
+      const Q = cam.quaternion.constructor;
+      const items = ctx.salvageables.list.map((s, idx) => {
+        const wp = s.panel.getWorldPosition(new V());
+        const wq = s.panel.getWorldQuaternion(new Q());
+        const outward = new V(0, 0, 1).applyQuaternion(wq);   // body-local +Z = door/outward side
+        const d = Math.hypot(wp.x - cam.position.x, wp.z - cam.position.z);
+        return { idx, kind: s.kind || s.wreckKind || '?', x: wp.x, y: wp.y, z: wp.z, ox: outward.x, oy: outward.y, oz: outward.z, d };
+      });
+      // One panel per UNIQUE kind (the offenders are kind-specific) — sweep all POI types.
+      const seen = new Set();
+      const perKind = [];
+      for (const it of items) { if (!seen.has(it.kind)) { seen.add(it.kind); perKind.push(it); } }
+      ctx.flags.paused = true;                    // freeze so the framing camera survives
+      return perKind;
+    });
+    for (let i = 0; i < targets.length; i++) {
+      const t = targets[i];
+      await page.evaluate((t) => {
+        const ctx = window.__game.ctx;
+        const cam = ctx.three.camera;
+        cam.position.set(t.x + t.ox * 1.7, t.y + 0.35, t.z + t.oz * 1.7);
+        cam.lookAt(t.x, t.y, t.z);
+        cam.updateMatrixWorld(true);
+      }, t);
+      await page.waitForTimeout(250);
+      const path = join(OUT, `scen-panel-${String(i).padStart(2, '0')}-${t.kind}.png`);
+      await page.screenshot({ path, fullPage: false });
+      console.log(`[panels] shot ${i}: kind=${t.kind} dist=${t.d.toFixed(1)} → ${path}`);
+    }
+  },
+
   // Footprints (ACO repro): walk → mount speeder → dismount → walk again, and
   // sample rig.stepCount each phase. If stepCount stops climbing after the
   // mount/dismount cycle, the gait (and thus footprint spawning) is wedged.

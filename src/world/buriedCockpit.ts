@@ -166,7 +166,11 @@ export function placeBuriedCockpit(
     root,
     -r * 1.05, r * 0.40, 0,
     1,
-    Math.PI,         // facing -X
+    // ACP bugfix — faceYaw maps local +Z → (sin yaw, 0, cos yaw); for the
+    // panel to face -X (outward from this -X flank) that is -π/2, NOT π.
+    // π made the door face -Z and the cavity recess PARALLEL to the flank →
+    // interior clipped through the hull. (cf. saltOutpost's +X flank = +π/2.)
+    -Math.PI / 2,    // facing -X
     'escape_pod',
   );
 

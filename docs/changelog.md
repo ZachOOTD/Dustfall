@@ -3,6 +3,33 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ACP — 2026-06-01 — Salvage-panel clipping: built panels-sweep harness, audited all call sites, fixed buriedCockpit faceYaw ✓ verify pass (tsc clean)
+
+`verified` — `npm run verify` (tsc) PASS. Focused work on the user-reported "salvage panel interiors
+clip through POI walls" bug. Built a `panels` harness scenario, confirmed the common case is fine,
+audited every call site, and fixed the lone offender.
+
+**Investigation (harness `--scenario=panels`):** enumerates `ctx.salvageables.list`, force-opens
+every door (`panelDoorTarget`), then frames + screenshots ONE panel per unique kind from the front.
+Result: the 6 procgen kinds present (fuselage, escape_pod, cargo_container, engine_bell,
+engine_cluster, massive) all render their interiors CORRECTLY when open — the bug is NOT systemic.
+
+**Fixed — buriedCockpit panel faceYaw** (`buriedCockpit.ts`): the panel sits on the -X flank
+(`localX=-r*1.05`) but passed `faceYaw=Math.PI`, which faces -Z. `addAccessPanel` maps
+`local +Z → (sin yaw, 0, cos yaw)`, so -X needs `-π/2` (cf. `saltOutpost`'s +X flank = `+π/2`). With
+`π` the door faced the wrong way and the cavity recessed PARALLEL to the flank → interior clipped
+through the hull. Audited all 15 `addAccessPanel` call sites; this was the only faceYaw mismatch (the
+rest use the correct wrapper-Group pattern or correct flank yaw). Fix is geometrically certain;
+screenshot-confirmation owed (buriedCockpit registers its salvageable as `escape_pod` kind + is
+seed-gated, so it wasn't isolable in the per-kind sweep — which is exactly why it slipped past).
+
+**Harness (`scripts/rig-shot.mjs`):** added `--scenario=panels` (per-unique-kind open-panel sweep).
+
+**Still open (per ACO/D150):** footprint + speed-spike + aim-twist feel-tune are FOREGROUND-only
+(kinematic-velocity / continuous-turn feel can't be exercised in the throttled headless harness).
+Sled-vs-POI collision deferred (larger — kinematic-vs-static shapecast). If other panels clip, the
+user can point at the POI; the sweep tool + call-site audit found only buriedCockpit.
+
 ## Session ACO — 2026-06-01 — Night ambient-dust gate (calm starry night) + 5 user-bugs logged + harness scenarios ✓ verify pass (tsc clean)
 
 `verified` — `npm run verify` (tsc) PASS + night-sky scenario confirms dust hidden at night (state +

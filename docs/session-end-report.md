@@ -2,7 +2,14 @@
 
 Cumulative state. Rewritten end-to-end at each `/session-end`.
 
-**Current state**: Session ACO shipped (2026-06-01 — night ambient-dust gate + 5 user-bugs logged + harness scenarios). 96 sessions post-MVP. `npm run verify` (tsc) PASS. **SAVE_VERSION 14** (unchanged). ACO was a bug-intake + targeted-fix session: the user reported 5 bugs (all logged to backlog). Shipped + verified the **night ambient-dust gate** (the always-on tan drift fades to 0 across dusk by `ctx.time.sunHeight` → stars read on a clean dark sky + calm night; verified via a new `night-sky` harness scenario). **Finding (D150)**: the speeder-dismount footprint bug + the random speed-spike both depend on the player body's KINEMATIC `linvel()`, which reads 0 in the throttled headless harness — so they can't be verified headlessly and need a foreground repro (deferred to ACP, along with the larger sled-POI-collision + panel-clipping bugs). **Next session (ACP) = foreground repro+fix footprints + speed-spike + the deferred aim-twist feel-tune.**
+**Current state**: Session ACP shipped (2026-06-01 — salvage-panel clipping investigation + buriedCockpit faceYaw fix). 97 sessions post-MVP. `npm run verify` (tsc) PASS. **SAVE_VERSION 14** (unchanged). ACP built a `panels` harness sweep, confirmed the 6 common procgen panel kinds render interiors correctly (the clipping bug is NOT systemic), audited all 15 `addAccessPanel` call sites, and fixed the lone offender — `buriedCockpit` passed `faceYaw=Math.PI` (faces -Z) on a -X flank when it needs `-π/2` (cf. `saltOutpost`'s +X flank = +π/2), so its cavity recessed parallel to the flank + clipped through the hull. Fix is geometrically certain; screenshot-confirmation owed (it registers its salvageable as `escape_pod` kind + is seed-gated, so it wasn't isolable in the per-kind sweep). **Next session = the still-open FOREGROUND-only bugs (footprint / speed-spike / aim-twist feel-tune — D150), then sled-vs-POI collision.**
+
+## ACP scope (this session) — salvage-panel clipping investigation + buriedCockpit faceYaw fix
+
+- **`panels` harness scenario** (`rig-shot.mjs`): enumerates `ctx.salvageables.list`, force-opens every door, screenshots one panel per unique kind. The 6 procgen kinds present (fuselage/escape_pod/cargo_container/engine_bell/engine_cluster/massive) all render interiors correctly when open → bug not systemic.
+- **buriedCockpit faceYaw fix** (`buriedCockpit.ts`): `Math.PI` → `-Math.PI/2`. `addAccessPanel` maps `local+Z → (sin yaw, 0, cos yaw)`; a -X flank panel needs `-π/2`. Audited all 15 call sites — only this one was wrong (others use the wrapper-Group pattern or correct flank yaw). Geometrically verified; visual confirmation owed.
+
+## ACO scope (this session) — night ambient-dust gate + bug intake ACO was a bug-intake + targeted-fix session: the user reported 5 bugs (all logged to backlog). Shipped + verified the **night ambient-dust gate** (the always-on tan drift fades to 0 across dusk by `ctx.time.sunHeight` → stars read on a clean dark sky + calm night; verified via a new `night-sky` harness scenario). **Finding (D150)**: the speeder-dismount footprint bug + the random speed-spike both depend on the player body's KINEMATIC `linvel()`, which reads 0 in the throttled headless harness — so they can't be verified headlessly and need a foreground repro (deferred to ACP, along with the larger sled-POI-collision + panel-clipping bugs). **Next session (ACP) = foreground repro+fix footprints + speed-spike + the deferred aim-twist feel-tune.**
 
 ## ACO scope (this session) — night ambient-dust gate + bug intake
 
@@ -223,33 +230,33 @@ Existing tunables of interest:
 
 ## Time spent
 
-96 sessions shipped (A through ACO). Approx ~300-371h cumulative human-facing dev time. ACO was a bug-intake + targeted-fix session (5 bugs logged; 1 shipped fix; 4 files touched, no save change). (Tail of the same very long conversation: ACJ skinned rig → ACK realism → ACL overnight breadth → ACM static triage → ACN live triage → ACO bug intake.)
+97 sessions shipped (A through ACP). Approx ~300-372h cumulative human-facing dev time. ACP was a focused investigation + single-fix session (panels-sweep tool, 15-call-site audit, 1 one-line geometric fix; 2 files touched, no save change). (Tail of the same very long conversation: ACJ→ACK→ACL→ACM→ACN→ACO→ACP.)
 
 ---
 
 ## State at session end
 
-- **Git status**: ACN committed + tagged + pushed (`7e3b29a`, `session-ACN`). ACO dirty: `src/world/ambientDust.ts` (night gate) + `src/config/tuning.ts` (`AMBIENT_DUST_NIGHT_FADE_*`) + `scripts/rig-shot.mjs` (night-sky + footprints scenarios) + `docs/` updates. Commit handoff below.
+- **Git status**: ACO committed + tagged + pushed (`37d7de6`, `session-ACO`). ACP dirty: `src/world/buriedCockpit.ts` (faceYaw fix) + `scripts/rig-shot.mjs` (`panels` scenario) + `docs/` updates. Commit handoff below.
 - **Branch**: `master`. **Save state**: localStorage **v14** (unchanged this session).
 - **Ports bound**: dev servers may linger from the preview-MCP (5180) / rig-shot harness (5191); both dev-only.
-- **Rule-8 status**: the night-dust gate is a render-state change (opacity vs sunHeight) — verified headlessly via the `night-sky` scenario (state + screenshot). The footprint/speed-spike bugs are velocity-dependent → foreground-only (D150), honestly deferred (NOT shipped/claimed).
+- **Rule-8 status**: the buriedCockpit faceYaw fix is geometrically certain (exact symmetric match to saltOutpost's +X precedent) but NOT screenshot-confirmed this session — buriedCockpit registers its salvageable as `escape_pod` kind + is seed-gated, so it wasn't isolable in the per-kind harness sweep. Visual confirmation owed (next seed with a buried cockpit, or the user's playtest). Honestly flagged.
 
 ---
 
 ## Token spend this session (estimated)
 
-ACO was a moderate bug-intake + single-fix session (no fan-out; a few iterative Playwright runs).
+ACP was a moderate investigation + single-fix session (no fan-out; ~3 iterative Playwright panel-sweep runs).
 
-- Input: high (read controller/speeder/footprints/playerRig/loop source to investigate the footprint + speed bugs + dust systems + docs).
-- Output: moderate — the night-dust gate, two harness scenarios, the bug-logging, and the session-end docs.
+- Input: high (read salvage/wrecks/interaction + all 15 addAccessPanel call sites + buriedCockpit/saltOutpost geometry + docs).
+- Output: moderate — the `panels` harness scenario, the one-line faceYaw fix, and the session-end docs.
 - Cost (Opus 4.8 rates): around the project baseline. Not flagged ≥2×.
 
-Notable: ACO extended the verification-ceiling canon to D150 — even the ticking harness can't exercise KINEMATIC-velocity-dependent behavior (the throttled tick makes `linvel` read 0), so gait/footstep/on-foot-speed bugs are foreground-only. The dust gate was shippable precisely because it's render-state, not velocity. Good restraint: did NOT blind-fix the 2 un-verifiable bugs.
+Notable: the panels-sweep + call-site audit confirmed the clipping is NOT systemic (common case fine) and isolated the lone faceYaw offender. Discipline note: the fix is geometric (provable), not screenshot-verified — flagged honestly rather than claimed as visually confirmed.
 
 ---
 
 ## Commit handoff
 
-Per CLAUDE.md (session-end auto-runs commit + tag + push). ACO is a bug-intake + single-fix session:
-- Code: `src/world/ambientDust.ts` + `src/config/tuning.ts` (night ambient-dust gate), `scripts/rig-shot.mjs` (`night-sky` + `footprints` harness scenarios).
-- Docs: changelog ACO, CLAUDE.md (Last shipped + ACP-next), roadmap (ACO shipped), decisions **D150** (kinematic-velocity behavior is foreground-only to verify), backlog (5 bugs logged; night-dust shipped; footprint/speed flagged foreground-repro; sled/panel deferred), this report, next-session-prompt ACP.
+Per CLAUDE.md (session-end auto-runs commit + tag + push). ACP is a focused investigation + single-fix session:
+- Code: `src/world/buriedCockpit.ts` (panel faceYaw `Math.PI` → `-Math.PI/2`), `scripts/rig-shot.mjs` (`--scenario=panels` sweep).
+- Docs: changelog ACP, CLAUDE.md (Last shipped + next), roadmap (ACP shipped), backlog (panel-clipping → 🟡 partial: buriedCockpit fixed), this report, next-session-prompt. No new D-entry (project-specific bugfix; faceYaw mapping already documented in addAccessPanel).
