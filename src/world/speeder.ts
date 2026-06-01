@@ -809,14 +809,29 @@ export function updateSpeeder(ctx: GameContext, dt: number): void {
     const av = body.angvel();
     body.setAngvel({ x: 0, y: av.y * angDamp, z: 0 }, true);
 
-    // Allow mount via E within range.
+    // Allow mount via E within range AND while looking at the bike.
     const playerPos = ctx.player.body.body.translation();
     const dx = playerPos.x - pos.x;
     const dz = playerPos.z - pos.z;
     const distSq = dx * dx + dz * dz;
+    // ACQ — gate mount on the camera roughly facing the bike, so E near the
+    // speeder (but looking away) no longer mounts unexpectedly. dot of the
+    // horizontal camera-forward with the horizontal dir from the eye to the
+    // bike must clear SPEEDER_MOUNT_LOOK_DOT. (camera.getWorldDirection is the
+    // forward look dir in this codebase — see controller.ts movement.)
+    const _cam = ctx.three.camera;
+    _cam.getWorldDirection(_forward);
+    const toBx = pos.x - _cam.position.x;
+    const toBz = pos.z - _cam.position.z;
+    const _toBLen = Math.hypot(toBx, toBz);
+    const _fLen = Math.hypot(_forward.x, _forward.z);
+    const lookDot = (_toBLen > 1e-4 && _fLen > 1e-4)
+      ? (_forward.x * toBx + _forward.z * toBz) / (_toBLen * _fLen)
+      : 1;
     if (
       ctx.input.pressed.has('KeyE') &&
-      distSq <= Tuning.SPEEDER_MOUNT_RANGE * Tuning.SPEEDER_MOUNT_RANGE
+      distSq <= Tuning.SPEEDER_MOUNT_RANGE * Tuning.SPEEDER_MOUNT_RANGE &&
+      lookDot >= Tuning.SPEEDER_MOUNT_LOOK_DOT
     ) {
       s.mounted = true;
       ctx.ui.showToast?.('mounted speeder — E to dismount');

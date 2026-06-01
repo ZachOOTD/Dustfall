@@ -1,11 +1,12 @@
-# Session ACQ — Kickoff Brief: foreground repro+fix of the velocity-dependent bugs, then the larger deferred bugs
+# Session ACR — Kickoff Brief: foreground repro+fix of the velocity-dependent bugs, then the larger deferred bugs
 
-> Across ACO+ACP, two of the 5 user bugs shipped headless-verifiable fixes (night ambient-dust gate
-> ✓ACO; salvage-panel clipping → buriedCockpit faceYaw ✓ACP). What REMAINS is foreground-only: the
-> speeder-dismount footprints + the random speed spike are velocity/real-rate-dependent and CANNOT be
-> reproduced in the headless harness (D150); plus the dynamic-aim-twist feel-tune (D148). Then the
-> larger sled-vs-POI collision. (Panel-clipping: the audit found only buriedCockpit — if other panels
-> clip, the user should point at the POI.)
+> Of the 5 user bugs: night-dust ✓ACO, panel-clipping→buriedCockpit ✓ACP. ACQ then did a backlog
+> archive sweep + 3 quick wins (Pebble rename, iron-stake model, speeder mount look-gate). What REMAINS
+> from the user-bug list is FOREGROUND-only (D150): speeder-dismount footprints + the random speed spike
+> (velocity/real-rate-dependent, can't be reproduced headlessly) + the dynamic-aim-twist feel-tune
+> (D148). Then the larger deferred: sled-vs-POI collision + carcass-tow cut-loose (ACF). The backlog
+> also has more quick wins (rope-leaves-inventory-while-deployed, shrew catch/cook, megaWreck catwalk
+> panels) if a foreground pass isn't wanted.
 
 ## Read these now (in order)
 1. **CLAUDE.md** (auto-loaded) — rules; note the tick order + rule 8.

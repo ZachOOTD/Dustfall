@@ -772,18 +772,18 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
         ctx.inventory.hover = {
           type: 'pet_companion',
           distance: info.distance,
-          promptNoun: 'tie rope to companion',
+          promptNoun: 'tie rope to Pebble',
         };
         if (ctx.input.mousePressed.has(0)) {
           playerTetheredSled.tether = { kind: 'companion' };
-          ctx.ui.showToast('rope transferred to companion');
+          ctx.ui.showToast('rope transferred to Pebble');
         }
         return;
       }
       ctx.inventory.hover = {
         type: 'pet_companion',
         distance: info.distance,
-        promptNoun: '(your companion)',
+        promptNoun: '(Pebble)',
         passive: true,
       };
       return;

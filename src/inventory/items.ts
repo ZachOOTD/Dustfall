@@ -2133,7 +2133,7 @@ const _DEFS: Record<ItemId, ItemDef> = {
     id: 'companion_pod',
     name: 'STONE EGG',
     glyph: '◓',
-    description: 'a small carved stone egg — something alive curls inside',
+    description: 'a small carved stone egg — Pebble curls inside, asleep',
     stackable: false,
     maxStack: 1,
     wieldLmb: 'place',
@@ -2141,7 +2141,7 @@ const _DEFS: Record<ItemId, ItemDef> = {
       const c = deployCompanion(ctx);
       if (!c) {
         // Already deployed — refuse silently (only one companion at a time).
-        return { consumed: false, message: 'the creature is already out somewhere' };
+        return { consumed: false, message: 'Pebble is already out somewhere' };
       }
       return { consumed: true, message: 'the egg cracks — something rolls out' };
     },

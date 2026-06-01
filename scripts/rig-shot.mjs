@@ -330,6 +330,45 @@ const SCENARIOS = {
     }
   },
 
+  // Stake (ACQ): equip + place a stake_kit, then frame the deployed stake to
+  // confirm the ACQ fixes — no sand mound, rope-loop seated near the top
+  // touching the shaft. Static (pause after place).
+  'stake': async (page) => {
+    await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      ctx.inventory.slots[0].item = 'stake_kit'; ctx.inventory.slots[0].count = 1;
+      ctx.inventory.selectedIdx = 0;
+      window.__game.setTime(0.42);
+    });
+    // Place via the LMB 'place' wield path (re-inject until a stake exists).
+    let placed = false;
+    for (let i = 0; i < 12 && !placed; i++) {
+      placed = await page.evaluate(() => {
+        window.__game.ctx.input.mousePressed.add(0);
+        return window.__game.ctx.stakes.list.length > 0;
+      });
+      await page.waitForTimeout(120);
+    }
+    const info = await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      const s = ctx.stakes.list[0];
+      if (!s) return { placed: false };
+      ctx.three.renderer.setSize(900, 1100, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 900 / 1100; cam.updateProjectionMatrix(); }
+      ctx.flags.paused = true;
+      cam.position.set(s.pos.x + 0.7, s.pos.y + 0.75, s.pos.z + 0.7); // close 3/4 from above
+      cam.lookAt(s.pos.x, s.pos.y + 0.45, s.pos.z);
+      cam.updateMatrixWorld(true);
+      return { placed: true, pos: [+s.pos.x.toFixed(1), +s.pos.z.toFixed(1)] };
+    });
+    console.log('[stake] ' + JSON.stringify(info));
+    await page.waitForTimeout(300);
+    const path = join(OUT, 'scen-stake.png');
+    await page.screenshot({ path, fullPage: false });
+    console.log(`[rig-shot] saved ${path}`);
+  },
+
   // Footprints (ACO repro): walk → mount speeder → dismount → walk again, and
   // sample rig.stepCount each phase. If stepCount stops climbing after the
   // mount/dismount cycle, the gait (and thus footprint spawning) is wedged.

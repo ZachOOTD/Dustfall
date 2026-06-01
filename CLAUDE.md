@@ -64,18 +64,17 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      Prior milestones live in docs/changelog.md — do NOT accumulate "Prior milestone"
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
-**Last shipped**: Session ACP — **salvage-panel clipping investigation + buriedCockpit faceYaw fix**.
-Built a `panels` harness scenario (enumerate `ctx.salvageables.list` → force every door open →
-screenshot one panel per unique kind); confirmed the 6 common procgen kinds render interiors
-correctly (bug NOT systemic). Audited all 15 `addAccessPanel` call sites — the lone offender was
-`buriedCockpit.ts`: a -X-flank panel passed `faceYaw=Math.PI` (faces -Z) when it needs `-π/2` (cf.
-`saltOutpost`'s +X = `+π/2`); `π` made the cavity recess parallel to the flank → interior clipped
-through the hull. Fixed (geometrically certain; screenshot-confirmation owed — it registers as
-`escape_pod` kind + is seed-gated). tsc clean.
+**Last shipped**: Session ACQ — **backlog archive sweep + 3 quick wins**. Archived the stale/completed
+backlog cruft (10 ACL-shipped duplicates never pruned + the procedural-character-arc followup pile +
+the obsolete FP-wraps entry). Shipped quick wins: **companion → "Pebble"** rename (all player-facing
+copy); **iron stake model fixes** (removed the sand mound, reseated the rope-loop near the top touching
+the shaft, aligned `rope.ts` endpoint to the actual ring via shared `STAKE_LOOP_OFFSET_*` — screenshot-
+verified); **speeder mount gated on looking at the bike** (`SPEEDER_MOUNT_LOOK_DOT` 0.5, so E near it
+while facing away no longer mounts). New `--scenario=stake` harness. tsc clean.
 
-**Next session (ACP-tail/ACQ)**: still FOREGROUND-only (D150) — footprint + speed-spike + aim-twist
-feel-tune via `npm run dev`. Then sled-vs-POI collision (larger; kinematic-vs-static shapecast). If
-the user sees other panels clip, point at the POI (the sweep + audit found only buriedCockpit). See
+**Next session (ACR)**: the still-open user bugs — FOREGROUND-only (D150): footprint + speed-spike +
+aim-twist feel-tune via `npm run dev`. Then the larger deferred: sled-vs-POI collision (kinematic-vs-
+static shapecast) + carcass-tow cut-loose (ACF). More quick wins remain in the backlog. See
 [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).

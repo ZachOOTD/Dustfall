@@ -286,14 +286,14 @@ export function packUpCompanion(ctx: GameContext): boolean {
   if (!c) return false;
   const slotIdx = addItem(ctx.inventory, 'companion_pod', undefined, ctx);
   if (slotIdx < 0) {
-    ctx.ui.showToast('no room in your bag for the creature');
+    ctx.ui.showToast('no room in your bag for Pebble');
     return false;
   }
   ctx.three.scene.remove(c.group);
   ctx.companion = null;
   // AAO — reset huddle toast so a fresh deploy can re-trigger the moment.
   _huddleToastShown = false;
-  ctx.ui.showToast('the creature curls back into its pod');
+  ctx.ui.showToast('Pebble curls back into its pod');
   return true;
 }
 
@@ -398,7 +398,7 @@ export function updateCompanion(ctx: GameContext, dt: number): void {
     // the moment lands. Subsequent huddles are silent (Rocky just does
     // its thing).
     if (nextState === 'huddle' && !_huddleToastShown) {
-      ctx.ui.showToast('Rocky huddles down');
+      ctx.ui.showToast('Pebble huddles down');
       _huddleToastShown = true;
     }
     c.state = nextState;

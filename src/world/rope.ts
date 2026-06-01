@@ -117,13 +117,20 @@ export function resolveEndpointWorldPos(
       return { x: endpoint.x, y: sy + 0.4, z: endpoint.z };
     }
     case 'stake': {
-      // ACE — craftable iron stake. The rope-loop on the stake visual
-      // sits ~55cm above terrain after Round-2 polish (taller shaft).
-      // Caller doesn't need to know the exact rope-loop offset — we
-      // resolve it from the stake's pos.
+      // ACE — craftable iron stake. ACQ: resolve the ACTUAL rope-loop ring
+      // world position (was the shaft axis at +0.55, ignoring the ring's
+      // side-offset + the stake's yaw, so the rope didn't meet the ring).
+      // Offset shared with the stake visual (stake.ts loop.position) via
+      // Tuning. Local ring offset (lx, ly, 0) rotated by the stake's yaw.
       const stake = ctx.stakes.list.find((s) => s.id === endpoint.stakeId);
       if (!stake) return null;
-      return { x: stake.pos.x, y: stake.pos.y + 0.55, z: stake.pos.z };
+      const lx = Tuning.STAKE_LOOP_OFFSET_X;
+      const ry = stake.rotationY;
+      return {
+        x: stake.pos.x + lx * Math.cos(ry),
+        y: stake.pos.y + Tuning.STAKE_LOOP_OFFSET_Y,
+        z: stake.pos.z - lx * Math.sin(ry),
+      };
     }
     case 'raider_corpse': {
       // ACF — a downed raider. Attach at the body center, lifted to

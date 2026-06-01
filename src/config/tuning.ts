@@ -231,6 +231,10 @@ export const Tuning = {
   SPEEDER_UNMOUNTED_ANGULAR_DAMP_RATE_PER_S: 2.5,   // ~0.08 rad/s remaining after 1s from 1 rad/s spin
   // AAL — SPEEDER_HOP_IMPULSE removed; unused since CC-2 (jump replaced with 2-phase pulse/recover).
   SPEEDER_MOUNT_RANGE: 3.5,
+  // ACQ — E only mounts when the player is roughly LOOKING at the bike (not on
+  // proximity alone). dot(camForwardXZ, dirToBikeXZ) must exceed this. 0.5 ≈
+  // within ~60° of facing the bike.
+  SPEEDER_MOUNT_LOOK_DOT: 0.5,
   SPEEDER_DISMOUNT_OFFSET: 1.8,
   SPEEDER_RIDER_SEAT_X: 0,              // local rider offset relative to bike center
   SPEEDER_RIDER_SEAT_Y: 1.00,           // mid-height (CC-2) — sees over handlebars (Y≈0.42) without floating
@@ -333,6 +337,11 @@ export const Tuning = {
    *  stake. Tighter than typical interaction range so the stake doesn't
    *  trigger from across a sled deck. */
   STAKE_ROPE_ATTACH_DISTANCE: 2.5,
+  // ACQ — rope-loop ring local offset on the stake visual (stake.ts), shared
+  // with rope.ts resolveEndpointWorldPos so the rope connects to the actual
+  // ring. X = ring tube touches the shaft +X surface; Y = seated under the cap.
+  STAKE_LOOP_OFFSET_X: 0.044,
+  STAKE_LOOP_OFFSET_Y: 0.58,
 
   // Session AAE — creature companion (Rocky-inspired from Project Hail Mary).
   // Pentagonal-symmetric body with 5 radial legs. Two locomotion states:

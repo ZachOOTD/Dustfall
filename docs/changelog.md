@@ -3,6 +3,35 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ACQ — 2026-06-01 — Backlog archive sweep + quick wins (Pebble rename, stake model, mount-look gate) ✓ verify pass (tsc clean)
+
+`verified` — `npm run verify` (tsc) PASS; stake fix screenshot-verified via a new `stake` harness scenario.
+
+**Backlog archive (cleanup):** removed 10 ACL-shipped duplicates never pruned (sweeping storm, in-storm
+penalty, stars drift+twinkle, aim-twist-IK, footstep-dust, 3P-snap, amban rifle, worm-audio, shrew →
+all superseded by the line-38 shipped record), collapsed the procedural-character-arc followup pile
+(ABT/ABU/ABV/ABW/ABX/ABY + ABS-deferred + ABP-Tier-5) into a tombstone (arc complete, model at ceiling
+per ACK), and tombstoned the obsolete FP-forearm-wraps entry (viewModelHands.ts deleted in ACJ/ACK).
+Kept genuinely-open items (sled tuning, sandworm encounter, biome/POI, real rope, etc.).
+
+**Quick wins shipped:**
+- **Companion → "Pebble" rename** (`companion.ts`/`interaction.ts`/`items.ts`/`tutorial.ts`): all
+  player-facing copy now says "Pebble" (was "Rocky" in one toast + "the creature"/"(your companion)"
+  elsewhere). Internal identifiers (`companion_pod`, `ctx.companion`) unchanged.
+- **Iron stake model fixes** (`stake.ts` + `rope.ts` + `tuning.ts`): removed the sand-mound disc;
+  reseated the rope-loop ring near the top, touching the shaft (was a 4cm-floating side hoop mid-
+  shaft); aligned `rope.ts` resolveEndpointWorldPos to the ACTUAL ring world pos (offset + stake yaw,
+  shared via `STAKE_LOOP_OFFSET_X/Y`) so the rope connects to the ring. Screenshot-verified.
+- **Speeder mount gated on looking at the bike** (`speeder.ts` + `tuning.ts`): E near the speeder no
+  longer mounts on proximity alone — `dot(camForwardXZ, dirToBikeXZ) ≥ SPEEDER_MOUNT_LOOK_DOT` (0.5)
+  required, so E while facing away doesn't fire an unexpected mount.
+
+**Harness (`scripts/rig-shot.mjs`):** added `--scenario=stake` (equip + place a stake, frame it).
+
+**Deferred:** carcass-tow cut-loose-after-harvest (ACF bug — interaction logic in the drag system,
+hard to verify headlessly; smaller follow-up). Footprint/speed/aim-twist still foreground-only (D150);
+sled-vs-POI collision still larger.
+
 ## Session ACP — 2026-06-01 — Salvage-panel clipping: built panels-sweep harness, audited all call sites, fixed buriedCockpit faceYaw ✓ verify pass (tsc clean)
 
 `verified` — `npm run verify` (tsc) PASS. Focused work on the user-reported "salvage panel interiors

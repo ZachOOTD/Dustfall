@@ -50,12 +50,6 @@ const _ironMat = createMetalMaterial(0x5e5048, {
   scratchStrength: 0.45,
 });
 
-// Sand-mound material at the base — slightly darker than terrain so
-// the "displaced from driving the stake in" reads as a fresh disturbance.
-const _moundMat = new THREE.MeshLambertMaterial({
-  color: 0x9a7b58,
-  flatShading: true,
-});
 
 /** Build the stake visual. Origin sits at GROUND LEVEL — the body
  *  protrudes upward and the pointed tip extends downward into the sand.
@@ -104,21 +98,17 @@ function makeStakeVisual(): THREE.Group {
     new THREE.TorusGeometry(0.058, 0.012, 6, 16),
     loopMat,
   );
-  loop.position.set(0.072, shaftH / 2 - 0.20 + shaftH / 2 - 0.10, 0);
+  // ACQ — seat the loop near the TOP, just under the cap, and bring it in
+  // so its tube touches the shaft (was X=0.072 → a 4cm floating gap; now
+  // ~0.044 so the −X tube edge meets the shaft +X surface at radius 0.032).
+  // Offset shared with rope.ts resolveEndpointWorldPos via Tuning so the rope
+  // connects to the actual ring (rule 2: magic numbers → tuning.ts).
+  loop.position.set(Tuning.STAKE_LOOP_OFFSET_X, Tuning.STAKE_LOOP_OFFSET_Y, 0);
   loop.rotation.y = Math.PI / 2;
   g.add(loop);
 
-  // ACE Round-3: sand-disturbance mound at base. Round-2 used a flat
-  // cylinder disc — read as a tile, not a mound. Now a half-buried
-  // SphereGeometry (squashed Y) gives an organic dome shape: more
-  // "pile of displaced sand", less "manufactured base plate".
-  const mound = new THREE.Mesh(
-    new THREE.SphereGeometry(0.18, 14, 8),
-    _moundMat,
-  );
-  mound.scale.set(1.0, 0.20, 1.0);  // squash to flat dome
-  mound.position.y = -0.012;         // partially buried at ground line
-  g.add(mound);
+  // ACQ — sand-disturbance mound REMOVED (read as a manufactured disc/dome
+  // at the base rather than displaced sand; cleaner without it).
 
   // Pointed tip — angled cone below the buried portion. Cosmetic only
   // (lives below the visible surface), but if the stake is placed on a
