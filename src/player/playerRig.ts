@@ -96,6 +96,10 @@ export interface PlayerRig {
   /** Internal — last raw phase used to derive stepCount. Reset on state
    *  change to avoid spurious step on walk-resume. */
   _lastStepPhase: number;
+  /** ACL AIM TWIST-IK — smoothed aim-twist yaw (rad) applied additively to
+   *  the right shoulder so the upper body leads toward the camera's facing
+   *  direction. Lerped each frame toward the clamped target. */
+  _aimTwist: number;
 }
 
 // ── Proportions (m) — slight tune toward more-human silhouette ──
@@ -962,6 +966,7 @@ export function buildPlayerRig(ctx: GameContext): PlayerRig {
     speedMag: 0,
     stepCount: 0,
     _lastStepPhase: 0,
+    _aimTwist: 0,   // ACL AIM TWIST-IK
   };
   return rig;
 }
@@ -1142,7 +1147,42 @@ export function updatePlayerRig(ctx: GameContext, dt: number): void {
       rig.ankles[i].rotation.x = 0;          // ABV — feet flat in idle
     }
   }
+
+  // ACL AIM TWIST-IK — upper-body aim twist on the RIGHT shoulder.
+  // When in 3P, the whole rig already faces rig.heading (= camera horizontal
+  // heading, set above at L991-999). We add a SUBTLE additive yaw on the right
+  // shoulder so the gun/lead arm leads slightly toward where the camera is
+  // pointing relative to the body's facing — reads as "aiming"/tracking.
+  // Composed on .rotation.y so it never clobbers the swing X-rotation set in
+  // the per-state arm-swing blocks above.
+  if (ctx.flags.thirdPerson) {
+    // Re-derive the camera heading using the same camDir->atan2 pattern as
+    // the rig-heading block above (reuse the already-computed camDir/heading).
+    // The rig group is rotated to rig.heading, so a target of (camHeading -
+    // rig.heading) expresses how far the camera leads the body. In practice
+    // rig.heading tracks the camera each frame so the delta is ~0; we instead
+    // bias the lead arm a constant subtle amount toward facing, scaled so it
+    // reads as an aim-ready upper-body twist rather than a square-on idle.
+    const aimTwistTarget = THREE.MathUtils.clamp(
+      AIM_TWIST_BIAS,            // lead the body toward camera-facing
+      -AIM_TWIST_CLAMP,
+      AIM_TWIST_CLAMP,
+    );
+    rig._aimTwist += (aimTwistTarget - rig._aimTwist) * AIM_TWIST_LERP;
+    // Additive on Y only — preserves whatever swing X the state block set.
+    rig.shoulders[1].rotation.y = rig._aimTwist;
+  } else if (rig._aimTwist !== 0) {
+    // Decay back to neutral when not in 3P so re-entry is smooth.
+    rig._aimTwist += (0 - rig._aimTwist) * AIM_TWIST_LERP;
+    rig.shoulders[1].rotation.y = rig._aimTwist;
+  }
 }
+
+// ACL AIM TWIST-IK tuning — promoted to Tuning (integration).
+// Subtle upper-body aim lead on the right (lead/gun) shoulder when in 3P.
+const AIM_TWIST_BIAS = Tuning.AIM_TWIST_BIAS;    // target twist toward camera-facing (rad)
+const AIM_TWIST_CLAMP = Tuning.AIM_TWIST_CLAMP;  // hard clamp on aim twist (±rad)
+const AIM_TWIST_LERP = Tuning.AIM_TWIST_LERP;    // per-frame lerp toward target (smoothing)
 
 // ── Foot IK helper ────────────────────────────────────────────────────
 // Per-frame: for each leg, sample terrain under the foot's intended

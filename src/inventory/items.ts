@@ -21,8 +21,15 @@ import { createMetalMaterial } from '../world/metalMaterial.ts';
 import { createFabricMaterial } from '../world/fabricMaterial.ts';
 import { createWoodGrainMaterial } from '../world/woodGrainMaterial.ts';
 import { createBoneMaterial } from '../world/boneMaterial.ts';
+import { createGlassMaterial } from '../world/glassMaterial.ts';  // ACL ITEMS — lantern globe
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
+
+// ACL ITEMS — amban rifle magazine capacity, mirrored from combat.ts's
+// WEAPON_AMBAN_RIFLE_MAX_AMMO so the scrap_bullet reload path can cap fill
+// without importing the combat spec (avoids a circular dep).
+// Promoted to Tuning (integration) — single source of truth shared w/ combat.ts.
+const AMBAN_RIFLE_MAX_AMMO = Tuning.WEAPON_AMBAN_RIFLE_MAX_AMMO;
 
 function svg(viewBox = '0 0 24 24'): SVGSVGElement {
   const s = document.createElementNS(SVG_NS, 'svg');
@@ -620,10 +627,15 @@ const _DEFS: Record<ItemId, ItemDef> = {
       // If the equipped item ISN'T a scrap_gun, this is a no-op
       // (we don't want to silently consume a bullet).
       const equipped = ctx.inventory.slots[ctx.inventory.selectedIdx];
-      if (equipped.item !== 'scrap_gun') {
-        return { consumed: false, message: 'equip the scrap gun first' };
+      // ACL ITEMS — bullets also feed the amban rifle (both are
+      // scrap_bullet-fed ranged weapons).
+      if (equipped.item !== 'scrap_gun' && equipped.item !== 'amban_rifle') {
+        return { consumed: false, message: 'equip a scrap-fed gun first' };
       }
-      const maxAmmo = Tuning.WEAPON_SCRAP_GUN_MAX_AMMO;
+      // amban capacity from Tuning.WEAPON_AMBAN_RIFLE_MAX_AMMO (via AMBAN_RIFLE_MAX_AMMO).
+      const maxAmmo = equipped.item === 'amban_rifle'
+        ? AMBAN_RIFLE_MAX_AMMO
+        : Tuning.WEAPON_SCRAP_GUN_MAX_AMMO;
       const cur = equipped.meta?.ammoRemaining ?? 0;
       if (cur >= maxAmmo) {
         return { consumed: false, message: 'gun is full' };
@@ -797,6 +809,122 @@ const _DEFS: Record<ItemId, ItemDef> = {
       chamberMat.color.setRGB(r, g, b);
       if (emitterMat && emitterMat !== chamberMat) emitterMat.color.setRGB(r, g, b);
     },
+  },
+
+  // ACL ITEMS — amban rifle. Long-barreled ranged weapon: longer reach +
+  // harder hit than the scrap gun (see combat.ts _WEAPON_SPECS). Procedural
+  // wood stock + machined-metal receiver/barrel from the material factories.
+  // wieldLmb:'attack' routes LMB through updateCombat's ranged path; R
+  // reloads from scrap_bullet stacks (combat.ts updateReload, generalized).
+  amban_rifle: {
+    id: 'amban_rifle',
+    name: 'AMBAN RIFLE',
+    glyph: '↟',
+    description: 'a long-barreled marksman rifle; carved stock, scrap-iron action',
+    stackable: false,
+    maxStack: 1,
+    wieldLmb: 'attack',
+    thirdPersonScale: 1.25,    // ACL — long but thin; modest 3P boost
+    onUse(_ctx, _slot) {
+      // Ranged firing is driven by combat.ts via LMB; onUse (E) is inert.
+      return { consumed: false };
+    },
+    makeViewModel() {
+      const group = new THREE.Group();
+      // Receiver/barrel — machined dark steel; long barrel runs forward (-Z).
+      const steelMat = createMetalMaterial(0x3a3832, { wornScale: 9.0, scratchStrength: 0.05 });
+      steelMat.emissive = new THREE.Color(0x090807);
+      const barrelMat = createMetalMaterial(0x26241f, { wornScale: 9.0, scratchAngle: Math.PI / 2, scratchStrength: 0.06 });
+      // Stock + fore-grip — carved wood grain.
+      const woodMat = createWoodGrainMaterial(0x5a3a22, {
+        grainAxis: Math.PI / 2,     // grain runs along the barrel axis
+        ringDensity: 9.0,
+        weatherLevel: 0.4,
+      });
+      // Receiver block — the action, sits at grip height.
+      const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.055, 0.14), steelMat);
+      receiver.position.set(0, 0, -0.02);
+      group.add(receiver);
+      // Long barrel — extends well forward of the receiver.
+      const barrel = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.011, 0.013, 0.46, 10),
+        barrelMat,
+      );
+      barrel.rotation.x = Math.PI / 2;       // cylinder Y → +Z (forward)
+      barrel.position.set(0, 0.012, -0.34);
+      group.add(barrel);
+      // Muzzle band — slightly fatter ring near the barrel tip.
+      const muzzle = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.018, 0.016, 0.04, 10),
+        steelMat,
+      );
+      muzzle.rotation.x = Math.PI / 2;
+      muzzle.position.set(0, 0.012, -0.55);
+      group.add(muzzle);
+      // Wooden fore-grip — a tube wrapping the rear half of the barrel.
+      const foreGrip = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.022, 0.022, 0.18, 8),
+        woodMat,
+      );
+      foreGrip.rotation.x = Math.PI / 2;
+      foreGrip.position.set(0, 0.006, -0.20);
+      group.add(foreGrip);
+      // Iron sight — small blade on top near the muzzle.
+      const sight = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.018, 0.012), steelMat);
+      sight.position.set(0, 0.032, -0.50);
+      group.add(sight);
+      // Rear sight notch — small block atop the receiver.
+      const rearSight = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.012, 0.012), steelMat);
+      rearSight.position.set(0, 0.033, 0.02);
+      group.add(rearSight);
+      // Wooden shoulder stock — angled back + down behind the receiver.
+      const stock = new THREE.Mesh(new THREE.BoxGeometry(0.034, 0.07, 0.16), woodMat);
+      stock.position.set(0, -0.022, 0.13);
+      stock.rotation.x = 0.12;
+      group.add(stock);
+      // Stock comb — thin raised cheek-piece on the stock.
+      const comb = new THREE.Mesh(new THREE.BoxGeometry(0.030, 0.014, 0.10), woodMat);
+      comb.position.set(0, 0.018, 0.10);
+      group.add(comb);
+      // Grip — angled wooden pistol grip beneath the receiver.
+      const grip = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.075, 0.030), woodMat);
+      grip.position.set(0, -0.052, 0.01);
+      grip.rotation.x = -0.30;
+      group.add(grip);
+      // Trigger guard — metal loop below the action.
+      const guard = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.012, 0.040), steelMat);
+      guard.position.set(0, -0.024, -0.01);
+      group.add(guard);
+      // Bolt handle — small knob jutting from the right of the receiver.
+      const bolt = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.006, 0.006, 0.05, 6),
+        steelMat,
+      );
+      bolt.rotation.z = Math.PI / 2;
+      bolt.position.set(0.035, 0.012, 0.02);
+      group.add(bolt);
+      // Rest pose — held at a slight cant, shouldered-ready angle.
+      group.rotation.set(-0.06, 0.04, 0.08);
+      return group;
+    },
+    makeIcon() {
+      const s = svg();
+      // Long rifle silhouette — barrel line + stock + grip.
+      s.appendChild(svgEl('line', { x1: '3', y1: '8', x2: '20', y2: '8', 'stroke-width': '2' }));
+      s.appendChild(svgEl('polygon', { points: '17,8 21,9 21,13 16,12' }));   // receiver/stock
+      s.appendChild(svgEl('line', { x1: '13', y1: '9', x2: '12', y2: '15' })); // grip
+      s.appendChild(svgEl('line', { x1: '4', y1: '6.5', x2: '4', y2: '8' }));  // muzzle sight
+      return s;
+    },
+    playUseAnim(itemRoot, t) {
+      // Heavy recoil — sharp kick back + slight muzzle rise, slow settle.
+      const kick = t < 0.22
+        ? easeOutBack(t / 0.22)
+        : 1 - easeOutQuad((t - 0.22) / 0.78);
+      itemRoot.position.set(0.006 * kick, 0.03 * kick, 0.13 * kick);
+      itemRoot.rotation.set(-0.20 * kick, 0.04 * kick, 0.08);
+    },
+    useAnimDuration: Tuning.VIEWMODEL_SCRAP_GUN_ANIM_S,
   },
 
   // ─── Food items (new in Session F) ────────────────────────────────────────
@@ -1759,19 +1887,45 @@ const _DEFS: Record<ItemId, ItemDef> = {
       return { consumed: true, message: 'shelter pitched' };
     },
     makeViewModel() {
+      // ACL ITEMS — upgraded from plain Lambert roll+poles to procedural
+      // fabric canvas + wood-grain poles + lashing cords + a metal stake.
+      // Reads as a real bundled-up shelter kit.
       const group = new THREE.Group();
-      // Scaled-up tent_kit viewmodel — bigger canvas roll + 4 poles.
-      const mat = new THREE.MeshLambertMaterial({ color: 0xa89878 });
-      const roll = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.30, 12), mat);
+      const canvasMat = createFabricMaterial(0xa89878, undefined, { disableShimmer: true });
+      const roll = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.30, 16), canvasMat);
       roll.rotation.z = Math.PI / 2;
       group.add(roll);
-      const poleMat = new THREE.MeshLambertMaterial({ color: 0x4a3a2a });
+      // Visible rolled-edge flap — a thin slab of canvas peeling off the roll.
+      const flap = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.012, 0.14), canvasMat);
+      flap.position.set(0, 0.07, 0.04);
+      flap.rotation.set(0.18, 0, 0);
+      group.add(flap);
+      // 4 wood-grain poles bundled beneath the canvas.
+      const poleMat = createWoodGrainMaterial(0x4a3a2a, {
+        grainAxis: 0,            // grain along the pole length (lies along X)
+        ringDensity: 11.0,
+        weatherLevel: 0.5,
+      });
       for (let i = 0; i < 4; i++) {
-        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.010, 0.010, 0.32, 4), poleMat);
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.010, 0.010, 0.34, 6), poleMat);
         pole.rotation.z = Math.PI / 2;
-        pole.position.set(0, -0.06, (i - 1.5) * 0.025);
+        pole.position.set(0, -0.07, (i - 1.5) * 0.026);
         group.add(pole);
       }
+      // 2 lashing cords binding the bundle.
+      const cordMat = createFabricMaterial(0x5a4030, undefined, { disableShimmer: true });
+      for (let i = 0; i < 2; i++) {
+        const cord = new THREE.Mesh(new THREE.TorusGeometry(0.085, 0.006, 6, 14), cordMat);
+        cord.position.set((i - 0.5) * 0.16, -0.01, 0);
+        cord.rotation.y = Math.PI / 2;
+        group.add(cord);
+      }
+      // A spare metal stake tucked along the bundle.
+      const stakeMat = createMetalMaterial(0x6e5a4a, { wornScale: 7.0 });
+      const stake = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.002, 0.24, 6), stakeMat);
+      stake.rotation.z = Math.PI / 2;
+      stake.position.set(0, 0.05, -0.09);
+      group.add(stake);
       return group;
     },
     makeIcon() {
@@ -1802,18 +1956,34 @@ const _DEFS: Record<ItemId, ItemDef> = {
       return { consumed: true, message: 'bedroll laid out' };
     },
     makeViewModel() {
+      // ACL ITEMS — upgraded from plain Lambert roll to procedural fabric
+      // (weave + folds) with a contrasting inner-liner band peeking from the
+      // end + wood-grain toggle pegs on the binding cords.
       const group = new THREE.Group();
-      const cloth = new THREE.MeshLambertMaterial({ color: 0x9a7b5a });
-      const roll = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.26, 12), cloth);
+      const cloth = createFabricMaterial(0x9a7b5a, undefined, { disableShimmer: true });
+      const liner = createFabricMaterial(0x6a5238, undefined, { disableShimmer: true });
+      const roll = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.26, 16), cloth);
       roll.rotation.z = Math.PI / 2;
       group.add(roll);
-      // Cord wrapping the roll
-      const cordMat = new THREE.MeshLambertMaterial({ color: 0x5a4030 });
+      // Inner liner — a slightly smaller, darker disc set into each open end.
+      for (const sx of [-1, 1]) {
+        const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.052, 0.012, 16), liner);
+        cap.rotation.z = Math.PI / 2;
+        cap.position.set(sx * 0.125, 0, 0);
+        group.add(cap);
+      }
+      // Cord wrapping the roll + a small wood toggle peg on each.
+      const cordMat = createFabricMaterial(0x5a4030, undefined, { disableShimmer: true });
+      const pegMat = createWoodGrainMaterial(0x4a3320, { grainAxis: Math.PI / 2, ringDensity: 14.0 });
       for (let i = 0; i < 2; i++) {
-        const cord = new THREE.Mesh(new THREE.TorusGeometry(0.065, 0.005, 6, 12), cordMat);
-        cord.position.set((i - 0.5) * 0.10, 0, 0);
+        const x = (i - 0.5) * 0.10;
+        const cord = new THREE.Mesh(new THREE.TorusGeometry(0.065, 0.005, 6, 14), cordMat);
+        cord.position.set(x, 0, 0);
         cord.rotation.y = Math.PI / 2;
         group.add(cord);
+        const peg = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.03, 6), pegMat);
+        peg.position.set(x, 0.066, 0);
+        group.add(peg);
       }
       return group;
     },
@@ -1841,20 +2011,46 @@ const _DEFS: Record<ItemId, ItemDef> = {
       return { consumed: true, message: 'lantern set' };
     },
     makeViewModel() {
+      // ACL ITEMS — upgraded from plain post + MeshBasic globe to a
+      // wood-grain post, metal cap/base/uprights, a procedural frosted-glass
+      // globe, and a bright emissive flame core glowing inside the glass.
       const group = new THREE.Group();
-      const postMat = new THREE.MeshLambertMaterial({ color: 0x5a4030 });
-      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.014, 0.22, 6), postMat);
-      group.add(post);
-      // Tiny globe near the top
-      const globeMat = new THREE.MeshBasicMaterial({
-        color: 0xffc080,
-        transparent: true,
-        opacity: 0.9,
-        toneMapped: false,
+      const postMat = createWoodGrainMaterial(0x5a4030, {
+        grainAxis: Math.PI / 2,    // grain runs up the post
+        ringDensity: 13.0,
+        weatherLevel: 0.5,
       });
-      const globe = new THREE.Mesh(new THREE.SphereGeometry(0.04, 10, 8), globeMat);
-      globe.position.y = 0.08;
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.014, 0.22, 8), postMat);
+      group.add(post);
+      // Metal base foot + top cap.
+      const metalMat = createMetalMaterial(0x4a4640, { wornScale: 8.0 });
+      const base = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.034, 0.018, 12), metalMat);
+      base.position.y = -0.115;
+      group.add(base);
+      const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.030, 0.022, 12), metalMat);
+      cap.position.y = 0.135;
+      group.add(cap);
+      // Frosted-glass globe — lets the flame read through.
+      const globeMat = createGlassMaterial(0xffd9a0, {
+        frostLevel: 0.35,
+        edgeHighlight: 0.7,
+        dustLayer: 0.2,
+        opacity: 0.45,
+      });
+      const globe = new THREE.Mesh(new THREE.SphereGeometry(0.042, 14, 12), globeMat);
+      globe.position.y = 0.085;
       group.add(globe);
+      // Two metal uprights flanking the globe (the lantern cage).
+      for (const sx of [-1, 1]) {
+        const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.003, 0.003, 0.10, 5), metalMat);
+        bar.position.set(sx * 0.04, 0.085, 0);
+        group.add(bar);
+      }
+      // Emissive flame core inside the globe — small bright sphere.
+      const flameMat = new THREE.MeshBasicMaterial({ color: 0xffb060, toneMapped: false });
+      const flame = new THREE.Mesh(new THREE.SphereGeometry(0.016, 8, 6), flameMat);
+      flame.position.y = 0.082;
+      group.add(flame);
       group.rotation.z = -0.15;
       return group;
     },
@@ -2152,4 +2348,5 @@ export const ALL_ITEM_IDS: ReadonlyArray<ItemId> = [
   'bedroll_kit', 'lantern_kit', 'locker_kit',  // Session AAC
   'companion_pod',  // Session AAE
   'stake_kit',      // Session ACE
+  'amban_rifle',    // ACL ITEMS — long-barreled ranged weapon
 ];

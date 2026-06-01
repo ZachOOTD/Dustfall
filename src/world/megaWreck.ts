@@ -1474,6 +1474,49 @@ export function placeMegaWreck(
     registerNested(p, group, 'massive');
   }
 
+  // ACL megawreck-catwalk-panel-reachability — 2 GROUND-LEVEL exterior
+  // hull panels. Panels #3/#4/#8 (upper catwalk ≈7.5m, bridge stub
+  // ≈11.5m, antenna spire ≈30m+) all require the ramp/stair climb. ABE
+  // added one ground panel on the rear back wall between the bells; this
+  // pair finishes the "fully salvageable from the ground" goal with two
+  // more on the most-walkable hull faces — the long aft -X side wall and
+  // the bow +X side wall (near the existing ragged opening). Both at
+  // chest/eye height so a player walking up from the sand can pry them
+  // without scaling the structure. Same 'massive' loot kind + scale=1 as
+  // the wreck's other hull panels. Additive registrations (no save bump).
+  const PANEL_GROUND_Y = Tuning.WRECK_GROUND_PANEL_Y;   // chest/eye-height for ground-reachable hull panels (m)
+
+  // 9. Aft -X side wall exterior — long flat hull face, mid-length.
+  // The aft -X wall is solid (no doorway) and spans the full 60m bay
+  // length, so it's the most approachable salvage surface from the sand.
+  // Panel sits proud of the wall (localX just outside the wall face),
+  // facing -X (outward toward the approaching player).
+  {
+    const p = new THREE.Group();
+    p.position.set(
+      -AFT_HALF_W - WALL_THICK - 0.05,
+      PANEL_GROUND_Y,
+      AFT_ORIGIN_Z - AFT_HALF_L * 0.3,
+    );
+    p.rotation.y = -Math.PI / 2;   // face -X (outward)
+    registerNested(p, group, 'massive');
+  }
+
+  // 10. Bow +X side wall exterior — beside the ragged side-light opening.
+  // Attached to bowGroup so it inherits bowYOffset (terrain tracking).
+  // Faces +X (outward). Offset along Z from the opening (BOW_ORIGIN_Z) so
+  // the panel doesn't overlap the opening hole.
+  {
+    const p = new THREE.Group();
+    p.position.set(
+      BOW_HALF_W + WALL_THICK + 0.05,
+      PANEL_GROUND_Y,
+      BOW_ORIGIN_Z + BOW_HALF_L * 0.45,
+    );
+    p.rotation.y = Math.PI / 2;    // face +X (outward)
+    registerNested(p, bowGroup ?? group, 'massive');
+  }
+
   // ── Surrounding debris field — 40 small pieces in a 50m radius.
   placeDebrisField(scene, _terrain, pos, 50, rand, 40);
 

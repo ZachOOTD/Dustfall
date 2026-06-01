@@ -37,7 +37,11 @@ interface SkyBundle {
   moon: THREE.Sprite;
   moonMat: THREE.SpriteMaterial;
   stars: THREE.Points;
-  starsMat: THREE.PointsMaterial;
+  // ACL SKY+WEATHER — stars are now a ShaderMaterial (was PointsMaterial)
+  // so each star can twinkle (per-vertex phase + uTime) and the whole
+  // field can drift. uOpacity carries the night/storm fade (replaces the
+  // old material.opacity).
+  starsMat: THREE.ShaderMaterial;
   planet: THREE.Sprite;
   planetMat: THREE.SpriteMaterial;
   shooters: ShootingStar[];
@@ -58,6 +62,57 @@ const _planetDir = new THREE.Vector3(
 const _planetPos = new THREE.Vector3();
 const _tmpOrigin = new THREE.Vector3();
 const _tmpTravel = new THREE.Vector3();
+
+// ACL SKY+WEATHER — star twinkle/drift tuning. Promoted to Tuning (integration).
+const STAR_TWINKLE_SPEED = Tuning.STAR_TWINKLE_SPEED;       // radians/sec base rate of the twinkle sine
+const STAR_TWINKLE_DEPTH = Tuning.STAR_TWINKLE_DEPTH;       // 0..1 — how much opacity dips at the trough
+const STAR_TWINKLE_SIZE_DEPTH = Tuning.STAR_TWINKLE_SIZE_DEPTH; // 0..1 — how much point size pulses with twinkle
+const STAR_DRIFT_RATE = Tuning.STAR_DRIFT_RATE;            // radians/sec — slow celestial rotation of the field
+const STAR_BASE_SIZE = Tuning.STAR_BASE_SIZE;             // px — base point size (was PointsMaterial.size)
+// Storm states suppress stars earlier than the bare intensity ramp: even a
+// building/settling storm has enough high dust to wash out the night sky.
+const STAR_STORM_STATE_FLOOR = Tuning.STAR_STORM_STATE_FLOOR;  // extra star-kill applied while building/storm/settling
+
+// ACL SKY+WEATHER — star field shader. Per-vertex `phase` decorrelates each
+// star's twinkle; `size` is the existing magnitude jitter. uTime drives the
+// twinkle sine; uOpacity is the night/storm fade (replaces material.opacity).
+export const STAR_VERTEX = /* glsl */ `
+attribute float size;
+attribute float phase;
+uniform float uTime;
+uniform float uOpacity;
+uniform float uTwinkleSpeed;
+uniform float uTwinkleDepth;
+uniform float uSizeDepth;
+uniform float uBaseSize;
+varying float vAlpha;
+void main() {
+  // Twinkle: a per-star sine in [-1,1], folded to [0,1].
+  float tw = 0.5 + 0.5 * sin(uTime * uTwinkleSpeed + phase);
+  // Opacity dips toward the trough; brighter stars (bigger size) twinkle
+  // a touch less so the field doesn't all blink in unison.
+  float dip = mix(1.0 - uTwinkleDepth, 1.0, tw);
+  vAlpha = uOpacity * dip;
+  // Size pulses subtly with the same phase.
+  float sizePulse = mix(1.0 - uSizeDepth, 1.0 + uSizeDepth, tw);
+  gl_PointSize = uBaseSize * size * sizePulse;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}
+`;
+
+// Round, soft-edged star point (gl_PointCoord disc) so points aren't squares.
+export const STAR_FRAGMENT = /* glsl */ `
+uniform vec3 uColor;
+varying float vAlpha;
+void main() {
+  vec2 c = gl_PointCoord - vec2(0.5);
+  float d = length(c);
+  // Soft falloff from center→edge.
+  float a = smoothstep(0.5, 0.05, d) * vAlpha;
+  if (a < 0.01) discard;
+  gl_FragColor = vec4(uColor, a);
+}
+`;
 
 export const SKY_VERTEX = /* glsl */ `
 varying vec3 vDir;
@@ -199,6 +254,8 @@ export function buildStarGeometry(): THREE.BufferGeometry {
   const radius = Tuning.STAR_SPHERE_RADIUS;
   const positions = new Float32Array(count * 3);
   const sizes = new Float32Array(count);
+  // ACL SKY+WEATHER — per-star twinkle phase so they blink independently.
+  const phases = new Float32Array(count);
   for (let i = 0; i < count; i++) {
     // Uniform-on-sphere via cos-z rejection-free formula.
     const u = Math.random() * 2 - 1;
@@ -207,12 +264,17 @@ export function buildStarGeometry(): THREE.BufferGeometry {
     positions[i * 3]     = radius * s * Math.cos(phi);
     positions[i * 3 + 1] = radius * u;
     positions[i * 3 + 2] = radius * s * Math.sin(phi);
-    // Brightness jitter — 80% are small/dim, 20% noticeably brighter.
-    sizes[i] = Math.random() < 0.2 ? 2.2 + Math.random() * 1.6 : 0.8 + Math.random() * 0.7;
+    // Brightness jitter — 80% are small/dim, 20% noticeably brighter. This is
+    // now a SIZE MULTIPLIER (× uBaseSize in the shader), centered near ~0.8–1.4
+    // for the common stars and ~1.4–2.4 for the bright ones.
+    sizes[i] = Math.random() < 0.2 ? 1.4 + Math.random() * 1.0 : 0.55 + Math.random() * 0.45;
+    // Random starting phase across a full period.
+    phases[i] = Math.random() * Math.PI * 2;
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   geo.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+  geo.setAttribute('phase', new THREE.BufferAttribute(phases, 1));
   return geo;
 }
 
@@ -278,20 +340,30 @@ export function createSky(scene: THREE.Scene): void {
   moon.frustumCulled = false;
   scene.add(moon);
 
-  // Star field — additive points, opacity ramps with night. depthTest stays
-  // ON so terrain in the lower hemisphere occludes the stars beneath your feet
+  // Star field — additive points via a custom ShaderMaterial so each star
+  // can twinkle (per-vertex phase + uTime) and the whole field can slowly
+  // drift. uOpacity carries the night/storm fade. depthTest stays ON so
+  // terrain in the lower hemisphere occludes the stars beneath your feet
   // (without it, transparent-pass ordering paints them over the terrain).
-  const starsMat = new THREE.PointsMaterial({
-    color: 0xffffff,
-    size: 1.6,
-    sizeAttenuation: false,   // constant pixel size — stars don't shrink with distance
+  // ACL SKY+WEATHER.
+  const starsMat = new THREE.ShaderMaterial({
+    vertexShader: STAR_VERTEX,
+    fragmentShader: STAR_FRAGMENT,
     transparent: true,
-    opacity: 0,
     depthWrite: false,
     depthTest: true,
     fog: false,
     toneMapped: false,
     blending: THREE.AdditiveBlending,
+    uniforms: {
+      uColor:        { value: new THREE.Color(0xffffff) },
+      uTime:         { value: 0 },
+      uOpacity:      { value: 0 },
+      uTwinkleSpeed: { value: STAR_TWINKLE_SPEED },
+      uTwinkleDepth: { value: STAR_TWINKLE_DEPTH },
+      uSizeDepth:    { value: STAR_TWINKLE_SIZE_DEPTH },
+      uBaseSize:     { value: STAR_BASE_SIZE },
+    },
   });
   const stars = new THREE.Points(buildStarGeometry(), starsMat);
   stars.renderOrder = -0.5;   // after sky sphere, before sun/moon
@@ -439,6 +511,14 @@ export function updateSky(ctx: GameContext, dt: number): void {
   // Sky sphere & sun & moon & stars & planet stay anchored to the camera.
   bundle.sphere.position.copy(cam);
   bundle.stars.position.copy(cam);
+  // ACL SKY+WEATHER — slow deterministic celestial DRIFT: rotate the whole
+  // star field about a tilted axis as a function of elapsed time. Deterministic
+  // (purely a function of ctx.time.elapsed) so it's identical across reloads.
+  bundle.stars.rotation.set(
+    ctx.time.elapsed * STAR_DRIFT_RATE * 0.18,
+    ctx.time.elapsed * STAR_DRIFT_RATE,
+    0,
+  );
 
   const sy = ctx.time.sunHeight;
   const aboveHorizon = Math.max(0, sy);
@@ -517,7 +597,17 @@ export function updateSky(ctx: GameContext, dt: number): void {
 
   // ── Stars: opacity rides nightMix, killed by sandstorm and twilight glow. ──
   // The 0.4 floor of dayMix knocks them out before they show in daylight.
-  bundle.starsMat.opacity = Math.max(0, nightMix - dayMix * 0.4) * (1 - storm * 0.9);
+  // ACL SKY+WEATHER — opacity now flows through the shader's uOpacity uniform
+  // (not material.opacity). uTime drives the twinkle sine. CLOUD OCCLUSION:
+  // building/storm/settling states suppress stars harder than the bare
+  // intensity ramp (high dust washes the sky out before peak intensity).
+  bundle.starsMat.uniforms.uTime.value = ctx.time.elapsed;
+  const stormStateKill =
+    ctx.weather.state === 'clear'
+      ? 1
+      : 1 - STAR_STORM_STATE_FLOOR * (0.35 + 0.65 * storm);
+  bundle.starsMat.uniforms.uOpacity.value =
+    Math.max(0, nightMix - dayMix * 0.4) * (1 - storm * 0.9) * Math.max(0, stormStateKill);
 
   // ── Distant planet: fixed direction in world, always-on faint visibility. ──
   _planetPos.copy(cam).addScaledVector(_planetDir, Tuning.PLANET_DISTANCE);

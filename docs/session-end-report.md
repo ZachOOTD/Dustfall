@@ -2,9 +2,24 @@
 
 Cumulative state. Rewritten end-to-end at each `/session-end`.
 
-**Current state**: Session ACK shipped (2026-05-31 — PM-C outfit + realism pass). 92 sessions post-MVP. tsc clean + verified via the Playwright `rig-shot` harness. **SAVE_VERSION still v13** (ACK = pure rig geometry + materials + tooling, zero save changes). **The player-model arc is substantially complete**: PM-A silhouette ✓, PM-S SkinnedMesh foundation ✓ (arms+legs skinned), PM-B head/face ✓, **PM-C outfit ✓ (ACK)**, **realism pass ✓ (ACK)** — the figure is now a believable, solid, dressed human at the **in-pipeline ceiling** (zero-asset flat-shaded primitives = "believable stylized", NOT photoreal). Remaining model work is OPTIONAL/deprioritized (PM-D cloth, PM-S.3 torso-skin, PM-E deeper texture) + two user-call realism levers (game lighting mood; D107 asset fork). **Next session is a long OVERNIGHT for backlog/roadmap breadth** (plan-mode + fanned-out agents), not the model.
+**Current state**: Session ACL shipped (2026-06-01 — overnight breadth, 8 backlog features via fanned-out agents). 93 sessions post-MVP. Full `tsc` PASS + runtime boot-clean (harness rendered, zero console errors). **SAVE_VERSION 14** (ACL bumped 13→14: additive shrew roster + storm-wall state, v13 back-compat — D144). ACL ran as **8 parallel file-ownership lanes + a single integrator** (~2M budget, 9 agents — methodology D143) and shipped: aim twist-IK, speeder angular damping, worm twilight-breach audio attenuation, megaWreck ground-level salvage panels, night-sky stars (twinkle/drift/cloud), Dune sweeping sandstorm (directional wall deriving the intensity carrier — D145), in-storm movement penalty, amban rifle (NEW ranged weapon) + viewmodel fidelity (3 kits), desert shrew (NEW ambient creature). The player-model arc remains complete (ACK ceiling = believable stylized human). **⚠ Rule-8 debt**: ACL's new VISUAL features shipped tsc+boot-clean but UN-iterated — a `/visual-triage` pass is the top next item. **Next session = `/visual-triage` the ACL visuals**, then more breadth or a player-model follow-up.
 
-## ACK scope (this session) — PM-C outfit + realism pass
+## ACL scope (this session) — overnight breadth: 8 features via fanned-out agents
+
+Ran a long unattended overnight (~2M budget) as **8 disjoint file-ownership lanes in parallel + a single integrator** (D143): each lane edited only its own files + tsc + returned an integration manifest; the integrator applied all manifests to the shared seams (`main.ts` tick, `save.ts` v13→14, `GameContext.ts` `ctx.shrews`, `tuning.ts` ~40 promoted consts) and ran the authoritative full tsc (PASS). 9 agents, ~573k subagent tokens, ~12min wall.
+
+- **aim twist-IK** (`playerRig.ts`): 3P right-shoulder leads toward camera (`_aimTwist`, additive yaw, ±0.5).
+- **speeder angular damping** (`speeder.ts`): passive Y-yaw decay so post-collision spin settles.
+- **worm twilight-breach audio attenuation** (`sandWorm.ts`+`audio.ts`): distance-scaled roar for ambient breaches.
+- **megaWreck ground panels** (`megaWreck.ts`): 2 chest-height salvage panels (no stairs needed).
+- **night-sky stars** (`sky.ts`): ShaderMaterial twinkle + deterministic drift + cloud occlusion.
+- **Dune sweeping sandstorm** (`weather.ts`, D145): directional storm WALL deriving `weather.intensity` (downstream readers unchanged); anisotropic dust; wall state persisted.
+- **in-storm movement penalty** (`controller.ts`): unsheltered + high intensity → no sprint + slowed walk.
+- **amban rifle** (`types.ts`/`items.ts`/`combat.ts`): new ranged weapon + procedural viewmodel; **+ viewmodel fidelity** on 3 kits.
+- **desert shrew** (NEW `enemies/shrew.ts`): ambient flee-AI critter; `ctx.shrews`, tick after `updateLizards`, save roster.
+- **Verification**: full tsc PASS + boot smoke-test clean. **Rule-8 debt**: the new visuals (stars/storm/shrew/aim-twist) NOT visually-iterated → `/visual-triage` owed.
+
+## ACK scope — PM-C outfit + realism pass
 
 PM-C re-dressed the torso (bare since the ACJ poncho cut) with a fitted wrapped **tunic** hugging the body lathe (D140). Then a goal-driven **9-round realism arc** took the figure from a cartoon mannequin → a believable solid dressed human:
 - **Proportions** (D142): `HEAD_R` 0.135→0.115 (≈ 1:7.7 adult; ACI's 0.135 read as a 1:6.7 cartoon big-head) + longer/slimmer neck.
@@ -175,45 +190,43 @@ Existing tunables of interest:
 
 ## Suggested next session (1-3 directions in priority order)
 
-The player-model arc is at its in-pipeline ceiling. Next is BREADTH, not the model:
-
-1. **Long OVERNIGHT — backlog/roadmap breadth** (TOP, Session ACL). Plan-mode + fanned-out agents across many INDEPENDENT backlog items (procgen variants, world/POI, audio, polish, bug fixes). Requires the overnight preconditions: populated scope-cut list, token-budget ceiling, `npm run verify` baseline, destructive-action guard. Classify each item (fan-out vs sequential vs visual-triage) per `orchestration-policy.md`. See `next-session-prompt.md` + `backlog.md`.
-2. **PM-D cloth physics** (optional) — Verlet drape on the tunic (+ a cloak), fold in PM-S.3 torso-skin junction blend. Only if the user wants the model pushed further; it's already at the believable-stylized ceiling.
-3. **In-game lighting mood** (optional, D142) — biggest remaining realism lever for actual play, but a whole-game aesthetic change; surface before doing.
+1. **`/visual-triage` the ACL visual features** (TOP, Session ACM). Close the rule-8 debt: star twinkle/drift + cloud occlusion (night shot), Dune sweeping storm WALL (trigger + watch it sweep), desert shrew procedural model + flee AI (frame one), 3P aim-twist in motion. Iterate the ACL `tuning.ts` constants (AIM/STAR/STORM/SHREW) via `npm run rig-shot --lit=form` + preview. These shipped tsc+boot-clean but un-iterated.
+2. **More backlog breadth** — another fanned-out overnight (the D143 file-ownership-lane + integrator pattern worked). Plenty remains (more procgen/POI/biome, creatures, audio, polish).
+3. **Player-model follow-ups** (optional) — PM-D cloth physics; or the game **lighting mood** (D142, biggest in-game realism lever, whole-game aesthetic — surface first); or the D107 asset fork (photoreal, user's call).
 
 ---
 
 ## Time spent
 
-92 sessions shipped (A through ACK). Approx ~298-365h cumulative dev time. ACK: PM-C tunic + a 9-round realism arc (proportions, stance, PBR materials + micro-bump + baked occlusion, glassy goggles, hands, boots, head) — every element harness-screenshot-iterated. (Tail of the same very long conversation: ACJ skinned rig → ACK PM-C → realism `/goal` arc.)
+93 sessions shipped (A through ACL). Approx ~300-368h cumulative human-facing dev time (ACL itself was a ~12min fanned-out machine run on top of the planning). ACL: 8 backlog features via 8 parallel file-ownership lanes + an integrator (9 agents, ~573k subagent tokens). (Tail of the same very long conversation: ACJ skinned rig → ACK realism → ACL overnight breadth.)
 
 ---
 
 ## State at session end
 
-- **Git status**: ACK was uncommitted until this `/session-end` (ACJ committed at `210ea4f`). Dirty: `src/player/playerRig.ts`, `src/world/skinMaterial.ts`, `src/world/fabricMaterial.ts`, `scripts/rig-shot.mjs`, deleted `src/player/viewModelHands.ts`, + the docs + the ACK-prompt archive. `verification/*.png` gitignored. Commit handoff below.
-- **Branch**: `master`. **Save state**: localStorage v13 — ACK made zero save changes (rig geometry + materials + tooling).
+- **Git status**: ACK committed at `dc233e3`; ACL uncommitted until this `/session-end`. Dirty (16): `playerRig.ts`, `speeder.ts`, `sandWorm.ts`, `audio.ts`, `megaWreck.ts`, `sky.ts`, `weather.ts`, `controller.ts`, `items.ts`, `types.ts`, `combat.ts`, `GameContext.ts`, `main.ts`, `save.ts`, `tuning.ts` + NEW `enemies/shrew.ts`. `verification/*.png` gitignored. Commit handoff below.
+- **Branch**: `master`. **Save state**: localStorage **v14** (ACL bumped 13→14 — additive shrew roster + storm-wall state, v13 back-compat — D144).
 - **Ports bound**: a dev server may linger from the preview-MCP (5180) / harness (5191); both dev-only.
-- **Realism `/goal`**: banked at "believable stylized human" (the user chose to bank rather than pursue the lighting-mood / asset-fork levers).
+- **Rule-8 debt**: ACL's new visual features (stars/storm/shrew/aim-twist) shipped tsc+boot-clean but UN-iterated — `/visual-triage` owed (top next item).
 
 ---
 
 ## Token spend this session (estimated)
 
-ACK was a long visual-iteration session: PM-C tunic + a 9-round realism arc (proportions, stance, PBR materials, baked occlusion, goggles, hands, boots, head), each harness-screenshot-iterated.
+ACL was a fanned-out overnight: 8 parallel lanes + integrator, ~573k subagent tokens (9 agents) over ~12min, plus the orchestration/exploration/planning + this session-end on the main loop.
 
-- Output (ACK slice): large — material-shader rewrites (skin + fabric → opt-in PBR + micro-bump + baked AO) + many `playerRig.ts` edits + ~20 harness screenshot-critique rounds + these docs.
-- Cost (Opus 4.8 rates): well above baseline (sustained visual iteration on a `/goal`); ≥2× baseline.
+- Output (ACL slice): very large by token volume (the fan-out), but high value-per-item — 8 shipped features + a new creature + a new weapon, all compiling + boot-clean, in one machine run.
+- Cost (Opus 4.8 rates): ~2M budget authorized; the fan-out is the bulk. Well above a normal session, by design (breadth sweep).
 
-Notable: the realism `/goal` was honestly bounded — the arc genuinely transformed the figure, and the agent surfaced (rather than spun on) the two user-owned ceilings (lighting mood, asset fork) once in-pipeline model levers were exhausted. D141's baked-occlusion-in-the-material was the key in-game realism win (solidity without a scene-lighting change).
+Notable: the **file-ownership-lane + manifest + single-integrator** orchestration (D143) shipped 8 parallel features with ZERO merge conflicts and a clean full tsc — the key methodological win. The honest cost: visual features got tsc+boot verification only, not rule-8 iteration (the breadth/depth tradeoff, flagged for follow-up).
 
 ---
 
 ## Commit handoff
 
-Per CLAUDE.md (session-end auto-runs commit + tag + push). ACK ships:
-- `src/player/playerRig.ts` — PM-C tunic (hugging lathe + folds + wrap seam); realism: HEAD_R 0.135→0.115 + neck; player skin/cloth → pbr; goggle lenses → glossy convex glass; hands slim+curled; boots (sole/toe/heel); fuller-cranium head profile.
-- `src/world/skinMaterial.ts` + `src/world/fabricMaterial.ts` — opt-in `pbr` (MeshStandard) + derivative micro-bump + baked downward-occlusion (D141).
-- `scripts/rig-shot.mjs` — `--lit=form` (key+rim), `full/full3q/torso` framings, `relaxed` pose.
-- deleted `src/player/viewModelHands.ts` (dead since ACJ; broke on the material union type).
-- Docs: changelog ACK entry, CLAUDE.md Last shipped, roadmap.md (shipped + cycle/next), decisions.md D140-D142, backlog.md (PM status + optional follow-ups), session-end-report.md (this file), next-session-prompt.md ACL overnight brief.
+Per CLAUDE.md (session-end auto-runs commit + tag + push). ACL ships 8 features across 15 modified files + NEW `src/enemies/shrew.ts`:
+- Player/feel: `playerRig.ts` (aim twist-IK), `speeder.ts` (angular damping), `controller.ts` (in-storm penalty).
+- World/audio: `sandWorm.ts`+`audio.ts` (worm roar attenuation), `megaWreck.ts` (ground panels), `sky.ts` (stars), `weather.ts` (sweeping storm wall).
+- Content: `items.ts`+`types.ts`+`combat.ts` (amban rifle + viewmodel fidelity), NEW `enemies/shrew.ts` (desert shrew).
+- Seams (integrator): `main.ts` (tick), `save.ts` (v13→14 + additive shrew/weatherWall), `GameContext.ts` (`ctx.shrews`), `tuning.ts` (~40 ACL consts).
+- Docs: changelog ACL, CLAUDE.md (Last shipped + tick order), roadmap (shipped + ACM-next), decisions D143-D145, backlog (ACL shipped + visual-triage/caveats follow-ups), this report, next-session-prompt ACM `/visual-triage` brief.

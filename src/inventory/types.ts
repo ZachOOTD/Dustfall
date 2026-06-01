@@ -48,7 +48,9 @@ export type ItemId =
   // Session AAR — heavy iron lever for prying salvage panels open
   | 'scrap_bar'
   // Session ACE — craftable world-anchor stake (B1 Phase 3 rope endpoint)
-  | 'stake_kit';
+  | 'stake_kit'
+  // ACL ITEMS — long-barreled procedural rifle (ranged weapon)
+  | 'amban_rifle';
 
 /** Per-slot metadata for stateful items (canteen fill level, cook state, light state). */
 export interface ItemMeta {

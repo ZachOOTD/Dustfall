@@ -26,6 +26,7 @@ import type { Terrain } from '../world/terrain.ts';
 import { createSkinMaterial } from '../world/skinMaterial.ts';
 import {
   playWormRoar,
+  playWormRoarAttenuated,
   playWormChomp,
   playHit,
   playPlayerHurt,
@@ -1211,7 +1212,16 @@ function enterStationaryBreach(worm: SandWorm, ctx: GameContext): void {
     new THREE.Vector3(worm.basePos.x, worm.surfaceGroundY + 0.3, worm.basePos.z),
     85, 9.0, 5.5,
   );
-  playWormRoar();
+  // ACL WORM TWILIGHT-BREACH AUDIO ATTENUATION — ambient twilight breaches
+  // erupt 180-400m off; attenuate the roar by player distance so it doesn't
+  // blast at full volume. Combat (non-twilight) breaches stay full-volume.
+  if (worm._isTwilightBreach) {
+    const playerTr = getPlayerPos(ctx);
+    const dist = Math.hypot(worm.basePos.x - playerTr.x, worm.basePos.z - playerTr.z);
+    playWormRoarAttenuated(dist);
+  } else {
+    playWormRoar();
+  }
 }
 
 function tickStationaryBreach(worm: SandWorm, ctx: GameContext, elapsed: number): void {

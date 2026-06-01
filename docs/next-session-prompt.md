@@ -1,70 +1,49 @@
-# Session ACL — Kickoff Brief: long OVERNIGHT, backlog/roadmap breadth (plan-mode + fan-out)
+# Session ACM — Kickoff Brief: /visual-triage the ACL features (close the rule-8 debt), then breadth
 
-> The player-model arc is at its in-pipeline ceiling (ACK). This session pivots to
-> **breadth**: knock out a large batch of INDEPENDENT backlog/roadmap items in one
-> long overnight, using **plan mode** to scope + **fanned-out agents** to execute in
-> parallel. NOT more player-model work (it's deprioritized; optional follow-ups in backlog).
+> The ACL overnight shipped 8 backlog features (tsc PASS + boot-clean) but the new VISUAL ones
+> shipped UN-iterated (rule 8 debt). This session: **visually verify + iterate the ACL visuals**,
+> then optionally continue breadth (another fanned-out overnight) or a player-model follow-up.
 
 ## Read these now (in order)
-1. **CLAUDE.md** (auto-loaded) — architecture rules, tick order, sub-agent policy (parallel-by-default).
-2. **docs/session-end-report.md** — full state through ACK.
-3. **docs/backlog.md** — THE source of work items for this session.
-4. **docs/roadmap.md** — "Up next" + the Phase-2 iteration plan context.
-5. **docs/decisions.md** tail (D130-D142) + grep `friction-score: [3-5]` for live risks.
-6. `~/projects/gamedev-framework/shared-memory/orchestration-policy.md` — the fan-out dispatch table.
+1. **CLAUDE.md** (auto-loaded) — rules; note the updated tick order (now includes `updateShrews`).
+2. **docs/session-end-report.md** — full state through ACL.
+3. **docs/decisions.md** tail — **D143** (file-ownership-lane overnight orchestration), **D144** (SAVE_VERSION 13→14 shrew+storm-wall), **D145** (sweeping storm = directional wall deriving the intensity carrier), D141 (player PBR+bump+baked-AO), D107 (zero-asset), D81 (additive save).
+4. **docs/backlog.md** — the ACL block (shipped + the visual-triage / shrew-determinism / rifle-balance follow-ups) + the rest of the backlog for further breadth.
+5. `shared-memory/iterative-polish-discipline.md` (the realism impact-order + "verify under form lighting") + `preview-screenshot-tips.md`.
 
 ## What's already built
-A full singleplayer desert-survival loop (survival stats, procgen 2400m world + POIs, combat, salvage, crafting, placement, mounts + sled tow, sandworm boss, companion, save v13, procedural audio + 3 music tracks) + a believable stylized procedural player rig (skinned limbs, dressed, PBR surfaces). See session-end-report "What works".
+A full singleplayer desert-survival loop + a believable stylized procedural player rig (skinned, dressed, PBR). ACL added: aim twist-IK, speeder angular damping, worm twilight-breach audio attenuation, megaWreck ground panels, night-sky star twinkle/drift, a Dune sweeping sandstorm WALL, in-storm movement penalty, the amban rifle (ranged weapon), and the desert shrew (ambient creature). SAVE_VERSION 14.
 
-## Session ACL focus — breadth via parallel fan-out
-Pick a batch of **independent** backlog items (no shared files / no ordering), classify each by shape (orchestration-policy.md), and **fan out one agent per item** (or per small cluster). Solo+sequential ONLY for dependency-ordered or observation-dependent (visual-feel) items. Govern cost with per-agent `effort`, not by avoiding fan-out.
+## Session ACM focus — VISUAL-TRIAGE the ACL features (rule 8)
+These compiled + boot clean but were never looked at. Verify each renders as intended, then iterate (3-5 rounds for tuning). Use `npm run rig-shot --lit=form` + the preview MCP / `__game` evals. Iterate the constants in the `tuning.ts` "ACL" block.
 
-## Candidate items (independent — good for fan-out; pick by budget)
-Quick wins (~30min–1h each, mostly isolated files):
-- **[polish] sandworm twilight-breach audio attenuation** — `enterStationaryBreach` plays `playWormRoar()` full-volume at 180-400m; skip it on twilight breaches or play a distance-attenuated variant. (`sandWorm.ts` + `audio.ts`)
-- **[polish] footstep dust at foot contact** — move dust emit from player-center to foot mid-stance world pos (foot IK). (`playerRig.ts`/controller + dust)
-- **[polish] 3P camera teleport-snap wiring** — set `ctx.player.cameraSnapNextFrame` on mount/dismount/save-load (flag exists, only boot consumes it).
-- **[bug] speeder spin angular-damping playtest** — confirm worldspace tilt recovery after bumps.
-- **[polish] megaWreck catwalk panel reachability** — add 1-2 ground-level panels.
-Medium (~1-3h):
-- **[polish] item viewmodel fidelity pass** — ~19 ItemDefs at primitive complexity (batch: large_tent_kit/bedroll_kit/lantern_kit, etc.). Visual-triage loop via `npm run rig-shot`-style capture or preview.
-- **[polish] 3P upper-body aim twist-IK** — rotate `rig.shoulders[1]` toward camera on aim (clamped ±0.5).
-- **[polish] 3P walk-cycle ↔ footstep cadence sync** — lock gait phase to footstep distance accumulator.
-- **[feat] multi-worm population follow-ups / [feat] in-storm movement penalty** (disable sprint + slow walk while storm overhead).
-Larger (scope carefully; may be 1 item alone):
-- **[feat] Dune-style sweeping sandstorm** (storm wall approaches/sweeps/passes) — reworks ambient intensity-ramp; bigger, save-aware. Consider spiking design first.
-- Triaged ideas in backlog: night-sky stars (twinkle/drift), wreck-yard biome, sarlacc pit, amban rifle, desert-shrew creature, cave→egg→"Pebble" companion, lie-down-to-sleep, iron-stake model, speeder rope-pull.
+## Priority items (in order)
+1. **Night-sky stars** (`sky.ts`, STAR_* consts) — set night time, screenshot the sky. Confirm twinkle reads (not strobing/static), drift is slow/natural, cloud occlusion fades stars during storms. Tune STAR_TWINKLE_SPEED/DEPTH, STAR_DRIFT_RATE, STAR_STORM_STATE_FLOOR.
+2. **Dune sweeping sandstorm** (`weather.ts`, STORM_WALL_* consts) — trigger a storm (`__game` debug / `triggerStorm`), watch the wall approach → engulf → pass. Confirm the intensity ramp feels like a wall (not a global fade), dust biases along travel dir, timing isn't too fast/slow. Tune STORM_WALL_WIDTH/SPEED/SPAWN_DIST/FALLOFF. (This is the riskiest — it reworked weather; watch for visual regressions in fog/sky/vignette.)
+3. **Desert shrew** (`enemies/shrew.ts`, SHREW_* consts) — frame a shrew in-world (they procgen-spawn; find one or add a temporary dev-spawn). Confirm the procedural model reads as a small critter (not broken/inside-out), and the flee AI looks skittish (not jittery/stuck). Tune model + SHREW_FLEE_SPEED/DURATION.
+4. **3P aim-twist** (`playerRig.ts` `_aimTwist`) — in 3P, confirm the upper body leads toward the camera naturally when turning/aiming (subtle, no clobbering the walk swing, no snap). Tune AIM_TWIST_BIAS/LERP.
+5. **amban rifle** (`items.ts`/`combat.ts`) — equip it, confirm the viewmodel reads as a rifle + it fires/reloads through the ranged path; sanity-check balance vs scrap_gun.
 
-## Overnight preconditions (verify BEFORE going wide; else fall back to gated)
-- `npm run verify` baseline PASS.
-- **Token-budget ceiling set** (fan-out is default-on — an unattended run needs a spend bound; the user passes e.g. `+500k`). If none set, ask or stay gated.
-- **Scope-cut list**: per-item, the cut order is "drop the item entirely, log a D-entry, move on" — don't half-ship. Capture cuts in the changelog.
-- Destructive-action guard active (no `reset --hard`/`push --force`).
-
-## Execution shape
-1. Plan-mode: read backlog, select the batch that fits the budget, classify each item's shape + strategy.
-2. Fan out: issue concurrent Agent calls (or a Workflow pipeline) — `isolation: worktree` for any that mutate the same files. One agent per independent item.
-3. Each agent: implement + `npm run verify` (tsc) + (visual items) capture-critique-iterate. Returns a structured result.
-4. Synthesize: collect results, resolve any file conflicts, run a final `npm run verify`, batch-verify save round-trip if any schema changed (bump SAVE_VERSION additively per D81).
+## Stretch / then
+- Another **fanned-out breadth overnight** (the D143 lane+integrator pattern) on more backlog (procgen/POI/biome, more creatures, audio, polish).
+- Player-model: PM-D cloth physics; or the in-game **lighting mood** (D142 — biggest in-game realism lever, whole-game aesthetic, surface first).
 
 ## Autonomy contract
-Ambiguous → GDD pillars + decisions.md realism dial; append a D-entry; continue. Surface only on: procedural-vs-asset (D107), save-schema bumps (D81), destructive git, or a whole-game aesthetic change (e.g. lighting mood).
+Ambiguous → GDD pillars + decisions realism dial → D-entry → continue. Surface only on: D107 (asset), save bumps (D81), destructive git, whole-game aesthetic shifts (lighting mood).
 
 ## Stop conditions
-Token budget reached · 3 consecutive fix-walls on one item (cut it, log, continue) · catastrophic block · destructive-action attempt · all selected items shipped.
-
-## On stop
-Invoke `/session-end` (verify-all, changelog, CLAUDE.md, roadmap, decisions, backlog, this report, next brief, post-mortem + consolidate, auto-commit+tag+push per CLAUDE.md git policy).
+Wall-clock / budget · 3 fix-walls on one feature (cut/log) · catastrophic block · destructive attempt.
 
 ## Notable footguns
-- **Per-frame tick order** in `main.ts` matters (CLAUDE.md rule 3); new systems hook at the right point + respect the pause gate (rule 4).
-- **Magic numbers → `tuning.ts` only** (rule 2). **No innerHTML string-concat** (rule 6). **Box decorations ≥10cm depth** (rule 7).
-- **D107 zero-asset** (procedural shaders only) — don't add texture files without surfacing.
-- Save changes are additive + version-bumped (D81); 2-pass load for cross-entity refs.
-- Verify = `npm run verify` (= `tsc --noEmit`); Dustfall opts out of the tier-ladder.
+- **D145**: don't make downstream systems read storm-wall geometry — they read `weather.intensity`; the wall only produces it. **D144**: SAVE_VERSION is 14; further save changes are additive + bump to 15. **Tick order** now has `updateShrews` after `updateLizards`.
+- Preview-MCP wedges mid-session (use `npm run rig-shot` / restart if it hangs). Storm has a multi-second timeline — be patient when capturing it.
+- D107 procedural-only; rule 2 magic-numbers→tuning.ts; rule 6 no innerHTML; rule 7 box depth ≥10cm.
+
+## Verification protocol
+`npm run verify` (= `tsc --noEmit`) = type gate. QUALITY gate for the visuals = screenshot + honest critique + iterate (3-5 rounds each), per rule 8.
 
 ## Begin block
-1. Read CLAUDE.md, session-end-report, backlog, roadmap, decisions tail, orchestration-policy.
-2. `npm run verify` baseline. Confirm token-budget ceiling (else gated).
-3. Plan-mode: select batch + per-item strategy. TaskCreate one task per item.
-4. Fan out; each agent verifies; synthesize + final verify; `/session-end`.
+1. Read CLAUDE.md, session-end-report, decisions tail (D143-D145), backlog ACL block, the discipline docs.
+2. `npm run verify` baseline.
+3. TaskCreate one task per ACL visual feature (stars, storm, shrew, aim-twist, rifle).
+4. Visual-triage each: capture → critique → tune the ACL `tuning.ts` consts → re-capture, 3-5 rounds.

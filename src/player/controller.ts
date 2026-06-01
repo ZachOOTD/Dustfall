@@ -46,6 +46,16 @@ const GRAVITY = -25; // m/s^2
 // visible foot motion — visually-audibly desynced.
 const STEP_DISTANCE = 1.875;     // meters between footsteps (walking gait)
 const STEP_DISTANCE_SPRINT = 2.75; // meters between footsteps (sprint gait)
+
+// ACL in-storm-movement-penalty — exposed (unsheltered) movement in a
+// strong dust storm is hard going: sprint becomes impossible and even a
+// walk is dragged down by the wind/sand. Penalty scales in smoothly
+// above STORM_PENALTY_INTENSITY_THRESHOLD (no hard snap) and tops out
+// at STORM_PENALTY_MAX_WALK_SLOWDOWN once the storm is at full force.
+// Only applies when NOT sheltered (ctx.player.inShelter).
+// Promoted to Tuning (integration).
+const STORM_PENALTY_INTENSITY_THRESHOLD = Tuning.STORM_PENALTY_INTENSITY_THRESHOLD; // intensity below which there's no penalty
+const STORM_PENALTY_MAX_WALK_SLOWDOWN = Tuning.STORM_PENALTY_MAX_WALK_SLOWDOWN;    // fraction of walk speed shaved at full intensity (→ 0.7x)
 let _stepAccum = 0;
 let _stepParity = 0;             // alternates 0/1 → ±lateral offset for L/R foot
 // ACE Tier 4A — step-count driven footstep cadence. Pre-ACE: _stepAccum
@@ -117,9 +127,24 @@ export function updatePlayer(ctx: GameContext, dt: number): void {
   }
   const isPullingSled = pulledSled !== null;
   const sprintBlockedByTow = isPullingSled && Tuning.SLED_TOW_PLAYER_DISABLES_SPRINT;
+  // ACL in-storm-movement-penalty — smooth 0..1 ramp of how much the
+  // storm bites, but ONLY while exposed (unsheltered). Below the
+  // threshold, or when inside shelter, this is 0 (no penalty). At full
+  // storm intensity it reaches 1.0. Avoids a hard snap by lerping across
+  // the [threshold, 1.0] intensity band.
+  let stormPenaltyT = 0;
+  if (!ctx.player.inShelter && ctx.weather.intensity > STORM_PENALTY_INTENSITY_THRESHOLD) {
+    const span = 1 - STORM_PENALTY_INTENSITY_THRESHOLD;
+    stormPenaltyT =
+      span > 1e-6
+        ? Math.min(1, (ctx.weather.intensity - STORM_PENALTY_INTENSITY_THRESHOLD) / span)
+        : 1;
+  }
+  const sprintBlockedByStorm = stormPenaltyT > 0; // ACL — any storm penalty clamps to walk
   const sprinting =
     !ctx.player.crouching &&
     !sprintBlockedByTow &&
+    !sprintBlockedByStorm &&
     (keys['ShiftLeft'] || keys['ShiftRight']) &&
     ctx.stats.thirst > 0.02 &&
     ctx.stats.stamina > Tuning.STAMINA_SPRINT_THRESHOLD &&
@@ -155,6 +180,13 @@ export function updatePlayer(ctx: GameContext, dt: number): void {
       towMult = 1.0;
     }
     speed *= towMult;
+  }
+  // ACL in-storm-movement-penalty — apply the smooth walk slowdown last,
+  // composing on top of crouch/tow. At full storm intensity this shaves
+  // STORM_PENALTY_MAX_WALK_SLOWDOWN of the speed (e.g. 0.3 → 0.7x). Sprint
+  // is already blocked above, so `speed` here is at most WALK_SPEED.
+  if (stormPenaltyT > 0) {
+    speed *= 1 - STORM_PENALTY_MAX_WALK_SLOWDOWN * stormPenaltyT;
   }
 
   // Stamina: drains while sprinting; recovers otherwise. JJ-2 — gated

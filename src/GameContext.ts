@@ -23,6 +23,7 @@ import type { PlayerRig } from './player/playerRig.ts';
 import type { WaterSource } from './world/waterSources.ts';
 import type { Cactus } from './world/cactus.ts';
 import type { Lizard } from './enemies/lizard.ts';
+import type { Shrew } from './enemies/shrew.ts';
 import type { SandWorm } from './enemies/sandWorm.ts';
 import type { LootContainer } from './world/lootContainers.ts';
 import type { Fire } from './world/fire.ts';
@@ -110,6 +111,12 @@ export interface GameContext {
   shelter: ShelterRegistry;
   raiders: Raider[];
   lizards: Lizard[];
+  /** ACL DESERT SHREW — skittery prey creatures (mirrors lizard pipeline).
+   *  Save schema v14 persists `shrews[]` (id + XZ + state; y re-derived from
+   *  terrain on load). NOTE: updateShrews iterates a module-owned list inside
+   *  shrew.ts; this slot's `list` IS that same array reference (assigned at
+   *  world build from spawnShrewsProcgen), so they stay in sync. */
+  shrews: { list: Shrew[] };
   /** Session DD — boss-tier sand worm(s). Singleton pre-ACE; ACE Tier 2
    *  multi-worm refactor: now an array (mirrors ctx.sleds shape). Save
    *  schema v13 stores `sandWorms[]`; v12 saves migrate by lifting the

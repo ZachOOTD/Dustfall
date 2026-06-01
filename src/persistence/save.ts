@@ -85,12 +85,17 @@ export const SAVE_KEY = 'dustfall.save.v1';
 // ACE Tier 2 — v13: multi-worm population. `sandWorm` (singleton-or-null)
 // → `sandWorms` (array). Pre-v13 saves migrate at load time by lifting
 // the legacy singleton into sandWorms[0].
-export const SAVE_VERSION = 13;
+// ACL — v14: additive. (1) `shrews[]` — desert-shrew prey (id + XZ + state).
+// (2) `weather.wall` — sweeping sandstorm-wall state. Both optional fields;
+// pre-v14 saves load with them absent (shrews rebuild from procgen; the wall
+// defaults to the dormant struct from createWeather and re-derives intensity
+// on the first updateWeather tick).
+export const SAVE_VERSION = 14;
 
 type V3 = { x: number; y: number; z: number };
 
 export interface SaveV1 {
-  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13;
+  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14;
   seed: number;
   savedAt: number;
   /** ABJ — v11: persist the dev-mode flag so a Continue from a
@@ -162,6 +167,18 @@ export interface SaveV1 {
   }>;
   cacti: Array<{ id: number; harvested: boolean }>;
   lizards: Array<{ id: number; pos: V3; state: LizardState; looted: boolean }>;
+  /** ACL — v14: desert shrews. Optional + additive (absent on pre-v14 saves,
+   *  where shrews rebuild from procgen). y is re-derived from terrain on load;
+   *  transient flee/wander needn't persist (state restores as-is). */
+  shrews?: Array<{ id: number; x: number; z: number; state: 'idle' | 'wander' | 'flee' }>;
+  /** ACL — v14: sweeping sandstorm-wall state (plain data struct; no THREE
+   *  objects). Optional + additive — absent on pre-v14 saves, which default
+   *  to the dormant wall from createWeather and re-derive intensity on the
+   *  first updateWeather tick. Restored verbatim onto ctx.weather.wall. */
+  weatherWall?: {
+    active: boolean; posX: number; posZ: number; dirX: number; dirZ: number;
+    width: number; speed: number; age: number; approaching: boolean;
+  };
   raiders: Array<{ id: number; pos: V3; state: RaiderState; health: number; dragAnchor?: SledTether }>;
   salvageables: Array<{ id: number; salvageRemaining: number; stripped: boolean }>;
   lootContainers: Array<{ id: number; opened: boolean; contents: LootEntry[] }>;
@@ -438,6 +455,17 @@ export function saveGameState(ctx: GameContext): { ok: boolean; error?: string }
           looted: l.looted,
         };
       }),
+      // ACL — v14: persist desert shrews (id + world XZ + state). y is
+      // re-derived from terrain on load.
+      shrews: ctx.shrews.list.map((s) => ({
+        id: s.id,
+        x: s.pos.x,
+        z: s.pos.z,
+        state: s.state,
+      })),
+      // ACL — v14: persist the sweeping sandstorm-wall state verbatim (plain
+      // data; no THREE objects). intensity re-derives from it on first tick.
+      weatherWall: { ...ctx.weather.wall },
       raiders: ctx.raiders.map((r) => {
         const tr = r.body.translation();
         return {
@@ -795,6 +823,32 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
       z: saved.pos.z,
     });
     if (saved.state === 'dead') applyDeadPose(lizard);
+  }
+
+  // ── ACL — Shrews (v14+): match boot-spawned shrews by id and restore
+  //    pos/state. Procgen is deterministic from the seeded scatterRand stream,
+  //    so the boot list ids/positions already match the same-seed save; this
+  //    just snaps any that had wandered + restores state. Pre-v14 saves have
+  //    no `shrews` field — boot procgen stands as-is. y re-derives from
+  //    terrain (shrews are not persisted with y). ──
+  if (save.shrews) {
+    for (const saved of save.shrews) {
+      const shrew = ctx.shrews.list.find((s) => s.id === saved.id);
+      if (!shrew) continue;
+      shrew.state = saved.state;
+      const gy = ctx.terrain.heightAt(saved.x, saved.z);
+      shrew.pos.set(saved.x, gy + 0.04, saved.z);
+      shrew.mesh.position.copy(shrew.pos);
+      shrew.body.setNextKinematicTranslation({ x: saved.x, y: gy + 0.04, z: saved.z });
+    }
+  }
+
+  // ── ACL — Storm wall (v14+): restore the sweeping sandstorm-wall state
+  //    verbatim onto ctx.weather.wall (plain data; no re-derivation needed).
+  //    intensity recomputes from the wall on the first updateWeather tick.
+  //    Pre-v14 saves keep the dormant wall from createWeather. ──
+  if (save.weatherWall) {
+    ctx.weather.wall = { ...save.weatherWall };
   }
 
   // ── Raiders ──

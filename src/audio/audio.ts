@@ -4,6 +4,8 @@
 // Browsers require a user gesture to start audio. We expose
 // `ensureAudioStarted()` from the "click to begin" overlay handler.
 
+import { Tuning } from '../config/tuning.ts'; // ACL WORM-ROAR-ATTENUATION integration
+
 let _ctx: AudioContext | null = null;
 let _master: GainNode | null = null;
 let _sfx: GainNode | null = null;
@@ -443,10 +445,12 @@ export function playSleepThud(): void {
 }
 
 /** Sand worm roar — layered low rumble + sandy noise burst + sub-bass thud.
- *  Used on breach and on the worm's death. ~0.9s total. */
-export function playWormRoar(): void {
+ *  Used on breach and on the worm's death. ~0.9s total.
+ *  `vol` (0..1) scales all three layers — full-volume call passes 1. */
+export function playWormRoar(vol = 1): void {
   const a = getAudioInternals();
   if (!a) return;
+  if (vol <= 0) return;
   const t = a.ctx.currentTime;
   // Intestinal rumble — sawtooth sweeping down
   const rumble = a.ctx.createOscillator();
@@ -455,8 +459,8 @@ export function playWormRoar(): void {
   rumble.frequency.exponentialRampToValueAtTime(40, t + 0.8);
   const rEnv = a.ctx.createGain();
   rEnv.gain.setValueAtTime(0.0, t);
-  rEnv.gain.linearRampToValueAtTime(0.18, t + 0.06);
-  rEnv.gain.setValueAtTime(0.18, t + 0.55);
+  rEnv.gain.linearRampToValueAtTime(0.18 * vol, t + 0.06);
+  rEnv.gain.setValueAtTime(0.18 * vol, t + 0.55);
   rEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.85);
   rumble.connect(rEnv).connect(a.sfx);
   rumble.start(t);
@@ -472,7 +476,7 @@ export function playWormRoar(): void {
   filter.Q.value = 2.5;
   const nEnv = a.ctx.createGain();
   nEnv.gain.setValueAtTime(0.0, t);
-  nEnv.gain.linearRampToValueAtTime(0.16, t + 0.04);
+  nEnv.gain.linearRampToValueAtTime(0.16 * vol, t + 0.04);
   nEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.8);
   src.connect(filter).connect(nEnv).connect(a.sfx);
   src.start(t);
@@ -483,11 +487,43 @@ export function playWormRoar(): void {
   sub.frequency.setValueAtTime(60, t);
   const sEnv = a.ctx.createGain();
   sEnv.gain.setValueAtTime(0.0, t);
-  sEnv.gain.linearRampToValueAtTime(0.06, t + 0.08);
+  sEnv.gain.linearRampToValueAtTime(0.06 * vol, t + 0.08);
   sEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.9);
   sub.connect(sEnv).connect(a.sfx);
   sub.start(t);
   sub.stop(t + 0.92);
+}
+
+// ACL WORM TWILIGHT-BREACH AUDIO ATTENUATION — distance falloff for ambient
+// twilight breaches (180-400m away). Soft inverse-distance curve:
+//   <= 180m -> ~1.0 (full),  ~400m -> ~0.2,  beyond -> fades to ~0.
+const WORM_ROAR_NEAR_DIST = Tuning.WORM_ROAR_NEAR_DIST;   // full volume at/under this range (m)
+const WORM_ROAR_FAR_DIST = Tuning.WORM_ROAR_FAR_DIST;    // ~0.2 volume at this range (m)
+const WORM_ROAR_FAR_VOL = Tuning.WORM_ROAR_FAR_VOL;     // target volume at FAR_DIST
+const WORM_ROAR_CUTOFF_DIST = Tuning.WORM_ROAR_CUTOFF_DIST; // effectively silent beyond this (m)
+
+/** Distance-attenuated worm roar for ambient twilight breaches. Reuses the
+ *  roar synth + sfx bus via playWormRoar(vol). Soft inverse-distance falloff:
+ *  full at NEAR, ~0.2 at FAR, silent past CUTOFF. */
+export function playWormRoarAttenuated(distance: number): void {
+  if (distance >= WORM_ROAR_CUTOFF_DIST) return;
+  let vol: number;
+  if (distance <= WORM_ROAR_NEAR_DIST) {
+    vol = 1;
+  } else {
+    // Inverse-distance: vol = NEAR/dist, normalized so FAR maps to FAR_VOL.
+    // raw(NEAR)=1, raw(FAR)=NEAR/FAR; remap that raw range onto [FAR_VOL, 1].
+    const raw = WORM_ROAR_NEAR_DIST / distance;
+    const rawFar = WORM_ROAR_NEAR_DIST / WORM_ROAR_FAR_DIST;
+    const norm = (raw - rawFar) / (1 - rawFar); // 1 at NEAR, 0 at FAR
+    vol = WORM_ROAR_FAR_VOL + norm * (1 - WORM_ROAR_FAR_VOL);
+    // Past FAR, keep decaying toward the cutoff instead of clamping at FAR_VOL.
+    if (distance > WORM_ROAR_FAR_DIST) {
+      const tail = (WORM_ROAR_CUTOFF_DIST - distance) / (WORM_ROAR_CUTOFF_DIST - WORM_ROAR_FAR_DIST);
+      vol = WORM_ROAR_FAR_VOL * Math.max(0, tail);
+    }
+  }
+  playWormRoar(vol);
 }
 
 /** Sand worm chomp — short low impact when a bite lands on the player. */

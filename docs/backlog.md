@@ -33,6 +33,14 @@ Use `/triage-ideas` to bulk-classify a free-form dump.
 - Stretch: sled-on-back when undeployed (design fork — surface first).
 File: `src/player/playerRig.ts` + `src/player/skinnedLimb.ts`. Verify via the Playwright harness `npm run rig-shot` (D138) — `--pose/--angles/--closeup/--lit=form`; `__game.rigStudio()` (D134/D137) still works for interactive checks.
 
+— — — ACL (2026-06-01) overnight breadth — — —
+
+✓ **SHIPPED in ACL** (removed from active backlog; see changelog + D143-D145): worm twilight-breach audio attenuation · megaWreck ground-level salvage panels · night-sky stars (twinkle/drift/cloud occlusion) · Dune sweeping sandstorm (directional wall) · in-storm movement penalty · 3P upper-body aim twist-IK · speeder angular damping · item viewmodel fidelity (large_tent/bedroll/lantern kits) · NEW amban rifle (ranged weapon) · NEW desert shrew creature. Already-implemented (verified, dropped): footstep-dust-at-foot, walk-cycle↔footstep sync, 3P camera teleport-snap wiring.
+
+⬜ **[polish] `/visual-triage` the ACL visual features (rule-8 debt — TOP NEXT)** — these shipped tsc+boot-clean but NOT visually-iterated: (1) star twinkle/drift + cloud occlusion (need a night shot; `sky.ts` ShaderMaterial), (2) Dune sweeping storm WALL (trigger a storm + watch the wall sweep; `weather.ts` STORM_WALL_* tuning), (3) desert shrew procedural model + flee AI (frame one in-world; `enemies/shrew.ts`), (4) 3P aim-twist in motion (`playerRig.ts` `_aimTwist`). Iterate the AIM/STAR/STORM/SHREW constants in `tuning.ts` (ACL block).
+⬜ **[debt] shrew save-restore determinism** (D144) — restore matches shrews by id assuming deterministic same-seed procgen; if shrew scatter becomes non-deterministic or the seed changes between save/load, saved shrews won't match (boot procgen stands, no crash). Revisit if shrew spawn changes.
+⬜ **[polish] amban rifle balance + acquisition** — stats are first-pass (range 60 / dmg 3 / cd 1.6 / mag 8, scrap_bullet-fed); playtest vs scrap_gun/energy_pistol. Confirm it's craftable or intentionally dev-loadout only.
+
 [polish] Sled mechanics further tuning (post-ACD playtest). The ACD slope-slide + Option-B-tilt + item-rest-height fixes shipped the core feel, but a focused tuning session would benefit from:
 - **Slope-slide speed feel**: current `SLED_SLOPE_SLIDE_GAIN = 6.0` produces ~5 m/s at 10° and ~15 m/s at 30°. Might be too aggressive at very steep slopes; playtest with varied dune steepness and tune.
 - **Slope-slide friction / static threshold**: `SLED_KINETIC_FRICTION = 0.15` gives a ~1.4° static threshold. Could be raised for "stickier" slopes (sled stays put on gentle inclines until pushed).

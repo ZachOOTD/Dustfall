@@ -12,6 +12,39 @@ import { Tuning } from '../config/tuning.ts';
 
 export type WeatherState = 'clear' | 'building' | 'storm' | 'settling';
 
+// ACL SKY+WEATHER — Dune-style sweeping sandstorm WALL. Rather than a uniform
+// intensity ramp tied only to a timer, a storm is now a directional wall that
+// travels across the world along a fixed heading. The player's *effective*
+// storm intensity is derived from their signed distance to the wall: ramps up
+// as the wall approaches, peaks while the player is inside the wall's width,
+// ramps down as it passes. This wall STATE must persist across save/load —
+// reported to the integrator as a saveField (see manifest). The carrier value
+// `Weather.intensity` (0..1) is still what sky/fog/dust/vignette read, so
+// nothing downstream needs to know about the wall.
+export interface StormWall {
+  /** Wall is "armed" (a storm is in progress and the wall is sweeping). When
+   *  false the wall is dormant and intensity stays 0. */
+  active: boolean;
+  /** XZ position of the wall's CENTER line (world units). The wall is a slab
+   *  perpendicular to `dir`, centered here, `width` units thick. */
+  posX: number;
+  posZ: number;
+  /** Unit travel direction in XZ (the wall sweeps along +dir). */
+  dirX: number;
+  dirZ: number;
+  /** Half-thickness of the full-intensity core (world units). */
+  width: number;
+  /** Travel speed (world units / sec). */
+  speed: number;
+  /** Seconds since this wall armed — lets the state machine know when to
+   *  retire it independently of where the player happens to stand. */
+  age: number;
+  /** True while the wall is still travelling toward / over the player's
+   *  region; flips false once it has swept well past, so the settling phase
+   *  can wind down even if the player chased it. */
+  approaching: boolean;
+}
+
 interface DustLayer {
   particles: THREE.Points;
   mat: THREE.PointsMaterial;
@@ -46,6 +79,10 @@ export interface Weather {
    *  Transient (not persisted) — on save+reload after day 7 the toast
    *  re-fires once, which is fine for an atmospheric beat. */
   longStormAnnounced: boolean;
+  /** ACL SKY+WEATHER — sweeping sandstorm wall. PERSISTED (saveField). The
+   *  active wall's position/dir/age drive `intensity` each tick; persisting it
+   *  means a storm mid-sweep resumes correctly across save/load. */
+  wall: StormWall;
 }
 
 /** AAF — storm-curve values at a given daysSurvived. Lerps linearly
@@ -106,6 +143,72 @@ const _sharedDustTex = (() => {
 
 const BUILD_DURATION = 8;
 const SETTLE_DURATION = 12;
+
+// ACL SKY+WEATHER — sweeping sandstorm wall tuning. Promoted to Tuning (integration).
+const STORM_WALL_WIDTH = Tuning.STORM_WALL_WIDTH;          // half-thickness (world u) of the full-intensity core
+const STORM_WALL_SPEED = Tuning.STORM_WALL_SPEED;          // wall travel speed (world u / sec)
+const STORM_WALL_SPAWN_DIST = Tuning.STORM_WALL_SPAWN_DIST;     // distance upwind the wall spawns ahead of the player
+const STORM_WALL_APPROACH_FALLOFF = Tuning.STORM_WALL_APPROACH_FALLOFF; // ramp distance (u) over which intensity rises as wall nears
+const STORM_WALL_DEPART_FALLOFF = Tuning.STORM_WALL_DEPART_FALLOFF; // ramp distance (u) over which intensity falls as wall departs
+// The wall retires (storm ends) once it has swept this far past the player
+// region, OR the legacy duration elapses — whichever first. Keeps storms
+// bounded even if the player walks alongside the wall.
+const STORM_WALL_RETIRE_DIST = Tuning.STORM_WALL_RETIRE_DIST;    // signed-distance past player at which the wall is spent
+const STORM_WALL_WIND_BIAS = Tuning.STORM_WALL_WIND_BIAS;      // extra wind (u/s) along wall dir at full intensity (mid-layer base)
+
+/** ACL SKY+WEATHER — signed distance from the wall's center plane to the
+ *  player, measured along the travel direction. Negative = wall hasn't
+ *  reached the player yet (approaching); 0 = player at the wall core;
+ *  positive = wall has passed the player (departing). */
+function wallSignedDistance(wall: StormWall, px: number, pz: number): number {
+  // Vector from wall center to player, projected onto travel dir. As the wall
+  // moves along +dir, this projection grows — so > 0 means the wall front is
+  // at/past the player.
+  const dx = px - wall.posX;
+  const dz = pz - wall.posZ;
+  return dx * wall.dirX + dz * wall.dirZ;
+}
+
+/** ACL SKY+WEATHER — derive the carrier intensity (0..1) from the player's
+ *  position relative to the wall. Approaching ramps up over
+ *  APPROACH_FALLOFF, peaks (=1) while within ±width of the core, then ramps
+ *  down over DEPART_FALLOFF as it passes. */
+function wallIntensityAt(wall: StormWall, px: number, pz: number): number {
+  if (!wall.active) return 0;
+  const signed = wallSignedDistance(wall, px, pz);
+  if (signed < -wall.width) {
+    // Wall front still approaching. signed in [-(width+falloff), -width] → 0..1.
+    const d = -signed - wall.width; // 0 at the leading edge, grows as wall is farther
+    return Math.max(0, 1 - d / STORM_WALL_APPROACH_FALLOFF);
+  }
+  if (signed > wall.width) {
+    // Wall has passed; departing trailing edge.
+    const d = signed - wall.width;
+    return Math.max(0, 1 - d / STORM_WALL_DEPART_FALLOFF);
+  }
+  // Inside the core slab — peak.
+  return 1;
+}
+
+/** ACL SKY+WEATHER — arm a fresh wall upwind of the player, heading toward and
+ *  across them. Direction is randomized; the wall is placed STORM_WALL_SPAWN_DIST
+ *  back along -dir so it sweeps over the player as it travels +dir. */
+function armWall(wall: StormWall, px: number, pz: number, rand: () => number): void {
+  const heading = rand() * Math.PI * 2;
+  const dirX = Math.cos(heading);
+  const dirZ = Math.sin(heading);
+  wall.active = true;
+  wall.dirX = dirX;
+  wall.dirZ = dirZ;
+  // Place the wall center upwind: back along -dir from the player so it's
+  // still approaching at storm start.
+  wall.posX = px - dirX * STORM_WALL_SPAWN_DIST;
+  wall.posZ = pz - dirZ * STORM_WALL_SPAWN_DIST;
+  wall.width = STORM_WALL_WIDTH;
+  wall.speed = STORM_WALL_SPEED;
+  wall.age = 0;
+  wall.approaching = true;
+}
 // AAF — storm duration + interval are now per-day-curve-driven via
 // `stormCurveAt(daysSurvived)`. Helpers below compute values from
 // Tuning.STORM_*_DAY0/DAY7/LONG_STORM_* constants.
@@ -204,12 +307,32 @@ export function createWeather(
     cameraRef: camera,
     currentStormDuration: initCurve.duration,
     longStormAnnounced: false,
+    // ACL SKY+WEATHER — wall dormant until a storm arms it.
+    wall: {
+      active: false,
+      posX: 0, posZ: 0,
+      dirX: 1, dirZ: 0,
+      width: STORM_WALL_WIDTH,
+      speed: STORM_WALL_SPEED,
+      age: 0,
+      approaching: true,
+    },
   };
 }
 
 const _camPos = new THREE.Vector3();
 
-function stepLayer(layer: DustLayer, opacity: number, visible: boolean, dt: number): void {
+// ACL SKY+WEATHER — extra wind bias (world u/s) applied on top of each
+// particle's baked velocity, aligned with the sweeping wall's travel dir.
+// `windScale` per-layer lets far dust drift more anisotropically than near.
+function stepLayer(
+  layer: DustLayer,
+  opacity: number,
+  visible: boolean,
+  dt: number,
+  windX: number,
+  windZ: number,
+): void {
   layer.mat.opacity = opacity;
   if (layer.particles.visible !== visible) layer.particles.visible = visible;
   if (!visible) return;
@@ -219,9 +342,9 @@ function stepLayer(layer: DustLayer, opacity: number, visible: boolean, dt: numb
   const vels = layer.vels;
   for (let i = 0; i < layer.count; i++) {
     const ix = i * 3;
-    arr[ix]     += vels[ix]     * dt;
+    arr[ix]     += (vels[ix]     + windX) * dt;
     arr[ix + 1] += vels[ix + 1] * dt;
-    arr[ix + 2] += vels[ix + 2] * dt;
+    arr[ix + 2] += (vels[ix + 2] + windZ) * dt;
     let lx = arr[ix]     - _camPos.x;
     let ly = arr[ix + 1] - _camPos.y;
     let lz = arr[ix + 2] - _camPos.z;
@@ -261,36 +384,71 @@ export function updateWeather(ctx: GameContext, dt: number): void {
   // gap interval shrinks as days pass even if we're already in 'clear'.
   const curve = stormCurveAt(ctx.time.daysSurvived);
 
+  // ACL SKY+WEATHER — player XZ drives both wall spawning and the
+  // distance-derived intensity. Read once per tick.
+  const ptr = ctx.player.body.body.translation();
+  const px = ptr.x;
+  const pz = ptr.z;
+  const wall = w.wall;
+
+  // Advance the sweeping wall whenever it's armed (any non-clear state).
+  if (wall.active) {
+    wall.posX += wall.dirX * wall.speed * dt;
+    wall.posZ += wall.dirZ * wall.speed * dt;
+    wall.age += dt;
+    // Has the wall core swept well past the player? Then it's departing.
+    const signed = wallSignedDistance(wall, px, pz);
+    wall.approaching = signed < wall.width;
+  }
+
   switch (w.state) {
     case 'clear':
       w.intensity = 0;
+      wall.active = false;
       if (ctx.time.elapsed >= w.nextStormAt) {
         w.state = 'building';
         w.stateTimer = 0;
         // Capture this storm's duration at start so a day-rollover
         // mid-storm doesn't shorten what the player's already enduring.
         w.currentStormDuration = curve.duration;
+        // ACL SKY+WEATHER — arm a fresh wall upwind of the player. It sweeps
+        // across them; intensity now derives from distance to the wall.
+        armWall(wall, px, pz, Math.random);
       }
       break;
     case 'building':
-      w.intensity = Math.min(1, w.stateTimer / BUILD_DURATION);
+      // ACL SKY+WEATHER — intensity is wall-derived, but gated by a short
+      // build envelope so even a wall that spawns close still eases in.
+      w.intensity = wallIntensityAt(wall, px, pz) * Math.min(1, w.stateTimer / BUILD_DURATION);
       if (w.stateTimer >= BUILD_DURATION) {
         w.state = 'storm';
         w.stateTimer = 0;
       }
       break;
     case 'storm':
-      w.intensity = 1;
-      if (w.stateTimer >= w.currentStormDuration) {
+      // Pure wall-derived intensity: peaks while the player is inside the
+      // wall slab, ramps as it approaches/departs.
+      w.intensity = wallIntensityAt(wall, px, pz);
+      // End the storm once the legacy duration elapses OR the wall has swept
+      // STORM_WALL_RETIRE_DIST past the player (whichever first) — keeps the
+      // storm bounded even if the player chased or fled the wall.
+      if (
+        w.stateTimer >= w.currentStormDuration ||
+        wallSignedDistance(wall, px, pz) > wall.width + STORM_WALL_RETIRE_DIST
+      ) {
         w.state = 'settling';
         w.stateTimer = 0;
       }
       break;
     case 'settling':
-      w.intensity = Math.max(0, 1 - w.stateTimer / SETTLE_DURATION);
+      // Let the wall keep departing (its own falloff lowers intensity), but
+      // also floor it down over SETTLE_DURATION so we always reach 0.
+      w.intensity =
+        wallIntensityAt(wall, px, pz) * Math.max(0, 1 - w.stateTimer / SETTLE_DURATION);
       if (w.stateTimer >= SETTLE_DURATION) {
         w.state = 'clear';
         w.stateTimer = 0;
+        wall.active = false;
         w.nextStormAt =
           ctx.time.elapsed +
           curve.intervalMin +
@@ -325,23 +483,44 @@ export function updateWeather(ctx: GameContext, dt: number): void {
     ramp(pi, Tuning.STORM_NEAR_RAMP_LO, Tuning.STORM_NEAR_RAMP_HI) *
     Tuning.STORM_DUST_NEAR_OPACITY;
 
-  stepLayer(w.layers.far, farOp, farOp > 0.001, dt);
-  stepLayer(w.layers.mid, midOp, midOp > 0.001, dt);
-  stepLayer(w.layers.near, nearOp, nearOp > 0.001, dt);
+  // ACL SKY+WEATHER — anisotropic wind: while the wall is active, bias the
+  // dust drift along the wall's travel direction (scaled by perceived
+  // intensity so it eases in/out). Far dust gets the strongest bias (it
+  // reads as the leading edge streaming across the horizon); near dust the
+  // least so the close parallax cue stays legible.
+  let windX = 0;
+  let windZ = 0;
+  if (wall.active) {
+    const k = pi * STORM_WALL_WIND_BIAS;
+    windX = wall.dirX * k;
+    windZ = wall.dirZ * k;
+  }
+
+  stepLayer(w.layers.far, farOp, farOp > 0.001, dt, windX * 1.4, windZ * 1.4);
+  stepLayer(w.layers.mid, midOp, midOp > 0.001, dt, windX, windZ);
+  stepLayer(w.layers.near, nearOp, nearOp > 0.001, dt, windX * 0.6, windZ * 0.6);
 }
 
 /** Convenience: trigger a storm immediately. Used by debug panel. */
 export function triggerStorm(ctx: GameContext): void {
   ctx.weather.state = 'building';
   ctx.weather.stateTimer = 0;
+  // ACL SKY+WEATHER — arm the sweeping wall upwind of the player so the
+  // debug-triggered storm actually ramps in (intensity is wall-derived).
+  const tr = ctx.player.body.body.translation();
+  armWall(ctx.weather.wall, tr.x, tr.z, Math.random);
 }
 
 /**
  * Seed a sandstorm at boot for the opening scene (Session W). Drops
- * straight into the 'storm' state (intensity = 1.0 — the per-tick
- * `case 'storm'` clause forces this regardless of what we set here), with
- * the state timer pre-advanced so the storm transitions to 'settling'
- * after ~18 s and is fully clear ~30 s after spawn (12 s of settling).
+ * straight into the 'storm' state with the state timer pre-advanced so the
+ * storm transitions to 'settling' after ~18 s and is fully clear ~30 s
+ * after spawn (12 s of settling).
+ *
+ * ACL SKY+WEATHER — intensity is now WALL-derived, so we must arm a wall
+ * for the opening beat too. The player spawns near origin; we center the
+ * wall ON the origin (player inside the core ⇒ peak intensity = 1) and give
+ * it a heading so it sweeps off over the following seconds.
  *
  * Call from main.ts only when hasSave() returns false (fresh world).
  */
@@ -352,4 +531,15 @@ export function seedOpeningStorm(weather: Weather): void {
   // AAF — day-0 storm duration; opening cinematic uses the gentlest curve.
   weather.currentStormDuration = Tuning.STORM_DURATION_DAY0_S;
   weather.stateTimer = Tuning.STORM_DURATION_DAY0_S - 18;
+  // ACL — arm a wall centered on origin so the freshly-spawned player (near
+  // 0,0) sits inside the full-intensity core from the first frame.
+  weather.wall.active = true;
+  weather.wall.posX = 0;
+  weather.wall.posZ = 0;
+  weather.wall.dirX = 1;
+  weather.wall.dirZ = 0;
+  weather.wall.width = STORM_WALL_WIDTH;
+  weather.wall.speed = STORM_WALL_SPEED;
+  weather.wall.age = 0;
+  weather.wall.approaching = false;
 }

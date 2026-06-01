@@ -1027,3 +1027,32 @@ The fundamental issue: KCC's slope projection, autostep, and contact resolution 
 **Picked**: shipped the stylized-realism result; surfaced both user-owned levers rather than overhauling lighting or importing an asset. The realism `/goal` was banked at "believable stylized human."
 
 **friction-score:** 2
+
+## D143 — Overnight breadth runs as parallel file-OWNERSHIP lanes + manifests + a single integrator (Session ACL)
+**When**: A long unattended overnight (~2M budget) to ship a broad mixed batch of backlog items in parallel via fanned-out agents. The risk: parallel agents editing the same files → merge hell.
+
+**Why**: Pre-exploration (3 Explore agents) mapped each candidate item to its files + identified the only true SHARED seams (`main.ts` tick order, `save.ts` SAVE_VERSION, `GameContext.ts`, `tuning.ts`, and the `types.ts`/`items.ts` ItemId bottleneck). Assigning each agent a **disjoint set of files** (a "lane") means parallel agents never touch the same file — no worktrees, no merge conflicts. Lanes do NOT edit the shared seams; instead each returns an **integration manifest** `{ tuningConsts, tickInsertions, saveFields, ctxSlots }`. A final **single integrator** agent applies all manifests to the shared seams (one SAVE_VERSION bump, all tick calls, all ctx slots, promotes all PROMOTE-TO-TUNING locals to `tuning.ts`) and runs the authoritative full `tsc`. Worked: 8 lanes + integrator, full tsc PASS, zero merge conflicts.
+
+**Footguns learned**: (1) lanes' per-lane `tsc` shows transient errors from OTHER lanes' mid-edit files (same working tree, no isolation) — instruct lanes to judge tsc on THEIR files only + treat sibling errors as expected; the integrator's full tsc is the real gate. (2) Magic numbers can't go straight into the shared `tuning.ts` (race) — lanes declare tagged `// PROMOTE-TO-TUNING` locals (compiles standalone) + report them; integrator promotes. (3) Features needing a tick/ctx/save can't self-wire — they implement standalone (own a module-local list, export update/spawn fns) + report the wiring; integrator wires. (4) Rule-8: visual features ship tsc+boot-clean but UN-iterated — schedule a visual-triage follow-up; don't claim visual quality.
+
+**Considered alternatives**: `isolation: worktree` per agent — rejected (merging changed worktrees that touch shared seams is the same conflict, just deferred + harder). Sequential single-agent — rejected (no parallelism; wastes the budget).
+
+**friction-score:** 2
+
+## D144 — SAVE_VERSION 13→14: additive shrew roster + storm-wall state, back-compat for v13 (Session ACL)
+**When**: ACL added two persistent bits — the desert-shrew roster (`shrews`) and the sweeping-storm wall state (`weatherWall`).
+
+**Why / how**: Per D81 additive discipline, ONE version bump per session (the integrator owns it). Both new fields are OPTIONAL: a v13 load skips the `if (save.shrews)` / `if (save.weatherWall)` guards → boot procgen shrews stand + `ctx.weather.wall` keeps the dormant struct `createWeather` always initializes (so the serialize spread is always safe). Shrews restore by id (deterministic same-seed procgen → boot ids match); the wall restores verbatim (plain data; `intensity` re-derives on the first `updateWeather` tick — no 2nd-pass needed).
+
+**Footgun**: shrew restore assumes deterministic same-seed scatter — if a future change makes shrew spawn non-deterministic or the seed changes between save/load, saved shrews simply won't match and boot procgen stands (no crash, but positions/state don't restore). `weatherWall` is a top-level save field (weather had no prior persisted block); fine + additive.
+
+**friction-score:** 1
+
+## D145 — Sweeping sandstorm is a directional WALL that DERIVES the existing intensity carrier (Session ACL)
+**When**: Reworking the uniform storm intensity-ramp into a Dune-style sweeping wall, with a separate in-storm movement-penalty lane + many downstream intensity readers (sky/fog/dust/vignette).
+
+**Why**: Rather than re-plumb every downstream system, the wall (XZ position + travel dir + half-width core + speed) **computes `weather.intensity` (0..1) from the player's signed distance to the wall** — ramp-up approaching, peak inside the core, ramp-down departing. So `weather.intensity` stays the single carrier every existing reader already consumes (lighting fog, sky tint, dust opacity, stormVignette, and the new movement penalty) — zero downstream changes, and the in-storm-penalty lane could be built in parallel against the unchanged intensity contract. The state machine still bounds storm duration; the wall retires past the player.
+
+**Picked**: keep `weather.intensity` as the immutable contract; the wall is an upstream producer of it. **Don't** make downstream systems read wall geometry directly — that would fork the contract and break the parallel-lane independence.
+
+**friction-score:** 2

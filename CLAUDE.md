@@ -40,7 +40,7 @@ Run with `npm run dev` (port 5173). Type-check / verify with
    ```
    physics.step → updateWeather → updateLighting → updateSky → updatePlayer →
    updateShelter → updateStats → updateSoundscape → bobPickups → updateRaiders →
-   updateLizards → updateFires → updateInteraction → updateInventoryInput →
+   updateLizards → updateShrews → updateFires → updateInteraction → updateInventoryInput →
    updateCombat → updateViewModel → updateHud → updateHotbar →
    updateInteractPrompt → updatePhysicsDebug → updatePerfHud → endInputFrame
    ```
@@ -64,26 +64,23 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      Prior milestones live in docs/changelog.md — do NOT accumulate "Prior milestone"
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
-**Last shipped**: Session ACK — **PM-C outfit + realism pass**. Re-dressed the
-torso (D139 had cut the poncho) with a fitted wrapped **tunic** that hugs the body
-lathe, not a flared cylinder (**D140**). Then a goal-driven **9-round realism arc**
-took the figure from a cartoon mannequin → a believable, solid, dressed human:
-proportions (`HEAD_R` 0.135→0.115 ≈ 1:7.7 adult + longer neck — **D142**), natural
-contrapposto stance, player skin+cloth → **PBR** (`MeshStandard` + procedural
-micro-bump + **baked occlusion** so undersides self-shadow under flat ambient —
-**D141**), glassy goggle lenses, slimmer curled hands, real boots, fuller-cranium
-head. Harness gained `--lit=form` (key+rim) + `full/full3q/torso` framings + a
-`relaxed` pose. **Honest ceiling**: believable *stylized* human, NOT photoreal —
-flat-shaded zero-asset primitives cap here; photoreal = the D107 asset fork (user's
-call). The other remaining realism lever is the game's **lighting mood** (also the
-user's call). Realism `/goal` banked at "believable stylized human". tsc clean;
-verified via `npm run rig-shot`.
+**Last shipped**: Session ACL — **overnight breadth: 8 backlog features via fanned-out
+agents**. Ran as **8 parallel file-ownership lanes + a single integrator** (~2M budget,
+9 agents, ~12min; methodology in **D143**). Shipped: aim twist-IK; speeder angular
+damping; worm twilight-breach audio attenuation; megaWreck ground-level salvage panels;
+**night-sky stars** (twinkle + drift + cloud occlusion); **Dune sweeping sandstorm** (a
+directional storm WALL that derives the existing `weather.intensity` carrier so all
+downstream readers are unchanged — **D145**); in-storm movement penalty; **amban rifle**
+(new ranged weapon) + viewmodel fidelity (3 kits); **desert shrew** (new ambient creature,
+`enemies/shrew.ts`). **SAVE_VERSION 13→14** (additive shrew roster + storm-wall state,
+v13 back-compat — **D144**). Full `tsc` PASS + runtime boot-clean. **⚠ Rule-8 debt**: the
+new VISUAL features (stars, sweeping storm, shrew, aim-twist) shipped tsc+boot-clean but
+NOT visually-iterated — a `/visual-triage` pass is owed.
 
-**Next session**: a **long overnight** to tackle backlog/roadmap breadth (NOT the
-player model — it's at its in-pipeline ceiling). Use plan mode + fanned-out agents.
-Player-model follow-ups remain available (PM-D cloth physics / PM-S.3 torso skin /
-PM-E deeper texture / in-game lighting mood) but are deprioritized vs breadth. See
-[docs/next-session-prompt.md](docs/next-session-prompt.md).
+**Next session**: **`/visual-triage` the ACL visual features first** (star twinkle/drift,
+sweeping storm wall, shrew model, aim-twist in motion) — close the rule-8 debt. Then more
+backlog breadth (another fanned-out overnight) or a player-model follow-up (PM-D cloth /
+in-game lighting mood). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 

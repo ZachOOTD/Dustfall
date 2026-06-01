@@ -1211,6 +1211,72 @@ export const Tuning = {
   SCAVENGER_CAMP_FUSELAGE_OFFSET_X_M: -1.4,  // fuselage windbreak placement offset from center
   SCAVENGER_CAMP_FUSELAGE_OFFSET_Y_M: -0.35, // partly buried
   SCAVENGER_CAMP_FUSELAGE_YAW_RAD: 0.4,      // rotated for "crash-tilt" reading
+
+  // ────────────────────────────────────────────────────────────────
+  // ACL parallel-lane integration — promoted lane locals.
+  // ────────────────────────────────────────────────────────────────
+
+  // ACL AIM TWIST-IK — subtle 3P upper-body aim twist on the lead shoulder.
+  AIM_TWIST_BIAS: 0.35,    // target aim-twist yaw (rad) the right shoulder leads toward in 3P
+  AIM_TWIST_CLAMP: 0.5,    // hard clamp on aim twist magnitude (±rad)
+  AIM_TWIST_LERP: 0.12,    // per-frame lerp factor toward target (smoothing)
+
+  // ACL SPEEDER ANGULAR DAMPING — passive Y-yaw settle on the MOUNTED body.
+  // Distinct from SPEEDER_UNMOUNTED_ANGULAR_DAMP_RATE_PER_S (2.5). At 1.2/s a
+  // 1 rad/s spin drops to ~0.3 rad/s after 1s; steady steering ~unaffected.
+  SPEEDER_MOUNTED_ANGULAR_DAMP_RATE_PER_S: 1.2,
+
+  // ACL WORM TWILIGHT-BREACH AUDIO — distance attenuation for the breach roar.
+  WORM_ROAR_NEAR_DIST: 180,   // m — full volume at/under this player distance
+  WORM_ROAR_FAR_DIST: 400,    // m — attenuated to WORM_ROAR_FAR_VOL at this distance
+  WORM_ROAR_FAR_VOL: 0.2,     // target roar volume scalar (0..1) at FAR_DIST
+  WORM_ROAR_CUTOFF_DIST: 650, // m — effectively silent beyond this
+
+  // ACL megawreck-catwalk-panel-reachability — ground-reachable hull-panel height.
+  WRECK_GROUND_PANEL_Y: 1.5,  // chest/eye height (m) for ground-level exterior salvage panels
+
+  // ACL SKY+WEATHER — twinkling/drifting star field (custom ShaderMaterial).
+  STAR_TWINKLE_SPEED: 1.6,       // radians/sec base rate of the per-star twinkle sine
+  STAR_TWINKLE_DEPTH: 0.45,      // 0..1 — opacity dip at the twinkle trough
+  STAR_TWINKLE_SIZE_DEPTH: 0.30, // 0..1 — point size pulse with the twinkle
+  STAR_DRIFT_RATE: 0.0042,       // radians/sec — slow celestial rotation of the field (X tilt = 0.18x)
+  STAR_BASE_SIZE: 1.6,           // base px point size (replaces old PointsMaterial.size)
+  STAR_STORM_STATE_FLOOR: 0.55,  // extra star suppression during building/storm/settling (cloud occlusion)
+  // ACL SKY+WEATHER — directional Dune-style sweeping sandstorm wall.
+  STORM_WALL_WIDTH: 140,           // half-thickness (world u) of the full-intensity core
+  STORM_WALL_SPEED: 26,            // wall travel speed (world u/sec)
+  STORM_WALL_SPAWN_DIST: 520,      // distance upwind the wall spawns ahead of the player at storm start
+  STORM_WALL_APPROACH_FALLOFF: 380,// ramp distance (u) over which intensity rises as the wall nears
+  STORM_WALL_DEPART_FALLOFF: 300,  // ramp distance (u) over which intensity falls as the wall departs
+  STORM_WALL_RETIRE_DIST: 260,     // signed distance past the player at which the wall is spent (ends storm early)
+  STORM_WALL_WIND_BIAS: 5.5,       // extra wind (u/s) along wall dir at full intensity for mid dust layer (far x1.4, near x0.6)
+
+  // ACL IN-STORM MOVEMENT PENALTY — unsheltered slow-down in a storm.
+  STORM_PENALTY_INTENSITY_THRESHOLD: 0.55, // intensity below which there is no movement penalty
+  STORM_PENALTY_MAX_WALK_SLOWDOWN: 0.3,    // fraction of walk speed shaved at full intensity (sprint disabled while active)
+
+  // ACL ITEMS — amban_rifle ranged weapon spec.
+  WEAPON_AMBAN_RIFLE_RANGE: 60.0,    // m — raycast reach, ~2x scrap gun
+  WEAPON_AMBAN_RIFLE_DAMAGE: 3.0,    // flat per-shot damage (2x scrap gun)
+  WEAPON_AMBAN_RIFLE_COOLDOWN: 1.6,  // seconds between shots (heavier than scrap gun)
+  WEAPON_AMBAN_RIFLE_MAX_AMMO: 8,    // magazine capacity
+
+  // ACL DESERT SHREW — skittery prey creature (mirrors lizard pipeline).
+  SHREW_SPOT_DISTANCE: 7,          // m — player proximity that triggers flee
+  SHREW_FLEE_SPEED: 3.2,           // m/s — fast skittery bolt
+  SHREW_FLEE_DURATION: 2.4,        // s — flee burst length
+  SHREW_WANDER_SPEED: 0.7,         // m/s — slow idle amble between wander targets
+  SHREW_WANDER_RADIUS: 4.0,        // m — max distance of a wander target from current pos
+  SHREW_IDLE_MIN: 1.5,             // s — min rest before picking a new wander
+  SHREW_IDLE_MAX: 5.0,             // s — max rest before picking a new wander
+  SHREW_ARRIVE_EPS: 0.25,          // m — wander 'arrived' threshold
+  SHREW_TERRAIN_OFFSET: 0.04,      // m — mesh lift above terrain
+  SHREW_TARGET_COUNT: 14,          // total shrews scattered across the world
+  SHREW_SPAWN_BUFFER_FROM_ORIGIN: 25, // m — keep them out of the opening scene
+  SHREW_CLUSTER_RADIUS_MIN: 4,     // m — min distance from a POI for a cluster spawn
+  SHREW_CLUSTER_RADIUS_MAX: 14,    // m — max distance from a POI for a cluster spawn
+  SHREW_SCATTER_RADIUS_MAX: 220,   // m — global-pass scatter radius
+  SHREW_PER_POI_AVG: 1.4,          // avg shrews clustered per POI
 } as const;
 
 // Sky gradient colors (top vs horizon) per time of day. Horizon stays close to

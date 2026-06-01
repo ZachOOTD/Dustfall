@@ -46,6 +46,7 @@ import { updateSoundscape } from './audio/soundscape.ts';
 import { startMusic, updateMusic } from './audio/music.ts';
 import { updateRaiders, type Raider } from './enemies/raider.ts';
 import { spawnLizardsProcgen, updateLizards } from './enemies/lizard.ts';
+import { spawnShrewsProcgen, updateShrews } from './enemies/shrew.ts'; // ACL DESERT SHREW
 import { spawnSandWorm, sampleSandwormHome, updateSandWorm } from './enemies/sandWorm.ts';
 import { updateWieldAction } from './player/wieldAction.ts';
 import { updateReload } from './player/combat.ts';
@@ -211,6 +212,13 @@ const lizards = spawnLizardsProcgen(
   three.scene, physics.world, terrain, biomes, scatterRand, allPoiPositions,
 );
 
+// ACL DESERT SHREW — procgen scatter mirroring lizards (clusters near POIs +
+// sparse global density). shrew.ts owns a module-level live list; the returned
+// array IS that reference, so ctx.shrews.list and updateShrews stay in sync.
+const shrews = spawnShrewsProcgen(
+  three.scene, physics.world, terrain, biomes, scatterRand, allPoiPositions,
+);
+
 // AAP — sandworm home is now sampled per-seed from the dune biome via
 // sampleSandwormHome (mirrors wells-in-salt). Falls back to
 // Tuning.SANDWORM_HOME_POS if no dune centroid is reachable (rare —
@@ -335,6 +343,7 @@ const ctx: GameContext = {
   shelter,
   raiders,
   lizards,
+  shrews: { list: shrews },        // ACL DESERT SHREW
   sandWorms: { list: sandWorms },
   waterSources: { list: waterSources },
   cacti: { list: cacti },
@@ -730,6 +739,7 @@ startLoop(ctx, (c, dt) => {
   updatePickups(c);
   updateRaiders(c, dt);          // AI state machine + raider movement
   updateLizards(c, dt);          // small flee-AI wildlife
+  updateShrews(c, dt);           // ACL — skittery shrew prey (idle/wander/flee); pause-gated internally
   updateCompanion(c, dt);        // AAE — Rocky-inspired creature follows player
   updateSandWorm(c, dt);         // DD — buried boss; breaches when player enters territory
   updateKillDrag(c);             // ACF — drag a slain raider corpse (on foot/sled) or worm carcass (speeder) via the shared rope constraint. AFTER updateRaiders/updateSandWorm (they skip dead entities, leaving drag-movement to this) + BEFORE updateSledRiders.

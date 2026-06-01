@@ -658,6 +658,17 @@ const _rollQ = new THREE.Quaternion();
 const _visualQ = new THREE.Quaternion();
 const _camRollQ = new THREE.Quaternion();
 
+// ACL SPEEDER ANGULAR DAMPING — passive yaw-rate damping while mounted.
+// Tuning.SPEEDER_ANGULAR_DAMP (the body-level Rapier damping) is 0, so a
+// post-collision yaw spin would persist until the steering lerp alone
+// bled it off. This exp-decay rate bleeds residual yaw rate per second
+// (Y-axis only; X+Z stay locked by setEnabledRotations, so upright
+// recovery is untouched). Kept gentle so it composes with steering
+// without feeling sluggish — at ~1.2/s, a 1 rad/s free spin drops to
+// ~0.3 rad/s after 1s; over a 60fps frame steady steering loses ~2%,
+// imperceptible. Promoted to Tuning (integration).
+const SPEEDER_MOUNTED_ANGULAR_DAMP_RATE_PER_S = Tuning.SPEEDER_MOUNTED_ANGULAR_DAMP_RATE_PER_S;
+
 export function updateSpeeder(ctx: GameContext, dt: number): void {
   const s = ctx.speeder;
   if (!s) return;
@@ -873,7 +884,17 @@ export function updateSpeeder(ctx: GameContext, dt: number): void {
   let targetAngVel = yawErr * Tuning.SPEEDER_TURN_RESPONSE;
   if (targetAngVel > Tuning.SPEEDER_TURN_RATE_MAX) targetAngVel = Tuning.SPEEDER_TURN_RATE_MAX;
   if (targetAngVel < -Tuning.SPEEDER_TURN_RATE_MAX) targetAngVel = -Tuning.SPEEDER_TURN_RATE_MAX;
-  const currentAngVel = body.angvel().y;
+  // ACL SPEEDER ANGULAR DAMPING — small passive Y-axis damping on the
+  // mounted body. Tuning.SPEEDER_ANGULAR_DAMP is 0 (body-level damping
+  // disabled), and setEnabledRotations already locks X+Z, so a post-
+  // collision yaw spin would otherwise persist until the steering lerp
+  // alone bled it off. We bleed the residual yaw rate first, THEN let
+  // steering lerp toward target — so the two compose: a free spin
+  // settles, while steady steering (where current already tracks the
+  // target) is effectively unaffected and never feels sluggish. Frame-
+  // rate independent via exp(-rate*dt), mirroring the unmounted damp.
+  const mountedAngDamp = Math.exp(-SPEEDER_MOUNTED_ANGULAR_DAMP_RATE_PER_S * dt);
+  const currentAngVel = body.angvel().y * mountedAngDamp;
   const lerpedAngVel = currentAngVel + (targetAngVel - currentAngVel) * Tuning.SPEEDER_TURN_LERP;
   body.setAngvel({ x: 0, y: lerpedAngVel, z: 0 }, true);
 

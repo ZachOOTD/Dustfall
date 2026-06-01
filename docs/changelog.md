@@ -3,6 +3,47 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ACL — 2026-06-01 — Overnight breadth: 8 backlog features via fanned-out agents ✓ verify pass (tsc clean) + boot-clean
+
+`verified` — full `npm run verify` (tsc) PASS + runtime boot smoke-test clean (harness booted +
+rendered, zero page/console errors). A **long unattended overnight** (~2M budget) that shipped a
+broad mixed batch via **8 parallel file-ownership lanes + a single integrator** (see orchestration
+note D143). 9 agents, ~573k subagent tokens, ~12min wall. **SAVE_VERSION 13→14** (additive — D144).
+
+**Shipped (8 features):**
+- **Aim twist-IK** (`playerRig.ts`): in 3P, the right shoulder leads toward the camera (additive
+  yaw `rig._aimTwist`, lerped, clamped ±0.5; never clobbers the swing X-rotation).
+- **Speeder angular damping** (`speeder.ts`): passive Y-yaw exp-decay on the mounted body so
+  post-collision spin settles without sluggish steering (composes before the steering lerp).
+- **Worm twilight-breach audio attenuation** (`sandWorm.ts` + `audio.ts`): `playWormRoar(vol)` +
+  new `playWormRoarAttenuated(dist)` (full ≤180m → ~0.2 @400m → silent @650m); twilight breaches
+  use distance, combat breaches stay full-volume.
+- **megaWreck ground-level salvage panels** (`megaWreck.ts`): 2 new chest-height exterior panels so
+  the wreck is fully salvageable without the catwalk stairs.
+- **Night-sky stars** (`sky.ts`): PointsMaterial → custom ShaderMaterial with per-star twinkle
+  (phase attr + `uTime`), slow deterministic celestial drift, and stronger cloud occlusion during
+  storm states.
+- **Dune sweeping sandstorm** (`weather.ts`): the uniform intensity-ramp is now a directional storm
+  WALL (position/dir/width/speed) that sweeps across the player; `weather.intensity` is DERIVED from
+  signed distance to the wall (ramp-up → peak inside the core → ramp-down) so all downstream readers
+  (sky/fog/dust/vignette/penalty) are unchanged. Anisotropic dust bias along travel dir. Wall state
+  persisted (D144/D145).
+- **In-storm movement penalty** (`controller.ts`): unsheltered + high intensity → sprint disabled +
+  walk slowed up to 30%, smooth ramp.
+- **Amban rifle** (new ranged weapon: `types.ts` + `items.ts` + `combat.ts`) — procedural wood/metal
+  viewmodel, fires via the existing ranged combat path, scrap_bullet-fed; **+ viewmodel fidelity** on
+  `large_tent_kit`/`bedroll_kit`/`lantern_kit` (Lambert primitives → procedural material factories).
+- **Desert shrew** (NEW `enemies/shrew.ts`): skittish ambient critter mirroring the lizard pipeline
+  (procedural model + idle/wander/flee AI); `ctx.shrews`, tick after `updateLizards`, save roster.
+
+**Integration** (`main.ts` tick, `save.ts` v14 + additive `shrews`/`weatherWall` + back-compat,
+`GameContext.ts` `ctx.shrews`, `tuning.ts` ~40 promoted consts): single integrator agent applied
+all 8 lane manifests; full tsc PASS. New constants live in a tuning.ts "ACL" block.
+
+**⚠ Rule-8 debt (honest):** the new VISUAL features (star twinkle/drift, sweeping storm wall, shrew
+model, aim-twist in motion) shipped **tsc-clean + boot-clean but NOT visually-iterated** — the
+overnight-breadth tradeoff. A `/visual-triage` pass on these is the next session's top item.
+
 ## Session ACK — 2026-05-31 — PM-C outfit + realism pass (PBR materials, proportions, baked occlusion) ✓ verify pass (tsc clean)
 
 `verified` — tsc clean + verified via the Playwright `rig-shot` harness. PM-C (re-dress

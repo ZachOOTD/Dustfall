@@ -44,6 +44,14 @@ interface WeaponSpec {
   chargeTime?: number;
 }
 
+// ACL ITEMS — amban rifle tuning. Long-barreled ranged weapon: longer
+// reach + harder hit than the scrap gun, slower cadence, larger magazine.
+// Promoted to Tuning (integration); combat.ts references Tuning.* like the others.
+const WEAPON_AMBAN_RIFLE_RANGE = Tuning.WEAPON_AMBAN_RIFLE_RANGE;     // meters (long-range marksman rifle)
+const WEAPON_AMBAN_RIFLE_DAMAGE = Tuning.WEAPON_AMBAN_RIFLE_DAMAGE;     // flat per-shot damage (2x scrap gun)
+const WEAPON_AMBAN_RIFLE_COOLDOWN = Tuning.WEAPON_AMBAN_RIFLE_COOLDOWN;   // seconds between shots (heavier than scrap gun)
+const WEAPON_AMBAN_RIFLE_MAX_AMMO = Tuning.WEAPON_AMBAN_RIFLE_MAX_AMMO;     // magazine capacity
+
 const _WEAPON_SPECS: Partial<Record<ItemId, WeaponSpec>> = {
   machete: {
     kind: 'melee',
@@ -64,6 +72,16 @@ const _WEAPON_SPECS: Partial<Record<ItemId, WeaponSpec>> = {
     damage: Tuning.WEAPON_SCRAP_GUN_DAMAGE,
     cooldown: Tuning.WEAPON_SCRAP_GUN_COOLDOWN,
     maxAmmo: Tuning.WEAPON_SCRAP_GUN_MAX_AMMO,
+  },
+  // ACL ITEMS — amban rifle (ranged). Fires through the existing
+  // updateCombat ranged path (raycast → dispatchHit → lizard/raider/
+  // sandWorm). Uses slot.meta.ammoRemaining + R-reload like the scrap gun.
+  amban_rifle: {
+    kind: 'ranged',
+    range: WEAPON_AMBAN_RIFLE_RANGE,
+    damage: WEAPON_AMBAN_RIFLE_DAMAGE,
+    cooldown: WEAPON_AMBAN_RIFLE_COOLDOWN,
+    maxAmmo: WEAPON_AMBAN_RIFLE_MAX_AMMO,
   },
   energy_pistol: {
     kind: 'charged',
@@ -294,8 +312,10 @@ export function updateReload(ctx: GameContext): void {
   if (!isPlaying(ctx)) return;
   if (!ctx.input.pressed.has('KeyR')) return;
   const slot = ctx.inventory.slots[ctx.inventory.selectedIdx];
-  if (slot.item !== 'scrap_gun') return;
-  const spec = _WEAPON_SPECS['scrap_gun'];
+  // ACL ITEMS — generalized so any equipped scrap_bullet-fed ranged
+  // weapon reloads on R (was scrap_gun-only). Covers the amban rifle.
+  if (slot.item !== 'scrap_gun' && slot.item !== 'amban_rifle') return;
+  const spec = _WEAPON_SPECS[slot.item];
   if (!spec || spec.maxAmmo === undefined) return;
   const maxAmmo = spec.maxAmmo;
   const cur = slot.meta?.ammoRemaining ?? 0;
