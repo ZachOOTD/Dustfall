@@ -998,3 +998,32 @@ The fundamental issue: KCC's slope projection, autostep, and contact resolution 
 **Picked**: deleted the poncho mesh + fold/dye-stripe code + dead `ponchoMat`/`PONCHO_COLOR`. The figure is intentionally "stripped" (undercloth + belt + bandolier + pack + goggles) until PM-C re-dresses it with a proper layered outfit and PM-D adds the simulated cloth. Mark this explicit so a future session doesn't "restore" a fake poncho.
 
 **friction-score:** 2
+
+## D140 — Torso garment HUGS the body lathe (fitted tunic), not a flared cylinder (Session ACK)
+**When**: PM-C — re-dressing the torso after the D139 poncho cut. The old poncho failed because it was a flared open cylinder offset from the body (read as stiff boxy panels).
+
+**Why**: A worn garment should follow the body. The tunic is a `LatheGeometry` built from the torso profile offset outward by a cloth thickness (~1.7cm), from a neckline at the trapezius to a hem at the upper hip — so it sits ON the torso like a fitted top, sleeveless (top radius ≈ the arm-attach lateral so the skinned arms emerge just outside + the deltoid caps the gap). Subtle fold displacement + a broken hem + a diagonal wrap-seam band read as worn cloth. Resting shape only — motion drape is PM-D.
+
+**Picked**: tunic lathe parented to `spineBend`. Distinct cloth tone (faded olive) so it reads as a garment over the dark undercloth. **Don't** reach for a flared cylinder again (that's the poncho mistake) — drape comes from PM-D cloth sim, not a wider tube.
+
+**friction-score:** 1
+
+## D141 — Player skin + cloth use opt-in PBR (MeshStandard) + procedural micro-bump + baked occlusion (Session ACK)
+**When**: PM-E realism pass — flat `MeshLambertMaterial` (vertex-lit, smooth normals, no specular) made every surface read as smooth plastic; the figure looked "stylized/fake" regardless of geometry.
+
+**Why**: Three levers, all in the existing `createSkinMaterial`/`createFabricMaterial` `onBeforeCompile` shaders, behind an opt-in `pbr` flag (creatures stay cheap Lambert): (1) **MeshStandardMaterial** → per-FRAGMENT lighting + roughness, so a perturbed normal actually shades; (2) **derivative-based micro-bump** (`dFdx/dFdy` of a procedural height = weave/pores/folds) → surfaces catch light with relief, no normal-map texture; (3) **baked occlusion** — darken downward-facing fragments (`smoothstep` on the local normal.y passed as a varying) so undersides/recesses self-shadow EVEN under the game's flat high-ambient daylight. Lever (3) is the key in-game win: solidity without touching the global lighting (a separate mood decision).
+
+**Picked**: `pbr`/`roughness`/`bump` opts added to both material factories; player skin (face/hands), undercloth (limbs/torso clones), and the cloth (tunic/hood/scarf/wraps) opt in. Goggle lenses → plain glossy `MeshStandard` (low roughness + metalness) for a specular glint. **Footgun**: enabling the union return type (`Lambert | Standard`) broke a stale consumer (`viewModelHands.ts`) — deleted it (dead since ACJ).
+
+**Considered alternatives**: vertex-color AO bake — rejected (pose-stale on a skinned figure, marginal at gameplay scale, black-mesh risk if a color attribute is missed); the shader baked-occlusion term is cleaner + universal.
+
+**friction-score:** 2
+
+## D142 — Realism is a believable STYLIZED human; photoreal is the asset fork; in-game lighting is the other lever (Session ACK)
+**When**: A `/goal` to make the player "look like a realistic person." Ran a 9-round realism arc (proportions, stance, PBR materials, baked AO, glassy goggles, hands, boots, head profile).
+
+**Why / outcome**: The arc genuinely transformed the figure (cartoon mannequin → believable solid dressed human). But the honest ceiling of a flat-shaded **zero-asset procedural-primitive** rig is *believable stylized*, not photoreal. Two findings worth not re-litigating: (1) **proportions reverted** `HEAD_R` 0.135→0.115 — ACI's 0.135 (chosen to look less "small-headed" in the stylized look) reads as a ~1:6.7 cartoon big-head; ~1:7.7 is the realistic adult ratio. Don't bump it back up for "presence." (2) Under proper key/rim lighting the model reads dramatically more solid than under the game's flat bright-desert ambient — so **the biggest remaining realism lever for actual play is the game's lighting MOOD** (lower ambient / higher sun contrast in `lighting.ts`), which is a whole-game aesthetic decision (surface to the user, don't change unilaterally). True photoreal = the D107 asset fork (also the user's call).
+
+**Picked**: shipped the stylized-realism result; surfaced both user-owned levers rather than overhauling lighting or importing an asset. The realism `/goal` was banked at "believable stylized human."
+
+**friction-score:** 2

@@ -2,9 +2,19 @@
 
 Cumulative state. Rewritten end-to-end at each `/session-end`.
 
-**Current state**: Session ACJ shipped (2026-05-31 — SkinnedMesh rig foundation + face + poncho cut + Playwright harness). 91 sessions post-MVP. tsc clean + verified via a NEW Playwright capture harness (`npm run rig-shot`). **SAVE_VERSION still v13** (ACJ = pure rig geometry + tooling, zero save changes). The player model arc (`docs/feature-player-model.md`): PM-A silhouette ✓ (ACI), **PM-S SkinnedMesh foundation ✓ (ACJ)** — arms + legs are continuous skinned tubes (the marionette joint-seam ceiling is broken), PM-B head/face ✓ (B.1 hood ACI; B.2 goggles + B.3 face-scarf ACJ), **PM-C layered outfit = NEXT** (re-dress the now-stripped torso), PM-D cloth physics (+ PM-S.3 torso-skin junction blend), PM-E texture. The broader Phase 2 plan (`docs/iteration-plan.md`) resumes at Cycle 3 (sled) after the model arc.
+**Current state**: Session ACK shipped (2026-05-31 — PM-C outfit + realism pass). 92 sessions post-MVP. tsc clean + verified via the Playwright `rig-shot` harness. **SAVE_VERSION still v13** (ACK = pure rig geometry + materials + tooling, zero save changes). **The player-model arc is substantially complete**: PM-A silhouette ✓, PM-S SkinnedMesh foundation ✓ (arms+legs skinned), PM-B head/face ✓, **PM-C outfit ✓ (ACK)**, **realism pass ✓ (ACK)** — the figure is now a believable, solid, dressed human at the **in-pipeline ceiling** (zero-asset flat-shaded primitives = "believable stylized", NOT photoreal). Remaining model work is OPTIONAL/deprioritized (PM-D cloth, PM-S.3 torso-skin, PM-E deeper texture) + two user-call realism levers (game lighting mood; D107 asset fork). **Next session is a long OVERNIGHT for backlog/roadmap breadth** (plan-mode + fanned-out agents), not the model.
 
-## ACJ scope (this session) — SkinnedMesh rig foundation + face + poncho cut + Playwright harness
+## ACK scope (this session) — PM-C outfit + realism pass
+
+PM-C re-dressed the torso (bare since the ACJ poncho cut) with a fitted wrapped **tunic** hugging the body lathe (D140). Then a goal-driven **9-round realism arc** took the figure from a cartoon mannequin → a believable solid dressed human:
+- **Proportions** (D142): `HEAD_R` 0.135→0.115 (≈ 1:7.7 adult; ACI's 0.135 read as a 1:6.7 cartoon big-head) + longer/slimmer neck.
+- **Stance**: contrapposto verification pose (vs stiff mannequin).
+- **Player materials → PBR** (D141): skin + cloth opt into `MeshStandardMaterial` (per-fragment lighting) + derivative procedural **micro-bump** + **baked occlusion** (downward faces darkened → undersides self-shadow under flat ambient = solidity without a scene-lighting change). Opt-in `pbr` flag; creatures stay Lambert.
+- **Goggles** → glossy convex glass lenses (specular glint). **Hands** → slim curled. **Boots** → sole+toe+heel. **Head** → fuller cranium.
+- **Harness**: `--lit=form` (key+rim), `full/full3q/torso` framings, `relaxed` pose.
+- **Honest ceiling**: believable *stylized* human, not photoreal. Removed dead `viewModelHands.ts`.
+
+## ACJ scope — SkinnedMesh rig foundation + face + poncho cut + Playwright harness
 
 The headline is a **foundation rebuild**: after ~13 sessions polishing a rig of rigid Lathe/Box primitives parented at joint Groups, the quality ceiling was diagnosed as the foundation (rigid parts can't deform across a joint → hard elbow/knee/wrist seams + a hand that jutted off the wrist as a disconnected block). User chose procedural skinning over an imported rig.
 
@@ -165,46 +175,45 @@ Existing tunables of interest:
 
 ## Suggested next session (1-3 directions in priority order)
 
-Player-model arc in progress (`docs/feature-player-model.md`). Next:
+The player-model arc is at its in-pipeline ceiling. Next is BREADTH, not the model:
 
-1. **PM-C — layered outfit** (~1-2 sessions). TOP. The torso is now STRIPPED (the poncho was cut) — re-dress it: tunic/wrap layers over the slim torso, visible gloved arms, legible belt/pouches, integrated pack, fix shoulder bunching. NOT a fake poncho (D139) — a real garment now, cloth-drape in PM-D. Verify via `npm run rig-shot` (D138). Rule 8 — iterate honestly.
-2. **PM-D — cloth physics** (~1-2 sessions). Verlet drape for a real cloth/poncho layer; fold in **PM-S.3** (skin the torso to spine/hip bones for the true junction blend, replacing the current filler bridge). Shares a solver with iteration-plan Cycle 4 rope.
-3. **PM-E — texture** then the Phase 2 plan resumes at Cycle 3 (sled riding).
+1. **Long OVERNIGHT — backlog/roadmap breadth** (TOP, Session ACL). Plan-mode + fanned-out agents across many INDEPENDENT backlog items (procgen variants, world/POI, audio, polish, bug fixes). Requires the overnight preconditions: populated scope-cut list, token-budget ceiling, `npm run verify` baseline, destructive-action guard. Classify each item (fan-out vs sequential vs visual-triage) per `orchestration-policy.md`. See `next-session-prompt.md` + `backlog.md`.
+2. **PM-D cloth physics** (optional) — Verlet drape on the tunic (+ a cloak), fold in PM-S.3 torso-skin junction blend. Only if the user wants the model pushed further; it's already at the believable-stylized ceiling.
+3. **In-game lighting mood** (optional, D142) — biggest remaining realism lever for actual play, but a whole-game aesthetic change; surface before doing.
 
 ---
 
 ## Time spent
 
-91 sessions shipped (A through ACJ). Approx ~295-360h cumulative dev time. ACJ: a foundation rebuild (procedural SkinnedMesh limbs) + face (goggles/scarf) + poncho cut + junction fillers + a Playwright capture harness — every element built → harness-screenshot → critique → iterate. (Continuation of the same long conversation: ACI re-plan → ACJ FP-hands cut → skinned arms → skinned legs → hand fix → poncho cut → junctions → face → harness.)
+92 sessions shipped (A through ACK). Approx ~298-365h cumulative dev time. ACK: PM-C tunic + a 9-round realism arc (proportions, stance, PBR materials + micro-bump + baked occlusion, glassy goggles, hands, boots, head) — every element harness-screenshot-iterated. (Tail of the same very long conversation: ACJ skinned rig → ACK PM-C → realism `/goal` arc.)
 
 ---
 
 ## State at session end
 
-- **Git status**: ACJ was a single long working session with **zero intermediate commits** (all work uncommitted until this `/session-end`). Dirty: `src/player/playerRig.ts`, NEW `src/player/skinnedLimb.ts`, `src/player/viewModel.ts`, `src/debug/debugPanel.ts`, NEW `scripts/rig-shot.mjs`, `package.json` (+ `package-lock`), `.gitignore`, + the docs. `verification/*.png` is gitignored (harness output). Commit handoff below.
-- **Branch**: `master`. **Save state**: localStorage v13 — ACJ made zero save changes (pure rig geometry + tooling).
-- **Ports bound**: a dev server may linger from the preview-MCP (5180) / harness (5191); both are dev-only.
-- **viewModelHands.ts** is now dead (FP hands removed) but left on disk in case FP hands are rebuilt properly later.
+- **Git status**: ACK was uncommitted until this `/session-end` (ACJ committed at `210ea4f`). Dirty: `src/player/playerRig.ts`, `src/world/skinMaterial.ts`, `src/world/fabricMaterial.ts`, `scripts/rig-shot.mjs`, deleted `src/player/viewModelHands.ts`, + the docs + the ACK-prompt archive. `verification/*.png` gitignored. Commit handoff below.
+- **Branch**: `master`. **Save state**: localStorage v13 — ACK made zero save changes (rig geometry + materials + tooling).
+- **Ports bound**: a dev server may linger from the preview-MCP (5180) / harness (5191); both dev-only.
+- **Realism `/goal`**: banked at "believable stylized human" (the user chose to bank rather than pursue the lighting-mood / asset-fork levers).
 
 ---
 
 ## Token spend this session (estimated)
 
-ACJ was a long visual-iteration + foundation-engineering session: skinned-limb infra + arms + legs + hand fix + poncho cut + junction fillers + goggles + scarf + a Playwright harness, each element harness-screenshot-iterated.
+ACK was a long visual-iteration session: PM-C tunic + a 9-round realism arc (proportions, stance, PBR materials, baked occlusion, goggles, hands, boots, head), each harness-screenshot-iterated.
 
-- Output (ACJ slice): large — a new module + a new tooling script + many edits across `playerRig.ts` + ~15-20 harness/MCP screenshot-critique rounds + these docs.
-- Cost (Opus 4.8 rates): well above a normal session (foundation rebuild + sustained visual iteration); ≥2× the project baseline.
+- Output (ACK slice): large — material-shader rewrites (skin + fabric → opt-in PBR + micro-bump + baked AO) + many `playerRig.ts` edits + ~20 harness screenshot-critique rounds + these docs.
+- Cost (Opus 4.8 rates): well above baseline (sustained visual iteration on a `/goal`); ≥2× baseline.
 
-Notable: choosing the **SkinnedMesh foundation** over more primitive polish (or an imported asset) was the key call — it broke the marionette ceiling that ~13 prior sessions of polish couldn't. The session also caught + fixed the D135-regression (D137) where a prior geometry edit silently inverted the verification camera.
+Notable: the realism `/goal` was honestly bounded — the arc genuinely transformed the figure, and the agent surfaced (rather than spun on) the two user-owned ceilings (lighting mood, asset fork) once in-pipeline model levers were exhausted. D141's baked-occlusion-in-the-material was the key in-game realism win (solidity without a scene-lighting change).
 
 ---
 
 ## Commit handoff
 
-Per CLAUDE.md (session-end auto-runs commit + tag + push). ACJ ships:
-- NEW `src/player/skinnedLimb.ts` (~115 LOC) — procedural skinned-limb builder.
-- `src/player/playerRig.ts` — arms + legs → skinned tubes; bones replace pivot Groups; hand orientation + thumb mirror; goggles/brow/nose; lower-face scarf; poncho removed; hip/deltoid junction fillers; widened pelvis.
-- `src/player/viewModel.ts` — FP viewmodel hands removed.
-- `src/debug/debugPanel.ts` — rigStudio framing fix (removed the D135 negate; D137).
-- NEW `scripts/rig-shot.mjs` — Playwright capture harness; `package.json` (+lock) `playwright` devDep + `rig-shot` script; `.gitignore` ignores `verification/*.png`.
-- Docs: changelog ACJ entry, CLAUDE.md Last shipped, roadmap.md (shipped + Up-next), decisions.md D136-D139, backlog.md (PM status), session-end-report.md (this file), next-session-prompt.md ACK brief.
+Per CLAUDE.md (session-end auto-runs commit + tag + push). ACK ships:
+- `src/player/playerRig.ts` — PM-C tunic (hugging lathe + folds + wrap seam); realism: HEAD_R 0.135→0.115 + neck; player skin/cloth → pbr; goggle lenses → glossy convex glass; hands slim+curled; boots (sole/toe/heel); fuller-cranium head profile.
+- `src/world/skinMaterial.ts` + `src/world/fabricMaterial.ts` — opt-in `pbr` (MeshStandard) + derivative micro-bump + baked downward-occlusion (D141).
+- `scripts/rig-shot.mjs` — `--lit=form` (key+rim), `full/full3q/torso` framings, `relaxed` pose.
+- deleted `src/player/viewModelHands.ts` (dead since ACJ; broke on the material union type).
+- Docs: changelog ACK entry, CLAUDE.md Last shipped, roadmap.md (shipped + cycle/next), decisions.md D140-D142, backlog.md (PM status + optional follow-ups), session-end-report.md (this file), next-session-prompt.md ACL overnight brief.

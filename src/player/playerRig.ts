@@ -104,10 +104,10 @@ export interface PlayerRig {
 const TORSO_CHEST_R = 0.185;    // upper torso (shoulders); was 0.22
 const TORSO_WAIST_R = 0.115;    // waist — clearly narrower than chest now; was 0.16
 const TORSO_H = 0.62;
-const HEAD_R = 0.135;            // ACI PM-A.3: bumped 0.12→0.135 — head read small vs the (now-slim) body; better head-height ratio. Scales head + scarf together (relative).
-const HEAD_SCALE_Y = 1.12;       // slightly less elongated (was 1.15) — rounder skull
-const NECK_R = 0.055;
-const NECK_H = 0.10;
+const HEAD_R = 0.115;            // ACK realism R1: 0.135→0.115. The ACI 0.135 read at ~1:6.7 head-to-height (cartoony big head). 0.115 → head ~0.23m on a ~1.85m figure ≈ 1:7.7, a realistic adult ratio. Scales head + hood + goggles + scarf together.
+const HEAD_SCALE_Y = 1.18;       // ACK: slightly taller skull (real heads are ~1.25× tall-vs-wide); was 1.12
+const NECK_R = 0.050;            // ACK: slimmer neck
+const NECK_H = 0.135;            // ACK realism R1: 0.10→0.135 — a longer neck reads human; the stub neck read non-human
 const LEG_LEN = 0.85;
 const UPPER_LEG_LEN = 0.45;
 const LOWER_LEG_LEN = LEG_LEN - UPPER_LEG_LEN;
@@ -164,18 +164,20 @@ function buildRigVisual(): {
   // (driven by accentColor) become more visible — reads as weathered
   // sun-damaged skin per the scavenger aesthetic.
   const skinMat = createSkinMaterial(SKIN_COLOR, {
-    accentColor: 0x6e4a26,       // ABX: deeper sun-aged brown (was 0x8a7048)
-    scaleSize: 26.0,
-    sheen: 0.22,                 // ABX: matte/dry (was 0.5 — was reading oily)
+    accentColor: 0x7a4636,       // ACK PM-E: redder/warmer sun-aged tone (subsurface warmth) — was 0x6e4a26
+    scaleSize: 30.0,             // ACK: finer pores
+    sheen: 0.14,                 // ACK: matte dry skin
     localSpace: true,
+    pbr: true, roughness: 0.9, bump: 0.5,   // ACK PM-E: per-fragment lighting + micro-bump (realism)
   });
   // ABX — secondary hands-only skin: same base but with grime accent
   // (dirty knuckles + palms). Per-region material variation.
   const handSkinMat = createSkinMaterial(SKIN_COLOR, {
     accentColor: 0x4a3520,       // grimy darker
-    scaleSize: 22.0,             // slightly larger "calluses"
-    sheen: 0.18,
+    scaleSize: 24.0,             // slightly larger "calluses"
+    sheen: 0.12,
     localSpace: true,
+    pbr: true, roughness: 0.92, bump: 0.6,   // ACK PM-E
   });
   // Torso/limbs under poncho — same skin tone but slightly darker
   // (shadows under cloth). Player can't see most of this; the cloth
@@ -183,17 +185,18 @@ function buildRigVisual(): {
   const underclothMat = createSkinMaterial(0x6a5a3a, {
     accentColor: 0x4a3a26,
     scaleSize: 22.0,
-    sheen: 0.3,
+    sheen: 0.18,                 // ACK PM-E: matte
     localSpace: true,
+    pbr: true, roughness: 0.94, bump: 0.7,   // ACK PM-E: limbs catch light with relief (clones feed torso/arms/legs)
   });
   // Cloth layers — fabric shader with disableShimmer (rig is a moving
   // entity; shimmer would crawl per ABN/D109 sibling pattern).
-  const hoodMat = createFabricMaterial(HOOD_COLOR, undefined, { disableShimmer: true });
+  const hoodMat = createFabricMaterial(HOOD_COLOR, undefined, { disableShimmer: true, pbr: true, roughness: 0.95, bump: 0.8 });
   // PM-B.3 (ACJ): pale sun-bleached face-wrap cloth — deliberately lighter +
   // cooler than the warm skin tone so the lower-face scarf reads as a distinct
   // cloth layer (the old same-tone bandana blended into the skin = invisible).
-  const scarfMat = createFabricMaterial(0xe4dcc4, undefined, { disableShimmer: true });
-  const wrapMat = createFabricMaterial(WRAP_COLOR, undefined, { disableShimmer: true });
+  const scarfMat = createFabricMaterial(0xe4dcc4, undefined, { disableShimmer: true, pbr: true, roughness: 0.95, bump: 0.7 });
+  const wrapMat = createFabricMaterial(WRAP_COLOR, undefined, { disableShimmer: true, pbr: true, roughness: 0.95, bump: 0.9 });
   // Metal: bandolier strap + pauldron base
   // ABX P4 — bandolier swapped from metalMaterial (was reading too
   // shiny + grey) to fabricMaterial with disableShimmer (matte leather
@@ -249,6 +252,70 @@ function buildRigVisual(): {
   );
   torsoMesh.position.y = TORSO_CENTER_Y;
   spineBend.add(torsoMesh);   // ABV — upper body bends with spine
+
+  // ── Torso tunic (PM-C, ACK) ──
+  // Re-dresses the torso after the poncho cut (D139). Unlike the poncho (a flared
+  // cylinder that read as stiff boxy panels), this HUGS the body — a lathe that
+  // follows the torso profile offset outward by a cloth thickness, from a
+  // neckline at the trapezius down to a hem at the upper hip. Sleeveless (top
+  // radius ≈ the arm-attach lateral, so the skinned arms emerge just outside +
+  // the deltoid caps the gap). Distinct cloth tone from skin/undercloth so it
+  // reads as a worn garment. Resting shape only — real drape/sway is PM-D cloth.
+  const garmentMat = createFabricMaterial(0x83805d, undefined, { disableShimmer: true, pbr: true, roughness: 0.96, bump: 1.0 }); // faded olive-drab canvas, fold relief
+  garmentMat.side = THREE.DoubleSide;
+  const GOFF = 0.017;   // cloth thickness over the body
+  const tunicProfile = [
+    new THREE.Vector2(TORSO_CHEST_R * 1.00 + 0.008, +0.332),   // neckline (open top, just below trapezius)
+    new THREE.Vector2(TORSO_CHEST_R * 1.08 + GOFF,  +0.315),   // shoulder line
+    new THREE.Vector2(TORSO_CHEST_R * 1.18 + GOFF,  +0.230),   // upper chest
+    new THREE.Vector2(TORSO_CHEST_R * 1.15 + GOFF,  +0.140),   // pec curve
+    new THREE.Vector2(TORSO_CHEST_R * 1.04 + GOFF,  +0.040),   // sternum
+    new THREE.Vector2(TORSO_CHEST_R * 0.88 + GOFF,  -0.060),   // lower ribcage
+    new THREE.Vector2(TORSO_WAIST_R * 0.98 + 0.020, -0.150),   // waist (under the belt)
+    new THREE.Vector2(TORSO_WAIST_R * 1.25 + 0.022, -0.210),   // hem at upper hip (open bottom)
+  ];
+  const tunicGeom = new THREE.LatheGeometry(tunicProfile, 28);
+  // Subtle cloth folds + broken hem so it reads as worn fabric, not a smooth
+  // shell. Fitted garment → gentle amplitude (vs the old poncho's 7.5cm). Folds
+  // deepest at the hem, fade to nothing at the neckline; valleys dip the hem
+  // edge so it's an uneven line. (Real motion-drape is PM-D.)
+  {
+    const pa = tunicGeom.attributes.position as THREE.BufferAttribute;
+    const TUNIC_TOP_Y = 0.332, TUNIC_BOT_Y = -0.210;
+    const span = TUNIC_TOP_Y - TUNIC_BOT_Y;
+    const WAVES = 7;
+    for (let i = 0; i < pa.count; i++) {
+      const x = pa.getX(i), y = pa.getY(i), z = pa.getZ(i);
+      const r = Math.hypot(x, z);
+      if (r < 1e-4) continue;
+      const theta = Math.atan2(z, x);
+      const t = (y - TUNIC_BOT_Y) / span;           // 0 at hem → 1 at neckline
+      const amp = 0.020 * (1 - t) + 0.004 * t;      // 2cm hem → 0.4cm neck
+      const fold = Math.sin(WAVES * theta) * amp;
+      const scale = (r + fold) / r;
+      pa.setX(i, x * scale);
+      pa.setZ(i, z * scale);
+      // Break the hem: fold valleys hang lower near the bottom edge.
+      const hemDip = Math.max(0, -Math.sin(WAVES * theta)) * (1 - t) * (1 - t) * 0.028;
+      pa.setY(i, y - hemDip);
+    }
+    pa.needsUpdate = true;
+    tunicGeom.computeVertexNormals();
+  }
+  const tunic = new THREE.Mesh(tunicGeom, garmentMat);
+  tunic.position.y = TORSO_CENTER_Y;
+  spineBend.add(tunic);
+  // Asymmetric wrap seam — a thin diagonal cloth band across the chest (a
+  // wrapped-tunic overlap edge), front-left to right hip. Sells "wrapped cloth"
+  // + breaks the uniform shell. Front = +Z.
+  const seam = new THREE.Mesh(
+    new THREE.BoxGeometry(0.045, 0.40, 0.02),
+    garmentMat,
+  );
+  seam.position.set(-TORSO_CHEST_R * 0.35, TORSO_CENTER_Y + 0.06, TORSO_CHEST_R * 1.05);
+  seam.rotation.z = 0.5;            // diagonal across the chest
+  seam.rotation.x = -0.12;          // hug the chest curve
+  spineBend.add(seam);
 
   // ── Belt + pouches (ACH Cycle 2.3): cinched leather belt at the waist with
   // utilitarian hip pouches — Rey-scavenger layering depth. Parented to
@@ -315,17 +382,20 @@ function buildRigVisual(): {
   spineBend.add(headGroup);   // ABV — head bends with spine
   const headProfile = [
     // [radial, axial] — axial 0 = head center
-    new THREE.Vector2(0, +HEAD_R * 1.10),          // crown cap top
-    new THREE.Vector2(HEAD_R * 0.55, +HEAD_R * 1.05),  // top of cranium
-    new THREE.Vector2(HEAD_R * 0.90, +HEAD_R * 0.85),  // upper cranium widening
-    new THREE.Vector2(HEAD_R * 1.00, +HEAD_R * 0.55),  // cranium widest (temple region)
-    new THREE.Vector2(HEAD_R * 0.98, +HEAD_R * 0.20),  // brow ridge
-    new THREE.Vector2(HEAD_R * 0.96, -HEAD_R * 0.05),  // mid-face (cheekbone level)
-    new THREE.Vector2(HEAD_R * 0.92, -HEAD_R * 0.30),  // cheek taper
-    new THREE.Vector2(HEAD_R * 0.78, -HEAD_R * 0.55),  // jaw line
-    new THREE.Vector2(HEAD_R * 0.55, -HEAD_R * 0.85),  // chin point
-    new THREE.Vector2(HEAD_R * 0.30, -HEAD_R * 1.00),  // under-chin
-    new THREE.Vector2(0, -HEAD_R * 1.05),          // bottom cap
+    // ACK realism: fuller, rounder cranium dome (was pointy/ovoid on top) +
+    // cleaner cheek→jaw→chin taper → a more skull-like silhouette.
+    new THREE.Vector2(0, +HEAD_R * 1.12),              // crown cap top
+    new THREE.Vector2(HEAD_R * 0.50, +HEAD_R * 1.10),  // crown — rounder
+    new THREE.Vector2(HEAD_R * 0.80, +HEAD_R * 1.00),  // upper cranium (fuller dome)
+    new THREE.Vector2(HEAD_R * 0.97, +HEAD_R * 0.78),  // back-cranium fullness
+    new THREE.Vector2(HEAD_R * 1.02, +HEAD_R * 0.45),  // cranium widest (temple)
+    new THREE.Vector2(HEAD_R * 1.00, +HEAD_R * 0.18),  // brow ridge
+    new THREE.Vector2(HEAD_R * 0.97, -HEAD_R * 0.08),  // cheekbone
+    new THREE.Vector2(HEAD_R * 0.88, -HEAD_R * 0.34),  // cheek taper
+    new THREE.Vector2(HEAD_R * 0.72, -HEAD_R * 0.58),  // jaw line
+    new THREE.Vector2(HEAD_R * 0.50, -HEAD_R * 0.84),  // chin
+    new THREE.Vector2(HEAD_R * 0.26, -HEAD_R * 1.00),  // under-chin
+    new THREE.Vector2(0, -HEAD_R * 1.05),              // bottom cap
   ];
   const headMat = skinMat.clone();
   headMat.side = THREE.DoubleSide;
@@ -370,7 +440,10 @@ function buildRigVisual(): {
   // peeking between the goggles and the scarf. Face = +Z; offsets in HEAD_R so
   // they scale with the head. Iterated via rigStudio('head') (PM-B.2).
   const goggleFrameMat = createFabricMaterial(0x2b2620, undefined, { disableShimmer: true });   // dark rubber/leather strap
-  const goggleLensMat = createMetalMaterial(0x1b2630, { wornScale: 12.0, scratchStrength: 0.12 }); // dark smoked glass
+  // ACK realism: glossy dark glass — low roughness + some metalness → catches a
+  // sharp specular glint from the key/rim light, reading as a real reflective
+  // lens instead of a flat black disc (the cartoonish tell on the face).
+  const goggleLensMat = new THREE.MeshStandardMaterial({ color: 0x14181c, roughness: 0.13, metalness: 0.55 });
   const goggleRimMat = createMetalMaterial(0x6a5a3a, { wornScale: 10.0, scratchStrength: 0.20 });  // scavenged brass rim
   const GOG_Y = HEAD_R * 0.20;            // eye line (slightly above center)
   const GOG_Z = HEAD_R * 0.95;            // ON the face surface (radius ~0.97R here)
@@ -386,10 +459,12 @@ function buildRigVisual(): {
     rim.rotation.y = toe;
     rim.position.set(lensX, GOG_Y, GOG_Z);
     headGroup.add(rim);
-    const lens = new THREE.Mesh(new THREE.CylinderGeometry(HEAD_R * 0.23, HEAD_R * 0.23, 0.012, 16), goggleLensMat);
-    lens.rotation.x = Math.PI / 2;
+    // Convex lens dome (sphere flattened in Z) — a curved glass surface catches
+    // a moving glint far better than a flat disc → reads as a real lens.
+    const lens = new THREE.Mesh(new THREE.SphereGeometry(HEAD_R * 0.23, 18, 12), goggleLensMat);
+    lens.scale.set(1, 1, 0.5);
     lens.rotation.y = toe;
-    lens.position.set(lensX, GOG_Y, GOG_Z + 0.016);
+    lens.position.set(lensX, GOG_Y, GOG_Z + 0.012);
     headGroup.add(lens);
     // Temple strap stub — short band from the lens outer edge toward the ear
     // (tucks under the hood at the side).
@@ -680,14 +755,22 @@ function buildRigVisual(): {
       kneeBone.add(bw);
     }
 
-    // Foot + toe — rigid children of the ankle bone (ankle rotation drives
-    // heel-toe roll).
-    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.095, 0.05, 0.16), underclothMat);
-    foot.position.set(0, -0.025, 0.045);
+    // Boot (ACK realism) — was 2 plain boxes (a "lego foot"). Now a sole slab +
+    // upper + ROUNDED toe cap + heel → reads as a worn boot. Rigid children of
+    // the ankle bone (ankle rotation drives heel-toe roll).
+    const sole = new THREE.Mesh(new THREE.BoxGeometry(0.090, 0.024, 0.210), underclothMat);
+    sole.position.set(0, -0.046, 0.050);
+    ankleBone.add(sole);
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.082, 0.058, 0.150), underclothMat);
+    foot.position.set(0, -0.016, 0.040);
     ankleBone.add(foot);
-    const toe = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.04, 0.05), underclothMat);
-    toe.position.set(0, -0.025, 0.155);
+    const toe = new THREE.Mesh(new THREE.SphereGeometry(0.045, 12, 9), underclothMat);
+    toe.scale.set(0.92, 0.62, 1.0);              // rounded toe bumper
+    toe.position.set(0, -0.020, 0.140);
     ankleBone.add(toe);
+    const heel = new THREE.Mesh(new THREE.BoxGeometry(0.078, 0.040, 0.045), underclothMat);
+    heel.position.set(0, -0.030, -0.028);        // slight heel block at the back
+    ankleBone.add(heel);
 
     // Hip-cap filler (ACJ) — sphere bridging the thigh top to the pelvis, the
     // same trick the deltoid uses for shoulders. Rides the hip bone (so the
@@ -789,19 +872,26 @@ function buildRigVisual(): {
     handGroup.rotation.x = -1.15;                 // relaxed down-forward hang (was flat-forward block)
     wristBone.add(handGroup);
     // Fingerless glove — palm + knuckle ridge in wrap cloth, fingers bare skin.
-    const palm = new THREE.Mesh(new THREE.BoxGeometry(0.078, 0.028, 0.062), wrapMat);
+    // ACK realism: slimmer palm + relaxed CURLED fingers (a real resting hand
+    // curls; stiff splayed digits read blocky/mannequin).
+    const palm = new THREE.Mesh(new THREE.BoxGeometry(0.070, 0.024, 0.058), wrapMat);
+    palm.scale.set(1, 1, 1);
     handGroup.add(palm);
-    const knuckleRidge = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.022, 0.022), wrapMat);
-    knuckleRidge.position.set(0, 0, -0.028);
+    const knuckleRidge = new THREE.Mesh(new THREE.BoxGeometry(0.066, 0.019, 0.020), wrapMat);
+    knuckleRidge.position.set(0, 0, -0.026);
     handGroup.add(knuckleRidge);
     for (let f = 0; f < 4; f++) {
-      const fingerLen = 0.062 - Math.abs(f - 1.5) * 0.006;
-      const finger = new THREE.Mesh(new THREE.CylinderGeometry(0.0075, 0.010, fingerLen, 8), handSkinMat);
-      finger.rotation.x = Math.PI / 2 - 0.35;
-      finger.position.set(-0.027 + f * 0.018, -fingerLen * 0.18, -0.028 - fingerLen * 0.45);
+      const fingerLen = 0.058 - Math.abs(f - 1.5) * 0.006;
+      // Tapered + slimmer; outer fingers (index/pinky) curl a touch more → a
+      // natural relaxed cup rather than a flat splay.
+      const curl = 0.62 + Math.abs(f - 1.5) * 0.10;
+      const finger = new THREE.Mesh(new THREE.CylinderGeometry(0.0056, 0.0085, fingerLen, 8), handSkinMat);
+      finger.rotation.x = Math.PI / 2 - curl;             // more relaxed curl (was 0.35)
+      finger.rotation.z = (-0.027 + f * 0.018) * 0.6;     // fan/converge slightly toward the palm center
+      finger.position.set(-0.025 + f * 0.0165, -fingerLen * 0.30, -0.026 - fingerLen * 0.40);
       handGroup.add(finger);
       for (const frac of [1 / 3, 2 / 3]) {
-        const knuckle = new THREE.Mesh(new THREE.SphereGeometry(0.0115, 6, 5), handSkinMat);
+        const knuckle = new THREE.Mesh(new THREE.SphereGeometry(0.0098, 6, 5), handSkinMat);
         knuckle.position.y = (frac - 0.5) * fingerLen;
         finger.add(knuckle);
       }

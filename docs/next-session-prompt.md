@@ -1,51 +1,70 @@
-# Session ACK — Player-model arc, PM-C: layered outfit (re-dress the stripped torso)
+# Session ACL — Kickoff Brief: long OVERNIGHT, backlog/roadmap breadth (plan-mode + fan-out)
 
-> Player-model arc: **[docs/feature-player-model.md](feature-player-model.md)**.
-> Done: PM-A silhouette, **PM-S SkinnedMesh foundation** (arms+legs skinned — the
-> marionette ceiling is broken), PM-B face (goggles + lower-face scarf), poncho
-> cut + junction fillers. **This session: PM-C — re-dress the now-STRIPPED torso**
-> with a real layered outfit (NOT a fake poncho — D139) + fix shoulder bunching.
+> The player-model arc is at its in-pipeline ceiling (ACK). This session pivots to
+> **breadth**: knock out a large batch of INDEPENDENT backlog/roadmap items in one
+> long overnight, using **plan mode** to scope + **fanned-out agents** to execute in
+> parallel. NOT more player-model work (it's deprioritized; optional follow-ups in backlog).
 
 ## Read these now (in order)
-1. **CLAUDE.md** (auto-loaded) — rule 8 is LOAD-BEARING; visual work is iterated, not one-shot.
-2. **docs/session-end-report.md** — full state through ACJ.
-3. **docs/feature-player-model.md** — the arc + the Model Verification Protocol.
-4. **docs/decisions.md** tail — **D136** (SkinnedMesh foundation + skinnedLimb.ts), **D137** (rigStudio frames +Z now — no negate), **D138** (Playwright `rig-shot` harness = verify path), **D139** (poncho cut — DON'T restore a fake one), D107 (zero-asset), D109 (localSpace).
-5. **docs/research/sci-fi-desert-scavenger-aesthetic.md** + the Rey reference (`docs/research/reference-tfa-jakku-opening.md`).
+1. **CLAUDE.md** (auto-loaded) — architecture rules, tick order, sub-agent policy (parallel-by-default).
+2. **docs/session-end-report.md** — full state through ACK.
+3. **docs/backlog.md** — THE source of work items for this session.
+4. **docs/roadmap.md** — "Up next" + the Phase-2 iteration plan context.
+5. **docs/decisions.md** tail (D130-D142) + grep `friction-score: [3-5]` for live risks.
+6. `~/projects/gamedev-framework/shared-memory/orchestration-policy.md` — the fan-out dispatch table.
 
 ## What's already built
-A slim procedural scavenger: skinned arms+legs (continuous, smooth joints), goggled + scarf-wrapped head, rounded hips, belt + bandolier + backpack + pauldron. The torso itself is bare dark **undercloth** — the poncho was removed (it was a stiff fake). The figure reads "stripped/undressed" and needs a real garment layer.
+A full singleplayer desert-survival loop (survival stats, procgen 2400m world + POIs, combat, salvage, crafting, placement, mounts + sled tow, sandworm boss, companion, save v13, procedural audio + 3 music tracks) + a believable stylized procedural player rig (skinned limbs, dressed, PBR surfaces). See session-end-report "What works".
 
-## PM-C focus — layered outfit
-Heavy visual iteration; `tsc` is the type gate, NOT the quality gate. Use `npm run rig-shot` (D138) every round (`--pose=idle|apose|walk`, `--angles=front,3q,left,back`, `--closeup=shoulder|hip|hand|face`). 5–8 rounds for new garments.
+## Session ACL focus — breadth via parallel fan-out
+Pick a batch of **independent** backlog items (no shared files / no ordering), classify each by shape (orchestration-policy.md), and **fan out one agent per item** (or per small cluster). Solo+sequential ONLY for dependency-ordered or observation-dependent (visual-feel) items. Govern cost with per-agent `effort`, not by avoiding fan-out.
 
-## Priority items (in order)
-1. **Torso garment** (`playerRig.ts`) — a real layered top over the slim torso: e.g. a sleeveless tunic/wrap or vest in a distinct cloth tone (use `scarfMat`-style fabric, NOT the old poncho cylinder). Should sit ON the torso (follow its lathe profile), leave the arms visible, and read as worn cloth/leather. Parent to `spineBend`. Resting shape only — real drape is PM-D.
-2. **Shoulder bunching fix** — with the poncho gone, check the shoulder/deltoid↔torso read at `--closeup=shoulder` (apose); refine the deltoid/garment so the shoulder line is clean.
-3. **Legible belt/pouches + integrated pack** — now exposed; make sure they read as worn kit, not floating boxes.
-4. **Visible gloved arms** — the forearm wraps + fingerless glove are already there; verify they read against the new garment.
+## Candidate items (independent — good for fan-out; pick by budget)
+Quick wins (~30min–1h each, mostly isolated files):
+- **[polish] sandworm twilight-breach audio attenuation** — `enterStationaryBreach` plays `playWormRoar()` full-volume at 180-400m; skip it on twilight breaches or play a distance-attenuated variant. (`sandWorm.ts` + `audio.ts`)
+- **[polish] footstep dust at foot contact** — move dust emit from player-center to foot mid-stance world pos (foot IK). (`playerRig.ts`/controller + dust)
+- **[polish] 3P camera teleport-snap wiring** — set `ctx.player.cameraSnapNextFrame` on mount/dismount/save-load (flag exists, only boot consumes it).
+- **[bug] speeder spin angular-damping playtest** — confirm worldspace tilt recovery after bumps.
+- **[polish] megaWreck catwalk panel reachability** — add 1-2 ground-level panels.
+Medium (~1-3h):
+- **[polish] item viewmodel fidelity pass** — ~19 ItemDefs at primitive complexity (batch: large_tent_kit/bedroll_kit/lantern_kit, etc.). Visual-triage loop via `npm run rig-shot`-style capture or preview.
+- **[polish] 3P upper-body aim twist-IK** — rotate `rig.shoulders[1]` toward camera on aim (clamped ±0.5).
+- **[polish] 3P walk-cycle ↔ footstep cadence sync** — lock gait phase to footstep distance accumulator.
+- **[feat] multi-worm population follow-ups / [feat] in-storm movement penalty** (disable sprint + slow walk while storm overhead).
+Larger (scope carefully; may be 1 item alone):
+- **[feat] Dune-style sweeping sandstorm** (storm wall approaches/sweeps/passes) — reworks ambient intensity-ramp; bigger, save-aware. Consider spiking design first.
+- Triaged ideas in backlog: night-sky stars (twinkle/drift), wreck-yard biome, sarlacc pit, amban rifle, desert-shrew creature, cave→egg→"Pebble" companion, lie-down-to-sleep, iron-stake model, speeder rope-pull.
 
-## Then (if budget)
-- **PM-S.3** — skin the torso to spine/hip bones for the TRUE junction blend (currently filler-bridged via deltoid/hip-cap spheres). Fold into PM-D if cloth physics needs it.
+## Overnight preconditions (verify BEFORE going wide; else fall back to gated)
+- `npm run verify` baseline PASS.
+- **Token-budget ceiling set** (fan-out is default-on — an unattended run needs a spend bound; the user passes e.g. `+500k`). If none set, ask or stay gated.
+- **Scope-cut list**: per-item, the cut order is "drop the item entirely, log a D-entry, move on" — don't half-ship. Capture cuts in the changelog.
+- Destructive-action guard active (no `reset --hard`/`push --force`).
+
+## Execution shape
+1. Plan-mode: read backlog, select the batch that fits the budget, classify each item's shape + strategy.
+2. Fan out: issue concurrent Agent calls (or a Workflow pipeline) — `isolation: worktree` for any that mutate the same files. One agent per independent item.
+3. Each agent: implement + `npm run verify` (tsc) + (visual items) capture-critique-iterate. Returns a structured result.
+4. Synthesize: collect results, resolve any file conflicts, run a final `npm run verify`, batch-verify save round-trip if any schema changed (bump SAVE_VERSION additively per D81).
 
 ## Autonomy contract
-Ambiguous → GDD pillars + the Rey reference + the scavenger aesthetic doc; append a D-entry; continue. Surface only on: procedural-vs-asset (D107), save bumps (D81), destructive git.
+Ambiguous → GDD pillars + decisions.md realism dial; append a D-entry; continue. Surface only on: procedural-vs-asset (D107), save-schema bumps (D81), destructive git, or a whole-game aesthetic change (e.g. lighting mood).
 
 ## Stop conditions
-Wall-clock 2-4h. 3 fix-walls on a garment → `/scope-cutter`. **Rule-8 self-check**: never mark a garment done on tsc alone or without a harness screenshot + honest critique.
+Token budget reached · 3 consecutive fix-walls on one item (cut it, log, continue) · catastrophic block · destructive-action attempt · all selected items shipped.
+
+## On stop
+Invoke `/session-end` (verify-all, changelog, CLAUDE.md, roadmap, decisions, backlog, this report, next brief, post-mortem + consolidate, auto-commit+tag+push per CLAUDE.md git policy).
 
 ## Notable footguns
-- **D137**: `rigStudio`/harness now frame the face at **+Z** (no negate). If you move the "front" again, re-run the two-sided marker test.
-- **D138**: the preview-MCP screenshotter WEDGES mid-session — use `npm run rig-shot`, not the MCP, for captures.
-- **D136**: limbs are SkinnedMeshes; `rig.shoulders/elbows/wrists/hips/knees/ankles` are now **Bones** (Object3D), animation/foot-IK unchanged. Don't reparent clothing to the limb bones expecting Group behavior — attach torso garments to `spineBend`.
-- **D107** procedural-only (no GLB); **D109** localSpace on the moving rig.
-- The harness boots its own dev server on port **5191** (strictPort) — kill stale dev servers if it fails to bind.
-
-## Verification protocol
-`npm run verify` (= tsc) = type gate. QUALITY gate = `npm run rig-shot` + honest critique, 5–8 rounds per garment.
+- **Per-frame tick order** in `main.ts` matters (CLAUDE.md rule 3); new systems hook at the right point + respect the pause gate (rule 4).
+- **Magic numbers → `tuning.ts` only** (rule 2). **No innerHTML string-concat** (rule 6). **Box decorations ≥10cm depth** (rule 7).
+- **D107 zero-asset** (procedural shaders only) — don't add texture files without surfacing.
+- Save changes are additive + version-bumped (D81); 2-pass load for cross-entity refs.
+- Verify = `npm run verify` (= `tsc --noEmit`); Dustfall opts out of the tier-ladder.
 
 ## Begin block
-1. Read CLAUDE.md, session-end-report, feature-player-model, decisions tail (D136-D139), the aesthetic/Rey refs.
-2. `npm run verify` baseline.
-3. TaskCreate: torso garment → shoulder fix → belt/pouch/pack legibility → (PM-S.3 if budget).
-4. `npm run rig-shot --pose=idle --angles=front,3q` baseline shot, then iterate the garment with a screenshot each round.
+1. Read CLAUDE.md, session-end-report, backlog, roadmap, decisions tail, orchestration-policy.
+2. `npm run verify` baseline. Confirm token-budget ceiling (else gated).
+3. Plan-mode: select batch + per-item strategy. TaskCreate one task per item.
+4. Fan out; each agent verifies; synthesize + final verify; `/session-end`.

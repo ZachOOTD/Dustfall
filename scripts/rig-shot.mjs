@@ -39,6 +39,7 @@ const ANGLES = String(argv.angles || 'front,3q,left,head').split(',').map((s) =>
 const TAG = argv.tag || 'shot';
 const PORT = Number(argv.port || 5191);
 const CLOSEUP = argv.closeup || ''; // shoulder|hip|hand|knee|elbow|face — overrides angles
+const LIT = argv.lit || '';         // "form" = dramatic key/fill/shadow lighting (rigStudio's flat even light hides all form)
 
 // Close-up targets: frame a joint from the front-side at close range. Offsets
 // are [side, up, fwd] in the HEAD's facing frame so framing is consistent
@@ -50,6 +51,9 @@ const CLOSEUPS = {
   knee:     { joint: 'rig.knees[1]',     off: [0.30, 0.08, 0.58], look: [0, -0.05, 0] },
   elbow:    { joint: 'rig.elbows[1]',    off: [0.28, 0.10, 0.50], look: [0, 0, 0] },
   face:     { joint: 'rig.headGroup',    off: [0.11, 0.04, 0.36], look: [0, -0.03, 0] },
+  torso:    { joint: 'rig.headGroup',    off: [0.18, -0.45, 1.05], look: [0, -0.62, 0] },
+  full:     { joint: 'rig.headGroup',    off: [0.55, -0.55, 2.15], look: [0, -0.92, 0] },     // whole figure, fills the portrait frame
+  full3q:   { joint: 'rig.headGroup',    off: [1.25, -0.55, 1.75], look: [0, -0.92, 0] },     // whole figure, 3/4
 };
 
 // Pose presets — run inside page.evaluate against window.__game.ctx.player.rig.
@@ -58,6 +62,9 @@ const POSES = {
   idle: `for(const i of [0,1]){ rig.shoulders[i].rotation.set(0.06,0,(i===1?1:-1)*0.05); rig.elbows[i].rotation.x=0.08; rig.wrists[i].rotation.x=-0.12; rig.hips[i].rotation.set(0,0,0); rig.knees[i].rotation.x=0.03; rig.ankles[i].rotation.x=0; }`,
   apose: `for(const i of [0,1]){ rig.shoulders[i].rotation.set(0.20,0,(i===1?1:-1)*0.55); rig.elbows[i].rotation.x=0.22; rig.wrists[i].rotation.x=0; rig.hips[i].rotation.set(0,0,(i===1?1:-1)*0.06); rig.knees[i].rotation.x=0.03; rig.ankles[i].rotation.x=0; }`,
   walk: `rig.hips[1].rotation.x=0.6; rig.knees[1].rotation.x=1.0; rig.ankles[1].rotation.x=0.2; rig.hips[0].rotation.x=-0.25; rig.knees[0].rotation.x=0.10; rig.ankles[0].rotation.x=0; rig.shoulders[1].rotation.set(-0.4,0,0.05); rig.elbows[1].rotation.x=0.5; rig.wrists[1].rotation.x=-0.1; rig.shoulders[0].rotation.set(0.4,0,-0.05); rig.elbows[0].rotation.x=0.3; rig.wrists[0].rotation.x=-0.1;`,
+  // Natural relaxed contrapposto — weight on the right leg, left leg eased, pelvis
+  // + spine + head counter-tilt, arms hang with a slight elbow bend + small gap.
+  relaxed: `rig.hips[1].rotation.set(-0.04,0,0.02); rig.knees[1].rotation.x=0.02; rig.ankles[1].rotation.x=0; rig.hips[0].rotation.set(0.10,0.05,0.03); rig.knees[0].rotation.x=0.20; rig.ankles[0].rotation.x=-0.05; rig.spineBend.rotation.set(0.05,0,-0.05); rig.shoulders[1].rotation.set(0.10,0,0.10); rig.elbows[1].rotation.x=0.22; rig.wrists[1].rotation.x=-0.12; rig.shoulders[0].rotation.set(0.06,0,-0.13); rig.elbows[0].rotation.x=0.30; rig.wrists[0].rotation.x=-0.12; rig.headGroup.rotation.set(0.03,0.12,-0.05);`,
 };
 
 function startDev() {
@@ -84,6 +91,48 @@ function startDev() {
     };
     tick();
   });
+}
+
+// Dramatic key/fill/shadow lighting — rigStudio cranks ambient to 2.2 + exposure
+// 2.0 (flat, even, kills all form). For a fair realism read (and a better in-game
+// presentation), drop ambient, keep a strong directional sun for shadow/form, and
+// lower exposure so highlights don't blow out. Self-shadowing on the rig (chin,
+// folds, under the tunic hem) is what makes a 3D form read as solid rather than flat.
+async function maybeFormLight(page) {
+  if (LIT !== 'form') return;
+  await page.evaluate(() => {
+    const ctx = window.__game.ctx;
+    const scene = ctx.three.scene;
+    const cam = ctx.three.camera;
+    const V = cam.position.constructor;
+    let sun = null;
+    scene.traverse((o) => {
+      if (!o.isLight) return;
+      if (o.type === 'AmbientLight') o.intensity = 0.28;          // low fill → form reads
+      else if (o.type === 'HemisphereLight') o.intensity = 0.35;
+      else if (o.type === 'DirectionalLight' && o.intensity > 0 && !sun) {
+        sun = o;                                                   // KEY
+        o.intensity = 3.0;
+        o.castShadow = true;
+        if (o.shadow) { o.shadow.bias = -0.0004; o.shadow.normalBias = 0.02; }
+      }
+    });
+    // RIM/back light — separates the silhouette from the ground = the single
+    // biggest "solid 3D figure" read. Placed behind the figure relative to the
+    // camera, up high, cool tint. Created once + repositioned per shot.
+    const rig = ctx.player.rig;
+    const head = rig.headGroup.getWorldPosition(new V());
+    const behind = new V().subVectors(head, cam.position).normalize(); // away from camera
+    let rim = scene.getObjectByName('__rimLight');
+    if (!rim && sun) { rim = new sun.constructor(0xbfd4ff, 2.2); rim.name = '__rimLight'; scene.add(rim); }
+    if (rim) {
+      rim.position.set(head.x + behind.x * 4 + 1.5, head.y + 3.5, head.z + behind.z * 4);
+      if (rim.target) { rim.target.position.copy(head); rim.target.updateMatrixWorld(true); }
+    }
+    ctx.three.renderer.shadowMap.enabled = true;
+    ctx.three.renderer.toneMappingExposure = 1.05;
+  });
+  await page.waitForTimeout(250);
 }
 
 async function main() {
@@ -137,14 +186,16 @@ async function main() {
         cam.updateMatrixWorld(true);
       }, { jointExpr: spec.joint, off: spec.off, look: spec.look });
       await page.waitForTimeout(350);
-      const path = join(OUT, `rig-${TAG}-${POSE}-closeup-${CLOSEUP}.png`);
+      await maybeFormLight(page);
+      const path = join(OUT, `rig-${TAG}-${POSE}-closeup-${CLOSEUP}${LIT ? '-' + LIT : ''}.png`);
       await page.screenshot({ path, fullPage: false });
       console.log(`[rig-shot] saved ${path}`);
     } else {
       for (const angle of ANGLES) {
         await page.evaluate((a) => window.__game.rigStudio(a), angle);
         await page.waitForTimeout(350);
-        const path = join(OUT, `rig-${TAG}-${POSE}-${angle}.png`);
+        await maybeFormLight(page);
+        const path = join(OUT, `rig-${TAG}-${POSE}-${angle}${LIT ? '-' + LIT : ''}.png`);
         await page.screenshot({ path, fullPage: false });
         console.log(`[rig-shot] saved ${path}`);
       }

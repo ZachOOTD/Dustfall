@@ -49,6 +49,16 @@ export interface FabricMaterialOpts {
    *  walks. World tents + tarps should leave this false so the wind
    *  shimmer still sells the storm intensity. Default false. */
   disableShimmer?: boolean;
+  /** PM-E (ACK) — build a `MeshStandardMaterial` (per-fragment lighting +
+   *  roughness) with a derivative-based normal bump from the weave + fold noise,
+   *  so cloth catches light with real thread/fold relief instead of reading as a
+   *  flat painted plane. Opt-in (default Lambert) — world tents/tarps stay cheap;
+   *  the player's worn garments use pbr for close-range realism. */
+  pbr?: boolean;
+  /** Standard roughness when `pbr` (default 0.95 — matte canvas). */
+  roughness?: number;
+  /** Bump strength when `pbr` (default 0.8). */
+  bump?: number;
 }
 
 /** Build the patched fabric material. Drop-in replacement for
@@ -58,12 +68,20 @@ export function createFabricMaterial(
   color: number,
   side?: THREE.Side,
   opts?: FabricMaterialOpts,
-): THREE.MeshLambertMaterial {
-  const mat = new THREE.MeshLambertMaterial({
-    color,
-    side: side ?? THREE.FrontSide,
-  });
+): THREE.MeshLambertMaterial | THREE.MeshStandardMaterial {
+  const mat = opts?.pbr
+    ? new THREE.MeshStandardMaterial({
+        color,
+        side: side ?? THREE.FrontSide,
+        roughness: opts.roughness ?? 0.95,
+        metalness: 0.0,
+      })
+    : new THREE.MeshLambertMaterial({
+        color,
+        side: side ?? THREE.FrontSide,
+      });
   const disableShimmer = opts?.disableShimmer ?? false;
+  const bump = opts?.bump ?? 0.8;
 
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uTime = { value: 0 };
@@ -81,6 +99,7 @@ export function createFabricMaterial(
       /* glsl */ `
         #include <common>
         varying vec3 vWorldFabric;
+        varying vec3 vNrmFabric;
         uniform float uTime;
         uniform float uWindStrength;
       `,
@@ -95,12 +114,14 @@ export function createFabricMaterial(
           // for the fragment-shader noise so the weave + stains stay
           // anchored to the held item as the player moves.
           vWorldFabric = position;
+          vNrmFabric = normal;
         `
         /* glsl */
         : `
           #include <begin_vertex>
           vec3 _fabricWorld = (modelMatrix * vec4(position, 1.0)).xyz;
           vWorldFabric = _fabricWorld;
+          vNrmFabric = normal;
 
           // Session ABE — wind shimmer. Sum of two phase-offset sin waves
           // in world-XZ at ~1m wavelength, driven by uTime, displaces the
@@ -123,6 +144,7 @@ export function createFabricMaterial(
       /* glsl */ `
         #include <common>
         varying vec3 vWorldFabric;
+        varying vec3 vNrmFabric;
 
         // IQ-style hash — same precision-robust formulation as
         // terrainMaterial.ts. fract() before the arithmetic prevents
@@ -207,6 +229,33 @@ export function createFabricMaterial(
         diffuseColor.rgb *= stainedTint;
       `,
     );
+
+    // PM-E (ACK) — cloth micro-relief for the PBR path only. Perturb the
+    // per-fragment normal from a height = the weave cross-hatch + a coarse fold
+    // FBM, via screen-space derivatives. Gives threads + soft folds that catch
+    // light, instead of a flat painted plane. (vWorldFabric is object-local in
+    // disableShimmer mode → relief stays anchored to the garment as it moves.)
+    if (opts?.pbr) {
+      // Baked occlusion — darken downward-facing cloth so undersides + the hem
+      // interior + the underside of folds sit in soft shadow under flat ambient.
+      shader.fragmentShader = shader.fragmentShader.replace(
+        'diffuseColor.rgb *= stainedTint;',
+        'diffuseColor.rgb *= stainedTint;\n        diffuseColor.rgb *= mix(0.6, 1.0, smoothstep(-0.75, 0.35, vNrmFabric.y));',
+      );
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <normal_fragment_maps>',
+        /* glsl */ `
+          #include <normal_fragment_maps>
+          {
+            vec3 wpn = vWorldFabric;
+            float thread = 0.5 * (sin(wpn.x * 40.0) + sin(wpn.z * 40.0));   // weave
+            float folds = fabricFbm(wpn.xz * 1.4) * 2.2;                    // soft folds
+            float h = thread * 0.35 + folds;
+            normal = normalize(normal + vec3(dFdx(h), dFdy(h), 0.0) * ${bump.toFixed(3)});
+          }
+        `,
+      );
+    }
   };
 
   return mat;

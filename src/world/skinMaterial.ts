@@ -42,19 +42,39 @@ export interface SkinMaterialOpts {
    *  (a placed corpse, a wreck skeleton) should leave this false so
    *  adjacent surfaces get coherent world-aligned noise. Default false. */
   localSpace?: boolean;
+  /** PM-E (ACK) — build a `MeshStandardMaterial` instead of Lambert: per-FRAGMENT
+   *  lighting (so a perturbed normal actually shades) + roughness, plus a
+   *  derivative-based procedural micro-bump from the skin noise. This is the
+   *  realism lever — Lambert is vertex-lit + smooth-normal, which reads as flat
+   *  plastic. Opt-in (default false) so cheap creatures stay on Lambert. */
+  pbr?: boolean;
+  /** Standard-material roughness when `pbr` (default 0.92 — dry matte skin). */
+  roughness?: number;
+  /** Micro-bump strength when `pbr` (default 0.6). 0 = smooth. */
+  bump?: number;
 }
 
 /** Build the patched organic-skin material. Drop-in replacement for
- *  `new MeshLambertMaterial({ color })` on a creature body. */
+ *  `new MeshLambertMaterial({ color })` on a creature body (or MeshStandard with
+ *  `pbr: true` for the player — see SkinMaterialOpts.pbr). */
 export function createSkinMaterial(
   color: number,
   opts: SkinMaterialOpts = {},
-): THREE.MeshLambertMaterial {
-  const mat = new THREE.MeshLambertMaterial({
-    color,
-    side: opts.doubleSide ? THREE.DoubleSide : THREE.FrontSide,
-    flatShading: false,                          // organic = smooth
-  });
+): THREE.MeshLambertMaterial | THREE.MeshStandardMaterial {
+  const mat = opts.pbr
+    ? new THREE.MeshStandardMaterial({
+        color,
+        side: opts.doubleSide ? THREE.DoubleSide : THREE.FrontSide,
+        roughness: opts.roughness ?? 0.92,
+        metalness: 0.0,
+        flatShading: false,
+      })
+    : new THREE.MeshLambertMaterial({
+        color,
+        side: opts.doubleSide ? THREE.DoubleSide : THREE.FrontSide,
+        flatShading: false,                          // organic = smooth
+      });
+  const bump = opts.bump ?? 0.6;
 
   // Default accent = darker version of the base color.
   const baseC = new THREE.Color(color);
@@ -70,6 +90,7 @@ export function createSkinMaterial(
       /* glsl */ `
         #include <common>
         varying vec3 vWorldSkin;
+        varying vec3 vNrmSkin;
       `,
     );
     shader.vertexShader = shader.vertexShader.replace(
@@ -81,11 +102,13 @@ export function createSkinMaterial(
           // ABN — localSpace: sample noise in object frame so detail
           // stays anchored to the body as it moves.
           vWorldSkin = position;
+          vNrmSkin = normal;
         `
         /* glsl */
         : `
           #include <begin_vertex>
           vWorldSkin = (modelMatrix * vec4(position, 1.0)).xyz;
+          vNrmSkin = normal;
         `,
     );
 
@@ -94,6 +117,7 @@ export function createSkinMaterial(
       /* glsl */ `
         #include <common>
         varying vec3 vWorldSkin;
+        varying vec3 vNrmSkin;
 
         float skinHash(vec2 p) {
           vec3 p3 = fract(vec3(p.xyx) * 0.1031);
@@ -162,6 +186,37 @@ export function createSkinMaterial(
         diffuseColor.rgb = sheenTinted * cellMod * veinMod * grainMod;
       `,
     );
+
+    // PM-E (ACK) — baked occlusion (PBR path). Darken downward-facing surfaces
+    // (local normal.y < 0) so undersides + recesses sit in soft shadow even
+    // under the game's flat high-ambient daylight — gives the body form/solidity
+    // without depending on scene lighting (which is a separate mood decision).
+    if (opts.pbr) {
+      shader.fragmentShader = shader.fragmentShader.replace(
+        'diffuseColor.rgb = sheenTinted * cellMod * veinMod * grainMod;',
+        'diffuseColor.rgb = sheenTinted * cellMod * veinMod * grainMod;\n        diffuseColor.rgb *= mix(0.58, 1.0, smoothstep(-0.75, 0.35, vNrmSkin.y));',
+      );
+    }
+
+    // PM-E (ACK) — procedural micro-bump for the PBR path only. MeshStandard
+    // lights per-fragment, so perturbing `normal` from the skin noise gives the
+    // surface real micro-relief (catches light unevenly = skin/cloth, not smooth
+    // plastic). Derivative-based bump (dFdx/dFdy of a world-sampled height) — no
+    // tangents / normal-map texture needed. `normal` here is view-space; screen-
+    // space derivatives perturb it convincingly for organic micro-detail.
+    if (opts.pbr) {
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <normal_fragment_maps>',
+        /* glsl */ `
+          #include <normal_fragment_maps>
+          {
+            float bh = skinFbm(vWorldSkin.xz * ${(scaleSize * 1.6).toFixed(2)})
+                     + 0.5 * skinFbm(vWorldSkin.xz * ${(scaleSize * 3.3).toFixed(2)});
+            normal = normalize(normal + vec3(dFdx(bh), dFdy(bh), 0.0) * ${bump.toFixed(3)});
+          }
+        `,
+      );
+    }
   };
 
   return mat;

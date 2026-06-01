@@ -23,12 +23,15 @@ Use `/triage-ideas` to bulk-classify a free-form dump.
 - ✓ **PM-S foundation** (ACJ, D136): procedural SkinnedMesh — arms + legs are continuous skinned tubes (elbow/knee/wrist bend smoothly, no seam). NEW `src/player/skinnedLimb.ts`. Hands fixed (orientation + thumb mirror); FP viewmodel hands removed.
 - ✓ **PM-B.2 face** (ACJ): goggles + brow + nose. ✓ **PM-B.3 face** (ACJ): pale lower-face scarf wrap (distinct from skin).
 - ✓ **poncho removed** (ACJ, D139) + junction fillers (hip-cap spheres + widened pelvis + bigger deltoid).
-- ⬜ **PM-C** layered outfit — re-dress the now-STRIPPED torso (tunic/wrap layers, visible gloved arms, legible belt/pouches, integrated pack, fix shoulder bunching). **NEXT (ACK).**
-- ⬜ **PM-D** cloth physics (Verlet drape — reintroduces a real cloth/poncho layer; shares a solver with iteration-plan Cycle 4 rope).
-- ⬜ **PM-S.3** torso/neck-head skinning — the true torso↔limb junction blend (currently filler-bridged); fold into PM-C or PM-D.
-- ⬜ **PM-E** texture pass (skin weathering, cloth weave/dye, leather, glove contrast, pack detail, palette match).
+- ✓ **PM-C outfit** (ACK, D140): fitted wrapped tunic that hugs the body lathe (not a flared poncho); belt/pouch/pack/shoulder re-verified.
+- ✓ **Realism pass** (ACK, D141/D142): proportions (HEAD_R→0.115 ≈ 1:7.7), contrapposto, player skin+cloth → PBR (MeshStandard + micro-bump + baked occlusion), glassy goggles, slim curled hands, real boots, fuller-cranium head. Model now at its in-pipeline ceiling = believable STYLIZED human.
+- ⬜ **PM-D** cloth physics (Verlet drape — adds real motion-drape to the tunic + a possible cloak; shares a solver with iteration-plan Cycle 4 rope). OPTIONAL/deprioritized vs breadth.
+- ⬜ **PM-S.3** torso/neck-head skinning — the true torso↔limb junction blend (currently filler-bridged via deltoid/hip-cap). OPTIONAL.
+- ⬜ **PM-E** deeper texture (more visible weathering/dye/leather/normal detail). OPTIONAL.
+- ⬜ **[polish] In-game lighting mood for figure solidity** (D142): the player reads far more solid under key/rim than the game's flat bright-desert ambient (`lighting.ts` AMBIENT_BASE vs SUN_INTENSITY_MAX). Lowering ambient / raising contrast = solid in-game, but changes the WHOLE game's look — an aesthetic decision, surface before doing. Biggest remaining realism lever for actual play.
+- ⬜ **Photoreal = D107 asset fork** — import a rigged+textured humanoid. The only path past "stylized"; breaks zero-asset. User's call.
 - Stretch: sled-on-back when undeployed (design fork — surface first).
-File: `src/player/playerRig.ts` + `src/player/skinnedLimb.ts`. Verify via the Playwright harness `npm run rig-shot` (D138) — `--pose/--angles/--closeup`; `__game.rigStudio()` (D134/D137) still works for interactive checks.
+File: `src/player/playerRig.ts` + `src/player/skinnedLimb.ts`. Verify via the Playwright harness `npm run rig-shot` (D138) — `--pose/--angles/--closeup/--lit=form`; `__game.rigStudio()` (D134/D137) still works for interactive checks.
 
 [polish] Sled mechanics further tuning (post-ACD playtest). The ACD slope-slide + Option-B-tilt + item-rest-height fixes shipped the core feel, but a focused tuning session would benefit from:
 - **Slope-slide speed feel**: current `SLED_SLOPE_SLIDE_GAIN = 6.0` produces ~5 m/s at 10° and ~15 m/s at 30°. Might be too aggressive at very steep slopes; playtest with varied dune steepness and tune.

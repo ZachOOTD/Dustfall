@@ -64,27 +64,25 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      Prior milestones live in docs/changelog.md — do NOT accumulate "Prior milestone"
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
-**Last shipped**: Session ACJ — **SkinnedMesh rig foundation** + face + poncho
-cut + Playwright harness. The marionette ceiling (rigid primitives parented at
-joints = hard elbow/knee/wrist seams) was the real blocker, so the rig moved to
-procedural skinning (NEW `src/player/skinnedLimb.ts`; keeps D107 zero-asset —
-**D136**): **arms + legs are now continuous skinned tubes** that bend smoothly,
-bones replacing the pivot Groups 1:1 (animation/foot-IK/held-items unchanged).
-**Hands** fixed (no longer jut forward; thumb mirrored L/R) + FP viewmodel hands
-removed. **Face complete** — PM-B.2 goggles+brow+nose, PM-B.3 pale lower-face
-scarf wrap (no longer a blank ovoid). **Poncho removed** (stiff fake; pending
-PM-D cloth — D139). **Junction fillers** (widened pelvis + hip-cap spheres +
-bigger deltoid) so hips→legs read continuous after the poncho cut exposed them.
-**rigStudio framing fix** — PM-B.1 had flipped the face to +Z, inverting D135's
-negate so every shot since ACI showed the BACK (D137). NEW Playwright
-`scripts/rig-shot.mjs` (`npm run rig-shot`, `--pose/--angles/--closeup`) is the
-reliable capture path now the preview-MCP wedges (D138). tsc clean; all verified
-via the harness.
+**Last shipped**: Session ACK — **PM-C outfit + realism pass**. Re-dressed the
+torso (D139 had cut the poncho) with a fitted wrapped **tunic** that hugs the body
+lathe, not a flared cylinder (**D140**). Then a goal-driven **9-round realism arc**
+took the figure from a cartoon mannequin → a believable, solid, dressed human:
+proportions (`HEAD_R` 0.135→0.115 ≈ 1:7.7 adult + longer neck — **D142**), natural
+contrapposto stance, player skin+cloth → **PBR** (`MeshStandard` + procedural
+micro-bump + **baked occlusion** so undersides self-shadow under flat ambient —
+**D141**), glassy goggle lenses, slimmer curled hands, real boots, fuller-cranium
+head. Harness gained `--lit=form` (key+rim) + `full/full3q/torso` framings + a
+`relaxed` pose. **Honest ceiling**: believable *stylized* human, NOT photoreal —
+flat-shaded zero-asset primitives cap here; photoreal = the D107 asset fork (user's
+call). The other remaining realism lever is the game's **lighting mood** (also the
+user's call). Realism `/goal` banked at "believable stylized human". tsc clean;
+verified via `npm run rig-shot`.
 
-**Next session**: **PM-C — layered outfit** — re-dress the now-stripped torso
-(tunic/wrap layers, visible gloved arms, legible belt/pouches, integrated pack)
-+ fix shoulder bunching. Then PM-D cloth physics (real cloth + proper torso-skin
-junction blend = PM-S.3), PM-E texture. See
+**Next session**: a **long overnight** to tackle backlog/roadmap breadth (NOT the
+player model — it's at its in-pipeline ceiling). Use plan mode + fanned-out agents.
+Player-model follow-ups remain available (PM-D cloth physics / PM-S.3 torso skin /
+PM-E deeper texture / in-game lighting mood) but are deprioritized vs breadth. See
 [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).

@@ -3,6 +3,42 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ACK — 2026-05-31 — PM-C outfit + realism pass (PBR materials, proportions, baked occlusion) ✓ verify pass (tsc clean)
+
+`verified` — tsc clean + verified via the Playwright `rig-shot` harness. PM-C (re-dress
+the stripped torso) + a goal-driven **realism arc** (9 rounds) taking the figure from a
+cartoon mannequin to a believable, solid, dressed human. Within the zero-asset procedural
+pipeline this is the realism ceiling (photoreal needs the D107 asset fork — surfaced, user
+chose to stay procedural).
+
+**PM-C — torso tunic** (`playerRig.ts`, D140): re-dressed the torso (bare since the ACJ
+poncho cut) with a fitted wrapped tunic that HUGS the body lathe (not a flared poncho) —
+neckline → upper-hip hem, cloth folds + broken hem + a diagonal wrap seam. Shoulder/belt/
+pouch/pack legibility re-verified.
+
+**Realism arc** (`playerRig.ts` + `skinMaterial.ts` + `fabricMaterial.ts`):
+- **Proportions** (D142): `HEAD_R` 0.135→0.115 (ACI's 0.135 read ~1:6.7 cartoon big-head;
+  now ~1:7.7 realistic adult) + longer/slimmer neck (`NECK_H` 0.10→0.135, `NECK_R`→0.050).
+- **Natural stance**: contrapposto verification pose (killed the stiff mannequin read).
+- **Player materials → PBR** (D141): skin + cloth opt into `MeshStandardMaterial` (per-FRAGMENT
+  lighting + roughness) with a derivative-based procedural **micro-bump** (skin pores / cloth
+  weave+folds catch light) + **baked occlusion** (downward-facing surfaces darkened so
+  undersides/recesses self-shadow even under the game's flat ambient — solidity without a
+  scene-lighting change). Opt-in `pbr` flag; creatures stay cheap Lambert.
+- **Goggles**: flat black discs → glossy convex lenses (low-roughness MeshStandard) that catch
+  a specular glint = real glass read.
+- **Hands**: slimmer + relaxed-CURLED fingers (was blocky splay). **Boots**: sole + rounded toe
+  + heel (was 2 lego boxes). **Head**: fuller cranium dome + cleaner jaw (was pointy ovoid).
+- **Harness** (`scripts/rig-shot.mjs`): added `--lit=form` (key + rim + low ambient — flat
+  studio light hid all form) + `full`/`full3q`/`torso` framings + a `relaxed` contrapposto pose.
+
+**Removed**: dead `src/player/viewModelHands.ts` (FP hands cut in ACJ; broke on the new material
+union type).
+
+**Honest ceiling**: believable *stylized* human, not photoreal. The remaining realism levers
+are the user's calls — the game's lighting MOOD (lower ambient/higher contrast = solid in-game,
+but changes the whole look) or the D107 asset fork. D140-D142.
+
 ## Session ACJ — 2026-05-31 — SkinnedMesh rig foundation + face (goggles/scarf) + poncho cut + Playwright harness ✓ verify pass (tsc clean)
 
 `verified` — tsc clean + self-verified via a NEW Playwright capture harness (the
