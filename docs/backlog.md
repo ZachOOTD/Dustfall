@@ -18,14 +18,17 @@ Use `/triage-ideas` to bulk-classify a free-form dump.
 <!-- (creature companion — shipped in AAE) -->
 
 [feat/polish] Player model → Rey/real-human quality — **NOW TRACKED IN [docs/feature-player-model.md](feature-player-model.md)** (5-cycle arc; ACH's "Rig to Rey-tier" detail work shipped band-wraps/glove/scarf/belt/backpack/boots but an honest audit found a wrong silhouette — rigid barrel on stick-legs, blank face — so it was re-planned). Status:
-- ✓ **PM-A silhouette** (ACI): slim+taper torso, narrowed/folded poncho, bigger head → reads as a slim draped human.
+- ✓ **PM-A silhouette** (ACI): slim+taper torso, bigger head → reads as a slim draped human.
 - ✓ **PM-B.1 hood** (ACI): wraps the skull (was a floating mushroom-disc).
-- ⬜ **PM-B.2** face planes + goggles (face is a blank ovoid) · **PM-B.3** face-wrap + neck
-- ⬜ **PM-C** layered outfit (tunic layers, visible arms, belt/pouches legible, integrated pack, fix shoulder bunching)
-- ⬜ **PM-D** cloth physics (Verlet drape — fixes the still-stiff poncho; shares a solver with Cycle 4 rope)
-- ⬜ **PM-E** texture pass (skin weathering, cloth weave/dye, leather, glove contrast, backpack detail, palette match)
+- ✓ **PM-S foundation** (ACJ, D136): procedural SkinnedMesh — arms + legs are continuous skinned tubes (elbow/knee/wrist bend smoothly, no seam). NEW `src/player/skinnedLimb.ts`. Hands fixed (orientation + thumb mirror); FP viewmodel hands removed.
+- ✓ **PM-B.2 face** (ACJ): goggles + brow + nose. ✓ **PM-B.3 face** (ACJ): pale lower-face scarf wrap (distinct from skin).
+- ✓ **poncho removed** (ACJ, D139) + junction fillers (hip-cap spheres + widened pelvis + bigger deltoid).
+- ⬜ **PM-C** layered outfit — re-dress the now-STRIPPED torso (tunic/wrap layers, visible gloved arms, legible belt/pouches, integrated pack, fix shoulder bunching). **NEXT (ACK).**
+- ⬜ **PM-D** cloth physics (Verlet drape — reintroduces a real cloth/poncho layer; shares a solver with iteration-plan Cycle 4 rope).
+- ⬜ **PM-S.3** torso/neck-head skinning — the true torso↔limb junction blend (currently filler-bridged); fold into PM-C or PM-D.
+- ⬜ **PM-E** texture pass (skin weathering, cloth weave/dye, leather, glove contrast, pack detail, palette match).
 - Stretch: sled-on-back when undeployed (design fork — surface first).
-File: `src/player/playerRig.ts`. Verify via `__game.rigStudio()` (D134/D135) + the Model Verification Protocol in the plan.
+File: `src/player/playerRig.ts` + `src/player/skinnedLimb.ts`. Verify via the Playwright harness `npm run rig-shot` (D138) — `--pose/--angles/--closeup`; `__game.rigStudio()` (D134/D137) still works for interactive checks.
 
 [polish] Sled mechanics further tuning (post-ACD playtest). The ACD slope-slide + Option-B-tilt + item-rest-height fixes shipped the core feel, but a focused tuning session would benefit from:
 - **Slope-slide speed feel**: current `SLED_SLOPE_SLIDE_GAIN = 6.0` produces ~5 m/s at 10° and ~15 m/s at 30°. Might be too aggressive at very steep slopes; playtest with varied dune steepness and tune.

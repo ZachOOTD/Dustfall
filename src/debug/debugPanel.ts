@@ -173,9 +173,12 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
       fwd.y = 0;
       if (fwd.lengthSq() < 1e-4) fwd.set(1, 0, 0);
       fwd.normalize();
-      // getWorldDirection points along the head's +Z (away from the face); the
-      // FACE is the other way. Negate so 'front'/'head' actually show the face.
-      fwd.negate();
+      // The head's +Z (getWorldDirection) now points TOWARD the face: PM-B.1
+      // (ACI) rebuilt the hood with its opening + the bandana on +Z, flipping
+      // the face from -Z to +Z. So we frame the +Z side directly (NO negate).
+      // (D135 added a negate when the face was at -Z; PM-B.1 silently inverted
+      // that, so every 'head'/'front' shot from ACI→ACJ showed the BACK until
+      // PM-B.2 caught it empirically — the head is symmetric, so it didn't error.)
       const side = new THREE.Vector3(-fwd.z, 0, fwd.x);
       const body = new THREE.Vector3(bp.x, bp.y - 0.05, bp.z);
       const D = 2.6, UP = 0.35;

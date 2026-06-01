@@ -3,6 +3,64 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ACJ — 2026-05-31 — SkinnedMesh rig foundation + face (goggles/scarf) + poncho cut + Playwright harness ✓ verify pass (tsc clean)
+
+`verified` — tsc clean + self-verified via a NEW Playwright capture harness (the
+preview-MCP screenshotter wedged twice mid-session; Playwright is the reliable path
+now). Continues the player-model arc; the headline is a **foundation rebuild** the
+earlier polish cycles structurally couldn't reach.
+
+**Why a foundation rebuild** — the rig was rigid Lathe/Box primitives parented at
+joint Groups, so every joint (elbow/knee/wrist) was a hard SEAM and the hand jutted
+off the wrist as a disconnected block. ~13 sessions of polish couldn't break that
+ceiling. User chose the procedural-SkinnedMesh path (keeps D107 zero-asset).
+
+**PM-S — procedural skinned limbs** (NEW `src/player/skinnedLimb.ts` ~115 LOC +
+`playerRig.ts`): `buildSkinnedLimb` lathes a radius profile into ONE continuous tube,
+generates skinIndex/skinWeight per vertex blending across the mid joint, and binds a
+3-bone chain. **Arms** (shoulder→elbow→wrist) + **legs** (hip→knee→ankle) converted —
+elbow + knee bend SMOOTHLY, no seam. Bones REPLACE the old pivot Groups (Bone extends
+Object3D) so animation / foot-IK / held-item / stepCount code is unchanged; PlayerRig
+limb fields retyped `Group[]`→`Object3D[]`. Legs keep HIP_Y on the hip BONE (foot IK
+rewrites `.position.y`); arms carry it on the mesh. D136.
+
+**Hands** — fixed "rotated weirdly / not connecting": the hand now CONTINUES the arm
+(fingers hang down-forward, `handGroup.rotation.x=-1.15`) instead of jutting forward
+off a vertical forearm; thumb MIRRORED per side (the left hand was a second right
+hand). FP viewmodel hands REMOVED (camera-anchored wraps that read as floating geometry).
+
+**PM-B.2 face — goggles + brow + nose** (`playerRig.ts`): the blank ovoid gets the
+scavenger signature — two smoked-glass lenses in brass rims + bridge + temple stubs on
+the +Z face, a brow ridge, and a nose-bridge wedge. Reads as a goggled face head-on + 3q.
+
+**PM-B.3 face — lower-face scarf** (`playerRig.ts`): a pale dusty cloth sphere-section
+over nose/mouth/chin (distinct tone from skin — the old same-tone bandana was invisible),
+standing proud of the skin so the cloth edge reads, wrapping the cheeks toward the hood.
+Face complete: goggles + nose + wrap.
+
+**Poncho REMOVED** — the folded-cylinder poncho read as stiff boxy panels (no real
+drape); cut pending PM-D cloth physics. Removed dead `ponchoMat`/`PONCHO_COLOR`. D139.
+
+**Junction fillers** — exposed by the poncho cut: legs stuck out beyond a too-narrow
+pelvis ("bolted on"). Widened the torso hip-line (×1.35→×1.62) + added hip-cap filler
+spheres on each hip bone (mirrors the deltoid trick) + enlarged the deltoid. Hips→legs
+now read as one continuous mass. (Full blend = torso skinning, deferred PM-S.3.)
+
+**rigStudio framing fix (D137)** — PM-B.1 (ACI) moved the face to +Z, which silently
+INVERTED D135's negate, so every `'head'`/`'front'` shot since ACI showed the BACK
+(undetected — the head is front/back-symmetric; the exact D135 trap the canon warns of).
+Removed the negate; verified empirically with a markered two-sided test.
+
+**NEW Playwright harness** (`scripts/rig-shot.mjs` + `npm run rig-shot`) — spins its own
+dev server, drives `__game.rigStudio`, writes PNGs to `verification/` (gitignored).
+`--pose`/`--angles`/`--closeup` (heading-relative joint close-ups). Mirrors Highwind's
+verify-rigs pattern; the reliable verification path now the preview-MCP wedges. D138.
+Added `playwright` devDep.
+
+**Deferred**: PM-C layered outfit (re-dress the now-stripped torso + fix shoulder
+bunching), PM-D cloth physics (real cloth + the proper torso-skin junction blend),
+PM-S.3 torso/neck-head skinning. D136-D139.
+
 ## Session ACI — 2026-05-31 — Player-model arc: re-plan + PM-Cycle A (silhouette) + PM-B.1 (hood) ✓ verify pass (tsc clean)
 
 `verified` — tsc clean + self-verified via the headless `rigStudio` loop. After an

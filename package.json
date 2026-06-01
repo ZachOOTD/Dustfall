@@ -8,10 +8,12 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "verify": "tsc --noEmit"
+    "verify": "tsc --noEmit",
+    "rig-shot": "node scripts/rig-shot.mjs"
   },
   "devDependencies": {
     "@types/three": "^0.184.1",
+    "playwright": "^1.60.0",
     "typescript": "~6.0.2",
     "vite": "^8.0.12"
   },

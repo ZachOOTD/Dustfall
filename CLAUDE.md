@@ -64,23 +64,27 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      Prior milestones live in docs/changelog.md — do NOT accumulate "Prior milestone"
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
-**Last shipped**: Session ACI — player-model re-plan + PM-Cycle A (silhouette)
-+ PM-B.1 (hood). An honest audit found the ACH model far from Rey/real-human
-(rigid barrel on stick-legs, blank face, floating-disc scarf), so the single
-"Rig to Rey-tier" cycle became a **5-cycle arc** (NEW
-[docs/feature-player-model.md](docs/feature-player-model.md): A silhouette → B
-head/face/scarf → C outfit → D cloth physics → E texture), each with a
-repeatable Model Verification Protocol + adversarial pass-bar. **PM-A.0**:
-`__game.rigStudio(angle?)` — one-call headless studio-lit framed shot (the
-verification engine). **PM-Cycle A (pass-bar MET)**: slimmed+tapered torso
-(killed the barrel), poncho narrowed/lengthened + deeper folds + broken hem,
-bigger head → reads as a slim draped human. **PM-B.1**: hood rebuilt to WRAP
-the skull (was a floating mushroom-disc); face sits in a front opening. **Fix**:
-rigStudio framed backwards (showed the back) — negated (D135). Rule 8 honored
-every round. tsc clean; self-verified via rigStudio.
+**Last shipped**: Session ACJ — **SkinnedMesh rig foundation** + face + poncho
+cut + Playwright harness. The marionette ceiling (rigid primitives parented at
+joints = hard elbow/knee/wrist seams) was the real blocker, so the rig moved to
+procedural skinning (NEW `src/player/skinnedLimb.ts`; keeps D107 zero-asset —
+**D136**): **arms + legs are now continuous skinned tubes** that bend smoothly,
+bones replacing the pivot Groups 1:1 (animation/foot-IK/held-items unchanged).
+**Hands** fixed (no longer jut forward; thumb mirrored L/R) + FP viewmodel hands
+removed. **Face complete** — PM-B.2 goggles+brow+nose, PM-B.3 pale lower-face
+scarf wrap (no longer a blank ovoid). **Poncho removed** (stiff fake; pending
+PM-D cloth — D139). **Junction fillers** (widened pelvis + hip-cap spheres +
+bigger deltoid) so hips→legs read continuous after the poncho cut exposed them.
+**rigStudio framing fix** — PM-B.1 had flipped the face to +Z, inverting D135's
+negate so every shot since ACI showed the BACK (D137). NEW Playwright
+`scripts/rig-shot.mjs` (`npm run rig-shot`, `--pose/--angles/--closeup`) is the
+reliable capture path now the preview-MCP wedges (D138). tsc clean; all verified
+via the harness.
 
-**Next session**: continue PM-Cycle B — **PM-B.2 face planes + goggles** (the
-face is a blank ovoid), then B.3 face-wrap/neck. See
+**Next session**: **PM-C — layered outfit** — re-dress the now-stripped torso
+(tunic/wrap layers, visible gloved arms, legible belt/pouches, integrated pack)
++ fix shoulder bunching. Then PM-D cloth physics (real cloth + proper torso-skin
+junction blend = PM-S.3), PM-E texture. See
 [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).

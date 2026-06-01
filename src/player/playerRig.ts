@@ -45,6 +45,7 @@ import { createSkinMaterial } from '../world/skinMaterial.ts';
 import { createFabricMaterial } from '../world/fabricMaterial.ts';
 import { createMetalMaterial } from '../world/metalMaterial.ts';
 import { createPaintedMetalMaterial } from '../world/paintMaterial.ts';
+import { buildSkinnedLimb } from './skinnedLimb.ts';
 
 const _PI2 = Math.PI * 2;
 
@@ -60,20 +61,20 @@ export interface PlayerRig {
   headGroup: THREE.Group;
   /** Per-limb pivot groups. Hips rotate around X (gait lift), shoulders
    *  rotate around X (arm swing). Index 0=left, 1=right. */
-  hips: THREE.Group[];
-  shoulders: THREE.Group[];
+  hips: THREE.Object3D[];   // ACJ: skeleton Bones (skinned legs)
+  shoulders: THREE.Object3D[];   // ACJ: skeleton Bones (skinned arms)
   /** ABP — knee sub-pivots inside each hip; rotate around X for knee flex
    *  during 3-phase walk cycle. */
-  knees: THREE.Group[];
+  knees: THREE.Object3D[];   // ACJ: skeleton Bones (skinned legs)
   /** ABP — elbow sub-pivots inside each shoulder; rotate around X for
    *  elbow bend during arm swing + aim-IK (Tier 5). */
-  elbows: THREE.Group[];
+  elbows: THREE.Object3D[];   // ACJ: skeleton Bones (skinned arms)
   /** ABV — wrist sub-pivots inside each elbow → before handGroup; rotate
    *  around X for wrist hang/aim. Enables natural hand orientation. */
-  wrists: THREE.Group[];
+  wrists: THREE.Object3D[];   // ACJ: skeleton Bones (skinned arms)
   /** ABV — ankle sub-pivots inside each knee → before foot box; rotate
    *  around X for heel-toe roll (toes up at heel-strike, down at toe-off). */
-  ankles: THREE.Group[];
+  ankles: THREE.Object3D[];   // ACJ: skeleton Bones (skinned legs)
   /** ABV — spine bend pivot inside body → parent of headGroup +
    *  shoulders. Rotates Z for sway during walk, X for sprint lean.
    *  Isolates upper body from leg pivots. */
@@ -111,8 +112,7 @@ const LEG_LEN = 0.85;
 const UPPER_LEG_LEN = 0.45;
 const LOWER_LEG_LEN = LEG_LEN - UPPER_LEG_LEN;
 const ARM_LEN = 0.65;
-const UPPER_ARM_LEN = 0.32;
-const LOWER_ARM_LEN = ARM_LEN - UPPER_ARM_LEN;
+const UPPER_ARM_LEN = 0.32;   // elbow joint depth; forearm = ARM_LEN - UPPER_ARM_LEN (skinned tube spans both)
 const HIP_LATERAL = 0.12;
 const SHOULDER_LATERAL = 0.22;
 const HIP_Y = 0.85;
@@ -124,8 +124,7 @@ const TORSO_CENTER_Y = HIP_Y + TORSO_H / 2 + 0.04;
 const SKIN_COLOR = 0xc9a876;           // weathered tan
 // ABX: SKIN_ACCENT retired — face/hand accent colors now inlined
 // per material (face = 0x6e4a26 sun-aged, hand = 0x4a3520 grimy).
-const PONCHO_COLOR = 0xd9a85a;         // ABP-polish R4: 0xb8860b read as dark brown after fabricMaterial multipliers; bumped to lighter golden ochre for the actual "sun-bleached" silhouette
-const HOOD_COLOR = 0xd2b48c;           // desert tan (lighter than poncho) — unified scarf cloth (ACH: bandana folded into this)
+const HOOD_COLOR = 0xd2b48c;           // desert tan — unified scarf/hood cloth (ACH: bandana folded into this)
 const STRAP_COLOR = 0x4a3220;          // ABX: brown leather (was 0x505050 dark metal)
 const POUCH_RUST = 0xa0522d;           // rust-orange
 const PAULDRON_METAL = 0x6a6a6a;       // dark grey metal
@@ -136,12 +135,12 @@ function buildRigVisual(): {
   group: THREE.Group;
   body: THREE.Group;
   headGroup: THREE.Group;
-  hips: THREE.Group[];
-  shoulders: THREE.Group[];
-  knees: THREE.Group[];
-  elbows: THREE.Group[];
-  wrists: THREE.Group[];
-  ankles: THREE.Group[];
+  hips: THREE.Object3D[];   // ACJ: skeleton Bones (skinned legs)
+  shoulders: THREE.Object3D[];   // ACJ: skeleton Bones (skinned arms)
+  knees: THREE.Object3D[];   // ACJ: skeleton Bones (skinned legs)
+  elbows: THREE.Object3D[];   // ACJ: skeleton Bones (skinned arms)
+  wrists: THREE.Object3D[];   // ACJ: skeleton Bones (skinned arms)
+  ankles: THREE.Object3D[];   // ACJ: skeleton Bones (skinned legs)
   spineBend: THREE.Group;
   rightHandAttach: THREE.Group;
 } {
@@ -189,8 +188,11 @@ function buildRigVisual(): {
   });
   // Cloth layers — fabric shader with disableShimmer (rig is a moving
   // entity; shimmer would crawl per ABN/D109 sibling pattern).
-  const ponchoMat = createFabricMaterial(PONCHO_COLOR, undefined, { disableShimmer: true });
   const hoodMat = createFabricMaterial(HOOD_COLOR, undefined, { disableShimmer: true });
+  // PM-B.3 (ACJ): pale sun-bleached face-wrap cloth — deliberately lighter +
+  // cooler than the warm skin tone so the lower-face scarf reads as a distinct
+  // cloth layer (the old same-tone bandana blended into the skin = invisible).
+  const scarfMat = createFabricMaterial(0xe4dcc4, undefined, { disableShimmer: true });
   const wrapMat = createFabricMaterial(WRAP_COLOR, undefined, { disableShimmer: true });
   // Metal: bandolier strap + pauldron base
   // ABX P4 — bandolier swapped from metalMaterial (was reading too
@@ -229,9 +231,9 @@ function buildRigVisual(): {
     new THREE.Vector2(TORSO_CHEST_R * 1.04, +0.040),    // mid chest (sternum)
     new THREE.Vector2(TORSO_CHEST_R * 0.88, -0.060),    // lower ribcage taper
     new THREE.Vector2(TORSO_WAIST_R * 0.98, -0.150),    // natural waist (narrow)
-    new THREE.Vector2(TORSO_WAIST_R * 1.10, -0.220),    // upper hip
-    new THREE.Vector2(TORSO_WAIST_R * 1.35, -0.280),    // hip line (flared)
-    new THREE.Vector2(TORSO_WAIST_R * 1.20, -0.330),    // upper thigh attach
+    new THREE.Vector2(TORSO_WAIST_R * 1.25, -0.220),    // upper hip (ACJ: wider to meet thighs)
+    new THREE.Vector2(TORSO_WAIST_R * 1.62, -0.280),    // hip line (ACJ widened 1.35→1.62 so the pelvis covers the thigh tops)
+    new THREE.Vector2(TORSO_WAIST_R * 1.48, -0.330),    // upper thigh attach (ACJ 1.20→1.48)
     new THREE.Vector2(0.10, -0.380),                    // crotch
     new THREE.Vector2(0.0, -0.395),                     // CAP bottom
   ];
@@ -353,12 +355,93 @@ function buildRigVisual(): {
   // naturalistic scarf.")
   const bandana = new THREE.Mesh(
     new THREE.TorusGeometry(HEAD_R * 0.88, 0.032, 6, 16),
-    hoodMat,
+    scarfMat,   // PM-B.3: distinct cloth tone (was hoodMat/skin-blend)
   );
   bandana.position.set(0, -HEAD_R * 0.22, HEAD_R * 0.14);
   bandana.rotation.x = Math.PI / 2;
   bandana.scale.set(1.0, 0.92, 0.62);     // flatten + push back to wrap face
   headGroup.add(bandana);
+
+  // ── Face features (PM-B.2, ACJ): goggles + brow + nose bridge ──
+  // The head is a Lathe of revolution → no front features by construction, so
+  // the face read as a blank tan ovoid (mannequin). The lower face is covered
+  // by the scarf wrap (bandana above); here we add the scavenger SIGNATURE —
+  // goggles on the brow/eye line — plus a brow ridge above and a nose bridge
+  // peeking between the goggles and the scarf. Face = +Z; offsets in HEAD_R so
+  // they scale with the head. Iterated via rigStudio('head') (PM-B.2).
+  const goggleFrameMat = createFabricMaterial(0x2b2620, undefined, { disableShimmer: true });   // dark rubber/leather strap
+  const goggleLensMat = createMetalMaterial(0x1b2630, { wornScale: 12.0, scratchStrength: 0.12 }); // dark smoked glass
+  const goggleRimMat = createMetalMaterial(0x6a5a3a, { wornScale: 10.0, scratchStrength: 0.20 });  // scavenged brass rim
+  const GOG_Y = HEAD_R * 0.20;            // eye line (slightly above center)
+  const GOG_Z = HEAD_R * 0.95;            // ON the face surface (radius ~0.97R here)
+  // Two lenses on the +Z face — smoked-glass disc in a brass rim, toed out to
+  // follow the cheek curve. (No full strap torus: the sides/back would be hidden
+  // by the hood anyway, and a front-crossing torus reads as a bar over the
+  // lenses. Connected by a thin bridge + short temple stubs instead.)
+  for (const sx of [-1, 1]) {
+    const lensX = sx * HEAD_R * 0.42;
+    const toe = sx * 0.34;
+    const rim = new THREE.Mesh(new THREE.CylinderGeometry(HEAD_R * 0.30, HEAD_R * 0.30, 0.026, 16), goggleRimMat);
+    rim.rotation.x = Math.PI / 2;          // cylinder axis → +Z (lens faces forward)
+    rim.rotation.y = toe;
+    rim.position.set(lensX, GOG_Y, GOG_Z);
+    headGroup.add(rim);
+    const lens = new THREE.Mesh(new THREE.CylinderGeometry(HEAD_R * 0.23, HEAD_R * 0.23, 0.012, 16), goggleLensMat);
+    lens.rotation.x = Math.PI / 2;
+    lens.rotation.y = toe;
+    lens.position.set(lensX, GOG_Y, GOG_Z + 0.016);
+    headGroup.add(lens);
+    // Temple strap stub — short band from the lens outer edge toward the ear
+    // (tucks under the hood at the side).
+    const strap = new THREE.Mesh(new THREE.BoxGeometry(HEAD_R * 0.55, 0.024, 0.030), goggleFrameMat);
+    strap.position.set(sx * HEAD_R * 0.80, GOG_Y, GOG_Z - HEAD_R * 0.55);
+    strap.rotation.y = sx * 0.95;          // angle back toward the temple
+    headGroup.add(strap);
+  }
+  // Bridge between the lenses (thin connector across the nose).
+  const goggleBridge = new THREE.Mesh(new THREE.BoxGeometry(HEAD_R * 0.30, 0.020, 0.026), goggleRimMat);
+  goggleBridge.position.set(0, GOG_Y, GOG_Z + 0.004);
+  headGroup.add(goggleBridge);
+  // Brow ridge — subtle wedge just above the goggles.
+  const brow = new THREE.Mesh(new THREE.BoxGeometry(HEAD_R * 0.92, HEAD_R * 0.10, HEAD_R * 0.14), skinMat);
+  brow.position.set(0, GOG_Y + HEAD_R * 0.22, HEAD_R * 0.95);
+  headGroup.add(brow);
+  // Nose bridge — small wedge peeking between the goggles and the scarf.
+  const nose = new THREE.Mesh(new THREE.BoxGeometry(HEAD_R * 0.16, HEAD_R * 0.28, HEAD_R * 0.18), skinMat);
+  nose.position.set(0, GOG_Y - HEAD_R * 0.30, HEAD_R * 0.95);
+  headGroup.add(nose);
+
+  // ── Lower-face scarf wrap (PM-B.3, ACJ) ──
+  // Cloth pulled up over the nose-tip/mouth/chin — the desert-scavenger
+  // signature, and what makes the lower face read as covered cloth rather than
+  // a blank tan jaw. A sphere section hugging the lower-front of the head,
+  // wrapping the cheeks back toward the hood. Sits just under the goggles +
+  // upper nose bridge (those still read above the cloth). Face = +Z; phi=π/2 is
+  // the +Z front (matches the hood's gap convention).
+  const scarfMask = new THREE.Mesh(
+    new THREE.SphereGeometry(
+      HEAD_R * 1.13, 24, 18,             // stands proud of the skin so the cloth reads as a layer with edges
+      Math.PI * -0.08, Math.PI * 1.16,   // phi: ~210° centered on +Z (front + both cheeks, wraps to the hood)
+      Math.PI * 0.49, Math.PI * 0.47,    // theta: nose-tip line down past the chin
+    ),
+    scarfMat,
+  );
+  // Subtle fold displacement so the cloth doesn't read as a smooth shell.
+  {
+    const pa = scarfMask.geometry.attributes.position as THREE.BufferAttribute;
+    for (let i = 0; i < pa.count; i++) {
+      const x = pa.getX(i), y = pa.getY(i), z = pa.getZ(i);
+      const r = Math.hypot(x, z);
+      if (r < 1e-4) continue;
+      const theta = Math.atan2(z, x);
+      const off = Math.sin(6 * theta) * 0.006 + Math.sin(11 * theta + y * 8) * 0.004;
+      pa.setX(i, x + (x / r) * off);
+      pa.setZ(i, z + (z / r) * off);
+    }
+    pa.needsUpdate = true;
+    scarfMask.geometry.computeVertexNormals();
+  }
+  headGroup.add(scarfMask);
 
   // ── Hood: hemisphere crown + back-half drape (ABP-polish R1).
   // Pre-polish was ConeGeometry apex-up = wizard hat silhouette. Now:
@@ -445,113 +528,12 @@ function buildRigVisual(): {
   hoodDrape.position.y = -HEAD_R * 0.55;
   headGroup.add(hoodDrape);
 
-  // ── Poncho: tapered open cylinder draping shoulders to upper hip ──
-  // thetaLength less than 2π for open sides (mismatched-scavenger feel
-  // per research; doesn't fully wrap the body).
-  // ABQ R1: shrunk from barrel (1.25/2.0/1.4) → shawl. Top radius now
-  // tighter than chest so arms hang OUTSIDE the silhouette; bottom
-  // flare gentle (1.4× not 2×); height = 0.85× torso so legs are
-  // visible below the hem (was reaching mid-thigh and hiding feet).
-  // ABQ R2: hem flare bumped 1.4 → 1.6 for a more visible "draped cloth"
-  // read (R1's 1.4 was correct shape but read as a tube at distance).
-  // ABU P1 — Realistic cloth drape via subdivided geometry + per-vertex
-  // sine-wave fold offsets. Pre-ABU: single-segment CylinderGeometry
-  // (1 height segment, smooth tube). Now: 10 height segments × 24 radial
-  // (576 verts before open-side cut), with per-vertex radial offsets to
-  // fake gravity-pulled folds at the hem narrowing toward the shoulders.
-  // ABW P2: expanded ponchoR_top 1.08 → 1.32 to clear pectoral swell
-  // (torso lathe max radius is 1.18×chest_r=0.260 at upper-chest; previous
-  // poncho top 0.238 caused body to poke through the cloth). Hem flare
-  // bumped slightly 1.6 → 1.75 to keep the drape proportion natural.
-  // ACI PM-A.2 first pass: narrower + longer drape so it reads as cloth hanging
-  // off the shoulders, not a wide barrel. (Resting shape only; real folds/sway
-  // come in PM-Cycle D cloth physics.) Multipliers bumped a touch since the
-  // torso constants shrank, but net width is much smaller than the old ~0.58 dia.
-  const ponchoR_top = TORSO_CHEST_R * 1.45;     // clears the (now-slimmer) chest
-  const ponchoR_bot = TORSO_WAIST_R * 1.95;     // modest hem flare off the slim waist
-  const ponchoH = TORSO_H * 1.05;               // hangs longer (was 0.85) → drapes, not a short tube
-  const ponchoGeom = new THREE.CylinderGeometry(
-    ponchoR_top, ponchoR_bot, ponchoH,
-    24, 10, true,             // 24 radial × 10 height (was 16 × 1)
-    Math.PI * 0.15, Math.PI * 1.7,
-  );
-  // Per-vertex fold offsets: walk position attribute, displace radially.
-  // Fold pattern: sin(N × θ) drives ridge/valley around perimeter,
-  // attenuated toward the top (folds deepest at hem, gentle at shoulder).
-  const posAttr = ponchoGeom.attributes.position as THREE.BufferAttribute;
-  // ABU R2: amplitude bumped (R1 hem 2.2cm read as too subtle).
-  // ACI PM-A.2 round 2: deeper folds + broken hem so the resting poncho reads
-  // as draped cloth, not a smooth grooved tube. (Real motion-drape = PM-Cycle D.)
-  const FOLD_WAVES = 8;          // more, deeper vertical fold ridges
-  const FOLD_AMP_HEM = 0.075;    // 7.5cm at hem — folds now clearly read
-  const FOLD_AMP_TOP = 0.010;    // ~1cm at shoulder
-  const halfH = ponchoH / 2;
-  for (let i = 0; i < posAttr.count; i++) {
-    const x = posAttr.getX(i);
-    const y = posAttr.getY(i);
-    const z = posAttr.getZ(i);
-    // Skip the seam vertices at y=±halfH (top + bottom rings) to avoid
-    // discontinuity at the open-side edges.
-    const r = Math.hypot(x, z);
-    if (r < 1e-4) continue;
-    const theta = Math.atan2(z, x);
-    // t = 0 at hem (y = -halfH), 1 at top (y = +halfH)
-    const t = (y + halfH) / ponchoH;
-    // Attenuate amplitude: deepest at hem, smallest at top
-    const amp = FOLD_AMP_HEM * (1 - t) + FOLD_AMP_TOP * t;
-    // Radial displacement — positive = ridge (push out), negative = valley
-    const foldOffset = Math.sin(FOLD_WAVES * theta) * amp;
-    const newR = r + foldOffset;
-    const scale = newR / r;
-    posAttr.setX(i, x * scale);
-    posAttr.setZ(i, z * scale);
-    // PM-A.2: break the hem — fold valleys hang lower toward the bottom edge,
-    // so the hem is a scalloped/uneven line instead of a clean horizontal ring.
-    const hemDip = Math.max(0, -Math.sin(FOLD_WAVES * theta)) * (1 - t) * (1 - t) * 0.06;
-    posAttr.setY(i, y - hemDip);
-  }
-  posAttr.needsUpdate = true;
-  ponchoGeom.computeVertexNormals();
-  // ABX P1 — Per-vertex dye stripe pattern. Hand-dyed cloth has
-  // visible vertical bands from dipping/wringing unevenness. 5 broad
-  // bands around the perimeter, each ±5% darker/lighter. Plus
-  // horizontal "wear gradient" (lighter at hem from sun-bleach, darker
-  // at shoulders from less exposure). Vertex colors multiply with the
-  // fabricMaterial's base color and existing shader layers.
-  const colorArr = new Float32Array(posAttr.count * 3);
-  const STRIPE_BANDS = 5;             // 5 distinct vertical bands
-  for (let i = 0; i < posAttr.count; i++) {
-    const x = posAttr.getX(i);
-    const y = posAttr.getY(i);
-    const z = posAttr.getZ(i);
-    const r = Math.hypot(x, z);
-    const theta = r < 1e-4 ? 0 : Math.atan2(z, x);
-    // 5-band stripe in [0, 1] — alternating slight tint shifts
-    // Normalize theta to [0, 2π], then bucket into bands
-    const thetaNorm = (theta + Math.PI * 2) % (Math.PI * 2);
-    const bandIdx = Math.floor((thetaNorm / (Math.PI * 2)) * STRIPE_BANDS);
-    // Band tints: cycle through subtle warm/cool variations
-    // Even bands slightly darker + warmer; odd bands slightly lighter + cooler
-    const bandTint = bandIdx % 2 === 0
-      ? { r: 0.93, g: 0.91, b: 0.86 }   // warm-darker (more saturated dye)
-      : { r: 1.05, g: 1.02, b: 0.97 };  // cool-lighter (sun-bleached)
-    // Vertical wear gradient — hem (t=0) is more sun-bleached, top (t=1)
-    // is more shaded. Slight ±3% brightness lerp.
-    const t = (y + halfH) / ponchoH;
-    const wearMul = 1.0 + (1 - t) * 0.05 - t * 0.03;  // hem brighter, top dimmer
-    colorArr[i * 3 + 0] = bandTint.r * wearMul;
-    colorArr[i * 3 + 1] = bandTint.g * wearMul;
-    colorArr[i * 3 + 2] = bandTint.b * wearMul;
-  }
-  ponchoGeom.setAttribute('color', new THREE.BufferAttribute(colorArr, 3));
-  // Clone ponchoMat to enable vertexColors without affecting other
-  // fabric instances (e.g., bandana, hood, forearm wraps share ponchoMat-
-  // adjacent materials).
-  const ponchoMatStriped = ponchoMat.clone();
-  ponchoMatStriped.vertexColors = true;
-  const poncho = new THREE.Mesh(ponchoGeom, ponchoMatStriped);
-  poncho.position.y = TORSO_CENTER_Y + 0.05;
-  spineBend.add(poncho);   // ABV — poncho bends with spine
+  // ── Poncho REMOVED (ACJ) ──
+  // The procedural folded-cylinder poncho read as stiff, unrealistic boxy
+  // panels (a tube with sine-wave grooves, no real drape). Removed pending
+  // PM-D cloth physics, which will reintroduce a properly simulated cloth
+  // layer. With it gone, the torso↔limb junctions (shoulders, hips) that the
+  // poncho was hiding are now exposed — fixed via filler geometry below.
 
   // ── Bandolier: TubeGeometry along a CLOSED Catmull-Rom loop wrapping
   // over the left shoulder, diagonally across the chest to the right hip,
@@ -634,263 +616,217 @@ function buildRigVisual(): {
     }
   }
 
-  // ── Hips: 2 leg pivots with NEW knee sub-pivots ──
-  // ABS P2 R1: replaced uniform cylinders with tapered LatheGeometry
-  // profiles for muscle silhouette (thigh swell at hip, calf swell mid-shin).
-  const hips: THREE.Group[] = [];
-  const knees: THREE.Group[] = [];
-  // Upper leg profile (extends DOWN from hip → knee). Origin at mesh
-  // center (-UPPER_LEG_LEN/2 below hip pivot).
-  const halfUL = UPPER_LEG_LEN / 2;
-  const upperLegProfile = [
-    new THREE.Vector2(0, +halfUL),                  // cap top (hip)
-    new THREE.Vector2(0.095, +halfUL - 0.01),       // hip thigh top
-    new THREE.Vector2(0.105, +halfUL * 0.55),       // thigh widest (quad swell)
-    new THREE.Vector2(0.088, 0.0),                  // mid thigh
-    new THREE.Vector2(0.068, -halfUL * 0.65),       // lower thigh taper
-    new THREE.Vector2(0.058, -halfUL + 0.01),       // knee top
-    new THREE.Vector2(0, -halfUL),                  // cap bottom (knee)
+  // ── Hips + legs: SkinnedMesh tubes (ACJ PM-S.2) ──
+  // Same technique as the arms: one continuous tube per leg skinned to a
+  // hip→knee→ankle bone chain, so the KNEE bends smoothly (no seam). Unlike
+  // the arms, the leg MESH sits at body origin and the HIP BONE carries the
+  // HIP_Y + lateral offset — because applyFootIK rewrites rig.hips[i].position.y
+  // each frame to plant the foot on terrain, and that must translate the whole
+  // leg (foot IK targets the hip bone exactly as it did the old hip pivot).
+  const hips: THREE.Object3D[] = [];
+  const knees: THREE.Object3D[] = [];
+  const ankles: THREE.Object3D[] = [];
+  const LEG_KNEE_Y = -UPPER_LEG_LEN;     // -0.45
+  const LEG_ANKLE_Y = -LEG_LEN;          // -0.85
+  // Combined leg profile in hip-local space (y: 0 at hip → -LEG_LEN at ankle).
+  // Merges the old thigh + shin profiles into one tube with a continuous knee
+  // + blend rings; radii preserve the ABY quad/calf swells.
+  const legProfile = [
+    new THREE.Vector2(0.0,   0.0),         // hip cap
+    new THREE.Vector2(0.095, -0.01),       // thigh top
+    new THREE.Vector2(0.105, -0.101),      // quad swell (widest)
+    new THREE.Vector2(0.088, -0.225),      // mid thigh
+    new THREE.Vector2(0.068, -0.371),      // lower thigh taper
+    new THREE.Vector2(0.060, -0.420),      // knee approach (blend ring)
+    new THREE.Vector2(0.058, -0.440),      // knee top
+    new THREE.Vector2(0.058, -0.460),      // knee bottom (continuous joint)
+    new THREE.Vector2(0.062, -0.500),      // calf start (blend ring)
+    new THREE.Vector2(0.068, -0.560),      // upper calf
+    new THREE.Vector2(0.078, -0.600),      // calf
+    new THREE.Vector2(0.082, -0.630),      // calf widest
+    new THREE.Vector2(0.072, -0.670),      // post-peak
+    new THREE.Vector2(0.060, -0.710),      // mid shin
+    new THREE.Vector2(0.045, -0.800),      // lower shin
+    new THREE.Vector2(0.040, -0.845),      // ankle
+    new THREE.Vector2(0.0,   LEG_ANKLE_Y), // ankle cap
   ];
-  // Lower leg profile (knee → ankle).
-  // ABY P2: calf muscle peak bumped 0.075 → 0.082 for more pronounced
-  // muscle bulge; added intermediate point at +halfLL*0.25 for smoother
-  // curve through the calf swell.
-  const halfLL = LOWER_LEG_LEN / 2;
-  const lowerLegProfile = [
-    new THREE.Vector2(0, +halfLL),                  // cap top (knee)
-    new THREE.Vector2(0.058, +halfLL - 0.01),       // knee bottom
-    new THREE.Vector2(0.068, +halfLL * 0.45),       // upper calf
-    new THREE.Vector2(0.078, +halfLL * 0.25),       // ABY: intermediate for smoother bulge
-    new THREE.Vector2(0.082, +halfLL * 0.10),       // ABY: calf widest (was 0.075)
-    new THREE.Vector2(0.072, -halfLL * 0.10),       // ABY: intermediate post-peak
-    new THREE.Vector2(0.060, -halfLL * 0.30),       // mid shin
-    new THREE.Vector2(0.045, -halfLL * 0.75),       // lower shin
-    new THREE.Vector2(0.040, -halfLL + 0.005),      // ankle
-    new THREE.Vector2(0, -halfLL),                  // cap bottom (ankle)
-  ];
-  const upperLegMat = underclothMat.clone();  upperLegMat.side = THREE.DoubleSide;
-  const lowerLegMat = underclothMat.clone();  lowerLegMat.side = THREE.DoubleSide;
-  const ankles: THREE.Group[] = [];   // ABV
+  const legMat = underclothMat.clone();  legMat.side = THREE.DoubleSide;
   for (const side of [-1, 1]) {
-    const hipPivot = new THREE.Group();
-    hipPivot.position.set(side * HIP_LATERAL, HIP_Y, 0);
-    body.add(hipPivot);     // legs stay on body, NOT spineBend
-    // Upper leg — tapered lathe
-    const upperLeg = new THREE.Mesh(
-      new THREE.LatheGeometry(upperLegProfile, 16),
-      upperLegMat,
-    );
-    upperLeg.position.y = -UPPER_LEG_LEN / 2;
-    hipPivot.add(upperLeg);
-    // Knee sub-pivot
-    const kneeGroup = new THREE.Group();
-    kneeGroup.position.y = -UPPER_LEG_LEN;
-    hipPivot.add(kneeGroup);
-    // Lower leg — tapered lathe
-    const lowerLeg = new THREE.Mesh(
-      new THREE.LatheGeometry(lowerLegProfile, 16),
-      lowerLegMat,
-    );
-    lowerLeg.position.y = -LOWER_LEG_LEN / 2;
-    kneeGroup.add(lowerLeg);
-    // ACH Cycle 2.3: boot wraps — cloth bands around the lower shin/ankle
-    // (Rey cloth-wrapped boots), same hand-wrapped vocabulary as the forearm
-    // wraps. Added to kneeGroup so they ride the lower leg.
+    const leg = buildSkinnedLimb({
+      profile: legProfile,
+      radialSegments: 16,
+      midY: LEG_KNEE_Y,
+      endY: LEG_ANKLE_Y,
+      blendBand: 0.08,
+      material: legMat,
+    });
+    leg.mesh.position.set(0, 0, 0);
+    body.add(leg.mesh);                 // legs stay on body, NOT spineBend
+    const hipBone = leg.rootBone;
+    const kneeBone = leg.midBone;
+    const ankleBone = leg.endBone;
+    // Hip bone carries lateral + HIP_Y offset (applyFootIK rewrites .y).
+    hipBone.position.set(side * HIP_LATERAL, HIP_Y, 0);
+
+    // Boot wraps — cloth bands on the lower shin, riding the knee bone.
     const BOOT_BANDS = 5;
     for (let b = 0; b < BOOT_BANDS; b++) {
       const t = b / (BOOT_BANDS - 1);
-      const bandR = 0.060 - t * 0.018;                 // taper toward the ankle
+      const bandR = 0.060 - t * 0.018;
       const bw = new THREE.Mesh(new THREE.TorusGeometry(bandR, 0.011, 6, 14), wrapMat);
-      bw.position.y = -LOWER_LEG_LEN * (0.46 + t * 0.46);  // lower-shin span
+      bw.position.y = -LOWER_LEG_LEN * (0.46 + t * 0.46);   // below the knee, on the shin
       bw.rotation.x = Math.PI / 2;
-      bw.rotation.z = (b % 2 === 0 ? 1 : -1) * 0.05;   // hand-wrapped unevenness
-      kneeGroup.add(bw);
+      bw.rotation.z = (b % 2 === 0 ? 1 : -1) * 0.05;
+      kneeBone.add(bw);
     }
-    // ABV — ankle sub-pivot at end of lower leg. Foot + toe attach
-    // here so ankle rotation around X drives heel-toe roll.
-    const ankleGroup = new THREE.Group();
-    ankleGroup.position.y = -LOWER_LEG_LEN;
-    kneeGroup.add(ankleGroup);
-    // Foot: foot box + toe box (now children of ankle)
-    const foot = new THREE.Mesh(
-      new THREE.BoxGeometry(0.095, 0.05, 0.16),
-      underclothMat,
-    );
+
+    // Foot + toe — rigid children of the ankle bone (ankle rotation drives
+    // heel-toe roll).
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.095, 0.05, 0.16), underclothMat);
     foot.position.set(0, -0.025, 0.045);
-    ankleGroup.add(foot);
-    const toe = new THREE.Mesh(
-      new THREE.BoxGeometry(0.08, 0.04, 0.05),
-      underclothMat,
-    );
+    ankleBone.add(foot);
+    const toe = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.04, 0.05), underclothMat);
     toe.position.set(0, -0.025, 0.155);
-    ankleGroup.add(toe);
-    hips.push(hipPivot);
-    knees.push(kneeGroup);
-    ankles.push(ankleGroup);
+    ankleBone.add(toe);
+
+    // Hip-cap filler (ACJ) — sphere bridging the thigh top to the pelvis, the
+    // same trick the deltoid uses for shoulders. Rides the hip bone (so the
+    // thigh always has a rounded glute/hip top); sized to reach the centerline
+    // so the two caps + the widened pelvis read as one continuous hip mass
+    // instead of legs bolted onto a narrow blob. (Exposed by removing the poncho;
+    // proper fix is torso skinning — PM-S.3.)
+    const hipFill = new THREE.Mesh(new THREE.SphereGeometry(0.118, 16, 12), underclothMat);
+    hipFill.position.set(0, 0.015, -0.005);
+    hipFill.scale.set(1.0, 0.95, 1.08);
+    hipBone.add(hipFill);
+
+    hips.push(hipBone);
+    knees.push(kneeBone);
+    ankles.push(ankleBone);
   }
 
-  // ── Shoulders: 2 arm pivots with NEW elbow sub-pivots ──
-  // ABS P2 R1: tapered Lathe profiles for arms (deltoid/bicep swell + tricep,
-  // forearm bulk + wrist taper).
-  const shoulders: THREE.Group[] = [];
-  const elbows: THREE.Group[] = [];
+  // ── Shoulders + arms: SkinnedMesh tubes (ACJ PM-S.1) ──
+  // Pre-ACJ each arm was 2 rigid Lathe meshes (upper arm + forearm) parented
+  // at separate Groups, so the ELBOW was a hard seam and the hand jutted off
+  // the wrist as a disconnected block — the "rotated weirdly / not connecting"
+  // bug. Now: ONE continuous tube per arm, skinned to a shoulder→elbow→wrist
+  // bone chain, so the elbow bends SMOOTHLY (vertices blend across the joint).
+  // Still procedural (D107) — geometry + weights generated in skinnedLimb.ts.
+  // The bones REPLACE the old pivot Groups; the animation tick rotates them
+  // identically (Bone extends Object3D). Decorations (deltoid cap, forearm
+  // wraps, hand) attach as rigid children of the bones.
+  const shoulders: THREE.Object3D[] = [];
+  const elbows: THREE.Object3D[] = [];
+  const wrists: THREE.Object3D[] = [];
   let rightHandAttach: THREE.Group | null = null;
-  const halfUA = UPPER_ARM_LEN / 2;
-  // ABY P2: bicep peak bumped 0.075 → 0.082 + intermediate point at
-  // halfUA * 0.20 for smoother bulge through bicep mass.
-  const upperArmProfile = [
-    new THREE.Vector2(0, +halfUA),                  // cap top (shoulder)
-    new THREE.Vector2(0.072, +halfUA - 0.01),       // ABY: deltoid top (was 0.070)
-    new THREE.Vector2(0.080, +halfUA * 0.45),       // ABY: intermediate upper-bicep
-    new THREE.Vector2(0.082, +halfUA * 0.20),       // ABY: bicep peak (was 0.075 at 0.35)
-    new THREE.Vector2(0.072, -halfUA * 0.05),       // ABY: post-peak fall
-    new THREE.Vector2(0.060, -halfUA * 0.30),       // mid arm taper
-    new THREE.Vector2(0.046, -halfUA + 0.01),       // elbow approach
-    new THREE.Vector2(0, -halfUA),                  // cap bottom (elbow)
+  // Combined arm profile in shoulder-local space (y: 0 at shoulder → -ARM_LEN
+  // at wrist). Merges the old upper-arm + forearm profiles into one tube with a
+  // continuous (non-zero-radius) elbow + extra rings around the joint so the
+  // skin blend bends smoothly instead of faceting. Radii preserve the ABY
+  // deltoid/bicep/forearm swells.
+  const ARM_ELBOW_Y = -UPPER_ARM_LEN;          // -0.32
+  const ARM_WRIST_Y = -ARM_LEN;                // -0.65
+  const armProfile = [
+    new THREE.Vector2(0.0,   0.0),             // shoulder cap
+    new THREE.Vector2(0.072, -0.01),           // deltoid top
+    new THREE.Vector2(0.080, -0.088),          // upper bicep
+    new THREE.Vector2(0.082, -0.128),          // bicep peak
+    new THREE.Vector2(0.072, -0.168),          // post-peak fall
+    new THREE.Vector2(0.060, -0.208),          // mid arm taper
+    new THREE.Vector2(0.052, -0.265),          // elbow approach (blend ring)
+    new THREE.Vector2(0.046, -0.310),          // elbow top
+    new THREE.Vector2(0.046, -0.330),          // elbow bottom (continuous joint)
+    new THREE.Vector2(0.049, -0.370),          // forearm start (blend ring)
+    new THREE.Vector2(0.054, -0.436),          // forearm bulk
+    new THREE.Vector2(0.045, -0.543),          // mid forearm
+    new THREE.Vector2(0.034, -0.645),          // wrist
+    new THREE.Vector2(0.0,   ARM_WRIST_Y),     // wrist cap
   ];
-  const halfLA = LOWER_ARM_LEN / 2;
-  const forearmProfile = [
-    new THREE.Vector2(0, +halfLA),                  // cap top (elbow)
-    new THREE.Vector2(0.046, +halfLA - 0.005),      // elbow bottom
-    new THREE.Vector2(0.054, +halfLA * 0.30),       // forearm bulk
-    new THREE.Vector2(0.045, -halfLA * 0.35),       // mid forearm
-    new THREE.Vector2(0.034, -halfLA + 0.005),      // wrist
-    new THREE.Vector2(0, -halfLA),                  // cap bottom (wrist)
-  ];
-  const upperArmMat = underclothMat.clone();  upperArmMat.side = THREE.DoubleSide;
-  const forearmMat = underclothMat.clone();   forearmMat.side = THREE.DoubleSide;
-  const wrists: THREE.Group[] = [];   // ABV
+  const armMat = underclothMat.clone();  armMat.side = THREE.DoubleSide;
   for (const side of [-1, 1]) {
-    const shoulderPivot = new THREE.Group();
-    shoulderPivot.position.set(side * SHOULDER_LATERAL, SHOULDER_Y, 0);
-    spineBend.add(shoulderPivot);   // ABV — arms bend with spine
-    // Upper arm — tapered lathe
-    const upperArm = new THREE.Mesh(
-      new THREE.LatheGeometry(upperArmProfile, 14),
-      upperArmMat,
-    );
-    upperArm.position.y = -UPPER_ARM_LEN / 2;
-    shoulderPivot.add(upperArm);
-    // ABU P2 — deltoid bridge: small sphere at the very top of the
-    // shoulder that hides the cap-to-torso gap and adds a natural
-    // "shoulder cap" look. Slightly larger than the arm top radius so
-    // it bulges outward.
-    const deltoid = new THREE.Mesh(
-      new THREE.SphereGeometry(0.085, 14, 8),
-      underclothMat,
-    );
-    deltoid.position.set(0, 0.005, 0);   // at shoulder pivot, slight up
-    deltoid.scale.set(1.0, 0.75, 1.0);    // squashed for shoulder shape
-    shoulderPivot.add(deltoid);
-    // Elbow sub-pivot
-    const elbowGroup = new THREE.Group();
-    elbowGroup.position.y = -UPPER_ARM_LEN;
-    shoulderPivot.add(elbowGroup);
-    // Forearm — tapered lathe
-    const forearm = new THREE.Mesh(
-      new THREE.LatheGeometry(forearmProfile, 14),
-      forearmMat,
-    );
-    forearm.position.y = -LOWER_ARM_LEN / 2;
-    elbowGroup.add(forearm);
-    // Forearm wraps — ACH Cycle 2.1: Rey-tier tight band stack. Replaces the
-    // 2 sparse tori (read as smooth cloth) with a column of ~6 bands covering
-    // the forearm, tapering toward the wrist (follows the forearm lathe
-    // profile) with a small gap between each + slight alternating tilt so
-    // they read as hand-wrapped strips, not machined rings.
+    const arm = buildSkinnedLimb({
+      profile: armProfile,
+      radialSegments: 14,
+      midY: ARM_ELBOW_Y,
+      endY: ARM_WRIST_Y,
+      blendBand: 0.075,
+      material: armMat,
+    });
+    arm.mesh.position.set(side * SHOULDER_LATERAL, SHOULDER_Y, 0);
+    spineBend.add(arm.mesh);            // ABV — arms bend with spine
+    const shoulderBone = arm.rootBone;
+    const elbowBone = arm.midBone;
+    const wristBone = arm.endBone;
+
+    // Deltoid cap — sphere over the shoulder bridging the arm-to-torso gap.
+    // ACJ: enlarged + spread (the poncho used to hide this junction).
+    const deltoid = new THREE.Mesh(new THREE.SphereGeometry(0.098, 16, 10), underclothMat);
+    deltoid.position.set(0, 0.005, 0);
+    deltoid.scale.set(1.08, 0.80, 1.05);
+    shoulderBone.add(deltoid);
+
+    // Forearm wraps — tight band stack on the mid-forearm, riding the elbow
+    // bone rigidly (positions relative to the elbow joint, same look as pre-ACJ).
     const WRAP_BANDS = 7;
     for (let w = 0; w < WRAP_BANDS; w++) {
-      const t = w / (WRAP_BANDS - 1);              // 0 near elbow → 1 mid-forearm
-      const bandR = 0.052 - t * 0.012;             // taper 0.052 → 0.040
-      const bandTube = 0.0105 + (w % 2) * 0.0025;  // alternate thick/thin → uneven hand-wrap
-      const wrap = new THREE.Mesh(
-        new THREE.TorusGeometry(bandR, bandTube, 6, 14),
-        wrapMat,
-      );
-      // Tight stack over the mid-forearm only (stay OFF the wrist so bands
-      // don't droop past the hand). Step 0.019 vs tube-dia 0.022 → bands
-      // nearly touch, reading as continuous bound cloth with shallow grooves.
-      wrap.position.y = -0.05 - w * 0.019;         // span -0.05 → -0.164
+      const t = w / (WRAP_BANDS - 1);
+      const bandR = 0.052 - t * 0.012;
+      const bandTube = 0.0105 + (w % 2) * 0.0025;
+      const wrap = new THREE.Mesh(new THREE.TorusGeometry(bandR, bandTube, 6, 14), wrapMat);
+      wrap.position.y = -0.05 - w * 0.019;        // forearm span below the elbow
       wrap.rotation.x = Math.PI / 2;
-      wrap.rotation.z = (w % 2 === 0 ? 1 : -1) * 0.05;  // hand-wrapped unevenness
-      elbowGroup.add(wrap);
+      wrap.rotation.z = (w % 2 === 0 ? 1 : -1) * 0.05;
+      elbowBone.add(wrap);
     }
-    // ABV — wrist sub-pivot inserted between elbow and hand. Rotation X
-    // = palm-up/down hang; rotation Z = wrist-roll for grip orientation.
-    const wristGroup = new THREE.Group();
-    wristGroup.position.y = -LOWER_ARM_LEN - 0.02;
-    elbowGroup.add(wristGroup);
-    wrists.push(wristGroup);
-    // Hand: ABS P3 R1 — replaced 6 boxes with palm-lathe + tapered-
-    // cylinder fingers + knuckle ridge for "real hand" silhouette at
-    // close 3P / FP range.
+
+    // Hand — rigid child of the wrist bone. ACJ orientation fix: the hand now
+    // CONTINUES the arm (fingers hang down-and-forward like a relaxed hand)
+    // instead of jutting straight forward off a vertical forearm. The handGroup
+    // is rotated so the finger axis (-Z) drops down-forward; the wrist bone's
+    // small animated rotation rides on top.
     const handGroup = new THREE.Group();
-    handGroup.position.y = -0.02;   // small hand-attach offset from wrist
-    wristGroup.add(handGroup);
-    // Palm — wider + slightly thicker box for proper proportions
-    // (real hand is ~85mm wide × 25mm thick × 100mm deep including
-    // fingers). Box here is the palm-back only; fingers cylinder-tapered.
-    // Hand-local: X = across knuckles (palm width), Z = wrist→knuckle
-    // (palm length), Y = palm thickness.
-    // ACH Cycle 2.1: fingerless glove — palm + knuckle ridge in the wrap
-    // cloth (same scavenger material as the forearm wraps), fingers left bare
-    // skin → exposed fingertips, the "cutout at the knuckles" read.
+    handGroup.position.set(0, -0.02, 0);
+    handGroup.rotation.x = -1.15;                 // relaxed down-forward hang (was flat-forward block)
+    wristBone.add(handGroup);
+    // Fingerless glove — palm + knuckle ridge in wrap cloth, fingers bare skin.
     const palm = new THREE.Mesh(new THREE.BoxGeometry(0.078, 0.028, 0.062), wrapMat);
     handGroup.add(palm);
-    // Knuckle ridge — narrow box at knuckle line where fingers attach (glove edge)
     const knuckleRidge = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.022, 0.022), wrapMat);
-    knuckleRidge.position.set(0, 0, -0.028);  // forward edge of palm (knuckle line)
+    knuckleRidge.position.set(0, 0, -0.028);
     handGroup.add(knuckleRidge);
-    // 4 fingers — tapered cylinders. Each finger extends FORWARD (-Z)
-    // from the knuckle line. Slight inward curl via rotation.x.
-    // Spacing: -0.027 to +0.027 across hand width (4 fingers @ 0.018 apart)
     for (let f = 0; f < 4; f++) {
-      const fingerLen = 0.062 - Math.abs(f - 1.5) * 0.006;  // index+ring slightly shorter, middle longest
-      const finger = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.0075, 0.010, fingerLen, 8),
-        handSkinMat,
-      );
-      // Cylinder default axis = Y; rotate so it points along -Z (forward
-      // from knuckle line).
-      finger.rotation.x = Math.PI / 2 - 0.35;    // -Z forward + slight curl down
-      // Knuckle joint at palm front edge; finger tip extends forward
-      const fingerX = -0.027 + f * 0.018;
-      const fingerY = -fingerLen * 0.18;
-      const fingerZ = -0.028 - fingerLen * 0.45;
-      finger.position.set(fingerX, fingerY, fingerZ);
+      const fingerLen = 0.062 - Math.abs(f - 1.5) * 0.006;
+      const finger = new THREE.Mesh(new THREE.CylinderGeometry(0.0075, 0.010, fingerLen, 8), handSkinMat);
+      finger.rotation.x = Math.PI / 2 - 0.35;
+      finger.position.set(-0.027 + f * 0.018, -fingerLen * 0.18, -0.028 - fingerLen * 0.45);
       handGroup.add(finger);
-      // ABU P2 / ACH Cycle 2.1 fix — knuckle bumps: 2 small spheres at ~1/3
-      // + 2/3 along each finger for visible joint inflections. PARENTED to the
-      // finger so they ride its local Y axis exactly. (The prior code placed
-      // them in world space via a wrong-sign forward vector + offsets ~3× the
-      // finger length — which left them floating off the fingertips, the bug
-      // surfaced in the ACH rig close-ups.)
       for (const frac of [1 / 3, 2 / 3]) {
-        const knuckle = new THREE.Mesh(
-          new THREE.SphereGeometry(0.0115, 6, 5),
-          handSkinMat,
-        );
-        knuckle.position.y = (frac - 0.5) * fingerLen;  // along the finger's own axis
+        const knuckle = new THREE.Mesh(new THREE.SphereGeometry(0.0115, 6, 5), handSkinMat);
+        knuckle.position.y = (frac - 0.5) * fingerLen;
         finger.add(knuckle);
       }
     }
-    // Thumb — tapered cylinder angled outward + forward (opposable)
-    const thumb = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.009, 0.011, 0.054, 8),
-      handSkinMat,
-    );
-    thumb.rotation.z = -0.7;                     // outward angle
-    thumb.rotation.x = Math.PI / 2 - 0.5;        // forward tilt
-    thumb.position.set(0.038, -0.012, -0.014);
+    // Thumb — the only asymmetric digit, so MIRROR it per side (handSign):
+    // pre-ACJ both arms used the identical hand, making the left a second right
+    // hand (thumb on the wrong/lateral side). Negate the thumb's X offset + its
+    // Z splay for the left arm so the two hands are a proper mirrored pair, with
+    // each thumb on the INNER (body-ward) side. Fingers stay unmirrored (their
+    // arrangement is X-symmetric).
+    const handSign = side;   // +1 right arm, -1 left arm
+    const thumb = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.011, 0.054, 8), handSkinMat);
+    thumb.rotation.z = handSign * 0.7;          // splay toward the body midline
+    thumb.rotation.x = Math.PI / 2 - 0.5;
+    thumb.position.set(handSign * -0.038, -0.012, -0.014);
     handGroup.add(thumb);
-    // ABP Tier 4 — right-hand attach point for 3P held items
+    // Right-hand attach point for 3P held items.
     if (side === 1) {
       rightHandAttach = new THREE.Group();
-      rightHandAttach.position.set(0, -0.04, 0.04);   // at palm tip, slightly forward
+      rightHandAttach.position.set(0, -0.04, 0.04);
       handGroup.add(rightHandAttach);
     }
-    shoulders.push(shoulderPivot);
-    elbows.push(elbowGroup);
+    shoulders.push(shoulderBone);
+    elbows.push(elbowBone);
+    wrists.push(wristBone);
   }
 
   // Fallback — should never happen since side==1 iteration always runs

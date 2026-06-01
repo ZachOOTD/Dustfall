@@ -25,3 +25,6 @@ dist-ssr
 
 # Transient screenshot capture from preview-toDataURL workflow
 .claude/preview-shot.png
+
+# Playwright rig-shot harness output (scripts/rig-shot.mjs) — dev artifacts
+verification/*.png

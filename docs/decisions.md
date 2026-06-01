@@ -958,3 +958,43 @@ The fundamental issue: KCC's slope projection, autostep, and contact resolution 
 **Picked**: in `rigStudio`, negate the direction (`fwd.negate()`) so `'front'`/`'head'` look at the face. Lesson: when a headless framing tool aims via `getWorldDirection`, **verify which side is the face with a two-sided screenshot before trusting it** — don't reason about the local frame; a backwards verification camera silently audits the wrong side.
 
 **friction-score:** 1
+
+## D136 — Player rig is a procedural SkinnedMesh + bone skeleton, not rigid parented primitives (Session ACJ)
+**When**: PM-S — after ~13 sessions (ABP→ACI) of polishing a rig built from rigid Lathe/Box meshes parented at joint Groups, an honest look found the quality ceiling wasn't polish but the FOUNDATION: rigid parts can't deform across a joint, so every elbow/knee/wrist was a hard seam and the hand read as a disconnected block off the wrist. User picked rebuilding on skinning over importing a rigged asset (keeps D107 zero-asset) or staying primitive.
+
+**Why**: A `SkinnedMesh` whose vertices are weighted to a bone chain bends smoothly across joints — the marionette seam is structurally impossible. Generating the geometry + skin weights in code keeps it 100% procedural (no GLB). `THREE.Bone extends Object3D`, so bones can replace the existing pivot Groups 1:1: the per-frame animation (`rig.shoulders[i].rotation.x = …`), foot-IK, held-item attach, and stepCount code all keep working untouched.
+
+**Picked**: NEW `src/player/skinnedLimb.ts` — `buildSkinnedLimb(profile, midY, endY, blendBand, material)` lathes a radius profile into one continuous tube, assigns skinIndex/skinWeight per vertex (linear blend across ±blendBand at the mid joint; root bone above, mid bone below; end bone carries the hand/foot as a rigid child), builds a 3-bone chain, `updateMatrixWorld` BEFORE `new Skeleton(bones)` so boneInverses capture the rest pose, then `mesh.bind()`. AttachedBindMode (default, r184) recomputes bindMatrixInverse from the live world each frame, so the limb follows the moving body correctly. Arms (shoulder→elbow→wrist) + legs (hip→knee→ankle) converted; PlayerRig limb fields retyped `THREE.Group[]`→`THREE.Object3D[]`.
+
+**Footguns**: (1) Legs — `applyFootIK` rewrites `rig.hips[i].position.y` each frame, so the hip BONE must carry the HIP_Y/lateral offset (mesh at body origin); arms instead carry the offset on the mesh (animation only ROTATES the shoulder). (2) `mesh.frustumCulled = false` — a posed limb swings outside its rest-pose bounds and would vanish. (3) Custom materials (`createSkinMaterial` etc.) are built-in `MeshLambertMaterial` subtypes, so skinning chunks auto-inject for a SkinnedMesh — no manual shader work; their `vWorldSkin = position` noise sampling stays rest-anchored (good, no crawl). (4) Torso/neck/head NOT yet skinned (PM-S.3) — the torso↔limb junctions still overlap + use filler (deltoid/hip-cap) rather than a true skin blend.
+
+**Considered alternatives**: import a rigged humanoid (Mixamo/MakeHuman) + drape procedural clothing — fastest to high quality but BREAKS D107; rejected to preserve the zero-asset identity. Stay on rigid primitives + only polish — hits the same ceiling; rejected.
+
+**friction-score:** 3
+
+## D137 — rigStudio framing inverted when PM-B.1 moved the face to +Z (the D135 regression) (Session ACJ)
+**When**: PM-B.2 — starting face work, a markered two-sided test showed `rigStudio('head')`/`'front'` was framing the BACK of the head, not the face. Every `'head'`/`'front'` shot from ACI→ACJ had silently audited the wrong side (undetected — the head is front/back-symmetric, the exact trap D135 warns about).
+
+**Why**: D135 added `fwd.negate()` because the face was then on the −Z side. But PM-B.1 (ACI) rebuilt the hood + bandana with the face opening on **+Z** — flipping the face to where `getWorldDirection()` points. So the negate, correct in ACI, became backwards in ACJ. The face side is now `+headZ`; the camera must sit there (NO negate).
+
+**Picked**: removed the `fwd.negate()` in `debugPanel.ts rigStudio`. Verified empirically (reddened the +Z bandana, confirmed it's centered front when framed from +headZ). Lesson reinforced: geometry edits that move the "front" silently invert framing-tool conventions — re-verify the two-sided test after any face/orientation change, don't trust a prior negate.
+
+**friction-score:** 2
+
+## D138 — Playwright `rig-shot` harness is the rig-verification path (preview-MCP wedges) (Session ACJ)
+**When**: PM-S/PM-B — the preview-MCP screenshotter wedged twice mid-session (`UnknownVizError`, then a 30s timeout) on the visual-iteration loop. The MEMORY gotcha (hidden-tab throttling + dynamic-import isolation) plus mid-session wedging makes it unreliable for sustained iteration.
+
+**Why**: A self-contained Playwright script (mirroring Highwind's `verify-rigs.ts`) launches its own headless chromium + dev server and never wedges; `page.screenshot()` captures the composited page regardless of `preserveDrawingBuffer`. Reuses the existing `__game.rigStudio` studio (D134/D135).
+
+**Picked**: NEW `scripts/rig-shot.mjs` + `npm run rig-shot`. Boots a dedicated dev server (port 5191, strictPort), waits for `__game.ctx.player.rig`, enters the studio, poses, frames, screenshots to `verification/` (gitignored). Flags: `--pose=idle|apose|walk`, `--angles=front,3q,left,right,back,head`, `--closeup=shoulder|hip|hand|knee|elbow|face` (heading-relative joint close-ups so framing is consistent across spawns). Added `playwright` devDep. The preview-MCP stays usable for quick interactive `ctx` inspection but is no longer the capture path of record.
+
+**friction-score:** 1
+
+## D139 — Poncho cut pending cloth physics (Session ACJ)
+**When**: PM-C entry — user judged the procedural folded-cylinder poncho "pretty unrealistic" (a tube with sine-wave grooves + a scalloped hem — no real drape, reads as stiff boxy panels). Removed rather than polished further.
+
+**Why**: A convincing poncho needs actual cloth simulation (drape, sway, fold under gravity) — that's PM-D (Verlet, shared solver with the Cycle-4 rope physics). Iterating the static-geometry fake further is wasted work that PM-D will replace. Removing it also exposed the torso↔limb junctions it was hiding, which is what surfaced the hip/shoulder-filler fixes this session.
+
+**Picked**: deleted the poncho mesh + fold/dye-stripe code + dead `ponchoMat`/`PONCHO_COLOR`. The figure is intentionally "stripped" (undercloth + belt + bandolier + pack + goggles) until PM-C re-dresses it with a proper layered outfit and PM-D adds the simulated cloth. Mark this explicit so a future session doesn't "restore" a fake poncho.
+
+**friction-score:** 2

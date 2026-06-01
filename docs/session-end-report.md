@@ -2,9 +2,20 @@
 
 Cumulative state. Rewritten end-to-end at each `/session-end`.
 
-**Current state**: Session ACI shipped (2026-05-31 — player-model re-plan + PM-Cycle A silhouette + PM-B.1 hood). 90 sessions post-MVP. tsc clean + self-verified via `rigStudio`. **SAVE_VERSION still v13**. The player model is mid-rework: an honest audit found the ACH "Rey-tier" result was a wrong silhouette (rigid barrel on stick-legs, blank face), so it's now a **5-cycle arc** (`docs/feature-player-model.md`): PM-A silhouette ✓, PM-B head/face/scarf (B.1 hood ✓; B.2 face next), PM-C outfit, PM-D cloth physics, PM-E texture. The broader Phase 2 plan (`docs/iteration-plan.md`) resumes at Cycle 3 (sled) after the model arc.
+**Current state**: Session ACJ shipped (2026-05-31 — SkinnedMesh rig foundation + face + poncho cut + Playwright harness). 91 sessions post-MVP. tsc clean + verified via a NEW Playwright capture harness (`npm run rig-shot`). **SAVE_VERSION still v13** (ACJ = pure rig geometry + tooling, zero save changes). The player model arc (`docs/feature-player-model.md`): PM-A silhouette ✓ (ACI), **PM-S SkinnedMesh foundation ✓ (ACJ)** — arms + legs are continuous skinned tubes (the marionette joint-seam ceiling is broken), PM-B head/face ✓ (B.1 hood ACI; B.2 goggles + B.3 face-scarf ACJ), **PM-C layered outfit = NEXT** (re-dress the now-stripped torso), PM-D cloth physics (+ PM-S.3 torso-skin junction blend), PM-E texture. The broader Phase 2 plan (`docs/iteration-plan.md`) resumes at Cycle 3 (sled) after the model arc.
 
-## ACI scope (this session) — player-model re-plan + PM-A + PM-B.1
+## ACJ scope (this session) — SkinnedMesh rig foundation + face + poncho cut + Playwright harness
+
+The headline is a **foundation rebuild**: after ~13 sessions polishing a rig of rigid Lathe/Box primitives parented at joint Groups, the quality ceiling was diagnosed as the foundation (rigid parts can't deform across a joint → hard elbow/knee/wrist seams + a hand that jutted off the wrist as a disconnected block). User chose procedural skinning over an imported rig.
+
+- **PM-S — procedural skinned limbs** (NEW `src/player/skinnedLimb.ts` ~115 LOC + `playerRig.ts`, D136): `buildSkinnedLimb` lathes a radius profile into one continuous tube + generates skinIndex/skinWeight blending across the mid joint + binds a 3-bone chain. Arms (shoulder→elbow→wrist) + legs (hip→knee→ankle) converted — joints bend smoothly, no seam. Bones replace the pivot Groups 1:1 (Bone extends Object3D); animation / foot-IK / held-items / stepCount unchanged. PlayerRig limb fields retyped `Group[]`→`Object3D[]`.
+- **Hands** fixed: continue the arm (fingers down-forward) instead of jutting forward; thumb mirrored per side. FP viewmodel hands removed (floating camera-anchored wraps).
+- **Face complete**: PM-B.2 goggles (smoked lenses + brass rims + bridge + temple stubs) + brow + nose-bridge; PM-B.3 pale lower-face scarf wrap (distinct tone, stands proud so the cloth edge reads).
+- **Poncho removed** (D139 — stiff fake, pending PM-D cloth) → exposed the torso↔limb junctions; fixed with hip-cap filler spheres + widened pelvis + bigger deltoid (hips→legs read continuous).
+- **rigStudio framing fix** (D137): PM-B.1 moved the face to +Z, inverting D135's negate, so every `'head'`/`'front'` shot since ACI showed the BACK. Removed the negate; verified empirically.
+- **NEW Playwright harness** (`scripts/rig-shot.mjs`, D138): self-contained capture (own dev server + headless chromium), `--pose/--angles/--closeup`. The reliable path now the preview-MCP wedges (it wedged twice this session).
+
+## ACI scope — player-model re-plan + PM-A + PM-B.1
 
 After ACH, a full-body audit (via `rigStudio`) honestly found the model far from the Rey/real-human bar: a rigid barrel/sandwich-board on stick-legs, blank ovoid face, floating mushroom-disc scarf. The single "Rig to Rey-tier" cycle was re-planned into a 5-cycle arc (`docs/feature-player-model.md`) with a repeatable **Model Verification Protocol** (6 canonical frames + critique vs real-human + Rey reference + adversarial pass-bar), 5–8 rounds/element.
 
@@ -102,7 +113,7 @@ The full Dustfall gameplay loop:
 
 ## Known issues / partials
 
-- **Player model — mid-rework (5-cycle arc, `docs/feature-player-model.md`)**. ACI fixed the silhouette (PM-A) + hood (PM-B.1). REMAINING: PM-B.2 **blank ovoid face** (no features) + goggles, PM-B.3 face-wrap/neck, PM-C layered outfit (poncho still stiff panels + shoulder bunching + arms occluded), PM-D cloth physics, PM-E texture. Glove contrast subtle at 3P; backpack a plain box.
+- **Player model — mid-rework (arc, `docs/feature-player-model.md`)**. Done: PM-A silhouette, PM-S SkinnedMesh foundation (arms+legs skinned), PM-B face (goggles + scarf), poncho cut + junction fillers. REMAINING: **PM-C layered outfit** — the torso is now STRIPPED (undercloth + belt + bandolier + pack + goggles only) since the poncho was cut; re-dress with tunic/wrap layers + fix shoulder bunching. PM-D cloth physics (real cloth layer). **PM-S.3** torso/neck-head skinning = the TRUE torso↔limb junction blend (currently filler-bridged via deltoid/hip-cap spheres — reads connected but isn't a real skin blend). PM-E texture. Glove contrast subtle at 3P; pack a plain box.
 - **Speeder bugs (ACG playtest, still open)** — E mounts the speeder without looking at the seat; 3P rig broken on the speeder (needs a seated stance). In backlog; fold into a PM cycle.
 - **Foot-IK slope-snap + 3P camera real-playtest** — rig-debt; fold into a PM cycle.
 - **ACF carcass tow blocked after harvest** — `lootSandWorm` untags the carcass, so towing works only before harvesting. Low severity. See backlog.
@@ -156,47 +167,44 @@ Existing tunables of interest:
 
 Player-model arc in progress (`docs/feature-player-model.md`). Next:
 
-1. **PM-B.2 — face planes + goggles** (~1 session). TOP. The face is a blank ovoid; give the head lathe brow/nose/cheek/jaw definition so it reads as a face, + goggles on the forehead (Rey detail). Then PM-B.3 (face-wrap covers nose/mouth + connects to the scarf, neck covered). Use `rigStudio('head')` (D134/D135) + the Model Verification Protocol, 5–8 rounds. Honor rule 8 — faces are unforgiving; iterate honestly.
-2. **PM-C — layered outfit** (~1-2 sessions). Tunic layers, visible gloved arms (now that the torso is slim), legible belt/pouches, integrated backpack, fix the shoulder bunching.
-3. **PM-D — cloth physics** then **PM-E — texture**. (Then the Phase 2 plan resumes at Cycle 3 — sled riding.)
+1. **PM-C — layered outfit** (~1-2 sessions). TOP. The torso is now STRIPPED (the poncho was cut) — re-dress it: tunic/wrap layers over the slim torso, visible gloved arms, legible belt/pouches, integrated pack, fix shoulder bunching. NOT a fake poncho (D139) — a real garment now, cloth-drape in PM-D. Verify via `npm run rig-shot` (D138). Rule 8 — iterate honestly.
+2. **PM-D — cloth physics** (~1-2 sessions). Verlet drape for a real cloth/poncho layer; fold in **PM-S.3** (skin the torso to spine/hip bones for the true junction blend, replacing the current filler bridge). Shares a solver with iteration-plan Cycle 4 rope.
+3. **PM-E — texture** then the Phase 2 plan resumes at Cycle 3 (sled riding).
 
 ---
 
 ## Time spent
 
-90 sessions shipped (A through ACI). Approx ~292-355h cumulative dev time. ACI: an audit-driven re-plan + the `rigStudio` verification tool + PM-Cycle A (silhouette) + PM-B.1 (hood), screenshot-iterated. (Tail of one extraordinarily long conversation spanning the framework smoke-test → ACF → the Phase 2 plan → Cycles 1-2 → the audit → this re-plan → PM-A/B.1.)
+91 sessions shipped (A through ACJ). Approx ~295-360h cumulative dev time. ACJ: a foundation rebuild (procedural SkinnedMesh limbs) + face (goggles/scarf) + poncho cut + junction fillers + a Playwright capture harness — every element built → harness-screenshot → critique → iterate. (Continuation of the same long conversation: ACI re-plan → ACJ FP-hands cut → skinned arms → skinned legs → hand fix → poncho cut → junctions → face → harness.)
 
 ---
 
 ## State at session end
 
-- **Git status**: ACI code committed across the PM commits `ea1b85c` (rigStudio) → `54d8b18` (silhouette R1) → `591ae8c` (silhouette R2 + head) → `9263523` (hood + rigStudio fix); re-plan docs `6ec442a`. This session-end's docs updates uncommitted (commit handoff below).
-- **Last commit before session-end**: `9263523`. All ACI code pushed to origin.
-- **Last tag**: (Dustfall's git policy doesn't establish a session-tag convention; user may tag manually if desired).
-- **Ports bound**: none (preview stopped).
-- **Save state**: localStorage v13. ACI made zero save changes (pure rig geometry + dev tooling).
+- **Git status**: ACJ was a single long working session with **zero intermediate commits** (all work uncommitted until this `/session-end`). Dirty: `src/player/playerRig.ts`, NEW `src/player/skinnedLimb.ts`, `src/player/viewModel.ts`, `src/debug/debugPanel.ts`, NEW `scripts/rig-shot.mjs`, `package.json` (+ `package-lock`), `.gitignore`, + the docs. `verification/*.png` is gitignored (harness output). Commit handoff below.
+- **Branch**: `master`. **Save state**: localStorage v13 — ACJ made zero save changes (pure rig geometry + tooling).
+- **Ports bound**: a dev server may linger from the preview-MCP (5180) / harness (5191); both are dev-only.
+- **viewModelHands.ts** is now dead (FP hands removed) but left on disk in case FP hands are rebuilt properly later.
 
 ---
 
 ## Token spend this session (estimated)
 
-ACI was a visual-iteration session on the tail of a marathon conversation: audit → re-plan → rigStudio tool → PM-A + PM-B.1, each element `rigStudio`-screenshot-iterated.
+ACJ was a long visual-iteration + foundation-engineering session: skinned-limb infra + arms + legs + hand fix + poncho cut + junction fillers + goggles + scarf + a Playwright harness, each element harness-screenshot-iterated.
 
-- Output (ACI slice): substantial — the re-plan doc + rigStudio + ~5 silhouette/head iteration commits + many screenshot-critique rounds + these docs.
-- Cost (Opus 4.8 rates): above a normal session for the visual-iteration + planning volume.
+- Output (ACJ slice): large — a new module + a new tooling script + many edits across `playerRig.ts` + ~15-20 harness/MCP screenshot-critique rounds + these docs.
+- Cost (Opus 4.8 rates): well above a normal session (foundation rebuild + sustained visual iteration); ≥2× the project baseline.
 
-Notable: the honest **audit → re-plan** was the key move — it caught the ACH "Rey-tier" over-claim and reset the model work onto a verifiable multi-cycle footing with `rigStudio` (D134/D135) as the engine. Quality-over-speed correction.
+Notable: choosing the **SkinnedMesh foundation** over more primitive polish (or an imported asset) was the key call — it broke the marionette ceiling that ~13 prior sessions of polish couldn't. The session also caught + fixed the D135-regression (D137) where a prior geometry edit silently inverted the verification camera.
 
 ---
 
 ## Commit handoff
 
-Print-hints mode. ACF ships:
-- NEW `src/world/killDrag.ts` (~210 LOC) — kind-agnostic kill-drag system + self-contained rope visual.
-- `src/world/rope.ts` — 2 towed-body endpoint kinds + resolver cases.
-- `src/player/interaction.ts` — `raiders` registry + corpse case + worm speeder-tow branch.
-- `src/persistence/save.ts` — additive tether-union extension + `dragAnchor` round-trip on raider + worm.
-- `src/enemies/raider.ts` + `src/enemies/sandWorm.ts` — `dragAnchor` field; raider corpse interaction tag on death.
-- `src/config/tuning.ts` — `KILL_DRAG_*` block.
-- `src/main.ts` — `updateKillDrag` hooked into the tick.
-- Docs: changelog ACF entry, CLAUDE.md Last shipped, roadmap.md Up next (ACG), decisions.md D131-D132, backlog.md (3 new items), session-end-report.md (this file), next-session-prompt.md ACG brief, docs/plans-archive/session-ACF-prompt.md.
+Per CLAUDE.md (session-end auto-runs commit + tag + push). ACJ ships:
+- NEW `src/player/skinnedLimb.ts` (~115 LOC) — procedural skinned-limb builder.
+- `src/player/playerRig.ts` — arms + legs → skinned tubes; bones replace pivot Groups; hand orientation + thumb mirror; goggles/brow/nose; lower-face scarf; poncho removed; hip/deltoid junction fillers; widened pelvis.
+- `src/player/viewModel.ts` — FP viewmodel hands removed.
+- `src/debug/debugPanel.ts` — rigStudio framing fix (removed the D135 negate; D137).
+- NEW `scripts/rig-shot.mjs` — Playwright capture harness; `package.json` (+lock) `playwright` devDep + `rig-shot` script; `.gitignore` ignores `verification/*.png`.
+- Docs: changelog ACJ entry, CLAUDE.md Last shipped, roadmap.md (shipped + Up-next), decisions.md D136-D139, backlog.md (PM status), session-end-report.md (this file), next-session-prompt.md ACK brief.

@@ -10,7 +10,6 @@ import type { ItemId } from '../inventory/types.ts';
 import { Tuning } from '../config/tuning.ts';
 import { getItemDef } from '../inventory/items.ts';
 import { playInventorySelect, playEquip } from '../audio/audio.ts';
-import { createForearmWraps } from './viewModelHands.ts';
 
 export interface ViewModel {
   group: THREE.Group;
@@ -66,13 +65,14 @@ export function createViewModel(ctx: GameContext): ViewModel {
   group.name = 'viewmodel';
   ctx.three.scene.add(group);
 
-  // ABP Tier 4 — FP viewmodel continuity with the 3P rig outfit. The
-  // `hands` group now hosts the forearm wraps + palm bulge so the FP
-  // view feels continuous with the wrapped-scavenger silhouette. Visible
-  // when an item is equipped (matches the existing toggle in swapEquippedMesh).
+  // FP viewmodel hands REMOVED (Session ACJ). ABP added forearm-wrap meshes
+  // here for FP↔3P outfit continuity, but they're parented to the
+  // camera-anchored `hands` group (not the real hand), so they read as
+  // floating/oddly-rotated geometry in front of the camera rather than
+  // wrapping the hand. Kept as an empty group so the visibility toggles in
+  // swapEquippedMesh stay valid; repopulate only if/when FP hands are
+  // rebuilt properly (camera-relative posing, not the rig wraps).
   const hands = new THREE.Group();
-  hands.add(createForearmWraps('right'));
-  configureViewModelObject(hands);
   hands.visible = false;
   group.add(hands);
 
