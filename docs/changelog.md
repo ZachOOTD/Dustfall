@@ -3,6 +3,49 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ACN — 2026-06-01 — Playwright cursor-trap fix + live-scenario harness + ACL live-feel triage (dynamic aim-twist) ✓ verify pass (tsc clean)
+
+`verified` — `npm run verify` (tsc) PASS + all three live-feel items exercised in a TICKING Playwright
+env (the ACM rAF-block is closed: the harness page ticks; the hidden preview MCP does not — D146). The
+session began with a user-reported bug (cursor trapped in an invisible top-left box during Playwright
+verification) and grew into finishing the ACL live-feel triage ACM couldn't reach.
+
+**Fixed:**
+- **Playwright cursor-trap** (`input.ts` + `main.ts`): `npm run rig-shot` enters via the DEV
+  `enterGame()` hook → `handoffToGame()` → `controls.lock()`. The lock guard
+  (`document.hidden || canvas 0×0 || !hasFocus()`) does NOT detect headless Playwright (its page
+  reports visible + sized + focused), so PointerLock fired and confined the OS cursor to the harness's
+  offscreen window. Now `enterGame` calls `handoffToGame({ skipLock: true })` — automated entry
+  **deterministically never locks** (it drives input via evals). Extracted a shared
+  `pointerLockSuppressed()` helper; also guarded the start-overlay click (D147).
+
+**Shipped:**
+- **Dynamic aim-twist** (`playerRig.ts` + `tuning.ts`, D148): the ACL "aim twist-IK" was a CONSTANT
+  0.35-rad shoulder bias in 3P (the author's own comment admits the static heading-delta was ~0). Now
+  derives the camera TURN RATE (Δheading/dt) and leads the lead shoulder INTO turns, relaxing to a
+  resting bias when steady. New `AIM_TWIST_TURN_GAIN` (0.10), `AIM_TWIST_BIAS` 0.35→0.18, new
+  `rig._aimPrevHeading`. Verified: steady 0.167 → turn-left 0.207 → turn-right 0.052 (responds to turn
+  direction + rate, both ways).
+- **Live `--scenario` harness mode** (`scripts/rig-shot.mjs`): enters the game TICKING (pointer-lock
+  gate forced open, unpaused) and captures time-sequence strips / numeric samples. Three scenarios:
+  `shrew-flee`, `aim-twist`, `rifle`. Drives + samples from NODE (page.waitForTimeout) — NOT in-page
+  rAF (throttled in the hidden Playwright tab; the game survives via its setTimeout fallback — D149).
+  Pre-sets the tutorial `seenIntro` flag so the first-boot controls panel never opens (it gates LMB).
+
+**ACL live-feel triage (all PASS, in a ticking env):**
+- **Shrew flee** — bolts ~8m at ~3.2 m/s (matches FLEE_SPEED), settles after ~2.4s (FLEE_DURATION),
+  resumes wander. ACM's "didn't flee" was the frozen-tick false alarm, NOT a bug.
+- **Aim-twist sweep** — see Dynamic aim-twist above.
+- **Rifle fire/reload** — fire decrements ammo (3→2), R-reload refills from scrap_bullet (2→8, bullets
+  12→6). Fully functional through the ranged combat path.
+
+**Findings (verification footguns, now canon):** (1) headless `enterGame` leaves the first-boot
+tutorial controls panel OPEN → `updateWieldAction.overlayOpen()` gates ALL LMB actions → silently
+blocked rifle-fire until the harness pre-dismissed it (reload uses a separate no-overlay path, so it
+worked — the asymmetry that exposed it). (2) in-page `requestAnimationFrame` is throttled in the
+hidden Playwright tab; drive ticking work from Node-side waits + shrink the canvas for tick-only
+sampling.
+
 ## Session ACM — 2026-06-01 — Visual-triage of the ACL features (partial: rAF-block ceiling) + debug storm-hook fix ✓ verify pass (tsc clean)
 
 `verified` — `npm run verify` (tsc) PASS. A visual-triage pass on the ACL-shipped visual features to

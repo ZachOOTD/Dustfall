@@ -1067,3 +1067,30 @@ The fundamental issue: KCC's slope projection, autostep, and contact resolution 
 **Considered alternatives**: spoofing `document.hidden`/visibility (read-only; throttle is enforced below page script); driving a manual tick from the eval (the main-loop closure isn't exposed; update fns aren't importable in page context). Both dead ends.
 
 **friction-score:** 3
+
+## D147 — Automated/headless game-entry must DETERMINISTICALLY skip PointerLock (the focus heuristic fails for headless Playwright) (Session ACN)
+**When**: A user reported their OS cursor trapped in an invisible top-left box during `npm run rig-shot` (Playwright) verification.
+
+**Why**: `rig-shot` enters via the DEV `enterGame()` hook → `handoffToGame()` → `controls.lock()`. That lock was guarded by `isPreviewLike = DEV && (document.hidden || canvas 0×0 || !document.hasFocus())` (ABL/ABN history). But headless Playwright's page reports `visibilityState:"visible"`, a sized canvas, AND `document.hasFocus()===true` — all three signals read "real user", so the guard does NOT fire and PointerLock engages, confining the physical cursor to the harness's offscreen/top-left window. The focus heuristic is fundamentally insufficient for headless automation.
+
+**Picked**: `handoffToGame(opts?: {skipLock?:boolean})`; the `enterGame` DEV hook passes `{skipLock:true}`. Automated entry NEVER acquires PointerLock — verification drives input via evals, so it has zero use for the lock. This is deterministic, not heuristic. Extracted a shared `pointerLockSuppressed(canvas)` helper (input.ts) and also applied it to the start-overlay click as defense-in-depth for stray preview clicks. Real users are unaffected (title buttons lock normally; a real click always has focus). The menus.ts lock sites (mid-game continue/restart/settings) were left unguarded — only reachable by a focused real user, never the harness.
+
+**friction-score:** 2
+
+## D148 — Aim-twist is DYNAMIC (camera turn-rate lead), not a constant 3P shoulder bias (Session ACN)
+**When**: ACN visual-triage found the ACL "aim twist-IK" was a CONSTANT `clamp(AIM_TWIST_BIAS)` on `shoulders[1].rotation.y` whenever in 3P — no response to turning/aiming, despite the feature name + comments + ACL changelog describing a dynamic "upper body leads toward the camera" behavior. The ACL author's own comment admitted it: `rig.heading` snaps to the camera heading every frame, so the static `(camHeading − bodyHeading)` delta is ~0 → they fell back to a constant.
+
+**Why**: The real dynamic signal is the camera TURN RATE, not a static heading delta. `aimTwistTarget = clamp(AIM_TWIST_BIAS + (Δheading/dt)·AIM_TWIST_TURN_GAIN, ±CLAMP)`, lerped. The lead shoulder winds INTO the turn and relaxes to a small resting bias when steady. Added `rig._aimPrevHeading` (per-frame heading diff), `AIM_TWIST_TURN_GAIN`=0.10, lowered `AIM_TWIST_BIAS` 0.35→0.18 (the static 0.35 read too square at rest). User chose "make it dynamic" over keep-static-and-document. Verified via the harness: steady 0.167 → turn+ 0.207 → turn− 0.052 (responds to direction + rate). **Peak magnitude in the harness underestimates real continuous-turn play** (Node-side bursty sampling), so the gain/bias likely want a foreground feel-tune (ACO).
+
+**friction-score:** 1
+
+## D149 — Live-behavior verification harness: drive the TICKING game from Node, not in-page rAF; pre-clear LMB-gating overlays (Session ACN)
+**When**: Building the `rig-shot --scenario` mode (shrew-flee / aim-twist / rifle) to exercise per-frame BEHAVIOR (the thing D146 says the preview MCP can't do), using the Playwright harness whose page DOES tick.
+
+**Why**: Two non-obvious footguns, each cost a debug cycle:
+1. **In-page `requestAnimationFrame` is throttled in the Playwright page** — its `visibilityState` is `hidden`, so rAF runs at ~0. The GAME keeps ticking because `loop.ts` falls back to `setTimeout(16)` when `document.hidden` (DEV), but a verification eval that `await`s in-page rAF in a loop HANGS → page-close/timeout. **Drive + sample from NODE** (`page.waitForTimeout` between short evals), letting the game's own setTimeout loop tick. For tick-only numeric sampling (no pixels needed), **shrink the canvas to ~48–64px** so each software-WebGL frame is near-instant (full 900×1100 renders at ~10s/frame).
+2. **Headless `enterGame` leaves the first-boot tutorial controls panel OPEN** (`!seenIntro`). `updateWieldAction.overlayOpen()` includes `isControlsPanelOpen()`, so ALL LMB actions (attack/place) are suppressed → the rifle-fire scenario silently did nothing while RELOAD (a separate path with no overlay gate) worked — that asymmetry is what exposed it. Fix: `page.addInitScript` to pre-set `localStorage['dustfall.tutorial.v1'] = {seenIntro:true}` before page load so the panel never opens.
+
+**Picked**: Node-driven scenario loops + canvas-shrink for numeric sampling + pre-dismiss LMB-gating overlays. This is the reusable recipe for live-feel verification, complementing D146 (static-only via the preview MCP). The rifle "didn't fire" was NOT a combat bug — it was the overlay gate; once dismissed, fire decrements ammo correctly.
+
+**friction-score:** 2

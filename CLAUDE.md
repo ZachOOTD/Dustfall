@@ -64,22 +64,21 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      Prior milestones live in docs/changelog.md — do NOT accumulate "Prior milestone"
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
-**Last shipped**: Session ACM — **visual-triage of the ACL features (partial) + a debug
-storm-hook fix**. Verified clean via static screenshots + state inspection: night-sky
-stars, the sweeping sandstorm wall, the desert-shrew **model**, the amban-rifle viewmodel,
-and the aim-twist rig plumbing. Fixed the stale debug `triggerStorm` hook (it set
-`weather.state` inline without arming the wall → 0 intensity; now delegates to
-`weather.triggerStorm`/`armWall`). **⚠ Could NOT live-verify** shrew flee *motion*, aim-twist
-*sweep*, or rifle *fire/reload* — the headless preview tab is `visibilityState:"hidden"` so
-the browser throttles rAF to zero and the **game tick is frozen** (the documented hidden-tab
-gotcha — **D146**). Those three are structurally sound but their live FEEL needs a foreground
-`npm run dev` playtest. tsc clean.
+**Last shipped**: Session ACN — **Playwright cursor-trap fix + live-scenario harness + the ACL
+live-feel triage ACM couldn't reach**. Fixed the OS-cursor trap during `npm run rig-shot`: the
+DEV `enterGame()` path acquired PointerLock because the focus heuristic doesn't detect headless
+Playwright; `enterGame` now calls `handoffToGame({ skipLock: true })` (deterministic — D147).
+Extended `rig-shot.mjs` with a live `--scenario` mode (ticking env; drives + samples from Node,
+NOT in-page rAF which is throttled in the hidden tab — D149). **Made aim-twist DYNAMIC** — it was
+a constant 0.35-rad 3P shoulder bias; now leads INTO turns by camera turn-rate, relaxing to a
+resting bias (D148). Triaged all 3 ACL live-feel items in the ticking env (all PASS): shrew flee
+(bolts ~8m @ ~3.2 m/s, settles, resumes wander — ACM's "didn't flee" was the frozen-tick false
+alarm), aim-twist sweep, rifle fire/reload (ammo 3→2 on fire, →8 on reload). tsc clean.
 
-**Next session (ACN)**: **finish the ACL visual-triage in a TICKING environment** — drive
-shrew flee, aim-twist sweep, and rifle fire/reload via a foreground `npm run dev` playtest
-or an extended Playwright `rig-shot` harness (NOT the hidden-tab preview MCP — D146). Then
-breadth (another fanned-out overnight) or a player-model follow-up (PM-D cloth / in-game
-lighting mood). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
+**Next session (ACO)**: feel-tune the new dynamic aim-twist in a foreground playtest (the harness
+underestimates the continuous-turn peak; `AIM_TWIST_TURN_GAIN`/`BIAS` may want a bump), then more
+backlog breadth (another fanned-out overnight) or a player-model follow-up (PM-D cloth / in-game
+lighting mood — D142). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 

@@ -67,6 +67,184 @@ const POSES = {
   relaxed: `rig.hips[1].rotation.set(-0.04,0,0.02); rig.knees[1].rotation.x=0.02; rig.ankles[1].rotation.x=0; rig.hips[0].rotation.set(0.10,0.05,0.03); rig.knees[0].rotation.x=0.20; rig.ankles[0].rotation.x=-0.05; rig.spineBend.rotation.set(0.05,0,-0.05); rig.shoulders[1].rotation.set(0.10,0,0.10); rig.elbows[1].rotation.x=0.22; rig.wrists[1].rotation.x=-0.12; rig.shoulders[0].rotation.set(0.06,0,-0.13); rig.elbows[0].rotation.x=0.30; rig.wrists[0].rotation.x=-0.12; rig.headGroup.rotation.set(0.03,0.12,-0.05);`,
 };
 
+// ── ACN — LIVE scenario mode (--scenario=…) ─────────────────────────────────
+// The pose/angle path above captures STATIC frames (it pauses + poses the rig).
+// Live-FEEL features (creature AI, aim-twist sweep, weapon fire) need the sim
+// TICKING — so these scenarios enter the game live, force the pointer-lock gate
+// open (so `isPlaying()` is true and every system ticks — the gate that the
+// hidden-preview path can't satisfy, D146), set up a situation, and capture a
+// STRIP of frames over wall-clock time. Output: verification/scen-<name>-fNN.png.
+const SCENARIO = argv.scenario || '';
+const FRAMES = Number(argv.frames || 10);
+const INTERVAL = Number(argv.interval || 300); // ms between strip frames
+
+/** Enter gameplay LIVE (ticking) — dev loadout, pointer-lock gate forced open,
+ *  unpaused, canvas sized, daylight for legibility. Does NOT pause/pose. */
+async function enterLive(page, thirdPerson) {
+  await page.evaluate((tp) => {
+    const g = window.__game;
+    g.enterGame(true);                              // dev loadout + handoff (skipLock — ACN)
+    const ctx = g.ctx;
+    ctx.input.controls.isLocked = true;             // make isPlaying()===true so all systems tick
+    ctx.flags.paused = false;
+    ctx.flags.thirdPerson = tp;
+    g.setTime(0.42);                                // mid-morning: scene legible
+    ctx.three.renderer.setSize(900, 1100, false);
+    const cam = ctx.three.camera;
+    if (cam.isPerspectiveCamera) { cam.aspect = 900 / 1100; cam.updateProjectionMatrix(); }
+  }, thirdPerson);
+  await page.waitForTimeout(500); // let several ticks run so the rig settles at the body
+}
+
+/** Capture FRAMES screenshots spaced INTERVAL ms apart. `perFrame` (optional)
+ *  is a function string run in-page each frame before the wait (gets the frame
+ *  index) — used to drive aim sweep / trigger fire / re-aim a tracking camera. */
+async function captureStrip(page, name, perFrame) {
+  for (let i = 0; i < FRAMES; i++) {
+    if (perFrame) await page.evaluate(`(${perFrame})(${i})`);
+    await page.waitForTimeout(INTERVAL);
+    const path = join(OUT, `scen-${name}-f${String(i).padStart(2, '0')}.png`);
+    await page.screenshot({ path, fullPage: false });
+  }
+  console.log(`[rig-shot] saved ${FRAMES} frames: scen-${name}-f00..f${String(FRAMES - 1).padStart(2, '0')}.png`);
+}
+
+const SCENARIOS = {
+  // Shrew flee: face the player at a shrew ~5m ahead (< SPOT_DISTANCE 7m), 1P
+  // static camera. The shrew flees directly AWAY from the camera, so it recedes
+  // along the view axis and stays roughly centered — the strip shows the bolt
+  // (recede + skittery hop) without per-frame tracking.
+  'shrew-flee': async (page) => {
+    const info = await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      ctx.three.renderer.toneMappingExposure = 1.6; // brighten for a clear critter read
+      const cam = ctx.three.camera;
+      const s = ctx.shrews.list[0];
+      const sx = s.pos.x, sz = s.pos.z, sy = ctx.terrain.heightAt(sx, sz);
+      const px = sx, pz = sz - 2.8, py = sy + 1.6;   // 2.8m south of the shrew (well < SPOT 7m)
+      ctx.player.body.body.setTranslation({ x: px, y: py, z: pz }, true);
+      cam.position.set(px, py, pz);
+      cam.lookAt(sx, sy + 0.1, sz);
+      cam.updateMatrixWorld(true);
+      return { shrewId: s.id, state0: s.state, start: [+sx.toFixed(2), +sz.toFixed(2)],
+               horizDist: +Math.hypot(cam.position.x - sx, cam.position.z - sz).toFixed(2) };
+    });
+    console.log(`[shrew-flee] shrew#${info.shrewId} @${info.start} dist=${info.horizDist}m state=${info.state0}`);
+    // Re-pin the 1P camera each frame, angled down at the critter (it flees away
+    // from the camera so it recedes along the view axis + stays centered).
+    await captureStrip(page, 'shrew-flee', `(i)=>{const c=window.__game.ctx;const s=c.shrews.list[0];const cam=c.three.camera;const gy=c.terrain.heightAt(s.pos.x,s.pos.z);cam.position.set(s.pos.x,gy+1.6,s.pos.z-2.8);cam.lookAt(s.pos.x,gy+0.1,s.pos.z);cam.updateMatrixWorld(true);console.log('[shrew-flee] f'+i+' state='+s.state+' pos='+s.pos.x.toFixed(2)+','+s.pos.z.toFixed(2));}`);
+    const end = await page.evaluate(() => {
+      const s = window.__game.ctx.shrews.list[0];
+      return { state: s.state, pos: [+s.pos.x.toFixed(2), +s.pos.z.toFixed(2)] };
+    });
+    console.log(`[shrew-flee] END state=${end.state} pos=${end.pos}`);
+  },
+
+  // Aim-twist (ACN dynamic): drive the 3P camera yaw over rAF ticks and sample
+  // rig._aimTwist to PROVE it responds to turn RATE (not a constant). Then two
+  // paused posed shots (resting bias vs full lead) for the visual range. The
+  // page is visible Playwright so rAF actually ticks (unlike the hidden preview).
+  'aim-twist': async (page) => {
+    // Drive + sample from NODE (page.waitForTimeout), letting the game's own
+    // tick loop run. Must NOT use in-page requestAnimationFrame: the Playwright
+    // page is `hidden`, so rAF is throttled to ~0 (the game survives via its
+    // setTimeout fallback in loop.ts — D146). Shrink canvas for fast ticks.
+    await page.evaluate(() => window.__game.ctx.three.renderer.setSize(64, 64, false));
+    const setYaw = (y) => page.evaluate((yy) => {
+      const c = window.__game.ctx.three.camera;
+      c.quaternion.setFromEuler(new (c.rotation.constructor)(-0.12, yy, 0, 'YXZ'));
+      c.updateMatrixWorld(true);
+    }, y);
+    const readAim = () => page.evaluate(() => +window.__game.ctx.player.rig._aimTwist.toFixed(3));
+    const samples = [];
+    // steady → relaxes to the resting bias
+    await setYaw(0); await page.waitForTimeout(1200);
+    samples.push({ phase: 'steady', aim: await readAim() });
+    // turn LEFT — ramp yaw + in small steps so the heading keeps changing
+    // (continuous turn rate); read promptly so the lead is fresh.
+    let y = 0;
+    for (let i = 0; i < 14; i++) { y += 0.10; await setYaw(y); await page.waitForTimeout(70); }
+    samples.push({ phase: 'turn+', aim: await readAim() });
+    // turn RIGHT — ramp yaw back the other way
+    for (let i = 0; i < 14; i++) { y -= 0.10; await setYaw(y); await page.waitForTimeout(70); }
+    samples.push({ phase: 'turn-', aim: await readAim() });
+    // stop → relaxes back toward the bias
+    await page.waitForTimeout(1500);
+    samples.push({ phase: 'relax', aim: await readAim() });
+    console.log('[aim-twist] dynamic response: ' + JSON.stringify(samples));
+    for (const [tag, val] of [['rest', 0.18], ['lead', 0.5]]) {
+      await page.evaluate((v) => {
+        const ctx = window.__game.ctx;
+        ctx.three.renderer.setSize(900, 1100, false); // restore from the 48×48 numeric-loop size
+        ctx.flags.paused = true;                       // freeze so our pose survives the shot
+        const rig = ctx.player.rig;
+        rig.shoulders[1].rotation.y = v;
+        rig.group.updateMatrixWorld(true);
+        const cam = ctx.three.camera; const V = cam.position.constructor;
+        if (cam.isPerspectiveCamera) { cam.aspect = 900 / 1100; cam.updateProjectionMatrix(); }
+        const hp = rig.headGroup.getWorldPosition(new V());
+        cam.position.set(hp.x + 1.5, hp.y + 0.05, hp.z + 1.0); // front-ish, slightly above
+        cam.lookAt(hp.x, hp.y - 0.30, hp.z);
+        cam.updateMatrixWorld(true);
+      }, val);
+      await page.waitForTimeout(300);
+      const path = join(OUT, `scen-aim-twist-${tag}.png`);
+      await page.screenshot({ path, fullPage: false });
+      console.log(`[rig-shot] saved ${path}`);
+    }
+  },
+
+  // Rifle (ACL amban_rifle): equip in hotbar slot 0 (1P viewmodel), prove the
+  // ranged FIRE path decrements ammo + the R-reload refills from scrap_bullet
+  // stacks, then a 1P viewmodel screenshot. State-based (functional) verify —
+  // reliable without trying to catch a muzzle flash in a slow software render.
+  'rifle': async (page) => {
+    // Equip + state setup. Node-driven press re-injection below (NOT in-page rAF
+    // — the page is hidden so rAF is throttled, and a single-tick input inject
+    // races endInputFrame which clears pressed/mousePressed each tick — D146).
+    await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      const inv = ctx.inventory;
+      inv.slots[0].item = 'amban_rifle'; inv.slots[0].count = 1; inv.slots[0].meta = { ammoRemaining: 3 };
+      inv.slots[1].item = 'scrap_bullet'; inv.slots[1].count = 12; inv.slots[1].meta = undefined;
+      inv.selectedIdx = 0;
+      ctx.three.renderer.setSize(64, 64, false);     // fast ticks for the fire/reload sim
+    });
+    const ammo = () => page.evaluate(() => window.__game.ctx.inventory.slots[0].meta.ammoRemaining);
+    const bullets = () => page.evaluate(() => { const s = window.__game.ctx.inventory.slots[1]; return s.item === 'scrap_bullet' ? s.count : 0; });
+    const ammo0 = await ammo();
+    // FIRE — re-inject LMB each step until ammo drops (cooldown then blocks further shots).
+    let ammoAfterShot = ammo0;
+    for (let i = 0; i < 14; i++) {
+      await page.evaluate(() => window.__game.ctx.input.mousePressed.add(0));
+      await page.waitForTimeout(110);
+      ammoAfterShot = await ammo();
+      if (ammoAfterShot < ammo0) break;
+    }
+    // RELOAD — re-inject R until ammo refills from the scrap_bullet stack.
+    let ammoAfterReload = ammoAfterShot;
+    for (let i = 0; i < 14; i++) {
+      await page.evaluate(() => window.__game.ctx.input.pressed.add('KeyR'));
+      await page.waitForTimeout(110);
+      ammoAfterReload = await ammo();
+      if (ammoAfterReload > ammoAfterShot) break;
+    }
+    const result = { equipped: 'amban_rifle', ammo0, ammoAfterShot, ammoAfterReload, bulletsLeft: await bullets() };
+    console.log('[rifle] ' + JSON.stringify(result));
+    // 1P viewmodel screenshot (restore size).
+    await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      ctx.three.renderer.setSize(900, 1100, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 900 / 1100; cam.updateProjectionMatrix(); }
+    });
+    await page.waitForTimeout(500);
+    const path = join(OUT, 'scen-rifle-viewmodel.png');
+    await page.screenshot({ path, fullPage: false });
+    console.log(`[rig-shot] saved ${path}`);
+  },
+};
+
 function startDev() {
   const isWin = process.platform === 'win32';
   const cmd = isWin ? 'npm.cmd' : 'npm';
@@ -148,9 +326,26 @@ async function main() {
     const page = await ctx.newPage();
     page.on('pageerror', (e) => console.log(`  [page error] ${e.message}`));
     page.on('console', (m) => { if (m.type() === 'error') console.log(`  [browser error] ${m.text()}`); });
+    // ACN — mark the tutorial intro as seen BEFORE any page script runs, so the
+    // first-boot controls panel never opens. Otherwise it stays open in the
+    // headless session and `updateWieldAction`'s overlayOpen() gate suppresses
+    // ALL LMB actions (attack/place) — which silently blocked the rifle-fire
+    // scenario (reload uses a separate path with no overlay gate, so it worked).
+    await page.addInitScript(() => {
+      try { localStorage.setItem('dustfall.tutorial.v1', JSON.stringify({ seenIntro: true, usedItems: [] })); } catch { /* ignore */ }
+    });
     await page.goto(`http://127.0.0.1:${PORT}/`);
     // Wait for the rig to exist (Rapier WASM + boot done).
     await page.waitForFunction(() => !!(window.__game && window.__game.ctx?.player?.rig), undefined, { timeout: 30000 });
+    // ACN — live scenario mode short-circuits the static pose/angle path.
+    if (SCENARIO) {
+      const fn = SCENARIOS[SCENARIO];
+      if (!fn) throw new Error(`unknown scenario "${SCENARIO}" (${Object.keys(SCENARIOS).join('|')})`);
+      console.log(`[rig-shot] running live scenario "${SCENARIO}" (${FRAMES} frames @ ${INTERVAL}ms)…`);
+      await enterLive(page, ['shrew-flee', 'rifle'].includes(SCENARIO) ? false : true);
+      await fn(page);
+      return; // the finally below closes browser + kills dev
+    }
     // Enter the studio (headless enter + lighting + unpause), let a frame settle
     // the rig at the player, then pause + pose.
     await page.evaluate(() => window.__game.rigStudio());

@@ -100,6 +100,9 @@ export interface PlayerRig {
    *  the right shoulder so the upper body leads toward the camera's facing
    *  direction. Lerped each frame toward the clamped target. */
   _aimTwist: number;
+  /** ACN — previous frame's `heading`, for deriving the camera turn RATE that
+   *  drives the dynamic aim-lead (the shoulder winds into the turn). */
+  _aimPrevHeading: number;
 }
 
 // ── Proportions (m) — slight tune toward more-human silhouette ──
@@ -967,6 +970,7 @@ export function buildPlayerRig(ctx: GameContext): PlayerRig {
     stepCount: 0,
     _lastStepPhase: 0,
     _aimTwist: 0,   // ACL AIM TWIST-IK
+    _aimPrevHeading: 0, // ACN — for camera turn-rate derivation
   };
   return rig;
 }
@@ -975,7 +979,6 @@ export function buildPlayerRig(ctx: GameContext): PlayerRig {
  *  ABP Tier 2 — 3-phase walk cycle + knee/elbow flex + foot IK + head
  *  counter-bob. */
 export function updatePlayerRig(ctx: GameContext, dt: number): void {
-  void dt;
   const rig = ctx.player.rig;
   if (!rig) return;
 
@@ -1156,23 +1159,29 @@ export function updatePlayerRig(ctx: GameContext, dt: number): void {
   // Composed on .rotation.y so it never clobbers the swing X-rotation set in
   // the per-state arm-swing blocks above.
   if (ctx.flags.thirdPerson) {
-    // Re-derive the camera heading using the same camDir->atan2 pattern as
-    // the rig-heading block above (reuse the already-computed camDir/heading).
-    // The rig group is rotated to rig.heading, so a target of (camHeading -
-    // rig.heading) expresses how far the camera leads the body. In practice
-    // rig.heading tracks the camera each frame so the delta is ~0; we instead
-    // bias the lead arm a constant subtle amount toward facing, scaled so it
-    // reads as an aim-ready upper-body twist rather than a square-on idle.
+    // ACN — DYNAMIC aim-lead. `rig.heading` snaps to the camera heading every
+    // frame (L1002), so the static (camHeading - bodyHeading) delta is ~0 —
+    // which is why the ACL version fell back to a constant. The real dynamic
+    // signal is the camera TURN RATE: when the player whips the view, the
+    // upper body winds INTO the turn, then relaxes to the resting bias when
+    // steady. We diff heading vs last frame, normalise by dt → rad/sec, and
+    // lead by that (clamped). Composed on .rotation.y only so it never
+    // clobbers the swing X-rotation set in the per-state arm blocks above.
+    let dh = rig.heading - rig._aimPrevHeading;
+    if (dh > Math.PI) dh -= _PI2; else if (dh < -Math.PI) dh += _PI2; // wrap to [-π,π]
+    rig._aimPrevHeading = rig.heading;
+    const turnRate = dt > 1e-5 ? dh / dt : 0;          // rad/sec (signed)
+    const turnLead = turnRate * AIM_TWIST_TURN_GAIN;   // lead winds into the turn
     const aimTwistTarget = THREE.MathUtils.clamp(
-      AIM_TWIST_BIAS,            // lead the body toward camera-facing
+      AIM_TWIST_BIAS + turnLead,
       -AIM_TWIST_CLAMP,
       AIM_TWIST_CLAMP,
     );
     rig._aimTwist += (aimTwistTarget - rig._aimTwist) * AIM_TWIST_LERP;
-    // Additive on Y only — preserves whatever swing X the state block set.
     rig.shoulders[1].rotation.y = rig._aimTwist;
   } else if (rig._aimTwist !== 0) {
     // Decay back to neutral when not in 3P so re-entry is smooth.
+    rig._aimPrevHeading = rig.heading;
     rig._aimTwist += (0 - rig._aimTwist) * AIM_TWIST_LERP;
     rig.shoulders[1].rotation.y = rig._aimTwist;
   }
@@ -1180,9 +1189,10 @@ export function updatePlayerRig(ctx: GameContext, dt: number): void {
 
 // ACL AIM TWIST-IK tuning — promoted to Tuning (integration).
 // Subtle upper-body aim lead on the right (lead/gun) shoulder when in 3P.
-const AIM_TWIST_BIAS = Tuning.AIM_TWIST_BIAS;    // target twist toward camera-facing (rad)
+const AIM_TWIST_BIAS = Tuning.AIM_TWIST_BIAS;    // resting twist (rad) when not turning
 const AIM_TWIST_CLAMP = Tuning.AIM_TWIST_CLAMP;  // hard clamp on aim twist (±rad)
 const AIM_TWIST_LERP = Tuning.AIM_TWIST_LERP;    // per-frame lerp toward target (smoothing)
+const AIM_TWIST_TURN_GAIN = Tuning.AIM_TWIST_TURN_GAIN; // rad lead per rad/sec camera turn (ACN)
 
 // ── Foot IK helper ────────────────────────────────────────────────────
 // Per-frame: for each leg, sample terrain under the foot's intended

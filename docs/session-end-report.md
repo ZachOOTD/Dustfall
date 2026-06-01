@@ -2,7 +2,18 @@
 
 Cumulative state. Rewritten end-to-end at each `/session-end`.
 
-**Current state**: Session ACM shipped (2026-06-01 — visual-triage of the ACL features, PARTIAL + a debug storm-hook fix). 94 sessions post-MVP. `npm run verify` (tsc) PASS. **SAVE_VERSION 14** (unchanged). ACM visually verified — via STATIC screenshots + runtime state inspection — the ACL visuals: night-sky stars, the sweeping storm wall, the desert-shrew MODEL, the amban-rifle viewmodel, and the aim-twist rig plumbing (all read correctly). It **fixed the stale debug `triggerStorm` hook** (set `weather.state` inline without arming the wall → 0 intensity; now delegates to `weather.triggerStorm`/`armWall`). **⚠ Live FEEL could NOT be verified** — shrew flee motion, the aim-twist sweep, and rifle fire/reload — because the headless preview tab is `document.visibilityState:"hidden"`, so the browser throttles rAF to zero and the **game tick is frozen** (the documented hidden-tab gotcha; **D146**). Those three are structurally sound but need a foreground `npm run dev` playtest or an extended Playwright harness. The player-model arc remains complete (ACK ceiling = believable stylized human). **Next session (ACN) = finish the live-feel triage in a TICKING environment**, then more breadth or a player-model follow-up.
+**Current state**: Session ACN shipped (2026-06-01 — Playwright cursor-trap fix + live-scenario harness + the ACL live-feel triage). 95 sessions post-MVP. `npm run verify` (tsc) PASS. **SAVE_VERSION 14** (unchanged). ACN fixed the OS-cursor trap during `npm run rig-shot` (DEV `enterGame` acquired PointerLock because the focus heuristic misses headless Playwright → now `handoffToGame({skipLock:true})` deterministically — D147), extended `rig-shot.mjs` with a live `--scenario` mode that ticks the game + samples from Node (D149), made aim-twist **dynamic** (camera turn-rate lead, was a constant bias — D148), and verified all 3 ACL live-feel items in the ticking env (shrew flee, aim-twist sweep, rifle fire/reload — all PASS; ACM's frozen-tick concerns resolved). The ACM→ACN arc fully closes the ACL rule-8 visual-triage debt. **Next session (ACO) = foreground feel-tune of dynamic aim-twist**, then breadth or a player-model follow-up.
+
+## ACN scope (this session) — cursor-trap fix + live-scenario harness + ACL live-feel triage
+
+Began with a user-reported bug (cursor trapped in an invisible top-left box during Playwright verification) and grew into finishing the live-feel triage ACM couldn't reach (the preview-MCP rAF freeze, D146).
+
+- **Cursor-trap fix** (`input.ts` + `main.ts`, D147): `enterGame()` → `handoffToGame({skipLock:true})`; automated entry never acquires PointerLock (the `document.hidden||canvas0||!hasFocus()` guard can't detect headless Playwright, which reports visible+sized+focused). Shared `pointerLockSuppressed()` helper; start-overlay click also guarded.
+- **Dynamic aim-twist** (`playerRig.ts` + `tuning.ts`, D148): the ACL feature was a constant 0.35-rad 3P shoulder bias; now derives camera turn-rate (Δheading/dt) and leads the lead shoulder into turns, relaxing to a 0.18 resting bias. New `AIM_TWIST_TURN_GAIN`=0.10, `rig._aimPrevHeading`. Harness-verified directional response (steady 0.167 → turn+ 0.207 → turn− 0.052).
+- **Live `--scenario` harness** (`scripts/rig-shot.mjs`, D149): enters the game ticking, drives + samples from Node (not in-page rAF — throttled in the hidden Playwright tab; game survives via its setTimeout fallback), pre-dismisses the tutorial overlay (else `updateWieldAction.overlayOpen()` gates all LMB). Scenarios: `shrew-flee`, `aim-twist`, `rifle`.
+- **ACL live-feel triage** (all PASS): shrew flee bolts ~8m @ ~3.2 m/s + settles + resumes wander; aim-twist sweep (dynamic); rifle fire decrements ammo (3→2) + R-reload refills from scrap_bullet (2→8). The rifle "didn't fire" mid-session was the tutorial-overlay LMB gate, NOT a combat bug.
+
+## ACM scope (this session) — visual-triage of the ACL features (partial) + debug storm-hook fix **SAVE_VERSION 14** (unchanged). ACM visually verified — via STATIC screenshots + runtime state inspection — the ACL visuals: night-sky stars, the sweeping storm wall, the desert-shrew MODEL, the amban-rifle viewmodel, and the aim-twist rig plumbing (all read correctly). It **fixed the stale debug `triggerStorm` hook** (set `weather.state` inline without arming the wall → 0 intensity; now delegates to `weather.triggerStorm`/`armWall`). **⚠ Live FEEL could NOT be verified** — shrew flee motion, the aim-twist sweep, and rifle fire/reload — because the headless preview tab is `document.visibilityState:"hidden"`, so the browser throttles rAF to zero and the **game tick is frozen** (the documented hidden-tab gotcha; **D146**). Those three are structurally sound but need a foreground `npm run dev` playtest or an extended Playwright harness. The player-model arc remains complete (ACK ceiling = believable stylized human). **Next session (ACN) = finish the live-feel triage in a TICKING environment**, then more breadth or a player-model follow-up.
 
 ## ACM scope (this session) — visual-triage of the ACL features (partial) + debug storm-hook fix
 
@@ -194,7 +205,7 @@ Existing tunables of interest:
 
 ## Suggested next session (1-3 directions in priority order)
 
-1. **Finish the ACL live-feel triage in a TICKING environment** (TOP, Session ACN). ACM verified the STATIC layer (geometry/wiring/viewmodels) but the rAF-frozen headless preview blocked live behavior (D146). Drive — via a foreground `npm run dev` browser tab OR an extended Playwright `rig-shot` harness (its page is `visible` so rAF runs) — the shrew flee MOTION (SHREW_FLEE_SPEED/DURATION), the 3P aim-twist SWEEP (AIM_TWIST_BIAS/LERP), rifle FIRE/RELOAD through the ranged path, and the in-motion feel of star twinkle/drift + storm-wall sweep timing. Iterate the ACL `tuning.ts` constants (AIM/STAR/STORM/SHREW). **Do NOT use the preview MCP for this — it's hidden-tab throttled.**
+1. **Foreground feel-tune of the dynamic aim-twist** (TOP, Session ACO). ACN made aim-twist dynamic (D148) + harness-verified the directional response, but the Node-side sampling underestimates the real continuous-turn peak. Play a foreground `npm run dev` 3P session; tune `AIM_TWIST_TURN_GAIN`/`AIM_TWIST_BIAS`/`AIM_TWIST_LERP` for feel (likely a gain bump). Optionally add `--scenario`s for star twinkle/storm-sweep in-motion feel. The live-feel triage of shrew-flee + rifle is DONE (ACN, both PASS via the harness).
 2. **More backlog breadth** — another fanned-out overnight (the D143 file-ownership-lane + integrator pattern worked). Plenty remains (more procgen/POI/biome, creatures, audio, polish).
 3. **Player-model follow-ups** (optional) — PM-D cloth physics; or the game **lighting mood** (D142, biggest in-game realism lever, whole-game aesthetic — surface first); or the D107 asset fork (photoreal, user's call).
 
@@ -202,33 +213,33 @@ Existing tunables of interest:
 
 ## Time spent
 
-94 sessions shipped (A through ACM). Approx ~300-369h cumulative human-facing dev time. ACM was a short verification + bug-fix session (visual-triage of ACL's output; ~1 code file touched). (Tail of the same very long conversation: ACJ skinned rig → ACK realism → ACL overnight breadth → ACM triage.)
+95 sessions shipped (A through ACN). Approx ~300-370h cumulative human-facing dev time. ACN was a focused bug-fix + tooling + verification session (cursor-trap fix, scenario harness, dynamic aim-twist, live-feel triage; 5 files touched, no save change). (Tail of the same very long conversation: ACJ skinned rig → ACK realism → ACL overnight breadth → ACM static triage → ACN live triage.)
 
 ---
 
 ## State at session end
 
-- **Git status**: ACL committed + tagged + pushed at its session-end. ACM dirty: `src/debug/debugPanel.ts` (storm-hook fix) + `docs/` updates (changelog/CLAUDE/roadmap/decisions/backlog/this report/next-session-prompt) + untracked `docs/plans-archive/session-ACM-prompt.md`. Commit handoff below.
+- **Git status**: ACM committed + tagged + pushed (`23fe238`, `session-ACM`). ACN dirty: `scripts/rig-shot.mjs` (scenario harness + cursor-trap tutorial-init), `src/config/tuning.ts` (aim-twist consts), `src/core/input.ts` (pointerLockSuppressed helper + start-overlay guard), `src/main.ts` (handoffToGame skipLock), `src/player/playerRig.ts` (dynamic aim-twist) + `docs/` updates. Commit handoff below.
 - **Branch**: `master`. **Save state**: localStorage **v14** (unchanged this session).
-- **Ports bound**: a dev server lingers from the preview-MCP (5180); dev-only and currently hidden-tab throttled (D146).
-- **Rule-8 status**: ACL's static visual layer now triaged clean (ACM); the live-FEEL remainder (shrew-flee / aim-twist-sweep / rifle-fire) is the ACN top item — blocked here by the hidden-tab rAF freeze, not by effort (D146).
+- **Ports bound**: dev servers may linger from the preview-MCP (5180) / rig-shot harness (5191); both dev-only. The rig-shot harness now ticks safely without trapping the cursor (D147).
+- **Rule-8 status**: the ACL visual-triage debt is now FULLY CLOSED (ACM static layer + ACN live-feel). aim-twist became dynamic (D148) and wants only a foreground feel-tune of its gain/bias (ACO).
 
 ---
 
 ## Token spend this session (estimated)
 
-ACM was a light verification + single-bug-fix session on the main loop (no fan-out).
+ACN was a moderate bug-fix + tooling + verification session on the main loop (no fan-out, but several iterative Playwright runs — each ~30-60s of software-WebGL rendering).
 
-- Input: moderate (resumed a compacted session; read shrew/combat/items source + docs for session-end).
-- Output: small — one code fix (`debugPanel.ts`, applied earlier) + the session-end doc updates.
-- Cost (Opus 4.8 rates): well under the project baseline; nowhere near 2× — a normal tight session.
+- Input: moderate-high (read combat/wieldAction/controller/playerRig/input source + iterative harness debug output + docs).
+- Output: moderate — the cursor-trap fix, the dynamic aim-twist, the `--scenario` harness (~120 LOC of new harness), and the session-end doc updates.
+- Cost (Opus 4.8 rates): around the project baseline; the iterative harness runs (find-and-fix the rAF-throttle + tutorial-overlay footguns) were the bulk. Not flagged ≥2×.
 
-Notable: ACM's real finding was the **D146** verification ceiling — the headless preview MCP can't exercise per-frame behavior because the hidden tab freezes rAF. This is now canon so future sessions don't re-discover it; live-feel work routes to a foreground tab or the Playwright harness.
+Notable: ACN turned D146's "can't verify live behavior" ceiling into a working recipe (D149) — drive the ticking game from Node-side waits (the game survives the hidden-tab rAF throttle via its setTimeout fallback) + pre-clear the LMB-gating tutorial overlay. The rifle "didn't fire" scare was that overlay gate, not a combat bug.
 
 ---
 
 ## Commit handoff
 
-Per CLAUDE.md (session-end auto-runs commit + tag + push). ACM is a tight verification + fix session:
-- Code: `src/debug/debugPanel.ts` (debug `triggerStorm` now delegates to `weather.triggerStorm`/`armWall`).
-- Docs: changelog ACM, CLAUDE.md (Last shipped + ACN-next), roadmap (ACM shipped + ACN-next pointer), decisions **D146** (headless-preview rAF freeze blocks live-feel verification; debug-hooks-must-delegate corollary), backlog (visual-triage now 🟡 partial + live-feel remainder), this report, next-session-prompt ACN.
+Per CLAUDE.md (session-end auto-runs commit + tag + push). ACN is a bug-fix + tooling + verification session:
+- Code: `src/core/input.ts` + `src/main.ts` (cursor-trap fix — deterministic skipLock, D147), `src/player/playerRig.ts` + `src/config/tuning.ts` (dynamic aim-twist, D148), `scripts/rig-shot.mjs` (live `--scenario` harness + tutorial pre-dismiss, D149).
+- Docs: changelog ACN, CLAUDE.md (Last shipped + ACO-next), roadmap (ACN shipped + visual-triage marked done), decisions **D147/D148/D149**, backlog (visual-triage done + aim-twist feel-tune follow-up), this report, next-session-prompt ACO.

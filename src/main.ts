@@ -8,7 +8,7 @@ import { makeRng } from './core/rng.ts';
 import { createScene } from './core/scene.ts';
 import { createLights, updateLighting } from './core/lighting.ts';
 import { createLightPool } from './core/lightPool.ts';
-import { createInput, wireOverlays, endInputFrame } from './core/input.ts';
+import { createInput, wireOverlays, endInputFrame, pointerLockSuppressed } from './core/input.ts';
 import { startLoop } from './core/loop.ts';
 import { createPhysicsWorld } from './physics/world.ts';
 import { makePlayer } from './physics/bodies.ts';
@@ -489,7 +489,10 @@ installDebugPanel(ctx, {
   // just add the paused=false the 'lock' handler would have set. Idempotent.
   enterGame: (dev?: boolean) => {
     if (dev && !ctx.flags.devMode) { applyDevLoadout(ctx); ctx.flags.devMode = true; }
-    if (ctx.flags.titleActive) handoffToGame();
+    // ACN — skipLock: automated entry must NEVER acquire PointerLock (it would
+    // trap the OS cursor in the headless/offscreen window — the focus heuristic
+    // doesn't catch headless Playwright). Verification drives input via evals.
+    if (ctx.flags.titleActive) handoffToGame({ skipLock: true });
     ctx.flags.paused = false;
   },
 });
@@ -568,7 +571,7 @@ const title = createTitleScene();
 // into a "new" run).
 const hadSaveAtBoot = hasSave();
 
-function handoffToGame(): void {
+function handoffToGame(opts?: { skipLock?: boolean }): void {
   titleOverlay.hide();
   ctx.flags.titleActive = false;
   inGameEls.forEach((el) => { el.style.visibility = ''; });
@@ -602,13 +605,18 @@ function handoffToGame(): void {
   // OS focus. A real user clicking NEW GAME has focus by definition
   // (the click itself focuses the window first); an agent's
   // synthesized click in a side-window doesn't.
+  //
+  // ACN — the focus/visibility heuristic is NOT enough for HEADLESS
+  // PLAYWRIGHT (`npm run rig-shot`): its page reports visible + sized +
+  // hasFocus()===true, so `pointerLockSuppressed` returns false and the
+  // lock fired anyway, trapping the user's OS cursor in the harness's
+  // offscreen top-left window. The automated-entry path (`enterGame` DEV
+  // hook) now passes `skipLock: true` so it NEVER locks regardless of the
+  // heuristic — verification drives camera/input via evals, never the real
+  // mouse, so it has no use for PointerLock. The heuristic stays for stray
+  // preview CLICKS on the start overlay (hidden Claude-Preview tab path).
   const canvas = three.renderer.domElement;
-  const isPreviewLike = import.meta.env.DEV && (
-    document.hidden ||
-    canvas.width === 0 || canvas.height === 0 ||
-    !document.hasFocus()
-  );
-  if (!isPreviewLike) {
+  if (!opts?.skipLock && !pointerLockSuppressed(canvas)) {
     ctx.input.controls.lock();
   }
   setTimeout(() => {

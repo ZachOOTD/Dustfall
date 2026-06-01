@@ -80,6 +80,27 @@ export function endInputFrame(input: InputBundle): void {
   input.wheel = 0;
 }
 
+/** True when PointerLock acquisition should be SUPPRESSED — a DEV/preview/
+ *  automation context where grabbing PointerLock would confine the real OS
+ *  cursor to an offscreen/unfocused window (the "cursor stuck in the top-left
+ *  invisible box" bug). Shared by every `controls.lock()` call site so the
+ *  guard logic lives in ONE place (ABL/ABN history; ACN hardening).
+ *
+ *  ⚠ This heuristic is NOT sufficient on its own for HEADLESS PLAYWRIGHT — its
+ *  page reports `visibilityState:"visible"`, a sized canvas, AND
+ *  `document.hasFocus() === true`, so all three signals read "real user" and
+ *  the guard does NOT fire. The deterministic fix for the automated-entry path
+ *  is `handoffToGame({ skipLock: true })` (the `enterGame` DEV hook passes it);
+ *  this heuristic remains as defense-in-depth for stray preview CLICKS on the
+ *  start overlay (which the hidden Claude-Preview tab path does catch). */
+export function pointerLockSuppressed(canvas: HTMLCanvasElement): boolean {
+  return import.meta.env.DEV && (
+    document.hidden ||
+    canvas.width === 0 || canvas.height === 0 ||
+    !document.hasFocus()
+  );
+}
+
 /** Wire DOM overlays (start, death) to controls. Called once at boot. */
 export function wireOverlays(ctx: GameContext): void {
   const startOverlay = document.getElementById('start-overlay');
@@ -89,7 +110,11 @@ export function wireOverlays(ctx: GameContext): void {
     // Browser autoplay policy: audio context must start under a user gesture.
     ensureAudioStarted();
     startSoundscape();
-    ctx.input.controls.lock();
+    // ACN — guard against an automated/preview click trapping the OS cursor
+    // (a real user clicking "begin" has focus → suppressed=false → locks fine).
+    if (!pointerLockSuppressed(ctx.three.renderer.domElement)) {
+      ctx.input.controls.lock();
+    }
   });
   ctx.input.controls.addEventListener('lock', () => {
     startOverlay.classList.add('hidden');

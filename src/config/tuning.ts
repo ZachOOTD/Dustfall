@@ -1216,10 +1216,12 @@ export const Tuning = {
   // ACL parallel-lane integration — promoted lane locals.
   // ────────────────────────────────────────────────────────────────
 
-  // ACL AIM TWIST-IK — subtle 3P upper-body aim twist on the lead shoulder.
-  AIM_TWIST_BIAS: 0.35,    // target aim-twist yaw (rad) the right shoulder leads toward in 3P
+  // ACL AIM TWIST-IK — 3P upper-body aim twist on the lead shoulder.
+  // ACN — made DYNAMIC: leads INTO turns by turn-rate, relaxing to the resting bias.
+  AIM_TWIST_BIAS: 0.18,    // resting aim-twist yaw (rad) the right shoulder holds when not turning (ACN: 0.35→0.18, the static value read too square)
   AIM_TWIST_CLAMP: 0.5,    // hard clamp on aim twist magnitude (±rad)
   AIM_TWIST_LERP: 0.12,    // per-frame lerp factor toward target (smoothing)
+  AIM_TWIST_TURN_GAIN: 0.10, // (rad of lead) per (rad/sec of camera turn rate); lead winds INTO the turn (ACN)
 
   // ACL SPEEDER ANGULAR DAMPING — passive Y-yaw settle on the MOUNTED body.
   // Distinct from SPEEDER_UNMOUNTED_ANGULAR_DAMP_RATE_PER_S (2.5). At 1.2/s a

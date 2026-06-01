@@ -1,57 +1,51 @@
-# Session ACN — Kickoff Brief: finish the ACL live-feel triage in a TICKING environment
+# Session ACO — Kickoff Brief: foreground feel-tune of dynamic aim-twist, then breadth
 
-> ACM verified the STATIC layer of the ACL visual features (geometry, wiring, viewmodels — all
-> read correctly) but the headless preview MCP **cannot exercise per-frame behavior**: its tab is
-> `document.visibilityState:"hidden"`, so the browser throttles `requestAnimationFrame` to zero and
-> the game tick is FROZEN (D146). This session closes the remaining rule-8 debt — the *live feel* of
-> the ACL features — in an environment where the tick actually advances.
+> ACN closed the ACL rule-8 visual-triage debt: it fixed the Playwright cursor-trap, built a ticking
+> `--scenario` harness, made aim-twist DYNAMIC, and verified shrew-flee / aim-twist / rifle-fire all
+> PASS. What remains is a light FEEL pass on the new dynamic aim-twist (the harness underestimates the
+> real continuous-turn peak), then the project is open for breadth or a player-model follow-up.
 
 ## Read these now (in order)
-1. **CLAUDE.md** (auto-loaded) — rules; note rule 8 (visual iteration) + the tick order.
-2. **docs/session-end-report.md** — cumulative state through ACM (top "Current state" + "ACM scope" + "Suggested next").
-3. **docs/decisions.md** tail — **D146** (headless-preview rAF freeze blocks live verification — the load-bearing constraint for THIS session), D145 (sweeping storm = wall deriving intensity), D144 (SAVE_VERSION 14), D143 (lane orchestration), D138 (Playwright `rig-shot` harness), D107 (zero-asset).
-4. **docs/backlog.md** — the ACL block (🟡 visual-triage partial + the live-feel remainder, shrew-determinism, rifle-balance follow-ups).
-5. `shared-memory/iterative-polish-discipline.md` + `preview-screenshot-tips.md` + the project memory `dustfall_preview_gotchas.md`.
+1. **CLAUDE.md** (auto-loaded) — rules; note rule 8 (visual iteration), the tick order.
+2. **docs/session-end-report.md** — cumulative state through ACN (top "Current state" + "ACN scope" + "Suggested next").
+3. **docs/decisions.md** tail — **D149** (live-feel harness recipe: Node-driven sampling + pre-clear LMB-gating overlays), **D148** (dynamic aim-twist), **D147** (automated entry must deterministically skip PointerLock), **D146** (preview MCP can't tick — use the harness or foreground), D142 (lighting mood = the big realism lever), D107 (zero-asset).
+4. **docs/backlog.md** — the aim-twist feel-tune item + the rest of the backlog for breadth.
+5. `shared-memory/iterative-polish-discipline.md` + `preview-screenshot-tips.md` (now documents the hidden-tab rAF freeze + the harness recipe).
 
 ## What's already built
-A full singleplayer desert-survival loop + a believable stylized procedural player rig (skinned, dressed, PBR). ACL added (all tsc+boot-clean, statically triaged in ACM): aim twist-IK, speeder angular damping, worm twilight-breach audio attenuation, megaWreck ground panels, night-sky star twinkle/drift, a Dune sweeping sandstorm WALL, in-storm movement penalty, the amban rifle (ranged weapon), and the desert shrew (ambient creature). SAVE_VERSION 14.
+A full singleplayer desert-survival loop + a believable stylized procedural player rig (skinned, dressed, PBR, with dynamic aim-twist). ACL's 8 features are shipped + now fully triaged (ACM static + ACN live): night-sky stars, sweeping sandstorm wall, in-storm penalty, amban rifle, desert shrew, speeder damping, worm-audio attenuation, megaWreck panels. SAVE_VERSION 14. A Playwright `rig-shot` harness with static pose/closeup shots + live `--scenario` mode (shrew-flee/aim-twist/rifle).
 
-## ⚠ THE critical constraint (D146) — read before picking a verification path
-The preview MCP tab is hidden → **rAF is throttled to zero → the game tick does not advance** (`ctx.time.elapsed` is frozen; an rAF callback never fires). You worked around the `isPlaying` pointer-lock gate last session (`ctx.input.controls.isLocked = true`) but the rAF freeze is a hard browser-level block with no page-script override. **Static screenshots + sync state-evals still work** (that's how ACM verified geometry). **For anything that needs the tick — motion, feel, timed state machines, combat — DO NOT use the preview MCP.** Use one of:
-- **(A) Foreground `npm run dev`** in a real browser tab the human drives, then playtest + capture. (Simplest; needs a human at the keyboard for pointer-lock + input.)
-- **(B) Extend the Playwright `rig-shot` harness** (`scripts/rig-shot.mjs`) — its Chromium page is `visible`, so rAF runs. Add affordances to: equip the amban rifle + fire/reload, set `rig._aimTwist` / drive aim, and let a shrew flee. This is the autonomous path and the higher-value investment (reusable verification engine).
-
-## Session ACN focus — live-FEEL verification + tuning of the ACL features (rule 8)
-For each item: get it ticking (path A or B), observe the live behavior, critique honestly, iterate the `tuning.ts` ACL constants 3-5 rounds.
+## Session ACO focus — feel-tune dynamic aim-twist (foreground), then pick a breadth/polish direction
+The aim-twist mechanic is correct (turn-rate lead, D148) but its magnitude wants a human feel-judgment that the headless harness can't give (Node-side sampling is bursty/underestimates). This is a short top item; the bulk of ACO is whatever breadth/polish you pick after.
 
 ## Priority items (in order)
-1. **Decide + set up the ticking environment** — pick path A or B above. If B, extend `rig-shot.mjs` first (equip-item + aim-state + a creature-flee scenario). This unblocks everything else.
-2. **Shrew flee AI + feel** (`enemies/shrew.ts`; SHREW_FLEE_SPEED 3.2 / FLEE_DURATION 2.4 / SPOT_DISTANCE 7) — with the tick running + player within 7m, confirm idle/wander→flee fires, the bolt looks skittish (not jittery/stuck/teleporting), and it settles back. The logic reads correct + mirrors the lizard; this is feel-tuning, not a bug hunt (but watch for a real bug now that it can actually run).
-3. **3P aim-twist sweep** (`playerRig.ts` `_aimTwist`; AIM_TWIST_BIAS 0.35 / CLAMP 0.5 / LERP 0.12) — in 3P, confirm the upper body leads toward the camera naturally when turning/aiming; subtle, no clobbering the walk swing, no snap.
-4. **amban rifle fire/reload** (`combat.ts` ranged path; `items.ts`) — equip it, confirm the viewmodel reads as a rifle in-hand, it fires through the ranged path + reloads on R from scrap_bullet; sanity-check balance vs scrap_gun (range 60 / dmg 3 / cd 1.6 / mag 8).
-5. **Star twinkle/drift + storm-wall sweep in motion** (`sky.ts` STAR_* / `weather.ts` STORM_WALL_*) — static shots can't show animation. Confirm twinkle reads (not strobing/static), drift is slow, cloud occlusion fades stars in storms; trigger a storm (`__game.triggerStorm()` now arms the wall correctly) and watch the wall approach→engulf→pass.
+1. **Foreground aim-twist feel-tune** (`tuning.ts` AIM_TWIST_* + `playerRig.ts`) — run `npm run dev` in a real browser tab, go 3P, turn/strafe, and judge: does the upper body lead into turns naturally (not too stiff, not whippy, no snap, doesn't fight the walk swing)? Tune `AIM_TWIST_TURN_GAIN` (0.10 — likely bump toward 0.15-0.25), `AIM_TWIST_BIAS` (0.18 resting), `AIM_TWIST_LERP` (0.12 smoothing). Acceptance: reads as an aim-ready torso lead in motion.
+2. **Pick a breadth/polish direction** (choose one, or fan out an overnight):
+   - Another **fanned-out breadth overnight** (D143 lane+integrator pattern) — more procgen/POI/biome, creatures, audio, polish.
+   - **In-game lighting mood** (D142 — the biggest remaining in-game realism lever; whole-game aesthetic, so surface the direction before committing).
+   - **PM-D cloth physics** or **PM-S.3 torso skinning** (player-model depth).
+3. **(Optional) extend the `--scenario` harness** for star-twinkle/storm-sweep in-motion feel if you want those verified without a foreground watch (the recipe is in D149 — Node-driven, shrink canvas for tick-only sampling).
 
 ## Stretch / then
-- Another **fanned-out breadth overnight** (the D143 lane+integrator pattern) on more backlog (procgen/POI/biome, more creatures, audio, polish).
-- Player-model: PM-D cloth physics; or the in-game **lighting mood** (D142 — biggest in-game realism lever, whole-game aesthetic, surface first).
+- The continuous-polish + non-cycle backlog (chunk streaming A1, flagship→composite procgen, item-viewmodel fidelity remainder, per-item colliders).
 
 ## Autonomy contract
-Ambiguous → GDD pillars + decisions realism dial → D-entry → continue. Surface only on: D107 (asset), save bumps (D81), destructive git, whole-game aesthetic shifts (lighting mood).
+Ambiguous → GDD pillars + decisions realism dial → D-entry → continue. Surface only on: D107 (asset), save bumps (D81), destructive git, whole-game aesthetic shifts (lighting mood — D142).
 
 ## Stop conditions
-Wall-clock / budget · 3 fix-walls on one feature (cut/log) · catastrophic block · destructive attempt · **if no ticking environment can be established (path A needs a human; B walls), STOP and surface — do not fake live verification through the frozen preview (D146).**
+Wall-clock / budget · 3 fix-walls on one feature (cut/log) · catastrophic block · destructive attempt.
 
-## Notable footguns
-- **D146**: the preview MCP tab is hidden → rAF frozen → no live behavior. This is THE gotcha this session must route around.
-- **D145**: don't make downstream systems read storm-wall geometry — they read `weather.intensity`; the wall only produces it. **D144**: SAVE_VERSION is 14; further save changes are additive + bump to 15. **Tick order** has `updateShrews` after `updateLizards`.
-- D107 procedural-only; rule 2 magic-numbers→tuning.ts; rule 6 no innerHTML; rule 7 box depth ≥10cm.
+## Notable footguns (verification)
+- **D149**: to verify LIVE behavior, use `npm run rig-shot --scenario=<name>` (ticking) or a foreground tab — NOT the preview MCP (D146, hidden-tab rAF freeze). In the harness: drive/sample from Node (in-page rAF is throttled), and the tutorial overlay is auto-dismissed (else it gates LMB).
+- **D147**: the harness no longer traps the cursor (`enterGame` skips PointerLock). Don't re-introduce a lock on any automated-entry path.
+- **D148**: aim-twist is dynamic now — `_aimTwist` is driven by turn-rate, not a constant. Don't revert to a static bias.
+- D107 procedural-only; rule 2 magic-numbers→tuning.ts; rule 6 no innerHTML; rule 7 box depth ≥10cm. SAVE_VERSION 14 (additive + bump to 15 for any save change).
 
 ## Verification protocol
-`npm run verify` (= `tsc --noEmit`) = type gate. QUALITY gate for the live feel = observe under a TICKING env + honest critique + iterate (3-5 rounds each), per rule 8. **Not the preview MCP** (D146).
+`npm run verify` (= `tsc --noEmit`) = type gate. FEEL gate for aim-twist = a foreground 3P playtest + honest critique + iterate (rule 8). Live behavior elsewhere = the `--scenario` harness.
 
 ## Begin block
-1. Read CLAUDE.md, session-end-report, decisions tail (esp. D146), backlog ACL block, the discipline + preview-gotcha docs.
+1. Read CLAUDE.md, session-end-report, decisions tail (D146-D149), backlog, the discipline docs.
 2. `npm run verify` baseline.
-3. Establish the ticking environment (path A or B) — this is priority item 1.
-4. TaskCreate one task per live-feel item (env-setup, shrew-flee, aim-twist, rifle, stars/storm-in-motion).
-5. Triage each in the ticking env: observe → critique → tune the ACL `tuning.ts` consts → re-observe, 3-5 rounds.
+3. Foreground `npm run dev`, feel-tune aim-twist (priority 1).
+4. TaskCreate the chosen breadth/polish direction; execute (fan out if independent — D143).
