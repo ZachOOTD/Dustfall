@@ -1061,6 +1061,35 @@ const _DEFS: Record<ItemId, ItemDef> = {
     },
   },
 
+  // ACR — desert shrew meat (mirror the lizard-meat pair). Raw drops when a
+  // shrew is killed (damageShrew → 'take'); cooks on a fire via COOK_MAP.
+  raw_shrew_meat: {
+    id: 'raw_shrew_meat',
+    name: 'DEAD SHREW',
+    glyph: 'ʂ',
+    description: 'a limp desert shrew — small, but meat is meat',
+    stackable: true,
+    maxStack: 4,
+    onUse(ctx, _slot) {
+      ctx.stats.hunger = Math.min(1, ctx.stats.hunger + 0.10);
+      ctx.stats.health = Math.max(0, ctx.stats.health - 0.05);
+      return { consumed: true, message: 'raw meat — you gag a little' };
+    },
+  },
+
+  cooked_shrew_meat: {
+    id: 'cooked_shrew_meat',
+    name: 'COOKED SHREW',
+    glyph: '≈',
+    description: 'a small shrew, charred over a fire',
+    stackable: true,
+    maxStack: 4,
+    onUse(ctx, _slot) {
+      ctx.stats.hunger = Math.min(1, ctx.stats.hunger + 0.28);
+      return { consumed: true, message: 'stringy, but it fills you a little' };
+    },
+  },
+
   cooked_lizard_meat: {
     id: 'cooked_lizard_meat',
     name: 'COOKED MEAT',

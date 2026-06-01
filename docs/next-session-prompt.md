@@ -1,12 +1,12 @@
-# Session ACR — Kickoff Brief: foreground repro+fix of the velocity-dependent bugs, then the larger deferred bugs
+# Session ACS — Kickoff Brief: a FOREGROUND pass (velocity/feel bugs + confirm shrew take/cook), then feature-sized backlog
 
-> Of the 5 user bugs: night-dust ✓ACO, panel-clipping→buriedCockpit ✓ACP. ACQ then did a backlog
-> archive sweep + 3 quick wins (Pebble rename, iron-stake model, speeder mount look-gate). What REMAINS
-> from the user-bug list is FOREGROUND-only (D150): speeder-dismount footprints + the random speed spike
-> (velocity/real-rate-dependent, can't be reproduced headlessly) + the dynamic-aim-twist feel-tune
-> (D148). Then the larger deferred: sled-vs-POI collision + carcass-tow cut-loose (ACF). The backlog
-> also has more quick wins (rope-leaves-inventory-while-deployed, shrew catch/cook, megaWreck catwalk
-> panels) if a foreground pass isn't wanted.
+> Recent: night-dust ✓ACO, panel-clipping ✓ACP, 3 quick wins + archive ✓ACQ, **shrew catch/cook ✓ACR**
+> (+ archive round 2). The headless-tractable backlog is now largely cleared. What remains needs a
+> FOREGROUND `npm run dev` pass (D150 — can't be headless-verified): (1) speeder-dismount footprints,
+> (2) random speed spike, (3) dynamic-aim-twist feel-tune (D148), (4) **confirm the new shrew take+cook
+> loop** (ACR shipped it + verified the kill headlessly, but the take/cook raycast-aim needs a live
+> playtest — if it's broken, it's likely a small interaction-target fix). Then the feature-sized backlog:
+> sled-vs-POI collision, carcass-tow cut-loose (ACF), rope-leaves-inventory-while-deployed.
 
 ## Read these now (in order)
 1. **CLAUDE.md** (auto-loaded) — rules; note the tick order + rule 8.

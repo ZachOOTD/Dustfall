@@ -2,7 +2,14 @@
 
 Cumulative state. Rewritten end-to-end at each `/session-end`.
 
-**Current state**: Session ACQ shipped (2026-06-01 — backlog archive sweep + 3 quick wins). 98 sessions post-MVP. `npm run verify` (tsc) PASS. **SAVE_VERSION 14** (unchanged). ACQ pruned the stale/completed backlog cruft (10 ACL-shipped duplicates + the procedural-character-arc followup pile + the obsolete FP-wraps entry) and shipped three quick wins: companion → **"Pebble"** rename (all player-facing copy), **iron stake model fixes** (removed sand mound + reseated rope-loop near the top touching the shaft + aligned `rope.ts` endpoint to the actual ring via shared `STAKE_LOOP_OFFSET_*` — screenshot-verified), and **speeder mount gated on looking at the bike** (`SPEEDER_MOUNT_LOOK_DOT` 0.5). New `--scenario=stake` harness. **Next session (ACR) = the still-open user bugs**: foreground-only footprint/speed/aim-twist (D150), then sled-vs-POI collision + carcass-tow cut-loose (deferred).
+**Current state**: Session ACR shipped (2026-06-01 — backlog archive round 2 + desert shrew CATCH/COOK feature). 99 sessions post-MVP. `npm run verify` (tsc) PASS. **SAVE_VERSION 14** (unchanged — shrew save is additive). ACR shipped the headline remaining backlog feature: **shrew catch/cook**, a 1:1 mirror of the lizard kill→loot pipeline (combat dispatch → `damageShrew` → dead-pose/'take' → `raw_shrew_meat`/`cooked_shrew_meat` → cook; save persists dead/looted). tsc clean; harness confirmed the kill; the take+cook loop is owed a foreground confirm (headless raycast-aim on a fleeing critter isn't scriptable — the take case is a verbatim lizard copy). Also finished the backlog archive hygiene (megaWreck panels confirmed already-done; ACL-shipped duplicates + procedural-arc cruft pruned). **Next session (ACS) = foreground pass** for the velocity/feel bugs (D150) + confirm the shrew take/cook, then the remaining feature-sized backlog (sled-POI collision, carcass-tow, rope-inventory).
+
+## ACR scope (this session) — backlog archive round 2 + shrew catch/cook
+
+- **Archive**: megaWreck catwalk panels confirmed already-shipped (ACL #9/#10) → archived; the ACL-duplicate + procedural-arc-followup cruft pruned. Active backlog now reflects only genuinely-open work.
+- **Shrew catch/cook** (SHIPPED): `shrew.ts` (`'dead'` state + `damageShrew`/`applyDeadShrewPose`/`lootShrew` + dead-skip), `combat.ts` (`getShrewForCollider→damageShrew` dispatch), `interaction.ts` (`'shrews'` registry + dead-shrew target + `'take'`→`raw_shrew_meat`), `items.ts`/`types.ts` (`raw_/cooked_shrew_meat`) + COOK_MAP, `save.ts` (persist/restore dead+looted, mirror lizard). Verified the kill via `--scenario=shrew-kill`; take+cook loop foreground-confirm owed.
+
+## ACQ scope (this session) — backlog archive + quick wins ACQ pruned the stale/completed backlog cruft (10 ACL-shipped duplicates + the procedural-character-arc followup pile + the obsolete FP-wraps entry) and shipped three quick wins: companion → **"Pebble"** rename (all player-facing copy), **iron stake model fixes** (removed sand mound + reseated rope-loop near the top touching the shaft + aligned `rope.ts` endpoint to the actual ring via shared `STAKE_LOOP_OFFSET_*` — screenshot-verified), and **speeder mount gated on looking at the bike** (`SPEEDER_MOUNT_LOOK_DOT` 0.5). New `--scenario=stake` harness. **Next session (ACR) = the still-open user bugs**: foreground-only footprint/speed/aim-twist (D150), then sled-vs-POI collision + carcass-tow cut-loose (deferred).
 
 ## ACQ scope (this session) — backlog archive + quick wins
 
@@ -246,27 +253,27 @@ Existing tunables of interest:
 
 ## State at session end
 
-- **Git status**: ACP committed + tagged + pushed (`0e1c835`, `session-ACP`). ACQ dirty: `src/enemies/companion.ts` + `src/player/interaction.ts` + `src/inventory/items.ts` + `src/ui/tutorial.ts` (Pebble), `src/world/stake.ts` + `src/world/rope.ts` (stake), `src/world/speeder.ts` (mount gate), `src/config/tuning.ts` (consts), `scripts/rig-shot.mjs` (`stake` scenario), `docs/` (incl. backlog archive). Commit handoff below.
-- **Branch**: `master`. **Save state**: localStorage **v14** (unchanged this session).
+- **Git status**: ACQ committed + tagged + pushed (`b84615c`, `session-ACQ`). ACR dirty: `src/enemies/shrew.ts` + `src/player/combat.ts` + `src/player/interaction.ts` + `src/inventory/items.ts` + `src/inventory/types.ts` + `src/persistence/save.ts` (shrew catch/cook), `scripts/rig-shot.mjs` (`shrew-kill` scenario), `docs/` (incl. backlog archive round 2). Commit handoff below.
+- **Branch**: `master`. **Save state**: localStorage **v14** (shrew dead/looted persistence is additive — no version bump).
 - **Ports bound**: dev servers may linger from the preview-MCP (5180) / rig-shot harness (5191); both dev-only.
-- **Rule-8 status**: the stake fix is screenshot-verified (`--scenario=stake`). The Pebble rename is string-only (tsc-safe). The speeder mount look-gate is code logic (reason-verified + tsc; low-risk — `dot ≥ 0.5` requires facing the bike). No un-verified visual claims.
+- **Rule-8 / verification status**: shrew catch/cook is tsc-clean + a 1:1 lizard mirror; the harness confirmed the KILL (deadState='dead' + 'take' tag). The take+cook loop is NOT headless-verified (raycast-aim on a fleeing critter isn't scriptable) — owed a foreground confirm. The take CASE is a verbatim lizard copy, so the risk is low; flagged honestly, not claimed as fully verified.
 
 ---
 
 ## Token spend this session (estimated)
 
-ACQ was a backlog-cleanup + small-quick-wins session (no fan-out; 1 Playwright stake-shot run).
+ACR was a backlog-archive + one-feature session (no fan-out; several Playwright shrew-kill verify runs).
 
-- Input: high (full backlog read + companion/stake/rope/speeder source + docs).
-- Output: moderate — the archive prune, 3 quick-win code changes, a harness scenario, and the session-end docs.
-- Cost (Opus 4.8 rates): around the project baseline. Not flagged ≥2×.
+- Input: high (lizard kill→loot template + shrew/combat/interaction/items/save source + full backlog + docs).
+- Output: high — the 6-file shrew feature + a harness scenario + the archive prune + the session-end docs.
+- Cost (Opus 4.8 rates): somewhat above baseline (the feature + iterative harness-verify runs). Not flagged ≥2×.
 
-Notable: a long-overdue backlog prune (the active list had ~10 ACL-shipped duplicates + a procedural-character-arc followup pile never cleaned up) — the active backlog now reflects genuinely-open work.
+Notable: shipped a genuine feature (shrew catch/cook) by mirroring a proven pattern (lizard) — tsc + the mirror structure carried most of the correctness; only the headless raycast-aim verification fell short (a harness limitation, flagged for foreground confirm).
 
 ---
 
 ## Commit handoff
 
-Per CLAUDE.md (session-end auto-runs commit + tag + push). ACQ is a cleanup + quick-wins session:
-- Code: `companion.ts`/`interaction.ts`/`items.ts`/`tutorial.ts` (Pebble rename), `stake.ts`/`rope.ts` (stake model + endpoint), `speeder.ts` (mount look-gate), `tuning.ts` (`STAKE_LOOP_OFFSET_*` + `SPEEDER_MOUNT_LOOK_DOT`), `scripts/rig-shot.mjs` (`--scenario=stake`).
-- Docs: changelog ACQ, CLAUDE.md (Last shipped + ACR-next), roadmap (ACQ shipped), backlog (archive prune), this report, next-session-prompt. No new D-entry (project-specific quick wins; new consts are tuning, not decisions).
+Per CLAUDE.md (session-end auto-runs commit + tag + push). ACR is an archive + one-feature session:
+- Code: `shrew.ts` (dead/damage/loot/pose), `combat.ts` (dispatch branch), `interaction.ts` (`'shrews'` registry + take case + COOK_MAP), `items.ts` + `types.ts` (shrew-meat items), `save.ts` (persist/restore), `scripts/rig-shot.mjs` (`--scenario=shrew-kill`).
+- Docs: changelog ACR, CLAUDE.md (Last shipped + ACS-next), roadmap (ACR shipped), backlog (megaWreck archived + shrew → SHIPPED), this report, next-session-prompt. No new D-entry (the shrew feature is a faithful mirror of the existing lizard pattern; no novel decision).

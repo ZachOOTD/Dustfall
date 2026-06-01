@@ -25,6 +25,11 @@ import {
   type LizardState,
 } from '../enemies/lizard.ts';
 import {
+  applyDeadShrewPose,
+  lootShrew,
+  type ShrewState,
+} from '../enemies/shrew.ts';
+import {
   applyRaiderDeadPose,
   type RaiderState,
 } from '../enemies/raider.ts';
@@ -170,7 +175,7 @@ export interface SaveV1 {
   /** ACL — v14: desert shrews. Optional + additive (absent on pre-v14 saves,
    *  where shrews rebuild from procgen). y is re-derived from terrain on load;
    *  transient flee/wander needn't persist (state restores as-is). */
-  shrews?: Array<{ id: number; x: number; z: number; state: 'idle' | 'wander' | 'flee' }>;
+  shrews?: Array<{ id: number; x: number; z: number; state: ShrewState }>;
   /** ACL — v14: sweeping sandstorm-wall state (plain data struct; no THREE
    *  objects). Optional + additive — absent on pre-v14 saves, which default
    *  to the dormant wall from createWeather and re-derive intensity on the
@@ -832,6 +837,13 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
   //    no `shrews` field — boot procgen stands as-is. y re-derives from
   //    terrain (shrews are not persisted with y). ──
   if (save.shrews) {
+    // ACR — shrews looted (killed + meat taken) before save were removed from
+    // the list, so they're ABSENT from save.shrews → lootShrew them now so boot
+    // procgen doesn't respawn them alive (mirrors the lizard restore above).
+    const savedShrewIds = new Set(save.shrews.map((s) => s.id));
+    for (const s of ctx.shrews.list.slice()) {
+      if (!savedShrewIds.has(s.id)) lootShrew(s, ctx);
+    }
     for (const saved of save.shrews) {
       const shrew = ctx.shrews.list.find((s) => s.id === saved.id);
       if (!shrew) continue;
@@ -840,6 +852,7 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
       shrew.pos.set(saved.x, gy + 0.04, saved.z);
       shrew.mesh.position.copy(shrew.pos);
       shrew.body.setNextKinematicTranslation({ x: saved.x, y: gy + 0.04, z: saved.z });
+      if (saved.state === 'dead') applyDeadShrewPose(shrew);   // ACR — restore dead flop + 'take' tag
     }
   }
 

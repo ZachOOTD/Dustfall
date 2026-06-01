@@ -20,6 +20,7 @@ import { Tuning } from '../config/tuning.ts';
 import type { ItemId } from '../inventory/types.ts';
 import { damageRaider, getRaiderForCollider } from '../enemies/raider.ts';
 import { damageLizard, getLizardForCollider, knockbackLizard } from '../enemies/lizard.ts';
+import { damageShrew, getShrewForCollider } from '../enemies/shrew.ts';
 import { damageSandWorm, getSandWormForCollider } from '../enemies/sandWorm.ts';
 import { playSwing, playHit, playLizardSquish, playReloadGun } from '../audio/audio.ts';
 
@@ -280,6 +281,13 @@ function dispatchHit(
     if (spec.knockbackM && spec.knockbackM > 0) {
       knockbackLizard(l, _fwd, spec.knockbackM, ctx);
     }
+    return;
+  }
+  const shrew = getShrewForCollider(collider.handle);
+  if (shrew) {
+    playLizardSquish();   // ACR — reuse the small-critter squish for the shrew
+    // 1-HP critter like the lizard — any non-zero damage kills.
+    damageShrew(shrew, Math.max(1.0, damage), ctx);
     return;
   }
   const worm = getSandWormForCollider(collider.handle);

@@ -27,11 +27,13 @@ import { createSkinMaterial } from '../world/skinMaterial.ts';
 import type { Terrain } from '../world/terrain.ts';
 import { Tuning } from '../config/tuning.ts';
 
-export type ShrewState = 'idle' | 'wander' | 'flee';
+export type ShrewState = 'idle' | 'wander' | 'flee' | 'dead';
 
 export interface Shrew {
   id: number;
   state: ShrewState;
+  /** ACR — true once the player has cut the meat (dead body removed). */
+  looted: boolean;
   mesh: THREE.Group;
   body: RAPIER.RigidBody;
   collider: RAPIER.Collider;
@@ -246,6 +248,7 @@ export function spawnShrew(
   const shrew: Shrew = {
     id,
     state: 'idle',
+    looted: false,
     mesh,
     body,
     collider,
@@ -260,6 +263,40 @@ export function spawnShrew(
   _colliderToShrew.set(collider.handle, shrew);
   _shrews.push(shrew);
   return shrew;
+}
+
+/** ACR — tag the dead shrew's mesh as a 'take' interactable yielding meat. */
+function tagShrewTake(root: THREE.Object3D, id: number): void {
+  root.traverse((o) => {
+    o.userData.interactType = 'take';
+    o.userData.interactId = id;
+    o.userData.interactRegistry = 'shrews';
+  });
+}
+
+/** ACR — apply the dead-shrew visual + 'take' retag. Safe to call on a fresh
+ *  restore where state is already 'dead' (save/load). */
+export function applyDeadShrewPose(shrew: Shrew): void {
+  shrew.mesh.rotation.z = Math.PI / 2;   // flop on its side
+  tagShrewTake(shrew.mesh, shrew.id);
+}
+
+/** ACR — combat hit kills the shrew (1-HP critter, like the lizard). Flops the
+ *  body on its side + retags it as a 'take' yielding raw_shrew_meat. */
+export function damageShrew(shrew: Shrew, _dmg: number, _ctx: GameContext): void {
+  if (shrew.state === 'dead') return;
+  shrew.state = 'dead';
+  applyDeadShrewPose(shrew);
+}
+
+/** ACR — player cut the meat: remove the dead shrew from world + registry. */
+export function lootShrew(shrew: Shrew, ctx: GameContext): void {
+  shrew.looted = true;
+  ctx.three.scene.remove(shrew.mesh);
+  _colliderToShrew.delete(shrew.collider.handle);
+  ctx.physics.world.removeRigidBody(shrew.body);
+  const idx = _shrews.indexOf(shrew);
+  if (idx >= 0) _shrews.splice(idx, 1);
 }
 
 /** ACL DESERT SHREW — biome-aware procgen scatter, mirroring
@@ -354,6 +391,14 @@ export function updateShrews(ctx: GameContext, dt: number): void {
   const elapsed = ctx.time.elapsed;
 
   for (const s of _shrews) {
+    if (s.state === 'dead') {
+      // ACR — dead body rests on the ground; no AI. (Looted bodies are
+      // already removed from _shrews by lootShrew.)
+      const gy = ctx.terrain.heightAt(s.pos.x, s.pos.z);
+      s.pos.y = gy + TERRAIN_OFFSET;
+      s.mesh.position.copy(s.pos);
+      continue;
+    }
     _toPlayer.copy(camera.position).sub(s.pos);
     _toPlayer.y = 0;
     const distSq = _toPlayer.lengthSq();

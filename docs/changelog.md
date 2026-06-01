@@ -3,6 +3,39 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ACR — 2026-06-01 — Backlog archive (round 2) + desert shrew CATCH/COOK feature ✓ verify pass (tsc clean)
+
+`verified` — `npm run verify` (tsc) PASS; harness confirmed the shrew KILL (deadState + 'take' tag).
+Continued clearing the backlog: more archive hygiene + the headline remaining feature.
+
+**Backlog archive (round 2):** confirmed the "megaWreck catwalk panel reachability" item was ALREADY
+done (ACL added the 2 ground panels #9/#10 — archived the stale entry). Earlier in the session also
+pruned 10 ACL-shipped duplicates + the procedural-character-arc followup pile + the obsolete
+FP-forearm-wraps entry (carried from the ACQ-tail cleanup). The active backlog now reflects only
+genuinely-open work.
+
+**Shipped — desert shrew CATCH/COOK** (the headline remaining backlog feature; a 1:1 mirror of the
+lizard kill→loot pipeline):
+- `shrew.ts`: `'dead'` ShrewState + `looted` field + `damageShrew()` (kill → flop + retag) +
+  `applyDeadShrewPose()` + `lootShrew()` (remove body + yield slot) + dead-skip in `updateShrews`.
+- `combat.ts`: `dispatchHit` branch — `getShrewForCollider → damageShrew` (the ACL shrew already had
+  the collider-lookup map, so the combat half was scaffolded).
+- `interaction.ts`: `'shrews'` registry + dead-shrew raycast target + the `'take'` case → adds
+  `raw_shrew_meat` + `lootShrew`; `COOK_MAP` `raw_shrew_meat → cooked_shrew_meat`.
+- `items.ts` + `types.ts`: new `raw_shrew_meat` / `cooked_shrew_meat` items (mirror the lizard meat).
+- `save.ts`: persist + restore shrew `dead`/`looted` state (widened state type; absent-→-loot +
+  dead-→-applyDeadShrewPose on load — mirror the lizard restore). Additive, no version bump.
+- **Verification**: tsc clean; the `--scenario=shrew-kill` harness confirmed the kill path
+  (deadState='dead' + 'take' tag applied). The full take+cook loop is **owed a foreground confirm** —
+  the combat/interaction raycast-aim on a small fleeing AI critter isn't reliably scriptable headlessly
+  (the take CASE is a verbatim lizard-copy, so real play should be fine). "Burrows into sand" flavor
+  NOT added (the shrew flees) — separate polish.
+
+**Harness (`scripts/rig-shot.mjs`):** added `--scenario=shrew-kill`.
+
+**Still open:** footprint/speed/aim-twist (foreground-only, D150); sled-vs-POI collision + carcass-tow
+cut-loose + rope-leaves-inventory (feature-sized).
+
 ## Session ACQ — 2026-06-01 — Backlog archive sweep + quick wins (Pebble rename, stake model, mount-look gate) ✓ verify pass (tsc clean)
 
 `verified` — `npm run verify` (tsc) PASS; stake fix screenshot-verified via a new `stake` harness scenario.

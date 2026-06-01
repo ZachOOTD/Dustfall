@@ -18,6 +18,7 @@ import { despawnPickup, findPickupById, spawnDroppedPickup } from '../pickups/pi
 import { findWaterSourceById } from '../world/waterSources.ts';
 import { findCactusById, harvestCactus } from '../world/cactus.ts';
 import { findLizardById, lootLizard } from '../enemies/lizard.ts';
+import { findShrewById, lootShrew } from '../enemies/shrew.ts';
 import { lootSandWorm } from '../enemies/sandWorm.ts';
 import { findLootContainerById } from '../world/lootContainers.ts';
 import { findFireById, addFuel, relightFire, attachGrillToFire } from '../world/fire.ts';
@@ -66,7 +67,7 @@ const _dir = new THREE.Vector3();
 interface InteractHit {
   type: InteractType;
   id: number;
-  registry: 'pickups' | 'waterSources' | 'cacti' | 'lizards' | 'sandWorms' | 'lootContainers' | 'fires' | 'tents' | 'largeTents' | 'bedrolls' | 'lanterns' | 'lockers' | 'salvageables' | 'journals' | 'speeder' | 'sleds' | 'companion' | 'stakes' | 'raiders';
+  registry: 'pickups' | 'waterSources' | 'cacti' | 'lizards' | 'shrews' | 'sandWorms' | 'lootContainers' | 'fires' | 'tents' | 'largeTents' | 'bedrolls' | 'lanterns' | 'lockers' | 'salvageables' | 'journals' | 'speeder' | 'sleds' | 'companion' | 'stakes' | 'raiders';
   distance: number;
   /** AAZ — optional sub-mesh discriminator. When the hit object's
    *  userData.interactSubKind is set, it's captured here so case handlers
@@ -79,6 +80,7 @@ const SALVAGE_DURATION = 1.5;        // legacy fallback; AAR pry uses Tuning.SAL
 // Map raw → cooked ItemIds (only items the player can actually cook here).
 const COOK_MAP: Partial<Record<ItemId, ItemId>> = {
   'raw_lizard_meat': 'cooked_lizard_meat',
+  'raw_shrew_meat': 'cooked_shrew_meat',
   'cactus_pulp': 'cooked_cactus_pulp',
   'raw_worm_meat': 'cooked_worm_meat',
   'lizard_on_a_stick_raw': 'lizard_on_a_stick_cooked',
@@ -193,6 +195,7 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
   for (const w of ctx.waterSources.list) w.hovered = false;
   for (const c of ctx.cacti.list) c.hovered = false;
   for (const l of ctx.lizards) l.hovered = false;
+  for (const s of ctx.shrews.list) s.hovered = false;
   for (const w of ctx.sandWorms.list) w.hovered = false;
   for (const f of ctx.fires.list) f.hovered = false;
   for (const t of ctx.tents.list) t.hovered = false;
@@ -242,6 +245,9 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
   for (const w of ctx.waterSources.list) targets.push(w.mesh);
   for (const c of ctx.cacti.list) if (!c.harvested) targets.push(c.mesh);
   for (const l of ctx.lizards) targets.push(l.mesh);
+  // ACR — dead (unlooted) shrews are E-take targets; live ones are LMB combat
+  // targets via the collider raycast in combat.ts, not [E] interactions.
+  for (const s of ctx.shrews.list) if (s.state === 'dead' && !s.looted) targets.push(s.mesh);
   // Sand worm corpses — only target dead, visible, unlooted worm meshes.
   // Live worms are LMB targets via combat.ts, not [E] interactions.
   for (const w of ctx.sandWorms.list) {
@@ -417,6 +423,26 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
         // Living lizard — no prompt for "attack" since LMB handles it; show
         // a passive "lizard" prompt as flavor.
         ctx.inventory.hover = { type: 'kill', distance: info.distance, promptNoun: 'lizard' };
+      }
+      return;
+    }
+
+    case 'shrews': {
+      // ACR — dead desert shrew → cut the meat (mirror the lizard take).
+      // Only dead shrews are raycast targets, so this only fires when dead.
+      const s = findShrewById(ctx.shrews.list, info.id);
+      if (!s || s.state !== 'dead') return;
+      s.hovered = true;
+      ctx.inventory.hover = { type: 'take', distance: info.distance, promptNoun: 'dead shrew', itemId: 'raw_shrew_meat' };
+      if (ctx.input.pressed.has('KeyE')) {
+        const slotIdx = addItem(ctx.inventory, 'raw_shrew_meat', undefined, ctx);
+        if (slotIdx < 0) {
+          ctx.ui.showToast('your bag is full');
+          return;
+        }
+        ctx.ui.showToast('you cut the meat from the shrew');
+        playPickup();
+        lootShrew(s, ctx);
       }
       return;
     }

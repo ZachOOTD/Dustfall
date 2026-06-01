@@ -64,18 +64,19 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      Prior milestones live in docs/changelog.md — do NOT accumulate "Prior milestone"
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
-**Last shipped**: Session ACQ — **backlog archive sweep + 3 quick wins**. Archived the stale/completed
-backlog cruft (10 ACL-shipped duplicates never pruned + the procedural-character-arc followup pile +
-the obsolete FP-wraps entry). Shipped quick wins: **companion → "Pebble"** rename (all player-facing
-copy); **iron stake model fixes** (removed the sand mound, reseated the rope-loop near the top touching
-the shaft, aligned `rope.ts` endpoint to the actual ring via shared `STAKE_LOOP_OFFSET_*` — screenshot-
-verified); **speeder mount gated on looking at the bike** (`SPEEDER_MOUNT_LOOK_DOT` 0.5, so E near it
-while facing away no longer mounts). New `--scenario=stake` harness. tsc clean.
+**Last shipped**: Session ACR — **backlog archive (round 2) + desert shrew CATCH/COOK feature**.
+Confirmed the megaWreck-catwalk-panel item was already done (ACL) + finished the backlog hygiene.
+Shipped the headline remaining feature: **shrew catch/cook** — a 1:1 mirror of the lizard kill→loot
+pipeline (`shrew.ts` dead-state + `damageShrew`/`lootShrew`, `combat.ts` dispatch branch,
+`interaction.ts` `'shrews'` take→`raw_shrew_meat`, new shrew-meat items + COOK_MAP, `save.ts`
+persist/restore). tsc clean; harness confirmed the KILL (`deadState='dead'` + 'take' tag). The full
+take+cook loop is **owed a foreground confirm** (raycast-aim on a small fleeing AI critter isn't
+headless-scriptable; the take case is a verbatim lizard-copy). New `--scenario=shrew-kill`.
 
-**Next session (ACR)**: the still-open user bugs — FOREGROUND-only (D150): footprint + speed-spike +
-aim-twist feel-tune via `npm run dev`. Then the larger deferred: sled-vs-POI collision (kinematic-vs-
-static shapecast) + carcass-tow cut-loose (ACF). More quick wins remain in the backlog. See
-[docs/next-session-prompt.md](docs/next-session-prompt.md).
+**Next session (ACS)**: the still-open user bugs are FOREGROUND-only (D150) — footprint + speed-spike +
+aim-twist feel-tune via `npm run dev` (+ confirm the shrew take/cook loop in the same pass). Then the
+remaining feature-sized backlog: sled-vs-POI collision, carcass-tow cut-loose, rope-leaves-inventory.
+See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 
