@@ -64,19 +64,16 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      Prior milestones live in docs/changelog.md — do NOT accumulate "Prior milestone"
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
-**Last shipped**: Session ACR — **backlog archive (round 2) + desert shrew CATCH/COOK feature**.
-Confirmed the megaWreck-catwalk-panel item was already done (ACL) + finished the backlog hygiene.
-Shipped the headline remaining feature: **shrew catch/cook** — a 1:1 mirror of the lizard kill→loot
-pipeline (`shrew.ts` dead-state + `damageShrew`/`lootShrew`, `combat.ts` dispatch branch,
-`interaction.ts` `'shrews'` take→`raw_shrew_meat`, new shrew-meat items + COOK_MAP, `save.ts`
-persist/restore). tsc clean; harness confirmed the KILL (`deadState='dead'` + 'take' tag). The full
-take+cook loop is **owed a foreground confirm** (raycast-aim on a small fleeing AI critter isn't
-headless-scriptable; the take case is a verbatim lizard-copy). New `--scenario=shrew-kill`.
+**Last shipped**: Session ACS — **carcass tow/harvest flow fix (ACF bug)**. Worked in parallel while
+the user playtested the foreground items. Found the real gap: harvest was BLOCKED while towing a worm
+carcass + a carved carcass went fully inert. Fix (`sandWorm.ts` + `interaction.ts`): carve meat with
+`E` while towing (LMB still cuts loose, shared `harvestWorm` helper); `lootSandWorm` keeps the tag
+while towed; the raycast still targets a looted-but-towed carcass — so tow/carve/cut-loose work in any
+order. tsc clean; logic-traced; owed a foreground confirm.
 
-**Next session (ACS)**: the still-open user bugs are FOREGROUND-only (D150) — footprint + speed-spike +
-aim-twist feel-tune via `npm run dev` (+ confirm the shrew take/cook loop in the same pass). Then the
-remaining feature-sized backlog: sled-vs-POI collision, carcass-tow cut-loose, rope-leaves-inventory.
-See [docs/next-session-prompt.md](docs/next-session-prompt.md).
+**Next session (ACT)**: fold in the user's playtest findings (footprint/speed/aim-twist + shrew
+take/cook + carcass-tow confirmations — all foreground, D150). Then the remaining feature-sized
+backlog: sled-vs-POI collision, rope-leaves-inventory. See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 

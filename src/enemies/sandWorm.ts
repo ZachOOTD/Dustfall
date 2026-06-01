@@ -693,10 +693,17 @@ export function applySandWormDeadPose(worm: SandWorm): void {
   tag(worm.mesh, 'take', worm.id);
 }
 
-/** Called when the player loots the corpse — untag and mark looted. */
+/** Called when the player loots the corpse — mark looted + untag.
+ *  ACS bugfix (ACF carcass-tow): if the carcass is currently being TOWED,
+ *  KEEP the interact tag so the player can still cut the rope loose (the
+ *  interaction's `towed` branch shows "cut carcass loose" regardless of
+ *  looted). Without this, looting an in-tow carcass left it moving with no
+ *  way to detach until the rope tore. Once cut loose (dragAnchor → none) the
+ *  target-push filter stops raycasting it, so the stale tag is harmless. */
 export function lootSandWorm(worm: SandWorm, ctx: GameContext): void {
   worm.looted = true;
-  untag(worm.mesh);
+  const towed = worm.dragAnchor !== undefined && worm.dragAnchor.kind !== 'none';
+  if (!towed) untag(worm.mesh);
   ctx.ui.showToast('you carve a slab of worm-flesh from the carcass');
 }
 

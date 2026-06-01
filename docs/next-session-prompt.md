@@ -1,12 +1,13 @@
-# Session ACS — Kickoff Brief: a FOREGROUND pass (velocity/feel bugs + confirm shrew take/cook), then feature-sized backlog
+# Session ACT — Kickoff Brief: fold in the user's playtest findings, then feature-sized backlog
 
-> Recent: night-dust ✓ACO, panel-clipping ✓ACP, 3 quick wins + archive ✓ACQ, **shrew catch/cook ✓ACR**
-> (+ archive round 2). The headless-tractable backlog is now largely cleared. What remains needs a
-> FOREGROUND `npm run dev` pass (D150 — can't be headless-verified): (1) speeder-dismount footprints,
-> (2) random speed spike, (3) dynamic-aim-twist feel-tune (D148), (4) **confirm the new shrew take+cook
-> loop** (ACR shipped it + verified the kill headlessly, but the take/cook raycast-aim needs a live
-> playtest — if it's broken, it's likely a small interaction-target fix). Then the feature-sized backlog:
-> sled-vs-POI collision, carcass-tow cut-loose (ACF), rope-leaves-inventory-while-deployed.
+> Recent: night-dust ✓ACO, panel-clipping ✓ACP, quick wins+archive ✓ACQ, shrew catch/cook ✓ACR,
+> carcass tow/harvest fix ✓ACS. The headless-tractable backlog is cleared. **The user ran a foreground
+> playtest** (footprint/speed/aim-twist + the shrew take/cook loop + the carcass-tow flow) — START by
+> reading their findings + fixing what they flagged (these are the D150 foreground-only items: (1)
+> speeder-dismount footprints, (2) random speed spike, (3) aim-twist feel-tune D148, (4) shrew take+cook
+> raycast/loop, (5) carcass tow/carve/cut-loose flow). If a shrew/carcass interaction is broken it's
+> likely a small interaction-target/aim fix. Then the remaining feature-sized backlog: sled-vs-POI
+> collision, rope-leaves-inventory-while-deployed.
 
 ## Read these now (in order)
 1. **CLAUDE.md** (auto-loaded) — rules; note the tick order + rule 8.

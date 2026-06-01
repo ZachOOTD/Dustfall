@@ -3,6 +3,25 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ACS — 2026-06-01 — Carcass tow/harvest flow fix (ACF bug) ✓ verify pass (tsc clean)
+
+`verified` — `npm run verify` (tsc) PASS. A focused fix for the ACF "carcass tow blocked after
+harvest" bug (worked in parallel while the user playtested the foreground/feel items).
+
+**Fixed — sandworm carcass tow/harvest flow** (`sandWorm.ts` + `interaction.ts`): the investigation
+found the real gap — harvest was BLOCKED while towing (the `towed` interaction branch returned before
+the loot branch), so a towed carcass couldn't be carved, and a carved (looted) carcass went fully
+inert (`lootSandWorm` untagged it + the raycast filtered out `looted` worms → no tie/cut-loose). Now:
+- the towed branch lets you **carve meat with `E` while towing** (LMB still cuts the rope loose) via a
+  shared `harvestWorm` helper (de-dups the on-foot loot path);
+- `lootSandWorm` KEEPS the interact tag while the carcass is towed (only untags an untowed carcass);
+- the interaction raycast still targets a dead worm that's looted-BUT-towed.
+Net: tow → carve → cut-loose work in any order; a carved-while-towed carcass stays cut-loose-able.
+Logic-traced + tsc-clean; owed a foreground confirm (in the user's current playtest).
+
+**Still open:** footprint/speed/aim-twist + shrew take/cook loop (foreground — the user is on it);
+sled-vs-POI collision + rope-leaves-inventory (feature-sized).
+
 ## Session ACR — 2026-06-01 — Backlog archive (round 2) + desert shrew CATCH/COOK feature ✓ verify pass (tsc clean)
 
 `verified` — `npm run verify` (tsc) PASS; harness confirmed the shrew KILL (deadState + 'take' tag).

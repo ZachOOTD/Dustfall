@@ -248,10 +248,13 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
   // ACR — dead (unlooted) shrews are E-take targets; live ones are LMB combat
   // targets via the collider raycast in combat.ts, not [E] interactions.
   for (const s of ctx.shrews.list) if (s.state === 'dead' && !s.looted) targets.push(s.mesh);
-  // Sand worm corpses — only target dead, visible, unlooted worm meshes.
-  // Live worms are LMB targets via combat.ts, not [E] interactions.
+  // Sand worm corpses — target dead, visible worm meshes that are still
+  // unlooted (tie/harvest) OR currently towed (so a looted-in-tow carcass can
+  // still be CUT LOOSE — ACS fix for the ACF carcass-tow bug). Live worms are
+  // LMB targets via combat.ts, not [E] interactions.
   for (const w of ctx.sandWorms.list) {
-    if (w.mesh.visible && w.state === 'dead' && !w.looted) {
+    const towed = w.dragAnchor !== undefined && w.dragAnchor.kind !== 'none';
+    if (w.mesh.visible && w.state === 'dead' && (!w.looted || towed)) {
       targets.push(w.mesh);
     }
   }
@@ -453,6 +456,18 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
       const worm = ctx.sandWorms.list.find((w) => w.id === info.id);
       if (!worm || worm.state !== 'dead') return;
       worm.hovered = true;
+      // ACS — shared harvest (used by both the towed branch + the on-foot loot
+      // branch). Yields 2-3 slabs from the giant carcass, then marks it looted.
+      const harvestWorm = (): void => {
+        const yieldN = 2 + Math.floor(Math.random() * 2);
+        let added = 0;
+        for (let i = 0; i < yieldN; i++) {
+          if (addItem(ctx.inventory, 'raw_worm_meat', undefined, ctx) >= 0) added++;
+        }
+        if (added === 0) { ctx.ui.showToast('your bag is full'); return; }
+        playPickup();
+        lootSandWorm(worm, ctx);
+      };
       // ACF — B1 Phase 3 follow-up: tow the carcass behind the SPEEDER only
       // (a 24m carcass is far too massive to drag on foot). Requires rope
       // wielded + mounted. LMB ties/cuts. Takes priority over the loot
@@ -462,15 +477,22 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
         const towed = worm.dragAnchor?.kind === 'speeder';
         const mounted = !!ctx.speeder?.mounted;
         if (towed) {
+          // ACS — while towing: LMB cuts the rope, E carves meat (if any is
+          // left). Harvesting no longer requires cutting loose first (closes
+          // the ACF gap where a towed carcass couldn't be carved + a carved
+          // carcass couldn't be cut loose — lootSandWorm keeps the tag while
+          // towed + the raycast still targets a towed-looted carcass).
           ctx.inventory.hover = {
             type: 'attach_rope',
             distance: info.distance,
-            promptNoun: 'cut carcass loose',
+            promptNoun: worm.looted ? 'cut carcass loose' : 'cut loose  ·  [E] carve meat',
           };
           if (ctx.input.mousePressed.has(0)) {
             worm.dragAnchor = { kind: 'none' };
             ctx.ui.showToast('carcass cut loose');
+            return;
           }
+          if (!worm.looted && ctx.input.pressed.has('KeyE')) harvestWorm();
           return;
         }
         if (ropeEq && mounted) {
@@ -502,20 +524,7 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
         promptNoun: 'worm-flesh',
         itemId: 'raw_worm_meat',
       };
-      if (ctx.input.pressed.has('KeyE')) {
-        // Yield 2-3 slabs — it's a giant worm.
-        const yieldN = 2 + Math.floor(Math.random() * 2);
-        let added = 0;
-        for (let i = 0; i < yieldN; i++) {
-          if (addItem(ctx.inventory, 'raw_worm_meat', undefined, ctx) >= 0) added++;
-        }
-        if (added === 0) {
-          ctx.ui.showToast('your bag is full');
-          return;
-        }
-        playPickup();
-        lootSandWorm(worm, ctx);
-      }
+      if (ctx.input.pressed.has('KeyE')) harvestWorm();
       return;
     }
 

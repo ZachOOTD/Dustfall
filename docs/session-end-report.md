@@ -2,7 +2,13 @@
 
 Cumulative state. Rewritten end-to-end at each `/session-end`.
 
-**Current state**: Session ACR shipped (2026-06-01 — backlog archive round 2 + desert shrew CATCH/COOK feature). 99 sessions post-MVP. `npm run verify` (tsc) PASS. **SAVE_VERSION 14** (unchanged — shrew save is additive). ACR shipped the headline remaining backlog feature: **shrew catch/cook**, a 1:1 mirror of the lizard kill→loot pipeline (combat dispatch → `damageShrew` → dead-pose/'take' → `raw_shrew_meat`/`cooked_shrew_meat` → cook; save persists dead/looted). tsc clean; harness confirmed the kill; the take+cook loop is owed a foreground confirm (headless raycast-aim on a fleeing critter isn't scriptable — the take case is a verbatim lizard copy). Also finished the backlog archive hygiene (megaWreck panels confirmed already-done; ACL-shipped duplicates + procedural-arc cruft pruned). **Next session (ACS) = foreground pass** for the velocity/feel bugs (D150) + confirm the shrew take/cook, then the remaining feature-sized backlog (sled-POI collision, carcass-tow, rope-inventory).
+**Current state**: Session ACS shipped (2026-06-01 — carcass tow/harvest flow fix, the ACF bug). 100 sessions post-MVP. `npm run verify` (tsc) PASS. **SAVE_VERSION 14** (unchanged). ACS (worked in parallel while the user playtested the foreground items) fixed the sandworm-carcass tow/harvest flow: harvest was blocked while towing + a carved carcass went inert; now you can carve meat with E while towing (LMB still cuts loose), `lootSandWorm` keeps the tag while towed, and the raycast targets a looted-but-towed carcass — so tow/carve/cut-loose work in any order (`sandWorm.ts` + `interaction.ts`, tsc-clean, foreground-confirm owed). **Next session (ACT) = fold in the user's playtest findings** (footprint/speed/aim-twist + shrew take/cook + carcass-tow confirmations — all foreground, D150), then the feature-sized backlog (sled-POI collision, rope-leaves-inventory).
+
+## ACS scope (this session) — carcass tow/harvest flow fix
+
+Fixed the ACF "carcass tow blocked after harvest" bug. Investigation: harvest was BLOCKED while towing (the `towed` interaction branch returned before the loot branch), so the dramatic "towed-then-harvested can't cut loose" was unreachable and a carved carcass went fully inert. Fix: the towed branch carves meat on `E` (LMB still cuts loose) via a shared `harvestWorm` helper; `lootSandWorm` keeps the tag while towed; the raycast targets a looted-but-towed carcass. tsc-clean + logic-traced; foreground-confirm owed (the user's current playtest covers it).
+
+## ACR scope (this session) — backlog archive round 2 + shrew catch/cook **SAVE_VERSION 14** (unchanged — shrew save is additive). ACR shipped the headline remaining backlog feature: **shrew catch/cook**, a 1:1 mirror of the lizard kill→loot pipeline (combat dispatch → `damageShrew` → dead-pose/'take' → `raw_shrew_meat`/`cooked_shrew_meat` → cook; save persists dead/looted). tsc clean; harness confirmed the kill; the take+cook loop is owed a foreground confirm (headless raycast-aim on a fleeing critter isn't scriptable — the take case is a verbatim lizard copy). Also finished the backlog archive hygiene (megaWreck panels confirmed already-done; ACL-shipped duplicates + procedural-arc cruft pruned). **Next session (ACS) = foreground pass** for the velocity/feel bugs (D150) + confirm the shrew take/cook, then the remaining feature-sized backlog (sled-POI collision, carcass-tow, rope-inventory).
 
 ## ACR scope (this session) — backlog archive round 2 + shrew catch/cook
 
@@ -253,27 +259,27 @@ Existing tunables of interest:
 
 ## State at session end
 
-- **Git status**: ACQ committed + tagged + pushed (`b84615c`, `session-ACQ`). ACR dirty: `src/enemies/shrew.ts` + `src/player/combat.ts` + `src/player/interaction.ts` + `src/inventory/items.ts` + `src/inventory/types.ts` + `src/persistence/save.ts` (shrew catch/cook), `scripts/rig-shot.mjs` (`shrew-kill` scenario), `docs/` (incl. backlog archive round 2). Commit handoff below.
-- **Branch**: `master`. **Save state**: localStorage **v14** (shrew dead/looted persistence is additive — no version bump).
+- **Git status**: ACR committed + tagged + pushed (`fb764d2`, `session-ACR`). ACS dirty: `src/enemies/sandWorm.ts` (lootSandWorm) + `src/player/interaction.ts` (towed branch + target-push + harvestWorm helper) + `docs/`. Commit handoff below.
+- **Branch**: `master`. **Save state**: localStorage **v14** (unchanged — ACS is interaction-logic only).
 - **Ports bound**: dev servers may linger from the preview-MCP (5180) / rig-shot harness (5191); both dev-only.
-- **Rule-8 / verification status**: shrew catch/cook is tsc-clean + a 1:1 lizard mirror; the harness confirmed the KILL (deadState='dead' + 'take' tag). The take+cook loop is NOT headless-verified (raycast-aim on a fleeing critter isn't scriptable) — owed a foreground confirm. The take CASE is a verbatim lizard copy, so the risk is low; flagged honestly, not claimed as fully verified.
+- **Rule-8 / verification status**: the carcass-tow fix is interaction logic — tsc-clean + fully flow-traced, not headless-exercised (the worm state machine + raycast make it finicky to script). Owed a foreground confirm — conveniently covered by the user's current playtest (tow a worm carcass, E to carve while towing, LMB to cut loose).
 
 ---
 
 ## Token spend this session (estimated)
 
-ACR was a backlog-archive + one-feature session (no fan-out; several Playwright shrew-kill verify runs).
+ACS was a single focused bug-fix session (interaction logic; no fan-out, no harness runs).
 
-- Input: high (lizard kill→loot template + shrew/combat/interaction/items/save source + full backlog + docs).
-- Output: high — the 6-file shrew feature + a harness scenario + the archive prune + the session-end docs.
-- Cost (Opus 4.8 rates): somewhat above baseline (the feature + iterative harness-verify runs). Not flagged ≥2×.
+- Input: moderate (sandWorm/interaction source + the ACF bug trace + docs).
+- Output: low-moderate — the carcass-tow fix + the session-end docs.
+- Cost (Opus 4.8 rates): below baseline. Not flagged.
 
-Notable: shipped a genuine feature (shrew catch/cook) by mirroring a proven pattern (lizard) — tsc + the mirror structure carried most of the correctness; only the headless raycast-aim verification fell short (a harness limitation, flagged for foreground confirm).
+Notable: the investigation reframed the bug — harvest was actually blocked WHILE towing (making the dramatic scenario unreachable), so the fix added harvest-while-towing rather than just the defensive cut-loose tag.
 
 ---
 
 ## Commit handoff
 
-Per CLAUDE.md (session-end auto-runs commit + tag + push). ACR is an archive + one-feature session:
-- Code: `shrew.ts` (dead/damage/loot/pose), `combat.ts` (dispatch branch), `interaction.ts` (`'shrews'` registry + take case + COOK_MAP), `items.ts` + `types.ts` (shrew-meat items), `save.ts` (persist/restore), `scripts/rig-shot.mjs` (`--scenario=shrew-kill`).
-- Docs: changelog ACR, CLAUDE.md (Last shipped + ACS-next), roadmap (ACR shipped), backlog (megaWreck archived + shrew → SHIPPED), this report, next-session-prompt. No new D-entry (the shrew feature is a faithful mirror of the existing lizard pattern; no novel decision).
+Per CLAUDE.md (session-end auto-runs commit + tag + push). ACS is a single bug-fix session:
+- Code: `sandWorm.ts` (`lootSandWorm` keeps the tag while towed), `interaction.ts` (towed branch carves on E + cuts loose on LMB; target-push includes looted-but-towed carcasses; shared `harvestWorm` helper).
+- Docs: changelog ACS, CLAUDE.md (Last shipped + ACT-next), roadmap (ACS shipped), backlog (ACF carcass-tow → FIXED), this report, next-session-prompt. No new D-entry (a bounded interaction-logic bug fix; no novel decision).
