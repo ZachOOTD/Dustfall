@@ -54,6 +54,18 @@ const _playerPos = new THREE.Vector3();
 // runs at ~10Hz instead of ~144Hz. The sun moves slowly enough that
 // stale shadows for ~6 frames are imperceptible.
 let _shadowUpdateCounter = 0;
+// ACU — shadow-swim-on-moving-player fix. The shadow camera FOLLOWS the player
+// every frame (updateLighting below), but a throttled shadow map leaves the
+// shadow PROJECTION matrix (light.shadow.matrix — only recomputed on the frames
+// the map regenerates) stale in between. While the player TRANSLATES, their
+// fragments get projected by the stale matrix into the stale map → the rig's
+// self-shadow drifts a little each frame and snaps back on every regen, reading
+// as flicker ON the moving player (static scenery doesn't move, so it's fine).
+// The ABL comment accounted for the sun's slow ROTATION but not the camera's
+// per-frame TRANSLATION with the player. Fix: force a regen on any frame the
+// player actually moved (the only time the staleness is visible); keep the
+// ~10Hz throttle when idle (ABL's perf win — imperceptible when nothing moves).
+let _lastShadowPx = Infinity, _lastShadowPy = Infinity, _lastShadowPz = Infinity;
 
 /** Runs every frame. Mutates ctx.time.sunHeight + ctx.time.sunDir + sky/light state. */
 export function updateLighting(ctx: GameContext, _dt: number): void {
@@ -63,10 +75,19 @@ export function updateLighting(ctx: GameContext, _dt: number): void {
   // ABL — perf: throttle shadow-map regen. Tag the renderer's
   // shadowMap.needsUpdate every N frames; in-between frames reuse the
   // already-rendered depth map. Invisible at the sun's angular speed.
+  // ACU — but ALSO force a regen on any frame the player MOVED, so the shadow
+  // projection matrix never goes stale relative to the following shadow camera
+  // (else the rig's self-shadow swims/flickers while walking — see note above).
   _shadowUpdateCounter++;
-  if (_shadowUpdateCounter >= Tuning.SHADOW_UPDATE_EVERY_N_FRAMES) {
+  const _shTr = ctx.player.body.body.translation();
+  const _playerMovedForShadow =
+    Math.abs(_shTr.x - _lastShadowPx) > 1e-3 ||
+    Math.abs(_shTr.y - _lastShadowPy) > 1e-3 ||
+    Math.abs(_shTr.z - _lastShadowPz) > 1e-3;
+  if (_playerMovedForShadow || _shadowUpdateCounter >= Tuning.SHADOW_UPDATE_EVERY_N_FRAMES) {
     renderer.shadowMap.needsUpdate = true;
     _shadowUpdateCounter = 0;
+    _lastShadowPx = _shTr.x; _lastShadowPy = _shTr.y; _lastShadowPz = _shTr.z;
   }
 
   // Sun rises at dayTime=0.25 (06:00), peaks at 0.5 (noon), sets at 0.75 (18:00).
