@@ -582,6 +582,11 @@ const _DEFS: Record<ItemId, ItemDef> = {
     maxStack: 1,
     wieldLmb: 'attack',
     thirdPersonScale: 1.35,    // ABY P3
+    // ACX — 3P grip. The gun is built barrel-forward (−Z) / grip-down, so by
+    // default the rig holds it barrel-at-the-ground. Rotate +X ~90° to bring the
+    // barrel onto the hand's natural down-forward reach (the same axis the
+    // machete's blade sits on) + lift so the grip seats in the fist.
+    handAttachTransform: { pos: [0, 0.03, -0.02], rot: [1.571, 0, 0] },
     onUse(_ctx, _slot) {
       // Firing is driven by combat.ts via LMB — `onUse` (E key) is a
       // no-op for ranged weapons.
@@ -741,6 +746,9 @@ const _DEFS: Record<ItemId, ItemDef> = {
     stackable: false,
     maxStack: 1,
     wieldLmb: 'attack',
+    // ACX — 3P grip (same −Z-barrel/grip-down family as scrap_gun): rotate the
+    // barrel onto the hand's forward reach + lift the grip into the fist.
+    handAttachTransform: { pos: [0, 0.03, -0.02], rot: [1.571, 0, 0] },
     onUse(_ctx, _slot) {
       return { consumed: false };
     },
@@ -873,6 +881,11 @@ const _DEFS: Record<ItemId, ItemDef> = {
     maxStack: 1,
     wieldLmb: 'attack',
     thirdPersonScale: 1.25,    // ACL — long but thin; modest 3P boost
+    // ACX — 3P grip (same −Z-barrel/grip-down family as the pistols, just
+    // longer with a rear stock): rotate the barrel onto the hand's forward
+    // reach + lift the pistol grip into the fist. Slight +Z so the long stock
+    // clears toward the elbow rather than jamming into the forearm.
+    handAttachTransform: { pos: [0, 0.03, 0.04], rot: [1.571, 0, 0] },
     onUse(_ctx, _slot) {
       // Ranged firing is driven by combat.ts via LMB; onUse (E) is inert.
       return { consumed: false };
