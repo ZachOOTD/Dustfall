@@ -3,6 +3,50 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ACV — 2026-06-02 — Overnight (partial): backlog clear + bug fixes + companion egg-cave ✓ verify pass (tsc clean)
+
+`verified` — `npm run verify` (tsc) PASS. A planned long overnight (bugs + easy features + one bigger
+feature). Budget-managed: shipped the bug/quick-win waves + the bigger feature (companion egg-cave),
+and pre-committed the visual/feel-tuning pile as scope-cuts deferred to ACW (per the approved plan).
+Three commits: `c9c71a6` (Wave 0-1), `2d4035b` (Wave 2 egg-cave).
+
+**Wave 0 — backlog reconciliation:** the three remaining "open bugs" were all already FIXED — speeder
+mount-without-seat (ACQ `SPEEDER_MOUNT_LOOK_DOT`), iron-stake model (ACQ+ACU), speeder angular-tilt
+(X/Z rotation-locked, non-issue). Closed in backlog.
+
+**Wave 1 — quick wins** (`c9c71a6`):
+- **#148 seated 3P rig on the speeder**: while mounted, the player capsule is parked at y=-2000, so
+  the rig dropped to the origin/underground ("3P rig broken on speeder"). Now seated at the rider
+  seat (bike body + yaw-rotated offset), facing bike-forward, with a seated pose. `SPEEDER_RIG_SEAT_Y/Z`
+  foreground-tunable; dedicated speeder 3P camera still deferred.
+- **#187 sled drag marks lightened** (`FOOTPRINT_SLED_COLOR_HEX` 0x3d2918 → 0x6e5236).
+- **#41 aim-twist turn-gain** 0.10 → 0.18.
+
+**Wave 2 — BIGGER FEATURE: companion egg-cave acquisition** (`2d4035b`, iteration-plan Cycle 7 core,
+D158): a NEW game no longer spawns the companion at the player's side — Pebble is acquired by finding
+the rock-biome cave and hatching an egg at its floor.
+- `rockyEntrance.ts` builds a glowing ovoid egg in the existing descent chamber; exported as
+  `placedCaveEgg` (placePOIs is void; egg is a singleton prop). New `CaveEgg` type.
+- `GameContext`: `egg: CaveEgg|null` + `flags.companionAcquired` (default false = new game).
+- `interaction.ts`: new `'eggs'` registry + target-push (only while `!companionAcquired`) + hatch
+  dispatch (E → `spawnCompanionAt(egg.pos)` + set acquired + remove egg). New `'hatch'` InteractType.
+- `companion.ts`: `despawnCompanion` (remove without granting a pod).
+- `save.ts`: additive `companionAcquired?: boolean` — **NO version bump** (D81); pre-feature saves
+  default TRUE so existing players keep Pebble. The egg needs no save field — it exists iff
+  `!companionAcquired`, re-derived at boot.
+- `main.ts`: boot spawns companion + builds egg (so Continue can patch); `handoffToGame` reconciles
+  per the flag — acquired → remove egg; not acquired → despawn the boot companion. DEV MODE keeps
+  the companion. Save/load traced across new-game / legacy-continue / not-yet-hatched / pod-in-bag.
+
+**Deferred to ACW** (pre-committed scope-cut — visual/feel-tuning, better with real iteration):
+speeder dust+engine FX (#183/#184), sandstorm wind pushes bodies (#146), 3P control-prompt
+positioning (#149), in-storm sensory degradation (#134), the egg/cave VISUAL polish (the egg is a
+placeholder emissive ovoid; chamber lighting), and the art/animation pile (item models, POI detail,
+creature gaits + shrew burrow, held-item 3P placement, 3P use-anims).
+
+**Owed a foreground confirm:** seated speeder pose (tune `SPEEDER_RIG_SEAT_Y/Z`), aim-twist feel,
+egg-cave boot spawn-then-despawn timing + save round-trip.
+
 ## Session ACU — 2026-06-02 — Playtest pass: rig look fixes, speeder/sled/rope features, slide tune ✓ verify pass (tsc clean)
 
 `verified` — `npm run verify` (tsc) PASS. A long interactive playtest session driven by live findings. All

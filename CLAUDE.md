@@ -64,22 +64,23 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      Prior milestones live in docs/changelog.md — do NOT accumulate "Prior milestone"
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
-**Last shipped**: Session ACU — **playtest pass: rig look fixes + speeder/sled/rope features + slide tune**
-(all foreground-confirmed; no save change). Rig look: reverted the PM-E PBR lighting (D154 — its derivative
-micro-bump shimmered as the model moved) → back to Lambert; shadow swim/flicker fix (D155 — the
-player-following shadow camera + a throttled shadow map desynced while walking; now regen-on-move); Rey
-off-white outfit + full-body cloth coverage (arms/legs/neck were bare skin) + smoothed the lobed "melon"
-head crown. Bugs/features: **#40** player speed-spike clamp (bound the KCC penetration-recovery lurch);
-**#42** sled-vs-POI collision (shapecast-clamp vs FIXED non-terrain colliders, D156, `Tuning.SLED_POI_COLLISION`);
-**#50** rope leaves inventory only when BOTH ends anchored (D157, `applyTether`) + drop-with-G releases the
-sled + removed the LMB floor-drop; footstep-puff FP fix (stale 3P-gated ankle). Plus: sled tow-handle
-rework (smaller/lower/rusted, rope connects + wraps the cross-bar) and a slope-slide feel tune
-(`SLED_SLOPE_SLIDE_GAIN` 6→2.5 + `SLED_KINETIC_FRICTION` .15→.20 → slight slopes stop, dunes still slide).
+**Last shipped**: Session ACV — **overnight (partial): backlog clear + bug fixes + companion egg-cave**.
+Wave 0 reconciled the backlog (the 3 remaining "bugs" — speeder mount-seat #147, iron-stake #150,
+speeder angular #100 — were all already fixed). Wave 1 quick wins (`c9c71a6`): seated 3P rig pose on the
+speeder (#148 — was dropping to the origin while mounted; `SPEEDER_RIG_SEAT_Y/Z` foreground-tunable),
+sled drag marks lightened (#187), aim-twist gain 0.10→0.18 (#41). Wave 2 BIGGER FEATURE (`2d4035b`, D158):
+**companion egg-cave acquisition** — a new game no longer spawns the companion; Pebble is hatched from an
+egg in the rock-biome cave. Egg in `rockyEntrance.ts` (exists iff `!companionAcquired`), `'eggs'`
+interaction + hatch, `despawnCompanion`, additive `companionAcquired` save (legacy default true, NO
+version bump), `main.ts` boot reconcile. tsc clean throughout. **Owed a foreground confirm**: seated
+pose tune, aim-twist feel, egg-cave boot spawn/despawn + save round-trip.
 
-**Next session (ACV)**: the ACT art/animation idea wave (large, multi-session) — item-model quality + 3P
-hand placement + 3P use-anims; lizard/shrew walk gaits + shrew burrow; speeder dust + engine FX; seated 3P
-speeder rig + camera; **dynamic salvage-panel placement on procgen POIs** (clip-safe surface-finding — its
-own design spike). Scope ONE piece first. See [docs/next-session-prompt.md](docs/next-session-prompt.md).
+**Next session (ACW)**: finish the ACV scope-cut pile (visual/feel work, each needs real iteration):
+egg/cave VISUAL polish (egg is a placeholder emissive ovoid + chamber lighting) + the companion
+proc-character (completes Cycle 7); speeder dust + engine FX (#183/#184); sandstorm wind pushes bodies
+(#146); 3P control-prompts (#149); in-storm sensory degradation (#134); then the art/animation pile
+(item models, POI detail, creature gaits + shrew burrow, held-item 3P placement, use-anims). Scope ONE
+visual piece at a time (rule 8). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 

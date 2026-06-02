@@ -2,9 +2,16 @@
 
 Cumulative state. Rewritten end-to-end at each `/session-end`.
 
-**Current state**: Session ACU shipped (2026-06-02 — playtest pass: rig look fixes + speeder/sled/rope features + slide tune). 100+ sessions post-MVP. `npm run verify` (tsc) PASS. **SAVE_VERSION 14** (unchanged — no save touch this session). ACU was a long interactive playtest-driven session, almost everything FOREGROUND-confirmed by the user in-play: reverted the PM-E PBR lighting on the rig (D154 — its derivative micro-bump shimmered as the model moved); fixed shadow swim/flicker (D155 — player-following shadow camera vs a throttled shadow map; now regen-on-move); shipped the Rey off-white outfit + full-body cloth coverage (arms/legs/neck were bare skin) + smoothed the lobed "melon" head crown; **#40** player speed-spike clamp (bound the KCC penetration-recovery lurch); **#42** sled-vs-POI collision (shapecast-clamp vs fixed non-terrain colliders, D156, flag-gated); **#50** rope leaves inventory only when BOTH ends anchored (D157, `applyTether`) + drop-with-G releases the sled + removed the LMB floor-drop; footstep-puff FP fix (stale 3P-gated ankle); sled tow-handle rework (rope connects + wraps); slope-slide feel tune. **Next session (ACV) = the ACT art/animation idea wave** (item-model quality, 3P hand placement + use-anims, creature gait + shrew burrow, speeder dust/engine FX, seated 3P speeder cam, dynamic salvage-panel placement) — large, scope ONE piece first.
+**Current state**: Session ACV shipped (2026-06-02 — overnight, partial: backlog clear + bug fixes + companion egg-cave). 100+ sessions post-MVP. `npm run verify` (tsc) PASS. **SAVE_VERSION 14** (unchanged — egg-cave save is additive, no bump). ACV was a planned long overnight (bugs + easy features + one bigger feature); budget-managed — shipped the bug/quick-win waves + the bigger feature (companion egg-cave) and pre-committed the visual/feel-tuning pile as scope-cuts → ACW. Wave 0 reconciled the backlog (the 3 remaining "bugs" #147/#150/#100 were already fixed). Wave 1: seated 3P rig pose on the speeder (#148, D159 — was dropping to the origin while mounted), sled drag marks lightened (#187), aim-twist gain 0.10→0.18 (#41). Wave 2 BIGGER FEATURE: **companion egg-cave acquisition** (Cycle 7 core, D158) — a new game no longer spawns the companion; Pebble is hatched from an egg in the rock-biome cave (egg + `'eggs'` interaction + `despawnCompanion` + additive `companionAcquired` save [legacy default true] + `main.ts` boot reconcile). **Next session (ACW) = finish the ACV scope-cut pile** (each needs real iteration): egg/cave VISUAL polish + companion proc-character (completes Cycle 7); speeder dust/engine FX; sandstorm wind; 3P prompts; in-storm sensory; then the art/animation pile.
 
-## ACU scope (this session) — playtest pass: rig look + speeder/sled/rope features + slide tune
+## ACV scope (this session) — overnight (partial): backlog clear + bugs + companion egg-cave
+
+- **Wave 0** — closed the 3 verified-fixed backlog "bugs" (#147 speeder mount-seat = ACQ look-gate, #150 iron-stake = ACQ+ACU, #100 speeder angular = X/Z rotation-locked).
+- **Wave 1** (`c9c71a6`): #148 seated 3P rig pose on the speeder (reposition to rider seat + seated pose; `SPEEDER_RIG_SEAT_Y/Z` foreground-tunable; D159); #187 sled drag marks lightened; #41 aim-twist turn-gain 0.10→0.18.
+- **Wave 2 — companion egg-cave** (`2d4035b`, D158): `rockyEntrance.ts` builds a glowing ovoid egg in the descent chamber (exists iff `!companionAcquired`); new `'eggs'` interaction registry + `'hatch'` type → E spawns the companion + sets acquired + removes the egg; `companion.ts` `despawnCompanion`; `save.ts` additive `companionAcquired?` (legacy default true, NO version bump); `main.ts` boot reconcile in `handoffToGame`. New-game → no companion → egg is the path.
+- **Deferred to ACW** (pre-committed scope-cut, visual/feel-tuning): speeder dust+engine FX (#183/#184), sandstorm wind (#146), 3P prompts (#149), in-storm sensory (#134), egg/cave visual polish, companion proc-character, + the art/animation pile.
+
+## ACU scope — playtest pass: rig look + speeder/sled/rope features + slide tune
 
 - **PM-E PBR revert** (`playerRig.ts` + skin/fabric factories, D154): the `pbr` path's derivative-based (`dFdx/dFdy`) micro-bump shimmered on the moving rig. Dropped `pbr` from 3 skin + 4 cloth mats → Lambert; procedural COLOR unaffected.
 - **Shadow swim/flicker fix** (`lighting.ts`, D155): force a shadow-map regen on any frame the player moved (was a fixed ~10Hz throttle while the shadow camera follows the player every frame → stale projection matrix → self-shadow drift/snap).
@@ -256,41 +263,39 @@ Existing tunables of interest:
 
 ## Suggested next session (1-3 directions in priority order)
 
-1. **The ACT art/animation idea wave** (TOP, Session ACV — large, multi-session; the foreground bug/feature backlog is now CLEARED through ACU). Scope ONE piece per session: higher-detail item models + correct 3P hand placement + 3P use-animations; lizard/shrew walk gait + shrew burrow; speeder dust trail + engine-ignition FX; seated 3P speeder rig + camera; **dynamic salvage-panel placement on procgen POIs** (clip-safe surface-finding — its own design spike). Each visual element gets the rule-8 build→screenshot→critique→iterate loop.
-2. **Re-verify the ACU flag-gated / behavior-change items hold up over longer play**: `Tuning.SLED_POI_COLLISION` (watch for stick-on-dunes), the rope `applyTether` state machine (tie→carry→2nd-anchor→take-back→drop-G across all anchor kinds + a save round-trip), and the slope-slide feel (`SLED_SLOPE_SLIDE_GAIN`/`SLED_KINETIC_FRICTION` are the dials).
-3. **Standing optional levers**: game **lighting mood** (D142, the biggest remaining in-game realism lever — surface to user first) + PM-D cloth-physics robe.
+1. **Finish the ACV scope-cut pile** (TOP, Session ACW — each item needs the rule-8 build→screenshot→iterate loop, which is why they were cut from the overnight). First the **egg/cave visual polish** (the egg is a placeholder emissive ovoid → nicer shell + chamber lighting) + the **companion proc-character** rebuild (completes Cycle 7). Then: speeder dust+engine FX (#183/#184), sandstorm wind (#146), 3P prompts (#149), in-storm sensory (#134), then the art/animation pile (item models, POI detail, creature gaits+burrow, held-item 3P placement, use-anims).
+2. **Foreground-confirm the ACV owed items** in `npm run dev`: the egg-cave (new game → no companion → find cave → hatch → Pebble; save round-trip; legacy save keeps companion), the seated speeder pose (tune `SPEEDER_RIG_SEAT_Y/Z`), and the aim-twist feel.
+3. **Standing optional levers**: game **lighting mood** (D142, biggest remaining in-game realism lever — surface first) + PM-D cloth-physics robe; the heavy **dynamic salvage-panel placement** (its own design spike).
 
 ---
 
 ## Time spent
 
-100+ sessions shipped (A through ACU). Approx ~308-382h cumulative human-facing dev time. ACU was a long interactive playtest-driven session (rig look fixes + 3 backlog bug/features #40/#42/#50 + handle rework + slide tune), almost all FOREGROUND-confirmed by the user in-play via a live `npm run dev`. 5 files + docs; no save change. (Tail of the same very long conversation: ACJ→…→ACT→ACU.)
+100+ sessions shipped (A through ACV). Approx ~310-385h cumulative human-facing dev time. ACV was a planned overnight executed partially (budget-managed): backlog reconcile + Wave-1 quick wins + the companion egg-cave bigger feature, with the visual/feel-tuning pile pre-committed as scope-cuts → ACW. 11 files + docs across 2 code commits; egg-cave save is additive (no version bump). (Tail of the same very long conversation: ACJ→…→ACU→ACV.)
 
 ---
 
 ## State at session end
 
-- **Git status**: ACU code landed in several pushed commits — `28d275a` (PBR revert), `5180705` (shadow fix), `4f3d4e9` (outfit/head), `b44d58b` (#40+#42), plus a final commit for #50 + rope-tunings + handle + puff-fix + slide-tune. The session-end doc edits (changelog/CLAUDE/roadmap/decisions/backlog/report/next-prompt) are committed alongside. Tagged `session-ACU`.
-- **Branch**: `master`. **Save state**: localStorage **v14** (unchanged — ACU is logic/material/geometry only).
-- **Ports bound**: a `npm run dev` server was left running on **5173** for the user's playtest (dev-only); rig-shot harness uses 5191.
-- **Rule-8 / verification status**: the visual work (outfit recolour + full-body cloth + head smooth) WAS screenshot-iterated (3 rounds via `rig-shot`, per discipline). The rig/sled/rope/shadow fixes are logic/material with no new animation surface; nearly all were FOREGROUND-confirmed by the user this session (the strongest verification available — D150). The sled tow-handle + rope-wrap geometry was NOT harness-screenshotted (no sled-rope scenario exists) but the user confirmed it live.
+- **Git status**: ACV code in two pushed commits — `c9c71a6` (Wave 0-1: seated pose + sled marks + aim-twist) and `2d4035b` (Wave 2: companion egg-cave spine). Session-end doc edits committed alongside; tagged `session-ACV`.
+- **Branch**: `master`. **Save state**: localStorage **v14** (unchanged — egg-cave `companionAcquired` is additive, D81, no bump).
+- **Ports bound**: a `npm run dev` server may still be running on **5173** from the prior playtest (dev-only); rig-shot harness uses 5191.
+- **Rule-8 / verification status**: ACV shipped LOGIC (egg-cave spine, bug fixes, tuning) — tsc-clean + traced, NOT screenshot/foreground-iterated. The egg's VISUAL is a deliberate placeholder (emissive ovoid) deferred to ACW's iteration loop; the seated speeder pose + aim-twist feel + egg-cave save round-trip are explicitly OWED a foreground/`__game` confirm (D150). No rough visual work was shipped as "done" — the visual pile was honestly cut, not crammed.
 
 ---
 
 ## Token spend this session (estimated)
 
-ACU was a long, many-turn interactive playtest session (no fan-out; iterative reads across controller/sled/interaction/playerRig/lighting + the material/tuning files + screenshot-iteration on the outfit).
+ACV was the tail of an already-very-long conversation; the overnight was executed inline rather than as a fanned-out workflow, with exploration agents up front (3 Explore for the egg-cave + bug verification).
 
-- Input: high (long session, many successive file reads + the rope state-machine investigation + 3 screenshot rounds).
-- Output: high-moderate — ~10 distinct fixes/features across 5 source files + 4 D-entries + the session-end docs.
-- Cost (Opus 4.8 rates): above the per-session baseline (length-driven, not waste). Flag: ~1.5-2× baseline due to session length + screenshot iteration — expected for an interactive playtest pass.
+- Input: high (long session; egg-cave exploration + the 6-file spine reads).
+- Output: high-moderate — Wave 0-1 + the egg-cave spine across 11 files + 2 D-entries + the session-end docs.
+- Cost (Opus 4.8 rates): above baseline (length-driven). The visual pile was scope-cut precisely to avoid burning budget on shallow iteration.
 
-Notable: the user's "model glitchy when moving" report had TWO independent causes — the PBR derivative micro-bump (D154) AND a shadow-map-vs-following-camera desync (D155); the PBR revert alone didn't fix it, which correctly drove the deeper shadow diagnosis. #50 ("quick win") turned out to be an architectural rope-ownership rework (D157), surfaced to the user before committing.
+Notable: pre-flight verification found ALL three remaining backlog "bugs" were already fixed (ACQ/ACU) — freeing the overnight to focus on the egg-cave. The egg-cave's key simplification (egg exists iff `!companionAcquired`, re-derived at boot → no egg save field, one additive boolean) kept it a clean additive change (no SAVE_VERSION bump). The visual/feel pile was honestly deferred rather than rushed (rule 8 / the ABP precedent).
 
 ---
 
 ## Commit handoff
 
-Per CLAUDE.md (session-end auto-runs commit + tag + push). ACS is a single bug-fix session:
-- Code: `sandWorm.ts` (`lootSandWorm` keeps the tag while towed), `interaction.ts` (towed branch carves on E + cuts loose on LMB; target-push includes looted-but-towed carcasses; shared `harvestWorm` helper).
-- Docs: changelog ACS, CLAUDE.md (Last shipped + ACT-next), roadmap (ACS shipped), backlog (ACF carcass-tow → FIXED), this report, next-session-prompt. No new D-entry (a bounded interaction-logic bug fix; no novel decision).
+Per CLAUDE.md (session-end auto-runs commit + tag + push). ACV code already committed across `c9c71a6` + `2d4035b`; the session-end doc edits (changelog/CLAUDE/roadmap/decisions/backlog/report/next-prompt) are committed alongside + tagged `session-ACV`.

@@ -1,57 +1,55 @@
-# Session ACV — Kickoff Brief
+# Session ACW — Kickoff Brief
 
-> Recent: ACT (FP footprints/hints + D109 swim sweep), **ACU (playtest pass — PBR-shimmer revert, shadow-swim
-> fix, Rey outfit + full-body cloth + head smooth, #40 speed-spike, #42 sled-POI, #50 rope-leaves-inventory,
-> footstep-puff FP fix, tow-handle rework, slope-slide tune)**. **The foreground bug/feature backlog is now
-> CLEARED.** What remains is the big **art/animation idea wave** from the ACT idea dump — large + multi-session.
-> START by scoping ONE piece (don't try to do the wave in one session).
+> Recent: ACU (rig look fixes + speeder/sled/rope + slide tune), **ACV (overnight, partial: backlog
+> reconcile + seated speeder pose #148 + sled marks #187 + aim-twist #41 + the COMPANION EGG-CAVE
+> spine, Cycle 7 core, D158)**. ACV deliberately **scope-cut the visual/feel-tuning pile** — those are
+> ACW's job, because each needs the real rule-8 screenshot/foreground iteration loop. The foreground
+> bug backlog is cleared.
 
 ## Read these now (in order)
-1. **CLAUDE.md** (auto-loaded) — rules; note the tick order + **rule 8** (visual iteration discipline — load-bearing this session, it's all visual/animation work).
-2. **docs/session-end-report.md** — top "Current state" + "ACU scope" + "Suggested next".
-3. **docs/decisions.md** tail — **D154** (no derivative micro-bump on moving meshes), **D155** (shadow regen-on-move), **D156** (sled-POI shapecast), **D157** (rope deploy = both-ends-anchored via `applyTether`); plus **D150** (kinematic/feel = foreground-only), **D151** (rig bones are 3P-gated), **D107** (procedural-only — relevant if "higher-detail item models" tempts an asset import → that's a user-call fork).
-4. **docs/backlog.md** — the ACT idea-dump block (bottom).
-5. `shared-memory/iterative-polish-discipline.md` + `preview-screenshot-tips.md` — REQUIRED before visual work.
+1. **CLAUDE.md** (auto-loaded) — rules; **rule 8 is load-bearing this session** (it's visual/animation work).
+2. **docs/session-end-report.md** — "Current state" + "ACV scope" + "Suggested next".
+3. **docs/decisions.md** tail — **D158** (egg-cave acquisition: egg exists iff `!companionAcquired`, additive save, boot reconcile), **D159** (mounted rig repositions to the seat), **D154-D157** (ACU), **D150** (kinematic/feel = foreground-only), **D107** (procedural-only — relevant to item-model detail).
+4. **docs/backlog.md** — the ACT idea-dump block + the 🟡 egg-cave / seated-pose / aim-twist partial entries.
+5. `shared-memory/iterative-polish-discipline.md` — REQUIRED before any visual element.
 
 ## What's already built
-A full singleplayer desert-survival loop + a believable stylized procedural player rig (skinned, dressed in a Rey-like off-white outfit, full-body cloth, Lambert-shaded — no PBR shimmer). Footprints/audio + interact hints work in both camera modes; shadows + procedural weathering are stable while moving. Sled tow (rope leaves inventory when both ends anchored; collides with POIs; gentle slope-slide). Speeder, stake, Pebble companion, salvage panels, 2 procedural music systems, sweeping Dune storm. SAVE_VERSION 14. Verification: `npm run rig-shot` (static pose/closeup) + `--scenario` (live AI/weapon state); foreground `npm run dev` for kinematic/feel.
+Full singleplayer survival loop + a Rey-like stylized procedural rig (Lambert, no PBR shimmer). Companion is now **egg-gated**: a new game spawns no companion; you find the rock-biome cave and hatch an egg to get Pebble (spine shipped ACV — but the egg is a **placeholder emissive ovoid** + the chamber is unlit; that's ACW's polish). Sled tow (rope-leaves-inventory, POI collision, gentle slide), speeder, stake, salvage, storm. SAVE_VERSION 14.
 
-## Session ACV focus
-Pick ONE item from the ACT art/animation wave and take it through the full rule-8 build→screenshot→critique→iterate loop. Suggested ordering (highest player-visible value first):
+## Session ACW focus
+Finish the ACV scope-cut pile, **one fully-iterated visual element at a time** (rule 8: 1-2 well-iterated elements beats 5 shallow). Start by closing Cycle 7, then the speeder FX, then the rest.
 
-## Priority items (pick ONE; in rough value order)
-1. **Speeder dust trail + engine-ignition FX** (`speeder.ts` + a particle/quad system like `footprintPuffs.ts`/`ambientDust.ts`). Speed-gated dust under/behind the bike while driving; engines visibly light on throttle. Self-verifiable via a `--scenario` harness shot (it's render-state, not kinematic-feel). Good first scope — contained, high-impact.
-2. **Lizard + shrew walk gaits** (`enemies/lizard.ts`, `enemies/shrew.ts`) — leg/body gait while moving (mirror the player rig's absolute-time gait pattern), + **shrew burrow** dig-in/out animation composing with flee/idle. Screenshot/scenario-verify.
-3. **Higher-detail item models + 3P hand placement + 3P use-anims** (`inventory/items.ts` makeViewModel + `playerRig.ts` `rightHandAttach` + a 3P use-animation hook). **NOTE the D107 fork**: "higher-detail" via more procedural geometry is in-bounds; importing art assets is a user-call (surface it).
-4. **Seated 3P speeder rig + camera** (`speeder.ts` + `playerRig.ts` + the 3P cam) — a proper seated stance pose while mounted + a speeder-specific 3P camera.
-5. **Dynamic salvage-panel placement on procgen POIs** (HEAVIEST — its own design spike first): place `addAccessPanel`s on procgen POIs at runtime without clipping through model parts/terrain, snapped to flat surfaces with valid facing. Needs a surface-finding/raycast approach before any code.
+## Priority items (in order — each gets the build→screenshot→critique→iterate loop)
+1. **Egg + cave-bottom visual polish** (`rockyEntrance.ts`): the egg is a placeholder `SphereGeometry` ovoid with flat emissive — make it read as a real egg (procedural shell: speckled/veined skin via a material factory, a subtle pulse/glow), and **light the chamber** (claim 1-3 from `ctx.lightPool` near the egg so the descent isn't pitch-black; mirror the fire/salvage-glow claim pattern). `__game`-position the camera at the chamber to screenshot (rig-shot can't frame a cave). **Also foreground-confirm the egg-cave spine**: new game → no companion → hatch → Pebble; save round-trip; legacy save keeps companion.
+2. **Companion proc-character** (`enemies/companion.ts`) — completes Cycle 7: rebuild the body via the D128 Lathe pipeline + D100 body-shell/hip-group decomposition; 5 rule-8 rounds.
+3. **Speeder dust trail + engine-ignition FX** (`speeder.ts` + a particle module modeled on `footprintPuffs.ts`/`ambientDust.ts`): speed-gated dust under/behind the bike; engines light on throttle. Harness-checkable via a `--scenario` shot.
+4. **Sandstorm wind pushes physics bodies** (#146, `weather.ts` read + a wind force): apply to dynamic dropped-item bodies + the unmounted speeder during storms (the sled is kinematic — nudge its slide-velocity or skip + note). Foreground feel-tune.
+5. **3P control-prompt positioning** (#149, `interactPrompt.ts`) + **in-storm sensory degradation** (#134, `stormVignette.ts`/`controller.ts`/`audio.ts` — camera sway + near-zero forward-vis while engulfed; verify the ACL storm-wall already covers fog/vignette).
+6. **Foreground-confirm ACV owed items**: seated speeder pose (tune `SPEEDER_RIG_SEAT_Y/Z`), aim-twist feel (`AIM_TWIST_*`).
 
 ## Stretch / standing levers
-- Game **lighting mood** (D142) — the biggest remaining in-game realism lever; surface to the user before a whole-scene aesthetic shift.
-- PM-D cloth-physics robe (the "wrap the model in real cloth" idea — large; D107-adjacent).
+Art/animation pile (item-model detail, POI detail, lizard/shrew gaits + shrew burrow, held-item 3P placement, 3P use-anims) · game lighting mood (D142, surface first) · PM-D cloth robe · the heavy **dynamic salvage-panel placement** (its own design spike — surface before coding).
 
 ## Autonomy contract
-Ambiguous → GDD pillars + decisions realism dial → new D-entry → continue. Surface only on: **D107 (asset-vs-procedural fork — likely to come up on item models)**, save bumps (D81), destructive git, whole-game aesthetic shifts (lighting mood — D142).
+Ambiguous → GDD pillars + decisions realism dial → new D-entry → continue. Surface only on: D107 asset-vs-procedural fork (item-model detail), save bumps (D81), destructive git, whole-game aesthetic shifts (lighting mood D142).
 
 ## Stop conditions
-Wall-clock / budget · 3 fix-walls on one element (cut/log) · catastrophic block · destructive attempt · **rule-8: don't mark a visual element done on `tsc`-clean alone — screenshot-iterate (5-8 rounds new / 3-5 tuning) or honestly flag it un-iterated.**
+Wall-clock / budget · 3 fix-walls on one element (cut/log) · catastrophic block · destructive attempt · **rule 8: never mark a visual element done on tsc alone — screenshot-iterate or honestly flag it un-iterated.**
 
-## On stop
-Invoke `/session-end` (verify → changelog → CLAUDE Last-shipped → roadmap → D-entries → backlog → report → next-prompt → post-mortem → commit per Dustfall git policy + tag `session-ACV`).
+## On stop → `/session-end`
+verify → changelog → CLAUDE Last-shipped → roadmap → D-entries → backlog → report → next-prompt → post-mortem (+consolidate) → commit + tag `session-ACW` + push.
 
 ## Notable footguns
-- **Rule 8 is the whole game this session** — it's visual/animation work. Screenshot-iterate every element; a "long session" ships 1-2 fully-iterated elements, not 5 shallow ones.
-- **D154**: no screen-space-derivative (`dFdx/dFdy`) normal bump on anything that moves/animates — it shimmers. Bake relief into geometry or use a real normal map.
-- **D151**: the player rig's bone transforms are only posed in 3P (the visibility gate is a render optimization). Anything OTHER systems read off the rig (cadence, foot pos) must not assume the bones are current in FP.
-- **D150**: gait/feel/kinematic-velocity behavior is FOREGROUND-only — the headless harness can't exercise it. Render-state (FX opacity, particle spawn, materials) IS harness-checkable.
-- **D156/D157**: the sled POI-collision (`Tuning.SLED_POI_COLLISION`) + rope `applyTether` state machine are new + flag-gated/centralized — don't bypass them; route any new tether transition through `applyTether`.
-- D107 procedural-only (asset import = user call); rule 2 magic-numbers→tuning.ts; rule 6 no innerHTML; rule 7 box depth ≥10cm. SAVE_VERSION 14.
+- **D158 egg-cave**: the egg exists iff `!companionAcquired` (re-derived at boot); the reconcile is in `main.ts handoffToGame` AFTER loadGameState. Don't add an egg save field. `companionAcquired` is additive (legacy default true). If you change the egg's placement/identity, keep the boot reconcile coherent.
+- **D159**: while mounted the player capsule is parked at y=-2000; the rig is repositioned to the bike seat — don't "fix" it by reading the parked body.
+- **D150**: gait/feel/kinematic-velocity + the seated pose + aim-twist + wind-force feel are FOREGROUND-only to verify. Render-state (egg glow, dust FX, chamber light, materials) IS harness/`__game`-checkable.
+- D107 procedural-only (item-model detail via more geometry is in-bounds; asset import is a user-call fork). rule 2 magic-numbers→tuning.ts; rule 6 no innerHTML; rule 7 box depth ≥10cm. SAVE_VERSION 14.
 
 ## Verification protocol
-`npm run verify` (= `tsc --noEmit`) = type gate. Visual elements: `npm run rig-shot` (+ `--scenario` for FX/AI) → screenshot → critique → iterate. Feel/kinematic: foreground `npm run dev`.
+`npm run verify` (= `tsc --noEmit`) = type gate. Visual: `npm run rig-shot` (+ `--scenario`) or `__game`-positioned screenshots → iterate. Feel/kinematic + egg-cave round-trip: foreground `npm run dev` / `__game`.
 
 ## Begin block
-1. Read CLAUDE.md, session-end-report, decisions tail (D154-D157 + D150/D151/D107), backlog ACT idea block, the discipline docs.
+1. Read CLAUDE.md, session-end-report, decisions tail (D158/D159 + D150/D107), backlog, the discipline doc.
 2. `npm run verify` baseline.
-3. Pick ONE priority item; if it's #3/#5, surface the D107 / design-spike fork to the user first.
-4. TaskCreate sub-tasks for that element; run the rule-8 screenshot loop.
+3. Start priority 1 (egg/cave visual) — `__game`-frame the chamber, screenshot, iterate; foreground-confirm the spine.
+4. TaskCreate one task per priority item; honor the rule-8 loop per element.
