@@ -46,6 +46,7 @@ import { createFabricMaterial } from '../world/fabricMaterial.ts';
 import { createMetalMaterial } from '../world/metalMaterial.ts';
 import { createPaintedMetalMaterial } from '../world/paintMaterial.ts';
 import { buildSkinnedLimb } from './skinnedLimb.ts';
+import { getItemDef } from '../inventory/items.ts';
 
 const _PI2 = Math.PI * 2;
 
@@ -1262,6 +1263,26 @@ export function updatePlayerRig(ctx: GameContext, dt: number): void {
     rig._aimPrevHeading = rig.heading;
     rig._aimTwist += (0 - rig._aimTwist) * AIM_TWIST_LERP;
     rig.shoulders[1].rotation.y = rig._aimTwist;
+  }
+
+  // ── ACW Phase A — 3P USE-ANIMATION. ──
+  // The FP viewmodel item is hidden in 3P, so an FP-only `playUseAnim` would
+  // show no arm motion when the player swings/drinks/fires with the camera
+  // behind the body. When a viewmodel use-anim is active AND we're in 3P,
+  // drive the held item's `playUseAnim3P` to pose the rig's right arm. Runs
+  // LAST (after the per-state arm swing + aim-twist) so it overrides them for
+  // the duration of the action; the gait/idle block re-poses the arm the
+  // frame after the anim ends.
+  if (ctx.flags.thirdPerson) {
+    const vm = ctx.player.viewModel;
+    if (vm && vm.anim.active && vm.anim.itemId !== null && vm.anim.duration > 0) {
+      const def = getItemDef(vm.anim.itemId);
+      if (def.playUseAnim3P) {
+        const t3 = Math.min(1, Math.max(0,
+          (performance.now() / 1000 - vm.anim.startTime) / vm.anim.duration));
+        def.playUseAnim3P(rig, t3);
+      }
+    }
   }
 }
 

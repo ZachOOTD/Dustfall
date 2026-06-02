@@ -149,6 +149,27 @@ export interface ItemDef {
    *  1.0 (no scale change). */
   thirdPersonScale?: number;
 
+  /** ACW Phase A — per-item 3P hand-attach transform applied to the 3P
+   *  hand-attach mesh ONLY (FP viewmodel unaffected). `pos` in meters in
+   *  rightHandAttach-local space, `rot` in radians (XYZ Euler). Applied
+   *  AFTER thirdPersonScale in viewModel.swapEquippedMesh. This is the
+   *  per-item knob that seats a grip correctly in the rig's right hand at
+   *  3P distance — without it most makeViewModel meshes float/intersect
+   *  the hand (they're authored for the FP camera origin). Default =
+   *  identity (legacy behavior). */
+  handAttachTransform?: { pos: [number, number, number]; rot: [number, number, number] };
+
+  /** ACW Phase A — 3P use-animation hook. The FP viewmodel item isn't
+   *  rendered in 3P, so an FP-only `playUseAnim` shows NO arm motion when
+   *  the player swings/drinks/fires while the camera is behind the body.
+   *  This drives the RIG's right-arm bones instead. `t` ∈ [0,1] over
+   *  `useAnimDuration`. Author ABSOLUTE poses on `rig.shoulders[1]` /
+   *  `elbows[1]` / `wrists[1]` (and the head/spine if needed) — the caller
+   *  does NOT reset between frames, and the per-state gait/idle block
+   *  re-poses the arm the frame after the anim ends. Optional — items
+   *  without it show no 3P arm motion on use. */
+  playUseAnim3P?: (rig: import('../player/playerRig.ts').PlayerRig, t: number) => void;
+
   /** Build a fresh SVG element for the hotbar icon. Falls back to `glyph` if absent. */
   makeIcon?: () => SVGElement;
 

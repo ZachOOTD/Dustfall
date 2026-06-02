@@ -163,6 +163,15 @@ function swapEquippedMesh(vm: ViewModel, newId: ItemId | null, ctx: GameContext)
       if (tpScale !== 1.0) {
         tpMesh.scale.multiplyScalar(tpScale);
       }
+      // ACW Phase A — per-item 3P hand placement. Applied AFTER scale; pos
+      // is in unscaled rightHandAttach-local meters, rot in radians (XYZ).
+      // Default (no field) = mesh sits at the hand-attach origin unrotated
+      // (legacy behavior).
+      const hat = def.handAttachTransform;
+      if (hat) {
+        tpMesh.position.set(hat.pos[0], hat.pos[1], hat.pos[2]);
+        tpMesh.rotation.set(hat.rot[0], hat.rot[1], hat.rot[2]);
+      }
       rig.rightHandAttach.add(tpMesh);
     }
   }
