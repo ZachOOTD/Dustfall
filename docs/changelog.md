@@ -3,6 +3,47 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ACT — 2026-06-01 — 3P/FP parity fixes + world-space texture-swim sweep (D109) ✓ verify pass (tsc clean)
+
+`verified` — `npm run verify` (tsc) PASS. Folded in live-playtest findings: two 3P/FP parity bugs +
+a procedural-material "texture swims on moving models" sweep. All geometric/material — no save change.
+
+**Fixed — footprints + footstep audio dead in first person** (`playerRig.ts`): `updatePlayerRig`
+early-returned on the visibility gate (`if (!rig.group.visible) return`) BEFORE advancing
+`rig.speedMag` / state / `rig.stepCount`. But `controller.ts` drives footstep audio AND footprint
+decals off `rig.stepCount`, so in FP both silently died (only worked in 3P). Hoisted the gait
+bookkeeping (speedMag, state classification, gait-phase, stepCount) ABOVE the gate; only the visual
+transform work (position/heading/bone posing/IK) stays 3P-gated. The `delta < 5` burst-clamp +
+controller `_lastSeenStepCount` resync still prevent catch-up spikes on FP↔3P toggle.
+
+**Fixed — interact hints never appeared in third person** (`interaction.ts`): the interaction raycast
+cast from `cam.position` with `far = 2.5`, but in 3P the camera sits ~1.8m behind the player
+(`_3P_BACK_DIST`), leaving ~0.7m effective reach — you'd have to clip into a target. Now the ray
+originates from the player's eye along camera-forward (the reticle) so reach is identical in both
+modes (no-op in FP, where `cam.position` already IS the eye).
+
+**Shipped — world-space texture-swim sweep (D109).** Procedural materials sample noise in world space
+by default (free per-instance weathering on static objects), which makes the pattern crawl across a
+MOVING surface. Audited every factory + every moving entity:
+- Added a `localSpace` option to `woodGrainMaterial` / `boneMaterial` / `glassMaterial` (were
+  always-world-space; glass also flips its dust-normal to object space).
+- Decoupled `fabricMaterial` `localSpace` from `disableShimmer` (legacy coupling did both jobs at once;
+  now a moving fabric can keep wind shimmer AND not swim).
+- `items.ts`: routed ALL viewmodel item materials through `vmMetal/vmWood/vmBone/vmGlass` wrappers that
+  force `localSpace: true` — every held item is a camera/hand-tracked viewmodel, so it always moves.
+- Fixed `speeder.ts` antenna (the reported case) + `playerRig.ts` metal/paint (pauldron, pouches,
+  goggle rim). Already-safe (verified): sled mats, all creature skin (lizard/shrew/worm/companion),
+  rig skin + rig fabric (via disableShimmer). Raiders use plain flat materials (N/A). Static
+  hull/concrete/stone/terrain intentionally left world-space.
+
+**Backlog:** triaged the ACT idea dump (7 [feat] / 4 [polish] / 1 [idea]) — item-model quality pass,
+3P hand placement + use anims, lizard/shrew gait + shrew burrow, speeder dust/engine FX, seated 3P
+speeder cam, cloth-physics robe, lighter sled marks, POI detail + dynamic salvage-panel placement.
+
+**Still open:** random speed spike (#40, foreground), sled-vs-POI collision (#42),
+rope-leaves-inventory (#50). Footprints/hints fixes owed a foreground confirm (D150-class for the
+gait one).
+
 ## Session ACS — 2026-06-01 — Carcass tow/harvest flow fix (ACF bug) ✓ verify pass (tsc clean)
 
 `verified` — `npm run verify` (tsc) PASS. A focused fix for the ACF "carcass tow blocked after

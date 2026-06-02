@@ -2,20 +2,23 @@
 
 Cumulative state. Rewritten end-to-end at each `/session-end`.
 
-**Current state**: Session ACS shipped (2026-06-01 — carcass tow/harvest flow fix, the ACF bug). 100 sessions post-MVP. `npm run verify` (tsc) PASS. **SAVE_VERSION 14** (unchanged). ACS (worked in parallel while the user playtested the foreground items) fixed the sandworm-carcass tow/harvest flow: harvest was blocked while towing + a carved carcass went inert; now you can carve meat with E while towing (LMB still cuts loose), `lootSandWorm` keeps the tag while towed, and the raycast targets a looted-but-towed carcass — so tow/carve/cut-loose work in any order (`sandWorm.ts` + `interaction.ts`, tsc-clean, foreground-confirm owed). **Next session (ACT) = fold in the user's playtest findings** (footprint/speed/aim-twist + shrew take/cook + carcass-tow confirmations — all foreground, D150), then the feature-sized backlog (sled-POI collision, rope-leaves-inventory).
+**Current state**: Session ACT shipped (2026-06-01 — 3P/FP parity fixes + world-space texture-swim sweep). 100+ sessions post-MVP. `npm run verify` (tsc) PASS. **SAVE_VERSION 14** (unchanged). ACT folded in live-playtest findings: (1) footprints + footstep audio were dead in first person — `updatePlayerRig` early-returned on the 3P visibility gate before advancing `rig.stepCount` (which `controller.ts` drives footsteps + decals off); hoisted the gait bookkeeping above the gate (D151). (2) Interact hints never appeared in 3P — the `far=2.5` interaction ray cast from `cam.position`, ~1.8m behind the player → ~0.7m reach; now originates from the player eye along camera-forward (D152). (3) D109 texture-swim sweep across all moving entities — added `localSpace` to woodGrain/bone/glass factories, decoupled fabric `localSpace` from `disableShimmer`, routed all viewmodel item materials through `vm*` local-space wrappers, fixed speeder antenna + rig metal/paint (D153). Geometric/material — no save change; footprints/hints owed a foreground confirm (D150-class). **Next session (ACU) = the still-open foreground item (random speed spike #40), then the feature-sized backlog (sled-POI collision #42, rope-leaves-inventory #50) — plus the queued ACT art/animation idea wave.**
+
+## ACT scope (this session) — 3P/FP parity fixes + world-space texture-swim sweep
+
+- **FP footprints + footstep audio fix** (`playerRig.ts`, D151): hoisted the gait bookkeeping (`speedMag`/state/gait-phase/`stepCount`) ABOVE the visibility early-return so it runs in both camera modes; only the visual transform work (position/heading/bone posing/IK) stays 3P-gated. `controller.ts` reads `stepCount` for both footstep SFX + footprint decals, so FP was silently dead before.
+- **3P interact-hint reach fix** (`interaction.ts`, D152): the hover ray now originates from the player eye along camera-forward in 3P (was `cam.position`, ~1.8m behind → ~0.7m effective reach); no-op in FP.
+- **D109 texture-swim sweep** (D153): added `localSpace` to `woodGrainMaterial`/`boneMaterial`/`glassMaterial`; decoupled `fabricMaterial` `localSpace` from `disableShimmer`; `items.ts` routes all viewmodel materials through `vmMetal/vmWood/vmBone/vmGlass` local-space wrappers; fixed `speeder.ts` antenna + `playerRig.ts` metal/paint. Audit confirmed sled/creature-skin/rig-skin/rig-fabric already safe; raiders use plain materials; static world objects left world-space.
+- **Backlog**: triaged the ACT idea dump (7 [feat] / 4 [polish] / 1 [idea]) — item-model quality, 3P hand placement + use anims, creature gait + shrew burrow, speeder FX, seated 3P speeder cam, cloth-physics robe, lighter sled marks, POI detail + dynamic salvage-panel placement.
 
 ## ACS scope (this session) — carcass tow/harvest flow fix
 
 Fixed the ACF "carcass tow blocked after harvest" bug. Investigation: harvest was BLOCKED while towing (the `towed` interaction branch returned before the loot branch), so the dramatic "towed-then-harvested can't cut loose" was unreachable and a carved carcass went fully inert. Fix: the towed branch carves meat on `E` (LMB still cuts loose) via a shared `harvestWorm` helper; `lootSandWorm` keeps the tag while towed; the raycast targets a looted-but-towed carcass. tsc-clean + logic-traced; foreground-confirm owed (the user's current playtest covers it).
 
-## ACR scope (this session) — backlog archive round 2 + shrew catch/cook **SAVE_VERSION 14** (unchanged — shrew save is additive). ACR shipped the headline remaining backlog feature: **shrew catch/cook**, a 1:1 mirror of the lizard kill→loot pipeline (combat dispatch → `damageShrew` → dead-pose/'take' → `raw_shrew_meat`/`cooked_shrew_meat` → cook; save persists dead/looted). tsc clean; harness confirmed the kill; the take+cook loop is owed a foreground confirm (headless raycast-aim on a fleeing critter isn't scriptable — the take case is a verbatim lizard copy). Also finished the backlog archive hygiene (megaWreck panels confirmed already-done; ACL-shipped duplicates + procedural-arc cruft pruned). **Next session (ACS) = foreground pass** for the velocity/feel bugs (D150) + confirm the shrew take/cook, then the remaining feature-sized backlog (sled-POI collision, carcass-tow, rope-inventory).
-
 ## ACR scope (this session) — backlog archive round 2 + shrew catch/cook
 
 - **Archive**: megaWreck catwalk panels confirmed already-shipped (ACL #9/#10) → archived; the ACL-duplicate + procedural-arc-followup cruft pruned. Active backlog now reflects only genuinely-open work.
 - **Shrew catch/cook** (SHIPPED): `shrew.ts` (`'dead'` state + `damageShrew`/`applyDeadShrewPose`/`lootShrew` + dead-skip), `combat.ts` (`getShrewForCollider→damageShrew` dispatch), `interaction.ts` (`'shrews'` registry + dead-shrew target + `'take'`→`raw_shrew_meat`), `items.ts`/`types.ts` (`raw_/cooked_shrew_meat`) + COOK_MAP, `save.ts` (persist/restore dead+looted, mirror lizard). Verified the kill via `--scenario=shrew-kill`; take+cook loop foreground-confirm owed.
-
-## ACQ scope (this session) — backlog archive + quick wins ACQ pruned the stale/completed backlog cruft (10 ACL-shipped duplicates + the procedural-character-arc followup pile + the obsolete FP-wraps entry) and shipped three quick wins: companion → **"Pebble"** rename (all player-facing copy), **iron stake model fixes** (removed sand mound + reseated rope-loop near the top touching the shaft + aligned `rope.ts` endpoint to the actual ring via shared `STAKE_LOOP_OFFSET_*` — screenshot-verified), and **speeder mount gated on looking at the bike** (`SPEEDER_MOUNT_LOOK_DOT` 0.5). New `--scenario=stake` harness. **Next session (ACR) = the still-open user bugs**: foreground-only footprint/speed/aim-twist (D150), then sled-vs-POI collision + carcass-tow cut-loose (deferred).
 
 ## ACQ scope (this session) — backlog archive + quick wins
 
@@ -25,14 +28,10 @@ Fixed the ACF "carcass tow blocked after harvest" bug. Investigation: harvest wa
 - **Speeder mount look-gate** (`speeder.ts`/`tuning.ts`): mount requires the camera to face the bike (`dot ≥ SPEEDER_MOUNT_LOOK_DOT`), not proximity alone.
 - **Deferred**: carcass-tow cut-loose (ACF — interaction-logic in the drag system, hard to verify headlessly).
 
-## ACP scope (this session) — salvage-panel clipping investigation + buriedCockpit faceYaw fix ACP built a `panels` harness sweep, confirmed the 6 common procgen panel kinds render interiors correctly (the clipping bug is NOT systemic), audited all 15 `addAccessPanel` call sites, and fixed the lone offender — `buriedCockpit` passed `faceYaw=Math.PI` (faces -Z) on a -X flank when it needs `-π/2` (cf. `saltOutpost`'s +X flank = +π/2), so its cavity recessed parallel to the flank + clipped through the hull. Fix is geometrically certain; screenshot-confirmation owed (it registers its salvageable as `escape_pod` kind + is seed-gated, so it wasn't isolable in the per-kind sweep). **Next session = the still-open FOREGROUND-only bugs (footprint / speed-spike / aim-twist feel-tune — D150), then sled-vs-POI collision.**
-
 ## ACP scope (this session) — salvage-panel clipping investigation + buriedCockpit faceYaw fix
 
 - **`panels` harness scenario** (`rig-shot.mjs`): enumerates `ctx.salvageables.list`, force-opens every door, screenshots one panel per unique kind. The 6 procgen kinds present (fuselage/escape_pod/cargo_container/engine_bell/engine_cluster/massive) all render interiors correctly when open → bug not systemic.
 - **buriedCockpit faceYaw fix** (`buriedCockpit.ts`): `Math.PI` → `-Math.PI/2`. `addAccessPanel` maps `local+Z → (sin yaw, 0, cos yaw)`; a -X flank panel needs `-π/2`. Audited all 15 call sites — only this one was wrong (others use the wrapper-Group pattern or correct flank yaw). Geometrically verified; visual confirmation owed.
-
-## ACO scope (this session) — night ambient-dust gate + bug intake ACO was a bug-intake + targeted-fix session: the user reported 5 bugs (all logged to backlog). Shipped + verified the **night ambient-dust gate** (the always-on tan drift fades to 0 across dusk by `ctx.time.sunHeight` → stars read on a clean dark sky + calm night; verified via a new `night-sky` harness scenario). **Finding (D150)**: the speeder-dismount footprint bug + the random speed-spike both depend on the player body's KINEMATIC `linvel()`, which reads 0 in the throttled headless harness — so they can't be verified headlessly and need a foreground repro (deferred to ACP, along with the larger sled-POI-collision + panel-clipping bugs). **Next session (ACP) = foreground repro+fix footprints + speed-spike + the deferred aim-twist feel-tune.**
 
 ## ACO scope (this session) — night ambient-dust gate + bug intake
 
@@ -245,36 +244,36 @@ Existing tunables of interest:
 
 ## Suggested next session (1-3 directions in priority order)
 
-1. **Foreground repro+fix the footprint + speed-spike bugs, + the deferred aim-twist feel-tune** (TOP, Session ACP). All three are foreground-only (D150 — kinematic-velocity / continuous-turn-feel can't be exercised headlessly). In `npm run dev`: (a) walk→mount→dismount→walk, confirm/fix footprints resuming; (b) play on-foot + on-bike to localize the speed spike; (c) 3P turn/strafe to feel-tune `AIM_TWIST_TURN_GAIN`/`BIAS`/`LERP` (D148, likely a gain bump).
-2. **The larger deferred bugs** — sled-vs-POI collision (kinematic-vs-static shapecast) + the salvage-panel interior-clipping sweep (per-POI visual pass; the harness can screenshot POIs statically).
-3. **More backlog breadth** — another fanned-out overnight (D143), or the game **lighting mood** (D142, biggest in-game realism lever — surface first), or PM-D cloth.
+1. **Foreground confirm the ACT fixes + chase the random speed spike** (TOP, Session ACU). The FP-footprints/audio + 3P-interact-hint fixes are tsc-clean + logic-traced but owed a real-rate confirm (D150-class): in `npm run dev`, walk in FP (prints + footstep SFX appear) and in 3P walk up to interactables (hints appear at normal range). Then localize the **random speed spike** (#40) — play on-foot vs on-bike, suspect the dynamic speeder body (collision-penetration velocity / dismount state-leak).
+2. **The feature-sized backlog** — sled-vs-POI collision (#42, kinematic-vs-static shapecast) + rope-leaves-inventory-while-deployed (#50, save-touching state-model change).
+3. **The ACT art/animation idea wave** (big, multi-session) — higher-detail item models + correct 3P hand placement + 3P use-animations; lizard/shrew walk gait + shrew burrow; speeder dust trail + engine ignition FX; seated 3P speeder rig + camera; dynamic salvage-panel placement on procgen POIs (clip-safe surface-finding). Plus the standing optional levers: game **lighting mood** (D142) + PM-D cloth-physics robe.
 
 ---
 
 ## Time spent
 
-97 sessions shipped (A through ACP). Approx ~300-372h cumulative human-facing dev time. ACP was a focused investigation + single-fix session (panels-sweep tool, 15-call-site audit, 1 one-line geometric fix; 2 files touched, no save change). (Tail of the same very long conversation: ACJ→ACK→ACL→ACM→ACN→ACO→ACP.)
+100+ sessions shipped (A through ACT). Approx ~305-378h cumulative human-facing dev time. ACT was a playtest-driven bug-fix session: 2 parity fixes (FP gait gate, 3P interaction reach) + a project-wide world-space-swim audit across 6 material factories + every moving entity (9 files, no save change). (Tail of the same very long conversation: ACJ→…→ACS→ACT.)
 
 ---
 
 ## State at session end
 
-- **Git status**: ACR committed + tagged + pushed (`fb764d2`, `session-ACR`). ACS dirty: `src/enemies/sandWorm.ts` (lootSandWorm) + `src/player/interaction.ts` (towed branch + target-push + harvestWorm helper) + `docs/`. Commit handoff below.
-- **Branch**: `master`. **Save state**: localStorage **v14** (unchanged — ACS is interaction-logic only).
+- **Git status**: ACT code already committed + pushed mid-session (`2899847`, `master`) — the FP/3P fixes + swim sweep + backlog triage. The session-end doc edits (changelog/CLAUDE/roadmap/decisions/backlog/report/next-prompt) are dirty; commit handoff below. No session tag yet (ACS was the last tag).
+- **Branch**: `master`. **Save state**: localStorage **v14** (unchanged — ACT is logic/material only).
 - **Ports bound**: dev servers may linger from the preview-MCP (5180) / rig-shot harness (5191); both dev-only.
-- **Rule-8 / verification status**: the carcass-tow fix is interaction logic — tsc-clean + fully flow-traced, not headless-exercised (the worm state machine + raycast make it finicky to script). Owed a foreground confirm — conveniently covered by the user's current playtest (tow a worm carcass, E to carve while towing, LMB to cut loose).
+- **Rule-8 / verification status**: ACT is material/geometry + logic (no new rig/camera/animation surface to screenshot-iterate). The two parity fixes are tsc-clean + root-cause-traced; owed a foreground confirm (D150-class for the gait one — kinematic `linvel` reads 0 headlessly). The swim sweep is verifiable foreground (drive speeder, walk 3P, equip held items).
 
 ---
 
 ## Token spend this session (estimated)
 
-ACS was a single focused bug-fix session (interaction logic; no fan-out, no harness runs).
+ACT was a foreground-playtest-driven bug-fix session (no fan-out; reads across the material factories + viewModel/interaction/playerRig).
 
-- Input: moderate (sandWorm/interaction source + the ACF bug trace + docs).
-- Output: low-moderate — the carcass-tow fix + the session-end docs.
-- Cost (Opus 4.8 rates): below baseline. Not flagged.
+- Input: moderate-high (6 material factories + items.ts + playerRig/interaction/controller/viewModel reads + the D109 audit + docs).
+- Output: moderate — 2 logic fixes + 4 factory edits + items wrapper refactor + the session-end docs.
+- Cost (Opus 4.8 rates): around baseline. Not flagged.
 
-Notable: the investigation reframed the bug — harvest was actually blocked WHILE towing (making the dramatic scenario unreachable), so the fix added harvest-while-towing rather than just the defensive cut-loose tag.
+Notable: the user's "footprints only in 3P" report turned out to share a root with the older ACN "dismount kills footprints" bug (the FP visibility-gate, D151), and the "texture swims on the speeder" report generalized into a full D109 sweep that found held viewmodel items (wood/bone/glass/metal) were the largest un-localSpace'd swim surface.
 
 ---
 

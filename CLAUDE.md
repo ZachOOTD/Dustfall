@@ -64,16 +64,22 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      Prior milestones live in docs/changelog.md — do NOT accumulate "Prior milestone"
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
-**Last shipped**: Session ACS — **carcass tow/harvest flow fix (ACF bug)**. Worked in parallel while
-the user playtested the foreground items. Found the real gap: harvest was BLOCKED while towing a worm
-carcass + a carved carcass went fully inert. Fix (`sandWorm.ts` + `interaction.ts`): carve meat with
-`E` while towing (LMB still cuts loose, shared `harvestWorm` helper); `lootSandWorm` keeps the tag
-while towed; the raycast still targets a looted-but-towed carcass — so tow/carve/cut-loose work in any
-order. tsc clean; logic-traced; owed a foreground confirm.
+**Last shipped**: Session ACT — **3P/FP parity fixes + world-space texture-swim sweep (D109)**, folding
+in live-playtest findings. (1) Footprints + footstep audio were dead in first person: `updatePlayerRig`
+early-returned on the 3P visibility gate before advancing `rig.stepCount`, which `controller.ts` drives
+footsteps + footprint decals off — hoisted the gait bookkeeping above the gate (only visual transforms
+stay 3P-gated). (2) Interact hints never appeared in 3P: the interaction raycast (`far=2.5`) cast from
+`cam.position`, ~1.8m behind the player in 3P → ~0.7m reach; now originates from the player eye along
+camera-forward. (3) D109 swim sweep: added `localSpace` to woodGrain/bone/glass factories, decoupled
+fabric `localSpace` from `disableShimmer`, routed all viewmodel item materials through
+`vmMetal/vmWood/vmBone/vmGlass` local-space wrappers, fixed speeder antenna + rig metal/paint. tsc
+clean; geometric/material (no save change); footprints/hints owed a foreground confirm (D150-class).
 
-**Next session (ACT)**: fold in the user's playtest findings (footprint/speed/aim-twist + shrew
-take/cook + carcass-tow confirmations — all foreground, D150). Then the remaining feature-sized
-backlog: sled-vs-POI collision, rope-leaves-inventory. See [docs/next-session-prompt.md](docs/next-session-prompt.md).
+**Next session (ACU)**: still-open foreground item — random speed spike (#40). Then the feature-sized
+backlog: sled-vs-POI collision (#42), rope-leaves-inventory (#50). The ACT idea-dump also queued a big
+art/animation wave (item-model quality, 3P hand placement + use anims, creature gait + shrew burrow,
+speeder FX, seated 3P speeder cam, dynamic salvage-panel placement). See
+[docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 

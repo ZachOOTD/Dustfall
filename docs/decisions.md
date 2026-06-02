@@ -1105,3 +1105,30 @@ The fundamental issue: KCC's slope projection, autostep, and contact resolution 
 **Considered alternatives**: driving the body via direct `setTranslation` per Node step (bypasses the kinematic linvel computation entirely → still 0); forcing `rig.speedMag` manually (would fake the gait, not verify the real path). Both defeat the purpose.
 
 **friction-score:** 2
+
+## D151 — Rig gait bookkeeping (speedMag/state/stepCount) must run in BOTH camera modes, not behind the 3P visibility gate (Session ACT)
+**When**: Fixing the user's playtest report that footprints (and, as it turned out, footstep audio) only appeared in third person.
+
+**Why**: `updatePlayerRig` opened with a visibility gate — `rig.group.visible = ctx.flags.thirdPerson; if (!rig.group.visible) return;` — and EVERYTHING after it (including `rig.speedMag`, the state classification, and the `rig.stepCount` advancement) was skipped in first person. But `controller.ts` drives BOTH the footstep audio AND the footprint decals off `rig.stepCount` (ACE Tier 4A made stepCount the single cadence source). So in FP the counter never advanced → no footsteps, no prints; it only worked in 3P where the rig is visible. The gait bookkeeping is cheap state math (a linvel read + a few comparisons + an absolute-time phase) and is NOT visual — only the transform work (group position/heading, bone rotations, foot-IK, aim-twist) actually needs the rig to be visible.
+
+**Picked**: Hoist the bookkeeping (speedMag, state, gait-phase, stepCount) ABOVE the visibility gate so it runs every frame in both modes; keep ONLY the visual transform work gated. The existing `delta < 5` burst-clamp + the controller's `_lastSeenStepCount` resync still prevent a catch-up spike on FP↔3P toggle. General rule: anything OTHER systems read off the rig (cadence, speed, state) must update regardless of whether the rig mesh is drawn; the gate is a render optimization, not a logic switch.
+
+**friction-score:** 2
+
+## D152 — The interaction raycast originates from the PLAYER EYE in 3P, not the camera (Session ACT)
+**When**: Fixing the user's report that `[E]` interact hints never appear in third person.
+
+**Why**: `interaction.ts` cast its hover ray from `cam.position` along `cam.getWorldDirection()` with `_ray.far = RAYCAST_DISTANCE` (2.5m). In 3P the camera sits `_3P_BACK_DIST` (~1.8m) behind the player, so the effective reach FROM THE PLAYER was only ~0.7m — you'd have to clip into a target for a prompt to register, i.e. hints essentially never showed. Combat doesn't exhibit this because weapon ranges are several meters and absorb the 1.8m offset; the 2.5m interaction reach doesn't. The reticle in 3P is still screen-center = `camFwd`, so the DIRECTION is right; only the ORIGIN was wrong.
+
+**Picked**: In 3P, originate the ray from the player's eye (`body.translation() + eyeOffset`) along `camFwd`; in FP keep `cam.position` (which already IS the eye). Reach is then identical in both modes. Considered reconstructing the exact 3P shoulder-anchor (cf. controller's `_shoulderAnchor`) but that duplicates the camera constants for sub-target-radius precision gain — the player-eye approximation is collinear-enough at 2.5m and low-coupling. NOTE: combat.ts still casts from `cam.position`; if a future 3P melee/range feels short-reached, apply the same player-eye origin there.
+
+**friction-score:** 2
+
+## D153 — Every VIEWMODEL/held item is a moving mesh → all its procedural materials must be localSpace; routed through wrappers (extends D109) (Session ACT)
+**When**: The D109 texture-swim sweep, tracing the user's "texture shifts when the speeder moves" report to its general cause across all moving entities.
+
+**Why**: D109 established that procedural materials sample noise in WORLD space by default (free per-instance weathering on static objects) and that MOVING entities must pass `localSpace:true` or the pattern crawls. ACT found the rule under-applied: (a) `woodGrainMaterial`/`boneMaterial`/`glassMaterial` had NO `localSpace` option at all (always world-space) — yet they're used on held items; (b) every item mesh is rendered as a VIEWMODEL (added to the main scene, tracking the camera for the FP copy + the rig hand bone for the 3P copy — see `viewModel.ts`), so EVERY held item moves through world space continuously and was swimming; (c) `fabricMaterial` only did local sampling as a side-effect of `disableShimmer`, coupling two concerns so a moving fabric couldn't keep wind shimmer without swimming.
+
+**Picked**: (1) Added a `localSpace` option to woodGrain/bone/glass (glass also flips its dust-layer normal to object space). (2) Decoupled `fabricMaterial.localSpace` from `disableShimmer` (`useLocalCoords = disableShimmer || localSpace`; shimmer gated only by `disableShimmer`). (3) In `items.ts`, routed ALL viewmodel material calls through `vmMetal/vmWood/vmBone/vmGlass` wrappers that force `localSpace:true` — so no item call site can forget it (the structural fix, vs. 25+ brittle per-call edits). Static world callers (locker, wreck skeletons, cockpit canopy) keep world-space intentionally. Audit confirmed sled/creature-skin/rig-skin/rig-fabric were already safe; raiders use plain flat materials. RULE: if a mesh is camera- or bone-anchored (any viewmodel/held item), its procedural materials are localSpace by default — prefer a wrapper over per-call flags.
+
+**friction-score:** 2
