@@ -482,6 +482,73 @@ const SCENARIOS = {
     console.log('[rig-shot] saved scen-footprint-repro.png');
   },
 
+  // Speeder-seated (ACX): mount the bike in 3P + frame a clean chase cam behind
+  // it, to verify the seated rig (facing forward, gripping bars, feet on pegs).
+  'speeder-seated': async (page) => {
+    await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      ctx.weather.intensity = 0; window.__game.setTime(0.5);
+      ctx.three.renderer.toneMappingExposure = 1.1; ctx.three.renderer.setSize(820, 950, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 820 / 950; cam.updateProjectionMatrix(); }
+      ctx.flags.thirdPerson = true;
+      const s = ctx.speeder;
+      // Force-mount: park the player capsule far below (as the real mount does)
+      // and flag mounted so updateSpeeder's mounted path + updatePlayerRig's
+      // seated branch run.
+      s.mounted = true;
+      ctx.player.body.body.setTranslation({ x: s.body.translation().x, y: -2000, z: s.body.translation().z }, true);
+    });
+    await page.waitForTimeout(300);
+    // Point the camera-look along the bike's forward (as a rider looking ahead),
+    // so the GAME's chase cam (driven by updateSpeeder) places itself behind +
+    // the bike yaw aligns. We do NOT override the camera — this reproduces the
+    // actual in-game view the user sees.
+    await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      const s = ctx.speeder;
+      const yaw = s.yaw;
+      const bf = new (ctx.three.camera.position.constructor)(-Math.sin(yaw), 0, -Math.cos(yaw));
+      const cam = ctx.three.camera;
+      const tgt = new (cam.position.constructor)(cam.position.x + bf.x, cam.position.y, cam.position.z + bf.z);
+      cam.lookAt(tgt);
+      cam.updateMatrixWorld(true);
+    });
+    await page.waitForTimeout(600); // let the live chase cam settle + bike-yaw lerp
+    const info = await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      const s = ctx.speeder;
+      const p = s.body.translation();
+      const yaw = s.yaw;
+      const bfx = -Math.sin(yaw), bfz = -Math.cos(yaw); // bike forward
+      const cam = ctx.three.camera;
+      // Measure the rig's actual facing (local +Z is the FACE, D137) + which
+      // side of the bike the (game-placed) camera is on.
+      const rig = ctx.player.rig;
+      const V = cam.position.constructor; const Q = cam.quaternion.constructor;
+      const rq = rig.group.getWorldQuaternion(new Q());
+      const face = new V(0, 0, 1).applyQuaternion(rq);
+      const faceDotFwd = +(face.x * bfx + face.z * bfz).toFixed(2);
+      // camera-to-bike vector vs bikeForward: + = cam is BEHIND (sees rear), - = cam in FRONT.
+      const camToBikeX = p.x - cam.position.x, camToBikeZ = p.z - cam.position.z;
+      const camDotFwd = +(camToBikeX * bfx + camToBikeZ * bfz).toFixed(2);
+      console.error('[seatfacing] faceDotFwd=' + faceDotFwd + (faceDotFwd > 0 ? '(rig FORWARD)' : '(rig BACKWARD)') +
+        ' camDotFwd=' + camDotFwd + (camDotFwd > 0 ? '(cam BEHIND)' : '(cam FRONT)'));
+      // SIDE profile of the seated rig (camera off the bike's left, looking
+      // across) so the riding pose reads: arms→bars, lean, knees→pegs, seat.
+      ctx.flags.paused = true;
+      const bleft = new V(bfz, 0, -bfx); // bike's left (perp to forward)
+      cam.position.set(p.x + bleft.x * 3.0, p.y + 1.0, p.z + bleft.z * 3.0);
+      cam.lookAt(p.x + bfx * 0.2, p.y + 0.2, p.z + bfz * 0.2);
+      cam.updateMatrixWorld(true);
+      return { yaw: +yaw.toFixed(2), faceDotFwd, camDotFwd };
+    });
+    console.log('[speeder-seated] ' + JSON.stringify(info));
+    await page.waitForTimeout(200);
+    await page.screenshot({ path: join(OUT, 'scen-speeder-seated.png'), fullPage: false });
+    console.log('[rig-shot] saved scen-speeder-seated.png');
+  },
+
   // Depthprobe (ACX): log the runtime material/render flags of the held 3P item
   // + the footprint decals, to diagnose why footsteps show through held items.
   'depthprobe': async (page) => {

@@ -1114,20 +1114,25 @@ export function updatePlayerRig(ctx: GameContext, dt: number): void {
     rig.heading = sp.yaw + Math.PI;                  // face the bike's forward (-Z local)
     rig.group.rotation.y = rig.heading;
     rig.state = 'idle';
-    // Seated pose: thighs forward + knees bent down astride the chassis, arms
-    // reaching to the grips, slight forward lean to the bars.
+    // ACX — RIDING pose: lean forward over the tank, both hands reaching
+    // forward+down to the handlebar grips (bars are ~0.77m up + 0.28m fwd of
+    // the seat origin), knees bent up astride the chassis with shins dropping
+    // to the footpegs (fwd + out + low). Tuned in the speeder-seated harness.
     for (let i = 0; i < 2; i++) {
       const side = i === 1 ? 1 : -1;
-      rig.hips[i].rotation.set(1.02, 0, side * 0.16);   // thigh forward + splayed astride
-      rig.knees[i].rotation.x = 1.15;                   // shin bent down
-      rig.ankles[i].rotation.x = 0.10;
-      rig.shoulders[i].rotation.set(0.58, 0, side * 0.05); // arms forward to grips
-      rig.elbows[i].rotation.x = 0.55;
-      rig.wrists[i].rotation.x = -0.05;
+      // Legs: thigh forward + splayed astride, shin bent down/forward to the peg.
+      rig.hips[i].rotation.set(1.25, 0, side * 0.22);
+      rig.knees[i].rotation.x = 1.35;
+      rig.ankles[i].rotation.x = 0.25;
+      // Arms: reach forward to the bars — shoulder well forward + slightly in,
+      // elbow bent so the hands come up to bar height, wrist cocked to grip.
+      rig.shoulders[i].rotation.set(1.15, 0, side * 0.12);
+      rig.elbows[i].rotation.x = 0.85;
+      rig.wrists[i].rotation.x = 0.15;
     }
     rig.body.position.set(0, 0, 0);
     rig.body.rotation.x = 0;
-    rig.spineBend.rotation.set(0.20, 0, 0);            // lean to the handlebars
+    rig.spineBend.rotation.set(0.34, 0, 0);            // forward lean onto the bars
     rig.headGroup.position.y = HEAD_Y;
     rig._aimPrevHeading = rig.heading;
     return;
