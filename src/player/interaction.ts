@@ -63,6 +63,7 @@ import { Tuning } from '../config/tuning.ts';
 const RAYCAST_DISTANCE = 2.5;
 const _ray = new THREE.Raycaster();
 const _dir = new THREE.Vector3();
+const _rayFrom = new THREE.Vector3();
 
 interface InteractHit {
   type: InteractType;
@@ -236,7 +237,20 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
 
   const cam = ctx.three.camera;
   cam.getWorldDirection(_dir);
-  _ray.set(cam.position, _dir);
+  // ACT — interaction ray origin. In 3P the camera sits ~1.8m behind the
+  // player (controller.ts _3P_BACK_DIST), which would eat most of the 2.5m
+  // interaction reach (effective ~0.7m) and stop hover prompts from EVER
+  // appearing in third person. Originate the ray from the player's eye along
+  // the camera look direction (= screen-center reticle) so reach is identical
+  // in both camera modes. In FP cam.position already IS the eye, so this is
+  // a no-op there.
+  if (ctx.flags.thirdPerson) {
+    const tr = ctx.player.body.body.translation();
+    _rayFrom.set(tr.x, tr.y + ctx.player.eyeOffset, tr.z);
+  } else {
+    _rayFrom.copy(cam.position);
+  }
+  _ray.set(_rayFrom, _dir);
   _ray.far = RAYCAST_DISTANCE;
 
   // Union target list — only meshes we tagged as interactable.

@@ -43,6 +43,15 @@ export interface GlassMaterialOpts {
   /** Whether to render double-sided (default true — glass should show
    *  both sides since the player can see "into" the volume). */
   doubleSide?: boolean;
+  /** ACT — sample the frost/dust noise (and the dust-on-top normal) in
+   *  OBJECT-LOCAL coords instead of world-space (D109). Required for MOVING
+   *  glass props (the lantern-globe viewmodel tracks the camera / rig hand
+   *  each frame); world-space sampling makes the frost speckle crawl across
+   *  the surface as the player walks. In local space the dust layer also
+   *  follows the object's own "up" (correct for a carried lantern that
+   *  rotates). Static glass (cockpit canopy) leaves this false. Default
+   *  false. */
+  localSpace?: boolean;
 }
 
 /** Build the patched glass material. Drop-in for canteen globe /
@@ -76,11 +85,22 @@ export function createGlassMaterial(
     );
     shader.vertexShader = shader.vertexShader.replace(
       '#include <begin_vertex>',
-      /* glsl */ `
-        #include <begin_vertex>
-        vWorldGlass = (modelMatrix * vec4(position, 1.0)).xyz;
-        vWorldGlassNormal = normalize(mat3(modelMatrix) * normal);
-      `,
+      opts.localSpace
+        /* glsl */
+        ? `
+          #include <begin_vertex>
+          // ACT — localSpace (D109): anchor frost/dust to the object frame so
+          // it doesn't crawl as a held/moving glass prop translates; the dust
+          // layer follows the object's own up (correct for a carried lantern).
+          vWorldGlass = position;
+          vWorldGlassNormal = normalize(normal);
+        `
+        /* glsl */
+        : `
+          #include <begin_vertex>
+          vWorldGlass = (modelMatrix * vec4(position, 1.0)).xyz;
+          vWorldGlassNormal = normalize(mat3(modelMatrix) * normal);
+        `,
     );
 
     shader.fragmentShader = shader.fragmentShader.replace(

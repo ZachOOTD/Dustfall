@@ -172,3 +172,19 @@ Intentionally not active. Detail preserved so the call is reversible. Each entry
 [bug] sled clips through POI models — sled body (KinematicPositionBased) has terrain collision but no collision vs POI/wreck static colliders; passes through them. **Deferred (ACO)**: non-trivial — a kinematic slide needs an explicit shapecast against POI colliders before moving. Add sled-vs-POI collision.
 ✓ **SHIPPED ACO — ambient dust off at night**: the always-on tan `ambientDust` drift fades to 0 across dusk by `ctx.time.sunHeight` (`AMBIENT_DUST_NIGHT_FADE_LO/HI` 0.02/0.20) + hides entirely at night → stars read + calm night. (The near-white firelight `dustMotes` left on.) Verified via the `night-sky` harness scenario.
 🟡 **[bug] salvage panel interiors clip through POI walls — PARTIAL (ACP)**. Built a `panels` harness sweep + audited all 15 `addAccessPanel` call sites. The 6 common procgen kinds render fine (not systemic). **Fixed the lone faceYaw offender — `buriedCockpit`** (was `Math.PI` → faced -Z on a -X flank; now `-π/2`, cf. saltOutpost +X=+π/2). Geometrically certain; **screenshot-confirmation owed** (buriedCockpit registers its salvageable as `escape_pod` kind + is seed-gated, so it wasn't isolable in the per-kind sweep). If the user sees OTHER panels clip, point at the POI — the audit found only buriedCockpit. Tool: `npm run rig-shot --scenario=panels`.
+
+— — — ACT (2026-06-01) idea dump — — —
+
+[polish] upgrade all item models to higher-detail / higher-quality procedural assets.
+[polish] held items must sit correctly in the hands in 3rd person (rig.rightHandAttach placement per item).
+[feat] 3rd-person use animations for items that act (swing/pry/drink/etc.) on the rig hand.
+[feat] lizard + shrew walking animations (gait while moving, mirror player rig gait pattern).
+[feat] shrew burrow animation (dig-in/out — composes with flee/idle AI).
+[feat] speeder dust effect under/behind the bike while driving (speed-gated particle trail).
+[feat] speeder engine ignition effect (engines visibly ignite/light on throttle).
+[feat] seated 3rd-person rig stance + dedicated 3P camera while mounted on the speeder (cf. ACN mount bug + D116).
+[idea] wrap player model in a cloth robe with real cloth physics to mask the low-poly rig.
+[polish] sled drag marks should be a lighter colour (footprints.ts sled track tint).
+[polish] add detail to existing POI models.
+[feat] salvage-panel variations — different sizes, component layouts, kinds.
+[feat] system to dynamically place salvage panels on procgen POIs — must avoid clipping through model parts/terrain, snap to flat surfaces, valid facing.

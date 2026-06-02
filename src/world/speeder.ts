@@ -85,7 +85,12 @@ const _rustDarkMat = new THREE.MeshLambertMaterial({
   color: Tuning.WRECK_RUST_DARK_HEX,
   flatShading: true,
 });
-const _antennaMat = createMetalMaterial(Tuning.WRECK_ANTENNA_HEX, { wornScale: 12.0 });
+// ACT — localSpace: true (D109). The speeder MOVES, so world-space noise
+// sampling made the antenna's brushed-metal scratches crawl across the
+// surface as the bike drove (the reported "texture shifts when the bike
+// moves" bug). The hull mats above already pass localSpace; the antenna was
+// the lone holdout. localSpace anchors the grain to the object frame.
+const _antennaMat = createMetalMaterial(Tuning.WRECK_ANTENNA_HEX, { wornScale: 12.0, localSpace: true });
 const _nozzleInteriorMat = new THREE.MeshBasicMaterial({
   color: Tuning.WRECK_NOZZLE_INTERIOR_HEX,
 });

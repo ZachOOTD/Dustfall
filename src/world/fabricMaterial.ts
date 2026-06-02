@@ -59,6 +59,17 @@ export interface FabricMaterialOpts {
   roughness?: number;
   /** Bump strength when `pbr` (default 0.8). */
   bump?: number;
+  /** ACT — sample the weave/stain/grain noise in OBJECT-LOCAL coords (D109),
+   *  DECOUPLED from `disableShimmer`. Historically `disableShimmer:true` did
+   *  double duty: it both skipped the wind displacement AND switched the
+   *  fragment noise to local coords (so viewmodel/rig cloth wouldn't swim).
+   *  That coupling meant a MOVING fabric that still wants wind shimmer had no
+   *  way to avoid the crawl. `localSpace:true` forces local sampling on its
+   *  own, so shimmer + no-swim can coexist. (Every current moving-fabric
+   *  caller already passes `disableShimmer:true`, so they were already
+   *  swim-safe — this option future-proofs the rare shimmer+moving case.)
+   *  Default false. */
+  localSpace?: boolean;
 }
 
 /** Build the patched fabric material. Drop-in replacement for
@@ -81,6 +92,11 @@ export function createFabricMaterial(
         side: side ?? THREE.FrontSide,
       });
   const disableShimmer = opts?.disableShimmer ?? false;
+  // ACT — local-space fragment sampling is implied by EITHER disableShimmer
+  // (legacy coupling) OR the explicit localSpace flag. Shimmer displacement
+  // is gated only by disableShimmer, so a moving fabric can have wind ripple
+  // AND local (non-swimming) weave by passing { localSpace: true }.
+  const useLocalCoords = disableShimmer || (opts?.localSpace ?? false);
   const bump = opts?.bump ?? 0.8;
 
   mat.onBeforeCompile = (shader) => {
@@ -104,38 +120,34 @@ export function createFabricMaterial(
         uniform float uWindStrength;
       `,
     );
+    // ACT — coords + shimmer decoupled. `vWorldFabric` (the fragment-noise
+    // input) is object-local when useLocalCoords (disableShimmer OR localSpace),
+    // world otherwise. The wind displacement is applied only when shimmer is
+    // ON (!disableShimmer), and always derives its phase from the true world
+    // position so out-of-phase per-instance billowing survives even with
+    // local-space fragment sampling.
     shader.vertexShader = shader.vertexShader.replace(
       '#include <begin_vertex>',
-      disableShimmer
-        /* glsl */
-        ? `
-          #include <begin_vertex>
-          // ABN — viewmodel mode: no shimmer, use object-local coords
-          // for the fragment-shader noise so the weave + stains stay
-          // anchored to the held item as the player moves.
-          vWorldFabric = position;
-          vNrmFabric = normal;
-        `
-        /* glsl */
-        : `
-          #include <begin_vertex>
-          vec3 _fabricWorld = (modelMatrix * vec4(position, 1.0)).xyz;
-          vWorldFabric = _fabricWorld;
-          vNrmFabric = normal;
-
+      /* glsl */ `
+        #include <begin_vertex>
+        vNrmFabric = normal;
+        vec3 _fabricWorld = (modelMatrix * vec4(position, 1.0)).xyz;
+        // useLocalCoords: anchor the weave/stains to the surface so they
+        // don't crawl on a moving entity (D109). Static tents use world.
+        ${useLocalCoords ? 'vWorldFabric = position;' : 'vWorldFabric = _fabricWorld;'}
+        ${disableShimmer ? '' : `
           // Session ABE — wind shimmer. Sum of two phase-offset sin waves
           // in world-XZ at ~1m wavelength, driven by uTime, displaces the
           // vertex along its (model-space) normal. Amplitude scales with
           // uWindStrength: calm ≈ 0.5cm, storm peak ≈ 4cm. Reads as a
-          // breathing/billowing fabric panel without needing real Verlet
-          // sim. Per-instance variation comes from the world-space input
-          // — different tents at different positions wobble out-of-phase.
+          // breathing/billowing fabric panel without needing real Verlet sim.
           float _fabRipple =
             sin(_fabricWorld.x * 6.28 + uTime * 1.7) +
             sin(_fabricWorld.z * 6.28 * 0.83 + uTime * 1.3 + 0.7);
           float _fabAmp = mix(0.005, 0.04, clamp(uWindStrength, 0.0, 1.0));
           transformed += normal * (_fabRipple * _fabAmp * 0.5);
-        `,
+        `}
+      `,
     );
 
     // ── Fragment shader: noise helpers + diffuse modulation. ──

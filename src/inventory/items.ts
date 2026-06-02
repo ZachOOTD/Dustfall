@@ -17,11 +17,34 @@ import { deployCompanion } from '../enemies/companion.ts';
 import { easeOutBack, easeInOutCubic, easeOutQuad } from '../core/ease.ts';
 import { addItem } from './inventory.ts';
 import { makeLizardVisual } from '../enemies/lizard.ts';
-import { createMetalMaterial } from '../world/metalMaterial.ts';
+import { createMetalMaterial, type MetalMaterialOpts } from '../world/metalMaterial.ts';
 import { createFabricMaterial } from '../world/fabricMaterial.ts';
-import { createWoodGrainMaterial } from '../world/woodGrainMaterial.ts';
-import { createBoneMaterial } from '../world/boneMaterial.ts';
-import { createGlassMaterial } from '../world/glassMaterial.ts';  // ACL ITEMS — lantern globe
+import { createWoodGrainMaterial, type WoodGrainMaterialOpts } from '../world/woodGrainMaterial.ts';
+import { createBoneMaterial, type BoneMaterialOpts } from '../world/boneMaterial.ts';
+import { createGlassMaterial, type GlassMaterialOpts } from '../world/glassMaterial.ts';  // ACL ITEMS — lantern globe
+
+// ACT — viewmodel material wrappers. EVERY item mesh is rendered as a
+// VIEWMODEL: it's added to the main scene and tracks the camera (FP copy) or
+// the rig's hand bone (3P copy) every frame — see viewModel.ts. So every item
+// surface MOVES through world space continuously. Per D109, procedural noise
+// on a moving mesh must sample in OBJECT-LOCAL space or the grain / scratches /
+// frost / cracks crawl across the surface as the player walks (the "texture
+// shifts on a moving model" bug). These wrappers force `localSpace: true` so no
+// item call site can forget it. (Item FABRIC already passes `disableShimmer`,
+// which implies local sampling — see fabricMaterial.ts — so it's already safe
+// and routes through createFabricMaterial directly.)
+function vmMetal(color: number, opts: MetalMaterialOpts = {}) {
+  return createMetalMaterial(color, { ...opts, localSpace: true });
+}
+function vmWood(color: number, opts: WoodGrainMaterialOpts = {}) {
+  return createWoodGrainMaterial(color, { ...opts, localSpace: true });
+}
+function vmBone(color: number, opts: BoneMaterialOpts = {}) {
+  return createBoneMaterial(color, { ...opts, localSpace: true });
+}
+function vmGlass(color: number, opts: GlassMaterialOpts = {}) {
+  return createGlassMaterial(color, { ...opts, localSpace: true });
+}
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -291,8 +314,8 @@ const _DEFS: Record<ItemId, ItemDef> = {
       // salvaged plate scrap rather than a brick. ABH metal shader gives
       // scratches + edge dirt.
       const group = new THREE.Group();
-      const mat = createMetalMaterial(0x6e5a4a, { wornScale: 6.0 });
-      const accentMat = createMetalMaterial(0x4a3a2a, { wornScale: 6.0, scratchStrength: 0.03 });
+      const mat = vmMetal(0x6e5a4a, { wornScale: 6.0 });
+      const accentMat = vmMetal(0x4a3a2a, { wornScale: 6.0, scratchStrength: 0.03 });
       // Main plate — slightly trapezoidal silhouette via small tilted slice
       const chunk = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.04, 0.07), mat);
       chunk.rotation.set(0.2, 0.4, 0.1);
@@ -354,9 +377,9 @@ const _DEFS: Record<ItemId, ItemDef> = {
       // ABH — scrap bar metal gets the weathered-metal procedural shader
       // (scratches + worn highlights + edge dirt). Keeps emissive for the
       // moody dark tone the original ironMat had.
-      const ironMat = createMetalMaterial(0x6e5a4a, { wornScale: 6.0 });
+      const ironMat = vmMetal(0x6e5a4a, { wornScale: 6.0 });
       ironMat.emissive = new THREE.Color(0x0a0806);
-      const tipMat = createMetalMaterial(0x8a7a64, { wornScale: 6.0 });
+      const tipMat = vmMetal(0x8a7a64, { wornScale: 6.0 });
       // Main shaft — long bar, square cross-section, slight bend at the tip.
       const shaft = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.34, 0.022), ironMat);
       shaft.position.y = 0.05;
@@ -418,7 +441,7 @@ const _DEFS: Record<ItemId, ItemDef> = {
       const group = new THREE.Group();
       // ABH — machete blade gets weathered-metal shader (brushed scratches
       // perpendicular to the blade length give the "honed edge" read).
-      const bladeMat = createMetalMaterial(0xa8aab0, {
+      const bladeMat = vmMetal(0xa8aab0, {
         scratchAngle: 0,           // scratches along world X — perpendicular to blade as held
         wornScale: 8.0,
         scratchStrength: 0.07,
@@ -475,10 +498,10 @@ const _DEFS: Record<ItemId, ItemDef> = {
       const group = new THREE.Group();
       // ABH — pipe staff: metal pipe + cap get weathered-metal; grip stays
       // wrapped-cord look (plain Lambert).
-      const pipeMat = createMetalMaterial(0x6a6055, { wornScale: 5.0 });
+      const pipeMat = vmMetal(0x6a6055, { wornScale: 5.0 });
       pipeMat.emissive = new THREE.Color(0x0a0907);
       const gripMat = new THREE.MeshLambertMaterial({ color: 0x382820 });
-      const capMat = createMetalMaterial(0x4a4035, { wornScale: 5.0 });
+      const capMat = vmMetal(0x4a4035, { wornScale: 5.0 });
       // Main pipe — long thin cylinder along Y.
       const pipe = new THREE.Mesh(
         new THREE.CylinderGeometry(0.018, 0.018, 0.46, 8),
@@ -543,9 +566,9 @@ const _DEFS: Record<ItemId, ItemDef> = {
       const group = new THREE.Group();
       // ABH — scrap gun: receiver + barrel get weathered-metal (heavy worn
       // around the action). Grip stays plain wrapped-cord.
-      const bodyMat = createMetalMaterial(0x4a4640, { wornScale: 7.0 });
+      const bodyMat = vmMetal(0x4a4640, { wornScale: 7.0 });
       bodyMat.emissive = new THREE.Color(0x0a0907);
-      const barrelMat = createMetalMaterial(0x2c2924, { wornScale: 7.0, scratchAngle: Math.PI / 2 });
+      const barrelMat = vmMetal(0x2c2924, { wornScale: 7.0, scratchAngle: Math.PI / 2 });
       const gripMat = new THREE.MeshLambertMaterial({ color: 0x382820 });
       // Receiver — short rectangular block. Z is forward (camera +Z is
       // into the screen via Three.js — viewmodel renders in -Z space so
@@ -648,9 +671,9 @@ const _DEFS: Record<ItemId, ItemDef> = {
       // A single bullet held in the fingertips — small cylinder.
       const group = new THREE.Group();
       // ABH — bullet brass case gets weathered metal with tight scratches.
-      const brassMat = createMetalMaterial(0xa28860, { wornScale: 14.0, scratchStrength: 0.03 });
+      const brassMat = vmMetal(0xa28860, { wornScale: 14.0, scratchStrength: 0.03 });
       brassMat.emissive = new THREE.Color(0x100a04);
-      const tipMat = createMetalMaterial(0x484035, { wornScale: 14.0 });
+      const tipMat = vmMetal(0x484035, { wornScale: 14.0 });
       const case_ = new THREE.Mesh(
         new THREE.CylinderGeometry(0.014, 0.014, 0.035, 8),
         brassMat,
@@ -700,9 +723,9 @@ const _DEFS: Record<ItemId, ItemDef> = {
       const group = new THREE.Group();
       // ABH — energy pistol: alloy body + accent get weathered-metal with
       // a finer scale (high-tech tool, less worn than scrap gear).
-      const bodyMat = createMetalMaterial(0x2a3540, { wornScale: 10.0, scratchStrength: 0.04 });
+      const bodyMat = vmMetal(0x2a3540, { wornScale: 10.0, scratchStrength: 0.04 });
       bodyMat.emissive = new THREE.Color(0x0a0d12);
-      const accentMat = createMetalMaterial(0x4a5560, { wornScale: 10.0, scratchStrength: 0.04 });
+      const accentMat = vmMetal(0x4a5560, { wornScale: 10.0, scratchStrength: 0.04 });
       const gripMat = new THREE.MeshLambertMaterial({ color: 0x18202a });
       // Chamber mat is emissive so we can pulse it via updateHeld as
       // the weapon charges. Stash it on group.userData so updateHeld
@@ -832,11 +855,11 @@ const _DEFS: Record<ItemId, ItemDef> = {
     makeViewModel() {
       const group = new THREE.Group();
       // Receiver/barrel — machined dark steel; long barrel runs forward (-Z).
-      const steelMat = createMetalMaterial(0x3a3832, { wornScale: 9.0, scratchStrength: 0.05 });
+      const steelMat = vmMetal(0x3a3832, { wornScale: 9.0, scratchStrength: 0.05 });
       steelMat.emissive = new THREE.Color(0x090807);
-      const barrelMat = createMetalMaterial(0x26241f, { wornScale: 9.0, scratchAngle: Math.PI / 2, scratchStrength: 0.06 });
+      const barrelMat = vmMetal(0x26241f, { wornScale: 9.0, scratchAngle: Math.PI / 2, scratchStrength: 0.06 });
       // Stock + fore-grip — carved wood grain.
-      const woodMat = createWoodGrainMaterial(0x5a3a22, {
+      const woodMat = vmWood(0x5a3a22, {
         grainAxis: Math.PI / 2,     // grain runs along the barrel axis
         ringDensity: 9.0,
         weatherLevel: 0.4,
@@ -990,7 +1013,7 @@ const _DEFS: Record<ItemId, ItemDef> = {
       // (metalMaterial dark) + lighter steamed pulp pocket showing through
       // a split + a small green fiber for residual cactus identity.
       const group = new THREE.Group();
-      const charMat = createMetalMaterial(0x1e2418, { wornScale: 9.0, scratchStrength: 0.04 });
+      const charMat = vmMetal(0x1e2418, { wornScale: 9.0, scratchStrength: 0.04 });
       const innerMat = new THREE.MeshLambertMaterial({ color: 0x5a6a3a });
       const outer = new THREE.Mesh(new THREE.BoxGeometry(0.085, 0.05, 0.062), charMat);
       outer.rotation.set(0.2, 0.3, 0.1);
@@ -1106,9 +1129,9 @@ const _DEFS: Record<ItemId, ItemDef> = {
       // 3 layered cuts (alternating dark-char + lighter cooked-interior) +
       // small bone shard exposed at one edge via boneMaterial.
       const group = new THREE.Group();
-      const charMat = createMetalMaterial(0x2a1408, { wornScale: 10.0, scratchStrength: 0.05 });
+      const charMat = vmMetal(0x2a1408, { wornScale: 10.0, scratchStrength: 0.05 });
       const interiorMat = new THREE.MeshLambertMaterial({ color: 0x7a3a22 });
-      const boneMat = createBoneMaterial(0xcab8a0, { crackDensity: 0.5 });
+      const boneMat = vmBone(0xcab8a0, { crackDensity: 0.5 });
       // 3 slices stacked
       for (let i = 0; i < 3; i++) {
         const useChar = i % 2 === 0;
@@ -1197,7 +1220,7 @@ const _DEFS: Record<ItemId, ItemDef> = {
       // slab + lighter rendered-fat interior peeking through a crack +
       // a few darker char-blister bumps on top.
       const group = new THREE.Group();
-      const crustMat = createMetalMaterial(0x2e1810, { wornScale: 8.0, scratchStrength: 0.04 });
+      const crustMat = vmMetal(0x2e1810, { wornScale: 8.0, scratchStrength: 0.04 });
       const fatMat = new THREE.MeshLambertMaterial({ color: 0xa07050 });
       const slab = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.035, 0.07), crustMat);
       slab.rotation.set(0.1, 0.4, 0.05);
@@ -1243,7 +1266,7 @@ const _DEFS: Record<ItemId, ItemDef> = {
       // Reads as actual woody fiber not painted plastic. Added one more
       // small offshoot for asymmetric "natural twig" silhouette.
       const group = new THREE.Group();
-      const mat = createWoodGrainMaterial(0x6e685f, {
+      const mat = vmWood(0x6e685f, {
         grainAxis: Math.PI / 2.4,     // grain aligns with the stick's tilt
         ringDensity: 12.0,            // tight rings → small-diameter branch
         weatherLevel: 0.55,           // dead-tree branches are weathered grey
@@ -1338,7 +1361,7 @@ const _DEFS: Record<ItemId, ItemDef> = {
       // wedged in the bundle. Reads as "kindling, flint, and a striker"
       // per the item description.
       const group = new THREE.Group();
-      const woodMat = createWoodGrainMaterial(0x6a4a2a, {
+      const woodMat = vmWood(0x6a4a2a, {
         grainAxis: 0,
         ringDensity: 14.0,
         weatherLevel: 0.45,
@@ -1359,7 +1382,7 @@ const _DEFS: Record<ItemId, ItemDef> = {
       flint.rotation.set(0.3, 0.5, 0.2);
       group.add(flint);
       // Striker — small metal shard wedged on the other side
-      const strikerMat = createMetalMaterial(0x9aa0a8, { wornScale: 12.0 });
+      const strikerMat = vmMetal(0x9aa0a8, { wornScale: 12.0 });
       const striker = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.008, 0.004), strikerMat);
       striker.position.set(-0.022, -0.058, 0.008);
       striker.rotation.set(0.1, -0.4, 0.6);
@@ -1418,8 +1441,8 @@ const _DEFS: Record<ItemId, ItemDef> = {
       // (brushed iron with scratches + worn highlights) + a cooked-residue
       // rust patch on one bar + small chain detail dangling from a side.
       const group = new THREE.Group();
-      const ironMat = createMetalMaterial(0x3a342a, { wornScale: 10.0, scratchStrength: 0.08 });
-      const rustyMat = createMetalMaterial(0x5a2a18, { wornScale: 10.0, scratchStrength: 0.12 });
+      const ironMat = vmMetal(0x3a342a, { wornScale: 10.0, scratchStrength: 0.08 });
+      const rustyMat = vmMetal(0x5a2a18, { wornScale: 10.0, scratchStrength: 0.12 });
       // 4 short bars stacked + a frame loop suggesting the grate
       for (let i = 0; i < 4; i++) {
         const bar = new THREE.Mesh(
@@ -1930,7 +1953,7 @@ const _DEFS: Record<ItemId, ItemDef> = {
       flap.rotation.set(0.18, 0, 0);
       group.add(flap);
       // 4 wood-grain poles bundled beneath the canvas.
-      const poleMat = createWoodGrainMaterial(0x4a3a2a, {
+      const poleMat = vmWood(0x4a3a2a, {
         grainAxis: 0,            // grain along the pole length (lies along X)
         ringDensity: 11.0,
         weatherLevel: 0.5,
@@ -1950,7 +1973,7 @@ const _DEFS: Record<ItemId, ItemDef> = {
         group.add(cord);
       }
       // A spare metal stake tucked along the bundle.
-      const stakeMat = createMetalMaterial(0x6e5a4a, { wornScale: 7.0 });
+      const stakeMat = vmMetal(0x6e5a4a, { wornScale: 7.0 });
       const stake = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.002, 0.24, 6), stakeMat);
       stake.rotation.z = Math.PI / 2;
       stake.position.set(0, 0.05, -0.09);
@@ -2003,7 +2026,7 @@ const _DEFS: Record<ItemId, ItemDef> = {
       }
       // Cord wrapping the roll + a small wood toggle peg on each.
       const cordMat = createFabricMaterial(0x5a4030, undefined, { disableShimmer: true });
-      const pegMat = createWoodGrainMaterial(0x4a3320, { grainAxis: Math.PI / 2, ringDensity: 14.0 });
+      const pegMat = vmWood(0x4a3320, { grainAxis: Math.PI / 2, ringDensity: 14.0 });
       for (let i = 0; i < 2; i++) {
         const x = (i - 0.5) * 0.10;
         const cord = new THREE.Mesh(new THREE.TorusGeometry(0.065, 0.005, 6, 14), cordMat);
@@ -2044,7 +2067,7 @@ const _DEFS: Record<ItemId, ItemDef> = {
       // wood-grain post, metal cap/base/uprights, a procedural frosted-glass
       // globe, and a bright emissive flame core glowing inside the glass.
       const group = new THREE.Group();
-      const postMat = createWoodGrainMaterial(0x5a4030, {
+      const postMat = vmWood(0x5a4030, {
         grainAxis: Math.PI / 2,    // grain runs up the post
         ringDensity: 13.0,
         weatherLevel: 0.5,
@@ -2052,7 +2075,7 @@ const _DEFS: Record<ItemId, ItemDef> = {
       const post = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.014, 0.22, 8), postMat);
       group.add(post);
       // Metal base foot + top cap.
-      const metalMat = createMetalMaterial(0x4a4640, { wornScale: 8.0 });
+      const metalMat = vmMetal(0x4a4640, { wornScale: 8.0 });
       const base = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.034, 0.018, 12), metalMat);
       base.position.y = -0.115;
       group.add(base);
@@ -2060,7 +2083,7 @@ const _DEFS: Record<ItemId, ItemDef> = {
       cap.position.y = 0.135;
       group.add(cap);
       // Frosted-glass globe — lets the flame read through.
-      const globeMat = createGlassMaterial(0xffd9a0, {
+      const globeMat = vmGlass(0xffd9a0, {
         frostLevel: 0.35,
         edgeHighlight: 0.7,
         dustLayer: 0.2,
@@ -2112,12 +2135,12 @@ const _DEFS: Record<ItemId, ItemDef> = {
       // on body, metal shader on band + hinges + latch, plus a small
       // round handle on the front face. Reads as a real lidded chest.
       const group = new THREE.Group();
-      const woodMat = createWoodGrainMaterial(0x6a4a2c, {
+      const woodMat = vmWood(0x6a4a2c, {
         grainAxis: 0,
         ringDensity: 10.0,
         weatherLevel: 0.45,
       });
-      const metalMat = createMetalMaterial(0x3a3a3a, { wornScale: 8.0 });
+      const metalMat = vmMetal(0x3a3a3a, { wornScale: 8.0 });
       // Body
       const box = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.12, 0.12), woodMat);
       group.add(box);
@@ -2237,7 +2260,7 @@ const _DEFS: Record<ItemId, ItemDef> = {
       // driven cap. Same vocab as the in-world mesh, scaled smaller for
       // the FP viewmodel.
       const group = new THREE.Group();
-      const ironMat = createMetalMaterial(0x4a4038, {
+      const ironMat = vmMetal(0x4a4038, {
         wornScale: 14.0,
         scratchStrength: 0.35,
       });
@@ -2306,7 +2329,7 @@ const _DEFS: Record<ItemId, ItemDef> = {
       // a second concentric coil loop for "looped multiple times"
       // silhouette + a fraying tail strand at one end.
       const group = new THREE.Group();
-      const coilMat = createWoodGrainMaterial(0x6e4a2a, {
+      const coilMat = vmWood(0x6e4a2a, {
         grainAxis: 0,           // grain along the rope's circumference
         ringDensity: 24.0,      // very tight — reads as fiber striations
         weatherLevel: 0.45,

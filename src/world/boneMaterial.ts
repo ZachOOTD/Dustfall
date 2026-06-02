@@ -42,6 +42,13 @@ export interface BoneMaterialOpts {
   ageBleach?: number;
   /** Whether to render double-sided (default false). */
   doubleSide?: boolean;
+  /** ACT — sample the crack/marrow/bleach noise in OBJECT-LOCAL coords
+   *  instead of world-space (D109). Required for MOVING bone props (the
+   *  bone-handled knife viewmodel tracks the camera / rig hand each frame);
+   *  world-space sampling makes the cracks crawl across the surface as the
+   *  player walks. Static bone (wreck skeletons) leaves this false. Default
+   *  false. */
+  localSpace?: boolean;
 }
 
 /** Build the patched bone material. Drop-in replacement for
@@ -70,10 +77,19 @@ export function createBoneMaterial(
     );
     shader.vertexShader = shader.vertexShader.replace(
       '#include <begin_vertex>',
-      /* glsl */ `
-        #include <begin_vertex>
-        vWorldBone = (modelMatrix * vec4(position, 1.0)).xyz;
-      `,
+      opts.localSpace
+        /* glsl */
+        ? `
+          #include <begin_vertex>
+          // ACT — localSpace (D109): anchor cracks to the object frame so
+          // they don't crawl as a held/moving bone prop translates.
+          vWorldBone = position;
+        `
+        /* glsl */
+        : `
+          #include <begin_vertex>
+          vWorldBone = (modelMatrix * vec4(position, 1.0)).xyz;
+        `,
     );
 
     shader.fragmentShader = shader.fragmentShader.replace(

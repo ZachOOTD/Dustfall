@@ -40,6 +40,13 @@ export interface WoodGrainMaterialOpts {
   grainStrength?: number;
   /** Whether to render double-sided (default false). */
   doubleSide?: boolean;
+  /** ACT — sample the grain/ring/weathering noise in OBJECT-LOCAL coords
+   *  instead of world-space (D109). Required for MOVING wood props (held
+   *  viewmodel items — staff, torch, branch — which track the camera / rig
+   *  hand every frame); world-space sampling makes the grain crawl across
+   *  the surface as the player walks. Static wood (locker, posts) leaves
+   *  this false for coherent world-aligned grain. Default false. */
+  localSpace?: boolean;
 }
 
 /** Build the patched wood-grain material. Drop-in replacement for
@@ -69,10 +76,19 @@ export function createWoodGrainMaterial(
     );
     shader.vertexShader = shader.vertexShader.replace(
       '#include <begin_vertex>',
-      /* glsl */ `
-        #include <begin_vertex>
-        vWorldWood = (modelMatrix * vec4(position, 1.0)).xyz;
-      `,
+      opts.localSpace
+        /* glsl */
+        ? `
+          #include <begin_vertex>
+          // ACT — localSpace (D109): anchor grain to the object frame so it
+          // doesn't crawl as a held/moving wood prop translates.
+          vWorldWood = position;
+        `
+        /* glsl */
+        : `
+          #include <begin_vertex>
+          vWorldWood = (modelMatrix * vec4(position, 1.0)).xyz;
+        `,
     );
 
     shader.fragmentShader = shader.fragmentShader.replace(

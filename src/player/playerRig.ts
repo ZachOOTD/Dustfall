@@ -209,12 +209,17 @@ function buildRigVisual(): {
   // shiny + grey) to fabricMaterial with disableShimmer (matte leather
   // look — brown base, no metal sheen). Reads as worn leather strap.
   const strapMat = createFabricMaterial(STRAP_COLOR, undefined, { disableShimmer: true });
-  const pauldronMetalMat = createMetalMaterial(PAULDRON_METAL, { wornScale: 9.0, scratchStrength: 0.10 });
+  // ACT — localSpace: true (D109) on ALL the rig's procedural metal/paint.
+  // The player rig MOVES (and is the most-viewed moving model in 3P), so
+  // world-space noise sampling made scratches + paint-chips crawl across the
+  // pauldron / pouches / goggle rim as the player walked — same swim class as
+  // the speeder antenna. localSpace anchors the weathering to the body frame.
+  const pauldronMetalMat = createMetalMaterial(PAULDRON_METAL, { wornScale: 9.0, scratchStrength: 0.10, localSpace: true });
   // Painted-corroded: pouches + pauldron plates (chipped paint over rust)
-  const pouchPaintMat = createPaintedMetalMaterial(POUCH_RUST, { wearLevel: 0.6 });
+  const pouchPaintMat = createPaintedMetalMaterial(POUCH_RUST, { wearLevel: 0.6, localSpace: true });
   // ABX P3 — bumped wearLevel 0.7 → 0.88 for more visible rust + paint
   // chipping (more salvaged/battle-scarred read).
-  const pauldronPaintMat = createPaintedMetalMaterial(PAULDRON_RUST, { wearLevel: 0.88 });
+  const pauldronPaintMat = createPaintedMetalMaterial(PAULDRON_RUST, { wearLevel: 0.88, localSpace: true });
 
   // ── Torso: ORGANIC LATHE (ABS R1) ──
   // Pre-ABS: 4-piece composite (2 cylinders + 2 sphere caps) read as
@@ -451,7 +456,7 @@ function buildRigVisual(): {
   // sharp specular glint from the key/rim light, reading as a real reflective
   // lens instead of a flat black disc (the cartoonish tell on the face).
   const goggleLensMat = new THREE.MeshStandardMaterial({ color: 0x14181c, roughness: 0.13, metalness: 0.55 });
-  const goggleRimMat = createMetalMaterial(0x6a5a3a, { wornScale: 10.0, scratchStrength: 0.20 });  // scavenged brass rim
+  const goggleRimMat = createMetalMaterial(0x6a5a3a, { wornScale: 10.0, scratchStrength: 0.20, localSpace: true });  // scavenged brass rim (ACT — localSpace D109; rig moves)
   const GOG_Y = HEAD_R * 0.20;            // eye line (slightly above center)
   const GOG_Z = HEAD_R * 0.95;            // ON the face surface (radius ~0.97R here)
   // Two lenses on the +Z face — smoked-glass disc in a brass rim, toed out to
@@ -982,9 +987,68 @@ export function updatePlayerRig(ctx: GameContext, dt: number): void {
   const rig = ctx.player.rig;
   if (!rig) return;
 
-  // Visibility gate — only sync transforms when visible.
+  // ── Gait bookkeeping — runs in BOTH camera modes (FP and 3P). ──
+  // ACT FIX: this block previously sat BELOW the visibility early-return, so
+  // in first person rig.speedMag / state / stepCount never advanced. But
+  // controller.ts drives footstep AUDIO and footprint DECALS off rig.stepCount
+  // — so in FP both silently died (footprints + steps only appeared in 3P).
+  // The cheap state + gait-phase bookkeeping now runs unconditionally; only
+  // the visual transform work (position / heading / bone posing) stays gated
+  // below the visibility check.
+  const lv = ctx.player.body.body.linvel();
+  rig.speedMag = Math.sqrt(lv.x * lv.x + lv.z * lv.z);
+
+  // State classification
+  const speedRun = Tuning.WALK_SPEED * Tuning.SPRINT_MULTIPLIER * 0.85;
+  if (ctx.player.crouching) {
+    rig.state = 'crouching';
+  } else if (rig.speedMag < 0.15) {
+    rig.state = 'idle';
+  } else if (rig.speedMag < speedRun) {
+    rig.state = 'walking';
+  } else {
+    rig.state = 'running';
+  }
+
+  const t = ctx.time.elapsed;
+  const isWalking = rig.state === 'walking' || rig.state === 'running';
+
+  // Gait amplitudes + global phase. ABQ R1: amplitudes bumped — pre-R1 read
+  // as "subtle" rather than a clear walk; was hipAmp=0.40/0.55,
+  // armAmp=hipAmp*0.85. Walk now reads at 3P distance. (Hoisted out of the
+  // bone block so the step-count math below runs in FP too; the bone posing
+  // in 3P reuses these.)
+  const gaitFreq = rig.state === 'walking' ? 1.6 : 2.4;
+  const phase = t * gaitFreq * _PI2;
+  const hipAmp = rig.state === 'walking' ? 0.48 : 0.62;
+  const armAmp = hipAmp * 0.95;
+
+  // ABY P1 — step counter increment. Heel-strikes happen at
+  // legPhase = π/2, 3π/2, 5π/2, ... (sin peaks of opposite-leg pair),
+  // so the GLOBAL phase passes a step-boundary every π radians offset
+  // from π/2. Track _lastStepPhase; count how many π-spaced
+  // boundaries (offset π/2) we've crossed since last frame.
+  if (isWalking) {
+    const stepBoundary = Math.PI / 2;   // first heel-strike phase
+    const stepPeriod = Math.PI;          // one heel-strike every π
+    const prevSteps = Math.floor((rig._lastStepPhase - stepBoundary) / stepPeriod);
+    const curSteps = Math.floor((phase - stepBoundary) / stepPeriod);
+    const delta = curSteps - prevSteps;
+    if (delta > 0 && rig._lastStepPhase > 0) {
+      // First frame after state-change has _lastStepPhase ≈ 0 from idle
+      // reset — skip that frame's massive delta to avoid burst.
+      if (delta < 5) rig.stepCount += delta;
+    }
+    rig._lastStepPhase = phase;
+  }
+
+  // ── Visibility gate — visual transforms only past here. ──
   rig.group.visible = ctx.flags.thirdPerson;
-  if (!rig.group.visible) return;
+  if (!rig.group.visible) {
+    // Keep the aim-twist turn-rate baseline synced so 3P re-entry is smooth.
+    rig._aimPrevHeading = rig.heading;
+    return;
+  }
 
   // Position — ABT P2 fix: pre-fix used `tr.y - eyeOffset - 0.5` which
   // is an approximate magic number that doesn't match actual capsule
@@ -1006,54 +1070,8 @@ export function updatePlayerRig(ctx: GameContext, dt: number): void {
   }
   rig.group.rotation.y = rig.heading;
 
-  // Speed magnitude
-  const lv = ctx.player.body.body.linvel();
-  rig.speedMag = Math.sqrt(lv.x * lv.x + lv.z * lv.z);
-
-  // State classification
-  const speedRun = Tuning.WALK_SPEED * Tuning.SPRINT_MULTIPLIER * 0.85;
-  if (ctx.player.crouching) {
-    rig.state = 'crouching';
-  } else if (rig.speedMag < 0.15) {
-    rig.state = 'idle';
-  } else if (rig.speedMag < speedRun) {
-    rig.state = 'walking';
-  } else {
-    rig.state = 'running';
-  }
-
   // Animate per state
-  const t = ctx.time.elapsed;
-  const isWalking = rig.state === 'walking' || rig.state === 'running';
-
   if (isWalking) {
-    // ABQ R1: amplitudes bumped — pre-R1 read as "subtle" rather than
-    // a clear walk; was hipAmp=0.40/0.55, armAmp=hipAmp*0.85. Walk now
-    // reads at 3P distance.
-    const gaitFreq = rig.state === 'walking' ? 1.6 : 2.4;
-    const phase = t * gaitFreq * _PI2;
-    const hipAmp = rig.state === 'walking' ? 0.48 : 0.62;
-    const armAmp = hipAmp * 0.95;
-
-    // ABY P1 — step counter increment. Heel-strikes happen at
-    // legPhase = π/2, 3π/2, 5π/2, ... (sin peaks of opposite-leg pair),
-    // so the GLOBAL phase passes a step-boundary every π radians offset
-    // from π/2. Track _lastStepPhase; count how many π-spaced
-    // boundaries (offset π/2) we've crossed since last frame.
-    {
-      const stepBoundary = Math.PI / 2;   // first heel-strike phase
-      const stepPeriod = Math.PI;          // one heel-strike every π
-      const prevSteps = Math.floor((rig._lastStepPhase - stepBoundary) / stepPeriod);
-      const curSteps = Math.floor((phase - stepBoundary) / stepPeriod);
-      const delta = curSteps - prevSteps;
-      if (delta > 0 && rig._lastStepPhase > 0) {
-        // First frame after state-change has _lastStepPhase ≈ 0 from idle
-        // reset — skip that frame's massive delta to avoid burst.
-        if (delta < 5) rig.stepCount += delta;
-      }
-      rig._lastStepPhase = phase;
-    }
-
     // 3-phase walk cycle per leg via 2 sin curves (hip + knee phase-locked
     // so knee bends during MID-SWING — foot in air, leg recovering forward —
     // and STRAIGHTENS at heel-strike + mid-stance + toe-off).
