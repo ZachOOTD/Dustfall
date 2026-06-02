@@ -1287,6 +1287,11 @@ export const Tuning = {
   STORM_WALL_DEPART_FALLOFF: 300,  // ramp distance (u) over which intensity falls as the wall departs
   STORM_WALL_RETIRE_DIST: 260,     // signed distance past the player at which the wall is spent (ends storm early)
   STORM_WALL_WIND_BIAS: 5.5,       // extra wind (u/s) along wall dir at full intensity for mid dust layer (far x1.4, near x0.6)
+  // ACW E (#146/#134) — storm wind pushes loose bodies + in-storm sensory.
+  STORM_WIND_PUSH_ACCEL: 4.5,      // u/s² wind accel on loose bodies (dropped pickups, parked speeder, slack sled) at full world intensity
+  STORM_CAM_SWAY_AMP: 0.022,       // rad — peak camera sway (pitch/roll) buffeting at full perceivedIntensity
+  STORM_CAM_SWAY_FREQ: 1.7,        // Hz base — gust sway frequency (pitch + roll run at slightly different rates)
+  STORM_AUDIO_LP_MIN_HZ: 2600,     // master low-pass cutoff at full storm (muffled); opens to ~20kHz when clear
 
   // ACL IN-STORM MOVEMENT PENALTY — unsheltered slow-down in a storm.
   STORM_PENALTY_INTENSITY_THRESHOLD: 0.55, // intensity below which there is no movement penalty

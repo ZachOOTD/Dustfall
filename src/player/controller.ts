@@ -16,6 +16,7 @@ import {
 } from '../audio/audio.ts';
 import { spawnFootprintPuff } from '../world/footprintPuffs.ts';
 
+const _PI2 = Math.PI * 2;
 const fwd = new THREE.Vector3();
 const right = new THREE.Vector3();
 const desired = new THREE.Vector3();
@@ -400,7 +401,35 @@ const _shoulderAnchor = new THREE.Vector3();
 const _rayOrig = { x: 0, y: 0, z: 0 };
 const _rayDir = { x: 0, y: 0, z: 0 };
 
+// ACW E (#134) — in-storm camera sway. A subtle pitch/roll buffet on the
+// camera, scaled by perceivedIntensity (sheltered = calm). Mirrors the
+// speeder-roll pattern: undo last frame's sway before applying the new one so
+// it never accumulates on top of the PointerLockControls mouse orientation.
+const _swayQuat = new THREE.Quaternion();
+const _swayInv = new THREE.Quaternion();
+const _swayEuler = new THREE.Euler(0, 0, 0, 'XYZ');
+let _swayActive = false;
+function applyStormCameraSway(ctx: GameContext): void {
+  const cam = ctx.three.camera;
+  if (_swayActive) { cam.quaternion.multiply(_swayInv); _swayActive = false; }
+  const pi = ctx.weather.perceivedIntensity;
+  if (pi <= 0.05) return;
+  const t = ctx.time.elapsed;
+  const amp = Tuning.STORM_CAM_SWAY_AMP * pi;
+  const f = Tuning.STORM_CAM_SWAY_FREQ;
+  // Pitch + roll at slightly different rates so the buffet doesn't read as a
+  // single clean oscillation. Local-space (post-multiply) so it rides the view.
+  const pitch = Math.sin(t * f * _PI2) * amp;
+  const roll = Math.cos(t * f * 0.73 * _PI2) * amp;
+  _swayEuler.set(pitch, 0, roll, 'XYZ');
+  _swayQuat.setFromEuler(_swayEuler);
+  _swayInv.copy(_swayQuat).invert();
+  cam.quaternion.multiply(_swayQuat);
+  _swayActive = true;
+}
+
 function syncCameraToBody(ctx: GameContext): void {
+  applyStormCameraSway(ctx);
   const tr = ctx.player.body.body.translation();
   if (ctx.flags.thirdPerson) {
     const cam = ctx.three.camera;

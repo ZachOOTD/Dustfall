@@ -744,7 +744,7 @@ startLoop(ctx, (c, dt) => {
   // roll/fall/settle). Cheap walk; skips pickups without a body.
   // Runs AFTER physics.step (above) so the body transform reflects
   // this tick's integration result.
-  updatePickups(c);
+  updatePickups(c, dt);
   updateRaiders(c, dt);          // AI state machine + raider movement
   updateLizards(c, dt);          // small flee-AI wildlife
   updateShrews(c, dt);           // ACL — skittery shrew prey (idle/wander/flee); pause-gated internally

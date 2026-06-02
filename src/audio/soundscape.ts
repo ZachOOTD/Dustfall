@@ -10,7 +10,7 @@
 // live in audio.ts and are untouched.
 
 import type { GameContext } from '../GameContext.ts';
-import { getAudioInternals } from './audio.ts';
+import { getAudioInternals, setStormMuffle } from './audio.ts';
 import { preloadSamples, getSample, type SampleId } from './samples.ts';
 
 interface StemNodes {
@@ -154,6 +154,8 @@ export function updateSoundscape(ctx: GameContext, dt: number): void {
   // authoritative intensity — those represent the world's state, not
   // the player's perception of it.
   const storm = clamp01(ctx.weather.perceivedIntensity);
+  // ACW E (#134) — muffle the whole mix as the storm engulfs the player.
+  setStormMuffle(storm);
   const sy = ctx.time.sunHeight;
   const day = clamp01(sy * 1.5 + 0.1);
   const night = clamp01(-sy * 1.5 + 0.1);

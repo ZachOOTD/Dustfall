@@ -51,6 +51,7 @@ import { resolveEndpointWorldPos } from './rope.ts';
 // in updateSleds (replacing the inline math); also available for new
 // non-sled endpoint kinds (raider_corpse, sandworm_carcass) to reuse.
 import { applyInextensibleConstraint } from './ropeConstraint.ts';
+import { stormWindAccel } from './weather.ts';
 export type SledTether = RopeEndpoint;
 
 export interface Sled {
@@ -841,6 +842,14 @@ export function updateSleds(ctx: GameContext, dt: number): void {
 
     let svx = sled._slideVx ?? 0;
     let svz = sled._slideVz ?? 0;
+    // ACW E (#146) — storm wind nudges the sled's slide velocity (kinematic,
+    // can't take a force). A free/slack sled drifts downwind; a towed sled is
+    // perturbed but the rope-snap correction below pulls it back.
+    {
+      const wind = stormWindAccel(ctx.weather);
+      svx += wind.x * dt;
+      svz += wind.z * dt;
+    }
     if (onSlope) {
       // DOWNHILL SIGN FIX (retained). terrain.normalAt computes normal
       // via `(hL - hR, 2e, hD - hU).normalize()` (see terrain.ts). For

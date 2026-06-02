@@ -543,3 +543,21 @@ export function seedOpeningStorm(weather: Weather): void {
   weather.wall.age = 0;
   weather.wall.approaching = false;
 }
+
+// ACW E (#146) — horizontal wind acceleration (world u/s²) from the active
+// storm wall, directed along the wall's travel direction and scaled by the
+// WORLD intensity (loose objects are pushed regardless of where the player
+// shelters — perceivedIntensity is a player-felt quantity, not a world force).
+// Returns a shared scratch (no per-frame alloc); callers read .x/.z at once.
+const _windAccel = { x: 0, z: 0 };
+export function stormWindAccel(weather: Weather): { x: number; z: number } {
+  const w = weather.wall;
+  if (!w.active || weather.intensity <= 0.02) {
+    _windAccel.x = 0; _windAccel.z = 0;
+    return _windAccel;
+  }
+  const mag = weather.intensity * Tuning.STORM_WIND_PUSH_ACCEL;
+  _windAccel.x = w.dirX * mag;
+  _windAccel.z = w.dirZ * mag;
+  return _windAccel;
+}

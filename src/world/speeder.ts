@@ -34,6 +34,7 @@ import {
   stopSpeederThrust,
 } from '../audio/audio.ts';
 import { transferTetherOnMount, transferTetherOnDismount } from './sled.ts';
+import { stormWindAccel } from './weather.ts';
 
 export interface SpeederState {
   body: RAPIER.RigidBody;
@@ -876,6 +877,11 @@ export function updateSpeeder(ctx: GameContext, dt: number): void {
     const damp = Math.exp(-Tuning.SPEEDER_UNMOUNTED_LINEAR_DAMP_RATE_PER_S * dt);
     unmountedDampedVx *= damp;
     unmountedDampedVz *= damp;
+    // ACW E (#146) — storm wind shoves the parked bike downwind (the damping
+    // above bleeds it back off once the gust eases).
+    const wind = stormWindAccel(ctx.weather);
+    unmountedDampedVx += wind.x * dt;
+    unmountedDampedVz += wind.z * dt;
   }
   body.setLinvel({ x: unmountedDampedVx, y: newVy, z: unmountedDampedVz }, true);
 

@@ -9,6 +9,7 @@ import type { Terrain } from '../world/terrain.ts';
 import type { AssetRegistry } from '../assets/loader.ts';
 import { cloneAsset } from '../assets/loader.ts';
 import { Tuning } from '../config/tuning.ts';
+import { stormWindAccel } from '../world/weather.ts';
 import type { ItemId, ItemMeta } from '../inventory/types.ts';
 import { getItemDef } from '../inventory/items.ts';
 
@@ -415,13 +416,22 @@ export function spawnDroppedPickup(
  *  pickup detection, save serialization) read the live position. */
 const _pickupSyncPos = new THREE.Vector3();
 const _pickupSyncQuat = new THREE.Quaternion();
-export function updatePickups(ctx: import('../GameContext.ts').GameContext): void {
+export function updatePickups(ctx: import('../GameContext.ts').GameContext, dt: number): void {
+  // ACW E (#146) — storm wind nudges loose dropped items downwind. Computed
+  // once per frame; applied as a per-frame impulse (= force × dt) on dynamic
+  // bodies so a sandstorm scatters dropped gear.
+  const wind = stormWindAccel(ctx.weather);
+  const hasWind = wind.x !== 0 || wind.z !== 0;
   for (const p of ctx.pickups.list) {
     if (!p.body) continue;
     // ACC P2 — riding pickups are kinematic-driven by updateSledRiders.
     // Skip them here so we don't overwrite this-frame's sled-driven pose
     // with the stale body translation.
     if (p.ridingSledId !== null) continue;
+    if (hasWind) {
+      const m = p.body.mass();
+      if (m > 0) p.body.applyImpulse({ x: wind.x * m * dt, y: 0, z: wind.z * m * dt }, true);
+    }
     const t = p.body.translation();
     const r = p.body.rotation();
     _pickupSyncPos.set(t.x, t.y, t.z);

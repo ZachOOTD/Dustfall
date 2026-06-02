@@ -11,6 +11,11 @@ let _master: GainNode | null = null;
 let _sfx: GainNode | null = null;
 let _ambient: GainNode | null = null;
 let _noiseBuffer: AudioBuffer | null = null;
+// ACW E (#134) — master storm low-pass. Sits between _master and the
+// destination; its cutoff ramps down during a storm so the whole mix muffles
+// (sand-deadened hearing), opening back to ~20kHz (transparent) when clear.
+let _stormLP: BiquadFilterNode | null = null;
+const _STORM_LP_OPEN_HZ = 20000;
 
 export interface AudioInternals {
   ctx: AudioContext;
@@ -30,6 +35,20 @@ export function setMasterVolume(v: number): void {
   if (_master) _master.gain.value = v;
 }
 
+/** ACW E (#134) — ramp the master storm low-pass from `storm01` (0 = clear /
+ *  fully open, 1 = peak storm / muffled). Called per-frame from updateSoundscape
+ *  with the player's perceivedIntensity. Cutoff lerps log-ish toward
+ *  STORM_AUDIO_LP_MIN_HZ as the storm engulfs the player. */
+export function setStormMuffle(storm01: number): void {
+  if (!_stormLP || !_ctx) return;
+  const s = Math.max(0, Math.min(1, storm01));
+  const minHz = Tuning.STORM_AUDIO_LP_MIN_HZ;
+  // Geometric interpolation between open + muffled reads more natural than
+  // linear for filter cutoff.
+  const cutoff = _STORM_LP_OPEN_HZ * Math.pow(minHz / _STORM_LP_OPEN_HZ, s);
+  _stormLP.frequency.setTargetAtTime(cutoff, _ctx.currentTime, 0.08);
+}
+
 export function ensureAudioStarted(): void {
   if (_ctx) {
     if (_ctx.state === 'suspended') void _ctx.resume();
@@ -43,7 +62,14 @@ export function ensureAudioStarted(): void {
 
   _master = _ctx.createGain();
   _master.gain.value = 0.55;
-  _master.connect(_ctx.destination);
+  // ACW E (#134) — master → storm low-pass → destination. Cutoff defaults
+  // fully open (transparent) and is ramped down by setStormMuffle during a storm.
+  _stormLP = _ctx.createBiquadFilter();
+  _stormLP.type = 'lowpass';
+  _stormLP.frequency.value = _STORM_LP_OPEN_HZ;
+  _stormLP.Q.value = 0.7;
+  _master.connect(_stormLP);
+  _stormLP.connect(_ctx.destination);
 
   _sfx = _ctx.createGain();
   _sfx.gain.value = 0.9;
