@@ -175,7 +175,13 @@ function buildRigVisual(): {
     scaleSize: 30.0,             // ACK: finer pores
     sheen: 0.14,                 // ACK: matte dry skin
     localSpace: true,
-    pbr: true, roughness: 0.9, bump: 0.5,   // ACK PM-E: per-fragment lighting + micro-bump (realism)
+    // ACU — PM-E PBR lighting REVERTED. The derivative-based (`dFdx/dFdy`)
+    // micro-bump perturbed the view-space normal from screen-space derivatives;
+    // on the moving/animating rig that shimmered/sparkled as the model moved
+    // (the user's "glitchy when it moves"). Dropping `pbr` falls back to Lambert
+    // (vertex-lit, smooth normal — no derivative term) and skips the baked-
+    // occlusion block too. The procedural skin COLOR (pigment/cells/veins/sheen/
+    // grain) is unaffected (not pbr-gated), so the look survives minus the relief.
   });
   // ABX — secondary hands-only skin: same base but with grime accent
   // (dirty knuckles + palms). Per-region material variation.
@@ -184,7 +190,7 @@ function buildRigVisual(): {
     scaleSize: 24.0,             // slightly larger "calluses"
     sheen: 0.12,
     localSpace: true,
-    pbr: true, roughness: 0.92, bump: 0.6,   // ACK PM-E
+    // ACU — PBR reverted (see skinMat above): derivative micro-bump shimmered on the moving rig.
   });
   // Torso/limbs under poncho — same skin tone but slightly darker
   // (shadows under cloth). Player can't see most of this; the cloth
@@ -194,16 +200,19 @@ function buildRigVisual(): {
     scaleSize: 22.0,
     sheen: 0.18,                 // ACK PM-E: matte
     localSpace: true,
-    pbr: true, roughness: 0.94, bump: 0.7,   // ACK PM-E: limbs catch light with relief (clones feed torso/arms/legs)
+    // ACU — PBR reverted (see skinMat above): derivative micro-bump shimmered on the moving rig.
   });
   // Cloth layers — fabric shader with disableShimmer (rig is a moving
   // entity; shimmer would crawl per ABN/D109 sibling pattern).
-  const hoodMat = createFabricMaterial(HOOD_COLOR, undefined, { disableShimmer: true, pbr: true, roughness: 0.95, bump: 0.8 });
+  // ACU — PM-E PBR reverted on all rig cloth (same shimmer fix as the skin): the
+  // pbr path's derivative-based normal bump sparkled as the player moved. Back to
+  // Lambert; the fabric weave/stain/grain COLOR is unaffected (not pbr-gated).
+  const hoodMat = createFabricMaterial(HOOD_COLOR, undefined, { disableShimmer: true });
   // PM-B.3 (ACJ): pale sun-bleached face-wrap cloth — deliberately lighter +
   // cooler than the warm skin tone so the lower-face scarf reads as a distinct
   // cloth layer (the old same-tone bandana blended into the skin = invisible).
-  const scarfMat = createFabricMaterial(0xe4dcc4, undefined, { disableShimmer: true, pbr: true, roughness: 0.95, bump: 0.7 });
-  const wrapMat = createFabricMaterial(WRAP_COLOR, undefined, { disableShimmer: true, pbr: true, roughness: 0.95, bump: 0.9 });
+  const scarfMat = createFabricMaterial(0xe4dcc4, undefined, { disableShimmer: true });
+  const wrapMat = createFabricMaterial(WRAP_COLOR, undefined, { disableShimmer: true });
   // Metal: bandolier strap + pauldron base
   // ABX P4 — bandolier swapped from metalMaterial (was reading too
   // shiny + grey) to fabricMaterial with disableShimmer (matte leather
@@ -273,7 +282,7 @@ function buildRigVisual(): {
   // radius ≈ the arm-attach lateral, so the skinned arms emerge just outside +
   // the deltoid caps the gap). Distinct cloth tone from skin/undercloth so it
   // reads as a worn garment. Resting shape only — real drape/sway is PM-D cloth.
-  const garmentMat = createFabricMaterial(0x83805d, undefined, { disableShimmer: true, pbr: true, roughness: 0.96, bump: 1.0 }); // faded olive-drab canvas, fold relief
+  const garmentMat = createFabricMaterial(0x83805d, undefined, { disableShimmer: true }); // ACU — PBR reverted (shimmer fix); faded olive-drab canvas
   garmentMat.side = THREE.DoubleSide;
   const GOFF = 0.017;   // cloth thickness over the body
   const tunicProfile = [
