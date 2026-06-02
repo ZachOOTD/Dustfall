@@ -706,6 +706,69 @@ function sledForwardFromQuat(quat: THREE.Quaternion): { x: number; z: number } {
   return { x: _sledFwdTmp.x / len, z: _sledFwdTmp.z / len };
 }
 
+// ── ACU #42 — sled-vs-POI collision clamp. ─────────────────────────────────
+// The sled body is KinematicPositionBased and was driven straight to its target
+// XZ each frame (slope-slide + rope-tow), passing through POI/wreck/rock
+// colliders. This shapecasts the sled's footprint along the intended move and
+// returns a target clamped short of any FIXED, non-terrain collider, so solid
+// structures block it. Terrain (heightfield) + dynamic bodies (items, creatures,
+// speeder, player) are filtered OUT so the sled still rides the dunes freely and
+// isn't snagged by loose objects. Gated by Tuning.SLED_POI_COLLISION.
+let _sledCastCuboid: RAPIER.Cuboid | null = null;
+const _sledCastPos = { x: 0, y: 0, z: 0 };
+const _sledCastRot = { x: 0, y: 0, z: 0, w: 1 };
+const _sledCastVel = { x: 0, y: 0, z: 0 };
+const _sledCastQuat = new THREE.Quaternion();
+const _sledMoveOut = { x: 0, z: 0, blocked: false };
+function poiBlockerPredicate(col: RAPIER.Collider): boolean {
+  const body = col.parent();
+  // Block ONLY on fixed, non-heightfield colliders → POIs / wrecks / rocks /
+  // structures. Terrain heightfield + all dynamic/kinematic bodies pass through.
+  return !!body && body.isFixed() && col.shapeType() !== RAPIER.ShapeType.HeightField;
+}
+function clampSledMoveAgainstPOIs(
+  ctx: GameContext, sled: Sled,
+  fromX: number, fromZ: number, toX: number, toZ: number, bodyY: number,
+): { x: number; z: number; blocked: boolean } {
+  _sledMoveOut.x = toX; _sledMoveOut.z = toZ; _sledMoveOut.blocked = false;
+  if (!Tuning.SLED_POI_COLLISION) return _sledMoveOut;
+  const dx = toX - fromX, dz = toZ - fromZ;
+  const dist = Math.hypot(dx, dz);
+  if (dist < 1e-4) return _sledMoveOut;
+  if (!_sledCastCuboid) {
+    _sledCastCuboid = new RAPIER.Cuboid(
+      Tuning.SLED_HALF_EXTENTS_X,
+      Tuning.SLED_POI_COLLISION_CAST_HALF_Y,
+      Tuning.SLED_HALF_EXTENTS_Z,
+    );
+  }
+  _sledCastQuat.setFromAxisAngle(_sledWorldUp, sled.yaw);
+  _sledCastPos.x = fromX; _sledCastPos.y = bodyY; _sledCastPos.z = fromZ;
+  _sledCastRot.x = _sledCastQuat.x; _sledCastRot.y = _sledCastQuat.y;
+  _sledCastRot.z = _sledCastQuat.z; _sledCastRot.w = _sledCastQuat.w;
+  _sledCastVel.x = dx; _sledCastVel.y = 0; _sledCastVel.z = dz;
+  // stopAtPenetration=false: if the sled somehow STARTS overlapping (clipped in
+  // before the flag, or a tunnel), don't freeze it at toi=0 — let it move out.
+  const hit = ctx.physics.world.castShape(
+    _sledCastPos, _sledCastRot, _sledCastVel, _sledCastCuboid,
+    0, 1.0, false,
+    0 as unknown as RAPIER.QueryFilterFlags,
+    undefined,
+    sled.collider,            // exclude the sled's own collider
+    undefined,
+    poiBlockerPredicate,
+  );
+  if (!hit) return _sledMoveOut;
+  // time_of_impact ∈ [0,1] is the fraction of the move before contact. Back off
+  // a skin gap so the sled rests just shy of the wall (avoids jitter on contact).
+  const toi = hit.time_of_impact;
+  const safeFrac = Math.max(0, toi - Tuning.SLED_POI_COLLISION_SKIN_M / dist);
+  _sledMoveOut.x = fromX + dx * safeFrac;
+  _sledMoveOut.z = fromZ + dz * safeFrac;
+  _sledMoveOut.blocked = true;
+  return _sledMoveOut;
+}
+
 /** Per-frame: enforce the inextensible-rope constraint on every
  *  tethered sled and rebuild its rope mesh.
  *
@@ -812,8 +875,19 @@ export function updateSleds(ctx: GameContext, dt: number): void {
     // Single setNextKinematicTranslation per frame; Rapier uses
     // (next - current) / dt as the implicit velocity for friction with
     // dynamic items on the deck (so they get dragged along).
-    const newX = tr.x + svx * dt;
-    const newZ = tr.z + svz * dt;
+    let newX = tr.x + svx * dt;
+    let newZ = tr.z + svz * dt;
+    // ACU #42 — clamp the slide move short of any POI/structure collider so an
+    // untethered sliding sled can't coast through a wreck. If blocked, kill the
+    // slide velocity (the sled has hit a wall — it shouldn't keep pushing).
+    {
+      const clamped = clampSledMoveAgainstPOIs(ctx, sled, tr.x, tr.z, newX, newZ, tr.y);
+      if (clamped.blocked) {
+        newX = clamped.x; newZ = clamped.z;
+        sled._slideVx = 0; sled._slideVz = 0;
+        svx = 0; svz = 0;
+      }
+    }
     const groundY = ctx.terrain.heightAt(newX, newZ);
     const targetBodyY = groundY + hy + Tuning.SLED_GROUND_CLEARANCE;
     sled.body.setNextKinematicTranslation({ x: newX, y: targetBodyY, z: newZ });
@@ -989,6 +1063,8 @@ export function updateSleds(ctx: GameContext, dt: number): void {
     // position-snap + radial/perpendicular velocity damping. Same math
     // as the pre-ACE inline block.
     const _sledSlideVel = { vx: sled._slideVx ?? 0, vz: sled._slideVz ?? 0 };
+    const _preConstraintX = tr.x;  // ACU #42 — pre-snap pos for the POI clamp below
+    const _preConstraintZ = tr.z;
     const constraintResult = applyInextensibleConstraint(
       {
         attachX: _sledAttach.x,
@@ -1025,6 +1101,18 @@ export function updateSleds(ctx: GameContext, dt: number): void {
         y: constraintResult.postY,
         z: constraintResult.postZ,
       } as ReturnType<typeof sled.body.translation>;
+      // ACU #42 — the rope-tow snap can yank the sled toward the player THROUGH
+      // a POI. Clamp the snap target short of any structure collider and
+      // re-commit (last setNextKinematicTranslation wins for the kinematic body).
+      const clamped = clampSledMoveAgainstPOIs(
+        ctx, sled, _preConstraintX, _preConstraintZ, tr.x, tr.z, tr.y,
+      );
+      if (clamped.blocked) {
+        const cGroundY = ctx.terrain.heightAt(clamped.x, clamped.z) + hy + Tuning.SLED_GROUND_CLEARANCE;
+        sled.body.setNextKinematicTranslation({ x: clamped.x, y: cGroundY, z: clamped.z });
+        sled._slideVx = 0; sled._slideVz = 0;
+        tr = { x: clamped.x, y: cGroundY, z: clamped.z } as ReturnType<typeof sled.body.translation>;
+      }
     }
 
     // Direct yaw lerp toward anchor. Body rotations are locked so

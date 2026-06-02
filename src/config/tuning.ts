@@ -1141,6 +1141,15 @@ export const Tuning = {
   // landing area for thrown items + more room before the back rim
   // catches them.
   SLED_HALF_EXTENTS_X: 0.6,                  // cargo bed half-width (1.2m wide)
+  // ACU #42 — sled-vs-POI collision. When true, the sled shapecasts its
+  // footprint before each move and clamps short of any FIXED, non-terrain
+  // collider (POI/wreck/rock), so it can no longer be dragged or slid through
+  // solid structures. Flag so it's instantly reversible if it regresses the
+  // (heavily-iterated) slide/tow feel. Cast half-height taller than the flat
+  // 2cm body so it reliably intersects POI hull walls.
+  SLED_POI_COLLISION: true,
+  SLED_POI_COLLISION_CAST_HALF_Y: 0.40,
+  SLED_POI_COLLISION_SKIN_M: 0.05,           // back-off gap so the sled rests just shy of the wall
   // ACD playtest follow-up — lowered 0.10 → 0.02. The body cuboid was
   // 20cm tall, putting items resting on the top deck collider ~29cm
   // above terrain (well above the visual scrap-sheet's flat center

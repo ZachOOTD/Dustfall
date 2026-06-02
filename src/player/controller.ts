@@ -229,11 +229,34 @@ export function updatePlayer(ctx: GameContext, dt: number): void {
   controller.computeColliderMovement(collider, desired);
   const corrected = controller.computedMovement();
 
+  // ACU — #40 fix: clamp the HORIZONTAL corrected delta. The requested
+  // horizontal motion is bounded (`speed * dt`, with `speed` fully clamped
+  // above and `dt` clamped to 0.1 in loop.ts), and normal KCC collision
+  // response only ever SHORTENS horizontal movement (sliding along walls).
+  // The one path that can LENGTHEN it is penetration recovery — when the
+  // capsule overlaps a static collider (a POI/wreck wall, a rock, or the
+  // speeder collider on dismount), the KCC ejects it, adding that ejection to
+  // `computedMovement()` → a sudden one-frame lurch the player reads as a
+  // "random dramatic speed increase". Cap the horizontal step at 1.5× the
+  // fastest legitimate on-foot frame so an eject can still nudge the capsule
+  // free over a few frames but never teleports it. Vertical (gravity / jump /
+  // autostep) is left untouched. Foreground-confirm owed (D150 — the trigger
+  // depends on real clipping geometry the headless harness can't exercise).
+  let cdx = corrected.x;
+  let cdz = corrected.z;
+  const horizMag = Math.hypot(cdx, cdz);
+  const maxHoriz = Tuning.WALK_SPEED * Tuning.SPRINT_MULTIPLIER * dt * 1.5;
+  if (horizMag > maxHoriz && horizMag > 1e-6) {
+    const k = maxHoriz / horizMag;
+    cdx *= k;
+    cdz *= k;
+  }
+
   const tr = body.translation();
   body.setNextKinematicTranslation({
-    x: tr.x + corrected.x,
+    x: tr.x + cdx,
     y: tr.y + corrected.y,
-    z: tr.z + corrected.z,
+    z: tr.z + cdz,
   });
 
   ctx.player.onGround = controller.computedGrounded();
