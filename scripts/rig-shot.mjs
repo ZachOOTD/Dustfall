@@ -437,6 +437,96 @@ const SCENARIOS = {
     console.log(`[rig-shot] saved scen-rig3p-${tag}.png`);
   },
 
+  // Footprint-repro (ACX): equip the gun in 3P, stamp a line of player
+  // footprints at the feet, then frame low-behind so the held gun overlaps the
+  // ground decals on screen — to confirm + diagnose footsteps-through-items.
+  'footprint-repro': async (page) => {
+    await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      ctx.weather.intensity = 0; window.__game.setTime(0.5);
+      ctx.three.renderer.toneMappingExposure = 1.15; ctx.three.renderer.setSize(820, 820, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1; cam.updateProjectionMatrix(); }
+      ctx.flags.thirdPerson = true;
+      const inv = ctx.inventory;
+      inv.slots[0].item = 'scrap_gun'; inv.slots[0].count = 1; inv.slots[0].meta = undefined; inv.selectedIdx = 0;
+    });
+    await page.waitForTimeout(500);
+    await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      const rig = ctx.player.rig;
+      rig.group.updateMatrixWorld(true);
+      const V = ctx.three.camera.position.constructor;
+      const root = rig.group.getWorldPosition(new V());
+      const h = rig.heading;
+      const fwd = new V(Math.sin(h), 0, Math.cos(h));
+      // Stamp a dense patch of footprints on the ground AHEAD of the player so
+      // the hip-held gun projects onto them from a high-behind, looking-down cam.
+      for (let i = 0; i <= 8; i++) {
+        for (let j = -1; j <= 1; j++) {
+          const px = root.x + fwd.x * (0.2 + i * 0.18) + (-fwd.z) * j * 0.18;
+          const pz = root.z + fwd.z * (0.2 + i * 0.18) + (fwd.x) * j * 0.18;
+          ctx.footprints.spawn('player', px, pz, h, ctx.time.elapsed);
+        }
+      }
+      ctx.flags.paused = true;
+      const cam = ctx.three.camera;
+      // High behind, steep look-down so the gun (hip) overlaps the ground decals
+      // ahead — the depth case that exposes see-through.
+      cam.position.set(root.x - fwd.x * 0.6, root.y + 2.3, root.z - fwd.z * 0.6);
+      cam.lookAt(root.x + fwd.x * 1.2, root.y, root.z + fwd.z * 1.2);
+      cam.updateMatrixWorld(true);
+    });
+    await page.waitForTimeout(200);
+    await page.screenshot({ path: join(OUT, 'scen-footprint-repro.png'), fullPage: false });
+    console.log('[rig-shot] saved scen-footprint-repro.png');
+  },
+
+  // Depthprobe (ACX): log the runtime material/render flags of the held 3P item
+  // + the footprint decals, to diagnose why footsteps show through held items.
+  'depthprobe': async (page) => {
+    await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      ctx.flags.thirdPerson = true;
+      const inv = ctx.inventory;
+      inv.slots[0].item = 'scrap_gun'; inv.slots[0].count = 1; inv.slots[0].meta = undefined;
+      inv.selectedIdx = 0;
+    });
+    await page.waitForTimeout(500);
+    const probe = await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      const out = { item: [], decals: [], itemRenderOrderGroup: null };
+      const rig = ctx.player.rig;
+      rig.rightHandAttach.traverse((o) => {
+        if (o.isMesh && o.material) {
+          const m = o.material;
+          out.item.push({
+            name: o.name || o.geometry?.type || '?',
+            transparent: m.transparent, depthTest: m.depthTest, depthWrite: m.depthWrite,
+            renderOrder: o.renderOrder, matType: m.type, visible: o.visible,
+          });
+        }
+      });
+      // attach group renderOrder + visibility chain
+      out.attachVisible = rig.rightHandAttach.visible;
+      out.attachRenderOrder = rig.rightHandAttach.renderOrder;
+      // Walk scene for footprint InstancedMeshes (player decals).
+      ctx.three.scene.traverse((o) => {
+        if (o.isInstancedMesh && o.material) {
+          const m = o.material;
+          out.decals.push({
+            renderOrder: o.renderOrder, transparent: m.transparent,
+            depthTest: m.depthTest, depthWrite: m.depthWrite,
+            polygonOffset: m.polygonOffset, count: o.count,
+          });
+        }
+      });
+      out.rendererSortObjects = ctx.three.renderer.sortObjects;
+      return out;
+    });
+    console.error('[depthprobe] ' + JSON.stringify(probe, null, 0));
+  },
+
   // Held-item (ACW D9/D10): equip an item (--item=<id>), let updateViewModel
   // swap it into the rig's right hand in 3P, then PAUSE + free-camera close on
   // the hand so the makeViewModel mesh + its handAttachTransform can be judged.

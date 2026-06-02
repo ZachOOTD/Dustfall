@@ -160,9 +160,14 @@ function makeFootprintMaterial(
     color: colorHex,
     transparent: true,
     depthWrite: false,
-    polygonOffset: true,        // bias on top of terrain to avoid z-fight
-    polygonOffsetFactor: -1,
-    polygonOffsetUnits: -1,
+    // ACX FIX — NO polygonOffset. The decals already sit FOOTPRINT_OFFSET_Y
+    // (4cm) above the terrain, which alone defeats terrain z-fight. The old
+    // polygonOffsetFactor:-1 scaled with the polygon's depth SLOPE, which is
+    // huge for a ground decal at a grazing angle — it pulled the decal's depth
+    // toward the camera enough to beat NEARBY geometry (held items ~90cm up),
+    // so footsteps punched through everything held in hand. Dropping the offset
+    // lets the true (depth-tested) depth occlude the decal behind held items.
+    depthTest: true,
     fog: true,
     toneMapped: false,
   });
