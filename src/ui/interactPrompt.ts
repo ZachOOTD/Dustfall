@@ -2,8 +2,10 @@
 // at any interactable entity. The verb is determined by hover.type, the
 // noun by hover.promptNoun (set by the interaction system).
 
+import * as THREE from 'three';
 import type { GameContext } from '../GameContext.ts';
 import type { InteractType } from '../inventory/types.ts';
+import { getHoverWorldPos } from '../player/interaction.ts';
 
 const VERBS: Record<InteractType, string> = {
   // AAA — restored to 'take' (UU's LMB-take reverted). E is the
@@ -46,6 +48,21 @@ let _lastLabel = '';
 // the player "you'll click and nothing happens" before they mash LMB.
 let _crosshairEl: HTMLDivElement | null = null;
 let _lastCrosshairState: '' | 'interactable' | 'kill' | 'dead' | 'no_ammo' = '';
+
+// ACW F (#149) — 3P prompt positioning. In 3P the player + hovered object are
+// off-center, so the crosshair-anchored prompt reads detached. We project the
+// hovered object's world hit point to screen and pin the prompt there. `_posOverridden`
+// tracks whether inline left/top/transform are set so we can restore the CSS
+// default (crosshair-centered) exactly once when returning to FP / no-hover.
+const _projVec = new THREE.Vector3();
+let _posOverridden = false;
+function resetPromptPos(): void {
+  if (!_root || !_posOverridden) return;
+  _root.style.left = '';
+  _root.style.top = '';
+  _root.style.transform = '';
+  _posOverridden = false;
+}
 
 // ItemIds that come from a corpse (dead lizard, sandworm corpse). Hovering
 // these with hover.type='take' triggers the .dead crosshair state rather
@@ -168,6 +185,26 @@ export function updateInteractPrompt(ctx: GameContext, _dt: number): void {
       _label.textContent = label;
       _lastLabel = label;
     }
+  }
+
+  // ACW F (#149) — in 3P, pin the prompt to the hovered object's screen
+  // position (projected from its world hit point) so it doesn't read detached
+  // at crosshair-center. FP keeps the CSS-default crosshair anchor.
+  const wp = (show && ctx.flags.thirdPerson) ? getHoverWorldPos() : null;
+  if (wp) {
+    _projVec.copy(wp).project(ctx.three.camera);
+    if (_projVec.z < 1) {            // in front of the camera
+      const sx = (_projVec.x * 0.5 + 0.5) * window.innerWidth;
+      const sy = (-_projVec.y * 0.5 + 0.5) * window.innerHeight;
+      _root.style.left = `${sx}px`;
+      _root.style.top = `${sy + 22}px`;        // sit just below the object point
+      _root.style.transform = 'translateX(-50%)';
+      _posOverridden = true;
+    } else {
+      resetPromptPos();              // object behind camera → fall back to center
+    }
+  } else {
+    resetPromptPos();
   }
 
   // VV — crosshair feedback hook. Same per-frame cadence as the prompt;

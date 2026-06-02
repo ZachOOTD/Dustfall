@@ -110,6 +110,56 @@ async function captureStrip(page, name, perFrame) {
 }
 
 const SCENARIOS = {
+  // Prompt-3P (ACW F #149): place the player near a ground pickup, aim the 3P
+  // camera at it so the eye-ray hovers it, tick live, then verify the prompt was
+  // re-pinned to the object's projected screen position (inline left set to a px
+  // value) instead of the CSS crosshair-center default ("50%"). Also screenshots.
+  'prompt-3p': async (page) => {
+    const setup = await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      ctx.weather.intensity = 0; window.__game.setTime(0.5);
+      ctx.three.renderer.toneMappingExposure = 1.1;
+      ctx.three.renderer.setSize(900, 700, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 900 / 700; cam.updateProjectionMatrix(); }
+      ctx.flags.thirdPerson = true;
+      const p = ctx.pickups.list[0];
+      if (!p) return { err: 'no pickup' };
+      // Put the player ~2.4m from the pickup; aim the eye/camera at it.
+      const px = p.pos.x, pz = p.pos.z, py = ctx.terrain.heightAt(px, pz);
+      const bx = px, bz = pz + 2.4, by = py + 1.0;
+      ctx.player.body.body.setTranslation({ x: bx, y: by, z: bz }, true);
+      cam.position.set(bx, by + 0.7, bz + 1.5); // 3P behind; eye-ray still aims fwd
+      cam.lookAt(px, py + 0.2, pz);
+      cam.updateMatrixWorld(true);
+      return { pickup: p.itemId, at: [+px.toFixed(1), +pz.toFixed(1)] };
+    });
+    console.log('[prompt-3p] setup ' + JSON.stringify(setup));
+    // Tick live so updateInteraction raycasts + updateInteractPrompt repositions.
+    for (let i = 0; i < 12; i++) {
+      await page.evaluate(() => {
+        const ctx = window.__game.ctx;
+        const p = ctx.pickups.list[0];
+        if (p) { const cam = ctx.three.camera; cam.lookAt(p.pos.x, ctx.terrain.heightAt(p.pos.x, p.pos.z) + 0.2, p.pos.z); cam.updateMatrixWorld(true); }
+      });
+      await page.waitForTimeout(70);
+    }
+    const result = await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      const el = document.getElementById('interact-prompt');
+      return {
+        hover: ctx.inventory.hover ? ctx.inventory.hover.promptNoun : null,
+        promptLeft: el ? el.style.left : '(none)',
+        promptTop: el ? el.style.top : '(none)',
+        transform: el ? el.style.transform : '(none)',
+      };
+    });
+    console.log('[prompt-3p] ' + JSON.stringify(result));
+    await page.waitForTimeout(150);
+    await page.screenshot({ path: join(OUT, 'scen-prompt-3p.png'), fullPage: false });
+    console.log('[rig-shot] saved scen-prompt-3p.png');
+  },
+
   // Shrew flee: face the player at a shrew ~5m ahead (< SPOT_DISTANCE 7m), 1P
   // static camera. The shrew flees directly AWAY from the camera, so it recedes
   // along the view axis and stays roughly centered — the strip shows the bolt

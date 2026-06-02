@@ -65,6 +65,17 @@ const _ray = new THREE.Raycaster();
 const _dir = new THREE.Vector3();
 const _rayFrom = new THREE.Vector3();
 
+// ACW F (#149) — world position of the current frame's interactable hit (the
+// raycast's closest hit point). The 3P interact-prompt projects this to screen
+// so the prompt sits ON the hovered object instead of at crosshair-center
+// (which reads detached in 3P, where the object is off the screen center).
+// Transient; null when nothing is hovered. interactPrompt.ts reads via the getter.
+const _hoverWorldPos = new THREE.Vector3();
+let _hoverWorldValid = false;
+export function getHoverWorldPos(): THREE.Vector3 | null {
+  return _hoverWorldValid ? _hoverWorldPos : null;
+}
+
 interface InteractHit {
   type: InteractType;
   id: number;
@@ -193,6 +204,7 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
   for (const sl of ctx.sleds.list) sl.hovered = false;
   for (const st of ctx.stakes.list) st.hovered = false;
   ctx.inventory.hover = null;
+  _hoverWorldValid = false;   // ACW F — invalidated until this frame's raycast resolves a hit
   // AAO — default cook bars to hidden each frame; re-shown inside the
   // 'fires' hover branch below when the player is looking at a fire
   // with active cooks. (Cooks themselves keep ticking regardless of
@@ -299,6 +311,9 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
     return;
   }
   info.distance = hit.distance;
+  // ACW F (#149) — record the hit point so the 3P prompt can sit on the object.
+  _hoverWorldPos.copy(hit.point);
+  _hoverWorldValid = true;
   // If we're salvaging but the hovered thing is no longer the same wreck, cancel.
   if (_salvaging && (info.registry !== 'salvageables' || info.id !== _salvaging.salvageableId)) {
     cancelSalvage();
