@@ -301,6 +301,58 @@ const SCENARIOS = {
     }
   },
 
+  // Held-item (ACW D9/D10): equip an item (--item=<id>), let updateViewModel
+  // swap it into the rig's right hand in 3P, then PAUSE + free-camera close on
+  // the hand so the makeViewModel mesh + its handAttachTransform can be judged.
+  // Used to confirm item models render in-hand + to iterate the 3P grip pose.
+  'held-item': async (page) => {
+    const item = argv.item || 'machete';
+    await page.evaluate((item) => {
+      const ctx = window.__game.ctx;
+      ctx.weather.intensity = 0;
+      window.__game.setTime(0.5);
+      ctx.three.renderer.toneMappingExposure = 1.1;
+      ctx.three.renderer.setSize(900, 900, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1; cam.updateProjectionMatrix(); }
+      ctx.flags.thirdPerson = true;
+      const inv = ctx.inventory;
+      inv.slots[0].item = item; inv.slots[0].count = 1; inv.slots[0].meta = undefined;
+      inv.selectedIdx = 0;
+    }, item);
+    await page.waitForTimeout(450); // let updateViewModel swap the mesh into the hand
+    await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      const rig = ctx.player.rig;
+      ctx.flags.paused = true;
+      // Pose the right arm OUT in front so the held item clears the torso +
+      // backpack (a relaxed hanging arm tucks the item against the body where
+      // it can't be judged). Forward-and-up shoulder + slight elbow bend.
+      rig.shoulders[1].rotation.set(-1.15, 0, 0.18);
+      rig.elbows[1].rotation.x = 0.35;
+      rig.wrists[1].rotation.x = -0.05;
+      rig.group.updateMatrixWorld(true);
+      const cam = ctx.three.camera;
+      const V = cam.position.constructor;
+      const hand = rig.rightHandAttach.getWorldPosition(new V());
+      const fz = rig.headGroup.getWorldDirection(new V()); fz.y = 0; fz.normalize();
+      const side = new V(-fz.z, 0, fz.x);
+      // Frame from the hand's right side (perpendicular to the body facing), a
+      // touch above, ~0.5m out — the extended arm keeps the body out of frame.
+      cam.position.set(
+        hand.x + side.x * 0.50 + fz.x * 0.10,
+        hand.y + 0.10,
+        hand.z + side.z * 0.50 + fz.z * 0.10,
+      );
+      cam.lookAt(hand.x, hand.y - 0.02, hand.z);
+      cam.updateMatrixWorld(true);
+    });
+    await page.waitForTimeout(250);
+    const path = join(OUT, `scen-held-${item}.png`);
+    await page.screenshot({ path, fullPage: false });
+    console.log(`[held-item] ${item} → ${path}`);
+  },
+
   // Speeder-FX (ACW C7/C8): drive the (unmounted) bike LIVE for ~0.6s so the
   // dust trail builds + the engine glow ramps with speed, then PAUSE (freezes
   // the dust cloud mid-air + holds the glow) and free-camera a 3/4-behind shot

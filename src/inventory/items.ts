@@ -17,6 +17,7 @@ import { deployCompanion } from '../enemies/companion.ts';
 import { easeOutBack, easeInOutCubic, easeOutQuad } from '../core/ease.ts';
 import { addItem } from './inventory.ts';
 import { makeLizardVisual } from '../enemies/lizard.ts';
+import { makeShrewVisual } from '../enemies/shrew.ts';
 import { createMetalMaterial, type MetalMaterialOpts } from '../world/metalMaterial.ts';
 import { createFabricMaterial } from '../world/fabricMaterial.ts';
 import { createWoodGrainMaterial, type WoodGrainMaterialOpts } from '../world/woodGrainMaterial.ts';
@@ -365,6 +366,9 @@ const _DEFS: Record<ItemId, ItemDef> = {
     maxStack: 1,
     wieldLmb: 'click_use',
     thirdPersonScale: 1.4,    // ABY P3 — small thin metal bar, boost for 3P visibility
+    // ACW D10 — 3P grip: grip-wrap at -Y, shaft +Y (same convention as the
+    // machete). Lift so the wrap seats in the fist; the bar extends forward.
+    handAttachTransform: { pos: [0, 0.12, 0], rot: [0, 0, 0] },
     onUse(_ctx, _slot) {
       // The actual pry logic lives in interaction.ts's 'salvageables'
       // case — onUse returns "do nothing" because the interaction.ts
@@ -434,6 +438,11 @@ const _DEFS: Record<ItemId, ItemDef> = {
     maxStack: 1,
     wieldLmb: 'attack',
     thirdPersonScale: 1.35,    // ABY P3
+    // ACW D10 — 3P grip: the mesh is built blade-up / handle-down with its
+    // origin at the guard, so by default the rig grips it at the guard and the
+    // handle floats above the fist. Shift +Y so the handle bottom seats in the
+    // hand; the blade then extends forward-down from the fist (carried machete).
+    handAttachTransform: { pos: [0, 0.11, 0], rot: [0, 0, 0] },
     onUse(_ctx, _slot) {
       return { consumed: false };
     },
@@ -479,6 +488,19 @@ const _DEFS: Record<ItemId, ItemDef> = {
       itemRoot.position.set(-0.04 * p, 0.04 * p, -0.22 * p);
       itemRoot.rotation.set(-0.85 * p, -0.2 * p, 0.15);
     },
+    playUseAnim3P(rig, t) {
+      // ACW D11 — 3P diagonal overhead chop on the right arm (the FP playUseAnim
+      // only moves the viewmodel item, invisible in 3P). p ∈ [-1 (raised back),
+      // +1 (struck down-forward)]: windup → snap → recover, mirroring the FP
+      // strike timing. Author absolute bone poses (the rig re-poses next frame).
+      let p: number;
+      if (t < 0.3) p = -easeOutQuad(t / 0.3);                 // raise up/back
+      else if (t < 0.55) p = -1 + 2 * easeOutBack((t - 0.3) / 0.25); // snap forward (overshoot)
+      else p = 1 - easeInOutCubic((t - 0.55) / 0.45);         // recover to neutral
+      rig.shoulders[1].rotation.set(-0.5 + 1.0 * p, 0, 0.2 - 0.3 * p);
+      rig.elbows[1].rotation.x = 0.9 - 0.7 * Math.max(0, p);  // bent on windup, extends on strike
+      rig.wrists[1].rotation.x = -0.1;
+    },
     useAnimDuration: Tuning.VIEWMODEL_MACHETE_ANIM_S,
   },
 
@@ -491,6 +513,9 @@ const _DEFS: Record<ItemId, ItemDef> = {
     stackable: false,
     maxStack: 1,
     wieldLmb: 'attack',
+    // ACW D10 — 3P grip: grip bands at -Y, pipe +Y (machete convention). Lift
+    // so the wrapped grip seats in the fist; the pipe extends forward.
+    handAttachTransform: { pos: [0, 0.12, 0], rot: [0, 0, 0] },
     onUse(_ctx, _slot) {
       return { consumed: false };
     },
@@ -1098,6 +1123,27 @@ const _DEFS: Record<ItemId, ItemDef> = {
       ctx.stats.health = Math.max(0, ctx.stats.health - 0.05);
       return { consumed: true, message: 'raw meat — you gag a little' };
     },
+    makeViewModel() {
+      // ACW D9 — was MISSING (rendered nothing in hand). Mirror raw_lizard_meat:
+      // show the actual shrew mesh held dangling upside-down by the tail.
+      const group = new THREE.Group();
+      const shrew = makeShrewVisual();
+      shrew.scale.setScalar(1.1);                          // shrew is smaller than the lizard
+      shrew.rotation.set(Math.PI * 0.05, 0.4, Math.PI);    // upside-down dangle, slight yaw
+      group.add(shrew);
+      return group;
+    },
+    makeIcon() {
+      const s = svg();
+      // Limp shrew silhouette held by the tail: plump body + big ear + long tail.
+      s.appendChild(svgEl('ellipse', { cx: '13', cy: '13', rx: '5', ry: '3' }));   // body
+      s.appendChild(svgEl('circle', { cx: '18', cy: '12', r: '2' }));              // head
+      s.appendChild(svgEl('ellipse', { cx: '17', cy: '9.5', rx: '1.4', ry: '2' })); // ear
+      s.appendChild(svgEl('path', { d: 'M8 13 Q4 13 3 16' }));                     // long tail
+      s.appendChild(svgEl('line', { x1: '17.4', y1: '11.4', x2: '18.4', y2: '12.4', 'stroke-width': '1' }));
+      s.appendChild(svgEl('line', { x1: '18.4', y1: '11.4', x2: '17.4', y2: '12.4', 'stroke-width': '1' }));
+      return s;
+    },
   },
 
   cooked_shrew_meat: {
@@ -1110,6 +1156,40 @@ const _DEFS: Record<ItemId, ItemDef> = {
     onUse(ctx, _slot) {
       ctx.stats.hunger = Math.min(1, ctx.stats.hunger + 0.28);
       return { consumed: true, message: 'stringy, but it fills you a little' };
+    },
+    makeViewModel() {
+      // ACW D9 — was MISSING. Small charred-meat composite (mirror
+      // cooked_lizard_meat, scaled down — a shrew is a mouthful): 2 layered
+      // cuts (char + cooked interior) on a little bone shard.
+      const group = new THREE.Group();
+      const charMat = vmMetal(0x2a1408, { wornScale: 10.0, scratchStrength: 0.05 });
+      const interiorMat = new THREE.MeshLambertMaterial({ color: 0x7a3a22 });
+      const boneMat = vmBone(0xcab8a0, { crackDensity: 0.5 });
+      for (let i = 0; i < 2; i++) {
+        const useChar = i % 2 === 0;
+        const slice = new THREE.Mesh(
+          new THREE.BoxGeometry(0.06 - i * 0.004, 0.010, 0.042 - i * 0.003),
+          useChar ? charMat : interiorMat,
+        );
+        slice.position.set(0, -0.003 + i * 0.010, 0);
+        slice.rotation.set(0.1, 0.4, 0.05);
+        group.add(slice);
+      }
+      const bone = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.004, 0.005, 0.034, 5),
+        boneMat,
+      );
+      bone.position.set(-0.028, 0.004, 0.008);
+      bone.rotation.set(0, 0.4, Math.PI / 2);
+      group.add(bone);
+      return group;
+    },
+    makeIcon() {
+      const s = svg();
+      s.appendChild(svgEl('polygon', { points: '6,12 9,8 15,9 18,12 16,16 11,17 7,15' }));
+      s.appendChild(svgEl('line', { x1: '10', y1: '12', x2: '15', y2: '13', 'stroke-width': '1' }));
+      s.appendChild(svgEl('path', { d: 'M9 5 Q10 3 11 5', 'stroke-width': '1' }));
+      return s;
     },
   },
 
