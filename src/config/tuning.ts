@@ -1307,6 +1307,13 @@ export const Tuning = {
   SHREW_CLUSTER_RADIUS_MAX: 14,    // m — max distance from a POI for a cluster spawn
   SHREW_SCATTER_RADIUS_MAX: 220,   // m — global-pass scatter radius
   SHREW_PER_POI_AVG: 1.4,          // avg shrews clustered per POI
+  // ACW B5 — shrew walk gait + burrow-on-approach.
+  SHREW_GAIT_FREQ_HZ: 4.0,         // Hz — stubby-leg cadence (faster than the lizard)
+  SHREW_GAIT_SWING: 0.5,           // rad — fore/aft leg swing
+  SHREW_GAIT_LIFT: 0.008,          // m — foot lift at mid-swing (small legs)
+  SHREW_BURROW_RADIUS: 2.6,        // m — player proximity that triggers a dive into the sand
+  SHREW_BURROW_DEPTH: 0.34,        // m — how far below the surface the shrew sinks
+  SHREW_BURROW_TRANSIT_S: 0.55,    // s — descent / re-emerge duration
 } as const;
 
 // Sky gradient colors (top vs horizon) per time of day. Horizon stays close to

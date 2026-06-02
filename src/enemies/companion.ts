@@ -227,6 +227,14 @@ function makeCompanionVisual(): {
     legSegment.position.set(LL * 0.5, 0, 0);
     hipGroup.add(legSegment);
 
+    // ACW B6 — mid-leg knuckle. A small faceted sphere at the leg midpoint so
+    // the legs read as jointed/chitinous rather than straight sticks (the one
+    // thing that looked a touch simple in the assess pass). Cosmetic only —
+    // doesn't change the gait pivot.
+    const knuckle = new THREE.Mesh(new THREE.IcosahedronGeometry(0.022, 0), legMat);
+    knuckle.position.set(LL * 0.5, 0, 0);
+    hipGroup.add(knuckle);
+
     // Tip — small sphere at the end of the leg (foot pad / claw).
     const tip = new THREE.Mesh(new THREE.SphereGeometry(0.025, 6, 5), tipMat);
     tip.position.set(LL, 0, 0);

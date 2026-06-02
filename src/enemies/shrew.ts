@@ -26,8 +26,15 @@ import { isPlaying } from '../GameContext.ts';
 import { createSkinMaterial } from '../world/skinMaterial.ts';
 import type { Terrain } from '../world/terrain.ts';
 import { Tuning } from '../config/tuning.ts';
+import { gaitPhase, legPose } from './creatureGait.ts';
+import {
+  createParticleTrail, emitBurst, updateParticleTrail, disposeParticleTrail,
+  type ParticleTrail,
+} from '../world/particleTrail.ts';
 
-export type ShrewState = 'idle' | 'wander' | 'flee' | 'dead';
+// ACW B5 — burrow now part of the FSM. 'burrow' = diving into / hiding under
+// the sand when the player closes within SHREW_BURROW_RADIUS.
+export type ShrewState = 'idle' | 'wander' | 'flee' | 'dead' | 'burrow';
 
 export interface Shrew {
   id: number;
@@ -48,6 +55,10 @@ export interface Shrew {
   /** Wander destination (world XZ; y ignored). */
   wanderTarget: THREE.Vector3;
   hovered: boolean;
+  /** ACW B5 — burrow descent progress 0 (on surface) → 1 (fully under the
+   *  sand). Eases toward 1 while the player is near in 'burrow' state, back
+   *  toward 0 when they leave. Transient (not persisted). */
+  burrowT: number;
 }
 
 // ── Tuning — promoted to Tuning (integration). ──
@@ -195,11 +206,19 @@ export function makeShrewVisual(): THREE.Group {
     { x: -0.026, sz: 1, pair: 'rear' },
     { x: -0.026, sz: -1, pair: 'rear' },
   ];
+  // ACW B5 — collect leg pivots for the walk gait (diagonal trot, like the
+  // lizard): the (front-left, rear-right) pair steps opposite (front-right,
+  // rear-left). `baseY` is the rest attach height the lift rides on.
+  const gaitLegs: Array<{ grp: THREE.Group; offset: number; baseY: number }> = [];
+  const LEG_BASE_Y = 0.028;
   for (const att of legAttach) {
     const leg = buildLeg(att.sz, att.pair);
-    leg.position.set(att.x, 0.028, att.sz * 0.018);
+    leg.position.set(att.x, LEG_BASE_Y, att.sz * 0.018);
     g.add(leg);
+    const diag = att.pair === 'front' ? att.sz : -att.sz;
+    gaitLegs.push({ grp: leg, offset: diag === 1 ? 0 : Math.PI, baseY: LEG_BASE_Y });
   }
+  g.userData.gaitLegs = gaitLegs;
 
   // ── Tail — long tapered Lathe extending in -X, with a darker tip tuft via
   // the dark material. Kangaroo-rat tails are nearly body-length.
@@ -259,6 +278,7 @@ export function spawnShrew(
     idleUntil: 0,
     wanderTarget: new THREE.Vector3(pos.x, 0, pos.z),
     hovered: false,
+    burrowT: 0,
   };
   _colliderToShrew.set(collider.handle, shrew);
   _shrews.push(shrew);
@@ -381,6 +401,50 @@ export function findShrewById(list: Shrew[], id: number | undefined): Shrew | un
 const _toPlayer = new THREE.Vector3();
 const _toTarget = new THREE.Vector3();
 
+// ── ACW B5 — shrew leg gait ──────────────────────────────────────────────
+interface ShrewGaitLeg { grp: THREE.Group; offset: number; baseY: number; }
+
+function animateShrewLegs(s: Shrew, elapsed: number, moving: boolean): void {
+  const legs = s.mesh.userData.gaitLegs as ShrewGaitLeg[] | undefined;
+  if (!legs) return;
+  if (!moving) {
+    for (const leg of legs) { leg.grp.rotation.z = 0; leg.grp.position.y = leg.baseY; }
+    return;
+  }
+  const phase = gaitPhase(elapsed + s.id * 0.41, Tuning.SHREW_GAIT_FREQ_HZ);
+  for (const leg of legs) {
+    const p = legPose(phase, leg.offset, Tuning.SHREW_GAIT_SWING, Tuning.SHREW_GAIT_LIFT, 0);
+    leg.grp.rotation.z = p.swing;
+    leg.grp.position.y = leg.baseY + p.lift;
+  }
+}
+
+// ── ACW B5 — shared burrow sand-puff (pooled particle trail) ─────────────
+// Lazily created on first burrow (needs the scene); HMR-disposed so a tuning
+// reload rebuilds it. Sandy tone, light gravity so it lingers like kicked-up
+// dust.
+let _burrowPuff: ParticleTrail | null = null;
+let _burrowPuffScene: THREE.Scene | null = null;
+if ((import.meta as { hot?: { dispose: (cb: () => void) => void } }).hot) {
+  (import.meta as { hot: { dispose: (cb: () => void) => void } }).hot.dispose(() => {
+    if (_burrowPuff && _burrowPuffScene) disposeParticleTrail(_burrowPuff, _burrowPuffScene);
+    _burrowPuff = null; _burrowPuffScene = null;
+  });
+}
+function burstBurrowPuff(scene: THREE.Scene, x: number, y: number, z: number): void {
+  if (!_burrowPuff) {
+    _burrowPuff = createParticleTrail(scene, {
+      count: 90, color: 0xc4a878, opacity: 0.6, gravity: 2.4, drag: 1.6,
+    });
+    _burrowPuffScene = scene;
+  }
+  emitBurst(_burrowPuff, x, y, z, 14, { speed: 0.6, up: 0.5, life: 0.7, size: 9, posJitter: 0.12 });
+}
+/** Per-frame integrate for the burrow puff (called from updateShrews). */
+export function updateShrewBurrowPuff(dt: number): void {
+  if (_burrowPuff) updateParticleTrail(_burrowPuff, dt);
+}
+
 /** Per-frame AI. ACL DESERT SHREW. Iterates the module-owned live list so it
  *  compiles standalone WITHOUT a `ctx.shrews` slot. The integrator wires
  *  `ctx.shrews = { list }` to the SAME array `spawnShrewsProcgen` returns, so
@@ -403,8 +467,16 @@ export function updateShrews(ctx: GameContext, dt: number): void {
     _toPlayer.y = 0;
     const distSq = _toPlayer.lengthSq();
 
-    // Player proximity always pre-empts into flee (from any non-flee state).
-    if (s.state !== 'flee' && distSq < SPOT_DISTANCE * SPOT_DISTANCE) {
+    // ACW B5 — burrow pre-empts flee when the player gets VERY close. The
+    // shrew bolts at SPOT_DISTANCE; if the player closes inside the (smaller)
+    // burrow radius, it dives into the sand instead of continuing to run.
+    const burrowR = Tuning.SHREW_BURROW_RADIUS;
+    if (s.state !== 'burrow' && distSq < burrowR * burrowR) {
+      s.state = 'burrow';
+    }
+
+    // Player proximity pre-empts into flee (from any non-flee, non-burrow state).
+    if (s.state !== 'flee' && s.state !== 'burrow' && distSq < SPOT_DISTANCE * SPOT_DISTANCE) {
       s.fleeDir.copy(_toPlayer).normalize().multiplyScalar(-1);
       const jitter = (Math.random() - 0.5) * 0.7;
       const c = Math.cos(jitter);
@@ -419,6 +491,8 @@ export function updateShrews(ctx: GameContext, dt: number): void {
     if (s.state === 'idle') {
       // Tiny breathing bob — mesh only, not AI position.
       s.mesh.position.y = s.pos.y + Math.sin(elapsed * 3 + s.id) * 0.004;
+      animateShrewLegs(s, elapsed, false); // ACW B5 — legs at rest
+
       if (s.idleUntil === 0) {
         s.idleUntil = elapsed + IDLE_MIN + Math.random() * (IDLE_MAX - IDLE_MIN);
       }
@@ -446,6 +520,7 @@ export function updateShrews(ctx: GameContext, dt: number): void {
         // Local forward is +X → yaw = atan2(-z, x) (same as the lizard).
         s.mesh.rotation.y = Math.atan2(-_toTarget.z, _toTarget.x);
         s.body.setNextKinematicTranslation({ x: s.pos.x, y: s.pos.y + 0.04, z: s.pos.z });
+        animateShrewLegs(s, elapsed, true); // ACW B5 — walk gait
       }
     } else if (s.state === 'flee') {
       const stepX = s.fleeDir.x * FLEE_SPEED * dt;
@@ -462,11 +537,43 @@ export function updateShrews(ctx: GameContext, dt: number): void {
       );
       s.mesh.rotation.y = Math.atan2(-s.fleeDir.z, s.fleeDir.x);
       s.body.setNextKinematicTranslation({ x: s.pos.x, y: s.pos.y + 0.04, z: s.pos.z });
+      animateShrewLegs(s, elapsed, true); // ACW B5 — scrabbling gait (layers under the hop)
       // Settle back to idle after the burst OR if the player is far away.
       if (elapsed > s.fleeUntil || distSq > SPOT_DISTANCE * 2 * (SPOT_DISTANCE * 2)) {
         s.state = 'idle';
         s.idleUntil = 0;
       }
+    } else if (s.state === 'burrow') {
+      // ACW B5 — dive into / hide under the sand. burrowT eases toward 1
+      // while the player is near, back toward 0 when they leave; the mesh
+      // sinks below the surface, tilts nose-down, and vanishes once mostly
+      // under. A sand puff bursts when crossing the surface (in or out).
+      const gy = ctx.terrain.heightAt(s.pos.x, s.pos.z);
+      const surfaceY = gy + TERRAIN_OFFSET;
+      const stayR = Tuning.SHREW_BURROW_RADIUS * 1.6; // hysteresis to stay buried
+      const playerNear = distSq < stayR * stayR;
+      const prevT = s.burrowT;
+      const dir = playerNear ? 1 : -1;
+      s.burrowT = Math.max(0, Math.min(1,
+        s.burrowT + (dir * dt) / Tuning.SHREW_BURROW_TRANSIT_S));
+      if ((prevT < 0.5) !== (s.burrowT < 0.5)) {
+        burstBurrowPuff(ctx.three.scene, s.pos.x, surfaceY + 0.02, s.pos.z);
+      }
+      const sinkY = surfaceY - s.burrowT * Tuning.SHREW_BURROW_DEPTH;
+      s.pos.y = sinkY;
+      s.mesh.position.set(s.pos.x, sinkY, s.pos.z);
+      s.mesh.rotation.z = -s.burrowT * 0.6;     // nose-down dive tilt
+      s.mesh.visible = s.burrowT < 0.85;
+      s.body.setNextKinematicTranslation({ x: s.pos.x, y: sinkY + 0.04, z: s.pos.z });
+      animateShrewLegs(s, elapsed, false);      // legs tucked while diving
+      if (s.burrowT <= 0 && !playerNear) {
+        s.mesh.rotation.z = 0;
+        s.mesh.visible = true;
+        s.state = 'idle';
+        s.idleUntil = 0;
+      }
     }
   }
+  // ACW B5 — advance the shared burrow sand-puff particles once per frame.
+  updateShrewBurrowPuff(dt);
 }

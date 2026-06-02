@@ -140,6 +140,212 @@ const SCENARIOS = {
     console.log(`[shrew-flee] END state=${end.state} pos=${end.pos}`);
   },
 
+  // Lizard-flee (ACW B4): force the lizard into a FIXED-direction flee (the AI
+  // normally flees away from the camera, which keeps it tail-on — useless for
+  // reading a gait). We pin fleeDir north + a far fleeUntil, then track from a
+  // CLOSE side-profile camera (east of the lizard) so the 4 stepping legs are
+  // visible. brightened exposure + a tight frame.
+  'lizard-flee': async (page) => {
+    const info = await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      ctx.three.renderer.toneMappingExposure = 1.7;
+      const l = ctx.lizards[0];
+      const sy = ctx.terrain.heightAt(l.pos.x, l.pos.z);
+      // Force a steady northward flee (z+), independent of camera position.
+      l.state = 'flee';
+      l.fleeDir.set(0, 0, 1);
+      l.fleeUntil = ctx.time.elapsed + 999;
+      const cam = ctx.three.camera;
+      // Teleport the player body to the side-view spot too — syncCameraToBody
+      // re-pins the camera to the body each tick, so the camera alone won't stick.
+      ctx.player.body.body.setTranslation({ x: l.pos.x + 0.55, y: sy + 0.50, z: l.pos.z + 0.15 }, true);
+      cam.position.set(l.pos.x + 0.55, sy + 0.50, l.pos.z + 0.15);
+      cam.lookAt(l.pos.x, sy + 0.04, l.pos.z);
+      cam.updateMatrixWorld(true);
+      return { lizardId: l.id, state0: l.state, pos: [+l.pos.x.toFixed(2), +l.pos.z.toFixed(2)] };
+    });
+    console.log(`[lizard-flee] lizard#${info.lizardId} state=${info.state0} pos=${info.pos}`);
+    // Track from the east side at 0.85m, low angle, re-pinning fleeDir + body each frame.
+    await captureStrip(page, 'lizard-flee', `(i)=>{const c=window.__game.ctx;const l=c.lizards[0];l.state='flee';l.fleeDir.set(0,0,1);l.fleeUntil=c.time.elapsed+999;const cam=c.three.camera;const gy=c.terrain.heightAt(l.pos.x,l.pos.z);c.player.body.body.setTranslation({x:l.pos.x+0.55,y:gy+0.50,z:l.pos.z+0.15},true);cam.position.set(l.pos.x+0.55,gy+0.50,l.pos.z+0.15);cam.lookAt(l.pos.x,gy+0.04,l.pos.z);cam.updateMatrixWorld(true);console.log('[lizard-flee] f'+i+' state='+l.state+' pos='+l.pos.x.toFixed(2)+','+l.pos.z.toFixed(2));}`);
+    const end = await page.evaluate(() => {
+      const l = window.__game.ctx.lizards[0];
+      return { state: l.state, pos: [+l.pos.x.toFixed(2), +l.pos.z.toFixed(2)] };
+    });
+    console.log(`[lizard-flee] END state=${end.state} pos=${end.pos}`);
+  },
+
+  // Lizard-gait (ACW B4 STATIC): the reliable read for a small creature's
+  // gait. Enter live (lizard + terrain exist), kill the storm + force bright
+  // noon, then for each of several gait phases: PAUSE (main loop early-returns,
+  // so a free camera sticks + the manual leg pose survives), replicate the
+  // sprawl-gait formula on the lizard's stored leg pivots at that phase, frame
+  // a close 3/4 camera, and screenshot. Output: scen-lizard-gait-pNN.png.
+  'lizard-gait': async (page) => {
+    const phases = [0.0, 0.2, 0.4, 0.6, 0.8];
+    for (let i = 0; i < phases.length; i++) {
+      const p = phases[i];
+      await page.evaluate((p) => {
+        const ctx = window.__game.ctx;
+        ctx.weather.intensity = 0;               // clear any storm dimming
+        window.__game.setTime(0.5);              // bright midday
+        ctx.three.renderer.toneMappingExposure = 1.15;
+        ctx.three.renderer.setSize(900, 900, false);
+        const cam = ctx.three.camera;
+        if (cam.isPerspectiveCamera) { cam.aspect = 1; cam.updateProjectionMatrix(); }
+        const l = ctx.lizards[0];
+        const sy = ctx.terrain.heightAt(l.pos.x, l.pos.z);
+        l.mesh.position.set(l.pos.x, sy + 0.06, l.pos.z);
+        l.mesh.rotation.set(0, 0, 0);            // face local +X (toward camera-left)
+        // Replicate animateLizardLegs at this phase (swing 0.55 / lift 0.014).
+        const legs = l.mesh.userData.gaitLegs || [];
+        const phase = p * Math.PI * 2;
+        for (const leg of legs) {
+          const pp = phase + leg.offset;
+          leg.grp.rotation.z = Math.sin(pp) * 0.72;
+          leg.grp.position.y = leg.baseY + Math.max(0, Math.cos(pp)) * 0.022;
+        }
+        ctx.flags.paused = true;                 // freeze so the camera + pose stick
+        l.mesh.updateMatrixWorld(true);
+        // Close 3/4 side view focused on the legs: lizard's local +X is world
+        // +X (no yaw), so a camera off the +X/+Z corner at low height sees the
+        // flank + all four legs stepping.
+        cam.position.set(l.pos.x + 0.24, sy + 0.16, l.pos.z + 0.30);
+        cam.lookAt(l.pos.x + 0.02, sy + 0.045, l.pos.z);
+        cam.updateMatrixWorld(true);
+      }, p);
+      await page.waitForTimeout(250);
+      const path = join(OUT, `scen-lizard-gait-p${String(i).padStart(2, '0')}.png`);
+      await page.screenshot({ path, fullPage: false });
+      console.log(`[lizard-gait] phase=${p} → ${path}`);
+    }
+  },
+
+  // Shrew-gait (ACW B5 STATIC): same paused-pose technique as lizard-gait, for
+  // the ~9cm shrew (camera pulled in tighter). Confirms the stubby-leg walk.
+  'shrew-gait': async (page) => {
+    const phases = [0.0, 0.25, 0.5, 0.75];
+    for (let i = 0; i < phases.length; i++) {
+      const p = phases[i];
+      await page.evaluate((p) => {
+        const ctx = window.__game.ctx;
+        ctx.weather.intensity = 0;
+        window.__game.setTime(0.5);
+        ctx.three.renderer.toneMappingExposure = 1.15;
+        ctx.three.renderer.setSize(900, 900, false);
+        const cam = ctx.three.camera;
+        if (cam.isPerspectiveCamera) { cam.aspect = 1; cam.updateProjectionMatrix(); }
+        const s = ctx.shrews.list[0];
+        const sy = ctx.terrain.heightAt(s.pos.x, s.pos.z);
+        s.mesh.position.set(s.pos.x, sy + 0.04, s.pos.z);
+        s.mesh.rotation.set(0, 0, 0);
+        const legs = s.mesh.userData.gaitLegs || [];
+        const phase = p * Math.PI * 2;
+        for (const leg of legs) {
+          const pp = phase + leg.offset;
+          leg.grp.rotation.z = Math.sin(pp) * 0.5;
+          leg.grp.position.y = leg.baseY + Math.max(0, Math.cos(pp)) * 0.008;
+        }
+        ctx.flags.paused = true;
+        s.mesh.updateMatrixWorld(true);
+        cam.position.set(s.pos.x + 0.15, sy + 0.11, s.pos.z + 0.19);
+        cam.lookAt(s.pos.x + 0.01, sy + 0.03, s.pos.z);
+        cam.updateMatrixWorld(true);
+      }, p);
+      await page.waitForTimeout(250);
+      const path = join(OUT, `scen-shrew-gait-p${String(i).padStart(2, '0')}.png`);
+      await page.screenshot({ path, fullPage: false });
+      console.log(`[shrew-gait] phase=${p} → ${path}`);
+    }
+  },
+
+  // Shrew-burrow (ACW B5 STATIC): the live FP camera can't be parked reliably
+  // (the KCC stomps the body teleport), so verify the DIVE VISUAL the paused
+  // way: manually set burrowT at several depths, replicate the burrow math
+  // (sink below the surface + nose-down tilt + vanish past 0.85), and shoot a
+  // close camera that looks at the surface so the terrain occludes the sunk
+  // body (reads as "submerged in the sand"). The puff + trigger are verified
+  // functionally (state machine + emitBurst); the dive feel is foreground-owed.
+  'shrew-burrow': async (page) => {
+    // The shrew (~9cm) vanishes under the solid terrain plane by burrowT~0.3
+    // (DEPTH 0.34m), so the VISIBLE dive is the early range — shoot it dense.
+    const ts = [0.0, 0.08, 0.16, 0.26];
+    for (let i = 0; i < ts.length; i++) {
+      const t = ts[i];
+      await page.evaluate((t) => {
+        const ctx = window.__game.ctx;
+        ctx.weather.intensity = 0;
+        window.__game.setTime(0.5);
+        ctx.three.renderer.toneMappingExposure = 1.15;
+        ctx.three.renderer.setSize(900, 900, false);
+        const cam = ctx.three.camera;
+        if (cam.isPerspectiveCamera) { cam.aspect = 1; cam.updateProjectionMatrix(); }
+        const s = ctx.shrews.list[0];
+        const sx = s.pos.x, sz = s.pos.z;
+        const surfaceY = ctx.terrain.heightAt(sx, sz) + 0.04; // SHREW_TERRAIN_OFFSET
+        const DEPTH = 0.34;
+        s.mesh.position.set(sx, surfaceY - t * DEPTH, sz);
+        s.mesh.rotation.set(0, 0, -t * 0.6); // nose-down dive tilt
+        s.mesh.visible = t < 0.85;
+        ctx.flags.paused = true;
+        s.mesh.updateMatrixWorld(true);
+        // Close ~45° view: sand line cuts across the shrew so the descending
+        // body reads (top half above sand, lower half clipped into the ground).
+        cam.position.set(sx + 0.17, surfaceY + 0.16, sz + 0.20);
+        cam.lookAt(sx, surfaceY + 0.01, sz);
+        cam.updateMatrixWorld(true);
+      }, t);
+      await page.waitForTimeout(250);
+      const path = join(OUT, `scen-shrew-burrow-t${String(i).padStart(2, '0')}.png`);
+      await page.screenshot({ path, fullPage: false });
+      console.log(`[shrew-burrow] burrowT=${t} → ${path}`);
+    }
+  },
+
+  // Companion (ACW B6 ASSESS): the companion is already a full proc-character
+  // (icosahedron carapace + 5 radial legs + gait). Frame it close from two
+  // angles + a walking-pose leg lift so we can judge whether it needs polish or
+  // already reads. Paused free camera.
+  'companion': async (page) => {
+    const shots = [
+      { tag: '3q', off: [0.55, 0.40, 0.62], walk: false },
+      { tag: 'side', off: [0.0, 0.30, 0.78], walk: false },
+      { tag: 'walk', off: [0.5, 0.34, 0.6], walk: true },
+    ];
+    for (const sh of shots) {
+      await page.evaluate((sh) => {
+        const ctx = window.__game.ctx;
+        ctx.weather.intensity = 0;
+        window.__game.setTime(0.5);
+        ctx.three.renderer.toneMappingExposure = 1.1;
+        ctx.three.renderer.setSize(900, 900, false);
+        const cam = ctx.three.camera;
+        if (cam.isPerspectiveCamera) { cam.aspect = 1; cam.updateProjectionMatrix(); }
+        const c = ctx.companion;
+        if (!c) return;
+        const cx = c.pos.x, cz = c.pos.z;
+        const cy = ctx.terrain.heightAt(cx, cz);
+        if (sh.walk) {
+          // Pose a mid-walk leg lift so leg taper/segmenting is visible.
+          const REST = 0.6, LIFT = 0.55;
+          for (let i = 0; i < c.legs.length; i++) {
+            c.legs[i].visible = true;
+            const ph = (i / 5) * Math.PI * 2;
+            c.hips[i].rotation.z = -REST + Math.max(0, Math.sin(ph)) * LIFT;
+          }
+        }
+        ctx.flags.paused = true;
+        c.group.updateMatrixWorld(true);
+        cam.position.set(cx + sh.off[0], cy + sh.off[1], cz + sh.off[2]);
+        cam.lookAt(cx, cy + 0.12, cz);
+        cam.updateMatrixWorld(true);
+      }, sh);
+      await page.waitForTimeout(250);
+      const path = join(OUT, `scen-companion-${sh.tag}.png`);
+      await page.screenshot({ path, fullPage: false });
+      console.log(`[companion] ${sh.tag} → ${path}`);
+    }
+  },
+
   // Aim-twist (ACN dynamic): drive the 3P camera yaw over rAF ticks and sample
   // rig._aimTwist to PROVE it responds to turn RATE (not a constant). Then two
   // paused posed shots (resting bias vs full lead) for the visual range. The

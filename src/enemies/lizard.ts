@@ -12,6 +12,7 @@ import type { GameContext } from '../GameContext.ts';
 import { isPlaying } from '../GameContext.ts';
 import { Tuning } from '../config/tuning.ts';
 import { createSkinMaterial } from '../world/skinMaterial.ts';
+import { gaitPhase, legPose } from './creatureGait.ts';
 import type { Terrain } from '../world/terrain.ts';
 
 export type LizardState = 'idle' | 'flee' | 'dead';
@@ -233,16 +234,54 @@ export function makeLizardVisual(): THREE.Group {
     { x: -0.100, sz: 1, pair: 'rear' },
     { x: -0.100, sz: -1, pair: 'rear' },
   ];
+  // ACW B4 — collect leg pivots + their base transforms so updateLizards
+  // can drive a sprawl-gait. Diagonal trot: the (front-left, rear-right)
+  // pair steps in phase, opposite the (front-right, rear-left) pair — so
+  // the body always has a diagonal of planted feet. `offset` spaces the
+  // two diagonals by π; `baseY` is the rest attach height the lift rides on.
+  const gaitLegs: Array<{ grp: THREE.Group; offset: number; baseY: number }> = [];
+  const LEG_BASE_Y = 0.054;
   for (const att of legAttach) {
     const leg = buildLeg({ sideX: att.sz, pair: att.pair });
     // R3: leg attach Y bumped 0.038 → 0.054 (matches body lift) so the
     // legs hang from the new body height. With body raised 16cm + leg
     // total length ~5.6cm, the foot-disc sits very near the mesh
     // origin (terrain + TERRAIN_OFFSET=0.06 → feet ~touch ground).
-    leg.position.set(att.x, 0.054, att.sz * 0.030);
+    leg.position.set(att.x, LEG_BASE_Y, att.sz * 0.030);
     g.add(leg);
+    const diag = att.pair === 'front' ? att.sz : -att.sz; // +1 = diagonal A, -1 = diagonal B
+    gaitLegs.push({ grp: leg, offset: diag === 1 ? 0 : Math.PI, baseY: LEG_BASE_Y });
   }
+  g.userData.gaitLegs = gaitLegs;
   return g;
+}
+
+// ACW B4 — lizard sprawl-gait tuning. Skittery quadruped cadence; the foot
+// swings fore/aft (leg.rotation.z) and lifts (leg.position.y) during the
+// forward-recovery half-stride. Reset to rest when not moving.
+const LIZARD_GAIT_FREQ_HZ = 3.4;
+const LIZARD_GAIT_SWING = 0.72;   // rad fore/aft — lively skitter while fleeing
+const LIZARD_GAIT_LIFT = 0.022;   // m foot lift at mid-swing
+
+interface GaitLeg { grp: THREE.Group; offset: number; baseY: number; }
+
+function animateLizardLegs(l: Lizard, elapsed: number, moving: boolean): void {
+  const legs = l.mesh.userData.gaitLegs as GaitLeg[] | undefined;
+  if (!legs) return;
+  if (!moving) {
+    for (const leg of legs) {
+      leg.grp.rotation.z = 0;
+      leg.grp.position.y = leg.baseY;
+    }
+    return;
+  }
+  // +l.id desyncs each lizard's stride so a cluster doesn't march in lockstep.
+  const phase = gaitPhase(elapsed + l.id * 0.37, LIZARD_GAIT_FREQ_HZ);
+  for (const leg of legs) {
+    const p = legPose(phase, leg.offset, LIZARD_GAIT_SWING, LIZARD_GAIT_LIFT, 0);
+    leg.grp.rotation.z = p.swing;
+    leg.grp.position.y = leg.baseY + p.lift;
+  }
 }
 
 export function spawnLizard(
@@ -427,6 +466,8 @@ export function updateLizards(ctx: GameContext, dt: number): void {
     if (l.state === 'idle') {
       // Idle bob — vertical sin wave on mesh only, not on AI position.
       l.mesh.position.y = l.pos.y + Math.sin(elapsed * 2 + l.id) * 0.005;
+      // ACW B4 — legs at rest (subtle settle); gait only runs while fleeing.
+      animateLizardLegs(l, elapsed, false);
       if (distSq < SPOT_DISTANCE * SPOT_DISTANCE) {
         // Flee — pick a direction opposite the player + small jitter.
         l.fleeDir.copy(_toPlayer).normalize().multiplyScalar(-1);
@@ -448,6 +489,8 @@ export function updateLizards(ctx: GameContext, dt: number): void {
       const groundY = ctx.terrain.heightAt(l.pos.x, l.pos.z);
       l.pos.y = groundY + TERRAIN_OFFSET;
       l.mesh.position.copy(l.pos);
+      // ACW B4 — sprawl-gait drives the legs while fleeing.
+      animateLizardLegs(l, elapsed, true);
       // Always orient the head toward the direction of motion. The lizard
       // mesh's local "forward" is +X (head at +X=0.11), so the correct yaw
       // to map local +X onto world (fleeDir.x, _, fleeDir.z) is
