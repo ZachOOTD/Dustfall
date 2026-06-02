@@ -220,6 +220,10 @@ export const Tuning = {
   SPEEDER_DUST_DOWN_OFFSET: 0.5,        // m below the bike center (toward the ground wash)
   SPEEDER_GLOW_MAX_INTENSITY: 3.2,      // engine nozzle PointLight intensity at full throttle
   SPEEDER_GLOW_HOT_HEX: 0xff7a2a,       // nozzle interior color at full throttle (hot orange)
+  // ACX — mounted 3P chase camera (behind the rider, looking forward).
+  SPEEDER_3P_CAM_BACK: 3.4,             // m behind the bike along the camera's forward
+  SPEEDER_3P_CAM_ANCHOR_UP: 0.9,        // m above the rig seat for the chase anchor
+  SPEEDER_3P_CAM_ABOVE: 0.5,            // extra m up so the cam looks slightly down at the bike
   SPEEDER_ACCEL_LERP: 0.07,             // per-frame lerp toward target XZ velocity (~14 frames to reach 64%)
   SPEEDER_TURN_RATE_MAX: 3.0,           // rad/s cap on bike yaw rate
   SPEEDER_TURN_RESPONSE: 4.0,           // target_ang_vel = wrapped_yaw_err × this (proportional)

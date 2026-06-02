@@ -944,10 +944,32 @@ function buildRigVisual(): {
     thumb.rotation.x = Math.PI / 2 - 0.5;
     thumb.position.set(handSign * -0.038, -0.012, -0.014);
     handGroup.add(thumb);
-    // Right-hand attach point for 3P held items.
-    if (side === 1) {
+    // Right-hand attach point for 3P held items. ACX FIX: the rig faces local
+    // +Z, so the player's RIGHT side is local -X = side -1 (NOT +1). Pre-ACX
+    // this lived on side +1 (the player's LEFT hand) — the "item in the wrong
+    // hand" bug. side -1 is pushed first → shoulders/elbows/wrists index 0, so
+    // the aim-twist + 3P use-anims (which target the held-item arm) also move
+    // to index 0.
+    if (side === -1) {
       rightHandAttach = new THREE.Group();
       rightHandAttach.position.set(0, -0.04, 0.04);
+      // ACX — orient the attach frame so a held item points the player's
+      // FORWARD in the idle pose (the raw hand frame has forward ≈ down-the-
+      // hand, which is why default items pointed at the ground/out to the side).
+      // Measured via rig-shot rig3p: in the hand-attach local frame, the
+      // player's world-forward ≈ (-0.16,-0.89,0.42) and world-up ≈
+      // (0.02,0.43,0.9). Build a basis so attach-local -Z = forward, +Y = up —
+      // then guns (barrel -Z) need no per-item rotation and blades (+Y) need a
+      // simple -90° X. The corrective lives on the attach (NOT handGroup) so it
+      // doesn't touch the visible hand mesh; it rides the gait with the arm.
+      const lf = new THREE.Vector3(-0.16, -0.89, 0.42).normalize();
+      const lu = new THREE.Vector3(0.02, 0.43, 0.9).normalize();
+      const zImg = lf.clone().negate();                            // -Z → forward
+      const xImg = new THREE.Vector3().crossVectors(lu, zImg).normalize();
+      const yImg = new THREE.Vector3().crossVectors(zImg, xImg).normalize();
+      rightHandAttach.quaternion.setFromRotationMatrix(
+        new THREE.Matrix4().makeBasis(xImg, yImg, zImg),
+      );
       handGroup.add(rightHandAttach);
     }
     shoulders.push(shoulderBone);
@@ -1257,12 +1279,12 @@ export function updatePlayerRig(ctx: GameContext, dt: number): void {
       AIM_TWIST_CLAMP,
     );
     rig._aimTwist += (aimTwistTarget - rig._aimTwist) * AIM_TWIST_LERP;
-    rig.shoulders[1].rotation.y = rig._aimTwist;
+    rig.shoulders[0].rotation.y = rig._aimTwist;   // ACX — index 0 = player's RIGHT arm (held-item/aim arm)
   } else if (rig._aimTwist !== 0) {
     // Decay back to neutral when not in 3P so re-entry is smooth.
     rig._aimPrevHeading = rig.heading;
     rig._aimTwist += (0 - rig._aimTwist) * AIM_TWIST_LERP;
-    rig.shoulders[1].rotation.y = rig._aimTwist;
+    rig.shoulders[0].rotation.y = rig._aimTwist;   // ACX — index 0 = player's RIGHT arm (held-item/aim arm)
   }
 
   // ── ACW Phase A — 3P USE-ANIMATION. ──

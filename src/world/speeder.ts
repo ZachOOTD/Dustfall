@@ -1040,23 +1040,37 @@ export function updateSpeeder(ctx: GameContext, dt: number): void {
   // Thrust audio — modulate pitch + noise with current horizontal speed.
   setSpeederThrustSpeed(s.speed, Tuning.SPEEDER_MAX_SPEED * Tuning.SPEEDER_BOOST_MULT);
 
-  // ── Drive the camera directly from the rider seat. Rider seat is a
-  // bike-local offset; rotate by yaw to get world offset. We don't
-  // teleport the player body (would collide with the speeder's
-  // collider and push it around) — the camera independently follows
-  // the bike. PointerLockControls keeps writing camera rotation, so
-  // mouse-look still works.
-  _riderOffset.set(
-    Tuning.SPEEDER_RIDER_SEAT_X,
-    Tuning.SPEEDER_RIDER_SEAT_Y,
-    Tuning.SPEEDER_RIDER_SEAT_Z,
-  );
-  const cos = Math.cos(s.yaw);
-  const sin = Math.sin(s.yaw);
-  const rx = _riderOffset.x * cos + _riderOffset.z * sin;
-  const rz = -_riderOffset.x * sin + _riderOffset.z * cos;
-  _ridePos.set(pos.x + rx, pos.y + _riderOffset.y, pos.z + rz);
-  ctx.three.camera.position.set(_ridePos.x, _ridePos.y, _ridePos.z);
+  // ── Drive the camera while mounted. PointerLockControls keeps writing the
+  // camera ROTATION (mouse-look), and the bike yaw lerps toward it — so the
+  // camera always "faces forward" along where the player looks. We only set the
+  // camera POSITION here.
+  if (ctx.flags.thirdPerson) {
+    // ACX FIX — 3P CHASE CAM: behind the rider, looking forward. Pre-ACX the
+    // mounted camera always sat at the rider SEAT (a 1P position), so in 3P it
+    // ended up at/ahead of the rig facing the wrong way. Now pull back along
+    // the camera's own horizontal forward (`_forward`, computed above) from a
+    // shoulder-height anchor over the bike, mirroring the on-foot 3P chase.
+    const anchorY = pos.y + Tuning.SPEEDER_RIG_SEAT_Y + Tuning.SPEEDER_3P_CAM_ANCHOR_UP;
+    const back = Tuning.SPEEDER_3P_CAM_BACK;
+    ctx.three.camera.position.set(
+      pos.x - _forward.x * back,
+      anchorY + Tuning.SPEEDER_3P_CAM_ABOVE,
+      pos.z - _forward.z * back,
+    );
+  } else {
+    // FP — camera at the rider seat (bike-local offset rotated by yaw).
+    _riderOffset.set(
+      Tuning.SPEEDER_RIDER_SEAT_X,
+      Tuning.SPEEDER_RIDER_SEAT_Y,
+      Tuning.SPEEDER_RIDER_SEAT_Z,
+    );
+    const cos = Math.cos(s.yaw);
+    const sin = Math.sin(s.yaw);
+    const rx = _riderOffset.x * cos + _riderOffset.z * sin;
+    const rz = -_riderOffset.x * sin + _riderOffset.z * cos;
+    _ridePos.set(pos.x + rx, pos.y + _riderOffset.y, pos.z + rz);
+    ctx.three.camera.position.set(_ridePos.x, _ridePos.y, _ridePos.z);
+  }
   // CC-2.1 — apply camera roll in camera-local Z. PointerLockControls
   // does NOT reset camera.quaternion between mouse events, so naively
   // post-multiplying by the roll quaternion each frame accumulates

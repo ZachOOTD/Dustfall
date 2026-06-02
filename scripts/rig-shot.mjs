@@ -351,6 +351,92 @@ const SCENARIOS = {
     }
   },
 
+  // Rig3p (ACX): the TRUE 3P verification — equip an item (--item=<id>, omit for
+  // bare hands), let the rig settle into its REAL idle pose (no posed-out arm),
+  // then frame the camera BEHIND the player looking forward, matching what the
+  // user sees in play. This is the correct frame for judging hand orientation +
+  // which hand + item facing (the held-item scenario's posed-out arm lied).
+  'rig3p': async (page) => {
+    const item = argv.item || '';
+    await page.evaluate((item) => {
+      const ctx = window.__game.ctx;
+      ctx.weather.intensity = 0;
+      window.__game.setTime(0.5);
+      ctx.three.renderer.toneMappingExposure = 1.1;
+      ctx.three.renderer.setSize(800, 950, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 800 / 950; cam.updateProjectionMatrix(); }
+      ctx.flags.thirdPerson = true;
+      const inv = ctx.inventory;
+      if (item) { inv.slots[0].item = item; inv.slots[0].count = 1; inv.slots[0].meta = undefined; inv.selectedIdx = 0; }
+      else { inv.slots[0].item = null; }
+    }, item);
+    await page.waitForTimeout(500); // settle the idle pose + swap the mesh into the hand
+    const info = await page.evaluate((handCloseup) => {
+      const ctx = window.__game.ctx;
+      const rig = ctx.player.rig;
+      ctx.flags.paused = true;
+      rig.group.updateMatrixWorld(true);
+      const cam = ctx.three.camera;
+      const V = cam.position.constructor;
+      const root = rig.group.getWorldPosition(new V());
+      const h = rig.heading;
+      // rig.group.rotation.y = heading rotates local +Z onto (sin h, 0, cos h),
+      // so that is the player's forward. Camera BEHIND the player, looking fwd.
+      const fwd = new V(Math.sin(h), 0, Math.cos(h));
+      // Close behind view biased toward the player's RIGHT hand (where held
+      // items now sit), hip-height, matching the user's screenshot framing.
+      const pright = new V(-fwd.z, 0, fwd.x); // player's right (local -X → world)
+      if (handCloseup === 'hand') {
+        // Tight closeup on the right hand to judge palm/finger orientation.
+        const hp = rig.rightHandAttach.getWorldPosition(new V());
+        // Pure side view from OUTSIDE the body (player's right), at hand height,
+        // so the torso/buttocks don't occlude the hand.
+        cam.position.set(
+          hp.x + pright.x * 0.42 + fwd.x * 0.05,
+          hp.y + 0.05,
+          hp.z + pright.z * 0.42 + fwd.z * 0.05,
+        );
+        cam.lookAt(hp.x, hp.y - 0.02, hp.z);
+      } else if (handCloseup === 'profile') {
+        // Side profile from the player's RIGHT, so forward (+fwd) reads as a
+        // clear left/right screen axis — unambiguous for "item points forward".
+        cam.position.set(
+          root.x + pright.x * 2.0,
+          root.y + 1.0,
+          root.z + pright.z * 2.0,
+        );
+        cam.lookAt(root.x, root.y + 0.85, root.z);
+      } else {
+        cam.position.set(
+          root.x - fwd.x * 1.1 + pright.x * 0.5,
+          root.y + 1.15,
+          root.z - fwd.z * 1.1 + pright.z * 0.5,
+        );
+        cam.lookAt(root.x + pright.x * 0.18, root.y + 0.85, root.z + pright.z * 0.18);
+      }
+      cam.updateMatrixWorld(true);
+      // ACX debug — the hand-attach world frame + the direction (in
+      // attach-LOCAL space) that points the player's world-forward. The item's
+      // mesh-forward axis, after handAttachTransform.rot, must equal localFwd.
+      const Q = cam.quaternion.constructor;
+      const aq = rig.rightHandAttach.getWorldQuaternion(new Q());
+      const inv = aq.clone().invert();
+      const worldFwd = new V(Math.sin(h), 0, Math.cos(h));
+      const worldUp = new V(0, 1, 0);
+      const localFwd = worldFwd.clone().applyQuaternion(inv);
+      const localUp = worldUp.clone().applyQuaternion(inv);
+      console.error('[handframe] localFwd=' + [localFwd.x, localFwd.y, localFwd.z].map((v) => +v.toFixed(2)).join(',') +
+        ' localUp=' + [localUp.x, localUp.y, localUp.z].map((v) => +v.toFixed(2)).join(','));
+      return { heading: +h.toFixed(2), rootY: +root.y.toFixed(2) };
+    }, argv.hand ? 'hand' : (argv.view || ''));
+    console.log('[rig3p] ' + JSON.stringify(info));
+    await page.waitForTimeout(200);
+    const tag = item || 'bare';
+    await page.screenshot({ path: join(OUT, `scen-rig3p-${tag}.png`), fullPage: false });
+    console.log(`[rig-shot] saved scen-rig3p-${tag}.png`);
+  },
+
   // Held-item (ACW D9/D10): equip an item (--item=<id>), let updateViewModel
   // swap it into the rig's right hand in 3P, then PAUSE + free-camera close on
   // the hand so the makeViewModel mesh + its handAttachTransform can be judged.

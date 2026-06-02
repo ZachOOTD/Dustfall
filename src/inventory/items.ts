@@ -366,9 +366,9 @@ const _DEFS: Record<ItemId, ItemDef> = {
     maxStack: 1,
     wieldLmb: 'click_use',
     thirdPersonScale: 1.4,    // ABY P3 — small thin metal bar, boost for 3P visibility
-    // ACW D10 — 3P grip: grip-wrap at -Y, shaft +Y (same convention as the
-    // machete). Lift so the wrap seats in the fist; the bar extends forward.
-    handAttachTransform: { pos: [0, 0.12, 0], rot: [0, 0, 0] },
+    // ACX — 3P grip: shaft is mesh +Y (machete convention) → -90° X points it
+    // forward (attach -Z), grip-wrap trails into the fist.
+    handAttachTransform: { pos: [0, 0, 0], rot: [-1.571, 0, 0] },
     onUse(_ctx, _slot) {
       // The actual pry logic lives in interaction.ts's 'salvageables'
       // case — onUse returns "do nothing" because the interaction.ts
@@ -438,11 +438,11 @@ const _DEFS: Record<ItemId, ItemDef> = {
     maxStack: 1,
     wieldLmb: 'attack',
     thirdPersonScale: 1.35,    // ABY P3
-    // ACW D10 — 3P grip: the mesh is built blade-up / handle-down with its
-    // origin at the guard, so by default the rig grips it at the guard and the
-    // handle floats above the fist. Shift +Y so the handle bottom seats in the
-    // hand; the blade then extends forward-down from the fist (carried machete).
-    handAttachTransform: { pos: [0, 0.11, 0], rot: [0, 0, 0] },
+    // ACX — 3P grip. The attach frame is now oriented (playerRig) so -Z =
+    // player-forward. The machete's blade is mesh +Y, so rotate -90° about X
+    // (+Y → -Z) to point the blade forward; the handle then trails back into
+    // the fist.
+    handAttachTransform: { pos: [0, 0, 0], rot: [-1.571, 0, 0] },
     onUse(_ctx, _slot) {
       return { consumed: false };
     },
@@ -497,9 +497,9 @@ const _DEFS: Record<ItemId, ItemDef> = {
       if (t < 0.3) p = -easeOutQuad(t / 0.3);                 // raise up/back
       else if (t < 0.55) p = -1 + 2 * easeOutBack((t - 0.3) / 0.25); // snap forward (overshoot)
       else p = 1 - easeInOutCubic((t - 0.55) / 0.45);         // recover to neutral
-      rig.shoulders[1].rotation.set(-0.5 + 1.0 * p, 0, 0.2 - 0.3 * p);
-      rig.elbows[1].rotation.x = 0.9 - 0.7 * Math.max(0, p);  // bent on windup, extends on strike
-      rig.wrists[1].rotation.x = -0.1;
+      rig.shoulders[0].rotation.set(-0.5 + 1.0 * p, 0, 0.2 - 0.3 * p);  // ACX — index 0 = right arm
+      rig.elbows[0].rotation.x = 0.9 - 0.7 * Math.max(0, p);  // bent on windup, extends on strike
+      rig.wrists[0].rotation.x = -0.1;
     },
     useAnimDuration: Tuning.VIEWMODEL_MACHETE_ANIM_S,
   },
@@ -513,9 +513,9 @@ const _DEFS: Record<ItemId, ItemDef> = {
     stackable: false,
     maxStack: 1,
     wieldLmb: 'attack',
-    // ACW D10 — 3P grip: grip bands at -Y, pipe +Y (machete convention). Lift
-    // so the wrapped grip seats in the fist; the pipe extends forward.
-    handAttachTransform: { pos: [0, 0.12, 0], rot: [0, 0, 0] },
+    // ACX — 3P grip: pipe is mesh +Y → -90° X points it forward (attach -Z),
+    // wrapped grip trails into the fist.
+    handAttachTransform: { pos: [0, 0, 0], rot: [-1.571, 0, 0] },
     onUse(_ctx, _slot) {
       return { consumed: false };
     },
@@ -582,11 +582,10 @@ const _DEFS: Record<ItemId, ItemDef> = {
     maxStack: 1,
     wieldLmb: 'attack',
     thirdPersonScale: 1.35,    // ABY P3
-    // ACX — 3P grip. The gun is built barrel-forward (−Z) / grip-down, so by
-    // default the rig holds it barrel-at-the-ground. Rotate +X ~90° to bring the
-    // barrel onto the hand's natural down-forward reach (the same axis the
-    // machete's blade sits on) + lift so the grip seats in the fist.
-    handAttachTransform: { pos: [0, 0.03, -0.02], rot: [1.571, 0, 0] },
+    // ACX — 3P grip. The attach frame's -Z is now player-forward and the gun's
+    // barrel is mesh -Z, so NO rotation is needed — it points forward out of the
+    // box. (Pre-ACX a π/2 X-rot fought the un-oriented frame.)
+    handAttachTransform: { pos: [0, 0, 0], rot: [0, 0, 0] },
     onUse(_ctx, _slot) {
       // Firing is driven by combat.ts via LMB — `onUse` (E key) is a
       // no-op for ranged weapons.
@@ -746,9 +745,9 @@ const _DEFS: Record<ItemId, ItemDef> = {
     stackable: false,
     maxStack: 1,
     wieldLmb: 'attack',
-    // ACX — 3P grip (same −Z-barrel/grip-down family as scrap_gun): rotate the
-    // barrel onto the hand's forward reach + lift the grip into the fist.
-    handAttachTransform: { pos: [0, 0.03, -0.02], rot: [1.571, 0, 0] },
+    // ACX — 3P grip (same −Z-barrel family as scrap_gun): barrel = attach -Z =
+    // forward with no rotation needed.
+    handAttachTransform: { pos: [0, 0, 0], rot: [0, 0, 0] },
     onUse(_ctx, _slot) {
       return { consumed: false };
     },
@@ -881,11 +880,10 @@ const _DEFS: Record<ItemId, ItemDef> = {
     maxStack: 1,
     wieldLmb: 'attack',
     thirdPersonScale: 1.25,    // ACL — long but thin; modest 3P boost
-    // ACX — 3P grip (same −Z-barrel/grip-down family as the pistols, just
-    // longer with a rear stock): rotate the barrel onto the hand's forward
-    // reach + lift the pistol grip into the fist. Slight +Z so the long stock
-    // clears toward the elbow rather than jamming into the forearm.
-    handAttachTransform: { pos: [0, 0.03, 0.04], rot: [1.571, 0, 0] },
+    // ACX — 3P grip (same −Z-barrel family, longer with a rear stock): barrel =
+    // attach -Z = forward, no rotation. Small -Z shift centres the long body so
+    // the pistol grip (not the receiver) sits in the fist.
+    handAttachTransform: { pos: [0, 0, -0.04], rot: [0, 0, 0] },
     onUse(_ctx, _slot) {
       // Ranged firing is driven by combat.ts via LMB; onUse (E) is inert.
       return { consumed: false };
