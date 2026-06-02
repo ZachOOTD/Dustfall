@@ -32,8 +32,7 @@ import { setupOpeningScene } from './world/openingScene.ts';
 import { updateOpeningWreckGodRay } from './world/openingWreck.ts';
 import { updateLanterns } from './world/lantern.ts';
 import { updateLargeTents } from './world/largeTent.ts';
-import { updateCompanion, spawnCompanionAt, despawnCompanion } from './enemies/companion.ts';
-import { placedCaveEgg } from './world/rockyEntrance.ts';
+import { updateCompanion, spawnCompanionAt } from './enemies/companion.ts';
 import { createFootprintPuffs, updateFootprintPuffs } from './world/footprintPuffs.ts';
 import { hasSave } from './persistence/save.ts';
 import { createJournalPanel } from './ui/journalPanel.ts';
@@ -185,10 +184,6 @@ spawnRockScatter(three.scene, terrain, biomes, scatterRand);
 // system can resolve hits to it.
 const journalsList: Journal[] = [];
 placePOIs(three.scene, physics.world, terrain, scatterRand, pickupList, salvageables, shelter, { list: journalsList }, biomes);
-// ACV (#Cycle 7) — placePOIs builds the rock-biome cave + its companion egg
-// (singleton, exported as placedCaveEgg). Read onto ctx.egg after ctx exists
-// (below); the boot reconcile in handoffToGame removes the egg or the companion
-// per flags.companionAcquired.
 
 // HH (world rework #3) — procgen POI layer scattered across the chunk band.
 // ~15 wrecks via rejection sampling. Reject against anchor POI coords AND
@@ -362,7 +357,6 @@ const ctx: GameContext = {
   lockers: { list: [], open: null }, // Session AAC
   stakes: { list: [] },              // Session ACE
   companion: null,                   // Session AAE
-  egg: null,                         // Session ACV — set from placedCaveEgg after placePOIs
 
   salvageables,
   weather,
@@ -384,9 +378,6 @@ const ctx: GameContext = {
     // ABO A3 — third-person camera mode. Default false (FP at boot).
     // Toggled by F-key (pause-gated).
     thirdPerson: false,
-    // ACV (#Cycle 7) — companion acquired? Default false (NEW game → egg is the
-    // acquisition path). loadGameState sets it from the save (legacy → true).
-    companionAcquired: false,
   },
 };
 
@@ -471,8 +462,6 @@ ctx.speeder = openingResult.speeder;
 // setupOpeningScene. Singleton; loadGameState may despawn this if the
 // save says the player had the pod in inventory.
 spawnCompanionAt(ctx, openingResult.companionSpawnPos, 'idle');
-// ACV (#Cycle 7) — surface the rock-cave companion egg (built in placePOIs).
-ctx.egg = placedCaveEgg;
 
 // IMPORTANT: createMenus must run BEFORE wireOverlays — the unlock handler
 // in input.ts calls showPauseOverlay which needs the menu DOM in place.
@@ -585,17 +574,6 @@ const hadSaveAtBoot = hasSave();
 function handoffToGame(opts?: { skipLock?: boolean }): void {
   titleOverlay.hide();
   ctx.flags.titleActive = false;
-  // ACV (#Cycle 7) — reconcile companion vs. cave egg. Boot always spawns the
-  // companion + builds the egg (so a Continue can patch the companion); resolve
-  // the final state here per flags.companionAcquired (set by loadGameState on
-  // Continue, false on a NEW game, true on DEV MODE): acquired → remove the egg
-  // (already had / will be hatched-already); NOT acquired → despawn the boot
-  // companion so the egg is the only acquisition path.
-  if (ctx.flags.companionAcquired) {
-    if (ctx.egg) { ctx.egg.group.removeFromParent(); ctx.egg = null; }
-  } else {
-    despawnCompanion(ctx);
-  }
   inGameEls.forEach((el) => { el.style.visibility = ''; });
   // AAX — surface the DEV MODE badge from the in-memory flag (set by the
   // DEV MODE button's onDevMode callback or by Tuning.DEBUG_STARTER_LOADOUT
@@ -711,7 +689,6 @@ const titleOverlay = createTitleOverlay(ctx, {
   onDevMode: () => {
     applyDevLoadout(ctx);
     ctx.flags.devMode = true;
-    ctx.flags.companionAcquired = true;  // ACV — dev sessions keep the companion (test affordance)
     handoffToGame();
   },
 });

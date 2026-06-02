@@ -34,7 +34,6 @@ import type { Bedroll } from './world/bedroll.ts';
 import type { Lantern } from './world/lantern.ts';
 import type { Locker } from './world/locker.ts';
 import type { Stake } from './world/stake.ts';
-import type { CaveEgg } from './world/rockyEntrance.ts';
 import type { Companion } from './enemies/companion.ts';
 import type { BiomeSampler } from './world/biomes.ts';
 import type { SalvageableRegistry } from './world/salvage.ts';
@@ -154,10 +153,6 @@ export interface GameContext {
    *  Singleton (one creature per save). Null when in inventory or
    *  never picked up; non-null when deployed in the world. */
   companion: Companion | null;
-  /** Session ACV — companion egg in the rock-biome cave. Non-null only while
-   *  the companion is NOT yet acquired (re-derived at boot from
-   *  `flags.companionAcquired`); hatching it spawns the companion + clears this. */
-  egg: CaveEgg | null;
   salvageables: SalvageableRegistry;
   weather: Weather;
   ambientDust: AmbientDust;
@@ -197,12 +192,6 @@ export interface GameContext {
      *  first-person. When true: rig becomes visible, viewmodel hidden,
      *  camera offsets behind+above player. */
     thirdPerson: boolean;
-    /** Session ACV (#Cycle 7) — has the player acquired the companion (hatched
-     *  the cave egg)? Default false on a NEW game (the egg is the acquisition
-     *  path). Legacy saves (pre-feature) default TRUE on load so existing
-     *  players keep their companion. Drives both the boot reconcile (egg vs.
-     *  companion present) and is persisted additively (no SAVE_VERSION bump). */
-    companionAcquired: boolean;
   };
 }
 

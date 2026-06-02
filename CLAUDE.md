@@ -68,18 +68,21 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 Wave 0 reconciled the backlog (the 3 remaining "bugs" — speeder mount-seat #147, iron-stake #150,
 speeder angular #100 — were all already fixed). Wave 1 quick wins (`c9c71a6`): seated 3P rig pose on the
 speeder (#148 — was dropping to the origin while mounted; `SPEEDER_RIG_SEAT_Y/Z` foreground-tunable),
-sled drag marks lightened (#187), aim-twist gain 0.10→0.18 (#41). Wave 2 BIGGER FEATURE (`2d4035b`, D158):
-**companion egg-cave acquisition** — a new game no longer spawns the companion; Pebble is hatched from an
-egg in the rock-biome cave. Egg in `rockyEntrance.ts` (exists iff `!companionAcquired`), `'eggs'`
-interaction + hatch, `despawnCompanion`, additive `companionAcquired` save (legacy default true, NO
-version bump), `main.ts` boot reconcile. tsc clean throughout. **Owed a foreground confirm**: seated
-pose tune, aim-twist feel, egg-cave boot spawn/despawn + save round-trip.
+sled drag marks lightened (#187), aim-twist gain 0.10→0.18 (#41). Wave 2 shipped a **companion egg-cave
+acquisition spine** (`2d4035b`, D158) — but it was **REVERTED post-session** (`git revert`): the egg sat in
+the shallow pre-existing `rockyEntrance` chamber, which is NOT the user's vision (a deep, dark, SPRAWLING
+underground cave SYSTEM with a surface descent opening, passages to get lost in). Companion restored to
+spawn-at-side. The acquisition spine (egg + `'eggs'` interaction + `despawnCompanion` + additive
+`companionAcquired` save + boot reconcile) is preserved in `2d4035b` to cherry-pick once the real cave is
+built; the gated-acquisition pattern is in shared-memory (D158). **Owed a foreground confirm**: seated
+speeder pose tune (`SPEEDER_RIG_SEAT_Y/Z`), aim-twist feel.
 
-**Next session (ACW)**: finish the ACV scope-cut pile (visual/feel work, each needs real iteration):
-egg/cave VISUAL polish (egg is a placeholder emissive ovoid + chamber lighting) + the companion
-proc-character (completes Cycle 7); speeder dust + engine FX (#183/#184); sandstorm wind pushes bodies
-(#146); 3P control-prompts (#149); in-storm sensory degradation (#134); then the art/animation pile
-(item models, POI detail, creature gaits + shrew burrow, held-item 3P placement, use-anims). Scope ONE
+**Next session (ACW)**: the DEEP CAVE SYSTEM needs a **design pass first** (procedural sprawl generation +
+sub-terrain walkable collision + descent opening + dark-navigation/lighting) before rebuilding the egg
+acquisition on top. Meanwhile the ACV scope-cut pile is open (each needs real rule-8 iteration): companion
+proc-character (Cycle 7), speeder dust + engine FX (#183/#184), sandstorm wind (#146), 3P prompts (#149),
+in-storm sensory (#134), then the art/animation pile (item models, POI detail, creature gaits + shrew
+burrow, held-item 3P placement, use-anims). Scope ONE
 visual piece at a time (rule 8). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
