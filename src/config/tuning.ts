@@ -239,6 +239,13 @@ export const Tuning = {
   SPEEDER_RIDER_SEAT_X: 0,              // local rider offset relative to bike center
   SPEEDER_RIDER_SEAT_Y: 1.00,           // mid-height (CC-2) — sees over handlebars (Y≈0.42) without floating
   SPEEDER_RIDER_SEAT_Z: 0.55,           // over the sunken cockpit seat (CC-2 redesign moved the seat back)
+  // ACV #148 — where the 3P RIG (not the camera) sits on the bike while mounted.
+  // The rig.group origin is the feet/ground plane, so SEAT_Y is offset DOWN from
+  // the camera seat so the seated hips land on the cockpit seat + feet reach the
+  // pegs. Foreground-tunable (mounted-3P view): nudge Y/Z until the figure sits
+  // cleanly astride the bike rather than floating above / sunk into it.
+  SPEEDER_RIG_SEAT_Y: -0.35,            // group-origin Y relative to bike center
+  SPEEDER_RIG_SEAT_Z: 0.28,             // slightly back over the seat
 
   // CC-2 — tilt on input (visual-only, bike body's rotation is X+Z-locked
   // per D34). Pitch from W/S, roll from A/D. Camera rolls half as much
@@ -711,7 +718,7 @@ export const Tuning = {
   // now covered by ~5 overlapping decals; their gaussian profiles sum
   // to a smooth continuous depression with no visible periodic peaks.
   FOOTPRINT_SLED_CADENCE_M: 0.12,
-  FOOTPRINT_SLED_COLOR_HEX: 0x3d2918,   // warmer brown — reads as sand depression, not paint
+  FOOTPRINT_SLED_COLOR_HEX: 0x6e5236,   // ACV #187 — lightened (was 0x3d2918 dark brown; read too heavy/dark). A paler sun-warmed sand tone reads as a shallow drag scuff, not a black gouge.
 
 
   // Stone-well rework (Session Z) — wells confined to salt-flats biome.
@@ -1242,7 +1249,7 @@ export const Tuning = {
   AIM_TWIST_BIAS: 0.18,    // resting aim-twist yaw (rad) the right shoulder holds when not turning (ACN: 0.35→0.18, the static value read too square)
   AIM_TWIST_CLAMP: 0.5,    // hard clamp on aim twist magnitude (±rad)
   AIM_TWIST_LERP: 0.12,    // per-frame lerp factor toward target (smoothing)
-  AIM_TWIST_TURN_GAIN: 0.10, // (rad of lead) per (rad/sec of camera turn rate); lead winds INTO the turn (ACN)
+  AIM_TWIST_TURN_GAIN: 0.18, // (rad of lead) per (rad/sec of camera turn rate); lead winds INTO the turn (ACN). ACV #41: 0.10→0.18 — the ACN harness undersampled the continuous-turn peak; the upper-body lead read too subtle in real 3P turns. Foreground-feel item (D150).
 
   // ACL SPEEDER ANGULAR DAMPING — passive Y-yaw settle on the MOUNTED body.
   // Distinct from SPEEDER_UNMOUNTED_ANGULAR_DAMP_RATE_PER_S (2.5). At 1.2/s a

@@ -1073,6 +1073,43 @@ export function updatePlayerRig(ctx: GameContext, dt: number): void {
     return;
   }
 
+  // ── ACV #148 — SEATED ON THE SPEEDER. ──
+  // While mounted, the player capsule is parked far below the world (speeder.ts
+  // sets it to y=-2000), so the normal "position the rig at the body" path below
+  // would drop the rig underground / snap it to the origin — the "3P rig broken
+  // on the speeder" bug. Instead seat the rig ON the bike: place its origin at
+  // the rider seat (bike body + a yaw-rotated local offset, matching the
+  // rider-seat math in speeder.ts), face the bike's forward, and hold a seated
+  // pose. The camera already follows the rider seat from speeder.ts; a dedicated
+  // speeder 3P camera is deferred. SEAT_Y/Z are foreground-tunable.
+  const sp = ctx.speeder;
+  if (sp && sp.mounted) {
+    const bt = sp.body.translation();
+    const c = Math.cos(sp.yaw), s = Math.sin(sp.yaw);
+    const sz = Tuning.SPEEDER_RIG_SEAT_Z;            // local +Z (back), x=0
+    rig.group.position.set(bt.x + sz * s, bt.y + Tuning.SPEEDER_RIG_SEAT_Y, bt.z + sz * c);
+    rig.heading = sp.yaw + Math.PI;                  // face the bike's forward (-Z local)
+    rig.group.rotation.y = rig.heading;
+    rig.state = 'idle';
+    // Seated pose: thighs forward + knees bent down astride the chassis, arms
+    // reaching to the grips, slight forward lean to the bars.
+    for (let i = 0; i < 2; i++) {
+      const side = i === 1 ? 1 : -1;
+      rig.hips[i].rotation.set(1.02, 0, side * 0.16);   // thigh forward + splayed astride
+      rig.knees[i].rotation.x = 1.15;                   // shin bent down
+      rig.ankles[i].rotation.x = 0.10;
+      rig.shoulders[i].rotation.set(0.58, 0, side * 0.05); // arms forward to grips
+      rig.elbows[i].rotation.x = 0.55;
+      rig.wrists[i].rotation.x = -0.05;
+    }
+    rig.body.position.set(0, 0, 0);
+    rig.body.rotation.x = 0;
+    rig.spineBend.rotation.set(0.20, 0, 0);            // lean to the handlebars
+    rig.headGroup.position.y = HEAD_Y;
+    rig._aimPrevHeading = rig.heading;
+    return;
+  }
+
   // Position — ABT P2 fix: pre-fix used `tr.y - eyeOffset - 0.5` which
   // is an approximate magic number that doesn't match actual capsule
   // halfHeight + radius. Feet were ending up under terrain. Now we
