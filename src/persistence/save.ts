@@ -288,6 +288,13 @@ export interface SaveV1 {
     huddleState?: boolean;
   };
 
+  /** ACV (#Cycle 7) — has the player hatched the cave egg (acquired the
+   *  companion)? Additive, NO version bump (D81). ABSENT on pre-feature saves →
+   *  loader defaults TRUE so existing players keep their companion. New-era
+   *  saves store the real value (false until the egg is hatched). When false,
+   *  the cave egg is present + the boot-spawned companion is despawned. */
+  companionAcquired?: boolean;
+
   /** Hover speeder pose. Optional so v1 saves written before this field
    *  was added still load cleanly (the speeder just stays at the default
    *  position from setupOpeningScene). */
@@ -541,6 +548,7 @@ export function saveGameState(ctx: GameContext): { ok: boolean; error?: string }
         // to idle/walking naturally.
         huddleState: ctx.companion.state === 'huddle',
       } : undefined,
+      companionAcquired: ctx.flags.companionAcquired,   // ACV #Cycle 7
       sleds: ctx.sleds.list.map((s) => {
         const tr = s.body.translation();
         return {
@@ -1044,6 +1052,12 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
   // Pre-v9 saves: keep the default-spawned companion at the
   // opening-scene location. Player encounters the creature for the
   // first time on this load.
+
+  // ACV (#Cycle 7) — companion-acquired flag. Pre-feature saves omit it →
+  // default TRUE so existing players keep their companion (the egg path only
+  // gates NEW games). The boot reconcile in main.ts (handoffToGame) uses this
+  // to remove the cave egg (acquired) or despawn the boot companion (not yet).
+  ctx.flags.companionAcquired = save.companionAcquired ?? true;
 
   // Session ACE — restore stakes BEFORE sleds, so any sled with a 'stake'
   // tether finds its anchor in ctx.stakes.list when updateSleds runs.

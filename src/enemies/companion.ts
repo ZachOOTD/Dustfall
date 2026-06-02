@@ -297,6 +297,19 @@ export function packUpCompanion(ctx: GameContext): boolean {
   return true;
 }
 
+/** ACV (#Cycle 7) — remove the deployed companion from the world WITHOUT
+ *  granting a pod (distinct from packUpCompanion). Used by the boot reconcile
+ *  for a NEW game where the companion hasn't been hatched yet — the boot
+ *  always spawns the companion (so a Continue can patch it), and this undoes
+ *  that spawn when `flags.companionAcquired` is false. */
+export function despawnCompanion(ctx: GameContext): void {
+  const c = ctx.companion;
+  if (!c) return;
+  ctx.three.scene.remove(c.group);
+  ctx.companion = null;
+  _huddleToastShown = false;
+}
+
 /** Deploy the companion from a wielded `companion_pod` in front of the
  *  player. Returns the new Companion or null if already deployed. */
 export function deployCompanion(ctx: GameContext): Companion | null {

@@ -24,6 +24,7 @@ const VERBS: Record<InteractType, string> = {
   attach_rope: '',      // QQ — LMB-driven; verb is empty so the [E] chip is hidden. promptNoun carries the click-to-attach copy.
   open_locker: 'open',  // AAC — E opens the locker (chest inventory menu)
   pet_companion: '',    // AAE — passive hover; RMB packs up (no E action)
+  hatch: 'hatch',       // ACV — cave egg → E hatches the companion
 };
 
 let _root: HTMLDivElement | null = null;

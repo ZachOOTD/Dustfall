@@ -28,6 +28,7 @@ import { findBedrollById } from '../world/bedroll.ts';
 import { findLockerById } from '../world/locker.ts';
 import { findSledById, attachRopeToSled, detachRope, attachLockerToSled, applyTether } from '../world/sled.ts';
 import { findStakeById } from '../world/stake.ts';
+import { spawnCompanionAt } from '../enemies/companion.ts';
 import type { RopeEndpoint } from '../world/rope.ts';
 import { claimLight, releaseLight } from '../core/lightPool.ts';
 import {
@@ -68,7 +69,7 @@ const _rayFrom = new THREE.Vector3();
 interface InteractHit {
   type: InteractType;
   id: number;
-  registry: 'pickups' | 'waterSources' | 'cacti' | 'lizards' | 'shrews' | 'sandWorms' | 'lootContainers' | 'fires' | 'tents' | 'largeTents' | 'bedrolls' | 'lanterns' | 'lockers' | 'salvageables' | 'journals' | 'speeder' | 'sleds' | 'companion' | 'stakes' | 'raiders';
+  registry: 'pickups' | 'waterSources' | 'cacti' | 'lizards' | 'shrews' | 'sandWorms' | 'lootContainers' | 'fires' | 'tents' | 'largeTents' | 'bedrolls' | 'lanterns' | 'lockers' | 'salvageables' | 'journals' | 'speeder' | 'sleds' | 'companion' | 'stakes' | 'raiders' | 'eggs';
   distance: number;
   /** AAZ — optional sub-mesh discriminator. When the hit object's
    *  userData.interactSubKind is set, it's captured here so case handlers
@@ -189,6 +190,7 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
   for (const l of ctx.lanterns.list) l.hovered = false;
   for (const l of ctx.lockers.list) l.hovered = false;
   if (ctx.companion) ctx.companion.hovered = false;
+  if (ctx.egg) ctx.egg.hovered = false;
   for (const s of ctx.salvageables.list) s.hovered = false;
   for (const sl of ctx.sleds.list) sl.hovered = false;
   for (const st of ctx.stakes.list) st.hovered = false;
@@ -265,6 +267,8 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
   for (const l of ctx.lanterns.list) targets.push(l.mesh);
   for (const l of ctx.lockers.list) targets.push(l.mesh);
   if (ctx.companion) targets.push(ctx.companion.group);
+  // ACV — unhatched cave egg (only present while the companion isn't acquired).
+  if (ctx.egg && !ctx.flags.companionAcquired) targets.push(ctx.egg.group);
   for (const sl of ctx.sleds.list) targets.push(sl.group);
   for (const st of ctx.stakes.list) targets.push(st.mesh);
   // ACF — dead raiders are rope-draggable corpses. Only push corpses (live
@@ -818,6 +822,28 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
         promptNoun: '(Pebble)',
         passive: true,
       };
+      return;
+    }
+
+    case 'eggs': {
+      // ACV (#Cycle 7) — the cave egg. E hatches the companion at the egg, sets
+      // the acquired flag, and removes the egg. Guarded on !companionAcquired so
+      // a hatched/already-had egg is inert (it's also removed from the world by
+      // the boot reconcile, but guard defensively).
+      if (!ctx.egg || ctx.flags.companionAcquired) return;
+      ctx.egg.hovered = true;
+      ctx.inventory.hover = {
+        type: 'hatch',
+        distance: info.distance,
+        promptNoun: 'egg — something stirs inside',
+      };
+      if (ctx.input.pressed.has('KeyE')) {
+        spawnCompanionAt(ctx, ctx.egg.pos, 'idle');
+        ctx.flags.companionAcquired = true;
+        ctx.egg.group.removeFromParent();
+        ctx.egg = null;
+        ctx.ui.showToast('the egg cracks open — Pebble uncurls');
+      }
       return;
     }
 

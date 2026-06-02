@@ -72,6 +72,18 @@ const STAIR_DROP_PER_STEP = CHAMBER_DEPTH / STAIR_COUNT;
 const STAIR_TREAD_DEPTH = 0.55;
 const STAIR_WIDTH = 1.6;
 
+/** ACV (#Cycle 7) — the companion egg placed at the cave-chamber floor. */
+export interface CaveEgg {
+  group: THREE.Group;
+  /** World-space position (for spawning the companion on hatch). */
+  pos: THREE.Vector3;
+  hovered: boolean;
+}
+/** Set by placeRockyEntrance when it builds the egg; main.ts reads this into
+ *  ctx.egg after placePOIs (placePOIs is void + the egg is a singleton prop).
+ *  Null if no rocky entrance was placed this boot. */
+export let placedCaveEgg: CaveEgg | null = null;
+
 /** Place a rocky subterranean entrance at the given world position.
  *  Returns the placed group. The interior chamber center sits at
  *  pos.y - CHAMBER_DEPTH + CHAMBER_H/2 in world Y. */
@@ -218,6 +230,34 @@ export function placeRockyEntrance(
     0,                       // faceYaw=0 → faces +Z (toward stair approach)
     'escape_pod',
   );
+
+  // ── 6b. ACV (#Cycle 7) — companion egg at the chamber floor center. ─
+  // A softly-glowing ovoid shell — "Pebble curls inside, asleep" (echoes the
+  // companion_pod copy). Procedural, zero-asset (D107). The hatch path lives in
+  // interaction.ts (registry 'eggs'); main.ts gates its presence on
+  // !companionAcquired (removes it on a Continue/dev where the companion is
+  // already had). Tagged like journal.ts for the interaction raycast.
+  const eggGroup = new THREE.Group();
+  const eggMat = new THREE.MeshStandardMaterial({
+    color: 0xcab89a, roughness: 0.55, metalness: 0.0,
+    emissive: 0x3a2614, emissiveIntensity: 0.7,
+  });
+  const eggShell = new THREE.Mesh(new THREE.SphereGeometry(0.16, 18, 14), eggMat);
+  eggShell.scale.set(1.0, 1.4, 1.0);     // ovoid
+  eggGroup.add(eggShell);
+  const eggLocalY = chamberY - CHAMBER_H * 0.5 + 0.20 + 0.16 * 1.4; // base resting on the floor top
+  eggGroup.position.set(0, eggLocalY, chamberCenterZ);
+  eggGroup.traverse((o) => {
+    o.userData.interactType = 'hatch';
+    o.userData.interactRegistry = 'eggs';
+    o.userData.interactId = 1;
+  });
+  root.add(eggGroup);
+  placedCaveEgg = {
+    group: eggGroup,
+    pos: new THREE.Vector3(pos.x, pos.y + eggLocalY, pos.z + chamberCenterZ),
+    hovered: false,
+  };
 
   // ── 7. Shadow flags + scene + collider. ────────────────────────────
   root.traverse((o) => {
