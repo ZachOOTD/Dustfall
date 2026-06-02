@@ -64,26 +64,26 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      Prior milestones live in docs/changelog.md — do NOT accumulate "Prior milestone"
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
-**Last shipped**: Session ACV — **overnight (partial): backlog clear + bug fixes + companion egg-cave**.
-Wave 0 reconciled the backlog (the 3 remaining "bugs" — speeder mount-seat #147, iron-stake #150,
-speeder angular #100 — were all already fixed). Wave 1 quick wins (`c9c71a6`): seated 3P rig pose on the
-speeder (#148 — was dropping to the origin while mounted; `SPEEDER_RIG_SEAT_Y/Z` foreground-tunable),
-sled drag marks lightened (#187), aim-twist gain 0.10→0.18 (#41). Wave 2 shipped a **companion egg-cave
-acquisition spine** (`2d4035b`, D158) — but it was **REVERTED post-session** (`git revert`): the egg sat in
-the shallow pre-existing `rockyEntrance` chamber, which is NOT the user's vision (a deep, dark, SPRAWLING
-underground cave SYSTEM with a surface descent opening, passages to get lost in). Companion restored to
-spawn-at-side. The acquisition spine (egg + `'eggs'` interaction + `despawnCompanion` + additive
-`companionAcquired` save + boot reconcile) is preserved in `2d4035b` to cherry-pick once the real cave is
-built; the gated-acquisition pattern is in shared-memory (D158). **Owed a foreground confirm**: seated
-speeder pose tune (`SPEEDER_RIG_SEAT_Y/Z`), aim-twist feel.
+**Last shipped**: Session ACW — **overnight: full art/animation + storm-feel pass** (the whole deferred ACV
+visual/feel pile, executed; recalibration = stop pre-emptively scope-cutting, plan deeply then execute fully).
+Six per-phase commits (`2b7830a` A → `8b9bdc7` F), tsc clean, no save change. **A** infra hooks:
+`ItemDef.handAttachTransform` (3P hand placement) + `ItemDef.playUseAnim3P` (3P use-anim) + reusable
+`enemies/creatureGait.ts` + `world/particleTrail.ts` (pooled soft-fade particles). **B** creatures: lizard
+sprawl-gait + shrew walk-gait + shrew **burrow-on-approach** (new FSM state, dives into the sand + sand puff)
++ companion leg knuckles. **C** speeder dust trail + engine-ignition nozzle glow. **D** fixed broken
+raw/cooked_shrew_meat viewmodels + 3P grip transforms (machete/scrap_bar/pipe_staff) + machete 3P chop.
+**E** storm wind pushes loose bodies (#146: pickups/speeder/sled via `stormWindAccel`) + in-storm camera
+sway + master audio low-pass (#134). **F** 3P interact-prompt projects onto the hovered object (#149).
+Static paused free-camera screenshot scenarios added to `rig-shot.mjs` (live camera fights the body sync).
+**Owed a foreground playtest** (D150 feel/kinematic — built fully, verify live): shrew-burrow dive/puff timing,
+in-motion gaits, speeder FX in motion, storm wind+sway+muffle feel, machete 3P chop read, per-item 3P grip
+fit + the guns/rifle/consumables grip+use-anim pass, 3P prompt on-object placement.
 
-**Next session (ACW)**: the DEEP CAVE SYSTEM needs a **design pass first** (procedural sprawl generation +
-sub-terrain walkable collision + descent opening + dark-navigation/lighting) before rebuilding the egg
-acquisition on top. Meanwhile the ACV scope-cut pile is open (each needs real rule-8 iteration): companion
-proc-character (Cycle 7), speeder dust + engine FX (#183/#184), sandstorm wind (#146), 3P prompts (#149),
-in-storm sensory (#134), then the art/animation pile (item models, POI detail, creature gaits + shrew
-burrow, held-item 3P placement, use-anims). Scope ONE
-visual piece at a time (rule 8). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
+**Next session (ACX)**: foreground-confirm the ACW feel pile above, then pick up either (a) the **DEEP CAVE
+SYSTEM** design pass (procedural sprawl + sub-terrain walkable collision + descent opening + dark-navigation;
+then cherry-pick the egg-acquisition spine from `2d4035b`), or (b) finish the per-item 3P grip + use-anim
+pass for the remaining held items (guns/rifle/consumables) + POI/salvage-panel art detail. See
+[docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 

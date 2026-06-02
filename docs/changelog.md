@@ -3,6 +3,48 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ACW — 2026-06-02 — Overnight: full art/animation + storm-feel pass (the deferred ACV pile, executed) ✓ verify pass (tsc clean)
+
+`verified` — `npm run verify` (tsc) PASS. Executed the WHOLE deferred ACV visual/feel pile (recalibration:
+stop pre-emptively scope-cutting; plan deeply then execute fully with real rule-8 screenshot iteration).
+Six per-phase commits (`2b7830a` A → `8b9bdc7` F). No save-schema change (additive ItemDef fields + visual/feel).
+Reusable static-pose screenshot scenarios added to `rig-shot.mjs` (lizard-gait/shrew-gait/shrew-burrow/
+companion/speeder-fx/held-item/prompt-3p) — the live FP/3P camera fights the body sync, so paused
+free-camera shots are the reliable verification path.
+
+**Phase A — infra hooks** (`2b7830a`): `ItemDef.handAttachTransform {pos,rot}` (per-item 3P hand placement,
+applied in `viewModel.swapEquippedMesh`) + `ItemDef.playUseAnim3P(rig,t)` (drives the rig's right arm during
+a use-anim in 3P, since the FP viewmodel item is hidden) + reusable `enemies/creatureGait.ts` (sin-phase gait
+helper) + `world/particleTrail.ts` (pooled soft-fading ShaderMaterial particle system).
+
+**Phase B — creatures** (`f8b08c1`): lizard sprawl-gait (4 legs step in diagonal pairs while fleeing — was a
+static slide); shrew walk gait; shrew **burrow-on-approach** (new FSM state — dives nose-down into the sand,
+vanishes below the terrain plane, bursts a pooled sand puff, re-emerges when the player leaves); companion
+mid-leg knuckles (jointed-leg polish — it was already a full proc-character). New SHREW_BURROW_*/SHREW_GAIT_* tuning.
+
+**Phase C — speeder FX** (`a042351`): speed-gated dust trail (pooled sandy particles behind/under the bike,
+≈2× on boost) + engine-ignition glow (nozzle emissive lerps base→hot-orange + a warm PointLight at the
+primary nozzle, ramping with speed, dying when parked). Verified: hot nozzles + dust plume. Fixed the
+particleTrail `size`-is-world-diameter convention (earlier values rendered screen-filling).
+
+**Phase D — items + 3P hands + use-anims** (`701779b`): fixed `raw_shrew_meat` + `cooked_shrew_meat` which had
+NO makeViewModel (rendered nothing — a real bug); 3P grip transforms for machete/scrap_bar/pipe_staff (were
+gripped at their middle — handle now seats in the fist); machete `playUseAnim3P` diagonal overhead chop.
+(Canteen seats fine as-is; Z-oriented guns/rifle were ACM-verified — exhaustive per-item grip/use-anim pass owed.)
+
+**Phase E — storm feel** (`e439e7e`): #146 storm wind pushes loose bodies (`stormWindAccel` helper → impulse on
+dynamic dropped pickups, velocity nudge on the parked speeder, slide-velocity nudge on the sled); #134 in-storm
+sensory — camera pitch/roll sway (controller, scaled by perceivedIntensity, undo-then-apply) + master audio
+low-pass that muffles the mix as the storm engulfs the player. New STORM_WIND/CAM/AUDIO tuning. All foreground-feel.
+
+**Phase F — 3P interact-prompt** (`8b9bdc7`, #149): the prompt now projects the hovered object's world hit point
+to screen and pins there in 3P (was crosshair-centered → read detached); FP unchanged. `getHoverWorldPos` getter
+on interaction.ts records the raycast hit point.
+
+**Foreground-owed (D150 — feel/kinematic, built fully but verify live):** shrew burrow dive/puff timing + in-motion
+creature gaits; speeder dust/engine in motion; storm wind push + camera sway + audio muffle feel; machete 3P
+chop read; per-item 3P grip fit + the guns/rifle/consumables grip+use-anim pass; 3P interact-prompt on-object placement.
+
 ## Session ACV — 2026-06-02 — Overnight (partial): backlog clear + bug fixes + companion egg-cave ✓ verify pass (tsc clean)
 
 `verified` — `npm run verify` (tsc) PASS. A planned long overnight (bugs + easy features + one bigger

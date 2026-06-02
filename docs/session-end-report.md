@@ -2,9 +2,20 @@
 
 Cumulative state. Rewritten end-to-end at each `/session-end`.
 
-**Current state**: Session ACV shipped (2026-06-02 — overnight, partial: backlog clear + bug fixes + companion egg-cave). 100+ sessions post-MVP. `npm run verify` (tsc) PASS. **SAVE_VERSION 14** (unchanged — egg-cave save is additive, no bump). ACV was a planned long overnight (bugs + easy features + one bigger feature); budget-managed — shipped the bug/quick-win waves + the bigger feature (companion egg-cave) and pre-committed the visual/feel-tuning pile as scope-cuts → ACW. Wave 0 reconciled the backlog (the 3 remaining "bugs" #147/#150/#100 were already fixed). Wave 1: seated 3P rig pose on the speeder (#148, D159 — was dropping to the origin while mounted), sled drag marks lightened (#187), aim-twist gain 0.10→0.18 (#41). Wave 2 BIGGER FEATURE: **companion egg-cave acquisition** (Cycle 7 core, D158) — a new game no longer spawns the companion; Pebble is hatched from an egg in the rock-biome cave (egg + `'eggs'` interaction + `despawnCompanion` + additive `companionAcquired` save [legacy default true] + `main.ts` boot reconcile). **Next session (ACW) = finish the ACV scope-cut pile** (each needs real iteration): egg/cave VISUAL polish + companion proc-character (completes Cycle 7); speeder dust/engine FX; sandstorm wind; 3P prompts; in-storm sensory; then the art/animation pile.
+**Current state**: Session ACW shipped (2026-06-02 — overnight: full art/animation + storm-feel pass). 100+ sessions post-MVP. `npm run verify` (tsc) PASS. **SAVE_VERSION 14** (unchanged — all ACW changes are additive ItemDef fields + visual/feel). ACW executed the WHOLE deferred ACV visual/feel pile in one overnight (recalibration: the prior overnight under-reached by pre-emptively scope-cutting; new mode = plan deeply then execute fully, no pre-emptive cuts, foreground-batch genuine D150 feel items). Six per-phase commits (`2b7830a`→`8b9bdc7`): **A** 3P `handAttachTransform`+`playUseAnim3P` hooks + reusable `creatureGait.ts`+`particleTrail.ts`; **B** lizard+shrew gaits + shrew burrow-on-approach (new FSM state) + companion knuckles; **C** speeder dust trail + engine glow; **D** fixed broken raw/cooked_shrew_meat viewmodels + 3P weapon grips + machete 3P chop; **E** storm wind pushes loose bodies (#146) + camera sway + audio low-pass (#134); **F** 3P interact-prompt projection (#149). D160-D164. **Next session (ACX) = foreground feel-tune playtest of the whole ACW pile** (D150 — the headless harness can't read in-motion gait/wind/sway), then pick a breadth lane (finish per-item 3P grips / deep-cave design pass / salvage-panel variety).
 
-## ACV scope (this session) — overnight (partial): backlog clear + bugs + companion egg-cave
+## ACW scope (this session) — overnight: full art/animation + storm-feel pass (the deferred ACV pile, executed)
+
+- **Recalibration**: prior overnight (ACV) pre-emptively scope-cut the visual pile + checkpointed mid-build citing budget/turn-length when neither was the real constraint. ACW operating mode = plan deeply → execute the whole plan with real rule-8 screenshot iteration; no pre-emptive cuts; genuine D150 feel/kinematic items built fully + batched for the user's playtest.
+- **Phase A** (`2b7830a`): `ItemDef.handAttachTransform {pos,rot}` (3P hand placement, applied in `viewModel.swapEquippedMesh`) + `ItemDef.playUseAnim3P(rig,t)` (drives the rig's right arm during a use-anim in 3P) + `enemies/creatureGait.ts` (shared sin-phase gait) + `world/particleTrail.ts` (pooled soft-fade ShaderMaterial particles).
+- **Phase B** (`f8b08c1`): lizard sprawl-gait + shrew walk-gait (diagonal leg pairs via the gait helper) + shrew **burrow** FSM state (dives into the sand within SHREW_BURROW_RADIUS, sand puff, re-emerges) + companion mid-leg knuckles (polish — it was already a full proc-character).
+- **Phase C** (`a042351`): speeder dust trail (speed-gated pooled particles) + engine-ignition glow (nozzle emissive + PointLight ramp with speed). Fixed the particleTrail size=world-diameter convention (D161).
+- **Phase D** (`701779b`): fixed `raw_shrew_meat`+`cooked_shrew_meat` (had NO makeViewModel — rendered nothing) + 3P grip transforms for machete/scrap_bar/pipe_staff + machete `playUseAnim3P` chop (D160). Guns/rifle/consumables grip+use-anim pass deferred.
+- **Phase E** (`e439e7e`): #146 storm wind on loose bodies (`stormWindAccel` → pickups/speeder/sled; world-intensity per D163) + #134 in-storm camera sway + master audio low-pass.
+- **Phase F** (`8b9bdc7`): #149 3P interact-prompt projects the hovered object's world hit point to screen.
+- **Foreground-owed (D150, built fully — verify live in ACX)**: in-motion gaits, burrow dive/puff timing, speeder FX in motion, storm wind+sway+muffle feel, machete 3P chop read, per-item 3P grip fit, 3P prompt on-object placement.
+
+## ACV scope — overnight (partial): backlog clear + bugs + companion egg-cave
 
 - **Wave 0** — closed the 3 verified-fixed backlog "bugs" (#147 speeder mount-seat = ACQ look-gate, #150 iron-stake = ACQ+ACU, #100 speeder angular = X/Z rotation-locked).
 - **Wave 1** (`c9c71a6`): #148 seated 3P rig pose on the speeder (reposition to rider seat + seated pose; `SPEEDER_RIG_SEAT_Y/Z` foreground-tunable; D159); #187 sled drag marks lightened; #41 aim-twist turn-gain 0.10→0.18.
@@ -263,39 +274,39 @@ Existing tunables of interest:
 
 ## Suggested next session (1-3 directions in priority order)
 
-1. **Finish the ACV scope-cut pile** (TOP, Session ACW — each item needs the rule-8 build→screenshot→iterate loop, which is why they were cut from the overnight). First the **egg/cave visual polish** (the egg is a placeholder emissive ovoid → nicer shell + chamber lighting) + the **companion proc-character** rebuild (completes Cycle 7). Then: speeder dust+engine FX (#183/#184), sandstorm wind (#146), 3P prompts (#149), in-storm sensory (#134), then the art/animation pile (item models, POI detail, creature gaits+burrow, held-item 3P placement, use-anims).
-2. **Foreground-confirm the ACV owed items** in `npm run dev`: the egg-cave (new game → no companion → find cave → hatch → Pebble; save round-trip; legacy save keeps companion), the seated speeder pose (tune `SPEEDER_RIG_SEAT_Y/Z`), and the aim-twist feel.
-3. **Standing optional levers**: game **lighting mood** (D142, biggest remaining in-game realism lever — surface first) + PM-D cloth-physics robe; the heavy **dynamic salvage-panel placement** (its own design spike).
+1. **Foreground feel-tune playtest of the whole ACW pile** (TOP, Session ACX — the owed D150 verification the headless harness can't do): creature gaits in motion (`LIZARD_GAIT_*`/`SHREW_GAIT_*`), shrew burrow dive (`SHREW_BURROW_*` + puff), speeder dust/engine (`SPEEDER_DUST_*`/`SPEEDER_GLOW_*`), storm wind push (`STORM_WIND_PUSH_ACCEL`), camera sway + audio muffle (`STORM_CAM_SWAY_*`/`STORM_AUDIO_LP_MIN_HZ`), machete 3P chop, 3P interact-prompt on-object, per-item 3P grips. Boot `npm run dev`, play, tune in `tuning.ts`.
+2. **Pick ONE breadth lane** (after the playtest): (a) finish the per-item 3P grip + use-anim pass for the remaining held items (guns/rifle recoil, canteen drink, scrap_bar pry, bandage) via the `held-item` rig-shot scenario; (b) the DEEP CAVE SYSTEM design pass (procedural sprawl + sub-terrain collision + descent opening + dark-nav, then re-apply the egg spine from `2d4035b`); (c) salvage-panel variety + dynamic placement (#189/#190) + POI art detail.
+3. **Standing optional levers**: game **lighting mood** (D142, biggest remaining in-game realism lever — surface first) + PM-D cloth-physics robe; companion deeper rebuild (D128) only if it stops reading well.
 
 ---
 
 ## Time spent
 
-100+ sessions shipped (A through ACV). Approx ~310-385h cumulative human-facing dev time. ACV was a planned overnight executed partially (budget-managed): backlog reconcile + Wave-1 quick wins + the companion egg-cave bigger feature, with the visual/feel-tuning pile pre-committed as scope-cuts → ACW. 11 files + docs across 2 code commits; egg-cave save is additive (no version bump). (Tail of the same very long conversation: ACJ→…→ACU→ACV.)
+100+ sessions shipped (A through ACW). Approx ~315-390h cumulative human-facing dev time. ACW was a full overnight executing the deferred ACV visual/feel pile across 6 phases (A-F), 6 per-phase commits, ~13 source files touched + docs. No save change. Heavy use of the rig-shot static-pose screenshot harness for per-element rule-8 iteration (creatures, items, speeder FX). (Tail of the same very long conversation: ACJ→…→ACV→ACW.)
 
 ---
 
 ## State at session end
 
-- **Git status**: ACV code in two pushed commits — `c9c71a6` (Wave 0-1: seated pose + sled marks + aim-twist) and `2d4035b` (Wave 2: companion egg-cave spine). Session-end doc edits committed alongside; tagged `session-ACV`.
-- **Branch**: `master`. **Save state**: localStorage **v14** (unchanged — egg-cave `companionAcquired` is additive, D81, no bump).
-- **Ports bound**: a `npm run dev` server may still be running on **5173** from the prior playtest (dev-only); rig-shot harness uses 5191.
-- **Rule-8 / verification status**: ACV shipped LOGIC (egg-cave spine, bug fixes, tuning) — tsc-clean + traced, NOT screenshot/foreground-iterated. The egg's VISUAL is a deliberate placeholder (emissive ovoid) deferred to ACW's iteration loop; the seated speeder pose + aim-twist feel + egg-cave save round-trip are explicitly OWED a foreground/`__game` confirm (D150). No rough visual work was shipped as "done" — the visual pile was honestly cut, not crammed.
+- **Git status**: ACW code in six pushed per-phase commits (`2b7830a` A, `f8b08c1` B, `a042351` C, `701779b` D, `e439e7e` E, `8b9bdc7` F). Session-end doc edits committed alongside; tagged `session-ACW`.
+- **Branch**: `master`. **Save state**: localStorage **v14** (unchanged — all ACW changes are additive ItemDef fields + visual/feel, D81, no bump).
+- **Ports bound**: a `npm run dev` server may still be running on **5173** (dev-only); rig-shot harness used 5191-5195 (transient, killed per run).
+- **Rule-8 / verification status**: ACW shipped VISUAL elements verified via the static paused-camera screenshot harness (D164) — lizard/shrew gaits (per-phase leg poses), shrew model + burrow sink, companion legs, speeder dust+glow (rear closeup), per-item 3P grips (machete/scrap_bar), shrew-meat in-hand. **Genuinely in-motion/feel items (D150) were built fully + tsc-clean but NOT live-verified** (the headless harness can't read in-motion gait/wind/sway/anim) — these are the ACX foreground-playtest list. No rough visual shipped as "done": each static element was screenshot-critiqued-iterated; the foreground-owed items are a verification-METHOD limitation, not a cut.
 
 ---
 
 ## Token spend this session (estimated)
 
-ACV was the tail of an already-very-long conversation; the overnight was executed inline rather than as a fanned-out workflow, with exploration agents up front (3 Explore for the egg-cave + bug verification).
+ACW was a full overnight executed inline (per-phase build→screenshot→iterate→commit), the tail of an already-very-long conversation. The dominant cost was the rig-shot screenshot loop — each run boots its own Vite+Playwright (~35s) and several elements needed 2-4 framing/tuning iterations (the live FP/3P camera fought placement until the paused-free-camera path was settled, D164).
 
-- Input: high (long session; egg-cave exploration + the 6-file spine reads).
-- Output: high-moderate — Wave 0-1 + the egg-cave spine across 11 files + 2 D-entries + the session-end docs.
-- Cost (Opus 4.8 rates): above baseline (length-driven). The visual pile was scope-cut precisely to avoid burning budget on shallow iteration.
+- Input: very high (long session + many screenshot-review cycles + the per-phase file reads across creatures/speeder/items/storm/prompt).
+- Output: high — 6 phases across ~13 source files + 5 D-entries + the full session-end doc set.
+- Cost (Opus 4.8 rates): well above baseline (length + iteration-loop driven). Justified by the recalibration mandate (execute the whole pile fully, no pre-emptive cuts; Claude Max, budget not a constraint).
 
-Notable: pre-flight verification found ALL three remaining backlog "bugs" were already fixed (ACQ/ACU) — freeing the overnight to focus on the egg-cave. The egg-cave's key simplification (egg exists iff `!companionAcquired`, re-derived at boot → no egg save field, one additive boolean) kept it a clean additive change (no SAVE_VERSION bump). The visual/feel pile was honestly deferred rather than rushed (rule 8 / the ABP precedent).
+Notable: the harness camera-fights-placement problem (D164) cost several iterations before the paused free-camera pattern was pinned as the reliable path; the particleTrail size-is-world-diameter gotcha (D161) cost an extra iteration on both the speeder dust + shrew puff. Both are now documented so ACX's per-item 3P pass + any future creature/FX work goes faster.
 
 ---
 
 ## Commit handoff
 
-Per CLAUDE.md (session-end auto-runs commit + tag + push). ACV code already committed across `c9c71a6` + `2d4035b`; the session-end doc edits (changelog/CLAUDE/roadmap/decisions/backlog/report/next-prompt) are committed alongside + tagged `session-ACV`.
+Per CLAUDE.md (session-end auto-runs commit + tag + push). ACW code already committed across the six per-phase commits (`2b7830a`→`8b9bdc7`); the session-end doc edits (changelog/CLAUDE/roadmap/decisions/backlog/report/next-prompt) are committed alongside + tagged `session-ACW`.

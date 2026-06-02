@@ -131,7 +131,7 @@ NEXT-ATTEMPT IDEAS:
 
 [debt] gamedev-framework feedback from ACF smoke-test — two findings worth folding into the framework: (1) session-start step-5 dispatcher over-classifies ("fan out 2 agents") BEFORE reading code; ACF Option A turned out ~90% shared-serialization-point infra + lopsided per-entity remainder + observation-dependent visual-triage (single preview server) — none fannable. The skill needs a "re-classify after reading the architecture" beat so the a-priori guess isn't load-bearing. (2) `decisions.md` (~70K tokens) exceeds the whole session-start doc-read budget; the skill should say "grep recent D-entries" or the file should split recent/archive. Lives in `~/projects/gamedev-framework/`, not this repo.
 
-[polish] in-storm sensory degradation — near-zero forward visibility + slight camera sway + wind/sandstorm SFX while engulfed. (Storm wall + fog/vignette shipped ACL; the camera-sway + near-zero-vis-while-engulfed polish may remain — verify in a foreground storm.)
+🟡 **[polish] in-storm sensory degradation — PARTIAL ACW (#134)**: fog + vignette ✓ACL; ACW added the missing **camera pitch/roll sway** (scaled by perceivedIntensity) + a **master audio low-pass** that muffles the mix as the storm engulfs the player. Foreground feel-tune owed (amp/cutoff). Near-zero forward visibility is already covered by ACL's FogExp2 ramp.
 [feat] real rope physics with slack — segmented/Verlet rope sim instead of the current cosmetic catmull-rom sag + inextensible position-snap constraint (ACE ropeConstraint.ts); ropes should hang, drag, and go taut like real rope.
 [feat] daytime sky variation — clear vs cloudy skies (no clouds exist yet; sky is a gradient shader + sun/moon/stars in sky.ts).
 [feat] rare "wreck yard" biome — ship-graveyard/junkyard with highly condensed wrecks (large + small); 4th biome alongside dune/salt/rocky, spawns rarely.
@@ -143,10 +143,10 @@ NEXT-ATTEMPT IDEAS:
 [feat] lie-down-to-sleep — camera lerps low to a fixed pose just above the bedroll, sleep, wake in the same pose + stand; replaces instant-sleep overlay. Needs lie-down/get-up anims (gated on player rigging progress).
 [feat] rope-attach to the speeder by clicking its rear mount bar (replaces the mount-while-holding-rope tether-transfer flow); lets the speeder be roped/pulled like other endpoints.
 ✓ **SHIPPED ACU (#50, D157)** — rope leaves inventory only when BOTH ends anchored (sled + stake/Pebble/speeder/static-pos); stays carried while player-held so you can tie the 2nd end. `applyTether` centralizes it; drop-with-G releases the sled; LMB floor-drop removed. User-confirmed.
-[feat] sandstorm wind pushes physics bodies — dropped items + speeder + sled get a wind force during storms (composes with the Dune storm rework).
+✓ **SHIPPED ACW (#146)** — sandstorm wind pushes physics bodies: `stormWindAccel(weather)` → per-frame impulse on dynamic dropped pickups, velocity nudge on the parked speeder, slide-velocity nudge on the kinematic sled. World-intensity-driven (D163). Foreground feel-tune owed.
 ✓ **FIXED ACQ** — E near the speeder mounting without looking: ACQ added the `SPEEDER_MOUNT_LOOK_DOT` gate (camera must face the bike within ~60°, not proximity alone). Verified ACV.
 🟡 **[bug] 3P rig on speeder — SEATED POSE SHIPPED ACV (D159)**. The rig was dropping to the world origin while mounted (body parked at y=-2000); now repositioned to the rider seat with a seated pose. `SPEEDER_RIG_SEAT_Y/Z` foreground-tunable. REMAINING (deferred): a dedicated speeder 3P chase/orbit camera (the follow-the-seat camera is adequate for now).
-[polish] show control/button prompts in 3rd-person view (interact prompts currently FP-oriented).
+✓ **SHIPPED ACW (#149)** — 3P interact prompt now projects the hovered object's world hit point to screen + pins the prompt there (was crosshair-centered → read detached in 3P); FP unchanged. `getHoverWorldPos` getter on interaction.ts. On-object placement foreground-verify owed (headless couldn't stage a live 3P hover).
 ✓ **FIXED ACQ+ACU** — iron stake model: sand mound removed (ACQ), rope-loop ring seated at the top touching the shaft (`STAKE_LOOP_OFFSET_X/Y`), and `resolveEndpointWorldPos` stake case resolves the actual ring world pos (offset + yaw). Verified ACV.
 
 ---
@@ -175,13 +175,13 @@ Intentionally not active. Detail preserved so the call is reversible. Each entry
 
 — — — ACT (2026-06-01) idea dump — — —
 
-[polish] upgrade all item models to higher-detail / higher-quality procedural assets.
-[polish] held items must sit correctly in the hands in 3rd person (rig.rightHandAttach placement per item).
-[feat] 3rd-person use animations for items that act (swing/pry/drink/etc.) on the rig hand.
-[feat] lizard + shrew walking animations (gait while moving, mirror player rig gait pattern).
-[feat] shrew burrow animation (dig-in/out — composes with flee/idle AI).
-[feat] speeder dust effect under/behind the bike while driving (speed-gated particle trail).
-[feat] speeder engine ignition effect (engines visibly ignite/light on throttle).
+🟡 **[polish] upgrade item models — PARTIAL ACW**: fixed the two BROKEN ones (raw/cooked_shrew_meat had NO makeViewModel → rendered nothing). Most others already have decent procedural meshes (built over prior sessions). REMAINING: a fidelity spot-check + upgrade of any genuinely-primitive ones.
+🟡 **[polish] held items sit correctly in 3P hand — PARTIAL ACW**: added `ItemDef.handAttachTransform` (Phase-A hook) + authored grips for machete/scrap_bar/pipe_staff (were gripped at their middle). Canteen seats fine as-is. REMAINING: the guns/rifle (Z-oriented — ACM-verified acceptable) + consumables grip pass.
+🟡 **[feat] 3P use animations — PARTIAL ACW**: added `ItemDef.playUseAnim3P` (Phase-A hook) + a machete diagonal-chop. REMAINING: scrap_bar pry, canteen drink, gun recoil, bandage apply.
+✓ **SHIPPED ACW** — lizard + shrew walking gaits (diagonal-pair leg step while moving, via `creatureGait.ts`). Foreground feel-tune owed (D150).
+✓ **SHIPPED ACW** — shrew burrow-on-approach (new FSM state — dives nose-down into the sand within SHREW_BURROW_RADIUS, sand puff, re-emerges). Foreground dive/puff timing owed.
+✓ **SHIPPED ACW (#183)** — speeder dust trail (speed-gated pooled particles behind/under the bike, ≈2× on boost).
+✓ **SHIPPED ACW (#184)** — speeder engine-ignition glow (nozzle emissive + PointLight ramp with speed, die when parked).
 [feat] seated 3rd-person rig stance + dedicated 3P camera while mounted on the speeder (cf. ACN mount bug + D116).
 [idea] wrap player model in a cloth robe with real cloth physics to mask the low-poly rig.
 ✓ **SHIPPED ACV** — sled drag marks lightened (`FOOTPRINT_SLED_COLOR_HEX` 0x3d2918 → 0x6e5236).

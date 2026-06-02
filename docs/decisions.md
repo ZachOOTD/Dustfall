@@ -1186,3 +1186,48 @@ The fundamental issue: KCC's slope projection, autostep, and contact resolution 
 **Picked**: In `updatePlayerRig`, when `ctx.speeder.mounted`, branch BEFORE the normal body-follow: position the rig at the bike's rider seat (bike body translation + a yaw-rotated local offset, mirroring the rider-seat math in speeder.ts), face `bikeYaw + π`, and apply a seated pose (thighs forward astride, knees bent down, arms to the grips). Seat offset constants `SPEEDER_RIG_SEAT_Y/Z` are foreground-tunable (the rig origin is the feet, so SEAT_Y is offset down from the camera seat). The dedicated speeder 3P camera (orbit/chase) stays deferred — the existing follow-the-rider-seat camera is adequate. General rule: a parked-body vehicle (capsule hidden so it doesn't fight the vehicle collider) must drive the visible rig from the VEHICLE transform, not the parked body.
 
 **friction-score:** 1
+
+## D160 — 3P held items need a per-item hand-attach transform + a separate 3P use-anim hook (the FP viewmodel is hidden in 3P) (Session ACW)
+**When**: ACW Phase A/D — seating items in the rig's right hand + animating use-actions in third person.
+
+**Why**: The dual-mesh system (ABP) parents a second copy of `makeViewModel()` to the rig's `rightHandAttach`, but those meshes are authored for the FP camera origin — their local origin is wherever the builder placed it (often the item's MIDDLE, e.g. the machete's guard), so in 3P the rig grips the item at its centre with the handle floating above the fist. Separately, `playUseAnim` only animates the FP `vm.itemRoot` (the viewmodel item), which is HIDDEN in 3P — so a swing/drink/fire showed no arm motion at all with the camera behind the body.
+
+**Picked**: Two additive `ItemDef` fields. (1) `handAttachTransform: {pos,rot}` — applied to the 3P hand-attach mesh ONLY in `viewModel.swapEquippedMesh` AFTER `thirdPersonScale`; authored per held item (machete/scrap_bar/pipe_staff lift +Y ~0.11–0.12 so the grip seats in the fist; canteen + the Z-oriented guns/rifle need none). (2) `playUseAnim3P(rig, t)` — drives the rig's right-arm BONES, called LAST in `updatePlayerRig` (after the per-state gait + aim-twist) when `vm.anim.active && thirdPerson`, with `t` from the vm anim clock; author ABSOLUTE poses (the gait re-poses next frame, no reset needed). Both default to no-op (legacy behavior). Verified the grip per-item via a paused `held-item` screenshot scenario (arm posed out to clear the torso). The exhaustive per-item pass (guns/rifle/consumables grips + their use-anims) is foreground-owed.
+
+**friction-score:** 2
+
+## D161 — Reusable creature-gait helper + pooled particle-trail; particle `size` is a WORLD diameter, not pixels (Session ACW)
+**When**: ACW Phase A — factoring the per-creature gait math + a shared dust/puff particle system out of footprintPuffs.
+
+**Why**: Lizard/shrew/companion all want the same sin-phase leg gait the player rig uses, and the speeder dust + shrew burrow want the footprintPuffs pool pattern but with soft per-particle fade. Copy-pasting either would drift.
+
+**Picked**: `enemies/creatureGait.ts` (`gaitPhase(elapsed,freq)` + `legPose(phase,offset,swingAmp,liftAmp,bendAmp)` returning swing/lift/bend; `sin` swing, `max(0,cos)` lift peaking in the forward-recovery half-stride — mirrors the player rig). `world/particleTrail.ts` (per-instance pooled `THREE.Points` + a tiny ShaderMaterial giving per-particle alpha+size fade over life — soft round motes that dissolve, vs footprintPuffs' hard cull). **GOTCHA promoted to the EmitSpec doc**: the shader renders `gl_PointSize = size * uScale(300) / cameraDist`, so the `size` param is ≈ world-space diameter — the right range is ~0.4–1.2; values in the tens (mistaking it for pixels) render screen-filling blobs. Cost both the speeder dust + shrew puff an iteration before the convention was pinned.
+
+**friction-score:** 1
+
+## D162 — Shrew burrow = an FSM state that sinks the mesh below the terrain plane (occlusion sells "underground"); trigger radius < flee distance (Session ACW)
+**When**: ACW Phase B — the "shrew dives into the sand when you get close" behavior.
+
+**Why**: The terrain is a continuous heightfield with no holes, so there's no literal burrow to dig into. But a creature sunk below the surface plane is OCCLUDED by the terrain mesh from every angle — which IS the read "it went underground." A ~9cm shrew vanishes once it sinks past ~its own height; SHREW_BURROW_DEPTH (0.34m) just guarantees it's well-buried.
+
+**Picked**: New `'burrow'` state in the shrew FSM, pre-empting `'flee'` (checked first; flee's guard excludes burrow). `SHREW_BURROW_RADIUS` (2.6m) < `SHREW_SPOT_DISTANCE` (7m) → the shrew BOLTS at 7m, then if the player closes to 2.6m it DIVES instead of continuing to run (escalation). `burrowT` (0..1, transient/not-persisted) eases toward 1 while the player is near (×1.6 hysteresis to stay buried), back to 0 when they leave; mesh Y = surface − burrowT·DEPTH, nose-down tilt via `rotation.z`, `visible=false` past 0.85, kinematic body sunk too (so a melee swing can't hit a buried invisible collider), a pooled sand puff bursts when crossing the surface threshold (entry/exit). Re-emerge → back to `idle`. The visible dive happens in burrowT 0–0.25; verified via static sink screenshots. Dive/puff TIMING is foreground-feel (D150).
+
+**friction-score:** 1
+
+## D163 — Storm wind on loose bodies uses WORLD intensity (not perceivedIntensity); kinematic bodies get a slide-velocity nudge, not a force (Session ACW)
+**When**: ACW Phase E (#146) — making a sandstorm physically shove dropped pickups / the parked speeder / a slack sled.
+
+**Why**: `perceivedIntensity` is shelter-dampened (a player-FELT quantity — drives fog/vignette/audio/thirst). But loose world objects are blown by the actual wind regardless of where the PLAYER is hiding, so the physical push must read `weather.intensity` (world truth) — same reasoning the companion's storm-huddle uses world intensity. (In-storm SENSORY effects — camera sway, audio muffle — correctly use perceivedIntensity, since those ARE player-felt.)
+
+**Picked**: `stormWindAccel(weather)` helper in weather.ts returns a shared-scratch `{x,z}` = wall travel dir × world intensity × `STORM_WIND_PUSH_ACCEL`, zero when the wall is inactive/intensity≈0. Dynamic dropped-pickup bodies get a per-frame `applyImpulse(accel·mass·dt)`; the unmounted speeder adds `accel·dt` to its velocity (its own damping bleeds it off when the gust eases); the KINEMATIC sled (can't take a force) folds `accel·dt` into its managed `_slideVx/_slideVz` scalars (a towed sled is perturbed but the rope-snap correction pulls it back). `updatePickups` gained a `dt` param. All foreground feel-tune.
+
+**friction-score:** 1
+
+## D164 — Headless creature/item screenshots use the PAUSED free-camera path; the live FP/3P camera + KCC body-teleport fights placement (Session ACW)
+**When**: ACW Phase B/C/D — building rig-shot scenarios to verify small-creature gaits, in-hand items, and speeder FX.
+
+**Why**: Live scenarios (`enterLive`) keep the sim ticking, so `syncCameraToBody` re-pins the camera to the player body every frame (FP: body+eye; 3P: a spring-arm BEHIND the body), and teleporting the dynamic KCC player body to a vantage gets stomped by the controller's own movement integration. Net: a `cam.position.set` + `lookAt` in a live scenario doesn't stick — the lizard ended up a distant dot / the player rig framed instead of the creature. (The non-FP-allowlist scenarios silently ran in 3P, compounding it.)
+
+**Picked**: For static reads, set `ctx.flags.paused = true` — the main loop early-returns before any camera sync (the pause-gates-everything rule), so a free `cam.position`/`lookAt` STICKS and the manually-posed mesh holds. Pattern: enter live briefly (so terrain + entities exist + a live tick populates dust/anim if needed), then pause, pose the target (manual gait phase / burrowT / leg-lift), free-frame the camera close, screenshot. For FX that must accumulate over frames (speeder dust trail), drive a few LIVE ticks first (re-injecting velocity so damping doesn't bleed it), THEN pause to freeze the cloud mid-air + hold the glow. Live tracking strips remain useful only when the creature recedes ALONG the view axis from the player-as-camera (the pre-existing shrew-flee). Genuinely live-only feel (in-motion gait, wind, sway) stays foreground (D150).
+
+**friction-score:** 2
