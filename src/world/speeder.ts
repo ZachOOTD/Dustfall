@@ -25,6 +25,10 @@ import { makeEngineBellMesh } from './wrecks.ts';
 import { createMetalMaterial } from './metalMaterial.ts';
 import { createPaintedMetalMaterial } from './paintMaterial.ts';
 import {
+  createParticleTrail, emitParticle, updateParticleTrail, disposeParticleTrail,
+  type ParticleTrail,
+} from './particleTrail.ts';
+import {
   startSpeederThrust,
   setSpeederThrustSpeed,
   stopSpeederThrust,
@@ -674,6 +678,82 @@ const _camRollQ = new THREE.Quaternion();
 // imperceptible. Promoted to Tuning (integration).
 const SPEEDER_MOUNTED_ANGULAR_DAMP_RATE_PER_S = Tuning.SPEEDER_MOUNTED_ANGULAR_DAMP_RATE_PER_S;
 
+// ── ACW C7/C8 — speeder dust trail + engine-ignition glow ────────────────
+// Pooled sandy dust kicked up behind/under the bike (speed-gated), plus a
+// nozzle emissive ramp + a glow PointLight that brightens with speed (so the
+// engines "ignite" under throttle and die when parked). Lazily created on the
+// first update (needs the scene); HMR-disposed so a tuning reload rebuilds.
+let _dust: ParticleTrail | null = null;
+let _glowLight: THREE.PointLight | null = null;
+let _fxScene: THREE.Scene | null = null;
+const _nozzleBaseColor = new THREE.Color(Tuning.WRECK_NOZZLE_INTERIOR_HEX);
+const _nozzleHotColor = new THREE.Color(Tuning.SPEEDER_GLOW_HOT_HEX);
+const _fxScratchColor = new THREE.Color();
+if ((import.meta as { hot?: { dispose: (cb: () => void) => void } }).hot) {
+  (import.meta as { hot: { dispose: (cb: () => void) => void } }).hot.dispose(() => {
+    if (_dust && _fxScene) disposeParticleTrail(_dust, _fxScene);
+    if (_glowLight && _fxScene) _fxScene.remove(_glowLight);
+    _dust = null; _glowLight = null; _fxScene = null;
+  });
+}
+
+function updateSpeederFX(ctx: GameContext, s: SpeederState, dt: number): void {
+  const scene = ctx.three.scene;
+  if (!_dust || !_glowLight) {
+    _dust = createParticleTrail(scene, {
+      count: 200, color: 0xc2a37c, opacity: 0.5, gravity: 1.4, drag: 1.1,
+    });
+    _glowLight = new THREE.PointLight(0xff6a22, 0, 4.5, 2.0);
+    scene.add(_glowLight);
+    _fxScene = scene;
+  }
+  const pos = s.body.translation();
+  const cos = Math.cos(s.yaw), sin = Math.sin(s.yaw);
+  const speedNorm = Math.min(1.3, s.speed / Tuning.SPEEDER_MAX_SPEED);
+
+  // ENGINE GLOW — nozzle interior emissive ramps base→hot with speed; a
+  // PointLight at the primary nozzle pools warm light behind the bike. Both
+  // saturate at full forward speed and keep glowing on boost; die when parked.
+  const glow = Math.min(1, speedNorm);
+  _fxScratchColor.copy(_nozzleBaseColor).lerp(_nozzleHotColor, glow);
+  _nozzleInteriorMat.color.copy(_fxScratchColor);
+  // Primary nozzle world position: local (0.32, 0, 1.85) rear (+Z), rotated
+  // by yaw (same rotation convention as the rider-seat offset).
+  const nlx = 0.32, nlz = 1.85;
+  const nx = pos.x + (nlx * cos + nlz * sin);
+  const nz = pos.z + (-nlx * sin + nlz * cos);
+  _glowLight.position.set(nx, pos.y, nz);
+  _glowLight.intensity = glow * Tuning.SPEEDER_GLOW_MAX_INTENSITY;
+
+  // DUST TRAIL — kicked up behind + below the bike while moving. Forward is
+  // (-sin, -cos); behind is the negation. Emission scales with speed; boost
+  // throws roughly 2× as much.
+  if (s.speed >= Tuning.SPEEDER_DUST_MIN_SPEED) {
+    const back = Tuning.SPEEDER_DUST_BACK_OFFSET;
+    const bx = sin, bz = cos;          // behind (= -forward)
+    const ex = pos.x + bx * back;
+    const ey = pos.y - Tuning.SPEEDER_DUST_DOWN_OFFSET;
+    const ez = pos.z + bz * back;
+    const n = Math.round(Tuning.SPEEDER_DUST_PER_FRAME * (1 + speedNorm));
+    for (let i = 0; i < n; i++) {
+      emitParticle(_dust, {
+        x: ex + (Math.random() - 0.5) * 0.5,
+        y: ey + (Math.random() - 0.5) * 0.2,
+        z: ez + (Math.random() - 0.5) * 0.5,
+        // drift further back + a little lateral spread + a soft upward billow
+        vx: bx * (1.2 + Math.random() * 1.6) + (Math.random() - 0.5) * 1.0,
+        vy: 0.5 + Math.random() * 0.9,
+        vz: bz * (1.2 + Math.random() * 1.6) + (Math.random() - 0.5) * 1.0,
+        life: 0.7 + Math.random() * 0.7,
+        // psize is ~world-diameter (shader: gl_PointSize = psize*uScale/dist);
+        // ~0.5-1.1 reads as a dust mote, not a screen-filling blob.
+        size: 0.5 + Math.random() * 0.6,
+      });
+    }
+  }
+  updateParticleTrail(_dust, dt);
+}
+
 export function updateSpeeder(ctx: GameContext, dt: number): void {
   const s = ctx.speeder;
   if (!s) return;
@@ -801,6 +881,10 @@ export function updateSpeeder(ctx: GameContext, dt: number): void {
 
   // ── Cache horizontal speed for HUD / audio.
   s.speed = Math.hypot(unmountedDampedVx, unmountedDampedVz);
+
+  // ── ACW C7/C8 — dust trail + engine glow. Runs every frame (mounted or
+  // not) so a coasting/parked bike still settles its FX; keyed to s.speed.
+  updateSpeederFX(ctx, s, dt);
 
   // ── If not mounted, nothing else to do beyond damping ang/lin
   //    velocity + checking for a mount key-press.

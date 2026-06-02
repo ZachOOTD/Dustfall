@@ -213,6 +213,13 @@ export const Tuning = {
   SPEEDER_STRAFE_SPEED: 7,              // m/s — half forward speed
   SPEEDER_REVERSE_MULT: 0.55,           // S thrust = forward × this
   SPEEDER_BOOST_MULT: 1.7,              // Shift while moving → max speed × this
+  // ACW C7/C8 — speeder dust trail + engine-ignition glow FX.
+  SPEEDER_DUST_MIN_SPEED: 2.0,          // m/s — below this no dust kicks up
+  SPEEDER_DUST_PER_FRAME: 3,            // particles emitted/frame at speed (scales up to ~2× on boost)
+  SPEEDER_DUST_BACK_OFFSET: 1.7,        // m behind the bike center the dust spawns
+  SPEEDER_DUST_DOWN_OFFSET: 0.5,        // m below the bike center (toward the ground wash)
+  SPEEDER_GLOW_MAX_INTENSITY: 3.2,      // engine nozzle PointLight intensity at full throttle
+  SPEEDER_GLOW_HOT_HEX: 0xff7a2a,       // nozzle interior color at full throttle (hot orange)
   SPEEDER_ACCEL_LERP: 0.07,             // per-frame lerp toward target XZ velocity (~14 frames to reach 64%)
   SPEEDER_TURN_RATE_MAX: 3.0,           // rad/s cap on bike yaw rate
   SPEEDER_TURN_RESPONSE: 4.0,           // target_ang_vel = wrapped_yaw_err × this (proportional)

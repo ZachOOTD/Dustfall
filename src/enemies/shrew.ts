@@ -438,7 +438,7 @@ function burstBurrowPuff(scene: THREE.Scene, x: number, y: number, z: number): v
     });
     _burrowPuffScene = scene;
   }
-  emitBurst(_burrowPuff, x, y, z, 14, { speed: 0.6, up: 0.5, life: 0.7, size: 9, posJitter: 0.12 });
+  emitBurst(_burrowPuff, x, y, z, 14, { speed: 0.6, up: 0.5, life: 0.7, size: 0.4, posJitter: 0.12 });
 }
 /** Per-frame integrate for the burrow puff (called from updateShrews). */
 export function updateShrewBurrowPuff(dt: number): void {

@@ -301,6 +301,54 @@ const SCENARIOS = {
     }
   },
 
+  // Speeder-FX (ACW C7/C8): drive the (unmounted) bike LIVE for ~0.6s so the
+  // dust trail builds + the engine glow ramps with speed, then PAUSE (freezes
+  // the dust cloud mid-air + holds the glow) and free-camera a 3/4-behind shot
+  // showing the trail + the hot nozzle. Re-inject forward velocity each tick so
+  // the unmounted damping doesn't bleed the speed (→ no dust).
+  'speeder-fx': async (page) => {
+    await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      ctx.weather.intensity = 0;
+      window.__game.setTime(0.5);
+      ctx.three.renderer.toneMappingExposure = 1.05;
+      ctx.three.renderer.setSize(1000, 720, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1000 / 720; cam.updateProjectionMatrix(); }
+      const s = ctx.speeder;
+      const bx = 8, bz = 0, by = ctx.terrain.heightAt(bx, bz) + 1.2;
+      s.body.setTranslation({ x: bx, y: by, z: bz }, true);   // yaw 0 → forward = -Z
+      s.body.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true);
+      s.mounted = false;
+    });
+    // Drive forward (-Z) for several ticks; re-inject velocity each step.
+    for (let i = 0; i < 11; i++) {
+      await page.evaluate(() => {
+        const s = window.__game.ctx.speeder;
+        s.body.setLinvel({ x: 0, y: s.body.linvel().y, z: -12 }, true);
+      });
+      await page.waitForTimeout(55);
+    }
+    const info = await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      ctx.flags.paused = true;                 // freeze dust cloud + glow + camera
+      const s = ctx.speeder;
+      const p = s.body.translation();
+      const cam = ctx.three.camera;
+      // Bike drove -Z, so the dust trails behind it toward +Z. View 3/4
+      // behind-right so the trail recedes into frame + the nozzle glow shows.
+      cam.position.set(p.x + 1.8, p.y + 1.1, p.z + 3.6);
+      cam.lookAt(p.x, p.y + 0.05, p.z + 0.6);
+      cam.updateMatrixWorld(true);
+      return { speed: +s.speed.toFixed(1), bikeZ: +p.z.toFixed(1) };
+    });
+    console.log(`[speeder-fx] final speed=${info.speed} bikeZ=${info.bikeZ}`);
+    await page.waitForTimeout(250);
+    const path = join(OUT, 'scen-speeder-fx.png');
+    await page.screenshot({ path, fullPage: false });
+    console.log(`[rig-shot] saved ${path}`);
+  },
+
   // Companion (ACW B6 ASSESS): the companion is already a full proc-character
   // (icosahedron carapace + 5 radial legs + gait). Frame it close from two
   // angles + a walking-pose leg lift so we can judge whether it needs polish or

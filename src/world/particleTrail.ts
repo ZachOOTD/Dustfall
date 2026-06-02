@@ -147,7 +147,9 @@ export interface EmitSpec {
   x: number; y: number; z: number;
   vx: number; vy: number; vz: number;
   life: number;
-  /** Base sprite size in px at unit depth (gl_PointSize before attenuation). */
+  /** Sprite size ≈ world-space diameter. The shader renders
+   *  gl_PointSize = size * uScale(300) / cameraDist, so ~0.4-1.2 reads as a
+   *  small mote; values in the tens fill the screen. */
   size: number;
 }
 
