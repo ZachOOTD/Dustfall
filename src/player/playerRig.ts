@@ -49,6 +49,10 @@ import { buildSkinnedLimb } from './skinnedLimb.ts';
 import { getItemDef } from '../inventory/items.ts';
 
 const _PI2 = Math.PI * 2;
+// ACX — roll (rad) of the visible hand about the forearm axis to turn the palm
+// from forward-facing to INWARD (toward the hip). Applied as `side * this` so
+// both hands turn inward symmetrically. Tuned via the apose hand closeup.
+const HAND_PALM_ROLL = 1.4;
 
 export type RigState = 'idle' | 'walking' | 'running' | 'crouching';
 
@@ -907,15 +911,24 @@ function buildRigVisual(): {
     handGroup.position.set(0, -0.02, 0);
     handGroup.rotation.x = -1.15;                 // relaxed down-forward hang (was flat-forward block)
     wristBone.add(handGroup);
+    // ACX — the VISIBLE hand meshes live under handVisual so a palm-orientation
+    // roll doesn't disturb rightHandAttach (the held-item anchor, parented to
+    // handGroup directly + carrying the item-forward corrective). The palm
+    // built flat in X-Z faces forward-down after the -1.15 hang; rolling about
+    // the forearm (~local Y) by HAND_PALM_ROLL turns the palm INWARD toward the
+    // hip/body. Mirrored per side so both hands turn inward.
+    const handVisual = new THREE.Group();
+    handVisual.rotation.y = side * HAND_PALM_ROLL;
+    handGroup.add(handVisual);
     // Fingerless glove — palm + knuckle ridge in wrap cloth, fingers bare skin.
     // ACK realism: slimmer palm + relaxed CURLED fingers (a real resting hand
     // curls; stiff splayed digits read blocky/mannequin).
     const palm = new THREE.Mesh(new THREE.BoxGeometry(0.070, 0.024, 0.058), wrapMat);
     palm.scale.set(1, 1, 1);
-    handGroup.add(palm);
+    handVisual.add(palm);
     const knuckleRidge = new THREE.Mesh(new THREE.BoxGeometry(0.066, 0.019, 0.020), wrapMat);
     knuckleRidge.position.set(0, 0, -0.026);
-    handGroup.add(knuckleRidge);
+    handVisual.add(knuckleRidge);
     for (let f = 0; f < 4; f++) {
       const fingerLen = 0.058 - Math.abs(f - 1.5) * 0.006;
       // Tapered + slimmer; outer fingers (index/pinky) curl a touch more → a
@@ -925,7 +938,7 @@ function buildRigVisual(): {
       finger.rotation.x = Math.PI / 2 - curl;             // more relaxed curl (was 0.35)
       finger.rotation.z = (-0.027 + f * 0.018) * 0.6;     // fan/converge slightly toward the palm center
       finger.position.set(-0.025 + f * 0.0165, -fingerLen * 0.30, -0.026 - fingerLen * 0.40);
-      handGroup.add(finger);
+      handVisual.add(finger);
       for (const frac of [1 / 3, 2 / 3]) {
         const knuckle = new THREE.Mesh(new THREE.SphereGeometry(0.0098, 6, 5), handSkinMat);
         knuckle.position.y = (frac - 0.5) * fingerLen;
@@ -943,7 +956,7 @@ function buildRigVisual(): {
     thumb.rotation.z = handSign * 0.7;          // splay toward the body midline
     thumb.rotation.x = Math.PI / 2 - 0.5;
     thumb.position.set(handSign * -0.038, -0.012, -0.014);
-    handGroup.add(thumb);
+    handVisual.add(thumb);
     // Right-hand attach point for 3P held items. ACX FIX: the rig faces local
     // +Z, so the player's RIGHT side is local -X = side -1 (NOT +1). Pre-ACX
     // this lived on side +1 (the player's LEFT hand) — the "item in the wrong
