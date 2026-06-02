@@ -131,12 +131,15 @@ const TORSO_CENTER_Y = HIP_Y + TORSO_H / 2 + 0.04;
 const SKIN_COLOR = 0xc9a876;           // weathered tan
 // ABX: SKIN_ACCENT retired — face/hand accent colors now inlined
 // per material (face = 0x6e4a26 sun-aged, hand = 0x4a3520 grimy).
-const HOOD_COLOR = 0xd2b48c;           // desert tan — unified scarf/hood cloth (ACH: bandana folded into this)
+// ACU — Rey-like off-white outfit. Was desert-tan/olive/grey (read dark). The
+// dominant cloth (hood/scarf wrap, forearm wraps, main tunic) goes to pale
+// sun-bleached cream; the leather belt/pouches/pack stay dark as accent contrast.
+const HOOD_COLOR = 0xeee7d8;           // ACU: off-white linen (was 0xd2b48c desert tan) — base pushed light so the fabric shader's tan mid-tone + stains still read off-white
 const STRAP_COLOR = 0x4a3220;          // ABX: brown leather (was 0x505050 dark metal)
 const POUCH_RUST = 0xa0522d;           // rust-orange
 const PAULDRON_METAL = 0x6a6a6a;       // dark grey metal
 const PAULDRON_RUST = 0x8a4a28;        // chipped paint reveals rust
-const WRAP_COLOR = 0x7a7a7a;           // warm grey (forearm wraps)
+const WRAP_COLOR = 0xe0d6c0;           // ACU: light linen (was 0x7a7a7a warm grey)
 
 function buildRigVisual(): {
   group: THREE.Group;
@@ -213,6 +216,14 @@ function buildRigVisual(): {
   // cloth layer (the old same-tone bandana blended into the skin = invisible).
   const scarfMat = createFabricMaterial(0xe4dcc4, undefined, { disableShimmer: true });
   const wrapMat = createFabricMaterial(WRAP_COLOR, undefined, { disableShimmer: true });
+  // ACU — limbs CLOTHED (were bare dark skin via underclothMat). The figure now
+  // reads dressed head-to-toe in the off-white outfit: sleeves over the arms +
+  // shoulders, leggings over the legs/hips, a cloth collar at the neck. Sleeves
+  // match the forearm-wrap linen; leggings are a slightly darker warm-grey so the
+  // trousers read distinct from the off-white tunic; collar matches the scarf.
+  const sleeveMat = createFabricMaterial(0xe0d6c0, undefined, { disableShimmer: true }); // light linen sleeves
+  const trouserMat = createFabricMaterial(0xbcb097, undefined, { disableShimmer: true }); // warm grey-tan leggings
+  const collarMat = createFabricMaterial(0xe4dcc4, undefined, { disableShimmer: true });  // neck wrap/collar (matches scarf)
   // Metal: bandolier strap + pauldron base
   // ABX P4 — bandolier swapped from metalMaterial (was reading too
   // shiny + grey) to fabricMaterial with disableShimmer (matte leather
@@ -282,7 +293,7 @@ function buildRigVisual(): {
   // radius ≈ the arm-attach lateral, so the skinned arms emerge just outside +
   // the deltoid caps the gap). Distinct cloth tone from skin/undercloth so it
   // reads as a worn garment. Resting shape only — real drape/sway is PM-D cloth.
-  const garmentMat = createFabricMaterial(0x83805d, undefined, { disableShimmer: true }); // ACU — PBR reverted (shimmer fix); faded olive-drab canvas
+  const garmentMat = createFabricMaterial(0xece4d3, undefined, { disableShimmer: true }); // ACU — Rey off-white wrapped tunic (was 0x83805d olive-drab); PBR reverted (shimmer fix)
   garmentMat.side = THREE.DoubleSide;
   const GOFF = 0.017;   // cloth thickness over the body
   const tunicProfile = [
@@ -368,7 +379,7 @@ function buildRigVisual(): {
 
   // ── Backpack (ACH Cycle 2.3): scavenger pack lashed to the back. Front=+Z,
   // so the pack rides -Z. Parented to spineBend so it moves with the torso.
-  const packMat = createFabricMaterial(0x6e5d44, undefined, { disableShimmer: true });
+  const packMat = createFabricMaterial(0xb3a17b, undefined, { disableShimmer: true }); // ACU — tan canvas satchel (was 0x6e5d44 dark brown — dominated the silhouette against the off-white outfit)
   // Mounted OUTSIDE the poncho's back drape (further -Z) so it isn't occluded,
   // and tall enough that the lashed bedroll clears the shoulders above the hood.
   const packZ = -(TORSO_CHEST_R + 0.13);
@@ -434,7 +445,7 @@ function buildRigVisual(): {
   // Neck — real cylinder (was a 4cm stub pre-ABP)
   const neck = new THREE.Mesh(
     new THREE.CylinderGeometry(NECK_R, NECK_R * 1.15, NECK_H, 10),
-    skinMat,
+    collarMat,   // ACU — cloth collar (was bare skinMat)
   );
   neck.position.y = -HEAD_R * HEAD_SCALE_Y - NECK_H / 2 + 0.02;
   headGroup.add(neck);
@@ -568,8 +579,11 @@ function buildRigVisual(): {
   );
   {
     const pa = hoodCrownGeom.attributes.position as THREE.BufferAttribute;
+    // ACU — head-shape fix. CROWN_AMP 0.013 (≈10% radial lobing × 7 waves) made
+    // the crown read as a segmented "melon/pumpkin". Dropped to a near-smooth
+    // 0.003 so the hood is a clean rounded dome.
     const CROWN_WAVES = 7;
-    const CROWN_AMP = 0.013;
+    const CROWN_AMP = 0.003;
     for (let i = 0; i < pa.count; i++) {
       const x = pa.getX(i), z = pa.getZ(i);
       const r = Math.hypot(x, z);
@@ -746,7 +760,7 @@ function buildRigVisual(): {
     new THREE.Vector2(0.040, -0.845),      // ankle
     new THREE.Vector2(0.0,   LEG_ANKLE_Y), // ankle cap
   ];
-  const legMat = underclothMat.clone();  legMat.side = THREE.DoubleSide;
+  const legMat = trouserMat.clone();  legMat.side = THREE.DoubleSide;  // ACU — trousers (was bare skin underclothMat)
   for (const side of [-1, 1]) {
     const leg = buildSkinnedLimb({
       profile: legProfile,
@@ -799,7 +813,7 @@ function buildRigVisual(): {
     // so the two caps + the widened pelvis read as one continuous hip mass
     // instead of legs bolted onto a narrow blob. (Exposed by removing the poncho;
     // proper fix is torso skinning — PM-S.3.)
-    const hipFill = new THREE.Mesh(new THREE.SphereGeometry(0.118, 16, 12), underclothMat);
+    const hipFill = new THREE.Mesh(new THREE.SphereGeometry(0.118, 16, 12), trouserMat); // ACU — hip clothed
     hipFill.position.set(0, 0.015, -0.005);
     hipFill.scale.set(1.0, 0.95, 1.08);
     hipBone.add(hipFill);
@@ -846,7 +860,7 @@ function buildRigVisual(): {
     new THREE.Vector2(0.034, -0.645),          // wrist
     new THREE.Vector2(0.0,   ARM_WRIST_Y),     // wrist cap
   ];
-  const armMat = underclothMat.clone();  armMat.side = THREE.DoubleSide;
+  const armMat = sleeveMat.clone();  armMat.side = THREE.DoubleSide;  // ACU — sleeved (was bare skin underclothMat)
   for (const side of [-1, 1]) {
     const arm = buildSkinnedLimb({
       profile: armProfile,
@@ -864,7 +878,7 @@ function buildRigVisual(): {
 
     // Deltoid cap — sphere over the shoulder bridging the arm-to-torso gap.
     // ACJ: enlarged + spread (the poncho used to hide this junction).
-    const deltoid = new THREE.Mesh(new THREE.SphereGeometry(0.098, 16, 10), underclothMat);
+    const deltoid = new THREE.Mesh(new THREE.SphereGeometry(0.098, 16, 10), sleeveMat); // ACU — shoulder clothed
     deltoid.position.set(0, 0.005, 0);
     deltoid.scale.set(1.08, 0.80, 1.05);
     shoulderBone.add(deltoid);
