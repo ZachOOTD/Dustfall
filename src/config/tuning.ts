@@ -1078,31 +1078,29 @@ export const Tuning = {
   // "truly flat" (no drift on rolling sand) from "shallow incline"
   // (slow but visible slide).
   SLED_SLOPE_SLIDE_THRESHOLD: 0.02,
-  // ACC playtest — gain 1.4 → 2.0. With the downhill direction sign
-  // fix landed (was inverted, was pushing sled uphill), real slides
-  // can be faster without destabilizing. 2.0 gives ~1.8 m/s on 10°
-  // (gentle drift), ~3.8 m/s on 20° (close to player tow speed),
-  // ~5.5 m/s on 30° (sled outruns player a bit; rope snap-back
-  // damping handles it cleanly).
-  SLED_SLOPE_SLIDE_GAIN: 6.0,
+  // ACU playtest tune — gain 6.0 → 2.5. At 6.0 even a barely-perceptible
+  // incline (~1.4° critical, see KINETIC_FRICTION) sent the sled sliding fast,
+  // which read as unrealistic. 2.5 (with KINETIC_FRICTION 0.20) raises the
+  // critical "won't budge / decelerates to a stop" angle to ~4.6° and softens
+  // terminal speeds: ~0.1 m/s @5° (still), ~1.3 m/s @10° (gentle drift),
+  // ~3.6 m/s @20° (brisk, catchable), so slight slopes slow to a stop while
+  // real dunes still slide. (The pre-ACU 6.0 was an over-eager ACC bump.)
+  SLED_SLOPE_SLIDE_GAIN: 2.5,
   // ACC playtest follow-up — Coulomb-style ground friction coefficient
   // for slope-slide. Always opposes motion at a fixed deceleration of
   // `9.81 × this` m/s² (independent of speed), capped to not reverse the
   // velocity (Math.min(speed, frictionDeltaV) clamp). Combined with the
   // gravity slope component this produces a STATIC friction threshold:
   //   slide-accel > friction-decel  ⇔  sin(θ) × GAIN > KINETIC_FRICTION
-  // With GAIN=2.0 + KINETIC_FRICTION=0.15: angle threshold ≈ 4.3°. Below
-  // that, gentle slopes don't move a stationary sled / decelerate one
-  // already moving to a smooth stop. Above, the sled accelerates. Net
-  // terminal velocities (with SLED_LINEAR_DAMP=1.8 still applied):
-  //   5° → 0.13 m/s (basically still),
-  //  10° → 1.08 m/s (gentle drift),
-  //  15° → 2.0 m/s (walking pace),
-  //  20° → 2.91 m/s (brisk),
-  //  30° → 4.63 m/s (fast — still catchable on sprint).
-  // Bump to 0.20-0.25 to make slopes "stickier" (steeper threshold + more
-  // damping); drop to 0.08 for less ground drag / longer coasts.
-  SLED_KINETIC_FRICTION: 0.15,
+  // ACU tune — 0.15 → 0.20 (with GAIN 2.5): critical angle ≈ asin(0.20/2.5)
+  // ≈ 4.6°. Below that, gentle slopes don't move a stationary sled and
+  // decelerate a moving one to a SMOOTH STOP (the Coulomb term is speed-
+  // independent, so it actually halts rather than asymptotically coasting);
+  // above it the sled accelerates to a damped terminal speed. Net terminals
+  // (SLED_LINEAR_DAMP=1.8): ~0.1 m/s @5° (still), ~1.3 @10° (gentle drift),
+  // ~3.6 @20° (brisk), ~6 @30° (fast). Bump toward 0.28 for an even stickier
+  // threshold (~6.4°); drop toward 0.10 for longer coasts.
+  SLED_KINETIC_FRICTION: 0.20,
   // ACC playtest follow-up — per-frame retention factor applied to the
   // managed slide-velocity scalars when the rope is slack on FLAT ground.
   // Compounded at 60Hz, 0.82/frame ≈ 99.99% removed per second — snaps

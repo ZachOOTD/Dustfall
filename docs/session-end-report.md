@@ -2,9 +2,21 @@
 
 Cumulative state. Rewritten end-to-end at each `/session-end`.
 
-**Current state**: Session ACT shipped (2026-06-01 — 3P/FP parity fixes + world-space texture-swim sweep). 100+ sessions post-MVP. `npm run verify` (tsc) PASS. **SAVE_VERSION 14** (unchanged). ACT folded in live-playtest findings: (1) footprints + footstep audio were dead in first person — `updatePlayerRig` early-returned on the 3P visibility gate before advancing `rig.stepCount` (which `controller.ts` drives footsteps + decals off); hoisted the gait bookkeeping above the gate (D151). (2) Interact hints never appeared in 3P — the `far=2.5` interaction ray cast from `cam.position`, ~1.8m behind the player → ~0.7m reach; now originates from the player eye along camera-forward (D152). (3) D109 texture-swim sweep across all moving entities — added `localSpace` to woodGrain/bone/glass factories, decoupled fabric `localSpace` from `disableShimmer`, routed all viewmodel item materials through `vm*` local-space wrappers, fixed speeder antenna + rig metal/paint (D153). Geometric/material — no save change; footprints/hints owed a foreground confirm (D150-class). **Next session (ACU) = the still-open foreground item (random speed spike #40), then the feature-sized backlog (sled-POI collision #42, rope-leaves-inventory #50) — plus the queued ACT art/animation idea wave.**
+**Current state**: Session ACU shipped (2026-06-02 — playtest pass: rig look fixes + speeder/sled/rope features + slide tune). 100+ sessions post-MVP. `npm run verify` (tsc) PASS. **SAVE_VERSION 14** (unchanged — no save touch this session). ACU was a long interactive playtest-driven session, almost everything FOREGROUND-confirmed by the user in-play: reverted the PM-E PBR lighting on the rig (D154 — its derivative micro-bump shimmered as the model moved); fixed shadow swim/flicker (D155 — player-following shadow camera vs a throttled shadow map; now regen-on-move); shipped the Rey off-white outfit + full-body cloth coverage (arms/legs/neck were bare skin) + smoothed the lobed "melon" head crown; **#40** player speed-spike clamp (bound the KCC penetration-recovery lurch); **#42** sled-vs-POI collision (shapecast-clamp vs fixed non-terrain colliders, D156, flag-gated); **#50** rope leaves inventory only when BOTH ends anchored (D157, `applyTether`) + drop-with-G releases the sled + removed the LMB floor-drop; footstep-puff FP fix (stale 3P-gated ankle); sled tow-handle rework (rope connects + wraps); slope-slide feel tune. **Next session (ACV) = the ACT art/animation idea wave** (item-model quality, 3P hand placement + use-anims, creature gait + shrew burrow, speeder dust/engine FX, seated 3P speeder cam, dynamic salvage-panel placement) — large, scope ONE piece first.
 
-## ACT scope (this session) — 3P/FP parity fixes + world-space texture-swim sweep
+## ACU scope (this session) — playtest pass: rig look + speeder/sled/rope features + slide tune
+
+- **PM-E PBR revert** (`playerRig.ts` + skin/fabric factories, D154): the `pbr` path's derivative-based (`dFdx/dFdy`) micro-bump shimmered on the moving rig. Dropped `pbr` from 3 skin + 4 cloth mats → Lambert; procedural COLOR unaffected.
+- **Shadow swim/flicker fix** (`lighting.ts`, D155): force a shadow-map regen on any frame the player moved (was a fixed ~10Hz throttle while the shadow camera follows the player every frame → stale projection matrix → self-shadow drift/snap).
+- **Rey outfit + full-body cloth + head** (`playerRig.ts`, committed `4f3d4e9`, 3 screenshot rounds): off-white tunic/hood/wraps/pack; arms/shoulders/legs/neck clothed (were bare skin); hood crown lobing smoothed.
+- **#40 speed-spike clamp** (`controller.ts`): horizontal KCC corrected delta capped at 1.5× the fastest legit on-foot frame.
+- **#42 sled-vs-POI collision** (`sled.ts`, D156): `clampSledMoveAgainstPOIs` shapecast at both move commits; `Tuning.SLED_POI_COLLISION`.
+- **#50 rope-leaves-inventory** (`sled.ts` + `interaction.ts`, D157): `applyTether` centralizes deploy/return; drop-with-G releases; LMB floor-drop removed. No save bump.
+- **Footstep-puff FP fix** (`controller.ts`): rig-ankle emit point only in 3P; FP uses body-center (the rig bones are 3P-gated, so the ankle was stale in FP).
+- **Sled tow-handle** (`sled.ts`): smaller/lower/rusted; rope attaches to + wraps the cross-bar via shared `SLED_YOKE_*` constants.
+- **Slope-slide tune** (`tuning.ts`): `SLED_SLOPE_SLIDE_GAIN` 6→2.5 + `SLED_KINETIC_FRICTION` .15→.20 (critical angle ~1.4°→~4.6°).
+
+## ACT scope — 3P/FP parity fixes + world-space texture-swim sweep
 
 - **FP footprints + footstep audio fix** (`playerRig.ts`, D151): hoisted the gait bookkeeping (`speedMag`/state/gait-phase/`stepCount`) ABOVE the visibility early-return so it runs in both camera modes; only the visual transform work (position/heading/bone posing/IK) stays 3P-gated. `controller.ts` reads `stepCount` for both footstep SFX + footprint decals, so FP was silently dead before.
 - **3P interact-hint reach fix** (`interaction.ts`, D152): the hover ray now originates from the player eye along camera-forward in 3P (was `cam.position`, ~1.8m behind → ~0.7m effective reach); no-op in FP.
@@ -244,36 +256,36 @@ Existing tunables of interest:
 
 ## Suggested next session (1-3 directions in priority order)
 
-1. **Foreground confirm the ACT fixes + chase the random speed spike** (TOP, Session ACU). The FP-footprints/audio + 3P-interact-hint fixes are tsc-clean + logic-traced but owed a real-rate confirm (D150-class): in `npm run dev`, walk in FP (prints + footstep SFX appear) and in 3P walk up to interactables (hints appear at normal range). Then localize the **random speed spike** (#40) — play on-foot vs on-bike, suspect the dynamic speeder body (collision-penetration velocity / dismount state-leak).
-2. **The feature-sized backlog** — sled-vs-POI collision (#42, kinematic-vs-static shapecast) + rope-leaves-inventory-while-deployed (#50, save-touching state-model change).
-3. **The ACT art/animation idea wave** (big, multi-session) — higher-detail item models + correct 3P hand placement + 3P use-animations; lizard/shrew walk gait + shrew burrow; speeder dust trail + engine ignition FX; seated 3P speeder rig + camera; dynamic salvage-panel placement on procgen POIs (clip-safe surface-finding). Plus the standing optional levers: game **lighting mood** (D142) + PM-D cloth-physics robe.
+1. **The ACT art/animation idea wave** (TOP, Session ACV — large, multi-session; the foreground bug/feature backlog is now CLEARED through ACU). Scope ONE piece per session: higher-detail item models + correct 3P hand placement + 3P use-animations; lizard/shrew walk gait + shrew burrow; speeder dust trail + engine-ignition FX; seated 3P speeder rig + camera; **dynamic salvage-panel placement on procgen POIs** (clip-safe surface-finding — its own design spike). Each visual element gets the rule-8 build→screenshot→critique→iterate loop.
+2. **Re-verify the ACU flag-gated / behavior-change items hold up over longer play**: `Tuning.SLED_POI_COLLISION` (watch for stick-on-dunes), the rope `applyTether` state machine (tie→carry→2nd-anchor→take-back→drop-G across all anchor kinds + a save round-trip), and the slope-slide feel (`SLED_SLOPE_SLIDE_GAIN`/`SLED_KINETIC_FRICTION` are the dials).
+3. **Standing optional levers**: game **lighting mood** (D142, the biggest remaining in-game realism lever — surface to user first) + PM-D cloth-physics robe.
 
 ---
 
 ## Time spent
 
-100+ sessions shipped (A through ACT). Approx ~305-378h cumulative human-facing dev time. ACT was a playtest-driven bug-fix session: 2 parity fixes (FP gait gate, 3P interaction reach) + a project-wide world-space-swim audit across 6 material factories + every moving entity (9 files, no save change). (Tail of the same very long conversation: ACJ→…→ACS→ACT.)
+100+ sessions shipped (A through ACU). Approx ~308-382h cumulative human-facing dev time. ACU was a long interactive playtest-driven session (rig look fixes + 3 backlog bug/features #40/#42/#50 + handle rework + slide tune), almost all FOREGROUND-confirmed by the user in-play via a live `npm run dev`. 5 files + docs; no save change. (Tail of the same very long conversation: ACJ→…→ACT→ACU.)
 
 ---
 
 ## State at session end
 
-- **Git status**: ACT code already committed + pushed mid-session (`2899847`, `master`) — the FP/3P fixes + swim sweep + backlog triage. The session-end doc edits (changelog/CLAUDE/roadmap/decisions/backlog/report/next-prompt) are dirty; commit handoff below. No session tag yet (ACS was the last tag).
-- **Branch**: `master`. **Save state**: localStorage **v14** (unchanged — ACT is logic/material only).
-- **Ports bound**: dev servers may linger from the preview-MCP (5180) / rig-shot harness (5191); both dev-only.
-- **Rule-8 / verification status**: ACT is material/geometry + logic (no new rig/camera/animation surface to screenshot-iterate). The two parity fixes are tsc-clean + root-cause-traced; owed a foreground confirm (D150-class for the gait one — kinematic `linvel` reads 0 headlessly). The swim sweep is verifiable foreground (drive speeder, walk 3P, equip held items).
+- **Git status**: ACU code landed in several pushed commits — `28d275a` (PBR revert), `5180705` (shadow fix), `4f3d4e9` (outfit/head), `b44d58b` (#40+#42), plus a final commit for #50 + rope-tunings + handle + puff-fix + slide-tune. The session-end doc edits (changelog/CLAUDE/roadmap/decisions/backlog/report/next-prompt) are committed alongside. Tagged `session-ACU`.
+- **Branch**: `master`. **Save state**: localStorage **v14** (unchanged — ACU is logic/material/geometry only).
+- **Ports bound**: a `npm run dev` server was left running on **5173** for the user's playtest (dev-only); rig-shot harness uses 5191.
+- **Rule-8 / verification status**: the visual work (outfit recolour + full-body cloth + head smooth) WAS screenshot-iterated (3 rounds via `rig-shot`, per discipline). The rig/sled/rope/shadow fixes are logic/material with no new animation surface; nearly all were FOREGROUND-confirmed by the user this session (the strongest verification available — D150). The sled tow-handle + rope-wrap geometry was NOT harness-screenshotted (no sled-rope scenario exists) but the user confirmed it live.
 
 ---
 
 ## Token spend this session (estimated)
 
-ACT was a foreground-playtest-driven bug-fix session (no fan-out; reads across the material factories + viewModel/interaction/playerRig).
+ACU was a long, many-turn interactive playtest session (no fan-out; iterative reads across controller/sled/interaction/playerRig/lighting + the material/tuning files + screenshot-iteration on the outfit).
 
-- Input: moderate-high (6 material factories + items.ts + playerRig/interaction/controller/viewModel reads + the D109 audit + docs).
-- Output: moderate — 2 logic fixes + 4 factory edits + items wrapper refactor + the session-end docs.
-- Cost (Opus 4.8 rates): around baseline. Not flagged.
+- Input: high (long session, many successive file reads + the rope state-machine investigation + 3 screenshot rounds).
+- Output: high-moderate — ~10 distinct fixes/features across 5 source files + 4 D-entries + the session-end docs.
+- Cost (Opus 4.8 rates): above the per-session baseline (length-driven, not waste). Flag: ~1.5-2× baseline due to session length + screenshot iteration — expected for an interactive playtest pass.
 
-Notable: the user's "footprints only in 3P" report turned out to share a root with the older ACN "dismount kills footprints" bug (the FP visibility-gate, D151), and the "texture swims on the speeder" report generalized into a full D109 sweep that found held viewmodel items (wood/bone/glass/metal) were the largest un-localSpace'd swim surface.
+Notable: the user's "model glitchy when moving" report had TWO independent causes — the PBR derivative micro-bump (D154) AND a shadow-map-vs-following-camera desync (D155); the PBR revert alone didn't fix it, which correctly drove the deeper shadow diagnosis. #50 ("quick win") turned out to be an architectural rope-ownership rework (D157), surfaced to the user before committing.
 
 ---
 

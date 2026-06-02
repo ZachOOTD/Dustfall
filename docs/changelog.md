@@ -3,6 +3,51 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ACU — 2026-06-02 — Playtest pass: rig look fixes, speeder/sled/rope features, slide tune ✓ verify pass (tsc clean)
+
+`verified` — `npm run verify` (tsc) PASS. A long interactive playtest session driven by live findings. All
+geometric/material/logic — no save-schema change. Most items are FOREGROUND-confirmed by the user in-play.
+
+**Player rig look:**
+- **Reverted the PM-E PBR lighting** on the rig's skin + cloth (D154). The `pbr` path's derivative-based
+  (`dFdx/dFdy`) micro-bump perturbed the view-space normal from screen-space derivatives → it sparkled/
+  shimmered as the model moved ("glitchy when moving"). Dropped `pbr` (+roughness/bump) from the 3 skin
+  + 4 cloth mats → Lambert (no derivative term); procedural surface COLOR unaffected. Goggle lens left.
+- **Shadow swim/flicker fix** (D155, `lighting.ts`): the shadow camera follows the player every frame but
+  the shadow map (+ its projection matrix) was throttled to ~10Hz (ABL perf), so while walking the rig's
+  self-shadow drifted + snapped each regen. Now force a regen on any frame the player moved; keep the
+  throttle when idle.
+- **Rey off-white outfit + full-body cloth + head-shape** (committed `4f3d4e9`, 3 screenshot-iterated rounds):
+  tunic/hood/wraps/pack → pale cream (leather belt/goggles kept dark); arms/shoulders/legs/neck were bare
+  dark skin → now clothed (linen sleeves, grey-tan leggings, cloth collar); hood crown lobing smoothed
+  (`CROWN_AMP` 0.013→0.003) to kill the segmented "melon".
+
+**Bugs + features:**
+- **#40 speed-spike clamp** (`controller.ts`): clamp the player KCC horizontal corrected delta to 1.5× the
+  fastest legit on-foot frame — bounds the Rapier penetration-recovery lurch (capsule ejected from an
+  overlapped static collider) read as a "random dramatic speed increase".
+- **#42 sled-vs-POI collision** (`sled.ts`, D156): the sled shapecasts its footprint before each move (slide
+  + rope-tow snap) and clamps short of any FIXED, non-heightfield collider (POI/wreck/rock). Terrain +
+  dynamic bodies filtered out. Gated by `Tuning.SLED_POI_COLLISION`.
+- **#50 rope-leaves-inventory** (D157): the rope is "deployed" (leaves the hotbar) only when BOTH ends are
+  anchored (sled + stake/Pebble/speeder/static-pos); while none/player it stays carried so you can walk it
+  to a 2nd anchor. Centralized through `applyTether` (remove on entering-deployed, return on leaving). Plus
+  tuning: **drop rope with G while towing → sled releases** (player-tethered + no rope in inventory →
+  detach); **removed the LMB-on-ground floor-drop** (replaced by tying to a stake). No save bump (tether
+  already persists; `attachedSledId` now dead).
+- **Footstep-puff FP fix** (`controller.ts`): the puff emit point read the rig ankle world pos whenever a rig
+  existed, but the rig bones are 3P-gated (D151) → in FP the ankle was stale (frozen at the camera-switch
+  spot). Now use the rig ankle only in 3P; FP falls back to body-center.
+
+**Sled tow handle:** smaller + lower + rusted-metal (was a tall yoke w/ a rope-coloured bar); the rope now
+attaches to the cross-bar via shared `SLED_YOKE_*` constants and **wraps over it** (2 wrap control points).
+
+**Tuned:** `SLED_SLOPE_SLIDE_GAIN` 6.0→2.5 + `SLED_KINETIC_FRICTION` 0.15→0.20 — slight slopes (<~4.6°) now
+decelerate to a stop instead of sliding fast; moderate dunes still slide (slower terminals).
+
+**Still open:** the ACT art/animation idea wave (item models, 3P hand placement + use anims, creature gait +
+shrew burrow, speeder dust/engine FX, seated 3P speeder cam, dynamic salvage-panel placement).
+
 ## Session ACT — 2026-06-01 — 3P/FP parity fixes + world-space texture-swim sweep (D109) ✓ verify pass (tsc clean)
 
 `verified` — `npm run verify` (tsc) PASS. Folded in live-playtest findings: two 3P/FP parity bugs +

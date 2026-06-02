@@ -64,22 +64,22 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      Prior milestones live in docs/changelog.md — do NOT accumulate "Prior milestone"
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
-**Last shipped**: Session ACT — **3P/FP parity fixes + world-space texture-swim sweep (D109)**, folding
-in live-playtest findings. (1) Footprints + footstep audio were dead in first person: `updatePlayerRig`
-early-returned on the 3P visibility gate before advancing `rig.stepCount`, which `controller.ts` drives
-footsteps + footprint decals off — hoisted the gait bookkeeping above the gate (only visual transforms
-stay 3P-gated). (2) Interact hints never appeared in 3P: the interaction raycast (`far=2.5`) cast from
-`cam.position`, ~1.8m behind the player in 3P → ~0.7m reach; now originates from the player eye along
-camera-forward. (3) D109 swim sweep: added `localSpace` to woodGrain/bone/glass factories, decoupled
-fabric `localSpace` from `disableShimmer`, routed all viewmodel item materials through
-`vmMetal/vmWood/vmBone/vmGlass` local-space wrappers, fixed speeder antenna + rig metal/paint. tsc
-clean; geometric/material (no save change); footprints/hints owed a foreground confirm (D150-class).
+**Last shipped**: Session ACU — **playtest pass: rig look fixes + speeder/sled/rope features + slide tune**
+(all foreground-confirmed; no save change). Rig look: reverted the PM-E PBR lighting (D154 — its derivative
+micro-bump shimmered as the model moved) → back to Lambert; shadow swim/flicker fix (D155 — the
+player-following shadow camera + a throttled shadow map desynced while walking; now regen-on-move); Rey
+off-white outfit + full-body cloth coverage (arms/legs/neck were bare skin) + smoothed the lobed "melon"
+head crown. Bugs/features: **#40** player speed-spike clamp (bound the KCC penetration-recovery lurch);
+**#42** sled-vs-POI collision (shapecast-clamp vs FIXED non-terrain colliders, D156, `Tuning.SLED_POI_COLLISION`);
+**#50** rope leaves inventory only when BOTH ends anchored (D157, `applyTether`) + drop-with-G releases the
+sled + removed the LMB floor-drop; footstep-puff FP fix (stale 3P-gated ankle). Plus: sled tow-handle
+rework (smaller/lower/rusted, rope connects + wraps the cross-bar) and a slope-slide feel tune
+(`SLED_SLOPE_SLIDE_GAIN` 6→2.5 + `SLED_KINETIC_FRICTION` .15→.20 → slight slopes stop, dunes still slide).
 
-**Next session (ACU)**: still-open foreground item — random speed spike (#40). Then the feature-sized
-backlog: sled-vs-POI collision (#42), rope-leaves-inventory (#50). The ACT idea-dump also queued a big
-art/animation wave (item-model quality, 3P hand placement + use anims, creature gait + shrew burrow,
-speeder FX, seated 3P speeder cam, dynamic salvage-panel placement). See
-[docs/next-session-prompt.md](docs/next-session-prompt.md).
+**Next session (ACV)**: the ACT art/animation idea wave (large, multi-session) — item-model quality + 3P
+hand placement + 3P use-anims; lizard/shrew walk gaits + shrew burrow; speeder dust + engine FX; seated 3P
+speeder rig + camera; **dynamic salvage-panel placement on procgen POIs** (clip-safe surface-finding — its
+own design spike). Scope ONE piece first. See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 

@@ -29,7 +29,7 @@ import { createMetalMaterial } from './metalMaterial.ts';
 import { createPaintedMetalMaterial } from './paintMaterial.ts';
 // ACB P1 — locker-on-sled needs to spawn + attach lockers to a sled.
 import { spawnLockerAt, findLockerById } from './locker.ts';
-import { removeItems } from '../inventory/inventory.ts';
+import { removeItems, addItem, countItems } from '../inventory/inventory.ts';
 import { spawnFootprintPuff } from './footprintPuffs.ts';
 // ACC P2 — sled-rider promotion needs to read Pickup state.
 import type { Pickup } from '../pickups/pickups.ts';
@@ -157,9 +157,14 @@ export function findSledById(list: Sled[], id: number | undefined): Sled | undef
 const _sheetMat = createPaintedMetalMaterial(0x6e5e48, { wearLevel: 0.85, localSpace: true });
 const _sheetUnderMat = createMetalMaterial(0x4a3a28, { wornScale: 10.0, scratchStrength: 0.15, localSpace: true });
 _sheetMat.side = THREE.DoubleSide;
-const _ropeStubMat = new THREE.MeshLambertMaterial({
-  color: Tuning.SLED_ROPE_COLOR_HEX, flatShading: true,
-});
+
+// ACU — tow handle (yoke) geometry. Small, low, rusted-metal (was a tall yoke
+// with a rope-coloured cross-bar). The rope ties to the cross-bar; these
+// constants are shared by makeSledVisual + the rope attach-point math so the
+// rope visually CONNECTS to the bar.
+const SLED_YOKE_FWD = Tuning.SLED_HALF_EXTENTS_Z - 0.05; // forward offset (local -Z) of the yoke base
+const SLED_YOKE_BAR_Y = 0.18;                            // cross-bar height above the deck plane
+const SLED_YOKE_BAR_HALF_LEN = 0.15;                     // cross-bar half-length (lateral)
 
 /** Build the sled visual. The `group` origin sits at the **center of the
  *  bottom face** so `group.position.y = terrainY` plants the runners on the
@@ -295,36 +300,39 @@ function makeSledVisual(): {
     }
   }
 
-  // ACA — Welded handle yoke. Simple bent-pipe handle: 2 vertical posts
-  // welded to the FRONT edge of the sheet (local -Z), joined by a
-  // horizontal cross-bar (the rope tie point). Metal not wood now.
+  // ACU — small, low, rusted-metal tow handle. 2 short posts welded to the
+  // FRONT edge (local -Z), joined by a horizontal cross-bar (the rope tie
+  // point). All one rusted painted-metal material to match the sled sheet
+  // (was: taller yoke with a rope-coloured cross-bar). Geometry from the shared
+  // SLED_YOKE_* constants so the rope attach-point lands exactly on the bar.
   const yokeBase = new THREE.Group();
-  // Yoke sits on the deck plane (now at group origin = terrain level).
-  yokeBase.position.set(0, 0, -(hz - 0.05));
+  // Yoke sits on the deck plane (group origin = terrain level).
+  yokeBase.position.set(0, 0, -SLED_YOKE_FWD);
   g.add(yokeBase);
   for (const sx of [-1, 1]) {
     const post = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.022, 0.022, 0.40, 8),
-      _sheetUnderMat,
+      new THREE.CylinderGeometry(0.018, 0.020, SLED_YOKE_BAR_Y, 8),
+      _sheetMat,
     );
-    post.position.set(sx * 0.18, 0.18, 0);
-    post.rotation.z = sx * 0.30;       // angled outward at top
+    // Centered between deck (0) and the bar (SLED_YOKE_BAR_Y); tops meet the bar.
+    post.position.set(sx * SLED_YOKE_BAR_HALF_LEN * 0.82, SLED_YOKE_BAR_Y * 0.5, 0);
+    post.rotation.z = sx * 0.12;       // slight outward lean
     yokeBase.add(post);
     // Weld-bead at base (small flattened sphere)
     const weld = new THREE.Mesh(
-      new THREE.SphereGeometry(0.025, 6, 4),
-      _sheetUnderMat,
+      new THREE.SphereGeometry(0.020, 6, 4),
+      _sheetMat,
     );
-    weld.position.set(sx * 0.16, 0.01, 0);
+    weld.position.set(sx * SLED_YOKE_BAR_HALF_LEN * 0.74, 0.01, 0);
     weld.scale.set(1.3, 0.5, 1.0);
     yokeBase.add(weld);
   }
-  // Horizontal cross-bar — rope ties here. Thicker than the posts.
+  // Horizontal cross-bar — rope ties (and wraps) here.
   const ropeStub = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.04, 0.04, 0.46, 8),
-    _ropeStubMat,
+    new THREE.CylinderGeometry(0.030, 0.030, SLED_YOKE_BAR_HALF_LEN * 2 + 0.06, 10),
+    _sheetMat,
   );
-  ropeStub.position.set(0, 0.37, 0);
+  ropeStub.position.set(0, SLED_YOKE_BAR_Y, 0);
   ropeStub.rotation.z = Math.PI / 2;
   yokeBase.add(ropeStub);
 
@@ -564,6 +572,31 @@ function disposeRopeMesh(ctx: GameContext, mesh: THREE.Mesh): void {
  *  for verifying the wielded slot is `rope`. `endpoint` is the OTHER end
  *  of the rope (the puller / anchor); the sled itself is the implicit
  *  second endpoint. */
+// ACU #50 — the rope is "deployed" (both ends anchored, player not holding it)
+// only when the tether is a NON-player anchor. While none/player the player
+// still holds the free end, so the rope stays a carried hotbar item (and can be
+// walked to a second anchor — Pebble / stake — to tie the other end).
+function ropeIsDeployed(kind: RopeEndpoint['kind']): boolean {
+  return kind !== 'none' && kind !== 'player';
+}
+
+/** ACU #50 — set a sled's rope tether AND keep the rope ITEM in sync:
+ *  it leaves the inventory the moment BOTH ends are anchored (entering a
+ *  deployed tether) and returns the moment an end comes free again (leaving a
+ *  deployed tether). Route EVERY sled.tether change through this so the rope
+ *  item can never desync. addItem(ctx) drops at the player's feet if the bag
+ *  is full. */
+export function applyTether(ctx: GameContext, sled: Sled, endpoint: RopeEndpoint): void {
+  const wasDeployed = ropeIsDeployed(sled.tether.kind);
+  const nowDeployed = ropeIsDeployed(endpoint.kind);
+  sled.tether = endpoint;
+  if (!wasDeployed && nowDeployed) {
+    removeItems(ctx.inventory, 'rope', 1);       // both ends now anchored → stow the line
+  } else if (wasDeployed && !nowDeployed) {
+    addItem(ctx.inventory, 'rope', undefined, ctx); // an end freed → rope back in hand/bag
+  }
+}
+
 export function attachRopeToSled(
   ctx: GameContext,
   sled: Sled,
@@ -571,14 +604,10 @@ export function attachRopeToSled(
 ): void {
   if (sled.tether.kind !== 'none') return;
   if (endpoint.kind === 'none') return;  // defensive: never attach to nothing
-  sled.tether = endpoint;
-
-  // Stamp the wielded rope slot so save/reload + auto-detach guards work.
-  const slot = ctx.inventory.slots[ctx.inventory.selectedIdx];
-  if (slot.item === 'rope') {
-    if (!slot.meta) slot.meta = {};
-    slot.meta.attachedSledId = sled.id;
-  }
+  // ACU #50 — tie one end to the sled. If the other end is the PLAYER, the rope
+  // stays in the hotbar (still carried); if attaching straight to an anchor
+  // (e.g. mounted → speeder), applyTether stows it. Routes inventory sync.
+  applyTether(ctx, sled, endpoint);
 
   if (!sled.ropeMesh) {
     sled.ropeMesh = makeRopeMesh();
@@ -633,28 +662,23 @@ export function attachLockerToSled(ctx: GameContext, sled: Sled): boolean {
   return true;
 }
 
-/** Untie the rope. Clears tether + ropeMesh + the wielded rope slot's
- *  meta.attachedSledId. */
+/** Fully untie the rope (tether → none). Clears tether + ropeMesh and RETURNS
+ *  the deployed rope to the player's inventory (ACU #50 — the rope leaves the
+ *  bag on deploy via attachRopeToSled, comes back here). Re-anchor transitions
+ *  (player↔stake↔speeder) reassign sled.tether directly and must NOT route
+ *  through here, or they'd spuriously hand the player a second rope. */
 export function detachRope(ctx: GameContext, sled: Sled, reason?: string): void {
   if (sled.tether.kind === 'none') return;
+  // ACU #50 — if the rope was DEPLOYED (both ends anchored), it returns to the
+  // inventory now. If it was only player-tethered, the player was already
+  // holding it (it never left the hotbar), so don't hand over a duplicate.
+  const wasDeployed = ropeIsDeployed(sled.tether.kind);
   sled.tether = { kind: 'none' };
   if (sled.ropeMesh) {
     disposeRopeMesh(ctx, sled.ropeMesh);
     sled.ropeMesh = null;
   }
-
-  // Clear meta.attachedSledId on any slot still pointing at this sled.
-  // (Usually the wielded slot, but defensively scan all.)
-  for (const s of ctx.inventory.slots) {
-    if (s.meta && s.meta.attachedSledId === sled.id) {
-      s.meta.attachedSledId = undefined;
-    }
-  }
-  for (const s of ctx.inventory.backpack) {
-    if (s.meta && s.meta.attachedSledId === sled.id) {
-      s.meta.attachedSledId = undefined;
-    }
-  }
+  if (wasDeployed) addItem(ctx.inventory, 'rope', undefined, ctx);
 
   if (reason) ctx.ui.showToast(reason);
 }
@@ -665,16 +689,6 @@ export function detachRope(ctx: GameContext, sled: Sled, reason?: string): void 
 
 const _anchor = new THREE.Vector3();
 const _sledAttach = new THREE.Vector3();
-
-function ropeIsStillHeld(ctx: GameContext, sledId: number): boolean {
-  for (const s of ctx.inventory.slots) {
-    if (s.meta && s.meta.attachedSledId === sledId) return true;
-  }
-  for (const s of ctx.inventory.backpack) {
-    if (s.meta && s.meta.attachedSledId === sledId) return true;
-  }
-  return false;
-}
 
 /** Shortest signed wrap of an angle delta into (-π, π]. */
 function wrapAngle(a: number): number {
@@ -1005,9 +1019,15 @@ export function updateSleds(ctx: GameContext, dt: number): void {
 
     if (sled.tether.kind === 'none') continue;
 
-    // Auto-detach guard: rope dropped / overwritten while tethered.
-    if (!ropeIsStillHeld(ctx, sled.id)) {
-      detachRope(ctx, sled, 'rope dropped — sled untied');
+    // ACU #50 tuning — DROP-TO-RELEASE. While a sled is player-tethered the rope
+    // is in the hotbar (it's carried, not yet deployed). If the player drops it
+    // (G → it becomes a ground pickup) the sled would otherwise keep following
+    // an invisible line, so detach it. Scoped to the player tether only: deployed
+    // tethers (stake/companion/speeder/static-pos) intentionally have NO rope in
+    // inventory, so this check must not touch them. detachRope here adds nothing
+    // back (wasDeployed=false) — the dropped rope already exists as a pickup.
+    if (sled.tether.kind === 'player' && countItems(ctx.inventory, 'rope') === 0) {
+      detachRope(ctx, sled, 'rope dropped — sled released');
       continue;
     }
 
@@ -1031,10 +1051,13 @@ export function updateSleds(ctx: GameContext, dt: number): void {
     // visual-tilt-composed quat). Constraint math should respond to
     // actual sled orientation, not the lagging visual.
     const fwd = sledForwardFromQuat(_sledYawQuat);
+    // ACU — attach at the tow handle's CROSS-BAR (was the sheet's front edge at
+    // +0.20). Forward = yoke offset; height = deck plane (body center − hy) +
+    // the bar's local height, so the rope endpoint sits on the bar.
     _sledAttach.set(
-      tr.x + fwd.x * Tuning.SLED_HALF_EXTENTS_Z,
-      tr.y + 0.20,
-      tr.z + fwd.z * Tuning.SLED_HALF_EXTENTS_Z,
+      tr.x + fwd.x * SLED_YOKE_FWD,
+      tr.y - Tuning.SLED_HALF_EXTENTS_Y + SLED_YOKE_BAR_Y,
+      tr.z + fwd.z * SLED_YOKE_FWD,
     );
 
     // Horizontal distance from anchor to sled attach point (used for the
@@ -1158,7 +1181,11 @@ export function updateSleds(ctx: GameContext, dt: number): void {
  *  between the anchor and the sled's front attach point. Mid-points
  *  sag downward proportional to the slack in the rope (taut = max
  *  sag, fully stretched = zero sag). */
+// ACU — 7 control points: anchor + 3 sag midpoints + approach (front of the
+// bar) + 2 wrap points (over the top, then tucked behind/under the bar) so the
+// rope visibly cinches around the tow handle's cross-bar.
 const _ropeCurvePoints: THREE.Vector3[] = [
+  new THREE.Vector3(), new THREE.Vector3(),
   new THREE.Vector3(), new THREE.Vector3(),
   new THREE.Vector3(), new THREE.Vector3(),
   new THREE.Vector3(),
@@ -1169,12 +1196,20 @@ function rebuildRopeMesh(sled: Sled, anchor: THREE.Vector3): void {
   const tr = sled.body.translation();
   // ACC playtest — derive forward from full body quaternion (was: yaw-only).
   const fwd = sledForwardFromQuat(sled.group.quaternion);
-  const attachX = tr.x + fwd.x * Tuning.SLED_HALF_EXTENTS_Z;
-  const attachY = tr.y + 0.20;
-  const attachZ = tr.z + fwd.z * Tuning.SLED_HALF_EXTENTS_Z;
+  // ACU — tie point is the tow handle's cross-bar (matches makeSledVisual +
+  // _sledAttach). The bar axis is lateral, so the wrap lives in the forward-up
+  // plane: the rope comes in from the front, loops over the top, tucks behind.
+  const barX = tr.x + fwd.x * SLED_YOKE_FWD;
+  const barY = tr.y - Tuning.SLED_HALF_EXTENTS_Y + SLED_YOKE_BAR_Y;
+  const barZ = tr.z + fwd.z * SLED_YOKE_FWD;
+  const WRAP_R = 0.05;
+  // Approach point — just in front of the bar, where the slung span arrives.
+  const approachX = barX + fwd.x * WRAP_R;
+  const approachY = barY;
+  const approachZ = barZ + fwd.z * WRAP_R;
 
-  const dx = attachX - anchor.x;
-  const dz = attachZ - anchor.z;
+  const dx = approachX - anchor.x;
+  const dz = approachZ - anchor.z;
   const horizDist = Math.hypot(dx, dz);
   // Sag is 0 at fully-stretched (rope is straight + horizontal), max
   // at slack. Use the rope's normalized slack as the sag factor.
@@ -1182,25 +1217,32 @@ function rebuildRopeMesh(sled: Sled, anchor: THREE.Vector3): void {
   const sagFrac = Math.min(1, slack / Tuning.SLED_TOW_DISTANCE);
   const sag = Tuning.SLED_ROPE_SAG * sagFrac;
 
-  // 5-point Catmull-Rom: endpoints + 3 evenly spaced midpoints with
-  // a parabolic sag profile (max at the middle).
+  // Main span: anchor → 3 sag midpoints → approach (front of the bar).
   _ropeCurvePoints[0].set(anchor.x, anchor.y, anchor.z);
-  _ropeCurvePoints[4].set(attachX, attachY, attachZ);
+  _ropeCurvePoints[4].set(approachX, approachY, approachZ);
   for (let i = 1; i <= 3; i++) {
     const t = i / 4;
-    const px = anchor.x + (attachX - anchor.x) * t;
-    const py = anchor.y + (attachY - anchor.y) * t;
-    const pz = anchor.z + (attachZ - anchor.z) * t;
+    const px = anchor.x + (approachX - anchor.x) * t;
+    const py = anchor.y + (approachY - anchor.y) * t;
+    const pz = anchor.z + (approachZ - anchor.z) * t;
     // Parabolic drop — sin(π·t) peaks at t=0.5.
     _ropeCurvePoints[i].set(px, py - Math.sin(Math.PI * t) * sag, pz);
   }
+  // Wrap: over the top of the bar, then tuck behind + slightly under it.
+  _ropeCurvePoints[5].set(barX, barY + WRAP_R, barZ);
+  _ropeCurvePoints[6].set(
+    barX - fwd.x * WRAP_R * 0.7,
+    barY - WRAP_R * 0.5,
+    barZ - fwd.z * WRAP_R * 0.7,
+  );
   const curve = new THREE.CatmullRomCurve3(_ropeCurvePoints, false, 'catmullrom', 0.5);
 
-  // Dispose previous geometry + replace with a fresh tube.
+  // Dispose previous geometry + replace with a fresh tube. More tubular
+  // segments now (24) so the tight wrap at the end reads smooth, not faceted.
   sled.ropeMesh.geometry.dispose();
   sled.ropeMesh.geometry = new THREE.TubeGeometry(
     curve,
-    /* tubularSegments */ 16,
+    /* tubularSegments */ 24,
     Tuning.SLED_ROPE_RADIUS,
     /* radialSegments */ 6,
     /* closed */ false,
@@ -1408,7 +1450,7 @@ function releaseSledRider(p: Pickup): void {
 export function transferTetherOnMount(ctx: GameContext): void {
   for (const sled of ctx.sleds.list) {
     if (sled.tether.kind === 'player') {
-      sled.tether = { kind: 'speeder' };
+      applyTether(ctx, sled, { kind: 'speeder' }); // ACU #50 — both ends now anchored → stow rope
       ctx.ui.showToast('rope transferred to speeder');
       return; // only one sled can be tethered at a time per current scope
     }
@@ -1420,7 +1462,7 @@ export function transferTetherOnMount(ctx: GameContext): void {
 export function transferTetherOnDismount(ctx: GameContext): void {
   for (const sled of ctx.sleds.list) {
     if (sled.tether.kind === 'speeder') {
-      sled.tether = { kind: 'player' };
+      applyTether(ctx, sled, { kind: 'player' }); // ACU #50 — end freed → rope back in hand
       ctx.ui.showToast('rope back in hand');
       return;
     }

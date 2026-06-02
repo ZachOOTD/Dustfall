@@ -327,16 +327,23 @@ export function updatePlayer(ctx: GameContext, dt: number): void {
       // on the ground plane, and reading the rig pos here would shift
       // the visible track laterally during turns — disruptive).
       // Pre-ACE used the same lateral-offset point for the puff.
-      if (rig) {
-        rig.ankles[_stepParity].getWorldPosition(_footWorld);
+      // ACU fix — only read the rig ankle for the puff point in THIRD person.
+      // The rig's bone transforms are visibility-gated (updatePlayerRig only
+      // poses them in 3P — D151), so in first person the ankle world position
+      // is STALE (frozen wherever the rig last posed in 3P) → puffs piled up at
+      // the camera-switch spot instead of tracking the player. In FP use the
+      // body-center + lateral-offset fallback (same point the decal uses).
+      const useRigFoot = rig !== null && ctx.flags.thirdPerson;
+      if (useRigFoot) {
+        rig!.ankles[_stepParity].getWorldPosition(_footWorld);
       }
       ctx.footprints.spawn('player', tr.x + offX, tr.z + offZ, yaw + toeOut, ctx.time.elapsed);
       _stepParity ^= 1;
-      // AAG / ACE Tier 4D — small upward dust puff. With rig available,
-      // emit AT THE FOOT (rig.ankles world pos); without, fall back to
-      // body-center + lateral offset.
+      // AAG / ACE Tier 4D — small upward dust puff. In 3P emit AT THE FOOT
+      // (rig.ankles world pos); in FP (or no rig) fall back to body-center +
+      // lateral offset so it tracks the actual position.
       if (!wet) {
-        if (rig) {
+        if (useRigFoot) {
           // Clamp puff Y to terrain so it doesn't emit mid-air during
           // a foot lift phase (ankle world Y can be 5-15cm above
           // terrain during the swing portion of the gait).

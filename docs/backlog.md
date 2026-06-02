@@ -142,7 +142,7 @@ NEXT-ATTEMPT IDEAS:
 [polish] rename the companion to "Pebble" (UI/journal/prompt copy).
 [feat] lie-down-to-sleep — camera lerps low to a fixed pose just above the bedroll, sleep, wake in the same pose + stand; replaces instant-sleep overlay. Needs lie-down/get-up anims (gated on player rigging progress).
 [feat] rope-attach to the speeder by clicking its rear mount bar (replaces the mount-while-holding-rope tether-transfer flow); lets the speeder be roped/pulled like other endpoints.
-[polish] rope item leaves inventory while deployed (both ends tied) + returns when re-grabbed — currently it stays in-slot via meta.attachedSledId.
+✓ **SHIPPED ACU (#50, D157)** — rope leaves inventory only when BOTH ends anchored (sled + stake/Pebble/speeder/static-pos); stays carried while player-held so you can tie the 2nd end. `applyTether` centralizes it; drop-with-G releases the sled; LMB floor-drop removed. User-confirmed.
 [feat] sandstorm wind pushes physics bodies — dropped items + speeder + sled get a wind force during storms (composes with the Dune storm rework).
 [bug] E near the speeder mounts it even when not looking at the seat — mount fires on SPEEDER_MOUNT_RANGE proximity, not gated on actually hovering the seat.
 [bug] 3rd-person rig broken while mounted on the speeder — needs a seated stance pose for 3P (controller/playerRig + speeder camera; relates to D116 3P cam).
@@ -167,9 +167,9 @@ Intentionally not active. Detail preserved so the call is reversible. Each entry
 
 — — — ACN (2026-06-01) user-reported bugs — — —
 
-🟡 [bug] speeder dismount kills player footprints — **LIKELY FIXED ACT (D151), foreground-confirm owed.** The user's follow-up report ("footprints only show in 3rd person, not first") pinned the real root cause: `updatePlayerRig` early-returned on the 3P visibility gate before advancing `rig.stepCount`, so footprints + footstep audio were dead in FP entirely (not dismount-specific). Fixed by hoisting the gait bookkeeping above the gate. If footprints still drop *specifically* after a speeder dismount in FOREGROUND `npm run dev` (FP and 3P), it's a separate state-leak — reopen.
-[bug] player speed randomly spikes dramatically (intermittent) — **ACO: needs a FOREGROUND repro (D150)**. On-foot speed is `speed*dt` (dt clamped to 0.1 in loop.ts) so a one-frame teleport is bounded; the spike may be the SPEEDER (dynamic body, possible collision-penetration velocity) or a dismount state-leak. Watch on-foot vs on-bike to localize.
-[bug] sled clips through POI models — sled body (KinematicPositionBased) has terrain collision but no collision vs POI/wreck static colliders; passes through them. **Deferred (ACO)**: non-trivial — a kinematic slide needs an explicit shapecast against POI colliders before moving. Add sled-vs-POI collision.
+✓ **FIXED ACT (D151) + confirmed ACU** — speeder-dismount footprints: real root cause was footprints/audio dead in FP entirely (rig gait bookkeeping was behind the 3P visibility gate). Fixed by hoisting it; user foreground-confirmed in ACU.
+✓ **FIXED ACU (#40)** — random player speed spike: clamped the KCC horizontal corrected delta (penetration-recovery lurch). User-confirmed.
+✓ **FIXED ACU (#42, D156)** — sled clips through POI: shapecast-clamp vs fixed non-terrain colliders, gated by `Tuning.SLED_POI_COLLISION`. User-confirmed.
 ✓ **SHIPPED ACO — ambient dust off at night**: the always-on tan `ambientDust` drift fades to 0 across dusk by `ctx.time.sunHeight` (`AMBIENT_DUST_NIGHT_FADE_LO/HI` 0.02/0.20) + hides entirely at night → stars read + calm night. (The near-white firelight `dustMotes` left on.) Verified via the `night-sky` harness scenario.
 🟡 **[bug] salvage panel interiors clip through POI walls — PARTIAL (ACP)**. Built a `panels` harness sweep + audited all 15 `addAccessPanel` call sites. The 6 common procgen kinds render fine (not systemic). **Fixed the lone faceYaw offender — `buriedCockpit`** (was `Math.PI` → faced -Z on a -X flank; now `-π/2`, cf. saltOutpost +X=+π/2). Geometrically certain; **screenshot-confirmation owed** (buriedCockpit registers its salvageable as `escape_pod` kind + is seed-gated, so it wasn't isolable in the per-kind sweep). If the user sees OTHER panels clip, point at the POI — the audit found only buriedCockpit. Tool: `npm run rig-shot --scenario=panels`.
 

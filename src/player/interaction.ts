@@ -26,7 +26,7 @@ import { findTentById } from '../world/tent.ts';
 import { findLargeTentById, toggleLargeTentDoor } from '../world/largeTent.ts';
 import { findBedrollById } from '../world/bedroll.ts';
 import { findLockerById } from '../world/locker.ts';
-import { findSledById, attachRopeToSled, detachRope, attachLockerToSled } from '../world/sled.ts';
+import { findSledById, attachRopeToSled, detachRope, attachLockerToSled, applyTether } from '../world/sled.ts';
 import { findStakeById } from '../world/stake.ts';
 import type { RopeEndpoint } from '../world/rope.ts';
 import { claimLight, releaseLight } from '../core/lightPool.ts';
@@ -164,26 +164,10 @@ function resolveInteractable(obj: THREE.Object3D): InteractHit | null {
   return null;
 }
 
-// ACB P2 — stake the player-tethered sled at a point in front of the
-// player. Only fires when player wields rope + has player-tethered sled
-// + LMB pressed + no other interactable hovered. Creates a static-pos
-// tether so the sled stays parked there even when the player walks away.
-const _stakeFwd = new THREE.Vector3();
-function maybeStakeSledAtFloor(ctx: GameContext): void {
-  if (!ctx.input.mousePressed.has(0)) return;
-  if (ctx.inventory.slots[ctx.inventory.selectedIdx].item !== 'rope') return;
-  const sled = ctx.sleds.list.find((s) => s.tether.kind === 'player');
-  if (!sled) return;
-  // ACC playtest — drop rope AT player's feet (was: 2.5m in front).
-  // Reads as "letting go of the rope" — the free end stays where the
-  // player was standing. Sled remains tethered to that point; gravity
-  // can pull it downhill until the rope goes taut, holding it in
-  // place. Player can pick the rope back up by approaching + LMB.
-  const tr = ctx.player.body.body.translation();
-  sled.tether = { kind: 'static-pos', x: tr.x, z: tr.z };
-  ctx.ui.showToast('rope dropped');
-  void _stakeFwd;  // keep the module-local var allocated; unused here now
-}
+// ACU #50 tuning — the LMB-on-empty-ground "drop rope at feet" (static-pos
+// floor-stake) was REMOVED. Anchoring a towed sled in place is now done by
+// tying it to an iron stake; releasing the sled is done by dropping the rope
+// item (G), handled in updateSleds. (Was: maybeStakeSledAtFloor.)
 
 export function updateInteraction(ctx: GameContext, _dt: number): void {
   // AAR — animate all salvage-panel doors toward their targets regardless
@@ -301,11 +285,10 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
   const hits = _ray.intersectObjects(targets, true);
   if (hits.length === 0) {
     if (_salvaging) cancelSalvage();
-    // ACB P2 — fallthrough: LMB on empty ground while wielding rope
-    // with a player-tethered sled → stake the sled at a point in
-    // front of the player. Creates a 'static-pos' tether so the sled
-    // stays put even if the player walks away.
-    maybeStakeSledAtFloor(ctx);
+    // ACU #50 tuning — the old LMB-on-empty-ground "drop rope at feet"
+    // (static-pos floor-stake) was removed; anchoring a towed sled is now done
+    // by tying it to an iron STAKE. (Dropping the rope item with G releases the
+    // sled — see updateSleds.)
     return;
   }
 
@@ -824,8 +807,8 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
           promptNoun: 'tie rope to Pebble',
         };
         if (ctx.input.mousePressed.has(0)) {
-          playerTetheredSled.tether = { kind: 'companion' };
-          ctx.ui.showToast('rope transferred to Pebble');
+          applyTether(ctx, playerTetheredSled, { kind: 'companion' }); // player→deployed → stow rope
+          ctx.ui.showToast('rope tied to Pebble');
         }
         return;
       }
@@ -870,11 +853,27 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
       // Sub-dispatch by the tagged interactType — info.type is either
       // 'open_sled' (cargo deck) or 'attach_rope' (front yoke).
       if (info.type === 'attach_rope') {
-        const equipped = ctx.inventory.slots[ctx.inventory.selectedIdx];
-        const ropeEquipped = equipped.item === 'rope';
         const attached = sled.tether.kind !== 'none';
+        // ACU #50 — untie this end from the sled:
+        //   • tether === player → the rope is in your hand; detaching just frees
+        //     the sled (rope was never removed, so nothing returns).
+        //   • tether is a deployed anchor (stake/companion/speeder/static-pos) →
+        //     the rope was stowed; detaching returns it to your bag.
+        // Either way detachRope does the right thing (it checks deployment).
+        if (attached) {
+          const deployed = sled.tether.kind !== 'player';
+          ctx.inventory.hover = {
+            type: 'attach_rope',
+            distance: info.distance,
+            promptNoun: deployed ? 'take rope' : 'untie rope',
+          };
+          if (ctx.input.mousePressed.has(0)) {
+            detachRope(ctx, sled, deployed ? 'rope coiled back up' : 'rope untied');
+          }
+          return;
+        }
+        const ropeEquipped = ctx.inventory.slots[ctx.inventory.selectedIdx].item === 'rope';
         if (!ropeEquipped) {
-          // Show a soft prompt — equip rope to engage.
           ctx.inventory.hover = {
             type: 'attach_rope',
             distance: info.distance,
@@ -886,16 +885,12 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
         ctx.inventory.hover = {
           type: 'attach_rope',
           distance: info.distance,
-          promptNoun: attached ? 'detach rope' : 'attach rope',
+          promptNoun: 'attach rope',
         };
         if (ctx.input.mousePressed.has(0)) {
-          if (attached) {
-            detachRope(ctx, sled, 'rope untied');
-          } else {
-            const endpoint: RopeEndpoint =
-              ctx.speeder && ctx.speeder.mounted ? { kind: 'speeder' } : { kind: 'player' };
-            attachRopeToSled(ctx, sled, endpoint);
-          }
+          const endpoint: RopeEndpoint =
+            ctx.speeder && ctx.speeder.mounted ? { kind: 'speeder' } : { kind: 'player' };
+          attachRopeToSled(ctx, sled, endpoint);
         }
         return;
       }
@@ -954,66 +949,47 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
       const stake = findStakeById(ctx.stakes.list, info.id);
       if (!stake) return;
       stake.hovered = true;
-      const equipped = ctx.inventory.slots[ctx.inventory.selectedIdx];
-      const ropeEquipped = equipped.item === 'rope';
       // Find a sled currently tethered to the player (the one we'd
       // re-anchor to the stake).
       const playerSled = ctx.sleds.list.find((s) => s.tether.kind === 'player');
-      // Is some sled ALREADY tethered to this stake? If so, LMB un-ties
-      // (mirrors the sled-stub detach metaphor).
+      // Is some sled ALREADY tethered to this stake?
       const stakedSled = ctx.sleds.list.find(
         (s) => s.tether.kind === 'stake' && s.tether.stakeId === stake.id,
       );
+      // ACU #50 — the rope DEPLOYS (out of inventory) while tied, so these are
+      // pure tether re-anchors that no longer require a wielded rope:
+      //   • staked sled → LMB takes the line in hand (tether→player); the rope
+      //     stays deployed — fully coil it back at the sled's rope stub.
+      //   • player-towed sled → LMB re-anchors it onto this stake.
       if (stakedSled) {
         ctx.inventory.hover = {
           type: 'attach_rope',
           distance: info.distance,
-          promptNoun: 'untie sled from stake',
+          promptNoun: 'take rope from stake',
         };
         if (ctx.input.mousePressed.has(0)) {
-          // Restore the sled's tether to the player if they're holding
-          // rope; otherwise free-detach (sled stays put until something
-          // else moves it).
-          if (ropeEquipped) {
-            stakedSled.tether = { kind: 'player' };
-            // The rope slot's attachedSledId stays set (it's still tied
-            // to this sled, just from a different anchor end now).
-            const slot = ctx.inventory.slots[ctx.inventory.selectedIdx];
-            if (!slot.meta) slot.meta = {};
-            slot.meta.attachedSledId = stakedSled.id;
-            ctx.ui.showToast('rope untied from stake — sled in hand');
-          } else {
-            detachRope(ctx, stakedSled, 'rope untied');
-          }
+          applyTether(ctx, stakedSled, { kind: 'player' }); // deployed→player → rope back in hand
+          ctx.ui.showToast('rope in hand — sled follows');
         }
         return;
       }
-      // Nothing tethered here yet. If player has a sled in hand + rope
-      // wielded, LMB re-anchors that sled to this stake.
-      if (ropeEquipped && playerSled) {
+      if (playerSled) {
         ctx.inventory.hover = {
           type: 'attach_rope',
           distance: info.distance,
           promptNoun: 'tie sled to stake',
         };
         if (ctx.input.mousePressed.has(0)) {
-          // Replace the sled's player tether with a stake tether.
-          // Rope slot's attachedSledId already pointed at this sled —
-          // keep it set so the detach guard still works (rope-still-held).
-          playerSled.tether = { kind: 'stake', stakeId: stake.id };
+          applyTether(ctx, playerSled, { kind: 'stake', stakeId: stake.id }); // player→deployed → stow rope
           ctx.ui.showToast('sled tied to stake');
         }
         return;
       }
-      // Passive hover — stake is here but no actionable tether move.
-      const promptNoun =
-        ropeEquipped ? 'iron stake (drag a sled here to tie)' :
-        playerSled ? 'iron stake (equip rope to tie)' :
-        'iron stake';
+      // Passive hover — stake is here but no sled to tie/untie.
       ctx.inventory.hover = {
         type: 'attach_rope',
         distance: info.distance,
-        promptNoun,
+        promptNoun: 'iron stake',
         passive: true,
       };
       return;
