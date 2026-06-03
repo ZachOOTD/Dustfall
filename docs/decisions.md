@@ -1258,3 +1258,21 @@ The fundamental issue: KCC's slope projection, autostep, and contact resolution 
 **Picked**: In the seated branch, compensate `spineBend.position = (0, PIVOT_Y·(1-cos θ), -PIVOT_Y·sin θ)` with `PIVOT_Y≈0.92` (waist) so the rotation effectively pivots at the waist — the torso rotates in place, staying seated on the hips. RESET `spineBend.position.set(0,0,0)` on the non-seated path so on-foot posture is unaffected (the early-return seated branch would otherwise leave the offset stuck after dismount).
 
 **friction-score:** 2
+
+## D168 — Procgen salvage panels mount via a raycast surface-sampler (`findPanelMount`), not a single hardcoded per-part anchor; cardinal-yaw only, with the anchor kept as a fallback (Session ACY)
+**When**: ACY — backlog #190 ("dynamically place salvage panels on procgen POIs — avoid clipping, snap to flat surfaces, valid facing"). The prior system gave each part builder ONE hardcoded `panelAnchor` on its +Z flank; the assembler just placed there, so panels could bury in geometry, overlap decorations, or only ever appear on one side.
+
+**Why**: A part is a composite `THREE.Group` of arbitrary child meshes; the only reliable way to find a flat, outward-facing, clip-free spot on arbitrary geometry is to ask the geometry. `Box3().setFromObject` + `Raycaster.intersectObject(part, true)` does the composite math for free — first-hit = the true outer surface, with point + face normal in one call.
+
+**Picked**: `findPanelMount(part, rand, placed)` casts a seeded jittered grid of outside-in rays at both ±Z flanks; keeps the first hit that is (a) outward (`normal·(point−centroid) > MIN`), (b) not-steep (`|n.y| < MAX` — the hinge/recess only YAW, so reject sloped/top faces), (c) flat (a 4-ray probe ring at the panel footprint agrees on depth within TOL — rejects curves, gaps, proud decorations, panel-spanning seams), (d) not on a `userData.isWreckDecoration` mesh, (e) clear of already-placed panels (`MIN_SEPARATION`). Returns part-LOCAL coords (pure-translation world→local at assembly time) + a `faceYaw` quantized to the nearest π/2 from the hit normal — so **`addAccessPanel`'s signature is unchanged** (its hinge/recess/rim are all built for pure-Y rotation). Falls back to the authored `panelAnchor` (on-surface by construction) when no mount is found; OPEN_TRUSS / engine bells keep explicit `null` anchors as a ray-budget fast-skip. Runs once at worldgen. **Considered**: extending `addAccessPanel` to take a full quaternion for arbitrary-tilt mounts — rejected (touches the hinge/recess/rim math + door swing; cardinal-yaw covers the flanks, which is where panels read best). RNG-stream caveat: the sampler consumes a variable number of `rand()` calls, so existing saved seeds render differently — additive, no save bump, verify on NEW seeds.
+
+**friction-score:** 3
+
+## D169 — Item viewmodels iterate against an ISOLATED `itemStudio` view (mesh alone vs the sky), not the in-hand `held-item` shot; the rig torso buries small items (Session ACY)
+**When**: ACY — deep-polishing 12 held item models under the rule-8 screenshot discipline. The first `held-item` smoke shot framed the machete as a thin sliver behind the rig's torso/backpack — useless for judging mesh fidelity.
+
+**Why**: The `held-item` scenario poses the 3P arm out and frames the hand, but the rig body + outfit fill most of the frame and small items read as occluded slivers. Critique needs the item ALONE, legibly, from several angles.
+
+**Picked**: NEW `__game.itemStudio(id, angle)` debug hook builds the item's `makeViewModel()` mesh in isolation, suspends it ~40m up (so terrain/wrecks fall outside the narrow framing → pure sky backdrop), hides the player rig, lights it for form (raking key + cool fill + ambient), and frames the chosen angle at a bbox-derived distance. A thin `item-studio` rig-shot scenario loops `--items=a,b,c --angles=front,3q,left,top` in one server boot. The studio uses the SAME `makeViewModel` mesh the game renders, so it faithfully previews FP + 3P (which both build that mesh) — verified by a 3P `held-item` spot-check on the structurally-changed amban. Lesson reinforces D165: the verification view must be legible AND faithful; an isolated studio is both for static mesh work (feel/in-motion still needs the real camera).
+
+**friction-score:** 1

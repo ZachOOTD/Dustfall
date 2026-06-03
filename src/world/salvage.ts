@@ -284,6 +284,11 @@ const TABLES: Record<SalvageKind, LootRoll[]> = {
     { id: 'fire_kit',      chance: 0.05 },
     { id: 'flashlight',    chance: 0.08 },
     { id: 'energy_pistol', chance: 0.03 },   // rare hero-tier weapon drop
+    // ACY — amban rifle was dev-loadout-only (orphan ItemDef + combat spec).
+    // Make it the rarest hero find on massive wrecks (mirrors energy_pistol,
+    // a notch rarer — it's the top-tier marksman weapon). Ammo shares the
+    // scrap_bullet pipeline, so finding one is immediately usable.
+    { id: 'amban_rifle',   chance: 0.02 },
   ],
 };
 

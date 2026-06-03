@@ -3,6 +3,52 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ACY — 2026-06-03 — Item-model detail pass (12 held items) + dynamic salvage-panel placement + POI greebles ✓ verify pass (tsc clean)
+
+`verified` — `npm run verify` (tsc) PASS throughout; no save-schema change. Long overnight. Item meshes are
+headless-verifiable (unlike the owed ACW/ACX feel work), so this session leaned into the visual centerpiece. 6 files:
+`items.ts`, `debug/debugPanel.ts`, `scripts/rig-shot.mjs`, `world/procgenWreck.ts`, `world/salvage.ts`, `config/tuning.ts`.
+
+**Lane 1 — deep-polished all 12 high-visibility held item models** (each iterated build→shot→critique vs a new
+isolated studio view, not tsc-only): **machete** (flat box → extruded parang blade w/ bevel edge, spine, fuller, guard
++ quillon + bolster, leather-wrapped grip w/ bands/pommel/rivets), **pipe_staff** (plain cylinder → jointed plumbing:
+union coupling, threads, bolted flange head, hose-clamp, taped grip), **scrap_bar** (square bar → double-ended crowbar:
+faceted shaft, curved nail-puller claw + slot, chisel pry-blade), **scrap_gun** (welded receiver + seam + ejection port,
+breech, wire-wrapped barrel + muzzle, hammer, wrapped canted grip, trigger loop), **energy_pistol** (sleek alloy: vent
+fins, glowing barrel coils + emitter lens + energy cells via the preserved `updateHeld` charge-pulse, grooved grip),
+**amban_rifle** (added a **scope** w/ glass lenses + ring mounts, box magazine, trigger loop, recoil pad, bolt ball —
+now unmistakably a marksman rifle), **scrap_bullet** (cylinder+cone → bottlenecked cartridge: rim/primer/shoulder/neck/
+copper ogive), **torch** (branch + knot/nub, layered rag wrap + charred head + binding cords), **flashlight** (rebuilt as
+a forward-pointing tube: knurled body, bezel head + reflector, lens, tail button), **rope** (wound coil hank + lashing +
+fraying tail), **canteen** (tin flask + felt cover + band + knurled cap + chain), **bandage** (rolled gauze + wrap rings +
+draping frayed end + tie + cross). Ground pickups reuse `makeViewModel` (×1.5) so dropped items inherit the upgrades.
+
+**Tooling** — NEW `__game.itemStudio(id, angle)` debug hook (builds an item's `makeViewModel` mesh in ISOLATION,
+suspended high vs the sky, lit for form, rig hidden) + a NEW `item-studio` rig-shot scenario (`--items=a,b,c --angles=…`,
+multi-item one boot). The held-item scenario buried small items behind the rig torso; the studio is the legible iteration
+view (D169).
+
+**Lane 2 — dynamic salvage-panel placement + variety.** NEW `findPanelMount` raycast surface-sampler in
+`procgenWreck.ts` replaces the single hardcoded per-part `panelAnchor` (kept as a fallback): a jittered grid of
+outside-in rays on both ±Z flanks, a 4-ray flatness probe ring, decoration-tag + same-part overlap rejection, and a
+cardinal `faceYaw` quantized from the hit normal (no `addAccessPanel` signature change). Decorations tagged
+`isWreckDecoration` (breach patches + welded plates) so panels never weld on top of them. Panel **size variants**
+(small/standard/large via the existing `scale` arg). NEW tuning: `SALVAGE_PANEL_SAMPLE_*` + `SALVAGE_PANEL_SCALE_*`.
+D168.
+
+**Lane 2 verify** — hardened the `panels` rig-shot scenario: shoot all kinds + a NEW `__game.panelBuryAudit` numeric
+bury/occlusion assertion (raycast inward along each panel's outward axis; PASS iff the panel surface is reached before
+any hull). **75/77, 75/78, 66/68 pass across 3 random seeds** — every procgen-composite panel the sampler places passes;
+the only fails are pre-existing hand-modeled curved `engine_bell`/`escape_pod` panels the sampler doesn't touch.
+
+**Lane 3 — POI detail + small win.** NEW `addHullGreebles` (panel-line seams / rivet strips / vent boxes, ≥10cm deep
+per rule 7, tagged so the sampler avoids them) on ribbed-cylinder + plated-rectangular hull variants. **amban_rifle**
+added to the `massive` wreck loot table (chance 0.02 — rarest hero find; was dev-loadout-only orphan).
+
+**Out of scope (carried):** 3P per-item use-animations (deferred per user — a rigged-model import may obsolete them);
+the owed ACW/ACX foreground feel-tune playtest (foreground-only, D150); remaining ~22 item models (kits/foods/
+materials); the hand-modeled curved-bell/pod panel cases. D168-D169.
+
 ## Session ACX — 2026-06-03 — 3P fix pass: held-item hand/orientation, speeder cam, footstep depth, seated rig pose (numeric-IK) ✓ verify pass (tsc clean)
 
 `verified` — `npm run verify` (tsc) PASS. A foreground-feedback fix pass on the ACW 3P work + a from-scratch

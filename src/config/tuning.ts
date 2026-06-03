@@ -767,6 +767,26 @@ export const Tuning = {
   // which is enough time for the player to see the swing rather than
   // perceiving it as "instant pop."
   SALVAGE_PANEL_DOOR_OPEN_LERP: 3.0,
+  // ACY — dynamic panel placement on procgen wrecks. `findPanelMount`
+  // raycasts a jittered grid against a part's outward flanks to find a flat,
+  // outward-facing, clip-free mount, replacing the single hardcoded
+  // panelAnchor (kept as a fallback). System-internal (player can't feel the
+  // ray budget) but lifted here per rule 2 for one-place tuning.
+  SALVAGE_PANEL_SAMPLE_GRID_X: 3,        // candidate origins along the part length
+  SALVAGE_PANEL_SAMPLE_GRID_Y: 3,        // candidate origins up the flank height
+  SALVAGE_PANEL_FACE_INSET: 0.70,        // sample only the inner 70% of a face (skip curved-away edges)
+  SALVAGE_PANEL_OUTWARD_MIN: 0.45,       // hit normal must point this much away from the part centroid
+  SALVAGE_PANEL_MAX_NORMAL_Y: 0.4,       // reject sloped/top faces — panel can only yaw, not pitch
+  SALVAGE_PANEL_FLATNESS_DEPTH_TOL: 0.13, // 4-ray probe ring must agree within this depth (m) = flush
+  SALVAGE_PANEL_MIN_SEPARATION: 0.9,     // min gap (m) between two panels on the same part
+  SALVAGE_PANEL_SURFACE_EPS: 0.012,      // push the mount this far proud to avoid z-fighting the hull skin
+  // ACY — panel size variants. Each placed panel rolls one size for visual
+  // variety (small access hatch → large cargo bay panel). Multiplies the
+  // base SALVAGE_PANEL_SIZE_* via addAccessPanel's `scale`.
+  SALVAGE_PANEL_SCALE_SMALL: 0.72,
+  SALVAGE_PANEL_SCALE_LARGE: 1.32,
+  SALVAGE_PANEL_SCALE_SMALL_THRESHOLD: 0.34,  // rand < this → small
+  SALVAGE_PANEL_SCALE_LARGE_THRESHOLD: 0.78,  // rand >= this → large; between → standard
   SALVAGE_NOISE_MULTIPLIER_DURING_PRY: 1.3, // sandworm detection radius boost while prying
   // AAV — inventory size (slot counts). Hotbar is the 4 numbered slots
   // visible at the screen bottom; backpack is the larger overflow grid

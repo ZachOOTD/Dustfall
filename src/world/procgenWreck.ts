@@ -303,7 +303,54 @@ function addBreachPatches(
       (rand() - 0.5) * 0.45,
       (rand() - 0.5) * 0.30,
     );
+    // ACY — tag so findPanelMount rejects a panel that would land on a proud
+    // breach patch (the depth probe is the backstop if a tag is ever missed).
+    patch.userData.isWreckDecoration = true;
     g.add(patch);
+  }
+}
+
+// ── ACY — small hull greebles (panel-line seams, rivet strips, vent boxes)
+// scattered on the flanks to break up bare hull. All ≥10cm deep (rule 7)
+// and tagged isWreckDecoration so findPanelMount won't weld a panel on top.
+function addHullGreebles(
+  g: THREE.Group,
+  partLength: number,
+  radius: number,
+  rand: Rng,
+  count: number,
+): void {
+  for (let i = 0; i < count; i++) {
+    const zside = rand() < 0.5 ? 1 : -1;
+    const px = partLength * (0.12 + rand() * 0.76);
+    const py = radius * (0.30 + rand() * 0.62);
+    const pz = radius * 0.93 * zside;
+    const roll = rand();
+    let node: THREE.Object3D;
+    if (roll < 0.42) {
+      // Panel-line seam strip (thin long box).
+      node = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.28 + rand() * 0.45, 0.10), _hullDarkMat);
+    } else if (roll < 0.72) {
+      // Rivet strip — a backing plate with a row of studs.
+      const grp = new THREE.Group();
+      const w = 0.4 + rand() * 0.35;
+      grp.add(new THREE.Mesh(new THREE.BoxGeometry(w, 0.12, 0.10), _hullDarkMat));
+      const n = 4 + Math.floor(rand() * 4);
+      for (let k = 0; k < n; k++) {
+        const rivet = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.12, 6), _rustMat);
+        rivet.rotation.x = Math.PI / 2;
+        rivet.position.x = (n > 1 ? k / (n - 1) - 0.5 : 0) * w * 0.85;
+        grp.add(rivet);
+      }
+      node = grp;
+    } else {
+      // Vent / louvered box.
+      node = new THREE.Mesh(new THREE.BoxGeometry(0.24 + rand() * 0.22, 0.18, 0.12), _rustMat);
+    }
+    node.position.set(px, py, pz);
+    node.rotation.y = zside > 0 ? 0 : Math.PI;
+    node.traverse((o) => { o.userData.isWreckDecoration = true; });
+    g.add(node);
   }
 }
 
@@ -340,6 +387,7 @@ const HULL_SEGMENT_VARIANTS: ReadonlyArray<PartBuilder> = [
       // a 10-composite seed sweep — too few to sell "scavenged battle
       // damage" feel). Now ~40% of all ribbed-cylinder hulls show a patch.
       if (rand() < 0.7) addBreachPatches(g, len, r, rand, 1);
+      addHullGreebles(g, len, r, rand, 1 + Math.floor(rand() * 3));   // ACY surface detail
       return {
         mesh: g,
         partLength: len,
@@ -375,12 +423,14 @@ const HULL_SEGMENT_VARIANTS: ReadonlyArray<PartBuilder> = [
           _rustMat,
         );
         plate.position.set(len * t, r * 0.7 + (rand() - 0.5) * r * 0.3, r * 0.9 + 0.06);
+        plate.userData.isWreckDecoration = true;   // ACY — keep panels off welded plates
         g.add(plate);
       }
       // Session ABD — 40% → 60% (see ribbed-cyl rationale). Plated_rect
       // already supports 1-2 patches per call, so this pushes plate-and-
       // breach-bearing hulls to ~60% of plated hulls.
       if (rand() < 0.6) addBreachPatches(g, len, r, rand, 1 + Math.floor(rand() * 2));
+      addHullGreebles(g, len, r, rand, 1 + Math.floor(rand() * 3));   // ACY surface detail
       return {
         mesh: g,
         partLength: len,
@@ -972,6 +1022,93 @@ interface AssembleResult {
   totalLength: number;
 }
 
+// ── ACY — dynamic panel placement via raycast surface sampling ──────────
+//
+// Replaces the single hardcoded per-part `panelAnchor` with a real sampler:
+// cast a jittered grid of outside-in rays against a part's outward flanks
+// (±Z), and keep the FIRST hit that is (a) outward-facing, (b) flat — a
+// 4-ray probe ring at the panel footprint agrees on depth, (c) not on a
+// tagged decoration, and (d) clear of panels already placed on this part.
+// Returns a part-LOCAL mount (the frame addAccessPanel's recess math wants)
+// + a cardinal faceYaw, or null (→ caller falls back to the authored
+// anchor). Cardinal-yaw only — the panel hinge/recess can't pitch — so we
+// reject near-horizontal (top/sloped) surfaces. Runs once at worldgen.
+const _panelRc = new THREE.Raycaster();
+function findPanelMount(
+  partMesh: THREE.Group,
+  rand: Rng,
+  placed: Array<{ x: number; y: number; z: number }>,
+): { x: number; y: number; z: number; faceYaw: number } | null {
+  partMesh.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(partMesh);
+  if (box.isEmpty()) return null;
+  const size = box.getSize(new THREE.Vector3());
+  const center = box.getCenter(new THREE.Vector3());
+  // At assembly time the part's only transform is a pure translation, so
+  // world→part-local is a subtraction of its position.
+  const offset = partMesh.position;
+
+  const gx = Tuning.SALVAGE_PANEL_SAMPLE_GRID_X;
+  const gy = Tuning.SALVAGE_PANEL_SAMPLE_GRID_Y;
+  const inset = Tuning.SALVAGE_PANEL_FACE_INSET;
+  const halfX = Tuning.SALVAGE_PANEL_SIZE_X * 0.5;
+  const halfY = Tuning.SALVAGE_PANEL_SIZE_Y * 0.5;
+  const inward = new THREE.Vector3();
+  const nrm = new THREE.Vector3();
+  const normalMat = new THREE.Matrix3();
+
+  const castNear = (ox: number, oy: number, faceZ: number, zside: number) => {
+    _panelRc.far = 0.95;
+    _panelRc.set(new THREE.Vector3(ox, oy, faceZ + zside * 0.4), inward.set(0, 0, -zside));
+    return _panelRc.intersectObject(partMesh, true)[0] ?? null;
+  };
+
+  // Both flanks, randomized order so a wreck doesn't always weld the same side.
+  const faces = rand() < 0.5 ? [1, -1] : [-1, 1];
+  for (const zside of faces) {
+    const faceZ = zside > 0 ? box.max.z : box.min.z;
+    const order: Array<[number, number]> = [];
+    for (let iy = 0; iy < gy; iy++) for (let ix = 0; ix < gx; ix++) order.push([ix, iy]);
+    for (let i = order.length - 1; i > 0; i--) {
+      const j = Math.floor(rand() * (i + 1));
+      [order[i], order[j]] = [order[j], order[i]];
+    }
+    for (const [ix, iy] of order) {
+      const fx = gx > 1 ? ix / (gx - 1) - 0.5 : 0;
+      const fy = gy > 1 ? iy / (gy - 1) - 0.5 : 0;
+      const ox = center.x + (fx + (rand() - 0.5) / gx) * size.x * inset;
+      const oy = center.y + (fy + (rand() - 0.5) / gy) * size.y * inset;
+      const hit = castNear(ox, oy, faceZ, zside);
+      if (!hit || hit.object.userData?.isWreckDecoration || !hit.face) continue;
+      nrm.copy(hit.face.normal).applyNormalMatrix(normalMat.getNormalMatrix(hit.object.matrixWorld)).normalize();
+      // Outward (de-weight vertical) + not-steep (cardinal yaw can't pitch).
+      const outDir = hit.point.clone().sub(center); outDir.y *= 0.3;
+      if (outDir.lengthSq() < 1e-6) continue;
+      if (nrm.dot(outDir.normalize()) < Tuning.SALVAGE_PANEL_OUTWARD_MIN) continue;
+      if (Math.abs(nrm.y) > Tuning.SALVAGE_PANEL_MAX_NORMAL_Y) continue;
+      // Flatness probe ring at the panel footprint — all 4 must agree on depth.
+      const depth = hit.distance;
+      let flat = true;
+      for (const [px, py] of [[halfX, 0], [-halfX, 0], [0, halfY], [0, -halfY]] as const) {
+        const ph = castNear(ox + px, oy + py, faceZ, zside);
+        if (!ph || ph.object.userData?.isWreckDecoration ||
+            Math.abs(ph.distance - depth) > Tuning.SALVAGE_PANEL_FLATNESS_DEPTH_TOL) { flat = false; break; }
+      }
+      if (!flat) continue;
+      const surf = hit.point.clone().addScaledVector(nrm, Tuning.SALVAGE_PANEL_SURFACE_EPS);
+      const lx = surf.x - offset.x, ly = surf.y - offset.y, lz = surf.z - offset.z;
+      let clash = false;
+      for (const p of placed) {
+        if (Math.hypot(p.x - lx, p.y - ly, p.z - lz) < Tuning.SALVAGE_PANEL_MIN_SEPARATION) { clash = true; break; }
+      }
+      if (clash) continue;
+      const faceYaw = Math.round(Math.atan2(nrm.x, nrm.z) / (Math.PI / 2)) * (Math.PI / 2);
+      return { x: lx, y: ly, z: lz, faceYaw };
+    }
+  }
+  return null;
+}
+
 function assembleWreck(
   rand: Rng,
   recipe: WreckRecipe,
@@ -1025,26 +1162,24 @@ function assembleWreck(
     : cls === 'corvette'
     ? ['fuselage', 'engine_cluster'] as const
     : ['fuselage', 'cargo_container'] as const;
+  // Track panels already placed per part so the sampler can avoid overlap.
+  const placedOnPart = new Map<THREE.Group, Array<{ x: number; y: number; z: number }>>();
   for (let i = 0; i < wantPanels; i++) {
     const slot = panelEligible[indices[i]];
-    const anchor = slot.built.panelAnchor!;
-    // Panel position in WRECK-root frame: slot.startX + anchor.x (then
-    // shifted by -totalLength/2 above, but that shift applied to the
-    // PART mesh's position — the anchor coords are PART-local). Since
-    // we want the panel in WRECK-root frame and we've already shifted
-    // each part's position by -totalLength/2, the panel sits in the
-    // part's local frame. addAccessPanel takes a parent + LOCAL coords,
-    // so we'll add it to the PART mesh as the parent.
+    const partMesh = slot.built.mesh;
+    // ACY — try the surface sampler first (finds a flat, outward, clip-free
+    // mount on either flank); fall back to the authored anchor if it can't.
+    const prior = placedOnPart.get(partMesh) ?? [];
+    const mount = findPanelMount(partMesh, rand, prior) ?? slot.built.panelAnchor!;
+    // ACY — size variant roll (small access hatch → large cargo panel).
+    const sr = rand();
+    const scale = sr < Tuning.SALVAGE_PANEL_SCALE_SMALL_THRESHOLD ? Tuning.SALVAGE_PANEL_SCALE_SMALL
+      : sr >= Tuning.SALVAGE_PANEL_SCALE_LARGE_THRESHOLD ? Tuning.SALVAGE_PANEL_SCALE_LARGE
+      : 1;
     const panelKind = panelKindPool[Math.floor(rand() * panelKindPool.length)];
-    addAccessPanel(
-      slot.built.mesh,
-      anchor.x,
-      anchor.y,
-      anchor.z,
-      1,                                  // scale
-      anchor.faceYaw,
-      panelKind,
-    );
+    addAccessPanel(partMesh, mount.x, mount.y, mount.z, scale, mount.faceYaw, panelKind);
+    prior.push({ x: mount.x, y: mount.y, z: mount.z });
+    placedOnPart.set(partMesh, prior);
   }
 
   return { group: root, totalLength };

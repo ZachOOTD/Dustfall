@@ -821,6 +821,26 @@ const SCENARIOS = {
     console.log(`[held-item] ${item} → ${path}`);
   },
 
+  // Item-studio (ACY): build the item's makeViewModel mesh in ISOLATION (no rig
+  // / world), suspended high against the sky gradient + lit for form, framed per
+  // angle. The clean multi-angle view the deep item-detail pass iterates against
+  // (the held-item shot buries small items behind the rig torso). --item=<id>,
+  // --angles=front,3q,left,top (default). One PNG per angle.
+  'item-studio': async (page) => {
+    // --item=<id> OR --items=a,b,c (multiple items in one server boot).
+    const items = String(argv.items || argv.item || 'machete').split(',').map((s) => s.trim());
+    const angles = String(argv.angles || 'front,3q,left,top').split(',').map((s) => s.trim());
+    for (const item of items) {
+      for (const angle of angles) {
+        const res = await page.evaluate(({ item, angle }) => window.__game.itemStudio(item, angle), { item, angle });
+        await page.waitForTimeout(200);
+        const path = join(OUT, `scen-item-${item}-${angle}.png`);
+        await page.screenshot({ path, fullPage: false });
+        console.log(`[item-studio] ${item} ${angle} → ${path}  ${JSON.stringify(res)}`);
+      }
+    }
+  },
+
   // Speeder-FX (ACW C7/C8): drive the (unmounted) bike LIVE for ~0.6s so the
   // dust trail builds + the engine glow ramps with speed, then PAUSE (freezes
   // the dust cloud mid-air + holds the glow) and free-camera a 3/4-behind shot
@@ -1050,43 +1070,43 @@ const SCENARIOS = {
     console.log(`[rig-shot] saved ${path}`);
   },
 
-  // Panels (ACP): enumerate salvage panels, force every door open, then frame +
-  // screenshot the nearest N from the FRONT to spot interior-clipping-through-
-  // hull-wall. Static (pause after the door-lerp settles → free camera).
+  // Panels (ACP; ACY-hardened): enumerate salvage panels, force every door
+  // open, then (1) run a HEADLESS BURY ASSERTION — for each panel, raycast
+  // inward along its own outward axis against its wreck root; if the nearest
+  // hit isn't the panel itself, hull occludes it (buried) → FAIL — and (2)
+  // screenshot a sample from the front. Each harness boot rolls a fresh random
+  // seed, so re-running sweeps seeds. Static (pause after the door-lerp).
   'panels': async (page) => {
     await page.evaluate(() => { window.__game.ctx.three.renderer.setSize(900, 1100, false); window.__game.setTime(0.42); });
-    // Enumerate + force every door fully open for inspection.
     const list = await page.evaluate(() => {
       const ctx = window.__game.ctx;
-      const out = [];
-      ctx.salvageables.list.forEach((s, idx) => {
+      ctx.salvageables.list.forEach((s) => {
         s.panel.userData.panelOpened = true;
         s.panel.userData.panelDoorTarget = 2.2;   // ~126° — clearly open
-        if (idx < 8) out.push({ idx, kind: s.kind || s.wreckKind || '?', cond: s.condition || '?' });
       });
-      return { count: ctx.salvageables.list.length, sample: out };
+      return { count: ctx.salvageables.list.length, seed: ctx.seed ?? '?' };
     });
-    console.log(`[panels] count=${list.count} sample=${JSON.stringify(list.sample)}`);
+    console.log(`[panels] seed=${list.seed} count=${list.count}`);
     await page.waitForTimeout(1400);             // let updatePanelDoors lerp them open
-    // Collect nearest-N panel world transforms, then pause + shoot each.
+
+    // ── Bury assertion (runs in TS via __game.panelBuryAudit — THREE there). ──
+    const audit = await page.evaluate(() => window.__game.panelBuryAudit());
+    console.log(`[panels] BURY-AUDIT seed=${list.seed} pass=${audit.pass}/${audit.tested} fails=${audit.failCount} ${audit.failCount ? JSON.stringify(audit.fails) : 'ALL CLEAR'}`);
+
+    // ── Screenshots: sample panels from the front (all kinds + first few). ──
     const targets = await page.evaluate(() => {
       const ctx = window.__game.ctx;
-      const cam = ctx.three.camera;
-      const V = cam.position.constructor;
-      const Q = cam.quaternion.constructor;
+      const V = ctx.three.camera.position.constructor;
+      const Q = ctx.three.camera.quaternion.constructor;
       const items = ctx.salvageables.list.map((s, idx) => {
         const wp = s.panel.getWorldPosition(new V());
-        const wq = s.panel.getWorldQuaternion(new Q());
-        const outward = new V(0, 0, 1).applyQuaternion(wq);   // body-local +Z = door/outward side
-        const d = Math.hypot(wp.x - cam.position.x, wp.z - cam.position.z);
-        return { idx, kind: s.kind || s.wreckKind || '?', x: wp.x, y: wp.y, z: wp.z, ox: outward.x, oy: outward.y, oz: outward.z, d };
+        const outward = new V(0, 0, 1).applyQuaternion(s.panel.getWorldQuaternion(new Q()));
+        return { idx, kind: s.kind || s.wreckKind || '?', x: wp.x, y: wp.y, z: wp.z, ox: outward.x, oy: outward.y, oz: outward.z };
       });
-      // One panel per UNIQUE kind (the offenders are kind-specific) — sweep all POI types.
-      const seen = new Set();
-      const perKind = [];
-      for (const it of items) { if (!seen.has(it.kind)) { seen.add(it.kind); perKind.push(it); } }
-      ctx.flags.paused = true;                    // freeze so the framing camera survives
-      return perKind;
+      const seen = new Set(); const pick = [];
+      for (const it of items) { const k = it.kind; if (!seen.has(k)) { seen.add(k); pick.push(it); } if (pick.length >= 12) break; }
+      ctx.flags.paused = true;
+      return pick;
     });
     for (let i = 0; i < targets.length; i++) {
       const t = targets[i];
@@ -1097,10 +1117,10 @@ const SCENARIOS = {
         cam.lookAt(t.x, t.y, t.z);
         cam.updateMatrixWorld(true);
       }, t);
-      await page.waitForTimeout(250);
+      await page.waitForTimeout(200);
       const path = join(OUT, `scen-panel-${String(i).padStart(2, '0')}-${t.kind}.png`);
       await page.screenshot({ path, fullPage: false });
-      console.log(`[panels] shot ${i}: kind=${t.kind} dist=${t.d.toFixed(1)} → ${path}`);
+      console.log(`[panels] shot ${i}: kind=${t.kind} → ${path}`);
     }
   },
 

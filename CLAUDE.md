@@ -64,24 +64,26 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      Prior milestones live in docs/changelog.md — do NOT accumulate "Prior milestone"
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
-**Last shipped**: Session ACX — **3P fix pass + seated-rig re-solve** (foreground feedback on ACW's 3P work).
-Held items moved to the real RIGHT hand + faced forward (`makeBasis` corrective on `rightHandAttach`; palms
-rolled inward via a `handVisual` sub-group that doesn't disturb the grip); real speeder 3P chase cam
-(`SPEEDER_3P_CAM_*`); footsteps-through-items fixed (footprint decal `polygonOffsetFactor` slope punch-through
-→ removed polygonOffset). **Seated speeder rig re-solved from scratch**: forward lean 0.60 pivoted at the WAIST
-(compensating `spineBend.position` — it's parented at rig origin y=0, so a bare lean slid the torso ~0.4m off the
-pelvis = "torso disconnected" gap), arms hang vertical onto the bars (hands ~4–5cm off), legs splayed astride,
-seat-back `SPEEDER_RIG_SEAT_Z` 0.28→0.36 (capped — arm can't reach bars further back). Key tooling: `rig-shot.mjs`
-**`bike-truth`** scenario renders the REAL game chase-cam + 5 world angles + an in-page **pose SWEEP** that minimizes
-wrist→grip/ankle→peg world distances. Lesson: the prior harness OVERRODE the camera + assumed +Z=face, so it
-reported "fine" for multiple rounds while the live view was wrong — a verification harness must render the REAL camera.
-**Foreground-owed:** live in-motion riding feel; exact feet-on-pegs (22cm residual reads astride, not pad-perfect);
-plus the carried ACW pile (in-motion gaits, shrew burrow timing, speeder FX in motion, storm feel, use-anim reads).
+**Last shipped**: Session ACY — **item-model detail pass (centerpiece) + dynamic salvage-panel placement + POI greebles**
+(long overnight; all tsc-clean, no save change). **Lane 1**: deep-polished all **12 high-visibility held item models** —
+machete (extruded parang blade), pipe_staff (jointed plumbing), scrap_bar (crowbar), scrap_gun (welded zip-gun),
+energy_pistol (alloy sci-fi, glow coils via the preserved `updateHeld`), amban_rifle (+**scope**/mag/recoil-pad),
+scrap_bullet (bottlenecked cartridge), torch (rag-wrapped branch), flashlight (forward tube + bezel), rope (coil hank),
+canteen (tin flask + felt cover), bandage (rolled gauze) — each iterated build→shot→critique against a NEW isolated
+**`itemStudio`** view (`__game.itemStudio` hook + `item-studio` rig-shot scenario; the in-hand shot buried small items —
+D169). Ground pickups reuse `makeViewModel` so they inherit the upgrades. **Lane 2**: NEW `findPanelMount` raycast
+surface-sampler in `procgenWreck.ts` (replaces the single hardcoded `panelAnchor`, kept as fallback): jittered ±Z-flank
+ray grid + flatness probe + decoration/overlap rejection + cardinal `faceYaw` (no `addAccessPanel` change) — D168; +
+panel **size variants**; + a hardened `panels` scenario with a numeric `panelBuryAudit` (75/77+ pass across seeds — only
+pre-existing hand-modeled curved bell/pod panels flag). **Lane 3**: `addHullGreebles` (panel-lines/rivets/vents, rule-7,
+tagged) on the common hull variants; **amban_rifle** now drops from `massive` wrecks (0.02; was dev-only). D168-D169.
+**Foreground-owed (unchanged):** the ACW/ACX in-motion feel pile (gaits, shrew burrow, speeder FX, storm, riding,
+feet-on-pegs) + use-anim reads — all foreground-only (D150), not overnight-doable.
 
-**Next session (ACY)**: pick up either (a) the **DEEP CAVE SYSTEM** design pass (procedural sprawl + sub-terrain
-walkable collision + descent opening + dark-navigation; then cherry-pick the egg-acquisition spine from `2d4035b`),
-or (b) finish the per-item 3P use-anim pass for the remaining held items (gun recoil, canteen drink, scrap_bar pry,
-bandage) + POI/salvage-panel art detail. See [docs/next-session-prompt.md](docs/next-session-prompt.md).
+**Next session (ACZ)**: pick a lane — (a) the **DEEP CAVE SYSTEM** design+build pass (procedural sprawl + sub-terrain
+walkable collision + descent opening + dark-nav; then cherry-pick the egg spine from `2d4035b`); (b) finish the
+**remaining ~22 item models** (kits/foods/materials) to parity with the 12 hero items; or (c) a **foreground feel-tune
+playtest** of the owed ACW/ACX pile (needs a human). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 

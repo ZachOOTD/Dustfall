@@ -8,6 +8,8 @@ import { resetTutorial, showControlsPanel } from '../ui/tutorial.ts';
 import { getAudioStateSnapshot, type AudioStateSnapshot } from '../audio/soundscape.ts';
 import { getMusicStateSnapshot, type MusicStateSnapshot } from '../audio/music.ts';
 import { triggerStorm as triggerStormWeather } from '../world/weather.ts';
+import { getItemDef } from '../inventory/items.ts';
+import type { ItemId } from '../inventory/types.ts';
 
 declare global {
   interface Window {
@@ -69,6 +71,19 @@ interface DebugApi {
    *  With an `angle`: pauses + frames that canonical view for a screenshot.
    *  The MVP-check verification loop (docs/feature-player-model.md) drives this. */
   rigStudio: (angle?: 'front' | 'back' | 'left' | 'right' | '3q' | 'head') => unknown;
+  /** ACY — visual-audit "studio" for ITEM viewmodels. Builds the item's
+   *  makeViewModel() mesh in ISOLATION (no rig/world clutter), suspends it high
+   *  against the clean sky gradient, lights it for form (key/fill/ambient), and
+   *  frames the chosen angle close enough to fill the frame. The item-detail
+   *  pass (Lane 1) drives this via the `item-studio` rig-shot scenario. Pass an
+   *  ItemId + angle; re-call to swap items/angles (prior mesh is removed). */
+  itemStudio: (id: ItemId, angle?: 'front' | 'back' | 'left' | 'right' | 'top' | '3q') => unknown;
+  /** ACY — headless bury/occlusion audit for salvage panels. For each
+   *  registered salvageable, raycasts inward along the panel's own outward
+   *  axis against its wreck root; if the nearest hit is NOT the panel body
+   *  (i.e. hull occludes it), the panel is buried inside the model → fail.
+   *  Drives the `panels` rig-shot scenario's pass/fail assertion. */
+  panelBuryAudit: () => { tested: number; pass: number; failCount: number; fails: Array<{ idx: number; kind: string; hit: string }> };
   /** Clear the tutorial localStorage flags so the controls panel + all
    *  pickup hints fire again. Refresh to see the first-boot overlay. */
   resetTutorial: () => void;
@@ -90,6 +105,10 @@ export interface DebugHooks {
 }
 
 export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): void {
+  // ACY item-studio state (lazily built on first itemStudio call).
+  let studioGroup: THREE.Group | null = null;
+  let studioMesh: THREE.Object3D | null = null;
+
   window.__game = {
     setTime: (t) => { ctx.time.dayTime = t; },
     setStats: (s) => {
@@ -207,6 +226,115 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
       cam.position.copy(camPos);
       cam.lookAt(tgt);
       return { angle, framed: true };
+    },
+    itemStudio(id, angle) {
+      // enter + headless render (idempotent), then suspend the item alone.
+      if (hooks.enterGame) hooks.enterGame(true);
+      else { ctx.flags.titleActive = false; ctx.flags.paused = false; }
+      const three = ctx.three;
+      three.renderer.setSize(900, 900, false);
+      const cam = three.camera as THREE.PerspectiveCamera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1; cam.updateProjectionMatrix(); }
+      three.renderer.toneMappingExposure = 1.45;
+      ctx.flags.paused = true;
+      // Hide the player rig so it never intrudes on the isolated item framing.
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+
+      // Build the studio rig once (adding lights triggers one lightsHash
+      // recompile — acceptable on this debug-only path).
+      if (!studioGroup) {
+        studioGroup = new THREE.Group();
+        studioGroup.name = '__itemStudio';
+        const key = new THREE.DirectionalLight(0xfff1dc, 2.6);
+        key.position.set(2.5, 3.5, 2.0);       // raking top-right key for greebles
+        const fill = new THREE.DirectionalLight(0xaec6ff, 0.85);
+        fill.position.set(-2.2, 1.0, -1.4);    // cool back-fill
+        const amb = new THREE.AmbientLight(0xffffff, 0.85);
+        studioGroup.add(key, fill, amb);
+        three.scene.add(studioGroup);
+      }
+      if (studioMesh) { studioGroup.remove(studioMesh); studioMesh = null; }
+
+      const def = getItemDef(id);
+      if (!def.makeViewModel) return { id, ok: false, reason: 'no makeViewModel' };
+      const mesh = def.makeViewModel();
+
+      // Anchor high above the player so the backdrop is pure sky gradient — no
+      // terrain/wrecks behind the item.
+      const bp = ctx.player.body.body.translation();
+      // Suspend high in the sky so terrain/wrecks fall far outside the narrow
+      // (≈0.6m) framing → pure sky-gradient backdrop on every angle.
+      const anchor = new THREE.Vector3(bp.x, bp.y + 40, bp.z);
+      mesh.updateMatrixWorld(true);
+      const box = new THREE.Box3().setFromObject(mesh);
+      const center = box.getCenter(new THREE.Vector3());
+      const size = box.getSize(new THREE.Vector3());
+      const radius = Math.max(size.x, size.y, size.z, 0.04) * 0.5;
+      mesh.position.sub(center).add(anchor);   // bbox center → anchor
+      studioGroup.add(mesh);
+      studioMesh = mesh;
+      studioGroup.updateMatrixWorld(true);
+
+      const dist = radius * 3.0 + 0.06;
+      // Slightly-below-level eye on the side/3q angles → the framing cone behind
+      // the item is sky, not distant ground. 'top' looks down by design.
+      const dir = new THREE.Vector3(0, -0.06, 1);
+      if (angle === 'back') dir.set(0, -0.06, -1);
+      else if (angle === 'left') dir.set(-1, -0.06, 0);
+      else if (angle === 'right') dir.set(1, -0.06, 0);
+      else if (angle === 'top') dir.set(0.12, 1, 0.18);
+      else if (angle === '3q') dir.set(0.8, 0.10, 0.8);
+      dir.normalize();
+      cam.position.copy(anchor).addScaledVector(dir, dist);
+      cam.lookAt(anchor);
+      cam.updateMatrixWorld(true);
+      return { id, angle: angle ?? 'front', ok: true, radius: +radius.toFixed(3) };
+    },
+    panelBuryAudit() {
+      const reg = (ctx as unknown as { salvageables?: { list: Array<{ panel: THREE.Object3D; kind?: string; wreckKind?: string }> } }).salvageables;
+      const scene = ctx.three.scene;
+      const rc = new THREE.Raycaster();
+      const fails: Array<{ idx: number; kind: string; hit: string }> = [];
+      let pass = 0, tested = 0;
+      const isAncestor = (anc: THREE.Object3D, node: THREE.Object3D | null): boolean => {
+        let n: THREE.Object3D | null = node;
+        while (n) { if (n === anc) return true; n = n.parent; }
+        return false;
+      };
+      const updatedRoots = new Set<THREE.Object3D>();
+      (reg?.list ?? []).forEach((s, idx) => {
+        const body = s.panel;
+        // Force a full world-matrix update of the wreck subtree so the door /
+        // rim / interior (descendants) aren't raycast at stale transforms.
+        let r0: THREE.Object3D = body;
+        while (r0.parent && r0.parent !== scene) r0 = r0.parent;
+        if (!updatedRoots.has(r0)) { r0.updateWorldMatrix(false, true); updatedRoots.add(r0); }
+        const wp = body.getWorldPosition(new THREE.Vector3());
+        const wq = body.getWorldQuaternion(new THREE.Quaternion());
+        const outward = new THREE.Vector3(0, 0, 1).applyQuaternion(wq).normalize();
+        let root: THREE.Object3D = body;
+        while (root.parent && root.parent !== scene) root = root.parent;
+        rc.far = 1.6;
+        rc.set(wp.clone().addScaledVector(outward, 0.8), outward.clone().multiplyScalar(-1));
+        const hits = rc.intersectObject(root, true);
+        tested++;
+        // Compare depths: the panel is exposed iff its nearest surface (rim /
+        // door / cavity) is reached BEFORE any non-panel hull mesh. Hull BEHIND
+        // the panel (e.g. the far wall past an open cavity) is fine.
+        let dPanel = Infinity, dHull = Infinity;
+        for (const h of hits) {
+          if (isAncestor(body, h.object)) dPanel = Math.min(dPanel, h.distance);
+          else dHull = Math.min(dHull, h.distance);
+        }
+        if (dPanel === Infinity) { pass++; return; }     // panel not on this axis — skip (no occlusion claim)
+        // Panels recess by design (RECESS_DEPTH), so the hull lip sits a little
+        // in front of the recessed cavity legitimately. Only flag GROSS
+        // occlusion — hull well in front of the panel beyond the recess.
+        if (dHull < dPanel - 0.22) {
+          fails.push({ idx, kind: s.kind || s.wreckKind || '?', hit: `hull@${dHull.toFixed(2)}<panel@${dPanel.toFixed(2)}` });
+        } else pass++;
+      });
+      return { tested, pass, failCount: fails.length, fails: fails.slice(0, 12) };
     },
     resetTutorial,
     showControls() { showControlsPanel(ctx); },

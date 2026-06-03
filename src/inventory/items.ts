@@ -191,29 +191,45 @@ const _DEFS: Record<ItemId, ItemDef> = {
     },
     makeViewModel() {
       const group = new THREE.Group();
-      const bodyMat = new THREE.MeshLambertMaterial({
-        color: 0x4a463c,
-        emissive: 0x12110d,
-      });
-      const capMat = new THREE.MeshLambertMaterial({ color: 0x2a2620 });
-      const body = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.06, 0.065, 0.16, 12),
-        bodyMat,
-      );
-      body.scale.set(1, 1, 0.6);
-      group.add(body);
-      const neck = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.025, 0.025, 0.04, 8),
-        bodyMat,
-      );
-      neck.position.y = 0.10;
-      group.add(neck);
-      const cap = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.03, 0.03, 0.015, 8),
-        capMat,
-      );
-      cap.position.y = 0.128;
-      group.add(cap);
+      // ACY — deep-detail rebuild: a battered tin field canteen. Flattened flask
+      // body (weathered metal), a felt pouch cover over the lower body with a
+      // stitch line + reinforcement band, a stepped neck, a knurled screw cap,
+      // and a cap retention chain. (D107 zero-asset — procedural shaders only.)
+      const tinMat = vmMetal(0x4a463c, { wornScale: 8.0, scratchStrength: 0.06 });
+      tinMat.emissive = new THREE.Color(0x0d0c09);
+      const capMat = vmMetal(0x2a2620, { wornScale: 5.0 });
+      const coverMat = createFabricMaterial(0x6a6450, undefined, { disableShimmer: true });
+      const strapMat = createFabricMaterial(0x4a4030, undefined, { disableShimmer: true });
+      const chainMat = vmMetal(0x7a7268, { wornScale: 3.0 });
+
+      // Flask body (flattened front-to-back).
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.063, 0.155, 16), tinMat);
+      body.scale.set(1, 1, 0.62); group.add(body);
+      // Felt pouch cover over the lower body.
+      const cover = new THREE.Mesh(new THREE.CylinderGeometry(0.064, 0.067, 0.10, 16), coverMat);
+      cover.scale.set(1, 1, 0.64); cover.position.y = -0.024; group.add(cover);
+      // Cover top stitch line + a horizontal reinforcement band.
+      const stitch = new THREE.Mesh(new THREE.CylinderGeometry(0.0645, 0.0645, 0.006, 16), strapMat);
+      stitch.scale.set(1, 1, 0.64); stitch.position.y = 0.027; group.add(stitch);
+      const band = new THREE.Mesh(new THREE.CylinderGeometry(0.0665, 0.0665, 0.016, 16), strapMat);
+      band.scale.set(1, 1, 0.64); band.position.y = -0.02; group.add(band);
+
+      // Stepped neck + knurled screw cap.
+      const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.027, 0.034, 12), tinMat);
+      neck.position.y = 0.094; group.add(neck);
+      const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.029, 0.029, 0.024, 16), capMat);
+      cap.position.y = 0.122; group.add(cap);
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * Math.PI * 2;
+        const knurl = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.024, 0.004), capMat);
+        knurl.position.set(Math.cos(a) * 0.029, 0.122, Math.sin(a) * 0.029); group.add(knurl);
+      }
+      // Cap retention chain (a couple of links to the neck).
+      for (let i = 0; i < 3; i++) {
+        const link = new THREE.Mesh(new THREE.TorusGeometry(0.005, 0.0015, 5, 8), chainMat);
+        link.position.set(0.03, 0.118 - i * 0.008, 0); link.rotation.y = 0.5; group.add(link);
+      }
+
       group.rotation.set(0, 0, -0.18);
       return group;
     },
@@ -253,33 +269,38 @@ const _DEFS: Record<ItemId, ItemDef> = {
       return { consumed: true, message: 'you bind a wound' };
     },
     makeViewModel() {
-      // ABJ — B13: applied fabric shader (weave + color variation +
-      // stains). Pad gets the weave reading; binding stripes show
-      // distinct cloth weave for free. Added a small red cross stripe
-      // for the "medical kit" silhouette.
+      // ACY — deep-detail rebuild: a rolled cloth bandage. A fabric roll (along
+      // X) with visible spiral wrap rings, a loose frayed end draping off, a
+      // binding tie, and a painted field-medical cross on top. Object-local
+      // fabric sampling (disableShimmer) keeps the weave anchored as it bobs.
       const group = new THREE.Group();
-      // ABN — disableShimmer for viewmodels: shimmer + world-sampled
-      // noise read as "the bandage expands when I walk" because the
-      // shader sees a camera-relative position. Object-local sampling
-      // keeps the weave + stain pattern anchored to the pad as it bobs.
       const cloth = createFabricMaterial(0xe8dcc0, undefined, { disableShimmer: true });
-      const stripe = createFabricMaterial(0xc8b89a, undefined, { disableShimmer: true });
+      const clothDark = createFabricMaterial(0xcdbf9f, undefined, { disableShimmer: true });
+      const tieMat = createFabricMaterial(0x9a8a6a, undefined, { disableShimmer: true });
       const crossMat = new THREE.MeshLambertMaterial({ color: 0xa83a2a });
-      const pad = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.04, 0.08), cloth);
-      group.add(pad);
-      const s1 = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.041, 0.082), stripe);
-      s1.position.x = -0.03;
-      group.add(s1);
-      const s2 = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.041, 0.082), stripe);
-      s2.position.x = 0.03;
-      group.add(s2);
-      // Red cross — small horizontal + vertical bar atop the pad
-      const crossH = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.005, 0.011), crossMat);
-      crossH.position.set(0, 0.021, 0);
-      group.add(crossH);
-      const crossV = new THREE.Mesh(new THREE.BoxGeometry(0.011, 0.005, 0.045), crossMat);
-      crossV.position.set(0, 0.021, 0);
-      group.add(crossV);
+
+      // Roll body (axis along X).
+      const roll = new THREE.Mesh(new THREE.CylinderGeometry(0.048, 0.048, 0.072, 18), cloth);
+      roll.rotation.z = Math.PI / 2; group.add(roll);
+      // Spiral wrap rings.
+      for (let i = 0; i < 4; i++) {
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(0.0482, 0.0034, 6, 22), clothDark);
+        ring.rotation.y = Math.PI / 2; ring.position.x = -0.027 + i * 0.018; group.add(ring);
+      }
+      // Loose frayed end draping down-forward.
+      const flap = new THREE.Mesh(new THREE.BoxGeometry(0.066, 0.058, 0.004), cloth);
+      flap.position.set(0, -0.05, 0.03); flap.rotation.x = 0.45; group.add(flap);
+      const flapTip = new THREE.Mesh(new THREE.BoxGeometry(0.058, 0.028, 0.003), clothDark);
+      flapTip.position.set(0, -0.086, 0.052); flapTip.rotation.x = 0.55; group.add(flapTip);
+      // Binding tie around the roll.
+      const tie = new THREE.Mesh(new THREE.TorusGeometry(0.0492, 0.006, 6, 18), tieMat);
+      tie.rotation.y = Math.PI / 2; tie.position.x = 0.006; group.add(tie);
+      // Painted field-medical cross on top of the roll.
+      const crossH = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.004, 0.008), crossMat);
+      crossH.position.set(0, 0.049, 0); group.add(crossH);
+      const crossV = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.004, 0.03), crossMat);
+      crossV.position.set(0, 0.049, 0); group.add(crossV);
+
       return group;
     },
     makeIcon() {
@@ -378,35 +399,42 @@ const _DEFS: Record<ItemId, ItemDef> = {
     },
     makeViewModel() {
       const group = new THREE.Group();
-      // ABH — scrap bar metal gets the weathered-metal procedural shader
-      // (scratches + worn highlights + edge dirt). Keeps emissive for the
-      // moody dark tone the original ironMat had.
-      const ironMat = vmMetal(0x6e5a4a, { wornScale: 6.0 });
+      // ACY — deep-detail rebuild: a proper double-ended crowbar. Faceted forged
+      // shaft, a curved nail-puller claw with a V slot at the top, a flattened
+      // beveled chisel pry-blade at the bottom, and a wrapped grip at the hand.
+      const ironMat = vmMetal(0x6e5a4a, { wornScale: 7.0, scratchStrength: 0.06 });
       ironMat.emissive = new THREE.Color(0x0a0806);
-      const tipMat = vmMetal(0x8a7a64, { wornScale: 6.0 });
-      // Main shaft — long bar, square cross-section, slight bend at the tip.
-      const shaft = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.34, 0.022), ironMat);
-      shaft.position.y = 0.05;
-      group.add(shaft);
-      // Bent prying tip — angled 25° at the top end.
-      const tip = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.08, 0.022), tipMat);
-      tip.position.set(-0.018, 0.24, 0);
-      tip.rotation.z = -0.44;       // ~25° bend toward the hook
-      group.add(tip);
-      // Forked hook at the very end — splits into 2 small claws.
-      const claw1 = new THREE.Mesh(new THREE.BoxGeometry(0.010, 0.020, 0.010), tipMat);
-      claw1.position.set(-0.038, 0.28, 0.008);
-      claw1.rotation.z = -0.44;
-      group.add(claw1);
-      const claw2 = new THREE.Mesh(new THREE.BoxGeometry(0.010, 0.020, 0.010), tipMat);
-      claw2.position.set(-0.038, 0.28, -0.008);
-      claw2.rotation.z = -0.44;
-      group.add(claw2);
-      // Grip wrap — leather binding at the base of the shaft.
-      const grip = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.10, 0.026),
-        new THREE.MeshLambertMaterial({ color: 0x2a1e16, flatShading: true }));
-      grip.position.y = -0.10;
-      group.add(grip);
+      const tipMat = vmMetal(0x9a886e, { wornScale: 6.0 });          // worn-bright working ends
+      const gripMat = createFabricMaterial(0x33251b, undefined, { disableShimmer: true });
+
+      // Octagonal forged shaft (faceted, not a plain box).
+      const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.0118, 0.0126, 0.32, 8), ironMat);
+      shaft.position.y = 0.06; group.add(shaft);
+
+      // Reinforced bend junction near the top.
+      const knee = new THREE.Mesh(new THREE.CylinderGeometry(0.0162, 0.0142, 0.05, 8), ironMat);
+      knee.position.set(-0.006, 0.215, 0); knee.rotation.z = -0.32; group.add(knee);
+
+      // Curved nail-puller claw — two flattened segments curling back.
+      const seg1 = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.02, 0.015), tipMat);
+      seg1.position.set(-0.024, 0.25, 0); seg1.rotation.z = -0.72; group.add(seg1);
+      const seg2 = new THREE.Mesh(new THREE.BoxGeometry(0.034, 0.017, 0.014), tipMat);
+      seg2.position.set(-0.052, 0.234, 0); seg2.rotation.z = -1.18; group.add(seg2);
+      // V nail-slot notched into the claw edge.
+      const slot = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.006, 0.022), ironMat);
+      slot.position.set(-0.031, 0.244, 0); slot.rotation.z = -0.72; group.add(slot);
+
+      // Bottom: flattened angled chisel / pry blade (double-ended).
+      const chisel = new THREE.Mesh(new THREE.BoxGeometry(0.031, 0.05, 0.012), tipMat);
+      chisel.position.set(0.007, -0.115, 0); chisel.rotation.z = 0.2; group.add(chisel);
+      const bevel = new THREE.Mesh(new THREE.BoxGeometry(0.033, 0.012, 0.005), tipMat);
+      bevel.position.set(0.014, -0.141, 0); bevel.rotation.z = 0.2; group.add(bevel);
+
+      // Wrapped grip at the hand zone (straddles the origin).
+      for (let i = 0; i < 6; i++) {
+        const band = new THREE.Mesh(new THREE.TorusGeometry(0.0138, 0.003, 6, 14), gripMat);
+        band.rotation.x = Math.PI / 2; band.position.y = 0.022 - i * 0.016; group.add(band);
+      }
       group.rotation.set(-0.15, 0.0, 0.10);
       return group;
     },
@@ -448,27 +476,80 @@ const _DEFS: Record<ItemId, ItemDef> = {
     },
     makeViewModel() {
       const group = new THREE.Group();
-      // ABH — machete blade gets weathered-metal shader (brushed scratches
-      // perpendicular to the blade length give the "honed edge" read).
-      const bladeMat = vmMetal(0xa8aab0, {
-        scratchAngle: 0,           // scratches along world X — perpendicular to blade as held
-        wornScale: 8.0,
-        scratchStrength: 0.07,
+      // ACY — deep-detail rebuild. Real extruded parang-style blade profile
+      // (belly bulge + clip tip) with a bevel-honed edge, a thicker spine ridge,
+      // a fuller groove, a crossguard + quillon, and a leather-wrapped grip with
+      // wrap bands, pommel, and rivets. Brushed scratches run ALONG the blade
+      // (scratchAngle ≈ vertical) for the honed read.
+      const steel = vmMetal(0xb4b6bc, { scratchAngle: Math.PI / 2, wornScale: 10.0, scratchStrength: 0.06 });
+      steel.emissive = new THREE.Color(0x121214);
+      const ironMat = vmMetal(0x33302a, { wornScale: 6.0 });            // guard / pommel dark iron
+      ironMat.emissive = new THREE.Color(0x070605);
+      const leatherMat = createFabricMaterial(0x4a3322, undefined, { disableShimmer: true });  // grip wrap
+      const rivetMat = vmMetal(0x9a9288, { wornScale: 3.0 });
+
+      // --- Blade: extruded 2D profile (flat in XY, thickness in Z) ---
+      const bs = new THREE.Shape();
+      bs.moveTo(-0.012, 0.0);                              // spine at ricasso
+      bs.lineTo(-0.014, 0.20);                             // up the straight spine
+      bs.lineTo(-0.009, 0.265);                            // spine just before tip
+      bs.quadraticCurveTo(0.004, 0.302, 0.013, 0.252);    // clip-point tip
+      bs.quadraticCurveTo(0.027, 0.175, 0.016, 0.045);    // belly bulge sweeping to the edge
+      bs.lineTo(0.012, 0.0);                               // cutting edge at the ricasso
+      bs.lineTo(-0.012, 0.0);
+      const bladeGeo = new THREE.ExtrudeGeometry(bs, {
+        depth: 0.0055, bevelEnabled: true, bevelThickness: 0.0016,
+        bevelSize: 0.0015, bevelSegments: 1, steps: 1,
       });
-      bladeMat.emissive = new THREE.Color(0x10100e);
-      const handleMat = new THREE.MeshLambertMaterial({ color: 0x2a1e16 });
-      const blade = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.28, 0.006), bladeMat);
-      blade.position.y = 0.10;
-      group.add(blade);
-      const tip = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.04, 0.006), bladeMat);
-      tip.position.y = 0.26;
-      group.add(tip);
-      const guard = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.012, 0.018), handleMat);
-      guard.position.y = -0.04;
+      bladeGeo.translate(0, 0, -0.00275);                 // center the thickness on z=0
+      group.add(new THREE.Mesh(bladeGeo, steel));
+
+      // Spine ridge — a touch thicker than the blade so it catches a highlight.
+      const spine = new THREE.Mesh(new THREE.BoxGeometry(0.0045, 0.255, 0.0092), steel);
+      spine.position.set(-0.0115, 0.128, 0);
+      group.add(spine);
+
+      // Fuller groove — a thin darker line engraved down each face.
+      for (const z of [0.0032, -0.0032]) {
+        const fuller = new THREE.Mesh(new THREE.BoxGeometry(0.0032, 0.205, 0.0009), ironMat);
+        fuller.position.set(-0.0025, 0.118, z);
+        group.add(fuller);
+      }
+
+      // --- Crossguard + quillon + bolster ---
+      const guard = new THREE.Mesh(new THREE.BoxGeometry(0.062, 0.017, 0.026), ironMat);
+      guard.position.y = -0.013;
       group.add(guard);
-      const handle = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.08, 0.022), handleMat);
-      handle.position.y = -0.09;
-      group.add(handle);
+      const quillon = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.026, 0.016), ironMat);
+      quillon.position.set(0.027, -0.027, 0);
+      group.add(quillon);
+      // Metal ferrule/bolster collaring the grip to the guard.
+      const bolster = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.0155, 0.016, 12), rivetMat);
+      bolster.position.y = -0.03;
+      group.add(bolster);
+
+      // --- Leather-wrapped grip (slimmer than the blade ricasso) ---
+      const core = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.0152, 0.082, 10), leatherMat);
+      core.position.y = -0.072;
+      group.add(core);
+      for (let i = 0; i < 5; i++) {
+        const band = new THREE.Mesh(new THREE.TorusGeometry(0.0146, 0.0032, 6, 14), leatherMat);
+        band.rotation.x = Math.PI / 2;
+        band.position.y = -0.044 - i * 0.0145;
+        group.add(band);
+      }
+      const pommel = new THREE.Mesh(new THREE.CylinderGeometry(0.0185, 0.013, 0.019, 12), ironMat);
+      pommel.position.y = -0.117;
+      group.add(pommel);
+      // Two rivets pinning the scales — heads proud on both faces.
+      const rivetGeo = new THREE.CylinderGeometry(0.0034, 0.0034, 0.034, 6);
+      for (const y of [-0.06, -0.092]) {
+        const rivet = new THREE.Mesh(rivetGeo, rivetMat);
+        rivet.rotation.x = Math.PI / 2;
+        rivet.position.set(0, y, 0);
+        group.add(rivet);
+      }
+
       group.rotation.set(-0.2, 0.0, 0.15);
       return group;
     },
@@ -521,36 +602,59 @@ const _DEFS: Record<ItemId, ItemDef> = {
     },
     makeViewModel() {
       const group = new THREE.Group();
-      // ABH — pipe staff: metal pipe + cap get weathered-metal; grip stays
-      // wrapped-cord look (plain Lambert).
-      const pipeMat = vmMetal(0x6a6055, { wornScale: 5.0 });
+      // ACY — deep-detail rebuild: scavenged plumbing. Two pipe sections joined
+      // by a hex union coupling with exposed threads, a bolted flange as the
+      // striking head, a hose-clamp field repair, and a taped cloth grip that
+      // straddles the origin so the hand holds the wrap.
+      const pipeMat = vmMetal(0x6a6055, { wornScale: 6.0, scratchStrength: 0.05 });
       pipeMat.emissive = new THREE.Color(0x0a0907);
-      const gripMat = new THREE.MeshLambertMaterial({ color: 0x382820 });
-      const capMat = vmMetal(0x4a4035, { wornScale: 5.0 });
-      // Main pipe — long thin cylinder along Y.
-      const pipe = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.018, 0.018, 0.46, 8),
-        pipeMat,
-      );
-      pipe.position.y = 0.10;
-      group.add(pipe);
-      // End cap at the top (the striking end) — slightly fatter.
-      const cap = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.026, 0.022, 0.04, 8),
-        capMat,
-      );
-      cap.position.y = 0.34;
-      group.add(cap);
-      // Cloth grip wrap at the bottom — 3 thin bands.
-      for (let i = 0; i < 3; i++) {
-        const band = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.022, 0.022, 0.018, 6),
-          gripMat,
-        );
-        band.position.y = -0.10 + i * 0.022;
-        group.add(band);
+      const rustMat = vmMetal(0x7a4a30, { wornScale: 8.0 });          // corroded joints
+      rustMat.emissive = new THREE.Color(0x0c0604);
+      const steelMat = vmMetal(0x8c877d, { wornScale: 4.0 });         // bright threads / clamps
+      const gripMat = createFabricMaterial(0x3a2c22, undefined, { disableShimmer: true });
+      const tapeMat = new THREE.MeshLambertMaterial({ color: 0x221d18 });
+
+      // Lower + upper pipe sections (slightly different bore reads as scavenged).
+      const lower = new THREE.Mesh(new THREE.CylinderGeometry(0.0182, 0.019, 0.16, 12), pipeMat);
+      lower.position.y = 0.135; group.add(lower);
+      const upper = new THREE.Mesh(new THREE.CylinderGeometry(0.0172, 0.0182, 0.20, 12), pipeMat);
+      upper.position.y = 0.33; group.add(upper);
+
+      // Union coupling — hex nut joining the sections, with exposed threads.
+      const coupling = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.026, 0.032, 6), rustMat);
+      coupling.position.y = 0.225; group.add(coupling);
+      for (const y of [0.205, 0.245]) {
+        const thread = new THREE.Mesh(new THREE.CylinderGeometry(0.0202, 0.0202, 0.012, 12), steelMat);
+        thread.position.y = y; group.add(thread);
       }
-      // Rest pose mirrors the machete tilt.
+
+      // Striking head: a pipe flange (wide disc) ringed with bolt heads.
+      const flange = new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.03, 0.02, 16), rustMat);
+      flange.position.y = 0.44; group.add(flange);
+      const flangeCap = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.034, 0.016, 16), steelMat);
+      flangeCap.position.y = 0.458; group.add(flangeCap);
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2;
+        const bolt = new THREE.Mesh(new THREE.CylinderGeometry(0.0038, 0.0038, 0.024, 6), steelMat);
+        bolt.position.set(Math.cos(a) * 0.026, 0.44, Math.sin(a) * 0.026);
+        group.add(bolt);
+      }
+
+      // Hose-clamp field repair on the upper section.
+      const clamp = new THREE.Mesh(new THREE.TorusGeometry(0.0192, 0.0028, 6, 16), steelMat);
+      clamp.rotation.x = Math.PI / 2; clamp.position.y = 0.37; group.add(clamp);
+
+      // Taped cloth grip straddling the origin (the hand holds here).
+      const tapeBase = new THREE.Mesh(new THREE.CylinderGeometry(0.0205, 0.021, 0.115, 12), tapeMat);
+      tapeBase.position.y = -0.005; group.add(tapeBase);
+      for (let i = 0; i < 6; i++) {
+        const band = new THREE.Mesh(new THREE.TorusGeometry(0.0218, 0.0034, 6, 16), gripMat);
+        band.rotation.x = Math.PI / 2; band.position.y = 0.045 - i * 0.018; group.add(band);
+      }
+      // Butt cap.
+      const butt = new THREE.Mesh(new THREE.CylinderGeometry(0.019, 0.0235, 0.018, 12), rustMat);
+      butt.position.y = -0.072; group.add(butt);
+
       group.rotation.set(-0.2, 0.0, 0.15);
       return group;
     },
@@ -593,53 +697,63 @@ const _DEFS: Record<ItemId, ItemDef> = {
     },
     makeViewModel() {
       const group = new THREE.Group();
-      // ABH — scrap gun: receiver + barrel get weathered-metal (heavy worn
-      // around the action). Grip stays plain wrapped-cord.
+      // ACY — deep-detail rebuild: a crude welded scrap pistol. Welded receiver
+      // (seam + ejection port), breech collar, wire-wrapped reinforced barrel +
+      // muzzle, front/rear sights, external hammer, wrapped canted grip, real
+      // trigger inside a loop guard. Barrel points -Z (viewmodel forward).
       const bodyMat = vmMetal(0x4a4640, { wornScale: 7.0 });
       bodyMat.emissive = new THREE.Color(0x0a0907);
       const barrelMat = vmMetal(0x2c2924, { wornScale: 7.0, scratchAngle: Math.PI / 2 });
-      const gripMat = new THREE.MeshLambertMaterial({ color: 0x382820 });
-      // Receiver — short rectangular block. Z is forward (camera +Z is
-      // into the screen via Three.js — viewmodel renders in -Z space so
-      // the barrel points away from the camera along its own +Z).
-      const receiver = new THREE.Mesh(
-        new THREE.BoxGeometry(0.04, 0.06, 0.10),
-        bodyMat,
-      );
-      receiver.position.set(0, 0, -0.04);
-      group.add(receiver);
-      // Barrel — thin cylinder extending forward from receiver.
-      const barrel = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.012, 0.012, 0.18, 8),
-        barrelMat,
-      );
-      barrel.rotation.x = Math.PI / 2;          // align cylinder Y → +Z (forward)
-      barrel.position.set(0, 0.012, -0.18);
-      group.add(barrel);
-      // Front sight — tiny bump on top of the barrel near the muzzle.
-      const sight = new THREE.Mesh(
-        new THREE.BoxGeometry(0.005, 0.012, 0.012),
-        bodyMat,
-      );
-      sight.position.set(0, 0.028, -0.26);
-      group.add(sight);
-      // Grip — angled downward from receiver.
-      const grip = new THREE.Mesh(
-        new THREE.BoxGeometry(0.026, 0.090, 0.030),
-        gripMat,
-      );
-      grip.position.set(0, -0.062, -0.005);
-      grip.rotation.x = -0.30;                  // canted slightly forward for a real pistol angle
-      group.add(grip);
-      // Trigger guard — small loop hanging below the receiver.
-      const guard = new THREE.Mesh(
-        new THREE.BoxGeometry(0.028, 0.014, 0.040),
-        bodyMat,
-      );
-      guard.position.set(0, -0.024, -0.022);
-      group.add(guard);
-      // Rest pose — pistol angled slightly upward + canted as if held
-      // at the hip-ish ready position.
+      const steelMat = vmMetal(0x8a8278, { wornScale: 4.0 });          // bright hammer/trigger/wire
+      const weldMat = vmMetal(0x6a4a38, { wornScale: 9.0 });           // rusty weld seam
+      const gripMat = createFabricMaterial(0x33251b, undefined, { disableShimmer: true });
+
+      // Receiver (welded scrap block) + a rough weld seam + ejection port.
+      const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.041, 0.062, 0.105), bodyMat);
+      receiver.position.set(0, 0, -0.04); group.add(receiver);
+      const seam = new THREE.Mesh(new THREE.BoxGeometry(0.013, 0.011, 0.10), weldMat);
+      seam.position.set(0, 0.034, -0.04); group.add(seam);
+      const port = new THREE.Mesh(new THREE.BoxGeometry(0.044, 0.02, 0.032), barrelMat);
+      port.position.set(0, 0.013, -0.018); group.add(port);
+
+      // Breech collar → barrel → muzzle, with wire-wrap reinforcement bands.
+      const breech = new THREE.Mesh(new THREE.CylinderGeometry(0.021, 0.021, 0.03, 10), bodyMat);
+      breech.rotation.x = Math.PI / 2; breech.position.set(0, 0.013, -0.095); group.add(breech);
+      const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.0115, 0.0125, 0.175, 10), barrelMat);
+      barrel.rotation.x = Math.PI / 2; barrel.position.set(0, 0.013, -0.188); group.add(barrel);
+      for (const z of [-0.155, -0.205, -0.245]) {
+        const wire = new THREE.Mesh(new THREE.TorusGeometry(0.0132, 0.0022, 6, 14), steelMat);
+        wire.position.set(0, 0.013, z); group.add(wire);
+      }
+      const muzzle = new THREE.Mesh(new THREE.CylinderGeometry(0.0155, 0.0132, 0.024, 10), bodyMat);
+      muzzle.rotation.x = Math.PI / 2; muzzle.position.set(0, 0.013, -0.278); group.add(muzzle);
+
+      // Sights — front blade + rear notch block; external hammer at the rear.
+      const frontSight = new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.015, 0.008), steelMat);
+      frontSight.position.set(0, 0.032, -0.258); group.add(frontSight);
+      const rearSight = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.011, 0.009), bodyMat);
+      rearSight.position.set(0, 0.038, -0.006); group.add(rearSight);
+      const hammer = new THREE.Mesh(new THREE.BoxGeometry(0.013, 0.024, 0.009), steelMat);
+      hammer.position.set(0, 0.03, 0.014); hammer.rotation.x = 0.32; group.add(hammer);
+
+      // Wrapped canted grip (subgroup inherits the cant) with a base plate.
+      const gripG = new THREE.Group();
+      gripG.position.set(0, -0.062, 0.0); gripG.rotation.x = -0.34;
+      gripG.add(new THREE.Mesh(new THREE.BoxGeometry(0.027, 0.094, 0.034), gripMat));
+      for (let i = 0; i < 4; i++) {
+        const band = new THREE.Mesh(new THREE.BoxGeometry(0.031, 0.006, 0.038), barrelMat);
+        band.position.y = 0.03 - i * 0.022; gripG.add(band);
+      }
+      const basePlate = new THREE.Mesh(new THREE.BoxGeometry(0.031, 0.012, 0.038), bodyMat);
+      basePlate.position.y = -0.052; gripG.add(basePlate);
+      group.add(gripG);
+
+      // Trigger guard loop + trigger.
+      const guard = new THREE.Mesh(new THREE.TorusGeometry(0.016, 0.0035, 6, 16), bodyMat);
+      guard.rotation.y = Math.PI / 2; guard.position.set(0, -0.03, -0.022); group.add(guard);
+      const trigger = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.017, 0.005), steelMat);
+      trigger.position.set(0, -0.029, -0.02); trigger.rotation.x = 0.25; group.add(trigger);
+
       group.rotation.set(-0.08, 0.02, 0.10);
       return group;
     },
@@ -697,24 +811,38 @@ const _DEFS: Record<ItemId, ItemDef> = {
       return { consumed: true, message: `loaded (${cur + 1}/${maxAmmo})` };
     },
     makeViewModel() {
-      // A single bullet held in the fingertips — small cylinder.
+      // ACY — deep-detail rebuild: a proper bottlenecked rifle cartridge. Rimmed
+      // base + extractor groove + primer, brass case body, shoulder taper, necked
+      // mouth with a crimp, and a copper-jacketed ogive bullet.
       const group = new THREE.Group();
-      // ABH — bullet brass case gets weathered metal with tight scratches.
-      const brassMat = vmMetal(0xa28860, { wornScale: 14.0, scratchStrength: 0.03 });
-      brassMat.emissive = new THREE.Color(0x100a04);
-      const tipMat = vmMetal(0x484035, { wornScale: 14.0 });
-      const case_ = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.014, 0.014, 0.035, 8),
-        brassMat,
-      );
-      case_.position.y = 0.018;
-      group.add(case_);
-      const tip = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.013, 0.0, 0.020, 8),
-        tipMat,
-      );
-      tip.position.y = 0.045;
-      group.add(tip);
+      const brassMat = vmMetal(0xb09464, { wornScale: 16.0, scratchStrength: 0.03 });
+      brassMat.emissive = new THREE.Color(0x120c05);
+      const copperMat = vmMetal(0x9a5a32, { wornScale: 16.0, scratchStrength: 0.03 });
+      copperMat.emissive = new THREE.Color(0x140a04);
+      const primerMat = vmMetal(0x6a6258, { wornScale: 8.0 });
+
+      const rim = new THREE.Mesh(new THREE.CylinderGeometry(0.0156, 0.0156, 0.005, 14), brassMat);
+      rim.position.y = 0.0025; group.add(rim);
+      const groove = new THREE.Mesh(new THREE.CylinderGeometry(0.0122, 0.0122, 0.004, 14), brassMat);
+      groove.position.y = 0.0075; group.add(groove);
+      const primer = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.0035, 10), primerMat);
+      primer.position.y = 0.0008; group.add(primer);
+
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.0146, 0.0152, 0.026, 14), brassMat);
+      body.position.y = 0.0225; group.add(body);
+      const shoulder = new THREE.Mesh(new THREE.CylinderGeometry(0.0106, 0.0146, 0.008, 14), brassMat);
+      shoulder.position.y = 0.0395; group.add(shoulder);
+      const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.0103, 0.0106, 0.009, 14), brassMat);
+      neck.position.y = 0.048; group.add(neck);
+      const crimp = new THREE.Mesh(new THREE.TorusGeometry(0.0104, 0.0012, 6, 14), copperMat);
+      crimp.rotation.x = Math.PI / 2; crimp.position.y = 0.051; group.add(crimp);
+
+      const bulletBase = new THREE.Mesh(new THREE.CylinderGeometry(0.0099, 0.0103, 0.012, 14), copperMat);
+      bulletBase.position.y = 0.058; group.add(bulletBase);
+      const ogive = new THREE.Mesh(
+        new THREE.SphereGeometry(0.0099, 14, 10, 0, Math.PI * 2, 0, Math.PI / 2), copperMat);
+      ogive.position.y = 0.064; ogive.scale.y = 1.7; group.add(ogive);
+
       group.rotation.set(-0.4, 0.0, 0.20);
       return group;
     },
@@ -753,66 +881,70 @@ const _DEFS: Record<ItemId, ItemDef> = {
     },
     makeViewModel() {
       const group = new THREE.Group();
-      // ABH — energy pistol: alloy body + accent get weathered-metal with
-      // a finer scale (high-tech tool, less worn than scrap gear).
-      const bodyMat = vmMetal(0x2a3540, { wornScale: 10.0, scratchStrength: 0.04 });
+      // ACY — deep-detail rebuild: a sleek salvaged sci-fi sidearm, distinct
+      // from the crude scrap_gun. Angular alloy body + beveled cowl + heat-sink
+      // vent fins, a glowing barrel-coil emitter rail, a muzzle lens, energy-cell
+      // windows, and a grooved grip. All glow elements share `chamberMat` so
+      // updateHeld pulses them together cold→orange→hot as the shot charges.
+      const bodyMat = vmMetal(0x2a3540, { wornScale: 11.0, scratchStrength: 0.035 });
       bodyMat.emissive = new THREE.Color(0x0a0d12);
-      const accentMat = vmMetal(0x4a5560, { wornScale: 10.0, scratchStrength: 0.04 });
-      const gripMat = new THREE.MeshLambertMaterial({ color: 0x18202a });
-      // Chamber mat is emissive so we can pulse it via updateHeld as
-      // the weapon charges. Stash it on group.userData so updateHeld
-      // can find it.
-      const chamberMat = new THREE.MeshBasicMaterial({ color: 0x1a1410 });
-      // Receiver — short angular body.
-      const receiver = new THREE.Mesh(
-        new THREE.BoxGeometry(0.045, 0.055, 0.085),
-        bodyMat,
-      );
-      receiver.position.set(0, 0, -0.05);
-      group.add(receiver);
-      // Barrel — flat-topped emitter rather than a round muzzle.
-      const barrel = new THREE.Mesh(
-        new THREE.BoxGeometry(0.028, 0.022, 0.10),
-        accentMat,
-      );
-      barrel.position.set(0, 0.01, -0.14);
-      group.add(barrel);
-      // Emitter cap at the muzzle — small bright disc that glows
-      // when fired (could be tied to swingViewKick later).
-      const emitter = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.011, 0.011, 0.004, 8),
-        chamberMat,
-      );
-      emitter.rotation.x = Math.PI / 2;
-      emitter.position.set(0, 0.01, -0.193);
-      group.add(emitter);
-      // Charge chamber — small box on top of the receiver that glows
-      // brighter as the charge ramps. We tint chamberMat from dark to
-      // hot blue-white via updateHeld below.
-      const chamber = new THREE.Mesh(
-        new THREE.BoxGeometry(0.020, 0.012, 0.025),
-        chamberMat,
-      );
-      chamber.position.set(0, 0.04, -0.045);
-      group.add(chamber);
+      const accentMat = vmMetal(0x55636e, { wornScale: 11.0, scratchStrength: 0.035 });
+      const darkMat = vmMetal(0x171d24, { wornScale: 12.0 });
+      const gripMat = createFabricMaterial(0x161d27, undefined, { disableShimmer: true });
+      const chamberMat = new THREE.MeshBasicMaterial({ color: 0x1a1410 });   // pulsed by updateHeld
+
+      // Receiver + beveled top cowl + heat-sink vent fins.
+      const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.046, 0.056, 0.092), bodyMat);
+      receiver.position.set(0, 0, -0.05); group.add(receiver);
+      const cowl = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.018, 0.086), accentMat);
+      cowl.position.set(0, 0.035, -0.05); group.add(cowl);
+      for (let i = 0; i < 4; i++) {
+        const fin = new THREE.Mesh(new THREE.BoxGeometry(0.034, 0.009, 0.005), darkMat);
+        fin.position.set(0, 0.047, -0.018 - i * 0.015); group.add(fin);
+      }
+      // Side energy-cell window (glow).
+      const cell = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.016, 0.028), chamberMat);
+      cell.position.set(0, 0.0, -0.038); group.add(cell);
+
+      // Emitter rail barrel + top groove rail + glowing coil rings + muzzle lens.
+      const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.027, 0.024, 0.11), accentMat);
+      barrel.position.set(0, 0.012, -0.145); group.add(barrel);
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.007, 0.1), darkMat);
+      rail.position.set(0, 0.027, -0.145); group.add(rail);
+      for (const z of [-0.115, -0.15, -0.185]) {
+        const coil = new THREE.Mesh(new THREE.TorusGeometry(0.0162, 0.0026, 6, 16), chamberMat);
+        coil.position.set(0, 0.012, z); group.add(coil);
+      }
+      const emitter = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.013, 0.006, 14), chamberMat);
+      emitter.rotation.x = Math.PI / 2; emitter.position.set(0, 0.012, -0.205); group.add(emitter);
+      const emitterRing = new THREE.Mesh(new THREE.TorusGeometry(0.0162, 0.0032, 8, 16), accentMat);
+      emitterRing.position.set(0, 0.012, -0.205); group.add(emitterRing);
+
+      // Charge chamber across the action (the primary glow element).
+      const chamber = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.03, 14), chamberMat);
+      chamber.rotation.z = Math.PI / 2; chamber.position.set(0, 0.03, -0.018); group.add(chamber);
+
       group.userData.chamberMat = chamberMat;
-      group.userData.emitterMat = chamberMat;     // share for now
-      // Grip — angled down.
-      const grip = new THREE.Mesh(
-        new THREE.BoxGeometry(0.028, 0.085, 0.030),
-        gripMat,
-      );
-      grip.position.set(0, -0.060, -0.015);
-      grip.rotation.x = -0.28;
-      group.add(grip);
-      // Trigger guard.
-      const guard = new THREE.Mesh(
-        new THREE.BoxGeometry(0.030, 0.012, 0.038),
-        bodyMat,
-      );
-      guard.position.set(0, -0.022, -0.030);
-      group.add(guard);
-      // Rest pose — similar to scrap_gun.
+      group.userData.emitterMat = chamberMat;
+
+      // Grip subgroup — angled, finger grooves + a glowing cell strip.
+      const gripG = new THREE.Group();
+      gripG.position.set(0, -0.058, -0.012); gripG.rotation.x = -0.30;
+      gripG.add(new THREE.Mesh(new THREE.BoxGeometry(0.028, 0.088, 0.032), gripMat));
+      for (let i = 0; i < 3; i++) {
+        const groove = new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.005, 0.034), darkMat);
+        groove.position.set(0, 0.022 - i * 0.02, 0.004); gripG.add(groove);
+      }
+      const cellStrip = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.05, 0.012), chamberMat);
+      cellStrip.position.set(0.016, 0.0, 0.0); gripG.add(cellStrip);
+      group.add(gripG);
+
+      // Trigger guard loop + trigger.
+      const guard = new THREE.Mesh(new THREE.TorusGeometry(0.016, 0.003, 6, 16), bodyMat);
+      guard.rotation.y = Math.PI / 2; guard.position.set(0, -0.028, -0.03); group.add(guard);
+      const trigger = new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.016, 0.005), accentMat);
+      trigger.position.set(0, -0.026, -0.028); trigger.rotation.x = 0.2; group.add(trigger);
+
       group.rotation.set(-0.08, 0.02, 0.10);
       return group;
     },
@@ -950,18 +1082,45 @@ const _DEFS: Record<ItemId, ItemDef> = {
       grip.position.set(0, -0.052, 0.01);
       grip.rotation.x = -0.30;
       group.add(grip);
-      // Trigger guard — metal loop below the action.
-      const guard = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.012, 0.040), steelMat);
-      guard.position.set(0, -0.024, -0.01);
-      group.add(guard);
-      // Bolt handle — small knob jutting from the right of the receiver.
-      const bolt = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.006, 0.006, 0.05, 6),
-        steelMat,
-      );
-      bolt.rotation.z = Math.PI / 2;
-      bolt.position.set(0.035, 0.012, 0.02);
-      group.add(bolt);
+      // Trigger guard — proper metal loop + a trigger inside it.
+      const guard = new THREE.Mesh(new THREE.TorusGeometry(0.016, 0.0032, 6, 16), steelMat);
+      guard.rotation.y = Math.PI / 2; guard.position.set(0, -0.026, -0.012); group.add(guard);
+      const trigger = new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.016, 0.005), steelMat);
+      trigger.position.set(0, -0.024, -0.01); trigger.rotation.x = 0.2; group.add(trigger);
+      // Bolt handle — knob jutting from the right of the receiver, with a ball.
+      const bolt = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.05, 6), steelMat);
+      bolt.rotation.z = Math.PI / 2; bolt.position.set(0.035, 0.012, 0.02); group.add(bolt);
+      const boltBall = new THREE.Mesh(new THREE.SphereGeometry(0.009, 10, 8), steelMat);
+      boltBall.position.set(0.058, 0.012, 0.02); group.add(boltBall);
+
+      // ACY — marksman scope: tube + objective bell + ring mounts + glass lenses.
+      const glassMat = vmGlass(0x2a3a44, { frostLevel: 0.1, edgeHighlight: 0.8, opacity: 0.7 });
+      const scopeTube = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.15, 14), steelMat);
+      scopeTube.rotation.x = Math.PI / 2; scopeTube.position.set(0, 0.052, -0.085); group.add(scopeTube);
+      const objective = new THREE.Mesh(new THREE.CylinderGeometry(0.0185, 0.015, 0.04, 14), steelMat);
+      objective.rotation.x = Math.PI / 2; objective.position.set(0, 0.052, -0.165); group.add(objective);
+      for (const z of [-0.18, -0.02]) {        // lens glass at each end
+        const lens = new THREE.Mesh(new THREE.CylinderGeometry(z < -0.1 ? 0.017 : 0.0125, z < -0.1 ? 0.017 : 0.0125, 0.004, 14), glassMat);
+        lens.rotation.x = Math.PI / 2; lens.position.set(0, 0.052, z); group.add(lens);
+      }
+      for (const z of [-0.04, -0.13]) {         // two ring mounts to the receiver
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(0.015, 0.0035, 6, 14), steelMat);
+        ring.position.set(0, 0.052, z); group.add(ring);
+        const post = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.018, 0.012), steelMat);
+        post.position.set(0, 0.04, z); group.add(post);
+      }
+
+      // Box magazine below the action.
+      const mag = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.052, 0.046), steelMat);
+      mag.position.set(0, -0.045, -0.052); mag.rotation.x = 0.12; group.add(mag);
+      // Barrel band joining the fore-grip to the barrel.
+      const band = new THREE.Mesh(new THREE.TorusGeometry(0.022, 0.0035, 6, 14), steelMat);
+      band.rotation.x = Math.PI / 2; band.position.set(0, 0.009, -0.292); group.add(band);
+      // Recoil pad at the butt of the stock.
+      const pad = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.072, 0.014),
+        new THREE.MeshLambertMaterial({ color: 0x1a140f }));
+      pad.position.set(0, -0.022, 0.214); pad.rotation.x = 0.12; group.add(pad);
+
       // Rest pose — held at a slight cant, shouldered-ready angle.
       group.rotation.set(-0.06, 0.04, 0.08);
       return group;
@@ -1649,48 +1808,47 @@ const _DEFS: Record<ItemId, ItemDef> = {
     },
     makeViewModel() {
       const group = new THREE.Group();
-      // Branch shaft
-      const shaftMat = new THREE.MeshLambertMaterial({ color: 0x6a4a2a });
-      const shaft = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.018, 0.024, 0.34, 6),
-        shaftMat,
-      );
-      shaft.position.y = -0.04;
-      group.add(shaft);
-      // Cloth-wrap head
-      const wrapMat = new THREE.MeshLambertMaterial({ color: 0x8a6038 });
-      const wrap = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.045, 0.035, 0.10, 8),
-        wrapMat,
-      );
-      wrap.position.y = 0.14;
-      group.add(wrap);
-      // Flame — a small emissive cone at the top. updateHeld toggles its
-      // material.emissiveIntensity along with the light.
+      // ACY — deep-detail rebuild: a real branch (wood grain + knot + side nub)
+      // with overlapping rag wrap layers lashed by binding cords and a charred
+      // pitch-soaked head. Flame cone + PointLight keep their names for updateHeld.
+      const shaftMat = vmWood(0x5a3c22, { ringDensity: 7.0, weatherLevel: 0.5 });
+      const ragMat = createFabricMaterial(0x6a4a30, undefined, { disableShimmer: true });
+      const charMat = createFabricMaterial(0x241a12, undefined, { disableShimmer: true });
+      const cordMat = new THREE.MeshLambertMaterial({ color: 0x2a2018 });
+
+      // Branch shaft + knot bump + a broken side nub.
+      const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.017, 0.023, 0.34, 8), shaftMat);
+      shaft.position.y = -0.04; group.add(shaft);
+      const knot = new THREE.Mesh(new THREE.SphereGeometry(0.02, 8, 6), shaftMat);
+      knot.position.set(0.005, -0.10, 0); knot.scale.set(1, 0.7, 1); group.add(knot);
+      const nub = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.009, 0.04, 5), shaftMat);
+      nub.position.set(0.022, -0.145, 0); nub.rotation.z = 0.9; group.add(nub);
+
+      // Rag-wrapped head — overlapping layers, top two charred.
+      for (let i = 0; i < 4; i++) {
+        const r = 0.041 + i * 0.0015;
+        const wrap = new THREE.Mesh(new THREE.CylinderGeometry(r, r - 0.006, 0.032, 10), i >= 2 ? charMat : ragMat);
+        wrap.position.y = 0.105 + i * 0.027; wrap.rotation.y = i * 0.6; group.add(wrap);
+      }
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.042, 10, 8), charMat);
+      head.position.y = 0.215; head.scale.y = 0.82; group.add(head);
+      // Binding cords lashing the rags to the stick.
+      for (const y of [0.098, 0.155]) {
+        const cord = new THREE.Mesh(new THREE.TorusGeometry(0.044, 0.0042, 6, 16), cordMat);
+        cord.rotation.x = Math.PI / 2; cord.position.y = y; group.add(cord);
+      }
+
+      // Flame — emissive cone (named; updateHeld toggles opacity).
       const flameMat = new THREE.MeshBasicMaterial({
-        color: Tuning.TORCH_LIGHT_COLOR_HEX,
-        transparent: true,
-        opacity: 0.0,
-        toneMapped: false,
-        fog: false,
+        color: Tuning.TORCH_LIGHT_COLOR_HEX, transparent: true, opacity: 0.0,
+        toneMapped: false, fog: false,
       });
-      const flame = new THREE.Mesh(
-        new THREE.ConeGeometry(0.05, 0.14, 6),
-        flameMat,
-      );
-      flame.name = 'torchFlame';
-      flame.position.y = 0.26;
-      group.add(flame);
-      // PointLight at the flame. Starts at 0 intensity.
+      const flame = new THREE.Mesh(new THREE.ConeGeometry(0.052, 0.15, 7), flameMat);
+      flame.name = 'torchFlame'; flame.position.y = 0.27; group.add(flame);
+
       const light = new THREE.PointLight(
-        Tuning.TORCH_LIGHT_COLOR_HEX,
-        0,
-        Tuning.TORCH_LIGHT_DISTANCE,
-        2,
-      );
-      light.name = 'torchLight';
-      light.position.y = 0.26;
-      group.add(light);
+        Tuning.TORCH_LIGHT_COLOR_HEX, 0, Tuning.TORCH_LIGHT_DISTANCE, 2);
+      light.name = 'torchLight'; light.position.y = 0.27; group.add(light);
       return group;
     },
     makeIcon() {
@@ -1753,40 +1911,43 @@ const _DEFS: Record<ItemId, ItemDef> = {
     },
     makeViewModel() {
       const group = new THREE.Group();
-      // Body — short cylinder
-      const bodyMat = new THREE.MeshLambertMaterial({ color: 0x3a3630 });
-      const body = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.035, 0.04, 0.16, 10),
-        bodyMat,
-      );
-      body.rotation.z = Math.PI / 2;
-      body.position.set(0, 0, -0.05);
-      group.add(body);
-      // Lens — bright disc on the forward end
+      // ACY — deep-detail rebuild: a salvaged hand-light as a forward-pointing
+      // tube (beam along -Z): machined body + knurled grip rings, flared bezel
+      // head with an interior reflector behind the lens, and a tail cap with a
+      // push button. Lens + SpotLight keep their names for updateHeld.
+      const bodyMat = vmMetal(0x3a3630, { wornScale: 8.0 });
+      const headMat = vmMetal(0x4a463e, { wornScale: 7.0 });
+      const knurlMat = vmMetal(0x22201c, { wornScale: 11.0 });
+      const reflMat = vmMetal(0xc0bcb0, { wornScale: 6.0 });
+      const buttonMat = new THREE.MeshLambertMaterial({ color: 0x6a2620 });
       const lensMat = new THREE.MeshBasicMaterial({
-        color: 0xe4f0ff,
-        transparent: true,
-        opacity: 0.4,
-        toneMapped: false,
-        fog: false,
+        color: 0xe4f0ff, transparent: true, opacity: 0.4, toneMapped: false, fog: false,
       });
-      const lens = new THREE.Mesh(
-        new THREE.CircleGeometry(0.035, 12),
-        lensMat,
-      );
-      lens.name = 'flashlightLens';
-      lens.position.set(0, 0, -0.135);
-      // Lens faces forward (-Z), already aligned by default CircleGeometry.
-      group.add(lens);
-      // Grip detail — small ridges
-      for (let i = 0; i < 3; i++) {
-        const ridge = new THREE.Mesh(
-          new THREE.BoxGeometry(0.005, 0.082, 0.005),
-          new THREE.MeshLambertMaterial({ color: 0x1a1612 }),
-        );
-        ridge.position.set(0.02 - i * 0.018, 0, -0.05);
-        group.add(ridge);
+
+      // Main body tube + knurled grip rings.
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.028, 0.13, 14), bodyMat);
+      body.rotation.x = Math.PI / 2; body.position.set(0, 0, -0.03); group.add(body);
+      for (let i = 0; i < 5; i++) {
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(0.0276, 0.002, 6, 16), knurlMat);
+        ring.position.set(0, 0, -0.002 - i * 0.013); group.add(ring);
       }
+      // Flared bezel head + interior reflector cone.
+      const head = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.03, 0.05, 16), headMat);
+      head.rotation.x = Math.PI / 2; head.position.set(0, 0, -0.115); group.add(head);
+      const refl = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.033, 0.012, 0.03, 16, 1, true), reflMat);
+      refl.rotation.x = Math.PI / 2; refl.position.set(0, 0, -0.123); group.add(refl);
+      // Tail cap + push button.
+      const tail = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.027, 0.022, 14), headMat);
+      tail.rotation.x = Math.PI / 2; tail.position.set(0, 0, 0.046); group.add(tail);
+      const button = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 0.009, 10), buttonMat);
+      button.rotation.x = Math.PI / 2; button.position.set(0, 0, 0.06); group.add(button);
+
+      // Lens — bright disc at the bezel front (named; updateHeld pulses opacity).
+      const lens = new THREE.Mesh(new THREE.CircleGeometry(0.034, 16), lensMat);
+      lens.name = 'flashlightLens';
+      lens.position.set(0, 0, -0.14);
+      group.add(lens);
       // SpotLight at the lens, pointed along -Z (camera forward).
       const light = new THREE.SpotLight(
         Tuning.FLASHLIGHT_LIGHT_COLOR_HEX,
@@ -2415,51 +2576,40 @@ const _DEFS: Record<ItemId, ItemDef> = {
       return { consumed: false, message: 'aim at a sled and click to tie' };
     },
     makeViewModel() {
-      // ABJ — B13: applied wood-grain shader for hempy-fiber reading
-      // (tight rings + weathering read as twisted rope strands). Added
-      // a second concentric coil loop for "looped multiple times"
-      // silhouette + a fraying tail strand at one end.
+      // ACY — deep-detail rebuild: a wound rope hank. Several side-by-side loops
+      // form a thick coiled bundle (tilted for a 3/4 read), lashed at the bottom
+      // by binding wraps, with a fraying tail hanging off. Tight wood-grain rings
+      // read as twisted-fiber striations (D107 zero-asset).
       const group = new THREE.Group();
-      const coilMat = vmWood(0x6e4a2a, {
-        grainAxis: 0,           // grain along the rope's circumference
-        ringDensity: 24.0,      // very tight — reads as fiber striations
-        weatherLevel: 0.45,
-      });
-      // Main coil
-      const coil = new THREE.Mesh(
-        new THREE.TorusGeometry(0.07, 0.022, 8, 16),
-        coilMat,
-      );
-      coil.rotation.x = Math.PI / 2;
-      coil.rotation.z = 0.2;
-      group.add(coil);
-      // Second inner coil — smaller torus stacked behind for "wound
-      // multiple times" depth.
-      const coil2 = new THREE.Mesh(
-        new THREE.TorusGeometry(0.055, 0.018, 6, 14),
-        coilMat,
-      );
-      coil2.rotation.x = Math.PI / 2;
-      coil2.rotation.z = 0.35;
-      coil2.position.z = -0.012;
-      group.add(coil2);
-      for (let i = 0; i < 2; i++) {
-        const strand = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.012, 0.012, 0.18, 6),
-          coilMat,
-        );
-        strand.rotation.x = Math.PI / 2;
-        strand.position.set((i - 0.5) * 0.06, 0, 0);
-        group.add(strand);
+      const coilMat = vmWood(0x6e4a2a, { grainAxis: 0, ringDensity: 28.0, weatherLevel: 0.5 });
+      const coilMat2 = vmWood(0x5e3e22, { grainAxis: 0, ringDensity: 28.0, weatherLevel: 0.62 });
+      const lashMat = new THREE.MeshLambertMaterial({ color: 0x46301c });
+
+      // Tilted coil subgroup so the lashing + tail follow the loops.
+      const coilG = new THREE.Group();
+      coilG.rotation.set(0.52, 0.12, 0.15);
+      const loops = 5;
+      for (let i = 0; i < loops; i++) {
+        const r = 0.067 - Math.abs(i - (loops - 1) / 2) * 0.0035;   // slight mid-bundle bulge
+        const loop = new THREE.Mesh(new THREE.TorusGeometry(r, 0.0108, 8, 26), i % 2 ? coilMat2 : coilMat);
+        loop.position.z = (i - (loops - 1) / 2) * 0.0135;
+        loop.rotation.z = i * 0.11;
+        coilG.add(loop);
       }
-      // Fraying tail strand sticking out (asymmetric break).
-      const tail = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.008, 0.005, 0.06, 5),
-        coilMat,
-      );
-      tail.position.set(0.08, 0.02, 0.04);
-      tail.rotation.set(0.3, 0.5, 0.8);
-      group.add(tail);
+      // Binding lashing at the bottom of the hank — 3 wraps around the bundle.
+      for (let i = 0; i < 3; i++) {
+        const wrap = new THREE.Mesh(new THREE.TorusGeometry(0.034, 0.005, 6, 16), lashMat);
+        wrap.rotation.y = Math.PI / 2;
+        wrap.position.set((i - 1) * 0.012, -0.066, 0);
+        coilG.add(wrap);
+      }
+      // Fraying tail hanging from the lashing.
+      const tail = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.0095, 0.085, 8), coilMat);
+      tail.position.set(0.016, -0.10, 0.018); tail.rotation.set(0.25, 0, 0.32); coilG.add(tail);
+      const frayTip = new THREE.Mesh(new THREE.CylinderGeometry(0.0095, 0.003, 0.03, 6), coilMat2);
+      frayTip.position.set(0.03, -0.142, 0.03); frayTip.rotation.set(0.25, 0, 0.45); coilG.add(frayTip);
+
+      group.add(coilG);
       return group;
     },
     makeIcon() {
