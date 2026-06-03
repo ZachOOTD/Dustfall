@@ -1133,19 +1133,22 @@ export function updatePlayerRig(ctx: GameContext, dt: number): void {
     // to the footpegs (fwd + out + low). Tuned in the speeder-seated harness.
     for (let i = 0; i < 2; i++) {
       const side = i === 1 ? 1 : -1;
-      // Legs: thigh forward + splayed astride, shin bent down/forward to the peg.
-      rig.hips[i].rotation.set(1.25, 0, side * 0.22);
-      rig.knees[i].rotation.x = 1.35;
-      rig.ankles[i].rotation.x = 0.25;
-      // Arms: reach forward to the bars — shoulder well forward + slightly in,
-      // elbow bent so the hands come up to bar height, wrist cocked to grip.
-      rig.shoulders[i].rotation.set(1.15, 0, side * 0.12);
-      rig.elbows[i].rotation.x = 0.85;
-      rig.wrists[i].rotation.x = 0.15;
+      // Legs: thigh forward to ~horizontal, knee bent so the shin drops down to
+      // the footpeg (pegs are fwd + low + out). Ankle flexes the foot flat onto
+      // the peg. (Earlier values over-flexed → knees/feet curled up overhead.)
+      rig.hips[i].rotation.set(0.85, 0, side * 0.20);
+      rig.knees[i].rotation.x = 0.95;
+      rig.ankles[i].rotation.x = -0.25;
+      // Arms: the bars sit BELOW the shoulders + forward, so the upper arm
+      // angles forward-DOWN (modest shoulder pitch) and the elbow bends so the
+      // hands meet the grips. (shoulder.x=1.15 raised them overhead — wrong.)
+      rig.shoulders[i].rotation.set(0.55, 0, side * 0.16);
+      rig.elbows[i].rotation.x = 0.55;
+      rig.wrists[i].rotation.x = 0.1;
     }
     rig.body.position.set(0, 0, 0);
     rig.body.rotation.x = 0;
-    rig.spineBend.rotation.set(0.34, 0, 0);            // forward lean onto the bars
+    rig.spineBend.rotation.set(0.28, 0, 0);            // forward lean onto the bars
     rig.headGroup.position.y = HEAD_Y;
     rig._aimPrevHeading = rig.heading;
     return;

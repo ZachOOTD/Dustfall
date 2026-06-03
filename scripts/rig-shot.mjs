@@ -534,12 +534,11 @@ const SCENARIOS = {
       const camDotFwd = +(camToBikeX * bfx + camToBikeZ * bfz).toFixed(2);
       console.error('[seatfacing] faceDotFwd=' + faceDotFwd + (faceDotFwd > 0 ? '(rig FORWARD)' : '(rig BACKWARD)') +
         ' camDotFwd=' + camDotFwd + (camDotFwd > 0 ? '(cam BEHIND)' : '(cam FRONT)'));
-      // SIDE profile of the seated rig (camera off the bike's left, looking
-      // across) so the riding pose reads: arms→bars, lean, knees→pegs, seat.
+      // BEHIND view (matches the user's chase-cam screenshot) so the riding
+      // pose reads as they see it: hands on bars, feet on pegs, sit.
       ctx.flags.paused = true;
-      const bleft = new V(bfz, 0, -bfx); // bike's left (perp to forward)
-      cam.position.set(p.x + bleft.x * 3.0, p.y + 1.0, p.z + bleft.z * 3.0);
-      cam.lookAt(p.x + bfx * 0.2, p.y + 0.2, p.z + bfz * 0.2);
+      cam.position.set(p.x - bfx * 3.0, p.y + 1.9, p.z - bfz * 3.0);
+      cam.lookAt(p.x + bfx * 0.6, p.y + 0.4, p.z + bfz * 0.6);
       cam.updateMatrixWorld(true);
       return { yaw: +yaw.toFixed(2), faceDotFwd, camDotFwd };
     });
