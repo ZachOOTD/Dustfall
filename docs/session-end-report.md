@@ -2,9 +2,18 @@
 
 Cumulative state. Rewritten end-to-end at each `/session-end`.
 
-**Current state**: Session ACW shipped (2026-06-02 — overnight: full art/animation + storm-feel pass). 100+ sessions post-MVP. `npm run verify` (tsc) PASS. **SAVE_VERSION 14** (unchanged — all ACW changes are additive ItemDef fields + visual/feel). ACW executed the WHOLE deferred ACV visual/feel pile in one overnight (recalibration: the prior overnight under-reached by pre-emptively scope-cutting; new mode = plan deeply then execute fully, no pre-emptive cuts, foreground-batch genuine D150 feel items). Six per-phase commits (`2b7830a`→`8b9bdc7`): **A** 3P `handAttachTransform`+`playUseAnim3P` hooks + reusable `creatureGait.ts`+`particleTrail.ts`; **B** lizard+shrew gaits + shrew burrow-on-approach (new FSM state) + companion knuckles; **C** speeder dust trail + engine glow; **D** fixed broken raw/cooked_shrew_meat viewmodels + 3P weapon grips + machete 3P chop; **E** storm wind pushes loose bodies (#146) + camera sway + audio low-pass (#134); **F** 3P interact-prompt projection (#149). D160-D164. **Next session (ACX) = foreground feel-tune playtest of the whole ACW pile** (D150 — the headless harness can't read in-motion gait/wind/sway), then pick a breadth lane (finish per-item 3P grips / deep-cave design pass / salvage-panel variety).
+**Current state**: Session ACX shipped (2026-06-03 — 3P fix pass + seated-rig numeric-IK re-solve). 100+ sessions post-MVP. `npm run verify` (tsc) PASS. **SAVE_VERSION 14** (unchanged — all ACX changes are visual/pose + tuning). ACX was a foreground-feedback fix pass on ACW's 3P work: held items moved to the real RIGHT hand + faced forward + palms-in (`makeBasis` corrective on `rightHandAttach`), real speeder 3P **chase cam** (`SPEEDER_3P_CAM_*`), footsteps-through-items depth fix (footprint decal `polygonOffset` slope punch-through), and a from-scratch **re-solve of the seated speeder rig pose** — forward lean pivoted at the WAIST (D167, fixes the "torso disconnected" gap), hands on the bars (~5cm), butt back on the seat (`SPEEDER_RIG_SEAT_Z` 0.28→0.36), legs splayed astride. Key tooling: the `bike-truth` rig-shot scenario renders the REAL game chase-cam + 5 world angles + an in-page **numeric-IK pose sweep** (D165/D166). D165-D167. **Next session (ACY) = foreground feel-tune playtest of the whole ACW+ACX pile** (D150 — in-motion gaits/wind/sway/riding feel the headless harness can't read), then pick a breadth lane (per-item 3P **use-anims** / deep-cave design pass / salvage-panel variety).
 
-## ACW scope (this session) — overnight: full art/animation + storm-feel pass (the deferred ACV pile, executed)
+## ACX scope (this session) — 3P fix pass: held-item hand/orientation, speeder cam, footstep depth, seated rig pose (numeric-IK)
+
+- **Trigger**: user foreground feedback on ACW's 3P work — items in the wrong hand + facing backward, hands palm-out, speeder 3P cam in front, footsteps showing through held items, and the seated speeder rig "totally wrong."
+- **3P held items** (`af039cf`): `rightHandAttach` moved to the real RIGHT hand (`side===-1`, index 0); `makeBasis` corrective baked onto the attach so attach-local −Z = world-forward; visible hand meshes wrapped in a `handVisual` sub-group rolled inward (palms toward body) WITHOUT disturbing the item grip; per-item `handAttachTransform` for machete/scrap_bar/pipe_staff/guns/rifle.
+- **Speeder 3P chase cam** (`af039cf`): behind the rider along the look dir, looking forward; `SPEEDER_3P_CAM_BACK/ANCHOR_UP/ABOVE`. Pre-fix sat at the 1P rider seat.
+- **Footsteps-through-items** (`04e99d9`): footprint decal `polygonOffsetFactor:-1` punched through at grazing angles; removed polygonOffset (the 4cm `FOOTPRINT_OFFSET_Y` lift alone prevents terrain z-fight).
+- **Seated speeder rig re-solve** (this turn, uncommitted at report time): the OLD harness lied (overrode the camera + assumed +Z=face → reported "fine" for 3 rounds while the live view was wrong — D165). New `bike-truth` scenario renders the real chase-cam + 5 fixed world angles + a numeric-IK **sweep** minimizing wrist→grip / ankle→peg world distances (D166). Solved: facing was already correct; the real bug was the ~0.65m arm can't reach the ~0.80m grips without a forward lean. Pose = lean 0.60 **pivoted at the waist** (D167 — `spineBend` is parented at rig origin y=0, so a bare lean slid the torso ~0.4m off the pelvis = the disconnect; compensating `spineBend.position` pivots at the waist), arms vertical onto the bars (~5cm), legs splayed astride, seat back `SPEEDER_RIG_SEAT_Z` 0.28→0.36 (capped — further back puts the bars out of arm reach). Feet ~22cm from pegs (astride; 3-DOF leg can't hit pads dead-on). `spineBend.position` reset on the non-seated path.
+- **Foreground-owed**: live in-motion riding feel; exact feet-on-pegs contact; plus the carried ACW D150 pile.
+
+## ACW scope — overnight: full art/animation + storm-feel pass (the deferred ACV pile, executed)
 
 - **Recalibration**: prior overnight (ACV) pre-emptively scope-cut the visual pile + checkpointed mid-build citing budget/turn-length when neither was the real constraint. ACW operating mode = plan deeply → execute the whole plan with real rule-8 screenshot iteration; no pre-emptive cuts; genuine D150 feel/kinematic items built fully + batched for the user's playtest.
 - **Phase A** (`2b7830a`): `ItemDef.handAttachTransform {pos,rot}` (3P hand placement, applied in `viewModel.swapEquippedMesh`) + `ItemDef.playUseAnim3P(rig,t)` (drives the rig's right arm during a use-anim in 3P) + `enemies/creatureGait.ts` (shared sin-phase gait) + `world/particleTrail.ts` (pooled soft-fade ShaderMaterial particles).
@@ -274,39 +283,39 @@ Existing tunables of interest:
 
 ## Suggested next session (1-3 directions in priority order)
 
-1. **Foreground feel-tune playtest of the whole ACW pile** (TOP, Session ACX — the owed D150 verification the headless harness can't do): creature gaits in motion (`LIZARD_GAIT_*`/`SHREW_GAIT_*`), shrew burrow dive (`SHREW_BURROW_*` + puff), speeder dust/engine (`SPEEDER_DUST_*`/`SPEEDER_GLOW_*`), storm wind push (`STORM_WIND_PUSH_ACCEL`), camera sway + audio muffle (`STORM_CAM_SWAY_*`/`STORM_AUDIO_LP_MIN_HZ`), machete 3P chop, 3P interact-prompt on-object, per-item 3P grips. Boot `npm run dev`, play, tune in `tuning.ts`.
-2. **Pick ONE breadth lane** (after the playtest): (a) finish the per-item 3P grip + use-anim pass for the remaining held items (guns/rifle recoil, canteen drink, scrap_bar pry, bandage) via the `held-item` rig-shot scenario; (b) the DEEP CAVE SYSTEM design pass (procedural sprawl + sub-terrain collision + descent opening + dark-nav, then re-apply the egg spine from `2d4035b`); (c) salvage-panel variety + dynamic placement (#189/#190) + POI art detail.
+1. **Foreground feel-tune playtest of the whole ACW+ACX pile** (TOP, Session ACY — the owed D150 verification the headless harness can't do): creature gaits in motion (`LIZARD_GAIT_*`/`SHREW_GAIT_*`), shrew burrow dive (`SHREW_BURROW_*` + puff), speeder dust/engine (`SPEEDER_DUST_*`/`SPEEDER_GLOW_*`), storm wind push (`STORM_WIND_PUSH_ACCEL`), camera sway + audio muffle (`STORM_CAM_SWAY_*`/`STORM_AUDIO_LP_MIN_HZ`), machete 3P chop, 3P interact-prompt on-object, **and the ACX seated-speeder riding feel in motion + exact feet-on-pegs** (`SPEEDER_RIG_SEAT_Y/Z` + the seated-branch pose angles in `playerRig.ts`; the `bike-truth` harness gets hands→bars to ~5cm but feet sit ~22cm from the pegs). Boot `npm run dev`, play, tune in `tuning.ts`.
+2. **Pick ONE breadth lane** (after the playtest): (a) finish the per-item 3P **use-anim** pass for the remaining held items (gun/rifle recoil, canteen drink, scrap_bar pry, bandage) via the `held-item` rig-shot scenario — per-item grips are now done (ACW+ACX); (b) the DEEP CAVE SYSTEM design pass (procedural sprawl + sub-terrain collision + descent opening + dark-nav, then re-apply the egg spine from `2d4035b`); (c) salvage-panel variety + dynamic placement (#189/#190) + POI art detail.
 3. **Standing optional levers**: game **lighting mood** (D142, biggest remaining in-game realism lever — surface first) + PM-D cloth-physics robe; companion deeper rebuild (D128) only if it stops reading well.
 
 ---
 
 ## Time spent
 
-100+ sessions shipped (A through ACW). Approx ~315-390h cumulative human-facing dev time. ACW was a full overnight executing the deferred ACV visual/feel pile across 6 phases (A-F), 6 per-phase commits, ~13 source files touched + docs. No save change. Heavy use of the rig-shot static-pose screenshot harness for per-element rule-8 iteration (creatures, items, speeder FX). (Tail of the same very long conversation: ACJ→…→ACV→ACW.)
+100+ sessions shipped (A through ACX). Approx ~318-394h cumulative human-facing dev time. ACX was a focused fix pass (foreground feedback on ACW's 3P work) — 3 earlier commits (`e4d223f`/`af039cf`/`04e99d9`) + several superseded seated-pose attempts, then a from-scratch numeric-IK re-solve of the seated speeder pose via the new `bike-truth` harness. ~3 source files touched this turn + docs. No save change. (Tail of the same very long conversation: ACJ→…→ACW→ACX.)
 
 ---
 
 ## State at session end
 
-- **Git status**: ACW code in six pushed per-phase commits (`2b7830a` A, `f8b08c1` B, `a042351` C, `701779b` D, `e439e7e` E, `8b9bdc7` F). Session-end doc edits committed alongside; tagged `session-ACW`.
-- **Branch**: `master`. **Save state**: localStorage **v14** (unchanged — all ACW changes are additive ItemDef fields + visual/feel, D81, no bump).
-- **Ports bound**: a `npm run dev` server may still be running on **5173** (dev-only); rig-shot harness used 5191-5195 (transient, killed per run).
-- **Rule-8 / verification status**: ACW shipped VISUAL elements verified via the static paused-camera screenshot harness (D164) — lizard/shrew gaits (per-phase leg poses), shrew model + burrow sink, companion legs, speeder dust+glow (rear closeup), per-item 3P grips (machete/scrap_bar), shrew-meat in-hand. **Genuinely in-motion/feel items (D150) were built fully + tsc-clean but NOT live-verified** (the headless harness can't read in-motion gait/wind/sway/anim) — these are the ACX foreground-playtest list. No rough visual shipped as "done": each static element was screenshot-critiqued-iterated; the foreground-owed items are a verification-METHOD limitation, not a cut.
+- **Git status**: ACX earlier fixes in three pushed commits (`e4d223f` gun/rifle grips, `af039cf` wrong-hand + item-forward + speeder 3P cam, `04e99d9` footstep depth) + superseded seated-pose attempts (`5146078`/`45ea390`/`6e5b7bb`). The final waist-pivot seated-pose re-solve + `bike-truth` harness + `SEAT_Z` are committed at session-end + tagged `session-ACX`.
+- **Branch**: `master`. **Save state**: localStorage **v14** (unchanged — all ACX changes are pose/visual + tuning, D81, no bump).
+- **Ports bound**: a `npm run dev` server may still be running on **5173** (dev-only); the `bike-truth` rig-shot harness used 5193-5203 (transient — Windows `dev.kill()` can orphan the vite child; kill leftover listeners on those ports if a re-run hits a strict-port conflict).
+- **Verification status**: hands→bars (~5cm) + facing + seated posture verified via the `bike-truth` numeric-IK harness rendering the REAL game chase-cam + 5 world angles (D165/D166) — the trustworthy gate after the OLD harness lied for 3 rounds by overriding the camera. **In-motion riding feel + exact feet-on-pegs (~22cm residual) are foreground-owed** (D150), as is the carried ACW feel pile.
 
 ---
 
 ## Token spend this session (estimated)
 
-ACW was a full overnight executed inline (per-phase build→screenshot→iterate→commit), the tail of an already-very-long conversation. The dominant cost was the rig-shot screenshot loop — each run boots its own Vite+Playwright (~35s) and several elements needed 2-4 framing/tuning iterations (the live FP/3P camera fought placement until the paused-free-camera path was settled, D164).
+ACX was a focused fix pass driven by foreground screenshots from the user. The dominant cost was the seated-pose loop — the OLD harness lied (overrode the camera + assumed +Z=face), so several rounds of "fixes" missed before the `bike-truth` rewrite + numeric-IK sweep pinned the real bug (D165/D166). Each harness run boots its own Vite+Playwright (~35s); the in-page pose sweep then resolves arms/legs in one boot (no per-angle recompile loop).
 
-- Input: very high (long session + many screenshot-review cycles + the per-phase file reads across creatures/speeder/items/storm/prompt).
-- Output: high — 6 phases across ~13 source files + 5 D-entries + the full session-end doc set.
-- Cost (Opus 4.8 rates): well above baseline (length + iteration-loop driven). Justified by the recalibration mandate (execute the whole pile fully, no pre-emptive cuts; Claude Max, budget not a constraint).
+- Input: high (long-conversation tail + many screenshot-review cycles + the playerRig/speeder/tuning file reads).
+- Output: moderate — ~3 source files + the `bike-truth` harness scenario + 3 D-entries + the session-end doc set.
+- Cost (Opus 4.8 rates): above baseline (iteration-loop driven, several wrong-fix rounds before the harness was made faithful). The numeric-IK sweep is now the reusable gate so future rig-to-world posing is fast.
 
-Notable: the harness camera-fights-placement problem (D164) cost several iterations before the paused free-camera pattern was pinned as the reliable path; the particleTrail size-is-world-diameter gotcha (D161) cost an extra iteration on both the speeder dust + shrew puff. Both are now documented so ACX's per-item 3P pass + any future creature/FX work goes faster.
+Notable: the verification-harness-must-render-the-real-camera lesson (D165) cost the most — a faithful-looking harness that silently overrides the camera masked the live bug for 3 rounds. Now documented + the `bike-truth` scenario is the template for any future on-vehicle / posed-rig verification.
 
 ---
 
 ## Commit handoff
 
-Per CLAUDE.md (session-end auto-runs commit + tag + push). ACW code already committed across the six per-phase commits (`2b7830a`→`8b9bdc7`); the session-end doc edits (changelog/CLAUDE/roadmap/decisions/backlog/report/next-prompt) are committed alongside + tagged `session-ACW`.
+Per CLAUDE.md (session-end auto-runs commit + tag + push). ACX earlier fixes already committed (`e4d223f`/`af039cf`/`04e99d9` + superseded pose attempts); the final waist-pivot seated-pose re-solve + `bike-truth` harness + `SEAT_Z` + the session-end doc edits (changelog/CLAUDE/roadmap/decisions/backlog/report/next-prompt) are committed at session-end + tagged `session-ACX`.

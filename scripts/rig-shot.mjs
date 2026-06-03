@@ -548,6 +548,182 @@ const SCENARIOS = {
     console.log('[rig-shot] saved scen-speeder-seated.png');
   },
 
+  // Bike-truth (ACX): the DECISIVE multi-angle rig-on-bike inspection. Prior
+  // speeder-seated lied because it OVERRODE the camera with a hand-placed
+  // behind-cam — so it never rendered what the user actually sees, and its
+  // faceDotFwd measurement assumed +Z=face. Here we (a) force bike yaw=0 so the
+  // nose points world -Z and tail/+Z is unambiguous, (b) mount, (c) shoot the
+  // REAL game chase camera (no override) = exactly the user's view, then (d)
+  // shoot 5 fixed WORLD angles so the pose (facing, hands-on-bars, feet-on-pegs)
+  // can be judged from every side. Output: scen-bike-<angle>.png.
+  'bike-truth': async (page) => {
+    // Mount + force yaw 0, on flat-ish ground, look along bike forward (-Z).
+    const info = await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      ctx.weather.intensity = 0; window.__game.setTime(0.5);
+      ctx.three.renderer.toneMappingExposure = 1.1; ctx.three.renderer.setSize(900, 900, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1; cam.updateProjectionMatrix(); }
+      ctx.flags.thirdPerson = true;
+      const s = ctx.speeder;
+      // Pin the bike to yaw=0 (nose → world -Z) so external angles are unambiguous.
+      s.body.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true);
+      s.yaw = 0;
+      const p = s.body.translation();
+      s.mounted = true;
+      ctx.player.body.body.setTranslation({ x: p.x, y: -2000, z: p.z }, true);
+      // Camera euler.y = yaw makes getWorldDirection = (-sin yaw,0,-cos yaw) = bike fwd.
+      cam.quaternion.setFromEuler(new (cam.rotation.constructor)(0, s.yaw, 0, 'YXZ'));
+      cam.updateMatrixWorld(true);
+      return { x: +p.x.toFixed(1), y: +p.y.toFixed(1), z: +p.z.toFixed(1) };
+    });
+    console.log('[bike-truth] bike@ ' + JSON.stringify(info));
+    // Let updateSpeeder drive the chase cam + bike-yaw lerp settle (no override).
+    await page.waitForTimeout(700);
+    // (1) The REAL game chase-cam view — what the user sees. Pause AFTER the
+    // game has positioned the camera this frame, do NOT touch cam.position.
+    const meas = await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      const s = ctx.speeder; const cam = ctx.three.camera;
+      const V = cam.position.constructor; const Q = cam.quaternion.constructor;
+      const p = s.body.translation();
+      const bfx = -Math.sin(s.yaw), bfz = -Math.cos(s.yaw);
+      const rig = ctx.player.rig;
+      const rq = rig.group.getWorldQuaternion(new Q());
+      const face = new V(0, 0, 1).applyQuaternion(rq);
+      const camToBikeX = p.x - cam.position.x, camToBikeZ = p.z - cam.position.z;
+      // NUMERIC IK CHECK — world positions of the hands + feet vs the bike's
+      // grip/peg world targets (yaw=0 so bike-local==world+bike pos). Distances
+      // near 0 = contact. This is the trustworthy gate (not eyeballing pixels).
+      rig.group.updateMatrixWorld(true);
+      const wp = (n) => { const v = n.getWorldPosition(new V()); return [+v.x.toFixed(2), +v.y.toFixed(2), +v.z.toFixed(2)]; };
+      const grip = [[p.x - 0.34, p.y + 0.42, p.z + 0.00], [p.x + 0.34, p.y + 0.42, p.z + 0.00]];
+      const peg  = [[p.x - 0.43, p.y - 0.08, p.z + 0.15], [p.x + 0.43, p.y - 0.08, p.z + 0.15]];
+      const dist = (a, b) => +Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]).toFixed(2);
+      const hands = [wp(rig.wrists[0]), wp(rig.wrists[1])];
+      const feet = [wp(rig.ankles[0]), wp(rig.ankles[1])];
+      const hipsW = [wp(rig.hips[0]), wp(rig.hips[1])];
+      // pair each hand/foot to its NEAREST target (don't assume index↔side).
+      const handErr = hands.map((h) => Math.min(dist(h, grip[0]), dist(h, grip[1])));
+      const footErr = feet.map((f) => Math.min(dist(f, peg[0]), dist(f, peg[1])));
+      console.error('[ik] hands=' + JSON.stringify(hands) + ' grips=' + JSON.stringify(grip) + ' handErr=' + JSON.stringify(handErr));
+      console.error('[ik] feet=' + JSON.stringify(feet) + ' pegs=' + JSON.stringify(peg) + ' footErr=' + JSON.stringify(footErr));
+      console.error('[ik] hipsW=' + JSON.stringify(hipsW) + ' bikeY=' + p.y.toFixed(2));
+      ctx.flags.paused = true; // freeze with the GAME camera in place
+      return {
+        yaw: +s.yaw.toFixed(2),
+        rigFaceXZ: [+face.x.toFixed(2), +face.z.toFixed(2)],
+        bikeFwdXZ: [+bfx.toFixed(2), +bfz.toFixed(2)],
+        faceDotBikeFwd: +(face.x * bfx + face.z * bfz).toFixed(2),
+        camDotBikeFwd: +(camToBikeX * bfx + camToBikeZ * bfz).toFixed(2),
+        camPos: [+cam.position.x.toFixed(1), +cam.position.y.toFixed(1), +cam.position.z.toFixed(1)],
+      };
+    });
+    console.log('[bike-truth] GAME-CAM ' + JSON.stringify(meas));
+    await page.waitForTimeout(150);
+    await page.screenshot({ path: join(OUT, 'scen-bike-gamecam.png'), fullPage: false });
+    console.log('[rig-shot] saved scen-bike-gamecam.png (the REAL user view)');
+    // (1b) POSE SWEEP — search the joint-angle space for the pose that lands the
+    // wrists on the grips + the ankles on the pegs. Pure matrix math (paused),
+    // so a coarse+fine grid runs in one boot. Logs the winning angles to bake
+    // into playerRig.ts. Legs are independent of the torso lean; arms depend on
+    // it (lean moves the shoulders), so arms sweep lean too.
+    const best = await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      const s = ctx.speeder; const rig = ctx.player.rig;
+      const V = ctx.three.camera.position.constructor;
+      const p = s.body.translation();
+      ctx.flags.paused = true;
+      const grip = [[p.x - 0.34, p.y + 0.42, p.z], [p.x + 0.34, p.y + 0.42, p.z]];
+      // Target the ANKLE node ~0.1m ABOVE the peg (the sole sits below the ankle).
+      const peg = [[p.x - 0.43, p.y + 0.02, p.z + 0.15], [p.x + 0.43, p.y + 0.02, p.z + 0.15]];
+      const wp = (n) => { const v = n.getWorldPosition(new V()); return [v.x, v.y, v.z]; };
+      const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+      const near = (pt, ts) => Math.min(dist(pt, ts[0]), dist(pt, ts[1]));
+      const setLegs = (hipX, hipZ, kneeX) => { for (let i = 0; i < 2; i++) { const sd = i === 1 ? 1 : -1; rig.hips[i].rotation.set(hipX, 0, sd * hipZ); rig.knees[i].rotation.x = kneeX; } rig.group.updateMatrixWorld(true); };
+      const PIVOT_Y = 0.92; // mirror playerRig: lean pivots at the waist (no torso slide)
+      const setArms = (lean, shX, shZ, elbX) => { rig.spineBend.rotation.set(lean, 0, 0); rig.spineBend.position.set(0, PIVOT_Y * (1 - Math.cos(lean)), -PIVOT_Y * Math.sin(lean)); for (let i = 0; i < 2; i++) { const sd = i === 1 ? 1 : -1; rig.shoulders[i].rotation.set(shX, 0, sd * shZ); rig.elbows[i].rotation.x = elbX; } rig.group.updateMatrixWorld(true); };
+      const legErr = () => (near(wp(rig.ankles[0]), peg) + near(wp(rig.ankles[1]), peg)) / 2;
+      const armErr = () => (near(wp(rig.wrists[0]), grip) + near(wp(rig.wrists[1]), grip)) / 2;
+      // ── Legs: coarse grid then refine around the winner.
+      const sweepLegs = (hipXs, hipZs, kneeXs) => {
+        let b = { e: 1e9 };
+        for (const hipX of hipXs) for (const hipZ of hipZs) for (const kneeX of kneeXs) {
+          setLegs(hipX, hipZ, kneeX); const e = legErr();
+          if (e < b.e) b = { e, hipX, hipZ, kneeX };
+        }
+        return b;
+      };
+      // hipX constrained ≥ -0.1: forbid strong backward thigh pitch (reads as
+      // "legs facing backwards"); prefer down/forward + abduction splay.
+      let L = sweepLegs([-0.1, 0.05, 0.2, 0.35, 0.5, 0.65], [0.2, 0.35, 0.5, 0.65, 0.8, 0.95], [0.0, 0.15, 0.3, 0.45, 0.6, 0.75]);
+      L = sweepLegs(
+        [Math.max(-0.1, L.hipX - 0.1), L.hipX - 0.03, L.hipX + 0.03, L.hipX + 0.1],
+        [L.hipZ - 0.08, L.hipZ - 0.03, L.hipZ + 0.03, L.hipZ + 0.08],
+        [L.kneeX - 0.1, L.kneeX - 0.03, L.kneeX + 0.03, L.kneeX + 0.1],
+      );
+      // ── Arms: sweep lean + shoulder pitch + elbow (shZ fixed; lateral was good).
+      const sweepArms = (leans, shXs, elbXs) => {
+        let b = { e: 1e9 };
+        for (const lean of leans) for (const shX of shXs) for (const elbX of elbXs) {
+          setArms(lean, shX, 0.12, elbX); const e = armErr();
+          if (e < b.e) b = { e, lean, shX, elbX };
+        }
+        return b;
+      };
+      // Free sweep: deep lean (waist-pivot, no torso slide) + full shoulder range
+      // (a deep lean wants the arm to hang slightly back-of-torso = vertical in
+      // world). Find the genuine best reach for a CONNECTED torso.
+      let A = sweepArms([0.3, 0.5, 0.7, 0.9, 1.1, 1.3], [-0.5, -0.25, 0.0, 0.25, 0.5], [0.0, 0.2, 0.4, 0.6]);
+      A = sweepArms(
+        [A.lean - 0.1, A.lean - 0.03, A.lean + 0.03, A.lean + 0.1],
+        [A.shX - 0.12, A.shX - 0.04, A.shX + 0.04, A.shX + 0.12],
+        [Math.max(0, A.elbX - 0.1), A.elbX - 0.03, A.elbX + 0.03, A.elbX + 0.1],
+      );
+      // Apply the combined winner so the screenshots reflect it.
+      setLegs(L.hipX, L.hipZ, L.kneeX);
+      setArms(A.lean, A.shX, 0.12, A.elbX);
+      rig.group.updateMatrixWorld(true);
+      // Post-sweep per-axis residuals (which axis is still off).
+      const axErr = (pt, ts) => { const t = dist(pt, ts[0]) < dist(pt, ts[1]) ? ts[0] : ts[1]; return [+(pt[0] - t[0]).toFixed(2), +(pt[1] - t[1]).toFixed(2), +(pt[2] - t[2]).toFixed(2)]; };
+      console.error('[ik2] handAx=' + JSON.stringify([axErr(wp(rig.wrists[0]), grip), axErr(wp(rig.wrists[1]), grip)]));
+      console.error('[ik2] footAx=' + JSON.stringify([axErr(wp(rig.ankles[0]), peg), axErr(wp(rig.ankles[1]), peg)]) + ' (x=lateral y=height z=fwd/back)');
+      const r3 = (x) => +x.toFixed(3);
+      return {
+        legs: { hipX: r3(L.hipX), hipZ: r3(L.hipZ), kneeX: r3(L.kneeX), errM: r3(L.e) },
+        arms: { lean: r3(A.lean), shX: r3(A.shX), shZ: 0.12, elbX: r3(A.elbX), errM: r3(A.e) },
+      };
+    });
+    console.log('[bike-truth] SWEEP-BEST ' + JSON.stringify(best));
+    await page.waitForTimeout(120);
+    await page.screenshot({ path: join(OUT, 'scen-bike-gamecam-opt.png'), fullPage: false });
+    console.log('[rig-shot] saved scen-bike-gamecam-opt.png (swept pose, game cam)');
+    // (2) Five fixed WORLD angles around the (yaw=0) bike. With yaw=0: nose=-Z,
+    // tail=+Z, so "front" cam sits on -Z looking +Z (sees nose + rider front).
+    const D = 3.2, UP = 1.1;
+    const angles = [
+      { tag: 'front', off: [0, UP, -D] },  // -Z side: sees the NOSE + rider's front (face if facing nose)
+      { tag: 'tail',  off: [0, UP, D] },   // +Z side: sees engine + rider's BACK (if facing nose)
+      { tag: 'left',  off: [-D, UP, 0] },
+      { tag: 'right', off: [D, UP, 0] },
+      { tag: '3q',    off: [D * 0.8, D * 0.7, D * 0.8] },
+    ];
+    for (const a of angles) {
+      await page.evaluate(({ off }) => {
+        const ctx = window.__game.ctx;
+        const s = ctx.speeder; const p = s.body.translation();
+        const cam = ctx.three.camera;
+        ctx.flags.paused = true;
+        cam.position.set(p.x + off[0], p.y + off[1], p.z + off[2]);
+        cam.lookAt(p.x, p.y + 0.2, p.z);
+        cam.updateMatrixWorld(true);
+      }, a);
+      await page.waitForTimeout(200);
+      await page.screenshot({ path: join(OUT, `scen-bike-${a.tag}.png`), fullPage: false });
+      console.log(`[bike-truth] world angle ${a.tag} → scen-bike-${a.tag}.png`);
+    }
+  },
+
   // Depthprobe (ACX): log the runtime material/render flags of the held 3P item
   // + the footprint decals, to diagnose why footsteps show through held items.
   'depthprobe': async (page) => {

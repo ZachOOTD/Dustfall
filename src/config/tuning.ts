@@ -256,7 +256,7 @@ export const Tuning = {
   // pegs. Foreground-tunable (mounted-3P view): nudge Y/Z until the figure sits
   // cleanly astride the bike rather than floating above / sunk into it.
   SPEEDER_RIG_SEAT_Y: -0.35,            // group-origin Y relative to bike center
-  SPEEDER_RIG_SEAT_Z: 0.28,             // slightly back over the seat
+  SPEEDER_RIG_SEAT_Z: 0.36,             // back on the seat (as far as the ~0.65m arm still reaches the bars)
 
   // CC-2 — tilt on input (visual-only, bike body's rotation is X+Z-locked
   // per D34). Pitch from W/S, roll from A/D. Camera rolls half as much

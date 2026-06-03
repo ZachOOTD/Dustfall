@@ -64,26 +64,24 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      Prior milestones live in docs/changelog.md — do NOT accumulate "Prior milestone"
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
-**Last shipped**: Session ACW — **overnight: full art/animation + storm-feel pass** (the whole deferred ACV
-visual/feel pile, executed; recalibration = stop pre-emptively scope-cutting, plan deeply then execute fully).
-Six per-phase commits (`2b7830a` A → `8b9bdc7` F), tsc clean, no save change. **A** infra hooks:
-`ItemDef.handAttachTransform` (3P hand placement) + `ItemDef.playUseAnim3P` (3P use-anim) + reusable
-`enemies/creatureGait.ts` + `world/particleTrail.ts` (pooled soft-fade particles). **B** creatures: lizard
-sprawl-gait + shrew walk-gait + shrew **burrow-on-approach** (new FSM state, dives into the sand + sand puff)
-+ companion leg knuckles. **C** speeder dust trail + engine-ignition nozzle glow. **D** fixed broken
-raw/cooked_shrew_meat viewmodels + 3P grip transforms (machete/scrap_bar/pipe_staff) + machete 3P chop.
-**E** storm wind pushes loose bodies (#146: pickups/speeder/sled via `stormWindAccel`) + in-storm camera
-sway + master audio low-pass (#134). **F** 3P interact-prompt projects onto the hovered object (#149).
-Static paused free-camera screenshot scenarios added to `rig-shot.mjs` (live camera fights the body sync).
-**Owed a foreground playtest** (D150 feel/kinematic — built fully, verify live): shrew-burrow dive/puff timing,
-in-motion gaits, speeder FX in motion, storm wind+sway+muffle feel, machete 3P chop read, per-item 3P grip
-fit + the guns/rifle/consumables grip+use-anim pass, 3P prompt on-object placement.
+**Last shipped**: Session ACX — **3P fix pass + seated-rig re-solve** (foreground feedback on ACW's 3P work).
+Held items moved to the real RIGHT hand + faced forward (`makeBasis` corrective on `rightHandAttach`; palms
+rolled inward via a `handVisual` sub-group that doesn't disturb the grip); real speeder 3P chase cam
+(`SPEEDER_3P_CAM_*`); footsteps-through-items fixed (footprint decal `polygonOffsetFactor` slope punch-through
+→ removed polygonOffset). **Seated speeder rig re-solved from scratch**: forward lean 0.60 pivoted at the WAIST
+(compensating `spineBend.position` — it's parented at rig origin y=0, so a bare lean slid the torso ~0.4m off the
+pelvis = "torso disconnected" gap), arms hang vertical onto the bars (hands ~4–5cm off), legs splayed astride,
+seat-back `SPEEDER_RIG_SEAT_Z` 0.28→0.36 (capped — arm can't reach bars further back). Key tooling: `rig-shot.mjs`
+**`bike-truth`** scenario renders the REAL game chase-cam + 5 world angles + an in-page **pose SWEEP** that minimizes
+wrist→grip/ankle→peg world distances. Lesson: the prior harness OVERRODE the camera + assumed +Z=face, so it
+reported "fine" for multiple rounds while the live view was wrong — a verification harness must render the REAL camera.
+**Foreground-owed:** live in-motion riding feel; exact feet-on-pegs (22cm residual reads astride, not pad-perfect);
+plus the carried ACW pile (in-motion gaits, shrew burrow timing, speeder FX in motion, storm feel, use-anim reads).
 
-**Next session (ACX)**: foreground-confirm the ACW feel pile above, then pick up either (a) the **DEEP CAVE
-SYSTEM** design pass (procedural sprawl + sub-terrain walkable collision + descent opening + dark-navigation;
-then cherry-pick the egg-acquisition spine from `2d4035b`), or (b) finish the per-item 3P grip + use-anim
-pass for the remaining held items (guns/rifle/consumables) + POI/salvage-panel art detail. See
-[docs/next-session-prompt.md](docs/next-session-prompt.md).
+**Next session (ACY)**: pick up either (a) the **DEEP CAVE SYSTEM** design pass (procedural sprawl + sub-terrain
+walkable collision + descent opening + dark-navigation; then cherry-pick the egg-acquisition spine from `2d4035b`),
+or (b) finish the per-item 3P use-anim pass for the remaining held items (gun recoil, canteen drink, scrap_bar pry,
+bandage) + POI/salvage-panel art detail. See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 

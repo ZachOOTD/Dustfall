@@ -145,7 +145,7 @@ NEXT-ATTEMPT IDEAS:
 ✓ **SHIPPED ACU (#50, D157)** — rope leaves inventory only when BOTH ends anchored (sled + stake/Pebble/speeder/static-pos); stays carried while player-held so you can tie the 2nd end. `applyTether` centralizes it; drop-with-G releases the sled; LMB floor-drop removed. User-confirmed.
 ✓ **SHIPPED ACW (#146)** — sandstorm wind pushes physics bodies: `stormWindAccel(weather)` → per-frame impulse on dynamic dropped pickups, velocity nudge on the parked speeder, slide-velocity nudge on the kinematic sled. World-intensity-driven (D163). Foreground feel-tune owed.
 ✓ **FIXED ACQ** — E near the speeder mounting without looking: ACQ added the `SPEEDER_MOUNT_LOOK_DOT` gate (camera must face the bike within ~60°, not proximity alone). Verified ACV.
-🟡 **[bug] 3P rig on speeder — SEATED POSE SHIPPED ACV (D159)**. The rig was dropping to the world origin while mounted (body parked at y=-2000); now repositioned to the rider seat with a seated pose. `SPEEDER_RIG_SEAT_Y/Z` foreground-tunable. REMAINING (deferred): a dedicated speeder 3P chase/orbit camera (the follow-the-seat camera is adequate for now).
+✓ **[bug] 3P rig on speeder — SHIPPED ACV (D159) + RE-SOLVED ACX**. Repositioned to the rider seat with a seated pose (ACV); ACX re-solved the pose from scratch via the `bike-truth` numeric-IK sweep harness (D165/D166): forward lean pivoted at the waist (D167 — fixes torso-disconnect), hands on the bars (~5cm), butt back on the seat (`SPEEDER_RIG_SEAT_Z` 0.28→0.36), legs splayed astride (feet ~22cm from pegs). Dedicated 3P **chase cam** shipped (`SPEEDER_3P_CAM_*`). REMAINING (foreground): in-motion riding feel + exact feet-on-pegs contact.
 ✓ **SHIPPED ACW (#149)** — 3P interact prompt now projects the hovered object's world hit point to screen + pins the prompt there (was crosshair-centered → read detached in 3P); FP unchanged. `getHoverWorldPos` getter on interaction.ts. On-object placement foreground-verify owed (headless couldn't stage a live 3P hover).
 ✓ **FIXED ACQ+ACU** — iron stake model: sand mound removed (ACQ), rope-loop ring seated at the top touching the shaft (`STAKE_LOOP_OFFSET_X/Y`), and `resolveEndpointWorldPos` stake case resolves the actual ring world pos (offset + yaw). Verified ACV.
 
@@ -182,7 +182,7 @@ Intentionally not active. Detail preserved so the call is reversible. Each entry
 ✓ **SHIPPED ACW** — shrew burrow-on-approach (new FSM state — dives nose-down into the sand within SHREW_BURROW_RADIUS, sand puff, re-emerges). Foreground dive/puff timing owed.
 ✓ **SHIPPED ACW (#183)** — speeder dust trail (speed-gated pooled particles behind/under the bike, ≈2× on boost).
 ✓ **SHIPPED ACW (#184)** — speeder engine-ignition glow (nozzle emissive + PointLight ramp with speed, die when parked).
-[feat] seated 3rd-person rig stance + dedicated 3P camera while mounted on the speeder (cf. ACN mount bug + D116).
+✓ **SHIPPED ACV+ACX** — seated 3rd-person rig stance + dedicated 3P chase camera while mounted on the speeder (seated pose ACV; numeric-IK re-solve + chase cam + footstep-through-items depth fix ACX). See the 3P-rig-on-speeder entry above.
 [idea] wrap player model in a cloth robe with real cloth physics to mask the low-poly rig.
 ✓ **SHIPPED ACV** — sled drag marks lightened (`FOOTPRINT_SLED_COLOR_HEX` 0x3d2918 → 0x6e5236).
 [polish] add detail to existing POI models.

@@ -3,6 +3,40 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ACX — 2026-06-03 — 3P fix pass: held-item hand/orientation, speeder cam, footstep depth, seated rig pose (numeric-IK) ✓ verify pass (tsc clean)
+
+`verified` — `npm run verify` (tsc) PASS. A foreground-feedback fix pass on the ACW 3P work + a from-scratch
+re-solve of the seated speeder rig pose. Commits `e4d223f` (gun/rifle 3P grips), `af039cf` (wrong-hand + item-forward
++ speeder 3P cam), `04e99d9` (footstep depth), `5146078`/`45ea390`/`6e5b7bb` (early seated-pose attempts — superseded);
+final seated-pose + harness changes uncommitted at entry time (committed under this session's tag). No save-schema change.
+
+**3P held items** (`af039cf`): items were equipped to the LEFT hand + faced backward — moved `rightHandAttach` to
+the real right hand (`side===-1`, shoulders/elbows/wrists index 0), baked a `makeBasis` corrective onto the attach so
+attach-local −Z = world-forward; visible hand meshes wrapped in a `handVisual` sub-group rolled inward (palms toward
+the body) WITHOUT disturbing the item grip. Per-item `handAttachTransform` for machete/scrap_bar/pipe_staff/guns/rifle.
+
+**Speeder 3P camera** (`af039cf`): added a real chase cam (behind the rider along the look dir, looking forward) +
+`SPEEDER_3P_CAM_BACK/ANCHOR_UP/ABOVE` — pre-fix the mounted cam sat at the 1P rider seat (ahead/wrong-facing in 3P).
+
+**Footsteps-through-items** (`04e99d9`): the footprint decal's `polygonOffsetFactor:-1` scaled with the polygon's
+huge depth slope at grazing angles, pulling the decal depth toward the camera enough to render OVER the hip-held item.
+Fix: drop polygonOffset; the 4cm `FOOTPRINT_OFFSET_Y` lift alone prevents terrain z-fight.
+
+**Seated speeder rig pose** (this turn): re-solved from scratch. The prior harness LIED — its `speeder-seated` scenario
+OVERRODE the camera with a hand-placed behind-cam, so it never rendered the real chase-cam view, and it assumed +Z=face;
+it reported "facing forward / pose fine" for multiple rounds while the live view was visibly wrong. New `bike-truth`
+harness scenario renders the REAL game chase-cam + 5 fixed world angles (bike yaw pinned to 0) + an in-page **pose SWEEP**
+that minimizes wrist→grip and ankle→peg WORLD distances (the trustworthy numeric gate vs eyeballing low-res frames).
+Findings: facing was already correct (the "backwards" read was a stiff upright figure, not a heading bug); the real bug
+was that the ~0.65m arm can't reach the grips (~0.80m away) without a forward torso lean. Solved pose: forward lean 0.60
+(pivoted at the WAIST — `spineBend` is parented at the rig origin y=0, so a bare rotation slid the whole torso ~0.4m off
+the pelvis = the "torso disconnected from body" gap; compensating `spineBend.position` pivots it at the waist), arms hang
+vertical onto the bars (hands land ~4–5cm off the grips), legs splayed astride. Moved the rig back on the seat
+(`SPEEDER_RIG_SEAT_Z` 0.28→0.36 — capped there; further back puts the bars out of arm's reach). Feet land ~22cm from the
+pegs (splayed astride; the 3-DOF leg can't hit the pads dead-on). `spineBend.position` reset on the non-seated path.
+
+**Foreground-owed:** live in-motion riding feel; exact feet-on-pegs contact (22cm residual reads astride, not pad-perfect).
+
 ## Session ACW — 2026-06-02 — Overnight: full art/animation + storm-feel pass (the deferred ACV pile, executed) ✓ verify pass (tsc clean)
 
 `verified` — `npm run verify` (tsc) PASS. Executed the WHOLE deferred ACV visual/feel pile (recalibration:

@@ -1231,3 +1231,30 @@ The fundamental issue: KCC's slope projection, autostep, and contact resolution 
 **Picked**: For static reads, set `ctx.flags.paused = true` — the main loop early-returns before any camera sync (the pause-gates-everything rule), so a free `cam.position`/`lookAt` STICKS and the manually-posed mesh holds. Pattern: enter live briefly (so terrain + entities exist + a live tick populates dust/anim if needed), then pause, pose the target (manual gait phase / burrowT / leg-lift), free-frame the camera close, screenshot. For FX that must accumulate over frames (speeder dust trail), drive a few LIVE ticks first (re-injecting velocity so damping doesn't bleed it), THEN pause to freeze the cloud mid-air + hold the glow. Live tracking strips remain useful only when the creature recedes ALONG the view axis from the player-as-camera (the pre-existing shrew-flee). Genuinely live-only feel (in-motion gait, wind, sway) stays foreground (D150).
 
 **friction-score:** 2
+
+## D165 — A verification harness MUST render the REAL game camera; a harness that overrides the camera (or assumes a facing convention) can mask a real-view bug for multiple rounds (Session ACX)
+**When**: ACX — the user reported the seated speeder rig facing/posed wrong; my `speeder-seated` rig-shot scenario reported "facing forward, pose fine" via a numeric `faceDotFwd` check for THREE rounds while the live view was visibly wrong.
+
+**Why**: The scenario (a) OVERRODE `cam.position`/`lookAt` with a hand-placed behind-cam for its screenshot — so it never rendered what the game's own chase-cam shows the user — and (b) computed "facing" as `+Z·bikeForward`, *assuming* +Z is the visible face (the D137 convention) rather than observing pixels. Both assumptions can be individually true yet jointly mask the real bug. Net: the harness looked faithful but verified a fiction; I shipped "fixes" that didn't match the user's screen.
+
+**Picked**: A pose/feel harness must (1) render the REAL in-game camera path (let `updateSpeeder` drive the chase cam; do NOT override `cam.position` for the shot), and (2) supplement any convention-based numeric check with fixed EXTERNAL world angles + actually reading the pixels. The new `bike-truth` scenario pins bike yaw=0 (nose=-Z unambiguous), captures the real game-cam frame + 5 fixed world angles, and only THEN poses. The "torso disconnected" + "facing backwards" reports were both diagnosable in one `bike-truth` run once the camera was real.
+
+**friction-score:** 4
+
+## D166 — Pose a rig to world targets with a numeric IK SWEEP (minimize joint-world-pos → target distance), not by eyeballing low-res frames (Session ACX)
+**When**: ACX — solving the seated speeder pose so the hands land on the handlebar grips + feet on the footpegs.
+
+**Why**: Hand-tuning coupled Euler joint angles (hip pitch + abduction + knee; shoulder pitch + lean) by eye across recompile→screenshot rounds is slow and converges poorly — the bike's grip/peg positions are known world points, so the problem is just "find the joint angles whose wrist/ankle world positions hit them."
+
+**Picked**: An in-page sweep (runs paused, pure matrix math, one dev-boot) grids the joint angles, computes each candidate's `wrist.getWorldPosition()` distance to the grip target + `ankle` to the peg, and reports the lowest-error angles + per-axis residuals to bake. Surfaced the real constraints fast: the ~0.65m arm can't reach the ~0.80m grips without a forward torso lean (→ deeper lean); the seat can't go further back than 0.36 or the bars leave arm range; the 3-DOF leg can't hit the pegs dead-on (~22cm residual, reads astride). Constrain the sweep (e.g. forbid strong backward hip pitch) to avoid contorted local minima. The numeric error is the gate; a final render confirms it reads.
+
+**friction-score:** 2
+
+## D167 — A big seated forward-lean must pivot at the WAIST; `spineBend` is parented at the rig origin (y=0, feet), so a bare rotation slides the whole torso off the pelvis (Session ACX)
+**When**: ACX — the seated speeder lean (~0.6 rad) made the torso visibly detach from the lower body ("torso disconnected from the body").
+
+**Why**: `spineBend` (torso + head + arms + pack) is added to `body` at the rig origin (y=0, the feet), while the legs stay on `body`. `spineBend.rotation.x` therefore pivots the upper body about the FEET — a 0.6 rad lean translates the torso ~0.4m forward off the (static) pelvis. Invisible at the normal standing lean (0.04 rad), glaring at a riding lean. Subtlety: that same forward slide had been *accidentally* providing the arm reach to the bars, so fixing the pivot also removed the reach (re-solved with a deeper lean — D166).
+
+**Picked**: In the seated branch, compensate `spineBend.position = (0, PIVOT_Y·(1-cos θ), -PIVOT_Y·sin θ)` with `PIVOT_Y≈0.92` (waist) so the rotation effectively pivots at the waist — the torso rotates in place, staying seated on the hips. RESET `spineBend.position.set(0,0,0)` on the non-seated path so on-foot posture is unaffected (the early-return seated branch would otherwise leave the offset stuck after dismount).
+
+**friction-score:** 2

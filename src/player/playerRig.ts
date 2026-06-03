@@ -1127,32 +1127,54 @@ export function updatePlayerRig(ctx: GameContext, dt: number): void {
     rig.heading = sp.yaw + Math.PI;                  // face the bike's forward (-Z local)
     rig.group.rotation.y = rig.heading;
     rig.state = 'idle';
-    // ACX — RIDING pose: lean forward over the tank, both hands reaching
-    // forward+down to the handlebar grips (bars are ~0.77m up + 0.28m fwd of
-    // the seat origin), knees bent up astride the chassis with shins dropping
-    // to the footpegs (fwd + out + low). Tuned in the speeder-seated harness.
-    for (let i = 0; i < 2; i++) {
-      const side = i === 1 ? 1 : -1;
-      // Legs: thigh forward to ~horizontal, knee bent so the shin drops down to
-      // the footpeg (pegs are fwd + low + out). Ankle flexes the foot flat onto
-      // the peg. (Earlier values over-flexed → knees/feet curled up overhead.)
-      rig.hips[i].rotation.set(0.85, 0, side * 0.20);
-      rig.knees[i].rotation.x = 0.95;
-      rig.ankles[i].rotation.x = -0.25;
-      // Arms: the bars sit BELOW the shoulders + forward, so the upper arm
-      // angles forward-DOWN (modest shoulder pitch) and the elbow bends so the
-      // hands meet the grips. (shoulder.x=1.15 raised them overhead — wrong.)
-      rig.shoulders[i].rotation.set(0.55, 0, side * 0.16);
-      rig.elbows[i].rotation.x = 0.55;
-      rig.wrists[i].rotation.x = 0.1;
-    }
+    // ACX RIDING pose — geometry-solved, not eyeballed. Bike-local targets
+    // (from speeder.ts): handlebar grips (±0.34, 0.42, 0.00); footpeg pads
+    // (±0.43, -0.08, 0.15). Rig origin sits at the seat (SEAT_Y/Z); the rig
+    // faces the nose (-Z). Key constraint: shoulder→grip is ~0.80m but the arm
+    // is only 0.65m, so the rider MUST lean the torso forward to bring the
+    // shoulders over the bars — otherwise the hands can't reach + the figure
+    // reads as standing upright on the bike (the prior bug). So: strong spine
+    // lean forward, arms drop forward-down to the grips, legs splay OUT + a
+    // knee bend that lifts the feet up onto the low pegs. Tuned numerically in
+    // the bike-truth harness (logs wrist↔grip + ankle↔peg distances).
     rig.body.position.set(0, 0, 0);
     rig.body.rotation.x = 0;
-    rig.spineBend.rotation.set(0.28, 0, 0);            // forward lean onto the bars
+    // Forward lean brings the shoulders over the bars (so the ~0.65m arm can
+    // reach the grips). spineBend is parented at the rig ORIGIN (y=0, the feet),
+    // so a bare rotation pivots the whole torso about the feet and SLIDES it
+    // ~0.4m forward off the (static, body-parented) legs → the "torso
+    // disconnected from the body" gap. Fix: translate spineBend so the rotation
+    // effectively pivots at the WAIST (PIVOT_Y) — the torso rotates in place,
+    // staying seated on the pelvis. (Reset to (0,0,0) on the non-seated path.)
+    const SEATED_LEAN = 0.60;
+    const PIVOT_Y = 0.92;
+    rig.spineBend.rotation.set(SEATED_LEAN, 0, 0);
+    rig.spineBend.position.set(0, PIVOT_Y * (1 - Math.cos(SEATED_LEAN)), -PIVOT_Y * Math.sin(SEATED_LEAN));
+    for (let i = 0; i < 2; i++) {
+      const side = i === 1 ? 1 : -1;
+      // Legs: hang ~straight down (tiny back of vertical) with a strong outward
+      // abduction (z-roll) so the knees splay astride the chassis + the feet
+      // track out toward the ±0.43 pegs. Pegs are only ~0.13m fwd + ~0.5m below
+      // the hip, so a near-vertical splayed leg + flat foot reads as feet-on-pegs
+      // (numeric solve lands the ankles ~0.15m inboard / ~0.2m above the pads —
+      // visually astride the bike; the 3-DOF leg can't hit the pads exactly).
+      rig.hips[i].rotation.set(-0.13, 0, side * 0.53);
+      rig.knees[i].rotation.x = 0.0;
+      rig.ankles[i].rotation.x = 0.30;            // dorsiflex → sole flat on the horizontal peg
+      // Arms: with the torso leaned forward, shoulder.x = -(lean) keeps the upper
+      // arm VERTICAL in world (hanging straight down from the leaned shoulder)
+      // so the hands drop onto the grips below. Solved: hands land ~4cm off.
+      rig.shoulders[i].rotation.set(-0.62, 0, side * 0.12);
+      rig.elbows[i].rotation.x = 0.0;
+      rig.wrists[i].rotation.x = 0.15;
+    }
     rig.headGroup.position.y = HEAD_Y;
     rig._aimPrevHeading = rig.heading;
     return;
   }
+  // Not seated — clear any waist-pivot offset the seated branch applied so the
+  // on-foot spine bends about its normal (origin) pivot.
+  rig.spineBend.position.set(0, 0, 0);
 
   // Position — ABT P2 fix: pre-fix used `tr.y - eyeOffset - 0.5` which
   // is an approximate magic number that doesn't match actual capsule
