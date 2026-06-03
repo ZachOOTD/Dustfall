@@ -1169,16 +1169,31 @@ const _DEFS: Record<ItemId, ItemDef> = {
     },
     makeViewModel() {
       const group = new THREE.Group();
-      const mat = new THREE.MeshLambertMaterial({ color: 0x4a6a3a });
-      const wedge = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.05, 0.06), mat);
-      wedge.rotation.set(0.2, 0.3, 0.1);
-      group.add(wedge);
-      // Tiny fiber strands
-      const fiber = new THREE.MeshLambertMaterial({ color: 0x6a8a4a });
+      // ACZ — detail pass: a cut chunk of cactus — pale wet flesh core, a waxy
+      // green skin cap on the outer face, exposed vertical fiber ribs on the cut
+      // face, and a couple of spine clusters.
+      const fleshMat = new THREE.MeshLambertMaterial({ color: 0x8aa868, flatShading: true });
+      const skinMat = new THREE.MeshLambertMaterial({ color: 0x3a5a2a, flatShading: true });
+      const fiberMat = new THREE.MeshLambertMaterial({ color: 0xc0cda0 });
+      const spineMat = new THREE.MeshLambertMaterial({ color: 0xd8c89a });
+
+      const flesh = new THREE.Mesh(new THREE.IcosahedronGeometry(0.046, 0), fleshMat);
+      flesh.scale.set(1.2, 0.85, 1.0); flesh.rotation.set(0.2, 0.3, 0.1); group.add(flesh);
+      // Waxy skin cap on the outer (top) face.
+      const skin = new THREE.Mesh(
+        new THREE.SphereGeometry(0.047, 10, 6, 0, Math.PI * 2, 0, Math.PI * 0.5), skinMat);
+      skin.scale.set(1.18, 0.55, 1.0); skin.position.y = 0.013; group.add(skin);
+      // Exposed fiber ribs on the cut face.
+      for (let i = 0; i < 5; i++) {
+        const f = new THREE.Mesh(new THREE.BoxGeometry(0.0026, 0.052, 0.0026), fiberMat);
+        f.position.set((i - 2) * 0.012, -0.006, 0.03); f.rotation.x = 0.22; group.add(f);
+      }
+      // Spine clusters on the skin.
       for (let i = 0; i < 3; i++) {
-        const f = new THREE.Mesh(new THREE.BoxGeometry(0.002, 0.012, 0.002), fiber);
-        f.position.set((i - 1) * 0.012, 0.028, 0);
-        group.add(f);
+        const a = i * 2.1;
+        const spine = new THREE.Mesh(new THREE.ConeGeometry(0.0022, 0.014, 4), spineMat);
+        spine.position.set(Math.cos(a) * 0.026, 0.03, Math.sin(a) * 0.018);
+        spine.rotation.set(0.3, 0, a); group.add(spine);
       }
       return group;
     },
@@ -1438,10 +1453,29 @@ const _DEFS: Record<ItemId, ItemDef> = {
     },
     makeViewModel() {
       const group = new THREE.Group();
-      const mat = new THREE.MeshLambertMaterial({ color: 0xb8a088 });
-      const slab = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.035, 0.07), mat);
-      slab.rotation.set(0.1, 0.4, 0.05);
-      group.add(slab);
+      // ACZ — detail pass: a heavy, lumpy slab of pale worm-flesh — a darker
+      // raw membrane on top, exposed fiber striations on the cut face, and a
+      // couple of glistening wet ooze patches.
+      const fleshMat = new THREE.MeshLambertMaterial({ color: 0xc2a890, flatShading: true });
+      const membraneMat = new THREE.MeshLambertMaterial({ color: 0x9a7a64, flatShading: true });
+      const fiberMat = new THREE.MeshLambertMaterial({ color: 0xd8c4ac });
+      const oozeMat = new THREE.MeshLambertMaterial({ color: 0x7a4438, emissive: 0x180806, emissiveIntensity: 0.3 });
+
+      const slab = new THREE.Mesh(new THREE.IcosahedronGeometry(0.06, 1), fleshMat);
+      slab.scale.set(1.5, 0.5, 1.0); slab.rotation.set(0.1, 0.4, 0.05); group.add(slab);
+      // Raw membrane patch draped over the top.
+      const membrane = new THREE.Mesh(new THREE.IcosahedronGeometry(0.05, 1), membraneMat);
+      membrane.scale.set(1.5, 0.18, 1.0); membrane.position.set(0.004, 0.02, 0); membrane.rotation.set(0.1, 0.4, 0.05); group.add(membrane);
+      // Exposed fiber striations across the cut face.
+      for (let i = 0; i < 5; i++) {
+        const f = new THREE.Mesh(new THREE.BoxGeometry(0.085, 0.0022, 0.0022), fiberMat);
+        f.position.set(0, -0.004 + (i - 2) * 0.006, 0.03); f.rotation.set(0.1, 0.4, 0.05); group.add(f);
+      }
+      // Glistening wet ooze patches.
+      for (const [x, y, z] of [[0.02, 0.014, 0.02], [-0.03, 0.008, -0.015]] as const) {
+        const ooze = new THREE.Mesh(new THREE.SphereGeometry(0.011, 8, 6), oozeMat);
+        ooze.scale.set(1.4, 0.4, 1.1); ooze.position.set(x, y, z); group.add(ooze);
+      }
       return group;
     },
     makeIcon() {
@@ -1521,18 +1555,30 @@ const _DEFS: Record<ItemId, ItemDef> = {
         ringDensity: 12.0,            // tight rings → small-diameter branch
         weatherLevel: 0.55,           // dead-tree branches are weathered grey
       });
-      const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.018, 0.34, 6), mat);
+      const barkMat = vmWood(0x564f47, { grainAxis: Math.PI / 2.4, ringDensity: 15.0, weatherLevel: 0.72 });
+      // Rounder 8-sided stick; splinters + knots are CHILDREN so they ride the tilt.
+      const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.019, 0.34, 8), mat);
+      // Splintered broken end at the thin (+Y) tip.
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * Math.PI * 2;
+        const shard = new THREE.Mesh(new THREE.ConeGeometry(0.0035, 0.03, 4), mat);
+        shard.position.set(Math.cos(a) * 0.006, 0.182, Math.sin(a) * 0.006);
+        shard.rotation.set(Math.cos(a) * 0.4, 0, Math.sin(a) * 0.4); stick.add(shard);
+      }
+      // Two knot bumps along the shaft.
+      for (const ky of [-0.05, 0.06]) {
+        const knot = new THREE.Mesh(new THREE.SphereGeometry(0.011, 6, 5), barkMat);
+        knot.position.set(0.014, ky, 0); knot.scale.set(0.7, 1, 0.9); stick.add(knot);
+      }
       stick.rotation.set(0, 0, Math.PI / 2.4);
       group.add(stick);
-      const twig = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.008, 0.09, 4), mat);
-      twig.position.set(0.08, 0.03, 0);
-      twig.rotation.set(0, 0, -0.6);
-      group.add(twig);
-      // Second smaller offshoot on the opposite side
-      const twig2 = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.007, 0.06, 4), mat);
-      twig2.position.set(-0.04, 0.02, 0.01);
-      twig2.rotation.set(0, 0, 0.75);
-      group.add(twig2);
+      // Offshoot twigs (group-space, on the tilted shaft).
+      const twig = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.008, 0.09, 5), mat);
+      twig.position.set(0.08, 0.03, 0); twig.rotation.set(0, 0, -0.6); group.add(twig);
+      const twig2 = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.007, 0.06, 5), mat);
+      twig2.position.set(-0.04, 0.02, 0.01); twig2.rotation.set(0, 0, 0.75); group.add(twig2);
+      const twig3 = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.006, 0.045, 4), barkMat);
+      twig3.position.set(0.02, -0.03, -0.012); twig3.rotation.set(0.3, 0, -0.9); group.add(twig3);
       return group;
     },
     makeIcon() {
@@ -1687,37 +1733,41 @@ const _DEFS: Record<ItemId, ItemDef> = {
       return { consumed: true, message: 'grill attached' };
     },
     makeViewModel() {
-      // ABO C3 — upgraded from plain Lambert. Metal shader on bars + rails
-      // (brushed iron with scratches + worn highlights) + a cooked-residue
-      // rust patch on one bar + small chain detail dangling from a side.
+      // ACZ — deep-detail: a real framed cooking grate — perimeter frame +
+      // parallel grate bars (one rust-caked from use) + 4 short folding legs so
+      // it reads as something you set OVER a fire + a dangling attach chain.
       const group = new THREE.Group();
       const ironMat = vmMetal(0x3a342a, { wornScale: 10.0, scratchStrength: 0.08 });
       const rustyMat = vmMetal(0x5a2a18, { wornScale: 10.0, scratchStrength: 0.12 });
-      // 4 short bars stacked + a frame loop suggesting the grate
-      for (let i = 0; i < 4; i++) {
-        const bar = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.008, 0.008, 0.16, 6),
-          i === 1 ? rustyMat : ironMat,
-        );
-        bar.rotation.z = Math.PI / 2;
-        bar.position.set(0, -0.015 + i * 0.012, 0);
-        group.add(bar);
-      }
-      // Side rails (perpendicular)
+      const W = 0.19, D = 0.12;
+
+      // Perimeter frame — 2 side rails (along X) + 2 end rails (along Z).
       for (const sz of [-1, 1]) {
-        const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.04, 6), ironMat);
-        rail.position.set(0, 0.003, sz * 0.075);
-        group.add(rail);
+        const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.007, 0.007, W, 8), ironMat);
+        rail.rotation.z = Math.PI / 2; rail.position.set(0, 0, sz * D / 2); group.add(rail);
       }
-      // Small dangling chain link from one side — reads as "attach to fire"
+      for (const sx of [-1, 1]) {
+        const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.007, 0.007, D, 8), ironMat);
+        rail.rotation.x = Math.PI / 2; rail.position.set(sx * W / 2, 0, 0); group.add(rail);
+      }
+      // Grate bars spanning the depth, spaced along the width (one rusty).
+      const n = 6;
+      for (let k = 0; k < n; k++) {
+        const x = (k / (n - 1) - 0.5) * W * 0.92;
+        const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.0055, 0.0055, D * 0.96, 6), k === 2 ? rustyMat : ironMat);
+        bar.rotation.x = Math.PI / 2; bar.position.set(x, 0, 0); group.add(bar);
+      }
+      // Four short folding legs angled down-out at the corners.
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+        const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.005, 0.05, 6), ironMat);
+        leg.position.set(sx * W * 0.44, -0.024, sz * D * 0.42);
+        leg.rotation.set(sz * 0.3, 0, -sx * 0.3); group.add(leg);
+      }
+      // Dangling attach chain from one corner.
       for (let i = 0; i < 3; i++) {
-        const link = new THREE.Mesh(
-          new THREE.TorusGeometry(0.006, 0.0018, 4, 8),
-          ironMat,
-        );
-        link.position.set(0.08, -0.026 - i * 0.008, 0.075);
-        link.rotation.x = (i % 2) * Math.PI / 2;
-        group.add(link);
+        const link = new THREE.Mesh(new THREE.TorusGeometry(0.006, 0.0018, 4, 8), ironMat);
+        link.position.set(W * 0.46, 0.0 - i * 0.009, D * 0.46);
+        link.rotation.x = (i % 2) * Math.PI / 2; group.add(link);
       }
       return group;
     },
@@ -1748,27 +1798,39 @@ const _DEFS: Record<ItemId, ItemDef> = {
     },
     makeViewModel() {
       const group = new THREE.Group();
+      // ACZ — detail pass: a smoother bulbous teal fruit with bioluminescent
+      // glow PODS (always-on MeshBasic nodes), darker mottle spots, and a woody
+      // stem + sepal calyx at the top. Reads organic + alien, not plastic.
       const bodyMat = new THREE.MeshLambertMaterial({
-        color: 0x2a8a8a,
-        emissive: 0x0a2828,
-        emissiveIntensity: 0.6,
-        flatShading: true,
+        color: 0x2a8a8a, emissive: 0x0c3030, emissiveIntensity: 0.7, flatShading: false,
       });
-      const spotMat = new THREE.MeshLambertMaterial({
-        color: 0x103838,
-        flatShading: true,
-      });
-      const fruit = new THREE.Mesh(new THREE.IcosahedronGeometry(0.07, 1), bodyMat);
-      fruit.scale.set(1, 1.1, 0.95);
-      group.add(fruit);
-      // A few darker spots — small icosahedra parented at offsets
-      const spotPositions: Array<[number, number, number]> = [
-        [0.04, 0.02, 0.045], [-0.035, 0.04, 0.04], [0.01, -0.04, 0.05],
-      ];
-      for (const [x, y, z] of spotPositions) {
-        const spot = new THREE.Mesh(new THREE.IcosahedronGeometry(0.012, 0), spotMat);
-        spot.position.set(x, y, z);
-        group.add(spot);
+      const spotMat = new THREE.MeshLambertMaterial({ color: 0x0e3434, flatShading: true });
+      const podMat = new THREE.MeshBasicMaterial({ color: 0x6fe6dc, toneMapped: false, fog: false });
+      const stemMat = new THREE.MeshLambertMaterial({ color: 0x4a3a26 });
+      const sepalMat = new THREE.MeshLambertMaterial({ color: 0x1f6a52, flatShading: true });
+
+      const fruit = new THREE.Mesh(new THREE.IcosahedronGeometry(0.07, 2), bodyMat);
+      fruit.scale.set(1, 1.12, 0.95); group.add(fruit);
+
+      // Bioluminescent glow pods scattered on the surface.
+      for (let i = 0; i < 6; i++) {
+        const a = i * 2.39, yy = (i / 5 - 0.5) * 0.1;
+        const pod = new THREE.Mesh(new THREE.SphereGeometry(0.008 + (i % 2) * 0.003, 8, 6), podMat);
+        pod.position.set(Math.cos(a) * 0.063, yy, Math.sin(a) * 0.06); group.add(pod);
+      }
+      // Darker mottle spots.
+      for (const [x, y, z] of [[0.045, 0.02, 0.04], [-0.04, 0.04, 0.038], [0.012, -0.045, 0.05], [-0.03, -0.03, 0.045]] as const) {
+        const spot = new THREE.Mesh(new THREE.IcosahedronGeometry(0.013, 0), spotMat);
+        spot.position.set(x, y, z); spot.scale.set(1, 0.6, 1); group.add(spot);
+      }
+      // Woody stem + sepal calyx at the top.
+      const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.008, 0.025, 8), stemMat);
+      stem.position.y = 0.085; group.add(stem);
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * Math.PI * 2;
+        const sepal = new THREE.Mesh(new THREE.ConeGeometry(0.012, 0.03, 4), sepalMat);
+        sepal.position.set(Math.cos(a) * 0.018, 0.074, Math.sin(a) * 0.018);
+        sepal.rotation.set(Math.PI * 0.62, 0, -a); group.add(sepal);
       }
       return group;
     },
@@ -2093,17 +2155,40 @@ const _DEFS: Record<ItemId, ItemDef> = {
     },
     makeViewModel() {
       const group = new THREE.Group();
-      const mat = new THREE.MeshLambertMaterial({ color: 0xa89878 });
-      const roll = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.22, 12), mat);
-      roll.rotation.z = Math.PI / 2;
-      group.add(roll);
-      // Two short poles strapped to one side
-      const poleMat = new THREE.MeshLambertMaterial({ color: 0x4a3a2a });
+      // ACY/ACZ — deep-detail: a rolled canvas bundle (fabric roll w/ a rolled
+      // end-spiral + cord straps), bundled tent poles lashed alongside, and two
+      // iron stakes tucked in. (D107 zero-asset — procedural shaders.)
+      const canvas = createFabricMaterial(0xb0a184, undefined, { disableShimmer: true });
+      const canvasDark = createFabricMaterial(0x8e7f60, undefined, { disableShimmer: true });
+      const poleMat = vmWood(0x4a3a2a, { ringDensity: 8.0, weatherLevel: 0.5 });
+      const cordMat = new THREE.MeshLambertMaterial({ color: 0x6a5238 });
+      const ironMat = vmMetal(0x6a6258, { wornScale: 5.0 });
+
+      // Rolled canvas (axis along X).
+      const roll = new THREE.Mesh(new THREE.CylinderGeometry(0.058, 0.058, 0.22, 16), canvas);
+      roll.rotation.z = Math.PI / 2; group.add(roll);
+      // Rolled-fabric spiral on the +X end face (concentric).
+      for (const r of [0.05, 0.034, 0.018]) {
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(r, 0.009, 6, 18), canvasDark);
+        ring.rotation.y = Math.PI / 2; ring.position.x = 0.111; group.add(ring);
+      }
+      // A loose canvas flap draping off the roll.
+      const flap = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.004, 0.09), canvas);
+      flap.position.set(-0.02, -0.052, 0.04); flap.rotation.set(0.3, 0, 0.05); group.add(flap);
+      // Cord straps cinching the bundle (axis X).
+      for (const x of [-0.075, 0, 0.075]) {
+        const strap = new THREE.Mesh(new THREE.TorusGeometry(0.062, 0.005, 6, 18), cordMat);
+        strap.rotation.y = Math.PI / 2; strap.position.x = x; group.add(strap);
+      }
+      // Two bundled tent poles lashed to the underside.
       for (let i = 0; i < 2; i++) {
-        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.24, 4), poleMat);
-        pole.rotation.z = Math.PI / 2;
-        pole.position.set(0, -0.05, (i - 0.5) * 0.04);
-        group.add(pole);
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.009, 0.27, 8), poleMat);
+        pole.rotation.z = Math.PI / 2; pole.position.set(0, -0.058, (i - 0.5) * 0.03); group.add(pole);
+      }
+      // Two iron stakes tucked alongside.
+      for (let i = 0; i < 2; i++) {
+        const stake = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.003, 0.12, 6), ironMat);
+        stake.rotation.set(0, 0, Math.PI / 2 + 0.15); stake.position.set(0.04, -0.052, -0.05 + i * 0.018); group.add(stake);
       }
       return group;
     },
@@ -2138,26 +2223,40 @@ const _DEFS: Record<ItemId, ItemDef> = {
     },
     makeViewModel() {
       const group = new THREE.Group();
-      // Folded planks bundled together — a small flat stack.
-      const plankMat = new THREE.MeshLambertMaterial({ color: 0x6b4a2c });
-      for (let i = 0; i < 3; i++) {
-        const plank = new THREE.Mesh(
-          new THREE.BoxGeometry(0.22, 0.018, 0.08),
-          plankMat,
-        );
-        plank.position.y = -0.02 + i * 0.022;
-        group.add(plank);
+      // ACZ — deep-detail: a folded warped scrap-metal sheet (matches the real
+      // deployed sled's scrap-metal look — ACA) with rivets, lashed by a strap,
+      // twin skid runners underneath, and a stub of the tow handle/yoke.
+      const sheetMat = vmMetal(0x6a5a48, { wornScale: 6.0, scratchStrength: 0.06 });
+      sheetMat.emissive = new THREE.Color(0x0c0a07);
+      const sheetDark = vmMetal(0x52463a, { wornScale: 7.0 });
+      const runnerMat = vmMetal(0x39302a, { wornScale: 5.0 });
+      const rivetMat = vmMetal(0x8a8278, { wornScale: 3.0 });
+      const strapMat = createFabricMaterial(0x4a3a28, undefined, { disableShimmer: true });
+
+      // Folded sheet — 2 plates with a slight warp (rotation) reads as scrap.
+      for (let i = 0; i < 2; i++) {
+        const plate = new THREE.Mesh(new THREE.BoxGeometry(0.23, 0.013, 0.10), i ? sheetDark : sheetMat);
+        plate.position.y = -0.012 + i * 0.02;
+        plate.rotation.z = (i - 0.5) * 0.06;   // warped, not flat
+        group.add(plate);
       }
-      // Twin runners strapped underneath.
-      const runnerMat = new THREE.MeshLambertMaterial({ color: 0x3a2a1a });
+      // Rivets across the top plate.
+      for (const x of [-0.085, 0, 0.085]) for (const z of [-0.035, 0.035]) {
+        const rivet = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.005, 0.006, 6), rivetMat);
+        rivet.position.set(x, 0.012, z); group.add(rivet);
+      }
+      // Lashing strap around the fold.
+      const strap = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.05, 0.108), strapMat);
+      strap.position.set(0.0, -0.002, 0); group.add(strap);
+      // Twin skid runners underneath.
       for (const sz of [-1, 1]) {
-        const runner = new THREE.Mesh(
-          new THREE.BoxGeometry(0.24, 0.012, 0.018),
-          runnerMat,
-        );
-        runner.position.set(0, -0.05, sz * 0.024);
-        group.add(runner);
+        const runner = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.012, 0.02), runnerMat);
+        runner.position.set(0, -0.038, sz * 0.03); group.add(runner);
       }
+      // Stub of the welded tow-handle yoke.
+      const yoke = new THREE.Mesh(new THREE.CylinderGeometry(0.007, 0.007, 0.08, 8), runnerMat);
+      yoke.rotation.x = Math.PI / 2; yoke.position.set(0.1, -0.018, 0); group.add(yoke);
+
       return group;
     },
     makeIcon() {
@@ -2451,30 +2550,40 @@ const _DEFS: Record<ItemId, ItemDef> = {
     },
     makeViewModel() {
       const group = new THREE.Group();
-      // Egg-shape — slightly elongated icosahedron. Dark stone with
-      // subtle warm-red veining (the creature curled inside).
-      const stoneMat = new THREE.MeshLambertMaterial({
-        color: 0x4a3a2c,
-        flatShading: true,
-      });
-      const veinMat = new THREE.MeshLambertMaterial({
-        color: 0xb04030,
-        emissive: 0x4a1408,
-        emissiveIntensity: 0.4,
-      });
-      const egg = new THREE.Mesh(new THREE.IcosahedronGeometry(0.085, 0), stoneMat);
-      egg.scale.set(1, 1.25, 1);
-      group.add(egg);
-      // Two thin veins running around the egg
-      const v1 = new THREE.Mesh(new THREE.TorusGeometry(0.075, 0.006, 4, 18), veinMat);
-      v1.rotation.x = Math.PI / 2;
-      v1.scale.set(1, 1, 1.2);
-      group.add(v1);
-      const v2 = new THREE.Mesh(new THREE.TorusGeometry(0.072, 0.005, 4, 16), veinMat);
-      v2.rotation.x = Math.PI / 2.5;
-      v2.rotation.z = 0.4;
-      v2.scale.set(1, 1, 1.2);
-      group.add(v2);
+      // ACZ — detail pass: a smoother carved-stone egg (subdivided) with a
+      // GLOWING crack-vein network (the creature's warmth bleeding through),
+      // raised speckle nubs, and a chipped base. Lambert (no procedural-noise
+      // shader — it crawls on the moving viewmodel; the emissive veins carry it).
+      const stoneMat = new THREE.MeshLambertMaterial({ color: 0x4a3a2c, flatShading: true });
+      const stoneDark = new THREE.MeshLambertMaterial({ color: 0x382a1e, flatShading: true });
+      const veinMat = new THREE.MeshLambertMaterial({ color: 0xc4502e, emissive: 0x5a1a08, emissiveIntensity: 0.55 });
+
+      const egg = new THREE.Mesh(new THREE.IcosahedronGeometry(0.085, 1), stoneMat);
+      egg.scale.set(1, 1.25, 1); group.add(egg);
+
+      // Crack-vein network: 3 rings at varied tilts + 2 vertical seams.
+      const ringSpecs: Array<[number, number, number, number]> = [
+        [0.078, Math.PI / 2, 0, 0.006],
+        [0.073, Math.PI / 2.4, 0.5, 0.005],
+        [0.07, Math.PI / 1.8, -0.6, 0.0045],
+      ];
+      for (const [r, rx, rz, tube] of ringSpecs) {
+        const v = new THREE.Mesh(new THREE.TorusGeometry(r, tube, 4, 20), veinMat);
+        v.rotation.x = rx; v.rotation.z = rz; v.scale.set(1, 1, 1.2); group.add(v);
+      }
+      for (const rzv of [0.0, Math.PI / 2.5]) {
+        const seam = new THREE.Mesh(new THREE.TorusGeometry(0.092, 0.004, 4, 22, Math.PI), veinMat);
+        seam.rotation.y = rzv; seam.scale.set(0.85, 1, 0.85); group.add(seam);
+      }
+      // Raised speckle nubs (carved stone texture in geometry).
+      for (let i = 0; i < 7; i++) {
+        const a = i * 2.39, y = (i / 6 - 0.5) * 0.16;
+        const nub = new THREE.Mesh(new THREE.IcosahedronGeometry(0.006 + (i % 3) * 0.002, 0), stoneDark);
+        nub.position.set(Math.cos(a) * 0.078, y, Math.sin(a) * 0.078); group.add(nub);
+      }
+      // Chipped flat base so it sits.
+      const base = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.024, 0.012, 8), stoneDark);
+      base.position.y = -0.105; group.add(base);
       return group;
     },
     makeIcon() {

@@ -3,6 +3,30 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ACZ — 2026-06-03 — Item-model detail pass, part 2: the remaining ~22 models (every item now detailed) ✓ verify pass (tsc clean)
+
+`verified` — `npm run verify` (tsc) PASS; no save change; 1 file (`items.ts`). Finishes the ACY item-model thread —
+**every item in the game now has a deep-detailed or verified-at-parity mesh.** All iterated against the ACY `item-studio`
+view (`npm run rig-shot --scenario=item-studio --items=… --angles=…`).
+
+**Deep-polished primitives (7)**: **tent_kit** (plain cylinder → rolled canvas bundle: fabric roll + rolled-end spiral +
+cord straps + draping flap + bundled poles + iron stakes), **sled_kit** (plank stack → folded warped scrap-metal sheet +
+rivets + lashing strap + skid runners + tow-yoke stub), **grill_kit** (flat bar-stack → framed cooking grate + grate bars
++ 4 folding legs + attach chain), **companion_pod** (faceted egg → smoother carved-stone egg + glowing crack-vein network
++ speckle nubs + chipped base), **cactus_pulp** (green box → cut cactus chunk: pale flesh + waxy skin cap + fiber ribs +
+spines), **alien_fruit** (flat ellipsoid → organic bioluminescent fruit: glowing MeshBasic pods + mottle spots + stem &
+sepal calyx), **raw_worm_meat** (single slab → lumpy flesh slab + raw membrane + fiber striations + wet ooze patches).
+
+**Light touch (1)**: **branch** (rounder 8-sided shaft + splintered broken end + knot bumps + a 3rd twig stub).
+
+**Verified at parity (no change)**: scrap, cloth, stake_kit, fire_kit, locker_kit, lantern_kit, bedroll_kit,
+large_tent_kit, all cooked foods, lizard/shrew raw+cooked + lizard-on-a-stick (these use the actual creature mesh or were
+upgraded in ABO/ACL — confirmed still reading well in the studio).
+
+**Process (honest)**: a breadth pass — primitives got 1-2 studio rounds each, not the full 5-8 (12 hero items already
+took ACY); they read clearly as their objects. No new D-entries (reused the ACY itemStudio harness + D169 pattern).
+**Owed (unchanged):** the ACW/ACX in-motion feel pile (D150, foreground-only).
+
 ## Session ACY — 2026-06-03 — Item-model detail pass (12 held items) + dynamic salvage-panel placement + POI greebles ✓ verify pass (tsc clean)
 
 `verified` — `npm run verify` (tsc) PASS throughout; no save-schema change. Long overnight. Item meshes are
