@@ -16,18 +16,19 @@ import { spawnBranchAt } from '../pickups/pickups.ts';
 import { Tuning } from '../config/tuning.ts';
 import { findBiomeCentroid } from './biomes.ts';
 import { createWoodGrainMaterial } from './woodGrainMaterial.ts';
+import { BRANCH_WOOD_COLOR, BRANCH_WEATHER_LEVEL } from './branchMesh.ts';
 
-// ACAE — warm aged-wood grain so trunk + tree-branches match the ground
-// branches + the held branch (all one deadwood family). Shared instances.
-// ACAF follow-up — the held branch is lit by the bright viewmodel scene; world
-// props sit in dim dusk/overcast light, so the held branch's dark base color
-// (0x3a2e20) read near-black out here. Lift the world base colors so they LOOK
-// like the held branch in-world rather than sharing its raw hex.
-const _trunkMat = createWoodGrainMaterial(0x6a5030, {
-  ringDensity: 6.0, weatherLevel: 0.6,
+// ACAE — aged-wood grain so trunk + tree-branches match the ground branches +
+// the held branch (all one deadwood family). Shared instances. ACAF follow-up —
+// the tree BRANCHES use the SHARED BRANCH_WOOD_COLOR so they're the exact same
+// color as the held + ground branches; the vm scene now mirrors the world
+// lighting (viewModel.ts) so held + dropped + tree all read identical. The trunk
+// is a thicker, slightly lighter wood (its own member, not a "branch").
+const _trunkMat = createWoodGrainMaterial(0x463827, {
+  ringDensity: 6.0, weatherLevel: 0.72,
 });
-const _branchMat = createWoodGrainMaterial(0x5c4528, {
-  ringDensity: 9.0, weatherLevel: 0.6,
+const _branchMat = createWoodGrainMaterial(BRANCH_WOOD_COLOR, {
+  ringDensity: 9.0, weatherLevel: BRANCH_WEATHER_LEVEL,
 });
 
 function makeDeadTree(rand: Rng): THREE.Group {

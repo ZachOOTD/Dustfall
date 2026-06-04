@@ -23,7 +23,7 @@ import { createFabricMaterial } from '../world/fabricMaterial.ts';
 import { createWoodGrainMaterial, type WoodGrainMaterialOpts } from '../world/woodGrainMaterial.ts';
 import { createBoneMaterial, type BoneMaterialOpts } from '../world/boneMaterial.ts';
 import { createGlassMaterial, type GlassMaterialOpts } from '../world/glassMaterial.ts';  // ACL ITEMS — lantern globe
-import { buildBranchMesh } from '../world/branchMesh.ts';  // ACAA — shared branch model (item + world pickups)
+import { buildBranchMesh, BRANCH_WOOD_COLOR, BRANCH_WEATHER_LEVEL } from '../world/branchMesh.ts';  // ACAA — shared branch model + shared color (item + world pickups)
 
 // ACT — viewmodel material wrappers. EVERY item mesh is rendered as a
 // VIEWMODEL: it's added to the main scene and tracks the camera (FP copy) or
@@ -1724,10 +1724,13 @@ const _DEFS: Record<ItemId, ItemDef> = {
       // trees). Clean tapered stick + a couple of twigs; no splinter bristles
       // or knot bumps (those read as weird clutter). vmWood for the held item.
       // ACAE — dark aged-wood grain (matches the dead trees + ground branches).
-      const mat = vmWood(0x3a2e20, {
+      // ACAF follow-up — uses the SHARED BRANCH_WOOD_COLOR/WEATHER_LEVEL so the
+      // held branch is the EXACT same color as the world ones; the vm scene now
+      // mirrors world lighting (viewModel.ts) so they read identical.
+      const mat = vmWood(BRANCH_WOOD_COLOR, {
         grainAxis: Math.PI / 2.4,     // grain runs along the shaft
         ringDensity: 12.0,            // tight rings → small-diameter branch
-        weatherLevel: 0.7,            // sun-cracked deadwood
+        weatherLevel: BRANCH_WEATHER_LEVEL,   // sun-cracked deadwood
       });
       const group = buildBranchMesh(mat, { len: 0.34, twigs: 3 });
       group.rotation.set(0, 0, -0.22);   // gentle diagonal lean for the FP read

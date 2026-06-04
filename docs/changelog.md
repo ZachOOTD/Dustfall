@@ -28,15 +28,22 @@ at the joint (`Rmid`), the knuckle shrank to a faint `Rmid`-sized smoothing sphe
 size + attach on the LOCAL shaft radius (`localR(f)`) so they sit on the tapered surface. Reads as one smooth taper now,
 no middle seam.
 
-**Follow-up 2 — single-mesh seamless shaft + world color match.** Two issues from the in-game screenshot. (1) The
-two-cylinder shaft still showed a facet where the segments met at the bend angle. Replaced with ONE continuous tapered
-`CylinderGeometry` (`Rbase`→`Rtip`, 8 height segments) with a gentle organic bow BAKED into the vertices (parabolic Z
-displacement, 0 at the ends → max at mid) — a single mesh has no seam anywhere. Twigs offset by `bowAt(f)` to follow the
-bowed centerline. (2) ACAF gave the world dead-trees + ~200 ground branches the held branch's RAW hex (`0x3a2e20`), but
-the held branch is lit by the bright viewmodel scene while world props sit in dim dusk/overcast light — so the same hex
-read near-black out in the world. Lifted the world base colors to warm browns (trunk `0x6a5030`, branches `0x5c4528`,
-weatherLevel 0.75→0.6) so they LOOK like the held branch in-world instead of sharing its hex. Held branch material
-unchanged. tsc clean; `branches` + `item-studio` rig-shots confirm.
+**Follow-up 2 — single-mesh seamless shaft + viewmodel lit by the WORLD.** Two issues from the in-game screenshot.
+(1) The two-cylinder shaft still showed a facet where the segments met at the bend angle. Replaced with ONE continuous
+tapered `CylinderGeometry` (`Rbase`→`Rtip`, 8 height segments) with a gentle organic bow BAKED into the vertices
+(parabolic Z displacement, 0 at the ends → max at mid) — a single mesh has no seam anywhere. Twigs offset by `bowAt(f)`
+to follow the bowed centerline. (2) **The held branch and world branches looked like different colors even at the same
+hex** — because the FP viewmodel renders in its OWN scene (D170) which had FIXED studio lights (ambient 0.9 + key 1.7 +
+fill 0.45), while world props are lit by the day/night sun+moon+ambient. Root-cause fix (user's call — "everything needs
+to be consistent; no model should look different in-hand vs in-world"): the vm scene's lights now **MIRROR the world
+sun/moon/ambient every frame** (`updateViewModel` copies color+intensity+direction from `ctx.lights`; lights live in
+`vm.scene` so directions are world-space and the camera-tracked item is lit exactly as a world object at that orientation
+would be). So a held item now darkens at dusk, warms at noon, flattens under overcast — identical to its dropped copy,
+for EVERY item, not just the branch. Trade-off vs the old studio rig: held items are no longer artificially bright at
+night (realistic; the torch flame stays emissive). Reverted the follow-up-1 color-lift; the deadwood color is now ONE
+shared constant (`BRANCH_WOOD_COLOR`/`BRANCH_WEATHER_LEVEL` exported from `branchMesh.ts`, imported by the held item,
+ground pickups, and tree branches) so they can never drift. New `branch-match` rig-shot scenario (FP held branch + world
+branch in one frame) confirms identical read at noon AND dusk. tsc clean.
 
 ## Session ACAE — 2026-06-04 — Dev item-spawner panel ✓ verify pass (tsc clean)
 

@@ -12,6 +12,14 @@
 import * as THREE from 'three';
 import type { Rng } from '../core/rng.ts';
 
+// ACAF follow-up — ONE source of truth for the deadwood color + weathering so
+// the held branch (items.ts), the ~200 ground branches (pickups.ts) and the
+// dead-tree branches (deadTree.ts) are guaranteed identical. They render under
+// the SAME lighting now (the vm scene mirrors the world sun/moon/ambient —
+// viewModel.ts), so a held branch and a dropped branch read as the same object.
+export const BRANCH_WOOD_COLOR = 0x3a2e20;
+export const BRANCH_WEATHER_LEVEL = 0.7;
+
 export interface BranchMeshOpts {
   /** Overall length of the main stick (m). Default 0.34 (item scale). */
   len?: number;

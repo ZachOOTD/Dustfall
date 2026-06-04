@@ -847,6 +847,34 @@ const SCENARIOS = {
     console.log(`[branches] ${JSON.stringify(r)}`);
   },
 
+  // Branch-match (ACAF f/u): FP held branch + a world branch in ONE frame under
+  // the SAME lighting, to verify they read identical (vm scene now mirrors the
+  // world sun/moon/ambient). Runs LIVE (not paused) so updateViewModel tracks
+  // the camera each frame. --time=<0..1> to compare day/dusk.
+  'branch-match': async (page) => {
+    const t = argv.time !== undefined ? Number(argv.time) : 0.5;
+    await captureStrip(page, 'branch-match', `(i)=>{
+      const ctx = window.__game.ctx;
+      ctx.weather.intensity = 0; ctx.weather.cloudiness = 0;
+      window.__game.setTime(${t});
+      ctx.flags.thirdPerson = false;
+      ctx.three.renderer.setSize(900, 700, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 900/700; cam.updateProjectionMatrix(); }
+      const inv = ctx.inventory;
+      inv.slots[0].item='branch'; inv.slots[0].count=1; inv.slots[0].meta=undefined; inv.selectedIdx=0;
+      const bs = (ctx.pickups.list||[]).filter(p=>p.itemId==='branch');
+      const b = bs[0]; if(!b){console.log('[branch-match] no world branch');return;}
+      const p = b.pos; const gy = ctx.terrain.heightAt(p.x, p.z);
+      const bx = p.x + 0.9, bz = p.z + 0.9;
+      ctx.player.body.body.setTranslation({x:bx, y:gy+1.0, z:bz}, true);
+      cam.position.set(bx, gy+1.55, bz);
+      cam.lookAt(p.x, p.y+0.05, p.z);
+      cam.updateMatrixWorld(true);
+      if(i===0) console.log('[branch-match] world branch at '+p.x.toFixed(1)+','+p.z.toFixed(1));
+    }`);
+  },
+
   // Dev-panel (ACAD): open the dev item-spawner panel + click an item, verify
   // it renders + adds to inventory.
   'dev-panel': async (page) => {

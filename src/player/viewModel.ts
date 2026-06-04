@@ -26,6 +26,13 @@ export interface ViewModel {
    *  `updateHeld`; zeroed each frame by `updateViewModel` before that hook. */
   heldPointLight: THREE.PointLight;
   heldSpotLight: THREE.SpotLight;
+  /** ACAF follow-up — the vm scene's lights MIRROR the world sun/moon/ambient
+   *  each frame (copied in updateViewModel) so a held item is lit IDENTICALLY to
+   *  its dropped/world copy. Previously the vm scene had fixed studio lights, so
+   *  the same model looked brighter/different in-hand than in-world. */
+  vmSun: THREE.DirectionalLight;
+  vmMoon: THREE.DirectionalLight;
+  vmAmbient: THREE.AmbientLight;
   currentItem: ItemId | null;
   anim: {
     active: boolean;
@@ -81,25 +88,29 @@ export function configureViewModelObject(obj: THREE.Object3D): void {
 
 export function createViewModel(ctx: GameContext): ViewModel {
   // ACAA — dedicated scene for the depth-cleared second pass (loop.ts). The
-  // held item no longer receives the WORLD lights, so this scene carries its
-  // own: a soft ambient + a key/fill rig parented to `group` (camera-relative)
-  // so the item is lit consistently as the player turns. Trade-off: the item
-  // no longer dims at night — a readability win for the detailed meshes; the
-  // torch flame is emissive so it still reads as the dominant light source.
+  // held item no longer receives the WORLD lights directly (different scene), so
+  // this scene carries its OWN sun/moon/ambient — but ACAF follow-up makes them
+  // MIRROR the world lights each frame (updateViewModel) instead of being fixed
+  // studio lights. That way a held item is lit IDENTICALLY to its dropped/world
+  // copy: same hex + same light = no in-hand/in-world difference. The lights are
+  // added to `scene` (NOT `group`), so their directions are world-space and the
+  // held item — which tracks the camera in world space — is lit exactly as a
+  // world object at that orientation would be.
   const scene = new THREE.Scene();
   const group = new THREE.Group();
   group.name = 'viewmodel';
   scene.add(group);
 
-  scene.add(new THREE.AmbientLight(0xffffff, 0.9));
-  const key = new THREE.DirectionalLight(0xfff4e6, 1.7);
-  key.position.set(0.6, 1.0, 0.8);
-  key.target.position.set(0, -0.15, -0.35);
-  group.add(key, key.target);
-  const fill = new THREE.DirectionalLight(0xbfd2ff, 0.45);
-  fill.position.set(-0.8, 0.2, 0.6);
-  fill.target.position.set(0, 0, -0.3);
-  group.add(fill, fill.target);
+  // Mirror lights — color/intensity/direction overwritten per-frame from
+  // ctx.lights. Initial values are placeholders.
+  const vmAmbient = new THREE.AmbientLight(0x4a3a2a, 0.4);
+  scene.add(vmAmbient);
+  const vmSun = new THREE.DirectionalLight(0xffe2ad, 1.0);
+  vmSun.castShadow = false;
+  scene.add(vmSun, vmSun.target);
+  const vmMoon = new THREE.DirectionalLight(0x6a7ea0, 0.0);
+  vmMoon.castShadow = false;
+  scene.add(vmMoon, vmMoon.target);
 
   // ACAB — held-item WORLD lights. The torch/flashlight functional lights used
   // to live in the item mesh; once that mesh moved into `scene` (D170) they
@@ -140,6 +151,9 @@ export function createViewModel(ctx: GameContext): ViewModel {
     itemRoot,
     heldPointLight,
     heldSpotLight,
+    vmSun,
+    vmMoon,
+    vmAmbient,
     currentItem: null,
     anim: { active: false, startTime: 0, itemId: null, duration: 0 },
     triggerUse() {
@@ -259,6 +273,26 @@ export function updateViewModel(ctx: GameContext, dt: number): void {
   // Hide entirely when not in game (start overlay or dead).
   const visible = ctx.flags.started && !ctx.stats.dead;
   if (vm.group.visible !== visible) vm.group.visible = visible;
+
+  // 1c. ACAF follow-up — mirror the WORLD sun/moon/ambient into the vm scene so
+  // the held item is lit identically to its dropped/world copy. Copy color +
+  // intensity verbatim; set the directional-light DIRECTIONS from the world sun
+  // dir (world sun comes FROM sunDir; the moon from the opposite side). Lights
+  // live in vm.scene (world-space), so the camera-tracked item is lit exactly as
+  // a world object at the same orientation would be — no in-hand/in-world gap.
+  const wl = ctx.lights;
+  vm.vmAmbient.color.copy(wl.ambient.color);
+  vm.vmAmbient.intensity = wl.ambient.intensity;
+  vm.vmSun.color.copy(wl.sun.color);
+  vm.vmSun.intensity = wl.sun.intensity;
+  vm.vmSun.position.copy(ctx.time.sunDir);
+  vm.vmSun.target.position.set(0, 0, 0);
+  vm.vmSun.target.updateMatrixWorld();
+  vm.vmMoon.color.copy(wl.moon.color);
+  vm.vmMoon.intensity = wl.moon.intensity;
+  vm.vmMoon.position.copy(ctx.time.sunDir).multiplyScalar(-1);
+  vm.vmMoon.target.position.set(0, 0, 0);
+  vm.vmMoon.target.updateMatrixWorld();
 
   // 2. Observe inventory selection change.
   const inv = ctx.inventory;
