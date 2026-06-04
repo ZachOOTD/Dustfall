@@ -70,6 +70,11 @@ each limb now gets its own staggered height band (upper 50-94%) AND its own even
 on the same side at the same height. Iterated across 4 seeds via the `tree` rig-shot (slim lean deadwood, clean
 junctions, correct taper, no overlap). tsc clean.
 
+**Follow-up 8 — shorter trunk + pointed tip.** Lowered overall height (`trunkH` 2.6+ → 1.8+) and tapered the trunk to a
+thin POINT at the top (`topR` ratio 0.45 → 0.16) so it ends like a branch instead of a blunt flat cut; pulled the limb
+band down to `hHi` 0.78 so limbs stay below the thin tip (no limb out-thicking the trunk there). `tree` rig-shot
+confirms across seeds. tsc clean.
+
 ## Session ACAE — 2026-06-04 — Dev item-spawner panel ✓ verify pass (tsc clean)
 
 `verified` — `npm run verify` (tsc) PASS; no save change. Dev tooling — a DOM panel (DEV MODE only) to add any item to

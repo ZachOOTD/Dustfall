@@ -44,9 +44,9 @@ const _limbInward = new THREE.Vector3();
 function makeDeadTree(rand: Rng): THREE.Group {
   const g = new THREE.Group();
 
-  const trunkH = 2.6 + rand() * 1.4;
+  const trunkH = 1.8 + rand() * 0.9;     // shorter overall (was 2.6+)
   const baseR = 0.085 + rand() * 0.03;   // slimmer trunk (was 0.15+) — desert deadwood is lean
-  const topR = baseR * 0.45;
+  const topR = baseR * 0.16;             // taper the trunk to a thin POINT at the tip (like a branch)
 
   // Trunk centerline lean (a parabolic bow in a random azimuth) + per-height
   // radius — shared by the trunk geometry AND the limb attach math so limbs sit
@@ -86,7 +86,7 @@ function makeDeadTree(rand: Rng): THREE.Group {
   // + jitter) so no two cluster on the same side at the same height.
   const limbCount = 3 + Math.floor(rand() * 2);   // 3-4 (was 4-6, too crowded)
   const azStart = rand() * Math.PI * 2;
-  const hLo = 0.5, hHi = 0.94;                     // limbs live in the upper trunk
+  const hLo = 0.45, hHi = 0.78;                    // limbs in the upper trunk but BELOW the thin tapered tip
   for (let i = 0; i < limbCount; i++) {
     // Staggered height: i-th band + a little jitter within the band.
     const frac = (i + 0.5 + (rand() - 0.5) * 0.6) / limbCount;

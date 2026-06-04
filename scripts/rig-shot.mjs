@@ -866,8 +866,8 @@ const SCENARIOS = {
       const wp = tree.getWorldPosition(new V());
       ctx.flags.paused = true;
       // Full-tree 3/4 framing: stand back ~3.5m, eye ~1.9m, look at mid-trunk.
-      cam.position.set(wp.x + 2.0, wp.y + 2.0, wp.z + 2.3);
-      cam.lookAt(wp.x, wp.y + 2.2, wp.z);
+      cam.position.set(wp.x + 1.7, wp.y + 1.4, wp.z + 2.0);
+      cam.lookAt(wp.x, wp.y + 1.5, wp.z);
       cam.updateMatrixWorld(true);
       return { found: true, pos: [wp.x.toFixed(1), wp.y.toFixed(1), wp.z.toFixed(1)] };
     }, t);
