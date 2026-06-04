@@ -17,7 +17,8 @@ import type { Rng } from '../core/rng.ts';
 // dead-tree branches (deadTree.ts) are guaranteed identical. They render under
 // the SAME lighting now (the vm scene mirrors the world sun/moon/ambient —
 // viewModel.ts), so a held branch and a dropped branch read as the same object.
-export const BRANCH_WOOD_COLOR = 0x3a2e20;
+// ACAF f/u 4 — sun-bleached light grey deadwood (was dark brown 0x3a2e20).
+export const BRANCH_WOOD_COLOR = 0x9b948a;
 export const BRANCH_WEATHER_LEVEL = 0.7;
 
 export interface BranchMeshOpts {

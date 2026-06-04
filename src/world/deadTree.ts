@@ -24,7 +24,7 @@ import { BRANCH_WOOD_COLOR, BRANCH_WEATHER_LEVEL } from './branchMesh.ts';
 // color as the held + ground branches; the vm scene now mirrors the world
 // lighting (viewModel.ts) so held + dropped + tree all read identical. The trunk
 // is a thicker, slightly lighter wood (its own member, not a "branch").
-const _trunkMat = createWoodGrainMaterial(0x463827, {
+const _trunkMat = createWoodGrainMaterial(0xa39c91, {
   ringDensity: 6.0, weatherLevel: 0.72,
 });
 const _branchMat = createWoodGrainMaterial(BRANCH_WOOD_COLOR, {
