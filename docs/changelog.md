@@ -64,6 +64,12 @@ thick base at +X / thin tip at −X, but `makeDeadTree` oriented the limb's +X O
 the trunk. Fixed by orienting +X INWARD (`_limbInward = −_limbDir`) so the thin tip points outward and the limb tapers
 trunk→tip correctly; base re-buried inside the surface accordingly. `tree` rig-shot confirms. tsc clean.
 
+**Follow-up 7 — slimmer + de-cluttered dead tree.** The tree read too thick and the limbs piled up. Slimmed the trunk
+(`baseR` 0.15+ → 0.085+) and the limbs (`radiusScale` 1.2+ → 0.7+), dropped the count 4-6 → 3-4, and DISTRIBUTED them:
+each limb now gets its own staggered height band (upper 50-94%) AND its own even azimuth sector (+jitter) so no two bunch
+on the same side at the same height. Iterated across 4 seeds via the `tree` rig-shot (slim lean deadwood, clean
+junctions, correct taper, no overlap). tsc clean.
+
 ## Session ACAE — 2026-06-04 — Dev item-spawner panel ✓ verify pass (tsc clean)
 
 `verified` — `npm run verify` (tsc) PASS; no save change. Dev tooling — a DOM panel (DEV MODE only) to add any item to

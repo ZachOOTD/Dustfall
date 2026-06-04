@@ -45,8 +45,8 @@ function makeDeadTree(rand: Rng): THREE.Group {
   const g = new THREE.Group();
 
   const trunkH = 2.6 + rand() * 1.4;
-  const baseR = 0.15 + rand() * 0.06;
-  const topR = baseR * 0.4;
+  const baseR = 0.085 + rand() * 0.03;   // slimmer trunk (was 0.15+) — desert deadwood is lean
+  const topR = baseR * 0.45;
 
   // Trunk centerline lean (a parabolic bow in a random azimuth) + per-height
   // radius — shared by the trunk geometry AND the limb attach math so limbs sit
@@ -81,20 +81,27 @@ function makeDeadTree(rand: Rng): THREE.Group {
   flare.position.y = flareH / 2;
   g.add(flare);
 
-  // 4-6 main limbs spread along the upper ~60% of the trunk, each a detailed
-  // branch emerging from the surface and angling outward + upward.
-  const limbCount = 4 + Math.floor(rand() * 3);
+  // 3-4 main limbs, DISTRIBUTED so they don't pile up: each limb gets its own
+  // height band (staggered up the trunk) AND its own azimuth sector (even split
+  // + jitter) so no two cluster on the same side at the same height.
+  const limbCount = 3 + Math.floor(rand() * 2);   // 3-4 (was 4-6, too crowded)
+  const azStart = rand() * Math.PI * 2;
+  const hLo = 0.5, hHi = 0.94;                     // limbs live in the upper trunk
   for (let i = 0; i < limbCount; i++) {
-    const h = trunkH * (0.38 + rand() * 0.55);
-    const az = rand() * Math.PI * 2;
-    const pitch = 0.45 + rand() * 0.7;     // upward tilt (rad above horizontal)
+    // Staggered height: i-th band + a little jitter within the band.
+    const frac = (i + 0.5 + (rand() - 0.5) * 0.6) / limbCount;
+    const h = trunkH * (hLo + frac * (hHi - hLo));
+    // Even azimuth sector + jitter (golden-ish offset so consecutive limbs face
+    // away from each other rather than bunching).
+    const az = azStart + i * (Math.PI * 2 / limbCount) + (rand() - 0.5) * 0.7;
+    const pitch = 0.5 + rand() * 0.5;      // upward tilt (rad above horizontal)
     const cp = Math.cos(pitch);
     _limbDir.set(Math.cos(az) * cp, Math.sin(pitch), Math.sin(az) * cp).normalize();
 
-    const limbLen = 0.7 + rand() * 0.8;
-    const rScale = 1.2 + rand() * 0.6;     // chunkier than a ground twig
+    const limbLen = 0.6 + rand() * 0.7;
+    const rScale = 0.7 + rand() * 0.3;     // thinner limbs (was 1.2+, too chunky)
     const limb = buildBranchMesh(_branchMat, {
-      len: limbLen, twigs: 2 + Math.floor(rand() * 2), rand,
+      len: limbLen, twigs: 1 + Math.floor(rand() * 2), rand,
       radiusScale: rScale, tipRatio: 0.32,
     });
     // buildBranchMesh puts the THICK base at +X and the THIN tip at −X. So orient
