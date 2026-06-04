@@ -59,6 +59,11 @@ flat base-caps show. Limbs spread along the upper ~60% and angle outward+up. Ite
 scenario (trees tagged `name='deadTree'` so the harness can locate one): fixed ball-like collars → buried bases, and a
 trumpet-like root flare → subtle. tsc clean.
 
+**Follow-up 6 — limb taper direction fix.** The limbs fattened toward the TIP (backwards). `buildBranchMesh` puts the
+thick base at +X / thin tip at −X, but `makeDeadTree` oriented the limb's +X OUTWARD — so the thick end pointed away from
+the trunk. Fixed by orienting +X INWARD (`_limbInward = −_limbDir`) so the thin tip points outward and the limb tapers
+trunk→tip correctly; base re-buried inside the surface accordingly. `tree` rig-shot confirms. tsc clean.
+
 ## Session ACAE — 2026-06-04 — Dev item-spawner panel ✓ verify pass (tsc clean)
 
 `verified` — `npm run verify` (tsc) PASS; no save change. Dev tooling — a DOM panel (DEV MODE only) to add any item to

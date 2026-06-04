@@ -34,6 +34,7 @@ const _branchMat = createWoodGrainMaterial(BRANCH_WOOD_COLOR, {
 // Module scratch (avoid per-tree allocation in the orientation math).
 const _LIMB_X = new THREE.Vector3(1, 0, 0);
 const _limbDir = new THREE.Vector3();
+const _limbInward = new THREE.Vector3();
 
 // ACAF f/u 5 — proper dead-desert-tree model. The trunk is a tapered, gently
 // bowed cylinder with a root flare; the limbs reuse the detailed branch model
@@ -96,22 +97,26 @@ function makeDeadTree(rand: Rng): THREE.Group {
       len: limbLen, twigs: 2 + Math.floor(rand() * 2), rand,
       radiusScale: rScale, tipRatio: 0.32,
     });
-    // Shift the canonical (origin-centered) branch so its THICK base sits BEHIND
-    // the wrapper origin — i.e. the base is buried INTO the trunk, so only the
-    // tapering limb emerges and the flat base cap never shows.
+    // buildBranchMesh puts the THICK base at +X and the THIN tip at −X. So orient
+    // the limb's +X axis INWARD (toward the trunk) — then the thin tip points
+    // OUTWARD and the limb tapers trunk→tip the CORRECT way. (Orienting +X
+    // outward, as before, made the limbs fatten toward the tip — backwards.)
     const limbBaseR = limbLen * 0.05 * rScale;
     const rH = radiusAt(h);
-    limb.position.x = limbLen * 0.5 - rH * 0.6;   // bury ~0.6·trunkR of the base
+    _limbInward.copy(_limbDir).multiplyScalar(-1);
+    // Shift so the thick base sits just inside the trunk surface (buried ~0.6·rH)
+    // and the tapering limb emerges outward; the flat base cap never shows.
+    limb.position.x = -limbLen * 0.5 + rH * 0.6;
 
     const wrap = new THREE.Group();
     wrap.add(limb);
-    wrap.quaternion.setFromUnitVectors(_LIMB_X, _limbDir);
-    // Origin sits just inside the trunk surface; the buried base spans from here
-    // toward the axis, so the limb grows OUT of solid wood.
+    wrap.quaternion.setFromUnitVectors(_LIMB_X, _limbInward);
+    // Origin on the trunk surface (outward radial); the buried base spans inward
+    // from here, so the limb grows OUT of solid wood.
     wrap.position.set(
-      lbx * leanAt(h) + Math.cos(az) * rH * 0.55,
+      lbx * leanAt(h) + Math.cos(az) * rH * 0.85,
       h,
-      lbz * leanAt(h) + Math.sin(az) * rH * 0.55,
+      lbz * leanAt(h) + Math.sin(az) * rH * 0.85,
     );
     g.add(wrap);
 
