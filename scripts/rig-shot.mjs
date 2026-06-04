@@ -821,6 +821,32 @@ const SCENARIOS = {
     console.log(`[held-item] ${item} → ${path}`);
   },
 
+  // Branches (ACAE): frame a world branch pickup near its dead tree — verifies
+  // the dark wood-grain branch + that the ground branches match the trees.
+  'branches': async (page) => {
+    const r = await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      window.__game.setTime(0.42);
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      ctx.three.renderer.setSize(900, 700, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 900 / 700; cam.updateProjectionMatrix(); }
+      const branches = (ctx.pickups.list || []).filter((p) => p.itemId === 'branch');
+      const b = branches[0];
+      if (!b) return { found: false };
+      const p = b.pos;
+      ctx.flags.paused = true;                  // freeze so our camera survives
+      cam.position.set(p.x + 0.9, p.y + 0.7, p.z + 0.9);
+      cam.lookAt(p.x, p.y + 0.1, p.z);
+      cam.updateMatrixWorld(true);
+      return { found: true, count: branches.length, pos: [p.x.toFixed(1), p.y.toFixed(1), p.z.toFixed(1)] };
+    });
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: join(OUT, 'scen-branches.png'), fullPage: false });
+    console.log(`[branches] ${JSON.stringify(r)}`);
+  },
+
   // Dev-panel (ACAD): open the dev item-spawner panel + click an item, verify
   // it renders + adds to inventory.
   'dev-panel': async (page) => {

@@ -3,6 +3,25 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ACAF — 2026-06-04 — Branch model: dark wood-grain + side twigs + dead-tree color match ✓ verify pass (tsc clean)
+
+`verified` — `npm run verify` (tsc) PASS; no save change. User feedback on the world branch: too light/grey, twigs
+pierced straight through, needs detail/texture + should match the dark dead trees. 5 files: `world/branchMesh.ts`,
+`inventory/items.ts`, `pickups/pickups.ts`, `world/deadTree.ts`, `scripts/rig-shot.mjs` (+NEW `branches` scenario).
+
+**Twigs from the side** (`branchMesh.ts`) — the twigs were centered on the shaft axis so they crossed straight through.
+Rebuilt: each twig is a per-subgroup cylinder whose BASE sits on the shaft surface and angles outward + a bit down the
+branch (radial dir + forward lean, oriented via `setFromUnitVectors`), with a base collar hiding the joint and a tiny
+secondary fork near the tip of the longer twigs. The main shaft now has a slight mid-length BEND (two segments + a
+knuckle) so it reads as deadwood, not a dowel.
+
+**Dark wood-grain + matching colors** — the branch (item + ground) is now dark aged-wood grain (`0x3a2e20`,
+weatherLevel 0.7) instead of flat grey: the held item uses `vmWood`; the ~200 world pickups share ONE
+`createWoodGrainMaterial` instance (`_worldBranchMat`, world-space — cheap, grain varies per branch). The dead trees
+(`deadTree.ts`) switched from flat-grey Lambert to the SAME dark wood-grain family (trunk `0x463827`, branches
+`0x3a2e20`), so the held branch, the ground branches, and the trees are now one coherent dark deadwood look (verified
+in-context via the `branches` scenario — ground branch + dead tree match).
+
 ## Session ACAE — 2026-06-04 — Dev item-spawner panel ✓ verify pass (tsc clean)
 
 `verified` — `npm run verify` (tsc) PASS; no save change. Dev tooling — a DOM panel (DEV MODE only) to add any item to

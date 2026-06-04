@@ -1723,10 +1723,11 @@ const _DEFS: Record<ItemId, ItemDef> = {
       // ACAA — shared branch model (matches the world pickups under dead
       // trees). Clean tapered stick + a couple of twigs; no splinter bristles
       // or knot bumps (those read as weird clutter). vmWood for the held item.
-      const mat = vmWood(0x6e685f, {
+      // ACAE — dark aged-wood grain (matches the dead trees + ground branches).
+      const mat = vmWood(0x3a2e20, {
         grainAxis: Math.PI / 2.4,     // grain runs along the shaft
         ringDensity: 12.0,            // tight rings → small-diameter branch
-        weatherLevel: 0.55,           // dead-tree branches are weathered grey
+        weatherLevel: 0.7,            // sun-cracked deadwood
       });
       const group = buildBranchMesh(mat, { len: 0.34, twigs: 3 });
       group.rotation.set(0, 0, -0.22);   // gentle diagonal lean for the FP read

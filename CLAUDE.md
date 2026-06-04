@@ -64,16 +64,18 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      Prior milestones live in docs/changelog.md — do NOT accumulate "Prior milestone"
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
-**Last shipped**: Session ACAE — **dev item-spawner panel** (4 files, tsc clean, no save change). Click the
-`[ DEV MODE ]` badge → a panel (`ui/devPanel.ts`) listing EVERY registered item (glyph + name + id) with a live filter;
-click a row to add it to inventory. Mirrors the inventory-overlay lifecycle (unlock pointer on open, `resumeFromPause`
-on close); badge made clickable (`pointer-events: auto`). The list derives from a NEW `ALL_REGISTERED_ITEM_IDS`
-(`Object.keys(_DEFS)`) so it can't go stale — found + fixed `ALL_ITEM_IDS` missing 4 real items (scrap_bar/grill_kit/
-raw+cooked_shrew_meat). NEW `dev-panel` rig-shot scenario. **Owed (unchanged):** the ACW/ACX in-motion feel pile (D150).
-*(Prior milestones — ACAD: rust/weathering pass (D173); ACAC: pulse rifle (D172); ACAB: Cycle 6 atmosphere / procedural
-clouds (D171); ACAA: FP-viewmodel two-pass render fix (D170); ACY/ACZ: the item-model arc. See changelog.)*
+**Last shipped**: Session ACAF — **branch model rework** (5 files, tsc clean, no save change). User feedback: the world
+branch was too light/grey, its twigs pierced straight through, and it should match the dark dead trees. Fixed in
+`world/branchMesh.ts`: twigs now EMERGE from the shaft surface + angle outward (per-subgroup, `setFromUnitVectors`, base
+collars, secondary forks) instead of crossing through; the shaft got a mid-length bend. Material → dark aged wood-grain
+(`0x3a2e20`): held item via `vmWood`, the ~200 world pickups share one `createWoodGrainMaterial` (`_worldBranchMat`,
+world-space — cheap); the dead trees (`deadTree.ts`) switched to the SAME dark wood family so held branch + ground
+branches + trees all match (verified via NEW `branches` rig-shot scenario). **Owed (unchanged):** the ACW/ACX in-motion
+feel pile (D150).
+*(Prior milestones — ACAE: dev item-spawner panel; ACAD: rust/weathering pass (D173); ACAC: pulse rifle (D172); ACAB:
+Cycle 6 atmosphere / clouds (D171); ACAA: FP-viewmodel two-pass render fix (D170); ACY/ACZ: item-model arc. See changelog.)*
 
-**Next session (ACAF)**: pick a lane — (a) **Cycle 5 raider proc-character** (the OTHER half — rebuild the raider as a
+**Next session (ACAG)**: pick a lane — (a) **Cycle 5 raider proc-character** (the OTHER half — rebuild the raider as a
 proc-character so the corpse-drag path has a good-looking body; the pulse rifle is now its weapon); (b) the **DEEP CAVE
 SYSTEM** design+build pass (procedural sprawl + sub-terrain collision + descent opening + dark-nav; then the egg spine
 from `2d4035b`); or (c) a **foreground feel-tune playtest** of the owed ACW/ACX in-motion pile (needs a human). See

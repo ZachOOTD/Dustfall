@@ -15,14 +15,15 @@ import type { Pickup } from '../pickups/pickups.ts';
 import { spawnBranchAt } from '../pickups/pickups.ts';
 import { Tuning } from '../config/tuning.ts';
 import { findBiomeCentroid } from './biomes.ts';
+import { createWoodGrainMaterial } from './woodGrainMaterial.ts';
 
-const _trunkMat = new THREE.MeshLambertMaterial({
-  color: 0x8a8278,
-  flatShading: true,
+// ACAE — dark aged-wood grain so trunk + tree-branches match the ground
+// branches + the held branch (all one dark deadwood family). Shared instances.
+const _trunkMat = createWoodGrainMaterial(0x463827, {
+  ringDensity: 6.0, weatherLevel: 0.72,
 });
-const _branchMat = new THREE.MeshLambertMaterial({
-  color: 0x6e685f,
-  flatShading: true,
+const _branchMat = createWoodGrainMaterial(0x3a2e20, {
+  ringDensity: 9.0, weatherLevel: 0.75,
 });
 
 function makeDeadTree(rand: Rng): THREE.Group {

@@ -1,4 +1,4 @@
-# Session ACAF — Kickoff Brief
+# Session ACAG — Kickoff Brief
 
 ## Read these now (in order)
 1. `CLAUDE.md` (auto-loaded) — esp. "Where we are now" (ACZ last-shipped + the foreground-owed list).
@@ -21,9 +21,11 @@ atmosphere**: a procedural cloud layer + clear↔overcast days + overcast lighti
 cell, hero model, rare loot; D172) — the WEAPON half of Cycle 5. **ACAD** added a **rust/weathering pass**: a `rustLevel`
 oxidation layer on the shared metal shader, applied to all held gear (`vmMetal` default) + the pulse rifle (scrappy
 junk-tech) + iron world props (D173). **ACAE** added a **dev item-spawner panel** (click the DEV MODE badge → add any
-item to inventory; `ui/devPanel.ts`).
+item to inventory; `ui/devPanel.ts`). **ACAF** reworked the **branch model** — dark wood-grain + side-emerging twigs (no
+longer piercing through) + a bend; the held branch, ~200 ground branches, and the dead trees now all match (one dark
+deadwood family).
 
-## Session ACAF focus — pick ONE lane (surface to the user if ambiguous; default (a))
+## Session ACAG focus — pick ONE lane (surface to the user if ambiguous; default (a))
 
 ### (a) DEEP CAVE SYSTEM — design pass + first build (the standing vision, deferred since ACV) — DEFAULT
 A genuine underground cave SYSTEM: procedural sprawl + branching passages you can get lost in, **sub-terrain walkable

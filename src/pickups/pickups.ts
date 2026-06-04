@@ -13,6 +13,16 @@ import { stormWindAccel } from '../world/weather.ts';
 import type { ItemId, ItemMeta } from '../inventory/types.ts';
 import { getItemDef } from '../inventory/items.ts';
 import { buildBranchMesh } from '../world/branchMesh.ts';  // ACAA — shared branch model
+import { createWoodGrainMaterial } from '../world/woodGrainMaterial.ts';  // ACAE — dark wood branches
+
+// ACAE — ONE shared dark wood-grain material for every world branch (~200
+// instances → 1 program, world-space grain so it varies per branch). Dark aged
+// deadwood that matches the dead trees.
+const _worldBranchMat = createWoodGrainMaterial(0x3a2e20, {
+  grainAxis: 0,          // grain along the stick's lie (world branches lie ~flat)
+  ringDensity: 11.0,
+  weatherLevel: 0.7,
+});
 
 export interface Pickup {
   id: number;                 // unique handle for hover/take
@@ -185,16 +195,14 @@ export function spawnCanteens(
 // Used as fire fuel (aim at fire + E with branch selected adds 30s).
 // ────────────────────────────────────────────────────────────────
 function makePrimitiveBranch(rand: Rng): THREE.Group {
-  // ACAA — unified with the held-item branch via the shared buildBranchMesh
-  // (same shape so a world branch reads as the item you pick up). Stays plain
-  // Lambert grey: ~200 in-world instances, so the wood-grain shader the held
-  // item uses is too costly here (ABL perf note); the silhouette is what
-  // matters and that's now identical. Grey 0x6e685f matches the dead-tree bark.
-  const mat = new THREE.MeshLambertMaterial({ color: 0x6e685f, flatShading: true });
-  // II — longer sticks so branches read as real fuel, not tiny twigs.
+  // ACAE — shares the held-item branch shape (buildBranchMesh) AND now its dark
+  // wood-grain look. The material is built ONCE (_worldBranchMat) and shared
+  // across all ~200 in-world branches — one program, world-space grain that
+  // varies per-position — so it stays cheap (ABL perf note) while reading as
+  // aged deadwood that matches the dead trees, not a flat grey dowel.
   const len = 0.40 + rand() * 0.15;
   const twigs = rand() < 0.6 ? 2 : 1;
-  return buildBranchMesh(mat, { len, twigs, rand });
+  return buildBranchMesh(_worldBranchMat, { len, twigs, rand });
 }
 
 /** Spawn a single branch pickup at a specific (x, z) world position.
