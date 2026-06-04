@@ -44,7 +44,7 @@ const _limbInward = new THREE.Vector3();
 function makeDeadTree(rand: Rng): THREE.Group {
   const g = new THREE.Group();
 
-  const trunkH = 1.8 + rand() * 0.9;     // shorter overall (was 2.6+)
+  const trunkH = 2.2 + rand() * 1.0;     // between the too-tall (2.6+) and too-short (1.8+) passes
   const baseR = 0.085 + rand() * 0.03;   // slimmer trunk (was 0.15+) — desert deadwood is lean
   const topR = baseR * 0.16;             // taper the trunk to a thin POINT at the tip (like a branch)
 
