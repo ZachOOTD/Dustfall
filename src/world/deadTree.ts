@@ -98,7 +98,7 @@ function makeDeadTree(rand: Rng): THREE.Group {
     const cp = Math.cos(pitch);
     _limbDir.set(Math.cos(az) * cp, Math.sin(pitch), Math.sin(az) * cp).normalize();
 
-    const limbLen = 0.6 + rand() * 0.7;
+    const limbLen = 0.4 + rand() * 0.45;   // shorter limbs (was 0.6+0.7)
     const rScale = 0.7 + rand() * 0.3;     // thinner limbs (was 1.2+, too chunky)
     const limb = buildBranchMesh(_branchMat, {
       len: limbLen, twigs: 1 + Math.floor(rand() * 2), rand,
