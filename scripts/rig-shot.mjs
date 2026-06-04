@@ -821,6 +821,63 @@ const SCENARIOS = {
     console.log(`[held-item] ${item} → ${path}`);
   },
 
+  // FP-item (ACAA): equip an item in FIRST person and screenshot the REAL
+  // viewmodel as the player sees it — this exercises the two-pass depth-cleared
+  // viewmodel render (loop.ts), the only path where the see-through-rings bug
+  // appears (the item-studio uses default-material meshes that already
+  // depth-sort, so it can't reproduce it). --item=<id> OR --items=a,b,c.
+  'fp-item': async (page) => {
+    const items = String(argv.items || argv.item || 'scrap_bar').split(',').map((s) => s.trim());
+    for (const item of items) {
+      await page.evaluate((item) => {
+        const ctx = window.__game.ctx;
+        ctx.weather.intensity = 0;
+        window.__game.setTime(0.5);
+        ctx.three.renderer.setSize(900, 900, false);
+        const cam = ctx.three.camera;
+        if (cam.isPerspectiveCamera) { cam.aspect = 1; cam.updateProjectionMatrix(); }
+        ctx.flags.thirdPerson = false;        // FIRST person → FP viewmodel shows
+        ctx.flags.started = true; ctx.flags.paused = false;
+        // Hide the rig so the camera-at-head hood doesn't fill the frame in
+        // this forced FP state (normal play keeps the head below the eyeline).
+        if (ctx.player.rig) ctx.player.rig.group.visible = false;
+        const inv = ctx.inventory;
+        inv.slots[0].item = item; inv.slots[0].count = 1;
+        // Light the torch / flashlight so their lit-only effects show.
+        inv.slots[0].meta = item === 'torch' ? { lit: true, burnRemaining: 1 }
+          : item === 'flashlight' ? { lit: true, fuelLevel: 1 } : undefined;
+        inv.selectedIdx = 0;
+      }, item);
+      await page.waitForTimeout(450);         // let updateViewModel swap + camera settle to FP
+      // Aim the FP camera UP at clean sky (FP sync only sets position, not
+      // rotation) + re-assert FP/rig-hidden, so the item frames against sky.
+      const dbg = await page.evaluate(() => {
+        const ctx = window.__game.ctx;
+        ctx.flags.thirdPerson = false;
+        if (ctx.player.rig) ctx.player.rig.group.visible = false;
+        const cam = ctx.three.camera;
+        cam.rotation.set(0.16, 2.2, 0);       // slight up + yaw away from the wreck → item lower-right vs horizon
+        cam.updateMatrixWorld(true);
+        const vm = ctx.player.viewModel;
+        const V = cam.position.constructor;
+        vm.group.updateWorldMatrix(true, true);
+        const ip = vm.itemRoot.getWorldPosition(new V());
+        const cp = cam.position;
+        return {
+          tp: ctx.flags.thirdPerson, vmVisible: vm.group.visible, item: ctx.inventory.slots[0].item,
+          sceneKids: vm.scene.children.length, groupInScene: vm.group.parent === vm.scene,
+          itemMeshes: vm.itemRoot.children.length,
+          cam: [cp.x.toFixed(1), cp.y.toFixed(1), cp.z.toFixed(1)],
+          itemPos: [ip.x.toFixed(1), ip.y.toFixed(1), ip.z.toFixed(1)],
+        };
+      });
+      await page.waitForTimeout(260);
+      const path = join(OUT, `scen-fp-${item}.png`);
+      await page.screenshot({ path, fullPage: false });
+      console.log(`[fp-item] ${item} → ${path}  ${JSON.stringify(dbg)}`);
+    }
+  },
+
   // Item-studio (ACY): build the item's makeViewModel mesh in ISOLATION (no rig
   // / world), suspended high against the sky gradient + lit for form, framed per
   // angle. The clean multi-angle view the deep item-detail pass iterates against

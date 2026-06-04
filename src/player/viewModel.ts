@@ -12,6 +12,12 @@ import { getItemDef } from '../inventory/items.ts';
 import { playInventorySelect, playEquip } from '../audio/audio.ts';
 
 export interface ViewModel {
+  /** ACAA — the viewmodel lives in its OWN scene, rendered in a second
+   *  depth-cleared pass (see core/loop.ts) so it (a) never clips through world
+   *  walls AND (b) depth-sorts correctly within itself. The old single-scene
+   *  approach disabled depthTest to avoid wall-clip, which broke self-sorting
+   *  (the far side of rings/toruses drew over the near side → "see-through"). */
+  scene: THREE.Scene;
   group: THREE.Group;
   hands: THREE.Group;
   itemRoot: THREE.Group;
@@ -36,11 +42,19 @@ let _breathPhase = 0;
 // Reusable scratch vectors so we don't allocate every frame.
 const _offset = new THREE.Vector3();
 
-/** Apply viewmodel material conventions: always draw on top + no fog. */
+/** Apply viewmodel material conventions. The viewmodel renders in its own
+ *  depth-cleared pass (loop.ts), so depthTest STAYS ON — that's what makes the
+ *  item self-sort correctly (closed shapes like grip-rings/toruses no longer
+ *  show their far side through the near side). The depth clear before the pass
+ *  is what prevents world walls from clipping the held item.
+ *  Opaque materials write depth (so they occlude each other correctly);
+ *  AUTHORED-transparent ones (flame / lens / glow) keep `transparent` + skip
+ *  depth-write so they blend over the item rather than punching a hole.
+ *  (The old single-scene path force-set transparent=false, which silently broke
+ *  the torch flame fade — ACAA.) */
 export function configureViewModelMaterial(mat: THREE.Material): void {
-  mat.depthTest = false;
-  mat.depthWrite = false;
-  mat.transparent = false;
+  mat.depthTest = true;
+  mat.depthWrite = !mat.transparent;
   // `fog` exists on most material types we use; guard for the type narrowing.
   if ('fog' in mat) (mat as unknown as { fog: boolean }).fog = false;
 }
@@ -60,10 +74,27 @@ export function configureViewModelObject(obj: THREE.Object3D): void {
   });
 }
 
-export function createViewModel(ctx: GameContext): ViewModel {
+export function createViewModel(_ctx: GameContext): ViewModel {
+  // ACAA — dedicated scene for the depth-cleared second pass (loop.ts). The
+  // held item no longer receives the WORLD lights, so this scene carries its
+  // own: a soft ambient + a key/fill rig parented to `group` (camera-relative)
+  // so the item is lit consistently as the player turns. Trade-off: the item
+  // no longer dims at night — a readability win for the detailed meshes; the
+  // torch flame is emissive so it still reads as the dominant light source.
+  const scene = new THREE.Scene();
   const group = new THREE.Group();
   group.name = 'viewmodel';
-  ctx.three.scene.add(group);
+  scene.add(group);
+
+  scene.add(new THREE.AmbientLight(0xffffff, 0.9));
+  const key = new THREE.DirectionalLight(0xfff4e6, 1.7);
+  key.position.set(0.6, 1.0, 0.8);
+  key.target.position.set(0, -0.15, -0.35);
+  group.add(key, key.target);
+  const fill = new THREE.DirectionalLight(0xbfd2ff, 0.45);
+  fill.position.set(-0.8, 0.2, 0.6);
+  fill.target.position.set(0, 0, -0.3);
+  group.add(fill, fill.target);
 
   // FP viewmodel hands REMOVED (Session ACJ). ABP added forearm-wrap meshes
   // here for FP↔3P outfit continuity, but they're parented to the
@@ -81,6 +112,7 @@ export function createViewModel(ctx: GameContext): ViewModel {
   group.add(itemRoot);
 
   const vm: ViewModel = {
+    scene,
     group,
     hands,
     itemRoot,

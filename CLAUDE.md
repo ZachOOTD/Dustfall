@@ -64,21 +64,24 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      Prior milestones live in docs/changelog.md — do NOT accumulate "Prior milestone"
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
-**Last shipped**: Session ACZ — **item-model detail pass part 2: the remaining ~22 models** (1 file, `items.ts`; tsc
-clean, no save change). Finishes the ACY thread — **every item in the game now has a deep-detailed or verified-at-parity
-mesh**, all iterated against the ACY `item-studio` view. Deep-polished 7 primitives — tent_kit (rolled canvas bundle),
-sled_kit (folded scrap-metal sheet), grill_kit (framed grate + folding legs), companion_pod (carved stone egg + glowing
-crack-veins), cactus_pulp (cut cactus chunk), alien_fruit (bioluminescent fruit + glow pods + calyx), raw_worm_meat
-(lumpy flesh + membrane + ooze); light-touched branch (splintered end + knots); verified scrap/cloth/stake_kit + the
-already-upgraded kits/cooked-foods + creature-mesh meats at parity. Breadth pass = 1-2 studio rounds each. No new
-D-entries (reused the ACY itemStudio harness — D169). **Owed (unchanged):** the ACW/ACX in-motion feel pile (D150).
-*(Prior milestone — ACY: dynamic salvage-panel placer `findPanelMount` (D168) + 12 hero item models (D169) + POI
-greebles; see changelog.)*
+**Last shipped**: Session ACAA — **FP-viewmodel fixes from playtest** (6 files; tsc clean, no save change). Three
+user-reported issues with the ACY/ACZ item models: (1) **see-through rings** — the FP viewmodel had `depthTest` OFF
+(anti-wall-clip) which broke self-sorting so the far side of grip-rings/coils drew over the near side; fixed by
+rendering the viewmodel in its OWN scene in a **second depth-cleared pass** with depthTest back ON (`core/loop.ts` +
+`player/viewModel.ts`) — D170. Also un-broke the long-standing `transparent=false` override that killed the torch
+flame's alpha. (2) **branch** — dropped the ACZ splinter-bristles + knots, and extracted a shared `buildBranchMesh`
+(NEW `world/branchMesh.ts`) so the held branch + the ~200 world-pickup branches under dead trees are the SAME model.
+(3) **real torch fire** — replaced the static yellow cone with a layered additive flame (orange→hot-white core) + rising
+ember sparks, flickering, shown ONLY when lit. NEW `fp-item` rig-shot scenario (renders the REAL first-person viewmodel
+— `item-studio` can't reproduce viewmodel depth bugs). D170. **Owed (unchanged):** the ACW/ACX in-motion feel pile (D150).
+*(Prior milestone — ACZ: finished the remaining ~22 item models; ACY: 12 hero models + dynamic panel placement. The
+item-model arc is COMPLETE. See changelog.)*
 
-**Next session (ACAA)**: pick a lane — (a) the **DEEP CAVE SYSTEM** design+build pass (procedural sprawl + sub-terrain
+**Next session (ACAB)**: pick a lane — (a) the **DEEP CAVE SYSTEM** design+build pass (procedural sprawl + sub-terrain
 walkable collision + descent opening + dark-nav; then cherry-pick the egg spine from `2d4035b`), or (b) a **foreground
-feel-tune playtest** of the owed ACW/ACX in-motion pile (needs a human). The item-model arc is now COMPLETE. See
-[docs/next-session-prompt.md](docs/next-session-prompt.md).
+feel-tune playtest** of the owed ACW/ACX in-motion pile (needs a human). See
+[docs/next-session-prompt.md](docs/next-session-prompt.md). NOTE: the viewmodel now has fixed scene lighting (D170) — if
+held items read too bright at night, that's the trade-off; tune the `vm.scene` lights in `createViewModel`.
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 

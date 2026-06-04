@@ -23,6 +23,7 @@ import { createFabricMaterial } from '../world/fabricMaterial.ts';
 import { createWoodGrainMaterial, type WoodGrainMaterialOpts } from '../world/woodGrainMaterial.ts';
 import { createBoneMaterial, type BoneMaterialOpts } from '../world/boneMaterial.ts';
 import { createGlassMaterial, type GlassMaterialOpts } from '../world/glassMaterial.ts';  // ACL ITEMS — lantern globe
+import { buildBranchMesh } from '../world/branchMesh.ts';  // ACAA — shared branch model (item + world pickups)
 
 // ACT — viewmodel material wrappers. EVERY item mesh is rendered as a
 // VIEWMODEL: it's added to the main scene and tracks the camera (FP copy) or
@@ -1549,36 +1550,16 @@ const _DEFS: Record<ItemId, ItemDef> = {
       // ABJ — B13: applied wood-grain shader (grain + rings + weathering).
       // Reads as actual woody fiber not painted plastic. Added one more
       // small offshoot for asymmetric "natural twig" silhouette.
-      const group = new THREE.Group();
+      // ACAA — shared branch model (matches the world pickups under dead
+      // trees). Clean tapered stick + a couple of twigs; no splinter bristles
+      // or knot bumps (those read as weird clutter). vmWood for the held item.
       const mat = vmWood(0x6e685f, {
-        grainAxis: Math.PI / 2.4,     // grain aligns with the stick's tilt
+        grainAxis: Math.PI / 2.4,     // grain runs along the shaft
         ringDensity: 12.0,            // tight rings → small-diameter branch
         weatherLevel: 0.55,           // dead-tree branches are weathered grey
       });
-      const barkMat = vmWood(0x564f47, { grainAxis: Math.PI / 2.4, ringDensity: 15.0, weatherLevel: 0.72 });
-      // Rounder 8-sided stick; splinters + knots are CHILDREN so they ride the tilt.
-      const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.019, 0.34, 8), mat);
-      // Splintered broken end at the thin (+Y) tip.
-      for (let i = 0; i < 4; i++) {
-        const a = (i / 4) * Math.PI * 2;
-        const shard = new THREE.Mesh(new THREE.ConeGeometry(0.0035, 0.03, 4), mat);
-        shard.position.set(Math.cos(a) * 0.006, 0.182, Math.sin(a) * 0.006);
-        shard.rotation.set(Math.cos(a) * 0.4, 0, Math.sin(a) * 0.4); stick.add(shard);
-      }
-      // Two knot bumps along the shaft.
-      for (const ky of [-0.05, 0.06]) {
-        const knot = new THREE.Mesh(new THREE.SphereGeometry(0.011, 6, 5), barkMat);
-        knot.position.set(0.014, ky, 0); knot.scale.set(0.7, 1, 0.9); stick.add(knot);
-      }
-      stick.rotation.set(0, 0, Math.PI / 2.4);
-      group.add(stick);
-      // Offshoot twigs (group-space, on the tilted shaft).
-      const twig = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.008, 0.09, 5), mat);
-      twig.position.set(0.08, 0.03, 0); twig.rotation.set(0, 0, -0.6); group.add(twig);
-      const twig2 = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.007, 0.06, 5), mat);
-      twig2.position.set(-0.04, 0.02, 0.01); twig2.rotation.set(0, 0, 0.75); group.add(twig2);
-      const twig3 = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.006, 0.045, 4), barkMat);
-      twig3.position.set(0.02, -0.03, -0.012); twig3.rotation.set(0.3, 0, -0.9); group.add(twig3);
+      const group = buildBranchMesh(mat, { len: 0.34, twigs: 3 });
+      group.rotation.set(0, 0, -0.22);   // gentle diagonal lean for the FP read
       return group;
     },
     makeIcon() {
@@ -1900,13 +1881,48 @@ const _DEFS: Record<ItemId, ItemDef> = {
         cord.rotation.x = Math.PI / 2; cord.position.y = y; group.add(cord);
       }
 
-      // Flame — emissive cone (named; updateHeld toggles opacity).
-      const flameMat = new THREE.MeshBasicMaterial({
-        color: Tuning.TORCH_LIGHT_COLOR_HEX, transparent: true, opacity: 0.0,
-        toneMapped: false, fog: false,
-      });
-      const flame = new THREE.Mesh(new THREE.ConeGeometry(0.052, 0.15, 7), flameMat);
-      flame.name = 'torchFlame'; flame.position.y = 0.27; group.add(flame);
+      // ACAA — REAL fire: a layered flickering flame (deep-orange outer →
+      // hot-white core) plus rising ember sparks, all additive so they glow.
+      // Lives in a group named 'torchFlame'; updateHeld shows it ONLY when lit
+      // and animates the flicker + embers. (Replaces the static yellow cone.)
+      const flameGroup = new THREE.Group();
+      flameGroup.name = 'torchFlame';
+      flameGroup.position.y = 0.235;
+      flameGroup.visible = false;
+      // Nested flame cones — outer to hot core.
+      const flameLayers: Array<[number, number, number, number]> = [
+        [0.06, 0.22, 0.0, 0xff4214],   // outer deep orange
+        [0.043, 0.18, 0.02, 0xff8a2a], // mid orange
+        [0.026, 0.135, 0.04, 0xffd060],// inner yellow
+        [0.013, 0.09, 0.06, 0xfff4cc], // hot white-yellow core
+      ];
+      for (const [r, h, yo, col] of flameLayers) {
+        const m = new THREE.MeshBasicMaterial({
+          color: col, transparent: true, opacity: 0.7, toneMapped: false, fog: false,
+          depthWrite: false, blending: THREE.AdditiveBlending,
+        });
+        const cone = new THREE.Mesh(new THREE.ConeGeometry(r, h, 8), m);
+        cone.position.y = h * 0.5 + yo;
+        cone.userData.flameLayer = true;
+        flameGroup.add(cone);
+      }
+      // Ember sparks — tiny additive flecks that rise from the flame + fade.
+      for (let i = 0; i < 7; i++) {
+        const em = new THREE.Mesh(
+          new THREE.ConeGeometry(0.006, 0.013, 4),
+          new THREE.MeshBasicMaterial({
+            color: 0xffb24a, transparent: true, opacity: 0.0, toneMapped: false,
+            fog: false, depthWrite: false, blending: THREE.AdditiveBlending,
+          }));
+        em.userData.ember = {
+          phase: i / 7,
+          speed: 0.6 + (i % 3) * 0.2,
+          sx: (i % 2 ? 1 : -1) * (0.02 + (i % 3) * 0.006),
+          sz: ((i % 3) - 1) * 0.016,
+        };
+        flameGroup.add(em);
+      }
+      group.add(flameGroup);
 
       const light = new THREE.PointLight(
         Tuning.TORCH_LIGHT_COLOR_HEX, 0, Tuning.TORCH_LIGHT_DISTANCE, 2);
@@ -1923,15 +1939,11 @@ const _DEFS: Record<ItemId, ItemDef> = {
     },
     updateHeld(itemRoot, slot, ctx, dt) {
       const light = itemRoot.getObjectByName('torchLight') as THREE.PointLight | null;
-      const flame = itemRoot.getObjectByName('torchFlame') as THREE.Mesh | null;
+      const flameGroup = itemRoot.getObjectByName('torchFlame') as THREE.Group | null;
       if (!slot.meta) slot.meta = { lit: false, burnRemaining: 1 };
       const lit = !!slot.meta.lit;
-      if (!light || !flame) return;
-      if (!lit) {
-        light.intensity = 0;
-        (flame.material as THREE.MeshBasicMaterial).opacity = 0;
-        return;
-      }
+      if (!light || !flameGroup) return;
+      if (!lit) { light.intensity = 0; flameGroup.visible = false; return; }
       // Drain burnRemaining; auto-consume on burn-out.
       const remaining = (slot.meta.burnRemaining ?? 1) - dt / Tuning.TORCH_BURN_DURATION_S;
       if (remaining <= 0) {
@@ -1941,16 +1953,38 @@ const _DEFS: Record<ItemId, ItemDef> = {
         slot.count = 0;
         slot.meta = undefined;
         light.intensity = 0;
-        (flame.material as THREE.MeshBasicMaterial).opacity = 0;
+        flameGroup.visible = false;
         ctx.ui.showToast('the torch burns out');
         return;
       }
       slot.meta.burnRemaining = remaining;
+      flameGroup.visible = true;
       // Flicker — two desynced sines for organic feel.
       const t = ctx.time.elapsed;
       const wobble = Math.sin(t * 17.3) * 0.5 + Math.sin(t * 23.7) * 0.5;
       light.intensity = Tuning.TORCH_LIGHT_INTENSITY + wobble * Tuning.TORCH_LIGHT_FLICKER_AMP;
-      (flame.material as THREE.MeshBasicMaterial).opacity = 0.85 + wobble * 0.1;
+      // Whole-flame flicker: vertical stretch + a little lateral lick.
+      flameGroup.scale.set(1 + wobble * 0.06, 1 + wobble * 0.22, 1 + wobble * 0.06);
+      flameGroup.rotation.z = wobble * 0.11;
+      flameGroup.position.x = wobble * 0.006;
+      // Per-element animation: cone opacity shimmer + rising/fading embers.
+      for (const child of flameGroup.children) {
+        const mat = (child as THREE.Mesh).material as THREE.MeshBasicMaterial;
+        if (child.userData.flameLayer) {
+          mat.opacity = 0.6 + (Math.sin(t * 19 + child.position.y * 42) * 0.5 + 0.5) * 0.3;
+        } else if (child.userData.ember) {
+          const e = child.userData.ember as { phase: number; speed: number; sx: number; sz: number };
+          const p = (t * e.speed + e.phase) % 1;                 // 0→1 rise cycle
+          child.position.set(
+            e.sx * p + Math.sin(t * 8 + e.phase * 10) * 0.004,
+            0.1 + p * 0.2,                                        // rise from the flame top
+            e.sz * p,
+          );
+          mat.opacity = (1 - p) * 0.9 * Math.min(1, p / 0.06);   // fade in fast, fade out as it rises
+          const s = 0.5 + (1 - p) * 0.7;
+          child.scale.set(s, s, s);
+        }
+      }
     },
   },
 

@@ -3,6 +3,35 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ACAA — 2026-06-03 — FP-viewmodel fixes from playtest: see-through rings, branch cleanup, real torch fire ✓ verify pass (tsc clean)
+
+`verified` — `npm run verify` (tsc) PASS; no save change. Three user-reported issues from testing the ACY/ACZ item
+models. 6 files: `core/loop.ts`, `player/viewModel.ts`, `inventory/items.ts`, `pickups/pickups.ts`, NEW
+`world/branchMesh.ts`, `scripts/rig-shot.mjs` (+NEW `fp-item` scenario).
+
+**See-through rings → two-pass FP viewmodel render (D170).** The FP viewmodel materials had `depthTest`/`depthWrite`
+OFF (so world walls can't clip the held item), which also disabled depth-sorting WITHIN the item — the far side of
+closed shapes (grip-rings/toruses/coils on the new detailed models) drew over the near side, reading as "see-through."
+Fix: the viewmodel now lives in its OWN `THREE.Scene` (with its own ambient+key+fill lights) rendered in a SECOND pass
+over a CLEARED depth buffer (`core/loop.ts`): world → `clearDepth()` → viewmodel. depthTest is back ON, so the item
+self-sorts correctly; the depth clear is what keeps walls from clipping it. Also fixed `configureViewModelMaterial`
+force-setting `transparent=false` on every viewmodel material — it had silently broken the torch flame's alpha fade;
+now it preserves authored transparency (+ `depthWrite=false` for transparent). Verified with the new `fp-item` rig-shot
+scenario (renders the REAL first-person viewmodel — the `item-studio` can't reproduce the bug since its meshes already
+depth-sort). Trade-off: the held item no longer dims at night (fixed vm-scene lights) — a readability win.
+
+**Branch cleanup + world unification.** Dropped the ACZ branch's splinter "bristles" + knot bumps (read as weird
+clutter). Extracted a shared `buildBranchMesh(material)` (NEW `world/branchMesh.ts`) used by BOTH the held item
+(`vmWood`) and the world pickups under dead trees (`makePrimitiveBranch`, plain Lambert grey — ~200 instances, so the
+shader stays off there) — so a branch on the ground now matches the one you hold. Clean tapered shaft + a couple of
+natural twig stubs.
+
+**Real torch fire.** Replaced the static single emissive cone ("yellow triangle") with a layered additive flame (deep
+orange → hot white-yellow core, 4 nested cones) + 7 rising/fading ember sparks, all flickering (vertical stretch +
+lateral lick + per-cone opacity shimmer + ember rise-and-recycle) in `updateHeld`. Lives in a group named `torchFlame`
+shown ONLY when `slot.meta.lit` (hidden otherwise). The transparent-material fix above is what lets it blend/glow.
+No new D-entries beyond D170.
+
 ## Session ACZ — 2026-06-03 — Item-model detail pass, part 2: the remaining ~22 models (every item now detailed) ✓ verify pass (tsc clean)
 
 `verified` — `npm run verify` (tsc) PASS; no save change; 1 file (`items.ts`). Finishes the ACY item-model thread —

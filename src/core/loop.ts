@@ -34,8 +34,23 @@ export function startLoop(
     // Wrap render in a GPU timer query so the perf HUD can show GPU ms.
     ctx.three.gpuTimer.begin();
     const target = getRenderTarget?.();
-    if (target) ctx.three.renderer.render(target.scene, target.camera);
-    else ctx.three.renderer.render(ctx.three.scene, ctx.three.camera);
+    const renderer = ctx.three.renderer;
+    // Main pass (getRenderTarget always returns a target — the title scene, or
+    // the world scene during gameplay).
+    if (target) renderer.render(target.scene, target.camera);
+    else renderer.render(ctx.three.scene, ctx.three.camera);
+    // ACAA — second pass: the FP viewmodel renders in its OWN scene over a
+    // CLEARED depth buffer, so it draws on top of the world (no wall-clip)
+    // while still depth-sorting WITHIN itself (no see-through rings). Gated on
+    // vm.group.visible (false in 3P / on death / at the title), so it only runs
+    // during FP gameplay. Uses the game camera the viewmodel tracks.
+    const vm = ctx.player?.viewModel;
+    if (vm && vm.group.visible) {
+      renderer.autoClear = false;
+      renderer.clearDepth();
+      renderer.render(vm.scene, ctx.three.camera);
+      renderer.autoClear = true;
+    }
     ctx.three.gpuTimer.end();
   };
   scheduleFrame(frame);

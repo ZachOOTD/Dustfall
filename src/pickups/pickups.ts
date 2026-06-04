@@ -12,6 +12,7 @@ import { Tuning } from '../config/tuning.ts';
 import { stormWindAccel } from '../world/weather.ts';
 import type { ItemId, ItemMeta } from '../inventory/types.ts';
 import { getItemDef } from '../inventory/items.ts';
+import { buildBranchMesh } from '../world/branchMesh.ts';  // ACAA — shared branch model
 
 export interface Pickup {
   id: number;                 // unique handle for hover/take
@@ -184,35 +185,16 @@ export function spawnCanteens(
 // Used as fire fuel (aim at fire + E with branch selected adds 30s).
 // ────────────────────────────────────────────────────────────────
 function makePrimitiveBranch(rand: Rng): THREE.Group {
-  const g = new THREE.Group();
-  // II — grey to match the dead trees branches actually come from
-  // (deadTree.ts _branchMat = 0x6e685f). Reads as "this branch fell off
-  // that tree" instead of "random brown stick."
-  // ABL — perf: PBR Standard → Lambert. Matte grey branches look
-  // identical; ~200 in-world instances drove a measurable fragment cost.
-  const mat = new THREE.MeshLambertMaterial({
-    color: 0x6e685f, flatShading: true,
-  });
-  // II — longer sticks so branches read as real fuel + craftable material
-  // rather than tiny twigs.
+  // ACAA — unified with the held-item branch via the shared buildBranchMesh
+  // (same shape so a world branch reads as the item you pick up). Stays plain
+  // Lambert grey: ~200 in-world instances, so the wood-grain shader the held
+  // item uses is too costly here (ABL perf note); the silhouette is what
+  // matters and that's now identical. Grey 0x6e685f matches the dead-tree bark.
+  const mat = new THREE.MeshLambertMaterial({ color: 0x6e685f, flatShading: true });
+  // II — longer sticks so branches read as real fuel, not tiny twigs.
   const len = 0.40 + rand() * 0.15;
-  const stick = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.018, 0.022, len, 6),
-    mat,
-  );
-  stick.rotation.z = Math.PI / 2;
-  g.add(stick);
-  // Small offshoot twig
-  if (rand() < 0.6) {
-    const twig = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.008, 0.012, 0.08, 4),
-      mat,
-    );
-    twig.position.set((rand() - 0.5) * len * 0.6, 0, 0);
-    twig.rotation.z = Math.PI / 2 + (rand() - 0.5) * 0.7;
-    g.add(twig);
-  }
-  return g;
+  const twigs = rand() < 0.6 ? 2 : 1;
+  return buildBranchMesh(mat, { len, twigs, rand });
 }
 
 /** Spawn a single branch pickup at a specific (x, z) world position.

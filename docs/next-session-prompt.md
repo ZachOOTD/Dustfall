@@ -1,10 +1,10 @@
-# Session ACAA — Kickoff Brief
+# Session ACAB — Kickoff Brief
 
 ## Read these now (in order)
 1. `CLAUDE.md` (auto-loaded) — esp. "Where we are now" (ACZ last-shipped + the foreground-owed list).
 2. `docs/session-end-report.md` — cumulative state (ACZ at top).
 3. `docs/backlog.md` — open items (✓/🟡 markers).
-4. `docs/decisions.md` — tail D165-D169 (D168 panel sampler, D169 itemStudio harness).
+4. `docs/decisions.md` — tail D165-D170 (D168 panel sampler, D169 itemStudio harness, D170 two-pass FP viewmodel render).
 5. `docs/roadmap.md` — "Up next" + the (empty) Scope-cut section.
 6. `docs/architecture.md` — read before touching terrain/collision (lane a needs it).
 
@@ -13,7 +13,10 @@ Post-MVP survival sandbox: terrain/biomes, weather (sweeping sandstorm wall), da
 inventory/crafting/cooking, fire/tent/sled/locker/stake/speeder, lizard/shrew/sandworm/raider/companion, a rigged 3P
 player, salvage POIs (hand-modeled flagships + composite procgen wrecks with dynamic panel placement). **The item-model
 arc is now COMPLETE** — ACY (12 hero held items + the `item-studio` harness + dynamic salvage-panel placer) and ACZ
-(the remaining ~22 kits/foods/materials) mean **every item has a detailed/verified mesh**.
+(the remaining ~22 kits/foods/materials) mean **every item has a detailed/verified mesh**. **ACAA** then fixed three
+playtest issues: see-through FP rings (the viewmodel now renders in its own scene in a 2nd depth-cleared pass — D170),
+branch cleanup + held/world unification, and a real layered torch fire (only when lit). New `fp-item` rig-shot scenario
+renders the REAL first-person viewmodel.
 
 ## Session ACAA focus — pick ONE lane (surface to the user if ambiguous; default (a))
 
