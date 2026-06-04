@@ -30,7 +30,13 @@ natural twig stubs.
 orange → hot white-yellow core, 4 nested cones) + 7 rising/fading ember sparks, all flickering (vertical stretch +
 lateral lick + per-cone opacity shimmer + ember rise-and-recycle) in `updateHeld`. Lives in a group named `torchFlame`
 shown ONLY when `slot.meta.lit` (hidden otherwise). The transparent-material fix above is what lets it blend/glow.
-No new D-entries beyond D170.
+
+**Follow-up fix (held lights cast on the world).** Moving the viewmodel into its own scene (D170) also moved the torch
+PointLight + flashlight SpotLight there — so they stopped illuminating the WORLD (only the in-vm-scene item). Fixed:
+two reusable held-lights (point + spot) now live in the WORLD scene (`createViewModel`), zeroed each frame by
+`updateViewModel`, and re-armed + positioned by the torch/flashlight `updateHeld` (point at the flame world-pos; spot
+at the lens, aimed along camera-forward). Verified at night — the torch lights the terrain around it + the flashlight
+casts its beam. No new D-entries beyond D170 (folded into it).
 
 ## Session ACZ — 2026-06-03 — Item-model detail pass, part 2: the remaining ~22 models (every item now detailed) ✓ verify pass (tsc clean)
 

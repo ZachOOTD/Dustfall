@@ -21,6 +21,11 @@ export interface ViewModel {
   group: THREE.Group;
   hands: THREE.Group;
   itemRoot: THREE.Group;
+  /** ACAB — held-item lights that live in the WORLD scene (so they illuminate
+   *  the world, not just the in-vm-scene item). Driven by torch/flashlight
+   *  `updateHeld`; zeroed each frame by `updateViewModel` before that hook. */
+  heldPointLight: THREE.PointLight;
+  heldSpotLight: THREE.SpotLight;
   currentItem: ItemId | null;
   anim: {
     active: boolean;
@@ -74,7 +79,7 @@ export function configureViewModelObject(obj: THREE.Object3D): void {
   });
 }
 
-export function createViewModel(_ctx: GameContext): ViewModel {
+export function createViewModel(ctx: GameContext): ViewModel {
   // ACAA — dedicated scene for the depth-cleared second pass (loop.ts). The
   // held item no longer receives the WORLD lights, so this scene carries its
   // own: a soft ambient + a key/fill rig parented to `group` (camera-relative)
@@ -96,6 +101,23 @@ export function createViewModel(_ctx: GameContext): ViewModel {
   fill.target.position.set(0, 0, -0.3);
   group.add(fill, fill.target);
 
+  // ACAB — held-item WORLD lights. The torch/flashlight functional lights used
+  // to live in the item mesh; once that mesh moved into `scene` (D170) they
+  // stopped lighting the WORLD. So two reusable lights live in the world scene
+  // instead, driven each frame by the equipped item's `updateHeld` (positioned
+  // at the flame/lens, intensity from lit-state). Always present (intensity 0
+  // when idle) so equipping a torch doesn't trigger a lightsHash recompile
+  // stutter. updateViewModel zeroes them before updateHeld so a non-emitter
+  // item leaves them dark.
+  const heldPointLight = new THREE.PointLight(Tuning.TORCH_LIGHT_COLOR_HEX, 0, Tuning.TORCH_LIGHT_DISTANCE, 2);
+  heldPointLight.castShadow = false;
+  ctx.three.scene.add(heldPointLight);
+  const heldSpotLight = new THREE.SpotLight(
+    Tuning.FLASHLIGHT_LIGHT_COLOR_HEX, 0, Tuning.FLASHLIGHT_LIGHT_DISTANCE,
+    Tuning.FLASHLIGHT_LIGHT_ANGLE_RAD, Tuning.FLASHLIGHT_LIGHT_PENUMBRA, 1.5);
+  heldSpotLight.castShadow = false;
+  ctx.three.scene.add(heldSpotLight, heldSpotLight.target);
+
   // FP viewmodel hands REMOVED (Session ACJ). ABP added forearm-wrap meshes
   // here for FP↔3P outfit continuity, but they're parented to the
   // camera-anchored `hands` group (not the real hand), so they read as
@@ -116,6 +138,8 @@ export function createViewModel(_ctx: GameContext): ViewModel {
     group,
     hands,
     itemRoot,
+    heldPointLight,
+    heldSpotLight,
     currentItem: null,
     anim: { active: false, startTime: 0, itemId: null, duration: 0 },
     triggerUse() {
@@ -266,6 +290,10 @@ export function updateViewModel(ctx: GameContext, dt: number): void {
   }
 
   // 4. Per-frame hook for held items (torch/flashlight react to slot.meta).
+  // Zero the world held-lights first; the equipped item's updateHeld re-arms
+  // them if it emits (so switching away from a lit torch goes dark).
+  vm.heldPointLight.intensity = 0;
+  vm.heldSpotLight.intensity = 0;
   const heldSlot = inv.slots[inv.selectedIdx];
   if (heldSlot.item !== null) {
     const def = getItemDef(heldSlot.item);

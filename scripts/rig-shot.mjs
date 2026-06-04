@@ -829,10 +829,10 @@ const SCENARIOS = {
   'fp-item': async (page) => {
     const items = String(argv.items || argv.item || 'scrap_bar').split(',').map((s) => s.trim());
     for (const item of items) {
-      await page.evaluate((item) => {
+      await page.evaluate(({ item, night }) => {
         const ctx = window.__game.ctx;
         ctx.weather.intensity = 0;
-        window.__game.setTime(0.5);
+        window.__game.setTime(night ? 0.96 : 0.5);   // --night → dark, to see emitted light
         ctx.three.renderer.setSize(900, 900, false);
         const cam = ctx.three.camera;
         if (cam.isPerspectiveCamera) { cam.aspect = 1; cam.updateProjectionMatrix(); }
@@ -847,16 +847,17 @@ const SCENARIOS = {
         inv.slots[0].meta = item === 'torch' ? { lit: true, burnRemaining: 1 }
           : item === 'flashlight' ? { lit: true, fuelLevel: 1 } : undefined;
         inv.selectedIdx = 0;
-      }, item);
+      }, { item, night: !!argv.night });
       await page.waitForTimeout(450);         // let updateViewModel swap + camera settle to FP
       // Aim the FP camera UP at clean sky (FP sync only sets position, not
       // rotation) + re-assert FP/rig-hidden, so the item frames against sky.
-      const dbg = await page.evaluate(() => {
+      const lookPitch = argv.pitch !== undefined ? Number(argv.pitch) : 0.16;
+      const dbg = await page.evaluate((pitch) => {
         const ctx = window.__game.ctx;
         ctx.flags.thirdPerson = false;
         if (ctx.player.rig) ctx.player.rig.group.visible = false;
         const cam = ctx.three.camera;
-        cam.rotation.set(0.16, 2.2, 0);       // slight up + yaw away from the wreck → item lower-right vs horizon
+        cam.rotation.set(pitch, 2.2, 0);       // slight up + yaw away; --pitch=<rad> for look-down light tests
         cam.updateMatrixWorld(true);
         const vm = ctx.player.viewModel;
         const V = cam.position.constructor;
@@ -870,7 +871,7 @@ const SCENARIOS = {
           cam: [cp.x.toFixed(1), cp.y.toFixed(1), cp.z.toFixed(1)],
           itemPos: [ip.x.toFixed(1), ip.y.toFixed(1), ip.z.toFixed(1)],
         };
-      });
+      }, lookPitch);
       await page.waitForTimeout(260);
       const path = join(OUT, `scen-fp-${item}.png`);
       await page.screenshot({ path, fullPage: false });

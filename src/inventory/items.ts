@@ -50,6 +50,9 @@ function vmGlass(color: number, opts: GlassMaterialOpts = {}) {
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
+// ACAB — scratch vector reused by flashlight updateHeld to aim the world spot.
+const _flashlightDir = new THREE.Vector3();
+
 // ACL ITEMS — amban rifle magazine capacity, mirrored from combat.ts's
 // WEAPON_AMBAN_RIFLE_MAX_AMMO so the scrap_bullet reload path can cap fill
 // without importing the combat spec (avoids a circular dep).
@@ -1923,10 +1926,10 @@ const _DEFS: Record<ItemId, ItemDef> = {
         flameGroup.add(em);
       }
       group.add(flameGroup);
-
-      const light = new THREE.PointLight(
-        Tuning.TORCH_LIGHT_COLOR_HEX, 0, Tuning.TORCH_LIGHT_DISTANCE, 2);
-      light.name = 'torchLight'; light.position.y = 0.27; group.add(light);
+      // NOTE: the world-illuminating PointLight is NOT here — it lives in the
+      // world scene (vm.heldPointLight) and is driven by updateHeld. A light
+      // parented here would sit in the isolated viewmodel scene (D170) and only
+      // light the held item, not the world (ACAB fix).
       return group;
     },
     makeIcon() {
@@ -1938,12 +1941,15 @@ const _DEFS: Record<ItemId, ItemDef> = {
       return s;
     },
     updateHeld(itemRoot, slot, ctx, dt) {
-      const light = itemRoot.getObjectByName('torchLight') as THREE.PointLight | null;
+      // ACAB — the world-illuminating light is vm.heldPointLight (in the world
+      // scene), zeroed each frame by updateViewModel; we re-arm + position it
+      // here. The flame VISUAL stays in the viewmodel scene.
+      const light = ctx.player.viewModel?.heldPointLight ?? null;
       const flameGroup = itemRoot.getObjectByName('torchFlame') as THREE.Group | null;
       if (!slot.meta) slot.meta = { lit: false, burnRemaining: 1 };
       const lit = !!slot.meta.lit;
-      if (!light || !flameGroup) return;
-      if (!lit) { light.intensity = 0; flameGroup.visible = false; return; }
+      if (!flameGroup) return;
+      if (!lit) { flameGroup.visible = false; return; }   // light already zeroed
       // Drain burnRemaining; auto-consume on burn-out.
       const remaining = (slot.meta.burnRemaining ?? 1) - dt / Tuning.TORCH_BURN_DURATION_S;
       if (remaining <= 0) {
@@ -1952,7 +1958,6 @@ const _DEFS: Record<ItemId, ItemDef> = {
         slot.item = null;
         slot.count = 0;
         slot.meta = undefined;
-        light.intensity = 0;
         flameGroup.visible = false;
         ctx.ui.showToast('the torch burns out');
         return;
@@ -1962,7 +1967,14 @@ const _DEFS: Record<ItemId, ItemDef> = {
       // Flicker — two desynced sines for organic feel.
       const t = ctx.time.elapsed;
       const wobble = Math.sin(t * 17.3) * 0.5 + Math.sin(t * 23.7) * 0.5;
-      light.intensity = Tuning.TORCH_LIGHT_INTENSITY + wobble * Tuning.TORCH_LIGHT_FLICKER_AMP;
+      // Drive the WORLD light: position it at the flame's world location.
+      if (light) {
+        light.color.setHex(Tuning.TORCH_LIGHT_COLOR_HEX);
+        light.distance = Tuning.TORCH_LIGHT_DISTANCE;
+        light.intensity = Tuning.TORCH_LIGHT_INTENSITY + wobble * Tuning.TORCH_LIGHT_FLICKER_AMP;
+        flameGroup.updateWorldMatrix(true, false);
+        flameGroup.getWorldPosition(light.position);
+      }
       // Whole-flame flicker: vertical stretch + a little lateral lick.
       flameGroup.scale.set(1 + wobble * 0.06, 1 + wobble * 0.22, 1 + wobble * 0.06);
       flameGroup.rotation.z = wobble * 0.11;
@@ -2044,22 +2056,10 @@ const _DEFS: Record<ItemId, ItemDef> = {
       lens.name = 'flashlightLens';
       lens.position.set(0, 0, -0.14);
       group.add(lens);
-      // SpotLight at the lens, pointed along -Z (camera forward).
-      const light = new THREE.SpotLight(
-        Tuning.FLASHLIGHT_LIGHT_COLOR_HEX,
-        0,
-        Tuning.FLASHLIGHT_LIGHT_DISTANCE,
-        Tuning.FLASHLIGHT_LIGHT_ANGLE_RAD,
-        Tuning.FLASHLIGHT_LIGHT_PENUMBRA,
-        1.5,
-      );
-      light.name = 'flashlightLight';
-      light.position.set(0, 0, -0.13);
-      // SpotLight needs its target in the scene graph. Add both light + target
-      // to this group so they inherit the camera's transform.
-      light.target.position.set(0, 0, -5);
-      group.add(light);
-      group.add(light.target);
+      // NOTE: the beam SpotLight is NOT here — it lives in the world scene
+      // (vm.heldSpotLight) and is driven by updateHeld (a light parented here
+      // would sit in the isolated viewmodel scene and not light the world —
+      // ACAB fix). The lens disc above is the visible emitter.
       return group;
     },
     makeIcon() {
@@ -2071,7 +2071,9 @@ const _DEFS: Record<ItemId, ItemDef> = {
       return s;
     },
     updateHeld(itemRoot, slot, ctx, dt) {
-      const light = itemRoot.getObjectByName('flashlightLight') as THREE.SpotLight | null;
+      // ACAB — the beam is vm.heldSpotLight (world scene), zeroed each frame by
+      // updateViewModel; re-armed + aimed here. The lens disc is the visual.
+      const light = ctx.player.viewModel?.heldSpotLight ?? null;
       const lens = itemRoot.getObjectByName('flashlightLens') as THREE.Mesh | null;
       if (!slot.meta) slot.meta = { lit: false, fuelLevel: 1 };
       const lit = !!slot.meta.lit;
@@ -2087,8 +2089,17 @@ const _DEFS: Record<ItemId, ItemDef> = {
         fuel = Math.min(1, fuel + dt / Tuning.FLASHLIGHT_RECHARGE_DURATION_S);
       }
       slot.meta.fuelLevel = fuel;
-      if (light) light.intensity = slot.meta.lit ? Tuning.FLASHLIGHT_LIGHT_INTENSITY : 0;
       if (lens) (lens.material as THREE.MeshBasicMaterial).opacity = slot.meta.lit ? 0.85 : 0.4;
+      // Drive the WORLD spotlight: position at the lens, aim along camera fwd.
+      if (light && slot.meta.lit && lens) {
+        const cam = ctx.three.camera;
+        lens.updateWorldMatrix(true, false);
+        lens.getWorldPosition(light.position);
+        cam.getWorldDirection(_flashlightDir);
+        light.target.position.copy(light.position).addScaledVector(_flashlightDir, 5);
+        light.color.setHex(Tuning.FLASHLIGHT_LIGHT_COLOR_HEX);
+        light.intensity = Tuning.FLASHLIGHT_LIGHT_INTENSITY;
+      }
     },
   },
 
