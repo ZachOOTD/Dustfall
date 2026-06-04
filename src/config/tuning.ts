@@ -1303,6 +1303,19 @@ export const Tuning = {
   STAR_DRIFT_RATE: 0.0042,       // radians/sec — slow celestial rotation of the field (X tilt = 0.18x)
   STAR_BASE_SIZE: 1.6,           // base px point size (replaces old PointsMaterial.size)
   STAR_STORM_STATE_FLOOR: 0.55,  // extra star suppression during building/storm/settling (cloud occlusion)
+  // ACAB (Cycle 6) — procedural cloud layer (sky.ts SKY_FRAGMENT).
+  CLOUD_COLOR_HEX: 0xd6d8e2,     // lit cloud tops
+  CLOUD_DARK_HEX: 0x6a6e7e,      // shaded cloud undersides
+  CLOUD_SCALE: 1.3,              // cloud feature frequency on the projection plane (higher = smaller, more puffs)
+  CLOUD_DRIFT_X: 0.06,           // cloud-plane drift per second (wind)
+  CLOUD_DRIFT_Z: 0.03,
+  CLOUD_MAX_ALPHA: 0.92,         // peak cloud opacity over the sky
+  // Cloud-cover weather (clear↔overcast days, independent of the storm cycle).
+  CLOUD_COVER_NOISE_PERIOD_S: 240, // seconds for the slow clear↔cloudy oscillation
+  CLOUD_COVER_LERP_RATE: 0.15,     // how fast cloudiness chases its target (per sec)
+  CLOUD_STORM_FLOOR: 0.85,         // cloudiness forced this high while a storm builds/rages
+  CLOUD_SUN_DIM: 0.55,             // overcast cuts direct sun by up to this fraction
+  CLOUD_AMBIENT_LIFT: 0.5,         // overcast lifts daytime ambient by up to this fraction
   // ACL SKY+WEATHER — directional Dune-style sweeping sandstorm wall.
   STORM_WALL_WIDTH: 140,           // half-thickness (world u) of the full-intensity core
   STORM_WALL_SPEED: 26,            // wall travel speed (world u/sec)

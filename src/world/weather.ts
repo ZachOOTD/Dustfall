@@ -58,6 +58,16 @@ interface DustLayer {
 export interface Weather {
   state: WeatherState;
   intensity: number;     // 0..1, drives fog/sky/thirst/audio (world truth)
+  /** ACAB (Cycle 6) — daytime cloud cover 0..1, INDEPENDENT of the storm cycle
+   *  (clear↔overcast days), eased toward a slow deterministic target each
+   *  frame; storms force it high. Drives the sky cloud shader + (Tier 3) the
+   *  overcast lighting flatten + star occlusion. Derived/transient — not
+   *  persisted (re-seeds from elapsed time on load), so additive, no save bump. */
+  cloudiness: number;
+  /** ACAB — dev/test override: when non-null, cloudiness is pinned here
+   *  (the `sky` rig-shot scenario + `__game.setCloudiness`) instead of easing
+   *  toward the auto cover target. null = automatic. */
+  cloudinessHold: number | null;
   /** Session YY — player-context-aware storm intensity. Equals
    *  `intensity` outside any shelter. Inside a fully-enclosed shelter
    *  (small tent / fire) = 0 (legacy binary suppression). Inside a
@@ -299,6 +309,8 @@ export function createWeather(
   return {
     state: 'clear',
     intensity: 0,
+    cloudiness: 0,         // ACAB — eased toward the slow cover target in updateWeather
+    cloudinessHold: null,
     perceivedIntensity: 0,
     stateTimer: 0,
     nextStormAt:
@@ -455,6 +467,26 @@ export function updateWeather(ctx: GameContext, dt: number): void {
           Math.random() * (curve.intervalMax - curve.intervalMin);
       }
       break;
+  }
+
+  // ── ACAB (Cycle 6) — daytime cloud cover (clear↔overcast days). ──
+  // A slow deterministic wander (two desynced sines, gamma-biased toward clear
+  // so clear days are more common than overcast) gives the daytime sky its
+  // variation INDEPENDENT of the storm cycle. Storms force it toward overcast.
+  // Eased so the cover changes gradually. `cloudinessHold` (dev/test) pins it.
+  if (w.cloudinessHold !== null) {
+    w.cloudiness = w.cloudinessHold;
+  } else {
+    const tt = (ctx.time.elapsed / Tuning.CLOUD_COVER_NOISE_PERIOD_S) * Math.PI * 2;
+    const a = Math.sin(tt) * 0.5 + 0.5;
+    const b = Math.sin(tt * 0.37 + 1.3) * 0.5 + 0.5;
+    let target = Math.pow(a * 0.6 + b * 0.4, 1.6);          // 0..1, biased toward clear
+    if (w.state !== 'clear') {
+      // Telegraph: the sky goes clearly overcast the moment a storm starts
+      // BUILDING (low dust), then deepens toward full as the dust intensifies.
+      target = Math.max(target, 0.6 + (Tuning.CLOUD_STORM_FLOOR - 0.6) * w.intensity);
+    }
+    w.cloudiness += (target - w.cloudiness) * Math.min(1, Tuning.CLOUD_COVER_LERP_RATE * dt);
   }
 
   // FogExp2 density curve. Smoothstep from CLEAR→STORM density so the

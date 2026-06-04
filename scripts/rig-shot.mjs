@@ -821,6 +821,69 @@ const SCENARIOS = {
     console.log(`[held-item] ${item} → ${path}`);
   },
 
+  // Sky (ACAB, Cycle 6): sweep cloud cover × time-of-day, aim the camera up at
+  // the dome, and screenshot — verifies the procedural cloud layer (clear →
+  // partly → overcast) and that clouds occlude stars at night. Headless.
+  'sky': async (page) => {
+    // [label, cloudiness, dayTime, pitch]
+    const shots = [
+      ['clear-noon', 0.0, 0.5, 0.55],
+      ['partly-noon', 0.45, 0.5, 0.55],
+      ['overcast-noon', 0.9, 0.5, 0.55],
+      ['partly-dusk', 0.5, 0.72, 0.32],
+      ['clear-night', 0.0, 0.95, 0.55],
+      ['overcast-night', 0.9, 0.95, 0.55],
+      // Ground-level: see the overcast LIGHTING flatten on terrain (vs clear).
+      ['clear-noon-ground', 0.0, 0.5, -0.12],
+      ['overcast-noon-ground', 0.92, 0.5, -0.12],
+    ];
+    for (const [label, cloud, time, pitch] of shots) {
+      await page.evaluate(({ cloud, time }) => {
+        const ctx = window.__game.ctx;
+        ctx.weather.intensity = 0;
+        window.__game.setCloudiness(cloud);
+        window.__game.setTime(time);
+        ctx.three.renderer.setSize(900, 700, false);
+        const cam = ctx.three.camera;
+        if (cam.isPerspectiveCamera) { cam.aspect = 900 / 700; cam.updateProjectionMatrix(); }
+        ctx.flags.thirdPerson = false;
+        if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      }, { cloud, time });
+      await page.waitForTimeout(380);
+      await page.evaluate((pitch) => {
+        const cam = window.__game.ctx.three.camera;
+        cam.rotation.set(pitch, 0.6, 0);
+        cam.updateMatrixWorld(true);
+      }, pitch);
+      await page.waitForTimeout(220);
+      const path = join(OUT, `scen-sky-${label}.png`);
+      await page.screenshot({ path, fullPage: false });
+      console.log(`[sky] ${label} → ${path}`);
+    }
+    // Storm telegraph: trigger a storm, let the 'building' state ramp the sky to
+    // ominous overcast (before the dust wall), capture it.
+    await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      window.__game.setCloudiness(-1);      // release the hold → auto (storm forces overcast)
+      window.__game.setTime(0.5);
+      window.__game.triggerStorm();
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+    });
+    await page.waitForTimeout(4500);        // let cloudiness ramp during 'building'
+    await page.evaluate(() => {
+      const cam = window.__game.ctx.three.camera;
+      cam.rotation.set(0.28, 0.6, 0); cam.updateMatrixWorld(true);
+    });
+    await page.waitForTimeout(300);
+    const st = await page.evaluate(() => {
+      const w = window.__game.ctx.weather;
+      return { state: w.state, intensity: +w.intensity.toFixed(2), cloud: +w.cloudiness.toFixed(2) };
+    });
+    await page.screenshot({ path: join(OUT, 'scen-sky-storm-build.png'), fullPage: false });
+    console.log(`[sky] storm-build → scen-sky-storm-build.png ${JSON.stringify(st)}`);
+  },
+
   // FP-item (ACAA): equip an item in FIRST person and screenshot the REAL
   // viewmodel as the player sees it — this exercises the two-pass depth-cleared
   // viewmodel render (loop.ts), the only path where the see-through-rings bug

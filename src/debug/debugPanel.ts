@@ -45,6 +45,10 @@ interface DebugApi {
   };
   /** Trigger a sandstorm immediately for testing. */
   triggerStorm: () => void;
+  /** ACAB (Cycle 6) — force the daytime cloud cover (0 clear … 1 overcast) for
+   *  sky-shader iteration + the `sky` rig-shot scenario. Sets a hold that
+   *  overrides the auto cloud-cover easing until cleared (pass < 0 to release). */
+  setCloudiness: (v: number) => void;
   /** ACG (Cycle 1) — DEV-only: spawn a raider at world XZ (terrain Y
    *  auto-sampled) and register it in ctx.raiders. Raiders are dormant by
    *  design (D13 / Pillar 1) — this is a test affordance for exercising the
@@ -140,6 +144,11 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
         colliderHandle: hit.collider.handle,
         shape: hit.collider.shape.type,
       };
+    },
+    setCloudiness(v) {
+      if (v < 0) { ctx.weather.cloudinessHold = null; return; }
+      ctx.weather.cloudinessHold = Math.max(0, Math.min(1, v));
+      ctx.weather.cloudiness = ctx.weather.cloudinessHold;
     },
     triggerStorm() {
       // ACM fix: delegate to the real weather.triggerStorm, which ARMS the

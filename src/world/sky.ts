@@ -53,6 +53,14 @@ let bundle: SkyBundle | null = null;
 const _topColor = new THREE.Color();
 const _horizonColor = new THREE.Color();
 const _sunColor = new THREE.Color();
+// ACAB (Cycle 6) — cloud shading scratch + base colors.
+const _cloudCol = new THREE.Color();
+const _cloudDark = new THREE.Color();
+const _cloudColBase = new THREE.Color(Tuning.CLOUD_COLOR_HEX);
+const _cloudDarkBase = new THREE.Color(Tuning.CLOUD_DARK_HEX);
+// ACAB — ominous storm-cloud colors (gathering dark dust-clouds before a storm).
+const _stormCloudCol = new THREE.Color(0x6a4c3c);
+const _stormCloudDark = new THREE.Color(0x2c2017);
 const _sunPos = new THREE.Vector3();
 const _moonDir = new THREE.Vector3();
 const _moonPos = new THREE.Vector3();
@@ -129,6 +137,31 @@ uniform vec3 uHorizonColor;
 uniform vec3 uSunDir;
 uniform vec3 uSunColor;
 uniform float uSunGlow;
+// ACAB (Cycle 6) — procedural cloud layer. Clouds are projected onto a virtual
+// horizontal plane (d.xz / d.y) so they recede to the horizon, sampled with FBM
+// value-noise (zero-asset), thresholded by uCloudiness (0 clear → 1 overcast),
+// and drifted by uTime. Lit tops + shaded undersides + a sun-tinted edge.
+uniform float uTime;
+uniform float uCloudiness;     // 0 clear … 1 overcast
+uniform vec3  uCloudColor;     // lit top
+uniform vec3  uCloudDark;      // shaded underside
+uniform float uCloudScale;     // cloud feature size (smaller = bigger puffs)
+uniform vec2  uCloudDrift;     // plane drift per second
+uniform float uCloudAlpha;     // max cloud opacity
+
+float skyHash(vec2 p){ p = fract(p * vec2(123.34, 345.45)); p += dot(p, p + 34.345); return fract(p.x * p.y); }
+float skyVNoise(vec2 p){
+  vec2 i = floor(p); vec2 f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  float a = skyHash(i), b = skyHash(i + vec2(1.0, 0.0));
+  float c = skyHash(i + vec2(0.0, 1.0)), dd = skyHash(i + vec2(1.0, 1.0));
+  return mix(mix(a, b, u.x), mix(c, dd, u.x), u.y);
+}
+float skyFbm(vec2 p){
+  float v = 0.0, amp = 0.55;
+  for (int i = 0; i < 5; i++) { v += amp * skyVNoise(p); p = p * 2.02 + 7.3; amp *= 0.5; }
+  return v;
+}
 
 void main() {
   vec3 d = normalize(vDir);
@@ -143,6 +176,27 @@ void main() {
   float inner = smoothstep(0.984, 1.0, sd);
   float outer = smoothstep(0.93, 0.984, sd) * 0.35;
   sky += uSunColor * (inner + outer) * uSunGlow;
+
+  // ── Clouds ──
+  if (uCloudiness > 0.001 && d.y > 0.0) {
+    float dy = max(d.y, 0.045);
+    vec2 cuv = (d.xz / dy) * uCloudScale + uTime * uCloudDrift;
+    // Domain warp — offset the sample by a low-freq noise so the radial
+    // projection streaks break into rounder, more organic billows.
+    vec2 warp = vec2(skyFbm(cuv * 0.5 + 3.0), skyFbm(cuv * 0.5 + 9.0)) - 0.5;
+    cuv += warp * 0.9;
+    float n = skyFbm(cuv);
+    // Coverage threshold drops as cloudiness rises (more sky fills in). A coarser
+    // second tap clumps the cover so it isn't uniform.
+    float base = n * 0.68 + skyFbm(cuv * 0.4 + 11.0) * 0.32;
+    float lo = mix(0.74, 0.28, uCloudiness);
+    float cov = smoothstep(lo, lo + 0.27, base);    // wider band = softer edges
+    cov *= smoothstep(0.015, 0.18, d.y);            // thin out toward the horizon
+    // Shade: bright lit tops where the noise is high, dark undersides where low.
+    vec3 cloudCol = mix(uCloudDark, uCloudColor, smoothstep(0.3, 0.92, n));
+    cloudCol += uSunColor * smoothstep(0.55, 1.0, sd) * 0.3 * uSunGlow;  // sun-tinted edge
+    sky = mix(sky, cloudCol, cov * uCloudAlpha);
+  }
 
   gl_FragColor = vec4(sky, 1.0);
 }
@@ -294,6 +348,14 @@ export function createSky(scene: THREE.Scene): void {
       uSunDir:       { value: new THREE.Vector3(0, 1, 0) },
       uSunColor:     { value: SunColors.NOON.clone() },
       uSunGlow:      { value: 1.0 },
+      // ACAB (Cycle 6) — cloud layer.
+      uTime:         { value: 0 },
+      uCloudiness:   { value: 0 },
+      uCloudColor:   { value: new THREE.Color(Tuning.CLOUD_COLOR_HEX) },
+      uCloudDark:    { value: new THREE.Color(Tuning.CLOUD_DARK_HEX) },
+      uCloudScale:   { value: Tuning.CLOUD_SCALE },
+      uCloudDrift:   { value: new THREE.Vector2(Tuning.CLOUD_DRIFT_X, Tuning.CLOUD_DRIFT_Z) },
+      uCloudAlpha:   { value: Tuning.CLOUD_MAX_ALPHA },
     },
   });
   const sphere = new THREE.Mesh(sphereGeo, sphereMat);
@@ -579,11 +641,37 @@ export function updateSky(ctx: GameContext, dt: number): void {
   bundle.sphereMat.uniforms.uSunColor.value.copy(_sunColor);
   bundle.sphereMat.uniforms.uSunGlow.value = (0.4 + dayMix * 0.6) * (1 - storm * 0.92);
 
+  // ACAB (Cycle 6) — cloud uniforms. Drift via elapsed time; cloudiness from
+  // the weather model (storms already overwrite the sky tint above, so we ease
+  // clouds OUT under heavy dust to avoid double-darkening). Cloud colors are
+  // shaded by time-of-day: bright by day, dim blue-grey at night (with a small
+  // floor so a moonlit edge survives), warmed slightly toward dusk.
+  const sphU = bundle.sphereMat.uniforms;
+  sphU.uTime.value = ctx.time.elapsed;
+  const cloudiness = ctx.weather.cloudiness ?? 0;
+  sphU.uCloudiness.value = cloudiness * (1 - storm * 0.85);
+  const cloudLit = 0.16 + dayMix * 0.84;                 // night floor 0.16 → 1 at noon
+  _cloudCol.copy(_cloudColBase).multiplyScalar(cloudLit);
+  _cloudDark.copy(_cloudDarkBase).multiplyScalar(cloudLit);
+  // Dusk warmth: lerp a touch toward the sun color when the sun is low + up.
+  const duskWarm = Math.max(0, 0.5 - aboveHorizon) * dayMix * 0.6;
+  _cloudCol.lerp(_sunColor, duskWarm);
+  // ACAB — gathering-storm clouds darken to an ominous dust hue while a storm
+  // builds/rages (the overcast telegraph turns menacing before the dust wall).
+  if (ctx.weather.state !== 'clear') {
+    const k = 0.6 * (0.45 + 0.55 * storm);
+    _cloudCol.lerp(_stormCloudCol, k);
+    _cloudDark.lerp(_stormCloudDark, k);
+  }
+  sphU.uCloudColor.value.copy(_cloudCol);
+  sphU.uCloudDark.value.copy(_cloudDark);
+
   // Sun disc: position along sun dir from camera, hide below horizon.
   _sunPos.copy(cam).addScaledVector(ctx.time.sunDir, Tuning.SUN_DISC_DISTANCE);
   bundle.sun.position.copy(_sunPos);
   bundle.sunMat.color.copy(_sunColor);
-  bundle.sunMat.opacity = Math.min(1, Math.max(0, sy * 5 + 0.1)); // fade out a bit before horizon
+  // ACAB — clouds dim the sun disc (overcast veils it).
+  bundle.sunMat.opacity = Math.min(1, Math.max(0, sy * 5 + 0.1)) * (1 - cloudiness * 0.82);
   bundle.sun.visible = aboveHorizon > -0.05;
 
   // ── Moon: opposite the sun, faded by nightMix and the storm. ──
@@ -592,7 +680,7 @@ export function updateSky(ctx: GameContext, dt: number): void {
   bundle.moon.position.copy(_moonPos);
   // Visible when the moon is above the horizon (moonDir.y > 0).
   const moonAbove = Math.max(0, _moonDir.y);
-  bundle.moonMat.opacity = Math.min(1, moonAbove * 4 + 0.05) * (1 - storm * 0.85);
+  bundle.moonMat.opacity = Math.min(1, moonAbove * 4 + 0.05) * (1 - storm * 0.85) * (1 - cloudiness * 0.8);
   bundle.moon.visible = moonAbove > -0.02;
 
   // ── Stars: opacity rides nightMix, killed by sandstorm and twilight glow. ──
@@ -607,7 +695,8 @@ export function updateSky(ctx: GameContext, dt: number): void {
       ? 1
       : 1 - STAR_STORM_STATE_FLOOR * (0.35 + 0.65 * storm);
   bundle.starsMat.uniforms.uOpacity.value =
-    Math.max(0, nightMix - dayMix * 0.4) * (1 - storm * 0.9) * Math.max(0, stormStateKill);
+    Math.max(0, nightMix - dayMix * 0.4) * (1 - storm * 0.9) * Math.max(0, stormStateKill)
+    * (1 - cloudiness * 0.92);   // ACAB — overcast veils the stars
 
   // ── Distant planet: fixed direction in world, always-on faint visibility. ──
   _planetPos.copy(cam).addScaledVector(_planetDir, Tuning.PLANET_DISTANCE);

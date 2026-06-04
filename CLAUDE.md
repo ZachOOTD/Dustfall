@@ -64,24 +64,22 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      Prior milestones live in docs/changelog.md — do NOT accumulate "Prior milestone"
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
-**Last shipped**: Session ACAA — **FP-viewmodel fixes from playtest** (6 files; tsc clean, no save change). Three
-user-reported issues with the ACY/ACZ item models: (1) **see-through rings** — the FP viewmodel had `depthTest` OFF
-(anti-wall-clip) which broke self-sorting so the far side of grip-rings/coils drew over the near side; fixed by
-rendering the viewmodel in its OWN scene in a **second depth-cleared pass** with depthTest back ON (`core/loop.ts` +
-`player/viewModel.ts`) — D170. Also un-broke the long-standing `transparent=false` override that killed the torch
-flame's alpha. (2) **branch** — dropped the ACZ splinter-bristles + knots, and extracted a shared `buildBranchMesh`
-(NEW `world/branchMesh.ts`) so the held branch + the ~200 world-pickup branches under dead trees are the SAME model.
-(3) **real torch fire** — replaced the static yellow cone with a layered additive flame (orange→hot-white core) + rising
-ember sparks, flickering, shown ONLY when lit. NEW `fp-item` rig-shot scenario (renders the REAL first-person viewmodel
-— `item-studio` can't reproduce viewmodel depth bugs). D170. **Owed (unchanged):** the ACW/ACX in-motion feel pile (D150).
-*(Prior milestone — ACZ: finished the remaining ~22 item models; ACY: 12 hero models + dynamic panel placement. The
-item-model arc is COMPLETE. See changelog.)*
+**Last shipped**: Session ACAB — **Cycle 6 atmosphere: procedural clouds + clear↔overcast days + storm sky telegraph**
+(overnight; 6 files; tsc clean, no save change — cloudiness is transient). The storm wall + in-storm penalty + star
+drift were already shipped, so the new work is **clouds** (didn't exist): an FBM-noise cloud layer in the sky-dome
+fragment shader (`sky.ts`) driven by a NEW `weather.cloudiness` field (0..1), a slow deterministic clear↔overcast day
+wander (`weather.ts`), overcast lighting flatten + sun/moon/star occlusion (`lighting.ts` + `sky.ts`), and an ominous
+**storm telegraph** (the sky goes dark-overcast the moment a storm starts BUILDING, before the dust wall — verified
+`state=building, intensity=0, cloudiness=0.9`). NEW `sky` rig-shot scenario. D171. **Owed (unchanged):** the ACW/ACX
+in-motion feel pile (D150) — incl. the in-motion storm feel.
+*(Prior milestones — ACAA: FP-viewmodel two-pass render fix (D170) + torch fire + branch unify; ACY/ACZ: the complete
+item-model arc. See changelog.)*
 
-**Next session (ACAB)**: pick a lane — (a) the **DEEP CAVE SYSTEM** design+build pass (procedural sprawl + sub-terrain
-walkable collision + descent opening + dark-nav; then cherry-pick the egg spine from `2d4035b`), or (b) a **foreground
-feel-tune playtest** of the owed ACW/ACX in-motion pile (needs a human). See
-[docs/next-session-prompt.md](docs/next-session-prompt.md). NOTE: the viewmodel now has fixed scene lighting (D170) — if
-held items read too bright at night, that's the trade-off; tune the `vm.scene` lights in `createViewModel`.
+**Next session (ACAC)**: pick a lane — (a) the **DEEP CAVE SYSTEM** design+build pass (procedural sprawl + sub-terrain
+walkable collision + descent opening + dark-nav; then cherry-pick the egg spine from `2d4035b`); (b) **Cycle 5 — raider
+proc-character + pulse rifle** (character/weapon visual, rig-shot-verifiable, closes the corpse-drag gap); or (c) a
+**foreground feel-tune playtest** of the owed ACW/ACX in-motion pile (needs a human). See
+[docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 

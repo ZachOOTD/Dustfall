@@ -3,6 +3,38 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ACAB — 2026-06-04 — Cycle 6 atmosphere: procedural clouds + clear↔overcast days + storm sky telegraph ✓ verify pass (tsc clean)
+
+`verified` — `npm run verify` (tsc) PASS; no save change (cloudiness is transient — re-derives on load). Overnight,
+lane = Cycle 6 (atmosphere). The sweeping storm wall + in-storm penalty + star drift were already shipped (ACL/ACW/ACO),
+so the new work is the **clouds** (didn't exist) + the weather/lighting coupling that makes days vary. 6 files: `sky.ts`,
+`weather.ts`, `core/lighting.ts`, `tuning.ts`, `debug/debugPanel.ts`, `scripts/rig-shot.mjs` (+NEW `sky` scenario). D171.
+
+**Tier 1 — procedural cloud layer** (`sky.ts` SKY_FRAGMENT). FBM value-noise clouds (zero-asset) projected onto a virtual
+horizontal plane (`d.xz/d.y`, so they recede + compress toward the horizon), with a domain warp to break the radial
+streaks into organic billows, drifted by `uTime`, thresholded by `uCloudiness` (0 clear → 1 overcast). Lit tops + shaded
+undersides + a sun-tinted edge. New `CLOUD_*` tuning + uniforms wired in createSky/updateSky. Iterated ~5 rounds
+(scale, warp, soften, day/night color, dusk warmth).
+
+**Tier 2 — clear↔overcast weather state** (`weather.ts`). NEW `cloudiness` (0..1) on the Weather model, eased each frame
+toward a slow deterministic wander (two desynced sines, gamma-biased so clear days are more common) — daytime skies now
+vary INDEPENDENT of the storm cycle. `cloudinessHold` is a dev/test pin (`__game.setCloudiness`). Transient (not
+persisted), additive, no save bump.
+
+**Tier 3 — cloud lighting + celestial coupling.** Overcast flattens the world light (`lighting.ts`: sun dimmed
+`CLOUD_SUN_DIM`, daytime ambient lifted + cooled toward neutral grey `CLOUD_AMBIENT_LIFT` — distinct from the orange
+storm dim). Clouds veil the sun disc, moon, and stars (`sky.ts` opacity factors) — a clear night shows the full
+starfield, an overcast night hides it.
+
+**Tier 4 — storm sky telegraph.** Storms force the sky overcast the moment they start BUILDING (before the dust wall
+arrives), and the clouds darken to an ominous dusty hue (`_stormCloudCol`) as the storm deepens — verified
+`state=building, intensity=0, cloudiness=0.9` (gathering dark clouds, no dust yet) = the GDD "see it coming, prep" beat,
+now carried by the sky. (Pivoted here from the planned static storm-wall refinement — the wall is already built + its
+in-motion feel is foreground-owed, D150; the telegraph is the higher-value, headless-verifiable storm-atmosphere win.)
+
+**Verification**: NEW `sky` rig-shot scenario sweeps cloud cover × time-of-day (clear/partly/overcast × noon/dusk/night
++ ground-level lighting + the storm-build telegraph). D171.
+
 ## Session ACAA — 2026-06-03 — FP-viewmodel fixes from playtest: see-through rings, branch cleanup, real torch fire ✓ verify pass (tsc clean)
 
 `verified` — `npm run verify` (tsc) PASS; no save change. Three user-reported issues from testing the ACY/ACZ item

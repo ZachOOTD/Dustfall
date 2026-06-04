@@ -136,7 +136,7 @@ NEXT-ATTEMPT IDEAS:
 
 🟡 **[polish] in-storm sensory degradation — PARTIAL ACW (#134)**: fog + vignette ✓ACL; ACW added the missing **camera pitch/roll sway** (scaled by perceivedIntensity) + a **master audio low-pass** that muffles the mix as the storm engulfs the player. Foreground feel-tune owed (amp/cutoff). Near-zero forward visibility is already covered by ACL's FogExp2 ramp.
 [feat] real rope physics with slack — segmented/Verlet rope sim instead of the current cosmetic catmull-rom sag + inextensible position-snap constraint (ACE ropeConstraint.ts); ropes should hang, drag, and go taut like real rope.
-[feat] daytime sky variation — clear vs cloudy skies (no clouds exist yet; sky is a gradient shader + sun/moon/stars in sky.ts).
+✓ **SHIPPED ACAB (Cycle 6, D171)** — daytime sky variation: a procedural FBM cloud layer in the sky-dome shader driven by a NEW `weather.cloudiness` field that slowly wanders clear↔overcast (independent of storms); overcast flattens the world lighting + veils sun/moon/stars; storms force the sky overcast (ominous telegraph before the dust wall). Verify via `npm run rig-shot --scenario=sky`. Optional follow-ups (not done): cloud shadows dappling the terrain, a second high-cirrus layer, god-rays.
 [feat] rare "wreck yard" biome — ship-graveyard/junkyard with highly condensed wrecks (large + small); 4th biome alongside dune/salt/rocky, spawns rarely.
 [idea] wreck-yard-exclusive loot — items obtainable only in the wreck-yard biome; specific loot TBD, likely tied to a future mechanic.
 [idea] Sarlacc pit (Star Wars / Boba Fett style) — rare dune-biome hazard, falling in = death, throw items in for a TBD effect; exact mechanic unscoped.

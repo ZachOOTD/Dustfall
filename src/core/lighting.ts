@@ -115,8 +115,13 @@ export function updateLighting(ctx: GameContext, _dt: number): void {
   const aboveHorizon = Math.max(0, sy);
   const storm = ctx.weather.intensity;
   const sunStormDim = 1 - storm * Tuning.STORM_SUN_DIM;
-  sun.intensity = aboveHorizon * Tuning.SUN_INTENSITY_MAX * sunStormDim;
-  moon.intensity = Math.max(0, -sy) * Tuning.MOON_INTENSITY_MAX * sunStormDim;
+  // ACAB (Cycle 6) — overcast flattens the light: clouds block the direct sun
+  // (less directional/harsh) and the ambient lifts (diffuse skylight). Net = a
+  // flatter, greyer overcast look, distinct from the orange storm dim.
+  const cloud = ctx.weather.cloudiness ?? 0;
+  const sunCloudDim = 1 - cloud * Tuning.CLOUD_SUN_DIM;
+  sun.intensity = aboveHorizon * Tuning.SUN_INTENSITY_MAX * sunStormDim * sunCloudDim;
+  moon.intensity = Math.max(0, -sy) * Tuning.MOON_INTENSITY_MAX * sunStormDim * (1 - cloud * Tuning.CLOUD_SUN_DIM);
   // Moon should also follow player so its lighting is consistent. We must
   // update BOTH position and target — DirectionalLight direction is
   // (target.position - light.position).normalize(), so leaving target at
@@ -157,14 +162,18 @@ export function updateLighting(ctx: GameContext, _dt: number): void {
   // dust color (the sky is one giant orange dome, so ambient light
   // arriving from above is dust-colored, not neutral).
   const ambientStormDim = 1 - storm * Tuning.STORM_AMBIENT_DIM;
+  // ACAB — overcast lifts the daytime ambient (diffuse skylight fills the
+  // shadows the blocked sun no longer carves), shifting the look flatter.
+  const ambientCloudLift = 1 + cloud * Tuning.CLOUD_AMBIENT_LIFT * aboveHorizon;
   ambient.intensity = (
     Tuning.AMBIENT_BASE
     + aboveHorizon * Tuning.AMBIENT_DAY_GAIN
     + Math.max(0, -sy) * Tuning.AMBIENT_NIGHT_GAIN
-  ) * ambientStormDim;
+  ) * ambientStormDim * ambientCloudLift;
   if (storm > 0.001) {
     ambient.color.copy(new THREE.Color(0x4a3a2a)).lerp(new THREE.Color(0x8a5840), storm * 0.7);
   } else {
-    ambient.color.setHex(0x4a3a2a);
+    // Cloud cover cools the ambient toward neutral grey (vs the warm desert tint).
+    ambient.color.copy(new THREE.Color(0x4a3a2a)).lerp(new THREE.Color(0x6a6a72), cloud * 0.5);
   }
 }
