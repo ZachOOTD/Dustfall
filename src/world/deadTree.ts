@@ -16,7 +16,7 @@ import { spawnBranchAt } from '../pickups/pickups.ts';
 import { Tuning } from '../config/tuning.ts';
 import { findBiomeCentroid } from './biomes.ts';
 import { createWoodGrainMaterial } from './woodGrainMaterial.ts';
-import { BRANCH_WOOD_COLOR, BRANCH_WEATHER_LEVEL } from './branchMesh.ts';
+import { BRANCH_WOOD_COLOR, BRANCH_WEATHER_LEVEL, buildBranchMesh } from './branchMesh.ts';
 
 // ACAE — aged-wood grain so trunk + tree-branches match the ground branches +
 // the held branch (all one deadwood family). Shared instances. ACAF follow-up —
@@ -31,44 +31,96 @@ const _branchMat = createWoodGrainMaterial(BRANCH_WOOD_COLOR, {
   ringDensity: 9.0, weatherLevel: BRANCH_WEATHER_LEVEL,
 });
 
+// Module scratch (avoid per-tree allocation in the orientation math).
+const _LIMB_X = new THREE.Vector3(1, 0, 0);
+const _limbDir = new THREE.Vector3();
+
+// ACAF f/u 5 — proper dead-desert-tree model. The trunk is a tapered, gently
+// bowed cylinder with a root flare; the limbs reuse the detailed branch model
+// (buildBranchMesh — same taper + emergent twigs as the held/ground branches),
+// each EMERGING FROM the trunk surface (base embedded, collar-blended) so
+// nothing floats. Replaces the old "straight cylinders" read.
 function makeDeadTree(rand: Rng): THREE.Group {
   const g = new THREE.Group();
 
-  const trunkH = 2.4 + rand() * 1.2;
-  const trunkR = 0.13 + rand() * 0.05;
-  const trunk = new THREE.Mesh(
-    new THREE.CylinderGeometry(trunkR * 0.55, trunkR, trunkH, 6),
-    _trunkMat,
-  );
-  trunk.position.y = trunkH / 2;
-  // Slight lean — old, weathered.
-  trunk.rotation.z = (rand() - 0.5) * 0.18;
-  trunk.rotation.x = (rand() - 0.5) * 0.12;
+  const trunkH = 2.6 + rand() * 1.4;
+  const baseR = 0.15 + rand() * 0.06;
+  const topR = baseR * 0.4;
+
+  // Trunk centerline lean (a parabolic bow in a random azimuth) + per-height
+  // radius — shared by the trunk geometry AND the limb attach math so limbs sit
+  // exactly on the (bowed, tapered) surface.
+  const leanDir = rand() * Math.PI * 2;
+  const lbx = Math.cos(leanDir), lbz = Math.sin(leanDir);
+  const bowMag = trunkH * (0.05 + rand() * 0.06);
+  const leanAt = (h: number) => bowMag * Math.pow(h / trunkH, 2);   // 0 at base → bowMag at top
+  const radiusAt = (h: number) => baseR + (topR - baseR) * (h / trunkH);
+
+  // Tapered trunk, 10 radial segments (round, not faceted), bow baked in.
+  const trunkGeo = new THREE.CylinderGeometry(topR, baseR, trunkH, 10, 10);
+  trunkGeo.translate(0, trunkH / 2, 0);   // base at y=0
+  const tp = trunkGeo.attributes.position as THREE.BufferAttribute;
+  for (let i = 0; i < tp.count; i++) {
+    const y = tp.getY(i);
+    const lean = leanAt(y);
+    tp.setX(i, tp.getX(i) + lbx * lean);
+    tp.setZ(i, tp.getZ(i) + lbz * lean);
+  }
+  trunkGeo.computeVertexNormals();
+  const trunk = new THREE.Mesh(trunkGeo, _trunkMat);
   g.add(trunk);
 
-  // 3-5 diagonal stub branches off the upper trunk
-  const branchCount = 3 + Math.floor(rand() * 3);
-  for (let i = 0; i < branchCount; i++) {
-    const len = 0.5 + rand() * 0.7;
-    const r = trunkR * (0.4 + rand() * 0.25);
-    const stub = new THREE.Mesh(
-      new THREE.CylinderGeometry(r * 0.5, r, len, 5),
-      _branchMat,
+  // Root flare — a short, subtle widening at the base so the trunk doesn't read
+  // as a pole stuck in the ground (kept modest — a big skirt reads as a trumpet).
+  const flareH = trunkH * 0.06;
+  const flare = new THREE.Mesh(
+    new THREE.CylinderGeometry(baseR, baseR * 1.32, flareH, 10),
+    _trunkMat,
+  );
+  flare.position.y = flareH / 2;
+  g.add(flare);
+
+  // 4-6 main limbs spread along the upper ~60% of the trunk, each a detailed
+  // branch emerging from the surface and angling outward + upward.
+  const limbCount = 4 + Math.floor(rand() * 3);
+  for (let i = 0; i < limbCount; i++) {
+    const h = trunkH * (0.38 + rand() * 0.55);
+    const az = rand() * Math.PI * 2;
+    const pitch = 0.45 + rand() * 0.7;     // upward tilt (rad above horizontal)
+    const cp = Math.cos(pitch);
+    _limbDir.set(Math.cos(az) * cp, Math.sin(pitch), Math.sin(az) * cp).normalize();
+
+    const limbLen = 0.7 + rand() * 0.8;
+    const rScale = 1.2 + rand() * 0.6;     // chunkier than a ground twig
+    const limb = buildBranchMesh(_branchMat, {
+      len: limbLen, twigs: 2 + Math.floor(rand() * 2), rand,
+      radiusScale: rScale, tipRatio: 0.32,
+    });
+    // Shift the canonical (origin-centered) branch so its THICK base sits BEHIND
+    // the wrapper origin — i.e. the base is buried INTO the trunk, so only the
+    // tapering limb emerges and the flat base cap never shows.
+    const limbBaseR = limbLen * 0.05 * rScale;
+    const rH = radiusAt(h);
+    limb.position.x = limbLen * 0.5 - rH * 0.6;   // bury ~0.6·trunkR of the base
+
+    const wrap = new THREE.Group();
+    wrap.add(limb);
+    wrap.quaternion.setFromUnitVectors(_LIMB_X, _limbDir);
+    // Origin sits just inside the trunk surface; the buried base spans from here
+    // toward the axis, so the limb grows OUT of solid wood.
+    wrap.position.set(
+      lbx * leanAt(h) + Math.cos(az) * rH * 0.55,
+      h,
+      lbz * leanAt(h) + Math.sin(az) * rH * 0.55,
     );
-    // Position part-way up the trunk (upper half), point diagonally outward
-    const heightUp = trunkH * (0.45 + rand() * 0.5);
-    const angle = rand() * Math.PI * 2;
-    // Translate the geometry so the stub pivots at its base
-    stub.geometry.translate(0, len / 2, 0);
-    stub.position.set(
-      Math.cos(angle) * trunkR * 0.6,
-      heightUp,
-      Math.sin(angle) * trunkR * 0.6,
-    );
-    // Rotate outward + slightly down (drooping)
-    stub.rotation.z = -Math.cos(angle) * (Math.PI / 2.8 + rand() * 0.3);
-    stub.rotation.x = Math.sin(angle) * (Math.PI / 2.8 + rand() * 0.3);
-    g.add(stub);
+    g.add(wrap);
+
+    // Collar — a small ELLIPSOID (flattened sphere) hugging the trunk surface to
+    // blend the junction as a natural branch swelling, not a round ball.
+    const collar = new THREE.Mesh(new THREE.SphereGeometry(limbBaseR * 1.05, 8, 6), _trunkMat);
+    collar.scale.set(1, 1, 0.6);
+    collar.position.copy(wrap.position);
+    g.add(collar);
   }
 
   return g;
@@ -115,6 +167,7 @@ export function spawnDeadTrees(
     if (terrainFlatnessAt(terrain, x, z) > FLATNESS_THRESHOLD) return false;
     const groundY = terrain.heightAt(x, z);
     const tree = makeDeadTree(rand);
+    tree.name = 'deadTree';   // so the rig-shot `tree` scenario can locate one
     tree.position.set(x, groundY - 0.05, z);
     tree.rotation.y = rand() * Math.PI * 2;
     tree.traverse((o) => {

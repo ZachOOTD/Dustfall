@@ -45,6 +45,20 @@ shared constant (`BRANCH_WOOD_COLOR`/`BRANCH_WEATHER_LEVEL` exported from `branc
 ground pickups, and tree branches) so they can never drift. New `branch-match` rig-shot scenario (FP held branch + world
 branch in one frame) confirms identical read at noon AND dusk. tsc clean.
 
+**Follow-up 4 — light grey sun-bleached deadwood.** `BRANCH_WOOD_COLOR` 0x3a2e20 (dark brown) → 0x9b948a (pale grey),
+dead-tree trunk → 0xa39c91. One shared constant moves held + ground + tree branches together.
+
+**Follow-up 5 — dead-tree model rebuilt to match the branch detail.** The tree was straight 6-sided cylinders (trunk +
+stub limbs) — read as primitive, nothing like a real dead desert tree. Rebuilt `deadTree.ts:makeDeadTree`: (1) the trunk
+is now a 10-sided tapered cylinder with a parabolic bow (random azimuth) baked into the vertices + a subtle root flare at
+the base; (2) the 4-6 limbs REUSE `buildBranchMesh` (the same tapered-shaft + emergent-twig model as the held/ground
+branches) — `buildBranchMesh` gained `radiusScale` (chunkier limbs without lengthening) + `tipRatio` opts. Each limb's
+thick base is BURIED into the trunk (offset by the per-height trunk radius — shared `leanAt`/`radiusAt` helpers keep
+limbs exactly on the bowed/tapered surface) and a small flattened collar blends the junction, so nothing floats and no
+flat base-caps show. Limbs spread along the upper ~60% and angle outward+up. Iterated 4 passes via a NEW `tree` rig-shot
+scenario (trees tagged `name='deadTree'` so the harness can locate one): fixed ball-like collars → buried bases, and a
+trumpet-like root flare → subtle. tsc clean.
+
 ## Session ACAE — 2026-06-04 — Dev item-spawner panel ✓ verify pass (tsc clean)
 
 `verified` — `npm run verify` (tsc) PASS; no save change. Dev tooling — a DOM panel (DEV MODE only) to add any item to

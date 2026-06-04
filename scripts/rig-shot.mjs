@@ -847,6 +847,35 @@ const SCENARIOS = {
     console.log(`[branches] ${JSON.stringify(r)}`);
   },
 
+  // Tree (ACAF f/u): frame a whole dead tree from a low 3/4 angle to judge the
+  // trunk taper + the buildBranchMesh limbs (connected, no floaters). --time set
+  // for a legible mid-morning read; --tilt/--dist to vary the camera.
+  'tree': async (page) => {
+    const t = argv.time !== undefined ? Number(argv.time) : 0.42;
+    const r = await page.evaluate((t) => {
+      const ctx = window.__game.ctx;
+      ctx.weather.intensity = 0; ctx.weather.cloudiness = 0.3;
+      window.__game.setTime(t);
+      ctx.three.renderer.setSize(900, 950, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 900 / 950; cam.updateProjectionMatrix(); }
+      const V = cam.position.constructor;
+      let tree = null;
+      ctx.three.scene.traverse((o) => { if (!tree && o.name === 'deadTree') tree = o; });
+      if (!tree) return { found: false };
+      const wp = tree.getWorldPosition(new V());
+      ctx.flags.paused = true;
+      // Full-tree 3/4 framing: stand back ~3.5m, eye ~1.9m, look at mid-trunk.
+      cam.position.set(wp.x + 2.4, wp.y + 1.9, wp.z + 2.8);
+      cam.lookAt(wp.x, wp.y + 2.1, wp.z);
+      cam.updateMatrixWorld(true);
+      return { found: true, pos: [wp.x.toFixed(1), wp.y.toFixed(1), wp.z.toFixed(1)] };
+    }, t);
+    await page.waitForTimeout(350);
+    await page.screenshot({ path: join(OUT, 'scen-tree.png'), fullPage: false });
+    console.log(`[tree] ${JSON.stringify(r)}`);
+  },
+
   // Branch-match (ACAF f/u): FP held branch + a world branch in ONE frame under
   // the SAME lighting, to verify they read identical (vm scene now mirrors the
   // world sun/moon/ambient). Runs LIVE (not paused) so updateViewModel tracks

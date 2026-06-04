@@ -28,6 +28,11 @@ export interface BranchMeshOpts {
   twigs?: number;
   /** Optional RNG to jitter twig placement; deterministic fixed layout if absent. */
   rand?: Rng;
+  /** Multiplier on the shaft (and twig) radius WITHOUT changing length — lets a
+   *  tree limb be chunkier than a ground twig of the same length. Default 1. */
+  radiusScale?: number;
+  /** Base→tip taper ratio (tip radius = base * tipRatio). Default 0.5. */
+  tipRatio?: number;
 }
 
 const _UP = new THREE.Vector3(0, 1, 0);
@@ -38,7 +43,8 @@ const _radial = new THREE.Vector3();
 export function buildBranchMesh(mat: THREE.Material, opts: BranchMeshOpts = {}): THREE.Group {
   const group = new THREE.Group();
   const len = opts.len ?? 0.34;
-  const r = len * 0.05;             // proportional radius so big + small branches match
+  const r = len * 0.05 * (opts.radiusScale ?? 1);   // proportional radius so big + small branches match
+  const tipRatio = opts.tipRatio ?? 0.5;
   const rand = opts.rand;
   const jit = (s: number) => (rand ? (rand() - 0.5) * s : 0);
 
@@ -48,7 +54,7 @@ export function buildBranchMesh(mat: THREE.Material, opts: BranchMeshOpts = {}):
   // isn't a dead-straight CG cone) WITHOUT introducing a discontinuity. Twigs
   // attach on the local radius `localR(f)` so they sit flush on the taper.
   // (rotation.z=π/2 maps cylinder TOP→-X, BOTTOM→+X.)
-  const Rbase = r, Rtip = r * 0.5;
+  const Rbase = r, Rtip = r * tipRatio;
   const localR = (f: number) => Rbase + (Rtip - Rbase) * (f + 0.5);   // radius at along-fraction f∈[-0.5,0.5]
   const shaftGeo = new THREE.CylinderGeometry(Rtip, Rbase, len, 8, 8);  // top(-X)=tip, bottom(+X)=base
   // Bake a faint bow: displace each vertex in local Z by a parabola of its
