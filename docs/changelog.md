@@ -22,6 +22,12 @@ weatherLevel 0.7) instead of flat grey: the held item uses `vmWood`; the ~200 wo
 `0x3a2e20`), so the held branch, the ground branches, and the trees are now one coherent dark deadwood look (verified
 in-context via the `branches` scenario — ground branch + dead tree match).
 
+**Follow-up — seamless mid-branch taper.** The two shaft segments had a thickness STEP at the joint (thick end `r` met
+thin start `0.58r`, plus a knuckle bulge). Reworked into a single CONTINUOUS gentle taper: the segment radii now MATCH
+at the joint (`Rmid`), the knuckle shrank to a faint `Rmid`-sized smoothing sphere over the bend, and twigs/collars now
+size + attach on the LOCAL shaft radius (`localR(f)`) so they sit on the tapered surface. Reads as one smooth taper now,
+no middle seam.
+
 ## Session ACAE — 2026-06-04 — Dev item-spawner panel ✓ verify pass (tsc clean)
 
 `verified` — `npm run verify` (tsc) PASS; no save change. Dev tooling — a DOM panel (DEV MODE only) to add any item to

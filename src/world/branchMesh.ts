@@ -33,27 +33,33 @@ export function buildBranchMesh(mat: THREE.Material, opts: BranchMeshOpts = {}):
   const rand = opts.rand;
   const jit = (s: number) => (rand ? (rand() - 0.5) * s : 0);
 
-  // Main shaft — tapered 8-sided cylinder lying along +X, with a slight bend at
-  // mid-length so it reads as natural deadwood, not a dowel.
+  // Main shaft — a single CONTINUOUS gentle taper (thick base → thin tip) split
+  // into two segments only so it can carry a subtle bend at mid-length. The
+  // segment radii MATCH at the joint (Rmid) so there's no step — just a smooth
+  // taper with a faint kink. (rotation.z=π/2 maps cylinder TOP→-X, BOTTOM→+X.)
+  const Rbase = r, Rmid = r * 0.78, Rtip = r * 0.5;
+  const localR = (f: number) => Rbase + (Rtip - Rbase) * (f + 0.5);   // radius at along-fraction f∈[-0.5,0.5]
   const seg1 = len * 0.54, seg2 = len - seg1;
-  const s1 = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.82, r, seg1, 8), mat);
+  // Segment 1: base end (-X, Rbase) → joint (+X, Rmid).
+  const s1 = new THREE.Mesh(new THREE.CylinderGeometry(Rbase, Rmid, seg1, 8), mat);
   s1.rotation.z = Math.PI / 2;
   s1.position.x = -len * 0.5 + seg1 * 0.5;
   group.add(s1);
-  // Segment 2 continues from segment 1's far end, angled by `bend` in XZ.
+  // Segment 2: joint (Rmid) → tip (+X, Rtip), angled by a gentle bend in XZ.
   const jointX = -len * 0.5 + seg1;
-  const bend = 0.16 + jit(0.1);
+  const bend = 0.12 + jit(0.06);
   const s2g = new THREE.Group();
   s2g.position.set(jointX, 0, 0);
   s2g.rotation.y = bend;
-  const s2 = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.58, r * 0.82, seg2, 8), mat);
+  const s2 = new THREE.Mesh(new THREE.CylinderGeometry(Rmid, Rtip, seg2, 8), mat);
   s2.rotation.z = Math.PI / 2;
   s2.position.x = seg2 * 0.5;
   s2g.add(s2);
   group.add(s2g);
-  // Knuckle at the bend joint.
-  const joint = new THREE.Mesh(new THREE.SphereGeometry(r * 0.95, 7, 5), mat);
-  joint.position.set(jointX, 0, 0); joint.scale.set(1, 0.85, 0.85);
+  // Faint smoothing sphere at the joint — Rmid-sized so it rounds the bend kink
+  // without bulging (NOT a knuckle).
+  const joint = new THREE.Mesh(new THREE.SphereGeometry(Rmid * 1.02, 8, 6), mat);
+  joint.position.set(jointX, 0, 0);
   group.add(joint);
 
   // Side twigs — each EMERGES FROM THE SHAFT SURFACE and angles outward + a bit
@@ -71,19 +77,20 @@ export function buildBranchMesh(mat: THREE.Material, opts: BranchMeshOpts = {}):
     const [f, th0, ls, lean] = specs[i];
     const th = th0 + jit(0.5);
     const along = f * len + jit(0.02);
+    const lr = localR(f);                   // shaft radius at THIS point (so twigs sit on the tapered surface)
     _radial.set(0, Math.cos(th), Math.sin(th));
     _dir.copy(_radial).addScaledVector(_X, lean).normalize();   // radial + lean down the branch
     const twigLen = len * ls;
 
     const tg = new THREE.Group();
-    tg.position.set(along, _radial.y * r * 0.8, _radial.z * r * 0.8);   // on the shaft surface
+    tg.position.set(along, _radial.y * lr * 0.78, _radial.z * lr * 0.78);   // on the shaft surface (overlap slightly)
     tg.quaternion.setFromUnitVectors(_UP, _dir);
-    const twig = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.16, r * 0.42, twigLen, 5), mat);
+    const twig = new THREE.Mesh(new THREE.CylinderGeometry(lr * 0.22, lr * 0.5, twigLen, 5), mat);
     twig.position.y = twigLen * 0.5;     // base at the subgroup origin, extends +Y (= _dir)
     tg.add(twig);
     // Tiny secondary fork near the tip of the longer twigs.
     if (ls > 0.2) {
-      const fork = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.1, r * 0.24, twigLen * 0.5, 4), mat);
+      const fork = new THREE.Mesh(new THREE.CylinderGeometry(lr * 0.12, lr * 0.28, twigLen * 0.5, 4), mat);
       const fg = new THREE.Group();
       fg.position.y = twigLen * 0.72;
       fg.rotation.z = 0.8;
@@ -92,7 +99,8 @@ export function buildBranchMesh(mat: THREE.Material, opts: BranchMeshOpts = {}):
       tg.add(fg);
     }
     group.add(tg);
-    const collar = new THREE.Mesh(new THREE.SphereGeometry(r * 0.5, 6, 5), mat);
+    // Small base collar (local-radius sized) to round the twig→shaft junction.
+    const collar = new THREE.Mesh(new THREE.SphereGeometry(lr * 0.5, 6, 5), mat);
     collar.position.copy(tg.position);
     group.add(collar);
   }
