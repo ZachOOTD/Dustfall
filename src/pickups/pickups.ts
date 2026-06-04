@@ -15,13 +15,15 @@ import { getItemDef } from '../inventory/items.ts';
 import { buildBranchMesh } from '../world/branchMesh.ts';  // ACAA — shared branch model
 import { createWoodGrainMaterial } from '../world/woodGrainMaterial.ts';  // ACAE — dark wood branches
 
-// ACAE — ONE shared dark wood-grain material for every world branch (~200
-// instances → 1 program, world-space grain so it varies per branch). Dark aged
-// deadwood that matches the dead trees.
-const _worldBranchMat = createWoodGrainMaterial(0x3a2e20, {
+// ACAE — ONE shared wood-grain material for every world branch (~200
+// instances → 1 program, world-space grain so it varies per branch). Aged
+// deadwood that matches the dead trees. ACAF follow-up — base color lifted from
+// 0x3a2e20: that was the held branch's hex, but the held branch is lit by the
+// bright viewmodel scene; out in dim world light the same hex read near-black.
+const _worldBranchMat = createWoodGrainMaterial(0x5c4528, {
   grainAxis: 0,          // grain along the stick's lie (world branches lie ~flat)
   ringDensity: 11.0,
-  weatherLevel: 0.7,
+  weatherLevel: 0.6,
 });
 
 export interface Pickup {

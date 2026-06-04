@@ -17,13 +17,17 @@ import { Tuning } from '../config/tuning.ts';
 import { findBiomeCentroid } from './biomes.ts';
 import { createWoodGrainMaterial } from './woodGrainMaterial.ts';
 
-// ACAE — dark aged-wood grain so trunk + tree-branches match the ground
-// branches + the held branch (all one dark deadwood family). Shared instances.
-const _trunkMat = createWoodGrainMaterial(0x463827, {
-  ringDensity: 6.0, weatherLevel: 0.72,
+// ACAE — warm aged-wood grain so trunk + tree-branches match the ground
+// branches + the held branch (all one deadwood family). Shared instances.
+// ACAF follow-up — the held branch is lit by the bright viewmodel scene; world
+// props sit in dim dusk/overcast light, so the held branch's dark base color
+// (0x3a2e20) read near-black out here. Lift the world base colors so they LOOK
+// like the held branch in-world rather than sharing its raw hex.
+const _trunkMat = createWoodGrainMaterial(0x6a5030, {
+  ringDensity: 6.0, weatherLevel: 0.6,
 });
-const _branchMat = createWoodGrainMaterial(0x3a2e20, {
-  ringDensity: 9.0, weatherLevel: 0.75,
+const _branchMat = createWoodGrainMaterial(0x5c4528, {
+  ringDensity: 9.0, weatherLevel: 0.6,
 });
 
 function makeDeadTree(rand: Rng): THREE.Group {

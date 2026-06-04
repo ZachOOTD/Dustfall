@@ -28,6 +28,16 @@ at the joint (`Rmid`), the knuckle shrank to a faint `Rmid`-sized smoothing sphe
 size + attach on the LOCAL shaft radius (`localR(f)`) so they sit on the tapered surface. Reads as one smooth taper now,
 no middle seam.
 
+**Follow-up 2 — single-mesh seamless shaft + world color match.** Two issues from the in-game screenshot. (1) The
+two-cylinder shaft still showed a facet where the segments met at the bend angle. Replaced with ONE continuous tapered
+`CylinderGeometry` (`Rbase`→`Rtip`, 8 height segments) with a gentle organic bow BAKED into the vertices (parabolic Z
+displacement, 0 at the ends → max at mid) — a single mesh has no seam anywhere. Twigs offset by `bowAt(f)` to follow the
+bowed centerline. (2) ACAF gave the world dead-trees + ~200 ground branches the held branch's RAW hex (`0x3a2e20`), but
+the held branch is lit by the bright viewmodel scene while world props sit in dim dusk/overcast light — so the same hex
+read near-black out in the world. Lifted the world base colors to warm browns (trunk `0x6a5030`, branches `0x5c4528`,
+weatherLevel 0.75→0.6) so they LOOK like the held branch in-world instead of sharing its hex. Held branch material
+unchanged. tsc clean; `branches` + `item-studio` rig-shots confirm.
+
 ## Session ACAE — 2026-06-04 — Dev item-spawner panel ✓ verify pass (tsc clean)
 
 `verified` — `npm run verify` (tsc) PASS; no save change. Dev tooling — a DOM panel (DEV MODE only) to add any item to

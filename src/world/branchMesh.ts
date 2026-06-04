@@ -33,34 +33,31 @@ export function buildBranchMesh(mat: THREE.Material, opts: BranchMeshOpts = {}):
   const rand = opts.rand;
   const jit = (s: number) => (rand ? (rand() - 0.5) * s : 0);
 
-  // Main shaft — a single CONTINUOUS gentle taper (thick base → thin tip) split
-  // into two segments only so it can carry a subtle bend at mid-length. The
-  // segment radii MATCH at the joint (Rmid) so there's no step — just a smooth
-  // taper with a faint kink. (rotation.z=π/2 maps cylinder TOP→-X, BOTTOM→+X.)
-  const Rbase = r, Rmid = r * 0.78, Rtip = r * 0.5;
+  // Main shaft — ONE continuous tapered cylinder (thick base → thin tip). A
+  // single mesh means there is NO seam/joint anywhere along the length — just a
+  // smooth slight taper. A gentle organic bow is baked into the vertices (so it
+  // isn't a dead-straight CG cone) WITHOUT introducing a discontinuity. Twigs
+  // attach on the local radius `localR(f)` so they sit flush on the taper.
+  // (rotation.z=π/2 maps cylinder TOP→-X, BOTTOM→+X.)
+  const Rbase = r, Rtip = r * 0.5;
   const localR = (f: number) => Rbase + (Rtip - Rbase) * (f + 0.5);   // radius at along-fraction f∈[-0.5,0.5]
-  const seg1 = len * 0.54, seg2 = len - seg1;
-  // Segment 1: base end (-X, Rbase) → joint (+X, Rmid).
-  const s1 = new THREE.Mesh(new THREE.CylinderGeometry(Rbase, Rmid, seg1, 8), mat);
-  s1.rotation.z = Math.PI / 2;
-  s1.position.x = -len * 0.5 + seg1 * 0.5;
-  group.add(s1);
-  // Segment 2: joint (Rmid) → tip (+X, Rtip), angled by a gentle bend in XZ.
-  const jointX = -len * 0.5 + seg1;
-  const bend = 0.12 + jit(0.06);
-  const s2g = new THREE.Group();
-  s2g.position.set(jointX, 0, 0);
-  s2g.rotation.y = bend;
-  const s2 = new THREE.Mesh(new THREE.CylinderGeometry(Rmid, Rtip, seg2, 8), mat);
-  s2.rotation.z = Math.PI / 2;
-  s2.position.x = seg2 * 0.5;
-  s2g.add(s2);
-  group.add(s2g);
-  // Faint smoothing sphere at the joint — Rmid-sized so it rounds the bend kink
-  // without bulging (NOT a knuckle).
-  const joint = new THREE.Mesh(new THREE.SphereGeometry(Rmid * 1.02, 8, 6), mat);
-  joint.position.set(jointX, 0, 0);
-  group.add(joint);
+  const shaftGeo = new THREE.CylinderGeometry(Rtip, Rbase, len, 8, 8);  // top(-X)=tip, bottom(+X)=base
+  // Bake a faint bow: displace each vertex in local Z by a parabola of its
+  // along-length position (0 at the ends, max at mid) so the stick curves
+  // smoothly instead of running perfectly straight. Single mesh → seamless.
+  const bow = len * (0.045 + jit(0.03));
+  const pos = shaftGeo.attributes.position as THREE.BufferAttribute;
+  for (let i = 0; i < pos.count; i++) {
+    const yN = pos.getY(i) / (len * 0.5);          // -1..1 along the shaft
+    pos.setZ(i, pos.getZ(i) + bow * (1 - yN * yN));
+  }
+  shaftGeo.computeVertexNormals();
+  const shaft = new THREE.Mesh(shaftGeo, mat);
+  shaft.rotation.z = Math.PI / 2;
+  group.add(shaft);
+  // Bow offset (in shaft-local Z) at along-fraction f — used to keep twigs on
+  // the bowed surface. Matches the parabola above (yN = 2f).
+  const bowAt = (f: number) => bow * (1 - (2 * f) * (2 * f));
 
   // Side twigs — each EMERGES FROM THE SHAFT SURFACE and angles outward + a bit
   // along the branch (never crosses through). A small base collar hides the
@@ -83,7 +80,8 @@ export function buildBranchMesh(mat: THREE.Material, opts: BranchMeshOpts = {}):
     const twigLen = len * ls;
 
     const tg = new THREE.Group();
-    tg.position.set(along, _radial.y * lr * 0.78, _radial.z * lr * 0.78);   // on the shaft surface (overlap slightly)
+    // +bowAt(f) follows the bowed shaft centerline (local Z survives rotation.z).
+    tg.position.set(along, _radial.y * lr * 0.78, bowAt(f) + _radial.z * lr * 0.78);   // on the shaft surface (overlap slightly)
     tg.quaternion.setFromUnitVectors(_UP, _dir);
     const twig = new THREE.Mesh(new THREE.CylinderGeometry(lr * 0.22, lr * 0.5, twigLen, 5), mat);
     twig.position.y = twigLen * 0.5;     // base at the subgroup origin, extends +Y (= _dir)
