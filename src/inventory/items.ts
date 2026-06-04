@@ -2947,12 +2947,19 @@ export function getItemDef(id: ItemId): ItemDef {
   return _DEFS[id];
 }
 
+/** ACAD — EVERY registered item, derived from the registry so it can never go
+ *  stale (the dev item spawner needs the complete set). Use this over the
+ *  hand-maintained ALL_ITEM_IDS below when you want "literally every item". */
+export const ALL_REGISTERED_ITEM_IDS: ReadonlyArray<ItemId> =
+  Object.keys(_DEFS) as ItemId[];
+
 export const ALL_ITEM_IDS: ReadonlyArray<ItemId> = [
-  'canteen', 'scrap', 'bandage', 'machete',
+  'canteen', 'scrap', 'bandage', 'machete', 'scrap_bar',
   'cactus_pulp', 'cooked_cactus_pulp',
   'raw_lizard_meat', 'cooked_lizard_meat',
   'raw_worm_meat', 'cooked_worm_meat',
-  'branch', 'cloth', 'fire_kit', 'tent_kit',
+  'raw_shrew_meat', 'cooked_shrew_meat',
+  'branch', 'cloth', 'fire_kit', 'grill_kit', 'tent_kit',
   'alien_fruit',
   'torch', 'flashlight',
   'lizard_on_a_stick_raw', 'lizard_on_a_stick_cooked',

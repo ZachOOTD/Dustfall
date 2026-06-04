@@ -74,6 +74,7 @@ import { createLootMenu } from './ui/lootMenu.ts';
 import { createCraftingMenu } from './ui/craftingMenu.ts';
 import { createSleepOverlay } from './ui/sleepOverlay.ts';
 import { createInventoryOverlay } from './ui/inventoryOverlay.ts';
+import { createDevItemPanel, toggleDevItemPanel } from './ui/devPanel.ts';
 import { createPerfHud, updatePerfHud } from './ui/perfHud.ts';
 import { createTutorial } from './ui/tutorial.ts';
 import { installDebugPanel } from './debug/debugPanel.ts';
@@ -531,6 +532,14 @@ const devModeBadge = document.createElement('div');
 devModeBadge.id = 'dev-mode-badge';
 devModeBadge.textContent = '[ DEV MODE ]';
 document.body.appendChild(devModeBadge);
+
+// ACAD — dev item spawner: click the DEV MODE badge to open a panel that adds
+// any item to the inventory (dev-mode only). Built once; gated here.
+createDevItemPanel(ctx);
+devModeBadge.title = 'click to spawn items';
+devModeBadge.addEventListener('click', () => {
+  if (ctx.flags.devMode) toggleDevItemPanel(ctx);
+});
 
 // ABL — perf: pre-warm shader compilation against the game scene
 // BEFORE the title is shown. Three.js compiles shader programs lazily

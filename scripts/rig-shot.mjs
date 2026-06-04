@@ -821,6 +821,30 @@ const SCENARIOS = {
     console.log(`[held-item] ${item} → ${path}`);
   },
 
+  // Dev-panel (ACAD): open the dev item-spawner panel + click an item, verify
+  // it renders + adds to inventory.
+  'dev-panel': async (page) => {
+    await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      ctx.flags.devMode = true;
+      const badge = document.getElementById('dev-mode-badge');
+      badge?.classList.add('visible');
+      badge?.click();   // toggle the panel open
+    });
+    await page.waitForTimeout(450);
+    await page.screenshot({ path: join(OUT, 'scen-dev-panel.png'), fullPage: false });
+    const res = await page.evaluate(() => {
+      const inv = window.__game.ctx.inventory;
+      const total = () => inv.slots.concat(inv.backpack).reduce((n, s) => n + (s.item ? s.count : 0), 0);
+      const before = total();
+      // click the LAST item button (likely pulse_rifle — unlikely already in the loadout)
+      const btns = document.querySelectorAll('.dev-item-btn');
+      btns[btns.length - 1]?.click();
+      return { itemCount: btns.length, totalBefore: before, totalAfter: total() };
+    });
+    console.log(`[dev-panel] items=${res.itemCount} invTotal ${res.totalBefore}→${res.totalAfter}`);
+  },
+
   // Pulse-test (ACAC): smoke-test the pulse rifle's auto-fire + self-recharging
   // energy cell. Holds LMB (mouseHeld) for ~1.2s → the cell should drain; then
   // releases + waits → it should recharge. Numeric (no screenshot).

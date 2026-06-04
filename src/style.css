@@ -230,11 +230,79 @@ canvas {
   background: rgba(8, 6, 4, 0.55);
   border: 1px dashed rgba(217, 122, 74, 0.75);
   z-index: 18;
-  pointer-events: none;
+  /* ACAD — clickable to open the dev item spawner. */
+  pointer-events: auto;
+  cursor: pointer;
+  user-select: none;
   /* Hidden until JS opt-in. */
   display: none;
 }
 #dev-mode-badge.visible { display: block; }
+#dev-mode-badge:hover { background: rgba(217, 122, 74, 0.22); color: #f0a06a; }
+
+/* ACAD — dev item spawner panel. Click the DEV MODE badge to toggle. */
+#dev-item-panel {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 420px;
+  max-width: 90vw;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  background: rgba(8, 6, 4, 0.92);
+  border: 1px dashed rgba(217, 122, 74, 0.7);
+  color: #d8cbb8;
+  font-family: 'JetBrains Mono', monospace;
+  z-index: 40;
+  pointer-events: auto;
+}
+#dev-item-panel.hidden { display: none; }
+#dev-item-panel .title.small {
+  color: #d97a4a;
+  font-size: 11px;
+  letter-spacing: 4px;
+  margin-bottom: 2px;
+}
+.dev-item-search {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(217, 122, 74, 0.4);
+  color: #e8dcc8;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  padding: 6px 8px;
+  outline: none;
+}
+.dev-item-search:focus { border-color: rgba(217, 122, 74, 0.8); }
+.dev-item-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+  flex: 1 1 auto;
+  padding-right: 4px;
+}
+.dev-item-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid transparent;
+  color: #d8cbb8;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  padding: 5px 8px;
+  cursor: pointer;
+}
+.dev-item-btn:hover { background: rgba(217, 122, 74, 0.18); border-color: rgba(217, 122, 74, 0.5); }
+.dev-item-glyph { width: 16px; text-align: center; color: #d97a4a; }
+.dev-item-name { flex: 1 1 auto; }
+.dev-item-id { color: #7a6e5c; font-size: 10px; }
 
 /* AAN — first-time recipe discovery toast variant. Larger, warm-gold,
    glowing — distinct from the muted-cream standard toast. Held 3.2s

@@ -3,6 +3,23 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ACAE — 2026-06-04 — Dev item-spawner panel ✓ verify pass (tsc clean)
+
+`verified` — `npm run verify` (tsc) PASS; no save change. Dev tooling — a DOM panel (DEV MODE only) to add any item to
+the inventory. 4 files: NEW `ui/devPanel.ts`, `main.ts`, `style.css`, `inventory/items.ts`.
+
+**Panel** (`ui/devPanel.ts`) — click the `[ DEV MODE ]` badge to toggle a centered panel listing **every registered
+item** (glyph + name + id), with a live **filter** box; clicking a row `addItem`s it to inventory + toasts. Mirrors the
+inventory-overlay lifecycle (unlock the pointer on open so the cursor is free, `resumeFromPause()` on close) + Escape to
+close. DOM built via createElement + textContent (rule 6). Gated to `ctx.flags.devMode` by the badge handler; the badge
+got `pointer-events: auto` + a hover (it was `pointer-events: none`). Verified via NEW `dev-panel` rig-shot scenario
+(panel renders, clicking a row grows the inventory total).
+
+**Robustness fix** — the panel derives its list from a NEW `ALL_REGISTERED_ITEM_IDS` (= `Object.keys(_DEFS)`) instead of
+the hand-maintained `ALL_ITEM_IDS`, which had silently gone stale — it was **missing 4 real items** (scrap_bar (!),
+grill_kit, raw/cooked_shrew_meat). Added those to `ALL_ITEM_IDS` too (it's now the only other place that list is
+referenced, and it should be complete). The registry-derived list can't go stale as items are added.
+
 ## Session ACAD — 2026-06-04 — Rust/weathering pass: scrappy pulse rifle + corroded metal across all gear ✓ verify pass (tsc clean)
 
 `verified` — `npm run verify` (tsc) PASS; no save change. User direction: "everything in the desert has been weathered
