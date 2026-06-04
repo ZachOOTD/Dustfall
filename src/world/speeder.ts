@@ -95,7 +95,7 @@ const _rustDarkMat = new THREE.MeshLambertMaterial({
 // surface as the bike drove (the reported "texture shifts when the bike
 // moves" bug). The hull mats above already pass localSpace; the antenna was
 // the lone holdout. localSpace anchors the grain to the object frame.
-const _antennaMat = createMetalMaterial(Tuning.WRECK_ANTENNA_HEX, { wornScale: 12.0, localSpace: true });
+const _antennaMat = createMetalMaterial(Tuning.WRECK_ANTENNA_HEX, { wornScale: 12.0, rustLevel: 0.4, localSpace: true });   // ACAD
 const _nozzleInteriorMat = new THREE.MeshBasicMaterial({
   color: Tuning.WRECK_NOZZLE_INTERIOR_HEX,
 });

@@ -36,7 +36,9 @@ import { buildBranchMesh } from '../world/branchMesh.ts';  // ACAA — shared br
 // which implies local sampling — see fabricMaterial.ts — so it's already safe
 // and routes through createFabricMaterial directly.)
 function vmMetal(color: number, opts: MetalMaterialOpts = {}) {
-  return createMetalMaterial(color, { ...opts, localSpace: true });
+  // ACAD — the desert weathers everything: held metal gear defaults to a
+  // visibly rusty/scrappy finish (override per-item for shinier or filthier).
+  return createMetalMaterial(color, { rustLevel: 0.34, ...opts, localSpace: true });
 }
 function vmWood(color: number, opts: WoodGrainMaterialOpts = {}) {
   return createWoodGrainMaterial(color, { ...opts, localSpace: true });
@@ -1168,11 +1170,17 @@ const _DEFS: Record<ItemId, ItemDef> = {
     },
     makeViewModel() {
       const group = new THREE.Group();
-      const bodyMat = vmMetal(0x303842, { wornScale: 11.0, scratchStrength: 0.035 });
-      bodyMat.emissive = new THREE.Color(0x080b0f);
-      const accentMat = vmMetal(0x5a6772, { wornScale: 11.0, scratchStrength: 0.035 });
-      const darkMat = vmMetal(0x16191e, { wornScale: 12.0 });
-      const gripMat = createFabricMaterial(0x161a20, undefined, { disableShimmer: true });
+      // ACAD — salvaged + corroded: rusted-iron body (heavy rust + scratches),
+      // a mismatched scrap patch, exposed wiring + a cable wrap + a hose clamp.
+      // The glowing cell is the only pristine tech amid the junk.
+      const bodyMat = vmMetal(0x3c352c, { wornScale: 9.0, scratchStrength: 0.08, rustLevel: 0.62 });
+      bodyMat.emissive = new THREE.Color(0x0a0806);
+      const accentMat = vmMetal(0x6a5a46, { wornScale: 9.0, scratchStrength: 0.07, rustLevel: 0.5 });
+      const darkMat = vmMetal(0x1e1813, { wornScale: 12.0, rustLevel: 0.42 });
+      const patchMat = vmMetal(0x5c4a38, { wornScale: 7.0, rustLevel: 0.72 });   // mismatched scrap patch
+      const copperMat = vmMetal(0x7a4a28, { wornScale: 8.0, rustLevel: 0.25 });  // exposed copper wiring
+      const wireMat = new THREE.MeshLambertMaterial({ color: 0x241b13 });        // grimy cable
+      const gripMat = createFabricMaterial(0x2a2017, undefined, { disableShimmer: true });  // grimy wrap
       // Glow material — cell + emitter coils + muzzle lens; pulsed by updateHeld.
       const cellMat = new THREE.MeshBasicMaterial({ color: 0x2a8a6a, toneMapped: false, fog: false });
 
@@ -1238,6 +1246,33 @@ const _DEFS: Record<ItemId, ItemDef> = {
       guard.rotation.y = Math.PI / 2; guard.position.set(0, -0.028, -0.03); group.add(guard);
       const trigger = new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.016, 0.005), accentMat);
       trigger.position.set(0, -0.026, -0.028); trigger.rotation.x = 0.2; group.add(trigger);
+
+      // ── Scavenger repairs (ACAD) — this thing's been kept running with junk. ──
+      // Mismatched riveted scrap patch welded over the receiver side.
+      const patch = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.034, 0.05), patchMat);
+      patch.position.set(0.026, 0.004, -0.05); group.add(patch);
+      for (const [py, pz] of [[0.013, -0.068], [0.013, -0.032], [-0.012, -0.068], [-0.012, -0.032]] as const) {
+        const rivet = new THREE.Mesh(new THREE.CylinderGeometry(0.0026, 0.0026, 0.006, 6), accentMat);
+        rivet.rotation.z = Math.PI / 2; rivet.position.set(0.028, py, pz); group.add(rivet);
+      }
+      // Grimy cable wrapped around the emitter shroud (a coil of cable).
+      for (const z of [-0.12, -0.142, -0.188]) {
+        const wrap = new THREE.Mesh(new THREE.TorusGeometry(0.017, 0.0035, 6, 14), wireMat);
+        wrap.position.set(0, 0.008, z); group.add(wrap);
+      }
+      // Exposed wiring running from the cell down into the receiver.
+      for (const [x, col] of [[-0.006, copperMat], [0.004, wireMat]] as const) {
+        const wire = new THREE.Mesh(new THREE.CylinderGeometry(0.0022, 0.0022, 0.05, 5), col);
+        wire.rotation.x = 0.9; wire.position.set(x, 0.018, -0.005); group.add(wire);
+      }
+      // Hose-clamp band cinching the barrel to the receiver.
+      const clampBand = new THREE.Mesh(new THREE.TorusGeometry(0.02, 0.0028, 6, 16), accentMat);
+      clampBand.rotation.y = Math.PI / 2; clampBand.position.set(0, 0.008, -0.108); group.add(clampBand);
+      // A couple of tape bands on the grip.
+      for (const gy of [0.0, -0.03]) {
+        const tape = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.008, 0.034), wireMat);
+        tape.position.set(0, gy, 0.003); gripG.add(tape);
+      }
 
       group.rotation.set(-0.08, 0.02, 0.1);
       return group;

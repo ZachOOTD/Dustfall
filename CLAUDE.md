@@ -64,21 +64,22 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      Prior milestones live in docs/changelog.md — do NOT accumulate "Prior milestone"
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
-**Last shipped**: Session ACAC — **pulse rifle: rapid-fire energy carbine** (Cycle 5 weapon half; 6 files, tsc clean, no
-save change). NEW `pulse_rifle` — a salvaged rapid-fire energy weapon distinct from the other 3 guns: **auto-fire**
-(fires while LMB held — new `auto` flag on the ranged WeaponSpec) from a **self-recharging energy cell** (no ammo item;
-drains 1/pulse, recharges 7/s after a 0.6s idle, via the item's `updateHeld`). Hero-quality model (glowing segmented
-energy cell + emitter coils, skeleton stock) iterated vs item-studio + fp-item; rare `massive`-wreck loot (0.015). NEW
-`pulse-test` rig-shot scenario. D172 (incl. the headless slow-game-clock verification footgun). **Owed (unchanged):**
-the ACW/ACX in-motion feel pile (D150).
-*(Prior milestones — ACAB: Cycle 6 atmosphere / procedural clouds (D171); ACAA: FP-viewmodel two-pass render fix (D170);
-ACY/ACZ: the complete item-model arc. See changelog.)*
+**Last shipped**: Session ACAD — **rust/weathering pass** (6 files, tsc clean, no save change). User direction:
+"everything in the desert has been weathered by time." The metal shader had scratches/dirt but no RUST — added a
+`rustLevel` (0..1) oxidation layer to `createMetalMaterial` (FBM patches + drip streaks, mixed INTO the diffuse), made
+the item `vmMetal` wrapper default `rustLevel: 0.34` so **all held metal gear ages at once**, rebuilt the **pulse rifle**
+as salvaged junk-tech (heavy rust + scrap patch + cable wrap + exposed wiring + taped grip; the glowing cell is the lone
+pristine tech), and rusted the iron/scrap world props (stake/sled/lantern/speeder). D173. Default rust is 0, so world
+props opt in via the wrapper — no surprise regressions. **Owed (unchanged):** the ACW/ACX in-motion feel pile (D150).
+*(Prior milestones — ACAC: pulse rifle (D172); ACAB: Cycle 6 atmosphere / procedural clouds (D171); ACAA: FP-viewmodel
+two-pass render fix (D170); ACY/ACZ: the complete item-model arc. See changelog.)*
 
-**Next session (ACAD)**: pick a lane — (a) **Cycle 5 raider proc-character** (the OTHER half — rebuild the raider as a
+**Next session (ACAE)**: pick a lane — (a) **Cycle 5 raider proc-character** (the OTHER half — rebuild the raider as a
 proc-character so the corpse-drag path has a good-looking body; the pulse rifle is now its weapon); (b) the **DEEP CAVE
 SYSTEM** design+build pass (procedural sprawl + sub-terrain collision + descent opening + dark-nav; then the egg spine
 from `2d4035b`); or (c) a **foreground feel-tune playtest** of the owed ACW/ACX in-motion pile (needs a human). See
-[docs/next-session-prompt.md](docs/next-session-prompt.md).
+[docs/next-session-prompt.md](docs/next-session-prompt.md). (Optional polish: extend `rustLevel` to painted-metal
+surfaces — speeder/sled top — if they read too clean.)
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 

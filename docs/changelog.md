@@ -3,6 +3,30 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ACAD — 2026-06-04 — Rust/weathering pass: scrappy pulse rifle + corroded metal across all gear ✓ verify pass (tsc clean)
+
+`verified` — `npm run verify` (tsc) PASS; no save change. User direction: "everything in the desert has been weathered
+by time — all models should reflect that." The metal shader had scratches/dirt but no actual RUST. 6 files: `world/
+metalMaterial.ts`, `inventory/items.ts`, `world/{sled,stake,lantern,speeder}.ts`. D173.
+
+**Rust shader layer** (`metalMaterial.ts`) — NEW `rustLevel` (0..1) option on `createMetalMaterial`: FBM oxidation
+patches + downward drip streaks tinted rust-orange (two-tone core→halo), mixed INTO the metal color (oxidation eats it).
+Default 0 (safe — existing world-prop callers unchanged unless opted in).
+
+**All held gear weathered at once** — the item `vmMetal` wrapper now defaults `rustLevel: 0.34`, so every held metal
+item reads aged in one change (verified across scrap_gun, machete (blade stays bright, grip weathers), canteen, amban
+(steel rusts, wood stays wood), energy_pistol). Per-item override still works.
+
+**Pulse rifle → salvaged/scrappy rebuild** — rusted-iron base colors + heavy `rustLevel` (0.5–0.72) + scavenger
+geometry: a mismatched riveted scrap patch, a grimy cable coil around the emitter shroud, exposed wiring from the cell,
+a hose-clamp band, taped grip. The glowing cyan cell is the lone pristine tech amid the junk. Reads as scavenged
+desert-tech now (was too clean/sci-fi).
+
+**World props** — added rust to the iron/scrap metal materials: sled scrap-sheet underside (0.45), iron stake (0.55–0.6
+— driven into sand, corrodes heavily), lantern body (0.42), speeder antenna (0.4). (Wrecks already use the heavy
+`createRustedHullMaterial`; the sled top + speeder body use painted-metal `wearLevel` — already weathered. Remaining
+gap: painted-metal surfaces don't have a rust layer — a follow-up if wanted.) D173.
+
 ## Session ACAC — 2026-06-04 — Pulse rifle: rapid-fire energy carbine (Cycle 5 weapon half) ✓ verify pass (tsc clean)
 
 `verified` — `npm run verify` (tsc) PASS; no save change (reuses additive `ammoRemaining`). Focused feature — the weapon

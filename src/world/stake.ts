@@ -48,6 +48,7 @@ function tag(root: THREE.Object3D, id: number): void {
 const _ironMat = createMetalMaterial(0x5e5048, {
   wornScale: 12.0,
   scratchStrength: 0.45,
+  rustLevel: 0.58,   // ACAD — iron driven into sand corrodes heavily
 });
 
 
@@ -77,6 +78,7 @@ function makeStakeVisual(): THREE.Group {
   const capMat = createMetalMaterial(0x4a3f38, {
     wornScale: 9.0,
     scratchStrength: 0.55,
+    rustLevel: 0.6,   // ACAD — hammered end, heavily corroded
   });
   const cap = new THREE.Mesh(
     new THREE.CylinderGeometry(0.052, 0.040, 0.030, 14),
@@ -93,6 +95,7 @@ function makeStakeVisual(): THREE.Group {
   const loopMat = createMetalMaterial(0x3a3028, {
     wornScale: 18.0,
     scratchStrength: 0.30,
+    rustLevel: 0.55,   // ACAD
   });
   const loop = new THREE.Mesh(
     new THREE.TorusGeometry(0.058, 0.012, 6, 16),

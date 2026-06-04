@@ -2,7 +2,17 @@
 
 Cumulative state. Rewritten end-to-end at each `/session-end`.
 
-**Current state**: Session ACAC shipped (2026-06-04 — pulse rifle: rapid-fire energy carbine, Cycle 5 weapon half). 100+ sessions post-MVP. `npm run verify` (tsc) PASS. **SAVE_VERSION 14** (unchanged — reuses additive `ammoRemaining`). ACAC added a NEW `pulse_rifle` weapon, distinct from the 3 existing guns: auto-fire (fires while LMB held via a new `auto` WeaponSpec flag) from a self-recharging energy cell (no ammo item; drains 1/pulse, recharges 7/s after a 0.6s idle via the item's updateHeld). Hero-quality glowing-cell model; rare `massive`-wreck loot. D172 (+ a headless slow-game-clock verification footgun). **Next session (ACAD)** = pick a lane: (a) Cycle 5 raider proc-character (the other half), (b) DEEP CAVE SYSTEM, or (c) foreground feel-tune.
+**Current state**: Session ACAD shipped (2026-06-04 — rust/weathering pass). 100+ sessions post-MVP. `npm run verify` (tsc) PASS. **SAVE_VERSION 14** (unchanged). ACAD answered "everything in the desert has been weathered by time": NEW `rustLevel` (0..1) oxidation layer on the shared `createMetalMaterial` shader (FBM patches + drip streaks, mixed into the diffuse); the item `vmMetal` wrapper defaults `rustLevel: 0.34` so ALL held metal gear ages at once; the pulse rifle rebuilt as scrappy junk-tech (heavy rust + scrap patch + cable wrap + exposed wiring + taped grip; the glowing cell is the lone pristine tech); iron world props (stake/sled/lantern/speeder) rusted. Default rust is 0, so world-prop callers opt in — no surprise regressions. D173. **Next session (ACAE)** = pick a lane: (a) Cycle 5 raider proc-character, (b) DEEP CAVE SYSTEM, or (c) foreground feel-tune.
+
+## ACAD scope (this session) — rust/weathering pass
+
+- **Trigger**: user — "everything in the desert has been weathered by time; all models should reflect that." The pulse rifle (and gear generally) read too clean; the metal shader had scratches/dirt but no rust.
+- **Rust shader** (`metalMaterial.ts`): NEW `rustLevel` opt → FBM oxidation patches + Y-stretched drip streaks, two-tone rust core→halo, mixed INTO the diffuse. Default 0 (world-prop callers unchanged unless opted in).
+- **All held gear** (`items.ts`): `vmMetal` defaults `rustLevel: 0.34` → every held metal item weathers in one change (verified scrap_gun/machete/canteen/amban/energy_pistol — rust on dark gun-metal, subtle on bright blades, wood/fabric untouched).
+- **Pulse rifle**: rusty base colors + heavy rustLevel (0.5–0.72) + scavenger geometry (riveted scrap patch, cable wrap, exposed wiring, hose clamp, taped grip).
+- **World props**: rust on sled scrap-sheet (0.45), iron stake (0.55–0.6), lantern (0.42), speeder antenna (0.4). Wrecks already use `createRustedHullMaterial`. Gap: painted-metal (`createPaintedMetalMaterial` — sled top, speeder body) has `wearLevel` but no rust layer (follow-up). D173.
+
+## ACAC scope (this session) — pulse rifle: rapid-fire energy carbine (Cycle 5 weapon half) 100+ sessions post-MVP. `npm run verify` (tsc) PASS. **SAVE_VERSION 14** (unchanged — reuses additive `ammoRemaining`). ACAC added a NEW `pulse_rifle` weapon, distinct from the 3 existing guns: auto-fire (fires while LMB held via a new `auto` WeaponSpec flag) from a self-recharging energy cell (no ammo item; drains 1/pulse, recharges 7/s after a 0.6s idle via the item's updateHeld). Hero-quality glowing-cell model; rare `massive`-wreck loot. D172 (+ a headless slow-game-clock verification footgun). **Next session (ACAD)** = pick a lane: (a) Cycle 5 raider proc-character (the other half), (b) DEEP CAVE SYSTEM, or (c) foreground feel-tune.
 
 ## ACAC scope (this session) — pulse rifle: rapid-fire energy carbine (Cycle 5 weapon half)
 

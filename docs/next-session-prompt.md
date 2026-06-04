@@ -1,4 +1,4 @@
-# Session ACAD — Kickoff Brief
+# Session ACAE — Kickoff Brief
 
 ## Read these now (in order)
 1. `CLAUDE.md` (auto-loaded) — esp. "Where we are now" (ACZ last-shipped + the foreground-owed list).
@@ -18,9 +18,11 @@ playtest issues: see-through FP rings (the viewmodel now renders in its own scen
 branch cleanup + held/world unification, and a real layered torch fire (only when lit). **ACAB** shipped **Cycle 6
 atmosphere**: a procedural cloud layer + clear↔overcast days + overcast lighting flatten + a storm sky telegraph (D171;
 `sky` rig-shot scenario). **ACAC** shipped the **pulse rifle** — a rapid-fire energy carbine (auto-fire + self-recharging
-cell, hero model, rare loot; D172) — which is the WEAPON half of Cycle 5.
+cell, hero model, rare loot; D172) — the WEAPON half of Cycle 5. **ACAD** added a **rust/weathering pass**: a `rustLevel`
+oxidation layer on the shared metal shader, applied to all held gear (`vmMetal` default) + the pulse rifle (scrappy
+junk-tech) + iron world props (D173). Held metal now reads desert-aged.
 
-## Session ACAD focus — pick ONE lane (surface to the user if ambiguous; default (a))
+## Session ACAE focus — pick ONE lane (surface to the user if ambiguous; default (a))
 
 ### (a) DEEP CAVE SYSTEM — design pass + first build (the standing vision, deferred since ACV) — DEFAULT
 A genuine underground cave SYSTEM: procedural sprawl + branching passages you can get lost in, **sub-terrain walkable

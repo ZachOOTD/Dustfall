@@ -156,7 +156,7 @@ export function findSledById(list: Sled[], id: number | undefined): Sled | undef
 // produced inverted flapped corners visible from below after the
 // back-curl was added).
 const _sheetMat = createPaintedMetalMaterial(0x6e5e48, { wearLevel: 0.85, localSpace: true });
-const _sheetUnderMat = createMetalMaterial(0x4a3a28, { wornScale: 10.0, scratchStrength: 0.15, localSpace: true });
+const _sheetUnderMat = createMetalMaterial(0x4a3a28, { wornScale: 10.0, scratchStrength: 0.15, rustLevel: 0.45, localSpace: true });   // ACAD — corroded scrap underside
 _sheetMat.side = THREE.DoubleSide;
 
 // ACU — tow handle (yoke) geometry. Small, low, rusted-metal (was a tall yoke

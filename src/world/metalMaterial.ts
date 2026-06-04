@@ -38,6 +38,11 @@ export interface MetalMaterialOpts {
   wornScale?: number;
   /** Strength of the scratches (±brightness). Default 0.05 (subtle). */
   scratchStrength?: number;
+  /** ACAD — rust/oxidation coverage 0..1 (FBM patches + downward drip streaks
+   *  tinted rust-orange). 0 = clean metal; ~0.3 = weathered; ~0.6 = heavily
+   *  corroded/scrappy. Default 0. The desert weathers everything — the item
+   *  `vmMetal` wrapper defaults this up so all held gear reads aged. */
+  rustLevel?: number;
   /** Whether to render double-sided (default false). */
   doubleSide?: boolean;
   /** D109 — sample the noise textures in OBJECT-LOCAL coords instead
@@ -64,6 +69,7 @@ export function createMetalMaterial(
   const scratchAngle = opts.scratchAngle ?? Math.PI / 4;
   const wornScale = opts.wornScale ?? 4.0;
   const scratchStrength = opts.scratchStrength ?? 0.05;
+  const rustLevel = opts.rustLevel ?? 0;   // ACAD — 0 = none; higher = rustier/scrappier
 
   mat.onBeforeCompile = (shader) => {
     // Forward world position to the fragment stage. Geometry may be
@@ -165,6 +171,24 @@ export function createMetalMaterial(
         // modulate tint. Multiplicative — order doesn't matter.
         diffuseColor.rgb *= scratchMod * grainMod;
         diffuseColor.rgb *= dirtTinted;
+
+        // 5. RUST (ACAD) — FBM patches + downward drip streaks, tinted toward
+        //    rust-orange (oxidation EATS the metal color, so we mix TO rust, not
+        //    multiply). The desert weathers everything; rustLevel sets coverage.
+        float rustLevel = ${rustLevel.toFixed(3)};
+        if (rustLevel > 0.001) {
+          float rustField = metalFbm(wpm.xz * 2.3 + vec2(31.0, 5.0));
+          // Stretch along Y so rust runs DOWN the surface like real drips.
+          float rustDrip = metalFbm(vec2((wpm.x + wpm.z) * 3.2, wpm.y * 0.55) + 13.0);
+          float rustN = rustField * 0.6 + rustDrip * 0.4;
+          float rustThresh = mix(0.92, 0.36, rustLevel);   // more rustLevel → lower threshold → more rust
+          float rustS = smoothstep(rustThresh, rustThresh + 0.2, rustN) * rustLevel;
+          // Two-tone: deep rust core → lighter oxide halo for depth.
+          vec3 rustCore = vec3(0.40, 0.18, 0.09);
+          vec3 rustHalo = vec3(0.55, 0.32, 0.18);
+          vec3 rustCol = mix(rustHalo, rustCore, smoothstep(rustThresh, 1.0, rustN));
+          diffuseColor.rgb = mix(diffuseColor.rgb, rustCol, rustS * 0.85);
+        }
       `,
     );
   };
