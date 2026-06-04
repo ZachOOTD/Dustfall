@@ -1149,6 +1149,138 @@ const _DEFS: Record<ItemId, ItemDef> = {
     useAnimDuration: Tuning.VIEWMODEL_SCRAP_GUN_ANIM_S,
   },
 
+  // ACAC — pulse rifle: rapid-fire energy carbine. Auto-fires while LMB held
+  // (combat.ts `auto` spec) from a self-recharging energy cell (slot.meta.
+  // ammoRemaining, refilled by updateHeld below — no ammo item). The cell +
+  // emitter coils GLOW by charge level + flash on each pulse.
+  pulse_rifle: {
+    id: 'pulse_rifle',
+    name: 'PULSE RIFLE',
+    glyph: '⌁',
+    description: 'a salvaged energy carbine — rapid pulses from a recharging cell',
+    stackable: false,
+    maxStack: 1,
+    wieldLmb: 'attack',
+    thirdPersonScale: 1.28,
+    handAttachTransform: { pos: [0, 0, 0], rot: [0, 0, 0] },   // barrel = mesh -Z = forward
+    onUse(_ctx, _slot) {
+      return { consumed: false };   // ranged firing is driven by combat.ts on LMB
+    },
+    makeViewModel() {
+      const group = new THREE.Group();
+      const bodyMat = vmMetal(0x303842, { wornScale: 11.0, scratchStrength: 0.035 });
+      bodyMat.emissive = new THREE.Color(0x080b0f);
+      const accentMat = vmMetal(0x5a6772, { wornScale: 11.0, scratchStrength: 0.035 });
+      const darkMat = vmMetal(0x16191e, { wornScale: 12.0 });
+      const gripMat = createFabricMaterial(0x161a20, undefined, { disableShimmer: true });
+      // Glow material — cell + emitter coils + muzzle lens; pulsed by updateHeld.
+      const cellMat = new THREE.MeshBasicMaterial({ color: 0x2a8a6a, toneMapped: false, fog: false });
+
+      // Receiver + top rail + a small sight.
+      const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.06, 0.13), bodyMat);
+      receiver.position.set(0, 0, -0.05); group.add(receiver);
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(0.016, 0.012, 0.12), darkMat);
+      rail.position.set(0, 0.037, -0.05); group.add(rail);
+      const sight = new THREE.Mesh(new THREE.BoxGeometry(0.009, 0.02, 0.01), accentMat);
+      sight.position.set(0, 0.052, -0.018); group.add(sight);
+      // Side vent slots (heat).
+      for (let i = 0; i < 3; i++) {
+        const vent = new THREE.Mesh(new THREE.BoxGeometry(0.052, 0.012, 0.006), darkMat);
+        vent.position.set(0, -0.008, -0.018 - i * 0.016); group.add(vent);
+      }
+
+      // Energy cell — the signature glowing element (slotted on top, with
+      // clamps + battery-segment ribs so it reads as a power cell).
+      const cell = new THREE.Mesh(new THREE.CylinderGeometry(0.0155, 0.0155, 0.07, 14), cellMat);
+      cell.rotation.x = Math.PI / 2; cell.position.set(0, 0.028, 0.012); group.add(cell);
+      for (const z of [-0.012, 0.036]) {
+        const clamp = new THREE.Mesh(new THREE.TorusGeometry(0.0175, 0.004, 6, 14), accentMat);
+        clamp.position.set(0, 0.028, z); group.add(clamp);
+      }
+      for (const z of [-0.002, 0.012, 0.026]) {     // segment ribs
+        const rib = new THREE.Mesh(new THREE.TorusGeometry(0.0162, 0.0016, 6, 14), darkMat);
+        rib.position.set(0, 0.028, z); group.add(rib);
+      }
+      group.userData.cellMat = cellMat;
+
+      // Emitter barrel — shroud + glowing coil rings + muzzle ring + lens.
+      const shroud = new THREE.Mesh(new THREE.BoxGeometry(0.028, 0.03, 0.13), accentMat);
+      shroud.position.set(0, 0.008, -0.165); group.add(shroud);
+      for (const z of [-0.13, -0.165, -0.2]) {
+        const coil = new THREE.Mesh(new THREE.TorusGeometry(0.018, 0.0032, 6, 16), cellMat);
+        coil.position.set(0, 0.008, z); group.add(coil);
+      }
+      const muzzle = new THREE.Mesh(new THREE.CylinderGeometry(0.019, 0.016, 0.02, 14), bodyMat);
+      muzzle.rotation.x = Math.PI / 2; muzzle.position.set(0, 0.008, -0.232); group.add(muzzle);
+      const emitter = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.006, 14), cellMat);
+      emitter.rotation.x = Math.PI / 2; emitter.position.set(0, 0.008, -0.241); group.add(emitter);
+
+      // Skeleton stock — twin rails + a cheek piece + a recoil pad.
+      for (const yy of [0.006, -0.018]) {
+        const rail2 = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.01, 0.1), bodyMat);
+        rail2.position.set(0, yy, 0.06); group.add(rail2);
+      }
+      const cheek = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.012, 0.06), accentMat);
+      cheek.position.set(0, 0.012, 0.055); group.add(cheek);
+      const stockPad = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.056, 0.014), darkMat);
+      stockPad.position.set(0, -0.006, 0.108); group.add(stockPad);
+
+      // Grip subgroup + trigger guard loop + trigger.
+      const gripG = new THREE.Group();
+      gripG.position.set(0, -0.058, -0.012); gripG.rotation.x = -0.32;
+      gripG.add(new THREE.Mesh(new THREE.BoxGeometry(0.028, 0.086, 0.032), gripMat));
+      for (let i = 0; i < 3; i++) {
+        const groove = new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.005, 0.034), darkMat);
+        groove.position.set(0, 0.022 - i * 0.02, 0.004); gripG.add(groove);
+      }
+      group.add(gripG);
+      const guard = new THREE.Mesh(new THREE.TorusGeometry(0.016, 0.003, 6, 16), bodyMat);
+      guard.rotation.y = Math.PI / 2; guard.position.set(0, -0.028, -0.03); group.add(guard);
+      const trigger = new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.016, 0.005), accentMat);
+      trigger.position.set(0, -0.026, -0.028); trigger.rotation.x = 0.2; group.add(trigger);
+
+      group.rotation.set(-0.08, 0.02, 0.1);
+      return group;
+    },
+    makeIcon() {
+      const s = svg();
+      s.appendChild(svgEl('rect', { x: '3', y: '9', width: '15', height: '4' }));    // body/barrel
+      s.appendChild(svgEl('rect', { x: '8', y: '6', width: '5', height: '3' }));      // cell
+      s.appendChild(svgEl('rect', { x: '7', y: '13', width: '5', height: '7' }));     // grip
+      s.appendChild(svgEl('line', { x1: '18', y1: '11', x2: '22', y2: '11' }));       // muzzle
+      return s;
+    },
+    updateHeld(itemRoot, slot, ctx, dt) {
+      if (!slot.meta) slot.meta = {};
+      const max = Tuning.WEAPON_PULSE_RIFLE_CELL_MAX;
+      if (slot.meta.ammoRemaining === undefined) slot.meta.ammoRemaining = max;
+      // Recharge the cell after a delay since the last pulse.
+      const lastFire = slot.meta.lastFireAt ?? -999;
+      const sinceFire = ctx.time.elapsed - lastFire;
+      if (sinceFire > Tuning.WEAPON_PULSE_RIFLE_RECHARGE_DELAY_S && slot.meta.ammoRemaining < max) {
+        slot.meta.ammoRemaining = Math.min(
+          max, slot.meta.ammoRemaining + Tuning.WEAPON_PULSE_RIFLE_RECHARGE_PER_S * dt);
+      }
+      // Drive the glow: brightness tracks cell charge; a quick white flash per pulse.
+      const cellMat = itemRoot.userData.cellMat as THREE.MeshBasicMaterial | undefined;
+      if (!cellMat) return;
+      const charge = Math.max(0, Math.min(1, slot.meta.ammoRemaining / max));
+      const flash = Math.max(0, 1 - sinceFire / 0.07);
+      cellMat.color.setRGB(
+        0.06 + charge * 0.16 + flash * 0.9,
+        0.36 + charge * 0.55 + flash * 0.9,   // cyan-green energy
+        0.28 + charge * 0.45 + flash * 0.9,
+      );
+    },
+    playUseAnim(itemRoot, t) {
+      // Quick light recoil flick (rapid cadence — small kick).
+      const kick = t < 0.4 ? easeOutBack(t / 0.4) : 1 - easeOutQuad((t - 0.4) / 0.6);
+      itemRoot.position.set(0.004 * kick, 0.01 * kick, 0.045 * kick);
+      itemRoot.rotation.set(-0.12 * kick, 0.02 * kick, 0.1);
+    },
+    useAnimDuration: Tuning.VIEWMODEL_PULSE_RIFLE_ANIM_S,
+  },
+
   // ─── Food items (new in Session F) ────────────────────────────────────────
 
   cactus_pulp: {
@@ -2796,4 +2928,5 @@ export const ALL_ITEM_IDS: ReadonlyArray<ItemId> = [
   'companion_pod',  // Session AAE
   'stake_kit',      // Session ACE
   'amban_rifle',    // ACL ITEMS — long-barreled ranged weapon
+  'pulse_rifle',    // ACAC — rapid-fire energy carbine
 ];

@@ -289,6 +289,9 @@ const TABLES: Record<SalvageKind, LootRoll[]> = {
     // a notch rarer — it's the top-tier marksman weapon). Ammo shares the
     // scrap_bullet pipeline, so finding one is immediately usable.
     { id: 'amban_rifle',   chance: 0.02 },
+    // ACAC — pulse rifle: the rarest hero find (rapid-fire energy carbine, no
+    // ammo item — its cell self-recharges, so it's immediately usable).
+    { id: 'pulse_rifle',   chance: 0.015 },
   ],
 };
 

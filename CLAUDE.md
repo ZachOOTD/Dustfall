@@ -64,21 +64,20 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      Prior milestones live in docs/changelog.md — do NOT accumulate "Prior milestone"
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
-**Last shipped**: Session ACAB — **Cycle 6 atmosphere: procedural clouds + clear↔overcast days + storm sky telegraph**
-(overnight; 6 files; tsc clean, no save change — cloudiness is transient). The storm wall + in-storm penalty + star
-drift were already shipped, so the new work is **clouds** (didn't exist): an FBM-noise cloud layer in the sky-dome
-fragment shader (`sky.ts`) driven by a NEW `weather.cloudiness` field (0..1), a slow deterministic clear↔overcast day
-wander (`weather.ts`), overcast lighting flatten + sun/moon/star occlusion (`lighting.ts` + `sky.ts`), and an ominous
-**storm telegraph** (the sky goes dark-overcast the moment a storm starts BUILDING, before the dust wall — verified
-`state=building, intensity=0, cloudiness=0.9`). NEW `sky` rig-shot scenario. D171. **Owed (unchanged):** the ACW/ACX
-in-motion feel pile (D150) — incl. the in-motion storm feel.
-*(Prior milestones — ACAA: FP-viewmodel two-pass render fix (D170) + torch fire + branch unify; ACY/ACZ: the complete
-item-model arc. See changelog.)*
+**Last shipped**: Session ACAC — **pulse rifle: rapid-fire energy carbine** (Cycle 5 weapon half; 6 files, tsc clean, no
+save change). NEW `pulse_rifle` — a salvaged rapid-fire energy weapon distinct from the other 3 guns: **auto-fire**
+(fires while LMB held — new `auto` flag on the ranged WeaponSpec) from a **self-recharging energy cell** (no ammo item;
+drains 1/pulse, recharges 7/s after a 0.6s idle, via the item's `updateHeld`). Hero-quality model (glowing segmented
+energy cell + emitter coils, skeleton stock) iterated vs item-studio + fp-item; rare `massive`-wreck loot (0.015). NEW
+`pulse-test` rig-shot scenario. D172 (incl. the headless slow-game-clock verification footgun). **Owed (unchanged):**
+the ACW/ACX in-motion feel pile (D150).
+*(Prior milestones — ACAB: Cycle 6 atmosphere / procedural clouds (D171); ACAA: FP-viewmodel two-pass render fix (D170);
+ACY/ACZ: the complete item-model arc. See changelog.)*
 
-**Next session (ACAC)**: pick a lane — (a) the **DEEP CAVE SYSTEM** design+build pass (procedural sprawl + sub-terrain
-walkable collision + descent opening + dark-nav; then cherry-pick the egg spine from `2d4035b`); (b) **Cycle 5 — raider
-proc-character + pulse rifle** (character/weapon visual, rig-shot-verifiable, closes the corpse-drag gap); or (c) a
-**foreground feel-tune playtest** of the owed ACW/ACX in-motion pile (needs a human). See
+**Next session (ACAD)**: pick a lane — (a) **Cycle 5 raider proc-character** (the OTHER half — rebuild the raider as a
+proc-character so the corpse-drag path has a good-looking body; the pulse rifle is now its weapon); (b) the **DEEP CAVE
+SYSTEM** design+build pass (procedural sprawl + sub-terrain collision + descent opening + dark-nav; then the egg spine
+from `2d4035b`); or (c) a **foreground feel-tune playtest** of the owed ACW/ACX in-motion pile (needs a human). See
 [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).

@@ -1,4 +1,4 @@
-# Session ACAC — Kickoff Brief
+# Session ACAD — Kickoff Brief
 
 ## Read these now (in order)
 1. `CLAUDE.md` (auto-loaded) — esp. "Where we are now" (ACZ last-shipped + the foreground-owed list).
@@ -17,9 +17,10 @@ arc is now COMPLETE** — ACY (12 hero held items + the `item-studio` harness + 
 playtest issues: see-through FP rings (the viewmodel now renders in its own scene in a 2nd depth-cleared pass — D170),
 branch cleanup + held/world unification, and a real layered torch fire (only when lit). **ACAB** shipped **Cycle 6
 atmosphere**: a procedural cloud layer + clear↔overcast days + overcast lighting flatten + a storm sky telegraph (D171;
-`sky` rig-shot scenario). Cycle 6 is substantially done — only the in-motion storm FEEL tune remains (foreground-owed).
+`sky` rig-shot scenario). **ACAC** shipped the **pulse rifle** — a rapid-fire energy carbine (auto-fire + self-recharging
+cell, hero model, rare loot; D172) — which is the WEAPON half of Cycle 5.
 
-## Session ACAC focus — pick ONE lane (surface to the user if ambiguous; default (a))
+## Session ACAD focus — pick ONE lane (surface to the user if ambiguous; default (a))
 
 ### (a) DEEP CAVE SYSTEM — design pass + first build (the standing vision, deferred since ACV) — DEFAULT
 A genuine underground cave SYSTEM: procedural sprawl + branching passages you can get lost in, **sub-terrain walkable
@@ -31,11 +32,12 @@ build a first cut. Then cherry-pick the egg-acquisition spine from commit `2d403
 pattern is intact there + in `shared-memory/save-schema-migration.md`, D158). Highest-value, highest-risk; a design pass
 + first build is a full session. **If a save bump is needed for cave state, surface it (D81).**
 
-### (b) CYCLE 5 — Raider proc-character + pulse rifle (strong AUTONOMOUS fit)
-Rebuild the raider as a proper proc-character (borrowing the player-rig vocabulary — sub-pivot rig per D115/D117/D118)
-+ add a new pulse/energy weapon. Pure character/weapon VISUAL work, fully `rig-shot`-verifiable like the item-model
-overnights — and it gives the corpse-drag path (Cycle 1) a good-looking body to drag. Raiders stay dormant (D13) except
-the DEV spawn/kill hooks. See iteration-plan Cycle 5. Lower-risk than the cave; ships clean unattended.
+### (b) CYCLE 5 — Raider proc-character (the OTHER half; strong AUTONOMOUS fit) — could be the DEFAULT
+The pulse rifle (Cycle 5's weapon) shipped in ACAC, so this is just the raider rebuild now: turn the raider into a proper
+proc-character (borrow the player-rig vocabulary — sub-pivot rig per D115/D117/D118), give it the **pulse_rifle** as its
+weapon, and verify the death→corpse→drag path (Cycle 1) reads as a recognizable body. Pure character VISUAL work, fully
+`rig-shot`-verifiable like the item-model overnights. Raiders stay dormant (D13) except the DEV spawn/kill hooks. See
+iteration-plan Cycle 5. Lower-risk than the cave; ships clean unattended — a natural follow-on to ACAC.
 
 ### (c) FOREGROUND FEEL-TUNE PLAYTEST — the owed ACW/ACX in-motion pile (needs a human at the keyboard)
 Not autonomous-doable. Boot `npm run dev`, play, tune constants in `src/config/tuning.ts`: seated-speeder riding feel +

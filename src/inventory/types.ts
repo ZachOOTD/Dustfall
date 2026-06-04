@@ -52,7 +52,9 @@ export type ItemId =
   // Session ACE — craftable world-anchor stake (B1 Phase 3 rope endpoint)
   | 'stake_kit'
   // ACL ITEMS — long-barreled procedural rifle (ranged weapon)
-  | 'amban_rifle';
+  | 'amban_rifle'
+  // ACAC — rapid-fire energy weapon with a self-recharging cell
+  | 'pulse_rifle';
 
 /** Per-slot metadata for stateful items (canteen fill level, cook state, light state). */
 export interface ItemMeta {
@@ -87,6 +89,10 @@ export interface ItemMeta {
    *  don't. NOT persisted across save (transient input state — see
    *  save.ts serialize). */
   holdProgress?: number;
+  /** ACAC — `ctx.time.elapsed` of the pulse_rifle's last pulse. The item's
+   *  updateHeld waits RECHARGE_DELAY_S after this before refilling the energy
+   *  cell. Transient (not persisted; re-derives — cell defaults to full). */
+  lastFireAt?: number;
 }
 
 export interface UseResult {

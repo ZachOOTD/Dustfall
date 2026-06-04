@@ -1340,6 +1340,18 @@ export const Tuning = {
   WEAPON_AMBAN_RIFLE_COOLDOWN: 1.6,  // seconds between shots (heavier than scrap gun)
   WEAPON_AMBAN_RIFLE_MAX_AMMO: 8,    // magazine capacity
 
+  // ACAC — pulse rifle: rapid-fire energy weapon with a self-recharging cell
+  // (no ammo item). Low per-pulse damage but a fast cadence (auto-fire while
+  // LMB held). The cell drains 1 per pulse + recharges over time when idle;
+  // sustained fire empties it, forcing a brief cool-down before it refills.
+  WEAPON_PULSE_RIFLE_RANGE: 48.0,      // m — raycast reach (between scrap gun + amban)
+  WEAPON_PULSE_RIFLE_DAMAGE: 1.3,      // flat per-pulse damage (low — DPS comes from cadence)
+  WEAPON_PULSE_RIFLE_COOLDOWN: 0.13,   // seconds between pulses (rapid auto-fire)
+  WEAPON_PULSE_RIFLE_CELL_MAX: 28,     // energy cell capacity (pulses)
+  WEAPON_PULSE_RIFLE_RECHARGE_PER_S: 7, // cell pulses regenerated per second while not firing
+  WEAPON_PULSE_RIFLE_RECHARGE_DELAY_S: 0.6, // seconds after the last shot before the cell recharges
+  VIEWMODEL_PULSE_RIFLE_ANIM_S: 0.12,  // quick per-pulse recoil flick
+
   // ACL DESERT SHREW — skittery prey creature (mirrors lizard pipeline).
   SHREW_SPOT_DISTANCE: 7,          // m — player proximity that triggers flee
   SHREW_FLEE_SPEED: 3.2,           // m/s — fast skittery bolt

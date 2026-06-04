@@ -3,6 +3,34 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ACAC — 2026-06-04 — Pulse rifle: rapid-fire energy carbine (Cycle 5 weapon half) ✓ verify pass (tsc clean)
+
+`verified` — `npm run verify` (tsc) PASS; no save change (reuses additive `ammoRemaining`). Focused feature — the weapon
+half of Cycle 5. NEW `pulse_rifle`: a salvaged rapid-fire energy carbine, distinct from the other 3 guns (scrap_gun =
+crude single-shot, amban = slow marksman, energy_pistol = charge-release). 6 files: `inventory/types.ts`,
+`inventory/items.ts`, `player/combat.ts`, `config/tuning.ts`, `world/salvage.ts`, `scripts/rig-shot.mjs` (+NEW
+`pulse-test` scenario). D172.
+
+**Mechanic** — auto-fire energy weapon with a **self-recharging cell** (no ammo item). `combat.ts` WeaponSpec gains an
+`auto` flag: auto weapons fire while LMB is HELD (gated by `cooldown`) instead of one shot per click, and empty
+silently (no toast spam). The pulse_rifle drains 1 cell-pulse per shot (`WEAPON_PULSE_RIFLE_CELL_MAX` = 28, fast 0.13s
+cadence, low 1.3 dmg — DPS from cadence) and the cell **recharges** (7/s, after a 0.6s idle delay) via the item's
+`updateHeld` — so sustained fire empties it and forces a brief cool-down. Verified via the `pulse-test` scenario:
+the cell drains while LMB held (28→24) + returns to full after release.
+
+**Model** (hero-quality, iterated vs item-studio + fp-item): a chunky alloy carbine — receiver + top rail/sight + side
+heat vents, a glowing segmented **energy cell** up top (the signature element, with clamps), an emitter barrel with
+glowing coil rings + muzzle, a skeleton stock (twin rails + cheek + recoil pad), and a grooved grip + trigger loop. The
+cell + coils GLOW cyan-green by charge level + flash on each pulse (`updateHeld` drives a shared MeshBasic, like the
+energy_pistol). New `WEAPON_PULSE_RIFLE_*` + `VIEWMODEL_PULSE_RIFLE_ANIM_S` tuning.
+
+**Acquisition** — added to the `massive` wreck loot table at 0.015 (the rarest hero find; its cell self-recharges so
+it's immediately usable, no ammo needed).
+
+**Verification footgun (D172)**: the headless rig-shot harness runs the game clock in SLOW-MOTION (low fps + dt clamped
+to 0.1), so a cadence/recharge test must wait in GAME-time, not wall-clock (game-time passed ~5× slower here) — the first
+test read "1 shot, no recharge" until the waits were lengthened.
+
 ## Session ACAB — 2026-06-04 — Cycle 6 atmosphere: procedural clouds + clear↔overcast days + storm sky telegraph ✓ verify pass (tsc clean)
 
 `verified` — `npm run verify` (tsc) PASS; no save change (cloudiness is transient — re-derives on load). Overnight,

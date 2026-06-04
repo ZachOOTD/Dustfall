@@ -38,6 +38,10 @@ interface WeaponSpec {
   /** Ranged only — if set, uses slot.meta.ammoRemaining and skips
    *  the shot when 0. Max capacity for reload bookkeeping. */
   maxAmmo?: number;
+  /** ACAC — ranged only: fire repeatedly while LMB is HELD (auto-fire), gated
+   *  by `cooldown`, instead of one shot per click. Empty silently (no toast
+   *  spam) — for a self-recharging energy cell (pulse_rifle). */
+  auto?: boolean;
   /** Charged only — damage at tap-fire (t=0) and at fully charged (t=1). */
   minDamage?: number;
   maxDamage?: number;
@@ -92,6 +96,18 @@ const _WEAPON_SPECS: Partial<Record<ItemId, WeaponSpec>> = {
     minDamage: Tuning.WEAPON_ENERGY_PISTOL_MIN_DAMAGE,
     maxDamage: Tuning.WEAPON_ENERGY_PISTOL_MAX_DAMAGE,
     chargeTime: Tuning.WEAPON_ENERGY_PISTOL_CHARGE_TIME,
+  },
+  // ACAC — pulse rifle: rapid AUTO-fire energy weapon. Reuses the ranged path
+  // (raycast → dispatchHit) with `auto` (fire while LMB held) + a maxAmmo cell
+  // that drains per pulse and recharges over time via the item's updateHeld
+  // (NOT an R-reload — no ammo item). Low damage, high cadence.
+  pulse_rifle: {
+    kind: 'ranged',
+    range: Tuning.WEAPON_PULSE_RIFLE_RANGE,
+    damage: Tuning.WEAPON_PULSE_RIFLE_DAMAGE,
+    cooldown: Tuning.WEAPON_PULSE_RIFLE_COOLDOWN,
+    maxAmmo: Tuning.WEAPON_PULSE_RIFLE_CELL_MAX,
+    auto: true,
   },
 };
 
@@ -175,9 +191,13 @@ export function updateCombat(ctx: GameContext, dt: number): void {
     return;
   }
 
-  // ── Non-charged weapons — single press triggers single swing/shot ──
+  // ── Non-charged weapons — single press = single shot; auto = while held ──
   if (ctx.time.elapsed < _nextSwingAt) return;
-  if (!ctx.input.mousePressed.has(0)) return;
+  // ACAC — auto weapons (pulse_rifle) fire while LMB is HELD; others on press.
+  const triggered = spec.auto
+    ? (ctx.input.mouseHeld?.has(0) ?? ctx.input.mousePressed.has(0))
+    : ctx.input.mousePressed.has(0);
+  if (!triggered) return;
 
   // Ammo check for ranged weapons. Click while empty still triggers the
   // anim + cooldown but produces no shot.
@@ -185,11 +205,13 @@ export function updateCombat(ctx: GameContext, dt: number): void {
     const ammo = slot.meta?.ammoRemaining ?? 0;
     if (ammo <= 0) {
       _nextSwingAt = ctx.time.elapsed + spec.cooldown * 0.5;
-      ctx.ui.showToast('out of ammo');
+      // Auto weapons recharge a cell — empty silently (no toast spam).
+      if (!spec.auto) ctx.ui.showToast('out of ammo');
       return;
     }
     if (!slot.meta) slot.meta = {};
     slot.meta.ammoRemaining = ammo - 1;
+    slot.meta.lastFireAt = ctx.time.elapsed;   // ACAC — for the pulse cell recharge timer
   }
 
   if (spec.kind === 'melee') {

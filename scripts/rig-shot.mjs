@@ -821,6 +821,43 @@ const SCENARIOS = {
     console.log(`[held-item] ${item} → ${path}`);
   },
 
+  // Pulse-test (ACAC): smoke-test the pulse rifle's auto-fire + self-recharging
+  // energy cell. Holds LMB (mouseHeld) for ~1.2s → the cell should drain; then
+  // releases + waits → it should recharge. Numeric (no screenshot).
+  'pulse-test': async (page) => {
+    await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      ctx.input.controls.isLocked = true; ctx.flags.paused = false; ctx.flags.thirdPerson = false;
+      const inv = ctx.inventory;
+      inv.slots[0].item = 'pulse_rifle'; inv.slots[0].count = 1; inv.slots[0].meta = undefined;
+      inv.selectedIdx = 0;
+    });
+    await page.waitForTimeout(350);   // updateHeld inits the cell
+    const full = await page.evaluate(() => window.__game.ctx.inventory.slots[0].meta?.ammoRemaining ?? -1);
+    const inp = await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      ctx.input.mouseHeld.add(0);     // hold LMB
+      return { hasHeld: ctx.input.mouseHeld.has(0), locked: ctx.input.controls.isLocked, hasSpec: !!window.__game.ctx };
+    });
+    // NOTE: the headless harness runs the game clock in slow-motion (dt clamped,
+    // low fps) so GAME-time passes ~5x slower than wall-clock — wait long.
+    const traj = [];
+    for (let i = 0; i < 8; i++) {
+      await page.waitForTimeout(900);
+      traj.push(await page.evaluate(() => {
+        const ctx = window.__game.ctx;
+        return +(ctx.inventory.slots[0].meta?.ammoRemaining ?? -1).toFixed(1) + (ctx.input.mouseHeld.has(0) ? '' : '!');
+      }));
+    }
+    await page.evaluate(() => window.__game.ctx.input.mouseHeld.delete(0)); // release
+    await page.waitForTimeout(9000);
+    const afterRecharge = await page.evaluate(() => +(window.__game.ctx.inventory.slots[0].meta?.ammoRemaining ?? -1).toFixed(1));
+    // (Headless runs the game clock slow, so the cell drains/recharges in
+    // slow-motion vs wall-clock — the trajectory should DROP while held + return
+    // to full after release.)
+    console.log(`[pulse-test] cellFull=${full} input=${JSON.stringify(inp)} hold-traj=[${traj.join(',')}] afterRecharge=${afterRecharge}`);
+  },
+
   // Sky (ACAB, Cycle 6): sweep cloud cover × time-of-day, aim the camera up at
   // the dome, and screenshot — verifies the procedural cloud layer (clear →
   // partly → overcast) and that clouds occlude stars at night. Headless.
