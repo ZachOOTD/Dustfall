@@ -79,11 +79,12 @@ the terrain from the cloud field. NEW rig-shots: `scrap-loot`/`worm-shelter`/`vu
 *(Prior milestones — ACAG: dead-tree rework + bark (D174-176); ACAF: branch rework; ACAD: rust (D173); ACAC: pulse rifle
 (D172); ACAB: clouds (D171). See changelog.)*
 
-**Next session (ACAI)**: pick a lane — (a) **Cycle 5 raider proc-character** (rebuild the raider as a proc-character
-wielding the pulse rifle; rig-shot-verifiable like the vulture/item work); (b) **mega-wreck rebuild from scratch** (ACAG
-triage — too boxy; research refs + level up modelling, like the camelthorn tree); (c) the **DEEP CAVE SYSTEM**
-design+build pass; or (d) a **foreground feel-tune playtest** of the owed ACW/ACX pile + the vulture flight feel (needs a
-human). See [docs/next-session-prompt.md](docs/next-session-prompt.md) + [docs/backlog.md](docs/backlog.md).
+**Next session (ACAI)** = **MEGA-WRECK rebuild from scratch + procgen-wreck/salvage-panel overhaul** (user-chosen ACAH).
+The hand-modeled mega-wreck reads too boxy; rebuild with references + the leveled-up modelling proved by the camelthorn
+tree (D176) + vulture (D179), preserving colliders/panels/shelter/journal, then level up the procgen wreck fleet + panel
+placement alongside. **The raider proc-character (Cycle 5) + all rig-dependent work is DEFERRED** — user is undecided on
+importing an external rigged character. Other standing lanes: wreck-yard biome, ODST drop-pod intro, deep cave; quick wins:
+painted-metal rust gap, sandworm depth. See [docs/next-session-prompt.md](docs/next-session-prompt.md) + [docs/backlog.md](docs/backlog.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 

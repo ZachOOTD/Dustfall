@@ -17,27 +17,32 @@ procgen wrecks with dynamic panels), pulse rifle, a rust pass, a dev item-spawne
 deadlock is fixed** (scrap scatters around wrecks). All 7 procedural-material factories now honor their per-instance
 params (the D177 cache-key fix).
 
-## Session ACAI focus — pick ONE lane (surface to the user if ambiguous; default (a))
+## Session ACAI focus — MEGA-WRECK REBUILD + procgen-wreck overhaul (user-chosen, 2026-06-05)
 
-### (a) CYCLE 5 — Raider proc-character (DEFAULT; strong autonomous fit)
-Rebuild the dormant raider as a proper proc-character wielding the **pulse_rifle**, so the death→corpse→drag path (Cycle
-1) reads as a recognizable body. Pure character VISUAL work, fully `rig-shot`-verifiable. **The NEW `enemies/vulture.ts`
-is a fresh, clean template** for a proc-creature with model + FSM + combat/loot/save wiring (mirrors the shrew). Borrow
-the player-rig vocabulary (sub-pivot rig, D115/D117/D118). Raiders stay dormant (D13) except DEV spawn/kill hooks.
+**The raider proc-character (Cycle 5) is DEFERRED** — the user is undecided on importing an external rigged character, so
+hold all rig-dependent work (raider, lie-down-sleep anims, the deferred 3P use-anims) until that's settled.
 
-### (b) MEGA-WRECK REBUILD FROM SCRATCH (standing triage)
-Remove the boxy mega-wreck + rebuild with references + leveled-up modelling (the camelthorn-tree and vulture rebuilds are
-the proof this pays off). Pairs with the standing "overhaul procgen wrecks + salvage-panel system" backlog item. Large.
+### (a) MEGA-WRECK REBUILD FROM SCRATCH + procgen-wreck/panel overhaul (DEFAULT — user-chosen)
+The hand-modeled mega-wreck (`src/world/megaWreck.ts`) reads too boxy/blocky. **DESIGN FIRST**: gather real references
+(crashed spaceship hulls — think Nostromo / star-destroyer wreck / Mad Max salvage), then rebuild with the leveled-up
+modelling techniques the camelthorn-tree (D176) + vulture (D179) rebuilds proved out (recursive/organic geometry,
+merged-geometry perf, real depth per rule 7, the now-correct per-instance materials post-D177). Preserve the colliders +
+all panels + shelter zone + journal (zero gameplay impact — it's a visual lift, like the ABL pass but from scratch). Then
+**pair it with the standing procgen-wreck + salvage-panel placement/variation overhaul** (the composite wreck vocabulary
+in `procgenWreck.ts`/`wrecks.ts` + the `findPanelMount` sampler D168) so BOTH the hero mega-wreck and the procgen fleet
+level up together. **Surface a save bump only if structurally needed (D81 — unlikely; geometry/material only).** Iterate
+hard via rig-shot (a NEW `megawreck`/`wreck` scenario), rule 8.
 
-### (c) DEEP CAVE SYSTEM — design pass + first build
-Procedural sprawl + sub-terrain walkable collision below the heightfield (spike this FIRST — the crux), descent opening,
-dark-nav. Then cherry-pick the egg spine from `2d4035b`. Highest-value, highest-risk.
+### Smaller interleavables (if the lane finishes early or for variety)
+- **Painted-metal rust gap** (quick): `paintMaterial` (speeder body / sled top) has `wearLevel` but no rust layer — add
+  a `rustLevel` parallel to the metal shader (D173) so painted surfaces weather too. Now that D177 fixed the cache key,
+  per-surface rust will actually render.
+- **Sandworm encounter depth**: retreat-and-stalk loop (extend `tickRetreat`) + multi-worm population (needs a save bump
+  — surface it).
 
-### (d) FOREGROUND FEEL-TUNE PLAYTEST (needs a human)
-The owed ACW/ACX in-motion pile (D150) + the NEW ACAH owed feel items: the **vulture in-flight flee** arc
-(`VULTURE_FLEE_SPEED`/`CLIMB_RATE`/`SPOT_RADIUS`/`DESPAWN_DIST`) and the **cloud-shadow strength**
-(`CLOUD_SHADOW_SCALE`/`DARKEN`). Also the painted-metal rust gap (speeder/sled top — `paintMaterial` has `wearLevel` but
-no rust layer).
+### Other standing lanes (NOT this session unless the user redirects)
+Wreck-yard biome (Cycle 8), ODST drop-pod opening cutscene, DEEP CAVE SYSTEM. Foreground feel-tune (owed ACW/ACX pile +
+the NEW vulture flight feel + cloud-shadow strength) needs a human at the keyboard.
 
 ## Autonomy contract
 Ambiguous → pick the option closest to the GDD pillars + decisions.md realism dial, append a D-entry, continue. Research
@@ -73,5 +78,7 @@ Framework post-mortem drafts may sit in `~/projects/gamedev-framework/.post-mort
 strong post-mortem candidate (extends the D175 canon).
 
 ## Begin
-Read the order above → confirm tsc clean → pick the lane (default (a): the raider proc-character — the vulture is a fresh
-template + it closes the Cycle-5 'other half') → TaskCreate the plan → start.
+Read the order above → confirm tsc clean → **lane (a): MEGA-WRECK rebuild from scratch + procgen-wreck/panel overhaul**
+(user-chosen ACAH). DESIGN/reference-gather first, then build + screenshot-iterate (rule 8); preserve colliders/panels/
+shelter/journal. → TaskCreate the plan → start. (Raider + all rig-dependent work is deferred until the external-character
+decision is made.)
