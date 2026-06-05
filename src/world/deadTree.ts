@@ -88,7 +88,11 @@ function makeDeadTree(rand: Rng): THREE.Group {
     const tip = new THREE.Vector3(Math.cos(bowAng) * bow, len, Math.sin(bowAng) * bow).applyMatrix4(_m);
     if (depth <= 0 || rTip < 0.011) return;
 
-    const childCount = 2 + (rand() < 0.5 ? 1 : 0);    // mostly 2, sometimes 3
+    // Main structure (high depth) forks 2-3 ways; fine twigs (low depth) fork
+    // sparingly (mostly 1, sometimes 2) so the tips stay sparse like the refs.
+    const childCount = depth >= 3
+      ? 2 + (rand() < 0.5 ? 1 : 0)
+      : 1 + (rand() < 0.4 ? 1 : 0);
     for (let c = 0; c < childCount; c++) {
       // Wider divergence at the main fork (high depth), tighter toward the tips.
       const spread = 0.4 + rand() * 0.5 + (depth >= 3 ? 0.25 : 0);
