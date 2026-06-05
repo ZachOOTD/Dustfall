@@ -75,6 +75,14 @@ thin POINT at the top (`topR` ratio 0.45 → 0.16) so it ends like a branch inst
 band down to `hHi` 0.78 so limbs stay below the thin tip (no limb out-thicking the trunk there). `tree` rig-shot
 confirms across seeds. tsc clean.
 
+**Follow-up 11 — realistic bark grain.** The trunk read flat: the wood shader's grain/ring layers sample in the
+HORIZONTAL plane and ignore Y, so a vertical trunk got almost no variation. Added a gated `bark` option to
+`woodGrainMaterial.ts` — fibrous striations sampled FINE around the surface (XZ) + SLOW along Y so the noise stretches
+into vertical fibers, plus thresholded ridge-noise grooves (darker cracks between bark plates). Applied to the dead-tree
+trunk (`bark:0.36`) + limbs (`bark:0.14`) with `localSpace:true` — the local frame makes the fibers run along the
+trunk's own vertical axis AND avoids the world-space noise precision loss that left trees far from the origin flat/banded.
+Iterated close-up + at distance via the `tree` rig-shot. tsc clean; other wood props unaffected (bark defaults off).
+
 ## Session ACAE — 2026-06-04 — Dev item-spawner panel ✓ verify pass (tsc clean)
 
 `verified` — `npm run verify` (tsc) PASS; no save change. Dev tooling — a DOM panel (DEV MODE only) to add any item to

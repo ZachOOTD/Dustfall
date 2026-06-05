@@ -24,11 +24,14 @@ import { BRANCH_WOOD_COLOR, BRANCH_WEATHER_LEVEL, buildBranchMesh } from './bran
 // color as the held + ground branches; the vm scene now mirrors the world
 // lighting (viewModel.ts) so held + dropped + tree all read identical. The trunk
 // is a thicker, slightly lighter wood (its own member, not a "branch").
+// localSpace so the bark samples in the trunk's OWN frame (Y = vertical) — gives
+// clean vertical fibers AND avoids the world-space noise precision loss for trees
+// placed far from the origin (their bark would otherwise read flat/banded).
 const _trunkMat = createWoodGrainMaterial(0xa39c91, {
-  ringDensity: 6.0, weatherLevel: 0.72,
+  ringDensity: 6.0, weatherLevel: 0.72, bark: 0.36, grainStrength: 0.13, localSpace: true,
 });
 const _branchMat = createWoodGrainMaterial(BRANCH_WOOD_COLOR, {
-  ringDensity: 9.0, weatherLevel: BRANCH_WEATHER_LEVEL,
+  ringDensity: 9.0, weatherLevel: BRANCH_WEATHER_LEVEL, bark: 0.14, grainStrength: 0.09, localSpace: true,
 });
 
 // Module scratch (avoid per-tree allocation in the orientation math).

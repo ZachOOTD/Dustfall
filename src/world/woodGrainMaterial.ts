@@ -38,6 +38,12 @@ export interface WoodGrainMaterialOpts {
   weatherLevel?: number;
   /** Strength of grain stripes (±brightness). Default 0.06. */
   grainStrength?: number;
+  /** ACAF f/u — BARK mode (0 = off). The plank grain/ring layers sample in the
+   *  horizontal plane and ignore the vertical axis, so on a vertical TRUNK they
+   *  read flat. Bark adds fibrous striations that run UP the axis (fine AROUND
+   *  the surface, slow along Y) + darker vertical grooves — realistic tree-bark
+   *  texture. Value = striation strength (±brightness); ~0.18-0.28 reads well. */
+  bark?: number;
   /** Whether to render double-sided (default false). */
   doubleSide?: boolean;
   /** ACT — sample the grain/ring/weathering noise in OBJECT-LOCAL coords
@@ -65,6 +71,7 @@ export function createWoodGrainMaterial(
   const ringDensity = opts.ringDensity ?? 8.0;
   const weatherLevel = opts.weatherLevel ?? 0.4;
   const grainStrength = opts.grainStrength ?? 0.06;
+  const bark = opts.bark ?? 0.0;
 
   mat.onBeforeCompile = (shader) => {
     shader.vertexShader = shader.vertexShader.replace(
@@ -164,6 +171,21 @@ export function createWoodGrainMaterial(
 
         diffuseColor.rgb *= grainMod * ringMod * microMod;
         diffuseColor.rgb *= weatherMix;
+        ${bark > 0 ? /* glsl */ `
+        // 5. BARK — fibrous striations that run UP the trunk axis. The plank
+        //    layers above ignore Y; bark samples FINE around the surface (XZ)
+        //    and SLOW along Y, so the noise stretches into vertical fibers.
+        //    Two octaves (broad ridges + fine fibers) + darker deep grooves.
+        float barkRidge = woodValueNoise(vec2((wpw.x - wpw.z) * 26.0, wpw.y * 1.1));
+        float barkFiber = woodValueNoise(vec2((wpw.x + wpw.z) * 70.0, wpw.y * 2.6));
+        float barkN = mix(barkRidge, barkFiber, 0.5);
+        float barkMod = mix(1.0 - ${bark.toFixed(3)}, 1.0 + ${(bark * 0.55).toFixed(3)}, barkN);
+        // Deep vertical grooves (cracks between bark plates) — thresholded ridge
+        //    noise darkens the troughs.
+        float groove = smoothstep(0.30, 0.12, barkRidge);
+        barkMod *= mix(1.0, 0.62, groove);
+        diffuseColor.rgb *= barkMod;
+        ` : ''}
       `,
     );
   };
