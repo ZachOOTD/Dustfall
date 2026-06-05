@@ -18,6 +18,7 @@ import { easeOutBack, easeInOutCubic, easeOutQuad } from '../core/ease.ts';
 import { addItem } from './inventory.ts';
 import { makeLizardVisual } from '../enemies/lizard.ts';
 import { makeShrewVisual } from '../enemies/shrew.ts';
+import { makeVultureVisual } from '../enemies/vulture.ts';  // ACAH — held dead-vulture model
 import { createMetalMaterial, type MetalMaterialOpts } from '../world/metalMaterial.ts';
 import { createFabricMaterial } from '../world/fabricMaterial.ts';
 import { createWoodGrainMaterial, type WoodGrainMaterialOpts } from '../world/woodGrainMaterial.ts';
@@ -1526,6 +1527,82 @@ const _DEFS: Record<ItemId, ItemDef> = {
     },
   },
 
+  raw_vulture_meat: {
+    id: 'raw_vulture_meat',
+    name: 'DEAD VULTURE',
+    glyph: 'V',
+    description: 'a shot-down scavenger — dark, gamey meat',
+    stackable: true,
+    maxStack: 4,
+    onUse(ctx, _slot) {
+      ctx.stats.hunger = Math.min(1, ctx.stats.hunger + 0.16);
+      ctx.stats.health = Math.max(0, ctx.stats.health - 0.06);   // raw carrion-bird — rougher than shrew
+      return { consumed: true, message: 'raw vulture — foul, but food' };
+    },
+    makeViewModel() {
+      // Held dangling by a wing — the actual vulture mesh, scaled down + inverted.
+      const group = new THREE.Group();
+      const bird = makeVultureVisual();
+      bird.scale.setScalar(0.6);
+      bird.rotation.set(Math.PI * 0.95, 0.5, 0.2);   // hung limp, head down
+      bird.position.set(0, 0.05, 0);
+      group.add(bird);
+      return group;
+    },
+    makeIcon() {
+      const s = svg();
+      // limp bird: body + drooping head + hanging wing
+      s.appendChild(svgEl('ellipse', { cx: '12', cy: '11', rx: '5', ry: '3.5' }));
+      s.appendChild(svgEl('path', { d: 'M16 12 Q19 14 18 17' }));            // drooping neck/head
+      s.appendChild(svgEl('circle', { cx: '18', cy: '17.5', r: '1.6' }));    // head
+      s.appendChild(svgEl('path', { d: 'M9 13 Q6 17 8 19' }));               // hanging wing
+      return s;
+    },
+  },
+
+  cooked_vulture_meat: {
+    id: 'cooked_vulture_meat',
+    name: 'COOKED VULTURE',
+    glyph: '≋',
+    description: 'a dark bird, roasted — gamey but filling',
+    stackable: true,
+    maxStack: 4,
+    onUse(ctx, _slot) {
+      ctx.stats.hunger = Math.min(1, ctx.stats.hunger + 0.40);   // a whole bird — substantial
+      return { consumed: true, message: 'gamey, dark, but it fills you up' };
+    },
+    makeViewModel() {
+      // A roasted-bird composite — a plump charred body + a drumstick + a bone.
+      const group = new THREE.Group();
+      const charMat = vmMetal(0x33180a, { wornScale: 9.0, scratchStrength: 0.05, rustLevel: 0 });
+      const interiorMat = new THREE.MeshLambertMaterial({ color: 0x7a3a22 });
+      const boneMat = vmBone(0xcab8a0, { crackDensity: 0.5 });
+      const bodyM = new THREE.Mesh(new THREE.SphereGeometry(0.05, 10, 8), charMat);
+      bodyM.scale.set(1.4, 0.9, 1.0);
+      group.add(bodyM);
+      const cut = new THREE.Mesh(new THREE.SphereGeometry(0.026, 8, 6), interiorMat);
+      cut.position.set(0.03, 0.012, 0.02);
+      group.add(cut);
+      // drumstick (leg) sticking out
+      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.02, 0.05, 6), charMat);
+      leg.position.set(-0.05, 0.0, 0.025);
+      leg.rotation.set(0, 0, 0.9);
+      group.add(leg);
+      const bone = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.006, 0.03, 5), boneMat);
+      bone.position.set(-0.075, -0.01, 0.025);
+      bone.rotation.set(0, 0, 0.9);
+      group.add(bone);
+      return group;
+    },
+    makeIcon() {
+      const s = svg();
+      s.appendChild(svgEl('polygon', { points: '6,12 9,7 15,8 18,12 16,17 10,18 7,15' }));
+      s.appendChild(svgEl('line', { x1: '5', y1: '15', x2: '8', y2: '13', 'stroke-width': '1.2' }));  // drumstick bone
+      s.appendChild(svgEl('line', { x1: '10', y1: '12', x2: '15', y2: '13', 'stroke-width': '1' }));
+      return s;
+    },
+  },
+
   cooked_lizard_meat: {
     id: 'cooked_lizard_meat',
     name: 'COOKED MEAT',
@@ -2940,6 +3017,7 @@ export const ALL_ITEM_IDS: ReadonlyArray<ItemId> = [
   'raw_lizard_meat', 'cooked_lizard_meat',
   'raw_worm_meat', 'cooked_worm_meat',
   'raw_shrew_meat', 'cooked_shrew_meat',
+  'raw_vulture_meat', 'cooked_vulture_meat',
   'branch', 'cloth', 'fire_kit', 'grill_kit', 'tent_kit',
   'alien_fruit',
   'torch', 'flashlight',

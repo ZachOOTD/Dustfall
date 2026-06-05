@@ -904,6 +904,62 @@ const SCENARIOS = {
     }`);
   },
 
+  // Vulture (ACAH): frame a perched vulture on its tree for model iteration.
+  // --angle=3q|side|front; head faces +X (rotation forced to 0 for a stable read).
+  'vulture': async (page) => {
+    const ang = argv.angle || '3q';
+    const r = await page.evaluate((ang) => {
+      const ctx = window.__game.ctx;
+      window.__game.setTime(0.45);
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      ctx.three.renderer.setSize(820, 900, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 820 / 900; cam.updateProjectionMatrix(); }
+      const v = ctx.vultures?.list?.[0];
+      if (!v) return { found: false };
+      v.mesh.rotation.y = 0;                 // head faces +X for a stable read
+      ctx.flags.paused = true;
+      const p = v.pos;
+      const eye = p.y + 0.28;                // bird body height
+      let cp;
+      if (ang === 'side') cp = [p.x, eye, p.z + 1.1];
+      else if (ang === 'front') cp = [p.x + 1.1, eye, p.z + 0.15];
+      else cp = [p.x + 1.0, eye + 0.12, p.z + 1.0];   // 3q
+      cam.position.set(cp[0], cp[1], cp[2]);
+      cam.lookAt(p.x + 0.05, p.y + 0.24, p.z);
+      cam.updateMatrixWorld(true);
+      return { found: true, count: ctx.vultures.list.length, perchY: +p.y.toFixed(1) };
+    }, ang);
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: join(OUT, `scen-vulture-${ang}.png`), fullPage: false });
+    console.log(`[vulture] ${JSON.stringify(r)}`);
+  },
+
+  // Vulture-kill (ACAH): verify the kill->fall->land->'take'-tag path (the loot
+  // E-take + combat dispatch mirror the verified shrew pattern). Logic eval.
+  'vulture-kill': async (page) => {
+    const r1 = await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      const v = ctx.vultures?.list?.[0];
+      if (!v) return { noVulture: true };
+      const gy = ctx.terrain.heightAt(v.pos.x, v.pos.z);
+      v.pos.set(v.pos.x, gy + 0.25, v.pos.z);   // just above ground so it lands fast
+      v.state = 'dead'; v.landed = false; v.velocity.set(0, -0.5, 0);
+      return { ok: true };
+    });
+    if (r1.noVulture) { console.log('[vulture-kill] SKIP — no vulture'); return; }
+    await page.waitForTimeout(1800);
+    const r2 = await page.evaluate(() => {
+      const v = window.__game.ctx.vultures.list[0];
+      let tagged = false;
+      v.mesh.traverse((o) => { if (o.userData.interactType === 'take' && o.userData.interactRegistry === 'vultures') tagged = true; });
+      return { state: v.state, landed: v.landed, tagged };
+    });
+    const pass = r2.state === 'dead' && r2.landed === true && r2.tagged === true;
+    console.log(`[vulture-kill] ${pass ? 'PASS' : 'FAIL'} ${JSON.stringify(r2)}`);
+  },
+
   // Scrap-loot (ACAH): verify scrap debris scatters around wrecks (the bootstrap
   // loot fix) — count scrap pickups + how many sit within 12m of a wreck, and
   // frame a wreck with its scrap ring. --time for legibility.

@@ -24,6 +24,7 @@ import type { WaterSource } from './world/waterSources.ts';
 import type { Cactus } from './world/cactus.ts';
 import type { Lizard } from './enemies/lizard.ts';
 import type { Shrew } from './enemies/shrew.ts';
+import type { Vulture } from './enemies/vulture.ts';
 import type { SandWorm } from './enemies/sandWorm.ts';
 import type { LootContainer } from './world/lootContainers.ts';
 import type { Fire } from './world/fire.ts';
@@ -117,6 +118,10 @@ export interface GameContext {
    *  shrew.ts; this slot's `list` IS that same array reference (assigned at
    *  world build from spawnShrewsProcgen), so they stay in sync. */
   shrews: { list: Shrew[] };
+  /** ACAH — rare perched desert vultures (salt-flat trees). Module-owned list in
+   *  vulture.ts; this slot's `list` IS that array reference. Save v14 additive:
+   *  perched vultures persist (id + perch XYZ + state). */
+  vultures: { list: Vulture[] };
   /** Session DD — boss-tier sand worm(s). Singleton pre-ACE; ACE Tier 2
    *  multi-worm refactor: now an array (mirrors ctx.sleds shape). Save
    *  schema v13 stores `sandWorms[]`; v12 saves migrate by lifting the

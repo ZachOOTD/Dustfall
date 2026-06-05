@@ -30,6 +30,11 @@ import {
   type ShrewState,
 } from '../enemies/shrew.ts';
 import {
+  applyDeadVulturePose,
+  lootVulture,
+  type VultureState,
+} from '../enemies/vulture.ts';
+import {
   applyRaiderDeadPose,
   type RaiderState,
 } from '../enemies/raider.ts';
@@ -176,6 +181,9 @@ export interface SaveV1 {
    *  where shrews rebuild from procgen). y is re-derived from terrain on load;
    *  transient flee/wander needn't persist (state restores as-is). */
   shrews?: Array<{ id: number; x: number; z: number; state: ShrewState }>;
+  /** ACAH — v14 additive: rare perched vultures (id + world pos + state).
+   *  Absent on pre-ACAH saves → boot procgen stands. */
+  vultures?: Array<{ id: number; x: number; y: number; z: number; state: VultureState }>;
   /** ACL — v14: sweeping sandstorm-wall state (plain data struct; no THREE
    *  objects). Optional + additive — absent on pre-v14 saves, which default
    *  to the dormant wall from createWeather and re-derive intensity on the
@@ -467,6 +475,16 @@ export function saveGameState(ctx: GameContext): { ok: boolean; error?: string }
         x: s.pos.x,
         z: s.pos.z,
         state: s.state,
+      })),
+      // ACAH — v14 additive: rare perched vultures (id + current world pos +
+      // state). Looted ones are absent (removed from the list) → on load the
+      // boot-spawned twin is removed, mirroring the shrew reconcile.
+      vultures: ctx.vultures.list.map((v) => ({
+        id: v.id,
+        x: v.pos.x,
+        y: v.pos.y,
+        z: v.pos.z,
+        state: v.state,
       })),
       // ACL — v14: persist the sweeping sandstorm-wall state verbatim (plain
       // data; no THREE objects). intensity re-derives from it on first tick.
@@ -853,6 +871,29 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
       shrew.mesh.position.copy(shrew.pos);
       shrew.body.setNextKinematicTranslation({ x: saved.x, y: gy + 0.04, z: saved.z });
       if (saved.state === 'dead') applyDeadShrewPose(shrew);   // ACR — restore dead flop + 'take' tag
+    }
+  }
+
+  // ── ACAH — Vultures (ACAH+): mirror the shrew reconcile. Boot procgen spawns
+  //    the vultures (deterministic ids); apply saved states. Vultures looted/
+  //    despawned before save are absent → remove the boot twin. Dead ones
+  //    restore at their landed pos + flop/tag; perched/flee re-derive from boot. ──
+  if (save.vultures) {
+    const savedVultureIds = new Set(save.vultures.map((v) => v.id));
+    for (const v of ctx.vultures.list.slice()) {
+      if (!savedVultureIds.has(v.id)) lootVulture(v, ctx);
+    }
+    for (const saved of save.vultures) {
+      const v = ctx.vultures.list.find((x) => x.id === saved.id);
+      if (!v) continue;
+      if (saved.state === 'dead') {
+        v.state = 'dead';
+        v.pos.set(saved.x, saved.y, saved.z);
+        v.mesh.position.copy(v.pos);
+        v.body.setNextKinematicTranslation({ x: saved.x, y: saved.y + 0.26, z: saved.z });
+        applyDeadVulturePose(v);   // sets landed + side-flop + 'take' tag
+      }
+      // perched / flee → leave as the boot-spawned perched bird (re-derives).
     }
   }
 

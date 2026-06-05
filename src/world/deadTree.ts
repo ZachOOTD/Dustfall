@@ -72,6 +72,7 @@ function makeDeadTree(rand: Rng): THREE.Group {
   const _q = new THREE.Quaternion();
   const _m = new THREE.Matrix4();
   const _s = new THREE.Vector3(1, 1, 1);
+  let crownTop = boleLen;   // ACAH — track the highest tip for the vulture perch height
 
   // Recursively grow a branch from `base` along `dir`, forking at its tip.
   const grow = (base: THREE.Vector3, dir: THREE.Vector3, len: number, rBase: number, depth: number): void => {
@@ -86,6 +87,7 @@ function makeDeadTree(rand: Rng): THREE.Group {
 
     // Curved tip (local (bow·cos, len, bow·sin) through the same transform).
     const tip = new THREE.Vector3(Math.cos(bowAng) * bow, len, Math.sin(bowAng) * bow).applyMatrix4(_m);
+    if (tip.y > crownTop) crownTop = tip.y;
     if (depth <= 0 || rTip < 0.011) return;
 
     // Main structure (high depth) forks 2-3 ways; fine twigs (low depth) fork
@@ -125,6 +127,9 @@ function makeDeadTree(rand: Rng): THREE.Group {
   const merged = mergeGeometries(segs, false);
   segs.forEach((s) => s.dispose());
   g.add(new THREE.Mesh(merged, _treeMat));
+  // ACAH — perch height (local) for a vulture: into the lower crown above the
+  // first fork, where the limbs are thickest and a big bird would actually sit.
+  g.userData.perchY = boleLen + (crownTop - boleLen) * 0.22;   // low in the crown, near the dense main fork
   return g;
 }
 
@@ -152,8 +157,10 @@ export function spawnDeadTrees(
   branchList: Pickup[],
   biomes: BiomeSampler,
   count = Tuning.DEAD_TREE_TARGET_COUNT,
-): THREE.Group[] {
+): THREE.Vector3[] {
   const trees: THREE.Group[] = [];
+  // ACAH — world-space crown perch points (one per tree) for the vulture spawner.
+  const perchPoints: THREE.Vector3[] = [];
   // AAO — was module-local const; lifted to Tuning.DEAD_TREE_FLATNESS_THRESHOLD
   // per CLAUDE.md rule 2.
   const FLATNESS_THRESHOLD = Tuning.DEAD_TREE_FLATNESS_THRESHOLD;
@@ -178,6 +185,7 @@ export function spawnDeadTrees(
     });
     scene.add(tree);
     trees.push(tree);
+    perchPoints.push(new THREE.Vector3(x, (groundY - 0.05) + (tree.userData.perchY ?? 2.0), z));
     // AAO — branch count + ring radius lifted to Tuning. Span is
     // inclusive of MIN..MAX so the original 2..4 (3-value range) is
     // preserved when MIN=2, MAX=4.
@@ -230,5 +238,5 @@ export function spawnDeadTrees(
     const angle = rand() * Math.PI * 2;
     placeTreeAt(Math.cos(angle) * radius, Math.sin(angle) * radius);
   }
-  return trees;
+  return perchPoints;
 }

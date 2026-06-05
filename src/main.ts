@@ -47,6 +47,7 @@ import { startMusic, updateMusic } from './audio/music.ts';
 import { updateRaiders, type Raider } from './enemies/raider.ts';
 import { spawnLizardsProcgen, updateLizards } from './enemies/lizard.ts';
 import { spawnShrewsProcgen, updateShrews } from './enemies/shrew.ts'; // ACL DESERT SHREW
+import { spawnVulturesProcgen, updateVultures } from './enemies/vulture.ts'; // ACAH
 import { spawnSandWorm, sampleSandwormHome, updateSandWorm } from './enemies/sandWorm.ts';
 import { updateWieldAction } from './player/wieldAction.ts';
 import { updateReload } from './player/combat.ts';
@@ -169,7 +170,7 @@ placeHeroLandmarks(three.scene, physics.world, terrain, scatterRand, salvageable
 // dropped in 2-4 clusters at the base of dead trees (see spawnDeadTrees
 // below) so they have a visible source.
 const pickupList = spawnBranches(three.scene, terrain, scatterRand, 0);
-spawnDeadTrees(three.scene, terrain, scatterRand, pickupList, biomes);
+const treePerches = spawnDeadTrees(three.scene, terrain, scatterRand, pickupList, biomes);
 const waterSources = spawnWaterSources(three.scene, terrain, scatterRand, biomes);
 const cacti = spawnCacti(three.scene, physics.world, terrain, scatterRand, biomes);
 // OO-4 — rocky biome rocks. Replaces the cracked-rock procedural
@@ -238,6 +239,11 @@ const lizards = spawnLizardsProcgen(
 const shrews = spawnShrewsProcgen(
   three.scene, physics.world, terrain, biomes, scatterRand, allPoiPositions,
 );
+
+// ACAH — rare desert vultures perched on the salt-flat dead-tree crowns
+// (treePerches from spawnDeadTrees). Module-owned list; returned ref IS
+// ctx.vultures.list.
+const vultures = spawnVulturesProcgen(three.scene, physics.world, treePerches, scatterRand);
 
 // AAP — sandworm home is now sampled per-seed from the dune biome via
 // sampleSandwormHome (mirrors wells-in-salt). Falls back to
@@ -364,6 +370,7 @@ const ctx: GameContext = {
   raiders,
   lizards,
   shrews: { list: shrews },        // ACL DESERT SHREW
+  vultures: { list: vultures },    // ACAH — rare perched vultures
   sandWorms: { list: sandWorms },
   waterSources: { list: waterSources },
   cacti: { list: cacti },
@@ -794,6 +801,7 @@ startLoop(ctx, (c, dt) => {
   updateRaiders(c, dt);          // AI state machine + raider movement
   updateLizards(c, dt);          // small flee-AI wildlife
   updateShrews(c, dt);           // ACL — skittery shrew prey (idle/wander/flee); pause-gated internally
+  updateVultures(c, dt);         // ACAH — perched vultures (perch/flee/dead); pause-gated internally
   updateCompanion(c, dt);        // AAE — Rocky-inspired creature follows player
   updateSandWorm(c, dt);         // DD — buried boss; breaches when player enters territory
   updateKillDrag(c);             // ACF — drag a slain raider corpse (on foot/sled) or worm carcass (speeder) via the shared rope constraint. AFTER updateRaiders/updateSandWorm (they skip dead entities, leaving drag-movement to this) + BEFORE updateSledRiders.

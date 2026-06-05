@@ -21,6 +21,7 @@ import type { ItemId } from '../inventory/types.ts';
 import { damageRaider, getRaiderForCollider } from '../enemies/raider.ts';
 import { damageLizard, getLizardForCollider, knockbackLizard } from '../enemies/lizard.ts';
 import { damageShrew, getShrewForCollider } from '../enemies/shrew.ts';
+import { damageVulture, getVultureForCollider } from '../enemies/vulture.ts';  // ACAH
 import { damageSandWorm, getSandWormForCollider } from '../enemies/sandWorm.ts';
 import { playSwing, playHit, playLizardSquish, playReloadGun } from '../audio/audio.ts';
 
@@ -310,6 +311,13 @@ function dispatchHit(
     playLizardSquish();   // ACR — reuse the small-critter squish for the shrew
     // 1-HP critter like the lizard — any non-zero damage kills.
     damageShrew(shrew, Math.max(1.0, damage), ctx);
+    return;
+  }
+  const vulture = getVultureForCollider(collider.handle);
+  if (vulture) {
+    playLizardSquish();   // ACAH — reuse the small-critter squish for the bird
+    // 1-HP — any hit (gun) drops it out of the air.
+    damageVulture(vulture, Math.max(1.0, damage), ctx);
     return;
   }
   const worm = getSandWormForCollider(collider.handle);

@@ -14,6 +14,8 @@ export type ItemId =
   | 'cooked_lizard_meat'
   | 'raw_shrew_meat'
   | 'cooked_shrew_meat'
+  | 'raw_vulture_meat'
+  | 'cooked_vulture_meat'
   | 'raw_worm_meat'
   | 'cooked_worm_meat'
   // Session G — fire / tent crafting + fuel + cloth

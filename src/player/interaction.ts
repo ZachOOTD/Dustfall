@@ -19,6 +19,7 @@ import { findWaterSourceById } from '../world/waterSources.ts';
 import { findCactusById, harvestCactus } from '../world/cactus.ts';
 import { findLizardById, lootLizard } from '../enemies/lizard.ts';
 import { findShrewById, lootShrew } from '../enemies/shrew.ts';
+import { findVultureById, lootVulture } from '../enemies/vulture.ts';  // ACAH
 import { lootSandWorm } from '../enemies/sandWorm.ts';
 import { findLootContainerById } from '../world/lootContainers.ts';
 import { findFireById, addFuel, relightFire, attachGrillToFire } from '../world/fire.ts';
@@ -79,7 +80,7 @@ export function getHoverWorldPos(): THREE.Vector3 | null {
 interface InteractHit {
   type: InteractType;
   id: number;
-  registry: 'pickups' | 'waterSources' | 'cacti' | 'lizards' | 'shrews' | 'sandWorms' | 'lootContainers' | 'fires' | 'tents' | 'largeTents' | 'bedrolls' | 'lanterns' | 'lockers' | 'salvageables' | 'journals' | 'speeder' | 'sleds' | 'companion' | 'stakes' | 'raiders';
+  registry: 'pickups' | 'waterSources' | 'cacti' | 'lizards' | 'shrews' | 'vultures' | 'sandWorms' | 'lootContainers' | 'fires' | 'tents' | 'largeTents' | 'bedrolls' | 'lanterns' | 'lockers' | 'salvageables' | 'journals' | 'speeder' | 'sleds' | 'companion' | 'stakes' | 'raiders';
   distance: number;
   /** AAZ — optional sub-mesh discriminator. When the hit object's
    *  userData.interactSubKind is set, it's captured here so case handlers
@@ -93,6 +94,7 @@ const SALVAGE_DURATION = 1.5;        // legacy fallback; AAR pry uses Tuning.SAL
 const COOK_MAP: Partial<Record<ItemId, ItemId>> = {
   'raw_lizard_meat': 'cooked_lizard_meat',
   'raw_shrew_meat': 'cooked_shrew_meat',
+  'raw_vulture_meat': 'cooked_vulture_meat',
   'cactus_pulp': 'cooked_cactus_pulp',
   'raw_worm_meat': 'cooked_worm_meat',
   'lizard_on_a_stick_raw': 'lizard_on_a_stick_cooked',
@@ -192,6 +194,7 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
   for (const c of ctx.cacti.list) c.hovered = false;
   for (const l of ctx.lizards) l.hovered = false;
   for (const s of ctx.shrews.list) s.hovered = false;
+  for (const v of ctx.vultures.list) v.hovered = false;
   for (const w of ctx.sandWorms.list) w.hovered = false;
   for (const f of ctx.fires.list) f.hovered = false;
   for (const t of ctx.tents.list) t.hovered = false;
@@ -258,6 +261,9 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
   // ACR — dead (unlooted) shrews are E-take targets; live ones are LMB combat
   // targets via the collider raycast in combat.ts, not [E] interactions.
   for (const s of ctx.shrews.list) if (s.state === 'dead' && !s.looted) targets.push(s.mesh);
+  // ACAH — dead (landed, unlooted) vultures are E-take targets; live/flying ones
+  // are LMB gun targets via the collider raycast in combat.ts.
+  for (const v of ctx.vultures.list) if (v.state === 'dead' && v.landed && !v.looted) targets.push(v.mesh);
   // Sand worm corpses — target dead, visible worm meshes that are still
   // unlooted (tie/harvest) OR currently towed (so a looted-in-tow carcass can
   // still be CUT LOOSE — ACS fix for the ACF carcass-tow bug). Live worms are
@@ -458,6 +464,25 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
         ctx.ui.showToast('you cut the meat from the shrew');
         playPickup();
         lootShrew(s, ctx);
+      }
+      return;
+    }
+
+    case 'vultures': {
+      // ACAH — dead vulture on the ground → cut the meat (mirror the shrew take).
+      const v = findVultureById(info.id);
+      if (!v || v.state !== 'dead' || !v.landed) return;
+      v.hovered = true;
+      ctx.inventory.hover = { type: 'take', distance: info.distance, promptNoun: 'dead vulture', itemId: 'raw_vulture_meat' };
+      if (ctx.input.pressed.has('KeyE')) {
+        const slotIdx = addItem(ctx.inventory, 'raw_vulture_meat', undefined, ctx);
+        if (slotIdx < 0) {
+          ctx.ui.showToast('your bag is full');
+          return;
+        }
+        ctx.ui.showToast('you cut the meat from the vulture');
+        playPickup();
+        lootVulture(v, ctx);
       }
       return;
     }

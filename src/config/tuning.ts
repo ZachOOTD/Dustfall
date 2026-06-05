@@ -1396,6 +1396,17 @@ export const Tuning = {
   SHREW_BURROW_RADIUS: 2.6,        // m — player proximity that triggers a dive into the sand
   SHREW_BURROW_DEPTH: 0.34,        // m — how far below the surface the shrew sinks
   SHREW_BURROW_TRANSIT_S: 0.55,    // s — descent / re-emerge duration
+
+  // ACAH — rare desert vulture: perches on salt-flat dead trees, flees on
+  // approach (the kill window — needs a gun), shoot for meat.
+  VULTURE_TARGET_COUNT: 3,         // total across the salt flats (rare — ~1 per region)
+  VULTURE_MIN_SEPARATION: 70,      // m — keep perched vultures far apart
+  VULTURE_SPOT_RADIUS: 16,         // m — horizontal player proximity that triggers the launch
+  VULTURE_FLEE_SPEED: 9.0,         // m/s — horizontal flight speed once launched
+  VULTURE_CLIMB_RATE: 4.5,         // m/s — initial climb on launch
+  VULTURE_GLIDE_CLIMB: 1.2,        // m/s — climb eases to this as it levels into a glide
+  VULTURE_DESPAWN_DIST: 110,       // m from the perch at which it's gone (out of sight)
+  VULTURE_GRAVITY: 11.0,           // m/s² — fall accel when shot dead
 } as const;
 
 // Sky gradient colors (top vs horizon) per time of day. Horizon stays close to
