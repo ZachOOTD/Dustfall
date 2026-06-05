@@ -105,7 +105,7 @@ function makeDeadTree(rand: Rng): THREE.Group {
 
   // Trunk bole — straight-ish, slight lean — then the recursion forks it.
   const startDir = tiltDir(_UP, 0.05 + rand() * 0.12, rand() * Math.PI * 2);
-  grow(new THREE.Vector3(0, 0, 0), startDir, boleLen, baseR, 5);   // 5 levels → finer twig tips
+  grow(new THREE.Vector3(0, 0, 0), startDir, boleLen, baseR, 4);   // recursion depth (generations of forking)
 
   // Buttress roots — short curved segments flaring outward (+ slightly down) from
   // the base, like the wide camelthorn root structures.
