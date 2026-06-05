@@ -1026,12 +1026,8 @@ export const Tuning = {
   SANDWORM_FEED_DETECT_RADIUS_M: 30,         // m — meat pickup detection radius (bait scent range)
   SANDWORM_FEED_DURATION_S: 4.5,             // s — total feeding state duration (rise + hold + descend)
 
-  // ABJ — A4: dune buried cockpit POI. Count is the number of cockpit
-  // POIs to spawn per world; 1 is the baseline (one per dune-biome
-  // centroid). Future increases (e.g. 2-3 across larger maps) are
-  // possible — the sampler does greedy multi-region placement.
-  BURIED_COCKPIT_COUNT: 1,
   // ABK — A4 continuation: salt outpost + rocky entrance counts.
+  // (ACAH — the dune BURIED_COCKPIT POI was removed; it read badly.)
   // Same greedy multi-region pattern as the dune cockpit; counts
   // can be bumped per playtest signal if biomes feel under-populated.
   SALT_OUTPOST_COUNT: 1,

@@ -33,7 +33,6 @@ import { placeProcgenCompositeForFlagship } from './procgenWreck.ts';
 import { placeCrashedHull } from './crashedHull.ts';
 import type { ShelterRegistry } from '../shelter/shelterZones.ts';
 import { Tuning } from '../config/tuning.ts';
-import { placeBuriedCockpit, sampleBuriedCockpitPositions } from './buriedCockpit.ts';
 import { placeSaltOutpost, sampleSaltOutpostPositions } from './saltOutpost.ts';
 import { placeRockyEntrance, sampleRockyEntrancePositions } from './rockyEntrance.ts';
 
@@ -636,22 +635,10 @@ export function placePOIs(
   // so earlier POIs are added to the exclusion list, naturally
   // spreading the three across separate biome regions.
   if (biomes) {
-    const initialExcludes = _placedFlagshipPositions.map(p => ({
-      x: p.x, z: p.z, radius: Tuning.POI_MIN_SEPARATION,
-    }));
-    // Dune (ABJ A4)
-    const cockpitCenters = sampleBuriedCockpitPositions(
-      biomes, initialExcludes, Tuning.BURIED_COCKPIT_COUNT,
-    );
-    for (const c of cockpitCenters) {
-      const y = terrain.heightAt(c.x, c.z);
-      placeBuriedCockpit(
-        scene, world, terrain,
-        new THREE.Vector3(c.x, y, c.z),
-        rand, salvageables,
-      );
-      _placedFlagshipPositions = [..._placedFlagshipPositions, { x: c.x, z: c.z }];
-    }
+    // ACAH — the dune "buried cockpit" POI was REMOVED (it read badly: a faceted
+    // icosphere dome with the salvage panels clipping through it). The salt +
+    // rocky biome POIs below remain. (`buriedCockpit.ts` deleted; the `escape_pod`
+    // salvage kind is still used by other wrecks/clusters.)
     // Salt (ABK A4)
     const saltExcludes = _placedFlagshipPositions.map(p => ({
       x: p.x, z: p.z, radius: Tuning.POI_MIN_SEPARATION,
