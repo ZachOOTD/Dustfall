@@ -585,15 +585,18 @@ window.addEventListener('keydown', (e) => {
   toggleDevItemPanel(ctx);
 });
 
-// ABL — perf: pre-warm shader compilation against the game scene
-// BEFORE the title is shown. Three.js compiles shader programs lazily
-// on first render; without this, the FIRST frame after the player
-// clicks NEW GAME stalls for 100ms-2s while ~16 programs compile cold.
-// `renderer.compile(scene, camera)` walks all visible materials and
-// submits them for compile against the current light/material setup.
-// Cost: adds ~200-500ms to boot (invisible — title comes up after);
-// payoff: click→first-game-frame is near-instant.
-three.renderer.compile(three.scene, three.camera);
+// ABL — perf: pre-warm shader compilation against the game scene so the FIRST
+// frame after NEW GAME doesn't stall while programs compile cold.
+// ACAH — switched the SYNCHRONOUS `compile()` to `compileAsync()`. The program
+// count grew from ~16 (ABL era) to ~120 (D175/D177 un-shared the per-material
+// programs — correct, but more of them), so the blocking compile had become a
+// multi-second STARTUP FREEZE before the title even appeared. compileAsync uses
+// the browser's parallel-shader-compile path (off the main thread) and returns a
+// promise we deliberately DON'T await — the title comes up immediately and the
+// programs finish compiling in the background while the player reads it. (Worst
+// case if they click NEW GAME mid-compile: a few cold lazy-compiles, same as
+// pre-ABL — far better than a guaranteed multi-second boot freeze.)
+void three.renderer.compileAsync(three.scene, three.camera);
 
 // ABL — perf: pre-warm the Rapier physics broadphase. The first
 // physics.step() of a session is significantly more expensive than

@@ -16,6 +16,31 @@ import { buildBranchMesh, BRANCH_WOOD_COLOR, BRANCH_WEATHER_LEVEL } from '../wor
 import { createWoodGrainMaterial } from '../world/woodGrainMaterial.ts';  // ACAE — dark wood branches
 import { buildScrapMesh } from '../world/scrapMesh.ts';  // ACAH — shared scrap model
 import { createMetalMaterial } from '../world/metalMaterial.ts';  // ACAH — world scrap material
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';  // ACAH perf — merge world pickups
+
+// ACAH perf — collapse a multi-mesh pickup Group into ONE merged geometry + a
+// single material (the dead-tree trick). World pickups are static + numerous
+// (~230 scrap, ~140 branches); a 12-mesh scrap chunk × 230 = ~2800 draw calls,
+// vs 1 each when merged. Held items keep their detailed multi-material version.
+function mergeGroupToMesh(group: THREE.Group, mat: THREE.Material): THREE.Mesh {
+  group.updateMatrixWorld(true);
+  const geos: THREE.BufferGeometry[] = [];
+  group.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (m.isMesh && m.geometry) {
+      const g = m.geometry.clone();
+      g.applyMatrix4(m.matrixWorld);
+      // Keep only the attributes merge needs (uniform across primitives).
+      for (const name of Object.keys(g.attributes)) {
+        if (name !== 'position' && name !== 'normal' && name !== 'uv') g.deleteAttribute(name);
+      }
+      geos.push(g);
+    }
+  });
+  const merged = mergeGeometries(geos, false);
+  geos.forEach((g) => g.dispose());
+  return new THREE.Mesh(merged, mat);
+}
 
 // ACAE — ONE shared wood-grain material for every world branch (~200
 // instances → 1 program, world-space grain so it varies per branch). Aged
@@ -204,7 +229,7 @@ export function spawnCanteens(
 // Branch pickup — small brown stick scattered across the world.
 // Used as fire fuel (aim at fire + E with branch selected adds 30s).
 // ────────────────────────────────────────────────────────────────
-function makePrimitiveBranch(rand: Rng): THREE.Group {
+function makePrimitiveBranch(rand: Rng): THREE.Mesh {
   // ACAE — shares the held-item branch shape (buildBranchMesh) AND now its dark
   // wood-grain look. The material is built ONCE (_worldBranchMat) and shared
   // across all ~200 in-world branches — one program, world-space grain that
@@ -212,7 +237,8 @@ function makePrimitiveBranch(rand: Rng): THREE.Group {
   // aged deadwood that matches the dead trees, not a flat grey dowel.
   const len = 0.40 + rand() * 0.15;
   const twigs = rand() < 0.6 ? 2 : 1;
-  return buildBranchMesh(_worldBranchMat, { len, twigs, rand });
+  // ACAH perf — merge the ~6-mesh branch into 1 (single shared material already).
+  return mergeGroupToMesh(buildBranchMesh(_worldBranchMat, { len, twigs, rand }), _worldBranchMat);
 }
 
 /** Spawn a single branch pickup at a specific (x, z) world position.
@@ -269,8 +295,11 @@ export function spawnBranchAt(
 // the player craft their first scrap_bar. Mirrors the branch-around-trees
 // pattern; uses the SHARED buildScrapMesh so it matches the held item.
 // ────────────────────────────────────────────────────────────────
-function makePrimitiveScrap(): THREE.Group {
-  return buildScrapMesh(_worldScrapMat, _worldScrapAccentMat);
+function makePrimitiveScrap(): THREE.Mesh {
+  // ACAH perf — merge the ~12-mesh scrap chunk into ONE geometry + one material
+  // (drops the minor accent tint for world scrap — invisible at pickup distance;
+  // the HELD item keeps the detailed 2-material version). 230 scrap: 2800→230 draws.
+  return mergeGroupToMesh(buildScrapMesh(_worldScrapMat, _worldScrapAccentMat), _worldScrapMat);
 }
 
 /** Spawn a single scrap pickup at a specific (x, z) world position. Terrain-

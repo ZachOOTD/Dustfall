@@ -876,6 +876,39 @@ const SCENARIOS = {
     console.log(`[tree] ${JSON.stringify(r)}`);
   },
 
+  // Perf-probe (ACAH diag): report renderer.info (draw calls, triangles, compiled
+  // programs) + scene object counts + per-itemId pickup mesh totals. No screenshot.
+  'perf-probe': async (page) => {
+    await page.waitForTimeout(2000);
+    const r = await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      const ren = ctx.three.renderer;
+      ren.render(ctx.three.scene, ctx.three.camera);   // populate info for this frame
+      const info = ren.info;
+      let objs = 0, meshes = 0;
+      ctx.three.scene.traverse((o) => { objs++; if (o.isMesh) meshes++; });
+      const pk = ctx.pickups?.list || [];
+      const meshCount = (g) => { let m = 0; g.traverse((o) => { if (o.isMesh) m++; }); return m; };
+      const byId = {};
+      for (const p of pk) {
+        const id = p.itemId;
+        byId[id] = byId[id] || { n: 0, meshes: 0 };
+        byId[id].n++; byId[id].meshes += meshCount(p.mesh);
+      }
+      return {
+        drawCalls: info.render.calls,
+        triangles: info.render.triangles,
+        programs: info.programs ? info.programs.length : -1,
+        sceneObjects: objs,
+        sceneMeshes: meshes,
+        pickupTotal: pk.length,
+        pickupsByIdMeshes: Object.fromEntries(Object.entries(byId).map(([k, v]) => [k, `${v.n}pk/${v.meshes}mesh`])),
+        salvageables: ctx.salvageables?.list?.length ?? -1,
+      };
+    });
+    console.log('[perf-probe] ' + JSON.stringify(r));
+  },
+
   // Branch-match (ACAF f/u): FP held branch + a world branch in ONE frame under
   // the SAME lighting, to verify they read identical (vm scene now mirrors the
   // world sun/moon/ambient). Runs LIVE (not paused) so updateViewModel tracks
