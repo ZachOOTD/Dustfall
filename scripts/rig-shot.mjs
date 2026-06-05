@@ -1055,6 +1055,54 @@ const SCENARIOS = {
 
   // Vulture-kill (ACAH): verify the kill->fall->land->'take'-tag path (the loot
   // E-take + combat dispatch mirror the verified shrew pattern). Logic eval.
+  // Vulture-flight (ACAI T4): verify the relocate-and-land FSM cycle
+  // perched → flying (relocating, target on ANOTHER tree) → landing → perched
+  // (re-perched at the target). Logic eval — the in-motion arc/cadence is
+  // foreground-owed (D150), so this asserts the state machine, not the feel.
+  'vulture-flight': async (page) => {
+    const r1 = await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      const v = ctx.vultures?.list?.[0];
+      if (!v) return { noVulture: true };
+      // Park the perched bird right beside the player so proximity triggers the
+      // launch; its relocation target is then a far salt-flat perch (different tree).
+      const pp = ctx.player.body.body.translation();
+      const gy = ctx.terrain.heightAt(pp.x + 5, pp.z);
+      v.state = 'perched'; v.relocating = false; v.landed = false;
+      v.perch.set(pp.x + 5, gy + 2.5, pp.z);
+      v.pos.copy(v.perch);
+      v.mesh.position.copy(v.pos);
+      v.body.setNextKinematicTranslation({ x: v.pos.x, y: v.pos.y + 0.26, z: v.pos.z });
+      return { ok: true };
+    });
+    if (r1.noVulture) { console.log('[vulture-flight] SKIP — no vulture'); return; }
+    await page.waitForTimeout(1600);   // let it launch + pick a target
+    const r2 = await page.evaluate(() => {
+      const v = window.__game.ctx.vultures.list[0];
+      const dTree = Math.sqrt((v.target.x - v.perch.x) ** 2 + (v.target.z - v.perch.z) ** 2);
+      return { state: v.state, relocating: v.relocating, targetTreeDist: +dTree.toFixed(1) };
+    });
+    // Shortcut the long cross-map flight: drop the bird just overhead its target
+    // so the landing → re-perch leg runs without waiting out 40m of travel.
+    const r3 = await page.evaluate(() => {
+      const v = window.__game.ctx.vultures.list[0];
+      if (v.state !== 'flying') return { notFlying: v.state };
+      v.pos.set(v.target.x, v.target.y + 1.2, v.target.z);
+      v.mesh.position.copy(v.pos);
+      return { ok: true };
+    });
+    await page.waitForTimeout(16000);   // descend + re-perch (slow sim clock)
+    const r4 = await page.evaluate(() => {
+      const v = window.__game.ctx.vultures.list[0];
+      const atTarget = Math.sqrt((v.perch.x - v.target.x) ** 2 + (v.perch.z - v.target.z) ** 2);
+      const hd = Math.sqrt((v.pos.x - v.target.x) ** 2 + (v.pos.z - v.target.z) ** 2);
+      return { state: v.state, rePerchAtTarget: +atTarget.toFixed(2), hd: +hd.toFixed(2), dy: +(v.pos.y - v.target.y).toFixed(2) };
+    });
+    const launchOk = r2.state === 'flying' && r2.relocating === true && r2.targetTreeDist >= 40;
+    const landOk = r4.state === 'perched' && r4.rePerchAtTarget < 0.3;
+    console.log(`[vulture-flight] ${launchOk && landOk ? 'PASS' : 'FAIL'} launch=${JSON.stringify(r2)} flightShortcut=${JSON.stringify(r3)} land=${JSON.stringify(r4)}`);
+  },
+
   'vulture-kill': async (page) => {
     const r1 = await page.evaluate(() => {
       const ctx = window.__game.ctx;

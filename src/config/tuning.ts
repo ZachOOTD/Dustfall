@@ -1420,6 +1420,9 @@ export const Tuning = {
   // ACAI — relocate-and-land flight.
   VULTURE_RELOCATE_MIN_DIST: 40,   // m — a relocation target perch must be at least this far
   VULTURE_LAND_ARRIVE_DIST: 2.5,   // m (horizontal) from target → begin the landing descent
+  VULTURE_CRUISE_HEIGHT: 7.0,      // m above the target perch the bird cruises before descending
+  VULTURE_LAND_DESCENT: 2.2,       // m/s vertical descent rate during the landing flare
+  VULTURE_LAND_SPEED_FACTOR: 0.45, // fraction of FLEE_SPEED used for the final horizontal approach
   VULTURE_DEATH_SPIN: 7.0,         // rad/s angular kick on death (tumble)
   VULTURE_SETTLE_VEL: 0.7,         // m/s — below this (lin+ang) the dead body is "settled"
   VULTURE_SETTLE_MAX_AGE: 2.5,     // s — hard cap: a near-stationary corpse lands even if heightfield jitter blocks sleep

@@ -55,6 +55,12 @@ export interface Vulture {
   velocity: THREE.Vector3;
   /** Unit flight direction while fleeing. */
   fleeDir: THREE.Vector3;
+  /** ACAI (T4) — relocation target perch (world) when flying to another tree. */
+  target: THREE.Vector3;
+  /** ACAI (T4) — the target branch direction (for the across-limb landing yaw). */
+  targetDir: THREE.Vector3;
+  /** ACAI (T4) — true while flying to a relocation perch; false = flee+despawn. */
+  relocating: boolean;
   /** Heading (radians, atan2(dirX,dirZ)) the mesh yaws toward. */
   heading: number;
   /** idle phase accumulator (perched bob). */
@@ -387,6 +393,9 @@ export function spawnVulture(
     perch: new THREE.Vector3(perch.x, py, perch.z),
     velocity: new THREE.Vector3(),
     fleeDir: new THREE.Vector3(1, 0, 0),
+    target: new THREE.Vector3(perch.x, py, perch.z),
+    targetDir: new THREE.Vector3(1, 0, 0),
+    relocating: false,
     heading,
     bob: Math.random() * Math.PI * 2,
     hovered: false,
@@ -436,6 +445,29 @@ export function setNextVultureId(n: number): void {
 
 const _toPlayer = new THREE.Vector3();
 
+/** ACAI (T4) — pick a relocation perch on a DIFFERENT tree, far from the player.
+ *  Returns null if none qualifies (caller then falls back to flee + despawn). */
+function pickRelocateTarget(
+  v: Vulture,
+  playerX: number,
+  playerZ: number,
+): TreePerch | null {
+  const minTreeSq = Tuning.VULTURE_RELOCATE_MIN_DIST * Tuning.VULTURE_RELOCATE_MIN_DIST;
+  const safePlayerSq = (Tuning.VULTURE_SPOT_RADIUS * 2.5) ** 2;
+  let best: TreePerch | null = null;
+  let bestScore = -Infinity;
+  for (const p of _perchPool) {
+    const dTreeSq = (p.pos.x - v.perch.x) ** 2 + (p.pos.z - v.perch.z) ** 2;
+    if (dTreeSq < minTreeSq) continue;                 // must be a different, distant tree
+    const dPlayerSq = (p.pos.x - playerX) ** 2 + (p.pos.z - playerZ) ** 2;
+    if (dPlayerSq < safePlayerSq) continue;            // not near the player
+    // Prefer perches far from the player but not absurdly distant from here.
+    const score = dPlayerSq - dTreeSq * 0.15;
+    if (score > bestScore) { bestScore = score; best = p; }
+  }
+  return best;
+}
+
 export function updateVultures(ctx: GameContext, dt: number): void {
   if (!isPlaying(ctx)) return;
   const playerTr = getPlayerPos(ctx);
@@ -450,36 +482,105 @@ export function updateVultures(ctx: GameContext, dt: number): void {
     switch (v.state) {
       case 'perched': {
         v.mesh.position.y = v.perch.y;   // seated; idle motion is the rig neck-bob (animateVulture)
-        // Player got close → launch.
+        // Player got close → launch off the perch.
         if (horizDistSq < spotRSq) {
           v.state = 'flying';
-          // Flee AWAY from the player, horizontally, with a strong climb.
+          v.velocity.set(0, Tuning.VULTURE_CLIMB_RATE, 0);
+          // Prefer relocating to another tree; fall back to a straight flee if
+          // no distant, player-safe perch exists.
+          const tgt = pickRelocateTarget(v, playerTr.x, playerTr.z);
+          if (tgt) {
+            v.relocating = true;
+            v.target.copy(tgt.pos);
+            v.targetDir.copy(tgt.dir);
+            v.heading = Math.atan2(tgt.pos.x - v.pos.x, tgt.pos.z - v.pos.z);
+          } else {
+            v.relocating = false;
+            _toPlayer.normalize();
+            v.fleeDir.set(-_toPlayer.x, 0, -_toPlayer.z);
+            if (v.fleeDir.lengthSq() < 1e-4) v.fleeDir.set(1, 0, 0);
+            v.fleeDir.normalize();
+            v.heading = Math.atan2(v.fleeDir.x, v.fleeDir.z);
+          }
+        }
+        break;
+      }
+      case 'flying': {
+        const sp = Tuning.VULTURE_FLEE_SPEED;
+        if (v.relocating) {
+          // Steer horizontally toward the target perch; climb toward a cruise
+          // altitude above it (ascending arc), banked into the heading.
+          const hx = v.target.x - v.pos.x, hz = v.target.z - v.pos.z;
+          const hd = Math.sqrt(hx * hx + hz * hz);
+          const dirx = hd > 1e-3 ? hx / hd : 0;
+          const dirz = hd > 1e-3 ? hz / hd : 0;
+          v.pos.x += dirx * sp * dt;
+          v.pos.z += dirz * sp * dt;
+          const cruiseY = v.target.y + Tuning.VULTURE_CRUISE_HEIGHT;
+          const dy = cruiseY - v.pos.y;
+          v.pos.y += Math.max(-Tuning.VULTURE_CLIMB_RATE * dt, Math.min(Tuning.VULTURE_CLIMB_RATE * dt, dy));
+          v.heading = Math.atan2(dirx, dirz);
+          v.mesh.rotation.set(0, v.heading + Math.PI / 2, -0.12);
+          // If the player drifts near the chosen target, re-pick a safer one.
+          const pdx = v.target.x - playerTr.x, pdz = v.target.z - playerTr.z;
+          if (pdx * pdx + pdz * pdz < spotRSq) {
+            const nt = pickRelocateTarget(v, playerTr.x, playerTr.z);
+            if (nt) { v.target.copy(nt.pos); v.targetDir.copy(nt.dir); }
+          }
+          // Arrived overhead + player not near the target → begin the landing flare.
+          if (hd < Tuning.VULTURE_LAND_ARRIVE_DIST) {
+            const ppx = v.pos.x - playerTr.x, ppz = v.pos.z - playerTr.z;
+            if (ppx * ppx + ppz * ppz > spotRSq) v.state = 'landing';
+          }
+        } else {
+          // Fallback: ascending flee arc away from the perch, then despawn.
+          v.pos.x += v.fleeDir.x * sp * dt;
+          v.pos.z += v.fleeDir.z * sp * dt;
+          v.pos.y += v.velocity.y * dt;
+          v.velocity.y = Math.max(Tuning.VULTURE_GLIDE_CLIMB, v.velocity.y - 2.0 * dt);
+          v.mesh.rotation.set(0, v.heading + Math.PI / 2, -0.12);
+          const dx = v.pos.x - v.perch.x, dz = v.pos.z - v.perch.z;
+          if (dx * dx + dz * dz > Tuning.VULTURE_DESPAWN_DIST * Tuning.VULTURE_DESPAWN_DIST) {
+            ctx.three.scene.remove(v.mesh);
+            _colliderToVulture.delete(v.collider.handle);
+            ctx.physics.world.removeRigidBody(v.body);
+            _vultures.splice(k, 1);
+            continue;
+          }
+        }
+        break;
+      }
+      case 'landing': {
+        // Descend to the target perch, easing horizontally onto it; the flare
+        // pose comes from animateVulture('landing'). Player re-approach → re-launch.
+        if (horizDistSq < spotRSq) {
+          v.state = 'flying';
+          v.relocating = false;
           _toPlayer.normalize();
           v.fleeDir.set(-_toPlayer.x, 0, -_toPlayer.z);
           if (v.fleeDir.lengthSq() < 1e-4) v.fleeDir.set(1, 0, 0);
           v.fleeDir.normalize();
           v.heading = Math.atan2(v.fleeDir.x, v.fleeDir.z);
           v.velocity.set(0, Tuning.VULTURE_CLIMB_RATE, 0);
+          break;
         }
-        break;
-      }
-      case 'flying': {
-        // Climb + accelerate along the flee direction (an ascending arc away).
-        const sp = Tuning.VULTURE_FLEE_SPEED;
-        v.pos.x += v.fleeDir.x * sp * dt;
-        v.pos.z += v.fleeDir.z * sp * dt;
-        v.pos.y += v.velocity.y * dt;
-        // Ease the climb rate down as it levels into a glide.
-        v.velocity.y = Math.max(Tuning.VULTURE_GLIDE_CLIMB, v.velocity.y - 2.0 * dt);
-        v.mesh.rotation.set(0, v.heading + Math.PI / 2, -0.12);   // banked, +π/2 since model faces +X
-        // Despawn once it's flown far away (out of sight).
-        const dx = v.pos.x - v.perch.x, dz = v.pos.z - v.perch.z;
-        if (dx * dx + dz * dz > Tuning.VULTURE_DESPAWN_DIST * Tuning.VULTURE_DESPAWN_DIST) {
-          ctx.three.scene.remove(v.mesh);
-          _colliderToVulture.delete(v.collider.handle);
-          ctx.physics.world.removeRigidBody(v.body);
-          _vultures.splice(k, 1);
-          continue;
+        const hx = v.target.x - v.pos.x, hz = v.target.z - v.pos.z;
+        const hd = Math.sqrt(hx * hx + hz * hz);
+        const step = Math.min(hd, Tuning.VULTURE_FLEE_SPEED * Tuning.VULTURE_LAND_SPEED_FACTOR * dt);
+        if (hd > 1e-3) { v.pos.x += (hx / hd) * step; v.pos.z += (hz / hd) * step; }
+        const dy = v.target.y - v.pos.y;
+        v.pos.y += Math.max(-Tuning.VULTURE_LAND_DESCENT * dt, Math.min(Tuning.VULTURE_LAND_DESCENT * dt, dy));
+        const landHeading = Math.atan2(v.targetDir.x, v.targetDir.z) + Math.PI / 2;
+        v.mesh.rotation.set(0, landHeading, 0);
+        // Touchdown → re-perch on the new tree.
+        if (hd < 0.25 && Math.abs(dy) < 0.1) {
+          v.perch.copy(v.target);
+          v.pos.copy(v.target);
+          v.heading = landHeading;
+          v.relocating = false;
+          v.mesh.rotation.set(0, landHeading, 0);
+          v.body.setNextKinematicTranslation({ x: v.pos.x, y: v.pos.y + 0.26, z: v.pos.z });
+          v.state = 'perched';
         }
         break;
       }
