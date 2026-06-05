@@ -79,7 +79,13 @@ export function updateLighting(ctx: GameContext, _dt: number): void {
   // projection matrix never goes stale relative to the following shadow camera
   // (else the rig's self-shadow swims/flickers while walking — see note above).
   _shadowUpdateCounter++;
-  const _shTr = ctx.player.body.body.translation();
+  // ACAH — FOLLOW POSITION. While mounted on the speeder the player capsule is
+  // parked off-world at y=-2000 (speeder.ts), so reading it here would track the
+  // sun/moon/shadow camera 2km underground → the whole world's lighting visibly
+  // shifts vs on-foot (moonlight even inverts). Follow the SPEEDER body while
+  // mounted so the lighting is identical mounted or not.
+  const _followBody = ctx.speeder?.mounted ? ctx.speeder.body : ctx.player.body.body;
+  const _shTr = _followBody.translation();
   const _playerMovedForShadow =
     Math.abs(_shTr.x - _lastShadowPx) > 1e-3 ||
     Math.abs(_shTr.y - _lastShadowPy) > 1e-3 ||
@@ -101,9 +107,9 @@ export function updateLighting(ctx: GameContext, _dt: number): void {
   ctx.time.sunDir.copy(_sunDir);
   ctx.time.sunHeight = sy;
 
-  // Player position drives the shadow camera so shadows follow you.
-  const tr = ctx.player.body.body.translation();
-  _playerPos.set(tr.x, tr.y, tr.z);
+  // Player (or speeder, when mounted) position drives the shadow camera so
+  // shadows follow you. Reuses _shTr/_followBody from the shadow-move check above.
+  _playerPos.set(_shTr.x, _shTr.y, _shTr.z);
 
   sun.target.position.copy(_playerPos);
   sun.target.updateMatrixWorld();

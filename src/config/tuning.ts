@@ -220,6 +220,12 @@ export const Tuning = {
   SPEEDER_DUST_DOWN_OFFSET: 0.5,        // m below the bike center (toward the ground wash)
   SPEEDER_GLOW_MAX_INTENSITY: 3.2,      // engine nozzle PointLight intensity at full throttle
   SPEEDER_GLOW_HOT_HEX: 0xff7a2a,       // nozzle interior color at full throttle (hot orange)
+  // ACAH — antenna tip blinks slowly so a parked bike is findable at dusk/night.
+  SPEEDER_ANTENNA_BLINK_HZ: 0.55,       // blink cycles/sec (slow pulse)
+  SPEEDER_ANTENNA_BEACON_INTENSITY: 1.6, // peak PointLight intensity at the tip
+  SPEEDER_ANTENNA_BEACON_RANGE: 6.0,    // m — small local glow, not a floodlight
+  SPEEDER_ANTENNA_TIP_BRIGHT_HEX: 0xff5a44, // tip color at the bright phase
+  SPEEDER_ANTENNA_TIP_DIM_HEX: 0x3a1108,    // tip color at the dim phase
   // ACX — mounted 3P chase camera (behind the rider, looking forward).
   SPEEDER_3P_CAM_BACK: 3.4,             // m behind the bike along the camera's forward
   SPEEDER_3P_CAM_ANCHOR_UP: 0.9,        // m above the rig seat for the chase anchor
@@ -494,6 +500,11 @@ export const Tuning = {
   DUST_MOTES_COUNT: 120,
   DUST_MOTES_SPREAD: 25,
   DUST_MOTES_OPACITY: 0.22,        // AAH: was 0.18 — too easily missed; 0.22 reads in lit interiors
+  // ACAH — at night, compress the motes' upper vertical-wrap bound toward the
+  // ground so they don't drift up over the stars (interpolated by sun height
+  // across the AMBIENT_DUST_NIGHT_FADE window). Lower bound stays at -4.
+  DUST_MOTES_UPPER_Y_DAY: 8.0,     // camera-relative top of the mote band by day
+  DUST_MOTES_UPPER_Y_NIGHT: 1.2,   // kept low at night (chest-height near fires, not over stars)
 
   // AAH — dust-motes storm cross-fade window. Hard cut at 0.8 (AAG)
   // is jarring; smoothstep 0.7→0.9 cross-fades into ambientDust's

@@ -90,6 +90,15 @@ export function updateDustMotes(ctx: GameContext): void {
   _camPos.copy(m.cameraRef.position);
   const spread = Tuning.DUST_MOTES_SPREAD;
   const half = spread / 2;
+  // ACAH — at night, pull the upper vertical-wrap bound down so motes stay low
+  // and don't drift up over the stars. Interpolate by sun height across the same
+  // dusk window the ambient dust fades on; lower bound stays at -4.
+  const fadeLo = Tuning.AMBIENT_DUST_NIGHT_FADE_LO;
+  const fadeHi = Tuning.AMBIENT_DUST_NIGHT_FADE_HI;
+  const dayF = Math.max(0, Math.min(1, (ctx.time.sunHeight - fadeLo) / (fadeHi - fadeLo)));
+  const upperY = Tuning.DUST_MOTES_UPPER_Y_NIGHT
+    + (Tuning.DUST_MOTES_UPPER_Y_DAY - Tuning.DUST_MOTES_UPPER_Y_NIGHT) * dayF;
+  const bandH = upperY + 4;   // band spans [-4, upperY]
   const posAttr = m.particles.geometry.attributes.position;
   const arr = posAttr.array as Float32Array;
   const vels = m.particleVels;
@@ -110,9 +119,10 @@ export function updateDustMotes(ctx: GameContext): void {
     let lz = arr[ix + 2] - _camPos.z;
     if (lx >  half) lx -= spread;
     if (lx < -half) lx += spread;
-    // Vertical wrap — motes that drift below the camera respawn above.
-    if (ly < -4) ly += 12;
-    if (ly >  8) ly -= 12;
+    // Vertical wrap — motes that drift below the camera respawn above. The upper
+    // bound (upperY) drops at night so motes stay low and off the stars (ACAH).
+    if (ly < -4)     ly += bandH;
+    if (ly > upperY) ly -= bandH;
     if (lz >  half) lz -= spread;
     if (lz < -half) lz += spread;
     arr[ix]     = _camPos.x + lx;

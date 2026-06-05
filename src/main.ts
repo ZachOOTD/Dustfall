@@ -536,9 +536,27 @@ document.body.appendChild(devModeBadge);
 // ACAD — dev item spawner: click the DEV MODE badge to open a panel that adds
 // any item to the inventory (dev-mode only). Built once; gated here.
 createDevItemPanel(ctx);
-devModeBadge.title = 'click to spawn items';
+devModeBadge.title = 'click to spawn items (or press ` )';
 devModeBadge.addEventListener('click', () => {
   if (ctx.flags.devMode) toggleDevItemPanel(ctx);
+});
+
+// ACAH — reliable DEV MODE entry via the Backquote (`) key. The badge can't be
+// CLICKED during play because the pointer is locked to the canvas (DOM overlays
+// don't receive clicks while locked), so there was no in-game way to turn dev
+// mode on. Backquote works while pointer-locked (it's a keydown): it turns dev
+// mode ON if it's off (+ reveals the badge), then toggles the item-spawner panel
+// (which unlocks the pointer itself, so item clicks then work).
+window.addEventListener('keydown', (e) => {
+  if (e.code !== 'Backquote' || e.repeat) return;
+  if (!ctx.flags.started || ctx.stats.dead) return;
+  e.preventDefault();
+  if (!ctx.flags.devMode) {
+    ctx.flags.devMode = true;
+    devModeBadge.classList.add('visible');
+    ctx.ui.showToast?.('DEV MODE on');
+  }
+  toggleDevItemPanel(ctx);
 });
 
 // ABL — perf: pre-warm shader compilation against the game scene

@@ -107,6 +107,12 @@ const _nozzleRimMat = new THREE.MeshLambertMaterial({
 const _headlampOnMat = new THREE.MeshBasicMaterial({ color: 0xfff3c8 });
 const _headlampOffMat = new THREE.MeshBasicMaterial({ color: 0x3a2818 });
 const _antennaTipMat = new THREE.MeshBasicMaterial({ color: 0xff6644 });
+// ACAH — antenna beacon: a small PointLight parented to the tip, pulsed slowly by
+// updateSpeederFX (with the tip material color) so a parked bike is locatable.
+let _antennaBeacon: THREE.PointLight | null = null;
+const _beaconBright = new THREE.Color(Tuning.SPEEDER_ANTENNA_TIP_BRIGHT_HEX);
+const _beaconDim = new THREE.Color(Tuning.SPEEDER_ANTENNA_TIP_DIM_HEX);
+const _beaconScratch = new THREE.Color();
 
 function box(w: number, h: number, d: number, mat: THREE.Material): THREE.Mesh {
   return new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
@@ -217,14 +223,16 @@ export function makeSpeeder(_rand: Rng): THREE.Group {
     // towing a sled. Sits just above the fuselage between the backrest
     // and the engine pods so it reads as a deliberate tow rig.
     {
-      // Two vertical posts.
+      // Two vertical posts. ACAH — lengthened 0.16→0.28 + lowered the centre so
+      // the post BOTTOMS embed into the fuselage deck (~0.16) instead of floating
+      // ~6cm above it (the previous y=0.30/len=0.16 left the bottoms at 0.22).
       for (const sx of [-1, 1]) {
-        const post = cyl(0.025, 0.025, 0.16, _nozzleRimMat, 6);
-        post.position.set(sx * 0.13, 0.30, 0.95);
+        const post = cyl(0.025, 0.025, 0.28, _nozzleRimMat, 6);
+        post.position.set(sx * 0.13, 0.24, 0.95);
         g.add(post);
       }
-      // Horizontal cross-bar — runs left-right at the top of the posts.
-      // Named so placeSpeeder can grab the ref for the rope anchor.
+      // Horizontal cross-bar — runs left-right at the top of the posts (kept at
+      // y=0.38 so the rope-anchor height is unchanged).
       const bar = cyl(0.030, 0.030, 0.34, _nozzleRimMat, 8);
       bar.rotation.z = Math.PI / 2;
       bar.position.set(0, 0.38, 0.95);
@@ -515,6 +523,13 @@ export function makeSpeeder(_rand: Rng): THREE.Group {
     tipLight.position.set(0, 0.41, 0);   // local to antenna
     tipLight.userData.noShadow = true;
     antenna.add(tipLight);
+    // ACAH — beacon PointLight parented to the tip (tracks the antenna's compound
+    // rotation for free); intensity pulsed in updateSpeederFX.
+    const beacon = new THREE.PointLight(
+      Tuning.SPEEDER_ANTENNA_TIP_BRIGHT_HEX, 0, Tuning.SPEEDER_ANTENNA_BEACON_RANGE, 2.0);
+    beacon.castShadow = false;
+    tipLight.add(beacon);
+    _antennaBeacon = beacon;
   }
 
   // ────────────────────────────────────────────────────────────────────
@@ -753,6 +768,18 @@ function updateSpeederFX(ctx: GameContext, s: SpeederState, dt: number): void {
     }
   }
   updateParticleTrail(_dust, dt);
+
+  // ANTENNA BEACON — slow pulse on the tip (material color + a parented PointLight)
+  // so a parked bike is findable at dusk/night. Deterministic on elapsed time;
+  // squared sine so it spends more of the cycle near "off" (reads as a blink, not
+  // a steady breathe). Runs always (mounted or parked).
+  {
+    const s01 = 0.5 + 0.5 * Math.sin(ctx.time.elapsed * Tuning.SPEEDER_ANTENNA_BLINK_HZ * Math.PI * 2);
+    const blink = s01 * s01;
+    _beaconScratch.copy(_beaconDim).lerp(_beaconBright, blink);
+    _antennaTipMat.color.copy(_beaconScratch);
+    if (_antennaBeacon) _antennaBeacon.intensity = blink * Tuning.SPEEDER_ANTENNA_BEACON_INTENSITY;
+  }
 }
 
 export function updateSpeeder(ctx: GameContext, dt: number): void {
