@@ -410,6 +410,16 @@ export const Tuning = {
   DEAD_TREE_BRANCH_RING_RADIUS_MIN: 1.5, // branches scatter in [min, max] ring at base
   DEAD_TREE_BRANCH_RING_RADIUS_MAX: 3.0,
 
+  // ACAH — scrap debris scattered around each wreck (the no-tools loot source
+  // that breaks the scrap_bar bootstrap deadlock — scrap_bar needs 2 scrap, so
+  // 2-4 per wreck means the first wreck reached lets you craft one).
+  SCRAP_PER_WRECK_MIN: 2,
+  SCRAP_PER_WRECK_MAX: 4,                 // inclusive
+  SCRAP_RING_RADIUS_MIN: 3.5,             // ring around a normal wreck (outside its footprint)
+  SCRAP_RING_RADIUS_MAX: 6.5,
+  SCRAP_RING_RADIUS_MASSIVE_MIN: 7.0,     // larger ring for big 'massive' wrecks
+  SCRAP_RING_RADIUS_MASSIVE_MAX: 11.0,
+
   // Session AAF — "the long storm" — 7-day escalating-storm endgame.
   // Storm interval shrinks + duration grows over 7 days of survival.
   // Day 7+ = permanent dust-choked endgame state. Player can survive

@@ -24,6 +24,7 @@ import { createWoodGrainMaterial, type WoodGrainMaterialOpts } from '../world/wo
 import { createBoneMaterial, type BoneMaterialOpts } from '../world/boneMaterial.ts';
 import { createGlassMaterial, type GlassMaterialOpts } from '../world/glassMaterial.ts';  // ACL ITEMS — lantern globe
 import { buildBranchMesh, BRANCH_WOOD_COLOR, BRANCH_WEATHER_LEVEL } from '../world/branchMesh.ts';  // ACAA — shared branch model + shared color (item + world pickups)
+import { buildScrapMesh } from '../world/scrapMesh.ts';  // ACAH — shared scrap model (item + world pickups)
 
 // ACT — viewmodel material wrappers. EVERY item mesh is rendered as a
 // VIEWMODEL: it's added to the main scene and tracks the camera (FP copy) or
@@ -337,38 +338,14 @@ const _DEFS: Record<ItemId, ItemDef> = {
       return { consumed: false, message: 'no use for it yet' };
     },
     makeViewModel() {
-      // ABJ — B13: upgraded from 1-box + 1-bolt flat Lambert to weathered-
-      // metal chunk + 2 bolts + a small bent fragment. Reads as actual
-      // salvaged plate scrap rather than a brick. ABH metal shader gives
-      // scratches + edge dirt.
-      const group = new THREE.Group();
-      const mat = vmMetal(0x6e5a4a, { wornScale: 6.0 });
-      const accentMat = vmMetal(0x4a3a2a, { wornScale: 6.0, scratchStrength: 0.03 });
-      // Main plate — slightly trapezoidal silhouette via small tilted slice
-      const chunk = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.04, 0.07), mat);
-      chunk.rotation.set(0.2, 0.4, 0.1);
-      group.add(chunk);
-      // Bent edge fragment — adds asymmetry; sits over one corner
-      const bend = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.025, 0.06), accentMat);
-      bend.position.set(-0.045, 0.025, 0);
-      bend.rotation.set(0.5, 0.3, 0.2);
-      group.add(bend);
-      // 2 bolts — main rivet + secondary
-      const bolt = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.012, 0.012, 0.020, 6),
-        accentMat,
-      );
-      bolt.position.set(0.04, 0.025, 0.02);
-      bolt.rotation.x = Math.PI / 2;
-      group.add(bolt);
-      const bolt2 = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.010, 0.010, 0.016, 6),
-        accentMat,
-      );
-      bolt2.position.set(0.02, 0.022, -0.025);
-      bolt2.rotation.x = Math.PI / 2;
-      group.add(bolt2);
-      return group;
+      // ACAH — rebuilt as a detailed scavenged-hull-debris chunk via the SHARED
+      // buildScrapMesh (matches the world pickups scattered around wrecks, like
+      // branchMesh does for branches). Rusty weathered metal (D173 rustLevel via
+      // vmMetal) — torn plate + folded flap + crumpled plate + angle bracket +
+      // rivets + bent rebar + wire coil.
+      const mat = vmMetal(0x73604c, { wornScale: 6.0, rustLevel: 0.5 });
+      const accentMat = vmMetal(0x4a3a2a, { wornScale: 7.0, scratchStrength: 0.04, rustLevel: 0.6 });
+      return buildScrapMesh(mat, accentMat);
     },
     makeIcon() {
       const s = svg();

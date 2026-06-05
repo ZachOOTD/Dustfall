@@ -14,6 +14,8 @@ import type { ItemId, ItemMeta } from '../inventory/types.ts';
 import { getItemDef } from '../inventory/items.ts';
 import { buildBranchMesh, BRANCH_WOOD_COLOR, BRANCH_WEATHER_LEVEL } from '../world/branchMesh.ts';  // ACAA — shared branch model + shared color
 import { createWoodGrainMaterial } from '../world/woodGrainMaterial.ts';  // ACAE — dark wood branches
+import { buildScrapMesh } from '../world/scrapMesh.ts';  // ACAH — shared scrap model
+import { createMetalMaterial } from '../world/metalMaterial.ts';  // ACAH — world scrap material
 
 // ACAE — ONE shared wood-grain material for every world branch (~200
 // instances → 1 program, world-space grain so it varies per branch). Aged
@@ -25,6 +27,12 @@ const _worldBranchMat = createWoodGrainMaterial(BRANCH_WOOD_COLOR, {
   ringDensity: 11.0,
   weatherLevel: BRANCH_WEATHER_LEVEL,
 });
+
+// ACAH — shared world-space metal for the scrap scattered around wrecks (rusty
+// salvage debris). World-space (not localSpace) — these are STATIC pickups, so
+// the cheaper world-space sampling is fine and varies the weathering per-position.
+const _worldScrapMat = createMetalMaterial(0x73604c, { wornScale: 6.0, rustLevel: 0.5 });
+const _worldScrapAccentMat = createMetalMaterial(0x4a3a2a, { wornScale: 7.0, scratchStrength: 0.04, rustLevel: 0.6 });
 
 export interface Pickup {
   id: number;                 // unique handle for hover/take
@@ -247,6 +255,63 @@ export function spawnBranchAt(
     bobPhase: rand() * Math.PI * 2,
     hovered: false,
     body: null,  // ABM (B7) — seed-spawned branches stay static
+    ridingSledId: null,
+  };
+  list.push(pickup);
+  return pickup;
+}
+
+// ────────────────────────────────────────────────────────────────
+// Scrap pickup — scavenged hull debris scattered around wrecks (ACAH).
+// The no-tools loot source that breaks the early-game bootstrap deadlock:
+// salvage panels need a scrap_bar to pry, but scrap_bar's recipe needs scrap,
+// and scrap otherwise only drops from panels. Ground scrap around wrecks lets
+// the player craft their first scrap_bar. Mirrors the branch-around-trees
+// pattern; uses the SHARED buildScrapMesh so it matches the held item.
+// ────────────────────────────────────────────────────────────────
+function makePrimitiveScrap(): THREE.Group {
+  return buildScrapMesh(_worldScrapMat, _worldScrapAccentMat);
+}
+
+/** Spawn a single scrap pickup at a specific (x, z) world position. Terrain-
+ *  aligned, no-shadow, pickup-tagged. Appends to `list` and returns the Pickup.
+ *  Used by the wreck-scatter loop (main.ts). */
+export function spawnScrapAt(
+  scene: THREE.Scene,
+  terrain: Terrain,
+  x: number,
+  z: number,
+  rand: Rng,
+  list: Pickup[],
+): Pickup {
+  const groundY = terrain.heightAt(x, z);
+  const mesh = makePrimitiveScrap();
+  const restY = groundY + 0.02;
+  mesh.position.set(x, restY, z);
+  mesh.rotation.y = rand() * Math.PI * 2;
+  alignToTerrainNormal(mesh, terrain, x, z);
+
+  mesh.userData.noShadow = true;
+  mesh.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (m.isMesh) {
+      m.castShadow = false;
+      m.receiveShadow = true;
+    }
+  });
+
+  const pickupId = _nextId++;
+  tagPickupMeshes(mesh, pickupId);
+  scene.add(mesh);
+
+  const pickup: Pickup = {
+    id: pickupId,
+    itemId: 'scrap',
+    mesh,
+    pos: new THREE.Vector3(x, restY, z),
+    bobPhase: rand() * Math.PI * 2,
+    hovered: false,
+    body: null,   // seed-spawned, static (like branches)
     ridingSledId: null,
   };
   list.push(pickup);

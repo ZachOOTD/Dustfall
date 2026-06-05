@@ -25,7 +25,7 @@ import { updateStats } from './stats/survival.ts';
 import { createHud, updateHud } from './ui/hud.ts';
 import { createHotbar, updateHotbar } from './ui/hotbar.ts';
 import { createInteractPrompt, updateInteractPrompt } from './ui/interactPrompt.ts';
-import { spawnBranches, updatePickups } from './pickups/pickups.ts';
+import { spawnBranches, spawnScrapAt, updatePickups } from './pickups/pickups.ts';
 import { spawnDeadTrees } from './world/deadTree.ts';
 import { spawnRockScatter } from './world/rockScatter.ts';
 import { setupOpeningScene } from './world/openingScene.ts';
@@ -209,6 +209,25 @@ const allPoiPositions: THREE.Vector3[] = [
   ...anchorPois.map((p) => new THREE.Vector3(p.x, terrain.heightAt(p.x, p.z), p.z)),
   ...procgenPoiPositions,
 ];
+
+// ACAH — scatter scrap debris in a ring around every wreck (the no-tools loot
+// source that breaks the scrap_bar bootstrap deadlock). Mirrors the branch-
+// around-trees pattern; deterministic from scatterRand. salvageables.list is now
+// complete (hero landmarks + placePOIs + procgen wrecks all registered above).
+for (const s of salvageables.list) {
+  const n = Tuning.SCRAP_PER_WRECK_MIN
+    + Math.floor(scatterRand() * (Tuning.SCRAP_PER_WRECK_MAX - Tuning.SCRAP_PER_WRECK_MIN + 1));
+  const massive = s.kind === 'massive';
+  const rMin = massive ? Tuning.SCRAP_RING_RADIUS_MASSIVE_MIN : Tuning.SCRAP_RING_RADIUS_MIN;
+  const rMax = massive ? Tuning.SCRAP_RING_RADIUS_MASSIVE_MAX : Tuning.SCRAP_RING_RADIUS_MAX;
+  for (let i = 0; i < n; i++) {
+    const ang = scatterRand() * Math.PI * 2;
+    const r = rMin + scatterRand() * (rMax - rMin);
+    const sx = s.pos.x + Math.cos(ang) * r;
+    const sz = s.pos.z + Math.sin(ang) * r;
+    spawnScrapAt(three.scene, terrain, sx, sz, scatterRand, pickupList);
+  }
+}
 const lizards = spawnLizardsProcgen(
   three.scene, physics.world, terrain, biomes, scatterRand, allPoiPositions,
 );

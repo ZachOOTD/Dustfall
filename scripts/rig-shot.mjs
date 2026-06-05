@@ -904,6 +904,52 @@ const SCENARIOS = {
     }`);
   },
 
+  // Scrap-loot (ACAH): verify scrap debris scatters around wrecks (the bootstrap
+  // loot fix) — count scrap pickups + how many sit within 12m of a wreck, and
+  // frame a wreck with its scrap ring. --time for legibility.
+  'scrap-loot': async (page) => {
+    const t = argv.time !== undefined ? Number(argv.time) : 0.42;
+    const r = await page.evaluate((t) => {
+      const ctx = window.__game.ctx;
+      window.__game.setTime(t);
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      ctx.three.renderer.setSize(900, 700, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 900 / 700; cam.updateProjectionMatrix(); }
+      const scrap = (ctx.pickups.list || []).filter((p) => p.itemId === 'scrap');
+      const wrecks = (ctx.salvageables?.list || []).map((s) => s.pos);
+      // count scrap within 12m of any wreck
+      let nearWreck = 0;
+      for (const sp of scrap) {
+        for (const w of wrecks) {
+          const dx = sp.pos.x - w.x, dz = sp.pos.z - w.z;
+          if (dx * dx + dz * dz < 144) { nearWreck++; break; }
+        }
+      }
+      // frame the wreck that has the most scrap around it
+      let best = null, bestN = -1;
+      for (const w of wrecks) {
+        let c = 0;
+        for (const sp of scrap) {
+          const dx = sp.pos.x - w.x, dz = sp.pos.z - w.z;
+          if (dx * dx + dz * dz < 144) c++;
+        }
+        if (c > bestN) { bestN = c; best = w; }
+      }
+      if (best) {
+        ctx.flags.paused = true;
+        cam.position.set(best.x + 13, best.y + 11, best.z + 13);
+        cam.lookAt(best.x, best.y + 0.3, best.z);
+        cam.updateMatrixWorld(true);
+      }
+      return { scrapTotal: scrap.length, nearWreck, wreckCount: wrecks.length, bestWreckScrap: bestN };
+    }, t);
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: join(OUT, 'scen-scrap-loot.png'), fullPage: false });
+    console.log(`[scrap-loot] ${JSON.stringify(r)}`);
+  },
+
   // Dev-panel (ACAD): open the dev item-spawner panel + click an item, verify
   // it renders + adds to inventory.
   'dev-panel': async (page) => {
