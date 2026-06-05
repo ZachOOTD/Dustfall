@@ -91,8 +91,8 @@ function makeDeadTree(rand: Rng): THREE.Group {
     // Main structure (high depth) forks 2-3 ways; fine twigs (low depth) fork
     // sparingly (mostly 1, sometimes 2) so the tips stay sparse like the refs.
     const childCount = depth >= 3
-      ? 2 + (rand() < 0.5 ? 1 : 0)
-      : 1 + (rand() < 0.4 ? 1 : 0);
+      ? 2 + (rand() < 0.3 ? 1 : 0)
+      : 1 + (rand() < 0.18 ? 1 : 0);
     for (let c = 0; c < childCount; c++) {
       // Wider divergence at the main fork (high depth), tighter toward the tips.
       const spread = 0.4 + rand() * 0.5 + (depth >= 3 ? 0.25 : 0);
