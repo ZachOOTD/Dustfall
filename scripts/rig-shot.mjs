@@ -869,7 +869,16 @@ const SCENARIOS = {
       cam.position.set(wp.x + 2.3, wp.y + 1.5, wp.z + 2.7);
       cam.lookAt(wp.x, wp.y + 1.5, wp.z);
       cam.updateMatrixWorld(true);
-      return { found: true, pos: [wp.x.toFixed(1), wp.y.toFixed(1), wp.z.toFixed(1)] };
+      // ACAI (T6) — assert a trunk collider sits near this tree (within 0.6m
+      // horizontally, raised above the base = the static cylinder, not the
+      // terrain heightfield which sits at/near the ground plane).
+      let trunkCol = 0;
+      ctx.physics.world.forEachCollider((c) => {
+        const tr = c.translation();
+        const dx = tr.x - wp.x, dz = tr.z - wp.z;
+        if (dx * dx + dz * dz < 0.36 && tr.y > wp.y + 0.2) trunkCol++;
+      });
+      return { found: true, pos: [wp.x.toFixed(1), wp.y.toFixed(1), wp.z.toFixed(1)], trunkCol };
     }, t);
     await page.waitForTimeout(350);
     await page.screenshot({ path: join(OUT, 'scen-tree.png'), fullPage: false });

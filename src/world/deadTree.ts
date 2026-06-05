@@ -3,11 +3,12 @@
 // tree's base, which reads as natural ("the tree shed these") instead of
 // the previous "branches randomly strewn nowhere near any source".
 //
-// The trees themselves are non-interactable static props. They don't have
-// physics colliders — they're visual cues for where branches live. Players
-// can walk through them; the silhouette is what matters.
+// The trees themselves are non-interactable static props. As of ACAI they DO
+// have a single static cylinder collider on the trunk bole (so the player can't
+// walk through the trunk); the fine crown branches remain non-colliding.
 
 import * as THREE from 'three';
+import type RAPIER from '@dimforge/rapier3d-compat';
 import type { Rng } from '../core/rng.ts';
 import type { Terrain } from './terrain.ts';
 import type { BiomeSampler } from './biomes.ts';
@@ -18,6 +19,7 @@ import { findBiomeCentroid } from './biomes.ts';
 import { createWoodGrainMaterial } from './woodGrainMaterial.ts';
 import { BRANCH_WOOD_COLOR, BRANCH_WEATHER_LEVEL } from './branchMesh.ts';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { makeStaticCylinder } from '../physics/bodies.ts';
 
 // ACAF f/u 12 — ONE shared material for the whole tree (trunk + every branch are
 // one continuous merged mesh now). Same BRANCH_WOOD_COLOR as the held/ground
@@ -73,6 +75,9 @@ function makeDeadTree(rand: Rng): THREE.Group {
   const _m = new THREE.Matrix4();
   const _s = new THREE.Vector3(1, 1, 1);
   let crownTop = boleLen;   // ACAH — track the highest tip for the vulture perch height
+  // ACAI — real branch points (tree-LOCAL) for clean vulture perching. Captured on
+  // STURDY secondary limbs (depth 2) — thick enough to bear a bird, not thin twigs.
+  const branchPerches: Array<{ pos: THREE.Vector3; dir: THREE.Vector3 }> = [];
 
   // Recursively grow a branch from `base` along `dir`, forking at its tip.
   const grow = (base: THREE.Vector3, dir: THREE.Vector3, len: number, rBase: number, depth: number): void => {
@@ -88,6 +93,10 @@ function makeDeadTree(rand: Rng): THREE.Group {
     // Curved tip (local (bow·cos, len, bow·sin) through the same transform).
     const tip = new THREE.Vector3(Math.cos(bowAng) * bow, len, Math.sin(bowAng) * bow).applyMatrix4(_m);
     if (tip.y > crownTop) crownTop = tip.y;
+    // ACAI — record a perch ~60% along sturdy secondary limbs (a bird sits here).
+    if (depth === 2) {
+      branchPerches.push({ pos: base.clone().addScaledVector(dir, len * 0.6), dir: dir.clone() });
+    }
     if (depth <= 0 || rTip < 0.011) return;
 
     // Main structure (high depth) forks 2-3 ways; fine twigs (low depth) fork
@@ -130,6 +139,15 @@ function makeDeadTree(rand: Rng): THREE.Group {
   // ACAH — perch height (local) for a vulture: into the lower crown above the
   // first fork, where the limbs are thickest and a big bird would actually sit.
   g.userData.perchY = boleLen + (crownTop - boleLen) * 0.22;   // low in the crown, near the dense main fork
+  // ACAI — fall back to a single crown point if no sturdy limbs were captured.
+  g.userData.branchPerches = branchPerches.length > 0
+    ? branchPerches
+    : [{ pos: new THREE.Vector3(0, g.userData.perchY, 0), dir: new THREE.Vector3(1, 0, 0) }];
+  // ACAI (T6) — trunk collider dims (local). A static cylinder over the bole +
+  // lower crown blocks the player from walking through the trunk; high twigs
+  // don't collide. Radius is slightly generous to cover the gnarled bark.
+  g.userData.trunkRadius = baseR * 1.35;
+  g.userData.trunkColliderH = boleLen + 0.6;
   return g;
 }
 
@@ -144,23 +162,27 @@ function terrainFlatnessAt(terrain: Terrain, cx: number, cz: number, r = 1.5): n
   );
 }
 
+/** ACAI — a world-space branch perch (point on a sturdy limb + that limb's
+ *  direction) for seating a vulture cleanly on a real branch. */
+export interface TreePerch { pos: THREE.Vector3; dir: THREE.Vector3; }
+
 /** Spawn dead trees scattered across the SALT-FLATS biome only, on
  *  roughly-flat ground. Each tree drops 2-4 branch pickups within a
  *  1.5-3m ring at its base. Branches are appended to `branchList` so the
- *  caller (main.ts) folds them into ctx.pickups. CC-4 restricted trees
- *  from any-biome to salt-only so the lake-bed reads as the only place
- *  where stuff used to live (and died). */
+ *  caller (main.ts) folds them into ctx.pickups. Returns the world-space branch
+ *  perches (several per tree) for the vulture spawner. */
 export function spawnDeadTrees(
   scene: THREE.Scene,
   terrain: Terrain,
   rand: Rng,
   branchList: Pickup[],
   biomes: BiomeSampler,
+  world: RAPIER.World,
   count = Tuning.DEAD_TREE_TARGET_COUNT,
-): THREE.Vector3[] {
+): TreePerch[] {
   const trees: THREE.Group[] = [];
-  // ACAH — world-space crown perch points (one per tree) for the vulture spawner.
-  const perchPoints: THREE.Vector3[] = [];
+  // ACAI — world-space branch perches (several per tree) for the vulture spawner.
+  const perchPoints: TreePerch[] = [];
   // AAO — was module-local const; lifted to Tuning.DEAD_TREE_FLATNESS_THRESHOLD
   // per CLAUDE.md rule 2.
   const FLATNESS_THRESHOLD = Tuning.DEAD_TREE_FLATNESS_THRESHOLD;
@@ -185,7 +207,24 @@ export function spawnDeadTrees(
     });
     scene.add(tree);
     trees.push(tree);
-    perchPoints.push(new THREE.Vector3(x, (groundY - 0.05) + (tree.userData.perchY ?? 2.0), z));
+    // ACAI (T6) — static trunk collider over the bole. Centred at half its
+    // collidable height above the (slightly sunk) tree base.
+    const trunkR = (tree.userData.trunkRadius ?? 0.13) as number;
+    const trunkH = (tree.userData.trunkColliderH ?? 1.4) as number;
+    makeStaticCylinder(world, trunkH / 2, trunkR, {
+      x,
+      y: groundY - 0.05 + trunkH / 2,
+      z,
+    });
+    // ACAI — transform this tree's LOCAL branch perches to WORLD (rotate by the
+    // tree yaw about Y, then offset by the tree position).
+    const yaw = tree.rotation.y;
+    const localPerches = (tree.userData.branchPerches ?? []) as Array<{ pos: THREE.Vector3; dir: THREE.Vector3 }>;
+    for (const lp of localPerches) {
+      const wp = lp.pos.clone().applyAxisAngle(_UP, yaw);
+      wp.set(wp.x + x, wp.y + (groundY - 0.05), wp.z + z);
+      perchPoints.push({ pos: wp, dir: lp.dir.clone().applyAxisAngle(_UP, yaw) });
+    }
     // AAO — branch count + ring radius lifted to Tuning. Span is
     // inclusive of MIN..MAX so the original 2..4 (3-value range) is
     // preserved when MIN=2, MAX=4.

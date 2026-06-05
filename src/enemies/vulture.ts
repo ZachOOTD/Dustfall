@@ -26,6 +26,7 @@ import { isPlaying } from '../GameContext.ts';
 import { createSkinMaterial } from '../world/skinMaterial.ts';
 import { Tuning } from '../config/tuning.ts';
 import { getPlayerPos } from '../util/playerPos.ts';
+import type { TreePerch } from '../world/deadTree.ts';
 
 export type VultureState = 'perched' | 'flying' | 'landing' | 'dead';
 
@@ -66,6 +67,14 @@ export interface Vulture {
 let _nextId = 1;
 const _colliderToVulture = new Map<number, Vulture>();
 const _vultures: Vulture[] = [];
+/** Full world-space branch-perch pool (set at spawn) — used by the relocate FSM
+ *  to pick a landing target on a DIFFERENT tree. */
+let _perchPool: ReadonlyArray<TreePerch> = [];
+
+/** All known branch perches in the world (for the relocate-and-land FSM). */
+export function getPerchPool(): ReadonlyArray<TreePerch> {
+  return _perchPool;
+}
 
 export function getVultureForCollider(handle: number): Vulture | undefined {
   return _colliderToVulture.get(handle);
@@ -272,15 +281,23 @@ export function spawnVulture(
   scene: THREE.Scene,
   world: RAPIER.World,
   perch: { x: number; y: number; z: number },
+  dir?: { x: number; z: number },
 ): Vulture {
+  // Seat the feet (group origin, y=0 local) on TOP of the limb: the perch point
+  // is the branch centreline, so lift by ~the branch radius so talons grip.
+  const SEAT_BIAS = 0.03;
+  const py = perch.y + SEAT_BIAS;
   const mesh = makeVultureVisual();
-  mesh.position.set(perch.x, perch.y, perch.z);
-  const heading = Math.random() * Math.PI * 2;
+  mesh.position.set(perch.x, py, perch.z);
+  // Perch ACROSS the limb (perpendicular to the branch direction) when known.
+  const heading = dir
+    ? Math.atan2(dir.x, dir.z) + Math.PI / 2
+    : Math.random() * Math.PI * 2;
   mesh.rotation.y = heading;
   scene.add(mesh);
 
   // Kinematic body + capsule around the body centre (~0.26 above the feet).
-  const cy = perch.y + 0.26;
+  const cy = py + 0.26;
   const body = world.createRigidBody(
     RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(perch.x, cy, perch.z),
   );
@@ -294,8 +311,8 @@ export function spawnVulture(
     mesh,
     body,
     collider,
-    pos: new THREE.Vector3(perch.x, perch.y, perch.z),
-    perch: new THREE.Vector3(perch.x, perch.y, perch.z),
+    pos: new THREE.Vector3(perch.x, py, perch.z),
+    perch: new THREE.Vector3(perch.x, py, perch.z),
     velocity: new THREE.Vector3(),
     fleeDir: new THREE.Vector3(1, 0, 0),
     heading,
@@ -314,9 +331,10 @@ export function spawnVulture(
 export function spawnVulturesProcgen(
   scene: THREE.Scene,
   world: RAPIER.World,
-  perches: ReadonlyArray<THREE.Vector3>,
+  perches: ReadonlyArray<TreePerch>,
   scatterRand: () => number,
 ): Vulture[] {
+  _perchPool = perches;
   const target = Tuning.VULTURE_TARGET_COUNT;
   const minSep = Tuning.VULTURE_MIN_SEPARATION;
   const minSepSq = minSep * minSep;
@@ -329,10 +347,10 @@ export function spawnVulturesProcgen(
   }
   for (const i of idx) {
     if (chosen.length >= target) break;
-    const p = perches[i];
+    const p = perches[i].pos;
     if (chosen.some((c) => (c.x - p.x) ** 2 + (c.z - p.z) ** 2 < minSepSq)) continue;
     chosen.push(p);
-    spawnVulture(scene, world, p);
+    spawnVulture(scene, world, p, perches[i].dir);
   }
   return _vultures;
 }

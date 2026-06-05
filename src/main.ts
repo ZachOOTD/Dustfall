@@ -175,7 +175,7 @@ placeHeroLandmarks(three.scene, physics.world, terrain, scatterRand, salvageable
 // dropped in 2-4 clusters at the base of dead trees (see spawnDeadTrees
 // below) so they have a visible source.
 const pickupList = spawnBranches(three.scene, terrain, scatterRand, 0);
-const treePerches = spawnDeadTrees(three.scene, terrain, scatterRand, pickupList, biomes);
+const treePerches = spawnDeadTrees(three.scene, terrain, scatterRand, pickupList, biomes, physics.world);
 _mark('trees+branches');
 const waterSources = spawnWaterSources(three.scene, terrain, scatterRand, biomes);
 const cacti = spawnCacti(three.scene, physics.world, terrain, scatterRand, biomes);
