@@ -1001,6 +1001,49 @@ const SCENARIOS = {
     console.log(`[vulture] ${JSON.stringify(r)}`);
   },
 
+  // Vulture-pose (ACAI): force the first vulture into a state + pin it in frame so
+  // the live loop poses the rig (idle/flying/landing/dead). --state=<state>.
+  'vulture-pose': async (page) => {
+    const state = argv.state || 'flying';
+    await page.evaluate((state) => {
+      const ctx = window.__game.ctx;
+      window.__game.setTime(0.45);
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      ctx.three.renderer.setSize(820, 760, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 820 / 760; cam.updateProjectionMatrix(); }
+      const v = ctx.vultures?.list?.[0];
+      if (!v) return;
+      // Pin the bird at a clear spot ~3m up; remember it for re-pinning each frame.
+      window.__poseAnchor = { x: v.pos.x, y: v.pos.y + 1.5, z: v.pos.z };
+      window.__poseV = v;
+      v.state = state;
+      v.landed = false;
+    }, state);
+    // Let the live loop pose the rig for ~0.4s, THEN pause (freezing the rig
+    // rotations) + re-pin the bird at the anchor + frame the camera on it.
+    await page.waitForTimeout(450);
+    const ang = argv.angle || '3q';
+    await page.evaluate((ang) => {
+      const ctx = window.__game.ctx;
+      const v = window.__poseV; const a = window.__poseAnchor;
+      if (!v || !a) return;
+      ctx.flags.paused = true;
+      v.pos.set(a.x, a.y, a.z);
+      v.mesh.position.set(a.x, a.y, a.z);
+      v.mesh.rotation.set(0, Math.PI / 2, 0);   // model faces +X → show its side/3q
+      const cam = ctx.three.camera;
+      const cp = ang === 'side' ? [a.x, a.y + 0.05, a.z + 1.3] : [a.x + 1.1, a.y + 0.12, a.z + 1.1];
+      cam.position.set(cp[0], cp[1], cp[2]);
+      cam.lookAt(a.x, a.y, a.z);
+      cam.updateMatrixWorld(true);
+    }, ang);
+    await page.waitForTimeout(120);
+    await page.screenshot({ path: join(OUT, `scen-vulture-pose-${state}.png`), fullPage: false });
+    console.log(`[vulture-pose] state=${state}`);
+  },
+
   // Vulture-kill (ACAH): verify the kill->fall->land->'take'-tag path (the loot
   // E-take + combat dispatch mirror the verified shrew pattern). Logic eval.
   'vulture-kill': async (page) => {

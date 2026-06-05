@@ -1408,6 +1408,20 @@ export const Tuning = {
   VULTURE_GLIDE_CLIMB: 1.2,        // m/s — climb eases to this as it levels into a glide
   VULTURE_DESPAWN_DIST: 110,       // m from the perch at which it's gone (out of sight)
   VULTURE_GRAVITY: 11.0,           // m/s² — fall accel when shot dead
+  // ACAI — rig animation (joint rotations, radians; flap in Hz).
+  VULTURE_IDLE_BOB_HZ: 0.5,        // perched head-bob frequency
+  VULTURE_IDLE_BOB_AMP: 0.10,      // perched head-bob amplitude (neck rot.z)
+  VULTURE_FLAP_HZ: 3.2,            // wingbeats/sec in flight
+  VULTURE_FLAP_AMP: 0.55,          // flap swing amplitude (shoulder rot.x)
+  VULTURE_WING_EXTEND: 0.35,       // shoulder rot.x that spreads the folded wing OUT for flight
+  VULTURE_LEG_TUCK: 1.2,           // hip rot.z that folds the legs up in flight
+  VULTURE_NECK_EXTEND: -0.5,       // neck rot.z extending the head forward in flight
+  VULTURE_LAND_DURATION: 0.9,      // s — landing flare → settle into perched
+  // ACAI — relocate-and-land flight.
+  VULTURE_RELOCATE_MIN_DIST: 40,   // m — a relocation target perch must be at least this far
+  VULTURE_LAND_ARRIVE_DIST: 2.5,   // m (horizontal) from target → begin the landing descent
+  VULTURE_DEATH_SPIN: 7.0,         // rad/s angular kick on death (tumble)
+  VULTURE_SETTLE_VEL: 0.4,         // m/s — below this (lin+ang) the dead body is "settled"
 } as const;
 
 // Sky gradient colors (top vs horizon) per time of day. Horizon stays close to

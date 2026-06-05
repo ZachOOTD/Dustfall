@@ -27,7 +27,18 @@ import { createSkinMaterial } from '../world/skinMaterial.ts';
 import { Tuning } from '../config/tuning.ts';
 import { getPlayerPos } from '../util/playerPos.ts';
 
-export type VultureState = 'perched' | 'flee' | 'dead';
+export type VultureState = 'perched' | 'flying' | 'landing' | 'dead';
+
+/** ACAI — animatable joint pivots on the vulture mesh (stored in
+ *  `mesh.userData.rig`). Each is a Group positioned AT its joint with its child
+ *  meshes offset, so rotating the group articulates about the joint (mirrors the
+ *  lizard/shrew leg-pivot convention). At rest (all rotations 0) the bird reads
+ *  identically to the ACAH static model. */
+export interface VultureRig {
+  wingL: THREE.Group; wingR: THREE.Group;
+  neck: THREE.Group; tail: THREE.Group;
+  legL: THREE.Group; legR: THREE.Group;
+}
 
 export interface Vulture {
   id: number;
@@ -76,99 +87,148 @@ const _eyeMat = new THREE.MeshBasicMaterial({ color: 0x140f0a });
 export function makeVultureVisual(): THREE.Group {
   const g = new THREE.Group();
   const box = (w: number, h: number, d: number, m: THREE.Material) => new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
+  // A joint pivot Group placed at (x,y,z); children are added at offsets so the
+  // group rotates ABOUT this joint. Returns the group (added to g).
+  const pivot = (x: number, y: number, z: number): THREE.Group => {
+    const p = new THREE.Group();
+    p.position.set(x, y, z);
+    g.add(p);
+    return p;
+  };
 
-  // ── Legs + talons (feet at y≈0, gripping the perch). Short, stout. ──
-  for (const sz of [-1, 1]) {
-    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.022, 0.13, 6), _bareSkin);
-    leg.position.set(-0.02, 0.07, sz * 0.05);
-    leg.rotation.z = sz * 0.12;
-    g.add(leg);
-    // foot + 3 forward talons gripping the branch
-    const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.018, 0.03, 6), _bareSkin);
-    foot.position.set(-0.02, 0.012, sz * 0.05);
-    g.add(foot);
-    for (const ta of [-0.5, 0, 0.5]) {
-      const claw = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.009, 0.05, 4), _beakMat);
-      claw.position.set(-0.02 + Math.cos(ta) * 0.03, 0.006, sz * 0.05 + Math.sin(ta) * 0.03);
-      claw.rotation.set(Math.PI / 2.2, 0, ta);
-      g.add(claw);
-    }
-  }
-
-  // ── Body — a plump, hunched ovoid (broad at the shoulders, tapering to the
-  //    tail). Slightly flattened. Sits above the legs. ──
+  // ── Body — plump hunched ovoid + shoulder hump. Stays on the root. ──
   const body = new THREE.Mesh(new THREE.SphereGeometry(0.16, 12, 10), _plumage);
-  body.scale.set(1.35, 1.05, 1.0);   // long (X) + a touch tall
+  body.scale.set(1.35, 1.05, 1.0);
   body.position.set(-0.02, 0.26, 0);
   g.add(body);
-  // Hunched upper-back hump (broad shoulders).
   const hump = new THREE.Mesh(new THREE.SphereGeometry(0.10, 10, 8), _plumage);
   hump.scale.set(1.2, 0.9, 1.0);
   hump.position.set(-0.08, 0.36, 0);
   g.add(hump);
-
-  // ── Folded wings — large flattened slabs draped down each side, angled so the
-  //    primaries hang toward the tail. Layered (under + over) for depth (rule 7). ──
-  for (const sz of [-1, 1]) {
-    // Folded wing draped down the side — large, angled so it hangs along the body.
-    const wing = box(0.33, 0.02, 0.19, _plumage);
-    wing.position.set(-0.05, 0.25, sz * 0.165);
-    wing.rotation.set(sz * 0.66, 0.0, 0.04);
-    g.add(wing);
-    // Primaries (lighter feather tips) jutting back past the tail — the folded
-    // wingtip a perched vulture shows.
-    const prim = box(0.18, 0.016, 0.085, _plumageEdge);
-    prim.position.set(-0.17, 0.17, sz * 0.16);
-    prim.rotation.set(sz * 0.8, 0.3, 0.12);
-    g.add(prim);
-  }
-
-  // ── Tail — short stiff fan angled down/back. ──
-  const tail = box(0.10, 0.016, 0.14, _plumageEdge);
-  tail.position.set(-0.21, 0.21, 0);
-  tail.rotation.set(0, 0, 0.25);
-  g.add(tail);
-
-  // ── Feather ruff at the neck base (collar of feathers the bald neck rises
-  //    from). A flattened torus around the shoulders/front. ──
+  // Feather ruff at the neck base — stays on the root (the collar the neck rises from).
   const ruff = new THREE.Mesh(new THREE.TorusGeometry(0.075, 0.03, 8, 14), _plumageEdge);
   ruff.position.set(0.06, 0.34, 0);
   ruff.rotation.set(0, 0, Math.PI / 2);
   ruff.scale.set(1.0, 1.0, 0.7);
   g.add(ruff);
 
-  // ── Neck — bald, an S-curve hunched into the shoulders then forward to the
-  //    head. Two tapered segments. ──
-  const neck1 = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.045, 0.10, 7), _bareSkin);
-  neck1.position.set(0.08, 0.39, 0);
-  neck1.rotation.z = -0.6;
-  g.add(neck1);
-  const neck2 = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.032, 0.08, 7), _bareSkin);
-  neck2.position.set(0.15, 0.42, 0);
-  neck2.rotation.z = -1.1;
-  g.add(neck2);
-
-  // ── Head — small bald dome at the neck top. ──
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.045, 10, 8), _bareSkin);
-  head.position.set(0.20, 0.44, 0);
-  g.add(head);
-  // Heavy hooked beak — a base cone + a down-curved tip.
-  const beakBase = new THREE.Mesh(new THREE.ConeGeometry(0.028, 0.07, 7), _beakMat);
-  beakBase.position.set(0.245, 0.435, 0);
-  beakBase.rotation.z = -Math.PI / 2;
-  g.add(beakBase);
-  const hook = new THREE.Mesh(new THREE.ConeGeometry(0.014, 0.035, 6), _beakMat);
-  hook.position.set(0.285, 0.418, 0);
-  hook.rotation.z = -Math.PI / 1.5;
-  g.add(hook);
-  // Eyes — tiny dark beads on the head sides.
+  // ── Legs — hip pivots at the leg tops (tuck up in flight). ──
+  const legs: THREE.Group[] = [];
   for (const sz of [-1, 1]) {
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.009, 6, 6), _eyeMat);
-    eye.position.set(0.225, 0.452, sz * 0.03);
-    g.add(eye);
+    const hip = pivot(-0.02, 0.14, sz * 0.05);
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.022, 0.13, 6), _bareSkin);
+    leg.position.set(0, -0.07, 0); leg.rotation.z = sz * 0.12;
+    hip.add(leg);
+    const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.018, 0.03, 6), _bareSkin);
+    foot.position.set(0, -0.128, 0);
+    hip.add(foot);
+    for (const ta of [-0.5, 0, 0.5]) {
+      const claw = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.009, 0.05, 4), _beakMat);
+      claw.position.set(Math.cos(ta) * 0.03, -0.134, Math.sin(ta) * 0.03);
+      claw.rotation.set(Math.PI / 2.2, 0, ta);
+      hip.add(claw);
+    }
+    legs.push(hip);
   }
 
+  // ── Wings — shoulder pivots; the folded slab + primaries hang off the joint so
+  //    rotating the pivot flaps the whole wing about the shoulder. ──
+  const wings: THREE.Group[] = [];
+  for (const sz of [-1, 1]) {
+    const shoulder = pivot(-0.05, 0.30, sz * 0.06);
+    const wing = box(0.33, 0.02, 0.19, _plumage);
+    wing.position.set(0, -0.05, sz * 0.105); wing.rotation.set(sz * 0.66, 0.0, 0.04);
+    shoulder.add(wing);
+    const prim = box(0.18, 0.016, 0.085, _plumageEdge);
+    prim.position.set(-0.12, -0.13, sz * 0.10); prim.rotation.set(sz * 0.8, 0.3, 0.12);
+    shoulder.add(prim);
+    wings.push(shoulder);
+  }
+
+  // ── Tail — root pivot (tilt/fan for steering + landing flare). ──
+  const tail = pivot(-0.13, 0.22, 0);
+  const tailFan = box(0.10, 0.016, 0.14, _plumageEdge);
+  tailFan.position.set(-0.08, -0.01, 0); tailFan.rotation.set(0, 0, 0.25);
+  tail.add(tailFan);
+
+  // ── Neck — base pivot at the shoulders; the S-neck + head + beak + eyes ride it
+  //    so the whole head bobs/turns/extends about the neck base. ──
+  const neck = pivot(0.06, 0.34, 0);
+  const neck1 = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.045, 0.10, 7), _bareSkin);
+  neck1.position.set(0.02, 0.05, 0); neck1.rotation.z = -0.6;
+  neck.add(neck1);
+  const neck2 = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.032, 0.08, 7), _bareSkin);
+  neck2.position.set(0.09, 0.08, 0); neck2.rotation.z = -1.1;
+  neck.add(neck2);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.045, 10, 8), _bareSkin);
+  head.position.set(0.14, 0.10, 0);
+  neck.add(head);
+  const beakBase = new THREE.Mesh(new THREE.ConeGeometry(0.028, 0.07, 7), _beakMat);
+  beakBase.position.set(0.185, 0.095, 0); beakBase.rotation.z = -Math.PI / 2;
+  neck.add(beakBase);
+  const hook = new THREE.Mesh(new THREE.ConeGeometry(0.014, 0.035, 6), _beakMat);
+  hook.position.set(0.225, 0.078, 0); hook.rotation.z = -Math.PI / 1.5;
+  neck.add(hook);
+  for (const sz of [-1, 1]) {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.009, 6, 6), _eyeMat);
+    eye.position.set(0.165, 0.112, sz * 0.03);
+    neck.add(eye);
+  }
+
+  const rig: VultureRig = { wingL: wings[0], wingR: wings[1], neck, tail, legL: legs[0], legR: legs[1] };
+  g.userData.rig = rig;
   return g;
+}
+
+/** ACAI — pose the rig per state each frame. At rest the bird is the perched
+ *  silhouette; this articulates wings/neck/legs/tail for idle / flap / landing /
+ *  death. Driven by `elapsed` (sinusoids) — see VULTURE_* tuning. */
+export function animateVulture(v: Vulture, elapsed: number): void {
+  const rig = v.mesh.userData.rig as VultureRig | undefined;
+  if (!rig) return;
+  const { wingL, wingR, neck, tail, legL, legR } = rig;
+  const ph = elapsed + v.id * 1.7;   // de-sync birds
+
+  switch (v.state) {
+    case 'perched': {
+      // Idle: slow head bob + occasional look-around + a faint wing settle.
+      neck.rotation.z = Math.sin(ph * Tuning.VULTURE_IDLE_BOB_HZ * Math.PI * 2) * Tuning.VULTURE_IDLE_BOB_AMP;
+      neck.rotation.y = Math.sin(ph * 0.23) * 0.12;
+      const settle = Math.sin(ph * 0.7) * 0.03;
+      wingL.rotation.set(-settle, 0, 0); wingR.rotation.set(settle, 0, 0);
+      legL.rotation.set(0, 0, 0); legR.rotation.set(0, 0, 0);
+      tail.rotation.set(0, 0, 0);
+      break;
+    }
+    case 'flying': {
+      // Wings extend OUT and flap (mirrored); legs tuck up; neck extends; tail trails.
+      const f = Math.sin(elapsed * Tuning.VULTURE_FLAP_HZ * Math.PI * 2);
+      const w = Tuning.VULTURE_WING_EXTEND + f * Tuning.VULTURE_FLAP_AMP;
+      wingL.rotation.set(w, 0, 0); wingR.rotation.set(-w, 0, 0);
+      neck.rotation.set(0, 0, Tuning.VULTURE_NECK_EXTEND);
+      legL.rotation.set(0, 0, -Tuning.VULTURE_LEG_TUCK); legR.rotation.set(0, 0, Tuning.VULTURE_LEG_TUCK);
+      tail.rotation.set(0, 0, -0.3);
+      break;
+    }
+    case 'landing': {
+      // Flare: wings spread + cupped forward, fluttering; legs reach DOWN; neck up; tail fans as an airbrake.
+      const flutter = Math.sin(elapsed * Tuning.VULTURE_FLAP_HZ * 1.6 * Math.PI * 2) * 0.18;
+      const w = Tuning.VULTURE_WING_EXTEND * 0.6 + flutter;
+      wingL.rotation.set(w, -0.4, 0); wingR.rotation.set(-w, 0.4, 0);   // cupped forward
+      neck.rotation.set(0, 0, -0.25);
+      legL.rotation.set(0, 0, 0.15); legR.rotation.set(0, 0, -0.15);    // reaching for the perch
+      tail.rotation.set(0, 0, 0.5);                                     // fanned down
+      break;
+    }
+    case 'dead': {
+      // Limp — wings splayed, head drooped, legs slack. Static (the body tumbles).
+      wingL.rotation.set(-0.9, 0, 0); wingR.rotation.set(0.9, 0, 0);
+      neck.rotation.set(0, 0, 0.9);
+      legL.rotation.set(0, 0, 0.4); legR.rotation.set(0, 0, -0.4);
+      tail.rotation.set(0, 0, 0.1);
+      break;
+    }
+  }
 }
 
 /** Tag the dead vulture's mesh as a 'take' interactable yielding meat. */
@@ -297,12 +357,10 @@ export function updateVultures(ctx: GameContext, dt: number): void {
 
     switch (v.state) {
       case 'perched': {
-        // Subtle idle: gentle head/body bob.
-        v.bob += dt * 1.4;
-        v.mesh.position.y = v.perch.y + Math.sin(v.bob) * 0.01;
+        v.mesh.position.y = v.perch.y;   // seated; idle motion is the rig neck-bob (animateVulture)
         // Player got close → launch.
         if (horizDistSq < spotRSq) {
-          v.state = 'flee';
+          v.state = 'flying';
           // Flee AWAY from the player, horizontally, with a strong climb.
           _toPlayer.normalize();
           v.fleeDir.set(-_toPlayer.x, 0, -_toPlayer.z);
@@ -313,7 +371,7 @@ export function updateVultures(ctx: GameContext, dt: number): void {
         }
         break;
       }
-      case 'flee': {
+      case 'flying': {
         // Climb + accelerate along the flee direction (an ascending arc away).
         const sp = Tuning.VULTURE_FLEE_SPEED;
         v.pos.x += v.fleeDir.x * sp * dt;
@@ -352,7 +410,10 @@ export function updateVultures(ctx: GameContext, dt: number): void {
       }
     }
 
-    // Sync mesh + kinematic body to pos (perched handled its own bob Y above).
+    // Articulate the rig for this state (idle bob / flap / landing flare / limp).
+    animateVulture(v, ctx.time.elapsed);
+
+    // Sync mesh + kinematic body to pos (perched sets its own Y above).
     if (v.state !== 'perched') {
       v.mesh.position.set(v.pos.x, v.pos.y, v.pos.z);
     }
