@@ -1060,20 +1060,76 @@ const SCENARIOS = {
       const ctx = window.__game.ctx;
       const v = ctx.vultures?.list?.[0];
       if (!v) return { noVulture: true };
-      const gy = ctx.terrain.heightAt(v.pos.x, v.pos.z);
-      v.pos.set(v.pos.x, gy + 0.25, v.pos.z);   // just above ground so it lands fast
-      v.state = 'dead'; v.landed = false; v.velocity.set(0, -0.5, 0);
-      return { ok: true };
+      // Relocate to OPEN ground (6m off the tree) + lift ~3m so the dynamic-body
+      // tumble (T5) falls clear of the trunk and reads against bare dune.
+      const ox = v.pos.x + 6, oz = v.pos.z + 6;
+      const gy = ctx.terrain.heightAt(ox, oz);
+      v.perch.set(ox, gy, oz);
+      v.pos.set(ox, gy + 3.0, oz);
+      v.mesh.position.copy(v.pos);
+      v.body.setNextKinematicTranslation({ x: v.pos.x, y: v.pos.y + 0.26, z: v.pos.z });
+      // Frame a side camera on the bird so the fall strip reads (pulled back +
+      // raised; sun high so it isn't a horizon silhouette).
+      const cam = ctx.three.camera;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      ctx.weather.intensity = 0;
+      cam.position.set(v.pos.x + 7, gy + 4.5, v.pos.z + 7);
+      cam.lookAt(v.pos.x, gy + 1.2, v.pos.z);
+      cam.updateMatrixWorld(true);
+      window.__game.setTime(0.5);
+      // Drive the REAL death → swaps in the dynamic tumbling body.
+      const killed = window.__game.killVulture(v.id);
+      return { ok: true, killed, id: v.id };
     });
     if (r1.noVulture) { console.log('[vulture-kill] SKIP — no vulture'); return; }
-    await page.waitForTimeout(1800);
+    // Let the dynamic body tumble + settle (game stays live so physics ticks).
+    // The player camera is far away + auto-tracks the player, so we can't film
+    // the fall from here (D150 — in-motion feel is foreground-owed); instead we
+    // PAUSE once it has settled and frame the resting corpse for a clean read.
+    // rig-shot runs a deliberately slow sim clock (D172, ~8× wall:sim), so a 3m
+    // fall + tumble + settle needs many wall-seconds of game-time to complete.
+    await page.waitForTimeout(16000);
     const r2 = await page.evaluate(() => {
-      const v = window.__game.ctx.vultures.list[0];
+      const ctx = window.__game.ctx;
+      const V = ctx.three.camera.position.constructor;
+      const v = ctx.vultures.list[0];
       let tagged = false;
       v.mesh.traverse((o) => { if (o.userData.interactType === 'take' && o.userData.interactRegistry === 'vultures') tagged = true; });
-      return { state: v.state, landed: v.landed, tagged };
+      const gy = ctx.terrain.heightAt(v.pos.x, v.pos.z);
+      // Measure the mesh's actual lowest point vs the ground (the feet-origin is
+      // misleading once the bird rests on its side).
+      v.mesh.updateMatrixWorld(true);
+      const Box3 = ctx.three.scene.constructor === Object ? null : null;  // (unused — keep V import live)
+      const box = { minY: Infinity, maxY: -Infinity };
+      v.mesh.traverse((o) => {
+        if (!o.isMesh || !o.geometry) return;
+        if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+        const bb = o.geometry.boundingBox;
+        for (const cx of [bb.min.x, bb.max.x]) for (const cy of [bb.min.y, bb.max.y]) for (const cz of [bb.min.z, bb.max.z]) {
+          const p = new V(cx, cy, cz); o.localToWorld(p);
+          if (p.y < box.minY) box.minY = p.y;
+          if (p.y > box.maxY) box.maxY = p.y;
+        }
+      });
+      const bottomGap = +(box.minY - gy).toFixed(2);   // lowest mesh point above ground
+      // Freeze + frame the corpse on the dune.
+      ctx.flags.paused = true;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      ctx.weather.intensity = 0;
+      window.__game.setTime(0.5);
+      const cam = ctx.three.camera;
+      cam.position.set(v.pos.x + 1.6, gy + 1.0, v.pos.z + 1.6);
+      cam.lookAt(v.pos.x, gy + 0.15, v.pos.z);
+      cam.updateMatrixWorld(true);
+      return { state: v.state, landed: v.landed, tagged, bottomGap, deathAge: +v.deathAge.toFixed(1) };
     });
-    const pass = r2.state === 'dead' && r2.landed === true && r2.tagged === true;
+    await page.waitForTimeout(250);
+    await page.screenshot({ path: join(OUT, 'scen-vulture-kill-rest.png'), fullPage: false });
+    // Lowest mesh point within ~0.25m of the ground = resting on the dune.
+    const onGround = r2.bottomGap >= -0.25 && r2.bottomGap <= 0.25;
+    const pass = r2.state === 'dead' && r2.landed === true && r2.tagged === true && onGround;
     console.log(`[vulture-kill] ${pass ? 'PASS' : 'FAIL'} ${JSON.stringify(r2)}`);
   },
 

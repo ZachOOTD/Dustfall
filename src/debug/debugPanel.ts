@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import type { GameContext } from '../GameContext.ts';
 import { spawnRaider as spawnRaiderEntity, damageRaider } from '../enemies/raider.ts';
+import { damageVulture } from '../enemies/vulture.ts';
 import { resetTutorial, showControlsPanel } from '../ui/tutorial.ts';
 import { getAudioStateSnapshot, type AudioStateSnapshot } from '../audio/soundscape.ts';
 import { getMusicStateSnapshot, type MusicStateSnapshot } from '../audio/music.ts';
@@ -59,6 +60,10 @@ interface DebugApi {
    *  path → dead pose + corpse interaction tag), so the corpse-drag flow is
    *  testable without melee aiming. Returns true if a live raider matched. */
   killRaider: (id: number) => boolean;
+  /** ACAI (T5) — DEV-only: kill a vulture by id (drives the real death path →
+   *  dynamic-body tumble + lootable tag), so the death physics is testable
+   *  without aiming. Returns true if a live (non-dead) vulture matched. */
+  killVulture: (id: number) => boolean;
   /** ACH (Cycle 2) — DEV-only: enter gameplay HEADLESS, bypassing the title
    *  button + pointer-lock. The normal handoff only clears `flags.paused` via
    *  the pointer-lock 'lock' event (input.ts), which never fires for an
@@ -168,6 +173,12 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
       const r = ctx.raiders.find((rr) => rr.id === id);
       if (!r || r.bb.state === 'dead') return false;
       damageRaider(r, 9999, ctx);  // drives transitionTo('dead') + applyRaiderDeadPose
+      return true;
+    },
+    killVulture(id) {
+      const v = ctx.vultures.list.find((vv) => vv.id === id);
+      if (!v || v.state === 'dead') return false;
+      damageVulture(v, 9999, ctx);  // drives the dynamic-body tumble death (T5)
       return true;
     },
     enterGame(dev) {

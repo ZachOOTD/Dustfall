@@ -1421,7 +1421,8 @@ export const Tuning = {
   VULTURE_RELOCATE_MIN_DIST: 40,   // m — a relocation target perch must be at least this far
   VULTURE_LAND_ARRIVE_DIST: 2.5,   // m (horizontal) from target → begin the landing descent
   VULTURE_DEATH_SPIN: 7.0,         // rad/s angular kick on death (tumble)
-  VULTURE_SETTLE_VEL: 0.4,         // m/s — below this (lin+ang) the dead body is "settled"
+  VULTURE_SETTLE_VEL: 0.7,         // m/s — below this (lin+ang) the dead body is "settled"
+  VULTURE_SETTLE_MAX_AGE: 2.5,     // s — hard cap: a near-stationary corpse lands even if heightfield jitter blocks sleep
 } as const;
 
 // Sky gradient colors (top vs horizon) per time of day. Horizon stays close to

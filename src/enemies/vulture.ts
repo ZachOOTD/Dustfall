@@ -62,6 +62,10 @@ export interface Vulture {
   hovered: boolean;
   /** true once landed dead (lootable on the ground). */
   landed: boolean;
+  /** ACAI (T5) — low-motion settle timer + total time since death (s), used to
+   *  decide when a dynamic-body corpse has come to rest. */
+  settleT: number;
+  deathAge: number;
 }
 
 let _nextId = 1;
@@ -249,18 +253,86 @@ function tagVultureTake(root: THREE.Object3D, id: number): void {
   });
 }
 
-/** Combat hit kills the vulture. It drops dead — the update loop falls it to the
- *  ground (gravity), then it flops + becomes lootable. */
-export function damageVulture(vulture: Vulture, _dmg: number, _ctx: GameContext): void {
+const _deadBox = new THREE.Box3();
+const _deadSize = new THREE.Vector3();
+const _deadCenter = new THREE.Vector3();
+const _deadOrigin = new THREE.Vector3();
+const _deadLocalOff = new THREE.Vector3();
+const _deadQ = new THREE.Quaternion();
+
+/** Combat hit kills the vulture: swap the kinematic body for a DYNAMIC one that
+ *  tumbles to the ground (mirrors the dropped-item physics) and set the limp
+ *  rig pose once. The update loop syncs the mesh from the body until it settles,
+ *  then tags it lootable. */
+export function damageVulture(vulture: Vulture, _dmg: number, ctx: GameContext): void {
   if (vulture.state === 'dead') return;
+  const wasFlying = vulture.state === 'flying' || vulture.state === 'landing';
   vulture.state = 'dead';
   vulture.landed = false;
-  // Carry any flee momentum into the fall + a downward kick.
-  vulture.velocity.y = Math.min(vulture.velocity.y, -0.5);
+  vulture.settleT = 0;
+  vulture.deathAge = 0;
+
+  const mesh = vulture.mesh;
+  // Limp pose once; bake it into the world matrices before measuring the AABB.
+  animateVulture(vulture, 0);
+  mesh.updateMatrixWorld(true);
+
+  const world = ctx.physics.world;
+  // Tear down the kinematic body + its combat collider.
+  _colliderToVulture.delete(vulture.collider.handle);
+  world.removeRigidBody(vulture.body);
+
+  // Cuboid from the posed mesh AABB. The body origin stays at the mesh origin
+  // (the feet), with the collider OFFSET to the body centre in local space — so
+  // the body spins about its centre of mass while body.translation() still maps
+  // straight onto mesh.position.
+  _deadBox.setFromObject(mesh);
+  _deadBox.getSize(_deadSize);
+  _deadBox.getCenter(_deadCenter);
+  mesh.getWorldPosition(_deadOrigin);
+  _deadLocalOff.copy(_deadCenter).sub(_deadOrigin)
+    .applyQuaternion(_deadQ.copy(mesh.quaternion).invert());
+  const hx = Math.max(0.05, _deadSize.x * 0.5);
+  const hy = Math.max(0.05, _deadSize.y * 0.5);
+  const hz = Math.max(0.05, _deadSize.z * 0.5);
+
+  const bd = RAPIER.RigidBodyDesc.dynamic()
+    .setTranslation(_deadOrigin.x, _deadOrigin.y, _deadOrigin.z)
+    .setRotation({ x: mesh.quaternion.x, y: mesh.quaternion.y, z: mesh.quaternion.z, w: mesh.quaternion.w })
+    .setLinearDamping(0.6)
+    .setAngularDamping(0.8)
+    .setCcdEnabled(true);   // fast fall → CCD prevents heightfield tunneling
+  // Seed momentum: carry horizontal flee drift (if airborne) + a downward kick.
+  const drift = wasFlying ? Tuning.VULTURE_FLEE_SPEED * 0.5 : 0;
+  bd.setLinvel(
+    vulture.fleeDir.x * drift,
+    Math.min(vulture.velocity.y, -0.8),
+    vulture.fleeDir.z * drift,
+  );
+  const body = world.createRigidBody(bd);
+  // Tumble spin (deterministic-ish per bird; game code → Math.random OK).
+  const spin = Tuning.VULTURE_DEATH_SPIN;
+  body.setAngvel(
+    { x: (Math.random() - 0.5) * spin, y: (Math.random() - 0.5) * spin, z: (Math.random() - 0.5) * spin },
+    true,
+  );
+  const collider = world.createCollider(
+    RAPIER.ColliderDesc.cuboid(hx, hy, hz)
+      .setTranslation(_deadLocalOff.x, _deadLocalOff.y, _deadLocalOff.z)
+      .setFriction(0.85)
+      .setRestitution(0.15)
+      .setDensity(0.5),
+    body,
+  );
+  vulture.body = body;
+  vulture.collider = collider;
 }
 
-/** Apply the landed-dead visual + 'take' retag. Safe on a fresh restore. */
+/** Apply the landed-dead visual + 'take' retag. Safe on a fresh restore (no
+ *  dynamic body — used by save-load to re-flop a saved dead bird statically). */
 export function applyDeadVulturePose(vulture: Vulture): void {
+  vulture.state = 'dead';
+  animateVulture(vulture, 0);                                   // limp wings/neck/legs
   vulture.mesh.rotation.set(0, vulture.heading, Math.PI / 2);   // flop on its side
   vulture.landed = true;
   tagVultureTake(vulture.mesh, vulture.id);
@@ -319,6 +391,8 @@ export function spawnVulture(
     bob: Math.random() * Math.PI * 2,
     hovered: false,
     landed: false,
+    settleT: 0,
+    deathAge: 0,
   };
   _colliderToVulture.set(collider.handle, v);
   _vultures.push(v);
@@ -411,24 +485,40 @@ export function updateVultures(ctx: GameContext, dt: number): void {
       }
       case 'dead': {
         if (!v.landed) {
-          // Fall under gravity until the ground, then flop + tag.
-          v.velocity.y -= Tuning.VULTURE_GRAVITY * dt;
-          v.pos.x += v.fleeDir.x * 1.0 * dt;   // a little forward drift as it tumbles
-          v.pos.z += v.fleeDir.z * 1.0 * dt;
-          v.pos.y += v.velocity.y * dt;
-          // tumble while falling
-          v.mesh.rotation.x += dt * 5.0;
-          const groundY = ctx.terrain.heightAt(v.pos.x, v.pos.z);
-          if (v.pos.y <= groundY + 0.06) {
-            v.pos.y = groundY + 0.06;
-            applyDeadVulturePose(v);
+          // Dynamic body (built in damageVulture) tumbles to the dunes; copy its
+          // transform onto the mesh until it settles, then tag it lootable.
+          const t = v.body.translation();
+          const r = v.body.rotation();
+          v.mesh.position.set(t.x, t.y, t.z);
+          v.mesh.quaternion.set(r.x, r.y, r.z, r.w);
+          v.pos.set(t.x, t.y, t.z);
+          v.deathAge += dt;
+          // Key the settle on LINEAR velocity only — a corpse resting on the
+          // heightfield keeps spurious angular jitter from mesh-vs-triangle
+          // contact, which would otherwise never let it "settle".
+          const lv = v.body.linvel();
+          const linMotion = lv.x * lv.x + lv.y * lv.y + lv.z * lv.z;
+          if (linMotion < Tuning.VULTURE_SETTLE_VEL * Tuning.VULTURE_SETTLE_VEL) {
+            v.settleT += dt;
+          } else {
+            v.settleT = 0;
+          }
+          // Land when it has rested for a beat, the body has slept (auto on the
+          // heightfield), or a hard age cap elapses (heightfield micro-jitter can
+          // otherwise keep a near-stationary corpse from ever sleeping).
+          if (v.settleT > 0.3 || v.body.isSleeping() || v.deathAge > Tuning.VULTURE_SETTLE_MAX_AGE) {
+            v.landed = true;
+            v.body.sleep();             // rest on the dune
+            tagVultureTake(v.mesh, v.id);
           }
         }
-        break;
+        // Dead birds drive the mesh from the body — skip the rig pose + kinematic
+        // sync below (the limp pose was baked once at death).
+        continue;
       }
     }
 
-    // Articulate the rig for this state (idle bob / flap / landing flare / limp).
+    // Articulate the rig for this state (idle bob / flap / landing flare).
     animateVulture(v, ctx.time.elapsed);
 
     // Sync mesh + kinematic body to pos (perched sets its own Y above).
