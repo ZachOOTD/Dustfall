@@ -772,6 +772,7 @@ startLoop(ctx, (c, dt) => {
     c.three.camera.position.x,
     c.three.camera.position.z,
     c.time.sunHeight,
+    c.weather.cloudiness ?? 0,   // ACAH — cloud-shadow coverage
   );
   // Session ABE — fabric wind shimmer. Calm baseline 0.10 keeps a
   // gentle breathing motion even on still days; weather.intensity

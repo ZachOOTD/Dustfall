@@ -904,6 +904,31 @@ const SCENARIOS = {
     }`);
   },
 
+  // Cloud-shadows (ACAH): force overcast + frame the lit ground from above so the
+  // moving cloud-shadow dapple on the terrain is visible. --cl=<0..1> coverage.
+  'cloud-shadows': async (page) => {
+    const cl = argv.cl !== undefined ? Number(argv.cl) : 0.9;
+    const r = await page.evaluate((cl) => {
+      const ctx = window.__game.ctx;
+      window.__game.setTime(0.5);                 // bright midday so the dapple contrasts
+      ctx.weather.cloudiness = cl;
+      ctx.weather.cloudinessHold = cl;            // pin it against the wander
+      ctx.three.renderer.setSize(900, 700, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 900 / 700; cam.updateProjectionMatrix(); }
+      const tr = ctx.player.body.body.translation();
+      ctx.flags.paused = true;
+      // Look down-ahead across the flats from ~14m up.
+      cam.position.set(tr.x, tr.y + 9, tr.z + 2);
+      cam.lookAt(tr.x + 14, tr.y, tr.z + 30);
+      cam.updateMatrixWorld(true);
+      return { cloudiness: ctx.weather.cloudiness };
+    }, cl);
+    await page.waitForTimeout(600);
+    await page.screenshot({ path: join(OUT, 'scen-cloud-shadows.png'), fullPage: false });
+    console.log(`[cloud-shadows] ${JSON.stringify(r)}`);
+  },
+
   // Vulture (ACAH): frame a perched vulture on its tree for model iteration.
   // --angle=3q|side|front; head faces +X (rotation forced to 0 for a stable read).
   'vulture': async (page) => {

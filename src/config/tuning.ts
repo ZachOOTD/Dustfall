@@ -1337,6 +1337,11 @@ export const Tuning = {
   CLOUD_STORM_FLOOR: 0.85,         // cloudiness forced this high while a storm builds/rages
   CLOUD_SUN_DIM: 0.55,             // overcast cuts direct sun by up to this fraction
   CLOUD_AMBIENT_LIFT: 0.5,         // overcast lifts daytime ambient by up to this fraction
+  // ACAH — moving cloud shadows dappling the terrain (built on the cloud field).
+  CLOUD_SHADOW_SCALE: 0.032,       // world-XZ feature size (smaller = bigger shadow patches)
+  CLOUD_SHADOW_DRIFT_X: 0.06,      // shadow drift speed (m/s-ish in noise space)
+  CLOUD_SHADOW_DRIFT_Z: 0.04,
+  CLOUD_SHADOW_DARKEN: 0.72,       // ground multiplier under a dense cloud (0.80 = -20%)
   // ACL SKY+WEATHER — directional Dune-style sweeping sandstorm wall.
   STORM_WALL_WIDTH: 140,           // half-thickness (world u) of the full-intensity core
   STORM_WALL_SPEED: 26,            // wall travel speed (world u/sec)

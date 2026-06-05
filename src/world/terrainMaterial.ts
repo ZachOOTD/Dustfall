@@ -72,6 +72,7 @@ export function createTerrainMaterial(): THREE.MeshLambertMaterial {
     shader.uniforms.uTime = { value: 0 };
     shader.uniforms.uCameraPosXZ = { value: new THREE.Vector2(0, 0) };
     shader.uniforms.uSunHeight = { value: 0 };
+    shader.uniforms.uCloudiness = { value: 0 };   // ACAH — cloud-shadow coverage (0..1)
     _shaderRefs.add(shader as unknown as ShaderRef);
 
     // ── Vertex shader: forward world position + WORLD-SPACE normal +
@@ -139,6 +140,8 @@ export function createTerrainMaterial(): THREE.MeshLambertMaterial {
         varying float vBiomeRaw;
         uniform float uWindCos;
         uniform float uWindSin;
+        uniform float uTime;        // ACAH — cloud-shadow drift
+        uniform float uCloudiness;  // ACAH — cloud-shadow coverage
 
         // Hash → value-noise → 4-octave FBM. Precision-robust IQ-style
         // hash: pulls the input into [0, 1) via fract() BEFORE the
@@ -467,6 +470,20 @@ export function createTerrainMaterial(): THREE.MeshLambertMaterial {
           diffuseColor.rgb * vec3(0.85, 0.88, 0.95),
           coolPush
         );
+
+        // ── ACAH — MOVING CLOUD SHADOWS. Dapple the ground where the overcast
+        //    cloud field is dense. Sampled from low-freq value-noise at world XZ
+        //    drifting over time (so the patches crawl like the sky's clouds),
+        //    gated by uCloudiness so it only appears under cloud cover. Reuses
+        //    the terrain's own precision-robust noise. Subtle — overcast already
+        //    dims the SUN globally (lighting.ts); this adds the moving dapple.
+        if (uCloudiness > 0.001) {
+          vec2 cloudUV = vWorldPositionTerrain.xz * ${Tuning.CLOUD_SHADOW_SCALE.toFixed(4)}
+                       + uTime * vec2(${Tuning.CLOUD_SHADOW_DRIFT_X.toFixed(4)}, ${Tuning.CLOUD_SHADOW_DRIFT_Z.toFixed(4)});
+          float cloudN = terrainValueNoise(cloudUV) * 0.6 + terrainValueNoise(cloudUV * 0.42 + 11.0) * 0.4;
+          float cloudShadow = smoothstep(0.42, 0.74, cloudN) * uCloudiness;
+          diffuseColor.rgb *= mix(1.0, ${Tuning.CLOUD_SHADOW_DARKEN.toFixed(3)}, cloudShadow);
+        }
       `,
     );
   };
@@ -483,6 +500,7 @@ export function updateTerrainShaderUniforms(
   cameraX: number,
   cameraZ: number,
   sunHeight: number,
+  cloudiness: number,
 ): void {
   for (const s of _shaderRefs) {
     const u = s.uniforms;
@@ -492,5 +510,6 @@ export function updateTerrainShaderUniforms(
       v.set(cameraX, cameraZ);
     }
     if (u.uSunHeight) (u.uSunHeight as { value: number }).value = sunHeight;
+    if (u.uCloudiness) (u.uCloudiness as { value: number }).value = cloudiness;
   }
 }
