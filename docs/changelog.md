@@ -48,7 +48,16 @@ iterated 4 rounds (`vulture` rig-shot); `vulture-kill` eval PASS. In-flight flee
 noise at world XZ drifting over `uTime` (gated by a new `uCloudiness` uniform from `ctx.weather.cloudiness`), darkening
 diffuse under cover. Subtle at gameplay angle (a top-down crank confirmed the patches). `tuning: CLOUD_SHADOW_*`.
 
-**NEW rig-shot scenarios:** `scrap-loot`, `worm-shelter`, `vulture`, `vulture-kill`, `cloud-shadows`.
+**NEW rig-shot scenarios:** `scrap-loot`, `worm-shelter`, `vulture`, `vulture-kill`, `cloud-shadows`, `perf-probe`.
+
+**Follow-up — perf pass (user-reported startup freeze + lower FPS).** Diagnosed via the NEW `perf-probe` scenario
+(renderer.info + scene counts). Two regressions from this session's work, both fixed: (1) **startup freeze** — the boot
+`renderer.compile()` pre-warm was sized for ~16 programs (ABL) but D175/D177 un-shared per-material programs to **~120**,
+so the SYNCHRONOUS compile became a multi-second freeze before the title appeared → switched to **`compileAsync()`**
+(parallel, off-main-thread, fire-and-forget; title shows immediately). (2) **lower FPS** — the scrap scatter added 233
+pickups × ~12 meshes = ~2800 meshes (34% of the scene) + ~140 branches × ~6 → **merge each world pickup into ONE
+geometry+material** (`mergeGroupToMesh`, the dead-tree trick): scrap 2796→230 meshes, branch 772→140; **draw calls
+2386→~1150 (halved)**, scene meshes 8313→5267. Held items keep the detailed multi-material version. No gameplay change.
 
 ## Session ACAF — 2026-06-04 — Branch model: dark wood-grain + side twigs + dead-tree color match ✓ verify pass (tsc clean)
 
