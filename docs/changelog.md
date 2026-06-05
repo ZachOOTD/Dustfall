@@ -56,8 +56,13 @@ diffuse under cover. Subtle at gameplay angle (a top-down crank confirmed the pa
 so the SYNCHRONOUS compile became a multi-second freeze before the title appeared → switched to **`compileAsync()`**
 (parallel, off-main-thread, fire-and-forget; title shows immediately). (2) **lower FPS** — the scrap scatter added 233
 pickups × ~12 meshes = ~2800 meshes (34% of the scene) + ~140 branches × ~6 → **merge each world pickup into ONE
-geometry+material** (`mergeGroupToMesh`, the dead-tree trick): scrap 2796→230 meshes, branch 772→140; **draw calls
-2386→~1150 (halved)**, scene meshes 8313→5267. Held items keep the detailed multi-material version. No gameplay change.
+geometry+material** (the dead-tree trick): scrap 2796→230 meshes, branch 772→140; **draw calls 2386→~1150 (halved)**,
+scene meshes 8313→5267. Held items keep the detailed multi-material version. **Round 2** (boot-phase timing via a NEW
+`window.__bootT` instrumentation): (3) **metal → uniforms** — the metal shader now passes scratch/worn/rust/localSpace as
+UNIFORMS instead of baking them into the GLSL, so all metal shares ONE program (cuts compile + per-frame state-switching;
+superseded the metal cache key). (4) **shared pickup geometry** — `buildScrapMesh` is deterministic, so all ~220 scrap
+were rebuilding identical geometry; now ONE shared geo (+ per-spawn yaw) + a 5-variant branch pool → boot scrap phase
+**108ms→3ms**, trees+branches 143→63ms, **bootTotal 876→619ms (−30%)** + a big GPU-memory drop. No gameplay change.
 
 ## Session ACAF — 2026-06-04 — Branch model: dark wood-grain + side twigs + dead-tree color match ✓ verify pass (tsc clean)
 
