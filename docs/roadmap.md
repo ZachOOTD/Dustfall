@@ -20,6 +20,7 @@ and promotes the second.
 
 ## Recently shipped (overnight + post-overnight)
 
+- **Session ACAG** (2026-06-05): **Branch realism + full dead-tree rework + bark grain.** Iterative polish (~15 screenshot-verified follow-ups), tsc clean, no save change. (1) **Held == world lighting (D174):** FP viewmodel scene mirrors the world sun/moon/ambient each frame (was fixed studio lights) → held items lit identically to dropped copies. (2) **Recursive dead tree (D176):** `deadTree.ts` rebuilt — recursive forking generator (camelthorn refs: bole → 2-3 forks ×4 levels + gnarled curves + buttress roots), all segments merged to ONE geometry/tree (1 draw call ×45). (3) **Bark grain + latent shader-cache fix (D175):** wood mats silently shared one program (Three keys cache on props, not onBeforeCompile source) → `customProgramCacheKey`; NEW gated `bark` shader layer → trunk vertical grain. (4) Branch shaft → single seamless tapered mesh; deadwood color → ONE shared `BRANCH_WOOD_COLOR` (light grey). NEW `tree` + `branch-match` rig-shot scenarios.
 - **Session ACAF** (2026-06-04): **Branch model rework.** 5 files, tsc clean, no save change. Twigs now emerge from the shaft surface (no longer pierce through) + a bend; dark wood-grain material (`0x3a2e20`) on the held branch (vmWood) + the ~200 world pickups (shared `createWoodGrainMaterial`); dead trees switched to the same dark wood family so branches + trees match. NEW `branches` rig-shot scenario.
 - **Session ACAE** (2026-06-04): **Dev item-spawner panel.** 4 files, tsc clean, no save change. Click the `[ DEV MODE ]` badge → a panel (`ui/devPanel.ts`) listing every registered item (filter + click-to-add). List derives from `ALL_REGISTERED_ITEM_IDS` (`Object.keys(_DEFS)`) so it can't go stale — found + fixed `ALL_ITEM_IDS` missing 4 items (scrap_bar/grill_kit/shrew meats). NEW `dev-panel` rig-shot scenario.
 - **Session ACAD** (2026-06-04): **Rust/weathering pass.** 6 files, tsc clean, no save change. NEW `rustLevel` oxidation layer on the shared metal shader (`createMetalMaterial` — FBM patches + drip streaks); item `vmMetal` wrapper defaults rusty (0.34) so all held gear ages at once; pulse rifle rebuilt as scrappy junk-tech (heavy rust + scrap patch + cable wrap + wiring + taped grip); iron world props (stake/sled/lantern/speeder) rusted. D173. (Wrecks already rusty; painted-metal surfaces — speeder/sled top — are the remaining clean-ish gap.)
@@ -138,6 +139,14 @@ signal in the session-end report, reorder remaining cycles in iteration-plan.md)
 flagship→composite procgen sweep (ABO B6b), item-viewmodel fidelity remainder (~19
 ItemDefs), per-item accurate collision shapes, crafting combine-to-discover chooser UI,
 megaWreck catwalk panel reachability.
+
+**Near-term priority (ACAG triage, 2026-06-05) — surfaced before the cycles:**
+- **[feat] Loot-source bootstrap fix** — panels need a `scrap_bar` to open, but `scrap_bar` can't be crafted without
+  loot → deadlock. Add a no-tools loot source (proposed: scrap scatter around wrecks, like branches around dead trees).
+  This gates the early game and should jump the queue.
+- Other ACAG triage items (see `backlog.md`): scrap-model overhaul + item-model audit, mega-wreck rebuild from scratch,
+  rare salt-flat vulture, devmode-toggle fix (badge unclickable), cloud shadows, night-dust ground clamp, ODST drop-pod
+  intro, procedural-repairable speeder bikes, sandworm shelter-immunity.
 
 **Parked speculative ideas** (not in Phase 2 cycles): opening-cutscene drop-pod sequence,
 craftable hover-bike, bounties (D39 singleton-interactable template). NOTE excluded as

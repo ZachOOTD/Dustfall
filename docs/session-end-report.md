@@ -2,17 +2,12 @@
 
 Cumulative state. Rewritten end-to-end at each `/session-end`.
 
-**Current state**: Session ACAE shipped (2026-06-04 — dev item-spawner panel). `npm run verify` (tsc) PASS. SAVE_VERSION 14 (unchanged). ACAE added a DEV-MODE-only DOM panel (`ui/devPanel.ts`): click the `[ DEV MODE ]` badge → a filterable list of every registered item, click to add it to inventory. The list derives from a NEW `ALL_REGISTERED_ITEM_IDS` (`Object.keys(_DEFS)`) so it can't go stale — which surfaced that `ALL_ITEM_IDS` was missing 4 real items (scrap_bar/grill_kit/raw+cooked_shrew_meat; now added). NEW `dev-panel` rig-shot scenario. **Next session (ACAF)** = pick a lane: (a) Cycle 5 raider proc-character, (b) DEEP CAVE SYSTEM, or (c) foreground feel-tune. — Prior: ACAD rust/weathering pass (D173) details below.
+**Current state**: Session ACAG shipped (2026-06-05 — branch realism + full dead-tree rework + bark grain). `npm run verify` (tsc) PASS. SAVE_VERSION 14 (unchanged). A long iterative visual-polish session (~15 screenshot-verified follow-ups + a real bug hunt). **Headlines**: (1) **Held == world lighting (D174)** — the FP viewmodel scene now mirrors the world sun/moon/ambient every frame (was fixed studio lights), so a held item is lit identically to its dropped/world copy; deadwood color unified to one shared `BRANCH_WOOD_COLOR` constant (light grey). (2) **Recursive dead tree (D176)** — `world/deadTree.ts` rebuilt from a single pole into a recursive forking generator (Deadvlei camelthorn refs: bole → 2-3 forks ×4 levels into a gnarled crown + buttress roots), all segments merged into ONE geometry/tree (1 draw call ×45). (3) **Bark grain + a LATENT shader-cache bug (D175)** — wood materials were silently sharing one compiled program (Three keys the program cache on material props, not onBeforeCompile source); `customProgramCacheKey` fixes it, exposing a new gated `bark` shader layer that gives the trunk vertical grain (and un-sharing grain across ALL wood props). (4) Branch shaft → single seamless tapered mesh. NEW `tree` + `branch-match` rig-shot scenarios. **Owed (unchanged)**: ACW/ACX in-motion feel pile (D150). **Next session (ACAH)** = pick a lane: (a) loot-source bootstrap fix (panel/scrap_bar deadlock — jump the queue), (b) Cycle 5 raider proc-character, (c) DEEP CAVE SYSTEM, or (d) foreground feel-tune.
 
-## ACAD scope (prior session) — rust/weathering pass 100+ sessions post-MVP. `npm run verify` (tsc) PASS. **SAVE_VERSION 14** (unchanged). ACAD answered "everything in the desert has been weathered by time": NEW `rustLevel` (0..1) oxidation layer on the shared `createMetalMaterial` shader (FBM patches + drip streaks, mixed into the diffuse); the item `vmMetal` wrapper defaults `rustLevel: 0.34` so ALL held metal gear ages at once; the pulse rifle rebuilt as scrappy junk-tech (heavy rust + scrap patch + cable wrap + exposed wiring + taped grip; the glowing cell is the lone pristine tech); iron world props (stake/sled/lantern/speeder) rusted. Default rust is 0, so world-prop callers opt in — no surprise regressions. D173. **Next session (ACAE)** = pick a lane: (a) Cycle 5 raider proc-character, (b) DEEP CAVE SYSTEM, or (c) foreground feel-tune.
-
-## ACAD scope (this session) — rust/weathering pass
-
-- **Trigger**: user — "everything in the desert has been weathered by time; all models should reflect that." The pulse rifle (and gear generally) read too clean; the metal shader had scratches/dirt but no rust.
-- **Rust shader** (`metalMaterial.ts`): NEW `rustLevel` opt → FBM oxidation patches + Y-stretched drip streaks, two-tone rust core→halo, mixed INTO the diffuse. Default 0 (world-prop callers unchanged unless opted in).
-- **All held gear** (`items.ts`): `vmMetal` defaults `rustLevel: 0.34` → every held metal item weathers in one change (verified scrap_gun/machete/canteen/amban/energy_pistol — rust on dark gun-metal, subtle on bright blades, wood/fabric untouched).
-- **Pulse rifle**: rusty base colors + heavy rustLevel (0.5–0.72) + scavenger geometry (riveted scrap patch, cable wrap, exposed wiring, hose clamp, taped grip).
-- **World props**: rust on sled scrap-sheet (0.45), iron stake (0.55–0.6), lantern (0.42), speeder antenna (0.4). Wrecks already use `createRustedHullMaterial`. Gap: painted-metal (`createPaintedMetalMaterial` — sled top, speeder body) has `wearLevel` but no rust layer (follow-up). D173.
+**Recent sessions (condensed — full detail in changelog.md):**
+- **ACAF** (2026-06-04): branch model rework — twigs emerge from the shaft (no longer pierce), dark wood-grain, dead trees joined the wood family. NEW `branches` scenario. (Superseded by ACAG's full rework.)
+- **ACAE** (2026-06-04): dev item-spawner panel (`ui/devPanel.ts`) — DEV-MODE badge → filterable add-any-item list from `ALL_REGISTERED_ITEM_IDS`. NEW `dev-panel` scenario. (NOTE: ACAG triage flagged the badge as unclickable — toggle fix is in backlog.)
+- **ACAD** (2026-06-04): rust/weathering pass — NEW `rustLevel` oxidation layer on the shared metal shader; `vmMetal` defaults 0.34 so all held gear ages; pulse rifle as junk-tech; iron props rusted. D173. (Gap: painted-metal — speeder/sled top — still has no rust layer.)
 
 ## ACAC scope (this session) — pulse rifle: rapid-fire energy carbine (Cycle 5 weapon half) 100+ sessions post-MVP. `npm run verify` (tsc) PASS. **SAVE_VERSION 14** (unchanged — reuses additive `ammoRemaining`). ACAC added a NEW `pulse_rifle` weapon, distinct from the 3 existing guns: auto-fire (fires while LMB held via a new `auto` WeaponSpec flag) from a self-recharging energy cell (no ammo item; drains 1/pulse, recharges 7/s after a 0.6s idle via the item's updateHeld). Hero-quality glowing-cell model; rare `massive`-wreck loot. D172 (+ a headless slow-game-clock verification footgun). **Next session (ACAD)** = pick a lane: (a) Cycle 5 raider proc-character (the other half), (b) DEEP CAVE SYSTEM, or (c) foreground feel-tune.
 
@@ -344,39 +339,43 @@ Existing tunables of interest:
 
 ## Suggested next session (1-3 directions in priority order)
 
-1. **Foreground feel-tune playtest of the whole ACW+ACX pile** (TOP, Session ACY — the owed D150 verification the headless harness can't do): creature gaits in motion (`LIZARD_GAIT_*`/`SHREW_GAIT_*`), shrew burrow dive (`SHREW_BURROW_*` + puff), speeder dust/engine (`SPEEDER_DUST_*`/`SPEEDER_GLOW_*`), storm wind push (`STORM_WIND_PUSH_ACCEL`), camera sway + audio muffle (`STORM_CAM_SWAY_*`/`STORM_AUDIO_LP_MIN_HZ`), machete 3P chop, 3P interact-prompt on-object, **and the ACX seated-speeder riding feel in motion + exact feet-on-pegs** (`SPEEDER_RIG_SEAT_Y/Z` + the seated-branch pose angles in `playerRig.ts`; the `bike-truth` harness gets hands→bars to ~5cm but feet sit ~22cm from the pegs). Boot `npm run dev`, play, tune in `tuning.ts`.
-2. **Pick ONE breadth lane** (after the playtest): (a) finish the per-item 3P **use-anim** pass for the remaining held items (gun/rifle recoil, canteen drink, scrap_bar pry, bandage) via the `held-item` rig-shot scenario — per-item grips are now done (ACW+ACX); (b) the DEEP CAVE SYSTEM design pass (procedural sprawl + sub-terrain collision + descent opening + dark-nav, then re-apply the egg spine from `2d4035b`); (c) salvage-panel variety + dynamic placement (#189/#190) + POI art detail.
-3. **Standing optional levers**: game **lighting mood** (D142, biggest remaining in-game realism lever — surface first) + PM-D cloth-physics robe; companion deeper rebuild (D128) only if it stops reading well.
+1. **Loot-source bootstrap fix** (TOP — gates the early game): salvage panels need a `scrap_bar` to open, but a `scrap_bar` can't be crafted without loot → deadlock. Add a no-tools loot source — proposed: **scrap pickups scatter around wrecks**, mirroring the dead-tree → branch spawn pattern (`world/deadTree.ts` `spawnDeadTrees` is the template; `pickups.ts spawnBranchAt` the per-item spawner). Headless-verifiable.
+2. **Pick ONE breadth lane**: (a) **Cycle 5 raider proc-character** (rebuild the raider as a proc-character so the corpse-drag path has a good-looking body; pulse rifle is its weapon; rig-shot-verifiable like the item/tree work); (b) **DEEP CAVE SYSTEM** design pass (procedural sprawl + sub-terrain collision + descent + dark-nav, then re-apply the egg spine from `2d4035b`); (c) **mega-wreck rebuild from scratch** (ACAG triage — too boxy; gather refs + level up modelling, like the camelthorn tree rework).
+3. **Foreground feel-tune playtest** of the owed ACW/ACX in-motion pile (D150, needs a human) + the ACAG-triage quick wins (devmode-toggle fix, night-dust ground clamp, speeder antenna blink, floating rear bar).
 
 ---
 
 ## Time spent
 
-100+ sessions shipped (A through ACX). Approx ~318-394h cumulative human-facing dev time. ACX was a focused fix pass (foreground feedback on ACW's 3P work) — 3 earlier commits (`e4d223f`/`af039cf`/`04e99d9`) + several superseded seated-pose attempts, then a from-scratch numeric-IK re-solve of the seated speeder pose via the new `bike-truth` harness. ~3 source files touched this turn + docs. No save change. (Tail of the same very long conversation: ACJ→…→ACW→ACX.)
+100+ sessions shipped (A through ACAG). ACAG was a long single conversation of iterative visual polish on the deadwood family — ~15 screenshot-verified follow-up commits (`64f3c49`→`f914100`) covering the branch seamless taper, the held==world lighting unification, the recursive dead-tree rebuild (6+ rig-shot rounds), the bark grain + shader-cache bug hunt, and density/height tuning — plus 4 `/triage-ideas` backlog dumps. ~4 source files + the harness + docs. No save change.
 
 ---
 
 ## State at session end
 
-- **Git status**: ACX earlier fixes in three pushed commits (`e4d223f` gun/rifle grips, `af039cf` wrong-hand + item-forward + speeder 3P cam, `04e99d9` footstep depth) + superseded seated-pose attempts (`5146078`/`45ea390`/`6e5b7bb`). The final waist-pivot seated-pose re-solve + `bike-truth` harness + `SEAT_Z` are committed at session-end + tagged `session-ACX`.
-- **Branch**: `master`. **Save state**: localStorage **v14** (unchanged — all ACX changes are pose/visual + tuning, D81, no bump).
-- **Ports bound**: a `npm run dev` server may still be running on **5173** (dev-only); the `bike-truth` rig-shot harness used 5193-5203 (transient — Windows `dev.kill()` can orphan the vite child; kill leftover listeners on those ports if a re-run hits a strict-port conflict).
-- **Verification status**: hands→bars (~5cm) + facing + seated posture verified via the `bike-truth` numeric-IK harness rendering the REAL game chase-cam + 5 world angles (D165/D166) — the trustworthy gate after the OLD harness lied for 3 rounds by overriding the camera. **In-motion riding feel + exact feet-on-pegs (~22cm residual) are foreground-owed** (D150), as is the carried ACW feel pile.
+- **Git status**: all ACAG work committed as the "ACAF follow-up 1-15" chain (`64f3c49`→`f914100`, pushed to `master`); the session-end doc set (changelog/CLAUDE/roadmap/decisions/backlog/report/next-prompt) committed at session-end + tagged `session-ACAG`.
+- **Branch**: `master`. **Save state**: localStorage **v14** (unchanged — all ACAG work is visual/material/geometry, D81, no bump).
+- **Ports bound**: a `npm run dev` server may still be running on **5173/5174** (dev-only); the `tree`/`branch-match` rig-shot harness used **5191** (transient — Windows `dev.kill()` can orphan the vite child; kill leftover listeners on a strict-port conflict).
+- **Verification status**: tsc clean. All visual work screenshot-iterated via the `tree`/`branch-match`/`item-studio`/`branches` rig-shot scenarios (rule 8 honored — see iteration self-check below). **Owed (unchanged)**: ACW/ACX in-motion feel pile (D150, foreground-only).
+
+---
+
+## Iteration-discipline self-check (rule 8)
+
+Every visual element this session was build → screenshot → critique → iterate, NOT shipped on `tsc` alone: branch seamless taper (3 rounds), held==world lighting (`branch-match` noon+dusk), grey color (2), recursive dead tree (**6+ rounds** — caught backwards limb taper, ball collars, trumpet root flare, over-density, proportions), bark grain (close-up + distance + a debug-fill bug hunt). The one thing `tsc` "passed" that was actually broken — the bark reading flat — was caught precisely because the user pushed for an up-close screenshot, which exposed the D175 shader-cache collision. Net: this session is the GOOD version of the discipline (the user drove several "still not right, look closer" loops; each surfaced a real defect).
 
 ---
 
 ## Token spend this session (estimated)
 
-ACX was a focused fix pass driven by foreground screenshots from the user. The dominant cost was the seated-pose loop — the OLD harness lied (overrode the camera + assumed +Z=face), so several rounds of "fixes" missed before the `bike-truth` rewrite + numeric-IK sweep pinned the real bug (D165/D166). Each harness run boots its own Vite+Playwright (~35s); the in-page pose sweep then resolves arms/legs in one boot (no per-angle recompile loop).
+Long iterative-polish conversation with frequent user screenshot review. Cost driver: many short build→rig-shot→read-image→adjust loops (each rig-shot boots its own Vite+Playwright ~35s) across the branch + dead-tree arc, plus one genuine bug hunt (the flat-bark shader-cache collision, found via a debug-fill probe).
 
-- Input: high (long-conversation tail + many screenshot-review cycles + the playerRig/speeder/tuning file reads).
-- Output: moderate — ~3 source files + the `bike-truth` harness scenario + 3 D-entries + the session-end doc set.
-- Cost (Opus 4.8 rates): above baseline (iteration-loop driven, several wrong-fix rounds before the harness was made faithful). The numeric-IK sweep is now the reusable gate so future rig-to-world posing is fast.
-
-Notable: the verification-harness-must-render-the-real-camera lesson (D165) cost the most — a faithful-looking harness that silently overrides the camera masked the live bug for 3 rounds. Now documented + the `bike-truth` scenario is the template for any future on-vehicle / posed-rig verification.
+- Input: high (long conversation + repeated image reads + file reads across deadTree/branchMesh/woodGrainMaterial/viewModel).
+- Output: high — ~4 source files heavily iterated, NEW `tree`/`branch-match` scenarios, 3 D-entries, 4 backlog triage dumps, the session-end doc set.
+- Cost (Opus 4.8 rates): above baseline (visual iteration loops are inherently screenshot-heavy). Justified — produced 3 fully-iterated systems (lighting unification, recursive tree, bark) + a latent-bug fix (D175) that silently affected ALL wood props.
 
 ---
 
 ## Commit handoff
 
-Per CLAUDE.md (session-end auto-runs commit + tag + push). ACX earlier fixes already committed (`e4d223f`/`af039cf`/`04e99d9` + superseded pose attempts); the final waist-pivot seated-pose re-solve + `bike-truth` harness + `SEAT_Z` + the session-end doc edits (changelog/CLAUDE/roadmap/decisions/backlog/report/next-prompt) are committed at session-end + tagged `session-ACX`.
+Per CLAUDE.md (session-end auto-runs commit + tag + push). The ACAG feature work is already committed + pushed (the "ACAF follow-up 1-15" chain on `master`). The session-end doc edits (changelog/CLAUDE/roadmap/decisions/backlog/report/next-prompt) are committed at session-end + tagged `session-ACAG`.

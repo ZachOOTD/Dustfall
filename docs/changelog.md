@@ -22,6 +22,21 @@ weatherLevel 0.7) instead of flat grey: the held item uses `vmWood`; the ~200 wo
 `0x3a2e20`), so the held branch, the ground branches, and the trees are now one coherent dark deadwood look (verified
 in-context via the `branches` scenario — ground branch + dead tree match).
 
+## Session ACAG — 2026-06-05 — Branch realism + full dead-tree rework + bark grain ✓ verify pass (tsc clean)
+
+`verified` — `npm run verify` (tsc) PASS; no save change. A long iterative polish session (15 screenshot-verified
+follow-ups) on the deadwood family + a viewmodel-lighting architecture change + a latent shader bug fix. Files:
+`world/deadTree.ts` (rewritten), `world/branchMesh.ts`, `world/woodGrainMaterial.ts`, `player/viewModel.ts`,
+`inventory/items.ts`, `pickups/pickups.ts`, `scripts/rig-shot.mjs` (+NEW `tree`, `branch-match` scenarios).
+
+**Highlights:** (1) **Held == world lighting (D174)** — the FP viewmodel scene now MIRRORS the world sun/moon/ambient
+each frame (was fixed studio lights), so every held item is lit identically to its dropped/world copy. (2) **Recursive
+dead tree (D176)** — the single-pole model is gone; trees are a recursive forking generator (Deadvlei camelthorn refs)
+merged into ONE geometry per tree (1 draw call ×45). (3) **Bark grain + a latent shader-cache collision fix (D175)** —
+wood materials were silently sharing one compiled program (Three keys the program cache on material PROPERTIES, not the
+onBeforeCompile source); `customProgramCacheKey` fixes it, and a new gated `bark` shader layer gives the trunk vertical
+grain. (4) Deadwood color unified to ONE shared constant (`BRANCH_WOOD_COLOR`), shifted to light grey. Blow-by-blow below.
+
 **Follow-up — seamless mid-branch taper.** The two shaft segments had a thickness STEP at the joint (thick end `r` met
 thin start `0.58r`, plus a knuckle bulge). Reworked into a single CONTINUOUS gentle taper: the segment radii now MATCH
 at the joint (`Rmid`), the knuckle shrank to a faint `Rmid`-sized smoothing sphere over the bend, and twigs/collars now

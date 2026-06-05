@@ -64,23 +64,26 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      Prior milestones live in docs/changelog.md — do NOT accumulate "Prior milestone"
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
-**Last shipped**: Session ACAF — **branch model rework** (5 files, tsc clean, no save change). User feedback: the world
-branch was too light/grey, its twigs pierced straight through, and it should match the dark dead trees. Fixed in
-`world/branchMesh.ts`: twigs now EMERGE from the shaft surface + angle outward (per-subgroup, `setFromUnitVectors`, base
-collars, secondary forks) instead of crossing through; the shaft got a mid-length bend. Material → dark aged wood-grain
-(`0x3a2e20`): held item via `vmWood`, the ~200 world pickups share one `createWoodGrainMaterial` (`_worldBranchMat`,
-world-space — cheap); the dead trees (`deadTree.ts`) switched to the SAME dark wood family so held branch + ground
-branches + trees all match (verified via NEW `branches` rig-shot scenario). **Owed (unchanged):** the ACW/ACX in-motion
-feel pile (D150).
-*(Prior milestones — ACAE: dev item-spawner panel; ACAD: rust/weathering pass (D173); ACAC: pulse rifle (D172); ACAB:
-Cycle 6 atmosphere / clouds (D171); ACAA: FP-viewmodel two-pass render fix (D170); ACY/ACZ: item-model arc. See changelog.)*
+**Last shipped**: Session ACAG — **branch realism + full dead-tree rework + bark grain** (iterative polish, ~15
+screenshot-verified follow-ups; tsc clean, no save change). (1) **Held == world lighting (D174):** the FP viewmodel
+scene now MIRRORS the world sun/moon/ambient every frame (`player/viewModel.ts`) instead of fixed studio lights, so every
+held item is lit identically to its dropped/world copy. (2) **Recursive dead tree (D176):** `world/deadTree.ts` rebuilt —
+the single-pole model replaced by a recursive forking branch generator (Deadvlei camelthorn refs: bole → 2-3 forks ×4
+levels into a gnarled crown + buttress roots), all segments merged into ONE geometry per tree (1 draw call ×45). (3)
+**Bark grain + a latent shader-cache bug (D175):** wood materials were silently sharing one compiled program (Three keys
+the program cache on material props, NOT onBeforeCompile source) — `customProgramCacheKey` fixes it; a new gated `bark`
+layer in `woodGrainMaterial.ts` gives the trunk vertical grain. (4) Branch shaft → single seamless tapered mesh; deadwood
+color unified to ONE shared constant `BRANCH_WOOD_COLOR` (light grey). NEW `tree` + `branch-match` rig-shot scenarios.
+**Owed (unchanged):** the ACW/ACX in-motion feel pile (D150).
+*(Prior milestones — ACAF: branch model rework; ACAE: dev item-spawner panel; ACAD: rust pass (D173); ACAC: pulse rifle
+(D172); ACAB: Cycle 6 clouds (D171); ACAA: FP two-pass render (D170). See changelog.)*
 
-**Next session (ACAG)**: pick a lane — (a) **Cycle 5 raider proc-character** (the OTHER half — rebuild the raider as a
-proc-character so the corpse-drag path has a good-looking body; the pulse rifle is now its weapon); (b) the **DEEP CAVE
-SYSTEM** design+build pass (procedural sprawl + sub-terrain collision + descent opening + dark-nav; then the egg spine
-from `2d4035b`); or (c) a **foreground feel-tune playtest** of the owed ACW/ACX in-motion pile (needs a human). See
-[docs/next-session-prompt.md](docs/next-session-prompt.md). (Optional polish: extend `rustLevel` to painted-metal
-surfaces — speeder/sled top — if they read too clean.)
+**Next session (ACAH)**: pick a lane — (a) **loot-source overhaul** (panels need a scrap_bar to open but scrap_bar needs
+loot to craft → bootstrap deadlock; add scrap scatter around wrecks like branches around trees, per backlog); (b) **Cycle
+5 raider proc-character** (rebuild the raider as a proc-character; pulse rifle is its weapon); (c) the **DEEP CAVE SYSTEM**
+design+build pass; or (d) a **foreground feel-tune playtest** of the owed ACW/ACX pile (needs a human). Fresh backlog
+items from ACAG triage: scrap-model overhaul, mega-wreck rebuild, vulture, devmode-toggle fix, cloud shadows, drop-pod
+intro. See [docs/next-session-prompt.md](docs/next-session-prompt.md) + [docs/backlog.md](docs/backlog.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 

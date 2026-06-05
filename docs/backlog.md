@@ -191,3 +191,22 @@ Intentionally not active. Detail preserved so the call is reversible. Each entry
 🟡 **[polish] add detail to existing POI models — PARTIAL ACY**: `addHullGreebles` (panel-line seams / rivet strips / vent boxes, rule-7 depth, tagged `isWreckDecoration`) added to ribbed-cylinder + plated-rectangular procgen hull variants. REMAINING: greebles on more variants + the hand-modeled flagships; the procgen hulls read fairly dark, so a brighter-lit visual pass would surface the detail more.
 🟡 **[feat] salvage-panel variations — PARTIAL ACY**: panel **size variants** (small/standard/large via `SALVAGE_PANEL_SCALE_*` + the existing `scale` arg, deterministic per-panel roll) shipped. Component layouts already vary by panel KIND (`PANEL_COMPONENT_PALETTES`). REMAINING (optional): per-panel variable slot counts + a genuinely new panel `kind` with a distinct interior look.
 ✓ **SHIPPED ACY (#190, D168)** — dynamic salvage-panel placement on procgen wrecks: `findPanelMount` raycast surface-sampler (jittered ±Z-flank ray grid → first hit that's outward + flat (4-ray probe ring) + not on a tagged decoration + clear of placed panels; cardinal `faceYaw`, part-local return) replaces the single hardcoded `panelAnchor` (kept as a fallback). Verified by `__game.panelBuryAudit` (75/77+ pass across 3 seeds). REMAINING: the hand-modeled curved `engine_bell`/`escape_pod` panels still flag the audit (pre-existing curved-surface cases the sampler doesn't touch — they're `panelAnchor:null`/hand-modeled); could be re-mounted via the sampler if it's extended to those parts.
+
+— — — ACAF (2026-06-05) idea dump — — —
+
+[polish] night dust particles clamp near the ground so they don't obscure the stars
+[bug] world lighting differs when mounted on the speeder vs on foot (should match)
+[bug] rear bar on the speeder bike floats slightly off the body
+[feat] procedural speeder bikes that must be repaired before they're functional
+[feat] overhaul procgen wrecks together with the salvage-panel placement/variation system
+[feat] opening cutscene: player descends from space in an ODST-style drop pod
+[bug] DEV MODE badge (top-left) isn't clickable — need a reliable way to toggle dev mode
+[polish] clouds cast moving shadows on the world
+[polish] overhaul the scrap item model (it missed the item-model detail-upgrade pass)
+[polish] audit remaining item models for any still needing a detail upgrade
+[feat] add loot sources beyond panels — scrap_bar is needed to open panels but can't be crafted without loot (bootstrap deadlock)
+[feat] scrap pickups scatter around wrecks (like branches around dead trees) — a no-tools loot source
+[feat] rare vulture perches on salt-flat trees (1/biome), flees on approach, shoot to kill for meat
+[polish] speeder-bike antenna red light blinks slowly so you can locate the parked bike
+[feat] remove the current mega-wreck + rebuild from scratch (too boxy/unrealistic) — gather references, level up modelling techniques for a detailed high-quality build
+[feat] sandworm should not attack the player while they're in shelter / somewhere that provides cover
