@@ -84,6 +84,10 @@ export function createSkinMaterial(
   const scaleSize = opts.scaleSize ?? 8.0;
   const sheen = opts.sheen ?? 0.5;
 
+  // ACAH (D175) — per-instance baked GLSL needs a distinguishing cache key or
+  // Three shares ONE compiled program across all skin materials.
+  mat.customProgramCacheKey = () => 'skin:' + JSON.stringify(opts ?? {});
+
   mat.onBeforeCompile = (shader) => {
     shader.vertexShader = shader.vertexShader.replace(
       '#include <common>',

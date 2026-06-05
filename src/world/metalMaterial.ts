@@ -71,6 +71,15 @@ export function createMetalMaterial(
   const scratchStrength = opts.scratchStrength ?? 0.05;
   const rustLevel = opts.rustLevel ?? 0;   // ACAD — 0 = none; higher = rustier/scrappier
 
+  // ACAH (D175) — these constants are BAKED into the onBeforeCompile GLSL string;
+  // Three keys its program cache on material PROPERTIES, not the injected source,
+  // so without a distinguishing customProgramCacheKey every metal material reuses
+  // the first-compiled program and per-instance rust/worn/scratch are silently
+  // ignored. (Base `color` still varies — it's a real uniform.) Encode the baked
+  // consts so each variant compiles its own program.
+  mat.customProgramCacheKey = () =>
+    `metal:${scratchAngle.toFixed(4)}:${wornScale}:${scratchStrength}:${rustLevel}:${opts.localSpace ? 1 : 0}:${opts.doubleSide ? 1 : 0}`;
+
   mat.onBeforeCompile = (shader) => {
     // Forward world position to the fragment stage. Geometry may be
     // animated (viewmodels bob), so we recompute world position per

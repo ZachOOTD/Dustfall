@@ -52,6 +52,10 @@ export function createStoneMaterial(
   const dustStrength = opts.dustStrength ?? 0.6;
   const crackThreshold = 1.0 - (opts.crackDensity ?? 0.4) * 0.15;   // 0.85..1.0
 
+  // ACAH (D175) — per-instance baked GLSL needs a distinguishing cache key or
+  // Three shares ONE compiled program across all stone materials.
+  mat.customProgramCacheKey = () => 'stone:' + JSON.stringify(opts ?? {});
+
   mat.onBeforeCompile = (shader) => {
     shader.vertexShader = shader.vertexShader.replace(
       '#include <common>',

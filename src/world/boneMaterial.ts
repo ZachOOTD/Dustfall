@@ -67,6 +67,10 @@ export function createBoneMaterial(
   const marrowHint = opts.marrowHint ?? 0.5;
   const ageBleach = opts.ageBleach ?? 0.35;
 
+  // ACAH (D175) — per-instance baked GLSL needs a distinguishing cache key or
+  // Three shares ONE compiled program across all bone materials.
+  mat.customProgramCacheKey = () => 'bone:' + JSON.stringify(opts ?? {});
+
   mat.onBeforeCompile = (shader) => {
     shader.vertexShader = shader.vertexShader.replace(
       '#include <common>',

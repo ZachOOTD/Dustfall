@@ -60,6 +60,10 @@ export function createPaintedMetalMaterial(
   const chipThreshold = 0.78 - wear * 0.23;
   const dripStrength = 0.15 + wear * 0.25;
 
+  // ACAH (D175) — per-instance baked GLSL needs a distinguishing cache key or
+  // Three shares ONE compiled program across all painted-metal materials.
+  mat.customProgramCacheKey = () => 'paint:' + JSON.stringify(opts ?? {});
+
   mat.onBeforeCompile = (shader) => {
     shader.vertexShader = shader.vertexShader.replace(
       '#include <common>',

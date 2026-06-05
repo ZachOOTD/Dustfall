@@ -74,6 +74,10 @@ export function createGlassMaterial(
     opacity,
   });
 
+  // ACAH (D175) — per-instance baked GLSL needs a distinguishing cache key or
+  // Three shares ONE compiled program across all glass materials.
+  mat.customProgramCacheKey = () => 'glass:' + JSON.stringify(opts ?? {});
+
   mat.onBeforeCompile = (shader) => {
     shader.vertexShader = shader.vertexShader.replace(
       '#include <common>',

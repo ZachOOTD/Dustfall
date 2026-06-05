@@ -99,6 +99,11 @@ export function createFabricMaterial(
   const useLocalCoords = disableShimmer || (opts?.localSpace ?? false);
   const bump = opts?.bump ?? 0.8;
 
+  // ACAH (D175) — distinguish the per-instance baked GLSL so Three doesn't share
+  // ONE compiled program across all fabric materials (which silently ignored
+  // per-instance opts). See woodGrainMaterial / metalMaterial for the rationale.
+  mat.customProgramCacheKey = () => 'fabric:' + JSON.stringify(opts ?? {});
+
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uTime = { value: 0 };
     shader.uniforms.uWindStrength = { value: 0 };
