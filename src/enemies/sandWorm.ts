@@ -931,10 +931,16 @@ function tickPatrol(worm: SandWorm, ctx: GameContext, dt: number, distToPlayer: 
   // + cooldown not active + a small per-frame probability fires, the
   // worm enters ambush instead of alert. Ambush is silent: skips the
   // alert+charging telegraph, snaps to lunge when player closes further.
+  // ACAH — a player who has reached SHELTER can't be acquired: the worm can't
+  // sense them through cover. Skip both the ambush and alert acquisitions while
+  // sheltered (the worm keeps patrolling below). Reuses ctx.player.inShelter,
+  // written each frame by updateShelter (tent/locker/large-tent/etc zones).
+  const sheltered = ctx.player.inShelter;
   const noiseMult = playerNoiseMultiplier(ctx);
   const ambushTriggerR = 25;       // metres
   const ambushPerSecondChance = 0.05;
   if (
+    !sheltered &&
     distToPlayer < ambushTriggerR &&
     noiseMult < 0.7 &&
     ctx.time.elapsed >= worm._ambushCooldownUntil &&
@@ -943,7 +949,7 @@ function tickPatrol(worm: SandWorm, ctx: GameContext, dt: number, distToPlayer: 
     enterAmbush(worm, ctx);
     return;
   }
-  if (distToPlayer < effectiveR) {
+  if (!sheltered && distToPlayer < effectiveR) {
     enterAlert(worm, ctx);
     return;
   }
@@ -1020,7 +1026,8 @@ function tickAmbush(
 function tickAlert(
   worm: SandWorm, ctx: GameContext, dt: number, distToPlayer: number, playerTr: { x: number; y: number; z: number },
 ): void {
-  if (distToPlayer > Tuning.SANDWORM_DISENGAGE_RADIUS) {
+  // ACAH — disengage on distance OR if the player reaches shelter mid-alert.
+  if (distToPlayer > Tuning.SANDWORM_DISENGAGE_RADIUS || ctx.player.inShelter) {
     worm.state = 'patrol';
     return;
   }
@@ -1048,7 +1055,8 @@ function enterCharging(worm: SandWorm, ctx: GameContext): void {
 function tickCharging(
   worm: SandWorm, ctx: GameContext, dt: number, distToPlayer: number, _playerTr: { x: number; y: number; z: number },
 ): void {
-  if (distToPlayer > Tuning.SANDWORM_DISENGAGE_RADIUS) {
+  // ACAH — abort the charge to a retreat if the player escaped OR reached shelter.
+  if (distToPlayer > Tuning.SANDWORM_DISENGAGE_RADIUS || ctx.player.inShelter) {
     worm.state = 'retreat';
     worm.phaseStartedAt = ctx.time.elapsed;
     pickRetreatTarget(worm, ctx);

@@ -950,6 +950,44 @@ const SCENARIOS = {
     console.log(`[scrap-loot] ${JSON.stringify(r)}`);
   },
 
+  // Worm-shelter (ACAH): verify the sandworm won't acquire a SHELTERED player +
+  // disengages if they reach shelter. Inject a shelter zone over a teleported
+  // player 40m from the worm (inside still-detection ~82m); sheltered → stays
+  // patrol; remove the zone → acquires. Logic eval (state read), no screenshot.
+  'worm-shelter': async (page) => {
+    const r1 = await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      window.__game.setTime(0.5);           // midday — no twilight breach/ambush confounds
+      const worm = ctx.sandWorms?.list?.[0];
+      if (!worm) return { noWorm: true };
+      worm.state = 'patrol';
+      const wx = worm.basePos.x, wz = worm.basePos.z;
+      const px = wx + 40, pz = wz;          // 40m away — inside still-detection radius
+      const gy = ctx.terrain.heightAt(px, pz);
+      ctx.player.body.body.setTranslation({ x: px, y: gy + 1.0, z: pz }, true);
+      ctx.shelter.zones.push({ cx: px, cy: gy + 1.0, cz: pz, hx: 6, hy: 6, hz: 6 });
+      return { ok: true };
+    });
+    if (r1.noWorm) { console.log('[worm-shelter] SKIP — no worm in world'); return; }
+    await page.waitForTimeout(2800);
+    const sheltered = await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      const worm = ctx.sandWorms.list[0];
+      const out = { state: worm.state, inShelter: ctx.player.inShelter };
+      ctx.shelter.zones.pop();              // expose the player for phase 2
+      return out;
+    });
+    await page.waitForTimeout(3200);
+    const exposed = await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      const worm = ctx.sandWorms.list[0];
+      return { state: worm.state, inShelter: ctx.player.inShelter };
+    });
+    const pass = sheltered.inShelter === true && sheltered.state === 'patrol'
+      && exposed.inShelter === false && exposed.state !== 'patrol';
+    console.log(`[worm-shelter] ${pass ? 'PASS' : 'FAIL'} sheltered=${JSON.stringify(sheltered)} exposed=${JSON.stringify(exposed)}`);
+  },
+
   // Dev-panel (ACAD): open the dev item-spawner panel + click an item, verify
   // it renders + adds to inventory.
   'dev-panel': async (page) => {
