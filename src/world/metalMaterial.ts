@@ -71,16 +71,21 @@ export function createMetalMaterial(
   const scratchStrength = opts.scratchStrength ?? 0.05;
   const rustLevel = opts.rustLevel ?? 0;   // ACAD — 0 = none; higher = rustier/scrappier
 
-  // ACAH (D175) — these constants are BAKED into the onBeforeCompile GLSL string;
-  // Three keys its program cache on material PROPERTIES, not the injected source,
-  // so without a distinguishing customProgramCacheKey every metal material reuses
-  // the first-compiled program and per-instance rust/worn/scratch are silently
-  // ignored. (Base `color` still varies — it's a real uniform.) Encode the baked
-  // consts so each variant compiles its own program.
-  mat.customProgramCacheKey = () =>
-    `metal:${scratchAngle.toFixed(4)}:${wornScale}:${scratchStrength}:${rustLevel}:${opts.localSpace ? 1 : 0}:${opts.doubleSide ? 1 : 0}`;
-
+  // ACAH perf — pass the per-instance params as UNIFORMS instead of baking them
+  // into the GLSL string. The injected source is then IDENTICAL across all metal
+  // materials, so Three compiles ONE program for them all (vs one program per
+  // variant — the D175/D177 cache-key approach was correct but grew the program
+  // count ~40 for metal alone, costing startup-compile time + per-frame material
+  // state-switching). Each material still renders its OWN values via its own
+  // uniform set. No customProgramCacheKey needed: identical source + props →
+  // shared program; only `side` (FrontSide/DoubleSide) splits it, which Three
+  // keys natively. (Supersedes the metal half of D175/D177.)
   mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uScratchAngle = { value: scratchAngle };
+    shader.uniforms.uWornScale = { value: wornScale };
+    shader.uniforms.uScratchStrength = { value: scratchStrength };
+    shader.uniforms.uRustLevel = { value: rustLevel };
+    shader.uniforms.uLocalSpace = { value: opts.localSpace ? 1.0 : 0.0 };
     // Forward world position to the fragment stage. Geometry may be
     // animated (viewmodels bob), so we recompute world position per
     // frame from the live modelMatrix.
@@ -89,21 +94,18 @@ export function createMetalMaterial(
       /* glsl */ `
         #include <common>
         varying vec3 vWorldMetal;
+        uniform float uLocalSpace;
       `,
     );
     shader.vertexShader = shader.vertexShader.replace(
       '#include <begin_vertex>',
-      opts.localSpace
-        ? /* glsl */ `
-          #include <begin_vertex>
-          // D109 — localSpace: sample noise in object frame so
-          // scratches/worn/dirt stay anchored to the surface as it moves.
-          vWorldMetal = position;
-        `
-        : /* glsl */ `
-          #include <begin_vertex>
-          vWorldMetal = (modelMatrix * vec4(position, 1.0)).xyz;
-        `,
+      /* glsl */ `
+        #include <begin_vertex>
+        // D109 — uLocalSpace selects object-frame (1) vs world-frame (0) noise
+        // coords; object frame keeps weathering anchored on MOVING surfaces.
+        // A uniform branch (not a compile-time variant) so all metal shares one program.
+        vWorldMetal = (uLocalSpace > 0.5) ? position : (modelMatrix * vec4(position, 1.0)).xyz;
+      `,
     );
 
     shader.fragmentShader = shader.fragmentShader.replace(
@@ -111,6 +113,10 @@ export function createMetalMaterial(
       /* glsl */ `
         #include <common>
         varying vec3 vWorldMetal;
+        uniform float uScratchAngle;
+        uniform float uWornScale;
+        uniform float uScratchStrength;
+        uniform float uRustLevel;
 
         // IQ-style hash + value noise + FBM (matches terrainMaterial
         // + fabricMaterial conventions).
@@ -152,15 +158,15 @@ export function createMetalMaterial(
         // 1. SCRATCHES — project world XZ onto the scratch axis, sample
         //    1D-stripey noise across the perpendicular axis. Gives the
         //    "brushed metal" directional grain.
-        float sA = ${scratchAngle.toFixed(4)};
+        float sA = uScratchAngle;
         float scratchCoord = wpm.x * sin(sA) - wpm.z * cos(sA);
         float scratchNoise = metalHash(vec2(scratchCoord * 90.0, wpm.y * 2.0));
-        float scratchMod = mix(1.0 - ${scratchStrength.toFixed(3)}, 1.0 + ${scratchStrength.toFixed(3)}, scratchNoise);
+        float scratchMod = mix(1.0 - uScratchStrength, 1.0 + uScratchStrength, scratchNoise);
 
         // 2. WORN HIGHLIGHTS — FBM thresholded to bright spots. Where
         //    palms/cloth would have rubbed the patina off. ~10% of
         //    surface area gets a noticeable lighten.
-        float wornNoise = metalFbm(wpm.xz * ${wornScale.toFixed(2)});
+        float wornNoise = metalFbm(wpm.xz * uWornScale);
         float wornStrength = smoothstep(0.62, 0.80, wornNoise);
         vec3 wornTint = vec3(1.12, 1.10, 1.05);
         vec3 baseTinted = mix(vec3(1.0), wornTint, wornStrength * 0.6);
@@ -184,7 +190,7 @@ export function createMetalMaterial(
         // 5. RUST (ACAD) — FBM patches + downward drip streaks, tinted toward
         //    rust-orange (oxidation EATS the metal color, so we mix TO rust, not
         //    multiply). The desert weathers everything; rustLevel sets coverage.
-        float rustLevel = ${rustLevel.toFixed(3)};
+        float rustLevel = uRustLevel;
         if (rustLevel > 0.001) {
           float rustField = metalFbm(wpm.xz * 2.3 + vec2(31.0, 5.0));
           // Stretch along Y so rust runs DOWN the surface like real drips.

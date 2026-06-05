@@ -883,6 +883,11 @@ const SCENARIOS = {
     const r = await page.evaluate(() => {
       const ctx = window.__game.ctx;
       const ren = ctx.three.renderer;
+      // Boot phase deltas (ms) from the __bootT marks.
+      const bt = window.__bootT || [];
+      const bootPhases = {};
+      for (let i = 1; i < bt.length; i++) bootPhases[bt[i][0]] = Math.round(bt[i][1] - bt[i - 1][1]);
+      const bootTotal = bt.length ? Math.round(bt[bt.length - 1][1] - bt[0][1]) : -1;
       ren.render(ctx.three.scene, ctx.three.camera);   // populate info for this frame
       const info = ren.info;
       let objs = 0, meshes = 0;
@@ -904,6 +909,8 @@ const SCENARIOS = {
         pickupTotal: pk.length,
         pickupsByIdMeshes: Object.fromEntries(Object.entries(byId).map(([k, v]) => [k, `${v.n}pk/${v.meshes}mesh`])),
         salvageables: ctx.salvageables?.list?.length ?? -1,
+        bootTotalMs: bootTotal,
+        bootPhasesMs: bootPhases,
       };
     });
     console.log('[perf-probe] ' + JSON.stringify(r));

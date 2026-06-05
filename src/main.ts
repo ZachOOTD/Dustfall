@@ -156,7 +156,12 @@ const biomes = createBiomeSampler(makeRng(worldSeed + 17));
 // time. Wire it once here so the salvage module has access without a
 // signature change to every registerSalvageable caller.
 setSalvageBiomesContext(biomes);
+// ACAH perf-diag — boot phase timing (temporary). Exposed on window.__bootT.
+const _bootT: Array<[string, number]> = [['start', performance.now()]];
+const _mark = (n: string): void => { _bootT.push([n, performance.now()]); };
+(window as unknown as { __bootT: typeof _bootT }).__bootT = _bootT;
 const terrain = createTerrain(three.scene, physics.world, terrainRand, biomes);
+_mark('terrain');
 // HH — the FF LOD ring was removed: its coarse 50m interpolation poked above
 // the chunks' fine detail in dune valleys (D52 superseded). Fog at the
 // chunk-band edge (1200m, density 0.0018 ≈ 99% opaque) is the visible
@@ -171,6 +176,7 @@ placeHeroLandmarks(three.scene, physics.world, terrain, scatterRand, salvageable
 // below) so they have a visible source.
 const pickupList = spawnBranches(three.scene, terrain, scatterRand, 0);
 const treePerches = spawnDeadTrees(three.scene, terrain, scatterRand, pickupList, biomes);
+_mark('trees+branches');
 const waterSources = spawnWaterSources(three.scene, terrain, scatterRand, biomes);
 const cacti = spawnCacti(three.scene, physics.world, terrain, scatterRand, biomes);
 // OO-4 — rocky biome rocks. Replaces the cracked-rock procedural
@@ -199,6 +205,7 @@ const existingObstacles: Array<{ x: number; z: number }> = [
 const procgenPoiPositions = placeProcgenPOIs(
   three.scene, physics.world, terrain, scatterRand, salvageables, existingObstacles, biomes,
 );
+_mark('pois+wrecks');
 
 // Session U — raiders deprioritized (world is sandbox / "only survivor").
 // Code path stays so we can revisit later; just don't spawn one at boot.
@@ -229,6 +236,7 @@ for (const s of salvageables.list) {
     spawnScrapAt(three.scene, terrain, sx, sz, scatterRand, pickupList);
   }
 }
+_mark('scrap');
 const lizards = spawnLizardsProcgen(
   three.scene, physics.world, terrain, biomes, scatterRand, allPoiPositions,
 );
@@ -244,6 +252,7 @@ const shrews = spawnShrewsProcgen(
 // (treePerches from spawnDeadTrees). Module-owned list; returned ref IS
 // ctx.vultures.list.
 const vultures = spawnVulturesProcgen(three.scene, physics.world, treePerches, scatterRand);
+_mark('creatures+vultures');
 
 // AAP — sandworm home is now sampled per-seed from the dune biome via
 // sampleSandwormHome (mirrors wells-in-salt). Falls back to
@@ -596,7 +605,9 @@ window.addEventListener('keydown', (e) => {
 // programs finish compiling in the background while the player reads it. (Worst
 // case if they click NEW GAME mid-compile: a few cold lazy-compiles, same as
 // pre-ABL — far better than a guaranteed multi-second boot freeze.)
+_mark('pre-compile');
 void three.renderer.compileAsync(three.scene, three.camera);
+_mark('compile-call');
 
 // ABL — perf: pre-warm the Rapier physics broadphase. The first
 // physics.step() of a session is significantly more expensive than
@@ -605,6 +616,7 @@ void three.renderer.compileAsync(three.scene, three.camera);
 // the ~68 wreck colliders + terrain. Pre-walking one step here while
 // the title is shown means the first GAME tick steps fast.
 physics.world.step();
+_mark('physics-prewarm');
 
 // ABL — perf: also prime one shadow map render so the first GAME
 // frame doesn't pay the shadow-pass cold cost on top of the regular

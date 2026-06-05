@@ -18,11 +18,10 @@ import { buildScrapMesh } from '../world/scrapMesh.ts';  // ACAH — shared scra
 import { createMetalMaterial } from '../world/metalMaterial.ts';  // ACAH — world scrap material
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';  // ACAH perf — merge world pickups
 
-// ACAH perf — collapse a multi-mesh pickup Group into ONE merged geometry + a
-// single material (the dead-tree trick). World pickups are static + numerous
-// (~230 scrap, ~140 branches); a 12-mesh scrap chunk × 230 = ~2800 draw calls,
-// vs 1 each when merged. Held items keep their detailed multi-material version.
-function mergeGroupToMesh(group: THREE.Group, mat: THREE.Material): THREE.Mesh {
+// ACAH perf — collapse a multi-mesh pickup Group into ONE merged geometry (the
+// dead-tree trick). World pickups are static + numerous (~220 scrap, ~140
+// branches); a 12-mesh scrap chunk × 220 = ~2600 extra draw calls vs 1 each.
+function mergeGroupToGeometry(group: THREE.Group): THREE.BufferGeometry {
   group.updateMatrixWorld(true);
   const geos: THREE.BufferGeometry[] = [];
   group.traverse((o) => {
@@ -39,7 +38,30 @@ function mergeGroupToMesh(group: THREE.Group, mat: THREE.Material): THREE.Mesh {
   });
   const merged = mergeGeometries(geos, false);
   geos.forEach((g) => g.dispose());
-  return new THREE.Mesh(merged, mat);
+  return merged;
+}
+
+// ACAH perf — SHARED merged geometries, built ONCE. Previously each of ~220 scrap
+// + ~140 branches re-ran buildScrapMesh/buildBranchMesh + a merge at boot (~360
+// redundant builds → boot stall) AND uploaded its own geometry to the GPU. Now a
+// small pool is built once; each pickup is a cheap Mesh sharing a pooled geometry
+// (random rotation per spawn keeps the variety). despawnPickup only scene.remove's
+// the mesh (never disposes geometry), so sharing is safe.
+let _scrapGeo: THREE.BufferGeometry | null = null;
+const _branchGeos: THREE.BufferGeometry[] = [];
+function _scrapGeometry(): THREE.BufferGeometry {
+  if (!_scrapGeo) _scrapGeo = mergeGroupToGeometry(buildScrapMesh(_worldScrapMat, _worldScrapAccentMat));
+  return _scrapGeo;
+}
+function _branchGeometry(rand: Rng): THREE.BufferGeometry {
+  if (_branchGeos.length === 0) {
+    // buildBranchMesh is deterministic without an RNG → a few (len, twigs)
+    // variants give shape variety; per-spawn yaw + terrain-align do the rest.
+    for (const [len, twigs] of [[0.40, 2], [0.46, 1], [0.52, 2], [0.44, 1], [0.50, 2]] as Array<[number, number]>) {
+      _branchGeos.push(mergeGroupToGeometry(buildBranchMesh(_worldBranchMat, { len, twigs })));
+    }
+  }
+  return _branchGeos[Math.floor(rand() * _branchGeos.length)];
 }
 
 // ACAE — ONE shared wood-grain material for every world branch (~200
@@ -235,10 +257,9 @@ function makePrimitiveBranch(rand: Rng): THREE.Mesh {
   // across all ~200 in-world branches — one program, world-space grain that
   // varies per-position — so it stays cheap (ABL perf note) while reading as
   // aged deadwood that matches the dead trees, not a flat grey dowel.
-  const len = 0.40 + rand() * 0.15;
-  const twigs = rand() < 0.6 ? 2 : 1;
-  // ACAH perf — merge the ~6-mesh branch into 1 (single shared material already).
-  return mergeGroupToMesh(buildBranchMesh(_worldBranchMat, { len, twigs, rand }), _worldBranchMat);
+  // ACAH perf — share one of a few pooled merged branch geometries (was a fresh
+  // buildBranchMesh + merge per branch). Per-spawn yaw + terrain-align give variety.
+  return new THREE.Mesh(_branchGeometry(rand), _worldBranchMat);
 }
 
 /** Spawn a single branch pickup at a specific (x, z) world position.
@@ -296,10 +317,11 @@ export function spawnBranchAt(
 // pattern; uses the SHARED buildScrapMesh so it matches the held item.
 // ────────────────────────────────────────────────────────────────
 function makePrimitiveScrap(): THREE.Mesh {
-  // ACAH perf — merge the ~12-mesh scrap chunk into ONE geometry + one material
-  // (drops the minor accent tint for world scrap — invisible at pickup distance;
-  // the HELD item keeps the detailed 2-material version). 230 scrap: 2800→230 draws.
-  return mergeGroupToMesh(buildScrapMesh(_worldScrapMat, _worldScrapAccentMat), _worldScrapMat);
+  // ACAH perf — share ONE pooled merged scrap geometry (buildScrapMesh is
+  // deterministic, so all instances were identical anyway); per-spawn yaw +
+  // terrain-align vary it. One material (drops the minor accent tint, invisible
+  // at pickup distance; the HELD item keeps the detailed 2-material version).
+  return new THREE.Mesh(_scrapGeometry(), _worldScrapMat);
 }
 
 /** Spawn a single scrap pickup at a specific (x, z) world position. Terrain-
