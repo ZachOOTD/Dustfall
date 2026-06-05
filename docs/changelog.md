@@ -75,13 +75,18 @@ thin POINT at the top (`topR` ratio 0.45 → 0.16) so it ends like a branch inst
 band down to `hHi` 0.78 so limbs stay below the thin tip (no limb out-thicking the trunk there). `tree` rig-shot
 confirms across seeds. tsc clean.
 
-**Follow-up 11 — realistic bark grain.** The trunk read flat: the wood shader's grain/ring layers sample in the
-HORIZONTAL plane and ignore Y, so a vertical trunk got almost no variation. Added a gated `bark` option to
-`woodGrainMaterial.ts` — fibrous striations sampled FINE around the surface (XZ) + SLOW along Y so the noise stretches
-into vertical fibers, plus thresholded ridge-noise grooves (darker cracks between bark plates). Applied to the dead-tree
-trunk (`bark:0.36`) + limbs (`bark:0.14`) with `localSpace:true` — the local frame makes the fibers run along the
-trunk's own vertical axis AND avoids the world-space noise precision loss that left trees far from the origin flat/banded.
-Iterated close-up + at distance via the `tree` rig-shot. tsc clean; other wood props unaffected (bark defaults off).
+**Follow-up 11 — realistic bark grain + a latent shader-cache bug fix.** The trunk read as ONE flat color. Two causes:
+(1) the wood shader's grain/ring layers sample in the HORIZONTAL plane and ignore Y, so a vertical trunk got no variation
+— added a gated `bark` option (`woodGrainMaterial.ts`): fibrous striations FINE around the surface (XZ) + SLOW along Y →
+vertical fibers, plus thresholded ridge-noise grooves (bark-plate cracks). Applied to the dead-tree trunk (`bark:0.34`) +
+limbs (`bark:0.14`) with `localSpace:true` (fibers run along the trunk's own vertical axis + avoids world-space noise
+precision loss for trees far from origin). (2) **The bark — and every per-material grain tweak — was being SILENTLY
+IGNORED.** Every wood material is a `MeshLambertMaterial` with identical standard params; only the onBeforeCompile-
+injected SOURCE differs. Three.js keys its compiled-program cache on material PROPERTIES, not injected source, so ALL
+wood materials reused whichever program compiled FIRST — the trunk was literally rendering another material's shader (a
+debug fill confirmed: it didn't show until fixed). Added `mat.customProgramCacheKey` encoding every baked constant, so
+each wood variant compiles its own program. This also (correctly) un-shares grain across all wood props. Iterated
+close-up + at distance via the `tree` rig-shot. tsc clean.
 
 ## Session ACAE — 2026-06-04 — Dev item-spawner panel ✓ verify pass (tsc clean)
 

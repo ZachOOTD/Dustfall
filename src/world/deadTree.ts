@@ -28,7 +28,7 @@ import { BRANCH_WOOD_COLOR, BRANCH_WEATHER_LEVEL, buildBranchMesh } from './bran
 // clean vertical fibers AND avoids the world-space noise precision loss for trees
 // placed far from the origin (their bark would otherwise read flat/banded).
 const _trunkMat = createWoodGrainMaterial(0xa39c91, {
-  ringDensity: 6.0, weatherLevel: 0.72, bark: 0.36, grainStrength: 0.13, localSpace: true,
+  ringDensity: 6.0, weatherLevel: 0.72, bark: 0.34, grainStrength: 0.13, localSpace: true,
 });
 const _branchMat = createWoodGrainMaterial(BRANCH_WOOD_COLOR, {
   ringDensity: 9.0, weatherLevel: BRANCH_WEATHER_LEVEL, bark: 0.14, grainStrength: 0.09, localSpace: true,

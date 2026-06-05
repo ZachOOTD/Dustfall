@@ -73,6 +73,18 @@ export function createWoodGrainMaterial(
   const grainStrength = opts.grainStrength ?? 0.06;
   const bark = opts.bark ?? 0.0;
 
+  // CRITICAL (ACAF f/u) — every wood material is a MeshLambertMaterial with the
+  // SAME standard parameters; only the onBeforeCompile-injected SOURCE differs
+  // (grain axis, ring density, bark, localSpace, …). Three.js keys its compiled-
+  // program cache on material PROPERTIES, not the injected source — so without a
+  // distinguishing customProgramCacheKey, ALL wood materials reuse whichever one
+  // compiled first, and per-material grain/bark is silently ignored (the trunk
+  // bark "did nothing" until this was added). Encode every baked constant here.
+  const cacheKey =
+    `wood:${grainAxis}:${ringDensity}:${weatherLevel}:${grainStrength}:${bark}` +
+    `:${opts.localSpace ? 1 : 0}:${opts.doubleSide ? 1 : 0}`;
+  mat.customProgramCacheKey = () => cacheKey;
+
   mat.onBeforeCompile = (shader) => {
     shader.vertexShader = shader.vertexShader.replace(
       '#include <common>',
