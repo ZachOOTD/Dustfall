@@ -16,128 +16,111 @@ import { spawnBranchAt } from '../pickups/pickups.ts';
 import { Tuning } from '../config/tuning.ts';
 import { findBiomeCentroid } from './biomes.ts';
 import { createWoodGrainMaterial } from './woodGrainMaterial.ts';
-import { BRANCH_WOOD_COLOR, BRANCH_WEATHER_LEVEL, buildBranchMesh } from './branchMesh.ts';
+import { BRANCH_WOOD_COLOR, BRANCH_WEATHER_LEVEL } from './branchMesh.ts';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
-// ACAE — aged-wood grain so trunk + tree-branches match the ground branches +
-// the held branch (all one deadwood family). Shared instances. ACAF follow-up —
-// the tree BRANCHES use the SHARED BRANCH_WOOD_COLOR so they're the exact same
-// color as the held + ground branches; the vm scene now mirrors the world
-// lighting (viewModel.ts) so held + dropped + tree all read identical. The trunk
-// is a thicker, slightly lighter wood (its own member, not a "branch").
-// localSpace so the bark samples in the trunk's OWN frame (Y = vertical) — gives
-// clean vertical fibers AND avoids the world-space noise precision loss for trees
-// placed far from the origin (their bark would otherwise read flat/banded).
-const _trunkMat = createWoodGrainMaterial(0xa39c91, {
-  ringDensity: 6.0, weatherLevel: 0.72, bark: 0.34, grainStrength: 0.13, localSpace: true,
-});
-const _branchMat = createWoodGrainMaterial(BRANCH_WOOD_COLOR, {
-  ringDensity: 9.0, weatherLevel: BRANCH_WEATHER_LEVEL, bark: 0.14, grainStrength: 0.09, localSpace: true,
+// ACAF f/u 12 — ONE shared material for the whole tree (trunk + every branch are
+// one continuous merged mesh now). Same BRANCH_WOOD_COLOR as the held/ground
+// branches so the deadwood family stays unified. localSpace so the bark samples
+// in the tree's OWN frame (Y = vertical) — clean vertical fibers + avoids the
+// world-space noise precision loss for trees far from the origin.
+const _treeMat = createWoodGrainMaterial(BRANCH_WOOD_COLOR, {
+  ringDensity: 7.0, weatherLevel: BRANCH_WEATHER_LEVEL, bark: 0.34, grainStrength: 0.12, localSpace: true,
 });
 
-// Module scratch (avoid per-tree allocation in the orientation math).
-const _LIMB_X = new THREE.Vector3(1, 0, 0);
-const _limbDir = new THREE.Vector3();
-const _limbInward = new THREE.Vector3();
+const _UP = new THREE.Vector3(0, 1, 0);
+const _SIDE_REF = new THREE.Vector3(1, 0, 0);
 
-// ACAF f/u 5 — proper dead-desert-tree model. The trunk is a tapered, gently
-// bowed cylinder with a root flare; the limbs reuse the detailed branch model
-// (buildBranchMesh — same taper + emergent twigs as the held/ground branches),
-// each EMERGING FROM the trunk surface (base embedded, collar-blended) so
-// nothing floats. Replaces the old "straight cylinders" read.
+/** One tapered branch segment as a geometry: a cylinder along +Y (base at y=0,
+ *  tip at y=len), with a parabolic bow baked in so it sweeps to one side — the
+ *  source of the gnarled/organic curve. */
+function makeSegmentGeo(len: number, rBase: number, rTip: number, bow: number, bowAng: number): THREE.BufferGeometry {
+  const geo = new THREE.CylinderGeometry(Math.max(rTip, 0.004), rBase, len, 6, 3);
+  geo.translate(0, len / 2, 0);
+  const ca = Math.cos(bowAng), sa = Math.sin(bowAng);
+  const pos = geo.attributes.position as THREE.BufferAttribute;
+  for (let i = 0; i < pos.count; i++) {
+    const t = pos.getY(i) / len;              // 0 at base → 1 at tip
+    const off = bow * t * t;                  // parabola: straight at base, sweeps near tip
+    pos.setX(i, pos.getX(i) + ca * off);
+    pos.setZ(i, pos.getZ(i) + sa * off);
+  }
+  geo.computeVertexNormals();
+  return geo;
+}
+
+/** Tilt a unit direction by `angle`, around an axis perpendicular to it chosen
+ *  by `azimuth` — used to fork child branches away from the parent. */
+function tiltDir(dir: THREE.Vector3, angle: number, azimuth: number): THREE.Vector3 {
+  const ref = Math.abs(dir.y) < 0.95 ? _UP : _SIDE_REF;
+  const axis = new THREE.Vector3().crossVectors(dir, ref).normalize().applyAxisAngle(dir, azimuth);
+  return dir.clone().applyAxisAngle(axis, angle).normalize();
+}
+
+// ACAF f/u 12 — RECURSIVE branching dead tree (modelled on Deadvlei camelthorn
+// references): a bole that FORKS into 2-3 limbs, each forking again 3-4 levels
+// deep into a spreading crown of fine, gnarled, upward-reaching branches, plus
+// buttress roots flaring at the base. Every segment is a tapered, bowed cylinder;
+// all segments merge into ONE geometry per tree (1 draw call) for perf (45 trees).
 function makeDeadTree(rand: Rng): THREE.Group {
   const g = new THREE.Group();
+  const segs: THREE.BufferGeometry[] = [];
 
-  const trunkH = 2.2 + rand() * 1.0;     // between the too-tall (2.6+) and too-short (1.8+) passes
-  const baseR = 0.085 + rand() * 0.03;   // slimmer trunk (was 0.15+) — desert deadwood is lean
-  const topR = baseR * 0.16;             // taper the trunk to a thin POINT at the tip (like a branch)
+  const baseR = 0.095 + rand() * 0.035;
+  const boleLen = (2.2 + rand() * 1.0) * 0.52;     // first trunk segment before the fork
 
-  // Trunk centerline lean (a parabolic bow in a random azimuth) + per-height
-  // radius — shared by the trunk geometry AND the limb attach math so limbs sit
-  // exactly on the (bowed, tapered) surface.
-  const leanDir = rand() * Math.PI * 2;
-  const lbx = Math.cos(leanDir), lbz = Math.sin(leanDir);
-  const bowMag = trunkH * (0.05 + rand() * 0.06);
-  const leanAt = (h: number) => bowMag * Math.pow(h / trunkH, 2);   // 0 at base → bowMag at top
-  const radiusAt = (h: number) => baseR + (topR - baseR) * (h / trunkH);
+  const _q = new THREE.Quaternion();
+  const _m = new THREE.Matrix4();
+  const _s = new THREE.Vector3(1, 1, 1);
 
-  // Tapered trunk, 10 radial segments (round, not faceted), bow baked in.
-  const trunkGeo = new THREE.CylinderGeometry(topR, baseR, trunkH, 10, 10);
-  trunkGeo.translate(0, trunkH / 2, 0);   // base at y=0
-  const tp = trunkGeo.attributes.position as THREE.BufferAttribute;
-  for (let i = 0; i < tp.count; i++) {
-    const y = tp.getY(i);
-    const lean = leanAt(y);
-    tp.setX(i, tp.getX(i) + lbx * lean);
-    tp.setZ(i, tp.getZ(i) + lbz * lean);
-  }
-  trunkGeo.computeVertexNormals();
-  const trunk = new THREE.Mesh(trunkGeo, _trunkMat);
-  g.add(trunk);
+  // Recursively grow a branch from `base` along `dir`, forking at its tip.
+  const grow = (base: THREE.Vector3, dir: THREE.Vector3, len: number, rBase: number, depth: number): void => {
+    const rTip = rBase * (0.64 + rand() * 0.1);
+    const bow = len * (0.11 + rand() * 0.16);       // stronger sweep = more gnarl
+    const bowAng = rand() * Math.PI * 2;
+    const geo = makeSegmentGeo(len, rBase, rTip, bow, bowAng);
+    _q.setFromUnitVectors(_UP, dir);
+    _m.compose(base, _q, _s);
+    geo.applyMatrix4(_m);
+    segs.push(geo);
 
-  // Root flare — a short, subtle widening at the base so the trunk doesn't read
-  // as a pole stuck in the ground (kept modest — a big skirt reads as a trumpet).
-  const flareH = trunkH * 0.06;
-  const flare = new THREE.Mesh(
-    new THREE.CylinderGeometry(baseR, baseR * 1.32, flareH, 10),
-    _trunkMat,
-  );
-  flare.position.y = flareH / 2;
-  g.add(flare);
+    // Curved tip (local (bow·cos, len, bow·sin) through the same transform).
+    const tip = new THREE.Vector3(Math.cos(bowAng) * bow, len, Math.sin(bowAng) * bow).applyMatrix4(_m);
+    if (depth <= 0 || rTip < 0.011) return;
 
-  // 3-4 main limbs, DISTRIBUTED so they don't pile up: each limb gets its own
-  // height band (staggered up the trunk) AND its own azimuth sector (even split
-  // + jitter) so no two cluster on the same side at the same height.
-  const limbCount = 3 + Math.floor(rand() * 2);   // 3-4 (was 4-6, too crowded)
-  const azStart = rand() * Math.PI * 2;
-  const hLo = 0.45, hHi = 0.78;                    // limbs in the upper trunk but BELOW the thin tapered tip
-  for (let i = 0; i < limbCount; i++) {
-    // Staggered height: i-th band + a little jitter within the band.
-    const frac = (i + 0.5 + (rand() - 0.5) * 0.6) / limbCount;
-    const h = trunkH * (hLo + frac * (hHi - hLo));
-    // Even azimuth sector + jitter (golden-ish offset so consecutive limbs face
-    // away from each other rather than bunching).
-    const az = azStart + i * (Math.PI * 2 / limbCount) + (rand() - 0.5) * 0.7;
-    const pitch = 0.5 + rand() * 0.5;      // upward tilt (rad above horizontal)
-    const cp = Math.cos(pitch);
-    _limbDir.set(Math.cos(az) * cp, Math.sin(pitch), Math.sin(az) * cp).normalize();
+    const childCount = 2 + (rand() < 0.5 ? 1 : 0);    // mostly 2, sometimes 3
+    for (let c = 0; c < childCount; c++) {
+      // Wider divergence at the main fork (high depth), tighter toward the tips.
+      const spread = 0.4 + rand() * 0.5 + (depth >= 3 ? 0.25 : 0);
+      const azimuth = (c / childCount) * Math.PI * 2 + rand() * 1.1;
+      const cd = tiltDir(dir, spread, azimuth);
+      cd.lerp(_UP, 0.08 + rand() * 0.14).normalize();  // gentle upward reach (less = wider crown)
+      grow(tip, cd, len * (0.6 + rand() * 0.16), rTip, depth - 1);
+    }
+  };
 
-    const limbLen = 0.4 + rand() * 0.45;   // shorter limbs (was 0.6+0.7)
-    const rScale = 0.7 + rand() * 0.3;     // thinner limbs (was 1.2+, too chunky)
-    const limb = buildBranchMesh(_branchMat, {
-      len: limbLen, twigs: 1 + Math.floor(rand() * 2), rand,
-      radiusScale: rScale, tipRatio: 0.32,
-    });
-    // buildBranchMesh puts the THICK base at +X and the THIN tip at −X. So orient
-    // the limb's +X axis INWARD (toward the trunk) — then the thin tip points
-    // OUTWARD and the limb tapers trunk→tip the CORRECT way. (Orienting +X
-    // outward, as before, made the limbs fatten toward the tip — backwards.)
-    const limbBaseR = limbLen * 0.05 * rScale;
-    const rH = radiusAt(h);
-    _limbInward.copy(_limbDir).multiplyScalar(-1);
-    // Shift so the thick base sits just inside the trunk surface (buried ~0.6·rH)
-    // and the tapering limb emerges outward; the flat base cap never shows.
-    limb.position.x = -limbLen * 0.5 + rH * 0.6;
+  // Trunk bole — straight-ish, slight lean — then the recursion forks it.
+  const startDir = tiltDir(_UP, 0.05 + rand() * 0.12, rand() * Math.PI * 2);
+  grow(new THREE.Vector3(0, 0, 0), startDir, boleLen, baseR, 5);   // 5 levels → finer twig tips
 
-    const wrap = new THREE.Group();
-    wrap.add(limb);
-    wrap.quaternion.setFromUnitVectors(_LIMB_X, _limbInward);
-    // Origin on the trunk surface (outward radial); the buried base spans inward
-    // from here, so the limb grows OUT of solid wood.
-    wrap.position.set(
-      lbx * leanAt(h) + Math.cos(az) * rH * 0.85,
-      h,
-      lbz * leanAt(h) + Math.sin(az) * rH * 0.85,
-    );
-    g.add(wrap);
-
-    // Collar — a small ELLIPSOID (flattened sphere) hugging the trunk surface to
-    // blend the junction as a natural branch swelling, not a round ball.
-    const collar = new THREE.Mesh(new THREE.SphereGeometry(limbBaseR * 1.05, 8, 6), _trunkMat);
-    collar.scale.set(1, 1, 0.6);
-    collar.position.copy(wrap.position);
-    g.add(collar);
+  // Buttress roots — short curved segments flaring outward (+ slightly down) from
+  // the base, like the wide camelthorn root structures.
+  const rootN = 4 + Math.floor(rand() * 3);
+  for (let i = 0; i < rootN; i++) {
+    const az = (i / rootN) * Math.PI * 2 + (rand() - 0.5) * 0.6;
+    const dir = new THREE.Vector3(Math.cos(az), -0.45 - rand() * 0.3, Math.sin(az)).normalize();
+    const len = baseR * (3.0 + rand() * 2.0);
+    const rb = baseR * (0.55 + rand() * 0.25);
+    const geo = makeSegmentGeo(len, rb, rb * 0.35, len * (0.4 + rand() * 0.3), rand() * Math.PI * 2);
+    _q.setFromUnitVectors(_UP, dir);
+    _m.compose(new THREE.Vector3(0, baseR * 1.1, 0), _q, _s);
+    geo.applyMatrix4(_m);
+    segs.push(geo);
   }
 
+  const merged = mergeGeometries(segs, false);
+  segs.forEach((s) => s.dispose());
+  g.add(new THREE.Mesh(merged, _treeMat));
   return g;
 }
 

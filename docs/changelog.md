@@ -88,6 +88,16 @@ debug fill confirmed: it didn't show until fixed). Added `mat.customProgramCache
 each wood variant compiles its own program. This also (correctly) un-shares grain across all wood props. Iterated
 close-up + at distance via the `tree` rig-shot. tsc clean.
 
+**Follow-up 12 — recursive branching dead tree (camelthorn references).** The single-pole-with-twigs model read
+straight + inorganic. Rebuilt `makeDeadTree` as a RECURSIVE branch generator modelled on Deadvlei camelthorn photos: a
+trunk bole FORKS into 2-3 limbs, each forking again 5 levels deep into a spreading crown of fine, gnarled,
+upward-reaching branches, plus buttress roots flaring at the base. Each segment is a tapered cylinder with a parabolic
+bow baked in (the gnarl); children attach at the parent's curved tip with matching radii (seamless forks, connected by
+construction — no floaters). All segments of a tree MERGE into ONE geometry (`mergeGeometries`) → 1 draw call/tree (×45).
+One shared `_treeMat` (BRANCH_WOOD_COLOR + bark). Iterated 4× via the `tree` rig-shot: (1) base recursion, (2) widen
+framing + crown spread, (3) +1 depth level + stronger bow for finer/gnarlier tips, (4) close-up joint/bark verification.
+tsc clean.
+
 ## Session ACAE — 2026-06-04 — Dev item-spawner panel ✓ verify pass (tsc clean)
 
 `verified` — `npm run verify` (tsc) PASS; no save change. Dev tooling — a DOM panel (DEV MODE only) to add any item to
