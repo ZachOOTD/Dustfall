@@ -37,6 +37,9 @@ export type VultureState = 'perched' | 'flying' | 'landing' | 'dead';
  *  identically to the ACAH static model. */
 export interface VultureRig {
   wingL: THREE.Group; wingR: THREE.Group;
+  /** Elbow sub-pivots (at the wrist) — fold the forearm+primaries for perching,
+   *  open them for the broad flight span. Children of wingL/wingR. */
+  elbowL: THREE.Group; elbowR: THREE.Group;
   neck: THREE.Group; tail: THREE.Group;
   legL: THREE.Group; legR: THREE.Group;
 }
@@ -63,6 +66,9 @@ export interface Vulture {
   relocating: boolean;
   /** Heading (radians, atan2(dirX,dirZ)) the mesh yaws toward. */
   heading: number;
+  /** ACAI f/u — previous-frame heading + smoothed roll, for banking into turns. */
+  prevHeading: number;
+  bank: number;
   /** idle phase accumulator (perched bob). */
   bob: number;
   hovered: boolean;
@@ -150,18 +156,40 @@ export function makeVultureVisual(): THREE.Group {
     legs.push(hip);
   }
 
-  // ── Wings — shoulder pivots; the folded slab + primaries hang off the joint so
-  //    rotating the pivot flaps the whole wing about the shoulder. ──
+  // ── Wings — broad TWO-segment wings (vulture-proportioned). Each shoulder pivot
+  //    carries an upper-arm bone that extends spanwise (±Z); an elbow sub-pivot at
+  //    the wrist carries the forearm + a fan of slotted primary feathers. Folding
+  //    the elbow + drooping the shoulder gives the tucked perched silhouette;
+  //    opening them spreads a wingspan ~3× the body width. Chord runs along X
+  //    (front↔back), span along Z (shoulder→tip). animateVulture poses both. ──
   const wings: THREE.Group[] = [];
+  const elbows: THREE.Group[] = [];
   for (const sz of [-1, 1]) {
-    const shoulder = pivot(-0.05, 0.30, sz * 0.06);
-    const wing = box(0.33, 0.02, 0.19, _plumage);
-    wing.position.set(0, -0.05, sz * 0.105); wing.rotation.set(sz * 0.66, 0.0, 0.04);
-    shoulder.add(wing);
-    const prim = box(0.18, 0.016, 0.085, _plumageEdge);
-    prim.position.set(-0.12, -0.13, sz * 0.10); prim.rotation.set(sz * 0.8, 0.3, 0.12);
-    shoulder.add(prim);
+    const shoulder = pivot(-0.04, 0.30, sz * 0.06);
+    // Upper-arm (humerus+secondaries): broad slab extending outward in +sz*Z.
+    const arm = box(0.19, 0.022, 0.20, _plumage);
+    arm.position.set(-0.02, 0, sz * 0.10);
+    shoulder.add(arm);
+    // Elbow/wrist pivot at the arm's outboard end.
+    const elbow = new THREE.Group();
+    elbow.position.set(-0.02, 0, sz * 0.20);
+    shoulder.add(elbow);
+    // Forearm — narrower chord, continues the span.
+    const fore = box(0.15, 0.02, 0.18, _plumage);
+    fore.position.set(-0.015, 0, sz * 0.085);
+    elbow.add(fore);
+    // Slotted primary feathers — long fingers continuing the span, only slightly
+    // separated (a tight blade folded, a slotted tip when spread). A big rake here
+    // fans them into a spiky crest, so keep it subtle.
+    for (let i = 0; i < 4; i++) {
+      const prim = box(0.055, 0.014, 0.19, _plumageEdge);
+      const rake = 0.05 + i * 0.05;                 // gentle finger separation
+      prim.position.set(-0.04 - i * 0.018, 0, sz * (0.17 + i * 0.012));
+      prim.rotation.set(0, sz * rake, 0);
+      elbow.add(prim);
+    }
     wings.push(shoulder);
+    elbows.push(elbow);
   }
 
   // ── Tail — root pivot (tilt/fan for steering + landing flare). ──
@@ -194,7 +222,11 @@ export function makeVultureVisual(): THREE.Group {
     neck.add(eye);
   }
 
-  const rig: VultureRig = { wingL: wings[0], wingR: wings[1], neck, tail, legL: legs[0], legR: legs[1] };
+  const rig: VultureRig = {
+    wingL: wings[0], wingR: wings[1],
+    elbowL: elbows[0], elbowR: elbows[1],
+    neck, tail, legL: legs[0], legR: legs[1],
+  };
   g.userData.rig = rig;
   return g;
 }
@@ -205,43 +237,57 @@ export function makeVultureVisual(): THREE.Group {
 export function animateVulture(v: Vulture, elapsed: number): void {
   const rig = v.mesh.userData.rig as VultureRig | undefined;
   if (!rig) return;
-  const { wingL, wingR, neck, tail, legL, legR } = rig;
+  const { wingL, wingR, elbowL, elbowR, neck, tail, legL, legR } = rig;
   const ph = elapsed + v.id * 1.7;   // de-sync birds
+
+  // Mirrored wing pose: (shoulder rot.x = dihedral/flap, shoulder rot.y = sweep,
+  // elbow rot.x = wrist tilt, elbow rot.y = forearm FOLD toward the tail). The R
+  // wing mirrors the L across the body, so a single call drives both symmetrically.
+  const poseWings = (sx: number, sy: number, ex: number, ey: number): void => {
+    wingL.rotation.set(sx, sy, 0); wingR.rotation.set(-sx, -sy, 0);
+    elbowL.rotation.set(ex, ey, 0); elbowR.rotation.set(-ex, -ey, 0);
+  };
 
   switch (v.state) {
     case 'perched': {
-      // Idle: slow head bob + occasional look-around + a faint wing settle.
+      // Idle: slow head bob + look-around; wings DROOPED down the flanks + elbows
+      // FOLDED back so the long wings tuck into the hunched perched silhouette.
       neck.rotation.z = Math.sin(ph * Tuning.VULTURE_IDLE_BOB_HZ * Math.PI * 2) * Tuning.VULTURE_IDLE_BOB_AMP;
       neck.rotation.y = Math.sin(ph * 0.23) * 0.12;
-      const settle = Math.sin(ph * 0.7) * 0.03;
-      wingL.rotation.set(-settle, 0, 0); wingR.rotation.set(settle, 0, 0);
+      const settle = Math.sin(ph * 0.7) * 0.04;   // faint wing shuffle
+      poseWings(Tuning.VULTURE_PERCH_WING_DROOP + settle, 0, 0, Tuning.VULTURE_ELBOW_FOLD);
       legL.rotation.set(0, 0, 0); legR.rotation.set(0, 0, 0);
       tail.rotation.set(0, 0, 0);
       break;
     }
     case 'flying': {
-      // Wings extend OUT and flap (mirrored); legs tuck up; neck extends; tail trails.
-      const f = Math.sin(elapsed * Tuning.VULTURE_FLAP_HZ * Math.PI * 2);
-      const w = Tuning.VULTURE_WING_EXTEND + f * Tuning.VULTURE_FLAP_AMP;
-      wingL.rotation.set(w, 0, 0); wingR.rotation.set(-w, 0, 0);
+      // Broad wings held out (dihedral) with the elbows OPEN; flap comes in BURSTS
+      // gated by a slow glide-cycle envelope (flap a few beats, then glide).
+      const glide = Math.sin(elapsed * Tuning.VULTURE_GLIDE_CYCLE_HZ * Math.PI * 2 + v.id * 2.1);
+      const flapEnv = Math.max(0, glide);                 // 0 = gliding, →1 = flapping hard
+      const beat = Math.sin(elapsed * Tuning.VULTURE_FLAP_HZ * Math.PI * 2);
+      const passive = Math.sin(elapsed * 1.4 + v.id) * 0.05 * (1 - flapEnv);   // soft glide bob
+      const sx = Tuning.VULTURE_DIHEDRAL + beat * Tuning.VULTURE_FLAP_AMP * flapEnv + passive;
+      const elbowFlex = beat * 0.12 * flapEnv;            // wrist follows the beat slightly
+      poseWings(sx, 0, elbowFlex, -0.08);
       neck.rotation.set(0, 0, Tuning.VULTURE_NECK_EXTEND);
       legL.rotation.set(0, 0, -Tuning.VULTURE_LEG_TUCK); legR.rotation.set(0, 0, Tuning.VULTURE_LEG_TUCK);
       tail.rotation.set(0, 0, -0.3);
       break;
     }
     case 'landing': {
-      // Flare: wings spread + cupped forward, fluttering; legs reach DOWN; neck up; tail fans as an airbrake.
-      const flutter = Math.sin(elapsed * Tuning.VULTURE_FLAP_HZ * 1.6 * Math.PI * 2) * 0.18;
-      const w = Tuning.VULTURE_WING_EXTEND * 0.6 + flutter;
-      wingL.rotation.set(w, -0.4, 0); wingR.rotation.set(-w, 0.4, 0);   // cupped forward
+      // Flare: wings cupped forward + spread wide as an airbrake, fluttering; elbows
+      // mostly open; legs reach DOWN; neck up; tail fans.
+      const flutter = Math.sin(elapsed * Tuning.VULTURE_FLAP_HZ * 1.6 * Math.PI * 2) * 0.16;
+      poseWings(0.5 + flutter, -0.32, 0, -0.1);   // wings raised + spread + cupped forward (airbrake)
       neck.rotation.set(0, 0, -0.25);
       legL.rotation.set(0, 0, 0.15); legR.rotation.set(0, 0, -0.15);    // reaching for the perch
       tail.rotation.set(0, 0, 0.5);                                     // fanned down
       break;
     }
     case 'dead': {
-      // Limp — wings splayed, head drooped, legs slack. Static (the body tumbles).
-      wingL.rotation.set(-0.9, 0, 0); wingR.rotation.set(0.9, 0, 0);
+      // Limp — wings splayed half-open, head drooped, legs slack. Static (body tumbles).
+      poseWings(-0.6, 0, 0, -0.5);
       neck.rotation.set(0, 0, 0.9);
       legL.rotation.set(0, 0, 0.4); legR.rotation.set(0, 0, -0.4);
       tail.rotation.set(0, 0, 0.1);
@@ -372,6 +418,7 @@ export function spawnVulture(
     ? Math.atan2(dir.x, dir.z) + Math.PI / 2
     : Math.random() * Math.PI * 2;
   mesh.rotation.y = heading;
+  mesh.traverse((o) => { if ((o as THREE.Mesh).isMesh) (o as THREE.Mesh).castShadow = true; });
   scene.add(mesh);
 
   // Kinematic body + capsule around the body centre (~0.26 above the feet).
@@ -397,6 +444,8 @@ export function spawnVulture(
     targetDir: new THREE.Vector3(1, 0, 0),
     relocating: false,
     heading,
+    prevHeading: heading,
+    bank: 0,
     bob: Math.random() * Math.PI * 2,
     hovered: false,
     landed: false,
@@ -468,6 +517,19 @@ function pickRelocateTarget(
   return best;
 }
 
+/** ACAI f/u — yaw to the flight heading + roll-bank INTO the turn (the inside wing
+ *  dips when steering). Smooths a per-frame heading delta into `v.bank`. */
+function applyFlightOrientation(v: Vulture, dt: number): void {
+  let dH = v.heading - v.prevHeading;
+  while (dH > Math.PI) dH -= Math.PI * 2;
+  while (dH < -Math.PI) dH += Math.PI * 2;
+  const turnRate = dt > 1e-4 ? dH / dt : 0;
+  const targetBank = Math.max(-Tuning.VULTURE_BANK_ANGLE, Math.min(Tuning.VULTURE_BANK_ANGLE, turnRate * 0.25));
+  v.bank += (targetBank - v.bank) * Math.min(1, dt * 5);
+  v.prevHeading = v.heading;
+  v.mesh.rotation.set(0, v.heading + Math.PI / 2, v.bank);
+}
+
 export function updateVultures(ctx: GameContext, dt: number): void {
   if (!isPlaying(ctx)) return;
   const playerTr = getPlayerPos(ctx);
@@ -502,6 +564,8 @@ export function updateVultures(ctx: GameContext, dt: number): void {
             v.fleeDir.normalize();
             v.heading = Math.atan2(v.fleeDir.x, v.fleeDir.z);
           }
+          v.prevHeading = v.heading;   // fresh bank reference (no stale-heading lurch)
+          v.bank = 0;
         }
         break;
       }
@@ -519,8 +583,12 @@ export function updateVultures(ctx: GameContext, dt: number): void {
           const cruiseY = v.target.y + Tuning.VULTURE_CRUISE_HEIGHT;
           const dy = cruiseY - v.pos.y;
           v.pos.y += Math.max(-Tuning.VULTURE_CLIMB_RATE * dt, Math.min(Tuning.VULTURE_CLIMB_RATE * dt, dy));
+          // Never sink through the dunes between trees — the cruise altitude is
+          // relative to the DESTINATION, so clamp to the terrain right here.
+          const minY = ctx.terrain.heightAt(v.pos.x, v.pos.z) + Tuning.VULTURE_MIN_FLIGHT_CLEARANCE;
+          if (v.pos.y < minY) v.pos.y = minY;
           v.heading = Math.atan2(dirx, dirz);
-          v.mesh.rotation.set(0, v.heading + Math.PI / 2, -0.12);
+          applyFlightOrientation(v, dt);
           // If the player drifts near the chosen target, re-pick a safer one.
           const pdx = v.target.x - playerTr.x, pdz = v.target.z - playerTr.z;
           if (pdx * pdx + pdz * pdz < spotRSq) {
@@ -538,7 +606,11 @@ export function updateVultures(ctx: GameContext, dt: number): void {
           v.pos.z += v.fleeDir.z * sp * dt;
           v.pos.y += v.velocity.y * dt;
           v.velocity.y = Math.max(Tuning.VULTURE_GLIDE_CLIMB, v.velocity.y - 2.0 * dt);
-          v.mesh.rotation.set(0, v.heading + Math.PI / 2, -0.12);
+          // Stay above the terrain as it flees across biomes (no dune clipping).
+          const minY = ctx.terrain.heightAt(v.pos.x, v.pos.z) + Tuning.VULTURE_MIN_FLIGHT_CLEARANCE;
+          if (v.pos.y < minY) v.pos.y = minY;
+          v.heading = Math.atan2(v.fleeDir.x, v.fleeDir.z);
+          applyFlightOrientation(v, dt);
           const dx = v.pos.x - v.perch.x, dz = v.pos.z - v.perch.z;
           if (dx * dx + dz * dz > Tuning.VULTURE_DESPAWN_DIST * Tuning.VULTURE_DESPAWN_DIST) {
             ctx.three.scene.remove(v.mesh);
@@ -562,6 +634,7 @@ export function updateVultures(ctx: GameContext, dt: number): void {
           v.fleeDir.normalize();
           v.heading = Math.atan2(v.fleeDir.x, v.fleeDir.z);
           v.velocity.set(0, Tuning.VULTURE_CLIMB_RATE, 0);
+          v.prevHeading = v.heading; v.bank = 0;
           break;
         }
         const hx = v.target.x - v.pos.x, hz = v.target.z - v.pos.z;

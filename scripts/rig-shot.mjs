@@ -1077,6 +1077,19 @@ const SCENARIOS = {
     });
     if (r1.noVulture) { console.log('[vulture-flight] SKIP — no vulture'); return; }
     await page.waitForTimeout(1600);   // let it launch + pick a target
+    // ACAI f/u — sample terrain clearance during the REAL flight (the bug: the
+    // bird sank through dunes when leaving the salt flats). Min over a few frames.
+    let minClear = Infinity;
+    for (let i = 0; i < 5; i++) {
+      await page.waitForTimeout(120);
+      const c = await page.evaluate(() => {
+        const ctx = window.__game.ctx;
+        const v = ctx.vultures.list[0];
+        if (v.state !== 'flying') return null;
+        return +(v.pos.y - ctx.terrain.heightAt(v.pos.x, v.pos.z)).toFixed(2);
+      });
+      if (c !== null && c < minClear) minClear = c;
+    }
     const r2 = await page.evaluate(() => {
       const v = window.__game.ctx.vultures.list[0];
       const dTree = Math.sqrt((v.target.x - v.perch.x) ** 2 + (v.target.z - v.perch.z) ** 2);
@@ -1100,7 +1113,10 @@ const SCENARIOS = {
     });
     const launchOk = r2.state === 'flying' && r2.relocating === true && r2.targetTreeDist >= 40;
     const landOk = r4.state === 'perched' && r4.rePerchAtTarget < 0.3;
-    console.log(`[vulture-flight] ${launchOk && landOk ? 'PASS' : 'FAIL'} launch=${JSON.stringify(r2)} flightShortcut=${JSON.stringify(r3)} land=${JSON.stringify(r4)}`);
+    // Clearance must stay near/above VULTURE_MIN_FLIGHT_CLEARANCE (3.0m) — a small
+    // negative slack tolerates the heightAt sample landing on a sharp ridge tip.
+    const clearOk = minClear === Infinity || minClear >= 2.0;
+    console.log(`[vulture-flight] ${launchOk && landOk && clearOk ? 'PASS' : 'FAIL'} launch=${JSON.stringify(r2)} minClear=${minClear === Infinity ? 'n/a' : minClear} flightShortcut=${JSON.stringify(r3)} land=${JSON.stringify(r4)}`);
   },
 
   'vulture-kill': async (page) => {

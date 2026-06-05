@@ -1411,12 +1411,18 @@ export const Tuning = {
   // ACAI — rig animation (joint rotations, radians; flap in Hz).
   VULTURE_IDLE_BOB_HZ: 0.5,        // perched head-bob frequency
   VULTURE_IDLE_BOB_AMP: 0.10,      // perched head-bob amplitude (neck rot.z)
-  VULTURE_FLAP_HZ: 3.2,            // wingbeats/sec in flight
-  VULTURE_FLAP_AMP: 0.55,          // flap swing amplitude (shoulder rot.x)
-  VULTURE_WING_EXTEND: 0.35,       // shoulder rot.x that spreads the folded wing OUT for flight
+  VULTURE_FLAP_HZ: 2.6,            // wingbeats/sec during a flap burst (slower = heavier big-bird beat)
+  VULTURE_FLAP_AMP: 0.7,           // flap swing amplitude (shoulder rot.x) — big broad-wing beat
+  VULTURE_WING_EXTEND: 0.35,       // (legacy) shoulder rot.x spread reference
+  VULTURE_DIHEDRAL: 0.22,          // ACAI f/u — flight dihedral: wings held slightly up in a shallow V
+  VULTURE_GLIDE_CYCLE_HZ: 0.22,    // ACAI f/u — slow flap↔glide envelope (flap a few beats, then glide)
+  VULTURE_PERCH_WING_DROOP: 1.5,   // ACAI f/u — perched shoulder rot.x drooping the long wings down the flanks
+  VULTURE_ELBOW_FOLD: -2.4,        // ACAI f/u — perched elbow rot.y folding the forearm+primaries back (≈180°, tucks the wing)
   VULTURE_LEG_TUCK: 1.2,           // hip rot.z that folds the legs up in flight
   VULTURE_NECK_EXTEND: -0.5,       // neck rot.z extending the head forward in flight
   VULTURE_LAND_DURATION: 0.9,      // s — landing flare → settle into perched
+  VULTURE_BANK_ANGLE: 0.45,        // ACAI f/u — max roll (rad) banking into a flight turn
+  VULTURE_MIN_FLIGHT_CLEARANCE: 3.0, // ACAI f/u — m the bird stays above the terrain while flying (no dune clipping)
   // ACAI — relocate-and-land flight.
   VULTURE_RELOCATE_MIN_DIST: 40,   // m — a relocation target perch must be at least this far
   VULTURE_LAND_ARRIVE_DIST: 2.5,   // m (horizontal) from target → begin the landing descent

@@ -45,6 +45,17 @@ asserts `trunkCol=1` per tree.
 `WING_EXTEND 0.35`, `LEG_TUCK`, `NECK_EXTEND`, `LAND_DURATION`, `CRUISE_HEIGHT 7`, `LAND_DESCENT 2.2`, `LAND_SPEED_FACTOR`,
 `RELOCATE_MIN_DIST 40`, `LAND_ARRIVE_DIST 2.5`, `DEATH_SPIN 7`, `SETTLE_VEL 0.7`, `SETTLE_MAX_AGE 2.5`.
 
+**Follow-up (same-day, post-playtest):** addressed user feedback on the vulture. (1) **Big wingspan** — wings rebuilt
+from single short slabs into TWO-segment articulated wings (shoulder→arm→elbow→forearm + 4 slotted primaries, ~3× body
+width when spread); `VultureRig` gains `elbowL/R`; `animateVulture` poses shoulder + elbow per state and folds the long
+wings cleanly along the flank for perching. (2) **No more dune clipping** — flight altitude is clamped to
+`terrain.heightAt + VULTURE_MIN_FLIGHT_CLEARANCE (3m)` every frame in flying/flee (the cruise target was relative to the
+DESTINATION tree, so the path sank into dunes between trees); `vulture-flight` now asserts `minClear≥2`. (3) **Flap/glide
+variation** — the flight flap is gated by a slow `VULTURE_GLIDE_CYCLE_HZ` envelope (flap a few beats, then glide with the
+wings held in a shallow dihedral). (4) **Extras** — the bird now casts a shadow; banks into flight turns
+(`applyFlightOrientation` rolls the inside wing down). New consts: `DIHEDRAL`, `GLIDE_CYCLE_HZ`, `PERCH_WING_DROOP`,
+`ELBOW_FOLD`, `BANK_ANGLE`, `MIN_FLIGHT_CLEARANCE`.
+
 ## Session ACAH — 2026-06-05 — Big overnight: bug sweep + loot bootstrap + vulture + cloud shadows ✓ verify pass (tsc clean)
 
 `verified` — `npm run verify` (tsc) PASS; **no save bump** (all additive, v14). A large multi-tier session: cleared the
