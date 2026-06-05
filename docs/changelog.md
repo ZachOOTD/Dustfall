@@ -3,6 +3,53 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ACAH — 2026-06-05 — Big overnight: bug sweep + loot bootstrap + vulture + cloud shadows ✓ verify pass (tsc clean)
+
+`verified` — `npm run verify` (tsc) PASS; **no save bump** (all additive, v14). A large multi-tier session: cleared the
+autonomous-verifiable backlog (bugs + the early-game loot deadlock), added a researched new creature + an atmosphere
+effect, and fixed a game-wide latent shader bug. 7 commits (`39af9d7`→`ae3f030`). Every visual element screenshot-iterated
+(rule 8).
+
+**Tier 0 — bug + quick-win sweep (5).** (1) **Mounted-vs-on-foot lighting (D180):** `lighting.ts` followed the player
+body for the sun/moon/shadow camera, but the player capsule is parked at **y=-2000 while mounted** (`speeder.ts:935`) →
+the whole world's lighting shifted (moonlight even inverted). Now follows the speeder body while mounted. (2) **DEV MODE
+keybind:** the badge can't be clicked during play (pointer locked to the canvas), so added a **Backquote (`)** toggle that
+turns dev mode on + opens the spawn panel. (3) **Speeder tow-bar reseat** (was floating ~6cm; posts lengthened to embed
+in the deck). (4) **Antenna slow-blink beacon** (parented PointLight + tip-color pulse) so a parked bike is findable at
+night. (5) **Night-dust ground-clamp** — the `dustMotes` upper vertical-wrap drops at night so motes don't drift over the
+stars (`night-sky` rig-shot confirms a clean star field).
+
+**Material program-cache collision — fixed GAME-WIDE (D177, extends D175).** Wood got `customProgramCacheKey` in ACAG,
+but **metal/fabric/glass/bone/skin/paint/stone ALL** bake per-instance constants into their `onBeforeCompile` GLSL via
+`toFixed` with no cache key → Three shared ONE compiled program per factory and silently ignored per-instance effect
+params (rust/scratch/grain/frost/…). Base `color` still varied (real uniform) — why it went unnoticed. Added the guard to
+all 7 (metal hand-encoded; the rest `JSON.stringify(opts)`). terrain excluded (bakes only global consts). Verified
+no regressions across items + the player rig.
+
+**Tier 1+2 — loot bootstrap + scrap model (D178).** The early game DEADLOCKED: salvage panels need a `scrap_bar`, the
+recipe needs **2 scrap**, and scrap only dropped from panels. Fix: **scatter 2-4 scrap in a ring around every wreck**
+(massive wrecks get a larger ring), deterministic from `scatterRand` — mirrors branches-around-trees. NEW
+`world/scrapMesh.ts buildScrapMesh` (shared detailed salvage-debris model: torn/bent plate + folded flap + crumpled plate
++ angle bracket + rivets + bent rebar + wire coil) used by BOTH the held item AND the world pickups; the flat box+2-bolts
+scrap is gone. `scrap-loot` rig-shot: 223 scrap, all within 12m of a wreck across 78 parts.
+
+**Tier 3 — sandworm shelter-immunity.** The worm can't sense a sheltered player. `tickPatrol` skips ambush+alert
+acquisition while `ctx.player.inShelter`; `tickAlert`/`tickCharging` disengage if the player reaches cover mid-approach.
+`worm-shelter` rig-shot eval: PASS (sheltered=patrol, exposed=alert).
+
+**Tier 4 — rare desert vulture (D179).** NEW `enemies/vulture.ts` — a researched perched scavenger (Deadvlei
+lappet-faced refs: hunched body, bald pink head on an S-neck, hooked beak, dark folded wings, neck ruff, gripping
+talons). Mirrors the shrew pipeline: perches on salt-flat dead-tree crowns (`spawnDeadTrees` now returns crown perch
+points), flees + climbs away when the player closes (the kill window — needs a gun), a hit drops it (gravity fall → land
+→ flop → `raw_vulture_meat` → cooks). Full combat/interaction/items/save (additive) wiring. ~3 spawn world-wide. Model
+iterated 4 rounds (`vulture` rig-shot); `vulture-kill` eval PASS. In-flight flee FEEL is foreground-owed (D150).
+
+**Tier 5 — moving cloud shadows.** Dapple the terrain under the overcast cloud field — `terrainMaterial` samples low-freq
+noise at world XZ drifting over `uTime` (gated by a new `uCloudiness` uniform from `ctx.weather.cloudiness`), darkening
+diffuse under cover. Subtle at gameplay angle (a top-down crank confirmed the patches). `tuning: CLOUD_SHADOW_*`.
+
+**NEW rig-shot scenarios:** `scrap-loot`, `worm-shelter`, `vulture`, `vulture-kill`, `cloud-shadows`.
+
 ## Session ACAF — 2026-06-04 — Branch model: dark wood-grain + side twigs + dead-tree color match ✓ verify pass (tsc clean)
 
 `verified` — `npm run verify` (tsc) PASS; no save change. User feedback on the world branch: too light/grey, twigs

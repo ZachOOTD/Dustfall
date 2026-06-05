@@ -1341,3 +1341,39 @@ The fundamental issue: KCC's slope projection, autostep, and contact resolution 
 **Picked**: `makeDeadTree` is a recursive `grow(base, dir, len, radius, depth)`: each call emits one tapered, parabolically-bowed cylinder segment (the bow = gnarl) and forks into 2-3 children at its CURVED TIP with divergence + upward bias, recursing `depth` levels (currently 4) until depth/min-radius cutoff. Children attach with matching radii at the parent tip → seamless forks, connected by construction (no floaters). Buttress roots flare at the base. **Perf**: a tree is ~40-80 cylinder segments; all merge into ONE `BufferGeometry` via `mergeGeometries` → 1 draw call/tree (×45 trees). One shared `_treeMat` (BRANCH_WOOD_COLOR + bark, localSpace). **Knobs**: `depth` = generations of forking (crown complexity, exponential cost), `childCount` probabilities = density per level (tune fine-twig sparseness here, NOT depth, to thin tips while keeping reach), `boleLen`/`baseR` = trunk size. **Process note**: this was iterated 6+ screenshot rounds via a NEW `tree` rig-shot scenario (trees tagged `name='deadTree'` so the harness can locate one) — caught a backwards limb taper, ball-collar junctions, a trumpet root flare, over-density, and proportions, none of which `tsc` would surface (rule 8).
 
 **friction-score:** 2
+
+## D177 — The onBeforeCompile program-cache collision (D175) was GAME-WIDE: every procedural material factory needs customProgramCacheKey (Session ACAH)
+**When**: ACAH — building the rusty scrap model, I found `createMetalMaterial` bakes its constants (rustLevel/wornScale/scratch) into the GLSL via `.toFixed()` with no cache key — the exact D175 bug. A grep showed ALL of metal/fabric/glass/bone/skin/paint/stone do the same; only woodGrainMaterial had been fixed (D175).
+
+**Why**: Three.js keys its compiled-program cache on material PROPERTIES, not the onBeforeCompile-injected source. So for each factory, every variant reused the FIRST-compiled program and silently ignored its per-instance baked effect params. Base `color` is a real uniform so it still varied per material — which is why nobody noticed across ~100 sessions (color carries most of the read; the shared rust/scratch/grain was "good enough" everywhere). The D173 rust pass *looked* like it varied because the scrappy read came from GEOMETRY + base colors, not the (collided) rust-shader layer.
+
+**Picked**: Added `mat.customProgramCacheKey` to all 7 remaining factories — metal hand-encodes its baked consts; fabric/glass/bone/skin/paint/stone use `'<factory>:' + JSON.stringify(opts ?? {})` (captures every baked field without enumerating; can only over-compile, never wrong-share). **terrainMaterial excluded**: it bakes only GLOBAL `Tuning.MIRAGE_*` constants (identical across all terrain instances → sharing is correct; the ACAH cloud-shadow addition uses a uniform, not a baked const). **Considered**: leaving it (rejected — it silently defeats per-material art direction game-wide). **Verified no catastrophic regression**: items + player rig render correctly; most materials use default opts so they're unchanged, only the few with custom params shift toward their authored intent. **Standing rule**: any NEW onBeforeCompile factory MUST set customProgramCacheKey; verify a shader-source change actually renders (inject a debug fill) before trusting it.
+
+**friction-score:** 3
+
+## D178 — The early game DEADLOCKED on scrap; fixed by scattering scrap around wrecks (no-tools loot), mirroring branches-around-trees (Session ACAH)
+**When**: ACAH — user flagged that panels are the only loot source, but opening a panel needs a `scrap_bar`, whose recipe needs 2 `scrap`, and scrap only dropped from panels → a cold-start deadlock (verified in code).
+
+**Why**: The salvage loop had no bootstrap entry. The cleanest no-tools source that fits the world is debris around crash sites — and the dead-tree→branch scatter is the exact proven pattern (ring-scatter from an anchor, static seed-spawned pickups).
+
+**Picked**: `main.ts` iterates `salvageables.list` (all placed wrecks) and drops 2-4 scrap in a ring around each (`spawnScrapAt` mirrors `spawnBranchAt`; massive wrecks get a larger ring to clear their footprint). Deterministic from `scatterRand`; static pickups (`body:null`), no save bump. Balanced so the first wreck reached yields enough for a `scrap_bar`. **Considered**: making panels pryable without a tool (rejected — removes the scrap_bar's purpose) and seeding a scrap_bar in the opening pod (rejected — narrower fix, doesn't enrich the world). Built the scrap mesh as a SHARED `buildScrapMesh` (held item + world pickups) per the branchMesh precedent so they can't drift.
+
+**friction-score:** 1
+
+## D179 — The vulture is a PERCHED proc-creature mirroring the shrew pipeline (not a flying-AI rebuild); dead trees return crown perch points (Session ACAH)
+**When**: ACAH — adding the rare salt-flat vulture (user spec: perches on trees, flees on approach, gun-kill for meat).
+
+**Why**: A full flight-AI bird is large + hard to verify headless. But the gameplay the user wants is perch → flee (kill window) → shoot → meat — which maps almost 1:1 onto the shrew's spawn/damage/loot/save pipeline. The only genuinely new pieces are the perched model + a simple flee-climb-despawn flight and a gravity death-fall.
+
+**Picked**: `enemies/vulture.ts` mirrors `shrew.ts` (module-owned list, kinematic body, combat dispatch, interaction take-case, COOK_MAP, additive save reconcile-by-id). FSM perched|flee|dead. **Perch placement**: `deadTree.spawnDeadTrees` now RETURNS world-space crown perch points (it tracks the crown-top Y during recursion and exposes `userData.perchY`); the vulture spawner picks ~3 well-separated perches. **Considered**: physics-driven flight (rejected — overkill; the flee is a scripted climb-arc + despawn) and ground-walking (rejected — a perched scavenger is the reference + reuses the new trees). **Save**: additive `vultures[]` (id+pos+state), reconciled like shrews — no version bump (D81). The in-FLIGHT feel (flee arc) is foreground-owed (D150 — the headless clock can't read flight cadence).
+
+**friction-score:** 1
+
+## D180 — The mounted player capsule parks at y=-2000; any system reading player position must account for it (Session ACAH)
+**When**: ACAH — fixing the user-reported "world lighting differs mounted vs on foot." Root cause: `lighting.ts` followed `ctx.player.body.body.translation()` for the sun/moon targets + shadow camera, but on speeder-mount `speeder.ts` parks the player capsule at `{0,-2000,0}` (so it can't collide with the bike) → the lighting tracked 2km underground (moonlight inverted, world darkened).
+
+**Why**: Worth a D-entry because it's a LATENT GOTCHA: the parked-at-y=-2000 trick (a reasonable way to stow the capsule while mounted) silently breaks any system that reads the player body position while mounted. Lighting was the one that surfaced; future systems (audio attenuation, fog, spawn distance, AI targeting) could hit the same trap.
+
+**Picked**: `updateLighting` derives a single follow-position: `ctx.speeder?.mounted ? ctx.speeder.body.translation() : ctx.player.body.body.translation()`, used for both the shadow-move check and the sun/moon targets. **General rule**: when reading player world position, prefer a helper that resolves the speeder position while mounted (the `getPlayerPos` util already does this for AI — sandWorm/companion/vulture use it; lighting predated it). Audit other raw `ctx.player.body.body.translation()` readers if a mounted-state bug appears.
+
+**friction-score:** 2

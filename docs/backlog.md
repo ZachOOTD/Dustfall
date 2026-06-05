@@ -194,19 +194,10 @@ Intentionally not active. Detail preserved so the call is reversible. Each entry
 
 — — — ACAF (2026-06-05) idea dump — — —
 
-[polish] night dust particles clamp near the ground so they don't obscure the stars
-[bug] world lighting differs when mounted on the speeder vs on foot (should match)
-[bug] rear bar on the speeder bike floats slightly off the body
+✓ **SHIPPED ACAH** — night dust ground-clamp (motes stay low at night, stars unobscured); mounted-vs-on-foot lighting (D180 — lighting follows the speeder while mounted); speeder tow-bar reseat + antenna slow-blink beacon; DEV MODE Backquote keybind (badge unclickable while pointer-locked); cloud shadows on the terrain; scrap model overhaul (shared `buildScrapMesh`) + remaining-item audit (folded into the D177 material-cache sweep); loot bootstrap = scrap scatters around wrecks (D178); rare vulture (D179 — perch/flee/shoot-for-meat); sandworm shelter-immunity.
 [feat] procedural speeder bikes that must be repaired before they're functional
 [feat] overhaul procgen wrecks together with the salvage-panel placement/variation system
 [feat] opening cutscene: player descends from space in an ODST-style drop pod
-[bug] DEV MODE badge (top-left) isn't clickable — need a reliable way to toggle dev mode
-[polish] clouds cast moving shadows on the world
-[polish] overhaul the scrap item model (it missed the item-model detail-upgrade pass)
-[polish] audit remaining item models for any still needing a detail upgrade
-[feat] add loot sources beyond panels — scrap_bar is needed to open panels but can't be crafted without loot (bootstrap deadlock)
-[feat] scrap pickups scatter around wrecks (like branches around dead trees) — a no-tools loot source
-[feat] rare vulture perches on salt-flat trees (1/biome), flees on approach, shoot to kill for meat
-[polish] speeder-bike antenna red light blinks slowly so you can locate the parked bike
 [feat] remove the current mega-wreck + rebuild from scratch (too boxy/unrealistic) — gather references, level up modelling techniques for a detailed high-quality build
-[feat] sandworm should not attack the player while they're in shelter / somewhere that provides cover
+🟡 **[polish] vulture in-flight flee feel (ACAH, foreground-owed D150)** — the perch→flee launch + climb-away arc + despawn read is logic-verified but the in-MOTION cadence/feel needs a human (headless clock can't read flight). Tune `VULTURE_FLEE_SPEED`/`VULTURE_CLIMB_RATE`/`VULTURE_SPOT_RADIUS` in a playtest.
+🟡 **[polish] cloud-shadow strength tune (ACAH, foreground)** — `CLOUD_SHADOW_SCALE`/`DARKEN` set subtle at gameplay angle; confirm the moving dapple reads right (not too strong/weak) across overcast levels in a real playtest.

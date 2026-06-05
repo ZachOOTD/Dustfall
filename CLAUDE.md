@@ -64,26 +64,26 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      Prior milestones live in docs/changelog.md — do NOT accumulate "Prior milestone"
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
-**Last shipped**: Session ACAG — **branch realism + full dead-tree rework + bark grain** (iterative polish, ~15
-screenshot-verified follow-ups; tsc clean, no save change). (1) **Held == world lighting (D174):** the FP viewmodel
-scene now MIRRORS the world sun/moon/ambient every frame (`player/viewModel.ts`) instead of fixed studio lights, so every
-held item is lit identically to its dropped/world copy. (2) **Recursive dead tree (D176):** `world/deadTree.ts` rebuilt —
-the single-pole model replaced by a recursive forking branch generator (Deadvlei camelthorn refs: bole → 2-3 forks ×4
-levels into a gnarled crown + buttress roots), all segments merged into ONE geometry per tree (1 draw call ×45). (3)
-**Bark grain + a latent shader-cache bug (D175):** wood materials were silently sharing one compiled program (Three keys
-the program cache on material props, NOT onBeforeCompile source) — `customProgramCacheKey` fixes it; a new gated `bark`
-layer in `woodGrainMaterial.ts` gives the trunk vertical grain. (4) Branch shaft → single seamless tapered mesh; deadwood
-color unified to ONE shared constant `BRANCH_WOOD_COLOR` (light grey). NEW `tree` + `branch-match` rig-shot scenarios.
-**Owed (unchanged):** the ACW/ACX in-motion feel pile (D150).
-*(Prior milestones — ACAF: branch model rework; ACAE: dev item-spawner panel; ACAD: rust pass (D173); ACAC: pulse rifle
-(D172); ACAB: Cycle 6 clouds (D171); ACAA: FP two-pass render (D170). See changelog.)*
+**Last shipped**: Session ACAH — **big overnight: bug sweep + loot bootstrap + vulture + cloud shadows** (7 commits, tsc
+clean, no save bump). **Tier 0 bugs:** mounted-vs-on-foot lighting (the player body parks at y=-2000 while mounted, so
+`lighting.ts` now follows the speeder — D180), a Backquote DEV-MODE keybind (badge unclickable while pointer-locked),
+speeder tow-bar reseat + antenna blink beacon, night-dust ground-clamp (stars unobscured). **Game-wide shader fix
+(D177):** extended the ACAG `customProgramCacheKey` fix to ALL 7 remaining material factories (metal/fabric/glass/bone/
+skin/paint/stone) — they were silently sharing one program each, ignoring per-instance rust/scratch/grain. **Loot
+bootstrap (D178):** scatter 2-4 scrap around every wreck (breaks the panel↔scrap_bar↔scrap deadlock) via a NEW shared
+`buildScrapMesh` (held + world match); scrap model overhauled. **Sandworm shelter-immunity:** won't acquire a sheltered
+player. **Vulture (D179):** NEW rare perched scavenger (`enemies/vulture.ts`, Deadvlei refs) — perches on dead-tree
+crowns, flees on approach, shoot for meat; mirrors the shrew pipeline; additive save. **Cloud shadows:** moving dapple on
+the terrain from the cloud field. NEW rig-shots: `scrap-loot`/`worm-shelter`/`vulture`/`vulture-kill`/`cloud-shadows`.
+**Owed:** the ACW/ACX in-motion feel pile (D150) + the vulture in-flight flee feel.
+*(Prior milestones — ACAG: dead-tree rework + bark (D174-176); ACAF: branch rework; ACAD: rust (D173); ACAC: pulse rifle
+(D172); ACAB: clouds (D171). See changelog.)*
 
-**Next session (ACAH)**: pick a lane — (a) **loot-source overhaul** (panels need a scrap_bar to open but scrap_bar needs
-loot to craft → bootstrap deadlock; add scrap scatter around wrecks like branches around trees, per backlog); (b) **Cycle
-5 raider proc-character** (rebuild the raider as a proc-character; pulse rifle is its weapon); (c) the **DEEP CAVE SYSTEM**
-design+build pass; or (d) a **foreground feel-tune playtest** of the owed ACW/ACX pile (needs a human). Fresh backlog
-items from ACAG triage: scrap-model overhaul, mega-wreck rebuild, vulture, devmode-toggle fix, cloud shadows, drop-pod
-intro. See [docs/next-session-prompt.md](docs/next-session-prompt.md) + [docs/backlog.md](docs/backlog.md).
+**Next session (ACAI)**: pick a lane — (a) **Cycle 5 raider proc-character** (rebuild the raider as a proc-character
+wielding the pulse rifle; rig-shot-verifiable like the vulture/item work); (b) **mega-wreck rebuild from scratch** (ACAG
+triage — too boxy; research refs + level up modelling, like the camelthorn tree); (c) the **DEEP CAVE SYSTEM**
+design+build pass; or (d) a **foreground feel-tune playtest** of the owed ACW/ACX pile + the vulture flight feel (needs a
+human). See [docs/next-session-prompt.md](docs/next-session-prompt.md) + [docs/backlog.md](docs/backlog.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 
