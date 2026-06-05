@@ -20,6 +20,7 @@ and promotes the second.
 
 ## Recently shipped (overnight + post-overnight)
 
+- **Session ACAI** (2026-06-06): **Vulture — rigged animations + branch-perch + death physics + tree collision.** 4 commits, tsc clean, no save bump (D181-D182). Turned the ACAH static-mesh vulture into a living creature: joint-pivot rig (T1) + per-state anim driver (T2: idle/flap/landing/death), branch-accurate perch captured during dead-tree generation (T3 — `deadTree.grow()` records `branchPerches` before the merge; `spawnDeadTrees` returns `TreePerch[]`), relocate-and-land FSM (T4 — flees to ANOTHER tree + re-perches, `pickRelocateTarget`), dynamic-body death tumble (T5 — kinematic→DYNAMIC swap mirroring dropped-item physics, settles on linear velocity to dodge heightfield angular jitter), and a static trunk collider per dead tree (T6 — `spawnDeadTrees` gains a `world` param). NEW `__game.killVulture`; rig-shots `vulture-flight`/`vulture-pose --state=`; extended `vulture-kill`/`tree`. In-motion flight/tumble cadence foreground-owed (D150). **(Also done pre-tier: perf optimizations — compileAsync boot pre-warm, pickup geometry merging, metal→uniforms; buried-cockpit POI removed.)**
 - **Session ACAH** (2026-06-05): **Big overnight — bug sweep + loot bootstrap + vulture + cloud shadows.** 7 commits, tsc clean, no save bump. Tier 0 bugs (mounted-vs-on-foot lighting D180, Backquote dev-mode keybind, speeder tow-bar reseat + antenna blink, night-dust ground-clamp). **Game-wide shader fix (D177):** extended ACAG's `customProgramCacheKey` to all 7 remaining material factories (metal/fabric/glass/bone/skin/paint/stone were silently sharing one program each). **Loot bootstrap (D178):** scrap scatters around wrecks (breaks the panel↔scrap_bar deadlock) via NEW shared `buildScrapMesh` (held+world); scrap model overhauled. **Sandworm shelter-immunity.** **Vulture (D179):** NEW rare perched scavenger creature (`enemies/vulture.ts`) — perch/flee/shoot-for-meat, mirrors the shrew pipeline, additive save. **Cloud shadows:** moving terrain dapple from the cloud field. NEW rig-shots: scrap-loot/worm-shelter/vulture/vulture-kill/cloud-shadows.
 - **Session ACAG** (2026-06-05): **Branch realism + full dead-tree rework + bark grain.** Iterative polish (~15 screenshot-verified follow-ups), tsc clean, no save change. (1) **Held == world lighting (D174):** FP viewmodel scene mirrors the world sun/moon/ambient each frame (was fixed studio lights) → held items lit identically to dropped copies. (2) **Recursive dead tree (D176):** `deadTree.ts` rebuilt — recursive forking generator (camelthorn refs: bole → 2-3 forks ×4 levels + gnarled curves + buttress roots), all segments merged to ONE geometry/tree (1 draw call ×45). (3) **Bark grain + latent shader-cache fix (D175):** wood mats silently shared one program (Three keys cache on props, not onBeforeCompile source) → `customProgramCacheKey`; NEW gated `bark` shader layer → trunk vertical grain. (4) Branch shaft → single seamless tapered mesh; deadwood color → ONE shared `BRANCH_WOOD_COLOR` (light grey). NEW `tree` + `branch-match` rig-shot scenarios.
 - **Session ACAF** (2026-06-04): **Branch model rework.** 5 files, tsc clean, no save change. Twigs now emerge from the shaft surface (no longer pierce through) + a bend; dark wood-grain material (`0x3a2e20`) on the held branch (vmWood) + the ~200 world pickups (shared `createWoodGrainMaterial`); dead trees switched to the same dark wood family so branches + trees match. NEW `branches` rig-shot scenario.
@@ -141,13 +142,14 @@ flagship→composite procgen sweep (ABO B6b), item-viewmodel fidelity remainder 
 ItemDefs), per-item accurate collision shapes, crafting combine-to-discover chooser UI,
 megaWreck catwalk panel reachability.
 
-**Near-term priority (ACAG triage, 2026-06-05) — surfaced before the cycles:**
-- **[feat] Loot-source bootstrap fix** — panels need a `scrap_bar` to open, but `scrap_bar` can't be crafted without
-  loot → deadlock. Add a no-tools loot source (proposed: scrap scatter around wrecks, like branches around dead trees).
-  This gates the early game and should jump the queue.
-- Other ACAG triage items (see `backlog.md`): scrap-model overhaul + item-model audit, mega-wreck rebuild from scratch,
-  rare salt-flat vulture, devmode-toggle fix (badge unclickable), cloud shadows, night-dust ground clamp, ODST drop-pod
-  intro, procedural-repairable speeder bikes, sandworm shelter-immunity.
+**Near-term priority (ACAG triage) — mostly cleared by ACAH+ACAI:**
+- ✓ SHIPPED (ACAH): loot-source bootstrap fix (D178), scrap-model overhaul + item audit, sandworm shelter-immunity,
+  devmode-toggle fix, cloud shadows, night-dust ground clamp; rare salt-flat vulture creature (D179, fully rigged ACAI).
+- **NEXT (ACAJ): [feat] mega-wreck rebuild from scratch** + procgen-wreck/salvage-panel overhaul (the user-chosen
+  direction deferred through ACAH+ACAI). Reads too boxy; rebuild with refs + the leveled-up modelling proved by the
+  camelthorn tree (D176) + vulture (D181), preserving colliders/panels/shelter/journal.
+- Still queued (see `backlog.md`): WebGL perf pass (wreck instancing/merge + LOD + shadow tuning; finish material→uniforms),
+  desktop packaging (Electron) + renderer exploration (WebGPU), ODST drop-pod intro, procedural-repairable speeder bikes.
 
 **Parked speculative ideas** (not in Phase 2 cycles): opening-cutscene drop-pod sequence,
 craftable hover-bike, bounties (D39 singleton-interactable template). NOTE excluded as

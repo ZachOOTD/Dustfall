@@ -3,6 +3,48 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ACAI — 2026-06-06 — Vulture: rigged animations + branch-perch + death physics + tree collision ✓ verify pass (tsc clean)
+
+`verified` — `npm run verify` (tsc) PASS; **no save bump** (all additive/transient, v14). Turned the ACAH static-mesh
+vulture into a believable living creature + fixed dead-tree pass-through. 4 commits (`9fb9dbf`→`d05eebf`, after T1+T2 at
+`ca277fb`). Every pose screenshot-iterated (rule 8); in-motion flight/tumble cadence is foreground-owed (D150). **D181-D182.**
+
+**T1 — vulture rig (joint pivots).** `makeVultureVisual` restructured from a flat ~20-mesh group into animatable sub-`Group`
+pivots (mirrors the lizard/shrew leg-pivot convention): `wingL/wingR` (shoulders), `neck` (carries head/beak/eyes), `tail`,
+`legL/legR` — children offset so rest pose reads identical to the ACAH silhouette. Stored on `mesh.userData.rig`.
+
+**T2 — animation driver.** NEW `animateVulture(v, elapsed)` poses the rig per state: perched (slow neck-bob + wing settle),
+flying (wings spread + flap at `VULTURE_FLAP_HZ`, legs tucked, neck extended, tail trail), landing (cupped flare + reaching
+legs + fanned tail), dead (limp splay). New `VULTURE_*` anim consts (rule 2). `vulture-pose --state=` rig-shot per state.
+
+**T3 — branch-accurate perch (D181).** Dead trees merge to ONE geometry so branch meshes don't survive — `deadTree.grow()`
+now records perch points (~60% along depth-2 limbs + the limb direction) into `userData.branchPerches` BEFORE the merge;
+`spawnDeadTrees` transforms them to world (`tree.rotation.y` + position) and returns `TreePerch[]` (pos+dir). The spawner
+seats the bird's feet on the limb (+0.03 seat bias) and yaws it ACROSS the branch. Verified feet-on-branch across seeds.
+
+**T4 — relocate-and-land FSM (D181).** A disturbed vulture now flies to a DIFFERENT salt-flat tree and re-perches (stays
+alive + re-disturbable) instead of fleeing into a despawn. States `perched|flying|landing|dead`. `pickRelocateTarget`
+chooses a perch on another tree (≥ `VULTURE_RELOCATE_MIN_DIST`, clear of the player; falls back to flee+despawn when none
+qualifies); flying steers + climbs to a cruise altitude then drops into a landing flare; landing descends onto the perch +
+yaws across the limb; re-launches if the player closes in. Kinematic body follows throughout (shootable mid-air).
+`vulture-flight` eval asserts the full cycle perched→flying→landing→perched with the target on another tree.
+
+**T5 — death = dynamic-body tumble (D181).** `damageVulture` tears down the kinematic body and spawns a DYNAMIC one at the
+posed mesh transform (mirrors dropped-item physics: cuboid from the AABB, CCD, linDamp 0.6 / angDamp 0.8 / friction 0.85 /
+restitution 0.15), seeds flee/fall momentum + a tumble angvel, bakes the limp pose once. The collider is offset to the body
+centre so it spins about its CoM while `body.translation()` maps onto `mesh.position`. Settles on LOW LINEAR velocity (0.3s)
+/ body-sleep / a 2.5s hard-cap age — angular jitter from heightfield contact is ignored (it would otherwise never rest).
+New DEV handle `__game.killVulture(id)`; `vulture-kill` rig-shot drives the real death + asserts the corpse rests on the dune.
+
+**T6 — dead-tree trunk collision (D182).** Trees were visual-only (you walked through trunks). `makeDeadTree` exposes trunk
+dims (`trunkRadius = baseR*1.35`, `trunkColliderH = bole+0.6`); `spawnDeadTrees` gains a `world` param (threaded from
+`main.ts`) and adds one `makeStaticCylinder` per trunk over the bole. Fine crown twigs stay non-colliding. `tree` rig-shot
+asserts `trunkCol=1` per tree.
+
+**Constants tuned/added** (`tuning.ts` VULTURE block): `VULTURE_IDLE_BOB_HZ/AMP`, `FLAP_HZ 3.2`, `FLAP_AMP 0.55`,
+`WING_EXTEND 0.35`, `LEG_TUCK`, `NECK_EXTEND`, `LAND_DURATION`, `CRUISE_HEIGHT 7`, `LAND_DESCENT 2.2`, `LAND_SPEED_FACTOR`,
+`RELOCATE_MIN_DIST 40`, `LAND_ARRIVE_DIST 2.5`, `DEATH_SPIN 7`, `SETTLE_VEL 0.7`, `SETTLE_MAX_AGE 2.5`.
+
 ## Session ACAH — 2026-06-05 — Big overnight: bug sweep + loot bootstrap + vulture + cloud shadows ✓ verify pass (tsc clean)
 
 `verified` — `npm run verify` (tsc) PASS; **no save bump** (all additive, v14). A large multi-tier session: cleared the

@@ -64,27 +64,30 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      Prior milestones live in docs/changelog.md — do NOT accumulate "Prior milestone"
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
-**Last shipped**: Session ACAH — **big overnight: bug sweep + loot bootstrap + vulture + cloud shadows** (7 commits, tsc
-clean, no save bump). **Tier 0 bugs:** mounted-vs-on-foot lighting (the player body parks at y=-2000 while mounted, so
-`lighting.ts` now follows the speeder — D180), a Backquote DEV-MODE keybind (badge unclickable while pointer-locked),
-speeder tow-bar reseat + antenna blink beacon, night-dust ground-clamp (stars unobscured). **Game-wide shader fix
-(D177):** extended the ACAG `customProgramCacheKey` fix to ALL 7 remaining material factories (metal/fabric/glass/bone/
-skin/paint/stone) — they were silently sharing one program each, ignoring per-instance rust/scratch/grain. **Loot
-bootstrap (D178):** scatter 2-4 scrap around every wreck (breaks the panel↔scrap_bar↔scrap deadlock) via a NEW shared
-`buildScrapMesh` (held + world match); scrap model overhauled. **Sandworm shelter-immunity:** won't acquire a sheltered
-player. **Vulture (D179):** NEW rare perched scavenger (`enemies/vulture.ts`, Deadvlei refs) — perches on dead-tree
-crowns, flees on approach, shoot for meat; mirrors the shrew pipeline; additive save. **Cloud shadows:** moving dapple on
-the terrain from the cloud field. NEW rig-shots: `scrap-loot`/`worm-shelter`/`vulture`/`vulture-kill`/`cloud-shadows`.
-**Owed:** the ACW/ACX in-motion feel pile (D150) + the vulture in-flight flee feel.
-*(Prior milestones — ACAG: dead-tree rework + bark (D174-176); ACAF: branch rework; ACAD: rust (D173); ACAC: pulse rifle
-(D172); ACAB: clouds (D171). See changelog.)*
+**Last shipped**: Session ACAI — **vulture: rigged animations + branch-perch + death physics + tree collision** (4 commits,
+tsc clean, no save bump; D181-D182). Turned the ACAH static-mesh vulture into a living creature. **Rig (T1):**
+`makeVultureVisual` restructured into joint-pivot sub-Groups (`wingL/R`, `neck`, `tail`, `legL/R`) on `userData.rig`, lizard/
+shrew leg-pivot convention. **Anim (T2):** `animateVulture(v, elapsed)` poses per state — perched neck-bob, flying flap, landing
+flare, dead limp. **Branch-perch (T3):** `deadTree.grow()` captures `branchPerches` (depth-2 limbs + dir) before the merge;
+`spawnDeadTrees` returns `TreePerch[]`; spawner seats feet ON the limb + yaws across it. **Relocate FSM (T4):** states
+`perched|flying|landing|dead` — a disturbed bird flies to ANOTHER salt-flat tree + re-perches (`pickRelocateTarget`), falls
+back to flee+despawn; kinematic body follows so it's shootable mid-air. **Death (T5):** `damageVulture` swaps kinematic→
+DYNAMIC body (mirrors dropped-item physics: cuboid+CCD, tumble angvel) + bakes the limp pose; settles on LINEAR velocity
+(heightfield angular jitter ignored) → lootable. **Tree collision (T6):** one `makeStaticCylinder` per trunk bole
+(`spawnDeadTrees` gains a `world` param). NEW DEV handle `__game.killVulture`; rig-shots `vulture-flight`/`vulture-pose`
+(+`--state=`); extended `vulture-kill`/`tree`. **Owed:** the ACW/ACX in-motion feel pile (D150) + the vulture in-flight/
+tumble cadence (foreground-owed).
+*(Prior milestones — ACAH: bug sweep + loot bootstrap + vulture creature + cloud shadows (D177-180); ACAG: dead-tree rework
++ bark (D174-176); ACAD: rust (D173); ACAC: pulse rifle (D172). See changelog.)*
 
-**Next session (ACAI)** = **MEGA-WRECK rebuild from scratch + procgen-wreck/salvage-panel overhaul** (user-chosen ACAH).
-The hand-modeled mega-wreck reads too boxy; rebuild with references + the leveled-up modelling proved by the camelthorn
-tree (D176) + vulture (D179), preserving colliders/panels/shelter/journal, then level up the procgen wreck fleet + panel
-placement alongside. **The raider proc-character (Cycle 5) + all rig-dependent work is DEFERRED** — user is undecided on
-importing an external rigged character. Other standing lanes: wreck-yard biome, ODST drop-pod intro, deep cave; quick wins:
-painted-metal rust gap, sandworm depth. See [docs/next-session-prompt.md](docs/next-session-prompt.md) + [docs/backlog.md](docs/backlog.md).
+**Next session (ACAJ)** = **MEGA-WRECK rebuild from scratch + procgen-wreck/salvage-panel overhaul** (the deferred ACAH/ACAI
+direction). The hand-modeled mega-wreck reads too boxy; rebuild with references + the leveled-up modelling proved by the
+camelthorn tree (D176) + vulture (D181), preserving colliders/panels/shelter/journal, then level up the procgen wreck fleet
++ panel placement alongside. **The raider proc-character (Cycle 5) + all rig-dependent work stays DEFERRED** — user is
+undecided on importing an external rigged character. Other standing lanes: WebGL perf pass (wreck instancing/merge + LOD +
+shadow tuning; finish material-factory→uniforms), desktop packaging (Electron) + renderer exploration (WebGPU), wreck-yard
+biome, ODST drop-pod intro, deep cave; quick wins: painted-metal rust gap, sandworm depth. See
+[docs/next-session-prompt.md](docs/next-session-prompt.md) + [docs/backlog.md](docs/backlog.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 

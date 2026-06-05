@@ -1379,3 +1379,21 @@ The fundamental issue: KCC's slope projection, autostep, and contact resolution 
 **Picked**: `updateLighting` derives a single follow-position: `ctx.speeder?.mounted ? ctx.speeder.body.translation() : ctx.player.body.body.translation()`, used for both the shadow-move check and the sun/moon targets. **General rule**: when reading player world position, prefer a helper that resolves the speeder position while mounted (the `getPlayerPos` util already does this for AI — sandWorm/companion/vulture use it; lighting predated it). Audit other raw `ctx.player.body.body.translation()` readers if a mounted-state bug appears.
 
 **friction-score:** 2
+
+## D181 — The vulture is now a fully-rigged creature: joint-pivot rig + per-state anim + relocate-and-land FSM + dynamic-body death tumble; branch perches captured during dead-tree generation (Session ACAI)
+**When**: ACAI — user asked to make the ACAH static-mesh vulture sit cleanly on a real branch, have full animations (idle / flap / landing / death-fall), and use real death physics.
+
+**Why**: The ACAH vulture floated at a computed crown height with only a tiny idle bob + a crude scripted gravity fall. Four design forks were resolved with the user: (1) the rig follows the proven lizard/shrew leg-pivot convention (sub-`Group` at each joint, children offset) rather than a skinned-mesh skeleton — it's verifiable headless + reuses the codebase pattern; (2) DEATH is a SINGLE Rapier dynamic-body tumble (mirrors dropped-item physics), NOT an articulated ragdoll — far cheaper + the dunes give a believable bounce/roll; (3) FLEE is relocate-and-land (fly to another tree + re-perch, stays alive), so all four requested anims are used; (4) the tree merges to ONE geometry, so perch points are captured DURING `grow()` recursion (before the merge) rather than from surviving branch meshes.
+
+**Picked**: `enemies/vulture.ts` — `makeVultureVisual` builds the rig into `userData.rig`; `animateVulture(v, elapsed)` poses per state; FSM `perched|flying|landing|dead`; `damageVulture` swaps kinematic→dynamic (cuboid from the posed AABB, CCD, collider offset to the body CoM so `body.translation()` maps onto `mesh.position`). `deadTree.grow()` records `branchPerches` (~60% along depth-2 limbs + dir); `spawnDeadTrees` returns `TreePerch[]` (pos+dir); the spawner seats feet on the limb + yaws across it. **Death-settle gotcha (friction)**: a corpse resting on the terrain HEIGHTFIELD keeps spurious ANGULAR jitter from mesh-vs-triangle contact, so a naive `linvel²+angvel² < ε` settle test NEVER fires — keyed the settle on LINEAR velocity only, with body-sleep + a `SETTLE_MAX_AGE` hard cap as backstops. **Considered**: articulated ragdoll (rejected — overkill), flee-to-despawn only (kept as the fallback when no relocation perch qualifies). **Save**: flying/landing/target fields are transient; dead persists via the existing additive `vultures[]` (no bump, D81). In-MOTION flight arc + tumble cadence are foreground-owed (D150 — the headless slow clock can't judge feel).
+
+**friction-score:** 2
+
+## D182 — Dead trees gained a single static trunk-cylinder collider; spawnDeadTrees now needs the physics world (Session ACAI)
+**When**: ACAI — user asked for tree collision while doing the vulture pass (you could walk through trunks).
+
+**Why**: Trees were deliberately visual-only (the original comment: "non-interactable static props … players can walk through them; the silhouette is what matters"). That reads wrong once you're standing next to one. Only the bole needs collision — the fine gnarled crown twigs don't (a body can't reach them, and per-twig colliders would be absurd).
+
+**Picked**: `makeDeadTree` exposes `userData.trunkRadius` (`baseR*1.35`, generous for the bark) + `trunkColliderH` (`bole+0.6`); `spawnDeadTrees` gains a `world: RAPIER.World` param (threaded from `main.ts`) and drops one `makeStaticCylinder` per trunk, centred over the bole. No save/cleanup (rebuilt from seed). **Considered**: a convex hull of the merged geometry (rejected — the crown would block movement + cost more) and a capsule (rejected — a cylinder matches a trunk + is cheap). Footgun for the vulture death pass: a perched bird dropped straight onto its own tree could collide with this new trunk cylinder, so the `vulture-kill` scenario relocates the corpse to open ground.
+
+**friction-score:** 1

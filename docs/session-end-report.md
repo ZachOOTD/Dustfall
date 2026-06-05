@@ -2,12 +2,12 @@
 
 Cumulative state. Rewritten end-to-end at each `/session-end`.
 
-**Current state**: Session ACAH shipped (2026-06-05 — big overnight: bug sweep + loot bootstrap + vulture + cloud shadows). `npm run verify` (tsc) PASS. SAVE_VERSION 14 (unchanged — all additive). A large multi-tier session, 7 commits, every visual element screenshot-iterated. **Headlines**: (1) **Loot bootstrap deadlock FIXED (D178)** — the early game was unwinnable (panels need a scrap_bar, the recipe needs scrap, scrap only dropped from panels); now 2-4 scrap scatter around every wreck via a NEW shared `buildScrapMesh` (held + world match), and the scrap model is overhauled. (2) **Game-wide shader-cache fix (D177)** — extended ACAG's D175 fix to ALL 7 remaining material factories (metal/fabric/glass/bone/skin/paint/stone were each silently sharing one compiled program, ignoring per-instance rust/scratch/grain). (3) **NEW rare vulture creature (D179)** — a perched salt-flat scavenger (Deadvlei refs) that flees on approach + is shot for meat, mirroring the shrew pipeline (`enemies/vulture.ts`); dead trees now expose crown perch points. (4) **Tier-0 bug sweep** — mounted-vs-on-foot lighting (D180: player parks at y=-2000 mounted, lighting now follows the speeder), Backquote dev-mode keybind, speeder tow-bar + antenna beacon, night-dust ground-clamp. (5) **Cloud shadows** — moving terrain dapple from the cloud field. NEW rig-shots: scrap-loot/worm-shelter/vulture/vulture-kill/cloud-shadows. **Owed**: ACW/ACX in-motion feel pile (D150) + the vulture in-flight flee feel + cloud-shadow strength tune (both foreground). **Next session (ACAI)** = pick a lane: (a) Cycle 5 raider proc-character, (b) mega-wreck rebuild, (c) DEEP CAVE SYSTEM, or (d) foreground feel-tune.
+**Current state**: Session ACAI shipped (2026-06-06 — vulture: rigged animations + branch-perch + death physics + tree collision). `npm run verify` (tsc) PASS. SAVE_VERSION 14 (unchanged — all additive/transient). 4 commits + a pre-tier perf/cleanup pass; every pose screenshot-iterated (rule 8). **Headlines**: (1) **Vulture is now a living creature** — the ACAH static mesh got a joint-pivot RIG (T1, `userData.rig`), a per-state ANIMATION driver (T2: idle neck-bob / wing flap / landing flare / death limp), and a full **relocate-and-land FSM** (T4: a disturbed bird flies to ANOTHER salt-flat tree + re-perches instead of despawning; kinematic body follows so it's shootable mid-air). (2) **Branch-accurate perch (T3, D181)** — `deadTree.grow()` captures real branch points (~60% along depth-2 limbs + dir) into `userData.branchPerches` BEFORE the merge-to-one-geometry; `spawnDeadTrees` returns `TreePerch[]`; the bird's feet seat ON the limb + yaw across it. (3) **Death = dynamic-body tumble (T5, D181)** — `damageVulture` swaps kinematic→DYNAMIC (mirrors dropped-item physics: cuboid + CCD + tumble angvel), bakes the limp pose, and settles on LINEAR velocity (heightfield angular jitter is ignored, else it never rests) → lootable corpse on the dune. (4) **Dead-tree trunk collision (T6, D182)** — one `makeStaticCylinder` per bole; you can no longer walk through trunks. (5) **Pre-tier: perf + cleanup** — `compileAsync` boot pre-warm (fixed the un-shared-shader startup freeze), pickup geometry-merge (draw calls 2386→~1150), metal material→uniforms; removed the buried-cockpit POI (read as a sphere with clipping panels). NEW `__game.killVulture`; rig-shots `vulture-flight`/`vulture-pose --state=`; extended `vulture-kill`/`tree`. **Owed**: the vulture in-MOTION feel (flap/flight-arc/landing/tumble cadence, foreground-owed D150) + the standing ACW/ACX in-motion feel pile + cloud-shadow strength tune. **Next session (ACAJ)** = the deferred **mega-wreck rebuild + procgen-wreck/panel overhaul**.
 
 **Recent sessions (condensed — full detail in changelog.md):**
-- **ACAG** (2026-06-05): branch realism + full dead-tree rework + bark grain. Held==world viewmodel lighting (D174); recursive camelthorn dead tree merged to one geometry/tree (D176); bark grain + the FIRST half of the shader-cache fix (wood only, D175). NEW `tree`/`branch-match` scenarios.
-- **ACAF** (2026-06-04): branch model rework — twigs emerge from the shaft, dark wood-grain, dead trees joined the wood family. (Superseded by ACAG's full rework.)
-- **ACAD-ACAE** (2026-06-04): rust/weathering pass (D173 — `rustLevel` on the shared metal shader; note: that pass's per-item rust was actually being collided per D177, fixed this session) + dev item-spawner panel (`ui/devPanel.ts`).
+- **ACAH** (2026-06-05): big overnight — bug sweep + loot bootstrap (D178) + game-wide shader-cache fix (D177) + NEW vulture creature (D179, static mesh — rigged this session) + cloud shadows + mounted-lighting fix (D180).
+- **ACAG** (2026-06-05): branch realism + full dead-tree rework + bark grain. Held==world viewmodel lighting (D174); recursive camelthorn dead tree merged to one geometry/tree (D176); bark grain + the FIRST half of the shader-cache fix (wood only, D175).
+- **ACAD-ACAF** (2026-06-04): rust/weathering pass (D173) + dev item-spawner panel + branch model rework (superseded by ACAG).
 
 ## ACAC scope (this session) — pulse rifle: rapid-fire energy carbine (Cycle 5 weapon half) 100+ sessions post-MVP. `npm run verify` (tsc) PASS. **SAVE_VERSION 14** (unchanged — reuses additive `ammoRemaining`). ACAC added a NEW `pulse_rifle` weapon, distinct from the 3 existing guns: auto-fire (fires while LMB held via a new `auto` WeaponSpec flag) from a self-recharging energy cell (no ammo item; drains 1/pulse, recharges 7/s after a 0.6s idle via the item's updateHeld). Hero-quality glowing-cell model; rare `massive`-wreck loot. D172 (+ a headless slow-game-clock verification footgun). **Next session (ACAD)** = pick a lane: (a) Cycle 5 raider proc-character (the other half), (b) DEEP CAVE SYSTEM, or (c) foreground feel-tune.
 
@@ -235,7 +235,7 @@ The full Dustfall gameplay loop:
 1. **Boot → title → new game / continue**. Procedural world seeded; opening scene wakeup; companion at side.
 2. **Survival systems**: thirst / hunger / temperature / stamina / health with day-night curves, shelter system, weather (storm escalating over 7-day countdown).
 3. **Exploration**: 2400m procedurally-seeded world, 6 flagship POIs + 22 procgen wrecks + biome-specific POIs (salt outpost, rocky entrance, dune buried cockpit) + themed clusters (military convoy, refugee caravan, comm-relay).
-4. **Combat**: machete (melee), scrap_gun (ranged + magazine reload), energy_pistol (charged), pipe_staff (knockback). Hostile sandworm boss with bait-and-strike + ambush states. Hostile raiders, fleeing lizards. Companion creature follows.
+4. **Combat**: machete (melee), scrap_gun (ranged + magazine reload), energy_pistol (charged), pulse_rifle (auto-fire energy carbine, D172), pipe_staff (knockback). Hostile sandworm boss with bait-and-strike + ambush states (shelter-immune, D-ACAH). Hostile raiders, fleeing lizards + burrowing shrews. **Rare perched vulture** (D179/D181) — a fully-rigged salt-flat scavenger: idle on a branch, flies to another tree + re-perches when disturbed, shot out of the air for meat (dynamic-body death tumble). Companion creature follows.
 5. **Salvage**: scrap_bar pry + per-component extract on wreck panels; condition tiers (corroded / standard / pristine).
 6. **Crafting**: 4-slot combine-to-discover (no recipe grid), 15+ recipes, partial-match suggestions.
 7. **Placement**: fire / tent / large_tent / bedroll / lantern / locker / sled kits; ghost-preview ring at place position.
@@ -243,14 +243,14 @@ The full Dustfall gameplay loop:
 9. **Sled mechanic** (ACA-ACD): scrap-metal-sheet visual, attachable locker for mobile storage, kinematic-rider promotion for items resting on the deck, aimable throw arc to lob items onto the deck, items roll/fall via Rapier dynamic bodies (Tarkov-style settle). **ACD adds**: slope-slide downhill via managed scalars (sled actually slides on dunes), body tilts to terrain (deck conforms), no item-push drift, no rope tunneling through terrain.
 10. **Player rig** (ABP-ABY): 10-session procedural-character pipeline. Lathe-based torso + tapered Lathe limbs, asymmetric scavenger clothing (hood + poncho + bandolier + pauldron + bandana + forearm wraps), foot IK, sub-pivot rigging (D118), cloth drape (D117), over-shoulder 3P camera (D116), dual-mesh held items (D113).
 11. **Audio**: Web Audio procedural soundscape + 3 music tracks crossfaded by sun + perceived storm intensity.
-12. **Save/load**: localStorage v13. Seed-stable across reloads. Additive-schema discipline (D81) preserves backwards compat.
+12. **Save/load**: localStorage v14. Seed-stable across reloads. Additive-schema discipline (D81) preserves backwards compat (vultures persist by id+pos+state; flight/land are transient → re-derive to perched).
 13. **Rope vocabulary** (ACC-ACF): generalized `RopeEndpoint` union + shared inextensible-rope constraint. Anchor kinds (player/speeder/companion/sled/static-pos/stake) + towed-body kinds (raider_corpse, sandworm_carcass). Drag a slain raider corpse on foot or behind a sled; tow a worm carcass behind the speeder. Sagged rope visual per tether.
 
-**ACF delta** (this session):
-- Kill a raider → wield rope → LMB-on-corpse → drag it on foot, or tie it to a player-tethered sled so it trails along.
-- Slay a worm → mount the speeder → wield rope → LMB-on-carcass → tow the 24m carcass behind the bike (speeder-only — too heavy on foot).
-- Sagged rope tube renders between anchor and dragged kill; in-progress drags persist across save/load (no version bump).
-- **Caveat**: drag-feel/sag aesthetic NOT visually iterated (rule 8); raider path tsc-clean but not runtime-exercised (no raider spawns by default). Worm path runtime-verified.
+**ACAI delta** (this session):
+- The rare vulture is now a believable living creature: perches ON a real branch (idle neck-bob), and when the player closes within `VULTURE_SPOT_RADIUS` it launches, flaps, flies an arc to ANOTHER salt-flat tree, flares, and re-perches — staying alive + re-disturbable (no more flee-into-despawn).
+- Shoot a vulture → it swaps to a Rapier dynamic body, tumbles to the dunes (CCD, real physics), settles, flops limp, and becomes a 'take' yielding `raw_vulture_meat` (cooks to food). DEV: `__game.killVulture(id)`.
+- Dead trees now have trunk colliders (can't walk through), and the buried-cockpit POI is removed.
+- **Caveat (rule 8)**: the static POSES (perched/flap/landing/dead) are screenshot-verified + the FSM cycle is eval-asserted, but the in-MOTION cadence (flap speed, flight arc, landing flare timing, tumble feel) is foreground-owed (D150 — the headless slow clock can't judge it). Tune in a playtest before calling it final.
 
 ---
 
@@ -288,6 +288,7 @@ The full Dustfall gameplay loop:
 ## Known issues / partials
 
 - **Player model — mid-rework (arc, `docs/feature-player-model.md`)**. Done: PM-A silhouette, PM-S SkinnedMesh foundation (arms+legs skinned), PM-B face (goggles + scarf), poncho cut + junction fillers. REMAINING: **PM-C layered outfit** — the torso is now STRIPPED (undercloth + belt + bandolier + pack + goggles only) since the poncho was cut; re-dress with tunic/wrap layers + fix shoulder bunching. PM-D cloth physics (real cloth layer). **PM-S.3** torso/neck-head skinning = the TRUE torso↔limb junction blend (currently filler-bridged via deltoid/hip-cap spheres — reads connected but isn't a real skin blend). PM-E texture. Glove contrast subtle at 3P; pack a plain box.
+- **Vulture in-MOTION feel (ACAI, foreground-owed D150)** — the rig + anims + relocate-and-land FSM + death tumble are logic-verified + pose-screenshotted, but the flap cadence / flight arc / landing flare / tumble feel need a human playtest (headless slow clock can't judge motion). Tunables in `tuning.ts` VULTURE block.
 - **Speeder bugs (ACG playtest, still open)** — E mounts the speeder without looking at the seat; 3P rig broken on the speeder (needs a seated stance). In backlog; fold into a PM cycle.
 - **Foot-IK slope-snap + 3P camera real-playtest** — rig-debt; fold into a PM cycle.
 - **ACF carcass tow blocked after harvest** — `lootSandWorm` untags the carcass, so towing works only before harvesting. Low severity. See backlog.
@@ -302,6 +303,19 @@ See `docs/backlog.md` for full open list (riding mechanic entry at top with deta
 ---
 
 ## Constants worth tuning
+
+**New from ACAI (`VULTURE_*` — all foreground-feel-owed, D150):**
+
+| Constant | Default | Notes |
+|---|---|---|
+| `VULTURE_FLAP_HZ` / `FLAP_AMP` / `WING_EXTEND` | 3.2 / 0.55 / 0.35 | Wingbeat cadence + swing + spread in flight. The flap is the headline motion to tune. |
+| `VULTURE_IDLE_BOB_HZ` / `IDLE_BOB_AMP` | 0.5 / 0.10 | Perched head-bob. |
+| `VULTURE_CRUISE_HEIGHT` | 7.0 | m above the target perch the bird climbs to before descending. |
+| `VULTURE_LAND_DESCENT` / `LAND_SPEED_FACTOR` / `LAND_ARRIVE_DIST` | 2.2 / 0.45 / 2.5 | Landing flare descent rate, final-approach speed fraction, arrival radius. |
+| `VULTURE_RELOCATE_MIN_DIST` | 40 | A relocation target perch must be ≥ this from the current tree. |
+| `VULTURE_FLEE_SPEED` / `CLIMB_RATE` / `SPOT_RADIUS` | 9.0 / 4.5 / 16 | Horizontal flight speed, launch climb, player-proximity trigger. |
+| `VULTURE_DEATH_SPIN` | 7.0 | rad/s tumble kick on death. |
+| `VULTURE_SETTLE_VEL` / `SETTLE_MAX_AGE` | 0.7 / 2.5 | Corpse settle: linear-velocity threshold + hard-cap age (heightfield jitter dodge — D181). |
 
 New from ACF (`KILL_DRAG_*`):
 
@@ -339,43 +353,43 @@ Existing tunables of interest:
 
 ## Suggested next session (1-3 directions in priority order)
 
-1. **Pick ONE breadth lane** (the loot deadlock + the ACAG-triage quick wins are now DONE): (a) **Cycle 5 raider proc-character** — rebuild the dormant raider as a proc-character wielding the pulse rifle so the corpse-drag path reads as a body; pure VISUAL work, rig-shot-verifiable like the vulture/item/tree arcs (the vulture is a fresh template for a new proc-creature). (b) **Mega-wreck rebuild from scratch** (standing triage item — too boxy; gather refs + level up modelling like the camelthorn tree; pairs with the procgen-wreck+panel overhaul). (c) **DEEP CAVE SYSTEM** design+build (procedural sprawl + sub-terrain collision spike + descent + dark-nav, then re-apply the egg spine from `2d4035b`).
-2. **Foreground feel-tune playtest** (needs a human): the owed ACW/ACX in-motion pile (D150) + the NEW ACAH owed items — the **vulture in-flight flee feel** (`VULTURE_FLEE_SPEED`/`CLIMB_RATE`/`SPOT_RADIUS`) and the **cloud-shadow strength** (`CLOUD_SHADOW_SCALE`/`DARKEN`).
-3. **Remaining smaller breadth**: procedural-repairable speeder bikes, ODST drop-pod opening cutscene, painted-metal rust gap (speeder/sled top) — all in backlog.
+1. **Mega-wreck rebuild from scratch + procgen-wreck/panel overhaul** (the user-chosen direction deferred through ACAH+ACAI). The hand-modeled mega-wreck reads too boxy; rebuild with references + the leveled-up modelling proved by the camelthorn tree (D176) + the vulture (D181), preserving colliders/panels/shelter/journal, then level up the procgen wreck fleet + panel placement. **Fold the WebGL perf wreck-instancing pass into this** (the wrecks now dominate draw calls — backlog §207 — and you're rebuilding that geometry anyway). Raider proc-character + all rig-dependent work stays DEFERRED (user undecided on an external rigged import).
+2. **Foreground feel-tune playtest** (needs a human): the owed ACW/ACX in-motion pile (D150) + the NEW vulture in-motion feel (flap/flight-arc/landing/tumble — `VULTURE_FLAP_*`/`CRUISE_HEIGHT`/`LAND_*`/`DEATH_SPIN`) + the cloud-shadow strength (`CLOUD_SHADOW_SCALE`/`DARKEN`).
+3. **Remaining smaller breadth**: WebGL perf pass (if not folded into #1), desktop packaging (Electron) + WebGPU exploration, procedural-repairable speeder bikes, ODST drop-pod opening cutscene, painted-metal rust gap — all in backlog.
 
 ---
 
 ## Time spent
 
-100+ sessions shipped (A through ACAH). ACAH was a large planned overnight (Tiers 0-5 + a bonus game-wide shader fix), 7 commits (`39af9d7`→`ae3f030`): the Tier-0 bug sweep, the material-cache-key sweep across all factories, the scrap-scatter loot bootstrap + shared scrap model, sandworm shelter-immunity, the NEW vulture creature (full pipeline + 4 model iterations), and cloud shadows. ~15 source files + a new module (`vulture.ts`, `scrapMesh.ts`) + 5 new rig-shot scenarios + docs. No save change.
+100+ sessions shipped (A through ACAI). ACAI was a focused 6-tier vulture session (continued through a context compaction): rig (T1), anim driver (T2), branch-accurate perch (T3), relocate-and-land FSM (T4), dynamic-body death tumble (T5), dead-tree trunk collision (T6) — 4 commits (`9fb9dbf`→`d05eebf`, after T1+T2 at `ca277fb`), plus a pre-tier perf/cleanup pass (compileAsync boot, pickup geometry-merge, metal→uniforms, buried-cockpit removal). Touched `vulture.ts` (the bulk), `deadTree.ts`, `tuning.ts`, `debugPanel.ts`, `main.ts`, `rig-shot.mjs`. No save change.
 
 ---
 
 ## State at session end
 
-- **Git status**: ACAH feature work committed in 6 commits (`39af9d7`→`ae3f030`, pushed to `master`); the session-end doc set committed + tagged `session-ACAH`.
-- **Branch**: `master`. **Save state**: localStorage **v14** (unchanged — all ACAH work is additive: scrap pickups are seed-static, the `vultures[]` save field is additive, D81 — no bump).
+- **Git status**: ACAI feature work committed in 4 tier commits (`9fb9dbf` T3+T6, `ef3f338` T5, `d05eebf` T4; T1+T2 at `ca277fb`) on `master`; the perf/cleanup pass committed earlier in the session; the session-end doc set committed + tagged `session-ACAI`.
+- **Branch**: `master`. **Save state**: localStorage **v14** (unchanged — vulture flight/land/target fields are transient; dead persists via the existing additive `vultures[]`, D81 — no bump; tree colliders rebuild from seed).
 - **Ports bound**: a `npm run dev` server may still be running on **5173/5174**; the rig-shot harness used **5191** (transient — Windows `dev.kill()` can orphan the vite child; kill leftover listeners on a strict-port conflict).
-- **Verification status**: tsc clean throughout. Visual work screenshot-iterated; logic verified via headless evals (`scrap-loot` 223/all-near-wrecks, `worm-shelter` PASS, `vulture-kill` PASS). **Owed (foreground)**: ACW/ACX in-motion pile (D150) + vulture flight feel + cloud-shadow strength tune.
+- **Verification status**: tsc clean throughout. Poses screenshot-iterated; logic verified via headless evals (`vulture-flight` PASS — full perched→flying→landing→perched cycle, target on another tree; `vulture-kill` PASS — tumble→settle→lootable, corpse rests on the dune; `tree` PASS — `trunkCol=1`; perched-on-branch regression PASS). **Owed (foreground)**: vulture in-motion cadence + ACW/ACX in-motion pile (D150) + cloud-shadow strength tune.
 
 ---
 
 ## Iteration-discipline self-check (rule 8)
 
-Visual elements this session were build → screenshot → critique → iterate, NOT shipped on `tsc` alone: the **scrap model** (item-studio 3q+left, reads as torn debris), the **vulture** (**4 rounds** — 3q+side, fixed a floaty perch via lower crown-fraction + made the folded wings read), the **speeder tow-bar/antenna** (bike-truth), **night-dust** (`night-sky` — clean star field confirmed), **cloud shadows** (top-down crank to confirm the patches, then dialed subtle at gameplay angle). The **material-cache-key fix** was verified for non-regression across items + the player rig (it changes how every procedural material renders). HONEST gaps: the vulture's **in-flight flee** and the **cloud-shadow strength at gameplay angle** are FEEL items the headless harness can't fully judge (motion + subtle dapple) — flagged foreground-owed, not faked. Everything else hit the bar.
+ACAI is mostly LOGIC + RIG work, but it shipped visual surface (poses, perch seating, death corpse) — each was build → screenshot → critique → iterate, NOT shipped on `tsc` alone: the **perched-on-branch seating** (T3 — `vulture --angle=side`/`3q`, confirmed feet grip a real limb across seeds), the **flap pose** (`vulture-pose --state=flying` — wings read spread), the **death corpse** (T5 — iterated the `vulture-kill` framing through ~4 rounds: too-close→trunk-occluded→relocated to open ground → reads as a flopped bird at `bottomGap 0`), and the **flight FSM** was iterated until the eval went green (settle-on-linear-velocity discovery, slow-clock wait calibration). HONEST gap: the in-MOTION cadence (flap speed, flight arc, landing flare, tumble feel) is FEEL the headless slow clock can't judge (D150) — flagged foreground-owed, not faked. Static poses + logic hit the bar.
 
 ---
 
 ## Token spend this session (estimated)
 
-Large planned overnight with heavy tool use: ~15 file edits across the bug sweep + 7 material factories + a full new creature pipeline (8 wiring sites) + 2 shader tasks, plus many build→rig-shot→read-image→adjust loops (each rig-shot boots its own Vite+Playwright ~35s) and 3 parallel Explore agents during planning.
+Focused 6-tier session continued across a context compaction. Tool-heavy on the death-physics + flight-FSM verification loops (each rig-shot boots its own Vite+Playwright ~35s; the death-settle + flight evals needed several timing-calibration re-runs against the slow sim clock).
 
-- Input: very high (long planning + exploration + repeated image reads + reads across ~25 files).
-- Output: very high — NEW `vulture.ts` (~340 lines) + `scrapMesh.ts`, 7 material-factory edits, ~15 src edits, 5 new rig-shot scenarios, 4 D-entries, the session-end doc set.
-- Cost (Opus 4.8 rates): well above the project baseline (this was an explicit big-budget overnight). Justified — shipped 6 planned tiers + a foundational game-wide shader-correctness fix, all verified.
+- Input: high — the compaction summary + repeated doc/source reads (`vulture.ts`, `deadTree.ts`, `save.ts`, `debugPanel.ts`, `rig-shot.mjs`) + image reads across the verification loops.
+- Output: moderate-high — ~`vulture.ts` rewrite (rig + anim + FSM + death, ~180 net new lines), `deadTree.ts` perch/collider edits, 3 new rig-shot scenarios/extensions, 2 D-entries, the session-end doc set.
+- Cost (Opus 4.8 rates): at/near the project baseline for a focused single-feature session — well under the ACAH big-overnight burn.
 
 ---
 
 ## Commit handoff
 
-Per CLAUDE.md (session-end auto-runs commit + tag + push). The ACAH feature work is committed + pushed (6 commits on `master`). The session-end doc edits (changelog/CLAUDE/roadmap/decisions/backlog/report/next-prompt) are committed at session-end + tagged `session-ACAH`.
+Per CLAUDE.md (session-end auto-runs commit + tag + push). The ACAI feature work is committed + pushed (4 tier commits + the perf/cleanup pass on `master`). The session-end doc edits (changelog/CLAUDE/roadmap/decisions/backlog/report/next-prompt) are committed at session-end + tagged `session-ACAI`.
