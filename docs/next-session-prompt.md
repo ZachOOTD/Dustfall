@@ -1,78 +1,74 @@
-# Session ACAJ-continuation — Kickoff Brief
+# Next session — Mega-wreck FROM-SCRATCH rebuild (sleek dagger + new narrow interior)
 
-## Read these now (in order)
-1. `CLAUDE.md` (auto-loaded) — "Where we are now" (ACAJ T1+T2 shipped; T3-T7 continuation).
-2. `docs/session-end-report.md` — cumulative state (ACAJ partial at top).
-3. `docs/backlog.md` — the "ACAJ continuation" item + the procgen-overhaul item.
-4. `docs/decisions.md` — tail D185 (wrap-a-curved-hull-over-the-box-interior; never rebuild the playable interior).
-5. `docs/roadmap.md` — "Recently shipped" (ACAJ partial).
-6. `docs/architecture.md` — read before touching `procgenWreck.ts`/`wrecks.ts` assembly.
-7. `.claude/plans/archive/ACAJ-wreck-rebuild-perf.md` — the full 7-tier plan (T1+T2 done).
+**Direction (user, ACAJ cont.):** the wide-cargo-bay mega-wreck is being **reworked from
+scratch**. Go for a **sleek narrow DAGGER** exterior (≈5:1, ~24m beam) + a **brand-new narrow
+walkable INTERIOR** (a spinal corridor through 6 chambers to a bridge payoff). The old wide
+interior is discarded. **Research is done** — build to the concept.
 
-## What's already built
-ACAJ T1 shipped **`src/world/wreckForms.ts`** — the shared procedural-hull toolkit: `makeLatheHull(profile, opts)` +
-`fuselageProfile()` (tapered hull via LatheGeometry, `axis:'x'|'y'|'z'`, partial-arc `phiLength` for torn ends),
-`makeFormerRings()` (exposed rib skeleton), `makeBreach()` (torn hole = void + bent flaps, NO boolean) +
-`tagWreckDecoration()`, `makeSandMound()` (windward half-burial drift). ACAJ T2 used it to rebuild the **mega-wreck**
-exterior into a curved downed-ship silhouette (FrontSide + `noCollider` shell over the untouched box interior — D185).
-Verify harness: `wreck-form` (--form=lathe|formers|breach|mound), `megawreck` (--angle=3q|side|front|interior),
-`__game.wreckFormStudio`/`wreckFormStudio` dev hooks; existing `panels` (bury-audit) + `perf-probe` scenarios.
+**THE SPEC (read first):** [docs/research/megawreck-concept.md](research/megawreck-concept.md)
+— full unified concept: exact local-Z coordinates, the 6-room interior layout, the
+collision/interactables plan, a tiered **T0–T8 build order**, and a **16-point harsh
+exterior+interior rubric**. Companion: [docs/research/megawreck-anatomy.md](research/megawreck-anatomy.md)
+(exterior detail spec + greebling rules).
 
-## Session focus — finish the wrecks + perf overnight (T3-T7)
-The toolkit (T1) is built; apply it to the fleet, bed wrecks in sand, then the perf merge. **No `SAVE_VERSION` bump
-expected** (geometry/material only). **Preserve the salvage loop** — panels stay interactive + `panelBuryAudit` PASS.
+**Why from scratch:** the exterior + interior are *coupled* — a narrow dagger only works once
+the interior is narrowed too (the shell must envelop the interior boxes). So it's one coherent
+rewrite of `src/world/megaWreck.ts` (`makeMegaWreck` geometry + `placeMegaWreck` colliders/
+shelter/2-panels/journal), NOT an incremental patch. Keep the game walkable at each committed
+checkpoint (don't commit a broken-interior half-state).
 
-## Priority items in order
-1. **T3 — procgen fleet vocabulary level-up.** Upgrade the shared part builders (`wrecks.ts` hull/cockpit variants +
-   `procgenWreck.ts` `HULL_SEGMENT_VARIANTS`) to use the toolkit: tapered/ribbed hull variants → `makeLatheHull` Lathe
-   profiles + `makeFormerRings` at torn ends; the flat `addBreachPatches` → real `makeBreach` holes; cockpits → a cleaner
-   dominant nose. Keep `assembleWreck`/recipes/biome-weights + the `panelAnchor` fallbacks. **Accept**: `panels`
-   bury-audit PASS across seeds; a `wreck-visual` strip of corvette/freighter/gunship reads as ships, not box-stacks.
-   Fan-out candidate (independent variant rewrites → `/visual-triage`).
-2. **T4 — half-burial + sand.** Apply terrain-height sink + `makeSandMound` to procgen wrecks (`placeProcgenComposite` /
-   `heroLandmarks.placeHeroLandmarks`) + the mega-wreck. Tune the mound COLOR in-context (it read cool under studio
-   lights — match the dune `0xcd9555`). **Accept**: wrecks bed in the dunes; `panelBuryAudit` PASS (panels not buried).
-3. **T5 — greeble + functional-asymmetry pass.** Expand `addHullGreebles` (place-by-normal: vents/antenna/ports/fins;
-   negative space — not every surface) + one-sided impact damage. Tag `isWreckDecoration`. **Accept**: bury-audit PASS.
-4. **T6 — WebGL wreck perf merge (NEVER CUT — the frames win).** `mergeGeometries` each assembled wreck's STATIC,
-   non-interactive meshes by material (the `deadTree.ts:136` pattern) in `assembleWreck` + `makeMegaWreck`; keep the
-   salvage PANELS + colliders SEPARATE (panels are interactive — do NOT merge them). **Accept**: `perf-probe` before/after
-   shows a real draw-call drop; `panels` bury-audit + panel interaction unchanged; visual unchanged. **CAREFUL** — this
-   touches the panel subtree; verify panel raycast/extract still works before committing.
+**Build order (each tier: build → `megawreck` rig-shot → critique → iterate 3–8 rounds; tsc is
+NOT the visual success gate, rule 8):**
+- **T0** new local-Z layout constants (spine half-dims, 6 room Z-centers/footprints, fracture Z,
+  island Z) + stub `makeMegaWreck`.
+- **T1** dagger exterior: `makeLoftedHull` bow + aft masses (sharp nose, blunt transom, ~5:1),
+  tilt+sink the `shell`.
+- **T2** mid-hull fracture cross-section (backboard + `makeFormerRings` ×2 faces + staggered deck
+  slabs + bent spine stub + `makeCable` danglers + `makeBreach` rims + 2–4m vertical offset).
+- **T3** interior spine corridor (3.5×3m, kinks, bulkhead `panelWithHole` doorways) + R1/R2/R4/R5
+  rooms + ALL cuboid colliders + the fracture-crossing ramp → **walk it end-to-end in-app**.
+- **T4** bridge payoff (R6 raised platform + stair + console + raked viewport) + register shelter
+  zone (pocket off R5), 2 salvage panels (R4 + R6), journal (R6 console).
+- **T5** light shafts + `PointLight`s at each beat (entrance, flank tears, fracture daylight,
+  bridge skylight) + red engine-room tint + interior haze.
+- **T6** burial: `makeSandMound` lee-flank drifts + buried bow mound + nose scorch + debris.
+- **T7** surface greeble + asymmetry (dense 1–2m plating/strakes, one-flank damage).
+- **(T8, never-cut perf)** `mergeGeometries` static shell+interior by material (panels/colliders
+  separate); measure via `perf-probe`.
 
-## Stretch goals if budget allows
-- **T7 — InstancedMesh/LOD**: instance repeated NON-interactive props (engine bells, common greebles) and/or a distance-LOD
-  for far wrecks. Keep panels as regular meshes (no interaction-raycast `instanceId` rework).
-- Material-factory → uniforms (wood/skin first) — collapse compiled programs (backlog §208).
+**Reusable iteration harness (built this session — USE IT):**
+- `megawreck-research` / `megawreck-interior-research` workflows (web research → spec).
+- `megawreck-critique` workflow — **4 adversarial critics READ the actual rig-shot PNGs** + score
+  against the rubric + rank weaknesses. Re-run it each tier (`scriptPath` re-invoke) to stay
+  honest. Scripts under `…/workflows/scripts/`.
+- `megawreck` rig-shot angles: `side`/`3q`/`hero`/`front`/`rear`/`interior`; bright midday + a
+  raking key light already wired.
 
-## Autonomy contract
-Ambiguous → GDD pillars + decisions.md realism dial, append a D-entry, continue. Screenshot-iterate every visual element
-(rule 8 — 5-8 rounds new, 3-5 tuning); NEVER mark a visual tier done on `tsc` alone. The toolkit is shared — a change to a
-builder ripples to all wrecks, so re-verify the mega-wreck (`megawreck`) after T3-T5.
+**Save discipline (D81):** geometry/material only → no `SAVE_VERSION` bump expected (colliders/
+panels/shelter rebuild from seed; transient state re-derives). Surface if a save field turns out
+necessary (unlikely).
 
-## Stop conditions
-Wall-clock/budget ceiling · 3 fix-walls on one element (log + move on) · a `SAVE_VERSION` bump turning out necessary
-(surface it) · destructive-git attempt · **the T6 merge breaking panel interaction** (revert + flag, don't ship a broken
-salvage loop).
+**Deferred (unchanged):** the procgen fleet vocabulary level-up + half-burial + greeble + WebGL
+perf merge (old ACAJ T3–T7) now ride on the new `wreckForms` toolkit AFTER the hero dagger lands.
+The raider proc-character + all rig-dependent work stays DEFERRED.
 
-## On stop
-Run gamedev-framework `/session-end` (verify → changelog → CLAUDE last-shipped → roadmap → D-entries → backlog → report →
-next-prompt → post-mortem → commit + tag `session-ACAJ` (or `-ACAK`) + push).
+---
 
-## Notable footguns
-- **D185** — wreck rebuilds WRAP a curved hull over the box interior; FrontSide + `noCollider`; never rebuild the playable
-  interior or touch the hand-authored colliders. Size the hull to ENVELOP the box (ellipse contains the rectangle corners).
-- **D177** — any NEW onBeforeCompile material factory needs `customProgramCacheKey` (or uniforms). The toolkit reuses
-  shared materials — don't allocate per-wreck.
-- **`findPanelMount` rejects `isWreckDecoration`** — tag every greeble/breach so panels don't land on them.
-- **The T6 merge must NOT merge panels** — they're interactive (raycast + per-component extract). Merge static only.
-- Headless harness: software-GL can't measure the real-GPU shader-compile freeze; `perf-probe` measures draw calls/tris.
+## What shipped this session (ACAJ cont. — mega-wreck quality push)
 
-## Verification protocol
-`npm run verify` (tsc) clean. `npm run rig-shot -- --scenario=panels` (bury-audit PASS), `--scenario=perf-probe` (draw-call
-delta), `--scenario=megawreck` / `wreck-visual` / `wreck-form` (visual). Rule-8 screenshot iteration on every visual tier.
+The user flagged the first mega-wreck rebuild as shipped-too-early / low-quality. This session:
+1. **Research** — 6-facet workflow → `docs/research/megawreck-anatomy.md` (exterior build spec +
+   12-pt rubric).
+2. **Ground-up exterior rework** — `makeLoftedHull` (NEW faceted ship-hull cross-section, replaces
+   the smooth-lathe "lump"); the whole exterior in a `shell` group tilted into a **list** + sunk;
+   dagger taper + raked roofline; real fracture cross-section (decks/ribs/spine/cables); stepped
+   command island + sensor mast; engine cage; asymmetric breaches; `makeSandMound` half-burial +
+   debris + scorch; hull plating strakes. Commits `03e8ddd` (+ `6c3fe99` earlier T1/T2).
+3. **Adversarial critique harness** — `megawreck-critique` workflow (4 critics read the renders).
+   Honest trajectory: **2.75 → 3.0** on the prior wide-hull — improving but capped by the
+   wide-cavity-vs-dagger tension.
+4. **Decision (user)** — narrow it, rework the interior from scratch → the **dagger + new interior
+   concept** (`docs/research/megawreck-concept.md`, commit `08687fd`). **Build = next.**
 
-## Begin
-Read the order above → confirm tsc clean → **T3: level up the procgen part vocabulary with `wreckForms.ts`** (start with
-the RIBBED_CYLINDER + PANELED_TAPERED hull variants → Lathe + formers + real breach). Screenshot-iterate (rule 8);
-`panels` bury-audit must stay green. → TaskCreate the T3-T7 plan → start.
+Toolkit added to `wreckForms.ts`: `makeLoftedHull`, `dentGeometry`, `makeCable` (+ existing
+`makeLatheHull`/`makeFormerRings`/`makeBreach`/`makeSandMound`).
