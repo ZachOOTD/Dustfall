@@ -1423,6 +1423,17 @@ export const Tuning = {
   VULTURE_LAND_DURATION: 0.9,      // s — landing flare → settle into perched
   VULTURE_BANK_ANGLE: 0.45,        // ACAI f/u — max roll (rad) banking into a flight turn
   VULTURE_MIN_FLIGHT_CLEARANCE: 3.0, // ACAI f/u — m the bird stays above the terrain while flying (no dune clipping)
+  // ACAI f/u — carcass ECOLOGY: vultures wheel over bone carcasses + hunt prey there.
+  VULTURE_CIRCLE_COUNT: 3,         // max vultures wheeling over carcasses (1 per carcass, capped)
+  VULTURE_CIRCLE_RADIUS: 13,       // m — horizontal orbit radius around a carcass
+  VULTURE_CIRCLE_HEIGHT: 15,       // m — altitude above the carcass while soaring
+  VULTURE_CIRCLE_SPEED: 0.5,       // rad/s — orbit angular speed (period ≈ 12.6s)
+  // ACAI f/u — swoop predation (E3).
+  VULTURE_HUNT_RADIUS: 16,         // m (horizontal, from the carcass) the circler scans for prey
+  VULTURE_HUNT_COOLDOWN: 14,       // s between hunt attempts (so it's an occasional event)
+  VULTURE_SWOOP_SPEED: 16,         // m/s dive speed toward the prey
+  VULTURE_GRAB_DIST: 1.0,          // m from the prey at which the grab succeeds
+  VULTURE_CARRY_DURATION: 4.0,     // s carrying the prey up + away before it despawns
   // ACAI — relocate-and-land flight.
   VULTURE_RELOCATE_MIN_DIST: 40,   // m — a relocation target perch must be at least this far
   VULTURE_LAND_ARRIVE_DIST: 2.5,   // m (horizontal) from target → begin the landing descent

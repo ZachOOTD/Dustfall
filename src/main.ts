@@ -47,7 +47,7 @@ import { startMusic, updateMusic } from './audio/music.ts';
 import { updateRaiders, type Raider } from './enemies/raider.ts';
 import { spawnLizardsProcgen, updateLizards } from './enemies/lizard.ts';
 import { spawnShrewsProcgen, updateShrews } from './enemies/shrew.ts'; // ACL DESERT SHREW
-import { spawnVulturesProcgen, updateVultures } from './enemies/vulture.ts'; // ACAH
+import { spawnVulturesProcgen, spawnCirclingVultures, updateVultures } from './enemies/vulture.ts'; // ACAH
 import { spawnSandWorm, sampleSandwormHome, updateSandWorm } from './enemies/sandWorm.ts';
 import { updateWieldAction } from './player/wieldAction.ts';
 import { updateReload } from './player/combat.ts';
@@ -169,7 +169,9 @@ _mark('terrain');
 // Session T — salvage registry. Built up-front so hero landmarks + POIs
 // can register their wrecks as they're placed.
 const salvageables = createSalvageableRegistry();
-placeHeroLandmarks(three.scene, physics.world, terrain, scatterRand, salvageables);
+// ACAI f/u — bone carcasses (ribcages) are ecology anchors: vultures circle them,
+// lizards/shrews gather at them (a "something died here" cluster).
+const carcasses = placeHeroLandmarks(three.scene, physics.world, terrain, scatterRand, salvageables);
 // Scattered canteens were removed — the player starts with one (see below).
 // Session W — branches no longer spawn as a random ground scatter. They're
 // dropped in 2-4 clusters at the base of dead trees (see spawnDeadTrees
@@ -216,6 +218,7 @@ const raiders: Raider[] = [];
 const allPoiPositions: THREE.Vector3[] = [
   ...anchorPois.map((p) => new THREE.Vector3(p.x, terrain.heightAt(p.x, p.z), p.z)),
   ...procgenPoiPositions,
+  ...carcasses,   // ACAI f/u — prey gathers at the bone carcasses (E2)
 ];
 
 // ACAH — scatter scrap debris in a ring around every wreck (the no-tools loot
@@ -252,6 +255,9 @@ const shrews = spawnShrewsProcgen(
 // (treePerches from spawnDeadTrees). Module-owned list; returned ref IS
 // ctx.vultures.list.
 const vultures = spawnVulturesProcgen(three.scene, physics.world, treePerches, scatterRand);
+// ACAI f/u — a few vultures WHEEL over the bone carcasses (the "something died
+// here" signal) + hunt prey gathered there. Same module list as the perched ones.
+spawnCirclingVultures(three.scene, physics.world, carcasses, scatterRand);
 _mark('creatures+vultures');
 
 // AAP — sandworm home is now sampled per-seed from the dune biome via

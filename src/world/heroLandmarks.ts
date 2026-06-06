@@ -96,13 +96,16 @@ const HERO_WRECK_TYPES: ReadonlyArray<WreckKind> = [
 ];
 const RIBCAGE_PROBABILITY = 0.15;  // ribcages sprinkled in; most spots are wrecks
 
+/** Returns the world positions of the bone carcasses (ribcages) placed — used
+ *  by the ecology systems (vultures circle them; lizards/shrews gather at them). */
 export function placeHeroLandmarks(
   scene: THREE.Scene,
   world: RAPIER.World,
   terrain: Terrain,
   rand: Rng,
   salvageables?: SalvageableRegistry,
-): void {
+): THREE.Vector3[] {
+  const carcasses: THREE.Vector3[] = [];
   const minCount = Tuning.HERO_LANDMARK_COUNT_MIN;
   const maxCount = Tuning.HERO_LANDMARK_COUNT_MAX;
   const count = minCount + Math.floor(rand() * (maxCount - minCount + 1));
@@ -116,6 +119,7 @@ export function placeHeroLandmarks(
     const y = terrain.heightAt(x, z);
     if (rand() < RIBCAGE_PROBABILITY) {
       placeRibcage(scene, world, new THREE.Vector3(x, y, z), rand);
+      carcasses.push(new THREE.Vector3(x, y, z));
     } else {
       const kind = HERO_WRECK_TYPES[Math.floor(rand() * HERO_WRECK_TYPES.length)];
       const pos = new THREE.Vector3(x, y, z);
@@ -128,4 +132,5 @@ export function placeHeroLandmarks(
       if (salvageables) registerSalvageable(salvageables, group, kind, pos, rand);
     }
   }
+  return carcasses;
 }

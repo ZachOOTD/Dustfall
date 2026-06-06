@@ -56,6 +56,18 @@ wings held in a shallow dihedral). (4) **Extras** — the bird now casts a shado
 (`applyFlightOrientation` rolls the inside wing down). New consts: `DIHEDRAL`, `GLIDE_CYCLE_HZ`, `PERCH_WING_DROOP`,
 `ELBOW_FOLD`, `BANK_ANGLE`, `MIN_FLIGHT_CLEARANCE`.
 
+**Follow-up 2 (same-day) — carcass ecology (D183).** A living-world layer around the bone carcasses (ribcage hero
+landmarks). (1) **Circling:** `placeHeroLandmarks` now returns carcass positions; `spawnCirclingVultures` puts a vulture
+(≤ `VULTURE_CIRCLE_COUNT`) in a NEW `circling` state wheeling in a banked soaring orbit over each carcass (the "something
+died here" signal, visible from afar; shootable for meat). (2) **Prey clusters:** carcass positions are folded into the
+lizard/shrew `allPoiPositions`, so prey gathers at the bones. (3) **Swoop predation:** a circling vulture off-cooldown
+locks the nearest live lizard/shrew within `VULTURE_HUNT_RADIUS`, enters `swooping` (tracks the fleeing prey + dives at
+`VULTURE_SWOOP_SPEED`), `grabPrey` removes the creature (`lootLizard`/`lootShrew` via `ctx`) + clutches a prey silhouette
+in the talons, then `carrying` climbs away before the prey despawns + it resumes circling. A shot mid-carry drops the prey.
+NEW rig-shots `vulture-circle` (soaring still) + `vulture-hunt` (swoop→grab→carry PASS, lizard removed). New consts
+`VULTURE_CIRCLE_*` + `VULTURE_HUNT_*`/`SWOOP_SPEED`/`GRAB_DIST`/`CARRY_DURATION`. No save bump (circling/swoop/carry are
+transient → re-derive to perched on load).
+
 ## Session ACAH — 2026-06-05 — Big overnight: bug sweep + loot bootstrap + vulture + cloud shadows ✓ verify pass (tsc clean)
 
 `verified` — `npm run verify` (tsc) PASS; **no save bump** (all additive, v14). A large multi-tier session: cleared the

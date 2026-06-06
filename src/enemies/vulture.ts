@@ -27,8 +27,13 @@ import { createSkinMaterial } from '../world/skinMaterial.ts';
 import { Tuning } from '../config/tuning.ts';
 import { getPlayerPos } from '../util/playerPos.ts';
 import type { TreePerch } from '../world/deadTree.ts';
+import { lootLizard } from './lizard.ts';
+import { lootShrew } from './shrew.ts';
 
-export type VultureState = 'perched' | 'flying' | 'landing' | 'dead';
+export type VultureState =
+  | 'perched' | 'flying' | 'landing' | 'dead'
+  // ACAI f/u — carcass ecology: wheel over a carcass, dive at prey, carry it off.
+  | 'circling' | 'swooping' | 'carrying';
 
 /** ACAI — animatable joint pivots on the vulture mesh (stored in
  *  `mesh.userData.rig`). Each is a Group positioned AT its joint with its child
@@ -69,6 +74,19 @@ export interface Vulture {
   /** ACAI f/u — previous-frame heading + smoothed roll, for banking into turns. */
   prevHeading: number;
   bank: number;
+  /** ACAI f/u — carcass this bird circles/hunts over (null for tree-perched birds). */
+  carcass: THREE.Vector3 | null;
+  /** ACAI f/u — orbit angle while circling (radians). */
+  circlePhase: number;
+  /** ACAI f/u — cooldown (s) until the next swoop-hunt attempt. */
+  huntCooldown: number;
+  /** ACAI f/u — seconds spent in the carrying state (climb-away timer). */
+  carryT: number;
+  /** ACAI f/u — the prey silhouette gripped in the talons while carrying. */
+  prey: THREE.Object3D | null;
+  /** ACAI f/u — the locked swoop target (kind + module id) being hunted. */
+  huntKind: 'lizard' | 'shrew' | null;
+  huntId: number;
   /** idle phase accumulator (perched bob). */
   bob: number;
   hovered: boolean;
@@ -275,6 +293,36 @@ export function animateVulture(v: Vulture, elapsed: number): void {
       tail.rotation.set(0, 0, -0.3);
       break;
     }
+    case 'circling': {
+      // Soaring: wings held WIDE in a dihedral, only an occasional lazy flap — the
+      // classic vulture wheeling on a thermal.
+      const glide = Math.sin(elapsed * Tuning.VULTURE_GLIDE_CYCLE_HZ * 0.6 * Math.PI * 2 + v.id * 2.1);
+      const flapEnv = Math.max(0, glide - 0.45) * 1.8;   // flaps only near the peak → mostly gliding
+      const beat = Math.sin(elapsed * Tuning.VULTURE_FLAP_HZ * Math.PI * 2);
+      const sx = Tuning.VULTURE_DIHEDRAL + beat * Tuning.VULTURE_FLAP_AMP * flapEnv * 0.55;
+      poseWings(sx, 0, beat * 0.1 * flapEnv, -0.06);
+      neck.rotation.set(0, 0, Tuning.VULTURE_NECK_EXTEND * 0.5);
+      legL.rotation.set(0, 0, -Tuning.VULTURE_LEG_TUCK); legR.rotation.set(0, 0, Tuning.VULTURE_LEG_TUCK);
+      tail.rotation.set(0, 0, -0.2);
+      break;
+    }
+    case 'swooping': {
+      // Dive: wings swept back + half-folded, tucked for speed; neck + legs forward.
+      poseWings(-0.15, 0.5, 0, -0.7);
+      neck.rotation.set(0, 0, -0.35);
+      legL.rotation.set(0, 0, 0.2); legR.rotation.set(0, 0, -0.2);
+      tail.rotation.set(0, 0, -0.1);
+      break;
+    }
+    case 'carrying': {
+      // Labouring climb with prey: deep, slow full flaps; legs down gripping.
+      const beat = Math.sin(elapsed * Tuning.VULTURE_FLAP_HZ * 0.8 * Math.PI * 2);
+      poseWings(Tuning.VULTURE_DIHEDRAL + beat * Tuning.VULTURE_FLAP_AMP, 0, beat * 0.12, -0.06);
+      neck.rotation.set(0, 0, Tuning.VULTURE_NECK_EXTEND * 0.3);
+      legL.rotation.set(0, 0, 0.25); legR.rotation.set(0, 0, -0.25);   // talons down, clutching
+      tail.rotation.set(0, 0, -0.2);
+      break;
+    }
     case 'landing': {
       // Flare: wings cupped forward + spread wide as an airbrake, fluttering; elbows
       // mostly open; legs reach DOWN; neck up; tail fans.
@@ -318,7 +366,9 @@ const _deadQ = new THREE.Quaternion();
  *  then tags it lootable. */
 export function damageVulture(vulture: Vulture, _dmg: number, ctx: GameContext): void {
   if (vulture.state === 'dead') return;
-  const wasFlying = vulture.state === 'flying' || vulture.state === 'landing';
+  const wasFlying = vulture.state === 'flying' || vulture.state === 'landing'
+    || vulture.state === 'circling' || vulture.state === 'swooping' || vulture.state === 'carrying';
+  if (vulture.prey) { vulture.mesh.remove(vulture.prey); vulture.prey = null; }   // drop any caught prey
   vulture.state = 'dead';
   vulture.landed = false;
   vulture.settleT = 0;
@@ -446,6 +496,13 @@ export function spawnVulture(
     heading,
     prevHeading: heading,
     bank: 0,
+    carcass: null,
+    circlePhase: 0,
+    huntCooldown: Tuning.VULTURE_HUNT_COOLDOWN,
+    carryT: 0,
+    prey: null,
+    huntKind: null,
+    huntId: -1,
     bob: Math.random() * Math.PI * 2,
     hovered: false,
     landed: false,
@@ -485,6 +542,33 @@ export function spawnVulturesProcgen(
     spawnVulture(scene, world, p, perches[i].dir);
   }
   return _vultures;
+}
+
+/** ACAI f/u — spawn vultures that WHEEL over bone carcasses (one per carcass, up
+ *  to VULTURE_CIRCLE_COUNT). They soar indefinitely (a "something died here"
+ *  signal), hunt prey gathered below, and can be shot down for meat. Added to the
+ *  same module list as the perched birds. */
+export function spawnCirclingVultures(
+  scene: THREE.Scene,
+  world: RAPIER.World,
+  carcasses: ReadonlyArray<THREE.Vector3>,
+  rand: () => number,
+): void {
+  const cap = Math.min(carcasses.length, Tuning.VULTURE_CIRCLE_COUNT);
+  // Deterministic shuffle so the chosen carcasses vary per seed.
+  const idx = carcasses.map((_, i) => i);
+  for (let i = idx.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [idx[i], idx[j]] = [idx[j], idx[i]];
+  }
+  for (let n = 0; n < cap; n++) {
+    const c = carcasses[idx[n]];
+    const v = spawnVulture(scene, world, { x: c.x, y: c.y, z: c.z });
+    v.state = 'circling';
+    v.carcass = c.clone();
+    v.circlePhase = rand() * Math.PI * 2;
+    v.huntCooldown = Tuning.VULTURE_HUNT_COOLDOWN * (0.5 + rand());
+  }
 }
 
 /** Bump the id counter past `n` so restored ids don't collide. */
@@ -528,6 +612,93 @@ function applyFlightOrientation(v: Vulture, dt: number): void {
   v.bank += (targetBank - v.bank) * Math.min(1, dt * 5);
   v.prevHeading = v.heading;
   v.mesh.rotation.set(0, v.heading + Math.PI / 2, v.bank);
+}
+
+// ── E3 swoop predation helpers ──────────────────────────────────────────────
+const _preyMat = createSkinMaterial(0x3a3128, { localSpace: true, sheen: 0.2 });
+
+/** A tiny limp prey silhouette clutched in the talons while carrying. */
+function makePreySilhouette(kind: 'lizard' | 'shrew'): THREE.Group {
+  const g = new THREE.Group();
+  if (kind === 'lizard') {
+    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.03, 0.16, 3, 6), _preyMat);
+    body.rotation.z = Math.PI / 2;   // lie horizontal, dangling
+    g.add(body);
+    const tail = new THREE.Mesh(new THREE.ConeGeometry(0.02, 0.12, 5), _preyMat);
+    tail.position.set(-0.13, 0, 0); tail.rotation.z = Math.PI / 2;
+    g.add(tail);
+  } else {
+    const body = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), _preyMat);
+    body.scale.set(1.3, 0.9, 0.9);
+    g.add(body);
+  }
+  return g;
+}
+
+/** Current world position of the locked prey (null if it's gone / dead / burrowed). */
+function findHuntPos(ctx: GameContext, v: Vulture): { x: number; y: number; z: number } | null {
+  if (v.huntKind === 'lizard') {
+    const l = ctx.lizards.find((x) => x.id === v.huntId && x.state !== 'dead');
+    if (l) return { x: l.pos.x, y: ctx.terrain.heightAt(l.pos.x, l.pos.z) + 0.15, z: l.pos.z };
+  } else if (v.huntKind === 'shrew') {
+    const s = ctx.shrews.list.find((x) => x.id === v.huntId && x.state !== 'dead' && x.state !== 'burrow');
+    if (s) return { x: s.pos.x, y: ctx.terrain.heightAt(s.pos.x, s.pos.z) + 0.15, z: s.pos.z };
+  }
+  return null;
+}
+
+/** From circling, occasionally lock the nearest ground prey under the carcass and
+ *  begin a swoop. Off-cooldown only; picks the closest live lizard/shrew. */
+function maybeStartSwoop(ctx: GameContext, v: Vulture): void {
+  if (v.huntCooldown > 0 || !v.carcass) return;
+  const rSq = Tuning.VULTURE_HUNT_RADIUS * Tuning.VULTURE_HUNT_RADIUS;
+  let bestK: 'lizard' | 'shrew' | null = null;
+  let bestId = -1;
+  let bestDSq = rSq;
+  for (const l of ctx.lizards) {
+    if (l.state === 'dead') continue;
+    const dSq = (l.pos.x - v.carcass.x) ** 2 + (l.pos.z - v.carcass.z) ** 2;
+    if (dSq < bestDSq) { bestDSq = dSq; bestK = 'lizard'; bestId = l.id; }
+  }
+  for (const s of ctx.shrews.list) {
+    if (s.state === 'dead' || s.state === 'burrow') continue;
+    const dSq = (s.pos.x - v.carcass.x) ** 2 + (s.pos.z - v.carcass.z) ** 2;
+    if (dSq < bestDSq) { bestDSq = dSq; bestK = 'shrew'; bestId = s.id; }
+  }
+  if (!bestK) { v.huntCooldown = 3; return; }   // nothing below — recheck shortly
+  v.huntKind = bestK;
+  v.huntId = bestId;
+  v.state = 'swooping';
+}
+
+/** On contact: remove (eat) the prey creature + clutch a silhouette in the talons. */
+function grabPrey(ctx: GameContext, v: Vulture): void {
+  let mesh: THREE.Group | null = null;
+  if (v.huntKind === 'lizard') {
+    const l = ctx.lizards.find((x) => x.id === v.huntId);
+    if (l) { lootLizard(l, ctx); mesh = makePreySilhouette('lizard'); }
+  } else if (v.huntKind === 'shrew') {
+    const s = ctx.shrews.list.find((x) => x.id === v.huntId);
+    if (s) { lootShrew(s, ctx); mesh = makePreySilhouette('shrew'); }
+  }
+  v.huntKind = null;
+  v.huntId = -1;
+  if (mesh) {
+    mesh.position.set(0.02, -0.04, 0);   // clutched just below the talons (group origin = feet)
+    v.mesh.add(mesh);
+    v.prey = mesh;
+    v.carryT = 0;
+    v.state = 'carrying';
+  } else {
+    // Prey vanished before the grab — abort.
+    v.state = 'circling';
+    v.huntCooldown = Tuning.VULTURE_HUNT_COOLDOWN;
+  }
+}
+
+/** Drop / despawn the carried prey silhouette. */
+function releasePrey(v: Vulture): void {
+  if (v.prey) { v.mesh.remove(v.prey); v.prey = null; }
 }
 
 export function updateVultures(ctx: GameContext, dt: number): void {
@@ -619,6 +790,61 @@ export function updateVultures(ctx: GameContext, dt: number): void {
             _vultures.splice(k, 1);
             continue;
           }
+        }
+        break;
+      }
+      case 'circling': {
+        if (!v.carcass) { v.state = 'flying'; v.relocating = false; break; }
+        // Steady banked orbit over the carcass at a soaring altitude.
+        v.circlePhase += Tuning.VULTURE_CIRCLE_SPEED * dt;
+        const R = Tuning.VULTURE_CIRCLE_RADIUS;
+        v.pos.x = v.carcass.x + Math.cos(v.circlePhase) * R;
+        v.pos.z = v.carcass.z + Math.sin(v.circlePhase) * R;
+        const cy = v.carcass.y + Tuning.VULTURE_CIRCLE_HEIGHT;
+        const minY = ctx.terrain.heightAt(v.pos.x, v.pos.z) + Tuning.VULTURE_MIN_FLIGHT_CLEARANCE;
+        v.pos.y = Math.max(cy, minY);
+        v.heading = Math.atan2(-Math.sin(v.circlePhase), Math.cos(v.circlePhase));
+        applyFlightOrientation(v, dt);
+        // E3 — occasionally swoop at prey gathered below (filled in below).
+        v.huntCooldown -= dt;
+        maybeStartSwoop(ctx, v);
+        break;
+      }
+      case 'swooping': {
+        // Track the (fleeing) prey each frame; dive at it; grab on contact.
+        const pp = findHuntPos(ctx, v);
+        if (!pp) { v.state = 'circling'; v.huntCooldown = Tuning.VULTURE_HUNT_COOLDOWN; break; }
+        v.target.set(pp.x, pp.y, pp.z);
+        const hx = v.target.x - v.pos.x, hy = v.target.y - v.pos.y, hz = v.target.z - v.pos.z;
+        const d = Math.sqrt(hx * hx + hy * hy + hz * hz);
+        if (d < Tuning.VULTURE_GRAB_DIST || d < 1e-3) {
+          grabPrey(ctx, v);
+          break;
+        }
+        const sp = Tuning.VULTURE_SWOOP_SPEED;
+        v.pos.x += (hx / d) * sp * dt;
+        v.pos.y += (hy / d) * sp * dt;
+        v.pos.z += (hz / d) * sp * dt;
+        v.heading = Math.atan2(hx, hz);
+        applyFlightOrientation(v, dt);
+        break;
+      }
+      case 'carrying': {
+        // Climb up + away from the carcass with the prey, then drop it + resume.
+        v.carryT += dt;
+        const away = Math.atan2(v.pos.x - v.carcass!.x, v.pos.z - v.carcass!.z);
+        v.pos.x += Math.sin(away) * Tuning.VULTURE_FLEE_SPEED * 0.7 * dt;
+        v.pos.z += Math.cos(away) * Tuning.VULTURE_FLEE_SPEED * 0.7 * dt;
+        const climbY = v.carcass!.y + Tuning.VULTURE_CIRCLE_HEIGHT + 4;
+        v.pos.y += Math.min(Tuning.VULTURE_CLIMB_RATE * dt, Math.max(0, climbY - v.pos.y));
+        const minY = ctx.terrain.heightAt(v.pos.x, v.pos.z) + Tuning.VULTURE_MIN_FLIGHT_CLEARANCE;
+        if (v.pos.y < minY) v.pos.y = minY;
+        v.heading = away;
+        applyFlightOrientation(v, dt);
+        if (v.carryT >= Tuning.VULTURE_CARRY_DURATION) {
+          releasePrey(v);
+          v.state = 'circling';
+          v.huntCooldown = Tuning.VULTURE_HUNT_COOLDOWN;
         }
         break;
       }

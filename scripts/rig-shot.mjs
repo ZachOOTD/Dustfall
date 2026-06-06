@@ -1119,6 +1119,82 @@ const SCENARIOS = {
     console.log(`[vulture-flight] ${launchOk && landOk && clearOk ? 'PASS' : 'FAIL'} launch=${JSON.stringify(r2)} minClear=${minClear === Infinity ? 'n/a' : minClear} flightShortcut=${JSON.stringify(r3)} land=${JSON.stringify(r4)}`);
   },
 
+  // Vulture-circle (ACAI f/u E1): a vulture wheeling over a bone carcass. Reports
+  // the circler + carcass counts and frames the orbit (paused mid-wheel).
+  'vulture-circle': async (page) => {
+    await page.waitForTimeout(800);   // let the circlers climb to orbit altitude
+    const r = await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      const circlers = ctx.vultures.list.filter((v) => v.carcass);
+      const carcasses = new Set(ctx.vultures.list.filter((v) => v.carcass).map((v) => `${v.carcass.x.toFixed(0)},${v.carcass.z.toFixed(0)}`));
+      if (!circlers.length) return { circlers: 0 };
+      const v = circlers[0];
+      const c = v.carcass;
+      ctx.weather.intensity = 0; window.__game.setTime(0.5);
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      ctx.flags.paused = true;   // freeze the wheel for a clean still
+      const cam = ctx.three.camera;
+      // Close on the soaring bird (carcass below-ground in frame for context).
+      cam.position.set(v.pos.x + 4.5, v.pos.y + 1.2, v.pos.z + 4.5);
+      cam.lookAt(v.pos.x, v.pos.y - 1.5, v.pos.z);
+      cam.updateMatrixWorld(true);
+      return {
+        circlers: circlers.length, carcasses: carcasses.size,
+        state: v.state,
+        vpos: [v.pos.x.toFixed(1), v.pos.y.toFixed(1), v.pos.z.toFixed(1)],
+        alt: +(v.pos.y - c.y).toFixed(1),
+      };
+    });
+    await page.waitForTimeout(300);
+    if (r.circlers) await page.screenshot({ path: join(OUT, 'scen-vulture-circle.png'), fullPage: false });
+    console.log(`[vulture-circle] ${JSON.stringify(r)}`);
+  },
+
+  // Vulture-hunt (ACAI f/u E3): a circling vulture swoops, grabs a lizard, and
+  // carries it off. Teleports a lizard under a carcass + forces the hunt, then
+  // asserts swooping → carrying (prey clutched) → lizard removed from the world.
+  'vulture-hunt': async (page) => {
+    const r1 = await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      const v = ctx.vultures.list[0];
+      const l = ctx.lizards[0];
+      if (!v || !l) return { noEntity: true };
+      // Synthesize a circling vulture over a lizard (seed-independent): anchor a
+      // carcass at the lizard, set the bird wheeling above it, force the hunt.
+      const V = ctx.three.camera.position.constructor;
+      const cy = ctx.terrain.heightAt(l.pos.x, l.pos.z);
+      v.carcass = new V(l.pos.x, cy, l.pos.z);
+      v.prey = null;
+      v.state = 'circling';
+      v.circlePhase = 0;
+      v.pos.set(l.pos.x + 13, cy + 15, l.pos.z);
+      v.huntCooldown = 0;   // hunt now
+      return { ok: true, lizardId: l.id, vId: v.id, lizardsBefore: ctx.lizards.length };
+    });
+    if (r1.noEntity) { console.log(`[vulture-hunt] SKIP ${JSON.stringify(r1)}`); return; }
+    let sawSwoop = false, sawCarry = false, sawPrey = false;
+    for (let i = 0; i < 90; i++) {
+      await page.waitForTimeout(250);
+      const s = await page.evaluate((a) => {
+        const ctx = window.__game.ctx;
+        const v = ctx.vultures.list.find((vv) => vv.id === a.vId);
+        return { state: v ? v.state : 'gone', hasPrey: !!(v && v.prey), lizGone: !ctx.lizards.find((l) => l.id === a.lizardId) };
+      }, { lizardId: r1.lizardId, vId: r1.vId });
+      if (s.state === 'swooping') sawSwoop = true;
+      if (s.state === 'carrying') sawCarry = true;
+      if (s.hasPrey) sawPrey = true;
+      if (sawCarry && s.lizGone && s.state === 'circling') break;
+    }
+    const fin = await page.evaluate((a) => {
+      const ctx = window.__game.ctx;
+      const v = ctx.vultures.list.find((vv) => vv.id === a.vId);
+      return { state: v ? v.state : 'gone', lizGone: !ctx.lizards.find((l) => l.id === a.lizardId), lizardsAfter: ctx.lizards.length };
+    }, { lizardId: r1.lizardId, vId: r1.vId });
+    const pass = sawSwoop && sawCarry && sawPrey && fin.lizGone;
+    console.log(`[vulture-hunt] ${pass ? 'PASS' : 'FAIL'} sawSwoop=${sawSwoop} sawCarry=${sawCarry} sawPrey=${sawPrey} ${JSON.stringify(fin)}`);
+  },
+
   'vulture-kill': async (page) => {
     const r1 = await page.evaluate(() => {
       const ctx = window.__game.ctx;

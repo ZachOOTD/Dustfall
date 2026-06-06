@@ -75,8 +75,10 @@ back to flee+despawn; kinematic body follows so it's shootable mid-air. **Death 
 DYNAMIC body (mirrors dropped-item physics: cuboid+CCD, tumble angvel) + bakes the limp pose; settles on LINEAR velocity
 (heightfield angular jitter ignored) → lootable. **Tree collision (T6):** one `makeStaticCylinder` per trunk bole
 (`spawnDeadTrees` gains a `world` param). NEW DEV handle `__game.killVulture`; rig-shots `vulture-flight`/`vulture-pose`
-(+`--state=`); extended `vulture-kill`/`tree`. **Owed:** the ACW/ACX in-motion feel pile (D150) + the vulture in-flight/
-tumble cadence (foreground-owed).
+(+`--state=`); extended `vulture-kill`/`tree`. **Same-day follow-ups:** big two-segment wingspan + no-dune-clip flight +
+flap/glide + shadow + banking; **carcass ecology (D183)** — vultures circle bone ribcages, lizards/shrews cluster there,
+vultures swoop down + grab + carry off prey (`vulture-circle`/`vulture-hunt` rig-shots). **Owed:** the ACW/ACX in-motion
+feel pile (D150) + the vulture flight/swoop/tumble cadence (foreground-owed).
 *(Prior milestones — ACAH: bug sweep + loot bootstrap + vulture creature + cloud shadows (D177-180); ACAG: dead-tree rework
 + bark (D174-176); ACAD: rust (D173); ACAC: pulse rifle (D172). See changelog.)*
 
