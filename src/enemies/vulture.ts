@@ -937,8 +937,8 @@ export function updateVultures(ctx: GameContext, dt: number): void {
         v.carryT += dt;
         const anchor = v.carcass ?? v.perch;
         const away = Math.atan2(v.pos.x - anchor.x, v.pos.z - anchor.z);
-        v.pos.x += Math.sin(away) * Tuning.VULTURE_FLEE_SPEED * 0.7 * dt;
-        v.pos.z += Math.cos(away) * Tuning.VULTURE_FLEE_SPEED * 0.7 * dt;
+        v.pos.x += Math.sin(away) * Tuning.VULTURE_FLEE_SPEED * 0.85 * dt;
+        v.pos.z += Math.cos(away) * Tuning.VULTURE_FLEE_SPEED * 0.85 * dt;
         // Laden + heavy → flies LOW (just clears the terrain), doesn't climb high.
         const climbY = ctx.terrain.heightAt(v.pos.x, v.pos.z) + Tuning.VULTURE_MIN_FLIGHT_CLEARANCE + 1;
         v.pos.y += Math.min(Tuning.VULTURE_CLIMB_RATE * dt, Math.max(-Tuning.VULTURE_CLIMB_RATE * dt, climbY - v.pos.y));
@@ -946,7 +946,12 @@ export function updateVultures(ctx: GameContext, dt: number): void {
         if (v.pos.y < minY) v.pos.y = minY;
         v.heading = away;
         applyFlightOrientation(v, dt);
-        if (v.carryT >= Tuning.VULTURE_CARRY_DURATION) { v.feedT = 0; v.state = 'feeding'; }
+        // Land to feed once it's carried the prey a good distance from the carcass
+        // (a time cap is a safety net in case the distance is never reached).
+        const carriedSq = (v.pos.x - anchor.x) ** 2 + (v.pos.z - anchor.z) ** 2;
+        if (carriedSq >= Tuning.VULTURE_CARRY_DIST ** 2 || v.carryT >= Tuning.VULTURE_CARRY_DURATION) {
+          v.feedT = 0; v.state = 'feeding';
+        }
         break;
       }
       case 'feeding': {

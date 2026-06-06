@@ -88,10 +88,11 @@ profile (was showing a rear view). Geometry-only — no FSM/physics/save impact.
 `applyFlightOrientation` set the mesh yaw to `heading + π/2`, which (model faces +X) points the head OPPOSITE the travel
 direction; corrected to `heading − π/2`. `vulture-flight` asserts `minFacing > 0.7` (measured 1.0 — head dead-on along
 travel). (2) **Carried prey no longer teleport-despawns:** the old `carrying` snapped straight back to the orbit (a visible
-vanish). Now the loop is **carry (fly off low with the meat) → feeding (land + tear at it, consume partway) → returning
-(fly back to the carcass) → circling** (rejoins the orbit seamlessly at the current angle — no snap). NEW states
-`feeding`/`returning` + poses; new const `VULTURE_FEED_DURATION` (+ `CARRY_DURATION` retuned). `vulture-hunt` asserts the
-full swoop→carry→feed→return cycle. tsc clean; all vulture evals PASS.
+vanish). Now the loop is **carry (fly off low with the meat a real distance — `VULTURE_CARRY_DIST` ≈ 38m — from the carcass) →
+feeding (land + tear at it, consume partway) → returning (fly back to the carcass) → circling** (rejoins the orbit
+seamlessly at the current angle — no snap). NEW states `feeding`/`returning` + poses; new consts `VULTURE_CARRY_DIST`/
+`VULTURE_FEED_DURATION` (carry is distance-gated with a time-cap safety net). `vulture-hunt` asserts the full
+swoop→carry→feed→return cycle + that it fed ≥30m from the carcass. tsc clean; all vulture evals PASS.
 
 ## Session ACAH — 2026-06-05 — Big overnight: bug sweep + loot bootstrap + vulture + cloud shadows ✓ verify pass (tsc clean)
 

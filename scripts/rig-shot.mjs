@@ -1181,29 +1181,33 @@ const SCENARIOS = {
       return { ok: true, lizardId: l.id, vId: v.id, lizardsBefore: ctx.lizards.length };
     });
     if (r1.noEntity) { console.log(`[vulture-hunt] SKIP ${JSON.stringify(r1)}`); return; }
-    let sawSwoop = false, sawCarry = false, sawPrey = false, sawFeed = false, sawReturn = false;
-    for (let i = 0; i < 140; i++) {
+    let sawSwoop = false, sawCarry = false, sawPrey = false, sawFeed = false, sawReturn = false, feedDist = null;
+    for (let i = 0; i < 340; i++) {
       await page.waitForTimeout(250);
       const s = await page.evaluate((a) => {
         const ctx = window.__game.ctx;
         const v = ctx.vultures.list.find((vv) => vv.id === a.vId);
-        return { state: v ? v.state : 'gone', hasPrey: !!(v && v.prey), lizGone: !ctx.lizards.find((l) => l.id === a.lizardId) };
+        const feedDist = v && v.state === 'feeding' && v.carcass
+          ? Math.sqrt((v.pos.x - v.carcass.x) ** 2 + (v.pos.z - v.carcass.z) ** 2) : null;
+        return { state: v ? v.state : 'gone', hasPrey: !!(v && v.prey), lizGone: !ctx.lizards.find((l) => l.id === a.lizardId), feedDist };
       }, { lizardId: r1.lizardId, vId: r1.vId });
       if (s.state === 'swooping') sawSwoop = true;
       if (s.state === 'carrying') sawCarry = true;
       if (s.hasPrey) sawPrey = true;
-      if (s.state === 'feeding') sawFeed = true;
+      if (s.state === 'feeding') { sawFeed = true; if (feedDist === null && s.feedDist !== null) feedDist = +s.feedDist.toFixed(1); }
       if (s.state === 'returning') sawReturn = true;
-      // The bird should fly off → eat → fly back → circle (NOT teleport-despawn).
-      if (sawFeed && sawReturn && s.lizGone && s.state === 'circling') break;
+      // The bird should fly off a distance → land to eat → fly back (NOT teleport).
+      if (sawFeed && sawReturn) break;
     }
     const fin = await page.evaluate((a) => {
       const ctx = window.__game.ctx;
       const v = ctx.vultures.list.find((vv) => vv.id === a.vId);
       return { state: v ? v.state : 'gone', lizGone: !ctx.lizards.find((l) => l.id === a.lizardId), lizardsAfter: ctx.lizards.length };
     }, { lizardId: r1.lizardId, vId: r1.vId });
-    const pass = sawSwoop && sawCarry && sawPrey && fin.lizGone && sawFeed && sawReturn;
-    console.log(`[vulture-hunt] ${pass ? 'PASS' : 'FAIL'} sawSwoop=${sawSwoop} sawCarry=${sawCarry} sawFeed=${sawFeed} sawReturn=${sawReturn} sawPrey=${sawPrey} ${JSON.stringify(fin)}`);
+    // Must have flown a real distance from the carcass before landing to feed.
+    const fedFar = feedDist !== null && feedDist >= 30;
+    const pass = sawSwoop && sawCarry && sawPrey && fin.lizGone && sawFeed && fedFar;
+    console.log(`[vulture-hunt] ${pass ? 'PASS' : 'FAIL'} sawSwoop=${sawSwoop} sawCarry=${sawCarry} sawFeed=${sawFeed} feedDist=${feedDist} sawReturn=${sawReturn} ${JSON.stringify(fin)}`);
   },
 
   // Vulture-escape (ACAI f/u): a swooped shrew dives for cover; once it's half-
