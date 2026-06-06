@@ -3,6 +3,34 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ACAJ (partial) — 2026-06-06 — Wreck toolkit + mega-wreck rebuild (T1+T2 of 7; T3-T7 deferred) ✓ verify pass (tsc clean)
+
+`verified` — `npm run verify` (tsc) PASS; **no save bump** (geometry/material only). The "wrecks + perf" overnight
+(user-chosen): rebuild the boxy mega-wreck + level up the procgen fleet + WebGL perf pass. **Shipped the foundation + hero
+centerpiece (T1+T2), deliberately deferred T3-T7** rather than rush the visual breadth + the panel-interaction-touching
+perf merge shallowly (rule 8 / the ABP lesson). 3 commits (`0f3d718`→`5262f0e`). **D185.**
+
+**T1 — shared procedural-hull toolkit (NEW `world/wreckForms.ts`).** The reusable building blocks for believable
+crashed-ship wrecks (used by the hero + the fleet so leveling a block improves every wreck): `makeLatheHull(profile, opts)`
++ `fuselageProfile()` (tapered/bowed hull sections via LatheGeometry, generalizing the `openingWreck.ts` profile pattern;
+`axis: 'x'|'y'|'z'`; partial-arc `phiLength` for torn-open ends); `makeFormerRings()` (exposed internal rib skeleton shown
+at breaks); `makeBreach()` (torn hole = recessed dark void + ragged bent torn-metal flaps, NO boolean/CSG) +
+`tagWreckDecoration()`; `makeSandMound()` (windward sand-drift for half-burial, visual-only). NEW `__game.wreckFormStudio`
+dev hook + `wreck-form` rig-shot — each primitive screenshot-verified in isolation (lathe = clean tapered fuselage,
+formers = torn-open hull showing its rib skeleton, breach = torn hole).
+
+**T2 — mega-wreck exterior rebuild (D185).** `makeMegaWreck` read as a cluster of dark boxes. Replaced the ABL
+straight-cylinder shell + rust bands + rib bumps with a toolkit-built **curved hull** — a tapered fuselage aft section +
+nose + **exposed former rings at the mid-hull fracture** (the ship's rib skeleton where bow + aft tore apart) + **3
+asymmetric impact breaches** (functional asymmetry) + a tapered/raked **bridge superstructure** cap. All FrontSide +
+`noCollider` so the entire interior architecture (walk-through cavity, ~25 colliders, 2 salvage panels, shelter zone,
+journal, catwalks, skylights, doorways) is UNTOUCHED — the hull envelops the wide box so the box reads as inner structure,
+not the silhouette. NEW `megawreck` rig-shot (orbit/interior); ~5 screenshot-iterated rounds → reads as a downed ship.
+
+**Deferred to the ACAJ continuation:** T3 procgen-fleet vocabulary level-up (apply the toolkit to the shared part
+builders), T4 half-burial + sand integration, T5 greeble + asymmetry pass, **T6 WebGL wreck perf merge** (never-cut), T7
+InstancedMesh/LOD. The toolkit (T1) makes T3-T5 efficient; the perf merge (T6) is the frames win.
+
 ## Session ACAI — 2026-06-06 — Vulture: rigged animations + branch-perch + death physics + tree collision ✓ verify pass (tsc clean)
 
 `verified` — `npm run verify` (tsc) PASS; **no save bump** (all additive/transient, v14). Turned the ACAH static-mesh

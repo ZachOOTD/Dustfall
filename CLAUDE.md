@@ -64,32 +64,27 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      Prior milestones live in docs/changelog.md — do NOT accumulate "Prior milestone"
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
-**Last shipped**: Session ACAI — **vulture: rigged animations + branch-perch + death physics + tree collision** (4 commits,
-tsc clean, no save bump; D181-D182). Turned the ACAH static-mesh vulture into a living creature. **Rig (T1):**
-`makeVultureVisual` restructured into joint-pivot sub-Groups (`wingL/R`, `neck`, `tail`, `legL/R`) on `userData.rig`, lizard/
-shrew leg-pivot convention. **Anim (T2):** `animateVulture(v, elapsed)` poses per state — perched neck-bob, flying flap, landing
-flare, dead limp. **Branch-perch (T3):** `deadTree.grow()` captures `branchPerches` (depth-2 limbs + dir) before the merge;
-`spawnDeadTrees` returns `TreePerch[]`; spawner seats feet ON the limb + yaws across it. **Relocate FSM (T4):** states
-`perched|flying|landing|dead` — a disturbed bird flies to ANOTHER salt-flat tree + re-perches (`pickRelocateTarget`), falls
-back to flee+despawn; kinematic body follows so it's shootable mid-air. **Death (T5):** `damageVulture` swaps kinematic→
-DYNAMIC body (mirrors dropped-item physics: cuboid+CCD, tumble angvel) + bakes the limp pose; settles on LINEAR velocity
-(heightfield angular jitter ignored) → lootable. **Tree collision (T6):** one `makeStaticCylinder` per trunk bole
-(`spawnDeadTrees` gains a `world` param). NEW DEV handle `__game.killVulture`; rig-shots `vulture-flight`/`vulture-pose`
-(+`--state=`); extended `vulture-kill`/`tree`. **Same-day follow-ups:** big two-segment wingspan + no-dune-clip flight +
-flap/glide + shadow + banking; **carcass ecology (D183-D184)** — vultures circle bone ribcages, lizards/shrews cluster
-there, vultures swoop + grab + carry off prey; a swooped shrew can burrow-escape (a race); vultures scavenge dropped meat
-off the ground (`vulture-circle`/`vulture-hunt`/`vulture-escape`/`vulture-scavenge` rig-shots). **Owed:** the ACW/ACX
-in-motion feel pile (D150) + the vulture flight/swoop/tumble cadence (foreground-owed).
-*(Prior milestones — ACAH: bug sweep + loot bootstrap + vulture creature + cloud shadows (D177-180); ACAG: dead-tree rework
-+ bark (D174-176); ACAD: rust (D173); ACAC: pulse rifle (D172). See changelog.)*
+**Last shipped**: Session ACAJ (partial) — **wreck procedural-hull toolkit + mega-wreck rebuild** (T1+T2 of a 7-tier
+"wrecks + perf" overnight; T3-T7 deferred). 3 commits, tsc clean, no save bump; D185. **T1 — `world/wreckForms.ts`**: the
+shared building blocks for crashed-ship wrecks — `makeLatheHull`/`fuselageProfile` (tapered hull via LatheGeometry,
+`axis:'x'|'y'|'z'`, partial-arc torn ends), `makeFormerRings` (exposed rib skeleton), `makeBreach` (torn hole = void +
+bent flaps, NO boolean), `makeSandMound` (half-burial drift). NEW `__game.wreckFormStudio` + `wreck-form` rig-shot. **T2 —
+mega-wreck exterior rebuild (D185)**: `makeMegaWreck` read as a box cluster; replaced the ABL cylinder shell with a curved
+toolkit hull (tapered aft fuselage + nose + exposed formers at the mid-hull FRACTURE + 3 asymmetric breaches + tapered/raked
+bridge cap), all FrontSide + `noCollider` so the **entire walkable interior + ~25 colliders + 2 panels + shelter + journal
+is UNTOUCHED** (the hull ENVELOPS the box so it reads as inner structure). NEW `megawreck` rig-shot; ~5 iterated rounds →
+reads as a downed ship. **Deliberately deferred T3-T7** (rule 8 / ABP: ship fully-iterated tiers, not shallow ones).
+*(Prior milestones — ACAI: vulture rig + ecology (D181-184); ACAH: bug sweep + loot + vulture + clouds (D177-180); ACAG:
+dead-tree rework (D174-176). See changelog.)*
 
-**Next session (ACAJ)** = **MEGA-WRECK rebuild from scratch + procgen-wreck/salvage-panel overhaul** (the deferred ACAH/ACAI
-direction). The hand-modeled mega-wreck reads too boxy; rebuild with references + the leveled-up modelling proved by the
-camelthorn tree (D176) + vulture (D181), preserving colliders/panels/shelter/journal, then level up the procgen wreck fleet
-+ panel placement alongside. **The raider proc-character (Cycle 5) + all rig-dependent work stays DEFERRED** — user is
-undecided on importing an external rigged character. Other standing lanes: WebGL perf pass (wreck instancing/merge + LOD +
-shadow tuning; finish material-factory→uniforms), desktop packaging (Electron) + renderer exploration (WebGPU), wreck-yard
-biome, ODST drop-pod intro, deep cave; quick wins: painted-metal rust gap, sandworm depth. See
+**Next session (ACAJ continuation)** = finish the wrecks+perf overnight: **T3** apply the `wreckForms` toolkit to the procgen
+part vocabulary (`wrecks.ts` hull/cockpit variants + `procgenWreck.ts` `HULL_SEGMENT_VARIANTS` → Lathe hulls + exposed
+formers + real `makeBreach` holes — levels up all ~80 procgen wrecks); **T4** half-burial + `makeSandMound` (sink wrecks
+into the dunes); **T5** greeble + functional-asymmetry pass; **T6 (never-cut)** WebGL wreck perf merge (`mergeGeometries`
+each wreck's static meshes by material, panels/colliders separate; measure via `perf-probe`); **T7** InstancedMesh/LOD.
+**The raider proc-character + all rig-dependent work stays DEFERRED.** Other lanes: material-factory→uniforms, desktop
+packaging (Electron) + WebGPU, wreck-yard biome, ODST drop-pod intro, deep cave; quick wins: painted-metal rust, sandworm
+depth. See
 [docs/next-session-prompt.md](docs/next-session-prompt.md) + [docs/backlog.md](docs/backlog.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
