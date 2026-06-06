@@ -251,8 +251,15 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
     const aS = hullAt(AFT_FACE_Z), bS = hullAt(BOW_FACE_Z);
     // Backboards sized to FULLY cover each torn cross-section (no see-through into
     // the hollow hull at the fracture mouth), centred on the station cy.
-    const aBack = box(aS.halfW * 2 + 1, aS.halfH * 2 + 1, 0.4, _viewportMat); aBack.position.set(0, aS.cy, AFT_FACE_Z + 0.3); add(aBack);
-    const bBack = box(bS.halfW * 2 + 1, bS.halfH * 2 + 1, 0.4, _viewportMat); bBack.position.set(0, bS.cy, BOW_FACE_Z - 0.3); add(bBack);
+    // Lit dark hull backboards RECESSED ~4m into each mass (parallax depth so the
+    // break reads as a recessed interior, not a flat black hole to the sky), with
+    // the former rings + decks layered in front. A couple of interior bulkhead
+    // silhouettes add depth.
+    const aBack = box(aS.halfW * 2 + 1, aS.halfH * 2 + 1, 0.4, _hullDarkMat); aBack.position.set(0, aS.cy, AFT_FACE_Z + 4); add(aBack);
+    const bBack = box(bS.halfW * 2 + 1, bS.halfH * 2 + 1, 0.4, _hullDarkMat); bBack.position.set(0, bS.cy, BOW_FACE_Z - 4); add(bBack);
+    for (const [bz, s] of [[AFT_FACE_Z + 2.5, aS], [BOW_FACE_Z - 2.5, bS]] as const) {
+      const bulk = box(s.halfW * 1.3, s.halfH * 1.6, 0.3, _viewportMat); bulk.position.set((bz > 0 ? -2 : 2), s.cy, bz); add(bulk);
+    }
     // Exposed former rings (ribs) on each torn face.
     const af = makeFormerRings(aS.halfW, 3, 1.5, { tube: 0.55 });
     af.rotation.y = -Math.PI / 2; af.position.set(0, aS.cy, AFT_FACE_Z); af.scale.set(1, aS.halfH / aS.halfW, 1); add(af);
@@ -261,15 +268,15 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
     // Deck-edge slabs — THICK floors RECEDING into each mass (depth, not paper) with
     // a dark torn-edge fascia, staggered in Y between faces so decks read countable.
     const mkDeck = (y: number, faceZ: number, into: number, w: number) => {
-      const depth = 6 + _rand() * 2;
-      const th = 0.3 + _rand() * 0.4;                 // varied thickness (not card-uniform)
+      const depth = 4 + _rand() * 1.5;                // capped depth (no 10:1 paper tongues)
+      const th = 0.5 + _rand() * 0.4;                 // thicker, varied (not card-uniform)
       const yj = y + (_rand() - 0.5) * 0.6;           // Y jitter
-      const wj = w * (0.82 + _rand() * 0.32);
-      const xj = (_rand() - 0.5) * 1.6;
+      const wj = w * (0.7 + _rand() * 0.28);          // ALWAYS ≤ w → never pokes past the hull flank
+      const xj = (_rand() - 0.5) * 1.2;
       const rz = (_rand() - 0.5) * 0.14, rx = (_rand() - 0.5) * 0.1;   // not parallel; one corner sags
       const s = box(wj * 2, th, depth, dark); s.position.set(xj, yj, faceZ + into * depth / 2); s.rotation.set(rx, 0, rz); add(s);
-      // Bright torn-lip highlight strip on the outboard (torn) edge so decks read countable.
-      const lip = box(wj * 2, 0.2, 0.35, _tornMat); lip.position.set(xj, yj + th / 2, faceZ); lip.rotation.z = rz; add(lip);
+      // Thick torn-edge fascia/riser on the outboard (torn) edge so decks read as floors.
+      const fascia = box(wj * 2, 0.8, 0.35, _tornMat); fascia.position.set(xj, yj - 0.1, faceZ); fascia.rotation.z = rz; add(fascia);
       // A couple of vertical stanchions between decks.
       for (const sx of [-wj * 0.5, wj * 0.45]) { const st = box(0.28, 2.4 + _rand(), 0.28, dark); st.position.set(xj + sx, yj + 1.3, faceZ + into * (1.2 + _rand())); add(st); }
     };
@@ -282,13 +289,14 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
     const spine2 = new THREE.Mesh(spine2Geo, dark); spine2.position.set(1.0, 3.2, BOW_FACE_Z + 3.5); spine2.rotation.set(0, 0.2, 0.06); add(spine2);
     // Dangling cables — drooping from upper deck-edges DOWN to a lower deck slab
     // (land on structure, not mid-air), with a junction-box foot.
-    for (const [x, fromY, faceZ, dir] of [[-6, 13, AFT_FACE_Z + 1, -1], [5, 10, AFT_FACE_Z + 1, -1], [-2, 8, BOW_FACE_Z - 1, 1], [7, 11, AFT_FACE_Z + 1, -1]] as const) {
-      // Droop from an upper deck edge DOWN onto the R3 fracture floor (y≈0.4), where
-      // a junction box rests — so nothing dangles in mid-air.
-      const footZ = FRACTURE_Z + dir * (3 + _rand() * 4);
-      const to = new THREE.Vector3(x + dir * 1.5, 0.4, footZ);
-      add(makeCable(new THREE.Vector3(x, fromY, faceZ), to, 3.4, _pipeMat, 0.1));
-      const jb = box(0.6, 0.5, 0.6, dark); jb.position.set(to.x, 0.3, to.z); add(jb);
+    // Cables droop from an UPPER deck-edge down to a LOWER deck slab on the SAME torn
+    // face (everything is in the tilted shell frame, so they stay attached + rest on
+    // structure — NOT the level interior floor, which is a different frame).
+    for (const [x, fromY, toY] of [[-5, 13, 4], [4, 10.5, 3.8], [-2, 14, 4.2], [6, 11.5, 3.6]] as const) {
+      const from = new THREE.Vector3(x, fromY, AFT_FACE_Z + 1.4);
+      const to = new THREE.Vector3(x + (_rand() - 0.5) * 2, toY, AFT_FACE_Z + 2.6);
+      add(makeCable(from, to, 3.0, _pipeMat, 0.1));
+      const jb = box(0.6, 0.4, 0.6, dark); jb.position.set(to.x, to.y + 0.2, to.z); add(jb);
     }
   }
 
@@ -332,9 +340,9 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
     // Sensor mast + dish cluster — SHORT + THICK, sitting just above the cap (no
     // tall bare pole), braced to the cap, dishes on thick yokes facing outward.
     const capTop = towerH + 1.6, crownY = towerH + 5.0;
-    const mast = cyl(0.34, 0.6, crownY - capTop, _antennaMat, 8); mast.position.set(0.3, (capTop + crownY) / 2, 0); mast.rotation.z = 0.05; addI(mast);
+    const mast = cyl(0.5, 0.85, crownY - capTop, _antennaMat, 8); mast.position.set(0.3, (capTop + crownY) / 2, 0); mast.rotation.z = 0.05; addI(mast);
     // Cross-braces from the mast down to the cap (so it's clearly rooted).
-    for (const bx of [-1.4, 1.4]) strut(new THREE.Vector3(0.3, crownY - 0.8, 0), new THREE.Vector3(bx, capTop + 0.3, 0), 0.13, _antennaMat);
+    for (const bx of [-1.6, 1.6]) strut(new THREE.Vector3(0.3, crownY - 0.8, 0), new THREE.Vector3(bx, capTop + 0.3, 0), 0.2, _antennaMat);
     const crown = new THREE.Vector3(0.3, crownY, 0);
     const globe = new THREE.Mesh(new THREE.SphereGeometry(0.9, 12, 9), _antennaMat); globe.position.copy(crown); addI(globe);
     // 3 distinct-size shallow dish bowls (open, concave) on thick yokes + collars,
@@ -343,7 +351,7 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
       const dpos = new THREE.Vector3(crown.x + ox, crown.y + oy, oz);
       strut(crown, dpos, 0.2, _antennaMat);
       const collar = box(0.45, 0.45, 0.45, dark); collar.position.copy(crown).lerp(dpos, 0.35); addI(collar);
-      const d = new THREE.Mesh(new THREE.ConeGeometry(r, r * 0.3, 16, 1, true), _dishMat);  // open shallow bowl
+      const d = new THREE.Mesh(new THREE.ConeGeometry(r, r * 0.45, 16, 1, false), _dishMat);  // closed → no see-through
       d.position.copy(dpos); d.rotation.set(rx, 0, rz); addI(d);
       const horn = cyl(0.08, 0.08, r * 0.5, dark, 6); horn.position.copy(dpos); horn.rotation.set(rx, 0, rz); addI(horn);
     }
@@ -384,10 +392,10 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
         st.position.copy(from).addScaledVector(dir, 0.5); st.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize()); add(st);
       }
     }
-    // 2 maneuvering-thruster pods bolted to the plate (on a small mount pad each).
-    for (const sx of [-2.5, 2.5]) {
-      const pad = box(1.6, 1.6, 0.5, dark); pad.position.set(sx, ey + 5, TRANSOM_Z + 0.3); add(pad);
-      const t = makeEngineBellMesh(1.1, 1.5, _hullMat, _nozzleInteriorMat); t.rotation.x = Math.PI / 2; t.position.set(sx, ey + 5, TRANSOM_Z + 0.9); add(t);
+    // 2 maneuvering-thruster pods recessed into the plate (within the transom face).
+    for (const sx of [-3, 3]) {
+      const pad = box(1.8, 1.8, 0.4, dark); pad.position.set(sx, tp.cy + 1.5, TRANSOM_Z + 0.2); add(pad);
+      const t = makeEngineBellMesh(1.1, 1.5, _hullMat, _nozzleInteriorMat); t.rotation.x = Math.PI / 2; t.position.set(sx, tp.cy + 1.5, TRANSOM_Z + 0.8); add(t);
     }
   }
 
@@ -561,21 +569,30 @@ export function placeMegaWreck(
     journals.list.push(placeJournal(scene, jw, yaw + Math.PI, 'mega_wreck'));
   }
 
-  // ── Half-burial: asymmetric sand mounds on the -X lee flank + buried bow nose.
+  // ── Half-burial: low drift mounds that meet the LISTING hull (sampled through the
+  // SHELL tilt, not the level frame) — denser on the down-rolled +X impact flank +
+  // over the buried bow, lighter on the lee. Small sizes → drifts, not landforms.
   {
     const cos = Math.cos(yaw), sin = Math.sin(yaw);
     const wd = new THREE.Vector2(-cos, -sin);
-    const lee: Array<[number, number, number]> = [
-      [-9, -8, 15], [-10, 18, 18], [-9, 42, 16], [-8, 60, 13],       // lee flank, lapping the belly waterline (inboard)
-      [-5, 64, 9], [-4, 30, 10],                                     // secondary mounds closing the gap to the hull
-      [-7, -36, 13], [-3, -54, 12],                                  // smaller mounds round the bow (nose ridge stays exposed)
+    // shell-local belly point → world (apply the shell tilt, then yaw + position).
+    const bellyWorld = (side: number, z: number) => {
+      const s = hullAt(z);
+      const local = new THREE.Vector3(side * (s.halfW - 1), s.keelY + 1.5, z).applyQuaternion(shellQ).add(shellOff);
+      return local.applyQuaternion(finalQ).add(pos);
+    };
+    // [side, z, size] — the +X (down-rolled) flank gets the heavy drift.
+    const drifts: Array<[number, number, number]> = [
+      [1, -8, 9], [1, 18, 10], [1, 42, 9], [1, 60, 7],     // +X buried impact flank
+      [-1, 10, 6], [-1, 46, 6],                            // -X lee (lighter)
+      [1, -36, 9], [-1, -40, 7], [0, -56, 9],              // round the buried bow
     ];
-    for (const [lx, lz, sz] of lee) {
-      const w = worldOf(new THREE.Vector3(lx, 0, lz));
+    for (const [side, z, sz] of drifts) {
+      const w = bellyWorld(side, z);
       scene.add(makeSandMound(_terrain, w.x, w.z, wd, sz, rand));
     }
-    const noseW = worldOf(new THREE.Vector3(0, 0, -62));
-    const scorch = new THREE.Mesh(new THREE.CircleGeometry(7, 16), new THREE.MeshLambertMaterial({ color: 0x3a2c20 }));
+    const noseW = bellyWorld(0, -58);
+    const scorch = new THREE.Mesh(new THREE.CircleGeometry(6, 16), new THREE.MeshLambertMaterial({ color: 0x3a2c20 }));
     scorch.rotation.x = -Math.PI / 2; scorch.position.set(noseW.x, _terrain.heightAt(noseW.x, noseW.z) + 0.04, noseW.z);
     scorch.userData.noCollider = true; scorch.userData.noShadow = true; scene.add(scorch);
   }

@@ -278,11 +278,12 @@ export function makeSandMound(
   }
   geo.computeVertexNormals();
   const mound = new THREE.Mesh(geo, _sandMat);
-  // Offset toward the windward side; sink so most of the cone is buried.
+  // Offset toward the windward side; sink DEEP so only a low organic crest shows
+  // (a drift, not a flat tan landform).
   const ox = cx + windDir.x * size * 0.45;
   const oz = cz + windDir.y * size * 0.45;
   const gy = terrain.heightAt(ox, oz);
-  mound.position.set(ox, gy + h * 0.31 - size * 0.18, oz);
+  mound.position.set(ox, gy + h * 0.18 - size * 0.30, oz);
   mound.rotation.y = rand() * Math.PI * 2;
   mound.receiveShadow = true;
   return mound;
