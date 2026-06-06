@@ -1195,6 +1195,102 @@ const SCENARIOS = {
     console.log(`[vulture-hunt] ${pass ? 'PASS' : 'FAIL'} sawSwoop=${sawSwoop} sawCarry=${sawCarry} sawPrey=${sawPrey} ${JSON.stringify(fin)}`);
   },
 
+  // Vulture-escape (ACAI f/u): a swooped shrew dives for cover; once it's half-
+  // buried the vulture loses the target + pulls up (shrew survives).
+  'vulture-escape': async (page) => {
+    const r1 = await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      const v = ctx.vultures.list[0];
+      const s = ctx.shrews.list[0];
+      if (!v || !s) return { noEntity: true };
+      const V = ctx.three.camera.position.constructor;
+      const cy = ctx.terrain.heightAt(s.pos.x, s.pos.z);
+      v.carcass = new V(s.pos.x, cy, s.pos.z);
+      v.prey = null; v.state = 'circling'; v.circlePhase = 0;
+      v.pos.set(s.pos.x + 6, cy + 8, s.pos.z);
+      v.huntCooldown = 0;
+      window.__rand = Math.random; Math.random = () => 0;   // force the escape roll to succeed
+      return { ok: true, shrewId: s.id, vId: v.id };
+    });
+    if (r1.noEntity) { console.log('[vulture-escape] SKIP'); return; }
+    let sawSwoop = false, sawBurrow = false, forced = false;
+    for (let i = 0; i < 70; i++) {
+      await page.waitForTimeout(180);
+      const o = await page.evaluate((a) => {
+        const ctx = window.__game.ctx;
+        const v = ctx.vultures.list.find((x) => x.id === a.vId);
+        const s = ctx.shrews.list.find((x) => x.id === a.shrewId);
+        return { vstate: v ? v.state : 'gone', sstate: s ? s.state : 'gone' };
+      }, r1);
+      if (o.vstate === 'swooping') sawSwoop = true;
+      if (o.sstate === 'burrow') {
+        sawBurrow = true;
+        // It dove — complete the burrow so the escape is decisive (skip the close race).
+        if (!forced) { forced = true; await page.evaluate((a) => { const s = window.__game.ctx.shrews.list.find((x) => x.id === a.shrewId); if (s) { s.burrowT = 1; s.burrowHold = 4; } }, r1); }
+      }
+      if (sawBurrow && forced && o.vstate === 'circling') break;   // swoop aborted
+    }
+    const fin = await page.evaluate((a) => {
+      Math.random = window.__rand;
+      const ctx = window.__game.ctx;
+      const v = ctx.vultures.list.find((x) => x.id === a.vId);
+      const s = ctx.shrews.list.find((x) => x.id === a.shrewId);
+      return { vstate: v ? v.state : 'gone', shrewAlive: !!s, sstate: s ? s.state : 'gone' };
+    }, r1);
+    const pass = sawSwoop && sawBurrow && fin.shrewAlive && fin.vstate === 'circling';
+    console.log(`[vulture-escape] ${pass ? 'PASS' : 'FAIL'} sawSwoop=${sawSwoop} sawBurrow=${sawBurrow} ${JSON.stringify(fin)}`);
+  },
+
+  // Vulture-scavenge (ACAI f/u): a circler is attracted to dropped MEAT, swoops,
+  // grabs it off the ground + carries it off (the pickup is removed).
+  'vulture-scavenge': async (page) => {
+    const r1 = await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      const v = ctx.vultures.list[0];
+      if (!v) return { noVulture: true };
+      const V = ctx.three.camera.position.constructor;
+      // Anchor a carcass near the player + drop a fake meat pickup beside it.
+      const pt = ctx.player.body.body.translation();
+      const cy = ctx.terrain.heightAt(pt.x + 20, pt.z);
+      v.carcass = new V(pt.x + 20, cy, pt.z);
+      v.prey = null; v.state = 'circling'; v.circlePhase = 0;
+      v.pos.set(pt.x + 20 + 13, cy + 15, pt.z);
+      v.huntCooldown = 0;
+      const mx = pt.x + 20 + 4, mz = pt.z + 4;
+      const fakeMesh = new (ctx.three.scene.constructor)();   // throwaway Object3D
+      const id = 990000 + Math.floor(Math.random() * 1000);
+      ctx.pickups.list.push({
+        id, itemId: 'raw_lizard_meat', mesh: fakeMesh,
+        pos: new V(mx, ctx.terrain.heightAt(mx, mz) + 0.06, mz),
+        body: null, bobPhase: 0, hovered: false, ridingSledId: null,
+      });
+      window.__rand = Math.random; Math.random = () => 0;   // force the scavenge roll
+      return { ok: true, meatId: id, vId: v.id, pickupsBefore: ctx.pickups.list.length };
+    });
+    if (r1.noVulture) { console.log('[vulture-scavenge] SKIP'); return; }
+    let sawSwoop = false, sawPickupTarget = false, sawCarry = false;
+    for (let i = 0; i < 80; i++) {
+      await page.waitForTimeout(200);
+      const o = await page.evaluate((a) => {
+        const ctx = window.__game.ctx;
+        const v = ctx.vultures.list.find((x) => x.id === a.vId);
+        return { vstate: v ? v.state : 'gone', huntKind: v ? v.huntKind : null, meatGone: !ctx.pickups.list.find((p) => p.id === a.meatId) };
+      }, r1);
+      if (o.vstate === 'swooping') sawSwoop = true;
+      if (o.huntKind === 'pickup') sawPickupTarget = true;
+      if (o.vstate === 'carrying') sawCarry = true;
+      if (sawCarry && o.meatGone) break;
+    }
+    const fin = await page.evaluate((a) => {
+      Math.random = window.__rand;
+      const ctx = window.__game.ctx;
+      const v = ctx.vultures.list.find((x) => x.id === a.vId);
+      return { vstate: v ? v.state : 'gone', meatGone: !ctx.pickups.list.find((p) => p.id === a.meatId) };
+    }, r1);
+    const pass = sawSwoop && sawPickupTarget && sawCarry && fin.meatGone;
+    console.log(`[vulture-scavenge] ${pass ? 'PASS' : 'FAIL'} sawSwoop=${sawSwoop} pickupTarget=${sawPickupTarget} sawCarry=${sawCarry} ${JSON.stringify(fin)}`);
+  },
+
   'vulture-kill': async (page) => {
     const r1 = await page.evaluate(() => {
       const ctx = window.__game.ctx;

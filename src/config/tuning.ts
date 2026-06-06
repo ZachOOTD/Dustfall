@@ -1397,6 +1397,8 @@ export const Tuning = {
   SHREW_BURROW_RADIUS: 2.6,        // m — player proximity that triggers a dive into the sand
   SHREW_BURROW_DEPTH: 0.34,        // m — how far below the surface the shrew sinks
   SHREW_BURROW_TRANSIT_S: 0.55,    // s — descent / re-emerge duration
+  SHREW_BURROW_ESCAPE_CHANCE: 0.55,// ACAI f/u — chance a shrew dives for cover when a vulture swoops at it
+  SHREW_BURROW_HOLD_S: 3.5,        // ACAI f/u — s a vulture-scared shrew stays under (independent of the player)
 
   // ACAH — rare desert vulture: perches on salt-flat dead trees, flees on
   // approach (the kill window — needs a gun), shoot for meat.
@@ -1434,6 +1436,9 @@ export const Tuning = {
   VULTURE_SWOOP_SPEED: 16,         // m/s dive speed toward the prey
   VULTURE_GRAB_DIST: 1.0,          // m from the prey at which the grab succeeds
   VULTURE_CARRY_DURATION: 4.0,     // s carrying the prey up + away before it despawns
+  VULTURE_SHADOW_WARN_DIST: 6,     // m — a swooping vulture this close lets a shrew try to burrow-escape
+  VULTURE_SCAVENGE_RADIUS: 70,     // m (from the carcass) a circler will travel to grab dropped meat
+  VULTURE_SCAVENGE_CHANCE: 0.6,    // chance a circler off-cooldown goes for in-range dropped meat
   // ACAI — relocate-and-land flight.
   VULTURE_RELOCATE_MIN_DIST: 40,   // m — a relocation target perch must be at least this far
   VULTURE_LAND_ARRIVE_DIST: 2.5,   // m (horizontal) from target → begin the landing descent

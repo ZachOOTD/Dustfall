@@ -76,9 +76,10 @@ DYNAMIC body (mirrors dropped-item physics: cuboid+CCD, tumble angvel) + bakes t
 (heightfield angular jitter ignored) → lootable. **Tree collision (T6):** one `makeStaticCylinder` per trunk bole
 (`spawnDeadTrees` gains a `world` param). NEW DEV handle `__game.killVulture`; rig-shots `vulture-flight`/`vulture-pose`
 (+`--state=`); extended `vulture-kill`/`tree`. **Same-day follow-ups:** big two-segment wingspan + no-dune-clip flight +
-flap/glide + shadow + banking; **carcass ecology (D183)** — vultures circle bone ribcages, lizards/shrews cluster there,
-vultures swoop down + grab + carry off prey (`vulture-circle`/`vulture-hunt` rig-shots). **Owed:** the ACW/ACX in-motion
-feel pile (D150) + the vulture flight/swoop/tumble cadence (foreground-owed).
+flap/glide + shadow + banking; **carcass ecology (D183-D184)** — vultures circle bone ribcages, lizards/shrews cluster
+there, vultures swoop + grab + carry off prey; a swooped shrew can burrow-escape (a race); vultures scavenge dropped meat
+off the ground (`vulture-circle`/`vulture-hunt`/`vulture-escape`/`vulture-scavenge` rig-shots). **Owed:** the ACW/ACX
+in-motion feel pile (D150) + the vulture flight/swoop/tumble cadence (foreground-owed).
 *(Prior milestones — ACAH: bug sweep + loot bootstrap + vulture creature + cloud shadows (D177-180); ACAG: dead-tree rework
 + bark (D174-176); ACAD: rust (D173); ACAC: pulse rifle (D172). See changelog.)*
 

@@ -28,7 +28,8 @@ import { Tuning } from '../config/tuning.ts';
 import { getPlayerPos } from '../util/playerPos.ts';
 import type { TreePerch } from '../world/deadTree.ts';
 import { lootLizard } from './lizard.ts';
-import { lootShrew } from './shrew.ts';
+import { lootShrew, alertShrewToSwoop } from './shrew.ts';
+import { despawnPickup } from '../pickups/pickups.ts';
 
 export type VultureState =
   | 'perched' | 'flying' | 'landing' | 'dead'
@@ -84,9 +85,12 @@ export interface Vulture {
   carryT: number;
   /** ACAI f/u — the prey silhouette gripped in the talons while carrying. */
   prey: THREE.Object3D | null;
-  /** ACAI f/u — the locked swoop target (kind + module id) being hunted. */
-  huntKind: 'lizard' | 'shrew' | null;
+  /** ACAI f/u — the locked swoop target (kind + module/pickup id) being hunted.
+   *  'pickup' = dropped meat scavenged off the ground. */
+  huntKind: 'lizard' | 'shrew' | 'pickup' | null;
   huntId: number;
+  /** ACAI f/u — set once per swoop after the shrew gets its burrow-escape roll. */
+  swoopWarned: boolean;
   /** idle phase accumulator (perched bob). */
   bob: number;
   hovered: boolean;
@@ -503,6 +507,7 @@ export function spawnVulture(
     prey: null,
     huntKind: null,
     huntId: -1,
+    swoopWarned: false,
     bob: Math.random() * Math.PI * 2,
     hovered: false,
     landed: false,
@@ -618,7 +623,7 @@ function applyFlightOrientation(v: Vulture, dt: number): void {
 const _preyMat = createSkinMaterial(0x3a3128, { localSpace: true, sheen: 0.2 });
 
 /** A tiny limp prey silhouette clutched in the talons while carrying. */
-function makePreySilhouette(kind: 'lizard' | 'shrew'): THREE.Group {
+function makePreySilhouette(kind: 'lizard' | 'shrew' | 'pickup'): THREE.Group {
   const g = new THREE.Group();
   if (kind === 'lizard') {
     const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.03, 0.16, 3, 6), _preyMat);
@@ -627,22 +632,39 @@ function makePreySilhouette(kind: 'lizard' | 'shrew'): THREE.Group {
     const tail = new THREE.Mesh(new THREE.ConeGeometry(0.02, 0.12, 5), _preyMat);
     tail.position.set(-0.13, 0, 0); tail.rotation.z = Math.PI / 2;
     g.add(tail);
-  } else {
+  } else if (kind === 'shrew') {
     const body = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), _preyMat);
     body.scale.set(1.3, 0.9, 0.9);
     g.add(body);
+  } else {
+    // Dropped meat — a ragged dark chunk.
+    const chunk = new THREE.Mesh(new THREE.IcosahedronGeometry(0.06, 0), _preyMat);
+    chunk.scale.set(1.2, 0.7, 0.9);
+    g.add(chunk);
   }
   return g;
 }
 
-/** Current world position of the locked prey (null if it's gone / dead / burrowed). */
+/** Dropped meat/carrion on the ground is scavengeable (raw_*_meat, etc.). */
+function isScavengeable(itemId: string): boolean {
+  return itemId.includes('meat') || itemId.includes('carcass');
+}
+
+/** Current world position of the locked target (null if it's gone / escaped). */
 function findHuntPos(ctx: GameContext, v: Vulture): { x: number; y: number; z: number } | null {
   if (v.huntKind === 'lizard') {
     const l = ctx.lizards.find((x) => x.id === v.huntId && x.state !== 'dead');
     if (l) return { x: l.pos.x, y: ctx.terrain.heightAt(l.pos.x, l.pos.z) + 0.15, z: l.pos.z };
   } else if (v.huntKind === 'shrew') {
-    const s = ctx.shrews.list.find((x) => x.id === v.huntId && x.state !== 'dead' && x.state !== 'burrow');
-    if (s) return { x: s.pos.x, y: ctx.terrain.heightAt(s.pos.x, s.pos.z) + 0.15, z: s.pos.z };
+    // A shrew that's burrowing is still grabbable until it's half-under (a race);
+    // past that it has escaped → target lost.
+    const s = ctx.shrews.list.find((x) => x.id === v.huntId && x.state !== 'dead');
+    if (s && (s.state !== 'burrow' || s.burrowT < 0.5)) {
+      return { x: s.pos.x, y: ctx.terrain.heightAt(s.pos.x, s.pos.z) + 0.15, z: s.pos.z };
+    }
+  } else if (v.huntKind === 'pickup') {
+    const p = ctx.pickups.list.find((x) => x.id === v.huntId);
+    if (p) return { x: p.pos.x, y: ctx.terrain.heightAt(p.pos.x, p.pos.z) + 0.1, z: p.pos.z };
   }
   return null;
 }
@@ -651,6 +673,20 @@ function findHuntPos(ctx: GameContext, v: Vulture): { x: number; y: number; z: n
  *  begin a swoop. Off-cooldown only; picks the closest live lizard/shrew. */
 function maybeStartSwoop(ctx: GameContext, v: Vulture): void {
   if (v.huntCooldown > 0 || !v.carcass) return;
+  // (a) CARRION FIRST — dropped meat within the (generous) scavenge radius. Easy
+  // food; a circler will travel for it. Probability-gated so it's "a chance".
+  const scavSq = Tuning.VULTURE_SCAVENGE_RADIUS * Tuning.VULTURE_SCAVENGE_RADIUS;
+  let meatId = -1, meatDSq = scavSq;
+  for (const p of ctx.pickups.list) {
+    if (!isScavengeable(p.itemId)) continue;
+    const dSq = (p.pos.x - v.carcass.x) ** 2 + (p.pos.z - v.carcass.z) ** 2;
+    if (dSq < meatDSq) { meatDSq = dSq; meatId = p.id; }
+  }
+  if (meatId >= 0 && Math.random() < Tuning.VULTURE_SCAVENGE_CHANCE) {
+    v.huntKind = 'pickup'; v.huntId = meatId; v.swoopWarned = true; v.state = 'swooping';
+    return;
+  }
+  // (b) LIVE PREY — nearest lizard/shrew within the (tighter) hunt radius.
   const rSq = Tuning.VULTURE_HUNT_RADIUS * Tuning.VULTURE_HUNT_RADIUS;
   let bestK: 'lizard' | 'shrew' | null = null;
   let bestId = -1;
@@ -668,6 +704,7 @@ function maybeStartSwoop(ctx: GameContext, v: Vulture): void {
   if (!bestK) { v.huntCooldown = 3; return; }   // nothing below — recheck shortly
   v.huntKind = bestK;
   v.huntId = bestId;
+  v.swoopWarned = false;   // the shrew gets a fresh burrow-escape roll this swoop
   v.state = 'swooping';
 }
 
@@ -680,6 +717,9 @@ function grabPrey(ctx: GameContext, v: Vulture): void {
   } else if (v.huntKind === 'shrew') {
     const s = ctx.shrews.list.find((x) => x.id === v.huntId);
     if (s) { lootShrew(s, ctx); mesh = makePreySilhouette('shrew'); }
+  } else if (v.huntKind === 'pickup') {
+    const p = ctx.pickups.list.find((x) => x.id === v.huntId);
+    if (p) { despawnPickup(ctx, p); mesh = makePreySilhouette('pickup'); }
   }
   v.huntKind = null;
   v.huntId = -1;
@@ -817,6 +857,13 @@ export function updateVultures(ctx: GameContext, dt: number): void {
         v.target.set(pp.x, pp.y, pp.z);
         const hx = v.target.x - v.pos.x, hy = v.target.y - v.pos.y, hz = v.target.z - v.pos.z;
         const d = Math.sqrt(hx * hx + hy * hy + hz * hz);
+        // A shrew that sees the diving shadow close in gets one chance to bolt
+        // underground (→ findHuntPos drops it next frame once it's half-buried).
+        if (v.huntKind === 'shrew' && !v.swoopWarned && d < Tuning.VULTURE_SHADOW_WARN_DIST) {
+          v.swoopWarned = true;
+          const s = ctx.shrews.list.find((x) => x.id === v.huntId);
+          if (s) alertShrewToSwoop(s, Tuning.SHREW_BURROW_ESCAPE_CHANCE);
+        }
         if (d < Tuning.VULTURE_GRAB_DIST || d < 1e-3) {
           grabPrey(ctx, v);
           break;

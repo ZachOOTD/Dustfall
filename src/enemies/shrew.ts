@@ -59,6 +59,9 @@ export interface Shrew {
    *  sand). Eases toward 1 while the player is near in 'burrow' state, back
    *  toward 0 when they leave. Transient (not persisted). */
   burrowT: number;
+  /** ACAI f/u — seconds the shrew stays burrowed after a vulture scare, even
+   *  with no player nearby (a vulture-triggered dive-for-cover). */
+  burrowHold: number;
 }
 
 // ── Tuning — promoted to Tuning (integration). ──
@@ -279,6 +282,7 @@ export function spawnShrew(
     wanderTarget: new THREE.Vector3(pos.x, 0, pos.z),
     hovered: false,
     burrowT: 0,
+    burrowHold: 0,
   };
   _colliderToShrew.set(collider.handle, shrew);
   _shrews.push(shrew);
@@ -299,6 +303,18 @@ function tagShrewTake(root: THREE.Object3D, id: number): void {
 export function applyDeadShrewPose(shrew: Shrew): void {
   shrew.mesh.rotation.z = Math.PI / 2;   // flop on its side
   tagShrewTake(shrew.mesh, shrew.id);
+}
+
+/** ACAI f/u — a vulture is swooping at this shrew; it may dive for cover. Rolls
+ *  `chance`; on success flips to 'burrow' + holds under for SHREW_BURROW_HOLD_S
+ *  (so it escapes the grab). Returns true if it bolted underground. No-op if the
+ *  shrew is dead or already burrowing. */
+export function alertShrewToSwoop(shrew: Shrew, chance: number): boolean {
+  if (shrew.state === 'dead' || shrew.state === 'burrow') return false;
+  if (Math.random() >= chance) return false;
+  shrew.state = 'burrow';
+  shrew.burrowHold = Tuning.SHREW_BURROW_HOLD_S;
+  return true;
 }
 
 /** ACR — combat hit kills the shrew (1-HP critter, like the lizard). Flops the
@@ -551,7 +567,10 @@ export function updateShrews(ctx: GameContext, dt: number): void {
       const gy = ctx.terrain.heightAt(s.pos.x, s.pos.z);
       const surfaceY = gy + TERRAIN_OFFSET;
       const stayR = Tuning.SHREW_BURROW_RADIUS * 1.6; // hysteresis to stay buried
-      const playerNear = distSq < stayR * stayR;
+      // ACAI f/u — a vulture-scared shrew holds underground for a beat even with
+      // no player around (else burrowT would immediately ease back out).
+      if (s.burrowHold > 0) s.burrowHold = Math.max(0, s.burrowHold - dt);
+      const playerNear = distSq < stayR * stayR || s.burrowHold > 0;
       const prevT = s.burrowT;
       const dir = playerNear ? 1 : -1;
       s.burrowT = Math.max(0, Math.min(1,

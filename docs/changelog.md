@@ -68,6 +68,15 @@ NEW rig-shots `vulture-circle` (soaring still) + `vulture-hunt` (swoop→grab→
 `VULTURE_CIRCLE_*` + `VULTURE_HUNT_*`/`SWOOP_SPEED`/`GRAB_DIST`/`CARRY_DURATION`. No save bump (circling/swoop/carry are
 transient → re-derive to perched on load).
 
+**Follow-up 3 (same-day) — shrew burrow-escape + meat scavenging (D183 extended).** (1) **Shrew dives for cover:** a
+swooped shrew within `VULTURE_SHADOW_WARN_DIST` gets one `SHREW_BURROW_ESCAPE_CHANCE` roll to bolt underground
+(`alertShrewToSwoop` → `burrow` state + a player-independent `burrowHold` so it stays under); the vulture's target-finder
+keeps it grabbable only until it's half-buried (`burrowT < 0.5`), so it's a genuine race — escape and the vulture pulls up.
+(2) **Scavenge dropped meat:** a circling vulture off-cooldown now prefers CARRION — any `raw_*_meat`/carcass pickup within
+the generous `VULTURE_SCAVENGE_RADIUS` (probability-gated, `VULTURE_SCAVENGE_CHANCE`) — and will travel to swoop, grab it
+off the ground (`despawnPickup`), and carry it off. Cross-module via `ctx.pickups`/`despawnPickup` + `alertShrewToSwoop`
+(no new circular deps). NEW rig-shots `vulture-escape` + `vulture-scavenge` (both PASS); hunt/flight/kill regressions PASS.
+
 ## Session ACAH — 2026-06-05 — Big overnight: bug sweep + loot bootstrap + vulture + cloud shadows ✓ verify pass (tsc clean)
 
 `verified` — `npm run verify` (tsc) PASS; **no save bump** (all additive, v14). A large multi-tier session: cleared the
