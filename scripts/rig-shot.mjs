@@ -871,8 +871,9 @@ const SCENARIOS = {
     const angle = argv.angle || '3q';
     const r = await page.evaluate((ang) => {
       const ctx = window.__game.ctx;
-      ctx.weather.intensity = 0; ctx.weather.cloudiness = 0.2;
-      window.__game.setTime(0.46);
+      ctx.weather.intensity = 0; ctx.weather.cloudiness = 0.15;
+      window.__game.setTime(0.5);                  // bright midday for max detail read
+      ctx.three.renderer.toneMappingExposure = 1.2;
       ctx.flags.thirdPerson = false;
       if (ctx.player.rig) ctx.player.rig.group.visible = false;
       let mw = null;
@@ -897,14 +898,25 @@ const SCENARIOS = {
       const span = Math.max(maxX - minX, maxZ - minZ);
       const cam = ctx.three.camera;
       ctx.flags.paused = true;
-      const eye = cy + (maxY - minY) * 0.35;
-      const d = span * 1.45;                       // pull back to fit the ~115m ship
+      const h = maxY - minY;
+      const eye = cy - h * 0.05;                    // low, dramatic eye line
+      const d = span * 0.92;                        // close enough to read detail
       if (ang === 'interior') { cam.position.set(cx, cy, cz); cam.lookAt(cx + 1, cy, cz + 1); }
-      else if (ang === 'side') { cam.position.set(cx + d, eye, cz); cam.lookAt(cx, cy, cz); }
-      else if (ang === 'front') { cam.position.set(cx, eye, cz - d); cam.lookAt(cx, cy, cz); }
-      else if (ang === 'rear') { cam.position.set(cx, eye, cz + d); cam.lookAt(cx, cy, cz); }
-      else { cam.position.set(cx + d * 0.72, eye + d * 0.28, cz - d * 0.72); cam.lookAt(cx, cy, cz); }
+      else if (ang === 'side') { cam.position.set(cx + d, eye + h * 0.18, cz); cam.lookAt(cx, cy, cz); }
+      else if (ang === 'front') { cam.position.set(cx + d * 0.25, eye + h * 0.15, cz - d * 0.95); cam.lookAt(cx, cy, cz); }
+      else if (ang === 'rear') { cam.position.set(cx, eye + h * 0.2, cz + d); cam.lookAt(cx, cy, cz); }
+      // 'hero' = low bow-quarter from the +X impact flank — the dagger silhouette + fracture.
+      else if (ang === 'hero') { cam.position.set(cx + d * 0.7, eye, cz - d * 0.62); cam.lookAt(cx, cy + h * 0.05, cz - span * 0.12); }
+      else { cam.position.set(cx + d * 0.62, eye + h * 0.3, cz - d * 0.62); cam.lookAt(cx, cy, cz); }
       cam.updateMatrixWorld(true);
+      // Raking key light off the +X impact flank so strakes/breaches/rust register.
+      const key = new (ctx.three.scene.children.find((o) => o.isDirectionalLight)?.constructor
+        || ctx.three.scene.constructor)();
+      if (key.isDirectionalLight) {
+        key.intensity = 1.6; key.color.set(0xfff0d8);
+        key.position.set(cx + span, cy + (maxY - minY) * 0.6, cz - span * 0.3);
+        key.target.position.set(cx, cy, cz); ctx.three.scene.add(key.target); ctx.three.scene.add(key);
+      }
       const panels = (ctx.salvageables?.list || []).filter((s) => s.kind === 'massive').length;
       return { found: true, span: +span.toFixed(0), height: +(maxY - minY).toFixed(0), panels };
     }, angle);

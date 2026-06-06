@@ -35,7 +35,7 @@ import type { Terrain } from './terrain.ts';
 import { Tuning } from '../config/tuning.ts';
 import { panelWithHole } from './panelUtils.ts';
 import { addAccessPanel, placeDebrisField, makeEngineBellMesh } from './wrecks.ts';
-import { makeLatheHull, makeFormerRings, makeBreach, tagWreckDecoration } from './wreckForms.ts';
+import { makeLoftedHull, makeFormerRings, makeBreach, tagWreckDecoration, makeCable, makeSandMound } from './wreckForms.ts';
 import { addShelterZone, type ShelterRegistry } from '../shelter/shelterZones.ts';
 import { registerSalvageable, type SalvageableRegistry } from './salvage.ts';
 import { placeJournal, type Journal } from './journal.ts';
@@ -753,114 +753,175 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
     }
   }
 
-  // ── ACAJ T2 — exterior silhouette rebuild. Replace the ABL straight-
-  // cylinder shell + rust bands + rib bumps with a proper TOOLKIT-built
-  // curved hull (wreckForms.ts): a tapered fuselage aft section + a nose
-  // section + exposed former rings at the fracture + asymmetric breaches.
-  // All FrontSide outer shell, noCollider — the interior box walls (which
-  // carry the colliders + are visible from inside the bay) are untouched.
-  // The hull is wider-than-tall, so the circular lathe cross-section is
-  // flattened in Y (HULL_Y_FLAT) to an ellipse hugging the box.
-  // The hull cross-section is an ellipse large enough to ENVELOP the wide box
-  // (its corners), so the box reads as the inner structure, not the silhouette.
-  const HULL_Y_FLAT = 0.72;
+  // ════════════════════════════════════════════════════════════════════
+  // ACAJ T2 (ground-up rebuild vs docs/research/megawreck-anatomy.md + the
+  // adversarial critique). A BROKEN downed warship: a listing tapered dagger,
+  // spine snapped at the mid-hull with a readable cut-open cross-section
+  // (countable decks + ribs + spine stub + cables), a detailed command island
+  // (windows + sensor mast + dishes), exposed engine cage, asymmetric breaches.
+  // ALL of it lives in `shell` — a group TILTED into a list + sunk into the dune,
+  // leaving the level interior box cavity + colliders untouched (D185). The shell
+  // ENVELOPS the boxes generously so no cuboid corner pokes through even tilted.
+  // Sand drifts + the debris field are added terrain-aware in placeMegaWreck.
+  // ════════════════════════════════════════════════════════════════════
+  const FRACTURE_Z1 = AFT_ORIGIN_Z - AFT_HALF_L;   // -10 — aft front (torn) face
+  const FRACTURE_Z0 = BOW_ORIGIN_Z + BOW_HALF_L;   // -25 — bow rear (torn) face
+  const dark = _hullDarkMat;
+  const shell = new THREE.Group();
+  shell.name = 'shell';
+  const add = (m: THREE.Object3D) => { m.userData.noCollider = true; shell.add(m); };
+  const AFT_CY = AFT_HALF_H + 2.0;
 
-  // (a) Aft hull — a broad tapered fuselage along +Z spanning the aft box
-  // [Z -10 .. 50]: narrower + torn at the fracture (front), a slight bulge,
-  // tapering to the engine end (rear, crash-flared).
+  // (A1) Aft hull — a faceted DAGGER mass: belly+dorsal peak amidships, a RAKED
+  // roofline dropping toward both ends, a generous envelope (×1.4 — must contain
+  // the tilted level box corners), a blunt LOW transom.
   {
-    const L = AFT_HALF_L * 2;                       // 60
-    const W = AFT_HALF_W * 1.28;                    // envelope the 40m-wide box
-    const profile = [
-      new THREE.Vector2(W * 0.84, 0.00 * L),        // fracture end (front, -Z)
-      new THREE.Vector2(W * 0.97, 0.10 * L),
-      new THREE.Vector2(W * 1.02, 0.34 * L),        // belly bulge
-      new THREE.Vector2(W * 1.03, 0.55 * L),
-      new THREE.Vector2(W * 0.99, 0.74 * L),
-      new THREE.Vector2(W * 0.90, 0.90 * L),        // taper to engines
-      new THREE.Vector2(W * 0.78, 1.00 * L),        // engine end (rear, +Z)
-    ];
-    const aftHull = makeLatheHull(profile, { material: _hullMat, axis: 'z', segments: 24 });
-    aftHull.position.set(0, AFT_HALF_H + 1.5, AFT_ORIGIN_Z - AFT_HALF_L);  // z=-10
-    aftHull.scale.set(1, HULL_Y_FLAT, 1);
-    aftHull.userData.noCollider = true;
-    g.add(aftHull);
+    const W = AFT_HALF_W, H = AFT_HALF_H;
+    add(makeLoftedHull([
+      { z: FRACTURE_Z1, halfW: W * 1.34, halfH: H * 1.20, cy: AFT_CY },         // fracture (tall)
+      { z: 6,  halfW: W * 1.42, halfH: H * 1.24, cy: AFT_CY + 0.5 },            // belly + dorsal peak
+      { z: 24, halfW: W * 1.38, halfH: H * 1.16, cy: AFT_CY - 0.5 },
+      { z: 40, halfW: W * 1.20, halfH: H * 1.00, cy: AFT_CY - 2.5 },            // taper + roof drop
+      { z: 50, halfW: W * 1.00, halfH: H * 0.82, cy: AFT_CY - 4.5 },            // blunt low transom
+    ], _hullMat));
   }
 
-  // (b) Bow hull — a nose section along +Z spanning the bow box [Z -60 .. -25],
-  // tapering to a torn nose tip at the -Z front. Attached to bowGroup so it
-  // tracks the bow's terrain Y-offset.
+  // (A2) Bow — a dagger nose DROPPING + tapering to a buried crushed point, rising
+  // toward the fracture (so the whole ship reads as a wedge driven nose-first into
+  // the dune, the aft mass riding higher).
   {
-    const L = BOW_HALF_L * 2;                       // 35
-    const W = BOW_HALF_W * 1.32;                     // envelope the bow box
-    const profile = [
-      new THREE.Vector2(W * 0.16, 0.00 * L),        // torn nose tip (-Z)
-      new THREE.Vector2(W * 0.48, 0.10 * L),
-      new THREE.Vector2(W * 0.80, 0.30 * L),
-      new THREE.Vector2(W * 0.95, 0.55 * L),        // bow shoulder
-      new THREE.Vector2(W * 0.99, 0.80 * L),
-      new THREE.Vector2(W * 0.90, 1.00 * L),        // fracture end (+Z, faces aft)
-    ];
-    const bowHull = makeLatheHull(profile, { material: _hullMat, axis: 'z', segments: 18 });
-    bowHull.position.set(0, BOW_HALF_H + 1.2, BOW_ORIGIN_Z - BOW_HALF_L);  // z=-60 (nose), +35 → -25
-    bowHull.scale.set(1, HULL_Y_FLAT + 0.04, 1);    // bow a touch rounder
-    bowHull.userData.noCollider = true;
-    bowGroup.add(bowHull);
+    const W = BOW_HALF_W, H = BOW_HALF_H, z0 = BOW_ORIGIN_Z - BOW_HALF_L;       // -60
+    add(makeLoftedHull([
+      { z: z0,          halfW: W * 0.18, halfH: H * 0.42, cy: BOW_HALF_H - 3.0 },  // crushed buried tip (low)
+      { z: z0 + 8,      halfW: W * 0.70, halfH: H * 0.95, cy: BOW_HALF_H - 1.0 },
+      { z: z0 + 20,     halfW: W * 1.30, halfH: H * 1.22, cy: BOW_HALF_H + 1.0 },
+      { z: FRACTURE_Z0, halfW: W * 1.32, halfH: H * 1.24, cy: BOW_HALF_H + 1.5 },  // fracture (rising)
+    ], _hullMat));
   }
 
-  // (c) Exposed former rings at the mid-hull FRACTURE (Z ∈ [-25,-10]) — the
-  // ship's internal rib skeleton showing where bow + aft tore apart on impact.
+  // (A3) Mid-hull FRACTURE cross-section — THE hero (the spec "money shot"). The
+  // gap is filled with a cut-open cross-section: full-width recessed deck slabs
+  // (staggered Y between faces → countable decks), former rings, a kinked spine
+  // stub, and dangling cables. A dark interior backboard makes the depth read.
   {
-    const formers = makeFormerRings(AFT_HALF_W * 1.02, 4, 4.2, { tube: 0.6 });
-    formers.rotation.y = -Math.PI / 2;              // rings spaced along +Z
-    formers.position.set(0, AFT_HALF_H + 1.5, -24);
-    formers.scale.set(1, HULL_Y_FLAT, 1);
-    formers.userData.noCollider = true;
-    g.add(formers);
-  }
-
-  // (d) Asymmetric impact breaches — torn holes punched through the flanks.
-  // Functional asymmetry: the +X side took the impact (2 big breaches), the
-  // far -X flank has one smaller tear.
-  {
-    const breach = (side: number, yFrac: number, z: number, radius: number) => {
-      const b = makeBreach(radius, _rand);
-      tagWreckDecoration(b);
-      b.position.set(side * AFT_HALF_W * 1.18, AFT_HALF_H * yFrac + 1.0, z);
-      b.rotation.y = side > 0 ? Math.PI / 2 : -Math.PI / 2;   // +Z (outward) → ±X flank
-      b.scale.set(1, HULL_Y_FLAT + 0.15, 1);
-      b.userData.noCollider = true;
-      g.add(b);
+    const R = AFT_HALF_W * 1.18, cy = AFT_CY;
+    // Dark interior backboards (so the cross-section reads as depth, not a gap to sky).
+    for (const z of [FRACTURE_Z1 + 0.2, FRACTURE_Z0 - 0.2]) {
+      const back = box(R * 1.7, AFT_HALF_H * 2.2, 0.4, _viewportMat);
+      back.position.set(0, cy - 1, z); add(back);
+    }
+    // Former rings on each torn face.
+    const af = makeFormerRings(R, 3, 1.4, { tube: 0.55 });
+    af.rotation.y = -Math.PI / 2; af.position.set(0, cy, FRACTURE_Z1 + 0.4); af.scale.set(1, 0.78, 1); add(af);
+    const bf = makeFormerRings(R * 0.95, 3, 1.4, { tube: 0.55 });
+    bf.rotation.y = -Math.PI / 2; bf.position.set(0, cy, FRACTURE_Z0 - 3.2); bf.scale.set(1, 0.78, 1); add(bf);
+    // Deck-edge ledges — full-width thin slabs, recessed, staggered Y between faces.
+    const deckW = AFT_HALF_W * 1.05;
+    const mkDeck = (y: number, z: number, w: number) => {
+      const slab = box(w * 2, 0.3, 3.4, dark); slab.position.set(0, y, z); add(slab);
     };
-    breach(1, 1.15, 6, 4.0);     // impact flank — gaping
-    breach(1, 0.65, 32, 2.6);    // impact flank — second
-    breach(-1, 1.05, 20, 2.1);   // far flank — smaller tear
+    for (const y of [3.0, 6.5, 10.0, 13.5]) mkDeck(y, FRACTURE_Z1 + 1.9, deckW);          // aft decks
+    for (const y of [4.6, 8.2, 11.6]) mkDeck(y, FRACTURE_Z0 - 1.9, deckW * 0.9);          // bow decks (offset Y)
+    // Snapped spine/keel stub — a bent two-segment beam low-center ("broke its back").
+    const seg1 = box(1.4, 1.2, 10, dark);
+    seg1.position.set(-2.0, 1.8, (FRACTURE_Z0 + FRACTURE_Z1) / 2 - 2.5); seg1.rotation.y = 0.14; add(seg1);
+    const seg2 = box(1.2, 1.1, 7, dark);
+    seg2.position.set(1.6, 2.8, (FRACTURE_Z0 + FRACTURE_Z1) / 2 + 3); seg2.rotation.set(0.12, -0.22, 0.07); add(seg2);
+    // Dangling cables from upper deck-edges to the floor.
+    for (const [x, z, y] of [[-7, FRACTURE_Z1 + 1.6, 13], [6, FRACTURE_Z0 - 1, 11], [-2, -17.5, 12], [10, FRACTURE_Z1 + 1, 9]] as const) {
+      add(makeCable(new THREE.Vector3(x, y, z), new THREE.Vector3(x + 3, 0.4, z - 2), 3.2, _pipeMat, 0.1));
+    }
+    // Bent torn rim flaps on the aft face.
+    const rim = makeBreach(R * 0.9, _rand); tagWreckDecoration(rim);
+    rim.rotation.x = -Math.PI / 2; rim.position.set(0, cy + AFT_HALF_H * 0.5, FRACTURE_Z1 + 0.5); rim.scale.set(1.6, 1.0, 0.6); add(rim);
   }
 
-  // (e) Bridge superstructure shell — a tapered cap + forward-raked windscreen
-  // over the tower box so it reads as a ship's bridge, not a plain cube. Visual
-  // only; the tower walls + the climb ramp inside are untouched.
+  // (A4) Command island — a stepped 5-deck wedding-cake bridge, OFFSET toward the
+  // +X impact flank + exaggerated, with framed viewport clusters + a raked
+  // windscreen. The recognition anchor that must dominate the skyline.
+  let bridgeTopY = TOWER_BASE_Y;
+  let bridgeCx = TOWER_HALF_W * 0.6;            // offset off-centre toward +X
   {
-    const cz = AFT_ORIGIN_Z + TOWER_OFFSET_Z;
-    const topY = TOWER_BASE_Y + TOWER_HALF_H * 2;
-    // Tapered cap (narrower at top) — a low 6-sided frustum reads angular/sci-fi.
-    const cap = new THREE.Mesh(
-      new THREE.CylinderGeometry(TOWER_HALF_W * 0.42, TOWER_HALF_W * 1.12, TOWER_HALF_H * 0.9, 6),
-      _hullMat,
-    );
-    cap.rotation.y = Math.PI / 6;
-    cap.position.set(0, topY + TOWER_HALF_H * 0.35, cz);
-    cap.scale.set(1.0, 1.0, TOWER_HALF_L / TOWER_HALF_W);  // match the tower footprint depth
-    cap.userData.noCollider = true;
-    g.add(cap);
-    // Forward-raked windscreen slab across the tower front (the bridge glass).
-    const screen = box(TOWER_HALF_W * 1.9, TOWER_HALF_H * 1.5, 0.5, _viewportMat);
-    screen.position.set(0, TOWER_BASE_Y + TOWER_HALF_H * 1.15, cz - TOWER_HALF_L - 0.55);
-    screen.rotation.x = -0.42;   // rake the top backward
-    screen.userData.noCollider = true;
-    screen.userData.noShadow = true;
-    g.add(screen);
+    const cz = AFT_ORIGIN_Z + TOWER_OFFSET_Z, baseY = TOWER_BASE_Y, cx = bridgeCx;
+    const baseW = TOWER_HALF_W * 1.55, baseL = TOWER_HALF_L * 1.7;
+    const decks = 5, dh = 2.8;
+    let y = baseY;
+    for (let i = 0; i < decks; i++) {
+      const t = i / decks;
+      const w = baseW * (1 - t * 0.5), l = baseL * (1 - t * 0.32);
+      const deck = box(w * 2, dh, l * 2, _hullMat);
+      deck.position.set(cx, y + dh / 2, cz + t * 1.5); add(deck);
+      const winN = 6, zf = cz + t * 1.5 - l;
+      for (let k = 0; k < winN; k++) {
+        const wx = cx + (k - (winN - 1) / 2) * (w * 1.6 / winN);
+        const frame = box(0.95, 1.15, 0.16, dark); frame.position.set(wx, y + dh * 0.55, zf - 0.08); add(frame);
+        const win = box(0.74, 0.94, 0.36, _viewportMat); win.position.set(wx, y + dh * 0.55, zf - 0.18); win.userData.noShadow = true; add(win);
+      }
+      y += dh;
+    }
+    const screen = box(baseW * 1.9, 3.0, 0.45, _viewportMat);
+    screen.position.set(cx, baseY + 1.8, cz - baseL - 0.5); screen.rotation.x = -0.42; screen.userData.noShadow = true; add(screen);
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(baseW * 0.3, baseW * 0.66, 1.9, 6), _hullMat);
+    cap.rotation.y = Math.PI / 6; cap.position.set(cx, y + 0.95, cz); add(cap);
+    bridgeTopY = y + 1.9;
   }
+
+  // (A5) Sensor mast + dish array on the bridge crown — leaned (bent on impact).
+  {
+    const cz = AFT_ORIGIN_Z + TOWER_OFFSET_Z, cx = bridgeCx;
+    const mast = cyl(0.15, 0.4, 12, dark, 7);
+    mast.position.set(cx, bridgeTopY + 6, cz); mast.rotation.z = 0.09; mast.rotation.x = -0.05; add(mast);
+    const crownY = bridgeTopY + 12, mx = cx + 0.9;
+    for (const [r, ox, oy, tilt] of [[2.2, 1.6, -1, 0.4], [3.4, -1.8, 1.8, -0.3], [1.4, 0.8, 3.6, 0.6]] as const) {
+      const d = new THREE.Mesh(new THREE.ConeGeometry(r, r * 0.5, 12, 1, true), dark);
+      d.position.set(mx + ox, crownY + oy, cz + 0.4); d.rotation.x = Math.PI / 2 + tilt; d.rotation.z = ox * 0.1; add(d);
+    }
+    for (const ox of [-0.9, 0.6, 1.5]) {
+      const whip = cyl(0.03, 0.06, 4 + Math.abs(ox), _antennaMat, 4);
+      whip.position.set(mx + ox, crownY + 2.2, cz - 0.6); whip.rotation.z = ox * 0.12; add(whip);
+    }
+    const globe = new THREE.Mesh(new THREE.SphereGeometry(1.4, 10, 8, 0, Math.PI * 2, 0, Math.PI / 2), _hullMat);
+    globe.position.set(mx, crownY + 0.5, cz); add(globe);
+  }
+
+  // (A6) Engine mount cage — exposed ring + radial struts around each bell so the
+  // engines read torn from their housing.
+  {
+    const ez = AFT_ORIGIN_Z + AFT_HALF_L + BELL_OFFSET_Z - 1.5, ey = AFT_HALF_H * 0.8;
+    for (const sx of [-BELL_OFFSET_X, BELL_OFFSET_X]) {
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(BELL_R * 1.06, 0.35, 6, 16), dark);
+      ring.rotation.y = Math.PI / 2; ring.position.set(sx, ey, ez); add(ring);
+      for (let k = 0; k < 6; k++) {
+        const a = (k / 6) * Math.PI * 2 + 0.3;
+        const strut = box(0.32, 0.32, 3.6, dark);
+        strut.position.set(sx + Math.cos(a) * BELL_R * 0.95, ey + Math.sin(a) * BELL_R * 0.7, ez - 1.6);
+        strut.lookAt(sx, ey, ez - 5); add(strut);
+      }
+    }
+  }
+
+  // (A7) Asymmetric impact breaches — +X impact flank shattered (2 big), -X lee
+  // flank one small tear. makeBreach = recessed void + bent flaps.
+  {
+    const breach = (side: number, y: number, z: number, radius: number) => {
+      const b = makeBreach(radius, _rand); tagWreckDecoration(b);
+      b.position.set(side * AFT_HALF_W * 1.3, y, z);
+      b.rotation.y = side > 0 ? Math.PI / 2 : -Math.PI / 2;
+      b.scale.set(1, 0.95, 1.2); add(b);
+    };
+    breach(1, AFT_CY + 4, 10, 4.4);     // impact flank — gaping
+    breach(1, AFT_CY - 3, 34, 2.8);     // impact flank — second
+    breach(-1, AFT_CY + 3, 22, 2.0);    // lee flank — small tear
+  }
+
+  // ── Tilt the whole exterior shell into a LIST + sink it into the dune. The
+  // interior boxes + colliders stay LEVEL (gameplay), so the wreck looks rolled
+  // + nose-down while the player still walks a level cavity (D185). Envelope is
+  // generous enough that the level box corners stay inside the tilted shell.
+  shell.rotation.z = -0.13;   // ~7.5° roll toward the +X impact flank
+  shell.rotation.x = -0.05;   // slight nose-down pitch
+  shell.position.y = -2.0;    // sink into the sand
+  g.add(shell);
 
   // ── Shadow flags.
   g.traverse((o) => {
@@ -1467,6 +1528,38 @@ export function placeMegaWreck(
     );
     p.rotation.y = Math.PI / 2;    // face +X (outward)
     registerNested(p, bowGroup ?? group, 'massive');
+  }
+
+  // ── ACAJ — asymmetric half-burial: wind-drifted sand mounds heap against the
+  // -X LEE flank (the impact +X flank stays exposed for the breaches/debris) +
+  // a big mound swallowing the driven-in bow nose. Reads as "sitting IN the
+  // dunes," and the asymmetric drift reinforces the list.
+  {
+    const cos = Math.cos(yaw), sin = Math.sin(yaw);
+    const wd = new THREE.Vector2(-cos, -sin);   // local -X drift, rotated into world by yaw
+    const leeLocal: Array<[number, number, number]> = [
+      [-AFT_HALF_W * 1.15, -6, 13],
+      [-AFT_HALF_W * 1.2, 12, 16],
+      [-AFT_HALF_W * 1.15, 30, 14],
+      [-AFT_HALF_W * 0.9, 44, 11],
+      [-BOW_HALF_W * 1.2, BOW_ORIGIN_Z, 12],
+      [-2, BOW_ORIGIN_Z - BOW_HALF_L, 18],       // big mound over the crushed nose
+    ];
+    for (const [lx, lz, sz] of leeLocal) {
+      const w = new THREE.Vector3(lx, 0, lz).applyQuaternion(finalQ).add(pos);
+      scene.add(makeSandMound(_terrain, w.x, w.z, wd, sz, rand));
+    }
+    // Bow ground-contact: a dark settling-depression disc where it hit nose-first.
+    const noseLocal = new THREE.Vector3(0, 0, BOW_ORIGIN_Z - BOW_HALF_L - 6);
+    const noseW = noseLocal.clone().applyQuaternion(finalQ).add(pos);
+    const scorch = new THREE.Mesh(
+      new THREE.CircleGeometry(7, 16),
+      new THREE.MeshLambertMaterial({ color: 0x3a2c20 }),
+    );
+    scorch.rotation.x = -Math.PI / 2;
+    scorch.position.set(noseW.x, _terrain.heightAt(noseW.x, noseW.z) + 0.04, noseW.z);
+    scorch.userData.noCollider = true; scorch.userData.noShadow = true;
+    scene.add(scorch);
   }
 
   // ── Surrounding debris field — 40 small pieces in a 50m radius.

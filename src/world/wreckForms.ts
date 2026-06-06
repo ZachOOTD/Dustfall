@@ -88,6 +88,54 @@ export function fuselageProfile(
 }
 
 // ──────────────────────────────────────────────────────────────────────────
+// Lofted faceted ship hull (a real angular hull, NOT a smooth lathe tube)
+// ──────────────────────────────────────────────────────────────────────────
+
+/** A ship-hull cross-section normalized to half-extents 1×1, centred on (0,0):
+ *  flat keel/bottom, hard bottom chines, vertical sides, a flat dorsal DECK,
+ *  top chines. Points go CCW. Lofting this reads as a real hull (flat deck for
+ *  the bridge, flat sides for panel lines, hard chine line) — not a dome. */
+const SHIP_SECTION: ReadonlyArray<readonly [number, number]> = [
+  [-0.60, -1.00], [0.60, -1.00],   // flat keel
+  [0.90, -0.78],                    // bottom chine
+  [1.00, -0.30], [1.00, 0.45],      // vertical side
+  [0.80, 0.84],                     // top chine
+  [0.44, 1.00], [-0.44, 1.00],      // flat dorsal deck
+  [-0.80, 0.84],                    // top chine
+  [-1.00, 0.45], [-1.00, -0.30],    // vertical side
+  [-0.90, -0.78],                   // bottom chine
+];
+
+export interface LoftStation { z: number; halfW: number; halfH: number; cy?: number }
+
+/** Loft the ship-hull cross-section along +Z through a list of stations (each a
+ *  half-width/half-height + optional vertical centre), building a FACETED hull
+ *  with a flat dorsal deck, hard chines, and flat sides. Open ends (for fracture
+ *  faces / transom). Outward normals → FrontSide shows the outside, the interior
+ *  shows through from inside the bay. */
+export function makeLoftedHull(stations: LoftStation[], material: THREE.Material): THREE.Mesh {
+  const N = SHIP_SECTION.length;
+  const ringOf = (s: LoftStation): THREE.Vector3[] =>
+    SHIP_SECTION.map(([x, y]) => new THREE.Vector3(x * s.halfW, (s.cy ?? 0) + y * s.halfH, s.z));
+  const rings = stations.map(ringOf);
+  const pos: number[] = [];
+  const push = (v: THREE.Vector3) => { pos.push(v.x, v.y, v.z); };
+  for (let i = 0; i < rings.length - 1; i++) {
+    const A = rings[i], B = rings[i + 1];
+    for (let k = 0; k < N; k++) {
+      const k2 = (k + 1) % N;
+      // Quad A[k]→A[k2]→B[k2]→B[k], wound for OUTWARD normals (CCW section + +Z loft).
+      push(A[k]); push(B[k]); push(B[k2]);
+      push(A[k]); push(B[k2]); push(A[k2]);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.computeVertexNormals();
+  return new THREE.Mesh(geo, material);
+}
+
+// ──────────────────────────────────────────────────────────────────────────
 // Exposed former rings (internal structure shown at breaks/breaches)
 // ──────────────────────────────────────────────────────────────────────────
 
@@ -152,6 +200,46 @@ export function makeBreach(radius: number, rand: Rng): THREE.Group {
  *  won't place a salvage panel on top of it. */
 export function tagWreckDecoration(group: THREE.Object3D): void {
   group.traverse((o) => { o.userData.isWreckDecoration = true; });
+}
+
+/** Localized vertex displacement — shove the verts of `geo` within `radius` of a
+ *  LOCAL-space `center` by `push` (world-ish units) along `dir`, falloff smooth.
+ *  For impact crumple / a driven-into-sand crushed nose (NOT a boolean cut). */
+export function dentGeometry(
+  geo: THREE.BufferGeometry,
+  center: THREE.Vector3,
+  radius: number,
+  push: THREE.Vector3,
+): void {
+  const p = geo.attributes.position;
+  const v = new THREE.Vector3();
+  for (let i = 0; i < p.count; i++) {
+    v.set(p.getX(i), p.getY(i), p.getZ(i));
+    const d = v.distanceTo(center);
+    if (d >= radius) continue;
+    const t = 1 - d / radius;                 // 1 at center → 0 at edge
+    const f = t * t * (3 - 2 * t);            // smoothstep falloff
+    p.setXYZ(i, v.x + push.x * f, v.y + push.y * f, v.z + push.z * f);
+  }
+  geo.computeVertexNormals();
+}
+
+/** A sagging cable/conduit as a TubeGeometry along a Catmull-Rom curve from `a`
+ *  to `b` with the midpoint dropped by `sag` (gravity droop). For dangling cables
+ *  at a hull fracture, conduit runs, etc. */
+export function makeCable(
+  a: THREE.Vector3,
+  b: THREE.Vector3,
+  sag: number,
+  mat: THREE.Material,
+  radius = 0.06,
+): THREE.Mesh {
+  const mid = a.clone().lerp(b, 0.5);
+  mid.y -= sag;
+  const q1 = a.clone().lerp(mid, 0.5); q1.y -= sag * 0.4;
+  const q2 = mid.clone().lerp(b, 0.5); q2.y -= sag * 0.4;
+  const curve = new THREE.CatmullRomCurve3([a, q1, mid, q2, b]);
+  return new THREE.Mesh(new THREE.TubeGeometry(curve, 14, radius, 5, false), mat);
 }
 
 // ──────────────────────────────────────────────────────────────────────────
