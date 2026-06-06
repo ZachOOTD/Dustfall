@@ -396,15 +396,13 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
   // Uses the shared 3D bell helper (CC-3) so the hero-scale 10m
   // diameter bells read as real flared nozzles from any angle.
   // ────────────────────────────────────────────────────────────────────
-  const bellCenterY = AFT_HALF_H * 0.7;
+  const bellCenterY = AFT_HALF_H * 1.15;   // ACAJ — raised onto the hull centerline (was 0.7 → read as low wheels)
   const bellCenterZ = AFT_ORIGIN_Z + AFT_HALF_L + WALL_THICK + BELL_OFFSET_Z;
   const BELL_DEPTH = BELL_R * 1.1;
   for (const side of [-1, 1] as const) {
     const x = side * BELL_OFFSET_X;
-    // Mounting frame behind the bell.
-    const frame = box(BELL_R * 1.8, BELL_R * 1.6, 1.2, _hullDarkMat);
-    frame.position.set(x, bellCenterY, bellCenterZ - 1.0);
-    g.add(frame);
+    // (ACAJ — the flat billboard mounting frame was removed; the A6 exposed cage
+    // ring + struts in the shell is the mount now.)
     // 3D bell — mouth opens +Z; anchor base just past the mounting frame.
     const bell = makeEngineBellMesh(BELL_R, BELL_DEPTH, _hullMat, _nozzleInteriorMat);
     bell.rotation.x = Math.PI / 2;
@@ -887,7 +885,7 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
   // (A6) Engine mount cage — exposed ring + radial struts around each bell so the
   // engines read torn from their housing.
   {
-    const ez = AFT_ORIGIN_Z + AFT_HALF_L + BELL_OFFSET_Z - 1.5, ey = AFT_HALF_H * 0.8;
+    const ez = AFT_ORIGIN_Z + AFT_HALF_L + BELL_OFFSET_Z - 1.5, ey = AFT_HALF_H * 1.15;
     for (const sx of [-BELL_OFFSET_X, BELL_OFFSET_X]) {
       const ring = new THREE.Mesh(new THREE.TorusGeometry(BELL_R * 1.06, 0.35, 6, 16), dark);
       ring.rotation.y = Math.PI / 2; ring.position.set(sx, ey, ez); add(ring);
@@ -914,13 +912,31 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
     breach(-1, AFT_CY + 3, 22, 2.0);    // lee flank — small tear
   }
 
-  // ── Tilt the whole exterior shell into a LIST + sink it into the dune. The
-  // interior boxes + colliders stay LEVEL (gameplay), so the wreck looks rolled
-  // + nose-down while the player still walks a level cavity (D185). Envelope is
-  // generous enough that the level box corners stay inside the tilted shell.
-  shell.rotation.z = -0.13;   // ~7.5° roll toward the +X impact flank
-  shell.rotation.x = -0.05;   // slight nose-down pitch
-  shell.position.y = -2.0;    // sink into the sand
+  // (A8) Hull PLATING — a dorsal spine keel strake running the full length (the
+  // cheapest "one long ship" signal) + fore-aft flank strakes with irregular
+  // spacing → the flat faces read as plated hull, not a smooth box. Rule 7: ≥12cm.
+  {
+    const L = 110, z0 = BOW_ORIGIN_Z - BOW_HALF_L + 4;
+    // Dorsal spine keel.
+    const spine = box(1.4, 0.5, L, _hullMat);
+    spine.position.set(bridgeCx * 0.3, AFT_CY + AFT_HALF_H * 1.12, (z0 + z0 + L) / 2); add(spine);
+    // Flank strakes (both sides), irregular Y, ≥14cm proud.
+    for (const side of [-1, 1]) {
+      for (const yf of [0.35, 0.62, 0.85, 1.05]) {
+        const st = box(0.18, 0.4, L * 0.92, _hullDarkMat);
+        st.position.set(side * AFT_HALF_W * 1.28, AFT_CY - AFT_HALF_H + AFT_HALF_H * 2 * yf, (z0 + z0 + L) / 2 + (yf - 0.6) * 6);
+        add(st);
+      }
+    }
+  }
+
+  // ── Tilt the whole exterior shell into a stronger LIST + sink it into the dune.
+  // The interior boxes + colliders stay LEVEL (gameplay), so the wreck looks
+  // rolled + nose-down while the player still walks a level cavity (D185). The
+  // generous envelope keeps the level box corners inside the tilted shell.
+  shell.rotation.z = -0.19;   // ~11° roll toward the +X impact flank
+  shell.rotation.x = -0.06;   // nose-down pitch
+  shell.position.y = -2.5;    // sink into the sand
   g.add(shell);
 
   // ── Shadow flags.
