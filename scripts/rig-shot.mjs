@@ -872,7 +872,7 @@ const SCENARIOS = {
     const r = await page.evaluate((ang) => {
       const ctx = window.__game.ctx;
       ctx.weather.intensity = 0; ctx.weather.cloudiness = 0.15;
-      window.__game.setTime(0.5);                  // bright midday for max detail read
+      window.__game.setTime(0.34);                 // true midday (0.5 was 18:00) for max detail read
       ctx.three.renderer.toneMappingExposure = 1.2;
       ctx.flags.thirdPerson = false;
       if (ctx.player.rig) ctx.player.rig.group.visible = false;

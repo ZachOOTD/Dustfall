@@ -32,13 +32,18 @@ import { createPaintedMetalMaterial } from './paintMaterial.ts';
 import { createRustedHullMaterial } from './hullMaterial.ts';
 
 // ── Shared materials (ABH procedural shader vocabulary).
-const _hullMat = createRustedHullMaterial({ baseColor: Tuning.WRECK_HULL_HEX, streakIntensity: 0.55 });
-const _hullDarkMat = createRustedHullMaterial({ baseColor: Tuning.WRECK_HULL_DARK_HEX, streakIntensity: 0.40 });
+const _hullMat = createRustedHullMaterial({ baseColor: Tuning.WRECK_HULL_HEX, streakIntensity: 0.85 });
+const _hullDarkMat = createRustedHullMaterial({ baseColor: Tuning.WRECK_HULL_DARK_HEX, streakIntensity: 0.6 });
 const _rustMat = createPaintedMetalMaterial(Tuning.WRECK_RUST_HEX, { wearLevel: 0.65 });
 const _nozzleInteriorMat = new THREE.MeshBasicMaterial({ color: Tuning.WRECK_NOZZLE_INTERIOR_HEX });
 const _antennaMat = createMetalMaterial(Tuning.WRECK_ANTENNA_HEX, { wornScale: 6.0, scratchStrength: 0.04 });
 const _pipeMat = createMetalMaterial(0x3a3028, { wornScale: 5.0, scratchStrength: 0.04 });
 const _viewportMat = new THREE.MeshBasicMaterial({ color: 0x14181c });
+// Fresh oxidized torn metal (brighter orange) for fracture + breach rims so the
+// cut reads distinct from the weathered skin.
+const _tornMat = createPaintedMetalMaterial(0xb5642e, { wearLevel: 0.5 });
+// Translucent rust-streak decal (hangs DOWN from features; +X-flank biased).
+const _streakMat = new THREE.MeshBasicMaterial({ color: 0x6e3a22, transparent: true, opacity: 0.5, depthWrite: false });
 void _rustMat;
 
 // ── Burial + wall thickness.
@@ -301,12 +306,39 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
   }
 
   // (A8) Asymmetric impact breaches — +X impact flank shattered (2), -X lee tear (1).
+  // Each backed by a rib + deck-edge so the void shows structure (not a flat hole),
+  // with a fresh-torn-metal rim.
+  const breachSites: Array<[number, number, number, number]> = [[1, 11, 30, 3.6], [1, 5, 52, 2.4], [-1, 10, 40, 1.8]];
   {
-    const breach = (side: number, y: number, z: number, r: number) => {
+    for (const [side, y, z, r] of breachSites) {
       const b = makeBreach(r, _rand); tagWreckDecoration(b);
-      b.position.set(side * 11.5, y, z); b.rotation.y = side > 0 ? Math.PI / 2 : -Math.PI / 2; b.scale.set(1, 0.95, 1.2); add(b);
+      b.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh && m.material === _hullDarkMat) m.material = _tornMat; });
+      b.position.set(side * 12, y, z); b.rotation.y = side > 0 ? Math.PI / 2 : -Math.PI / 2; b.scale.set(1, 0.95, 1.2); add(b);
+      // Back the void with a rib arc + a short deck-edge ledge so structure shows.
+      const rib = makeFormerRings(r * 0.85, 1, 1, { tube: 0.3 }); rib.rotation.y = side > 0 ? 0 : Math.PI;
+      rib.position.set(side * (12 - 0.6), y, z); rib.scale.set(0.5, 0.9, 0.9); add(rib);
+      const ledge = box(0.5, 0.2, r * 1.4, _tornMat); ledge.position.set(side * (12 - 0.7), y - r * 0.4, z); add(ledge);
+    }
+  }
+
+  // (A9) Directional weathering — translucent rust streaks hanging DOWN from the
+  // breach rims, fracture, and deck lips; concentrated on the +X impact flank +
+  // near the fracture, near-clean on the -X lee flank (directional = story + scale).
+  {
+    const streak = (x: number, yTop: number, z: number, w: number, h: number, faceX: number) => {
+      const q = new THREE.Mesh(new THREE.PlaneGeometry(w, h), _streakMat);
+      q.position.set(x, yTop - h / 2, z); q.rotation.y = faceX > 0 ? Math.PI / 2 : -Math.PI / 2;
+      q.userData.noShadow = true; add(q);
     };
-    breach(1, 11, 30, 3.6); breach(1, 5, 52, 2.4); breach(-1, 10, 40, 1.8);
+    // Below each breach (impact flank gets denser streaks).
+    for (const [side, y, z, r] of breachSites) {
+      const n = side > 0 ? 4 : 1;
+      for (let i = 0; i < n; i++) streak(side * 12.05, y - r * 0.7, z + (i - n / 2) * r * 0.5, 0.5 + (i % 2) * 0.4, 3 + (i % 3), side);
+    }
+    // Fracture flank streaks (+X, fresh oxidation runs).
+    for (let i = 0; i < 5; i++) streak(11.8, 9 - i * 0.4, FRACTURE_Z - 6 + i * 3, 0.6, 4 + (i % 2) * 2, 1);
+    // A few sparse lee-flank streaks (weathered).
+    for (let i = 0; i < 2; i++) streak(-12.0, 8, 20 + i * 22, 0.5, 3, -1);
   }
 
   // Tilt the shell into a STRONG list + sink it deep. Interior boxes stay LEVEL
@@ -391,7 +423,8 @@ export function placeMegaWreck(
     const cos = Math.cos(yaw), sin = Math.sin(yaw);
     const wd = new THREE.Vector2(-cos, -sin);
     const lee: Array<[number, number, number]> = [
-      [-13, 0, 14], [-13, 30, 16], [-12, 55, 13], [-10, -30, 12], [-2, -56, 16],
+      [-13, -10, 18], [-14, 18, 22], [-13, 42, 19], [-11, 60, 16],   // lee flank, to the belly waterline
+      [-9, -34, 16], [-1, -58, 22], [4, -52, 16],                    // big mounds swallowing the crushed bow
     ];
     for (const [lx, lz, sz] of lee) {
       const w = worldOf(new THREE.Vector3(lx, 0, lz));
