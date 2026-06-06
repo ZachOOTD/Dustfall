@@ -901,8 +901,13 @@ const SCENARIOS = {
       const h = maxY - minY;
       const eye = cy - h * 0.05;                    // low, dramatic eye line
       const d = span * 0.92;                        // close enough to read detail
-      if (ang === 'interior') { cam.position.set(cx, cy, cz); cam.lookAt(cx + 1, cy, cz + 1); }
-      else if (ang === 'side') { cam.position.set(cx + d, eye + h * 0.18, cz); cam.lookAt(cx, cy, cz); }
+      if (ang === 'interior') {
+        // Inside the spinal corridor (bow → aft), in the wreck's own frame.
+        const q = mw.quaternion;
+        cam.position.copy(new V(0, 1.6, -20).applyQuaternion(q).add(mw.position));
+        cam.lookAt(new V(0, 1.6, 40).applyQuaternion(q).add(mw.position));
+      }
+      else if (ang === 'side') { cam.position.set(cx + d, eye + h * 0.28, cz); cam.lookAt(cx, cy, cz); }
       else if (ang === 'front') { cam.position.set(cx + d * 0.25, eye + h * 0.15, cz - d * 0.95); cam.lookAt(cx, cy, cz); }
       else if (ang === 'rear') { cam.position.set(cx, eye + h * 0.2, cz + d); cam.lookAt(cx, cy, cz); }
       // 'hero' = low bow-quarter from the +X impact flank — the dagger silhouette + fracture.

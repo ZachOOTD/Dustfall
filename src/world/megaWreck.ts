@@ -53,10 +53,6 @@ const AFT_FACE_Z = 18;       // aft hull torn face
 const ISLAND_Z = 68;         // command island Z (over the bridge)
 const TRANSOM_Z = 76;        // engine transom
 
-// ── Engine bells (narrow ship → smaller bells).
-const BELL_R = 3.2;
-const BELL_DX = 4.2;
-
 // ── Interior cell model ────────────────────────────────────────────────
 // A walkable box (corridor segment or room). Consecutive cells share OPEN Z
 // faces (no wall between) → one connected interior. Side openings (the bow
@@ -176,22 +172,24 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
   shell.name = 'shell';
   const add = (m: THREE.Object3D) => { m.userData.noCollider = true; shell.add(m); };
 
-  // (A1) Bow mass — a sharp tapered wedge driving nose-first into the dune.
+  // (A1) Bow mass — a sharp tapered wedge driving nose-first into the dune, riding
+  // LOWER than the aft (snapped back) so the fracture reads as a hard notch.
   add(makeLoftedHull([
-    { z: -60, halfW: 1.3, halfH: 1.8, cy: 1.0 },     // crushed buried tip
-    { z: -50, halfW: 4.8, halfH: 5.0, cy: 4.0 },
-    { z: -32, halfW: 9.2, halfH: 8.2, cy: 6.0 },
-    { z: -16, halfW: 11.0, halfH: 9.0, cy: 6.5 },
-    { z: BOW_FACE_Z, halfW: 11.0, halfH: 9.0, cy: 7.0 },   // fracture face
+    { z: -60, halfW: 1.3, halfH: 2.0, cy: -1.0 },    // crushed buried tip (driven down)
+    { z: -50, halfW: 5.0, halfH: 5.6, cy: 2.5 },
+    { z: -32, halfW: 9.6, halfH: 9.0, cy: 4.5 },
+    { z: -16, halfW: 11.2, halfH: 10.0, cy: 5.0 },
+    { z: BOW_FACE_Z, halfW: 11.0, halfH: 9.6, cy: 5.2 },   // fracture face (low)
   ], _hullMat));
 
-  // (A2) Aft mass — widest amidships, raking down to a blunt low transom.
+  // (A2) Aft mass — a fat-bellied wedge, widest + tallest amidships (height ~1/4
+  // length so it reads as a dagger-wedge, not a plate), raking to a blunt transom.
   add(makeLoftedHull([
-    { z: AFT_FACE_Z, halfW: 11.0, halfH: 9.0, cy: 7.5 },   // fracture face (rides higher)
-    { z: 36, halfW: 13.0, halfH: 11.0, cy: 8.5 },          // amidships peak
-    { z: 56, halfW: 12.5, halfH: 10.0, cy: 7.5 },
-    { z: ISLAND_Z, halfW: 11.0, halfH: 9.0, cy: 7.0 },
-    { z: TRANSOM_Z, halfW: 9.5, halfH: 7.0, cy: 5.5 },     // blunt transom
+    { z: AFT_FACE_Z, halfW: 11.5, halfH: 11.5, cy: 8.5 },  // fracture face (rides high → notch)
+    { z: 36, halfW: 13.5, halfH: 14.0, cy: 9.5 },          // amidships peak (fat belly)
+    { z: 56, halfW: 13.0, halfH: 12.5, cy: 8.5 },
+    { z: ISLAND_Z, halfW: 11.5, halfH: 10.5, cy: 7.5 },
+    { z: TRANSOM_Z, halfW: 9.8, halfH: 8.0, cy: 6.0 },     // blunt transom
   ], _hullMat));
 
   // (A3) Mid-hull FRACTURE cross-section — the money shot. Cut-open guts in the
@@ -217,70 +215,88 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
     rim.rotation.x = -Math.PI / 2; rim.position.set(0, cy + 5, AFT_FACE_Z + 0.5); rim.scale.set(1.5, 1, 0.6); add(rim);
   }
 
-  // (A4) Command island — stepped 5-deck wedding-cake on the aft dorsal, offset
-  // toward the +X impact flank, with framed viewports + raked windscreen + cap.
-  let islandTopY = 16;
+  // (A4) Command island — a LOW WIDE 3-deck island (each deck wider than tall,
+  // stepping back only slightly) that LEANS forward (impact) and grows out of a
+  // hull shoulder — dominant but reads as a bridge riding ON the hull, not a
+  // separate ziggurat. Big readable framed viewports on the forward + flank faces.
+  let islandTopY = 24;
   {
-    const cz = ISLAND_Z, cx = 3.0, baseY = 15;     // dorsal deck height
-    const baseW = 4.0, baseL = 4.5, decks = 5, dh = 2.6;
-    let y = baseY;
-    for (let i = 0; i < decks; i++) {
-      const t = i / decks, w = baseW * (1 - t * 0.45), l = baseL * (1 - t * 0.3);
-      const deck = box(w * 2, dh, l * 2, _hullMat); deck.position.set(cx, y + dh / 2, cz + t * 1.4); add(deck);
-      const winN = 5, zf = cz + t * 1.4 - l;
+    const cz = ISLAND_Z, cx = 3.0, baseY = 17;
+    const shoulder = box(11, 2.0, 11, _hullMat); shoulder.position.set(cx, baseY - 0.5, cz); add(shoulder);  // grows out of the deck
+    const island = new THREE.Group(); island.position.set(cx, baseY, cz); island.rotation.x = -0.12;  // lean forward about its base
+    const decks: Array<[number, number, number]> = [[5.0, 3.0, 3.2], [4.4, 2.8, 2.6], [3.6, 2.6, 2.0]];  // [hw, h, hl]
+    let y = 0;
+    decks.forEach(([hw, dh, hl], i) => {
+      const deck = box(hw * 2, dh, hl * 2, _hullMat); deck.position.set(0, y + dh / 2, -i * 0.5);
+      deck.userData.noCollider = true; island.add(deck);
+      // Big readable viewports: forward (-Z) face, framed ≥12cm relief.
+      const winN = 5, zf = -i * 0.5 - hl;
       for (let k = 0; k < winN; k++) {
-        const wx = cx + (k - (winN - 1) / 2) * (w * 1.5 / winN);
-        const fr = box(0.9, 1.1, 0.16, dark); fr.position.set(wx, y + dh * 0.55, zf - 0.08); add(fr);
-        const wn = box(0.7, 0.9, 0.34, _viewportMat); wn.position.set(wx, y + dh * 0.55, zf - 0.18); wn.userData.noShadow = true; add(wn);
+        const wx = (k - (winN - 1) / 2) * (hw * 1.55 / winN);
+        const fr = box(1.0, 1.3, 0.18, dark); fr.position.set(wx, y + dh * 0.55, zf - 0.09); fr.userData.noCollider = true; island.add(fr);
+        const wn = box(0.78, 1.05, 0.4, _viewportMat); wn.position.set(wx, y + dh * 0.55, zf - 0.2); wn.userData.noCollider = true; wn.userData.noShadow = true; island.add(wn);
       }
       y += dh;
-    }
-    const screen = box(baseW * 1.9, 2.6, 0.4, _viewportMat);
-    screen.position.set(cx, baseY + 1.5, cz - baseL - 0.5); screen.rotation.x = -0.4; screen.userData.noShadow = true; add(screen);
-    const cap = new THREE.Mesh(new THREE.CylinderGeometry(baseW * 0.3, baseW * 0.66, 1.7, 6), _hullMat);
-    cap.rotation.y = Math.PI / 6; cap.position.set(cx, y + 0.85, cz); add(cap);
-    islandTopY = y + 1.7;
+    });
+    // Forward-raked windscreen wedge capping the lean.
+    const screen = box(9, 2.4, 0.5, _viewportMat); screen.position.set(0, 1.6, -4.5); screen.rotation.x = -0.5; screen.userData.noCollider = true; screen.userData.noShadow = true; island.add(screen);
+    add(island);
+    islandTopY = baseY + y + 0.5;
   }
 
-  // (A5) Sensor mast + dish array on the island crown — bent on impact.
+  // (A5) Sensor mast + dish array on the island crown — distinct dish sizes, a
+  // leaned mast, contrasting lighter metal, clear spacing (NOT a blob).
   {
     const cz = ISLAND_Z, cx = 3.0;
-    const mast = cyl(0.14, 0.34, 10, dark, 7); mast.position.set(cx, islandTopY + 5, cz); mast.rotation.z = 0.1; mast.rotation.x = -0.05; add(mast);
-    const crownY = islandTopY + 10, mx = cx + 0.8;
-    for (const [r, ox, oy, tilt] of [[1.8, 1.3, -1, 0.4], [2.8, -1.6, 1.5, -0.3], [1.1, 0.6, 3.0, 0.6]] as const) {
-      const d = new THREE.Mesh(new THREE.ConeGeometry(r, r * 0.5, 12, 1, true), dark);
+    const mast = cyl(0.16, 0.36, 9, _antennaMat, 7); mast.position.set(cx, islandTopY + 4.5, cz); mast.rotation.z = 0.12; mast.rotation.x = -0.06; add(mast);
+    const crownY = islandTopY + 9, mx = cx + 0.7;
+    // 3 clearly different-diameter shallow paraboloid dishes on standoff arms.
+    for (const [r, ox, oy, tilt] of [[1.0, 1.8, -1.5, 0.4], [2.4, -2.2, 0.5, -0.3], [3.6, 0.5, 2.6, 0.5]] as const) {
+      const arm = box(0.18, 0.18, Math.abs(ox) + 0.5, _antennaMat); arm.position.set(mx + ox / 2, crownY + oy, cz + 0.2); arm.rotation.y = Math.PI / 2; add(arm);
+      const d = new THREE.Mesh(new THREE.ConeGeometry(r, r * 0.45, 14, 1, true), _antennaMat);
       d.position.set(mx + ox, crownY + oy, cz + 0.4); d.rotation.x = Math.PI / 2 + tilt; d.rotation.z = ox * 0.1; add(d);
+      const stem = box(0.1, 0.1, r * 0.5, dark); stem.position.set(mx + ox, crownY + oy, cz + 0.4 + r * 0.2); add(stem);
     }
-    for (const ox of [-0.8, 0.6, 1.4]) { const whip = cyl(0.03, 0.05, 3.5 + Math.abs(ox), _antennaMat, 4); whip.position.set(mx + ox, crownY + 2, cz - 0.5); whip.rotation.z = ox * 0.12; add(whip); }
-    const globe = new THREE.Mesh(new THREE.SphereGeometry(1.2, 10, 8, 0, Math.PI * 2, 0, Math.PI / 2), _hullMat); globe.position.set(mx, crownY + 0.4, cz); add(globe);
+    for (const ox of [-0.7, 0.5, 1.3]) { const whip = cyl(0.025, 0.05, 3.5 + Math.abs(ox) * 1.5, _antennaMat, 4); whip.position.set(mx + ox, crownY + 2.2, cz - 0.5); whip.rotation.z = ox * 0.12; add(whip); }
+    const globe = new THREE.Mesh(new THREE.SphereGeometry(1.1, 12, 9, 0, Math.PI * 2, 0, Math.PI / 2), _antennaMat); globe.position.set(mx, crownY + 0.4, cz); add(globe);
   }
 
-  // (A6) Engine bank — 3 clustered flared bells at the transom on an exposed torn
-  // mount cage, asymmetric (one skyward, one twisted toward the buried flank).
+  // (A6) Engine bank — TWO big flared bells PROJECTING ~5m off the transom (capital
+  // ships read as 2 or 4, never 3), hollow mouths with a recessed combustion void,
+  // on an exposed torn mount cage; asymmetric (one offset + shrunk = impact damage).
   {
-    const ez = TRANSOM_Z + 1, ey = 6;
-    const slots: Array<[number, number, number]> = [[-BELL_DX, ey - 1, 1.0], [0, ey + 1.5, 1.05], [BELL_DX, ey, 0.92]];
-    for (const [sx, sy, scl] of slots) {
-      const bell = makeEngineBellMesh(BELL_R * scl, BELL_R * 1.1, _hullMat, _nozzleInteriorMat);
-      bell.rotation.x = Math.PI / 2; bell.position.set(sx, sy, ez); add(bell);
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(BELL_R * scl * 1.05, 0.3, 6, 14), dark);
-      ring.rotation.y = Math.PI / 2; ring.position.set(sx, sy, ez - BELL_R * 0.7); add(ring);
-      for (let k = 0; k < 5; k++) {
-        const a = (k / 5) * Math.PI * 2 + 0.3;
-        const strut = box(0.26, 0.26, 3, dark);
-        strut.position.set(sx + Math.cos(a) * BELL_R * scl * 0.9, sy + Math.sin(a) * BELL_R * scl * 0.7, ez - 2);
-        strut.lookAt(sx, sy, ez - 4); add(strut);
+    const ez = TRANSOM_Z + 2.5, ey = 7;
+    const slots: Array<[number, number, number, number]> = [
+      [-5.0, ey + 0.5, 4.2, 0.0],   // [x, y, mouthR, tilt]
+      [5.0, ey - 1.2, 3.7, 0.14],   // offset + shrunk + twisted (damage)
+    ];
+    for (const [sx, sy, mouthR, tilt] of slots) {
+      const bell = makeEngineBellMesh(mouthR, mouthR * 1.4, _hullMat, _nozzleInteriorMat);
+      bell.rotation.x = Math.PI / 2 + tilt; bell.position.set(sx, sy, ez); add(bell);
+      // Recessed near-black combustion void deep in the mouth.
+      const voidDisc = new THREE.Mesh(new THREE.CircleGeometry(mouthR * 0.55, 16), _nozzleInteriorMat);
+      voidDisc.position.set(sx, sy, ez - mouthR * 0.6); add(voidDisc);
+      // Exposed mount cage ring + radial struts tying it to the hull.
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(mouthR * 1.08, 0.35, 6, 16), dark);
+      ring.rotation.y = Math.PI / 2; ring.position.set(sx, sy, ez - mouthR * 1.0); add(ring);
+      for (let k = 0; k < 6; k++) {
+        const a = (k / 6) * Math.PI * 2 + 0.3;
+        const strut = box(0.4, 0.4, 4, dark);
+        strut.position.set(sx + Math.cos(a) * mouthR * 0.95, sy + Math.sin(a) * mouthR * 0.7, ez - mouthR * 1.4);
+        strut.lookAt(sx, sy, ez - mouthR * 2.5); add(strut);
       }
     }
+    // 2 small maneuvering thrusters above for variety.
+    for (const sx of [-2, 2]) { const t = makeEngineBellMesh(1.2, 1.6, _hullMat, _nozzleInteriorMat); t.rotation.x = Math.PI / 2; t.position.set(sx, ey + 5, ez - 1); add(t); }
   }
 
   // (A7) Hull plating — dorsal spine keel + irregular fore-aft flank strakes
   // (dense on the narrow hull → reads as a real plated ship, not a smooth blade).
   {
     const z0 = -52, z1 = TRANSOM_Z - 2, midZ = (z0 + z1) / 2, lenH = (z1 - z0) / 2;
-    const spine = box(1.0, 0.5, lenH * 2, _hullMat); spine.position.set(2.5, 15.5, midZ); add(spine);
-    for (const side of [-1, 1]) for (const [yf, zoff] of [[3, -2], [6, 1], [9, -1], [11.5, 2]] as const) {
-      const st = box(0.16, 0.34, lenH * 1.7, dark); st.position.set(side * 11.5, yf, midZ + zoff); add(st);
+    const spine = box(1.0, 0.5, lenH * 2, _hullMat); spine.position.set(2.5, 18.5, midZ); add(spine);
+    for (const side of [-1, 1]) for (const [yf, zoff] of [[3, -2], [6.5, 1], [10, -1], [13.5, 2]] as const) {
+      const st = box(0.16, 0.36, lenH * 1.7, dark); st.position.set(side * 12.5, yf, midZ + zoff); add(st);
     }
   }
 
@@ -293,10 +309,12 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
     breach(1, 11, 30, 3.6); breach(1, 5, 52, 2.4); breach(-1, 10, 40, 1.8);
   }
 
-  // Tilt the shell into a list + sink it. Interior boxes stay LEVEL (D185).
-  shell.rotation.z = -0.20;   // ~11.5° roll toward the +X impact flank
-  shell.rotation.x = -0.06;   // nose-down pitch
-  shell.position.y = -2.5;
+  // Tilt the shell into a STRONG list + sink it deep. Interior boxes stay LEVEL
+  // (D185); the narrow dagger hull has ample margin over the narrow interior so
+  // even a hard roll keeps the level box corners enveloped.
+  shell.rotation.z = -0.33;   // ~19° roll toward the +X impact flank
+  shell.rotation.x = -0.13;   // ~7.5° nose-down pitch
+  shell.position.y = -4.0;    // sink deep into the dune
   g.add(shell);
 
   // Shadow flags.
