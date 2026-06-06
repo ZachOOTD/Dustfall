@@ -176,8 +176,16 @@ export function makeBreach(radius: number, rand: Rng): THREE.Group {
   const g = new THREE.Group();
   // Recessed interior darkness (slightly behind the skin so it reads as depth).
   const voidDisc = new THREE.Mesh(new THREE.CircleGeometry(radius * 0.95, 14), _voidMat);
-  voidDisc.position.z = -radius * 0.4;
+  voidDisc.position.z = -radius * 0.45;
   g.add(voidDisc);
+  // Dark collar bridging the skin plane to the recessed disc, so an OBLIQUE sightline
+  // hits a dark wall (not daylight) through the hole — reads as a real cavity.
+  const collar = new THREE.Mesh(
+    new THREE.CylinderGeometry(radius * 0.95, radius * 0.95, radius * 0.45, 14, 1, true),
+    _voidMat,
+  );
+  collar.rotation.x = Math.PI / 2; collar.position.z = -radius * 0.225;
+  g.add(collar);
   // Torn rim flaps — irregular bent plates splayed outward around the rim.
   const flapN = 7 + Math.floor(rand() * 4);
   for (let i = 0; i < flapN; i++) {
