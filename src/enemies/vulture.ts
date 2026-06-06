@@ -143,18 +143,47 @@ export function makeVultureVisual(): THREE.Group {
     return p;
   };
 
-  // ── Body — plump hunched ovoid + shoulder hump. Stays on the root. ──
-  const body = new THREE.Mesh(new THREE.SphereGeometry(0.16, 12, 10), _plumage);
-  body.scale.set(1.35, 1.05, 1.0);
-  body.position.set(-0.02, 0.26, 0);
+  // ── Body — GAUNT hunched form: a small slim trunk raised off the legs (the
+  //    thin shanks show beneath = starved stance), a deep narrow keel, a pinched
+  //    belly, bony shoulders standing proud. Stays on the root. ──
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.125, 12, 10), _plumage);
+  body.scale.set(1.45, 1.18, 0.62);   // slim + upright, narrow across — not a round ball
+  body.position.set(-0.03, 0.30, 0);
   g.add(body);
-  const hump = new THREE.Mesh(new THREE.SphereGeometry(0.10, 10, 8), _plumage);
-  hump.scale.set(1.2, 0.9, 1.0);
-  hump.position.set(-0.08, 0.36, 0);
+  // Protruding breast keel (sternum ridge) — a deep thin fin at the front, the
+  // hungry bird's sharp breastbone catching the light.
+  const keel = new THREE.Mesh(new THREE.SphereGeometry(0.075, 8, 8), _plumage);
+  keel.scale.set(0.95, 1.45, 0.4);
+  keel.position.set(0.075, 0.26, 0);
+  g.add(keel);
+  // Pinched lower belly — small + tucked up so the legs are exposed (no fat gut).
+  const belly = new THREE.Mesh(new THREE.SphereGeometry(0.075, 9, 8), _plumage);
+  belly.scale.set(1.1, 0.78, 0.62);
+  belly.position.set(-0.04, 0.2, 0);
+  g.add(belly);
+  // Bony hunched shoulders — narrow + raised, reading as a starved hump.
+  const hump = new THREE.Mesh(new THREE.SphereGeometry(0.085, 10, 8), _plumage);
+  hump.scale.set(1.1, 1.05, 0.74);
+  hump.position.set(-0.1, 0.4, 0);
   g.add(hump);
+  // Mangy worn patches — bare grey-pink skin showing through where feathers fell
+  // out (the strongest "starved/ragged" read). A couple on the flanks + rump.
+  for (const [px, py, pz, s] of [[-0.06, 0.30, 0.10, 1.0], [-0.14, 0.26, -0.07, 0.85], [0.02, 0.20, -0.09, 0.7]] as const) {
+    const patch = new THREE.Mesh(new THREE.SphereGeometry(0.028 * s, 7, 6), _bareSkin);
+    patch.scale.set(1.5, 1.1, 0.35);
+    patch.position.set(px, py, pz);
+    g.add(patch);
+  }
+  // Ragged feather tufts — scraggly, uneven quills sticking out of the back/rump.
+  for (const [tx, ty, tz, ax, az] of [[-0.16, 0.34, 0.03, 0.4, 0.2], [-0.13, 0.40, -0.05, 0.7, -0.3], [-0.18, 0.30, -0.02, 0.1, 0.5], [-0.10, 0.42, 0.06, 0.9, 0.4]] as const) {
+    const tuft = new THREE.Mesh(new THREE.ConeGeometry(0.012, 0.07, 4), _plumageEdge);
+    tuft.position.set(tx, ty, tz);
+    tuft.rotation.set(az, 0, Math.PI - ax);   // splay back + up, irregular
+    g.add(tuft);
+  }
   // Feather ruff at the neck base — stays on the root (the collar the neck rises from).
-  const ruff = new THREE.Mesh(new THREE.TorusGeometry(0.075, 0.03, 8, 14), _plumageEdge);
-  ruff.position.set(0.06, 0.34, 0);
+  const ruff = new THREE.Mesh(new THREE.TorusGeometry(0.062, 0.024, 8, 14), _plumageEdge);
+  ruff.position.set(0.06, 0.33, 0);
   ruff.rotation.set(0, 0, Math.PI / 2);
   ruff.scale.set(1.0, 1.0, 0.7);
   g.add(ruff);

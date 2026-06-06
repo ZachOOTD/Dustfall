@@ -77,6 +77,13 @@ the generous `VULTURE_SCAVENGE_RADIUS` (probability-gated, `VULTURE_SCAVENGE_CHA
 off the ground (`despawnPickup`), and carry it off. Cross-module via `ctx.pickups`/`despawnPickup` + `alertShrewToSwoop`
 (no new circular deps). NEW rig-shots `vulture-escape` + `vulture-scavenge` (both PASS); hunt/flight/kill regressions PASS.
 
+**Follow-up 4 (same-day) — gaunt/mangy model pass.** Per user feedback the vulture read too plump. Reworked
+`makeVultureVisual` from a round ovoid into a STARVED silhouette: a small slim upright trunk raised off the legs (the two
+thin bare shanks now show beneath = scrawny stance), a deep narrow breast keel + pinched lower belly (no fat gut), bony
+hunched shoulders, ragged uneven feather tufts on the back/rump, and worn bare-skin patches showing through where feathers
+fell out. 3 screenshot-iterated rounds (rule 8). Also fixed the `vulture-pose` rig-shot to frame a true side/front-quarter
+profile (was showing a rear view). Geometry-only — no FSM/physics/save impact.
+
 ## Session ACAH — 2026-06-05 — Big overnight: bug sweep + loot bootstrap + vulture + cloud shadows ✓ verify pass (tsc clean)
 
 `verified` — `npm run verify` (tsc) PASS; **no save bump** (all additive, v14). A large multi-tier session: cleared the

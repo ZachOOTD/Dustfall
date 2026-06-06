@@ -1041,9 +1041,10 @@ const SCENARIOS = {
       ctx.flags.paused = true;
       v.pos.set(a.x, a.y, a.z);
       v.mesh.position.set(a.x, a.y, a.z);
-      v.mesh.rotation.set(0, Math.PI / 2, 0);   // model faces +X → show its side/3q
+      v.mesh.rotation.set(0, 0, 0);   // head faces +X → camera on +Z sees the profile
       const cam = ctx.three.camera;
-      const cp = ang === 'side' ? [a.x, a.y + 0.05, a.z + 1.3] : [a.x + 1.1, a.y + 0.12, a.z + 1.1];
+      // side = pure +Z (left flank profile); 3q = front-quarter (+X +Z).
+      const cp = ang === 'side' ? [a.x, a.y + 0.04, a.z + 0.82] : [a.x + 0.64, a.y + 0.1, a.z + 0.64];
       cam.position.set(cp[0], cp[1], cp[2]);
       cam.lookAt(a.x, a.y, a.z);
       cam.updateMatrixWorld(true);
