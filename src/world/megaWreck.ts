@@ -183,8 +183,8 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
     { z: -60, halfW: 1.3, halfH: 2.0, cy: -1.0 },    // crushed buried tip (driven down)
     { z: -50, halfW: 5.0, halfH: 5.6, cy: 2.5 },
     { z: -32, halfW: 9.6, halfH: 9.0, cy: 4.5 },
-    { z: -16, halfW: 11.2, halfH: 10.0, cy: 5.0 },
-    { z: BOW_FACE_Z, halfW: 11.0, halfH: 9.6, cy: 5.2 },   // fracture face (low)
+    { z: -18, halfW: 11.2, halfH: 8.5, cy: 4.0 },
+    { z: BOW_FACE_Z, halfW: 10.5, halfH: 7.0, cy: 2.0 },   // fracture face (DROPPED → hard notch vs the high aft)
   ], _hullMat));
 
   // (A2) Aft mass — a fat-bellied wedge, widest + tallest amidships (height ~1/4
@@ -202,8 +202,10 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
   // spine stub + dangling cables + torn rim flaps. Aft mass rides ~2m higher.
   {
     const cy = 7.5;
+    // Backboards sit LOW in the gap (top ~y12) so empty sky shows above → the
+    // fracture reads as a hard notch between the high aft mass + the dropped bow.
     for (const z of [AFT_FACE_Z + 0.3, BOW_FACE_Z - 0.3]) {
-      const back = box(20, 20, 0.4, _viewportMat); back.position.set(0, cy, z); add(back);
+      const back = box(19, 13, 0.4, _viewportMat); back.position.set(0, cy - 2, z); add(back);
     }
     const af = makeFormerRings(11, 3, 1.5, { tube: 0.55 });
     af.rotation.y = -Math.PI / 2; af.position.set(0, cy + 0.5, AFT_FACE_Z); af.scale.set(1, 0.8, 1); add(af);

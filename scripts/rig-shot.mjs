@@ -914,14 +914,20 @@ const SCENARIOS = {
       else if (ang === 'hero') { cam.position.set(cx + d * 0.7, eye, cz - d * 0.62); cam.lookAt(cx, cy + h * 0.05, cz - span * 0.12); }
       else { cam.position.set(cx + d * 0.62, eye + h * 0.3, cz - d * 0.62); cam.lookAt(cx, cy, cz); }
       cam.updateMatrixWorld(true);
-      // Raking key light off the +X impact flank so strakes/breaches/rust register.
-      const key = new (ctx.three.scene.children.find((o) => o.isDirectionalLight)?.constructor
-        || ctx.three.scene.constructor)();
-      if (key.isDirectionalLight) {
-        key.intensity = 1.6; key.color.set(0xfff0d8);
-        key.position.set(cx + span, cy + (maxY - minY) * 0.6, cz - span * 0.3);
+      ctx.three.renderer.toneMappingExposure = 1.5;
+      // Find the THREE light constructors off existing scene lights.
+      let DirCtor = null, HemiCtor = null;
+      ctx.three.scene.traverse((o) => { if (o.isDirectionalLight && !DirCtor) DirCtor = o.constructor; if (o.isHemisphereLight && !HemiCtor) HemiCtor = o.constructor; });
+      // Front-high KEY light from just above + beside the camera (3/4 front), so
+      // the face the camera sees is LIT — not a backlit silhouette.
+      if (DirCtor) {
+        const key = new DirCtor(); key.intensity = 2.0; key.color.set(0xfff2e0);
+        const toC = new V(cx - cam.position.x, 0, cz - cam.position.z); // camera→wreck (XZ)
+        key.position.set(cam.position.x + toC.x * 0.2 + span * 0.25, cam.position.y + h * 0.6, cam.position.z + toC.z * 0.2);
         key.target.position.set(cx, cy, cz); ctx.three.scene.add(key.target); ctx.three.scene.add(key);
       }
+      // Hemisphere FILL so shadow faces aren't pure black.
+      if (HemiCtor) { const fill = new HemiCtor(0xbfccdd, 0x6b5840, 0.7); ctx.three.scene.add(fill); }
       const panels = (ctx.salvageables?.list || []).filter((s) => s.kind === 'massive').length;
       return { found: true, span: +span.toFixed(0), height: +(maxY - minY).toFixed(0), panels };
     }, angle);
