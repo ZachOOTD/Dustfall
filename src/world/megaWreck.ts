@@ -35,15 +35,20 @@ import { createRustedHullMaterial } from './hullMaterial.ts';
 const _hullMat = createRustedHullMaterial({ baseColor: Tuning.WRECK_HULL_HEX, streakIntensity: 0.85 });
 const _hullDarkMat = createRustedHullMaterial({ baseColor: Tuning.WRECK_HULL_DARK_HEX, streakIntensity: 0.6 });
 const _rustMat = createPaintedMetalMaterial(Tuning.WRECK_RUST_HEX, { wearLevel: 0.65 });
-const _nozzleInteriorMat = new THREE.MeshBasicMaterial({ color: Tuning.WRECK_NOZZLE_INTERIOR_HEX });
+// DoubleSide so the recessed combustion disc never culls to invisible.
+const _nozzleInteriorMat = new THREE.MeshBasicMaterial({ color: Tuning.WRECK_NOZZLE_INTERIOR_HEX, side: THREE.DoubleSide });
 const _antennaMat = createMetalMaterial(Tuning.WRECK_ANTENNA_HEX, { wornScale: 6.0, scratchStrength: 0.04 });
 const _pipeMat = createMetalMaterial(0x3a3028, { wornScale: 5.0, scratchStrength: 0.04 });
 const _viewportMat = new THREE.MeshBasicMaterial({ color: 0x14181c });
+// Open-cone dishes are single-sided → DoubleSide so they don't vanish edge-on.
+const _dishMat = createMetalMaterial(Tuning.WRECK_ANTENNA_HEX, { wornScale: 4.0, scratchStrength: 0.05 });
+_dishMat.side = THREE.DoubleSide;
 // Fresh oxidized torn metal (brighter orange) for fracture + breach rims so the
 // cut reads distinct from the weathered skin.
 const _tornMat = createPaintedMetalMaterial(0xb5642e, { wearLevel: 0.5 });
 // Translucent rust-streak decal (hangs DOWN from features; +X-flank biased).
-const _streakMat = new THREE.MeshBasicMaterial({ color: 0x6e3a22, transparent: true, opacity: 0.5, depthWrite: false });
+// DoubleSide so the flank streaks read from both viewing sides.
+const _streakMat = new THREE.MeshBasicMaterial({ color: 0x6e3a22, transparent: true, opacity: 0.5, depthWrite: false, side: THREE.DoubleSide });
 void _rustMat;
 
 // ── Burial + wall thickness.
@@ -57,6 +62,37 @@ const BOW_FACE_Z = -5;       // bow hull torn face
 const AFT_FACE_Z = 18;       // aft hull torn face
 const ISLAND_Z = 68;         // command island Z (over the bridge)
 const TRANSOM_Z = 76;        // engine transom
+
+// Loft stations (z, halfW, halfH, cy) shared by the hull geometry AND the surface
+// sampler so flank decorations sit ON the hull (no floating/clipping).
+type Station = { z: number; halfW: number; halfH: number; cy: number };
+const BOW_STATIONS: Station[] = [
+  { z: -60, halfW: 1.3, halfH: 2.0, cy: -1.0 },
+  { z: -50, halfW: 5.0, halfH: 5.6, cy: 2.5 },
+  { z: -32, halfW: 9.6, halfH: 9.0, cy: 4.5 },
+  { z: -18, halfW: 11.2, halfH: 8.5, cy: 4.0 },
+  { z: BOW_FACE_Z, halfW: 10.5, halfH: 7.0, cy: 2.0 },
+];
+const AFT_STATIONS: Station[] = [
+  { z: AFT_FACE_Z, halfW: 11.5, halfH: 11.5, cy: 8.5 },
+  { z: 36, halfW: 13.5, halfH: 14.0, cy: 9.5 },
+  { z: 56, halfW: 13.0, halfH: 12.5, cy: 8.5 },
+  { z: ISLAND_Z, halfW: 11.5, halfH: 10.5, cy: 7.5 },
+  { z: TRANSOM_Z, halfW: 9.8, halfH: 8.0, cy: 6.0 },
+];
+/** Interpolate the hull cross-section at local Z (picks the right mass). Returns
+ *  the flank half-width, dorsal/keel Y, and section centre — so a decoration can
+ *  sit exactly ON the curved/tapered hull instead of at a fixed X/Y. */
+function hullAt(z: number): { halfW: number; halfH: number; cy: number; dorsalY: number; keelY: number } {
+  const st = z < (BOW_FACE_Z + AFT_FACE_Z) / 2 ? BOW_STATIONS : AFT_STATIONS;
+  let a = st[0], b = st[st.length - 1];
+  for (let i = 0; i < st.length - 1; i++) { if (z >= st[i].z && z <= st[i + 1].z) { a = st[i]; b = st[i + 1]; break; } }
+  const t = b.z === a.z ? 0 : Math.max(0, Math.min(1, (z - a.z) / (b.z - a.z)));
+  const halfW = a.halfW + (b.halfW - a.halfW) * t;
+  const halfH = a.halfH + (b.halfH - a.halfH) * t;
+  const cy = a.cy + (b.cy - a.cy) * t;
+  return { halfW, halfH, cy, dorsalY: cy + halfH, keelY: cy - halfH };
+}
 
 // ── Interior cell model ────────────────────────────────────────────────
 // A walkable box (corridor segment or room). Consecutive cells share OPEN Z
@@ -179,23 +215,11 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
 
   // (A1) Bow mass — a sharp tapered wedge driving nose-first into the dune, riding
   // LOWER than the aft (snapped back) so the fracture reads as a hard notch.
-  add(makeLoftedHull([
-    { z: -60, halfW: 1.3, halfH: 2.0, cy: -1.0 },    // crushed buried tip (driven down)
-    { z: -50, halfW: 5.0, halfH: 5.6, cy: 2.5 },
-    { z: -32, halfW: 9.6, halfH: 9.0, cy: 4.5 },
-    { z: -18, halfW: 11.2, halfH: 8.5, cy: 4.0 },
-    { z: BOW_FACE_Z, halfW: 10.5, halfH: 7.0, cy: 2.0 },   // fracture face (DROPPED → hard notch vs the high aft)
-  ], _hullMat));
+  add(makeLoftedHull(BOW_STATIONS, _hullMat));
 
   // (A2) Aft mass — a fat-bellied wedge, widest + tallest amidships (height ~1/4
   // length so it reads as a dagger-wedge, not a plate), raking to a blunt transom.
-  add(makeLoftedHull([
-    { z: AFT_FACE_Z, halfW: 11.5, halfH: 11.5, cy: 8.5 },  // fracture face (rides high → notch)
-    { z: 36, halfW: 13.5, halfH: 14.0, cy: 9.5 },          // amidships peak (fat belly)
-    { z: 56, halfW: 13.0, halfH: 12.5, cy: 8.5 },
-    { z: ISLAND_Z, halfW: 11.5, halfH: 10.5, cy: 7.5 },
-    { z: TRANSOM_Z, halfW: 9.8, halfH: 8.0, cy: 6.0 },     // blunt transom
-  ], _hullMat));
+  add(makeLoftedHull(AFT_STATIONS, _hullMat));
 
   // (A3) Mid-hull FRACTURE cross-section — the money shot. Cut-open guts in the
   // ~23m gap: backboard + former rings + countable staggered deck slabs + bent
@@ -260,7 +284,7 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
     // 3 clearly different-diameter shallow paraboloid dishes on standoff arms.
     for (const [r, ox, oy, tilt] of [[1.0, 1.8, -1.5, 0.4], [2.4, -2.2, 0.5, -0.3], [3.6, 0.5, 2.6, 0.5]] as const) {
       const arm = box(0.18, 0.18, Math.abs(ox) + 0.5, _antennaMat); arm.position.set(mx + ox / 2, crownY + oy, cz + 0.2); arm.rotation.y = Math.PI / 2; add(arm);
-      const d = new THREE.Mesh(new THREE.ConeGeometry(r, r * 0.45, 14, 1, true), _antennaMat);
+      const d = new THREE.Mesh(new THREE.ConeGeometry(r, r * 0.45, 14, 1, true), _dishMat);
       d.position.set(mx + ox, crownY + oy, cz + 0.4); d.rotation.x = Math.PI / 2 + tilt; d.rotation.z = ox * 0.1; add(d);
       const stem = box(0.1, 0.1, r * 0.5, dark); stem.position.set(mx + ox, crownY + oy, cz + 0.4 + r * 0.2); add(stem);
     }
@@ -297,50 +321,69 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
     for (const sx of [-2, 2]) { const t = makeEngineBellMesh(1.2, 1.6, _hullMat, _nozzleInteriorMat); t.rotation.x = Math.PI / 2; t.position.set(sx, ey + 5, ez - 1); add(t); }
   }
 
-  // (A7) Hull plating — dorsal spine keel + irregular fore-aft flank strakes
-  // (dense on the narrow hull → reads as a real plated ship, not a smooth blade).
+  // (A7) Hull plating — a dorsal spine keel that FOLLOWS the dorsal curve + fore-aft
+  // flank strakes + transverse butt-joint frames, all sampled ONTO the hull surface
+  // (hullAt) so nothing floats off the taper or clips the belly. Seam ridges sit
+  // ~10cm proud (rule 7).
   {
-    const z0 = -52, z1 = TRANSOM_Z - 2, midZ = (z0 + z1) / 2, lenH = (z1 - z0) / 2;
-    const spine = box(1.0, 0.5, lenH * 2, _hullMat); spine.position.set(2.5, 18.5, midZ); add(spine);
-    for (const side of [-1, 1]) for (const [yf, zoff] of [[3, -2], [6.5, 1], [10, -1], [13.5, 2]] as const) {
-      const st = box(0.16, 0.36, lenH * 1.7, dark); st.position.set(side * 12.5, yf, midZ + zoff); add(st);
+    // Dorsal spine: short segments tracking the dorsal Y so it never floats/clips.
+    for (let z = AFT_FACE_Z + 2; z < TRANSOM_Z - 3; z += 6) {
+      const s = hullAt(z), s2 = hullAt(z + 6);
+      const seg = box(0.9, 0.5, 6.2, _hullMat);
+      seg.position.set(0, (s.dorsalY + s2.dorsalY) / 2 - 0.2, z + 3);
+      add(seg);
+    }
+    // Fore-aft flank strakes at fractions of the section height, riding the surface.
+    for (const side of [-1, 1]) for (const hf of [0.3, 0.55, 0.78]) {
+      for (let z = AFT_FACE_Z + 1; z < TRANSOM_Z - 2; z += 9) {
+        const s = hullAt(z), s2 = hullAt(z + 9);
+        const x = side * (s.halfW + 0.04), y = s.keelY + (s.dorsalY - s.keelY) * hf;
+        const st = box(0.18, 0.34, 9.0, hf < 0.5 ? dark : _hullMat);
+        st.position.set((x + side * (s2.halfW + 0.04)) / 2, y, z + 4.5);
+        st.rotation.y = side > 0 ? -0.04 : 0.04; add(st);
+      }
+    }
+    // Transverse butt-joint frame ribs every ~12m → reads as bulkhead stations.
+    for (let z = AFT_FACE_Z + 6; z < TRANSOM_Z - 4; z += 13) {
+      const s = hullAt(z);
+      const rib = new THREE.Mesh(new THREE.TorusGeometry(s.halfW + 0.05, 0.22, 5, 18), _hullMat);
+      rib.rotation.y = Math.PI / 2; rib.position.set(0, s.cy, z); rib.scale.set(1, s.halfH / s.halfW, 1); add(rib);
     }
   }
 
   // (A8) Asymmetric impact breaches — +X impact flank shattered (2), -X lee tear (1).
-  // Each backed by a rib + deck-edge so the void shows structure (not a flat hole),
-  // with a fresh-torn-metal rim.
-  const breachSites: Array<[number, number, number, number]> = [[1, 11, 30, 3.6], [1, 5, 52, 2.4], [-1, 10, 40, 1.8]];
+  // Each seated ON the sampled flank (no float/clip), backed by a rib + deck-edge so
+  // the void shows structure, with a fresh-torn-metal rim.
+  const breachSites: Array<[number, number, number]> = [[1, 30, 3.6], [1, 52, 2.4], [-1, 40, 1.8]];
   {
-    for (const [side, y, z, r] of breachSites) {
+    for (const [side, z, r] of breachSites) {
+      const s = hullAt(z), y = s.cy + (side > 0 ? 1.5 : 0.5);
+      const fx = side * (s.halfW - 0.1);
       const b = makeBreach(r, _rand); tagWreckDecoration(b);
       b.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh && m.material === _hullDarkMat) m.material = _tornMat; });
-      b.position.set(side * 12, y, z); b.rotation.y = side > 0 ? Math.PI / 2 : -Math.PI / 2; b.scale.set(1, 0.95, 1.2); add(b);
-      // Back the void with a rib arc + a short deck-edge ledge so structure shows.
+      b.position.set(fx, y, z); b.rotation.y = side > 0 ? Math.PI / 2 : -Math.PI / 2; b.scale.set(1, 0.95, 1.2); add(b);
       const rib = makeFormerRings(r * 0.85, 1, 1, { tube: 0.3 }); rib.rotation.y = side > 0 ? 0 : Math.PI;
-      rib.position.set(side * (12 - 0.6), y, z); rib.scale.set(0.5, 0.9, 0.9); add(rib);
-      const ledge = box(0.5, 0.2, r * 1.4, _tornMat); ledge.position.set(side * (12 - 0.7), y - r * 0.4, z); add(ledge);
+      rib.position.set(side * (s.halfW - 0.8), y, z); rib.scale.set(0.5, 0.9, 0.9); add(rib);
+      const ledge = box(0.5, 0.2, r * 1.4, _tornMat); ledge.position.set(side * (s.halfW - 0.9), y - r * 0.4, z); add(ledge);
     }
   }
 
   // (A9) Directional weathering — translucent rust streaks hanging DOWN from the
-  // breach rims, fracture, and deck lips; concentrated on the +X impact flank +
-  // near the fracture, near-clean on the -X lee flank (directional = story + scale).
+  // breach rims + fracture, seated ON the sampled flank, concentrated on the +X
+  // impact flank, near-clean on the -X lee (directional = story + scale).
   {
-    const streak = (x: number, yTop: number, z: number, w: number, h: number, faceX: number) => {
-      const q = new THREE.Mesh(new THREE.PlaneGeometry(w, h), _streakMat);
-      q.position.set(x, yTop - h / 2, z); q.rotation.y = faceX > 0 ? Math.PI / 2 : -Math.PI / 2;
+    const streak = (side: number, z: number, yTop: number, w: number, hgt: number) => {
+      const s = hullAt(z);
+      const q = new THREE.Mesh(new THREE.PlaneGeometry(w, hgt), _streakMat);
+      q.position.set(side * (s.halfW + 0.05), yTop - hgt / 2, z); q.rotation.y = side > 0 ? Math.PI / 2 : -Math.PI / 2;
       q.userData.noShadow = true; add(q);
     };
-    // Below each breach (impact flank gets denser streaks).
-    for (const [side, y, z, r] of breachSites) {
+    for (const [side, z, r] of breachSites) {
       const n = side > 0 ? 4 : 1;
-      for (let i = 0; i < n; i++) streak(side * 12.05, y - r * 0.7, z + (i - n / 2) * r * 0.5, 0.5 + (i % 2) * 0.4, 3 + (i % 3), side);
+      for (let i = 0; i < n; i++) streak(side, z + (i - n / 2) * r * 0.5, hullAt(z).cy + (side > 0 ? 1.5 : 0.5) - r * 0.7, 0.5 + (i % 2) * 0.4, 3 + (i % 3));
     }
-    // Fracture flank streaks (+X, fresh oxidation runs).
-    for (let i = 0; i < 5; i++) streak(11.8, 9 - i * 0.4, FRACTURE_Z - 6 + i * 3, 0.6, 4 + (i % 2) * 2, 1);
-    // A few sparse lee-flank streaks (weathered).
-    for (let i = 0; i < 2; i++) streak(-12.0, 8, 20 + i * 22, 0.5, 3, -1);
+    for (let i = 0; i < 5; i++) { const z = FRACTURE_Z - 6 + i * 3; streak(1, z, hullAt(z).cy + 2 - i * 0.4, 0.6, 4 + (i % 2) * 2); }
+    for (let i = 0; i < 2; i++) { const z = 20 + i * 22; streak(-1, z, hullAt(z).cy, 0.5, 3); }
   }
 
   // Tilt the shell into a STRONG list + sink it deep. Interior boxes stay LEVEL
@@ -391,6 +434,33 @@ export function placeMegaWreck(
   // ── Interior colliders from the SAME cell descriptors as the meshes.
   for (const c of CELLS) for (const b of cellWallBoxes(c)) cuboid(b);
   for (const s of interiorSteps()) cuboid(s);
+
+  // ── Exterior collision. The visual shell is TILTED + sunk relative to the body;
+  // replicate that transform so the colliders sit on the visible hull (no walking
+  // through the hull/engines). Coarse flank slabs + engine blockers — they sit at
+  // the OUTER surface; the interior box walls hold the inner surface, so the hull
+  // thickness reads solid without sealing the walkable cavity.
+  const shellQ = new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.13, 0, -0.33, 'XYZ'));
+  const shellOff = new THREE.Vector3(0, -4, 0);
+  const extCuboid = (px: number, py: number, pz: number, hx: number, hy: number, hz: number) => {
+    const p = new THREE.Vector3(px, py, pz).applyQuaternion(shellQ).add(shellOff);
+    world.createCollider(
+      RAPIER.ColliderDesc.cuboid(hx, hy, hz).setTranslation(p.x, p.y, p.z).setRotation({ x: shellQ.x, y: shellQ.y, z: shellQ.z, w: shellQ.w }),
+      body,
+    );
+  };
+  // Exposed hull flanks (both masses) — thin vertical slabs at the sampled surface.
+  for (const z of [-46, -32, -16, 24, 38, 52, 66, 73]) {
+    const s = hullAt(z);
+    for (const side of [-1, 1]) extCuboid(side * s.halfW, s.cy, z, 0.4, s.halfH, 7);
+  }
+  // Bow nose cap + transom cap (Z end blockers).
+  { const s = hullAt(-58); extCuboid(0, s.cy, -59, s.halfW + 0.5, s.halfH, 0.5); }
+  { const s = hullAt(75); extCuboid(0, s.cy, 76.5, s.halfW + 0.5, s.halfH, 0.5); }
+  // Command-island base blocker.
+  extCuboid(3.0, 18, ISLAND_Z, 5.0, 5.0, 5.0);
+  // Engine bells (two big projecting nozzles).
+  for (const [sx, sy, mr] of [[-5.0, 7.5, 4.2], [5.0, 5.8, 3.7]] as const) extCuboid(sx, sy, TRANSOM_Z + 2.5, mr, mr, mr * 1.3);
 
   // ── Helper: a nested salvage panel registered at its world position.
   const worldOf = (local: THREE.Vector3) => local.clone().applyQuaternion(finalQ).add(pos);
