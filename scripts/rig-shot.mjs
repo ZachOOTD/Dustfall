@@ -899,20 +899,23 @@ const SCENARIOS = {
       const cam = ctx.three.camera;
       ctx.flags.paused = true;
       const h = maxY - minY;
-      const eye = cy - h * 0.05;                    // low, dramatic eye line
-      const d = span * 0.92;                        // close enough to read detail
+      // Aim LOW at the visual mass (not the bbox centre, which sits high because of
+      // the island/mast). Frame the full LENGTH; avoid end-on shots that foreshorten
+      // the 136m dagger into a "squat blob".
+      const D = Math.max(span, maxZ - minZ) * 1.02;
+      const aimY = minY + h * 0.3, up = minY + h * 0.5;
+      const aim = (camPos) => { cam.position.copy(camPos); cam.lookAt(cx, aimY, cz); };
       if (ang === 'interior') {
-        // Inside the spinal corridor (bow → aft), in the wreck's own frame.
         const q = mw.quaternion;
         cam.position.copy(new V(0, 1.6, -20).applyQuaternion(q).add(mw.position));
         cam.lookAt(new V(0, 1.6, 40).applyQuaternion(q).add(mw.position));
       }
-      else if (ang === 'side') { cam.position.set(cx + d, eye + h * 0.28, cz); cam.lookAt(cx, cy, cz); }
-      else if (ang === 'front') { cam.position.set(cx + d * 0.25, eye + h * 0.15, cz - d * 0.95); cam.lookAt(cx, cy, cz); }
-      else if (ang === 'rear') { cam.position.set(cx, eye + h * 0.2, cz + d); cam.lookAt(cx, cy, cz); }
-      // 'hero' = low bow-quarter from the +X impact flank — the dagger silhouette + fracture.
-      else if (ang === 'hero') { cam.position.set(cx + d * 0.7, eye, cz - d * 0.62); cam.lookAt(cx, cy + h * 0.05, cz - span * 0.12); }
-      else { cam.position.set(cx + d * 0.62, eye + h * 0.3, cz - d * 0.62); cam.lookAt(cx, cy, cz); }
+      else if (ang === 'side') aim(new V(cx + D, up, cz));                          // broadside (the money shot)
+      else if (ang === 'hero') aim(new V(cx + D * 0.8, minY + h * 0.16, cz - D * 0.5)); // low bow-3/4 (length + list)
+      else if (ang === '3q')   aim(new V(cx + D * 0.62, up, cz + D * 0.52));        // aft-3/4 (engines + island)
+      else if (ang === 'rear') aim(new V(cx + D * 0.5, up + h * 0.1, cz + D * 0.85));// aft-3/4 (not pure end-on)
+      else if (ang === 'front') aim(new V(cx - D * 0.5, up, cz - D * 0.85));         // bow-3/4 (not pure end-on)
+      else aim(new V(cx + D * 0.6, up, cz - D * 0.55));
       cam.updateMatrixWorld(true);
       ctx.three.renderer.toneMappingExposure = 1.5;
       // Find the THREE light constructors off existing scene lights.
