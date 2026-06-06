@@ -20,7 +20,7 @@ import type { Terrain } from './terrain.ts';
 /** Dark interior rib/former metal. */
 const _formerMat = new THREE.MeshLambertMaterial({ color: 0x342f28, flatShading: true });
 /** Near-black breach interior (the dark void behind a torn hole). */
-const _voidMat = new THREE.MeshBasicMaterial({ color: 0x0b0907 });
+const _voidMat = new THREE.MeshBasicMaterial({ color: 0x0b0907, side: THREE.DoubleSide });
 /** Torn, rust-bitten metal flaps around a breach rim. */
 const _tornMat = new THREE.MeshLambertMaterial({ color: 0x4a3a2b, flatShading: true });
 /** Wind-drifted sand piled against a hull (matches the dune ground 0xcd9555). */
