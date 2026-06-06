@@ -1080,16 +1080,21 @@ const SCENARIOS = {
     await page.waitForTimeout(1600);   // let it launch + pick a target
     // ACAI f/u — sample terrain clearance during the REAL flight (the bug: the
     // bird sank through dunes when leaving the salt flats). Min over a few frames.
-    let minClear = Infinity;
+    let minClear = Infinity, minFacing = 1;
     for (let i = 0; i < 5; i++) {
       await page.waitForTimeout(120);
       const c = await page.evaluate(() => {
         const ctx = window.__game.ctx;
         const v = ctx.vultures.list[0];
         if (v.state !== 'flying') return null;
-        return +(v.pos.y - ctx.terrain.heightAt(v.pos.x, v.pos.z)).toFixed(2);
+        // Head-forward check: world +X (the head) should align with the travel dir.
+        const V = ctx.three.camera.position.constructor;
+        const fwd = new V(1, 0, 0).applyQuaternion(v.mesh.quaternion);
+        const vx = Math.sin(v.heading), vz = Math.cos(v.heading);
+        const facing = fwd.x * vx + fwd.z * vz;   // ~+1 forward, ~-1 backwards
+        return { clear: +(v.pos.y - ctx.terrain.heightAt(v.pos.x, v.pos.z)).toFixed(2), facing: +facing.toFixed(2) };
       });
-      if (c !== null && c < minClear) minClear = c;
+      if (c) { if (c.clear < minClear) minClear = c.clear; if (c.facing < minFacing) minFacing = c.facing; }
     }
     const r2 = await page.evaluate(() => {
       const v = window.__game.ctx.vultures.list[0];
@@ -1117,7 +1122,9 @@ const SCENARIOS = {
     // Clearance must stay near/above VULTURE_MIN_FLIGHT_CLEARANCE (3.0m) — a small
     // negative slack tolerates the heightAt sample landing on a sharp ridge tip.
     const clearOk = minClear === Infinity || minClear >= 2.0;
-    console.log(`[vulture-flight] ${launchOk && landOk && clearOk ? 'PASS' : 'FAIL'} launch=${JSON.stringify(r2)} minClear=${minClear === Infinity ? 'n/a' : minClear} flightShortcut=${JSON.stringify(r3)} land=${JSON.stringify(r4)}`);
+    // Head must point ALONG travel (forward), not backwards.
+    const facingOk = minFacing > 0.7;
+    console.log(`[vulture-flight] ${launchOk && landOk && clearOk && facingOk ? 'PASS' : 'FAIL'} launch=${JSON.stringify(r2)} minClear=${minClear === Infinity ? 'n/a' : minClear} minFacing=${minFacing} flightShortcut=${JSON.stringify(r3)} land=${JSON.stringify(r4)}`);
   },
 
   // Vulture-circle (ACAI f/u E1): a vulture wheeling over a bone carcass. Reports
@@ -1174,8 +1181,8 @@ const SCENARIOS = {
       return { ok: true, lizardId: l.id, vId: v.id, lizardsBefore: ctx.lizards.length };
     });
     if (r1.noEntity) { console.log(`[vulture-hunt] SKIP ${JSON.stringify(r1)}`); return; }
-    let sawSwoop = false, sawCarry = false, sawPrey = false;
-    for (let i = 0; i < 90; i++) {
+    let sawSwoop = false, sawCarry = false, sawPrey = false, sawFeed = false, sawReturn = false;
+    for (let i = 0; i < 140; i++) {
       await page.waitForTimeout(250);
       const s = await page.evaluate((a) => {
         const ctx = window.__game.ctx;
@@ -1185,15 +1192,18 @@ const SCENARIOS = {
       if (s.state === 'swooping') sawSwoop = true;
       if (s.state === 'carrying') sawCarry = true;
       if (s.hasPrey) sawPrey = true;
-      if (sawCarry && s.lizGone && s.state === 'circling') break;
+      if (s.state === 'feeding') sawFeed = true;
+      if (s.state === 'returning') sawReturn = true;
+      // The bird should fly off → eat → fly back → circle (NOT teleport-despawn).
+      if (sawFeed && sawReturn && s.lizGone && s.state === 'circling') break;
     }
     const fin = await page.evaluate((a) => {
       const ctx = window.__game.ctx;
       const v = ctx.vultures.list.find((vv) => vv.id === a.vId);
       return { state: v ? v.state : 'gone', lizGone: !ctx.lizards.find((l) => l.id === a.lizardId), lizardsAfter: ctx.lizards.length };
     }, { lizardId: r1.lizardId, vId: r1.vId });
-    const pass = sawSwoop && sawCarry && sawPrey && fin.lizGone;
-    console.log(`[vulture-hunt] ${pass ? 'PASS' : 'FAIL'} sawSwoop=${sawSwoop} sawCarry=${sawCarry} sawPrey=${sawPrey} ${JSON.stringify(fin)}`);
+    const pass = sawSwoop && sawCarry && sawPrey && fin.lizGone && sawFeed && sawReturn;
+    console.log(`[vulture-hunt] ${pass ? 'PASS' : 'FAIL'} sawSwoop=${sawSwoop} sawCarry=${sawCarry} sawFeed=${sawFeed} sawReturn=${sawReturn} sawPrey=${sawPrey} ${JSON.stringify(fin)}`);
   },
 
   // Vulture-escape (ACAI f/u): a swooped shrew dives for cover; once it's half-

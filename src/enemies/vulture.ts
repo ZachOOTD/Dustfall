@@ -33,8 +33,9 @@ import { despawnPickup } from '../pickups/pickups.ts';
 
 export type VultureState =
   | 'perched' | 'flying' | 'landing' | 'dead'
-  // ACAI f/u — carcass ecology: wheel over a carcass, dive at prey, carry it off.
-  | 'circling' | 'swooping' | 'carrying';
+  // ACAI f/u — carcass ecology: wheel over a carcass, dive at prey, carry it off,
+  // land to eat it, then fly back to the carcass + resume circling.
+  | 'circling' | 'swooping' | 'carrying' | 'feeding' | 'returning';
 
 /** ACAI — animatable joint pivots on the vulture mesh (stored in
  *  `mesh.userData.rig`). Each is a Group positioned AT its joint with its child
@@ -83,6 +84,8 @@ export interface Vulture {
   huntCooldown: number;
   /** ACAI f/u — seconds spent in the carrying state (climb-away timer). */
   carryT: number;
+  /** ACAI f/u — seconds spent feeding on the ground (eat timer). */
+  feedT: number;
   /** ACAI f/u — the prey silhouette gripped in the talons while carrying. */
   prey: THREE.Object3D | null;
   /** ACAI f/u — the locked swoop target (kind + module/pickup id) being hunted.
@@ -356,6 +359,27 @@ export function animateVulture(v: Vulture, elapsed: number): void {
       tail.rotation.set(0, 0, -0.2);
       break;
     }
+    case 'returning': {
+      // Same broad flap/glide as ordinary flight, heading home.
+      const glide = Math.sin(elapsed * Tuning.VULTURE_GLIDE_CYCLE_HZ * Math.PI * 2 + v.id * 2.1);
+      const flapEnv = Math.max(0, glide);
+      const beat = Math.sin(elapsed * Tuning.VULTURE_FLAP_HZ * Math.PI * 2);
+      const sx = Tuning.VULTURE_DIHEDRAL + beat * Tuning.VULTURE_FLAP_AMP * flapEnv;
+      poseWings(sx, 0, beat * 0.12 * flapEnv, -0.08);
+      neck.rotation.set(0, 0, Tuning.VULTURE_NECK_EXTEND);
+      legL.rotation.set(0, 0, -Tuning.VULTURE_LEG_TUCK); legR.rotation.set(0, 0, Tuning.VULTURE_LEG_TUCK);
+      tail.rotation.set(0, 0, -0.3);
+      break;
+    }
+    case 'feeding': {
+      // Landed, wings folded; head bobbing DOWN tearing at the meat between the feet.
+      const peck = 0.6 + Math.abs(Math.sin(elapsed * 4 + v.id)) * 0.5;   // repeated downward jabs
+      poseWings(Tuning.VULTURE_PERCH_WING_DROOP, 0, 0, Tuning.VULTURE_ELBOW_FOLD);
+      neck.rotation.set(0, 0, peck);            // head down at the kill
+      legL.rotation.set(0, 0, 0); legR.rotation.set(0, 0, 0);
+      tail.rotation.set(0, 0, 0.1);
+      break;
+    }
     case 'landing': {
       // Flare: wings cupped forward + spread wide as an airbrake, fluttering; elbows
       // mostly open; legs reach DOWN; neck up; tail fans.
@@ -533,6 +557,7 @@ export function spawnVulture(
     circlePhase: 0,
     huntCooldown: Tuning.VULTURE_HUNT_COOLDOWN,
     carryT: 0,
+    feedT: 0,
     prey: null,
     huntKind: null,
     huntId: -1,
@@ -645,7 +670,9 @@ function applyFlightOrientation(v: Vulture, dt: number): void {
   const targetBank = Math.max(-Tuning.VULTURE_BANK_ANGLE, Math.min(Tuning.VULTURE_BANK_ANGLE, turnRate * 0.25));
   v.bank += (targetBank - v.bank) * Math.min(1, dt * 5);
   v.prevHeading = v.heading;
-  v.mesh.rotation.set(0, v.heading + Math.PI / 2, v.bank);
+  // heading = atan2(velX, velZ); the model's head is +X, so the yaw that points
+  // +X ALONG the velocity is heading − π/2 (the old +π/2 pointed it backwards).
+  v.mesh.rotation.set(0, v.heading - Math.PI / 2, v.bank);
 }
 
 // ── E3 swoop predation helpers ──────────────────────────────────────────────
@@ -906,21 +933,58 @@ export function updateVultures(ctx: GameContext, dt: number): void {
         break;
       }
       case 'carrying': {
-        // Climb up + away from the carcass with the prey, then drop it + resume.
+        // Climb + fly AWAY from the carcass with the prey, then land to eat it.
         v.carryT += dt;
-        const away = Math.atan2(v.pos.x - v.carcass!.x, v.pos.z - v.carcass!.z);
+        const anchor = v.carcass ?? v.perch;
+        const away = Math.atan2(v.pos.x - anchor.x, v.pos.z - anchor.z);
         v.pos.x += Math.sin(away) * Tuning.VULTURE_FLEE_SPEED * 0.7 * dt;
         v.pos.z += Math.cos(away) * Tuning.VULTURE_FLEE_SPEED * 0.7 * dt;
-        const climbY = v.carcass!.y + Tuning.VULTURE_CIRCLE_HEIGHT + 4;
-        v.pos.y += Math.min(Tuning.VULTURE_CLIMB_RATE * dt, Math.max(0, climbY - v.pos.y));
+        // Laden + heavy → flies LOW (just clears the terrain), doesn't climb high.
+        const climbY = ctx.terrain.heightAt(v.pos.x, v.pos.z) + Tuning.VULTURE_MIN_FLIGHT_CLEARANCE + 1;
+        v.pos.y += Math.min(Tuning.VULTURE_CLIMB_RATE * dt, Math.max(-Tuning.VULTURE_CLIMB_RATE * dt, climbY - v.pos.y));
         const minY = ctx.terrain.heightAt(v.pos.x, v.pos.z) + Tuning.VULTURE_MIN_FLIGHT_CLEARANCE;
         if (v.pos.y < minY) v.pos.y = minY;
         v.heading = away;
         applyFlightOrientation(v, dt);
-        if (v.carryT >= Tuning.VULTURE_CARRY_DURATION) {
-          releasePrey(v);
-          v.state = 'circling';
+        if (v.carryT >= Tuning.VULTURE_CARRY_DURATION) { v.feedT = 0; v.state = 'feeding'; }
+        break;
+      }
+      case 'feeding': {
+        // Glide DOWN to the ground, then tear at the prey; the eat timer only runs
+        // once landed. Consume the prey partway through, then fly back.
+        const groundY = ctx.terrain.heightAt(v.pos.x, v.pos.z) + 0.06;
+        v.pos.y += Math.max(-Tuning.VULTURE_LAND_DESCENT * dt, Math.min(Tuning.VULTURE_LAND_DESCENT * dt, groundY - v.pos.y));
+        v.mesh.rotation.set(0, v.heading - Math.PI / 2, 0);   // level, facing its travel heading
+        if (v.pos.y <= groundY + 0.15) {                      // on the ground → eat
+          v.feedT += dt;
+          if (v.prey && v.feedT > Tuning.VULTURE_FEED_DURATION * 0.5) releasePrey(v);
+          if (v.feedT >= Tuning.VULTURE_FEED_DURATION) {
+            if (v.carcass) { v.state = 'returning'; v.prevHeading = v.heading; v.bank = 0; }
+            else { v.state = 'flying'; v.relocating = false; }   // synthetic (no carcass) → just leave
+          }
+        }
+        break;
+      }
+      case 'returning': {
+        // Fly back to the carcass + rejoin the orbit seamlessly (no teleport snap).
+        const c = v.carcass!;
+        const hx = c.x - v.pos.x, hz = c.z - v.pos.z;
+        const hd = Math.sqrt(hx * hx + hz * hz);
+        const dirx = hd > 1e-3 ? hx / hd : 0, dirz = hd > 1e-3 ? hz / hd : 0;
+        v.pos.x += dirx * Tuning.VULTURE_FLEE_SPEED * dt;
+        v.pos.z += dirz * Tuning.VULTURE_FLEE_SPEED * dt;
+        const cy = c.y + Tuning.VULTURE_CIRCLE_HEIGHT;
+        v.pos.y += Math.max(-Tuning.VULTURE_CLIMB_RATE * dt, Math.min(Tuning.VULTURE_CLIMB_RATE * dt, cy - v.pos.y));
+        const minY = ctx.terrain.heightAt(v.pos.x, v.pos.z) + Tuning.VULTURE_MIN_FLIGHT_CLEARANCE;
+        if (v.pos.y < minY) v.pos.y = minY;
+        v.heading = Math.atan2(dirx, dirz);
+        applyFlightOrientation(v, dt);
+        // Reached the orbit ring → set the phase to the current angle so circling
+        // continues from here (the bird is already at ~radius R).
+        if (hd <= Tuning.VULTURE_CIRCLE_RADIUS) {
+          v.circlePhase = Math.atan2(v.pos.z - c.z, v.pos.x - c.x);
           v.huntCooldown = Tuning.VULTURE_HUNT_COOLDOWN;
+          v.state = 'circling';
         }
         break;
       }

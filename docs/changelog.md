@@ -84,6 +84,15 @@ hunched shoulders, ragged uneven feather tufts on the back/rump, and worn bare-s
 fell out. 3 screenshot-iterated rounds (rule 8). Also fixed the `vulture-pose` rig-shot to frame a true side/front-quarter
 profile (was showing a rear view). Geometry-only — no FSM/physics/save impact.
 
+**Follow-up 5 (same-day) — flight head-direction fix + realistic feed loop.** (1) **Head was backwards in flight:**
+`applyFlightOrientation` set the mesh yaw to `heading + π/2`, which (model faces +X) points the head OPPOSITE the travel
+direction; corrected to `heading − π/2`. `vulture-flight` asserts `minFacing > 0.7` (measured 1.0 — head dead-on along
+travel). (2) **Carried prey no longer teleport-despawns:** the old `carrying` snapped straight back to the orbit (a visible
+vanish). Now the loop is **carry (fly off low with the meat) → feeding (land + tear at it, consume partway) → returning
+(fly back to the carcass) → circling** (rejoins the orbit seamlessly at the current angle — no snap). NEW states
+`feeding`/`returning` + poses; new const `VULTURE_FEED_DURATION` (+ `CARRY_DURATION` retuned). `vulture-hunt` asserts the
+full swoop→carry→feed→return cycle. tsc clean; all vulture evals PASS.
+
 ## Session ACAH — 2026-06-05 — Big overnight: bug sweep + loot bootstrap + vulture + cloud shadows ✓ verify pass (tsc clean)
 
 `verified` — `npm run verify` (tsc) PASS; **no save bump** (all additive, v14). A large multi-tier session: cleared the

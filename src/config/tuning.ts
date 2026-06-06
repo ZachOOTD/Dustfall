@@ -1435,7 +1435,8 @@ export const Tuning = {
   VULTURE_HUNT_COOLDOWN: 14,       // s between hunt attempts (so it's an occasional event)
   VULTURE_SWOOP_SPEED: 16,         // m/s dive speed toward the prey
   VULTURE_GRAB_DIST: 1.0,          // m from the prey at which the grab succeeds
-  VULTURE_CARRY_DURATION: 4.0,     // s carrying the prey up + away before it despawns
+  VULTURE_CARRY_DURATION: 2.6,     // s flying off with the prey before landing to eat
+  VULTURE_FEED_DURATION: 3.6,      // s on the ground tearing at + consuming the prey, then it flies back
   VULTURE_SHADOW_WARN_DIST: 6,     // m — a swooping vulture this close lets a shrew try to burrow-escape
   VULTURE_SCAVENGE_RADIUS: 70,     // m (from the carcass) a circler will travel to grab dropped meat
   VULTURE_SCAVENGE_CHANCE: 0.6,    // chance a circler off-cooldown goes for in-range dropped meat
