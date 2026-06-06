@@ -1,0 +1,190 @@
+// Shared procedural-hull TOOLKIT (Session ACAJ). The reusable building blocks
+// for believable crashed-ship wrecks — used by the hand-modeled mega-wreck AND
+// the procgen wreck fleet so leveling up a block improves every wreck at once.
+//
+// Research touchstones (game-researcher, ACAJ): dominant-feature silhouette
+// (avoid boxy symmetry; read at 100m), LatheGeometry for tapered fuselage/nose,
+// exposed formers/ribs at breaks, breach via VERTEX-DISPLACEMENT (not boolean) +
+// jagged edges, half-burial via a windward sand-drift mound (~20° slope).
+//
+// Convention: hull long-axis = +X (matches the procgen part convention — parts
+// advance along +X, radius in the YZ plane). Builders return Groups/Meshes ready
+// to position; the caller owns world transform + colliders + merge.
+
+import * as THREE from 'three';
+import type { Rng } from '../core/rng.ts';
+import type { Terrain } from './terrain.ts';
+
+// ── Shared accent materials (low instance count; module singletons). The HULL
+//    material is passed IN by callers (reuse wrecks.ts `_hullMat` etc. — no dup). ──
+/** Dark interior rib/former metal. */
+const _formerMat = new THREE.MeshLambertMaterial({ color: 0x342f28, flatShading: true });
+/** Near-black breach interior (the dark void behind a torn hole). */
+const _voidMat = new THREE.MeshBasicMaterial({ color: 0x0b0907 });
+/** Torn, rust-bitten metal flaps around a breach rim. */
+const _tornMat = new THREE.MeshLambertMaterial({ color: 0x4a3a2b, flatShading: true });
+/** Wind-drifted sand piled against a hull (matches the dune ground 0xcd9555). */
+const _sandMat = new THREE.MeshLambertMaterial({ color: 0xc69a5a, flatShading: true });
+
+// ──────────────────────────────────────────────────────────────────────────
+// Lathe hull section
+// ──────────────────────────────────────────────────────────────────────────
+
+export interface LatheHullOpts {
+  /** Hull surface material (pass the shared `_hullMat` from wrecks.ts). */
+  material: THREE.Material;
+  /** Angular slices (default 20). */
+  segments?: number;
+  /** Partial-arc start angle (radians) — for a torn-open or skylight gap. */
+  phiStart?: number;
+  /** Partial-arc sweep (radians, default 2π = closed tube). */
+  phiLength?: number;
+  /** Long axis: 'x' (default — procgen convention) rotates the lathe so length
+   *  runs along +X; 'y' leaves the native lathe Y axis. */
+  axis?: 'x' | 'y';
+}
+
+/** A tapered/bowed hull section revolved from a 2D profile of
+ *  `Vector2(radius, axialPosition)` points (the openingWreck.ts PROFILE pattern,
+ *  generalized). Smooth taper replaces box sections. Use a partial `phiLength`
+ *  for a torn-open end or a skylight slot. Returns a single Mesh. */
+export function makeLatheHull(profile: THREE.Vector2[], opts: LatheHullOpts): THREE.Mesh {
+  const geo = new THREE.LatheGeometry(
+    profile,
+    opts.segments ?? 20,
+    opts.phiStart ?? 0,
+    opts.phiLength ?? Math.PI * 2,
+  );
+  if ((opts.axis ?? 'x') === 'x') geo.rotateZ(-Math.PI / 2); // lathe +Y → world +X
+  geo.computeVertexNormals();
+  return new THREE.Mesh(geo, opts.material);
+}
+
+/** A symmetric tapered-fuselage profile helper: nose tip → bulge → tail, with a
+ *  little mid bow. `len` along the axis, `maxR` at the widest, `noseR`/`tailR`
+ *  end radii. Returns Vector2(radius, axialY) for `makeLatheHull`. */
+export function fuselageProfile(
+  len: number,
+  maxR: number,
+  noseR: number,
+  tailR: number,
+  rand?: Rng,
+): THREE.Vector2[] {
+  const jit = (f: number) => (rand ? 1 + (rand() - 0.5) * f : 1);
+  return [
+    new THREE.Vector2(Math.max(0.02, tailR), 0),
+    new THREE.Vector2(tailR * 1.04 * jit(0.06), len * 0.10),
+    new THREE.Vector2(maxR * 0.82 * jit(0.06), len * 0.26),
+    new THREE.Vector2(maxR * jit(0.05), len * 0.44),        // widest waist
+    new THREE.Vector2(maxR * 0.97 * jit(0.05), len * 0.60),
+    new THREE.Vector2(maxR * 0.74 * jit(0.06), len * 0.74), // shoulder taper
+    new THREE.Vector2(maxR * 0.46 * jit(0.06), len * 0.86),
+    new THREE.Vector2(noseR * 1.5 * jit(0.06), len * 0.94),
+    new THREE.Vector2(Math.max(0.02, noseR), len),          // nose tip
+  ];
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Exposed former rings (internal structure shown at breaks/breaches)
+// ──────────────────────────────────────────────────────────────────────────
+
+/** Exposed internal rib/former rings — thin tori spaced along the +X axis, sized
+ *  just inside the hull radius so the structure reads where the skin is torn open.
+ *  Position the returned group at a torn end / breach mouth. */
+export function makeFormerRings(
+  radius: number,
+  count: number,
+  spacing: number,
+  opts?: { startX?: number; tube?: number; taper?: number },
+): THREE.Group {
+  const g = new THREE.Group();
+  const tube = opts?.tube ?? Math.max(0.04, radius * 0.06);
+  const startX = opts?.startX ?? 0;
+  const taper = opts?.taper ?? 0.02;
+  for (let i = 0; i < count; i++) {
+    const r = Math.max(0.1, radius * (0.84 - i * taper));
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(r, tube, 6, 18), _formerMat);
+    ring.rotation.y = Math.PI / 2;       // ring plane ⟂ +X
+    ring.position.x = startX + i * spacing;
+    g.add(ring);
+  }
+  return g;
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Breach (torn hole) — vertex-displaced look, NO boolean cut
+// ──────────────────────────────────────────────────────────────────────────
+
+const _flapGeo = new THREE.ConeGeometry(0.5, 1, 3);   // shared unit torn-flap
+
+/** A torn breach built in LOCAL space facing +Z (place it on a hull flank with
+ *  +Z = the surface OUTWARD normal): a recessed dark void + a ragged ring of
+ *  bent torn-metal flaps. Reads as a hole punched through the skin without any
+ *  CSG. Tag children `isWreckDecoration` via `tagBreach` before adding. */
+export function makeBreach(radius: number, rand: Rng): THREE.Group {
+  const g = new THREE.Group();
+  // Recessed interior darkness (slightly behind the skin so it reads as depth).
+  const voidDisc = new THREE.Mesh(new THREE.CircleGeometry(radius * 0.95, 14), _voidMat);
+  voidDisc.position.z = -radius * 0.4;
+  g.add(voidDisc);
+  // Torn rim flaps — irregular bent plates splayed outward around the rim.
+  const flapN = 7 + Math.floor(rand() * 4);
+  for (let i = 0; i < flapN; i++) {
+    const a = (i / flapN) * Math.PI * 2 + (rand() - 0.5) * 0.5;
+    const fl = radius * (0.55 + rand() * 0.6);
+    const fw = radius * (0.22 + rand() * 0.18);
+    const flap = new THREE.Mesh(_flapGeo, _tornMat);
+    flap.scale.set(fw, fl, Math.max(0.04, radius * 0.12));
+    const rr = radius * 0.85;
+    flap.position.set(Math.cos(a) * rr, Math.sin(a) * rr, radius * (0.05 + rand() * 0.12));
+    // Cone points +Y by default → point it radially outward from the rim, bent out.
+    flap.rotation.z = a - Math.PI / 2;
+    flap.rotation.x = (rand() - 0.5) * 0.7;     // bend out of plane
+    g.add(flap);
+  }
+  return g;
+}
+
+/** Tag every mesh in a breach (or any decoration group) so `findPanelMount`
+ *  won't place a salvage panel on top of it. */
+export function tagWreckDecoration(group: THREE.Object3D): void {
+  group.traverse((o) => { o.userData.isWreckDecoration = true; });
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Windward sand-drift mound (half-burial; visual only)
+// ──────────────────────────────────────────────────────────────────────────
+
+/** A wind-drifted sand pile heaped against a wreck's windward flank — a low,
+ *  flattened, organic dome (~20° slope) sunk so only the drift shows, blended to
+ *  the terrain. Visual only (sand is non-traversable anyway). Returns a
+ *  WORLD-positioned Mesh to add to the scene. */
+export function makeSandMound(
+  terrain: Terrain,
+  cx: number,
+  cz: number,
+  windDir: THREE.Vector2,
+  size: number,
+  rand: Rng,
+): THREE.Mesh {
+  const h = size * 0.42;                                   // ~atan(h/size) drift slope
+  const geo = new THREE.ConeGeometry(size, h, 14, 2, false);
+  // Squash + perturb the rim verts so it reads as an organic drift, not a cone.
+  const p = geo.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+    const t = (y + h / 2) / h;                             // 0 base → 1 apex
+    const wob = 1 + (Math.sin(x * 5.1 + z * 3.7) * 0.18 + (rand() - 0.5) * 0.12) * (1 - t);
+    p.setXYZ(i, x * wob, y * 0.62, z * wob);               // flatten + wobble base
+  }
+  geo.computeVertexNormals();
+  const mound = new THREE.Mesh(geo, _sandMat);
+  // Offset toward the windward side; sink so most of the cone is buried.
+  const ox = cx + windDir.x * size * 0.45;
+  const oz = cz + windDir.y * size * 0.45;
+  const gy = terrain.heightAt(ox, oz);
+  mound.position.set(ox, gy + h * 0.31 - size * 0.18, oz);
+  mound.rotation.y = rand() * Math.PI * 2;
+  mound.receiveShadow = true;
+  return mound;
+}

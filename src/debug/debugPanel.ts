@@ -5,6 +5,8 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import type { GameContext } from '../GameContext.ts';
 import { spawnRaider as spawnRaiderEntity, damageRaider } from '../enemies/raider.ts';
 import { damageVulture } from '../enemies/vulture.ts';
+import { makeLatheHull, fuselageProfile, makeFormerRings, makeBreach, makeSandMound } from '../world/wreckForms.ts';
+import { createRustedHullMaterial } from '../world/hullMaterial.ts';
 import { resetTutorial, showControlsPanel } from '../ui/tutorial.ts';
 import { getAudioStateSnapshot, type AudioStateSnapshot } from '../audio/soundscape.ts';
 import { getMusicStateSnapshot, type MusicStateSnapshot } from '../audio/music.ts';
@@ -87,6 +89,11 @@ interface DebugApi {
    *  pass (Lane 1) drives this via the `item-studio` rig-shot scenario. Pass an
    *  ItemId + angle; re-call to swap items/angles (prior mesh is removed). */
   itemStudio: (id: ItemId, angle?: 'front' | 'back' | 'left' | 'right' | 'top' | '3q') => unknown;
+  /** ACAJ — visual-audit "studio" for the shared wreck-form toolkit primitives
+   *  (`wreckForms.ts`). Builds a single form (lathe hull / former rings / breach /
+   *  sand mound) in ISOLATION, suspends it against the clean sky, and frames the
+   *  angle. Drives the `wreck-form` rig-shot scenario. */
+  wreckFormStudio: (form: 'lathe' | 'formers' | 'breach' | 'mound', angle?: 'front' | 'side' | '3q' | 'top') => unknown;
   /** ACY — headless bury/occlusion audit for salvage panels. For each
    *  registered salvageable, raycasts inward along the panel's own outward
    *  axis against its wreck root; if the nearest hit is NOT the panel body
@@ -309,6 +316,77 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
       cam.lookAt(anchor);
       cam.updateMatrixWorld(true);
       return { id, angle: angle ?? 'front', ok: true, radius: +radius.toFixed(3) };
+    },
+    wreckFormStudio(form, angle) {
+      if (hooks.enterGame) hooks.enterGame(true);
+      else { ctx.flags.titleActive = false; ctx.flags.paused = false; }
+      const three = ctx.three;
+      three.renderer.setSize(900, 900, false);
+      const cam = three.camera as THREE.PerspectiveCamera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1; cam.updateProjectionMatrix(); }
+      three.renderer.toneMappingExposure = 1.4;
+      ctx.flags.paused = true;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (!studioGroup) {
+        studioGroup = new THREE.Group();
+        studioGroup.name = '__itemStudio';
+        const key = new THREE.DirectionalLight(0xfff1dc, 2.6);
+        key.position.set(2.5, 3.5, 2.0);
+        const fill = new THREE.DirectionalLight(0xaec6ff, 0.85);
+        fill.position.set(-2.2, 1.0, -1.4);
+        const amb = new THREE.AmbientLight(0xffffff, 0.85);
+        studioGroup.add(key, fill, amb);
+        three.scene.add(studioGroup);
+      }
+      if (studioMesh) { studioGroup.remove(studioMesh); studioMesh = null; }
+
+      const rand = Math.random;
+      const hullMat = createRustedHullMaterial({ baseColor: 0x5f5b54 });
+      let node: THREE.Object3D;
+      if (form === 'lathe') {
+        node = makeLatheHull(fuselageProfile(6, 1.4, 0.3, 0.9, rand), { material: hullMat });
+      } else if (form === 'formers') {
+        const g = new THREE.Group();
+        g.add(makeLatheHull(fuselageProfile(4, 1.3, 0.3, 1.1, rand), { material: hullMat, phiLength: Math.PI * 1.3 }));
+        g.add(makeFormerRings(1.2, 4, 0.5, { startX: 0.3 }));
+        node = g;
+      } else if (form === 'breach') {
+        const g = new THREE.Group();
+        const hull = makeLatheHull(fuselageProfile(5, 1.3, 0.3, 1.0, rand), { material: hullMat });
+        g.add(hull);
+        const breach = makeBreach(0.7, rand);
+        breach.position.set(2.6, 0, 1.25);   // on the +Z flank
+        breach.rotation.y = 0;               // +Z outward
+        g.add(breach);
+        node = g;
+      } else {
+        node = makeSandMound(ctx.terrain, 0, 0, new THREE.Vector2(1, 0), 3, rand);
+        node.position.set(0, 0, 0);          // reframed below
+      }
+
+      const bp = ctx.player.body.body.translation();
+      const anchor = new THREE.Vector3(bp.x, bp.y + 60, bp.z);
+      node.updateMatrixWorld(true);
+      const box = new THREE.Box3().setFromObject(node);
+      const center = box.getCenter(new THREE.Vector3());
+      const size = box.getSize(new THREE.Vector3());
+      const radius = Math.max(size.x, size.y, size.z, 0.1) * 0.5;
+      node.position.sub(center).add(anchor);
+      studioGroup.add(node);
+      studioMesh = node;
+      studioGroup.updateMatrixWorld(true);
+
+      const dist = radius * 2.6 + 0.5;
+      const dir = new THREE.Vector3(0.2, 0.12, 1);
+      if (angle === 'side') dir.set(0, 0.08, 1);
+      else if (angle === '3q') dir.set(0.85, 0.18, 0.85);
+      else if (angle === 'top') dir.set(0.1, 1, 0.2);
+      else if (angle === 'front') dir.set(1, 0.12, 0.15);   // down the +X nose
+      dir.normalize();
+      cam.position.copy(anchor).addScaledVector(dir, dist);
+      cam.lookAt(anchor);
+      cam.updateMatrixWorld(true);
+      return { form, angle: angle ?? 'side', ok: true, radius: +radius.toFixed(2) };
     },
     panelBuryAudit() {
       const reg = (ctx as unknown as { salvageables?: { list: Array<{ panel: THREE.Object3D; kind?: string; wreckKind?: string }> } }).salvageables;

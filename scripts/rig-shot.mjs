@@ -850,6 +850,21 @@ const SCENARIOS = {
   // Tree (ACAF f/u): frame a whole dead tree from a low 3/4 angle to judge the
   // trunk taper + the buildBranchMesh limbs (connected, no floaters). --time set
   // for a legible mid-morning read; --tilt/--dist to vary the camera.
+  // Wreck-form (ACAJ T1): isolate a shared wreck-form toolkit primitive against
+  // the sky for screenshot iteration. --form=lathe|formers|breach|mound, --angle=.
+  'wreck-form': async (page) => {
+    const form = argv.form || 'lathe';
+    const angle = argv.angle || 'side';
+    const r = await page.evaluate((a) => {
+      window.__game.setTime(0.5);
+      window.__game.ctx.weather.intensity = 0;
+      return window.__game.wreckFormStudio(a.form, a.angle);
+    }, { form, angle });
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: join(OUT, `scen-wreck-form-${form}.png`), fullPage: false });
+    console.log(`[wreck-form] ${JSON.stringify(r)}`);
+  },
+
   'tree': async (page) => {
     const t = argv.time !== undefined ? Number(argv.time) : 0.42;
     const r = await page.evaluate((t) => {
