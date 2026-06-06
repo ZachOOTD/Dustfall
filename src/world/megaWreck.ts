@@ -35,6 +35,7 @@ import type { Terrain } from './terrain.ts';
 import { Tuning } from '../config/tuning.ts';
 import { panelWithHole } from './panelUtils.ts';
 import { addAccessPanel, placeDebrisField, makeEngineBellMesh } from './wrecks.ts';
+import { makeLatheHull, makeFormerRings, makeBreach, tagWreckDecoration } from './wreckForms.ts';
 import { addShelterZone, type ShelterRegistry } from '../shelter/shelterZones.ts';
 import { registerSalvageable, type SalvageableRegistry } from './salvage.ts';
 import { placeJournal, type Journal } from './journal.ts';
@@ -82,14 +83,8 @@ const _pipeMat = createMetalMaterial(0x3a3028, {
 });
 const _viewportMat = new THREE.MeshBasicMaterial({ color: 0x14181c });
 
-// ABL — rust-band wrap material. Slightly darker + stronger streaks
-// than the main hull so the wraps read as discrete weathering bands
-// against the panel surface.
-const _bandMat = createRustedHullMaterial({
-  baseColor: Tuning.WRECK_RUST_DARK_HEX,
-  streakIntensity: 0.75,
-  rustHex: 0x1a0e08,
-});
+// (ACAJ T2 — the ABL rust-band `_bandMat` was retired with the band wraps;
+// the new toolkit hull carries its own rust-streak material.)
 
 // ── Burial + wall thickness. WALL_BURY scaled up from megaShip's 2.0m
 // because at 120m length even small terrain variation otherwise exposes
@@ -758,157 +753,113 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
     }
   }
 
-  // ── ABL — silhouette improvement pass. Drape decorative meshes
-  // OVER the existing box-wall structure to improve the silhouette
-  // without touching colliders or interior layout. Three layers:
-  //   (a) Tapered LatheGeometry hull shell over the aft section —
-  //       reads as a curved cargo-ship hull instead of a box
-  //   (b) Rust band wraps around aft + mid-hull break — discrete
-  //       weathering bands that read as "this ship has weathered
-  //       for years"
-  //   (c) Exposed rib bumps at the hull break — small cylinder
-  //       struts visible where the hull is torn open between bow
-  //       and aft, suggesting the hull cracked here on impact
+  // ── ACAJ T2 — exterior silhouette rebuild. Replace the ABL straight-
+  // cylinder shell + rust bands + rib bumps with a proper TOOLKIT-built
+  // curved hull (wreckForms.ts): a tapered fuselage aft section + a nose
+  // section + exposed former rings at the fracture + asymmetric breaches.
+  // All FrontSide outer shell, noCollider — the interior box walls (which
+  // carry the colliders + are visible from inside the bay) are untouched.
+  // The hull is wider-than-tall, so the circular lathe cross-section is
+  // flattened in Y (HULL_Y_FLAT) to an ellipse hugging the box.
+  // The hull cross-section is an ellipse large enough to ENVELOP the wide box
+  // (its corners), so the box reads as the inner structure, not the silhouette.
+  const HULL_Y_FLAT = 0.72;
 
-  // (a) Tapered aft-section hull shell. CylinderGeometry rotated so
-  // its axis is along Z; scaled to ellipsoidal cross-section to fit
-  // the wider-than-tall aft body. Slightly tapered (smaller at front
-  // edge of aft, wider at rear) for crash-deformation read. Material
-  // is FrontSide-only outer shell — interior box walls remain visible
-  // from inside the bay.
+  // (a) Aft hull — a broad tapered fuselage along +Z spanning the aft box
+  // [Z -10 .. 50]: narrower + torn at the fracture (front), a slight bulge,
+  // tapering to the engine end (rear, crash-flared).
   {
-    const shellLen = AFT_HALF_L * 2.0;
-    const shellRTop = AFT_HALF_W * 0.95;     // narrower at front
-    const shellRBot = AFT_HALF_W * 1.05;     // wider at rear (crash flare)
-    const shell = new THREE.Mesh(
-      new THREE.CylinderGeometry(shellRTop, shellRBot, shellLen, 16, 1, true),
+    const L = AFT_HALF_L * 2;                       // 60
+    const W = AFT_HALF_W * 1.28;                    // envelope the 40m-wide box
+    const profile = [
+      new THREE.Vector2(W * 0.84, 0.00 * L),        // fracture end (front, -Z)
+      new THREE.Vector2(W * 0.97, 0.10 * L),
+      new THREE.Vector2(W * 1.02, 0.34 * L),        // belly bulge
+      new THREE.Vector2(W * 1.03, 0.55 * L),
+      new THREE.Vector2(W * 0.99, 0.74 * L),
+      new THREE.Vector2(W * 0.90, 0.90 * L),        // taper to engines
+      new THREE.Vector2(W * 0.78, 1.00 * L),        // engine end (rear, +Z)
+    ];
+    const aftHull = makeLatheHull(profile, { material: _hullMat, axis: 'z', segments: 24 });
+    aftHull.position.set(0, AFT_HALF_H + 1.5, AFT_ORIGIN_Z - AFT_HALF_L);  // z=-10
+    aftHull.scale.set(1, HULL_Y_FLAT, 1);
+    aftHull.userData.noCollider = true;
+    g.add(aftHull);
+  }
+
+  // (b) Bow hull — a nose section along +Z spanning the bow box [Z -60 .. -25],
+  // tapering to a torn nose tip at the -Z front. Attached to bowGroup so it
+  // tracks the bow's terrain Y-offset.
+  {
+    const L = BOW_HALF_L * 2;                       // 35
+    const W = BOW_HALF_W * 1.32;                     // envelope the bow box
+    const profile = [
+      new THREE.Vector2(W * 0.16, 0.00 * L),        // torn nose tip (-Z)
+      new THREE.Vector2(W * 0.48, 0.10 * L),
+      new THREE.Vector2(W * 0.80, 0.30 * L),
+      new THREE.Vector2(W * 0.95, 0.55 * L),        // bow shoulder
+      new THREE.Vector2(W * 0.99, 0.80 * L),
+      new THREE.Vector2(W * 0.90, 1.00 * L),        // fracture end (+Z, faces aft)
+    ];
+    const bowHull = makeLatheHull(profile, { material: _hullMat, axis: 'z', segments: 18 });
+    bowHull.position.set(0, BOW_HALF_H + 1.2, BOW_ORIGIN_Z - BOW_HALF_L);  // z=-60 (nose), +35 → -25
+    bowHull.scale.set(1, HULL_Y_FLAT + 0.04, 1);    // bow a touch rounder
+    bowHull.userData.noCollider = true;
+    bowGroup.add(bowHull);
+  }
+
+  // (c) Exposed former rings at the mid-hull FRACTURE (Z ∈ [-25,-10]) — the
+  // ship's internal rib skeleton showing where bow + aft tore apart on impact.
+  {
+    const formers = makeFormerRings(AFT_HALF_W * 1.02, 4, 4.2, { tube: 0.6 });
+    formers.rotation.y = -Math.PI / 2;              // rings spaced along +Z
+    formers.position.set(0, AFT_HALF_H + 1.5, -24);
+    formers.scale.set(1, HULL_Y_FLAT, 1);
+    formers.userData.noCollider = true;
+    g.add(formers);
+  }
+
+  // (d) Asymmetric impact breaches — torn holes punched through the flanks.
+  // Functional asymmetry: the +X side took the impact (2 big breaches), the
+  // far -X flank has one smaller tear.
+  {
+    const breach = (side: number, yFrac: number, z: number, radius: number) => {
+      const b = makeBreach(radius, _rand);
+      tagWreckDecoration(b);
+      b.position.set(side * AFT_HALF_W * 1.18, AFT_HALF_H * yFrac + 1.0, z);
+      b.rotation.y = side > 0 ? Math.PI / 2 : -Math.PI / 2;   // +Z (outward) → ±X flank
+      b.scale.set(1, HULL_Y_FLAT + 0.15, 1);
+      b.userData.noCollider = true;
+      g.add(b);
+    };
+    breach(1, 1.15, 6, 4.0);     // impact flank — gaping
+    breach(1, 0.65, 32, 2.6);    // impact flank — second
+    breach(-1, 1.05, 20, 2.1);   // far flank — smaller tear
+  }
+
+  // (e) Bridge superstructure shell — a tapered cap + forward-raked windscreen
+  // over the tower box so it reads as a ship's bridge, not a plain cube. Visual
+  // only; the tower walls + the climb ramp inside are untouched.
+  {
+    const cz = AFT_ORIGIN_Z + TOWER_OFFSET_Z;
+    const topY = TOWER_BASE_Y + TOWER_HALF_H * 2;
+    // Tapered cap (narrower at top) — a low 6-sided frustum reads angular/sci-fi.
+    const cap = new THREE.Mesh(
+      new THREE.CylinderGeometry(TOWER_HALF_W * 0.42, TOWER_HALF_W * 1.12, TOWER_HALF_H * 0.9, 6),
       _hullMat,
     );
-    // Cylinder default axis = Y. Rotate around X to make axis = Z.
-    shell.rotation.x = Math.PI / 2;
-    // Position: centered on the aft section. Y centered vertically.
-    shell.position.set(0, AFT_HALF_H, AFT_ORIGIN_Z);
-    // Scale to ellipsoidal cross-section: keep X radius, flatten Y so the
-    // shell hugs the box top + bottom rather than overshooting upward.
-    shell.scale.set(1.0, 0.62, 1.0);
-    shell.userData.noCollider = true;
-    g.add(shell);
-  }
-
-  // (a-bow) Session ABN — bow hull shell, mirroring the aft pattern.
-  // HALF-CYLINDER (thetaStart=0, thetaLength=π) caps the upper portion
-  // of the bow's box silhouette; open underside keeps the -X side
-  // entrance visually clear (entrance top at Y=4m sits at shell's open
-  // bottom edge, so the player still walks into a clean doorway).
-  // Attached to bowGroup so it tracks the bow's terrain Y-offset.
-  {
-    const shellLen = BOW_HALF_L * 2.0;
-    const shellRTop = BOW_HALF_W * 0.95;
-    const shellRBot = BOW_HALF_W * 1.05;
-    const bowShell = new THREE.Mesh(
-      new THREE.CylinderGeometry(
-        shellRTop, shellRBot, shellLen,
-        14, 1, true,                 // open-ended, no caps
-        0, Math.PI,                  // half-cylinder (top hemicircle)
-      ),
-      _hullMat,
-    );
-    bowShell.rotation.x = Math.PI / 2;
-    bowShell.position.set(0, BOW_HALF_H, BOW_ORIGIN_Z);
-    // Same ellipsoidal flatten as aft, so bow + aft shells read as one
-    // continuous silhouette family despite the different scales.
-    bowShell.scale.set(1.0, 0.62, 1.0);
-    bowShell.userData.noCollider = true;
-    bowGroup.add(bowShell);
-  }
-
-  // (b) Rust band wraps. 4 thick bands around the aft + 2 around bow.
-  // Each is a thin torus oriented so it wraps the body cross-section.
-  // Using torus over cylinder slice because the torus reads as a real
-  // 3D wrapping band, not a flat ring.
-  {
-    // Aft bands at different Z positions along the aft length.
-    const aftBandZs = [
-      AFT_ORIGIN_Z - AFT_HALF_L * 0.7,
-      AFT_ORIGIN_Z - AFT_HALF_L * 0.25,
-      AFT_ORIGIN_Z + AFT_HALF_L * 0.15,
-      AFT_ORIGIN_Z + AFT_HALF_L * 0.55,
-    ];
-    for (const z of aftBandZs) {
-      const band = new THREE.Mesh(
-        new THREE.TorusGeometry(AFT_HALF_W * 1.02, 0.35, 6, 18),
-        _bandMat,
-      );
-      band.rotation.y = Math.PI / 2;       // torus default in XY plane → rotate so it's in YZ
-      band.position.set(0, AFT_HALF_H, z);
-      band.scale.set(1.0, 0.62, 1.0);      // match ellipsoidal hull cross-section
-      band.userData.noCollider = true;
-      g.add(band);
-    }
-    // Bow bands (smaller — bow is thinner).
-    const bowBandZs = [
-      BOW_ORIGIN_Z - BOW_HALF_L * 0.5,
-      BOW_ORIGIN_Z + BOW_HALF_L * 0.4,
-    ];
-    for (const z of bowBandZs) {
-      const band = new THREE.Mesh(
-        new THREE.TorusGeometry(BOW_HALF_W * 1.05, 0.22, 5, 14),
-        _bandMat,
-      );
-      band.rotation.y = Math.PI / 2;
-      band.position.set(0, BOW_HALF_H + 0.5, z);
-      band.scale.set(1.0, 0.7, 1.0);
-      band.userData.noCollider = true;
-      bowGroup.add(band);
-    }
-  }
-
-  // (c) Exposed rib bumps at the hull break. The mid-hull break sits
-  // between bow (Z = BOW_ORIGIN_Z + BOW_HALF_L = -25) and aft
-  // (Z = AFT_ORIGIN_Z - AFT_HALF_L = -10), so the break is the gap
-  // Z ∈ [-25, -10]. Place 3 short vertical ribs spanning Y from ground
-  // up to mid-height — reads as "internal hull beams exposed where
-  // the skin peeled away."
-  {
-    const ribZs = [-22, -17, -12];
-    for (const z of ribZs) {
-      const rib = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.25, 0.32, AFT_HALF_H * 1.5, 6),
-        _hullDarkMat,
-      );
-      rib.position.set(
-        // Alternate left/right slightly so they don't look perfectly aligned
-        (z % 5) - 2.5,
-        AFT_HALF_H * 0.6,
-        z,
-      );
-      rib.rotation.z = (z * 0.13) % 0.3 - 0.15;     // slight random tilt
-      rib.userData.noCollider = true;
-      g.add(rib);
-    }
-    // Plus a few torn-plate fragments arching over the break — small
-    // boxes positioned at the break zone with random tilts.
-    for (let i = 0; i < 5; i++) {
-      const frag = new THREE.Mesh(
-        new THREE.BoxGeometry(
-          1.5 + _rand() * 1.2,
-          0.15,
-          0.8 + _rand() * 0.6,
-        ),
-        _rustDarkMat,
-      );
-      const z = -22 + _rand() * 12;
-      const x = (_rand() - 0.5) * AFT_HALF_W * 1.5;
-      const y = AFT_HALF_H * (0.7 + _rand() * 0.4);
-      frag.position.set(x, y, z);
-      frag.rotation.set(
-        (_rand() - 0.5) * 0.8,
-        (_rand() - 0.5) * Math.PI,
-        (_rand() - 0.5) * 0.6,
-      );
-      frag.userData.noCollider = true;
-      g.add(frag);
-    }
+    cap.rotation.y = Math.PI / 6;
+    cap.position.set(0, topY + TOWER_HALF_H * 0.35, cz);
+    cap.scale.set(1.0, 1.0, TOWER_HALF_L / TOWER_HALF_W);  // match the tower footprint depth
+    cap.userData.noCollider = true;
+    g.add(cap);
+    // Forward-raked windscreen slab across the tower front (the bridge glass).
+    const screen = box(TOWER_HALF_W * 1.9, TOWER_HALF_H * 1.5, 0.5, _viewportMat);
+    screen.position.set(0, TOWER_BASE_Y + TOWER_HALF_H * 1.15, cz - TOWER_HALF_L - 0.55);
+    screen.rotation.x = -0.42;   // rake the top backward
+    screen.userData.noCollider = true;
+    screen.userData.noShadow = true;
+    g.add(screen);
   }
 
   // ── Shadow flags.
@@ -942,6 +893,7 @@ export function placeMegaWreck(
   journals?: { list: Journal[] },
 ): THREE.Group {
   const group = makeMegaWreck(rand);
+  group.name = 'megaWreck';   // ACAJ — so the `megawreck` rig-shot can locate it
   group.position.copy(pos);
   const yawQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
   const finalQ = new THREE.Quaternion().multiplyQuaternions(tilt, yawQ);

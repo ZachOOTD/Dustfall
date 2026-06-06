@@ -865,6 +865,54 @@ const SCENARIOS = {
     console.log(`[wreck-form] ${JSON.stringify(r)}`);
   },
 
+  // Megawreck (ACAJ T2): locate the mega-wreck POI + orbit it for the silhouette
+  // rebuild. --angle=3q|side|front|rear|interior ; reports panel/shelter presence.
+  'megawreck': async (page) => {
+    const angle = argv.angle || '3q';
+    const r = await page.evaluate((ang) => {
+      const ctx = window.__game.ctx;
+      ctx.weather.intensity = 0; ctx.weather.cloudiness = 0.2;
+      window.__game.setTime(0.46);
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      let mw = null;
+      ctx.three.scene.traverse((o) => { if (!mw && o.name === 'megaWreck') mw = o; });
+      if (!mw) return { found: false };
+      const V = ctx.three.camera.position.constructor;
+      // bbox via traversal (Box3 not guaranteed on window)
+      let minX = 1e9, minY = 1e9, minZ = 1e9, maxX = -1e9, maxY = -1e9, maxZ = -1e9;
+      mw.updateMatrixWorld(true);
+      mw.traverse((o) => {
+        if (!o.isMesh || !o.geometry) return;
+        o.geometry.computeBoundingBox();
+        const bb = o.geometry.boundingBox;
+        for (const cx of [bb.min.x, bb.max.x]) for (const cy of [bb.min.y, bb.max.y]) for (const cz of [bb.min.z, bb.max.z]) {
+          const p = new V(cx, cy, cz); o.localToWorld(p);
+          minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+          minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
+          minZ = Math.min(minZ, p.z); maxZ = Math.max(maxZ, p.z);
+        }
+      });
+      const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2, cz = (minZ + maxZ) / 2;
+      const span = Math.max(maxX - minX, maxZ - minZ);
+      const cam = ctx.three.camera;
+      ctx.flags.paused = true;
+      const eye = cy + (maxY - minY) * 0.35;
+      const d = span * 1.45;                       // pull back to fit the ~115m ship
+      if (ang === 'interior') { cam.position.set(cx, cy, cz); cam.lookAt(cx + 1, cy, cz + 1); }
+      else if (ang === 'side') { cam.position.set(cx + d, eye, cz); cam.lookAt(cx, cy, cz); }
+      else if (ang === 'front') { cam.position.set(cx, eye, cz - d); cam.lookAt(cx, cy, cz); }
+      else if (ang === 'rear') { cam.position.set(cx, eye, cz + d); cam.lookAt(cx, cy, cz); }
+      else { cam.position.set(cx + d * 0.72, eye + d * 0.28, cz - d * 0.72); cam.lookAt(cx, cy, cz); }
+      cam.updateMatrixWorld(true);
+      const panels = (ctx.salvageables?.list || []).filter((s) => s.kind === 'massive').length;
+      return { found: true, span: +span.toFixed(0), height: +(maxY - minY).toFixed(0), panels };
+    }, angle);
+    await page.waitForTimeout(350);
+    await page.screenshot({ path: join(OUT, `scen-megawreck-${angle}.png`), fullPage: false });
+    console.log(`[megawreck] ${JSON.stringify(r)}`);
+  },
+
   'tree': async (page) => {
     const t = argv.time !== undefined ? Number(argv.time) : 0.42;
     const r = await page.evaluate((t) => {

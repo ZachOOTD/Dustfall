@@ -40,8 +40,9 @@ export interface LatheHullOpts {
   /** Partial-arc sweep (radians, default 2π = closed tube). */
   phiLength?: number;
   /** Long axis: 'x' (default — procgen convention) rotates the lathe so length
-   *  runs along +X; 'y' leaves the native lathe Y axis. */
-  axis?: 'x' | 'y';
+   *  runs along +X; 'z' along +Z (the mega-wreck ship axis); 'y' leaves the
+   *  native lathe Y axis. */
+  axis?: 'x' | 'y' | 'z';
 }
 
 /** A tapered/bowed hull section revolved from a 2D profile of
@@ -55,7 +56,9 @@ export function makeLatheHull(profile: THREE.Vector2[], opts: LatheHullOpts): TH
     opts.phiStart ?? 0,
     opts.phiLength ?? Math.PI * 2,
   );
-  if ((opts.axis ?? 'x') === 'x') geo.rotateZ(-Math.PI / 2); // lathe +Y → world +X
+  const axis = opts.axis ?? 'x';
+  if (axis === 'x') geo.rotateZ(-Math.PI / 2);       // lathe +Y → world +X
+  else if (axis === 'z') geo.rotateX(Math.PI / 2);   // lathe +Y → world +Z
   geo.computeVertexNormals();
   return new THREE.Mesh(geo, opts.material);
 }
