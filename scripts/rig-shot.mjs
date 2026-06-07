@@ -905,10 +905,24 @@ const SCENARIOS = {
       const D = Math.max(span, maxZ - minZ) * 1.02;
       const aimY = minY + h * 0.3, up = minY + h * 0.5;
       const aim = (camPos) => { cam.position.copy(camPos); cam.lookAt(cx, aimY, cz); };
-      if (ang === 'interior') {
-        const q = mw.quaternion;
-        cam.position.copy(new V(0, 1.6, -20).applyQuaternion(q).add(mw.position));
-        cam.lookAt(new V(0, 1.6, 40).applyQuaternion(q).add(mw.position));
+      if (ang.startsWith('int')) {
+        // Inside the canted wreck, in the SHELL frame (the interior is built there).
+        // Place via the shell child's world matrix so the camera rides the list onto
+        // the tilted deck. Shell-local interior viewpoints (deck ≈ y 1; eye ≈ y 2.6):
+        const shellObj = mw.getObjectByName('shell') || mw;
+        shellObj.updateMatrixWorld(true);
+        const M = shellObj.matrixWorld;
+        const sl = (x, y, z) => new V(x, y, z).applyMatrix4(M);
+        const VIEWS = {
+          'interior': [[1.4, 2.6, -28], [1, 1.5, 6]],       // bow compartment → fracture
+          'int-bow':  [[1.5, 3.0, -42], [1, 1.5, -10]],     // bow entry looking aft
+          'int-frac': [[0.5, 3.5, -10], [0.5, 4.0, 18]],    // across the fracture cathedral
+          'int-aft':  [[2.0, 3.2, 22], [1.5, 2.0, 48]],     // engineering looking aft
+          'int-bridge': [[3.0, 3.0, 60], [3.0, 2.5, 73]],   // up to the bridge
+        };
+        const [eye, look] = VIEWS[ang] || VIEWS['interior'];
+        cam.position.copy(sl(eye[0], eye[1], eye[2]));
+        cam.lookAt(sl(look[0], look[1], look[2]));
       }
       else if (ang === 'side') aim(new V(cx + D, up, cz));                          // broadside (the money shot)
       else if (ang === 'hero') aim(new V(cx + D * 0.8, minY + h * 0.16, cz - D * 0.5)); // low bow-3/4 (length + list)

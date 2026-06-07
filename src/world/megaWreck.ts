@@ -177,26 +177,94 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
   // Wreckage decoration — peeled bulkheads, debris piles flowed to the down-+X
   // flank, exposed ribs where plating tore, hanging cables. Visual only.
   {
-    // Peeled-inward bulkheads (from the +X impact side) — 2 partial walls.
-    for (const [z, h] of [[-26, 7], [34, 9]] as const) {
+    // Frame ribs every ~10m along the walkable length — the ship's internal skeleton
+    // showing where the plating peeled, exposed inside the hull (catches the fill).
+    for (let z = -42; z < 70; z += 9) {
+      if (Math.abs(z - 6) < 12) continue;     // skip the open fracture
       const s = hullAt(z);
-      const w = box(0.5, h, 5, dark); w.position.set(s.halfW * 0.55, deckY(z) + h / 2, z); w.rotation.set(0, 0, -0.35); add(w);
-      const rib = makeFormerRings(s.halfW * 0.9, 2, 1.5, { tube: 0.4 }); rib.rotation.y = -Math.PI / 2; rib.position.set(0, s.cy, z); rib.scale.set(1, s.halfH / s.halfW, 1); add(rib);
+      const rib = makeFormerRings(s.halfW * 0.94, 1, 1, { tube: 0.35 });
+      rib.rotation.y = -Math.PI / 2; rib.position.set(0, s.cy, z); rib.scale.set(1, s.halfH / s.halfW, 1); add(rib);
     }
-    // Debris piles flowed down toward the +X flank.
-    for (const [z, n] of [[-30, 5], [-12, 4], [30, 6], [40, 4], [58, 3]] as const) {
+    // Peeled-inward bulkheads (from the +X impact side) — torn partial walls.
+    for (const [z, h] of [[-26, 7], [34, 9], [56, 6]] as const) {
+      const s = hullAt(z);
+      const w = box(0.5, h, 4.5, dark); w.position.set(s.halfW * 0.5, deckY(z) + h / 2, z); w.rotation.set(0, 0, -0.32 - _rand() * 0.15); add(w);
+      // a bent torn flap off its edge
+      const fl = box(0.3, 2.5, 3, _tornMat); fl.position.set(s.halfW * 0.5 - 1, deckY(z) + h - 1, z); fl.rotation.set(0.3, 0.2, -0.6); add(fl);
+    }
+    // Varied wreckage debris flowed down toward the down-+X flank (torn plates, drums,
+    // pipe fragments — NOT uniform cubes), half-settled on the canted floor.
+    const debris = (z: number, n: number) => {
       const s = hullAt(z);
       for (let i = 0; i < n; i++) {
-        const db = box(0.6 + _rand() * 1.4, 0.4 + _rand() * 1.0, 0.6 + _rand() * 1.4, dark);
-        db.position.set(s.halfW * (0.2 + _rand() * 0.45), deckY(z) + 0.3 + _rand() * 0.6, z + (_rand() - 0.5) * 4);
-        db.rotation.set(_rand(), _rand(), _rand()); add(db);
+        const fx = s.halfW * (0.15 + _rand() * 0.5), fy = deckY(z) + 0.25 + _rand() * 0.5, fz = z + (_rand() - 0.5) * 6;
+        const kind = _rand();
+        let m: THREE.Mesh;
+        if (kind < 0.45) { m = box(0.8 + _rand() * 2.2, 0.1 + _rand() * 0.3, 0.6 + _rand() * 2.0, dark); }   // torn plate
+        else if (kind < 0.72) { m = cyl(0.5 + _rand() * 0.5, 0.5 + _rand() * 0.5, 1.4 + _rand(), dark, 8); }  // drum
+        else if (kind < 0.9) { m = cyl(0.12, 0.12, 2 + _rand() * 3, _pipeMat, 6); }                            // pipe fragment
+        else { m = box(0.5 + _rand(), 0.5 + _rand(), 0.5 + _rand(), dark); }                                   // chunk
+        m.position.set(fx, fy, fz); m.rotation.set(_rand() * 3, _rand() * 3, _rand() * 3); add(m);
       }
+    };
+    for (const [z, n] of [[-38, 4], [-30, 5], [-12, 4], [22, 5], [30, 6], [40, 5], [58, 4], [66, 3]] as const) debris(z, n);
+    // Overhead structure — collapsed deck beams + hanging duct runs across the upper
+    // hull (gives the ceiling void mass + shadow, and reads as a torn-open deck).
+    for (const [z, ang] of [[-28, 0.2], [24, -0.15], [44, 0.18], [62, -0.1]] as const) {
+      const s = hullAt(z);
+      const beam = box(s.halfW * 1.4, 0.5, 0.6, dark); beam.position.set(0, s.dorsalY - 2 - _rand(), z); beam.rotation.set(0.1, 0, ang); add(beam);
+      const duct = cyl(0.4, 0.4, 6, _pipeMat, 8); duct.rotation.x = Math.PI / 2; duct.position.set(s.halfW * 0.3, s.dorsalY - 3, z + 2); duct.rotation.z = 0.1; add(duct);
     }
-    // Hanging cables from torn upper deck-edges down to the floor (catenary; the
-    // shell frame makes them hang under the list).
-    for (const [x, z, topY] of [[-3, -24, 8], [4, 32, 11], [-2, 38, 9], [2, -10, 7]] as const) {
+    // Hanging cables + conduits from the torn upper deck-edges down to the floor.
+    for (const [x, z, topY] of [[-3, -24, 8], [4, 32, 11], [-2, 38, 9], [2, -10, 7], [5, 48, 8], [-4, 60, 7]] as const) {
       add(makeCable(new THREE.Vector3(x, deckY(z) + topY, z), new THREE.Vector3(x + 1.5, deckY(z) + 0.4, z + 2), 2.6, _pipeMat, 0.08));
     }
+    // Wall consoles / panels on the lee (-X, intact) flank — interior greeble.
+    for (const [z, h] of [[-20, 1.6], [28, 1.8], [50, 1.6]] as const) {
+      const s = hullAt(z);
+      const con = box(0.4, h, 2.2, dark); con.position.set(-s.halfW * 0.78, deckY(z) + h / 2 + 0.4, z); con.rotation.set(0, 0, 0.25); add(con);
+      const scr = box(0.18, 0.7, 1.2, _viewportMat); scr.position.set(-s.halfW * 0.78 + 0.25, deckY(z) + h * 0.6 + 0.4, z); scr.rotation.set(0, 0, 0.25); scr.userData.noShadow = true; add(scr);
+    }
+    // Sand-fan intrusion pouring in through the bow-entry breach.
+    const sandMat = new THREE.MeshLambertMaterial({ color: 0xb89968, flatShading: true });
+    for (let i = 0; i < 4; i++) {
+      const sd = cyl(0, 2 + i, 1.2, sandMat, 8);   // flattened sand cones
+      sd.position.set(-hullAt(-40).halfW * 0.5 + i * 0.8, deckY(-40) + 0.3, -40 + i * 1.5);
+      sd.scale.set(1, 0.4, 1); add(sd);
+    }
+  }
+
+  // ── INTERIOR LIGHT (I4) — shafts of DAYLIGHT stab in through the breaches + the
+  // open fracture (sun streaming into the wreck), each a visible god-ray cone + a
+  // PointLight pooling on the floor; a dim cool fill so the upper hull/ceiling isn't
+  // a black void; warm emergency lamps for contrast.
+  {
+    const shaftMat = new THREE.MeshBasicMaterial({ color: 0xfff1d6, transparent: true, opacity: 0.16, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+    const shafts: Array<[number, number, number, number, number]> = [
+      [0, 6, 0xfff1d6, 4.0, 40],            // the open fracture — bright daylight flood
+      [hullAt(30).halfW * 0.8, 30, 0xffe6c2, 2.6, 26],   // +X engineering breach
+      [-hullAt(-40).halfW * 0.8, -40, 0xffe6c2, 2.4, 24], // bow-entry breach
+      [hullAt(52).halfW * 0.8, 52, 0xffe6c2, 2.0, 22],   // aft flank breach
+    ];
+    for (const [sx, sz, color, inten, dist] of shafts) {
+      const top = hullAt(sz).dorsalY + 1, floorY = deckY(sz);
+      const len = top - floorY;
+      const cone = new THREE.Mesh(new THREE.ConeGeometry(3.4, len, 14, 1, true), shaftMat);
+      cone.position.set(sx * 0.5, (top + floorY) / 2, sz); cone.rotation.z = sx > 0 ? 0.25 : -0.25;
+      cone.userData.noShadow = true; add(cone);
+      const pl = new THREE.PointLight(color, inten, dist, 2);
+      pl.position.set(sx * 0.4, floorY + 2.5, sz); add(pl);
+    }
+    // Cool dim FILL lights up the spine at mid-height so the canted ceiling/upper
+    // hull reads (kills the black void) without flattening the dark mood.
+    for (const z of [-30, 0, 25, 45, 66]) {
+      const s = hullAt(z);
+      const f = new THREE.PointLight(0x9fb4cc, 0.55, 34, 1.5);
+      f.position.set(0, s.cy + s.halfH * 0.3, z); add(f);
+    }
+    // Warm emergency lamps (bridge + an engineering panel glow).
+    const lamp1 = new THREE.PointLight(0xff9a4a, 1.2, 16, 2); lamp1.position.set(2.5, deckY(70) + 2.5, 70); add(lamp1);
+    const lamp2 = new THREE.PointLight(0xff7a30, 0.9, 12, 2); lamp2.position.set(hullAt(40).halfW * 0.6, deckY(40) + 2, 40); add(lamp2);
   }
 
 
