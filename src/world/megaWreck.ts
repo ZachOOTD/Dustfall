@@ -278,6 +278,57 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
     const lamp1 = new THREE.PointLight(0xff9a4a, 1.3, 18, 2); lamp1.position.set(2.5, deckY(70) + 2.5, 70); add(lamp1);
   }
 
+  // ── SET DRESSING (I5) — clustered cargo + survivor props near the daylight pools,
+  // material variety + scorch so surfaces aren't single-value, contact-shadow discs
+  // grounding each prop. Makes the bay read as a lived-in crash site, not a greybox.
+  {
+    const _scorchMat = new THREE.MeshBasicMaterial({ color: 0x140f0b, transparent: true, opacity: 0.5, depthWrite: false });
+    const ground = (x: number, y: number, z: number, r: number) => {
+      const d = new THREE.Mesh(new THREE.CircleGeometry(r, 10), _scorchMat); d.rotation.x = -Math.PI / 2; d.position.set(x, y + 0.06, z); d.userData.noShadow = true; add(d);
+    };
+    const propMats = [_rustMat, _hullDarkMat, _hullMat, _tornMat];
+    const pmat = () => propMats[Math.floor(_rand() * propMats.length)];
+    const crate = (x: number, y: number, z: number, sw: number, mat: THREE.Material) => {
+      const c = box(sw, sw * 0.9, sw, mat); c.position.set(x, y + sw * 0.45, z); c.rotation.y = _rand(); c.rotation.z = (_rand() - 0.5) * 0.2; add(c);
+      for (const ex of [-1, 1] as const) for (const ez of [-1, 1] as const) { const bar = box(0.1, sw * 0.94, 0.1, dark); bar.position.set(x + ex * sw * 0.48, y + sw * 0.45, z + ez * sw * 0.48); bar.rotation.copy(c.rotation); add(bar); }
+      ground(x, y, z, sw * 0.7);
+    };
+    const barrel = (x: number, y: number, z: number, mat: THREE.Material) => {
+      const b = cyl(0.5, 0.55, 1.4, mat, 10); b.position.set(x, y + 0.7, z); b.rotation.set((_rand() - 0.5) * 0.35, 0, (_rand() - 0.5) * 0.35); add(b);
+      const rim = new THREE.Mesh(new THREE.TorusGeometry(0.52, 0.06, 5, 12), dark); rim.rotation.x = Math.PI / 2; rim.position.set(x, y + 1.3, z); add(rim); ground(x, y, z, 0.7);
+    };
+    // Prop clusters near the lit zones [z, x-center].
+    for (const [z, cxc] of [[-38, -2], [-30, 3], [6, -3], [28, 3], [40, -2], [66, 0]] as const) {
+      const n = 2 + Math.floor(_rand() * 3);
+      for (let i = 0; i < n; i++) {
+        const px = cxc + (_rand() - 0.5) * 4, pz = z + (_rand() - 0.5) * 5, py = deckY(z) + 0.35;
+        const kind = _rand();
+        if (kind < 0.5) crate(px, py, pz, 0.8 + _rand() * 0.9, pmat());
+        else if (kind < 0.8) barrel(px, py, pz, pmat());
+        else { const door = box(0.2, 2.2, 1.2, dark); door.position.set(px, py + 0.6, pz); door.rotation.set(0.4 + _rand(), _rand(), 0.3); add(door); ground(px, py, pz, 1); }
+      }
+    }
+    // Scorch decals on the floor near the fracture + breaches.
+    for (const [x, z, r] of [[0, 6, 4], [hullAt(30).halfW * 0.5, 30, 3], [-hullAt(-40).halfW * 0.4, -40, 2.5]] as const) {
+      const sc = new THREE.Mesh(new THREE.CircleGeometry(r, 12), _scorchMat); sc.rotation.x = -Math.PI / 2; sc.position.set(x, deckY(z) + 0.37, z); sc.userData.noShadow = true; add(sc);
+    }
+    // Survivor camp in the shelter nook (lee flank, z54): crate-table + tarp + embers.
+    {
+      const z = 54, s = hullAt(54), cx = -s.halfW * 0.5, fy = deckY(54) + 0.35;
+      crate(cx, fy, z, 1.1, _rustMat);
+      const tarp = box(2.6, 0.1, 2.4, _tornMat); tarp.position.set(cx - 1, fy + 1.7, z); tarp.rotation.set(0.12, 0.3, 0.15); add(tarp);
+      const fire = new THREE.Mesh(new THREE.ConeGeometry(0.32, 0.7, 6), new THREE.MeshBasicMaterial({ color: 0xff7a2a })); fire.position.set(cx + 1.6, fy + 0.35, z); fire.userData.noShadow = true; add(fire);
+      const ember = new THREE.PointLight(0xff5a1e, 1.5, 8, 2); ember.position.set(cx + 1.6, fy + 0.5, z); add(ember); ground(cx + 1.6, fy, z, 0.9);
+    }
+    // Bridge command dressing (z70): captain's console + chair + a daylight viewport.
+    {
+      const z = 70, cx = 2, fy = deckY(70) + 0.35;
+      const con = box(2.4, 1.1, 0.9, dark); con.position.set(cx, fy + 0.55, z - 1.5); add(con);
+      const cscr = box(2.0, 0.7, 0.14, _viewportMat); cscr.position.set(cx, fy + 0.9, z - 1.96); cscr.rotation.x = -0.3; cscr.userData.noShadow = true; add(cscr);
+      const chair = box(0.7, 1.3, 0.7, dark); chair.position.set(cx, fy + 0.65, z - 0.1); add(chair);
+      ground(cx, fy, z - 1, 2.2);
+    }
+  }
 
   // (A1) Bow mass — a sharp tapered wedge driving nose-first into the dune, riding
   // LOWER than the aft (snapped back) so the fracture reads as a hard notch.
