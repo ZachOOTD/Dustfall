@@ -3,6 +3,48 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ACAL — 2026-06-07 — Mega-wreck walkthrough fixes: exact collision, natural light, entrance, no floaters ✓ verify pass (tsc clean)
+
+`verified` — `npm run verify` (tsc) PASS throughout; **no save bump** (geometry/material/collider
+only). The user WALK-TESTED the ACAK wreck and reported issues across two passes; fixed each + ran
+an adversarial **floater-hunt** (4 agents read the interior PNGs + geometry code → ranked floaters)
+to convergence over 3 rounds. 6 commits (`2ed662b`→`0aae9f9`). **D189-D191.**
+
+**Collision — 100% EXACT trimesh (D189).** The coarse hand-authored cuboid proxy (player clipped
+through everything) is replaced by ONE Rapier **trimesh built from EVERY solid mesh** in the wreck
+(hull, decks, ribs, beams, debris, cables, props, island, engine bells…), each baked into the
+body-local frame so it inherits the ~17° shell tilt from the mesh hierarchy. Collision matches the
+rendered model triangle-for-triangle (only flat fake-AO/scorch CircleGeometry decals skipped). Kept
+the invisible deck curbs + entrance ramp; panels/journal built AFTER the trimesh → stay interactive.
+
+**Lighting — natural-only (D190).** Removed ALL custom wreck lighting (the artificial god-ray cones
++ fracture flood + every fill/rim/emergency PointLight + console glow + ember). The wreck is lit
+only by the world sun/ambient. Also removed the (A9) rust-streak decal planes — they used an UNLIT
+`MeshBasicMaterial`, so under natural light they glowed flat-pink while everything darkened ("floating
+pink light rectangles"); the lit hull-shader streaking stays. Dead campfire (charred logs + ash, no glow).
+
+**Entrance + open fracture.** `makeLoftedHull` builds open-ended tubes → the mid-hull FRACTURE gap
+is genuinely open in the trimesh = the walkable entrance; added a sand/debris RAMP up into it on
+the lee flank. Removed the (A3) `aBack`/`bBack` backboard walls that sealed the split → it now opens
+straight to the interior (the user flagged the gray wall as unrealistic).
+
+**Panels.** The 2 salvage panels were hardcoded to the buried +X flank (one floated on the sand);
+reseated ON the real exposed lee (-X) hull surface via `hullAt` sampling + a terrain-height guard,
+facing outward. (`findPanelMount` already exists for procgen wrecks; the mega-wreck now surface-snaps.)
+
+**Thicker hull (D191).** `makeLoftedHull` gains a `thickness` param — a second inner skin + rim caps
+at the open ends, so torn edges read as ~0.4m plating, not a paper surface (mega-wreck uses 0.4).
+
+**Floater-hunt → convergence (D191).** 3 rounds fixed ~16 distinct floaters, almost all from one bug
+class (a fixed Y at a cluster-center, never sampling the curved surface at the piece's own X/Z on
+the canted deck). Added shared `ceilingY(x)`/`hullHalfWAt(y)` samplers. Fixes: frame ribs + fracture
+formers FULL hoops (lower arc 5m into the belly) → partial **top-arcs** (NEW `arc` option on
+`makeFormerRings`) springing from the deck + leg-stubs; overhead beams span the full hull (both ends
+embed); ducts strapped to the ceiling; cable brackets bedded into the curved ceiling; bridge
+console/chair per-Z seated; props out of the empty gap; spine stubs embedded; bulkhead flap parented;
+tarp grounded; stanchions sized; interior ceiling cap occludes the island's exterior gear (was seen
+through the hull). No gross floaters remain; residual sub-0.6m nits + the in-app walk-test owed.
+
 ## Session ACAK — 2026-06-07 — Mega-wreck FROM-SCRATCH rebuild: sleek dagger + aligned wreck interior ✓ verify pass (tsc clean)
 
 `verified` — `npm run verify` (tsc) PASS throughout; **no save bump** (geometry/material/collider only; rebuilds from

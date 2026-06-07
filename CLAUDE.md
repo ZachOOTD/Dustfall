@@ -64,26 +64,26 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      Prior milestones live in docs/changelog.md — do NOT accumulate "Prior milestone"
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
-**Last shipped**: Session ACAK — **mega-wreck FROM-SCRATCH rebuild: sleek crashed DAGGER + aligned wreck interior** (tsc
-clean, no save bump; ~18 commits `6c3fe99`→`bcff628`; D186-D188). The user flagged the ACAJ wreck as shipped-too-early /
-boxy; reworked the hero ground-up via research + adversarial self-critique. **Exterior**: NEW `makeLoftedHull` (faceted
-ship-hull cross-section, replaces the lathe "dome"); the whole exterior in a `shell` group **tilted ~17° into a list + sunk**
-(pivot-compensated `shellQuat()`/`shellPos()` so it kisses the ground); a `hullAt(z)` sampler so flank detail sits ON the
-hull; ~5:1 dagger, bow driven into the dune, mid-hull FRACTURE notch + cut-open cross-section, tapered command island +
-mast/dishes, 2 hollow engine bells on a transom plate, plating strakes/ribs, rust streaks, tilt-aware half-burial + debris;
-coarse exterior collider proxy. **Interior v2** (scrapped the corridors): `interiorDecks()` built in the SAME tilted shell
-frame (one rigid object), floor carries the full list, DoubleSide hull = walls/ceiling derived from `hullAt`; wreckage +
-cargo/survivor set dressing + a dressed bridge; fracture = HERO daylight flood; deck/curb/prop colliders + a stepped
-fracture crossing (fixed a ~2m unclimbable step that blocked the bridge). NEW reusable **workflow harness**: `megawreck-
-research`/`-critique`/`-interior-defects` (agents read the rig-shot PNGs + the code) — ran the exterior to a sleek dagger
-+ 4 interior defect-hunt rounds. *(Prior — ACAJ: wreckForms toolkit + first mega-wreck rebuild (D185); ACAI: vulture rig +
-ecology (D181-184). See changelog.)*
+**Last shipped**: Session ACAL — **mega-wreck walkthrough fixes: exact collision + natural light + entrance + de-floated
+interior** (tsc clean, no save bump; 6 commits `2ed662b`→`0aae9f9`; D189-D191). The user walk-tested ACAK + reported issues;
+fixed each + ran an adversarial **floater-hunt** to convergence (3 rounds, ~16 floaters). **Collision (D189)**: replaced the
+coarse cuboid proxy (player clipped through) with ONE Rapier **trimesh built from EVERY solid mesh** in the wreck, baked to
+body-local so it inherits the shell tilt — exact, triangle-for-triangle (flat decals skipped); curbs + entrance ramp kept,
+panels built after so they stay interactive. **Lighting (D190)**: removed ALL custom wreck lights (god-rays + fills + glows)
+→ natural world light only; removed the rust-streak decals (unlit MeshBasic → glowed pink in the dark). **Entrance**: the
+open FRACTURE gap is the walkable way in (a lee-flank sand ramp leads up); removed the `aBack`/`bBack` backboard walls so the
+split opens to the interior. **Panels** reseated on the real exposed lee-flank hull surface (`hullAt` + terrain guard).
+**Thicker hull (D191)**: `makeLoftedHull` gains `thickness` (inner skin + rim caps → ~0.4m plating, no paper edges).
+**Floaters (D191)**: one bug class (fixed-Y-at-cluster-center, never sampling the curved surface) → shared
+`ceilingY`/`hullHalfWAt` samplers; ribs became partial **top-arcs** (NEW `arc` on `makeFormerRings`) + leg-stubs, beams span
+the hull, ducts/cables/console/spines/tarp/stanchions re-anchored, island gear occluded. *(Prior — ACAK: from-scratch dagger
+rebuild (D186-188); ACAJ: wreckForms toolkit (D185). See changelog.)*
 
-**Next session** = **(1) WALK-TEST the new mega-wreck interior** (`npm run dev` → enter via the bow breach/fracture, cross
-to the bridge; confirm the ~17° canted floor + the 9-step fracture crossing feel right + panels/journal/shelter register —
-this is the one thing screenshots can't verify; if traversal is bad, rework the `interiorDecks()` deck layout BEFORE more
-cosmetics). **(2)** deeper interior lighting/material pass (rust/grime on debris+planes, contact AO, partial-arc ribs, the
-fracture-as-cathedral). **(3)** the still-deferred ACAJ **T3-T7** (apply the bigger `wreckForms` toolkit to the procgen
+**Next session** = **(1) WALK-TEST again** (`npm run dev`) — confirm the new exact collision holds (push into bow/flanks/
+island/engines), the fracture-ramp entrance walks, both lee-flank salvage panels are flush + reachable, and whether the
+natural-only interior is too dark (if so, widen the openings — don't re-add fake lights). Flag any residual floaters with a
+screenshot. **(2)** interior material depth (rust/grime/contact-AO — the lighting is now natural so surfaces carry the read).
+**(3)** the still-deferred ACAJ **T3-T7** (apply `wreckForms` — incl. the NEW `thickness`/`arc` options — to the procgen
 fleet `wrecks.ts`/`procgenWreck.ts`; half-burial; greeble; **T6 never-cut** WebGL wreck perf merge via `mergeGeometries`;
 InstancedMesh/LOD). The raider proc-character + all rig-dependent work stays DEFERRED. See
 [docs/next-session-prompt.md](docs/next-session-prompt.md) + [docs/backlog.md](docs/backlog.md).
