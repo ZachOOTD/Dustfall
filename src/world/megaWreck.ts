@@ -196,6 +196,12 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
       const s = hullAt(z);
       const rib = makeFormerRings(s.halfW * 0.94, 1, 1, { tube: 0.35, arc: Math.PI * 1.5 });   // top arc (gap at the belly) → springs from the deck, no hoop below the floor
       rib.rotation.y = -Math.PI / 2; rib.position.set(0, s.cy, z); rib.scale.set(1, s.halfH / s.halfW, 1); add(rib);
+      // Short leg-stubs tying each arc end down to the deck (the 270° arc's free legs end
+      // at ~mid-section height; in tall aft sections that's above the inset deck → tie them).
+      const lx = s.halfW * 0.56, legY = s.cy - s.halfH * 0.56, bot = deckY(z);
+      for (const sgn of [-1, 1] as const) if (legY > bot + 0.25) {
+        const stub = cyl(0.32, 0.32, legY - bot + 0.2, dark, 6); stub.position.set(sgn * lx, (legY + bot) / 2, z); add(stub);
+      }
     }
     // Peeled-inward bulkheads (from the +X impact side) — torn partial walls.
     for (const [z, h] of [[-26, 7], [34, 9], [56, 6]] as const) {
@@ -236,8 +242,12 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
       const dx = (_rand() - 0.5) * hw, dz0 = z + 1.2, ductLen = 3.4;
       const cz = ceilingY(dx, hullAt(dz0));   // sample the ceiling at the DUCT's own Z (it recedes)
       const duct = cyl(0.3, 0.3, ductLen, _pipeMat, 8); duct.rotation.set(Math.PI / 2, 0, 0.05); duct.position.set(dx, cz - 0.5, dz0); add(duct);
-      // straps near the duct's ends, each bedded into the ceiling sampled at ITS own Z.
-      for (const dz of [-(ductLen / 2 - 0.4), ductLen / 2 - 0.4]) { const sCz = ceilingY(dx, hullAt(dz0 + dz)); const strap = cyl(0.05, 0.05, 0.7, dark, 5); strap.position.set(dx, sCz - 0.35, dz0 + dz); add(strap); }
+      // straps near the duct's ends, each SPANNING from the duct top up to the ceiling
+      // (sampled at its own Z) so it visibly connects both (was a fixed 0.7 → missed the duct).
+      for (const dz of [-(ductLen / 2 - 0.4), ductLen / 2 - 0.4]) {
+        const top = ceilingY(dx, hullAt(dz0 + dz)), botY = cz - 0.2, len = Math.max(0.2, top - botY);
+        const strap = cyl(0.05, 0.05, len, dark, 5); strap.position.set(dx, (top + botY) / 2, dz0 + dz); add(strap);
+      }
     }
     // Hanging cables from the torn upper deck-edges down to the floor, each with a
     // junction-box bracket at the top so it reads as anchored (not a floating wire).
@@ -384,9 +394,9 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
     // Seated at a deck Y + centered so most of each stub is EMBEDDED in its mass and
     // only a short snapped end projects into the gap (was floating mid-gap at y=2.2/3.0).
     const spineGeo = new THREE.CylinderGeometry(0.6, 0.95, 8, 10); spineGeo.rotateX(Math.PI / 2);
-    const spine = new THREE.Mesh(spineGeo, dark); spine.position.set(-1.5, 3.5, AFT_FACE_Z + 0.5); spine.rotation.y = 0.16; add(spine);
+    const spine = new THREE.Mesh(spineGeo, dark); spine.position.set(-1.5, 3.5, AFT_FACE_Z + 2.5); spine.rotation.y = 0.16; add(spine);   // bulk buried in the aft mass, only a short tip projects
     const spine2Geo = new THREE.CylinderGeometry(0.45, 0.7, 5, 10); spine2Geo.rotateX(Math.PI / 2);
-    const spine2 = new THREE.Mesh(spine2Geo, dark); spine2.position.set(1.0, 5.0, BOW_FACE_Z - 0.5); spine2.rotation.set(0, 0.2, 0.06); add(spine2);
+    const spine2 = new THREE.Mesh(spine2Geo, dark); spine2.position.set(1.0, 5.0, BOW_FACE_Z - 2.0); spine2.rotation.set(0, 0.2, 0.06); add(spine2);   // buried in the bow mass, short snapped tip
     // Dangling cables — drooping from upper deck-edges DOWN to a lower deck slab
     // (land on structure, not mid-air), with a junction-box foot.
     // Cables droop from an UPPER deck-edge down to a LOWER deck slab on the SAME torn
@@ -458,6 +468,10 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
     // 2 whip antennas emerging from the crown.
     for (const ox of [-0.6, 0.8]) { const whip = cyl(0.05, 0.08, 3.0, _antennaMat, 5); whip.position.set(crown.x + ox, crown.y + 1.5, 0); whip.rotation.z = ox * 0.1; addI(whip); }
     add(island);
+    // Interior ceiling cap UNDER the island footprint — occludes the island's exterior
+    // sensor dishes/mast (which sit on the dorsal hull) from being seen THROUGH the upper
+    // hull from the bridge floor, where they read as floating gear.
+    { const cs = hullAt(ISLAND_Z); const cap = box(cs.halfW * 1.7, 0.6, 16, _hullDarkMat); cap.position.set(0, cs.dorsalY - 0.6, ISLAND_Z); add(cap); }
   }
 
   // (A6) Engine bank — TWO big flared bells PROJECTING ~5m off the transom (capital
