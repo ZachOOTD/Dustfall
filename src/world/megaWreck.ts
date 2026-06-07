@@ -49,13 +49,9 @@ _dishMat.side = THREE.DoubleSide;
 // Fresh oxidized torn metal (brighter orange) for fracture + breach rims so the
 // cut reads distinct from the weathered skin.
 const _tornMat = createPaintedMetalMaterial(0x8f5230, { wearLevel: 0.6 });
-// Translucent rust-streak decal (hangs DOWN from features; +X-flank biased).
-// DoubleSide so the flank streaks read from both viewing sides.
-const _streakMat = new THREE.MeshBasicMaterial({ color: 0x6e3a22, transparent: true, opacity: 0.5, depthWrite: false, side: THREE.DoubleSide });
 void _rustMat;
 
 // ── Exterior dagger masses (lofted). Bow mass -60..-5, aft mass +18..+76.
-const FRACTURE_Z = 6;        // fracture center
 const BOW_FACE_Z = -5;       // bow hull torn face
 const AFT_FACE_Z = 18;       // aft hull torn face
 const ISLAND_Z = 68;         // command island Z (over the bridge)
@@ -329,17 +325,10 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
   // spine stub + dangling cables + torn rim flaps. Aft mass rides ~2m higher.
   {
     const aS = hullAt(AFT_FACE_Z), bS = hullAt(BOW_FACE_Z);
-    // Backboards sized to FULLY cover each torn cross-section (no see-through into
-    // the hollow hull at the fracture mouth), centred on the station cy.
-    // Lit dark hull backboards RECESSED ~4m into each mass (parallax depth so the
-    // break reads as a recessed interior, not a flat black hole to the sky), with
-    // the former rings + decks layered in front. A couple of interior bulkhead
-    // silhouettes add depth.
-    const aBack = box(aS.halfW * 2 + 1, aS.halfH * 2 + 1, 0.4, _hullDarkMat); aBack.position.set(0, aS.cy, AFT_FACE_Z + 4); add(aBack);
-    const bBack = box(bS.halfW * 2 + 1, bS.halfH * 2 + 1, 0.4, _hullDarkMat); bBack.position.set(0, bS.cy, BOW_FACE_Z - 4); add(bBack);
-    for (const [bz, s] of [[AFT_FACE_Z + 2.5, aS], [BOW_FACE_Z - 2.5, bS]] as const) {
-      const bulk = box(s.halfW * 1.3, s.halfH * 1.6, 0.3, _viewportMat); bulk.position.set((bz > 0 ? -2 : 2), s.cy, bz); add(bulk);
-    }
+    // NO backboards — the ship is torn fully in two here, so the fracture is OPEN to the
+    // real interior (you see straight into the broken hull, which is the entrance). The
+    // old `aBack`/`bBack` dark walls sealed the mouth and read as an unrealistic flat
+    // wall across the split; removed so the break shows the actual decks/guts behind it.
     // Exposed former rings (ribs) on each torn face.
     const af = makeFormerRings(aS.halfW, 3, 1.5, { tube: 0.55 });
     af.rotation.y = -Math.PI / 2; af.position.set(0, aS.cy, AFT_FACE_Z); af.scale.set(1, aS.halfH / aS.halfW, 1); add(af);
@@ -530,23 +519,11 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
     }
   }
 
-  // (A9) Directional weathering — translucent rust streaks hanging DOWN from the
-  // breach rims + fracture, seated ON the sampled flank, concentrated on the +X
-  // impact flank, near-clean on the -X lee (directional = story + scale).
-  {
-    const streak = (side: number, z: number, yTop: number, w: number, hgt: number) => {
-      const s = hullAt(z);
-      const q = new THREE.Mesh(new THREE.PlaneGeometry(w, hgt), _streakMat);
-      q.position.set(side * (s.halfW + 0.05), yTop - hgt / 2, z); q.rotation.y = side > 0 ? Math.PI / 2 : -Math.PI / 2;
-      q.userData.noShadow = true; add(q);
-    };
-    for (const [side, z, r] of breachSites) {
-      const n = side > 0 ? 4 : 1;
-      for (let i = 0; i < n; i++) streak(side, z + (i - n / 2) * r * 0.5, hullAt(z).cy + (side > 0 ? 1.5 : 0.5) - r * 0.7, 0.5 + (i % 2) * 0.4, 3 + (i % 3));
-    }
-    for (let i = 0; i < 5; i++) { const z = FRACTURE_Z - 6 + i * 3; streak(1, z, hullAt(z).cy + 2 - i * 0.4, 0.6, 4 + (i % 2) * 2); }
-    for (let i = 0; i < 2; i++) { const z = 20 + i * 22; streak(-1, z, hullAt(z).cy, 0.5, 3); }
-  }
+  // (A9) Directional weathering — REMOVED the translucent rust-streak decal planes:
+  // they used an UNLIT MeshBasicMaterial, so under natural-only lighting they glowed
+  // flat-pink while the rest of the wreck darkened, reading as "floating pink light
+  // rectangles." The rust streaking baked into the hull shader (createRustedHullMaterial
+  // streakIntensity) stays — it's lit, so it weathers without glowing.
 
   // Tilt the shell into a STRONG list + sink it deep. Interior boxes stay LEVEL
   // (D185); the narrow dagger hull has ample margin over the narrow interior so
