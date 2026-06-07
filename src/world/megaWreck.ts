@@ -241,7 +241,6 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
       const s = hullAt(z), cx = -s.halfW * 0.6;
       const housing = box(0.6, h + 0.3, 2.4, dark); housing.position.set(cx, deckY(z) + (h + 0.3) / 2, z); housing.rotation.set(0, 0, 0.22); add(housing);
       const scr = box(0.2, 0.8, 1.3, _viewportMat); scr.position.set(cx + 0.35, deckY(z) + h * 0.65, z); scr.rotation.set(0, 0, 0.22); scr.userData.noShadow = true; add(scr);
-      const glow = new THREE.PointLight(0x3a6a8a, 0.4, 5, 2); glow.position.set(cx + 0.6, deckY(z) + h * 0.65, z); add(glow);
     }
     // Sand-fan intrusion pouring in through the bow-entry breach — each cone seated
     // on the deck at its own Z (sloped deck → no float), shrinking inboard.
@@ -254,49 +253,10 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
     }
   }
 
-  // ── INTERIOR LIGHT (I4) — shafts of DAYLIGHT stab in through the breaches + the
-  // open fracture (sun streaming into the wreck), each a visible god-ray cone + a
-  // PointLight pooling on the floor; a dim cool fill so the upper hull/ceiling isn't
-  // a black void; warm emergency lamps for contrast.
-  {
-    // (No HemisphereLight — those are GLOBAL in three.js and would wash the whole
-    // desert / stack per wreck. Bounded PointLights fill the interior instead.)
-    const shaftMat = new THREE.MeshBasicMaterial({ color: 0xfff1d6, transparent: true, opacity: 0.28, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
-    // 3 daylight shafts at real openings (the fracture is the dominant HERO flood).
-    const shafts: Array<[number, number, number, number, number]> = [
-      [0, 6, 0xfff4dc, 8.0, 52],            // the open fracture — bright hero daylight flood
-      [hullAt(30).halfW * 0.8, 30, 0xffe6c2, 3.4, 28],   // +X engineering breach
-      [-hullAt(-40).halfW * 0.8, -40, 0xffe6c2, 3.0, 26], // bow-entry breach
-    ];
-    // A second high light at the fracture so the exposed formers + decks are rim-lit.
-    const frTop = new THREE.PointLight(0xfff4dc, 4.0, 40, 2); frTop.position.set(0, hullAt(6).cy + hullAt(6).halfH * 0.6, 6); add(frTop);
-    for (const [sx, sz, color, inten, dist] of shafts) {
-      const s = hullAt(sz), floorY = deckY(sz);
-      // Cap the shaft top INSIDE the hull (not dorsalY+1, which poked through the
-      // exterior skin). Flank breaches originate at the breach height (cy); the
-      // fracture (sx≈0) reaches higher toward the open break.
-      const top = Math.abs(sx) < 1 ? s.cy + s.halfH * 0.75 : s.cy + s.halfH * 0.4;
-      const len = top - floorY;
-      const cone = new THREE.Mesh(new THREE.ConeGeometry(3.2, len, 14, 1, true), shaftMat);
-      cone.position.set(sx * 0.5, (top + floorY) / 2, sz); cone.rotation.z = sx > 0 ? 0.25 : -0.25;
-      cone.userData.noShadow = true; add(cone);
-      const pl = new THREE.PointLight(color, inten, dist, 2);
-      pl.position.set(sx * 0.4, floorY + 2.5, sz); add(pl);
-    }
-    // Cool fill lights — mid-height (read the flanks) + high near the dorsal (read the
-    // canted upper hull / ribs, so it isn't a black-then-brown void). Bounded ranges.
-    for (const z of [-30, 45]) {
-      const s = hullAt(z);
-      const f = new THREE.PointLight(0xb0bccc, 1.0, 36, 1.5); f.position.set(0, s.cy + s.halfH * 0.3, z); add(f);
-      const u = new THREE.PointLight(0x9aaec4, 0.7, 28, 1.6); u.position.set(s.halfW * 0.2, s.dorsalY - 3, z); add(u);
-    }
-    for (const z of [-12, 20, 62]) {
-      const s = hullAt(z);
-      const u = new THREE.PointLight(0x9aaec4, 0.6, 26, 1.6); u.position.set(0, s.dorsalY - 3, z); add(u);
-    }
-    // Warm emergency lamp on the bridge (one focal point).
-    const lamp1 = new THREE.PointLight(0xff9a4a, 1.3, 18, 2); lamp1.position.set(2.5, deckY(70) + 2.5, 70); add(lamp1);
-  }
+  // ── NO custom wreck lighting — only the natural world sun/ambient lights the wreck
+  // (the user found the artificial PointLights + additive god-ray cones unrealistic).
+  // Real daylight reaches the interior through the open fracture + the entrance breach
+  // + the lofted hull ends; the rest reads as authentic shadow.
 
   // ── SET DRESSING (I5) — clustered cargo + survivor props near the daylight pools,
   // material variety + scorch so surfaces aren't single-value, contact-shadow discs
@@ -339,8 +299,11 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
       // Strung tarp — one edge drapes onto the crate-table, held by a corner pole.
       const tarp = box(2.6, 0.1, 2.4, _tornMat); tarp.position.set(cx - 0.6, fy + 1.25, z); tarp.rotation.set(0.18, 0.3, 0.12); add(tarp);
       const pole = cyl(0.06, 0.06, 1.8, dark, 5); pole.position.set(cx - 1.7, fy + 0.9, z + 0.8); add(pole);
-      const fire = new THREE.Mesh(new THREE.ConeGeometry(0.32, 0.7, 6), new THREE.MeshBasicMaterial({ color: 0xff7a2a })); fire.position.set(cx + 1.6, fy + 0.35, z); fire.userData.noShadow = true; add(fire);
-      const ember = new THREE.PointLight(0xff5a1e, 1.5, 8, 2); ember.position.set(cx + 1.6, fy + 0.5, z); add(ember); ground(cx + 1.6, fy, z, 0.9);
+      // Cold, long-dead campfire — charred log stubs + ash (no glowing cone: there's
+      // no light motivation, and the user wants only natural lighting).
+      for (const a of [0.3, 2.4, 4.5]) { const logm = cyl(0.07, 0.09, 0.8, dark, 5); logm.position.set(cx + 1.6 + Math.cos(a) * 0.3, fy + 0.12, z + Math.sin(a) * 0.3); logm.rotation.set(Math.PI / 2 - 0.3, a, 0); add(logm); }
+      const ash = new THREE.Mesh(new THREE.CircleGeometry(0.5, 8), new THREE.MeshLambertMaterial({ color: 0x2a2622, flatShading: true })); ash.rotation.x = -Math.PI / 2; ash.position.set(cx + 1.6, fy + 0.04, z); ash.userData.noShadow = true; add(ash);
+      ground(cx + 1.6, fy, z, 0.9);
     }
     // Bridge command dressing (z70): captain's console + chair + a daylight viewport.
     {
@@ -354,11 +317,12 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
 
   // (A1) Bow mass — a sharp tapered wedge driving nose-first into the dune, riding
   // LOWER than the aft (snapped back) so the fracture reads as a hard notch.
-  add(makeLoftedHull(BOW_STATIONS, _hullMat));
+  // hullCollide → its real surface goes into the accurate trimesh collider (D189).
+  const bowHull = makeLoftedHull(BOW_STATIONS, _hullMat); bowHull.userData.hullCollide = true; add(bowHull);
 
   // (A2) Aft mass — a fat-bellied wedge, widest + tallest amidships (height ~1/4
   // length so it reads as a dagger-wedge, not a plate), raking to a blunt transom.
-  add(makeLoftedHull(AFT_STATIONS, _hullMat));
+  const aftHull = makeLoftedHull(AFT_STATIONS, _hullMat); aftHull.userData.hullCollide = true; add(aftHull);
 
   // (A3) Mid-hull FRACTURE cross-section — the money shot. Cut-open guts in the
   // ~23m gap: backboard + former rings + countable staggered deck slabs + bent
@@ -438,7 +402,7 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
     };
     // Tapered 8-sided tower body (angular faceted faces, NOT a box).
     const towerH = 11;
-    const tower = new THREE.Mesh(new THREE.CylinderGeometry(3.6, 5.4, towerH, 8), _hullMat);
+    const tower = new THREE.Mesh(new THREE.CylinderGeometry(3.6, 5.4, towerH, 8), _hullMat); tower.userData.hullCollide = true;
     tower.rotation.y = Math.PI / 8; tower.position.set(0, towerH / 2, 0); addI(tower);
     // Window bands on the forward face, 2 levels, framed ≥12cm relief.
     for (const ly of [towerH * 0.34, towerH * 0.6]) {
@@ -454,7 +418,7 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
     const wsBack = box(7.2, 2.6, 0.3, dark); wsBack.position.set(0, towerH * 0.5, -4.0); wsBack.rotation.x = -0.5; addI(wsBack);
     const screen = box(7.0, 2.5, 0.2, _viewportMat); screen.position.set(0, towerH * 0.5, -4.18); screen.rotation.x = -0.5; screen.userData.noShadow = true; addI(screen);
     // Tapered cap.
-    const cap = new THREE.Mesh(new THREE.CylinderGeometry(2.4, 3.6, 1.6, 8), _hullMat); cap.rotation.y = Math.PI / 8; cap.position.set(0, towerH + 0.8, 0); addI(cap);
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(2.4, 3.6, 1.6, 8), _hullMat); cap.userData.hullCollide = true; cap.rotation.y = Math.PI / 8; cap.position.set(0, towerH + 0.8, 0); addI(cap);
     // Sensor mast + dish cluster — SHORT + THICK, sitting just above the cap (no
     // tall bare pole), braced to the cap, dishes on thick yokes facing outward.
     const capTop = towerH + 1.6, crownY = towerH + 5.0;
@@ -495,6 +459,7 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
     ];
     for (const [sx, sy, mouthR, tilt] of slots) {
       const bell = makeEngineBellMesh(mouthR, mouthR * 1.4, _hullMat, _nozzleInteriorMat);
+      bell.userData.hullCollide = true;
       bell.rotation.x = Math.PI / 2 + tilt; bell.position.set(sx, sy, ez); add(bell);
       // Recessed dark throat cone so the mouth reads hollow at any angle.
       const throat = new THREE.Mesh(new THREE.ConeGeometry(mouthR * 0.7, mouthR * 1.1, 14, 1, true), _nozzleInteriorMat);
@@ -658,20 +623,36 @@ export function placeMegaWreck(
   extCuboid(2, deckY(70) + 0.9, 68.5, 1.25, 0.6, 0.5);              // bridge console
   extCuboid(2, deckY(70) + 1.0, 69.9, 0.4, 0.7, 0.4);               // captain's chair
 
-  // ── Exterior collision — flank slabs + caps + island + engines (same transform).
-  // Exposed hull flanks (both masses) — thin vertical slabs at the sampled surface.
-  for (const z of [-46, -32, -16, 24, 38, 52, 66, 73]) {
-    const s = hullAt(z);
-    for (const side of [-1, 1]) extCuboid(side * s.halfW, s.cy, z, 0.4, s.halfH, 7);
+  // ── Exterior collision — an ACCURATE TRIMESH of the REAL hull surface (D189). The
+  // lofted bow+aft masses + island tower/cap + engine bells are tagged `hullCollide`;
+  // we bake each tagged mesh's geometry into the body-local (group) frame — so the
+  // ~17° shell tilt is inherited from the mesh hierarchy for free — and feed one
+  // Rapier trimesh. Zero drift from the rendered surface, no clip-through (replaces
+  // the old coarse cuboid proxy). The FRACTURE gap (no hull between the bow+aft masses,
+  // z≈-5..+18) stays OPEN in the trimesh → that IS the walkable entrance.
+  {
+    group.updateWorldMatrix(true, true);
+    const invGroup = group.matrixWorld.clone().invert();
+    const verts: number[] = [];
+    group.traverse((o) => {
+      let anc: THREE.Object3D | null = o, tagged = false;
+      while (anc) { if (anc.userData?.hullCollide) { tagged = true; break; } anc = anc.parent; }
+      const m = o as THREE.Mesh;
+      if (!tagged || !m.isMesh || !m.geometry) return;
+      const g = m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone();
+      m.updateWorldMatrix(true, false);
+      g.applyMatrix4(invGroup.clone().multiply(m.matrixWorld));   // → body-local
+      const p = g.attributes.position;
+      for (let i = 0; i < p.count; i++) verts.push(p.getX(i), p.getY(i), p.getZ(i));
+      g.dispose();
+    });
+    if (verts.length) {
+      const v = new Float32Array(verts);
+      const idx = new Uint32Array(v.length / 3);
+      for (let i = 0; i < idx.length; i++) idx[i] = i;            // non-indexed → sequential tris
+      world.createCollider(RAPIER.ColliderDesc.trimesh(v, idx), body);
+    }
   }
-  // Bow nose cap + transom cap (Z end blockers).
-  { const s = hullAt(-58); extCuboid(0, s.cy, -59, s.halfW + 0.5, s.halfH, 0.5); }
-  { const s = hullAt(75); extCuboid(0, s.cy, 76.5, s.halfW + 0.5, s.halfH, 0.5); }
-  // Command-island blocker — tall enough to cover the whole tower (the bridge
-  // journal/panel payoff is here; the player must not walk through it).
-  extCuboid(3.0, 24, ISLAND_Z, 4.5, 7.0, 4.5);
-  // Engine bells (two big projecting nozzles).
-  for (const [sx, sy, mr] of [[-5.0, 7.5, 4.2], [5.0, 5.8, 3.7]] as const) extCuboid(sx, sy, TRANSOM_Z + 2.5, mr, mr, mr * 1.3);
 
   // Shell-local → world helpers (so interactables sit on the TILTED decks).
   const shellToG = (l: THREE.Vector3) => l.clone().applyQuaternion(shellQ).add(shellOff);
@@ -685,10 +666,44 @@ export function placeMegaWreck(
     const wp = new THREE.Vector3().setFromMatrixPosition(p.matrixWorld);
     registerSalvageable(salvageables, p, 'massive', wp, rand);
   };
-  // Panel #1 — canted bulkhead in collapsed engineering (+X flank), facing inboard.
-  addPanel(new THREE.Vector3(hullAt(40).halfW * 0.7, deckY(40) + 1.6, 40), -Math.PI / 2);
-  // Panel #2 — bridge console wall (+X), the near-intact payoff space.
-  addPanel(new THREE.Vector3(4.0, deckY(70) + 1.6, 70), -Math.PI / 2);
+  // Panels mount ON the real EXPOSED lee (-X, up-rolled) hull surface, facing OUTWARD
+  // so they sit flush on the skin + stay reachable from the sand (was: hardcoded +X
+  // buried-flank coords → one floated out on the open sand). Terrain-height guarded,
+  // with fallback Z's if the first sample is buried.
+  const placeHullPanel = (...zs: number[]) => {
+    for (const z of zs) {
+      const s = hullAt(z);
+      const local = new THREE.Vector3(-s.halfW + 0.15, s.cy + 0.4, z);   // ON the -X skin
+      const w = shellWorld(local);
+      if (w.y < _terrain.heightAt(w.x, w.z) + 1.0) continue;             // buried → next Z
+      addPanel(local, Math.PI / 2);                                      // face -X (outward)
+      return;
+    }
+  };
+  placeHullPanel(36, 30, 44);   // mid-hull engineering
+  placeHullPanel(62, 58, 50);   // aft / bridge flank
+
+  // ── ENTRANCE — a debris/sand RAMP from the desert up into the open FRACTURE on the
+  // exposed lee (-X) flank. The fracture gap has no hull in the trimesh, so once the
+  // player climbs the ramp they walk straight onto the crossing deck. The ramp collider
+  // is a gentle tilted slab (well under the 50° slope-climb limit); a sand mound dresses
+  // it so it reads as a drift you can walk up into the tear.
+  {
+    const mouth = shellWorld(new THREE.Vector3(-hullAt(6).halfW + 2.0, deckY(6) + 0.3, 6));
+    const outDir = new THREE.Vector3(-1, 0, 0).applyQuaternion(finalQ); outDir.y = 0; outDir.normalize();
+    const foot = mouth.clone().addScaledVector(outDir, 10);
+    foot.y = _terrain.heightAt(foot.x, foot.z);
+    const mid = foot.clone().add(mouth).multiplyScalar(0.5);
+    const span = mouth.clone().sub(foot);
+    const rampQ = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), span.clone().normalize());
+    const lp = mid.clone().sub(pos).applyQuaternion(finalQ.clone().invert());
+    const lq = finalQ.clone().invert().multiply(rampQ);
+    world.createCollider(
+      RAPIER.ColliderDesc.cuboid(3.4, 0.4, span.length() / 2).setTranslation(lp.x, lp.y, lp.z).setRotation({ x: lq.x, y: lq.y, z: lq.z, w: lq.w }),
+      body,
+    );
+    scene.add(makeSandMound(_terrain, foot.x, foot.z, new THREE.Vector2(-outDir.x, -outDir.z), 9, rand));
+  }
 
   // ── Shelter zone — the sheltered settled nook against the lee (-X) flank of the
   // aft/engineering space (the one compartment that didn't breach).
