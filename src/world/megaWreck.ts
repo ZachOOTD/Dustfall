@@ -184,6 +184,11 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
   // Wreckage decoration — peeled bulkheads, debris piles flowed to the down-+X
   // flank, exposed ribs where plating tore, hanging cables. Visual only.
   {
+    // Surface samplers (kill the "fixed-Y-at-cluster-center → floats" bug class): the
+    // curved ceiling height at local X, and the hull half-width at local Y. Used to
+    // EMBED overhead beams/ducts/cable-brackets into the real skin instead of mid-air.
+    const ceilingY = (x: number, s: ReturnType<typeof hullAt>) => s.cy + s.halfH * Math.sqrt(Math.max(0, 1 - (x / s.halfW) ** 2));
+    const hullHalfWAt = (y: number, s: ReturnType<typeof hullAt>) => s.halfW * Math.sqrt(Math.max(0, 1 - ((y - s.cy) / s.halfH) ** 2));
     // Frame ribs every ~10m along the walkable length — the ship's internal skeleton
     // showing where the plating peeled, exposed inside the hull (catches the fill).
     for (let z = -42; z < 70; z += 9) {
@@ -196,8 +201,10 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
     for (const [z, h] of [[-26, 7], [34, 9], [56, 6]] as const) {
       const s = hullAt(z);
       const w = box(0.5, h, 4.5, dark); w.position.set(s.halfW * 0.5, deckY(z) + h / 2, z); w.rotation.set(0, 0, -0.32 - _rand() * 0.15); add(w);
-      // a bent torn flap off its edge
-      const fl = box(0.3, 2.5, 3, _tornMat); fl.position.set(s.halfW * 0.5 - 1, deckY(z) + h - 1, z); fl.rotation.set(0.3, 0.2, -0.6); add(fl);
+      // a bent torn flap — PARENTED to the bulkhead (local offset on its torn top edge) so
+      // it inherits the bulkhead's random roll and the hinge stays welded (was a separate
+      // world-space transform → detached for larger random tilts).
+      const fl = box(0.3, 2.5, 3, _tornMat); fl.position.set(-0.45, h / 2 - 0.6, 0); fl.rotation.set(0.3, 0.2, -0.32); w.add(fl);
     }
     // Varied wreckage debris flowed down toward the down-+X flank (torn plates, drums,
     // pipe fragments — NOT uniform cubes), half-settled on the canted floor.
@@ -219,24 +226,34 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
     // hull (gives the ceiling void mass + shadow, and reads as a torn-open deck).
     for (const [z, ang] of [[-28, 0.5], [24, -0.4], [44, 0.55], [62, -0.35]] as const) {
       const s = hullAt(z);
-      // COLLAPSED beams — one end dropped (big tilt) + a torn cap, so they dangle from
-      // the torn deck rather than spanning intact.
-      const beam = box(s.halfW * 1.0, 0.5, 0.6, dark); beam.position.set(s.halfW * 0.25, s.dorsalY - 3 - _rand() * 1.5, z); beam.rotation.set(0.1, 0, ang); add(beam);
-      const duct = cyl(0.4, 0.4, 4 + _rand() * 2, _pipeMat, 8); duct.rotation.x = Math.PI / 2 + 0.15; duct.position.set(s.halfW * 0.3, s.dorsalY - 4, z + 2); duct.rotation.z = 0.1; add(duct);
+      // COLLAPSED cross-beams — span the FULL hull width at their own Y so BOTH ends
+      // embed in the curved skin (no cantilever into mid-air); a gentle sag-tilt.
+      const beamY = s.cy + s.halfH * 0.55 - _rand() * 1.2;
+      const hw = hullHalfWAt(beamY, s);
+      const beam = box(hw * 2 + 0.6, 0.45, 0.6, dark); beam.position.set(0, beamY, z); beam.rotation.set(0.08, 0, ang * 0.25); add(beam);
+      // A duct hung JUST under the curved ceiling with 2 short hanger straps up to the
+      // skin (so it reads as rooted, not a floating pipe).
+      const dx = (_rand() - 0.5) * hw;
+      const cz = ceilingY(dx, s);
+      const duct = cyl(0.32, 0.32, 5 + _rand() * 1.5, _pipeMat, 8); duct.rotation.set(Math.PI / 2 + 0.08, 0, 0.08); duct.position.set(dx, cz - 0.55, z + 1.5); add(duct);
+      for (const dz of [-1.6, 1.6]) { const strap = cyl(0.05, 0.05, 0.7, dark, 5); strap.position.set(dx, cz - 0.25, z + 1.5 + dz); add(strap); }
     }
     // Hanging cables from the torn upper deck-edges down to the floor, each with a
     // junction-box bracket at the top so it reads as anchored (not a floating wire).
     for (const [x, z] of [[-3, -24], [4, 32], [-2, 38], [2, -10], [5, 48], [-4, 60]] as const) {
       const s = hullAt(z);
-      const from = new THREE.Vector3(x, s.dorsalY - 0.8, z);   // anchored just under the ceiling
+      const ay = ceilingY(x, s) - 0.25;   // bed the bracket INTO the curved ceiling at this X (not the centerline apex)
+      const from = new THREE.Vector3(x, ay, z);
       add(makeCable(from, new THREE.Vector3(x + 1.5, deckY(z) + 0.4, z + 2), 3.0, _pipeMat, 0.12));
-      const br = box(0.6, 0.5, 0.6, dark); br.position.copy(from); add(br);   // ceiling junction bracket
+      const br = box(0.6, 0.5, 0.6, dark); br.position.set(x, ay + 0.15, z); add(br);   // ceiling junction bracket
     }
     // Wall consoles / panels on the lee (-X) flank — seated ON the widened deck edge.
     for (const [z, h] of [[-20, 1.6], [28, 1.8], [50, 1.6]] as const) {
-      const s = hullAt(z), cx = -s.halfW * 0.6;
-      const housing = box(0.6, h + 0.3, 2.4, dark); housing.position.set(cx, deckY(z) + (h + 0.3) / 2, z); housing.rotation.set(0, 0, 0.22); add(housing);
-      const scr = box(0.2, 0.8, 1.3, _viewportMat); scr.position.set(cx + 0.35, deckY(z) + h * 0.65, z); scr.rotation.set(0, 0, 0.22); scr.userData.noShadow = true; add(scr);
+      const s = hullAt(z), cx = -s.halfW * 0.6, rz = 0.06, hh = (h + 0.3) / 2;
+      // Small roll (was 0.22 → lifted one base corner ~0.27m off the deck, sank the other
+      // through it). Seat the base ON the deck accounting for the roll.
+      const housing = box(0.6, h + 0.3, 2.4, dark); housing.position.set(cx, deckY(z) + hh * Math.cos(rz) + Math.sin(rz) * 0.3, z); housing.rotation.set(0, 0, rz); add(housing);
+      const scr = box(0.2, 0.8, 1.3, _viewportMat); scr.position.set(cx + 0.32, deckY(z) + h * 0.65, z); scr.rotation.set(0, 0, rz); scr.userData.noShadow = true; add(scr);
     }
     // Sand-fan intrusion pouring in through the bow-entry breach — each cone seated
     // on the deck at its own Z (sloped deck → no float), shrinking inboard.
@@ -274,7 +291,7 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
       const rim = new THREE.Mesh(new THREE.TorusGeometry(0.52, 0.06, 5, 12), dark); rim.rotation.x = Math.PI / 2; rim.position.set(x, y + 1.3, z); add(rim); ground(x, y, z, 0.7);
     };
     // Prop clusters near the lit zones [z, x-center].
-    for (const [z, cxc] of [[-38, -2], [-30, 3], [6, -3], [28, 3], [40, -2], [66, 0]] as const) {
+    for (const [z, cxc] of [[-38, -2], [-30, 3], [-10, -3], [28, 3], [40, -2], [66, 0]] as const) {   // -10 (real bow deck), not 6 (the empty fracture gap → props fell through)
       const n = 2 + Math.floor(_rand() * 3);
       for (let i = 0; i < n; i++) {
         const px = cxc + (_rand() - 0.5) * 4, pz = z + (_rand() - 0.5) * 5, py = deckY(pz) + 0.35;  // sample deck at the prop's own Z (sloped deck → no float)
@@ -293,8 +310,10 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
       const z = 54, s = hullAt(54), cx = -s.halfW * 0.5, fy = deckY(54) + 0.35;
       crate(cx, fy, z, 1.1, _rustMat);
       // Strung tarp — one edge drapes onto the crate-table, held by a corner pole.
-      const tarp = box(2.6, 0.1, 2.4, _tornMat); tarp.position.set(cx - 0.6, fy + 1.25, z); tarp.rotation.set(0.18, 0.3, 0.12); add(tarp);
-      const pole = cyl(0.06, 0.06, 1.8, dark, 5); pole.position.set(cx - 1.7, fy + 0.9, z + 0.8); add(pole);
+      // Tarp: smaller, its high edge RESTING on the crate top (~fy+1.0), sloping down to
+      // a corner pole that actually reaches it (was a stiff slab hovering off one corner).
+      const tarp = box(1.9, 0.08, 1.9, _tornMat); tarp.position.set(cx - 0.7, fy + 1.05, z); tarp.rotation.set(0.28, 0.25, 0.0); add(tarp);
+      const pole = cyl(0.06, 0.06, 1.5, dark, 5); pole.position.set(cx - 1.5, fy + 0.75, z - 0.55); add(pole);   // under the down-slope corner
       // Cold, long-dead campfire — charred log stubs + ash (no glowing cone: there's
       // no light motivation, and the user wants only natural lighting).
       for (const a of [0.3, 2.4, 4.5]) { const logm = cyl(0.07, 0.09, 0.8, dark, 5); logm.position.set(cx + 1.6 + Math.cos(a) * 0.3, fy + 0.12, z + Math.sin(a) * 0.3); logm.rotation.set(Math.PI / 2 - 0.3, a, 0); add(logm); }
@@ -314,11 +333,11 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
   // (A1) Bow mass — a sharp tapered wedge driving nose-first into the dune, riding
   // LOWER than the aft (snapped back) so the fracture reads as a hard notch.
   // hullCollide → its real surface goes into the accurate trimesh collider (D189).
-  const bowHull = makeLoftedHull(BOW_STATIONS, _hullMat); bowHull.userData.hullCollide = true; add(bowHull);
+  const bowHull = makeLoftedHull(BOW_STATIONS, _hullMat, 0.4); bowHull.userData.hullCollide = true; add(bowHull);
 
   // (A2) Aft mass — a fat-bellied wedge, widest + tallest amidships (height ~1/4
   // length so it reads as a dagger-wedge, not a plate), raking to a blunt transom.
-  const aftHull = makeLoftedHull(AFT_STATIONS, _hullMat); aftHull.userData.hullCollide = true; add(aftHull);
+  const aftHull = makeLoftedHull(AFT_STATIONS, _hullMat, 0.4); aftHull.userData.hullCollide = true; add(aftHull);
 
   // (A3) Mid-hull FRACTURE cross-section — the money shot. Cut-open guts in the
   // ~23m gap: backboard + former rings + countable staggered deck slabs + bent
@@ -336,7 +355,7 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
     bf.rotation.y = -Math.PI / 2; bf.position.set(0, bS.cy, BOW_FACE_Z - 3); bf.scale.set(1, bS.halfH / bS.halfW, 1); add(bf);
     // Deck-edge slabs — THICK floors RECEDING into each mass (depth, not paper) with
     // a dark torn-edge fascia, staggered in Y between faces so decks read countable.
-    const mkDeck = (y: number, faceZ: number, into: number, w: number) => {
+    const mkDeck = (y: number, faceZ: number, into: number, w: number, gapAbove?: number) => {
       const depth = 4 + _rand() * 1.5;                // capped depth (no 10:1 paper tongues)
       const th = 0.5 + _rand() * 0.4;                 // thicker, varied (not card-uniform)
       const yj = y + (_rand() - 0.5) * 0.6;           // Y jitter
@@ -346,18 +365,25 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
       const s = box(wj * 2, th, depth, dark); s.position.set(xj, yj, faceZ + into * depth / 2); s.rotation.set(rx, 0, rz); add(s);
       // Thick torn-edge fascia/riser on the outboard (torn) edge so decks read as floors.
       const fascia = box(wj * 2, 0.8, 0.35, _tornMat); fascia.position.set(xj, yj - 0.1, faceZ); fascia.rotation.z = rz; add(fascia);
-      // A couple of vertical stanchions between decks.
-      for (const sx of [-wj * 0.5, wj * 0.45]) { const st = box(0.28, 2.4 + _rand(), 0.28, dark); st.position.set(xj + sx, yj + 1.3, faceZ + into * (1.2 + _rand())); add(st); }
+      // Vertical stanchions spanning UP to the next deck (sized to the real inter-deck
+      // gap so they seat into both floors; skipped on the topmost deck — nothing above).
+      if (gapAbove) for (const sx of [-wj * 0.5, wj * 0.45]) {
+        const st = box(0.28, gapAbove + 0.25, 0.28, dark); st.position.set(xj + sx, yj + gapAbove / 2, faceZ + into * (1.2 + _rand())); add(st);
+      }
     };
-    for (const y of [3.5, 7.0, 10.5, 14.0]) mkDeck(y, AFT_FACE_Z, 1, aS.halfW - 1.5);     // aft decks recede +Z
-    for (const y of [1.5, 5.0, 8.5]) mkDeck(y, BOW_FACE_Z, -1, bS.halfW - 1.5);           // bow decks (offset Y)
+    const aftYs = [3.5, 7.0, 10.5, 14.0];
+    aftYs.forEach((y, i) => mkDeck(y, AFT_FACE_Z, 1, aS.halfW - 1.5, i < aftYs.length - 1 ? aftYs[i + 1] - y : undefined));   // aft decks recede +Z
+    const bowYs = [1.5, 5.0, 8.5];
+    bowYs.forEach((y, i) => mkDeck(y, BOW_FACE_Z, -1, bS.halfW - 1.5, i < bowYs.length - 1 ? bowYs[i + 1] - y : undefined)); // bow decks (offset Y)
     // Snapped keel-stub beam — tapered, anchored INTO the aft backboard (torn-but-rooted).
     // Snapped keel-stub beams — shorter + more segments + one end embedded into the
     // torn face (rooted, not a dangling glowing flagpole).
+    // Seated at a deck Y + centered so most of each stub is EMBEDDED in its mass and
+    // only a short snapped end projects into the gap (was floating mid-gap at y=2.2/3.0).
     const spineGeo = new THREE.CylinderGeometry(0.6, 0.95, 8, 10); spineGeo.rotateX(Math.PI / 2);
-    const spine = new THREE.Mesh(spineGeo, dark); spine.position.set(-1.5, 2.2, AFT_FACE_Z - 2); spine.rotation.y = 0.16; add(spine);
+    const spine = new THREE.Mesh(spineGeo, dark); spine.position.set(-1.5, 3.5, AFT_FACE_Z + 0.5); spine.rotation.y = 0.16; add(spine);
     const spine2Geo = new THREE.CylinderGeometry(0.45, 0.7, 5, 10); spine2Geo.rotateX(Math.PI / 2);
-    const spine2 = new THREE.Mesh(spine2Geo, dark); spine2.position.set(1.0, 3.0, BOW_FACE_Z + 2); spine2.rotation.set(0, 0.2, 0.06); add(spine2);
+    const spine2 = new THREE.Mesh(spine2Geo, dark); spine2.position.set(1.0, 5.0, BOW_FACE_Z - 0.5); spine2.rotation.set(0, 0.2, 0.06); add(spine2);
     // Dangling cables — drooping from upper deck-edges DOWN to a lower deck slab
     // (land on structure, not mid-air), with a junction-box foot.
     // Cables droop from an UPPER deck-edge down to a LOWER deck slab on the SAME torn

@@ -113,20 +113,39 @@ export interface LoftStation { z: number; halfW: number; halfH: number; cy?: num
  *  with a flat dorsal deck, hard chines, and flat sides. Open ends (for fracture
  *  faces / transom). Outward normals → FrontSide shows the outside, the interior
  *  shows through from inside the bay. */
-export function makeLoftedHull(stations: LoftStation[], material: THREE.Material): THREE.Mesh {
+export function makeLoftedHull(stations: LoftStation[], material: THREE.Material, thickness = 0): THREE.Mesh {
   const N = SHIP_SECTION.length;
-  const ringOf = (s: LoftStation): THREE.Vector3[] =>
-    SHIP_SECTION.map(([x, y]) => new THREE.Vector3(x * s.halfW, (s.cy ?? 0) + y * s.halfH, s.z));
-  const rings = stations.map(ringOf);
+  const ringOf = (s: LoftStation, inset: number): THREE.Vector3[] =>
+    SHIP_SECTION.map(([x, y]) => new THREE.Vector3(
+      x * Math.max(0.05, s.halfW - inset), (s.cy ?? 0) + y * Math.max(0.05, s.halfH - inset), s.z));
   const pos: number[] = [];
   const push = (v: THREE.Vector3) => { pos.push(v.x, v.y, v.z); };
-  for (let i = 0; i < rings.length - 1; i++) {
-    const A = rings[i], B = rings[i + 1];
-    for (let k = 0; k < N; k++) {
-      const k2 = (k + 1) % N;
-      // Quad A[k]→A[k2]→B[k2]→B[k], wound for OUTWARD normals (CCW section + +Z loft).
-      push(A[k]); push(B[k]); push(B[k2]);
-      push(A[k]); push(B[k2]); push(A[k2]);
+  const loft = (rings: THREE.Vector3[][], inward: boolean) => {
+    for (let i = 0; i < rings.length - 1; i++) {
+      const A = rings[i], B = rings[i + 1];
+      for (let k = 0; k < N; k++) {
+        const k2 = (k + 1) % N;
+        // Quad wound for OUTWARD normals (CCW section + +Z loft); reversed for the inner skin.
+        if (!inward) { push(A[k]); push(B[k]); push(B[k2]); push(A[k]); push(B[k2]); push(A[k2]); }
+        else { push(A[k]); push(B[k2]); push(B[k]); push(A[k]); push(A[k2]); push(B[k2]); }
+      }
+    }
+  };
+  const outer = stations.map((s) => ringOf(s, 0));
+  loft(outer, false);
+  // Optional WALL THICKNESS — a second inner skin + rim caps at the two open ends, so the
+  // hull reads as thick plating (not a paper edge) where it's torn open (fracture, bow tip,
+  // transom). Also makes the collision trimesh a solid wall (no thin-surface tunnelling).
+  if (thickness > 0) {
+    const inner = stations.map((s) => ringOf(s, thickness));
+    loft(inner, true);
+    for (const idx of [0, stations.length - 1]) {
+      const O = outer[idx], I = inner[idx], endFlip = idx === 0;
+      for (let k = 0; k < N; k++) {
+        const k2 = (k + 1) % N;
+        if (endFlip) { push(O[k]); push(I[k2]); push(I[k]); push(O[k]); push(O[k2]); push(I[k2]); }
+        else { push(O[k]); push(I[k]); push(I[k2]); push(O[k]); push(I[k2]); push(O[k2]); }
+      }
     }
   }
   const geo = new THREE.BufferGeometry();
