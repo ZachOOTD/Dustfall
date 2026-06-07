@@ -580,42 +580,22 @@ export function placeMegaWreck(
     );
   };
 
-  // ── INTERIOR floor colliders — the SAME interiorDecks() as the meshes, through
-  // the same shell transform → mesh + collision locked, both canted with the hull.
-  for (const d of interiorDecks()) if (d.collide) extCuboid(d.x, d.y, d.z, d.hx, d.hy, d.hz, [d.rx ?? 0, d.ry ?? 0, d.rz ?? 0]);
-  // Deck-edge CURBS — thin tall blockers at the walkable deck rim so the player can't
-  // slide off the ~17°-canted deck into the belly void (both flanks, along the spine).
-  for (const [z0, z1] of [[-44, -6], [17, 72]] as const) for (let z = z0; z < z1; z += 6) {
-    const s = hullAt(z + 3);
-    for (const side of [-1, 1]) extCuboid(0.4 + side * s.halfW * 0.74, deckY(z + 3) + 0.9, z + 3, 0.3, 0.9, 3.1);
-  }
-  // Solid interior PROPS get colliders so the player can't walk through them (the
-  // fixed-position blockers — peeled bulkheads, wall consoles, bridge console + chair).
-  for (const [z, h] of [[-26, 7], [34, 9], [56, 6]] as const) {     // peeled bulkheads
-    const s = hullAt(z); extCuboid(s.halfW * 0.5, deckY(z) + h / 2, z, 0.3, h / 2, 2.3, [0, 0, -0.32]);
-  }
-  for (const [z, h] of [[-20, 1.6], [28, 1.8], [50, 1.6]] as const) { // wall consoles
-    const s = hullAt(z); extCuboid(-s.halfW * 0.6, deckY(z) + (h + 0.3) / 2, z, 0.35, (h + 0.3) / 2, 1.3, [0, 0, 0.22]);
-  }
-  extCuboid(2, deckY(70) + 0.9, 68.5, 1.25, 0.6, 0.5);              // bridge console
-  extCuboid(2, deckY(70) + 1.0, 69.9, 0.4, 0.7, 0.4);               // captain's chair
-
-  // ── Exterior collision — an ACCURATE TRIMESH of the REAL hull surface (D189). The
-  // lofted bow+aft masses + island tower/cap + engine bells are tagged `hullCollide`;
-  // we bake each tagged mesh's geometry into the body-local (group) frame — so the
-  // ~17° shell tilt is inherited from the mesh hierarchy for free — and feed one
-  // Rapier trimesh. Zero drift from the rendered surface, no clip-through (replaces
-  // the old coarse cuboid proxy). The FRACTURE gap (no hull between the bow+aft masses,
-  // z≈-5..+18) stays OPEN in the trimesh → that IS the walkable entrance.
+  // ── FULL-MODEL collision (D189) — ONE Rapier TRIMESH built from EVERY solid mesh in
+  // the wreck (hull masses, interior decks, ribs, collapsed beams, debris, cables,
+  // bulkheads/consoles/props, plating strakes, greebles, command island, engine bells…),
+  // baked into the body-local frame so it inherits the ~17° shell tilt from the mesh
+  // hierarchy. 100% EXACT — the collider matches the rendered geometry triangle-for-
+  // triangle (no approximating cuboids; if it's on the model, it collides as its real
+  // shape). Only flat ground-decals (fake-AO / scorch / ash CircleGeometry) are skipped.
+  // The panels/journal are added AFTER this (interactive → not in the trimesh). The open
+  // FRACTURE gap (no hull between the masses) stays open → the walkable entrance.
   {
     group.updateWorldMatrix(true, true);
     const invGroup = group.matrixWorld.clone().invert();
     const verts: number[] = [];
     group.traverse((o) => {
-      let anc: THREE.Object3D | null = o, tagged = false;
-      while (anc) { if (anc.userData?.hullCollide) { tagged = true; break; } anc = anc.parent; }
       const m = o as THREE.Mesh;
-      if (!tagged || !m.isMesh || !m.geometry) return;
+      if (!m.isMesh || !m.geometry || m.geometry.type === 'CircleGeometry') return;   // skip flat ground decals
       const g = m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone();
       m.updateWorldMatrix(true, false);
       g.applyMatrix4(invGroup.clone().multiply(m.matrixWorld));   // → body-local
@@ -629,6 +609,12 @@ export function placeMegaWreck(
       for (let i = 0; i < idx.length; i++) idx[i] = i;            // non-indexed → sequential tris
       world.createCollider(RAPIER.ColliderDesc.trimesh(v, idx), body);
     }
+  }
+  // Invisible deck-edge CURBS (no mesh equivalent) so the player can't slide off the
+  // ~17°-canted deck into the belly trough.
+  for (const [z0, z1] of [[-44, -6], [17, 72]] as const) for (let z = z0; z < z1; z += 6) {
+    const s = hullAt(z + 3);
+    for (const side of [-1, 1]) extCuboid(0.4 + side * s.halfW * 0.74, deckY(z + 3) + 0.9, z + 3, 0.3, 0.9, 3.1);
   }
 
   // Shell-local → world helpers (so interactables sit on the TILTED decks).
