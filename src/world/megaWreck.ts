@@ -141,9 +141,17 @@ function interiorDecks(): Deck[] {
       D.push({ x: 0.4, y: deckY(z + 2.5), z: z + 2.5, hx: s.halfW * 0.74, hy: 0.35, hz: 2.7, collide: true });
     }
   }
-  // Fracture crossing — a WIDE fallen-bulkhead deck bridging the open break, rising
-  // to meet the higher aft deck (no fall-off-the-plank, no big step).
-  D.push({ x: 0.4, y: deckY(6) + 0.3, z: 8, hx: 4.5, hy: 0.45, hz: 13, rx: -0.06, rz: 0.04, collide: true });
+  // Fracture crossing — STEPPED flat fallen-deck slabs climbing from the bow deck
+  // (deckY(-5)≈0.8) up to the higher aft deck (deckY(20)≈2.7) so the bridge payoff
+  // stays reachable on foot. Flat (no tilt) + each step ≤ the autostep height +
+  // overlapping in Z → robustly climbable regardless of collider tilt convention.
+  {
+    const bowY = deckY(-5), aftY = deckY(20), n = 9;
+    for (let i = 0; i < n; i++) {
+      const t = i / (n - 1), z = -4 + t * 24;
+      D.push({ x: 0.4, y: bowY + (aftY - bowY) * t + 0.3, z, hx: 4.6, hy: 0.4, hz: 2.0, rz: 0.03, collide: true });
+    }
+  }
   return D;
 }
 
@@ -222,10 +230,11 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
     }
     // Hanging cables from the torn upper deck-edges down to the floor, each with a
     // junction-box bracket at the top so it reads as anchored (not a floating wire).
-    for (const [x, z, topY] of [[-3, -24, 8], [4, 32, 11], [-2, 38, 9], [2, -10, 7], [5, 48, 8], [-4, 60, 7]] as const) {
-      const from = new THREE.Vector3(x, deckY(z) + topY, z);
-      add(makeCable(from, new THREE.Vector3(x + 1.5, deckY(z) + 0.4, z + 2), 2.6, _pipeMat, 0.12));
-      const br = box(0.5, 0.5, 0.5, dark); br.position.copy(from); add(br);
+    for (const [x, z] of [[-3, -24], [4, 32], [-2, 38], [2, -10], [5, 48], [-4, 60]] as const) {
+      const s = hullAt(z);
+      const from = new THREE.Vector3(x, s.dorsalY - 0.8, z);   // anchored just under the ceiling
+      add(makeCable(from, new THREE.Vector3(x + 1.5, deckY(z) + 0.4, z + 2), 3.0, _pipeMat, 0.12));
+      const br = box(0.6, 0.5, 0.6, dark); br.position.copy(from); add(br);   // ceiling junction bracket
     }
     // Wall consoles / panels on the lee (-X) flank — seated ON the widened deck edge.
     for (const [z, h] of [[-20, 1.6], [28, 1.8], [50, 1.6]] as const) {
@@ -260,9 +269,13 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
       [-hullAt(-40).halfW * 0.8, -40, 0xffe6c2, 2.2, 24], // bow-entry breach
     ];
     for (const [sx, sz, color, inten, dist] of shafts) {
-      const top = hullAt(sz).dorsalY + 1, floorY = deckY(sz);
+      const s = hullAt(sz), floorY = deckY(sz);
+      // Cap the shaft top INSIDE the hull (not dorsalY+1, which poked through the
+      // exterior skin). Flank breaches originate at the breach height (cy); the
+      // fracture (sx≈0) reaches higher toward the open break.
+      const top = Math.abs(sx) < 1 ? s.cy + s.halfH * 0.75 : s.cy + s.halfH * 0.4;
       const len = top - floorY;
-      const cone = new THREE.Mesh(new THREE.ConeGeometry(3.4, len, 14, 1, true), shaftMat);
+      const cone = new THREE.Mesh(new THREE.ConeGeometry(3.2, len, 14, 1, true), shaftMat);
       cone.position.set(sx * 0.5, (top + floorY) / 2, sz); cone.rotation.z = sx > 0 ? 0.25 : -0.25;
       cone.userData.noShadow = true; add(cone);
       const pl = new THREE.PointLight(color, inten, dist, 2);
