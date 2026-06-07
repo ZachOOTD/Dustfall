@@ -200,7 +200,7 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
     const debris = (z: number, n: number) => {
       const s = hullAt(z);
       for (let i = 0; i < n; i++) {
-        const fx = s.halfW * (0.15 + _rand() * 0.5), fy = deckY(z) + 0.25 + _rand() * 0.5, fz = z + (_rand() - 0.5) * 6;
+        const fx = s.halfW * (0.12 + _rand() * 0.45), fz = z + (_rand() - 0.5) * 6, fy = deckY(fz) + 0.2 + _rand() * 0.35;  // sample deck at fz
         const kind = _rand();
         let m: THREE.Mesh;
         if (kind < 0.45) { m = box(0.8 + _rand() * 2.2, 0.1 + _rand() * 0.3, 0.6 + _rand() * 2.0, dark); }   // torn plate
@@ -234,11 +234,13 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
       const scr = box(0.2, 0.8, 1.3, _viewportMat); scr.position.set(cx + 0.35, deckY(z) + h * 0.65, z); scr.rotation.set(0, 0, 0.22); scr.userData.noShadow = true; add(scr);
       const glow = new THREE.PointLight(0x3a6a8a, 0.4, 5, 2); glow.position.set(cx + 0.6, deckY(z) + h * 0.65, z); add(glow);
     }
-    // Sand-fan intrusion pouring in through the bow-entry breach.
+    // Sand-fan intrusion pouring in through the bow-entry breach — each cone seated
+    // on the deck at its own Z (sloped deck → no float), shrinking inboard.
     const sandMat = new THREE.MeshLambertMaterial({ color: 0xb89968, flatShading: true });
-    for (let i = 0; i < 4; i++) {
-      const sd = cyl(0, 2 + i, 1.2, sandMat, 8);   // flattened sand cones
-      sd.position.set(-hullAt(-40).halfW * 0.5 + i * 0.8, deckY(-40) + 0.3, -40 + i * 1.5);
+    for (let i = 0; i < 3; i++) {
+      const cz = -40 + i * 1.6;
+      const sd = cyl(0, 3 - i * 0.7, 1.0, sandMat, 8);
+      sd.position.set(-hullAt(cz).halfW * 0.55 + i * 1.0, deckY(cz) + 0.2, cz);
       sd.scale.set(1, 0.4, 1); add(sd);
     }
   }
@@ -248,9 +250,8 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
   // PointLight pooling on the floor; a dim cool fill so the upper hull/ceiling isn't
   // a black void; warm emergency lamps for contrast.
   {
-    // Dim HEMISPHERE ambient locked to the wreck so the dark steel never crushes to
-    // pure black (a warm sand-bounce floor + a cool sky from the breaches above).
-    add(new THREE.HemisphereLight(0x8a93a0, 0x4a3a28, 0.5));
+    // (No HemisphereLight — those are GLOBAL in three.js and would wash the whole
+    // desert / stack per wreck. Bounded PointLights fill the interior instead.)
     const shaftMat = new THREE.MeshBasicMaterial({ color: 0xfff1d6, transparent: true, opacity: 0.16, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
     // 3 daylight shafts at real openings (one dominant = the fracture sun).
     const shafts: Array<[number, number, number, number, number]> = [
@@ -267,12 +268,16 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
       const pl = new THREE.PointLight(color, inten, dist, 2);
       pl.position.set(sx * 0.4, floorY + 2.5, sz); add(pl);
     }
-    // 2 cool fill lights at mid-height to read the canted upper hull (drop z=0 — it
-    // pooled in the empty fracture gap).
+    // Cool fill lights — mid-height (read the flanks) + high near the dorsal (read the
+    // canted upper hull / ribs, so it isn't a black-then-brown void). Bounded ranges.
     for (const z of [-30, 45]) {
       const s = hullAt(z);
-      const f = new THREE.PointLight(0x9fb4cc, 0.6, 36, 1.5);
-      f.position.set(0, s.cy + s.halfH * 0.3, z); add(f);
+      const f = new THREE.PointLight(0x9fb4cc, 0.7, 34, 1.5); f.position.set(0, s.cy + s.halfH * 0.3, z); add(f);
+      const u = new THREE.PointLight(0x8aa0bc, 0.5, 26, 1.6); u.position.set(s.halfW * 0.2, s.dorsalY - 3, z); add(u);
+    }
+    for (const z of [-12, 20, 62]) {
+      const s = hullAt(z);
+      const u = new THREE.PointLight(0x8aa0bc, 0.45, 24, 1.6); u.position.set(0, s.dorsalY - 3, z); add(u);
     }
     // Warm emergency lamp on the bridge (one focal point).
     const lamp1 = new THREE.PointLight(0xff9a4a, 1.3, 18, 2); lamp1.position.set(2.5, deckY(70) + 2.5, 70); add(lamp1);
@@ -286,7 +291,7 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
     const ground = (x: number, y: number, z: number, r: number) => {
       const d = new THREE.Mesh(new THREE.CircleGeometry(r, 10), _scorchMat); d.rotation.x = -Math.PI / 2; d.position.set(x, y + 0.06, z); d.userData.noShadow = true; add(d);
     };
-    const propMats = [_rustMat, _hullDarkMat, _hullMat, _tornMat];
+    const propMats = [_hullDarkMat, _hullMat, _hullDarkMat, _rustMat];   // dusty hull palette (was over-saturated orange)
     const pmat = () => propMats[Math.floor(_rand() * propMats.length)];
     const crate = (x: number, y: number, z: number, sw: number, mat: THREE.Material) => {
       const c = box(sw, sw * 0.9, sw, mat); c.position.set(x, y + sw * 0.45, z); c.rotation.y = _rand(); c.rotation.z = (_rand() - 0.5) * 0.2; add(c);
@@ -301,7 +306,7 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
     for (const [z, cxc] of [[-38, -2], [-30, 3], [6, -3], [28, 3], [40, -2], [66, 0]] as const) {
       const n = 2 + Math.floor(_rand() * 3);
       for (let i = 0; i < n; i++) {
-        const px = cxc + (_rand() - 0.5) * 4, pz = z + (_rand() - 0.5) * 5, py = deckY(z) + 0.35;
+        const px = cxc + (_rand() - 0.5) * 4, pz = z + (_rand() - 0.5) * 5, py = deckY(pz) + 0.35;  // sample deck at the prop's own Z (sloped deck → no float)
         const kind = _rand();
         if (kind < 0.5) crate(px, py, pz, 0.8 + _rand() * 0.9, pmat());
         else if (kind < 0.8) barrel(px, py, pz, pmat());
@@ -316,7 +321,9 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
     {
       const z = 54, s = hullAt(54), cx = -s.halfW * 0.5, fy = deckY(54) + 0.35;
       crate(cx, fy, z, 1.1, _rustMat);
-      const tarp = box(2.6, 0.1, 2.4, _tornMat); tarp.position.set(cx - 1, fy + 1.7, z); tarp.rotation.set(0.12, 0.3, 0.15); add(tarp);
+      // Strung tarp — one edge drapes onto the crate-table, held by a corner pole.
+      const tarp = box(2.6, 0.1, 2.4, _tornMat); tarp.position.set(cx - 0.6, fy + 1.25, z); tarp.rotation.set(0.18, 0.3, 0.12); add(tarp);
+      const pole = cyl(0.06, 0.06, 1.8, dark, 5); pole.position.set(cx - 1.7, fy + 0.9, z + 0.8); add(pole);
       const fire = new THREE.Mesh(new THREE.ConeGeometry(0.32, 0.7, 6), new THREE.MeshBasicMaterial({ color: 0xff7a2a })); fire.position.set(cx + 1.6, fy + 0.35, z); fire.userData.noShadow = true; add(fire);
       const ember = new THREE.PointLight(0xff5a1e, 1.5, 8, 2); ember.position.set(cx + 1.6, fy + 0.5, z); add(ember); ground(cx + 1.6, fy, z, 0.9);
     }
@@ -377,10 +384,12 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
     for (const y of [3.5, 7.0, 10.5, 14.0]) mkDeck(y, AFT_FACE_Z, 1, aS.halfW - 1.5);     // aft decks recede +Z
     for (const y of [1.5, 5.0, 8.5]) mkDeck(y, BOW_FACE_Z, -1, bS.halfW - 1.5);           // bow decks (offset Y)
     // Snapped keel-stub beam — tapered, anchored INTO the aft backboard (torn-but-rooted).
-    const spineGeo = new THREE.CylinderGeometry(0.7, 1.0, 13, 6); spineGeo.rotateX(Math.PI / 2);
-    const spine = new THREE.Mesh(spineGeo, dark); spine.position.set(-1.5, 2.5, AFT_FACE_Z - 5.5); spine.rotation.y = 0.16; add(spine);
-    const spine2Geo = new THREE.CylinderGeometry(0.5, 0.7, 7, 6); spine2Geo.rotateX(Math.PI / 2);
-    const spine2 = new THREE.Mesh(spine2Geo, dark); spine2.position.set(1.0, 3.2, BOW_FACE_Z + 3.5); spine2.rotation.set(0, 0.2, 0.06); add(spine2);
+    // Snapped keel-stub beams — shorter + more segments + one end embedded into the
+    // torn face (rooted, not a dangling glowing flagpole).
+    const spineGeo = new THREE.CylinderGeometry(0.6, 0.95, 8, 10); spineGeo.rotateX(Math.PI / 2);
+    const spine = new THREE.Mesh(spineGeo, dark); spine.position.set(-1.5, 2.2, AFT_FACE_Z - 2); spine.rotation.y = 0.16; add(spine);
+    const spine2Geo = new THREE.CylinderGeometry(0.45, 0.7, 5, 10); spine2Geo.rotateX(Math.PI / 2);
+    const spine2 = new THREE.Mesh(spine2Geo, dark); spine2.position.set(1.0, 3.0, BOW_FACE_Z + 2); spine2.rotation.set(0, 0.2, 0.06); add(spine2);
     // Dangling cables — drooping from upper deck-edges DOWN to a lower deck slab
     // (land on structure, not mid-air), with a junction-box foot.
     // Cables droop from an UPPER deck-edge down to a LOWER deck slab on the SAME torn
@@ -617,6 +626,22 @@ export function placeMegaWreck(
   // ── INTERIOR floor colliders — the SAME interiorDecks() as the meshes, through
   // the same shell transform → mesh + collision locked, both canted with the hull.
   for (const d of interiorDecks()) if (d.collide) extCuboid(d.x, d.y, d.z, d.hx, d.hy, d.hz, [d.rx ?? 0, d.ry ?? 0, d.rz ?? 0]);
+  // Deck-edge CURBS — thin tall blockers at the walkable deck rim so the player can't
+  // slide off the ~17°-canted deck into the belly void (both flanks, along the spine).
+  for (const [z0, z1] of [[-44, -6], [17, 72]] as const) for (let z = z0; z < z1; z += 6) {
+    const s = hullAt(z + 3);
+    for (const side of [-1, 1]) extCuboid(0.4 + side * s.halfW * 0.74, deckY(z + 3) + 0.9, z + 3, 0.3, 0.9, 3.1);
+  }
+  // Solid interior PROPS get colliders so the player can't walk through them (the
+  // fixed-position blockers — peeled bulkheads, wall consoles, bridge console + chair).
+  for (const [z, h] of [[-26, 7], [34, 9], [56, 6]] as const) {     // peeled bulkheads
+    const s = hullAt(z); extCuboid(s.halfW * 0.5, deckY(z) + h / 2, z, 0.3, h / 2, 2.3, [0, 0, -0.32]);
+  }
+  for (const [z, h] of [[-20, 1.6], [28, 1.8], [50, 1.6]] as const) { // wall consoles
+    const s = hullAt(z); extCuboid(-s.halfW * 0.6, deckY(z) + (h + 0.3) / 2, z, 0.35, (h + 0.3) / 2, 1.3, [0, 0, 0.22]);
+  }
+  extCuboid(2, deckY(70) + 0.9, 68.5, 1.25, 0.6, 0.5);              // bridge console
+  extCuboid(2, deckY(70) + 1.0, 69.9, 0.4, 0.7, 0.4);               // captain's chair
 
   // ── Exterior collision — flank slabs + caps + island + engines (same transform).
   // Exposed hull flanks (both masses) — thin vertical slabs at the sampled surface.

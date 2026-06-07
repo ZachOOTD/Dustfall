@@ -154,7 +154,7 @@ export function makeFormerRings(
   const taper = opts?.taper ?? 0.02;
   for (let i = 0; i < count; i++) {
     const r = Math.max(0.1, radius * (0.84 - i * taper));
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(r, tube, 6, 18), _formerMat);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(r, tube, 10, 20), _formerMat);
     ring.rotation.y = Math.PI / 2;       // ring plane ⟂ +X
     ring.position.x = startX + i * spacing;
     g.add(ring);
