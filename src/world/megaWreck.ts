@@ -261,13 +261,15 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
   {
     // (No HemisphereLight — those are GLOBAL in three.js and would wash the whole
     // desert / stack per wreck. Bounded PointLights fill the interior instead.)
-    const shaftMat = new THREE.MeshBasicMaterial({ color: 0xfff1d6, transparent: true, opacity: 0.16, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
-    // 3 daylight shafts at real openings (one dominant = the fracture sun).
+    const shaftMat = new THREE.MeshBasicMaterial({ color: 0xfff1d6, transparent: true, opacity: 0.28, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+    // 3 daylight shafts at real openings (the fracture is the dominant HERO flood).
     const shafts: Array<[number, number, number, number, number]> = [
-      [0, 6, 0xfff1d6, 4.2, 44],            // the open fracture — dominant daylight flood
-      [hullAt(30).halfW * 0.8, 30, 0xffe6c2, 2.4, 26],   // +X engineering breach
-      [-hullAt(-40).halfW * 0.8, -40, 0xffe6c2, 2.2, 24], // bow-entry breach
+      [0, 6, 0xfff4dc, 8.0, 52],            // the open fracture — bright hero daylight flood
+      [hullAt(30).halfW * 0.8, 30, 0xffe6c2, 3.4, 28],   // +X engineering breach
+      [-hullAt(-40).halfW * 0.8, -40, 0xffe6c2, 3.0, 26], // bow-entry breach
     ];
+    // A second high light at the fracture so the exposed formers + decks are rim-lit.
+    const frTop = new THREE.PointLight(0xfff4dc, 4.0, 40, 2); frTop.position.set(0, hullAt(6).cy + hullAt(6).halfH * 0.6, 6); add(frTop);
     for (const [sx, sz, color, inten, dist] of shafts) {
       const s = hullAt(sz), floorY = deckY(sz);
       // Cap the shaft top INSIDE the hull (not dorsalY+1, which poked through the
@@ -285,12 +287,12 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
     // canted upper hull / ribs, so it isn't a black-then-brown void). Bounded ranges.
     for (const z of [-30, 45]) {
       const s = hullAt(z);
-      const f = new THREE.PointLight(0x9fb4cc, 0.7, 34, 1.5); f.position.set(0, s.cy + s.halfH * 0.3, z); add(f);
-      const u = new THREE.PointLight(0x8aa0bc, 0.5, 26, 1.6); u.position.set(s.halfW * 0.2, s.dorsalY - 3, z); add(u);
+      const f = new THREE.PointLight(0xb0bccc, 1.0, 36, 1.5); f.position.set(0, s.cy + s.halfH * 0.3, z); add(f);
+      const u = new THREE.PointLight(0x9aaec4, 0.7, 28, 1.6); u.position.set(s.halfW * 0.2, s.dorsalY - 3, z); add(u);
     }
     for (const z of [-12, 20, 62]) {
       const s = hullAt(z);
-      const u = new THREE.PointLight(0x8aa0bc, 0.45, 24, 1.6); u.position.set(0, s.dorsalY - 3, z); add(u);
+      const u = new THREE.PointLight(0x9aaec4, 0.6, 26, 1.6); u.position.set(0, s.dorsalY - 3, z); add(u);
     }
     // Warm emergency lamp on the bridge (one focal point).
     const lamp1 = new THREE.PointLight(0xff9a4a, 1.3, 18, 2); lamp1.position.set(2.5, deckY(70) + 2.5, 70); add(lamp1);
