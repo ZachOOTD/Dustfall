@@ -64,27 +64,28 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      Prior milestones live in docs/changelog.md — do NOT accumulate "Prior milestone"
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
-**Last shipped**: Session ACAJ (partial) — **wreck procedural-hull toolkit + mega-wreck rebuild** (T1+T2 of a 7-tier
-"wrecks + perf" overnight; T3-T7 deferred). 3 commits, tsc clean, no save bump; D185. **T1 — `world/wreckForms.ts`**: the
-shared building blocks for crashed-ship wrecks — `makeLatheHull`/`fuselageProfile` (tapered hull via LatheGeometry,
-`axis:'x'|'y'|'z'`, partial-arc torn ends), `makeFormerRings` (exposed rib skeleton), `makeBreach` (torn hole = void +
-bent flaps, NO boolean), `makeSandMound` (half-burial drift). NEW `__game.wreckFormStudio` + `wreck-form` rig-shot. **T2 —
-mega-wreck exterior rebuild (D185)**: `makeMegaWreck` read as a box cluster; replaced the ABL cylinder shell with a curved
-toolkit hull (tapered aft fuselage + nose + exposed formers at the mid-hull FRACTURE + 3 asymmetric breaches + tapered/raked
-bridge cap), all FrontSide + `noCollider` so the **entire walkable interior + ~25 colliders + 2 panels + shelter + journal
-is UNTOUCHED** (the hull ENVELOPS the box so it reads as inner structure). NEW `megawreck` rig-shot; ~5 iterated rounds →
-reads as a downed ship. **Deliberately deferred T3-T7** (rule 8 / ABP: ship fully-iterated tiers, not shallow ones).
-*(Prior milestones — ACAI: vulture rig + ecology (D181-184); ACAH: bug sweep + loot + vulture + clouds (D177-180); ACAG:
-dead-tree rework (D174-176). See changelog.)*
+**Last shipped**: Session ACAK — **mega-wreck FROM-SCRATCH rebuild: sleek crashed DAGGER + aligned wreck interior** (tsc
+clean, no save bump; ~18 commits `6c3fe99`→`bcff628`; D186-D188). The user flagged the ACAJ wreck as shipped-too-early /
+boxy; reworked the hero ground-up via research + adversarial self-critique. **Exterior**: NEW `makeLoftedHull` (faceted
+ship-hull cross-section, replaces the lathe "dome"); the whole exterior in a `shell` group **tilted ~17° into a list + sunk**
+(pivot-compensated `shellQuat()`/`shellPos()` so it kisses the ground); a `hullAt(z)` sampler so flank detail sits ON the
+hull; ~5:1 dagger, bow driven into the dune, mid-hull FRACTURE notch + cut-open cross-section, tapered command island +
+mast/dishes, 2 hollow engine bells on a transom plate, plating strakes/ribs, rust streaks, tilt-aware half-burial + debris;
+coarse exterior collider proxy. **Interior v2** (scrapped the corridors): `interiorDecks()` built in the SAME tilted shell
+frame (one rigid object), floor carries the full list, DoubleSide hull = walls/ceiling derived from `hullAt`; wreckage +
+cargo/survivor set dressing + a dressed bridge; fracture = HERO daylight flood; deck/curb/prop colliders + a stepped
+fracture crossing (fixed a ~2m unclimbable step that blocked the bridge). NEW reusable **workflow harness**: `megawreck-
+research`/`-critique`/`-interior-defects` (agents read the rig-shot PNGs + the code) — ran the exterior to a sleek dagger
++ 4 interior defect-hunt rounds. *(Prior — ACAJ: wreckForms toolkit + first mega-wreck rebuild (D185); ACAI: vulture rig +
+ecology (D181-184). See changelog.)*
 
-**Next session (ACAJ continuation)** = finish the wrecks+perf overnight: **T3** apply the `wreckForms` toolkit to the procgen
-part vocabulary (`wrecks.ts` hull/cockpit variants + `procgenWreck.ts` `HULL_SEGMENT_VARIANTS` → Lathe hulls + exposed
-formers + real `makeBreach` holes — levels up all ~80 procgen wrecks); **T4** half-burial + `makeSandMound` (sink wrecks
-into the dunes); **T5** greeble + functional-asymmetry pass; **T6 (never-cut)** WebGL wreck perf merge (`mergeGeometries`
-each wreck's static meshes by material, panels/colliders separate; measure via `perf-probe`); **T7** InstancedMesh/LOD.
-**The raider proc-character + all rig-dependent work stays DEFERRED.** Other lanes: material-factory→uniforms, desktop
-packaging (Electron) + WebGPU, wreck-yard biome, ODST drop-pod intro, deep cave; quick wins: painted-metal rust, sandworm
-depth. See
+**Next session** = **(1) WALK-TEST the new mega-wreck interior** (`npm run dev` → enter via the bow breach/fracture, cross
+to the bridge; confirm the ~17° canted floor + the 9-step fracture crossing feel right + panels/journal/shelter register —
+this is the one thing screenshots can't verify; if traversal is bad, rework the `interiorDecks()` deck layout BEFORE more
+cosmetics). **(2)** deeper interior lighting/material pass (rust/grime on debris+planes, contact AO, partial-arc ribs, the
+fracture-as-cathedral). **(3)** the still-deferred ACAJ **T3-T7** (apply the bigger `wreckForms` toolkit to the procgen
+fleet `wrecks.ts`/`procgenWreck.ts`; half-burial; greeble; **T6 never-cut** WebGL wreck perf merge via `mergeGeometries`;
+InstancedMesh/LOD). The raider proc-character + all rig-dependent work stays DEFERRED. See
 [docs/next-session-prompt.md](docs/next-session-prompt.md) + [docs/backlog.md](docs/backlog.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).

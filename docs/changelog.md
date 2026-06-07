@@ -3,6 +3,51 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ACAK — 2026-06-07 — Mega-wreck FROM-SCRATCH rebuild: sleek dagger + aligned wreck interior ✓ verify pass (tsc clean)
+
+`verified` — `npm run verify` (tsc) PASS throughout; **no save bump** (geometry/material/collider only; rebuilds from
+seed). The user flagged the ACAJ mega-wreck as shipped-too-early / low quality ("reads boxy", a "smoother box"). Reworked
+the hero centerpiece **ground-up across the whole session**, driven by research + adversarial self-critique. ~18 commits
+(`6c3fe99`→`bcff628`). **D186-D188.** Reusable research + critique + defect-hunt **workflow harness** built (agents read
+the actual rig-shot PNGs + the geometry code). The exterior dagger reads as a real crashed warship; the interior is
+rebuilt + dressed + collision-correct but **owes an in-app walk-test + a deeper lighting/material pass** (honestly flagged).
+
+**Research (3 specs).** `docs/research/megawreck-anatomy.md` (exterior build spec + 12-pt rubric, 6-facet web research),
+`megawreck-concept.md` (the dagger + interior concept), `megawreck-interior-v2.md` (the from-scratch wreck-interior concept
+after the user rejected corridors).
+
+**Exterior — sleek crashed DAGGER (replaces the wide hauler).** NEW `makeLoftedHull` (wreckForms) — a FACETED ship-hull
+cross-section (flat dorsal deck + hard chines + flat sides) lofted along Z, replacing the smooth lathe "dome" that read as
+a lump. The whole exterior lives in a `shell` group **tilted into a ~17° list + sunk** (pivot-compensated `shellQuat()`/
+`shellPos()` so the hull KISSES the ground, doesn't lever the aft up). A `hullAt(z)` sampler interpolates the cross-section
+so flank detail sits ON the hull (no floating/clipping). ~5:1 dagger, sharp bow driven into the dune, mid-hull FRACTURE
+notch with a cut-open cross-section (former rings + staggered deck slabs + spine stub + cables), a tapered angular command
+island (windows + leaned sensor mast + dish array), 2 projecting hollow engine bells on a transom plate + cage, asymmetric
+breaches, hull plating strakes + frame ribs, directional rust streaks, asymmetric half-burial (tilt-aware sand drifts +
+nose scorch + debris). Coarse exterior collision proxy (flank slabs + caps + island + engines, transformed to the tilt).
+Critique trajectory 2.75 → 3.75/10 on the wide hull; the dagger then read as a sleek crashed blade.
+
+**Interior v2 — the broken GUTS of the dagger (scrapped the corridors).** The clean spinal-corridor interior was a LEVEL
+box-cavity under a tilted shell (inside + outside didn't agree). Rebuilt: `interiorDecks()` descriptors built in the SAME
+tilted `shell` frame (one rigid listed object), the floor carrying the full ~17° list (user's call: max authenticity); the
+DoubleSide hull is the walls + ceiling (literal inside of the skin, derived from `hullAt` → no poke-through). Wreckage:
+exposed rib skeleton, peeled bulkheads, varied debris (plates/drums/pipes, flowed down the +X flank), collapsed overhead
+beams + hanging ducts, cables to ceiling brackets, wall consoles, a bow-breach sand-fan. Set dressing: framed cargo crates
++ barrels + fallen doors (grounded by contact-AO discs), a survivor camp (crate-table + tarp + fire) in the shelter nook,
+a dressed bridge (captain's console + chair + viewport), scorch decals. **Lighting:** the open fracture is the HERO
+daylight flood (rim-lit formers) + breach pools + bounded fill so the canted upper hull reads (removed a global-
+HemisphereLight bug that washed the whole desert). **Collision:** deck colliders + curbs + prop colliders + a STEPPED
+fracture crossing fixing a ~2m unclimbable step that had made the bridge payoff unreachable.
+
+**Verification harness (reusable workflows).** `megawreck-research` / `megawreck-interior-research` (web→spec),
+`megawreck-critique` (4 adversarial critics read the renders + score a rubric), `megawreck-interior-defects` (4 lenses read
+renders + code, ranked fixes). Interior ran 4 defect-hunt→fix rounds. The `megawreck` rig-shot gained front-lit framing +
+5 interior camera angles (shell-frame). NEW wreckForms: `makeLoftedHull`, `dentGeometry`, `makeCable` (+ DoubleSide voids).
+
+**Still owed (honest):** interior in-app WALK-TEST (a ~17° canted floor + the 9-step fracture crossing can't be verified
+from screenshots); a deeper interior lighting/material pass (rust/grime, contact AO, rib arcs). The deferred ACAJ T3-T7
+(procgen fleet level-up, perf merge) now ride on the bigger `wreckForms` toolkit.
+
 ## Session ACAJ (partial) — 2026-06-06 — Wreck toolkit + mega-wreck rebuild (T1+T2 of 7; T3-T7 deferred) ✓ verify pass (tsc clean)
 
 `verified` — `npm run verify` (tsc) PASS; **no save bump** (geometry/material only). The "wrecks + perf" overnight
