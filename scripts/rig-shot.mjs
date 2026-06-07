@@ -916,7 +916,7 @@ const SCENARIOS = {
         const VIEWS = {
           'interior': [[1.4, 2.6, -28], [1, 1.5, 6]],       // bow compartment → fracture
           'int-bow':  [[1.5, 3.0, -42], [1, 1.5, -10]],     // bow entry looking aft
-          'int-frac': [[0.5, 3.5, -10], [0.5, 4.0, 18]],    // across the fracture cathedral
+          'int-frac': [[3, 3.5, -22], [0, 4.5, 4]],         // from the bow toward the lit fracture opening
           'int-aft':  [[2.0, 3.2, 22], [1.5, 2.0, 48]],     // engineering looking aft
           'int-bridge': [[3.0, 3.0, 60], [3.0, 2.5, 73]],   // up to the bridge
         };
