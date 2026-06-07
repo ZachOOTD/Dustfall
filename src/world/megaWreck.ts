@@ -54,11 +54,6 @@ const _tornMat = createPaintedMetalMaterial(0x8f5230, { wearLevel: 0.6 });
 const _streakMat = new THREE.MeshBasicMaterial({ color: 0x6e3a22, transparent: true, opacity: 0.5, depthWrite: false, side: THREE.DoubleSide });
 void _rustMat;
 
-// ── Burial + wall thickness.
-const WALL_BURY = 6.0;
-const WALL_THICK = 0.4;
-const SLAB_T = 0.2;          // floor/ceiling half-thickness
-
 // ── Exterior dagger masses (lofted). Bow mass -60..-5, aft mass +18..+76.
 const FRACTURE_Z = 6;        // fracture center
 const BOW_FACE_Z = -5;       // bow hull torn face
@@ -118,80 +113,35 @@ function shellPos(): THREE.Vector3 {
 // A walkable box (corridor segment or room). Consecutive cells share OPEN Z
 // faces (no wall between) → one connected interior. Side openings (the bow
 // breach entrance, the shelter spur) cut a gap in an X wall.
-interface Cell {
-  id: string;
-  cx: number;            // X center (kinks the spine)
-  hw: number;            // half-width (X)
-  z0: number; z1: number;
-  floorY: number;
-  ceilY: number | null;  // null = open sky (no ceiling — the fracture)
-  openZ0: boolean; openZ1: boolean;
-  gapMinX?: [number, number]; // Z-range of an opening in the -X wall
-  gapMaxX?: [number, number]; // Z-range of an opening in the +X wall
-  mat?: THREE.Material;
-}
+// ── Interior v2 — the broken GUTS of the dagger, built in the SAME shell frame as
+// the exterior (one rigid listed object; the floor carries the full ~17° list per
+// the user's call). A walkable element is one DECK descriptor in SHELL-LOCAL space,
+// consumed by BOTH the mesh builder (added to the tilted `shell` group) and the
+// collider builder (pushed through the same shellQuat/shellPos). The cavity floor
+// is inset UP from the keel of the hull cross-section (hullAt) so it's the literal
+// inside of the skin — no poke-through by construction. The hull (DoubleSide) is
+// the walls + ceiling; flank breaches + the open fracture admit light + are entries.
+interface Deck { x: number; y: number; z: number; hx: number; hy: number; hz: number; rx?: number; ry?: number; rz?: number; collide: boolean; }
 
-// The interior layout (bow → aft). All floors y=0 except the bridge (raised +3).
-const SPINE_HW = 1.75;       // 3.5m corridor
-const CELLS: Cell[] = [
-  { id: 'R1', cx: 0,    hw: 4.0,  z0: -47, z1: -37, floorY: 0, ceilY: 4.0, openZ0: false, openZ1: true,  gapMinX: [-44, -39] }, // entrance breach hall
-  { id: 'C1', cx: 1.2,  hw: SPINE_HW, z0: -37, z1: -27, floorY: 0, ceilY: 3.0, openZ0: true, openZ1: true },
-  { id: 'R2', cx: 2.6,  hw: 3.5,  z0: -27, z1: -17, floorY: 0, ceilY: 3.2, openZ0: true, openZ1: true },  // crew / med bay
-  { id: 'C2', cx: 0.6,  hw: SPINE_HW, z0: -17, z1: -5, floorY: 0, ceilY: 3.0, openZ0: true, openZ1: true },
-  { id: 'R3', cx: 0,    hw: 5.0,  z0: -5,  z1: 17,  floorY: 0, ceilY: null, openZ0: true, openZ1: true }, // fracture crossing (open sky)
-  { id: 'C3', cx: -1.2, hw: SPINE_HW, z0: 17,  z1: 27,  floorY: 0, ceilY: 3.0, openZ0: true, openZ1: true },
-  { id: 'R4', cx: 0,    hw: 5.0,  z0: 27,  z1: 44,  floorY: 0, ceilY: 6.0, openZ0: true, openZ1: true },  // engine / reactor room
-  { id: 'C4', cx: 1.2,  hw: SPINE_HW, z0: 44,  z1: 50,  floorY: 0, ceilY: 3.0, openZ0: true, openZ1: true },
-  { id: 'R5', cx: 0,    hw: 4.5,  z0: 50,  z1: 62,  floorY: 0, ceilY: 4.0, openZ0: true, openZ1: true, gapMaxX: [53, 58] }, // cargo / mess junction
-  { id: 'SH', cx: 7.0,  hw: 2.5,  z0: 52.5, z1: 58.5, floorY: 0, ceilY: 3.0, openZ0: false, openZ1: false, gapMinX: [53, 58] }, // shelter pocket
-  { id: 'C5', cx: 0,    hw: SPINE_HW, z0: 62,  z1: 66,  floorY: 0, ceilY: 3.0, openZ0: true, openZ1: true },
-  { id: 'R6', cx: 2.0,  hw: 4.5,  z0: 66,  z1: 76,  floorY: 3, ceilY: 7.0, openZ0: true, openZ1: false }, // bridge (raised payoff)
-];
+// Floor Y at a given Z: a fixed height up from the keel of the (shell-local) hull
+// section, so the deck rides the lower-mid hull + tapers with it.
+function deckY(z: number): number { return hullAt(z).keelY + 5.5; }
 
-interface WallBox { x: number; y: number; z: number; hx: number; hy: number; hz: number; }
-
-// Expand a cell into its floor + ceiling + 4 walls (split around side openings,
-// skipping connected Z faces). Used by BOTH the mesh + the collider builders.
-function cellWallBoxes(c: Cell): WallBox[] {
-  const out: WallBox[] = [];
-  const midZ = (c.z0 + c.z1) / 2, lenH = (c.z1 - c.z0) / 2;
-  const top = c.ceilY ?? c.floorY + 5;          // open-sky cells: short stub walls
-  const wallBot = c.floorY - WALL_BURY;
-  const wallCy = (wallBot + top) / 2, wallH = top - wallBot;
-  const GAP_H = 3.4;                              // doorway / breach opening height
-  // Floor.
-  out.push({ x: c.cx, y: c.floorY - SLAB_T, z: midZ, hx: c.hw + WALL_THICK, hy: SLAB_T, hz: lenH });
-  // Ceiling.
-  if (c.ceilY != null) out.push({ x: c.cx, y: c.ceilY + SLAB_T, z: midZ, hx: c.hw + WALL_THICK, hy: SLAB_T, hz: lenH });
-  // X walls, split around an optional opening.
-  for (const sign of [-1, 1] as const) {
-    const wx = c.cx + sign * (c.hw + WALL_THICK / 2);
-    const gap = sign < 0 ? c.gapMinX : c.gapMaxX;
-    if (!gap) { out.push({ x: wx, y: wallCy, z: midZ, hx: WALL_THICK / 2, hy: wallH / 2, hz: lenH }); continue; }
-    const [ga, gb] = gap;
-    if (ga > c.z0) out.push({ x: wx, y: wallCy, z: (c.z0 + ga) / 2, hx: WALL_THICK / 2, hy: wallH / 2, hz: (ga - c.z0) / 2 });
-    if (c.z1 > gb) out.push({ x: wx, y: wallCy, z: (gb + c.z1) / 2, hx: WALL_THICK / 2, hy: wallH / 2, hz: (c.z1 - gb) / 2 });
-    const bH = c.floorY - wallBot;                // below opening (buried band)
-    if (bH > 0.05) out.push({ x: wx, y: (wallBot + c.floorY) / 2, z: (ga + gb) / 2, hx: WALL_THICK / 2, hy: bH / 2, hz: (gb - ga) / 2 });
-    const aH = top - (c.floorY + GAP_H);          // above opening (lintel)
-    if (aH > 0.05) out.push({ x: wx, y: (c.floorY + GAP_H + top) / 2, z: (ga + gb) / 2, hx: WALL_THICK / 2, hy: aH / 2, hz: (gb - ga) / 2 });
+// The walkable floor: a continuous deck spine bow→aft (skipping the OPEN fracture
+// gap -5..+17), plus the fracture-crossing fallen-beam bridge. Offset toward the
+// down-rolled +X flank where the sheared decks settled. Shell-local; the shell
+// supplies the list, so the floor is genuinely canted ~17° (authentic wreckage).
+function interiorDecks(): Deck[] {
+  const D: Deck[] = [];
+  for (const [z0, z1] of [[-44, -6], [17, 72]] as const) {
+    for (let z = z0; z < z1; z += 5) {
+      const s = hullAt(z + 2.5);
+      D.push({ x: 1.4, y: deckY(z + 2.5), z: z + 2.5, hx: Math.min(s.halfW * 0.6, 6.0), hy: 0.35, hz: 2.7, collide: true });
+    }
   }
-  // Z end walls (only on closed faces).
-  if (!c.openZ0) out.push({ x: c.cx, y: wallCy, z: c.z0 - WALL_THICK / 2, hx: c.hw + WALL_THICK, hy: wallH / 2, hz: WALL_THICK / 2 });
-  if (!c.openZ1) out.push({ x: c.cx, y: wallCy, z: c.z1 + WALL_THICK / 2, hx: c.hw + WALL_THICK, hy: wallH / 2, hz: WALL_THICK / 2 });
-  return out;
-}
-
-// Bridge stair (C5 floor 0 → R6 floor +3) as 3 step cuboids + ramps for the
-// fracture crossing. Each is a level cuboid (no rotation) for robust walking.
-interface StepBox { x: number; y: number; z: number; hx: number; hy: number; hz: number; }
-function interiorSteps(): StepBox[] {
-  const steps: StepBox[] = [];
-  for (let i = 0; i < 3; i++) {
-    const topY = (i + 1) * 1.0;                   // 1,2,3
-    steps.push({ x: 1.0, y: topY / 2, z: 64.0 + i, hx: SPINE_HW, hy: topY / 2, hz: 0.6 });
-  }
-  return steps;
+  // Fracture crossing — a fallen bulkhead beam bridging the open break at floor level.
+  D.push({ x: 0.5, y: deckY(6) + 0.5, z: 6, hx: 2.2, hy: 0.45, hz: 12, rz: 0.05, collide: true });
+  return D;
 }
 
 function box(w: number, h: number, d: number, mat: THREE.Material): THREE.Mesh {
@@ -207,34 +157,48 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
   const g = new THREE.Group();
   const dark = _hullDarkMat;
 
-  // ── INTERIOR — walls from the shared cell descriptors (level, collidable read).
-  for (const c of CELLS) {
-    for (const b of cellWallBoxes(c)) {
-      const m = box(b.hx * 2, b.hy * 2, b.hz * 2, c.mat ?? dark);
-      m.position.set(b.x, b.y, b.z);
-      g.add(m);
-    }
-  }
-  // Bridge stair (visual).
-  for (const s of interiorSteps()) {
-    const m = box(s.hx * 2, s.hy * 2, s.hz * 2, dark);
-    m.position.set(s.x, s.y, s.z); g.add(m);
-  }
-  // Fracture-crossing fallen-bulkhead ramp — a low fallen slab resting ON the R3
-  // floor (the floor carries the player; this is debris, not a head-height ghost).
-  {
-    const ramp = box(4, 0.35, 13, dark);
-    ramp.position.set(0.5, 0.5, 6); ramp.rotation.set(0.05, 0.04, 0.03); g.add(ramp);
-    // a couple of debris steps onto it
-    for (const [dz, dy] of [[-5, 0.3], [4.5, 0.4]] as const) { const st = box(3, 0.4, 2, dark); st.position.set(-0.4, dy, 6 + dz); g.add(st); }
-  }
-
   // ════════════════════════════════════════════════════════════════════
-  // EXTERIOR — the dagger shell (tilted + sunk; FrontSide + noCollider).
+  // The whole wreck (exterior shell + interior guts) lives in ONE tilted+sunk
+  // `shell` group so inside + outside are a single rigid listed object. The
+  // exterior hull is DoubleSide → from inside you see the hull as the walls +
+  // ceiling. The interior floor + wreckage are added to this same group.
   // ════════════════════════════════════════════════════════════════════
   const shell = new THREE.Group();
   shell.name = 'shell';
   const add = (m: THREE.Object3D) => { m.userData.noCollider = true; shell.add(m); };
+
+  // ── INTERIOR GUTS (in the tilted shell frame). ──
+  // Walkable floor decks (the colliders are built from the same interiorDecks() in
+  // placeMegaWreck → mesh + collision locked).
+  for (const d of interiorDecks()) {
+    const m = box(d.hx * 2, d.hy * 2, d.hz * 2, dark);
+    m.position.set(d.x, d.y, d.z); m.rotation.set(d.rx ?? 0, d.ry ?? 0, d.rz ?? 0); add(m);
+  }
+  // Wreckage decoration — peeled bulkheads, debris piles flowed to the down-+X
+  // flank, exposed ribs where plating tore, hanging cables. Visual only.
+  {
+    // Peeled-inward bulkheads (from the +X impact side) — 2 partial walls.
+    for (const [z, h] of [[-26, 7], [34, 9]] as const) {
+      const s = hullAt(z);
+      const w = box(0.5, h, 5, dark); w.position.set(s.halfW * 0.55, deckY(z) + h / 2, z); w.rotation.set(0, 0, -0.35); add(w);
+      const rib = makeFormerRings(s.halfW * 0.9, 2, 1.5, { tube: 0.4 }); rib.rotation.y = -Math.PI / 2; rib.position.set(0, s.cy, z); rib.scale.set(1, s.halfH / s.halfW, 1); add(rib);
+    }
+    // Debris piles flowed down toward the +X flank.
+    for (const [z, n] of [[-30, 5], [-12, 4], [30, 6], [40, 4], [58, 3]] as const) {
+      const s = hullAt(z);
+      for (let i = 0; i < n; i++) {
+        const db = box(0.6 + _rand() * 1.4, 0.4 + _rand() * 1.0, 0.6 + _rand() * 1.4, dark);
+        db.position.set(s.halfW * (0.2 + _rand() * 0.45), deckY(z) + 0.3 + _rand() * 0.6, z + (_rand() - 0.5) * 4);
+        db.rotation.set(_rand(), _rand(), _rand()); add(db);
+      }
+    }
+    // Hanging cables from torn upper deck-edges down to the floor (catenary; the
+    // shell frame makes them hang under the list).
+    for (const [x, z, topY] of [[-3, -24, 8], [4, 32, 11], [-2, 38, 9], [2, -10, 7]] as const) {
+      add(makeCable(new THREE.Vector3(x, deckY(z) + topY, z), new THREE.Vector3(x + 1.5, deckY(z) + 0.4, z + 2), 2.6, _pipeMat, 0.08));
+    }
+  }
+
 
   // (A1) Bow mass — a sharp tapered wedge driving nose-first into the dune, riding
   // LOWER than the aft (snapped back) so the fracture reads as a hard notch.
@@ -505,28 +469,26 @@ export function placeMegaWreck(
   const body = world.createRigidBody(
     RAPIER.RigidBodyDesc.fixed().setTranslation(pos.x, pos.y, pos.z).setRotation({ x: finalQ.x, y: finalQ.y, z: finalQ.z, w: finalQ.w }),
   );
-  const cuboid = (b: WallBox) => world.createCollider(
-    RAPIER.ColliderDesc.cuboid(b.hx, b.hy, b.hz).setTranslation(b.x, b.y, b.z), body,
-  );
-
-  // ── Interior colliders from the SAME cell descriptors as the meshes.
-  for (const c of CELLS) for (const b of cellWallBoxes(c)) cuboid(b);
-  for (const s of interiorSteps()) cuboid(s);
-
-  // ── Exterior collision. The visual shell is TILTED + sunk relative to the body;
-  // replicate that transform so the colliders sit on the visible hull (no walking
-  // through the hull/engines). Coarse flank slabs + engine blockers — they sit at
-  // the OUTER surface; the interior box walls hold the inner surface, so the hull
-  // thickness reads solid without sealing the walkable cavity.
+  // The whole wreck (interior floor + exterior hull) lives in the tilted+sunk shell
+  // frame; colliders replicate that transform so physics matches the visuals. A
+  // collider can carry a small extra local tilt (ramps). Both inside + outside use
+  // this — inside and outside are ONE listed rigid body.
   const shellQ = shellQuat();
   const shellOff = shellPos();
-  const extCuboid = (px: number, py: number, pz: number, hx: number, hy: number, hz: number) => {
+  const extCuboid = (px: number, py: number, pz: number, hx: number, hy: number, hz: number, tilt?: [number, number, number]) => {
+    const q = tilt ? shellQ.clone().multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(tilt[0], tilt[1], tilt[2], 'XYZ'))) : shellQ;
     const p = new THREE.Vector3(px, py, pz).applyQuaternion(shellQ).add(shellOff);
     world.createCollider(
-      RAPIER.ColliderDesc.cuboid(hx, hy, hz).setTranslation(p.x, p.y, p.z).setRotation({ x: shellQ.x, y: shellQ.y, z: shellQ.z, w: shellQ.w }),
+      RAPIER.ColliderDesc.cuboid(hx, hy, hz).setTranslation(p.x, p.y, p.z).setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }),
       body,
     );
   };
+
+  // ── INTERIOR floor colliders — the SAME interiorDecks() as the meshes, through
+  // the same shell transform → mesh + collision locked, both canted with the hull.
+  for (const d of interiorDecks()) if (d.collide) extCuboid(d.x, d.y, d.z, d.hx, d.hy, d.hz, [d.rx ?? 0, d.ry ?? 0, d.rz ?? 0]);
+
+  // ── Exterior collision — flank slabs + caps + island + engines (same transform).
   // Exposed hull flanks (both masses) — thin vertical slabs at the sampled surface.
   for (const z of [-46, -32, -16, 24, 38, 52, 66, 73]) {
     const s = hullAt(z);
@@ -541,31 +503,31 @@ export function placeMegaWreck(
   // Engine bells (two big projecting nozzles).
   for (const [sx, sy, mr] of [[-5.0, 7.5, 4.2], [5.0, 5.8, 3.7]] as const) extCuboid(sx, sy, TRANSOM_Z + 2.5, mr, mr, mr * 1.3);
 
-  // ── Helper: a nested salvage panel registered at its world position.
-  const worldOf = (local: THREE.Vector3) => local.clone().applyQuaternion(finalQ).add(pos);
-  const addPanel = (local: THREE.Vector3, faceYaw: number) => {
+  // Shell-local → world helpers (so interactables sit on the TILTED decks).
+  const shellToG = (l: THREE.Vector3) => l.clone().applyQuaternion(shellQ).add(shellOff);
+  const shellWorld = (l: THREE.Vector3) => shellToG(l).applyQuaternion(finalQ).add(pos);
+  const addPanel = (shellLocal: THREE.Vector3, faceYaw: number) => {
     const p = new THREE.Group();
-    p.position.copy(local); p.rotation.y = faceYaw;
+    p.position.copy(shellToG(shellLocal));
+    p.quaternion.copy(shellQ.clone().multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), faceYaw)));
     addAccessPanel(p, 0, 0, 0, 1, 0, 'massive');
     group.add(p); p.updateWorldMatrix(true, false);
     const wp = new THREE.Vector3().setFromMatrixPosition(p.matrixWorld);
     registerSalvageable(salvageables, p, 'massive', wp, rand);
   };
-  // Panel #1 — engine/reactor room (R4) back wall (+Z), facing -Z into the room.
-  addPanel(new THREE.Vector3(3.5, 0, 43), Math.PI);
-  // Panel #2 — bridge (R6) console wall (+X side), facing -X.
-  addPanel(new THREE.Vector3(5.5, 3, 71), -Math.PI / 2);
+  // Panel #1 — canted bulkhead in collapsed engineering (+X flank), facing inboard.
+  addPanel(new THREE.Vector3(hullAt(40).halfW * 0.7, deckY(40) + 1.6, 40), -Math.PI / 2);
+  // Panel #2 — bridge console wall (+X), the near-intact payoff space.
+  addPanel(new THREE.Vector3(4.0, deckY(70) + 1.6, 70), -Math.PI / 2);
 
-  // ── Shelter zone — covers the secured pocket (SH). AABB sized by the diagonal
-  // so the axis-aligned zone still covers the rotated cavity.
-  const sh = CELLS.find((c) => c.id === 'SH')!;
-  const shCenter = worldOf(new THREE.Vector3(sh.cx, 1.5, (sh.z0 + sh.z1) / 2));
-  const shDiag = Math.sqrt(sh.hw * sh.hw + ((sh.z1 - sh.z0) / 2) ** 2) + 0.5;
-  addShelterZone(shelter, shCenter, { x: shDiag, y: 2.0, z: shDiag });
+  // ── Shelter zone — the sheltered settled nook against the lee (-X) flank of the
+  // aft/engineering space (the one compartment that didn't breach).
+  const shCenter = shellWorld(new THREE.Vector3(-4, deckY(54) + 1.5, 54));
+  addShelterZone(shelter, shCenter, { x: 6.5, y: 3.0, z: 7.0 });
 
-  // ── Captain's log — on the bridge console (R6), met on arrival.
+  // ── Captain's log — on the bridge console, met on arrival at the end of the path.
   if (journals) {
-    const jw = worldOf(new THREE.Vector3(2.0, 3.2, 72));
+    const jw = shellWorld(new THREE.Vector3(2.0, deckY(70) + 1.0, 71));
     journals.list.push(placeJournal(scene, jw, yaw + Math.PI, 'mega_wreck'));
   }
 
