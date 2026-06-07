@@ -165,15 +165,19 @@ export function makeFormerRings(
   radius: number,
   count: number,
   spacing: number,
-  opts?: { startX?: number; tube?: number; taper?: number },
+  opts?: { startX?: number; tube?: number; taper?: number; arc?: number },
 ): THREE.Group {
   const g = new THREE.Group();
   const tube = opts?.tube ?? Math.max(0.04, radius * 0.06);
   const startX = opts?.startX ?? 0;
   const taper = opts?.taper ?? 0.02;
+  const arc = opts?.arc ?? Math.PI * 2;     // < 2π → a partial arc with its GAP centred at the bottom
   for (let i = 0; i < count; i++) {
     const r = Math.max(0.1, radius * (0.84 - i * taper));
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(r, tube, 10, 20), _formerMat);
+    const tseg = Math.max(8, Math.round(20 * arc / (Math.PI * 2)));
+    const geo = new THREE.TorusGeometry(r, tube, 10, tseg, arc);
+    if (arc < Math.PI * 2) geo.rotateZ(Math.PI / 2 - arc / 2);   // gap → bottom (so a rib springs from the deck, no belly hoop)
+    const ring = new THREE.Mesh(geo, _formerMat);
     ring.rotation.y = Math.PI / 2;       // ring plane ⟂ +X
     ring.position.x = startX + i * spacing;
     g.add(ring);

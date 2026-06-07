@@ -194,7 +194,7 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
     for (let z = -42; z < 70; z += 9) {
       if (Math.abs(z - 6) < 12) continue;     // skip the open fracture
       const s = hullAt(z);
-      const rib = makeFormerRings(s.halfW * 0.94, 1, 1, { tube: 0.35 });
+      const rib = makeFormerRings(s.halfW * 0.94, 1, 1, { tube: 0.35, arc: Math.PI * 1.5 });   // top arc (gap at the belly) → springs from the deck, no hoop below the floor
       rib.rotation.y = -Math.PI / 2; rib.position.set(0, s.cy, z); rib.scale.set(1, s.halfH / s.halfW, 1); add(rib);
     }
     // Peeled-inward bulkheads (from the +X impact side) — torn partial walls.
@@ -230,13 +230,14 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
       // embed in the curved skin (no cantilever into mid-air); a gentle sag-tilt.
       const beamY = s.cy + s.halfH * 0.55 - _rand() * 1.2;
       const hw = hullHalfWAt(beamY, s);
-      const beam = box(hw * 2 + 0.6, 0.45, 0.6, dark); beam.position.set(0, beamY, z); beam.rotation.set(0.08, 0, ang * 0.25); add(beam);
+      const beam = box(hw * 2 + 0.9, 0.45, 0.6, dark); beam.position.set(0, beamY, z); beam.rotation.set(0.08, 0, ang * 0.06); add(beam);   // near-flat roll + bigger embed margin so neither end lifts out of the (narrower) upper hull
       // A duct hung JUST under the curved ceiling with 2 short hanger straps up to the
       // skin (so it reads as rooted, not a floating pipe).
-      const dx = (_rand() - 0.5) * hw;
-      const cz = ceilingY(dx, s);
-      const duct = cyl(0.32, 0.32, 5 + _rand() * 1.5, _pipeMat, 8); duct.rotation.set(Math.PI / 2 + 0.08, 0, 0.08); duct.position.set(dx, cz - 0.55, z + 1.5); add(duct);
-      for (const dz of [-1.6, 1.6]) { const strap = cyl(0.05, 0.05, 0.7, dark, 5); strap.position.set(dx, cz - 0.25, z + 1.5 + dz); add(strap); }
+      const dx = (_rand() - 0.5) * hw, dz0 = z + 1.2, ductLen = 3.4;
+      const cz = ceilingY(dx, hullAt(dz0));   // sample the ceiling at the DUCT's own Z (it recedes)
+      const duct = cyl(0.3, 0.3, ductLen, _pipeMat, 8); duct.rotation.set(Math.PI / 2, 0, 0.05); duct.position.set(dx, cz - 0.5, dz0); add(duct);
+      // straps near the duct's ends, each bedded into the ceiling sampled at ITS own Z.
+      for (const dz of [-(ductLen / 2 - 0.4), ductLen / 2 - 0.4]) { const sCz = ceilingY(dx, hullAt(dz0 + dz)); const strap = cyl(0.05, 0.05, 0.7, dark, 5); strap.position.set(dx, sCz - 0.35, dz0 + dz); add(strap); }
     }
     // Hanging cables from the torn upper deck-edges down to the floor, each with a
     // junction-box bracket at the top so it reads as anchored (not a floating wire).
@@ -298,7 +299,7 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
         const kind = _rand();
         if (kind < 0.5) crate(px, py, pz, 0.8 + _rand() * 0.9, pmat());
         else if (kind < 0.8) barrel(px, py, pz, pmat());
-        else { const door = box(0.2, 2.2, 1.2, dark); door.position.set(px, py + 0.6, pz); door.rotation.set(0.4 + _rand(), _rand(), 0.3); add(door); ground(px, py, pz, 1); }
+        else { const door = box(0.2, 2.2, 1.2, dark); door.position.set(px, deckY(pz) + 0.18, pz); door.rotation.set(1.35, _rand() * 3, (_rand() - 0.5) * 0.3); add(door); ground(px, deckY(pz), pz, 1); }   // a fallen door lies ~flat on the deck (was tilted up → floated/sank)
       }
     }
     // Scorch decals on the floor near the fracture + breaches.
@@ -313,7 +314,7 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
       // Tarp: smaller, its high edge RESTING on the crate top (~fy+1.0), sloping down to
       // a corner pole that actually reaches it (was a stiff slab hovering off one corner).
       const tarp = box(1.9, 0.08, 1.9, _tornMat); tarp.position.set(cx - 0.7, fy + 1.05, z); tarp.rotation.set(0.28, 0.25, 0.0); add(tarp);
-      const pole = cyl(0.06, 0.06, 1.5, dark, 5); pole.position.set(cx - 1.5, fy + 0.75, z - 0.55); add(pole);   // under the down-slope corner
+      const pole = cyl(0.06, 0.06, 1.35, dark, 5); pole.position.set(cx - 1.5, deckY(54) + 0.675, z - 0.55); add(pole);   // foot ON the deck, top reaches the tarp underside (~fy+1.0)
       // Cold, long-dead campfire — charred log stubs + ash (no glowing cone: there's
       // no light motivation, and the user wants only natural lighting).
       for (const a of [0.3, 2.4, 4.5]) { const logm = cyl(0.07, 0.09, 0.8, dark, 5); logm.position.set(cx + 1.6 + Math.cos(a) * 0.3, fy + 0.12, z + Math.sin(a) * 0.3); logm.rotation.set(Math.PI / 2 - 0.3, a, 0); add(logm); }
@@ -322,11 +323,13 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
     }
     // Bridge command dressing (z70): captain's console + chair + a daylight viewport.
     {
-      const z = 70, cx = 2, fy = deckY(70) + 0.35;
-      const con = box(2.4, 1.1, 0.9, dark); con.position.set(cx, fy + 0.55, z - 1.5); add(con);
-      const cscr = box(2.0, 0.7, 0.14, _viewportMat); cscr.position.set(cx, fy + 0.9, z - 1.96); cscr.rotation.x = -0.3; cscr.userData.noShadow = true; add(cscr);
-      const chair = box(0.7, 1.3, 0.7, dark); chair.position.set(cx, fy + 0.65, z - 0.1); add(chair);
-      ground(cx, fy, z - 1, 2.2);
+      // Each piece seats on the deck sampled at its OWN Z (the deck slopes ~17°; a single
+      // deckY(70) sample + the stray +0.35 floated the whole cluster ~0.4-0.6m).
+      const z = 70, cx = 2;
+      const con = box(2.4, 1.1, 0.9, dark); con.position.set(cx, deckY(z - 1.5) + 0.55, z - 1.5); add(con);
+      const cscr = box(2.0, 0.7, 0.14, _viewportMat); cscr.position.set(cx, deckY(z - 1.96) + 0.9, z - 1.96); cscr.rotation.x = -0.3; cscr.userData.noShadow = true; add(cscr);
+      const chair = box(0.7, 1.3, 0.7, dark); chair.position.set(cx, deckY(z - 0.1) + 0.65, z - 0.1); add(chair);
+      ground(cx, deckY(z - 1), z - 1, 2.2);
     }
   }
 
@@ -349,9 +352,9 @@ export function makeMegaWreck(rand: Rng): THREE.Group {
     // old `aBack`/`bBack` dark walls sealed the mouth and read as an unrealistic flat
     // wall across the split; removed so the break shows the actual decks/guts behind it.
     // Exposed former rings (ribs) on each torn face.
-    const af = makeFormerRings(aS.halfW, 3, 1.5, { tube: 0.55 });
+    const af = makeFormerRings(aS.halfW, 3, 1.5, { tube: 0.55, arc: Math.PI * 1.5 });   // top arcs (no hoop over the open belly gap)
     af.rotation.y = -Math.PI / 2; af.position.set(0, aS.cy, AFT_FACE_Z); af.scale.set(1, aS.halfH / aS.halfW, 1); add(af);
-    const bf = makeFormerRings(bS.halfW, 3, 1.5, { tube: 0.55 });
+    const bf = makeFormerRings(bS.halfW, 3, 1.5, { tube: 0.55, arc: Math.PI * 1.5 });
     bf.rotation.y = -Math.PI / 2; bf.position.set(0, bS.cy, BOW_FACE_Z - 3); bf.scale.set(1, bS.halfH / bS.halfW, 1); add(bf);
     // Deck-edge slabs — THICK floors RECEDING into each mass (depth, not paper) with
     // a dark torn-edge fascia, staggered in Y between faces so decks read countable.
