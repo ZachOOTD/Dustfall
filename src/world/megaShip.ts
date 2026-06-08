@@ -33,6 +33,7 @@ import type { Terrain } from './terrain.ts';
 import { Tuning } from '../config/tuning.ts';
 import { panelWithHole } from './panelUtils.ts';
 import { addAccessPanel, placeDebrisField, makeEngineBellMesh } from './wrecks.ts';
+import { mergeStaticByMaterial } from './wreckForms.ts';
 import { addShelterZone, type ShelterRegistry } from '../shelter/shelterZones.ts';
 import { registerSalvageable, type SalvageableRegistry } from './salvage.ts';
 import { placeJournal, type Journal } from './journal.ts';
@@ -485,6 +486,7 @@ export function placeMegaShip(
   journals?: { list: Journal[] },
 ): THREE.Group {
   const group = makeMegaShip(rand);
+  group.name = 'megaShip';   // so the `flagship` rig-shot can find + frame it
   group.position.copy(pos);
   // Compose orientation: yaw around Y, then apply terrain-tilt on top.
   const yawQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
@@ -662,5 +664,8 @@ export function placeMegaShip(
     journals.list.push(placeJournal(scene, journalWorld, journalYaw, 'mega_ship'));
   }
 
+  // T6 — collapse the static meshes by material (panels stay live; collision is hand-
+  // built static boxes, independent of the visual meshes). ~160→a handful of draws.
+  mergeStaticByMaterial(group);
   return group;
 }

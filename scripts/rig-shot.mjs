@@ -953,6 +953,58 @@ const SCENARIOS = {
     console.log(`[megawreck] ${JSON.stringify(r)}`);
   },
 
+  // Generic FLAGSHIP framer — finds a named flagship POI (megaShip / satelliteDish /
+  // crashedHull / megaWreck) + frames its exterior + reports mesh count. Used to verify
+  // the T6 static-merge is render-identical (before/after) + measure the mesh drop.
+  // `--name=<group.name> --angle=<3q|side|front>`.
+  'flagship': async (page) => {
+    const name = argv.name || 'megaShip';
+    const angle = argv.angle || '3q';
+    const r = await page.evaluate(({ nm, ang }) => {
+      const ctx = window.__game.ctx;
+      ctx.weather.intensity = 0; ctx.weather.cloudiness = 0.15;
+      window.__game.setTime(0.34);
+      ctx.three.renderer.toneMappingExposure = 1.5;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      let mw = null;
+      ctx.three.scene.traverse((o) => { if (!mw && o.name === nm) mw = o; });
+      if (!mw) return { found: false, name: nm };
+      const V = ctx.three.camera.position.constructor;
+      let minX = 1e9, minY = 1e9, minZ = 1e9, maxX = -1e9, maxY = -1e9, maxZ = -1e9;
+      mw.updateMatrixWorld(true);
+      let meshes = 0;
+      mw.traverse((o) => {
+        if (!o.isMesh || !o.geometry) return;
+        meshes++;
+        o.geometry.computeBoundingBox(); const bb = o.geometry.boundingBox;
+        for (const cx of [bb.min.x, bb.max.x]) for (const cy of [bb.min.y, bb.max.y]) for (const cz of [bb.min.z, bb.max.z]) {
+          const p = new V(cx, cy, cz); o.localToWorld(p);
+          minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+          minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
+          minZ = Math.min(minZ, p.z); maxZ = Math.max(maxZ, p.z);
+        }
+      });
+      const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2, cz = (minZ + maxZ) / 2;
+      const span = Math.max(maxX - minX, maxZ - minZ), h = maxY - minY;
+      const cam = ctx.three.camera; ctx.flags.paused = true;
+      const D = span * 1.2, up = minY + h * 0.55;
+      const aim = (p) => { cam.position.copy(p); cam.lookAt(cx, minY + h * 0.4, cz); };
+      if (ang === 'side') aim(new V(cx + D, up, cz));
+      else if (ang === 'front') aim(new V(cx - D * 0.5, up, cz - D * 0.85));
+      else aim(new V(cx + D * 0.62, up, cz + D * 0.52));   // 3q
+      cam.updateMatrixWorld(true);
+      let DirCtor = null, HemiCtor = null;
+      ctx.three.scene.traverse((o) => { if (o.isDirectionalLight && !DirCtor) DirCtor = o.constructor; if (o.isHemisphereLight && !HemiCtor) HemiCtor = o.constructor; });
+      if (DirCtor) { const key = new DirCtor(); key.intensity = 2.0; key.color.set(0xfff2e0); const toC = new V(cx - cam.position.x, 0, cz - cam.position.z); key.position.set(cam.position.x + toC.x * 0.2 + span * 0.25, cam.position.y + h * 0.6, cam.position.z + toC.z * 0.2); key.target.position.set(cx, cy, cz); ctx.three.scene.add(key.target); ctx.three.scene.add(key); }
+      if (HemiCtor) { const fill = new HemiCtor(0xbfccdd, 0x6b5840, 0.7); ctx.three.scene.add(fill); }
+      return { found: true, name: nm, span: +span.toFixed(0), height: +h.toFixed(0), meshes };
+    }, { nm: name, ang: angle });
+    await page.waitForTimeout(350);
+    await page.screenshot({ path: join(OUT, `scen-flagship-${name}-${angle}.png`), fullPage: false });
+    console.log(`[flagship] ${JSON.stringify(r)}`);
+  },
+
   'tree': async (page) => {
     const t = argv.time !== undefined ? Number(argv.time) : 0.42;
     const r = await page.evaluate((t) => {

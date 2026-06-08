@@ -51,6 +51,7 @@ import { placeJournal, type Journal } from './journal.ts';
 import { makeStaticBox } from '../physics/bodies.ts';
 import { Tuning } from '../config/tuning.ts';
 import { placeDebrisField, addAccessPanel } from './wrecks.ts';
+import { mergeStaticByMaterial } from './wreckForms.ts';
 import { createRustedHullMaterial } from './hullMaterial.ts';
 
 // ── Materials — local copies so this module's palette can drift from
@@ -356,6 +357,7 @@ export function placeCrashedHull(
   void rand;
 
   const group = new THREE.Group();
+  group.name = 'crashedHull';   // so the `flagship` rig-shot can find + frame it
 
   // ── 1. Fuselage body — tapered Lathe along local +X after rotation.
   const fuselage = makeFuselageBody();
@@ -508,5 +510,7 @@ export function placeCrashedHull(
     journals.list.push(placeJournal(scene, journalWorld, journalYaw, 'crashed_hull'));
   }
 
+  // T6 — collapse the static meshes by material (panels stay live).
+  mergeStaticByMaterial(group);
   return group;
 }

@@ -24,6 +24,7 @@ import type { SalvageableRegistry } from './salvage.ts';
 import { registerSalvageable } from './salvage.ts';
 import { placeJournal, type Journal } from './journal.ts';
 import { addAccessPanel } from './wrecks.ts';
+import { mergeStaticByMaterial } from './wreckForms.ts';
 import type { ShelterRegistry } from '../shelter/shelterZones.ts';
 import { addShelterZone } from '../shelter/shelterZones.ts';
 import { makeStaticBox, attachAabbCollider } from '../physics/bodies.ts';
@@ -239,6 +240,7 @@ export function placeSatelliteDish(
   journals?: { list: Journal[] },
 ): THREE.Group {
   const group = new THREE.Group();
+  group.name = 'satelliteDish';   // so the `flagship` rig-shot can find + frame it
   // Bury offset — base sits 1.0m below ground so the doorway opening
   // (cut from y_local -1.9 to +0.3) is mostly above grade — its sill
   // sits 0.4m below terrain, so the player steps DOWN through the
@@ -1058,5 +1060,7 @@ export function placeSatelliteDish(
     journals.list.push(placeJournal(scene, journalWorld, journalYaw, 'satellite_dish'));
   }
 
+  // T6 — collapse the static meshes by material (panels stay live).
+  mergeStaticByMaterial(group);
   return group;
 }
