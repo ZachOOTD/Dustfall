@@ -53,7 +53,7 @@ import type { SalvageableRegistry } from './salvage.ts';
 import { registerSalvageable } from './salvage.ts';
 import { Tuning } from '../config/tuning.ts';
 import { addAccessPanel, makeEngineBellMesh } from './wrecks.ts';
-import { mergeStaticByMaterial, makeSandMound } from './wreckForms.ts';
+import { mergeStaticByMaterial, makeSandMound, makeLoftedHull } from './wreckForms.ts';
 import { createRustedHullMaterial } from './hullMaterial.ts';
 import { attachCompoundCollider } from '../physics/bodies.ts';
 import { alignToTerrain } from '../util/terrainAlign.ts';
@@ -365,13 +365,16 @@ const HULL_SEGMENT_VARIANTS: ReadonlyArray<PartBuilder> = [
       const g = new THREE.Group();
       const len = 2.5 + rand() * 1.2;
       const r = Math.max(prevRadius * 0.95, 0.8 + rand() * 0.25);
-      const tube = new THREE.Mesh(
-        new THREE.CylinderGeometry(r, r, len, 14),
-        _hullMat,
+      // ACAM T3 — faceted ship-hull section (flat keel + hard chines + flat dorsal
+      // deck via makeLoftedHull) instead of a smooth pipe, so procgen hulls read like
+      // the hero. Lofted along Z then rotated to the part's +X long axis; ~0.1m plate.
+      const hull = makeLoftedHull(
+        [{ z: 0, halfW: r, halfH: r }, { z: len, halfW: r, halfH: r }],
+        _hullMat, 0.09,
       );
-      tube.rotation.z = Math.PI / 2;
-      tube.position.set(len * 0.5, r * 0.55, 0);
-      g.add(tube);
+      hull.rotation.y = Math.PI / 2;
+      hull.position.set(0, r * 0.55, 0);
+      g.add(hull);
       // Reinforcement rings: 2 thin cylinders slightly larger radius.
       const ringCount = 2 + Math.floor(rand() * 2);
       for (let i = 0; i < ringCount; i++) {
@@ -453,13 +456,15 @@ const HULL_SEGMENT_VARIANTS: ReadonlyArray<PartBuilder> = [
       const len = 1.8 + rand() * 0.8;
       const rStart = Math.max(prevRadius, 0.8);
       const rEnd = rStart * (0.7 + rand() * 0.2);
-      const tube = new THREE.Mesh(
-        new THREE.CylinderGeometry(rEnd, rStart, len, 12),
-        _hullMat,
+      // ACAM T3 — faceted tapered ship-hull section (hard chines) instead of a smooth
+      // cone; lofted rStart→rEnd along Z then rotated to +X.
+      const hull = makeLoftedHull(
+        [{ z: 0, halfW: rStart, halfH: rStart }, { z: len, halfW: rEnd, halfH: rEnd }],
+        _hullMat, 0.08,
       );
-      tube.rotation.z = -Math.PI / 2;     // taper FROM +X start TO -X end
-      tube.position.set(len * 0.5, ((rStart + rEnd) / 2) * 0.55, 0);
-      g.add(tube);
+      hull.rotation.y = Math.PI / 2;
+      hull.position.set(0, ((rStart + rEnd) / 2) * 0.55, 0);
+      g.add(hull);
       // One large rusted plate on top
       const plate = new THREE.Mesh(
         new THREE.BoxGeometry(len * 0.7, 0.10, rEnd * 1.4),
