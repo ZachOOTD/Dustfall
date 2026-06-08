@@ -3,6 +3,38 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ACAM — 2026-06-08 — Wreck-fleet level-up: WebGL static-merge perf + faceted procgen hulls + half-burial ✓ verify pass (tsc clean)
+
+`verified` — `npm run verify` (tsc) PASS; **no save bump** (geometry/material/collider only). Finished the
+deferred ACAJ **T3/T4/T6** (the wreck-fleet level-up + the never-cut perf merge) from the planned overnight.
+2 commits (`6eb925f`, `84cda18`); D192-D194. Shipped the 3 core tiers fully-verified; T5 (greeble) / T7
+(LOD) + the flagship-merge extension are noted stretch/follow-ups.
+
+**T6 — WebGL static-mesh MERGE (the perf win, NEVER-CUT).** NEW `mergeStaticByMaterial(root)` (wreckForms):
+collapses a wreck's many static, non-interactive meshes into ONE mesh per (material, attribute-sig,
+shadow-flags), baked to root-local. Salvage PANELS stay live (skips the `accessPanel` subtree); transparent
+meshes left unmerged (depth-sort safety). **Critical order (D192):** colliders are built per-part FIRST
+(`attachCompoundCollider`) so per-part collision survives — Rapier colliders are independent of the meshes.
+Wired into `placeProcgenComposite` + `placeWreck` + the mega-wreck (merged into its `shell` sub-group so
+the tilt applies once + the interior stays framable). **Measured: mega-wreck 491→79 meshes (84%); the
+procgen + hand-modeled fleet ~254→52 across ~42 wrecks (~80%).** Exterior + interior render identical
+(side/3q/int-aft confirmed). **Measurement finding (D193):** the prior "wrecks dominate ~4900 meshes" claim
+was WRONG — wrecks are ~250; the mesh hogs are the hand-modeled FLAGSHIPS (mega-wreck was 491 alone). NEW
+`perf-probe` biggest-objects breakdown surfaced it.
+
+**T3 — procgen hull vocabulary level-up (D194).** The two SMOOTH-cylinder hull variants (RIBBED_CYLINDER,
+PANELED_TAPERED) now use `makeLoftedHull` (faceted SHIP_SECTION: flat keel + hard chines + flat dorsal deck,
+~0.1m plate) instead of `CylinderGeometry`, lofted along Z then rotated to the procgen +X long-axis. So the
+~80 procgen wrecks read like the hero, not smooth pipes. Boxy/truss/barrel/antenna variants stay (read
+intentionally different). `findPanelMount` raycasts the new surface fine — panel bury-audit 61/63 (all
+procgen panels pass).
+
+**T4 — half-burial.** A windward `makeSandMound` drift bedding each procgen wreck into the dune (visual-only).
+
+**Also:** mega-wreck lee-flank salvage panels were inset behind the now-thick hull → nudged proud (the 2
+remaining bury-audit fails are these hand-placed panels on the busy tilted flank — an ACAL carryover, owed a
+`findPanelMount` pass; NOT a regression).
+
 ## Session ACAL — 2026-06-07 — Mega-wreck walkthrough fixes: exact collision, natural light, entrance, no floaters ✓ verify pass (tsc clean)
 
 `verified` — `npm run verify` (tsc) PASS throughout; **no save bump** (geometry/material/collider
