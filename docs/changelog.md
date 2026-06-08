@@ -3,6 +3,31 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ACAN — 2026-06-08 — Flagship perf merge (finishes T6) + mega-wreck panel fix ✓ verify pass (tsc clean)
+
+`verified` — `npm run verify` (tsc) PASS; **no save bump** (geometry/material only). Finished the ACAM-deferred
+flagship merges (the biggest remaining frames win) + fixed the lingering mega-wreck salvage-panel bury-audit fails.
+2 commits (`2d6127d`, `d907893`); D195-D196.
+
+**Flagship static-merge (D195).** ACAM merged the procgen fleet + the mega-wreck, but the 3 hand-modeled FLAGSHIPS
+were the actual mesh hogs (D193) + were deferred (no verification rig-shot). Wired `mergeStaticByMaterial` into
+`placeMegaShip`/`placeSatelliteDish`/`placeCrashedHull` (merge the root before return; panels stay live via the
+accessPanel-subtree skip; their collision is hand-built static boxes, independent of the visual meshes). **megaShip
+160→67 · satelliteDish 148→47 · crashedHull 51→44 (~201 meshes saved).** NEW generic `flagship` rig-shot
+(`--name=<group.name>`) finds-by-name + frames + reports mesh count — each flagship NAMED so it's findable; all 3
+render structurally identical (panels/dish-struts/fuselage-bands intact). **The static-merge now covers every big
+wreck/flagship in the game.**
+
+**Mega-wreck panels (D196).** The 2 persistent "massive" bury-audit fails (+ the ACAL panel-reachability concern):
+the lee-flank panels used `faceYaw = +π/2`, which rotates the panel's local +Z (its outward normal + recess axis)
+to +X — i.e. INTO the hull. So they faced inward, recessed outward, and the audit (which raycasts along the panel's
++Z) started inside the hull → instant occlusion. One-line sign fix → `-π/2` (face -X / outward). **Panel bury-audit
+68/68 ALL CLEAR** (was 61/63).
+
+**Attempted + reverted:** T5 real-`makeBreach` holes on the procgen hulls — couldn't verify visually (procgen wrecks
+are unnamed + random-positioned, so no rig-shot frames them) → reverted per rule 8 (don't ship visual work verified
+only by tsc + audit). Owed first: a procgen-wreck rig-shot framer, then T5.
+
 ## Session ACAM — 2026-06-08 — Wreck-fleet level-up: WebGL static-merge perf + faceted procgen hulls + half-burial ✓ verify pass (tsc clean)
 
 `verified` — `npm run verify` (tsc) PASS; **no save bump** (geometry/material/collider only). Finished the

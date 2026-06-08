@@ -64,28 +64,24 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      Prior milestones live in docs/changelog.md — do NOT accumulate "Prior milestone"
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
-**Last shipped**: Session ACAM — **wreck-fleet level-up: WebGL static-merge perf + faceted procgen hulls + half-burial**
-(tsc clean, no save bump; 2 commits `6eb925f`,`84cda18`; D192-D194). Finished the deferred ACAJ T3/T4/T6 (3 core tiers
-fully-verified; T5/T7 + flagship-merge = noted stretch). **T6 perf merge (never-cut, D192):** NEW
-`mergeStaticByMaterial(root)` (wreckForms) collapses a wreck's static, non-interactive meshes into 1-few per
-(material, attr-sig, shadow-flags), baked root-local; PANELS stay live (skips `accessPanel`), transparent meshes left
-unmerged. Colliders built per-part FIRST (`attachCompoundCollider`) so collision survives the merge. Wired into
-`placeProcgenComposite` + `placeWreck` + the mega-wreck (merged into its `shell` sub-group → tilt applies once + interior
-stays framable). **Mega-wreck 491→79 meshes; fleet ~254→52 across ~42 wrecks.** **Measurement finding (D193):** the
-"~4900 wreck meshes" claim was WRONG — wrecks are ~250; the hand-modeled FLAGSHIPS are the hogs (mega-wreck was 491
-alone); NEW `perf-probe` biggest-objects breakdown surfaced it. **T3 faceted procgen hulls (D194):** RIBBED_CYLINDER +
-PANELED_TAPERED now use `makeLoftedHull` (faceted SHIP_SECTION, ~0.1m plate) lofted-along-Z-then-rotated-to-+X instead of
-smooth cylinders → procgen wrecks read like the hero; panel bury-audit 61/63 (all procgen pass). **T4:** windward
-`makeSandMound` drift beds each procgen wreck into the dune. *(Prior — ACAL: mega-wreck walkthrough fixes (D189-191);
-ACAK: from-scratch dagger (D186-188). See changelog.)*
+**Last shipped**: Session ACAN — **flagship static-merge (finishes the T6 perf win) + mega-wreck panel fix** (tsc clean,
+no save bump; 2 commits `2d6127d`,`d907893`; D195-D196). **Flagship merge (D195):** wired `mergeStaticByMaterial` into
+`placeMegaShip`/`placeSatelliteDish`/`placeCrashedHull` (merge the root before return; panels stay live; their collision
+is hand-built static boxes, independent of the visual meshes). **megaShip 160→67 · satelliteDish 148→47 · crashedHull
+51→44 (~201 saved)** — the static-merge now covers EVERY big wreck/flagship. NEW generic `flagship` rig-shot
+(`--name=<group.name>`) finds-by-name + frames + reports mesh count; each flagship NAMED; all 3 render identical.
+**Mega-wreck panels (D196):** the 2 persistent bury-audit fails were a faceYaw SIGN bug — `+π/2` faced the panel's +Z
+(outward normal + recess axis) INTO the hull (audit raycasts along +Z → hit hull instantly). Fixed to `-π/2` (face out).
+**Bury-audit 68/68 ALL CLEAR.** *Attempted+reverted:* T5 real-breach holes — couldn't verify visually (procgen wrecks
+unnamed/random → no rig-shot frames them); reverted per rule 8. *(Prior — ACAM: wreck-fleet level-up (D192-194); ACAL:
+mega-wreck walkthrough fixes (D189-191). See changelog.)*
 
-**Next session** = **(1)** finish T6 by extending the merge to the 3 remaining hand-modeled FLAGSHIPS (megaShip ~160m /
-satelliteDish / crashedHull — the biggest unmerged hogs); each needs a verification rig-shot first (none exist) + panel
-noMerge tagging — see backlog. **(2)** the mega-wreck's 2 lee-flank salvage panels still fail the bury-audit (occluded by
-the busy tilted flank) — wire `findPanelMount` for the mega-wreck (the deferred ACAL "Path A"). **(3)** T5 greeble +
-real-`makeBreach` holes on the procgen hulls; T7 InstancedMesh/LOD. **(4)** the still-owed mega-wreck interior WALK-TEST
-(collision/entrance/brightness, ACAL). The raider proc-character + all rig-dependent work stays DEFERRED. See
-[docs/next-session-prompt.md](docs/next-session-prompt.md) + [docs/backlog.md](docs/backlog.md).
+**Next session** = **(1)** a procgen-wreck rig-shot framer (spawn/find + frame a procgen wreck) — the BLOCKER for
+verifying procgen visual work. **(2)** then T5: real-`makeBreach` holes + greeble-vocabulary + impact-flank asymmetry on
+the now-faceted procgen hulls (screenshot-iterate). **(3)** T7 InstancedMesh/LOD (stretch). **(4)** the still-owed
+mega-wreck interior WALK-TEST (collision/entrance/brightness, ACAL — only screenshots done). The raider proc-character +
+all rig-dependent work stays DEFERRED. See [docs/next-session-prompt.md](docs/next-session-prompt.md) +
+[docs/backlog.md](docs/backlog.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 
