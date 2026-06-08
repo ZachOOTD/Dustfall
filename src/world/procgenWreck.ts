@@ -53,6 +53,7 @@ import type { SalvageableRegistry } from './salvage.ts';
 import { registerSalvageable } from './salvage.ts';
 import { Tuning } from '../config/tuning.ts';
 import { addAccessPanel, makeEngineBellMesh } from './wrecks.ts';
+import { mergeStaticByMaterial, makeSandMound } from './wreckForms.ts';
 import { createRustedHullMaterial } from './hullMaterial.ts';
 import { attachCompoundCollider } from '../physics/bodies.ts';
 import { alignToTerrain } from '../util/terrainAlign.ts';
@@ -1264,8 +1265,26 @@ export function placeProcgenComposite(
   });
   scene.add(group);
 
-  // Compound collider matching the part shapes.
+  // Compound collider matching the part shapes. MUST run BEFORE the merge —
+  // it builds one collider per part mesh by geometry type; merging first would
+  // collapse the wreck to a single giant AABB. The Rapier colliders are
+  // independent of the meshes, so removing the visual meshes afterward is safe.
   attachCompoundCollider(world, group);
+
+  // T6 — merge the static, non-interactive meshes by material into 1-few meshes
+  // (the draw-call win). Salvage panels stay live (animated doors). Per-part
+  // collision already captured above.
+  mergeStaticByMaterial(group);
+
+  // T4 — half-burial: a windward sand drift bedding the wreck into the dune
+  // (visual-only, no collider). Sized to the wreck; consistent prevailing-wind
+  // direction so all drifts read as the same weather.
+  {
+    const sz = new THREE.Box3().setFromObject(group).getSize(new THREE.Vector3());
+    const radius = Math.min(9, Math.max(2.5, Math.max(sz.x, sz.z) * 0.5));
+    const windDir = new THREE.Vector2(0.85, 0.52).normalize();
+    scene.add(makeSandMound(terrain, pos.x, pos.z, windDir, radius, rand));
+  }
 
   // Register every part that got a salvage panel. We walk all
   // descendants looking for userData.accessPanel; each PART mesh that

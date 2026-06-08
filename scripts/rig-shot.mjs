@@ -1012,7 +1012,15 @@ const SCENARIOS = {
         byId[id] = byId[id] || { n: 0, meshes: 0 };
         byId[id].n++; byId[id].meshes += meshCount(p.mesh);
       }
+      // Biggest individual scene children by mesh count (perf-hog finder).
+      const topGroups = ctx.three.scene.children
+        .map((c) => ({ k: c.name || c.userData?.poiKind || c.userData?.kind || c.type || 'unnamed', m: meshCount(c) }))
+        .filter((x) => x.m > 3)
+        .sort((a, b) => b.m - a.m)
+        .slice(0, 18)
+        .map((x) => `${x.k}:${x.m}m`);
       return {
+        topGroups,
         drawCalls: info.render.calls,
         triangles: info.render.triangles,
         programs: info.programs ? info.programs.length : -1,

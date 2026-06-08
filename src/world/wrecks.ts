@@ -15,6 +15,7 @@ import type { Terrain } from './terrain.ts';
 import { Tuning } from '../config/tuning.ts';
 import { perturbOutward } from './sculpt.ts';
 import { attachCompoundCollider } from '../physics/bodies.ts';
+import { mergeStaticByMaterial } from './wreckForms.ts';
 import { createRustedHullMaterial } from './hullMaterial.ts';
 
 // ────────────────────────────────────────────────────────────────
@@ -921,5 +922,8 @@ export function placeWreck(
     // single bounding box around the whole tilted composite.
     attachCompoundCollider(world, group);
   }
+  // T6 — merge the static meshes by material (draw-call win); panels stay live.
+  // Colliders (above) captured the per-part shapes first, so collision is intact.
+  mergeStaticByMaterial(group);
   return group;
 }

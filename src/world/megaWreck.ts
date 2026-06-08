@@ -23,7 +23,7 @@ import type { Rng } from '../core/rng.ts';
 import type { Terrain } from './terrain.ts';
 import { Tuning } from '../config/tuning.ts';
 import { addAccessPanel, placeDebrisField, makeEngineBellMesh } from './wrecks.ts';
-import { makeLoftedHull, makeFormerRings, makeBreach, tagWreckDecoration, makeCable, makeSandMound } from './wreckForms.ts';
+import { makeLoftedHull, makeFormerRings, makeBreach, tagWreckDecoration, makeCable, makeSandMound, mergeStaticByMaterial } from './wreckForms.ts';
 import { addShelterZone, type ShelterRegistry } from '../shelter/shelterZones.ts';
 import { registerSalvageable, type SalvageableRegistry } from './salvage.ts';
 import { placeJournal, type Journal } from './journal.ts';
@@ -679,7 +679,7 @@ export function placeMegaWreck(
   const placeHullPanel = (...zs: number[]) => {
     for (const z of zs) {
       const s = hullAt(z);
-      const local = new THREE.Vector3(-s.halfW + 0.15, s.cy + 0.4, z);   // ON the -X skin
+      const local = new THREE.Vector3(-(s.halfW + 0.08), s.cy + 0.4, z);   // just PROUD of the -X skin (was inset 0.15 → buried behind the now-thick hull)
       const w = shellWorld(local);
       if (w.y < _terrain.heightAt(w.x, w.z) + 1.0) continue;             // buried → next Z
       addPanel(local, Math.PI / 2);                                      // face -X (outward)
@@ -752,6 +752,15 @@ export function placeMegaWreck(
 
   // ── Surrounding debris field.
   placeDebrisField(scene, _terrain, pos, 50, rand, 40);
+
+  // T6 — collapse the mega-wreck's ~490 static meshes into a handful (per material).
+  // Merge into the `shell` sub-group (not the root): the merged meshes bake to
+  // shell-local + stay under `shell`, so the tilt is applied once AND the shell group
+  // remains populated (rig-shot interior cameras + anything that frames `shell` still
+  // work). Runs LAST: the exact trimesh collider (D189) + panels + journal are already
+  // built, so collision + interaction are intact; only the visual draw-call count drops.
+  const shellGroup = group.getObjectByName('shell');
+  if (shellGroup) mergeStaticByMaterial(shellGroup);
 
   return group;
 }

@@ -12,6 +12,7 @@
 // to position; the caller owns world transform + colliders + merge.
 
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { Rng } from '../core/rng.ts';
 import type { Terrain } from './terrain.ts';
 
@@ -310,4 +311,58 @@ export function makeSandMound(
   mound.rotation.y = rand() * Math.PI * 2;
   mound.receiveShadow = true;
   return mound;
+}
+
+// ── T6 — WebGL static-mesh MERGE (the never-cut perf win) ──────────────
+//
+// Collapse a wreck's many static, non-interactive meshes into ONE merged
+// mesh per (material, attribute-signature) — the dominant draw-call cost.
+// Salvage PANELS (interactive, animated doors) are kept LIVE. Colliders are
+// built per-part BEFORE this runs (`attachCompoundCollider`) so per-part
+// collision shapes survive the merge (Rapier colliders are independent of
+// the meshes — removing the visual meshes afterward leaves the body intact).
+//
+// Each geometry is baked into ROOT-LOCAL space (the mega-wreck D189 bake) so
+// the merged mesh, added as a child of `root`, inherits the wreck's
+// terrain-align transform. Returns {before, after} mesh counts for logging.
+export function mergeStaticByMaterial(root: THREE.Object3D): { before: number; after: number } {
+  root.updateMatrixWorld(true);
+  const rootInv = root.matrixWorld.clone().invert();
+  // Group baked geometries by material UUID + attribute signature (uv presence)
+  // so every group is mergeable (mergeGeometries needs identical attributes).
+  const groups = new Map<string, { mat: THREE.Material; geos: THREE.BufferGeometry[]; meshes: THREE.Mesh[]; cast: boolean; recv: boolean }>();
+  let before = 0;
+  root.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh || !m.geometry) return;
+    // Skip the whole salvage-PANEL subtree (animated doors + interaction state).
+    let n: THREE.Object3D | null = o;
+    while (n) { if (n.userData?.accessPanel || n.userData?.noMerge) return; n = n.parent; }
+    if (Array.isArray(m.material)) return;            // multi-material meshes: leave as-is (rare)
+    const mat = m.material as THREE.Material;
+    if (mat.transparent) return;                       // leave transparent (decals/screens) unmerged — preserves depth-sort order
+    before++;
+    const g = m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone();
+    m.updateWorldMatrix(true, false);
+    g.applyMatrix4(rootInv.clone().multiply(m.matrixWorld));        // → root-local
+    if (!g.attributes.normal) g.computeVertexNormals();
+    const hasUV = !!g.attributes.uv;
+    for (const name of Object.keys(g.attributes)) if (name !== 'position' && name !== 'normal' && name !== 'uv') g.deleteAttribute(name);
+    // Sub-group so shadow behaviour is preserved (a merged mesh has ONE castShadow flag).
+    const key = mat.uuid + (hasUV ? '|uv' : '|nouv') + (m.castShadow ? '|cs' : '') + (m.receiveShadow ? '|rs' : '');
+    let grp = groups.get(key);
+    if (!grp) { grp = { mat, geos: [], meshes: [], cast: m.castShadow, recv: m.receiveShadow }; groups.set(key, grp); }
+    grp.geos.push(g); grp.meshes.push(m);
+  });
+  let after = 0;
+  for (const { mat, geos, meshes, cast, recv } of groups.values()) {
+    const merged = geos.length === 1 ? geos[0] : mergeGeometries(geos, false);
+    if (!merged) { geos.forEach((g) => g.dispose()); continue; }    // merge failed → leave originals untouched
+    if (geos.length > 1) geos.forEach((g) => g.dispose());
+    const mm = new THREE.Mesh(merged, mat);
+    mm.userData.noCollider = true; mm.castShadow = cast; mm.receiveShadow = recv;
+    root.add(mm); after++;
+    for (const om of meshes) om.parent?.remove(om);
+  }
+  return { before, after };
 }
