@@ -682,7 +682,7 @@ export function placeMegaWreck(
       const local = new THREE.Vector3(-(s.halfW + 0.08), s.cy + 0.4, z);   // just PROUD of the -X skin (was inset 0.15 → buried behind the now-thick hull)
       const w = shellWorld(local);
       if (w.y < _terrain.heightAt(w.x, w.z) + 1.0) continue;             // buried → next Z
-      addPanel(local, Math.PI / 2);                                      // face -X (outward)
+      addPanel(local, -Math.PI / 2);                                     // face -X / outward (was +π/2 → +Z faced +X = INTO the hull → buried from outside)
       return;
     }
   };
