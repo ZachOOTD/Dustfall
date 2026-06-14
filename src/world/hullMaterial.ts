@@ -50,8 +50,22 @@ export interface RustedHullOptions {
    *  Default 0.55. */
   streakIntensity?: number;
   /** Maximum brightness reduction from the panel-wear layer (0 = no
-   *  wear variation, 0.3 = up to 30% darker patches). Default 0.15. */
+   *  wear variation, 0.3 = up to 30% darker patches). Default 0.20. */
   wearAmplitude?: number;
+  /** Underside/down-facing form-AO darkening (0 = flat, 0.34 = up to 34%
+   *  darker on undersides). Default 0.34. ACAP W3. */
+  aoStrength?: number;
+  /** Bare-metal scuff-fleck intensity (sparse chipped-paint spots). Default
+   *  0.5. ACAP W3. */
+  fleckStrength?: number;
+  /** Hex color the scuff flecks reveal (chipped-to-bare-metal). Default a
+   *  cool light metal. ACAP W3. */
+  bareMetalHex?: number;
+  /** Warm oxidation-zone color depth (low-freq rust-brown patches). Default
+   *  0.32. ACAP W3. */
+  oxStrength?: number;
+  /** Hex color of the warm oxidation zones. Default a mid rust-brown. ACAP W3. */
+  oxHex?: number;
 }
 
 /**
@@ -66,7 +80,10 @@ export function createRustedHullMaterial(opts: RustedHullOptions): THREE.MeshLam
   const rustHex = opts.rustHex ?? 0x1a0a04;
   const bleachHex = opts.bleachHex ?? _deriveBleachHex(baseColor);
   const streakIntensity = opts.streakIntensity ?? 0.55;
-  const wearAmplitude = opts.wearAmplitude ?? 0.15;
+  const wearAmplitude = opts.wearAmplitude ?? 0.20;   // ACAP W3 — was 0.15; more plate-to-plate tonal variation
+  const aoStrength = opts.aoStrength ?? 0.34;          // ACAP W3 — underside form darkening
+  const fleckStrength = opts.fleckStrength ?? 0.5;     // ACAP W3 — bare-metal scuff intensity
+  const oxStrength = opts.oxStrength ?? 0.32;          // ACAP W3 — warm oxidation-zone color depth
 
   const mat = new THREE.MeshLambertMaterial({
     color: baseColor,
@@ -75,12 +92,19 @@ export function createRustedHullMaterial(opts: RustedHullOptions): THREE.MeshLam
 
   const rustColor = new THREE.Color(rustHex);
   const bleachColor = new THREE.Color(bleachHex);
+  const bareMetalColor = new THREE.Color(opts.bareMetalHex ?? 0x9ea2a6);
+  const oxColor = new THREE.Color(opts.oxHex ?? 0x6b4326);   // ACAP W3 — warm mid-oxidation brown
 
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uRustColor = { value: rustColor };
     shader.uniforms.uBleachColor = { value: bleachColor };
     shader.uniforms.uStreakIntensity = { value: streakIntensity };
     shader.uniforms.uWearAmplitude = { value: wearAmplitude };
+    shader.uniforms.uAoStrength = { value: aoStrength };
+    shader.uniforms.uFleckStrength = { value: fleckStrength };
+    shader.uniforms.uBareMetalColor = { value: bareMetalColor };
+    shader.uniforms.uOxColor = { value: oxColor };
+    shader.uniforms.uOxStrength = { value: oxStrength };
 
     // ── Vertex shader: forward world position + world-space normal ──
     // D62: world-space normal, NOT vNormal (which is view space and
@@ -118,6 +142,11 @@ export function createRustedHullMaterial(opts: RustedHullOptions): THREE.MeshLam
         uniform vec3 uBleachColor;
         uniform float uStreakIntensity;
         uniform float uWearAmplitude;
+        uniform float uAoStrength;
+        uniform float uFleckStrength;
+        uniform vec3 uBareMetalColor;
+        uniform vec3 uOxColor;
+        uniform float uOxStrength;
 
         // IQ-style precision-robust hash (same as terrainMaterial.ts).
         // Avoids the sin(dot()) hash trap that breaks at large
@@ -195,6 +224,30 @@ export function createRustedHullMaterial(opts: RustedHullOptions): THREE.MeshLam
         // Mix toward bleach by up to 30% so the underlying base color
         // still reads through (not pure white).
         diffuseColor.rgb = mix(diffuseColor.rgb, uBleachColor, topFacing * 0.30);
+
+        // ── 4) Form darkening (cheap AO) — ACAP W3. Down-facing + underside
+        //    surfaces sit in occlusion / self-shadow; darkening them deepens
+        //    the hull's read from flat to volumetric. Pure value (no hue
+        //    shift) → lowest-risk depth on the shared material.
+        float downFacingHull = clamp(-vWorldNormalHull.y, 0.0, 1.0);
+        diffuseColor.rgb *= (1.0 - downFacingHull * uAoStrength);
+
+        // ── 5) Bare-metal scuff flecks — ACAP W3. Sparse high-freq spots where
+        //    paint has chipped to bare metal (lighter, slightly cool). Threshold
+        //    is high so it reads as occasional scratches, not noise; biased to
+        //    side-facing surfaces (sideFacing from layer 2) where impacts scrape.
+        float fleckN = hullValueNoise(wp.xz * 9.0 + vec2(wp.y * 6.0, 0.0));
+        float fleck = smoothstep(0.80, 0.92, fleckN) * sideFacing * uFleckStrength;
+        diffuseColor.rgb = mix(diffuseColor.rgb, uBareMetalColor, fleck);
+
+        // ── 6) Oxidation zones — ACAP W3. A low-freq field tints some hull
+        //    zones toward a warm rust-brown, so the hull reads as a patchwork of
+        //    salvaged plates in different oxidation states (COLOR depth, not just
+        //    value — the main fix for the flat-grey read). Side-facing biased
+        //    (oxidation pools on walls/flanks, not sun-baked tops).
+        float oxZone = hullFbm(wp.xz * 0.14 + vec2(wp.y * 0.08, 4.0));
+        float oxMask = smoothstep(0.52, 0.82, oxZone) * sideFacing * uOxStrength;
+        diffuseColor.rgb = mix(diffuseColor.rgb, uOxColor, oxMask);
       `,
     );
   };
