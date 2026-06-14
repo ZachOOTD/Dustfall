@@ -3,6 +3,45 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ACAQ — 2026-06-14 — Marathon overnight: Wreck-yard biome (Cycle 8) — graveyard + Sarlacc pit ✓ verify pass (tsc clean)
+
+`verified` — `npm run verify` (tsc) PASS; **no save bump** (geometry/material/additive-item only). A long marathon
+overnight building a whole new rare DESTINATION biome end-to-end (6 tiers Y1-Y6). 5 commits (`b2417e5`,`aa50056`,
+`5f49444`,`0978f6d`,`8c75493`); D201-D203. Planned via 4 parallel read-only investigations (biome/POI/loot/sandworm).
+
+**Y1 — Wreck-yard biome (D201).** A rare DESTINATION biome (1 per seed), placed as a DISTANCE-OVERRIDE disc around a
+seed-derived anchor 620-1000m from spawn — NOT a noise region. `biomes.ts`: BiomeId += 'wreck_yard'; the sampler exposes
+`wreckYardAnchor`/`wreckYardRadius` + a `wreckYardAt(x,z)` strength field (smoothstep core→edge); `biomeAt` returns
+'wreck_yard' within. `terrain.ts` blends the ground toward an ashen oxidized grey-brown + flattens to a basin by
+wreckYardAt. NEW `wreck-yard` rig-shot framer (`--angle=aerial|approach|ground|pit`) — the framer for the whole build.
+
+**Y2 — Dense graveyard POI.** NEW `wreckYard.ts` → placeWreckYard(): ~26-38 deeply-buried corroded procgen wrecks
+(packed toward center, biome-weighted to corroded+skeletal hulls) + 3-5 big tilted hand-wreck silhouettes + 5-9 ribcage
+bone-fields (carcass anchors) + heavy debris, with a central 24m CLEARING reserved for the pit. Wired into poi.ts.
+
+**Y3 — Exclusive loot.** NEW additive ItemId `relic_core` (a glowing alien-tech artifact, near-full-restore on use);
+NEW `relicMesh.ts` (glowing MeshBasic core + dark housing, shared held+world); `pickups.ts` spawnRelicAt; 4-7 relics
+scattered across the graveyard biased toward the dangerous center. (Chose scattered glowing pickups over the deep
+panel-component loot surgery.)
+
+**Y4 — Sarlacc pit (the hero centerpiece).** NEW `enemies/sarlaccPit.ts`: a raised sand-maw (4 screenshot-iterated
+rounds — mound + dark glowing throat + inward-curving teeth + feelers) at the graveyard center. FSM: idle (buried) →
+gapes when the player nears → PULLS the player toward the throat (`ctx.player.externalPull` injected into the KCC
+`desired` vector) + BITES (damage ticks) in the inner radius. Reuses the sandworm's damage/die/pause patterns. Smoke
+test: maw opens → pulls player 5.6m→0.3m → bites (health 1→0.86). **Pull FEEL flagged for attended tune.** (D202.)
+
+**Y5 — Ecology.** The graveyard ribcages join the vulture ecology (vultures wheel over it — the approach telegraph) +
+prey gathers. main.ts threads `getWreckYardCarcasses()` into the carcass list before the ecology spawn.
+
+**Y6 — Perf merge (D203).** The dense field measured 2055 draw calls in-view; placeWreckYard now re-parents every
+wreck group into one `yardGroup` (`group.attach`) + `mergeStaticByMaterial` → **2055→1664** (the D198 cluster-merge
+applied; panels stay live, per-part colliders survive). Remaining draw calls: sand mounds/debris/bones unmerged
+(flagged follow-up) + the world. Bury-audit ~96-98% (the pre-existing curved-hull-panel flake rate; the graveyard just
+adds ~70 panels — not a regression).
+
+**Deferred/flagged:** route mounds/debris/bones into the yard merge (a `parent` opt); the pull-feel tune; the
+muddy-bare wreck-yard ground color; the big hand-wreck panels aren't registered as salvageable (relics carry the loot).
+
 ## Session ACAP — 2026-06-14 — Overnight: finish the wreck arc (hand-POI merge + shared-material depth + crash debris) ✓ verify pass (tsc clean)
 
 `verified` — `npm run verify` (tsc) PASS; **no save bump** (geometry/material/tooling only). A measure-first long
