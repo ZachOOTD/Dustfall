@@ -1124,7 +1124,9 @@ const SCENARIOS = {
         const dx = p.x - anchor.x, dz = p.z - anchor.z;
         if (dx * dx + dz * dz < rad * rad) near++;
       }
-      return { anchor: [+anchor.x.toFixed(0), +anchor.z.toFixed(0)], rad, biomeHere, groundY: +groundY.toFixed(1), nearObjects: near };
+      ctx.three.renderer.render(ctx.three.scene, cam);   // populate renderer.info for this view
+      const info = ctx.three.renderer.info;
+      return { anchor: [+anchor.x.toFixed(0), +anchor.z.toFixed(0)], rad, biomeHere, groundY: +groundY.toFixed(1), nearObjects: near, drawCalls: info.render.calls, tris: info.render.triangles };
     }, { ang: angle });
     await page.waitForTimeout(350);
     await page.screenshot({ path: join(OUT, `scen-wreckyard-${angle}.png`), fullPage: false });

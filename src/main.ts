@@ -16,7 +16,7 @@ import { installPhysicsDebug, updatePhysicsDebug } from './physics/debug.ts';
 import { preloadAssets } from './assets/loader.ts';
 import { createTerrain } from './world/terrain.ts';
 import { createBiomeSampler } from './world/biomes.ts';
-import { placePOIs, getAnchorPOIPositions } from './world/poi.ts';
+import { placePOIs, getAnchorPOIPositions, getWreckYardCarcasses } from './world/poi.ts';
 import { placeProcgenPOIs } from './world/procgenPoi.ts';
 import { placeHeroLandmarks } from './world/heroLandmarks.ts';
 import { createSalvageableRegistry, setSalvageBiomesContext } from './world/salvage.ts';
@@ -195,6 +195,9 @@ spawnRockScatter(three.scene, terrain, biomes, scatterRand);
 // system can resolve hits to it.
 const journalsList: Journal[] = [];
 placePOIs(three.scene, physics.world, terrain, scatterRand, pickupList, salvageables, shelter, { list: journalsList }, biomes);
+// ACAQ (Cycle 8) — the wreck-yard's ribcages join the ecology: vultures wheel over
+// the graveyard ("something died here" approach telegraph) + prey gathers at them.
+carcasses.push(...getWreckYardCarcasses());
 
 // HH (world rework #3) — procgen POI layer scattered across the chunk band.
 // ~15 wrecks via rejection sampling. Reject against anchor POI coords AND

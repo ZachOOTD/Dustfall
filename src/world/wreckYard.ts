@@ -16,6 +16,7 @@ import type { SalvageableRegistry } from './salvage.ts';
 import { placeProcgenComposite } from './procgenWreck.ts';
 import { placeWreck, placeDebrisField, type WreckKind } from './wrecks.ts';
 import { placeRibcage } from './heroLandmarks.ts';
+import { mergeStaticByMaterial } from './wreckForms.ts';
 import { Tuning } from '../config/tuning.ts';
 
 const BIG_KINDS: ReadonlyArray<WreckKind> = ['engine_cluster', 'fuselage', 'cargo_container'];
@@ -34,6 +35,12 @@ export function placeWreckYard(
   const cx = anchor.x, cz = anchor.z;
   const placed: Array<{ x: number; z: number }> = [];
   const carcasses: THREE.Vector3[] = [];
+  // Y6 perf — all wreck groups are re-parented into ONE yard group + merged at the
+  // end (the D198 cluster-merge), collapsing ~30 already-merged wrecks → a handful
+  // of draw calls. Panels (accessPanel) stay live (the merge skips them).
+  const yardGroup = new THREE.Group();
+  yardGroup.name = 'wreckYard';
+  scene.add(yardGroup);
 
   // Loose min-separation so the field reads as a packed-but-distinct pile of
   // hulks (a little overlap is characterful; too much z-fights).
@@ -62,10 +69,11 @@ export function placeWreckYard(
     const pos = tryPos(radius * 0.92, 5.0, 0.7, Tuning.WRECK_YARD_PIT_CLEARING);   // pack toward center, clear the pit
     if (!pos) continue;
     const y = terrain.heightAt(pos.x, pos.z);
-    placeProcgenComposite(scene, world, terrain, new THREE.Vector3(pos.x, y, pos.z), rand, salvageables, {
+    const grp = placeProcgenComposite(scene, world, terrain, new THREE.Vector3(pos.x, y, pos.z), rand, salvageables, {
       buryY: 0.5 + rand() * 0.55,        // deep ancient burial
       biome: 'wreck_yard',
     });
+    yardGroup.attach(grp);   // re-parent for the yard-level merge (preserves world transform)
   }
 
   // ── 2. A few BIG tilted hand-wreck silhouettes (the graveyard's skyline). ──
@@ -82,11 +90,7 @@ export function placeWreckYard(
       tiltZ: (rand() - 0.5) * 0.6,        // heavy crash tilt — keeled over
       tiltX: (rand() - 0.5) * 0.35,
     });
-    if (salvageables) {
-      // registered by the caller via the group's panels (placeWreck builds them);
-      // wreck-yard exclusive loot wiring lands in Y3.
-      void group;
-    }
+    yardGroup.attach(group);   // re-parent for the yard-level merge
   }
 
   // ── 3. Bone-fields — ribcages scattered as carcass anchors. ──
@@ -102,6 +106,12 @@ export function placeWreckYard(
 
   // ── 4. Heavy debris scatter across the floor. ──
   placeDebrisField(scene, terrain, new THREE.Vector3(cx, 0, cz), radius * 0.8, rand, 36 + Math.floor(rand() * 16));
+
+  // Y6 perf — collapse the whole graveyard's static geometry into a handful of
+  // draw calls (~30 already-merged wrecks → per-material meshes). Salvage panels
+  // (accessPanel) + interactables stay live (the merge skips them). Per-part
+  // colliders were already built inside each placeProcgenComposite/placeWreck.
+  mergeStaticByMaterial(yardGroup);
 
   return carcasses;
 }
