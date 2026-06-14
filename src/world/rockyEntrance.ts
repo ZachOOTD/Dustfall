@@ -34,6 +34,7 @@ import { registerSalvageable } from './salvage.ts';
 import type { ShelterRegistry } from '../shelter/shelterZones.ts';
 import { addShelterZone } from '../shelter/shelterZones.ts';
 import { attachCompoundCollider } from '../physics/bodies.ts';
+import { mergeStaticByMaterial } from './wreckForms.ts';
 import { Tuning } from '../config/tuning.ts';
 import { createStoneMaterial } from './stoneMaterial.ts';
 import { addAccessPanel } from './wrecks.ts';
@@ -243,6 +244,12 @@ export function placeRockyEntrance(
       }
     });
   }
+
+  // ACAP W1 — static-merge the static hull/rock meshes (per-part colliders are
+  // built above by attachCompoundCollider; salvage panels + interactables are
+  // skipped by the merge). Named for `flagship` rig-shot render-identity check.
+  root.name = 'rockyEntrance';
+  mergeStaticByMaterial(root);
 
   return root;
 }

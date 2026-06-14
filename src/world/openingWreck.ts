@@ -41,6 +41,7 @@ import type { GameContext } from '../GameContext.ts';
 // prop, not a salvage site). Other flagships keep their access panels.
 import { Tuning } from '../config/tuning.ts';
 import { createRustedHullMaterial } from './hullMaterial.ts';
+import { mergeStaticByMaterial } from './wreckForms.ts';
 
 // ── Materials ───────────────────────────────────────────────────────
 // Hull uses the procedural rust shader (Session OO) — vertical streaks
@@ -820,6 +821,14 @@ export function placeOpeningWreck(
   // non-salvageable story prop. `salvageables` arg kept on the function
   // signature for source-compatibility with the caller (openingScene.ts).
   void salvageables;
+
+  // ACAP W1 — static-merge the opening wreck (the always-rendered spawn hero,
+  // ~80-130 unmerged meshes per the perf-probe). Non-salvageable story prop (D15,
+  // no live panels); colliders are independent hand-built cuboids on the fixed
+  // body above, so the merge is collision-safe. Named so the `flagship` rig-shot
+  // can frame it for render-identity verification.
+  group.name = 'openingWreck';
+  mergeStaticByMaterial(group);
 
   return group;
 }

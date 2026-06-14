@@ -1145,14 +1145,26 @@ const SCENARIOS = {
         byId[id].n++; byId[id].meshes += meshCount(p.mesh);
       }
       // Biggest individual scene children by mesh count (perf-hog finder).
-      const topGroups = ctx.three.scene.children
-        .map((c) => ({ k: c.name || c.userData?.poiKind || c.userData?.kind || c.type || 'unnamed', m: meshCount(c) }))
+      const ranked = ctx.three.scene.children
+        .map((c) => ({ c, k: c.name || c.userData?.poiKind || c.userData?.kind || c.type || 'unnamed', m: meshCount(c) }))
         .filter((x) => x.m > 3)
-        .sort((a, b) => b.m - a.m)
-        .slice(0, 18)
-        .map((x) => `${x.k}:${x.m}m`);
+        .sort((a, b) => b.m - a.m);
+      const topGroups = ranked.slice(0, 18).map((x) => `${x.k}:${x.m}m`);
+      // Deep dump of the top 6 — what ARE these big groups? (identify before optimizing, D193)
+      const idOf = (o) => o.name || o.userData?.poiKind || o.userData?.kind || o.type;
+      const topGroupsDeep = ranked.slice(0, 6).map((x) => {
+        const kids = x.c.children || [];
+        const hist = {};
+        for (const kid of kids) { const id = idOf(kid); hist[id] = (hist[id] || 0) + 1; }
+        return {
+          k: x.k, m: x.m, kids: kids.length,
+          ud: Object.keys(x.c.userData || {}).join(',') || '-',
+          childKinds: Object.entries(hist).map(([id, n]) => `${n}x${id}`).slice(0, 8),
+        };
+      });
       return {
         topGroups,
+        topGroupsDeep,
         drawCalls: info.render.calls,
         triangles: info.render.triangles,
         programs: info.programs ? info.programs.length : -1,

@@ -28,6 +28,7 @@ import { findBiomeCentroid } from './biomes.ts';
 import type { SalvageableRegistry } from './salvage.ts';
 import { registerSalvageable } from './salvage.ts';
 import { attachCompoundCollider } from '../physics/bodies.ts';
+import { mergeStaticByMaterial } from './wreckForms.ts';
 import { Tuning } from '../config/tuning.ts';
 import { createMetalMaterial } from './metalMaterial.ts';
 import { createStoneMaterial } from './stoneMaterial.ts';
@@ -195,6 +196,11 @@ export function placeSaltOutpost(
 
   // ── 7. Debris scatter — small 2-3 fragments at 3-5m. ───────────────
   placeDebrisField(scene, terrain, pos, 4.0, rand, 2 + Math.floor(rand() * 2));
+
+  // ACAP W1 — static-merge the static outpost meshes (per-part colliders built
+  // above; salvage panels + interactables skipped). Named for the rig-shot check.
+  root.name = 'saltOutpost';
+  mergeStaticByMaterial(root);
 
   return root;
 }

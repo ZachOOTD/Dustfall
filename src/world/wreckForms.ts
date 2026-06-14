@@ -335,9 +335,12 @@ export function mergeStaticByMaterial(root: THREE.Object3D): { before: number; a
   root.traverse((o) => {
     const m = o as THREE.Mesh;
     if (!m.isMesh || !m.geometry) return;
-    // Skip the whole salvage-PANEL subtree (animated doors + interaction state).
+    // Skip the whole salvage-PANEL subtree (animated doors + interaction state)
+    // AND any interactable subtree (journals, loot, triggers — userData.interactType),
+    // so merging arbitrary hand POIs can't silently fold a live interaction into a
+    // static mesh. (ACAP — hardened for the hand-POI merge sweep.)
     let n: THREE.Object3D | null = o;
-    while (n) { if (n.userData?.accessPanel || n.userData?.noMerge) return; n = n.parent; }
+    while (n) { if (n.userData?.accessPanel || n.userData?.noMerge || n.userData?.interactType) return; n = n.parent; }
     if (Array.isArray(m.material)) return;            // multi-material meshes: leave as-is (rare)
     const mat = m.material as THREE.Material;
     if (mat.transparent) return;                       // leave transparent (decals/screens) unmerged — preserves depth-sort order
