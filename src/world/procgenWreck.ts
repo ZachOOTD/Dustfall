@@ -998,6 +998,9 @@ const HULL_SEGMENT_BIOME_WEIGHTS: Record<BiomeId, ReadonlyArray<number>> = {
   salt:  [1.0, 1.3, 1.0, 1.0, 1.0, 1.0],
   rocky: [1.0, 1.0, 1.0, 1.2, 1.0, 1.0],
   dune:  [1.0, 1.0, 1.0, 1.0, 1.2, 1.0],
+  // Cycle 8 — wreck-yard graveyard: ancient corroded + stripped-to-frame hulks
+  // (PLATED corrosion + OPEN_TRUSS skeletal both boosted).
+  wreck_yard: [1.0, 1.3, 1.0, 1.3, 1.0, 1.0],
 };
 
 function pickPart(rand: Rng, kind: PartKind, biome?: BiomeId): PartBuilder {

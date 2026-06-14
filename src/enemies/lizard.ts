@@ -334,7 +334,7 @@ export function spawnLizardsProcgen(
   scene: THREE.Scene,
   physicsWorld: RAPIER.World,
   terrain: Terrain,
-  biomes: { biomeAt: (x: number, z: number) => 'dune' | 'rocky' | 'salt' },
+  biomes: { biomeAt: (x: number, z: number) => 'dune' | 'rocky' | 'salt' | 'wreck_yard' },
   rand: () => number,
   poiPositions: ReadonlyArray<THREE.Vector3>,
 ): Lizard[] {

@@ -1085,6 +1085,48 @@ const SCENARIOS = {
     }
   },
 
+  // ACAQ — WRECK-YARD biome framer (Cycle 8). Finds the seed-derived wreck-yard
+  // anchor (ctx.biomes.wreckYardAnchor) + frames the region. `--angle=aerial|approach|ground`.
+  // The framer for the whole wreck-yard build (biome → graveyard → pit).
+  'wreck-yard': async (page) => {
+    const angle = argv.angle || 'aerial';
+    const r = await page.evaluate(({ ang }) => {
+      const ctx = window.__game.ctx;
+      ctx.weather.intensity = 0; ctx.weather.cloudiness = 0.15;
+      window.__game.setTime(0.36);
+      ctx.three.renderer.toneMappingExposure = 1.4;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      const anchor = ctx.biomes.wreckYardAnchor;
+      const rad = ctx.biomes.wreckYardRadius;
+      const biomeHere = ctx.biomes.biomeAt(anchor.x, anchor.z);
+      const cam = ctx.three.camera; ctx.flags.paused = true;
+      const groundY = ctx.terrain.heightAt(anchor.x, anchor.z);
+      if (ang === 'aerial') {
+        cam.position.set(anchor.x, groundY + rad * 1.5, anchor.z + rad * 0.25);
+        cam.lookAt(anchor.x, groundY, anchor.z);
+      } else if (ang === 'approach') {
+        cam.position.set(anchor.x + rad * 1.7, groundY + 26, anchor.z + rad * 1.7);
+        cam.lookAt(anchor.x, groundY + 5, anchor.z);
+      } else { // ground
+        cam.position.set(anchor.x - rad * 0.55, groundY + 3.2, anchor.z - rad * 0.55);
+        cam.lookAt(anchor.x, groundY + 2.5, anchor.z);
+      }
+      cam.updateMatrixWorld(true);
+      // Count wrecks/objects near the anchor (for Y2+ verification).
+      let near = 0;
+      for (const o of ctx.three.scene.children) {
+        const p = o.position; if (!p) continue;
+        const dx = p.x - anchor.x, dz = p.z - anchor.z;
+        if (dx * dx + dz * dz < rad * rad) near++;
+      }
+      return { anchor: [+anchor.x.toFixed(0), +anchor.z.toFixed(0)], rad, biomeHere, groundY: +groundY.toFixed(1), nearObjects: near };
+    }, { ang: angle });
+    await page.waitForTimeout(350);
+    await page.screenshot({ path: join(OUT, `scen-wreckyard-${angle}.png`), fullPage: false });
+    console.log(`[wreck-yard] ${JSON.stringify(r)}`);
+  },
+
   'tree': async (page) => {
     const t = argv.time !== undefined ? Number(argv.time) : 0.42;
     const r = await page.evaluate((t) => {

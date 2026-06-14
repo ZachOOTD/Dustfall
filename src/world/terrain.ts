@@ -24,6 +24,9 @@ import { createTerrainMaterial } from './terrainMaterial.ts';
 const BIOME_COLOR_DUNE: readonly [number, number, number] = [0xcd / 255, 0x95 / 255, 0x55 / 255];
 const BIOME_COLOR_ROCKY: readonly [number, number, number] = [0x55 / 255, 0x36 / 255, 0x1f / 255];
 const BIOME_COLOR_SALT: readonly [number, number, number] = [0xf0 / 255, 0xe8 / 255, 0xd2 / 255];
+// Cycle 8 (ACAQ) — wreck-yard graveyard ground: ashen oxidized grey-brown
+// (rust-stained, drained of the warm dune orange). Reads as a different, dead place.
+const BIOME_COLOR_WRECK_YARD: readonly [number, number, number] = [0x47 / 255, 0x3a / 255, 0x2e / 255];
 
 function smoothstep(edge0: number, edge1: number, x: number): number {
   const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)));
@@ -136,7 +139,9 @@ export function createTerrain(
           const localZ = (j / CELLS - 0.5) * SIZE;
           const x = centerX + localX;
           const z = centerZ + localZ;
-          const flatness = biomeHeightScale(biomes.rawAt(x, z));
+          let flatness = biomeHeightScale(biomes.rawAt(x, z));
+          const wyH = biomes.wreckYardAt(x, z);   // Cycle 8 — flatten the graveyard floor
+          if (wyH > 0) flatness = flatness * (1 - wyH) + Tuning.WRECK_YARD_HEIGHT_SCALE * wyH;
           heights[i * stride + j] = sampleHeight(noise, x, z) * flatness;
         }
       }
@@ -158,8 +163,11 @@ export function createTerrain(
           positions[idx] = localX;
           positions[idx + 1] = heights[i * stride + j];
           positions[idx + 2] = localZ;
-          const n = biomes.rawAt(centerX + localX, centerZ + localZ);
-          const c = blendedBiomeColor(n);
+          const wx2 = centerX + localX, wz2 = centerZ + localZ;
+          const n = biomes.rawAt(wx2, wz2);
+          let c = blendedBiomeColor(n);
+          const wyC = biomes.wreckYardAt(wx2, wz2);   // Cycle 8 — tint toward the graveyard ground
+          if (wyC > 0) c = lerp3(c, BIOME_COLOR_WRECK_YARD, wyC);
           colors[idx]     = c[0];
           colors[idx + 1] = c[1];
           colors[idx + 2] = c[2];

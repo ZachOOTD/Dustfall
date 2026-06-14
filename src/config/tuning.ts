@@ -459,6 +459,13 @@ export const Tuning = {
   BIOME_HEIGHT_SCALE_DUNE: 1.0,
   BIOME_HEIGHT_SCALE_ROCKY: 1.15,
   BIOME_HEIGHT_SCALE_SALT: 0.08,
+  // Cycle 8 (ACAQ) — wreck-yard: a rare DESTINATION biome placed as a distance-
+  // override region around a seed-derived anchor far from spawn (one per seed).
+  // An ashen oxidized graveyard flat of buried crashed fleet + a Sarlacc pit.
+  WRECK_YARD_DIST_MIN: 620,            // m from spawn anchor — a real journey out
+  WRECK_YARD_DIST_MAX: 1000,
+  WRECK_YARD_RADIUS: 135,              // m — region radius (biomeAt='wreck_yard' within ~50%)
+  WRECK_YARD_HEIGHT_SCALE: 0.10,       // flattened graveyard floor (near-featureless like salt)
 
   // Wreck palette (Session S). Cool grey-rust industrial; avoids pure
   // blacks/whites so primitives feel weathered, not cartoon.

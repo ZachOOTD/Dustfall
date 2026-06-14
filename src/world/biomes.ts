@@ -11,12 +11,21 @@ import { createNoise2D } from 'simplex-noise';
 import type { Rng } from '../core/rng.ts';
 import { Tuning } from '../config/tuning.ts';
 
-export type BiomeId = 'dune' | 'rocky' | 'salt';
+// Cycle 8 (ACAQ) — 'wreck_yard' is a rare DESTINATION biome, not a noise region:
+// a single distance-override disc around a seed-derived anchor far from spawn.
+export type BiomeId = 'dune' | 'rocky' | 'salt' | 'wreck_yard';
 
 export interface BiomeSampler {
   biomeAt: (x: number, z: number) => BiomeId;
   /** Raw noise value at (x, z) in [-1, 1]. Useful for soft color blends. */
   rawAt: (x: number, z: number) => number;
+  /** Wreck-yard region strength 0..1 (1 in the core, smooth-fading to 0 at the
+   *  radius edge). Drives terrain ground-tint + flatten blends. Cycle 8. */
+  wreckYardAt: (x: number, z: number) => number;
+  /** The seed-derived wreck-yard region center (the rare destination). */
+  wreckYardAnchor: { x: number; z: number };
+  /** Wreck-yard region radius (m). */
+  wreckYardRadius: number;
 }
 
 export function createBiomeSampler(rand: Rng): BiomeSampler {
@@ -25,14 +34,34 @@ export function createBiomeSampler(rand: Rng): BiomeSampler {
 
   const rawAt = (x: number, z: number): number => noise(x * freq, z * freq);
 
+  // Pick the wreck-yard anchor: a seed-derived polar position far from spawn
+  // (one per seed). Computed AFTER createNoise2D so the rng state is stable.
+  const wyDist = Tuning.WRECK_YARD_DIST_MIN + rand() * (Tuning.WRECK_YARD_DIST_MAX - Tuning.WRECK_YARD_DIST_MIN);
+  const wyAng = rand() * Math.PI * 2;
+  const wreckYardAnchor = {
+    x: Tuning.OPENING_SCENE_ANCHOR_X + Math.cos(wyAng) * wyDist,
+    z: Tuning.OPENING_SCENE_ANCHOR_Z + Math.sin(wyAng) * wyDist,
+  };
+  const wreckYardRadius = Tuning.WRECK_YARD_RADIUS;
+
+  const wreckYardAt = (x: number, z: number): number => {
+    const dx = x - wreckYardAnchor.x, dz = z - wreckYardAnchor.z;
+    const d = Math.sqrt(dx * dx + dz * dz);
+    if (d >= wreckYardRadius) return 0;
+    if (d <= wreckYardRadius * 0.6) return 1;
+    const t = (wreckYardRadius - d) / (wreckYardRadius * 0.4);
+    return t * t * (3 - 2 * t);   // smoothstep core→edge
+  };
+
   const biomeAt = (x: number, z: number): BiomeId => {
+    if (wreckYardAt(x, z) > 0.5) return 'wreck_yard';
     const n = rawAt(x, z);
     if (n < Tuning.BIOME_THRESHOLD_ROCKY) return 'rocky';
     if (n > Tuning.BIOME_THRESHOLD_SALT) return 'salt';
     return 'dune';
   };
 
-  return { biomeAt, rawAt };
+  return { biomeAt, rawAt, wreckYardAt, wreckYardAnchor, wreckYardRadius };
 }
 
 // GG — find the cell deepest into `target` biome via a grid sweep over a
