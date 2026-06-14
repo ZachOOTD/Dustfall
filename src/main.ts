@@ -49,6 +49,7 @@ import { spawnLizardsProcgen, updateLizards } from './enemies/lizard.ts';
 import { spawnShrewsProcgen, updateShrews } from './enemies/shrew.ts'; // ACL DESERT SHREW
 import { spawnVulturesProcgen, spawnCirclingVultures, updateVultures } from './enemies/vulture.ts'; // ACAH
 import { spawnSandWorm, sampleSandwormHome, updateSandWorm } from './enemies/sandWorm.ts';
+import { spawnSarlaccPit, updateSarlaccPit } from './enemies/sarlaccPit.ts';
 import { updateWieldAction } from './player/wieldAction.ts';
 import { updateReload } from './player/combat.ts';
 import { createGhostPreview, updateGhostPreview } from './player/ghostPreview.ts';
@@ -254,6 +255,8 @@ for (const s of salvageables.list) {
   }
 }
 _mark('scrap');
+// ACAQ (Cycle 8) — the Sarlacc pit at the graveyard center (the wreck-yard hero hazard).
+const sarlaccPit = spawnSarlaccPit(three.scene, terrain, biomes.wreckYardAnchor, Tuning.SARLACC_PIT_RADIUS);
 const lizards = spawnLizardsProcgen(
   three.scene, physics.world, terrain, biomes, scatterRand, allPoiPositions,
 );
@@ -381,6 +384,8 @@ const ctx: GameContext = {
     eyeOffset: Tuning.PLAYER_EYE_OFFSET,
     body: playerBody,
     velocityY: 0,
+    externalPullX: 0,
+    externalPullZ: 0,
     onGround: false,
     crouching: false,
     inShelter: false,
@@ -413,6 +418,7 @@ const ctx: GameContext = {
   lockers: { list: [], open: null }, // Session AAC
   stakes: { list: [] },              // Session ACE
   companion: null,                   // Session AAE
+  sarlaccPit,                        // ACAQ Cycle 8 — wreck-yard hero hazard
 
   salvageables,
   weather,
@@ -840,6 +846,7 @@ startLoop(ctx, (c, dt) => {
   updateVultures(c, dt);         // ACAH — perched vultures (perch/flee/dead); pause-gated internally
   updateCompanion(c, dt);        // AAE — Rocky-inspired creature follows player
   updateSandWorm(c, dt);         // DD — buried boss; breaches when player enters territory
+  updateSarlaccPit(c, dt);       // ACAQ Cycle 8 — wreck-yard maw; gapes + pulls + bites near the player
   updateKillDrag(c);             // ACF — drag a slain raider corpse (on foot/sled) or worm carcass (speeder) via the shared rope constraint. AFTER updateRaiders/updateSandWorm (they skip dead entities, leaving drag-movement to this) + BEFORE updateSledRiders.
   updateFootprints(c.footprints, c.time.elapsed); // age + fade pooled decals
   updateFootprintPuffs(c, dt);   // AAG — particle puffs from each footstep

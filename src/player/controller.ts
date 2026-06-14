@@ -226,6 +226,14 @@ export function updatePlayer(ctx: GameContext, dt: number): void {
   ctx.player.velocityY += GRAVITY * dt;
   desired.y = ctx.player.velocityY * dt;
 
+  // Cycle 8 — external horizontal pull (the Sarlacc maw drags the player toward
+  // its throat). Added to the request BEFORE the KCC solve so it routes through
+  // collision/slope handling, then cleared (one-frame impulse each frame).
+  desired.x += ctx.player.externalPullX * dt;
+  desired.z += ctx.player.externalPullZ * dt;
+  ctx.player.externalPullX = 0;
+  ctx.player.externalPullZ = 0;
+
   // Ask Rapier for the corrected delta (handles collisions, slopes, autostep).
   controller.computeColliderMovement(collider, desired);
   const corrected = controller.computedMovement();

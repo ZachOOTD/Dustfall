@@ -475,6 +475,13 @@ export const Tuning = {
   WRECK_YARD_PIT_CLEARING: 24,         // central clearing radius (m) reserved for the Sarlacc pit
   WRECK_YARD_RELIC_COUNT_MIN: 4,       // glowing relic-core pickups (wreck-yard exclusive loot)
   WRECK_YARD_RELIC_COUNT_MAX: 7,
+  SARLACC_PIT_RADIUS: 10,              // rim radius (m) of the central Sarlacc maw (fits the 24m clearing)
+  SARLACC_PIT_DETECT_RADIUS: 34,       // m — the maw gapes when the player enters
+  SARLACC_PIT_PULL_RADIUS: 20,         // m — within this the player is dragged toward the throat
+  SARLACC_PIT_DANGER_RADIUS: 9,        // m — within this (open maw) damage ticks
+  SARLACC_PIT_PULL_ACCEL: 7.0,         // m/s² toward center while open (FEEL — attended tune)
+  SARLACC_PIT_DAMAGE_PER_TICK: 0.07,   // health/0..1 per damage tick
+  SARLACC_PIT_DAMAGE_INTERVAL: 0.45,   // s between damage ticks
 
   // Wreck palette (Session S). Cool grey-rust industrial; avoids pure
   // blacks/whites so primitives feel weathered, not cartoon.

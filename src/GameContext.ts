@@ -36,6 +36,7 @@ import type { Lantern } from './world/lantern.ts';
 import type { Locker } from './world/locker.ts';
 import type { Stake } from './world/stake.ts';
 import type { Companion } from './enemies/companion.ts';
+import type { SarlaccPit } from './enemies/sarlaccPit.ts';
 import type { BiomeSampler } from './world/biomes.ts';
 import type { SalvageableRegistry } from './world/salvage.ts';
 import type { FootprintRegistry } from './world/footprints.ts';
@@ -79,6 +80,10 @@ export interface GameContext {
     eyeOffset: number;     // camera Y above body center (m) — adjusted by crouch
     body: PlayerBody;
     velocityY: number;     // vertical velocity for gravity (m/s)
+    /** Cycle 8 — external horizontal pull (m/s) applied for one frame then
+     *  cleared by the controller. Used by the Sarlacc pit to drag the player in. */
+    externalPullX: number;
+    externalPullZ: number;
     onGround: boolean;
     crouching: boolean;    // set each frame from LeftControl
     inShelter: boolean;    // set each frame by shelter system
@@ -158,6 +163,8 @@ export interface GameContext {
    *  Singleton (one creature per save). Null when in inventory or
    *  never picked up; non-null when deployed in the world. */
   companion: Companion | null;
+  /** Cycle 8 — the wreck-yard Sarlacc pit (one per world; null until placed). */
+  sarlaccPit: SarlaccPit | null;
   salvageables: SalvageableRegistry;
   weather: Weather;
   ambientDust: AmbientDust;

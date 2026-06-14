@@ -1108,6 +1108,10 @@ const SCENARIOS = {
       } else if (ang === 'approach') {
         cam.position.set(anchor.x + rad * 1.7, groundY + 26, anchor.z + rad * 1.7);
         cam.lookAt(anchor.x, groundY + 5, anchor.z);
+      } else if (ang === 'pit') {
+        const pr = (ctx.sarlaccPit && ctx.sarlaccPit.rOuter) || 10;   // close-up on the maw
+        cam.position.set(anchor.x + pr * 1.9, groundY + pr * 1.35, anchor.z + pr * 1.9);
+        cam.lookAt(anchor.x, groundY - pr * 0.35, anchor.z);
       } else { // ground
         cam.position.set(anchor.x - rad * 0.55, groundY + 3.2, anchor.z - rad * 0.55);
         cam.lookAt(anchor.x, groundY + 2.5, anchor.z);
@@ -1125,6 +1129,39 @@ const SCENARIOS = {
     await page.waitForTimeout(350);
     await page.screenshot({ path: join(OUT, `scen-wreckyard-${angle}.png`), fullPage: false });
     console.log(`[wreck-yard] ${JSON.stringify(r)}`);
+  },
+
+  // ACAQ — Sarlacc-pit behavior smoke test. Teleport the player onto the maw, let
+  // the live game tick, confirm the maw OPENS + BITES (health drops). The pull
+  // FEEL can't be judged headless (attended walk-test); this gates the wiring.
+  'sarlacc-test': async (page) => {
+    const before = await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      const pit = ctx.sarlaccPit;
+      if (!pit) return { ok: false, reason: 'no pit' };
+      // Teleport the player onto the maw rim.
+      const bp = pit.basePos;
+      ctx.player.body.body.setNextKinematicTranslation({ x: bp.x + 4, y: bp.y + 2, z: bp.z + 4 });
+      ctx.stats.health = 1;
+      return { ok: true, health0: ctx.stats.health, openAmt0: +pit.openAmt.toFixed(2), state0: pit.state, meshY0: +pit.mesh.position.y.toFixed(2) };
+    });
+    await page.waitForTimeout(5000);   // live ticks: maw opens + bites
+    const after = await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      const pit = ctx.sarlaccPit;
+      const tr = ctx.player.body.body.translation();
+      const d = Math.hypot(tr.x - pit.basePos.x, tr.z - pit.basePos.z);
+      return {
+        health1: +ctx.stats.health.toFixed(3),
+        openAmt1: +pit.openAmt.toFixed(2),
+        state1: pit.state,
+        meshY1: +pit.mesh.position.y.toFixed(2),
+        playerDist: +d.toFixed(1),
+        damaged: ctx.stats.health < 1,
+        dead: ctx.stats.dead,
+      };
+    });
+    console.log(`[sarlacc-test] ${JSON.stringify({ before, after })}`);
   },
 
   'tree': async (page) => {
