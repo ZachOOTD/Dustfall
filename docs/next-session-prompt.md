@@ -1,74 +1,72 @@
-# Session ACAP — Kickoff Brief
+# Session ACAQ — Kickoff Brief
 
 ## Read these now (in order)
-1. `CLAUDE.md` (auto-loaded) — "Where we are now" (ACAO: framer + T5 greebles/asymmetry shipped).
-2. `docs/session-end-report.md` — cumulative state (ACAO at top).
-3. `docs/backlog.md` + `docs/decisions.md` (D197 makeBreach-doesn't-read-at-scale; D195 name-for-verification; D196 panel-outward-normal).
+1. `CLAUDE.md` (auto-loaded) — "Where we are now" (ACAP: wreck arc finished — hand-POI merge + material depth + debris).
+2. `docs/session-end-report.md` — cumulative state (ACAP at top).
+3. `docs/backlog.md` + `docs/decisions.md` (D198 hand-POI-merge + interactType-skip; D199 shared-material-depth; D200 in-group-debris-at-buryY).
 4. `docs/roadmap.md` + `docs/architecture.md`.
 
 ## What's already built
-The wreck story is deep: `mergeStaticByMaterial` covers every big wreck/flagship (procgen fleet + mega-wreck 491→79 +
-megaShip/satelliteDish/crashedHull). Procgen hulls are faceted ship sections (D194), half-buried (T4), with a 7-type
-greeble vocabulary + impact-flank asymmetry (ACAO). Panels are bury-audit-clean. **Procgen visual work is now
-screenshot-verifiable** via the NEW `procgen-wreck` rig-shot (`--class=` + `--seeds=` sweep + `--zoom`, ground-aware,
-orientation-pinned) — that was the ACAO unblock. tsc clean, no save bump (SAVE_VERSION 14).
+The wreck arc is essentially DONE: every wreck/flagship/hand-POI is static-merged (procgen fleet + mega-wreck 491→79 +
+the 3 flagships + opening wreck 13 / rockyEntrance 37 / saltOutpost 28), procgen hulls are faceted with a 7-type greeble
+vocabulary + impact asymmetry + crash-debris fans, half-buried, and the SHARED `createRustedHullMaterial` now reads
+weathered-with-depth (form-AO + oxidation-zones + scuff-flecks) across every wreck. Procgen visual work is
+screenshot-verifiable (`procgen-wreck` framer) + the hand assets are framable (`flagship --name=`). tsc clean, no save
+bump (SAVE_VERSION 14).
 
-## Session ACAP focus — finish the wreck arc: T7 perf (stretch) + the owed walk-test + flagship polish
-The big visual + perf wins are banked. What remains is the perf stretch (T7), the one human-in-the-loop verification
-(the mega-wreck interior walk-test), and spreading the greeble polish to the flagships.
+## Session ACAQ focus — the human-owed walk-test + the attended perf follow-ups
+This session is **ATTENDED** (not an overnight) — its top item needs a human in `npm run dev`. The autonomous wreck work
+is done; what's left needs either your eyes (walk-test) or careful attended interaction-preserving refactors.
 
 ## Priority items (in order)
-1. **T7 — InstancedMesh / LOD (the stretch perf item).** Distance-LOD far wrecks (>300m from the player) to a merged
-   low-detail shell, and/or `InstancedMesh` the repeated NON-interactive props (engine bells, common greebles) across
-   the fleet. Keep salvage PANELS as regular meshes (no interaction-raycast `instanceId` rework — that's the risk).
-   Measure with `perf-probe` (the biggest-objects breakdown + `render.calls`/`sceneMeshes`). Files: `procgenWreck.ts`
-   (`placeProcgenComposite` ~L1219), `procgenPoi.ts` (placement), `scripts/rig-shot.mjs` (`perf-probe`). Acceptance:
-   a measured draw-call / sceneMesh drop with triangles ≈ unchanged; record the before/after in the changelog.
-2. **Mega-wreck interior WALK-TEST (owed since ACAL — needs YOU).** `npm run dev` → walk to the mega-wreck. Confirm:
-   collision holds (no walk-through the hull), the fracture-ramp entrance is walkable, salvage panels are reachable +
-   face outward (audit-clean since D196), interior brightness is adequate (natural-only light since D190). The one
-   thing screenshots can't verify. If too dark → WIDER openings (fracture/breaches), NOT fake lights (D190).
-3. **Richer greebles on the hand-modeled flagships + a brighter-lit procgen pass.** Extend the ACAO greeble vocabulary
-   to megaShip/satelliteDish/crashedHull (they're NAMED → frame with the `flagship` rig-shot). The procgen hulls read
-   fairly dark; a brighter-lit `procgen-wreck` shot (or a tuning lift) would surface the new detail more.
-4. **(Opportunistic) procgen visual polish** now that it's verifiable — material depth / edge-wear on the faceted
-   hulls, debris fans, biome-flavored greeble weighting. Screenshot-iterate via the framer (rule 8).
+1. **Mega-wreck interior WALK-TEST (owed since ACAL — needs YOU).** `npm run dev` → walk to the mega-wreck. Confirm:
+   collision holds (no walk-through the hull — D189 full trimesh), the lee-flank sand-ramp into the fracture is walkable,
+   both salvage panels are reachable + pry-able + the journal/shelter register, and interior brightness is adequate
+   (natural-only since D190). If too dark → WIDER openings (fracture/breaches), NOT fake lights. Flag residual floaters.
+2. **Speeder static-merge (attended perf — the biggest remaining draw-call win, ~86 meshes always on-screen).** The
+   speeder is unmerged. FIRST identify + tag its animated/interactive sub-parts `noMerge` (`headlamp`/`headlampDisc`/
+   `speederSeat`/`speederTowBar`/any wheels or suspension that move), THEN `mergeStaticByMaterial(speederGroup)` on the
+   static body. Verify in `npm run dev` that the speeder still drives, the headlamp lights, mount/dismount works, and the
+   tow-bar animates. `src/**/speeder*` (find the builder). The `interactType`-skip (D198) already protects tagged
+   interactables; the risk is ANIMATED parts (no interactType) — tag those `noMerge`.
+3. **Pickup InstancedMesh (attended perf — 340 branch+scrap meshes ≈ 340 draw calls).** Instance the scatter pickups
+   (branch ×~130, scrap ×~200) into per-geometry InstancedMeshes. The risk: each pickup is individually TAKEABLE via an
+   interaction raycast — needs an `instanceId`→pickup map + raycast rework (or keep a small pool of real meshes for the
+   nearest-N and instance the far field). Measure via `perf-probe`. Higher-risk; scope carefully.
+4. **W2 flagship greebles + W5 brighter/dusk procgen pass (optional, deferred from ACAP).** W3 already lifted the
+   flagships via the shared material, so W2 is marginal; W5 (a dusk-lighting or exposure tune so the new detail reads
+   in-game, not just in the bright framer) is global-lighting work — verify in `npm run dev`, not just the framer.
 
 ## Stretch goals
-- A genuine procgen breach HOLE (D197): loft the hull WITH a gap rather than decaling over intact skin — bigger than a
-  decal; only if T7 + walk-test land with budget to spare.
+- Biome-weighted greeble distribution (salt→corrosion, rocky→structural, dune→tanker) — thread biome → `addHullGreebles`.
+- A genuine procgen breach HOLE via a lofted-in gap (D197) — bigger than a decal.
 
 ## Verification protocol
-`npm run verify` (= `tsc --noEmit`) clean. **Perf (T7):** `perf-probe` before/after (record numbers). **Procgen
-visual:** the `procgen-wreck` framer (`--class=<corvette|gunship|freighter|science_vessel|bulk_hauler|orbital_pod_cluster>
---angle=<3q|side|front> --seeds=1,2,3 --zoom=<f>`) + `panels` bury-audit PASS. **Flagship visual:** the `flagship`
-rig-shot (`--name=<megaShip|satelliteDish|crashedHull|megaWreck>`). **Visual (rule 8):** screenshot-iterate every new
-element; DON'T ship procgen/flagship visual work on tsc alone (that's why ACAN reverted the breach swap).
-
-## Footguns (this arc)
-- **Procgen wrecks are X-LONG; the hero is Z-long.** The `procgen-wreck` framer pins orientation (long-axis +X, detail
-  flank +Z) so `side`=+Z broadside; `makeLoftedHull` lofts along Z → procgen rotates it `rotation.y = π/2` (D194).
-- **`makeBreach` doesn't read on small intact hulls (D197).** No boolean cut → recessed void occluded / proud reads as
-  a bump. Use the flat damage patch; a real hole needs a lofted-in gap.
-- **Name + pin hero/procgen assets so the harness can find + frame them (D195, ACAO).** Unnamed/un-pinned = unverifiable
-  = don't change its look (rule 8).
-- **Merge order / subgroup (D192)** — colliders per-part BEFORE merge; merge the tilted subgroup if a camera frames it.
-- **Windows rig-shot teardown:** the harness now `taskkill /T /F`s the vite tree + `process.exit(0)`s (ACAO) — if a run
-  ever wedges again, check for an orphan vite holding port 5191.
-
-## Save discipline (D81)
-Geometry/material/collider/tooling only → no `SAVE_VERSION` bump. Surface if a save field turns out necessary (unlikely
-for this arc).
+`npm run verify` (= `tsc --noEmit`) clean. **Perf:** `perf-probe` before/after (+ the `topGroupsDeep` dump) — record
+numbers. **Procgen/flagship visual:** the `procgen-wreck` + `flagship --name=` rig-shots + `panels` bury-audit PASS.
+**Items 1-3 are interaction/feel-critical** → verify in `npm run dev` (the framer can't confirm "still drives / still
+takeable"). Rule 8: screenshot-iterate any visual change.
 
 ## Autonomy contract
-Ambiguous → GDD pillars + `decisions.md` realism dial; append a D-entry; continue (don't ask). Screenshot-iterate every
-visual element (rule 8); NEVER mark a visual element done on tsc alone — and DON'T ship a visual change you can't frame.
-Item 2 (walk-test) is the exception — it needs a human; set it up + hand over.
+Items 2-3 are attended (interaction-preserving) — if running unattended, do the SAFE half (measure + identify the parts)
+and STOP before the merge/instancing that needs live-drive verification; surface it. Item 1 needs a human throughout.
+Ambiguous → GDD pillars + `decisions.md` realism dial; append a D-entry; continue.
+
+## Footguns (this arc)
+- **The merge skips `accessPanel`/`noMerge`/`interactType`/transparent (D198).** ANIMATED parts with no `interactType`
+  (wheels, the tow-bar) are NOT auto-skipped — tag them `noMerge` before merging the speeder, or they freeze.
+- **In-group debris/decoration on a buried parent → pre-compensate by buryY (D200)** so it lands on terrain after the sink.
+- **Shared hull material (D199)** — changes hit EVERY wreck; verify across small procgen + the hero + a flagship.
+- **Procgen wrecks are X-long, the hero Z-long; the framer pins orientation** so `side`=+Z broadside (D194/ACAO).
+- **Windows rig-shot teardown** now `taskkill /T /F`s the vite tree (ACAO) — if a run wedges, check for an orphan on 5191.
+
+## Save discipline (D81)
+Geometry/material/collider/tooling only → no `SAVE_VERSION` bump.
 
 ## Stop conditions
 3 fix-walls on one element (log + move on) · a `SAVE_VERSION` bump turning out necessary (surface it) · destructive-git
-attempt · wall-clock/budget ceiling.
+attempt · an interaction-preserving merge/instancing that can't be live-verified unattended (do the safe half, surface).
 
 ## On stop
-Run `/session-end` (verify → changelog [WITH T7 perf before/after numbers] → CLAUDE last-shipped → roadmap → D-entries →
-backlog → report → next-prompt → post-mortem → commit + tag `session-ACAP` + push).
+Run `/session-end` (verify → changelog → CLAUDE last-shipped → roadmap → D-entries → backlog → report → next-prompt →
+post-mortem → commit + tag `session-ACAQ` + push).

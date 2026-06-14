@@ -3,6 +3,37 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ACAP — 2026-06-14 — Overnight: finish the wreck arc (hand-POI merge + shared-material depth + crash debris) ✓ verify pass (tsc clean)
+
+`verified` — `npm run verify` (tsc) PASS; **no save bump** (geometry/material/tooling only). A measure-first long
+overnight that closed the wreck arc's perf + visual gaps. 3 commits (`584d1b0`,`c5f2d2b`,`a33435d`); D198-D200. Shipped
+3 fully-iterated tiers; W2 (flagship greebles) + W5 (lighting) deliberately deprioritized after measurement.
+
+**W1 — hand-POI static-merge (the perf win, measure-first).** A NEW `perf-probe` deep-dump (`topGroupsDeep` child-kind
+histogram) showed the remaining draw-call hogs were the hand-modeled POIs that never got the ACAM/ACAN static-merge —
+NOT the procgen fleet (already merged) and NOT a need for LOD. Merged them, render-identical: **opening wreck ~80-130→13
+meshes, rockyEntrance →37, saltOutpost →28.** Hardened `mergeStaticByMaterial` to skip any `userData.interactType`
+subtree (journals/loot/triggers), not just `accessPanel`/`noMerge` — so merging arbitrary hand POIs can't fold a live
+interaction into a static mesh. **Heavy distance-LOD CUT** (measure-first): the merge already won the budget; the
+remaining big groups are mesh-heavy already-merged procgen wrecks + the speeder (animated → unsafe unattended) + pickups
+(interaction-raycast risk). (D198.)
+
+**W3 — shared hull-material depth (highest-leverage).** `createRustedHullMaterial` read flat-grey. Added 3 weathering
+layers on the existing wear/streak/bleach: **(4) form-AO** (undersides darken → volumetric), **(5) bare-metal scuff
+flecks** (sparse chipped-paint), **(6) oxidation zones** (low-freq warm rust-brown patches = COLOR depth, the main
+flat-grey fix); bumped `wearAmplitude` 0.15→0.20. ONE shared-material change lifted EVERY wreck — verified across procgen
+corvette + bulk_hauler + the mega-wreck hero + the megaShip flagship, all weathered-with-depth, none over-rusted. (D199.)
+
+**W4 — crash-debris fans.** A 2-4 fragment fan (plates/pipes/struts) shed onto a random impact flank of ~60% of procgen
+wrecks. NEW `addDebrisFan` adds them to the wreck GROUP before the merge so they fold into the static merge (~0 draw
+cost); placed at **local-y = buryY** so they rest on the sand AFTER the half-burial sink (not buried, not floating). All
+`isWreckDecoration`; bury-audit ALL CLEAR (53/53). Skipped biome-greeble-weighting (low payoff + hard to verify). (D200.)
+
+**Findings flagged (not done unattended):** speeder static-merge (86 meshes, but animated/interactive parts → needs an
+attended pass to tag `noMerge`), pickup InstancedMesh (340 branch+scrap meshes, but breaks per-item interaction raycast).
+**Deferred:** W2 flagship greebles (W3 lifted them), W5 brighter lighting (global/risky/hard-to-verify headlessly), the
+ACAL mega-wreck interior WALK-TEST (needs a human).
+
 ## Session ACAO — 2026-06-13 — Procgen-wreck rig-shot framer (the BLOCKER) + T5 greebles & impact asymmetry ✓ verify pass (tsc clean)
 
 `verified` — `npm run verify` (tsc) PASS; **no save bump** (geometry/material/tooling only). Built the verification

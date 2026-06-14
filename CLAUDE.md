@@ -64,24 +64,23 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      Prior milestones live in docs/changelog.md — do NOT accumulate "Prior milestone"
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
-**Last shipped**: Session ACAO — **procgen-wreck rig-shot framer (the BLOCKER) + T5 greebles & impact asymmetry**
-(tsc clean, no save bump; D197). **Framer:** NEW `__game.spawnProcgenWreckRig(cls, seed)` spawns a chosen wreck class
-at a fixed anchor with a deterministic seed + **pins its orientation** (kills `placeProcgenComposite`'s random yaw so
-the +Z detail flank faces the camera) + names it `procgenWreckRig`; NEW `procgen-wreck` rig-shot reuses the `flagship`
-find/frame/mesh-count logic, is ground-aware (frames the exposed hull above the sand), and adds a `--seeds=` sweep
-(N shots/boot) + `--zoom`. Fixed a Windows vite-orphan teardown hang (`taskkill /T /F` + `process.exit(0)`). **T5:**
-`addHullGreebles` vocabulary 3→7 (louvered vents, circular ports, fins, antenna stubs) + impact-flank asymmetry (~78%
-of greebles + the damage patch cluster on the hit side) on RIBBED_CYLINDER + PLATED_RECTANGULAR; verified corvette +
-bulk_hauler; **bury-audit 56/56 ALL CLEAR**. **Reverted (D197):** real `makeBreach` holes don't read on small intact
-procgen hulls (no boolean cut → recessed void occluded / proud void reads as a bump) — kept the flat damage patch.
-*(Prior — ACAN: flagship static-merge + mega-wreck panel fix (D195-196); ACAM: wreck-fleet level-up (D192-194). See
+**Last shipped**: Session ACAP — **overnight: finish the wreck arc (hand-POI merge + shared-material depth + crash
+debris)** (tsc clean, no save bump; D198-D200; 3 commits). A measure-first overnight, 3 fully-iterated tiers. **W1
+(D198):** a `perf-probe` deep-dump showed the remaining draw-call hogs were the hand-modeled POIs never given the
+ACAM/ACAN static-merge → merged them render-identical (**opening wreck ~80-130→13, rockyEntrance →37, saltOutpost →28**);
+hardened `mergeStaticByMaterial` to also skip `userData.interactType` subtrees; heavy distance-LOD CUT (the merge already
+won; speeder/pickups flagged as risky follow-ups). **W3 (D199):** the shared `createRustedHullMaterial` read flat-grey →
+added form-AO + bare-metal flecks + warm oxidation-zones (+wearAmplitude 0.15→0.20); ONE material change lifted EVERY
+wreck (procgen + flagships + hero), verified none over-rusted. **W4 (D200):** crash-debris fans on ~60% of procgen
+wrecks, added to the group before the merge (~0 draw cost) at local-y=buryY so they rest on the sand after the
+half-burial sink. *(Prior — ACAO: procgen framer + T5 greebles (D197); ACAN: flagship merge + panel fix (D195-196). See
 changelog.)*
 
-**Next session** = **(1)** T7 InstancedMesh/LOD (stretch perf — distance-LOD far wrecks >300m + instance repeated
-non-interactive props; measure via `perf-probe`). **(2)** the still-owed mega-wreck interior WALK-TEST
-(collision/fracture-ramp entrance/panel reachability/brightness — needs a human in `npm run dev`, ACAL). **(3)** richer
-greebles on the hand-modeled flagships + a brighter-lit procgen visual pass. The raider proc-character + all
-rig-dependent work stays DEFERRED. See [docs/next-session-prompt.md](docs/next-session-prompt.md) +
+**Next session** = **(1)** the still-owed mega-wreck interior WALK-TEST (collision/fracture-ramp entrance/panel
+reachability/brightness — needs a human in `npm run dev`, ACAL). **(2)** the flagged perf follow-ups (attended): speeder
+static-merge (tag its animated/interactive parts `noMerge` first) + pickup InstancedMesh (needs an interaction-raycast
+rework). **(3)** W2 flagship greebles + W5 a brighter-lit/dusk procgen pass (both deferred this overnight). The raider
+proc-character + all rig-dependent work stays DEFERRED. See [docs/next-session-prompt.md](docs/next-session-prompt.md) +
 [docs/backlog.md](docs/backlog.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
