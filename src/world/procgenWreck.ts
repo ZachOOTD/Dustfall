@@ -403,6 +403,41 @@ function addHullGreebles(
   }
 }
 
+// ── ACAP W4 — crash-debris fan ───────────────────────────────────────
+// A few fragments (hull plates / pipes / struts) shed onto a random impact
+// flank. Added to the wreck GROUP before the static-merge so they fold in
+// (≈0 extra draw calls — the W1 perf goal). Placed at local-y = buryY so that
+// AFTER the group sinks by buryY (half-burial, T4) the debris rests on the sand
+// surface; the slight terrain-align tilt is inherited (fine — crash-site slope).
+// All `isWreckDecoration` so findPanelMount avoids them + the merge folds them.
+function addDebrisFan(
+  g: THREE.Group, lenX: number, sizeZ: number, buryY: number, rand: Rng, side: number,
+): void {
+  const count = 2 + Math.floor(rand() * 3);   // 2-4 fragments
+  const flank = sizeZ * 0.5;
+  for (let i = 0; i < count; i++) {
+    const px = (rand() - 0.5) * lenX * 1.15;                 // spread along the wreck length
+    const pz = side * (flank + 0.5 + rand() * (flank * 0.9 + 0.5));  // just beyond the flank, outward
+    const py = buryY + 0.04 + rand() * 0.05;                 // rests on the sand after the sink
+    const roll = rand();
+    let mesh: THREE.Mesh;
+    if (roll < 0.45) {
+      const w = 0.4 + rand() * 0.5, d = 0.3 + rand() * 0.4;
+      mesh = new THREE.Mesh(new THREE.BoxGeometry(w, 0.10, d), _hullMat);          // hull plate (rule 7 depth)
+    } else if (roll < 0.78) {
+      mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.4 + rand() * 0.5, 6), _rustMat);  // pipe
+      mesh.rotation.z = Math.PI / 2;
+    } else {
+      mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.6 + rand() * 0.4, 5), _hullDarkMat); // strut
+      mesh.rotation.z = Math.PI / 2;
+    }
+    mesh.position.set(px, py, pz);
+    mesh.rotation.y = rand() * Math.PI * 2;
+    mesh.userData.isWreckDecoration = true;
+    g.add(mesh);
+  }
+}
+
 // ── Hull-segment variants ────────────────────────────────────────────
 
 const HULL_SEGMENT_VARIANTS: ReadonlyArray<PartBuilder> = [
@@ -1310,7 +1345,8 @@ export function placeProcgenComposite(
 
   // Position + terrain-align + bury + yaw.
   group.position.copy(pos);
-  group.position.y -= opts.buryY ?? 0.4;
+  const buryY = opts.buryY ?? 0.4;
+  group.position.y -= buryY;
   const yaw = rand() * Math.PI * 2;
   alignToTerrain(group, terrain, pos.x, pos.z, yaw, 1.5);
   // alignToTerrain sets quaternion directly; the yaw component is
@@ -1332,6 +1368,15 @@ export function placeProcgenComposite(
   // collapse the wreck to a single giant AABB. The Rapier colliders are
   // independent of the meshes, so removing the visual meshes afterward is safe.
   attachCompoundCollider(world, group);
+
+  // ACAP W4 — shed a crash-debris fan onto a random impact flank, added to the
+  // group BEFORE the merge so it folds in (≈0 draw cost). Debris is cosmetic →
+  // added after the collider pass (no collider). Placed at local-y = buryY so it
+  // rests on the sand after the half-burial sink.
+  if (rand() < 0.6) {
+    const dsz = new THREE.Box3().setFromObject(group).getSize(new THREE.Vector3());
+    addDebrisFan(group, dsz.x, dsz.z, buryY, rand, rand() < 0.5 ? 1 : -1);
+  }
 
   // T6 — merge the static, non-interactive meshes by material into 1-few meshes
   // (the draw-call win). Salvage panels stay live (animated doors). Per-part
