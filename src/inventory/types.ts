@@ -56,7 +56,10 @@ export type ItemId =
   // ACL ITEMS — long-barreled procedural rifle (ranged weapon)
   | 'amban_rifle'
   // ACAC — rapid-fire energy weapon with a self-recharging cell
-  | 'pulse_rifle';
+  | 'pulse_rifle'
+  // ACAQ (Cycle 8) — wreck-yard exclusive: a glowing alien-tech relic core.
+  // A rare emergency artifact (full-restore on use) found only in the graveyard.
+  | 'relic_core';
 
 /** Per-slot metadata for stateful items (canteen fill level, cook state, light state). */
 export interface ItemMeta {

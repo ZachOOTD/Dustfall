@@ -13,6 +13,7 @@ import { stormWindAccel } from '../world/weather.ts';
 import type { ItemId, ItemMeta } from '../inventory/types.ts';
 import { getItemDef } from '../inventory/items.ts';
 import { buildBranchMesh, BRANCH_WOOD_COLOR, BRANCH_WEATHER_LEVEL } from '../world/branchMesh.ts';  // ACAA — shared branch model + shared color
+import { buildRelicCoreMesh } from '../world/relicMesh.ts';  // ACAQ — shared relic-core model (wreck-yard exclusive)
 import { createWoodGrainMaterial } from '../world/woodGrainMaterial.ts';  // ACAE — dark wood branches
 import { buildScrapMesh } from '../world/scrapMesh.ts';  // ACAH — shared scrap model
 import { createMetalMaterial } from '../world/metalMaterial.ts';  // ACAH — world scrap material
@@ -363,6 +364,44 @@ export function spawnScrapAt(
     bobPhase: rand() * Math.PI * 2,
     hovered: false,
     body: null,   // seed-spawned, static (like branches)
+    ridingSledId: null,
+  };
+  list.push(pickup);
+  return pickup;
+}
+
+/** ACAQ (Cycle 8) — spawn a single glowing relic-core pickup at (x, z). The
+ *  wreck-yard-exclusive reward; sits slightly proud of the sand so its emissive
+ *  core reads from a distance. Appends to `list` (the boot pickup list). */
+export function spawnRelicAt(
+  scene: THREE.Scene,
+  terrain: Terrain,
+  x: number,
+  z: number,
+  rand: Rng,
+  list: Pickup[],
+): Pickup {
+  const groundY = terrain.heightAt(x, z);
+  const mesh = buildRelicCoreMesh();
+  const restY = groundY + 0.13;
+  mesh.position.set(x, restY, z);
+  mesh.rotation.y = rand() * Math.PI * 2;
+  mesh.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (m.isMesh) { m.castShadow = false; m.receiveShadow = false; }
+  });
+  const pickupId = _nextId++;
+  tagPickupMeshes(mesh, pickupId);
+  scene.add(mesh);
+
+  const pickup: Pickup = {
+    id: pickupId,
+    itemId: 'relic_core',
+    mesh,
+    pos: new THREE.Vector3(x, restY, z),
+    bobPhase: rand() * Math.PI * 2,
+    hovered: false,
+    body: null,
     ridingSledId: null,
   };
   list.push(pickup);

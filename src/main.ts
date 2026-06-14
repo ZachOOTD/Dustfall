@@ -25,7 +25,7 @@ import { updateStats } from './stats/survival.ts';
 import { createHud, updateHud } from './ui/hud.ts';
 import { createHotbar, updateHotbar } from './ui/hotbar.ts';
 import { createInteractPrompt, updateInteractPrompt } from './ui/interactPrompt.ts';
-import { spawnBranches, spawnScrapAt, updatePickups } from './pickups/pickups.ts';
+import { spawnBranches, spawnScrapAt, spawnRelicAt, updatePickups } from './pickups/pickups.ts';
 import { spawnDeadTrees } from './world/deadTree.ts';
 import { spawnRockScatter } from './world/rockScatter.ts';
 import { setupOpeningScene } from './world/openingScene.ts';
@@ -237,6 +237,20 @@ for (const s of salvageables.list) {
     const sx = s.pos.x + Math.cos(ang) * r;
     const sz = s.pos.z + Math.sin(ang) * r;
     spawnScrapAt(three.scene, terrain, sx, sz, scatterRand, pickupList);
+  }
+}
+// ACAQ (Cycle 8) — relic-core scatter: the wreck-yard's exclusive reward. A few
+// glowing relics across the graveyard floor, biased toward the dangerous center
+// (near the Sarlacc pit) but outside the pit clearing — draws the player in.
+{
+  const wy = biomes.wreckYardAnchor, wyR = biomes.wreckYardRadius;
+  const relicN = Tuning.WRECK_YARD_RELIC_COUNT_MIN
+    + Math.floor(scatterRand() * (Tuning.WRECK_YARD_RELIC_COUNT_MAX - Tuning.WRECK_YARD_RELIC_COUNT_MIN + 1));
+  const rInner = Tuning.WRECK_YARD_PIT_CLEARING * 0.75, rOuter = wyR * 0.7;
+  for (let i = 0; i < relicN; i++) {
+    const r = rInner + (rOuter - rInner) * Math.pow(scatterRand(), 1.4);   // bias inward
+    const a = scatterRand() * Math.PI * 2;
+    spawnRelicAt(three.scene, terrain, wy.x + Math.cos(a) * r, wy.z + Math.sin(a) * r, scatterRand, pickupList);
   }
 }
 _mark('scrap');

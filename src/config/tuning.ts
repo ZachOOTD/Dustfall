@@ -473,6 +473,8 @@ export const Tuning = {
   WRECK_YARD_BONE_COUNT_MIN: 5,        // ribcage bone-fields (carcass anchors)
   WRECK_YARD_BONE_COUNT_MAX: 9,
   WRECK_YARD_PIT_CLEARING: 24,         // central clearing radius (m) reserved for the Sarlacc pit
+  WRECK_YARD_RELIC_COUNT_MIN: 4,       // glowing relic-core pickups (wreck-yard exclusive loot)
+  WRECK_YARD_RELIC_COUNT_MAX: 7,
 
   // Wreck palette (Session S). Cool grey-rust industrial; avoids pure
   // blacks/whites so primitives feel weathered, not cartoon.

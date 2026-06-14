@@ -26,6 +26,7 @@ import { createBoneMaterial, type BoneMaterialOpts } from '../world/boneMaterial
 import { createGlassMaterial, type GlassMaterialOpts } from '../world/glassMaterial.ts';  // ACL ITEMS — lantern globe
 import { buildBranchMesh, BRANCH_WOOD_COLOR, BRANCH_WEATHER_LEVEL } from '../world/branchMesh.ts';  // ACAA — shared branch model + shared color (item + world pickups)
 import { buildScrapMesh } from '../world/scrapMesh.ts';  // ACAH — shared scrap model (item + world pickups)
+import { buildRelicCoreMesh } from '../world/relicMesh.ts';  // ACAQ — shared relic-core model (item + world pickups)
 
 // ACT — viewmodel material wrappers. EVERY item mesh is rendered as a
 // VIEWMODEL: it's added to the main scene and tracks the camera (FP copy) or
@@ -352,6 +353,34 @@ const _DEFS: Record<ItemId, ItemDef> = {
       const s = svg();
       s.appendChild(svgEl('polygon', { points: '5,8 9,4 16,5 20,10 18,17 12,20 6,16' }));
       s.appendChild(svgEl('line', { x1: '9', y1: '10', x2: '14', y2: '14', 'stroke-width': '1' }));
+      return s;
+    },
+  },
+
+  // ACAQ (Cycle 8) — wreck-yard exclusive: a glowing alien-tech relic core.
+  // A rare emergency artifact (near-full restore on use) scattered only in the
+  // graveyard biome (pickups.ts spawnRelicAt). The reward for the journey + pit.
+  relic_core: {
+    id: 'relic_core',
+    name: 'RELIC CORE',
+    glyph: '◆',
+    description: 'an intact alien-tech core, still humming with power',
+    stackable: true,
+    maxStack: 4,
+    onUse(ctx, _slot) {
+      ctx.stats.health = Math.min(1, ctx.stats.health + 0.6);
+      ctx.stats.thirst = 1;
+      ctx.stats.hunger = 1;
+      ctx.stats.stamina = 1;
+      return { consumed: true, message: 'the core discharges — energy floods through you' };
+    },
+    makeViewModel() {
+      return buildRelicCoreMesh();
+    },
+    makeIcon() {
+      const s = svg();
+      s.appendChild(svgEl('polygon', { points: '12,3 19,12 12,21 5,12' }));
+      s.appendChild(svgEl('circle', { cx: '12', cy: '12', r: '3.4' }));
       return s;
     },
   },
@@ -3030,4 +3059,5 @@ export const ALL_ITEM_IDS: ReadonlyArray<ItemId> = [
   'stake_kit',      // Session ACE
   'amban_rifle',    // ACL ITEMS — long-barreled ranged weapon
   'pulse_rifle',    // ACAC — rapid-fire energy carbine
+  'relic_core',     // ACAQ — wreck-yard exclusive artifact
 ];
