@@ -283,6 +283,7 @@ function addBreachPatches(
   radius: number,
   rand: Rng,
   count: number,
+  side: number = 1,   // which flank (+1=+Z, -1=-Z) — clustered with greebles for impact asymmetry
 ): void {
   for (let i = 0; i < count; i++) {
     const w = 0.5 + rand() * 0.7;          // 0.5–1.2m wide
@@ -292,10 +293,10 @@ function addBreachPatches(
       new THREE.BoxGeometry(w, h, d),
       _breachMat,
     );
-    // Position on +Z flank, biased to upper half (0.4–0.95 of radius for Y).
+    // Position on the impact flank, biased to upper half (0.4–0.95 of radius for Y).
     const px = partLength * (0.15 + rand() * 0.7);
     const py = radius * (0.40 + rand() * 0.55);
-    const pz = radius * 0.92 + d * 0.5;     // pull patch outward so it pokes through hull skin
+    const pz = (radius * 0.92 + d * 0.5) * side;   // pull patch outward so it pokes through hull skin
     patch.position.set(px, py, pz);
     // Slight random rotation in all 3 axes so the patch reads "torn open"
     // rather than a perfectly-aligned rectangle.
@@ -320,18 +321,24 @@ function addHullGreebles(
   radius: number,
   rand: Rng,
   count: number,
+  impactSide: number = 0,   // 0 = random flanks; ±1 = bias greebles to that flank (impact asymmetry)
 ): void {
   for (let i = 0; i < count; i++) {
-    const zside = rand() < 0.5 ? 1 : -1;
+    // Impact asymmetry: when an impact side is given, ~78% of greebles cluster on
+    // that flank so the side that took the hit reads busier/more torn (the other
+    // flank stays cleaner — negative-space contrast).
+    const zside = impactSide === 0
+      ? (rand() < 0.5 ? 1 : -1)
+      : (rand() < 0.78 ? impactSide : -impactSide);
     const px = partLength * (0.12 + rand() * 0.76);
     const py = radius * (0.30 + rand() * 0.62);
     const pz = radius * 0.93 * zside;
     const roll = rand();
     let node: THREE.Object3D;
-    if (roll < 0.42) {
+    if (roll < 0.20) {
       // Panel-line seam strip (thin long box).
       node = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.28 + rand() * 0.45, 0.10), _hullDarkMat);
-    } else if (roll < 0.72) {
+    } else if (roll < 0.40) {
       // Rivet strip — a backing plate with a row of studs.
       const grp = new THREE.Group();
       const w = 0.4 + rand() * 0.35;
@@ -344,9 +351,50 @@ function addHullGreebles(
         grp.add(rivet);
       }
       node = grp;
+    } else if (roll < 0.58) {
+      // Louvered vent — a dark recessed frame with angled horizontal slats
+      // (intake/exhaust). Negative space: the dark gaps read as depth.
+      const grp = new THREE.Group();
+      const w = 0.30 + rand() * 0.24, hgt = 0.22 + rand() * 0.16;
+      grp.add(new THREE.Mesh(new THREE.BoxGeometry(w, hgt, 0.10), _hullDarkMat));
+      const slats = 3 + Math.floor(rand() * 2);
+      for (let k = 0; k < slats; k++) {
+        const slat = new THREE.Mesh(new THREE.BoxGeometry(w * 0.86, 0.03, 0.12), _rustMat);
+        slat.position.y = (slats > 1 ? k / (slats - 1) - 0.5 : 0) * hgt * 0.72;
+        slat.position.z = 0.02;
+        slat.rotation.x = 0.5;   // angled louver
+        grp.add(slat);
+      }
+      node = grp;
+    } else if (roll < 0.74) {
+      // Circular port — a rim ring + a darker recessed inner disc (porthole/sensor).
+      const grp = new THREE.Group();
+      const rad = 0.12 + rand() * 0.09;
+      const ring = new THREE.Mesh(new THREE.CylinderGeometry(rad, rad, 0.12, 12), _rustMat);
+      ring.rotation.x = Math.PI / 2;
+      grp.add(ring);
+      const inner = new THREE.Mesh(new THREE.CylinderGeometry(rad * 0.66, rad * 0.66, 0.10, 12), _hullDarkMat);
+      inner.rotation.x = Math.PI / 2; inner.position.z = -0.03;   // recessed center
+      grp.add(inner);
+      node = grp;
+    } else if (roll < 0.88) {
+      // Fin / strake — a thin blade jutting outward off the flank (heat fin /
+      // stabiliser). One prominent fin beats uniform clutter.
+      const finL = 0.28 + rand() * 0.30, finOut = 0.18 + rand() * 0.18;
+      node = new THREE.Mesh(new THREE.BoxGeometry(finL, 0.05, finOut), _hullDarkMat);
+      node.position.set(px, py, pz + finOut * 0.5 * zside);   // juts outward from the flank
+      node.rotation.y = zside > 0 ? 0 : Math.PI;
+      node.userData.isWreckDecoration = true;
+      g.add(node);
+      continue;   // custom outward offset handled above
     } else {
-      // Vent / louvered box.
-      node = new THREE.Mesh(new THREE.BoxGeometry(0.24 + rand() * 0.22, 0.18, 0.12), _rustMat);
+      // Antenna stub — a short whip on a small base box.
+      const grp = new THREE.Group();
+      grp.add(new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.10), _hullDarkMat));
+      const whip = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.025, 0.5 + rand() * 0.4, 6), _rustMat);
+      whip.position.z = 0.28; whip.rotation.x = Math.PI / 2;
+      grp.add(whip);
+      node = grp;
     }
     node.position.set(px, py, pz);
     node.rotation.y = zside > 0 ? 0 : Math.PI;
@@ -387,11 +435,19 @@ const HULL_SEGMENT_VARIANTS: ReadonlyArray<PartBuilder> = [
         ring.position.set(len * t, r * 0.55, 0);
         g.add(ring);
       }
-      // Session ABD — 50% → 70% (was reading as ~15% of hulls breached in
-      // a 10-composite seed sweep — too few to sell "scavenged battle
-      // damage" feel). Now ~40% of all ribbed-cylinder hulls show a patch.
-      if (rand() < 0.7) addBreachPatches(g, len, r, rand, 1);
-      addHullGreebles(g, len, r, rand, 1 + Math.floor(rand() * 3));   // ACY surface detail
+      // ACAO T5 — real makeBreach holes were trialled here + REVERTED: makeBreach
+      // does no boolean cut, so on a small intact procgen hull (~1m radius) the
+      // recessed void is OCCLUDED by the skin in front of it (no hole reads) and
+      // pushing it proud reads as a crusty bump, not a hole. Only the 136m hero
+      // has the scale to sell it. Kept the flat dark battle-damage patch (reads
+      // reliably at this scale); T5's value goes into the richer greeble
+      // vocabulary + impact-flank asymmetry below. (decisions.md D197.)
+      // ACAO T5 — impact-flank asymmetry: pick the side that "took the hit" and
+      // cluster the battle-damage patch + most greebles there; the lee flank stays
+      // cleaner (negative-space contrast).
+      const impactSide = rand() < 0.5 ? 1 : -1;
+      if (rand() < 0.7) addBreachPatches(g, len, r, rand, 1, impactSide);
+      addHullGreebles(g, len, r, rand, 2 + Math.floor(rand() * 3), impactSide);   // ACAO richer vocab + asymmetry
       return {
         mesh: g,
         partLength: len,
@@ -432,9 +488,10 @@ const HULL_SEGMENT_VARIANTS: ReadonlyArray<PartBuilder> = [
       }
       // Session ABD — 40% → 60% (see ribbed-cyl rationale). Plated_rect
       // already supports 1-2 patches per call, so this pushes plate-and-
-      // breach-bearing hulls to ~60% of plated hulls.
-      if (rand() < 0.6) addBreachPatches(g, len, r, rand, 1 + Math.floor(rand() * 2));
-      addHullGreebles(g, len, r, rand, 1 + Math.floor(rand() * 3));   // ACY surface detail
+      // breach-bearing hulls to ~60% of plated hulls. ACAO — impact asymmetry.
+      const impactSide = rand() < 0.5 ? 1 : -1;
+      if (rand() < 0.6) addBreachPatches(g, len, r, rand, 1 + Math.floor(rand() * 2), impactSide);
+      addHullGreebles(g, len, r, rand, 2 + Math.floor(rand() * 3), impactSide);   // ACAO richer vocab + asymmetry
       return {
         mesh: g,
         partLength: len,

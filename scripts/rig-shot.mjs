@@ -19,7 +19,7 @@
 // Output: verification/rig-<tag>-<pose>-<angle>.png  (one per angle)
 
 import { chromium } from 'playwright';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { existsSync, mkdirSync } from 'node:fs';
@@ -1003,6 +1003,86 @@ const SCENARIOS = {
     await page.waitForTimeout(350);
     await page.screenshot({ path: join(OUT, `scen-flagship-${name}-${angle}.png`), fullPage: false });
     console.log(`[flagship] ${JSON.stringify(r)}`);
+  },
+
+  // ACAO — PROCGEN-WRECK framer (the BLOCKER from ACAN). Spawns a chosen procgen
+  // wreck CLASS at a fixed clear anchor with a deterministic seed (via
+  // __game.spawnProcgenWreckRig), names it 'procgenWreckRig', then frames it +
+  // reports mesh count (same find/frame/mesh-count logic as `flagship`). THIS is
+  // what makes procgen visual work (breaches / greebles / impact-asymmetry)
+  // screenshot-verifiable — procgen wrecks are otherwise unnamed + random-spot.
+  // `--class=<corvette|gunship|freighter|science_vessel|bulk_hauler|orbital_pod_cluster>`
+  // `--angle=<3q|side|front> --seed=<n>`.
+  'procgen-wreck': async (page) => {
+    const cls = argv.class || 'corvette';
+    const angle = argv.angle || '3q';
+    // `--seed=N` (single) or `--seeds=1,2,3` (sweep — one screenshot per seed in
+    // ONE dev-server boot, the fast path for screenshot-iterating procgen visuals).
+    const seeds = (argv.seeds !== undefined ? String(argv.seeds)
+      : argv.seed !== undefined ? String(argv.seed) : '1337')
+      .split(',').map((s) => Number(s.trim())).filter((n) => !Number.isNaN(n));
+    const zoom = argv.zoom !== undefined ? Number(argv.zoom) : 1;   // <1 = tighter (detail inspection)
+    for (const seed of seeds) {
+    const r = await page.evaluate(({ cls, ang, seed, zoom }) => {
+      const ctx = window.__game.ctx;
+      ctx.weather.intensity = 0; ctx.weather.cloudiness = 0.15;
+      window.__game.setTime(0.34);
+      ctx.three.renderer.toneMappingExposure = 1.5;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      const spawn = window.__game.spawnProcgenWreckRig(cls, seed);
+      let mw = null;
+      ctx.three.scene.traverse((o) => { if (!mw && o.name === 'procgenWreckRig') mw = o; });
+      if (!mw) return { found: false, cls, seed, spawn };
+      const V = ctx.three.camera.position.constructor;
+      let minX = 1e9, minY = 1e9, minZ = 1e9, maxX = -1e9, maxY = -1e9, maxZ = -1e9;
+      mw.updateMatrixWorld(true);
+      let meshes = 0;
+      mw.traverse((o) => {
+        if (!o.isMesh || !o.geometry) return;
+        meshes++;
+        o.geometry.computeBoundingBox(); const bb = o.geometry.boundingBox;
+        for (const cx of [bb.min.x, bb.max.x]) for (const cy of [bb.min.y, bb.max.y]) for (const cz of [bb.min.z, bb.max.z]) {
+          const p = new V(cx, cy, cz); o.localToWorld(p);
+          minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+          minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
+          minZ = Math.min(minZ, p.z); maxZ = Math.max(maxZ, p.z);
+        }
+      });
+      const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2, cz = (minZ + maxZ) / 2;
+      const span = Math.max(maxX - minX, maxZ - minZ), h = maxY - minY;
+      const cam = ctx.three.camera; ctx.flags.paused = true;
+      // Half-buried: frame the EXPOSED hull (terrain line → top), NOT the full
+      // bbox — its bottom is under the sand, which would drag the eye down and
+      // let the dune cut across mid-hull. spawn.pos[1] is the terrain Y.
+      const groundY = (spawn && spawn.pos) ? spawn.pos[1] : minY;
+      const expMid = (groundY + maxY) * 0.5;
+      const expH = Math.max(0.6, maxY - groundY);
+      const D = Math.max(span, expH * 2.2) * 1.35 * (zoom || 1);
+      const eyeY = expMid + expH * 0.18;        // slightly above exposed-mid → gentle down-angle
+      // Procgen wrecks are X-LONG (flanks ±Z; breaches + salvage panels live on
+      // the +Z flank), so unlike the Z-long hero: 'side' is a +Z broadside (the
+      // money shot for breach/greeble inspection), 'front' is nose-on down -X,
+      // '3q' favors the +Z detail flank.
+      const aim = (p) => { cam.position.copy(p); cam.lookAt(cx, expMid, cz); };
+      if (ang === 'side') aim(new V(cx, eyeY, cz + D));
+      else if (ang === 'front') aim(new V(cx - D, eyeY, cz + D * 0.12));
+      else aim(new V(cx + D * 0.55, eyeY, cz + D * 0.62));   // 3q — length + +Z flank
+      cam.updateMatrixWorld(true);
+      let DirCtor = null, HemiCtor = null;
+      ctx.three.scene.traverse((o) => { if (o.isDirectionalLight && !DirCtor) DirCtor = o.constructor; if (o.isHemisphereLight && !HemiCtor) HemiCtor = o.constructor; });
+      // Key + hemi fill — named so the seed sweep reuses them (reposition the key
+      // each seed so framing-relative lighting stays correct).
+      let key = ctx.three.scene.getObjectByName('__procgenKey');
+      if (!key && DirCtor) { key = new DirCtor(); key.name = '__procgenKey'; key.intensity = 2.0; key.color.set(0xfff2e0); ctx.three.scene.add(key.target); ctx.three.scene.add(key); }
+      if (key) { const toC = new V(cx - cam.position.x, 0, cz - cam.position.z); key.position.set(cam.position.x + toC.x * 0.2 + span * 0.25, cam.position.y + h * 0.6, cam.position.z + toC.z * 0.2); key.target.position.set(cx, cy, cz); key.target.updateMatrixWorld(true); }
+      if (!ctx.three.scene.getObjectByName('__procgenFill') && HemiCtor) { const fill = new HemiCtor(0xbfccdd, 0x6b5840, 0.7); fill.name = '__procgenFill'; ctx.three.scene.add(fill); }
+      return { found: true, cls, seed, span: +span.toFixed(1), height: +h.toFixed(1), meshes };
+    }, { cls, ang: angle, seed, zoom });
+    await page.waitForTimeout(320);
+    await page.screenshot({ path: join(OUT, `scen-procgen-${cls}-${angle}-s${seed}.png`), fullPage: false });
+    console.log(`[procgen-wreck] ${JSON.stringify(r)}`);
+    }
   },
 
   'tree': async (page) => {
@@ -2424,8 +2504,21 @@ async function main() {
     }
   } finally {
     await browser.close();
-    try { dev.kill(); } catch {}
+    // Windows: dev.kill() only signals the npm wrapper; the vite child is left
+    // orphaned — it keeps --strictPort 5191 bound (so the NEXT run can't bind)
+    // AND its stdio pipes keep this node process alive → the run "hangs" after
+    // the screenshot is already written. Kill the whole process tree so the
+    // port frees and the loop doesn't wedge.
+    try {
+      if (process.platform === 'win32' && dev.pid) {
+        spawnSync('taskkill', ['/pid', String(dev.pid), '/T', '/F'], { stdio: 'ignore' });
+      } else {
+        dev.kill();
+      }
+    } catch {}
   }
 }
 
-main().catch((e) => { console.error(e); process.exit(1); });
+// Force a clean exit — on win32 a lingering child handle can otherwise keep the
+// event loop alive even after teardown completes.
+main().then(() => process.exit(0)).catch((e) => { console.error(e); process.exit(1); });

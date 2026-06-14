@@ -7,6 +7,9 @@ import { spawnRaider as spawnRaiderEntity, damageRaider } from '../enemies/raide
 import { damageVulture } from '../enemies/vulture.ts';
 import { makeLatheHull, fuselageProfile, makeFormerRings, makeBreach, makeSandMound } from '../world/wreckForms.ts';
 import { createRustedHullMaterial } from '../world/hullMaterial.ts';
+import { placeProcgenComposite, type ProcgenWreckClass } from '../world/procgenWreck.ts';
+import { makeRng } from '../core/rng.ts';
+import { Tuning } from '../config/tuning.ts';
 import { resetTutorial, showControlsPanel } from '../ui/tutorial.ts';
 import { getAudioStateSnapshot, type AudioStateSnapshot } from '../audio/soundscape.ts';
 import { getMusicStateSnapshot, type MusicStateSnapshot } from '../audio/music.ts';
@@ -94,6 +97,18 @@ interface DebugApi {
    *  sand mound) in ISOLATION, suspends it against the clean sky, and frames the
    *  angle. Drives the `wreck-form` rig-shot scenario. */
   wreckFormStudio: (form: 'lathe' | 'formers' | 'breach' | 'mound', angle?: 'front' | 'side' | '3q' | 'top') => unknown;
+  /** ACAO — DEV: spawn a procgen wreck of a chosen CLASS at a fixed clear
+   *  anchor with a DETERMINISTIC seeded rng, named 'procgenWreckRig' so the
+   *  headless framer (the `procgen-wreck` rig-shot scenario) can find + frame
+   *  it. THE unblock for screenshot-verifying procgen visual work — procgen
+   *  wrecks are otherwise unnamed + random-positioned, so no rig-shot could
+   *  frame one (rule 8 killed the ACAN T5 breach attempt). Re-callable: removes
+   *  the prior subject first. Deterministic (cls, seed) → the same wreck every
+   *  run, so a before/after A/B of a visual change is comparable. Returns the
+   *  spawned descendant mesh count (built-in before/after merge metric). */
+  spawnProcgenWreckRig: (cls?: ProcgenWreckClass, seed?: number) => {
+    cls: ProcgenWreckClass; seed: number; ok: boolean; meshes: number; pos: number[];
+  };
   /** ACY — headless bury/occlusion audit for salvage panels. For each
    *  registered salvageable, raycasts inward along the panel's own outward
    *  axis against its wreck root; if the nearest hit is NOT the panel body
@@ -124,6 +139,8 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
   // ACY item-studio state (lazily built on first itemStudio call).
   let studioGroup: THREE.Group | null = null;
   let studioMesh: THREE.Object3D | null = null;
+  // ACAO — the live procgen-wreck framer subject (re-spawned per call).
+  let procgenRigGroup: THREE.Group | null = null;
 
   window.__game = {
     setTime: (t) => { ctx.time.dayTime = t; },
@@ -387,6 +404,44 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
       cam.lookAt(anchor);
       cam.updateMatrixWorld(true);
       return { form, angle: angle ?? 'side', ok: true, radius: +radius.toFixed(2) };
+    },
+    spawnProcgenWreckRig(cls = 'corvette', seed = 1337) {
+      // Ensure the world is live (idempotent) — same enter path the studios use.
+      if (hooks.enterGame) hooks.enterGame(true);
+      else { ctx.flags.titleActive = false; ctx.flags.paused = false; }
+      // Remove + dispose a prior subject so re-calls (swap class/seed) don't leak.
+      if (procgenRigGroup) {
+        ctx.three.scene.remove(procgenRigGroup);
+        procgenRigGroup.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh) m.geometry?.dispose(); });
+        procgenRigGroup = null;
+      }
+      // Deterministic stream: same (cls, seed) reproduces the same wreck, so a
+      // before/after A/B of a visual change is comparable (unlike the random
+      // world-seed, which makes cross-boot snapshots incomparable).
+      const rand = makeRng(seed);
+      // Spawn inside the player-spawn exclusion ring (procgenPoi keeps other
+      // procgen wrecks ≥80m from the anchor), offset from the anchor so the
+      // subject isn't on top of the hidden player body → an isolated subject.
+      const px = Tuning.OPENING_SCENE_ANCHOR_X + 30;
+      const pz = Tuning.OPENING_SCENE_ANCHOR_Z + 30;
+      const py = ctx.terrain.heightAt(px, pz);
+      const pos = new THREE.Vector3(px, py, pz);
+      const group = placeProcgenComposite(
+        ctx.three.scene, ctx.physics.world, ctx.terrain, pos, rand, undefined, { cls },
+      );
+      // placeProcgenComposite applies a RANDOM yaw (+ terrain tilt) so the detail
+      // flank (+Z: breaches + salvage panels) faces an arbitrary world direction.
+      // For a verification framer that's no good — PIN the subject to a known
+      // orientation (long-axis +X, detail flank +Z) so the framer's broadside
+      // angle reliably sees the breach/greeble flank (shared-memory: "pin
+      // ambiguous world axes"). A slight forward tilt keeps the crashed feel.
+      group.rotation.set(0, 0, -0.06);
+      group.updateMatrixWorld(true);
+      group.name = 'procgenWreckRig';
+      procgenRigGroup = group;
+      let meshes = 0;
+      group.traverse((o) => { if ((o as THREE.Mesh).isMesh) meshes++; });
+      return { cls, seed, ok: true, meshes, pos: [px, +py.toFixed(1), pz] };
     },
     panelBuryAudit() {
       const reg = (ctx as unknown as { salvageables?: { list: Array<{ panel: THREE.Object3D; kind?: string; wreckKind?: string }> } }).salvageables;

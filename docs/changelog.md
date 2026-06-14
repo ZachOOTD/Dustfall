@@ -3,6 +3,37 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ACAO — 2026-06-13 — Procgen-wreck rig-shot framer (the BLOCKER) + T5 greebles & impact asymmetry ✓ verify pass (tsc clean)
+
+`verified` — `npm run verify` (tsc) PASS; **no save bump** (geometry/material/tooling only). Built the verification
+unblock the ACAN T5 attempt was missing, then shipped the procgen visual level-up it enables. D197.
+
+**Procgen-wreck rig-shot framer (the BLOCKER).** Procgen wrecks are unnamed + random-positioned, so no rig-shot could
+frame one → procgen visual work couldn't be screenshot-verified (rule 8 killed the ACAN breach attempt). NEW
+`__game.spawnProcgenWreckRig(cls, seed)` debug hook spawns a chosen wreck CLASS at a fixed clear anchor with a
+DETERMINISTIC seeded rng, **pins it to a known orientation** (kills `placeProcgenComposite`'s random placement yaw so
+the +Z detail flank — breaches + panels — faces the camera; "pin ambiguous world axes"), and names it
+`procgenWreckRig`. NEW `procgen-wreck` rig-shot scenario reuses the `flagship` find/frame/mesh-count logic + is
+**ground-aware** (frames the EXPOSED hull above the sand line, not the buried bbox). Bonus: `--seeds=1,2,3` sweep
+(N screenshots per dev-server boot — the fast iteration path) + `--zoom`. Also fixed a **Windows vite-orphan teardown
+hang** (the harness wedged after the screenshot was already written — `dev.kill()` only signalled the npm wrapper,
+leaving vite holding the port + stdio pipes open; now `taskkill /T /F` on win32 + `process.exit(0)`).
+
+**T5 — greeble vocabulary + impact-flank asymmetry.** `addHullGreebles` vocabulary 3→7 types: added louvered vents
+(dark frame + angled slats), circular ports/portholes (rim ring + recessed dark inner), fins/strakes (outward blade),
+antenna stubs (whip + base) — on top of the existing seams/rivets/vent-boxes. **Impact asymmetry**: each hull picks a
+side that "took the hit"; ~78% of greebles + the damage patch cluster there, the lee flank stays cleaner (negative-
+space contrast) — wired into RIBBED_CYLINDER + PLATED_RECTANGULAR (`addBreachPatches` gained a `side` param). Verified
+across corvette (small) + bulk_hauler (large); **bury-audit 56/56 ALL CLEAR** (greebles tagged `isWreckDecoration` so
+`findPanelMount` rejects them + the T6 merge folds them in).
+
+**Attempted + reverted (D197):** real `makeBreach` holes on the procgen hulls — `makeBreach` does NO boolean cut, so
+on a small intact procgen hull (~1m radius) the recessed void is OCCLUDED by the skin in front of it (no hole reads)
+and pushing it proud reads as a crusty bump, not a hole. Only the 136m hero has the scale to sell it. Kept the flat
+dark battle-damage patch (reads reliably at this scale). 3 iterations (recessed → big-proud → revert) per rule 8.
+
+**Deferred:** T7 InstancedMesh/LOD (stretch); the ACAL mega-wreck interior WALK-TEST (needs a human in `npm run dev`).
+
 ## Session ACAN — 2026-06-08 — Flagship perf merge (finishes T6) + mega-wreck panel fix ✓ verify pass (tsc clean)
 
 `verified` — `npm run verify` (tsc) PASS; **no save bump** (geometry/material only). Finished the ACAM-deferred
