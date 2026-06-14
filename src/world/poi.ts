@@ -35,6 +35,7 @@ import type { ShelterRegistry } from '../shelter/shelterZones.ts';
 import { Tuning } from '../config/tuning.ts';
 import { placeSaltOutpost, sampleSaltOutpostPositions } from './saltOutpost.ts';
 import { placeRockyEntrance, sampleRockyEntrancePositions } from './rockyEntrance.ts';
+import { placeWreckYard } from './wreckYard.ts';
 
 // ────────────────────────────────────────────────────────────────
 // The Engine Block POI is built by `placeEngineBlock` in
@@ -671,7 +672,22 @@ export function placePOIs(
       );
       _placedFlagshipPositions = [..._placedFlagshipPositions, { x: c.x, z: c.z }];
     }
+
+    // ── Wreck-yard graveyard (Cycle 8 / ACAQ) — the rare DESTINATION biome's
+    // dense crashed-fleet field, centered on the seed-derived anchor. ──
+    {
+      const a = biomes.wreckYardAnchor;
+      _wreckYardCarcasses = placeWreckYard(scene, world, terrain, rand, a, biomes.wreckYardRadius, salvageables);
+      _placedFlagshipPositions = [..._placedFlagshipPositions, { x: a.x, z: a.z }];
+    }
   }
+}
+
+/** Cycle 8 — ribcage carcass positions inside the wreck-yard, for the vulture
+ *  ecology (Y5). Populated by placePOIs; read via getWreckYardCarcasses(). */
+let _wreckYardCarcasses: import('three').Vector3[] = [];
+export function getWreckYardCarcasses(): ReadonlyArray<import('three').Vector3> {
+  return _wreckYardCarcasses;
 }
 
 // ── ABJ — B3: comm_relay cluster ─────────────────────────────────────

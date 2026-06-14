@@ -466,6 +466,13 @@ export const Tuning = {
   WRECK_YARD_DIST_MAX: 1000,
   WRECK_YARD_RADIUS: 135,              // m — region radius (biomeAt='wreck_yard' within ~50%)
   WRECK_YARD_HEIGHT_SCALE: 0.10,       // flattened graveyard floor (near-featureless like salt)
+  WRECK_YARD_WRECK_COUNT_MIN: 26,      // dense procgen wreck field
+  WRECK_YARD_WRECK_COUNT_MAX: 38,
+  WRECK_YARD_BIG_COUNT_MIN: 3,         // big hand-wreck silhouettes
+  WRECK_YARD_BIG_COUNT_MAX: 5,
+  WRECK_YARD_BONE_COUNT_MIN: 5,        // ribcage bone-fields (carcass anchors)
+  WRECK_YARD_BONE_COUNT_MAX: 9,
+  WRECK_YARD_PIT_CLEARING: 24,         // central clearing radius (m) reserved for the Sarlacc pit
 
   // Wreck palette (Session S). Cool grey-rust industrial; avoids pure
   // blacks/whites so primitives feel weathered, not cartoon.
