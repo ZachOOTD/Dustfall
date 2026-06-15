@@ -52,11 +52,13 @@ export function createStoneMaterial(
   const dustStrength = opts.dustStrength ?? 0.6;
   const crackThreshold = 1.0 - (opts.crackDensity ?? 0.4) * 0.15;   // 0.85..1.0
 
-  // ACAH (D175) — per-instance baked GLSL needs a distinguishing cache key or
-  // Three shares ONE compiled program across all stone materials.
-  mat.customProgramCacheKey = () => 'stone:' + JSON.stringify(opts ?? {});
-
+  // ACAT T3 — params as UNIFORMS → all stone materials share ONE program (drops the
+  // cache key + per-variant bloat; supersedes the stone half of D175). Stone is
+  // always world-space (static scatter), so there's no localSpace branch.
   mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uDustCol = { value: new THREE.Vector3(dust.r, dust.g, dust.b) };
+    shader.uniforms.uCrackThreshold = { value: crackThreshold };
+    shader.uniforms.uDustStrength = { value: dustStrength };
     shader.vertexShader = shader.vertexShader.replace(
       '#include <common>',
       /* glsl */ `
@@ -82,6 +84,9 @@ export function createStoneMaterial(
         #include <common>
         varying vec3 vWorldStone;
         varying vec3 vWorldNormalStone;
+        uniform vec3 uDustCol;
+        uniform float uCrackThreshold;
+        uniform float uDustStrength;
 
         float stoneHash(vec2 p) {
           vec3 p3 = fract(vec3(p.xyx) * 0.1031);
@@ -118,7 +123,7 @@ export function createStoneMaterial(
 
         vec3 wps = vWorldStone;
         vec3 wns = vWorldNormalStone;
-        vec3 dustCol = vec3(${dust.r.toFixed(3)}, ${dust.g.toFixed(3)}, ${dust.b.toFixed(3)});
+        vec3 dustCol = uDustCol;
 
         // 4. SUN-BLEACH (apply first, tints the base).
         float bleachNoise = stoneFbm(wps.xz * 0.20);
@@ -135,7 +140,7 @@ export function createStoneMaterial(
         float c0 = stoneFbm(vec2(wps.x * 3.0, wps.y * 0.4));
         float c1 = stoneFbm(vec2(wps.z * 3.0 + 17.0, wps.y * 0.4 + 5.0));
         float crackNoise = max(c0, c1);
-        float crackMask = smoothstep(${crackThreshold.toFixed(3)}, ${(crackThreshold + 0.04).toFixed(3)}, crackNoise);
+        float crackMask = smoothstep(uCrackThreshold, uCrackThreshold + 0.04, crackNoise);
         float crackMod = mix(1.0, 0.55, crackMask * 0.7);
 
         // 3. DUST ACCUMULATION — gated on world-up component of normal.
@@ -144,7 +149,7 @@ export function createStoneMaterial(
         float upGate = smoothstep(0.35, 0.95, wns.y);
         // Modulate dust amount with FBM so it's patchy, not uniform.
         float dustPatch = stoneFbm(wps.xz * 0.8 + vec2(31.0, 13.0));
-        float dustAmount = upGate * mix(0.4, 1.0, dustPatch) * ${dustStrength.toFixed(3)};
+        float dustAmount = upGate * mix(0.4, 1.0, dustPatch) * uDustStrength;
         vec3 dustedColor = mix(bleached, dustCol, dustAmount * 0.55);
 
         // 5. MICRO-GRAIN.

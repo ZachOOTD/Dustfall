@@ -60,33 +60,30 @@ export function createPaintedMetalMaterial(
   const chipThreshold = 0.78 - wear * 0.23;
   const dripStrength = 0.15 + wear * 0.25;
 
-  // ACAH (D175) — per-instance baked GLSL needs a distinguishing cache key or
-  // Three shares ONE compiled program across all painted-metal materials.
-  mat.customProgramCacheKey = () => 'paint:' + JSON.stringify(opts ?? {});
-
+  // ACAT T3 — params as UNIFORMS → all painted-metal materials share ONE program
+  // (drops the cache key + per-variant bloat; supersedes the paint half of D175).
+  // localSpace is a runtime uniform branch.
   mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uRustCol = { value: new THREE.Vector3(rust.r, rust.g, rust.b) };
+    shader.uniforms.uChipThreshold = { value: chipThreshold };
+    shader.uniforms.uDripStrength = { value: dripStrength };
+    shader.uniforms.uLocalSpace = { value: opts.localSpace ? 1.0 : 0.0 };
     shader.vertexShader = shader.vertexShader.replace(
       '#include <common>',
       /* glsl */ `
         #include <common>
         varying vec3 vWorldPaint;
+        uniform float uLocalSpace;
       `,
     );
     shader.vertexShader = shader.vertexShader.replace(
       '#include <begin_vertex>',
-      opts.localSpace
-        /* glsl */
-        ? `
-          #include <begin_vertex>
-          // ABN — localSpace: sample noise in object frame so paint chips
-          // + drip streaks stay anchored to the surface as it moves.
-          vWorldPaint = position;
-        `
-        /* glsl */
-        : `
-          #include <begin_vertex>
-          vWorldPaint = (modelMatrix * vec4(position, 1.0)).xyz;
-        `,
+      /* glsl */ `
+        #include <begin_vertex>
+        // ABN/ACAT — uLocalSpace runtime branch: object frame (1) anchors paint chips
+        // + drip streaks on a MOVING surface (speeder/sled); world frame (0) static.
+        vWorldPaint = (uLocalSpace > 0.5) ? position : (modelMatrix * vec4(position, 1.0)).xyz;
+      `,
     );
 
     shader.fragmentShader = shader.fragmentShader.replace(
@@ -94,6 +91,9 @@ export function createPaintedMetalMaterial(
       /* glsl */ `
         #include <common>
         varying vec3 vWorldPaint;
+        uniform vec3 uRustCol;
+        uniform float uChipThreshold;
+        uniform float uDripStrength;
 
         float paintHash(vec2 p) {
           vec3 p3 = fract(vec3(p.xyx) * 0.1031);
@@ -129,7 +129,7 @@ export function createPaintedMetalMaterial(
         #include <color_fragment>
 
         vec3 wpp = vWorldPaint;
-        vec3 rustColor = vec3(${rust.r.toFixed(3)}, ${rust.g.toFixed(3)}, ${rust.b.toFixed(3)});
+        vec3 rustColor = uRustCol;
 
         // 3. FADED PAINT (apply first — it tints the base paint color).
         float fadeNoise = paintFbm(wpp.xz * 0.25);
@@ -137,7 +137,7 @@ export function createPaintedMetalMaterial(
 
         // 1. PAINT CHIPS — FBM thresholded.
         float chipNoise = paintFbm(wpp.xz * 3.5 + vec2(11.0, 23.0));
-        float chipStrength = smoothstep(${chipThreshold.toFixed(3)}, ${(chipThreshold + 0.10).toFixed(3)}, chipNoise);
+        float chipStrength = smoothstep(uChipThreshold, uChipThreshold + 0.10, chipNoise);
 
         // 2. RUST BLEED — at chip locations, blend toward rust color.
         //    chipStrength=1 = full rust, fading at chip edges.
@@ -149,7 +149,7 @@ export function createPaintedMetalMaterial(
         float dripCoord = paintFbm(vec2(wpp.x * 8.0, wpp.z * 8.0));
         float dripVert = 0.5 + 0.5 * sin(wpp.y * 6.0 + dripCoord * 12.0);
         float dripMask = smoothstep(0.75, 0.95, dripVert) * smoothstep(0.45, 0.75, dripCoord);
-        vec3 streaked = mix(paintOrRust, paintOrRust * vec3(0.55, 0.40, 0.30), dripMask * ${dripStrength.toFixed(3)});
+        vec3 streaked = mix(paintOrRust, paintOrRust * vec3(0.55, 0.40, 0.30), dripMask * uDripStrength);
 
         // 5. MICRO-GRAIN.
         float pGrain = paintHash(wpp.xz * 140.0);

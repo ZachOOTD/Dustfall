@@ -67,33 +67,30 @@ export function createBoneMaterial(
   const marrowHint = opts.marrowHint ?? 0.5;
   const ageBleach = opts.ageBleach ?? 0.35;
 
-  // ACAH (D175) — per-instance baked GLSL needs a distinguishing cache key or
-  // Three shares ONE compiled program across all bone materials.
-  mat.customProgramCacheKey = () => 'bone:' + JSON.stringify(opts ?? {});
-
+  // ACAT T3 — per-instance params are UNIFORMS, not baked GLSL → all bone materials
+  // share ONE compiled program (drops the customProgramCacheKey + per-variant bloat;
+  // supersedes the bone half of D175). localSpace is a runtime uniform branch.
   mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uCrackDensity = { value: crackDensity };
+    shader.uniforms.uMarrowHint = { value: marrowHint };
+    shader.uniforms.uAgeBleach = { value: ageBleach };
+    shader.uniforms.uLocalSpace = { value: opts.localSpace ? 1.0 : 0.0 };
     shader.vertexShader = shader.vertexShader.replace(
       '#include <common>',
       /* glsl */ `
         #include <common>
         varying vec3 vWorldBone;
+        uniform float uLocalSpace;
       `,
     );
     shader.vertexShader = shader.vertexShader.replace(
       '#include <begin_vertex>',
-      opts.localSpace
-        /* glsl */
-        ? `
-          #include <begin_vertex>
-          // ACT — localSpace (D109): anchor cracks to the object frame so
-          // they don't crawl as a held/moving bone prop translates.
-          vWorldBone = position;
-        `
-        /* glsl */
-        : `
-          #include <begin_vertex>
-          vWorldBone = (modelMatrix * vec4(position, 1.0)).xyz;
-        `,
+      /* glsl */ `
+        #include <begin_vertex>
+        // ACT/ACAT — uLocalSpace (D109) runtime branch: object frame (1) anchors
+        // cracks on a MOVING bone prop so they don't crawl; world frame (0) static.
+        vWorldBone = (uLocalSpace > 0.5) ? position : (modelMatrix * vec4(position, 1.0)).xyz;
+      `,
     );
 
     shader.fragmentShader = shader.fragmentShader.replace(
@@ -101,6 +98,9 @@ export function createBoneMaterial(
       /* glsl */ `
         #include <common>
         varying vec3 vWorldBone;
+        uniform float uCrackDensity;
+        uniform float uMarrowHint;
+        uniform float uAgeBleach;
 
         float boneHash(vec2 p) {
           vec3 p3 = fract(vec3(p.xyx) * 0.1031);
@@ -142,7 +142,7 @@ export function createBoneMaterial(
         //    at different scales and ANDs them at a high threshold to
         //    get a thin web-like dark network. crackDensity scales
         //    the spatial frequency.
-        float cd = ${crackDensity.toFixed(3)};
+        float cd = uCrackDensity;
         float crack1 = boneFbm(wpb.xz * 15.0 * cd);
         float crack2 = boneFbm(wpb.xz * 22.0 * cd + vec2(31.0, 17.0));
         float crackMask = step(0.62, crack1) * step(0.58, crack2);
@@ -154,7 +154,7 @@ export function createBoneMaterial(
         float mineralNoise = boneFbm(wpb.xz * 2.5 + vec2(53.0, 11.0));
         float mineralStrength = smoothstep(0.62, 0.82, mineralNoise);
         vec3 mineralTint = vec3(0.85, 0.78, 0.62);   // yellow-brown
-        vec3 mineralMix = mix(vec3(1.0), mineralTint, mineralStrength * ${marrowHint.toFixed(3)} * 0.7);
+        vec3 mineralMix = mix(vec3(1.0), mineralTint, mineralStrength * uMarrowHint * 0.7);
 
         // 3. AGE BLEACH — brighter on sun-facing (positive world-Y)
         //    surfaces vs cavities. Gradient mod is 1.0 at y=0.5 going
@@ -163,7 +163,7 @@ export function createBoneMaterial(
         float yNorm = clamp((wpb.y - 0.3) / 1.7, 0.0, 1.0);
         float bleachNoise = boneFbm(wpb.xz * 0.8 + vec2(7.0, 41.0));
         float bleachFactor = yNorm * (0.7 + 0.3 * bleachNoise);
-        float bleachMod = 1.0 + ${ageBleach.toFixed(3)} * 0.25 * bleachFactor;
+        float bleachMod = 1.0 + uAgeBleach * 0.25 * bleachFactor;
 
         // 4. MICRO-GRAIN — fine per-pixel hash for close range. Subtle.
         float microHash = boneHash(wpb.xz * 280.0);

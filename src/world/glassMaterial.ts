@@ -74,37 +74,34 @@ export function createGlassMaterial(
     opacity,
   });
 
-  // ACAH (D175) — per-instance baked GLSL needs a distinguishing cache key or
-  // Three shares ONE compiled program across all glass materials.
-  mat.customProgramCacheKey = () => 'glass:' + JSON.stringify(opts ?? {});
-
+  // ACAT T3 — per-instance params are UNIFORMS, not baked GLSL, so all glass
+  // materials share ONE compiled program (drops the customProgramCacheKey + the
+  // per-variant program bloat; supersedes the glass half of D175). localSpace is a
+  // runtime uniform branch. Mirrors metalMaterial.ts.
   mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uFrostLevel = { value: frostLevel };
+    shader.uniforms.uEdgeHighlight = { value: edgeHighlight };
+    shader.uniforms.uDustLayer = { value: dustLayer };
+    shader.uniforms.uLocalSpace = { value: opts.localSpace ? 1.0 : 0.0 };
     shader.vertexShader = shader.vertexShader.replace(
       '#include <common>',
       /* glsl */ `
         #include <common>
         varying vec3 vWorldGlass;
         varying vec3 vWorldGlassNormal;
+        uniform float uLocalSpace;
       `,
     );
     shader.vertexShader = shader.vertexShader.replace(
       '#include <begin_vertex>',
-      opts.localSpace
-        /* glsl */
-        ? `
-          #include <begin_vertex>
-          // ACT — localSpace (D109): anchor frost/dust to the object frame so
-          // it doesn't crawl as a held/moving glass prop translates; the dust
-          // layer follows the object's own up (correct for a carried lantern).
-          vWorldGlass = position;
-          vWorldGlassNormal = normalize(normal);
-        `
-        /* glsl */
-        : `
-          #include <begin_vertex>
-          vWorldGlass = (modelMatrix * vec4(position, 1.0)).xyz;
-          vWorldGlassNormal = normalize(mat3(modelMatrix) * normal);
-        `,
+      /* glsl */ `
+        #include <begin_vertex>
+        // ACT/ACAT — uLocalSpace (D109) runtime branch: object frame (1) anchors
+        // frost/dust on a MOVING glass prop so it doesn't crawl (+ the dust layer
+        // follows the object's own up); world frame (0) for static glass.
+        vWorldGlass = (uLocalSpace > 0.5) ? position : (modelMatrix * vec4(position, 1.0)).xyz;
+        vWorldGlassNormal = (uLocalSpace > 0.5) ? normalize(normal) : normalize(mat3(modelMatrix) * normal);
+      `,
     );
 
     shader.fragmentShader = shader.fragmentShader.replace(
@@ -113,6 +110,9 @@ export function createGlassMaterial(
         #include <common>
         varying vec3 vWorldGlass;
         varying vec3 vWorldGlassNormal;
+        uniform float uFrostLevel;
+        uniform float uEdgeHighlight;
+        uniform float uDustLayer;
 
         float glassHash(vec2 p) {
           vec3 p3 = fract(vec3(p.xyx) * 0.1031);
@@ -154,8 +154,8 @@ export function createGlassMaterial(
         //    Scaled enough that close-range camera sees the texture but
         //    far-range averages back to uniform.
         float frostN = glassFbm(wpg.xz * 18.0 + vec2(wpg.y * 9.0, 0.0));
-        float frostMod = mix(1.0 - ${frostLevel.toFixed(3)} * 0.08,
-                             1.0 + ${frostLevel.toFixed(3)} * 0.08, frostN);
+        float frostMod = mix(1.0 - uFrostLevel * 0.08,
+                             1.0 + uFrostLevel * 0.08, frostN);
 
         // 2. EDGE HIGHLIGHTS — fresnel-like rim. Compute the
         //    world-space view direction (camera → fragment). The dot
@@ -164,13 +164,13 @@ export function createGlassMaterial(
         //    at edges. Modulated by edgeHighlight opt.
         vec3 vCam = normalize(cameraPosition - wpg);
         float rimAmt = pow(1.0 - max(0.0, dot(wnG, vCam)), 2.0);
-        float edgeMod = 1.0 + rimAmt * ${edgeHighlight.toFixed(3)} * 0.45;
+        float edgeMod = 1.0 + rimAmt * uEdgeHighlight * 0.45;
 
         // 3. DUST LAYER — gate on world-up normal (horizontal facets
         //    accumulate dust). Slightly darkens + warms color.
         float upAmt = max(0.0, wnG.y);    // 1 on top-facing, 0 on side
         float dustN = glassFbm(wpg.xz * 2.5 + vec2(53.0, 11.0));
-        float dustStrength = upAmt * smoothstep(0.5, 0.85, dustN) * ${dustLayer.toFixed(3)};
+        float dustStrength = upAmt * smoothstep(0.5, 0.85, dustN) * uDustLayer;
         vec3 dustTint = vec3(0.85, 0.80, 0.70);
         vec3 dustMix = mix(vec3(1.0), dustTint, dustStrength);
 

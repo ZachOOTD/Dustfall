@@ -80,34 +80,32 @@ export function createWoodGrainMaterial(
   // distinguishing customProgramCacheKey, ALL wood materials reuse whichever one
   // compiled first, and per-material grain/bark is silently ignored (the trunk
   // bark "did nothing" until this was added). Encode every baked constant here.
-  const cacheKey =
-    `wood:${grainAxis}:${ringDensity}:${weatherLevel}:${grainStrength}:${bark}` +
-    `:${opts.localSpace ? 1 : 0}:${opts.doubleSide ? 1 : 0}`;
-  mat.customProgramCacheKey = () => cacheKey;
-
+  // ACAT T3 — params as UNIFORMS → all wood materials share ONE program (drops the
+  // cache key + per-variant bloat; supersedes the wood half of D175/D176). localSpace
+  // AND bark are runtime uniform branches (bark was a compile-time `${bark>0?…:''}`).
   mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uGrainAxis = { value: grainAxis };
+    shader.uniforms.uGrainStrength = { value: grainStrength };
+    shader.uniforms.uRingDensity = { value: ringDensity };
+    shader.uniforms.uWeatherLevel = { value: weatherLevel };
+    shader.uniforms.uBark = { value: bark };
+    shader.uniforms.uLocalSpace = { value: opts.localSpace ? 1.0 : 0.0 };
     shader.vertexShader = shader.vertexShader.replace(
       '#include <common>',
       /* glsl */ `
         #include <common>
         varying vec3 vWorldWood;
+        uniform float uLocalSpace;
       `,
     );
     shader.vertexShader = shader.vertexShader.replace(
       '#include <begin_vertex>',
-      opts.localSpace
-        /* glsl */
-        ? `
-          #include <begin_vertex>
-          // ACT — localSpace (D109): anchor grain to the object frame so it
-          // doesn't crawl as a held/moving wood prop translates.
-          vWorldWood = position;
-        `
-        /* glsl */
-        : `
-          #include <begin_vertex>
-          vWorldWood = (modelMatrix * vec4(position, 1.0)).xyz;
-        `,
+      /* glsl */ `
+        #include <begin_vertex>
+        // ACT/ACAT — uLocalSpace (D109) runtime branch: object frame (1) anchors grain
+        // on a MOVING wood prop so it doesn't crawl; world frame (0) static.
+        vWorldWood = (uLocalSpace > 0.5) ? position : (modelMatrix * vec4(position, 1.0)).xyz;
+      `,
     );
 
     shader.fragmentShader = shader.fragmentShader.replace(
@@ -115,6 +113,11 @@ export function createWoodGrainMaterial(
       /* glsl */ `
         #include <common>
         varying vec3 vWorldWood;
+        uniform float uGrainAxis;
+        uniform float uGrainStrength;
+        uniform float uRingDensity;
+        uniform float uWeatherLevel;
+        uniform float uBark;
 
         float woodHash(vec2 p) {
           vec3 p3 = fract(vec3(p.xyx) * 0.1031);
@@ -150,7 +153,7 @@ export function createWoodGrainMaterial(
         #include <color_fragment>
 
         vec3 wpw = vWorldWood;
-        float gA = ${grainAxis.toFixed(4)};
+        float gA = uGrainAxis;
 
         // 1. GRAIN — stripey noise perpendicular to grain axis. Project
         //    world XZ onto axis (grainCoord) + perpendicular (perpCoord),
@@ -159,7 +162,7 @@ export function createWoodGrainMaterial(
         float grainCoord = wpw.x * cos(gA) + wpw.z * sin(gA);
         float perpCoord  = wpw.x * sin(gA) - wpw.z * cos(gA);
         float grainStripe = woodValueNoise(vec2(perpCoord * 35.0, grainCoord * 1.5));
-        float grainMod = mix(1.0 - ${grainStrength.toFixed(3)}, 1.0 + ${grainStrength.toFixed(3)}, grainStripe);
+        float grainMod = mix(1.0 - uGrainStrength, 1.0 + uGrainStrength, grainStripe);
 
         // 2. GROWTH RINGS — modulate brightness in concentric bands.
         //    Sample distance from a perpendicular axis (treats the plank
@@ -167,7 +170,7 @@ export function createWoodGrainMaterial(
         //    so rings aren't perfectly circular — knotty character.
         float ringR = length(vec2(perpCoord, wpw.y));
         float ringWarp = woodFbm(vec2(grainCoord * 0.6, ringR * 0.8)) * 0.4;
-        float ringSig = sin((ringR + ringWarp) * ${ringDensity.toFixed(2)});
+        float ringSig = sin((ringR + ringWarp) * uRingDensity);
         float ringMod = mix(0.85, 1.0, smoothstep(-0.3, 0.6, ringSig));
 
         // 3. MICRO-GRAIN — per-pixel hash for close-range texture. Small.
@@ -179,25 +182,22 @@ export function createWoodGrainMaterial(
         float weatherNoise = woodFbm(wpw.xz * 0.7 + vec2(11.0, 23.0));
         float weatherStrength = smoothstep(0.55, 0.85, weatherNoise);
         vec3 weatherTint = vec3(0.72, 0.66, 0.58);
-        vec3 weatherMix = mix(vec3(1.0), weatherTint, weatherStrength * ${weatherLevel.toFixed(3)});
+        vec3 weatherMix = mix(vec3(1.0), weatherTint, weatherStrength * uWeatherLevel);
 
         diffuseColor.rgb *= grainMod * ringMod * microMod;
         diffuseColor.rgb *= weatherMix;
-        ${bark > 0 ? /* glsl */ `
-        // 5. BARK — fibrous striations that run UP the trunk axis. The plank
-        //    layers above ignore Y; bark samples FINE around the surface (XZ)
-        //    and SLOW along Y, so the noise stretches into vertical fibers.
-        //    Two octaves (broad ridges + fine fibers) + darker deep grooves.
-        float barkRidge = woodValueNoise(vec2((wpw.x - wpw.z) * 26.0, wpw.y * 1.1));
-        float barkFiber = woodValueNoise(vec2((wpw.x + wpw.z) * 70.0, wpw.y * 2.6));
-        float barkN = mix(barkRidge, barkFiber, 0.5);
-        float barkMod = mix(1.0 - ${bark.toFixed(3)}, 1.0 + ${(bark * 0.55).toFixed(3)}, barkN);
-        // Deep vertical grooves (cracks between bark plates) — thresholded ridge
-        //    noise darkens the troughs.
-        float groove = smoothstep(0.30, 0.12, barkRidge);
-        barkMod *= mix(1.0, 0.62, groove);
-        diffuseColor.rgb *= barkMod;
-        ` : ''}
+        // 5. BARK — fibrous striations up the trunk axis. ACAT — a RUNTIME uBark
+        //    branch (was a compile-time bark-greater-than-0 string conditional), so
+        //    all wood materials share one program.
+        if (uBark > 0.001) {
+          float barkRidge = woodValueNoise(vec2((wpw.x - wpw.z) * 26.0, wpw.y * 1.1));
+          float barkFiber = woodValueNoise(vec2((wpw.x + wpw.z) * 70.0, wpw.y * 2.6));
+          float barkN = mix(barkRidge, barkFiber, 0.5);
+          float barkMod = mix(1.0 - uBark, 1.0 + uBark * 0.55, barkN);
+          float groove = smoothstep(0.30, 0.12, barkRidge);
+          barkMod *= mix(1.0, 0.62, groove);
+          diffuseColor.rgb *= barkMod;
+        }
       `,
     );
   };
