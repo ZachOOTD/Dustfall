@@ -2107,23 +2107,27 @@ const SCENARIOS = {
   // × open/closed at 3q (one-pass /visual-triage fodder).
   'panel-studio': async (page) => {
     const sweep = argv.sweep !== undefined;
+    const allArch = argv.allarch !== undefined;
     const shapes = String(argv.shapes || argv.shape || (sweep ? 'rect,square,circle' : 'rect')).split(',').map((s) => s.trim());
-    const kinds = String(argv.kinds || argv.kind || 'fuselage').split(',').map((s) => s.trim());
-    const archetype = argv.archetype ? String(argv.archetype) : undefined;
-    const angles = String(argv.angles || (sweep ? '3q' : 'front,3q,side')).split(',').map((s) => s.trim());
-    const states = argv.state ? [String(argv.state)] : (argv.open !== undefined ? ['open'] : (sweep ? ['closed', 'open'] : ['closed']));
+    const archetypes = (allArch)
+      ? ['electrical', 'plumbing', 'avionics', 'mechanical', 'junction']
+      : (argv.archetypes || argv.archetype)
+        ? String(argv.archetypes || argv.archetype).split(',').map((s) => s.trim())
+        : [undefined];
+    const angles = String(argv.angles || (sweep || allArch ? '3q' : 'front,3q,side')).split(',').map((s) => s.trim());
+    const states = argv.state ? [String(argv.state)] : (argv.open !== undefined ? ['open'] : (sweep ? ['closed', 'open'] : (allArch ? ['open'] : ['closed'])));
     const scale = Number(argv.scale || 1);
     for (const shape of shapes) {
-      for (const kind of kinds) {
+      for (const archetype of archetypes) {
         for (const st of states) {
           for (const angle of angles) {
             const res = await page.evaluate(
-              ({ shape, kind, archetype, st, angle, scale }) =>
-                window.__game.spawnPanelStudio({ shape, kind, archetype, scale, open: st === 'open', angle }),
-              { shape, kind, archetype, st, angle, scale },
+              ({ shape, archetype, st, angle, scale }) =>
+                window.__game.spawnPanelStudio({ shape, archetype, scale, open: st === 'open', angle }),
+              { shape, archetype, st, angle, scale },
             );
             await page.waitForTimeout(220);
-            const tag = archetype ? `${shape}-${archetype}` : `${shape}-${kind}`;
+            const tag = archetype ? `${shape}-${archetype}` : `${shape}-fuselage`;
             const path = join(OUT, `scen-panelstudio-${tag}-${st}-${angle}.png`);
             await page.screenshot({ path, fullPage: false });
             console.log(`[panel-studio] ${tag}/${st}/${angle} → ${path}  ${JSON.stringify(res)}`);

@@ -845,6 +845,9 @@ export const Tuning = {
   // rolled values (panelKind + size roll) so it adds ZERO new world-rand (D208).
   // Flag for rollback; visual-verified via panel-studio before enabling.
   SALVAGE_PANEL_SHAPES_ENABLED: true,
+  // ACAV Tier 4 — archetype-driven scrappy interior (decorative greeble + the 5
+  // lootable components). Flag for rollback; flip on after the visual gate.
+  SALVAGE_PANEL_INTERIOR_V2: true,
   SALVAGE_PANEL_FOOTPRINT_CLEARANCE: 0.22, // probe pushes out this far + casts back; |d−this| ≤ FLATNESS_TOL = flat AND clear (a closer hit = geometry intrudes; subsumes decoration avoidance)
   SALVAGE_PANEL_NORMAL_AGREEMENT: 0.72,  // min dot(footprint-probe normal, centre normal) — the surface stays flat across the panel
   // ACAV — shared bury/occlusion raycast params (factored out of the three

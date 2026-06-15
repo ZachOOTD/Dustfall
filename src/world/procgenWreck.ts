@@ -47,13 +47,14 @@
 import * as THREE from 'three';
 import type RAPIER from '@dimforge/rapier3d-compat';
 import type { Rng } from '../core/rng.ts';
+import { makeRng } from '../core/rng.ts';
 import type { Terrain } from './terrain.ts';
 import type { BiomeId } from './biomes.ts';
 import type { SalvageableRegistry, Salvageable } from './salvage.ts';
 import { registerSalvageable } from './salvage.ts';
 import { validatePanels, findSurfaceMounts, type PanelEntry } from './panelPlacement.ts';
 import { Tuning } from '../config/tuning.ts';
-import { addAccessPanel, addAccessPanelOriented, makeEngineBellMesh, type PanelShape } from './wrecks.ts';
+import { addAccessPanel, addAccessPanelOriented, makeEngineBellMesh, type PanelShape, type PanelArchetype } from './wrecks.ts';
 import { mergeStaticByMaterial, makeSandMound, makeLoftedHull } from './wreckForms.ts';
 import { createRustedHullMaterial } from './hullMaterial.ts';
 import { attachCompoundCollider } from '../physics/bodies.ts';
@@ -1205,6 +1206,15 @@ function assembleWreck(
       : panelKind === 'engine_cluster' ? 'circle'
       : sr < Tuning.SALVAGE_PANEL_SCALE_SMALL_THRESHOLD ? 'square'
       : 'rect';
+    // ACAV Tier 4 — derive the interior ARCHETYPE from already-rolled values (engine
+    // hardware → mechanical/plumbing, cargo → junction, fuselage → electrical/avionics)
+    // + a per-panel greeble seed (one fixed rand draw → still a fixed budget, D208).
+    const greebleSeed = (rand() * 0x7fffffff) | 0;
+    const panelArchetype: PanelArchetype | undefined = !Tuning.SALVAGE_PANEL_INTERIOR_V2 ? undefined
+      : panelKind === 'engine_cluster' ? (sr < 0.5 ? 'mechanical' : 'plumbing')
+      : panelKind === 'cargo_container' ? 'junction'
+      : (sr < 0.5 ? 'electrical' : 'avionics');
+    const panelOpts = { shape: panelShape, archetype: panelArchetype, rand: makeRng(greebleSeed) };
     const prior = placedOnPart.get(partMesh) ?? [];
     const halfX = Tuning.SALVAGE_PANEL_SIZE_X * scale * 0.5;
     const halfY = Tuning.SALVAGE_PANEL_SIZE_Y * scale * 0.5;
@@ -1213,12 +1223,12 @@ function assembleWreck(
     // On a miss, fall back to the authored per-part anchor (yaw-based).
     const cand = findSurfaceMounts(partMesh, rand, prior, halfX, halfY);
     if (cand) {
-      addAccessPanelOriented(partMesh, cand.localPos, cand.localQuat, scale, panelKind, { shape: panelShape });
+      addAccessPanelOriented(partMesh, cand.localPos, cand.localQuat, scale, panelKind, panelOpts);
       prior.push({ x: cand.localPos.x, y: cand.localPos.y, z: cand.localPos.z });
     } else {
       const a = slot.built.panelAnchor;
       if (a) {
-        addAccessPanel(partMesh, a.x, a.y, a.z, scale, a.faceYaw, panelKind, { shape: panelShape });
+        addAccessPanel(partMesh, a.x, a.y, a.z, scale, a.faceYaw, panelKind, panelOpts);
         prior.push({ x: a.x, y: a.y, z: a.z });
       }
     }

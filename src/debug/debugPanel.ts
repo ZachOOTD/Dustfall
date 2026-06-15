@@ -333,7 +333,11 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
         const fill = new THREE.DirectionalLight(0xaec6ff, 0.85);
         fill.position.set(-2.2, 1.0, -1.4);    // cool back-fill
         const amb = new THREE.AmbientLight(0xffffff, 0.85);
-        studioGroup.add(key, fill, amb);
+        // ACAV — a CAVITY light: rays roughly -Z (DirectionalLight target = origin)
+        // rake INTO the +Z-facing recessed panel cavity the key/fill leave shadowed.
+        const cavity = new THREE.DirectionalLight(0xffe6c0, 1.5);
+        cavity.position.set(0.5, 0.9, 4.0);
+        studioGroup.add(key, fill, amb, cavity);
         three.scene.add(studioGroup);
       }
       if (studioMesh) { studioGroup.remove(studioMesh); studioMesh = null; }
@@ -398,7 +402,11 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
         const fill = new THREE.DirectionalLight(0xaec6ff, 0.85);
         fill.position.set(-2.2, 1.0, -1.4);
         const amb = new THREE.AmbientLight(0xffffff, 0.85);
-        studioGroup.add(key, fill, amb);
+        // ACAV — a CAVITY light: rays roughly -Z (DirectionalLight target = origin)
+        // rake INTO the +Z-facing recessed panel cavity the key/fill leave shadowed.
+        const cavity = new THREE.DirectionalLight(0xffe6c0, 1.5);
+        cavity.position.set(0.5, 0.9, 4.0);
+        studioGroup.add(key, fill, amb, cavity);
         three.scene.add(studioGroup);
       }
       if (studioMesh) { studioGroup.remove(studioMesh); studioMesh = null; }
@@ -436,19 +444,19 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
       studioMesh = host;
       host.updateMatrixWorld(true);
 
-      const box = new THREE.Box3().setFromObject(body ?? host);
-      const center = box.getCenter(new THREE.Vector3());
-      const size = box.getSize(new THREE.Vector3());
-      const radius = Math.max(size.x, size.y, size.z, 0.1) * 0.5;
-      const dist = radius * 2.8 + 0.3;
+      // Frame on the panel CENTRE (anchor) — the bbox centre is skewed by the swung
+      // door. dist from a nominal panel size, CLOSER for open so the cavity fills
+      // the frame (the interior is the subject).
+      const nominal = 0.7 * scale;
+      const dist = nominal * (o.open ? 1.15 : 1.8);
       const dir = new THREE.Vector3(0, 0.05, 1);                 // 'front'
-      if (angle === '3q') dir.set(0.7, 0.18, 0.8);
+      if (angle === '3q') dir.set(0.6, 0.16, 0.85);
       else if (angle === 'side') dir.set(1, 0.05, 0.18);
-      else if (angle === 'eye') dir.set(0.18, -0.32, 1);        // player looking at a hull panel
+      else if (angle === 'eye') dir.set(0.16, -0.30, 1);        // player looking at a hull panel
       else if (angle === 'top') dir.set(0.1, 1, 0.2);
       dir.normalize();
-      cam.position.copy(center).addScaledVector(dir, dist);
-      cam.lookAt(center);
+      cam.position.copy(anchor).addScaledVector(dir, dist);
+      cam.lookAt(anchor);
       cam.updateMatrixWorld(true);
       let meshCount = 0;
       host.traverse((n) => { if ((n as THREE.Mesh).isMesh) meshCount++; });
@@ -472,7 +480,11 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
         const fill = new THREE.DirectionalLight(0xaec6ff, 0.85);
         fill.position.set(-2.2, 1.0, -1.4);
         const amb = new THREE.AmbientLight(0xffffff, 0.85);
-        studioGroup.add(key, fill, amb);
+        // ACAV — a CAVITY light: rays roughly -Z (DirectionalLight target = origin)
+        // rake INTO the +Z-facing recessed panel cavity the key/fill leave shadowed.
+        const cavity = new THREE.DirectionalLight(0xffe6c0, 1.5);
+        cavity.position.set(0.5, 0.9, 4.0);
+        studioGroup.add(key, fill, amb, cavity);
         three.scene.add(studioGroup);
       }
       if (studioMesh) { studioGroup.remove(studioMesh); studioMesh = null; }

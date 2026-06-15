@@ -16,6 +16,8 @@ import { Tuning } from '../config/tuning.ts';
 import { perturbOutward } from './sculpt.ts';
 import { attachCompoundCollider } from '../physics/bodies.ts';
 import { mergeStaticByMaterial } from './wreckForms.ts';
+import { buildGreeble } from './panelGreeble.ts';   // ACAV Tier 4 — decorative interior
+import { makeRng } from '../core/rng.ts';
 import { createRustedHullMaterial } from './hullMaterial.ts';
 
 // ────────────────────────────────────────────────────────────────
@@ -160,6 +162,17 @@ export interface AccessPanelOpts {
   /** Deterministic RNG for greeble jitter (Tier 4); position-seeded by the caller. */
   rand?: Rng;
 }
+
+/** ACAV Tier 4 — the 5 LOOTABLE components per archetype. Reuses the existing 7
+ *  PanelComponentKinds so COMPONENT_LOOT + the loot economy are untouched; the
+ *  archetype only varies WHICH 5 + the decorative greeble around them. */
+export const ARCHETYPE_EXTRACTABLES: Record<PanelArchetype, readonly PanelComponentKind[]> = {
+  electrical: ['red_wire', 'red_wire', 'yellow_wire', 'fuse', 'chip'],
+  plumbing:   ['scrap_chunk', 'red_wire', 'fuse', 'cloth_scrap', 'scrap_chunk'],
+  avionics:   ['chip', 'chip', 'yellow_wire', 'fuse', 'bandage_pack'],
+  mechanical: ['scrap_chunk', 'scrap_chunk', 'fuse', 'red_wire', 'chip'],
+  junction:   ['red_wire', 'yellow_wire', 'fuse', 'cloth_scrap', 'bandage_pack'],
+};
 
 /** AAS — per-wreck-kind 5-component palettes. The interior of a
  *  fuselage panel looks different from a cargo-container panel; the
@@ -419,7 +432,9 @@ export function addAccessPanel(
       : new THREE.BoxGeometry(sx * 0.85, sy * 0.85, sz * 0.05),
     _panelInteriorMat,
   );
-  backplate.position.set(0, 0, sz * 0.25);   // recessed into the body
+  // ACAV Tier 4 — push the backplate to the body BACK for V2 so the rich greeble
+  // has real cavity depth to layer in (V1's shallow mid-cavity plate read flat).
+  backplate.position.set(0, 0, (Tuning.SALVAGE_PANEL_INTERIOR_V2 && opts.archetype) ? -sz * 0.34 : sz * 0.25);
   backplate.userData.noCollider = true;
   interior.add(backplate);
 
@@ -431,7 +446,28 @@ export function addAccessPanel(
   // Both `panelComponentIndex` and `panelComponentKind` are tagged on
   // each mesh; the latter drives loot mapping in interaction.ts via
   // COMPONENT_LOOT.
-  const palette = PANEL_COMPONENT_PALETTES[kind];
+  // ACAV Tier 4 — INTERIOR_V2: a scrappy archetype interior = rich DECORATIVE
+  // greeble (set-dressing, NOT lootable) + the 5 LOOTABLE components. The greeble
+  // is built into its own group; the per-panel merge happens in the wreck merge
+  // skip-zone, so we merge it HERE (before parenting under the body) to bound the
+  // live-mesh count. Falls back to the legacy per-kind 5-component palette.
+  const palette = (Tuning.SALVAGE_PANEL_INTERIOR_V2 && opts.archetype)
+    ? ARCHETYPE_EXTRACTABLES[opts.archetype]
+    : PANEL_COMPONENT_PALETTES[kind];
+  if (Tuning.SALVAGE_PANEL_INTERIOR_V2 && opts.archetype) {
+    const greeble = buildGreeble(opts.archetype, {
+      hw: (isCircle ? radius : sx * 0.5) * 0.82,
+      hh: (isCircle ? radius : sy * 0.5) * 0.82,
+      depth: sz,
+      isCircle,
+    }, opts.rand ?? makeRng(1));
+    // Merge the decorative greeble per-panel HERE: the wreck-level merge SKIPS
+    // accessPanel subtrees, so the ~10 greeble meshes × ~68 panels would otherwise
+    // stay live. Merge before parenting under the body (no accessPanel ancestor
+    // yet). The 5 extractables + emissive/transparent pieces stay separate.
+    mergeStaticByMaterial(greeble);
+    interior.add(greeble);
+  }
   const components: THREE.Mesh[] = [];
   for (let i = 0; i < 5; i++) {
     const compKind = palette[i];
@@ -519,7 +555,11 @@ export function addAccessPanel(
   // tick in interaction.ts uses it to position the claimed light each
   // ignite. Shadows still OFF when claimed (interaction sets this).
   body.userData.panelGlow = null;               // ABL — pool light when active, null when idle
-  body.userData.panelGlowAnchorLocal = new THREE.Vector3(0, 0, sz * 0.45);
+  // ACAV Tier 4 — for the deep V2 cavity, sit the pry-glow more CENTRALLY (sz*0.10)
+  // so it lights the layered greeble at the back, not just the mouth; V1's shallow
+  // cavity keeps the near-mouth anchor.
+  body.userData.panelGlowAnchorLocal = new THREE.Vector3(0, 0,
+    (Tuning.SALVAGE_PANEL_INTERIOR_V2 && opts.archetype) ? sz * 0.10 : sz * 0.45);
 
   // Stash refs + animation state on body.userData so interaction.ts
   // can drive the door + hide components as they're extracted.
