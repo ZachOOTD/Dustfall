@@ -3,6 +3,38 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ACAT — 2026-06-15 — Perf + wreck-detail debt: material-uniforms · brighter hulls · panel-audit/greeble triage ✓ verify pass (tsc clean)
+
+`verified` — `npm run verify` (tsc) PASS; **no save bump** (material/tuning only). User-chosen "perf + wreck-detail debt"
+bundle, planned via 3-agent exploration. 3 commits (`97e714a`,`7fa9261`,`081614d`); D207-D208. Two tiers shipped, two
+honestly deferred after investigation reshaped them.
+
+**T1 — W5 brighter procgen hulls (shipped).** The procgen wreck hulls read dark, swallowing the ACAO greeble detail.
+`WRECK_HULL_HEX` 0x5f5b54→0x6a6657 (+~20% value) + `WRECK_HULL_DARK_HEX` to match; the shared procgen `_hullMat` gets
+`streakIntensity` 0.55→0.40 + `aoStrength` 0.34→0.24. Verified on corvette (ribbed) + gunship (plated): hull reads as
+lighter weathered metal with visible seams/ports, weathered tone intact.
+
+**T3 — material factories → uniforms (the headline, shipped; D207).** Converted ALL 7 remaining procedural material
+factories from per-instance `.toFixed()`-baked GLSL constants to shader UNIFORMS, following the metal template (ACAH).
+Pure-value factories (glass/bone/stone/paint/wood) drop their `customProgramCacheKey` entirely; the localSpace branch +
+wood's `bark` conditional become RUNTIME uniform branches. The pbr-fork factories (fabric/skin) also drop the key — the
+`pbr` flag forks the BASE material class (Standard vs Lambert), which Three's default key already distinguishes, so the
+`if(opts.pbr)` blocks stay compile-time while the value params + localSpace/shimmer source-conditionals become
+uniforms/runtime-branches. Result: **perf-probe programs 105→67 (−38, −36%); boot shader-compile 270→197ms.** Verified
+identical: wood (branch/locker), glass (canteen/lantern), paint (speeder), fabric (cloth/tent), pbr skin+fabric (player
+rig), Lambert skin (vulture).
+
+**T2 — curved-panel bury-audit (investigated + DEFERRED; D208).** The plan assumed the 4 audit fails were the hand-modeled
+curved parts (engine_bell/escape_pod); the audit showed they're actually PROCGEN findPanelMount edge cases (a panel valid
+on an isolated part ends up occluded by a sibling once assembled). Attempted a register-time occlusion gate but it desynced
+the procgen RNG (`registerSalvageable` consumes `rand`, so skipping it regenerates the world — D208) AND missed the targets
+(stale descendant matrices). Reverted; the real fix (register-all-then-prune, matching the audit raycast) is deferred — a
+pre-existing ~3% (4/133) cosmetic dev-audit tail, not a gameplay issue.
+
+**T4 — flagship/procgen greebles (DEFERRED, cut-first).** Exploration found W2 low-ROI/awkward: `addHullGreebles` assumes
+±Z cylinder flanks, but the flagships are boxes/lathes (already hand-detailed) + the un-greebled procgen variants are
+intentionally distinct. T1's brightness pass already delivers W2's intent (more visible hull detail). Deferred with rationale.
+
 ## Session ACAS — 2026-06-15 — Overnight: wreck-yard perf+polish + item fidelity/collision breadth ✓ verify pass (tsc clean)
 
 `verified` — `npm run verify` (tsc) PASS; **no save bump** (geometry/material/collider/data only). Unattended overnight on

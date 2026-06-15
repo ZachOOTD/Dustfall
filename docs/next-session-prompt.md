@@ -1,73 +1,68 @@
-# Session ACAT — Kickoff Brief
+# Session ACAU — Kickoff Brief
 
 ## Read these now (in order)
-1. `CLAUDE.md` (auto-loaded) — "Where we are now" (ACAS: wreck-yard perf+polish + item/collision breadth shipped).
-2. `docs/session-end-report.md` — cumulative state (ACAS at top).
-3. `docs/backlog.md` — the owed walk-tests + deferred items.
-4. `docs/decisions.md` tail (D204 recessed-pit terrain-carve; D205 merge-an-interactive-object; D206 collider-shape-from-bbox).
+1. `CLAUDE.md` (auto-loaded) — "Where we are now" (ACAT: material-uniforms + brighter hulls shipped).
+2. `docs/session-end-report.md` — cumulative state (ACAT at top).
+3. `docs/backlog.md` — the PENDING section (owed walk-tests + buildable debt/features).
+4. `docs/decisions.md` tail (D207 material-uniforms pattern; D208 RNG-desync footgun; D204-D206).
 5. `docs/roadmap.md` + `docs/architecture.md` (only if touching an unfamiliar system).
 
 ## What's already built
-The wreck-yard biome (Cycle 8) + the recessed Sarlacc pit are shipped and polished. ACAS added: the wreck-yard yard-merge
-now folds in the loose props (mounds/debris/bones), the speeder body is static-merged (D205), the graveyard floor is
-oil/ash-mottled, the big hand-wrecks are lootable, the maw is denser, two item viewmodels were upgraded (cloth, skewer
-spit), dropped items get per-item collider shapes (D206), and the crafting chooser's discovery-spoiler was fixed +
-verified. tsc clean, SAVE_VERSION 14.
+The wreck-yard biome + recessed Sarlacc pit, the full salvage/crafting/creature/sled/rope/weather/POI stack, and a deep
+perf pass: static-merges (wrecks, speeder, wreck-yard), and now ALL procedural material factories share uniforms
+(perf-probe programs 105→67). tsc clean, SAVE_VERSION 14.
 
-## Session ACAT focus — the owed human WALK-TESTS (this is an ATTENDED session)
-Almost everything left needs a human in `npm run dev` — feel/interaction the headless harness can't judge. The autonomous
-build work for this arc is essentially done; what remains is your eyes + a couple of attended refactors.
+## Session ACAU focus — pick a lane (the perf/material debt is now largely cleared)
+Two shapes available. **If a human is at the keyboard:** the owed walk-tests are the highest-value thing left (they gate
+"is it actually good"). **If running autonomous:** there's a clean buildable item (the bury-audit register-all-then-prune
+fix) plus the big feature options.
 
 ## Priority items (in order)
-1. **Sarlacc-pit WALK-TEST (needs YOU) — the recessed crater (ACAR2/D204).** `__game.ctx.biomes.sarlaccPitAnchor` (its own
-   dune spot, ~420-950m out). Walk in: judge the **PULL feel** (escapable but scary?) **combined with the funnel physically
-   funneling you down** — the key question: can you **climb back out** of the bowl while the pull is active (walls ~39° < the
-   KCC 50° limit, but confirm no softlock), is the crater depth/steepness right (`SARLACC_PIT_CRATER_DEPTH`/`_CLEARING`), and
-   does descending read as a dread trap. Also: damage cadence, the gape/clench telegraph. Tune `tuning.ts` `SARLACC_PIT_*`.
-2. **Dropped-item settle FEEL (ACAS B2).** Drop pipe_staff/amban_rifle/branch (capsule) + canteen/relic_core (sphere) on
-   flat + slope + the crater — does the capsule/ball lie read more natural than the old box? `__game.dropTestItem('id')`
-   spawns one in front of you. Tune the bbox-derived half-extents (`pickups.ts` `getItemColliderDesc` region) if a body
-   jitters/slides. Add more `colliderHint`s to items if warranted.
-3. **Wreck-yard graveyard + mega-wreck interior WALK-TESTS.** Graveyard (`wreckYardAnchor`, 620-1000m): relic findability +
-   value, do the ashen/mottled ground + dense wreck silhouette + circling vultures read ominous, are the big wrecks'
-   newly-registered panels reachable. Mega-wreck interior (owed since ACAL): collision holds / fracture-ramp entrance /
-   panels reachable / interior brightness.
-4. **(Deferred perf, attended) Pickup InstancedMesh.** 340 branch+scrap pickups ≈ 340 draw calls. Each is individually
-   takeable → needs an interaction-raycast (`instanceId`) rework. Do it only with a human to confirm pickups still take.
-5. **(Open design call) Activate the crafting chooser.** The multi-match chooser is built + verified + discovery-respecting
-   but dormant (no recipes collide). Add ONE colliding recipe (same inputs → a different output) for a real player choice —
-   mind D71 (ids ≥ 17) + the discovery/save balance. `__registerTestRecipe` shows the shape.
+1. **(ATTENDED) The owed human WALK-TESTS — `npm run dev`** (the headless harness can't judge feel):
+   - **Recessed Sarlacc pit** (`__game.ctx.biomes.sarlaccPitAnchor`, D204): the PULL feel + can you CLIMB BACK OUT of the
+     funnel while pulled (no softlock); tune `tuning.ts` `SARLACC_PIT_*`.
+   - **Dropped-item settle feel** (ACAS B2): `__game.dropTestItem('pipe_staff'|'amban_rifle'|'canteen'|…)` — does the
+     capsule/ball lie read more natural than a box? tune the bbox-derived half-extents in `pickups.ts`.
+   - **Graveyard** (`wreckYardAnchor`) relic findability + ominous read; **mega-wreck interior** (owed since ACAL).
+2. **(AUTONOMOUS, clean) Bury-audit the RIGHT way (D208).** The 4 fails (~3% of 133) are procgen findPanelMount panels
+   occluded by a sibling post-assembly. Implement **register-all-then-prune** in `placeProcgenComposite`'s registration
+   loop: every panel `registerSalvageable`s normally (do NOT skip — it consumes `rand`, D208), then a 2nd pass removes any
+   panel the assembled wreck occludes (mirror `panelBuryAudit`'s raycast; `updateWorldMatrix(true,true)` on the wreck root
+   first). Gate: `panels` scenario fails → 0, total count drops only ~4.
+3. **(AUTONOMOUS, stretch) Material shared-noise-helper lift (D207).** Each factory redeclares an identical IQ `hash`/
+   `valueNoise`/`fbm` GLSL block — lift to one shared snippet. Low-risk cleanup; verify materials render identical.
+4. **(BUILD, bigger) A feature from the backlog §B:** raider proc-character (Cycle 5b — pulse rifle done, body remains,
+   proven rig pipeline, headless-verifiable); deep cave system (Cycle 7 — needs a design pass first); or the opening
+   drop-pod cutscene.
 
 ## Stretch goals
-- W2 flagship greebles / W5 dusk-lit procgen pass (long-deferred).
-- The next Phase-2 cycle: Cycle 5 raider proc-character, or Cycle 7 deep cave (both bigger, mostly DEFERRED).
+- Speeder pickup-InstancedMesh (attended — interaction-raycast rework, can't feel-verify unattended).
+- Activate the crafting chooser by adding ONE colliding recipe (gameplay-design call).
 
 ## Autonomy contract
-Items 1-3 need a human throughout — do NOT claim feel/interaction verified from a headless run. Item 4 is
-interaction-preserving but unverifiable unattended (do the safe half + surface, don't claim pickups still take). Item 5 is
-a design decision — surface options, don't unilaterally add a gameplay recipe unattended. Ambiguous → GDD pillars + the
-realism dial, append a D-entry, continue.
+Item 1 needs a human throughout — never claim feel/interaction verified from a headless run. Items 2-3 are headless-safe.
+Item 4 (raider/cave/drop-pod) is a real build → scope it first (a `/plan-game`-style pass or the `feature-slice` skill).
+Ambiguous → GDD pillars + the realism dial, append a D-entry, continue.
 
 ## Stop conditions
-3 fix-walls on one element (log + move on) · a `SAVE_VERSION` bump turning out necessary (surface it) · destructive-git
-attempt · an interaction-preserving refactor that can't be live-verified unattended (do the safe half, surface).
+3 fix-walls on one element (log + move on / cut) · a `SAVE_VERSION` bump turning out necessary (surface it) ·
+destructive-git attempt · an interaction-preserving refactor that can't be live-verified unattended (do the safe half, surface).
 
 ## Notable footguns (this arc)
-- **Recessed hazard = carve the shared heightfield (D204)** — mesh+collider+`heightAt` dip together; gate the wall slope vs
-  the KCC 50° climb limit or the player softlocks.
-- **Merging an interactive object (D205)** — tag every animated/interactive/light-bearing mesh `noMerge`; the merge removes
-  a mesh's whole subtree, so a light under a merged mesh is lost. The collider must be mesh-independent (or built first).
-- **Per-item dropped colliders (D206)** — `ItemDef.colliderHint` picks the shape; the SIZE comes from the bbox. Capsule axis
-  = the bbox's longest dimension (rotated onto it). Default-off; raycast keys on userData so interaction is unaffected.
-- **`placeWreck` can't import salvage.ts (circular)** — register big-wreck panels from the CALLER (`wreckYard`) after it returns.
+- **RNG-desync (D208):** the procgen world runs off ONE seeded `rand` stream; never conditionally skip an RNG-consuming
+  call (`registerSalvageable`) to filter items — it regenerates the whole world. Register-all-then-prune instead.
+- **Material program collapse (D207):** to merge onBeforeCompile variants, make every per-instance difference a
+  uniform/runtime-branch, then drop the per-instance cache key (default `onBeforeCompile.toString()` handles it); a `pbr`
+  base-class fork needs no key. NEVER put a backtick or `${...}` in a GLSL comment inside the template literal (it closes
+  the literal / interpolates — two TS errors this session).
 - **Windows rig-shot** pins a fixed seed (`dustfall.pendingSeed`=1337) for deterministic shots; `--seed=<n>` overrides.
 
 ## Verification protocol
-`npm run verify` (= `tsc --noEmit`) clean. Headless gates that exist: `wreck-yard --angle=aerial|approach|ground|pit|maw|pit-eye`
-(draw calls + salvageable count), `speeder-fx` (merge-safety refs), `drop-test` (dropped-item settle), `craft-chooser`
-(chooser path), `sarlacc-test` (pit open/pull/bite), `item-studio --items=`. **Items 1-3 are feel/interaction-critical →
-verify in `npm run dev` (the harness can't judge feel).** Rule 8: screenshot-iterate any visual change.
+`npm run verify` (= `tsc --noEmit`) clean. Headless gates: `perf-probe` (programs/draw-calls/boot), `procgen-wreck`
+(`--class --angle --seeds --zoom`), `panels` (bury-audit), `item-studio --items=`, `speeder-fx`, `drop-test`,
+`craft-chooser`, `wreck-yard --angle=`, `sarlacc-test`. **Item 1 is feel-critical → `npm run dev`.** Rule 8: screenshot-
+iterate any visual change (per-factory material-identity shot is the catch-net for material edits).
 
 ## On stop
-Run `/session-end` (verify → changelog → CLAUDE last-shipped → roadmap → D-entries → backlog → report → next-prompt →
-post-mortem → commit + tag `session-ACAT` + push).
+Run `/session-end` (verify → changelog WITH any perf numbers → CLAUDE last-shipped → roadmap → D-entries → backlog →
+report → next-prompt → post-mortem → commit + tag `session-ACAU` + push).

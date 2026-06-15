@@ -64,27 +64,25 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      Prior milestones live in docs/changelog.md — do NOT accumulate "Prior milestone"
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
-**Last shipped**: Session ACAS — **overnight: wreck-yard perf+polish + item-fidelity / collision breadth** (tsc clean,
-no save bump; D205-D206; 5 commits). Unattended, opened with a 4-agent parallel AUDIT that reshaped the work (the
-roadmap's "~19 item models" was stale — all 62 are DECENT/HERO; the crafting chooser already existed). **A1:** routed the
-wreck-yard sand mounds/debris/ribcages into the yard merge via an optional `parent` on
-placeProcgenComposite/placeDebrisField/placeRibcage (graveyard 4082→3994 draw calls). **A2 (D205):** static-merged the
-speeder body (~40+ parts → 14 meshes) — collider is hand-defined so it's merge-safe; tagged headlamp-disc/tow-bar/antenna
-`noMerge`; `speeder-fx` verifies refs survive + it drives. **A3:** graveyard ground mottle (oil pools + ash drifts).
-**A4:** the big hand-wrecks are now LOOTABLE (register their existing panels from `wreckYard` after `placeWreck`,
-above-ground only). **A5:** denser Sarlacc maw (46→63 teeth). **B1:** `cloth` → soft draped folds + lizard-skewer spit →
-real branch (the rest were already hero; branch left per ACAA). **B2 (D206):** `ItemDef.colliderHint`
-(box|sphere|capsule) — shape from the hint, SIZE from the bbox; dropped pipe/rifle/branch lie as rods, flask/orb as balls;
-`drop-test` confirms they settle. **B3:** fixed the crafting chooser's discovery-spoiler (undiscovered → "?") + verified it
-end-to-end (`craft-chooser`); it's dormant only because no recipes collide. NEW dev hooks: `dropTestItem`,
-`craftChooserTest`, `injectTestRecipe`. *(Prior — ACAR2: recessed Sarlacc pit (D204); ACAQ: wreck-yard biome / Cycle 8 (D201-203). See changelog.)*
+**Last shipped**: Session ACAT — **perf + wreck-detail debt: material-uniforms + brighter hulls** (tsc clean, no save bump;
+D207-D208; 3 commits). User-chosen "perf + wreck-detail debt" bundle, planned via 3-agent exploration. **T1 (W5):** lifted
+the procgen hull base color + lowered `_hullMat` streak/AO so the ACAO greeble detail surfaces (verified corvette+gunship).
+**T3 (headline, D207):** converted ALL 7 remaining procedural material factories (glass/bone/stone/paint/wood/fabric/skin)
+from per-instance `.toFixed()`-baked GLSL → shader UNIFORMS + runtime branches (the metal/ACAH template); dropped their
+`customProgramCacheKey` (the default `onBeforeCompile.toString()` key shares within-factory + distinguishes factories; the
+fabric/skin `pbr` fork rides the base material class so no key needed) → **perf-probe programs 105→67 (−36%), boot
+shader-compile 270→197ms**; materials verified pixel-identical. **T2 (deferred, D208):** the bury-audit's 4 fails are
+procgen findPanelMount occlusion edge cases (not the assumed hand-modeled curved parts); a register-time skip desynced the
+RNG (`registerSalvageable` consumes `rand`) so it was reverted — real fix (register-all-then-prune) deferred; a ~3%
+cosmetic dev-audit tail. **T4 (deferred, cut-first):** flagship greebles are architecturally awkward + the procgen variants
+are intentionally distinct; T1 covers the intent. *(Prior — ACAS: wreck-yard perf+polish + item/collision (D205-206); ACAR2: recessed Sarlacc pit (D204). See changelog.)*
 
 **Next session** = **(1)** the owed human WALK-TESTS in `npm run dev` (all need eyes): the recessed Sarlacc-pit PULL feel +
-climb-out (ACAR2/D204), the wreck-yard graveyard (relic findability, ominous read), the mega-wreck interior (collision /
-entrance / panels), and the new **B2 dropped-item settle FEEL** (does a capsule pipe lie more naturally than a box). **(2)**
-flagged perf: the speeder pickup-InstancedMesh (interaction-raycast rework, attended). **(3)** OPEN design call: activate
-the crafting chooser by adding a colliding recipe (infra ready). The raider proc-character + rig-dependent work stays
-DEFERRED. See [docs/next-session-prompt.md](docs/next-session-prompt.md) + [docs/backlog.md](docs/backlog.md).
+climb-out (ACAR2/D204), the dropped-item settle FEEL (ACAS B2), the wreck-yard graveyard read, the mega-wreck interior.
+**(2)** OR another buildable debt/feature: finish the bury-audit fix the RIGHT way (register-all-then-prune, D208); the
+material-factory shared-noise-helper lift (D207 stretch); or a feature (raider proc-character / deep cave / drop-pod intro).
+The pickup-InstancedMesh + raider rig-work stay DEFERRED/attended. See
+[docs/next-session-prompt.md](docs/next-session-prompt.md) + [docs/backlog.md](docs/backlog.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 
