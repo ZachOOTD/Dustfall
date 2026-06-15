@@ -22,6 +22,7 @@ import type { Rng } from '../core/rng.ts';
 import type { Terrain } from './terrain.ts';
 import { Tuning } from '../config/tuning.ts';
 import { makeEngineBellMesh } from './wrecks.ts';
+import { mergeStaticByMaterial } from './wreckForms.ts';   // ACAS A2 — static-merge the speeder body
 import { createMetalMaterial } from './metalMaterial.ts';
 import { createPaintedMetalMaterial } from './paintMaterial.ts';
 import {
@@ -180,6 +181,7 @@ export function makeSpeeder(_rand: Rng): THREE.Group {
     disc.rotation.y = Math.PI;
     disc.userData.noShadow = true;
     disc.name = 'headlampDisc';              // looked up in placeSpeeder
+    disc.userData.noMerge = true;            // ACAS A2 — material swapped on/off; keep live
     g.add(disc);
     // SpotLight + target. Cone narrow (Math.PI/5 ≈ 36° total), reaches
     // 30m. castShadow off — moving shadow maps on a fast vehicle are
@@ -237,6 +239,7 @@ export function makeSpeeder(_rand: Rng): THREE.Group {
       bar.rotation.z = Math.PI / 2;
       bar.position.set(0, 0.38, 0.95);
       bar.name = 'speederTowBar';
+      bar.userData.noMerge = true;           // ACAS A2 — sled rope-anchor ref; keep live
       g.add(bar);
     }
   }
@@ -512,6 +515,7 @@ export function makeSpeeder(_rand: Rng): THREE.Group {
     antenna.position.set(0.15, 0.58, 1.0);
     antenna.rotation.x = -0.18;
     antenna.rotation.z = 0.10;
+    antenna.userData.noMerge = true;         // ACAS A2 — carries the tip-light + pulsed beacon; keep the subtree live
     g.add(antenna);
     // Tip light at the antenna's local +Y top (cylinder length 0.85 →
     // half = 0.425). Slightly inset (0.41) so the sphere overlaps the
@@ -553,6 +557,16 @@ export function makeSpeeder(_rand: Rng): THREE.Group {
       m.receiveShadow = true;
     }
   });
+
+  // ACAS A2 — static-merge the body. The collider is hand-defined cuboids in
+  // placeSpeeder (independent of these meshes), so collapsing the visual hull is
+  // collider-safe. The merge SKIPS the seat (interactType='mount'), the headlamp
+  // disc + tow-bar + antenna (userData.noMerge), and leaves the headlamp/beacon
+  // lights (direct children of g, not meshes) untouched — so mount, headlamp
+  // toggle, sled tow, and the antenna beacon all keep working. placeSpeeder's
+  // getObjectByName('headlampDisc'|'speederTowBar'|'speederSeat'|'headlamp')
+  // still resolves because those parts survive.
+  mergeStaticByMaterial(g);
 
   return g;
 }

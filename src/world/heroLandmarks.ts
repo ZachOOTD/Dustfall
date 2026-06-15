@@ -27,6 +27,9 @@ export function placeRibcage(
   world: RAPIER.World,
   pos: THREE.Vector3,
   rand: Rng,
+  // ACAS A1 — re-parent the ribcage group into this object instead of the scene
+  // (default: scene), so a dense field can collect + static-merge it.
+  parent?: THREE.Object3D,
 ): void {
   const group = new THREE.Group();
   const boneColor = new THREE.Color().setHSL(0.10, 0.18, 0.55 + rand() * 0.12);
@@ -71,7 +74,7 @@ export function placeRibcage(
     const m = o as THREE.Mesh;
     if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; }
   });
-  scene.add(group);
+  (parent ?? scene).add(group);
 
   makeStaticBox(
     world,

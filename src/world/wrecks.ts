@@ -809,6 +809,9 @@ export function placeDebrisField(
   radius: number,
   rand: Rng,
   count?: number,
+  // ACAS A1 — re-parent each debris mesh into this object instead of the scene
+  // (default: scene), so a dense field can collect + static-merge them.
+  parent?: THREE.Object3D,
 ): void {
   const total = count ?? (6 + Math.floor(rand() * 7));
   for (let i = 0; i < total; i++) {
@@ -856,7 +859,7 @@ export function placeDebrisField(
     mesh.userData.noShadow = true;
     mesh.castShadow = false;
     mesh.receiveShadow = true;
-    scene.add(mesh);
+    (parent ?? scene).add(mesh);
   }
 }
 

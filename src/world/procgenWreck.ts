@@ -1298,6 +1298,10 @@ interface PlaceProcgenOpts {
    *  biomes ship visually distinct procgen wrecks (corrosion-resistant
    *  plates in salt, skeletal trusses in rocky, fuel barrels in dune). */
   biome?: BiomeId;
+  /** ACAS A1 — re-parent the wreck group + its sand mound into this object
+   *  instead of the scene (default: scene). Lets a dense field (the wreck-yard)
+   *  collect everything under one group for a cluster-level static merge. */
+  parent?: THREE.Object3D;
 }
 
 /** Place a procgen composite wreck at the given world position.
@@ -1364,7 +1368,7 @@ export function placeProcgenComposite(
       m.receiveShadow = true;
     }
   });
-  scene.add(group);
+  (opts.parent ?? scene).add(group);
 
   // Compound collider matching the part shapes. MUST run BEFORE the merge —
   // it builds one collider per part mesh by geometry type; merging first would
@@ -1393,7 +1397,7 @@ export function placeProcgenComposite(
     const sz = new THREE.Box3().setFromObject(group).getSize(new THREE.Vector3());
     const radius = Math.min(9, Math.max(2.5, Math.max(sz.x, sz.z) * 0.5));
     const windDir = new THREE.Vector2(0.85, 0.52).normalize();
-    scene.add(makeSandMound(terrain, pos.x, pos.z, windDir, radius, rand));
+    (opts.parent ?? scene).add(makeSandMound(terrain, pos.x, pos.z, windDir, radius, rand));
   }
 
   // Register every part that got a salvage panel. We walk all

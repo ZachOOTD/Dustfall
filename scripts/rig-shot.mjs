@@ -2072,9 +2072,20 @@ const SCENARIOS = {
       cam.position.set(p.x + 1.8, p.y + 1.1, p.z + 3.6);
       cam.lookAt(p.x, p.y + 0.05, p.z + 0.6);
       cam.updateMatrixWorld(true);
-      return { speed: +s.speed.toFixed(1), bikeZ: +p.z.toFixed(1) };
+      // ACAS A2 — static-merge safety check: every interactive/animated ref must
+      // still resolve + sit in the speeder graph; count meshes under the group.
+      const inGraph = (o) => { let n = o; while (n) { if (n === s.group) return true; n = n.parent; } return false; };
+      let meshCount = 0; s.group.traverse((o) => { if (o.isMesh) meshCount++; });
+      const merge = {
+        discOk: !!(s.headlampDisc && s.headlampDisc.isMesh && inGraph(s.headlampDisc)),
+        towBarOk: !!(s.towBar && s.towBar.isMesh && inGraph(s.towBar)),
+        seatOk: !!(s.seat && s.seat.userData.interactType === 'mount' && inGraph(s.seat)),
+        headlampOk: !!(s.headlamp && s.headlamp.isSpotLight && inGraph(s.headlamp)),
+        speederMeshes: meshCount,
+      };
+      return { speed: +s.speed.toFixed(1), bikeZ: +p.z.toFixed(1), merge };
     });
-    console.log(`[speeder-fx] final speed=${info.speed} bikeZ=${info.bikeZ}`);
+    console.log(`[speeder-fx] final speed=${info.speed} bikeZ=${info.bikeZ} merge=${JSON.stringify(info.merge)}`);
     await page.waitForTimeout(250);
     const path = join(OUT, 'scen-speeder-fx.png');
     await page.screenshot({ path, fullPage: false });
