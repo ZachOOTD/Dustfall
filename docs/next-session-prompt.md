@@ -17,11 +17,12 @@ This is an **ATTENDED** session: its top items need a human in `npm run dev` (fe
 refactors are interaction-preserving. The autonomous biome build is done; what's left needs your eyes or careful edits.
 
 ## Priority items (in order)
-1. **Wreck-yard WALK-TEST (needs YOU).** `npm run dev` → reach the graveyard (it's 600-1000m out — `__game.ctx.biomes.wreckYardAnchor`
-   gives the coords; consider a dev teleport). Judge: the **Sarlacc-pit PULL feel** (escapable but scary? — D202; the
-   magnitudes in `tuning.ts` `SARLACC_PIT_PULL_ACCEL`/`_RADIUS`/`_DANGER` are a first pass), the maw damage cadence + does
-   the maw open/close read, the relic findability + the full-restore value, and whether the ashen ground + wreck
-   silhouette + circling vultures read ominous on approach. Tune the pit numbers to taste.
+1. **Wreck-yard + Sarlacc-pit WALK-TESTS (needs YOU) — now SEPARATE locations (ACAR).** `npm run dev`:
+   - **The pit** (`__game.ctx.biomes.sarlaccPitAnchor` — its own DUNE-desert spot, ~420-950m out): judge the **PULL feel**
+     (escapable but scary? — D202; `tuning.ts` `SARLACC_PIT_PULL_ACCEL`/`_RADIUS`/`_DANGER` are a first pass), the damage
+     cadence, does the maw open/close read as you approach/leave, does it sit nicely in its sand bowl. Tune to taste.
+   - **The graveyard** (`__game.ctx.biomes.wreckYardAnchor` — separate, ~620-1000m out): relic findability + full-restore
+     value, whether the ashen ground + dense wreck silhouette + circling vultures read ominous on approach.
 2. **Mega-wreck interior WALK-TEST (owed since ACAL).** The other human-owed check: collision holds / fracture-ramp
    entrance walks / panels reachable / interior brightness.
 3. **Wreck-yard perf follow-up (D203).** Route the sand mounds + debris + ribcages into the yard merge: add a `parent?:

@@ -25,7 +25,9 @@ scattered across the graveyard biased toward the dangerous center. (Chose scatte
 panel-component loot surgery.)
 
 **Y4 — Sarlacc pit (the hero centerpiece).** NEW `enemies/sarlaccPit.ts`: a raised sand-maw (4 screenshot-iterated
-rounds — mound + dark glowing throat + inward-curving teeth + feelers) at the graveyard center. FSM: idle (buried) →
+rounds — mound + dark glowing throat + inward-curving teeth + feelers). **[ACAR: relocated to its OWN seed-derived
+dune-desert anchor + sand-bowl clearing — separate from the graveyard, which now fills its center + spreads relics.]**
+FSM: idle (buried) →
 gapes when the player nears → PULLS the player toward the throat (`ctx.player.externalPull` injected into the KCC
 `desired` vector) + BITES (damage ticks) in the inner radius. Reuses the sandworm's damage/die/pause patterns. Smoke
 test: maw opens → pulls player 5.6m→0.3m → bites (health 1→0.86). **Pull FEEL flagged for attended tune.** (D202.)
