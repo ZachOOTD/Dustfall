@@ -109,10 +109,12 @@ export function makeSarlaccPitMesh(rOuter: number): THREE.Group {
   //    can gape (lean back) / clench (lean in). ──
   const teeth = new THREE.Group();        // outer + mid tiers
   const innerTeeth = new THREE.Group();   // inner tier around the beak
+  // ACAS A5 — denser fang ring (was 20/15/11 = 46 → 28/21/14 = 63, nearer the
+  // canon ~73) so the maw reads as a jagged tooth-lined gullet, not a sparse ring.
   const tiers = [
-    { grp: teeth,      n: 20, r: 0.82, len: 0.5,  y: 0.02,  thick: 0.07, lean: 0.9 },
-    { grp: teeth,      n: 15, r: 0.6,  len: 0.42, y: -0.14, thick: 0.06, lean: 0.7 },
-    { grp: innerTeeth, n: 11, r: 0.36, len: 0.32, y: -0.3,  thick: 0.05, lean: 0.5 },
+    { grp: teeth,      n: 28, r: 0.82, len: 0.5,  y: 0.02,  thick: 0.062, lean: 0.9 },
+    { grp: teeth,      n: 21, r: 0.6,  len: 0.42, y: -0.14, thick: 0.052, lean: 0.7 },
+    { grp: innerTeeth, n: 14, r: 0.36, len: 0.32, y: -0.3,  thick: 0.045, lean: 0.5 },
   ];
   for (const tier of tiers) {
     for (let i = 0; i < tier.n; i++) {

@@ -1151,9 +1151,18 @@ const SCENARIOS = {
         const dx = p.x - anchor.x, dz = p.z - anchor.z;
         if (dx * dx + dz * dz < rad * rad) near++;
       }
+      // ACAS A4 — count salvageable panels registered within the graveyard (the
+      // procgen wrecks + now the big hand-wrecks) to confirm loot registration.
+      let nearSalvage = 0;
+      const sl = ctx.salvageables && ctx.salvageables.list;
+      if (sl) for (const s of sl) {
+        const sp = s.pos || (s.group && s.group.position); if (!sp) continue;
+        const dx = sp.x - anchor.x, dz = sp.z - anchor.z;
+        if (dx * dx + dz * dz < rad * rad) nearSalvage++;
+      }
       ctx.three.renderer.render(ctx.three.scene, cam);   // populate renderer.info for this view
       const info = ctx.three.renderer.info;
-      return { anchor: [+anchor.x.toFixed(0), +anchor.z.toFixed(0)], rad, biomeHere, groundY: +groundY.toFixed(1), nearObjects: near, drawCalls: info.render.calls, tris: info.render.triangles };
+      return { anchor: [+anchor.x.toFixed(0), +anchor.z.toFixed(0)], rad, biomeHere, groundY: +groundY.toFixed(1), nearObjects: near, nearSalvage, drawCalls: info.render.calls, tris: info.render.triangles };
     }, { ang: angle });
     await page.waitForTimeout(350);
     await page.screenshot({ path: join(OUT, `scen-wreckyard-${angle}.png`), fullPage: false });

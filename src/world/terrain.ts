@@ -27,6 +27,11 @@ const BIOME_COLOR_SALT: readonly [number, number, number] = [0xf0 / 255, 0xe8 / 
 // Cycle 8 (ACAQ) — wreck-yard graveyard ground: ashen oxidized grey-brown
 // (rust-stained, drained of the warm dune orange). Reads as a different, dead place.
 const BIOME_COLOR_WRECK_YARD: readonly [number, number, number] = [0x47 / 255, 0x3a / 255, 0x2e / 255];
+// ACAS A3 — graveyard-floor mottle: oil-stained pools (dark) + bleached-ash drifts
+// (pale), noise-blended over the ashen base so the dead ground reads contaminated
+// and textured rather than a flat muddy tint.
+const BIOME_COLOR_WRECK_YARD_OIL: readonly [number, number, number] = [0x26 / 255, 0x20 / 255, 0x1b / 255];
+const BIOME_COLOR_WRECK_YARD_ASH: readonly [number, number, number] = [0x71 / 255, 0x64 / 255, 0x52 / 255];
 // ACAR2 — Sarlacc crater interior: a shadowed dusky dune-brown so the recessed
 // funnel reads as a pit (darkest at center, fading to dune at the rim).
 const BIOME_COLOR_SARLACC_PIT: readonly [number, number, number] = [0x5a / 255, 0x44 / 255, 0x30 / 255];
@@ -191,7 +196,15 @@ export function createTerrain(
           const n = biomes.rawAt(wx2, wz2);
           let c = blendedBiomeColor(n);
           const wyC = biomes.wreckYardAt(wx2, wz2);   // Cycle 8 — tint toward the graveyard ground
-          if (wyC > 0) c = lerp3(c, BIOME_COLOR_WRECK_YARD, wyC);
+          if (wyC > 0) {
+            // ACAS A3 — mottle the graveyard floor with oil pools + ash drifts
+            // (separate-phase noise) so it reads as a contaminated dead place.
+            const mot = noise(wx2 * 0.05 + 11.3, wz2 * 0.05 - 7.1);   // -1..1
+            const stain = mot < 0
+              ? lerp3(BIOME_COLOR_WRECK_YARD, BIOME_COLOR_WRECK_YARD_OIL, Math.min(1, -mot))
+              : lerp3(BIOME_COLOR_WRECK_YARD, BIOME_COLOR_WRECK_YARD_ASH, mot * 0.7);
+            c = lerp3(c, stain, wyC);
+          }
           // ACAR2 — dusk the sand toward the Sarlacc crater center so the recessed
           // funnel READS as a shadowed pit even under flat overhead light (the
           // depression alone is too subtle). Darkens to a shadowed dune-brown.

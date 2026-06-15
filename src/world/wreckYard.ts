@@ -12,7 +12,7 @@ import * as THREE from 'three';
 import type RAPIER from '@dimforge/rapier3d-compat';
 import type { Rng } from '../core/rng.ts';
 import type { Terrain } from './terrain.ts';
-import type { SalvageableRegistry } from './salvage.ts';
+import { registerSalvageable, type SalvageableRegistry } from './salvage.ts';   // ACAS A4 — register big-wreck panels as loot
 import { placeProcgenComposite } from './procgenWreck.ts';
 import { placeWreck, placeDebrisField, type WreckKind } from './wrecks.ts';
 import { placeRibcage } from './heroLandmarks.ts';
@@ -91,6 +91,21 @@ export function placeWreckYard(
       tiltX: (rand() - 0.5) * 0.35,
     });
     yardGroup.attach(group);   // re-parent for the yard-level merge
+    // ACAS A4 — make the big hand-wrecks LOOTABLE. Their make* builders already add
+    // access panels (the merge keeps them live); placeWreck just doesn't register
+    // them (it can't import salvage.ts — circular). Register here, but only panels
+    // that ended up ABOVE the sand — a heavy crash tilt + deep burial can rotate
+    // some panels underground where the player could never reach them.
+    if (salvageables) {
+      const seen = new Set<THREE.Object3D>();
+      group.traverse((o) => {
+        if (!o.userData.accessPanel || seen.has(o)) return;
+        seen.add(o);
+        o.updateWorldMatrix(true, false);
+        const wp = new THREE.Vector3().setFromMatrixPosition(o.matrixWorld);
+        if (wp.y > terrain.heightAt(wp.x, wp.z) + 0.2) registerSalvageable(salvageables, o, kind, wp, rand);
+      });
+    }
   }
 
   // ── 3. Bone-fields — ribcages scattered as carcass anchors. ──
