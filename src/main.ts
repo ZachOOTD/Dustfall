@@ -243,23 +243,23 @@ for (const s of salvageables.list) {
     spawnScrapAt(three.scene, terrain, sx, sz, scatterRand, pickupList);
   }
 }
-// ACAQ (Cycle 8) — relic-core scatter: the wreck-yard's exclusive reward. A few
-// glowing relics across the graveyard floor, biased toward the dangerous center
-// (near the Sarlacc pit) but outside the pit clearing — draws the player in.
+// ACAQ/ACAR (Cycle 8) — relic-core scatter: the wreck-yard's exclusive reward. A
+// few glowing relics spread EVENLY across the graveyard floor (the pit moved out,
+// so no center bias) — the player sweeps the field to find them.
 {
   const wy = biomes.wreckYardAnchor, wyR = biomes.wreckYardRadius;
   const relicN = Tuning.WRECK_YARD_RELIC_COUNT_MIN
     + Math.floor(scatterRand() * (Tuning.WRECK_YARD_RELIC_COUNT_MAX - Tuning.WRECK_YARD_RELIC_COUNT_MIN + 1));
-  const rInner = Tuning.WRECK_YARD_PIT_CLEARING * 0.75, rOuter = wyR * 0.7;
   for (let i = 0; i < relicN; i++) {
-    const r = rInner + (rOuter - rInner) * Math.pow(scatterRand(), 1.4);   // bias inward
+    const r = wyR * 0.82 * Math.sqrt(scatterRand());   // even area distribution
     const a = scatterRand() * Math.PI * 2;
     spawnRelicAt(three.scene, terrain, wy.x + Math.cos(a) * r, wy.z + Math.sin(a) * r, scatterRand, pickupList);
   }
 }
 _mark('scrap');
-// ACAQ (Cycle 8) — the Sarlacc pit at the graveyard center (the wreck-yard hero hazard).
-const sarlaccPit = spawnSarlaccPit(three.scene, terrain, biomes.wreckYardAnchor, Tuning.SARLACC_PIT_RADIUS);
+// ACAQ/ACAR (Cycle 8) — the Sarlacc pit: a SEPARATE dune-desert hazard at its own
+// seed-derived anchor (a sand-maw belongs in open sand, not the ship graveyard).
+const sarlaccPit = spawnSarlaccPit(three.scene, terrain, biomes.sarlaccPitAnchor, Tuning.SARLACC_PIT_RADIUS);
 const lizards = spawnLizardsProcgen(
   three.scene, physics.world, terrain, biomes, scatterRand, allPoiPositions,
 );

@@ -1109,9 +1109,14 @@ const SCENARIOS = {
         cam.position.set(anchor.x + rad * 1.7, groundY + 26, anchor.z + rad * 1.7);
         cam.lookAt(anchor.x, groundY + 5, anchor.z);
       } else if (ang === 'pit') {
-        const pr = (ctx.sarlaccPit && ctx.sarlaccPit.rOuter) || 10;   // close-up on the maw
-        cam.position.set(anchor.x + pr * 1.9, groundY + pr * 1.35, anchor.z + pr * 1.9);
-        cam.lookAt(anchor.x, groundY - pr * 0.35, anchor.z);
+        // The pit is now a SEPARATE dune hazard (ctx.sarlaccPit.basePos), not the
+        // graveyard center. Force it open for the shot (the live sim sinks it idle).
+        const pit = ctx.sarlaccPit;
+        const pr = (pit && pit.rOuter) || 10;
+        const pb = pit ? pit.basePos : { x: anchor.x, y: groundY, z: anchor.z };
+        if (pit) { pit.openAmt = 1; pit.mesh.position.y = pit.basePos.y; }
+        cam.position.set(pb.x + pr * 1.9, pb.y + pr * 1.35, pb.z + pr * 1.9);
+        cam.lookAt(pb.x, pb.y - pr * 0.35, pb.z);
       } else { // ground
         cam.position.set(anchor.x - rad * 0.55, groundY + 3.2, anchor.z - rad * 0.55);
         cam.lookAt(anchor.x, groundY + 2.5, anchor.z);

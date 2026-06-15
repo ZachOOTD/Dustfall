@@ -482,6 +482,11 @@ export const Tuning = {
   SARLACC_PIT_PULL_ACCEL: 7.0,         // m/s² toward center while open (FEEL — attended tune)
   SARLACC_PIT_DAMAGE_PER_TICK: 0.07,   // health/0..1 per damage tick
   SARLACC_PIT_DAMAGE_INTERVAL: 0.45,   // s between damage ticks
+  // ACAR — the pit is a SEPARATE dune-desert hazard (its own seed-derived anchor),
+  // NOT the wreck-yard centerpiece. A sand-maw belongs in open sand.
+  SARLACC_PIT_DIST_MIN: 420,           // m from spawn for the pit's own anchor
+  SARLACC_PIT_DIST_MAX: 950,
+  SARLACC_PIT_CLEARING: 22,            // m — terrain flatten radius (a sand bowl around the maw)
 
   // Wreck palette (Session S). Cool grey-rust industrial; avoids pure
   // blacks/whites so primitives feel weathered, not cartoon.

@@ -26,6 +26,11 @@ export interface BiomeSampler {
   wreckYardAnchor: { x: number; z: number };
   /** Wreck-yard region radius (m). */
   wreckYardRadius: number;
+  /** ACAR — the Sarlacc pit's own seed-derived anchor (a SEPARATE dune-desert
+   *  hazard, not the wreck-yard). */
+  sarlaccPitAnchor: { x: number; z: number };
+  /** Sarlacc-pit terrain-clearing strength 0..1 (a flattened sand bowl). */
+  sarlaccPitAt: (x: number, z: number) => number;
 }
 
 export function createBiomeSampler(rand: Rng): BiomeSampler {
@@ -53,6 +58,35 @@ export function createBiomeSampler(rand: Rng): BiomeSampler {
     return t * t * (3 - 2 * t);   // smoothstep core→edge
   };
 
+  // ACAR — the Sarlacc pit is a SEPARATE dune-desert hazard, not the wreck-yard
+  // centerpiece. Pick its own anchor: a seed-derived DUNE spot away from spawn +
+  // the graveyard. (rng consumed after the wreck-yard anchor → deterministic.)
+  let sarlaccPitAnchor: { x: number; z: number } = {
+    x: Tuning.OPENING_SCENE_ANCHOR_X + Tuning.SARLACC_PIT_DIST_MIN,
+    z: Tuning.OPENING_SCENE_ANCHOR_Z,
+  };
+  for (let i = 0; i < 60; i++) {
+    const d = Tuning.SARLACC_PIT_DIST_MIN + rand() * (Tuning.SARLACC_PIT_DIST_MAX - Tuning.SARLACC_PIT_DIST_MIN);
+    const a = rand() * Math.PI * 2;
+    const x = Tuning.OPENING_SCENE_ANCHOR_X + Math.cos(a) * d;
+    const z = Tuning.OPENING_SCENE_ANCHOR_Z + Math.sin(a) * d;
+    if (wreckYardAt(x, z) > 0) continue;                  // not in/near the graveyard
+    const n = rawAt(x, z);
+    if (n >= Tuning.BIOME_THRESHOLD_ROCKY && n <= Tuning.BIOME_THRESHOLD_SALT) {  // a dune cell
+      sarlaccPitAnchor = { x, z };
+      break;
+    }
+  }
+  const pitClearing = Tuning.SARLACC_PIT_CLEARING;
+  const sarlaccPitAt = (x: number, z: number): number => {
+    const dx = x - sarlaccPitAnchor.x, dz = z - sarlaccPitAnchor.z;
+    const d = Math.sqrt(dx * dx + dz * dz);
+    if (d >= pitClearing) return 0;
+    if (d <= pitClearing * 0.55) return 1;
+    const t = (pitClearing - d) / (pitClearing * 0.45);
+    return t * t * (3 - 2 * t);
+  };
+
   const biomeAt = (x: number, z: number): BiomeId => {
     if (wreckYardAt(x, z) > 0.5) return 'wreck_yard';
     const n = rawAt(x, z);
@@ -61,7 +95,7 @@ export function createBiomeSampler(rand: Rng): BiomeSampler {
     return 'dune';
   };
 
-  return { biomeAt, rawAt, wreckYardAt, wreckYardAnchor, wreckYardRadius };
+  return { biomeAt, rawAt, wreckYardAt, wreckYardAnchor, wreckYardRadius, sarlaccPitAnchor, sarlaccPitAt };
 }
 
 // GG — find the cell deepest into `target` biome via a grid sweep over a

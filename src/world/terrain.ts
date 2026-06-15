@@ -142,6 +142,8 @@ export function createTerrain(
           let flatness = biomeHeightScale(biomes.rawAt(x, z));
           const wyH = biomes.wreckYardAt(x, z);   // Cycle 8 — flatten the graveyard floor
           if (wyH > 0) flatness = flatness * (1 - wyH) + Tuning.WRECK_YARD_HEIGHT_SCALE * wyH;
+          const pitH = biomes.sarlaccPitAt(x, z);  // ACAR — flatten a sand bowl around the maw
+          if (pitH > 0) flatness = flatness * (1 - pitH) + 0.05 * pitH;
           heights[i * stride + j] = sampleHeight(noise, x, z) * flatness;
         }
       }

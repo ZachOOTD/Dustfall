@@ -66,7 +66,7 @@ export function placeWreckYard(
   const wreckN = Tuning.WRECK_YARD_WRECK_COUNT_MIN
     + Math.floor(rand() * (Tuning.WRECK_YARD_WRECK_COUNT_MAX - Tuning.WRECK_YARD_WRECK_COUNT_MIN + 1));
   for (let i = 0; i < wreckN; i++) {
-    const pos = tryPos(radius * 0.92, 5.0, 0.7, Tuning.WRECK_YARD_PIT_CLEARING);   // pack toward center, clear the pit
+    const pos = tryPos(radius * 0.92, 5.0, 0.7);   // pack toward center (the pit moved to its own dune anchor)
     if (!pos) continue;
     const y = terrain.heightAt(pos.x, pos.z);
     const grp = placeProcgenComposite(scene, world, terrain, new THREE.Vector3(pos.x, y, pos.z), rand, salvageables, {
@@ -80,7 +80,7 @@ export function placeWreckYard(
   const bigN = Tuning.WRECK_YARD_BIG_COUNT_MIN
     + Math.floor(rand() * (Tuning.WRECK_YARD_BIG_COUNT_MAX - Tuning.WRECK_YARD_BIG_COUNT_MIN + 1));
   for (let i = 0; i < bigN; i++) {
-    const pos = tryPos(radius * 0.7, 14.0, 0.5, Tuning.WRECK_YARD_PIT_CLEARING + 6);
+    const pos = tryPos(radius * 0.7, 14.0, 0.5);
     if (!pos) continue;
     const y = terrain.heightAt(pos.x, pos.z);
     const kind = BIG_KINDS[Math.floor(rand() * BIG_KINDS.length)];
@@ -97,7 +97,7 @@ export function placeWreckYard(
   const boneN = Tuning.WRECK_YARD_BONE_COUNT_MIN
     + Math.floor(rand() * (Tuning.WRECK_YARD_BONE_COUNT_MAX - Tuning.WRECK_YARD_BONE_COUNT_MIN + 1));
   for (let i = 0; i < boneN; i++) {
-    const pos = tryPos(radius * 0.85, 6.0, 0.5, Tuning.WRECK_YARD_PIT_CLEARING * 0.7);
+    const pos = tryPos(radius * 0.85, 6.0, 0.5);
     if (!pos) continue;
     const y = terrain.heightAt(pos.x, pos.z);
     placeRibcage(scene, world, new THREE.Vector3(pos.x, y, pos.z), rand);
