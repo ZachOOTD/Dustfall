@@ -94,12 +94,12 @@ function buildSkewerMesh(cooked: boolean): THREE.Group {
   const stickMat = new THREE.MeshLambertMaterial({ color: stickColor });
   // II — longer stick so there's visible branch above + below the lizard.
   const stickLen = 0.55;
-  const stick = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.012, 0.018, stickLen, 6),
-    stickMat,
-  );
-  // Stick is vertical (default cylinder is along Y). Grip lives at the
-  // group origin → push the stick up so its base sits there.
+  // ACAS B1 — a real whittled BRANCH as the spit (was a smooth CG cylinder),
+  // reusing the shared branch model (taper + faint organic bow). twigs:0 keeps it
+  // clean enough to read as a sharpened skewer. Canonical branch lies along +X →
+  // rotate so the tip points UP, base at the grip.
+  const stick = buildBranchMesh(stickMat, { len: stickLen, twigs: 0, tipRatio: 0.45, radiusScale: 1.15 });
+  stick.rotation.z = -Math.PI / 2;
   stick.position.y = stickLen * 0.5;
   group.add(stick);
 
@@ -1849,18 +1849,37 @@ const _DEFS: Record<ItemId, ItemDef> = {
       const mat = createFabricMaterial(0xc8b89a, undefined, { disableShimmer: true });
       const matInner = createFabricMaterial(0xb8a888, undefined, { disableShimmer: true });
       const matInnermost = createFabricMaterial(0xa8987c, undefined, { disableShimmer: true });
-      const fold = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.025, 0.085), mat);
-      group.add(fold);
-      const inner = new THREE.Mesh(new THREE.BoxGeometry(0.095, 0.018, 0.072), matInner);
-      inner.position.y = 0.020;
-      group.add(inner);
-      const innermost = new THREE.Mesh(new THREE.BoxGeometry(0.080, 0.014, 0.060), matInnermost);
-      innermost.position.y = 0.036;
-      group.add(innermost);
-      // Small fabric "tag" sticking out one side — adds asymmetry.
-      const tag = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.008, 0.022), matInner);
-      tag.position.set(0.060, 0.020, 0);
-      tag.rotation.z = -0.20;
+      // ACAS B1 — soft DRAPED folds (was a rigid 3-tier slab stack that read as a
+      // stepped pyramid). Each layer is a subdivided slab whose top sags toward the
+      // corners + a faint weave-wave, with the underside edges curling up — so it
+      // reads as folded fabric, not stacked chips. A rolled hem + frayed tag finish it.
+      const fold = (w: number, h: number, d: number, m: THREE.Material, yBase: number, sag: number): THREE.Mesh => {
+        const g = new THREE.BoxGeometry(w, h, d, 8, 1, 6);
+        const p = g.attributes.position as THREE.BufferAttribute;
+        for (let i = 0; i < p.count; i++) {
+          const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+          const edge = Math.max(Math.abs(x) / (w * 0.5), Math.abs(z) / (d * 0.5));
+          if (y > 0) p.setY(i, y - sag * edge * edge + Math.sin(x * 55 + z * 40) * h * 0.14);
+          else p.setY(i, y + sag * 0.3 * edge * edge);
+        }
+        g.computeVertexNormals();
+        const mesh = new THREE.Mesh(g, m);
+        mesh.position.y = yBase;
+        mesh.rotation.y = ((yBase * 7) % 0.3) - 0.15;   // slight per-layer twist (deterministic)
+        return mesh;
+      };
+      group.add(fold(0.115, 0.026, 0.090, mat, 0.0, 0.013));
+      group.add(fold(0.098, 0.020, 0.074, matInner, 0.022, 0.011));
+      group.add(fold(0.082, 0.016, 0.060, matInnermost, 0.040, 0.009));
+      // Rolled hem along the front folded edge of the bottom layer.
+      const hem = new THREE.Mesh(new THREE.CylinderGeometry(0.0095, 0.0095, 0.106, 7), mat);
+      hem.rotation.z = Math.PI / 2;
+      hem.position.set(0, 0.005, 0.046);
+      group.add(hem);
+      // Frayed fabric "tag" sticking out one side — adds asymmetry.
+      const tag = new THREE.Mesh(new THREE.BoxGeometry(0.016, 0.007, 0.024, 3, 1, 2), matInner);
+      tag.position.set(0.062, 0.019, 0);
+      tag.rotation.z = -0.22;
       group.add(tag);
       return group;
     },
