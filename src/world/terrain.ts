@@ -27,6 +27,9 @@ const BIOME_COLOR_SALT: readonly [number, number, number] = [0xf0 / 255, 0xe8 / 
 // Cycle 8 (ACAQ) — wreck-yard graveyard ground: ashen oxidized grey-brown
 // (rust-stained, drained of the warm dune orange). Reads as a different, dead place.
 const BIOME_COLOR_WRECK_YARD: readonly [number, number, number] = [0x47 / 255, 0x3a / 255, 0x2e / 255];
+// ACAR2 — Sarlacc crater interior: a shadowed dusky dune-brown so the recessed
+// funnel reads as a pit (darkest at center, fading to dune at the rim).
+const BIOME_COLOR_SARLACC_PIT: readonly [number, number, number] = [0x5a / 255, 0x44 / 255, 0x30 / 255];
 
 function smoothstep(edge0: number, edge1: number, x: number): number {
   const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)));
@@ -144,7 +147,26 @@ export function createTerrain(
           if (wyH > 0) flatness = flatness * (1 - wyH) + Tuning.WRECK_YARD_HEIGHT_SCALE * wyH;
           const pitH = biomes.sarlaccPitAt(x, z);  // ACAR — flatten a sand bowl around the maw
           if (pitH > 0) flatness = flatness * (1 - pitH) + 0.05 * pitH;
-          heights[i * stride + j] = sampleHeight(noise, x, z) * flatness;
+          let h = sampleHeight(noise, x, z) * flatness;
+          // ACAR2 — carve the Sarlacc into a RECESSED funnel crater (Great Pit of
+          // Carkoon), deepest at center, eased to 0 at the clearing rim. The depth
+          // profile is a radial smoothstep on distance to the anchor: a soft sand
+          // lip at the rim (no seam / normal flicker), a steep mid-wall, and a
+          // flattened bottom where the maw mesh sits. Carved into the shared heights
+          // array → the visual mesh, the Rapier heightfield collider, AND heightAt()
+          // all dip together, so the player physically walks down into the bowl.
+          {
+            const pdx = x - biomes.sarlaccPitAnchor.x;
+            const pdz = z - biomes.sarlaccPitAnchor.z;
+            const pr = Math.sqrt(pdx * pdx + pdz * pdz);
+            const R = Tuning.SARLACC_PIT_CLEARING;
+            if (pr < R) {
+              const t = 1 - pr / R;                 // 0 at rim → 1 at center
+              const profile = t * t * (3 - 2 * t);  // smoothstep: soft lip + flat-ish floor
+              h -= profile * Tuning.SARLACC_PIT_CRATER_DEPTH;
+            }
+          }
+          heights[i * stride + j] = h;
         }
       }
 
@@ -170,6 +192,11 @@ export function createTerrain(
           let c = blendedBiomeColor(n);
           const wyC = biomes.wreckYardAt(wx2, wz2);   // Cycle 8 — tint toward the graveyard ground
           if (wyC > 0) c = lerp3(c, BIOME_COLOR_WRECK_YARD, wyC);
+          // ACAR2 — dusk the sand toward the Sarlacc crater center so the recessed
+          // funnel READS as a shadowed pit even under flat overhead light (the
+          // depression alone is too subtle). Darkens to a shadowed dune-brown.
+          const pitC = biomes.sarlaccPitAt(wx2, wz2);
+          if (pitC > 0) c = lerp3(c, BIOME_COLOR_SARLACC_PIT, pitC * 0.82);
           colors[idx]     = c[0];
           colors[idx + 1] = c[1];
           colors[idx + 2] = c[2];

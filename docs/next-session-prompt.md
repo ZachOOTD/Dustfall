@@ -18,9 +18,13 @@ refactors are interaction-preserving. The autonomous biome build is done; what's
 
 ## Priority items (in order)
 1. **Wreck-yard + Sarlacc-pit WALK-TESTS (needs YOU) — now SEPARATE locations (ACAR).** `npm run dev`:
-   - **The pit** (`__game.ctx.biomes.sarlaccPitAnchor` — its own DUNE-desert spot, ~420-950m out): judge the **PULL feel**
-     (escapable but scary? — D202; `tuning.ts` `SARLACC_PIT_PULL_ACCEL`/`_RADIUS`/`_DANGER` are a first pass), the damage
-     cadence, does the maw open/close read as you approach/leave, does it sit nicely in its sand bowl. Tune to taste.
+   - **The pit** (`__game.ctx.biomes.sarlaccPitAnchor` — its own DUNE-desert spot, ~420-950m out): it's now a RECESSED
+     funnel crater carved into the terrain (ACAR2/D204), depth 13 / clearing 24. Judge the **PULL feel** (escapable but
+     scary? — D202; `tuning.ts` `SARLACC_PIT_PULL_ACCEL`/`_RADIUS`/`_DANGER` are a first pass) **combined with the funnel
+     now physically funneling you down** — the key new question: can you still CLIMB BACK OUT (walls are ~39°, under the
+     KCC 50° limit, but confirm no softlock when the pull is also active), and does descending into the bowl read as a
+     dread trap. Also: damage cadence, does the maw gape/clench as you approach/leave, is the crater depth/steepness
+     right (`SARLACC_PIT_CRATER_DEPTH`). Tune to taste.
    - **The graveyard** (`__game.ctx.biomes.wreckYardAnchor` — separate, ~620-1000m out): relic findability + full-restore
      value, whether the ashen ground + dense wreck silhouette + circling vultures read ominous on approach.
 2. **Mega-wreck interior WALK-TEST (owed since ACAL).** The other human-owed check: collision holds / fracture-ramp

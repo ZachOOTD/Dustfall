@@ -486,7 +486,13 @@ export const Tuning = {
   // NOT the wreck-yard centerpiece. A sand-maw belongs in open sand.
   SARLACC_PIT_DIST_MIN: 420,           // m from spawn for the pit's own anchor
   SARLACC_PIT_DIST_MAX: 950,
-  SARLACC_PIT_CLEARING: 22,            // m — terrain flatten radius (a sand bowl around the maw)
+  SARLACC_PIT_CLEARING: 24,            // m — terrain crater radius (the recessed funnel rim)
+  // ACAR2 — the pit is RECESSED into the dunes (Great Pit of Carkoon), not a raised
+  // mound. The terrain itself is carved into a funnel crater this deep at center,
+  // easing to 0 at the clearing rim (smoothstep → soft lip, peak wall ~32°, well
+  // under the KCC 50° climb limit so the player can still walk out). The maw mesh
+  // sits at the carved crater floor (its origin auto-lands there via heightAt).
+  SARLACC_PIT_CRATER_DEPTH: 13,        // m — funnel depth at center (terrain carve); peak wall ~39° (< KCC 50° climb)
 
   // Wreck palette (Session S). Cool grey-rust industrial; avoids pure
   // blacks/whites so primitives feel weathered, not cartoon.

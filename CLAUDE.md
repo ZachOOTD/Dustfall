@@ -74,9 +74,12 @@ as graveyard-exclusive loot (`relicMesh.ts` + `spawnRelicAt`). **Y4 (hero, D202)
 sand-maw (4 iterated rounds) that gapes when the player nears, PULLS them in (`ctx.player.externalPull` → KCC desired
 vector) + BITES; smoke-tested (pull 5.6m→0.3m, health 1→0.86). **Pull feel flagged for attended tune.** **Y5:** graveyard
 joins the vulture ecology. **Y6 (D203):** graveyard perf merge (re-parent wrecks via `group.attach` + merge → 2055→1664
-draw calls). **ACAR follow-up:** SEPARATED the Sarlacc pit from the graveyard — it's now its OWN dune-desert hazard
-(`biomes.sarlaccPitAnchor`, its own flattened sand-bowl clearing); the graveyard is a pure wreck field (center filled,
-relics spread evenly). *(Prior — ACAP: wreck-arc finish (D198-200); ACAO: procgen framer + T5 greebles (D197). See changelog.)*
+draw calls). **ACAR follow-up:** SEPARATED the Sarlacc pit from the graveyard — its OWN dune-desert hazard
+(`biomes.sarlaccPitAnchor`). **ACAR2 (D204):** RECESSED the Sarlacc pit INTO the terrain (Great Pit of Carkoon, per
+user feedback + a 4-agent reference sweep) — `terrain.ts` carves a funnel crater into the shared `heights` array (depth
+13 / clearing 24, peak wall ~39° < KCC climb limit; sand dusked toward center) so the player descends into the bowl;
+`sarlaccPit.ts` maw fully rebuilt to sit at the crater floor (fleshy collar + leathery lip + glowing gullet + central
+beak + 3 teeth tiers + 9 tapered tentacles), FSM animates the maw only (no mesh sink). *(Prior — ACAP: wreck-arc finish (D198-200); ACAO: procgen framer + T5 greebles (D197). See changelog.)*
 
 **Next session** = **(1)** the still-owed mega-wreck interior WALK-TEST + a wreck-yard WALK-TEST (the pull FEEL, the maw
 danger, the relic findability — all need a human in `npm run dev`). **(2)** the flagged perf follow-ups: route the

@@ -1108,15 +1108,37 @@ const SCENARIOS = {
       } else if (ang === 'approach') {
         cam.position.set(anchor.x + rad * 1.7, groundY + 26, anchor.z + rad * 1.7);
         cam.lookAt(anchor.x, groundY + 5, anchor.z);
-      } else if (ang === 'pit') {
-        // The pit is now a SEPARATE dune hazard (ctx.sarlaccPit.basePos), not the
-        // graveyard center. Force it open for the shot (the live sim sinks it idle).
+      } else if (ang === 'pit' || ang === 'pit-eye' || ang === 'maw') {
+        // The pit is now a RECESSED funnel crater (ACAR2) at its own dune anchor
+        // (ctx.sarlaccPit.basePos = the carved crater FLOOR). Force the maw open for
+        // the shot (no mesh-sink now). The rim sits ~CRATER_DEPTH above the floor, so
+        // sample the undisturbed dune just outside the clearing for the camera height.
         const pit = ctx.sarlaccPit;
         const pr = (pit && pit.rOuter) || 10;
         const pb = pit ? pit.basePos : { x: anchor.x, y: groundY, z: anchor.z };
-        if (pit) { pit.openAmt = 1; pit.mesh.position.y = pit.basePos.y; }
-        cam.position.set(pb.x + pr * 1.9, pb.y + pr * 1.35, pb.z + pr * 1.9);
-        cam.lookAt(pb.x, pb.y - pr * 0.35, pb.z);
+        if (pit) pit.openAmt = 1;
+        // Lower, raking sun + tamer exposure so the funnel's near-wall shadow reads
+        // (overhead noon light flattens the depression). The crater depth shows as a
+        // light/shadow gradient across the bowl.
+        window.__game.setTime(0.4);
+        ctx.three.renderer.toneMappingExposure = 1.1;
+        const rimY = ctx.terrain.heightAt(pb.x + 34, pb.z);
+        if (ang === 'maw') {
+          // Tight, low 3/4 close-up of the MAW itself (beak/teeth/tentacles/throat) —
+          // for iterating the creature detail. Inside the bowl, near the floor.
+          cam.position.set(pb.x + pr * 0.95, pb.y + pr * 0.7, pb.z + pr * 0.95);
+          cam.lookAt(pb.x, pb.y + pr * 0.12, pb.z);
+        } else if (ang === 'pit-eye') {
+          // Peer over the rim lip — the player's approach POV, close enough that the
+          // bowl interior + maw read (not foreshortened to a flat disc from far off).
+          cam.position.set(pb.x + pr * 1.9, rimY + 3.0, pb.z + pr * 0.5);
+          cam.lookAt(pb.x, pb.y + pr * 0.1, pb.z);
+        } else {
+          // Elevated 3/4 look-down framing the WHOLE crater (rim to rim) so the sand
+          // funnel around the maw is visible, not just the maw.
+          cam.position.set(pb.x + pr * 2.4, rimY + pr * 2.0, pb.z + pr * 2.4);
+          cam.lookAt(pb.x, pb.y + pr * 0.05, pb.z);
+        }
       } else { // ground
         cam.position.set(anchor.x - rad * 0.55, groundY + 3.2, anchor.z - rad * 0.55);
         cam.lookAt(anchor.x, groundY + 2.5, anchor.z);
@@ -2536,9 +2558,13 @@ async function main() {
     // headless session and `updateWieldAction`'s overlayOpen() gate suppresses
     // ALL LMB actions (attack/place) — which silently blocked the rifle-fire
     // scenario (reload uses a separate path with no overlay gate, so it worked).
-    await page.addInitScript(() => {
+    await page.addInitScript((seed) => {
       try { localStorage.setItem('dustfall.tutorial.v1', JSON.stringify({ seenIntro: true, usedItems: [] })); } catch { /* ignore */ }
-    });
+      // Pin the world seed so rig-shots are DETERMINISTIC (same world every run →
+      // clean before/after visual comparisons). Re-set on every document load
+      // (boot consumes/removes the pending key). Override with --seed=<n>.
+      try { localStorage.setItem('dustfall.pendingSeed', String(seed)); } catch { /* ignore */ }
+    }, Number(argv.seed ?? 1337));
     await page.goto(`http://127.0.0.1:${PORT}/`);
     // Wait for the rig to exist (Rapier WASM + boot done).
     await page.waitForFunction(() => !!(window.__game && window.__game.ctx?.player?.rig), undefined, { timeout: 30000 });

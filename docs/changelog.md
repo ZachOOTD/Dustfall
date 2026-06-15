@@ -3,6 +3,30 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ACAR2 — 2026-06-14 — Sarlacc pit RECESSED into the terrain (Great Pit of Carkoon) ✓ verify pass (tsc clean)
+
+`verified` — `npm run verify` (tsc) PASS; **no save bump** (terrain/geometry/material only). User feedback: the pit
+read as a raised sand-MOUND on top of the dunes; it should sink INTO the sand like the Star Wars Sarlacc. Researched the
+Great Pit of Carkoon via a 4-agent parallel sweep (overall crater form / beak+teeth / tentacles+color / code-archaeology
+of the terrain-carve), then rebuilt it as a recessed funnel crater. ~3 crater + ~2 maw screenshot-iteration rounds via
+the `wreck-yard` framer (new `--angle=maw` + `pit-eye`). D204.
+
+- **Terrain carve (D204).** `terrain.ts` now carves a funnel crater into the shared `heights` array (deepest at center,
+  smoothstep-eased to 0 at the clearing rim) — so the visual mesh, the Rapier heightfield collider, AND `heightAt()` all
+  dip together and the player physically descends into the bowl. `SARLACC_PIT_CRATER_DEPTH=13` over a 24m clearing →
+  peak wall ~39°, under the KCC 50° climb limit (no softlock — escapable on foot). The sand is dusked toward center
+  (`BIOME_COLOR_SARLACC_PIT`) so the depression reads as a shadowed pit even in flat overhead light.
+- **Recessed maw mesh.** `sarlaccPit.ts` `makeSarlaccPitMesh` fully rebuilt: the maw now sits at the carved crater FLOOR
+  (origin auto-lands there via `heightAt`), nothing rises above the sand. New parts from the references: a fleshy maw
+  collar + leathery hide rim lip, a warm-glowing gullet (digestive-ember emissive), a central **beak** (1997 SE — bulbous
+  lathe core + 4 splaying mandible plates), **3 concentric teeth tiers** (outer→inner, ivory), and **9 tapered sinuous
+  tentacles** (TubeGeometry along CatmullRom curves, tip-tapered) curling up over the throat.
+- **FSM.** `updateSarlaccPit` no longer sinks the whole mesh (the crater is permanent terrain) — only the maw animates:
+  beak extends + gnashes, mandibles splay, teeth gape/clench, tentacles writhe, gullet pulses, all scaled by `openAmt`.
+- **Framer.** `wreck-yard` rig-shot pinned to a fixed seed (deterministic shots) + new `maw`/`pit-eye` angles look down
+  into the recessed crater. Smoke test re-passes: maw opens → pulls player 5.6m→0.8m → bites (health 1→0.86), mesh
+  stays at the crater floor (meshY -11.85). **Pull FEEL + climb-out still flagged for the attended walk-test.**
+
 ## Session ACAQ — 2026-06-14 — Marathon overnight: Wreck-yard biome (Cycle 8) — graveyard + Sarlacc pit ✓ verify pass (tsc clean)
 
 `verified` — `npm run verify` (tsc) PASS; **no save bump** (geometry/material/additive-item only). A long marathon
