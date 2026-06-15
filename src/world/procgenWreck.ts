@@ -51,9 +51,9 @@ import type { Terrain } from './terrain.ts';
 import type { BiomeId } from './biomes.ts';
 import type { SalvageableRegistry, Salvageable } from './salvage.ts';
 import { registerSalvageable } from './salvage.ts';
-import { validatePanels, type PanelEntry } from './panelPlacement.ts';
+import { validatePanels, findSurfaceMounts, type PanelEntry } from './panelPlacement.ts';
 import { Tuning } from '../config/tuning.ts';
-import { addAccessPanel, makeEngineBellMesh } from './wrecks.ts';
+import { addAccessPanel, addAccessPanelOriented, makeEngineBellMesh } from './wrecks.ts';
 import { mergeStaticByMaterial, makeSandMound, makeLoftedHull } from './wreckForms.ts';
 import { createRustedHullMaterial } from './hullMaterial.ts';
 import { attachCompoundCollider } from '../physics/bodies.ts';
@@ -1126,92 +1126,12 @@ interface AssembleResult {
   totalLength: number;
 }
 
-// ── ACY — dynamic panel placement via raycast surface sampling ──────────
-//
-// Replaces the single hardcoded per-part `panelAnchor` with a real sampler:
-// cast a jittered grid of outside-in rays against a part's outward flanks
-// (±Z), and keep the FIRST hit that is (a) outward-facing, (b) flat — a
-// 4-ray probe ring at the panel footprint agrees on depth, (c) not on a
-// tagged decoration, and (d) clear of panels already placed on this part.
-// Returns a part-LOCAL mount (the frame addAccessPanel's recess math wants)
-// + a cardinal faceYaw, or null (→ caller falls back to the authored
-// anchor). Cardinal-yaw only — the panel hinge/recess can't pitch — so we
-// reject near-horizontal (top/sloped) surfaces. Runs once at worldgen.
-const _panelRc = new THREE.Raycaster();
-function findPanelMount(
-  partMesh: THREE.Group,
-  rand: Rng,
-  placed: Array<{ x: number; y: number; z: number }>,
-): { x: number; y: number; z: number; faceYaw: number } | null {
-  partMesh.updateMatrixWorld(true);
-  const box = new THREE.Box3().setFromObject(partMesh);
-  if (box.isEmpty()) return null;
-  const size = box.getSize(new THREE.Vector3());
-  const center = box.getCenter(new THREE.Vector3());
-  // At assembly time the part's only transform is a pure translation, so
-  // world→part-local is a subtraction of its position.
-  const offset = partMesh.position;
-
-  const gx = Tuning.SALVAGE_PANEL_SAMPLE_GRID_X;
-  const gy = Tuning.SALVAGE_PANEL_SAMPLE_GRID_Y;
-  const inset = Tuning.SALVAGE_PANEL_FACE_INSET;
-  const halfX = Tuning.SALVAGE_PANEL_SIZE_X * 0.5;
-  const halfY = Tuning.SALVAGE_PANEL_SIZE_Y * 0.5;
-  const inward = new THREE.Vector3();
-  const nrm = new THREE.Vector3();
-  const normalMat = new THREE.Matrix3();
-
-  const castNear = (ox: number, oy: number, faceZ: number, zside: number) => {
-    _panelRc.far = 0.95;
-    _panelRc.set(new THREE.Vector3(ox, oy, faceZ + zside * 0.4), inward.set(0, 0, -zside));
-    return _panelRc.intersectObject(partMesh, true)[0] ?? null;
-  };
-
-  // Both flanks, randomized order so a wreck doesn't always weld the same side.
-  const faces = rand() < 0.5 ? [1, -1] : [-1, 1];
-  for (const zside of faces) {
-    const faceZ = zside > 0 ? box.max.z : box.min.z;
-    const order: Array<[number, number]> = [];
-    for (let iy = 0; iy < gy; iy++) for (let ix = 0; ix < gx; ix++) order.push([ix, iy]);
-    for (let i = order.length - 1; i > 0; i--) {
-      const j = Math.floor(rand() * (i + 1));
-      [order[i], order[j]] = [order[j], order[i]];
-    }
-    for (const [ix, iy] of order) {
-      const fx = gx > 1 ? ix / (gx - 1) - 0.5 : 0;
-      const fy = gy > 1 ? iy / (gy - 1) - 0.5 : 0;
-      const ox = center.x + (fx + (rand() - 0.5) / gx) * size.x * inset;
-      const oy = center.y + (fy + (rand() - 0.5) / gy) * size.y * inset;
-      const hit = castNear(ox, oy, faceZ, zside);
-      if (!hit || hit.object.userData?.isWreckDecoration || !hit.face) continue;
-      nrm.copy(hit.face.normal).applyNormalMatrix(normalMat.getNormalMatrix(hit.object.matrixWorld)).normalize();
-      // Outward (de-weight vertical) + not-steep (cardinal yaw can't pitch).
-      const outDir = hit.point.clone().sub(center); outDir.y *= 0.3;
-      if (outDir.lengthSq() < 1e-6) continue;
-      if (nrm.dot(outDir.normalize()) < Tuning.SALVAGE_PANEL_OUTWARD_MIN) continue;
-      if (Math.abs(nrm.y) > Tuning.SALVAGE_PANEL_MAX_NORMAL_Y) continue;
-      // Flatness probe ring at the panel footprint — all 4 must agree on depth.
-      const depth = hit.distance;
-      let flat = true;
-      for (const [px, py] of [[halfX, 0], [-halfX, 0], [0, halfY], [0, -halfY]] as const) {
-        const ph = castNear(ox + px, oy + py, faceZ, zside);
-        if (!ph || ph.object.userData?.isWreckDecoration ||
-            Math.abs(ph.distance - depth) > Tuning.SALVAGE_PANEL_FLATNESS_DEPTH_TOL) { flat = false; break; }
-      }
-      if (!flat) continue;
-      const surf = hit.point.clone().addScaledVector(nrm, Tuning.SALVAGE_PANEL_SURFACE_EPS);
-      const lx = surf.x - offset.x, ly = surf.y - offset.y, lz = surf.z - offset.z;
-      let clash = false;
-      for (const p of placed) {
-        if (Math.hypot(p.x - lx, p.y - ly, p.z - lz) < Tuning.SALVAGE_PANEL_MIN_SEPARATION) { clash = true; break; }
-      }
-      if (clash) continue;
-      const faceYaw = Math.round(Math.atan2(nrm.x, nrm.z) / (Math.PI / 2)) * (Math.PI / 2);
-      return { x: lx, y: ly, z: lz, faceYaw };
-    }
-  }
-  return null;
-}
+// ACAV Tier 2 — the per-part panel sampler `findPanelMount` (ACY: a jittered grid
+// of rays against the ±Z bounding-box flanks + cardinal-yaw snap) was replaced by
+// the shape-agnostic `findSurfaceMounts` in world/panelPlacement.ts (bounding-
+// sphere inward rays read the REAL hull surface — any shape — + a full quaternion
+// so the panel sits flush). The old SALVAGE_PANEL_SAMPLE_GRID_*/FACE_INSET tuning
+// is retired with it.
 
 function assembleWreck(
   rand: Rng,
@@ -1271,18 +1191,30 @@ function assembleWreck(
   for (let i = 0; i < wantPanels; i++) {
     const slot = panelEligible[indices[i]];
     const partMesh = slot.built.mesh;
-    // ACY — try the surface sampler first (finds a flat, outward, clip-free
-    // mount on either flank); fall back to the authored anchor if it can't.
-    const prior = placedOnPart.get(partMesh) ?? [];
-    const mount = findPanelMount(partMesh, rand, prior) ?? slot.built.panelAnchor!;
-    // ACY — size variant roll (small access hatch → large cargo panel).
+    // ACAV Tier 2 — roll SIZE first so the shape-agnostic sampler tests the panel's
+    // REAL footprint (the old order tested base size, then built at up to 1.32×).
     const sr = rand();
     const scale = sr < Tuning.SALVAGE_PANEL_SCALE_SMALL_THRESHOLD ? Tuning.SALVAGE_PANEL_SCALE_SMALL
       : sr >= Tuning.SALVAGE_PANEL_SCALE_LARGE_THRESHOLD ? Tuning.SALVAGE_PANEL_SCALE_LARGE
       : 1;
     const panelKind = panelKindPool[Math.floor(rand() * panelKindPool.length)];
-    addAccessPanel(partMesh, mount.x, mount.y, mount.z, scale, mount.faceYaw, panelKind);
-    prior.push({ x: mount.x, y: mount.y, z: mount.z });
+    const prior = placedOnPart.get(partMesh) ?? [];
+    const halfX = Tuning.SALVAGE_PANEL_SIZE_X * scale * 0.5;
+    const halfY = Tuning.SALVAGE_PANEL_SIZE_Y * scale * 0.5;
+    // findSurfaceMounts reads the REAL hull surface (any shape) + a full quaternion
+    // so the panel sits flush; it consumes exactly ONE rand (fixed budget, D208).
+    // On a miss, fall back to the authored per-part anchor (yaw-based).
+    const cand = findSurfaceMounts(partMesh, rand, prior, halfX, halfY);
+    if (cand) {
+      addAccessPanelOriented(partMesh, cand.localPos, cand.localQuat, scale, panelKind);
+      prior.push({ x: cand.localPos.x, y: cand.localPos.y, z: cand.localPos.z });
+    } else {
+      const a = slot.built.panelAnchor;
+      if (a) {
+        addAccessPanel(partMesh, a.x, a.y, a.z, scale, a.faceYaw, panelKind);
+        prior.push({ x: a.x, y: a.y, z: a.z });
+      }
+    }
     placedOnPart.set(partMesh, prior);
   }
 

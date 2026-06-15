@@ -831,10 +831,17 @@ export const Tuning = {
   SALVAGE_PANEL_SAMPLE_GRID_Y: 3,        // candidate origins up the flank height
   SALVAGE_PANEL_FACE_INSET: 0.70,        // sample only the inner 70% of a face (skip curved-away edges)
   SALVAGE_PANEL_OUTWARD_MIN: 0.45,       // hit normal must point this much away from the part centroid
-  SALVAGE_PANEL_MAX_NORMAL_Y: 0.4,       // reject sloped/top faces — panel can only yaw, not pitch
-  SALVAGE_PANEL_FLATNESS_DEPTH_TOL: 0.13, // 4-ray probe ring must agree within this depth (m) = flush
+  SALVAGE_PANEL_MAX_NORMAL_Y: 0.6,       // ACAV Tier 2 — reject near-horizontal faces (panel facing sky/sand); raised 0.4→0.6 since the full quaternion now lets a panel PITCH to sit flush on a sloped hull
+  SALVAGE_PANEL_FLATNESS_DEPTH_TOL: 0.13, // footprint probe must agree within this depth (m) = flush
   SALVAGE_PANEL_MIN_SEPARATION: 0.9,     // min gap (m) between two panels on the same part
   SALVAGE_PANEL_SURFACE_EPS: 0.012,      // push the mount this far proud to avoid z-fighting the hull skin
+  // ACAV Tier 2 — shape-agnostic `findSurfaceMounts` (world/panelPlacement.ts):
+  // bounding-sphere inward rays sample the REAL hull surface (any shape, not just
+  // ±Z cylinder flanks); each candidate is scored over the panel FOOTPRINT.
+  SALVAGE_PANEL_SAMPLE_DIRS: 48,         // Fibonacci-sphere inward cast directions (1 seeded rotation offset → fixed RNG budget, D208); early-exits on a high-quality mount so most panels scan far fewer
+  SALVAGE_PANEL_MOUNT_EARLY_ACCEPT: 0.88, // stop scanning once a mount this outward-facing + flat is found (boot perf)
+  SALVAGE_PANEL_FOOTPRINT_CLEARANCE: 0.22, // probe pushes out this far + casts back; |d−this| ≤ FLATNESS_TOL = flat AND clear (a closer hit = geometry intrudes; subsumes decoration avoidance)
+  SALVAGE_PANEL_NORMAL_AGREEMENT: 0.72,  // min dot(footprint-probe normal, centre normal) — the surface stays flat across the panel
   // ACAV — shared bury/occlusion raycast params (factored out of the three
   // duplicated copies — pruneBuriedPanels / panelBuryAudit / wreck-yard cluster
   // pass — into one validatePanels in world/panelPlacement.ts; D210 drift fix).

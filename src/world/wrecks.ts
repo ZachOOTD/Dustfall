@@ -295,6 +295,7 @@ export function addAccessPanel(
   scale = 1,
   faceYaw = 0,
   kind: PanelKind = 'fuselage',
+  orientQuat?: THREE.Quaternion,
 ): THREE.Mesh {
   const sx = Tuning.SALVAGE_PANEL_SIZE_X * scale;
   const sy = Tuning.SALVAGE_PANEL_SIZE_Y * scale;
@@ -316,17 +317,17 @@ export function addAccessPanel(
   // raycast bounds, and child positions (door / rim / interior / glow)
   // all keep their existing wrapper-local layouts.
   const body = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), _panelBodyMatBackSide);
-  // Build a small offset vector in panel-LOCAL Z and rotate it by
-  // faceYaw so the "back" direction matches the panel's facing.
+  // ACAV Tier 2 — orient from a FULL quaternion when the shape-agnostic sampler
+  // passes one (so the panel sits FLUSH on angled/curved hulls — no cardinal-yaw
+  // snap), else a yaw-only quaternion from faceYaw (legacy + authored-anchor path).
+  // The recess offset runs along the panel's local −Z (the "back" direction), so
+  // it composes correctly with any orientation. Yaw-only reproduces the old
+  // `recessZ*sin(yaw), 0, recessZ*cos(yaw)` exactly.
   const recessZ = -sz / 2;
-  const cosY = Math.cos(faceYaw);
-  const sinY = Math.sin(faceYaw);
-  body.position.set(
-    localX + recessZ * sinY,    // local +Z direction after yaw rotation
-    localY,
-    localZ + recessZ * cosY,
-  );
-  body.rotation.y = faceYaw;
+  const q = orientQuat ?? new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), faceYaw);
+  const recessOff = new THREE.Vector3(0, 0, recessZ).applyQuaternion(q);
+  body.position.set(localX + recessOff.x, localY + recessOff.y, localZ + recessOff.z);
+  body.quaternion.copy(q);
   body.userData.noCollider = true;
 
   // Brass rim — thin frame around the panel face, sticking forward like
@@ -486,6 +487,20 @@ export function addAccessPanel(
   group.add(body);
   group.userData.accessPanel = body;
   return body;
+}
+
+/** ACAV Tier 2 — mount a panel with a FULL part-local quaternion (from the
+ *  shape-agnostic `findSurfaceMounts` sampler) so it sits flush on any hull
+ *  surface. Thin wrapper over addAccessPanel; the faceYaw arg is unused because
+ *  orientation comes entirely from `localQuat`. */
+export function addAccessPanelOriented(
+  group: THREE.Group,
+  localPos: THREE.Vector3,
+  localQuat: THREE.Quaternion,
+  scale = 1,
+  kind: PanelKind = 'fuselage',
+): THREE.Mesh {
+  return addAccessPanel(group, localPos.x, localPos.y, localPos.z, scale, 0, kind, localQuat);
 }
 
 // ────────────────────────────────────────────────────────────────
