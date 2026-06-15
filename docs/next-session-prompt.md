@@ -1,76 +1,73 @@
-# Session ACAS — Kickoff Brief
+# Session ACAT — Kickoff Brief
 
 ## Read these now (in order)
-1. `CLAUDE.md` (auto-loaded) — "Where we are now" (ACAQ wreck-yard biome + ACAR2 recessed Sarlacc pit shipped).
-2. `docs/session-end-report.md` — cumulative state (ACAQ at top).
-3. `docs/backlog.md` + `docs/decisions.md` (D201 distance-override-biome; D202 KCC-external-pull; D203 group.attach-merge).
-4. `docs/roadmap.md` + `docs/architecture.md`.
+1. `CLAUDE.md` (auto-loaded) — "Where we are now" (ACAS: wreck-yard perf+polish + item/collision breadth shipped).
+2. `docs/session-end-report.md` — cumulative state (ACAS at top).
+3. `docs/backlog.md` — the owed walk-tests + deferred items.
+4. `docs/decisions.md` tail (D204 recessed-pit terrain-carve; D205 merge-an-interactive-object; D206 collider-shape-from-bbox).
+5. `docs/roadmap.md` + `docs/architecture.md` (only if touching an unfamiliar system).
 
 ## What's already built
-The wreck arc + the **wreck-yard biome (Cycle 8)** are shipped: a rare distance-override destination (`biomes.wreckYardAnchor`,
-620-1000m out) with a dense crashed-fleet graveyard (`wreckYard.ts`), `relic_core` exclusive glowing loot, and vulture
-ecology. The **Sarlacc pit** (`sarlaccPit.ts`) is a SEPARATE dune hazard on its own `biomes.sarlaccPitAnchor` (ACAR) and is
-now **RECESSED into the terrain** (ACAR2/D204) — `terrain.ts` carves a funnel crater into the heightfield (depth 13 /
-clearing 24) and the maw (beak + 3 teeth tiers + 9 tentacles + glowing gullet) sits at the carved floor; it gapes/pulls/
-bites. Verifiable via the `wreck-yard` framer (`--angle=aerial|approach|ground|pit|maw|pit-eye`; fixed-seed) + `sarlacc-test`.
-tsc clean, no save bump (SAVE_VERSION 14).
+The wreck-yard biome (Cycle 8) + the recessed Sarlacc pit are shipped and polished. ACAS added: the wreck-yard yard-merge
+now folds in the loose props (mounds/debris/bones), the speeder body is static-merged (D205), the graveyard floor is
+oil/ash-mottled, the big hand-wrecks are lootable, the maw is denser, two item viewmodels were upgraded (cloth, skewer
+spit), dropped items get per-item collider shapes (D206), and the crafting chooser's discovery-spoiler was fixed +
+verified. tsc clean, SAVE_VERSION 14.
 
-## Session ACAS focus — the owed WALK-TESTS (human) + the flagged perf/polish follow-ups
-This is an **ATTENDED** session: its top items need a human in `npm run dev` (feel + interaction), and the perf
-refactors are interaction-preserving. The autonomous biome build is done; what's left needs your eyes or careful edits.
+## Session ACAT focus — the owed human WALK-TESTS (this is an ATTENDED session)
+Almost everything left needs a human in `npm run dev` — feel/interaction the headless harness can't judge. The autonomous
+build work for this arc is essentially done; what remains is your eyes + a couple of attended refactors.
 
 ## Priority items (in order)
-1. **Wreck-yard + Sarlacc-pit WALK-TESTS (needs YOU) — now SEPARATE locations (ACAR).** `npm run dev`:
-   - **The pit** (`__game.ctx.biomes.sarlaccPitAnchor` — its own DUNE-desert spot, ~420-950m out): it's now a RECESSED
-     funnel crater carved into the terrain (ACAR2/D204), depth 13 / clearing 24. Judge the **PULL feel** (escapable but
-     scary? — D202; `tuning.ts` `SARLACC_PIT_PULL_ACCEL`/`_RADIUS`/`_DANGER` are a first pass) **combined with the funnel
-     now physically funneling you down** — the key new question: can you still CLIMB BACK OUT (walls are ~39°, under the
-     KCC 50° limit, but confirm no softlock when the pull is also active), and does descending into the bowl read as a
-     dread trap. Also: damage cadence, does the maw gape/clench as you approach/leave, is the crater depth/steepness
-     right (`SARLACC_PIT_CRATER_DEPTH`). Tune to taste.
-   - **The graveyard** (`__game.ctx.biomes.wreckYardAnchor` — separate, ~620-1000m out): relic findability + full-restore
-     value, whether the ashen ground + dense wreck silhouette + circling vultures read ominous on approach.
-2. **Mega-wreck interior WALK-TEST (owed since ACAL).** The other human-owed check: collision holds / fracture-ramp
-   entrance walks / panels reachable / interior brightness.
-3. **Wreck-yard perf follow-up (D203).** Route the sand mounds + debris + ribcages into the yard merge: add a `parent?:
-   THREE.Object3D` opt to `placeProcgenComposite`/`placeDebrisField`/`placeRibcage` (add to `parent ?? scene`) so
-   `placeWreckYard` puts them in `yardGroup` before `mergeStaticByMaterial` → ~200 more draw calls saved. `wreckYard.ts`.
-4. **The ACAP-flagged perf (attended):** speeder static-merge (tag its animated parts `noMerge` first) + pickup
-   InstancedMesh (interaction-raycast rework). Measure via `perf-probe`.
-5. **Wreck-yard polish:** the muddy-bare ground color (`BIOME_COLOR_WRECK_YARD`); register the big hand-wrecks' panels
-   for more graveyard loot; a 2nd maw-iteration pass if the walk-test flags it.
+1. **Sarlacc-pit WALK-TEST (needs YOU) — the recessed crater (ACAR2/D204).** `__game.ctx.biomes.sarlaccPitAnchor` (its own
+   dune spot, ~420-950m out). Walk in: judge the **PULL feel** (escapable but scary?) **combined with the funnel physically
+   funneling you down** — the key question: can you **climb back out** of the bowl while the pull is active (walls ~39° < the
+   KCC 50° limit, but confirm no softlock), is the crater depth/steepness right (`SARLACC_PIT_CRATER_DEPTH`/`_CLEARING`), and
+   does descending read as a dread trap. Also: damage cadence, the gape/clench telegraph. Tune `tuning.ts` `SARLACC_PIT_*`.
+2. **Dropped-item settle FEEL (ACAS B2).** Drop pipe_staff/amban_rifle/branch (capsule) + canteen/relic_core (sphere) on
+   flat + slope + the crater — does the capsule/ball lie read more natural than the old box? `__game.dropTestItem('id')`
+   spawns one in front of you. Tune the bbox-derived half-extents (`pickups.ts` `getItemColliderDesc` region) if a body
+   jitters/slides. Add more `colliderHint`s to items if warranted.
+3. **Wreck-yard graveyard + mega-wreck interior WALK-TESTS.** Graveyard (`wreckYardAnchor`, 620-1000m): relic findability +
+   value, do the ashen/mottled ground + dense wreck silhouette + circling vultures read ominous, are the big wrecks'
+   newly-registered panels reachable. Mega-wreck interior (owed since ACAL): collision holds / fracture-ramp entrance /
+   panels reachable / interior brightness.
+4. **(Deferred perf, attended) Pickup InstancedMesh.** 340 branch+scrap pickups ≈ 340 draw calls. Each is individually
+   takeable → needs an interaction-raycast (`instanceId`) rework. Do it only with a human to confirm pickups still take.
+5. **(Open design call) Activate the crafting chooser.** The multi-match chooser is built + verified + discovery-respecting
+   but dormant (no recipes collide). Add ONE colliding recipe (same inputs → a different output) for a real player choice —
+   mind D71 (ids ≥ 17) + the discovery/save balance. `__registerTestRecipe` shows the shape.
 
 ## Stretch goals
-- W2 flagship greebles / W5 dusk-lit procgen pass (deferred from ACAP).
-- The next Phase-2 cycle (iteration-plan.md): Cycle 5 raider proc-character, or Cycle 7 deep cave.
-
-## Verification protocol
-`npm run verify` (= `tsc --noEmit`) clean. **Wreck-yard visual:** the `wreck-yard` framer (now reports draw calls) +
-`sarlacc-test` (open/pull/bite wiring). **Items 1-2 are feel/interaction-critical** → verify in `npm run dev` (the framer
-can't judge feel). **Perf:** `perf-probe` + the `wreck-yard --angle=ground` draw-call read. Rule 8: screenshot-iterate
-any visual change.
+- W2 flagship greebles / W5 dusk-lit procgen pass (long-deferred).
+- The next Phase-2 cycle: Cycle 5 raider proc-character, or Cycle 7 deep cave (both bigger, mostly DEFERRED).
 
 ## Autonomy contract
-Items 1-2 need a human throughout. Item 3-4 are interaction-preserving — if running unattended, do the SAFE half (the
-`parent` plumbing + measure) and STOP before claiming the speeder/pickups still work; surface it. Ambiguous → GDD pillars
-+ realism dial; append a D-entry; continue.
-
-## Footguns (this arc)
-- **The merge skips accessPanel/noMerge/interactType/transparent (D198/D203)** — ANIMATED parts with no interactType
-  (speeder wheels/tow-bar) are NOT auto-skipped; tag them `noMerge` before merging.
-- **External force on the KCC → a one-frame `ctx.player.externalPull` field folded into `desired` (D202)**, never a
-  competing `setNextKinematicTranslation`.
-- **A rare destination biome is a distance-override around `wreckYardAnchor`, not a noise band (D201)** — terrain reads
-  `biomes.wreckYardAt`; new biome consumers must widen any hardcoded `'dune'|'rocky'|'salt'` unions.
-- **Windows rig-shot teardown** `taskkill /T /F`s the vite tree (ACAO) — if a run wedges, check port 5191.
-
-## Save discipline (D81)
-Geometry/material/collider/additive-item only → no `SAVE_VERSION` bump. (relic_core is additive — old saves ignore it.)
+Items 1-3 need a human throughout — do NOT claim feel/interaction verified from a headless run. Item 4 is
+interaction-preserving but unverifiable unattended (do the safe half + surface, don't claim pickups still take). Item 5 is
+a design decision — surface options, don't unilaterally add a gameplay recipe unattended. Ambiguous → GDD pillars + the
+realism dial, append a D-entry, continue.
 
 ## Stop conditions
 3 fix-walls on one element (log + move on) · a `SAVE_VERSION` bump turning out necessary (surface it) · destructive-git
 attempt · an interaction-preserving refactor that can't be live-verified unattended (do the safe half, surface).
 
+## Notable footguns (this arc)
+- **Recessed hazard = carve the shared heightfield (D204)** — mesh+collider+`heightAt` dip together; gate the wall slope vs
+  the KCC 50° climb limit or the player softlocks.
+- **Merging an interactive object (D205)** — tag every animated/interactive/light-bearing mesh `noMerge`; the merge removes
+  a mesh's whole subtree, so a light under a merged mesh is lost. The collider must be mesh-independent (or built first).
+- **Per-item dropped colliders (D206)** — `ItemDef.colliderHint` picks the shape; the SIZE comes from the bbox. Capsule axis
+  = the bbox's longest dimension (rotated onto it). Default-off; raycast keys on userData so interaction is unaffected.
+- **`placeWreck` can't import salvage.ts (circular)** — register big-wreck panels from the CALLER (`wreckYard`) after it returns.
+- **Windows rig-shot** pins a fixed seed (`dustfall.pendingSeed`=1337) for deterministic shots; `--seed=<n>` overrides.
+
+## Verification protocol
+`npm run verify` (= `tsc --noEmit`) clean. Headless gates that exist: `wreck-yard --angle=aerial|approach|ground|pit|maw|pit-eye`
+(draw calls + salvageable count), `speeder-fx` (merge-safety refs), `drop-test` (dropped-item settle), `craft-chooser`
+(chooser path), `sarlacc-test` (pit open/pull/bite), `item-studio --items=`. **Items 1-3 are feel/interaction-critical →
+verify in `npm run dev` (the harness can't judge feel).** Rule 8: screenshot-iterate any visual change.
+
 ## On stop
 Run `/session-end` (verify → changelog → CLAUDE last-shipped → roadmap → D-entries → backlog → report → next-prompt →
-post-mortem → commit + tag `session-ACAS` + push).
+post-mortem → commit + tag `session-ACAT` + push).

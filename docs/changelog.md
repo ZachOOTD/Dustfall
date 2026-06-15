@@ -3,6 +3,52 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ACAS — 2026-06-15 — Overnight: wreck-yard perf+polish + item fidelity/collision breadth ✓ verify pass (tsc clean)
+
+`verified` — `npm run verify` (tsc) PASS; **no save bump** (geometry/material/collider/data only). Unattended overnight on
+two themes the user picked (options 3+4), max-depth budget. Opened with a 4-agent parallel AUDIT that reshaped the work:
+the roadmap's "~19 item models need fidelity" was **stale/false** (all 62 are DECENT/HERO) and the crafting chooser UI
+**already existed** — so B1/B3 shrank to focused, honest work. 5 commits (`b63a327`,`88949fe`,`447c732`,`ad91f22`,`6d745a6`);
+D205-D206.
+
+**A1 — wreck-yard yard-merge for the loose props.** `placeProcgenComposite`/`placeDebrisField`/`placeRibcage` gained an
+optional `parent` (default scene); `placeWreckYard` routes the sand mounds + debris + ribcages into `yardGroup` before
+`mergeStaticByMaterial`. Graveyard draw calls **4082→3994** (−88; the previously scene-direct props now fold into the
+cluster merge), tris unchanged.
+
+**A2 — speeder static-merge.** `makeSpeeder` now `mergeStaticByMaterial`s its body (**~40+ parts → 14 meshes**). Collider
+is hand-defined cuboids (independent of meshes) so it's collider-safe; tagged headlamp-disc/tow-bar/antenna `noMerge` (seat
+auto-skipped via interactType; the headlamp+beacon lights are direct group children, untouched). `speeder-fx` verifies all
+refs survive + the bike still drives. (D205.) **Pickup InstancedMesh deferred** — interaction-raycast rework, not
+feel-verifiable unattended.
+
+**A3 — graveyard ground mottle.** The floor now noise-blends oil-stained pools (dark) + bleached-ash drifts (pale) over the
+ashen base, so it reads as a contaminated dead place, not a flat muddy tint.
+
+**A4 — big hand-wrecks are LOOTABLE.** Their builders already add access panels (the merge keeps them live) but `placeWreck`
+never registered them (can't import salvage.ts — circular); `wreckYard` registers them after `placeWreck` returns, skipping
+any panel a crash-tilt + deep burial rotated underground (no unreachable loot). Graveyard salvageables = 75.
+
+**A5 — denser Sarlacc maw.** Fang ring 46→63 teeth (nearer the canon ~73) — reads as a jagged tooth-lined gullet.
+
+**B1 — item viewmodels (focused, honest).** Audit found all items already DECENT/HERO; two genuinely warranted a touch-up:
+`cloth` (rigid 3-tier slab stack → soft DRAPED folds: sagging corners + weave-wave + rolled hem) and the
+`lizard_on_a_stick` spit (smooth CG cylinder → the shared `buildBranchMesh`, a whittled branch). The `branch` itself was left
+as-is (well-built; deliberately simplified in ACAA).
+
+**B2 — per-item dropped-collider shapes (D206).** New optional `ItemDef.colliderHint` ('box'|'sphere'|'capsule') picks the
+SHAPE while the SIZE is derived from the viewmodel bbox (robust, not hardcoded). `spawnDroppedPickup` builds a ball / an
+axis-aligned capsule / the legacy cuboid; tagged pipe_staff/amban_rifle/pulse_rifle/branch=capsule, canteen/relic_core=sphere.
+Defaults preserve old behavior; pickup raycast keys on userData so interaction is unaffected. NEW `__game.dropTestItem` +
+`drop-test` scenario: capsule/sphere/box pickups all settle finite + near terrain (no NaN/explosion). **Settle FEEL flagged
+for an attended walk-test.**
+
+**B3 — crafting chooser.** The multi-match chooser UI already existed but is dormant (the 16-recipe set has no input-multiset
+collisions — confirmed). Fixed a real **discovery-spoiler bug** (chooser labeled undiscovered options with their name; now
+shows "?" like the rest of the UI). Verified END-TO-END via NEW `craft-chooser` scenario + test hooks (`craftChooserTest`
+fills slots + reads the chooser DOM; `injectTestRecipe`/`__registerTestRecipe` register a transient collision): 2 buttons,
+CRAFT gated, discovery-respecting. **Activating it for players is a 1-recipe design call (infra + UI ready), left to the user.**
+
 ## Session ACAR2 — 2026-06-14 — Sarlacc pit RECESSED into the terrain (Great Pit of Carkoon) ✓ verify pass (tsc clean)
 
 `verified` — `npm run verify` (tsc) PASS; **no save bump** (terrain/geometry/material only). User feedback: the pit

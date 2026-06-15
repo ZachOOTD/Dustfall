@@ -64,29 +64,27 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      Prior milestones live in docs/changelog.md — do NOT accumulate "Prior milestone"
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
-**Last shipped**: Session ACAQ — **marathon overnight: Wreck-yard biome (Cycle 8) — graveyard + Sarlacc pit** (tsc
-clean, no save bump; D201-D203; 5 commits). A whole new rare DESTINATION biome end-to-end (6 tiers), planned via 4
-parallel investigations. **Y1 (D201):** `wreck_yard` biome as a DISTANCE-OVERRIDE disc around a seed-derived anchor
-620-1000m out (not noise) — `biomes.wreckYardAnchor`/`wreckYardAt` strength + ashen flattened ground; NEW `wreck-yard`
-rig-shot framer. **Y2:** NEW `wreckYard.ts` dense graveyard (~26-38 corroded procgen wrecks + big silhouettes + ribcage
-bone-fields + debris, 24m center clearing). **Y3:** NEW additive `relic_core` artifact (glowing, full-restore) scattered
-as graveyard-exclusive loot (`relicMesh.ts` + `spawnRelicAt`). **Y4 (hero, D202):** NEW `sarlaccPit.ts` — a raised
-sand-maw (4 iterated rounds) that gapes when the player nears, PULLS them in (`ctx.player.externalPull` → KCC desired
-vector) + BITES; smoke-tested (pull 5.6m→0.3m, health 1→0.86). **Pull feel flagged for attended tune.** **Y5:** graveyard
-joins the vulture ecology. **Y6 (D203):** graveyard perf merge (re-parent wrecks via `group.attach` + merge → 2055→1664
-draw calls). **ACAR follow-up:** SEPARATED the Sarlacc pit from the graveyard — its OWN dune-desert hazard
-(`biomes.sarlaccPitAnchor`). **ACAR2 (D204):** RECESSED the Sarlacc pit INTO the terrain (Great Pit of Carkoon, per
-user feedback + a 4-agent reference sweep) — `terrain.ts` carves a funnel crater into the shared `heights` array (depth
-13 / clearing 24, peak wall ~39° < KCC climb limit; sand dusked toward center) so the player descends into the bowl;
-`sarlaccPit.ts` maw fully rebuilt to sit at the crater floor (fleshy collar + leathery lip + glowing gullet + central
-beak + 3 teeth tiers + 9 tapered tentacles), FSM animates the maw only (no mesh sink). *(Prior — ACAP: wreck-arc finish (D198-200); ACAO: procgen framer + T5 greebles (D197). See changelog.)*
+**Last shipped**: Session ACAS — **overnight: wreck-yard perf+polish + item-fidelity / collision breadth** (tsc clean,
+no save bump; D205-D206; 5 commits). Unattended, opened with a 4-agent parallel AUDIT that reshaped the work (the
+roadmap's "~19 item models" was stale — all 62 are DECENT/HERO; the crafting chooser already existed). **A1:** routed the
+wreck-yard sand mounds/debris/ribcages into the yard merge via an optional `parent` on
+placeProcgenComposite/placeDebrisField/placeRibcage (graveyard 4082→3994 draw calls). **A2 (D205):** static-merged the
+speeder body (~40+ parts → 14 meshes) — collider is hand-defined so it's merge-safe; tagged headlamp-disc/tow-bar/antenna
+`noMerge`; `speeder-fx` verifies refs survive + it drives. **A3:** graveyard ground mottle (oil pools + ash drifts).
+**A4:** the big hand-wrecks are now LOOTABLE (register their existing panels from `wreckYard` after `placeWreck`,
+above-ground only). **A5:** denser Sarlacc maw (46→63 teeth). **B1:** `cloth` → soft draped folds + lizard-skewer spit →
+real branch (the rest were already hero; branch left per ACAA). **B2 (D206):** `ItemDef.colliderHint`
+(box|sphere|capsule) — shape from the hint, SIZE from the bbox; dropped pipe/rifle/branch lie as rods, flask/orb as balls;
+`drop-test` confirms they settle. **B3:** fixed the crafting chooser's discovery-spoiler (undiscovered → "?") + verified it
+end-to-end (`craft-chooser`); it's dormant only because no recipes collide. NEW dev hooks: `dropTestItem`,
+`craftChooserTest`, `injectTestRecipe`. *(Prior — ACAR2: recessed Sarlacc pit (D204); ACAQ: wreck-yard biome / Cycle 8 (D201-203). See changelog.)*
 
-**Next session** = **(1)** the still-owed mega-wreck interior WALK-TEST + a wreck-yard WALK-TEST (the pull FEEL, the maw
-danger, the relic findability — all need a human in `npm run dev`). **(2)** the flagged perf follow-ups: route the
-wreck-yard mounds/debris/bones into the yard merge (a `parent` opt on placeProcgenComposite/placeDebrisField); the
-speeder static-merge + pickup InstancedMesh (ACAP). **(3)** wreck-yard polish: ground color, register the big
-hand-wrecks' panels, tune the maw. The raider proc-character + rig-dependent work stays DEFERRED. See
-[docs/next-session-prompt.md](docs/next-session-prompt.md) + [docs/backlog.md](docs/backlog.md).
+**Next session** = **(1)** the owed human WALK-TESTS in `npm run dev` (all need eyes): the recessed Sarlacc-pit PULL feel +
+climb-out (ACAR2/D204), the wreck-yard graveyard (relic findability, ominous read), the mega-wreck interior (collision /
+entrance / panels), and the new **B2 dropped-item settle FEEL** (does a capsule pipe lie more naturally than a box). **(2)**
+flagged perf: the speeder pickup-InstancedMesh (interaction-raycast rework, attended). **(3)** OPEN design call: activate
+the crafting chooser by adding a colliding recipe (infra ready). The raider proc-character + rig-dependent work stays
+DEFERRED. See [docs/next-session-prompt.md](docs/next-session-prompt.md) + [docs/backlog.md](docs/backlog.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 
