@@ -827,9 +827,6 @@ export const Tuning = {
   // outward-facing, clip-free mount, replacing the single hardcoded
   // panelAnchor (kept as a fallback). System-internal (player can't feel the
   // ray budget) but lifted here per rule 2 for one-place tuning.
-  SALVAGE_PANEL_SAMPLE_GRID_X: 3,        // candidate origins along the part length
-  SALVAGE_PANEL_SAMPLE_GRID_Y: 3,        // candidate origins up the flank height
-  SALVAGE_PANEL_FACE_INSET: 0.70,        // sample only the inner 70% of a face (skip curved-away edges)
   SALVAGE_PANEL_OUTWARD_MIN: 0.45,       // hit normal must point this much away from the part centroid
   SALVAGE_PANEL_MAX_NORMAL_Y: 0.6,       // ACAV Tier 2 — reject near-horizontal faces (panel facing sky/sand); raised 0.4→0.6 since the full quaternion now lets a panel PITCH to sit flush on a sloped hull
   SALVAGE_PANEL_FLATNESS_DEPTH_TOL: 0.13, // footprint probe must agree within this depth (m) = flush

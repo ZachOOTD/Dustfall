@@ -88,6 +88,7 @@ src/
 - `SkeletonUtils.clone()` for rigged GLTFs (when added) — plain `.clone()` shares bones across instances.
 - `InstancedMesh` for landmarks has `frustumCulled = false` — the union AABB across all instances spans the world.
 - MCP preview screenshot tool can time out on this page once Rapier is loaded — verify with `gl.readPixels()` instead.
+- **Salvage-panel placement (ACAV).** Panels mount via `world/panelPlacement.ts` `findSurfaceMounts` (bounding-sphere inward rays read the REAL hull surface — any shape — + a full quaternion → flush) and are validated/culled by the ONE `validatePanels` (occlusion + surface-terrain). `world/panelGreeble.ts` builds the scrappy interior. Footguns: (1) any per-panel placement search must keep a FIXED `rand` budget — the procgen world runs off one seeded stream (D208/D213). (2) terrain-cull is SURFACE-scoped, never global (interior panels — mega-wreck/rockyEntrance/flagship bells — are legitimately below terrain, D212). (3) the circle lift-off cover + the door-swing reuse the SAME `-panelDoorAngle` hinge math; name any new cover pivot `panelDoor` so the bury-audit/prune door-exclusion + `completePry` apply. (4) **CONTRACT — any new wreck CLASS or hand-modeled flagship must pass `npm run verify:placement` (0 bury-audit fails across the seed sweep) before shipping**; that one gate is the scalability guarantee that a future wreck-model change didn't bury panels.
 
 ## Perf testing
 

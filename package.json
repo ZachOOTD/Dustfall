@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "verify": "tsc --noEmit",
+    "verify:placement": "node scripts/verify-placement.mjs",
     "rig-shot": "node scripts/rig-shot.mjs"
   },
   "devDependencies": {
