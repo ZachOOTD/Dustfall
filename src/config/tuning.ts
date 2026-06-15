@@ -496,8 +496,8 @@ export const Tuning = {
 
   // Wreck palette (Session S). Cool grey-rust industrial; avoids pure
   // blacks/whites so primitives feel weathered, not cartoon.
-  WRECK_HULL_HEX: 0x5f5b54,            // weathered light grey hull
-  WRECK_HULL_DARK_HEX: 0x534f48,       // AAM-followup #10: was 0x3a3631 (~40% darker than base, creating strong "fan blade" stripes on the sliced lathe hull as alternating slices read as separate panels with shadow gaps). Bumped much closer to base so slice seams read as subtle panel joints, not contrasted blades. User feedback: the opening wreck's rear dome looked thin/segmented because the high-contrast stripes were misread as gaps.
+  WRECK_HULL_HEX: 0x6a6657,            // ACAT W5 — lifted from 0x5f5b54 (+~20% value) so greeble/seam detail surfaces against the harsh desert light
+  WRECK_HULL_DARK_HEX: 0x5e5a52,       // ACAT W5 — lifted with the base hull (was 0x534f48) so the slice-seam relationship stays subtle. AAM-followup #10: was 0x3a3631 (~40% darker than base, creating strong "fan blade" stripes on the sliced lathe hull as alternating slices read as separate panels with shadow gaps). Bumped much closer to base so slice seams read as subtle panel joints, not contrasted blades. User feedback: the opening wreck's rear dome looked thin/segmented because the high-contrast stripes were misread as gaps.
   WRECK_RUST_HEX: 0x6e3a22,            // dominant rust accent
   WRECK_RUST_DARK_HEX: 0x4a2614,       // deep-rust crevice color
   WRECK_NOZZLE_INTERIOR_HEX: 0x14110e, // engine bell inside — near black

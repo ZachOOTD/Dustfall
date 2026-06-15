@@ -63,6 +63,8 @@ import { placeJournal, type Journal } from './journal.ts';
 //    wrecks.ts palette so composites blend visually). ────────────────
 const _hullMat = createRustedHullMaterial({
   baseColor: Tuning.WRECK_HULL_HEX,
+  streakIntensity: 0.40,   // ACAT W5 — was the 0.55 default; lower so dark rust streaks stop swallowing the greeble/seam detail
+  aoStrength: 0.24,        // ACAT W5 — was the 0.34 default; less underside crushing so the lower hull + flank greebles read
 });
 const _hullDarkMat = createRustedHullMaterial({
   baseColor: Tuning.WRECK_HULL_DARK_HEX,
