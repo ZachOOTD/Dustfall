@@ -1,18 +1,21 @@
-# Session ACAR — Kickoff Brief
+# Session ACAS — Kickoff Brief
 
 ## Read these now (in order)
-1. `CLAUDE.md` (auto-loaded) — "Where we are now" (ACAQ: wreck-yard biome / Cycle 8 shipped).
+1. `CLAUDE.md` (auto-loaded) — "Where we are now" (ACAQ wreck-yard biome + ACAR2 recessed Sarlacc pit shipped).
 2. `docs/session-end-report.md` — cumulative state (ACAQ at top).
 3. `docs/backlog.md` + `docs/decisions.md` (D201 distance-override-biome; D202 KCC-external-pull; D203 group.attach-merge).
 4. `docs/roadmap.md` + `docs/architecture.md`.
 
 ## What's already built
 The wreck arc + the **wreck-yard biome (Cycle 8)** are shipped: a rare distance-override destination (`biomes.wreckYardAnchor`,
-620-1000m out) with a dense crashed-fleet graveyard (`wreckYard.ts`), `relic_core` exclusive glowing loot, an animated
-Sarlacc-pit hazard (`sarlaccPit.ts` — gapes/pulls/bites), vulture ecology, and a yard-level perf merge. Verifiable via the
-`wreck-yard` framer (`--angle=aerial|approach|ground|pit`) + `sarlacc-test`. tsc clean, no save bump (SAVE_VERSION 14).
+620-1000m out) with a dense crashed-fleet graveyard (`wreckYard.ts`), `relic_core` exclusive glowing loot, and vulture
+ecology. The **Sarlacc pit** (`sarlaccPit.ts`) is a SEPARATE dune hazard on its own `biomes.sarlaccPitAnchor` (ACAR) and is
+now **RECESSED into the terrain** (ACAR2/D204) — `terrain.ts` carves a funnel crater into the heightfield (depth 13 /
+clearing 24) and the maw (beak + 3 teeth tiers + 9 tentacles + glowing gullet) sits at the carved floor; it gapes/pulls/
+bites. Verifiable via the `wreck-yard` framer (`--angle=aerial|approach|ground|pit|maw|pit-eye`; fixed-seed) + `sarlacc-test`.
+tsc clean, no save bump (SAVE_VERSION 14).
 
-## Session ACAR focus — the owed WALK-TESTS (human) + the flagged perf/polish follow-ups
+## Session ACAS focus — the owed WALK-TESTS (human) + the flagged perf/polish follow-ups
 This is an **ATTENDED** session: its top items need a human in `npm run dev` (feel + interaction), and the perf
 refactors are interaction-preserving. The autonomous biome build is done; what's left needs your eyes or careful edits.
 
@@ -70,4 +73,4 @@ attempt · an interaction-preserving refactor that can't be live-verified unatte
 
 ## On stop
 Run `/session-end` (verify → changelog → CLAUDE last-shipped → roadmap → D-entries → backlog → report → next-prompt →
-post-mortem → commit + tag `session-ACAR` + push).
+post-mortem → commit + tag `session-ACAS` + push).
