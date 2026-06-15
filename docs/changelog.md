@@ -3,6 +3,45 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ACAV — 2026-06-15 — Salvage-panel overhaul: PLACEMENT half (Tiers 0-2) + dropped-item collider revert ✓ verify pass (tsc clean)
+
+`verified` — `npm run verify` (tsc) PASS; **no save bump**. User flagged salvage panels (a core mechanic) as broken —
+phasing through terrain, weird angles, clipping models, hidden interiors — and asked for a robust+scalable rebuild plus
+shape variety + a scrappy interior overhaul. Planned via 3 Explore + 3 Plan agents + a web-research pass; full plan in
+`.claude/plans/`. This session shipped the **placement half** (Tiers 0-2 of 6); the visual half (shapes/interiors/verify
+hardening) is queued. D211-D213. 4 commits (`63e96d0`,`94f8bc6`,`fe63875` + this).
+
+**Dropped-item collider revert (D211, reverses D206).** User walk-tested ACAS B2 and disliked it — dropped items spun +
+tunnelled. Cause: spheres ROLL and capsules roll + their thin 2cm radius tunnelled the heightfield. Reverted
+`pickups.ts` to the snug **cuboid** for all dropped items (the original ABM behaviour); removed the capsule scratch vars.
+`def.colliderHint` is now dead but harmless. `drop-test` finite + settles.
+
+**Tier 0 — unified `validatePanels` (`63e96d0`).** Three near-identical bury-raycast copies had already drifted (D210):
+`pruneBuriedPanels` / `panelBuryAudit` / the wreck-yard cluster pass. Collapsed them into ONE `validatePanels` in NEW
+`world/panelPlacement.ts` (imports only THREE + Tuning, never salvage.ts — cull via an injected callback). Factored the
+magic 1.6/0.22 into tuning. Provably inert: audit byte-identical (seed 1337 129/0).
+
+**Tier 1 — terrain-clearance cull (`94f8bc6`; the headline phase-through fix).** Nothing ever checked a panel against
+terrain. Added a CENTER-clearance cull (a surface panel whose centre sits >0.10m below the sand is culled) on the three
+SURFACE-wreck gen paths (procgen composite, the legacy `placeWreck` branch — the worst offender, never covered before — and
+the wreck-yard cluster), all register-all-then-prune (RNG-safe, D208). Dropped the wreck-yard center-point gate that
+conditionally skipped `registerSalvageable` (rand desync, D208). Terrain-culling is **surface-scoped, NOT global**: interior
+panels (mega-wreck interior, rockyEntrance chamber, flagship recessed bells) are legitimately below the surface, so the
+global `panelBuryAudit` stays occlusion-only. Door-swing + reachability re-sequenced out of the cull (would over-cull) →
+Tier-2 sampler preference + Tier-5 audit.
+
+**Tier 2 — shape-agnostic sampler + flush mount (`fe63875`; the weird-angle fix).** Replaced `findPanelMount` (jittered grid
+vs ±Z bounding-box flanks + cardinal-yaw 90° snap — broke on cockpits/bells/boxes, never sat flush) with `findSurfaceMounts`:
+bounding-SPHERE inward rays read the REAL hull surface (any shape), each candidate scored over the panel FOOTPRINT (flatness
++ clearance, subsumes decoration avoidance), and a FULL quaternion from the real normal → panel sits flush on curved/angled
+hulls. Exactly ONE `rand` (Fibonacci rotation offset) = fixed RNG budget (D208); 48 dirs + early-exit keep boot cheap.
+`addAccessPanel` now orients from an optional quaternion; `addAccessPanelOriented` wraps it. **Verified:** occlusion audit
+94/94 0 fails; perf-probe boot 964ms + programs 67 (D207 invariant); close-ups show flush mounts + readable cavities.
+
+**Deferred (the visual half, planned):** Tier 3 shape/size variants (square + bolted lift-off circular port), Tier 4 the
+5-archetype scrappy interior overhaul (pipes/fuses/machinery/wires/rust, decorative greeble + 5 lootable, all deeply
+iterated), Tier 5 verification hardening + scalability gate (placement-torture + flagship-audit + `verify:placement`).
+
 ## Session ACAU — 2026-06-15 — ACAT-debt finish: bury-audit register-all-then-prune + material shared-noise helper ✓ verify pass (tsc clean)
 
 `verified` — `npm run verify` (tsc) PASS; **no save bump** (procgen-registration + shader-source only). User asked to start the dev

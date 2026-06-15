@@ -125,11 +125,6 @@ function tagPickupMeshes(root: THREE.Object3D, pickupId: number): void {
 const _UP = new THREE.Vector3(0, 1, 0);
 const _alignQuat = new THREE.Quaternion();
 const _alignAxis = new THREE.Vector3();
-// ACAS B2 — scratch for orienting a capsule collider onto a dropped item's long axis.
-const _capUp = new THREE.Vector3(0, 1, 0);
-const _capX = new THREE.Vector3(1, 0, 0);
-const _capZ = new THREE.Vector3(0, 0, 1);
-const _capQ = new THREE.Quaternion();
 
 /** Tilt `mesh` so its local +Y points along the terrain normal at (x, z).
  *  Preserves any existing rotation by composing the alignment quaternion
@@ -540,26 +535,13 @@ export function spawnDroppedPickup(
       bd.setLinvel(opts.initialVel.x, opts.initialVel.y, opts.initialVel.z);
     }
     body = opts.world.createRigidBody(bd);
-    // ACAS B2 — shape the collider per def.colliderHint, DERIVING the size from the
-    // bbox (not hardcoded). Default = the snug cuboid (legacy). A capsule/sphere
-    // lets long-thin / round dropped items settle naturally rather than as a box.
-    let shape: RAPIER.ColliderDesc;
-    if (def.colliderHint === 'sphere') {
-      shape = RAPIER.ColliderDesc.ball(Math.max(0.04, (hx + hy + hz) / 3));
-    } else if (def.colliderHint === 'capsule') {
-      const hs = [hx, hy, hz];
-      const axis = hs.indexOf(Math.max(hx, hy, hz));           // longest = capsule axis
-      const others = hs.filter((_, i) => i !== axis);
-      const radius = Math.max(0.02, Math.min(others[0], others[1]) * 0.9);
-      shape = RAPIER.ColliderDesc.capsule(Math.max(0.02, hs[axis] - radius), radius);
-      // Rapier's capsule axis is local +Y; rotate it onto the bbox's longest axis.
-      if (axis !== 1) {
-        _capQ.setFromUnitVectors(_capUp, axis === 0 ? _capX : _capZ);
-        shape.setRotation({ x: _capQ.x, y: _capQ.y, z: _capQ.z, w: _capQ.w });
-      }
-    } else {
-      shape = RAPIER.ColliderDesc.cuboid(hx, hy, hz);           // 'box' or default
-    }
+    // Snug cuboid sized to the bbox (the original ABM behavior). A box's flat
+    // faces grip the dune and settle without rolling. ACAU REVERTED the ACAS B2
+    // sphere/capsule colliderHint (D206): in the walk-test spheres/capsules
+    // rolled + spun instead of settling, and the thin capsule radius (2cm floor,
+    // vs the box's 4cm) tunneled through the heightfield even with CCD. The
+    // `def.colliderHint` field is now ignored; the box reads best for all items.
+    const shape = RAPIER.ColliderDesc.cuboid(hx, hy, hz);
     shape.setFriction(0.85).setRestitution(0.15).setDensity(0.6);
     opts.world.createCollider(shape, body);
   }

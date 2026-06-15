@@ -1,77 +1,83 @@
-# Session ACAV — Kickoff Brief
+# Session ACAW — Kickoff Brief (continue the salvage-panel overhaul — the VISUAL half)
 
 ## Read these now (in order)
-1. `CLAUDE.md` (auto-loaded) — "Where we are now" (ACAU: bury-audit prune + material shared-noise helper shipped).
-2. `docs/session-end-report.md` — cumulative state (ACAU at top).
-3. `docs/backlog.md` — the PENDING section (owed walk-tests A + features B).
-4. `docs/decisions.md` tail (D209 generator-not-rename helper lift; D210 two-scope bury prune + door-exclusion; D207-D208 the ACAT lineage; D204-D206).
-5. `docs/roadmap.md` "Up next" (the Phase-2 cycle plan) + `docs/architecture.md` (only if touching an unfamiliar system).
+1. `CLAUDE.md` (auto-loaded) — "Where we are now" (ACAV: panel placement half shipped).
+2. **`.claude/plans/ok-next-i-want-ticklish-lampson.md`** — the FULL 6-tier panel-overhaul plan (Tiers 0-2 done; 3-5 remain). This is the spec.
+3. `docs/session-end-report.md` — cumulative state (ACAV at top).
+4. `docs/decisions.md` tail — D211 (dropped-item revert), D212 (surface-scoped terrain cull), D213 (shape-agnostic sampler).
+5. `docs/backlog.md` — the panel-overhaul visual-half item + owed walk-tests.
 
-## What's already built
-The wreck-yard biome + recessed Sarlacc pit, the full salvage/crafting/creature/sled/rope/weather/POI stack, a deep perf
-pass (static-merges + ALL procedural materials on shared uniforms, perf-probe programs 67), and now the procgen/wreck-yard
-salvage panels are bury-pruned (no phantom unreachable panels — `panels` audit 0 fails) + the material noise GLSL is lifted
-to one shared `shaderNoise.ts` helper. tsc clean, SAVE_VERSION 14. The perf / material / bury debt buckets are now CLEARED.
+## What's already built (ACAV — the placement half)
+Salvage panels now: read the REAL hull surface via `findSurfaceMounts` (bounding-sphere rays + a full quaternion → flush on
+any shape, `world/panelPlacement.ts`), get terrain-culled if a surface panel sits below the sand (center-clearance, SURFACE-
+scoped — interiors exempt), and route ALL bury/terrain checks through ONE `validatePanels`. `addAccessPanel` orients from an
+optional quaternion; `addAccessPanelOriented` wraps it. Occlusion audit 0 fails, boot 964ms, programs 67. The interior is
+still the old fixed 5-component palette; shapes are still rectangle-only.
 
-## Session ACAV focus — pick a lane (no pressing debt left)
-The autonomous debt that motivated ACAT/ACAU is done. Two shapes remain. **If a human is at the keyboard:** the owed
-walk-tests are the single highest-value thing left and NONE have been done yet — they gate "is it actually good." **If
-running autonomous:** the next real build is a feature (raider proc-character is the most shovel-ready + headless-verifiable).
+## Session ACAW focus — the VISUAL half (Tiers 3-5). Locked decisions from the user: keep **5 lootable** components + rich
+**decorative greeble** (merged, not lootable); circular panels use a **bolted lift-off cover**; build **all 5 archetypes,
+deeply iterated**. RULE 8 governs: build → `panel-studio` screenshot → critique → iterate, 5-8 rounds per new element.
 
 ## Priority items (in order)
-1. **(ATTENDED) The owed human WALK-TESTS — `npm run dev`** (the headless harness can't judge feel; the dev server was left
-   running on `localhost:5173` at the end of ACAU):
-   - **Recessed Sarlacc pit** (`__game.ctx.biomes.sarlaccPitAnchor`, D204): the PULL feel + can you CLIMB BACK OUT of the
-     funnel while pulled (no softlock; walls ~39° < KCC 50°); tune `tuning.ts` `SARLACC_PIT_*`.
-   - **Dropped-item settle feel** (ACAS B2): `__game.dropTestItem('pipe_staff'|'amban_rifle'|'canteen'|…)` — does the
-     capsule/ball lie read more natural than a box? tune the bbox-derived half-extents in `pickups.ts`.
-   - **Graveyard** (`wreckYardAnchor`) relic findability + ominous read (now that buried panels are pruned, the reachable
-     panels should all be lootable); **mega-wreck interior** (owed since ACAL).
-2. **(AUTONOMOUS, biggest payoff) Raider proc-character body (Cycle 5b).** The pulse rifle (its weapon) shipped ACAC; the
-   raider BODY is still a placeholder. Rebuild it as a full procedural character using the player-rig / vulture / lizard
-   pipeline (Cycle 1+2 rig vocabulary exists) so the corpse-drag path + raider combat has a believable body. Headless-
-   verifiable via rig-shots (pose/anim screenshots). **Scope it first** (`/feature-slice` or a `/plan-game`-style pass).
-3. **(AUTONOMOUS, bigger, design-first) Deep cave system (Cycle 7).** A genuine sprawling underground reached via a surface
-   descent opening; the companion egg lives deep inside (egg-acquisition spine preserved in commit `2d4035b`). Needs a
-   DESIGN pass first (gen method / sub-heightfield collision / dark-nav). Not a quick build.
-4. **(BUILD) The drop-pod intro cutscene** (backlog §B) — keep the title screen; spawn the player in a small enclosed pod
-   with a baked descent + in-world lever/blackout/exit. Self-contained but sizeable.
+1. **Tier 3 — shape + size variants.** Add `AccessPanelOpts {shape, aspect, archetype}` to `addAccessPanel` (absent = today's
+   rect, zero rand → regression baseline). `square` = rect with aspect 1; **circle** = `buildCircleBody` (cylinder bore + bolted
+   torus ring rim + a lift-off cover disc on a `coverPivot` NAMED `body.userData.panelDoor` so the audit/prune door-exclusion +
+   `completePry` drive it unchanged); `updatePanelDoors` (`interaction.ts`) branches on `panelShape==='circle'` → slide+tumble
+   the cover via the existing `panelDoorAngle/Target`. Behind `SALVAGE_PANEL_SHAPES_ENABLED`. Files: `wrecks.ts`,
+   `interaction.ts`, `procgenWreck.ts` (derive shape from already-rolled values — zero new world-rand), `tuning.ts`.
+   **Gate:** `panel-studio` rect/square/circle × open/closed visual 5-8 rounds (no paper-thin edges — circle rim is a thick
+   torus); occlusion audit STILL 0 (validatePanels reads the panel's real geometry half-extents, so it honours shapes).
+2. **Tier 4 — the interior overhaul (all 5 archetypes, deeply iterated).** NEW `world/panelGreeble.ts` component library
+   (coiled wire, fuse bank, PCB+chips, gauge, valve wheel, conduit elbow, terminal block, frayed wires, cracked screen,
+   emissive indicator). NEW `populateInterior(archetype, shape, dims, rand)` → backplate + a MERGED `greebleGroup` (8-16
+   decorative pieces; `mergeStaticByMaterial(greebleGroup)` BEFORE parenting under `body`) + the **5 tagged extractables**
+   (reuse the 7 existing `PanelComponentKind`s → `COMPONENT_LOOT` + loot economy unchanged → NO save bump). 5 archetypes
+   (electrical/plumbing/avionics/mechanical/junction) map to an extractable palette + a greeble recipe + shape/size. Depth-
+   layered (3 Z-bands); position-seeded greeble Rng (zero world-rand). Emissive indicator (NOT a PointLight — ABL perf). Behind
+   `SALVAGE_PANEL_INTERIOR_V2`. **Parallelize** archetype/component authoring across subagents (`/parallel-implement`), then a
+   unified `panel-studio` shoot. **Gate:** `/visual-triage` per archetype 5-8 rounds (scrappy/rustic, ≥3 material reads, depth-
+   layered, glow-lit, cleanly visible at `--angle=eye`); perf-probe STILL 67 (reuse the material factories + `shaderNoise.ts`,
+   no new programs); occlusion audit STILL 0; **attended pry-FEEL walk-test owed**.
+3. **Tier 5 — verification hardening + scalability gate.** NEW `placement-torture` (loop `spawnProcgenWreckRig(cls,seed)` over
+   all classes × seeds + a synthetic torture fixture) + `flagship-audit` (each hand-modeled flagship) + `npm run verify:placement`
+   + a SURFACE-scoped terrain audit + the contract doc ("any new wreck class must pass `verify:placement`"). Also build the
+   `panel-studio` rig-shot scenario + `__game.spawnPanelStudio(...)` hook (needed by Tiers 3-4). Optional: the save R4 fix
+   (hide already-extracted component meshes on load) + a SAVE_VERSION 14→15 marker; verify the ≤v13 load-guard mismatch.
+
+## Build first (blocks Tiers 3-4): the `panel-studio` harness
+`__game.spawnPanelStudio({shape, archetype, scale, open, angle})` (clone `itemStudio`'s lit-for-form rig, deterministic
+`makeRng(1337)`, suspend the panel high for a sky backdrop) + a `panel-studio` rig-shot scenario (`--shape --archetype --state
+--angle`, + a sweep mode). This is the screenshot loop the visual gates depend on.
 
 ## Stretch goals
-- Speeder pickup-InstancedMesh (attended — interaction-raycast rework, can't feel-verify unattended).
-- Activate the crafting chooser by adding ONE colliding recipe (gameplay-design call).
-- Session-end-report PRUNE: it has accumulated duplicate scope blocks (ACAC/ACAB/ACAA/ACM appear twice) + a bloated ACAR2
-  paragraph; a dedup pass would cut its session-start re-read cost (it's well over the ~3000-token-for-older threshold).
+- Strip the now-dead `colliderHint` field + tags (`types.ts`/`items.ts`) — D211 left them harmless.
+- Retire the dead `SALVAGE_PANEL_SAMPLE_GRID_*`/`FACE_INSET` tuning (old findPanelMount).
+- The owed human walk-tests (Sarlacc pull-feel + climb-out, graveyard read, mega-wreck interior) — none done yet.
+- Session-end-report dedup (it still has duplicate ACAC/ACAB/ACAA/ACM scope blocks).
 
 ## Autonomy contract
-Item 1 needs a human throughout — never claim feel/interaction verified from a headless run. Items 2-4 are real builds →
-scope first (`/feature-slice`). Ambiguous → GDD pillars + the realism dial, append a D-entry, continue.
+Tiers 3-4 are VISUAL → rule 8 (5-8 screenshot rounds/element; never mark done on tsc alone; never >150 LOC visual code without a
+shot). Pry FEEL is attended-only (headless can't judge). Ambiguous → GDD pillars + realism dial, append a D-entry, continue.
 
 ## Stop conditions
-3 fix-walls on one element (log + move on / cut) · a `SAVE_VERSION` bump turning out necessary (surface it) ·
-destructive-git attempt · an interaction-preserving refactor that can't be live-verified unattended (do the safe half, surface).
+3 fix-walls on one element (log + move on / cut) · a SAVE_VERSION bump turning out necessary (surface it) · destructive-git ·
+a shape/cover that can't be made flush+thick after iteration (cut circular, ship square).
 
 ## Notable footguns (this arc)
-- **RNG-desync (D208/D210):** the procgen world runs off ONE seeded `rand` stream; never conditionally skip an RNG-consuming
-  call (`registerSalvageable`) to filter items. Register-all-then-prune (the prune does no `rand`).
-- **Occlusion-prune scope (D210):** a bury/visibility prune must raycast at the SAME scope the verifying audit uses — the
-  per-wreck self-prune is blind to the wreck-yard's post-merge CROSS-wreck occlusion, so it ALSO runs against the merged
-  `yardGroup`. And the prune excludes the panel's `panelDoor` to match the audit's force-open-door state.
-- **GLSL helper lifts (D209):** prefer a generator parameterised by the existing identifiers over a rename sweep — a GLSL
-  name typo is invisible to tsc (names are strings) and only fails as a runtime shader-compile error; confirm with the
-  `perf-probe` program-count invariant + a before/after pixel-diff, not just tsc. NEVER put a backtick or `${…}` in a GLSL
-  comment inside a template literal.
-- **Windows rig-shot** pins a fixed seed (`dustfall.pendingSeed`=1337) for deterministic shots; `--seed=<n>` overrides; the
-  scenario boots its OWN vite on `--port` (default 5191) so it doesn't collide with `npm run dev`. The post-audit screenshot
-  step can exit non-zero AFTER the audit line prints — read the captured output, not the exit code.
+- **RNG budget (D208/D213):** the sampler + any new per-panel roll must consume a FIXED `rand` count; derive shape/archetype
+  from ALREADY-rolled values, seed greeble from world-position — never add a world-rand draw (regenerates the world).
+- **Terrain cull is SURFACE-scoped (D212):** never terrain-cull interior panels (mega-wreck/rockyEntrance/flagship bells).
+- **Door/cover sign (D196/ACP):** the circle lift-off cover + door-swing must reuse the SAME `−panelDoorAngle` hinge math as
+  `updatePanelDoors`; name the cover pivot `panelDoor` so audit/prune exclusion + `completePry` apply.
+- **Merge before parent:** `mergeStaticByMaterial` SKIPS `accessPanel` subtrees, so merge the `greebleGroup` BEFORE parenting it
+  under `body`; emissive/transparent greeble won't merge (fine).
+- **Windows rig-shot** pins `dustfall.pendingSeed`=1337; boots its own vite on `--port`; the post-scenario teardown can exit
+  non-zero AFTER the assertion line prints — read the captured stdout, not the exit code.
 
 ## Verification protocol
-`npm run verify` (= `tsc --noEmit`) clean. Headless gates: `perf-probe` (programs/draw-calls/boot — programs should stay 67),
-`procgen-wreck` (`--cls --angle --seeds --zoom`), `panels` (bury-audit — should stay 0 fails across seeds), `item-studio
---items=`, `speeder-fx`, `drop-test`, `craft-chooser`, `wreck-yard --angle=`, `sarlacc-test`. **Item 1 is feel-critical →
-`npm run dev`.** Rule 8: screenshot-iterate any visual change (5-8 rounds new elements, 3-5 tuning); a raider proc-character
-is NEW visual work → full iteration discipline + `/visual-triage`.
+`npm run verify` (tsc) clean. Headless: `panels` (occlusion audit — stays 0), `perf-probe` (programs stays 67, boot sane),
+`procgen-wreck`, NEW `panel-studio` (visual), eventually `verify:placement`. Visual tiers → `/visual-triage` 5-8 rounds.
 
 ## On stop
-Run `/session-end` (verify → changelog WITH any numbers → CLAUDE last-shipped → roadmap → D-entries → backlog → report →
-next-prompt → post-mortem → commit + tag `session-ACAV` + push).
+Run `/session-end` (verify → changelog → CLAUDE last-shipped → roadmap → D-entries → backlog → report → next-prompt →
+post-mortem → commit + tag `session-ACAW` + push).
