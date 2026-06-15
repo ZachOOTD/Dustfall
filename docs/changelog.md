@@ -3,6 +3,30 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ACAU — 2026-06-15 — ACAT-debt finish: bury-audit register-all-then-prune + material shared-noise helper ✓ verify pass (tsc clean)
+
+`verified` — `npm run verify` (tsc) PASS; **no save bump** (procgen-registration + shader-source only). User asked to start the dev
+server for walk-tests + clear the two ACAT-deferred autonomous debt items. D209-D210.
+
+**1 — Bury-audit, done right (D210; closes D208's deferred fix).** Implemented **register-all-then-prune** in `placeProcgenComposite`:
+every panel-bearing part still `registerSalvageable`s unconditionally (it consumes `rand` — skipping desyncs the seeded world, D208),
+then a NEW `pruneBuriedPanels` 2nd pass raycasts each panel and drops the occluded ones (removes the record + clears the panel's
+`interactType`/`interactId` so it's inert). The fix grew once the data came in: a temporary occluder-trail diagnostic showed the last
+of the 4 fails wasn't self-occlusion but a **wreck-yard CROSS-wreck** bury (panel hidden behind a NEIGHBOUR's hull merged into the
+cluster mesh — `rootName:"wreckYard"`). So the helper was exported and called a 2nd time from `wreckYard.ts` AFTER
+`mergeStaticByMaterial(yardGroup)`, raycasting the whole yard (mirrors the audit's `root=wreckYard` walk-up). Also matched the audit's
+open-door state by EXCLUDING the panel's `panelDoor` subtree from the raycast (placement-time doors are closed → a proud closed door
+gives a tiny `dPanel` that masks the occluder). **Verified — `panels` bury-audit 0 fails across 5 seeds (1/2/42/1337/2024)**; seed
+1337 went 133 panels/4 fails → 129/**0** (drops exactly 4, as D208 predicted). RNG-safe (the prune does no `rand`).
+
+**2 — Material shared-noise helper (D209; the D207 stretch).** NEW `world/shaderNoise.ts` `iqNoise2D({hash,valueNoise,fbm,octaves})`
+emits the IQ integer-hash value-noise + fBm GLSL block that **11** procedural material factories each hand-copied
+(metal/hull/stone/paint/wood/glass/bone/skin/fabric/concrete/terrain). Each factory now calls the generator with the EXACT function
+names + octave count it already used (`<x>Hash` vs the terrain-lineage `<x>Hash21`; 3 vs 4 octaves), so the emitted GLSL is
+byte-identical and zero call sites changed — provably pixel-identical, program count unchanged. ~260 lines of duplication removed.
+**Verified:** tsc clean · `procgen-wreck` render pixel-identical to baseline (hull/metal/terrain) · **`perf-probe` programs 67**
+(the exact D207 invariant — every material still compiles, sharing intact) · no shader/console errors.
+
 ## Session ACAT — 2026-06-15 — Perf + wreck-detail debt: material-uniforms · brighter hulls · panel-audit/greeble triage ✓ verify pass (tsc clean)
 
 `verified` — `npm run verify` (tsc) PASS; **no save bump** (material/tuning only). User-chosen "perf + wreck-detail debt"

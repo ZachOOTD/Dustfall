@@ -34,6 +34,7 @@
 // inverted color direction.
 
 import * as THREE from 'three';
+import { iqNoise2D } from './shaderNoise.ts';
 
 export interface WeatheredConcreteOptions {
   /** Hex color of fresh concrete. Required. */
@@ -111,31 +112,7 @@ export function createWeatheredConcreteMaterial(opts: WeatheredConcreteOptions):
 
         // IQ-style precision-robust hash + FBM (same as hullMaterial
         // / terrainMaterial). See memory/dustfall_shader_gotchas.md.
-        float concreteHash21(vec2 p) {
-          vec3 p3 = fract(vec3(p.xyx) * 0.1031);
-          p3 += dot(p3, p3.yzx + 33.33);
-          return fract((p3.x + p3.y) * p3.z);
-        }
-        float concreteValueNoise(vec2 p) {
-          vec2 i = floor(p);
-          vec2 f = fract(p);
-          vec2 u = f * f * (3.0 - 2.0 * f);
-          float a = concreteHash21(i + vec2(0.0, 0.0));
-          float b = concreteHash21(i + vec2(1.0, 0.0));
-          float c = concreteHash21(i + vec2(0.0, 1.0));
-          float d = concreteHash21(i + vec2(1.0, 1.0));
-          return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
-        }
-        float concreteFbm(vec2 p) {
-          float v = 0.0;
-          float a = 0.5;
-          for (int i = 0; i < 4; i++) {
-            v += a * concreteValueNoise(p);
-            p *= 2.0;
-            a *= 0.5;
-          }
-          return v;
-        }
+        ${iqNoise2D({ hash: 'concreteHash21', valueNoise: 'concreteValueNoise', fbm: 'concreteFbm', octaves: 4 })}
       `,
     );
 

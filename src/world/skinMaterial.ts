@@ -23,6 +23,7 @@
 //   5. MICRO-GRAIN — per-pixel hash for very close range pore-feel.
 
 import * as THREE from 'three';
+import { iqNoise2D } from './shaderNoise.ts';
 
 export interface SkinMaterialOpts {
   /** Saturated tint mixed into the base via the pigment-blotch layer.
@@ -127,31 +128,7 @@ export function createSkinMaterial(
         uniform float uSheen;
         uniform float uBump;
 
-        float skinHash(vec2 p) {
-          vec3 p3 = fract(vec3(p.xyx) * 0.1031);
-          p3 += dot(p3, p3.yzx + 33.33);
-          return fract((p3.x + p3.y) * p3.z);
-        }
-        float skinValueNoise(vec2 p) {
-          vec2 i = floor(p);
-          vec2 f = fract(p);
-          vec2 u = f * f * (3.0 - 2.0 * f);
-          float a = skinHash(i + vec2(0.0, 0.0));
-          float b = skinHash(i + vec2(1.0, 0.0));
-          float c = skinHash(i + vec2(0.0, 1.0));
-          float d = skinHash(i + vec2(1.0, 1.0));
-          return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
-        }
-        float skinFbm(vec2 p) {
-          float v = 0.0;
-          float a = 0.5;
-          for (int i = 0; i < 3; i++) {
-            v += a * skinValueNoise(p);
-            p *= 2.0;
-            a *= 0.5;
-          }
-          return v;
-        }
+        ${iqNoise2D({ hash: 'skinHash', valueNoise: 'skinValueNoise', fbm: 'skinFbm', octaves: 3 })}
       `,
     );
 

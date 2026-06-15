@@ -41,6 +41,7 @@
 // vs a few hundred for a full lighting rewrite.
 
 import * as THREE from 'three';
+import { iqNoise2D } from './shaderNoise.ts';
 import { Tuning } from '../config/tuning.ts';
 
 // AAG — captured shader refs for the per-frame mirage uniform updates.
@@ -156,31 +157,7 @@ export function createTerrainMaterial(): THREE.MeshLambertMaterial {
         // as completely-flat ground when the camera looked straight
         // down (small per-fragment XZ delta + large absolute coord =
         // total noise collapse). The IQ hash sidesteps the issue.
-        float terrainHash21(vec2 p) {
-          vec3 p3 = fract(vec3(p.xyx) * 0.1031);
-          p3 += dot(p3, p3.yzx + 33.33);
-          return fract((p3.x + p3.y) * p3.z);
-        }
-        float terrainValueNoise(vec2 p) {
-          vec2 i = floor(p);
-          vec2 f = fract(p);
-          vec2 u = f * f * (3.0 - 2.0 * f);
-          float a = terrainHash21(i + vec2(0.0, 0.0));
-          float b = terrainHash21(i + vec2(1.0, 0.0));
-          float c = terrainHash21(i + vec2(0.0, 1.0));
-          float d = terrainHash21(i + vec2(1.0, 1.0));
-          return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
-        }
-        float terrainFbm(vec2 p) {
-          float v = 0.0;
-          float a = 0.5;
-          for (int i = 0; i < 4; i++) {
-            v += a * terrainValueNoise(p);
-            p *= 2.0;
-            a *= 0.5;
-          }
-          return v;
-        }
+        ${iqNoise2D({ hash: 'terrainHash21', valueNoise: 'terrainValueNoise', fbm: 'terrainFbm', octaves: 4 })}
 
         // Voronoi (F2 - F1) — used for the salt-flat desiccation cracks.
         // Returns vec2(F1, F2). F2-F1 is small near cell edges, large

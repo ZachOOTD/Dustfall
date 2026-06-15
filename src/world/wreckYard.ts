@@ -13,7 +13,7 @@ import type RAPIER from '@dimforge/rapier3d-compat';
 import type { Rng } from '../core/rng.ts';
 import type { Terrain } from './terrain.ts';
 import { registerSalvageable, type SalvageableRegistry } from './salvage.ts';   // ACAS A4 — register big-wreck panels as loot
-import { placeProcgenComposite } from './procgenWreck.ts';
+import { placeProcgenComposite, pruneBuriedPanels } from './procgenWreck.ts';
 import { placeWreck, placeDebrisField, type WreckKind } from './wrecks.ts';
 import { placeRibcage } from './heroLandmarks.ts';
 import { mergeStaticByMaterial } from './wreckForms.ts';
@@ -35,6 +35,11 @@ export function placeWreckYard(
   const cx = anchor.x, cz = anchor.z;
   const placed: Array<{ x: number; z: number }> = [];
   const carcasses: THREE.Vector3[] = [];
+  // ACAU (D208) — mark where this yard's salvageables begin so we can cluster-
+  // prune just them after the yard-level merge (below). Per-wreck self-pruning
+  // inside placeProcgenComposite can't see a panel buried behind a NEIGHBOURING
+  // wreck — only a raycast against the whole merged yard can.
+  const startIdx = salvageables ? salvageables.list.length : 0;
   // Y6 perf — all wreck groups are re-parented into ONE yard group + merged at the
   // end (the D198 cluster-merge), collapsing ~30 already-merged wrecks → a handful
   // of draw calls. Panels (accessPanel) stay live (the merge skips them).
@@ -127,6 +132,14 @@ export function placeWreckYard(
   // (accessPanel) + interactables stay live (the merge skips them). Per-part
   // colliders were already built inside each placeProcgenComposite/placeWreck.
   mergeStaticByMaterial(yardGroup);
+
+  // ACAU (D208) — cluster-level bury prune: now that the whole yard is merged,
+  // raycast every panel registered in this yard against the FULL yardGroup so a
+  // panel buried behind a neighbouring hulk (not just its own wreck) is dropped.
+  // RNG-safe (no `rand`). Mirrors the audit's root=wreckYard raycast.
+  if (salvageables) {
+    pruneBuriedPanels(yardGroup, salvageables.list.slice(startIdx), salvageables);
+  }
 
   return carcasses;
 }

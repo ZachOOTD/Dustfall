@@ -49,7 +49,7 @@ import type RAPIER from '@dimforge/rapier3d-compat';
 import type { Rng } from '../core/rng.ts';
 import type { Terrain } from './terrain.ts';
 import type { BiomeId } from './biomes.ts';
-import type { SalvageableRegistry } from './salvage.ts';
+import type { SalvageableRegistry, Salvageable } from './salvage.ts';
 import { registerSalvageable } from './salvage.ts';
 import { Tuning } from '../config/tuning.ts';
 import { addAccessPanel, makeEngineBellMesh } from './wrecks.ts';
@@ -1420,18 +1420,89 @@ export function placeProcgenComposite(
       cls === 'orbital_pod_cluster' ? 'escape_pod' : // ACE — pod cluster: medical-heavy palette
       'cargo_container';
     const seen = new Set<THREE.Object3D>();
+    const registered: Salvageable[] = [];
     group.traverse((o) => {
       const panel = o.userData.accessPanel;
       if (panel && !seen.has(o)) {
         seen.add(o);
         o.updateWorldMatrix(true, false);
         const wp = new THREE.Vector3().setFromMatrixPosition(o.matrixWorld);
-        registerSalvageable(salvageables, o, salvageKind, wp, rand);
+        // ACAU (D208) — register EVERY panel-bearing part, unconditionally.
+        // registerSalvageable consumes `rand`; conditionally skipping it here
+        // (the obvious "don't register buried panels" shortcut) desyncs the one
+        // seeded `rand` stream and regenerates the whole world. Register all,
+        // then prune below.
+        registered.push(registerSalvageable(salvageables, o, salvageKind, wp, rand));
       }
     });
+    // ACAU (D208) — 2nd pass: drop any panel the assembled+merged wreck grossly
+    // occludes (a sibling part welded in front of it post-assembly). These are
+    // phantom salvageables the player can never reach. RNG-safe: no `rand` calls.
+    pruneBuriedPanels(group, registered, salvageables);
   }
 
   return group;
+}
+
+/** ACAU (D208) — remove registered salvageables whose access panel is buried
+ *  behind hull geometry under `wreckRoot`. Mirrors debugPanel.ts panelBuryAudit:
+ *  for each panel, cast a short ray inward along the panel's own outward normal;
+ *  if a non-panel (hull) surface is reached well in front of the panel's own
+ *  nearest surface, the panel is occluded → prune it (remove the record + make
+ *  the panel inert so interaction.ts ignores it). Run AFTER mergeStaticByMaterial
+ *  so the merged hull is the occluder we test against.
+ *
+ *  `wreckRoot` is the raycast scope: pass the single wreck `group` to catch a
+ *  part welded over its own panel (standalone desert wrecks), or the whole
+ *  cluster group (the wreck-yard) to ALSO catch a panel buried behind a
+ *  NEIGHBOURING wreck — exactly what the audit's walk-up-to-root raycast sees. */
+export function pruneBuriedPanels(
+  wreckRoot: THREE.Object3D,
+  registered: Salvageable[],
+  registry: SalvageableRegistry,
+): void {
+  if (registered.length === 0) return;
+  // Force the wreck subtree (and its parent chain) to current world transforms
+  // so the raycast doesn't run on stale matrices (meshes update at render time).
+  wreckRoot.updateWorldMatrix(true, true);
+  const rc = new THREE.Raycaster();
+  rc.far = 1.6;
+  const isAncestor = (anc: THREE.Object3D, node: THREE.Object3D | null): boolean => {
+    let n: THREE.Object3D | null = node;
+    while (n) { if (n === anc) return true; n = n.parent; }
+    return false;
+  };
+  for (const s of registered) {
+    const body = s.panel;
+    // The hinged door (body.userData.panelDoor) sits proud/flush when CLOSED —
+    // which it is at placement time. The audit force-OPENS every door, swinging
+    // it out of the ray path so the panel's nearest surface is the recessed rim.
+    // Exclude the door subtree from our raycast to reproduce that open-door state
+    // (otherwise the proud closed door gives a tiny dPanel and masks the occluder).
+    const door = body.userData.panelDoor as THREE.Object3D | undefined;
+    const wp = body.getWorldPosition(new THREE.Vector3());
+    const wq = body.getWorldQuaternion(new THREE.Quaternion());
+    const outward = new THREE.Vector3(0, 0, 1).applyQuaternion(wq).normalize();
+    rc.set(wp.clone().addScaledVector(outward, 0.8), outward.clone().multiplyScalar(-1));
+    const hits = rc.intersectObject(wreckRoot, true);
+    let dPanel = Infinity, dHull = Infinity;
+    for (const h of hits) {
+      if (door && isAncestor(door, h.object)) continue;       // skip the closed door (open-door parity)
+      if (isAncestor(body, h.object)) dPanel = Math.min(dPanel, h.distance);
+      else dHull = Math.min(dHull, h.distance);
+    }
+    if (dPanel === Infinity) continue;                 // panel not on this axis — keep
+    // Panels recess by design (RECESS_DEPTH), so a hull lip legitimately sits a
+    // little in front of the recessed cavity. Only prune GROSS occlusion — hull
+    // well in front of the panel beyond the recess (same 0.22 slack as the audit).
+    if (dHull < dPanel - 0.22) {
+      const i = registry.list.indexOf(s);
+      if (i >= 0) registry.list.splice(i, 1);
+      delete body.userData.interactType;
+      delete body.userData.interactId;
+      delete body.userData.interactRegistry;
+    }
+  }
 }
 
 // ── ABO B6 — flagship POC migration entry ───────────────────────────

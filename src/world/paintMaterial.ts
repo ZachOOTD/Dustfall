@@ -23,6 +23,7 @@
 //      Lower than metal's because painted surfaces are smoother.
 
 import * as THREE from 'three';
+import { iqNoise2D } from './shaderNoise.ts';
 
 export interface PaintMaterialOpts {
   /** Substrate (rust) color visible through chips. Default warm rust. */
@@ -95,31 +96,7 @@ export function createPaintedMetalMaterial(
         uniform float uChipThreshold;
         uniform float uDripStrength;
 
-        float paintHash(vec2 p) {
-          vec3 p3 = fract(vec3(p.xyx) * 0.1031);
-          p3 += dot(p3, p3.yzx + 33.33);
-          return fract((p3.x + p3.y) * p3.z);
-        }
-        float paintValueNoise(vec2 p) {
-          vec2 i = floor(p);
-          vec2 f = fract(p);
-          vec2 u = f * f * (3.0 - 2.0 * f);
-          float a = paintHash(i + vec2(0.0, 0.0));
-          float b = paintHash(i + vec2(1.0, 0.0));
-          float c = paintHash(i + vec2(0.0, 1.0));
-          float d = paintHash(i + vec2(1.0, 1.0));
-          return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
-        }
-        float paintFbm(vec2 p) {
-          float v = 0.0;
-          float a = 0.5;
-          for (int i = 0; i < 3; i++) {
-            v += a * paintValueNoise(p);
-            p *= 2.0;
-            a *= 0.5;
-          }
-          return v;
-        }
+        ${iqNoise2D({ hash: 'paintHash', valueNoise: 'paintValueNoise', fbm: 'paintFbm', octaves: 3 })}
       `,
     );
 

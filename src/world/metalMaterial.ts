@@ -29,6 +29,7 @@
 // — see comment at the bottom about the cameraPos uniform if needed.
 
 import * as THREE from 'three';
+import { iqNoise2D } from './shaderNoise.ts';
 
 export interface MetalMaterialOpts {
   /** Direction (radians) of the scratch grain in world XZ. 0 = +X.
@@ -120,31 +121,7 @@ export function createMetalMaterial(
 
         // IQ-style hash + value noise + FBM (matches terrainMaterial
         // + fabricMaterial conventions).
-        float metalHash(vec2 p) {
-          vec3 p3 = fract(vec3(p.xyx) * 0.1031);
-          p3 += dot(p3, p3.yzx + 33.33);
-          return fract((p3.x + p3.y) * p3.z);
-        }
-        float metalValueNoise(vec2 p) {
-          vec2 i = floor(p);
-          vec2 f = fract(p);
-          vec2 u = f * f * (3.0 - 2.0 * f);
-          float a = metalHash(i + vec2(0.0, 0.0));
-          float b = metalHash(i + vec2(1.0, 0.0));
-          float c = metalHash(i + vec2(0.0, 1.0));
-          float d = metalHash(i + vec2(1.0, 1.0));
-          return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
-        }
-        float metalFbm(vec2 p) {
-          float v = 0.0;
-          float a = 0.5;
-          for (int i = 0; i < 3; i++) {
-            v += a * metalValueNoise(p);
-            p *= 2.0;
-            a *= 0.5;
-          }
-          return v;
-        }
+        ${iqNoise2D({ hash: 'metalHash', valueNoise: 'metalValueNoise', fbm: 'metalFbm', octaves: 3 })}
       `,
     );
 

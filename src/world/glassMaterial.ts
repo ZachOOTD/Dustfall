@@ -27,6 +27,7 @@
 //      Gated by opts.dustLayer (0 = off, 1 = strong).
 
 import * as THREE from 'three';
+import { iqNoise2D } from './shaderNoise.ts';
 
 export interface GlassMaterialOpts {
   /** Strength of the frosted scatter (0 = clear, 1 = heavy frost).
@@ -114,31 +115,7 @@ export function createGlassMaterial(
         uniform float uEdgeHighlight;
         uniform float uDustLayer;
 
-        float glassHash(vec2 p) {
-          vec3 p3 = fract(vec3(p.xyx) * 0.1031);
-          p3 += dot(p3, p3.yzx + 33.33);
-          return fract((p3.x + p3.y) * p3.z);
-        }
-        float glassValueNoise(vec2 p) {
-          vec2 i = floor(p);
-          vec2 f = fract(p);
-          vec2 u = f * f * (3.0 - 2.0 * f);
-          float a = glassHash(i + vec2(0.0, 0.0));
-          float b = glassHash(i + vec2(1.0, 0.0));
-          float c = glassHash(i + vec2(0.0, 1.0));
-          float d = glassHash(i + vec2(1.0, 1.0));
-          return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
-        }
-        float glassFbm(vec2 p) {
-          float v = 0.0;
-          float a = 0.5;
-          for (int i = 0; i < 3; i++) {
-            v += a * glassValueNoise(p);
-            p *= 2.0;
-            a *= 0.5;
-          }
-          return v;
-        }
+        ${iqNoise2D({ hash: 'glassHash', valueNoise: 'glassValueNoise', fbm: 'glassFbm', octaves: 3 })}
       `,
     );
 

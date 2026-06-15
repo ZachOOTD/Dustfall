@@ -37,6 +37,7 @@
 // low-poly aesthetic of the rest of the game.
 
 import * as THREE from 'three';
+import { iqNoise2D } from './shaderNoise.ts';
 
 export interface RustedHullOptions {
   /** Hex color of the base hull paint. Required. */
@@ -151,31 +152,7 @@ export function createRustedHullMaterial(opts: RustedHullOptions): THREE.MeshLam
         // IQ-style precision-robust hash (same as terrainMaterial.ts).
         // Avoids the sin(dot()) hash trap that breaks at large
         // world coordinates — see memory/dustfall_shader_gotchas.md.
-        float hullHash21(vec2 p) {
-          vec3 p3 = fract(vec3(p.xyx) * 0.1031);
-          p3 += dot(p3, p3.yzx + 33.33);
-          return fract((p3.x + p3.y) * p3.z);
-        }
-        float hullValueNoise(vec2 p) {
-          vec2 i = floor(p);
-          vec2 f = fract(p);
-          vec2 u = f * f * (3.0 - 2.0 * f);
-          float a = hullHash21(i + vec2(0.0, 0.0));
-          float b = hullHash21(i + vec2(1.0, 0.0));
-          float c = hullHash21(i + vec2(0.0, 1.0));
-          float d = hullHash21(i + vec2(1.0, 1.0));
-          return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
-        }
-        float hullFbm(vec2 p) {
-          float v = 0.0;
-          float a = 0.5;
-          for (int i = 0; i < 4; i++) {
-            v += a * hullValueNoise(p);
-            p *= 2.0;
-            a *= 0.5;
-          }
-          return v;
-        }
+        ${iqNoise2D({ hash: 'hullHash21', valueNoise: 'hullValueNoise', fbm: 'hullFbm', octaves: 4 })}
       `,
     );
 

@@ -1,68 +1,77 @@
-# Session ACAU — Kickoff Brief
+# Session ACAV — Kickoff Brief
 
 ## Read these now (in order)
-1. `CLAUDE.md` (auto-loaded) — "Where we are now" (ACAT: material-uniforms + brighter hulls shipped).
-2. `docs/session-end-report.md` — cumulative state (ACAT at top).
-3. `docs/backlog.md` — the PENDING section (owed walk-tests + buildable debt/features).
-4. `docs/decisions.md` tail (D207 material-uniforms pattern; D208 RNG-desync footgun; D204-D206).
-5. `docs/roadmap.md` + `docs/architecture.md` (only if touching an unfamiliar system).
+1. `CLAUDE.md` (auto-loaded) — "Where we are now" (ACAU: bury-audit prune + material shared-noise helper shipped).
+2. `docs/session-end-report.md` — cumulative state (ACAU at top).
+3. `docs/backlog.md` — the PENDING section (owed walk-tests A + features B).
+4. `docs/decisions.md` tail (D209 generator-not-rename helper lift; D210 two-scope bury prune + door-exclusion; D207-D208 the ACAT lineage; D204-D206).
+5. `docs/roadmap.md` "Up next" (the Phase-2 cycle plan) + `docs/architecture.md` (only if touching an unfamiliar system).
 
 ## What's already built
-The wreck-yard biome + recessed Sarlacc pit, the full salvage/crafting/creature/sled/rope/weather/POI stack, and a deep
-perf pass: static-merges (wrecks, speeder, wreck-yard), and now ALL procedural material factories share uniforms
-(perf-probe programs 105→67). tsc clean, SAVE_VERSION 14.
+The wreck-yard biome + recessed Sarlacc pit, the full salvage/crafting/creature/sled/rope/weather/POI stack, a deep perf
+pass (static-merges + ALL procedural materials on shared uniforms, perf-probe programs 67), and now the procgen/wreck-yard
+salvage panels are bury-pruned (no phantom unreachable panels — `panels` audit 0 fails) + the material noise GLSL is lifted
+to one shared `shaderNoise.ts` helper. tsc clean, SAVE_VERSION 14. The perf / material / bury debt buckets are now CLEARED.
 
-## Session ACAU focus — pick a lane (the perf/material debt is now largely cleared)
-Two shapes available. **If a human is at the keyboard:** the owed walk-tests are the highest-value thing left (they gate
-"is it actually good"). **If running autonomous:** there's a clean buildable item (the bury-audit register-all-then-prune
-fix) plus the big feature options.
+## Session ACAV focus — pick a lane (no pressing debt left)
+The autonomous debt that motivated ACAT/ACAU is done. Two shapes remain. **If a human is at the keyboard:** the owed
+walk-tests are the single highest-value thing left and NONE have been done yet — they gate "is it actually good." **If
+running autonomous:** the next real build is a feature (raider proc-character is the most shovel-ready + headless-verifiable).
 
 ## Priority items (in order)
-1. **(ATTENDED) The owed human WALK-TESTS — `npm run dev`** (the headless harness can't judge feel):
+1. **(ATTENDED) The owed human WALK-TESTS — `npm run dev`** (the headless harness can't judge feel; the dev server was left
+   running on `localhost:5173` at the end of ACAU):
    - **Recessed Sarlacc pit** (`__game.ctx.biomes.sarlaccPitAnchor`, D204): the PULL feel + can you CLIMB BACK OUT of the
-     funnel while pulled (no softlock); tune `tuning.ts` `SARLACC_PIT_*`.
+     funnel while pulled (no softlock; walls ~39° < KCC 50°); tune `tuning.ts` `SARLACC_PIT_*`.
    - **Dropped-item settle feel** (ACAS B2): `__game.dropTestItem('pipe_staff'|'amban_rifle'|'canteen'|…)` — does the
      capsule/ball lie read more natural than a box? tune the bbox-derived half-extents in `pickups.ts`.
-   - **Graveyard** (`wreckYardAnchor`) relic findability + ominous read; **mega-wreck interior** (owed since ACAL).
-2. **(AUTONOMOUS, clean) Bury-audit the RIGHT way (D208).** The 4 fails (~3% of 133) are procgen findPanelMount panels
-   occluded by a sibling post-assembly. Implement **register-all-then-prune** in `placeProcgenComposite`'s registration
-   loop: every panel `registerSalvageable`s normally (do NOT skip — it consumes `rand`, D208), then a 2nd pass removes any
-   panel the assembled wreck occludes (mirror `panelBuryAudit`'s raycast; `updateWorldMatrix(true,true)` on the wreck root
-   first). Gate: `panels` scenario fails → 0, total count drops only ~4.
-3. **(AUTONOMOUS, stretch) Material shared-noise-helper lift (D207).** Each factory redeclares an identical IQ `hash`/
-   `valueNoise`/`fbm` GLSL block — lift to one shared snippet. Low-risk cleanup; verify materials render identical.
-4. **(BUILD, bigger) A feature from the backlog §B:** raider proc-character (Cycle 5b — pulse rifle done, body remains,
-   proven rig pipeline, headless-verifiable); deep cave system (Cycle 7 — needs a design pass first); or the opening
-   drop-pod cutscene.
+   - **Graveyard** (`wreckYardAnchor`) relic findability + ominous read (now that buried panels are pruned, the reachable
+     panels should all be lootable); **mega-wreck interior** (owed since ACAL).
+2. **(AUTONOMOUS, biggest payoff) Raider proc-character body (Cycle 5b).** The pulse rifle (its weapon) shipped ACAC; the
+   raider BODY is still a placeholder. Rebuild it as a full procedural character using the player-rig / vulture / lizard
+   pipeline (Cycle 1+2 rig vocabulary exists) so the corpse-drag path + raider combat has a believable body. Headless-
+   verifiable via rig-shots (pose/anim screenshots). **Scope it first** (`/feature-slice` or a `/plan-game`-style pass).
+3. **(AUTONOMOUS, bigger, design-first) Deep cave system (Cycle 7).** A genuine sprawling underground reached via a surface
+   descent opening; the companion egg lives deep inside (egg-acquisition spine preserved in commit `2d4035b`). Needs a
+   DESIGN pass first (gen method / sub-heightfield collision / dark-nav). Not a quick build.
+4. **(BUILD) The drop-pod intro cutscene** (backlog §B) — keep the title screen; spawn the player in a small enclosed pod
+   with a baked descent + in-world lever/blackout/exit. Self-contained but sizeable.
 
 ## Stretch goals
 - Speeder pickup-InstancedMesh (attended — interaction-raycast rework, can't feel-verify unattended).
 - Activate the crafting chooser by adding ONE colliding recipe (gameplay-design call).
+- Session-end-report PRUNE: it has accumulated duplicate scope blocks (ACAC/ACAB/ACAA/ACM appear twice) + a bloated ACAR2
+  paragraph; a dedup pass would cut its session-start re-read cost (it's well over the ~3000-token-for-older threshold).
 
 ## Autonomy contract
-Item 1 needs a human throughout — never claim feel/interaction verified from a headless run. Items 2-3 are headless-safe.
-Item 4 (raider/cave/drop-pod) is a real build → scope it first (a `/plan-game`-style pass or the `feature-slice` skill).
-Ambiguous → GDD pillars + the realism dial, append a D-entry, continue.
+Item 1 needs a human throughout — never claim feel/interaction verified from a headless run. Items 2-4 are real builds →
+scope first (`/feature-slice`). Ambiguous → GDD pillars + the realism dial, append a D-entry, continue.
 
 ## Stop conditions
 3 fix-walls on one element (log + move on / cut) · a `SAVE_VERSION` bump turning out necessary (surface it) ·
 destructive-git attempt · an interaction-preserving refactor that can't be live-verified unattended (do the safe half, surface).
 
 ## Notable footguns (this arc)
-- **RNG-desync (D208):** the procgen world runs off ONE seeded `rand` stream; never conditionally skip an RNG-consuming
-  call (`registerSalvageable`) to filter items — it regenerates the whole world. Register-all-then-prune instead.
-- **Material program collapse (D207):** to merge onBeforeCompile variants, make every per-instance difference a
-  uniform/runtime-branch, then drop the per-instance cache key (default `onBeforeCompile.toString()` handles it); a `pbr`
-  base-class fork needs no key. NEVER put a backtick or `${...}` in a GLSL comment inside the template literal (it closes
-  the literal / interpolates — two TS errors this session).
-- **Windows rig-shot** pins a fixed seed (`dustfall.pendingSeed`=1337) for deterministic shots; `--seed=<n>` overrides.
+- **RNG-desync (D208/D210):** the procgen world runs off ONE seeded `rand` stream; never conditionally skip an RNG-consuming
+  call (`registerSalvageable`) to filter items. Register-all-then-prune (the prune does no `rand`).
+- **Occlusion-prune scope (D210):** a bury/visibility prune must raycast at the SAME scope the verifying audit uses — the
+  per-wreck self-prune is blind to the wreck-yard's post-merge CROSS-wreck occlusion, so it ALSO runs against the merged
+  `yardGroup`. And the prune excludes the panel's `panelDoor` to match the audit's force-open-door state.
+- **GLSL helper lifts (D209):** prefer a generator parameterised by the existing identifiers over a rename sweep — a GLSL
+  name typo is invisible to tsc (names are strings) and only fails as a runtime shader-compile error; confirm with the
+  `perf-probe` program-count invariant + a before/after pixel-diff, not just tsc. NEVER put a backtick or `${…}` in a GLSL
+  comment inside a template literal.
+- **Windows rig-shot** pins a fixed seed (`dustfall.pendingSeed`=1337) for deterministic shots; `--seed=<n>` overrides; the
+  scenario boots its OWN vite on `--port` (default 5191) so it doesn't collide with `npm run dev`. The post-audit screenshot
+  step can exit non-zero AFTER the audit line prints — read the captured output, not the exit code.
 
 ## Verification protocol
-`npm run verify` (= `tsc --noEmit`) clean. Headless gates: `perf-probe` (programs/draw-calls/boot), `procgen-wreck`
-(`--class --angle --seeds --zoom`), `panels` (bury-audit), `item-studio --items=`, `speeder-fx`, `drop-test`,
-`craft-chooser`, `wreck-yard --angle=`, `sarlacc-test`. **Item 1 is feel-critical → `npm run dev`.** Rule 8: screenshot-
-iterate any visual change (per-factory material-identity shot is the catch-net for material edits).
+`npm run verify` (= `tsc --noEmit`) clean. Headless gates: `perf-probe` (programs/draw-calls/boot — programs should stay 67),
+`procgen-wreck` (`--cls --angle --seeds --zoom`), `panels` (bury-audit — should stay 0 fails across seeds), `item-studio
+--items=`, `speeder-fx`, `drop-test`, `craft-chooser`, `wreck-yard --angle=`, `sarlacc-test`. **Item 1 is feel-critical →
+`npm run dev`.** Rule 8: screenshot-iterate any visual change (5-8 rounds new elements, 3-5 tuning); a raider proc-character
+is NEW visual work → full iteration discipline + `/visual-triage`.
 
 ## On stop
-Run `/session-end` (verify → changelog WITH any perf numbers → CLAUDE last-shipped → roadmap → D-entries → backlog →
-report → next-prompt → post-mortem → commit + tag `session-ACAU` + push).
+Run `/session-end` (verify → changelog WITH any numbers → CLAUDE last-shipped → roadmap → D-entries → backlog → report →
+next-prompt → post-mortem → commit + tag `session-ACAV` + push).

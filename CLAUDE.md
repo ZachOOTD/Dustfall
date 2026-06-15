@@ -64,24 +64,25 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      Prior milestones live in docs/changelog.md — do NOT accumulate "Prior milestone"
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
-**Last shipped**: Session ACAT — **perf + wreck-detail debt: material-uniforms + brighter hulls** (tsc clean, no save bump;
-D207-D208; 3 commits). User-chosen "perf + wreck-detail debt" bundle, planned via 3-agent exploration. **T1 (W5):** lifted
-the procgen hull base color + lowered `_hullMat` streak/AO so the ACAO greeble detail surfaces (verified corvette+gunship).
-**T3 (headline, D207):** converted ALL 7 remaining procedural material factories (glass/bone/stone/paint/wood/fabric/skin)
-from per-instance `.toFixed()`-baked GLSL → shader UNIFORMS + runtime branches (the metal/ACAH template); dropped their
-`customProgramCacheKey` (the default `onBeforeCompile.toString()` key shares within-factory + distinguishes factories; the
-fabric/skin `pbr` fork rides the base material class so no key needed) → **perf-probe programs 105→67 (−36%), boot
-shader-compile 270→197ms**; materials verified pixel-identical. **T2 (deferred, D208):** the bury-audit's 4 fails are
-procgen findPanelMount occlusion edge cases (not the assumed hand-modeled curved parts); a register-time skip desynced the
-RNG (`registerSalvageable` consumes `rand`) so it was reverted — real fix (register-all-then-prune) deferred; a ~3%
-cosmetic dev-audit tail. **T4 (deferred, cut-first):** flagship greebles are architecturally awkward + the procgen variants
-are intentionally distinct; T1 covers the intent. *(Prior — ACAS: wreck-yard perf+polish + item/collision (D205-206); ACAR2: recessed Sarlacc pit (D204). See changelog.)*
+**Last shipped**: Session ACAU — **ACAT-debt finish: bury-audit register-all-then-prune + material shared-noise helper** (tsc
+clean, no save bump; D209-D210). Cleared the two ACAT-deferred autonomous items while the dev server ran for the owed
+walk-tests. **(1) Bury-audit done right (D210, closes D208):** `placeProcgenComposite` now register-all-then-prunes — every
+panel registers unconditionally (skipping desyncs the seeded `rand`, D208), then a NEW exported `pruneBuriedPanels` raycast
+pass drops + inerts the occluded ones. An occluder-trail diagnostic revealed the stubborn 4th fail was a wreck-yard
+CROSS-wreck bury (panel behind a NEIGHBOUR's hull in the cluster mesh), so the helper runs a 2nd time from `wreckYard.ts`
+after `mergeStaticByMaterial(yardGroup)` against the whole yard (mirrors the audit's `root=wreckYard`); the raycast EXCLUDES
+the panel's `panelDoor` subtree to match the audit's open-door state. **`panels` audit 0 fails across 5 seeds**; seed 1337
+133/4-fails → 129/0 (drops exactly 4). **(2) Material shared-noise helper (D209, the D207 stretch):** NEW `world/shaderNoise.ts`
+`iqNoise2D({hash,valueNoise,fbm,octaves})` replaces the IQ hash/value-noise/fBm GLSL block hand-copied across **11** factories;
+each calls it with its exact existing names+octaves → byte-identical GLSL, ~260 dup lines gone, `perf-probe` programs still 67
+(the D207 invariant), render pixel-identical. *(Prior — ACAT: material-uniforms + brighter hulls (D207-208); ACAS: wreck-yard
+perf+polish + item/collision (D205-206). See changelog.)*
 
-**Next session** = **(1)** the owed human WALK-TESTS in `npm run dev` (all need eyes): the recessed Sarlacc-pit PULL feel +
-climb-out (ACAR2/D204), the dropped-item settle FEEL (ACAS B2), the wreck-yard graveyard read, the mega-wreck interior.
-**(2)** OR another buildable debt/feature: finish the bury-audit fix the RIGHT way (register-all-then-prune, D208); the
-material-factory shared-noise-helper lift (D207 stretch); or a feature (raider proc-character / deep cave / drop-pod intro).
-The pickup-InstancedMesh + raider rig-work stay DEFERRED/attended. See
+**Next session** = **(1)** the still-owed human WALK-TESTS in `npm run dev` (all need eyes, none done yet): the recessed
+Sarlacc-pit PULL feel + climb-out (ACAR2/D204), the dropped-item settle FEEL (ACAS B2), the wreck-yard graveyard read, the
+mega-wreck interior. **(2)** OR a buildable feature now the perf/material/bury debt is cleared: raider proc-character (Cycle
+5b — proven rig pipeline, headless-verifiable); deep cave system (Cycle 7 — needs a design pass); the drop-pod intro; or the
+D209-stretch (none pressing). The pickup-InstancedMesh + raider rig-work stay DEFERRED/attended. See
 [docs/next-session-prompt.md](docs/next-session-prompt.md) + [docs/backlog.md](docs/backlog.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
