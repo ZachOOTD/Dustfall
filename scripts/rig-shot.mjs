@@ -1202,6 +1202,31 @@ const SCENARIOS = {
     console.log(`[drop-test] ${allOk ? 'PASS' : 'FAIL'} ${JSON.stringify(after)}`);
   },
 
+  // ACAS B3 — crafting multi-match CHOOSER verification. The chooser fires for real:
+  // scrap×2+branch×1 matches BOTH sled_kit (id 9) AND scrap_bar (id 15). Confirm the
+  // chooser renders one button per recipe, gates CRAFT until a pick, and respects
+  // discovery (undiscovered → "?"). Control: a single-match combo shows no chooser.
+  'craft-chooser': async (page) => {
+    const r = await page.evaluate(() => {
+      const g = window.__game; g.enterGame(true);
+      // The live recipe set has no collisions, so inject a transient recipe colliding
+      // with scrap_bar (scrap×2+branch×1) to exercise the multi-match chooser.
+      g.injectTestRecipe();
+      const collide = g.craftChooserTest([{ id: 'scrap', count: 2 }, { id: 'branch', count: 1 }]);
+      const single = g.craftChooserTest([{ id: 'cloth', count: 1 }, { id: 'scrap', count: 1 }]);  // → bandage only
+      const none = g.craftChooserTest([{ id: 'cloth', count: 2 }, { id: 'branch', count: 5 }]);    // no recipe
+      return { collide, single, none };
+    });
+    const c = r.collide || {};
+    // Multi-match: 2 buttons, CRAFT gated until a pick, and discovery-respecting —
+    // the discovered scrap_bar shows its name, the undiscovered injected recipe "?".
+    const pass = !!c.buttons && c.buttons.length === 2 && c.craftDisabled === true
+      && c.buttons.includes('?') && c.buttons.includes('scrap bar')
+      && (r.single ? r.single.buttons.length === 0 : false)
+      && (r.none ? r.none.buttons.length === 0 : false);
+    console.log(`[craft-chooser] ${pass ? 'PASS' : 'FAIL'} ${JSON.stringify(r)}`);
+  },
+
   // ACAQ — Sarlacc-pit behavior smoke test. Teleport the player onto the maw, let
   // the live game tick, confirm the maw OPENS + BITES (health drops). The pull
   // FEEL can't be judged headless (attended walk-test); this gates the wiring.

@@ -331,6 +331,18 @@ export function findRecipeById(id: number): Recipe | undefined {
   return undefined;
 }
 
+/** ACAS B3 — TEST-ONLY: register a transient recipe at runtime so the multi-match
+ *  CHOOSER path can be exercised without shipping a gameplay collision (the live
+ *  recipe set has no input-multiset overlaps, so the chooser is otherwise dormant).
+ *  Not called by production code — only the `craft-chooser` rig-shot verification. */
+export function __registerTestRecipe(r: Recipe): void {
+  RECIPES.push(r);
+  const key = canonicalInputKey(r.inputs);
+  const existing = _recipesByKey.get(key);
+  if (existing) existing.push(r);
+  else _recipesByKey.set(key, [r]);
+}
+
 /** AAV — partial-match recipes for the "you're on the right track" hint
  *  system in the crafting UI. Returns recipes where the player's current
  *  inputs are a SUB-MULTISET of the recipe's input multiset (every item

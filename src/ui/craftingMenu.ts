@@ -295,11 +295,17 @@ function renderOutputPreview(): void {
   }
   _chooserEl.classList.remove('hidden');
   for (const r of matches) {
-    const btn = makeBtn(r.displayName, () => {
+    // ACAS B3 — respect discovery: an undiscovered option shows "?" (not its name)
+    // so the chooser doesn't SPOIL the combine-to-discover mystery — consistent with
+    // showOutputForRecipe. (The chooser fires for real: scrap×2+branch×1 → sled_kit
+    // OR scrap_bar, ids 9/15 — a live early-game choice.)
+    const known = _ctx?.inventory.discoveredRecipes.includes(r.id) ?? false;
+    const btn = makeBtn(known ? r.displayName : '?', () => {
       _selectedRecipe = r;
       renderOutputPreview();
     });
     btn.classList.add('craft-chooser-btn');
+    if (!known) btn.classList.add('craft-chooser-unknown');
     if (_selectedRecipe === r) btn.classList.add('selected');
     _chooserEl.appendChild(btn);
   }
@@ -786,6 +792,29 @@ export function closeCraftingMenu(): void {
 
 export function isCraftingMenuOpen(): boolean {
   return _open;
+}
+
+/** ACAS B3 — TEST hook: force the input slots to a multiset, render the output
+ *  preview, and report the resulting chooser state (button labels + craft-enabled).
+ *  Verifies the multi-match chooser path end-to-end (real DOM) without driving
+ *  inventory/DOM clicks. Returns null if the menu DOM isn't built yet. */
+export function __craftChooserTest(
+  ctx: GameContext,
+  items: Array<{ id: ItemId; count: number }>,
+): { buttons: string[]; craftDisabled: boolean; label: string } | null {
+  if (!_chooserEl || !_craftBtn || !_outputLabelEl) return null;
+  _ctx = ctx;
+  for (const s of _inputs) { s.item = null; s.count = 0; s.meta = undefined; }
+  let slot = 0;
+  for (const it of items) {
+    if (slot >= _inputs.length) break;
+    _inputs[slot].item = it.id;
+    _inputs[slot].count = it.count;
+    slot++;
+  }
+  renderOutputPreview();
+  const buttons = Array.from(_chooserEl.children).map((b) => (b as HTMLElement).textContent ?? '');
+  return { buttons, craftDisabled: _craftBtn.disabled, label: _outputLabelEl.textContent ?? '' };
 }
 
 // Re-export so callers can introspect (used by an upcoming Recipe Book

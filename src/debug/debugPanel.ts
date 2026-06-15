@@ -17,6 +17,8 @@ import { triggerStorm as triggerStormWeather } from '../world/weather.ts';
 import { getItemDef } from '../inventory/items.ts';
 import type { ItemId } from '../inventory/types.ts';
 import { spawnDroppedPickup } from '../pickups/pickups.ts';   // ACAS B2 — dropTestItem dev hook
+import { __craftChooserTest } from '../ui/craftingMenu.ts';   // ACAS B3 — chooser verification hook
+import { __registerTestRecipe } from '../inventory/recipeDiscovery.ts';   // ACAS B3 — transient test-recipe injector
 
 declare global {
   interface Window {
@@ -74,6 +76,12 @@ interface DebugApi {
    *  player so the per-item collider SHAPE (capsule/sphere/box) can be smoke-tested.
    *  Returns the new pickup id. */
   dropTestItem: (itemId: string) => number;
+  /** ACAS (B3) — DEV-only: force the crafting input slots to a multiset + report the
+   *  multi-match chooser state (button labels, craft-enabled). Verifies the chooser. */
+  craftChooserTest: (items: Array<{ id: string; count: number }>) => { buttons: string[]; craftDisabled: boolean; label: string } | null;
+  /** ACAS (B3) — DEV/TEST-only: inject a transient recipe colliding with scrap_bar
+   *  so the multi-match chooser path can be exercised end-to-end. */
+  injectTestRecipe: () => void;
   /** ACH (Cycle 2) — DEV-only: enter gameplay HEADLESS, bypassing the title
    *  button + pointer-lock. The normal handoff only clears `flags.paused` via
    *  the pointer-lock 'lock' event (input.ts), which never fires for an
@@ -220,6 +228,18 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
       );
       ctx.pickups.list.push(p);
       return p.id;
+    },
+    craftChooserTest(items) {
+      return __craftChooserTest(ctx, items as Array<{ id: ItemId; count: number }>);
+    },
+    injectTestRecipe() {
+      // Register a transient recipe colliding with scrap_bar (scrap×2+branch×1) so
+      // the multi-match chooser can be verified end-to-end.
+      __registerTestRecipe({
+        id: 9001, displayName: 'test alt', category: 'tool',
+        inputs: [{ id: 'scrap', count: 2 }, { id: 'branch', count: 1 }],
+        output: { id: 'scrap_bullet', count: 1 },
+      });
     },
     enterGame(dev) {
       if (hooks.enterGame) hooks.enterGame(dev);
