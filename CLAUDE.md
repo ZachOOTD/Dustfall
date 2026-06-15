@@ -64,27 +64,25 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      Prior milestones live in docs/changelog.md — do NOT accumulate "Prior milestone"
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
-**Last shipped**: Session ACAV — **Salvage-panel overhaul: the PLACEMENT half (Tiers 0-2 of 6) + dropped-item collider
-revert** (tsc clean, no save bump; D211-D213). User flagged salvage panels (a core mechanic) as broken — phasing through
-terrain, weird angles, clipping models, hidden interiors — and asked for a robust+scalable rebuild + shape variety + a
-scrappy interior overhaul (planned via 6 agents + web research; full plan in `.claude/plans/`). **Tier 0:** collapsed the 3
-drifting bury-raycast copies (`pruneBuriedPanels`/`panelBuryAudit`/wreck-yard gate) into ONE `validatePanels` in NEW
-`world/panelPlacement.ts` (provably inert). **Tier 1 (the headline phase-through fix):** a CENTER-clearance terrain cull on
-the three SURFACE-wreck gen paths (procgen composite + the legacy `placeWreck` branch that was never covered + the wreck-yard
-cluster), register-all-then-prune (RNG-safe, D208); terrain-culling is SURFACE-scoped not global (interiors like the
-mega-wreck / rockyEntrance are legitimately below terrain). **Tier 2 (the weird-angle fix):** replaced `findPanelMount`
-(±Z-flank grid + cardinal-yaw snap) with `findSurfaceMounts` — bounding-sphere inward rays read the REAL hull surface (any
-shape) + a FULL quaternion so panels sit flush; fixed 1-rand budget; 48 dirs + early-exit. **Also (D211):** reverted ACAS's
-dropped-item capsule/sphere colliders → the original cuboid (spheres rolled, thin capsules tunnelled). Verified: occlusion
-audit 0 fails, perf-probe boot 964ms + programs 67. *(Prior — ACAU: bury-prune + material noise-helper (D209-210); ACAT:
-material-uniforms (D207-208). See changelog.)*
+**Last shipped**: Session ACAW — **Salvage-panel overhaul COMPLETE: the VISUAL half (Tiers 3-5 of 6) — shapes + scrappy
+interiors + scalability gate** (tsc clean, `verify:placement` 0 fails, no save bump; D214-D216). Long autonomous session
+finishing the ACAV overhaul. **Tier 3 (D214):** `addAccessPanel` gains `AccessPanelOpts {shape,aspect,archetype}` — square
+(rect aspect 1) + a CIRCULAR bolted port with a disc LIFT-OFF cover (a `coverPivot` NAMED `panelDoor` so the audit/prune +
+`completePry` drive it; `updatePanelDoors` slides+tumbles it); procgen derives shape from rolled values (engine→circle,
+small→square). NEW `panel-studio` harness (`__game.spawnPanelStudio` + scenario) = the screenshot loop. **Tier 4 (D215):**
+NEW `world/panelGreeble.ts` low-poly component library (coiled wire, fuse bank, PCB, gauge, valve wheel, conduit, terminal,
+frayed wires, cracked screen, indicator) + `buildGreeble` depth-layered; INTERIOR_V2 = MERGED decorative greeble (the wreck
+merge skips accessPanel subtrees, so merge before parenting) + the 5 unchanged lootable components; 5 archetypes
+(electrical/plumbing/avionics/mechanical/junction) screenshot-iterated 3-4 rounds; shared singletons → **programs still 67**.
+**Tier 5 (D216):** NEW `npm run verify:placement` (multi-seed bury-audit) = the scalability gate a future wreck-model change
+re-runs; contract documented in `architecture.md`. *(Prior — ACAV: placement half (Tiers 0-2, D211-213); ACAU: bury-prune +
+noise-helper (D209-210). See changelog.)*
 
-**Next session (continue the overhaul — the VISUAL half)** = **Tier 3** shape + size variants (square + the bolted lift-off
-circular port); **Tier 4** the 5-archetype scrappy interior overhaul (pipes/fuses/machinery/wires/rust — decorative greeble +
-keep 5 lootable; build a `panel-studio` harness + deeply iterate ALL 5 per rule 8); **Tier 5** verification hardening +
-scalability gate (`placement-torture` + `flagship-audit` + `verify:placement` + the "new wreck class must pass" contract).
-Owed walk-tests still pending (Sarlacc pull-feel, graveyard, mega-wreck interior). See
-[docs/next-session-prompt.md](docs/next-session-prompt.md) + the plan in `.claude/plans/`.
+**Next session** = the OWED human WALK-TESTS in `npm run dev` (the panel overhaul's pry-FEEL: prying a panel + the amber-glow-
+lit cavity read — the headless audit force-opens doors without the glow, so feel/lighting needs eyes; plus the older Sarlacc
+pull-feel + climb-out, graveyard read, mega-wreck interior). OR a new buildable feature now the whole panel mechanic is solid:
+raider proc-character (Cycle 5b — proven rig pipeline), deep cave system (Cycle 7 — design pass first), or the drop-pod intro.
+See [docs/next-session-prompt.md](docs/next-session-prompt.md) + [docs/backlog.md](docs/backlog.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 

@@ -3,6 +3,38 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ACAW — 2026-06-15 — Salvage-panel overhaul: the VISUAL half (Tiers 3-5) — shapes + scrappy interiors + scalability gate ✓ verify pass (tsc clean)
+
+`verified` — `npm run verify` (tsc) PASS; `npm run verify:placement` PASS (0 bury-audit fails across 5 seeds); **no save
+bump** (geometry/material/registration only). Long autonomous session continuing the ACAV overhaul; finishes all 6 tiers.
+D214-D216. 4 commits (`7cb244a`,`c4c505e`,`78fc76f` + this).
+
+**Tier 3 — shape + size variants + panel-studio (D214).** `addAccessPanel` gains an `AccessPanelOpts {shape, aspect,
+archetype, orientQuat}` (absent ⇒ today's exact rect). `'square'` = rect aspect 1; `'circle'` = a CylinderGeometry bore +
+a thick bolted torus ring rim + a disc LIFT-OFF cover on a `coverPivot` NAMED `panelDoor` (so the audit/prune door-exclusion
++ `completePry` drive it unchanged); `updatePanelDoors` branches on `panelShape` → the cover slides out + tumbles ajar
+(normalised by the open angle). Procgen derives shape from already-rolled values (engine→circle, small→square, else rect),
+zero new world-rand. NEW `panel-studio` harness (`__game.spawnPanelStudio` + a rig-shot scenario with `--sweep`/`--allarch`
++ a cavity fill light + tight cavity framing) — the screenshot loop the visual tiers ran on.
+
+**Tier 4 — scrappy archetype interiors (D215).** NEW `world/panelGreeble.ts` low-poly DECORATIVE component library (coiled
+copper wire, ceramic+brass fuse bank, PCB+chips, pressure gauge, valve handwheel, conduit elbow, terminal block, frayed
+wires, cracked screen, emissive indicator) + `buildGreeble(archetype)` composing them depth-layered. `addAccessPanel`
+INTERIOR_V2 = the greeble (set-dressing, NOT lootable, MERGED per-panel before parenting under the body — the wreck merge
+skips accessPanel subtrees) + the 5 LOOTABLE components (reuse the 7 existing `PanelComponentKind`s → `COMPONENT_LOOT` + loot
+economy UNCHANGED). 5 archetypes (electrical/plumbing/avionics/mechanical/junction) derived in procgen from rolled values +
+a per-panel greeble seed. Backplate pushed to the body back for real cavity depth; pry-glow anchor moved central to light it.
+Each archetype screenshot-iterated 3-4 rounds (framing → cavity-light → depth). All shared singleton materials → **perf-probe
+programs still 67**; draw calls 891, boot 1145ms.
+
+**Tier 5 — scalability gate (D216).** NEW `npm run verify:placement` (`scripts/verify-placement.mjs`) sweeps the `panels`
+bury-audit across seeds + PASSES iff every seed is 0 fails — the one gate a future wreck-model change re-runs. Documented the
+contract + footguns in `architecture.md`. Retired the dead `SALVAGE_PANEL_SAMPLE_GRID_*`/`FACE_INSET` tuning.
+
+**Owed (attended):** the in-world pry-FEEL — prying a panel + seeing the amber-glow-lit cavity read (the headless audit
+force-opens doors WITHOUT igniting the glow, so cavity lighting/feel needs `npm run dev`). Plus the older Sarlacc/graveyard/
+mega-wreck walk-tests.
+
 ## Session ACAV — 2026-06-15 — Salvage-panel overhaul: PLACEMENT half (Tiers 0-2) + dropped-item collider revert ✓ verify pass (tsc clean)
 
 `verified` — `npm run verify` (tsc) PASS; **no save bump**. User flagged salvage panels (a core mechanic) as broken —
