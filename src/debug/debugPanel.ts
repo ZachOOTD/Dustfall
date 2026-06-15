@@ -16,6 +16,7 @@ import { getMusicStateSnapshot, type MusicStateSnapshot } from '../audio/music.t
 import { triggerStorm as triggerStormWeather } from '../world/weather.ts';
 import { getItemDef } from '../inventory/items.ts';
 import type { ItemId } from '../inventory/types.ts';
+import { spawnDroppedPickup } from '../pickups/pickups.ts';   // ACAS B2 — dropTestItem dev hook
 
 declare global {
   interface Window {
@@ -69,6 +70,10 @@ interface DebugApi {
    *  dynamic-body tumble + lootable tag), so the death physics is testable
    *  without aiming. Returns true if a live (non-dead) vulture matched. */
   killVulture: (id: number) => boolean;
+  /** ACAS (B2) — DEV-only: drop a dynamic-body pickup of `itemId` in front of the
+   *  player so the per-item collider SHAPE (capsule/sphere/box) can be smoke-tested.
+   *  Returns the new pickup id. */
+  dropTestItem: (itemId: string) => number;
   /** ACH (Cycle 2) — DEV-only: enter gameplay HEADLESS, bypassing the title
    *  button + pointer-lock. The normal handoff only clears `flags.paused` via
    *  the pointer-lock 'lock' event (input.ts), which never fires for an
@@ -204,6 +209,17 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
       if (!v || v.state === 'dead') return false;
       damageVulture(v, 9999, ctx);  // drives the dynamic-body tumble death (T5)
       return true;
+    },
+    dropTestItem(itemId) {
+      // ACAS B2 — drop a dynamic-body pickup in front of the player to smoke-test
+      // the per-item collider shape (capsule/sphere). Returns the new pickup id.
+      const tr = ctx.player.body.body.translation();
+      const p = spawnDroppedPickup(
+        ctx.three.scene, ctx.terrain, { x: tr.x + 1.2, z: tr.z + 1.2 }, itemId as ItemId,
+        undefined, { world: ctx.physics.world, initialVel: { x: 0, y: 1.0, z: 0 } },
+      );
+      ctx.pickups.list.push(p);
+      return p.id;
     },
     enterGame(dev) {
       if (hooks.enterGame) hooks.enterGame(dev);

@@ -191,6 +191,14 @@ export interface ItemDef {
   /** Duration of the use animation in seconds. Omit/0 = no animation. */
   useAnimDuration?: number;
 
+  /** ACAS B2 — physics-collider shape for a DROPPED copy of this item. The size is
+   *  always derived from the viewmodel's bounding box; this only picks the SHAPE:
+   *  'capsule' for long-thin items (pipe/rifle/branch) so they settle as a rod
+   *  instead of a chunky box; 'sphere' for round items (flask/orb). Omitted = a
+   *  snug cuboid (the legacy behavior). Pickup raycast detection is unaffected
+   *  (it keys on mesh userData), so this never changes interaction. */
+  colliderHint?: 'box' | 'sphere' | 'capsule';
+
   /** Per-frame hook for the currently-held item — reacts to slot.meta changes
    *  (e.g., torch/flashlight light state, fuel depletion). Called from
    *  `updateViewModel` only while this item is the equipped slot. */

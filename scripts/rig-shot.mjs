@@ -1169,6 +1169,39 @@ const SCENARIOS = {
     console.log(`[wreck-yard] ${JSON.stringify(r)}`);
   },
 
+  // ACAS B2 — drop-test: drop capsule/sphere/box pickups + tick; confirm the bodies
+  // SETTLE (finite + near terrain), i.e. the per-item collider shapes don't NaN or
+  // explode. The settle FEEL (natural lie vs box) still needs an attended walk-test.
+  'drop-test': async (page) => {
+    const ids = await page.evaluate(() => {
+      const g = window.__game; g.enterGame(true);
+      g.ctx.flags.paused = false;
+      return {
+        capsule: g.dropTestItem('pipe_staff'),
+        sphere: g.dropTestItem('canteen'),
+        rifle: g.dropTestItem('amban_rifle'),
+        box: g.dropTestItem('scrap_bar'),   // no hint → default cuboid (control)
+      };
+    });
+    await page.waitForTimeout(4000);   // let the bodies fall + settle
+    const after = await page.evaluate((ids) => {
+      const ctx = window.__game.ctx;
+      const read = (id) => {
+        const p = ctx.pickups.list.find((pp) => pp.id === id);
+        if (!p || !p.body) return { ok: false };
+        const t = p.body.translation();
+        const finite = Number.isFinite(t.x) && Number.isFinite(t.y) && Number.isFinite(t.z);
+        const gy = ctx.terrain.heightAt(t.x, t.z);
+        return { ok: true, finite, dy: +(t.y - gy).toFixed(2), settled: finite && Math.abs(t.y - gy) < 1.0 };
+      };
+      const out = {};
+      for (const k in ids) out[k] = read(ids[k]);
+      return out;
+    }, ids);
+    const allOk = Object.values(after).every((r) => r.ok && r.finite && r.settled);
+    console.log(`[drop-test] ${allOk ? 'PASS' : 'FAIL'} ${JSON.stringify(after)}`);
+  },
+
   // ACAQ — Sarlacc-pit behavior smoke test. Teleport the player onto the maw, let
   // the live game tick, confirm the maw OPENS + BITES (health drops). The pull
   // FEEL can't be judged headless (attended walk-test); this gates the wiring.
