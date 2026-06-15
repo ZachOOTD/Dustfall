@@ -2100,6 +2100,39 @@ const SCENARIOS = {
     }
   },
 
+  // ACAV — panel-studio: isolated single salvage-panel framer for the shape +
+  // interior visual-iteration loop. --shapes=rect,square,circle --kinds=fuselage
+  // --archetype=electrical --state=open|closed --angles=front,3q,side,eye
+  // --scale=1. Sweep mode (--sweep) loops shapes × a representative archetype set
+  // × open/closed at 3q (one-pass /visual-triage fodder).
+  'panel-studio': async (page) => {
+    const sweep = argv.sweep !== undefined;
+    const shapes = String(argv.shapes || argv.shape || (sweep ? 'rect,square,circle' : 'rect')).split(',').map((s) => s.trim());
+    const kinds = String(argv.kinds || argv.kind || 'fuselage').split(',').map((s) => s.trim());
+    const archetype = argv.archetype ? String(argv.archetype) : undefined;
+    const angles = String(argv.angles || (sweep ? '3q' : 'front,3q,side')).split(',').map((s) => s.trim());
+    const states = argv.state ? [String(argv.state)] : (argv.open !== undefined ? ['open'] : (sweep ? ['closed', 'open'] : ['closed']));
+    const scale = Number(argv.scale || 1);
+    for (const shape of shapes) {
+      for (const kind of kinds) {
+        for (const st of states) {
+          for (const angle of angles) {
+            const res = await page.evaluate(
+              ({ shape, kind, archetype, st, angle, scale }) =>
+                window.__game.spawnPanelStudio({ shape, kind, archetype, scale, open: st === 'open', angle }),
+              { shape, kind, archetype, st, angle, scale },
+            );
+            await page.waitForTimeout(220);
+            const tag = archetype ? `${shape}-${archetype}` : `${shape}-${kind}`;
+            const path = join(OUT, `scen-panelstudio-${tag}-${st}-${angle}.png`);
+            await page.screenshot({ path, fullPage: false });
+            console.log(`[panel-studio] ${tag}/${st}/${angle} → ${path}  ${JSON.stringify(res)}`);
+          }
+        }
+      }
+    }
+  },
+
   // Speeder-FX (ACW C7/C8): drive the (unmounted) bike LIVE for ~0.6s so the
   // dust trail builds + the engine glow ramps with speed, then PAUSE (freezes
   // the dust cloud mid-air + holds the glow) and free-camera a 3/4-behind shot

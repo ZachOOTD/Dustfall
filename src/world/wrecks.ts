@@ -139,6 +139,28 @@ export type PanelComponentKind =
  *  circular imports (salvage.ts imports WreckKind from this file). */
 export type PanelKind = WreckKind | 'massive';
 
+// ── ACAV Tier 3+ — panel shape / size / archetype ───────────────────
+/** Panel silhouette. `'square'` is `'rect'` with aspect 1 (one geometry path);
+ *  `'circle'` is a round inspection port with a bolted lift-off cover. */
+export type PanelShape = 'rect' | 'square' | 'circle';
+/** Drives the interior generator (Tier 4). Each archetype = a 5-slot extractable
+ *  palette + a decorative-greeble recipe + a default shape/size. */
+export type PanelArchetype = 'electrical' | 'plumbing' | 'avionics' | 'mechanical' | 'junction';
+/** Trailing options for addAccessPanel. Absent ⇒ today's exact rectangular panel
+ *  (zero new behaviour) so existing callers + the regression baseline are unchanged. */
+export interface AccessPanelOpts {
+  /** Full part-local orientation (the Tier-2 sampler passes this for a flush mount). */
+  orientQuat?: THREE.Quaternion;
+  /** Silhouette. Default 'rect'. */
+  shape?: PanelShape;
+  /** Height:width ratio (sy/sx). Default = SIZE_Y/SIZE_X (≈1.55). Ignored for circle. */
+  aspect?: number;
+  /** Interior archetype (Tier 4). */
+  archetype?: PanelArchetype;
+  /** Deterministic RNG for greeble jitter (Tier 4); position-seeded by the caller. */
+  rand?: Rng;
+}
+
 /** AAS — per-wreck-kind 5-component palettes. The interior of a
  *  fuselage panel looks different from a cargo-container panel; the
  *  loot it yields differs accordingly (red_wire→rope; bandage_pack→
@@ -295,36 +317,38 @@ export function addAccessPanel(
   scale = 1,
   faceYaw = 0,
   kind: PanelKind = 'fuselage',
-  orientQuat?: THREE.Quaternion,
+  opts: AccessPanelOpts = {},
 ): THREE.Mesh {
+  // ACAV Tier 3 — shape + size. 'square' = rect with aspect 1; 'circle' = a round
+  // port (width == height, bore radius sx/2). Absent opts ⇒ today's exact rect, so
+  // every existing caller + the regression baseline is byte-unchanged.
+  const shape = opts.shape ?? 'rect';
+  const isCircle = shape === 'circle';
+  const aspectRatio = (isCircle || shape === 'square')
+    ? 1
+    : (opts.aspect ?? (Tuning.SALVAGE_PANEL_SIZE_Y / Tuning.SALVAGE_PANEL_SIZE_X));
   const sx = Tuning.SALVAGE_PANEL_SIZE_X * scale;
-  const sy = Tuning.SALVAGE_PANEL_SIZE_Y * scale;
+  const sy = Tuning.SALVAGE_PANEL_SIZE_X * scale * aspectRatio;
   const sz = Tuning.SALVAGE_PANEL_SIZE_Z * scale;
+  const radius = sx * 0.5;
 
-  // Panel root mesh — the body. Used as the interact target.
-  // The body itself is the rusted RECESSED CAVITY box; the door covers
-  // it. From the front-on view the door reads as "the panel" until pried.
-  //
-  // AAU — body shifted BACK along local Z by sz/2 so its FRONT face is
-  // flush with the hull surface (callers position `localZ` at the hull
-  // surface). The rim + closed door sit just proud of the hull; the
-  // body cavity recesses INTO the hull. Reads as "integrated, not
-  // stuck on" rather than the AAR/AAS protrusion. All children of body
-  // stay at their unchanged body-local positions and move with it.
-  // ABG bugfix — use the BackSide-cloned body material so the box's
-  // front face doesn't occlude the cavity interior. See material
-  // comment above. The box geometry itself is unchanged so colliders,
-  // raycast bounds, and child positions (door / rim / interior / glow)
-  // all keep their existing wrapper-local layouts.
-  const body = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), _panelBodyMatBackSide);
-  // ACAV Tier 2 — orient from a FULL quaternion when the shape-agnostic sampler
-  // passes one (so the panel sits FLUSH on angled/curved hulls — no cardinal-yaw
-  // snap), else a yaw-only quaternion from faceYaw (legacy + authored-anchor path).
-  // The recess offset runs along the panel's local −Z (the "back" direction), so
-  // it composes correctly with any orientation. Yaw-only reproduces the old
+  // Panel root mesh — the body, the interact target + the rusted RECESSED CAVITY.
+  // AAU — shifted BACK by sz/2 so its FRONT face is flush with the hull; the rim +
+  // closed door/cover sit just proud, the cavity recesses in. ABG — BackSide-cloned
+  // material so the front face doesn't occlude the cavity interior when open.
+  // ACAV Tier 3 — circle uses a CylinderGeometry BORE (axis rotated to +Z) so the
+  // round cavity wall reads when the cover lifts off; rect/square stay a box.
+  const bodyGeo = isCircle
+    ? new THREE.CylinderGeometry(radius, radius, sz, 22).rotateX(Math.PI / 2)
+    : new THREE.BoxGeometry(sx, sy, sz);
+  const body = new THREE.Mesh(bodyGeo, _panelBodyMatBackSide);
+  body.userData.panelShape = shape;
+  // ACAV Tier 2 — orient from a FULL quaternion (the shape-agnostic sampler passes
+  // one for a flush mount) else a yaw-only quaternion from faceYaw. The recess runs
+  // along local −Z so it composes with any orientation; yaw-only reproduces the old
   // `recessZ*sin(yaw), 0, recessZ*cos(yaw)` exactly.
   const recessZ = -sz / 2;
-  const q = orientQuat ?? new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), faceYaw);
+  const q = opts.orientQuat ?? new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), faceYaw);
   const recessOff = new THREE.Vector3(0, 0, recessZ).applyQuaternion(q);
   body.position.set(localX + recessOff.x, localY + recessOff.y, localZ + recessOff.z);
   body.quaternion.copy(q);
@@ -343,33 +367,44 @@ export function addAccessPanel(
   // appearance are unchanged from outside.
   const rimDepth = sz * 0.20;
   const rimZ = sz * 0.55;
-  const rimBorderX = sx * 0.10;   // left/right bar thickness
-  const rimBorderY = sy * 0.10;   // top/bottom bar thickness
-  const rimOuterX = sx * 1.10;
-  const rimOuterY = sy * 1.10;
-  // Top + bottom bars span the full outer width.
-  for (const yy of [rimOuterY * 0.5 - rimBorderY * 0.5,
-                    -(rimOuterY * 0.5 - rimBorderY * 0.5)]) {
-    const bar = new THREE.Mesh(
-      new THREE.BoxGeometry(rimOuterX, rimBorderY, rimDepth),
-      _panelRimMat,
-    );
-    bar.position.set(0, yy, rimZ);
-    bar.userData.noCollider = true;
-    body.add(bar);
-  }
-  // Left + right bars span only the interior height (so we don't
-  // double-stack with top/bottom at the corners).
-  const sideBarH = rimOuterY - 2 * rimBorderY;
-  for (const xx of [rimOuterX * 0.5 - rimBorderX * 0.5,
-                    -(rimOuterX * 0.5 - rimBorderX * 0.5)]) {
-    const bar = new THREE.Mesh(
-      new THREE.BoxGeometry(rimBorderX, sideBarH, rimDepth),
-      _panelRimMat,
-    );
-    bar.position.set(xx, 0, rimZ);
-    bar.userData.noCollider = true;
-    body.add(bar);
+  if (!isCircle) {
+    const rimBorderX = sx * 0.10;   // left/right bar thickness
+    const rimBorderY = sy * 0.10;   // top/bottom bar thickness
+    const rimOuterX = sx * 1.10;
+    const rimOuterY = sy * 1.10;
+    // Top + bottom bars span the full outer width.
+    for (const yy of [rimOuterY * 0.5 - rimBorderY * 0.5,
+                      -(rimOuterY * 0.5 - rimBorderY * 0.5)]) {
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(rimOuterX, rimBorderY, rimDepth), _panelRimMat);
+      bar.position.set(0, yy, rimZ);
+      bar.userData.noCollider = true;
+      body.add(bar);
+    }
+    // Left + right bars span only the interior height (no corner double-stack).
+    const sideBarH = rimOuterY - 2 * rimBorderY;
+    for (const xx of [rimOuterX * 0.5 - rimBorderX * 0.5,
+                      -(rimOuterX * 0.5 - rimBorderX * 0.5)]) {
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(rimBorderX, sideBarH, rimDepth), _panelRimMat);
+      bar.position.set(xx, 0, rimZ);
+      bar.userData.noCollider = true;
+      body.add(bar);
+    }
+  } else {
+    // ACAV Tier 3 — circle: a bolted ring rim. A thick torus (inherently NOT
+    // paper-thin — rule 7) + brass bolt-head studs evenly around it.
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(radius * 0.99, sz * 0.16, 8, 30), _panelRimMat);
+    ring.position.set(0, 0, rimZ * 0.7);
+    ring.userData.noCollider = true;
+    body.add(ring);
+    const bolts = 8;
+    for (let b = 0; b < bolts; b++) {
+      const a = (b / bolts) * Math.PI * 2 + Math.PI / bolts;
+      const stud = new THREE.Mesh(new THREE.CylinderGeometry(sx * 0.045, sx * 0.045, sz * 0.22, 6), _panelRimMat);
+      stud.rotation.x = Math.PI / 2;
+      stud.position.set(Math.cos(a) * radius * 0.99, Math.sin(a) * radius * 0.99, rimZ * 0.85);
+      stud.userData.noCollider = true;
+      body.add(stud);
+    }
   }
 
   // ── Interior cavity (visible when door is open) ──────────────────
@@ -379,7 +414,9 @@ export function addAccessPanel(
   interior.position.set(0, 0, 0);
   interior.userData.noCollider = true;
   const backplate = new THREE.Mesh(
-    new THREE.BoxGeometry(sx * 0.85, sy * 0.85, sz * 0.05),
+    isCircle
+      ? new THREE.CylinderGeometry(radius * 0.92, radius * 0.92, sz * 0.05, 22).rotateX(Math.PI / 2)
+      : new THREE.BoxGeometry(sx * 0.85, sy * 0.85, sz * 0.05),
     _panelInteriorMat,
   );
   backplate.position.set(0, 0, sz * 0.25);   // recessed into the body
@@ -408,59 +445,69 @@ export function addAccessPanel(
 
   body.add(interior);
 
-  // ── Hinged door (covers the cavity when closed) ──────────────────
-  // The door is parented to a HINGE group offset to the LEFT edge of
-  // the panel (body local -X), following real fuse-box convention
-  // (hinge LEFT, handle RIGHT looking at the panel from outside).
-  // Door thickness = sz * 0.30 so it reads as a real iron plate, not
-  // paper-thin (rule 7).
-  //
-  // Session ABA — hinge convention. The hinge axis is +Y; the door
-  // extends to body's +X (handle side). With three.js's right-hand
-  // rule on +Y, a positive Y rotation around the hinge swings the
-  // door's free edge from +X toward -Z (i.e. INTO the hull body).
-  // We want OUTWARD swing (toward +Z, away from the hull surface),
-  // so updatePanelDoors in interaction.ts applies the NEGATIVE of
-  // `panelDoorAngle` to the hinge's `rotation.y`. The state field
-  // stays positive (it's a magnitude); the sign is encoded once at
-  // the application site. Don't change the rotation axis here.
-  const hinge = new THREE.Group();
-  hinge.position.set(-sx * 0.5, 0, sz * 0.60);   // hinge axis = left edge, slightly proud
-  hinge.userData.noCollider = true;
-  const door = new THREE.Mesh(
-    new THREE.BoxGeometry(sx, sy * 0.96, sz * 0.30),
-    _panelDoorMat,
-  );
-  // Door's local origin is centered; offset so the LEFT edge sits at hinge.
-  door.position.set(sx * 0.5, 0, 0);
-  door.userData.noCollider = true;
-  hinge.add(door);
-  // Door surface detail: 4 rivet bumps near corners + a handle on the right.
-  for (const [rx, ry] of [
-    [0.08, 0.40],
-    [0.92, 0.40],
-    [0.08, -0.40],
-    [0.92, -0.40],
-  ] as const) {
-    const rivet = new THREE.Mesh(
-      new THREE.CylinderGeometry(sx * 0.025, sx * 0.025, sz * 0.10, 6),
-      _panelRimMat,
+  // ── Door / cover (covers the cavity when closed) ─────────────────
+  // Rect/square: a HINGED door, hinge at the LEFT edge (+Y axis). ABA — a positive
+  // Y rotation swings the free edge INTO the hull, so updatePanelDoors applies the
+  // NEGATIVE of panelDoorAngle for OUTWARD swing; the state field stays a positive
+  // magnitude. Circle: a bolted LIFT-OFF cover that slides out + tumbles ajar.
+  // BOTH pivots are named `body.userData.panelDoor` so the bury-audit/prune door-
+  // exclusion + completePry drive them unchanged. Thickness sz*0.30 = a real plate
+  // (rule 7).
+  let panelDoorPivot: THREE.Group;
+  if (!isCircle) {
+    const hinge = new THREE.Group();
+    hinge.position.set(-sx * 0.5, 0, sz * 0.60);   // hinge axis = left edge, slightly proud
+    hinge.userData.noCollider = true;
+    const door = new THREE.Mesh(new THREE.BoxGeometry(sx, sy * 0.96, sz * 0.30), _panelDoorMat);
+    door.position.set(sx * 0.5, 0, 0);             // local origin centred; LEFT edge at the hinge
+    door.userData.noCollider = true;
+    hinge.add(door);
+    // 4 rivet bumps near corners + a handle on the right.
+    for (const [rx, ry] of [[0.08, 0.40], [0.92, 0.40], [0.08, -0.40], [0.92, -0.40]] as const) {
+      const rivet = new THREE.Mesh(new THREE.CylinderGeometry(sx * 0.025, sx * 0.025, sz * 0.10, 6), _panelRimMat);
+      rivet.rotation.x = Math.PI / 2;
+      rivet.position.set(sx * rx, sy * ry, sz * 0.20);
+      rivet.userData.noCollider = true;
+      hinge.add(rivet);
+    }
+    const handle = new THREE.Mesh(new THREE.BoxGeometry(sx * 0.05, sy * 0.20, sz * 0.12), _panelRimMat);
+    handle.position.set(sx * 0.92, 0, sz * 0.22);
+    handle.userData.noCollider = true;
+    hinge.add(handle);
+    body.add(hinge);
+    panelDoorPivot = hinge;
+  } else {
+    // ACAV Tier 3 — circle: a bolted disc cover on a pivot at the bore mouth.
+    const coverPivot = new THREE.Group();
+    coverPivot.position.set(0, 0, sz * 0.55);
+    coverPivot.userData.noCollider = true;
+    // updatePanelDoors reads these to slide the cover out + tumble it ajar (its
+    // local +Z base + how far it travels at full open).
+    coverPivot.userData.panelCoverBaseZ = sz * 0.55;
+    coverPivot.userData.panelCoverSlide = sz * 1.6;
+    const cover = new THREE.Mesh(
+      new THREE.CylinderGeometry(radius * 1.04, radius * 1.04, sz * 0.30, 22).rotateX(Math.PI / 2),
+      _panelDoorMat,
     );
-    rivet.rotation.x = Math.PI / 2;
-    rivet.position.set(sx * rx, sy * ry, sz * 0.20);
-    rivet.userData.noCollider = true;
-    hinge.add(rivet);
+    cover.userData.noCollider = true;
+    coverPivot.add(cover);
+    // 6 brass bolt-heads in a ring + a centre grip nub.
+    for (let b = 0; b < 6; b++) {
+      const a = (b / 6) * Math.PI * 2;
+      const stud = new THREE.Mesh(new THREE.CylinderGeometry(sx * 0.04, sx * 0.04, sz * 0.14, 6), _panelRimMat);
+      stud.rotation.x = Math.PI / 2;
+      stud.position.set(Math.cos(a) * radius * 0.62, Math.sin(a) * radius * 0.62, sz * 0.17);
+      stud.userData.noCollider = true;
+      coverPivot.add(stud);
+    }
+    const grip = new THREE.Mesh(new THREE.CylinderGeometry(sx * 0.07, sx * 0.07, sz * 0.20, 8), _panelRimMat);
+    grip.rotation.x = Math.PI / 2;
+    grip.position.set(0, 0, sz * 0.22);
+    grip.userData.noCollider = true;
+    coverPivot.add(grip);
+    body.add(coverPivot);
+    panelDoorPivot = coverPivot;
   }
-  // Handle — small recessed grip on the right edge of the door.
-  const handle = new THREE.Mesh(
-    new THREE.BoxGeometry(sx * 0.05, sy * 0.20, sz * 0.12),
-    _panelRimMat,
-  );
-  handle.position.set(sx * 0.92, 0, sz * 0.22);
-  handle.userData.noCollider = true;
-  hinge.add(handle);
-
-  body.add(hinge);
 
   // AAS — electrical-flicker glow. Pre-ABL each panel got its own
   // PointLight parented here (intensity=0 until pry). With ~68 panels
@@ -476,7 +523,7 @@ export function addAccessPanel(
 
   // Stash refs + animation state on body.userData so interaction.ts
   // can drive the door + hide components as they're extracted.
-  body.userData.panelDoor = hinge;
+  body.userData.panelDoor = panelDoorPivot;
   body.userData.panelInterior = interior;
   body.userData.panelGlowStartedAt = -1;        // -1 = not yet ignited
   body.userData.panelComponents = components;
@@ -499,8 +546,9 @@ export function addAccessPanelOriented(
   localQuat: THREE.Quaternion,
   scale = 1,
   kind: PanelKind = 'fuselage',
+  panelOpts: Omit<AccessPanelOpts, 'orientQuat'> = {},
 ): THREE.Mesh {
-  return addAccessPanel(group, localPos.x, localPos.y, localPos.z, scale, 0, kind, localQuat);
+  return addAccessPanel(group, localPos.x, localPos.y, localPos.z, scale, 0, kind, { orientQuat: localQuat, ...panelOpts });
 }
 
 // ────────────────────────────────────────────────────────────────

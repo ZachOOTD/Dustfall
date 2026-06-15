@@ -1393,7 +1393,20 @@ function updatePanelDoors(ctx: GameContext, dt: number): void {
       // `panelDoorTarget` stay positive magnitudes; the convention
       // (positive = outward open) is encoded once at this application
       // site. All callsites of addAccessPanel inherit the fix.
-      if (door) door.rotation.y = -next;
+      if (door) {
+        if (panel.userData.panelShape === 'circle') {
+          // ACAV Tier 3 — circle lift-off cover: slide it out along +Z + tumble it
+          // ajar, normalised by the open-angle so it tracks the same 0..1 lerp the
+          // hinge does (reuses panelDoorAngle/Target + completePry untouched).
+          const t = next / Tuning.SALVAGE_PANEL_DOOR_OPEN_ANGLE;
+          const baseZ = (door.userData.panelCoverBaseZ as number | undefined) ?? 0;
+          const slide = (door.userData.panelCoverSlide as number | undefined) ?? 0.3;
+          door.position.z = baseZ + t * slide;
+          door.rotation.x = t * 1.0;
+        } else {
+          door.rotation.y = -next;
+        }
+      }
     }
     // AAS — electrical-flicker glow envelope. While glowElapsed < fade,
     // intensity = peak × fadeFactor × flicker. The flicker is two

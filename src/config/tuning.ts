@@ -840,6 +840,11 @@ export const Tuning = {
   // ±Z cylinder flanks); each candidate is scored over the panel FOOTPRINT.
   SALVAGE_PANEL_SAMPLE_DIRS: 48,         // Fibonacci-sphere inward cast directions (1 seeded rotation offset → fixed RNG budget, D208); early-exits on a high-quality mount so most panels scan far fewer
   SALVAGE_PANEL_MOUNT_EARLY_ACCEPT: 0.88, // stop scanning once a mount this outward-facing + flat is found (boot perf)
+  // ACAV Tier 3 — shape variety on procgen panels (square junction boxes + bolted
+  // circular inspection ports alongside the rect hatches). Derived from already-
+  // rolled values (panelKind + size roll) so it adds ZERO new world-rand (D208).
+  // Flag for rollback; visual-verified via panel-studio before enabling.
+  SALVAGE_PANEL_SHAPES_ENABLED: true,
   SALVAGE_PANEL_FOOTPRINT_CLEARANCE: 0.22, // probe pushes out this far + casts back; |d−this| ≤ FLATNESS_TOL = flat AND clear (a closer hit = geometry intrudes; subsumes decoration avoidance)
   SALVAGE_PANEL_NORMAL_AGREEMENT: 0.72,  // min dot(footprint-probe normal, centre normal) — the surface stays flat across the panel
   // ACAV — shared bury/occlusion raycast params (factored out of the three

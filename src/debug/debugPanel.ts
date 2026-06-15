@@ -9,6 +9,7 @@ import { makeLatheHull, fuselageProfile, makeFormerRings, makeBreach, makeSandMo
 import { createRustedHullMaterial } from '../world/hullMaterial.ts';
 import { placeProcgenComposite, type ProcgenWreckClass } from '../world/procgenWreck.ts';
 import { validatePanels, type PanelEntry } from '../world/panelPlacement.ts';
+import { addAccessPanel, type PanelKind, type PanelArchetype } from '../world/wrecks.ts';   // ACAV — panel-studio
 import { makeRng } from '../core/rng.ts';
 import { Tuning } from '../config/tuning.ts';
 import { resetTutorial, showControlsPanel } from '../ui/tutorial.ts';
@@ -106,6 +107,7 @@ interface DebugApi {
    *  pass (Lane 1) drives this via the `item-studio` rig-shot scenario. Pass an
    *  ItemId + angle; re-call to swap items/angles (prior mesh is removed). */
   itemStudio: (id: ItemId, angle?: 'front' | 'back' | 'left' | 'right' | 'top' | '3q') => unknown;
+  spawnPanelStudio: (opts?: { shape?: 'rect' | 'square' | 'circle'; archetype?: string; kind?: PanelKind; scale?: number; open?: boolean; angle?: 'front' | '3q' | 'side' | 'eye' | 'top' }) => unknown;
   /** ACAJ — visual-audit "studio" for the shared wreck-form toolkit primitives
    *  (`wreckForms.ts`). Builds a single form (lathe hull / former rings / breach /
    *  sand mound) in ISOLATION, suspends it against the clean sky, and frames the
@@ -370,6 +372,87 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
       cam.lookAt(anchor);
       cam.updateMatrixWorld(true);
       return { id, angle: angle ?? 'front', ok: true, radius: +radius.toFixed(3) };
+    },
+    spawnPanelStudio(opts) {
+      // ACAV — isolated single-panel framer for the shape + interior visual loop
+      // (clones itemStudio's lit-for-form rig + sky-suspend). Build → screenshot →
+      // critique → iterate (rule 8). Tier 3+ threads o.shape/o.archetype through.
+      const o = opts ?? {};
+      const scale = o.scale ?? 1;
+      const kind = (o.kind ?? 'fuselage') as PanelKind;
+      const angle = o.angle ?? '3q';
+      if (hooks.enterGame) hooks.enterGame(true);
+      else { ctx.flags.titleActive = false; ctx.flags.paused = false; }
+      const three = ctx.three;
+      three.renderer.setSize(900, 900, false);
+      const cam = three.camera as THREE.PerspectiveCamera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1; cam.updateProjectionMatrix(); }
+      three.renderer.toneMappingExposure = 1.45;
+      ctx.flags.paused = true;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (!studioGroup) {
+        studioGroup = new THREE.Group();
+        studioGroup.name = '__itemStudio';
+        const key = new THREE.DirectionalLight(0xfff1dc, 2.6);
+        key.position.set(2.5, 3.5, 2.0);
+        const fill = new THREE.DirectionalLight(0xaec6ff, 0.85);
+        fill.position.set(-2.2, 1.0, -1.4);
+        const amb = new THREE.AmbientLight(0xffffff, 0.85);
+        studioGroup.add(key, fill, amb);
+        three.scene.add(studioGroup);
+      }
+      if (studioMesh) { studioGroup.remove(studioMesh); studioMesh = null; }
+
+      // Build ONE panel into a host group. faceYaw 0 → the panel front (door/rim)
+      // faces +Z, so the camera frames the front.
+      const host = new THREE.Group();
+      const body = addAccessPanel(host, 0, 0, 0, scale, 0, kind, {
+        shape: o.shape,
+        archetype: o.archetype as PanelArchetype | undefined,
+        rand: makeRng(1337),     // deterministic greeble → comparable A/B shots
+      });
+      // Force-open: paused → updatePanelDoors won't run, so apply the open transform
+      // directly (shape-aware: rect hinge swing vs circle lift-off cover slide+tumble).
+      if (o.open && body) {
+        const open = Tuning.SALVAGE_PANEL_DOOR_OPEN_ANGLE;
+        body.userData.panelOpened = true;
+        body.userData.panelDoorAngle = open;
+        const door = body.userData.panelDoor as THREE.Object3D | undefined;
+        if (door) {
+          if (body.userData.panelShape === 'circle') {
+            const baseZ = (door.userData.panelCoverBaseZ as number | undefined) ?? 0;
+            const slide = (door.userData.panelCoverSlide as number | undefined) ?? 0.3;
+            door.position.z = baseZ + slide;
+            door.rotation.x = 1.0;
+          } else {
+            door.rotation.y = -open;
+          }
+        }
+      }
+      const bp = ctx.player.body.body.translation();
+      const anchor = new THREE.Vector3(bp.x, bp.y + 40, bp.z);   // sky backdrop
+      host.position.copy(anchor);
+      studioGroup.add(host);
+      studioMesh = host;
+      host.updateMatrixWorld(true);
+
+      const box = new THREE.Box3().setFromObject(body ?? host);
+      const center = box.getCenter(new THREE.Vector3());
+      const size = box.getSize(new THREE.Vector3());
+      const radius = Math.max(size.x, size.y, size.z, 0.1) * 0.5;
+      const dist = radius * 2.8 + 0.3;
+      const dir = new THREE.Vector3(0, 0.05, 1);                 // 'front'
+      if (angle === '3q') dir.set(0.7, 0.18, 0.8);
+      else if (angle === 'side') dir.set(1, 0.05, 0.18);
+      else if (angle === 'eye') dir.set(0.18, -0.32, 1);        // player looking at a hull panel
+      else if (angle === 'top') dir.set(0.1, 1, 0.2);
+      dir.normalize();
+      cam.position.copy(center).addScaledVector(dir, dist);
+      cam.lookAt(center);
+      cam.updateMatrixWorld(true);
+      let meshCount = 0;
+      host.traverse((n) => { if ((n as THREE.Mesh).isMesh) meshCount++; });
+      return { ok: true, shape: o.shape ?? 'rect', archetype: o.archetype ?? '-', kind, open: !!o.open, angle, meshCount };
     },
     wreckFormStudio(form, angle) {
       if (hooks.enterGame) hooks.enterGame(true);

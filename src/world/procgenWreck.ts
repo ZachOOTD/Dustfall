@@ -53,7 +53,7 @@ import type { SalvageableRegistry, Salvageable } from './salvage.ts';
 import { registerSalvageable } from './salvage.ts';
 import { validatePanels, findSurfaceMounts, type PanelEntry } from './panelPlacement.ts';
 import { Tuning } from '../config/tuning.ts';
-import { addAccessPanel, addAccessPanelOriented, makeEngineBellMesh } from './wrecks.ts';
+import { addAccessPanel, addAccessPanelOriented, makeEngineBellMesh, type PanelShape } from './wrecks.ts';
 import { mergeStaticByMaterial, makeSandMound, makeLoftedHull } from './wreckForms.ts';
 import { createRustedHullMaterial } from './hullMaterial.ts';
 import { attachCompoundCollider } from '../physics/bodies.ts';
@@ -1198,6 +1198,13 @@ function assembleWreck(
       : sr >= Tuning.SALVAGE_PANEL_SCALE_LARGE_THRESHOLD ? Tuning.SALVAGE_PANEL_SCALE_LARGE
       : 1;
     const panelKind = panelKindPool[Math.floor(rand() * panelKindPool.length)];
+    // ACAV Tier 3 — derive SHAPE from already-rolled values (zero new world-rand,
+    // D208): engine hardware gets round bolted ports; small panels read as square
+    // junction boxes; the rest stay rect hatches.
+    const panelShape: PanelShape = !Tuning.SALVAGE_PANEL_SHAPES_ENABLED ? 'rect'
+      : panelKind === 'engine_cluster' ? 'circle'
+      : sr < Tuning.SALVAGE_PANEL_SCALE_SMALL_THRESHOLD ? 'square'
+      : 'rect';
     const prior = placedOnPart.get(partMesh) ?? [];
     const halfX = Tuning.SALVAGE_PANEL_SIZE_X * scale * 0.5;
     const halfY = Tuning.SALVAGE_PANEL_SIZE_Y * scale * 0.5;
@@ -1206,12 +1213,12 @@ function assembleWreck(
     // On a miss, fall back to the authored per-part anchor (yaw-based).
     const cand = findSurfaceMounts(partMesh, rand, prior, halfX, halfY);
     if (cand) {
-      addAccessPanelOriented(partMesh, cand.localPos, cand.localQuat, scale, panelKind);
+      addAccessPanelOriented(partMesh, cand.localPos, cand.localQuat, scale, panelKind, { shape: panelShape });
       prior.push({ x: cand.localPos.x, y: cand.localPos.y, z: cand.localPos.z });
     } else {
       const a = slot.built.panelAnchor;
       if (a) {
-        addAccessPanel(partMesh, a.x, a.y, a.z, scale, a.faceYaw, panelKind);
+        addAccessPanel(partMesh, a.x, a.y, a.z, scale, a.faceYaw, panelKind, { shape: panelShape });
         prior.push({ x: a.x, y: a.y, z: a.z });
       }
     }
