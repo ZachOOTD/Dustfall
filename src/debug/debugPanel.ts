@@ -8,6 +8,7 @@ import { damageVulture } from '../enemies/vulture.ts';
 import { makeLatheHull, fuselageProfile, makeFormerRings, makeBreach, makeSandMound } from '../world/wreckForms.ts';
 import { createRustedHullMaterial } from '../world/hullMaterial.ts';
 import { placeProcgenComposite, type ProcgenWreckClass } from '../world/procgenWreck.ts';
+import { validatePanels, type PanelEntry } from '../world/panelPlacement.ts';
 import { makeRng } from '../core/rng.ts';
 import { Tuning } from '../config/tuning.ts';
 import { resetTutorial, showControlsPanel } from '../ui/tutorial.ts';
@@ -480,50 +481,22 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
       return { cls, seed, ok: true, meshes, pos: [px, +py.toFixed(1), pz] };
     },
     panelBuryAudit() {
+      // ACAV — delegates to the unified validatePanels (world/panelPlacement.ts) in
+      // read-only AUDIT mode (each panel walks up to its scene-root, occlusion-only).
+      // Same raycast the gen-time prune + cluster pass run, so the audit can't drift
+      // from the cull (D210). Reshapes to the historical {idx,kind,hit} fail format.
       const reg = (ctx as unknown as { salvageables?: { list: Array<{ panel: THREE.Object3D; kind?: string; wreckKind?: string }> } }).salvageables;
-      const scene = ctx.three.scene;
-      const rc = new THREE.Raycaster();
-      const fails: Array<{ idx: number; kind: string; hit: string }> = [];
-      let pass = 0, tested = 0;
-      const isAncestor = (anc: THREE.Object3D, node: THREE.Object3D | null): boolean => {
-        let n: THREE.Object3D | null = node;
-        while (n) { if (n === anc) return true; n = n.parent; }
-        return false;
+      const entries: PanelEntry[] = (reg?.list ?? []).map((s) => ({
+        body: s.panel,
+        kind: s.kind || s.wreckKind || '?',
+      }));
+      const report = validatePanels(entries, { scene: ctx.three.scene, audit: true });
+      return {
+        tested: report.tested,
+        pass: report.pass,
+        failCount: report.failCount,
+        fails: report.fails.slice(0, 12).map((f) => ({ idx: f.idx, kind: f.kind, hit: f.detail })),
       };
-      const updatedRoots = new Set<THREE.Object3D>();
-      (reg?.list ?? []).forEach((s, idx) => {
-        const body = s.panel;
-        // Force a full world-matrix update of the wreck subtree so the door /
-        // rim / interior (descendants) aren't raycast at stale transforms.
-        let r0: THREE.Object3D = body;
-        while (r0.parent && r0.parent !== scene) r0 = r0.parent;
-        if (!updatedRoots.has(r0)) { r0.updateWorldMatrix(false, true); updatedRoots.add(r0); }
-        const wp = body.getWorldPosition(new THREE.Vector3());
-        const wq = body.getWorldQuaternion(new THREE.Quaternion());
-        const outward = new THREE.Vector3(0, 0, 1).applyQuaternion(wq).normalize();
-        let root: THREE.Object3D = body;
-        while (root.parent && root.parent !== scene) root = root.parent;
-        rc.far = 1.6;
-        rc.set(wp.clone().addScaledVector(outward, 0.8), outward.clone().multiplyScalar(-1));
-        const hits = rc.intersectObject(root, true);
-        tested++;
-        // Compare depths: the panel is exposed iff its nearest surface (rim /
-        // door / cavity) is reached BEFORE any non-panel hull mesh. Hull BEHIND
-        // the panel (e.g. the far wall past an open cavity) is fine.
-        let dPanel = Infinity, dHull = Infinity;
-        for (const h of hits) {
-          if (isAncestor(body, h.object)) dPanel = Math.min(dPanel, h.distance);
-          else dHull = Math.min(dHull, h.distance);
-        }
-        if (dPanel === Infinity) { pass++; return; }     // panel not on this axis — skip (no occlusion claim)
-        // Panels recess by design (RECESS_DEPTH), so the hull lip sits a little
-        // in front of the recessed cavity legitimately. Only flag GROSS
-        // occlusion — hull well in front of the panel beyond the recess.
-        if (dHull < dPanel - 0.22) {
-          fails.push({ idx, kind: s.kind || s.wreckKind || '?', hit: `hull@${dHull.toFixed(2)}<panel@${dPanel.toFixed(2)}` });
-        } else pass++;
-      });
-      return { tested, pass, failCount: fails.length, fails: fails.slice(0, 12) };
     },
     resetTutorial,
     showControls() { showControlsPanel(ctx); },

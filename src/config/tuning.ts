@@ -835,6 +835,11 @@ export const Tuning = {
   SALVAGE_PANEL_FLATNESS_DEPTH_TOL: 0.13, // 4-ray probe ring must agree within this depth (m) = flush
   SALVAGE_PANEL_MIN_SEPARATION: 0.9,     // min gap (m) between two panels on the same part
   SALVAGE_PANEL_SURFACE_EPS: 0.012,      // push the mount this far proud to avoid z-fighting the hull skin
+  // ACAV — shared bury/occlusion raycast params (factored out of the three
+  // duplicated copies — pruneBuriedPanels / panelBuryAudit / wreck-yard cluster
+  // pass — into one validatePanels in world/panelPlacement.ts; D210 drift fix).
+  SALVAGE_PANEL_OCCLUSION_FAR: 1.6,      // inward bury-ray length (m) from 0.8m proud of the panel
+  SALVAGE_PANEL_OCCLUSION_SLACK: 0.22,   // hull must be THIS much in front of the panel surface to count as buried (recess tolerance)
   // ACY — panel size variants. Each placed panel rolls one size for visual
   // variety (small access hatch → large cargo bay panel). Multiplies the
   // base SALVAGE_PANEL_SIZE_* via addAccessPanel's `scale`.
