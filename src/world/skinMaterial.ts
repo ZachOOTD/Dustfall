@@ -84,36 +84,36 @@ export function createSkinMaterial(
   const scaleSize = opts.scaleSize ?? 8.0;
   const sheen = opts.sheen ?? 0.5;
 
-  // ACAH (D175) — per-instance baked GLSL needs a distinguishing cache key or
-  // Three shares ONE compiled program across all skin materials.
-  mat.customProgramCacheKey = () => 'skin:' + JSON.stringify(opts ?? {});
-
+  // ACAT T3 — value params (accentColor/scaleSize/sheen/bump) are UNIFORMS + the
+  // localSpace source branch is a RUNTIME uniform branch, so the injected source is
+  // identical across same-base-class skin → ONE program per base class. `pbr` forks
+  // the BASE material (Standard vs Lambert), which Three's default key distinguishes,
+  // so no customProgramCacheKey is needed (supersedes the skin half of D175). The pbr
+  // occlusion + micro-bump stay compile-time `if (opts.pbr)` (1:1 with the base class).
   mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uAccentCol = { value: new THREE.Vector3(accent.r, accent.g, accent.b) };
+    shader.uniforms.uScaleSize = { value: scaleSize };
+    shader.uniforms.uSheen = { value: sheen };
+    shader.uniforms.uBump = { value: bump };
+    shader.uniforms.uLocalSpace = { value: opts.localSpace ? 1.0 : 0.0 };
     shader.vertexShader = shader.vertexShader.replace(
       '#include <common>',
       /* glsl */ `
         #include <common>
         varying vec3 vWorldSkin;
         varying vec3 vNrmSkin;
+        uniform float uLocalSpace;
       `,
     );
     shader.vertexShader = shader.vertexShader.replace(
       '#include <begin_vertex>',
-      opts.localSpace
-        /* glsl */
-        ? `
-          #include <begin_vertex>
-          // ABN — localSpace: sample noise in object frame so detail
-          // stays anchored to the body as it moves.
-          vWorldSkin = position;
-          vNrmSkin = normal;
-        `
-        /* glsl */
-        : `
-          #include <begin_vertex>
-          vWorldSkin = (modelMatrix * vec4(position, 1.0)).xyz;
-          vNrmSkin = normal;
-        `,
+      /* glsl */ `
+        #include <begin_vertex>
+        // ABN/ACAT — uLocalSpace runtime branch: object frame (1) anchors skin detail
+        // on a MOVING body so it doesn't crawl; world frame (0) otherwise.
+        vWorldSkin = (uLocalSpace > 0.5) ? position : (modelMatrix * vec4(position, 1.0)).xyz;
+        vNrmSkin = normal;
+      `,
     );
 
     shader.fragmentShader = shader.fragmentShader.replace(
@@ -122,6 +122,10 @@ export function createSkinMaterial(
         #include <common>
         varying vec3 vWorldSkin;
         varying vec3 vNrmSkin;
+        uniform vec3 uAccentCol;
+        uniform float uScaleSize;
+        uniform float uSheen;
+        uniform float uBump;
 
         float skinHash(vec2 p) {
           vec3 p3 = fract(vec3(p.xyx) * 0.1031);
@@ -157,7 +161,7 @@ export function createSkinMaterial(
         #include <color_fragment>
 
         vec3 wpsk = vWorldSkin;
-        vec3 accentCol = vec3(${accent.r.toFixed(3)}, ${accent.g.toFixed(3)}, ${accent.b.toFixed(3)});
+        vec3 accentCol = uAccentCol;
 
         // 2. PIGMENT BLOTCHES (apply first — tints the base).
         float pigmentNoise = skinFbm(wpsk.xz * 0.35 + vec2(0.0, wpsk.y * 0.2));
@@ -165,7 +169,7 @@ export function createSkinMaterial(
 
         // 1. SCALE CELLS — FBM thresholded to bright cell interiors,
         //    darker cell borders (the "between" regions).
-        float cellsNoise = skinFbm(wpsk.xyz.xz * ${scaleSize.toFixed(2)});
+        float cellsNoise = skinFbm(wpsk.xyz.xz * uScaleSize);
         // Inner cell brightness vs outer-darker:
         // smoothstep(0.45, 0.55) gives a sharp-ish cell boundary.
         float cellInner = smoothstep(0.45, 0.55, cellsNoise);
@@ -181,7 +185,7 @@ export function createSkinMaterial(
         // 4. SHEEN HIGHLIGHTS — FBM thresholded to bright spots.
         float sheenNoise = skinFbm(wpsk.xz * 1.8 + vec2(41.0, 7.0));
         float sheenStrength = smoothstep(0.65, 0.85, sheenNoise);
-        vec3 sheenTinted = mix(pigmentTinted, pigmentTinted + vec3(0.15, 0.13, 0.10), sheenStrength * ${sheen.toFixed(3)});
+        vec3 sheenTinted = mix(pigmentTinted, pigmentTinted + vec3(0.15, 0.13, 0.10), sheenStrength * uSheen);
 
         // 5. MICRO-GRAIN.
         float skGrain = skinHash(wpsk.xz * 180.0);
@@ -214,9 +218,9 @@ export function createSkinMaterial(
         /* glsl */ `
           #include <normal_fragment_maps>
           {
-            float bh = skinFbm(vWorldSkin.xz * ${(scaleSize * 1.6).toFixed(2)})
-                     + 0.5 * skinFbm(vWorldSkin.xz * ${(scaleSize * 3.3).toFixed(2)});
-            normal = normalize(normal + vec3(dFdx(bh), dFdy(bh), 0.0) * ${bump.toFixed(3)});
+            float bh = skinFbm(vWorldSkin.xz * (uScaleSize * 1.6))
+                     + 0.5 * skinFbm(vWorldSkin.xz * (uScaleSize * 3.3));
+            normal = normalize(normal + vec3(dFdx(bh), dFdy(bh), 0.0) * uBump);
           }
         `,
       );

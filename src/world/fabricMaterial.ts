@@ -99,14 +99,18 @@ export function createFabricMaterial(
   const useLocalCoords = disableShimmer || (opts?.localSpace ?? false);
   const bump = opts?.bump ?? 0.8;
 
-  // ACAH (D175) — distinguish the per-instance baked GLSL so Three doesn't share
-  // ONE compiled program across all fabric materials (which silently ignored
-  // per-instance opts). See woodGrainMaterial / metalMaterial for the rationale.
-  mat.customProgramCacheKey = () => 'fabric:' + JSON.stringify(opts ?? {});
-
+  // ACAT T3 — value params are UNIFORMS + the useLocalCoords/shimmer SOURCE
+  // conditionals are RUNTIME uniform branches, so the injected source is identical
+  // across same-base-class fabric → ONE program per base class. `pbr` forks the BASE
+  // material (Standard vs Lambert), which Three's default cache key already
+  // distinguishes — so no customProgramCacheKey is needed (supersedes the fabric half
+  // of D175). The per-frame wind-tick stays gated on disableShimmer (CPU-side only).
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uTime = { value: 0 };
     shader.uniforms.uWindStrength = { value: 0 };
+    shader.uniforms.uShimmer = { value: disableShimmer ? 0.0 : 1.0 };
+    shader.uniforms.uLocalCoords = { value: useLocalCoords ? 1.0 : 0.0 };
+    shader.uniforms.uBump = { value: bump };
     // ABN — only register for per-frame uniform updates if shimmer is
     // on. Viewmodel callers don't need the wind-tick.
     if (!disableShimmer) _shaderRefs.add(shader as unknown as FabricShaderRef);
@@ -123,6 +127,8 @@ export function createFabricMaterial(
         varying vec3 vNrmFabric;
         uniform float uTime;
         uniform float uWindStrength;
+        uniform float uShimmer;
+        uniform float uLocalCoords;
       `,
     );
     // ACT — coords + shimmer decoupled. `vWorldFabric` (the fragment-noise
@@ -137,21 +143,21 @@ export function createFabricMaterial(
         #include <begin_vertex>
         vNrmFabric = normal;
         vec3 _fabricWorld = (modelMatrix * vec4(position, 1.0)).xyz;
-        // useLocalCoords: anchor the weave/stains to the surface so they
-        // don't crawl on a moving entity (D109). Static tents use world.
-        ${useLocalCoords ? 'vWorldFabric = position;' : 'vWorldFabric = _fabricWorld;'}
-        ${disableShimmer ? '' : `
-          // Session ABE — wind shimmer. Sum of two phase-offset sin waves
-          // in world-XZ at ~1m wavelength, driven by uTime, displaces the
-          // vertex along its (model-space) normal. Amplitude scales with
-          // uWindStrength: calm ≈ 0.5cm, storm peak ≈ 4cm. Reads as a
-          // breathing/billowing fabric panel without needing real Verlet sim.
+        // ACAT — RUNTIME branches (were compile-time opts conditionals), so all
+        // same-base-class fabric shares one program. uLocalCoords (D109) anchors the
+        // weave/stains to the surface on a MOVING entity; world for static tents.
+        vWorldFabric = (uLocalCoords > 0.5) ? position : _fabricWorld;
+        // Session ABE — wind shimmer (gated by uShimmer): two phase-offset sin waves
+        // in world-XZ driven by uTime displace the vertex along its normal (calm
+        // ≈0.5cm, storm ≈4cm). The per-frame uTime/uWindStrength tick is registered
+        // only for shimmer materials (CPU-side), so uShimmer=0 stays at rest.
+        if (uShimmer > 0.5) {
           float _fabRipple =
             sin(_fabricWorld.x * 6.28 + uTime * 1.7) +
             sin(_fabricWorld.z * 6.28 * 0.83 + uTime * 1.3 + 0.7);
           float _fabAmp = mix(0.005, 0.04, clamp(uWindStrength, 0.0, 1.0));
           transformed += normal * (_fabRipple * _fabAmp * 0.5);
-        `}
+        }
       `,
     );
 
@@ -162,6 +168,7 @@ export function createFabricMaterial(
         #include <common>
         varying vec3 vWorldFabric;
         varying vec3 vNrmFabric;
+        uniform float uBump;
 
         // IQ-style hash — same precision-robust formulation as
         // terrainMaterial.ts. fract() before the arithmetic prevents
@@ -268,7 +275,7 @@ export function createFabricMaterial(
             float thread = 0.5 * (sin(wpn.x * 40.0) + sin(wpn.z * 40.0));   // weave
             float folds = fabricFbm(wpn.xz * 1.4) * 2.2;                    // soft folds
             float h = thread * 0.35 + folds;
-            normal = normalize(normal + vec3(dFdx(h), dFdy(h), 0.0) * ${bump.toFixed(3)});
+            normal = normalize(normal + vec3(dFdx(h), dFdy(h), 0.0) * uBump);
           }
         `,
       );
