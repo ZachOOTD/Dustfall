@@ -482,9 +482,12 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
     },
     panelBuryAudit() {
       // ACAV — delegates to the unified validatePanels (world/panelPlacement.ts) in
-      // read-only AUDIT mode (each panel walks up to its scene-root, occlusion-only).
-      // Same raycast the gen-time prune + cluster pass run, so the audit can't drift
-      // from the cull (D210). Reshapes to the historical {idx,kind,hit} fail format.
+      // read-only AUDIT mode (each panel walks up to its scene-root). OCCLUSION-only:
+      // a global terrain check here false-flags legitimately-below-surface INTERIOR
+      // panels (mega-wreck interior, rockyEntrance chamber, flagship recessed bells).
+      // The terrain CULL runs on the surface-wreck gen paths instead (procgen
+      // composite + legacy placeWreck + the wreck-yard cluster). A surface-scoped
+      // terrain audit lands in Tier 5. Reshapes to the historical {idx,kind,hit}.
       const reg = (ctx as unknown as { salvageables?: { list: Array<{ panel: THREE.Object3D; kind?: string; wreckKind?: string }> } }).salvageables;
       const entries: PanelEntry[] = (reg?.list ?? []).map((s) => ({
         body: s.panel,

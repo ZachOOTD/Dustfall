@@ -22,7 +22,7 @@ import type { BiomeSampler } from './biomes.ts';
 import type { SalvageableRegistry } from './salvage.ts';
 import { registerSalvageable } from './salvage.ts';
 import { placeWreck, type WreckKind } from './wrecks.ts';
-import { placeProcgenComposite } from './procgenWreck.ts';
+import { placeProcgenComposite, pruneBuriedPanels } from './procgenWreck.ts';
 import { Tuning } from '../config/tuning.ts';
 
 // Wreck-kind palette for procgen POIs. Cargo containers are intentionally
@@ -115,7 +115,12 @@ export function placeProcgenPOIs(
       if (salvageables) {
         // Use the wreck kind directly — registerSalvageable accepts the
         // same union as placeWreck.
-        registerSalvageable(salvageables, group, kind, pos, rand);
+        const rec = registerSalvageable(salvageables, group, kind, pos, rand);
+        // ACAV Tier 1 — legacy hand-modeled procgen wrecks are SURFACE wrecks too;
+        // cull their panel if it ended up occluded or below the sand (the composite
+        // path already does this; this branch was the missing terrain coverage that
+        // left `root=Group` panels phasing through terrain). RNG-safe (no `rand`).
+        pruneBuriedPanels(group, [rec], salvageables, terrain);
       }
     }
     placed.push(pos);

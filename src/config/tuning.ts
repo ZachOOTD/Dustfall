@@ -840,6 +840,16 @@ export const Tuning = {
   // pass — into one validatePanels in world/panelPlacement.ts; D210 drift fix).
   SALVAGE_PANEL_OCCLUSION_FAR: 1.6,      // inward bury-ray length (m) from 0.8m proud of the panel
   SALVAGE_PANEL_OCCLUSION_SLACK: 0.22,   // hull must be THIS much in front of the panel surface to count as buried (recess tolerance)
+  // ACAV Tier 1 — terrain-clearance cull BACKSTOP. A SURFACE-wreck panel whose
+  // CENTER sits more than |this| below the sand is mostly buried → cull it
+  // (procgen composite + legacy placeWreck + the wreck-yard cluster; NOT interiors
+  // like the mega-wreck / rockyEntrance, whose panels are legitimately below the
+  // terrain surface). Negative = tolerate partial burial: a 0.7m-tall panel on a
+  // crashed hull naturally dips its lower edge toward the sand, which reads fine —
+  // only fully-submerged panels are unreachable. Register-all-then-prune keeps the
+  // seeded RNG intact (D208). Fine placement quality is the Tier-2 sampler's job;
+  // this is just the "never leave a fully-buried phantom panel" guard.
+  SALVAGE_PANEL_TERRAIN_MARGIN: -0.10,   // cull if (center.y - terrain) < this (m)
   // ACY — panel size variants. Each placed panel rolls one size for visual
   // variety (small access hatch → large cargo bay panel). Multiplies the
   // base SALVAGE_PANEL_SIZE_* via addAccessPanel's `scale`.

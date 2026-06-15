@@ -98,9 +98,12 @@ export function placeWreckYard(
     yardGroup.attach(group);   // re-parent for the yard-level merge
     // ACAS A4 — make the big hand-wrecks LOOTABLE. Their make* builders already add
     // access panels (the merge keeps them live); placeWreck just doesn't register
-    // them (it can't import salvage.ts — circular). Register here, but only panels
-    // that ended up ABOVE the sand — a heavy crash tilt + deep burial can rotate
-    // some panels underground where the player could never reach them.
+    // them (it can't import salvage.ts — circular). ACAV Tier 1 — register EVERY
+    // panel UNCONDITIONALLY: the old `if (wp.y > terrain+0.2)` gate conditionally
+    // skipped registerSalvageable, which consumes `rand`, desyncing the yard's
+    // downstream RNG (bones/debris) based on terrain — the D208 hazard. Panels that
+    // ended up below the sand are dropped by the cluster validatePanels pass (with
+    // `terrain`) after the merge instead. Register-all-then-prune.
     if (salvageables) {
       const seen = new Set<THREE.Object3D>();
       group.traverse((o) => {
@@ -108,7 +111,7 @@ export function placeWreckYard(
         seen.add(o);
         o.updateWorldMatrix(true, false);
         const wp = new THREE.Vector3().setFromMatrixPosition(o.matrixWorld);
-        if (wp.y > terrain.heightAt(wp.x, wp.z) + 0.2) registerSalvageable(salvageables, o, kind, wp, rand);
+        registerSalvageable(salvageables, o, kind, wp, rand);
       });
     }
   }
@@ -136,9 +139,10 @@ export function placeWreckYard(
   // ACAU (D208) — cluster-level bury prune: now that the whole yard is merged,
   // raycast every panel registered in this yard against the FULL yardGroup so a
   // panel buried behind a neighbouring hulk (not just its own wreck) is dropped.
-  // RNG-safe (no `rand`). Mirrors the audit's root=wreckYard raycast.
+  // ACAV Tier 1 — also pass `terrain` so panels that sank below the sand under a
+  // heavy crash-tilt are culled here too. RNG-safe (no `rand`).
   if (salvageables) {
-    pruneBuriedPanels(yardGroup, salvageables.list.slice(startIdx), salvageables);
+    pruneBuriedPanels(yardGroup, salvageables.list.slice(startIdx), salvageables, terrain);
   }
 
   return carcasses;

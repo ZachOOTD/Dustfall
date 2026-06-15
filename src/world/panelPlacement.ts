@@ -27,6 +27,11 @@ export interface PanelEntry {
   cull?: () => void;
 }
 
+/** Minimal terrain sampler (the game's Terrain satisfies this structurally). */
+export interface TerrainLike {
+  heightAt(x: number, z: number): number;
+}
+
 export interface ValidatePanelsOpts {
   /** Raycast scope for ALL panels (the wreck group, or the merged wreck-yard
    *  group for cross-wreck checks). If omitted, each panel walks UP to its
@@ -36,13 +41,17 @@ export interface ValidatePanelsOpts {
   scene?: THREE.Object3D;
   /** Read-only: accumulate failures + return the report, never call `cull`. */
   audit?: boolean;
+  /** When set, also cull panels whose front-face corners dip below terrain. */
+  terrain?: TerrainLike;
+  /** Override the default terrain clearance margin (m). */
+  terrainMargin?: number;
 }
 
 export interface PanelFail {
   idx: number;
   kind: string;
-  /** Which check failed — only 'occlusion' exists in Tier 0. */
-  criterion: 'occlusion';
+  /** Which check failed. */
+  criterion: 'occlusion' | 'terrain';
   detail: string;
 }
 
@@ -86,6 +95,8 @@ export function validatePanels(
   // pruneBuriedPanels `(true,true)`); when walking up per-panel (audit), only the
   // subtree (matches the old audit `(false,true)`).
   const updatedRoots = new Set<THREE.Object3D>();
+  const terrain = opts.terrain;
+  const margin = opts.terrainMargin ?? Tuning.SALVAGE_PANEL_TERRAIN_MARGIN;
   const _wp = new THREE.Vector3();
   const _wq = new THREE.Quaternion();
   const _out = new THREE.Vector3();
@@ -107,12 +118,15 @@ export function validatePanels(
     body.getWorldPosition(_wp);
     body.getWorldQuaternion(_wq);
     _out.set(0, 0, 1).applyQuaternion(_wq).normalize();
+    report.tested++;
+    let fail: { criterion: 'occlusion' | 'terrain'; detail: string } | null = null;
+
+    // CHECK 1 — OCCLUSION. Inward ray from 0.8m proud; hull well in front of the
+    // panel's own nearest surface (door excluded) = buried.
     _origin.copy(_wp).addScaledVector(_out, 0.8);
     _dir.copy(_out).multiplyScalar(-1);
     rc.set(_origin, _dir);
     const hits = rc.intersectObject(root, true);
-    report.tested++;
-
     let dPanel = Infinity;
     let dHull = Infinity;
     for (const h of hits) {
@@ -120,15 +134,26 @@ export function validatePanels(
       if (isAncestor(body, h.object)) dPanel = Math.min(dPanel, h.distance);
       else dHull = Math.min(dHull, h.distance);
     }
-    if (dPanel === Infinity) { report.pass++; return; }       // panel not on this axis — no occlusion claim
-    if (dHull < dPanel - slack) {
+    if (dPanel !== Infinity && dHull < dPanel - slack) {
+      fail = { criterion: 'occlusion', detail: `hull@${dHull.toFixed(2)}<panel@${dPanel.toFixed(2)}` };
+    }
+
+    // CHECK 2 — TERRAIN CLEARANCE. The panel CENTER must clear terrain by `margin`.
+    // A center below the sand = the panel is substantially submerged (the
+    // phase-through bug). Center (NOT the bottom corners) because a 0.7m-tall panel
+    // on a near-buried hull naturally has its lower edge dip toward the sand line —
+    // testing corners over-culls those normal cases. `_wp` is the current world
+    // center (getWorldPosition forced an update above), so gen-cull == audit.
+    if (!fail && terrain) {
+      const clear = _wp.y - terrain.heightAt(_wp.x, _wp.z);
+      if (clear < margin) {
+        fail = { criterion: 'terrain', detail: `clear@${clear.toFixed(2)}<${margin.toFixed(2)}` };
+      }
+    }
+
+    if (fail) {
       report.failCount++;
-      report.fails.push({
-        idx,
-        kind: entry.kind ?? '?',
-        criterion: 'occlusion',
-        detail: `hull@${dHull.toFixed(2)}<panel@${dPanel.toFixed(2)}`,
-      });
+      report.fails.push({ idx, kind: entry.kind ?? '?', criterion: fail.criterion, detail: fail.detail });
       if (!opts.audit) entry.cull?.();
     } else {
       report.pass++;

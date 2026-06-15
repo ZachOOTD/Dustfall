@@ -1437,9 +1437,10 @@ export function placeProcgenComposite(
       }
     });
     // ACAU (D208) — 2nd pass: drop any panel the assembled+merged wreck grossly
-    // occludes (a sibling part welded in front of it post-assembly). These are
-    // phantom salvageables the player can never reach. RNG-safe: no `rand` calls.
-    pruneBuriedPanels(group, registered, salvageables);
+    // occludes (a sibling part welded in front of it post-assembly), or (ACAV
+    // Tier 1) whose front face dipped below the terrain after bury + crash-tilt.
+    // Phantom salvageables the player can never reach. RNG-safe: no `rand` calls.
+    pruneBuriedPanels(group, registered, salvageables, terrain);
   }
 
   return group;
@@ -1461,13 +1462,15 @@ export function pruneBuriedPanels(
   wreckRoot: THREE.Object3D,
   registered: Salvageable[],
   registry: SalvageableRegistry,
+  terrain?: Terrain,
 ): void {
   if (registered.length === 0) return;
   // ACAV — thin wrapper over the unified validatePanels (world/panelPlacement.ts).
   // Each entry's `cull` removes the record from the registry + inerts the panel
-  // mesh. validatePanels does the (occlusion) raycast against `wreckRoot`,
-  // excluding each panel's door subtree (open-door parity) — identical behavior
-  // to the old hand-rolled loop, now shared with the audit + the cluster pass.
+  // mesh. validatePanels raycasts for occlusion against `wreckRoot` (door subtree
+  // excluded for open-door parity) and, when `terrain` is given, also culls panels
+  // whose front-face corners dipped below the sand (Tier 1). Shared with the audit
+  // + the cluster pass — one source of truth.
   const entries: PanelEntry[] = registered.map((s) => ({
     body: s.panel,
     kind: s.kind,
@@ -1479,7 +1482,7 @@ export function pruneBuriedPanels(
       delete s.panel.userData.interactRegistry;
     },
   }));
-  validatePanels(entries, { root: wreckRoot });
+  validatePanels(entries, { root: wreckRoot, terrain });
 }
 
 // ── ABO B6 — flagship POC migration entry ───────────────────────────
