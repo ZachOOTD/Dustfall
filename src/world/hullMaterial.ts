@@ -78,13 +78,17 @@ export interface RustedHullOptions {
  */
 export function createRustedHullMaterial(opts: RustedHullOptions): THREE.MeshLambertMaterial {
   const baseColor = opts.baseColor;
-  const rustHex = opts.rustHex ?? 0x1a0a04;
+  const rustHex = opts.rustHex ?? 0x2a1206;            // ACAX — was 0x1a0a04 (near-black); warmer so streaks read as RUST, not just shadow
   const bleachHex = opts.bleachHex ?? _deriveBleachHex(baseColor);
   const streakIntensity = opts.streakIntensity ?? 0.55;
-  const wearAmplitude = opts.wearAmplitude ?? 0.20;   // ACAP W3 — was 0.15; more plate-to-plate tonal variation
+  const wearAmplitude = opts.wearAmplitude ?? 0.28;   // ACAX — was 0.20; more plate-to-plate tonal break-up
   const aoStrength = opts.aoStrength ?? 0.34;          // ACAP W3 — underside form darkening
-  const fleckStrength = opts.fleckStrength ?? 0.5;     // ACAP W3 — bare-metal scuff intensity
-  const oxStrength = opts.oxStrength ?? 0.32;          // ACAP W3 — warm oxidation-zone color depth
+  const fleckStrength = opts.fleckStrength ?? 0.7;     // ACAX — was 0.5; more bare-metal scuffs break up the flatness
+  // ACAX — oxidation zones are the ONLY HUE-shifting weathering layer (the rest are
+  // value-only). Boosted strength + a warmer/more-saturated rust-orange so the hull
+  // reads as a PATCHWORK of differently-corroded plates ("less flat"), not one tone.
+  const oxStrength = opts.oxStrength ?? 0.58;          // was 0.32
+  const oxHexDefault = 0x8a4a26;                       // was 0x6b4326 — warmer, more saturated rust-orange
 
   const mat = new THREE.MeshLambertMaterial({
     color: baseColor,
@@ -94,7 +98,7 @@ export function createRustedHullMaterial(opts: RustedHullOptions): THREE.MeshLam
   const rustColor = new THREE.Color(rustHex);
   const bleachColor = new THREE.Color(bleachHex);
   const bareMetalColor = new THREE.Color(opts.bareMetalHex ?? 0x9ea2a6);
-  const oxColor = new THREE.Color(opts.oxHex ?? 0x6b4326);   // ACAP W3 — warm mid-oxidation brown
+  const oxColor = new THREE.Color(opts.oxHex ?? oxHexDefault);   // ACAX — warm rust-orange oxidation zones
 
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uRustColor = { value: rustColor };
@@ -223,7 +227,9 @@ export function createRustedHullMaterial(opts: RustedHullOptions): THREE.MeshLam
         //    value — the main fix for the flat-grey read). Side-facing biased
         //    (oxidation pools on walls/flanks, not sun-baked tops).
         float oxZone = hullFbm(wp.xz * 0.14 + vec2(wp.y * 0.08, 4.0));
-        float oxMask = smoothstep(0.52, 0.82, oxZone) * sideFacing * uOxStrength;
+        // ACAX — widened threshold (was 0.52,0.82) so MORE of the hull picks up the
+        // warm rust-orange tint → a richer corroded patchwork, less uniform.
+        float oxMask = smoothstep(0.44, 0.80, oxZone) * sideFacing * uOxStrength;
         diffuseColor.rgb = mix(diffuseColor.rgb, uOxColor, oxMask);
       `,
     );

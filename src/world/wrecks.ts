@@ -16,9 +16,11 @@ import { Tuning } from '../config/tuning.ts';
 import { perturbOutward } from './sculpt.ts';
 import { attachCompoundCollider } from '../physics/bodies.ts';
 import { mergeStaticByMaterial } from './wreckForms.ts';
-import { buildGreeble } from './panelGreeble.ts';   // ACAV Tier 4 — decorative interior
+import { buildSalvageComponents, makeBreakerBoard, makeLootComponent } from './panelGreeble.ts';   // breaker-board skeleton + salvageable modules
 import { makeRng } from '../core/rng.ts';
 import { createRustedHullMaterial } from './hullMaterial.ts';
+import { createMetalMaterial } from './metalMaterial.ts';   // ACAX — rusted panel exterior
+import { makePanelMask, applyPortalInterior } from './panelPortal.ts';   // ACAX — stencil-portal interior
 
 // ────────────────────────────────────────────────────────────────
 // Shared materials. Same materials reused across wrecks so we don't
@@ -60,67 +62,68 @@ const _antennaMat = new THREE.MeshLambertMaterial({
 // rim (brass frame), door (slightly weathered metal), interior backplate
 // (deep cavity black), wire (insulated red), chip (silicon green-black),
 // fuse (ceramic pale).
-const _panelBodyMat = new THREE.MeshLambertMaterial({
-  color: Tuning.SALVAGE_PANEL_BODY_HEX,
-  flatShading: true,
+// ACAX — the panel EXTERIOR (body cavity shell, rim, door) now uses the rust
+// shader (createMetalMaterial, localSpace so the weathering doesn't crawl as the
+// door swings) so the panel reads as OLD + RUSTED like the hull, not a flat plate.
+//
+// ACAX — body is DOUBLE-SIDED (was BackSide). The old BackSide trick culled the
+// front face so it didn't occlude the open cavity (ABG) — but it ALSO culled the
+// box's OUTER side walls, so from an oblique angle you saw THROUGH the recess
+// (the panel looked like it floated, unconnected to the hull). DoubleSide renders
+// the side walls from both sides → the recess reads as a solid box cut into the
+// hull. The front face occluding the cavity is no longer a problem: the stencil-
+// portal interior (depthTest off) draws OVER it within the opening, and the rim
+// hides the thin edge ring. shadowSide FrontSide avoids small-box self-shadowing.
+// The door + body use the HULL rust shader (createRustedHullMaterial): its
+// oxidation patchwork + drip streaks + plate-wear + bare-metal flecks read as a
+// DYNAMIC rusted surface even on a flat plate (the plain metal shader read flat).
+// Pushed harder than the hull (more wear/ox/flecks) so a salvage panel looks like
+// the most beaten part of the wreck. World-space weathering crawls slightly while
+// the door SWINGS, but closed doors (the common state) + settled-open doors are
+// static, so it's not noticeable.
+const _panelBodyMat = createRustedHullMaterial({
+  baseColor: 0x2c2116, streakIntensity: 0.55, wearAmplitude: 0.34, oxStrength: 0.55, fleckStrength: 0.8,
 });
-// Session ABG bugfix — body BoxGeometry's front face was occluding the
-// cavity interior (backplate + 5 components) even when the door pried
-// open. Intent per the addAccessPanel comment was for `body` to be a
-// "rusted RECESSED CAVITY box" — i.e. an open-front shell viewable
-// from outside once the door swings away. Render the body's material
-// with side: BackSide so only the INSIDE faces (back wall + 4 side
-// walls) draw from a player-outside POV. The front face becomes
-// invisible — the closed door (FrontSide) still reads as the surface
-// when shut, and the opened door reveals the cavity interior. Shadows
-// stay on FrontSide via shadowSide to avoid the BackSide self-shadow
-// artifacts on a small box. Cached so all panels share one material.
-const _panelBodyMatBackSide = (() => {
-  const m = _panelBodyMat.clone();
-  m.side = THREE.BackSide;
-  m.shadowSide = THREE.FrontSide;
-  return m;
-})();
-const _panelRimMat = new THREE.MeshLambertMaterial({
-  color: Tuning.SALVAGE_PANEL_RIM_HEX,
-  flatShading: true,
+_panelBodyMat.side = THREE.DoubleSide;
+_panelBodyMat.shadowSide = THREE.FrontSide;
+// ACAX — the body is recessed FLUSH, so its front face is coplanar with the hull
+// surface; with DoubleSide that front face z-FIGHTS the hull (the "wreck flickering
+// through" the open cavity edge). polygonOffset biases the body's depth BACK so the
+// hull consistently wins at the shared plane — no flicker — while the proud rim/door
+// + the portal interior (depthTest off) still draw over it fine.
+_panelBodyMat.polygonOffset = true;
+_panelBodyMat.polygonOffsetFactor = 1.0;
+_panelBodyMat.polygonOffsetUnits = 2.0;
+// ACAX — was a tarnished-brass "spot the panel" affordance, but the gold read too
+// clean/flat. Now a rusted weathered-iron frame (rim bars, rivets, bolt studs,
+// handle): a dark steel-brown base + heavy rust + fine wornScale so the orange
+// corrosion patches + scratches read as OLD METAL, not a flat colour. Kept a touch
+// lighter than the door so the frame still reads. localSpace (the door rivets swing).
+const _panelRimMat = createMetalMaterial(0x6a563c, { rustLevel: 0.72, wornScale: 1.5, scratchStrength: 0.1, localSpace: true });
+// The door is SMALL (~0.5m), so the hull shader's low-frequency oxidation patchwork
+// (~7m features) covers it in one flat zone — it read uniform. createMetalMaterial's
+// weathering is tuned for CLOSE-RANGE fine detail; a small `wornScale` (fine rust/wear
+// blotches) + strong rust + visible scratches gives the door real high-frequency
+// variation. localSpace so the weathering doesn't crawl while the door swings.
+const _panelDoorMat = createMetalMaterial(0x40301f, {
+  rustLevel: 0.88, wornScale: 1.4, scratchStrength: 0.12, localSpace: true,
 });
-const _panelDoorMat = new THREE.MeshLambertMaterial({
-  color: 0x5a4a3a,             // weathered iron, lighter than the body
-  flatShading: true,
-});
+// The cavity backplate. ACAX — the 5 lootable extractables no longer use their own
+// per-kind materials here; `makeLootComponent` (panelGreeble.ts) builds them from
+// the shared greeble palette so they match the new interior, so only the backplate
+// material lives here now.
 const _panelInteriorMat = new THREE.MeshLambertMaterial({
-  color: 0x0a0805,             // deep cavity — almost black
+  color: 0x161009,             // deep cavity — dark warm brown (not a black void)
   flatShading: true,
 });
-const _panelWireMat = new THREE.MeshLambertMaterial({
-  color: 0xa83a2a,             // insulated red wiring
-  flatShading: true,
-});
-const _panelChipMat = new THREE.MeshLambertMaterial({
-  color: 0x1a3a1e,             // PCB green-black
-  flatShading: true,
-  emissive: 0x080a06,           // faint glow when light hits
-});
-const _panelFuseMat = new THREE.MeshLambertMaterial({
-  color: 0xb8a880,             // ceramic pale
-  flatShading: true,
-});
-// AAS — variant component materials. cloth_scrap = folded fabric;
-// bandage_pack = small white medical kit. Each maps deterministically
-// to a single loot item via COMPONENT_LOOT (see interaction.ts).
-const _panelClothScrapMat = new THREE.MeshLambertMaterial({
-  color: 0xc4ad88,             // weathered linen
-  flatShading: true,
-});
-const _panelBandagePackMat = new THREE.MeshLambertMaterial({
-  color: 0xe8dcc0,             // off-white gauze
-  flatShading: true,
-});
-const _panelBandageCrossMat = new THREE.MeshLambertMaterial({
-  color: 0xa83a2a,             // red cross stripe
-  flatShading: true,
-});
+
+// ACAX Tier A — the backplate is a stencil-portal material (draws only inside the
+// panel window, over a clipping hull, sorted back-to-front). Applied ONCE at module
+// load; the greeble library does the same to its own materials in panelGreeble.ts.
+// The body/rim/door stay normal (they're the hull-side surface, not interior).
+if (Tuning.SALVAGE_PANEL_PORTAL_ENABLED) {
+  applyPortalInterior([_panelInteriorMat]);
+}
 
 /** AAS — per-component kind discriminator. Each interior detail mesh
  *  is tagged with one of these on `userData.panelComponentKind`; the
@@ -169,10 +172,30 @@ export interface AccessPanelOpts {
 export const ARCHETYPE_EXTRACTABLES: Record<PanelArchetype, readonly PanelComponentKind[]> = {
   electrical: ['red_wire', 'red_wire', 'yellow_wire', 'fuse', 'chip'],
   plumbing:   ['scrap_chunk', 'red_wire', 'fuse', 'cloth_scrap', 'scrap_chunk'],
-  avionics:   ['chip', 'chip', 'yellow_wire', 'fuse', 'bandage_pack'],
+  avionics:   ['chip', 'chip', 'yellow_wire', 'fuse', 'scrap_chunk'],
   mechanical: ['scrap_chunk', 'scrap_chunk', 'fuse', 'red_wire', 'chip'],
-  junction:   ['red_wire', 'yellow_wire', 'fuse', 'cloth_scrap', 'bandage_pack'],
+  junction:   ['red_wire', 'yellow_wire', 'fuse', 'cloth_scrap', 'scrap_chunk'],
 };
+
+/** ACAX — derive a default interior archetype from the panel's wreck-kind. Used
+ *  by addAccessPanel as a FALLBACK when a caller doesn't pass `opts.archetype`:
+ *  14 of the 16 hand-modeled-wreck + POI callsites (megaShip, megaWreck, crashed-
+ *  hull, satelliteDish, engineBlock, saltOutpost, rockyEntrance, poi) omitted it,
+ *  so they were stuck on the OLD legacy interior while only procgen got the new
+ *  scrappy greeble. Deriving here makes EVERY panel get the V2 interior in one
+ *  place (no need to touch all 8 files). Hand-modeled wrecks aren't part of the
+ *  seeded procgen rand stream, so the position-seeded greeble rand is D208-safe. */
+export function archetypeForKind(kind: PanelKind): PanelArchetype {
+  switch (kind) {
+    case 'engine_cluster': return 'mechanical';
+    case 'engine_bell':    return 'mechanical';
+    case 'cargo_container': return 'junction';
+    case 'escape_pod':     return 'avionics';
+    case 'fuselage':       return 'electrical';
+    case 'massive':        return 'junction';
+    default:               return 'electrical';
+  }
+}
 
 /** AAS — per-wreck-kind 5-component palettes. The interior of a
  *  fuselage panel looks different from a cargo-container panel; the
@@ -202,105 +225,32 @@ function makePanelComponent(
   kind: PanelComponentKind,
   slot: number,
   sx: number, sy: number, sz: number,
-): THREE.Mesh {
+  rand: Rng,
+): THREE.Object3D {
   // 5 slot positions inside the cavity. The slot picks WHERE the
   // component lives; the kind picks WHAT it looks like. Some slot/kind
   // pairings need geometric overrides (e.g. a wire in the top-right
   // slot reads as horizontal not vertical) but the simplest first pass
   // is "kind dictates geometry, slot dictates position."
+  // Small loose lootable parts tucked into the FRONT of the cavity (in front of the
+  // greeble structure), in tidy slots so they read as "loose bits to grab", not
+  // scattered junk. Extraction fills slot 0 first, so a corroded panel (few parts)
+  // shows the lower-front slots populated, the rest empty — a picked-over read.
   const slotPositions: ReadonlyArray<{ x: number; y: number; z: number }> = [
-    { x: -sx * 0.30, y:  sy * 0.05, z: sz * 0.32 },  // slot 0: top-left wire-bay
-    { x: -sx * 0.18, y: -sy * 0.18, z: sz * 0.32 },  // slot 1: lower-left wire-bay
-    { x:  sx * 0.18, y:  sy * 0.20, z: sz * 0.32 },  // slot 2: top-right chip-bay
-    { x:  sx * 0.18, y: -sy * 0.18, z: sz * 0.34 },  // slot 3: lower-right fuse-bay
-    { x: -sx * 0.02, y: -sy * 0.05, z: sz * 0.30 },  // slot 4: lower-center misc
+    { x: -sx * 0.24, y: -sy * 0.30, z: sz * 0.36 },  // slot 0: lower-left
+    { x:  sx * 0.06, y: -sy * 0.32, z: sz * 0.36 },  // slot 1: lower-centre
+    { x:  sx * 0.26, y: -sy * 0.26, z: sz * 0.36 },  // slot 2: lower-right
+    { x: -sx * 0.20, y:  sy * 0.10, z: sz * 0.36 },  // slot 3: mid-left
+    { x:  sx * 0.22, y:  sy * 0.12, z: sz * 0.36 },  // slot 4: mid-right
   ];
   const p = slotPositions[slot];
-  switch (kind) {
-    case 'red_wire': {
-      // Vertical-ish red insulated cable bundle.
-      const m = new THREE.Mesh(
-        new THREE.BoxGeometry(sx * 0.06, sy * 0.40, sz * 0.08),
-        _panelWireMat,
-      );
-      m.position.set(p.x, p.y, p.z);
-      m.rotation.z = (slot % 2 === 0) ? 0.15 : -0.20;
-      return m;
-    }
-    case 'yellow_wire': {
-      // Slightly thinner yellow cable bundle.
-      const m = new THREE.Mesh(
-        new THREE.BoxGeometry(sx * 0.05, sy * 0.30, sz * 0.06),
-        new THREE.MeshLambertMaterial({ color: 0xc8a830, flatShading: true }),
-      );
-      m.position.set(p.x, p.y, p.z);
-      m.rotation.z = (slot % 2 === 0) ? -0.25 : 0.18;
-      return m;
-    }
-    case 'chip': {
-      // Flat PCB rectangle.
-      const m = new THREE.Mesh(
-        new THREE.BoxGeometry(sx * 0.25, sy * 0.18, sz * 0.06),
-        _panelChipMat,
-      );
-      m.position.set(p.x, p.y, p.z);
-      return m;
-    }
-    case 'fuse': {
-      // Horizontal ceramic cylinder.
-      const m = new THREE.Mesh(
-        new THREE.CylinderGeometry(sy * 0.06, sy * 0.06, sx * 0.22, 8),
-        _panelFuseMat,
-      );
-      m.rotation.z = Math.PI / 2;
-      m.position.set(p.x, p.y, p.z);
-      return m;
-    }
-    case 'scrap_chunk': {
-      // Irregular plate of bare metal.
-      const m = new THREE.Mesh(
-        new THREE.BoxGeometry(sx * 0.18, sy * 0.12, sz * 0.10),
-        new THREE.MeshLambertMaterial({ color: 0x6e5a4a, flatShading: true }),
-      );
-      m.rotation.z = 0.3;
-      m.position.set(p.x, p.y, p.z);
-      return m;
-    }
-    case 'cloth_scrap': {
-      // Folded fabric square.
-      const m = new THREE.Mesh(
-        new THREE.BoxGeometry(sx * 0.20, sy * 0.20, sz * 0.05),
-        _panelClothScrapMat,
-      );
-      m.rotation.z = (slot % 2 === 0) ? 0.12 : -0.18;
-      m.position.set(p.x, p.y, p.z);
-      return m;
-    }
-    case 'bandage_pack': {
-      // Small white medical kit with a red cross stripe.
-      const m = new THREE.Mesh(
-        new THREE.BoxGeometry(sx * 0.18, sy * 0.14, sz * 0.10),
-        _panelBandagePackMat,
-      );
-      m.position.set(p.x, p.y, p.z);
-      // Red cross stripe on the face.
-      const crossH = new THREE.Mesh(
-        new THREE.BoxGeometry(sx * 0.16, sy * 0.03, sz * 0.005),
-        _panelBandageCrossMat,
-      );
-      crossH.position.set(0, 0, sz * 0.055);
-      crossH.userData.noCollider = true;
-      m.add(crossH);
-      const crossV = new THREE.Mesh(
-        new THREE.BoxGeometry(sx * 0.03, sy * 0.12, sz * 0.005),
-        _panelBandageCrossMat,
-      );
-      crossV.position.set(0, 0, sz * 0.055);
-      crossV.userData.noCollider = true;
-      m.add(crossV);
-      return m;
-    }
-  }
+  // ACAX — delegate the visual to makeLootComponent (the greeble-style builder) so
+  // the lootable parts match the rest of the new interior instead of reading as the
+  // OLD crude flat boxes mixed in. The slot fixes WHERE it sits; kind picks WHAT.
+  const comp = makeLootComponent(kind, sx * 0.92, rand);
+  comp.position.set(p.x, p.y, p.z);
+  comp.rotation.z = (rand() - 0.5) * 0.5;
+  return comp;
 }
 
 /**
@@ -345,6 +295,17 @@ export function addAccessPanel(
   const sz = Tuning.SALVAGE_PANEL_SIZE_Z * scale;
   const radius = sx * 0.5;
 
+  // ACAX — resolve the interior archetype: a caller's explicit `opts.archetype`
+  // (procgen) wins; otherwise derive one from `kind` so the 14 hand-modeled/POI
+  // callsites that omit it still get the V2 scrappy interior (not the old legacy
+  // one). `greebleRand` falls back to a STABLE position-seeded stream (these
+  // hand-modeled wrecks aren't in the seeded procgen rand stream → D208-safe, and
+  // a position seed keeps each panel's greeble stable + varied across panels).
+  const archetype: PanelArchetype | undefined = opts.archetype
+    ?? (Tuning.SALVAGE_PANEL_INTERIOR_V2 ? archetypeForKind(kind) : undefined);
+  const greebleRand = opts.rand
+    ?? makeRng((Math.abs(Math.round(localX * 137.1 + localY * 311.7 + localZ * 547.3)) % 0x7fffffff) || 1);
+
   // Panel root mesh — the body, the interact target + the rusted RECESSED CAVITY.
   // AAU — shifted BACK by sz/2 so its FRONT face is flush with the hull; the rim +
   // closed door/cover sit just proud, the cavity recesses in. ABG — BackSide-cloned
@@ -354,7 +315,7 @@ export function addAccessPanel(
   const bodyGeo = isCircle
     ? new THREE.CylinderGeometry(radius, radius, sz, 22).rotateX(Math.PI / 2)
     : new THREE.BoxGeometry(sx, sy, sz);
-  const body = new THREE.Mesh(bodyGeo, _panelBodyMatBackSide);
+  const body = new THREE.Mesh(bodyGeo, _panelBodyMat);
   body.userData.panelShape = shape;
   // ACAV Tier 2 — orient from a FULL quaternion (the shape-agnostic sampler passes
   // one for a flush mount) else a yaw-only quaternion from faceYaw. The recess runs
@@ -426,16 +387,28 @@ export function addAccessPanel(
   const interior = new THREE.Group();
   interior.position.set(0, 0, 0);
   interior.userData.noCollider = true;
+  // ACAX perf — the cavity interior is only ever VISIBLE through the stencil
+  // portal while the door is OPEN; updatePanelDoors gates this group's visibility
+  // on the open state so a closed panel's ~10 merged greeble draw calls are
+  // skipped entirely (the common case — most panels stay shut).
+  interior.visible = false;
+  // ACAX — backplate sized to fully BACK the stencil-portal window (mask is *INSET
+  // ≈0.88) so the hull can't peek through gaps at the cavity edges. A touch of depth
+  // (a shallow box, not a paper plate) so oblique angles still see dark cavity, not
+  // the hull behind.
   const backplate = new THREE.Mesh(
     isCircle
-      ? new THREE.CylinderGeometry(radius * 0.92, radius * 0.92, sz * 0.05, 22).rotateX(Math.PI / 2)
-      : new THREE.BoxGeometry(sx * 0.85, sy * 0.85, sz * 0.05),
+      ? new THREE.CylinderGeometry(radius * 0.99, radius * 0.99, sz * 0.16, 22).rotateX(Math.PI / 2)
+      : new THREE.BoxGeometry(sx * 0.99, sy * 0.99, sz * 0.16),
     _panelInteriorMat,
   );
   // ACAV Tier 4 — push the backplate to the body BACK for V2 so the rich greeble
   // has real cavity depth to layer in (V1's shallow mid-cavity plate read flat).
-  backplate.position.set(0, 0, (Tuning.SALVAGE_PANEL_INTERIOR_V2 && opts.archetype) ? -sz * 0.34 : sz * 0.25);
+  backplate.position.set(0, 0, (Tuning.SALVAGE_PANEL_INTERIOR_V2 && archetype) ? -sz * 0.34 : sz * 0.25);
   backplate.userData.noCollider = true;
+  // ACAX — portal depth bands: backplate is the deepest layer (drawn first among
+  // the transparent, depthTest-off interior); greeble = +1, extractables = +2.
+  backplate.renderOrder = Tuning.SALVAGE_PANEL_INTERIOR_RENDER_ORDER;
   interior.add(backplate);
 
   // AAS — interior detail components driven by per-kind palette. Each
@@ -446,37 +419,56 @@ export function addAccessPanel(
   // Both `panelComponentIndex` and `panelComponentKind` are tagged on
   // each mesh; the latter drives loot mapping in interaction.ts via
   // COMPONENT_LOOT.
-  // ACAV Tier 4 — INTERIOR_V2: a scrappy archetype interior = rich DECORATIVE
-  // greeble (set-dressing, NOT lootable) + the 5 LOOTABLE components. The greeble
-  // is built into its own group; the per-panel merge happens in the wreck merge
-  // skip-zone, so we merge it HERE (before parenting under the body) to bound the
-  // live-mesh count. Falls back to the legacy per-kind 5-component palette.
-  const palette = (Tuning.SALVAGE_PANEL_INTERIOR_V2 && opts.archetype)
-    ? ARCHETYPE_EXTRACTABLES[opts.archetype]
-    : PANEL_COMPONENT_PALETTES[kind];
-  if (Tuning.SALVAGE_PANEL_INTERIOR_V2 && opts.archetype) {
-    const greeble = buildGreeble(opts.archetype, {
+  // ACAX — REALISTIC breaker-board interior: a FIXED skeleton (mounting board + a 3x4
+  // grid of empty bay-sockets + DIN rails + bus bar + wiring trough + terminal + labels)
+  // that is ALWAYS present (merged, NOT salvageable), with 5 salvageable BREAKER modules
+  // clipped onto the first 5 bays at the same slot/depth. Pulling a module (extraction
+  // only hides) reveals its fixed socket → the panel reads as a real engineered board
+  // at full, half-stripped (clean left/right boundary), and fully-gutted. registerSalvageable
+  // hides the surplus modules past the condition count. The realism is in the fixed
+  // skeleton — alignment + repetition, ZERO jitter.
+  const components: THREE.Object3D[] = [];
+  if (Tuning.SALVAGE_PANEL_INTERIOR_V2 && archetype) {
+    const dims = {
       hw: (isCircle ? radius : sx * 0.5) * 0.82,
       hh: (isCircle ? radius : sy * 0.5) * 0.82,
       depth: sz,
       isCircle,
-    }, opts.rand ?? makeRng(1));
-    // Merge the decorative greeble per-panel HERE: the wreck-level merge SKIPS
-    // accessPanel subtrees, so the ~10 greeble meshes × ~68 panels would otherwise
-    // stay live. Merge before parenting under the body (no accessPanel ancestor
-    // yet). The 5 extractables + emissive/transparent pieces stay separate.
-    mergeStaticByMaterial(greeble);
-    interior.add(greeble);
-  }
-  const components: THREE.Mesh[] = [];
-  for (let i = 0; i < 5; i++) {
-    const compKind = palette[i];
-    const comp = makePanelComponent(compKind, i, sx, sy, sz);
-    comp.userData.noCollider = true;
-    comp.userData.panelComponentIndex = i;
-    comp.userData.panelComponentKind = compKind;
-    interior.add(comp);
-    components.push(comp);
+    };
+    // Fixed board skeleton (always there) — merged (the wreck-level merge skips
+    // accessPanel subtrees) into a small handful of meshes, behind the modules.
+    const skeleton = makeBreakerBoard(dims, archetype, greebleRand);
+    // includeTransparent: the portal materials are transparent; the board is built
+    // back-to-front so the merged buffer order is the correct draw order. Collapses
+    // the ~100 bay/rail/socket sub-meshes to ~1 per material.
+    mergeStaticByMaterial(skeleton, { includeTransparent: true });
+    skeleton.traverse((n) => { n.renderOrder = Tuning.SALVAGE_PANEL_INTERIOR_RENDER_ORDER + 1; });
+    interior.add(skeleton);
+    // 5 salvageable breaker modules — separate + tagged, in FRONT (+2) so each occludes
+    // its bay until salvaged.
+    const comps = buildSalvageComponents(archetype, dims, greebleRand);
+    comps.forEach((c, i) => {
+      mergeStaticByMaterial(c.obj, { includeTransparent: true });
+      c.obj.userData.noCollider = true;
+      c.obj.userData.panelComponentIndex = i;
+      c.obj.userData.panelComponentKind = c.kind;
+      c.obj.traverse((n) => { n.renderOrder = Tuning.SALVAGE_PANEL_INTERIOR_RENDER_ORDER + 2; });
+      interior.add(c.obj);
+      components.push(c.obj);
+    });
+  } else {
+    // Legacy fallback (no archetype): the per-kind 5-component palette.
+    const palette = PANEL_COMPONENT_PALETTES[kind];
+    for (let i = 0; i < 5; i++) {
+      const compKind = palette[i];
+      const comp = makePanelComponent(compKind, i, sx, sy, sz, greebleRand);
+      comp.userData.noCollider = true;
+      comp.userData.panelComponentIndex = i;
+      comp.userData.panelComponentKind = compKind;
+      comp.traverse((n) => { n.renderOrder = Tuning.SALVAGE_PANEL_INTERIOR_RENDER_ORDER + 1; });
+      interior.add(comp);
+      components.push(comp);
+    }
   }
 
   body.add(interior);
@@ -494,24 +486,43 @@ export function addAccessPanel(
     const hinge = new THREE.Group();
     hinge.position.set(-sx * 0.5, 0, sz * 0.60);   // hinge axis = left edge, slightly proud
     hinge.userData.noCollider = true;
-    const door = new THREE.Mesh(new THREE.BoxGeometry(sx, sy * 0.96, sz * 0.30), _panelDoorMat);
-    door.position.set(sx * 0.5, 0, 0);             // local origin centred; LEFT edge at the hinge
-    door.userData.noCollider = true;
-    hinge.add(door);
-    // 4 rivet bumps near corners + a handle on the right.
-    for (const [rx, ry] of [[0.08, 0.40], [0.92, 0.40], [0.08, -0.40], [0.92, -0.40]] as const) {
+    // ACAX — a riveted hatch with GEOMETRIC relief, not a flat plate. A flat
+    // ~0.5m door reads flat in any light (material alone can't fix it); a raised
+    // stamped inner panel + reinforcement ridges throw real shadow lines so it
+    // reads as a beaten, dynamic hatch. Built centred then offset so its LEFT edge
+    // sits at the hinge. The same-material parts are merged (plate+inset+ridges →
+    // 1 mesh, rivets+handle → 1 mesh) so the richer door is actually CHEAPER than
+    // the old 6-mesh door.
+    const doorVisual = new THREE.Group();
+    const plate = new THREE.Mesh(new THREE.BoxGeometry(sx, sy * 0.96, sz * 0.30), _panelDoorMat);
+    doorVisual.add(plate);
+    const inset = new THREE.Mesh(new THREE.BoxGeometry(sx * 0.70, sy * 0.66, sz * 0.40), _panelDoorMat);
+    inset.position.z = sz * 0.05;                  // raised stamped panel → border groove
+    doorVisual.add(inset);
+    for (const ry of [0.30, -0.30]) {              // 2 reinforcement ridges
+      const ridge = new THREE.Mesh(new THREE.BoxGeometry(sx * 0.92, sy * 0.055, sz * 0.46), _panelDoorMat);
+      ridge.position.set(0, sy * ry, sz * 0.03);
+      doorVisual.add(ridge);
+    }
+    for (const [rx, ry] of [[-0.42, 0.42], [0.42, 0.42], [-0.42, -0.42], [0.42, -0.42]] as const) {
       const rivet = new THREE.Mesh(new THREE.CylinderGeometry(sx * 0.025, sx * 0.025, sz * 0.10, 6), _panelRimMat);
       rivet.rotation.x = Math.PI / 2;
-      rivet.position.set(sx * rx, sy * ry, sz * 0.20);
-      rivet.userData.noCollider = true;
-      hinge.add(rivet);
+      rivet.position.set(sx * rx, sy * ry, sz * 0.24);
+      doorVisual.add(rivet);
     }
     const handle = new THREE.Mesh(new THREE.BoxGeometry(sx * 0.05, sy * 0.20, sz * 0.12), _panelRimMat);
-    handle.position.set(sx * 0.92, 0, sz * 0.22);
-    handle.userData.noCollider = true;
-    hinge.add(handle);
+    handle.position.set(sx * 0.40, 0, sz * 0.26);
+    doorVisual.add(handle);
+    mergeStaticByMaterial(doorVisual);
+    doorVisual.position.set(sx * 0.5, 0, 0);       // local origin centred; LEFT edge at the hinge
+    doorVisual.traverse((n) => { n.userData.noCollider = true; });
+    hinge.add(doorVisual);
     body.add(hinge);
     panelDoorPivot = hinge;
+    // ACAX — refs for the 50%-chance pop-off (panelDebris.ts detaches this visual
+    // + spawns a physics body sized to these local half-extents).
+    body.userData.panelDoorVisual = doorVisual;
+    body.userData.panelDoorExtents = { hx: sx * 0.5, hy: sy * 0.48, hz: sz * 0.25 };
   } else {
     // ACAV Tier 3 — circle: a bolted disc cover on a pivot at the bore mouth.
     const coverPivot = new THREE.Group();
@@ -543,6 +554,22 @@ export function addAccessPanel(
     coverPivot.add(grip);
     body.add(coverPivot);
     panelDoorPivot = coverPivot;
+    // ACAX — pop-off refs (the cover + studs + grip all ride the pivot).
+    body.userData.panelDoorVisual = coverPivot;
+    body.userData.panelDoorExtents = { hx: radius, hy: radius, hz: sz * 0.20 };
+  }
+
+  // ACAX Tier A — stencil-portal MASK. A quad/disc at the opening mouth that
+  // writes stencil=REF so the interior renders THROUGH a clipping hull but stays
+  // confined to the mouth. Sized a touch inside the rim (INSET) so the interior
+  // can't spill over the frame; placed at the mouth plane (+sz/2). Starts hidden
+  // — the closed door covers the mouth; updatePanelDoors reveals it as the door
+  // swings clear (and spawnPanelStudio's force-open sets it directly).
+  if (Tuning.SALVAGE_PANEL_PORTAL_ENABLED) {
+    const inset = Tuning.SALVAGE_PANEL_MASK_INSET;
+    const mask = makePanelMask(isCircle, sx * inset, sy * inset, radius * inset, sz * 0.5);
+    body.add(mask);
+    body.userData.panelMask = mask;
   }
 
   // AAS — electrical-flicker glow. Pre-ABL each panel got its own
@@ -559,7 +586,7 @@ export function addAccessPanel(
   // so it lights the layered greeble at the back, not just the mouth; V1's shallow
   // cavity keeps the near-mouth anchor.
   body.userData.panelGlowAnchorLocal = new THREE.Vector3(0, 0,
-    (Tuning.SALVAGE_PANEL_INTERIOR_V2 && opts.archetype) ? sz * 0.10 : sz * 0.45);
+    (Tuning.SALVAGE_PANEL_INTERIOR_V2 && archetype) ? sz * 0.10 : sz * 0.45);
 
   // Stash refs + animation state on body.userData so interaction.ts
   // can drive the door + hide components as they're extracted.

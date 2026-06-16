@@ -326,6 +326,41 @@ export function playDrop(): void {
   osc.stop(t + 0.22);
 }
 
+/** ACAX — metallic clang for a salvage-panel door popping off + tumbling free.
+ *  A low impact thud + a ring of inharmonic metal partials, fast decay. */
+export function playMetalClang(): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  // Low impact thud (the door breaking loose).
+  const thud = a.ctx.createOscillator();
+  thud.type = 'triangle';
+  thud.frequency.setValueAtTime(150, t);
+  thud.frequency.exponentialRampToValueAtTime(64, t + 0.16);
+  const thudEnv = a.ctx.createGain();
+  thudEnv.gain.setValueAtTime(0, t);
+  thudEnv.gain.linearRampToValueAtTime(0.11, t + 0.004);
+  thudEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+  thud.connect(thudEnv).connect(a.sfx);
+  thud.start(t); thud.stop(t + 0.24);
+  // Inharmonic metal partials → the "clang" ring.
+  const partials = [328, 547, 781, 1190];
+  for (let i = 0; i < partials.length; i++) {
+    const f = partials[i] * (0.98 + Math.random() * 0.04);
+    const osc = a.ctx.createOscillator();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(f, t);
+    osc.frequency.exponentialRampToValueAtTime(f * 0.72, t + 0.26);
+    const env = a.ctx.createGain();
+    const peak = 0.06 / (i + 1);
+    env.gain.setValueAtTime(0, t);
+    env.gain.linearRampToValueAtTime(peak, t + 0.004);
+    env.gain.exponentialRampToValueAtTime(0.001, t + 0.30 - i * 0.05);
+    osc.connect(env).connect(a.sfx);
+    osc.start(t); osc.stop(t + 0.32);
+  }
+}
+
 /** Player hurt — short low groan when raider hits the player. */
 export function playPlayerHurt(): void {
   const a = getAudioInternals();

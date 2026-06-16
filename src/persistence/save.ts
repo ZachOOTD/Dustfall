@@ -193,7 +193,7 @@ export interface SaveV1 {
     width: number; speed: number; age: number; approaching: boolean;
   };
   raiders: Array<{ id: number; pos: V3; state: RaiderState; health: number; dragAnchor?: SledTether }>;
-  salvageables: Array<{ id: number; salvageRemaining: number; stripped: boolean }>;
+  salvageables: Array<{ id: number; salvageRemaining: number; stripped: boolean; extractedIndices?: number[] }>;
   lootContainers: Array<{ id: number; opened: boolean; contents: LootEntry[] }>;
 
   // Player-placed — recreated from scratch on load.
@@ -502,11 +502,13 @@ export function saveGameState(ctx: GameContext): { ok: boolean; error?: string }
             : {}),
         };
       }),
-      salvageables: ctx.salvageables.list.map((s) => ({
-        id: s.id,
-        salvageRemaining: s.salvageRemaining,
-        stripped: s.stripped,
-      })),
+      salvageables: ctx.salvageables.list.map((s) => {
+        // ACAX — persist WHICH components are gone (extracted OR condition-surplus)
+        // so a reload restores the exact visible set (WYSIWYG), not all of them.
+        const comps = (s.panel.userData.panelComponents as Array<{ visible: boolean }> | undefined) ?? [];
+        const extractedIndices = comps.flatMap((c, i) => (c.visible ? [] : [i]));
+        return { id: s.id, salvageRemaining: s.salvageRemaining, stripped: s.stripped, extractedIndices };
+      }),
       lootContainers: ctx.lootContainers.list.map((c) => ({
         id: c.id,
         opened: c.opened,
@@ -929,6 +931,12 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
     if (!s) continue;
     s.salvageRemaining = saved.salvageRemaining;
     if (saved.stripped) markSalvageStripped(s);
+    // ACAX — re-hide the components that were gone at save time (extracted +
+    // condition-surplus) so the visible set matches salvageRemaining on reload.
+    if (saved.extractedIndices) {
+      const comps = (s.panel.userData.panelComponents as Array<{ visible: boolean }> | undefined) ?? [];
+      for (const idx of saved.extractedIndices) { if (comps[idx]) comps[idx].visible = false; }
+    }
   }
 
   // ── Loot containers ──

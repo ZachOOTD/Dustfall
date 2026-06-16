@@ -325,7 +325,10 @@ export function makeSandMound(
 // Each geometry is baked into ROOT-LOCAL space (the mega-wreck D189 bake) so
 // the merged mesh, added as a child of `root`, inherits the wreck's
 // terrain-align transform. Returns {before, after} mesh counts for logging.
-export function mergeStaticByMaterial(root: THREE.Object3D): { before: number; after: number } {
+export function mergeStaticByMaterial(
+  root: THREE.Object3D,
+  opts?: { includeTransparent?: boolean },
+): { before: number; after: number } {
   root.updateMatrixWorld(true);
   const rootInv = root.matrixWorld.clone().invert();
   // Group baked geometries by material UUID + attribute signature (uv presence)
@@ -343,7 +346,10 @@ export function mergeStaticByMaterial(root: THREE.Object3D): { before: number; a
     while (n) { if (n.userData?.accessPanel || n.userData?.noMerge || n.userData?.interactType) return; n = n.parent; }
     if (Array.isArray(m.material)) return;            // multi-material meshes: leave as-is (rare)
     const mat = m.material as THREE.Material;
-    if (mat.transparent) return;                       // leave transparent (decals/screens) unmerged — preserves depth-sort order
+    // Transparent is normally left unmerged to preserve per-mesh depth sort. The
+    // ACAX breaker-board skeleton opts IN: it's a single renderOrder band built
+    // strictly back-to-front, so the merged buffer order IS the correct draw order.
+    if (mat.transparent && !opts?.includeTransparent) return;
     before++;
     const g = m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone();
     m.updateWorldMatrix(true, false);

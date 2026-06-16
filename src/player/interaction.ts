@@ -29,6 +29,7 @@ import { findBedrollById } from '../world/bedroll.ts';
 import { findLockerById } from '../world/locker.ts';
 import { findSledById, attachRopeToSled, detachRope, attachLockerToSled, applyTether } from '../world/sled.ts';
 import { findStakeById } from '../world/stake.ts';
+import { popPanelDoor } from '../world/panelDebris.ts';   // ACAX — door pop-off physics
 import type { RopeEndpoint } from '../world/rope.ts';
 import { claimLight, releaseLight } from '../core/lightPool.ts';
 import {
@@ -1226,17 +1227,25 @@ function tickSalvage(ctx: GameContext): void {
 function completePry(ctx: GameContext, s: import('../world/salvage.ts').Salvageable): void {
   const panel = s.panel as THREE.Object3D;
   panel.userData.panelOpened = true;
-  panel.userData.panelDoorTarget = Tuning.SALVAGE_PANEL_DOOR_OPEN_ANGLE;
   // AAS — ignite the electrical-flicker glow. updatePanelDoors ticks
   // the intensity envelope (peak → flicker → fade to 0 over
   // SALVAGE_PANEL_GLOW_FADE_DURATION_S).
   panel.userData.panelGlowStartedAt = ctx.time.elapsed;
-  // AAU — explicit toast so the player recognizes the two-stage flow:
-  // pry opens the panel (stage 1), then E-press extracts components
-  // (stage 2). Pre-AAU the door swung open silently and players
-  // mistook the pry+extract sequence for the old "just press E"
-  // mechanic.
-  ctx.ui.showToast('the panel pries open — search inside');
+  // ACAX — 50% chance the pry shears the door/cover LOOSE so it tumbles to the
+  // ground with real physics (popPanelDoor), instead of swinging open on the hinge.
+  if (Math.random() < Tuning.SALVAGE_PANEL_POP_CHANCE && popPanelDoor(ctx, panel)) {
+    // The door is gone — there's no hinge left to animate. Snap the open-state to
+    // fully open so the cavity interior + portal mask reveal immediately
+    // (updatePanelDoors gates both on the door angle).
+    panel.userData.panelDoorAngle = Tuning.SALVAGE_PANEL_DOOR_OPEN_ANGLE;
+    panel.userData.panelDoorTarget = Tuning.SALVAGE_PANEL_DOOR_OPEN_ANGLE;
+    ctx.ui.showToast('the cover shears loose — search inside');
+  } else {
+    // AAU — the default: hinge swing. Explicit toast so the player recognizes the
+    // two-stage flow (pry opens stage 1, E-press extracts stage 2).
+    panel.userData.panelDoorTarget = Tuning.SALVAGE_PANEL_DOOR_OPEN_ANGLE;
+    ctx.ui.showToast('the panel pries open — search inside');
+  }
   _salvaging = null;
   hideSalvageProgress();
 }
@@ -1408,6 +1417,17 @@ function updatePanelDoors(ctx: GameContext, dt: number): void {
         }
       }
     }
+    // ACAX — gate the stencil-portal MASK + the cavity INTERIOR group on the open
+    // state EVERY frame (not just while animating, so a save loaded already-open
+    // is handled too). The interior only reads through the portal once the door is
+    // >45% clear of the mouth; gating it also SKIPS the closed panel's greeble draw
+    // calls (the common case). Cheap: two boolean sets per panel, only on change.
+    const openFrac = ((panel.userData.panelDoorAngle as number | undefined) ?? 0) / Tuning.SALVAGE_PANEL_DOOR_OPEN_ANGLE;
+    const showInterior = openFrac > 0.45;
+    const mask = panel.userData.panelMask as THREE.Object3D | undefined;
+    if (mask && mask.visible !== showInterior) mask.visible = showInterior;
+    const interior = panel.userData.panelInterior as THREE.Object3D | undefined;
+    if (interior && interior.visible !== showInterior) interior.visible = showInterior;
     // AAS — electrical-flicker glow envelope. While glowElapsed < fade,
     // intensity = peak × fadeFactor × flicker. The flicker is two
     // detuned high-frequency sines so it never settles into a pattern;

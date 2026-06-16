@@ -40,8 +40,8 @@ export interface Salvageable {
   kind: SalvageKind;
   /** AAT — per-panel condition tier, set at registration. */
   condition: SalvageCondition;
-  /** The full wreck group — used by markSalvageStripped to dim every child mesh
-   *  on depletion. The wreck itself is NOT interactive; only `panel` is. */
+  /** The full wreck group the panel belongs to. The wreck itself is NOT
+   *  interactive; only `panel` is. (ACAX — no longer dimmed on depletion.) */
   mesh: THREE.Object3D;
   /** Small access panel embedded in the wreck. The interaction raycast targets
    *  this mesh; the wreck root carries no interact userData (Session Z). */
@@ -137,12 +137,22 @@ export function registerSalvageable(
     // Pristine — full 5 extracts (panel has the last "premium" slot too).
     remaining = Tuning.SALVAGE_CONDITION_MAX_EXTRACTS_PRISTINE;
   } else {
-    // Standard — AAR baseline (massive=4-6, others=2-3).
+    // Standard — ACAX: massive 4-6, others 3-4 (bumped from 2-3 so the common panels
+    // read a bit fuller now the structural fixtures live at the higher indices).
     remaining = kind === 'massive'
       ? 4 + Math.floor(rand() * 3)
-      : 2 + Math.floor(rand() * 2);
+      : 3 + Math.floor(rand() * 2);
   }
   const panel = (group.userData.accessPanel as THREE.Object3D | undefined) ?? group;
+  // ACAX — WYSIWYG salvage: the number of VISIBLE interior components must equal
+  // the number you can extract. The panel mesh builds a full set of lootable
+  // components; here we cap `remaining` to how many actually exist, then HIDE the
+  // surplus so what you see is exactly what you can salvage (a corroded panel shows
+  // ~1-2 components, not a packed cavity you can only take 2 things from). Each
+  // visible component disappears as it's extracted → the cavity empties realistically.
+  const allComponents = (panel.userData.panelComponents as THREE.Object3D[] | undefined) ?? [];
+  if (allComponents.length > 0) remaining = Math.min(remaining, allComponents.length);
+  for (let i = remaining; i < allComponents.length; i++) allComponents[i].visible = false;
   panel.userData.interactType = 'salvage';
   panel.userData.interactId = id;
   panel.userData.interactRegistry = 'salvageables';
@@ -308,29 +318,14 @@ export function rollWreckLoot(kind: SalvageKind, rand: Rng): LootEntry[] {
   return out;
 }
 
-/** Dim every mesh under the wreck group by cloning its material and
- *  multiplying the color by 0.7. Materials are shared across wrecks at
- *  module level in wrecks.ts — cloning per mesh protects the originals. */
+/** Mark a panel's wreck as fully stripped. ACAX — this used to DIM every mesh in
+ *  the whole wreck group (×0.7) on depletion, a pre-panel-overhaul effect that
+ *  made the ENTIRE wreck visibly change colour when a single panel was emptied.
+ *  The user asked for that removed — a wreck must NOT recolour at all. We keep
+ *  the `stripped` flag (it's persisted in the save schema — no version bump) but
+ *  do NO visual change; the emptied cavity + the "— stripped" prompt are the only
+ *  cues. (`s.mesh` is retained on the type for potential future use.) */
 export function markSalvageStripped(s: Salvageable): void {
   if (s.stripped) return;
   s.stripped = true;
-  s.mesh.traverse((o) => {
-    const m = o as THREE.Mesh;
-    if (!m.isMesh) return;
-    const mat = m.material;
-    if (Array.isArray(mat)) {
-      m.material = mat.map((mm) => dimMaterial(mm));
-    } else if (mat) {
-      m.material = dimMaterial(mat);
-    }
-  });
-}
-
-function dimMaterial(mat: THREE.Material): THREE.Material {
-  // Only clone if it's a material with a `.color` we can darken.
-  const anyMat = mat as THREE.Material & { color?: THREE.Color };
-  if (!anyMat.color) return mat;
-  const clone = mat.clone() as THREE.Material & { color: THREE.Color };
-  clone.color.multiplyScalar(0.7);
-  return clone;
 }

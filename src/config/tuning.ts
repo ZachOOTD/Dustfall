@@ -496,9 +496,17 @@ export const Tuning = {
 
   // Wreck palette (Session S). Cool grey-rust industrial; avoids pure
   // blacks/whites so primitives feel weathered, not cartoon.
-  WRECK_HULL_HEX: 0x6a6657,            // ACAT W5 — lifted from 0x5f5b54 (+~20% value) so greeble/seam detail surfaces against the harsh desert light
-  WRECK_HULL_DARK_HEX: 0x5e5a52,       // ACAT W5 — lifted with the base hull (was 0x534f48) so the slice-seam relationship stays subtle. AAM-followup #10: was 0x3a3631 (~40% darker than base, creating strong "fan blade" stripes on the sliced lathe hull as alternating slices read as separate panels with shadow gaps). Bumped much closer to base so slice seams read as subtle panel joints, not contrasted blades. User feedback: the opening wreck's rear dome looked thin/segmented because the high-contrast stripes were misread as gaps.
-  WRECK_RUST_HEX: 0x6e3a22,            // dominant rust accent
+  // ACAX — darkened + WARMED from ACAT W5's light grey-tan (0x6a6657/0x5e5a52). User
+  // feedback: the exterior read "flat, one light colour" — too close in value + hue to
+  // the sand, so wrecks washed out. Shifted into a warmer rust-brown family + darker so
+  // a wreck reads as an OLD rusted hulk that contrasts with the bright dune. CRITICAL —
+  // base + dark are kept CLOSE in value (low contrast between the two) so the lathe slice
+  // seams stay subtle: the AAM-followup #10 "fan blade stripes" came from a ~40%-darker
+  // dark hue, NOT from darkness per se. The "less flat" richness comes from the shader's
+  // boosted oxidation/color-variation layer (hullMaterial.ts), not from base darkness alone.
+  WRECK_HULL_HEX: 0x5b4c3c,            // warm rust-brown base (was 0x6a6657 light grey-tan)
+  WRECK_HULL_DARK_HEX: 0x4f4233,       // kept close to base (low contrast → no fan-blade stripes)
+  WRECK_RUST_HEX: 0x73401f,            // dominant rust accent — warmer, richer rust-orange (was 0x6e3a22)
   WRECK_RUST_DARK_HEX: 0x4a2614,       // deep-rust crevice color
   WRECK_NOZZLE_INTERIOR_HEX: 0x14110e, // engine bell inside — near black
   WRECK_NOZZLE_RIM_HEX: 0x4a4944,      // cooler metal rim
@@ -817,6 +825,16 @@ export const Tuning = {
   SALVAGE_PANEL_RECESS_DEPTH: 0.16,     // how much of the body is sunken into the hull surface
   SALVAGE_PANEL_DOOR_OPEN_ANGLE: 2.1,   // rad — door swings ~120° on hinges
   SALVAGE_PANEL_PRY_DURATION_S: 0.85,   // hold-LMB duration to lever the door open
+  // ACAX — door POP-OFF: on pry, this fraction of doors break loose + fall to the
+  // ground with real physics (dynamic Rapier body, cuboid collider — see
+  // world/panelDebris.ts) instead of swinging open on the hinge. The pop velocity
+  // is OUTWARD (the door's local +Z, away from the hull) + a slight upward arc + a
+  // random tumble spin so it reads realistic + satisfying. setLinvel/Angvel are
+  // mass-independent so the pop is consistent across panel sizes.
+  SALVAGE_PANEL_POP_CHANCE: 0.5,        // 50% of pried doors pop off vs swing open
+  SALVAGE_PANEL_POP_SPEED: 1.9,         // outward launch speed (m/s)
+  SALVAGE_PANEL_POP_UP: 1.4,            // upward boost so it arcs before falling (m/s)
+  SALVAGE_PANEL_POP_SPIN: 7.0,          // max random tumble (rad/s on each axis)
   // AAU — slowed door lerp 4.5 → 3.0/s so the swing-open animation is
   // visibly readable. At 3.0/s the door reaches target in ~1.5s,
   // which is enough time for the player to see the swing rather than
@@ -845,6 +863,18 @@ export const Tuning = {
   // ACAV Tier 4 — archetype-driven scrappy interior (decorative greeble + the 5
   // lootable components). Flag for rollback; flip on after the visual gate.
   SALVAGE_PANEL_INTERIOR_V2: true,
+  // ACAX Tier A — stencil-portal interior. The interior renders as a "window
+  // into the hull": a mask mesh at the opening writes stencil=REF, the interior
+  // draws only where stencil==REF with depthTest OFF, so it stays ALWAYS visible
+  // even when the recessed cavity clips into the wreck hull. Shared ref across
+  // all panels (interiors don't overlap on-screen). renderOrder bands sort the
+  // transparent interior backplate < greeble < extractables. Needs the renderer
+  // built with { stencil: true } (see core/scene.ts). Flag for rollback.
+  SALVAGE_PANEL_PORTAL_ENABLED: true,
+  SALVAGE_PANEL_STENCIL_REF: 1,
+  SALVAGE_PANEL_MASK_RENDER_ORDER: 2,        // after the opaque hull/body/door (0)
+  SALVAGE_PANEL_INTERIOR_RENDER_ORDER: 3,    // backplate; greeble = +1, extractables = +2
+  SALVAGE_PANEL_MASK_INSET: 0.88,            // mask mouth as a fraction of the body face (stays inside the rim)
   SALVAGE_PANEL_FOOTPRINT_CLEARANCE: 0.22, // probe pushes out this far + casts back; |d−this| ≤ FLATNESS_TOL = flat AND clear (a closer hit = geometry intrudes; subsumes decoration avoidance)
   SALVAGE_PANEL_NORMAL_AGREEMENT: 0.72,  // min dot(footprint-probe normal, centre normal) — the surface stays flat across the panel
   // ACAV — shared bury/occlusion raycast params (factored out of the three
@@ -897,7 +927,7 @@ export const Tuning = {
   SALVAGE_CONDITION_PRY_MUL_STANDARD: 1.0,   // baseline
   SALVAGE_CONDITION_PRY_MUL_PRISTINE: 1.4,   // harder (sealed, fresh)
   SALVAGE_CONDITION_MAX_EXTRACTS_CORRODED: 2,  // few survivors of the rot
-  SALVAGE_CONDITION_MAX_EXTRACTS_PRISTINE: 5,  // full panel + premium last component
+  SALVAGE_CONDITION_MAX_EXTRACTS_PRISTINE: 5,  // ACAX — full board = 5 breaker modules at slots 0..4 (the other 7 bays are permanent empty sockets)
   // Distribution roll thresholds (cumulative). Base ordering: pristine
   // first (15%), then standard (next 50%, cumulative 65%), then
   // corroded (remaining 35%). Biome biases shift the thresholds.

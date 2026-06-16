@@ -10,6 +10,7 @@ import { createRustedHullMaterial } from '../world/hullMaterial.ts';
 import { placeProcgenComposite, type ProcgenWreckClass } from '../world/procgenWreck.ts';
 import { validatePanels, type PanelEntry } from '../world/panelPlacement.ts';
 import { addAccessPanel, type PanelKind, type PanelArchetype } from '../world/wrecks.ts';   // ACAV — panel-studio
+import { popPanelDoor, panelDebrisInfo } from '../world/panelDebris.ts';   // ACAX — door pop-off smoke test
 import { makeRng } from '../core/rng.ts';
 import { Tuning } from '../config/tuning.ts';
 import { resetTutorial, showControlsPanel } from '../ui/tutorial.ts';
@@ -107,7 +108,7 @@ interface DebugApi {
    *  pass (Lane 1) drives this via the `item-studio` rig-shot scenario. Pass an
    *  ItemId + angle; re-call to swap items/angles (prior mesh is removed). */
   itemStudio: (id: ItemId, angle?: 'front' | 'back' | 'left' | 'right' | 'top' | '3q') => unknown;
-  spawnPanelStudio: (opts?: { shape?: 'rect' | 'square' | 'circle'; archetype?: string; kind?: PanelKind; scale?: number; open?: boolean; angle?: 'front' | '3q' | 'side' | 'eye' | 'top' }) => unknown;
+  spawnPanelStudio: (opts?: { shape?: 'rect' | 'square' | 'circle'; archetype?: string; kind?: PanelKind; scale?: number; open?: boolean; angle?: 'front' | '3q' | 'side' | 'eye' | 'top'; occlude?: boolean }) => unknown;
   /** ACAJ — visual-audit "studio" for the shared wreck-form toolkit primitives
    *  (`wreckForms.ts`). Builds a single form (lathe hull / former rings / breach /
    *  sand mound) in ISOLATION, suspends it against the clean sky, and frames the
@@ -131,6 +132,11 @@ interface DebugApi {
    *  (i.e. hull occludes it), the panel is buried inside the model → fail.
    *  Drives the `panels` rig-shot scenario's pass/fail assertion. */
   panelBuryAudit: () => { tested: number; pass: number; failCount: number; fails: Array<{ idx: number; kind: string; hit: string }> };
+  /** ACAX — door pop-off smoke test. Spawns a wreck on terrain, pops the first
+   *  panel's door (physics), returns the door's spawn Y so the `door-pop` scenario
+   *  can confirm it FELL + settled (read panelDebris() after letting the loop run). */
+  popTestDoor: (seed?: number) => { ok: boolean; reason?: string; spawnY?: number; panel?: number[] };
+  panelDebris: () => { count: number; doors: Array<{ y: number; sleeping: boolean }> };
   /** Clear the tutorial localStorage flags so the controls panel + all
    *  pickup hints fire again. Refresh to see the first-boot overlay. */
   resetTutorial: () => void;
@@ -436,6 +442,25 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
             door.rotation.y = -open;
           }
         }
+        // ACAX — paused studio skips updatePanelDoors, so reveal the portal mask
+        // + the (now default-hidden) interior group directly.
+        const mask = body.userData.panelMask as THREE.Object3D | undefined;
+        if (mask) mask.visible = true;
+        const interior = body.userData.panelInterior as THREE.Object3D | undefined;
+        if (interior) interior.visible = true;
+      }
+      // ACAX Tier A spike — drop a rust hull SLAB just in front of the open mouth
+      // to simulate the wreck hull clipping IN FRONT of a recessed cavity. Without
+      // the stencil portal the slab hides the interior; with it, the interior shows
+      // THROUGH the slab but only inside the panel mouth. Sized to fully cover.
+      if (o.occlude && body) {
+        const slab = new THREE.Mesh(
+          new THREE.BoxGeometry(0.9 * scale, 1.3 * scale, 0.1),
+          createRustedHullMaterial({ baseColor: Tuning.WRECK_HULL_HEX }),
+        );
+        slab.position.set(0, 0, 0.14 * scale);   // between the mouth (~+0.10) and the camera
+        slab.userData.noCollider = true;
+        host.add(slab);
       }
       const bp = ctx.player.body.body.translation();
       const anchor = new THREE.Vector3(bp.x, bp.y + 40, bp.z);   // sky backdrop
@@ -490,7 +515,7 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
       if (studioMesh) { studioGroup.remove(studioMesh); studioMesh = null; }
 
       const rand = Math.random;
-      const hullMat = createRustedHullMaterial({ baseColor: 0x5f5b54 });
+      const hullMat = createRustedHullMaterial({ baseColor: Tuning.WRECK_HULL_HEX });
       let node: THREE.Object3D;
       if (form === 'lathe') {
         node = makeLatheHull(fuselageProfile(6, 1.4, 0.3, 0.9, rand), { material: hullMat });
@@ -575,6 +600,37 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
       group.traverse((o) => { if ((o as THREE.Mesh).isMesh) meshes++; });
       return { cls, seed, ok: true, meshes, pos: [px, +py.toFixed(1), pz] };
     },
+    popTestDoor(seed = 1337) {
+      // ACAX — smoke test for the door pop-off. Enter the game LIVE (NOT paused) so
+      // physics.step + updatePanelDebris actually run and the door falls.
+      if (hooks.enterGame) hooks.enterGame(true);
+      else { ctx.flags.titleActive = false; ctx.flags.paused = false; }
+      ctx.flags.paused = false;
+      const rand = makeRng(seed);
+      const px = Tuning.OPENING_SCENE_ANCHOR_X + 30;
+      const pz = Tuning.OPENING_SCENE_ANCHOR_Z + 30;
+      const py = ctx.terrain.heightAt(px, pz);
+      const group = placeProcgenComposite(
+        ctx.three.scene, ctx.physics.world, ctx.terrain, new THREE.Vector3(px, py, pz), rand, undefined, { cls: 'corvette' },
+      );
+      group.updateMatrixWorld(true);
+      // Find a panel body that has a poppable door ref.
+      let panel: THREE.Object3D | null = null;
+      group.traverse((o) => { if (!panel && o.userData && o.userData.panelDoorVisual) panel = o; });
+      if (!panel) return { ok: false, reason: 'no poppable panel found' };
+      const p = panel as THREE.Object3D;
+      p.userData.panelOpened = true;
+      p.userData.panelGlowStartedAt = ctx.time.elapsed;
+      const visual = p.userData.panelDoorVisual as THREE.Object3D;
+      visual.updateWorldMatrix(true, false);
+      const spawnY = new THREE.Vector3().setFromMatrixPosition(visual.matrixWorld).y;
+      const popped = popPanelDoor(ctx, p);
+      p.userData.panelDoorAngle = Tuning.SALVAGE_PANEL_DOOR_OPEN_ANGLE;
+      p.userData.panelDoorTarget = Tuning.SALVAGE_PANEL_DOOR_OPEN_ANGLE;
+      const wp = new THREE.Vector3(); p.getWorldPosition(wp);
+      return { ok: popped, spawnY: +spawnY.toFixed(2), panel: [+wp.x.toFixed(1), +wp.y.toFixed(2), +wp.z.toFixed(1)] };
+    },
+    panelDebris() { return panelDebrisInfo(); },
     panelBuryAudit() {
       // ACAV — delegates to the unified validatePanels (world/panelPlacement.ts) in
       // read-only AUDIT mode (each panel walks up to its scene-root). OCCLUSION-only:

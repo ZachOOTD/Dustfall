@@ -2117,17 +2117,18 @@ const SCENARIOS = {
     const angles = String(argv.angles || (sweep || allArch ? '3q' : 'front,3q,side')).split(',').map((s) => s.trim());
     const states = argv.state ? [String(argv.state)] : (argv.open !== undefined ? ['open'] : (sweep ? ['closed', 'open'] : (allArch ? ['open'] : ['closed'])));
     const scale = Number(argv.scale || 1);
+    const occlude = argv.occlude !== undefined;   // ACAX — drop a hull slab in front (stencil-portal spike)
     for (const shape of shapes) {
       for (const archetype of archetypes) {
         for (const st of states) {
           for (const angle of angles) {
             const res = await page.evaluate(
-              ({ shape, archetype, st, angle, scale }) =>
-                window.__game.spawnPanelStudio({ shape, archetype, scale, open: st === 'open', angle }),
-              { shape, archetype, st, angle, scale },
+              ({ shape, archetype, st, angle, scale, occlude }) =>
+                window.__game.spawnPanelStudio({ shape, archetype, scale, open: st === 'open', angle, occlude }),
+              { shape, archetype, st, angle, scale, occlude },
             );
             await page.waitForTimeout(220);
-            const tag = archetype ? `${shape}-${archetype}` : `${shape}-fuselage`;
+            const tag = (archetype ? `${shape}-${archetype}` : `${shape}-fuselage`) + (occlude ? '-occ' : '');
             const path = join(OUT, `scen-panelstudio-${tag}-${st}-${angle}.png`);
             await page.screenshot({ path, fullPage: false });
             console.log(`[panel-studio] ${tag}/${st}/${angle} → ${path}  ${JSON.stringify(res)}`);
@@ -2135,6 +2136,46 @@ const SCENARIOS = {
         }
       }
     }
+  },
+
+  // ACAX — WYSIWYG salvage audit. For every registered panel, the number of VISIBLE
+  // interior components must EQUAL salvageRemaining (so what you see is what you can
+  // salvage). Boots the real world + iterates ctx.salvageables.list.
+  'salvage-audit': async (page) => {
+    const r = await page.evaluate(() => {
+      const list = window.__game.ctx.salvageables.list;
+      let mismatches = 0; const samples = []; const byCond = {};
+      for (const s of list) {
+        const comps = s.panel.userData.panelComponents ?? [];
+        const visible = comps.filter((c) => c.visible).length;
+        const match = visible === s.salvageRemaining;
+        if (!match) mismatches++;
+        byCond[s.condition] = byCond[s.condition] || { n: 0, vis: 0, rem: 0 };
+        byCond[s.condition].n++; byCond[s.condition].vis += visible; byCond[s.condition].rem += s.salvageRemaining;
+        if (!match && samples.length < 8) samples.push({ cond: s.condition, visible, remaining: s.salvageRemaining });
+      }
+      return { total: list.length, mismatches, byCond, samples };
+    });
+    console.log('[salvage-audit] ' + JSON.stringify(r));
+    console.log(r.mismatches === 0
+      ? `[salvage-audit] PASS — visible == salvageable across all ${r.total} panels`
+      : `[salvage-audit] FAIL — ${r.mismatches}/${r.total} mismatches`);
+  },
+
+  // ACAX — door pop-off smoke test. Pops a salvage-panel door (physics), lets the
+  // LIVE loop run, then asserts the door detached + FELL + reached a finite resting
+  // pose (no NaN / explosion / fall-through). The "satisfying" feel is walk-test-owed.
+  'door-pop': async (page) => {
+    const before = await page.evaluate((seed) => window.__game.popTestDoor(seed), Number(argv.seed || 1337));
+    console.log('[door-pop] pop: ' + JSON.stringify(before));
+    if (!before.ok) { console.log('[door-pop] FAIL — door did not pop'); return; }
+    await page.waitForTimeout(2800);   // live loop steps physics → door falls + settles
+    const after = await page.evaluate(() => window.__game.panelDebris());
+    const d = after.doors[0];
+    const finite = !!d && Number.isFinite(d.y);
+    const fell = finite && d.y < before.spawnY - 0.3;
+    console.log(`[door-pop] spawnY=${before.spawnY} restY=${d ? d.y.toFixed(2) : 'NONE'} fell=${fell} finite=${finite} sleeping=${d ? d.sleeping : '?'} count=${after.count}`);
+    console.log(fell && finite ? '[door-pop] PASS — door detached + fell with physics to a finite pose' : '[door-pop] FAIL');
   },
 
   // Speeder-FX (ACW C7/C8): drive the (unmounted) bike LIVE for ~0.6s so the

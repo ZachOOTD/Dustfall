@@ -64,23 +64,24 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      Prior milestones live in docs/changelog.md — do NOT accumulate "Prior milestone"
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
-**Last shipped**: Session ACAW — **Salvage-panel overhaul COMPLETE: the VISUAL half (Tiers 3-5 of 6) — shapes + scrappy
-interiors + scalability gate** (tsc clean, `verify:placement` 0 fails, no save bump; D214-D216). Long autonomous session
-finishing the ACAV overhaul. **Tier 3 (D214):** `addAccessPanel` gains `AccessPanelOpts {shape,aspect,archetype}` — square
-(rect aspect 1) + a CIRCULAR bolted port with a disc LIFT-OFF cover (a `coverPivot` NAMED `panelDoor` so the audit/prune +
-`completePry` drive it; `updatePanelDoors` slides+tumbles it); procgen derives shape from rolled values (engine→circle,
-small→square). NEW `panel-studio` harness (`__game.spawnPanelStudio` + scenario) = the screenshot loop. **Tier 4 (D215):**
-NEW `world/panelGreeble.ts` low-poly component library (coiled wire, fuse bank, PCB, gauge, valve wheel, conduit, terminal,
-frayed wires, cracked screen, indicator) + `buildGreeble` depth-layered; INTERIOR_V2 = MERGED decorative greeble (the wreck
-merge skips accessPanel subtrees, so merge before parenting) + the 5 unchanged lootable components; 5 archetypes
-(electrical/plumbing/avionics/mechanical/junction) screenshot-iterated 3-4 rounds; shared singletons → **programs still 67**.
-**Tier 5 (D216):** NEW `npm run verify:placement` (multi-seed bury-audit) = the scalability gate a future wreck-model change
-re-runs; contract documented in `architecture.md`. *(Prior — ACAV: placement half (Tiers 0-2, D211-213); ACAU: bury-prune +
-noise-helper (D209-210). See changelog.)*
+**Last shipped**: Session ACAX — **Salvage-panel interior + exterior REALISM overhaul** (tsc clean, `verify:placement` 0 fails,
+NEW `salvage-audit` 0 mismatches/99, `door-pop` smoke test PASS, no save bump; D217-D220). Long user-feedback-driven session.
+**Stencil portal (D217):** the interior renders as a "window into the hull" — a per-panel MASK writes `stencil=REF`, the interior
+draws `stencilFunc EQUAL`+`depthTest:false`+transparent so it shows THROUGH a clipping hull (renderer now `{stencil:true}`); the MASK
+itself RESPECTS depth (+polygonOffset) so terrain/dunes/sides/far-side panels in front occlude it — visible through the WRECK HULL
+ONLY, never the world (`world/panelPortal.ts`). **Breaker-board interior (D218, headline):** scattered greeble → a real DIN-rail board
+(adversarially-judged design workflow) = a FIXED skeleton (board + bus + 3 rails + trough + terminal + 12 empty bay-sockets) + 5
+salvageable BREAKER modules clipped onto the first bays at the same slot, so salvaging a module reveals its socket — ZERO jitter, ZERO
+new logic (`makeBreakerBoard`/`makeBreaker`/`buildSalvageComponents`); merge gained `includeTransparent` (portal mats are transparent)
+→ sceneMeshes 21k→8.6k. **WYSIWYG salvage (D219):** `registerSalvageable` hides surplus modules so visible==salvageable (corroded ~1-2,
+pristine 5), thins as stripped; `save.ts` persists `extractedIndices`. **Door pop-off (D220):** 50% of pried doors SHEAR LOOSE + fall
+with real physics (`world/panelDebris.ts`, dropped-item pattern + clang). Plus: darker/warmer rusted hull + panel-exterior palette,
+DoubleSide rusted body, relief'd rusted door, rusted (not gold) frame, `archetypeForKind` fallback (all 16 callsites get V2), removed
+the wreck recolor-on-salvage dim + the bandage model.
 
-**Next session** = the OWED human WALK-TESTS in `npm run dev` (the panel overhaul's pry-FEEL: prying a panel + the amber-glow-
-lit cavity read — the headless audit force-opens doors without the glow, so feel/lighting needs eyes; plus the older Sarlacc
-pull-feel + climb-out, graveyard read, mega-wreck interior). OR a new buildable feature now the whole panel mechanic is solid:
+**Next session** = the OWED human WALK-TESTS in `npm run dev` (eyes-only): the salvage breaker-board read under the amber pry-glow up
+close + actually salvaging to feel the bays empty; the door pop-off FEEL (outward/tumble/clang); confirm the stencil portal no longer
+bleeds through terrain/sides AND a normal panel doesn't flicker against its hull (mask-vs-coplanar-hull). THEN a new buildable feature:
 raider proc-character (Cycle 5b — proven rig pipeline), deep cave system (Cycle 7 — design pass first), or the drop-pod intro.
 See [docs/next-session-prompt.md](docs/next-session-prompt.md) + [docs/backlog.md](docs/backlog.md).
 

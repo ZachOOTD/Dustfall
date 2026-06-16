@@ -3,6 +3,49 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Session ACAX — 2026-06-16 — Salvage-panel interior + exterior REALISM overhaul — stencil portal, breaker-board interior, door pop-off, WYSIWYG salvage ✓ verify pass (tsc clean)
+
+`verified` — `npm run verify` (tsc) PASS; `npm run verify:placement` PASS (0 bury-audit fails across 5 seeds); NEW `salvage-audit`
+scenario 0 mismatches / 99 panels; `door-pop` physics smoke test PASS; perf-probe programs 69 (closed) / draw calls 728 / sceneMeshes
+8602. **No save bump** — the salvageables save gained an OPTIONAL additive `extractedIndices?: number[]` (backward-compatible).
+Long user-feedback-driven session reworking the salvage-panel interior + exterior end-to-end. D217-D220. NEW `world/panelPortal.ts`,
+`world/panelDebris.ts`.
+
+**Stencil-portal interior (D217).** A recessed panel cavity could clip into the hull + be occluded; the interior now renders as a
+"window into the hull". NEW `panelPortal.ts`: a per-panel MASK mesh at the opening writes `stencil=REF`; the interior materials (the
+`_panel*` + all of `panelGreeble.ts`) draw `stencilFunc EQUAL` + `depthTest:false` + `transparent` so they show THROUGH a clipping
+hull, confined to the mouth (renderer built with `{stencil:true}`, `core/scene.ts`). The mask + interior `.visible` gate on the door
+being >45% open (closed panels skip their greeble draw calls). **World-occlusion fix:** the MASK respects depth (+ a polygon-offset to
+win the coplanar flush hull) so terrain / dunes / side-walls / far-side panels in FRONT of the mouth occlude the window — visible
+through the WRECK HULL only, never the world. The breaker-board's full backing board covers any 2-open-panel overlap.
+
+**Realism-first DIN-rail breaker-board interior (D218, headline).** The scattered greeble read as "junk in a box"; redesigned from a
+3-concept adversarially-judged design workflow into a real engineered panel: a FIXED skeleton (mounting board + brass bus bar + 3 DIN
+rails + wiring trough + terminal block + 12 grid-aligned empty bay-sockets + labels) + 5 salvageable BREAKER modules clipped onto the
+first bays at the same slot/depth, so pulling a module (extraction only hides) reveals its socket underneath — ZERO new logic, ZERO
+jitter (alignment is the realism). Per-archetype variety on ONE skeleton (electrical=toggles, avionics=screen cards, plumbing/
+mechanical=a gauge/valve accent). `makeBreakerBoard` + `makeBreaker` + `buildSalvageComponents` in `panelGreeble.ts`. Merge gained an
+`includeTransparent` opt (`wreckForms.ts`) since the portal materials are transparent → the board collapses to ~1 mesh/material
+(sceneMeshes 21k→8.6k).
+
+**WYSIWYG depleting salvage (D219).** Visible component count == salvageable count, both directions. `registerSalvageable` (`salvage.ts`)
+hides the surplus modules past the condition's extract count (corroded ~1-2, standard ~3.6, pristine 5) so a panel is exactly as full
+as it is salvageable + thins as you strip it; `save.ts` persists `extractedIndices` so a half-salvaged panel stays consistent on reload.
+
+**Door pop-off physics (D220).** On pry, `SALVAGE_PANEL_POP_CHANCE` (50%) the door SHEARS LOOSE + falls with real physics instead of
+swinging — NEW `panelDebris.ts` reuses the dropped-item pattern (dynamic Rapier body, cuboid collider, CCD) + an outward launch +
+tumble + a `playMetalClang`; synced by `updatePanelDebris` after `updatePickups`, sleeping doors skipped.
+
+**Exterior weathering.** Wreck hull palette darkened + WARMED (`WRECK_HULL_HEX` 0x6a6657→0x5b4c3c etc.) + the `createRustedHullMaterial`
+oxidation boosted (oxStrength 0.32→0.58, warmer oxHex, wider coverage) so wrecks read as old rusted hulks vs the sand, not flat tan.
+Panel EXTERIOR: a rusted DOUBLE-SIDED body (was BackSide — fixed the "floating, sides invisible" + a polygonOffset for the coplanar
+z-fight), a rusted iron DOOR with GEOMETRIC relief (raised stamped panel + ridges + rivets, same-material parts merged → cheaper than
+the old flat door), the gold brass frame → rusted weathered-iron.
+
+**Old-panel + recolor fixes.** `addAccessPanel` now derives a fallback `archetypeForKind(kind)` so the 14 hand-modeled/POI callsites
+that omitted `archetype` get the V2 interior (was: only procgen). Removed the pre-panel `markSalvageStripped` ×0.7 dim that recoloured
+the WHOLE wreck when one panel was stripped (kept the `stripped` flag — no save bump). Removed the bandage/med-pack model per feedback.
+
 ## Session ACAW — 2026-06-15 — Salvage-panel overhaul: the VISUAL half (Tiers 3-5) — shapes + scrappy interiors + scalability gate ✓ verify pass (tsc clean)
 
 `verified` — `npm run verify` (tsc) PASS; `npm run verify:placement` PASS (0 bury-audit fails across 5 seeds); **no save

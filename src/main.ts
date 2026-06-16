@@ -26,6 +26,7 @@ import { createHud, updateHud } from './ui/hud.ts';
 import { createHotbar, updateHotbar } from './ui/hotbar.ts';
 import { createInteractPrompt, updateInteractPrompt } from './ui/interactPrompt.ts';
 import { spawnBranches, spawnScrapAt, spawnRelicAt, updatePickups } from './pickups/pickups.ts';
+import { updatePanelDebris } from './world/panelDebris.ts';   // ACAX — popped panel-door physics sync
 import { spawnDeadTrees } from './world/deadTree.ts';
 import { spawnRockScatter } from './world/rockScatter.ts';
 import { setupOpeningScene } from './world/openingScene.ts';
@@ -843,6 +844,7 @@ startLoop(ctx, (c, dt) => {
   // Runs AFTER physics.step (above) so the body transform reflects
   // this tick's integration result.
   updatePickups(c, dt);
+  updatePanelDebris(c, dt);      // ACAX — synced popped-off salvage-panel doors (mesh ← physics body)
   updateRaiders(c, dt);          // AI state machine + raider movement
   updateLizards(c, dt);          // small flee-AI wildlife
   updateShrews(c, dt);           // ACL — skittery shrew prey (idle/wander/flee); pause-gated internally

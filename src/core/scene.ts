@@ -26,7 +26,11 @@ export function createScene(): SceneBundle {
   );
   camera.position.set(0, Tuning.PLAYER_HEIGHT, 0);
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  // ACAX — stencil: true allocates the stencil buffer the salvage-panel
+  // interior portal needs (a mask writes stencil=REF at the opening; the
+  // interior draws only where stencil==REF, so it shows THROUGH a clipping
+  // hull but stays confined to the panel mouth). See world/panelPortal.ts.
+  const renderer = new THREE.WebGLRenderer({ antialias: true, stencil: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
