@@ -27,7 +27,7 @@ import { addAccessPanel } from './wrecks.ts';
 import { mergeStaticByMaterial } from './wreckForms.ts';
 import type { ShelterRegistry } from '../shelter/shelterZones.ts';
 import { addShelterZone } from '../shelter/shelterZones.ts';
-import { makeStaticBox, attachAabbCollider } from '../physics/bodies.ts';
+import { makeStaticBox, makeStaticCylinder, attachAabbCollider } from '../physics/bodies.ts';
 import { createRustedHullMaterial } from './hullMaterial.ts';
 import { createWeatheredConcreteMaterial } from './concreteMaterial.ts';
 import { createMetalMaterial } from './metalMaterial.ts';
@@ -963,13 +963,14 @@ export function placeSatelliteDish(
     new THREE.Vector3(0, BASE_H * 0.5 - BASE_WALL_T * 0.5, 0),
     { x: BASE_W * 0.5, y: BASE_WALL_T * 0.5, z: BASE_D * 0.5 },
   );
-  // ── ACBB Tier 3 (§E) — the 16m parabolic DISH had NO collider (only the base did), so the
-  // player walked clean through the reflector + its forward-collapsed lower rim. Add a slab
-  // matching the reflector: DISH_R square × DISH_DEPTH thick, at the dishPivot's exact WORLD
-  // transform (group world TRS ∘ dishPivot local pos apexY ∘ the forward-collapse tilt). The
-  // box corners over-block the round dish slightly at the diagonals (acceptable; the dish sits
-  // high). NOTE: collision FEEL owes the attended walk-test (headless can't judge it) — the
-  // geometry is grounded in the dishPivot transform, so the worst case is a touch of over-block.
+  // ── ACBB Tier 3 (§E) + dish-collider-feel (campaign 2026-06-18) — the 16m parabolic DISH had no
+  // collider (player walked clean through it). ACBB added a square SLAB box, but its corners
+  // over-blocked the round dish at the diagonals (the §E/§G walk-test concern). Now a CYLINDER DISC
+  // matching the round reflector: radius DISH_R, half-height DISH_DEPTH*0.5+0.3, at the dishPivot's
+  // exact WORLD transform (group world TRS ∘ dishPivot local pos apexY ∘ the forward-collapse tilt).
+  // Rapier's cylinder axis = local Y = the dish thickness axis (== the old box Y), so the SAME
+  // dishWorldQuat orients it. No diagonal corners → no over-block. (Collision FEEL still owes the
+  // attended walk-test, but the disc IS the round-dish geometry, so the diagonal worst case is gone.)
   {
     const dishPivotQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI * 0.32, 0, 0.18));
     const dishWorldQuat = groupWorldQuat.clone().multiply(dishPivotQuat);
@@ -978,9 +979,10 @@ export function placeSatelliteDish(
       .add(new THREE.Vector3(0, apexY, 0))   // dishPivot's local Y within group
       .applyQuaternion(groupWorldQuat)
       .add(groupWorldPos);
-    makeStaticBox(
+    makeStaticCylinder(
       world,
-      { x: DISH_R, y: DISH_DEPTH * 0.5 + 0.3, z: DISH_R },
+      DISH_DEPTH * 0.5 + 0.3,   // half-height along local Y = the dish thickness axis (== the old box Y)
+      DISH_R,                   // radius = the round reflector (no diagonal corners → no over-block)
       dishWorldCenter,
       { x: dishWorldQuat.x, y: dishWorldQuat.y, z: dishWorldQuat.z, w: dishWorldQuat.w },
     );

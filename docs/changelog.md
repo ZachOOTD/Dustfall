@@ -3,6 +3,14 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign C4 — 2026-06-18 — M1 dish collider disc (no diagonal over-block) ✓ M1 COMPLETE
+
+`verified` — `npm run verify:all` PASS (tsc + `verify:placement` 0/0 ×5 + `verify:colliders` 0/25). **No save bump.** Cycle 4/12. Collider-only change → visual gate N/A; collision FEEL feel-pending the Phase-A walk-test.
+
+**dish-collider-feel (§E/§G).** The flagship `satelliteDish` 16m reflector got a square SLAB box collider in ACBB whose corners over-blocked the round dish at the diagonals. Replaced with a `makeStaticCylinder` DISC (radius `DISH_R`, half-height `DISH_DEPTH*0.5+0.3`) at the dishPivot's exact world transform — Rapier's cylinder axis = local Y = the dish thickness axis (== the old box Y), so the same `dishWorldQuat` orients a disc that IS the round dish, minus the diagonal corners → no over-block. Whether it still snags is owed the walk-test.
+
+**→ Milestone M1 — Wreck-arc finish (calibration) COMPLETE** (cycles C1-C4): panel dead-code cleanup + perf baseline · remove wreck sand-mounds (bare terrain) · scrap pickup edge-on mass · dish collider disc. Next: M2 (wreck breadth + polish + infra).
+
 ## Campaign C3 — 2026-06-18 — M1 scrap pickup edge-on mass (3q rework) ✓ all gates pass
 
 `verified` — `npm run verify:all` PASS (tsc + `verify:placement` 0/0 ×5 + `verify:colliders` 0/25); **visual gate PASS** (3 harsh-lens critics, 0 sev≥2 — the edge-on read now has real plate mass + stays one clean torn sheet). **No save bump.** Cycle 3/12 (M1 — 4 of 5 units). Appearance-verified; in-hand feel owed the Phase-A walk-test.

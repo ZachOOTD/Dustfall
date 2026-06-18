@@ -1,37 +1,42 @@
-# Campaign cycle-4 kickoff — `campaign/2026-06-18`
+# Campaign cycle-5 kickoff — `campaign/2026-06-18`
 
 > `/session-end` (focused, per-cycle) rewrote this. The roadmap is authoritative (skill Step 4).
 
 ## Boot order (re-read every cycle from FILES)
 1. `docs/campaign/campaign-state.json` · 2. `docs/campaign/steering.md` · 3. `docs/roadmap.md` "Up next" (Phase A queue, authoritative) · 4. `docs/iteration-plan.md` "Campaign 2026-06-18 — milestone ladder" · 5. `CLAUDE.md` + `docs/decisions.md` tail.
 
-## Where C1-C3 left off
-- **C1:** `panel-deadcode-cleanup` + `perf-budget-reprofile` (baseline drawCalls 843 / programs 71).
-- **C2:** `remove-wreck-sand-mounds` — wrecks on bare terrain (rand-preserving no-op; visual gate PASS).
-- **C3:** `scrap-pickup-3q-thin` — `scrapMesh.ts` SHEET_T 6→14mm + fuller rolled edge (visual gate PASS; sev3 fin-ward nit deferred). **M1 now 4 of 5 units.**
+## ✓ Milestone M1 COMPLETE (cycles C1-C4)
+panel-deadcode-cleanup + perf-baseline · remove-wreck-sand-mounds · scrap-pickup-3q-thin · dish-collider-disc.
+All gates green; **feel-pending items queued for the Phase-A walk-test** (scrap in-hand 3q · bare-terrain
+wreck seating · dish-collider snag-at-diagonals · the curl-fin-ward scrap nit).
 
-## Cycle 4 picks up: **Phase A → M1 — the LAST unit**
-`dish-collider-feel` (S · feel-pending). The flagship `satelliteDish` reflector got a slab collider in ACBB
-(was walkthrough), but a box approximation may over-block the round dish at the diagonals. **Refine** the
-collider shape — a thinner/rotated slab, a flat disc (cylinder), or a tighter convex hull — so the round
-face doesn't snag the player at the diagonals.
-- File: `src/world/satelliteDish.ts` (the hand POI flagship — OUTSIDE the procgen `verify:colliders` gate per
-  D235, so changing it won't trip that audit, but RE-RUN `verify:all` anyway to be safe).
-- `verify:colliders` must stay 0-fail. The collider FEEL (does it snag at the diagonals?) is a **walk-test
-  judgment** — mark `feel-pending`; the headless gate only confirms coverage, not over-blocking.
-- This is feel-pending, so the visual gate is N/A (a collider has no appearance) — just confirm `verify:all`
-  green + reason carefully about the shape. Log it `appearance-verified N/A; feel-pending`.
+## Cycle 5 picks up: **Phase A → M2 — Wreck breadth + polish + infra**
+M2 has 4 units. **Recommended order — safe/headless first, the high-risk merge LAST (on its own cycle):**
+1. `feature-flags-infra` (S · headless · low) — NEW `src/config/features.ts` (`FEATURES.realRope` et al), flag-OFF.
+   Dependency-enabler for the M9 gate-and-wait rope/cloth cycles. Land it early + inert. Pure tsc-verified.
+2. `security-review-repo` (M · headless · medium) — audit the public repo for vulns / leaked secrets
+   (`/security-review` over the tree). Writes findings to backlog; headless hygiene, no game change.
+3. `wreck-polish-bundle` (M · visual-gate · low-med) — the §F/§G sev-2/3 set: one non-axial mass per heavy
+   class (dorsal/sponson — breaks the "sausage") · up-close weathering chroma (oxide→orange, seam-rust
+   lifted, rust-coloured drips) · engine-droop sign-randomize + ~15% nozzle-detach · scout/corvette
+   guaranteed visible trauma · scale-anchor exclusion pocket. **Visual gate REQUIRED** (rig-shot the
+   affected archetypes, front-light + length-frame, critique). Likely spans >1 cycle — ship `[partial]`.
+4. `yard-cross-poi-merge` (M · headless · **HIGH-RISK**) — **DO LAST, on its own cycle.** The D237/D239
+   re-attempt: fold the ~36-38 already-merged yard sub-groups into a handful of draw calls WITHOUT
+   perturbing the `panelDoorExtents` bottom-edge measure (that regressed the terrain bury-audit twice).
+   Run `pruneBuriedPanels`/`validatePanels` (or snapshot bottom-edge world positions) BEFORE the cross-merge.
+   **If it fails the placement/collider audit twice → revert to last-green + re-queue (don't half-ship);
+   3-strike → scope-cut per GDD §12 + a D-entry.** The rig-shot `wreck-yard` reports drawCalls for measurement.
 
-After this → **M1 COMPLETE** (all 5 units) → cycle moves to **M2** (yard-cross-poi-merge — the high-risk
-D237/D239 re-attempt; wreck-polish-bundle; feature-flags-infra; security-review). Phase A pauses for review
-ONLY at the `### Milestone: Phase A — Build-out complete` marker (after M5b).
+After all 4 → **M2 complete** → M3. Phase A pauses for review ONLY at the `### Milestone: Phase A —
+Build-out complete` marker (after M5b).
 
 ## Autonomy contract
 - **`phash`-determinism (D221)** — re-run `verify:placement` + `verify:colliders` after any POI/panel/geometry/
-  seating change; use a rand-preserving approach when removing a non-last `rand` draw (see C2). **Rule 8** —
-  visual work iterates (build → screenshot → critique); a collider change is FEEL not appearance → walk-test.
-  **COLLIDER-AUDIT (D235)** — procgen structural meshes need a declared collider or an exempt tag; hand POIs
-  (megaShip/satelliteDish/etc.) are outside that gate. **Save (D81)** — additive only; surface any bump.
+  seating change; rand-preserving approach when removing a non-last `rand` draw (C2 precedent). **Rule 8** —
+  visual work iterates (build → screenshot → critique; front-light + length-frame first). **COLLIDER-AUDIT
+  (D235)** — procgen structural meshes need a declared collider or an exempt tag; hand POIs are outside it.
+  **Save (D81)** — additive only; surface any `SAVE_VERSION` bump, don't auto-bump.
 - **Net-new content (M5a/M5b later)** needs a rig-shot framing authored for the visual gate.
 
 ## Stop conditions

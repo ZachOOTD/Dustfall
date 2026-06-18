@@ -138,7 +138,7 @@ and promotes the second.
 
 ### Phase A — Build-out (M1→M5b; all build-now, runs unattended → ONE review after) · [BUILD-NOW]
 Tiers in order (each spans 1+ cycles; the loop commits every cycle and pauses at NONE of these):
-- **M1 — Wreck-arc finish (calibration):** scrap-pickup-3q-thin · dish-collider-feel · remove-wreck-sand-mounds · panel-deadcode-cleanup · perf-budget-reprofile.
+- ✓ **M1 — Wreck-arc finish (calibration) — SHIPPED (C1-C4):** panel-deadcode-cleanup · perf-budget-reprofile · remove-wreck-sand-mounds · scrap-pickup-3q-thin · dish-collider-feel (disc). *(feel-pending → Phase-A walk-test: scrap in-hand 3q · bare-terrain wreck seating · dish-collider snag-at-diagonals.)*
 - **M2 — Wreck breadth + polish + infra:** yard-cross-poi-merge (D237/D239 re-attempt) · wreck-polish-bundle (§F/§G sev-2/3: non-axial mass · weathering chroma · engine droop · scout trauma · scale-anchor pocket) · feature-flags-infra · security-review-repo.
 - **M3 — The worm + the pit:** worm-model-overhaul · worm-tail-buried · worm-charge-dive · worm-audio-rumble · multi-worm-population · sarlacc-lure-ambush (awe-not-horror). *(Order: worm model+tail before population.)*
 - **M4 — Critters + atmosphere:** vulture-motion-feel · atmosphere-feeltunes (incl. in-storm sway — tunes of shipped systems) · smoke-signal-plume · amban-rifle-balance.
