@@ -2,7 +2,7 @@
   "status": "active",
   "started": "2026-06-18",
   "branch": "campaign/2026-06-18",
-  "cycles_completed": 5,
+  "cycles_completed": 6,
   "current_tier": "M2 — Wreck breadth + polish + infra",
   "awaiting_approval": false,
   "stop_reasons": [],
@@ -15,7 +15,7 @@
   "circuit_breaker_n": 3,
   "consecutive_no_progress": 0,
   "ceiling": { "max_cycles": 12, "total": null, "per_cycle": null, "unit": "tokens" },
-  "spend": { "total": 560000, "note": "approximate — agent cannot precisely self-meter; max_cycles is the real bound (no budget ceiling set)" },
+  "spend": { "total": 640000, "note": "approximate — agent cannot precisely self-meter; max_cycles is the real bound (no budget ceiling set)" },
   "plan": {
     "authored": "2026-06-18",
     "amended": "2026-06-18 plan-review user steering + evidence audit + Phase-C promotion (see campaign-log.md Cycle 0)",
@@ -91,6 +91,18 @@
       "visual": "N/A — inert config scaffold (no appearance/feel)",
       "commit": "5d1c22e",
       "spend_approx_tokens": 50000
+    },
+    {
+      "cycle": 6,
+      "date": "2026-06-18",
+      "focus": "M2 security-review-repo (clean + vite vuln fix)",
+      "tier": "M2 — Wreck breadth + polish + infra",
+      "outcome": "SHIPPED",
+      "units": ["security-review-repo"],
+      "verify": "verify:all PASS (tsc + placement 0/0 x5 + colliders 0/25); npm audit 0 vulns (was 1 high vite dev-server); vite-boot smoke-test PASS",
+      "visual": "N/A — security audit + dep patch (no appearance/feel)",
+      "commit": "27d03b6",
+      "spend_approx_tokens": 80000
     }
   ]
 }

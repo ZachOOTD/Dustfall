@@ -146,3 +146,14 @@ first stop will be `max-cycles` ~mid-Phase-A; resume via `/campaign-start --resu
 - **Spend:** ~50K approx; campaign total ~560K; cycle **5/12**.
 - **Commit:** `5d1c22e`.
 - **Next (cycle 6):** M2 `security-review-repo` (a client-side-game security audit — secrets/DOM/npm-audit/hygiene; likely a documented all-clear). Then wreck-polish-bundle, then yard-merge (last/careful). **Verdict: CONTINUE** (M2 1/4; no milestone crossed).
+
+---
+
+## Cycle 6 — M2 security review (2026-06-18) — SHIPPED
+- **Planned:** `security-review-repo` — audit the repo for vulns / leaked secrets.
+- **Shipped:** an all-clear audit (client-side game, narrow surface) — 0 secrets, 0 unsafe DOM/injection sinks, clean repo hygiene — + **remediated the 1 HIGH npm-audit vuln** (vite 8.0.12 → 8.0.16 dev-server fix; 0 vulns after). Findings logged to backlog §E.
+- **Verify:** `verify:all` PASS — tsc · placement 0/0 ×5 · colliders 0/25. `npm audit` 0 vulns (was 1 high). Vite-boot smoke-test PASS (perf-probe; drawCalls 841 / programs 71).
+- **Visual iteration:** N/A — security audit + dependency patch (no appearance/feel).
+- **Spend:** ~80K approx; campaign total ~640K; cycle **6/12**.
+- **Commit:** `27d03b6`.
+- **Next (cycle 7):** M2 `wreck-polish-bundle` (the §F/§G sev-2/3 visual set — likely multi-cycle, ship `[partial]`), then `yard-cross-poi-merge` (last/careful). **Verdict: CONTINUE** (M2 2/4; no milestone crossed). **Halfway to the 12-cap** — the calibration stop lands mid-Phase-A.
