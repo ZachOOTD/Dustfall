@@ -138,30 +138,30 @@ and promotes the second.
 > **Awaiting `/campaign-approve` at the `plan-review` checkpoint.**
 
 ### Milestone: M1 — Wreck-arc finish (calibration) · [BUILD-NOW]
-scrap-pickup-3q-thin · dish-collider-feel · panel-deadcode-cleanup · perf-budget-reprofile.
-*Walk-test: dish collider doesn't snag at diagonals · scrap reads solid in-hand · fleet cohesive · field drawCalls <1000.*
+scrap-pickup-3q-thin · dish-collider-feel · remove-wreck-sand-mounds · panel-deadcode-cleanup · perf-budget-reprofile.
+*Walk-test: dish collider doesn't snag at diagonals · scrap reads solid in-hand · wrecks read right on bare terrain (no sand mounds) · fleet cohesive · field drawCalls <1000.*
 
-### Milestone: M2 — Wreck breadth + infra gate · [BUILD-NOW]
-yard-cross-poi-merge (high-risk; the D237/D239 re-attempt) · feature-flags-infra · security-review-repo · small §F up-close wreck polish.
-*Walk-test: dense wreck-yard has no float/clip/bury regression + draw budget held; mega-wreck interior + graveyard re-confirm.*
+### Milestone: M2 — Wreck breadth + polish + infra · [BUILD-NOW]
+yard-cross-poi-merge (high-risk; the D237/D239 re-attempt) · wreck-polish-bundle (§F/§G sev-2/3: non-axial mass · weathering chroma · engine droop · scout trauma · scale-anchor pocket) · feature-flags-infra · security-review-repo.
+*Walk-test: dense wreck-yard has no float/clip/bury regression + draw budget held; mega-wreck interior + graveyard re-confirm; wreck silhouettes/weathering read better up close.*
 
-### Milestone: M3 — The worm, made right · [BUILD-NOW]
-worm-model-overhaul · worm-tail-buried · worm-charge-dive · worm-audio-rumble · multi-worm-population. *(Order: model+tail before population.)*
-*Walk-test: one worm encounter (model/rumble/buried-tail/charge-dive/N>2 stalk) + the owed recessed-Sarlacc-pit pull-feel + climb-out.*
+### Milestone: M3 — The worm + the pit, made right · [BUILD-NOW]
+worm-model-overhaul · worm-tail-buried · worm-charge-dive · worm-audio-rumble · multi-worm-population · sarlacc-lure-ambush (awe-not-horror). *(Order: worm model+tail before population.)*
+*Walk-test: one worm encounter (model/rumble/buried-tail/charge-dive/N>2 stalk) + the Sarlacc lure-and-maw read + the owed recessed-pit pull-feel + climb-out.*
 
 ### Milestone: M4 — Critters + atmosphere · [BUILD-NOW]
-vulture-motion-feel · storm-instorm-sway · atmosphere-feeltunes · smoke-signal-plume · amban-rifle-balance.
+vulture-motion-feel · atmosphere-feeltunes (incl. in-storm sway — all tunes of shipped systems) · smoke-signal-plume · amban-rifle-balance.
 *Walk-test: one day→night cycle (vultures, storm sway + sky drift, smoke plume, rifle feel).*
 
 ### Milestone: M5 — Riding & rest feel · [BUILD-NOW]
-speeder-riding-feel · rope-attach-speeder-rear-bar · 3p-camera-and-render-polish · lie-down-to-sleep · sled-mechanics-feel-tune (tow/slope only, NOT riding) · viewmodel-nits.
+speeder-riding-feel · rope-attach-speeder-rear-bar · 3p-camera-and-render-polish (held-items-in-3P, footstep sync, foot-IK snap) · lie-down-to-sleep · viewmodel-nits (3P torch flame). *(sled-tow-tune dropped — shipped ACU.)*
 *Walk-test: one long continuous-motion session (ride/rope/3P/foot-IK/sleep) + salvage-panel ACAX feel; surface the figure-lighting-mood lever.*
 
 ### Milestone: M6 — Survival & UX direction · [DESIGN-GATE]
 survival-rebalance-newgame · crafting-chooser-colliding-recipe · remove-hud-stat-bars (dep survival) · flat-color-texture-audit (scope-first).
 
 ### Milestone: M7 — Wreck depth & new POIs · [DESIGN-GATE]
-procedural-wreck-overhaul (§F deltas) · more-wreck-types-new-pois · walkable-wreck-interiors (XL, spike→build) · crashing-ship-event.
+procedural-wreck-overhaul (net-new variety; §F deltas moved to M2) · more-wreck-types-new-pois · walkable-wreck-interiors (XL, spike→build) · crashing-ship-event.
 
 ### Milestone: M8 — Deep cave & companion · [DESIGN-GATE]
 deep-cave-design-spike → deep-cave-build (XL) → companion-egg-cherry-pick (hard-gated on the cave existing).
@@ -172,7 +172,7 @@ rideable-sled-spike (A/B worktree spike; no KCC-retries per D125) · real-rope-p
 ### Milestone: M10 — Big features & tools · [DESIGN-GATE]
 scrap-machete-pry-tool · craftable-hover-bike (+ repairable speeder) · drop-pod-intro-cutscene · sarlacc-lure-ambush (awe-not-horror) · pickup-instancedmesh (human-attended).
 
-**Excluded (GDD §11/§14, logged for reversibility):** base-building · multiplayer + char-customization · real-PBR-textures (D107 fork, user call) · WebGPU/Electron/dynamic-POI-gen (deferred) · PARKED design-call items. See [iteration-plan.md](iteration-plan.md) "Excluded / deferred".
+**Excluded (GDD §11/§14 + user 2026-06-18):** base-building · multiplayer + char-customization · real-PBR-textures (D107 fork, user call) · WebGPU/Electron/dynamic-POI-gen (deferred) · player-model §D optional (deferred) · the 5 PARKED items (DROPPED, won't-do). See [iteration-plan.md](iteration-plan.md) "Excluded / deferred".
 
 ---
 

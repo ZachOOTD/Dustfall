@@ -44,11 +44,18 @@ core loop · multiplayer + MP character-customization (`Solo only`, §14). See "
   /`makeWireLoom`/…), the dead `colliderHint` field (D211), redundant `_panelInteriorMat`.
 - `perf-budget-reprofile` (S · headless · low) — `perf-probe` pass; record drawCalls/meshes/programs
   baseline so later content lands against a known budget.
+- `remove-wreck-sand-mounds` (M · visual-gate + headless · low) — **[user directive 2026-06-18]**
+  remove the `makeSandMound` sand drifts banked around wreck bases (`procgenWreck`/`poiAssembler`/
+  `wreckYard`) so wrecks sit on the terrain without mounds. **Reverses the ACBB D236 banking + supersedes
+  the §G sand-integration polish items** (wrecked_tank sand-swallow, satellite/debris drifts) — those are
+  dropped, not built. Re-run `verify:placement`/`verify:colliders` (mounds were additive sand; removing
+  them shouldn't bury panels — confirm the bury-audit still passes 0 fails).
 - **Your ~5-min playtest:** walk INTO the satellite dish (no diagonal clip-wall) · inspect scrap
-  in-hand in motion (reads solid, not thin) · fleet still cohesive under sky/fog · field drawCalls
-  < 1000. Then `/campaign-approve` + resume with a higher `--max-cycles`.
+  in-hand in motion (reads solid, not thin) · **wrecks read right on bare terrain (no sand mounds)** ·
+  fleet still cohesive under sky/fog · field drawCalls < 1000. Then `/campaign-approve` + resume with a
+  higher `--max-cycles`.
 
-### Milestone 2 — Wreck breadth + infra gate · [BUILD-NOW]
+### Milestone 2 — Wreck breadth + polish + infra · [BUILD-NOW]
 *The high-risk wreck-perf item gets its own checkpoint so a regression can't poison M1's signal; plus
 the FEATURES scaffold the later physics cycles depend on.*
 - `yard-cross-poi-merge` (M · headless · **high**) — re-attempt the yard-level cross-POI merge
@@ -60,18 +67,22 @@ the FEATURES scaffold the later physics cycles depend on.*
   flag-OFF. **Dependency enabler** for the gate-and-wait rope/cloth cycles (M9). Land early, inert.
 - `security-review-repo` (M · headless · medium) — audit the public GitHub repo for vulns / leaked
   secrets (`/security-review` over the tree). Headless hygiene; rides this review boundary.
-- **Also fold (small wreck up-close polish, visual-gate):** the genuinely-pending §F deltas that read
-  at procgen scale — sign-randomize + widen engine droop (~15% detach the nozzle), scout/corvette
-  guaranteed visible trauma. *(The larger "wider openings / non-axial mass / chroma push" is M7.)*
+- `wreck-polish-bundle` (M · visual-gate · low-medium) — **[user directive 2026-06-18: build-now]**
+  the full §F/§G sev-2/3 wreck polish set: **one non-axial mass per heavy class** (dorsal superstructure
+  / sponson / bridge tower — breaks the length-axis "sausage" silhouette) · **up-close weathering chroma**
+  (oxide → more orange, seam-rust lifted out of shadow, gravity drips rust-coloured + seam-gated) ·
+  **engine droop** sign-randomize + widen + ~15% nozzle-detach · **scout/corvette guaranteed visible
+  trauma** (≥1 SHEARED/breach + a list, since they sit fully proud) · **scale-anchor exclusion pocket**
+  (lee-flank greebles/seams don't punch through near the human-scale door).
 - **Your playtest:** stand in a dense wreck-yard (620-1000m out) — no float/clip/bury regression, draw
   budget held; re-confirm the mega-wreck interior (push bow/flanks/bells, lee sand-ramp, panels
   flush+pry-able, natural-light brightness) and the wreck-yard graveyard read (relic findability,
   ominous silhouette, vultures).
 
-### Milestone 3 — The worm, made right · [BUILD-NOW]
-*Every unit converges on the SAME entity → one sustained encounter judges the whole package. Strongest
-single lever on the GDD's Dune "how a sand worm enters a scene" pillar. **Order: model + tail-depth
-BEFORE population** so the scaled worms inherit the corrected mesh.*
+### Milestone 3 — The worm + the pit, made right · [BUILD-NOW]
+*The worm units converge on the SAME entity → one sustained encounter judges the package; the Sarlacc
+lure rides the same hazard-playtest. Strongest single lever on the GDD's Dune "how a sand worm enters a
+scene" pillar. **Order: worm model + tail-depth BEFORE population** so the scaled worms inherit the corrected mesh.*
 - `worm-model-overhaul` (M · visual-gate · medium) — more realistic mouth + body (`sandWorm.ts`).
 - `worm-tail-buried` (S · feel-pending · low) — tail stays buried (model / spawn depth); no above-ground tail.
 - `worm-charge-dive` (M · feel-pending · medium, dep `worm-tail-buried`) — replace the jump attack with a
@@ -81,17 +92,22 @@ BEFORE population** so the scaled worms inherit the corrected mesh.*
 - `multi-worm-population` (M · feel-pending · medium) — N>2 scaling + per-worm min-sep + the
   retreat-and-stalk loop (deferred ABO). *(The 2-worm `sandWorms[]` array already shipped — additive
   only per D81; flag if N>2 needs a SAVE_VERSION bump.)*
+- `sarlacc-lure-ambush` (M · visual-gate · medium) — **[user directive 2026-06-18: build-now]** a
+  bulb-flower lure in the pit centre; the maw emerges + opens when the player gets close (net-new — no
+  lure mesh exists today; the pit FSM is gate-on-proximity). **§11 guardrail baked in:** reads as awe /
+  indifferent geography + telegraphed, NOT a jump-scare or bait-and-gotcha startle.
 - **Your playtest:** force-spawn worms — judge model read, low rumble, buried-tail spawn, the
-  charge-and-dive telegraph, and N>2 stalk behaviour in one encounter. **Plus the owed recessed
-  Sarlacc-pit walk-test** (pull feel — escapable but scary? climb back out of the funnel, no softlock?).
+  charge-and-dive telegraph, and N>2 stalk behaviour in one encounter. **Plus the recessed Sarlacc-pit
+  walk-test** (the new lure draw + the maw-emerges read; pull feel — escapable but scary? climb back
+  out of the funnel, no softlock?).
 
 ### Milestone 4 — Critters + atmosphere · [BUILD-NOW]
 *Ambient/sensory feel with a shared TEST CONTEXT — one full day→night cycle judges them together.*
 - `vulture-motion-feel` (M · feel-pending · low) — flap cadence / relocate arc / landing flare / death
   tumble / carcass-ecology tunes (all `VULTURE_*` in tuning.ts).
-- `storm-instorm-sway` (S · feel-pending · low) — in-storm sensory camera sway.
-- `atmosphere-feeltunes` (M · feel-pending · low, dep `storm-instorm-sway`) — cloud-shadow strength,
-  star twinkle/drift, storm-wall sweep timing.
+- `atmosphere-feeltunes` (M · feel-pending · low) — **a feel-pass on shipped systems, not a build:**
+  in-storm sensory camera sway (built ACW #134), cloud-shadow strength, star twinkle/drift, storm-wall
+  sweep timing.
 - `smoke-signal-plume` (M · visual-gate · medium) — a tall smoke column rising high from fires.
 - **Also fold:** `amban-rifle-balance` (S · feel-pending) — range 60 / dmg 3 / cd 1.6 / mag 8 vs
   scrap_gun/energy_pistol (a small combat-pressure tune, not a combat loop — §11).
@@ -101,17 +117,18 @@ BEFORE population** so the scaled worms inherit the corrected mesh.*
 
 ### Milestone 5 — Riding & rest feel · [BUILD-NOW]
 *All third-person / vehicle / rope FEEL — judged only in live continuous motion. One long attended
-motion-playtest covers the whole player-rig surface instead of five stops.*
+motion-playtest covers the whole player-rig surface instead of five stops. (`sled-mechanics-feel-tune`
+DROPPED 2026-06-18 — the slope-slide tune already shipped ACU: GAIN 6→2.5 + FRICTION .15→.20.)*
 - `speeder-riding-feel` (M · feel-pending · medium) — in-motion riding + exact feet-on-pegs.
 - `rope-attach-speeder-rear-bar` (M · feel-pending · low) — rope-attach via the speeder's rear tow bar.
   *(Targets today's inextensible rope; if real-rope (M9) is ever in flight, sequence after the FEATURES flag.)*
-- `3p-camera-and-render-polish` (L · feel-pending · medium) — held-items-in-3P, gait↔footstep sync,
-  foot-IK idle→walk snap, camera snap-on-teleport.
+- `3p-camera-and-render-polish` (M · feel-pending · medium) — the OPEN 3P sub-items only (camera
+  snap-on-teleport + walk-cycle already shipped ABR/ABQ): held-items-in-3P render/swap, gait↔footstep
+  cadence sync, foot-IK idle→walk-on-slope reset snap.
 - `lie-down-to-sleep` (L · feel-pending · medium) — camera lerps low to a bedroll pose + lie-down/get-up
-  anims (the rig is now mature — replaces the instant-sleep overlay).
-- `sled-mechanics-feel-tune` (S · feel-pending · low) — **SCOPED to the EXISTING tow / slope-slide /
-  collision feel only** (ACD D122-D124). Does NOT include riding (that's the tabled D125 spike → M9).
-- `viewmodel-nits` (S · visual-gate · low) — 3P torch flame animation + FP held-item night lighting.
+  anims (the rig is now mature — replaces the instant-sleep overlay). *(Genuinely PENDING — still an instant overlay.)*
+- `viewmodel-nits` (S · visual-gate · low) — just the **3P torch-flame animation** (the FP held-item
+  night-lighting nit already shipped, D174). First scope-cut candidate (GDD §12).
 - **Surface during this milestone:** the player-model **in-game-lighting-mood** lever (D142 — lowering
   ambient / raising contrast makes the figure read far more solid, but changes the WHOLE game's look;
   the biggest remaining realism lever — *your aesthetic call*). Plus the owed salvage-panel ACAX
@@ -136,10 +153,9 @@ motion-playtest covers the whole player-rig surface instead of five stops.*
   readers. *Scope-first:* pick the N weakest, don't open-endedly re-shade everything.
 
 ### Milestone 7 — Wreck depth & new POIs · [DESIGN-GATE]
-- `procedural-wreck-overhaul` (L · visual-gate · medium) — **scoped to concrete §F deltas:** one
-  non-axial mass per heavy class (dorsal/sponson, breaks the "sausage"), up-close weathering chroma
-  (oxide→orange, seam-rust lifted, rust-coloured gravity drips). *Confirm these are the wanted deltas
-  vs re-doing shipped work.*
+- `procedural-wreck-overhaul` (L · visual-gate · medium) — net-new variety BEYOND the §F deltas (those
+  moved to M2's `wreck-polish-bundle`, build-now): more part/component variants + new silhouette families.
+  *Confirm the wanted scope vs re-doing shipped work.*
 - `more-wreck-types-new-pois` — net-new POI archetypes beyond the procgen overhaul.
 - `walkable-wreck-interiors` (XL · design-gated · high) — generalize the mega-wreck's walkable interior
   procedurally (floor + interior collision + lighting + layout). Split: design spike → build. The
@@ -190,8 +206,12 @@ motion-playtest covers the whole player-rig surface instead of five stops.*
 - **`dynamic-poi-model-gen`** — partly realized by the composite fleet; revisit if hand-flagships become the bottleneck.
 - **`shrew-save-determinism`** — only if shrew procgen ever becomes non-deterministic (D144).
 - **`sarlacc-throw-items`**, **`idea-generation-tooling`** — speculative; park.
-- **PARKED (design-call first):** flagship hermit NPCs · salvage-durability-per-wreck · rare key-card
-  panels · restore-corroded-via-weld-kit · machete-as-wreck-loot (backlog `## PARKED`).
+- **Player-model §D optional — DEFERRED (user, 2026-06-18):** PM-S.3 torso/neck skinning · PM-E deeper
+  texture · in-game lighting-mood lever · sled-on-back-when-undeployed. The rig is at its
+  believable-stylized ceiling; kept out of the autonomous queue. (PM-D cloth lives in M9 via `real-cloth-physics`.)
+- **PARKED items — DROPPED as won't-do (user, 2026-06-18):** flagship hermit NPCs · salvage-durability-
+  per-wreck · rare key-card panels · restore-corroded-via-weld-kit · machete-as-wreck-loot. Cut from the
+  backlog (NPCs + key-cards rub against the lone-survivor / anti-quest pillars; the rest unprioritized).
 - **Continuous (handled per-cycle by `/session-end`, not a milestone):** the full roadmap/docs refresh.
 
 ---

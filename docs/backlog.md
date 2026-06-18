@@ -23,7 +23,7 @@ When ready to ship one → promote it into a session in [roadmap.md](roadmap.md)
 - `[polish]` **Mega-wreck interior depth + exterior dagger polish (ACAK/ACAL).** If too dark → WIDER openings, not fake lights. Interior debris/floor planes still want contact-AO grounding tints at object-floor seams. Exterior bow is a touch needle-thin; richer mid-span greeble + a downwind debris fan would lift it (`megawreck-critique`).
 - `[polish]` **Vulture in-motion feel (ACAI, D150).** Flap cadence (`VULTURE_FLAP_HZ`/`FLAP_AMP`/`WING_EXTEND`), relocate flight arc (`FLEE_SPEED`/`CRUISE_HEIGHT`), landing flare (`LAND_*`), death tumble (`DEATH_SPIN`/`SETTLE_*`), and the carcass-ecology cadence (circle orbit `VULTURE_CIRCLE_*`, swoop `VULTURE_SWOOP_SPEED`/`GRAB_DIST`, hunt `VULTURE_HUNT_*`, carry duration, `VULTURE_CIRCLE_COUNT`).
 - `[polish]` **Storm + atmosphere feel-tunes.** In-storm sensory sway amp + audio low-pass cutoff (#134, partial ACW); cloud-shadow strength (`CLOUD_SHADOW_SCALE`/`DARKEN`, ACAH); star twinkle/drift + storm-wall sweep timing in-motion; dynamic aim-twist lead (`AIM_TWIST_TURN_GAIN` 0.18, ACV).
-- `[polish]` **Sled mechanics tuning (post-ACD).** Slope-slide speed (`SLED_SLOPE_SLIDE_GAIN` 6.0 — maybe too aggressive steep), static-friction threshold (`SLED_KINETIC_FRICTION` 0.15), collision feel vs wrecks/rocks (currently "stop dead" — wants bounce/thump/slow-ramp), item rest height, sled-to-sled collision (untested), tow-when-blocked-by-cliff.
+- `[polish]` ✓ **Sled mechanics tuning — slope-slide SHIPPED (ACU: `SLED_SLOPE_SLIDE_GAIN` 6→2.5 + FRICTION .15→.20); remainder DROPPED from the campaign M5 (user 2026-06-18).** Preserved for reversibility: collision feel vs wrecks/rocks ("stop dead" — wants bounce/thump/slow-ramp), item rest height, sled-to-sled collision (untested), tow-when-blocked-by-cliff.
 - `[polish]` **Speeder riding feel (ACX).** In-motion riding feel + exact feet-on-pegs contact (legs splayed astride, feet ~22cm from pegs).
 - `[polish]` **3P pass (ABP/ABQ).** 3P camera real-playtest (wreck walls, F-toggles, mount mid-3P; wire `cameraSnapNextFrame` on mount/dismount/save-load so the camera doesn't lerp across teleports); held items in 3P (canteen/machete/scrap_gun/bandage swap+render); walk-cycle ↔ footstep cadence sync (gait fires on a separate timer → footstep can fire mid-air); foot-IK idle→walk-on-slope reset snap (cosmetic); 3P mouse-look orbit-around-player option; ABQ walk-cycle amplitude / pauldron / hood-asymmetry; 3P interact-prompt on-object placement (ACW #149); per-item 3P readability (small/dark items — a `thirdPersonColorBoost` hint?).
 - `[polish]` **Small viewmodel nits.** 3P torch flame doesn't animate in the rig-hand copy (FP-only, ACAA); FP held-item night lighting (fixed vm-scene lights → held items don't dim at night, D170).
@@ -71,6 +71,7 @@ When ready to ship one → promote it into a session in [roadmap.md](roadmap.md)
 
 **✓ SHIPPED in ACBB (2026-06-18):** brighter stars (`STAR_BRIGHTNESS 1.55`) · satellite dish full collider (flagship `satelliteDish`) · speeder antenna rear-tilt · dev-mode F8 keybind (works under pointer-lock) · scrap pickup → rusted-metal sheet. Also from §G: the per-bucket weathering rebalance / fleet cohesion, the COLLIDER-AUDIT harness (`verify:colliders`), sand-drift banking, debris scorch ring, husk hollow read, derelict parallel-hull outriggers. Their bullets may still appear in the list below — treat anything in the SHIPPED list above as DONE (don't re-do); the rest is genuinely pending.
 
+- `[polish]` **Remove the sand mounds around wrecks (user, 2026-06-18 — campaign M1).** Strip the `makeSandMound` drifts banked around wreck bases so wrecks sit on bare terrain. **Supersedes/drops the §G sand-integration items** (wrecked_tank sand-swallow, satellite/debris drifts, the D236 banking).
 - `[bug]` **Satellite dish FULL collider — partly done (ACBB):** the flagship dish reflector now has a slab collider (was walkthrough), but the FEEL owes the attended walk-test (a box approximation may slightly over-block the round dish at the diagonals). Refine if it reads wrong in play.
 - `[bug]` **Satellite dish needs a full collider** (currently walkthrough/partial collision).
 - `[feat]` **Sarlacc lure-and-ambush** — a bulb-flower lure in the pit centre; the maw emerges + opens when the player gets close.
@@ -98,7 +99,11 @@ When ready to ship one → promote it into a session in [roadmap.md](roadmap.md)
 
 ---
 
-## PARKED (may revisit — needs a design decision first; detail preserved so the call is reversible)
+## DROPPED — won't-do (cut 2026-06-18 by the user at the campaign plan-review; was "PARKED")
+
+> All 5 below were cut during the `campaign/2026-06-18` plan-review (user: "drop as won't-do").
+> Detail preserved for reversibility — flagship-NPC + key-card-quest beats rub against the
+> lone-survivor / anti-quest pillars (GDD §11); the rest were unprioritized. NOT in the campaign queue.
 
 - `[feat]` **Flagship NPC beats** (2026-05-24) — ~~hostile raider holdouts~~ (the raider half is DROPPED, D238) + friendly hermit NPCs at the hand-modeled flagships. ABF shipped narrative journals; this adds live NPCs. Parked: needs an NPC-AI-scope decision (dialogue? trade?) before a ~4-6h session — any raider-combat angle is off the table.
 - `[feat]` **Salvage durability per-wreck** (2026-05-24) — finite mass across a wreck's panels; deplete → a dimmed "stripped corpse" wreck. Parked: the current infinite-per-panel model + AAT condition tiers don't read as broken; revisit if the salvage economy needs tightening.

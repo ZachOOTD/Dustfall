@@ -17,11 +17,14 @@
   "spend": { "total": 0 },
   "plan": {
     "authored": "2026-06-18",
+    "amended": "2026-06-18 plan-review user steering + evidence audit (see campaign-log.md Cycle 0)",
     "source": "6-domain backlog analysis (51 work-units) + coverage/GDD audit",
     "doc": "docs/iteration-plan.md#campaign-2026-06-18--milestone-ladder",
     "milestones_build_now": ["M1", "M2", "M3", "M4", "M5"],
     "milestones_design_gate": ["M6", "M7", "M8", "M9", "M10"],
-    "excluded_per_gdd": ["base-building", "multiplayer-character-customization"]
+    "excluded_per_gdd": ["base-building", "multiplayer-character-customization"],
+    "deferred": ["player-model-optional (PM-S.3/PM-E/lighting-mood/sled-on-back)"],
+    "dropped_wont_do": ["parked-5: hermit-NPCs, salvage-durability, key-card-panels, weld-kit, machete-loot"]
   },
   "cycles": []
 }

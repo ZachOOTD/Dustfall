@@ -39,5 +39,17 @@ M4) · real-cloth depends on real-rope, both behind feature-flags-infra · sled-
 the existing tow/slope, NOT riding (riding is the M9 spike) · sarlacc-lure must bake the §11
 awe-not-horror guardrail.
 
-**Status:** ⏸ PAUSED at `plan-review` — awaiting `/campaign-approve` of this plan before Cycle 1
-(Milestone 1) starts. Build begins on approval + `/loop /campaign-cycle`.
+**Plan-review amendments (user steering + an evidence audit, 2026-06-18):**
+- **Dropped** `sled-mechanics-feel-tune` (M5) — the slope-slide tune already shipped ACU (GAIN 6→2.5).
+- **Added** `remove-wreck-sand-mounds` (M1, build-now) — strip the `makeSandMound` drifts around wrecks;
+  **supersedes/drops** the §G sand-integration items (wrecked_tank sand-swallow, satellite/debris drifts, D236 banking).
+- **Promoted to build-now** `sarlacc-lure-ambush` (M3, user opted in — awe-not-horror baked in) and the full
+  §F/§G `wreck-polish-bundle` (M2 — non-axial mass, weathering chroma, engine droop, scout trauma, scale-anchor pocket).
+- **Deferred** the §D player-model optional work (PM-S.3 / PM-E / lighting-mood / sled-on-back).
+- **Dropped (won't-do)** the 5 PARKED items (hermit NPCs, salvage-durability, key-card panels, weld-kit, machete-loot).
+- **Reframed as tunes, not rebuilds** (audit ground-truth): storm-sway folded into `atmosphere-feeltunes`
+  (built ACW #134); `3p-camera-and-render-polish` → open sub-items only (cameraSnap + walk-cycle already
+  shipped); `viewmodel-nits` → just the 3P torch flame (FP night-lighting shipped D174).
+
+**Status:** ⏸ PAUSED at `plan-review` — awaiting `/campaign-approve` of this (amended) plan before
+Cycle 1 (Milestone 1) starts. Build begins on approval + `/loop /campaign-cycle`.
