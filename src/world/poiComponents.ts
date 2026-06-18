@@ -267,114 +267,101 @@ export function dishAntenna(seed: number, _state = 'intact'): BuiltComponent {
 }
 
 // ════════════════════════════════════════════════════════════════════
-// TANK / SILO components — vertical industrial: a ground slab carrying upright
-// storage tanks + a silo. The deliberate OPPOSITE of every horizontal wreck.
+// WRECKED TANK — a single big storage tank RIPPED OPEN, toppled on its side, DEEPLY half-
+// swallowed by sand. Whole-silhouette damage (so no random yaw hides all trauma): a torn-
+// open +X end (ribs + jagged flaps + peel-back plates), a CRUSHED dented −X cap, TWO recessed
+// flank breaches, a mid buckle + a snapped hoop, and a human-scale manway for scale.
 // ════════════════════════════════════════════════════════════════════
-
-/** Foundation slab. Width/depth can be FIXED by the grammar (sized to the tank count) so
- *  the pad is never an oversized empty plinth; `base` sockets remain for socket-based use. */
-export function groundSlab(seed: number, nMounts = 4, fixedW?: number, fixedD?: number): BuiltComponent {
+export function wreckedTank(seed: number, _state = 'breached'): BuiltComponent {
   const g = new THREE.Group();
-  const sw = fixedW ?? (4.0 + phash(seed, 1) * 2.0);
-  const sd = fixedD ?? (4.0 + phash(seed, 2) * 2.0);
-  const sh = 0.7;   // chunky concrete-pad read (was a 0.45 thin steel plate)
-  const slab = new THREE.Mesh(new THREE.BoxGeometry(sw, sh, sd), _hullDarkMat);
-  g.add(slab);
-  // A few anchor bolts / curb greebles.
-  for (let i = 0; i < 4; i++) {
-    const a = (i / 4) * Math.PI * 2 + 0.4;
-    const bolt = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, 0.18, 6), _rustMat);
-    bolt.position.set(Math.cos(a) * sw * 0.38, sh / 2 + 0.05, Math.sin(a) * sd * 0.38);
-    bolt.userData.isWreckDecoration = true; g.add(bolt);
+  const len = 6 + phash(seed, 1) * 3.5;     // 6-9.5m long
+  const r = 1.9 + phash(seed, 2) * 0.9;     // 1.9-2.8m radius (a big tank)
+  const QZ = { x: 0, y: 0, z: Math.SQRT1_2, w: Math.SQRT1_2 };   // qZ(π/2): a Y-axis cylinder → X
+  // Full-length hull lying on its side along X, OPEN-ENDED + DoubleSide so the torn openings
+  // show the interior; a dark BackSide inner liner makes every breach read into a black void.
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 18, 1, true), _hullMat);
+  body.rotation.z = Math.PI / 2; body.position.set(0, r, 0);
+  (body.material as THREE.Material).side = THREE.DoubleSide; g.add(body);
+  const liner = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.88, r * 0.88, len * 0.96, 16, 1, true), _hullDarkMat);
+  liner.rotation.z = Math.PI / 2; liner.position.set(0, r, 0);
+  (liner.material as THREE.Material).side = THREE.BackSide; liner.userData.isWreckDecoration = true; g.add(liner);
+  // CRUSHED −X end cap — a dented, caved hemisphere (not a clean showroom dome) so even the
+  // "intact" end reads damaged from that yaw.
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(r, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), _hullMat);
+  dome.rotation.z = Math.PI / 2; dome.position.set(-len / 2, r, 0); g.add(dome);
+  for (let i = 0; i < 3; i++) {   // dark caved-in dents / buckle creases on the cap
+    const dent = new THREE.Mesh(new THREE.BoxGeometry(0.5 + phash(seed, 160 + i) * 0.5, 0.14, r * (0.4 + phash(seed, 170 + i) * 0.5)), _hullDarkMat);
+    dent.position.set(-len / 2 - r * 0.32, r + (phash(seed, 180 + i) - 0.5) * r * 1.1, (phash(seed, 190 + i) - 0.5) * r);
+    dent.rotation.set((phash(seed, 200 + i) - 0.5) * 1.2, (phash(seed, 210 + i) - 0.5), (phash(seed, 220 + i) - 0.5));
+    dent.userData.isWreckDecoration = true; g.add(dent);
   }
-  const sockets: Socket[] = [];
-  // Distribute base sockets on a loose grid on the slab top.
-  for (let i = 0; i < nMounts; i++) {
-    const hx = (phash(seed, 10 + i) - 0.5) * sw * 0.6;
-    const hz = (phash(seed, 20 + i) - 0.5) * sd * 0.6;
-    sockets.push({ name: `mount${i}`, pos: new THREE.Vector3(hx, sh / 2, hz), quat: FACE.posY(), radius: 1.0, tag: 'base' });
+  // TORN-OPEN +X end — exposed internal ribs + a JAGGED, irregular ring of torn flaps (some
+  // dropped for asymmetric gaps) + two big peel-back plates of torn sheet metal.
+  const formers = makeFormerRings(r * 0.9, 3, len * 0.1, { startX: len / 2 - len * 0.32, arc: Math.PI * 1.2, taper: 0.03 });
+  formers.position.y = r; formers.traverse((o) => { o.userData.isWreckDecoration = true; }); g.add(formers);
+  for (let i = 0; i < 11; i++) {
+    if (phash(seed, 12 + i) < 0.2) continue;   // skip → asymmetric jagged gaps
+    const ang = (i / 11) * Math.PI * 2 + (phash(seed, 14 + i) - 0.5) * 0.5;
+    const flap = new THREE.Mesh(new THREE.ConeGeometry(r * (0.12 + phash(seed, 16 + i) * 0.14), r * (0.45 + phash(seed, 17 + i) * 0.7), 3), _rustMat);
+    flap.position.set(len / 2 - 0.1, r + Math.cos(ang) * r * 0.92, Math.sin(ang) * r * 0.92);
+    flap.rotation.z = ang - Math.PI / 2; flap.rotation.x = (phash(seed, 20 + i) - 0.5) * 2.2;
+    flap.userData.isWreckDecoration = true; g.add(flap);
+  }
+  for (let i = 0; i < 2; i++) {   // peel-back plates (torn sheet metal, rule-7 0.12m)
+    const a = i * Math.PI + phash(seed, 24 + i);
+    const plate = new THREE.Mesh(new THREE.BoxGeometry(r * 0.7, 0.12, r * 0.5), _hullMat);
+    plate.position.set(len / 2 + 0.15, r + Math.cos(a) * r * 0.7, Math.sin(a) * r * 0.7);
+    plate.rotation.set(a, 0.4, 0.5); plate.userData.isWreckDecoration = true; g.add(plate);
+  }
+  // TWO flank breaches (+Z and −Z, different X) so an unambiguous tear is visible from ANY
+  // ground-level yaw: a dark RECESSED hole + a rib arc seen through it + a jagged flap ring.
+  const addBreach = (bx: number, zs: number, sk: number) => {
+    const hole = new THREE.Mesh(new THREE.CircleGeometry(r * 0.55, 14), _hullDarkMat);
+    hole.position.set(bx, r + r * 0.15, zs * r * 0.78); hole.rotation.y = zs > 0 ? 0 : Math.PI; hole.rotation.x = -zs * 0.2;
+    hole.userData.isWreckDecoration = true; g.add(hole);
+    const rib = new THREE.Mesh(new THREE.TorusGeometry(r * 0.66, 0.06, 6, 12, Math.PI * 0.9), _rustMat);
+    rib.rotation.set(0, Math.PI / 2, zs > 0 ? 0 : Math.PI); rib.position.set(bx, r, zs * r * 0.45);
+    rib.userData.isWreckDecoration = true; g.add(rib);
+    for (let i = 0; i < 7; i++) {
+      if (phash(sk, i) < 0.15) continue;
+      const a = (i / 7) * Math.PI * 2;
+      const f = new THREE.Mesh(new THREE.ConeGeometry(r * (0.1 + phash(sk, 10 + i) * 0.1), r * (0.35 + phash(sk, 20 + i) * 0.45), 3), _rustMat);
+      f.position.set(bx + Math.cos(a) * r * 0.5, r + r * 0.15 + Math.sin(a) * r * 0.5, zs * r * 0.9);
+      f.rotation.set(zs * (0.4 + phash(sk, 30 + i) * 0.7), 0, a);
+      f.userData.isWreckDecoration = true; g.add(f);
+    }
+  };
+  addBreach(-len * 0.22, 1, seed + 300);
+  addBreach(len * 0.14, -1, seed + 400);
+  // A mid-span axial buckle (the barrel itself caved a little — a dark crease box).
+  const buckle = new THREE.Mesh(new THREE.BoxGeometry(len * 0.22, 0.14, r * 0.55), _hullDarkMat);
+  buckle.position.set(-len * 0.04, r + r * 0.72, r * 0.5); buckle.rotation.set(-0.5, 0.3, 0);
+  buckle.userData.isWreckDecoration = true; g.add(buckle);
+  // Hoop bands — one full, one SNAPPED (partial arc) → reads worn, not pristine manufacturing.
+  for (let h = 0; h < 2; h++) {
+    const hoop = new THREE.Mesh(new THREE.TorusGeometry(r + 0.05, 0.07, 6, 18, h === 0 ? Math.PI * 2 : Math.PI * 1.25), _hullDarkMat);
+    hoop.rotation.y = Math.PI / 2; hoop.position.set(len * (h === 0 ? -0.34 : 0.04), r, 0);
+    hoop.userData.isWreckDecoration = true; g.add(hoop);
+  }
+  // Human-SCALE cue: a ~0.7m bolted manway hatch + 3 rungs on the exposed upper flank, so the
+  // multi-metre tank scale reads against a known human-constant.
+  const mwX = -len * 0.36;
+  const manway = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.12, 12), _hullDarkMat);
+  manway.rotation.x = Math.PI / 2; manway.position.set(mwX, r + r * 0.6, r * 0.8); manway.userData.isWreckDecoration = true; g.add(manway);
+  for (let i = 0; i < 3; i++) {
+    const rung = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.04, 0.06), _rustMat);
+    rung.position.set(mwX, r + r * 0.6 - 0.5 - i * 0.32, r * 0.94); rung.userData.isWreckDecoration = true; g.add(rung);
   }
   const colliders: ColliderSpec[] = [
-    { kind: 'box', half: { x: sw / 2, y: sh / 2, z: sd / 2 }, pos: { x: 0, y: 0, z: 0 } },
-  ];
-  const bbox = new THREE.Box3(new THREE.Vector3(-sw / 2, -sh / 2, -sd / 2), new THREE.Vector3(sw / 2, sh / 2, sd / 2));
-  return { mesh: g, sockets, colliders, panelMounts: [], bbox };
-}
-
-/** Upright storage tank — a vertical cylinder + domed cap + ladder + side hatch.
- *  Body extends along +Y from its base socket (which mates DOWN onto a slab). */
-export function tankCylinder(seed: number, state = 'intact', tall = false): BuiltComponent {
-  const g = new THREE.Group();
-  // tall = a slim SILO (4.5-6.8m); else a WIDER SQUAT storage tank — both read at multi-
-  // metre industrial scale, away from 55-gallon-drum proportions.
-  const r = tall ? 0.7 + phash(seed, 1) * 0.4 : 0.95 + phash(seed, 1) * 0.6;
-  const bodyH = tall ? 4.5 + phash(seed, 2) * 2.3 : 2.4 + phash(seed, 2) * 1.5;
-  const breached = state === 'breached';
-  const shell = new THREE.Mesh(new THREE.CylinderGeometry(r, r, bodyH, 12, 1, false), _hullMat);
-  shell.position.y = bodyH / 2; g.add(shell);
-  // Domed top cap (half-sphere) unless breached (then a torn open rim).
-  if (!breached) {
-    const dome = new THREE.Mesh(new THREE.SphereGeometry(r, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), _hullMat);
-    dome.position.y = bodyH; g.add(dome);
-  } else {
-    const rim = new THREE.Mesh(new THREE.TorusGeometry(r * 0.96, 0.08, 6, 14), _rustMat);
-    rim.rotation.x = Math.PI / 2; rim.position.y = bodyH; rim.userData.isWreckDecoration = true; g.add(rim);
-  }
-  // Two horizontal hoop bands (decoration).
-  for (const ty of [0.32, 0.68]) {
-    const hoop = new THREE.Mesh(new THREE.TorusGeometry(r + 0.03, 0.05, 6, 14), _hullDarkMat);
-    hoop.rotation.x = Math.PI / 2; hoop.position.y = bodyH * ty; hoop.userData.isWreckDecoration = true; g.add(hoop);
-  }
-  // Vertical inspection ladder on the +X side.
-  const ladH = bodyH * 0.9;
-  const rungs = Math.max(4, Math.round(ladH / 0.32));
-  for (let i = 0; i < rungs; i++) {
-    const rung = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.36, 6), _rustMat);
-    rung.rotation.z = Math.PI / 2;
-    rung.position.set(r + 0.06, bodyH * 0.06 + (i / (rungs - 1)) * ladH, 0);
-    rung.userData.isWreckDecoration = true; g.add(rung);
-  }
-  for (const k of [-1, 1]) {
-    const rail = new THREE.Mesh(new THREE.BoxGeometry(0.07, ladH, 0.07), _hullDarkMat);
-    rail.position.set(r + 0.06, bodyH * 0.06 + ladH / 2, k * 0.16); rail.userData.isWreckDecoration = true; g.add(rail);
-  }
-  const sockets: Socket[] = [
-    { name: 'base', pos: new THREE.Vector3(0, 0, 0), quat: FACE.negY(), radius: r, tag: 'base' },
-    { name: 'pipeZ', pos: new THREE.Vector3(0, bodyH * 0.5, r), quat: FACE.posZ(), radius: 0.18, tag: 'radial' },
-  ];
-  const colliders: ColliderSpec[] = [
-    { kind: 'cylinder', halfHeight: bodyH / 2, radius: r, pos: { x: 0, y: bodyH / 2, z: 0 } },
-    // Dome cap collider — the SphereGeometry cap reaches y=bodyH+r and is otherwise
-    // un-collided (the player/projectiles would clip the tallest part of the tank).
-    { kind: 'ball', radius: r, pos: { x: 0, y: bodyH, z: 0 } },
+    { kind: 'cylinder', halfHeight: len / 2, radius: r, pos: { x: 0, y: r, z: 0 }, quat: QZ },
+    { kind: 'ball', radius: r * 0.95, pos: { x: -len / 2, y: r, z: 0 } },   // dome cap
   ];
   const panelMounts: PanelMount[] = [
-    // Salvage hatch at a HUMAN-reachable height (never up a 7m silo), on +Z.
-    { pos: new THREE.Vector3(0, Math.min(bodyH * 0.42, 1.5), r), quat: FACE.posZ(), kind: 'cargo_container' as PanelKind },
+    // Salvage hatch on the exposed UPPER surface (faces +Y → never occluded).
+    { pos: new THREE.Vector3(-len * 0.36, r * 2, 0), quat: FACE.posY(), kind: 'cargo_container' as PanelKind },
   ];
-  const bbox = new THREE.Box3(new THREE.Vector3(-r, 0, -r), new THREE.Vector3(r, bodyH + r, r));
-  return { mesh: g, sockets, colliders, panelMounts, bbox };
-}
-
-/** Connecting pipe — a horizontal run between two tank radial sockets. Body −Z. */
-export function pipeStrut(_seed: number, length = 2): BuiltComponent {
-  const g = new THREE.Group();
-  const len = length;
-  const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, len, 8), _rustMat);
-  pipe.rotation.x = Math.PI / 2; pipe.position.z = -len / 2; g.add(pipe);
-  // Flange collars at both ends.
-  for (const z of [-0.04, -len + 0.04]) {
-    const fl = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.08, 8), _hullDarkMat);
-    fl.rotation.x = Math.PI / 2; fl.position.z = z; fl.userData.isWreckDecoration = true; g.add(fl);
-  }
-  const sockets: Socket[] = [
-    { name: 'root', pos: new THREE.Vector3(0, 0, 0), quat: FACE.posZ(), radius: 0.18, tag: 'radial' },
-  ];
-  const colliders: ColliderSpec[] = [
-    { kind: 'cylinder', halfHeight: len / 2, radius: 0.16, pos: { x: 0, y: 0, z: -len / 2 }, quat: FACE.posY() },
-  ];
-  const bbox = new THREE.Box3(new THREE.Vector3(-0.2, -0.2, -len), new THREE.Vector3(0.2, 0.2, 0));
-  return { mesh: g, sockets, colliders, panelMounts: [], bbox };
+  const bbox = new THREE.Box3(new THREE.Vector3(-len / 2 - r, 0, -r * 1.2), new THREE.Vector3(len / 2 + r, r * 2, r * 1.2));
+  return { mesh: g, sockets: [], colliders, panelMounts, bbox };
 }
 
 // ════════════════════════════════════════════════════════════════════

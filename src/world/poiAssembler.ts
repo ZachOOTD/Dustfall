@@ -58,8 +58,13 @@ export function placeProcgenPOI(
   const topY = result.bbox.max.y;   // height above the group's ground plane (y=0)
   let buryY: number;
   if (arch.params.burySink) {
-    const raw = arch.params.bury * (0.9 + phash(pos.x, pos.z) * 0.25);
-    buryY = Math.min(raw, 0.5 * Math.max(0.4, topY));   // keep ≥50% proud
+    // buryFrac (a fraction of the height) is scale-invariant — use it for a deeply-
+    // swallowed wreck whose sand line should cross the hull AXIS regardless of size;
+    // else the fixed `bury` metres. The proud-clamp keeps ≥(1-buryClampFrac) above sand.
+    const raw = arch.params.buryFrac !== undefined
+      ? arch.params.buryFrac * topY
+      : arch.params.bury * (0.9 + phash(pos.x, pos.z) * 0.25);
+    buryY = Math.min(raw, (arch.params.buryClampFrac ?? 0.5) * Math.max(0.4, topY));
   } else {
     // A standing structure beds its base into the surface so the WIDE flat foundation
     // doesn't float a downhill corner over a dune. Sized to the footprint half-width ×

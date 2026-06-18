@@ -14,7 +14,7 @@ import type { HullBucket } from './procgenWreck.ts';
 import type { ColliderSpec } from '../physics/bodies.ts';
 import {
   type BuiltComponent, type PanelMount, mate, transformCollider, transformPanelMount, phash,
-  busBody, solarWing, dishAntenna, groundSlab, tankCylinder, debrisPiece, huskShell,
+  busBody, solarWing, dishAntenna, wreckedTank, debrisPiece, huskShell,
   noseCone, hullBarrel, engineNozzle,
 } from './poiComponents.ts';
 
@@ -30,6 +30,11 @@ export interface ArchetypeParams {
   /** Fixed sink (m) for a non-burySink archetype. Omit → derived from the footprint
    *  width (right for a wide slab); set small for scattered debris that already rests. */
   seatSink?: number;
+  /** burySink: sink this FRACTION of the height (scale-invariant) instead of `bury` m —
+   *  for a deeply-swallowed wreck whose sand line crosses the hull axis at any size. */
+  buryFrac?: number;
+  /** burySink: max sink as a fraction of height (default 0.5 = keep ≥50% proud). */
+  buryClampFrac?: number;
 }
 
 export interface AssembleResult {
@@ -120,32 +125,13 @@ function assembleSatellite(rand: Rng): AssembleResult {
 }
 
 // ════════════════════════════════════════════════════════════════════
-// TANK CLUSTER — a ground slab carrying 2-4 upright storage tanks + a silo.
-// Vertical topology; STANDS (burySink:false). The opposite of every horizontal wreck.
+// WRECKED TANK — one big storage tank ripped open, toppled on its side, half-buried.
+// Reads as desert wreckage (the neat upright "tank farm" read as an intact depot, D233).
 // ════════════════════════════════════════════════════════════════════
-function assembleTankCluster(rand: Rng): AssembleResult {
+function assembleWreckedTank(rand: Rng): AssembleResult {
   const a = new Assembly();
-  const s = seedOf(rand);
-  const nTanks = 3 + Math.floor(rand() * 2);   // 3-4 — plurality IS the identity (ONE rand draw)
-  const spacing = 3.3;
-  const clusterW = (nTanks - 1) * spacing;
-  // Slab sized to the cluster (a tight pad, never an oversized empty plinth).
-  const slab = groundSlab(s, nTanks, clusterW + 2.6, 4.4);
-  a.place(slab, liftToGround(slab));
-  const slabTopY = slab.bbox.max.y - slab.bbox.min.y;   // slab bottom rests at group-y 0
-  const siloIdx = Math.floor(phash(s, 9) * nTanks);     // exactly one guaranteed TALL silo
-  for (let i = 0; i < nTanks; i++) {
-    const x = (i - (nTanks - 1) / 2) * spacing;
-    const z = (phash(s, 50 + i) - 0.5) * 1.2;           // slight depth jitter (not a dead-straight row)
-    const breached = phash(s, 30 + i) < 0.3 ? 'breached' : 'intact';
-    const tank = tankCylinder(s + 1000 + i * 191, breached, i === siloIdx);
-    // Stand the tank on the slab; yaw its +Z salvage hatch to face OUTWARD from the cluster
-    // centre so it never faces a neighbouring tank (no cross-tank panel occlusion).
-    const yaw = Math.atan2(x, z || 0.001);
-    const m = new THREE.Matrix4().makeTranslation(x, slabTopY, z)
-      .multiply(new THREE.Matrix4().makeRotationY(yaw));
-    a.place(tank, m);
-  }
+  const tank = wreckedTank(seedOf(rand));
+  a.place(tank, liftToGround(tank));
   return a.result();
 }
 
@@ -235,10 +221,13 @@ export const ARCHETYPES: Record<string, Archetype> = {
     params: { bucket: 'cool', burySink: false, bury: 0, list: 0.15, panelMin: 1, panelMax: 1, sandMound: true, seatSink: 0.12, salvageKind: 'escape_pod' },
     assemble: assembleSatellite,
   },
-  tank_cluster: {
-    id: 'tank_cluster',
-    params: { bucket: 'dark', burySink: false, bury: 0, list: 0, panelMin: 1, panelMax: 2, sandMound: true, seatSink: 0.38, salvageKind: 'cargo_container' },
-    assemble: assembleTankCluster,
+  wrecked_tank: {
+    id: 'wrecked_tank',
+    // Toppled + RIPPED OPEN + HALF-SWALLOWED by sand (D233 critique): sink ~57% of the
+    // height so the sand line crosses the hull axis (clamp 0.68 lets it bite), a roll-list,
+    // a windward drift. The component also banks its own sand drift up the lower flank.
+    params: { bucket: 'dark', burySink: true, bury: 1.7, buryFrac: 0.57, buryClampFrac: 0.68, list: 0.24, panelMin: 1, panelMax: 1, sandMound: true, salvageKind: 'cargo_container' },
+    assemble: assembleWreckedTank,
   },
   debris_field: {
     id: 'debris_field',
@@ -263,10 +252,10 @@ export type ArchetypeId = 'ship' | keyof typeof ARCHETYPES;
 // salt favours ships (freight routes), wreck_yard mixes everything. `ship` delegates to
 // the legacy linear assembler (placeProcgenComposite) so today's hulls still appear.
 const ARCH_WEIGHTS: Record<BiomeId, Array<[ArchetypeId, number]>> = {
-  salt:       [['ship', 0.38], ['derelict', 0.14], ['satellite', 0.16], ['tank_cluster', 0.12], ['debris_field', 0.10], ['hollow_husk', 0.10]],
-  rocky:      [['ship', 0.30], ['derelict', 0.14], ['satellite', 0.14], ['tank_cluster', 0.20], ['debris_field', 0.10], ['hollow_husk', 0.12]],
-  dune:       [['ship', 0.28], ['derelict', 0.14], ['satellite', 0.18], ['tank_cluster', 0.18], ['debris_field', 0.08], ['hollow_husk', 0.14]],
-  wreck_yard: [['ship', 0.26], ['derelict', 0.14], ['satellite', 0.13], ['tank_cluster', 0.18], ['debris_field', 0.16], ['hollow_husk', 0.13]],
+  salt:       [['ship', 0.38], ['derelict', 0.14], ['satellite', 0.16], ['wrecked_tank', 0.12], ['debris_field', 0.10], ['hollow_husk', 0.10]],
+  rocky:      [['ship', 0.30], ['derelict', 0.14], ['satellite', 0.14], ['wrecked_tank', 0.20], ['debris_field', 0.10], ['hollow_husk', 0.12]],
+  dune:       [['ship', 0.28], ['derelict', 0.14], ['satellite', 0.18], ['wrecked_tank', 0.18], ['debris_field', 0.08], ['hollow_husk', 0.14]],
+  wreck_yard: [['ship', 0.26], ['derelict', 0.14], ['satellite', 0.13], ['wrecked_tank', 0.18], ['debris_field', 0.16], ['hollow_husk', 0.13]],
 };
 
 export function pickArchetype(rand: Rng, biome?: BiomeId): ArchetypeId {

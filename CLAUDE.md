@@ -76,7 +76,7 @@ topology; declared colliders; ZERO rand draws — `phash` only) + `poiArchetypes
 (`placeProcgenPOI` = the lifted pipeline). `bodies.ts` gained `attachDeclaredColliders`/`ColliderSpec` (exact primitives + convex-hull, no
 AABB fallback — D228). `pickArchetype('ship')` delegates to the legacy assembler → ZERO ship regression (D227 — ship→socket migration
 deferred). **Phase B — 5 archetypes (ALL FOUR user directions + weirder-ships):** SATELLITE (foil bus + crash-banked solar wings + dish +
-hatch), TANK_CLUSTER (3-4 upright tanks + a ~10m silo tentpole on a bedded pad, STANDS vertical), DEBRIS_FIELD (scattered
+hatch), WRECKED_TANK (one big tank toppled on its side + ripped open — torn shell/end + exposed ribs + flank gash — half-buried; D233 replaced the neat "tank farm" on walk-test feedback), DEBRIS_FIELD (scattered
 plates/struts/lootable chunk), HOLLOW_HUSK (a gutted hull shell — open-top trough + torn ends + flank breach + exposed rib formers,
 enterable-ready, reads as a ribbed skeleton), DERELICT (D232 — an intact ship socket-mated from nose+barrel+engine into LINEAR / WIDE-BODY
 outriggers / STACKED conning-tower forms = the "wider/weirder ships", additive so the refined legacy ship stays). An **adversarial 5-lens
