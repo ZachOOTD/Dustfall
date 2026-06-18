@@ -45,14 +45,11 @@ const matDark     = new THREE.MeshLambertMaterial({ color: 0x30281d, flatShading
 // than ACAV: these are the structural pieces the eye reads as "old metal". Warm
 // orange-brown rust base so the mottling reads as corrosion, not mud.
 const matSteel    = createMetalMaterial(0x6e5e44, { rustLevel: 0.60, localSpace: true });
-const matPipe     = createMetalMaterial(0x665740, { rustLevel: 0.42, localSpace: true });   // cool grey-brown base shows (rust patchy, no salmon)
 const matRust     = createMetalMaterial(0x744e30, { rustLevel: 0.82, localSpace: true });   // heaviest — valve wheels / corroded blocks
 // Indicator dots — a decades-dead panel has mostly-dead indicators. Desaturated +
 // darkened so they read as corroded lenses, not powered LEDs (the in-world pry-glow
 // supplies the only real "live" light). MeshBasic (self-lit, no PointLight).
-const matIndGreen = new THREE.MeshBasicMaterial({ color: 0x4a5a44 });   // dead green lens
 const matIndAmber = new THREE.MeshBasicMaterial({ color: 0x8a6a34 });   // dim amber lens
-const matIndRed   = new THREE.MeshBasicMaterial({ color: 0x6a3a30 });   // dead red lens
 // ACAX — small loose lootables reuse the greeble palette; cloth is the only kind
 // the greeble didn't already have a material for (the bandage/med-pack model was
 // removed per feedback, so its yellowed-gauze + red-cross materials are gone too).
@@ -65,7 +62,7 @@ if (Tuning.SALVAGE_PANEL_PORTAL_ENABLED) {
   applyPortalInterior([
     matCopper, matWireRed, matWireYel, matBrass, matCeramic, matPCB, matChip,
     matDial, matGlass, matScreen, matNeedle, matDark, matSteel,
-    matPipe, matRust, matIndGreen, matIndAmber, matIndRed, matCloth,
+    matRust, matIndAmber, matCloth,
   ]);
 }
 
@@ -77,125 +74,6 @@ const jitter = (rand: Rng, a: number) => (rand() - 0.5) * 2 * a;
 
 // ── Component builders ───────────────────────────────────────────────
 // Each returns a Group sized in metres for a `u` ≈ panel-width unit.
-
-/** A coil of copper wire — a few stacked torus rings, slightly skewed. */
-export function makeCoiledWire(u: number, rand: Rng): THREE.Object3D {
-  const g = new THREE.Group();
-  const r = u * 0.10;
-  const tube = u * 0.022;
-  const rings = 3 + Math.floor(rand() * 2);
-  for (let i = 0; i < rings; i++) {
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(r * (1 - i * 0.08), tube, 5, 10), matCopper);
-    ring.position.z = i * tube * 1.6;
-    ring.rotation.set(jitter(rand, 0.25), jitter(rand, 0.25), jitter(rand, 0.4));
-    g.add(ring);
-  }
-  return noColl(g);
-}
-
-/** A bank of N cylindrical fuses with brass end-caps. */
-export function makeFuseBank(u: number, n: number, rand: Rng): THREE.Object3D {
-  const g = new THREE.Group();
-  const fr = u * 0.030;
-  const fl = u * 0.16;
-  const gap = fr * 2.5;
-  for (let i = 0; i < n; i++) {
-    const f = new THREE.Group();
-    const body = new THREE.Mesh(new THREE.CylinderGeometry(fr, fr, fl, 8), matCeramic);
-    body.rotation.z = Math.PI / 2;
-    f.add(body);
-    for (const s of [-1, 1]) {
-      const cap = new THREE.Mesh(new THREE.CylinderGeometry(fr * 1.15, fr * 1.15, fl * 0.16, 8), matBrass);
-      cap.rotation.z = Math.PI / 2;
-      cap.position.x = s * fl * 0.5;
-      f.add(cap);
-    }
-    f.position.set((i - (n - 1) / 2) * gap, jitter(rand, fr * 0.3), 0);
-    f.rotation.z = jitter(rand, 0.06);
-    g.add(f);
-  }
-  return noColl(g);
-}
-
-/** ACAX Tier C — a CHUNKY breaker bank: a grid of deep 3D breaker boxes on a
- *  backing plate, each with a toggle switch flipped up/down at random. The
- *  dominant element of the rusted-electrical-panel references; its real depth +
- *  the staggered toggles break the old flat read. */
-export function makeBreakerBank(w: number, h: number, rand: Rng): THREE.Object3D {
-  const g = new THREE.Group();
-  const cols = 2;
-  const rows = 3 + Math.floor(rand() * 2);     // 3-4 rows of breakers
-  const cellW = w / cols, cellH = h / rows;
-  const bw = cellW * 0.84, bh = cellH * 0.78;
-  const bd = w * 0.18;                          // real depth — the chunky read
-  const plate = new THREE.Mesh(new THREE.BoxGeometry(w, h, w * 0.05), matDark);
-  g.add(plate);
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const x = (c - (cols - 1) / 2) * cellW;
-      const y = (r - (rows - 1) / 2) * cellH;
-      // Breaker BODY in rusted steel (lighter than the dark plate) so each reads
-      // as a distinct raised box with a shadow gap, not a flat grid.
-      const breaker = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, bd), matSteel);
-      breaker.position.set(x, y, bd * 0.5);
-      g.add(breaker);
-      // Toggle switch — flipped up (on) or down (off) at random, tilted so it
-      // catches light. Chunky tarnished-brass lever standing proud of the body.
-      const on = rand() < 0.5;
-      const sw = new THREE.Mesh(new THREE.BoxGeometry(bw * 0.34, bh * 0.42, bd * 0.7), matBrass);
-      sw.position.set(x, y + (on ? bh * 0.18 : -bh * 0.18), bd + bd * 0.30);
-      sw.rotation.x = on ? -0.5 : 0.5;
-      g.add(sw);
-      // A dark recessed slot the toggle sits in (reads as the breaker face).
-      const slot = new THREE.Mesh(new THREE.BoxGeometry(bw * 0.5, bh * 0.62, bd * 0.12), matDark);
-      slot.position.set(x, y, bd + bd * 0.06);
-      g.add(slot);
-    }
-  }
-  return noColl(g);
-}
-
-/** ACAX Tier C — a loom of 3D wires DRAPING between anchors (real sag via a
- *  tube along a CatmullRom curve), replacing the old flat hanging cones. Reads
- *  as the tangled cable runs of the references. */
-export function makeWireLoom(u: number, n: number, rand: Rng): THREE.Object3D {
-  const g = new THREE.Group();
-  for (let i = 0; i < n; i++) {
-    const span = u * (0.34 + rand() * 0.30);
-    const sag = u * (0.12 + rand() * 0.18);
-    const start = new THREE.Vector3(-span * 0.5, jitter(rand, u * 0.05), jitter(rand, u * 0.05));
-    const mid   = new THREE.Vector3(jitter(rand, u * 0.08), -sag, jitter(rand, u * 0.07));
-    const end   = new THREE.Vector3(span * 0.5, jitter(rand, u * 0.05), jitter(rand, u * 0.05));
-    const curve = new THREE.CatmullRomCurve3([start, mid, end]);
-    const m = [matWireRed, matWireYel, matCopper][Math.floor(rand() * 3)];
-    const tube = new THREE.Mesh(new THREE.TubeGeometry(curve, 8, u * 0.017, 5, false), m);
-    tube.rotation.z = jitter(rand, 0.3);
-    g.add(tube);
-  }
-  return noColl(g);
-}
-
-/** A circuit board: a thin PCB plate scattered with chips + capacitors. */
-export function makeCircuitBoard(w: number, h: number, rand: Rng): THREE.Object3D {
-  const g = new THREE.Group();
-  const board = new THREE.Mesh(new THREE.BoxGeometry(w, h, w * 0.04), matPCB);
-  g.add(board);
-  const chips = 3 + Math.floor(rand() * 3);
-  for (let i = 0; i < chips; i++) {
-    const cw = w * (0.12 + rand() * 0.12);
-    const chip = new THREE.Mesh(new THREE.BoxGeometry(cw, cw * 0.7, w * 0.05), matChip);
-    chip.position.set(jitter(rand, w * 0.32), jitter(rand, h * 0.32), w * 0.04);
-    chip.rotation.z = rand() < 0.5 ? 0 : Math.PI / 2;
-    g.add(chip);
-  }
-  const caps = 2 + Math.floor(rand() * 2);
-  for (let i = 0; i < caps; i++) {
-    const cap = new THREE.Mesh(new THREE.CylinderGeometry(w * 0.04, w * 0.04, w * 0.1, 7), i % 2 ? matBrass : matDark);
-    cap.position.set(jitter(rand, w * 0.34), jitter(rand, h * 0.3), w * 0.06);
-    g.add(cap);
-  }
-  return noColl(g);
-}
 
 /** A pressure gauge: case + pale dial + red needle behind dark glass. */
 export function makePressureGauge(r: number, rand: Rng): THREE.Object3D {
@@ -238,28 +116,6 @@ export function makeValveWheel(r: number, rand: Rng): THREE.Object3D {
   return noColl(g);
 }
 
-/** A bent conduit pipe (elbow) joined to a small manifold block. */
-export function makeConduitElbow(u: number, rand: Rng): THREE.Object3D {
-  const g = new THREE.Group();
-  const pr = u * 0.05;
-  const len = u * 0.30;
-  const a = new THREE.Mesh(new THREE.CylinderGeometry(pr, pr, len, 9), matPipe);
-  a.position.y = len * 0.5;
-  g.add(a);
-  const elbow = new THREE.Mesh(new THREE.SphereGeometry(pr * 1.2, 8, 6), matPipe);
-  elbow.position.y = len;
-  g.add(elbow);
-  const b = new THREE.Mesh(new THREE.CylinderGeometry(pr, pr, len * 0.8, 9), matPipe);
-  b.position.set(len * 0.4, len, 0);
-  b.rotation.z = Math.PI / 2;
-  g.add(b);
-  const manifold = new THREE.Mesh(new THREE.BoxGeometry(u * 0.14, u * 0.14, u * 0.12), matSteel);
-  manifold.position.y = -len * 0.1;
-  g.add(manifold);
-  g.rotation.z = jitter(rand, 0.3);
-  return noColl(g);
-}
-
 /** A terminal / bus-bar block: a base with a row of brass posts. */
 export function makeTerminalBlock(w: number, rand: Rng): THREE.Object3D {
   const g = new THREE.Group();
@@ -286,31 +142,6 @@ export function makeFrayedWires(u: number, n: number, rand: Rng): THREE.Object3D
     g.add(w);
   }
   return noColl(g);
-}
-
-/** A cracked display screen — dark glass in a bezel, faint emissive. */
-export function makeCrackedScreen(w: number, h: number, rand: Rng): THREE.Object3D {
-  const g = new THREE.Group();
-  const bezel = new THREE.Mesh(new THREE.BoxGeometry(w * 1.12, h * 1.12, w * 0.06), matDark);
-  g.add(bezel);
-  const screen = new THREE.Mesh(new THREE.BoxGeometry(w, h, w * 0.04), matScreen);
-  screen.position.z = w * 0.04;
-  g.add(screen);
-  // a couple of crack lines (thin dark bars across the glass)
-  for (let i = 0; i < 2; i++) {
-    const crack = new THREE.Mesh(new THREE.BoxGeometry(w * (0.5 + rand() * 0.5), w * 0.01, w * 0.01), matDark);
-    crack.position.set(jitter(rand, w * 0.2), jitter(rand, h * 0.3), w * 0.07);
-    crack.rotation.z = jitter(rand, 1.2);
-    g.add(crack);
-  }
-  return noColl(g);
-}
-
-/** A small glowing indicator dot (emissive, not a light). */
-export function makeIndicatorLight(u: number, rand: Rng): THREE.Object3D {
-  const m = [matIndGreen, matIndAmber, matIndRed][Math.floor(rand() * 3)];
-  const dot = new THREE.Mesh(new THREE.SphereGeometry(u * 0.022, 7, 6), m);
-  return noColl(dot);
 }
 
 /** ACAX — the visual for ONE of the 5 LOOTABLE extractables, built in the same
@@ -586,77 +417,4 @@ export function buildSalvageComponents(archetype: PanelArchetype, d: Dims, rand:
     out.push({ obj, kind: kinds[i] });
   }
   return out;
-}
-
-/** Build the decorative greeble Group for an archetype (NOT lootable; merged). */
-export function buildGreeble(archetype: PanelArchetype, d: Dims, rand: Rng): THREE.Group {
-  const g = new THREE.Group();
-  const u = d.hw * 2;                       // ≈ cavity width
-  // Cavity-local Z (0 = body centre). With the V2 backplate pushed to ~-0.34*depth
-  // and the closed-door back at ~+0.45*depth, spread the greeble across the now-deep
-  // cavity for REAL depth layering: a back band near the plate, a front band toward
-  // the mouth. (The shallow old bands sat ON the mid-cavity backplate → flat read.)
-  // ACAX Tier C — push the bands wider apart for STRONG front-to-back layering:
-  // chunky machinery sits deep (zBack, near the backplate at ~-0.34*depth), mid
-  // gear at zMid, and wires/coils/looms DRAPE toward the mouth (zFront) so the
-  // front layer overlaps the back machinery → real depth shadows from the cavity
-  // light. (The old shallow bands sat almost on the backplate → flat read.)
-  const zBack = -d.depth * 0.26, zMid = d.depth * 0.02, zFront = d.depth * 0.36;
-  // Place helper: drop a piece at (fx,fy) of the cavity at depth z, with jitter rot.
-  const place = (o: THREE.Object3D, fx: number, fy: number, z: number, rot = 0.18) => {
-    o.position.set(fx * d.hw, fy * d.hh, z);
-    o.rotation.z += jitter(rand, rot);
-    g.add(o);
-  };
-  switch (archetype) {
-    case 'electrical':
-      // Hero: a chunky breaker bank deep at back-left; fuses + terminal + wire loom
-      // + coil layer in front of it toward the mouth.
-      place(makeBreakerBank(u * 0.52, d.hh * 1.5, rand), -0.34, 0.0, zBack, 0.0);
-      place(makeFuseBank(u, 4, rand), 0.42, 0.6, zMid, 0.05);
-      place(makeTerminalBlock(u * 0.5, rand), 0.42, -0.02, zMid, 0.05);
-      place(makeWireLoom(u, 3, rand), -0.1, 0.2, zFront, 0.0);
-      place(makeCoiledWire(u, rand), 0.5, -0.5, zFront);
-      place(makeFrayedWires(u, 3, rand), -0.55, -0.5, zFront, 0.0);
-      place(makeIndicatorLight(u, rand), 0.6, 0.6, zFront, 0);
-      break;
-    case 'plumbing':
-      place(makeConduitElbow(u, rand), -0.45, -0.5, zMid);
-      place(makeValveWheel(d.hw * 0.52, rand), 0.1, 0.05, zMid, 0.0);
-      place(makePressureGauge(d.hw * 0.34, rand), -0.5, 0.5, zMid, 0.0);
-      place(makePressureGauge(d.hw * 0.28, rand), 0.55, 0.55, zMid, 0.0);
-      place(makeTerminalBlock(u * 0.5, rand), 0.4, -0.5, zBack, 0.05);
-      place(makeWireLoom(u, 3, rand), 0.0, -0.15, zFront, 0.0);
-      place(makeFrayedWires(u, 2, rand), 0.55, -0.15, zFront, 0.0);
-      break;
-    case 'avionics':
-      place(makeCrackedScreen(d.hw * 0.86, d.hh * 0.5, rand), -0.05, 0.45, zMid, 0.0);
-      place(makeBreakerBank(u * 0.4, d.hh * 0.7, rand), 0.45, 0.5, zBack, 0.0);
-      place(makeCircuitBoard(d.hw * 0.8, d.hh * 0.5, rand), -0.4, -0.42, zBack, 0.06);
-      place(makeCircuitBoard(d.hw * 0.5, d.hh * 0.4, rand), 0.5, -0.45, zBack, 0.1);
-      place(makeWireLoom(u, 3, rand), 0.0, -0.05, zFront, 0.0);
-      place(makeIndicatorLight(u, rand), -0.55, 0.55, zFront, 0);
-      place(makeIndicatorLight(u, rand), 0.6, -0.05, zFront, 0);
-      break;
-    case 'mechanical':
-      place(makeValveWheel(d.hw * 0.56, rand), -0.3, 0.32, zMid, 0.0);
-      place(makeConduitElbow(u, rand), 0.45, -0.35, zMid);
-      place(makePressureGauge(d.hw * 0.34, rand), 0.38, 0.55, zMid, 0.0);
-      place(makeTerminalBlock(u * 0.5, rand), -0.4, -0.52, zBack, 0.05);
-      place(makeCoiledWire(u, rand), 0.55, 0.1, zFront);
-      place(makeWireLoom(u, 2, rand), -0.1, -0.2, zFront, 0.0);
-      place(makeFrayedWires(u, 3, rand), -0.55, 0.5, zFront, 0.0);
-      break;
-    case 'junction':
-      // The "everything" box — the densest archetype.
-      place(makeBreakerBank(u * 0.46, d.hh * 1.1, rand), 0.36, 0.1, zBack, 0.0);
-      place(makeFuseBank(u, 3, rand), -0.4, 0.6, zMid, 0.05);
-      place(makeTerminalBlock(u * 0.5, rand), -0.4, -0.3, zMid, 0.06);
-      place(makeCoiledWire(u, rand), -0.45, 0.2, zFront);
-      place(makeWireLoom(u, 3, rand), 0.05, -0.25, zFront, 0.0);
-      place(makeFrayedWires(u, 3, rand), 0.5, -0.55, zFront, 0.0);
-      place(makeIndicatorLight(u, rand), -0.55, -0.55, zFront, 0);
-      break;
-  }
-  return noColl(g) as THREE.Group;
 }

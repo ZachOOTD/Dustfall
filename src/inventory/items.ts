@@ -144,7 +144,6 @@ function buildSkewerMesh(cooked: boolean): THREE.Group {
 const _DEFS: Record<ItemId, ItemDef> = {
   canteen: {
     id: 'canteen',
-    colliderHint: 'sphere',   // ACAS B2 — flask body settles as a blob, not a box
     name: 'CANTEEN',
     glyph: '◇',
     description: 'a half-empty canteen',
@@ -363,7 +362,6 @@ const _DEFS: Record<ItemId, ItemDef> = {
   // graveyard biome (pickups.ts spawnRelicAt). The reward for the journey + pit.
   relic_core: {
     id: 'relic_core',
-    colliderHint: 'sphere',   // ACAS B2 — glowing orb
     name: 'RELIC CORE',
     glyph: '◆',
     description: 'an intact alien-tech core, still humming with power',
@@ -603,7 +601,6 @@ const _DEFS: Record<ItemId, ItemDef> = {
   // Session PP — pipe staff. Slower heavy swing, longer reach, knockback.
   pipe_staff: {
     id: 'pipe_staff',
-    colliderHint: 'capsule',   // ACAS B2 — long thin pipe lies as a rod
     name: 'PIPE STAFF',
     glyph: '⊓',
     description: 'a length of scrap pipe with cloth grip',
@@ -1021,7 +1018,6 @@ const _DEFS: Record<ItemId, ItemDef> = {
   // reloads from scrap_bullet stacks (combat.ts updateReload, generalized).
   amban_rifle: {
     id: 'amban_rifle',
-    colliderHint: 'capsule',   // ACAS B2 — long barrel + stock lies as a rod
     name: 'AMBAN RIFLE',
     glyph: '↟',
     description: 'a long-barreled marksman rifle; carved stock, scrap-iron action',
@@ -1168,7 +1164,6 @@ const _DEFS: Record<ItemId, ItemDef> = {
   // emitter coils GLOW by charge level + flash on each pulse.
   pulse_rifle: {
     id: 'pulse_rifle',
-    colliderHint: 'capsule',   // ACAS B2 — long carbine lies as a rod
     name: 'PULSE RIFLE',
     glyph: '⌁',
     description: 'a salvaged energy carbine — rapid pulses from a recharging cell',
@@ -1796,7 +1791,6 @@ const _DEFS: Record<ItemId, ItemDef> = {
 
   branch: {
     id: 'branch',
-    colliderHint: 'capsule',   // ACAS B2 — a stick lies as a rod
     name: 'BRANCH',
     glyph: '/',
     description: 'a dry length of wood — good for fuel',

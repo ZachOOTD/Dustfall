@@ -3,6 +3,14 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign C1 — 2026-06-18 — M1 panel dead-code cleanup + perf baseline ✓ all gates pass
+
+`verified` — `npm run verify:all` PASS (tsc + `verify:placement` 0/0 ×5 seeds + `verify:colliders` 0/25); perf-probe **drawCalls 843** (<1000) / **programs 71** (≤72) / sceneMeshes 8401 / boot 1225ms. **No save bump.** First `campaign/2026-06-18` build cycle (M1 — 2 of 5 units; headless cleanup before the visual units).
+
+**panel-deadcode-cleanup.** Removed the dead `buildGreeble` interior path (superseded by the ACAX breaker-board): 9 functions (`buildGreeble` + its 8 exclusive helpers coiledWire/fuseBank/breakerBank/wireLoom/circuitBoard/conduitElbow/crackedScreen/indicatorLight) + 3 now-orphaned materials (`matPipe`/`matIndGreen`/`matIndRed`) + their portal-array entries (−242 lines, `panelGreeble.ts`); the dead `ARCHETYPE_EXTRACTABLES` export (`wrecks.ts`); the inert `colliderHint` ItemDef field (reverted-but-kept since D211 — 6 set-sites in `items.ts` + the type + a stale `pickups.ts` comment). Provably inert (zero callers/reads; the placement audit is unchanged at 81/79/79/84/79). The LIVE breaker-board interior (`makeLootComponent`/`makeBreakerBoard`/`buildSalvageComponents` + their shared helpers/materials) is untouched.
+
+**perf-budget-reprofile.** Recorded the campaign perf baseline (drawCalls 843 / tris 362550 / programs 71 / sceneMeshes 8401 / pickups 382 / boot 1225ms) — the reference later content measures against. drawCalls ≈ the 842 ACBB baseline confirms the removal is runtime-inert.
+
 ## Session ACBB — 2026-06-18 — FINISH THE WRECK ARC: weathering cohesion + sand integration + a COLLIDER-AUDIT gate + husk/derelict silhouette + §E polish ✓ all gates pass
 
 `verified` — `npm run verify` (tsc) PASS; `npm run verify:placement` PASS (0 occlusion + 0 terrain ×5 seeds); **NEW** `npm run verify:colliders` PASS (25 archetype×seed audits, 0 uncovered); perf-probe field **drawCalls 842** (<1000, +3 from new decals) / triangles 363k / **programs 69** (≤72, no new programs). **No save bump.** Long autonomous overnight (planned + executed Tiers 1–4 + a §E polish bucket; Tier 5 scope-cut). Tier 1 gated by a 3-critic adversarial cohesion pass; husk/derelict/satellite screenshot-iterated. D234-D237.

@@ -166,17 +166,6 @@ export interface AccessPanelOpts {
   rand?: Rng;
 }
 
-/** ACAV Tier 4 — the 5 LOOTABLE components per archetype. Reuses the existing 7
- *  PanelComponentKinds so COMPONENT_LOOT + the loot economy are untouched; the
- *  archetype only varies WHICH 5 + the decorative greeble around them. */
-export const ARCHETYPE_EXTRACTABLES: Record<PanelArchetype, readonly PanelComponentKind[]> = {
-  electrical: ['red_wire', 'red_wire', 'yellow_wire', 'fuse', 'chip'],
-  plumbing:   ['scrap_chunk', 'red_wire', 'fuse', 'cloth_scrap', 'scrap_chunk'],
-  avionics:   ['chip', 'chip', 'yellow_wire', 'fuse', 'scrap_chunk'],
-  mechanical: ['scrap_chunk', 'scrap_chunk', 'fuse', 'red_wire', 'chip'],
-  junction:   ['red_wire', 'yellow_wire', 'fuse', 'cloth_scrap', 'scrap_chunk'],
-};
-
 /** ACAX — derive a default interior archetype from the panel's wreck-kind. Used
  *  by addAccessPanel as a FALLBACK when a caller doesn't pass `opts.archetype`:
  *  14 of the 16 hand-modeled-wreck + POI callsites (megaShip, megaWreck, crashed-

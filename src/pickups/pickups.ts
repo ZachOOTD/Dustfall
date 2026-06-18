@@ -539,8 +539,8 @@ export function spawnDroppedPickup(
     // faces grip the dune and settle without rolling. ACAU REVERTED the ACAS B2
     // sphere/capsule colliderHint (D206): in the walk-test spheres/capsules
     // rolled + spun instead of settling, and the thin capsule radius (2cm floor,
-    // vs the box's 4cm) tunneled through the heightfield even with CCD. The
-    // `def.colliderHint` field is now ignored; the box reads best for all items.
+    // vs the box's 4cm) tunneled through the heightfield even with CCD. The box
+    // reads best for all items (the dead `def.colliderHint` field was removed).
     const shape = RAPIER.ColliderDesc.cuboid(hx, hy, hz);
     shape.setFriction(0.85).setRestitution(0.15).setDensity(0.6);
     opts.world.createCollider(shape, body);
