@@ -19,7 +19,7 @@ import * as THREE from 'three';
 // Sheet footprint (metres, held-item scale — matches the old ~0.11 × 0.085 plate).
 const SHEET_W = 0.125;   // along local X
 const SHEET_L = 0.115;   // along local Z — closer to square so it reads as a SHEET, not a fin
-const SHEET_T = 0.006;   // plate thickness (thin sheet metal, but not paper)
+const SHEET_T = 0.014;   // plate thickness — heftier hull plating so the EDGE reads as real metal mass at a 3q/edge-on angle (ACBC §G: 6mm read paper-thin oblique)
 const SEG_W = 6;         // subdivisions — enough for buckle + tears, still low-poly
 const SEG_L = 5;
 
@@ -68,10 +68,10 @@ function buildTornSheet(mat: THREE.Material): THREE.Mesh {
 
     // 4. Curl the far +X edge UP into a rolled lip (the classic torn-sheet curl).
     //    A clear roll, but moderated so the plate keeps a rectangular read.
-    if (u > 0.74) {
-      const curlAmt = (u - 0.74) / 0.26; // 0..1 toward the edge
-      pos.setY(i, pos.getY(i) + curlAmt * curlAmt * 0.055);
-      pos.setX(i, x - curlAmt * curlAmt * 0.02); // pull edge back as it rolls
+    if (u > 0.66) {
+      const curlAmt = (u - 0.66) / 0.34; // 0..1 toward the edge (starts earlier → a fuller roll)
+      pos.setY(i, pos.getY(i) + curlAmt * curlAmt * 0.085); // a chunkier rolled lip → more edge mass at 3q
+      pos.setX(i, x - curlAmt * curlAmt * 0.03); // pull the edge back as it rolls into the lip
     }
   }
 

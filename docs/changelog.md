@@ -3,6 +3,12 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign C3 — 2026-06-18 — M1 scrap pickup edge-on mass (3q rework) ✓ all gates pass
+
+`verified` — `npm run verify:all` PASS (tsc + `verify:placement` 0/0 ×5 + `verify:colliders` 0/25); **visual gate PASS** (3 harsh-lens critics, 0 sev≥2 — the edge-on read now has real plate mass + stays one clean torn sheet). **No save bump.** Cycle 3/12 (M1 — 4 of 5 units). Appearance-verified; in-hand feel owed the Phase-A walk-test.
+
+**scrap-pickup-3q-thin (§G).** The ACBC torn-sheet scrap read paper-THIN from a 3-quarter/edge-on angle (the front broad-face read fine). Fix in `scrapMesh.ts` (shared by held + world pickups → one fix covers both): plate thickness `SHEET_T` 6mm→14mm + a fuller rolled torn edge (curl start u 0.74→0.66, lift 0.055→0.085) → edge-on MASS without adding pieces (no "busy pile" regression). Gated by a 3-critic adversarial pass on the 3q/front/left renders. **Nit (sev3, deferred):** the curl amplitude (0.085) slightly out-muscles the plate half-width (0.0625) → could read fin-ward in-hand; dial back if the walk-test flags it.
+
 ## Campaign C2 — 2026-06-18 — M1 remove wreck sand-mounds (bare terrain) ✓ all gates pass
 
 `verified` — `npm run verify:all` PASS (tsc + `verify:placement` 0 fails ×5 seeds + `verify:colliders` 0/25); **visual gate PASS** (3 harsh-lens critics + a code-auditor over 4 archetype renders — 0 sev≥2; satellite/tank/husk/derelict all read grounded on bare sand). **No save bump.** Cycle 2/12 (M1 — 3 of 5 units). Appearance-verified; the in-world seating FEEL is owed the Phase-A walk-test.
