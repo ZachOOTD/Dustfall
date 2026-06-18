@@ -13,7 +13,8 @@ import type RAPIER from '@dimforge/rapier3d-compat';
 import type { Rng } from '../core/rng.ts';
 import type { Terrain } from './terrain.ts';
 import { registerSalvageable, type SalvageableRegistry } from './salvage.ts';   // ACAS A4 — register big-wreck panels as loot
-import { placeProcgenComposite, pruneBuriedPanels } from './procgenWreck.ts';
+import { pruneBuriedPanels } from './procgenWreck.ts';
+import { placeProcgenPOI } from './poiAssembler.ts';
 import { placeWreck, placeDebrisField, type WreckKind } from './wrecks.ts';
 import { placeRibcage } from './heroLandmarks.ts';
 import { mergeStaticByMaterial } from './wreckForms.ts';
@@ -74,10 +75,10 @@ export function placeWreckYard(
     const pos = tryPos(radius * 0.92, 5.0, 0.7);   // pack toward center (the pit moved to its own dune anchor)
     if (!pos) continue;
     const y = terrain.heightAt(pos.x, pos.z);
-    placeProcgenComposite(scene, world, terrain, new THREE.Vector3(pos.x, y, pos.z), rand, salvageables, {
-      buryY: 0.5 + rand() * 0.55,        // deep ancient burial
+    placeProcgenPOI(scene, world, terrain, new THREE.Vector3(pos.x, y, pos.z), rand, salvageables, {
+      buryY: 0.5 + rand() * 0.55,        // deep ancient burial (ship delegate only)
       biome: 'wreck_yard',
-      parent: yardGroup,   // ACAS A1 — the wreck AND its sand mound land in the yard merge
+      parent: yardGroup,   // ACAS A1 — the POI AND its sand mound land in the yard merge
     });
   }
 

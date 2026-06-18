@@ -6,8 +6,10 @@ import type { GameContext } from '../GameContext.ts';
 import { spawnRaider as spawnRaiderEntity, damageRaider } from '../enemies/raider.ts';
 import { damageVulture } from '../enemies/vulture.ts';
 import { makeLatheHull, fuselageProfile, makeFormerRings, makeBreach, makeSandMound } from '../world/wreckForms.ts';
-import { createRustedHullMaterial } from '../world/hullMaterial.ts';
+import { createRustedHullMaterial, HULL_WEATHERING_ACAY } from '../world/hullMaterial.ts';
 import { placeProcgenComposite, type ProcgenWreckClass } from '../world/procgenWreck.ts';
+import { placeProcgenPOI } from '../world/poiAssembler.ts';
+import type { ArchetypeId } from '../world/poiArchetypes.ts';
 import { validatePanels, type PanelEntry } from '../world/panelPlacement.ts';
 import { addAccessPanel, type PanelKind, type PanelArchetype } from '../world/wrecks.ts';   // ACAV — panel-studio
 import { popPanelDoor, panelDebrisInfo } from '../world/panelDebris.ts';   // ACAX — door pop-off smoke test
@@ -131,7 +133,7 @@ interface DebugApi {
    *  axis against its wreck root; if the nearest hit is NOT the panel body
    *  (i.e. hull occludes it), the panel is buried inside the model → fail.
    *  Drives the `panels` rig-shot scenario's pass/fail assertion. */
-  panelBuryAudit: () => { tested: number; pass: number; failCount: number; fails: Array<{ idx: number; kind: string; hit: string }> };
+  panelBuryAudit: () => { tested: number; pass: number; failCount: number; fails: Array<{ idx: number; kind: string; hit: string }>; terrain: { tested: number; pass: number; failCount: number; fails: Array<{ idx: number; kind: string; hit: string }> } };
   /** ACAX — door pop-off smoke test. Spawns a wreck on terrain, pops the first
    *  panel's door (physics), returns the door's spawn Y so the `door-pop` scenario
    *  can confirm it FELL + settled (read panelDebris() after letting the loop run). */
@@ -515,7 +517,7 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
       if (studioMesh) { studioGroup.remove(studioMesh); studioMesh = null; }
 
       const rand = Math.random;
-      const hullMat = createRustedHullMaterial({ baseColor: Tuning.WRECK_HULL_HEX });
+      const hullMat = createRustedHullMaterial({ baseColor: Tuning.WRECK_HULL_HEX, ...HULL_WEATHERING_ACAY });
       let node: THREE.Object3D;
       if (form === 'lathe') {
         node = makeLatheHull(fuselageProfile(6, 1.4, 0.3, 0.9, rand), { material: hullMat });
@@ -562,7 +564,7 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
       cam.updateMatrixWorld(true);
       return { form, angle: angle ?? 'side', ok: true, radius: +radius.toFixed(2) };
     },
-    spawnProcgenWreckRig(cls = 'corvette', seed = 1337) {
+    spawnProcgenWreckRig(cls = 'corvette', seed = 1337, archetype?: ArchetypeId) {
       // Ensure the world is live (idempotent) — same enter path the studios use.
       if (hooks.enterGame) hooks.enterGame(true);
       else { ctx.flags.titleActive = false; ctx.flags.paused = false; }
@@ -583,16 +585,17 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
       const pz = Tuning.OPENING_SCENE_ANCHOR_Z + 30;
       const py = ctx.terrain.heightAt(px, pz);
       const pos = new THREE.Vector3(px, py, pz);
-      const group = placeProcgenComposite(
-        ctx.three.scene, ctx.physics.world, ctx.terrain, pos, rand, undefined, { cls },
-      );
-      // placeProcgenComposite applies a RANDOM yaw (+ terrain tilt) so the detail
-      // flank (+Z: breaches + salvage panels) faces an arbitrary world direction.
-      // For a verification framer that's no good — PIN the subject to a known
-      // orientation (long-axis +X, detail flank +Z) so the framer's broadside
-      // angle reliably sees the breach/greeble flank (shared-memory: "pin
-      // ambiguous world axes"). A slight forward tilt keeps the crashed feel.
-      group.rotation.set(0, 0, -0.06);
+      // ACBA — when an archetype is given (satellite / tank_cluster / …) route through
+      // the new socket/grammar pipeline; else the legacy linear ship assembler.
+      const group = archetype && archetype !== 'ship'
+        ? placeProcgenPOI(ctx.three.scene, ctx.physics.world, ctx.terrain, pos, rand, undefined, { archetype })
+        : placeProcgenComposite(ctx.three.scene, ctx.physics.world, ctx.terrain, pos, rand, undefined, { cls });
+      // placeProcgen* applies a RANDOM yaw (+ terrain tilt) so the detail flank faces an
+      // arbitrary world direction. For SHIPS, PIN to a known crash pose so the framer's
+      // broadside reliably sees the detail flank. POIs KEEP their real terrain-aligned
+      // seating (so the inspection shows true in-world ground contact, not a forced level
+      // that would float a wide slab on a slope).
+      if (!(archetype && archetype !== 'ship')) group.rotation.set(0, 0, -0.06);
       group.updateMatrixWorld(true);
       group.name = 'procgenWreckRig';
       procgenRigGroup = group;
@@ -645,11 +648,21 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
         kind: s.kind || s.wreckKind || '?',
       }));
       const report = validatePanels(entries, { scene: ctx.three.scene, audit: true });
+      // ACBA — surface-scoped TERRAIN audit: re-check ONLY panels the GEN cull tagged
+      // terrainCullEligible (interiors excluded), corner-aware. Surviving surface panels
+      // should all clear sand; a fail here means the corner cull (or seating) regressed.
+      const terr = validatePanels(entries, { scene: ctx.three.scene, audit: true, terrain: ctx.terrain, terrainOnly: true });
       return {
         tested: report.tested,
         pass: report.pass,
         failCount: report.failCount,
         fails: report.fails.slice(0, 12).map((f) => ({ idx: f.idx, kind: f.kind, hit: f.detail })),
+        terrain: {
+          tested: terr.tested,
+          pass: terr.pass,
+          failCount: terr.failCount,
+          fails: terr.fails.slice(0, 12).map((f) => ({ idx: f.idx, kind: f.kind, hit: f.detail })),
+        },
       };
     },
     resetTutorial,

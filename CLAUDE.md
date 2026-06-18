@@ -64,26 +64,32 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      Prior milestones live in docs/changelog.md — do NOT accumulate "Prior milestone"
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
-**Last shipped**: Session ACAX — **Salvage-panel interior + exterior REALISM overhaul** (tsc clean, `verify:placement` 0 fails,
-NEW `salvage-audit` 0 mismatches/99, `door-pop` smoke test PASS, no save bump; D217-D220). Long user-feedback-driven session.
-**Stencil portal (D217):** the interior renders as a "window into the hull" — a per-panel MASK writes `stencil=REF`, the interior
-draws `stencilFunc EQUAL`+`depthTest:false`+transparent so it shows THROUGH a clipping hull (renderer now `{stencil:true}`); the MASK
-itself RESPECTS depth (+polygonOffset) so terrain/dunes/sides/far-side panels in front occlude it — visible through the WRECK HULL
-ONLY, never the world (`world/panelPortal.ts`). **Breaker-board interior (D218, headline):** scattered greeble → a real DIN-rail board
-(adversarially-judged design workflow) = a FIXED skeleton (board + bus + 3 rails + trough + terminal + 12 empty bay-sockets) + 5
-salvageable BREAKER modules clipped onto the first bays at the same slot, so salvaging a module reveals its socket — ZERO jitter, ZERO
-new logic (`makeBreakerBoard`/`makeBreaker`/`buildSalvageComponents`); merge gained `includeTransparent` (portal mats are transparent)
-→ sceneMeshes 21k→8.6k. **WYSIWYG salvage (D219):** `registerSalvageable` hides surplus modules so visible==salvageable (corroded ~1-2,
-pristine 5), thins as stripped; `save.ts` persists `extractedIndices`. **Door pop-off (D220):** 50% of pried doors SHEAR LOOSE + fall
-with real physics (`world/panelDebris.ts`, dropped-item pattern + clang). Plus: darker/warmer rusted hull + panel-exterior palette,
-DoubleSide rusted body, relief'd rusted door, rusted (not gold) frame, `archetypeForKind` fallback (all 16 callsites get V2), removed
-the wreck recolor-on-salvage dim + the bandage model.
+**Last shipped**: Session ACBA — **POI VARIETY overhaul: a socket/component/grammar system + 4 non-ship archetypes, pervasive across all
+biomes** (tsc clean, `verify:placement` 0 occlusion + 0 terrain fails ×5 seeds, perf field drawCalls **839**/programs 67, no save bump;
+D226-D231). User
+feedback on the ACAZ wrecks: still "all long tubes", buggy collision, panels under terrain, a disliked window + scout. **Phase 0 bug-fix
+pass:** removed the cockpit window + `scout` class (user-disliked); decoration meshes no longer spawn colliders (kills invisible interior
+walls); greebles now seat on the REAL variant flank (`flankZ`, not the buggy `0.93r` that buried them); rule-7 depth bumps; a
+**corner-aware terrain panel cull** + a new **TERRAIN-AUDIT** gate line (interior-safe via a `terrainCullEligible` tag). **Phase A
+(D226, headline):** replaced the linear `+X`-cursor `assembleWreck` with `poiComponents.ts` (Socket + `mate()` glues components in ANY
+topology; declared colliders; ZERO rand draws — `phash` only) + `poiArchetypes.ts` (grammar + biome `pickArchetype`) + `poiAssembler.ts`
+(`placeProcgenPOI` = the lifted pipeline). `bodies.ts` gained `attachDeclaredColliders`/`ColliderSpec` (exact primitives + convex-hull, no
+AABB fallback — D228). `pickArchetype('ship')` delegates to the legacy assembler → ZERO ship regression (D227 — ship→socket migration
+deferred). **Phase B — 5 archetypes (ALL FOUR user directions + weirder-ships):** SATELLITE (foil bus + crash-banked solar wings + dish +
+hatch), TANK_CLUSTER (3-4 upright tanks + a ~10m silo tentpole on a bedded pad, STANDS vertical), DEBRIS_FIELD (scattered
+plates/struts/lootable chunk), HOLLOW_HUSK (a gutted hull shell — open-top trough + torn ends + flank breach + exposed rib formers,
+enterable-ready, reads as a ribbed skeleton), DERELICT (D232 — an intact ship socket-mated from nose+barrel+engine into LINEAR / WIDE-BODY
+outriggers / STACKED conning-tower forms = the "wider/weirder ships", additive so the refined legacy ship stays). An **adversarial 5-lens
+critique Workflow** (D230) caught 3 real collision/grounding bugs (strut collider axis, debris float-seat, un-collided tank dome) + sev-1
+gaps → all fixed. **Pervasiveness (user):** bumped `PROCGEN_COMPOSITE_SHARE` 0.50→**0.85** so the new system handles the bulk of scattered
+wrecks across ALL biomes (not graveyard-only); perf IMPROVED (839/67). Inspection: rig-shot `--archetype=`.
 
-**Next session** = the OWED human WALK-TESTS in `npm run dev` (eyes-only): the salvage breaker-board read under the amber pry-glow up
-close + actually salvaging to feel the bays empty; the door pop-off FEEL (outward/tumble/clang); confirm the stencil portal no longer
-bleeds through terrain/sides AND a normal panel doesn't flicker against its hull (mask-vs-coplanar-hull). THEN a new buildable feature:
-raider proc-character (Cycle 5b — proven rig pipeline), deep cave system (Cycle 7 — design pass first), or the drop-pod intro.
-See [docs/next-session-prompt.md](docs/next-session-prompt.md) + [docs/backlog.md](docs/backlog.md).
+**Next session** = (1) the **OWED attended WALK-TEST** in `npm run dev` (eyes-only): walk INTO a tank/satellite/husk/derelict (collision
+feel — the declared-collider fix), the field variety standing among ships + tank farms + satellites + debris + ribbed husks + wide-body
+derelicts under sky/fog, panel seating. (2) Optional: RETIRE the legacy linear ship for the socket `derelict` (then composite share → 1.0)
+— the derelict already delivers the weird-ship value without the regression risk (D232). (3) The ranked sev-2/3 polish (changelog ACBA /
+[backlog.md](docs/backlog.md) §G): tank terracotta→steel gradient, fleet palette cohesion, pipe-strut wiring, sand-drift banking, husk +
+derelict exterior detail, a COLLIDER-AUDIT harness, yard cluster-merge. See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 

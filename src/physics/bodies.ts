@@ -79,7 +79,7 @@ export function attachCompoundCollider(
   obj.traverse((node) => {
     const mesh = node as THREE.Mesh;
     if (!mesh.isMesh) return;
-    if (mesh.userData.noCollider) return;
+    if (mesh.userData.noCollider || mesh.userData.isWreckDecoration) return;
     const geo = mesh.geometry as THREE.BufferGeometry & {
       type: string;
       parameters?: Record<string, number>;
@@ -200,6 +200,84 @@ export function makeStaticConvexHull(
   if (quat) bd = bd.setRotation(quat);
   const body = world.createRigidBody(bd);
   return world.createCollider(desc, body);
+}
+
+// ── Declared colliders (ACBA — POI socket/component system) ──────────
+//
+// Components DECLARE their colliders (shape + component-local TRS) instead of the
+// assembler INFERRING them from geometry. attachDeclaredColliders composes each
+// collider's local transform with the placed group's world matrix and emits the
+// exact Rapier primitive at that world pose — no world-space AABB fallback (the
+// lofted/lathe/torus/bell collision bug), scale-correct (captures the class GIRTH
+// + crash tilt baked into the group), and decorations declare {kind:'none'} so they
+// never spawn invisible interior walls. A structural component with no declared
+// collider is a build error (the grammar asserts it); decorations are explicit 'none'.
+export type ColliderSpec =
+  | { kind: 'box'; half: Vec3Like; pos: Vec3Like; quat?: QuatLike }
+  | { kind: 'cylinder'; halfHeight: number; radius: number; pos: Vec3Like; quat?: QuatLike }
+  | { kind: 'ball'; radius: number; pos: Vec3Like }
+  | { kind: 'convex'; geo: THREE.BufferGeometry; pos: Vec3Like; quat?: QuatLike }
+  | { kind: 'none' };
+
+const _ONE = new THREE.Vector3(1, 1, 1);
+const _dcLocal = new THREE.Matrix4();
+const _dcWorld = new THREE.Matrix4();
+const _dcP = new THREE.Vector3();
+const _dcQ = new THREE.Quaternion();
+const _dcS = new THREE.Vector3();
+const _dcQuat = new THREE.Quaternion();
+
+/** Hull verts in the body's local frame, scaled, subsampled to ≤256 (Rapier hull cap). */
+function convexVerts(geo: THREE.BufferGeometry, scale: THREE.Vector3): Float32Array | null {
+  const posAttr = geo.attributes.position;
+  if (!posAttr) return null;
+  const n = posAttr.count;
+  const step = n > 256 ? Math.ceil(n / 256) : 1;
+  const verts: number[] = [];
+  for (let i = 0; i < n; i += step) {
+    verts.push(posAttr.getX(i) * scale.x, posAttr.getY(i) * scale.y, posAttr.getZ(i) * scale.z);
+  }
+  return verts.length >= 12 ? new Float32Array(verts) : null;
+}
+
+export function attachDeclaredColliders(
+  world: RAPIER.World,
+  group: THREE.Object3D,
+  colliders: ReadonlyArray<ColliderSpec>,
+): RAPIER.RigidBody {
+  group.updateMatrixWorld(true);
+  const body = world.createRigidBody(RAPIER.RigidBodyDesc.fixed());
+  const gm = group.matrixWorld;   // group-local → world (carries burial / tilt / girth scale)
+  for (const c of colliders) {
+    if (c.kind === 'none') continue;
+    const q = c.kind !== 'ball' && c.quat
+      ? _dcQuat.set(c.quat.x, c.quat.y, c.quat.z, c.quat.w)
+      : _dcQuat.identity();
+    _dcLocal.compose(_dcP.set(c.pos.x, c.pos.y, c.pos.z), q, _ONE);
+    _dcWorld.multiplyMatrices(gm, _dcLocal);
+    _dcWorld.decompose(_dcP, _dcQ, _dcS);
+    let desc: RAPIER.ColliderDesc | null = null;
+    switch (c.kind) {
+      case 'box':
+        desc = RAPIER.ColliderDesc.cuboid(c.half.x * _dcS.x, c.half.y * _dcS.y, c.half.z * _dcS.z);
+        break;
+      case 'cylinder':
+        desc = RAPIER.ColliderDesc.cylinder(c.halfHeight * _dcS.y, c.radius * Math.max(_dcS.x, _dcS.z));
+        break;
+      case 'ball':
+        desc = RAPIER.ColliderDesc.ball(c.radius * Math.max(_dcS.x, _dcS.y, _dcS.z));
+        break;
+      case 'convex': {
+        const verts = convexVerts(c.geo, _dcS);
+        desc = verts ? RAPIER.ColliderDesc.convexHull(verts) : null;
+        break;
+      }
+    }
+    if (!desc) continue;
+    desc.setTranslation(_dcP.x, _dcP.y, _dcP.z).setRotation({ x: _dcQ.x, y: _dcQ.y, z: _dcQ.z, w: _dcQ.w });
+    world.createCollider(desc, body);
+  }
+  return body;
 }
 
 /**

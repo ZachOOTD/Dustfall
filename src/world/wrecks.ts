@@ -626,7 +626,9 @@ export function addAccessPanelOriented(
 // group; the bell's mouth opens at LOCAL +Y by default.
 // ────────────────────────────────────────────────────────────────
 const _bellOuterMatCache = new WeakMap<THREE.Material, THREE.Material>();
-function _bellOuterMat(src: THREE.Material): THREE.Material {
+/** ACAZ T3 — exported so the procgen per-class re-skin can remap the bell's cloned
+ *  DoubleSide flare material (which a `=== _hullMat` identity test would otherwise miss). */
+export function _bellOuterMat(src: THREE.Material): THREE.Material {
   // Clone the source material with `side: DoubleSide` so the inside-
   // the-mouth view of the flare isn't transparent (open-ended
   // cylinder is single-sided by default). Cached so we only allocate

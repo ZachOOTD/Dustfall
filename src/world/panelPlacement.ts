@@ -44,8 +44,14 @@ export interface ValidatePanelsOpts {
   audit?: boolean;
   /** When set, also cull panels whose front-face corners dip below terrain. */
   terrain?: TerrainLike;
-  /** Override the default terrain clearance margin (m). */
+  /** Override the default center-clearance margin (m, fallback when no extents). */
   terrainMargin?: number;
+  /** Override the bottom-edge corner-clearance margin (m). */
+  terrainCornerMargin?: number;
+  /** ACBA — terrain-AUDIT pass: skip occlusion, and only check panels the GEN cull
+   *  marked `terrainCullEligible` (surface panels). Keeps interior panels — which are
+   *  legitimately below the sand — out of the headless TERRAIN-AUDIT. */
+  terrainOnly?: boolean;
 }
 
 export interface PanelFail {
@@ -243,6 +249,7 @@ export function validatePanels(
   const _out = new THREE.Vector3();
   const _origin = new THREE.Vector3();
   const _dir = new THREE.Vector3();
+  const _corner = new THREE.Vector3();
 
   panels.forEach((entry, idx) => {
     const body = entry.body;
@@ -259,36 +266,50 @@ export function validatePanels(
     body.getWorldPosition(_wp);
     body.getWorldQuaternion(_wq);
     _out.set(0, 0, 1).applyQuaternion(_wq).normalize();
+    // ACBA — the TERRAIN-AUDIT pass (terrainOnly) only re-checks panels the GEN cull
+    // tagged surface; interior panels (mega-wreck/rockyEntrance/recessed bells) are
+    // never terrain-culled, so never tagged, so the audit never false-flags them.
+    if (opts.terrainOnly && body.userData.terrainCullEligible !== true) return;
     report.tested++;
     let fail: { criterion: 'occlusion' | 'terrain'; detail: string } | null = null;
 
     // CHECK 1 — OCCLUSION. Inward ray from 0.8m proud; hull well in front of the
     // panel's own nearest surface (door excluded) = buried.
-    _origin.copy(_wp).addScaledVector(_out, 0.8);
-    _dir.copy(_out).multiplyScalar(-1);
-    rc.set(_origin, _dir);
-    const hits = rc.intersectObject(root, true);
-    let dPanel = Infinity;
-    let dHull = Infinity;
-    for (const h of hits) {
-      if (door && isAncestor(door, h.object)) continue;       // skip the closed door (open-door parity)
-      if (isAncestor(body, h.object)) dPanel = Math.min(dPanel, h.distance);
-      else dHull = Math.min(dHull, h.distance);
-    }
-    if (dPanel !== Infinity && dHull < dPanel - slack) {
-      fail = { criterion: 'occlusion', detail: `hull@${dHull.toFixed(2)}<panel@${dPanel.toFixed(2)}` };
+    if (!opts.terrainOnly) {
+      _origin.copy(_wp).addScaledVector(_out, 0.8);
+      _dir.copy(_out).multiplyScalar(-1);
+      rc.set(_origin, _dir);
+      const hits = rc.intersectObject(root, true);
+      let dPanel = Infinity;
+      let dHull = Infinity;
+      for (const h of hits) {
+        if (door && isAncestor(door, h.object)) continue;       // skip the closed door (open-door parity)
+        if (isAncestor(body, h.object)) dPanel = Math.min(dPanel, h.distance);
+        else dHull = Math.min(dHull, h.distance);
+      }
+      if (dPanel !== Infinity && dHull < dPanel - slack) {
+        fail = { criterion: 'occlusion', detail: `hull@${dHull.toFixed(2)}<panel@${dPanel.toFixed(2)}` };
+      }
     }
 
-    // CHECK 2 — TERRAIN CLEARANCE. The panel CENTER must clear terrain by `margin`.
-    // A center below the sand = the panel is substantially submerged (the
-    // phase-through bug). Center (NOT the bottom corners) because a 0.7m-tall panel
-    // on a near-buried hull naturally has its lower edge dip toward the sand line —
-    // testing corners over-culls those normal cases. `_wp` is the current world
-    // center (getWorldPosition forced an update above), so gen-cull == audit.
+    // CHECK 2 — TERRAIN CLEARANCE (ACBA, corner-aware). Sample the panel plate's
+    // bottom-edge midpoint (panelDoorExtents → body-local (0,-hy,0), to world) and cull
+    // if IT sinks more than the corner margin below sand. Catches a panel whose lower
+    // half is buried even when its CENTER still clears (the "panels under the terrain"
+    // bug). Size-aware: a tall panel may dip its lower edge a little (reads fine). Falls
+    // back to the center test when a panel has no declared extents. The GEN cull
+    // (terrainOnly=false) also TAGS the panel surface so the headless audit can re-check.
     if (!fail && terrain) {
-      const clear = _wp.y - terrain.heightAt(_wp.x, _wp.z);
-      if (clear < margin) {
-        fail = { criterion: 'terrain', detail: `clear@${clear.toFixed(2)}<${margin.toFixed(2)}` };
+      if (!opts.terrainOnly) body.userData.terrainCullEligible = true;
+      const ext = body.userData.panelDoorExtents as { hx: number; hy: number; hz: number } | undefined;
+      if (ext) {
+        _corner.set(0, -ext.hy, 0).applyMatrix4(body.matrixWorld);
+        const clear = _corner.y - terrain.heightAt(_corner.x, _corner.z);
+        const cm = opts.terrainCornerMargin ?? Tuning.SALVAGE_PANEL_TERRAIN_CORNER_MARGIN;
+        if (clear < cm) fail = { criterion: 'terrain', detail: `edge@${clear.toFixed(2)}<${cm.toFixed(2)}` };
+      } else {
+        const clear = _wp.y - terrain.heightAt(_wp.x, _wp.z);
+        if (clear < margin) fail = { criterion: 'terrain', detail: `clear@${clear.toFixed(2)}<${margin.toFixed(2)}` };
       }
     }
 

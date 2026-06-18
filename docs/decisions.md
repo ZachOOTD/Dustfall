@@ -1675,3 +1675,87 @@ The fundamental issue: KCC's slope projection, autostep, and contact resolution 
 **Why**: A satisfying "this is salvage, things break" detail. Needed to feel like the dropped items (real tumble + settle), not a bespoke animation.
 
 **Picked**: NEW `world/panelDebris.ts`. On `completePry`, `Math.random() < SALVAGE_PANEL_POP_CHANCE` (0.5) → detach the door visual (`scene.attach`, preserving world pose), spawn a dynamic Rapier body sized to stored local half-extents (cuboid collider + CCD, mirroring `spawnDroppedPickup`'s friction/restitution), launch it OUTWARD off the hull + a slight upward arc + a random tumble (`setLinvel`/`setAngvel` = mass-independent), `playMetalClang`. A dedicated debris list (NOT the pickups list → not E-takeable) synced by `updatePanelDebris` after `updatePickups`; settled (sleeping) doors are skipped. Snap the open-state to fully-open so the cavity reveals immediately. Transient (not persisted — matches the door-open state never being saved). **friction-score:** 1
+
+## D221 — Procgen wreck DECORATIONS must be rand-NEUTRAL (derive variation from `hash2()`, not `rand()`) so panel placement never shifts (Session ACAZ)
+**When**: ACAZ — adding the scale-anchor hatch/ladder first used `rand()` for placement → seed 42 buried 2 salvage panels (verify:placement FAIL).
+
+**Why**: Wrecks share ONE seeded `rand` stream across the field; any rand consumed DURING part build shifts every subsequent panel mount → buries loot. D208 wants fixed-budget determinism.
+
+**Picked**: A new deterministic `hash2(a,b)` (IEEE754 `Math.sin` hash, no draw) supplies all per-segment variation (anchor px/py, ladder roll, engine-shear angle, burial jitter, crash-list). Net: adding geometry leaves the rand STREAM byte-identical → panel placement unchanged → verify:placement stays 0 fails. The lesson generalises: **decorative procgen geometry derives from a position/geometry hash, never from the shared world-rand.** **friction-score:** 1
+
+## D222 — Scale-anchor door is BAND-SEATED + human-CONSTANT-clamped (the size-read mechanism) (Session ACAZ)
+**When**: ACAZ — the access-hatch "scale anchor" floated off the chining cylinder hull (upper door 0.14-0.56m proud of the receding skin), and a per-class-scaled door defeated the whole point.
+
+**Why**: A constant human-sized door is what makes the eye read true SIZE (tiny on a mega, big on a scout). It must (a) seat flush on every hull variant, (b) stay ~human-constant regardless of class.
+
+**Picked**: Each solid-hull variant exposes its flat-flank Y band (`anchorBandLo/Hi`) via `BuiltPart`; `addScaleAnchor` sizes the door to the band and seats every box's back-face on the real skin (no float). Height clamped ≤1.7m so on a fat (high-girth) mega the constant door reads proportionally TINY → sells the mass. assembleWreck gates to 1 anchor/wreck (2-3 on mega/bulk), preferring the tallest-band (plated) host. **friction-score:** 2
+
+## D223 — At procgen wreck scale (~1m radius) battle damage must be built PROUD, not recessed (D197 reaffirmed) (Session ACAZ)
+**When**: ACAZ — the SHEARED_HULL "torn open" variant first used a dent + internal former rings → read as a nearly-intact hull (the ribs were occluded by the skin; the dent moved too few low-poly verts).
+
+**Why**: D197 already found recessed voids don't read on small procgen hulls (the skin in front occludes them). The same applies to exposed-rib tears.
+
+**Picked**: Build the damage PROUD of the skin: a flat dark charred breach patch + exposed bent frame ribs + splayed torn-metal flaps, all in front of the flank (never occluded). Reads as "blasted open" on approach (subtle at 50m — inherent at this scale). Dramatic recessed damage stays a hero-scale-only effect. **friction-score:** 1
+
+## D224 — Per-class hull palettes → 3 shared LIGHTNESS-tier BUCKETS (identity through the desert tint + merge efficiency) (Session ACAZ)
+**When**: ACAZ — the capstone critique: the 8 per-class hexes sat in a ~19° warm-brown wedge (no fleet identity — the desert tint + warm weathering crush them to one brown) AND each class's distinct {hull,dark,rust} set fragmented the material-keyed cluster merge ~3→24×.
+
+**Why**: Pure-hue class identity doesn't survive the warm tint + heavy warm weathering; and per-class materials hurt the dense-yard draw-call merge.
+
+**Picked**: Snap the 8 classes to 3 material BUCKETS keyed by bucket (cool steel-grey / warm tan / dark industrial), separated by LIGHTNESS not just hue (a pale ship beside a dark one always reads as two classes). Identity now reads via lightness; full hue identity would need per-bucket weathering rebalance (deferred). NOTE: the bucket merge barely moved the yard draw-calls (1499→1477 — dominated by the ~36 live salvage panels, not hull mats), so buckets earn their keep on IDENTITY, not perf. **friction-score:** 3
+
+## D225 — Wreck SIZE ladder via per-class GIRTH (radius), not just length (Session ACAZ)
+**When**: ACAZ — the capstone critique: every class seeded `prevRadius=0.9`, so a 33m mega had the same ~1m girth as a 4m scout and read as a "buried pipeline", not mass.
+
+**Why**: A believable size ladder needs heavy classes to be FAT, not just long. The scale anchor + burial can't sell size if the hull is a uniform-radius tube.
+
+**Picked**: A `CLASS_GIRTH` table; seed `prevRadius = 0.9·girth[cls]` (scout 0.7 … mega 2.4) — the per-segment 0.95 taper still narrows a long mega toward the tail (fat-bodied freighter read). Faceted hulls scale at a FIXED vertex count → zero triangle/draw cost. Synergises with D222: the clamped human door reads tiny on the now-fat mega. Burial re-tuned to the fatter hulls + clamped ≥50% proud. **friction-score:** 1
+
+## D226 — POI assembly = a component/socket/`mate()` grammar, replacing the linear `+X`-cursor chain (Session ACBA)
+**When**: ACBA — user feedback that every procgen wreck "looks the same — a long hull with the same modules", and the want for satellites / tank farms / husks / debris, "a fool-proof system for modelling, designing, placing, combining" that "feels like a real world".
+
+**Why**: The root cause was architectural — `assembleWreck` placed cockpit→hull→engine→tail at an advancing `+X cursor`, so EVERY result was a horizontal tube. No amount of new variants fixes a linear grammar.
+
+**Picked**: NEW `poiComponents.ts` (a Socket = pos+outward-quat+radius+tag; a `mate(parent, parentSocket, childSocket)` primitive that glues a child socket opposing a parent socket in ANY topology — linear falls out of axial mating, radial/vertical/scatter fall out of mating onto other tags; components DECLARE their colliders; everything `phash`-derived so components NEVER touch the shared rand stream) + `poiArchetypes.ts` (the grammar + `pickArchetype`) + `poiAssembler.ts` (`placeProcgenPOI` = the lifted post-assembly pipeline). The legacy linear path stays as the `ship` archetype. **friction-score:** 4
+
+## D227 — Ship the new archetypes ALONGSIDE the legacy ship (don't migrate the ship first) (Session ACBA)
+**When**: ACBA — the approved plan's Phase A was "migrate the linear ship onto sockets 1:1, reproduce today's look, THEN add archetypes".
+
+**Why**: Reproducing the existing ship exactly is the riskiest part AND isn't even the goal (the user wants ships to look DIFFERENT). Touching the working ship to reproduce it risks regressions for no user-visible gain, and delays the actual payoff (visible non-ship variety).
+
+**Picked**: Build the general socket/`mate`/declared-collider foundation, prove it on NEW archetypes (satellite/tank/debris), and leave the ship on the legacy linear assembler reached via `pickArchetype('ship')` → `placeProcgenComposite` (zero regression risk). The ship→socket migration (which unlocks "wider/weirder ships") is now a clean additive follow-up (#27). **Considered**: full ship migration first (rejected — high risk, no visible payoff, reproducing-exactly isn't the goal). **friction-score:** 2
+
+## D228 — POI colliders are DECLARED (exact primitives), not inferred from geometry (Session ACBA)
+**When**: ACBA — user: "collision is not 100% accurate for a lot of these models". `attachCompoundCollider` falls back to a world-space AABB for lofted/lathe/torus/bell geometry (gross over-approximation) and never scaled with the class girth.
+
+**Why**: Inferring a collider from arbitrary geometry is lossy; a component that knows its own shape should state it.
+
+**Picked**: `ColliderSpec` (box/cylinder/ball/convex-hull) + `attachDeclaredColliders` (`bodies.ts`) — each component declares colliders in its local frame; the assembler transforms them to root-local; the placer composes the group world matrix and emits the EXACT Rapier primitive (captures burial/tilt/girth scale). A structural component with no collider is a build error; decorations declare `{kind:'none'}`. Correct-by-construction. The adversarial critique still found 3 author-error mismatches (strut axis, dome gap, plate size) — declared ≠ automatically correct, but it's auditable and the renders + a per-component shape match catch them. **friction-score:** 3
+
+## D229 — Salvage-panel terrain cull is corner-aware + the gate gained a TERRAIN-AUDIT (Session ACBA)
+**When**: ACBA — user: "many instances of panels under the terrain". The cull was CENTER-only with a lenient `−0.10` margin, so a panel whose center cleared sand but whose lower half was buried passed; the `verify:placement` gate only tested occlusion, never terrain.
+
+**Why**: A center test can't tell a tall panel dipping its edge (fine) from a half-submerged one (the bug); and the gate couldn't catch terrain burial at all.
+
+**Picked**: `validatePanels` CHECK 2 now samples the panel plate's bottom-edge midpoint (from `panelDoorExtents`) vs sand with a size-aware corner margin (`SALVAGE_PANEL_TERRAIN_CORNER_MARGIN −0.25`). The gen-cull TAGS each surface panel `terrainCullEligible`; the audit re-checks ONLY tagged panels (interiors — mega-wreck/rockyEntrance/recessed bells — are legitimately below sand and never tagged → never false-flagged) and prints a `TERRAIN-AUDIT` line the gate parses. Culled ~10 buried panels/world (a ~11% trim, not over-culling). **friction-score:** 2
+
+## D230 — An adversarial multi-lens critique Workflow is the verification gate for new visual archetypes (Session ACBA)
+**When**: ACBA — after the satellite/tank/debris looked "good to me" on the renders.
+
+**Why**: Self-assessment misses real bugs. A 5-lens parallel critique (silhouette / realism / scale / material / CODE-audit) reading the render PNGs + source found a vertical-capsule-over-horizontal-bar strut collider, a float/spear grounding bug, an un-collided tank dome, a panel-mounted-on-a-decoration, AND the sev-1 quality gaps (floating wings, toylike dish, one-tank-on-a-plinth) — none of which I'd flagged.
+
+**Picked**: For new procedural visual content, run the adversarial critique Workflow as a verification step (not just a polish nicety), act on sev-1 + real-bug findings, re-render to confirm, defer ranked sev-2/3. This operationalizes CLAUDE.md rule 8 (the code-audit lens also CONFIRMED determinism — no `rand()` in any component). **friction-score:** 1
+
+## D231 — Removed the cockpit window + the `scout` class on direct user feedback (Session ACBA)
+**When**: ACBA — user: the front "window looking thing" is "unrealistic", and "don't like that little scout at all, it looks kinda lame and unrealistic".
+
+**Why**: Direct aesthetic feedback from the project owner; both were ACAY-era additions that didn't land.
+
+**Picked**: Deleted the bubble+window from both cockpit variants + the `_windowMat` singleton (rand-neutral); removed `scout` from the `ProcgenWreckClass` union + `recipeFor` + `pickPart` + 4 CLASS_* tables + salvageKind + the anchor scale, re-weighting the roulette 8→7-way (a deliberate world-regen; the gate asserts 0 fails, not byte-identity — re-verified green). **friction-score:** 1
+
+## D232 — "Wider/weirder ships" shipped as an ADDITIVE socket-built `derelict` archetype, not by migrating the legacy ship (Session ACBA)
+**When**: ACBA — the last open user direction ("some can be wider ships … weirder ships"). The plan (D227) had deferred the ship→socket migration.
+
+**Why**: The legacy linear ship (`assembleWreck`) is the most heavily-refined wreck path (ACAZ: 8 hull variants, 12-channel weathering, the band-seated scale anchor, per-class girth + crash damage). Migrating it onto sockets risks regressing all that polish, and reproducing it 1:1 isn't even the goal — the goal is non-tube ship FORMS.
+
+**Picked**: A new `derelict` archetype built from NEW intact-ship components (`noseCone` + `hullBarrel` (axial + radial sponson + top sockets) + `engineNozzle`) that a `phash`-picked form mates into LINEAR (a clean pointed ship), WIDE-BODY (outrigger hull pods on the radial sockets → catamaran-ish) or STACKED (a dorsal conning-tower) — same parts, different sockets → non-tube ships for free. ADDITIVE: the refined legacy ship stays as `ship` (zero regression); the derelict adds the wide/stacked variety it can't make. This proves the socket grammar builds SHIPS too (the architecture's whole point) and delivers the user's value now; fully RETIRING the legacy ship for the derelict stays an optional follow-up (then `PROCGEN_COMPOSITE_SHARE`→1.0). **Considered**: a full in-place migration of `assembleWreck` onto sockets (rejected — high regression risk on the most-refined path, for no extra user-visible value over the additive derelict). **friction-score:** 2

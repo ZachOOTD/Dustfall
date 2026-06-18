@@ -33,9 +33,14 @@ for (const seed of seeds) {
   const m = out.match(/BURY-AUDIT seed=\S+ pass=(\d+)\/(\d+) fails=(\d+)/);
   if (!m) { rows.push(`seed ${seed}: NO AUDIT LINE (boot/render failed)`); allPass = false; continue; }
   const [, pass, tested, fails] = m;
-  const ok = Number(fails) === 0;
+  // ACBA — also parse the surface-scoped TERRAIN-AUDIT (corner-aware burial); a panel
+  // dipping its lower half below the sand fails the gate just like an occlusion bury.
+  const tm = out.match(/TERRAIN-AUDIT seed=\S+ pass=(\d+)\/(\d+) fails=(\d+)/);
+  const tFails = tm ? Number(tm[3]) : 0;
+  const ok = Number(fails) === 0 && tFails === 0;
   if (!ok) { allPass = false; }
-  rows.push(`seed ${seed}: ${pass}/${tested} pass, ${fails} fails  ${ok ? 'OK' : '*** FAIL ***'}`);
+  const tNote = tm ? `, terrain ${tm[1]}/${tm[2]} pass ${tFails} fails` : '';
+  rows.push(`seed ${seed}: ${pass}/${tested} pass, ${fails} occ-fails${tNote}  ${ok ? 'OK' : '*** FAIL ***'}`);
 }
 
 console.log('\n=== verify:placement (salvage-panel scalability gate) ===');

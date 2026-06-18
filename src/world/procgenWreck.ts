@@ -54,28 +54,39 @@ import type { SalvageableRegistry, Salvageable } from './salvage.ts';
 import { registerSalvageable } from './salvage.ts';
 import { validatePanels, findSurfaceMounts, type PanelEntry } from './panelPlacement.ts';
 import { Tuning } from '../config/tuning.ts';
-import { addAccessPanel, addAccessPanelOriented, makeEngineBellMesh, type PanelShape, type PanelArchetype } from './wrecks.ts';
-import { mergeStaticByMaterial, makeSandMound, makeLoftedHull } from './wreckForms.ts';
-import { createRustedHullMaterial } from './hullMaterial.ts';
+import { addAccessPanel, addAccessPanelOriented, makeEngineBellMesh, _bellOuterMat, type PanelShape, type PanelArchetype } from './wrecks.ts';
+import { mergeStaticByMaterial, makeSandMound, makeLoftedHull, dentGeometry } from './wreckForms.ts';
+import { createRustedHullMaterial, HULL_WEATHERING_ACAY } from './hullMaterial.ts';
 import { attachCompoundCollider } from '../physics/bodies.ts';
 import { alignToTerrain } from '../util/terrainAlign.ts';
 import { placeJournal, type Journal } from './journal.ts';
 
 // ── Local materials (procedural rust shader matches the hand-modeled
 //    wrecks.ts palette so composites blend visually). ────────────────
-const _hullMat = createRustedHullMaterial({
+export const _hullMat = createRustedHullMaterial({
   baseColor: Tuning.WRECK_HULL_HEX,
-  streakIntensity: 0.50,   // ACAX — was 0.40; more visible rust streaks now the base is darker (greeble still reads on the warmer base)
-  aoStrength: 0.30,        // ACAX — was 0.24; a touch more underside form-depth
+  streakIntensity: 0.38,   // ACAY — lowered; the new directional seam-rust (ch.11) now carries the rust read
+  // ACAY — full surface-orientation weathering profile (saturated hues + strengths),
+  // shared with the wreck-form studio so the studio is a faithful preview. aoStrength
+  // + every weathering hue live in the profile (tune in hullMaterial.ts).
+  ...HULL_WEATHERING_ACAY,
 });
-const _hullDarkMat = createRustedHullMaterial({
+export const _hullDarkMat = createRustedHullMaterial({
   baseColor: Tuning.WRECK_HULL_DARK_HEX,
   streakIntensity: 0.35,
+  // ACAY — lighter (already dark); dust + underside ox for cohesion.
+  dustStrength: 0.22,
+  oxDeepStrength: 0.45,
+  seamRustStrength: 0.25,
+  abrasionStrength: 0.22,
 });
-const _rustMat = createRustedHullMaterial({
+export const _rustMat = createRustedHullMaterial({
   baseColor: Tuning.WRECK_RUST_HEX,
   rustHex: 0x0e0603,
   streakIntensity: 0.45,
+  // ACAY — already rust-toned; a little dust + abrasion to break it up.
+  dustStrength: 0.18,
+  abrasionStrength: 0.20,
 });
 const _antennaMat = new THREE.MeshLambertMaterial({
   color: Tuning.WRECK_ANTENNA_HEX,
@@ -88,9 +99,95 @@ const _nozzleRimMat = new THREE.MeshLambertMaterial({
   color: Tuning.WRECK_NOZZLE_RIM_HEX,
   flatShading: true,
 });
-const _windowMat = new THREE.MeshBasicMaterial({
-  color: 0x0a0d10,             // dark broken cockpit glass
-});
+
+// ── ACAY 1B — per-CLASS hull palette. Each wreck class reads as a distinct colour
+// identity (a corvette is cool steel-grey, a gunship dark gunmetal, a freighter warm
+// tan-rust…) so the fleet stops reading as one brown. The shared weathering PROFILE
+// (HULL_WEATHERING_ACAY) is spread into every variant → the dust/rust/scour realism
+// stays consistent across classes while only the BASE paint differs. Memoised by
+// class → a fleet of N corvettes shares ONE material set (0 extra shader programs —
+// identical onBeforeCompile source; only uniform values differ). dark/rust accents
+// are DERIVED from the class base so greebles harmonise. Keyed off `cls` (no rand →
+// D208-safe). flagship_engineBlock is omitted → falls back to the default look (don't
+// regress the ABO B6 POC).
+// ACAZ T3 — palette BUCKETS (not per-class). The 8 classes snap to 3 genuinely-distinct
+// material families: (a) the desert tint can't crush them back to one brown (the old 8
+// hexes sat in a ~19° warm-brown wedge → no real identity at fleet scale), and (b)
+// mergeStaticByMaterial folds a whole wreck-yard into ~3 hull buckets, not ~24 — the fix
+// for the 1499-drawcall dense yard. Memoised by BUCKET key, so a fleet shares ≤9 hull mats.
+export type HullBucket = 'cool' | 'warm' | 'dark';
+const CLASS_BUCKET: Record<ProcgenWreckClass, HullBucket> = {
+  corvette: 'cool', gunship: 'cool', science_vessel: 'cool',      // military / observation → cool steel-grey
+  freighter: 'warm', orbital_pod_cluster: 'warm',                 // working / civilian → warm tan
+  bulk_hauler: 'dark', mega_freighter: 'dark',                    // heavy industrial → dark rust-brown
+  flagship_engineBlock: 'warm',                                   // unused (re-skin skips it); type completeness
+};
+// Separated by LIGHTNESS as well as temperature — under the warm desert tint + the warm
+// weathering channels, a pure-hue split washes out, but three distinct lightness tiers
+// (light-cool / mid-warm / dark) stay legible across the fleet: a pale ship beside a dark
+// one always reads as two different classes.
+const BUCKET_HEX: Record<HullBucket, number> = {
+  cool: 0x6b7079,   // LIGHT cool blue-grey steel — military/observation
+  warm: 0x6e5c42,   // MID warm tan — working/civilian
+  dark: 0x382e24,   // DARK industrial rust-brown — heavy haulers
+};
+// ACAZ T3 — per-class GIRTH (hull-radius multiplier). The size ladder was length-only
+// (every class seeded prevRadius=0.9), so a 33m mega had the same ~1m girth as a 4m scout
+// and read as a buried pipeline. Seeding prevRadius from this fattens the heavy classes
+// (a fat-bodied freighter), while the human-CONSTANT scale-anchor door (clamped ≤1.7m)
+// then reads proportionally TINY on the mega — selling its mass. Faceted hulls scale at a
+// fixed vertex count → zero triangle / draw-call cost.
+const CLASS_GIRTH: Partial<Record<ProcgenWreckClass, number>> = {
+  corvette: 1.0, gunship: 1.05, science_vessel: 1.15,
+  freighter: 1.5, bulk_hauler: 1.8, mega_freighter: 2.4, orbital_pod_cluster: 1.2,
+};
+// ACAZ T2D/T3 — crash burial by class (absolute metres, RE-TUNED to the now-fatter T3
+// hulls): the dramatic-size classes bed DEEP into the dune (a 33m mega half-swallowed
+// reads its mass), scouts sit nearly upright. Burial is additionally clamped at placement
+// to keep ≥50% of the wreck (and its top-aligned scale anchors) proud. flagship exempt.
+const CLASS_BURY: Partial<Record<ProcgenWreckClass, number>> = {
+  corvette: 0.42, gunship: 0.48, science_vessel: 0.55,
+  freighter: 0.90, bulk_hauler: 1.20, mega_freighter: 1.55, orbital_pod_cluster: 0.45,
+};
+// ACAZ T2D/T3 — crash LIST (roll, radians) by class — floors RAISED so the "not parked"
+// roll actually reads across the fleet (the old sin()-gated version zeroed most wrecks).
+const CLASS_LIST: Partial<Record<ProcgenWreckClass, number>> = {
+  corvette: 0.14, gunship: 0.20, science_vessel: 0.16,
+  freighter: 0.24, bulk_hauler: 0.30, mega_freighter: 0.34, orbital_pod_cluster: 0.16,
+};
+export interface ClassHullMats { hull: THREE.MeshLambertMaterial; dark: THREE.MeshLambertMaterial; rust: THREE.MeshLambertMaterial; }
+const _bucketMatCache = new Map<HullBucket, ClassHullMats>();
+/** ACBA — bucket→materials, shared by ship classes AND the new POI archetypes so the
+ *  whole field collapses into ≤3 hull buckets at merge (the draw-call win). Memoised. */
+export function getBucketMats(bucket: HullBucket): ClassHullMats {
+  const cached = _bucketMatCache.get(bucket);
+  if (cached) return cached;
+  const base = new THREE.Color(BUCKET_HEX[bucket]);
+  const dark = base.clone().multiplyScalar(0.80);
+  const rust = base.clone().lerp(new THREE.Color(Tuning.WRECK_RUST_HEX), 0.5);
+  const mats: ClassHullMats = {
+    hull: createRustedHullMaterial({ baseColor: base.getHex(), ...HULL_WEATHERING_ACAY, streakIntensity: 0.42 }),
+    dark: createRustedHullMaterial({ baseColor: dark.getHex(), ...HULL_WEATHERING_ACAY, streakIntensity: 0.34 }),
+    rust: createRustedHullMaterial({ baseColor: rust.getHex(), ...HULL_WEATHERING_ACAY, streakIntensity: 0.46 }),
+  };
+  _bucketMatCache.set(bucket, mats);
+  return mats;
+}
+function getClassHullMats(cls: ProcgenWreckClass): ClassHullMats {
+  return getBucketMats(CLASS_BUCKET[cls] ?? 'warm');
+}
+/** ACBA — remap a group's shared base hull mats to a bucket's palette (by singleton
+ *  identity). Runs BEFORE mergeStaticByMaterial. Shared by the ship + POI pipelines. */
+export function reskinToBucket(root: THREE.Object3D, mats: ClassHullMats): void {
+  root.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh) return;
+    if (m.material === _hullMat) m.material = mats.hull;
+    else if (m.material === _hullDarkMat) m.material = mats.dark;
+    else if (m.material === _rustMat) m.material = mats.rust;
+    else if (m.material === _bellOuterMat(_hullMat)) m.material = _bellOuterMat(mats.hull);
+  });
+}
 
 // ── Part type signatures ─────────────────────────────────────────────
 //
@@ -116,12 +213,29 @@ interface BuiltPart {
    *  on the +Z flank, X is part-local (will be added to the part's
    *  assembly X position). Null if this part has no suitable surface. */
   panelAnchor: { x: number; y: number; z: number; faceYaw: number } | null;
+  /** ACAZ T2A — set ONLY by solid-hull variants that can host a scale-anchor
+   *  hatch: the part's REAL +Z flank z (so the anchor seats flush on the actual
+   *  surface, not a guessed 0.92·r). `anchorLeeSide` = the clean flank (−impactSide)
+   *  reusing the segment's already-rolled impact side (no new rand). assembleWreck
+   *  picks 1-2 of these per WRECK (not per segment) so the door reads as a single
+   *  trusted human reference, not a repeating band. */
+  anchorSurfZ?: number;
+  anchorLeeSide?: number;
+  /** ACAZ T2A r3 — the part-local Y range over which the +Z flank stays ~flat at
+   *  `anchorSurfZ` (so the door/ladder seat flush, no float off a chining hull). The
+   *  door is sized to fit INSIDE this band. Plated box = nearly the whole face;
+   *  lofted cylinder = a narrower mid-band before the chines pull in. */
+  anchorBandLo?: number;
+  anchorBandHi?: number;
 }
 
 type PartKind = 'cockpit' | 'hullSegment' | 'engineModule' | 'tailStub';
 
 interface PartBuilder {
-  build(rand: Rng, prevRadius: number): BuiltPart;
+  // `cls` (ACAZ T2A) lets a builder scale human-scale anchors by class (a hatch
+  // is the same real size on every ship — that's what sells scale). Optional, so
+  // builders that don't care keep their 2-arg signature (TS allows fewer params).
+  build(rand: Rng, prevRadius: number, cls?: ProcgenWreckClass): BuiltPart;
 }
 
 // ── Cockpit variants ─────────────────────────────────────────────────
@@ -152,22 +266,9 @@ const COCKPIT_VARIANTS: ReadonlyArray<PartBuilder> = [
       nose.rotation.z = Math.PI / 2;             // cylinder long axis along world X
       nose.position.x = len * 0.5;
       g.add(nose);
-      // Cockpit bubble — a half-sphere on top of the nose, slightly
-      // forward of center.
-      const bubbleR = baseR * 0.45;
-      const bubble = new THREE.Mesh(
-        new THREE.SphereGeometry(bubbleR, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2),
-        _hullDarkMat,
-      );
-      bubble.position.set(len * 0.55, baseR * 0.55, 0);
-      g.add(bubble);
-      // Window strip inside the bubble (dark).
-      const window = new THREE.Mesh(
-        new THREE.BoxGeometry(bubbleR * 1.3, bubbleR * 0.4, 0.10),
-        _windowMat,
-      );
-      window.position.set(len * 0.55, baseR * 0.55 + bubbleR * 0.5, bubbleR * 0.85);
-      g.add(window);
+      // ACBA — removed the cockpit "bubble + window": it read as a fake cartoon
+      // canopy (user feedback: unrealistic). The nose is now a clean tapered hull
+      // cone; Phase A re-skins the cockpit component without glass.
       return {
         mesh: g,
         partLength: len,
@@ -194,16 +295,8 @@ const COCKPIT_VARIANTS: ReadonlyArray<PartBuilder> = [
       );
       body.position.set(len * 0.5, baseR * 0.55, 0);
       g.add(body);
-      // Big front window — a tilted box on the forward face.
-      const winW = baseR * 1.4;
-      const winH = baseR * 0.5;
-      const window = new THREE.Mesh(
-        new THREE.BoxGeometry(0.10, winH, winW),
-        _windowMat,
-      );
-      window.position.set(0.06, baseR * 0.95, 0);
-      window.rotation.z = -0.15;       // slight forward rake
-      g.add(window);
+      // ACBA — removed the big forward "window" (user feedback: the glass insets
+      // read as unrealistic). The boxy cockpit keeps only its rust-streak greeble.
       // Rust streak. AAN/CLAUDE.md rule 7 — 10cm depth, not paper-thin.
       const streak = new THREE.Mesh(
         new THREE.BoxGeometry(len * 0.7, baseR * 0.15, 0.10),
@@ -326,6 +419,7 @@ function addHullGreebles(
   rand: Rng,
   count: number,
   impactSide: number = 0,   // 0 = random flanks; ±1 = bias greebles to that flank (impact asymmetry)
+  flankZ: number = radius,  // ACBA — real surface Z of THIS variant's flank; greebles seat ON the skin
 ): void {
   for (let i = 0; i < count; i++) {
     // Impact asymmetry: when an impact side is given, ~78% of greebles cluster on
@@ -336,12 +430,26 @@ function addHullGreebles(
       : (rand() < 0.78 ? impactSide : -impactSide);
     const px = partLength * (0.12 + rand() * 0.76);
     const py = radius * (0.30 + rand() * 0.62);
-    const pz = radius * 0.93 * zside;
+    const pz = flankZ * zside;   // ACBA — was radius*0.93 (buried 10cm greebles INSIDE the skin)
     const roll = rand();
     let node: THREE.Object3D;
     if (roll < 0.20) {
-      // Panel-line seam strip (thin long box).
-      node = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.28 + rand() * 0.45, 0.10), _hullDarkMat);
+      // ACAZ T2A — Panel-line seam NETWORK: a longitudinal crease plus two cross
+      // seams reading as a riveted plate boundary (a system, not one stray line).
+      // Flat-shading makes the crease boxes read as sharp recessed grooves. Same
+      // single rand() the old one-seam branch spent (D208 — rand-budget neutral).
+      const seamGrp = new THREE.Group();
+      const seamLen = 0.55 + rand() * 0.75;
+      // +z = 0.07 keeps the crease PROUD of the real flank (greebles now seat at pz=flankZ,
+      // i.e. ON the skin → a 10cm box is half-proud; the seam reads as a raised weld line).
+      const lng = new THREE.Mesh(new THREE.BoxGeometry(seamLen, 0.05, 0.10), _hullDarkMat);   // longitudinal
+      lng.position.z = 0.07; seamGrp.add(lng);
+      for (let k = -1; k <= 1; k += 2) {
+        const cross = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.34, 0.10), _hullDarkMat);    // cross-ties
+        cross.position.set(seamLen * 0.4 * k, 0, 0.07);
+        seamGrp.add(cross);
+      }
+      node = seamGrp;
     } else if (roll < 0.40) {
       // Rivet strip — a backing plate with a row of studs.
       const grp = new THREE.Group();
@@ -363,7 +471,7 @@ function addHullGreebles(
       grp.add(new THREE.Mesh(new THREE.BoxGeometry(w, hgt, 0.10), _hullDarkMat));
       const slats = 3 + Math.floor(rand() * 2);
       for (let k = 0; k < slats; k++) {
-        const slat = new THREE.Mesh(new THREE.BoxGeometry(w * 0.86, 0.03, 0.12), _rustMat);
+        const slat = new THREE.Mesh(new THREE.BoxGeometry(w * 0.86, 0.05, 0.12), _rustMat);   // ACBA rule-7 thin-axis 0.03→0.05
         slat.position.y = (slats > 1 ? k / (slats - 1) - 0.5 : 0) * hgt * 0.72;
         slat.position.z = 0.02;
         slat.rotation.x = 0.5;   // angled louver
@@ -404,6 +512,113 @@ function addHullGreebles(
     node.rotation.y = zside > 0 ? 0 : Math.PI;
     node.traverse((o) => { o.userData.isWreckDecoration = true; });
     g.add(node);
+  }
+}
+
+// Deterministic 0..1 hash of two floats (no rand draw). Lets addScaleAnchor vary
+// per segment from the part's already-rolled len/radius WITHOUT touching the rand
+// stream — so panel placement stays byte-identical to pre-anchor (verify:placement
+// 0 fails). IEEE754 Math.sin is deterministic across runs (seeded-build safe).
+function hash2(a: number, b: number): number {
+  const s = Math.sin(a * 127.1 + b * 311.7) * 43758.5453;
+  return s - Math.floor(s);
+}
+
+// ── ACAZ T2A — human-scale ACCESS HATCH + LADDER (the scale-read anchor) ──
+// The single highest-leverage feature for reading wreck SIZE: a man-sized door
+// and a climbing ladder are objects the eye knows the real dimensions of, so the
+// SAME feature anchors a 4m scout AND makes a 33m freighter read 33m (the non-
+// linear-detail rule — repeat a constant human anchor; don't resize one shape).
+// Placed on the CLEAN lee flank (negative-space contrast to the battle-scarred
+// impact flank, where addHullGreebles clusters). Shared materials so the static
+// merge folds it (≈0 draw cost) and the per-class re-skin remaps it. Every box
+// ≥10cm deep (rule 7); the wheel/rungs are cylinders/torus (inherently thick).
+function addScaleAnchor(
+  g: THREE.Group,
+  partLength: number,
+  radius: number,
+  surfZ: number,                   // the part's REAL +Z flank z (variant-specific)
+  bandLo: number,                  // part-local Y range where the flank stays flat at surfZ
+  bandHi: number,
+  leeSide: number,                 // flank to sit on (−impactSide → the clean side)
+): void {
+  // Consumes ZERO rand() — variation is hash2() of the part's already-rolled len/radius,
+  // so the rand STREAM is byte-identical to pre-anchor (verify:placement 0 fails, D208).
+  // Inspection override (rig-shot --forceanchor) pins the hatch to the +Z camera flank
+  // for the headless studio; no in-game effect (the flag is never set at runtime).
+  const lee = (globalThis as { __FORCE_ANCHOR_NEAR?: boolean }).__FORCE_ANCHOR_NEAR ? 1 : leeSide;
+  const flankZ = surfZ * lee;                          // group origin sits ON the real skin
+  // Size the door to the FLAT band so it can never float off a chining hull, as tall as
+  // the band allows (a believable bulkhead door), top-aligned so the threshold mostly
+  // clears the post-sink sand line. Width follows a door-ish aspect.
+  const band = bandHi - bandLo;
+  const hatchH = Math.min(1.7, band * 0.72);
+  const hatchW = Math.min(0.92, Math.max(0.58, hatchH * 0.6));
+  const px = partLength * (0.32 + hash2(partLength, radius) * 0.36);
+  const py = bandHi - hatchH * 0.5 - 0.15;             // top-aligned in the band (least burial)
+
+  // All local +z = PROUD outward; the group's rotation.y resolves the flank sign.
+  const grp = new THREE.Group();
+  // Recessed mounting flange — the door slab stands ~12cm proud of it so the slab throws
+  // its own shadow step (reads set-IN, not bolted-on).
+  const flange = new THREE.Mesh(new THREE.BoxGeometry(hatchW + 0.22, hatchH + 0.22, 0.10), _hullDarkMat);
+  flange.position.z = 0.04; grp.add(flange);
+  const door = new THREE.Mesh(new THREE.BoxGeometry(hatchW, hatchH, 0.16), _rustMat);
+  door.position.z = 0.13; grp.add(door);              // front ≈0.21, ~12cm proud of the flange
+  // Two horizontal reinforcing straps — reads as a heavy sealed door.
+  for (let b = -1; b <= 1; b += 2) {
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(hatchW * 0.92, 0.06, 0.10), _hullDarkMat);
+    bar.position.set(0, b * 0.27 * hatchH, 0.19); grp.add(bar);
+  }
+  // Lock HANDWHEEL on the latch (free) edge (−x): dark ring + 3 spokes + hub, sized so the
+  // outer edge stays ON the slab (no overhang onto the flange).
+  const wheelR = hatchW * 0.24, wx = -hatchW * 0.22, wy = -hatchH * 0.04, wz = 0.23;
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(wheelR, 0.036, 8, 16), _hullDarkMat);
+  ring.position.set(wx, wy, wz); grp.add(ring);
+  for (let sp = 0; sp < 3; sp++) {
+    const spoke = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, wheelR * 2, 6), _hullDarkMat);
+    spoke.rotation.z = Math.PI / 2 + sp * (Math.PI * 2 / 3);
+    spoke.position.set(wx, wy, wz); grp.add(spoke);
+  }
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.14, 8), _hullDarkMat);
+  hub.rotation.x = Math.PI / 2; hub.position.set(wx, wy, wz); grp.add(hub);
+  // Two hinges on the latch-OPPOSITE edge (+x): a vertical pivot barrel + a DARK strap leaf,
+  // both proud of the slab front so the hinge silhouette isn't swallowed by the slab.
+  for (let k = -1; k <= 1; k += 2) {
+    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.20, 6), _hullDarkMat);
+    barrel.position.set(hatchW * 0.5 + 0.07, hatchH * 0.30 * k, 0.25); grp.add(barrel);
+    const strap = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.10, 0.10), _hullDarkMat);
+    strap.position.set(hatchW * 0.30, hatchH * 0.30 * k, 0.23); grp.add(strap);
+  }
+  grp.position.set(px, py, flankZ);
+  grp.rotation.y = lee > 0 ? 0 : Math.PI;
+  grp.traverse((o) => { o.userData.isWreckDecoration = true; });
+  grp.name = '__scaleAnchor';   // pre-merge tag so the inspection harness can aim at it
+  g.add(grp);
+
+  // Climbing LADDER hugging the door jamb (~70%), seated in the SAME flat band so it can't
+  // float off a chining hull; biased toward the segment centre so it always stays on hull.
+  if (hash2(partLength + 3.3, radius + 1.1) < 0.70) {
+    const lad = new THREE.Group();
+    const ladH = band - 0.12;                          // fills the flat band (a boarding climb)
+    const rungs = Math.max(4, Math.round(ladH / 0.30));   // ~0.3m human rung pitch
+    const railSep = 0.18;
+    for (let k = -1; k <= 1; k += 2) {                 // two thick side rails (back on skin)
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(0.055, ladH + 0.12, 0.12), _hullDarkMat);
+      rail.position.set(k * railSep, 0, 0.06); lad.add(rail);
+    }
+    for (let r2 = 0; r2 < rungs; r2++) {               // 6cm-dia horizontal rungs, proud
+      const rung = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, railSep * 2 + 0.05, 8), _rustMat);
+      rung.rotation.z = Math.PI / 2;
+      rung.position.set(0, (rungs > 1 ? r2 / (rungs - 1) - 0.5 : 0) * ladH, 0.12);
+      lad.add(rung);
+    }
+    const ladSide = px < partLength * 0.5 ? 1 : -1;    // toward segment centre → stays on hull
+    const ladX = px + (hatchW * 0.5 + 0.22) * ladSide;
+    lad.position.set(ladX, (bandLo + bandHi) * 0.5, flankZ);   // centred in the band
+    lad.rotation.y = lee > 0 ? 0 : Math.PI;
+    lad.traverse((o) => { o.userData.isWreckDecoration = true; });
+    g.add(lad);
   }
 }
 
@@ -486,7 +701,7 @@ const HULL_SEGMENT_VARIANTS: ReadonlyArray<PartBuilder> = [
       // cleaner (negative-space contrast).
       const impactSide = rand() < 0.5 ? 1 : -1;
       if (rand() < 0.7) addBreachPatches(g, len, r, rand, 1, impactSide);
-      addHullGreebles(g, len, r, rand, 2 + Math.floor(rand() * 3), impactSide);   // ACAO richer vocab + asymmetry
+      addHullGreebles(g, len, r, rand, 2 + Math.floor(rand() * 3), impactSide, r);   // ACAO richer vocab + asymmetry; seat on flank r
       return {
         mesh: g,
         partLength: len,
@@ -497,6 +712,13 @@ const HULL_SEGMENT_VARIANTS: ReadonlyArray<PartBuilder> = [
           z: r * 1.02,
           faceYaw: Math.PI / 2,
         },
+        // ACAZ T2A — lofted ship-section flank reaches z = r; clean lee = −impactSide.
+        // The SHIP_SECTION holds full half-width only mid-flank (chines pull in above);
+        // hull sits at y=r*0.55, so the flat band is part-local y∈[0.25r, 1.0r].
+        anchorSurfZ: r,
+        anchorLeeSide: -impactSide,
+        anchorBandLo: r * 0.25,
+        anchorBandHi: r * 1.0,
       };
     },
   },
@@ -530,7 +752,7 @@ const HULL_SEGMENT_VARIANTS: ReadonlyArray<PartBuilder> = [
       // breach-bearing hulls to ~60% of plated hulls. ACAO — impact asymmetry.
       const impactSide = rand() < 0.5 ? 1 : -1;
       if (rand() < 0.6) addBreachPatches(g, len, r, rand, 1 + Math.floor(rand() * 2), impactSide);
-      addHullGreebles(g, len, r, rand, 2 + Math.floor(rand() * 3), impactSide);   // ACAO richer vocab + asymmetry
+      addHullGreebles(g, len, r, rand, 2 + Math.floor(rand() * 3), impactSide, r * 0.9);   // ACAO richer vocab + asymmetry; seat on plated flank 0.9r
       return {
         mesh: g,
         partLength: len,
@@ -541,6 +763,13 @@ const HULL_SEGMENT_VARIANTS: ReadonlyArray<PartBuilder> = [
           z: r * 0.9,
           faceYaw: Math.PI / 2,
         },
+        // ACAZ T2A — box body half-depth (r*1.8)/2 → +Z face at 0.9·r; lee = −impactSide.
+        // The whole flat box face hosts the door — band = base to just under the crown
+        // (box spans y∈[-0.15r, 1.35r]); this flat host gets the tallest doors.
+        anchorSurfZ: r * 0.9,
+        anchorLeeSide: -impactSide,
+        anchorBandLo: 0.05,
+        anchorBandHi: r * 1.30,
       };
     },
   },
@@ -832,6 +1061,107 @@ const HULL_SEGMENT_VARIANTS: ReadonlyArray<PartBuilder> = [
       };
     },
   },
+  // Variant 7 — SHEARED_HULL (ACAZ T2B). A hull section BLASTED open on one flank
+  // mid-ship: a charred breach patch with exposed bent frame ribs + torn-metal flaps
+  // bursting outward (built proud — recessed voids don't read at procgen scale, D197).
+  // The strongest "crashed, not parked" silhouette; the intact lee flank still hosts a
+  // salvage panel + a scale-anchor hatch.
+  {
+    build(rand: Rng, prevRadius: number): BuiltPart {
+      const g = new THREE.Group();
+      const len = 2.4 + rand() * 0.9;
+      const r = Math.max(prevRadius * 0.95, 0.95 + rand() * 0.2);
+      const hull = makeLoftedHull(
+        [{ z: 0, halfW: r, halfH: r }, { z: len, halfW: r, halfH: r }], _hullMat, 0.09,
+      );
+      // A subtle local crumple by the tear (the angular low-poly dent reads on-brand).
+      const gashSide = rand() < 0.5 ? 1 : -1;
+      const gx = len * (0.42 + rand() * 0.2);
+      dentGeometry(hull.geometry, new THREE.Vector3(gashSide * r, 0, gx),
+        r * 0.9, new THREE.Vector3(-gashSide * r * 0.28, -r * 0.08, 0));
+      hull.geometry.computeVertexNormals();
+      hull.rotation.y = Math.PI / 2;
+      hull.position.set(0, r * 0.55, 0);
+      g.add(hull);
+      // The torn-open section is built PROUD of the skin on the gash flank — recessed
+      // voids DON'T read on ~1m procgen hulls (D197), so the damage bursts OUTWARD: a
+      // dark charred breach patch + exposed bent frame ribs + splayed torn-metal flaps.
+      const fz = gashSide * (r + 0.06);
+      const patch = new THREE.Mesh(new THREE.BoxGeometry(r * 0.95, r * 1.05, 0.15), _hullDarkMat);   // ACBA rule-7 0.06→0.15 (hull-substantial)
+      patch.position.set(gx, r * 0.6, gashSide * (r + 0.05));   // seated mostly proud of the skin
+      patch.userData.isWreckDecoration = true;
+      g.add(patch);
+      for (let i = -1; i <= 1; i++) {                  // 3 exposed bent frame ribs
+        const rib = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, r * (0.95 - Math.abs(i) * 0.14), 6), _rustMat);
+        rib.position.set(gx + i * r * 0.3, r * 0.6, fz);
+        rib.rotation.x = i * 0.14;                      // bowed outward
+        rib.userData.isWreckDecoration = true;
+        g.add(rib);
+      }
+      const flapN = 4 + Math.floor(rand() * 3);         // torn-metal flaps around the rim
+      for (let i = 0; i < flapN; i++) {
+        const ang = (i / flapN) * Math.PI * 2 + (rand() - 0.5) * 0.4;
+        const flap = new THREE.Mesh(new THREE.ConeGeometry(r * 0.15, r * 0.46, 3), _rustMat);
+        flap.position.set(gx + Math.cos(ang) * r * 0.5, r * 0.6 + Math.sin(ang) * r * 0.5, fz);
+        flap.rotation.z = ang - Math.PI / 2;            // splay radially out from the rim
+        flap.rotation.x = gashSide * (0.5 + rand() * 0.4);
+        flap.userData.isWreckDecoration = true;
+        g.add(flap);
+      }
+      addHullGreebles(g, len, r, rand, 1 + Math.floor(rand() * 2), -gashSide, r);   // intact lee detail; seat on flank r
+      return {
+        mesh: g,
+        partLength: len,
+        radius: r,
+        panelAnchor: { x: len * 0.2, y: r * 0.5, z: r * 1.02, faceYaw: Math.PI / 2 },
+        // Scale-anchor on the INTACT lee flank (−gashSide); same flat band as the cylinder.
+        anchorSurfZ: r,
+        anchorLeeSide: -gashSide,
+        anchorBandLo: r * 0.25,
+        anchorBandHi: r * 1.0,
+      };
+    },
+  },
+  // Variant 8 — CARGO_POD_ROW (ACAZ T2B). A freight spine carrying 3-4 shipping-
+  // container pods, some torn off (only the bare clamp saddle remains). The containers
+  // are themselves human-known scale references, so this is a freight-train silhouette
+  // that reads its own size — no hatch anchor needed.
+  {
+    build(rand: Rng, prevRadius: number): BuiltPart {
+      const g = new THREE.Group();
+      const len = 2.8 + rand() * 1.0;
+      const r = Math.max(prevRadius * 0.95, 0.95 + rand() * 0.15);
+      const spine = new THREE.Mesh(new THREE.BoxGeometry(len, r * 0.5, r * 0.55), _hullDarkMat);
+      spine.position.set(len * 0.5, r * 0.5, 0);
+      g.add(spine);
+      const podCount = 3 + Math.floor(rand() * 2);     // 3-4 freight pods
+      const podLen = (len * 0.94) / podCount;
+      for (let i = 0; i < podCount; i++) {
+        const cx = (i + 0.5) * (len / podCount);
+        // Clamp saddle — present even where the pod was torn off (a bare freight cradle).
+        const clamp = new THREE.Mesh(new THREE.BoxGeometry(podLen * 0.28, r * 0.62, r * 1.18), _rustMat);
+        clamp.position.set(cx, r * 0.55, 0);
+        clamp.userData.isWreckDecoration = true;
+        g.add(clamp);
+        if (i > 0 && rand() < 0.25) continue;          // ~torn-off pod (only the clamp remains)
+        const pod = new THREE.Mesh(new THREE.BoxGeometry(podLen * 0.86, r * 0.95, r * 1.05), _hullMat);
+        pod.position.set(cx, r * 0.78, 0);
+        g.add(pod);
+        for (let k = -1; k <= 1; k += 2) {             // corrugation ribs on the +Z face
+          const rib = new THREE.Mesh(new THREE.BoxGeometry(podLen * 0.86, r * 0.10, 0.10), _hullDarkMat);
+          rib.position.set(cx, r * 0.78 + k * r * 0.28, r * 0.55);
+          rib.userData.isWreckDecoration = true;
+          g.add(rib);
+        }
+      }
+      return {
+        mesh: g,
+        partLength: len,
+        radius: r,
+        panelAnchor: { x: podLen * 0.5, y: r * 0.78, z: r * 0.55, faceYaw: Math.PI / 2 },
+      };
+    },
+  },
 ];
 
 // ── Engine module variants ───────────────────────────────────────────
@@ -990,27 +1320,33 @@ function pickVariantBiased(
   return pool[pool.length - 1];   // numerical-precision fallback
 }
 
-/** Session ABJ + ACE — biome-specific hullSegment weights (indices:
- *  0=RIBBED_CYLINDER, 1=PLATED_RECTANGULAR, 2=PANELED_TAPERED,
- *  3=OPEN_TRUSS, 4=FUEL_BARRELS, 5=BRISTLE_ANTENNA — added ACE).
- *  Salt: +30% PLATED (corrosion-resistant plates fit salt-flat lore).
- *  Rocky: +20% OPEN_TRUSS (mining-mod / skeletal frame feel).
- *  Dune: +20% FUEL_BARRELS (caravan tanker silhouette in the dunes).
- *  BRISTLE_ANTENNA: no biome bias — appears uniformly across all biomes
- *  as a "scout / science vessel" silhouette wherever wrecks crash. */
+/** Session ABJ + ACE + ACAZ — biome-specific hullSegment weights (indices:
+ *  0=RIBBED_CYLINDER, 1=PLATED_RECTANGULAR, 2=PANELED_TAPERED, 3=OPEN_TRUSS,
+ *  4=FUEL_BARRELS, 5=BRISTLE_ANTENNA, 6=SHEARED_HULL, 7=CARGO_POD_ROW — last two ACAZ T2B).
+ *  Salt: +30% PLATED + cargo pods (freight-route lore).
+ *  Rocky: +20% OPEN_TRUSS + SHEARED (hard-impact crashes split hulls open).
+ *  Dune: +20% FUEL_BARRELS + cargo pods (caravan/freight silhouette in the dunes).
+ *  Wreck-yard: PLATED + OPEN_TRUSS + SHEARED boosted (a graveyard of violently-wrecked hulks).
+ *  ⚠ EVERY row MUST list all 8 weights — `pickVariantBiased`'s `?? 1.0` fallback silently
+ *  mis-weights a forgotten index. */
 const HULL_SEGMENT_BIOME_WEIGHTS: Record<BiomeId, ReadonlyArray<number>> = {
-  salt:  [1.0, 1.3, 1.0, 1.0, 1.0, 1.0],
-  rocky: [1.0, 1.0, 1.0, 1.2, 1.0, 1.0],
-  dune:  [1.0, 1.0, 1.0, 1.0, 1.2, 1.0],
-  // Cycle 8 — wreck-yard graveyard: ancient corroded + stripped-to-frame hulks
-  // (PLATED corrosion + OPEN_TRUSS skeletal both boosted).
-  wreck_yard: [1.0, 1.3, 1.0, 1.3, 1.0, 1.0],
+  salt:  [1.0, 1.3, 1.0, 1.0, 1.0, 1.0, 1.0, 1.2],
+  rocky: [1.0, 1.0, 1.0, 1.2, 1.0, 1.0, 1.3, 1.0],
+  dune:  [1.0, 1.0, 1.0, 1.0, 1.2, 1.0, 1.0, 1.3],
+  // Cycle 8 — wreck-yard graveyard: ancient corroded + stripped-to-frame + torn-open hulks.
+  wreck_yard: [1.0, 1.3, 1.0, 1.3, 1.0, 1.0, 1.4, 1.0],
 };
 
 function pickPart(rand: Rng, kind: PartKind, biome?: BiomeId): PartBuilder {
   switch (kind) {
-    case 'cockpit':       return pickVariant(rand, COCKPIT_VARIANTS);
+    case 'cockpit':
+      return pickVariant(rand, COCKPIT_VARIANTS);
     case 'hullSegment': {
+      // Inspection override (rig-shot --variant=N) forces every hull segment to one
+      // variant so the studio can frame it; consumes the selection rand to keep the
+      // budget stable. No in-game effect (the flag is never set at runtime).
+      const forced = (globalThis as { __FORCE_HULL_VARIANT?: number }).__FORCE_HULL_VARIANT;
+      if (forced !== undefined && HULL_SEGMENT_VARIANTS[forced]) { rand(); return HULL_SEGMENT_VARIANTS[forced]; }
       if (biome) {
         return pickVariantBiased(rand, HULL_SEGMENT_VARIANTS, HULL_SEGMENT_BIOME_WEIGHTS[biome]);
       }
@@ -1023,7 +1359,7 @@ function pickPart(rand: Rng, kind: PartKind, biome?: BiomeId): PartBuilder {
 
 // ── Wreck classes (recipes) ──────────────────────────────────────────
 
-export type ProcgenWreckClass = 'corvette' | 'freighter' | 'gunship' | 'science_vessel' | 'bulk_hauler' | 'orbital_pod_cluster' | 'flagship_engineBlock';
+export type ProcgenWreckClass = 'corvette' | 'freighter' | 'gunship' | 'science_vessel' | 'bulk_hauler' | 'mega_freighter' | 'orbital_pod_cluster' | 'flagship_engineBlock';
 
 interface WreckRecipe {
   /** Ordered part kinds. Cockpit goes first (nose end at x=0), tail
@@ -1071,6 +1407,19 @@ function recipeFor(rand: Rng, cls: ProcgenWreckClass): WreckRecipe {
     parts.push('engineModule');
     parts.push('tailStub');
     return { parts, panelCountMin: 2, panelCountMax: 3 };
+  }
+  if (cls === 'mega_freighter') {
+    // ACAY — mega-freighter (~25-40m): cockpit + 7-10 hull + 2-3 engine + tail,
+    // 4-5 panels. The dramatic-scale piece (squat/blocky, deeply buried). Roulette-
+    // RARE so the field isn't all giants. The merge collapses the many segments by
+    // material, so draw calls stay bounded — but watch the triangle budget.
+    const hullCount = 7 + Math.floor(rand() * 4);     // 7-10
+    const engineCount = 2 + Math.floor(rand() * 2);   // 2-3
+    const parts: PartKind[] = ['cockpit'];
+    for (let i = 0; i < hullCount; i++) parts.push('hullSegment');
+    for (let i = 0; i < engineCount; i++) parts.push('engineModule');
+    parts.push('tailStub');
+    return { parts, panelCountMin: 4, panelCountMax: 5 };
   }
   if (cls === 'flagship_engineBlock') {
     // ABO B6 — POC migration of engineBlock flagship into the composite
@@ -1150,11 +1499,23 @@ function assembleWreck(
   }
   const placed: PlacedPart[] = [];
   let cursor = 0;
-  let prevRadius = 0.9;                  // seed for the first part's interface
+  // ACAZ T3 — seed the hull girth from the class so heavy classes are FAT (the size
+  // ladder, not length-only). prevRadius carries the girth down the part chain; the 0.95
+  // per-segment taper still applies so a long mega narrows toward the tail (fat-bodied
+  // freighter read). Faceted hulls scale at fixed vertex count → no tri/draw cost.
+  let prevRadius = 0.9 * (CLASS_GIRTH[cls] ?? 1.0);   // seed for the first part's interface
   for (const kind of recipe.parts) {
     const builder = pickPart(rand, kind, biome);
-    const built = builder.build(rand, prevRadius);
+    const built = builder.build(rand, prevRadius, cls);
     built.mesh.position.x = cursor;
+    // ACAZ T2D — crash-shear ENGINES: a drooped/canted engine module hanging off its
+    // mount reads "torn loose in the crash" (not a parked 90° nozzle). Rotated about the
+    // attach (local x=0); the small gap to the tail reads as battle damage. Gentle so
+    // multi-engine clusters don't fly apart. Deterministic from cursor → no new rand.
+    if (kind === 'engineModule') {
+      built.mesh.rotation.z = -(0.14 + hash2(cursor, prevRadius) * 0.16);   // droop ~8-17°
+      built.mesh.rotation.y = (hash2(prevRadius * 1.3, cursor) - 0.5) * 0.5; // slight cant
+    }
     root.add(built.mesh);
     placed.push({ built, startX: cursor });
     cursor += built.partLength;
@@ -1165,6 +1526,42 @@ function assembleWreck(
   // Center the wreck on its position by shifting all parts -totalLength/2.
   root.position.x = 0;
   for (const child of root.children) child.position.x -= totalLength / 2;
+
+  // ── ACAZ T2A — scale-anchor hatch+ladder: ONE per wreck (2 on heavy freighters),
+  // on a SOLID-hull segment's clean lee flank. A per-WRECK gate (NOT per-segment) so
+  // the human door reads as a single trusted size reference instead of a repeating
+  // band (the adversarial-critique ship-blocker). Added BEFORE panel placement so
+  // findSurfaceMounts treats it as an obstacle. Deterministic target pick + reused
+  // lee side → ZERO new rand (panel stream unchanged, verify:placement stays 0 fails).
+  // Eligible hosts: a solid flank, a FAT segment (≥0.7r — never a thin tail), and a flat
+  // band tall enough to seat a door (≥0.7m). Prefer the host with the TALLEST band so the
+  // flat plated box (band 1.3r → walk-up door) beats the chining cylinder (band 0.75r →
+  // a lower access hatch); cylinders still host for broad fleet coverage, just shorter.
+  const anchorable = placed.filter((p) =>
+    p.built.anchorSurfZ !== undefined && p.built.radius >= 0.7 &&
+    (p.built.anchorBandHi! - p.built.anchorBandLo!) >= 0.7,
+  );
+  if (anchorable.length > 0) {
+    const ranked = [...anchorable].sort((a, b) => {
+      const ba = a.built.anchorBandHi! - a.built.anchorBandLo!;
+      const bb = b.built.anchorBandHi! - b.built.anchorBandLo!;
+      return (bb - ba) || (b.built.partLength - a.built.partLength);
+    });
+    // Anchor count scales with hull LENGTH on the big freight classes so a 33m mega
+    // gets 2-3 repeated human references (sells the length); everyone else gets 1.
+    const nWant = (cls === 'mega_freighter' || cls === 'bulk_hauler')
+      ? Math.max(1, Math.min(3, Math.round(totalLength / 9))) : 1;
+    const targets: PlacedPart[] = [];
+    for (const p of ranked) {
+      if (targets.length >= nWant) break;
+      // Keep anchors >4m apart so the doors don't cluster (count-legibility).
+      if (targets.every((t) => Math.abs(p.startX - t.startX) > 4)) targets.push(p);
+    }
+    for (const t of targets) {
+      addScaleAnchor(t.built.mesh, t.built.partLength, t.built.radius, t.built.anchorSurfZ!,
+        t.built.anchorBandLo!, t.built.anchorBandHi!, t.built.anchorLeeSide ?? 1);
+    }
+  }
 
   // ── Salvage panels — pick from parts that offered a panelAnchor.
   const panelEligible = placed.filter((p) => p.built.panelAnchor !== null);
@@ -1287,12 +1684,16 @@ export function placeProcgenComposite(
   // together) at modest frequency.
   const cls: ProcgenWreckClass = opts.cls ?? (() => {
     const r = rand();
+    // ACBA — 7-way (scout removed per user feedback: read as lame/unrealistic). The
+    // mid classes carry the bulk; mega_freighter (~25-40m) stays RARE so the field
+    // isn't all giants. Scout's old 12% share folded mostly into corvette.
     if (r < 0.30) return 'corvette';
-    if (r < 0.48) return 'gunship';
-    if (r < 0.64) return 'freighter';
-    if (r < 0.75) return 'science_vessel';
-    if (r < 0.88) return 'bulk_hauler';
-    return 'orbital_pod_cluster';
+    if (r < 0.46) return 'gunship';
+    if (r < 0.61) return 'freighter';
+    if (r < 0.72) return 'science_vessel';
+    if (r < 0.85) return 'bulk_hauler';
+    if (r < 0.94) return 'orbital_pod_cluster';
+    return 'mega_freighter';
   })();
   const recipe = recipeFor(rand, cls);
   // Session ABJ — B4: query biome at the wreck position and thread to
@@ -1304,13 +1705,30 @@ export function placeProcgenComposite(
 
   // Position + terrain-align + bury + yaw.
   group.position.copy(pos);
-  const buryY = opts.buryY ?? 0.4;
+  // ACAZ T2D/T3 — class-scaled half-burial, CLAMPED so ≥~50% of the wreck (and its top-
+  // aligned scale anchors) stays proud — deeper burial would bury all the loot. Derived
+  // from cls + a position hash → no new rand. flagship keeps its caller-authored buryY.
+  let buryY: number;
+  if (cls === 'flagship_engineBlock') {
+    buryY = opts.buryY ?? 0.4;
+  } else {
+    group.updateMatrixWorld(true);
+    const topY = new THREE.Box3().setFromObject(group).max.y;   // wreck height (base ≈ 0)
+    const raw = (CLASS_BURY[cls] ?? (opts.buryY ?? 0.5)) * (0.9 + hash2(pos.x, pos.z) * 0.25);
+    buryY = Math.min(raw, 0.5 * Math.max(0.4, topY));
+  }
   group.position.y -= buryY;
   const yaw = rand() * Math.PI * 2;
   alignToTerrain(group, terrain, pos.x, pos.z, yaw, 1.5);
-  // alignToTerrain sets quaternion directly; the yaw component is
-  // already encoded. Composing further euler.z = 0 isn't needed —
-  // tilt is purely from terrain.
+  // alignToTerrain sets the quaternion from terrain normal + yaw. ACAZ T2D/T3 — compose a
+  // class crash LIST (roll about the wreck's local long axis +X) on top. ALWAYS fires at
+  // ≥55% of the class max (the old sin() gate zeroed most wrecks); deterministic per site
+  // (hash → no new rand). flagship_engineBlock stays level (authored hero pose).
+  if (cls !== 'flagship_engineBlock') {
+    const listMax = CLASS_LIST[cls] ?? 0.1;
+    const listMag = listMax * (0.55 + 0.45 * hash2(pos.x, pos.z));
+    group.rotateX(hash2(pos.z, pos.x) < 0.5 ? listMag : -listMag);
+  }
 
   // Shadow flags.
   group.traverse((o) => {
@@ -1336,6 +1754,31 @@ export function placeProcgenComposite(
     const dsz = new THREE.Box3().setFromObject(group).getSize(new THREE.Vector3());
     addDebrisFan(group, dsz.x, dsz.z, buryY, rand, rand() < 0.5 ? 1 : -1);
   }
+
+  // ACAY 1B — re-skin the wreck to its CLASS palette (distinct colour identity per
+  // class). MUST run before the merge (which groups by material) + after debris (so
+  // shed plates re-skin too). Keyed off `cls` (no rand → D208-safe). Memoised, so a
+  // whole fleet of one class shares one material set (0 extra shader programs).
+  if (cls !== 'flagship_engineBlock') {
+    // ACBA — the swap (incl. the cloned DoubleSide bell-flare remap) now lives in the
+    // shared reskinToBucket so the POI archetypes re-skin identically.
+    reskinToBucket(group, getClassHullMats(cls));
+  }
+
+  // ACAZ T2A — record scale-anchor positions in GROUP-LOCAL coords BEFORE the merge
+  // folds the named groups away, so the inspection harness (rig-shot --forceanchor) can
+  // aim the camera straight at a hatch. Local (not world) so it survives the rig's
+  // later re-orientation. Cheap metadata; harmless/unused in production.
+  const anchorLocal: number[] = [];
+  group.updateMatrixWorld(true);
+  group.traverse((o) => {
+    if (o.name === '__scaleAnchor') {
+      const p = new THREE.Vector3(); o.getWorldPosition(p);
+      group.worldToLocal(p);   // group-local → stable under later re-rotation
+      anchorLocal.push(p.x, p.y, p.z);
+    }
+  });
+  if (anchorLocal.length) group.userData.anchorLocalPositions = anchorLocal;
 
   // T6 — merge the static, non-interactive meshes by material into 1-few meshes
   // (the draw-call win). Salvage panels stay live (animated doors). Per-part
@@ -1367,6 +1810,7 @@ export function placeProcgenComposite(
       cls === 'gunship' ? 'engine_cluster' :
       cls === 'science_vessel' ? 'fuselage' :     // ABJ — observation hull → fuselage palette (mixed loot, no engine-cabling skew)
       cls === 'bulk_hauler' ? 'cargo_container' : // ABN — cargo-heavy frame → cargo lottery palette
+      cls === 'mega_freighter' ? 'cargo_container' : // ACAY — heavy hauler → cargo lottery palette
       cls === 'orbital_pod_cluster' ? 'escape_pod' : // ACE — pod cluster: medical-heavy palette
       'cargo_container';
     const seen = new Set<THREE.Object3D>();

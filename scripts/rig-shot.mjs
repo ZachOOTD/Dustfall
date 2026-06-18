@@ -1022,15 +1022,20 @@ const SCENARIOS = {
       : argv.seed !== undefined ? String(argv.seed) : '1337')
       .split(',').map((s) => Number(s.trim())).filter((n) => !Number.isNaN(n));
     const zoom = argv.zoom !== undefined ? Number(argv.zoom) : 1;   // <1 = tighter (detail inspection)
+    const fa = argv.forceanchor !== undefined;   // ACAZ T2A — pin the scale-anchor hatch to the +Z camera flank
+    const variant = argv.variant !== undefined ? Number(argv.variant) : -1;   // ACAZ T2B — force one hull variant
+    const archetype = argv.archetype || '';      // ACBA — POI archetype (satellite/tank_cluster/…); '' = ship
     for (const seed of seeds) {
-    const r = await page.evaluate(({ cls, ang, seed, zoom }) => {
+    const r = await page.evaluate(({ cls, ang, seed, zoom, fa, variant, archetype }) => {
       const ctx = window.__game.ctx;
+      window.__FORCE_ANCHOR_NEAR = fa;   // inspection only — forces the hatch camera-facing
+      if (variant >= 0) window.__FORCE_HULL_VARIANT = variant; else delete window.__FORCE_HULL_VARIANT;
       ctx.weather.intensity = 0; ctx.weather.cloudiness = 0.15;
       window.__game.setTime(0.34);
       ctx.three.renderer.toneMappingExposure = 1.5;
       ctx.flags.thirdPerson = false;
       if (ctx.player.rig) ctx.player.rig.group.visible = false;
-      const spawn = window.__game.spawnProcgenWreckRig(cls, seed);
+      const spawn = window.__game.spawnProcgenWreckRig(cls, seed, archetype || undefined);
       let mw = null;
       ctx.three.scene.traverse((o) => { if (!mw && o.name === 'procgenWreckRig') mw = o; });
       if (!mw) return { found: false, cls, seed, spawn };
@@ -1068,6 +1073,21 @@ const SCENARIOS = {
       if (ang === 'side') aim(new V(cx, eyeY, cz + D));
       else if (ang === 'front') aim(new V(cx - D, eyeY, cz + D * 0.12));
       else aim(new V(cx + D * 0.55, eyeY, cz + D * 0.62));   // 3q — length + +Z flank
+      // ACAZ T2A — when --forceanchor, aim a CLOSE 3/4 shot straight at a hatch (its
+      // world pos was recorded pre-merge on the wreck group). `--zoom` sets the
+      // distance (×9): 0.3→~2.7m, 0.22→~2.0m. The hatch is pinned to the +Z flank.
+      if (fa) {
+        let ap = null;
+        mw.traverse((o) => { if (!ap && o.userData && o.userData.anchorLocalPositions) ap = o.userData.anchorLocalPositions; });
+        if (ap && ap.length >= 3) {
+          const lp = new V(ap[0], ap[1], ap[2]);
+          mw.localToWorld(lp);                 // transform by the rig's FINAL orientation
+          const ax = lp.x, ay = lp.y, az = lp.z;
+          const dist = (zoom || 1) * 9;
+          cam.position.set(ax + dist * 0.30, ay + dist * 0.16, az + dist);
+          cam.lookAt(ax, ay, az);
+        }
+      }
       cam.updateMatrixWorld(true);
       let DirCtor = null, HemiCtor = null;
       ctx.three.scene.traverse((o) => { if (o.isDirectionalLight && !DirCtor) DirCtor = o.constructor; if (o.isHemisphereLight && !HemiCtor) HemiCtor = o.constructor; });
@@ -1077,10 +1097,11 @@ const SCENARIOS = {
       if (!key && DirCtor) { key = new DirCtor(); key.name = '__procgenKey'; key.intensity = 2.0; key.color.set(0xfff2e0); ctx.three.scene.add(key.target); ctx.three.scene.add(key); }
       if (key) { const toC = new V(cx - cam.position.x, 0, cz - cam.position.z); key.position.set(cam.position.x + toC.x * 0.2 + span * 0.25, cam.position.y + h * 0.6, cam.position.z + toC.z * 0.2); key.target.position.set(cx, cy, cz); key.target.updateMatrixWorld(true); }
       if (!ctx.three.scene.getObjectByName('__procgenFill') && HemiCtor) { const fill = new HemiCtor(0xbfccdd, 0x6b5840, 0.7); fill.name = '__procgenFill'; ctx.three.scene.add(fill); }
-      return { found: true, cls, seed, span: +span.toFixed(1), height: +h.toFixed(1), meshes };
-    }, { cls, ang: angle, seed, zoom });
+      return { found: true, cls: archetype || cls, seed, span: +span.toFixed(1), height: +h.toFixed(1), meshes };
+    }, { cls, ang: angle, seed, zoom, fa, variant, archetype });
     await page.waitForTimeout(320);
-    await page.screenshot({ path: join(OUT, `scen-procgen-${cls}-${angle}-s${seed}.png`), fullPage: false });
+    const tag = archetype ? archetype : cls;
+    await page.screenshot({ path: join(OUT, `scen-procgen-${tag}-${angle}-s${seed}${variant >= 0 ? `-v${variant}` : ''}.png`), fullPage: false });
     console.log(`[procgen-wreck] ${JSON.stringify(r)}`);
     }
   },
@@ -2440,6 +2461,9 @@ const SCENARIOS = {
     // ── Bury assertion (runs in TS via __game.panelBuryAudit — THREE there). ──
     const audit = await page.evaluate(() => window.__game.panelBuryAudit());
     console.log(`[panels] BURY-AUDIT seed=${list.seed} pass=${audit.pass}/${audit.tested} fails=${audit.failCount} ${audit.failCount ? JSON.stringify(audit.fails) : 'ALL CLEAR'}`);
+    // ACBA — surface-scoped terrain audit (corner-aware; interiors excluded).
+    const t = audit.terrain;
+    if (t) console.log(`[panels] TERRAIN-AUDIT seed=${list.seed} pass=${t.pass}/${t.tested} fails=${t.failCount} ${t.failCount ? JSON.stringify(t.fails) : 'ALL CLEAR'}`);
 
     // ── Screenshots: sample panels from the front (all kinds + first few). ──
     const targets = await page.evaluate(() => {

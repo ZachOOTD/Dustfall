@@ -22,7 +22,8 @@ import type { BiomeSampler } from './biomes.ts';
 import type { SalvageableRegistry } from './salvage.ts';
 import { registerSalvageable } from './salvage.ts';
 import { placeWreck, type WreckKind } from './wrecks.ts';
-import { placeProcgenComposite, pruneBuriedPanels } from './procgenWreck.ts';
+import { pruneBuriedPanels } from './procgenWreck.ts';
+import { placeProcgenPOI } from './poiAssembler.ts';
 import { Tuning } from '../config/tuning.ts';
 
 // Wreck-kind palette for procgen POIs. Cargo containers are intentionally
@@ -101,7 +102,10 @@ export function placeProcgenPOIs(
       // ABJ — B4: thread the biome at the placement position so the
       // composite assembler can bias hullSegment variant selection.
       const biome = biomes.biomeAt(accepted.x, accepted.z);
-      placeProcgenComposite(scene, world, terrain, pos, rand, salvageables, { buryY, biome });
+      // ACBA — placeProcgenPOI rolls an ARCHETYPE (ship / satellite / tank_cluster / …);
+      // `ship` delegates to the legacy linear assembler, so the field now mixes genuinely
+      // different POIs (vertical tank farms, fallen satellites) among the hull wrecks.
+      placeProcgenPOI(scene, world, terrain, pos, rand, salvageables, { buryY, biome });
     } else {
       const kind = PROCGEN_WRECK_KINDS[Math.floor(rand() * PROCGEN_WRECK_KINDS.length)];
       // Modest size + bury variation so procgen POIs read as varied silhouettes

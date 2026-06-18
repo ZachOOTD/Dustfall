@@ -659,13 +659,15 @@ export const Tuning = {
   // Session ABA — share of procgen POIs that use the new composite
   // wreck system (procgenWreck.ts) vs. the legacy hand-modeled
   // wreck-kind palette. Session ABC bumped 0.35 → 0.50 after the part
-  // vocabulary expanded (3 → 5 hullSegment variants, 2 → 3 wreck classes
-  // with gunship added, breach-patch decoration layer wired into 2 of the
-  // hull variants). At 0.50 ~11 of 22 procgen POIs per world get
-  // composites; the rest stay on legacy engine_cluster / fuselage /
-  // escape_pod / cargo_container. Ramp again past 0.65 once a multi-seed
-  // playtest validates that the expanded variety doesn't read repetitive.
-  PROCGEN_COMPOSITE_SHARE: 0.50,
+  // ACBA — the composite path now routes through `placeProcgenPOI` (the new
+  // component/socket/grammar system: ship / satellite / tank_cluster / debris,
+  // biome-weighted). Bumped 0.50→0.85 so the VARIETY system applies to the whole
+  // scattered-wreck field across ALL biomes (user: "not just the ship graveyard"),
+  // not a graveyard-only effect. The remaining ~15% stay on the legacy hand-modeled
+  // small props (lone engine_bell / fuselage / escape_pod / engine_cluster) for
+  // small-scale ground texture. Once the ship→socket migration lands (#27) the whole
+  // composite path is the new system and this can go to 1.0.
+  PROCGEN_COMPOSITE_SHARE: 0.85,
 
   // AAI — opening-scene anchor (player + opening wreck + companion pod +
   // speeder). Per D83, this position stays seed-stable as a narrative anchor.
@@ -891,7 +893,14 @@ export const Tuning = {
   // only fully-submerged panels are unreachable. Register-all-then-prune keeps the
   // seeded RNG intact (D208). Fine placement quality is the Tier-2 sampler's job;
   // this is just the "never leave a fully-buried phantom panel" guard.
-  SALVAGE_PANEL_TERRAIN_MARGIN: -0.10,   // cull if (center.y - terrain) < this (m)
+  SALVAGE_PANEL_TERRAIN_MARGIN: -0.10,   // cull if (center.y - terrain) < this (m) — fallback when no door extents
+  // ACBA — corner-aware terrain cull. The center-only check above passed panels
+  // whose CENTER cleared sand but whose lower half was buried (the "panels under the
+  // terrain" the player reported). Now we sample the panel plate's bottom-edge
+  // midpoint (from panelDoorExtents) and cull if IT sinks more than this below sand —
+  // size-aware, so a tall panel may dip its lower edge a little (reads fine) but a
+  // half-submerged panel is removed. Tune on the owed walk-test (eyes-on).
+  SALVAGE_PANEL_TERRAIN_CORNER_MARGIN: -0.25,   // cull if (bottom-edge.y - terrain) < this (m)
   // ACY — panel size variants. Each placed panel rolls one size for visual
   // variety (small access hatch → large cargo bay panel). Multiplies the
   // base SALVAGE_PANEL_SIZE_* via addAccessPanel's `scale`.

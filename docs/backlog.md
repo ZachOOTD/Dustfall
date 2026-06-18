@@ -67,6 +67,33 @@ When ready to ship one → promote it into a session in [roadmap.md](roadmap.md)
 
 - **Player model (at its in-pipeline ceiling — see [feature-player-model.md](feature-player-model.md)).** Remaining OPTIONAL: **PM-D** cloth physics (Verlet tunic + possible cloak; shares the Cycle-4 rope solver); **PM-S.3** torso/neck-head skinning (the true junction blend — currently filler-bridged); **PM-E** deeper texture (weathering/dye/leather/normals); **in-game lighting mood for figure solidity** (D142 — the figure reads far more solid under key/rim than the flat bright-desert ambient; lowering ambient / raising contrast changes the WHOLE game's look → an aesthetic decision, surface first; **biggest remaining realism lever for actual play**); **photoreal = a D107 asset fork** (import a rigged+textured humanoid — the only path past "stylized", breaks zero-asset, user's call); sled-on-back when undeployed (design fork).
 
+### E. Fresh triage (2026-06-17 dump — regroup into A–D / promote later)
+
+- `[polish]` **Brighter stars** in the night sky.
+- `[bug]` **Satellite dish needs a full collider** (currently walkthrough/partial collision).
+- `[feat]` **Sarlacc lure-and-ambush** — a bulb-flower lure in the pit centre; the maw emerges + opens when the player gets close.
+- `[feat]` **Procedural wreck overhaul** — more detail, variety, sizes, variations + better textures.
+- `[idea]` **Procedurally-generated wreck interiors** (walkable, not hand-placed).
+- `[feat]` **More wreck types + new POIs.**
+- `[polish]` **Speeder antenna tilt** — angle it toward the REAR of the bike, not the front.
+- `[polish]` **Rebalance survival stats** (health/food/thirst/temperature) + enable survival in the new-game mode to playtest feel.
+- `[bug]` **Dev/debug mode inaccessible** — can't click the screen to open it (pointer-lock); add a keybind.
+- `[feat]` **Replace the scrap bar with a scrap machete** tool.
+- `[feat]` **Open salvage panels with the machete** (tool-gated pry, replacing scrap-bar gating).
+- `[polish]` **Machete panel-open animation.**
+- `[polish]` **Sandworm model overhaul** — more realistic mouth + body.
+- `[polish]` **Worm audio** — replace the loud/abrasive SFX with a low rumble.
+- `[bug]` **Worm tail visible above ground** — should stay buried (adjust model / spawn depth).
+- `[feat]` **Worm charge-and-dive attack** — remove the jump attack.
+- `[polish]` **Flat-colour texture audit** — review all materials, improve the weakest-reading ones.
+- `[feat]` **Crashing-ship / satellite event** — fiery wreck falls from the sky, crashes into the sand, leaves a salvageable dynamic wreck.
+- `[polish]` **Rework the scrap pickup model** to a rusted sheet-of-metal look (current model disliked).
+- `[debt]` **Security review** — audit the public GitHub repo for vulnerabilities / leaked secrets.
+- `[polish]` **Tall smoke-signal plume** rising high into the sky from fires.
+- `[feat]` **Rideable scrap sled** — press E to mount, like the bike.
+- `[idea]` **Idea-generation tooling** — a way for the agent to propose new game ideas from the current project state.
+- `[debt]` **Full roadmap refresh** to reflect current state + what we're working toward.
+
 ---
 
 ## PARKED (may revisit — needs a design decision first; detail preserved so the call is reversible)
@@ -100,3 +127,28 @@ When ready to ship one → promote it into a session in [roadmap.md](roadmap.md)
 **World gen & core**: procedural 2400m seeded world + biome sampler + flagship rejection-sampler placement + opening-scene seed-stable anchor (AAI-AAK, D82-D85); GameContext spine; save/load v14 (additive-schema discipline, D81).
 
 **Perf & tooling**: static-merge + pickup geometry-merge + `compileAsync` boot prewarm + the `customProgramCacheKey` shader-cache fix (D175/D177); the **rig-shot Playwright harness** + ~25 scenarios (rigStudio/item-studio/panels/perf-probe/procgen-wreck/wreck-yard/speeder-fx/drop-test/craft-chooser/sky/…) + `__game` dev hooks (D134/D138/D149).
+
+### F. Deferred from the ACAZ wreck-overhaul capstone critique (2026-06-17)
+[polish] SHEARED_HULL breach-patch depth 0.06→0.10 + recessed near-black gash floor (rule-7; reads as a hole not scabbing)
+[polish] wreck-yard: force a size tentpole (1 mega + 1 bulk + 1 scout) + scale minSep by class footprint so megas don't clip neighbours
+[polish] one non-axial mass per heavy class (dorsal superstructure / sponsons / bridge tower) to break the length-axis "sausage" silhouette
+[polish] up-close weathering chroma: push oxide more orange, lift seam-rust out of shadow, make gravity drips rust-coloured + seam-gated
+[polish] sign-randomize + widen engine droop (currently always down-and-one-way); ~15% fully detach the nozzle off its mount
+[polish] scout/corvette guaranteed visible trauma (≥1 SHEARED or breach + a list) since they sit fully proud + most-scrutinised
+[polish] 2A scale-anchor: exclusion pocket so lee-flank greebles/seams don't punch through near the door; fins/antennas → impact flank only
+[debt] full per-bucket weathering rebalance so hull HUE identity (not just lightness) survives the desert tint
+[idea] wreck-yard draw-calls 1477 from ~36 live salvage panels (not hull mats) — cap concurrent open-panel interiors or LOD distant panels
+
+### G. Deferred from the ACBA POI-variety overhaul + its adversarial critique (2026-06-17)
+[done] HOLLOW-HUSK archetype SHIPPED (ACBA) — open-top-trough gutted hull shell + torn ends + flank breach + exposed rib formers, half-buried + listed, side-wall colliders (enterable-ready). Follow-up: more exterior detail, a clearer hollow read from low side angles, true enterability (floor + remove the bore obstruction) in a dedicated phase
+[feat] PROCGEN_COMPOSITE_SHARE 0.50→0.85 SHIPPED (ACBA) — new system now covers the bulk of scattered wrecks in ALL biomes; once ship→socket migration lands, go to 1.0 + retire/fold the legacy placeWreck 4-kind path in procgenPoi into a small_wreck archetype
+[done] "wider/weirder ships" SHIPPED (ACBA, D232) as an ADDITIVE socket-built `derelict` archetype (nose+barrel+engine → linear/wide-body-outriggers/stacked-tower forms). Optional follow-up: RETIRE the legacy linear assembleWreck for the derelict (then composite share → 1.0) — only if the derelict reaches the legacy ship's polish (8 variants / weathering / scale anchor); else keep both. Refine the wide-body outriggers (currently perpendicular barrels — try parallel twin-hulls or angled sponsons)
+[debt] formal COLLIDER-AUDIT harness — assert each POI's declared collider-union ⊇ its visual bbox (the critique found 3 author-error mismatches by eye; a headless gate would catch them)
+[polish] tank_cluster weathering reads terracotta/ceramic — a vertical cylinder fires the ox channels everywhere; give tanks a lower-ox / more-dust-chalk profile so the flank shows a top-to-bottom steel value gradient (cooler up top)
+[polish] fleet palette cohesion — pull the saturated accents (navy-slate wings, terracotta tanks) toward the warm hull mid-value band so the family reads as one weather-system; distinct via LIGHTNESS not clashing hue (D224 approach)
+[polish] wire pipeStrut() into assembleTankCluster (mate pipes between adjacent tanks' pipeZ sockets) — currently dead code + an untested collider path; plumbed tanks read as a connected farm
+[polish] sand-drift banking — makeSandMound for the tank pad / satellite base doesn't visibly bank against the structure; raise mound height + ensure radius ≥ footprint + ~1.5m so every base meets the sand as a drift, not a clean seam
+[polish] debris field scorch ring / disturbed-sand disc under the scatter centre (one impact footprint readable at yard distance) + warm ox/seam-rust on fragments so they read as torn hull metal, not grey rock
+[polish] satellite solar wings still read dark at distance + bus (cool bucket) vs gold foil is slightly incoherent; consider a warmer bus bucket or more foil coverage; status-LED sub-pixel (enlarge or add a bezel)
+[polish] yard ground-view worst-case 3215 draw calls — a yard-level cluster-merge across already-merged POIs (38 sub-groups un-merged) would cut it; field perf is fine (869)
+[done-partial] §F SHEARED breach-patch depth 0.06→0.15 SHIPPED (ACBA); recessed gash floor stays N/A (D223 — recessed voids don't read at procgen scale, built proud instead)

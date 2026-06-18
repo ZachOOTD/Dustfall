@@ -67,6 +67,30 @@ export interface RustedHullOptions {
   oxStrength?: number;
   /** Hex color of the warm oxidation zones. Default a mid rust-brown. ACAP W3. */
   oxHex?: number;
+  // ── ACAY — surface-orientation weathering (the "flat tops" fix). Research:
+  //    arid-desert hulls decay UV-fade → chalk → seam-rust → bare metal, and
+  //    weathering is orientation-specific (tops = dust+chalk, undersides =
+  //    heaviest oxidation, seams = rust origin). All default 0 so existing
+  //    callers (the hand-modeled hero wrecks that share this factory) are
+  //    byte-identical; the procgen materials opt in with elevated values.
+  /** Warm ochre-grey desert dust that settles on UP-facing surfaces. Default 0. */
+  dustStrength?: number;
+  /** Hex of the settled dust crust. Default a warm ochre-grey. */
+  dustHex?: number;
+  /** Pale chalky UV-breakdown haze on top/upper surfaces. Default 0. */
+  chalkStrength?: number;
+  /** Thin rust crust on TOP-facing oxidation zones (tops aren't pristine). Default 0. */
+  oxTopStrength?: number;
+  /** Heavy, saturated oxidation on UNDERSIDES (shadowed moisture traps). Default 0. */
+  oxDeepStrength?: number;
+  /** Hex of the deep underside oxidation. Default a deep saturated rust-brown. */
+  oxDeepHex?: number;
+  /** Extra rust pooling at procedural "seam" ridges (rust originates at seams). Default 0. */
+  seamRustStrength?: number;
+  /** Sand-blast abrasion back to bare metal on the lower hull. Default 0. */
+  abrasionStrength?: number;
+  /** Hex of the pale UV-chalk veil on top/upper faces. Default a pale cool ochre. */
+  chalkHex?: number;
 }
 
 /**
@@ -89,6 +113,13 @@ export function createRustedHullMaterial(opts: RustedHullOptions): THREE.MeshLam
   // reads as a PATCHWORK of differently-corroded plates ("less flat"), not one tone.
   const oxStrength = opts.oxStrength ?? 0.58;          // was 0.32
   const oxHexDefault = 0x8a4a26;                       // was 0x6b4326 — warmer, more saturated rust-orange
+  // ── ACAY surface-orientation weathering (all default 0 → hero callers unchanged).
+  const dustStrength = opts.dustStrength ?? 0;
+  const chalkStrength = opts.chalkStrength ?? 0;
+  const oxTopStrength = opts.oxTopStrength ?? 0;
+  const oxDeepStrength = opts.oxDeepStrength ?? 0;
+  const seamRustStrength = opts.seamRustStrength ?? 0;
+  const abrasionStrength = opts.abrasionStrength ?? 0;
 
   const mat = new THREE.MeshLambertMaterial({
     color: baseColor,
@@ -99,6 +130,9 @@ export function createRustedHullMaterial(opts: RustedHullOptions): THREE.MeshLam
   const bleachColor = new THREE.Color(bleachHex);
   const bareMetalColor = new THREE.Color(opts.bareMetalHex ?? 0x9ea2a6);
   const oxColor = new THREE.Color(opts.oxHex ?? oxHexDefault);   // ACAX — warm rust-orange oxidation zones
+  const dustColor = new THREE.Color(opts.dustHex ?? 0xb8a079);   // ACAY — warm ochre-grey desert dust
+  const oxDeepColor = new THREE.Color(opts.oxDeepHex ?? 0x5e3318); // ACAY — deep saturated underside rust
+  const chalkColor = new THREE.Color(opts.chalkHex ?? 0xc9c3b2);  // ACAY — pale cool UV-chalk veil
 
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uRustColor = { value: rustColor };
@@ -110,6 +144,15 @@ export function createRustedHullMaterial(opts: RustedHullOptions): THREE.MeshLam
     shader.uniforms.uBareMetalColor = { value: bareMetalColor };
     shader.uniforms.uOxColor = { value: oxColor };
     shader.uniforms.uOxStrength = { value: oxStrength };
+    shader.uniforms.uDustColor = { value: dustColor };
+    shader.uniforms.uDustStrength = { value: dustStrength };
+    shader.uniforms.uChalkStrength = { value: chalkStrength };
+    shader.uniforms.uOxTopStrength = { value: oxTopStrength };
+    shader.uniforms.uOxDeepColor = { value: oxDeepColor };
+    shader.uniforms.uOxDeepStrength = { value: oxDeepStrength };
+    shader.uniforms.uSeamRustStrength = { value: seamRustStrength };
+    shader.uniforms.uAbrasionStrength = { value: abrasionStrength };
+    shader.uniforms.uChalkColor = { value: chalkColor };
 
     // ── Vertex shader: forward world position + world-space normal ──
     // D62: world-space normal, NOT vNormal (which is view space and
@@ -121,6 +164,7 @@ export function createRustedHullMaterial(opts: RustedHullOptions): THREE.MeshLam
         #include <common>
         varying vec3 vWorldPositionHull;
         varying vec3 vWorldNormalHull;
+        varying float vLocalYHull;
       `,
     );
     shader.vertexShader = shader.vertexShader.replace(
@@ -133,6 +177,7 @@ export function createRustedHullMaterial(opts: RustedHullOptions): THREE.MeshLam
         // space normal. Wrecks DO get rotated (yaw/pitch/roll for the
         // crashed-into-dune look), so the rotation matters here.
         vWorldNormalHull = normalize(mat3(modelMatrix) * normal);
+        vLocalYHull = position.y;
       `,
     );
 
@@ -143,6 +188,7 @@ export function createRustedHullMaterial(opts: RustedHullOptions): THREE.MeshLam
         #include <common>
         varying vec3 vWorldPositionHull;
         varying vec3 vWorldNormalHull;
+        varying float vLocalYHull;
         uniform vec3 uRustColor;
         uniform vec3 uBleachColor;
         uniform float uStreakIntensity;
@@ -152,6 +198,15 @@ export function createRustedHullMaterial(opts: RustedHullOptions): THREE.MeshLam
         uniform vec3 uBareMetalColor;
         uniform vec3 uOxColor;
         uniform float uOxStrength;
+        uniform vec3 uDustColor;
+        uniform float uDustStrength;
+        uniform float uChalkStrength;
+        uniform float uOxTopStrength;
+        uniform vec3 uOxDeepColor;
+        uniform float uOxDeepStrength;
+        uniform float uSeamRustStrength;
+        uniform float uAbrasionStrength;
+        uniform vec3 uChalkColor;
 
         // IQ-style precision-robust hash (same as terrainMaterial.ts).
         // Avoids the sin(dot()) hash trap that breaks at large
@@ -184,7 +239,7 @@ export function createRustedHullMaterial(opts: RustedHullOptions): THREE.MeshLam
         //    into a streak mask. Attenuated by (1 - vWorldNormalHull.y)
         //    so streaks vanish on top-facing surfaces (drips run
         //    DOWN, not up off the hull's roof).
-        float streakInput = (wp.x + wp.z) * 4.0 + wp.y * 0.4 * 6.28;
+        float streakInput = (wp.x + wp.z) * 4.0;   // ACAY round 5 — dropped the wp.y term that sheared streaks diagonally; verticality now comes only from the second (low-freq) noise coord
         // Use the y world-coord directly as the second FBM coord so
         // adjacent stripes share noise vertically — that's what makes
         // them read as "streaks" instead of "blobs."
@@ -231,6 +286,70 @@ export function createRustedHullMaterial(opts: RustedHullOptions): THREE.MeshLam
         // warm rust-orange tint → a richer corroded patchwork, less uniform.
         float oxMask = smoothstep(0.44, 0.80, oxZone) * sideFacing * uOxStrength;
         diffuseColor.rgb = mix(diffuseColor.rgb, uOxColor, oxMask);
+
+        // ACAY surface-orientation weathering — round 5 (adversarial panel 2):
+        // undersides DE-STACKED (oxDeep owns the dark end; seam moved to flanks);
+        // deck masks recentred on hullFbm's realised ~0.45-0.60 range so they fire;
+        // dust/chalk made mutually-exclusive + dust cooler; oxTop given its own
+        // duller crust hue; a hull-HEIGHT rust ramp so long cylinders aren't one
+        // flat tube; vertical streaks de-sheared at the channel-2 source. ──────
+        float upFacing = clamp(vWorldNormalHull.y, 0.0, 1.0);
+        float downFacing = clamp(-vWorldNormalHull.y, 0.0, 1.0);
+        // Hull-LOCAL height → "lower hull" band: drives the scour AND a belly-up
+        // rust ramp so a long horizontal cylinder (all "side" normals) still decays
+        // top-to-bottom instead of reading as one uniform tube.
+        float lowBand = smoothstep(0.6, -0.8, vLocalYHull);
+
+        // ── 7) Underside + lower-flank heavy oxidation — the most CORRODED metal
+        //    (shadowed moisture trap). Saturated warm rust-brown (NOT near-black).
+        //    Fires on down-facing AND lower flanks (lowBand) so cylinders rust from
+        //    the belly up. oxDeep OWNS the dark end so AO/seam don't stack into mud.
+        float oxDeepZone = hullFbm(wp.xz * 0.20 + vec2(wp.y * 0.10, 8.0));
+        float oxDeepFace = max(downFacing, lowBand * sideFacing * 0.8);
+        float oxDeepMask = smoothstep(0.30, 0.54, oxDeepZone) * oxDeepFace * uOxDeepStrength;
+        diffuseColor.rgb = mix(diffuseColor.rgb, uOxDeepColor, oxDeepMask);
+
+        // ── 8) Top oxidation crust — a DULLER, dust-contaminated sun-baked orange
+        //    (distinct from the saturated flank rust) on up-facing zones. Applied
+        //    before dust/chalk; topProtect keeps its hue from washing to grey.
+        vec3 oxTopCol = mix(uOxColor, uDustColor, 0.45);
+        float oxTopZone = hullFbm(wp.xz * 0.16 + vec2(7.0, wp.y * 0.06));
+        float oxTopMask = smoothstep(0.38, 0.55, oxTopZone) * upFacing * uOxTopStrength;
+        diffuseColor.rgb = mix(diffuseColor.rgb, oxTopCol, oxTopMask);
+        float topProtect = 1.0 - 0.6 * oxTopMask;
+
+        // ── 9) Dust crust (the flat-tops fix) — wind-blown dust on UP-facing
+        //    surfaces, a cool grey-ochre HUE shift so decks read powder-buried.
+        //    Masks recentred on the realised fBm range so the channel actually fires.
+        float dustZone = hullFbm(wp.xz * 0.11 + vec2(3.0, wp.y * 0.05));
+        float dustMask = smoothstep(0.28, 0.52, dustZone)
+                       * smoothstep(0.22, 0.75, vWorldNormalHull.y) * uDustStrength * topProtect;
+        diffuseColor.rgb = mix(diffuseColor.rgb, uDustColor, dustMask);
+
+        // ── 10) Paint chalk — a pale low-chroma UV-haze, MUTUALLY EXCLUSIVE with the
+        //    dust (1.0 - dustMask) so the two stages read distinct instead of merging.
+        float chalkN = hullFbm(wp.xz * 0.22 + vec2(wp.y * 0.12, 11.0));
+        float chalkFace = smoothstep(0.28, 0.80, vWorldNormalHull.y);
+        float chalkMask = chalkFace * smoothstep(0.32, 0.52, chalkN) * uChalkStrength * topProtect * (1.0 - dustMask);
+        diffuseColor.rgb = mix(diffuseColor.rgb, uChalkColor, chalkMask);
+
+        // ── 11) Rust pooling running DOWN — gravity-pooled rust in low-freq noise
+        //    crevices (an APPROXIMATION, not true geometry seams), biased to the
+        //    visible FLANKS (sideFacing — undersides are oxDeep's job) and to the
+        //    LOWER hull, paired with a vertical drip that bleeds it down.
+        float seamField = hullFbm(wp.xz * 0.9 + vec2(13.0, wp.y * 0.7));
+        float seamRidge = 1.0 - smoothstep(0.0, 0.05, abs(seamField - 0.42));
+        float dripField = hullFbm(vec2((wp.x + wp.z) * 3.0, wp.y * 0.25));
+        float drip = smoothstep(0.42, 0.66, dripField);
+        float seamMask = max(seamRidge * mix(0.4, 1.0, lowBand), drip * 0.7)
+                       * clamp(sideFacing, 0.0, 1.0) * uSeamRustStrength;
+        diffuseColor.rgb = mix(diffuseColor.rgb, uRustColor, seamMask);
+
+        // ── 12) Sand-blast scour — LOWER hull abraded back toward cool bare metal
+        //    (the only cool hue → temperature contrast). Sparse hard-edged patches.
+        float abrN = hullValueNoise(wp.xz * 5.0 + vec2(wp.y * 3.0, 5.0));
+        float abrMask = smoothstep(0.60, 0.80, abrN) * lowBand * uAbrasionStrength;
+        diffuseColor.rgb = mix(diffuseColor.rgb, uBareMetalColor, abrMask);
       `,
     );
   };
@@ -250,3 +369,32 @@ function _deriveBleachHex(baseHex: number): number {
   const b = Math.min(1, c.b + (1 - c.b) * 0.30);
   return new THREE.Color(r, g, b).getHex();
 }
+
+/**
+ * ACAY — the canonical procgen-wreck surface-weathering profile (the "flat-tops
+ * fix": dust + chalk on decks, heavy underside oxidation, seam-pooled rust,
+ * lower-hull abrasion). Spread into the procgen hull materials AND the
+ * wreck-form studio so the studio is a FAITHFUL preview — tune HERE and both
+ * update. Hand-modeled hero wrecks deliberately do NOT spread this (they keep
+ * the cleaner default look that was tuned for them in ACAK/ACAL).
+ */
+export const HULL_WEATHERING_ACAY: Partial<RustedHullOptions> = {
+  // Distinct, SATURATED, separated hues (the adversarial critique: channels had
+  // collapsed into one monochrome-brown value ramp — push hue, not just value).
+  rustHex: 0x6e3a1c,         // saturated mid-rust for streaks + seam-drips (was near-black → read as shadow)
+  oxHex: 0xa85423,           // saturated rust-ORANGE side oxidation (was 0x8a4a26, too brown)
+  oxDeepHex: 0x8a4119,       // round 5 — more chroma so undersides read saturated rust, not mud
+  dustHex: 0x97978c,         // round 5 — cooler/greyer so deck dust separates from the warm flank rust
+  chalkHex: 0xc9c3b2,        // pale low-chroma chalk veil, distinct from the dust
+  bareMetalHex: 0x9aa0a4,    // cool grey scoured metal — the ONLY cool hue → temperature contrast
+  // Strengths. The deck masks are recentred on hullFbm's realised ~0.45-0.60 range
+  // (round 5) so the dust/chalk/oxTop channels actually fire near full strength.
+  aoStrength: 0.15,          // round 5 — lowered further; oxDeep now owns underside depth+hue (de-stack)
+  oxStrength: 0.60,
+  oxTopStrength: 0.40,
+  dustStrength: 0.58,
+  chalkStrength: 0.34,
+  oxDeepStrength: 0.56,      // round 5 — also fires on lower flanks now (cylinder belly-up ramp)
+  seamRustStrength: 0.56,
+  abrasionStrength: 0.52,
+};
