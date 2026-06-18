@@ -3,6 +3,12 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign C5 — 2026-06-18 — M2 feature-flags infra (gate-and-wait scaffold) ✓ all gates pass
+
+`verified` — `npm run verify:all` PASS (tsc + `verify:placement` 0/0 ×5 + `verify:colliders` 0/25). **No save bump.** Cycle 5/12 (M2 — 1 of 4 units). Headless scaffold (no visual/feel output).
+
+**feature-flags-infra.** NEW `src/config/features.ts` — the central toggle home for gate-and-wait experimental systems (sibling of `tuning.ts`). A `FEATURES` const with `realRope` + `realCloth` flags, all default FALSE (the proven path), + a `FeatureFlag` type. Landed INERT (nothing reads it yet) ahead of the M9 architectural-risk cycles that consume it (`real-rope-physics` depends on `feature-flags-infra`). Documents the gate-and-wait pattern: flag OFF = shipped behaviour, ON = experimental, a one-line reversible flip.
+
 ## Campaign C4 — 2026-06-18 — M1 dish collider disc (no diagonal over-block) ✓ M1 COMPLETE
 
 `verified` — `npm run verify:all` PASS (tsc + `verify:placement` 0/0 ×5 + `verify:colliders` 0/25). **No save bump.** Cycle 4/12. Collider-only change → visual gate N/A; collision FEEL feel-pending the Phase-A walk-test.
