@@ -102,3 +102,14 @@ first stop will be `max-cycles` ~mid-Phase-A; resume via `/campaign-start --resu
 - **Spend:** ~100K approx (no budget ceiling; cycle **1/12**).
 - **Commit:** `7f06022`.
 - **Next (cycle 2):** the remaining M1 units — `remove-wreck-sand-mounds` → `scrap-pickup-3q-thin` → `dish-collider-feel` (the visual/feel ones) → then M2. **Verdict: CONTINUE** (M1 in progress; no milestone crossed → no pause).
+
+---
+
+## Cycle 2 — M1 remove wreck sand-mounds (2026-06-18) — SHIPPED
+- **Planned:** `remove-wreck-sand-mounds` (user directive) — wrecks sit on bare terrain, no sand-drift mounds.
+- **Shipped:** removed the `makeSandMound` drifts from poiAssembler (composite POIs) / procgenWreck (legacy ships) / megaWreck (hero) via a **determinism-preserving no-op** (kept each call's rand draws, discarded the mesh) → seeded stream byte-identical. Supersedes the §G sand-integration items.
+- **Verify:** `verify:all` PASS — tsc · `verify:placement` **0 fails ×5** (seed-42 79→80: a panel the drift used to occlude in the yard-prune is now exposed — intended, still 0-fail) · `verify:colliders` 0/25.
+- **Visual iteration:** appearance-verified — **adversarial visual gate PASS** (3 harsh-lens critics + a code-auditor over satellite/tank/husk/derelict side renders; **0 sev≥2**; all read grounded on bare sand via seatSink/burySink). Seating FEEL → **feel-pending** Phase-A walk-test.
+- **Spend:** ~170K approx (incl. the rig-shot renders + the visual-gate workflow); campaign total ~270K; cycle **2/12**.
+- **Commit:** `e5ea971`.
+- **Next (cycle 3):** M1's last 2 units — `scrap-pickup-3q-thin` → `dish-collider-feel` → then **M1 complete** → M2. **Verdict: CONTINUE** (M1 in progress; no milestone crossed).
