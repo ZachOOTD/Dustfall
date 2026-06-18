@@ -130,8 +130,8 @@ export function transformPanelMount(p: PanelMount, m: THREE.Matrix4): PanelMount
 // in an otherwise warm-desert fleet. Lifted ~2× in value to a dusty mid blue-grey: still
 // reads "photovoltaic" (the only cool member) but sits in the family by LIGHTNESS, not as
 // a black silhouette. Frame lifted to match so the cell grid stays legible.
-const _solarMat = new THREE.MeshLambertMaterial({ color: 0x8d8a84, flatShading: true });     // sun-faded photovoltaic grey (ACBB iter2→3: lifted for value AND warm-nudged off cold-blue so it sits in the desert family — the cell silhouette still reads "panel"; was 0x44525c→0x6a7078→0x868d96→here)
-const _solarFrameMat = new THREE.MeshLambertMaterial({ color: 0x4a4a52, flatShading: true }); // dusty frame (lifted so the grid reads against the lighter cells)
+const _solarMat = new THREE.MeshLambertMaterial({ color: 0x9e9b92, flatShading: true });     // sun-faded photovoltaic grey (ACBC §G: lifted again 0x8d8a84→here — the wing blades still read a touch dark at silhouette distance when the lit face turns away from the low sun; a higher base value keeps them in the family without washing white)
+const _solarFrameMat = new THREE.MeshLambertMaterial({ color: 0x57575f, flatShading: true }); // dusty frame (lifted to match the brighter cells so the grid still reads)
 const _foilMat = new THREE.MeshLambertMaterial({ color: 0xc79a52, flatShading: true });       // richer brass-gold thermal blanket (off the sand value)
 const _dishMat = new THREE.MeshLambertMaterial({ color: 0xa6aab0, flatShading: true });       // pale dish face
 const _emitMat = new THREE.MeshBasicMaterial({ color: 0x6b1d12 });                            // dead status-light red
@@ -398,7 +398,7 @@ export function debrisPiece(seed: number, kindIdx: number, lootable = false): Bu
   if (kindIdx === 0) {
     const w = 1.2 + phash(seed, 1) * 1.6;
     const h = 0.8 + phash(seed, 2) * 1.0;
-    const plate = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.16), _hullMat);
+    const plate = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.16), _rustMat);   // ACBC §G — rust-toned (was _hullMat) so the debris reads as TORN HULL METAL, not grey rock
     g.add(plate);
     const edge = new THREE.Mesh(new THREE.BoxGeometry(w, 0.16, 0.20), _rustMat);   // ragged torn lip
     edge.position.y = h / 2; edge.userData.isWreckDecoration = true; g.add(edge);
@@ -420,7 +420,7 @@ export function debrisPiece(seed: number, kindIdx: number, lootable = false): Bu
     const w = 1.4 + phash(seed, 1) * 1.0;
     const h = 1.1 + phash(seed, 2) * 0.8;
     const d = 1.2 + phash(seed, 3) * 0.8;
-    const chunk = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), _hullMat);
+    const chunk = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), _rustMat);   // ACBC §G — rust-toned torn hull chunk (was _hullMat) so it reads as wreck metal, not rock
     g.add(chunk);
     const rib = new THREE.Mesh(new THREE.BoxGeometry(w * 1.02, h * 0.16, 0.12), _hullDarkMat);
     rib.position.set(0, h * 0.1, d / 2); rib.userData.isWreckDecoration = true; g.add(rib);
@@ -459,6 +459,24 @@ export function huskShell(seed: number, _state = 'breached'): BuiltComponent {
   // from the COLLIDER-AUDIT so its mostly-empty AABB doesn't read as an un-collided mass.
   shell.userData.auditExempt = true;
   g.add(shell);
+  // ACBC §G — longitudinal hull-plate SEAMS proud of the outer flanks so the convex shell
+  // reads as riveted PLATING, not a smooth pipe. φ measured from the open +Y top; placed on
+  // the lower/flank closed arc only. rotation.x=φ aligns the strip's thin face to the surface
+  // normal; pushed proud by ~5cm (rule-7). Decoration (no collider, doesn't affect the audit).
+  for (const phi of [Math.PI * 0.60, Math.PI * 0.92, Math.PI * 1.30, Math.PI * 1.62]) {
+    const rho = r + 0.05;
+    const seam = new THREE.Mesh(new THREE.BoxGeometry(len * 0.8, 0.12, 0.20), _hullDarkMat);
+    seam.position.set((phash(seed, 90 + Math.round(phi * 10)) - 0.5) * len * 0.12, r + Math.cos(phi) * rho, Math.sin(phi) * rho);
+    seam.rotation.x = phi;
+    seam.userData.isWreckDecoration = true; g.add(seam);
+    // a sparse rivet row riding the seam
+    for (let i = 0; i < 4; i++) {
+      const rx = (-0.3 + i * 0.2) * len * 0.8;
+      const rivet = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.10, 0.12), _rustMat);
+      rivet.position.set(seam.position.x + rx, r + Math.cos(phi) * (rho + 0.02), Math.sin(phi) * (rho + 0.02));
+      rivet.rotation.x = phi; rivet.userData.isWreckDecoration = true; g.add(rivet);
+    }
+  }
   // Exposed rib formers inside (arc gap at bottom → ribs spring from the floor), shown
   // through the open top. Spaced along the length.
   const ribN = 3 + Math.floor(phash(seed, 3) * 3);
@@ -545,10 +563,17 @@ export function hullBarrel(seed: number, scale = 1): BuiltComponent {
   const r = (0.9 + phash(seed, 2) * 0.5) * scale;
   const body = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 0.96, len, 10), _hullMat);
   body.rotation.x = Math.PI / 2; g.add(body);   // axis along Z
-  for (const tz of [-0.3, 0.3]) {
+  // ACBC §G — more hoop bands (plated sections) + a dorsal spine ridge + a sensor box so the
+  // barrel reads as a detailed hull, not a smooth tube. Detail scales with r so the small
+  // strut/sponson instances stay proportional. Top of the Z-axis barrel is +Y at (0, r, z).
+  for (const tz of [-0.38, -0.13, 0.13, 0.38]) {
     const hoop = new THREE.Mesh(new THREE.TorusGeometry(r + 0.02, 0.05, 6, 14), _hullDarkMat);
     hoop.position.z = len * tz; hoop.userData.isWreckDecoration = true; g.add(hoop);
   }
+  const spine = new THREE.Mesh(new THREE.BoxGeometry(r * 0.20, r * 0.18, len * 0.62), _hullDarkMat);
+  spine.position.set(0, r, 0); spine.userData.isWreckDecoration = true; g.add(spine);
+  const sensor = new THREE.Mesh(new THREE.BoxGeometry(r * 0.42, r * 0.30, r * 0.42), _rustMat);
+  sensor.position.set(0, r + r * 0.14, len * 0.16); sensor.userData.isWreckDecoration = true; g.add(sensor);
   const sockets: Socket[] = [
     { name: 'aft', pos: new THREE.Vector3(0, 0, -len / 2), quat: FACE.negZ(), radius: r, tag: 'axialIn' },
     { name: 'fwd', pos: new THREE.Vector3(0, 0, len / 2), quat: FACE.posZ(), radius: r, tag: 'axialOut' },

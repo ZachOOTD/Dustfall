@@ -83,8 +83,7 @@ leans rearward, F8 opens the dev panel under pointer-lock, scrap pickup → a to
 
 **Next session** = (1) the **OWED attended WALK-TEST** in `npm run dev` (eyes-only — headless can't judge it): walk INTO a
 tank/satellite/husk/derelict (declared-collider feel) + the NEW flagship dish collider; judge the in-world feel of the banking drifts +
-crash-poses + the fleet cohesion under sky/fog. (2) Remaining backlog §G polish (fleet detail, debris fragment metal-read) + the deferred **Tier 5 yard cross-POI merge**
-(D237) + the **scrap pickup is reworked but its 3q edge-on read is thin** (re-judge in hand). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
+crash-poses + the fleet cohesion under sky/fog. (2) The §G fleet polish (satellite-wing brightness, debris metal-read, husk seams + derelict barrel detail) is DONE (ACBB follow-up); what remains is the deferred **Tier 5 yard cross-POI merge** (D237/D239 — attempted + reverted: the rim-greeble merge cut ~18% but regressed the terrain-audit; re-attempt carefully). The reworked **scrap pickup's 3q edge-on read is still thin** (re-judge in hand). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 

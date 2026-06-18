@@ -1141,7 +1141,7 @@ const SCENARIOS = {
   // The framer for the whole wreck-yard build (biome → graveyard → pit).
   'wreck-yard': async (page) => {
     const angle = argv.angle || 'aerial';
-    const r = await page.evaluate(({ ang }) => {
+    const r = await page.evaluate(({ ang, doBreakdown }) => {
       const ctx = window.__game.ctx;
       ctx.weather.intensity = 0; ctx.weather.cloudiness = 0.15;
       window.__game.setTime(0.36);
@@ -1213,8 +1213,87 @@ const SCENARIOS = {
       }
       ctx.three.renderer.render(ctx.three.scene, cam);   // populate renderer.info for this view
       const info = ctx.three.renderer.info;
-      return { anchor: [+anchor.x.toFixed(0), +anchor.z.toFixed(0)], rad, biomeHere, groundY: +groundY.toFixed(1), nearObjects: near, nearSalvage, drawCalls: info.render.calls, tris: info.render.triangles };
-    }, { ang: angle });
+      // --breakdown perf probe (ACBC / D237) — opt-in yard draw-call attribution.
+      // Buckets every VISIBLE mesh by a coarse "kind" (a draw call ≈ one visible
+      // mesh = one material) so the dominant draw-call source in the dense yard is
+      // measurable headlessly (page.screenshot times out on this scene). Salvage
+      // panels are split into EXT_body / EXT_door / EXT_mask / EXT_rim / INTERIOR
+      // so the merge-eligible static rim greeble (the ACBC cut target) is visible.
+      // `inYard` counts meshes under the wreckYard group; `distinctMats` flags a
+      // bucket that can't merge by-material (N meshes, N materials). Kept as a
+      // reusable probe; inert without the flag.
+      let breakdown = null;
+      if (doBreakdown) {
+        const yard = ctx.three.scene.getObjectByName('wreckYard');
+        const kindOf = (o) => {
+          // walk up: find the panel body (accessPanel) or interactType tag.
+          let n = o, body = null;
+          while (n) {
+            if (n.userData?.accessPanel) { body = n; break; }
+            if (n.userData?.interactType === 'salvage') { body = n; break; }
+            if (n.userData?.interactType) return 'interact:' + n.userData.interactType;
+            n = n.parent;
+          }
+          if (body) {
+            // INTERIOR if o is a descendant of body.userData.panelInterior.
+            const interior = body.userData.panelInterior;
+            if (interior) {
+              let q = o;
+              while (q) { if (q === interior) return 'salvagePanel:INTERIOR'; q = q.parent; }
+            }
+            // sub-classify the exterior: BODY (the cavity box = raycast target),
+            // DOOR (animated pivot), MASK (stencil), or RIM (static greeble).
+            const doorV = body.userData.panelDoor;
+            const mask = body.userData.panelMask;
+            if (o === body) return 'salvagePanel:EXT_body';
+            let q2 = o;
+            while (q2) {
+              if (q2 === doorV) return 'salvagePanel:EXT_door';
+              if (q2 === mask) return 'salvagePanel:EXT_mask';
+              q2 = q2.parent;
+            }
+            return 'salvagePanel:EXT_rim(' + ((o.material && o.material.name) || o.geometry?.type || '?') + ')';
+          }
+          const m = o.material;
+          const mn = (m && m.name) || '';
+          const gn = (o.name) || (o.geometry && o.geometry.type) || '';
+          if (mn) return 'mat:' + mn;
+          return 'geo:' + gn;
+        };
+        const buckets = {};        // kind -> { meshes, matUUIDs:Set, transparent, inYard }
+        const matsAll = new Set();
+        let visMeshes = 0;
+        ctx.three.scene.traverse((o) => {
+          if (!o.isMesh || !o.visible || !o.material) return;
+          // skip if any ancestor invisible
+          let p = o.parent, vis = true;
+          while (p) { if (p.visible === false) { vis = false; break; } p = p.parent; }
+          if (!vis) return;
+          visMeshes++;
+          const mat = Array.isArray(o.material) ? o.material[0] : o.material;
+          matsAll.add(mat.uuid);
+          const k = kindOf(o);
+          let b = buckets[k];
+          if (!b) { b = buckets[k] = { meshes: 0, mats: new Set(), transp: 0, inYard: 0 }; }
+          b.meshes++; b.mats.add(mat.uuid);
+          if (mat.transparent) b.transp++;
+          // is it under the yardGroup?
+          let q = o, isY = false;
+          while (q) { if (q === yard) { isY = true; break; } q = q.parent; }
+          if (isY) b.inYard++;
+        });
+        const ranked = Object.entries(buckets)
+          .map(([k, b]) => ({ k, meshes: b.meshes, distinctMats: b.mats.size, transp: b.transp, inYard: b.inYard }))
+          .sort((a, b) => b.meshes - a.meshes);
+        breakdown = {
+          visibleMeshesTotal: visMeshes,
+          distinctMaterialsTotal: matsAll.size,
+          yardChildren: yard ? yard.children.length : -1,
+          top: ranked.slice(0, 22),
+        };
+      }
+      return { anchor: [+anchor.x.toFixed(0), +anchor.z.toFixed(0)], rad, biomeHere, groundY: +groundY.toFixed(1), nearObjects: near, nearSalvage, drawCalls: info.render.calls, tris: info.render.triangles, breakdown };
+    }, { ang: angle, doBreakdown: !!argv.breakdown });
     await page.waitForTimeout(350);
     await page.screenshot({ path: join(OUT, `scen-wreckyard-${angle}.png`), fullPage: false });
     console.log(`[wreck-yard] ${JSON.stringify(r)}`);
