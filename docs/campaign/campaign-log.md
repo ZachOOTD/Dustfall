@@ -79,3 +79,15 @@ design-gated — its design calls are made at the Phase A review, then it runs a
 complete" review. **Commit granularity is unchanged: one commit per CYCLE (≈ one session); a single
 milestone spans several cycles/commits.** `checkpoint` stays `milestone` (markers now sit at phase
 boundaries, not per-M-milestone).
+
+---
+
+## Cycle 0 — APPROVED ✅ (plan-review gate released · 2026-06-18)
+
+Human `/campaign-approve` at plan-review. The plan was authored directly into `roadmap.md` /
+`iteration-plan.md` / GDD §12 (no separate proposal file to fold). **Gate cleared:** `status: active`,
+`awaiting_approval: false`, `stop_reasons: []`. Launch config (user kept as-is): cap **12** (hard stop —
+first stop will be `max-cycles` ~mid-Phase-A; resume via `/campaign-start --resume --max-cycles=<N>`, NOT
+`/campaign-approve`), gate `npm run verify:all`, visual-gate `auto`, **PHASE-level** review,
+`until: roadmap-empty`, no budget ceiling. No post-mortem drafts pending (consolidate skipped).
+**Cycle 1 is released → Phase A → M1 (Wreck-arc finish).** Begin with `/loop /campaign-cycle`.
