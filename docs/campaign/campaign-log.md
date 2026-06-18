@@ -135,3 +135,14 @@ first stop will be `max-cycles` ~mid-Phase-A; resume via `/campaign-start --resu
 - **Spend:** ~90K approx; campaign total ~510K; cycle **4/12**.
 - **Commit:** `cbe861c`.
 - **✓ MILESTONE M1 COMPLETE (C1-C4):** panel-deadcode + perf-baseline · sand-mounds · scrap-3q · dish-disc. **Verdict: CONTINUE** — M1 is NOT the last tier before the Phase-A `### Milestone:` marker (M2-M5b remain), so phase-level review does NOT pause here. Next: **M2** (cycle 5: feature-flags-infra → security-review → wreck-polish-bundle → yard-cross-poi-merge last/careful).
+
+---
+
+## Cycle 5 — M2 feature-flags infra (2026-06-18) — SHIPPED
+- **Planned:** `feature-flags-infra` — the dependency-enabler the M9 gate-and-wait rope/cloth cycles need; land it early + inert.
+- **Shipped:** NEW `src/config/features.ts` (sibling of tuning.ts) — `FEATURES` const (`realRope`/`realCloth`, default FALSE) + `FeatureFlag` type. Documents the gate-and-wait pattern. Inert (nothing reads it yet — intentional).
+- **Verify:** `verify:all` PASS — tsc · placement 0/0 ×5 · colliders 0/25.
+- **Visual iteration:** N/A — inert config scaffold (no appearance/feel).
+- **Spend:** ~50K approx; campaign total ~560K; cycle **5/12**.
+- **Commit:** `5d1c22e`.
+- **Next (cycle 6):** M2 `security-review-repo` (a client-side-game security audit — secrets/DOM/npm-audit/hygiene; likely a documented all-clear). Then wreck-polish-bundle, then yard-merge (last/careful). **Verdict: CONTINUE** (M2 1/4; no milestone crossed).
