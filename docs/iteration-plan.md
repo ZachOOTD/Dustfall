@@ -228,7 +228,9 @@ every rope flow.
 
 ---
 
-## Cycle 5: Raider character + pulse rifle
+## Cycle 5: ~~Raider character~~ + pulse rifle — RAIDER HALF DROPPED (D238)
+
+> **DROPPED (D238, 2026-06-18):** the user is not adding raiders. The **pulse rifle shipped (ACAC) + stays** as a usable weapon; the **raider proc-character rebuild + everything raider-specific below in this cycle is CUT**. The dormant raider placeholder remains ONLY as a combat/corpse-drag test affordance (D13), not an ambient threat. The rest of this section is retained for history only — do NOT pick it up.
 
 **Why**: GDD §7 combat (WeaponKind dispatch, generalized PP) + Pillar 2 (procedural-only). Two
 folded items: (a) apply the proc-character pipeline to the **raider** — ACE did the lizard (D128);
@@ -478,7 +480,7 @@ Dependency-aware, honoring the **finish-what's-started-first** spine from the di
    rope feature; supersedes D126.
 
 **Phase 2b — new breadth on the base (Cycles 5-9):**
-5. **Cycle 5 — Raider character + pulse rifle**. Needs Cycle 1 (drag) + Cycle 2 (rig vocabulary).
+5. ~~**Cycle 5 — Raider character**~~ **DROPPED (D238)** — pulse rifle shipped (ACAC); the raider proc-character is cut (user call, no more raiders).
 6. **Cycle 6 — Dune storm rework**. Highest-leverage atmosphere lift; the pillar the GDD weights
    most. Independent — can swap with 5 if a playtest says atmosphere is the bigger gap.
 7. **Cycle 7 — Companion overhaul**. Needs Cycle 2 (rig). Owns the companion proc-character half.

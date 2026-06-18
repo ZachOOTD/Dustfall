@@ -362,3 +362,12 @@ unresolved entries.
 **Why**: Field perf is fine (842 draw calls, well under 1000); the ~3215 yard worst-case is a RARE distance-override destination biome that's frustum-culled in play. The yard already runs `mergeStaticByMaterial(yardGroup)`; the residual is live salvage panels + per-POI sand mounds + yard ecology, not un-merged hulls — so a real cross-POI merge is a non-trivial architecture change for low player impact.
 
 **Picked**: Deferred to a future perf-focused session (left in `backlog.md`). The four higher-value tiers + the §E polish shipped instead. **friction-score:** 1
+
+## D238 — Raiders dropped from the roadmap; keep BOTH ship paths (no legacy retirement) (Session ACBB follow-up)
+**When**: ACBB session-end follow-up — two direct user product calls: "lets remove raiders from the roadmap, i don't want to add those anymore" + "lets also keep the legacy ship for now."
+
+**Why**:
+- **Raiders** — the GDD's lone-survivor tone keeps raiders DORMANT by design (D13/§11 anti-feature); the planned "raider proc-character rebuild" (iteration-plan Cycle 5 remainder) would have been content toward a combat loop the user doesn't want. Cut it. The pulse rifle (its nominal "weapon") already shipped (ACAC) as a usable salvage weapon and stays. The dormant raider placeholder in `enemies/raider.ts` STAYS — it's load-bearing as a combat-dispatch + corpse-drag TEST affordance (`__game.spawnRaider`/`killRaider`, D13/ACG), NOT an ambient threat — but no further raider *content* is planned.
+- **Legacy ship** — the additive socket `derelict` (D232) already delivers the "wider/weirder ships" value with ZERO regression, so retiring the heavily-refined legacy linear ship (8 hull variants / 12-channel weathering / band-seated scale anchor) to push `PROCGEN_COMPOSITE_SHARE`→1.0 buys nothing but regression risk. Keep both paths at 0.85.
+
+**Picked**: Struck the raider proc-character + the legacy-ship-retirement from `roadmap.md` / `iteration-plan.md` Cycle 5 / `backlog.md` / `CLAUDE.md` Next-session / `next-session-prompt.md`. Both are reversible if the user changes direction (the iteration-plan Cycle 5 section is retained for history under a DROPPED banner; D232's retirement note still stands as "only if the derelict reaches legacy polish"). **Considered alternatives:** keep them as low-priority backlog items (rejected — the user was explicit; leaving them invites a future session to re-pick them). **friction-score:** 1

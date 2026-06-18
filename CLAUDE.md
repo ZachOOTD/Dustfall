@@ -83,8 +83,7 @@ leans rearward, F8 opens the dev panel under pointer-lock, scrap pickup → a to
 
 **Next session** = (1) the **OWED attended WALK-TEST** in `npm run dev` (eyes-only — headless can't judge it): walk INTO a
 tank/satellite/husk/derelict (declared-collider feel) + the NEW flagship dish collider; judge the in-world feel of the banking drifts +
-crash-poses + the fleet cohesion under sky/fog. (2) Optional: RETIRE the legacy linear ship for the socket `derelict` (then composite share
-→ 1.0; D232). (3) Remaining backlog §G polish (fleet detail, debris fragment metal-read) + the deferred **Tier 5 yard cross-POI merge**
+crash-poses + the fleet cohesion under sky/fog. (2) Remaining backlog §G polish (fleet detail, debris fragment metal-read) + the deferred **Tier 5 yard cross-POI merge**
 (D237) + the **scrap pickup is reworked but its 3q edge-on read is thin** (re-judge in hand). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
