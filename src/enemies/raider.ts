@@ -11,6 +11,7 @@ import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import type { GameContext } from '../GameContext.ts';
 import { isPlaying } from '../GameContext.ts';
+import { Tuning } from '../config/tuning.ts';
 import type { Terrain } from '../world/terrain.ts';
 import { die } from '../stats/survival.ts';
 import { playFootstep, playHit, playPlayerHurt } from '../audio/audio.ts';
@@ -41,7 +42,7 @@ export interface RaiderBlackboard {
   lastSightResult: boolean;
 }
 
-const SIGHT_REFRESH = 0.5; // seconds between sight raycasts per raider
+const SIGHT_REFRESH = Tuning.RAIDER_SIGHT_REFRESH; // seconds between sight raycasts per raider
 
 export type RaiderAnim = 'idle' | 'walk' | 'run' | 'attack' | 'die';
 
@@ -132,21 +133,24 @@ export function setNextRaiderId(n: number): void {
   if (n > _nextRaiderId) _nextRaiderId = n;
 }
 
-const RAIDER_HEIGHT = 1.85;
-const CAPSULE_RADIUS = 0.30;
+// Feel/combat constants live in tuning.ts (Tuning.RAIDER_*); these are
+// readable local aliases. Derived values (CAPSULE_HALF, SIGHT_ANGLE) are
+// computed from the tuned primitives.
+const RAIDER_HEIGHT = Tuning.RAIDER_HEIGHT;
+const CAPSULE_RADIUS = Tuning.RAIDER_CAPSULE_RADIUS;
 const CAPSULE_HALF = (RAIDER_HEIGHT - 2 * CAPSULE_RADIUS) / 2; // ~0.625
 
-const WALK_SPEED = 1.8;
-const RUN_SPEED = 4.0;
-const SIGHT_DISTANCE = 28;
-const SIGHT_ANGLE = Math.cos(Math.PI / 3); // ±60° cone
-const HEARING_RADIUS_WALK = 8;
-const HEARING_RADIUS_SPRINT = 18;
-const ATTACK_RANGE = 2.0;
-const ATTACK_BREAK_RANGE = 2.8;
-const ATTACK_COOLDOWN = 1.2;
-const ATTACK_DAMAGE = 0.15;
-const CHASE_GIVEUP_DURATION = 3.0;
+const WALK_SPEED = Tuning.RAIDER_WALK_SPEED;
+const RUN_SPEED = Tuning.RAIDER_RUN_SPEED;
+const SIGHT_DISTANCE = Tuning.RAIDER_SIGHT_DISTANCE;
+const SIGHT_ANGLE = Math.cos(Tuning.RAIDER_SIGHT_HALF_ANGLE); // ±60° cone
+const HEARING_RADIUS_WALK = Tuning.RAIDER_HEARING_RADIUS_WALK;
+const HEARING_RADIUS_SPRINT = Tuning.RAIDER_HEARING_RADIUS_SPRINT;
+const ATTACK_RANGE = Tuning.RAIDER_ATTACK_RANGE;
+const ATTACK_BREAK_RANGE = Tuning.RAIDER_ATTACK_BREAK_RANGE;
+const ATTACK_COOLDOWN = Tuning.RAIDER_ATTACK_COOLDOWN;
+const ATTACK_DAMAGE = Tuning.RAIDER_ATTACK_DAMAGE;
+const CHASE_GIVEUP_DURATION = Tuning.RAIDER_CHASE_GIVEUP_DURATION;
 
 // Map collider handles → Raider so a raycast/shapecast can resolve to enemy.
 const _colliderToRaider = new Map<number, Raider>();
