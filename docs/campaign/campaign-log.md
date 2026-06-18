@@ -53,3 +53,14 @@ awe-not-horror guardrail.
 
 **Status:** ⏸ PAUSED at `plan-review` — awaiting `/campaign-approve` of this (amended) plan before
 Cycle 1 (Milestone 1) starts. Build begins on approval + `/loop /campaign-cycle`.
+
+---
+
+## Cycle 0 addendum — net-new direction ideation (2026-06-18)
+
+User asked what else is worth developing beyond the backlog. A vetted ideation pass (5 GDD-grounded lenses
+→ 23 proposals → anti-feature + value/vision vetting; both vetters converged on the same 4 core-levers)
+surfaced 3 net-new arcs the GDD weights heavily but ships thin: **C1 water & exposure · C2 exploration pull ·
+C3 the Long-Storm endgame arc** (+ a lower-priority tone/ecology layer). Captured as **Phase C (PROPOSED)**
+in `iteration-plan.md` — the `--self-author` seed when M1-M10 empties, or promotable into the active queue on
+the user's pick. Does NOT change the active M1-M10 plan. (Awaiting the user's promotion pick.)

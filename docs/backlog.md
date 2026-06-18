@@ -99,6 +99,18 @@ When ready to ship one → promote it into a session in [roadmap.md](roadmap.md)
 
 ---
 
+### H. NET-NEW direction candidates (proposed 2026-06-18 — see [iteration-plan.md](iteration-plan.md) "Phase C")
+
+Beyond the existing backlog: a vetted ideation pass surfaced 3 net-new arcs the GDD weights heavily but ships thin —
+**C1 water & exposure** (wreck-water-tanks ★ · sun-shade-exposure ★ · wind-chill · condensation-still) · **C2 exploration
+pull** (horizon-landmark-silhouettes ★ · salvaged-spyglass · vista-crest-reveal) · **C3 the Long-Storm endgame arc**
+(storm-eve-survivable-finale ★ · morning-after-rearranged-world · readiness-mirror · days-lasted-ledger), + a lower-priority
+tone/ecology layer (wordless-prop-scenes · wind-mood-soundscape · rare-sky-phenomena · diurnal-cycle · worm-far-horizon-crossing).
+All cleared the §11/§14 + D107 filters. PROPOSED (the campaign `--self-author` seed / promotable into the active queue). Full
+detail + the "consciously NOT chasing" list in [iteration-plan.md](iteration-plan.md) "Phase C".
+
+---
+
 ## DROPPED — won't-do (cut 2026-06-18 by the user at the campaign plan-review; was "PARKED")
 
 > All 5 below were cut during the `campaign/2026-06-18` plan-review (user: "drop as won't-do").

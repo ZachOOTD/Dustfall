@@ -216,6 +216,71 @@ DROPPED 2026-06-18 — the slope-slide tune already shipped ACU: GAIN 6→2.5 + 
 
 ---
 
+## Phase C — net-new direction candidates (PROPOSED 2026-06-18, not yet in the active queue)
+
+> Beyond the existing backlog: a vetted ideation pass (5 GDD-grounded lenses → anti-feature +
+> value/vision vetting, 23 proposals) found the real net-new frontier is THREE systems the GDD weights
+> heavily but ships THIN — **water/thirst sourcing, exploration pull, and the Long-Storm endgame arc.**
+> All below cleared the §11/§14 anti-feature filter + the D107 zero-asset constraint. **PROPOSED, not
+> active** — they become the campaign's `--self-author` seed when M1-M10 empties, OR can be promoted into
+> the active queue now (user pick). Both vetters converged on the same 4 core-levers (★).
+
+### Arc C1 — Water & exposure (the Long Dark survival core) — HIGHEST-LEVERAGE, LOWEST-RISK
+*Thirst is the named "dominant pressure" (§7) but water is canteen-only + temperature is a flat scalar.
+Mostly `survival.ts` + `tuning.ts` edits; S/M scope; near-zero anti-feature surface.*
+- ★ `wreck-water-tanks` (M) — finite salvageable water-tank components in wrecks (brackish rust-tier vs
+  clean), tapped via the existing per-component extract; deplete permanently → every salvage run becomes a
+  water-survey. Boil brackish at a fire or risk a mild thirst-penalty. Additive save (v15).
+- ★ `sun-shade-exposure` (S) — position-aware heat: open sun heats faster, a wreck's shadow / hull interior
+  / tent canopy slows it (raycast-to-sun `shadeFactor` scaling HEAT_GAIN). Midday travel → a shade-hop route
+  decision. No save, no mesh — pure `survival.ts` + `tuning.ts`.
+- `wind-chill-storm-cold` (S) — wire `weather.intensity` into TEMPERATURE (today only thirst/fog read it):
+  the storm drives wind-chill + a lit fire emits a warmth radius → reach shelter before the wall hits.
+  *(Shared with Arc C3 — the survival mechanic the storm-finale needs.)*
+- `condensation-still` (M) — *optional, lower priority:* a placeable solar still (craft-and-wait water).
+  Overlaps tanks + leans closest to base-builder — only if the water economy wants a second source.
+
+### Arc C2 — Exploration pull ("over that ridge") — directly targets §13
+*The §13 success metric the iteration plan calls "real but thin." Make the horizon beckon, diegetically
+(NO UI markers / objective HUD — that would break the lone-survivor emptiness).*
+- ★ `horizon-landmark-silhouettes` (L) — 2-4 seeded MONUMENTAL silhouettes that sit ABOVE the fog plane,
+  visible across the 2400m map (a colossal canted hull, a lone mesa/spire, a derelict tower). A
+  self-generated objective with no marker — just a shape you choose to walk toward.
+- `salvaged-spyglass-wayfinding` (S) — a craftable monocular (RMB zoom + procedural vignette) to read a
+  distant silhouette BEFORE committing water to the trek. Gear, not an unlock.
+- `vista-crest-reveal` (M) — worldgen tags a few seed-stable high crests; cresting the lee side reveals a
+  composed wide shot + a brief procedural music swell (cooldown-gated so it stays special). *(Merges the
+  two duplicate vista proposals.)*
+
+### Arc C3 — The Long Storm, given an arc (the endgame) — "survive but cannot win"
+*The 7-day countdown (AAF) currently builds to a soft-fail. Reframe it into the GDD's actual thesis — all
+using SHIPPED storm penalties, zero win-state/unlock. Best built as ONE coherent arc.*
+- ★ `storm-eve-survivable-finale` (M) — day 7 becomes a 20-40 min UNSURVIVABLE-OUTSIDE peak you PREPARE for
+  (shelter + water + fire), not a soft fail. Weather it → a melancholy morning-after, the counter continues.
+- `morning-after-rearranged-world` (M) — weathering a peak re-seeds the drift/dune noise so the dune field
+  visibly RESHAPES (POI anchors untouched) — the "the land doesn't care about you" exhale + fresh
+  over-the-ridge moments.
+- `storm-prep-readiness-mirror` (S) — a terse non-numeric readiness reflection on the night-6 sleep/save
+  overlay ("the tent holds, water runs low") — makes the stakes concrete at the decision point.
+- `days-lasted-ledger` (S) — a quiet endurance record (best days / longest load / storms weathered),
+  surfaced ONLY at death/morning beats — turns "cannot win" into "how long can you last." No HUD counter.
+
+### Tone & ecology layer (lower priority — build ON TOP of M3/M4, not ahead of the frontier)
+- `wordless-prop-scenes` (M) — sparse prop-only tableaus from EXISTING meshes (two skeletons round a dead
+  fire; a child's toy in a refugee wreck) — Pillar-4 "the world tells you what happened," NO text.
+- `wind-mood-soundscape` (M) — reactive wind moods + sparse structural creak (audible loneliness; pure Web Audio).
+- `rare-sky-phenomena` (M) — weighted-rare blood-dusk / meteor shower / eclipse-dim recolouring the existing sky rig.
+- `diurnal-cycle` (S) — bind the existing fauna to day/night (lizards diurnal, shrews nocturnal, vultures roost).
+- `worm-far-horizon-crossing` (M) — a distant non-aggro worm plowing the far horizon as pure geography (awe,
+  never threat) — built on top of the M3 worm overhaul. *(Breadth: `spoor-and-tracks`, `worm-dead-zone`,
+  `follow-the-flock` — Dune ecology, downstream of M3.)*
+
+**Consciously NOT chasing** (both vetters): `self-set-storm-goals` + quest-flavored seeds (closest to the §11
+lore-heavy line — the opening journal stays the ONLY authored narrative) · `placeable-cairns`
+(base-builder-adjacent; marginal once silhouettes + spyglass exist).
+
+---
+
 # Phase 2: Iteration cycles after MVP completion
 
 > Produced by `/iteration-plan` (game-planner) 2026-05-31, after Session ACF (87 shipped sessions).
