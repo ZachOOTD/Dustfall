@@ -2,8 +2,8 @@
   "status": "active",
   "started": "2026-06-18",
   "branch": "campaign/2026-06-18",
-  "cycles_completed": 3,
-  "current_tier": "M1 — Wreck-arc finish (calibration)",
+  "cycles_completed": 4,
+  "current_tier": "M2 — Wreck breadth + polish + infra",
   "awaiting_approval": false,
   "stop_reasons": [],
   "self_author": "propose",
@@ -15,7 +15,7 @@
   "circuit_breaker_n": 3,
   "consecutive_no_progress": 0,
   "ceiling": { "max_cycles": 12, "total": null, "per_cycle": null, "unit": "tokens" },
-  "spend": { "total": 420000, "note": "approximate — agent cannot precisely self-meter; max_cycles is the real bound (no budget ceiling set)" },
+  "spend": { "total": 510000, "note": "approximate — agent cannot precisely self-meter; max_cycles is the real bound (no budget ceiling set)" },
   "plan": {
     "authored": "2026-06-18",
     "amended": "2026-06-18 plan-review user steering + evidence audit + Phase-C promotion (see campaign-log.md Cycle 0)",
@@ -66,6 +66,19 @@
       "visual": "appearance-verified — visual gate PASS (3 critics, 0 sev>=2); sev3 fin-ward curl nit deferred; in-hand FEEL feel-pending Phase-A walk-test",
       "commit": "5514fd6",
       "spend_approx_tokens": 150000
+    },
+    {
+      "cycle": 4,
+      "date": "2026-06-18",
+      "focus": "M1 dish-collider-feel (disc vs slab) — M1 COMPLETE",
+      "tier": "M1 — Wreck-arc finish (calibration)",
+      "outcome": "SHIPPED",
+      "units": ["dish-collider-feel"],
+      "milestone_complete": "M1 (5/5 units) — not a Phase boundary, no pause",
+      "verify": "verify:all PASS (tsc + placement 0/0 x5 + colliders 0/25)",
+      "visual": "N/A — collider-only change (no appearance); collision FEEL feel-pending Phase-A walk-test",
+      "commit": "cbe861c",
+      "spend_approx_tokens": 90000
     }
   ]
 }

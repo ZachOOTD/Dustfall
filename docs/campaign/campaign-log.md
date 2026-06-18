@@ -124,3 +124,14 @@ first stop will be `max-cycles` ~mid-Phase-A; resume via `/campaign-start --resu
 - **Spend:** ~150K approx (rig-shots + visual-gate workflow); campaign total ~420K; cycle **3/12**.
 - **Commit:** `5514fd6`.
 - **Next (cycle 4):** M1's LAST unit — `dish-collider-feel` → then **M1 COMPLETE** → M2. **Verdict: CONTINUE** (M1 in progress; no milestone crossed).
+
+---
+
+## Cycle 4 — M1 dish collider disc — M1 COMPLETE (2026-06-18) — SHIPPED
+- **Planned:** `dish-collider-feel` (§E/§G) — the flagship satelliteDish slab collider over-blocked the round dish at the diagonals.
+- **Shipped:** `satelliteDish.ts` — replaced the square slab box with a `makeStaticCylinder` DISC (radius `DISH_R`, half-height `DISH_DEPTH*0.5+0.3`) at the dishPivot's exact world transform → the disc IS the round dish, no diagonal corners.
+- **Verify:** `verify:all` PASS — tsc · placement 0/0 ×5 · colliders 0/25.
+- **Visual iteration:** N/A — collider-only change (no appearance). Collision FEEL (does it still snag?) → **feel-pending** Phase-A walk-test.
+- **Spend:** ~90K approx; campaign total ~510K; cycle **4/12**.
+- **Commit:** `cbe861c`.
+- **✓ MILESTONE M1 COMPLETE (C1-C4):** panel-deadcode + perf-baseline · sand-mounds · scrap-3q · dish-disc. **Verdict: CONTINUE** — M1 is NOT the last tier before the Phase-A `### Milestone:` marker (M2-M5b remain), so phase-level review does NOT pause here. Next: **M2** (cycle 5: feature-flags-infra → security-review → wreck-polish-bundle → yard-cross-poi-merge last/careful).
