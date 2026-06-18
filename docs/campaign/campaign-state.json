@@ -2,7 +2,7 @@
   "status": "active",
   "started": "2026-06-18",
   "branch": "campaign/2026-06-18",
-  "cycles_completed": 2,
+  "cycles_completed": 3,
   "current_tier": "M1 — Wreck-arc finish (calibration)",
   "awaiting_approval": false,
   "stop_reasons": [],
@@ -15,7 +15,7 @@
   "circuit_breaker_n": 3,
   "consecutive_no_progress": 0,
   "ceiling": { "max_cycles": 12, "total": null, "per_cycle": null, "unit": "tokens" },
-  "spend": { "total": 270000, "note": "approximate — agent cannot precisely self-meter; max_cycles is the real bound (no budget ceiling set)" },
+  "spend": { "total": 420000, "note": "approximate — agent cannot precisely self-meter; max_cycles is the real bound (no budget ceiling set)" },
   "plan": {
     "authored": "2026-06-18",
     "amended": "2026-06-18 plan-review user steering + evidence audit + Phase-C promotion (see campaign-log.md Cycle 0)",
@@ -54,6 +54,18 @@
       "visual": "appearance-verified — visual gate PASS (3 critics + code-auditor, 0 sev>=2); seating FEEL feel-pending Phase-A walk-test",
       "commit": "e5ea971",
       "spend_approx_tokens": 170000
+    },
+    {
+      "cycle": 3,
+      "date": "2026-06-18",
+      "focus": "M1 scrap-pickup-3q-thin (edge-on mass)",
+      "tier": "M1 — Wreck-arc finish (calibration)",
+      "outcome": "SHIPPED",
+      "units": ["scrap-pickup-3q-thin"],
+      "verify": "verify:all PASS (tsc + placement 0/0 x5 + colliders 0/25)",
+      "visual": "appearance-verified — visual gate PASS (3 critics, 0 sev>=2); sev3 fin-ward curl nit deferred; in-hand FEEL feel-pending Phase-A walk-test",
+      "commit": "5514fd6",
+      "spend_approx_tokens": 150000
     }
   ]
 }

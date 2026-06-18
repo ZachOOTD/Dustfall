@@ -113,3 +113,14 @@ first stop will be `max-cycles` ~mid-Phase-A; resume via `/campaign-start --resu
 - **Spend:** ~170K approx (incl. the rig-shot renders + the visual-gate workflow); campaign total ~270K; cycle **2/12**.
 - **Commit:** `e5ea971`.
 - **Next (cycle 3):** M1's last 2 units — `scrap-pickup-3q-thin` → `dish-collider-feel` → then **M1 complete** → M2. **Verdict: CONTINUE** (M1 in progress; no milestone crossed).
+
+---
+
+## Cycle 3 — M1 scrap pickup edge-on mass (2026-06-18) — SHIPPED
+- **Planned:** `scrap-pickup-3q-thin` (§G) — the torn-sheet scrap read paper-thin at a 3q/edge-on angle.
+- **Shipped:** `scrapMesh.ts` (shared held + world) — plate thickness 6→14mm + a fuller rolled torn edge → edge-on MASS, no new pieces (no busy-pile regression). Round-1 fix held.
+- **Verify:** `verify:all` PASS — tsc · placement 0/0 ×5 · colliders 0/25.
+- **Visual iteration:** appearance-verified — **adversarial visual gate PASS** (3 harsh-lens critics on 3q/front/left renders; **0 sev≥2**; edge-on now reads with real plate mass, stays one clean torn sheet). 1 sev3 nit (curl slightly fin-ward) deferred. In-hand FEEL → **feel-pending** Phase-A walk-test.
+- **Spend:** ~150K approx (rig-shots + visual-gate workflow); campaign total ~420K; cycle **3/12**.
+- **Commit:** `5514fd6`.
+- **Next (cycle 4):** M1's LAST unit — `dish-collider-feel` → then **M1 COMPLETE** → M2. **Verdict: CONTINUE** (M1 in progress; no milestone crossed).
