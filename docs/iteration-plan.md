@@ -14,7 +14,9 @@ walk-test (the campaign verifies *appearance* headlessly + via the adversarial g
 `feel-pending`). Per unit: `id` (scope S/M/L/XL · verify-type · risk). Milestones are tagged:
 
 - **[BUILD-NOW]** — the campaign builds these unattended, gates on `verify:all` (+ the visual gate
-  for visual/feel cycles), commits each cycle, and pauses at the milestone boundary for your playtest.
+  for visual/feel cycles), commits each cycle, and pauses for your playtest only at the **PHASE boundary**
+  (review cadence set to phase-level, 2026-06-18 — the whole build-out phase M1→M5b runs as one unattended
+  block; the per-milestone walk-test foci below all batch into that single Phase-A review). See roadmap.
 - **[DESIGN-GATE]** — the lead unit needs a **design decision or an architecture spike before any
   build**. The cycle that reaches it will surface a proposal and pause (it will NOT build-now). These
   are the genuinely-consequential calls (deep cave, real-rope/cloth, sled-riding, drop-pod intro,

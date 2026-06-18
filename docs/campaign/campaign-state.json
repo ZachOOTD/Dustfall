@@ -8,6 +8,7 @@
   "stop_reasons": ["plan-review"],
   "self_author": "propose",
   "checkpoint": "milestone",
+  "checkpoint_note": "Markers placed at PHASE boundaries (user 2026-06-18): pause ONLY after Phase A (last milestone M5b) and after Phase B (M10), NOT at each M-milestone. Phase A = M1-M5b build-now (one unattended block); Phase B = M6-M10 design-gated (design calls made at the Phase A review). Commits remain per-cycle for reversibility.",
   "verify_cmd": "npm run verify:all",
   "visual_gate": "auto",
   "until": "roadmap-empty",

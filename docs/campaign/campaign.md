@@ -13,8 +13,10 @@ exhausted (`--until=roadmap-empty`). Measured against GDD §13 success condition
 **Budget:** max-cycles **12** (hard stop, this first run) · no soft token ceiling set
   (calibrate per-cycle spend from `campaign-log.md` after milestone 1, then
   `/campaign-start --resume` with a higher cap)
-**Checkpoint policy:** **milestone** — runs unattended across cycles, pauses only at a
-  `### Milestone: <name>` boundary in `docs/roadmap.md` for a human playtest + approval.
+**Checkpoint policy:** **milestone**, with markers placed at **PHASE boundaries** (user, 2026-06-18) —
+  runs an ENTIRE phase unattended across many cycles, **committing every cycle**, and pauses for a human
+  playtest + approval ONLY at a phase boundary (after Phase A's last milestone M5b; after Phase B's M10),
+  **not** at each M-milestone. (Commits are per-cycle for reversibility; review is per-phase.)
 **Verify gate:** `npm run verify:all` (tsc + `verify:placement` + `verify:colliders`) —
   Dustfall opts out of the tier-ladder; this is its real headless gate.
 **Visual gate:** `auto` — visual/feel cycles also run the adversarial appearance gate

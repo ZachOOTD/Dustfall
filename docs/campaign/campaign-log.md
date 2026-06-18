@@ -67,3 +67,15 @@ new build-now Milestone M5a**; **tone/ecology layer → M5b**. **Deferred** the 
 wind-chill, condensation-still — "not for now"). **C3 endgame NOT pursued** — the user does not want an
 endgame; the game stays open-ended ("days survived"), and the `--self-author` phase must NOT resurface a
 storm-finale. Active build-now queue is now **M1-M5 + M5a + M5b**; design-gate M6-M10 unchanged.
+
+---
+
+## Cycle 0 addendum — review cadence set to PHASE-level (2026-06-18)
+
+User: don't pause at each milestone — run the full phase, review after. Restructured the roadmap
+`### Milestone:` markers to **PHASE boundaries**: the loop now runs all of Phase A (M1→M5b) unattended,
+**committing every cycle**, and PAUSES once at "Phase A — Build-out complete." Phase B (M6→M10) is
+design-gated — its design calls are made at the Phase A review, then it runs as one block → "Phase B
+complete" review. **Commit granularity is unchanged: one commit per CYCLE (≈ one session); a single
+milestone spans several cycles/commits.** `checkpoint` stays `milestone` (markers now sit at phase
+boundaries, not per-M-milestone).

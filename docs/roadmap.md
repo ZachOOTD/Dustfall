@@ -130,55 +130,37 @@ and promotes the second.
 ## Up next
 
 > **ACTIVE: campaign `campaign/2026-06-18`** (`--until=roadmap-empty --checkpoint=milestone
-> --max-cycles=12 --visual-gate=auto`, gate `npm run verify:all`). The milestone queue below is the
-> authoritative ordered plan (full detail + per-unit scope/verify/risk in
-> [iteration-plan.md](iteration-plan.md) "Campaign 2026-06-18 — milestone ladder"). The campaign
-> pauses at each `### Milestone:` boundary for a human playtest + `/campaign-approve`. Phases A
-> (BUILD-NOW) traverse unattended; Phase B (DESIGN-GATE) surface a proposal + pause before building.
-> **Awaiting `/campaign-approve` at the `plan-review` checkpoint.**
+> --max-cycles=12 --visual-gate=auto`, gate `npm run verify:all`). **Review cadence = PHASE-level**
+> (user, 2026-06-18): the loop runs an ENTIRE phase unattended — **committing every cycle** (one cycle ≈
+> one session ≈ a chunk of a milestone; a milestone spans several cycles/commits) — and PAUSES for review
+> only at a `### Milestone:` PHASE marker below, **not** at each M-milestone. Full per-unit detail in
+> [iteration-plan.md](iteration-plan.md). **Awaiting `/campaign-approve` at the `plan-review` checkpoint.**
 
-### Milestone: M1 — Wreck-arc finish (calibration) · [BUILD-NOW]
-scrap-pickup-3q-thin · dish-collider-feel · remove-wreck-sand-mounds · panel-deadcode-cleanup · perf-budget-reprofile.
-*Walk-test: dish collider doesn't snag at diagonals · scrap reads solid in-hand · wrecks read right on bare terrain (no sand mounds) · fleet cohesive · field drawCalls <1000.*
+### Phase A — Build-out (M1→M5b; all build-now, runs unattended → ONE review after) · [BUILD-NOW]
+Tiers in order (each spans 1+ cycles; the loop commits every cycle and pauses at NONE of these):
+- **M1 — Wreck-arc finish (calibration):** scrap-pickup-3q-thin · dish-collider-feel · remove-wreck-sand-mounds · panel-deadcode-cleanup · perf-budget-reprofile.
+- **M2 — Wreck breadth + polish + infra:** yard-cross-poi-merge (D237/D239 re-attempt) · wreck-polish-bundle (§F/§G sev-2/3: non-axial mass · weathering chroma · engine droop · scout trauma · scale-anchor pocket) · feature-flags-infra · security-review-repo.
+- **M3 — The worm + the pit:** worm-model-overhaul · worm-tail-buried · worm-charge-dive · worm-audio-rumble · multi-worm-population · sarlacc-lure-ambush (awe-not-horror). *(Order: worm model+tail before population.)*
+- **M4 — Critters + atmosphere:** vulture-motion-feel · atmosphere-feeltunes (incl. in-storm sway — tunes of shipped systems) · smoke-signal-plume · amban-rifle-balance.
+- **M5 — Riding & rest feel:** speeder-riding-feel · rope-attach-speeder-rear-bar · 3p-camera-and-render-polish (held-items-in-3P, footstep sync, foot-IK snap) · lie-down-to-sleep · viewmodel-nits (3P torch flame).
+- **M5a — Exploration & exposure:** horizon-landmark-silhouettes · salvaged-spyglass · vista-crest-reveal · sun-shade-exposure. *(rest of C1 — wreck-water-tanks/wind-chill/still — deferred.)*
+- **M5b — Living world & tone:** wordless-prop-scenes (no text) · wind-mood-soundscape · rare-sky-phenomena · diurnal-cycle · worm-far-horizon-crossing (awe, on top of M3).
 
-### Milestone: M2 — Wreck breadth + polish + infra · [BUILD-NOW]
-yard-cross-poi-merge (high-risk; the D237/D239 re-attempt) · wreck-polish-bundle (§F/§G sev-2/3: non-axial mass · weathering chroma · engine droop · scout trauma · scale-anchor pocket) · feature-flags-infra · security-review-repo.
-*Walk-test: dense wreck-yard has no float/clip/bury regression + draw budget held; mega-wreck interior + graveyard re-confirm; wreck silhouettes/weathering read better up close.*
+### Milestone: Phase A — Build-out complete (full review + walk-test)
+*The loop PAUSES here after M5b ships. Play the WHOLE Phase A build (all feel-pending items batched into
+one walk-test; per-milestone walk-test focus in [iteration-plan.md](iteration-plan.md)), then
+`/campaign-approve`. **At this review you also make Phase B's design calls** (below) so Phase B can then
+run as one unattended block too.*
 
-### Milestone: M3 — The worm + the pit, made right · [BUILD-NOW]
-worm-model-overhaul · worm-tail-buried · worm-charge-dive · worm-audio-rumble · multi-worm-population · sarlacc-lure-ambush (awe-not-horror). *(Order: worm model+tail before population.)*
-*Walk-test: one worm encounter (model/rumble/buried-tail/charge-dive/N>2 stalk) + the Sarlacc lure-and-maw read + the owed recessed-pit pull-feel + climb-out.*
+### Phase B — Design-gated (M6→M10; design calls made at the Phase A review, then runs → ONE review) · [DESIGN-GATE]
+Each item needs a design decision BEFORE it builds — resolved at the Phase A review (batch them there):
+- **M6 — Survival & UX direction:** survival-rebalance-newgame · crafting-chooser-colliding-recipe · remove-hud-stat-bars (dep survival) · flat-color-texture-audit (scope-first).
+- **M7 — Wreck depth & new POIs:** procedural-wreck-overhaul (net-new variety; §F deltas moved to M2) · more-wreck-types-new-pois · walkable-wreck-interiors (XL, spike→build) · crashing-ship-event.
+- **M8 — Deep cave & companion:** deep-cave-design-spike → deep-cave-build (XL) → companion-egg-cherry-pick (hard-gated on the cave existing).
+- **M9 — Architectural-risk physics:** rideable-sled-spike (A/B worktree spike; no KCC-retries per D125) · real-rope-physics (dep feature-flags-infra) · real-cloth-physics (dep real-rope).
+- **M10 — Big features & tools:** scrap-machete-pry-tool · craftable-hover-bike (+ repairable speeder) · drop-pod-intro-cutscene · pickup-instancedmesh (human-attended).
 
-### Milestone: M4 — Critters + atmosphere · [BUILD-NOW]
-vulture-motion-feel · atmosphere-feeltunes (incl. in-storm sway — all tunes of shipped systems) · smoke-signal-plume · amban-rifle-balance.
-*Walk-test: one day→night cycle (vultures, storm sway + sky drift, smoke plume, rifle feel).*
-
-### Milestone: M5 — Riding & rest feel · [BUILD-NOW]
-speeder-riding-feel · rope-attach-speeder-rear-bar · 3p-camera-and-render-polish (held-items-in-3P, footstep sync, foot-IK snap) · lie-down-to-sleep · viewmodel-nits (3P torch flame). *(sled-tow-tune dropped — shipped ACU.)*
-*Walk-test: one long continuous-motion session (ride/rope/3P/foot-IK/sleep) + salvage-panel ACAX feel; surface the figure-lighting-mood lever.*
-
-### Milestone: M5a — Exploration & exposure (promoted Phase C) · [BUILD-NOW]
-horizon-landmark-silhouettes · salvaged-spyglass · vista-crest-reveal · sun-shade-exposure. *(rest of C1 — wreck-water-tanks/wind-chill/still — deferred per user.)*
-*Walk-test: walk toward a horizon silhouette across open desert at noon — exposure makes it a real route decision; spyglass + vista-reveal reward the trek (no UI markers).*
-
-### Milestone: M5b — Living world & tone (promoted Phase C) · [BUILD-NOW]
-wordless-prop-scenes (no text) · wind-mood-soundscape · rare-sky-phenomena · diurnal-cycle · worm-far-horizon-crossing (awe, on top of M3).
-*Walk-test: one day→night cycle — prop-scenes land, wind/creak deepens loneliness, sky events + diurnal fauna + distant worm read as a living, indifferent world.*
-
-### Milestone: M6 — Survival & UX direction · [DESIGN-GATE]
-survival-rebalance-newgame · crafting-chooser-colliding-recipe · remove-hud-stat-bars (dep survival) · flat-color-texture-audit (scope-first).
-
-### Milestone: M7 — Wreck depth & new POIs · [DESIGN-GATE]
-procedural-wreck-overhaul (net-new variety; §F deltas moved to M2) · more-wreck-types-new-pois · walkable-wreck-interiors (XL, spike→build) · crashing-ship-event.
-
-### Milestone: M8 — Deep cave & companion · [DESIGN-GATE]
-deep-cave-design-spike → deep-cave-build (XL) → companion-egg-cherry-pick (hard-gated on the cave existing).
-
-### Milestone: M9 — Architectural-risk physics · [DESIGN-GATE]
-rideable-sled-spike (A/B worktree spike; no KCC-retries per D125) · real-rope-physics (dep feature-flags-infra) · real-cloth-physics (dep real-rope).
-
-### Milestone: M10 — Big features & tools · [DESIGN-GATE]
-scrap-machete-pry-tool · craftable-hover-bike (+ repairable speeder) · drop-pod-intro-cutscene · sarlacc-lure-ambush (awe-not-horror) · pickup-instancedmesh (human-attended).
+### Milestone: Phase B — Design-gated complete (full review)
 
 **Net-new (Phase C, 2026-06-18):** C2 exploration + sun-shade **promoted → M5a** · tone/ecology **→ M5b** · rest of C1 (water-in-wrecks / wind-chill) **deferred** · **C3 endgame NOT pursued** (user: no endgame — keep the open-ended "days survived" model; the self-author phase must not resurface a storm-finale). See [iteration-plan.md](iteration-plan.md) "Phase C".
 
