@@ -1,3 +1,201 @@
+# Campaign 2026-06-18 — milestone ladder (ACTIVE QUEUE)
+
+> **This is the authoritative ordered queue for the `campaign/2026-06-18` autonomous run**
+> (`/campaign-start --until=roadmap-empty --checkpoint=milestone --max-cycles=12 --plan-first
+> --verify-cmd="npm run verify:all" --visual-gate=auto`). It supersedes the per-cycle ordering in
+> the "Phase 2" plan below (that detail is preserved as the design reference for the
+> architectural-risk cycles — sled-riding, real-rope). Produced from a 6-domain backlog analysis
+> (51 work-units) + a coverage/GDD-compliance audit (2026-06-18). Awaiting `/campaign-approve` at
+> the `plan-review` checkpoint before building starts.
+
+**How to read this.** Each milestone is a coherent, **playable** bundle ending in a human
+walk-test (the campaign verifies *appearance* headlessly + via the adversarial gate; **feel**
+— motion/traversal/timing — is yours to judge at the checkpoint; those units are tagged
+`feel-pending`). Per unit: `id` (scope S/M/L/XL · verify-type · risk). Milestones are tagged:
+
+- **[BUILD-NOW]** — the campaign builds these unattended, gates on `verify:all` (+ the visual gate
+  for visual/feel cycles), commits each cycle, and pauses at the milestone boundary for your playtest.
+- **[DESIGN-GATE]** — the lead unit needs a **design decision or an architecture spike before any
+  build**. The cycle that reaches it will surface a proposal and pause (it will NOT build-now). These
+  are the genuinely-consequential calls (deep cave, real-rope/cloth, sled-riding, drop-pod intro,
+  survival-curve, HUD removal). They're sequenced AFTER the build-now bulk on purpose.
+
+**Verify-type legend:** `headless` (verify:all fully proves it) · `visual-gate` (adversarial
+appearance gate: front-lit + length-framed render → harsh critics + code-auditor, PASS iff no
+sev≥2) · `feel-pending` (appearance-verified by the campaign; **you walk-test the feel**) ·
+`design-gated` (needs a design call first) · `human-attended` (build with a human in the loop).
+
+**Hard exclusions (GDD §11/§14 — NOT in scope, logged for reversibility):** base-building as a
+core loop · multiplayer + MP character-customization (`Solo only`, §14). See "Excluded" at the end.
+
+---
+
+## Phase A — autonomous build-out (BUILD-NOW; the campaign traverses these unattended)
+
+### Milestone 1 — Wreck-arc finish (calibration) · [BUILD-NOW]
+*Small, low-risk, high-visibility — the OWED ACBB walk-test (next-session-prompt §1). Reachable in
+~2-4 cycles; built to let you calibrate cost + quality before resuming with a higher cap.*
+- `scrap-pickup-3q-thin` (S · visual-gate · low) — rework the rusted-sheet so it has edge-on mass at
+  a 3-quarter angle without re-introducing the disliked "busy pile". Shared `scrapMesh.ts` builder →
+  one fix covers held + world. **Critics MUST shoot the 3q angle** (front already reads fine).
+- `dish-collider-feel` (S · feel-pending · low) — refine the flagship `satelliteDish` slab collider
+  (thinner/rotated slab, disc, or tighter hull) so the round face doesn't snag at the diagonals.
+- `panel-deadcode-cleanup` (S · headless · low) — strip superseded greeble builders (`makeBreakerBank`
+  /`makeWireLoom`/…), the dead `colliderHint` field (D211), redundant `_panelInteriorMat`.
+- `perf-budget-reprofile` (S · headless · low) — `perf-probe` pass; record drawCalls/meshes/programs
+  baseline so later content lands against a known budget.
+- **Your ~5-min playtest:** walk INTO the satellite dish (no diagonal clip-wall) · inspect scrap
+  in-hand in motion (reads solid, not thin) · fleet still cohesive under sky/fog · field drawCalls
+  < 1000. Then `/campaign-approve` + resume with a higher `--max-cycles`.
+
+### Milestone 2 — Wreck breadth + infra gate · [BUILD-NOW]
+*The high-risk wreck-perf item gets its own checkpoint so a regression can't poison M1's signal; plus
+the FEATURES scaffold the later physics cycles depend on.*
+- `yard-cross-poi-merge` (M · headless · **high**) — re-attempt the yard-level cross-POI merge
+  (~36-38 sub-groups → few draw calls; ~18% cut last time). **Attempted+reverted twice (D237/D239)** —
+  it regressed the terrain bury-audit by perturbing the `panelDoorExtents` bottom-edge measure.
+  Re-attempt by running `pruneBuriedPanels`/`validatePanels` (or snapshotting bottom-edge world
+  positions) **before** the cross-merge. Gate hard on `verify:placement` + `verify:colliders`.
+- `feature-flags-infra` (S · headless · low) — NEW `src/config/features.ts` (`FEATURES.realRope` et al),
+  flag-OFF. **Dependency enabler** for the gate-and-wait rope/cloth cycles (M9). Land early, inert.
+- `security-review-repo` (M · headless · medium) — audit the public GitHub repo for vulns / leaked
+  secrets (`/security-review` over the tree). Headless hygiene; rides this review boundary.
+- **Also fold (small wreck up-close polish, visual-gate):** the genuinely-pending §F deltas that read
+  at procgen scale — sign-randomize + widen engine droop (~15% detach the nozzle), scout/corvette
+  guaranteed visible trauma. *(The larger "wider openings / non-axial mass / chroma push" is M7.)*
+- **Your playtest:** stand in a dense wreck-yard (620-1000m out) — no float/clip/bury regression, draw
+  budget held; re-confirm the mega-wreck interior (push bow/flanks/bells, lee sand-ramp, panels
+  flush+pry-able, natural-light brightness) and the wreck-yard graveyard read (relic findability,
+  ominous silhouette, vultures).
+
+### Milestone 3 — The worm, made right · [BUILD-NOW]
+*Every unit converges on the SAME entity → one sustained encounter judges the whole package. Strongest
+single lever on the GDD's Dune "how a sand worm enters a scene" pillar. **Order: model + tail-depth
+BEFORE population** so the scaled worms inherit the corrected mesh.*
+- `worm-model-overhaul` (M · visual-gate · medium) — more realistic mouth + body (`sandWorm.ts`).
+- `worm-tail-buried` (S · feel-pending · low) — tail stays buried (model / spawn depth); no above-ground tail.
+- `worm-charge-dive` (M · feel-pending · medium, dep `worm-tail-buried`) — replace the jump attack with a
+  charge-and-dive. **Awe-not-horror (§11):** reads as geography/presence, not a combat escalation.
+- `worm-audio-rumble` (S · feel-pending · low) — replace the abrasive SFX with a low procedural rumble
+  (`audio.ts`, Web Audio per D3).
+- `multi-worm-population` (M · feel-pending · medium) — N>2 scaling + per-worm min-sep + the
+  retreat-and-stalk loop (deferred ABO). *(The 2-worm `sandWorms[]` array already shipped — additive
+  only per D81; flag if N>2 needs a SAVE_VERSION bump.)*
+- **Your playtest:** force-spawn worms — judge model read, low rumble, buried-tail spawn, the
+  charge-and-dive telegraph, and N>2 stalk behaviour in one encounter. **Plus the owed recessed
+  Sarlacc-pit walk-test** (pull feel — escapable but scary? climb back out of the funnel, no softlock?).
+
+### Milestone 4 — Critters + atmosphere · [BUILD-NOW]
+*Ambient/sensory feel with a shared TEST CONTEXT — one full day→night cycle judges them together.*
+- `vulture-motion-feel` (M · feel-pending · low) — flap cadence / relocate arc / landing flare / death
+  tumble / carcass-ecology tunes (all `VULTURE_*` in tuning.ts).
+- `storm-instorm-sway` (S · feel-pending · low) — in-storm sensory camera sway.
+- `atmosphere-feeltunes` (M · feel-pending · low, dep `storm-instorm-sway`) — cloud-shadow strength,
+  star twinkle/drift, storm-wall sweep timing.
+- `smoke-signal-plume` (M · visual-gate · medium) — a tall smoke column rising high from fires.
+- **Also fold:** `amban-rifle-balance` (S · feel-pending) — range 60 / dmg 3 / cd 1.6 / mag 8 vs
+  scrap_gun/energy_pistol (a small combat-pressure tune, not a combat loop — §11).
+- **Your playtest:** one day/night loop — vultures, storm sway + sky drift, the smoke plume from a lit
+  fire, rifle feel. *(NOTE: `companion-egg-cherry-pick` was proposed here but is **blocked** on the
+  deep cave existing — moved to M8.)*
+
+### Milestone 5 — Riding & rest feel · [BUILD-NOW]
+*All third-person / vehicle / rope FEEL — judged only in live continuous motion. One long attended
+motion-playtest covers the whole player-rig surface instead of five stops.*
+- `speeder-riding-feel` (M · feel-pending · medium) — in-motion riding + exact feet-on-pegs.
+- `rope-attach-speeder-rear-bar` (M · feel-pending · low) — rope-attach via the speeder's rear tow bar.
+  *(Targets today's inextensible rope; if real-rope (M9) is ever in flight, sequence after the FEATURES flag.)*
+- `3p-camera-and-render-polish` (L · feel-pending · medium) — held-items-in-3P, gait↔footstep sync,
+  foot-IK idle→walk snap, camera snap-on-teleport.
+- `lie-down-to-sleep` (L · feel-pending · medium) — camera lerps low to a bedroll pose + lie-down/get-up
+  anims (the rig is now mature — replaces the instant-sleep overlay).
+- `sled-mechanics-feel-tune` (S · feel-pending · low) — **SCOPED to the EXISTING tow / slope-slide /
+  collision feel only** (ACD D122-D124). Does NOT include riding (that's the tabled D125 spike → M9).
+- `viewmodel-nits` (S · visual-gate · low) — 3P torch flame animation + FP held-item night lighting.
+- **Surface during this milestone:** the player-model **in-game-lighting-mood** lever (D142 — lowering
+  ambient / raising contrast makes the figure read far more solid, but changes the WHOLE game's look;
+  the biggest remaining realism lever — *your aesthetic call*). Plus the owed salvage-panel ACAX
+  walk-tests (breaker-board under the pry-glow, door pop-off feel, stencil-portal bleed).
+
+---
+
+## Phase B — design-gated arcs (DESIGN-GATE; the cycle surfaces a proposal + pauses here)
+
+> These need a decision or a spike before code. Under `--checkpoint=milestone` the campaign pauses at
+> each as it reaches it. Ordered roughly by value/independence; you can reorder via `steering.md`.
+
+### Milestone 6 — Survival & UX direction · [DESIGN-GATE]
+- `survival-rebalance-newgame` (M · feel-pending · medium) — rebalance health/food/thirst/temperature +
+  **enable survival in the new-game mode** to playtest the curve. *Design call:* the target difficulty curve.
+- `crafting-chooser-colliding-recipe` (S · design-gated · medium) — activate the dormant multi-match
+  chooser by adding ONE colliding recipe (same inputs → different output). *Design call:* which recipe
+  (a gameplay/discovery/save-balance decision, D71).
+- `remove-hud-stat-bars` (L · design-gated · **high**, dep `survival-rebalance`) — replace HUD bars with
+  audio/visual/text cues. *Big UX call* — only after the survival curve is tuned enough to telegraph state without bars.
+- `flat-color-texture-audit` (XL · visual-gate · high) — review ALL materials, improve the weakest
+  readers. *Scope-first:* pick the N weakest, don't open-endedly re-shade everything.
+
+### Milestone 7 — Wreck depth & new POIs · [DESIGN-GATE]
+- `procedural-wreck-overhaul` (L · visual-gate · medium) — **scoped to concrete §F deltas:** one
+  non-axial mass per heavy class (dorsal/sponson, breaks the "sausage"), up-close weathering chroma
+  (oxide→orange, seam-rust lifted, rust-coloured gravity drips). *Confirm these are the wanted deltas
+  vs re-doing shipped work.*
+- `more-wreck-types-new-pois` — net-new POI archetypes beyond the procgen overhaul.
+- `walkable-wreck-interiors` (XL · design-gated · high) — generalize the mega-wreck's walkable interior
+  procedurally (floor + interior collision + lighting + layout). Split: design spike → build. The
+  hollow-husk archetype is the enterable-ready seed.
+- `crashing-ship-event` (L · design-gated · high) — a fiery wreck falls from the sky → a salvageable
+  *dynamic* wreck. *(Mega-wreck depth/dagger polish + W2 conditional flagship greebles + the "real
+  breach holes" idea fold in here.)*
+
+### Milestone 8 — Deep cave & companion · [DESIGN-GATE]
+- `deep-cave-design-spike` (M · design-gated · high) — design pass + generation spike (cellular-automata
+  vs tunnel-carving vs modules? sub-heightfield collision? torch/dark model?).
+- `deep-cave-build` (XL · feel-pending · high, dep spike) — the sprawling underground system + descent opening.
+- `companion-egg-cherry-pick` (M · feel-pending · medium, **dep `deep-cave-build`**) — cherry-pick the
+  preserved egg-acquisition spine (commit `2d4035b`) into the new cave **only once it exists**. *(Audit
+  flagged this as out-of-order if scheduled earlier — it is hard-gated here.)* Optional: deeper companion
+  proc-character rebuild only if it stops reading well.
+
+### Milestone 9 — Architectural-risk physics · [DESIGN-GATE]
+*Flagged friction-3+ cycles. Spike-first, gate-and-wait. See the Phase-2 Cycle 3/4 detail below for the blessed approaches + the documented KCC failures NOT to retry.*
+- `rideable-sled-spike` (L · design-gated · high) — Cycle 3. Spike **Option-C platform-local frame** vs
+  **synthetic ride-peg** concurrently (worktrees); do NOT retry the 3 documented KCC failures (D125).
+- `real-rope-physics` (L · feel-pending · high, dep `feature-flags-infra`) — Cycle 4. Verlet/segment sim
+  behind `FEATURES.realRope`; keep the `RopeEndpoint` vocabulary as the seam, enable CCD from the start (D124).
+- `real-cloth-physics` (L · feel-pending · high, **dep `real-rope-physics`**) — PM-D; shares the Verlet
+  solver. Cheap intermediate (vertex-shader wind ripple) already shipped.
+
+### Milestone 10 — Big features & tools · [DESIGN-GATE]
+- `scrap-machete-pry-tool` (M · visual-gate · medium) — replace `scrap_bar` with a scrap MACHETE pry
+  tool + panel-open anim (+ `rope-rmb-pick-ux` follow-on).
+- `craftable-hover-bike` (L · feel-pending · medium) — build/repair a hover-bike from found parts
+  (incl. the repairable-speeder sub-item) instead of starting with one.
+- `drop-pod-intro-cutscene` (XL · feel-pending · high) — the ODST opening: in-world pod descent + lever +
+  blackout + wake + exit + delayed comedic parachute; keep the existing opening wreck as a nearby POI.
+- `sarlacc-lure-ambush` (M · visual-gate · medium) — bulb-flower lure + maw-emerges-on-approach.
+  **§11 guardrail baked in:** awe/indifferent-geography + telegraphed, NOT a jump-scare.
+- `pickup-instancedmesh` (L · human-attended · high) — InstancedMesh batch the ~340 branch/scrap pickups
+  (needs an `instanceId` interaction-raycast rework — **build with a human** to confirm pickups still take).
+
+---
+
+## Excluded / deferred (logged for reversibility — NOT in the campaign queue)
+
+- **`base-building`** — GDD §11 anti-feature (tents/fires placeables exist; not a fortress loop).
+- **`multiplayer-character-customization`** — GDD §14 "Solo only. No MP planned."
+- **`real-pbr-textures`** — revisits the D107 zero-asset policy; a deliberate asset-fork, **your call** only.
+- **`renderer-webgpu-explore`** — re-evaluate only when frames are the wall.
+- **`desktop-packaging-electron`** — post-content distribution decision (design-first, not now).
+- **`dynamic-poi-model-gen`** — partly realized by the composite fleet; revisit if hand-flagships become the bottleneck.
+- **`shrew-save-determinism`** — only if shrew procgen ever becomes non-deterministic (D144).
+- **`sarlacc-throw-items`**, **`idea-generation-tooling`** — speculative; park.
+- **PARKED (design-call first):** flagship hermit NPCs · salvage-durability-per-wreck · rare key-card
+  panels · restore-corroded-via-weld-kit · machete-as-wreck-loot (backlog `## PARKED`).
+- **Continuous (handled per-cycle by `/session-end`, not a milestone):** the full roadmap/docs refresh.
+
+---
+
 # Phase 2: Iteration cycles after MVP completion
 
 > Produced by `/iteration-plan` (game-planner) 2026-05-31, after Session ACF (87 shipped sessions).

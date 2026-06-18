@@ -243,15 +243,32 @@ current direction.
 
 ## 12. Scope-cut candidates (pre-committed)
 
-Dustfall opts out of the framework's tier verify pattern + the
-agent-autonomous overnight mode, so this section is informational
-rather than executable. Per-session scope cuts have historically been
-applied ad-hoc in the changelog (e.g., D52 `LOD ring deleted` in
-NN — superseded by HH; trim `pipe_staff` + `energy_pistol` from
-starter loadout in QQ to fit new items).
+Populated 2026-06-18 for the `campaign/2026-06-18` autonomous run (`--plan-first`).
+Historically Dustfall applied cuts ad-hoc in the changelog (e.g., D52 `LOD ring deleted`
+in NN; trim `pipe_staff` + `energy_pistol` from the QQ starter loadout). Under the
+campaign, **if a cycle's `npm run verify:all` fails 3× or time-pressure trips,
+`/scope-cut` (or the autonomy stop-condition) is authorized to cut from this list IN
+ORDER — top entry first.** Cut juice + optional content before core/pillar systems.
 
-When `/plan-vertical-slice` is invoked for a future session, populate
-this section as a per-session pre-commit.
+**Cut order (top cut first):**
+1. **`viewmodel-nits`** (M5) — purely cosmetic (3P torch-flame anim, FP held-item night dim).
+   Nothing depends on it; the lowest-value unit in the queue.
+2. **`smoke-signal-plume`** (M4) — atmosphere juice; standalone, nothing reads off it.
+3. **The star-twinkle/drift half of `atmosphere-feeltunes`** (M4) — cosmetic sky polish.
+   KEEP the cloud-shadow + storm-wall-sweep half (that's the load-bearing storm feel).
+4. **`multi-worm-population` N>2 scaling + retreat-stalk** (M3) — the 2-worm `sandWorms[]`
+   baseline already ships; N>2 is breadth. KEEP the worm model/tail/charge-dive (the §1 Dune
+   pillar lever).
+5. **`lie-down-to-sleep`** (M5) — nice-to-have; the instant-sleep overlay already works.
+6. **`rope-attach-speeder-rear-bar`** (M5) — convenience; the existing tether flow is functional.
+7. **`salvage-panel-variations` + optional wreck-breadth** (M7) — optional content.
+
+**Never cut once started** (defer the whole unit to a follow-up instead of half-shipping):
+- **Any save-touching change** — additive-only per D81; if a unit genuinely needs a
+  `SAVE_VERSION` bump, **surface it to the user**, don't cut around it.
+- **`worm-model-overhaul`** (M3 pillar lever) and **`security-review-repo`** (hygiene).
+- A **high-risk** unit that fails (e.g. `yard-cross-poi-merge`) is **reverted to its last green
+  state** per its own D237/D239 history — not half-shipped — and re-queued, not "cut".
 
 ## 13. Success conditions
 

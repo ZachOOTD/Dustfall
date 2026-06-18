@@ -1,0 +1,27 @@
+{
+  "status": "paused",
+  "started": "2026-06-18",
+  "branch": "campaign/2026-06-18",
+  "cycles_completed": 0,
+  "current_tier": "M1 — Wreck-arc finish (calibration)",
+  "awaiting_approval": true,
+  "stop_reasons": ["plan-review"],
+  "self_author": "propose",
+  "checkpoint": "milestone",
+  "verify_cmd": "npm run verify:all",
+  "visual_gate": "auto",
+  "until": "roadmap-empty",
+  "circuit_breaker_n": 3,
+  "consecutive_no_progress": 0,
+  "ceiling": { "max_cycles": 12, "total": null, "per_cycle": null, "unit": "tokens" },
+  "spend": { "total": 0 },
+  "plan": {
+    "authored": "2026-06-18",
+    "source": "6-domain backlog analysis (51 work-units) + coverage/GDD audit",
+    "doc": "docs/iteration-plan.md#campaign-2026-06-18--milestone-ladder",
+    "milestones_build_now": ["M1", "M2", "M3", "M4", "M5"],
+    "milestones_design_gate": ["M6", "M7", "M8", "M9", "M10"],
+    "excluded_per_gdd": ["base-building", "multiplayer-character-customization"]
+  },
+  "cycles": []
+}
