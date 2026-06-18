@@ -157,6 +157,14 @@ vulture-motion-feel · atmosphere-feeltunes (incl. in-storm sway — all tunes o
 speeder-riding-feel · rope-attach-speeder-rear-bar · 3p-camera-and-render-polish (held-items-in-3P, footstep sync, foot-IK snap) · lie-down-to-sleep · viewmodel-nits (3P torch flame). *(sled-tow-tune dropped — shipped ACU.)*
 *Walk-test: one long continuous-motion session (ride/rope/3P/foot-IK/sleep) + salvage-panel ACAX feel; surface the figure-lighting-mood lever.*
 
+### Milestone: M5a — Exploration & exposure (promoted Phase C) · [BUILD-NOW]
+horizon-landmark-silhouettes · salvaged-spyglass · vista-crest-reveal · sun-shade-exposure. *(rest of C1 — wreck-water-tanks/wind-chill/still — deferred per user.)*
+*Walk-test: walk toward a horizon silhouette across open desert at noon — exposure makes it a real route decision; spyglass + vista-reveal reward the trek (no UI markers).*
+
+### Milestone: M5b — Living world & tone (promoted Phase C) · [BUILD-NOW]
+wordless-prop-scenes (no text) · wind-mood-soundscape · rare-sky-phenomena · diurnal-cycle · worm-far-horizon-crossing (awe, on top of M3).
+*Walk-test: one day→night cycle — prop-scenes land, wind/creak deepens loneliness, sky events + diurnal fauna + distant worm read as a living, indifferent world.*
+
 ### Milestone: M6 — Survival & UX direction · [DESIGN-GATE]
 survival-rebalance-newgame · crafting-chooser-colliding-recipe · remove-hud-stat-bars (dep survival) · flat-color-texture-audit (scope-first).
 
@@ -171,6 +179,8 @@ rideable-sled-spike (A/B worktree spike; no KCC-retries per D125) · real-rope-p
 
 ### Milestone: M10 — Big features & tools · [DESIGN-GATE]
 scrap-machete-pry-tool · craftable-hover-bike (+ repairable speeder) · drop-pod-intro-cutscene · sarlacc-lure-ambush (awe-not-horror) · pickup-instancedmesh (human-attended).
+
+**Net-new (Phase C, 2026-06-18):** C2 exploration + sun-shade **promoted → M5a** · tone/ecology **→ M5b** · rest of C1 (water-in-wrecks / wind-chill) **deferred** · **C3 endgame NOT pursued** (user: no endgame — keep the open-ended "days survived" model; the self-author phase must not resurface a storm-finale). See [iteration-plan.md](iteration-plan.md) "Phase C".
 
 **Excluded (GDD §11/§14 + user 2026-06-18):** base-building · multiplayer + char-customization · real-PBR-textures (D107 fork, user call) · WebGPU/Electron/dynamic-POI-gen (deferred) · player-model §D optional (deferred) · the 5 PARKED items (DROPPED, won't-do). See [iteration-plan.md](iteration-plan.md) "Excluded / deferred".
 

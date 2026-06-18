@@ -62,5 +62,8 @@ User asked what else is worth developing beyond the backlog. A vetted ideation p
 → 23 proposals → anti-feature + value/vision vetting; both vetters converged on the same 4 core-levers)
 surfaced 3 net-new arcs the GDD weights heavily but ships thin: **C1 water & exposure · C2 exploration pull ·
 C3 the Long-Storm endgame arc** (+ a lower-priority tone/ecology layer). Captured as **Phase C (PROPOSED)**
-in `iteration-plan.md` — the `--self-author` seed when M1-M10 empties, or promotable into the active queue on
-the user's pick. Does NOT change the active M1-M10 plan. (Awaiting the user's promotion pick.)
+in `iteration-plan.md`. **Promotion decision (user, 2026-06-18):** **C2 exploration + `sun-shade-exposure` →
+new build-now Milestone M5a**; **tone/ecology layer → M5b**. **Deferred** the rest of C1 (wreck-water-tanks,
+wind-chill, condensation-still — "not for now"). **C3 endgame NOT pursued** — the user does not want an
+endgame; the game stays open-ended ("days survived"), and the `--self-author` phase must NOT resurface a
+storm-finale. Active build-now queue is now **M1-M5 + M5a + M5b**; design-gate M6-M10 unchanged.
