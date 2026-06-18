@@ -56,7 +56,7 @@ import { validatePanels, findSurfaceMounts, type PanelEntry } from './panelPlace
 import { Tuning } from '../config/tuning.ts';
 import { addAccessPanel, addAccessPanelOriented, makeEngineBellMesh, _bellOuterMat, type PanelShape, type PanelArchetype } from './wrecks.ts';
 import { mergeStaticByMaterial, makeSandMound, makeLoftedHull, dentGeometry } from './wreckForms.ts';
-import { createRustedHullMaterial, HULL_WEATHERING_ACAY } from './hullMaterial.ts';
+import { createRustedHullMaterial, HULL_WEATHERING_ACAY, type RustedHullOptions } from './hullMaterial.ts';
 import { attachCompoundCollider } from '../physics/bodies.ts';
 import { alignToTerrain } from '../util/terrainAlign.ts';
 import { placeJournal, type Journal } from './journal.ts';
@@ -127,9 +127,28 @@ const CLASS_BUCKET: Record<ProcgenWreckClass, HullBucket> = {
 // (light-cool / mid-warm / dark) stay legible across the fleet: a pale ship beside a dark
 // one always reads as two different classes.
 const BUCKET_HEX: Record<HullBucket, number> = {
-  cool: 0x6b7079,   // LIGHT cool blue-grey steel — military/observation
+  cool: 0x70767f,   // LIGHT cool blue-grey steel — military/observation (ACBB: lifted from 0x6b7079 so the cool tier stays light)
   warm: 0x6e5c42,   // MID warm tan — working/civilian
-  dark: 0x382e24,   // DARK industrial rust-brown — heavy haulers
+  dark: 0x3a3d43,   // DARK cool-steel — heavy haulers (ACBB: was 0x382e24 warm-brown → read as terracotta mud; cool-steel reads as dark METAL under reduced pale weathering)
+};
+// ── ACBB Tier 1 — per-BUCKET weathering rebalance (the §F debt + the cohesion fix).
+// The shared HULL_WEATHERING_ACAY profile applied UNIFORMLY collapsed all three buckets
+// toward one warm-rust value (the desert tint + the warm ox/dust channels washed cool→rust
+// and dark→pale-ceramic — see the ACBB baseline shots). Each bucket now overrides a few
+// channel STRENGTHS so its identity survives as a distinct lightness/temperature TIER while
+// staying in one believable weather-system (D224 — distinct by lightness, not clashing hue):
+//   cool  → warm-rust channels pulled DOWN (ox/seam/oxTop) so it stays cool-grey steel.
+//   warm  → the full HULL_WEATHERING_ACAY (the warm tan-rust reference look). No override.
+//   dark  → the PALE channels pulled down (dust/chalk/oxTop) so the heavy hull stays DARK
+//           steel instead of washing to powder-pale; rust still pools low (oxDeep/seam kept).
+// Strengths only (hues stay shared) → zero new shader programs (identical onBeforeCompile).
+const BUCKET_WEATHERING: Record<HullBucket, Partial<RustedHullOptions>> = {
+  // wearAmplitude bumped on cool/dark (ACBB iter3): the critique read the smooth low-poly
+  // tank/derelict flanks as "CGI-flat" — more plate-to-plate brightness break-up adds tonal
+  // variation even where the geometry is too smooth for the orientation channels to fire.
+  cool: { oxStrength: 0.30, oxTopStrength: 0.18, seamRustStrength: 0.32, oxDeepStrength: 0.38, wearAmplitude: 0.34 },
+  warm: {},
+  dark: { dustStrength: 0.26, chalkStrength: 0.10, oxTopStrength: 0.24, oxDeepStrength: 0.62, seamRustStrength: 0.50, wearAmplitude: 0.38 },
 };
 // ACAZ T3 — per-class GIRTH (hull-radius multiplier). The size ladder was length-only
 // (every class seeded prevRadius=0.9), so a 33m mega had the same ~1m girth as a 4m scout
@@ -165,10 +184,11 @@ export function getBucketMats(bucket: HullBucket): ClassHullMats {
   const base = new THREE.Color(BUCKET_HEX[bucket]);
   const dark = base.clone().multiplyScalar(0.80);
   const rust = base.clone().lerp(new THREE.Color(Tuning.WRECK_RUST_HEX), 0.5);
+  const wx = BUCKET_WEATHERING[bucket];   // ACBB — per-bucket strength overrides (tier separation)
   const mats: ClassHullMats = {
-    hull: createRustedHullMaterial({ baseColor: base.getHex(), ...HULL_WEATHERING_ACAY, streakIntensity: 0.42 }),
-    dark: createRustedHullMaterial({ baseColor: dark.getHex(), ...HULL_WEATHERING_ACAY, streakIntensity: 0.34 }),
-    rust: createRustedHullMaterial({ baseColor: rust.getHex(), ...HULL_WEATHERING_ACAY, streakIntensity: 0.46 }),
+    hull: createRustedHullMaterial({ baseColor: base.getHex(), ...HULL_WEATHERING_ACAY, ...wx, streakIntensity: 0.42 }),
+    dark: createRustedHullMaterial({ baseColor: dark.getHex(), ...HULL_WEATHERING_ACAY, ...wx, streakIntensity: 0.34 }),
+    rust: createRustedHullMaterial({ baseColor: rust.getHex(), ...HULL_WEATHERING_ACAY, ...wx, streakIntensity: 0.46 }),
   };
   _bucketMatCache.set(bucket, mats);
   return mats;

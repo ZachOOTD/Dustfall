@@ -963,6 +963,28 @@ export function placeSatelliteDish(
     new THREE.Vector3(0, BASE_H * 0.5 - BASE_WALL_T * 0.5, 0),
     { x: BASE_W * 0.5, y: BASE_WALL_T * 0.5, z: BASE_D * 0.5 },
   );
+  // ── ACBB Tier 3 (§E) — the 16m parabolic DISH had NO collider (only the base did), so the
+  // player walked clean through the reflector + its forward-collapsed lower rim. Add a slab
+  // matching the reflector: DISH_R square × DISH_DEPTH thick, at the dishPivot's exact WORLD
+  // transform (group world TRS ∘ dishPivot local pos apexY ∘ the forward-collapse tilt). The
+  // box corners over-block the round dish slightly at the diagonals (acceptable; the dish sits
+  // high). NOTE: collision FEEL owes the attended walk-test (headless can't judge it) — the
+  // geometry is grounded in the dishPivot transform, so the worst case is a touch of over-block.
+  {
+    const dishPivotQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI * 0.32, 0, 0.18));
+    const dishWorldQuat = groupWorldQuat.clone().multiply(dishPivotQuat);
+    const dishWorldCenter = new THREE.Vector3(0, DISH_DEPTH * 0.5, 0)
+      .applyQuaternion(dishPivotQuat)
+      .add(new THREE.Vector3(0, apexY, 0))   // dishPivot's local Y within group
+      .applyQuaternion(groupWorldQuat)
+      .add(groupWorldPos);
+    makeStaticBox(
+      world,
+      { x: DISH_R, y: DISH_DEPTH * 0.5 + 0.3, z: DISH_R },
+      dishWorldCenter,
+      { x: dishWorldQuat.x, y: dishWorldQuat.y, z: dishWorldQuat.z, w: dishWorldQuat.w },
+    );
+  }
   // Ladder ramp — tilted 45° box collider that the player can walk up
   // from terrain to roof. addBaseCollider doesn't support local
   // rotations (it only applies the parent group's world quat), so we

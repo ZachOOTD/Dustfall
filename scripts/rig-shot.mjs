@@ -1005,6 +1005,36 @@ const SCENARIOS = {
     console.log(`[flagship] ${JSON.stringify(r)}`);
   },
 
+  // ACBB Tier 3 — COLLIDER-AUDIT (no screenshot). For each POI archetype × a seed sweep,
+  // assemble it pre-merge + assert every collidable-scale mesh is covered by a declared
+  // collider (the audit lives in poiAssembler; __game.auditPOIColliders is pure → works at
+  // title, no enterGame). Prints one `COLLIDER-AUDIT archetype=… seed=… pass=p/t fails=f`
+  // line per (archetype,seed) for scripts/verify-colliders.mjs (mirrors the panels gate).
+  // `--archetype=a,b` (default all 5) `--seeds=1,42,…` (default 1,42,1337,2024).
+  'collider-audit': async (page) => {
+    // seed 2 is included so the derelict WIDE-BODY form (parallel outrigger pods + cross-strut)
+    // is exercised — seeds 1/42/1337/2024 all roll the linear/stacked forms (ACBB Tier 4).
+    const seeds = (argv.seeds !== undefined ? String(argv.seeds) : '1,2,42,1337,2024')
+      .split(',').map((s) => Number(s.trim())).filter((n) => !Number.isNaN(n));
+    const archs = (argv.archetype ? String(argv.archetype) : 'satellite,wrecked_tank,debris_field,hollow_husk,derelict')
+      .split(',').map((s) => s.trim()).filter(Boolean);
+    await page.waitForFunction(() => !!(window.__game && window.__game.auditPOIColliders), { timeout: 20000 });
+    const rows = await page.evaluate(({ archs, seeds }) => {
+      const out = [];
+      for (const a of archs) for (const s of seeds) {
+        const r = window.__game.auditPOIColliders(a, s);
+        out.push({ archetype: a, seed: s, total: r.total, pass: r.pass, fails: r.fails, details: r.details });
+      }
+      return out;
+    }, { archs, seeds });
+    let totalFails = 0;
+    for (const r of rows) {
+      totalFails += r.fails;
+      console.log(`COLLIDER-AUDIT archetype=${r.archetype} seed=${r.seed} pass=${r.pass}/${r.total} fails=${r.fails}${r.fails ? ' :: ' + r.details.join(' | ') : ''}`);
+    }
+    console.log(`[collider-audit] ${rows.length} audits across ${archs.length} archetypes — ${totalFails} total fails`);
+  },
+
   // ACAO — PROCGEN-WRECK framer (the BLOCKER from ACAN). Spawns a chosen procgen
   // wreck CLASS at a fixed clear anchor with a deterministic seed (via
   // __game.spawnProcgenWreckRig), names it 'procgenWreckRig', then frames it +

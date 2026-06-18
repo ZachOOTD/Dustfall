@@ -341,13 +341,13 @@ const _DEFS: Record<ItemId, ItemDef> = {
       return { consumed: false, message: 'no use for it yet' };
     },
     makeViewModel() {
-      // ACAH — rebuilt as a detailed scavenged-hull-debris chunk via the SHARED
+      // ACBC — one torn, bent, rusted SHEET of hull plating via the SHARED
       // buildScrapMesh (matches the world pickups scattered around wrecks, like
-      // branchMesh does for branches). Rusty weathered metal (D173 rustLevel via
-      // vmMetal) — torn plate + folded flap + crumpled plate + angle bracket +
-      // rivets + bent rebar + wire coil.
-      const mat = vmMetal(0x73604c, { wornScale: 6.0, rustLevel: 0.5 });
-      const accentMat = vmMetal(0x4a3a2a, { wornScale: 7.0, scratchStrength: 0.04, rustLevel: 0.6 });
+      // branchMesh does for branches). Heavily-rusted oxidized steel (rustLevel
+      // via vmMetal) — buckled plate + curling edge + bitten corners + fold
+      // crease + riveted seam + a peeled accent tab.
+      const mat = vmMetal(0x7a3c1c, { wornScale: 6.0, rustLevel: 0.92 });        // saturated rust-orange base
+      const accentMat = vmMetal(0x52260f, { wornScale: 7.0, scratchStrength: 0.04, rustLevel: 0.97 }); // deep-rust crevice tone
       return buildScrapMesh(mat, accentMat);
     },
     makeIcon() {

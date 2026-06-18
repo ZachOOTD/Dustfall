@@ -93,6 +93,7 @@ uniform float uTwinkleSpeed;
 uniform float uTwinkleDepth;
 uniform float uSizeDepth;
 uniform float uBaseSize;
+uniform float uBrightness;
 varying float vAlpha;
 void main() {
   // Twinkle: a per-star sine in [-1,1], folded to [0,1].
@@ -100,7 +101,10 @@ void main() {
   // Opacity dips toward the trough; brighter stars (bigger size) twinkle
   // a touch less so the field doesn't all blink in unison.
   float dip = mix(1.0 - uTwinkleDepth, 1.0, tw);
-  vAlpha = uOpacity * dip;
+  // uBrightness (>1) lifts the soft-disc mid-tones so stars read clearly on a
+  // clear night; the saturated core still clamps in the fragment so we don't
+  // get blown-out white blobs. Capped just above 1 to keep the ceiling sane.
+  vAlpha = min(uOpacity * dip * uBrightness, 1.15);
   // Size pulses subtly with the same phase.
   float sizePulse = mix(1.0 - uSizeDepth, 1.0 + uSizeDepth, tw);
   gl_PointSize = uBaseSize * size * sizePulse;
@@ -425,6 +429,7 @@ export function createSky(scene: THREE.Scene): void {
       uTwinkleDepth: { value: STAR_TWINKLE_DEPTH },
       uSizeDepth:    { value: STAR_TWINKLE_SIZE_DEPTH },
       uBaseSize:     { value: STAR_BASE_SIZE },
+      uBrightness:   { value: Tuning.STAR_BRIGHTNESS },
     },
   });
   const stars = new THREE.Points(buildStarGeometry(), starsMat);

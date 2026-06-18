@@ -135,6 +135,12 @@ function assembleWreckedTank(rand: Rng): AssembleResult {
   return a.result();
 }
 
+// ACBB Tier 2 — disturbed/scorched sand under a debris scatter (an impact footprint).
+// Dark warm-grey scorched tan; polygon-offset so the flat decal sits ON the sand without
+// z-fighting. A shared singleton (merges across every debris field in the yard).
+const _scorchMat = new THREE.MeshLambertMaterial({ color: 0x564738, flatShading: true });
+_scorchMat.polygonOffset = true; _scorchMat.polygonOffsetFactor = -1; _scorchMat.polygonOffsetUnits = -1;
+
 // ════════════════════════════════════════════════════════════════════
 // DEBRIS FIELD — no hull: torn plates, bent struts + a lootable chunk strewn over
 // a disc. The "blast-scatter / fallen-apart" graveyard texture between bigger POIs.
@@ -143,6 +149,14 @@ function assembleDebris(rand: Rng): AssembleResult {
   const a = new Assembly();
   const s = seedOf(rand);
   const n = 6 + Math.floor(rand() * 5);   // 6-10 pieces (ONE rand draw)
+  // Impact footprint: a disturbed-sand DISC under the scatter centre so the field reads as
+  // "something came down and broke apart HERE", not as scattered rocks. Flat ground decal
+  // (decoration, no collider); rides the group's terrain-align like the rest of the POI.
+  const discR = 3.4 + phash(s, 5) * 1.6;
+  const disc = new THREE.Mesh(new THREE.CircleGeometry(discR, 24), _scorchMat);
+  disc.rotation.x = -Math.PI / 2; disc.position.y = 0.06;
+  disc.userData.isWreckDecoration = true;
+  a.group.add(disc);
   for (let i = 0; i < n; i++) {
     const isChunk0 = i === 0;
     const kindIdx = isChunk0 ? 2 : Math.floor(phash(s, 200 + i) * 3);
@@ -163,7 +177,7 @@ function assembleDebris(rand: Rng): AssembleResult {
         (phash(s, 500 + i) - 0.5) * 2 * tiltMax,
       ));
       x = Math.cos(ang) * dist; z = Math.sin(ang) * dist;
-      sink = phash(s, 600 + i) * 0.3;
+      sink = 0.06 + phash(s, 600 + i) * 0.34;   // ACBB Tier 2 — deeper bias so pieces nestle into the sand, not perch/float
     }
     // Seat by the POST-ROTATION lowest vertex (the un-rotated bbox floated/speared tilts).
     const m = new THREE.Matrix4().compose(
@@ -200,11 +214,24 @@ function assembleDerelict(rand: Rng): AssembleResult {
   const engine = engineNozzle(s + 200);
   a.place(engine, mate(spinePl, socket(spine, 'aft'), socket(engine, 'mount')));
   if (form < 0.45) {
-    // WIDE-BODY — outrigger hull pods grafted onto both flanks (a catamaran-ish hauler).
-    for (const sock of ['spoL', 'spoR'] as const) {
-      const spon = hullBarrel(s + 300 + (sock === 'spoL' ? 7 : 17), 0.62);
-      a.place(spon, mate(spinePl, socket(spine, sock), socket(spon, 'aft')));
+    // WIDE-BODY — twin outrigger hulls running PARALLEL to the spine (a trimaran hauler).
+    // ACBB Tier 4: was mate()'d onto the radial sockets, which oriented them PERPENDICULAR
+    // (a plus-sign cross, not a wide ship). Placed directly now — spine frame translated to
+    // each flank with NO rotation → they stay axis-aligned alongside the spine + a connecting
+    // cross-strut so the trio reads as one welded wide hull, not three loose tubes.
+    const spoX = socket(spine, 'spoL').pos.x;          // = r·0.85
+    const offX = spoX * 1.85;                          // pods nearly kiss the spine flanks
+    for (const sgn of [1, -1]) {
+      const pod = hullBarrel(s + 300 + (sgn > 0 ? 7 : 17), 0.7);
+      const pl = spinePl.clone().multiply(new THREE.Matrix4().makeTranslation(sgn * offX, -0.12, -0.25));
+      a.place(pod, pl);
     }
+    // Cross-strut tying the three hulls together (a transverse bar across the spine top).
+    const strut = hullBarrel(s + 360, 0.34);
+    const strutPl = spinePl.clone()
+      .multiply(new THREE.Matrix4().makeTranslation(0, spoX * 0.5, 0))
+      .multiply(new THREE.Matrix4().makeRotationY(Math.PI / 2));   // lie across ±X
+    a.place(strut, strutPl);
   } else if (form < 0.75) {
     // STACKED — a dorsal superstructure barrel (a conning-tower silhouette).
     const tower = hullBarrel(s + 400, 0.55);
@@ -218,7 +245,11 @@ function assembleDerelict(rand: Rng): AssembleResult {
 export const ARCHETYPES: Record<string, Archetype> = {
   satellite: {
     id: 'satellite',
-    params: { bucket: 'cool', burySink: false, bury: 0, list: 0.15, panelMin: 1, panelMax: 1, sandMound: true, seatSink: 0.12, salvageKind: 'escape_pod' },
+    // ACBB Tier 2 — read as CRASH-LANDED, not a showroom display (the critique's #1
+    // immersion break): a real hard-landing LEAN (0.15→0.30) + a deeper base SEAT
+    // (0.12→0.38) so it beds into the dune instead of floating; the proud sand drift now
+    // banks up its windward base. Still burySink:false (stands — distinct from the toppled tank).
+    params: { bucket: 'cool', burySink: false, bury: 0, list: 0.30, panelMin: 1, panelMax: 1, sandMound: true, seatSink: 0.38, salvageKind: 'escape_pod' },
     assemble: assembleSatellite,
   },
   wrecked_tank: {
@@ -241,7 +272,9 @@ export const ARCHETYPES: Record<string, Archetype> = {
   },
   derelict: {
     id: 'derelict',
-    params: { bucket: 'cool', burySink: true, bury: 0.25, list: 0.14, panelMin: 1, panelMax: 1, sandMound: true, salvageKind: 'fuselage' },
+    // ACBB Tier 2 — the derelict rested ON the sand like a prop (critique sev2); give it a
+    // real settle (bury 0.25→0.55) + a touch more crash-list so it reads CRASHED + bedded.
+    params: { bucket: 'cool', burySink: true, bury: 0.55, list: 0.20, panelMin: 1, panelMax: 1, sandMound: true, salvageKind: 'fuselage' },
     assemble: assembleDerelict,
   },
 };

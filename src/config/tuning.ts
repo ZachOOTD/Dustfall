@@ -1419,6 +1419,7 @@ export const Tuning = {
   STAR_TWINKLE_SIZE_DEPTH: 0.30, // 0..1 — point size pulse with the twinkle
   STAR_DRIFT_RATE: 0.0042,       // radians/sec — slow celestial rotation of the field (X tilt = 0.18x)
   STAR_BASE_SIZE: 1.6,           // base px point size (replaces old PointsMaterial.size)
+  STAR_BRIGHTNESS: 1.55,         // per-star alpha gain on a clear night (>1 brightens the soft-disc mid-tones; core clamps so no white blobs). User feedback: stars too dim.
   STAR_STORM_STATE_FLOOR: 0.55,  // extra star suppression during building/storm/settling (cloud occlusion)
   // ACAB (Cycle 6) — procedural cloud layer (sky.ts SKY_FRAGMENT).
   CLOUD_COLOR_HEX: 0xd6d8e2,     // lit cloud tops
@@ -1550,6 +1551,24 @@ export const Tuning = {
   VULTURE_DEATH_SPIN: 7.0,         // rad/s angular kick on death (tumble)
   VULTURE_SETTLE_VEL: 0.7,         // m/s — below this (lin+ang) the dead body is "settled"
   VULTURE_SETTLE_MAX_AGE: 2.5,     // s — hard cap: a near-stationary corpse lands even if heightfield jitter blocks sleep
+
+  // ── Raider (hostile hooded wanderer) — AI feel + combat. Lifted out of
+  //    enemies/raider.ts inline consts (2026-06-17 framework audit) so combat
+  //    tunes from here, matching the VULTURE_* convention above.
+  RAIDER_HEIGHT: 1.85,               // m — capsule total height
+  RAIDER_CAPSULE_RADIUS: 0.30,       // m — capsule radius
+  RAIDER_WALK_SPEED: 1.8,            // m/s — patrol speed
+  RAIDER_RUN_SPEED: 4.0,             // m/s — chase speed
+  RAIDER_SIGHT_DISTANCE: 28,         // m — max sight range
+  RAIDER_SIGHT_HALF_ANGLE: Math.PI / 3, // rad — half-angle of the ±60° vision cone
+  RAIDER_SIGHT_REFRESH: 0.5,         // s — between sight raycasts per raider (perf cache)
+  RAIDER_HEARING_RADIUS_WALK: 8,     // m — hears a walking player within this
+  RAIDER_HEARING_RADIUS_SPRINT: 18,  // m — hears a sprinting player within this
+  RAIDER_ATTACK_RANGE: 2.0,          // m — engages melee inside this
+  RAIDER_ATTACK_BREAK_RANGE: 2.8,    // m — breaks the attack if the player escapes past this
+  RAIDER_ATTACK_COOLDOWN: 1.2,       // s — between melee swings
+  RAIDER_ATTACK_DAMAGE: 0.15,        // fraction of player health per hit
+  RAIDER_CHASE_GIVEUP_DURATION: 3.0, // s — keeps chasing after losing sight before giving up
 } as const;
 
 // Sky gradient colors (top vs horizon) per time of day. Horizon stays close to

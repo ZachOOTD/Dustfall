@@ -8,7 +8,7 @@ import { damageVulture } from '../enemies/vulture.ts';
 import { makeLatheHull, fuselageProfile, makeFormerRings, makeBreach, makeSandMound } from '../world/wreckForms.ts';
 import { createRustedHullMaterial, HULL_WEATHERING_ACAY } from '../world/hullMaterial.ts';
 import { placeProcgenComposite, type ProcgenWreckClass } from '../world/procgenWreck.ts';
-import { placeProcgenPOI } from '../world/poiAssembler.ts';
+import { placeProcgenPOI, auditArchetypeColliders } from '../world/poiAssembler.ts';
 import type { ArchetypeId } from '../world/poiArchetypes.ts';
 import { validatePanels, type PanelEntry } from '../world/panelPlacement.ts';
 import { addAccessPanel, type PanelKind, type PanelArchetype } from '../world/wrecks.ts';   // ACAV — panel-studio
@@ -128,6 +128,10 @@ interface DebugApi {
   spawnProcgenWreckRig: (cls?: ProcgenWreckClass, seed?: number) => {
     cls: ProcgenWreckClass; seed: number; ok: boolean; meshes: number; pos: number[];
   };
+  /** ACBB Tier 3 — COLLIDER-AUDIT. Assembles one POI archetype (pre-merge) at a fixed
+   *  seed and asserts every collidable-scale mesh is covered by a declared collider.
+   *  Drives the `collider-audit` rig-shot scenario + `npm run verify:colliders` gate. */
+  auditPOIColliders: (archetype: ArchetypeId, seed?: number) => { archetype: string; total: number; pass: number; fails: number; details: string[] };
   /** ACY — headless bury/occlusion audit for salvage panels. For each
    *  registered salvageable, raycasts inward along the panel's own outward
    *  axis against its wreck root; if the nearest hit is NOT the panel body
@@ -602,6 +606,11 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
       let meshes = 0;
       group.traverse((o) => { if ((o as THREE.Mesh).isMesh) meshes++; });
       return { cls, seed, ok: true, meshes, pos: [px, +py.toFixed(1), pz] };
+    },
+    auditPOIColliders(archetype: ArchetypeId, seed = 1337) {
+      // ACBB Tier 3 — pure assemble+measure (no scene/physics state touched), so it's safe
+      // to call at the title screen; the audit lives in poiAssembler (group-local coverage).
+      return auditArchetypeColliders(archetype, seed);
     },
     popTestDoor(seed = 1337) {
       // ACAX — smoke test for the door pop-off. Enter the game LIVE (NOT paused) so

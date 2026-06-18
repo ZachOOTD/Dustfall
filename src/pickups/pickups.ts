@@ -79,8 +79,8 @@ const _worldBranchMat = createWoodGrainMaterial(BRANCH_WOOD_COLOR, {
 // ACAH — shared world-space metal for the scrap scattered around wrecks (rusty
 // salvage debris). World-space (not localSpace) — these are STATIC pickups, so
 // the cheaper world-space sampling is fine and varies the weathering per-position.
-const _worldScrapMat = createMetalMaterial(0x73604c, { wornScale: 6.0, rustLevel: 0.5 });
-const _worldScrapAccentMat = createMetalMaterial(0x4a3a2a, { wornScale: 7.0, scratchStrength: 0.04, rustLevel: 0.6 });
+const _worldScrapMat = createMetalMaterial(0x7a3c1c, { wornScale: 6.0, rustLevel: 0.92 });
+const _worldScrapAccentMat = createMetalMaterial(0x52260f, { wornScale: 7.0, scratchStrength: 0.04, rustLevel: 0.97 });
 
 export interface Pickup {
   id: number;                 // unique handle for hover/take

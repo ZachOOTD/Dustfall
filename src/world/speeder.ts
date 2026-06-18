@@ -513,7 +513,10 @@ export function makeSpeeder(_rand: Rng): THREE.Group {
   {
     const antenna = cyl(0.018, 0.028, 0.85, _antennaMat, 5);
     antenna.position.set(0.15, 0.58, 1.0);
-    antenna.rotation.x = -0.18;
+    // Forward = -Z (see "Local-space convention" above). +rotation.x leans the
+    // whip's tip toward +Z = the REAR. Flipped from -0.18 (leaned forward) on
+    // user feedback that the antenna should angle rearward.
+    antenna.rotation.x = 0.18;
     antenna.rotation.z = 0.10;
     antenna.userData.noMerge = true;         // ACAS A2 — carries the tip-light + pulsed beacon; keep the subtree live
     g.add(antenna);

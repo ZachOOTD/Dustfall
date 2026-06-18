@@ -10,7 +10,7 @@
 
 import * as THREE from 'three';
 import type RAPIER from '@dimforge/rapier3d-compat';
-import type { Rng } from '../core/rng.ts';
+import { makeRng, type Rng } from '../core/rng.ts';
 import type { Terrain } from './terrain.ts';
 import type { BiomeId } from './biomes.ts';
 import type { SalvageableRegistry, Salvageable } from './salvage.ts';
@@ -18,7 +18,7 @@ import { registerSalvageable } from './salvage.ts';
 import { addAccessPanelOriented } from './wrecks.ts';
 import { mergeStaticByMaterial, makeSandMound } from './wreckForms.ts';
 import { alignToTerrain } from '../util/terrainAlign.ts';
-import { attachDeclaredColliders } from '../physics/bodies.ts';
+import { attachDeclaredColliders, type ColliderSpec } from '../physics/bodies.ts';
 import { placeProcgenComposite, reskinToBucket, getBucketMats, pruneBuriedPanels } from './procgenWreck.ts';
 import { phash } from './poiComponents.ts';
 import { ARCHETYPES, pickArchetype, type ArchetypeId } from './poiArchetypes.ts';
@@ -118,11 +118,104 @@ export function placeProcgenPOI(
   }
 
   // Windward sand drift (only when the archetype wants it — towers stand clean-footed).
+  // ACBB Tier 2: span the FOOTPRINT + a ~1.8m margin (was half the footprint, too small to
+  // reach the base) and request a PROUD crest (makeSandMound default sinks the drift below
+  // the sand → the "clean seam, no banking" the critique flagged). Now the drift laps up the
+  // windward base as a visible bank.
   if (arch.params.sandMound) {
     const sz = result.bbox.getSize(new THREE.Vector3());
-    const radius = Math.min(8, Math.max(2.5, Math.max(sz.x, sz.z) * 0.5));
-    (opts.parent ?? scene).add(makeSandMound(terrain, pos.x, pos.z, _windDir, radius, rand));
+    const radius = Math.min(11, Math.max(3.0, Math.max(sz.x, sz.z) * 0.5 + 1.8));
+    (opts.parent ?? scene).add(makeSandMound(terrain, pos.x, pos.z, _windDir, radius, rand, { proud: 0.16 }));
   }
 
   return group;
+}
+
+// ════════════════════════════════════════════════════════════════════
+// COLLIDER-AUDIT (ACBB Tier 3) — a headless gate that asserts every COLLIDABLE-SCALE mesh
+// of a POI is covered by a declared collider. The ACBA adversarial critique caught three
+// real author-error mismatches BY EYE (an un-collided tank dome, a mis-axis strut capsule,
+// a float-seated debris chunk); this turns that into a `npm run verify:colliders` gate.
+//
+// Operates on the RAW pre-merge AssembleResult: the declared collider specs and the mesh
+// placements both live in the assembly-root frame, so coverage is a pure local-space test
+// (no Rapier, no world transform). A mesh whose every dimension is below a small threshold
+// is an un-collidable trim (rivet / flap / LED) and is exempt; anything bigger the player
+// could walk into MUST be ≥40%-covered by some declared collider (volume-sampled on a
+// 3×3×3 grid) — catching both a wholly-orphaned body AND a collider on the wrong axis.
+// ════════════════════════════════════════════════════════════════════
+const _AUDIT_MIN_DIM = 0.7;   // a mesh smaller than this in EVERY axis is un-collidable trim → exempt
+const _AUDIT_COVER = 0.4;     // a collidable mesh must have ≥40% of its sampled volume inside some collider
+const _AUDIT_TOL = 0.12;      // collider-AABB expansion (m) so a slightly-inset collider still counts
+
+export interface ColliderAuditResult { total: number; pass: number; fails: number; details: string[] }
+
+/** AABB (assembly-root frame) of a declared collider spec, expanded by the tolerance. */
+function colliderAABB(c: ColliderSpec): THREE.Box3 | null {
+  if (c.kind === 'none') return null;
+  if (c.kind === 'convex') {
+    c.geo.computeBoundingBox();
+    const box = (c.geo.boundingBox ?? new THREE.Box3()).clone();
+    box.translate(new THREE.Vector3(c.pos.x, c.pos.y, c.pos.z));
+    return box.expandByScalar(_AUDIT_TOL);
+  }
+  // extents in the collider's own frame (Rapier cylinder axis = local Y)
+  const ex = c.kind === 'box' ? new THREE.Vector3(c.half.x, c.half.y, c.half.z)
+    : c.kind === 'cylinder' ? new THREE.Vector3(c.radius, c.halfHeight, c.radius)
+    : new THREE.Vector3(c.radius, c.radius, c.radius);   // ball
+  const q = (c.kind !== 'ball' && c.quat)
+    ? new THREE.Quaternion(c.quat.x, c.quat.y, c.quat.z, c.quat.w) : new THREE.Quaternion();
+  const m = new THREE.Matrix4().compose(new THREE.Vector3(c.pos.x, c.pos.y, c.pos.z), q, new THREE.Vector3(1, 1, 1));
+  const box = new THREE.Box3();
+  const p = new THREE.Vector3();
+  for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const sz of [-1, 1]) {
+    box.expandByPoint(p.set(ex.x * sx, ex.y * sy, ex.z * sz).applyMatrix4(m));
+  }
+  return box.expandByScalar(_AUDIT_TOL);
+}
+
+/** Audit a raw assembled POI: are all collidable-scale meshes covered by declared colliders? */
+export function auditPOIColliders(group: THREE.Group, colliders: ReadonlyArray<ColliderSpec>): ColliderAuditResult {
+  const colBoxes = colliders.map(colliderAABB).filter((b): b is THREE.Box3 => b !== null);
+  group.updateMatrixWorld(true);
+  const details: string[] = [];
+  let total = 0, pass = 0;
+  const meshAABB = new THREE.Box3();
+  const size = new THREE.Vector3();
+  const pt = new THREE.Vector3();
+  group.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh || !m.geometry) return;
+    // The invariant is "every STRUCTURAL mass is collided". Skip DECORATIONS (surface detail
+    // — flaps / formers / rivets / an overhead dish / cosmetic blobs that may protrude past
+    // the colliders by design) and explicitly EXEMPT meshes (a hollow ENTERABLE shell whose
+    // collision is its side-walls, not the shell volume — the husk). Tag checked up the chain.
+    for (let n: THREE.Object3D | null = o; n && n !== group; n = n.parent) {
+      if (n.userData?.isWreckDecoration || n.userData?.auditExempt) return;
+    }
+    m.geometry.computeBoundingBox();
+    if (!m.geometry.boundingBox) return;
+    meshAABB.copy(m.geometry.boundingBox).applyMatrix4(m.matrixWorld);   // group at identity pre-placement → root frame
+    meshAABB.getSize(size);
+    if (Math.max(size.x, size.y, size.z) < _AUDIT_MIN_DIM) return;       // small trim → exempt
+    if (Math.min(size.x, size.y, size.z) < 0.06) return;                 // flat decal (no walk-into volume) → exempt
+    total++;
+    let inside = 0;
+    for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) for (let k = 0; k < 3; k++) {
+      pt.set(meshAABB.min.x + size.x * i / 2, meshAABB.min.y + size.y * j / 2, meshAABB.min.z + size.z * k / 2);
+      if (colBoxes.some((b) => b.containsPoint(pt))) inside++;
+    }
+    const cover = inside / 27;
+    if (cover >= _AUDIT_COVER) pass++;
+    else details.push(`${m.name || '(unnamed)'} ${size.x.toFixed(1)}x${size.y.toFixed(1)}x${size.z.toFixed(1)}m cover=${Math.round(cover * 100)}%`);
+  });
+  return { total, pass, fails: total - pass, details };
+}
+
+/** Assemble one archetype at a fixed seed (pre-merge) and audit its declared colliders. */
+export function auditArchetypeColliders(archetype: ArchetypeId, seed: number): ColliderAuditResult & { archetype: string } {
+  if (archetype === 'ship' || !ARCHETYPES[archetype]) return { archetype, total: 0, pass: 0, fails: 0, details: ['(no declared-collider audit for the legacy ship)'] };
+  const rand = makeRng(seed);
+  const result = ARCHETYPES[archetype].assemble(rand);
+  return { archetype, ...auditPOIColliders(result.group, result.colliders) };
 }

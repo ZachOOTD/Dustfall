@@ -125,11 +125,19 @@ export function transformPanelMount(p: PanelMount, m: THREE.Matrix4): PanelMount
 // ACBA critique pass: warm-shifted, lightened toward a dusty teal-slate so the wings
 // read as a sun-bleached tech panel that sits IN the palette (not a cold near-black navy
 // that collapses to a black blade against warm sand). Identity via lightness, per D224.
-const _solarMat = new THREE.MeshLambertMaterial({ color: 0x44525c, flatShading: true });     // sun-bleached photovoltaic slate
-const _solarFrameMat = new THREE.MeshLambertMaterial({ color: 0x2a2a30, flatShading: true }); // clean dark frame (no dust-speckle on cells)
+// ACBB Tier 1 cohesion: the 0x44525c slate still rendered near-BLACK on the vertical wing
+// blades (Lambert + low desert sun on a dark side-facing panel) → the lone value-outlier
+// in an otherwise warm-desert fleet. Lifted ~2× in value to a dusty mid blue-grey: still
+// reads "photovoltaic" (the only cool member) but sits in the family by LIGHTNESS, not as
+// a black silhouette. Frame lifted to match so the cell grid stays legible.
+const _solarMat = new THREE.MeshLambertMaterial({ color: 0x8d8a84, flatShading: true });     // sun-faded photovoltaic grey (ACBB iter2→3: lifted for value AND warm-nudged off cold-blue so it sits in the desert family — the cell silhouette still reads "panel"; was 0x44525c→0x6a7078→0x868d96→here)
+const _solarFrameMat = new THREE.MeshLambertMaterial({ color: 0x4a4a52, flatShading: true }); // dusty frame (lifted so the grid reads against the lighter cells)
 const _foilMat = new THREE.MeshLambertMaterial({ color: 0xc79a52, flatShading: true });       // richer brass-gold thermal blanket (off the sand value)
 const _dishMat = new THREE.MeshLambertMaterial({ color: 0xa6aab0, flatShading: true });       // pale dish face
 const _emitMat = new THREE.MeshBasicMaterial({ color: 0x6b1d12 });                            // dead status-light red
+// ACBB Tier 2 — warm desert sand for the drift TONGUES that spill in through a torn hull
+// opening (the "living dune swallowing the wreck" read). Component-baked → sinks with burial.
+const _sandTongueMat = new THREE.MeshLambertMaterial({ color: 0xc2aa7e, flatShading: true });
 
 // ════════════════════════════════════════════════════════════════════
 // SATELLITE components — the canonical "not a ship": a central bus, mirrored
@@ -162,8 +170,12 @@ export function busBody(seed: number, _state = 'intact'): BuiltComponent {
   // Top equipment deck — a darker raised box + a dead status light.
   const deck = new THREE.Mesh(new THREE.BoxGeometry(w * 0.7, 0.22, d * 0.7), _hullDarkMat);
   deck.position.y = h / 2 + 0.10; deck.userData.isWreckDecoration = true; g.add(deck);
-  const led = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 0.16), _emitMat);
-  led.position.set(w * 0.22, h / 2 + 0.26, d * 0.22); led.userData.isWreckDecoration = true; g.add(led);
+  // ACBB Tier 1 — a dark bezel housing so the dead status light reads as a recessed
+  // indicator (the bare 0.16 emit box was sub-pixel at distance, lost against the deck).
+  const ledBezel = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.22, 0.30), _hullDarkMat);
+  ledBezel.position.set(w * 0.22, h / 2 + 0.21, d * 0.22); ledBezel.userData.isWreckDecoration = true; g.add(ledBezel);
+  const led = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, 0.18), _emitMat);
+  led.position.set(w * 0.22, h / 2 + 0.28, d * 0.22); led.userData.isWreckDecoration = true; g.add(led);
   // Human-scale ANCHOR: a recessed access hatch (~0.7m) on the -Z face — a known
   // size constant so the bus+wings+dish read at real scale, not as a desktop model.
   const hatchFrame = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.78, 0.10), _hullDarkMat);
@@ -313,6 +325,13 @@ export function wreckedTank(seed: number, _state = 'breached'): BuiltComponent {
     plate.position.set(len / 2 + 0.15, r + Math.cos(a) * r * 0.7, Math.sin(a) * r * 0.7);
     plate.rotation.set(a, 0.4, 0.5); plate.userData.isWreckDecoration = true; g.add(plate);
   }
+  // ACBB Tier 2 — a SAND TONGUE drifted in through the torn +X mouth, filling the lower bore
+  // and spilling out past the lip (the living dune reaching into the wreck). Baked into the
+  // component so it sinks WITH the tank's deep burial (a placement-time drift sits beside it).
+  const tongue = new THREE.Mesh(new THREE.SphereGeometry(r * 0.78, 10, 7), _sandTongueMat);
+  tongue.scale.set(1.5, 0.42, 1.05);
+  tongue.position.set(len / 2 - r * 0.15, r * 0.5, 0);
+  tongue.userData.isWreckDecoration = true; g.add(tongue);
   // TWO flank breaches (+Z and −Z, different X) so an unambiguous tear is visible from ANY
   // ground-level yaw: a dark RECESSED hole + a rib arc seen through it + a jagged flap ring.
   const addBreach = (bx: number, zs: number, sk: number) => {
@@ -423,15 +442,22 @@ export function huskShell(seed: number, _state = 'breached'): BuiltComponent {
   const g = new THREE.Group();
   const len = 7 + phash(seed, 1) * 4.5;     // 7-11.5m long
   const r = 2.0 + phash(seed, 2) * 0.9;     // 2-2.9m bore (enterable scale)
-  // Gutted hull shell — a partial cylinder OPEN at the top (~126° gap) + both ENDS, so the
-  // hollow interior + ribs read from above, the side, and the torn ends. DoubleSide.
-  const gap = Math.PI * 0.7;
+  // Gutted hull shell — a partial cylinder OPEN at the top + both ENDS, so the hollow
+  // interior + ribs read from above, the side, and the torn ends. DoubleSide.
+  // ACBB Tier 4 — WIDENED the top gap 126°→~153° (the critique read the husk as a flat
+  // curved PLATE from 3q; a wider opening makes it unambiguously an open TROUGH so the
+  // hollow + ribs read from any slightly-elevated or oblique angle, not just from directly above).
+  const gap = Math.PI * 0.85;
   const shell = new THREE.Mesh(
     new THREE.CylinderGeometry(r, r, len, 16, 1, true, gap / 2, Math.PI * 2 - gap), _hullMat,
   );
   shell.rotation.z = Math.PI / 2;            // cylinder Y-axis → X (tube lies along X); gap → top (+Y)
   shell.position.y = r;
   (shell.material as THREE.Material).side = THREE.DoubleSide;
+  // ACBB Tier 3 — the shell is a HOLLOW enterable trough: its collision is the two declared
+  // side-wall boxes (you walk inside on the terrain floor), NOT the shell volume. Exempt it
+  // from the COLLIDER-AUDIT so its mostly-empty AABB doesn't read as an un-collided mass.
+  shell.userData.auditExempt = true;
   g.add(shell);
   // Exposed rib formers inside (arc gap at bottom → ribs spring from the floor), shown
   // through the open top. Spaced along the length.

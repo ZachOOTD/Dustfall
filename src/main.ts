@@ -601,7 +601,7 @@ document.body.appendChild(devModeBadge);
 // ACAD — dev item spawner: click the DEV MODE badge to open a panel that adds
 // any item to the inventory (dev-mode only). Built once; gated here.
 createDevItemPanel(ctx);
-devModeBadge.title = 'click to spawn items (or press ` )';
+devModeBadge.title = 'click to spawn items (or press F8 / ` )';
 devModeBadge.addEventListener('click', () => {
   if (ctx.flags.devMode) toggleDevItemPanel(ctx);
 });
@@ -612,8 +612,12 @@ devModeBadge.addEventListener('click', () => {
 // mode on. Backquote works while pointer-locked (it's a keydown): it turns dev
 // mode ON if it's off (+ reveals the badge), then toggles the item-spawner panel
 // (which unlocks the pointer itself, so item clicks then work).
+// F8 is the same path under a DEDICATED, conflict-free key: Backquote is ALSO
+// the physics collider-wireframe toggle (physics/debug.ts), so a player who only
+// wants the item spawner shouldn't have to flip the wireframe too. Both keys are
+// window-level keydowns, so they fire while the pointer is locked to the canvas.
 window.addEventListener('keydown', (e) => {
-  if (e.code !== 'Backquote' || e.repeat) return;
+  if ((e.code !== 'Backquote' && e.code !== 'F8') || e.repeat) return;
   if (!ctx.flags.started || ctx.stats.dead) return;
   e.preventDefault();
   if (!ctx.flags.devMode) {

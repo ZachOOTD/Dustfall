@@ -64,32 +64,28 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      Prior milestones live in docs/changelog.md — do NOT accumulate "Prior milestone"
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
-**Last shipped**: Session ACBA — **POI VARIETY overhaul: a socket/component/grammar system + 4 non-ship archetypes, pervasive across all
-biomes** (tsc clean, `verify:placement` 0 occlusion + 0 terrain fails ×5 seeds, perf field drawCalls **839**/programs 67, no save bump;
-D226-D231). User
-feedback on the ACAZ wrecks: still "all long tubes", buggy collision, panels under terrain, a disliked window + scout. **Phase 0 bug-fix
-pass:** removed the cockpit window + `scout` class (user-disliked); decoration meshes no longer spawn colliders (kills invisible interior
-walls); greebles now seat on the REAL variant flank (`flankZ`, not the buggy `0.93r` that buried them); rule-7 depth bumps; a
-**corner-aware terrain panel cull** + a new **TERRAIN-AUDIT** gate line (interior-safe via a `terrainCullEligible` tag). **Phase A
-(D226, headline):** replaced the linear `+X`-cursor `assembleWreck` with `poiComponents.ts` (Socket + `mate()` glues components in ANY
-topology; declared colliders; ZERO rand draws — `phash` only) + `poiArchetypes.ts` (grammar + biome `pickArchetype`) + `poiAssembler.ts`
-(`placeProcgenPOI` = the lifted pipeline). `bodies.ts` gained `attachDeclaredColliders`/`ColliderSpec` (exact primitives + convex-hull, no
-AABB fallback — D228). `pickArchetype('ship')` delegates to the legacy assembler → ZERO ship regression (D227 — ship→socket migration
-deferred). **Phase B — 5 archetypes (ALL FOUR user directions + weirder-ships):** SATELLITE (foil bus + crash-banked solar wings + dish +
-hatch), WRECKED_TANK (one big tank toppled on its side + ripped open — torn shell/end + exposed ribs + flank gash — half-buried; D233 replaced the neat "tank farm" on walk-test feedback), DEBRIS_FIELD (scattered
-plates/struts/lootable chunk), HOLLOW_HUSK (a gutted hull shell — open-top trough + torn ends + flank breach + exposed rib formers,
-enterable-ready, reads as a ribbed skeleton), DERELICT (D232 — an intact ship socket-mated from nose+barrel+engine into LINEAR / WIDE-BODY
-outriggers / STACKED conning-tower forms = the "wider/weirder ships", additive so the refined legacy ship stays). An **adversarial 5-lens
-critique Workflow** (D230) caught 3 real collision/grounding bugs (strut collider axis, debris float-seat, un-collided tank dome) + sev-1
-gaps → all fixed. **Pervasiveness (user):** bumped `PROCGEN_COMPOSITE_SHARE` 0.50→**0.85** so the new system handles the bulk of scattered
-wrecks across ALL biomes (not graveyard-only); perf IMPROVED (839/67). Inspection: rig-shot `--archetype=`.
+**Last shipped**: Session ACBB — **FINISH THE WRECK ARC: weathering cohesion + sand integration + a COLLIDER-AUDIT gate + husk/derelict
+silhouette + §E polish** (tsc clean, `verify:placement` 0/0 ×5 seeds, **NEW `verify:colliders` 0 fails / 25 audits**, perf field drawCalls
+**842**/programs 69, no save bump; D234-D237). A long autonomous overnight finishing the ACBA 5-archetype system. **Tier 1 — weathering
+cohesion (D234):** the 3 hull buckets were collapsing to one warm-brown + the satellite wings rendered near-black; fixed at the
+`getBucketMats` lever via per-bucket `BUCKET_WEATHERING` channel-strength overrides (cool stays cool-steel, dark = a genuine DARK-steel
+anchor on a cooler base `0x3a3d43`, warm unchanged) + wings lifted to in-family grey + LED bezel + `wearAmplitude` break-up; material-only,
+ZERO new programs. Gated by a 3-critic adversarial cohesion pass. **Tier 2 — sand integration:** root-caused `makeSandMound` sinking drifts
+BELOW the sand → added a `proud` param (ship callers byte-identical) so drifts BANK against the base; the SATELLITE now reads crash-landed
+(list+seat, was floating/showroom — the critique's #1 issue), derelict bedded in, debris gets an impact scorch-disc, tank a sand-tongue
+through its torn mouth. **Tier 3 — the COLLIDER-AUDIT gate (D235):** NEW `npm run verify:colliders` + `collider-audit` scenario +
+`auditPOIColliders` (structural meshes ≥40%-covered by a declared collider via a 3×3×3 grid; decorations/overhead/hollow-shells exempt),
+wired into `verify:all` — turns the ACBA found-by-eye author errors into a headless gate; + a grounded collider for the flagship
+satelliteDish (§E walkthrough). **Tier 4:** husk hollow read FIXED (gap 126°→153° → reads as a gutted ribbed shell, not a flat plate);
+derelict wide-body rebuilt as a parallel-hull TRIMARAN (was a perpendicular plus-sign). **§E polish (4/4):** brighter stars, antenna
+leans rearward, F8 opens the dev panel under pointer-lock, scrap pickup → a torn rusted-metal sheet. **Tier 5 (yard merge) SCOPE-CUT
+(D237).** Inspection: rig-shot `--archetype=` / `--scenario=collider-audit`.
 
-**Next session** = (1) the **OWED attended WALK-TEST** in `npm run dev` (eyes-only): walk INTO a tank/satellite/husk/derelict (collision
-feel — the declared-collider fix), the field variety standing among ships + tank farms + satellites + debris + ribbed husks + wide-body
-derelicts under sky/fog, panel seating. (2) Optional: RETIRE the legacy linear ship for the socket `derelict` (then composite share → 1.0)
-— the derelict already delivers the weird-ship value without the regression risk (D232). (3) The ranked sev-2/3 polish (changelog ACBA /
-[backlog.md](docs/backlog.md) §G): tank terracotta→steel gradient, fleet palette cohesion, pipe-strut wiring, sand-drift banking, husk +
-derelict exterior detail, a COLLIDER-AUDIT harness, yard cluster-merge. See [docs/next-session-prompt.md](docs/next-session-prompt.md).
+**Next session** = (1) the **OWED attended WALK-TEST** in `npm run dev` (eyes-only — headless can't judge it): walk INTO a
+tank/satellite/husk/derelict (declared-collider feel) + the NEW flagship dish collider; judge the in-world feel of the banking drifts +
+crash-poses + the fleet cohesion under sky/fog. (2) Optional: RETIRE the legacy linear ship for the socket `derelict` (then composite share
+→ 1.0; D232). (3) Remaining backlog §G polish (fleet detail, debris fragment metal-read) + the deferred **Tier 5 yard cross-POI merge**
+(D237) + the **scrap pickup is reworked but its 3q edge-on read is thin** (re-judge in hand). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 

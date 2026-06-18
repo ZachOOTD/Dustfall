@@ -289,6 +289,7 @@ export function makeSandMound(
   windDir: THREE.Vector2,
   size: number,
   rand: Rng,
+  opts?: { proud?: number },
 ): THREE.Mesh {
   const h = size * 0.42;                                   // ~atan(h/size) drift slope
   const geo = new THREE.ConeGeometry(size, h, 14, 2, false);
@@ -302,12 +303,18 @@ export function makeSandMound(
   }
   geo.computeVertexNormals();
   const mound = new THREE.Mesh(geo, _sandMat);
-  // Offset toward the windward side; sink DEEP so only a low organic crest shows
-  // (a drift, not a flat tan landform).
+  // Offset toward the windward side.
   const ox = cx + windDir.x * size * 0.45;
   const oz = cz + windDir.y * size * 0.45;
   const gy = terrain.heightAt(ox, oz);
-  mound.position.set(ox, gy + h * 0.18 - size * 0.30, oz);
+  // `proud` = the drift CREST height above terrain, as a fraction of `size` (the apex
+  // sits at gy + proud*size). The default (-0.0942) reproduces the legacy near-buried
+  // drift exactly (ship/megaWreck callers unchanged); the POI assembler passes a small
+  // POSITIVE proud (ACBB Tier 2) so the drift actually BANKS up as a visible crest
+  // against the wreck base instead of sinking below the sand to a clean seam. The cone
+  // apex (post-squash, ConeGeometry apex at +h/2) sits at position.y + 0.62*h/2 = +0.1302*size.
+  const proud = opts?.proud ?? -0.0942;
+  mound.position.set(ox, gy + proud * size - 0.1302 * size, oz);
   mound.rotation.y = rand() * Math.PI * 2;
   mound.receiveShadow = true;
   return mound;

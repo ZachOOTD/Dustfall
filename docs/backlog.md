@@ -69,7 +69,9 @@ When ready to ship one → promote it into a session in [roadmap.md](roadmap.md)
 
 ### E. Fresh triage (2026-06-17 dump — regroup into A–D / promote later)
 
-- `[polish]` **Brighter stars** in the night sky.
+**✓ SHIPPED in ACBB (2026-06-18):** brighter stars (`STAR_BRIGHTNESS 1.55`) · satellite dish full collider (flagship `satelliteDish`) · speeder antenna rear-tilt · dev-mode F8 keybind (works under pointer-lock) · scrap pickup → rusted-metal sheet. Also from §G: the per-bucket weathering rebalance / fleet cohesion, the COLLIDER-AUDIT harness (`verify:colliders`), sand-drift banking, debris scorch ring, husk hollow read, derelict parallel-hull outriggers. Their bullets may still appear in the list below — treat anything in the SHIPPED list above as DONE (don't re-do); the rest is genuinely pending.
+
+- `[bug]` **Satellite dish FULL collider — partly done (ACBB):** the flagship dish reflector now has a slab collider (was walkthrough), but the FEEL owes the attended walk-test (a box approximation may slightly over-block the round dish at the diagonals). Refine if it reads wrong in play.
 - `[bug]` **Satellite dish needs a full collider** (currently walkthrough/partial collision).
 - `[feat]` **Sarlacc lure-and-ambush** — a bulb-flower lure in the pit centre; the maw emerges + opens when the player gets close.
 - `[feat]` **Procedural wreck overhaul** — more detail, variety, sizes, variations + better textures.
@@ -140,6 +142,10 @@ When ready to ship one → promote it into a session in [roadmap.md](roadmap.md)
 [idea] wreck-yard draw-calls 1477 from ~36 live salvage panels (not hull mats) — cap concurrent open-panel interiors or LOD distant panels
 
 ### G. Deferred from the ACBA POI-variety overhaul + its adversarial critique (2026-06-17)
+
+**✓ SHIPPED in ACBB (2026-06-18) — treat these as DONE:** per-bucket weathering rebalance + fleet palette cohesion (D234, `BUCKET_WEATHERING`) · tank terracotta→dark-steel (the dark bucket) · the formal COLLIDER-AUDIT harness (D235, `verify:colliders`) · sand-drift banking (D236, `makeSandMound` `proud`) · debris scorch ring · satellite crash-pose+burial + LED bezel · husk hollow read (gap widen) · derelict wide-body parallel-hull outriggers · wrecked_tank sand-tongue through the mouth.
+**Still PENDING (ACBB deferrals):** [debt] **Tier 5 yard cross-POI merge** (D237 scope-cut — the ~3215 yard ground worst-case; field perf fine at 842) · [polish] the reworked **scrap pickup reads thin from a 3q edge-on angle** (re-judge in-hand; the front view reads well) · [polish] satellite solar wings still a touch dark at silhouette distance + debris fragments could use warmer ox so they read as torn hull metal not grey rock · [polish] husk + derelict deeper exterior detail · [bug] the flagship dish-collider FEEL owes the attended walk-test (slab approximation).
+
 [done] HOLLOW-HUSK archetype SHIPPED (ACBA) — open-top-trough gutted hull shell + torn ends + flank breach + exposed rib formers, half-buried + listed, side-wall colliders (enterable-ready). Follow-up: more exterior detail, a clearer hollow read from low side angles, true enterability (floor + remove the bore obstruction) in a dedicated phase
 [feat] PROCGEN_COMPOSITE_SHARE 0.50→0.85 SHIPPED (ACBA) — new system now covers the bulk of scattered wrecks in ALL biomes; once ship→socket migration lands, go to 1.0 + retire/fold the legacy placeWreck 4-kind path in procgenPoi into a small_wreck archetype
 [done] "wider/weirder ships" SHIPPED (ACBA, D232) as an ADDITIVE socket-built `derelict` archetype (nose+barrel+engine → linear/wide-body-outriggers/stacked-tower forms). Optional follow-up: RETIRE the legacy linear assembleWreck for the derelict (then composite share → 1.0) — only if the derelict reaches the legacy ship's polish (8 variants / weathering / scale anchor); else keep both. Refine the wide-body outriggers (currently perpendicular barrels — try parallel twin-hulls or angled sponsons)
