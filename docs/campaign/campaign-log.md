@@ -91,3 +91,14 @@ first stop will be `max-cycles` ~mid-Phase-A; resume via `/campaign-start --resu
 `/campaign-approve`), gate `npm run verify:all`, visual-gate `auto`, **PHASE-level** review,
 `until: roadmap-empty`, no budget ceiling. No post-mortem drafts pending (consolidate skipped).
 **Cycle 1 is released → Phase A → M1 (Wreck-arc finish).** Begin with `/loop /campaign-cycle`.
+
+---
+
+## Cycle 1 — M1 panel dead-code cleanup + perf baseline (2026-06-18) — SHIPPED
+- **Planned:** M1's two headless units — strip dead panel-greeble code + record the perf baseline (safe, verifiable first cycle).
+- **Shipped:** removed the dead `buildGreeble` interior path (9 fns + 3 orphaned materials, −242 lines `panelGreeble.ts`) + dead `ARCHETYPE_EXTRACTABLES` + the inert `colliderHint` ItemDef field (4 files); recorded the campaign perf baseline.
+- **Verify:** `verify:all` PASS — tsc clean · `verify:placement` 0/0 ×5 seeds (panel counts unchanged → live path intact) · `verify:colliders` 0/25. perf-probe **drawCalls 843** (≈842 baseline → inert) / programs 71 / sceneMeshes 8401 / boot 1225ms.
+- **Visual iteration:** N/A — pure dead-code removal (no visual output; the adversarial appearance gate is not applicable).
+- **Spend:** ~100K approx (no budget ceiling; cycle **1/12**).
+- **Commit:** `7f06022`.
+- **Next (cycle 2):** the remaining M1 units — `remove-wreck-sand-mounds` → `scrap-pickup-3q-thin` → `dish-collider-feel` (the visual/feel ones) → then M2. **Verdict: CONTINUE** (M1 in progress; no milestone crossed → no pause).
