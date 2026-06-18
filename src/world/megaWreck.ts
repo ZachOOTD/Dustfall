@@ -708,7 +708,7 @@ export function placeMegaWreck(
       RAPIER.ColliderDesc.cuboid(3.4, 0.4, span.length() / 2).setTranslation(lp.x, lp.y, lp.z).setRotation({ x: lq.x, y: lq.y, z: lq.z, w: lq.w }),
       body,
     );
-    scene.add(makeSandMound(_terrain, foot.x, foot.z, new THREE.Vector2(-outDir.x, -outDir.z), 9, rand));
+    makeSandMound(_terrain, foot.x, foot.z, new THREE.Vector2(-outDir.x, -outDir.z), 9, rand);   // drift removed (user 2026-06-18); call kept (mesh discarded) to preserve rand
   }
 
   // ── Shelter zone — the sheltered settled nook against the lee (-X) flank of the
@@ -742,7 +742,7 @@ export function placeMegaWreck(
     ];
     for (const [side, z, sz] of drifts) {
       const w = bellyWorld(side, z);
-      scene.add(makeSandMound(_terrain, w.x, w.z, wd, sz, rand));
+      makeSandMound(_terrain, w.x, w.z, wd, sz, rand);   // drift removed (user 2026-06-18); call kept (mesh discarded) to preserve rand
     }
     const noseW = bellyWorld(0, -58);
     const scorch = new THREE.Mesh(new THREE.CircleGeometry(6, 16), new THREE.MeshLambertMaterial({ color: 0x3a2c20 }));

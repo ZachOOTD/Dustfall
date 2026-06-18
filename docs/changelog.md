@@ -3,6 +3,12 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign C2 — 2026-06-18 — M1 remove wreck sand-mounds (bare terrain) ✓ all gates pass
+
+`verified` — `npm run verify:all` PASS (tsc + `verify:placement` 0 fails ×5 seeds + `verify:colliders` 0/25); **visual gate PASS** (3 harsh-lens critics + a code-auditor over 4 archetype renders — 0 sev≥2; satellite/tank/husk/derelict all read grounded on bare sand). **No save bump.** Cycle 2/12 (M1 — 3 of 5 units). Appearance-verified; the in-world seating FEEL is owed the Phase-A walk-test.
+
+**remove-wreck-sand-mounds (user directive).** Removed the `makeSandMound` sand-drift mounds banked around wreck bases (poiAssembler composite POIs / procgenWreck legacy ships / megaWreck hero) so wrecks sit on **bare terrain**. **Determinism-preserving:** each `makeSandMound` CALL is kept (rand draws identical) but its returned mesh is DISCARDED → the seeded procgen stream is byte-identical (panel positions unchanged; seed-42 79→80 only because a panel the drift used to occlude in the yard-prune is now exposed — a feature, still 0-fail). Supersedes the §G sand-integration items (D236 banking). Dev-panel mound kept (test affordance); scorch discs + the tank sand-tongue are NOT mounds → left (surfaced for the walk-test).
+
 ## Campaign C1 — 2026-06-18 — M1 panel dead-code cleanup + perf baseline ✓ all gates pass
 
 `verified` — `npm run verify:all` PASS (tsc + `verify:placement` 0/0 ×5 seeds + `verify:colliders` 0/25); perf-probe **drawCalls 843** (<1000) / **programs 71** (≤72) / sceneMeshes 8401 / boot 1225ms. **No save bump.** First `campaign/2026-06-18` build cycle (M1 — 2 of 5 units; headless cleanup before the visual units).

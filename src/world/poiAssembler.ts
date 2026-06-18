@@ -117,15 +117,15 @@ export function placeProcgenPOI(
     mergeStaticByMaterial(group);
   }
 
-  // Windward sand drift (only when the archetype wants it — towers stand clean-footed).
-  // ACBB Tier 2: span the FOOTPRINT + a ~1.8m margin (was half the footprint, too small to
-  // reach the base) and request a PROUD crest (makeSandMound default sinks the drift below
-  // the sand → the "clean seam, no banking" the critique flagged). Now the drift laps up the
-  // windward base as a visible bank.
+  // Windward sand drift REMOVED (user 2026-06-18 — wrecks sit on bare terrain). The
+  // makeSandMound CALL is retained but its mesh is DISCARDED (not added to the scene) so the
+  // seeded procgen `rand` stream stays byte-identical → verify:placement/colliders unchanged
+  // (D208/D221: dropping the rand draws would desync later panel placement). Reversible:
+  // wrap the call back in `(opts.parent ?? scene).add(...)` to restore the drifts.
   if (arch.params.sandMound) {
     const sz = result.bbox.getSize(new THREE.Vector3());
     const radius = Math.min(11, Math.max(3.0, Math.max(sz.x, sz.z) * 0.5 + 1.8));
-    (opts.parent ?? scene).add(makeSandMound(terrain, pos.x, pos.z, _windDir, radius, rand, { proud: 0.16 }));
+    makeSandMound(terrain, pos.x, pos.z, _windDir, radius, rand, { proud: 0.16 });   // rand-preserving no-op (mesh discarded)
   }
 
   return group;

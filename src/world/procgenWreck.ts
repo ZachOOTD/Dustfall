@@ -1805,14 +1805,15 @@ export function placeProcgenComposite(
   // collision already captured above.
   mergeStaticByMaterial(group);
 
-  // T4 — half-burial: a windward sand drift bedding the wreck into the dune
-  // (visual-only, no collider). Sized to the wreck; consistent prevailing-wind
-  // direction so all drifts read as the same weather.
+  // T4 sand drift REMOVED (user 2026-06-18 — bare terrain). The makeSandMound CALL is kept
+  // (mesh discarded) to preserve the seeded `rand` stream byte-for-byte — panel registration
+  // BELOW draws rand, so dropping these draws would desync it + regress the bury audit
+  // (D208/D221). Reversible: re-wrap in `(opts.parent ?? scene).add(...)`.
   {
     const sz = new THREE.Box3().setFromObject(group).getSize(new THREE.Vector3());
     const radius = Math.min(9, Math.max(2.5, Math.max(sz.x, sz.z) * 0.5));
     const windDir = new THREE.Vector2(0.85, 0.52).normalize();
-    (opts.parent ?? scene).add(makeSandMound(terrain, pos.x, pos.z, windDir, radius, rand));
+    makeSandMound(terrain, pos.x, pos.z, windDir, radius, rand);   // rand-preserving no-op (mesh discarded)
   }
 
   // Register every part that got a salvage panel. We walk all
