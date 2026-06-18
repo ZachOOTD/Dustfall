@@ -64,6 +64,12 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      Prior milestones live in docs/changelog.md — do NOT accumulate "Prior milestone"
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
+**🟢 CAMPAIGN ACTIVE — `campaign/2026-06-18`** (autonomous; PHASE-level review). Each `/campaign-cycle` boots from
+`docs/campaign/campaign-state.json` + `docs/roadmap.md` "Up next" (the AUTHORITATIVE queue) — NOT from this
+"Last shipped" note or the stale "Next session" pointer below. Current target: **Phase A → M1 (Wreck-arc finish)**.
+The loop runs the whole phase unattended, commits every cycle, and pauses only at "Phase A — Build-out complete".
+Charter + how-to-steer: `docs/campaign/campaign.md`.
+
 **Last shipped**: Session ACBB — **FINISH THE WRECK ARC: weathering cohesion + sand integration + a COLLIDER-AUDIT gate + husk/derelict
 silhouette + §E polish** (tsc clean, `verify:placement` 0/0 ×5 seeds, **NEW `verify:colliders` 0 fails / 25 audits**, perf field drawCalls
 **842**/programs 69, no save bump; D234-D237). A long autonomous overnight finishing the ACBA 5-archetype system. **Tier 1 — weathering

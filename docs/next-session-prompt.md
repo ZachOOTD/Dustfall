@@ -1,42 +1,50 @@
-# Session ACBC — Kickoff Brief
+# Campaign cycle-1 kickoff — `campaign/2026-06-18`
 
-## Read these now (in order)
-1. `CLAUDE.md` (auto-loaded) — "Where we are now" (ACBB finished the wreck arc).
-2. `docs/session-end-report.md` — cumulative state (ACBB at top).
-3. `docs/backlog.md` §A (owed walk-tests) + §G (the ACBB shipped-note + remaining polish/deferrals).
-4. `docs/decisions.md` tail — D234-D237 (per-bucket weathering / collider-audit scope / sand-drift `proud` / Tier-5 cut).
-5. `docs/roadmap.md` "Recently shipped" (ACBB) + the touched files: `src/world/poiArchetypes.ts`, `poiAssembler.ts`, `poiComponents.ts`, `procgenWreck.ts` (`BUCKET_WEATHERING`/`getBucketMats`), `src/world/hullMaterial.ts`, `scripts/verify-colliders.mjs`.
+> This replaces the old ACBC hand-session brief. The campaign drives the queue now; `/session-end`
+> rewrites this file at the end of each cycle. **The roadmap is authoritative** (skill Step 4) — if this
+> brief and `docs/roadmap.md` "Up next" ever disagree, the roadmap wins.
 
-## What's already built
-The procedural-POI system (ACBA) is a component/socket/`mate()` grammar with 5 archetypes (satellite, wrecked_tank, debris_field, hollow_husk, derelict) + the legacy `ship`, pervasive at `PROCGEN_COMPOSITE_SHARE`=0.85. ACBB FINISHED its visual/collision pass: a **cohesive weathered fleet** (per-bucket weathering → 3 distinct lightness tiers, D234), **sand drifts that bank** against bedded/crash-posed wrecks (D236), a **`verify:colliders` gate** asserting structural-mesh collider coverage (D235, in `verify:all`), a **husk that reads hollow** + a **derelict wide-body trimaran**, and the §E polish (stars/antenna/dev-keybind/scrap-model). Baseline: tsc clean, `verify:placement` 0/0 ×5 seeds, `verify:colliders` 0/25, perf 842 draw calls / 69 programs, no save bump.
+## Boot order (re-read every cycle from FILES, never chat memory)
+1. `docs/campaign/campaign-state.json` — cycles done, spend, ceilings, `status`/`awaiting_approval`, `current_tier`.
+2. `docs/campaign/steering.md` — the human inbox (apply + archive any note).
+3. `docs/roadmap.md` "Up next" — the **PHASE-grouped milestone queue** (the authority on what's next).
+4. `docs/iteration-plan.md` "Campaign 2026-06-18 — milestone ladder" — per-unit scope / verify-type / risk.
+5. `CLAUDE.md` architecture rules + `docs/decisions.md` tail.
 
-## Session ACBC focus — pick a lane
-The wreck arc is headless-COMPLETE. The headline owed item is the **attended in-world WALK-TEST** (the ONLY thing headless can't judge). **If a human is at the keyboard:** do the walk-test first — it's the highest-value item and gates the "ship it" confidence. **If running autonomous:** the §G fleet polish is DONE (ACBB follow-up); the deferred Tier 5 yard merge is the main shovel-ready item (D239 — re-attempt carefully). **NOTE (D238):** keep BOTH ship paths — the legacy-ship retirement is OFF the table (user call); the additive derelict already delivers the weird-ship value with zero regression.
+## What this campaign is
+Autonomous build-out of the remaining roadmap+backlog. **Review cadence = PHASE-level**: the loop runs the
+WHOLE build-out phase (M1→M5b) unattended, **commits every cycle** (one cycle ≈ one session ≈ a chunk of a
+milestone — a milestone spans several cycles), and PAUSES only at the `### Milestone: Phase A — Build-out
+complete` marker. Gate = `npm run verify:all`. Visual/feel cycles also run the adversarial appearance gate
+(`--visual-gate=auto`) — appearance only; mark feel items `appearance-verified; feel-pending` for the human
+walk-test at the phase boundary.
 
-## Priority items (in order)
-1. **(ATTENDED) The OWED in-world WALK-TEST — `npm run dev`** (eyes-only; headless can't judge collision/feel/seating):
-   - Walk INTO a tank / satellite / husk / derelict (the declared-collider feel) + the **flagship satellite DISH** (the NEW slab collider — D235/§E; a box approximation that may slightly over-block the round dish at the diagonals — confirm it doesn't feel like a clip-wall near the dish base).
-   - Stand among the field across biomes: does the fleet read as ONE cohesive weather-system with distinct light/dark tiers (D234)? Do the **banking sand drifts + crash-poses** (satellite leaning into a drift, debris on its scorch-disc) read as "swallowed by a living dune"? Any float/clip?
-   - Re-judge the **reworked scrap pickup** in-hand (its front reads as a rusted torn sheet; the 3q edge-on read is a touch thin — see if it bothers in motion).
-2. **(AUTONOMOUS) The deferred Tier 5 yard cross-POI merge** (D237/D239 — the ~3215 yard ground worst-case; field perf is fine at 842). ATTEMPTED + REVERTED in ACBB: a panel-rim-greeble merge cut it to 2633 (~18%) but regressed the terrain bury-audit — re-attempt WITHOUT perturbing the panelDoorExtents bottom-edge measure (see D239 leads). The rig-shot `wreck-yard` scenario now reports `drawCalls` for measurement. (The §G fleet polish — wing brightness, debris metal-read, husk/derelict detail — is DONE.)
+## Cycle 1 picks up: **Phase A → M1 — Wreck-arc finish (calibration)**
+Take the top M1 unit (all low-risk, small):
+1. `scrap-pickup-3q-thin` (visual-gate; shoot the 3-QUARTER angle — front already reads fine) — `src/world/scrapMesh.ts`.
+2. `dish-collider-feel` (feel-pending; refine the flagship `satelliteDish` slab so it doesn't snag at diagonals).
+3. `remove-wreck-sand-mounds` (user directive) — strip the `makeSandMound` drifts around wreck bases
+   (`procgenWreck`/`poiAssembler`/`wreckYard`); re-run `verify:placement`/`verify:colliders` (mounds were
+   additive sand → removing them shouldn't bury panels; confirm 0 fails). **Supersedes the §G sand items.**
+4. `panel-deadcode-cleanup` (headless) · 5. `perf-budget-reprofile` (headless — record the drawCalls/programs baseline).
 
-## Stretch goals
-- A `wreck-field` rig-shot scenario framing the REGULAR (non-yard) field so archetype MIX + fleet cohesion are verifiable headless (the yard ground view times out at 30s; per-archetype shots can't show the mix).
-- Pivot to a fresh lane entirely (the §E dump has sandworm overhaul, survival rebalance, machete-tool — see the planning options).
+Scope each cycle to ONE unit (sometimes a few tiny related ones). Ship `[partial]` if a unit won't fit the
+cycle rather than launching an unbounded sweep.
 
-## Autonomy contract
-- `phash`-determinism law (D221): components NEVER draw `rand`; assemblers draw a small FIXED budget. Re-run `npm run verify:placement` AND `npm run verify:colliders` after ANY POI/panel/geometry/seating change (a buried panel or an un-covered structural mesh at a fixed seed = STOP).
-- Rule 8: visual work is NOT done when tsc passes — build → screenshot → critique → iterate. Hold the ACBB bar (a 3-critic cohesion pass + 5-round model iteration).
-- New COLLIDER-AUDIT footgun (D235): a NEW structural mesh needs a declared collider OR an `auditExempt`/`isWreckDecoration` tag, else `verify:colliders` trips. The flagship dish collider is OUTSIDE this gate (hand POI).
-- Ambiguous → GDD pillars + the realism dial; append a D-entry; continue.
+## Autonomy contract (unchanged from the project norms)
+- **`phash`-determinism (D221):** components never draw `rand`; assemblers draw a small FIXED budget. Re-run
+  `npm run verify:placement` AND `npm run verify:colliders` after ANY POI/panel/geometry/seating change.
+- **Rule 8:** visual work is NOT done when tsc passes — build → screenshot → critique → iterate (front-light +
+  length-frame the rig FIRST). Hold the ACBB bar (3-critic cohesion pass / 5-round model iteration).
+- **COLLIDER-AUDIT footgun (D235):** a NEW structural mesh needs a declared collider OR an
+  `auditExempt`/`isWreckDecoration` tag, else `verify:colliders` trips.
+- **Save (D81):** additive-only. A `SAVE_VERSION` bump (e.g. multi-worm N>2 later) → **surface it, do NOT
+  auto-bump unattended**; log + flag for the phase review.
+- **Net-new content needs a rig-shot framing** for the visual gate (e.g. M5a horizon silhouettes / M5b sky
+  phenomena have no scenario yet) — author the `--scenario`/framing as part of that cycle, or the appearance
+  gate can't run. The dense `wreck-yard --angle=ground` view times out at 30s (chain shots sequentially).
 
 ## Stop conditions
-3 fix-walls on one element (log + move on / cut) · a buried-panel or un-covered-collider gate regression you can't clear in 2 tries · a `SAVE_VERSION` bump turning out necessary (surface it) · destructive-git attempt.
-
-## Notable footguns
-- **rig-shot harness runs SEQUENTIALLY only** — 6-way parallel times out on `page.screenshot` ("waiting for fonts"); chain shots with `;` on one `--port`. The dense `wreck-yard --angle=ground` view also times out at 30s.
-- **`--zoom < 1` is TIGHTER** (closer) in the `procgen-wreck` scenario; `--archetype=<id>` spawns one archetype; `--scenario=collider-audit` runs the new gate (no screenshot).
-- **Per-bucket weathering** lives in `procgenWreck.ts` `BUCKET_WEATHERING` + `BUCKET_HEX`; the shared profile is `HULL_WEATHERING_ACAY` in `hullMaterial.ts`. Strengths-only overrides keep the shared `onBeforeCompile` → no new programs.
-
-## Verification protocol
-`npm run verify` (tsc) clean. `npm run verify:all` (= tsc + `verify:placement` 0/0 ×5 seeds + `verify:colliders` 0 fails). Headless framing: `rig-shot --scenario=procgen-wreck --archetype=<id>` (+ `--angle=side|front|3q`, `--seeds=`), `perf-probe` (field drawCalls <1000, programs ≤72). **Collision/feel/seating sign-off → the attended `npm run dev` walk-test.**
+3 fix-walls on one element (game-verifier → scope-cut from GDD §12, log a D-entry) · a buried-panel or
+un-covered-collider regression you can't clear in 2 tries · a needed `SAVE_VERSION` bump (surface) ·
+destructive-git attempt (blocked by the guard) · per-cycle spend exhausted (ship `[partial]`).
