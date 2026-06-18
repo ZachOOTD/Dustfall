@@ -3,6 +3,12 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign C6 — 2026-06-18 — M2 security review (clean; vite dev-server vuln fixed) ✓ all gates pass
+
+`verified` — `npm run verify:all` PASS (tsc + `verify:placement` 0/0 ×5 + `verify:colliders` 0/25); `npm audit` **0 vulns** (was 1 high); vite-boot smoke-test PASS (perf-probe). **No save bump.** Cycle 6/12 (M2 — 2 of 4 units). Headless audit + a dependency patch bump (`package-lock.json` only).
+
+**security-review-repo.** Audited the client-side game repo (Three.js, no backend/server/DB/auth → narrow surface). **All-clear on:** secrets (0 tracked `.env`/`.pem`/`.key`/credential files, 0 key/token/private-key literals in `src/`) · DOM/injection sinks (0 `innerHTML`/`eval`/`new Function`/`document.write`/`insertAdjacentHTML` — the createElement+textContent discipline + the rule-6 pre-tool hook hold) · repo hygiene (`.gitignore` complete, no committed artifacts). The one real finding — a **HIGH** npm-audit vuln in `vite` 8.0.12 (**dev-server-only:** NTLMv2 hash disclosure + `server.fs.deny` bypass on Windows) — was **remediated** via `npm audit fix` (vite → 8.0.16, SemVer-safe patch; 0 vulns after). Dev-server vulns don't reach the shipped static build; the dev fix is applied. Findings logged to backlog §E.
+
 ## Campaign C5 — 2026-06-18 — M2 feature-flags infra (gate-and-wait scaffold) ✓ all gates pass
 
 `verified` — `npm run verify:all` PASS (tsc + `verify:placement` 0/0 ×5 + `verify:colliders` 0/25). **No save bump.** Cycle 5/12 (M2 — 1 of 4 units). Headless scaffold (no visual/feel output).
