@@ -28,3 +28,7 @@ dist-ssr
 
 # Playwright rig-shot harness output (scripts/rig-shot.mjs) — dev artifacts
 verification/*.png
+
+# gamedev-framework campaign/overnight runtime state (lock, progress journal,
+# cycle in-progress marker). Transient + machine-local — never commit.
+.gamedev-framework/
