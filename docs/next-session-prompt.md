@@ -1,39 +1,40 @@
-# Campaign cycle-17 kickoff (overnight, ultracode) — `campaign/2026-06-18`
+# Campaign cycle-18 kickoff (overnight, ultracode) — `campaign/2026-06-18`
 
 ## Boot order (re-read every cycle from FILES)
 1. `docs/campaign/campaign-state.json` · 2. `docs/campaign/steering.md` · 3. `docs/roadmap.md` "Up next" · 4. `docs/iteration-plan.md` · 5. `CLAUDE.md` + `docs/decisions.md` tail (D240).
 
 ## Where we are
-- ✓ M1 · ✓ M2 content (yard-merge deferred D240) · **M3 IN PROGRESS:** ✓ model (C12-13) · ✓ tail-buried (C14) · ✓ charge-dive (C15) · ✓ audio-rumble (C16).
-- **M3 order:** model ✓ · tail ✓ · charge ✓ · audio ✓ → **multi-worm-population (cycle 17)** → sarlacc-lure-ambush. *(Per the roadmap: model+tail before population — done.)*
+- ✓ M1 · ✓ M2 content (yard-merge deferred D240) · **M3 IN PROGRESS:** ✓ model (C12-13) · ✓ tail (C14) · ✓ charge (C15) · ✓ audio (C16) · ✓ multi-worm (C17).
+- **M3 LAST unit → `sarlacc-lure-ambush` (cycle 18)**, then **M3 COMPLETE → M4.**
 
-## Cycle 17 picks up: **M3 → `multi-worm-population`**
-More than one worm roaming the world (the desert has several territorial leviathans, not one). Likely: spawn N
-worms across the map (per-biome / spacing), each with its own AI instance + home anchor.
-- Where: `src/enemies/sandWorm.ts` — `ctx.sandWorms.list[]` is already an array; check the spawn (`spawnSandWorm`/
-  the boot spawn ~L607) + `updateSandWorm`/the multi-worm tremor-selection (the ACE Tier-2 code ~L807-844 already
-  picks ONE worm for the tremor — multi-worm aware). Check `tuning.ts` SANDWORM_* for a count/spacing constant
-  (may need a new SANDWORM_COUNT). Save: worms are saved individually (check `save.ts` worm fields) — **adding
-  worms is additive but may need a SAVE_VERSION surface-bump if the saved list schema changes (D81).**
-- **⚠ THE C16 RUMBLE IS A SINGLE GLOBAL HANDLE** — with multiple worms charging, only the first gets the rumble
-  (the rest masked). For multi-worm, either (a) make the rumble per-worm (a handle on each worm) driven by the
-  NEAREST charging worm, or (b) keep one global rumble but drive it from the nearest/most-threatening charging worm
-  (simpler). Note it; the audio code-auditor flagged this as the multi-worm follow-up.
-- **Determinism:** worm spawn may use a seed — if it draws from the procgen rand stream, re-run verify:placement.
-  More likely the worm has its OWN rng (per `worm` fields). Verify = tsc + placement/colliders + (if visual) a gate.
-- **Perf:** N worms × particle pools + meshes — check the draw-call/particle budget (perf-probe). Cap N sensibly.
+## Cycle 18 picks up: **M3 → `sarlacc-lure-ambush`** (USER-REQUESTED ADD — build it)
+The user explicitly asked to add the **Sarlacc lure**: a deployable bait/lure the player places to draw the worm
+(or trigger a sarlacc-pit ambush) — turning the worm from a pure threat into something the player can bait/exploit
+(e.g. lure a worm onto/near the sarlacc pit, or bait it to a spot to escape/divert it). "awe-not-horror."
+- **DESIGN FIRST (it's net-new):** decide the exact mechanic before building. Likely shape — a craftable/placeable
+  LURE item that, when deployed, emits a worm-attracting signal (the worm's `feeding`/bait state already exists —
+  see `sandWorm.ts` `tickFeeding` + the meat-bait `FEED_DETECT_RADIUS`/`feeding` state, ACAJ B12). The sarlacc PIT
+  exists (`src/enemies/sarlaccPit.ts`). The lure could: (a) bait a worm to a location (reuse the feeding-surface
+  loop), and/or (b) near the sarlacc pit, set up an ambush. Pick the SIMPLEST coherent version + ship it; note the
+  rest. Consider a `/research-topic` or a short design fan-out if the mechanic is unclear.
+- Where: NEW item (inventory/types.ts ItemId + items.ts), a placeable (model + deploy, mirror `stake.ts`/`bedroll.ts`
+  deploy patterns), the worm-attract hook (`sandWorm.ts` feeding/bait path), maybe `sarlaccPit.ts` interaction.
+- **Save (D81):** a new placeable + item = additive; **likely a SAVE_VERSION surface-bump** (the deployed-lure list).
+- **Determinism:** if it scatters/seeds, re-run verify:placement. **VISUAL** (the lure item + deployed model) → rig-shot
+  (item-studio for the held item; a world shot for the deployed) + adversarial gate. **FEEL** (does baiting feel good) → walk-test.
 
-## Worm rig-shot (reuse): `--scenario=worm-model --angle=head|side|3q|arc|charge`
+## Worm rig-shot (reuse): `--scenario=worm-model --angle=head|side|3q|arc|charge` · item-studio `--item=<id>`
 
 ## Autonomy contract
-- **⚡ ULTRACODE** (overnight, max-quality): adversarial Workflow gate on VISUAL work; code-auditor on AUDIO/logic
-  (the C16 rumble audit caught 3 real sev2 node-lifecycle bugs). **Rule 8** for visual. **Save (D81)** additive + surface bumps.
+- **⚡ ULTRACODE** (overnight, max-quality): adversarial Workflow gate on VISUAL; code-auditor on AUDIO/logic.
+  **Rule 8** for visual (the lure item/model). **Save (D81)** additive + surface-bump if the schema grows.
+  **Don't re-do already-done items** (C17 found multi-worm infra was already built — verify current state first).
 - Pauses at the **Phase A milestone** (after M5b). Backstop **max-cycles=50**.
 
 ## Stop conditions
 Phase A milestone (pause) · max-cycles=50 · 3 fix-walls · placement/collider regression unclearable in 2 tries ·
-SAVE_VERSION bump needed (do it, surface only) · destructive-git attempt.
+SAVE_VERSION bump (do it, surface only) · destructive-git attempt.
 
 ## Open backlog of note
-- worm: per-worm rumble (multi-worm) · dorsal-crest contrast · head-beef · charge sand-bank · breach/charge/sound FEEL walk-test.
+- worm: per-worm rumble was solved as nearest-charging (C17); SANDWORM_COUNT tunable (encounter balance) · dorsal-crest contrast · head-beef.
 - yard-cross-poi-merge (D240). Full list: `docs/backlog.md`.

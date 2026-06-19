@@ -3,6 +3,12 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign C17 — 2026-06-19 — M3: multi-worm-population (infra pre-existing) + the multi-worm RUMBLE fix ✓ gates pass (ultracode)
+
+`verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/25). **Logic/audio unit → code-auditor gate** (PASS, no fix round needed). **No save bump.** Cycle 17/50.
+
+**multi-worm-population.** The population INFRA was **already implemented** (ACE Tier 2): `SANDWORM_COUNT=2` worms, rejection-sampled with `SANDWORM_MIN_SEPARATION` so they don't bunch, per-biome placement, multi-worm-aware tremor selection (`applyClosestTremorEffect`), and per-worm save/load. Like the chroma/dish items, the unit was substantially done — verified, not rebuilt. **The genuine gap (the C16 follow-up the audio audit flagged):** the C16 approach rumble was a SINGLE GLOBAL handle wired PER-WORM — with 2 worms it broke (a 2nd charging worm's `enterCharging` no-op'd on the busy handle; one worm's lunge could stop the rumble while another still charged). **Fixed:** refactored to a global `applyWormRumble` pass in `updateSandWorm` (mirroring the tremor pattern) that drives the one rumble from the **nearest CHARGING worm** (the player hears the closest underground threat); removed all the C16 per-worm start/stop/level calls. **Gate (code-auditor, ultracode):** PASS — "nearest-selection correct, stops on no-charge, pause-safe, idempotent, all per-worm calls correctly removed." Count kept at 2 (bumping draws `scatterRand` → a determinism risk; `SANDWORM_COUNT` is a documented tunable, encounter balance feel-pending). Next: sarlacc-lure-ambush (the user-requested add). 
+
 ## Campaign C16 — 2026-06-19 — M3: worm-audio-rumble (sustained sub-bass charge approach) ✓ gates pass (ultracode, audio) · sound feel-pending
 
 `verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/25 — audio/behavior, not a placement/collider POI). **Audio unit → no visual gate;** "gate" = a code-auditor review of the Web Audio graph (PASS after 1 fix round). **No save bump.** Cycle 16/50.

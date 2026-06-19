@@ -698,7 +698,6 @@ export function damageSandWorm(
 
 function transitionToDead(worm: SandWorm, ctx: GameContext): void {
   worm.state = 'dead';
-  stopWormRumble();   // C16 — defensive: kill the charge rumble if the worm dies/despawns (no dangling drone)
   // Lay the worm on its side at the breach surface position.
   worm.pitch = 0;
   applySandWormDeadPose(worm);
@@ -811,6 +810,26 @@ export function updateSandWorm(ctx: GameContext, dt: number): void {
   // worm (multi-worm tremor stacking would feel chaotic — pick a single
   // canonical source).
   applyClosestTremorEffect(ctx, playerTr);
+  // C17 — same single-canonical-source rule for the approach RUMBLE: drive the one rumble from the
+  // NEAREST CHARGING worm (multi-worm-correct; replaces C16's per-worm start/stop which masked a 2nd
+  // charging worm + could be stopped by one worm while another still charged).
+  applyWormRumble(ctx, playerTr);
+}
+
+/** C17 — multi-worm approach rumble: one global rumble, driven by the nearest CHARGING worm (the
+ *  player hears the closest underground threat). No charging worm → fade out. Idempotent each frame. */
+function applyWormRumble(ctx: GameContext, playerTr: { x: number; z: number }): void {
+  let nearest: SandWorm | null = null;
+  let nearestDist = Infinity;
+  for (const worm of ctx.sandWorms.list) {
+    if (worm.state !== 'charging') continue;
+    const d = Math.hypot(playerTr.x - worm.basePos.x, playerTr.z - worm.basePos.z);
+    if (d < nearestDist) { nearestDist = d; nearest = worm; }
+  }
+  if (!nearest) { stopWormRumble(); return; }
+  startWormRumble();   // idempotent — no-op if already playing
+  const prox = 1 - Math.min(1, nearestDist / Tuning.SANDWORM_DISENGAGE_RADIUS);
+  setWormRumbleLevel(0.25 + prox * 0.75);
 }
 
 /** ACE Tier 2 — multi-worm tremor selection. Pick the worm in a threat
@@ -1087,7 +1106,6 @@ function enterCharging(worm: SandWorm, ctx: GameContext): void {
   const playerTr = getPlayerPos(ctx);
   worm.target.set(playerTr.x, 0, playerTr.z);
   worm.nextWakePuffAt = ctx.time.elapsed;
-  startWormRumble();   // C16 — the underground approach rumble begins on the committed charge
 }
 
 function tickCharging(
@@ -1097,7 +1115,6 @@ function tickCharging(
   if (distToPlayer > Tuning.SANDWORM_DISENGAGE_RADIUS || ctx.player.inShelter) {
     worm.state = 'retreat';
     worm.phaseStartedAt = ctx.time.elapsed;
-    stopWormRumble();   // C16 — charge aborted (player escaped/sheltered) → rumble fades out
     pickRetreatTarget(worm, ctx);
     return;
   }
@@ -1116,9 +1133,6 @@ function tickCharging(
     - Tuning.SANDWORM_MAX_RADIUS * Tuning.SANDWORM_CHARGE_SUBMERGE;
   worm.pitch = 0;
   worm.mesh.visible = true;
-  // C16 — rumble intensity ramps with the worm's proximity to the player (dread builds as it closes).
-  const prox = 1 - Math.min(1, distToPlayer / Tuning.SANDWORM_DISENGAGE_RADIUS);
-  setWormRumbleLevel(0.25 + prox * 0.75);
   // Wake puffs — every ~0.15s pop puffs along the visible spine.
   if (ctx.time.elapsed >= worm.nextWakePuffAt) {
     worm.nextWakePuffAt = ctx.time.elapsed + 0.15;
@@ -1146,7 +1160,6 @@ function enterLunge(worm: SandWorm, ctx: GameContext): void {
   worm.state = 'lunge';
   worm.phaseStartedAt = ctx.time.elapsed;
   worm._biteDealt = false;
-  stopWormRumble();   // C16 — the worm surfaces/erupts; the underground rumble gives way to the roar+chomp
   // Arc along the committed target direction (set at enterCharging) — the
   // worm doesn't track the player into the lunge. If the player dodged,
   // the lunge passes through empty sand.
