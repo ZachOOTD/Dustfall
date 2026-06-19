@@ -265,3 +265,12 @@ first stop will be `max-cycles` ~mid-Phase-A; resume via `/campaign-start --resu
 - **Spend:** ~190K (feel unit); campaign total ~3.31M; cycle **15/50**.
 - **Commit:** `760dd81`.
 - **M3:** model ✓ · tail ✓ · charge ✓. **Next (cycle 16):** `worm-audio-rumble` (AUDIO — no visual gate). **Verdict: CONTINUE** (M3 in progress; no Phase boundary).
+
+## Cycle 16 — M3 worm-audio-rumble (sustained sub-bass charge approach) (2026-06-19) — SHIPPED ⚡ULTRACODE · sound feel-pending
+- **Planned:** `worm-audio-rumble` — a low approach rumble during the underground charge.
+- **Shipped:** a NEW sustained **sub-bass rumble** (`audio.ts` start/setLevel/stopWormRumble — detuned low sines + lowpassed looping noise under a tremolo LFO, via `_sfx`) wired to the charge: starts on `enterCharging`, ramps with proximity, stops on abort/lunge/death; main.ts stops it on pause. Pairs with C15's back-ridge.
+- **Verify:** `verify:all` PASS — tsc · placement 0/0 ×5 · colliders 0/25 (audio/behavior, not a placement/collider POI).
+- **Visual iteration:** N/A — **AUDIO unit, no visual gate.** Gated by a **code-auditor** review of the Web Audio graph (ultracode): R1 FAIL — **3 real sev2 node-lifecycle bugs** (LFO not detached before the fade → tail clicks; `stop()` never `disconnect()`'d → stale graph branches across charges; paused-mid-charge orphaned the rumble). Fixed in 1 round → R2 **PASS** ("no leaks, no clicks, no negative-gain, all charge exits covered"). **SOUND** quality → feel-pending walk-test.
+- **Spend:** ~190K (audio unit, 2 code-auditor rounds); campaign total ~3.50M; cycle **16/50**.
+- **Commit:** `a248d9c`.
+- **M3:** model ✓ · tail ✓ · charge ✓ · audio ✓. **Next (cycle 17):** `multi-worm-population`. **Verdict: CONTINUE** (M3 in progress; no Phase boundary). *(The code-auditor gate on an audio unit caught 3 sev2 node-lifecycle bugs a tsc-only check would have shipped.)*
