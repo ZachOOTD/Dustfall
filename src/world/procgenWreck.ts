@@ -1503,6 +1503,65 @@ interface AssembleResult {
 // so the panel sits flush). The old SALVAGE_PANEL_SAMPLE_GRID_*/FACE_INSET tuning
 // is retired with it.
 
+// ── wreck-polish-bundle delta 1 (campaign 2026-06-18) — NON-AXIAL DORSAL MASS ──
+// The §F/§G "sausage" fix: heavy classes are a chain of co-axial hull tubes, so the
+// silhouette reads as one long pipe. A dorsal SUPERSTRUCTURE (bridge tower + a tapered
+// bridge cap + an offset deckhouse + window strip + antenna whips) rising off the TOP of
+// a mid hull body breaks the length-axis read with a vertical mass. Consumes ZERO rand()
+// (hash2 of the part's len/radius → the panel rand stream is byte-identical,
+// verify:placement unchanged, D208/D221). Shared materials (folds into the static merge +
+// the per-class re-skin). Tagged isWreckDecoration → COLLIDER-AUDIT-exempt (D235): it sits
+// high on the dorsal, above the walkable ground around the half-buried hull. Every box
+// ≥12cm on its thin axis (rule 7); whips are cylinders (inherently thick).
+function addDorsalMass(g: THREE.Group, partLength: number, partRadius: number, maxR: number): void {
+  const grp = new THREE.Group();
+  const h = hash2(partLength * 1.7, maxR * 2.3);
+  const h2 = hash2(maxR * 3.1, partLength * 0.7);
+  // round-3 (silhouette fix): the tower must read as real MASS, not a sliver. Scale its HEIGHT off
+  // the wreck's BULK (maxR = the fattest part) so it's tall even when the mid-span host part is slim;
+  // scale the BASE off the host partRadius so it stays seated on the part (no overhang). A chunky,
+  // tall bridge block — not a thin mast — is what breaks the horizontal pipe read.
+  // round-4 (proportion fix): build the tower TALLER-THAN-WIDE so it reads as a vertical
+  // superstructure on EVERY heavy class — the fat bulk_hauler made a squat wide-as-tall slab.
+  // Height scales off the wreck BULK (maxR); the base is capped to ≤~0.55× the height (and to the
+  // host part width) so the proportion is always vertical, never a flush slab.
+  const towerH = maxR * (1.7 + h * 0.5);              // TALL vertical mass from the wreck bulk
+  const baseW = Math.min(partRadius * 1.35, towerH * 0.52);   // along X (length)
+  const baseD = Math.min(partRadius * 1.45, towerH * 0.55);   // along Z (beam) — capped → stays vertical
+  const tower = new THREE.Mesh(new THREE.BoxGeometry(baseW, towerH, baseD), _rustMat);
+  tower.position.y = towerH * 0.5;
+  grp.add(tower);
+  // Tapered bridge CAP (reads as a superstructure, not a slab).
+  const capW = baseW * 0.68, capD = baseD * 0.72, capH = maxR * (0.4 + h2 * 0.22);
+  const cap = new THREE.Mesh(new THREE.BoxGeometry(capW, capH, capD), _hullDarkMat);
+  cap.position.set(-baseW * 0.05, towerH + capH * 0.5, 0);
+  grp.add(cap);
+  // Offset DECKHOUSE block — asymmetry so it isn't a centred monolith.
+  const dkW = baseW * 0.55, dkH = maxR * (0.5 + h * 0.2), dkD = baseD * 0.8;
+  const deck = new THREE.Mesh(new THREE.BoxGeometry(dkW, dkH, dkD), _rustMat);
+  deck.position.set(baseW * (0.45 + h2 * 0.2), dkH * 0.5, baseD * (h - 0.5) * 0.25);
+  grp.add(deck);
+  // Window strip on the tower's forward face (a dark recessed band).
+  const win = new THREE.Mesh(new THREE.BoxGeometry(baseW * 0.78, towerH * 0.16, 0.12), _hullDarkMat);
+  win.position.set(0, towerH * 0.6, baseD * 0.5 + 0.02);
+  grp.add(win);
+  // Two tall antenna MASTS off the cap — now that the block reads as solid mass, tall masts add
+  // commanding vertical SILHOUETTE height (esp. on the long-low freighter) without being mistaken
+  // for the whole superstructure (round-5 — the silhouette critic asked for more whip presence).
+  for (let k = -1; k <= 1; k += 2) {
+    const mastH = maxR * (1.0 + hash2(maxR + k, partLength) * 0.7);
+    const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.07, mastH, 6), _hullDarkMat);
+    mast.position.set(capW * 0.26 * k - baseW * 0.05, towerH + capH + mastH * 0.5, 0);
+    grp.add(mast);
+  }
+  // Seat on the dorsal (top) of the part: X mid-ish, base embedded ~0.28r into the upper skin.
+  const px = partLength * (0.34 + h * 0.30);
+  grp.position.set(px, partRadius * 0.72, 0);
+  grp.traverse((o) => { o.userData.isWreckDecoration = true; });
+  grp.name = '__dorsalMass';
+  g.add(grp);
+}
+
 function assembleWreck(
   rand: Rng,
   recipe: WreckRecipe,
@@ -1580,6 +1639,28 @@ function assembleWreck(
     for (const t of targets) {
       addScaleAnchor(t.built.mesh, t.built.partLength, t.built.radius, t.built.anchorSurfZ!,
         t.built.anchorBandLo!, t.built.anchorBandHi!, t.built.anchorLeeSide ?? 1);
+    }
+  }
+
+  // ── wreck-polish-bundle delta 1 (campaign 2026-06-18) — NON-AXIAL DORSAL MASS on the heavy
+  // classes to break the length-axis "sausage" silhouette (§F/§G). ONE per wreck, on the FATTEST
+  // mid hull body. Deterministic pick + addDorsalMass uses hash2 only → ZERO new rand, so the
+  // panel stream below is byte-identical (verify:placement unchanged). Added BEFORE panels so
+  // findSurfaceMounts sees it as an obstacle — but it sits dorsal; panels mount on the flanks.
+  if (cls === 'mega_freighter' || cls === 'bulk_hauler' || cls === 'freighter') {
+    const body = placed.slice(1, Math.max(1, placed.length - 1));   // skip cockpit + tail/engine
+    const fat = body.filter((p) => p.built.radius >= 0.9);
+    const pool = fat.length ? fat : body;
+    if (pool.length) {
+      // Seat the tower MID-HULL (not at an end) so the vertical mass crosses the length axis and
+      // genuinely breaks the sausage — not a cap on one tip (round-2 silhouette fix). Among the fat
+      // body parts, pick the one whose CENTRE is closest to the hull mid-span.
+      const mid = totalLength / 2;
+      const target = [...pool].sort((a, b) =>
+        Math.abs((a.startX + a.built.partLength / 2) - mid) -
+        Math.abs((b.startX + b.built.partLength / 2) - mid))[0];
+      const maxR = Math.max(...placed.map((p) => p.built.radius));   // size the tower off the wreck BULK
+      addDorsalMass(target.built.mesh, target.built.partLength, target.built.radius, maxR);
     }
   }
 

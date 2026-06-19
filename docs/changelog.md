@@ -3,6 +3,12 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign C7 — 2026-06-18 — M2 wreck-polish delta 1: non-axial dorsal mass `[partial]` ✓ all gates pass
+
+`verified` — `npm run verify:all` PASS (tsc + `verify:placement` 0/0 ×5 + `verify:colliders` 0/25); **visual gate PASS after 5 rounds** (3 harsh-lens critics over mega/bulk/freighter renders — 0 sev≥2; the "sausage" silhouette is broken on all 3 heavy classes). **No save bump.** Cycle 7/12 (M2 — wreck-polish-bundle `[partial]`, delta 1 of 5). Appearance-verified; in-world feel feel-pending.
+
+**wreck-polish-bundle delta 1 — non-axial dorsal mass (§F/§G "sausage" fix).** NEW `addDorsalMass` in `procgenWreck.ts` adds a dorsal SUPERSTRUCTURE (tall bridge tower + tapered cap + offset deckhouse + window strip + twin antenna masts) rising off the mid-hull of the heavy classes (mega_freighter / bulk_hauler / freighter) to break the length-axis "sausage" silhouette with vertical mass. Determinism-safe (hash2 only, ZERO rand → panel stream byte-identical, verify:placement 0/0); `isWreckDecoration`-tagged (COLLIDER-AUDIT-exempt, D235); shared `_rustMat`/`_hullDarkMat` (folds into the static merge + per-class re-skin); rule-7 compliant. **5-round rule-8 iteration** (position → mass → proportion → vertical presence): seated MID-hull (not capping a tip), height scaled off the wreck bulk (`maxR`) with the base capped to stay vertical, + tall masts for commanding silhouette height on the long-low freighter. Remaining wreck-polish deltas (weathering chroma, engine-droop randomize, scout/corvette trauma, scale-anchor pocket) → follow-up cycles.
+
 ## Campaign C6 — 2026-06-18 — M2 security review (clean; vite dev-server vuln fixed) ✓ all gates pass
 
 `verified` — `npm run verify:all` PASS (tsc + `verify:placement` 0/0 ×5 + `verify:colliders` 0/25); `npm audit` **0 vulns** (was 1 high); vite-boot smoke-test PASS (perf-probe). **No save bump.** Cycle 6/12 (M2 — 2 of 4 units). Headless audit + a dependency patch bump (`package-lock.json` only).
