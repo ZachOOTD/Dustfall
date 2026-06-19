@@ -577,6 +577,29 @@ function addScaleAnchor(
   const px = partLength * (0.32 + hash2(partLength, radius) * 0.36);
   const py = bandHi - hatchH * 0.5 - 0.15;             // top-aligned in the band (least burial)
 
+  // ── wreck-polish delta 5 (campaign C10) — scale-anchor EXCLUSION POCKET. The hatch+ladder is the
+  // game's ONE human-constant scale reference; a hull greeble/seam punching through right beside it
+  // corrupts that read. Greebles were scattered during the PART build (before this host was chosen) and
+  // ~22% bias to the lee flank (addHullGreebles) — exactly where the anchor sits. Carve a clean pocket:
+  // remove any isWreckDecoration greeble already on THIS part that falls inside the anchor footprint on
+  // the lee flank. Pure scene-graph filter → ZERO rand (panel stream byte-identical) + greebles are
+  // collider-exempt (no COLLIDER-AUDIT impact). Runs BEFORE the door/ladder are added so it can't hit them.
+  {
+    const leeSign = Math.sign(flankZ) || 1;
+    const exclHalfX = hatchW * 0.5 + 0.55;            // covers the door slab + the jamb ladder + margin
+    const exclLoY = bandLo - 0.12, exclHiY = bandHi + 0.12;
+    const doomed: THREE.Object3D[] = [];
+    for (const child of g.children) {
+      if (child.userData?.isWreckDecoration !== true) continue;        // never touch the structural hull
+      const cz = child.position.z;
+      if (Math.abs(cz) < 0.01 || Math.sign(cz) !== leeSign) continue;  // lee flank only (skip dorsal/top)
+      if (Math.abs(child.position.x - px) > exclHalfX) continue;
+      if (child.position.y < exclLoY || child.position.y > exclHiY) continue;
+      doomed.push(child);
+    }
+    for (const d of doomed) g.remove(d);
+  }
+
   // All local +z = PROUD outward; the group's rotation.y resolves the flank sign.
   const grp = new THREE.Group();
   // Recessed mounting flange — the door slab stands ~12cm proud of it so the slab throws
@@ -1573,32 +1596,62 @@ function addForcedTrauma(g: THREE.Group, partLength: number, radius: number): vo
   const h = hash2(partLength * 2.1, radius * 1.7);
   const h2 = hash2(radius * 2.9, partLength * 1.3);
   const side = hash2(partLength * 0.7, radius * 3.3) < 0.5 ? 1 : -1;
+  // Seat everything against the part's REAL geometry frame. C10 gate root-cause: addForcedTrauma had
+  // assumed local y=0 was the hull AXIS, but every hull variant seats the body CENTRE at y≈r*0.55
+  // (crown ≈ r*1.55; y=0 is the underside that burial sinks). So the roof/flap floated ~0.5m off the
+  // hull and read as debris on the sand. Anchor to the real centre/crown/flank instead.
+  const cy = radius * 0.55;                            // real hull centreline
+  const skinZ = radius * 0.92;                         // real +Z flank surface (matches addBreachPatches)
   const w = radius * (0.8 + h * 0.5);
-  const ht = radius * (0.55 + h2 * 0.4);
-  const d = 0.14;                                     // rule 7
+  const ht = radius * (0.5 + h2 * 0.32);
+  const d = 0.16;                                      // rule 7
   const px = partLength * (0.30 + h * 0.40);
-  const py = radius * (0.52 + h2 * 0.36);             // upper flank — clear of the sand-line, reads at 3q + side
-  const pz = (radius * 0.90 + d * 0.5) * side;        // pokes through the flank skin
-  // Torn-open GASH — UNLIT pure-black (nozzle-interior mat) so it reads as a VOID into the hull,
-  // distinct from the lit dark greebles it would otherwise blend with (the breach-read fix).
+  const py = cy + radius * (0.10 + h2 * 0.26);         // UPPER flank, above the real centreline
+  const pz = (skinZ + d * 0.3) * side;                 // pokes just through the real flank skin
+  // Torn-open GASH — UNLIT pure-black void (nozzle-interior mat) reads as a HOLE, not a lit greeble.
   const gash = new THREE.Mesh(new THREE.BoxGeometry(w, ht, d), _nozzleInteriorMat);
   gash.position.set(px, py, pz);
-  gash.rotation.set((h - 0.5) * 0.4, (h2 - 0.5) * 0.5, (h - 0.5) * 0.35);   // torn, not a clean rect
-  gash.userData.isWreckDecoration = true;
-  g.add(gash);
-  // Sheared hull plate PEELED back from the gash lip — attached at one edge + bent outward off the
-  // flank, so it reads as blasted-open plating (not detached debris). Sits just outboard of the gash.
-  const flap = new THREE.Mesh(new THREE.BoxGeometry(w * 0.7, ht * 0.7, 0.12), _rustMat);
-  flap.position.set(px + w * 0.48, py + ht * 0.12, (radius * 0.86 + 0.22) * side);
-  flap.rotation.set((h - 0.5) * 0.4, (h2 - 0.5) * 0.6, -0.7 * side);        // hinged back off the hull
-  flap.userData.isWreckDecoration = true;
-  g.add(flap);
-  // A jagged torn-metal strut at the gash lip (sells the breach up close).
-  const lip = new THREE.Mesh(new THREE.BoxGeometry(0.12, ht * 0.55, 0.12), _rustMat);
-  lip.position.set(px - w * 0.42, py + ht * 0.18, pz);
+  gash.rotation.set((h - 0.5) * 0.4, (h2 - 0.5) * 0.5, (h - 0.5) * 0.35);
+  gash.userData.isWreckDecoration = true; g.add(gash);
+  // An offset sub-void breaks the clean rectangle into a jagged blast outline (not a pasted panel).
+  const sub = new THREE.Mesh(new THREE.BoxGeometry(w * 0.5, ht * 0.52, d), _nozzleInteriorMat);
+  sub.position.set(px + w * 0.34 * (h - 0.5), py + ht * 0.5 * (h2 - 0.5), pz);
+  sub.rotation.z = (h2 - 0.5) * 0.7;
+  sub.userData.isWreckDecoration = true; g.add(sub);
+  // A second sub-void on the opposite rim so the jagged blast outline wraps the WHOLE perimeter (the
+  // void's right/bottom edges were reading too clean/rectangular — C10 gate r2 sev1).
+  const sub2 = new THREE.Mesh(new THREE.BoxGeometry(w * 0.4, ht * 0.42, d), _nozzleInteriorMat);
+  sub2.position.set(px + w * (0.18 + h * 0.16), py - ht * (0.28 + h2 * 0.16), pz);
+  sub2.rotation.z = (h - 0.5) * 0.7;
+  sub2.userData.isWreckDecoration = true; g.add(sub2);
+  // Thin rust scorch RING around the rim — gradates skin→hole so the edge isn't a hard pasted line.
+  const ring = new THREE.Mesh(new THREE.BoxGeometry(w + 0.20, ht + 0.20, 0.07), _rustMat);
+  ring.position.set(px, py, (skinZ - 0.02) * side);
+  ring.rotation.copy(gash.rotation);
+  ring.userData.isWreckDecoration = true; g.add(ring);
+  // PEELED flap — inboard edge WELDED to the gash rim, gentle ~18° hinge so the far edge lifts off the
+  // flank but never reaches sand. On a TINY wreck a lone flap reads as a dropped sheet → skip it (the
+  // gash + ring + sub-voids + lip carry the breach).
+  const tiny = radius < 0.85 || radius * partLength < 2.0;
+  if (!tiny) {
+    const flap = new THREE.Mesh(new THREE.BoxGeometry(w * 0.7, ht * 0.6, 0.12), _rustMat);
+    flap.position.set(px + w * 0.12, py - ht * 0.04, (skinZ + 0.05) * side);
+    flap.rotation.set((h - 0.5) * 0.3, (h2 - 0.5) * 0.4, -0.32 * side);     // small hinge → stays attached
+    flap.userData.isWreckDecoration = true; g.add(flap);
+  }
+  // NOTE — a dorsal "roof tear" plate was tried (C9 + C10 gate rounds 1-3) for an all-angle silhouette
+  // break, but it persistently FLOATED above the crown on the corvette: a y≈r*1.55 cylinder estimate
+  // overshoots the domed-corvette hull (it seated fine on the gunship cylinder), and it sat laterally
+  // decoupled from the flank gash → a hovering slab no reseat could weld without a real per-variant Box3
+  // crown. DROPPED: the flank breach (gash + ring + 2 sub-voids + flap + lip) reads as a strong ATTACHED
+  // hole on every angle the adversarial gate checked, and the player circles the proud wreck in-world so
+  // the flank breach is always seen.
+  // Jagged torn-metal LIP at the gash rim — thick (rule 7), flush to the real flank, framing the hole.
+  // Biased inboard (C10 gate r2 sev1) so its tip terminates within the gash silhouette, not over sand.
+  const lip = new THREE.Mesh(new THREE.BoxGeometry(0.13, ht * 0.5, 0.13), _rustMat);
+  lip.position.set(px - w * 0.38, py + ht * 0.12 * side, (skinZ + 0.05) * side);
   lip.rotation.set((h2 - 0.5) * 0.8, 0, (h - 0.5) * 0.9);
-  lip.userData.isWreckDecoration = true;
-  g.add(lip);
+  lip.userData.isWreckDecoration = true; g.add(lip);
 }
 
 function assembleWreck(
@@ -1718,7 +1771,15 @@ function assembleWreck(
     const body = placed.slice(1).filter((p) => p.built.radius >= 0.7);
     const pool = body.length ? body : placed.slice(1);
     if (pool.length) {
-      const target = pool[Math.floor(hash2(totalLength, pool.length) * pool.length) % pool.length];
+      // C9 read-polish (campaign C10): pick the LARGEST visible hull mass (radius × length), tie-break
+      // toward mid-span — so the breach lands on the MAIN hull, not a forward/minor part (the C9
+      // scattered-debris read). Deterministic (no rand).
+      const mid = totalLength / 2;
+      const target = [...pool].sort((a, b) => {
+        const va = a.built.radius * a.built.partLength, vb = b.built.radius * b.built.partLength;
+        return (vb - va) ||
+          (Math.abs((a.startX + a.built.partLength / 2) - mid) - Math.abs((b.startX + b.built.partLength / 2) - mid));
+      })[0];
       addForcedTrauma(target.built.mesh, target.built.partLength, target.built.radius);
     }
   }

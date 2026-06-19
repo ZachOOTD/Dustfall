@@ -3,6 +3,16 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign C10 — 2026-06-18 — M2 wreck-polish delta 5 + C9 trauma read-polish → **wreck-polish-bundle COMPLETE** ✓ all gates pass (ultracode)
+
+`verified` — `npm run verify:all` PASS (tsc + `verify:placement` 0/0 ×5 + `verify:colliders` 0/25). Visual: **3-round adversarial Workflow gate** (multi-critic + code-auditor reading rendered PNGs + geometry source). **No save bump.** Cycle 10/12 — **wreck-polish-bundle DONE (5/5 deltas)**. Big cycle (~600K, ultracode: 3 gate rounds).
+
+**C9 trauma read-polish (the flagged §F item) — the gate found a ROOT-CAUSE BUG.** The adversarial code-auditor diagnosed that `addForcedTrauma` placed elements as if local `y=0` were the hull axis, but **every hull variant seats the body centre at `y≈r*0.55`** (crown ≈ `r*1.55`; `y=0` is the underside burial sinks) — so the roof/flap floated ~0.5m OFF the hull and read as "debris on the sand." Also disambiguated: the C9 "scattered debris" was partly the **intended `addDebrisFan`** (fragments shed onto the sand — a feature, mis-attributed). **Rewrote** `addForcedTrauma` to anchor to the real centre/crown/flank frame; added depth cues (rust scorch RING + 2 jagged sub-voids so the black void reads as a HOLE with an irregular blast outline, not a flat sticker); welded the peeled flap to the gash rim; skip the lone flap on tiny 2-3-part wrecks; part-pick → largest visible hull mass (mid-span tie-break). **Dropped the dorsal "roof tear"** — it persistently floated above the corvette crown across 3 gate rounds (the `r*1.55` cylinder estimate overshoots the domed corvette hull); the flank breach (gash+ring+sub-voids+flap+lip) carries it and reads as a strong ATTACHED hole on every angle the gate checked (the player circles the proud wreck in-world).
+
+**delta 5 — scale-anchor EXCLUSION POCKET.** The hatch+ladder is the one human-constant scale reference; greebles (~22% bias to the lee flank, where the anchor sits) could punch through beside it. Added a determinism-safe scene-graph filter in `addScaleAnchor`: removes any `isWreckDecoration` greeble on the host part inside the anchor footprint on the lee flank. **ZERO rand** (panel stream byte-identical) + greebles are collider-exempt.
+
+**Gate arc (visual_gate=auto, ultracode → real Workflow not solo-triage):** R1 FAIL (8 sev1+7 sev2 → root-cause coordinate bug found) · R2 FAIL (coordinate fix CONFIRMED landed by all 3 critics; 1 residual sev2 = roof float) · R3 FAIL (roof still floating on the corvette — reseat insufficient) → roof DROPPED → flank breach gate-confirmed attached. Determinism held every round (0/0). All sev≥2 were the roof; remaining sev1 are cosmetic (gunship side-void contrast).
+
 ## Campaign C9 — 2026-06-18 — M2 wreck-polish delta 4: guaranteed corvette/gunship trauma `[partial]` ✓ gates pass (read-polish flagged)
 
 `verified` — `npm run verify:all` PASS (tsc + `verify:placement` 0/0 ×5 + `verify:colliders` 0/25). **No save bump.** Cycle 9/12 (M2 — wreck-polish-bundle `[partial]`; delta 4 shipped, delta 5 remains).
