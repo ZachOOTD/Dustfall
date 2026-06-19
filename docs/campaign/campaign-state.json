@@ -2,7 +2,7 @@
   "status": "active",
   "started": "2026-06-18",
   "branch": "campaign/2026-06-18",
-  "cycles_completed": 24,
+  "cycles_completed": 25,
   "current_tier": "M5 — Riding & rest feel",
   "awaiting_approval": false,
   "stop_reasons": [],
@@ -16,7 +16,7 @@
   "circuit_breaker_n": 3,
   "consecutive_no_progress": 0,
   "ceiling": { "max_cycles": 50, "total": null, "per_cycle": null, "unit": "tokens" },
-  "spend": { "total": 5130000, "note": "approximate — agent cannot precisely self-meter. RESUMED overnight (ultracode max-quality). M3 worm: C13 ~320K (dorsal armor); C14 ~210K; C15 ~190K; C16 ~190K (audio, gate caught 3 sev2); C17 ~150K (multi-worm: infra pre-existing + rumble refactor); C18 ~300K (sarlacc-lure: 3-agent recon + net-new item + 4 model-gate rounds + a verify-zombie recovery); C19 ~120K (vulture-motion-feel: infra pre-existing, found+fixed the dangling-leg soar via flight-pose renders, 1 lean gate); C20 ~250K (atmosphere-feeltunes: storm pre-built; built a storm-render scenario + root-caused/fixed the dust snow-read across 3 gate rounds); C21 ~350K (smoke-signal-plume NET-NEW: fire smoke system + debug hooks + rig scenario + 6 plume-gate rounds tuning the storm wind-tear); C22 ~120K (amban-rifle-balance: assessed the 4-weapon spread, found+corrected the amban's strict dominance over the scrap gun via cd 1.6->2.2, flagged the deeper economy fix); C23 ~90K (speeder-riding-feel: VERIFIED the exhaustively-tuned ride system via bike-truth — no code change; handling feel-pending, foot-lift queued); C24 ~250K (rope-attach-speeder-rear-bar: NET feature — explicit LMB tow-bar tie/untie mirroring the stake, code-auditor PASS). Mostly-done units run lean (~150K); feel/audio/logic ~190K; hero-visual ~300-600K. Pre-ultracode (C1-C8) 50-290K. max-cycles=50; pauses at the Phase A milestone." },
+  "spend": { "total": 5220000, "note": "approximate — agent cannot precisely self-meter. RESUMED overnight (ultracode max-quality). M3 worm: C13 ~320K (dorsal armor); C14 ~210K; C15 ~190K; C16 ~190K (audio, gate caught 3 sev2); C17 ~150K (multi-worm: infra pre-existing + rumble refactor); C18 ~300K (sarlacc-lure: 3-agent recon + net-new item + 4 model-gate rounds + a verify-zombie recovery); C19 ~120K (vulture-motion-feel: infra pre-existing, found+fixed the dangling-leg soar via flight-pose renders, 1 lean gate); C20 ~250K (atmosphere-feeltunes: storm pre-built; built a storm-render scenario + root-caused/fixed the dust snow-read across 3 gate rounds); C21 ~350K (smoke-signal-plume NET-NEW: fire smoke system + debug hooks + rig scenario + 6 plume-gate rounds tuning the storm wind-tear); C22 ~120K (amban-rifle-balance: assessed the 4-weapon spread, found+corrected the amban's strict dominance over the scrap gun via cd 1.6->2.2, flagged the deeper economy fix); C23 ~90K (speeder-riding-feel: VERIFIED the exhaustively-tuned ride system via bike-truth — no code change; handling feel-pending, foot-lift queued); C24 ~250K (rope-attach-speeder-rear-bar: NET feature — explicit LMB tow-bar tie/untie mirroring the stake, code-auditor PASS); C25 ~90K (3p-camera-and-render-polish: VERIFIED heavily-built — cameraSnap/held-items-3P/footstep-sync all done, foot-lift structural; no code change). Mostly-done units run lean (~150K); feel/audio/logic ~190K; hero-visual ~300-600K. Pre-ultracode (C1-C8) 50-290K. max-cycles=50; pauses at the Phase A milestone." },
   "plan": {
     "authored": "2026-06-18",
     "amended": "2026-06-18 plan-review user steering + evidence audit + Phase-C promotion (see campaign-log.md Cycle 0)",
@@ -350,6 +350,22 @@
       "ultracode": true,
       "commit": "956bab1",
       "spend_approx_tokens": 250000
+    },
+    {
+      "cycle": 25,
+      "date": "2026-06-19",
+      "focus": "M5 3p-camera-and-render-polish — VERIFIED the heavily-built 3P render/camera system; modest remainder deferred",
+      "tier": "M5 — Riding & rest feel",
+      "outcome": "SHIPPED",
+      "units": ["3p-camera-and-render-polish — assessed every named sub-item; ALL already built: cameraSnapNextFrame (flag + chase-cam lerp, SET on save-load + mount + dismount), held-items-in-3P (tpMesh on rightHandAttach + per-item handAttachTransform + thirdPersonScale; rig3p-confirmed), footstep<->gait sync (phase-locked to rig.stepCount, ACE Tier 4A). Speeder foot-lift = STRUCTURAL leg-reach limit (the seated-pose comment: '3-DOF leg can't hit the pads exactly'). Remaining = design/feel/speculative: 3P camera-orbit mode (control-scheme design), thirdPersonColorBoost (speculative; scale side done), foot-IK idle->walk snap (cosmetic). No blind build. Next M5: lie-down-to-sleep."],
+      "verify": "src byte-identical to C24's verify:all PASS (no source change — a verification cycle); tsc re-confirmed clean (C11/C23/C25 docs-only precedent)",
+      "visual": "rig3p --item=machete confirmed held-items-in-3P renders in the hand. The remainder (camera-orbit/color-boost/foot-IK-snap) is design/feel/cosmetic -> walk-test/backlog.",
+      "save": "no bump — no code change",
+      "ultracode": true,
+      "no_code_change": true,
+      "meta_note": "M5 polish units keep landing on heavily-built mature systems (riding + 3P) -> verify cycles; the user may want to re-prioritize toward M5a/Phase B (more net-new) at the milestone review.",
+      "commit": "PENDING",
+      "spend_approx_tokens": 90000
     }
   ]
 }
