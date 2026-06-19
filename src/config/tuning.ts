@@ -98,6 +98,22 @@ export const Tuning = {
   FIRE_GRILL_MAX_PARALLEL_COOKS: 4,  // how many items can cook simultaneously on a gridded fire
   FIRE_NEAR_DISTANCE_SQ: 1.5 * 1.5,  // reject deploy within sqrt(this)m of another fire
 
+  // M4 (C21) — smoke-signal-plume: a tall rising smoke column off every ALIVE fire,
+  // so a lit fire reads as a SIGNAL/landmark visible across the dunes. Billboarded
+  // soft puffs rising from the flame top, growing + fading + drifting with the wind.
+  // Transient (re-created for alive fires on load) → no save bump.
+  FIRE_SMOKE_POOL: 34,                // MANY small billboarded puffs per fire — a continuous structured streak, not a few big blobs
+  FIRE_SMOKE_SPAWN_INTERVAL_S: 0.3,   // a new puff this often (≥ pool·interval > ttl) — dense overlap so the column reads continuous even when sheared
+  FIRE_SMOKE_TTL_S: 8.5,              // puff lifetime; rise·ttl ≈ column height
+  FIRE_SMOKE_RISE_MIN: 2.0,           // m/s upward (→ ~17m), randomized per puff
+  FIRE_SMOKE_RISE_MAX: 2.8,           // m/s upward (→ ~24m)
+  FIRE_SMOKE_SCALE_START: 1.5,        // m sprite width at the flame top (enough body in the lower-mid column to read as a bold beacon, small enough for internal structure)
+  FIRE_SMOKE_SCALE_END: 5.0,          // m sprite width at the top of the column (billows out)
+  FIRE_SMOKE_OPACITY: 0.7,            // peak puff opacity — a bold SIGNAL column, visible from afar
+  FIRE_SMOKE_DRIFT: 0.9,              // m/s base lean along the prevailing dune wind
+  FIRE_SMOKE_STORM_DRIFT: 9.5,        // extra m/s drift at full storm intensity — the column tears hard downwind toward horizontal (the f^1.5 height-ramp keeps the root anchored at the fire, so it shears without detaching)
+  FIRE_SMOKE_COLOR: 0x86837c,         // neutral cool ash-grey — separates from BOTH the warm sky + the brown storm murk (fog:false so the murk can't tint it)
+
   // Session VV — tent entity constants (lifted from src/world/tent.ts).
   TENT_SHELTER_HALF_X: 1.8,
   TENT_SHELTER_HALF_Y: 1.4,

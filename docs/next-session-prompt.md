@@ -1,30 +1,28 @@
-# Campaign cycle-21 kickoff (overnight, ultracode) — `campaign/2026-06-18`
+# Campaign cycle-22 kickoff (overnight, ultracode) — `campaign/2026-06-18`
 
 ## Boot order (re-read every cycle from FILES)
 1. `docs/campaign/campaign-state.json` · 2. `docs/campaign/steering.md` · 3. `docs/roadmap.md` "Up next" · 4. `docs/iteration-plan.md` · 5. `CLAUDE.md` + `docs/decisions.md` tail (D240).
 
 ## Where we are
-- ✓ M1 · ✓ M2 content (yard-merge deferred D240) · ✓ M3 COMPLETE (worm + lure) · **M4 IN PROGRESS (C19-):** ✓ vulture-motion-feel (C19) · ✓ atmosphere-feeltunes (C20 — storm pre-built; fixed the dust "snow" read + a new `storm` render scenario).
-- **→ M4 next unit: `smoke-signal-plume`** (cycle 21).
+- ✓ M1 · ✓ M2 content · ✓ M3 COMPLETE · **M4 IN PROGRESS (C19-):** ✓ vulture-motion-feel · ✓ atmosphere-feeltunes · ✓ smoke-signal-plume (C21 — net-new fire beacon).
+- **→ M4 LAST unit: `amban-rifle-balance` (cycle 22)**, then **M4 COMPLETE → M5 (Riding & rest feel).**
 
-## Cycle 21 picks up: **M4 → `smoke-signal-plume`** (take the top remaining M4 unit)
-M4 remaining (in order): **smoke-signal-plume** · amban-rifle-balance.
-- **smoke-signal-plume** — likely **NET-NEW** (the M4 units before it were mostly pre-built). Probable shape: a placeable/lightable **smoke signal** (a fire that emits a tall rising smoke PLUME visible from afar — a navigation/signal beacon), OR a plume rising off existing fires/wrecks. **ASSESS FIRST** (the strong recurring lesson — C8/C17/C19/C20 were all substantially pre-built): grep `smoke`, `plume`, `signal`, `beacon` across `src/world/` + `src/audio/` + check `fire.ts`/deployables + the particle systems (`particleTrail.ts`, `footprintPuffs.ts`, the storm `dustMotes`/`ambientDust` pattern). If a smoke/plume system exists → tune/finish it; if not → build the minimal coherent version.
-- If NET-NEW: a particle plume (reuse the `THREE.Points` + soft-radial-texture pattern from `weather.ts` dust / `particleTrail.ts`), likely tied to a fire/deployable. **Save (D81):** a new placeable = additive; surface-bump only if a deployed-list field is added.
-- Gate: a rising plume is VISUAL → render it (a new rig-shot scenario like the C20 `storm` one, OR reuse an existing fire/world scenario) + adversarial gate (Rule 8 for a net-new visual). The plume's MOTION (rising/drift) → feel-pending walk-test.
+## Cycle 22 picks up: **M4 → `amban-rifle-balance`** (the LAST M4 unit)
+- **amban-rifle-balance** = tuning the existing AMBAN RIFLE weapon (damage / handling / fire-rate / recoil / ammo balance). **ASSESS FIRST** (the strong recurring lesson — assess what's shipped before changing). grep `amban` + `rifle` across `src/player/combat.ts` + `src/inventory/items.ts` + `src/config/tuning.ts` (look for `AMBAN_*` / `RIFLE_*` tunables). Understand the current damage/handling + how it compares to other weapons (machete, etc.) + the threat it's balanced against (the worm? vultures? — note raiders are NOT a world threat per D13).
+- This is a **tuning/balance** unit → mostly `tuning.ts` constants. **Balance is FEEL** (does it feel good to shoot / is it over/under-powered) → hard to judge fully headless. A render can show the rifle MODEL/viewmodel + a muzzle-flash; the damage/handling FEEL is walk-test. So: tune the identifiable balance levers (assess vs the design intent), gate any VISUAL change (viewmodel/flash) lightly, and mark the balance FEEL feel-pending walk-test. If the rifle is already well-balanced (likely, given the maturity), this is a verify-and-mark-mostly-done cycle (like C19) + maybe one targeted tweak.
+- **This completes M4.** After it ships → M4 COMPLETE → **M5 — Riding & rest feel** (speeder-riding-feel · rope-attach · 3p-camera-polish · lie-down-to-sleep · viewmodel-nits). M5 is the next tier; cycle 23 starts it. Still NOT a Phase boundary (the Phase A milestone is after M5b).
 
-## Rig-shot (reuse): **NEW `--scenario=storm`** (peak sandstorm look — C20). vulture `--scenario=vulture-pose --state=flying|circling|landing --angle=3q|side`. worm `--scenario=worm-model`. held item `--scenario=item-studio --item=<id>`. (Scenario filenames are by state/item — an angle re-render overwrites; render one at a time if the studio teardown flakes.)
+## Rig-shot (reuse): **NEW `--scenario=smoke-plume` (+`--storm`)** (fire smoke beacon — C21) · `--scenario=storm` (peak sandstorm — C20) · `item-studio --item=<id>` (held items incl. the rifle viewmodel) · vulture-pose · worm-model. NEW debug hooks: `__game.spawnFire([x,z])`, `__game.warmSmoke(seconds)`.
 
-## Verify gotcha (C18-20 — important, keeps biting)
-`npm run verify:all` → `verify:placement` runs **5 seeds sequentially via spawnSync** + **buffers ALL output to the very END** — an empty mid-run log means "still running," NOT "hung." Slow (~5-7 min). **Do NOT kill it** (killing spawns zombie vite/node procs that contend for the port + hang the next run). If it truly hangs: `taskkill //F //IM node.exe` → confirm `tasklist | grep -c node` is 0 → ONE clean run. **Clean lingering node procs BEFORE verify; don't run a rig-shot render concurrently with verify (port contention).**
+## Verify gotcha (C18-21 — keeps biting)
+`npm run verify:all` → `verify:placement` runs **5 seeds sequentially via spawnSync** + **buffers ALL output to the very END** — empty mid-run ≠ hung. Slow (~5-7 min). **Do NOT kill it** (zombies contend for the port). If it hangs: `taskkill //F //IM node.exe` → confirm `tasklist | grep -c node` is 0 → ONE clean run. Clean node BEFORE verify; don't render concurrently with verify. **Renders flake when run back-to-back (sequential) — render ONE scenario per command, not two chained.**
 
 ## Autonomy contract
-- **⚡ ULTRACODE** (overnight, max-quality): adversarial Workflow gate on VISUAL; code-auditor on AUDIO/logic; **Rule 8** for any NEW visual (smoke-plume likely qualifies). **Save (D81)** additive + surface-bump only if the schema grows. **Don't re-do already-done items — verify current state first** (every M4 unit so far was substantially pre-built).
-- **Don't blind-tune multi-session-tuned FEEL systems** (C20 lesson — left the storm sway alone; tuned only the headless-judgeable LOOK). Pauses at the **Phase A milestone** (after M5b). Backstop **max-cycles=50** (now at 20).
+- **⚡ ULTRACODE** (overnight, max-quality): adversarial Workflow gate on VISUAL; code-auditor on AUDIO/logic; **Rule 8** for any new visual. **Save (D81)** additive + surface-bump only if the schema grows. **Don't re-do already-done items — verify current state first.** **Don't blind-tune multi-session-tuned FEEL** (C20 lesson — tune the headless-judgeable parts, mark feel-pending).
+- Pauses at the **Phase A milestone** (after M5b). Backstop **max-cycles=50** (now at 21).
 
 ## Stop conditions
 Phase A milestone (pause) · max-cycles=50 · 3 fix-walls · placement/collider regression unclearable in 2 tries · SAVE_VERSION bump (do it, surface only) · destructive-git attempt.
 
 ## Open backlog of note
-- storm: residual dust specks over the darkest sky (frozen-frame, motion-masked — walk-test); horizon-seam sev1 (ground vs sky tonal split); vignette is gentle. Storm sway/wind/dust-in-motion → walk-test.
-- vulture: tucked-leg subtlety (nit); MOTION feel walk-test. worm: SANDWORM_COUNT balance · `worm_lure` craft recipe (dev-start only). yard-cross-poi-merge (D240). Full list: `docs/backlog.md`.
+- smoke-plume: storm bend reads slightly clumpy/blobby frozen + clear upper-third thins (motion-dependent — walk-test); MOTION rise cadence walk-test. storm dust specks (frozen, motion-masked). vulture tucked-leg subtlety. SANDWORM_COUNT balance · `worm_lure` craft recipe (dev-start only). yard-cross-poi-merge (D240). Full list: `docs/backlog.md`.

@@ -2,7 +2,7 @@
   "status": "active",
   "started": "2026-06-18",
   "branch": "campaign/2026-06-18",
-  "cycles_completed": 20,
+  "cycles_completed": 21,
   "current_tier": "M4 — Critters + atmosphere",
   "awaiting_approval": false,
   "stop_reasons": [],
@@ -16,7 +16,7 @@
   "circuit_breaker_n": 3,
   "consecutive_no_progress": 0,
   "ceiling": { "max_cycles": 50, "total": null, "per_cycle": null, "unit": "tokens" },
-  "spend": { "total": 4320000, "note": "approximate — agent cannot precisely self-meter. RESUMED overnight (ultracode max-quality). M3 worm: C13 ~320K (dorsal armor); C14 ~210K; C15 ~190K; C16 ~190K (audio, gate caught 3 sev2); C17 ~150K (multi-worm: infra pre-existing + rumble refactor); C18 ~300K (sarlacc-lure: 3-agent recon + net-new item + 4 model-gate rounds + a verify-zombie recovery); C19 ~120K (vulture-motion-feel: infra pre-existing, found+fixed the dangling-leg soar via flight-pose renders, 1 lean gate); C20 ~250K (atmosphere-feeltunes: storm pre-built; built a storm-render scenario + root-caused/fixed the dust snow-read across 3 gate rounds). Mostly-done units run lean (~150K); feel/audio/logic ~190K; hero-visual ~300-600K. Pre-ultracode (C1-C8) 50-290K. max-cycles=50; pauses at the Phase A milestone." },
+  "spend": { "total": 4670000, "note": "approximate — agent cannot precisely self-meter. RESUMED overnight (ultracode max-quality). M3 worm: C13 ~320K (dorsal armor); C14 ~210K; C15 ~190K; C16 ~190K (audio, gate caught 3 sev2); C17 ~150K (multi-worm: infra pre-existing + rumble refactor); C18 ~300K (sarlacc-lure: 3-agent recon + net-new item + 4 model-gate rounds + a verify-zombie recovery); C19 ~120K (vulture-motion-feel: infra pre-existing, found+fixed the dangling-leg soar via flight-pose renders, 1 lean gate); C20 ~250K (atmosphere-feeltunes: storm pre-built; built a storm-render scenario + root-caused/fixed the dust snow-read across 3 gate rounds); C21 ~350K (smoke-signal-plume NET-NEW: fire smoke system + debug hooks + rig scenario + 6 plume-gate rounds tuning the storm wind-tear). Mostly-done units run lean (~150K); feel/audio/logic ~190K; hero-visual ~300-600K. Pre-ultracode (C1-C8) 50-290K. max-cycles=50; pauses at the Phase A milestone." },
   "plan": {
     "authored": "2026-06-18",
     "amended": "2026-06-18 plan-review user steering + evidence audit + Phase-C promotion (see campaign-log.md Cycle 0)",
@@ -292,6 +292,20 @@
       "ultracode": true,
       "commit": "5877599",
       "spend_approx_tokens": 250000
+    },
+    {
+      "cycle": 21,
+      "date": "2026-06-19",
+      "focus": "M4 smoke-signal-plume (NET-NEW) — every lit fire emits a rising smoke beacon, torn flat in a storm",
+      "tier": "M4 — Critters + atmosphere",
+      "outcome": "SHIPPED",
+      "units": ["smoke-signal-plume — NET-NEW (the in-game fire had no smoke; title pyre + particleTrail anticipated it). Every ALIVE fire now emits a tall rising smoke column (a signal/landmark visible across the dunes), torn flat in a storm. Minimal design: reuses fire.ts (no new item), pooled billboard puffs parented to the fire group, rise+billow+fade+wind-drift. Transient -> no save bump. + Tuning.FIRE_SMOKE_*, __game.spawnFire/warmSmoke hooks, a smoke-plume rig scenario. Next M4 (last): amban-rifle-balance."],
+      "verify": "verify:all PASS (tsc + placement 0/0 x5 + colliders 0/25; render-time non-raycastable sprites, not a placement/collider POI or a procgen draw)",
+      "visual": "adversarial gate on the plume LOOK (clear + storm), 6 rounds (net-new visual, Rule 8). reads_as_smoke_signal=true every round; iteration was storm wind-response + boldness: faint->bold, R2 big-puffs blobbed -> R3 smaller/denser/cooler-grey + fog:false + f^2 root-anchor (too vertical) -> R4-5 stronger shear + flattened vertical reach (tears toward horizontal) -> R6 BOTH critics PASS (clear bold beacon; storm tears hard downwind; cool grey separates from warm sky + brown murk; no sprite edges). Footguns fixed: sprite.raycast no-op (interaction raycaster crash), deterministic warmFireSmoke (headless rAF throttling), noon+side-spawn (was backlit at the sun). MOTION feel (rise cadence/billow) feel-pending walk-test.",
+      "save": "no bump — transient smoke, re-created for alive fires on load",
+      "ultracode": true,
+      "commit": "PENDING",
+      "spend_approx_tokens": 350000
     }
   ]
 }

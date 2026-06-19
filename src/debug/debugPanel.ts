@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import type { GameContext } from '../GameContext.ts';
 import { spawnRaider as spawnRaiderEntity, damageRaider } from '../enemies/raider.ts';
+import { spawnFireAt, warmFireSmoke } from '../world/fire.ts';   // M4 (C21) — __game.spawnFire / warmSmoke test hooks
 import { damageVulture } from '../enemies/vulture.ts';
 import { makeLatheHull, fuselageProfile, makeFormerRings, makeBreach, makeSandMound } from '../world/wreckForms.ts';
 import { createRustedHullMaterial, HULL_WEATHERING_ACAY } from '../world/hullMaterial.ts';
@@ -69,6 +70,12 @@ interface DebugApi {
    *  ACF corpse-drag path, NOT a return of raiders as a world threat.
    *  Returns the new raider's id. */
   spawnRaider: (x: number, z: number) => number;
+  /** M4 (C21) — DEV-only: deploy a lit fire (default: in front of the player) so
+   *  the smoke-signal plume + fire visuals are renderable headless. Returns the id. */
+  spawnFire: (x?: number, z?: number) => number;
+  /** M4 (C21) — DEV-only: fast-forward all fires' smoke plumes by N seconds
+   *  (deterministic) so the full column renders headless despite rAF throttling. */
+  warmSmoke: (seconds: number) => void;
   /** ACG (Cycle 1) — DEV-only: kill a raider by id (drives the real death
    *  path → dead pose + corpse interaction tag), so the corpse-drag flow is
    *  testable without melee aiming. Returns true if a live raider matched. */
@@ -220,6 +227,24 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
       );
       ctx.raiders.push(r);
       return r.id;
+    },
+    spawnFire(x, z) {
+      // Default ~6m in front of the player so the rising plume frames cleanly.
+      const tr = ctx.player.body.body.translation();
+      let fx = x, fz = z;
+      if (fx === undefined || fz === undefined) {
+        const fwd = new THREE.Vector3();
+        ctx.three.camera.getWorldDirection(fwd); fwd.y = 0;
+        if (fwd.lengthSq() < 1e-4) fwd.set(0, 0, -1);
+        fwd.normalize();
+        fx = tr.x + fwd.x * 6; fz = tr.z + fwd.z * 6;
+      }
+      const pos = new THREE.Vector3(fx, ctx.terrain.heightAt(fx, fz), fz);
+      const f = spawnFireAt(ctx, pos, Tuning.FIRE_INITIAL_FUEL_S, true);
+      return f.id;
+    },
+    warmSmoke(seconds) {
+      warmFireSmoke(ctx, seconds);
     },
     killRaider(id) {
       const r = ctx.raiders.find((rr) => rr.id === id);

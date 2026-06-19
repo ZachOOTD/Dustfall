@@ -1594,6 +1594,62 @@ const SCENARIOS = {
     console.log(`[storm] ${JSON.stringify(r)}`);
   },
 
+  // Smoke-plume (C21): deploy a lit fire + let its smoke-signal column build, then
+  // frame it from a distance against the sky (the "visible-from-afar" signal read).
+  // Tall frame for a vertical plume. --storm forces a peak storm (the plume tears flat).
+  'smoke-plume': async (page) => {
+    const stormy = !!argv.storm;
+    await page.evaluate((stormy) => {
+      const ctx = window.__game.ctx;
+      window.__game.setTime(0.5);         // noon — sun overhead (not behind the plume → front/side-lit, not backlit)
+      ctx.weather.cloudiness = 0.12;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      ctx.three.renderer.setSize(720, 840, false);   // tall frame for a vertical plume
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 720 / 840; cam.updateProjectionMatrix(); }
+      // Offset the fire to the player's side + ahead (clear of the wreck the player spawns by).
+      const tr = ctx.player.body.body.translation();
+      const V = ctx.three.camera.position.constructor;
+      const fwd = new V(); ctx.three.camera.getWorldDirection(fwd); fwd.y = 0; fwd.normalize();
+      const fx = tr.x + fwd.z * 20 + fwd.x * 6;
+      const fz = tr.z - fwd.x * 20 + fwd.z * 6;
+      window.__fireId = window.__game.spawnFire(fx, fz);
+      if (stormy) {
+        const w = ctx.weather; const tr = ctx.player.body.body.translation();
+        w.state = 'storm'; w.intensity = 1; w.perceivedIntensity = 1; w.currentStormDuration = 1e6; w.stateTimer = 0;
+        w.wall.active = true; w.wall.posX = tr.x; w.wall.posZ = tr.z; w.wall.dirX = 1; w.wall.dirZ = 0; w.wall.width = 400; w.wall.age = 0;
+      } else {
+        ctx.weather.intensity = 0;
+      }
+      // Deterministically build the column (headless rAF throttling starves the
+      // real-time accumulation) — fast-forward ~10s of plume.
+      window.__game.warmSmoke(10);
+    }, stormy);
+    await page.waitForTimeout(400);
+    const r = await page.evaluate((stormy) => {
+      const ctx = window.__game.ctx;
+      const f = ctx.fires.list.find((x) => x.id === window.__fireId) || ctx.fires.list[0];
+      if (stormy) { ctx.weather.intensity = 1; ctx.weather.perceivedIntensity = 1; }
+      ctx.flags.paused = true;
+      const cam = ctx.three.camera;
+      const p = f.pos;
+      // Stand back ~15m + a touch up; look at the lower-mid column so the full plume
+      // rises through the upper frame against the sky.
+      cam.position.set(p.x - 12, p.y + 3, p.z - 2);
+      cam.lookAt(p.x, p.y + 7, p.z);
+      cam.updateMatrixWorld(true);
+      ctx.three.renderer.render(ctx.three.scene, cam);
+      let active = 0, topY = 0;
+      if (f.smoke) for (const s of f.smoke) if (s.active) { active++; topY = Math.max(topY, s.sprite.position.y); }
+      return { fireId: f.id, alive: f.alive, activePuffs: active, columnHeight: +topY.toFixed(1) };
+    }, stormy);
+    await page.waitForTimeout(120);
+    await page.screenshot({ path: join(OUT, `scen-smoke-plume${stormy ? '-storm' : ''}.png`), fullPage: false });
+    console.log(`[smoke-plume] ${JSON.stringify(r)}`);
+  },
+
   // Vulture (ACAH): frame a perched vulture on its tree for model iteration.
   // --angle=3q|side|front; head faces +X (rotation forced to 0 for a stable read).
   'vulture': async (page) => {

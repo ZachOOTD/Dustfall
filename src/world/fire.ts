@@ -15,6 +15,58 @@ import { playFireIgnite, playFireCrackle } from '../audio/audio.ts';
 import { claimLight, releaseLight } from '../core/lightPool.ts';
 import { createMetalMaterial } from './metalMaterial.ts';
 
+/** M4 (C21) — one billowing puff in a fire's rising signal plume (pooled). */
+interface SmokePuff {
+  sprite: THREE.Sprite;
+  age: number;
+  ttl: number;
+  rise: number;     // m/s upward (randomized per puff)
+  active: boolean;
+}
+
+// Soft round smoke sprite (grey radial falloff). One shared texture across all fires.
+let _smokeTex: THREE.CanvasTexture | null = null;
+function smokeTexture(): THREE.CanvasTexture {
+  if (_smokeTex) return _smokeTex;
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d');
+  if (!g) throw new Error('canvas 2d unavailable');
+  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grad.addColorStop(0, 'rgba(255,255,255,0.85)');
+  grad.addColorStop(0.5, 'rgba(255,255,255,0.38)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 64, 64);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return (_smokeTex = tex);
+}
+
+/** Build a hidden pool of smoke sprites parented to the fire group (local space:
+ *  they rise in +Y + drift in XZ off the flame top). */
+function buildSmokePool(group: THREE.Group): SmokePuff[] {
+  const pool: SmokePuff[] = [];
+  for (let i = 0; i < Tuning.FIRE_SMOKE_POOL; i++) {
+    const mat = new THREE.SpriteMaterial({
+      map: smokeTexture(),
+      color: Tuning.FIRE_SMOKE_COLOR,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      fog: false,        // a signal beacon punches through haze; also stops the brown storm-fog from tinting the grey smoke
+    });
+    const s = new THREE.Sprite(mat);
+    s.scale.setScalar(Tuning.FIRE_SMOKE_SCALE_START);
+    s.position.set(0, 0.55, 0);
+    s.visible = false;
+    s.raycast = () => {};   // decorative — never an interaction target (and avoids the sprite-raycast camera warning)
+    group.add(s);
+    pool.push({ sprite: s, age: 0, ttl: 0, rise: 0, active: false });
+  }
+  return pool;
+}
+
 export interface Fire {
   id: number;
   mesh: THREE.Group;
@@ -38,6 +90,12 @@ export interface Fire {
   hasGrill: boolean;
   /** AAM — the visible grate group, lazily created when grill attaches. */
   grillMesh: THREE.Group | null;
+  /** M4 (C21) — signal-plume smoke puffs (pooled, parented to mesh). Built at spawn
+   *  for alive fires, lazily on relight. Transient — re-created for alive fires on
+   *  load, so no save bump. */
+  smoke: SmokePuff[] | null;
+  /** Elapsed time of the next smoke-puff emission. */
+  _nextSmokeAt: number;
 }
 
 let _nextId = 1;
@@ -198,6 +256,9 @@ export function spawnFireAt(
     _nextCrackleAt: ctx.time.elapsed + 0.5 + Math.random() * 2,
     hasGrill: false,       // AAM — grill attached later via attachGrillToFire
     grillMesh: null,
+    // M4 (C21) — alive fires emit a signal plume; dead fires build it on relight.
+    smoke: alive ? buildSmokePool(visual.group) : null,
+    _nextSmokeAt: ctx.time.elapsed,
   };
   ctx.fires.list.push(fire);
   return fire;
@@ -248,6 +309,9 @@ export function relightFire(fire: Fire, ctx: GameContext): boolean {
   // Switch tag back to cook (alive fire is cookable).
   tag(fire.mesh, fire.id, 'cook');
   fire._nextCrackleAt = ctx.time.elapsed + 0.5 + Math.random() * 2;
+  // M4 (C21) — resume the signal plume (build the pool if this fire spawned dead).
+  if (!fire.smoke) fire.smoke = buildSmokePool(fire.mesh);
+  fire._nextSmokeAt = ctx.time.elapsed;
   playFireIgnite();
   return true;
 }
@@ -311,9 +375,80 @@ export function attachGrillToFire(ctx: GameContext, fire: Fire): void {
   fire.hasGrill = true;
 }
 
+/** M4 (C21) — spawn + advance a fire's rising signal plume. Spawns new puffs only
+ *  while the fire is alive; always ticks the live puffs so a just-died fire's column
+ *  drifts up + fades out instead of snapping off. Puffs rise, billow (grow), lean
+ *  along the prevailing dune wind (torn flat in a storm), and fade in→out over life. */
+function updateFireSmoke(ctx: GameContext, fire: Fire, dt: number, t: number): void {
+  const pool = fire.smoke;
+  if (!pool) return;
+  // Wind: a gentle prevailing lean, plus a hard storm lean (the plume tears flat).
+  const stormI = ctx.weather ? ctx.weather.intensity : 0;
+  const windSpeed = Tuning.FIRE_SMOKE_DRIFT + Tuning.FIRE_SMOKE_STORM_DRIFT * stormI;
+  const wx = Math.cos(Tuning.DUNE_WIND_DIR_RAD) * windSpeed;
+  const wz = Math.sin(Tuning.DUNE_WIND_DIR_RAD) * windSpeed;
+
+  if (fire.alive && t >= fire._nextSmokeAt) {
+    fire._nextSmokeAt = t + Tuning.FIRE_SMOKE_SPAWN_INTERVAL_S;
+    const p = pool.find((q) => !q.active);
+    if (p) {
+      p.active = true;
+      p.age = 0;
+      p.ttl = Tuning.FIRE_SMOKE_TTL_S;
+      p.rise = Tuning.FIRE_SMOKE_RISE_MIN + Math.random() * (Tuning.FIRE_SMOKE_RISE_MAX - Tuning.FIRE_SMOKE_RISE_MIN);
+      p.sprite.visible = true;
+      p.sprite.position.set((Math.random() - 0.5) * 0.3, 0.55, (Math.random() - 0.5) * 0.3);
+      p.sprite.scale.setScalar(Tuning.FIRE_SMOKE_SCALE_START);
+    }
+  }
+
+  for (const p of pool) {
+    if (!p.active) continue;
+    p.age += dt;
+    if (p.age >= p.ttl) { p.active = false; p.sprite.visible = false; continue; }
+    const f = p.age / p.ttl;                 // 0..1 life fraction
+    const pos = p.sprite.position;
+    // A strong storm flattens the vertical reach (the plume is pushed over, not lofted)
+    // so it tilts toward horizontal — "torn flat" — instead of standing taller than calm.
+    pos.y += p.rise * (1 - 0.4 * stormI) * dt;
+    // Drift ramps with height (f^1.5): the root stays anchored at the fire while the
+    // mid+upper column leans/shears progressively downwind — a continuous diagonal tear
+    // in a storm, not a vertical stack that kinks only at the very top.
+    const lean = f * Math.sqrt(f);
+    pos.x += wx * lean * dt;
+    pos.z += wz * lean * dt;
+    p.sprite.scale.setScalar(
+      Tuning.FIRE_SMOKE_SCALE_START + (Tuning.FIRE_SMOKE_SCALE_END - Tuning.FIRE_SMOKE_SCALE_START) * f,
+    );
+    // Fade in fast, hold the column OPAQUE through its mid-height (a solid signal),
+    // then ease out only over the top ~45% so the plume thins into the sky.
+    const fadeIn = Math.min(1, f / 0.08);
+    const fadeOut = f < 0.65 ? 1 : (1 - f) / 0.35;   // hold opaque higher up the column (a bolder beacon), then taper the top
+    (p.sprite.material as THREE.SpriteMaterial).opacity = Tuning.FIRE_SMOKE_OPACITY * fadeIn * fadeOut;
+  }
+}
+
+/** TEST/render helper — fast-forward every alive fire's smoke column by `seconds`
+ *  of deterministic simulation. rig-shot uses this because headless rAF throttling
+ *  starves the real-time accumulation needed to build the full column. */
+export function warmFireSmoke(ctx: GameContext, seconds: number): void {
+  const dt = 1 / 30;
+  for (const fire of ctx.fires.list) {
+    if (!fire.smoke || !fire.alive) continue;
+    let t = ctx.time.elapsed;
+    fire._nextSmokeAt = t;
+    for (let s = 0; s < seconds; s += dt) {
+      t += dt;
+      updateFireSmoke(ctx, fire, dt, t);
+    }
+    fire._nextSmokeAt = ctx.time.elapsed;   // resume the normal cadence in-game
+  }
+}
+
 export function updateFires(ctx: GameContext, dt: number): void {
   const t = ctx.time.elapsed;
   for (const fire of ctx.fires.list) {
+    if (fire.smoke) updateFireSmoke(ctx, fire, dt, t);
     if (fire.alive) {
       fire.fuelSeconds -= dt;
       if (fire.fuelSeconds <= 0) {
