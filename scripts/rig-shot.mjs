@@ -1848,6 +1848,31 @@ const SCENARIOS = {
     console.log('[wordless] ' + JSON.stringify(r));
   },
 
+  // Fireball/bolide (C34): force a rare fireball at midnight, aim the camera at its
+  // arc, let it advance to ~peak, and capture the night-sky moment.
+  'fireball': async (page) => {
+    const r = await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      window.__game.setTime(0.0);               // midnight
+      ctx.weather.intensity = 0; ctx.weather.cloudiness = 0;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      ctx.three.renderer.setSize(860, 760, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 860 / 760; cam.updateProjectionMatrix(); }
+      const res = window.__game.triggerFireball();
+      if (!res) return { found: false };
+      const d = res.dir, R = 460, p = cam.position;
+      cam.lookAt(p.x + d[0] * R, p.y + d[1] * R, p.z + d[2] * R);   // aim at the fireball's peak point
+      cam.updateMatrixWorld(true);
+      return { found: true, dir: d.map((x) => +x.toFixed(2)) };
+    });
+    await page.waitForTimeout(700);             // let night settle + the fireball advance to ~peak
+    await page.screenshot({ path: join(OUT, 'scen-fireball.png'), fullPage: false });
+    console.log('[fireball] ' + JSON.stringify(r));
+  },
+
   // Vulture (ACAH): frame a perched vulture on its tree for model iteration.
   // --angle=3q|side|front; head faces +X (rotation forced to 0 for a stable read).
   'vulture': async (page) => {

@@ -3,6 +3,12 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign C34 — 2026-06-19 — M5b: **rare-sky-phenomena** — a dramatic rare FIREBALL/bolide ✓ verify pass (ultracode)
+
+`verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/25 — a sky-render addition; the sky already uses `Math.random` for runtime visuals, no scatter-rand/geometry/collider). Visual: adversarial gate (2 critics) — **iterated 2 rounds → PASS** (both critics `reads_as_fireball=true`, no sev2; residual = sev1 polish + a motion-dependent trail-length). **No save bump.** Cycle 34/50. **M5b unit 3/5.**
+
+**rare-sky-phenomena.** **ASSESS-FIRST:** the sky already has small fast **shooting stars** (Session V — pool, arcs, twinkle) + moon + planet. So the NET-NEW awe event is a distinct, dramatic **FIREBALL/bolide** (`sky.ts`): a rare (200-540s interval, night-only), slow (~3-4.5s, ≈4× the small shooters) bolide with a **white-hot core** sprite inside a **warm amber halo head**, a **tapering ribbon of fading glow-puffs** (the trail, reddening toward the tail), and an **entry-flash bloom** — the "whoa, did you see that?!" moment that rewards looking up. Brightness scales with `nightVisibility` (invisible by day / under storm); spawns via `Math.random` like the existing shooters (runtime visual, not placement determinism). **Iteration (Rule 8, 2 rounds):** r1 read as "a soft amber dot / planet" (no hot core, a 1px hairline trail, too small) → r2 added the white-hot core, replaced the Line with the glow-puff ribbon, and scaled it up → **gate PASS** (a dramatic incandescent bolide). NEW `__game.triggerFireball()` debug hook + a `--scenario=fireball` rig-shot. **Residual (backlog):** a tighter core + a crisper anisotropic bloom (sev1 polish); the FEEL of the streak in motion → walk-test. **Follow-up phenomena** (aurora / blood moon / horizon heat-lightning) are future. Next M5b: diurnal-cycle.
+
 ## Campaign C33 — 2026-06-19 — M5b: **wind-mood-soundscape** — a PROCEDURAL wind bed that shifts timbre by time of day ✓ verify pass (ultracode)
 
 `verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/25 — an audio-graph change; no scatter-rand, no geometry/collider). Logic/audio unit → **code-auditor review: READY TO SHIP / CLEAN** (8 checks: produces sound, leak-free, `setTargetAtTime` smooth + bounded, mood curve correct, null-safe, storm-muffle applies). **No save bump.** Cycle 33/50. **M5b unit 2/5.**

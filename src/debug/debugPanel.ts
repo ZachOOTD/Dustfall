@@ -6,6 +6,7 @@ import type { GameContext } from '../GameContext.ts';
 import { spawnRaider as spawnRaiderEntity, damageRaider } from '../enemies/raider.ts';
 import { spawnFireAt, warmFireSmoke } from '../world/fire.ts';   // M4 (C21) — __game.spawnFire / warmSmoke test hooks
 import { getSunOccluders } from '../world/horizonSilhouettes.ts';   // M5a (C31) — __game.sunInfo
+import { debugTriggerFireball } from '../world/sky.ts';   // M5b (C34) — __game.triggerFireball
 import { damageVulture } from '../enemies/vulture.ts';
 import { makeLatheHull, fuselageProfile, makeFormerRings, makeBreach, makeSandMound } from '../world/wreckForms.ts';
 import { createRustedHullMaterial, HULL_WEATHERING_ACAY } from '../world/hullMaterial.ts';
@@ -81,6 +82,9 @@ interface DebugApi {
    *  fully shaded) + the registered sun-occluder wreck boxes (their ground shadows
    *  relieve heat). For the sun-shade walk-test + headless verification. */
   sunInfo: () => { exposure: number; occluders: number; boxes: Array<{ cx: number; cy: number; cz: number; hx: number; hy: number; hz: number }> };
+  /** M5b (C34) — DEV-only: force a rare fireball/bolide now + return its head's peak
+   *  direction (so the rig-shot can aim). For the sky walk-test + headless render. */
+  triggerFireball: () => { dir: [number, number, number] } | null;
   /** ACG (Cycle 1) — DEV-only: kill a raider by id (drives the real death
    *  path → dead pose + corpse interaction tag), so the corpse-drag flow is
    *  testable without melee aiming. Returns true if a live raider matched. */
@@ -189,6 +193,7 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
       occluders: getSunOccluders().length,
       boxes: getSunOccluders().map((o) => ({ cx: o.cx, cy: o.cy, cz: o.cz, hx: o.hx, hy: o.hy, hz: o.hz })),
     }),
+    triggerFireball: () => debugTriggerFireball(),
     setStats: (s) => {
       if (s.thirst !== undefined) ctx.stats.thirst = s.thirst;
       if (s.temperature !== undefined) ctx.stats.temperature = s.temperature;
