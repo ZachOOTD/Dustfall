@@ -3,6 +3,12 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign C23 — 2026-06-19 — M5 START: **speeder-riding-feel** — VERIFIED the exhaustively-tuned ride system (bike-truth) · handling feel-pending ✓ (ultracode)
+
+`verified` — `npm run verify:all` baseline: **src byte-identical to C22's PASS** (no source change — a verification cycle); tsc re-confirmed clean. Visual: the bike-truth rig-on-bike inspection (5 angles + a numeric IK check). **No save bump.** Cycle 23/50. **M5 unit 1/5.**
+
+**speeder-riding-feel — the riding system is EXHAUSTIVELY tuned** (sessions AAL/BB-CC/CC-2): hover physics with a 4-sample terrain-follow LOOKAHEAD, velocity-control + proportional yaw turning (rate cap + response + lerp), pitch/roll TILT (nose-down under thrust, lean into strafe) + a camera-roll ratio, dust trail + engine glow + antenna beacon, mount/dismount, unmounted damping, and a **pose-SWEEP-solved rider pose** — ~40 `SPEEDER_*` constants. **Verified, not re-tuned** (the recurring pattern; and the handling FEEL is the one thing headless can't judge — don't blind-tune a multi-session-tuned system, the C20/C22 lesson). **Headless verification (bike-truth):** the rider pose reads correct — `faceDotBikeFwd=1` (faces forward), hands **5cm** from the grips (on the bars), feet **22cm** from the pegs (they sit ~14cm BELOW the pegs → read as TUCKED, acceptable for a hunched rider, not a floating defect). **The one genuine residual:** the rider's feet hang slightly below the foot-pegs rather than resting on them → queued as a focused **ride-pose foot-lift** polish (backlog §A — NOT blind-nudged here: the pose is sweep-baked, so it needs the bike-truth iterate-verify loop, not a guess). **Handling FEEL** (accel/turn/boost/terrain-follow/tilt — the core of "riding feel") → feel-pending Phase-A walk-test. Next M5: rope-attach-speeder-rear-bar.
+
 ## Campaign C22 — 2026-06-19 — M4: **amban-rifle-balance** — found + corrected its strict dominance → **M4 COMPLETE** ✓ gates pass (ultracode)
 
 `verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/25 — a weapon-balance constant, not a placement/collider POI or a procgen draw). Visual: N/A — a balance/tuning unit (no appearance change); the rifle MODEL was render-checked (reads as a long rifle). **No save bump.** Cycle 22/50. **LAST M4 unit → M4 COMPLETE.**
