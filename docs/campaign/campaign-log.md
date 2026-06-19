@@ -375,5 +375,5 @@ first stop will be `max-cycles` ~mid-Phase-A; resume via `/campaign-start --resu
 - **Verify:** `verify:all` PASS — tsc · placement 0/0 ×5 · colliders 0/25 (a render-time held-item mirror + a test-only rig-shot flag, not a placement/collider POI).
 - **Visual iteration:** `rig3p --item=torch --lit` confirmed a **live glowing flame in the 3P hand** (was a dark unlit stick). **FLAME flicker MOTION** → feel-pending walk-test (the mirror is exact, so the 3P matches the FP).
 - **Spend:** ~150K (assess the torch/vm system + the mirror fix + the rig-shot flag + a render); campaign total ~5.65M; cycle **27/50**.
-- **Commit:** `PENDING`.
+- **Commit:** `9cd358d`.
 - **✓ MILESTONE M5 COMPLETE (C23-27):** speeder-riding-feel · rope-attach · 3p-render-polish · lie-down-to-sleep · viewmodel-nits. **Next (cycle 28):** `M5a — Exploration & exposure` (horizon-landmark-silhouettes first — more net-new). **Verdict: CONTINUE** — M5 done but it is NOT the last tier before the Phase-A `### Milestone:` marker (M5a + M5b remain), so the phase-level review does NOT pause here. **Getting close to the Phase A milestone pause (after M5b).**

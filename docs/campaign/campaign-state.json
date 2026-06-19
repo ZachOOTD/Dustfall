@@ -393,7 +393,7 @@
       "visual": "rig3p --item=torch --lit confirmed the 3P flame now shows + glows in the hand (was a dark stick). FLAME flicker MOTION feel-pending walk-test (the mirror is exact -> matches the FP).",
       "save": "no bump — render-time mirror",
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "9cd358d",
       "spend_approx_tokens": 150000
     }
   ]
