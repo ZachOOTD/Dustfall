@@ -19,6 +19,7 @@ import { createBiomeSampler } from './world/biomes.ts';
 import { placePOIs, getAnchorPOIPositions, getWreckYardCarcasses } from './world/poi.ts';
 import { placeProcgenPOIs } from './world/procgenPoi.ts';
 import { placeHeroLandmarks } from './world/heroLandmarks.ts';
+import { placeWordlessScenes } from './world/wordlessScenes.ts';   // M5b (C32) — environmental-storytelling tableaux
 import { updateHorizonSilhouettes, addHorizonSilhouettesByName } from './world/horizonSilhouettes.ts';   // M5a (C28) — skyline nav silhouettes
 import { initSpyglass, updateSpyglass } from './player/spyglass.ts';   // M5a (C29) — hold-RMB spyglass zoom
 import { updateVistaReveal } from './world/vistaReveal.ts';   // M5a (C30) — crest-a-ridge fog-lift + swell
@@ -190,7 +191,10 @@ const cacti = spawnCacti(three.scene, physics.world, terrain, scatterRand, biome
 // OO-4 — rocky biome rocks. Replaces the cracked-rock procedural
 // shader with actual scatter geometry (read too similarly to salt
 // flats as a shader pattern). No colliders — visual props only.
-spawnRockScatter(three.scene, terrain, biomes, scatterRand);
+const scatterRocks = spawnRockScatter(three.scene, terrain, biomes, scatterRand);
+// M5b (C32) — wordless prop scenes (a dedicated seeded RNG → does NOT perturb the
+// scatter stream; decoration-only, no colliders; clears scatter rocks off each stage).
+placeWordlessScenes(three.scene, terrain, worldSeed, scatterRocks);
 
 // Hand-placed distant POIs (Session P). Adds a bandage pickup at the
 // abandoned camp. Massive POI wrecks register as salvageables too.

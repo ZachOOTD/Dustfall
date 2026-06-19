@@ -67,6 +67,12 @@ export const Tuning = {
   SUN_EXPOSURE_MAX_M: 140,           // max raymarch distance (a far dune can still cast shade at low sun)
   SUN_EXPOSURE_CLEAR_M: 22,          // once the ray clears terrain by this much, stop (sky ahead) — high enough that low-sun rays march far enough to catch distant dune/ridge shadows
   SUN_EXPOSURE_LERP: 3.0,            // ease rate for sunExposure01 toward its target (no pop stepping in/out of shade)
+  // M5b (C32) — wordless prop scenes (environmental-storytelling tableaux scattered
+  // in the mid-field; decoration-only, placed from a dedicated seeded RNG).
+  WORDLESS_SCENE_COUNT: 4,
+  WORDLESS_SCENE_RADIUS_MIN: 110,    // m — nearest a scene spawns from origin (past the spawn area)
+  WORDLESS_SCENE_RADIUS_MAX: 460,    // m — farthest
+  WORDLESS_SCENE_CLEAR_M: 5.0,       // m — clear scatter rocks within this of a scene (a clean tableau stage)
   DEHYDRATION_DAMAGE: 1 / 30,
   HEATSTROKE_DAMAGE: 1 / 25,
   // Hunger

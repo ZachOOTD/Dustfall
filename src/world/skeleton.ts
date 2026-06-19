@@ -74,23 +74,33 @@ export function makeSkeleton(): THREE.Group {
     torsoTop.add(ring);
   }
 
-  // ── Skull: at top of the spine, tilted chin-to-chest (forward). ─────────
-  const skull = new THREE.Mesh(new THREE.IcosahedronGeometry(0.13, 1), _boneMat);
-  skull.position.set(0, 0.78, 0);
+  // ── Skull: seated just above the ribcage top (was 0.78 — a floating-head gap;
+  // lowered to 0.64 so it reads as a skull on a neck, not a hovering ball). Slightly
+  // ellipsoidal (taller than wide) so it reads as a skull, not a sphere. ──────────
+  const skull = new THREE.Mesh(new THREE.IcosahedronGeometry(0.11, 1), _boneMat);
+  skull.scale.set(0.92, 1.08, 1.0);
+  skull.position.set(0, 0.64, 0.01);
   skull.rotation.x = 0.25;       // additional forward tilt on top of spine lean
   spineBase.add(skull);
-  // Eye sockets
-  for (const dx of [-0.04, 0.04]) {
-    const socket = new THREE.Mesh(
-      new THREE.SphereGeometry(0.025, 6, 4),
-      _socketMat,
-    );
-    socket.position.set(dx, 0.78, 0.10);
+  // Eye sockets — dark RECESSED discs (read as hollow eyes at a glance, not protruding
+  // balls). Brow ridge above + a nasal void below flip the read from "ball" to "skull".
+  for (const dx of [-0.043, 0.043]) {
+    const socket = new THREE.Mesh(new THREE.CircleGeometry(0.032, 10), _socketMat);
+    socket.position.set(dx, 0.655, 0.088);
+    socket.rotation.x = -0.12;
     spineBase.add(socket);
   }
+  const nasal = new THREE.Mesh(new THREE.ConeGeometry(0.02, 0.045, 3), _socketMat);
+  nasal.position.set(0, 0.608, 0.094);
+  nasal.rotation.set(Math.PI, 0, 0);          // inverted triangle (point down)
+  spineBase.add(nasal);
+  const brow = box(0.105, 0.02, 0.032);       // bone brow ridge over the sockets
+  brow.position.set(0, 0.7, 0.072);
+  brow.rotation.x = 0.22;
+  spineBase.add(brow);
   // Jaw — small box under the skull
-  const jaw = box(0.10, 0.04, 0.07);
-  jaw.position.set(0, 0.68, 0.05);
+  const jaw = box(0.092, 0.045, 0.067);
+  jaw.position.set(0, 0.562, 0.052);
   spineBase.add(jaw);
 
   // ── Left arm: bent at elbow, hand on lap. Lives in world space (not on

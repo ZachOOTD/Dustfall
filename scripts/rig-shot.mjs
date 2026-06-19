@@ -1808,6 +1808,46 @@ const SCENARIOS = {
     console.log('[sun-probe] ' + JSON.stringify(r));
   },
 
+  // Wordless prop scene (C32): frame a storytelling tableau (skeleton + props).
+  // --idx=N picks the Nth scene; --angle=3q|front|side. Rotation forced to 0 +
+  // morning sun (front-light, not noon-flat) per the harness footgun.
+  'wordless': async (page) => {
+    const idx = argv.idx !== undefined ? Number(argv.idx) : 0;
+    const ang = argv.angle || '3q';
+    const r = await page.evaluate(({ idx, ang }) => {
+      const ctx = window.__game.ctx;
+      window.__game.setTime(0.42);            // morning sun — front/side light, not flat noon
+      ctx.weather.intensity = 0; ctx.weather.cloudiness = 0.15;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      ctx.three.renderer.setSize(840, 760, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 840 / 760; cam.updateProjectionMatrix(); }
+      const V = cam.position.constructor;
+      const scenes = [];
+      ctx.three.scene.traverse((o) => { if (o.name === 'wordlessScene') scenes.push(o); });
+      const s = scenes[idx];
+      if (!s) return { found: false, count: scenes.length };
+      s.rotation.y = 0;                       // face +Z for a stable read
+      s.updateMatrixWorld(true);
+      const c = s.getWorldPosition(new V());
+      const D = 2.7;
+      let cp;
+      if (ang === 'front') cp = [c.x, c.y + 1.15, c.z + D];
+      else if (ang === 'side') cp = [c.x + D, c.y + 1.0, c.z + 0.2];
+      else cp = [c.x + D * 0.72, c.y + 1.35, c.z + D * 0.72];   // 3q
+      cam.position.set(cp[0], cp[1], cp[2]);
+      cam.lookAt(c.x, c.y + 0.45, c.z);
+      cam.updateMatrixWorld(true);
+      ctx.flags.paused = true;
+      return { found: true, idx, count: scenes.length, center: [+c.x.toFixed(0), +c.y.toFixed(1), +c.z.toFixed(0)] };
+    }, { idx, ang });
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: join(OUT, `scen-wordless-${idx}-${ang}.png`), fullPage: false });
+    console.log('[wordless] ' + JSON.stringify(r));
+  },
+
   // Vulture (ACAH): frame a perched vulture on its tree for model iteration.
   // --angle=3q|side|front; head faces +X (rotation forced to 0 for a stable read).
   'vulture': async (page) => {
