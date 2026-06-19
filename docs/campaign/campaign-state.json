@@ -2,7 +2,7 @@
   "status": "active",
   "started": "2026-06-18",
   "branch": "campaign/2026-06-18",
-  "cycles_completed": 18,
+  "cycles_completed": 19,
   "current_tier": "M4 — Critters + atmosphere",
   "awaiting_approval": false,
   "stop_reasons": [],
@@ -16,7 +16,7 @@
   "circuit_breaker_n": 3,
   "consecutive_no_progress": 0,
   "ceiling": { "max_cycles": 50, "total": null, "per_cycle": null, "unit": "tokens" },
-  "spend": { "total": 3950000, "note": "approximate — agent cannot precisely self-meter. RESUMED overnight (ultracode max-quality). M3 worm: C13 ~320K (dorsal armor); C14 ~210K; C15 ~190K; C16 ~190K (audio, gate caught 3 sev2); C17 ~150K (multi-worm: infra pre-existing + rumble refactor); C18 ~300K (sarlacc-lure: 3-agent recon + net-new item + 4 model-gate rounds + a verify-zombie recovery). Mostly-done units run lean (~150K); feel/audio/logic ~190K; hero-visual ~300-600K. Pre-ultracode (C1-C8) 50-290K. max-cycles=50; pauses at the Phase A milestone." },
+  "spend": { "total": 4070000, "note": "approximate — agent cannot precisely self-meter. RESUMED overnight (ultracode max-quality). M3 worm: C13 ~320K (dorsal armor); C14 ~210K; C15 ~190K; C16 ~190K (audio, gate caught 3 sev2); C17 ~150K (multi-worm: infra pre-existing + rumble refactor); C18 ~300K (sarlacc-lure: 3-agent recon + net-new item + 4 model-gate rounds + a verify-zombie recovery); C19 ~120K (vulture-motion-feel: infra pre-existing, found+fixed the dangling-leg soar via flight-pose renders, 1 lean gate). Mostly-done units run lean (~150K); feel/audio/logic ~190K; hero-visual ~300-600K. Pre-ultracode (C1-C8) 50-290K. max-cycles=50; pauses at the Phase A milestone." },
   "plan": {
     "authored": "2026-06-18",
     "amended": "2026-06-18 plan-review user steering + evidence audit + Phase-C promotion (see campaign-log.md Cycle 0)",
@@ -264,6 +264,20 @@
       "ultracode": true,
       "commit": "9d5576e",
       "spend_approx_tokens": 300000
+    },
+    {
+      "cycle": 19,
+      "date": "2026-06-19",
+      "focus": "M4 START vulture-motion-feel — infra pre-existing (ACAI); fixed the dangling-leg soar tuck",
+      "tier": "M4 — Critters + atmosphere",
+      "outcome": "SHIPPED",
+      "units": ["vulture-motion-feel — the flight system was already deeply built (ACAH model + ACAI flight FSM: perched/flying/landing/dead + carcass ecology circling/swooping/carrying/feeding/returning, banking via applyFlightOrientation, flap/glide envelopes, dihedral, landing flare, gaggle separation). Verified, not rebuilt (like multi-worm/chroma/dish). FIXED the genuine gap: legs DANGLED+splayed in the soaring states (mirrored leg-tuck signs swung the feet opposite front-back; 1.2 rad only reached horizontal) -> both hips rot.z -VULTURE_LEG_TUCK (same sign) + 1.2->1.85 so they tuck back+up under the tail. Next M4: atmosphere-feeltunes."],
+      "verify": "verify:all PASS (tsc + placement 0/0 x5 + colliders 0/25; the vulture is a creature + the change is a render-time pose, not a placement/collider POI or a procgen draw)",
+      "visual": "lean adversarial gate (2 critics) on the soaring silhouette (flying+circling side, frozen-flap-phase disregarded). Both verdict-PASS, legs_tucked=true,true + reads_as_soaring_bird=true,true, no geometry defect introduced. Residual sev1 (tucked-leg mass subtle at close-up side-profile — irrelevant at in-game distance) -> backlog/nit. MOTION feel (animation over time: cadence/banking/wheel) feel-pending walk-test (a frozen frame can't judge it).",
+      "save": "no bump — render-time pose tuning only",
+      "ultracode": true,
+      "commit": "PENDING",
+      "spend_approx_tokens": 120000
     }
   ]
 }

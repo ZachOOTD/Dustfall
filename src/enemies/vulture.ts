@@ -325,7 +325,7 @@ export function animateVulture(v: Vulture, elapsed: number): void {
       const elbowFlex = beat * 0.12 * flapEnv;            // wrist follows the beat slightly
       poseWings(sx, 0, elbowFlex, -0.08);
       neck.rotation.set(0, 0, Tuning.VULTURE_NECK_EXTEND);
-      legL.rotation.set(0, 0, -Tuning.VULTURE_LEG_TUCK); legR.rotation.set(0, 0, Tuning.VULTURE_LEG_TUCK);
+      legL.rotation.set(0, 0, -Tuning.VULTURE_LEG_TUCK); legR.rotation.set(0, 0, -Tuning.VULTURE_LEG_TUCK);   // C19 — both legs back+up, tucked together (not splayed)
       tail.rotation.set(0, 0, -0.3);
       break;
     }
@@ -338,7 +338,7 @@ export function animateVulture(v: Vulture, elapsed: number): void {
       const sx = Tuning.VULTURE_DIHEDRAL + beat * Tuning.VULTURE_FLAP_AMP * flapEnv * 0.55;
       poseWings(sx, 0, beat * 0.1 * flapEnv, -0.06);
       neck.rotation.set(0, 0, Tuning.VULTURE_NECK_EXTEND * 0.5);
-      legL.rotation.set(0, 0, -Tuning.VULTURE_LEG_TUCK); legR.rotation.set(0, 0, Tuning.VULTURE_LEG_TUCK);
+      legL.rotation.set(0, 0, -Tuning.VULTURE_LEG_TUCK); legR.rotation.set(0, 0, -Tuning.VULTURE_LEG_TUCK);   // C19 — both legs back+up, tucked together (not splayed)
       tail.rotation.set(0, 0, -0.2);
       break;
     }
@@ -367,7 +367,7 @@ export function animateVulture(v: Vulture, elapsed: number): void {
       const sx = Tuning.VULTURE_DIHEDRAL + beat * Tuning.VULTURE_FLAP_AMP * flapEnv;
       poseWings(sx, 0, beat * 0.12 * flapEnv, -0.08);
       neck.rotation.set(0, 0, Tuning.VULTURE_NECK_EXTEND);
-      legL.rotation.set(0, 0, -Tuning.VULTURE_LEG_TUCK); legR.rotation.set(0, 0, Tuning.VULTURE_LEG_TUCK);
+      legL.rotation.set(0, 0, -Tuning.VULTURE_LEG_TUCK); legR.rotation.set(0, 0, -Tuning.VULTURE_LEG_TUCK);   // C19 — both legs back+up, tucked together (not splayed)
       tail.rotation.set(0, 0, -0.3);
       break;
     }

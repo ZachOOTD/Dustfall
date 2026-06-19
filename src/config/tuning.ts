@@ -1523,7 +1523,7 @@ export const Tuning = {
   VULTURE_GLIDE_CYCLE_HZ: 0.22,    // ACAI f/u — slow flap↔glide envelope (flap a few beats, then glide)
   VULTURE_PERCH_WING_DROOP: 1.5,   // ACAI f/u — perched shoulder rot.x drooping the long wings down the flanks
   VULTURE_ELBOW_FOLD: -2.4,        // ACAI f/u — perched elbow rot.y folding the forearm+primaries back (≈180°, tucks the wing)
-  VULTURE_LEG_TUCK: 1.2,           // hip rot.z that folds the legs up in flight
+  VULTURE_LEG_TUCK: 1.85,          // C19 — BOTH hips rot.z=-this in soaring flight → feet drawn BACK + up under the tail, tucked together (was 1.2 + mirrored ± → legs splayed/dangling = "struggling", not soaring)
   VULTURE_NECK_EXTEND: -0.5,       // neck rot.z extending the head forward in flight
   VULTURE_LAND_DURATION: 0.9,      // s — landing flare → settle into perched
   VULTURE_BANK_ANGLE: 0.45,        // ACAI f/u — max roll (rad) banking into a flight turn
