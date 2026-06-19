@@ -73,6 +73,15 @@ export const Tuning = {
   WORDLESS_SCENE_RADIUS_MIN: 110,    // m — nearest a scene spawns from origin (past the spawn area)
   WORDLESS_SCENE_RADIUS_MAX: 460,    // m — farthest
   WORDLESS_SCENE_CLEAR_M: 5.0,       // m — clear scatter rocks within this of a scene (a clean tableau stage)
+  // M5b (C33) — procedural wind mood (soundscape.ts synthesizes the wind bed; the
+  // sample pack never landed → it was silent). The wind's TIMBRE shifts with the time
+  // of day: a bright crisp day hiss → a dull lonely night moan, opened up by a storm.
+  // Levels are conservative (a bed, not a gale); FEEL → the attended walk-test.
+  WIND_CUTOFF_NIGHT: 620,            // Hz — body low-pass at deep night (dull, lonely)
+  WIND_CUTOFF_DAY: 2600,             // Hz — body low-pass at noon (bright, airy)
+  WIND_CUTOFF_STORM: 5200,           // Hz — a storm opens the wind to full-spectrum roar
+  WIND_BODY_MASTER: 0.5,             // peak wind-bed gain (× windLvl × gust)
+  WIND_WHISTLE_MASTER: 0.16,         // the lonely band-pass moan (subtle; fuller at night)
   DEHYDRATION_DAMAGE: 1 / 30,
   HEATSTROKE_DAMAGE: 1 / 25,
   // Hunger

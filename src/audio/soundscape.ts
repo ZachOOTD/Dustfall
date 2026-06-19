@@ -12,11 +12,25 @@
 import type { GameContext } from '../GameContext.ts';
 import { getAudioInternals, setStormMuffle } from './audio.ts';
 import { preloadSamples, getSample, type SampleId } from './samples.ts';
+import { Tuning } from '../config/tuning.ts';
 
 interface StemNodes {
   src: AudioBufferSourceNode | null;
   gain: GainNode;
   target: number;   // most recently requested gain — exposed via audioState()
+}
+
+// M5b (C33) — procedural wind. The sample-based stems below preload from
+// /public/audio/, which is EMPTY (the CC0 pack never landed), so the wind/ambient/
+// music all degrade to silence. This synthesizes the wind bed live (filtered looping
+// noise + a moaning whistle band) so the world actually breathes, and shifts its
+// TIMBRE with mood — a bright crisp day hiss, a dull lonely night moan, a resonant
+// dusk threshold — driven by sun height + storm. Procedural-only (no sample files).
+interface ProceduralWind {
+  body: BiquadFilterNode;       // lowpass — the wind's tone (cutoff = mood)
+  bodyGain: GainNode;           // level (windLvl × gusts)
+  whistle: BiquadFilterNode;    // bandpass — the lonely moan
+  whistleGain: GainNode;
 }
 
 interface SoundscapeState {
@@ -25,9 +39,25 @@ interface SoundscapeState {
   ambient: { day: StemNodes; night: StemNodes };
   music: { calm: StemNodes; tense: StemNodes };
   musicBus: GainNode;
+  pwind: ProceduralWind | null; // C33 — procedural wind graph
   startTime: number;            // ctx.currentTime when startSoundscape ran
   driftPhase: number;           // monotonically increases; used for breeze sin sum
   lastUpdate: number;
+}
+
+/** A loopable noise buffer (white, lightly low-passed toward pink so it's airy, not
+ *  hissy). Reused as the wind source. */
+function makeWindNoiseBuffer(ctx: AudioContext, seconds = 5): AudioBuffer {
+  const n = Math.floor(ctx.sampleRate * seconds);
+  const buf = ctx.createBuffer(1, n, ctx.sampleRate);
+  const d = buf.getChannelData(0);
+  let last = 0;
+  for (let i = 0; i < n; i++) {
+    const white = Math.random() * 2 - 1;
+    last = last * 0.86 + white * 0.14;   // one-pole low-pass → pink-ish, airy
+    d[i] = last * 3.2;
+  }
+  return buf;
 }
 
 let _state: SoundscapeState | null = null;
@@ -106,6 +136,29 @@ export function startSoundscape(): void {
   musicBus.gain.setValueAtTime(0, now);
   musicBus.gain.linearRampToValueAtTime(1.0, now + MUSIC_FADE_IN_S);
 
+  // C33 — the procedural wind graph: a looping noise source fanned into a low-pass
+  // BODY (the wind's tone) + a band-pass WHISTLE (the lonely moan), each with its own
+  // gain → the ambient bus. Cutoffs/levels are modulated per-frame in updateSoundscape.
+  const noise = a.ctx.createBufferSource();
+  noise.buffer = makeWindNoiseBuffer(a.ctx);
+  noise.loop = true;
+  const body = a.ctx.createBiquadFilter();
+  body.type = 'lowpass';
+  body.frequency.value = 1400;
+  body.Q.value = 0.7;
+  const bodyGain = a.ctx.createGain();
+  bodyGain.gain.value = 0;
+  const whistle = a.ctx.createBiquadFilter();
+  whistle.type = 'bandpass';
+  whistle.frequency.value = 820;
+  whistle.Q.value = 4.5;
+  const whistleGain = a.ctx.createGain();
+  whistleGain.gain.value = 0;
+  noise.connect(body).connect(bodyGain).connect(a.ambient);
+  noise.connect(whistle).connect(whistleGain).connect(a.ambient);
+  noise.start(0);
+  const pwind: ProceduralWind = { body, bodyGain, whistle, whistleGain };
+
   // Build placeholder state first (silent stems) — buffers attach once decode
   // resolves below. This keeps updateSoundscape simple: it never touches null.
   const dummy = (): StemNodes => ({ src: null, gain: a.ctx.createGain(), target: 0 });
@@ -115,6 +168,7 @@ export function startSoundscape(): void {
     ambient: { day:   dummy(), night: dummy() },
     music:   { calm:  dummy(), tense: dummy() },
     musicBus,
+    pwind,
     startTime: now,
     driftPhase: 0,
     lastUpdate: now,
@@ -177,6 +231,24 @@ export function updateSoundscape(ctx: GameContext, dt: number): void {
   setStem(s.wind.mid,   tMid,   s.ctx);
   setStem(s.wind.storm, tStorm, s.ctx);
 
+  // C33 — the procedural wind bed: TIMBRE by mood (time of day), LEVEL by windLvl.
+  // A bright airy day hiss → a dull lonely night moan; a storm opens it to full roar.
+  // setTargetAtTime gives a smooth (zipper-free) approach every frame.
+  if (s.pwind) {
+    const dayness = clamp01(sy * 0.5 + 0.5);            // 0 deep night → 1 noon
+    let cutoff = Tuning.WIND_CUTOFF_NIGHT + dayness * (Tuning.WIND_CUTOFF_DAY - Tuning.WIND_CUTOFF_NIGHT);
+    cutoff += storm * (Tuning.WIND_CUTOFF_STORM - cutoff);            // storm opens the wind up
+    const gust = 0.82 + 0.18 * (0.5 + 0.5 * Math.sin(s.driftPhase * 0.7));
+    const bodyLvl = Tuning.WIND_BODY_MASTER * windLvl * gust;
+    const whistleLvl = Tuning.WIND_WHISTLE_MASTER * windLvl * (0.25 + 0.75 * (1 - dayness));
+    const whistleFreq = 760 + windLvl * 220;
+    const t0 = s.ctx.currentTime, tc = 0.3;
+    s.pwind.body.frequency.setTargetAtTime(cutoff, t0, tc);
+    s.pwind.bodyGain.gain.setTargetAtTime(bodyLvl, t0, tc);
+    s.pwind.whistle.frequency.setTargetAtTime(whistleFreq, t0, tc);
+    s.pwind.whistleGain.gain.setTargetAtTime(whistleLvl, t0, tc);
+  }
+
   // Ambient life — suppressed under sandstorm
   const lifeMask = 1 - smoothstep(0.15, 0.35, storm);
   setStem(s.ambient.day,   day   * lifeMask * AMBIENT_LIFE_MASTER, s.ctx);
@@ -210,6 +282,8 @@ export interface AudioStateSnapshot {
     musicCalm: number; musicTense: number;
     musicBus: number;
   };
+  // C33 — procedural wind (the audible bed; the sample stems above are silent).
+  pwind: { bodyCutoff: number; bodyGain: number; whistleFreq: number; whistleGain: number } | null;
   loaded: Record<SampleId, boolean>;
 }
 
@@ -239,6 +313,12 @@ export function getAudioStateSnapshot(ctx: GameContext): AudioStateSnapshot | nu
       musicTense:  s.music.tense.gain.gain.value,
       musicBus:    s.musicBus.gain.value,
     },
+    pwind: s.pwind ? {
+      bodyCutoff: s.pwind.body.frequency.value,
+      bodyGain: s.pwind.bodyGain.gain.value,
+      whistleFreq: s.pwind.whistle.frequency.value,
+      whistleGain: s.pwind.whistleGain.gain.value,
+    } : null,
     loaded: {
       'wind-calm':   getSample('wind-calm')   !== null,
       'wind-mid':    getSample('wind-mid')    !== null,
