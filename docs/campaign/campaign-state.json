@@ -304,7 +304,7 @@
       "visual": "adversarial gate on the plume LOOK (clear + storm), 6 rounds (net-new visual, Rule 8). reads_as_smoke_signal=true every round; iteration was storm wind-response + boldness: faint->bold, R2 big-puffs blobbed -> R3 smaller/denser/cooler-grey + fog:false + f^2 root-anchor (too vertical) -> R4-5 stronger shear + flattened vertical reach (tears toward horizontal) -> R6 BOTH critics PASS (clear bold beacon; storm tears hard downwind; cool grey separates from warm sky + brown murk; no sprite edges). Footguns fixed: sprite.raycast no-op (interaction raycaster crash), deterministic warmFireSmoke (headless rAF throttling), noon+side-spawn (was backlit at the sun). MOTION feel (rise cadence/billow) feel-pending walk-test.",
       "save": "no bump — transient smoke, re-created for alive fires on load",
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "7ce6c81",
       "spend_approx_tokens": 350000
     }
   ]
