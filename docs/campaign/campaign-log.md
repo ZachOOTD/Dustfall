@@ -168,3 +168,14 @@ first stop will be `max-cycles` ~mid-Phase-A; resume via `/campaign-start --resu
 - **Spend:** ~290K approx (the costliest cycle — 5 visual-gate rounds); campaign total ~930K; cycle **7/12**.
 - **Commit:** `9a49532`.
 - **`wreck-polish-bundle` is `[partial]`** — 4 deltas remain (chroma, engine-droop, scout-trauma, scale-anchor pocket). **Next (cycle 8):** delta 2 = weathering chroma. **Verdict: CONTINUE** (M2 in progress; no milestone crossed). **Cap heads-up: 5 cycles left** to the calibration stop.
+
+---
+
+## Cycle 8 — M2 wreck-polish: chroma (already-done) + delta 3 engine-droop `[partial]` (2026-06-18) — SHIPPED
+- **Planned:** wreck-polish delta 2 (weathering chroma).
+- **Shipped:** **delta 2 chroma → assessed ALREADY-DONE** (the `HULL_WEATHERING_ACAY` profile already has saturated orange oxide + lifted seam-rust + rust drips; ACBB D234 finalized it post-§F; up-close render confirms) → no re-do; **pivoted to delta 3 engine-droop** — sign-randomized + widened (6-21°) + ~15% torn (dramatic hang), hash2-only (zero rand), pure rotation (no overlap).
+- **Verify:** `verify:all` PASS — tsc · placement 0/0 ×5 (determinism preserved) · colliders 0/25.
+- **Visual iteration:** delta-3 **solo-triage** (the skill's lighter pass for a routine geometry tuning) — 3-seed gunship inspection shows varied torn-loose engines, believable, no float/clip. Torn FEEL → **feel-pending** walk-test. delta-2 chroma not rebuilt (verified already-done — like the dish/scrap items).
+- **Spend:** ~130K approx; campaign total ~1.06M; cycle **8/12**.
+- **Commit:** `f4535c8`.
+- **`wreck-polish-bundle` stays `[partial]`** — deltas 4 (scout/corvette trauma) + 5 (scale-anchor pocket) remain. **Next (cycle 9):** delta 4. **Verdict: CONTINUE** (M2 in progress; no milestone crossed). **Cap: 4 cycles left.**
