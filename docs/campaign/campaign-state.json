@@ -421,7 +421,7 @@
       "visual": "adversarial gate — SCOPE-VIEW PASSED 1st pass ('reads unmistakably as looking THROUGH a spyglass; large obvious magnification'). The held-item MODEL took 3 gate-driven rounds (r1 stubby-thermos + flat-cap lens -> r2 longer+structured -> r3 classic spyglass taper [narrow eyepiece -> flared objective bell, ~6.5:1] + visible step-downs + bold collars + SOLID dark recessed lenses behind brass bezels [fixed r2's transparent-glass flat-cap + a recess-direction bug]). Reads clearly as a brass spyglass in profile/3q (the in-play views). Residual gate nitpicks (a perfectly-end-on objective funnel + matte brass under the FLAT studio light) = rare-view/lighting artifacts, assessed low-impact -> shipped (no 4th round). FEEL (zoom speed/curve, vignette timing, no aim-down-sight pose) -> walk-test.",
       "save": "no bump — additive item + an additive discoveredRecipes id",
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "0a01b1b",
       "spend_approx_tokens": 450000
     }
   ]
