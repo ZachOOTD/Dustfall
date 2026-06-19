@@ -262,7 +262,7 @@
       "save": "no bump — reuses ctx.pickups.list + feeding; the placed lure persists as a normal pickup (D81 additive)",
       "note": "circular import items.ts<->pickups.ts is runtime-only (init-safe, confirmed by a clean perf-probe boot). verify-zombie recovery: verify:placement buffers output to the end + is slow; premature kills spawned port-contending zombies -> documented in next-session-prompt.",
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "9d5576e",
       "spend_approx_tokens": 300000
     }
   ]
