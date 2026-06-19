@@ -2,7 +2,7 @@
   "status": "active",
   "started": "2026-06-18",
   "branch": "campaign/2026-06-18",
-  "cycles_completed": 8,
+  "cycles_completed": 9,
   "current_tier": "M2 — Wreck breadth + polish + infra",
   "awaiting_approval": false,
   "stop_reasons": [],
@@ -15,7 +15,7 @@
   "circuit_breaker_n": 3,
   "consecutive_no_progress": 0,
   "ceiling": { "max_cycles": 12, "total": null, "per_cycle": null, "unit": "tokens" },
-  "spend": { "total": 1060000, "note": "approximate — agent cannot precisely self-meter; max_cycles is the real bound (no budget ceiling set). C7 costliest (~290K, 5 visual-gate rounds, new visual element); C8 ~130K (chroma assessed-done + engine-droop solo-triage); logic/material/audit cycles 50-170K." },
+  "spend": { "total": 1290000, "note": "approximate — agent cannot precisely self-meter; max_cycles is the real bound (no budget ceiling set). C7 costliest (~290K, 5 visual rounds); C9 ~230K (4 trauma-read rounds + a tsc class-name fix + extra gate runs); C8 ~130K; logic/material/audit cycles 50-170K." },
   "plan": {
     "authored": "2026-06-18",
     "amended": "2026-06-18 plan-review user steering + evidence audit + Phase-C promotion (see campaign-log.md Cycle 0)",
@@ -127,6 +127,19 @@
       "visual": "delta-3 engine-droop solo-triage PASS (3-seed variety + believability); torn FEEL feel-pending. delta-2 chroma: assessed already-done (profile + render), not rebuilt.",
       "commit": "f4535c8",
       "spend_approx_tokens": 130000
+    },
+    {
+      "cycle": 9,
+      "date": "2026-06-18",
+      "focus": "M2 wreck-polish delta 4 — guaranteed corvette/gunship trauma [partial]",
+      "tier": "M2 — Wreck breadth + polish + infra",
+      "outcome": "SHIPPED",
+      "units": ["wreck-polish-bundle (delta 4 of 5 — forced corvette/gunship trauma); unit stays [partial], delta 5 remains"],
+      "verify": "verify:all PASS (tsc + placement 0/0 x5 + colliders 0/25)",
+      "visual": "appearance-verified MODEST (4 rounds): trauma guaranteed + determinism-safe + believable from the gash flank, but flank-located + reads as scattered debris vs a clean main-hull breach on some seeds. Honest read-flag -> backlog §F (attachment/main-hull-targeting). All-angle silhouette-break (round 2) read as detached debris + reverted. read + feel feel-pending walk-test.",
+      "tsc_fix": "'scout' is not a ProcgenWreckClass (TS2367) -> retargeted to corvette + gunship",
+      "commit": "4bca3b4",
+      "spend_approx_tokens": 230000
     }
   ]
 }

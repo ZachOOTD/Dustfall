@@ -179,3 +179,14 @@ first stop will be `max-cycles` ~mid-Phase-A; resume via `/campaign-start --resu
 - **Spend:** ~130K approx; campaign total ~1.06M; cycle **8/12**.
 - **Commit:** `f4535c8`.
 - **`wreck-polish-bundle` stays `[partial]`** — deltas 4 (scout/corvette trauma) + 5 (scale-anchor pocket) remain. **Next (cycle 9):** delta 4. **Verdict: CONTINUE** (M2 in progress; no milestone crossed). **Cap: 4 cycles left.**
+
+---
+
+## Cycle 9 — M2 wreck-polish delta 4: guaranteed corvette/gunship trauma `[partial]` (2026-06-18) — SHIPPED (read-polish flagged)
+- **Planned:** wreck-polish delta 4 (scout/corvette guaranteed visible trauma).
+- **Shipped:** new `addForcedTrauma` — ONE deterministic breach on every **corvette + gunship**: an unlit black-void **gash** (reads as a hole, not a lit dark greeble) + a peeled hull-plate **flap** + a jagged **lip** strut. **hash2-only → ZERO rand** (panel stream byte-identical); added before panels (no panel welds over the hole); `isWreckDecoration`-tagged. The §F "list" was already in-world (`poiAssembler` `arch.params.list` × phash). **Caught in tsc:** `'scout'` is NOT a `ProcgenWreckClass` (rig-shot fallback) → retargeted to corvette + gunship.
+- **Verify:** `verify:all` PASS — tsc · placement 0/0 ×5 (determinism preserved) · colliders 0/25.
+- **Visual iteration:** ⚠ **appearance-verified MODEST (4 rounds) — honest read-flag.** Trauma is guaranteed + determinism-safe + believable crash damage from the gash flank (player circles in-world → guaranteed-seen), but it's **flank-located** + on some seeds reads as **scattered debris near the wreck** rather than a clean attached **main-hull** breach (part-pick takes any ≥0.7 body part). The all-angle silhouette-break attempt (round 2) read as detached debris + was reverted. **Attachment + main-hull-targeting polish → backlog §F; read + feel → walk-test.** Not a clean dramatic PASS — flagged for the milestone polish review.
+- **Spend:** ~230K approx (4 trauma-read rounds + a tsc class-name fix + extra gate runs); campaign total ~1.29M; cycle **9/12**.
+- **Commit:** `4bca3b4`.
+- **`wreck-polish-bundle` stays `[partial]`** — delta 5 (scale-anchor exclusion pocket) remains, then `yard-cross-poi-merge`. **Next (cycle 10):** delta 5. **Verdict: CONTINUE** (M2 in progress; no milestone crossed). **Cap: 3 cycles left — the cap will likely land at delta 5 + the start of yard-merge.**
