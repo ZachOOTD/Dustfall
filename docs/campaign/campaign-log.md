@@ -347,5 +347,5 @@ first stop will be `max-cycles` ~mid-Phase-A; resume via `/campaign-start --resu
 - **Visual iteration:** N/A — logic/interaction feature. **Code-auditor gate PASS** (ultracode, 0 sev≤2): "correct, consistent with the stake pattern, sub-dispatch sound, coexistence with the auto-transfer non-breaking." Lone nit: `attach_rope` LMB also fires a wielded-weapon swing — **PRE-EXISTING across ALL rope-attach paths** (stake/companion too), not new here → backlog §A. **Tie FEEL** → feel-pending walk-test.
 - **Process note:** read the backlog design-gate carefully — "needs a design pass" applied to the *RMB-on-rope-pick* UX (a separate item), NOT the rear-bar attach. So the buildable scope (LMB-on-bar, the standard metaphor) shipped cleanly; only the RMB-pick UX stays deferred. (The C24 build-the-buildable-scope pattern — don't over-defer a unit because PART of it is design-gated.)
 - **Spend:** ~250K (assess the rope/tether system + the feature build + the code-auditor gate); campaign total ~5.13M; cycle **24/50**.
-- **Commit:** `PENDING`.
+- **Commit:** `956bab1`.
 - **M5:** ✓ speeder-riding-feel · ✓ rope-attach. **Next (cycle 25):** `3p-camera-and-render-polish` (held-items-in-3P / foot-IK / the C23 foot-lift). **Verdict: CONTINUE** (M5 2/5; no Phase boundary).

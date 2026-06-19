@@ -348,7 +348,7 @@
       "visual": "N/A — logic/interaction feature. Code-auditor gate PASS (0 sev<=2): correct, consistent with the stake pattern, sub-dispatch sound, coexistence with the mount auto-transfer non-breaking. Nit: attach_rope LMB also fires a wielded-weapon swing — PRE-EXISTING across all rope-attach paths -> backlog A. Tie FEEL feel-pending walk-test.",
       "save": "no bump — reuses the existing 'speeder' tether kind",
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "956bab1",
       "spend_approx_tokens": 250000
     }
   ]
