@@ -300,5 +300,5 @@ first stop will be `max-cycles` ~mid-Phase-A; resume via `/campaign-start --resu
 - **Verify:** `verify:all` PASS — tsc · placement 0/0 ×5 · colliders 0/25 (the vulture is a creature + the change is a render-time pose, not a placement/collider POI or a procgen draw).
 - **Visual iteration:** lean adversarial gate (2 critics) on the soaring silhouette (flying+circling side; frozen-flap-phase explicitly disregarded). Both **verdict-PASS**, `legs_tucked=true,true` + `reads_as_soaring_bird=true,true`, no geometry defect introduced. Residual sev1 (the tucked-leg mass is subtle at close-up side-profile — irrelevant at in-game viewing distance where the bird is a distant dark silhouette) → backlog/nit. **MOTION feel** (the animation over time — flap cadence, banking in turns, the wheel over a carcass) → feel-pending Phase-A walk-test (a frozen frame can't judge it).
 - **Spend:** ~120K (mostly-done unit: assess + flight-pose renders + one targeted fix + 1 lean gate); campaign total ~4.07M; cycle **19/50**.
-- **Commit:** `PENDING`.
+- **Commit:** `a0d9f1d`.
 - **M4:** ✓ vulture-motion-feel. **Next (cycle 20):** `atmosphere-feeltunes` (tuning of shipped storm/fog/wind systems). **Verdict: CONTINUE** (M4 1/4; no Phase boundary).

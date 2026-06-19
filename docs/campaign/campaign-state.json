@@ -276,7 +276,7 @@
       "visual": "lean adversarial gate (2 critics) on the soaring silhouette (flying+circling side, frozen-flap-phase disregarded). Both verdict-PASS, legs_tucked=true,true + reads_as_soaring_bird=true,true, no geometry defect introduced. Residual sev1 (tucked-leg mass subtle at close-up side-profile — irrelevant at in-game distance) -> backlog/nit. MOTION feel (animation over time: cadence/banking/wheel) feel-pending walk-test (a frozen frame can't judge it).",
       "save": "no bump — render-time pose tuning only",
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "a0d9f1d",
       "spend_approx_tokens": 120000
     }
   ]
