@@ -359,7 +359,9 @@ function makeWormMesh(): { group: THREE.Group } {
     xPos: number, a: number, ringR: number, scale: number, inwardX: number,
   ): void => {
     const tooth = new THREE.Mesh(
-      new THREE.ConeGeometry(0.13 * scale, 0.7 * scale, 4),
+      // C12 — real FANGS. The old 0.13×0.7m cones read as invisible dots on the ~12m maw;
+      // base 0.34 / length 1.9 (× scale) gives fangs that read as a toothed gullet.
+      new THREE.ConeGeometry(0.34 * scale, 1.9 * scale, 5),
       toothMat,
     );
     tooth.position.set(xPos, Math.cos(a) * ringR, Math.sin(a) * ringR);
@@ -371,15 +373,20 @@ function makeWormMesh(): { group: THREE.Group } {
     group.add(tooth);
   };
 
-  const outerCount = 14;
+  // C12 — fang ring: alternate LONG fangs + shorter fillers around the rim for an organic,
+  // menacing read (uniform teeth read mechanical). A second deeper ring keeps the gullet toothed.
+  const outerCount = 16;
   for (let i = 0; i < outerCount; i++) {
     const a = (i / outerCount) * Math.PI * 2;
-    placeTooth(halfLen - 0.10, a, headFaceR * 0.86, 1.0, 1.3);
+    const fang = i % 2 === 0 ? 1.25 : 0.82;          // interleaved long/short
+    // C12 gate r2: recess the bases INSIDE the rim (was flush at halfLen-0.10) + pull radius in +
+    // tip further inward, so no top fang crosses the lit rim band onto the outer wall.
+    placeTooth(halfLen - mawDepth * 0.10, a, headFaceR * 0.80, fang, 1.7);
   }
-  const innerCount = 10;
+  const innerCount = 11;
   for (let i = 0; i < innerCount; i++) {
-    const a = (i / innerCount + 0.5 / innerCount) * Math.PI * 2; // offset to interleave with outer
-    placeTooth(halfLen - mawDepth * 0.55, a, headFaceR * 0.55, 0.65, 0.7);
+    const a = (i / innerCount + 0.5 / innerCount) * Math.PI * 2; // interleave with outer
+    placeTooth(halfLen - mawDepth * 0.5, a, headFaceR * 0.56, 0.95, 0.8);
   }
 
   return { group };

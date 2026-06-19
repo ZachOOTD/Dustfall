@@ -2028,6 +2028,62 @@ const SCENARIOS = {
     console.log(`[worm-shelter] ${pass ? 'PASS' : 'FAIL'} sheltered=${JSON.stringify(sheltered)} exposed=${JSON.stringify(exposed)}`);
   },
 
+  // WORM-MODEL studio (Campaign C12) — surfaces ctx.sandWorms.list[0] on the sand
+  // in a clean head-at-+X pose + frames it for MODEL iteration (the M3 hero creature).
+  // `--angle=head|side|3q`. Pauses the sim so the posed mesh holds. If no worm exists
+  // at spawn, tries ctx.sandWorms.spawnAt/forceSpawn; SKIPs if it can't make one.
+  'worm-model': async (page) => {
+    const angle = argv.angle || 'head';
+    const r = await page.evaluate(({ ang }) => {
+      const ctx = window.__game.ctx;
+      ctx.weather.intensity = 0; ctx.weather.cloudiness = 0.12;
+      window.__game.setTime(0.42);                 // raking light — reads the body taper + ridges
+      ctx.three.renderer.toneMappingExposure = 1.25;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      ctx.flags.paused = true;                      // freeze the tick so the posed mesh holds
+      let worm = ctx.sandWorms?.list?.[0];
+      if (!worm && ctx.sandWorms?.spawnAt) {        // best-effort spawn near the player
+        const pp = ctx.player.body.body.translation();
+        try { worm = ctx.sandWorms.spawnAt(pp.x + 80, pp.z); } catch { /* no-op */ }
+      }
+      if (!worm) return { found: false };
+      const ax = worm.basePos.x, az = worm.basePos.z;
+      const groundY = ctx.terrain.heightAt(ax, az);
+      const rad = 10, halfLen = 60;                 // SANDWORM_MAX_RADIUS, SANDWORM_LENGTH/2
+      // Surface + pose: body along +X, head at +X, resting on the sand.
+      worm.mesh.visible = true;
+      worm.mesh.position.set(ax, groundY + rad * 0.55, az);
+      worm.mesh.rotation.set(0, 0, 0);
+      worm.mesh.updateMatrixWorld(true);
+      let meshes = 0; worm.mesh.traverse((o) => { if (o.isMesh) meshes++; });
+      const cam = ctx.three.camera;
+      const headX = ax + halfLen;
+      if (ang === 'head') {                          // close 3/4 on the maw + front body
+        cam.position.set(headX + rad * 2.0, groundY + rad * 1.5, az + rad * 2.4);
+        cam.lookAt(headX - rad * 0.8, groundY + rad * 0.7, az);
+      } else if (ang === 'side') {                   // full 120m silhouette broadside
+        cam.position.set(ax + halfLen * 0.1, groundY + rad * 3.4, az + halfLen * 1.6);
+        cam.lookAt(ax, groundY + rad * 0.4, az);
+      } else {                                       // 3q — head-led three-quarter of the whole body
+        cam.position.set(ax + halfLen * 0.8, groundY + rad * 2.4, az + halfLen * 1.0);
+        cam.lookAt(ax + halfLen * 0.15, groundY + rad * 0.4, az);
+      }
+      cam.updateMatrixWorld(true);
+      let DirCtor = null, HemiCtor = null;
+      ctx.three.scene.traverse((o) => { if (o.isDirectionalLight && !DirCtor) DirCtor = o.constructor; if (o.isHemisphereLight && !HemiCtor) HemiCtor = o.constructor; });
+      let key = ctx.three.scene.getObjectByName('__wormKey');
+      if (!key && DirCtor) { key = new DirCtor(); key.name = '__wormKey'; key.intensity = 2.1; key.color.set(0xfff2e0); ctx.three.scene.add(key.target); ctx.three.scene.add(key); }
+      if (key) { key.position.set(cam.position.x + rad, cam.position.y + 24, cam.position.z + 12); key.target.position.set(ax + halfLen * 0.4, groundY, az); key.target.updateMatrixWorld(true); }
+      if (!ctx.three.scene.getObjectByName('__wormFill') && HemiCtor) { const fill = new HemiCtor(0xbfccdd, 0x6b5840, 0.7); fill.name = '__wormFill'; ctx.three.scene.add(fill); }
+      return { found: true, meshes, angle: ang, halfLen };
+    }, { ang: angle });
+    await page.waitForTimeout(340);
+    if (!r.found) { console.log('[worm-model] SKIP — no worm in world'); return; }
+    await page.screenshot({ path: join(OUT, `scen-worm-${angle}.png`), fullPage: false });
+    console.log(`[worm-model] ${JSON.stringify(r)}`);
+  },
+
   // Dev-panel (ACAD): open the dev item-spawner panel + click an item, verify
   // it renders + adds to inventory.
   'dev-panel': async (page) => {

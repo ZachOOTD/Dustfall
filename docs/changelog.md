@@ -3,6 +3,14 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign C12 (THE CAP) — 2026-06-18 — M3 START: worm-model rig-shot + maw fang overhaul `[partial]` ✓ gates pass (ultracode)
+
+`verified` — `npm run verify:all` PASS (tsc clean; placement 0/0 ×5 + colliders 0/25 unchanged — the worm is a creature, not a placement/collider-audited POI). Visual: lean adversarial Workflow gate (2 critics, 1 fix round). **No save bump.** Cycle 12/12 → **campaign STOPS `completed (max-cycles)` for the calibration review.**
+
+**M3 `worm-model-overhaul` STARTED `[partial]`.** Two deliverables:
+1. **NEW `worm-model` rig-shot scenario** (`scripts/rig-shot.mjs`, `--angle=head|side|3q`) — surfaces `ctx.sandWorms.list[0]` on the sand in a clean head-at-+X pose + frames it (pauses the sim so the pose holds). **The M3 hero-creature enabler** — all future worm visual work (the resume) can now render + gate the worm. Zero game-code touch.
+2. **Maw FANG overhaul** (`sandWorm.ts` makeWormMesh): the teeth were 0.7m cones — invisible dots on the ~12m maw. Now real **~2-2.4m fangs**, interleaved long/short, in two rings, recessed inside the rim. The gate (believability + clipping critics) called it "a massive improvement, awe not silly, proportion correct," caught one sev2 (top-rim fangs crossing the lit rim band), fixed in 1 round (recess the outer ring inside the rim + pull radius in + tip further inward); re-render confirms a clean recessed toothed gullet. Determinism-safe (hand-model, no rand). FEEL (the worm's motion/menace) + the FULL-BODY overhaul (dorsal character, tail/dive/audio/population/lure) → the RESUME (Rule 8: a hero creature wants a multi-cycle 5-8-round pass; this is the [partial] start). Residual sev1 (top-fang angle, near-side depth read) → resume polish.
+
 ## Campaign C11 — 2026-06-18 — M2 yard-cross-poi-merge: 3rd attempt DEFERRED after a recon (D240) — recon-backed decision
 
 `verified` — **no source change** (docs-only: D240 + backlog + roadmap); `src/` byte-identical to C10's `verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/25), tsc re-confirmed clean. Cycle 11/12. **M2 content COMPLETE.**
