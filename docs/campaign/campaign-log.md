@@ -337,5 +337,5 @@ first stop will be `max-cycles` ~mid-Phase-A; resume via `/campaign-start --resu
 - **Visual iteration:** N/A (no new visual). bike-truth confirmed the pose. The one genuine residual — a **ride-pose foot-LIFT** (re-bake the sweep-solved leg/ankle angles via the bike-truth IK loop to land the feet on the pegs) — is **queued** (backlog §A), NOT blind-nudged: the pose is sweep-baked, so it needs the iterate-verify loop, not a guess. **Handling FEEL** (accel/turn/boost/terrain-follow/tilt — the core of "riding feel") → feel-pending Phase-A walk-test.
 - **Honest note:** a low-code-output cycle (like C11's recon→defer), but justified — the speeder is the most-tuned system in the game; the deliverable is the *verification* that it's solid + the correct hand-off of the residuals (the foot-lift to backlog, the handling to the walk-test) rather than a manufactured risky change.
 - **Spend:** ~90K (the bike-truth inspection + the weapon/pose assessment); campaign total ~4.88M; cycle **23/50**.
-- **Commit:** `PENDING`.
+- **Commit:** `8bcf723`.
 - **M5:** ✓ speeder-riding-feel (verified). **Next (cycle 24):** `rope-attach-speeder-rear-bar`. **Verdict: CONTINUE** (M5 1/5; no Phase boundary).
