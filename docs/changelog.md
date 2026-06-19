@@ -3,6 +3,14 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign C8 — 2026-06-18 — M2 wreck-polish: chroma (already done) + delta 3 engine-droop `[partial]` ✓ all gates pass
+
+`verified` — `npm run verify:all` PASS (tsc + `verify:placement` 0/0 ×5 + `verify:colliders` 0/25); engine-droop solo-triage PASS (3-seed variety + believability). **No save bump.** Cycle 8/12 (M2 — wreck-polish-bundle `[partial]`; delta 2 assessed-already-done, delta 3 shipped).
+
+**delta 2 — weathering chroma: ASSESSED ALREADY-DONE (no re-do).** `HULL_WEATHERING_ACAY` (hullMaterial.ts) already carries the §F asks — saturated rust-ORANGE oxide (`oxHex 0xa85423`), lifted seam-rust (`rustHex 0x6e3a1c`, was near-black → read as shadow), rust-coloured drips, `seamRustStrength 0.56` — and ACBB's D234 per-bucket rebalance (cool stays cool-steel, dark stays dark-steel BY DESIGN) shipped AFTER the §F critique. An up-close warm-bucket render confirms saturated rust, not muddy. Skipped like the dish/scrap already-done items.
+
+**delta 3 — engine-droop sign-randomize + ~15% torn (§F).** `assembleWreck`'s engine droop was always DOWN (8-17°, repetitive across the fleet). Now **sign-randomized** (down OR up) + **widened** (6-21°) + **~15% droop dramatically** (a near-torn-off hang with a wider cant). hash2-derived → ZERO rand (placement stream byte-identical, 0/0); pure rotation about the mount (local x=0) — no position offset, so the part layout can't overlap. A 3-seed gunship inspection shows varied torn-loose engines (solo-triage — the skill's lighter pass for a routine geometry tweak). In-world torn FEEL → feel-pending walk-test. wreck-polish-bundle stays `[partial]` (deltas 4 scout-trauma + 5 scale-anchor pocket remain).
+
 ## Campaign C7 — 2026-06-18 — M2 wreck-polish delta 1: non-axial dorsal mass `[partial]` ✓ all gates pass
 
 `verified` — `npm run verify:all` PASS (tsc + `verify:placement` 0/0 ×5 + `verify:colliders` 0/25); **visual gate PASS after 5 rounds** (3 harsh-lens critics over mega/bulk/freighter renders — 0 sev≥2; the "sausage" silhouette is broken on all 3 heavy classes). **No save bump.** Cycle 7/12 (M2 — wreck-polish-bundle `[partial]`, delta 1 of 5). Appearance-verified; in-world feel feel-pending.

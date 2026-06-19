@@ -1592,8 +1592,14 @@ function assembleWreck(
     // attach (local x=0); the small gap to the tail reads as battle damage. Gentle so
     // multi-engine clusters don't fly apart. Deterministic from cursor → no new rand.
     if (kind === 'engineModule') {
-      built.mesh.rotation.z = -(0.14 + hash2(cursor, prevRadius) * 0.16);   // droop ~8-17°
-      built.mesh.rotation.y = (hash2(prevRadius * 1.3, cursor) - 0.5) * 0.5; // slight cant
+      // wreck-polish delta 3 (campaign 2026-06-18): SIGN-RANDOMIZE the droop (was always DOWN →
+      // repetitive) + WIDEN it, so engines tear loose in varied directions; ~15% droop DRAMATICALLY
+      // (a near-torn-off hang) with a wider cant. hash2-derived → ZERO rand (D208/D221-safe). Pure
+      // rotation about the mount (local x=0) — no position offset, so the part layout can't overlap.
+      const sign = hash2(cursor * 1.7, prevRadius * 0.6) < 0.5 ? -1 : 1;     // tears down OR up
+      const torn = hash2(cursor * 2.9, prevRadius * 1.4) < 0.15;            // ~15% nearly torn off
+      built.mesh.rotation.z = sign * (0.10 + hash2(cursor, prevRadius) * 0.26 + (torn ? 0.34 : 0)); // 6-21°, torn ~+20° more
+      built.mesh.rotation.y = (hash2(prevRadius * 1.3, cursor) - 0.5) * (torn ? 1.0 : 0.5);          // wider cant when torn
     }
     root.add(built.mesh);
     placed.push({ built, startX: cursor });
