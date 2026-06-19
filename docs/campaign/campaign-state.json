@@ -290,7 +290,7 @@
       "visual": "adversarial gate on the peak-storm LOOK, 3 dust rounds. reads_as_sandstorm=true UNANIMOUS every round (the storm TONE — dark warm murk + fog + dimming + vignette — was always excellent). Dust: R1 white-speck pop (sev2) -> R2 darker colors -> R3 intensity-coupled dim + softer sprite -> holistic TONE critic PASSES (dust_reads_as_sand=true, 'dim warm motes, blowing sand not snow'). Residual: a few specks over the darkest sky (frozen-frame, motion-masked — dust streaks 6-7 m/s in play) + a horizon-seam sev1 -> backlog/walk-test. MOTION feel (sway/wind/dust-in-motion) feel-pending walk-test.",
       "save": "no bump — render-time atmosphere tuning + a rig-shot scenario",
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "5877599",
       "spend_approx_tokens": 250000
     }
   ]

@@ -309,5 +309,5 @@ first stop will be `max-cycles` ~mid-Phase-A; resume via `/campaign-start --resu
 - **Verify:** `verify:all` PASS — tsc · placement 0/0 ×5 · colliders 0/25 (atmosphere particles + a new rig-shot scenario, not a placement/collider POI or a procgen draw).
 - **Visual iteration:** adversarial gate on the peak-storm LOOK, **3 dust rounds**. `reads_as_sandstorm=true` **UNANIMOUS every round** (the storm TONE — dark warm murk + fog + dimming + vignette — was always excellent). Dust arc: R1 white-speck pop (sev2) → R2 darker colors (helped, still popped) → R3 the intensity-coupled dim + softer sprite → the holistic **TONE critic now PASSES** (`dust_reads_as_sand=true`, "dim warm motes, blowing sand not snow"). Residual: a few specks over the very darkest sky band (frozen-frame; the dust streaks at 6-7 m/s in play → motion-masked) + a horizon-seam sev1 → backlog/walk-test. **MOTION feel** (sway/wind/dust-in-motion) → feel-pending Phase-A walk-test.
 - **Spend:** ~250K (assess + the storm scenario + 3 gate rounds + the root-cause fix); campaign total ~4.32M; cycle **20/50**.
-- **Commit:** `PENDING`.
+- **Commit:** `5877599`.
 - **M4:** ✓ vulture-motion-feel · ✓ atmosphere-feeltunes. **Next (cycle 21):** `smoke-signal-plume` (likely net-new). **Verdict: CONTINUE** (M4 2/4; no Phase boundary).
