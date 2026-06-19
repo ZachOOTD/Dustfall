@@ -2051,15 +2051,34 @@ const SCENARIOS = {
       const ax = worm.basePos.x, az = worm.basePos.z;
       const groundY = ctx.terrain.heightAt(ax, az);
       const rad = 10, halfLen = 60;                 // SANDWORM_MAX_RADIUS, SANDWORM_LENGTH/2
-      // Surface + pose: body along +X, head at +X, resting on the sand.
+      // Surface + pose: body along +X, head at +X.
       worm.mesh.visible = true;
-      worm.mesh.position.set(ax, groundY + rad * 0.55, az);
       worm.mesh.rotation.set(0, 0, 0);
-      worm.mesh.updateMatrixWorld(true);
       let meshes = 0; worm.mesh.traverse((o) => { if (o.isMesh) meshes++; });
+      if (ang === 'arc') {
+        // Faithful LUNGE-PEAK pose — mirrors sandWorm.ts applyBodyBend + the lunge Y-curve at t=0.5:
+        // PEAK=20, DEPTH=12.5, RAD=10 → basePos.y = ground − DEPTH/2 + PEAK = ground+13.75; bend amp 2.5;
+        // tailSink = aboveGround + RAD*0.5 = 18.75. Confirms the C14 TAIL-BURIED read (tail under, front arcs).
+        const aboveGround = 13.75, bendAmp = 2.5, tailSink = aboveGround + rad * 1.2;
+        worm.mesh.position.set(ax, groundY + aboveGround, az);
+        for (const child of worm.mesh.children) {
+          if (child.userData._nomY === undefined) child.userData._nomY = child.position.y;
+          const s = child.position.x / halfLen;
+          const sBias = s - 0.15;
+          const arch = Math.max(0, 1 - sBias * sBias) * bendAmp;
+          const rear = Math.max(0, -s);
+          child.position.y = child.userData._nomY + arch - rear * rear * tailSink;
+        }
+      } else {
+        worm.mesh.position.set(ax, groundY + rad * 0.55, az);
+      }
+      worm.mesh.updateMatrixWorld(true);
       const cam = ctx.three.camera;
       const headX = ax + halfLen;
-      if (ang === 'head') {                          // close 3/4 on the maw + front body
+      if (ang === 'arc') {                           // side-on lunge arc — tail buried + body arcing out
+        cam.position.set(ax - halfLen * 0.05, groundY + rad * 2.4, az + halfLen * 1.5);
+        cam.lookAt(ax - halfLen * 0.05, groundY + rad * 0.7, az);
+      } else if (ang === 'head') {                   // close 3/4 on the maw + front body
         cam.position.set(headX + rad * 2.0, groundY + rad * 1.5, az + rad * 2.4);
         cam.lookAt(headX - rad * 0.8, groundY + rad * 0.7, az);
       } else if (ang === 'side') {                   // full 120m silhouette broadside

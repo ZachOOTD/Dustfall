@@ -3,6 +3,12 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign C14 — 2026-06-19 — M3: worm-tail-buried (Dune emergence read) ✓ gates pass (ultracode) · feel-pending
+
+`verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/25 — worm pose code, not a placement/collider POI). Visual: lean adversarial gate (2 critics, 1 fix round) on a faithful static lunge-pose render. **No save bump.** Cycle 14/50.
+
+**worm-tail-buried.** During a surface arc the worm previously lifted its WHOLE body (tail included) above the sand — a free-floating tube. Added a **tail-sink** to `applyBodyBend` (`sandWorm.ts`): when the body arcs above ground, the REAR segments ramp DOWN to ~1.2 radii below the sand line (quadratic rear ramp; head/front arch + the bite-arc reference `basePos` untouched; auto-scales to arc height). Now the rear stays BURIED → the worm reads as ERUPTING from the earth (Dune), front arcing over. Hand-model, no rand. **Gate:** added a faithful `worm-model --angle=arc` pose render (mirrors the real `applyBodyBend` + lunge Y-curve at t=0.5); 2 critics both verdict-PASS + `tail_buried=true` ("rear dives into the sand, armor follows the bend cohesively, no defects"); 1 sev2 (dive too shallow) fixed in 1 round (bury margin 0.5→1.2 radii) — re-render confirms the rear plunges deep. Residual sev1 (front hump squat; tail-entry sand spray) → **FEEL feel-pending walk-test** (the breach MOTION is the real test). Next: worm-charge-dive.
+
 ## Campaign C13 — 2026-06-19 — M3: worm dorsal-armor overhaul → **worm-model-overhaul COMPLETE** ✓ all gates pass (ultracode, 3 rounds)
 
 `verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/25 — the worm is a creature, not a placement/collider POI). Visual: adversarial Workflow gate, **3 rounds** (hero element). **No save bump.** Cycle 13/50 (first overnight-resume cycle).

@@ -1530,20 +1530,31 @@ function syncBodyToMesh(worm: SandWorm, ctx: GameContext): void {
 function applyBodyBend(worm: SandWorm): void {
   const halfLen = Tuning.SANDWORM_LENGTH / 2;
   const amp = worm.bend;
+  // C14 — TAIL-BURIED: when the body arcs ABOVE the sand (lunge/breach), pull the REAR of the worm back
+  // down to/under the sand line so it reads as EMERGING from the earth (Dune), not a free-floating tube.
+  // Auto-scales to the arc height (the tail lands ~at the surface + a small bury margin) and only fires
+  // while above ground; the head/front arch + the bite-arc reference (basePos) are untouched. Quadratic
+  // rear ramp → mid-body unaffected, only the back ~third dives.
+  const aboveGround = Math.max(0, worm.basePos.y - worm.surfaceGroundY);
+  // Bury margin ~1.2 radii (C14 gate: a 0.5-radius dip read as the tail RESTING on the sand, not plunging
+  // INTO it) so the rear emphatically disappears below the surface.
+  const tailSink = aboveGround > 0.5 ? aboveGround + Tuning.SANDWORM_MAX_RADIUS * 1.2 : 0;
   for (const child of worm.mesh.children) {
     if (child.userData.baseY === undefined) {
       child.userData.baseY = child.position.y;
     }
-    if (amp === 0) {
+    if (amp === 0 && tailSink === 0) {
       child.position.y = child.userData.baseY;
       continue;
     }
-    // Parabolic shape: max at center, zero at ends. Slightly biased toward
-    // the head so the front raises more than the tail during the lunge.
-    const s = child.position.x / halfLen;
-    const sBias = s - 0.15; // shift peak toward head (s = 0.15)
-    const shape = Math.max(0, 1 - sBias * sBias);
-    child.position.y = child.userData.baseY + shape * amp;
+    const s = child.position.x / halfLen;               // −1 tail … +1 head
+    // Arch (existing): parabola, peak biased toward the head so the front raises more.
+    const sBias = s - 0.15;
+    const arch = amp === 0 ? 0 : Math.max(0, 1 - sBias * sBias) * amp;
+    // Tail-sink (new): 0 from mid-body forward, ramps DOWN to −tailSink at the tail (quadratic).
+    const rear = Math.max(0, -s);
+    const sink = rear * rear * tailSink;
+    child.position.y = child.userData.baseY + arch - sink;
   }
 }
 
