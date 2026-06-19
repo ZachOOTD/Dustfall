@@ -1478,7 +1478,7 @@ export const Tuning = {
   // ACL ITEMS — amban_rifle ranged weapon spec.
   WEAPON_AMBAN_RIFLE_RANGE: 60.0,    // m — raycast reach, ~2x scrap gun
   WEAPON_AMBAN_RIFLE_DAMAGE: 3.0,    // flat per-shot damage (2x scrap gun)
-  WEAPON_AMBAN_RIFLE_COOLDOWN: 1.6,  // seconds between shots (heavier than scrap gun)
+  WEAPON_AMBAN_RIFLE_COOLDOWN: 2.2,  // C21-balance: was 1.6. The amban shares scrap_bullet ammo with the scrap gun (cd 1.2, dmg 1.5) but did 2× damage AND out-DPS'd it (1.875 vs 1.25) → it strictly dominated the starter. Slowed so it reads as a true MARKSMAN tradeoff (huge per-shot + 2× range, but a slow cadence → the rapid scrap gun wins sustained close-range DPS). DPS now 1.36 ≈ scrap's 1.25. FEEL feel-pending walk-test; a deeper fix (the amban is still 2× ammo-EFFICIENT per scrap_bullet → push cd toward 2.4-2.6 for DPS parity, or charge 2 bullets/round at reload) is flagged for the milestone review (backlog §M4).
   WEAPON_AMBAN_RIFLE_MAX_AMMO: 8,    // magazine capacity
 
   // ACAC — pulse rifle: rapid-fire energy weapon with a self-recharging cell

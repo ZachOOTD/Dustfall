@@ -2,8 +2,8 @@
   "status": "active",
   "started": "2026-06-18",
   "branch": "campaign/2026-06-18",
-  "cycles_completed": 21,
-  "current_tier": "M4 — Critters + atmosphere",
+  "cycles_completed": 22,
+  "current_tier": "M5 — Riding & rest feel",
   "awaiting_approval": false,
   "stop_reasons": [],
   "resume_note": "RESUMED 2026-06-19 (overnight) at the user's request — max-cycles 12→50, status active, ULTRACODE max-quality (user chose correctness over coverage). Runs Phase A (M3-M5b) unattended; pauses at the Phase A milestone (checkpoint=milestone) for the design review (Phase B M6-M10 is design-gated). Prior cap-stop at cycle 12 was the calibration review (passed: ultracode kept on).",
@@ -16,7 +16,7 @@
   "circuit_breaker_n": 3,
   "consecutive_no_progress": 0,
   "ceiling": { "max_cycles": 50, "total": null, "per_cycle": null, "unit": "tokens" },
-  "spend": { "total": 4670000, "note": "approximate — agent cannot precisely self-meter. RESUMED overnight (ultracode max-quality). M3 worm: C13 ~320K (dorsal armor); C14 ~210K; C15 ~190K; C16 ~190K (audio, gate caught 3 sev2); C17 ~150K (multi-worm: infra pre-existing + rumble refactor); C18 ~300K (sarlacc-lure: 3-agent recon + net-new item + 4 model-gate rounds + a verify-zombie recovery); C19 ~120K (vulture-motion-feel: infra pre-existing, found+fixed the dangling-leg soar via flight-pose renders, 1 lean gate); C20 ~250K (atmosphere-feeltunes: storm pre-built; built a storm-render scenario + root-caused/fixed the dust snow-read across 3 gate rounds); C21 ~350K (smoke-signal-plume NET-NEW: fire smoke system + debug hooks + rig scenario + 6 plume-gate rounds tuning the storm wind-tear). Mostly-done units run lean (~150K); feel/audio/logic ~190K; hero-visual ~300-600K. Pre-ultracode (C1-C8) 50-290K. max-cycles=50; pauses at the Phase A milestone." },
+  "spend": { "total": 4790000, "note": "approximate — agent cannot precisely self-meter. RESUMED overnight (ultracode max-quality). M3 worm: C13 ~320K (dorsal armor); C14 ~210K; C15 ~190K; C16 ~190K (audio, gate caught 3 sev2); C17 ~150K (multi-worm: infra pre-existing + rumble refactor); C18 ~300K (sarlacc-lure: 3-agent recon + net-new item + 4 model-gate rounds + a verify-zombie recovery); C19 ~120K (vulture-motion-feel: infra pre-existing, found+fixed the dangling-leg soar via flight-pose renders, 1 lean gate); C20 ~250K (atmosphere-feeltunes: storm pre-built; built a storm-render scenario + root-caused/fixed the dust snow-read across 3 gate rounds); C21 ~350K (smoke-signal-plume NET-NEW: fire smoke system + debug hooks + rig scenario + 6 plume-gate rounds tuning the storm wind-tear); C22 ~120K (amban-rifle-balance: assessed the 4-weapon spread, found+corrected the amban's strict dominance over the scrap gun via cd 1.6->2.2, flagged the deeper economy fix). Mostly-done units run lean (~150K); feel/audio/logic ~190K; hero-visual ~300-600K. Pre-ultracode (C1-C8) 50-290K. max-cycles=50; pauses at the Phase A milestone." },
   "plan": {
     "authored": "2026-06-18",
     "amended": "2026-06-18 plan-review user steering + evidence audit + Phase-C promotion (see campaign-log.md Cycle 0)",
@@ -306,6 +306,21 @@
       "ultracode": true,
       "commit": "7ce6c81",
       "spend_approx_tokens": 350000
+    },
+    {
+      "cycle": 22,
+      "date": "2026-06-19",
+      "focus": "M4 amban-rifle-balance — found + corrected its strict dominance over the scrap gun → M4 COMPLETE",
+      "tier": "M4 — Critters + atmosphere",
+      "outcome": "SHIPPED",
+      "units": ["amban-rifle-balance — assessed the 4-weapon spread (scrap_gun/amban/pulse/energy_pistol). FOUND: the amban shares scrap_bullet ammo with the scrap_gun but did 2x damage, 2x range, AND higher DPS (1.875 vs 1.25) -> it strictly dominated the starter. FIX: cd 1.6->2.2 so it's a marksman tradeoff (DPS 1.36 ~= scrap; the rapid scrap gun wins sustained close-range). Moderate reversible nudge; deeper economy fix (2x ammo-efficient) + the feel flagged for the milestone review. M4 COMPLETE. Next tier: M5."],
+      "milestone_complete": "M4 (4 units: vulture-motion · atmosphere · smoke-plume · rifle-balance) — NOT a Phase boundary (Phase A milestone is after M5b), no pause",
+      "verify": "verify:all PASS (tsc + placement 0/0 x5 + colliders 0/25; a weapon-balance constant, not a placement/collider POI or a procgen draw)",
+      "visual": "N/A — balance/tuning unit (no appearance change). The rifle MODEL was render-checked (reads as a long rifle). Balance FEEL (cadence + over/under-power vs worm[HP12]/vultures) feel-pending walk-test.",
+      "save": "no bump — one tuning constant",
+      "ultracode": true,
+      "commit": "PENDING",
+      "spend_approx_tokens": 120000
     }
   ]
 }

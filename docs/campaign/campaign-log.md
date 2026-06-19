@@ -320,3 +320,12 @@ first stop will be `max-cycles` ~mid-Phase-A; resume via `/campaign-start --resu
 - **Spend:** ~350K (net-new build + debug hooks + rig scenario + 6 plume-gate rounds); campaign total ~4.67M; cycle **21/50**.
 - **Commit:** `7ce6c81`.
 - **M4:** ✓ vulture · ✓ atmosphere · ✓ smoke-plume. **Next (cycle 22, LAST M4):** `amban-rifle-balance` → then **M4 COMPLETE → M5**. **Verdict: CONTINUE** (M4 3/4; no Phase boundary).
+
+## Cycle 22 — M4 amban-rifle-balance: corrected its strict dominance over the scrap gun → M4 COMPLETE (2026-06-19) — SHIPPED ⚡ULTRACODE · balance feel-pending
+- **Planned:** `amban-rifle-balance` — tune the amban rifle (the last M4 unit).
+- **Shipped:** assessed the shipped **4-weapon spread** (scrap_gun / amban / pulse_rifle / energy_pistol) + corrected an **objective imbalance.** The amban is fed by the SAME `scrap_bullet` ammo as the scrap_gun (range 30 / dmg 1.5 / cd 1.2 → DPS 1.25) but did **2× damage, 2× range, AND a higher DPS** (1.875) → it **strictly dominated** the starter (better in every dimension on shared ammo — the scrap gun had no niche once you salvage the amban). **Fix:** `WEAPON_AMBAN_RIFLE_COOLDOWN` 1.6→2.2 so it reads as a true MARKSMAN tradeoff (huge per-shot at 2× range, slow cadence → DPS 1.36 ≈ scrap's 1.25; the rapid scrap gun now wins sustained close-range DPS, its niche restored).
+- **Verify:** `verify:all` PASS — tsc · placement 0/0 ×5 · colliders 0/25 (a weapon-balance constant, not a placement/collider POI or a procgen draw).
+- **Visual iteration:** N/A — balance/tuning unit (no appearance change). The rifle MODEL was render-checked (reads as a long rifle). **Moderate, reversible nudge** (one constant), NOT a blind over-tune (C20/C22 discipline): the exact value + the deeper question (the amban is still ~2× ammo-EFFICIENT per bullet — accept as the rare-upgrade reward / push cd→2.4-2.6 for DPS parity / charge 2 bullets/round) are flagged for the **Phase-A milestone review** (backlog §A). **Balance FEEL** (cadence + power vs the worm[HP 12]/vultures) → feel-pending walk-test.
+- **Spend:** ~120K (assess the weapon spread + the targeted balance fix); campaign total ~4.79M; cycle **22/50**.
+- **Commit:** `PENDING`.
+- **✓ MILESTONE M4 COMPLETE (C19-22):** vulture-motion · atmosphere · smoke-plume · rifle-balance. **Next (cycle 23):** `M5 — Riding & rest feel` (speeder-riding-feel first). **Verdict: CONTINUE** — M4 done but it is NOT the last tier before the Phase-A `### Milestone:` marker (M5, M5a, M5b remain), so the phase-level review does NOT pause here.

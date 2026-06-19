@@ -3,6 +3,12 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign C22 — 2026-06-19 — M4: **amban-rifle-balance** — found + corrected its strict dominance → **M4 COMPLETE** ✓ gates pass (ultracode)
+
+`verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/25 — a weapon-balance constant, not a placement/collider POI or a procgen draw). Visual: N/A — a balance/tuning unit (no appearance change); the rifle MODEL was render-checked (reads as a long rifle). **No save bump.** Cycle 22/50. **LAST M4 unit → M4 COMPLETE.**
+
+**amban-rifle-balance — assessed the shipped 4-weapon spread, found + corrected an objective imbalance.** The ranged weapons: scrap_gun (range 30 / dmg 1.5 / cd 1.2 → DPS 1.25, the starter), **amban_rifle** (range 60 / dmg 3 / cd 1.6 / mag 8, the marksman), pulse_rifle (rapid energy DPS), energy_pistol (charged). **The genuine issue:** the amban is fed by the SAME `scrap_bullet` ammo as the scrap_gun, but did **2× the damage, 2× the range, AND a higher DPS** (1.875 vs 1.25) — it **strictly dominated** the starter (better in every dimension on shared ammo; the scrap gun had no niche once you salvage the amban). **Fix:** bumped `WEAPON_AMBAN_RIFLE_COOLDOWN` 1.6→2.2 so the amban reads as a true MARKSMAN tradeoff — a huge per-shot hit at 2× range, but a slow cadence (DPS 1.36 ≈ scrap's 1.25), so the rapid scrap gun now wins sustained close-range DPS (its niche restored). **Moderate, reversible nudge** (one constant) — NOT a blind over-tune (the C20 lesson): the exact value + the deeper question (the amban is still ~2× ammo-EFFICIENT per bullet — accept as the rare-upgrade reward, or push cd→2.4-2.6 for DPS parity, or charge 2 bullets/round) are flagged for the **Phase-A milestone review** (backlog §A). **Balance FEEL** (cadence + over/under-power vs the worm[HP 12]/vultures) → feel-pending walk-test. **✓ M4 COMPLETE** (C19-22: vulture-motion · atmosphere · smoke-plume · rifle-balance). Next tier: **M5 — Riding & rest feel.**
+
 ## Campaign C21 — 2026-06-19 — M4: **smoke-signal-plume** (NET-NEW) — every lit fire is now a smoke beacon ✓ gates pass (ultracode, 6 plume rounds)
 
 `verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/25 — the plume is render-time billboard sprites + non-raycastable, not a placement/collider POI or a procgen draw). Visual: adversarial gate on the plume LOOK (clear + storm), **6 rounds**. **No save bump** (transient — re-created for alive fires on load). Cycle 21/50. **M4 unit 3/4.**
