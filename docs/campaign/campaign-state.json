@@ -364,7 +364,7 @@
       "ultracode": true,
       "no_code_change": true,
       "meta_note": "M5 polish units keep landing on heavily-built mature systems (riding + 3P) -> verify cycles; the user may want to re-prioritize toward M5a/Phase B (more net-new) at the milestone review.",
-      "commit": "PENDING",
+      "commit": "c25cf7e",
       "spend_approx_tokens": 90000
     }
   ]

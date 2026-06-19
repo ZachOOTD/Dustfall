@@ -357,5 +357,5 @@ first stop will be `max-cycles` ~mid-Phase-A; resume via `/campaign-start --resu
 - **Visual iteration:** N/A — the `rig3p` render confirmed held-items-in-3P. **Remaining (modest, deferred — NO blind build):** 3P camera-ORBIT mode (a design/feel control-scheme feature — walk-test), `thirdPersonColorBoost` for dark items (speculative "?"; the SCALE side is already done), the foot-IK idle→walk snap (cosmetic, no clean fix — continuous per-frame IK). The C20/C22/C23/C25 discipline: don't blind-build design/feel/structural items.
 - **Honest note + meta:** the 2nd low-code cycle in the M5 polish run (C23 too). M5's units keep landing on **heavily-built mature systems** (riding + 3P) → verification cycles. The deliverable is the *confirmation* they're solid + the correct hand-off of the design/feel/structural remainder to the walk-test. **Flagged for the milestone review:** the user may want to re-prioritize toward M5a (exploration & exposure) / Phase B, which have more net-new feature work.
 - **Spend:** ~90K (the full sub-item assessment + a rig3p render); campaign total ~5.22M; cycle **25/50** (HALFWAY).
-- **Commit:** `PENDING`.
+- **Commit:** `c25cf7e`.
 - **M5:** ✓ speeder-riding-feel · ✓ rope-attach · ✓ 3p-camera-and-render-polish. **Next (cycle 26):** `lie-down-to-sleep`. **Verdict: CONTINUE** (M5 3/5; no Phase boundary).
