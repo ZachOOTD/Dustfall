@@ -1,4 +1,4 @@
-# Campaign cycle-9 kickoff — `campaign/2026-06-18`
+# Campaign cycle-10 kickoff — `campaign/2026-06-18`
 
 > `/session-end` (focused, per-cycle) rewrote this. The roadmap is authoritative (skill Step 4).
 
@@ -7,35 +7,40 @@
 
 ## Where we are
 - ✓ **M1 COMPLETE** (C1-C4). **M2:** C5 feature-flags · C6 security-review · **wreck-polish-bundle `[partial]`** —
-  C7 delta 1 (dorsal mass, 5-round gate) · C8 delta 2 chroma (assessed already-done, skipped) + delta 3 (engine-droop).
-- **wreck-polish deltas done: 1 (dorsal mass), 2 (chroma, was already done), 3 (engine-droop). Remaining: 4 + 5.**
+  C7 delta 1 (dorsal mass) · C8 delta 2 chroma (already-done) + delta 3 (engine-droop) · C9 delta 4 (corvette/gunship trauma).
+- **wreck-polish deltas: 1✓ 2✓(already-done) 3✓ 4✓(read-polish flagged → backlog §F). Remaining: delta 5.**
 
-## Cycle 9 picks up: **wreck-polish delta 4 = scout/corvette guaranteed visible TRAUMA** · VISUAL
-§F: scout + corvette sit fully PROUD (barely buried) + are the most-scrutinised, but can roll up clean/intact —
-they need guaranteed visible damage. **Ensure ≥1 SHEARED hull / breach + a crash LIST on every scout + corvette.**
-- Where: `procgenWreck.ts` — the SHEARED_HULL variant + `addBreachPatches` are gated by `rand()` per part
-  (e.g. L723 `if (rand() < 0.7) addBreachPatches(...)`). For scout/corvette, FORCE at least one breach/shear +
-  a list (the crash tilt). **DETERMINISM:** if you add a FORCED call, do it WITHOUT changing the `rand` draw
-  count (a conditional that skips a rand desyncs the stream, D208) — gate on `cls`, and either keep the rand
-  draw and override its effect, or add a rand-free forced breach. Re-run `verify:placement` + `verify:colliders`.
-- **Visual gate:** rig-shot scout + corvette across a few seeds (`--class=scout --seeds=1,42,1337 --zoom=0.5`),
-  confirm EVERY one shows visible trauma (breach/shear + list). Critique believability.
+## Cycle 10 picks up: **wreck-polish delta 5 = scale-anchor exclusion pocket** · VISUAL (likely a quieter cycle)
+§F: lee greebles / panel seams can punch THROUGH the hull near the human scale-anchor hatch, breaking the one
+human-constant reference that sells wreck scale. Carve a small **exclusion pocket** around each scale-anchor so
+greebles/seams/panels don't overlap it.
+- Where: `procgenWreck.ts` — the scale-anchor block (`addScaleAnchor`, ~L1650-1700) sets `anchorLeeSide` +
+  seats the hatch on the part's real +Z flank. `findSurfaceMounts` / `addHullGreebles` / panel placement need to
+  treat a radius-R disc around the anchor's (x,y,z) as off-limits. Cleanest: tag the anchor's footprint (reuse the
+  `isWreckDecoration` reject path the breach gash uses) OR add an explicit exclusion-radius check in the greeble/
+  panel-mount loops keyed off the anchor position.
+- **DETERMINISM:** if the exclusion changes how many greebles/panels are placed, that's fine ONLY if it doesn't
+  change the **rand draw count** (skipping a rand-gated placement desyncs — D208). Prefer: keep the draw, reject
+  the RESULT (place-then-discard if it lands in the pocket), or use a hash2/phash exclusion test (no rand). Re-run
+  `verify:placement` ×5 + `verify:colliders`. If panel COUNT shifts but positions are otherwise identical + 0-fail,
+  that's the intended un-collision (precedent: C2 sand-mound 79→80).
+- **Visual gate:** rig-shot a wreck that has a scale-anchor (`procgen-wreck --class=freighter --zoom=0.4`), confirm
+  the hatch sits in a clean pocket (no greeble/seam clipping it). Lighter pass — it's a subtle placement fix.
 
-## Remaining after delta 4
-- delta 5: scale-anchor exclusion pocket (lee greebles/seams don't punch through near the human hatch — a
-  subtle placement fix). Then **M2's LAST unit `yard-cross-poi-merge`** (HIGH-RISK, own cycle — D237/D239
-  re-attempt; revert+requeue on 2× audit fail). After M2 → M3.
+## After delta 5 → wreck-polish-bundle COMPLETE; then M2's last unit:
+- **`yard-cross-poi-merge`** (HIGH-RISK, own cycle — D237/D239 re-attempt; revert+requeue on 2× audit fail). Then M3.
 
-> **CAP: 4 cycles left.** At `cycles_completed >= 12` the loop STOPS `completed (max-cycles)` — the calibration
-> review (mid-Phase-A, mid wreck-polish). Resume: `/campaign-start --resume --max-cycles=<N>`. Per-cycle spend
-> table is in `campaign-log.md` (visual cycles 150-290K, logic/material 50-170K).
+> **CAP: 3 cycles left (cycle 10 next).** At `cycles_completed >= 12` the loop STOPS `completed (max-cycles)` — the
+> calibration review (mid-Phase-A, mid wreck-polish). Resume: `/campaign-start --resume --max-cycles=<N>`. The cap
+> will likely land at delta-5 + the start of yard-merge — Phase A is NOT reached within 12.
 
 ## Autonomy contract
 - **`phash`-determinism (D221)** — re-run `verify:placement` + `verify:colliders` after any geometry change; a
-  rand-consuming conditional desyncs the stream (gate on `cls`, keep the draw count). **Rule 8** — visual work
-  iterates; a NEW visual element = 5-8 rounds, a routine TUNING = solo-triage / 2-3 rounds. **Don't re-do
-  already-done items** (verify the current state first — chroma + dish + scrap were largely done). **COLLIDER-AUDIT
-  (D235)** · **Save (D81)** additive-only, surface bumps.
+  rand-consuming conditional desyncs the stream (gate on `cls`/hash2, keep the draw count). Watch the **types**: not
+  every conceptual name is a `ProcgenWreckClass` ('scout' is a rig-shot fallback, NOT a class — C9 caught this in tsc).
+  **Rule 8** — visual work iterates (new element 5-8 rounds, tuning 3-5 / solo-triage); **flag honest read-conviction**
+  when a visual ships modest (C9 trauma → backlog §F). **Don't re-do already-done items.** **COLLIDER-AUDIT (D235)** ·
+  **Save (D81)** additive-only, surface bumps.
 
 ## Stop conditions
 3 fix-walls on one element (→ scope-cut GDD §12, D-entry) · a placement/collider regression you can't clear in

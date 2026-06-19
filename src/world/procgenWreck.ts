@@ -1562,6 +1562,45 @@ function addDorsalMass(g: THREE.Group, partLength: number, partRadius: number, m
   g.add(grp);
 }
 
+// ── wreck-polish delta 4 (campaign 2026-06-18) — GUARANTEED visible trauma on corvette + gunship ──
+// These small military ships sit nearly upright (barely buried) + are the most-scrutinised, but the
+// per-part breach gate is probabilistic so one can roll up clean/intact. This adds ONE deterministic
+// breach on a hull body of every corvette/gunship: a torn-open GASH poking through the flank + a bent
+// sheared-loose hull-plate FLAP beside it. hash2-only (ZERO rand → the panel rand stream is
+// byte-identical, verify:placement unchanged, D208/D221); isWreckDecoration-tagged (findPanelMount
+// rejects a panel on it, COLLIDER-AUDIT-exempt); shared materials (folds into the merge + re-skin).
+function addForcedTrauma(g: THREE.Group, partLength: number, radius: number): void {
+  const h = hash2(partLength * 2.1, radius * 1.7);
+  const h2 = hash2(radius * 2.9, partLength * 1.3);
+  const side = hash2(partLength * 0.7, radius * 3.3) < 0.5 ? 1 : -1;
+  const w = radius * (0.8 + h * 0.5);
+  const ht = radius * (0.55 + h2 * 0.4);
+  const d = 0.14;                                     // rule 7
+  const px = partLength * (0.30 + h * 0.40);
+  const py = radius * (0.52 + h2 * 0.36);             // upper flank — clear of the sand-line, reads at 3q + side
+  const pz = (radius * 0.90 + d * 0.5) * side;        // pokes through the flank skin
+  // Torn-open GASH — UNLIT pure-black (nozzle-interior mat) so it reads as a VOID into the hull,
+  // distinct from the lit dark greebles it would otherwise blend with (the breach-read fix).
+  const gash = new THREE.Mesh(new THREE.BoxGeometry(w, ht, d), _nozzleInteriorMat);
+  gash.position.set(px, py, pz);
+  gash.rotation.set((h - 0.5) * 0.4, (h2 - 0.5) * 0.5, (h - 0.5) * 0.35);   // torn, not a clean rect
+  gash.userData.isWreckDecoration = true;
+  g.add(gash);
+  // Sheared hull plate PEELED back from the gash lip — attached at one edge + bent outward off the
+  // flank, so it reads as blasted-open plating (not detached debris). Sits just outboard of the gash.
+  const flap = new THREE.Mesh(new THREE.BoxGeometry(w * 0.7, ht * 0.7, 0.12), _rustMat);
+  flap.position.set(px + w * 0.48, py + ht * 0.12, (radius * 0.86 + 0.22) * side);
+  flap.rotation.set((h - 0.5) * 0.4, (h2 - 0.5) * 0.6, -0.7 * side);        // hinged back off the hull
+  flap.userData.isWreckDecoration = true;
+  g.add(flap);
+  // A jagged torn-metal strut at the gash lip (sells the breach up close).
+  const lip = new THREE.Mesh(new THREE.BoxGeometry(0.12, ht * 0.55, 0.12), _rustMat);
+  lip.position.set(px - w * 0.42, py + ht * 0.18, pz);
+  lip.rotation.set((h2 - 0.5) * 0.8, 0, (h - 0.5) * 0.9);
+  lip.userData.isWreckDecoration = true;
+  g.add(lip);
+}
+
 function assembleWreck(
   rand: Rng,
   recipe: WreckRecipe,
@@ -1667,6 +1706,20 @@ function assembleWreck(
         Math.abs((b.startX + b.built.partLength / 2) - mid))[0];
       const maxR = Math.max(...placed.map((p) => p.built.radius));   // size the tower off the wreck BULK
       addDorsalMass(target.built.mesh, target.built.partLength, target.built.radius, maxR);
+    }
+  }
+
+  // wreck-polish delta 4 — GUARANTEED visible trauma on the small proud military ships (corvette +
+  // gunship sit nearly upright per the burial table + are the most-scrutinised, but the per-part breach
+  // gate is probabilistic → one can roll up clean). ONE forced breach gash + sheared flap on a hull body
+  // part. hash2-only → the panel rand stream is byte-identical (verify:placement unchanged). Added BEFORE
+  // panels so findSurfaceMounts treats the proud gash as an obstacle (no panel welds over the hole).
+  if (cls === 'corvette' || cls === 'gunship') {
+    const body = placed.slice(1).filter((p) => p.built.radius >= 0.7);
+    const pool = body.length ? body : placed.slice(1);
+    if (pool.length) {
+      const target = pool[Math.floor(hash2(totalLength, pool.length) * pool.length) % pool.length];
+      addForcedTrauma(target.built.mesh, target.built.partLength, target.built.radius);
     }
   }
 

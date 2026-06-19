@@ -3,6 +3,14 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign C9 — 2026-06-18 — M2 wreck-polish delta 4: guaranteed corvette/gunship trauma `[partial]` ✓ gates pass (read-polish flagged)
+
+`verified` — `npm run verify:all` PASS (tsc + `verify:placement` 0/0 ×5 + `verify:colliders` 0/25). **No save bump.** Cycle 9/12 (M2 — wreck-polish-bundle `[partial]`; delta 4 shipped, delta 5 remains).
+
+**delta 4 — guaranteed visible trauma on the small proud military ships (§F).** corvette + gunship sit nearly upright (barely buried) + are the most-scrutinised, but the per-part breach gate is probabilistic → one can roll up clean/intact. New `addForcedTrauma` puts ONE deterministic breach on a hull body of every corvette/gunship: a torn-open **GASH** (unlit pure-black nozzle-interior mat → reads as a VOID, not a lit dark greeble) + a **peeled hull-plate flap** + a **jagged lip strut**. **hash2-only → ZERO rand** (panel stream byte-identical, placement 0/0); added BEFORE panels so `findSurfaceMounts` rejects a panel over the hole; `isWreckDecoration`-tagged (COLLIDER-AUDIT-exempt). The §F "list" is already handled in-world (`poiAssembler` `arch.params.list` × phash crash-list). **NOTE — `'scout'` is NOT a `ProcgenWreckClass`** (rig-shot `--class=scout` silently renders a fallback); the faithful mapping of §F's "scout + corvette" is corvette + gunship (the cool-bucket small ships).
+
+⚠ **Read-conviction flagged (honest self-check, 4 iteration rounds):** the trauma is guaranteed + determinism-safe + believable crash damage from the gash flank (in-world the player circles → guaranteed-seen), but it's **flank-located** (the fixed rig angle shows it ~half the seeds) and on some seeds reads as **scattered debris near the wreck** rather than a clean attached main-hull breach (part-selection picks any ≥0.7 body part). The all-angle silhouette-break attempt (round 2) read as detached debris + was reverted. **Attachment + main-hull-targeting polish → backlog §F; read + feel → walk-test.** wreck-polish-bundle stays `[partial]` (delta 5 scale-anchor pocket remains).
+
 ## Campaign C8 — 2026-06-18 — M2 wreck-polish: chroma (already done) + delta 3 engine-droop `[partial]` ✓ all gates pass
 
 `verified` — `npm run verify:all` PASS (tsc + `verify:placement` 0/0 ×5 + `verify:colliders` 0/25); engine-droop solo-triage PASS (3-seed variety + believability). **No save bump.** Cycle 8/12 (M2 — wreck-polish-bundle `[partial]`; delta 2 assessed-already-done, delta 3 shipped).
