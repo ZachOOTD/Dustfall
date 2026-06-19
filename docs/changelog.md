@@ -3,6 +3,14 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign C13 — 2026-06-19 — M3: worm dorsal-armor overhaul → **worm-model-overhaul COMPLETE** ✓ all gates pass (ultracode, 3 rounds)
+
+`verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/25 — the worm is a creature, not a placement/collider POI). Visual: adversarial Workflow gate, **3 rounds** (hero element). **No save bump.** Cycle 13/50 (first overnight-resume cycle).
+
+**worm dorsal armor (the full-body awe pass — finishes worm-model-overhaul).** The side silhouette was a uniform ribbed tube; added a row of 13 overlapping keeled **dorsal armor scutes** along the spine (`sandWorm.ts` makeWormMesh) → an ancient ARMORED leviathan read (awe-not-horror). Hand-model, no rand. Color `0x46382a` (sits between skin + ridge-ring browns — gate praised, kept). **Gate arc (3 rounds, the hero-element discipline):** R1 — awe ✓ + clipping ✓, cohesion FAIL (tall gappy sawtooth pyramids read as stegosaurus fins). R2 — lowered (r*0.6→0.36) + broadened (r*0.62→0.9) + overlapped (10→13 plates) + per-plate variation; broadside ✓ but 3q still showed sharp sawtooth APEX peaks. R3 — swapped the sharp cone for a **flat-topped frustum** (`CylinderGeometry(0.42,1,1,4)`) + stronger overlap → the 3q V-notches filled into one continuous rolled armored crest. **Final gate PASS — sawtooth resolved, both prior FAIL modes gone.** Residual sev3 nits (crest a touch dark/subtle at distance; gentle variation) → backlog. FEEL (the worm's motion/menace) → feel-pending walk-test.
+
+**worm-model-overhaul COMPLETE** (C12 rig-shot + maw fangs · C13 dorsal armor). Optional future polish: a more massive defined head; per-segment chitin variation (deferred — the core silhouette + maw asks are met).
+
 ## Campaign C12 (THE CAP) — 2026-06-18 — M3 START: worm-model rig-shot + maw fang overhaul `[partial]` ✓ gates pass (ultracode)
 
 `verified` — `npm run verify:all` PASS (tsc clean; placement 0/0 ×5 + colliders 0/25 unchanged — the worm is a creature, not a placement/collider-audited POI). Visual: lean adversarial Workflow gate (2 critics, 1 fix round). **No save bump.** Cycle 12/12 → **campaign STOPS `completed (max-cycles)` for the calibration review.**

@@ -307,6 +307,32 @@ function makeWormMesh(): { group: THREE.Group } {
     group.add(ridge);
   }
 
+  // ─── Dorsal armor (C13) — overlapping keeled SCUTES along the spine. Breaks the uniform
+  //     ribbed-tube silhouette into an ancient ARMORED leviathan read (awe, not horror). Each
+  //     scute is a low 4-sided keel sitting on the dorsal surface, scaled to the body radius there
+  //     + elongated along the body so neighbours overlap. Hand-model → no rand. ───
+  const plateMat = new THREE.MeshLambertMaterial({ color: 0x46382a, flatShading: true });
+  const PLATE_COUNT = 13;
+  for (let i = 0; i < PLATE_COUNT; i++) {
+    const t = 0.26 + (0.90 - 0.26) * (i / (PLATE_COUNT - 1));   // behind the head taper → near the tail
+    const xPos = -halfLen + t * length;
+    const r = segmentRadius(t * SEGMENT_COUNT);
+    // C13 r2 (gate cohesion fix): broad LOW OVERLAPPING keeled plates — NOT tall gappy pyramids (those
+    // read as a stegosaurus sawback). Bases now exceed the centre spacing so they interlock into one
+    // ridge of layered armour; height peaks mid-body + a small per-plate wobble = organic grown armour
+    // that undulates rather than marching in a perfect identical row. Hand-authored → no rand.
+    const hFactor = 0.74 + 0.40 * Math.sin(t * Math.PI) + 0.12 * Math.sin(i * 2.3);  // harder mid-body swell + wobble
+    const scuteH = r * 0.36 * hFactor;                       // LOW keel (was r*0.6 spike)
+    const lenFactor = 0.9 + 0.18 * Math.sin(i * 1.7);        // more per-plate length variation
+    // C13 r3 (gate 3q fix): FLAT-TOPPED frustum, not a sharp cone — a blunt plate apex reads as armour,
+    // not a sawtooth point along the spine. More base overlap fills the V-notches into one rolled crest.
+    const scute = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 1, 1, 4), plateMat);
+    scute.rotation.y = Math.PI / 4;                          // square base edges → X (length) / Z (width)
+    scute.scale.set(segmentLen * 0.95 * lenFactor, scuteH, r * 0.92);  // strong OVERLAP · low · broad back
+    scute.position.set(xPos, r + scuteH * 0.1, 0);
+    group.add(scute);
+  }
+
   // Tail tip — narrow cone capping the -halfLen end.
   const tailR = segmentRadius(0);
   const tail = new THREE.Mesh(
