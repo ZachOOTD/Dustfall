@@ -2,7 +2,7 @@
   "status": "active",
   "started": "2026-06-18",
   "branch": "campaign/2026-06-18",
-  "cycles_completed": 9,
+  "cycles_completed": 10,
   "current_tier": "M2 — Wreck breadth + polish + infra",
   "awaiting_approval": false,
   "stop_reasons": [],
@@ -15,7 +15,7 @@
   "circuit_breaker_n": 3,
   "consecutive_no_progress": 0,
   "ceiling": { "max_cycles": 12, "total": null, "per_cycle": null, "unit": "tokens" },
-  "spend": { "total": 1290000, "note": "approximate — agent cannot precisely self-meter; max_cycles is the real bound (no budget ceiling set). C7 costliest (~290K, 5 visual rounds); C9 ~230K (4 trauma-read rounds + a tsc class-name fix + extra gate runs); C8 ~130K; logic/material/audit cycles 50-170K." },
+  "spend": { "total": 1890000, "note": "approximate — agent cannot precisely self-meter; max_cycles is the real bound (no budget ceiling set). C10 by FAR the costliest (~600K) — ULTRACODE enabled mid-campaign: 3 adversarial Workflow gate rounds (~458K subagent tokens) that FOUND + fixed a root-cause coordinate bug, + a full addForcedTrauma rewrite. Pre-ultracode cycles ran 50-290K. FLAG at cap review: ultracode roughly 2-4x's per-cycle cost." },
   "plan": {
     "authored": "2026-06-18",
     "amended": "2026-06-18 plan-review user steering + evidence audit + Phase-C promotion (see campaign-log.md Cycle 0)",
@@ -140,6 +140,20 @@
       "tsc_fix": "'scout' is not a ProcgenWreckClass (TS2367) -> retargeted to corvette + gunship",
       "commit": "4bca3b4",
       "spend_approx_tokens": 230000
+    },
+    {
+      "cycle": 10,
+      "date": "2026-06-18",
+      "focus": "M2 wreck-polish delta 5 + C9 trauma read-polish -> wreck-polish-bundle COMPLETE (ultracode)",
+      "tier": "M2 — Wreck breadth + polish + infra",
+      "outcome": "SHIPPED",
+      "units": ["wreck-polish-bundle COMPLETE (delta 5 scale-anchor exclusion pocket + C9 trauma read-polish; 5/5 deltas done)"],
+      "verify": "verify:all PASS (tsc + placement 0/0 x5 + colliders 0/25)",
+      "visual": "3-round adversarial Workflow gate. R1 found a ROOT-CAUSE coordinate bug (elements placed at local y=0 but hull centre is y=r*0.55) via the code-auditor; rewrote addForcedTrauma to the real frame + depth cues + welded flap. R2/R3 confirmed the fix landed but the dorsal roof kept floating on the domed corvette -> DROPPED it. Flank breach gate-confirmed ATTACHED. delta-5 exclusion is non-visual (greeble removal near the anchor). Residual sev1 (gunship side-void contrast) -> backlog. FEEL feel-pending walk-test.",
+      "milestone_complete": "wreck-polish-bundle UNIT done (not the M2 milestone — yard-cross-poi-merge remains); no Phase boundary, no pause",
+      "ultracode": true,
+      "commit": "89d63d4",
+      "spend_approx_tokens": 600000
     }
   ]
 }

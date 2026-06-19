@@ -190,3 +190,16 @@ first stop will be `max-cycles` ~mid-Phase-A; resume via `/campaign-start --resu
 - **Spend:** ~230K approx (4 trauma-read rounds + a tsc class-name fix + extra gate runs); campaign total ~1.29M; cycle **9/12**.
 - **Commit:** `4bca3b4`.
 - **`wreck-polish-bundle` stays `[partial]`** — delta 5 (scale-anchor exclusion pocket) remains, then `yard-cross-poi-merge`. **Next (cycle 10):** delta 5. **Verdict: CONTINUE** (M2 in progress; no milestone crossed). **Cap: 3 cycles left — the cap will likely land at delta 5 + the start of yard-merge.**
+
+---
+
+## Cycle 10 — M2 wreck-polish delta 5 + C9 trauma read-polish → wreck-polish-bundle COMPLETE (2026-06-18) — SHIPPED ⚡ULTRACODE
+- **Planned:** delta 5 (scale-anchor exclusion pocket) + (ultracode) a real fix for the flagged C9 trauma read.
+- **Shipped:** **wreck-polish-bundle is now COMPLETE (5/5 deltas).**
+  - **C9 trauma read-polish — the adversarial gate FOUND A ROOT-CAUSE BUG.** A 3-round Workflow gate's code-auditor (reading the geometry SOURCE, not just the renders) diagnosed that `addForcedTrauma` placed elements as if local `y=0` were the hull axis — but every hull variant seats the body centre at `y≈r*0.55` (crown `≈r*1.55`; `y=0` is the underside burial sinks), so the roof/flap floated ~0.5m off the hull = the "scattered debris" read. (Also disambiguated: that read was partly the INTENDED `addDebrisFan` — sand fragments are a feature, mis-attributed in C9.) Rewrote to the real frame + depth cues (scorch ring + 2 jagged sub-voids) + welded flap + tiny-wreck flap-skip + largest-mass part-pick. **Dropped the dorsal roof** (floated on the domed corvette across all 3 rounds — the `r*1.55` estimate overshoots it); the flank breach now reads as a strong ATTACHED hole, gate-confirmed.
+  - **delta 5 scale-anchor exclusion pocket:** determinism-safe scene-graph filter removes greebles inside the anchor footprint on the lee flank (zero rand, collider-exempt).
+- **Verify:** `verify:all` PASS — tsc · placement 0/0 ×5 · colliders 0/25 (determinism held across the rewrite + 3 gate rounds).
+- **Visual iteration:** iterated **3 adversarial Workflow gate rounds** (multi-critic + code-auditor). R1 FAIL→found the bug; R2 FAIL→fix confirmed landed, 1 residual sev2 (roof float); R3 FAIL→roof still floating→DROPPED. Final: flank breach gate-confirmed attached on every angle; residual sev1 (gunship side-void contrast) → backlog. **The gate earned its keep — a code-only change would have shipped the coordinate bug.** FEEL → feel-pending walk-test.
+- **Spend:** ~600K approx (BY FAR the costliest cycle — ultracode: 3 gate rounds ≈458K subagent tokens + a full rewrite); campaign total ~1.89M; cycle **10/12**.
+- **Commit:** `89d63d4`.
+- **M2 status:** wreck-polish-bundle ✓ COMPLETE; **`yard-cross-poi-merge` is the last M2 unit. Next (cycle 11):** yard-merge (HIGH-RISK, D237/D239). **Verdict: CONTINUE** (M2 in progress; no Phase boundary). **Cap: 2 cycles left.** ⚠ Per-cycle spend rose ~2-4× under ultracode — flag at the cap review.
