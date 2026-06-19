@@ -301,7 +301,7 @@ export const Tuning = {
   // Peak opacity per layer.
   STORM_DUST_NEAR_OPACITY: 0.55,
   STORM_DUST_MID_OPACITY: 0.55,
-  STORM_DUST_FAR_OPACITY: 0.40,
+  STORM_DUST_FAR_OPACITY: 0.30,    // C20 — thinned so the far/sky layer dissolves into the fog haze instead of dotting the dark sky with specks
   // Terrain darkening at peak storm. Sun intensity × (1 - STORM_SUN_DIM),
   // ambient × (1 - STORM_AMBIENT_DIM). Sun loses more than ambient (sun
   // is "behind" the dust, ambient picks up dust-scattered light).

@@ -48,6 +48,11 @@ export interface StormWall {
 interface DustLayer {
   particles: THREE.Points;
   mat: THREE.PointsMaterial;
+  /** C20 — the layer's un-dimmed albedo. The dust is unlit + toneMapped:false, so
+   *  it ignored the storm's sun/ambient dimming and popped as bright specks vs the
+   *  darkened sky; updateWeather scales mat.color = baseColor · (1 − sunDim·intensity)
+   *  so the dust dims in lockstep with the scene instead of out-luminancing it. */
+  baseColor: THREE.Color;
   vels: Float32Array;
   count: number;
   spread: number;
@@ -131,8 +136,10 @@ function makeDustTexture(): THREE.CanvasTexture {
   const g = c.getContext('2d');
   if (!g) throw new Error('canvas 2d unavailable');
   const grad = g.createRadialGradient(16, 16, 0, 16, 16, 16);
-  grad.addColorStop(0, 'rgba(255,255,255,1)');
-  grad.addColorStop(0.45, 'rgba(255,255,255,0.65)');
+  // C20 — softer, feathered falloff (lower peak alpha) so a mote reads as an
+  // out-of-focus dust smudge, not a crisp bright point (the snow/flake tell).
+  grad.addColorStop(0, 'rgba(255,255,255,0.78)');
+  grad.addColorStop(0.4, 'rgba(255,255,255,0.38)');
   grad.addColorStop(1, 'rgba(255,255,255,0)');
   g.fillStyle = grad;
   g.fillRect(0, 0, 32, 32);
@@ -265,7 +272,7 @@ function buildLayer(
   particles.frustumCulled = false;
   particles.visible = false;
   scene.add(particles);
-  return { particles, mat, vels, count: cfg.count, spread: cfg.spread, yWrapHalf: cfg.yWrapHalf };
+  return { particles, mat, baseColor: mat.color.clone(), vels, count: cfg.count, spread: cfg.spread, yWrapHalf: cfg.yWrapHalf };
 }
 
 export function createWeather(
@@ -278,7 +285,7 @@ export function createWeather(
     spread: Tuning.STORM_DUST_NEAR_SPREAD,
     yWrapHalf: 6,
     size: 0.18,
-    color: 0xd8b888,
+    color: 0xae8658,   // C20 — dimmed from 0xd8b888: toneMapped:false dust ignored the storm exposure-dim → bright specks popped (snow-read) vs the darkened sky. Still the brightest (warm-gold) layer.
     velMean: [7.5, 0, -3.0],
     velSpread: [2.0, 0.6, 1.8],
   });
@@ -288,7 +295,7 @@ export function createWeather(
     spread: Tuning.STORM_DUST_MID_SPREAD,
     yWrapHalf: 10,
     size: 0.32,
-    color: 0xc8a070,
+    color: 0x947048,   // C20 — dimmed from 0xc8a070 toward the dimmed storm tone (was popping bright vs the dark sky)
     velMean: [6.0, 0, -2.8],
     velSpread: [1.6, 0.5, 1.4],
   });
@@ -299,7 +306,7 @@ export function createWeather(
     spread: Tuning.STORM_DUST_FAR_SPREAD,
     yWrapHalf: 18,
     size: 0.60,
-    color: 0x8c6850,
+    color: 0x60492f,   // C20 — far layer biased MOST toward the fog/sky murk so it recedes into haze instead of sparkling (dimmed from 0x8c6850)
     velMean: [2.5, 0, -1.2],
     velSpread: [0.8, 0.3, 0.7],
   });
@@ -527,6 +534,16 @@ export function updateWeather(ctx: GameContext, dt: number): void {
     windX = wall.dirX * k;
     windZ = wall.dirZ * k;
   }
+
+  // C20 — couple the (unlit, toneMapped:false) dust brightness to the storm's
+  // scene-dimming. The storm dims sun/ambient by STORM_SUN_DIM·intensity, but the
+  // dust ignored that and popped as bright specks against the darkened sky (a
+  // snow/flurry read). Scale each layer's albedo down in lockstep so the dust sits
+  // IN the murk at peak, while staying bright in a light/early storm.
+  const dustDim = 1 - Tuning.STORM_SUN_DIM * pi;
+  w.layers.far.mat.color.copy(w.layers.far.baseColor).multiplyScalar(dustDim);
+  w.layers.mid.mat.color.copy(w.layers.mid.baseColor).multiplyScalar(dustDim);
+  w.layers.near.mat.color.copy(w.layers.near.baseColor).multiplyScalar(dustDim);
 
   stepLayer(w.layers.far, farOp, farOp > 0.001, dt, windX * 1.4, windZ * 1.4);
   stepLayer(w.layers.mid, midOp, midOp > 0.001, dt, windX, windZ);

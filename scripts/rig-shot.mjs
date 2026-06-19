@@ -1538,6 +1538,62 @@ const SCENARIOS = {
     console.log(`[cloud-shadows] ${JSON.stringify(r)}`);
   },
 
+  // Storm (C20): force a PEAK sandstorm centered on the player + render the dust-
+  // storm LOOK (the signature atmosphere moment — 3 dust layers + fog + sun/ambient
+  // dimming + the storm vignette). No storm-render scenario existed; this is the
+  // reusable enabler for atmosphere iteration. Eye-level horizontal view into the wall.
+  'storm': async (page) => {
+    await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      window.__game.setTime(0.42);                 // mid-morning: lit but warm
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      ctx.player.inShelter = false;                // ensure perceivedIntensity isn't dampened
+      ctx.three.renderer.setSize(900, 600, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 900 / 600; cam.updateProjectionMatrix(); }
+      // Force a peak storm centered on the player (player inside the wall core → intensity 1).
+      const w = ctx.weather;
+      const tr = ctx.player.body.body.translation();
+      w.state = 'storm';
+      w.intensity = 1.0;
+      w.perceivedIntensity = 1.0;
+      w.currentStormDuration = 1e6;                // don't let it settle during the shot
+      w.stateTimer = 0;
+      w.wall.active = true;
+      w.wall.posX = tr.x; w.wall.posZ = tr.z;
+      w.wall.dirX = 1; w.wall.dirZ = 0;
+      w.wall.width = 400; w.wall.age = 0; w.wall.approaching = false;
+    });
+    // Run the LIVE loop ~2.4s so the 3 dust layers populate, drift, + ramp to full
+    // opacity (opacity keys off perceivedIntensity, recomputed by the shelter pass).
+    await page.waitForTimeout(2400);
+    const r = await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      const w = ctx.weather;
+      w.intensity = 1.0; w.perceivedIntensity = 1.0;   // re-pin peak
+      const tr = ctx.player.body.body.translation();
+      const cam = ctx.three.camera;
+      ctx.flags.paused = true;
+      // Eye-level horizontal view into the storm.
+      cam.position.set(tr.x, tr.y + 1.6, tr.z);
+      cam.lookAt(tr.x + 30, tr.y + 1.6, tr.z + 4);
+      cam.updateMatrixWorld(true);
+      ctx.three.renderer.render(ctx.three.scene, cam);   // guarantee the repositioned view paints
+      const fog = ctx.three.scene.fog;
+      return {
+        intensity: +w.intensity.toFixed(2), pi: +w.perceivedIntensity.toFixed(2),
+        fogDensity: fog ? +fog.density.toFixed(4) : null,
+        vis: [w.layers.near.particles.visible, w.layers.mid.particles.visible, w.layers.far.particles.visible],
+        op: [+w.layers.near.mat.opacity.toFixed(2), +w.layers.mid.mat.opacity.toFixed(2), +w.layers.far.mat.opacity.toFixed(2)],
+      };
+    });
+    await page.waitForTimeout(120);
+    await page.screenshot({ path: join(OUT, 'scen-storm.png'), fullPage: false });
+    console.log(`[storm] ${JSON.stringify(r)}`);
+  },
+
   // Vulture (ACAH): frame a perched vulture on its tree for model iteration.
   // --angle=3q|side|front; head faces +X (rotation forced to 0 for a stable read).
   'vulture': async (page) => {
