@@ -378,7 +378,7 @@
       "visual": "N/A — logic/UI feature. Code-auditor gate PASS (0 sev<=2): the timeout chain aligns with the CSS transitions, the time-skip applies fully-black (no flash), the re-entry guard + paused-world assumption hold, no leaks. Fixed the 3 sev3 nits (the black now captures pointer events so blind-clicks can't hit the pause menu revealed behind it; closeSleepOverlay guards _fading). FADE TIMING feel-pending walk-test (SLEEP_FADE_* tunable).",
       "save": "no bump — the sleep autosave is unchanged",
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "24c6719",
       "spend_approx_tokens": 280000
     }
   ]
