@@ -2,8 +2,8 @@
   "status": "active",
   "started": "2026-06-18",
   "branch": "campaign/2026-06-18",
-  "cycles_completed": 12,
-  "current_tier": "M2 — Wreck breadth + polish + infra",
+  "cycles_completed": 13,
+  "current_tier": "M3 — The worm + the pit",
   "awaiting_approval": false,
   "stop_reasons": [],
   "resume_note": "RESUMED 2026-06-19 (overnight) at the user's request — max-cycles 12→50, status active, ULTRACODE max-quality (user chose correctness over coverage). Runs Phase A (M3-M5b) unattended; pauses at the Phase A milestone (checkpoint=milestone) for the design review (Phase B M6-M10 is design-gated). Prior cap-stop at cycle 12 was the calibration review (passed: ultracode kept on).",
@@ -16,7 +16,7 @@
   "circuit_breaker_n": 3,
   "consecutive_no_progress": 0,
   "ceiling": { "max_cycles": 50, "total": null, "per_cycle": null, "unit": "tokens" },
-  "spend": { "total": 2590000, "note": "approximate — agent cannot precisely self-meter. CAMPAIGN COMPLETE at the 12-cap. ULTRACODE cost arc: C10 ~600K (gate found+fixed a root-cause bug), C11 ~300K (recon prevented a 3rd failed merge), C12 ~400K (worm rig-shot + maw gate). Pre-ultracode (C1-C8) ran 50-290K. CALIBRATION TAKEAWAY: ultracode ~2-4x's per-cycle cost; high-value on hero/visual + de-risking, pricey on routine — user decides ON/OFF (per-cycle if desired) for the resume." },
+  "spend": { "total": 2910000, "note": "approximate — agent cannot precisely self-meter. RESUMED overnight (ultracode max-quality per user). C13 ~320K (worm dorsal armor, 3 adversarial gate rounds). ULTRACODE cost arc C9-C13: 300-600K/cycle (hero/visual + de-risking). Pre-ultracode (C1-C8) 50-290K. max-cycles=50 backstop; pauses at the Phase A milestone." },
   "plan": {
     "authored": "2026-06-18",
     "amended": "2026-06-18 plan-review user steering + evidence audit + Phase-C promotion (see campaign-log.md Cycle 0)",
@@ -183,6 +183,19 @@
       "commit": "96459a6",
       "spend_approx_tokens": 400000,
       "terminal": "max-cycles — campaign completed at the 12-cap"
+    },
+    {
+      "cycle": 13,
+      "date": "2026-06-19",
+      "focus": "M3 worm dorsal-armor overhaul -> worm-model-overhaul COMPLETE",
+      "tier": "M3 — The worm + the pit",
+      "outcome": "SHIPPED",
+      "units": ["worm-model-overhaul COMPLETE (C12 rig-shot + maw fangs; C13 dorsal armor). Next M3 unit: worm-tail-buried."],
+      "verify": "verify:all PASS (tsc + placement 0/0 x5 + colliders 0/25; worm is a creature, not a placement/collider POI)",
+      "visual": "3-round adversarial Workflow gate (hero element). R1 cohesion FAIL (sawtooth pyramids) -> R2 lower/broad/overlap (broadside ok, 3q sawtooth) -> R3 flat-topped frustum + overlap -> PASS (continuous armored crest, sawtooth resolved). Residual sev3 (crest contrast) -> backlog. FEEL feel-pending walk-test.",
+      "ultracode": true,
+      "commit": "ee78dc9",
+      "spend_approx_tokens": 320000
     }
   ]
 }

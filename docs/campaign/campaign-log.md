@@ -234,3 +234,16 @@ first stop will be `max-cycles` ~mid-Phase-A; resume via `/campaign-start --resu
 - **Cost calibration:** C1-C8 50-290K; **ultracode (C9-C12) ~300-600K** — bought a root-cause bug catch (C10) + a saved failed-attempt (C11), pricey on routine. **User decides ultracode posture for the resume.**
 - **Notable engineering:** C10 adversarial code-auditor found a hull coordinate-frame bug solo iteration missed; C11 recon prevented a 3rd yard-merge failure; the determinism law (placement 0/0) held every cycle.
 - **Owed:** an attended `npm run dev` walk-test pass (FEEL — wrecks/scrap/dish/engine/breach/worm); the deferred yard-merge perf session; the worm full-body overhaul.
+
+---
+
+# ▶️ RESUMED 2026-06-19 (overnight, ULTRACODE max-quality) — cap 12→50, status active
+
+## Cycle 13 — M3 worm dorsal-armor overhaul → worm-model-overhaul COMPLETE (2026-06-19) — SHIPPED ⚡ULTRACODE
+- **Planned:** finish `worm-model-overhaul` — the full-body awe pass (the side silhouette was a uniform ribbed tube).
+- **Shipped:** **worm-model-overhaul is COMPLETE.** Added 13 overlapping keeled **dorsal armor scutes** along the spine (`sandWorm.ts` makeWormMesh) → an ancient ARMORED leviathan silhouette (awe-not-horror). Hand-model, no rand; color `0x46382a` (gate-praised).
+- **Verify:** `verify:all` PASS — tsc · placement 0/0 ×5 · colliders 0/25 (the worm is a creature, not a placement/collider-audited POI).
+- **Visual iteration:** **3 adversarial Workflow gate rounds** (hero element, Rule 8). R1 cohesion FAIL (gappy sawtooth pyramids → stegosaurus); R2 lower+broaden+overlap (broadside ok, 3q still sawtooth apex); R3 **flat-topped frustum** (`CylinderGeometry(0.42,1,1,4)`) + stronger overlap → 3q V-notches filled into one continuous rolled armored crest → **final gate PASS** (sawtooth resolved). Residual sev3 (crest contrast / head-beef) → backlog. FEEL → feel-pending walk-test.
+- **Spend:** ~320K (3 gate rounds); campaign total ~2.91M; cycle **13/50**.
+- **Commit:** `ee78dc9`.
+- **M3:** worm-model-overhaul ✓ COMPLETE. **Next (cycle 14):** `worm-tail-buried`. **Verdict: CONTINUE** (M3 in progress; no Phase boundary).
