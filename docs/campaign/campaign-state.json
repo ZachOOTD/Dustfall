@@ -492,7 +492,7 @@
       "visual": "adversarial gate (2 critics) -> 2 rounds -> PASS. r1 FAIL (read as a soft amber dot/planet: no hot core, a 1px hairline trail, too small) -> r2 added the white-hot core sprite + replaced the Line trail with a tapering glow-puff ribbon + scaled up -> both critics PASS, reads_as_fireball=true, no sev2 (residual = sev1 polish: a tighter core / crisper bloom + a motion-dependent trail-length). FEEL of the in-motion streak -> walk-test.",
       "save": "no bump — sky render visuals, no schema change",
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "3507fd4",
       "spend_approx_tokens": 430000
     }
   ]

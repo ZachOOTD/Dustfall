@@ -438,5 +438,5 @@ first stop will be `max-cycles` ~mid-Phase-A; resume via `/campaign-start --resu
 - **Verify:** `verify:all` PASS — tsc · placement 0/0 ×5 · colliders 0/25 (a sky-render addition; no scatter-rand, no geometry/collider).
 - **Visual iteration:** adversarial gate (2 critics) → **2 rounds → PASS.** r1 FAILed (read as "a soft amber dot / planet": no hot core, a 1px hairline trail, too small) → r2 added the white-hot core sprite, replaced the Line with the glow-puff ribbon, and scaled it up → **both critics PASS, `reads_as_fireball=true`, no sev2.** Residual = sev1 polish (a tighter core / crisper bloom) + a motion-dependent trail-length → backlog/walk-test.
 - **Spend:** ~430K (assess the sky [shooters exist] → build the fireball [core+halo+puff-trail+flash] + the debug hook + the rig-scenario → 2 adversarial gate rounds); campaign total ~8.8M; cycle **34/50**.
-- **Commit:** `PENDING`.
+- **Commit:** `3507fd4`.
 - **M5b unit 3/5 ✓.** **Next (cycle 35):** `M5b — diurnal-cycle` (likely heavily already-built — ASSESS, then verify-and-defer or a small addition). **Verdict: CONTINUE** — M5b in progress; not terminal (roadmap non-empty, cycle 34/50), not a milestone (2 M5b units remain before the Phase-A marker). **⚠ The Phase-A milestone PAUSE fires when M5b's LAST unit (worm-far-horizon-crossing) ships — ~1-2 cycles away.**
