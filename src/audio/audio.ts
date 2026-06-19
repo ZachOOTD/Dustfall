@@ -719,6 +719,44 @@ export function playCraft(): void {
   o2.stop(t + 0.24);
 }
 
+/** Vista reveal (C30) — a soft warm swell when cresting a ridge onto an open view.
+ *  A gentle open-fifth/octave pad, slow attack + long release, low-passed warm and
+ *  routed to the ambient bus so it sits UNDER the mix (a reward, not a fanfare). */
+export function playVistaReveal(strength = 1): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  const s = Math.max(0.3, Math.min(1, strength));
+  // Warm low-pass that opens slightly as the pad swells in.
+  const lp = a.ctx.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.setValueAtTime(650, t);
+  lp.frequency.linearRampToValueAtTime(1500, t + 0.9);
+  lp.Q.value = 0.6;
+  const bus = a.ctx.createGain();
+  bus.gain.setValueAtTime(0.0001, t);
+  bus.gain.linearRampToValueAtTime(0.11 * s, t + 0.5);   // slow swell-in
+  bus.gain.setValueAtTime(0.11 * s, t + 1.2);
+  bus.gain.exponentialRampToValueAtTime(0.0008, t + 2.6); // long release
+  lp.connect(bus).connect(a.ambient);
+  // Open warm chord (D3 / A3 / D4 / A4 — fifths + octaves, hopeful + airy), each
+  // voice slightly detuned + the upper voices quieter.
+  const freqs = [146.83, 220.0, 293.66, 440.0];
+  for (let i = 0; i < freqs.length; i++) {
+    const o = a.ctx.createOscillator();
+    o.type = i === 0 ? 'triangle' : 'sine';
+    o.frequency.setValueAtTime(freqs[i] * (1 + (i - 1.5) * 0.0016), t);
+    const g = a.ctx.createGain();
+    const w = 1 / (1 + i * 0.5);   // upper voices softer
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.5 * w, t + 0.5);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 2.6);
+    o.connect(g).connect(lp);
+    o.start(t);
+    o.stop(t + 2.7);
+  }
+}
+
 /** Refill (water source → canteen) — water filling a vessel, rising pitch. */
 export function playRefill(): void {
   const a = getAudioInternals();

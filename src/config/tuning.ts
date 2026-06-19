@@ -620,6 +620,19 @@ export const Tuning = {
   SPYGLASS_FOV: 24,            // zoomed FOV in degrees — ~3.25× over the 78° base (a strong but not nauseating glass)
   SPYGLASS_ZOOM_LERP: 9,       // FOV ease rate (per-second); higher = snappier zoom in/out
   SPYGLASS_VIGNETTE_MAX: 0.96, // peak darkness of the scope vignette ring at full zoom (0..1)
+
+  // M5a (C30) — vista-crest-reveal: when the player CRESTS a ridge (stands notably
+  // above the surrounding dune field), briefly LIFT the fog so the vista opens up
+  // (distant landmark silhouettes sharpen) + play a warm audio swell. The detection
+  // (prominence + cooldown) + the envelope timing + the fog amount are FEEL → tune in
+  // the attended walk-test; these are sane defaults.
+  VISTA_SAMPLE_INTERVAL_S: 0.3,  // how often to resample the surrounding terrain (cheap; throttled)
+  VISTA_PROMINENCE_M: 7,         // player must stand this many m above the surrounding ring average to count as a crest
+  VISTA_COOLDOWN_S: 50,          // min seconds between reveals (so dune-hopping doesn't spam it)
+  VISTA_ATTACK_S: 1.4,           // fog-lift ease-in (the air clears as you take in the view)
+  VISTA_SUSTAIN_S: 3.0,          // hold the open vista
+  VISTA_RELEASE_S: 3.5,          // fog eases back
+  VISTA_FOG_MULT: 0.5,           // fog density at peak reveal (×0.5 ≈ see ~2× further)
   NEAR_PLANE: 0.1,
   FAR_PLANE: 1800,  // EE — bumped from 600 with the larger world
   RNG_SEED: 1337,

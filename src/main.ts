@@ -21,6 +21,7 @@ import { placeProcgenPOIs } from './world/procgenPoi.ts';
 import { placeHeroLandmarks } from './world/heroLandmarks.ts';
 import { updateHorizonSilhouettes, addHorizonSilhouettesByName } from './world/horizonSilhouettes.ts';   // M5a (C28) — skyline nav silhouettes
 import { initSpyglass, updateSpyglass } from './player/spyglass.ts';   // M5a (C29) — hold-RMB spyglass zoom
+import { updateVistaReveal } from './world/vistaReveal.ts';   // M5a (C30) — crest-a-ridge fog-lift + swell
 import { createSalvageableRegistry, setSalvageBiomesContext } from './world/salvage.ts';
 import { createSky, updateSky } from './world/sky.ts';
 import { updateStats } from './stats/survival.ts';
@@ -851,6 +852,7 @@ startLoop(ctx, (c, dt) => {
   updateStaminaWobble(c);        // WW — sin-driven camera jitter when stamina low (must run AFTER updatePlayer's camera-anchor)
   updateHorizonSilhouettes(c.three.camera);   // M5a (C28) — distance-gate + billboard the skyline silhouettes (camera is final here)
   updateSpyglass(c, dt);         // M5a (C29) — ease the camera FOV toward the spyglass zoom + drive the scope vignette
+  updateVistaReveal(c, dt);      // M5a (C30) — crest detection: re-multiply the weather fog density to LIFT it on a vista reveal (after updateWeather set it)
   updateShelter(c, dt);          // before stats so heat path sees inShelter
   updateStats(c, dt);            // thirst/heat/health drain + death
   updateSoundscape(c, dt);       // wind volume tracks day/night

@@ -1659,7 +1659,8 @@ const SCENARIOS = {
   // as a skyline silhouette, or fade into the fog/sky? --dist=<m> sets the camera range.
   'vista': async (page) => {
     const dist = argv.dist !== undefined ? Number(argv.dist) : 600;
-    const info = await page.evaluate((dist) => {
+    const fogmult = argv.fogmult !== undefined ? Number(argv.fogmult) : 1;
+    const info = await page.evaluate(({ dist, fogmult }) => {
       const ctx = window.__game.ctx;
       window.__game.setTime(0.5);            // midday, clear sky
       ctx.weather.intensity = 0; ctx.weather.cloudiness = 0.1;
@@ -1688,10 +1689,12 @@ const SCENARIOS = {
       cam.updateMatrixWorld(true);
       ctx.flags.paused = true;
       const fog = ctx.three.scene.fog;
-      return { landmark: hit, target: [+target.x.toFixed(0), +target.y.toFixed(0), +target.z.toFixed(0)], dist, fogDensity: fog ? +fog.density.toFixed(4) : null };
-    }, dist);
+      // C30 — optional fog multiplier to preview the vista-crest fog-LIFT effect.
+      if (fog && fogmult !== 1) fog.density *= fogmult;
+      return { landmark: hit, target: [+target.x.toFixed(0), +target.y.toFixed(0), +target.z.toFixed(0)], dist, fogmult, fogDensity: fog ? +fog.density.toFixed(4) : null };
+    }, { dist, fogmult });
     await page.waitForTimeout(300);
-    await page.screenshot({ path: join(OUT, `scen-vista-${dist}.png`), fullPage: false });
+    await page.screenshot({ path: join(OUT, `scen-vista-${dist}${argv.fogmult !== undefined ? '-fog' + argv.fogmult : ''}.png`), fullPage: false });
     console.log('[vista] ' + JSON.stringify(info));
   },
 
