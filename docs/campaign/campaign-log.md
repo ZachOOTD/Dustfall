@@ -214,3 +214,23 @@ first stop will be `max-cycles` ~mid-Phase-A; resume via `/campaign-start --resu
 - **Spend:** ~300K (the recon); campaign total ~2.19M; cycle **11/12**.
 - **Commit:** `725524c`.
 - **M2 status:** ✓ **CONTENT COMPLETE** (feature-flags + security + wreck-polish-bundle, C5-C10); yard-merge deferred. **Next (cycle 12, THE CAP):** M3 `worm-model-overhaul`. **Verdict: CONTINUE** (no Phase boundary). **Cap: 1 cycle left → cycle 12 self-halts `completed (max-cycles)` for the calibration review.**
+
+---
+
+## Cycle 12 (THE CAP) — M3 START: worm-model rig-shot + maw fang overhaul (2026-06-18) — SHIPPED `[partial]` ⚡ULTRACODE → 🏁 COMPLETED (max-cycles)
+- **Planned:** start M3 with `worm-model-overhaul` (one bounded unit before the cap).
+- **Shipped (M3 STARTED `[partial]`):** (1) a **NEW `worm-model` rig-shot scenario** (`--angle=head|side|3q`) that surfaces + frames the sand worm — the M3 hero-creature enabler, so the resume can render+gate the worm (zero game-code touch); (2) a **maw FANG overhaul** — the teeth were 0.7m cones (invisible dots on the ~12m maw) → real ~2-2.4m interleaved fangs in two recessed rings.
+- **Verify:** `verify:all` PASS — tsc · placement 0/0 ×5 · colliders 0/25 (the worm is a creature, not a placement/collider-audited POI; tsc is the relevant gate).
+- **Visual iteration:** lean adversarial Workflow gate (2 critics) — "a massive improvement, awe not silly, proportion correct"; caught one sev2 (top-rim fangs crossing the lit rim band), **fixed in 1 round** (recess the ring inside the rim + radius pull-in + tip inward); re-render confirms a clean recessed toothed gullet. Residual sev1 (top-fang angle, near-side depth) + the FULL-BODY awe overhaul → resume (Rule 8: hero creature = 5-8 rounds). FEEL → feel-pending walk-test.
+- **Spend:** ~400K (worm investigation + the rig-shot scenario + the gate); campaign total ~2.59M; cycle **12/12**.
+- **Commit:** `96459a6`.
+- **🏁 VERDICT: STOP — `completed (max-cycles)`.** `cycles_completed = 12 = max_cycles` → TERMINAL. The campaign self-halted at the calibration cap. **NOT a pause — do not `/campaign-approve`.** Review (see `next-session-prompt.md`: ultracode on/off, owed walk-tests, resume cap), then **`/campaign-start --resume --max-cycles=<N>`** to continue at M3.
+
+---
+
+## 🏁 CAMPAIGN SUMMARY — `campaign/2026-06-18` (12 cycles, ~2.59M, COMPLETED at the cap)
+- **M1 ✓** (C1-C4) · **M2 content ✓** (C5-C11; yard-merge deferred D240) · **M3 ◐ started** (C12 `[partial]`).
+- **Per-cycle commits** on `campaign/2026-06-18` (one revertible commit each). **Phase A (M3-M5b) + Phase B (M6-M10) remain** for the resume.
+- **Cost calibration:** C1-C8 50-290K; **ultracode (C9-C12) ~300-600K** — bought a root-cause bug catch (C10) + a saved failed-attempt (C11), pricey on routine. **User decides ultracode posture for the resume.**
+- **Notable engineering:** C10 adversarial code-auditor found a hull coordinate-frame bug solo iteration missed; C11 recon prevented a 3rd yard-merge failure; the determinism law (placement 0/0) held every cycle.
+- **Owed:** an attended `npm run dev` walk-test pass (FEEL — wrecks/scrap/dish/engine/breach/worm); the deferred yard-merge perf session; the worm full-body overhaul.

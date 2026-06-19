@@ -1,11 +1,12 @@
 {
-  "status": "active",
+  "status": "completed",
   "started": "2026-06-18",
   "branch": "campaign/2026-06-18",
-  "cycles_completed": 11,
+  "cycles_completed": 12,
   "current_tier": "M2 — Wreck breadth + polish + infra",
   "awaiting_approval": false,
-  "stop_reasons": [],
+  "stop_reasons": ["max-cycles"],
+  "stop_note": "CAP reached: cycles_completed=12 >= max_cycles=12 → TERMINAL (max-cycles), the calibration stop. M1 ✓, M2 content ✓ (yard-merge deferred D240), M3 started [partial] (worm rig-shot + maw fangs). Resume: /campaign-start --resume --max-cycles=<N> (see next-session-prompt.md for the calibration decisions: ultracode on/off, owed walk-tests, resume cap). NOT a pause — completed; do not /campaign-approve.",
   "self_author": "propose",
   "checkpoint": "milestone",
   "checkpoint_note": "Markers placed at PHASE boundaries (user 2026-06-18): pause ONLY after Phase A (last milestone M5b) and after Phase B (M10), NOT at each M-milestone. Phase A = M1-M5b build-now (one unattended block); Phase B = M6-M10 design-gated (design calls made at the Phase A review). Commits remain per-cycle for reversibility.",
@@ -15,7 +16,7 @@
   "circuit_breaker_n": 3,
   "consecutive_no_progress": 0,
   "ceiling": { "max_cycles": 12, "total": null, "per_cycle": null, "unit": "tokens" },
-  "spend": { "total": 2190000, "note": "approximate — agent cannot precisely self-meter; max_cycles is the real bound (no budget ceiling set). ULTRACODE cost arc: C10 ~600K (3 adversarial gate rounds, found+fixed a root-cause bug), C11 ~300K (3-agent recon that prevented a 3rd wasteful failed merge attempt). Pre-ultracode (C1-C8) ran 50-290K. FLAG at cap review: ultracode ~2-4x's per-cycle cost — user decides ON/OFF for the resume." },
+  "spend": { "total": 2590000, "note": "approximate — agent cannot precisely self-meter. CAMPAIGN COMPLETE at the 12-cap. ULTRACODE cost arc: C10 ~600K (gate found+fixed a root-cause bug), C11 ~300K (recon prevented a 3rd failed merge), C12 ~400K (worm rig-shot + maw gate). Pre-ultracode (C1-C8) ran 50-290K. CALIBRATION TAKEAWAY: ultracode ~2-4x's per-cycle cost; high-value on hero/visual + de-risking, pricey on routine — user decides ON/OFF (per-cycle if desired) for the resume." },
   "plan": {
     "authored": "2026-06-18",
     "amended": "2026-06-18 plan-review user steering + evidence audit + Phase-C promotion (see campaign-log.md Cycle 0)",
@@ -168,6 +169,20 @@
       "ultracode": true,
       "commit": "725524c",
       "spend_approx_tokens": 300000
+    },
+    {
+      "cycle": 12,
+      "date": "2026-06-18",
+      "focus": "M3 START (the cap): worm-model rig-shot + maw fang overhaul [partial]",
+      "tier": "M3 — The worm + the pit",
+      "outcome": "SHIPPED",
+      "units": ["M3 worm-model-overhaul [partial] — NEW worm-model rig-shot scenario (hero-creature enabler) + maw FANG overhaul (gate-verified). Full-body awe overhaul = resume."],
+      "verify": "verify:all PASS (tsc + placement 0/0 x5 + colliders 0/25; worm is a creature, not a placement/collider POI)",
+      "visual": "lean adversarial Workflow gate (2 critics): maw fangs 'massive improvement, awe not silly'; caught a top-rim clip sev2, fixed in 1 round (recess). Residual sev1 (fang angle/depth) + full-body overhaul -> resume. FEEL feel-pending walk-test.",
+      "ultracode": true,
+      "commit": "96459a6",
+      "spend_approx_tokens": 400000,
+      "terminal": "max-cycles — campaign completed at the 12-cap"
     }
   ]
 }
