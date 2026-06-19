@@ -332,6 +332,32 @@ export function updateViewModel(ctx: GameContext, dt: number): void {
   if (heldSlot.item !== null) {
     const def = getItemDef(heldSlot.item);
     if (def.updateHeld) def.updateHeld(vm.itemRoot, heldSlot, ctx, dt);
+
+    // M5 (C27) — mirror the animated torch FLAME onto the 3P hand copy. updateHeld
+    // only ran on the FP itemRoot, so the 3P tpMesh flame stayed hidden + static
+    // (the backlog nit — the 3P torch had no live flame). The FP flame is the single
+    // source of the animation; the 3P just COPIES its transform + per-element state
+    // (no functional state re-run → no double burn-drain / double light-arm).
+    if (ctx.player.rig && heldSlot.item === 'torch') {
+      const fpFlame = vm.itemRoot.getObjectByName('torchFlame');
+      const tpFlame = ctx.player.rig.rightHandAttach.getObjectByName('torchFlame');
+      if (fpFlame && tpFlame) {
+        tpFlame.visible = fpFlame.visible;
+        tpFlame.scale.copy(fpFlame.scale);
+        tpFlame.rotation.copy(fpFlame.rotation);
+        tpFlame.position.copy(fpFlame.position);
+        const fc = fpFlame.children;
+        const tc = tpFlame.children;
+        for (let i = 0; i < Math.min(fc.length, tc.length); i++) {
+          tc[i].visible = fc[i].visible;
+          tc[i].position.copy(fc[i].position);
+          tc[i].scale.copy(fc[i].scale);
+          const fm = (fc[i] as THREE.Mesh).material as THREE.MeshBasicMaterial | undefined;
+          const tm = (tc[i] as THREE.Mesh).material as THREE.MeshBasicMaterial | undefined;
+          if (fm && tm && tm.transparent) tm.opacity = fm.opacity;   // flame cones + embers are authored-transparent
+        }
+      }
+    }
   }
 
   // 4b. Cook animation (Session II). When the player is cooking the

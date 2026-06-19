@@ -3,6 +3,12 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign C27 — 2026-06-19 — M5: **viewmodel-nits** — the 3P torch flame now lives → **M5 COMPLETE** ✓ gates pass (ultracode)
+
+`verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/25 — a render-time held-item mirror + a test-only rig-shot flag, not a placement/collider POI or a procgen draw). Visual: a `rig3p --item=torch --lit` render confirmed the 3P flame now shows + glows. **No save bump.** Cycle 27/50. **LAST M5 unit → M5 COMPLETE.**
+
+**viewmodel-nits.** Two backlog nits (§A). **(1) The 3P torch flame didn't show/animate (FIXED):** `updateHeld` (the torch's flame flicker + burn + world-light) only ran on the FP `vm.itemRoot`, so the 3P hand copy (`tpMesh` on `rightHandAttach`) had its `'torchFlame'` group stuck at `visible:false` — a dark stick in 3P. Fix: in `updateViewModel`'s per-frame hook, after the FP `updateHeld`, **MIRROR** the FP flame's animated state (visible + group transform + each cone/ember's position/scale/opacity) onto the 3P copy — the FP flame stays the single source (no functional-state re-run → no double burn-drain / double light-arm). `rig3p --item=torch --lit` (a NEW `--lit` rig-shot flag) confirms a live glowing flame in the 3P hand. **(2) FP held-item night lighting — ALREADY FIXED** (ACAF follow-up: the vm-scene's `vmSun/vmMoon/vmAmbient` now MIRROR the world sun/moon/ambient each frame, so held items DO dim at night; the backlog item was stale → marked done). **FLAME flicker MOTION** → walk-test (the mirror is exact, so the 3P matches the FP). **✓ M5 COMPLETE** (C23-27: riding-feel · rope-attach · 3p-render-polish · lie-down-to-sleep · viewmodel-nits). Next tier: **M5a — Exploration & exposure** (more net-new feature work).
+
 ## Campaign C26 — 2026-06-19 — M5: **lie-down-to-sleep** — a fade-to-black sleep transition (embodied rest) ✓ gates pass (ultracode, code-auditor)
 
 `verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/25 — a UI overlay + CSS, not a placement/collider POI or a procgen draw; the first placement run had a seed-2 boot FLAKE "NO AUDIT LINE", re-ran clean per protocol). **Logic/UI feature → code-auditor gate** (PASS, 0 sev≤2). **No save bump** (the sleep autosave is unchanged). Cycle 26/50. **M5 unit 4/5.**

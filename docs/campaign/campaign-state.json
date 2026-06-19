@@ -2,8 +2,8 @@
   "status": "active",
   "started": "2026-06-18",
   "branch": "campaign/2026-06-18",
-  "cycles_completed": 26,
-  "current_tier": "M5 — Riding & rest feel",
+  "cycles_completed": 27,
+  "current_tier": "M5a — Exploration & exposure",
   "awaiting_approval": false,
   "stop_reasons": [],
   "resume_note": "RESUMED 2026-06-19 (overnight) at the user's request — max-cycles 12→50, status active, ULTRACODE max-quality (user chose correctness over coverage). Runs Phase A (M3-M5b) unattended; pauses at the Phase A milestone (checkpoint=milestone) for the design review (Phase B M6-M10 is design-gated). Prior cap-stop at cycle 12 was the calibration review (passed: ultracode kept on).",
@@ -16,7 +16,7 @@
   "circuit_breaker_n": 3,
   "consecutive_no_progress": 0,
   "ceiling": { "max_cycles": 50, "total": null, "per_cycle": null, "unit": "tokens" },
-  "spend": { "total": 5500000, "note": "approximate — agent cannot precisely self-meter. RESUMED overnight (ultracode max-quality). M3 worm: C13 ~320K (dorsal armor); C14 ~210K; C15 ~190K; C16 ~190K (audio, gate caught 3 sev2); C17 ~150K (multi-worm: infra pre-existing + rumble refactor); C18 ~300K (sarlacc-lure: 3-agent recon + net-new item + 4 model-gate rounds + a verify-zombie recovery); C19 ~120K (vulture-motion-feel: infra pre-existing, found+fixed the dangling-leg soar via flight-pose renders, 1 lean gate); C20 ~250K (atmosphere-feeltunes: storm pre-built; built a storm-render scenario + root-caused/fixed the dust snow-read across 3 gate rounds); C21 ~350K (smoke-signal-plume NET-NEW: fire smoke system + debug hooks + rig scenario + 6 plume-gate rounds tuning the storm wind-tear); C22 ~120K (amban-rifle-balance: assessed the 4-weapon spread, found+corrected the amban's strict dominance over the scrap gun via cd 1.6->2.2, flagged the deeper economy fix); C23 ~90K (speeder-riding-feel: VERIFIED the exhaustively-tuned ride system via bike-truth — no code change; handling feel-pending, foot-lift queued); C24 ~250K (rope-attach-speeder-rear-bar: NET feature — explicit LMB tow-bar tie/untie mirroring the stake, code-auditor PASS); C25 ~90K (3p-camera-and-render-polish: VERIFIED heavily-built — cameraSnap/held-items-3P/footstep-sync all done, foot-lift structural; no code change); C26 ~280K (lie-down-to-sleep: NET feature — a fade-to-black sleep transition, code-auditor PASS + 3 sev3 fixes, a placement seed-flake re-run). Mostly-done units run lean (~150K); feel/audio/logic ~190K; hero-visual ~300-600K. Pre-ultracode (C1-C8) 50-290K. max-cycles=50; pauses at the Phase A milestone." },
+  "spend": { "total": 5650000, "note": "approximate — agent cannot precisely self-meter. RESUMED overnight (ultracode max-quality). M3 worm: C13 ~320K (dorsal armor); C14 ~210K; C15 ~190K; C16 ~190K (audio, gate caught 3 sev2); C17 ~150K (multi-worm: infra pre-existing + rumble refactor); C18 ~300K (sarlacc-lure: 3-agent recon + net-new item + 4 model-gate rounds + a verify-zombie recovery); C19 ~120K (vulture-motion-feel: infra pre-existing, found+fixed the dangling-leg soar via flight-pose renders, 1 lean gate); C20 ~250K (atmosphere-feeltunes: storm pre-built; built a storm-render scenario + root-caused/fixed the dust snow-read across 3 gate rounds); C21 ~350K (smoke-signal-plume NET-NEW: fire smoke system + debug hooks + rig scenario + 6 plume-gate rounds tuning the storm wind-tear); C22 ~120K (amban-rifle-balance: assessed the 4-weapon spread, found+corrected the amban's strict dominance over the scrap gun via cd 1.6->2.2, flagged the deeper economy fix); C23 ~90K (speeder-riding-feel: VERIFIED the exhaustively-tuned ride system via bike-truth — no code change; handling feel-pending, foot-lift queued); C24 ~250K (rope-attach-speeder-rear-bar: NET feature — explicit LMB tow-bar tie/untie mirroring the stake, code-auditor PASS); C25 ~90K (3p-camera-and-render-polish: VERIFIED heavily-built — cameraSnap/held-items-3P/footstep-sync all done, foot-lift structural; no code change); C26 ~280K (lie-down-to-sleep: NET feature — a fade-to-black sleep transition, code-auditor PASS + 3 sev3 fixes, a placement seed-flake re-run); C27 ~150K (viewmodel-nits: 3P torch-flame mirror fix + the night-lighting already-done -> M5 COMPLETE). Mostly-done units run lean (~150K); feel/audio/logic ~190K; hero-visual ~300-600K. Pre-ultracode (C1-C8) 50-290K. max-cycles=50; pauses at the Phase A milestone." },
   "plan": {
     "authored": "2026-06-18",
     "amended": "2026-06-18 plan-review user steering + evidence audit + Phase-C promotion (see campaign-log.md Cycle 0)",
@@ -380,6 +380,21 @@
       "ultracode": true,
       "commit": "24c6719",
       "spend_approx_tokens": 280000
+    },
+    {
+      "cycle": 27,
+      "date": "2026-06-19",
+      "focus": "M5 viewmodel-nits — the 3P torch flame now mirrors the FP flame -> M5 COMPLETE",
+      "tier": "M5 — Riding & rest feel",
+      "outcome": "SHIPPED",
+      "units": ["viewmodel-nits — (1) FIXED: the 3P torch flame was static/hidden (updateHeld ran only on the FP itemRoot; the 3P tpMesh torchFlame stayed visible:false). Fix: mirror the FP flame's animated state (visible+transform+per-element opacity/pos/scale) onto the 3P copy in updateViewModel's per-frame hook (FP stays the single source -> no double burn/light). + a NEW rig3p --lit flag to render a lit torch. (2) FP held-item night-lighting = ALREADY FIXED (ACAF: vm-scene lights mirror the world sun/moon/ambient). M5 COMPLETE. Next tier: M5a."],
+      "milestone_complete": "M5 (5 units: riding-feel · rope-attach · 3p-render-polish · lie-down-to-sleep · viewmodel-nits) — NOT a Phase boundary (Phase A milestone is after M5b), no pause",
+      "verify": "verify:all PASS (tsc + placement 0/0 x5 + colliders 0/25; a render-time held-item mirror + a test-only rig-shot flag, not a placement/collider POI)",
+      "visual": "rig3p --item=torch --lit confirmed the 3P flame now shows + glows in the hand (was a dark stick). FLAME flicker MOTION feel-pending walk-test (the mirror is exact -> matches the FP).",
+      "save": "no bump — render-time mirror",
+      "ultracode": true,
+      "commit": "PENDING",
+      "spend_approx_tokens": 150000
     }
   ]
 }

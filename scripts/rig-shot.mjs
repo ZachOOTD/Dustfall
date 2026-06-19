@@ -358,19 +358,23 @@ const SCENARIOS = {
   // which hand + item facing (the held-item scenario's posed-out arm lied).
   'rig3p': async (page) => {
     const item = argv.item || '';
-    await page.evaluate((item) => {
+    const lit = !!argv.lit;   // C27 — --lit lights a torch (meta.lit) so the 3P flame shows
+    await page.evaluate(({ item, lit }) => {
       const ctx = window.__game.ctx;
       ctx.weather.intensity = 0;
-      window.__game.setTime(0.5);
+      window.__game.setTime(lit ? 0.0 : 0.5);   // night for a lit-torch shot so the flame reads
       ctx.three.renderer.toneMappingExposure = 1.1;
       ctx.three.renderer.setSize(800, 950, false);
       const cam = ctx.three.camera;
       if (cam.isPerspectiveCamera) { cam.aspect = 800 / 950; cam.updateProjectionMatrix(); }
       ctx.flags.thirdPerson = true;
       const inv = ctx.inventory;
-      if (item) { inv.slots[0].item = item; inv.slots[0].count = 1; inv.slots[0].meta = undefined; inv.selectedIdx = 0; }
-      else { inv.slots[0].item = null; }
-    }, item);
+      if (item) {
+        inv.slots[0].item = item; inv.slots[0].count = 1;
+        inv.slots[0].meta = lit ? { lit: true, burnRemaining: 1 } : undefined;
+        inv.selectedIdx = 0;
+      } else { inv.slots[0].item = null; }
+    }, { item, lit });
     await page.waitForTimeout(500); // settle the idle pose + swap the mesh into the hand
     const info = await page.evaluate((handCloseup) => {
       const ctx = window.__game.ctx;
@@ -432,7 +436,7 @@ const SCENARIOS = {
     }, argv.hand ? 'hand' : (argv.view || ''));
     console.log('[rig3p] ' + JSON.stringify(info));
     await page.waitForTimeout(200);
-    const tag = item || 'bare';
+    const tag = (item || 'bare') + (lit ? '-lit' : '');
     await page.screenshot({ path: join(OUT, `scen-rig3p-${tag}.png`), fullPage: false });
     console.log(`[rig-shot] saved scen-rig3p-${tag}.png`);
   },
