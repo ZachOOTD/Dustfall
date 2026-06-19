@@ -456,7 +456,7 @@ first stop will be `max-cycles` ~mid-Phase-A; resume via `/campaign-start --resu
 - **Verify:** `verify:all` PASS — tsc · placement 0/0 ×5 · colliders 0/25 (decoupled spectacle; no collider, no seeded-scatter draw).
 - **Visual iteration:** ⚠ adversarial gate (2 critics, pixel-level) → **FAIL after 4 build / 2 gate rounds** → `[partial]`. r1 spiky cones → r2 rounded domes (beads + a detached fleck) → r3 over-merged into a smooth tadpole-blob-with-an-eye → r4 **an articulated headless rolled dark ridge** (a silhouette that pops vs the sand, scalloped hump rhythm, middle-thick taper). The gate still wants a convincing **colossal** worm — a **breach berm** (erupt THROUGH the dune), **colossal scale**, a **multi-S spine**, a **dust wake** — a real art pass (**backlog §A**; **D244**). Shipped `[partial]` rather than thrash further at the tail of the run; the worm-look is part of the user's Phase-A review.
 - **Spend:** ~620K (assess the worm AI → build the decoupled crossing [traverse/surface/rumble + the rig-scenario + debug hooks] → 4 build rounds + 2 adversarial gate rounds on the silhouette); campaign total ~9.7M; cycle **36/50**.
-- **Commit:** `PENDING`.
+- **Commit:** `703d5dd`.
 
 ## ⏸ MILESTONE — PHASE A: BUILD-OUT COMPLETE (M1→M5b) — CAMPAIGN PAUSED (after cycle 36)
 - **The unattended Phase-A block is DONE.** M1→M5b all shipped over cycles 1-36 (this overnight ran 13-36). The loop **PAUSES** at the `### Milestone: Phase A — Build-out complete` marker (checkpoint=milestone).
