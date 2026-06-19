@@ -274,3 +274,12 @@ first stop will be `max-cycles` ~mid-Phase-A; resume via `/campaign-start --resu
 - **Spend:** ~190K (audio unit, 2 code-auditor rounds); campaign total ~3.50M; cycle **16/50**.
 - **Commit:** `a248d9c`.
 - **M3:** model ✓ · tail ✓ · charge ✓ · audio ✓. **Next (cycle 17):** `multi-worm-population`. **Verdict: CONTINUE** (M3 in progress; no Phase boundary). *(The code-auditor gate on an audio unit caught 3 sev2 node-lifecycle bugs a tsc-only check would have shipped.)*
+
+## Cycle 17 — M3 multi-worm-population (infra pre-existing) + the multi-worm rumble fix (2026-06-19) — SHIPPED ⚡ULTRACODE
+- **Planned:** `multi-worm-population` — several roaming worms.
+- **Shipped:** **the population infra was ALREADY BUILT** (ACE Tier 2 — `SANDWORM_COUNT=2`, rejection-sampled with `SANDWORM_MIN_SEPARATION`, per-biome, multi-worm tremor selection, save/load) — verified, not rebuilt (like chroma/dish). **The genuine gap (the C16 audio-audit follow-up):** the C16 approach rumble was a single global handle wired PER-WORM → broke with 2 worms. **Fixed** with a global `applyWormRumble` pass (mirrors `applyClosestTremorEffect`) driving the one rumble from the NEAREST CHARGING worm; removed all the C16 per-worm calls.
+- **Verify:** `verify:all` PASS — tsc · placement 0/0 ×5 · colliders 0/25.
+- **Visual iteration:** N/A — logic/audio refactor. **Code-auditor gate PASS** (ultracode): "nearest-selection correct, stops on no-charge, pause-safe, idempotent, all per-worm calls correctly removed." Encounter balance (the worm count) → feel-pending walk-test; `SANDWORM_COUNT` is a documented tunable (bumping draws `scatterRand` → determinism re-check).
+- **Spend:** ~150K (mostly-done unit + a focused refactor); campaign total ~3.65M; cycle **17/50**.
+- **Commit:** `22822d2`.
+- **M3:** model ✓ · tail ✓ · charge ✓ · audio ✓ · multi-worm ✓. **Next (cycle 18):** `sarlacc-lure-ambush` (the user-requested add — LAST M3 unit). **Verdict: CONTINUE** (M3 in progress; no Phase boundary).

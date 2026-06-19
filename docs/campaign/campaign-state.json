@@ -2,7 +2,7 @@
   "status": "active",
   "started": "2026-06-18",
   "branch": "campaign/2026-06-18",
-  "cycles_completed": 16,
+  "cycles_completed": 17,
   "current_tier": "M3 — The worm + the pit",
   "awaiting_approval": false,
   "stop_reasons": [],
@@ -16,7 +16,7 @@
   "circuit_breaker_n": 3,
   "consecutive_no_progress": 0,
   "ceiling": { "max_cycles": 50, "total": null, "per_cycle": null, "unit": "tokens" },
-  "spend": { "total": 3500000, "note": "approximate — agent cannot precisely self-meter. RESUMED overnight (ultracode max-quality). M3 worm: C13 ~320K (dorsal armor, 3 rounds); C14 ~210K (tail-buried); C15 ~190K (charge-dive); C16 ~190K (audio-rumble, code-auditor gate found 3 sev2 node-lifecycle bugs). Feel/audio/logic units run ~190-210K; hero-visual ~300-600K. Pre-ultracode (C1-C8) 50-290K. max-cycles=50; pauses at the Phase A milestone." },
+  "spend": { "total": 3650000, "note": "approximate — agent cannot precisely self-meter. RESUMED overnight (ultracode max-quality). M3 worm: C13 ~320K (dorsal armor); C14 ~210K; C15 ~190K; C16 ~190K (audio, gate caught 3 sev2); C17 ~150K (multi-worm: infra pre-existing + rumble refactor, 1 code-auditor PASS). Mostly-done units run lean (~150K); feel/audio/logic ~190K; hero-visual ~300-600K. Pre-ultracode (C1-C8) 50-290K. max-cycles=50; pauses at the Phase A milestone." },
   "plan": {
     "authored": "2026-06-18",
     "amended": "2026-06-18 plan-review user steering + evidence audit + Phase-C promotion (see campaign-log.md Cycle 0)",
@@ -235,6 +235,19 @@
       "ultracode": true,
       "commit": "a248d9c",
       "spend_approx_tokens": 190000
+    },
+    {
+      "cycle": 17,
+      "date": "2026-06-19",
+      "focus": "M3 multi-worm-population — infra pre-existing (ACE Tier 2); fixed the multi-worm rumble (C16 follow-up)",
+      "tier": "M3 — The worm + the pit",
+      "outcome": "SHIPPED",
+      "units": ["multi-worm-population — infra was already built (SANDWORM_COUNT=2, separation, tremor, save); this cycle refactored the C16 rumble to a global nearest-charging-worm pass. Next M3 (last): sarlacc-lure-ambush."],
+      "verify": "verify:all PASS (tsc + placement 0/0 x5 + colliders 0/25)",
+      "visual": "N/A — logic/audio refactor. Code-auditor gate PASS (multi-worm rumble: nearest-charging selection, stops on no-charge, pause-safe, per-worm calls removed). Encounter balance (count) feel-pending walk-test.",
+      "ultracode": true,
+      "commit": "22822d2",
+      "spend_approx_tokens": 150000
     }
   ]
 }
