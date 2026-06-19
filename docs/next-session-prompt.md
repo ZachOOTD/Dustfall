@@ -1,8 +1,10 @@
-# 🏁 CAMPAIGN PAUSED AT THE CAP — calibration review, then RESUME — `campaign/2026-06-18`
+# ▶️ CAMPAIGN RESUMED (overnight, ultracode) — cycle 13+ picks up M3 — `campaign/2026-06-18`
 
-The loop hit `cycles_completed = 12 = max_cycles` and **self-halted `completed (max-cycles)`**. This is the
-calibration stop the 12-cap exists for. **To continue:** review below, then `/campaign-start --resume
---max-cycles=<N>` (optionally toggle ultracode via `/effort` first — see the cost note).
+**RESUMED 2026-06-19** at the user's request for an unattended overnight run. Cap raised 12→50, status active,
+**ULTRACODE max-quality** (the user chose correctness over coverage at the cap review). Cycle 13 boots from the
+roadmap (authoritative) → **M3 → finish `worm-model-overhaul`**, then the M3 chain. **checkpoint=milestone** →
+runs Phase A (M3-M5b) unattended, pauses ONLY at the Phase A milestone (Phase B M6-M10 is design-gated → needs
+the user). The calibration review below is HISTORY (kept for the resume context).
 
 ## What shipped (12 cycles, ~2.5M spend, branch `campaign/2026-06-18`)
 - ✓ **M1 — Wreck-arc finish** (C1-C4): panel-deadcode-cleanup · perf-reprofile · remove-sand-mounds · scrap-3q · dish-collider.
