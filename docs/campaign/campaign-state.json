@@ -2,7 +2,7 @@
   "status": "active",
   "started": "2026-06-18",
   "branch": "campaign/2026-06-18",
-  "cycles_completed": 10,
+  "cycles_completed": 11,
   "current_tier": "M2 — Wreck breadth + polish + infra",
   "awaiting_approval": false,
   "stop_reasons": [],
@@ -15,7 +15,7 @@
   "circuit_breaker_n": 3,
   "consecutive_no_progress": 0,
   "ceiling": { "max_cycles": 12, "total": null, "per_cycle": null, "unit": "tokens" },
-  "spend": { "total": 1890000, "note": "approximate — agent cannot precisely self-meter; max_cycles is the real bound (no budget ceiling set). C10 by FAR the costliest (~600K) — ULTRACODE enabled mid-campaign: 3 adversarial Workflow gate rounds (~458K subagent tokens) that FOUND + fixed a root-cause coordinate bug, + a full addForcedTrauma rewrite. Pre-ultracode cycles ran 50-290K. FLAG at cap review: ultracode roughly 2-4x's per-cycle cost." },
+  "spend": { "total": 2190000, "note": "approximate — agent cannot precisely self-meter; max_cycles is the real bound (no budget ceiling set). ULTRACODE cost arc: C10 ~600K (3 adversarial gate rounds, found+fixed a root-cause bug), C11 ~300K (3-agent recon that prevented a 3rd wasteful failed merge attempt). Pre-ultracode (C1-C8) ran 50-290K. FLAG at cap review: ultracode ~2-4x's per-cycle cost — user decides ON/OFF for the resume." },
   "plan": {
     "authored": "2026-06-18",
     "amended": "2026-06-18 plan-review user steering + evidence audit + Phase-C promotion (see campaign-log.md Cycle 0)",
@@ -154,6 +154,20 @@
       "ultracode": true,
       "commit": "89d63d4",
       "spend_approx_tokens": 600000
+    },
+    {
+      "cycle": 11,
+      "date": "2026-06-18",
+      "focus": "M2 yard-cross-poi-merge — 3rd attempt DEFERRED to a perf session after a recon (D240)",
+      "tier": "M2 — Wreck breadth + polish + infra",
+      "outcome": "DEFERRED",
+      "units": ["yard-cross-poi-merge -> DEFERRED to a dedicated perf session (D240, recon-backed). M2 CONTENT now complete."],
+      "verify": "no source change (docs-only); src/ byte-identical to C10 verify:all PASS; tsc re-confirmed clean",
+      "visual": "N/A — recon + decision cycle, no visual/code output",
+      "recon": "3-agent Workflow recon (~205K): mapped the merge path + bury-audit + D237/D239 history. Verdict: marginal value (yard 1705/field 842), un-pinned audit regression mechanism, needs an architectural change -> defer.",
+      "ultracode": true,
+      "commit": "725524c",
+      "spend_approx_tokens": 300000
     }
   ]
 }

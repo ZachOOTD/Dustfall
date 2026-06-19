@@ -203,3 +203,14 @@ first stop will be `max-cycles` ~mid-Phase-A; resume via `/campaign-start --resu
 - **Spend:** ~600K approx (BY FAR the costliest cycle — ultracode: 3 gate rounds ≈458K subagent tokens + a full rewrite); campaign total ~1.89M; cycle **10/12**.
 - **Commit:** `89d63d4`.
 - **M2 status:** wreck-polish-bundle ✓ COMPLETE; **`yard-cross-poi-merge` is the last M2 unit. Next (cycle 11):** yard-merge (HIGH-RISK, D237/D239). **Verdict: CONTINUE** (M2 in progress; no Phase boundary). **Cap: 2 cycles left.** ⚠ Per-cycle spend rose ~2-4× under ultracode — flag at the cap review.
+
+---
+
+## Cycle 11 — M2 yard-cross-poi-merge: 3rd attempt DEFERRED to a perf session after a recon (2026-06-18) — DEFERRED ⚡ULTRACODE
+- **Planned:** the last M2 unit `yard-cross-poi-merge` (HIGH-RISK, twice-reverted — D237/D239).
+- **Shipped:** an informed **DEFER decision (D240)**, not code. Per the D239 revert-on-2×-fail guardrail + ultracode, ran a **3-agent Workflow recon (~205K)** mapping the merge path, the bury-audit, and the D237/D239 history BEFORE a risky 3rd attempt. Findings: (1) **marginal value** — live `wreck-yard` probe = **1705** draw calls (field **842**), both playable, dense yard frustum-culled; (2) the panel **already self-merges** its static parts at gen — only the rim frame is foldable, and folding it is what regressed the audit; (3) D239's terrain-audit regression mechanism is **still un-pinned**. → DEFER to a dedicated perf session that can make the architectural change (cache `panelDoorExtents`-world + audit the cache, or instance the salvage components). D240 + backlog document the exact next-session order (instrument the perturbation FIRST).
+- **Verify:** no source change (docs-only) → `src/` byte-identical to C10's `verify:all` PASS; tsc re-confirmed clean.
+- **Visual iteration:** N/A — a recon + decision cycle (no player-facing content). Honest note: low game-value cycle, but justified — the recon de-risks a future clean attempt + prevented a 3rd wasteful failed try on a marginal-value perf item.
+- **Spend:** ~300K (the recon); campaign total ~2.19M; cycle **11/12**.
+- **Commit:** `725524c`.
+- **M2 status:** ✓ **CONTENT COMPLETE** (feature-flags + security + wreck-polish-bundle, C5-C10); yard-merge deferred. **Next (cycle 12, THE CAP):** M3 `worm-model-overhaul`. **Verdict: CONTINUE** (no Phase boundary). **Cap: 1 cycle left → cycle 12 self-halts `completed (max-cycles)` for the calibration review.**
