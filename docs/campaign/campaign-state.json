@@ -464,7 +464,7 @@
       "visual": "adversarial gate (2 critics) -> 3 gate-driven rounds. Concept + somber tone gate-confirmed BOTH rounds ('deliberate human tragedies, not random bone-piles'). r1 blobby (oversized rubble-fire, beach-ball/floating skull, dark-merged, tiny canteen) -> r2 shrank+lit props, fixed the floating skull (lowered + ellipsoidal in makeSkeleton), bigger canteen, archetype variety, rock-clear -> r3 SKULL now reads (recessed eye-socket discs + brow + nasal — the load-bearing fix), PAIR reads (widened ~1.7m + inward lean + central fire), deliberate graduated cairn. Shipped on self-assessment after the top blockers (the front/encounter view reads as death tableaux); residual far-distance prop-legibility + backlit-skull-at-3q + occasional edge rocks -> backlog.",
       "save": "no bump — decoration-only, dedicated-RNG, no schema change",
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "72898e5",
       "spend_approx_tokens": 600000
     }
   ]
