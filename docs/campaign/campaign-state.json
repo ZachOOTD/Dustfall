@@ -506,7 +506,7 @@
       "visual": "logic/audio unit -> code-auditor review (crossing logic sound [fires once, frame-hop-proof, pause-safe], audio graph clean/leak-free, determinism). Caught one sev2: resetDayBeats() was exported but UNWIRED -> a stray dawn/dusk beat could fire on load/new-game (module _prevSy persists). FIXED: call resetDayBeats() in handoffToGame (the common new-game/continue/title-skip path). The diurnal VISUALS were verified already-built (rendered across many prior cycles). FEEL (beat character/levels, day length) -> walk-test.",
       "save": "no bump — transient audio, no schema change",
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "d048cb0",
       "spend_approx_tokens": 300000
     }
   ]
