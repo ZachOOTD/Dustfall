@@ -247,3 +247,12 @@ first stop will be `max-cycles` ~mid-Phase-A; resume via `/campaign-start --resu
 - **Spend:** ~320K (3 gate rounds); campaign total ~2.91M; cycle **13/50**.
 - **Commit:** `ee78dc9`.
 - **M3:** worm-model-overhaul ✓ COMPLETE. **Next (cycle 14):** `worm-tail-buried`. **Verdict: CONTINUE** (M3 in progress; no Phase boundary).
+
+## Cycle 14 — M3 worm-tail-buried (Dune emergence read) (2026-06-19) — SHIPPED ⚡ULTRACODE · feel-pending
+- **Planned:** `worm-tail-buried` — the tail stays buried during surface arcs (emerging-from-earth read).
+- **Shipped:** a **tail-sink** in `applyBodyBend` (`sandWorm.ts`) — when the body arcs above the sand, the REAR segments ramp DOWN to ~1.2 radii below the surface (quadratic rear ramp; head/front arch + the bite-arc untouched; auto-scales to arc height). The worm now ERUPTS from the earth instead of floating as a tube. Added a faithful `worm-model --angle=arc` static lunge-pose render for gating.
+- **Verify:** `verify:all` PASS — tsc · placement 0/0 ×5 · colliders 0/25 (worm pose code, not a placement/collider POI).
+- **Visual iteration:** lean adversarial gate (2 critics) on the arc-pose render — both verdict-PASS + `tail_buried=true` ("rear dives into the sand, armor follows the bend cohesively, no defects"); 1 sev2 (dive shallow) fixed in 1 round (bury margin 0.5→1.2 radii); re-render confirms a deep plunge. Residual sev1 (front-hump height, tail-entry sand spray) → **FEEL feel-pending walk-test** (the breach MOTION is the real test).
+- **Spend:** ~210K (feel unit, lighter than the hero-model cycles); campaign total ~3.12M; cycle **14/50**.
+- **Commit:** `588ee60`.
+- **M3:** model ✓ · tail-buried ✓. **Next (cycle 15):** `worm-charge-dive`. **Verdict: CONTINUE** (M3 in progress; no Phase boundary).
