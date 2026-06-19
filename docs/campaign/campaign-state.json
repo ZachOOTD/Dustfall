@@ -2,8 +2,8 @@
   "status": "active",
   "started": "2026-06-18",
   "branch": "campaign/2026-06-18",
-  "cycles_completed": 17,
-  "current_tier": "M3 — The worm + the pit",
+  "cycles_completed": 18,
+  "current_tier": "M4 — Critters + atmosphere",
   "awaiting_approval": false,
   "stop_reasons": [],
   "resume_note": "RESUMED 2026-06-19 (overnight) at the user's request — max-cycles 12→50, status active, ULTRACODE max-quality (user chose correctness over coverage). Runs Phase A (M3-M5b) unattended; pauses at the Phase A milestone (checkpoint=milestone) for the design review (Phase B M6-M10 is design-gated). Prior cap-stop at cycle 12 was the calibration review (passed: ultracode kept on).",
@@ -16,7 +16,7 @@
   "circuit_breaker_n": 3,
   "consecutive_no_progress": 0,
   "ceiling": { "max_cycles": 50, "total": null, "per_cycle": null, "unit": "tokens" },
-  "spend": { "total": 3650000, "note": "approximate — agent cannot precisely self-meter. RESUMED overnight (ultracode max-quality). M3 worm: C13 ~320K (dorsal armor); C14 ~210K; C15 ~190K; C16 ~190K (audio, gate caught 3 sev2); C17 ~150K (multi-worm: infra pre-existing + rumble refactor, 1 code-auditor PASS). Mostly-done units run lean (~150K); feel/audio/logic ~190K; hero-visual ~300-600K. Pre-ultracode (C1-C8) 50-290K. max-cycles=50; pauses at the Phase A milestone." },
+  "spend": { "total": 3950000, "note": "approximate — agent cannot precisely self-meter. RESUMED overnight (ultracode max-quality). M3 worm: C13 ~320K (dorsal armor); C14 ~210K; C15 ~190K; C16 ~190K (audio, gate caught 3 sev2); C17 ~150K (multi-worm: infra pre-existing + rumble refactor); C18 ~300K (sarlacc-lure: 3-agent recon + net-new item + 4 model-gate rounds + a verify-zombie recovery). Mostly-done units run lean (~150K); feel/audio/logic ~190K; hero-visual ~300-600K. Pre-ultracode (C1-C8) 50-290K. max-cycles=50; pauses at the Phase A milestone." },
   "plan": {
     "authored": "2026-06-18",
     "amended": "2026-06-18 plan-review user steering + evidence audit + Phase-C promotion (see campaign-log.md Cycle 0)",
@@ -248,6 +248,22 @@
       "ultracode": true,
       "commit": "22822d2",
       "spend_approx_tokens": 150000
+    },
+    {
+      "cycle": 18,
+      "date": "2026-06-19",
+      "focus": "M3 sarlacc-lure-ambush (USER ADD) — the worm_lure bait → M3 COMPLETE",
+      "tier": "M3 — The worm + the pit",
+      "outcome": "SHIPPED",
+      "units": ["sarlacc-lure-ambush — NEW worm_lure consumable: plant-ahead pickup the worm homes on (SANDWORM_LURE_DETECT_RADIUS_M=70 vs meat 30), reuses findNearbyMeat + the feeding loop. Minimal design (3-agent recon) over a ~625-LOC deployable. M3 COMPLETE (C12-18). Next tier: M4."],
+      "milestone_complete": "M3 (6 units: model · tail-buried · charge-dive · audio-rumble · multi-worm · lure) — NOT a Phase boundary (Phase A milestone is after M5b), no pause",
+      "verify": "verify:all PASS (tsc + placement 0/0 x5 + colliders 0/25; the lure is a held item + pickup, not a placement/collider POI)",
+      "visual": "adversarial Workflow gate on the lure model, 4 rounds (held item). R1 FAIL (cherry-red gland cartoonish) -> R2 oxblood + lumpy + crown (1/2) -> R3 rounded gland + clean thick barb-ring + collar (1/2) -> R4 removed emissive (the glow read hot) -> muted dried-blood gland in the bone crown. reads_as_lure=true unanimous every round, geometry sound. FEEL (summon-and-ambush loop + in-hand edge-on) feel-pending walk-test.",
+      "save": "no bump — reuses ctx.pickups.list + feeding; the placed lure persists as a normal pickup (D81 additive)",
+      "note": "circular import items.ts<->pickups.ts is runtime-only (init-safe, confirmed by a clean perf-probe boot). verify-zombie recovery: verify:placement buffers output to the end + is slow; premature kills spawned port-contending zombies -> documented in next-session-prompt.",
+      "ultracode": true,
+      "commit": "PENDING",
+      "spend_approx_tokens": 300000
     }
   ]
 }

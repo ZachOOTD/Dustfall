@@ -1125,6 +1125,7 @@ export const Tuning = {
   // not the player. Duration matches stationaryBreach scale so the
   // bait-and-strike loop has the same dramatic window.
   SANDWORM_FEED_DETECT_RADIUS_M: 30,         // m — meat pickup detection radius (bait scent range)
+  SANDWORM_LURE_DETECT_RADIUS_M: 70,         // m — the deliberate 'worm_lure' bait's scent range (>> meat; a real summoning lure). C18.
   SANDWORM_FEED_DURATION_S: 4.5,             // s — total feeding state duration (rise + hold + descend)
 
   // ABK — A4 continuation: salt outpost + rocky entrance counts.

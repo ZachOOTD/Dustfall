@@ -478,6 +478,7 @@ function applyDevLoadout(c: GameContext): void {
   // Cookable food — drives the cook-over-fire + lizard-on-a-stick paths.
   for (let i = 0; i < 3; i++) addItem(c.inventory, 'raw_lizard_meat');
   for (let i = 0; i < 2; i++) addItem(c.inventory, 'raw_worm_meat');
+  for (let i = 0; i < 2; i++) addItem(c.inventory, 'worm_lure');   // C18 — sand-worm lure (testability; craft recipe is a follow-up)
   for (let i = 0; i < 2; i++) addItem(c.inventory, 'cactus_pulp');
   // Pre-made deployables — skip the craft step when iterating on fire
   // mechanics directly.

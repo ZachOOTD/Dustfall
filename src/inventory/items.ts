@@ -16,6 +16,7 @@ import { deployStake } from '../world/stake.ts';
 import { deployCompanion } from '../enemies/companion.ts';
 import { easeOutBack, easeInOutCubic, easeOutQuad } from '../core/ease.ts';
 import { addItem } from './inventory.ts';
+import { spawnDroppedPickup } from '../pickups/pickups.ts';   // C18 — worm-lure onUse plants a pickup the worm homes on
 import { makeLizardVisual } from '../enemies/lizard.ts';
 import { makeShrewVisual } from '../enemies/shrew.ts';
 import { makeVultureVisual } from '../enemies/vulture.ts';  // ACAH — held dead-vulture model
@@ -1737,6 +1738,81 @@ const _DEFS: Record<ItemId, ItemDef> = {
       s.appendChild(svgEl('polygon', { points: '4,12 7,7 17,7 20,12 18,17 14,18 6,17' }));
       s.appendChild(svgEl('line', { x1: '8', y1: '11', x2: '16', y2: '14', 'stroke-width': '1' }));
       s.appendChild(svgEl('line', { x1: '9', y1: '14', x2: '15', y2: '11', 'stroke-width': '1' }));
+      return s;
+    },
+  },
+
+  worm_lure: {
+    id: 'worm_lure',
+    name: 'WORM-LURE',
+    glyph: '◈',
+    description: 'a staked scent-gland on bone spikes — plant it to CALL the deep. the worm homes on it from afar + surfaces to feed (when it can be struck)',
+    stackable: true,
+    maxStack: 4,
+    onUse(ctx, _slot) {
+      // Plant the lure ~4m ahead of the player (on the ground) as a pickup the worm homes on
+      // (it's in the meatItems set with a long scent range). Static placement so it stays put;
+      // recoverable until the worm feeds on it (which consumes it via the feeding loop).
+      const cam = ctx.three.camera;
+      const fwd = new THREE.Vector3();
+      cam.getWorldDirection(fwd); fwd.y = 0;
+      if (fwd.lengthSq() < 1e-4) fwd.set(0, 0, -1);
+      fwd.normalize();
+      const fx = cam.position.x + fwd.x * 4;
+      const fz = cam.position.z + fwd.z * 4;
+      const p = spawnDroppedPickup(ctx.three.scene, ctx.terrain, { x: fx, z: fz }, 'worm_lure');
+      ctx.pickups.list.push(p);
+      return { consumed: true, message: 'lure planted — it calls the deep' };
+    },
+    makeViewModel() {
+      const g = new THREE.Group();
+      // C18 gate r2: desaturated DRIED-BLOOD gland (the bright red read cartoonish vs the muted palette),
+      // a LUMPY/CLOTTED organic mass (not a clean sphere), a bigger/higher bone CROWN + a clear collar.
+      const woodMat = new THREE.MeshLambertMaterial({ color: 0x4f3c28, flatShading: true });          // drier, darker wood
+      const glandMat = new THREE.MeshLambertMaterial({ color: 0x361c16, flatShading: true });   // r4: dried-blood, NO emissive (the glow read as a hot orange-red); value-matched toward the wood
+      const clotMat = new THREE.MeshLambertMaterial({ color: 0x281310, flatShading: true });          // dark clotting/mottle
+      const boneMat = new THREE.MeshLambertMaterial({ color: 0xcdc3aa, flatShading: true });          // r3: the lightest values in frame
+      // Stake driven into the ground (the held model is shown tip-down).
+      const stake = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.022, 0.24, 6), woodMat);
+      stake.position.y = -0.07; g.add(stake);
+      // Scent-gland: a ROUNDED irregular lumpy mass (r3: subdiv-2 ico, not a faceted peak that read as a roof) —
+      // a main blob + a couple of fused sub-lumps so the silhouette sags organically, not a clean sphere.
+      const gland = new THREE.Mesh(new THREE.IcosahedronGeometry(0.046, 2), glandMat);
+      gland.scale.set(1.12, 0.92, 1.05); gland.rotation.set(0.3, 0.5, 0.1); gland.position.y = 0.072; g.add(gland);
+      for (const [sx, sy, sz, r] of [[0.028, 0.084, 0.012, 0.026], [-0.026, 0.06, 0.02, 0.022]] as const) {
+        const lump = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 2), glandMat);
+        lump.scale.set(1.1, 0.95, 1.0); lump.position.set(sx, sy, sz); g.add(lump);
+      }
+      // Dark clots / dried-fluid mottle break up the surface (reads as cured tissue, not painted plastic).
+      for (const [cx, cy, cz] of [[0.022, 0.092, 0.028], [-0.03, 0.066, -0.012], [0.008, 0.05, -0.03]] as const) {
+        const clot = new THREE.Mesh(new THREE.IcosahedronGeometry(0.013, 1), clotMat);
+        clot.scale.set(1.3, 0.5, 1.2); clot.position.set(cx, cy, cz); g.add(clot);
+      }
+      // Bone CROWN — THICK barbs (rule 7) in a clean radial ring, each canted UP + OUTWARD (no drooping) so
+      // they read as a cage of barbs encircling the gland, rooted at the collar.
+      const _up = new THREE.Vector3(0, 1, 0);
+      const _dir = new THREE.Vector3();
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2;
+        const spike = new THREE.Mesh(new THREE.ConeGeometry(0.019, 0.085, 5), boneMat);   // ~3.8cm base — holds volume edge-on
+        spike.position.set(Math.cos(a) * 0.05, 0.07, Math.sin(a) * 0.05);
+        _dir.set(Math.cos(a) * 0.6, 1, Math.sin(a) * 0.6).normalize();   // up + outward, uniform
+        spike.quaternion.setFromUnitVectors(_up, _dir);
+        g.add(spike);
+      }
+      // Clear bone COLLAR band where the gland is lashed to the stake (overhangs the stake top).
+      const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.027, 0.032, 0.03, 8), boneMat);
+      collar.position.y = 0.026; g.add(collar);
+      return g;
+    },
+    makeIcon() {
+      const s = svg();
+      // staked lure: a vertical stake + a round gland + splayed spikes
+      s.appendChild(svgEl('line', { x1: '12', y1: '21', x2: '12', y2: '11', 'stroke-width': '2' }));
+      s.appendChild(svgEl('circle', { cx: '12', cy: '8', r: '3.5' }));
+      s.appendChild(svgEl('line', { x1: '12', y1: '8', x2: '6', y2: '4', 'stroke-width': '1' }));
+      s.appendChild(svgEl('line', { x1: '12', y1: '8', x2: '18', y2: '4', 'stroke-width': '1' }));
+      s.appendChild(svgEl('line', { x1: '12', y1: '8', x2: '12', y2: '3', 'stroke-width': '1' }));
       return s;
     },
   },

@@ -18,6 +18,8 @@ export type ItemId =
   | 'cooked_vulture_meat'
   | 'raw_worm_meat'
   | 'cooked_worm_meat'
+  // M3 (C18) — sand-worm LURE: a deliberate bait the worm homes on from a longer range than meat
+  | 'worm_lure'
   // Session G — fire / tent crafting + fuel + cloth
   | 'branch'
   | 'cloth'

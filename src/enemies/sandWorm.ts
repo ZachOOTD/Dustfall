@@ -1369,14 +1369,17 @@ function findNearbyMeat(worm: SandWorm, ctx: GameContext): { x: number; z: numbe
     'cooked_worm_meat',
     'lizard_on_a_stick_raw',
     'lizard_on_a_stick_cooked',
+    'worm_lure',   // C18 — the deliberate sand-worm LURE (longer scent range — see below)
   ]);
-  const detectR = Tuning.SANDWORM_FEED_DETECT_RADIUS_M;
+  const meatR = Tuning.SANDWORM_FEED_DETECT_RADIUS_M;
+  const lureR = Tuning.SANDWORM_LURE_DETECT_RADIUS_M;   // C18 — the lure summons from much further than incidental meat
   let best: { x: number; z: number; id: number; distSq: number } | null = null;
   for (const p of ctx.pickups.list) {
     if (!meatItems.has(p.itemId)) continue;
     const dx = p.pos.x - worm.basePos.x;
     const dz = p.pos.z - worm.basePos.z;
     const distSq = dx * dx + dz * dz;
+    const detectR = p.itemId === 'worm_lure' ? lureR : meatR;
     if (distSq > detectR * detectR) continue;
     if (best === null || distSq < best.distSq) {
       best = { x: p.pos.x, z: p.pos.z, id: p.id, distSq };
