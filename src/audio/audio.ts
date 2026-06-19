@@ -555,6 +555,74 @@ export function playWormRoar(vol = 1): void {
   sub.stop(t + 0.92);
 }
 
+// ── Sustained worm APPROACH RUMBLE (C16) ──────────────────────────────────
+// A held sub-bass tremor under the worm's underground CHARGE (vs the one-shot
+// roar): two detuned low sines (beating organic weight) + lowpassed looping
+// noise (grinding earth), throbbing under a slow tremolo LFO. start/level/stop
+// are driven by the worm's charge state (sandWorm.ts). Single global rumble —
+// idempotent start; the multi-worm case is handled when that unit lands.
+let _wormRumble: {
+  sub: OscillatorNode; sub2: OscillatorNode; noise: AudioBufferSourceNode;
+  lfo: OscillatorNode; lfoGain: GainNode; level: GainNode;
+} | null = null;
+const _WORM_RUMBLE_MAX = 0.5;
+
+/** Start the sustained charge rumble (no-op if already playing or audio not started). */
+export function startWormRumble(): void {
+  const a = getAudioInternals();
+  if (!a || _wormRumble) return;
+  const t = a.ctx.currentTime;
+  const level = a.ctx.createGain();
+  level.gain.setValueAtTime(0.0001, t);          // near-silent until setWormRumbleLevel ramps it
+  level.connect(a.sfx);
+  // Sub-bass weight — two slightly-detuned low sines beat for an organic throb.
+  const sub = a.ctx.createOscillator(); sub.type = 'sine'; sub.frequency.value = 34;
+  const sub2 = a.ctx.createOscillator(); sub2.type = 'sine'; sub2.frequency.value = 41;
+  const subGain = a.ctx.createGain(); subGain.gain.value = 0.7;
+  sub.connect(subGain); sub2.connect(subGain); subGain.connect(level);
+  // Grinding earth — lowpassed looping noise.
+  const noise = a.ctx.createBufferSource();
+  noise.buffer = a.noiseBuffer; noise.loop = true; noise.playbackRate.value = 0.35;
+  const lp = a.ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 95; lp.Q.value = 0.8;
+  const noiseGain = a.ctx.createGain(); noiseGain.gain.value = 0.5;
+  noise.connect(lp); lp.connect(noiseGain); noiseGain.connect(level);
+  // Tremolo LFO — modulates the level so the rumble throbs (the felt vibration).
+  const lfo = a.ctx.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = 5;
+  const lfoGain = a.ctx.createGain(); lfoGain.gain.value = 0;   // depth set by setWormRumbleLevel
+  lfo.connect(lfoGain); lfoGain.connect(level.gain);
+  sub.start(t); sub2.start(t); noise.start(t); lfo.start(t);
+  _wormRumble = { sub, sub2, noise, lfo, lfoGain, level };
+  setWormRumbleLevel(0.2);
+}
+
+/** Set the rumble intensity 0..1 (charge proximity) — louder, deeper-throbbing, faster as it nears. */
+export function setWormRumbleLevel(level01: number): void {
+  if (!_wormRumble || !_ctx) return;
+  const v = Math.max(0, Math.min(1, level01));
+  const t = _ctx.currentTime;
+  _wormRumble.level.gain.setTargetAtTime(0.0001 + v * _WORM_RUMBLE_MAX, t, 0.15);
+  _wormRumble.lfoGain.gain.setTargetAtTime(v * _WORM_RUMBLE_MAX * 0.3, t, 0.15);
+  _wormRumble.lfo.frequency.setTargetAtTime(4 + v * 3.5, t, 0.2);
+}
+
+/** Stop the rumble — ramps down (no click) then frees the nodes. Idempotent. */
+export function stopWormRumble(): void {
+  if (!_wormRumble || !_ctx) return;
+  const r = _wormRumble; _wormRumble = null;     // null first so a re-start can't collide
+  const t = _ctx.currentTime;
+  // Detach the tremolo BEFORE the fade so its oscillation can't bump/click the ramp tail (audit fix).
+  r.lfoGain.disconnect();
+  r.level.gain.cancelScheduledValues(t);
+  r.level.gain.setTargetAtTime(0.0001, t, 0.1);
+  const stopT = t + 0.45;
+  r.sub.stop(stopT); r.sub2.stop(stopT); r.noise.stop(stopT); r.lfo.stop(stopT);
+  // Free the graph once the sources stop — no stale branches accumulate across repeated charges (audit fix).
+  r.noise.onended = () => {
+    r.sub.disconnect(); r.sub2.disconnect(); r.noise.disconnect();
+    r.lfo.disconnect(); r.level.disconnect();
+  };
+}
+
 // ACL WORM TWILIGHT-BREACH AUDIO ATTENUATION — distance falloff for ambient
 // twilight breaches (180-400m away). Soft inverse-distance curve:
 //   <= 180m -> ~1.0 (full),  ~400m -> ~0.2,  beyond -> fades to ~0.

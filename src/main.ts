@@ -83,7 +83,7 @@ import { createTutorial } from './ui/tutorial.ts';
 import { installDebugPanel } from './debug/debugPanel.ts';
 import { createTitleScene } from './world/titleScene.ts';
 import { createTitleOverlay } from './ui/titleOverlay.ts';
-import { ensureAudioStarted } from './audio/audio.ts';
+import { ensureAudioStarted, stopWormRumble } from './audio/audio.ts';
 import { startSoundscape } from './audio/soundscape.ts';
 // AAP — startMusic imported above (alongside updateMusic).
 import { clearSave, loadGameState, peekSavedSeed } from './persistence/save.ts';
@@ -807,6 +807,7 @@ startLoop(ctx, (c, dt) => {
   }
   // Skip ALL game logic while paused. Render still runs (after this callback).
   if (c.flags.paused) {
+    stopWormRumble();   // C16 — don't leave the worm charge-rumble droning while the game is frozen (updateSandWorm won't run to stop it)
     endInputFrame(c.input);
     return;
   }

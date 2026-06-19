@@ -3,6 +3,12 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign C16 — 2026-06-19 — M3: worm-audio-rumble (sustained sub-bass charge approach) ✓ gates pass (ultracode, audio) · sound feel-pending
+
+`verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/25 — audio/behavior, not a placement/collider POI). **Audio unit → no visual gate;** "gate" = a code-auditor review of the Web Audio graph (PASS after 1 fix round). **No save bump.** Cycle 16/50.
+
+**worm-audio-rumble.** A NEW sustained **sub-bass approach rumble** under the worm's underground charge (vs the existing one-shot roar) — two detuned low sines (34/41 Hz, beating organic weight) + lowpassed looping noise (grinding earth), throbbing under a slow tremolo LFO (`audio.ts` `startWormRumble`/`setWormRumbleLevel`/`stopWormRumble`, routed through `_sfx`). Wired in `sandWorm.ts`: starts on `enterCharging`, the level/tremor/pitch **ramp with proximity to the player** (dread builds as it closes), stops on the charge abort, on `enterLunge` (the eruption/roar takes over), and on death; main.ts stops it on pause. Pairs with C15's back-ridge charge tell. **Gate (code-auditor, ultracode):** R1 FAIL — 3 real sev2 (LFO not detached before the fade → tail clicks; `stop()` never `disconnect()`'d → stale graph branches across charges; paused mid-charge orphaned the rumble). Fixed: detach the tremolo + free the graph on `noise.onended`; stop on pause (main.ts) + on death. R2 **PASS** ("no leaks, no clicks, no negative-gain, all charge exits covered, robust Web Audio patterns"). **SOUND** (does it land as dread) → feel-pending walk-test. Multi-worm: single global rumble for now (documented; the per-worm rumble lands with multi-worm-population). Next: multi-worm-population.
+
 ## Campaign C15 — 2026-06-19 — M3: worm-charge-dive (submerged armored back-ridge tell) ✓ gates pass (ultracode) · feel-pending
 
 `verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/25 — worm behavior, not a placement/collider POI). Visual: lean adversarial gate (2 critics, 1 fix round) on a static charge-pose render. **No save bump.** Cycle 15/50.
