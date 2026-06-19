@@ -240,6 +240,13 @@ export function makeSpeeder(_rand: Rng): THREE.Group {
       bar.position.set(0, 0.38, 0.95);
       bar.name = 'speederTowBar';
       bar.userData.noMerge = true;           // ACAS A2 — sled rope-anchor ref; keep live
+      // M5 (C24) — the tow-bar is a rope-ATTACH interactable: LMB ties/unties a
+      // player-tethered sled to the speeder. Works while PARKED (no mounting needed)
+      // — an explicit alternative to the mount auto-transfer; mirrors the stake's
+      // rope-attach (interaction.ts case 'speeder' → 'attach_rope'). Both tags so
+      // resolveInteractable picks the bar (not the seat's 'mount').
+      bar.userData.interactType = 'attach_rope';
+      bar.userData.interactRegistry = 'speeder';
       g.add(bar);
     }
   }

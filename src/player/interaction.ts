@@ -296,6 +296,9 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
   // seat mesh is tagged with userData.interactType='mount' inside
   // makeSpeeder so resolveInteractable picks it up on raycast hit.
   if (ctx.speeder && !ctx.speeder.mounted) targets.push(ctx.speeder.seat);
+  // M5 (C24) — the rear tow-bar is a rope-attach interactable (tie/untie a sled
+  // to the speeder), available whether parked or mounted.
+  if (ctx.speeder) targets.push(ctx.speeder.towBar);
   if (targets.length === 0) {
     if (_salvaging) cancelSalvage();
     return;
@@ -1124,10 +1127,38 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
     }
 
     case 'speeder': {
-      // CC-3.1 — looking at the speeder seat (and not mounted). Show
-      // the "[E] mount speeder" prompt. The actual mount action is
-      // handled by updateSpeeder earlier in the tick (which also
-      // checks SPEEDER_MOUNT_RANGE), so we don't dispatch E here.
+      // M5 (C24) — sub-dispatch by the tagged interactType: the rear TOW-BAR
+      // ('attach_rope') ties/unties a sled; the SEAT ('mount') shows the mount prompt.
+      if (info.type === 'attach_rope') {
+        // Rope-attach to the speeder's rear tow-bar — parallels the stake case
+        // (ACU #50: the rope is DEPLOYED while tied, so no wielded-rope check).
+        // LMB ties a player-tethered sled to the speeder, or unties a
+        // speeder-tethered one back into hand. Works PARKED (no mounting needed) —
+        // an explicit alternative to the mount auto-transfer (which still works).
+        const playerSled = ctx.sleds.list.find((s) => s.tether.kind === 'player');
+        const speederSled = ctx.sleds.list.find((s) => s.tether.kind === 'speeder');
+        if (speederSled) {
+          ctx.inventory.hover = { type: 'attach_rope', distance: info.distance, promptNoun: 'take rope from speeder' };
+          if (ctx.input.mousePressed.has(0)) {
+            applyTether(ctx, speederSled, { kind: 'player' });   // speeder→player → rope back in hand
+            ctx.ui.showToast('rope in hand — sled follows');
+          }
+          return;
+        }
+        if (playerSled) {
+          ctx.inventory.hover = { type: 'attach_rope', distance: info.distance, promptNoun: 'tie sled to speeder' };
+          if (ctx.input.mousePressed.has(0)) {
+            applyTether(ctx, playerSled, { kind: 'speeder' });   // player→speeder → stow rope on the bar
+            ctx.ui.showToast('sled tied to the speeder');
+          }
+          return;
+        }
+        // Nothing to tie — passive hover so the bar still reads as the tow point.
+        ctx.inventory.hover = { type: 'attach_rope', distance: info.distance, promptNoun: 'tow-bar', passive: true };
+        return;
+      }
+      // CC-3.1 — the SEAT: "[E] mount speeder". The mount action is handled by
+      // updateSpeeder earlier in the tick (SPEEDER_MOUNT_RANGE), so no E here.
       ctx.inventory.hover = {
         type: 'mount',
         distance: info.distance,
