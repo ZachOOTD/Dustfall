@@ -478,7 +478,7 @@
       "visual": "logic/audio unit -> code-auditor review READY TO SHIP / CLEAN (8 checks: produces sound [graph connected + source started + non-zero gains], leak-free [idempotent single-start], setTargetAtTime smooth + all param bounds legal, mood curve correct [noon bright -> night dull, storm opens, whistle louder at night], null-safe, no conflict with the silent sample stems, storm-muffle applies). Audio can't be heard headlessly (suspended context) -> FEEL (levels/cutoffs/whistle) + the day/night-life+music beds being still silent -> walk-test/backlog.",
       "save": "no bump — runtime audio graph, no schema change",
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "cd4b632",
       "spend_approx_tokens": 280000
     }
   ]
