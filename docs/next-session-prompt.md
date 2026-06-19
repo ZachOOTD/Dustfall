@@ -34,6 +34,17 @@ greebles/seams/panels don't overlap it.
 > calibration review (mid-Phase-A, mid wreck-polish). Resume: `/campaign-start --resume --max-cycles=<N>`. The cap
 > will likely land at delta-5 + the start of yard-merge — Phase A is NOT reached within 12.
 
+## ⚡ ULTRACODE ON (user enabled during cycle 9)
+Optimize for the most exhaustive, correct result — token cost is NOT a constraint (the 12-cap still bounds total
+cycles). For substantive cycle work, **use the Workflow tool**, not solo shortcuts:
+- **Visual gate → a real adversarial Workflow** (parallel harsh-lens critics + a code-auditor reading the rendered
+  PNGs + geometry source, schema-forced severity findings, PASS iff no sev≥2) instead of solo-triage — even for the
+  "subtle" delta-5 pocket fix. Front-light + length-frame the renders first.
+- **Reconsider the C9 trauma read-polish (backlog §F)** with a fuller fan-out if delta 5 is quick — under ultracode
+  the modest read shouldn't be left as merely "flagged"; orchestrate a real fix (target the largest central body
+  part + seat the gash tight + an attached all-angle silhouette break) with an adversarial gate.
+- If still on at the cap, note it in the review hand-off (per-cycle spend will be higher than the C1-C8 baseline).
+
 ## Autonomy contract
 - **`phash`-determinism (D221)** — re-run `verify:placement` + `verify:colliders` after any geometry change; a
   rand-consuming conditional desyncs the stream (gate on `cls`/hash2, keep the draw count). Watch the **types**: not
