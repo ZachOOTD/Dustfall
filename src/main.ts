@@ -24,6 +24,7 @@ import { updateHorizonSilhouettes, addHorizonSilhouettesByName } from './world/h
 import { initSpyglass, updateSpyglass } from './player/spyglass.ts';   // M5a (C29) — hold-RMB spyglass zoom
 import { updateVistaReveal } from './world/vistaReveal.ts';   // M5a (C30) — crest-a-ridge fog-lift + swell
 import { updateSunExposure } from './world/sunExposure.ts';   // M5a (C31) — direct-sun vs shade (heat relief)
+import { updateDayBeats, resetDayBeats } from './world/dayBeats.ts';   // M5b (C35) — dawn/dusk tonal beats
 import { createSalvageableRegistry, setSalvageBiomesContext } from './world/salvage.ts';
 import { createSky, updateSky } from './world/sky.ts';
 import { updateStats } from './stats/survival.ts';
@@ -700,6 +701,7 @@ function handoffToGame(opts?: { skipLock?: boolean }): void {
   // hides → but the boot loadout was already applied).
   if (ctx.flags.devMode) devModeBadge.classList.add('visible');
   else devModeBadge.classList.remove('visible');
+  resetDayBeats();   // C35 — seed fresh so a new-game/load sun position can't fire a stray dawn/dusk beat
   ensureAudioStarted();
   startSoundscape();
   // AAP — atmospheric music tracks. Three procedural Web Audio tracks
@@ -864,6 +866,7 @@ startLoop(ctx, (c, dt) => {
   updateStats(c, dt);            // thirst/heat/health drain + death
   updateSoundscape(c, dt);       // wind volume tracks day/night
   updateMusic(c, dt);            // AAP — procedural music tracks crossfade by sun + storm
+  updateDayBeats(c);             // M5b (C35) — a warm/cool tonal swell at the sunrise/sunset crossings
   // ABM (B7) — per-frame sync of dynamic-body pickups (dropped items
   // roll/fall/settle). Cheap walk; skips pickups without a body.
   // Runs AFTER physics.step (above) so the body transform reflects

@@ -757,6 +757,53 @@ export function playVistaReveal(strength = 1): void {
   }
 }
 
+/** Diurnal beats (C35) — a warm/cool tonal swell at the day boundaries so each
+ *  sunrise/sunset is a FELT moment (the survival rhythm). `warm` = a hopeful rising
+ *  MAJOR chord for dawn; `!warm` = a cooler, settling, lower chord for dusk. On the
+ *  ambient bus (sits under the mix). */
+function playDayBeat(warm: boolean): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  const lp = a.ctx.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.setValueAtTime(warm ? 700 : 520, t);
+  lp.frequency.linearRampToValueAtTime(warm ? 2100 : 1050, t + (warm ? 1.0 : 1.6));
+  lp.Q.value = 0.6;
+  const bus = a.ctx.createGain();
+  bus.gain.setValueAtTime(0.0001, t);
+  bus.gain.linearRampToValueAtTime(warm ? 0.1 : 0.085, t + (warm ? 0.45 : 0.7));
+  bus.gain.setValueAtTime(warm ? 0.1 : 0.085, t + (warm ? 1.1 : 1.4));
+  bus.gain.exponentialRampToValueAtTime(0.0007, t + (warm ? 2.8 : 3.4));
+  lp.connect(bus).connect(a.ambient);
+  // Dawn: a major chord, gently rising (hopeful). Dusk: an open chord a 5th lower,
+  // slightly sinking (settling, the night closing in).
+  const freqs = warm
+    ? [196.0, 246.94, 293.66, 392.0]   // G3 B3 D4 G4 — major, hopeful
+    : [130.81, 196.0, 261.63, 392.0];  // C3 G3 C4 G4 — open + low, settling
+  const bend = warm ? 1.02 : 0.985;    // rise (dawn) / sink (dusk) over the swell
+  for (let i = 0; i < freqs.length; i++) {
+    const o = a.ctx.createOscillator();
+    o.type = i === 0 ? 'triangle' : 'sine';
+    const f0 = freqs[i] * (1 + (i - 1.5) * 0.0016);
+    o.frequency.setValueAtTime(f0, t);
+    o.frequency.linearRampToValueAtTime(f0 * bend, t + (warm ? 2.4 : 3.0));
+    const g = a.ctx.createGain();
+    const w = 1 / (1 + i * 0.5);
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.5 * w, t + (warm ? 0.45 : 0.7));
+    g.gain.exponentialRampToValueAtTime(0.001, t + (warm ? 2.8 : 3.4));
+    o.connect(g).connect(lp);
+    o.start(t);
+    o.stop(t + (warm ? 2.9 : 3.5));
+  }
+}
+
+/** Dawn — a warm hopeful swell as the sun crests (you survived the night). */
+export function playDawnTone(): void { playDayBeat(true); }
+/** Dusk — a cooler settling swell as the sun sets (the cold night comes). */
+export function playDuskTone(): void { playDayBeat(false); }
+
 /** Refill (water source → canteen) — water filling a vessel, rising pitch. */
 export function playRefill(): void {
   const a = getAudioInternals();

@@ -3,6 +3,12 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign C35 — 2026-06-19 — M5b: **diurnal-cycle** — dawn/dusk tonal beats mark each day boundary ✓ verify pass (ultracode)
+
+`verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/25 — an audio + a sun-height edge check; no scatter-rand/geometry/collider). Logic/audio unit → **code-auditor review** (mostly clean; caught one sev2 — the reset wasn't wired → a stray beat could fire on load; **fixed** by calling `resetDayBeats()` in `handoffToGame`). **No save bump.** Cycle 35/50. **M5b unit 4/5.**
+
+**diurnal-cycle.** **ASSESS-FIRST:** the day/night cycle is heavily already-built + tuned — `dayTime` advances at `dt/DAY_LENGTH_SECONDS` (12-min days, CC-4-tuned), `daysSurvived` counts toward the day-7 "long storm", the sky blends NIGHT→DUSK→DAY + the light shifts + dusk warmth. So I did NOT blind-tune the pacing (a multi-session feel call → walk-test). The genuine GAP: crossing a day boundary was **silent** — surviving a night → a new day had no felt moment. Added it: `world/dayBeats.ts` detects the sunrise/sunset **threshold crossings of `sunHeight`** (rising/falling edge at ±0.04, fires once per crossing, storm-suppressed) and plays a tonal swell — a warm hopeful rising **MAJOR** chord at DAWN ("you survived the night") and a cooler, settling, lower chord at DUSK ("the cold night comes"), both `playDayBeat` on the ambient bus. Determinism-safe (sunHeight, no rand) + transient. The diurnal VISUALS were verified already-built (rendered across many prior cycles). **FEEL** (the beat character/levels, the day length) → walk-test. Next M5b: **worm-far-horizon-crossing** — the LAST M5b unit → the **Phase-A milestone PAUSE**.
+
 ## Campaign C34 — 2026-06-19 — M5b: **rare-sky-phenomena** — a dramatic rare FIREBALL/bolide ✓ verify pass (ultracode)
 
 `verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/25 — a sky-render addition; the sky already uses `Math.random` for runtime visuals, no scatter-rand/geometry/collider). Visual: adversarial gate (2 critics) — **iterated 2 rounds → PASS** (both critics `reads_as_fireball=true`, no sev2; residual = sev1 polish + a motion-dependent trail-length). **No save bump.** Cycle 34/50. **M5b unit 3/5.**
