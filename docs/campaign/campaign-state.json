@@ -449,7 +449,7 @@
       "visual": "logic/survival unit -> code-auditor review SHIP CLEAN (slab math, raymarch, survival integration [clamps keep temp in 0..1], determinism, null-safety, smoothing, perf all sound; the only notes were doc-comment + the known <8m-wreck coverage gap). A NEW sun-probe scenario: the naive terrain/shelter-zone approach was found INERT (gentle dunes ~1% shaded only at low sun; tiny zones) -> pivoted (D242) to the C28 wreck boxes; a TARGETED probe confirmed a point on a 20m wreck's shadow side reads shaded + the sunny side clear. FEEL + coverage (<8m wrecks) -> walk-test/backlog.",
       "save": "no bump — transient sunExposure01, no schema change",
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "c73617e",
       "milestone_complete": "M5a (4 units: silhouettes[partial] + spyglass + vista-crest + sun-shade) — NOT a Phase boundary (the Phase-A milestone is after M5b), no pause",
       "spend_approx_tokens": 500000
     }
