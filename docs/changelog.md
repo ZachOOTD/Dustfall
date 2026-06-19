@@ -3,6 +3,12 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign C11 — 2026-06-18 — M2 yard-cross-poi-merge: 3rd attempt DEFERRED after a recon (D240) — recon-backed decision
+
+`verified` — **no source change** (docs-only: D240 + backlog + roadmap); `src/` byte-identical to C10's `verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/25), tsc re-confirmed clean. Cycle 11/12. **M2 content COMPLETE.**
+
+**yard-cross-poi-merge → DEFERRED to a dedicated perf session (D240).** Per the D239 revert-on-2×-fail guardrail + ultracode, ran a **3-agent recon (~205K)** to map the merge path, the bury-audit, and the D237/D239 history BEFORE a risky 3rd attempt. Findings: (1) the win is **MARGINAL** — measured the live `wreck-yard` probe at **1705** draw calls (field **842**); both fully playable, and the dense-yard worst-case is frustum-culled. (2) The panel **already self-merges** its static parts at gen (door/interior/components); the only foldable residual is the rim frame, and folding it is exactly what regressed the audit. (3) D239's terrain-audit regression mechanism (`body.matrixWorld` moving despite not depending on its children) is **still un-pinned** — a 3rd blind attempt would likely trip the same wall. A safe capture needs an *architectural* change (cache `panelDoorExtents`-world at gen + audit the cache, or instance the salvage components) that belongs in a focused perf session, not the last budget-constrained cycle before the cap. **D240 documents the exact next-session investigation order** (instrument the perturbation FIRST). This is a recon-backed engineering DEFER, not a punt — the 205K recon de-risks a future clean attempt + prevents a 3rd wasteful failed try. **M2's content (feature-flags, security, wreck-polish-bundle, C5-C10) is all shipped;** the only remaining M2 item is this deferred perf-optimization. Honest note: a recon+decision cycle (no player-facing content), justified by the high-risk twice-failed nature. **Next (cycle 12, the cap)** → M3 start (worm + sarlacc-lure).
+
 ## Campaign C10 — 2026-06-18 — M2 wreck-polish delta 5 + C9 trauma read-polish → **wreck-polish-bundle COMPLETE** ✓ all gates pass (ultracode)
 
 `verified` — `npm run verify:all` PASS (tsc + `verify:placement` 0/0 ×5 + `verify:colliders` 0/25). Visual: **3-round adversarial Workflow gate** (multi-critic + code-auditor reading rendered PNGs + geometry source). **No save bump.** Cycle 10/12 — **wreck-polish-bundle DONE (5/5 deltas)**. Big cycle (~600K, ultracode: 3 gate rounds).
