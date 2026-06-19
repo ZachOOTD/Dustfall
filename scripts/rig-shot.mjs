@@ -1695,6 +1695,50 @@ const SCENARIOS = {
     console.log('[vista] ' + JSON.stringify(info));
   },
 
+  // Spyglass zoom (C29): stand `dist` m from a flagship landmark, force the spyglass
+  // FOV zoom + the scope vignette, and capture the world-through-the-glass. Pass
+  // --raw to capture the UN-zoomed wide view for a before/after compare.
+  'spyglass-view': async (page) => {
+    const dist = argv.dist !== undefined ? Number(argv.dist) : 480;
+    const raw = !!argv.raw;
+    const info = await page.evaluate(({ dist, raw }) => {
+      const ctx = window.__game.ctx;
+      window.__game.setTime(0.5);
+      ctx.weather.intensity = 0; ctx.weather.cloudiness = 0.1;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      ctx.three.renderer.setSize(720, 720, false);
+      const cam = ctx.three.camera;
+      const V = cam.position.constructor;
+      const names = ['megaShip', 'megaWreck', 'satelliteDish', 'crashedHull', 'openingWreck'];
+      let target = null, hit = null;
+      for (const n of names) {
+        const o = ctx.three.scene.getObjectByName(n);
+        if (o) { target = o.getWorldPosition(new V()); hit = n; break; }
+      }
+      if (!target) return { noTarget: true };
+      const d = Math.hypot(target.x, target.z) || 1;
+      const ux = target.x / d, uz = target.z / d;
+      const cx = target.x - ux * dist, cz = target.z - uz * dist;
+      const groundY = ctx.terrain.heightAt(cx, cz);
+      cam.position.set(cx, groundY + 3, cz);
+      cam.lookAt(target.x, target.y + 10, target.z);
+      // Force the zoom (paused → updateSpyglass won't fight it) + the vignette.
+      const zoomFov = raw ? 78 : 24;          // SPYGLASS_FOV
+      cam.fov = zoomFov;
+      cam.aspect = 1; cam.updateProjectionMatrix();
+      cam.updateMatrixWorld(true);
+      const scope = document.getElementById('spyglass-scope');
+      if (scope) scope.style.opacity = raw ? '0' : '0.96';
+      ctx.flags.paused = true;
+      return { landmark: hit, dist, fov: zoomFov, raw, hasScope: !!scope };
+    }, { dist, raw });
+    await page.waitForTimeout(320);
+    await page.screenshot({ path: join(OUT, `scen-spyglass-${raw ? 'raw' : 'zoom'}-${dist}.png`), fullPage: false });
+    console.log('[spyglass-view] ' + JSON.stringify(info));
+  },
+
   // Vulture (ACAH): frame a perched vulture on its tree for model iteration.
   // --angle=3q|side|front; head faces +X (rotation forced to 0 for a stable read).
   'vulture': async (page) => {

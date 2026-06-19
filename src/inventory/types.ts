@@ -61,7 +61,10 @@ export type ItemId =
   | 'pulse_rifle'
   // ACAQ (Cycle 8) — wreck-yard exclusive: a glowing alien-tech relic core.
   // A rare emergency artifact (full-restore on use) found only in the graveyard.
-  | 'relic_core';
+  | 'relic_core'
+  // M5a (C29) — a salvaged brass spyglass: hold RMB to zoom + scan the horizon
+  // (read the distant landmark silhouettes, spot wrecks/water to navigate toward).
+  | 'spyglass';
 
 /** Per-slot metadata for stateful items (canteen fill level, cook state, light state). */
 export interface ItemMeta {

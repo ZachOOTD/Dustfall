@@ -263,6 +263,17 @@ export const RECIPES: Recipe[] = [
     output: { id: 'stake_kit', count: 1 },
     category: 'tool',
   },
+  {
+    // M5a (C29) — salvaged spyglass: a brass tube (scrap) + a wrapped grip (cloth).
+    id: 17,
+    displayName: 'spyglass',
+    inputs: [
+      { id: 'scrap', count: 3 },
+      { id: 'cloth', count: 1 },
+    ],
+    output: { id: 'spyglass', count: 1 },
+    category: 'tool',
+  },
 ];
 
 /** Session ABE — display order for category sub-headers. Recipes within

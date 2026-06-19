@@ -615,6 +615,11 @@ export const Tuning = {
 
   // Scene
   FOV: 78,
+  // M5a (C29) — salvaged-spyglass zoom: hold RMB while the spyglass is equipped to
+  // narrow the camera FOV (scan the horizon). Restores to the player's settings FOV.
+  SPYGLASS_FOV: 24,            // zoomed FOV in degrees — ~3.25× over the 78° base (a strong but not nauseating glass)
+  SPYGLASS_ZOOM_LERP: 9,       // FOV ease rate (per-second); higher = snappier zoom in/out
+  SPYGLASS_VIGNETTE_MAX: 0.96, // peak darkness of the scope vignette ring at full zoom (0..1)
   NEAR_PLANE: 0.1,
   FAR_PLANE: 1800,  // EE — bumped from 600 with the larger world
   RNG_SEED: 1337,

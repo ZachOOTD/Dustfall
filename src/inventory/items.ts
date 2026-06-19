@@ -3123,6 +3123,91 @@ const _DEFS: Record<ItemId, ItemDef> = {
       return s;
     },
   },
+
+  // M5a (C29) — salvaged brass spyglass. The ZOOM verb is hold-RMB, driven by
+  // updateSpyglass (player/spyglass.ts) reading mouseHeld(2) while equipped — NOT
+  // wieldLmb, so LMB stays inert and Q just surfaces the how-to hint.
+  spyglass: {
+    id: 'spyglass',
+    name: 'SPYGLASS',
+    glyph: '⊙',
+    description: 'a salvaged brass spyglass — hold RMB to scan the horizon',
+    stackable: false,
+    maxStack: 1,
+    wieldLmb: 'click_use',
+    thirdPersonScale: 1.35,    // long but thin tube — modest 3P boost
+    onUse(_ctx, _slot) {
+      return { consumed: false, message: 'hold RMB to look through the spyglass' };
+    },
+    makeViewModel() {
+      // C29 r3 — a long brass draw-telescope with the CLASSIC spyglass taper: a
+      // narrow eyepiece (+Z, the eye end) widening through stepped draw-tubes to a
+      // flared OBJECTIVE bell (−Z). ~6.5:1 length:width. The lenses are now SOLID
+      // dark glossy discs RECESSED behind raised brass bezel rings (r2's transparent
+      // glass showed brass through it → read as a flat painted cap). Bold steel joint
+      // collars + a leather grip. Brass reads metallic in-hand under the sun.
+      const group = new THREE.Group();
+      const brass = vmMetal(0xcf9a3a, { wornScale: 3.0, rustLevel: 0.025, scratchStrength: 0.07 });
+      const brassDark = vmMetal(0xa1731f, { wornScale: 3.6, rustLevel: 0.05, scratchStrength: 0.06 });
+      const steel = vmMetal(0xb7bcc4, { wornScale: 4.5, rustLevel: 0.02, scratchStrength: 0.05 });
+      const leather = createFabricMaterial(0x33210e, undefined, { disableShimmer: true });
+      const lensMat = new THREE.MeshStandardMaterial({ color: 0x070a11, roughness: 0.22, metalness: 0.15, side: THREE.DoubleSide });
+
+      const tube = (r1: number, r2: number, len: number, z: number, mat: THREE.Material) => {
+        const m = new THREE.Mesh(new THREE.CylinderGeometry(r1, r2, len, 22), mat);
+        m.rotation.x = Math.PI / 2;   // lay the Y-cylinder along Z
+        m.position.z = z;
+        group.add(m);
+        return m;
+      };
+      const collar = (r: number, z: number, t: number, mat: THREE.Material = steel) => {
+        const m = new THREE.Mesh(new THREE.TorusGeometry(r, t, 9, 24), mat);
+        m.position.z = z; group.add(m);   // ring wraps the Z-axis tube
+        return m;
+      };
+      // A recessed lens: a raised brass bezel torus + a big SOLID dark disc set back
+      // INTO the tube (toward the body centre — note −Z is forward/out at the
+      // objective, +Z at the eyepiece, so recess toward z=0) so end-on it reads as a
+      // dark glassy disc inside a brass rim, not a flat painted cap.
+      const lens = (bezelR: number, z: number) => {
+        collar(bezelR, z, 0.006, brassDark);                         // raised bezel lip
+        const disc = new THREE.Mesh(new THREE.CircleGeometry(bezelR - 0.001, 24), lensMat);
+        const dir = z > 0 ? -1 : 1;                                  // recess toward the body centre
+        disc.position.z = z + dir * 0.008;
+        group.add(disc);
+      };
+
+      // Eyepiece (narrowest, +Z, the eye end).
+      tube(0.0175, 0.0175, 0.10, 0.155, brass);
+      tube(0.0205, 0.0205, 0.020, 0.205, brassDark);    // eyecup
+      lens(0.018, 0.214);                                // recessed eye lens behind the eyecup
+      collar(0.0185, 0.105, 0.006);                      // steel collar at eyepiece↔draw1
+
+      // Draw-tube 1 (widening toward the objective).
+      tube(0.0225, 0.0225, 0.115, 0.04, brass);
+      collar(0.0235, -0.018, 0.0065);                    // draw1↔main collar
+      // Main barrel (widest body) with a leather grip sleeve.
+      tube(0.0285, 0.0285, 0.13, -0.10, brass);
+      tube(0.0305, 0.0305, 0.05, -0.07, leather);        // wrapped grip
+      collar(0.0312, -0.046, 0.0055, leather);
+      collar(0.0312, -0.094, 0.0055, leather);
+      collar(0.029, -0.16, 0.007);                       // bold steel collar at main↔bell
+      // Flared objective bell + the big recessed lens.
+      tube(0.0285, 0.034, 0.04, -0.19, brassDark);
+      lens(0.033, -0.207);                               // recessed objective lens behind a brass bezel
+
+      // Tilt very slightly so it reads as held, not a floating prop.
+      group.rotation.set(0.04, 0.0, 0.0);
+      return group;
+    },
+    makeIcon() {
+      const s = svg();
+      // A tapered spyglass: a long body + a flared objective end.
+      s.appendChild(svgEl('path', { d: 'M4 9 L15 10 L20 7 L20 17 L15 14 L4 15 Z' }));
+      s.appendChild(svgEl('line', { x1: '9', y1: '9.6', x2: '9', y2: '14.4', 'stroke-width': '1' }));
+      return s;
+    },
+  },
 };
 
 export function getItemDef(id: ItemId): ItemDef {

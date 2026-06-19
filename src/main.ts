@@ -20,6 +20,7 @@ import { placePOIs, getAnchorPOIPositions, getWreckYardCarcasses } from './world
 import { placeProcgenPOIs } from './world/procgenPoi.ts';
 import { placeHeroLandmarks } from './world/heroLandmarks.ts';
 import { updateHorizonSilhouettes, addHorizonSilhouettesByName } from './world/horizonSilhouettes.ts';   // M5a (C28) — skyline nav silhouettes
+import { initSpyglass, updateSpyglass } from './player/spyglass.ts';   // M5a (C29) — hold-RMB spyglass zoom
 import { createSalvageableRegistry, setSalvageBiomesContext } from './world/salvage.ts';
 import { createSky, updateSky } from './world/sky.ts';
 import { updateStats } from './stats/survival.ts';
@@ -484,6 +485,7 @@ function applyDevLoadout(c: GameContext): void {
   for (let i = 0; i < 3; i++) addItem(c.inventory, 'raw_lizard_meat');
   for (let i = 0; i < 2; i++) addItem(c.inventory, 'raw_worm_meat');
   for (let i = 0; i < 2; i++) addItem(c.inventory, 'worm_lure');   // C18 — sand-worm lure (testability; craft recipe is a follow-up)
+  addItem(c.inventory, 'spyglass');   // C29 — salvaged spyglass (testability; also a craft recipe below)
   for (let i = 0; i < 2; i++) addItem(c.inventory, 'cactus_pulp');
   // Pre-made deployables — skip the craft step when iterating on fire
   // mechanics directly.
@@ -538,6 +540,7 @@ spawnCompanionAt(ctx, openingResult.companionSpawnPos, 'idle');
 // IMPORTANT: createMenus must run BEFORE wireOverlays — the unlock handler
 // in input.ts calls showPauseOverlay which needs the menu DOM in place.
 createMenus(ctx);
+initSpyglass();          // M5a (C29) — the scope vignette overlay (owns its div)
 createLootMenu(ctx);
 createCraftingMenu(ctx);
 createSleepOverlay(ctx);
@@ -847,6 +850,7 @@ startLoop(ctx, (c, dt) => {
   updatePlayer(c, dt);           // movement + camera + advance dayTime
   updateStaminaWobble(c);        // WW — sin-driven camera jitter when stamina low (must run AFTER updatePlayer's camera-anchor)
   updateHorizonSilhouettes(c.three.camera);   // M5a (C28) — distance-gate + billboard the skyline silhouettes (camera is final here)
+  updateSpyglass(c, dt);         // M5a (C29) — ease the camera FOV toward the spyglass zoom + drive the scope vignette
   updateShelter(c, dt);          // before stats so heat path sees inShelter
   updateStats(c, dt);            // thirst/heat/health drain + death
   updateSoundscape(c, dt);       // wind volume tracks day/night
