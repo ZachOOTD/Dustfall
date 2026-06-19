@@ -435,7 +435,7 @@
       "visual": "logic/audio/atmosphere unit -> code-auditor review CLEAN (no sev1/sev2 across 7 checks: fog non-compounding [updateWeather resets density before], envelope terminates [no stuck-fog path], deterministic, null-safe access paths, audio leak-free/legal-ramps, pause-gated, the unwired resetVistaReveal correct-by-design [transient state]). A vista --dist=600 --fogmult=0.5 render confirmed the lift reads as a gentle clearing (megaShip + horizon crisp up). FEEL (prominence threshold/cooldown/envelope timing/fog amount/swell) -> walk-test.",
       "save": "no bump — transient runtime state, no schema change",
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "d24334f",
       "spend_approx_tokens": 300000
     }
   ]
