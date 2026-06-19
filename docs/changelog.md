@@ -3,6 +3,14 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign C36 — 2026-06-19 — M5b: **worm-far-horizon-crossing** `[partial]` — a distant worm sweeps the dunes → **M5b + PHASE A COMPLETE** (milestone pause) ✓ verify pass (ultracode)
+
+`verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/25 — a decoupled spectacle: no collider, `Math.random` runtime-visual like the sky shooters/fireball, not the seeded scatter stream). Visual: adversarial gate — **FAIL after 4 build / 2 gate rounds**, shipping `[partial]`. **No save bump.** Cycle 36/50. **M5b unit 5/5 → M5b COMPLETE → PHASE A milestone PAUSE.**
+
+**worm-far-horizon-crossing `[partial]`.** The sandworm should be a distant, majestic PRESENCE, not just the near THREAT. Built `world/wormHorizonCrossing.ts`: rarely (`WORM_CROSSING_*` interval) a worm's dorsal ridge surfaces FAR away (430-850m, beyond detection), sweeps ACROSS the horizon along a tangent arc (the body undulating, riding the dune heights), throws the low attenuated rumble (`playWormRoarAttenuated`), then submerges — "that thing is out there." **Decoupled from the threat AI** (no collider, no detection, no save, no interaction with the close-encounter worm); a flat unlit fog-resistant dark silhouette ridge. The **SYSTEM ships + works** (the traverse / surface-submerge envelope / rumble; verify-clean; a NEW `--scenario=worm-crossing` + `__game.triggerWormCrossing/advanceWormCrossing`). **The LOOK is `[partial]`:** the adversarial gate (pixel-level) wants a convincing COLOSSAL articulated worm — across 4 rounds I fixed the read from spiky cones → too-separate beads → an over-merged smooth tadpole-blob-with-an-eye → **an articulated headless rolled dorsal ridge** (a dark silhouette that pops vs the sand, scalloped hump rhythm, middle-thick taper), but it still doesn't pass: it needs a **breach berm** (displaced sand at the waterline so it erupts THROUGH the dune, not sits ON it), **colossal scale**, a **multi-inflection S-spine**, and a **dust wake** — a real art pass (backlog §A). Shipped `[partial]` rather than thrash further at the tail of the run; the worm-look is part of the user's Phase-A review.
+
+**✓ PHASE A — BUILD-OUT COMPLETE (M1→M5b).** The unattended Phase-A block is done. **The campaign PAUSES here** for the user's walk-test of the whole build + the Phase-B (M6-M10) design review.
+
 ## Campaign C35 — 2026-06-19 — M5b: **diurnal-cycle** — dawn/dusk tonal beats mark each day boundary ✓ verify pass (ultracode)
 
 `verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/25 — an audio + a sun-height edge check; no scatter-rand/geometry/collider). Logic/audio unit → **code-auditor review** (mostly clean; caught one sev2 — the reset wasn't wired → a stray beat could fire on load; **fixed** by calling `resetDayBeats()` in `handoffToGame`). **No save bump.** Cycle 35/50. **M5b unit 4/5.**

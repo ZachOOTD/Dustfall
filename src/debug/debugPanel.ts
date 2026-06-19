@@ -7,6 +7,7 @@ import { spawnRaider as spawnRaiderEntity, damageRaider } from '../enemies/raide
 import { spawnFireAt, warmFireSmoke } from '../world/fire.ts';   // M4 (C21) — __game.spawnFire / warmSmoke test hooks
 import { getSunOccluders } from '../world/horizonSilhouettes.ts';   // M5a (C31) — __game.sunInfo
 import { debugTriggerFireball } from '../world/sky.ts';   // M5b (C34) — __game.triggerFireball
+import { spawnWormCrossing, updateWormHorizonCrossing } from '../world/wormHorizonCrossing.ts';   // M5b (C36) — __game.triggerWormCrossing
 import { damageVulture } from '../enemies/vulture.ts';
 import { makeLatheHull, fuselageProfile, makeFormerRings, makeBreach, makeSandMound } from '../world/wreckForms.ts';
 import { createRustedHullMaterial, HULL_WEATHERING_ACAY } from '../world/hullMaterial.ts';
@@ -85,6 +86,10 @@ interface DebugApi {
   /** M5b (C34) — DEV-only: force a rare fireball/bolide now + return its head's peak
    *  direction (so the rig-shot can aim). For the sky walk-test + headless render. */
   triggerFireball: () => { dir: [number, number, number] } | null;
+  /** M5b (C36) — DEV-only: force a distant worm horizon-crossing now (returns its
+   *  centre point); + fast-forward it `seconds` for a deterministic rig-shot frame. */
+  triggerWormCrossing: () => { cx: number; cz: number } | null;
+  advanceWormCrossing: (seconds: number) => void;
   /** ACG (Cycle 1) — DEV-only: kill a raider by id (drives the real death
    *  path → dead pose + corpse interaction tag), so the corpse-drag flow is
    *  testable without melee aiming. Returns true if a live raider matched. */
@@ -194,6 +199,8 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
       boxes: getSunOccluders().map((o) => ({ cx: o.cx, cy: o.cy, cz: o.cz, hx: o.hx, hy: o.hy, hz: o.hz })),
     }),
     triggerFireball: () => debugTriggerFireball(),
+    triggerWormCrossing: () => spawnWormCrossing(ctx),
+    advanceWormCrossing: (seconds: number) => updateWormHorizonCrossing(ctx, ctx.terrain, seconds),
     setStats: (s) => {
       if (s.thirst !== undefined) ctx.stats.thirst = s.thirst;
       if (s.temperature !== undefined) ctx.stats.temperature = s.temperature;

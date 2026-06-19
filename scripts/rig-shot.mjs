@@ -1848,6 +1848,37 @@ const SCENARIOS = {
     console.log('[wordless] ' + JSON.stringify(r));
   },
 
+  // Worm far-horizon crossing (C36): force a distant crossing, fast-forward to mid-
+  // sweep (fully surfaced + central), and frame the dorsal ridge from ~190m.
+  'worm-crossing': async (page) => {
+    const r = await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      window.__game.setTime(0.33);              // warm afternoon — side-lit dunes, dark ridge
+      ctx.weather.intensity = 0; ctx.weather.cloudiness = 0.1;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      ctx.three.renderer.setSize(920, 600, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 920 / 600; cam.updateProjectionMatrix(); }
+      const c = window.__game.triggerWormCrossing();
+      if (!c) return { found: false };
+      window.__game.advanceWormCrossing(13);    // jump to mid-sweep (surfaced + central)
+      const pl = ctx.player.body.body.translation();
+      const dx = c.cx - pl.x, dz = c.cz - pl.z, d = Math.hypot(dx, dz) || 1;
+      const ux = dx / d, uz = dz / d, camDist = 165;
+      const ccx = c.cx - ux * camDist, ccz = c.cz - uz * camDist;
+      cam.position.set(ccx, ctx.terrain.heightAt(ccx, ccz) + 16, ccz);   // raised to clear foreground dunes
+      cam.lookAt(c.cx, ctx.terrain.heightAt(c.cx, c.cz) + 4, c.cz);
+      cam.updateMatrixWorld(true);
+      ctx.flags.paused = true;
+      return { found: true, center: [+c.cx.toFixed(0), +c.cz.toFixed(0)] };
+    });
+    await page.waitForTimeout(320);
+    await page.screenshot({ path: join(OUT, 'scen-worm-crossing.png'), fullPage: false });
+    console.log('[worm-crossing] ' + JSON.stringify(r));
+  },
+
   // Fireball/bolide (C34): force a rare fireball at midnight, aim the camera at its
   // arc, let it advance to ~peak, and capture the night-sky moment.
   'fireball': async (page) => {

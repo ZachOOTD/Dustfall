@@ -584,6 +584,21 @@ export const Tuning = {
   FIREBALL_FLASH_SCALE: 135,         // the entry-flash bloom (peaks early, then shrinks)
   FIREBALL_TRAIL_LEN: 0.3,           // trail spans this fraction of the arc behind the head
   FIREBALL_TRAIL_PUFFS: 8,           // glow sprites forming the tapering trail ribbon
+  // M5b (C36) — worm far-horizon crossing: a distant sandworm's dorsal ridge surfaces
+  // FAR away + sweeps across the horizon (awe, the world's scale), then submerges.
+  // Decoupled from the threat AI (pure spectacle, no collider/threat). FEEL → walk-test.
+  WORM_CROSSING_SEGMENTS: 17,        // dorsal humps along the ridge (a long serpentine body)
+  WORM_CROSSING_MIN_INTERVAL: 150,   // s — min wait between crossings (rare-ish)
+  WORM_CROSSING_MAX_INTERVAL: 420,
+  WORM_CROSSING_DIST_MIN: 430,       // m — how far the ridge surfaces from the player
+  WORM_CROSSING_DIST_MAX: 850,
+  WORM_CROSSING_SPEED: 14,           // m/s — the ridge's traverse speed
+  WORM_CROSSING_LIFETIME: 26,        // s — surface → traverse → submerge
+  WORM_CROSSING_SPACING: 6.0,        // m between humps ≈ 0.85·radius → they poke above each other (scalloped rolled ridge, not a smooth slug)
+  WORM_CROSSING_WAVE_AMP: 18,        // m — lateral body undulation (a clear serpentine S)
+  WORM_CROSSING_UNDULATE_SPEED: 1.1, // body-wave rate
+  WORM_CROSSING_CREST: 6.5,          // m — dorsal crest height above the sand (a massive proud back)
+  WORM_CROSSING_BURY: 1.5,           // m — base sink (the body is mostly under the sand)
   PLANET_DISTANCE: 420,
   PLANET_SIZE: 14,
   // Fixed direction: low on the eastern horizon (azimuth ~+X, elev ~0.18)

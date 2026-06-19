@@ -25,6 +25,7 @@ import { initSpyglass, updateSpyglass } from './player/spyglass.ts';   // M5a (C
 import { updateVistaReveal } from './world/vistaReveal.ts';   // M5a (C30) — crest-a-ridge fog-lift + swell
 import { updateSunExposure } from './world/sunExposure.ts';   // M5a (C31) — direct-sun vs shade (heat relief)
 import { updateDayBeats, resetDayBeats } from './world/dayBeats.ts';   // M5b (C35) — dawn/dusk tonal beats
+import { initWormHorizonCrossing, updateWormHorizonCrossing, resetWormHorizonCrossing } from './world/wormHorizonCrossing.ts';   // M5b (C36) — distant worm sighting
 import { createSalvageableRegistry, setSalvageBiomesContext } from './world/salvage.ts';
 import { createSky, updateSky } from './world/sky.ts';
 import { updateStats } from './stats/survival.ts';
@@ -549,6 +550,7 @@ spawnCompanionAt(ctx, openingResult.companionSpawnPos, 'idle');
 // in input.ts calls showPauseOverlay which needs the menu DOM in place.
 createMenus(ctx);
 initSpyglass();          // M5a (C29) — the scope vignette overlay (owns its div)
+initWormHorizonCrossing(three.scene);   // M5b (C36) — the distant worm dorsal-ridge (hidden until a crossing)
 createLootMenu(ctx);
 createCraftingMenu(ctx);
 createSleepOverlay(ctx);
@@ -702,6 +704,7 @@ function handoffToGame(opts?: { skipLock?: boolean }): void {
   if (ctx.flags.devMode) devModeBadge.classList.add('visible');
   else devModeBadge.classList.remove('visible');
   resetDayBeats();   // C35 — seed fresh so a new-game/load sun position can't fire a stray dawn/dusk beat
+  resetWormHorizonCrossing();   // C36 — clear any in-flight distant crossing on new-game/load
   ensureAudioStarted();
   startSoundscape();
   // AAP — atmospheric music tracks. Three procedural Web Audio tracks
@@ -861,6 +864,7 @@ startLoop(ctx, (c, dt) => {
   updateHorizonSilhouettes(c.three.camera);   // M5a (C28) — distance-gate + billboard the skyline silhouettes (camera is final here)
   updateSpyglass(c, dt);         // M5a (C29) — ease the camera FOV toward the spyglass zoom + drive the scope vignette
   updateVistaReveal(c, dt);      // M5a (C30) — crest detection: re-multiply the weather fog density to LIFT it on a vista reveal (after updateWeather set it)
+  updateWormHorizonCrossing(c, c.terrain, dt);   // M5b (C36) — the distant worm dorsal-ridge sweeping the horizon (decoupled spectacle)
   updateShelter(c, dt);          // before stats so heat path sees inShelter
   updateSunExposure(c, dt);      // M5a (C31) — before stats so the heat path sees sunExposure01 (direct sun vs dune shade)
   updateStats(c, dt);            // thirst/heat/health drain + death
