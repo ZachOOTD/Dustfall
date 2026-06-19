@@ -2,7 +2,7 @@
   "status": "active",
   "started": "2026-06-18",
   "branch": "campaign/2026-06-18",
-  "cycles_completed": 14,
+  "cycles_completed": 15,
   "current_tier": "M3 — The worm + the pit",
   "awaiting_approval": false,
   "stop_reasons": [],
@@ -16,7 +16,7 @@
   "circuit_breaker_n": 3,
   "consecutive_no_progress": 0,
   "ceiling": { "max_cycles": 50, "total": null, "per_cycle": null, "unit": "tokens" },
-  "spend": { "total": 3120000, "note": "approximate — agent cannot precisely self-meter. RESUMED overnight (ultracode max-quality). C13 ~320K (worm dorsal armor, 3 gate rounds); C14 ~210K (worm-tail-buried, feel unit + arc-pose rig-shot + 2-critic gate). ULTRACODE C9-C14: 200-600K/cycle (visual heavy; feel units lighter). Pre-ultracode (C1-C8) 50-290K. max-cycles=50; pauses at the Phase A milestone." },
+  "spend": { "total": 3310000, "note": "approximate — agent cannot precisely self-meter. RESUMED overnight (ultracode max-quality). M3 worm: C13 ~320K (dorsal armor, 3 rounds); C14 ~210K (tail-buried); C15 ~190K (charge-dive). Feel units (C14/C15) run lighter (~190-210K: 1 build + 2-critic gate + 1 fix round). ULTRACODE C9-C15: 190-600K/cycle. Pre-ultracode (C1-C8) 50-290K. max-cycles=50; pauses at the Phase A milestone." },
   "plan": {
     "authored": "2026-06-18",
     "amended": "2026-06-18 plan-review user steering + evidence audit + Phase-C promotion (see campaign-log.md Cycle 0)",
@@ -209,6 +209,19 @@
       "ultracode": true,
       "commit": "588ee60",
       "spend_approx_tokens": 210000
+    },
+    {
+      "cycle": 15,
+      "date": "2026-06-19",
+      "focus": "M3 worm-charge-dive — submerged armored back-ridge charge tell (Dune)",
+      "tier": "M3 — The worm + the pit",
+      "outcome": "SHIPPED",
+      "units": ["worm-charge-dive — charge rides lower (SANDWORM_CHARGE_SUBMERGE) so only the armored back-ridge breaks the surface; rear tapers into the dune. Next M3: worm-audio-rumble."],
+      "verify": "verify:all PASS (tsc + placement 0/0 x5 + colliders 0/25; worm behavior, not a placement/collider POI)",
+      "visual": "lean adversarial gate (2 critics) on a static charge-pose render (new worm-model --angle=charge). Both verdict-PASS + submerged_read=true; 1 sev2 (rear flat cut-off) fixed in 1 round (chargeDip rear-taper in applyBodyBend). Residual sev1 (sand-bank, crest separation) -> backlog. SOUND/MOTION feel-pending walk-test.",
+      "ultracode": true,
+      "commit": "760dd81",
+      "spend_approx_tokens": 190000
     }
   ]
 }

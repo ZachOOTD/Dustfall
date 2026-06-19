@@ -256,3 +256,12 @@ first stop will be `max-cycles` ~mid-Phase-A; resume via `/campaign-start --resu
 - **Spend:** ~210K (feel unit, lighter than the hero-model cycles); campaign total ~3.12M; cycle **14/50**.
 - **Commit:** `588ee60`.
 - **M3:** model ✓ · tail-buried ✓. **Next (cycle 15):** `worm-charge-dive`. **Verdict: CONTINUE** (M3 in progress; no Phase boundary).
+
+## Cycle 15 — M3 worm-charge-dive (submerged armored back-ridge tell) (2026-06-19) — SHIPPED ⚡ULTRACODE · feel-pending
+- **Planned:** `worm-charge-dive` — strengthen the underground charge tell.
+- **Shipped:** the charge now rides LOWER (`basePos.y = groundY − MAX_RADIUS·SANDWORM_CHARGE_SUBMERGE`, new tuning 0.42) so only the **armored back-ridge** (the C13 crest) breaks the surface — a Dune submerged-tracking tell, the lunge being the full reveal. A charge `chargeDip` in `applyBodyBend` tapers the rear into the dune. Added `worm-model --angle=charge`.
+- **Verify:** `verify:all` PASS — tsc · placement 0/0 ×5 · colliders 0/25 (worm behavior, not a placement/collider POI).
+- **Visual iteration:** lean adversarial gate (2 critics) on the charge-pose render — both verdict-PASS + `submerged_read=true` ("a credible sandworm-back racing through the dune, not a worm on top; geometry sound"); 1 sev2 (rear flat cut-off face) fixed in 1 round (the chargeDip rear-taper). Residual sev1 (displaced sand-bank, crest tonal separation) → backlog. **SOUND/MOTION** (charge timing + wake puffs) → feel-pending walk-test.
+- **Spend:** ~190K (feel unit); campaign total ~3.31M; cycle **15/50**.
+- **Commit:** `760dd81`.
+- **M3:** model ✓ · tail ✓ · charge ✓. **Next (cycle 16):** `worm-audio-rumble` (AUDIO — no visual gate). **Verdict: CONTINUE** (M3 in progress; no Phase boundary).
