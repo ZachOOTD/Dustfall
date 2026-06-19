@@ -1103,7 +1103,11 @@ function tickCharging(
   // exposed (with MAX_RADIUS=2m, that's ~2m of back visible above the dunes).
   // Collider stays parked deep below per syncBodyToMesh, so the charge is
   // still untouchable per the damage-gating contract.
-  worm.basePos.y = ctx.terrain.heightAt(worm.basePos.x, worm.basePos.z);
+  // C15 — ride LOWER during the charge so only the armored back-RIDGE (the C13 dorsal crest) breaks the
+  // surface: a Dune submerged-tracking tell, not a fully-surfaced rush. The lunge (dive) is then the full
+  // reveal/eruption. Damage stays gated — the collider is parked deep per syncBodyToMesh.
+  worm.basePos.y = ctx.terrain.heightAt(worm.basePos.x, worm.basePos.z)
+    - Tuning.SANDWORM_MAX_RADIUS * Tuning.SANDWORM_CHARGE_SUBMERGE;
   worm.pitch = 0;
   worm.mesh.visible = true;
   // Wake puffs — every ~0.15s pop puffs along the visible spine.
@@ -1539,11 +1543,15 @@ function applyBodyBend(worm: SandWorm): void {
   // Bury margin ~1.2 radii (C14 gate: a 0.5-radius dip read as the tail RESTING on the sand, not plunging
   // INTO it) so the rear emphatically disappears below the surface.
   const tailSink = aboveGround > 0.5 ? aboveGround + Tuning.SANDWORM_MAX_RADIUS * 1.2 : 0;
+  // C15 — during the CHARGE the worm rides submerged; taper the REAR down into the dune so the back-ridge
+  // reads as a body continuing UNDER the sand, not a hump ending in a flat vertical face (gate sev2).
+  const chargeDip = worm.state === 'charging' ? Tuning.SANDWORM_MAX_RADIUS * 1.0 : 0;
+  const rearSink = tailSink + chargeDip;
   for (const child of worm.mesh.children) {
     if (child.userData.baseY === undefined) {
       child.userData.baseY = child.position.y;
     }
-    if (amp === 0 && tailSink === 0) {
+    if (amp === 0 && rearSink === 0) {
       child.position.y = child.userData.baseY;
       continue;
     }
@@ -1551,9 +1559,10 @@ function applyBodyBend(worm: SandWorm): void {
     // Arch (existing): parabola, peak biased toward the head so the front raises more.
     const sBias = s - 0.15;
     const arch = amp === 0 ? 0 : Math.max(0, 1 - sBias * sBias) * amp;
-    // Tail-sink (new): 0 from mid-body forward, ramps DOWN to −tailSink at the tail (quadratic).
+    // Rear-sink: 0 from mid-body forward, ramps DOWN at the tail (quadratic) — tail-buried during the
+    // arc (tailSink) AND tapering the rear into the dune during the charge (chargeDip).
     const rear = Math.max(0, -s);
-    const sink = rear * rear * tailSink;
+    const sink = rear * rear * rearSink;
     child.position.y = child.userData.baseY + arch - sink;
   }
 }

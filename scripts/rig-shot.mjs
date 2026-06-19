@@ -2069,6 +2069,17 @@ const SCENARIOS = {
           const rear = Math.max(0, -s);
           child.position.y = child.userData._nomY + arch - rear * rear * tailSink;
         }
+      } else if (ang === 'charge') {
+        // C15 charge exposure: rides ground − MAX_RADIUS*CHARGE_SUBMERGE (0.42) so only the armored
+        // back-ridge breaks the surface; the REAR tapers into the dune (mirrors applyBodyBend chargeDip).
+        worm.mesh.position.set(ax, groundY - rad * 0.42, az);
+        const chargeDip = rad * 1.0;
+        for (const child of worm.mesh.children) {
+          if (child.userData._nomY === undefined) child.userData._nomY = child.position.y;
+          const s = child.position.x / halfLen;
+          const rear = Math.max(0, -s);
+          child.position.y = child.userData._nomY - rear * rear * chargeDip;
+        }
       } else {
         worm.mesh.position.set(ax, groundY + rad * 0.55, az);
       }
@@ -2078,6 +2089,9 @@ const SCENARIOS = {
       if (ang === 'arc') {                           // side-on lunge arc — tail buried + body arcing out
         cam.position.set(ax - halfLen * 0.05, groundY + rad * 2.4, az + halfLen * 1.5);
         cam.lookAt(ax - halfLen * 0.05, groundY + rad * 0.7, az);
+      } else if (ang === 'charge') {                 // low 3q — the armored back-ridge breaking the surface
+        cam.position.set(ax + halfLen * 0.55, groundY + rad * 1.1, az + halfLen * 0.65);
+        cam.lookAt(ax, groundY + rad * 0.15, az);
       } else if (ang === 'head') {                   // close 3/4 on the maw + front body
         cam.position.set(headX + rad * 2.0, groundY + rad * 1.5, az + rad * 2.4);
         cam.lookAt(headX - rad * 0.8, groundY + rad * 0.7, az);

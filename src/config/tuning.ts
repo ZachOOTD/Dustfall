@@ -1117,6 +1117,7 @@ export const Tuning = {
   SANDWORM_LENGTH: 120,                      // m — total body length head-to-tail (was 240)
   SANDWORM_MAX_RADIUS: 10.0,                 // m — peak body radius (was 20)
   SANDWORM_UNDERGROUND_DEPTH: 12.5,          // m below ground while submerged (was 25)
+  SANDWORM_CHARGE_SUBMERGE: 0.42,            // × MAX_RADIUS — how deep the charging worm rides so only the armored back-RIDGE breaks the surface (Dune submerged-tracking tell, not a fully-surfaced rush). C15.
   // ABJ — B12: feeding state. While in 'patrol', the worm scans for
   // meat pickups within FEED_DETECT_RADIUS and surfaces to feed (2x
   // damage vulnerability window for the player who baited it). Detect

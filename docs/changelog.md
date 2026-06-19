@@ -3,6 +3,12 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign C15 — 2026-06-19 — M3: worm-charge-dive (submerged armored back-ridge tell) ✓ gates pass (ultracode) · feel-pending
+
+`verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/25 — worm behavior, not a placement/collider POI). Visual: lean adversarial gate (2 critics, 1 fix round) on a static charge-pose render. **No save bump.** Cycle 15/50.
+
+**worm-charge-dive — the charge tell.** The charge previously surfaced the worm's whole upper half (`basePos.y = groundY`) — a fully-surfaced rush. Now it **rides lower** (`basePos.y = groundY − MAX_RADIUS·SANDWORM_CHARGE_SUBMERGE`, new tuning 0.42) so only the **armored back-RIDGE** (the C13 dorsal crest) breaks the surface — a Dune submerged-tracking tell (a sandworm-back racing through the dunes), the body convincingly under the sand; the lunge (dive) is then the full eruption/reveal. Damage stays gated (collider parked deep). Added a `worm-model --angle=charge` render. **Gate:** 2 critics both verdict-PASS + `submerged_read=true` ("a credible sandworm-back, not a worm on top; geometry sound"); 1 sev2 (rear ended in a flat cut-off face) fixed in 1 round — a charge `chargeDip` in `applyBodyBend` tapers the rear into the dune (the C14 tail-sink only fires during the arc). Residual sev1 (displaced sand-bank against the ridge; crest tonal separation) → backlog/feel. **FEEL** (charge timing/motion + the wake-puff spray) → feel-pending walk-test. Next: worm-audio-rumble.
+
 ## Campaign C14 — 2026-06-19 — M3: worm-tail-buried (Dune emergence read) ✓ gates pass (ultracode) · feel-pending
 
 `verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/25 — worm pose code, not a placement/collider POI). Visual: lean adversarial gate (2 critics, 1 fix round) on a faithful static lunge-pose render. **No save bump.** Cycle 14/50.
