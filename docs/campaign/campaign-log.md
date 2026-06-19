@@ -157,3 +157,14 @@ first stop will be `max-cycles` ~mid-Phase-A; resume via `/campaign-start --resu
 - **Spend:** ~80K approx; campaign total ~640K; cycle **6/12**.
 - **Commit:** `27d03b6`.
 - **Next (cycle 7):** M2 `wreck-polish-bundle` (the §F/§G sev-2/3 visual set — likely multi-cycle, ship `[partial]`), then `yard-cross-poi-merge` (last/careful). **Verdict: CONTINUE** (M2 2/4; no milestone crossed). **Halfway to the 12-cap** — the calibration stop lands mid-Phase-A.
+
+---
+
+## Cycle 7 — M2 wreck-polish delta 1: non-axial dorsal mass `[partial]` (2026-06-18) — SHIPPED
+- **Planned:** `wreck-polish-bundle` delta 1 of 5 — break the heavy-class "sausage" silhouette (§F/§G).
+- **Shipped:** NEW `addDorsalMass` (procgenWreck.ts) — a dorsal bridge-tower superstructure (tower + cap + offset deckhouse + window strip + twin masts) rising mid-hull on mega_freighter/bulk_hauler/freighter. hash2-only (zero rand), decoration-tagged, shared mats, rule-7.
+- **Verify:** `verify:all` PASS — tsc · placement 0/0 ×5 (determinism preserved) · colliders 0/25.
+- **Visual iteration:** **iterated 5 ROUNDS** (rule-8, new visual element) — adversarial gate PASS (3 critics, 0 sev≥2; sausage broken on all 3 heavy classes). Convergence: R1 freighter end-cap → R2 mega+freighter sliver → R3 bulk squat → R4 freighter short → R5 PASS (mid-hull seat · height off wreck-bulk · vertical-capped base · tall masts). In-world feel → **feel-pending** Phase-A walk-test.
+- **Spend:** ~290K approx (the costliest cycle — 5 visual-gate rounds); campaign total ~930K; cycle **7/12**.
+- **Commit:** `9a49532`.
+- **`wreck-polish-bundle` is `[partial]`** — 4 deltas remain (chroma, engine-droop, scout-trauma, scale-anchor pocket). **Next (cycle 8):** delta 2 = weathering chroma. **Verdict: CONTINUE** (M2 in progress; no milestone crossed). **Cap heads-up: 5 cycles left** to the calibration stop.

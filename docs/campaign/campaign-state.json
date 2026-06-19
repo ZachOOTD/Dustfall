@@ -2,7 +2,7 @@
   "status": "active",
   "started": "2026-06-18",
   "branch": "campaign/2026-06-18",
-  "cycles_completed": 6,
+  "cycles_completed": 7,
   "current_tier": "M2 — Wreck breadth + polish + infra",
   "awaiting_approval": false,
   "stop_reasons": [],
@@ -15,7 +15,7 @@
   "circuit_breaker_n": 3,
   "consecutive_no_progress": 0,
   "ceiling": { "max_cycles": 12, "total": null, "per_cycle": null, "unit": "tokens" },
-  "spend": { "total": 640000, "note": "approximate — agent cannot precisely self-meter; max_cycles is the real bound (no budget ceiling set)" },
+  "spend": { "total": 930000, "note": "approximate — agent cannot precisely self-meter; max_cycles is the real bound (no budget ceiling set). C7 was the costliest (~290K) — 5 visual-gate rounds for a new visual element (rule 8); pure-logic/material cycles ran 50-170K." },
   "plan": {
     "authored": "2026-06-18",
     "amended": "2026-06-18 plan-review user steering + evidence audit + Phase-C promotion (see campaign-log.md Cycle 0)",
@@ -103,6 +103,18 @@
       "visual": "N/A — security audit + dep patch (no appearance/feel)",
       "commit": "27d03b6",
       "spend_approx_tokens": 80000
+    },
+    {
+      "cycle": 7,
+      "date": "2026-06-18",
+      "focus": "M2 wreck-polish-bundle delta 1 — non-axial dorsal mass [partial]",
+      "tier": "M2 — Wreck breadth + polish + infra",
+      "outcome": "SHIPPED",
+      "units": ["wreck-polish-bundle (delta 1 of 5 — non-axial dorsal mass); unit stays [partial]"],
+      "verify": "verify:all PASS (tsc + placement 0/0 x5 + colliders 0/25)",
+      "visual": "appearance-verified — visual gate PASS after 5 ROUNDS (3 critics, 0 sev>=2; sausage broken on all 3 heavy classes); in-world feel feel-pending Phase-A walk-test",
+      "commit": "9a49532",
+      "spend_approx_tokens": 290000
     }
   ]
 }
