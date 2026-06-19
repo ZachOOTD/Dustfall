@@ -5,10 +5,14 @@ import type { GameContext } from '../GameContext.ts';
 import { playUiClick, playUiHover, playSleepThud } from '../audio/audio.ts';
 import { resumeFromPause } from './menus.ts';
 import { saveGameState } from '../persistence/save.ts';
+import { Tuning } from '../config/tuning.ts';
 
 let _root: HTMLDivElement | null = null;
 let _ctx: GameContext | null = null;
 let _open = false;
+// M5 (C26) — the black sleep-fade layer + a re-entry guard while the fade plays.
+let _fade: HTMLDivElement | null = null;
+let _fading = false;
 
 function makeBtn(label: string, onClick: () => void): HTMLButtonElement {
   const b = document.createElement('button');
@@ -44,43 +48,77 @@ export function createSleepOverlay(ctx: GameContext): void {
 
   document.body.appendChild(root);
   _root = root;
+
+  // M5 (C26) — the full-screen black fade for the sleep transition. The CSS gives
+  // it position/z/opacity; the transition DURATION comes from Tuning (single source).
+  const fade = document.createElement('div');
+  fade.id = 'sleep-fade';
+  fade.style.transition = `opacity ${Tuning.SLEEP_FADE_MS}ms ease-in-out`;
+  document.body.appendChild(fade);
+  _fade = fade;
 }
 
 function sleep(hours: number): void {
-  if (!_ctx) return;
+  if (!_ctx || _fading) return;          // M5 (C26) — guard re-entry while a fade plays
+  _fading = true;
   const ctx = _ctx;
   playSleepThud();
 
-  // Advance day time
-  const deltaDay = hours / 24;
-  const prev = ctx.time.dayTime;
-  ctx.time.dayTime = (ctx.time.dayTime + deltaDay) % 1;
-  if (prev > ctx.time.dayTime) {
-    // wrapped past midnight
-    ctx.time.daysSurvived++;
+  // M5 (C26) — embodied rest: hide the menu, fade to black, advance time + recover
+  // DURING the black, then fade back to the rested world (vs the old instant skip).
+  // The world is frozen behind the overlay (paused), so the stat/time mutation is a
+  // one-shot exactly as before — only its presentation changed.
+  if (_root) _root.classList.add('hidden');
+  if (_fade) {
+    _fade.classList.add('black');
+    // Capture clicks for the whole sequence so a blind-click on the black can't
+    // hit the pause menu that unlock() reveals behind it (z=100, under the z=150 fade).
+    _fade.style.pointerEvents = 'auto';
   }
+  const FADE = Tuning.SLEEP_FADE_MS;
 
-  // Stat changes — applied once (skipping per-tick simulation through the slept hours)
-  const fraction = hours / 8;          // 8h = full effect; 4h = half
-  const thirstScale = 1 - 0.7 * fraction; // 8h → ×0.3, 4h → ×0.65
-  const hungerScale = 1 - 0.5 * fraction; // 8h → ×0.5, 4h → ×0.75
-  ctx.stats.thirst = Math.max(0, ctx.stats.thirst * thirstScale);
-  ctx.stats.hunger = Math.max(0, ctx.stats.hunger * hungerScale);
-  ctx.stats.stamina = 1;
-  // Temperature drifts toward 0. AAL — only the strong (×0.3 at 8h) drift
-  // applies if the player is sheltered; sleeping in the open desert gets
-  // a much weaker recovery (×0.7 at 8h) because there's no warmth source.
-  // ctx.player.inShelter is updated by updateShelter each frame, so it
-  // reflects the player's location when the sleep dialog was opened.
-  const tempRecoverFactor = ctx.player.inShelter ? 0.7 : 0.25;
-  ctx.stats.temperature = ctx.stats.temperature * (1 - tempRecoverFactor * fraction);
+  window.setTimeout(() => {
+    // Advance day time
+    const deltaDay = hours / 24;
+    const prev = ctx.time.dayTime;
+    ctx.time.dayTime = (ctx.time.dayTime + deltaDay) % 1;
+    if (prev > ctx.time.dayTime) {
+      // wrapped past midnight
+      ctx.time.daysSurvived++;
+    }
 
-  ctx.ui.showToast(`you sleep ${hours} hours — the world keeps turning`);
-  // Sleep autosave — fired AFTER stat/time mutations complete so the save
-  // reflects the rested player. (M.4: one of two save triggers; the other
-  // is the pause menu's manual Save button.)
-  saveGameState(ctx);
-  closeSleepOverlay();
+    // Stat changes — applied once (skipping per-tick simulation through the slept hours)
+    const fraction = hours / 8;          // 8h = full effect; 4h = half
+    const thirstScale = 1 - 0.7 * fraction; // 8h → ×0.3, 4h → ×0.65
+    const hungerScale = 1 - 0.5 * fraction; // 8h → ×0.5, 4h → ×0.75
+    ctx.stats.thirst = Math.max(0, ctx.stats.thirst * thirstScale);
+    ctx.stats.hunger = Math.max(0, ctx.stats.hunger * hungerScale);
+    ctx.stats.stamina = 1;
+    // Temperature drifts toward 0. AAL — only the strong (×0.3 at 8h) drift
+    // applies if the player is sheltered; sleeping in the open desert gets
+    // a much weaker recovery (×0.7 at 8h) because there's no warmth source.
+    // ctx.player.inShelter still reflects the dialog-open location (the game is
+    // paused through the fade, so updateShelter hasn't run).
+    const tempRecoverFactor = ctx.player.inShelter ? 0.7 : 0.25;
+    ctx.stats.temperature = ctx.stats.temperature * (1 - tempRecoverFactor * fraction);
+
+    ctx.ui.showToast(`you sleep ${hours} hours — the world keeps turning`);
+    // Sleep autosave — fired AFTER stat/time mutations complete so the save
+    // reflects the rested player. (M.4: one of two save triggers; the other
+    // is the pause menu's manual Save button.)
+    saveGameState(ctx);
+
+    // Hold the black a beat, then fade back to reveal the rested world + close.
+    window.setTimeout(() => {
+      if (_fade) _fade.classList.remove('black');
+      window.setTimeout(() => {
+        if (_fade) _fade.style.pointerEvents = 'none';
+        _open = false;
+        _fading = false;
+        resumeFromPause();
+      }, FADE);
+    }, Tuning.SLEEP_FADE_HOLD_MS);
+  }, FADE);
 }
 
 export function openSleepOverlay(ctx: GameContext): void {
@@ -91,7 +129,7 @@ export function openSleepOverlay(ctx: GameContext): void {
 }
 
 export function closeSleepOverlay(): void {
-  if (!_root) return;
+  if (!_root || _fading) return;   // don't interrupt a fade in progress (symmetric with sleep()'s guard)
   _root.classList.add('hidden');
   _open = false;
   resumeFromPause();

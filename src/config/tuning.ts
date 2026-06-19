@@ -119,6 +119,12 @@ export const Tuning = {
   TENT_SHELTER_HALF_Y: 1.4,
   TENT_SHELTER_HALF_Z: 1.8,
   TENT_NEAR_DISTANCE_SQ: 2.0 * 2.0,  // reject deploy within 2m of another tent
+
+  // M5 (C26) — lie-down-to-sleep: the sleep FADE-to-black transition (fade out →
+  // time passes during the black → fade back rested) so resting reads as SLEEPING,
+  // not an instant menu-skip. Durations in ms; the exact feel is walk-test-tunable.
+  SLEEP_FADE_MS: 800,                  // each-way fade (out, then in)
+  SLEEP_FADE_HOLD_MS: 450,             // black hold while the time-skip + stat recovery applies
   // AAZ-fix — small-tent visual constants. Geometry mirrors the AAY/AAZ
   // large tent (peaked ridge along the long axis, sagged side walls,
   // guy ropes) but scaled down for a one-person pup tent. The shelter

@@ -333,6 +333,19 @@ canvas {
   display: none;
 }
 
+/* M5 (C26) — lie-down-to-sleep: a full-screen black layer for the sleep fade,
+   above the menu overlay (z=100). Opacity is toggled by .black; the transition
+   DURATION is set from Tuning.SLEEP_FADE_MS in JS (single source of truth). */
+#sleep-fade {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  z-index: 150;
+  opacity: 0;
+  pointer-events: none;
+}
+#sleep-fade.black { opacity: 1; }
+
 .title {
   font-family: 'Cormorant Garamond', serif;
   font-size: 96px;

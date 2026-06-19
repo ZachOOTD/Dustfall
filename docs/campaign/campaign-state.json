@@ -2,7 +2,7 @@
   "status": "active",
   "started": "2026-06-18",
   "branch": "campaign/2026-06-18",
-  "cycles_completed": 25,
+  "cycles_completed": 26,
   "current_tier": "M5 — Riding & rest feel",
   "awaiting_approval": false,
   "stop_reasons": [],
@@ -16,7 +16,7 @@
   "circuit_breaker_n": 3,
   "consecutive_no_progress": 0,
   "ceiling": { "max_cycles": 50, "total": null, "per_cycle": null, "unit": "tokens" },
-  "spend": { "total": 5220000, "note": "approximate — agent cannot precisely self-meter. RESUMED overnight (ultracode max-quality). M3 worm: C13 ~320K (dorsal armor); C14 ~210K; C15 ~190K; C16 ~190K (audio, gate caught 3 sev2); C17 ~150K (multi-worm: infra pre-existing + rumble refactor); C18 ~300K (sarlacc-lure: 3-agent recon + net-new item + 4 model-gate rounds + a verify-zombie recovery); C19 ~120K (vulture-motion-feel: infra pre-existing, found+fixed the dangling-leg soar via flight-pose renders, 1 lean gate); C20 ~250K (atmosphere-feeltunes: storm pre-built; built a storm-render scenario + root-caused/fixed the dust snow-read across 3 gate rounds); C21 ~350K (smoke-signal-plume NET-NEW: fire smoke system + debug hooks + rig scenario + 6 plume-gate rounds tuning the storm wind-tear); C22 ~120K (amban-rifle-balance: assessed the 4-weapon spread, found+corrected the amban's strict dominance over the scrap gun via cd 1.6->2.2, flagged the deeper economy fix); C23 ~90K (speeder-riding-feel: VERIFIED the exhaustively-tuned ride system via bike-truth — no code change; handling feel-pending, foot-lift queued); C24 ~250K (rope-attach-speeder-rear-bar: NET feature — explicit LMB tow-bar tie/untie mirroring the stake, code-auditor PASS); C25 ~90K (3p-camera-and-render-polish: VERIFIED heavily-built — cameraSnap/held-items-3P/footstep-sync all done, foot-lift structural; no code change). Mostly-done units run lean (~150K); feel/audio/logic ~190K; hero-visual ~300-600K. Pre-ultracode (C1-C8) 50-290K. max-cycles=50; pauses at the Phase A milestone." },
+  "spend": { "total": 5500000, "note": "approximate — agent cannot precisely self-meter. RESUMED overnight (ultracode max-quality). M3 worm: C13 ~320K (dorsal armor); C14 ~210K; C15 ~190K; C16 ~190K (audio, gate caught 3 sev2); C17 ~150K (multi-worm: infra pre-existing + rumble refactor); C18 ~300K (sarlacc-lure: 3-agent recon + net-new item + 4 model-gate rounds + a verify-zombie recovery); C19 ~120K (vulture-motion-feel: infra pre-existing, found+fixed the dangling-leg soar via flight-pose renders, 1 lean gate); C20 ~250K (atmosphere-feeltunes: storm pre-built; built a storm-render scenario + root-caused/fixed the dust snow-read across 3 gate rounds); C21 ~350K (smoke-signal-plume NET-NEW: fire smoke system + debug hooks + rig scenario + 6 plume-gate rounds tuning the storm wind-tear); C22 ~120K (amban-rifle-balance: assessed the 4-weapon spread, found+corrected the amban's strict dominance over the scrap gun via cd 1.6->2.2, flagged the deeper economy fix); C23 ~90K (speeder-riding-feel: VERIFIED the exhaustively-tuned ride system via bike-truth — no code change; handling feel-pending, foot-lift queued); C24 ~250K (rope-attach-speeder-rear-bar: NET feature — explicit LMB tow-bar tie/untie mirroring the stake, code-auditor PASS); C25 ~90K (3p-camera-and-render-polish: VERIFIED heavily-built — cameraSnap/held-items-3P/footstep-sync all done, foot-lift structural; no code change); C26 ~280K (lie-down-to-sleep: NET feature — a fade-to-black sleep transition, code-auditor PASS + 3 sev3 fixes, a placement seed-flake re-run). Mostly-done units run lean (~150K); feel/audio/logic ~190K; hero-visual ~300-600K. Pre-ultracode (C1-C8) 50-290K. max-cycles=50; pauses at the Phase A milestone." },
   "plan": {
     "authored": "2026-06-18",
     "amended": "2026-06-18 plan-review user steering + evidence audit + Phase-C promotion (see campaign-log.md Cycle 0)",
@@ -366,6 +366,20 @@
       "meta_note": "M5 polish units keep landing on heavily-built mature systems (riding + 3P) -> verify cycles; the user may want to re-prioritize toward M5a/Phase B (more net-new) at the milestone review.",
       "commit": "c25cf7e",
       "spend_approx_tokens": 90000
+    },
+    {
+      "cycle": 26,
+      "date": "2026-06-19",
+      "focus": "M5 lie-down-to-sleep — a fade-to-black sleep transition (embodied rest vs the instant menu-skip)",
+      "tier": "M5 — Riding & rest feel",
+      "outcome": "SHIPPED",
+      "units": ["lie-down-to-sleep — sleep was built (bedroll/tent E -> 'how long?' menu -> INSTANT time-skip + recovery + autosave). The rest-feel gap: an abrupt menu-skip, no embodied beat. Built a fade-to-black TRANSITION: pick duration -> hide menu -> fade black (SLEEP_FADE_MS=800) -> time-skip + recovery apply DURING the black (one-shot, world frozen) -> hold (450) -> fade back to the rested world -> resume. + Tuning.SLEEP_FADE_*, a #sleep-fade CSS layer, a _fading guard. Next M5 (last): viewmodel-nits."],
+      "verify": "verify:all PASS (tsc + placement 0/0 x5 + colliders 0/25; a UI overlay + CSS, not a placement/collider POI). NOTE: the first placement run FLAKED on seed 2 ('NO AUDIT LINE' boot/render timeout; the other 4 seeds 0-fails) -> re-ran clean per the skill (a single-seed boot flake, not a real bury; my UI change can't touch placement).",
+      "visual": "N/A — logic/UI feature. Code-auditor gate PASS (0 sev<=2): the timeout chain aligns with the CSS transitions, the time-skip applies fully-black (no flash), the re-entry guard + paused-world assumption hold, no leaks. Fixed the 3 sev3 nits (the black now captures pointer events so blind-clicks can't hit the pause menu revealed behind it; closeSleepOverlay guards _fading). FADE TIMING feel-pending walk-test (SLEEP_FADE_* tunable).",
+      "save": "no bump — the sleep autosave is unchanged",
+      "ultracode": true,
+      "commit": "PENDING",
+      "spend_approx_tokens": 280000
     }
   ]
 }

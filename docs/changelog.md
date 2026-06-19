@@ -3,6 +3,12 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign C26 — 2026-06-19 — M5: **lie-down-to-sleep** — a fade-to-black sleep transition (embodied rest) ✓ gates pass (ultracode, code-auditor)
+
+`verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/25 — a UI overlay + CSS, not a placement/collider POI or a procgen draw; the first placement run had a seed-2 boot FLAKE "NO AUDIT LINE", re-ran clean per protocol). **Logic/UI feature → code-auditor gate** (PASS, 0 sev≤2). **No save bump** (the sleep autosave is unchanged). Cycle 26/50. **M5 unit 4/5.**
+
+**lie-down-to-sleep.** The sleep system was built (E on a bedroll/tent → a "REST: how long?" menu → 4h/8h → **instant** time-skip + stat recovery + autosave). **The genuine "rest feel" gap:** resting was an abrupt menu-skip — no embodied beat. **Built a fade-to-black sleep TRANSITION:** picking a duration now **hides the menu → fades a full-screen black layer in (`SLEEP_FADE_MS=800`) → advances time + recovers stats DURING the black (the existing one-shot, world frozen) → holds (`SLEEP_FADE_HOLD_MS=450`) → fades back to the rested world → resumes** — so rest reads as actually SLEEPING (the conventional survival-game beat), not an instant skip. New `Tuning.SLEEP_FADE_*` (Rule 2), a `#sleep-fade` CSS layer (z=150, above the menu), a `_fading` re-entry guard. **Gate (code-auditor, ultracode):** PASS — "the timeout chain aligns exactly with the CSS transitions; the time-skip applies fully-black (no flash of the world mutating); the re-entry guard + the paused-world assumption (inShelter reflects the dialog-open spot) hold; no timer leaks." Addressed the 3 sev3 nits it flagged (the pause overlay is revealed behind the fade → the black now **captures pointer events** during the sequence so a blind-click can't hit a hidden pause button; `closeSleepOverlay` now guards `_fading`). **FEEL** (the exact fade timing) → feel-pending walk-test (`SLEEP_FADE_*` are tunable). Next M5 (last): viewmodel-nits.
+
 ## Campaign C25 — 2026-06-19 — M5: **3p-camera-and-render-polish** — VERIFIED the heavily-built 3P render/camera system · modest remainder deferred ✓ (ultracode)
 
 `verified` — `npm run verify:all` baseline: **src byte-identical to C24's PASS** (no source change — a verification cycle); tsc re-confirmed clean. Visual: a `rig3p --item=machete` render confirmed held-items-in-3P. **No save bump.** Cycle 25/50. **M5 unit 3/5.**
