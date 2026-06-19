@@ -2,7 +2,7 @@
   "status": "active",
   "started": "2026-06-18",
   "branch": "campaign/2026-06-18",
-  "cycles_completed": 27,
+  "cycles_completed": 28,
   "current_tier": "M5a — Exploration & exposure",
   "awaiting_approval": false,
   "stop_reasons": [],
@@ -16,7 +16,7 @@
   "circuit_breaker_n": 3,
   "consecutive_no_progress": 0,
   "ceiling": { "max_cycles": 50, "total": null, "per_cycle": null, "unit": "tokens" },
-  "spend": { "total": 5650000, "note": "approximate — agent cannot precisely self-meter. RESUMED overnight (ultracode max-quality). M3 worm: C13 ~320K (dorsal armor); C14 ~210K; C15 ~190K; C16 ~190K (audio, gate caught 3 sev2); C17 ~150K (multi-worm: infra pre-existing + rumble refactor); C18 ~300K (sarlacc-lure: 3-agent recon + net-new item + 4 model-gate rounds + a verify-zombie recovery); C19 ~120K (vulture-motion-feel: infra pre-existing, found+fixed the dangling-leg soar via flight-pose renders, 1 lean gate); C20 ~250K (atmosphere-feeltunes: storm pre-built; built a storm-render scenario + root-caused/fixed the dust snow-read across 3 gate rounds); C21 ~350K (smoke-signal-plume NET-NEW: fire smoke system + debug hooks + rig scenario + 6 plume-gate rounds tuning the storm wind-tear); C22 ~120K (amban-rifle-balance: assessed the 4-weapon spread, found+corrected the amban's strict dominance over the scrap gun via cd 1.6->2.2, flagged the deeper economy fix); C23 ~90K (speeder-riding-feel: VERIFIED the exhaustively-tuned ride system via bike-truth — no code change; handling feel-pending, foot-lift queued); C24 ~250K (rope-attach-speeder-rear-bar: NET feature — explicit LMB tow-bar tie/untie mirroring the stake, code-auditor PASS); C25 ~90K (3p-camera-and-render-polish: VERIFIED heavily-built — cameraSnap/held-items-3P/footstep-sync all done, foot-lift structural; no code change); C26 ~280K (lie-down-to-sleep: NET feature — a fade-to-black sleep transition, code-auditor PASS + 3 sev3 fixes, a placement seed-flake re-run); C27 ~150K (viewmodel-nits: 3P torch-flame mirror fix + the night-lighting already-done -> M5 COMPLETE). Mostly-done units run lean (~150K); feel/audio/logic ~190K; hero-visual ~300-600K. Pre-ultracode (C1-C8) 50-290K. max-cycles=50; pauses at the Phase A milestone." },
+  "spend": { "total": 6050000, "note": "approximate — agent cannot precisely self-meter. RESUMED overnight (ultracode max-quality). M3 worm: C13 ~320K (dorsal armor); C14 ~210K; C15 ~190K; C16 ~190K (audio, gate caught 3 sev2); C17 ~150K (multi-worm: infra pre-existing + rumble refactor); C18 ~300K (sarlacc-lure: 3-agent recon + net-new item + 4 model-gate rounds + a verify-zombie recovery); C19 ~120K (vulture-motion-feel: infra pre-existing, found+fixed the dangling-leg soar via flight-pose renders, 1 lean gate); C20 ~250K (atmosphere-feeltunes: storm pre-built; built a storm-render scenario + root-caused/fixed the dust snow-read across 3 gate rounds); C21 ~350K (smoke-signal-plume NET-NEW: fire smoke system + debug hooks + rig scenario + 6 plume-gate rounds tuning the storm wind-tear); C22 ~120K (amban-rifle-balance: assessed the 4-weapon spread, found+corrected the amban's strict dominance over the scrap gun via cd 1.6->2.2, flagged the deeper economy fix); C23 ~90K (speeder-riding-feel: VERIFIED the exhaustively-tuned ride system via bike-truth — no code change; handling feel-pending, foot-lift queued); C24 ~250K (rope-attach-speeder-rear-bar: NET feature — explicit LMB tow-bar tie/untie mirroring the stake, code-auditor PASS); C25 ~90K (3p-camera-and-render-polish: VERIFIED heavily-built — cameraSnap/held-items-3P/footstep-sync all done, foot-lift structural; no code change); C26 ~280K (lie-down-to-sleep: NET feature — a fade-to-black sleep transition, code-auditor PASS + 3 sev3 fixes, a placement seed-flake re-run); C27 ~150K (viewmodel-nits: 3P torch-flame mirror fix + the night-lighting already-done -> M5 COMPLETE); C28 ~330K (horizon-landmark-silhouettes [partial]: a NEW vista rig-scenario confirmed the FogExp2 hides distant landmarks; built the fog-resistant distance-gated silhouette system; the adversarial gate FAILed the flat-billboard look -> iterated 2 rounds blob->structured + shipped [partial], deferring the per-model impostor to backlog §A/D241). Mostly-done units run lean (~150K); feel/audio/logic ~190K; hero-visual ~300-600K. Pre-ultracode (C1-C8) 50-290K. max-cycles=50; pauses at the Phase A milestone." },
   "plan": {
     "authored": "2026-06-18",
     "amended": "2026-06-18 plan-review user steering + evidence audit + Phase-C promotion (see campaign-log.md Cycle 0)",
@@ -395,6 +395,20 @@
       "ultracode": true,
       "commit": "9cd358d",
       "spend_approx_tokens": 150000
+    },
+    {
+      "cycle": 28,
+      "date": "2026-06-19",
+      "focus": "M5a horizon-landmark-silhouettes [partial] — fog-resistant skyline nav silhouettes (system ships; look deferred to a per-model impostor)",
+      "tier": "M5a — Exploration & exposure",
+      "outcome": "PARTIAL",
+      "units": ["horizon-landmark-silhouettes [partial] — GAP (confirmed by a NEW --scenario=vista rig-shot): FogExp2 (0.0018) fades distant geometry toward the sky color, so a hero landmark at ~600m is invisible + can't be a nav cue. BUILT the system: horizonSilhouettes.ts — a fog-resistant (fog:false) dark silhouette billboard per major landmark (flagships via addHorizonSilhouettesByName + tall hero wrecks inline in placeHeroLandmarks), distance-gated (FADE_START/FULL) to fade IN as the real model fogs OUT, Y-billboarded, ticked in main.ts after the camera is final. Determinism-safe (no rand draw) + decoration-only (no collider). The LOOK is a [partial] first pass: the adversarial gate (2 critics, pixel-level) FAILed the flat-billboard — blob/no-structure, faintest-at-far (r1 faded the top = the against-sky part), floats above the dune. Iterated 2 rounds: r2 = a STRUCTURED hand-drawn wreck silhouette (hull+tower+mast) + darker/bolder (0x262320 @ 0.85) -> reads as a dark structure now. DEFERRED (backlog §A, D241): a per-model IMPOSTOR (RTT the actual outline), a texture-margin ground-tuck, far-range boldness."],
+      "verify": "verify:all PASS (tsc + placement 0/0 x5 + colliders 0/25 — silhouette billboards are decorations at landmark positions with NO new rand draw -> determinism-safe + not a placement/collider POI)",
+      "visual": "adversarial gate FAIL -> iterated 2 rounds (blob -> structured), shipped [partial]. vista renders (150/350/600m) confirm the cross-fade (real model -> silhouette) + that a dark landmark mass now stands on the skyline at 600m (was invisible). Far-range boldness + the per-model impostor are the queued polish; LOOK below-bar by the gate -> [partial], not done.",
+      "save": "no bump — decoration billboards, no schema change",
+      "ultracode": true,
+      "commit": "PENDING",
+      "spend_approx_tokens": 330000
     }
   ]
 }

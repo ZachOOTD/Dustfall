@@ -19,6 +19,7 @@ import { createBiomeSampler } from './world/biomes.ts';
 import { placePOIs, getAnchorPOIPositions, getWreckYardCarcasses } from './world/poi.ts';
 import { placeProcgenPOIs } from './world/procgenPoi.ts';
 import { placeHeroLandmarks } from './world/heroLandmarks.ts';
+import { updateHorizonSilhouettes, addHorizonSilhouettesByName } from './world/horizonSilhouettes.ts';   // M5a (C28) — skyline nav silhouettes
 import { createSalvageableRegistry, setSalvageBiomesContext } from './world/salvage.ts';
 import { createSky, updateSky } from './world/sky.ts';
 import { updateStats } from './stats/survival.ts';
@@ -196,6 +197,10 @@ spawnRockScatter(three.scene, terrain, biomes, scatterRand);
 // system can resolve hits to it.
 const journalsList: Journal[] = [];
 placePOIs(three.scene, physics.world, terrain, scatterRand, pickupList, salvageables, shelter, { list: journalsList }, biomes);
+// M5a (C28) — give the hand-modeled flagships fog-resistant skyline silhouettes so they
+// read as navigation cues from across the map (FogExp2 blends the real models into the
+// sky past ~0.5km). The hero-landmark wrecks get theirs inline in placeHeroLandmarks.
+addHorizonSilhouettesByName(three.scene, ['megaShip', 'megaWreck', 'satelliteDish', 'crashedHull']);
 // ACAQ (Cycle 8) — the wreck-yard's ribcages join the ecology: vultures wheel over
 // the graveyard ("something died here" approach telegraph) + prey gathers at them.
 carcasses.push(...getWreckYardCarcasses());
@@ -841,6 +846,7 @@ startLoop(ctx, (c, dt) => {
   updateSleds(c, dt);            // QQ — per-sled tow spring + rope visual. Moved BEFORE updatePlayer so this-frame's sled XZ delta is fresh when updatePlayer reads it for moving-platform-ride. Tether endpoint resolution reads ctx.player.body.body.translation() = position committed by this-frame's physics.step (one frame behind setNext, but negligible at tow speeds).
   updatePlayer(c, dt);           // movement + camera + advance dayTime
   updateStaminaWobble(c);        // WW — sin-driven camera jitter when stamina low (must run AFTER updatePlayer's camera-anchor)
+  updateHorizonSilhouettes(c.three.camera);   // M5a (C28) — distance-gate + billboard the skyline silhouettes (camera is final here)
   updateShelter(c, dt);          // before stats so heat path sees inShelter
   updateStats(c, dt);            // thirst/heat/health drain + death
   updateSoundscape(c, dt);       // wind volume tracks day/night

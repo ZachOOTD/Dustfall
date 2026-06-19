@@ -1654,6 +1654,47 @@ const SCENARIOS = {
     console.log(`[smoke-plume] ${JSON.stringify(r)}`);
   },
 
+  // Vista (C28): the horizon-landmark-silhouette check. Find a hand-modeled flagship
+  // by name, stand ~--dist=600m away across the desert, and look AT it — does it read
+  // as a skyline silhouette, or fade into the fog/sky? --dist=<m> sets the camera range.
+  'vista': async (page) => {
+    const dist = argv.dist !== undefined ? Number(argv.dist) : 600;
+    const info = await page.evaluate((dist) => {
+      const ctx = window.__game.ctx;
+      window.__game.setTime(0.5);            // midday, clear sky
+      ctx.weather.intensity = 0; ctx.weather.cloudiness = 0.1;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      ctx.three.renderer.setSize(1000, 480, false);   // wide for the horizon
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1000 / 480; cam.updateProjectionMatrix(); }
+      const V = cam.position.constructor;
+      // Find a flagship landmark by name (the hand-modeled hero wrecks).
+      const names = ['megaShip', 'megaWreck', 'satelliteDish', 'crashedHull', 'openingWreck'];
+      let target = null, hit = null;
+      for (const n of names) {
+        const o = ctx.three.scene.getObjectByName(n);
+        if (o) { target = o.getWorldPosition(new V()); hit = n; break; }
+      }
+      if (!target) return { noTarget: true };
+      // Stand `dist` m from the landmark (along the line to origin), eye-level on the dune.
+      const d = Math.hypot(target.x, target.z) || 1;
+      const ux = target.x / d, uz = target.z / d;
+      const cx = target.x - ux * dist, cz = target.z - uz * dist;
+      const groundY = ctx.terrain.heightAt(cx, cz);
+      cam.position.set(cx, groundY + 3, cz);
+      cam.lookAt(target.x, target.y + 12, target.z);   // look at the upper landmark
+      cam.updateMatrixWorld(true);
+      ctx.flags.paused = true;
+      const fog = ctx.three.scene.fog;
+      return { landmark: hit, target: [+target.x.toFixed(0), +target.y.toFixed(0), +target.z.toFixed(0)], dist, fogDensity: fog ? +fog.density.toFixed(4) : null };
+    }, dist);
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: join(OUT, `scen-vista-${dist}.png`), fullPage: false });
+    console.log('[vista] ' + JSON.stringify(info));
+  },
+
   // Vulture (ACAH): frame a perched vulture on its tree for model iteration.
   // --angle=3q|side|front; head faces +X (rotation forced to 0 for a stable read).
   'vulture': async (page) => {

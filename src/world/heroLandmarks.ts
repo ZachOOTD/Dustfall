@@ -10,6 +10,7 @@ import type { Terrain } from './terrain.ts';
 import { placeWreck, type WreckKind } from './wrecks.ts';
 import { makeStaticBox } from '../physics/bodies.ts';
 import { registerSalvageable, type SalvageableRegistry } from './salvage.ts';
+import { addHorizonSilhouette } from './horizonSilhouettes.ts';   // M5a (C28) — skyline nav silhouettes
 import { Tuning } from '../config/tuning.ts';
 
 const _q = new THREE.Quaternion();
@@ -133,6 +134,9 @@ export function placeHeroLandmarks(
         scale: 0.9 + rand() * 0.3,
       });
       if (salvageables) registerSalvageable(salvageables, group, kind, pos, rand);
+      // M5a (C28) — a fog-resistant skyline silhouette for this landmark (tall ones
+      // only; addHorizonSilhouette filters by height). No rand draw → determinism-safe.
+      addHorizonSilhouette(scene, new THREE.Box3().setFromObject(group));
     }
   }
   return carcasses;

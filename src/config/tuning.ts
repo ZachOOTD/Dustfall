@@ -664,6 +664,16 @@ export const Tuning = {
   HERO_LANDMARK_COUNT_MAX: 20,
   HERO_LANDMARK_RADIUS_MIN: 70,
   HERO_LANDMARK_RADIUS_MAX: 1050,
+
+  // M5a (C28) — horizon landmark silhouettes: a fog-RESISTANT dark billboard at each
+  // tall landmark that fades IN as the real model fogs OUT, so distant landmarks read
+  // as skyline NAVIGATION cues (the FogExp2 otherwise blends them into the sky).
+  HORIZON_SILHOUETTE_MIN_HEIGHT: 8,    // m — only landmarks at least this tall get a skyline silhouette
+  HORIZON_SILHOUETTE_WIDTH_MULT: 0.85, // billboard width = max(bbox x,z) × this (narrower than the full footprint reads truer)
+  HORIZON_SILHOUETTE_COLOR: 0x262320,  // C28 r2 — darker (r1 read ~10% contrast at far; needs to clearly punch out vs the sky)
+  HORIZON_SILHOUETTE_OPACITY: 0.85,    // C28 r2 — bolder so the FAR silhouette (the sole nav cue once the model fogs) reads
+  HORIZON_SILHOUETTE_FADE_START: 240,  // m — start fading the silhouette in (the real model is ~20% fogged here)
+  HORIZON_SILHOUETTE_FADE_FULL: 460,   // m — full silhouette (the real model has fogged out)
   WELL_MIN_SEPARATION: 400,            // greedy exclusion radius for multi-well placement
   BIOME_CENTROID_SEARCH_RADIUS: 1100,  // grid sweep half-extent in findBiomeCentroid
   BIOME_CENTROID_GRID_STEP: 24,        // sample spacing in findBiomeCentroid

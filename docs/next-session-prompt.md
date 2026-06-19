@@ -1,29 +1,29 @@
-# Campaign cycle-28 kickoff (overnight, ultracode) — `campaign/2026-06-18`
+# Campaign cycle-29 kickoff (overnight, ultracode) — `campaign/2026-06-18`
 
 ## Boot order (re-read every cycle from FILES)
 1. `docs/campaign/campaign-state.json` · 2. `docs/campaign/steering.md` · 3. `docs/roadmap.md` "Up next" · 4. `docs/iteration-plan.md` · 5. `CLAUDE.md` + `docs/decisions.md` tail (D240).
 
 ## Where we are
-- ✓ M1 · ✓ M2 content · ✓ M3 COMPLETE · ✓ M4 COMPLETE · ✓ **M5 COMPLETE (C23-27).**
-- **→ M5a — Exploration & exposure** is the next tier (cycle 28 starts it). **M5a then M5b, then the Phase A milestone PAUSE.**
+- ✓ M1 · ✓ M2 content · ✓ M3 · ✓ M4 · ✓ M5 · **M5a IN PROGRESS (C28-):** ◑ horizon-landmark-silhouettes `[partial]` (C28 — system + nav cue ship; per-model impostor polish → backlog §A).
+- **→ M5a next unit: `salvaged-spyglass` (cycle 29).**
 
-## Cycle 28 picks up: **M5a → `horizon-landmark-silhouettes`** (take the TOP M5a unit)
-M5a units (in order): **horizon-landmark-silhouettes** · salvaged-spyglass · vista-crest-reveal · sun-shade-exposure.
-- **horizon-landmark-silhouettes** — distant LANDMARK silhouettes on the horizon as navigation cues ("that flagship wreck on the skyline → camp is that way"). **ASSESS FIRST:** the hand-modeled flagships + hero landmarks exist (`src/world/heroLandmarks.ts`; the megaShip/satelliteDish/etc. flagships). Are they ALREADY visible from afar on the horizon (render distance / fog / LOD), or do they fade into the fog before they read as skyline silhouettes? grep `heroLandmark`/`horizon`/`landmark`/`LOD`/`renderDistance` + check the fog (`FOG_DENSITY_CLEAR=0.0018`, "1km+ visible" per tuning) vs the flagship spawn distances. The gap may be: (a) flagships too far / fogged to read as silhouettes, (b) no DEDICATED far-horizon silhouette layer (billboards/impostors on the skyline), (c) already-visible → verify + feel-pending.
-- This is likely **net-new or a real gap** (M5a = exploration, more feature-y than M5's polish). If net-new: a far-horizon silhouette layer (distant dark landmark shapes on the skyline that don't fog out) OR ensure the hero flagships read from distance. VISUAL → render (a long-distance horizon shot — perf-probe/a vista scenario, or add one) + adversarial gate (Rule 8). Navigation FEEL → walk-test.
-- **Save (D81):** likely none (silhouettes are render-only). **Determinism:** if it scatters, re-run verify:placement.
+## Cycle 29 picks up: **M5a → `salvaged-spyglass`** (take the top remaining M5a unit)
+M5a remaining (in order): **salvaged-spyglass** · vista-crest-reveal · sun-shade-exposure.
+- **salvaged-spyglass** — a SPYGLASS/scope item: hold it (RMB or use) to ZOOM the view, so the player can scan the horizon (read the C28 distant landmark silhouettes, spot wrecks/water/landmarks to navigate toward). Pairs with the horizon silhouettes (zoom in on a distant landmark to identify it). **ASSESS FIRST:** is there an existing zoom/scope/FOV mechanic? grep `zoom`/`fov`/`scope`/`spyglass`/`telescope` across `src/player/` + `src/inventory/items.ts` + `tuning.ts`. The amban rifle (marksman) — does it have a scope/zoom? If a zoom mechanic exists, the spyglass reuses it; if not, it's net-new (a held-item zoom: lower the camera FOV while held/aimed, a vignette/scope overlay, the spyglass viewmodel).
+- Likely **net-new**: a `spyglass` item (ItemId + items.ts def + makeViewModel) + a zoom mechanic (camera FOV lerp on use/RMB) + maybe a scope vignette overlay. **Save (D81):** an inventory item = additive (the item registry handles it). **VISUAL** (the spyglass model + the scope overlay) → render + gate (Rule 8). Zoom FEEL → walk-test.
+- Where to obtain: a craft recipe or a wreck-loot drop (or dev-start for testing, like the worm_lure C18).
 
-## Rig-shot (reuse): `perf-probe` (scene/boot) · `storm` · `smoke-plume`(+`--storm`) · `rig3p --item=<id> [--lit]` (C27 lit flag) · `bike-truth` · `item-studio --item=<id>` · `vulture-pose` · `worm-model`. For a HORIZON shot: position the camera high + look at the skyline (may need a new `vista`/`horizon` scenario — the C20/C21 add-a-scenario pattern). Debug hooks: `__game.spawnFire`, `__game.warmSmoke`, `__game.spawnRaider`.
+## Rig-shot (reuse): **NEW `--scenario=vista [--dist=<m>]`** (horizon landmark silhouettes — C28) · `item-studio --item=<id>` (the spyglass model) · `rig3p --item=<id> [--lit]` · `bike-truth` · `smoke-plume`(+`--storm`) · `storm` · `vulture-pose` · `worm-model`. Debug hooks: `__game.spawnFire`, `__game.warmSmoke`, `__game.spawnRaider`.
 
-## Verify gotcha (C18-27 — keeps biting; C26 hit a seed FLAKE)
-`npm run verify:all` → `verify:placement` runs **5 seeds sequentially via spawnSync** + **buffers ALL output to the very END** — empty mid-run ≠ hung. Slow (~5-7 min). A seed can FLAKE ("NO AUDIT LINE" = a headless boot timeout, NOT a real bury — C26 seed-2); **re-run once to clear it.** **Do NOT kill a running verify** (zombies → port contention). If it hangs: `taskkill //F //IM node.exe` → confirm 0 → ONE clean run. Docs-only → skip (byte-identical + tsc; C11/C23/C25). Clean node BEFORE verify; render ONE scenario per command; don't render concurrently with verify.
+## Verify gotcha (C18-28 — keeps biting; C26 hit a seed FLAKE)
+`npm run verify:all` → `verify:placement` runs **5 seeds sequentially via spawnSync** + **buffers ALL output to the very END** — empty mid-run ≠ hung. Slow (~5-7 min). A seed can FLAKE ("NO AUDIT LINE" = a headless boot timeout, NOT a real bury — C26 seed-2); **re-run once to clear it.** **Do NOT kill a running verify** (zombies → port contention). If it hangs: `taskkill //F //IM node.exe` → confirm 0 → ONE clean run. Docs-only → skip (byte-identical + tsc). Clean node BEFORE verify; render ONE scenario per command; don't render concurrently with verify.
 
 ## Autonomy contract
-- **⚡ ULTRACODE** (overnight, max-quality): adversarial Workflow gate on VISUAL; code-auditor on AUDIO/logic/UI; **Rule 8** for any new visual. **Save (D81)** additive + surface-bump only if the schema grows. **Don't re-do already-done items — verify current state first.** **Don't blind-tune multi-session-tuned FEEL or blind-build design/feel features; build the buildable/objective scope, defer feel to the walk-test.** A conventional low-risk feature via the standard pattern IS buildable (C24/C26).
-- Pauses at the **Phase A milestone** (after M5b — M5a (4 units) + M5b remain). Backstop **max-cycles=50** (now at 27).
+- **⚡ ULTRACODE** (overnight, max-quality): adversarial Workflow gate on VISUAL; code-auditor on AUDIO/logic/UI; **Rule 8** for any new visual (5-8 rounds for a hero visual — a net-new item model qualifies; if a big visual can't converge, ship `[partial]` + queue the polish, like C28). **Save (D81)** additive + surface-bump only if the schema grows. **Don't re-do already-done items — verify current state first.** **Don't blind-tune multi-session-tuned FEEL or blind-build design/feel features; build the buildable/objective scope, defer feel to the walk-test.** A conventional feature via the standard pattern IS buildable (C24/C26).
+- Pauses at the **Phase A milestone** (after M5b — M5a (3 units + the horizon polish) + M5b remain). Backstop **max-cycles=50** (now at 28).
 
 ## Stop conditions
 Phase A milestone (pause, after M5b) · max-cycles=50 · 3 fix-walls · placement/collider regression unclearable in 2 tries (a single-seed FLAKE re-run is NOT a regression) · SAVE_VERSION bump (do it, surface only) · destructive-git attempt.
 
 ## Open backlog of note
-- **C27:** 3P torch flicker → walk-test (mirror is exact). **C26:** sleep-fade timing → walk-test. **C25:** 3P camera-orbit/foot-IK-snap (design/feel), speeder foot-lift (STRUCTURAL). **C24:** attach_rope LMB double-fires (pre-existing). **C22:** amban economy → milestone. SANDWORM_COUNT balance; `worm_lure` craft recipe. yard-cross-poi-merge (D240). Full list: `docs/backlog.md`.
+- **C28:** horizon-silhouette POLISH (per-model impostor / ground-tuck / far-boldness — §A). **C27:** 3P torch flicker → walk-test. **C26:** sleep-fade timing → walk-test. **C24:** attach_rope LMB double-fires. **C22:** amban economy → milestone. SANDWORM_COUNT balance; `worm_lure` craft recipe. yard-cross-poi-merge (D240). Full list: `docs/backlog.md`.
