@@ -319,7 +319,7 @@
       "visual": "N/A — balance/tuning unit (no appearance change). The rifle MODEL was render-checked (reads as a long rifle). Balance FEEL (cadence + over/under-power vs worm[HP12]/vultures) feel-pending walk-test.",
       "save": "no bump — one tuning constant",
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "e301823",
       "spend_approx_tokens": 120000
     }
   ]

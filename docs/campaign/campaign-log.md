@@ -327,5 +327,5 @@ first stop will be `max-cycles` ~mid-Phase-A; resume via `/campaign-start --resu
 - **Verify:** `verify:all` PASS — tsc · placement 0/0 ×5 · colliders 0/25 (a weapon-balance constant, not a placement/collider POI or a procgen draw).
 - **Visual iteration:** N/A — balance/tuning unit (no appearance change). The rifle MODEL was render-checked (reads as a long rifle). **Moderate, reversible nudge** (one constant), NOT a blind over-tune (C20/C22 discipline): the exact value + the deeper question (the amban is still ~2× ammo-EFFICIENT per bullet — accept as the rare-upgrade reward / push cd→2.4-2.6 for DPS parity / charge 2 bullets/round) are flagged for the **Phase-A milestone review** (backlog §A). **Balance FEEL** (cadence + power vs the worm[HP 12]/vultures) → feel-pending walk-test.
 - **Spend:** ~120K (assess the weapon spread + the targeted balance fix); campaign total ~4.79M; cycle **22/50**.
-- **Commit:** `PENDING`.
+- **Commit:** `e301823`.
 - **✓ MILESTONE M4 COMPLETE (C19-22):** vulture-motion · atmosphere · smoke-plume · rifle-balance. **Next (cycle 23):** `M5 — Riding & rest feel` (speeder-riding-feel first). **Verdict: CONTINUE** — M4 done but it is NOT the last tier before the Phase-A `### Milestone:` marker (M5, M5a, M5b remain), so the phase-level review does NOT pause here.
