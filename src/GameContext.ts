@@ -87,6 +87,7 @@ export interface GameContext {
     onGround: boolean;
     crouching: boolean;    // set each frame from LeftControl
     inShelter: boolean;    // set each frame by shelter system
+    sunExposure01: number; // M5a (C31) — 1 = full direct sun, 0 = fully shaded (terrain-occluded); set each frame by updateSunExposure
     viewModel: ViewModel | null;
     /** ABO A3 — third-person rigged body. Null until rig is built at boot.
      *  Visibility gated by ctx.flags.thirdPerson (FP hides rig; 3P hides

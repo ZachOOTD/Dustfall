@@ -23,6 +23,13 @@ interface HorizonSilhouette {
 
 const _silhouettes: HorizonSilhouette[] = [];
 
+// C31 — the same wreck bounding boxes double as SUN OCCLUDERS: a tall wreck casts a
+// real ground shadow (unlike the gentle dunes / small shelter zones), so standing in
+// it relieves heat (sun-shade-exposure). Read by world/sunExposure.ts.
+export interface SunOccluder { cx: number; cy: number; cz: number; hx: number; hy: number; hz: number; }
+const _occluders: SunOccluder[] = [];
+export function getSunOccluders(): ReadonlyArray<SunOccluder> { return _occluders; }
+
 // C28 r2 — a STRUCTURED wreck silhouette (a broad hull mass + an off-centre tower +
 // a mast spike + a bridge bump), drawn as a near-OPAQUE alpha so the part standing
 // against the SKY stays dark (the r1 top-fade made the silhouette vanish exactly
@@ -90,6 +97,11 @@ export function addHorizonSilhouette(scene: THREE.Scene, box: THREE.Box3): void 
   mesh.renderOrder = 1;
   scene.add(mesh);
   _silhouettes.push({ mesh, mat, x: cx, z: cz });
+  // Register the wreck box as a sun occluder (C31 — its ground shadow relieves heat).
+  _occluders.push({
+    cx, cz, cy: (box.min.y + box.max.y) * 0.5,
+    hx: size.x * 0.5, hy: size.y * 0.5, hz: size.z * 0.5,
+  });
 }
 
 /** Find each scene group whose name is in `names` (the hand-modeled flagships) and
@@ -130,4 +142,5 @@ export function clearHorizonSilhouettes(scene: THREE.Scene): void {
     s.mesh.geometry.dispose();
   }
   _silhouettes.length = 0;
+  _occluders.length = 0;
 }

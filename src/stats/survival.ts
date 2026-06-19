@@ -25,11 +25,26 @@ export function updateStats(ctx: GameContext, dt: number): void {
       t.temperature = Math.min(0, t.temperature + Tuning.COLD_SHELTER_RECOVER * dt);
     }
   } else if (exposure > 0.2) {
-    // Sun is up — heating
+    // Sun is up. Direct sun heats; SHADE (a dune's lee, a low-sun shadow) relieves it.
+    // sunExposure01: 1 = full direct sun, 0 = fully terrain-occluded (C31).
+    const sun01 = ctx.player.sunExposure01;
+    // Heat gain scales with how much direct sun reaches you (floored — deep shade
+    // still warms a little at midday, you're not in a fridge).
+    const heatScale = Tuning.SHADE_HEAT_FLOOR + (1 - Tuning.SHADE_HEAT_FLOOR) * sun01;
     t.temperature = Math.min(
       1,
-      t.temperature + Tuning.HEAT_GAIN_PER_SEC * dt * exposure,
+      t.temperature + Tuning.HEAT_GAIN_PER_SEC * dt * exposure * heatScale,
     );
+    // Real shade (mostly occluded) is cooler air — gently pull a HOT player toward 0
+    // (a weak shelter), so ducking into shade actively helps once you're overheating.
+    // In DEEP shade the net of (small floored gain) + (this cool) is slightly cooling —
+    // intended; both clamps keep temperature in [0, 1].
+    if (sun01 < 0.5 && t.temperature > 0) {
+      t.temperature = Math.max(
+        0,
+        t.temperature - Tuning.SHADE_COOL_PER_SEC * (1 - sun01) * dt,
+      );
+    }
   } else if (exposure <= 0.0) {
     // Sun is down (night) — chilling
     t.temperature = Math.max(

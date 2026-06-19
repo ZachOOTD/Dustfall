@@ -1742,6 +1742,72 @@ const SCENARIOS = {
     console.log('[spyglass-view] ' + JSON.stringify(info));
   },
 
+  // Sun-shade probe (C31): replicate the updateSunExposure heightfield raymarch over a
+  // deterministic grid at 3 sun heights, report the shaded fraction. Confirms the
+  // occlusion logic detects MEANINGFUL dune shade on the real terrain (not all-sun /
+  // all-shade) + reacts to sun height (overhead = clear, low = long shadows).
+  'sun-probe': async (page) => {
+    const r = await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      const STEP = 2.5, MAXD = 140, CLEAR = 22;
+      // Compute the sun direction directly from dayTime (lighting.ts formula) so the
+      // probe doesn't depend on the rAF-throttled lighting tick.
+      const zones = window.__game.sunInfo().boxes.concat(ctx.shelter.zones);
+      const hitsAABB = (ox, oy, oz, dx, dy, dz, z) => {
+        let tmin = 0.5, tmax = MAXD;
+        const ax = [[ox, dx, z.cx, z.hx], [oy, dy, z.cy, z.hy], [oz, dz, z.cz, z.hz]];
+        for (const [o, d, c, h] of ax) {
+          if (Math.abs(d) < 1e-6) { if (o < c - h || o > c + h) return false; continue; }
+          let t1 = (c - h - o) / d, t2 = (c + h - o) / d; if (t1 > t2) { const m = t1; t1 = t2; t2 = m; }
+          if (t1 > tmin) tmin = t1; if (t2 < tmax) tmax = t2; if (tmin > tmax) return false;
+        }
+        return true;
+      };
+      const probe = (dayTime) => {
+        const ang = (dayTime - 0.25) * Math.PI * 2;
+        let sx = Math.cos(ang), sy = Math.sin(ang), sz = 0.18;
+        const len = Math.hypot(sx, sy, sz); sx /= len; sy /= len; sz /= len;
+        const sunHeight = Math.sin(ang);   // matches ctx.time.sunHeight
+        if (sunHeight <= 0.08 || sy <= 0.02) return { dayTime, sunHeight: +sunHeight.toFixed(3), note: 'low sun' };
+        let terr = 0, struct = 0, total = 0;
+        // Wide grid centered to reach the flagship wrecks (megaShip ~-485,227).
+        for (let gx = -560; gx <= 360; gx += 40) {
+          for (let gz = -160; gz <= 440; gz += 40) {
+            const headY = ctx.terrain.heightAt(gx, gz) + 1.6;
+            let tBlock = false;
+            for (let d = STEP; d <= MAXD; d += STEP) {
+              const ry = headY + sy * d;
+              const th = ctx.terrain.heightAt(gx + sx * d, gz + sz * d);
+              if (th > ry + 0.3) { tBlock = true; break; }
+              if (ry - th > CLEAR) break;
+            }
+            let sBlock = false;
+            if (!tBlock) for (const z of zones) { if (hitsAABB(gx, headY, gz, sx, sy, sz, z)) { sBlock = true; break; } }
+            if (tBlock) terr++;
+            if (sBlock) struct++;
+            total++;
+          }
+        }
+        return { dayTime, sunHeight: +sunHeight.toFixed(3), terrainPct: Math.round((terr / total) * 100), structPct: Math.round((struct / total) * 100), total };
+      };
+      const out = [probe(0.5), probe(0.40), probe(0.33), probe(0.29), probe(0.275)];   // noon → low sun
+      // Targeted: a point on a wreck's SHADOW side must read shaded; the SUNNY side must not.
+      let targeted = null;
+      const tboxes = window.__game.sunInfo().boxes;
+      if (tboxes.length) {
+        const b = tboxes[0];
+        const ang = (0.33 - 0.25) * Math.PI * 2;
+        let sx = Math.cos(ang), sy = Math.sin(ang), sz = 0.18; const L = Math.hypot(sx, sy, sz); sx /= L; sy /= L; sz /= L;
+        const off = b.hx + b.hz + 6;
+        const shadowSideDetected = hitsAABB(b.cx - sx * off, b.cy, b.cz - sz * off, sx, sy, sz, b);
+        const sunnySideClear = !hitsAABB(b.cx + sx * off, b.cy, b.cz + sz * off, sx, sy, sz, b);
+        targeted = { boxHalf: { hx: +b.hx.toFixed(1), hy: +b.hy.toFixed(1), hz: +b.hz.toFixed(1) }, shadowSideDetected, sunnySideClear };
+      }
+      return { occluderBoxes: tboxes.length, zoneTotal: zones.length, targeted, probes: out };
+    });
+    console.log('[sun-probe] ' + JSON.stringify(r));
+  },
+
   // Vulture (ACAH): frame a perched vulture on its tree for model iteration.
   // --angle=3q|side|front; head faces +X (rotation forced to 0 for a stable read).
   'vulture': async (page) => {

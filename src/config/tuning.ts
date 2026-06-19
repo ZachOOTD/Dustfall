@@ -56,6 +56,17 @@ export const Tuning = {
   THIRST_HEAT_FACTOR: 1.8,
   HEAT_GAIN_PER_SEC: 1 / 90,         // positive temperature gain in sun
   HEAT_COOL_PER_SEC: 1 / 40,         // shelter cooling on positive side
+  // M5a (C31) — sun-shade-exposure: direct sun vs SHADE (a dune's lee / low-sun
+  // shadow). updateSunExposure raymarches the heightfield toward the sun → a
+  // sunExposure01 (1 = full sun, 0 = terrain-occluded); shade reduces heat GAIN +
+  // (when mostly shaded) gently cools a hot player. Rates are FEEL → walk-test.
+  SHADE_HEAT_FLOOR: 0.35,            // heat gain in full shade = ×this (deep shade still warms slightly midday)
+  SHADE_COOL_PER_SEC: 1 / 95,        // gentle pull toward 0 when mostly shaded + hot (weaker than a full shelter)
+  SUN_EXPOSURE_INTERVAL_S: 0.25,     // how often to re-raymarch the sun occlusion (throttled; cheap)
+  SUN_EXPOSURE_STEP_M: 2.5,          // raymarch step toward the sun
+  SUN_EXPOSURE_MAX_M: 140,           // max raymarch distance (a far dune can still cast shade at low sun)
+  SUN_EXPOSURE_CLEAR_M: 22,          // once the ray clears terrain by this much, stop (sky ahead) — high enough that low-sun rays march far enough to catch distant dune/ridge shadows
+  SUN_EXPOSURE_LERP: 3.0,            // ease rate for sunExposure01 toward its target (no pop stepping in/out of shade)
   DEHYDRATION_DAMAGE: 1 / 30,
   HEATSTROKE_DAMAGE: 1 / 25,
   // Hunger

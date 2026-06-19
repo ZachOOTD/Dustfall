@@ -22,6 +22,7 @@ import { placeHeroLandmarks } from './world/heroLandmarks.ts';
 import { updateHorizonSilhouettes, addHorizonSilhouettesByName } from './world/horizonSilhouettes.ts';   // M5a (C28) — skyline nav silhouettes
 import { initSpyglass, updateSpyglass } from './player/spyglass.ts';   // M5a (C29) — hold-RMB spyglass zoom
 import { updateVistaReveal } from './world/vistaReveal.ts';   // M5a (C30) — crest-a-ridge fog-lift + swell
+import { updateSunExposure } from './world/sunExposure.ts';   // M5a (C31) — direct-sun vs shade (heat relief)
 import { createSalvageableRegistry, setSalvageBiomesContext } from './world/salvage.ts';
 import { createSky, updateSky } from './world/sky.ts';
 import { updateStats } from './stats/survival.ts';
@@ -400,6 +401,7 @@ const ctx: GameContext = {
     onGround: false,
     crouching: false,
     inShelter: false,
+    sunExposure01: 1,                // M5a (C31) — full sun until the first raymarch
     viewModel: null,
     rig: null,                       // ABO A3 — built post-context construction
     cameraSnapNextFrame: true,       // ABP Tier 3 — first frame is a "teleport"
@@ -854,6 +856,7 @@ startLoop(ctx, (c, dt) => {
   updateSpyglass(c, dt);         // M5a (C29) — ease the camera FOV toward the spyglass zoom + drive the scope vignette
   updateVistaReveal(c, dt);      // M5a (C30) — crest detection: re-multiply the weather fog density to LIFT it on a vista reveal (after updateWeather set it)
   updateShelter(c, dt);          // before stats so heat path sees inShelter
+  updateSunExposure(c, dt);      // M5a (C31) — before stats so the heat path sees sunExposure01 (direct sun vs dune shade)
   updateStats(c, dt);            // thirst/heat/health drain + death
   updateSoundscape(c, dt);       // wind volume tracks day/night
   updateMusic(c, dt);            // AAP — procedural music tracks crossfade by sun + storm
