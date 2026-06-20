@@ -138,6 +138,9 @@ const _emitMat = new THREE.MeshBasicMaterial({ color: 0x6b1d12 });              
 // ACBB Tier 2 — warm desert sand for the drift TONGUES that spill in through a torn hull
 // opening (the "living dune swallowing the wreck" read). Component-baked → sinks with burial.
 const _sandTongueMat = new THREE.MeshLambertMaterial({ color: 0xc2aa7e, flatShading: true });
+// C43 — an unlit near-black for a recessed shaft VOID (a well mouth / hole reads as a hole,
+// not a lit grey lid, when the bottom is pure shadow).
+const _shaftVoidMat = new THREE.MeshBasicMaterial({ color: 0x05060a });
 
 // ════════════════════════════════════════════════════════════════════
 // SATELLITE components — the canonical "not a ship": a central bus, mirrored
@@ -390,39 +393,42 @@ export function wreckedTank(seed: number, _state = 'breached'): BuiltComponent {
 
 /** One wreck fragment. kindIdx: 0 torn plate, 1 bent strut, 2 hull chunk. `lootable`
  *  (chunk only) adds a TOP salvage hatch — the assembler seats that piece upright. */
-export function debrisPiece(seed: number, kindIdx: number, lootable = false): BuiltComponent {
+export function debrisPiece(seed: number, kindIdx: number, lootable = false, scale = 1): BuiltComponent {
+  // `scale` (C43) lets a caller GROW pieces along a gradient (the debris-trail's small→big read).
+  // It multiplies every dimension — geo, collider, bbox — so the collider stays matched. Default
+  // 1 → the existing caller (assembleDebris) is byte-identical.
   const g = new THREE.Group();
   let collider: ColliderSpec;
   let panelMounts: PanelMount[] = [];
   let bbox: THREE.Box3;
   if (kindIdx === 0) {
-    const w = 1.2 + phash(seed, 1) * 1.6;
-    const h = 0.8 + phash(seed, 2) * 1.0;
-    const plate = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.16), _rustMat);   // ACBC §G — rust-toned (was _hullMat) so the debris reads as TORN HULL METAL, not grey rock
+    const w = (1.2 + phash(seed, 1) * 1.6) * scale;
+    const h = (0.8 + phash(seed, 2) * 1.0) * scale;
+    const plate = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.16 * scale), _rustMat);   // ACBC §G — rust-toned (was _hullMat) so the debris reads as TORN HULL METAL, not grey rock
     g.add(plate);
-    const edge = new THREE.Mesh(new THREE.BoxGeometry(w, 0.16, 0.20), _rustMat);   // ragged torn lip
+    const edge = new THREE.Mesh(new THREE.BoxGeometry(w, 0.16 * scale, 0.20 * scale), _rustMat);   // ragged torn lip
     edge.position.y = h / 2; edge.userData.isWreckDecoration = true; g.add(edge);
-    collider = { kind: 'box', half: { x: w / 2, y: h / 2, z: 0.08 }, pos: { x: 0, y: 0, z: 0 } };
-    bbox = new THREE.Box3(new THREE.Vector3(-w / 2, -h / 2, -0.12), new THREE.Vector3(w / 2, h / 2 + 0.1, 0.12));
+    collider = { kind: 'box', half: { x: w / 2, y: h / 2, z: 0.08 * scale }, pos: { x: 0, y: 0, z: 0 } };
+    bbox = new THREE.Box3(new THREE.Vector3(-w / 2, -h / 2, -0.12 * scale), new THREE.Vector3(w / 2, h / 2 + 0.1 * scale, 0.12 * scale));
   } else if (kindIdx === 1) {
-    const len = 1.6 + phash(seed, 1) * 2.4;
-    const strut = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, len, 7), _rustMat);
+    const len = (1.6 + phash(seed, 1) * 2.4) * scale;
+    const strut = new THREE.Mesh(new THREE.CylinderGeometry(0.16 * scale, 0.16 * scale, len, 7), _rustMat);
     strut.rotation.x = Math.PI / 2; g.add(strut);   // lie along Z (matches the collider axis)
     for (const sz of [-1, 1]) {   // end flanges
-      const fl = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.10), _hullDarkMat);
+      const fl = new THREE.Mesh(new THREE.BoxGeometry(0.5 * scale, 0.5 * scale, 0.10 * scale), _hullDarkMat);
       fl.position.z = sz * len / 2; fl.userData.isWreckDecoration = true; g.add(fl);
     }
     // Rapier cylinders are Y-axis; FACE.posY() rotates the collider onto Z to match the
     // visible horizontal bar (the prior FACE.posX() left an invisible VERTICAL capsule).
-    collider = { kind: 'cylinder', halfHeight: len / 2, radius: 0.18, pos: { x: 0, y: 0, z: 0 }, quat: FACE.posY() };
-    bbox = new THREE.Box3(new THREE.Vector3(-0.3, -0.3, -len / 2), new THREE.Vector3(0.3, 0.3, len / 2));
+    collider = { kind: 'cylinder', halfHeight: len / 2, radius: 0.18 * scale, pos: { x: 0, y: 0, z: 0 }, quat: FACE.posY() };
+    bbox = new THREE.Box3(new THREE.Vector3(-0.3 * scale, -0.3 * scale, -len / 2), new THREE.Vector3(0.3 * scale, 0.3 * scale, len / 2));
   } else {
-    const w = 1.4 + phash(seed, 1) * 1.0;
-    const h = 1.1 + phash(seed, 2) * 0.8;
-    const d = 1.2 + phash(seed, 3) * 0.8;
+    const w = (1.4 + phash(seed, 1) * 1.0) * scale;
+    const h = (1.1 + phash(seed, 2) * 0.8) * scale;
+    const d = (1.2 + phash(seed, 3) * 0.8) * scale;
     const chunk = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), _rustMat);   // ACBC §G — rust-toned torn hull chunk (was _hullMat) so it reads as wreck metal, not rock
     g.add(chunk);
-    const rib = new THREE.Mesh(new THREE.BoxGeometry(w * 1.02, h * 0.16, 0.12), _hullDarkMat);
+    const rib = new THREE.Mesh(new THREE.BoxGeometry(w * 1.02, h * 0.16, 0.12 * scale), _hullDarkMat);
     rib.position.set(0, h * 0.1, d / 2); rib.userData.isWreckDecoration = true; g.add(rib);
     collider = { kind: 'box', half: { x: w / 2, y: h / 2, z: d / 2 }, pos: { x: 0, y: 0, z: 0 } };
     // Lootable chunk → salvage hatch on TOP (+Y); the assembler seats this piece UPRIGHT
@@ -758,6 +764,74 @@ export function watchtower(seed: number): BuiltComponent {
   const bbox = new THREE.Box3(
     new THREE.Vector3(-half - 0.3, 0, -half - 0.3),
     new THREE.Vector3(half + rampRun + 0.4, platH + roofPostH + 0.9, half + 0.3),
+  );
+  return { mesh: g, sockets, colliders, panelMounts, bbox };
+}
+
+/** M7 ⑥ (C43) — WELLHEAD: a scavenger water cache — a metal CURB ring around a dark shaft
+ *  mouth, with a 2-post WINCH (a roller + a crank + a rope + a hanging bucket) over it. A built
+ *  human landmark (someone dug for water). Stands on the surface. The curb + the 2 winch posts
+ *  declare colliders; the roller/crank/rope/bucket/rim/mouth are decoration. */
+export function wellHead(seed: number): BuiltComponent {
+  const g = new THREE.Group();
+  const curbR = 1.05 + phash(seed, 1) * 0.4;
+  const curbH = 0.78 + phash(seed, 2) * 0.24;       // C43 r2 — TALLER (was 0.55-0.75) so it reads as a built wellhead with mass
+  const colliders: ColliderSpec[] = [];
+  // ── metal curb ring (a hollow well-mouth: solid wall, recessed dark shaft) ──
+  const curb = new THREE.Mesh(new THREE.CylinderGeometry(curbR, curbR * 1.08, curbH, 16), _hullMat);
+  curb.position.y = curbH / 2; g.add(curb);
+  colliders.push({ kind: 'cylinder', halfHeight: curbH / 2, radius: curbR, pos: { x: 0, y: curbH / 2, z: 0 } });
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(curbR, 0.08, 6, 18), _hullDarkMat);   // a chunky cap band
+  rim.rotation.x = Math.PI / 2; rim.position.y = curbH; rim.userData.isWreckDecoration = true; g.add(rim);
+  // rim plates — irregular salvaged blocks ringing the curb (built/scavenged read; ≥12cm deep, rule 7)
+  const innerR = curbR * 0.74;
+  for (let i = 0; i < 7; i++) {
+    const ang = (i / 7) * Math.PI * 2 + phash(seed, 30 + i) * 0.3;
+    const pw = 0.34 + phash(seed, 40 + i) * 0.2;
+    const ph = 0.14 + phash(seed, 50 + i) * 0.12;
+    const plate = new THREE.Mesh(new THREE.BoxGeometry(pw, ph, 0.16), i % 2 ? _rustMat : _hullDarkMat);
+    plate.position.set(Math.cos(ang) * curbR, curbH + ph / 2 - 0.02, Math.sin(ang) * curbR);
+    plate.rotation.y = -ang; plate.userData.isWreckDecoration = true; g.add(plate);
+  }
+  // recessed shaft: an inner wall dropping into shadow + a near-black void floor → reads as a HOLE
+  const shaftWall = new THREE.Mesh(new THREE.CylinderGeometry(innerR, innerR, curbH * 0.9, 16, 1, true), _hullDarkMat);
+  shaftWall.position.y = curbH * 0.55; shaftWall.userData.isWreckDecoration = true; g.add(shaftWall);
+  const voidFloor = new THREE.Mesh(new THREE.CircleGeometry(innerR, 16), _shaftVoidMat);
+  voidFloor.rotation.x = -Math.PI / 2; voidFloor.position.y = curbH * 0.18; voidFloor.userData.isWreckDecoration = true; g.add(voidFloor);
+  // ── 2 vertical winch posts at ±X of the curb ──
+  const postH = 1.9 + phash(seed, 3) * 0.6;
+  const postX = curbR * 0.92;
+  for (const sx of [-1, 1]) {
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.12, postH, 6), _rustMat);
+    post.position.set(sx * postX, curbH + postH / 2, 0); g.add(post);
+    colliders.push({ kind: 'cylinder', halfHeight: postH / 2, radius: 0.11, pos: { x: sx * postX, y: curbH + postH / 2, z: 0 } });
+    const gusset = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.26, 0.1), _hullDarkMat);   // joint bracket (decoration)
+    gusset.position.set(sx * (postX - 0.13), curbH + postH - 0.16, 0); gusset.rotation.z = sx * 0.5;
+    gusset.userData.isWreckDecoration = true; g.add(gusset);
+  }
+  // ── windlass DRUM (thick, reads as the roller) + an offset L-crank + rope + hanging bucket ──
+  const drumY = curbH + postH;
+  const drum = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, postX * 2 - 0.1, 10), _hullDarkMat);
+  drum.rotation.z = Math.PI / 2; drum.position.set(0, drumY, 0); drum.userData.isWreckDecoration = true; g.add(drum);
+  const crankArm = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.5, 0.07), _hullDarkMat);   // radial arm off the drum end
+  crankArm.position.set(postX + 0.04, drumY - 0.22, 0); crankArm.userData.isWreckDecoration = true; g.add(crankArm);
+  const crankGrip = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.34, 6), _rustMat);   // the handle you grip
+  crankGrip.rotation.x = Math.PI / 2; crankGrip.position.set(postX + 0.04, drumY - 0.44, 0.17);
+  crankGrip.userData.isWreckDecoration = true; g.add(crankGrip);
+  const ropeLen = postH * 0.52;
+  const rope = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, ropeLen, 4), _hullDarkMat);
+  rope.position.set(0, drumY - ropeLen / 2, 0); rope.userData.isWreckDecoration = true; g.add(rope);
+  const bucket = new THREE.Mesh(new THREE.CylinderGeometry(0.23, 0.18, 0.34, 10), _rustMat);
+  bucket.position.set(0, drumY - ropeLen - 0.11, 0); bucket.userData.isWreckDecoration = true; g.add(bucket);
+  const bucketBand = new THREE.Mesh(new THREE.TorusGeometry(0.225, 0.025, 5, 10), _hullDarkMat);
+  bucketBand.rotation.x = Math.PI / 2; bucketBand.position.set(0, drumY - ropeLen - 0.05, 0); bucketBand.userData.isWreckDecoration = true; g.add(bucketBand);
+  const sockets: Socket[] = [{ name: 'base', pos: new THREE.Vector3(0, 0, 0), quat: FACE.posY(), radius: curbR, tag: 'base' }];
+  const panelMounts: PanelMount[] = [
+    { pos: new THREE.Vector3(0, curbH * 0.5, curbR), quat: FACE.posZ(), kind: 'cargo_container' as PanelKind },
+  ];
+  const bbox = new THREE.Box3(
+    new THREE.Vector3(-postX - 0.25, 0, -curbR - 0.25),
+    new THREE.Vector3(postX + 0.25, curbH + postH + 0.1, curbR + 0.25),
   );
   return { mesh: g, sockets, colliders, panelMounts, bbox };
 }

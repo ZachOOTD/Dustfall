@@ -15,7 +15,7 @@ import type { ColliderSpec } from '../physics/bodies.ts';
 import {
   type BuiltComponent, type PanelMount, mate, transformCollider, transformPanelMount, phash,
   busBody, solarWing, dishAntenna, wreckedTank, debrisPiece, huskShell,
-  noseCone, hullBarrel, engineNozzle, splayedEngineCluster, dorsalMast, watchtower,
+  noseCone, hullBarrel, engineNozzle, splayedEngineCluster, dorsalMast, watchtower, wellHead,
 } from './poiComponents.ts';
 
 export interface ArchetypeParams {
@@ -140,6 +140,10 @@ function assembleWreckedTank(rand: Rng): AssembleResult {
 // z-fighting. A shared singleton (merges across every debris field in the yard).
 const _scorchMat = new THREE.MeshLambertMaterial({ color: 0x564738, flatShading: true });
 _scorchMat.polygonOffset = true; _scorchMat.polygonOffsetFactor = -1; _scorchMat.polygonOffsetUnits = -1;
+// C43 — a much DARKER burn for the debris-trail skid/crater so the directional ground cue reads
+// at a grazing angle (the muted _scorchMat barely separates from sand).
+const _skidMat = new THREE.MeshLambertMaterial({ color: 0x241a12, flatShading: true });
+_skidMat.polygonOffset = true; _skidMat.polygonOffsetFactor = -1; _skidMat.polygonOffsetUnits = -1;
 
 // ════════════════════════════════════════════════════════════════════
 // DEBRIS FIELD — no hull: torn plates, bent struts + a lootable chunk strewn over
@@ -408,6 +412,58 @@ function assembleWatchtower(rand: Rng): AssembleResult {
   return a.result();
 }
 
+// M7 ⑥ (C43) — WELL: a single built water-cache structure, stands on the surface.
+function assembleWell(rand: Rng): AssembleResult {
+  const a = new Assembly();
+  const s = seedOf(rand);
+  const well = wellHead(s);
+  a.place(well, liftToGround(well));
+  return a.result();
+}
+
+// M7 ⑥ (C43) — DEBRIS-TRAIL: a directional crash-ejecta streak (vs debris_field's scattered
+// disc). A heavy lootable IMPACT chunk at the deep end + a scorch skid + a mass gradient
+// (plates near the start → struts → heavier chunks near the impact). ONE seedOf draw; phash rest.
+function assembleDebrisTrail(rand: Rng): AssembleResult {
+  const a = new Assembly();
+  const s = seedOf(rand);
+  const n = 6 + Math.floor(phash(s, 1) * 3);          // 6-8 trailing pieces — FEW, so clear GAPS read as a line not a clump
+  const trailLen = 15 + phash(s, 2) * 4;              // 15-19m — long, so the spread dominates (was clumping)
+  // DARK skid streak (tapered toward the start) + a darker impact crater at the deep end (decoration)
+  const streak = new THREE.Mesh(new THREE.PlaneGeometry(2.4, trailLen), _skidMat);
+  streak.rotation.x = -Math.PI / 2; streak.position.set(0, 0.05, trailLen * 0.5);
+  streak.userData.isWreckDecoration = true; a.group.add(streak);
+  const crater = new THREE.Mesh(new THREE.CircleGeometry(2.8, 24), _skidMat);
+  crater.rotation.x = -Math.PI / 2; crater.position.set(0, 0.07, trailLen);
+  crater.userData.isWreckDecoration = true; a.group.add(crater);
+  // heavy lootable IMPACT chunk — decisively the biggest mass, TILTED + bedded deep at the terminus
+  const impact = debrisPiece(s + 50, 2, true, 1.7);
+  const iq = new THREE.Quaternion().setFromEuler(new THREE.Euler(0.3 + phash(s, 4) * 0.25, phash(s, 3) * Math.PI * 2, 0.15));
+  a.place(impact, new THREE.Matrix4().compose(
+    new THREE.Vector3(0, -rotatedMinY(impact.bbox, iq) - 0.4, trailLen), iq, _ONE_SCALE,
+  ));
+  // a strictly MONOTONIC small→big gradient back from the impact, on a TIGHT centreline with
+  // clear gaps; struts/chunks only (no flat plates that vanish at a grazing angle).
+  for (let i = 0; i < n; i++) {
+    const t = (i + 0.5) / n;                           // 0→1 from the START toward the impact (even spacing)
+    const z = t * (trailLen - 2.0);
+    const offX = (phash(s, 100 + i) - 0.5) * 1.1;      // TIGHT (±0.55m) → a line, not a sideways spray
+    const kindIdx = (i % 3 === 0) ? 1 : 2;             // mostly chunks, every 3rd a strut — all visible 3D mass
+    const sc = 0.3 + t * 0.75;                         // strictly grows with z (0.3 → ~1.05); no big piece near the start
+    const piece = debrisPiece(s + i * 311, kindIdx, false, sc);
+    const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(
+      (phash(s, 300 + i) - 0.5) * 0.9,
+      phash(s, 410 + i) * Math.PI * 2,
+      (phash(s, 500 + i) - 0.5) * 0.9,
+    ));
+    const sink = 0.1 + phash(s, 600 + i) * 0.28;       // bed/tumble each piece into the sand
+    a.place(piece, new THREE.Matrix4().compose(
+      new THREE.Vector3(offX, -rotatedMinY(piece.bbox, q) - sink, z), q, _ONE_SCALE,
+    ));
+  }
+  return a.result();
+}
+
 // ── Archetype registry + biome-weighted roulette ─────────────────────
 export const ARCHETYPES: Record<string, Archetype> = {
   watchtower: {
@@ -416,6 +472,20 @@ export const ARCHETYPES: Record<string, Archetype> = {
     // ramp stays walkable; a shallow seat beds the legs), a salvage panel on a leg, a windward drift.
     params: { bucket: 'dark', burySink: false, bury: 0, list: 0.04, panelMin: 1, panelMax: 1, sandMound: true, seatSink: 0.12, salvageKind: 'fuselage' },
     assemble: assembleWatchtower,
+  },
+  well: {
+    id: 'well',
+    // M7 ⑥ (C43) — a BUILT water cache; stands ~level (the curb beds shallow, a hair of list),
+    // a salvage panel on the curb, a windward drift banks the base.
+    params: { bucket: 'dark', burySink: false, bury: 0, list: 0.03, panelMin: 1, panelMax: 1, sandMound: true, seatSink: 0.10, salvageKind: 'cargo_container' },
+    assemble: assembleWell,
+  },
+  debris_trail: {
+    id: 'debris_trail',
+    // M7 ⑥ (C43) — a directional crash-ejecta streak; the pieces self-seat, the impact chunk
+    // is the lone lootable mass. No sandMound (the scorch streak is its ground decal).
+    params: { bucket: 'warm', burySink: false, bury: 0, list: 0, panelMin: 1, panelMax: 1, sandMound: false, salvageKind: 'fuselage', seatSink: 0.05 },
+    assemble: assembleDebrisTrail,
   },
   satellite: {
     id: 'satellite',
@@ -472,11 +542,13 @@ export type ArchetypeId = 'ship' | keyof typeof ARCHETYPES;
 // M7 ⑥ (C42) — the `watchtower` (a BUILT human landmark) joins at ~0.07 per biome; it's
 // rarest in the wreck_yard (a ship graveyard, not a settlement) and slightly more common on the
 // open salt/dune flats where a lookout makes sense.
+// M7 ⑥ (C43) — `well` (a built water cache, rare — ~0.04, rarest in the wreck_yard) + `debris_trail`
+// (crash ejecta — commoner, peaks in the wreck_yard where everything came down).
 const ARCH_WEIGHTS: Record<BiomeId, Array<[ArchetypeId, number]>> = {
-  salt:       [['ship', 0.26], ['derelict', 0.22], ['satellite', 0.15], ['wrecked_tank', 0.12], ['debris_field', 0.10], ['hollow_husk', 0.08], ['watchtower', 0.08]],
-  rocky:      [['ship', 0.20], ['derelict', 0.21], ['satellite', 0.13], ['wrecked_tank', 0.19], ['debris_field', 0.10], ['hollow_husk', 0.11], ['watchtower', 0.07]],
-  dune:       [['ship', 0.18], ['derelict', 0.23], ['satellite', 0.17], ['wrecked_tank', 0.15], ['debris_field', 0.08], ['hollow_husk', 0.13], ['watchtower', 0.08]],
-  wreck_yard: [['ship', 0.18], ['derelict', 0.22], ['satellite', 0.13], ['wrecked_tank', 0.17], ['debris_field', 0.16], ['hollow_husk', 0.12], ['watchtower', 0.04]],
+  salt:       [['ship', 0.26], ['derelict', 0.22], ['satellite', 0.15], ['wrecked_tank', 0.12], ['debris_field', 0.10], ['hollow_husk', 0.08], ['watchtower', 0.08], ['well', 0.05], ['debris_trail', 0.06]],
+  rocky:      [['ship', 0.20], ['derelict', 0.21], ['satellite', 0.13], ['wrecked_tank', 0.19], ['debris_field', 0.10], ['hollow_husk', 0.11], ['watchtower', 0.07], ['well', 0.04], ['debris_trail', 0.06]],
+  dune:       [['ship', 0.18], ['derelict', 0.23], ['satellite', 0.17], ['wrecked_tank', 0.15], ['debris_field', 0.08], ['hollow_husk', 0.13], ['watchtower', 0.08], ['well', 0.06], ['debris_trail', 0.05]],
+  wreck_yard: [['ship', 0.18], ['derelict', 0.22], ['satellite', 0.13], ['wrecked_tank', 0.17], ['debris_field', 0.16], ['hollow_husk', 0.12], ['watchtower', 0.04], ['well', 0.03], ['debris_trail', 0.10]],
 };
 
 export function pickArchetype(rand: Rng, biome?: BiomeId): ArchetypeId {

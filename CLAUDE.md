@@ -69,17 +69,16 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 "Last shipped" note. Current target: **Phase B (M6→M10) — APPROVED + RELEASED**. The loop runs M6→M10 unattended,
 commits every cycle, and pauses only at "Phase B — Build-out complete" (after M10). Charter: `docs/campaign/campaign.md`.
 
-**Last shipped**: Campaign **C42** (2026-06-20, cycle 42/75) — **M7 ⑥ more-wreck-types-new-pois `[partial]` — the WATCHTOWER**
-(`verify:all` PASS — tsc + placement 0/0 ×5 + colliders 0/30; **visual gate PASS in 2 rounds**; **no save bump**).
-Added a NEW non-ship landmark to the procedural scatter via the socket grammar: a scavenged-metal desert LOOKOUT — 4 braced legs carrying
-a railed deck under a wide hipped sun-shade roof, with a straight **walkable RAMP** up to the deck (a "ramp-vantage", NOT a ladder — D250;
-the ramp is a real inclined collider at ~37°, under the KCC climb limit). NEW `watchtower()` component + `assembleWatchtower` archetype +
-`ARCH_WEIGHTS` (~0.07/biome) + added to the collider-audit (25→30). r1 FAIL (squat/parasol-roof/narrow-ramp) → r2 (taller + braced + wide
-roof on posts + wider overlapping ramp) → PASS. **`[partial]`: watchtower done; the well/cistern + debris-trail continue ⑥ next cycle.**
+**Last shipped**: Campaign **C43** (2026-06-20, cycle 43/75) — **M7 ⑥ more-wreck-types-new-pois COMPLETE — the WELL + the DEBRIS-TRAIL**
+(`verify:all` PASS — tsc + placement 0/0 ×5 + colliders 0/40; **visual gate PASS** [well 2 rounds, trail 3 rounds]; **no save bump**).
+Finished ⑥ (watchtower was C42): a **WELL** (NEW `wellHead()` — a metal curb around a recessed dark shaft + a 2-post windlass-drum winch with
+a hanging bucket) + a **DEBRIS-TRAIL** (NEW `assembleDebrisTrail` — a directional crash-ejecta streak: a big tilted impact chunk + a dark
+skid/crater with debris trailing back getting SMALLER; reuses `debrisPiece`, now given a `scale` param + a dark `_skidMat`). Both registered
+in `ARCH_WEIGHTS` + the collider-audit (30→40). D251. **3 new non-ship POIs now vary the scatter beyond ships; ⑥ DONE.**
 
-**Next session** = cycle 43 = **M7 ⑥ continued** — the **well/cistern** (a sunken stone/metal water structure) + a **debris-trail** (a streak
-of crash ejecta to follow), via the same socket grammar (`poiComponents.ts` + `poiArchetypes.ts`; register in `ARCH_WEIGHTS` + the
-collider-audit list). Then ⑦ walkable-wreck-interiors (XL, spike→build — generalize D1's enterable `crash_husk`). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
+**Next session** = cycle 44 = **M7 ⑦ walkable-wreck-interiors** (the LAST M7 unit; XL, spike→build) — generalize D1's enterable `crash_husk`
+(the dressed interior + portal) so other large wrecks become enterable. Likely an A/B architecture spike first. After ⑦, M7 is complete (but
+the loop only PAUSES at the Phase-B milestone, after M10). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 
