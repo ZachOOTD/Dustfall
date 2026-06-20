@@ -29,46 +29,6 @@ interface ShootingStar {
   active: boolean;
 }
 
-// M5b (C34) — a rare FIREBALL/bolide: a big, slow, bright meteor with a glowing warm
-// head, a fading trail, and a brief sky-flash bloom. Distinct from the small fast
-// shooters (rarer, ~5× longer-lived, warm, with a head sprite + flash). The "whoa".
-interface Fireball {
-  head: THREE.Sprite;            // warm amber halo
-  headMat: THREE.SpriteMaterial;
-  core: THREE.Sprite;            // C34 r2 — small white-hot incandescent center
-  coreMat: THREE.SpriteMaterial;
-  flash: THREE.Sprite;          // entry-flash bloom
-  flashMat: THREE.SpriteMaterial;
-  trail: THREE.Sprite[];        // C34 r2 — a tapering ribbon of fading glow puffs (was a 1px line)
-  trailMats: THREE.SpriteMaterial[];
-  origin: THREE.Vector3;
-  travel: THREE.Vector3;
-  lifetime: number;
-  elapsed: number;
-  active: boolean;
-}
-
-/** A soft warm radial glow (white core → amber → transparent) for the fireball head
- *  + flash. The sprite material color tints it. */
-let _fireGlowTex: THREE.CanvasTexture | null = null;
-function fireGlowTexture(): THREE.CanvasTexture {
-  if (_fireGlowTex) return _fireGlowTex;
-  const c = document.createElement('canvas');
-  c.width = c.height = 64;
-  const g = c.getContext('2d');
-  if (!g) throw new Error('canvas 2d unavailable');
-  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
-  grad.addColorStop(0, 'rgba(255,255,255,1)');
-  grad.addColorStop(0.22, 'rgba(255,238,205,0.92)');
-  grad.addColorStop(0.55, 'rgba(255,170,85,0.42)');
-  grad.addColorStop(1, 'rgba(255,130,55,0)');
-  g.fillStyle = grad;
-  g.fillRect(0, 0, 64, 64);
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return (_fireGlowTex = tex);
-}
-
 interface SkyBundle {
   sphere: THREE.Mesh;
   sphereMat: THREE.ShaderMaterial;
@@ -86,8 +46,6 @@ interface SkyBundle {
   planetMat: THREE.SpriteMaterial;
   shooters: ShootingStar[];
   nextShooterAt: number;  // seconds (ctx.time.elapsed) when we try to spawn the next
-  fireball: Fireball;     // C34 — the rare bolide
-  nextFireballAt: number;
 }
 
 let bundle: SkyBundle | null = null;
@@ -533,42 +491,11 @@ export function createSky(scene: THREE.Scene): void {
     });
   }
 
-  // C34 r2 — the rare fireball: a warm halo HEAD + a white-hot CORE + a tapering
-  // ribbon of fading glow puffs (the TRAIL) + an entry-flash BLOOM. Hidden until armed.
-  const glow = fireGlowTexture();
-  const mkSprite = (color: number, scale: number, order: number): [THREE.Sprite, THREE.SpriteMaterial] => {
-    const m = new THREE.SpriteMaterial({
-      map: glow, color, transparent: true, opacity: 0,
-      depthWrite: false, depthTest: true, fog: false, toneMapped: false, blending: THREE.AdditiveBlending,
-    });
-    const s = new THREE.Sprite(m);
-    s.scale.setScalar(scale);
-    s.renderOrder = order; s.frustumCulled = false; s.visible = false;
-    scene.add(s);
-    return [s, m];
-  };
-  const [fbHead, headMat] = mkSprite(0xffcaa0, Tuning.FIREBALL_HEAD_SCALE, 0.6);
-  const [fbCore, coreMat] = mkSprite(0xfff6e8, Tuning.FIREBALL_HEAD_SCALE * 0.42, 0.62);  // white-hot center
-  const [fbFlash, flashMat] = mkSprite(0xffc89a, Tuning.FIREBALL_FLASH_SCALE, 0.55);
-  const trail: THREE.Sprite[] = [];
-  const trailMats: THREE.SpriteMaterial[] = [];
-  for (let i = 0; i < Tuning.FIREBALL_TRAIL_PUFFS; i++) {
-    // Warmer + redder toward the tail.
-    const col = i < 2 ? 0xffd4a0 : i < 5 ? 0xff9a52 : 0xd2581f;
-    const [s, m] = mkSprite(col, Tuning.FIREBALL_HEAD_SCALE, 0.5);
-    trail.push(s); trailMats.push(m);
-  }
-  const fireball: Fireball = {
-    head: fbHead, headMat, core: fbCore, coreMat, flash: fbFlash, flashMat, trail, trailMats,
-    origin: new THREE.Vector3(), travel: new THREE.Vector3(), lifetime: 0, elapsed: 0, active: false,
-  };
-
   bundle = {
     sphere, sphereMat, sun, sunMat,
     moon, moonMat, stars, starsMat,
     planet, planetMat, shooters,
     nextShooterAt: Tuning.SHOOTING_STAR_MIN_INTERVAL,
-    fireball, nextFireballAt: Tuning.FIREBALL_MIN_INTERVAL,
   };
 }
 
@@ -641,75 +568,6 @@ function updateShooter(s: ShootingStar, dt: number, cam: THREE.Vector3, opacityS
   const env = t < 0.15 ? t / 0.15 : 1 - (t - 0.15) / 0.85;
   const mat = s.line.material as THREE.LineBasicMaterial;
   mat.opacity = Math.max(0, env) * opacityScale;
-}
-
-const _fbHead = new THREE.Vector3();
-const _fbPuff = new THREE.Vector3();
-
-/** Arm the fireball with a slow high-sky arc. */
-function trySpawnFireball(f: Fireball): void {
-  if (f.active) return;
-  const phi = Math.random() * Math.PI * 2;
-  const u = 0.28 + Math.random() * 0.55;          // higher in the sky than the small shooters
-  const s = Math.sqrt(1 - u * u);
-  f.origin.set(s * Math.cos(phi), u, s * Math.sin(phi));
-  const tx = -Math.sin(phi), tz = Math.cos(phi);
-  f.travel.set(tx, -0.05 - Math.random() * 0.12, tz).normalize()
-    .multiplyScalar(0.6 + Math.random() * 0.25);   // a long sweep
-  f.lifetime = Tuning.FIREBALL_LIFETIME_MIN +
-    Math.random() * (Tuning.FIREBALL_LIFETIME_MAX - Tuning.FIREBALL_LIFETIME_MIN);
-  f.elapsed = 0;
-  f.active = true;
-  f.head.visible = true; f.core.visible = true; f.flash.visible = true;
-}
-
-/** Advance the fireball: white-hot core + warm halo head + a tapering puff trail +
- *  an early entry-flash bloom. */
-function updateFireball(f: Fireball, dt: number, cam: THREE.Vector3, vis: number): void {
-  if (!f.active) return;
-  f.elapsed += dt;
-  const t = f.elapsed / f.lifetime;
-  if (t >= 1) {
-    f.active = false;
-    f.head.visible = false; f.core.visible = false; f.flash.visible = false;
-    for (const s of f.trail) s.visible = false;
-    return;
-  }
-  const R = Tuning.STAR_SPHERE_RADIUS;
-  _fbHead.copy(f.origin).addScaledVector(f.travel, t);
-  const hx = cam.x + _fbHead.x * R, hy = cam.y + _fbHead.y * R, hz = cam.z + _fbHead.z * R;
-  f.head.position.set(hx, hy, hz);
-  f.core.position.set(hx, hy, hz);
-  f.flash.position.set(hx, hy, hz);
-
-  // Brightness: quick ramp, long sustain, slow fade; + a fast flicker.
-  const env = t < 0.12 ? t / 0.12 : 1 - (t - 0.12) / 0.88;
-  const flicker = 0.85 + 0.15 * Math.sin(f.elapsed * 47);
-  const bright = Math.max(0, env) * flicker * vis;
-  f.headMat.opacity = Math.min(1, bright * 1.25);
-  f.coreMat.opacity = Math.min(1, bright * 1.7);       // the core clips toward white-hot
-  // The head halo pulses a touch larger at the entry flare.
-  const flashEnv = Math.max(0, 1 - Math.abs(t - 0.2) / 0.2);
-  f.head.scale.setScalar(Tuning.FIREBALL_HEAD_SCALE * (1 + 0.35 * flashEnv));
-
-  // Trail puffs: tapering ribbon behind the head (brightest + widest near the head).
-  const N = f.trail.length;
-  const step = Tuning.FIREBALL_TRAIL_LEN / N;
-  for (let i = 0; i < N; i++) {
-    const at = t - (i + 1) * step;
-    const s = f.trail[i];
-    if (at <= 0) { s.visible = false; continue; }
-    s.visible = true;
-    _fbPuff.copy(f.origin).addScaledVector(f.travel, at);
-    s.position.set(cam.x + _fbPuff.x * R, cam.y + _fbPuff.y * R, cam.z + _fbPuff.z * R);
-    const taper = 1 - i / N;                            // 1 near head → ~0 at tail
-    s.scale.setScalar(Tuning.FIREBALL_HEAD_SCALE * (0.62 * taper + 0.12));
-    f.trailMats[i].opacity = Math.min(1, bright * taper * 0.9);
-  }
-
-  // Entry-flash bloom: peaks early (the atmospheric flare), brief, then shrinks.
-  f.flashMat.opacity = flashEnv * flashEnv * 0.85 * vis;
-  f.flash.scale.setScalar(Tuning.FIREBALL_FLASH_SCALE * (0.5 + 0.5 * flashEnv));
 }
 
 /** Per-frame sky update: follow camera, blend gradient, animate sun disc. */
@@ -873,26 +731,4 @@ export function updateSky(ctx: GameContext, dt: number): void {
     // Reset the timer when fully bright so we don't fire 4 in a row at dusk.
     bundle.nextShooterAt = ctx.time.elapsed + Tuning.SHOOTING_STAR_MIN_INTERVAL;
   }
-
-  // ── Fireball/bolide: rare, slow, bright. Tick the active one; occasionally arm. ──
-  updateFireball(bundle.fireball, dt, cam, nightVisibility);
-  if (!bundle.fireball.active && ctx.time.elapsed >= bundle.nextFireballAt && nightVisibility > 0.25) {
-    trySpawnFireball(bundle.fireball);
-    bundle.nextFireballAt = ctx.time.elapsed
-      + Tuning.FIREBALL_MIN_INTERVAL
-      + Math.random() * (Tuning.FIREBALL_MAX_INTERVAL - Tuning.FIREBALL_MIN_INTERVAL);
-  } else if (nightVisibility <= 0.25) {
-    // Hold the timer while it's too bright so one fires soon after dark, not at dusk.
-    bundle.nextFireballAt = Math.max(bundle.nextFireballAt, ctx.time.elapsed + Tuning.FIREBALL_MIN_INTERVAL);
-  }
-}
-
-/** DEV/debug — force a fireball now + return the head's peak direction (unit-ish vec
- *  from the camera) so a rig-shot can aim at it. For the scenario + walk-test. */
-export function debugTriggerFireball(): { dir: [number, number, number] } | null {
-  if (!bundle) return null;
-  trySpawnFireball(bundle.fireball);
-  const f = bundle.fireball;
-  const d = _fbHead.copy(f.origin).addScaledVector(f.travel, 0.25);   // head at ~peak
-  return { dir: [d.x, d.y, d.z] };
 }

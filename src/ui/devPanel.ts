@@ -80,7 +80,6 @@ function makeActionsSection(): HTMLDivElement {
     ['clear', () => { g()?.setCloudiness(0.04); toast('skies clear'); }],
   ]);
   group('events', [
-    // Fireball is night-only — jump to night first so it's reliably visible.
     ['crash', () => { g()?.triggerCrash(); toast('incoming — a wreck is falling!'); }],
     ['worm sweep', () => { g()?.triggerWormCrossing(); toast('worm crossing — scan the horizon'); }],
   ]);

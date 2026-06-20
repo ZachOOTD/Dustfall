@@ -575,16 +575,6 @@ export const Tuning = {
   SHOOTING_STAR_MAX_INTERVAL: 12,
   SHOOTING_STAR_LIFETIME_MIN: 0.8,
   SHOOTING_STAR_LIFETIME_MAX: 1.6,
-  // M5b (C34) — the rare FIREBALL/bolide: a big slow bright meteor + a flash bloom.
-  // Rarity + slowness are what make it special (most nights see none); FEEL → walk-test.
-  FIREBALL_MIN_INTERVAL: 200,        // s — min wait between fireballs (rare)
-  FIREBALL_MAX_INTERVAL: 540,
-  FIREBALL_LIFETIME_MIN: 2.8,        // s — slow sweep (≈4× the small shooters)
-  FIREBALL_LIFETIME_MAX: 4.5,
-  FIREBALL_HEAD_SCALE: 34,           // glowing head halo size on the star sphere (cf moon 32 — bolides dominate the sky)
-  FIREBALL_FLASH_SCALE: 135,         // the entry-flash bloom (peaks early, then shrinks)
-  FIREBALL_TRAIL_LEN: 0.3,           // trail spans this fraction of the arc behind the head
-  FIREBALL_TRAIL_PUFFS: 8,           // glow sprites forming the tapering trail ribbon
   // ── ACBE (D1) — SKYFALL: a burning wreck streaks across the sky + CRASHES into the
   // desert, leaving an explorable, lootable, lore-bearing wreck (replaces the C34 sky-
   // only fireball). Rarity + the travel-to-it payoff are the point. FEEL → walk-test.
