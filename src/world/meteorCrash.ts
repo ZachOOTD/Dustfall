@@ -27,6 +27,7 @@ import { placeProcgenPOI } from './poiAssembler.ts';   // Tier 2/3 — the enter
 import { setCrashDressRole } from './poiArchetypes.ts';   // Tier 3 — role-driven interior dressing
 import { generateCrashLog } from './crashLog.ts';          // Tier 3 — procedural black-box log
 import { placeJournal, type Journal } from './journal.ts';
+import { spawnScrapAt, spawnRelicAt, type Pickup } from '../pickups/pickups.ts';   // Tier 3 — fresh-crash spilled loot
 import { makeRng } from '../core/rng.ts';
 
 export type CrashRole = 'freighter' | 'liner' | 'military' | 'science' | 'mining';
@@ -62,7 +63,7 @@ let _smokeTrail: ParticleTrail | null = null; // alpha dark smoke (rises)
 let _ejecta: ParticleTrail | null = null;     // debris/dust thrown at impact (falls)
 
 // ── Tier 2: landed crash SITES (the explorable destinations) + a persistent beacon. ──
-interface CrashSite { pos: THREE.Vector3; seed: number; role: CrashRole; wreck: THREE.Group; decor: THREE.Group; journal: Journal; age: number; }
+interface CrashSite { pos: THREE.Vector3; seed: number; role: CrashRole; wreck: THREE.Group; decor: THREE.Group; journal: Journal; cache: Pickup[]; age: number; }
 const _sites: CrashSite[] = [];
 let _beacon: ParticleTrail | null = null;     // shared persistent smoke-column beacon (outlives the fires)
 const _scorchMat = new THREE.MeshLambertMaterial({ color: 0x130d09, transparent: true, opacity: 0.85, depthWrite: false });
@@ -202,7 +203,7 @@ export function resetMeteorCrash(): void {
   if (_ring) { _ring.visible = false; (_ring.material as THREE.MeshBasicMaterial).opacity = 0; }
   // Drop any runtime-spawned crash-site visuals (Tier 4 restores saved ones on load; the
   // wreck's Rapier body is left for now — handled with the save round-trip in Tier 4).
-  if (_scene) for (const s of _sites) { _scene.remove(s.wreck); _scene.remove(s.decor); _scene.remove(s.journal.mesh); }
+  if (_scene) for (const s of _sites) { _scene.remove(s.wreck); _scene.remove(s.decor); _scene.remove(s.journal.mesh); for (const p of s.cache) _scene.remove(p.mesh); }
   _sites.length = 0;
   if (_beacon) {
     for (let i = 0; i < _beacon.count; i++) {
@@ -271,7 +272,22 @@ function landCrashAt(ctx: GameContext, c: ActiveCrash): void {
   );
   ctx.journals.list.push(journal);
 
-  _sites.push({ pos, seed: c.seed, role: c.role, wreck, decor, journal, age: 0 });
+  // Fresh-crash SPILLED LOOT — scrap chunks thrown around the impact, and a chance at a rare
+  // relic_core (science crashes always carry one; others ~25%). The rich 'massive' salvage
+  // PANEL (pry it open) is the bulk reward; this is the immediate grab. Static (body=null) →
+  // the save ignores them; the Tier-4 crash re-spawn re-creates them deterministically.
+  const cache: Pickup[] = [];
+  const nScrap = 2 + Math.floor(rng() * 3);
+  for (let i = 0; i < nScrap; i++) {
+    const a = rng() * Math.PI * 2, rr = 1.5 + rng() * (Tuning.CRASH_SCORCH_RADIUS - 1.5);
+    cache.push(spawnScrapAt(ctx.three.scene, ctx.terrain, pos.x + Math.cos(a) * rr, pos.z + Math.sin(a) * rr, rng, ctx.pickups.list));
+  }
+  if (c.role === 'science' || rng() < 0.25) {
+    const a = rng() * Math.PI * 2;
+    cache.push(spawnRelicAt(ctx.three.scene, ctx.terrain, pos.x + Math.cos(a) * 1.6, pos.z + Math.sin(a) * 1.6, rng, ctx.pickups.list));
+  }
+
+  _sites.push({ pos, seed: c.seed, role: c.role, wreck, decor, journal, cache, age: 0 });
 }
 
 /** Per-frame: emit the tall smoke-column beacon from each active site (thins over its life,
