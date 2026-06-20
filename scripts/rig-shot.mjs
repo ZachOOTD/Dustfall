@@ -1943,7 +1943,7 @@ const SCENARIOS = {
       const ix = res.x, iz = res.z, iy = ctx.terrain.heightAt(ix, iz);
       ctx.flags.paused = true;                                                    // freeze the live tick
       // Fine sub-steps → the trail builds densely like real 60fps play (not blobby).
-      const adv = phase === 'site' ? FLIGHT + 9 : phase === 'impact' ? FLIGHT + 0.5 : FLIGHT * 0.5;
+      const adv = (phase === 'site' || phase === 'interior') ? FLIGHT + 9 : phase === 'impact' ? FLIGHT + 0.5 : FLIGHT * 0.5;
       window.__game.advanceCrash(adv, 220);
       const st = window.__game.crashState();
       const hp = st.headPos;
@@ -1957,6 +1957,10 @@ const SCENARIOS = {
       } else if (phase === 'site') {
         cam.position.set(ix + 24, iy + 11, iz + 24);             // settled site: wreck + scorch + beacon column
         cam.lookAt(ix, iy + 4, iz);
+      } else if (phase === 'interior') {
+        ctx.three.renderer.toneMappingExposure = 2.4;           // brighten the dim trough so the dressing reads for verification
+        cam.position.set(ix + 5, iy + 7, iz + 8);               // lower 3/4 down into the open husk → the dressed interior
+        cam.lookAt(ix, iy - 0.8, iz);
       } else {
         cam.position.set(ix + 36, iy + 16, iz + 36);             // 3/4 over the impact moment
         cam.lookAt(ix, iy + 3, iz);
@@ -1968,7 +1972,7 @@ const SCENARIOS = {
     if (!r.found) { console.log('[crash] not armed'); return; }
     // 'site' adds a wreck (new materials) → let the paused scene render a few frames first so
     // the cold shader compile (ABL multi-second stall) finishes BEFORE the screenshot.
-    await page.waitForTimeout(phase === 'site' ? 2200 : 300);
+    await page.waitForTimeout((phase === 'site' || phase === 'interior') ? 2200 : 300);
     await page.screenshot({ path: join(OUT, `scen-crash-${phase}-${argv.time || 'night'}.png`), fullPage: false, timeout: 90000 });
     console.log('[crash] ' + JSON.stringify(r));
   },

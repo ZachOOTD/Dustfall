@@ -23,7 +23,8 @@ import {
   createParticleTrail, emitParticle, emitBurst, updateParticleTrail,
   type ParticleTrail,
 } from './particleTrail.ts';
-import { placeProcgenPOI } from './poiAssembler.ts';   // Tier 2 — the wreck model (bespoke enterable hull swaps in at Tier 3)
+import { placeProcgenPOI } from './poiAssembler.ts';   // Tier 2/3 — the enterable crash_husk wreck
+import { setCrashDressRole } from './poiArchetypes.ts';   // Tier 3 — role-driven interior dressing
 import { makeRng } from '../core/rng.ts';
 
 export type CrashRole = 'freighter' | 'liner' | 'military' | 'science' | 'mining';
@@ -220,12 +221,13 @@ function landCrashAt(ctx: GameContext, c: ActiveCrash): void {
   const pos = c.impact.clone();
   const rng = makeRng(c.seed);   // independent stream — never perturbs the seeded world scatter
 
-  // The wreck — the ENTERABLE hollow-husk archetype (a gutted hull section you walk into
-  // through the breach: side-wall colliders + an auditExempt hollow shell). Tier 3 dresses
-  // its interior + adds the light shaft + the black-box lore.
+  // The wreck — the ENTERABLE, role-DRESSED crash husk (a gutted hull you walk into through
+  // the breach: side-wall colliders + auditExempt hollow shell + role-driven interior cargo,
+  // aftermath empty-suits/scorch, a dead console). The light shaft is the open top.
+  setCrashDressRole(c.role);
   const wreck = placeProcgenPOI(
     ctx.three.scene, ctx.physics.world, ctx.terrain, pos, rng, ctx.salvageables,
-    { archetype: 'hollow_husk', buryY: Tuning.CRASH_WRECK_BURY },
+    { archetype: 'crash_husk', buryY: Tuning.CRASH_WRECK_BURY },
   );
 
   // Scorch + ejecta in their own group (so reset can drop the whole site's decor cleanly).
