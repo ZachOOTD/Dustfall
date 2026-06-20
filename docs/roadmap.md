@@ -152,15 +152,21 @@ one walk-test; per-milestone walk-test focus in [iteration-plan.md](iteration-pl
 `/campaign-approve`. **At this review you also make Phase B's design calls** (below) so Phase B can then
 run as one unattended block too.*
 
-### Phase B — Design-gated (M6→M10; design calls made at the Phase A review, then runs → ONE review) · [DESIGN-GATE]
-Each item needs a design decision BEFORE it builds — resolved at the Phase A review (batch them there):
-- **M6 — Survival & UX direction:** survival-rebalance-newgame · crafting-chooser-colliding-recipe · remove-hud-stat-bars (dep survival) · flat-color-texture-audit (scope-first).
-- **M7 — Wreck depth & new POIs:** procedural-wreck-overhaul (net-new variety; §F deltas moved to M2) · more-wreck-types-new-pois · walkable-wreck-interiors (XL, spike→build) · ~~crashing-ship-event~~ **✓ DONE — D1 "Skyfall" (built ahead, during the Phase-A pause, 2026-06-20): a persistent enterable lore-bearing crash POI w/ a heat hazard; save v15. Walk-test owed.**
-- **M8 — Deep cave & companion:** deep-cave-design-spike → deep-cave-build (XL) → companion-egg-cherry-pick (hard-gated on the cave existing).
-- **M9 — Architectural-risk physics:** rideable-sled-spike (A/B worktree spike; no KCC-retries per D125) · real-rope-physics (dep feature-flags-infra) · real-cloth-physics (dep real-rope).
-- **M10 — Big features & tools:** scrap-machete-pry-tool · craftable-hover-bike (+ repairable speeder) · drop-pod-intro-cutscene · pickup-instancedmesh (human-attended).
+### Phase B — ✅ APPROVED + RELEASED (2026-06-20, cycle 37) — M6→M10, runs unattended → ONE review after · [BUILD-NOW]
+Design calls resolved at the Phase-A review (full proposal + decisions: [campaign/proposal-cycle-37.md](campaign/proposal-cycle-37.md)).
+**User decisions:** M7 INCLUDED · survival = forgiving Long Dark (flip `GOD_MODE` off) · HUD removal behind a flag + a
+pause-menu opt-in (default-ON) · **flip-authority = AUTONOMOUS** (loop may flip `FEATURES.*`/kill-switches ON once
+the headless+visual gates pass; reversible; user vetoes FEEL at the review; **D81 save-bump still STOPs the loop**).
+**Build order** (finish-debt → spike-before-build → value-first; ~33 cycles; `max_cycles` 75):
+- **M6 — Survival & UX:** ① crafting-chooser-colliding-recipe (S — `fire_kit` vs new `signal_kit`, both scrap×2+branch×1) · ② **survival-rebalance-newgame** (M, KEYSTONE — flip `GOD_MODE` off + tune the forgiving curve in tuning.ts) · ③ flat-color-texture-audit (L — scope-first, ~6-8 surfaces, no new programs/assets) · ④ remove-hud-stat-bars (L — `FEATURES.diegeticSurvival` + opt-in; dep ②).
+- **M7 — Wreck depth & new POIs:** ⑤ procedural-wreck-overhaul (L — net-new structure axes in the socket grammar) · ⑥ more-wreck-types-new-pois (L — watchtower/debris-trail/well, ramp-vantage not ladder) · ⑦ walkable-wreck-interiors (XL, spike→build — generalize D1's enterable `crash_husk`). ~~crashing-ship-event~~ **✓ DONE (D1 "Skyfall").**
+- **M8 — Deep cave & companion:** ⑧ deep-cave-design-spike (A/B worktree — collision topology; writes `feature-deep-cave.md`) · ⑨ deep-cave-build (XL — seeded tunnel-carving, ONE rare location, dark-nav, no-horror) · ⑩ companion-egg-cherry-pick (M — re-apply the `2d4035b` spine at the deepest chamber).
+- **M9 — Architectural-risk physics:** ⑪ rideable-sled-spike (A/B worktree, kill-switch; **re-table if both fail** — no 3rd KCC try per D125) · ⑫ real-rope-physics (Verlet behind `FEATURES.realRope`, CCD per D124) · ⑬ real-cloth-physics (2D Verlet grid, `FEATURES.realCloth`, tent-door/flag only; dep ⑫).
+- **M10 — Arrival & tools:** ⑭ scrap-machete-pry-tool (M — new `scrap_machete` id) · ⑮ craftable-hover-bike (L — repairable-speeder, one vehicle two states; dep ⑭) · ⑯ drop-pod-intro-cutscene (XL — in-world ODST descent reusing Skyfall FX, `FEATURES.dropPodIntro`; couples to the broken-speeder spawn) · ⑰ pickup-instancedmesh (L — human-attended perf).
+- **Scope-cut order** (if the cap tightens): pickup-instancing → real-cloth → flat-color FIX tail → companion-egg → drop-pod comedy beats → hover-bike coupling.
 
-### Milestone: Phase B — Design-gated complete (full review)
+### Milestone: Phase B — Build-out complete (full review + walk-test)
+*The loop PAUSES here after M10 ships. Batch every feel-pending + flag-flip veto: the survival curve, the diegetic-HUD read, the cave descent/dark-nav feel, the sled-ride feel, the rope/cloth looks, the drop-pod descent, the bike-repair beat. Conditional mid-block risk notes: after the cave spike (if it picks the risky path) + after the sled spike (if both candidates fail).*
 
 **Net-new (Phase C, 2026-06-18):** C2 exploration + sun-shade **promoted → M5a** · tone/ecology **→ M5b** · rest of C1 (water-in-wrecks / wind-chill) **deferred** · **C3 endgame NOT pursued** (user: no endgame — keep the open-ended "days survived" model; the self-author phase must not resurface a storm-finale). See [iteration-plan.md](iteration-plan.md) "Phase C".
 

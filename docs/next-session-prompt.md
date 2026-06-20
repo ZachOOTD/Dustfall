@@ -1,24 +1,42 @@
-# ⏸ CAMPAIGN PAUSED — Phase A — Build-out complete (after cycle 36) — `campaign/2026-06-18`
+# ▶ CAMPAIGN ACTIVE — Phase B released (cycle 37) — `campaign/2026-06-18`
 
-**The campaign is PAUSED for human review (`status:paused`, `awaiting_approval:true`, `stop_reasons:["milestone-review"]`). The unattended Phase-A block (M1→M5b) is DONE. The loop has STOPPED — it will not auto-cycle. To continue, the user reviews + runs `/campaign-approve` (which releases Phase B).**
+**Phase B is APPROVED + RELEASED** (2026-06-20). `status:active`, `awaiting_approval:false`, `max_cycles:75`.
+Boot each cycle from `docs/campaign/campaign-state.json` + `docs/roadmap.md` "Up next" (the AUTHORITATIVE queue) —
+NOT from this file's hints. The loop runs M6→M10 unattended, commits every cycle, and pauses only at
+`### Milestone: Phase B — Build-out complete`.
 
-## What shipped in the unattended run (cycles 13-36, this overnight)
-- ✓ **M3** worm arc · ✓ **M4** critters + atmosphere · ✓ **M5** riding & rest feel.
-- ✓ **M5a — Exploration & exposure (C28-31):** ◑ horizon-landmark-silhouettes `[partial]` · ✓ salvaged-spyglass · ✓ vista-crest-reveal · ✓ sun-shade-exposure.
-- ✓ **M5b — Living world & tone (C32-36):** ✓ wordless-prop-scenes · ✓ wind-mood-soundscape · ✓ rare-sky-phenomena (fireball) · ✓ diurnal-cycle · ◑ worm-far-horizon-crossing `[partial]`.
-- Every cycle committed on `campaign/2026-06-18`; verify:all green throughout (placement 0/0 ×5, colliders 0/25); no save-schema bumps.
+## How we got here
+- Phase A (M1–M5b) shipped (cycles 1–36). The user **deferred** the Phase-A walk-test + the 2 `[partial]` looks
+  (C28 horizon-landmarks, C36 distant-worm) + the silent day/night + music beds **to backlog** (chose to push
+  straight to Phase B). Those remain owed for a later focused pass.
+- **D1 "Skyfall"** (a crashing-wreck crash POI = the Phase-B **M7 `crashing-ship-event`**) shipped during the
+  pause via `/loop`, OUTSIDE the cycle count — so `cycles_completed` stays 36 and that M7 unit is marked DONE.
+  Reuse its patterns: `meteorCrash.ts` (the falling-from-sky FX vocabulary — particleTrail/cameraShake/
+  screenFlash/playCrashImpact + the `advanceCrash` headless stepper), the enterable `crash_husk` archetype +
+  the collider-audit gate, the additive save (`crashes[]` v15), and `crashHeatAt` (the heat-hazard pattern).
 
-## ⏵ Human review checklist (do before `/campaign-approve`)
-1. **Walk-test the build** (`npm run dev`) — a large FEEL batch is owed (headless can't judge feel):
-   - C36 worm-far-horizon timing/feel · C34 fireball in-motion · C33 wind levels/character · C31 sun-shade strength (find a wreck's shadow at midday) · C30 vista-reveal (crest a ridge) · C29 spyglass zoom + the missing aim-down pose · C26 sleep-fade · C27 3P torch flicker · C23/C25 speeder handling + foot-lift.
-   - Dev hooks: `__game.triggerFireball()`, `__game.triggerWormCrossing()`, `__game.audioState()`, `__game.sunInfo()`, `__game.setTime(0..1)`. Dev-start inventory has a `spyglass`.
-2. **Art-direct the two `[partial]` looks** (these owe a focused visual pass):
-   - **C28 horizon-landmark-silhouettes** — the fog-resistant nav-silhouette SYSTEM works; the LOOK wants a per-model impostor (RTT the actual wreck outline) + ground-tuck + far-boldness (backlog §A).
-   - **C36 worm-far-horizon-crossing** — the decoupled distant-worm SYSTEM works; the silhouette wants a breach berm (erupt THROUGH the dune) + colossal scale + a multi-S spine + a dust wake (backlog §A). This is the one to art-direct — the colossal-worm awe needs your eye.
-3. **Silent systems** to decide on: the day/night-LIFE beds + MUSIC are still silent (empty CC0 pack; C33 synthesized only the WIND) — synthesize them procedurally, or source samples? (backlog)
-4. **Phase-B (M6-M10) design review** — these were design-gated; make the calls now. See `docs/iteration-plan.md` + the GDD. The no-endgame direction stands (keep open-ended "days survived"; no storm-finale).
+## Phase-B plan + the resolved design calls
+Full proposal: **[docs/campaign/proposal-cycle-37.md](campaign/proposal-cycle-37.md)** (APPROVED). The ordered
+17-unit ladder is folded into `docs/roadmap.md` "Up next" → Phase B. **User decisions baked in:**
+- **M7 INCLUDED** (variety + new POIs + walkable-interiors).
+- **Survival = forgiving Long Dark** — flip `GOD_MODE` off for the real new-game; tune the curve in `tuning.ts`
+  (prepared player → indefinite; unmanaged → ~8–12 in-game min). This is the M6 KEYSTONE + a hard dep for the HUD work.
+- **HUD removal** behind `FEATURES.diegeticSurvival` + a pause-menu opt-in (default-ON; bars stay the floor).
+- **FLIP-AUTHORITY = AUTONOMOUS** — the loop MAY flip `FEATURES.*` / kill-switches ON once the headless +
+  visual/adversarial gates pass (everything stays behind a reversible flag; the user vetoes FEEL at the Phase-B
+  review). **The D81 SAVE-VERSION-BUMP rule still STOPs the loop — never bump autonomously; surface it.**
+- Defaults: cave = ONE + walkable ramp + no-horror; hover-bike = repairable-speeder (one vehicle, two states);
+  `scrap_machete` = a new item id; crafting collision = `fire_kit` vs a new `signal_kit` (both scrap×2+branch×1);
+  drop-pod intro couples to the broken-speeder spawn.
 
-## After `/campaign-approve` → cycle 37 picks up Phase B
-The approve folds the Phase-B plan into the roadmap "Up next" + releases the loop. Likely first: the highest-value M6 unit per the design review. Re-run `/loop /campaign-cycle` to resume the unattended loop once Phase B is approved.
+## ▶ Cycle 37 picks up: **M6 unit ① crafting-chooser-colliding-recipe** (S/low)
+Lead the block with the guaranteed win: the multi-match crafting chooser UI is already built + verified (dormant
+since ACAS B3) — add ONE colliding recipe (`fire_kit` vs a new `signal_kit`, both `scrap×2 + branch×1`) so it
+fires in real play. Then ② survival-rebalance (the keystone), ③ flat-color audit, ④ HUD removal, then M7→M10.
 
-## Full backlog of owed polish/feel: `docs/backlog.md` (§A has the C28-C36 follow-ups). Per-cycle detail: `docs/campaign/campaign-log.md`.
+Verify gate: `npm run verify:all`. Visual/feel units: the adversarial appearance gate + rule-8 iteration.
+Scope-cut order (if the cap tightens) is in the proposal. **Resume the loop with `/loop /campaign-cycle`.**
+
+## Owed (deferred to backlog, for a later focused pass)
+The Phase-A FEEL walk-test (`docs/backlog.md` §A lists the per-cycle items) · art-direct the C28 horizon-landmark
++ C36 distant-worm `[partial]` looks · the silent day/night-life + music audio beds.
