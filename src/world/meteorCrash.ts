@@ -71,6 +71,7 @@ interface CrashRestore { ageS: number; salvageStripped: boolean; salvageRemainin
 export interface SavedCrash { seed: number; role: CrashRole; pos: { x: number; y: number; z: number }; ageS: number; salvageStripped: boolean; salvageRemaining: number; }
 const _sites: CrashSite[] = [];
 let _beacon: ParticleTrail | null = null;     // shared persistent smoke-column beacon (outlives the fires)
+let _embers: ParticleTrail | null = null;     // Tier 4 (E) — warm rising embers off a FRESH burning site (fade with the fires)
 const _scorchMat = new THREE.MeshLambertMaterial({ color: 0x130d09, transparent: true, opacity: 0.85, depthWrite: false });
 const _ejectaMat = new THREE.MeshLambertMaterial({ color: 0x271d14, flatShading: true });
 
@@ -135,6 +136,8 @@ export function initMeteorCrash(scene: THREE.Scene): void {
   _smokeTrail = createParticleTrail(scene, { count: 340, color: 0x35302b, opacity: 0.5, gravity: -0.35, renderOrder: 2 });
   _ejecta = createParticleTrail(scene, { count: 90, color: 0x6a5a46, opacity: 0.7, gravity: 9.0, renderOrder: 2 });
   _beacon = createParticleTrail(scene, { count: 300, color: 0x47423a, opacity: 0.5, gravity: -0.45, renderOrder: 2 });
+  _embers = createParticleTrail(scene, { count: 180, color: 0xff7e2e, opacity: 0.95, gravity: -0.5, renderOrder: 3 });
+  (_embers.points.material as THREE.ShaderMaterial).blending = THREE.AdditiveBlending;
 }
 
 /** Roll an impact point in the band around the player + a high-sky origin behind it. */
@@ -219,14 +222,15 @@ export function resetMeteorCrash(ctx: GameContext): void {
     for (const p of s.cache) splice(ctx.pickups.list, p);
   }
   _sites.length = 0;
-  if (_beacon) {
-    for (let i = 0; i < _beacon.count; i++) {
-      _beacon.particles[i].active = false;
-      _beacon.positions[i * 3 + 1] = -10000;
-      _beacon.alphas[i] = 0;
+  for (const trail of [_beacon, _embers]) {
+    if (!trail) continue;
+    for (let i = 0; i < trail.count; i++) {
+      trail.particles[i].active = false;
+      trail.positions[i * 3 + 1] = -10000;
+      trail.alphas[i] = 0;
     }
-    _beacon.geo.attributes.position.needsUpdate = true;
-    _beacon.geo.attributes.alpha.needsUpdate = true;
+    trail.geo.attributes.position.needsUpdate = true;
+    trail.geo.attributes.alpha.needsUpdate = true;
   }
 }
 
@@ -390,8 +394,25 @@ function updateBeacons(_ctx: GameContext, dt: number): void {
         life: 6.5 * (0.7 + Math.random() * 0.6), size: (5 + Math.random() * 5) * (0.5 + fade * 0.5),
       });
     }
+    // Tier 4 (E) — warm rising EMBERS while the wreck still burns (fade out with the fires over
+    // CRASH_FIRE_FUEL_S) — sells a FRESH, still-hot crash + telegraphs the interior heat hazard.
+    const burn = 1 - s.age / Tuning.CRASH_FIRE_FUEL_S;
+    if (_embers && burn > 0) {
+      const want = Tuning.CRASH_EMBER_RATE * dt * burn;
+      let en = Math.floor(want);
+      if (Math.random() < want - en) en++;
+      for (let i = 0; i < en; i++) {
+        const a = Math.random() * Math.PI * 2, r = Math.random() * 2.2;
+        emitParticle(_embers, {
+          x: s.pos.x + Math.cos(a) * r, y: s.pos.y + 0.4 + Math.random() * 1.4, z: s.pos.z + Math.sin(a) * r,
+          vx: (Math.random() - 0.5) * 0.9, vy: 1.6 + Math.random() * 2.8, vz: (Math.random() - 0.5) * 0.9,
+          life: 1.0 + Math.random() * 1.3, size: (0.3 + Math.random() * 0.45) * (0.6 + burn * 0.6),
+        });
+      }
+    }
   }
   updateParticleTrail(_beacon, dt);
+  if (_embers) updateParticleTrail(_embers, dt);
 }
 
 /** Landed crash sites (for the dev panel + Tier-4 save). */
@@ -413,9 +434,9 @@ function onImpact(ctx: GameContext, c: ActiveCrash): void {
 
   // Dust mushroom plume (slow, rises) + debris ejecta (fast, radial, falls).
   if (_smokeTrail) emitBurst(_smokeTrail, c.impact.x, c.impact.y + 1, c.impact.z, Tuning.CRASH_PLUME_COUNT,
-    { speed: 4, up: 6, life: 3.0, size: 6, posJitter: 3 });
+    { speed: 5, up: 8.5, life: 3.6, size: 7, posJitter: 3.2 });   // Tier 4 E — taller, fuller mushroom
   if (_ejecta) emitBurst(_ejecta, c.impact.x, c.impact.y + 0.5, c.impact.z, Tuning.CRASH_EJECTA_COUNT,
-    { speed: 16, up: 9, life: 1.6, size: 1.2, posJitter: 1.5 });
+    { speed: 18, up: 11, life: 1.7, size: 1.3, posJitter: 1.5 });   // Tier 4 E — more violent fan
 
   // Build the full crash SITE (wreck + scorch + ejecta + fires + a persistent beacon).
   landCrashAt(ctx, c);

@@ -590,8 +590,8 @@ export const Tuning = {
   CRASH_TRAIL_EMIT_HZ: 60,           // particles/sec emitted at the head along the arc
   CRASH_SHOCKWAVE_S: 1.4,            // s — impact shockwave ring expand + fade
   CRASH_SHOCKWAVE_R: 28,             // m — shockwave ring final radius
-  CRASH_EJECTA_COUNT: 44,            // debris/dust ejecta particles at impact
-  CRASH_PLUME_COUNT: 34,             // dust mushroom-plume particles at impact
+  CRASH_EJECTA_COUNT: 54,            // debris/dust ejecta particles at impact (Tier 4 E — denser fan)
+  CRASH_PLUME_COUNT: 50,             // dust mushroom-plume particles at impact (Tier 4 E — fuller column)
   CRASH_FIRE_FUEL_S: 240,            // s — crash fire burn time before it smolders out
   CRASH_SOUND_SPEED: 343,            // m/s — for the flash-then-boom delay (dist / this)
   CRASH_FLASH_STRENGTH: 0.55,        // peak screen-flash opacity at impact (proximity-scaled)
@@ -610,6 +610,7 @@ export const Tuning = {
   CRASH_BEACON_LIFE_S: 600,          // s — the smoke-column beacon smolders this long (outlives the ~240s fire)
   CRASH_BEACON_RATE: 16,             // beacon smoke particles/sec per active site
   CRASH_BEACON_RISE: 4.5,            // m/s — beacon smoke rise speed (a tall findable column)
+  CRASH_EMBER_RATE: 42,              // Tier 4 (E) — warm embers/sec off a FRESH site (scaled by burn, fades over CRASH_FIRE_FUEL_S)
   CRASH_FIRES: 3,                    // number of fires lit across the fresh wreck
   // Tier 4 (C) — INTERIOR HEAT HAZARD: lingering in/near a still-burning crash bakes you (pushes
   // temperature toward heatstroke) — the risk that gates the rich interior loot. Falls off with
