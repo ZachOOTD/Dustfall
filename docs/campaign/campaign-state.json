@@ -629,7 +629,7 @@
       "decisions": ["D251 — a DIRECTIONAL procgen feature needs a strict monotonic gradient on a tight axis + visible 3D mass, NOT a flat ground decal; + the reusable debrisPiece `scale` param + the well's recessed-shaft/thick-drum/mass reads (friction 1)"],
       "housekeeping": "decisions.md archival D189-D206 -> decisions-archive.md (active D207-D251 ~45 entries; count-conserved, both headers + pointer updated) — the C40-overdue debt cleared",
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "345994e",
       "spend_approx_tokens": 400000
     }
   ]
