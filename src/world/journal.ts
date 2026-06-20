@@ -12,6 +12,8 @@
 // lookup, matching the salvage-panel sub-kind pattern).
 
 import * as THREE from 'three';
+import { createFabricMaterial } from './fabricMaterial.ts';   // M6 ③ (C39) — leather-grain cover/spine (was flat Lambert)
+import { createMetalMaterial } from './metalMaterial.ts';     // M6 ③ (C39) — salvaged-metal black-box body
 
 /** Session ABF — discriminator for which journal entries to render in
  *  the modal panel. `'opening'` is the legacy W-era survivor journal
@@ -58,14 +60,10 @@ function tag(root: THREE.Object3D, id: number, kind: JournalKind): void {
 
 function makeJournal(): THREE.Group {
   const g = new THREE.Group();
-  const coverMat = new THREE.MeshLambertMaterial({
-    color: 0x3a2818,
-    flatShading: true,
-  });
-  const spineMat = new THREE.MeshLambertMaterial({
-    color: 0x1f140a,
-    flatShading: true,
-  });
+  // M6 ③ (C39) — leather grain on the cover + spine (read at reading distance);
+  // the fabric factory's wear/weave reads as aged bound leather. Pages stay flat (printed-page intent).
+  const coverMat = createFabricMaterial(0x3a2818);
+  const spineMat = createFabricMaterial(0x1f140a);
   const pageMat = new THREE.MeshLambertMaterial({
     color: 0xc8b896,
     flatShading: true,
@@ -103,7 +101,7 @@ function makeJournal(): THREE.Group {
 // leather diary — the right object to carry a crashed ship's final log.
 function makeBlackBox(): THREE.Group {
   const g = new THREE.Group();
-  const bodyMat = new THREE.MeshLambertMaterial({ color: 0x1a1410, flatShading: true });
+  const bodyMat = createMetalMaterial(0x1a1410, { wornScale: 6.0, rustLevel: 0.15, scratchStrength: 0.05 });   // M6 ③ (C39) — salvaged ship tech reads as scratched dark metal
   const stripeMat = new THREE.MeshLambertMaterial({ color: 0xc2521a, flatShading: true });   // hazard orange
   const screenMat = new THREE.MeshLambertMaterial({ color: 0x0a1014, emissive: 0x163e48, emissiveIntensity: 0.6, flatShading: true });
   const body = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.11, 0.14), bodyMat);

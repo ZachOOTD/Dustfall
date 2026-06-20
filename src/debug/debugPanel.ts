@@ -5,6 +5,9 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import type { GameContext } from '../GameContext.ts';
 import { spawnRaider as spawnRaiderEntity, damageRaider } from '../enemies/raider.ts';
 import { spawnFireAt, warmFireSmoke } from '../world/fire.ts';   // M4 (C21) — __game.spawnFire / warmSmoke test hooks
+import { spawnBedrollAt } from '../world/bedroll.ts';   // M6 ③ (C39) — camp-studio render
+import { spawnTentAt } from '../world/tent.ts';
+import { spawnLanternAt } from '../world/lantern.ts';
 import { getSunOccluders } from '../world/horizonSilhouettes.ts';   // M5a (C31) — __game.sunInfo
 import { triggerCrash, crashState, advanceCrash, crashSites, crashHeatAt, resetMeteorCrash, applyPendingCrashRestore, type CrashRole } from '../world/meteorCrash.ts';   // ACBE (D1) — __game.triggerCrash
 import { saveGameState, loadGameState } from '../persistence/save.ts';   // ACBE (D1) — crash save round-trip test hook
@@ -119,6 +122,11 @@ interface DebugApi {
    *  and report whether it fired + the death overlay un-hid. Verifies the death→Continue UI
    *  still works now that GOD_MODE is off. Leaves the game in the death state (call last). */
   triggerDeath: (cause?: string) => { dead: boolean; overlayShown: boolean };
+  /** M6 ③ (C39) — DEV-only: deploy the camp objects (fire / bedroll / tent / lantern) in a
+   *  row ahead of the player so the flat-color-texture-audit material swaps are renderable,
+   *  and report the scene shader-program count (must NOT rise — the audit reuses existing
+   *  factories). Returns the cluster centre + per-object positions for framing. */
+  campStudio: () => { center: [number, number, number]; programs: number };
   /** ACG (Cycle 1) — DEV-only: kill a raider by id (drives the real death
    *  path → dead pose + corpse interaction tag), so the corpse-drag flow is
    *  testable without melee aiming. Returns true if a live raider matched. */
@@ -322,6 +330,35 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
       die(ctx, cause);
       const overlay = document.getElementById('death-screen');
       return { dead: ctx.stats.dead, overlayShown: !!overlay && !overlay.classList.contains('hidden') };
+    },
+    campStudio: () => {
+      // Lay the camp objects in a row across the player's forward view so the C39
+      // material swaps render. Spread perpendicular to the view direction.
+      const cam = ctx.three.camera;
+      const fwd = new THREE.Vector3(); cam.getWorldDirection(fwd); fwd.y = 0;
+      if (fwd.lengthSq() < 1e-4) fwd.set(0, 0, -1);
+      fwd.normalize();
+      const right = new THREE.Vector3(fwd.z, 0, -fwd.x);   // horizontal right
+      const base = new THREE.Vector3(cam.position.x, 0, cam.position.z).addScaledVector(fwd, 3.0);
+      const yaw = Math.atan2(fwd.x, fwd.z);
+      const at = (off: number) => {
+        const p = base.clone().addScaledVector(right, off);
+        p.y = ctx.terrain.heightAt(p.x, p.z);
+        return p;
+      };
+      // The tent is intentionally OMITTED from the studio: its big fabric walls occlude the
+      // smaller objects, and its wood poles share the same factory as the (visible) fire logs.
+      const firePos = at(-1.1), bedPos = at(0.8), lanternPos = at(2.5);
+      spawnFireAt(ctx, firePos, Tuning.FIRE_INITIAL_FUEL_S, true);
+      spawnBedrollAt(ctx, bedPos, yaw);
+      spawnLanternAt(ctx, lanternPos, yaw);
+      void spawnTentAt;   // kept imported for parity; tent omitted from the studio framing
+      const ren = ctx.three.renderer;
+      ren.render(ctx.three.scene, cam);   // compile + populate program list for these materials
+      return {
+        center: [base.x, ctx.terrain.heightAt(base.x, base.z), base.z],
+        programs: ren.info.programs ? ren.info.programs.length : -1,
+      };
     },
     setStats: (s) => {
       if (s.thirst !== undefined) ctx.stats.thirst = s.thirst;

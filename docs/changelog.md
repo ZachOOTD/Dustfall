@@ -3,6 +3,20 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign C39 — 2026-06-20 — M6: **flat-color-texture-audit** — 8 flat surfaces upgraded to the existing procedural shaders, ZERO new programs ✓ verify pass (ultracode)
+
+`verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/25 — material swaps only, geometry unchanged). **Objective constraint met DEFINITIVELY:** a NEW `camp-studio` render + a git-stash before/after showed **programs 82 = 82** (flat vs factory) → **zero new shader programs** (the audit's hard requirement). **Visual gate PASS** (adversarial critic on the camp render — surfaces read as aged wood / woven canvas / weathered metal, colors preserved, no broken rendering, no sev≤2). **No save bump.** Cycle 39/75. **M6 unit 3/4.**
+
+**flat-color-texture-audit (scope-first).** An Explore-agent scan ranked the weakest flat `MeshLambertMaterial` surfaces the player sees up close; upgraded **8 surface-groups** to the project's EXISTING 9 procedural shader factories (zero new programs, zero asset bytes — NOT the D107 PBR fork):
+- **fire logs** (`fire.ts`) → `createWoodGrainMaterial` (weathered deadwood + bark striations) — the #1 surface (player at fires constantly).
+- **bedroll pad + pillow + blanket** (`bedroll.ts`) → `createFabricMaterial` (woven canvas, read while sleeping).
+- **journal cover + spine** (`journal.ts`) → `createFabricMaterial` (aged leather grain); **black-box body** → `createMetalMaterial` (scratched salvaged ship tech).
+- **tent poles** (`tent.ts`) + **largeTent poles + interior rug** (`largeTent.ts`) → wood-grain poles + a woven rug (was flat red ochre).
+- **lantern power-lead wires** (`lantern.ts`) → `createMetalMaterial` (low rust so the cable colour still reads).
+- **Why no program creep:** all three factories already exist in-scene — world-space `createWoodGrainMaterial` (the locker/posts), `createFabricMaterial` (the tents), `createMetalMaterial` (the wrecks). The `bark` option is a runtime UNIFORM (not a shader fork, per woodGrainMaterial's own note), and the swaps use the world-space variants matching existing users → the program SET is unchanged. The git-stash A/B proved it (82=82).
+- **NEW verification harness:** `__game.campStudio()` (deploys fire/bedroll/lantern in a row ahead of the player + reports the program count) + a `camp-studio` rig scenario (frames the row in front light, screenshots, reports `programs`) — reusable for future material/deploy work.
+- **Owed/backlog:** sev-3 cosmetic nits (lantern post is thin — pre-existing; bedroll pillow/blanket value separation). The journal/tent-pole close-up reads weren't rendered (covered by factory transitivity + the 0-program gate) → spot-check at the walk-test.
+
 ## Campaign C38 — 2026-06-20 — M6: **survival-rebalance-newgame** (the KEYSTONE) — `GOD_MODE` off + a forgiving Long-Dark curve + health regen ✓ verify pass (ultracode)
 
 `verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/25 — pure logic/balance + debug hooks; no scatter-rand/geometry/collider). **survival-probe gate PASS** (NEW deterministic headless probe driving the real `updateStats`): heat **7.54 min** · cold **8.67 min** · thirst **10 min** · hunger **15 min** · prepared **never dies + heals 0.3→1.0** · death-overlay un-hides. **Code-auditor adversarial review PASS** (no sev≤2 — regen/damage can't overlap; the godmode gate is correct; the probe restores all state). **No save bump.** Cycle 38/75. **M6 unit 2/4 (the KEYSTONE).**

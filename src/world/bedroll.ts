@@ -21,6 +21,7 @@ import {
   type ShelterZone,
 } from '../shelter/shelterZones.ts';
 import { addItem } from '../inventory/inventory.ts';
+import { createFabricMaterial } from './fabricMaterial.ts';   // M6 ③ (C39) — woven cloth detail on the sleep pad (was flat Lambert)
 
 export interface Bedroll {
   id: number;
@@ -49,7 +50,8 @@ function makeBedrollVisual(): THREE.Group {
   // AAD polish — darker dusty-canvas brown (was 0x9a7b5a). The lighter
   // tone disappeared into the sand terrain from above. Darker reads
   // against both salt-flat (light) and dune (medium) ground.
-  const padMat = new THREE.MeshLambertMaterial({ color: 0x4a3a26 });
+  // M6 ③ (C39) — woven canvas detail (same fabric factory as the tents), world-space static.
+  const padMat = createFabricMaterial(0x4a3a26);
   // Pad thickness bumped from 0.06 → 0.12 so the silhouette reads from
   // oblique angles (previously was paper-thin and invisible head-on).
   const pad = new THREE.Mesh(
@@ -61,7 +63,7 @@ function makeBedrollVisual(): THREE.Group {
 
   // Pillow — bigger + taller so it visibly rises above the pad as a
   // distinct head-end marker.
-  const pillowMat = new THREE.MeshLambertMaterial({ color: 0x7a5a3a });
+  const pillowMat = createFabricMaterial(0x7a5a3a);
   const pillow = new THREE.Mesh(
     new THREE.BoxGeometry(W * 0.30, 0.16, D * 0.85),
     pillowMat,
@@ -71,7 +73,7 @@ function makeBedrollVisual(): THREE.Group {
 
   // Folded blanket at the foot end — gives the bedroll a clear
   // "head + body + foot" silhouette so it reads as a sleeping spot.
-  const blanketMat = new THREE.MeshLambertMaterial({ color: 0x5e4830 });
+  const blanketMat = createFabricMaterial(0x5e4830);
   const blanket = new THREE.Mesh(
     new THREE.BoxGeometry(W * 0.32, 0.10, D * 0.92),
     blanketMat,

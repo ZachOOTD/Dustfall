@@ -39,6 +39,7 @@ import {
 import { addItem } from '../inventory/inventory.ts';
 import { playBandageUse } from '../audio/audio.ts';
 import { createFabricMaterial } from './fabricMaterial.ts';
+import { createWoodGrainMaterial } from './woodGrainMaterial.ts';   // M6 ③ (C39) — wood-grain tent poles (was flat Lambert)
 import { alignToTerrain } from '../util/terrainAlign.ts';
 
 export interface LargeTent {
@@ -198,8 +199,8 @@ function makeLargeTentVisual(idForSeed: number): {
   // board even with the sag geometry.
   const fabricMat = createFabricMaterial(0xd4c5a8, THREE.DoubleSide);
   const patchMat = createFabricMaterial(0xa48f6e, THREE.DoubleSide);
-  const rugMat = new THREE.MeshLambertMaterial({ color: 0x8a3a26 });   // muted red ochre
-  const poleMat = new THREE.MeshLambertMaterial({ color: 0x4a3320 });
+  const rugMat = createFabricMaterial(0x8a3a26);   // M6 ③ (C39) — woven rug (was flat red ochre)
+  const poleMat = createWoodGrainMaterial(0x4a3320, { weatherLevel: 0.4, ringDensity: 6.0, bark: 0.22 });   // M6 ③ (C39) — seasoned branch poles
   const ropeMat = new THREE.MeshLambertMaterial({ color: 0x4a3a26 });
   const stakeMat = new THREE.MeshLambertMaterial({ color: 0x3a2818 });
 

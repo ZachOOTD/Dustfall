@@ -77,11 +77,12 @@ function makeLanternVisual(): {
   // brighter rivet color for accents, salvage cable colors carried
   // over from the AAR fuse-box wires for material consistency.
   // ABH — iron + rivet get the weathered-metal procedural shader for
-  // scratches + worn highlights + grain. Wires stay flat colored.
+  // scratches + worn highlights + grain.
   const ironMat = createMetalMaterial(0x4a4238, { wornScale: 5.0, rustLevel: 0.42 });          // ACAD — corroded lantern body
   const rivetMat = createMetalMaterial(0x726658, { wornScale: 5.0, scratchStrength: 0.03, rustLevel: 0.3 });
-  const wireRedMat = new THREE.MeshLambertMaterial({ color: 0x8a3a26 });
-  const wireYellowMat = new THREE.MeshLambertMaterial({ color: 0xb89028 });
+  // M6 ③ (C39) — worn-insulation detail on the salvaged power leads (was flat red/yellow); low rust so the cable colour still reads.
+  const wireRedMat = createMetalMaterial(0x8a3a26, { wornScale: 8.0, rustLevel: 0.18, scratchStrength: 0.04 });
+  const wireYellowMat = createMetalMaterial(0xb89028, { wornScale: 8.0, rustLevel: 0.12, scratchStrength: 0.04 });
   const glowColor = Tuning.LANTERN_LIGHT_COLOR_HEX;
   const globeMat = new THREE.MeshBasicMaterial({
     color: glowColor,

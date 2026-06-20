@@ -14,6 +14,7 @@ import {
 import { playFireIgnite, playFireCrackle } from '../audio/audio.ts';
 import { claimLight, releaseLight } from '../core/lightPool.ts';
 import { createMetalMaterial } from './metalMaterial.ts';
+import { createWoodGrainMaterial } from './woodGrainMaterial.ts';   // M6 ③ (C39) — logs read as real aged wood, not flat brown
 
 /** M4 (C21) — one billowing puff in a fire's rising signal plume (pooled). */
 interface SmokePuff {
@@ -114,9 +115,11 @@ function tag(root: THREE.Object3D, id: number, type: 'cook' | 'relight'): void {
 export function makeFireVisual(): { group: THREE.Group; flameGroup: THREE.Group; ember: THREE.Mesh } {
   const g = new THREE.Group();
 
-  // 3-4 short logs arranged in a tee-pee
-  const logMat = new THREE.MeshLambertMaterial({ color: 0x4a2e1a });
-  const charMat = new THREE.MeshLambertMaterial({ color: 0x1a0e08 });
+  // 3-4 short logs arranged in a tee-pee. M6 ③ (C39) — wood-grain + bark
+  // striations on the aged deadwood (world-space, static) instead of flat brown;
+  // reuses the same factory as world branches/posts so no new shader program.
+  const logMat = createWoodGrainMaterial(0x4a2e1a, { weatherLevel: 0.6, ringDensity: 7.0, bark: 0.2 });
+  const charMat = createWoodGrainMaterial(0x1a0e08, { weatherLevel: 0.85, ringDensity: 7.0, bark: 0.22 });
   const logCount = 4;
   for (let i = 0; i < logCount; i++) {
     const ang = (i / logCount) * Math.PI * 2;

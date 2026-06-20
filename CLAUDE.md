@@ -69,19 +69,18 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 "Last shipped" note. Current target: **Phase B (M6→M10) — APPROVED + RELEASED**. The loop runs M6→M10 unattended,
 commits every cycle, and pauses only at "Phase B — Build-out complete" (after M10). Charter: `docs/campaign/campaign.md`.
 
-**Last shipped**: Campaign **C38** (2026-06-20, cycle 38/75) — **M6 ② survival-rebalance-newgame (the KEYSTONE)**
-(`verify:all` PASS — tsc + placement 0/0 ×5 + colliders 0/25; **survival-probe gate PASS**; **code-auditor PASS**; **no save bump**).
-Survival was never real (`GOD_MODE: true` → never died). Flipped `GOD_MODE` + `DEBUG_UNLIMITED_STAMINA` OFF and tuned a **forgiving
-Long-Dark** curve: a PREPARED player (drinks/eats/shelters) survives indefinitely + slowly HEALS (new health-regen-when-provisioned);
-a NEGLECTED player dies in ~8–10 min on the urgent paths (heat/cold/thirst), ~15 min on hunger. Damage rates softened so a depleted
-stat is a recoverable spiral, not a cliff. The godmode floor is now gated on `GOD_MODE || ctx.flags.devMode` (D246) so dev-mode boots
-stay safe for rig-shots while real new-games are lethal. NEW `__game.survivalProbe`/`triggerDeath` hooks + a `survival-probe` rig
-scenario assert the time-to-death bands + prepared-indefinite + the death→overlay wiring (heat 7.5 / cold 8.7 / thirst 10 / hunger 15 min).
-**FELT pacing + the re-enabled stamina cadence → Phase-B walk-test.**
+**Last shipped**: Campaign **C39** (2026-06-20, cycle 39/75) — **M6 ③ flat-color-texture-audit**
+(`verify:all` PASS — tsc + placement 0/0 ×5 + colliders 0/25; **visual gate PASS**; **0 new shader programs** [git-stash A/B: 82=82]; **no save bump**).
+Scope-first: an Explore-agent scan ranked the weakest flat `MeshLambertMaterial` surfaces the player sees up close; upgraded **8 surface-groups**
+to the project's EXISTING procedural shader factories (zero new programs/assets — NOT the D107 PBR fork): fire logs + tent poles → wood-grain;
+bedroll pad/pillow/blanket + journal cover/spine + largeTent rug → woven fabric; journal black-box body + lantern wires → weathered metal. No
+program creep because all three factories already exist in-scene (locker/posts wood, tents fabric, wrecks metal) and `bark` is a runtime uniform,
+not a shader fork. NEW `__game.campStudio()` + a `camp-studio` rig scenario (deploy the camp objects + report the program count) verify it.
 
-**Next session** = cycle 39 = **M6 ③ flat-color-texture-audit** (L, scope-first): identify the ~6–8 weakest flat-shaded surfaces and
-upgrade them via the EXISTING 9 procedural shader factories (metal/hull/wood/stone/…) — **zero new shader programs, zero asset bytes**
-(NOT the D107 PBR fork). Then ④ remove-hud-stat-bars (dep ②). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
+**Next session** = cycle 40 = **M6 ④ remove-hud-stat-bars** (L, dep on C38's survival): behind `FEATURES.diegeticSurvival` (default OFF) + a
+pause-menu opt-in (default-ON; bars stay the floor). Replace the always-on HUD stat bars with diegetic tells — screen vignette / procedural
+audio / viewmodel cues. The loop MAY flip the FEATURES flag ON once the gates pass (reversible; user vetoes FEEL). This COMPLETES M6.
+See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 

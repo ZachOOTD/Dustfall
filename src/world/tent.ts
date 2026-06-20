@@ -29,6 +29,7 @@ import {
 } from '../shelter/shelterZones.ts';
 import { addItem } from '../inventory/inventory.ts';
 import { createFabricMaterial } from './fabricMaterial.ts';
+import { createWoodGrainMaterial } from './woodGrainMaterial.ts';   // M6 ③ (C39) — wood-grain tent poles (was flat Lambert)
 import { alignToTerrain } from '../util/terrainAlign.ts';
 
 export interface Tent {
@@ -116,7 +117,7 @@ function makeTentVisual(): THREE.Group {
   // Materials — same off-white canvas + fabric shader as the large
   // shelter tent so they read as the same material family.
   const fabricMat = createFabricMaterial(0xd4c5a8, THREE.DoubleSide);
-  const poleMat = new THREE.MeshLambertMaterial({ color: 0x4a3320 });
+  const poleMat = createWoodGrainMaterial(0x4a3320, { weatherLevel: 0.4, ringDensity: 6.0, bark: 0.22 });   // M6 ③ (C39) — seasoned branch poles
   const ropeMat = new THREE.MeshLambertMaterial({ color: 0x4a3a26 });
   const stakeMat = new THREE.MeshLambertMaterial({ color: 0x3a2818 });
 

@@ -1408,6 +1408,45 @@ const SCENARIOS = {
     console.log(`[survival-probe] ${pass ? 'PASS' : 'FAIL'} (urgent=${urgent} hunger=${hungerOk} prepared=${preparedOk} deathUi=${deathOk}) ${JSON.stringify({ ...r, deathUi })}`);
   },
 
+  // M6 ③ (C39) — flat-color-texture-audit render: deploy the camp objects (fire/bedroll/tent/
+  // lantern) in a row so the procedural-material swaps are visible, frame them in good front
+  // light, and report the shader-PROGRAM count (must stay at baseline — the audit reuses the
+  // existing factories, adds zero new programs). The screenshot drives the appearance gate.
+  'camp-studio': async (page) => {
+    const r = await page.evaluate(() => {
+      const g = window.__game; g.enterGame(true);
+      const ctx = g.ctx;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      g.setTime(0.40);                       // morning — sun high + angled, not backlighting the row
+      ctx.weather.cloudiness = 0.1; ctx.weather.intensity = 0;
+      ctx.three.renderer.setSize(1000, 600, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1000 / 600; cam.updateProjectionMatrix(); }
+      const out = g.campStudio();            // spawns the row ahead of the player + returns center + programs
+      return out;
+    });
+    await page.waitForTimeout(400);
+    await page.evaluate((center) => {
+      const ctx = window.__game.ctx;
+      ctx.flags.paused = true;
+      const cam = ctx.three.camera;
+      // Stand ~2.2m in FRONT of the row centre (forward = camera→centre) at near eye-level so the
+      // fire logs + bedroll fabric read close, in 3/4 profile (not foreshortened top-down).
+      const cx = center[0] - cam.position.x, cz = center[2] - cam.position.z;
+      const d = Math.hypot(cx, cz) || 1;
+      const fx = cx / d, fz = cz / d;
+      cam.position.set(center[0] - fx * 2.2, center[1] + 1.3, center[2] - fz * 2.2);
+      cam.lookAt(center[0], center[1] + 0.4, center[2]);
+      cam.updateMatrixWorld(true);
+      ctx.three.renderer.render(ctx.three.scene, cam);
+    }, r.center);
+    await page.waitForTimeout(150);
+    await page.screenshot({ path: join(OUT, 'scen-camp-studio.png'), fullPage: false });
+    console.log(`[camp-studio] programs=${r.programs} ${JSON.stringify(r)}`);
+  },
+
   // ACAQ — Sarlacc-pit behavior smoke test. Teleport the player onto the maw, let
   // the live game tick, confirm the maw OPENS + BITES (health drops). The pull
   // FEEL can't be judged headless (attended walk-test); this gates the wiring.
