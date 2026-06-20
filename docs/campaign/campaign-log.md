@@ -568,5 +568,5 @@ first stop will be `max-cycles` ~mid-Phase-A; resume via `/campaign-start --resu
 - **Visual iteration:** N/A — a design-spike cycle (no visible prototype shipped; the deliverable is the doc + the D-entry).
 - **Decisions:** **D254** — cave = Sarlacc funnel + a box/cylinder room-kit interior (not a trimesh carve); ambient-darken dark-nav; additive `companionEggTaken?` save field, no bump. friction 2 (low-risk topology reusing 3 proven subsystems, but ⑨ is the campaign's biggest single net-new BUILD + its dark-nav FEEL is prototype/walk-test-only).
 - **Spend:** ~250K (1 recon Explore agent + the topology analysis + `feature-deep-cave.md` + D254 + the doc suite); campaign total ~12.56M; cycle **46/75**.
-- **Commit:** `PENDING` (patched in the follow-up ledger commit).
+- **Commit:** `995f5a2`.
 - **Next (cycle 47):** **M8 ⑨ deep-cave-build** (XL — the seeded `caveAnchor` + the funnel carve + the room-kit interior + dark-nav, per `feature-deep-cave.md`). **Verdict: CONTINUE** — not terminal (roadmap non-empty, cycle 46/75); NOT a milestone pause (⑧ is a unit within M8; the Phase-B pause is after M10). `consecutive_no_progress` stays 0 (SHIPPED).

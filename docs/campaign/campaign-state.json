@@ -678,7 +678,7 @@
       "save": "no bump — ⑧ is a design doc; ⑨/⑩ will persist only an additive companionEggTaken? flag (D81-compliant). If ⑨ finds it needs more, it STOPs + surfaces.",
       "decisions": ["D254 — cave = a Sarlacc terrain funnel + a box/cylinder room-kit interior (not a trimesh carve); ambient-darken dark-nav; additive companionEggTaken? save field, no bump (friction 2 — low-risk topology reusing 3 proven subsystems, but ⑨ is the biggest single net-new build + its dark-nav feel is prototype-only)"],
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "995f5a2",
       "spend_approx_tokens": 250000
     }
   ]
