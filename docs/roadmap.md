@@ -155,7 +155,7 @@ run as one unattended block too.*
 ### Phase B — Design-gated (M6→M10; design calls made at the Phase A review, then runs → ONE review) · [DESIGN-GATE]
 Each item needs a design decision BEFORE it builds — resolved at the Phase A review (batch them there):
 - **M6 — Survival & UX direction:** survival-rebalance-newgame · crafting-chooser-colliding-recipe · remove-hud-stat-bars (dep survival) · flat-color-texture-audit (scope-first).
-- **M7 — Wreck depth & new POIs:** procedural-wreck-overhaul (net-new variety; §F deltas moved to M2) · more-wreck-types-new-pois · walkable-wreck-interiors (XL, spike→build) · crashing-ship-event.
+- **M7 — Wreck depth & new POIs:** procedural-wreck-overhaul (net-new variety; §F deltas moved to M2) · more-wreck-types-new-pois · walkable-wreck-interiors (XL, spike→build) · ~~crashing-ship-event~~ **✓ DONE — D1 "Skyfall" (built ahead, during the Phase-A pause, 2026-06-20): a persistent enterable lore-bearing crash POI w/ a heat hazard; save v15. Walk-test owed.**
 - **M8 — Deep cave & companion:** deep-cave-design-spike → deep-cave-build (XL) → companion-egg-cherry-pick (hard-gated on the cave existing).
 - **M9 — Architectural-risk physics:** rideable-sled-spike (A/B worktree spike; no KCC-retries per D125) · real-rope-physics (dep feature-flags-infra) · real-cloth-physics (dep real-rope).
 - **M10 — Big features & tools:** scrap-machete-pry-tool · craftable-hover-bike (+ repairable speeder) · drop-pod-intro-cutscene · pickup-instancedmesh (human-attended).

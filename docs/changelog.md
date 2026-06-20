@@ -3,6 +3,14 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Post-Phase-A interjection — 2026-06-20 — **Phase-A fix batch + D1 "Skyfall" crash POI** (user-directed `/loop`, during the milestone pause) ✓ verify pass
+
+`verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/25) ×2; a headless **save round-trip** + **heat-falloff/bake** probe; a **21-agent adversarial review** that caught + fixed 3 sev-2 bugs. **Save v14→v15** (additive `crashes[]`). Done OUTSIDE the campaign cycles — the campaign stays PAUSED at the Phase-A milestone. Commits `8d768de` (fix batch) + `9729ace`/`61ce988`/`d7c79fc`/`2cb84f4`/`8d160c2` (D1 Tier 4) + the earlier D1 Tier 1-3.
+
+**Phase-A fix batch (`8d768de`):** 10 review fixes — removed the distant mega-wreck silhouette billboards; double-sided wreck materials + ≥thin-model depth; removed the legacy `escape_pod` drop-pod wreck; longer/rustier scrap pickup (no floating bolts); rusty spyglass + 2× more zoom (`SPYGLASS_FOV` 24→12); F8 dev-panel frees/re-locks the cursor; fixed the bike↔weather wind desync; the sarlacc teeth/tentacles now rise from under the sand only when you enter the pit.
+
+**D1 "Skyfall" — the crashing-wreck crash POI (= the Phase-B M7 `crashing-ship-event`, built ahead).** Replaces the C34 sky-only fireball (now REMOVED) with a hero event: a burning wreck streaks across the sky, crashes into the desert, and leaves a **persistent, enterable, lootable, lore-bearing** wreck. (1) spectacle — streak + flash/shake/shockwave/plume/ejecta + a flash-then-delayed boom; (2) site — scorch + ejecta + fires + a smoke-column beacon; (3) the role-dressed enterable `crash_husk` (5 ship roles → silhouette/cargo/loot/lore) + a procedural black-box log + spilled loot; (4) **persistence** (save v15, deterministic re-spawn, body/registry cleanup), an **interior heat hazard** (a fresh blaze bakes you toward heatstroke, gating the rich loot), the fireball **removal**, **embers** + a punchier impact, and the review fixes (death-continue crash restore; the crash-fire shelter zone that was canceling the hazard; salvage `extractedIndices`). Attended **walk-test owed** (feel/eyes-only — checklist in the archived plan).
+
 ## Campaign C36 — 2026-06-19 — M5b: **worm-far-horizon-crossing** `[partial]` — a distant worm sweeps the dunes → **M5b + PHASE A COMPLETE** (milestone pause) ✓ verify pass (ultracode)
 
 `verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/25 — a decoupled spectacle: no collider, `Math.random` runtime-visual like the sky shooters/fireball, not the seeded scatter stream). Visual: adversarial gate — **FAIL after 4 build / 2 gate rounds**, shipping `[partial]`. **No save bump.** Cycle 36/50. **M5b unit 5/5 → M5b COMPLETE → PHASE A milestone PAUSE.**
