@@ -1,81 +1,72 @@
-# ▶ CAMPAIGN cycle 45 — Kickoff Brief — `campaign/2026-06-18`
+# ▶ CAMPAIGN cycle 46 — Kickoff Brief — `campaign/2026-06-18`
 
-**Phase B is building unattended (M6→M10). M6 COMPLETE; M7 underway (⑤ done; ⑥ done; C44 was a steering-driven SOLITUDE PASS).**
+**Phase B is building unattended (M6→M10). M6 ✓ · M7 ✓ COMPLETE (C45). Now starting M8 (deep cave & companion).**
 Boot from `docs/campaign/campaign-state.json` + `docs/roadmap.md` "Up next" (the AUTHORITATIVE queue) — NOT this file's hints. The loop
 commits every cycle and pauses only at `### Milestone: Phase B — Build-out complete` (after M10). Charter: `docs/campaign/campaign.md`.
 
 ## Read these now (in order)
 1. `CLAUDE.md` (auto-loaded) — esp. "Where we are now".
 2. `docs/campaign/campaign-state.json` + `docs/campaign/steering.md` (your inbox) + `docs/campaign/campaign-log.md` (recent cycles).
-3. `docs/roadmap.md` "Up next" → Phase B → **M7 ⑦** (the LAST M7 unit).
-4. `docs/decisions.md` tail — **D252 (the SOLITUDE PRINCIPLE — read this, it constrains ⑦)**, D251 (directional features / `debrisPiece` scale), D226 (phash determinism) — + `docs/vision-deltas.md` + `docs/backlog.md` §A.
+3. `docs/roadmap.md` "Up next" → Phase B → **M8** (the whole tier: ⑧ spike → ⑨ build → ⑩ companion).
+4. `docs/decisions.md` tail — **D252 (the solitude principle — applies to the cave too)**, D253 (enterable_wreck), D125 (the KCC/riding wall — relevant to cave traversal/slope limits), D226 (phash determinism), D81 (NEVER bump SAVE_VERSION autonomously) — + `docs/GDD.md` (the cave's place in the vision) + `docs/architecture.md` (terrain/physics/KCC).
 
-## ⚠️ NEW standing constraint — D252 (the solitude principle)
-The user steered (C44): **the world must read as abandoned for ~100 years; the player feels utterly alone; almost NO signs of living human life.**
-Every POI / structure must read as decayed wreckage — NO maintained, currently-used, or recently-built infrastructure. C44 removed the
-`watchtower` and re-scoped the `well` into a dry collapsed ruin. **M7 ⑦'s enterable interior MUST obey this**: a long-dead wreck interior
-(dust, decay, dead crew/cargo), not a tidy livable shelter. Don't add working doors, lights, or "someone lives here" dressing.
-
-## What's already built (one paragraph)
-The socket-grammar POI system: `world/poiComponents.ts` (`Socket`/`mate`/`ColliderSpec`/`phash` + component builders),
-`world/poiArchetypes.ts` (`assembleX` + `ARCH_WEIGHTS`), `world/poiAssembler.ts` (`placeProcgenPOI` — burial/align/collider/merge/panel).
-C41 (⑤) overhauled the `derelict` ship (5 forms). Non-ship archetypes now: satellite, wrecked_tank, debris_field, hollow_husk, well (a dry
-RUIN as of C44), debris_trail. **The watchtower was REMOVED in C44.** The collider-audit default list is now 7 archetypes (35 audits).
-**The enterable wreck already exists**: `crash_husk` (D1 "Skyfall") — `assembleCrashHusk` builds a dressed, walk-in interior + a portal, but
-it's forced ONLY by `landCrashAt` (absent from `ARCH_WEIGHTS`, so it never appears in the ambient scatter).
-
-## Cycle 45 focus — **M7 ⑦ walkable-wreck-interiors (the LAST M7 unit; XL, spike→build)**
-Generalize the D1 enterable `crash_husk` (the dressed interior + the enter/exit portal) so OTHER large wrecks become enterable in the ambient
-scatter — turning some `ship`/`derelict`/`hollow_husk` hulls into spaces the player can walk INTO. This is the milestone's "wreck depth" payoff.
-**The interior must read as a long-dead wreck (D252), not a shelter.**
+## Cycle 46 focus — **M8 ⑧ deep-cave-design-spike (A/B worktree — collision topology)**
+The DESIGN SPIKE that de-risks the cave before the XL build (⑨). **Deliverable: `docs/feature-deep-cave.md`** — a decision doc that picks the
+cave's collision-topology approach, NOT shipped gameplay. The hard problem: the world terrain is a **heightfield** (one Y per XZ — it physically
+cannot represent an overhang or an enclosed underground volume). A walkable cave needs real 3D enclosure (a roof over your head). So the spike must
+answer: **how does the player get below the heightfield into an enclosed, collidable space, and back out?**
 
 ### Priority items (in order)
-1. **Recon FIRST (likely an A/B architecture spike).** Read `assembleCrashHusk` + the husk/interior dressing + the portal/enter-exit mechanic
-   (`grep` for `crash_husk`, `landCrashAt`, the portal/interior trigger). Map exactly what makes `crash_husk` enterable (the hollow shell + the
-   interior dressing + the collider gap for the doorway + the portal volume). Decide the generalization path: **(A)** a reusable
-   `enterableInterior(shell)` decorator any large archetype can opt into, vs **(B)** a new `derelict_interior` archetype composing an existing hull
-   form with the husk's interior kit. Spike both briefly if not obvious; pick one, log a D-entry.
-2. **Build** the chosen path — a large wreck the player can walk into, with a real doorway gap in the collider (not a walk-through wall), DECAYED
-   interior dressing (D252 — no livable/maintained read), and a clear enter/exit. Reuse `crash_husk`'s interior kit + portal wherever possible (DRY).
-3. **HARD conventions** (D226/D235/D250): phash-only (one `seedOf(rand)` draw, the rest hashed); declare a collider per structural mesh, with a
-   deliberate GAP for the doorway (decorations get `userData.isWreckDecoration = true`); **add any new archetype to the `collider-audit` default
-   list** (`scripts/rig-shot.mjs` ~line 1023 — the audit count must rise from 35) — BUT an enterable hollow shell needs the audit to tolerate the
-   doorway gap + the hollow interior (study how `crash_husk`/`hollow_husk` already pass the coverage audit).
-4. **Verify** — `npm run verify:all` (placement 0/0 ×5 + colliders 0/3X). The doorway gap must not trip the collider-audit (hollow-shell exempt path).
-5. **Visual gate** — render via `--scenario=procgen-wreck --archetype=<new> --pinyaw` (length-frame — D249) at several seeds; AND verify the INTERIOR
-   reads (a render from inside / at the doorway). Fan the adversarial critics; iterate to PASS. "Can I tell it's enterable + where's the door + does
-   it read as a DEAD wreck (D252)" is the thing to nail.
-6. **CRITICAL — the only place the loop can STOP:** ⑦ likely touches the enter/exit portal + interior trigger. If generalizing it requires a
-   **SAVE-SCHEMA change** (e.g. persisting which scattered wrecks are enterable / interior state), **STOP the loop and surface it** (D81 — never bump
-   `SAVE_VERSION` autonomously). An additive archetype that reuses the existing transient portal should NOT need a bump — but watch for it.
+1. **Recon FIRST.** Map how terrain + physics + the KCC work today: `src/world/terrain*`, the Rapier heightfield collider, the character controller
+   (grep `KinematicCharacterController`/`KCC`/`moveCharacter`), and how `crash_husk`/`huskShell` made an *enclosed walkable shell above ground*
+   (C45/D253 — that hollow-shell + side-wall-collider trick may be the cheapest cave too). Also read D125 (the riding/KCC slope wall — the cave's
+   ramps/descent must stay under the KCC climb limit) and the "cave = ONE + ramp + no-horror" Phase-B design call (`proposal-cycle-37.md`).
+2. **Spike 2-3 candidate approaches CONCURRENTLY (worktrees — `isolation: worktree`).** Candidates to consider (pick the real ones after recon):
+   - **(A) A pit + a placed enclosed mesh module:** carve/lower a terrain bowl, drop a trimesh/box-kit cave room with a roof + a walk-down ramp
+     (reuses the heightfield for the descent, a separate collider for the enclosure — closest to the proven `huskShell` trick).
+   - **(B) Trimesh tunnel segments:** author a tunnel as a trimesh collider (full 3D), stitched into a pit entrance. Most flexible, heaviest.
+   - **(C) Box-collider room kit:** compose the cave from oriented box colliders (cheap, robust, but blocky — may suffice for ONE location).
+   Each spike: a throwaway prototype proving the player can descend in, walk an enclosed space (roof collides), and climb out — under the KCC limits.
+3. **Decide + write `docs/feature-deep-cave.md`** — the chosen approach, why, the collision/determinism/perf trade-offs, the dark-nav plan (lighting),
+   the no-horror + solitude (D252) tone, and the sub-task breakdown for ⑨ (the XL build) + ⑩ (companion-egg cherry-pick at the deepest chamber).
+   **Log a D-entry** for the topology choice.
+4. **Verify** — `npm run verify:all` must stay green (the spike likely adds little/no shipped code; if a prototype lands behind a flag, keep the
+   audits clean). A spike that ships only a design doc + a flagged prototype is fine.
+5. **Visual gate** — only if the spike ships a visible prototype; otherwise the deliverable is the doc (no appearance gate needed this cycle).
 
-### After ⑦
-M7 is COMPLETE (⑤ overhaul · ⑥ new POIs · C44 solitude pass · ⑦ interiors). The loop does NOT pause (only the Phase-B milestone after M10 pauses).
-Next is **M8** (see `docs/roadmap.md` "Up next" → Phase B → M8 — read it fresh; don't assume).
+### CRITICAL — STOP conditions for this tier
+- **D81 SAVE-SCHEMA (the real risk for M8):** ⑧ is just a design spike (a doc) → should NOT touch the save. But the cave BUILD (⑨) and the companion
+  (⑩) will likely want to persist "cave discovered / companion state / egg taken". **If THIS cycle's spike concludes the cave needs a SAVE_VERSION
+  bump, DO NOT bump it** — record the requirement in `feature-deep-cave.md` and let the build cycle surface it; never bump autonomously.
+- **D125 (the KCC wall):** if the spike finds the descent/traversal needs a NEW movement mode (climbing, crouch, a non-KCC controller) and 2 approaches
+  fail, **re-table rather than force a 3rd** (the D125 precedent). A ramp under the KCC limit is the safe path (the watchtower ramp / cave-ramp pattern).
+
+### After ⑧
+⑨ deep-cave-build (XL — seeded tunnel-carving, ONE rare location, dark-nav, no-horror) then ⑩ companion-egg-cherry-pick (re-apply the `2d4035b`
+spine at the deepest chamber). The loop does NOT pause (only the Phase-B milestone after M10 pauses).
 
 ## Autonomy contract
-Ambiguous landmark/structural call → pick the form that fits the Dune/Mad-Max scavenger tone **AND D252 (decayed, solitary)**, log a D-entry, continue.
-**D81 SAVE-VERSION bump STOPs the loop** — the interior-persistence question above is the one real risk this cycle; if you hit it, STOP + surface.
+Ambiguous design call → pick the approach that fits the Dune/Mad-Max tone + D252 (decayed, solitary, no-horror), log a D-entry, continue.
+A spike is allowed to ship a design doc + a flagged throwaway prototype rather than finished gameplay — that's the point of de-risking ⑨ first.
+**D81 save-bump STOPs the loop.** **D125: don't force a 3rd movement-mode attempt.**
 
 ## Stop conditions
 Terminal: max-cycles (75) · catastrophic verify break · 3 fix-walls on one gate · save-version bump (STOP) · destructive attempt. Pause:
-steering "pause" · the Phase-B milestone (after M10 — M7 units don't pause).
+steering "pause" · the Phase-B milestone (after M10 — M8 units don't pause).
 
 ## Notable footguns
-- **D252 (the solitude principle):** the interior must read DEAD/decayed, not livable. Don't reintroduce "someone lives here" reads.
-- **The enter/exit portal + save schema (D81):** generalizing the enterable interior is the one place this milestone might want a save bump. STOP if so.
-- **The collider-audit + a doorway gap (D250/D235):** an enterable shell has a deliberate collider GAP (the door) + a hollow interior. The audit must
-  treat it like `crash_husk`/`hollow_husk` (hollow-shell exempt). Add the new archetype to the audit list.
-- **End-on framing (D249):** render `--pinyaw` (or a 2nd angle) before concluding an asset is malformed.
-- **Determinism (D226):** components use `phash`, never `rand`; the archetype spends ONE `seedOf(rand)`.
-- `verify:placement` buffers output to the END + is slow; don't kill it early (C18 zombie footgun).
-- **Rig scenario invocation is `--scenario=procgen-wreck`** (not a positional arg — a bare `procgen-wreck` falls through to the default rig-studio path and times out; C44 footgun).
+- **Heightfield ≠ caves:** a Rapier heightfield can't enclose a volume; the cave needs a separate 3D collider (mesh/box kit) — that's the whole spike.
+- **The hollow-shell trick (C45/D253):** `huskShell` proves an enclosed walkable space = a shell mesh + side-wall colliders + `auditExempt`; the cave
+  may reuse exactly this pattern (a roof + walls collider, the player walks the floor). Cheapest candidate — evaluate it first.
+- **Determinism (D226):** any procedural cave placement uses `phash`/one `seedOf` draw; don't desync the world stream.
+- **Worktree spikes auto-clean** if unchanged — use `isolation: worktree` so concurrent prototypes don't collide on the same files.
+- `verify:placement` buffers output to the END + is slow; don't kill it early. Rig renders use `--scenario=<name>` (a bare positional name falls
+  through to the default rig-studio path and times out — C44 footgun). The multi-seed render can flake on one screenshot; re-run the single seed.
 
 ## Verification protocol
-`npm run verify:all` (tsc + `verify:placement` ×5 + `verify:colliders` — add the new archetype to the audit). New enterable wreck → the
-adversarial appearance gate (`--pinyaw` length-framed + an INTERIOR/doorway render) + Rule-8 iteration.
+`npm run verify:all` (tsc + `verify:placement` ×5 + `verify:colliders`). A design-spike cycle's primary deliverable is `docs/feature-deep-cave.md`
++ a D-entry; only run the visual gate if a visible prototype ships.
 
 ## Begin
-Read the order above → `TaskCreate` the ⑦ recon+spike → study `assembleCrashHusk` → pick A/B + log a D-entry → build (phash + declared colliders
-w/ a doorway gap + audit-list, DECAYED interior per D252) → `verify:all` + the adversarial visual gate (iterate) → `/session-end`. Boot fresh from
-FILES; don't trust chat memory.
+Read the order above → `TaskCreate` the M8 ⑧ recon + the A/B/C spike → recon terrain/physics/KCC + the huskShell trick → spike 2-3 candidates in
+worktrees → pick one + write `docs/feature-deep-cave.md` + a D-entry → `verify:all` → `/session-end`. Boot fresh from FILES; don't trust chat memory.

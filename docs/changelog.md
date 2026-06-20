@@ -3,6 +3,18 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign C45 — 2026-06-20 — M7: **walkable-wreck-interiors** — enterable wrecks join the ambient scatter → **M7 COMPLETE** ✓ verify pass (ultracode)
+
+`verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders **0/40** — 8 archetypes × 5 seeds; the new `enterable_wreck` passes via the hollow-shell exemption + side-wall colliders). **Visual gate PASS** — rendered `--scenario=procgen-wreck --archetype=enterable_wreck` at seeds 1/42/1337: reads as a large hollow walkable hull (torn-end cavity / open ribbed trough with a dark furnished interior), interior reads DEAD (no powered glow → D252). **No save bump** (additive archetype, world-seed spawned; entering touches zero save state). Cycle 45/75. **M7 COMPLETE.**
+
+**walkable-wreck-interiors (the last M7 unit).** Generalized the D1 enterable `crash_husk` so WALKABLE-interior wrecks appear in the ambient procedural scatter — the milestone's "wreck depth" payoff. A recon agent confirmed the key fact: **there is no portal/teleport mechanic** — a wreck is enterable purely because `huskShell` is a hollow shell (open torn ends + open top) with ONLY side-wall colliders + `auditExempt`, so the player walks IN.
+- **NEW `enterable_wreck` archetype** (`world/poiArchetypes.ts`) — Option B (a self-contained archetype, not a decorator; D253). Reuses `huskShell` + `dressCrashInterior` (the role-driven interior kit).
+- **Determinism pin:** spends exactly ONE shared-stream draw (`seedOf`); role via `phash(s,7)`; the variable-count interior dressing runs on an **isolated `makeRng(s)`** stream so the salvage-panel stream never desyncs (D208/D226).
+- **Solitude pin (D252):** added an `aged` flag to `dressCrashInterior` → a fully DEAD console (no emissive glow) for the century-old wreck (a fresh D1 crash keeps the flicker).
+- **Weights:** registered in `ARCH_WEIGHTS` (rare; commonest in the wreck_yard, rarest in open dune); renormalized all biome rows to sum to 1.0 (were ~1.04, compressing the tail; slack off the legacy `ship` tube). Added to the collider-audit list (35→40).
+- **SAVE:** no bump (recon-confirmed — no interior/entry state persists). **D253.**
+- **Owed/backlog:** the in-world INTERIOR FEEL — walking in, dark-nav, the dead-console read up close — → walk-test. **M7 COMPLETE → next tier M8 (deep cave & companion).**
+
 ## Campaign C44 — 2026-06-20 — M7: **the SOLITUDE PASS** (steering, D252) — remove the watchtower + ruin the well ✓ verify pass (ultracode)
 
 `verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders **0/35** — the `watchtower` removal drops the collider-audit list to 7 archetypes × 5 seeds; the re-scoped `well` still covered by its curb + 2 posts). **Visual gate PASS** — re-rendered the well at seeds 1/42/1337 (`--scenario=procgen-wreck --archetype=well`): reads as an abandoned, collapsed, long-DRY well ruin across seeds, no maintained-infrastructure read; 1 refinement round (dropped the fallen beam onto the curb mouth). The watchtower removal is pure deletion. **No save bump** (additive archetype removal + a re-scope; placement is archetype-agnostic, D227). Cycle 44/75.

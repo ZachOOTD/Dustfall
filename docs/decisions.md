@@ -401,3 +401,17 @@ The focal mass also has to DOMINATE: the impact chunk is scaled 1.7× (decisivel
 - **Standing constraint going forward:** every POI and every future structure (incl. M7 ⑦ walkable-wreck-interiors) must read as decayed/abandoned wreckage — NO maintained, currently-used, or recently-built infrastructure. The older POIs (satellite, wrecked_tank, debris_field, husks, derelict, debris_trail) already satisfy this and were left untouched (the user scoped this pass to the two C42/C43 "inhabited-reading" POIs).
 
 **friction-score:** 1 (a clean, reversible removal + re-scope; tsc + the visual gate pass). The forward weight: this is now a **tone INVARIANT** the campaign must hold — a single "someone lives here" prop can undo the solitude the whole world is built for. Also recorded as a vision-delta.
+
+## D253 — Walkable wreck interiors generalize crash_husk via a self-contained `enterable_wreck` archetype (not a decorator), with an isolated dressing RNG (Session C45, campaign)
+
+**Context (M7 ⑦, the last M7 unit).** The ONE enterable wreck (`crash_husk`, D1 "Skyfall") is forced only by the crash event (absent from `ARCH_WEIGHTS`). Generalize it so WALKABLE-interior wrecks appear in the ambient scatter. Recon finding: there is **no portal/teleport mechanic at all** — `crash_husk` is enterable purely because `huskShell` is a hollow shell (open torn ends + open top) with **only side-wall colliders** + `shell.userData.auditExempt = true`, so the player physically walks in. (`panelPortal.ts` is unrelated — it's salvage-panel stencil rendering.)
+
+**Decision — Option B (a new archetype), not Option A (a decorator on existing archetypes).** Added `enterable_wreck`: reuses `huskShell` (the proven hollow/enterable shell) + `dressCrashInterior` (the role-driven interior kit), registered in `ARCHETYPES` + `ARCH_WEIGHTS` (rare; commonest in the wreck_yard). Self-contained > a decorator because role can be derived locally and there's no opt-in plumbing on `ship`/`derelict`/`hollow_husk`.
+
+**Two correctness pins:**
+- **Determinism (D208/D226):** `dressCrashInterior` makes a *variable* number of `rand()` draws (cargo counts) — calling it on the shared world stream would desync the salvage-panel stream. So the archetype spends exactly ONE shared draw (`seedOf`), derives the role via `phash(s,7)`, and runs the dressing on an **isolated `makeRng(s)`** stream. World-stream footprint = 1 draw (same as `hollow_husk`). verify:placement stays 0/0 ×5.
+- **Solitude (D252):** added an `aged` flag to `dressCrashInterior` → a fully DEAD console (no emissive glow) for the ambient century-old wreck; a fresh crash (D1) keeps the flicker (`aged=false`).
+
+**Audit:** passes via the existing hollow-shell exemption (`auditExempt` on the shell + declared side-wall colliders); added `enterable_wreck` to the collider-audit list (35→40 audits). **SAVE: no bump** — additive archetype spawned from the world seed; entering/exiting touches zero save state (the recon confirmed there is none). The `ARCH_WEIGHTS` rows were renormalized to sum to 1.0 (they summed to ~1.04, compressing the reachable tail; slack trimmed mostly off the legacy `ship` tube per C41/D249).
+
+**friction-score:** 2 (the architecture + determinism are sound and gate-verified, but the in-world INTERIOR FEEL — walking in, dark-nav, the dead-console read up close — is walk-test-only; and reusing `dressCrashInterior` couples the ambient wreck to the crash kit, so a future interior-kit change must keep the `aged` path dead).

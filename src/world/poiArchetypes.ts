@@ -8,7 +8,7 @@
 // pure function of (archetype, part-count) and the salvage-panel stream stays stable.
 
 import * as THREE from 'three';
-import type { Rng } from '../core/rng.ts';
+import { type Rng, makeRng } from '../core/rng.ts';
 import type { BiomeId } from './biomes.ts';
 import type { HullBucket } from './procgenWreck.ts';
 import type { ColliderSpec } from '../physics/bodies.ts';
@@ -217,10 +217,13 @@ const _crateMat = new THREE.MeshLambertMaterial({ color: 0x5a4a33, flatShading: 
 const _crateDark = new THREE.MeshLambertMaterial({ color: 0x33291d, flatShading: true });
 const _suitMat = new THREE.MeshLambertMaterial({ color: 0x6e6657, flatShading: true });        // faded empty flight-suit
 const _screenMat = new THREE.MeshLambertMaterial({ color: 0x0a0e12, emissive: 0x12303a, emissiveIntensity: 0.45, flatShading: true });
+const _screenDeadMat = new THREE.MeshLambertMaterial({ color: 0x090c10, flatShading: true });   // C45 — a century-DEAD console: no power, no glow (D252 — no signs of recent life)
 const _scorchInner = new THREE.MeshLambertMaterial({ color: 0x0e0906, transparent: true, opacity: 0.9, flatShading: true });
 const _oreMat = new THREE.MeshLambertMaterial({ color: 0x473827, flatShading: true });
 
-function dressCrashInterior(husk: BuiltComponent, rand: Rng, role: string): void {
+// `aged` (C45) → a long-dead wreck (no console glow), for the ambient enterable_wreck archetype;
+// a fresh crash (D1) leaves it false so the console still flickers.
+function dressCrashInterior(husk: BuiltComponent, rand: Rng, role: string, aged = false): void {
   const g = husk.mesh;
   const len = husk.bbox.max.x - husk.bbox.min.x;
   const r = husk.bbox.max.z;
@@ -282,12 +285,12 @@ function dressCrashInterior(husk: BuiltComponent, rand: Rng, role: string): void
     }
   }
 
-  // ── A dead/flickering console near one end ──
+  // ── A console near one end — flickering for a fresh crash, fully DEAD for an aged wreck ──
   {
     const p = spot(0.12, 0.0);
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.7, 0.4), _crateDark);
     body.position.set(p.x, 0.35, p.z);
-    const screen = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.4, 0.05), _screenMat);
+    const screen = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.4, 0.05), aged ? _screenDeadMat : _screenMat);
     screen.position.set(p.x, 0.55, p.z + 0.22); screen.rotation.x = -0.3;
     mark(body); mark(screen);
   }
@@ -323,6 +326,27 @@ function assembleCrashHusk(rand: Rng): AssembleResult {
   const a = new Assembly();
   const husk = huskShell(seedOf(rand));
   dressCrashInterior(husk, rand, _crashRole);
+  a.place(husk, liftToGround(husk));
+  return a.result();
+}
+
+// ════════════════════════════════════════════════════════════════════
+// ENTERABLE WRECK (M7 ⑦, C45) — generalizes the D1 crash_husk so a WALKABLE-INTERIOR wreck
+// appears in the AMBIENT scatter (not just at the forced crash event). Reuses the hollow
+// `huskShell` (open torn ends + side-wall colliders + auditExempt → the player walks IN) and
+// the `dressCrashInterior` kit, but with `aged=true` so it reads as a long-DEAD hull (no console
+// glow), per the solitude principle (D252). DETERMINISM: spends exactly ONE shared-stream draw
+// (seedOf); the role is phashed from that seed and the variable-count interior dressing runs on
+// an ISOLATED makeRng(s) stream, so the world's salvage-panel stream never desyncs (D208/D226).
+// SAVE: additive archetype, spawned from the world seed like any POI — NO save-schema change.
+// ════════════════════════════════════════════════════════════════════
+const _ENTERABLE_ROLES = ['freighter', 'liner', 'military', 'science', 'mining'];
+function assembleEnterableWreck(rand: Rng): AssembleResult {
+  const a = new Assembly();
+  const s = seedOf(rand);                                                 // the ONLY shared-stream draw
+  const role = _ENTERABLE_ROLES[Math.floor(phash(s, 7) * _ENTERABLE_ROLES.length)];
+  const husk = huskShell(s);                                              // hollow shell: auditExempt + side-wall colliders
+  dressCrashInterior(husk, makeRng(s), role, true);                      // isolated stream (no desync) + aged (D252)
   a.place(husk, liftToGround(husk));
   return a.result();
 }
@@ -500,6 +524,14 @@ export const ARCHETYPES: Record<string, Archetype> = {
     params: { bucket: 'dark', burySink: true, bury: 0.55, list: 0.14, panelMin: 1, panelMax: 1, sandMound: true, salvageKind: 'massive' },
     assemble: assembleCrashHusk,
   },
+  enterable_wreck: {
+    id: 'enterable_wreck',
+    // M7 ⑦ (C45) — a WALKABLE-INTERIOR wreck for the ambient scatter (generalizes crash_husk).
+    // Mirrors crash_husk's settle so the hollow shell + side-wall colliders stay enterable when
+    // bedded (bury 0.5 keeps the torn-end openings clear to walk in). Aged/dead interior (D252).
+    params: { bucket: 'dark', burySink: true, bury: 0.5, list: 0.12, panelMin: 1, panelMax: 1, sandMound: true, salvageKind: 'massive' },
+    assemble: assembleEnterableWreck,
+  },
   derelict: {
     id: 'derelict',
     // ACBB Tier 2 — the derelict rested ON the sand like a prop (critique sev2); give it a
@@ -518,15 +550,18 @@ export type ArchetypeId = 'ship' | keyof typeof ARCHETYPES;
 // M7 ⑤ (C41) — the socket-grammar `derelict` (now 5 silhouette forms × 2 stern types) is
 // the answer to "all long tubes"; shifted ~0.08 from the legacy linear `ship` → `derelict`
 // in every biome so the wider/weirder hulls appear roughly as often as the tube hulls.
-// M7 ⑥ (C43; the solitude pass C44, D252) — `well` (a long-DRY RUINED well, rare — ~0.04, rarest
-// in the wreck_yard) + `debris_trail` (crash ejecta — commoner, peaks in the wreck_yard where
-// everything came down). The C42 `watchtower` was REMOVED in C44: a standing lookout read as
-// recent, maintained infrastructure — the world should show almost no signs of living human life.
+// M7 ⑥ (C43; the solitude pass C44, D252) — `well` (a long-DRY RUINED well, rare) + `debris_trail`
+// (crash ejecta). The C42 `watchtower` was REMOVED in C44 (a standing lookout read as recent,
+// maintained infrastructure — the world should show almost no signs of living human life).
+// M7 ⑦ (C45) — `enterable_wreck` (a WALKABLE-interior hull) joins the scatter: rare, most common
+// in the wreck_yard (a graveyard of big hulls), rarest in the open dune. Each biome row is now
+// RENORMALIZED to sum to 1.0 (the old rows summed to ~1.04, compressing the reachable tail);
+// the slack came mostly off the legacy linear `ship` tube (the C41/D249 de-emphasis direction).
 const ARCH_WEIGHTS: Record<BiomeId, Array<[ArchetypeId, number]>> = {
-  salt:       [['ship', 0.26], ['derelict', 0.22], ['satellite', 0.15], ['wrecked_tank', 0.12], ['debris_field', 0.10], ['hollow_husk', 0.08], ['well', 0.05], ['debris_trail', 0.06]],
-  rocky:      [['ship', 0.20], ['derelict', 0.21], ['satellite', 0.13], ['wrecked_tank', 0.19], ['debris_field', 0.10], ['hollow_husk', 0.11], ['well', 0.04], ['debris_trail', 0.06]],
-  dune:       [['ship', 0.18], ['derelict', 0.23], ['satellite', 0.17], ['wrecked_tank', 0.15], ['debris_field', 0.08], ['hollow_husk', 0.13], ['well', 0.06], ['debris_trail', 0.05]],
-  wreck_yard: [['ship', 0.18], ['derelict', 0.22], ['satellite', 0.13], ['wrecked_tank', 0.17], ['debris_field', 0.16], ['hollow_husk', 0.12], ['well', 0.03], ['debris_trail', 0.10]],
+  salt:       [['ship', 0.24], ['derelict', 0.21], ['satellite', 0.14], ['wrecked_tank', 0.11], ['debris_field', 0.09], ['hollow_husk', 0.08], ['well', 0.04], ['debris_trail', 0.04], ['enterable_wreck', 0.05]],
+  rocky:      [['ship', 0.19], ['derelict', 0.20], ['satellite', 0.12], ['wrecked_tank', 0.18], ['debris_field', 0.09], ['hollow_husk', 0.10], ['well', 0.04], ['debris_trail', 0.04], ['enterable_wreck', 0.04]],
+  dune:       [['ship', 0.17], ['derelict', 0.22], ['satellite', 0.16], ['wrecked_tank', 0.14], ['debris_field', 0.07], ['hollow_husk', 0.12], ['well', 0.05], ['debris_trail', 0.04], ['enterable_wreck', 0.03]],
+  wreck_yard: [['ship', 0.15], ['derelict', 0.19], ['satellite', 0.11], ['wrecked_tank', 0.15], ['debris_field', 0.13], ['hollow_husk', 0.10], ['well', 0.03], ['debris_trail', 0.07], ['enterable_wreck', 0.07]],
 };
 
 export function pickArchetype(rand: Rng, biome?: BiomeId): ArchetypeId {

@@ -69,18 +69,17 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 "Last shipped" note. Current target: **Phase B (M6→M10) — APPROVED + RELEASED**. The loop runs M6→M10 unattended,
 commits every cycle, and pauses only at "Phase B — Build-out complete" (after M10). Charter: `docs/campaign/campaign.md`.
 
-**Last shipped**: Campaign **C44** (2026-06-20, cycle 44/75) — **the SOLITUDE PASS (steering, D252) — remove the watchtower + ruin the well**
-(`verify:all` PASS — tsc + placement 0/0 ×5 + colliders 0/35; **visual gate PASS** [well re-rendered 3 seeds, 1 refinement round]; **no save bump**).
-A steering-driven cycle: the user wants the world to read as abandoned-for-a-century with the player utterly alone — **almost no signs of living
-human life**. The C42 watchtower + the C43 working winch-well both read as recent/maintained infrastructure → **removed the `watchtower` archetype
-entirely** + **re-scoped the `well` into a long-DRY collapsed RUIN** (kept the curb + dry shaft; collapsed the winch — a leaning broken post, a
-snapped stub, a fallen beam, slumped plates; NO bucket/rope/working crank). **D252** codifies the solitude principle as a standing constraint on
-all future POIs (incl. M7 ⑦); also a new `docs/vision-deltas.md`. Audit list 40→35.
+**Last shipped**: Campaign **C45** (2026-06-20, cycle 45/75) — **M7 ⑦ walkable-wreck-interiors → M7 COMPLETE**
+(`verify:all` PASS — tsc + placement 0/0 ×5 + colliders 0/40; **visual gate PASS** [3 seeds — enterable read + dead interior]; **no save bump**).
+Generalized the D1 enterable `crash_husk` into a NEW ambient **`enterable_wreck`** archetype so walkable-interior wrecks appear in the procedural
+scatter. A recon agent confirmed there is **no portal mechanic** — a wreck is enterable purely because `huskShell` is a hollow shell (torn ends +
+open top + only side-wall colliders + `auditExempt`), so the player walks IN. Reuses `huskShell` + `dressCrashInterior` (Option B — a self-contained
+archetype, D253); determinism via ONE `seedOf` draw + an **isolated `makeRng(s)`** dressing stream; an `aged` flag gives a DEAD console (no glow) per
+D252; `ARCH_WEIGHTS` renormalized to 1.0. **No save bump** (entering touches zero save state). **M7 COMPLETE** (⑤ overhaul · ⑥ new POIs · C44 solitude · ⑦ interiors).
 
-**Next session** = cycle 45 = **M7 ⑦ walkable-wreck-interiors** (the LAST M7 unit; XL, spike→build) — generalize D1's enterable `crash_husk`
-(the dressed interior + portal) so other large wrecks become enterable. **The interior must read DEAD/decayed per D252**, not a livable shelter.
-Likely an A/B architecture spike first. After ⑦, M7 is complete (but the loop only PAUSES at the Phase-B milestone, after M10).
-See [docs/next-session-prompt.md](docs/next-session-prompt.md).
+**Next session** = cycle 46 = **M8 ⑧ deep-cave-design-spike** (A/B worktree — collision topology; writes `docs/feature-deep-cave.md`) — the first
+unit of **M8 (deep cave & companion)**. After ⑧: ⑨ deep-cave-build (XL — seeded tunnel-carving, ONE rare location, dark-nav, no-horror) · ⑩
+companion-egg-cherry-pick. The loop only PAUSES at the Phase-B milestone (after M10). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 
