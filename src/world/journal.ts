@@ -23,7 +23,17 @@ export type JournalKind =
   | 'mega_wreck'
   | 'satellite_dish'
   | 'crashed_hull'
-  | 'engine_block';
+  | 'engine_block'
+  | 'crash_log';   // ACBE (D1) — a crashed ship's recovered black-box; PROCEDURAL per-instance text
+
+/** A rendered lore document (journalPanel.ts). Flagship `kind`s map to a fixed one, but a
+ *  per-instance `content` on the Journal (e.g. a procedural crash black-box) overrides it. */
+export type JournalEntry = readonly [string, string];
+export interface JournalContent {
+  title: string;
+  subtitle: string;
+  entries: ReadonlyArray<JournalEntry>;
+}
 
 export interface Journal {
   id: number;
@@ -31,6 +41,8 @@ export interface Journal {
   pos: THREE.Vector3;
   /** Session ABF — picks the entries array in journalPanel.ts. */
   kind: JournalKind;
+  /** ACBE (D1) — optional per-instance content; overrides the fixed per-kind entries. */
+  content?: JournalContent;
 }
 
 let _nextId = 1;
@@ -86,13 +98,34 @@ function makeJournal(): THREE.Group {
   return g;
 }
 
+// ACBE (D1) — a recovered flight RECORDER ("black box"): a small dark armoured box with
+// the hazard-orange band + a dim status light. Reads as salvaged ship tech, not a survivor's
+// leather diary — the right object to carry a crashed ship's final log.
+function makeBlackBox(): THREE.Group {
+  const g = new THREE.Group();
+  const bodyMat = new THREE.MeshLambertMaterial({ color: 0x1a1410, flatShading: true });
+  const stripeMat = new THREE.MeshLambertMaterial({ color: 0xc2521a, flatShading: true });   // hazard orange
+  const screenMat = new THREE.MeshLambertMaterial({ color: 0x0a1014, emissive: 0x163e48, emissiveIntensity: 0.6, flatShading: true });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.11, 0.14), bodyMat);
+  body.position.y = 0.055; g.add(body);
+  const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.205, 0.032, 0.145), stripeMat);
+  stripe.position.y = 0.058; g.add(stripe);
+  const screen = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.05, 0.012), screenMat);
+  screen.position.set(0.03, 0.075, 0.072); g.add(screen);
+  // a stubby antenna nub
+  const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.01, 0.09, 6), bodyMat);
+  ant.position.set(-0.07, 0.13, -0.04); g.add(ant);
+  return g;
+}
+
 export function placeJournal(
   scene: THREE.Scene,
   pos: THREE.Vector3,
   yaw = 0,
   kind: JournalKind = 'opening',
+  content?: JournalContent,
 ): Journal {
-  const mesh = makeJournal();
+  const mesh = kind === 'crash_log' ? makeBlackBox() : makeJournal();
   mesh.position.copy(pos);
   mesh.rotation.y = yaw;
   mesh.traverse((o) => {
@@ -111,6 +144,7 @@ export function placeJournal(
     mesh,
     pos: pos.clone(),
     kind,
+    content,
   };
 }
 

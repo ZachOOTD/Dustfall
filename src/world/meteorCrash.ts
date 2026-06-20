@@ -25,6 +25,8 @@ import {
 } from './particleTrail.ts';
 import { placeProcgenPOI } from './poiAssembler.ts';   // Tier 2/3 — the enterable crash_husk wreck
 import { setCrashDressRole } from './poiArchetypes.ts';   // Tier 3 — role-driven interior dressing
+import { generateCrashLog } from './crashLog.ts';          // Tier 3 — procedural black-box log
+import { placeJournal, type Journal } from './journal.ts';
 import { makeRng } from '../core/rng.ts';
 
 export type CrashRole = 'freighter' | 'liner' | 'military' | 'science' | 'mining';
@@ -60,7 +62,7 @@ let _smokeTrail: ParticleTrail | null = null; // alpha dark smoke (rises)
 let _ejecta: ParticleTrail | null = null;     // debris/dust thrown at impact (falls)
 
 // ── Tier 2: landed crash SITES (the explorable destinations) + a persistent beacon. ──
-interface CrashSite { pos: THREE.Vector3; seed: number; role: CrashRole; wreck: THREE.Group; decor: THREE.Group; age: number; }
+interface CrashSite { pos: THREE.Vector3; seed: number; role: CrashRole; wreck: THREE.Group; decor: THREE.Group; journal: Journal; age: number; }
 const _sites: CrashSite[] = [];
 let _beacon: ParticleTrail | null = null;     // shared persistent smoke-column beacon (outlives the fires)
 const _scorchMat = new THREE.MeshLambertMaterial({ color: 0x130d09, transparent: true, opacity: 0.85, depthWrite: false });
@@ -200,7 +202,7 @@ export function resetMeteorCrash(): void {
   if (_ring) { _ring.visible = false; (_ring.material as THREE.MeshBasicMaterial).opacity = 0; }
   // Drop any runtime-spawned crash-site visuals (Tier 4 restores saved ones on load; the
   // wreck's Rapier body is left for now — handled with the save round-trip in Tier 4).
-  if (_scene) for (const s of _sites) { _scene.remove(s.wreck); _scene.remove(s.decor); }
+  if (_scene) for (const s of _sites) { _scene.remove(s.wreck); _scene.remove(s.decor); _scene.remove(s.journal.mesh); }
   _sites.length = 0;
   if (_beacon) {
     for (let i = 0; i < _beacon.count; i++) {
@@ -260,7 +262,16 @@ function landCrashAt(ctx: GameContext, c: ActiveCrash): void {
       Tuning.CRASH_FIRE_FUEL_S * (0.7 + rng() * 0.6), true);
   }
 
-  _sites.push({ pos, seed: c.seed, role: c.role, wreck, decor, age: 0 });
+  // The black-box recorder inside the wreck — a procedural final log. Placed on the interior
+  // floor near centre, kept OUT of the merge (a live journal mesh) so it stays interactable.
+  const bx = pos.x + (rng() - 0.5) * 2.2, bz = pos.z + (rng() - 0.5) * 2.2;
+  const journal = placeJournal(
+    ctx.three.scene, new THREE.Vector3(bx, ctx.terrain.heightAt(bx, bz) + 0.04, bz),
+    rng() * Math.PI * 2, 'crash_log', generateCrashLog(c.seed, c.role),
+  );
+  ctx.journals.list.push(journal);
+
+  _sites.push({ pos, seed: c.seed, role: c.role, wreck, decor, journal, age: 0 });
 }
 
 /** Per-frame: emit the tall smoke-column beacon from each active site (thins over its life,

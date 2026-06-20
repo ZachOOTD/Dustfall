@@ -58,6 +58,7 @@ import { isCraftingMenuOpen } from '../ui/craftingMenu.ts';
 import { isInventoryOverlayOpen } from '../ui/inventoryOverlay.ts';
 import { isControlsPanelOpen } from '../ui/tutorial.ts';
 import { isJournalPanelOpen } from '../ui/journalPanel.ts';
+import { findJournalById, type JournalKind } from '../world/journal.ts';   // ACBE (D1) — crash black-box per-instance content
 import { isRecipeBookPanelOpen } from '../ui/recipeBookPanel.ts';
 import type { InteractType, ItemId, Slot } from '../inventory/types.ts';
 import { Tuning } from '../config/tuning.ts';
@@ -1112,16 +1113,17 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
       // ABJ — C2 (v11): suffix " (read)" to the prompt noun when this
       // kind has been read at least once on this save. journalReadKinds
       // is a Set<JournalKind> on ctx.inventory (persisted v11+).
-      const journalKind = (info.subKind ?? 'opening') as
-        'opening' | 'mega_ship' | 'mega_wreck' | 'satellite_dish' | 'crashed_hull' | 'engine_block';
-      const alreadyRead = ctx.inventory.journalReadKinds.has(journalKind);
+      const journalKind = (info.subKind ?? 'opening') as JournalKind;
+      const isBlackBox = journalKind === 'crash_log';   // ACBE — recovered flight recorder; unique per crash
+      const alreadyRead = !isBlackBox && ctx.inventory.journalReadKinds.has(journalKind);
       ctx.inventory.hover = {
         type: 'read',
         distance: info.distance,
-        promptNoun: alreadyRead ? 'journal (read)' : 'journal',
+        promptNoun: isBlackBox ? 'black box' : alreadyRead ? 'journal (read)' : 'journal',
       };
       if (ctx.input.pressed.has('KeyE')) {
-        void import('../ui/journalPanel.ts').then((m) => m.openJournalPanel(ctx, journalKind));
+        const content = findJournalById(ctx.journals.list, info.id)?.content;
+        void import('../ui/journalPanel.ts').then((m) => m.openJournalPanel(ctx, journalKind, content));
       }
       return;
     }

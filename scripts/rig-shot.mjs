@@ -1966,8 +1966,10 @@ const SCENARIOS = {
         cam.lookAt(ix, iy + 3, iz);
       }
       cam.updateMatrixWorld(true);
+      const jl = ctx.journals.list.filter((j) => j.kind === 'crash_log').slice(-1)[0];
+      const log = jl && jl.content ? (jl.content.subtitle + ' :: ' + jl.content.entries.map((e) => e[1]).join(' // ')) : null;
       return { found: true, ix: +ix.toFixed(1), iy: +iy.toFixed(1), iz: +iz.toFixed(1),
-        role: res.role, t: +st.t.toFixed(2), impacted: st.impacted, head: hp ? hp.map((v) => +v.toFixed(0)) : null };
+        role: res.role, t: +st.t.toFixed(2), impacted: st.impacted, head: hp ? hp.map((v) => +v.toFixed(0)) : null, log };
     }, { phase });
     if (!r.found) { console.log('[crash] not armed'); return; }
     // 'site' adds a wreck (new materials) → let the paused scene render a few frames first so

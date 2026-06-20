@@ -14,16 +14,8 @@
 // Esc and the close button both close.
 
 import type { GameContext } from '../GameContext.ts';
-import type { JournalKind } from '../world/journal.ts';
+import type { JournalKind, JournalContent } from '../world/journal.ts';
 import { playUiHover, playUiClick } from '../audio/audio.ts';
-
-type Entry = readonly [string, string];
-
-interface JournalContent {
-  title: string;
-  subtitle: string;
-  entries: ReadonlyArray<Entry>;
-}
 
 // Session W — original opening-wreck journal. Anonymous survivor in the
 // W-era story prop. Stays as the default kind so existing behavior is
@@ -111,6 +103,14 @@ const ENGINE_BLOCK_CONTENT: JournalContent = {
   ],
 };
 
+// ACBE (D1) — crash black boxes carry PER-INSTANCE procedural text (crashLog.ts), passed to
+// openJournalPanel; this is only the safety default if a crash journal somehow has no content.
+const CRASH_LOG_FALLBACK: JournalContent = {
+  title: 'FLIGHT RECORDER',
+  subtitle: 'recovered black box — data corrupted',
+  entries: [['—', 'the recorder is scorched through. nothing legible remains.']],
+};
+
 const CONTENT_BY_KIND: Record<JournalKind, JournalContent> = {
   opening: OPENING_CONTENT,
   mega_ship: MEGA_SHIP_CONTENT,
@@ -118,6 +118,7 @@ const CONTENT_BY_KIND: Record<JournalKind, JournalContent> = {
   satellite_dish: SATELLITE_DISH_CONTENT,
   crashed_hull: CRASHED_HULL_CONTENT,
   engine_block: ENGINE_BLOCK_CONTENT,
+  crash_log: CRASH_LOG_FALLBACK,
 };
 
 let _ctx: GameContext | null = null;
@@ -208,14 +209,17 @@ export function createJournalPanel(ctx: GameContext): void {
  *  Defaults to 'opening' so legacy single-arg callers (e.g. anything
  *  pre-ABF that hadn't been updated) still see the original survivor
  *  journal. */
-export function openJournalPanel(ctx: GameContext, kind: JournalKind = 'opening'): void {
+export function openJournalPanel(ctx: GameContext, kind: JournalKind = 'opening', content?: JournalContent): void {
   if (!_panel || _open) return;
   _open = true;
-  renderContent(CONTENT_BY_KIND[kind]);
-  // ABJ — C2 (v11): mark this kind as read. The HUD's hover prompt
-  // reads ctx.inventory.journalReadKinds to dim already-read entries.
-  // Persisted across save/load via SaveV1.inventory.journalReadKinds.
-  ctx.inventory.journalReadKinds.add(kind);
+  // ACBE — a per-instance `content` (a crash black box's procedural log) overrides the
+  // fixed per-kind entries.
+  renderContent(content ?? CONTENT_BY_KIND[kind]);
+  // ABJ — C2 (v11): mark this kind as read. The HUD's hover prompt reads
+  // ctx.inventory.journalReadKinds to dim already-read entries (persisted v11+). Skip for
+  // crash_log: each crash's black box is unique, so a per-KIND read-flag would wrongly dim
+  // every future crash after the first is read (per-instance read-state is Tier-4 save work).
+  if (kind !== 'crash_log') ctx.inventory.journalReadKinds.add(kind);
   ctx.input.controls.unlock();
   _panel.classList.remove('hidden');
 }
