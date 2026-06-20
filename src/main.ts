@@ -80,6 +80,7 @@ import { updateKillDrag } from './world/killDrag.ts';
 import { spawnWaterSources } from './world/waterSources.ts';
 import { spawnCacti, updateCacti } from './world/cactus.ts';
 import { updateFires } from './world/fire.ts';
+import { updateSignalFlares } from './world/signalFlare.ts';   // M6 (C37) — transient signal-flare arcs
 import { createFootprintRegistry, updateFootprints } from './world/footprints.ts';
 import { addItem } from './inventory/inventory.ts';
 import { createMenus } from './ui/menus.ts';
@@ -503,6 +504,7 @@ function applyDevLoadout(c: GameContext): void {
   // Pre-made deployables — skip the craft step when iterating on fire
   // mechanics directly.
   for (let i = 0; i < 2; i++) addItem(c.inventory, 'fire_kit');
+  for (let i = 0; i < 3; i++) addItem(c.inventory, 'signal_kit');   // C37 — signal flare (testability; also a craft recipe, collides with fire_kit)
   // Light sources for night testing.
   addItem(c.inventory, 'flashlight');
   // Combat testing — gun starts with a full magazine (ammo in meta).
@@ -900,6 +902,7 @@ startLoop(ctx, (c, dt) => {
   updateFootprints(c.footprints, c.time.elapsed); // age + fade pooled decals
   updateFootprintPuffs(c, dt);   // AAG — particle puffs from each footstep
   updateFires(c, dt);            // flicker + fuel decrement + burnout
+  updateSignalFlares(c, dt);     // C37 — advance any in-flight signal-flare arcs
   updateLanterns(c);             // AAC — sin-driven flicker on placed lanterns
   updateLargeTents(c, dt);       // AAZ — doorway open/close lerp on placed shelter tents
   updateCacti(c);                // CC-4 — regrow harvested alien-cactus fruit after a day cycle

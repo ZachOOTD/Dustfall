@@ -10,6 +10,7 @@ import { triggerCrash, crashState, advanceCrash, crashSites, crashHeatAt, resetM
 import { saveGameState, loadGameState } from '../persistence/save.ts';   // ACBE (D1) — crash save round-trip test hook
 import { updateStats } from '../stats/survival.ts';   // ACBE (D1) — crash heat-hazard probe
 import { spawnWormCrossing, updateWormHorizonCrossing } from '../world/wormHorizonCrossing.ts';   // M5b (C36) — __game.triggerWormCrossing
+import { fireSignalFlare, advanceSignalFlares, activeSignalFlareCount } from '../world/signalFlare.ts';   // M6 (C37) — __game.fireSignalFlare
 import { damageVulture } from '../enemies/vulture.ts';
 import { makeLatheHull, fuselageProfile, makeFormerRings, makeBreach, makeSandMound } from '../world/wreckForms.ts';
 import { createRustedHullMaterial, HULL_WEATHERING_ACAY } from '../world/hullMaterial.ts';
@@ -104,6 +105,9 @@ interface DebugApi {
    *  centre point); + fast-forward it `seconds` for a deterministic rig-shot frame. */
   triggerWormCrossing: () => { cx: number; cz: number } | null;
   advanceWormCrossing: (seconds: number) => void;
+  /** M6 (C37) — DEV-only: fire a signal flare from the player's view + fast-forward
+   *  its arc `seconds` for a deterministic rig-shot frame. Returns the live count. */
+  fireSignalFlare: (seconds?: number) => number;
   /** ACG (Cycle 1) — DEV-only: kill a raider by id (drives the real death
    *  path → dead pose + corpse interaction tag), so the corpse-drag flow is
    *  testable without melee aiming. Returns true if a live raider matched. */
@@ -254,6 +258,11 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
     },
     triggerWormCrossing: () => spawnWormCrossing(ctx),
     advanceWormCrossing: (seconds: number) => updateWormHorizonCrossing(ctx, ctx.terrain, seconds),
+    fireSignalFlare: (seconds = 0) => {
+      fireSignalFlare(ctx);
+      if (seconds > 0) advanceSignalFlares(ctx, seconds);
+      return activeSignalFlareCount();
+    },
     setStats: (s) => {
       if (s.thirst !== undefined) ctx.stats.thirst = s.thirst;
       if (s.temperature !== undefined) ctx.stats.temperature = s.temperature;

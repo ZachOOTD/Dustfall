@@ -1346,29 +1346,38 @@ const SCENARIOS = {
     console.log(`[drop-test] ${allOk ? 'PASS' : 'FAIL'} ${JSON.stringify(after)}`);
   },
 
-  // ACAS B3 — crafting multi-match CHOOSER verification. The chooser fires for real:
-  // scrap×2+branch×1 matches BOTH sled_kit (id 9) AND scrap_bar (id 15). Confirm the
-  // chooser renders one button per recipe, gates CRAFT until a pick, and respects
-  // discovery (undiscovered → "?"). Control: a single-match combo shows no chooser.
+  // ACAS B3 + C37 — crafting multi-match CHOOSER verification.
+  //   REAL collision (C37): branch×3 + scrap×1 now matches BOTH fire_kit (id 2) AND
+  //   signal_kit (id 18) — the first live gameplay collision, which lights up the
+  //   chooser in real play (dev-mode pre-discovers both, so it shows two NAMED buttons).
+  //   INJECTED (ACAS B3): also inject a transient recipe colliding with scrap_bar
+  //   (scrap×2 + branch×1) to exercise the discovery-respecting "?" path (one option
+  //   discovered, one not). Confirm the chooser renders one button per recipe + gates
+  //   CRAFT until a pick. Control: a single-match combo + a no-match combo show no chooser.
   'craft-chooser': async (page) => {
     const r = await page.evaluate(() => {
       const g = window.__game; g.enterGame(true);
-      // The live recipe set has no collisions, so inject a transient recipe colliding
-      // with scrap_bar (scrap×2+branch×1) to exercise the multi-match chooser.
+      // C37 — the REAL fire_kit ⇄ signal_kit collision (no injection needed).
+      const real = g.craftChooserTest([{ id: 'branch', count: 3 }, { id: 'scrap', count: 1 }]);
+      // Inject a transient recipe colliding with scrap_bar to exercise the "?" path.
       g.injectTestRecipe();
       const collide = g.craftChooserTest([{ id: 'scrap', count: 2 }, { id: 'branch', count: 1 }]);
       const single = g.craftChooserTest([{ id: 'cloth', count: 1 }, { id: 'scrap', count: 1 }]);  // → bandage only
       const none = g.craftChooserTest([{ id: 'cloth', count: 2 }, { id: 'branch', count: 5 }]);    // no recipe
-      return { collide, single, none };
+      return { real, collide, single, none };
     });
     const c = r.collide || {};
-    // Multi-match: 2 buttons, CRAFT gated until a pick, and discovery-respecting —
-    // the discovered scrap_bar shows its name, the undiscovered injected recipe "?".
-    const pass = !!c.buttons && c.buttons.length === 2 && c.craftDisabled === true
-      && c.buttons.includes('?') && c.buttons.includes('scrap bar')
+    const rl = r.real || {};
+    // REAL collision: 2 buttons, CRAFT gated, both named (dev pre-discovers both).
+    const realPass = !!rl.buttons && rl.buttons.length === 2 && rl.craftDisabled === true
+      && rl.buttons.includes('fire kit') && rl.buttons.includes('signal flare');
+    // Injected: 2 buttons, CRAFT gated, discovery-respecting (scrap_bar named, injected "?").
+    const injPass = !!c.buttons && c.buttons.length === 2 && c.craftDisabled === true
+      && c.buttons.includes('?') && c.buttons.includes('scrap bar');
+    const pass = realPass && injPass
       && (r.single ? r.single.buttons.length === 0 : false)
       && (r.none ? r.none.buttons.length === 0 : false);
-    console.log(`[craft-chooser] ${pass ? 'PASS' : 'FAIL'} ${JSON.stringify(r)}`);
+    console.log(`[craft-chooser] ${pass ? 'PASS' : 'FAIL'} (real=${realPass} injected=${injPass}) ${JSON.stringify(r)}`);
   },
 
   // ACAQ — Sarlacc-pit behavior smoke test. Teleport the player onto the maw, let
@@ -1662,6 +1671,53 @@ const SCENARIOS = {
     await page.waitForTimeout(120);
     await page.screenshot({ path: join(OUT, `scen-smoke-plume${stormy ? '-storm' : ''}.png`), fullPage: false });
     console.log(`[smoke-plume] ${JSON.stringify(r)}`);
+  },
+
+  // Signal flare (C37): fire signal_kit's transient flare from the player's view,
+  // advance the arc to mid-climb (head high + a full ember trail), then frame the
+  // whole arc from the side against the sky. --day forces noon; default is a dimmer
+  // evening sky where the additive flare reads brightest. Tall frame for the arc.
+  'signal-flare': async (page) => {
+    const day = !!argv.day;
+    await page.evaluate((day) => {
+      const ctx = window.__game.ctx;
+      window.__game.setTime(day ? 0.5 : 0.86);   // noon, or a dim evening so the flare pops
+      ctx.weather.cloudiness = 0.1;
+      ctx.weather.intensity = 0;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      ctx.three.renderer.setSize(720, 840, false);   // tall frame for the vertical arc
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 720 / 840; cam.updateProjectionMatrix(); }
+      // Flatten the look so the flare launches along the horizontal forward (a clean arc).
+      const V = cam.position.constructor;
+      const fwd = new V(); cam.getWorldDirection(fwd); fwd.y = 0; fwd.normalize();
+      // Capture the launch origin + forward BEFORE firing (the flare uses the live camera).
+      window.__flareOrigin = { x: cam.position.x + fwd.x * 0.6, y: cam.position.y - 0.15, z: cam.position.z + fwd.z * 0.6 };
+      window.__flareFwd = { x: fwd.x, z: fwd.z };
+      // Fire + fast-forward ~1.6s of arc (head near apogee → the ballistic curve +
+      // downrange lean read clearly, and the ember ribbon is fully formed behind it).
+      window.__flareCount = window.__game.fireSignalFlare(1.6);
+    }, day);
+    await page.waitForTimeout(300);
+    const r = await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      ctx.flags.paused = true;
+      const O = window.__flareOrigin, F = window.__flareFwd;
+      const cam = ctx.three.camera;
+      // Side vantage: perpendicular to the launch forward, ~15m off, looking at mid-arc.
+      const rx = F.z, rz = -F.x;                       // right vector ⟂ to the launch/lean dir → profile view of the arc
+      const midX = O.x + F.x * 2.6, midZ = O.z + F.z * 2.6;   // ~mid of the leaned arc
+      cam.position.set(midX + rx * 16, O.y + 5.0, midZ + rz * 16);
+      cam.lookAt(midX, O.y + 7, midZ);
+      cam.updateMatrixWorld(true);
+      ctx.three.renderer.render(ctx.three.scene, cam);
+      return { liveFlares: window.__flareCount };
+    });
+    await page.waitForTimeout(120);
+    await page.screenshot({ path: join(OUT, `scen-signal-flare${day ? '-day' : ''}.png`), fullPage: false });
+    console.log(`[signal-flare] ${JSON.stringify(r)}`);
   },
 
   // Vista (C28): the horizon-landmark-silhouette check. Find a hand-modeled flagship

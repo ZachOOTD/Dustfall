@@ -140,6 +140,30 @@ export const Tuning = {
   FIRE_SMOKE_STORM_DRIFT: 9.5,        // extra m/s drift at full storm intensity — the column tears hard downwind toward horizontal (the f^1.5 height-ramp keeps the root anchored at the fire, so it shears without detaching)
   FIRE_SMOKE_COLOR: 0x86837c,         // neutral cool ash-grey — separates from BOTH the warm sky + the brown storm murk (fog:false so the murk can't tint it)
 
+  // M6 (C37) — signal flare (signal_kit's "call out"). A one-shot bright flare
+  // streaks skyward, peaks, and burns out over a couple seconds, trailing embers.
+  // Self-luminous ADDITIVE sprites only — NO dynamic PointLight (adding/removing
+  // one would change the scene light count and force a Three.js shader recompile,
+  // per the fire.ts AAY-fix). Fully transient → never persisted, no save bump.
+  SIGNAL_FLARE_RISE_SPEED: 15.0,      // m/s initial upward launch velocity
+  SIGNAL_FLARE_GRAVITY: 7.5,          // m/s² pull-down → peaks ~2s, ~15m up before it falls back
+  SIGNAL_FLARE_FORWARD: 3.3,          // m/s forward drift — a pronounced ballistic LEAN downrange (not a near-vertical line)
+  SIGNAL_FLARE_TTL_S: 2.8,            // head burn time before it gutters out
+  SIGNAL_FLARE_HEAD_COLOR: 0xfff2c4,  // white-hot magnesium core
+  SIGNAL_FLARE_GLOW_COLOR: 0xff7a2c,  // warm orange halo around the core
+  SIGNAL_FLARE_HEAD_SIZE: 0.95,       // m sprite width of the burning head (a touch bigger so the hot core punches past the halo)
+  SIGNAL_FLARE_GLOW_SIZE: 2.2,        // m sprite width of the soft halo (tightened so it frames the core, not swamps it)
+  SIGNAL_FLARE_GLOW_OPACITY: 0.45,    // halo base opacity (lower so the white-hot head reads as the brightest point)
+  // Ember trail — dense enough to overlap into a near-continuous burning ribbon (NOT a bead string),
+  // cooling hot→dark + tapering + drifting as each ember falls behind the climbing head.
+  SIGNAL_FLARE_TRAIL_POOL: 96,        // ember puffs per flare (pooled, reused) — sized for the dense interval × ttl
+  SIGNAL_FLARE_TRAIL_INTERVAL_S: 0.02, // a new ember this often — tight spacing (~0.3m at launch speed) so sprites overlap
+  SIGNAL_FLARE_TRAIL_TTL_S: 1.25,     // ember lifetime (fades behind the rising head)
+  SIGNAL_FLARE_TRAIL_COLOR_HOT: 0xffb056, // freshly-shed ember (near the head): hot orange
+  SIGNAL_FLARE_TRAIL_COLOR_COOL: 0x6e1606, // aged ember (down the tail): dark cooling red
+  SIGNAL_FLARE_TRAIL_SIZE: 0.55,      // m sprite width of a fresh ember (tapers down with age)
+  SIGNAL_FLARE_TRAIL_DRIFT: 0.8,      // m/s lateral wind drift on aging embers (along the prevailing dune wind)
+
   // Session VV — tent entity constants (lifted from src/world/tent.ts).
   TENT_SHELTER_HALF_X: 1.8,
   TENT_SHELTER_HALF_Y: 1.4,

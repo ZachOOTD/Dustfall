@@ -125,8 +125,9 @@ export function updateGhostPreview(ctx: GameContext): void {
     return;
   }
   const def = getItemDef(slot.item);
-  // Only show for wieldLmb='place' kits.
-  if (def.wieldLmb !== 'place') {
+  // Only show for wieldLmb='place' kits. signal_kit also uses 'place' (LMB fires it),
+  // but it's launched SKYWARD — a ground footprint ring would mislead, so exempt it.
+  if (def.wieldLmb !== 'place' || slot.item === 'signal_kit') {
     if (g.group.visible) g.group.visible = false;
     return;
   }

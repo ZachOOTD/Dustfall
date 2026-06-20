@@ -1,42 +1,60 @@
-# ▶ CAMPAIGN ACTIVE — Phase B released (cycle 37) — `campaign/2026-06-18`
+# ▶ CAMPAIGN cycle 38 — Kickoff Brief — `campaign/2026-06-18`
 
-**Phase B is APPROVED + RELEASED** (2026-06-20). `status:active`, `awaiting_approval:false`, `max_cycles:75`.
-Boot each cycle from `docs/campaign/campaign-state.json` + `docs/roadmap.md` "Up next" (the AUTHORITATIVE queue) —
-NOT from this file's hints. The loop runs M6→M10 unattended, commits every cycle, and pauses only at
-`### Milestone: Phase B — Build-out complete`.
+**Phase B is building unattended (M6→M10).** Boot from `docs/campaign/campaign-state.json` + `docs/roadmap.md` "Up next"
+(the AUTHORITATIVE queue) — NOT from this file's hints. The loop commits every cycle and pauses only at
+`### Milestone: Phase B — Build-out complete` (after M10). Charter: `docs/campaign/campaign.md`.
 
-## How we got here
-- Phase A (M1–M5b) shipped (cycles 1–36). The user **deferred** the Phase-A walk-test + the 2 `[partial]` looks
-  (C28 horizon-landmarks, C36 distant-worm) + the silent day/night + music beds **to backlog** (chose to push
-  straight to Phase B). Those remain owed for a later focused pass.
-- **D1 "Skyfall"** (a crashing-wreck crash POI = the Phase-B **M7 `crashing-ship-event`**) shipped during the
-  pause via `/loop`, OUTSIDE the cycle count — so `cycles_completed` stays 36 and that M7 unit is marked DONE.
-  Reuse its patterns: `meteorCrash.ts` (the falling-from-sky FX vocabulary — particleTrail/cameraShake/
-  screenFlash/playCrashImpact + the `advanceCrash` headless stepper), the enterable `crash_husk` archetype +
-  the collider-audit gate, the additive save (`crashes[]` v15), and `crashHeatAt` (the heat-hazard pattern).
+## Read these now (in order)
+1. `CLAUDE.md` (auto-loaded) — esp. "Where we are now".
+2. `docs/campaign/campaign-state.json` + `docs/campaign/steering.md` (your inbox) + `docs/campaign/campaign-log.md` (recent cycles).
+3. `docs/roadmap.md` "Up next" → Phase B unit list.
+4. `docs/decisions.md` tail (D245 — the C37 recipe-collision call) + `docs/backlog.md` §A.
 
-## Phase-B plan + the resolved design calls
-Full proposal: **[docs/campaign/proposal-cycle-37.md](campaign/proposal-cycle-37.md)** (APPROVED). The ordered
-17-unit ladder is folded into `docs/roadmap.md` "Up next" → Phase B. **User decisions baked in:**
-- **M7 INCLUDED** (variety + new POIs + walkable-interiors).
-- **Survival = forgiving Long Dark** — flip `GOD_MODE` off for the real new-game; tune the curve in `tuning.ts`
-  (prepared player → indefinite; unmanaged → ~8–12 in-game min). This is the M6 KEYSTONE + a hard dep for the HUD work.
-- **HUD removal** behind `FEATURES.diegeticSurvival` + a pause-menu opt-in (default-ON; bars stay the floor).
-- **FLIP-AUTHORITY = AUTONOMOUS** — the loop MAY flip `FEATURES.*` / kill-switches ON once the headless +
-  visual/adversarial gates pass (everything stays behind a reversible flag; the user vetoes FEEL at the Phase-B
-  review). **The D81 SAVE-VERSION-BUMP rule still STOPs the loop — never bump autonomously; surface it.**
-- Defaults: cave = ONE + walkable ramp + no-horror; hover-bike = repairable-speeder (one vehicle, two states);
-  `scrap_machete` = a new item id; crafting collision = `fire_kit` vs a new `signal_kit` (both scrap×2+branch×1);
-  drop-pod intro couples to the broken-speeder spawn.
+## What's already built (one paragraph)
+Phase A (M1–M5b) shipped: the wreck arc (procgen socket grammar + 5 archetypes + collider-audit gate), the worm + sarlacc + lure,
+critters + atmosphere (vultures, storm, smoke plume), riding & rest, the M5a exploration pull (silhouettes/spyglass/vista/sun-shade),
+and the M5b tone layer (wordless scenes, procedural wind, fireball, dawn/dusk beats, distant-worm crossing). C37 (Phase B start) lit
+up the crafting **chooser** via a new `signal_kit` flare. The survival STATS exist (thirst/hunger/temperature/stamina/health in
+`src/stats/survival.ts`, HUD bars in the UI) but the game currently runs with **`GOD_MODE: true`** — the player never actually dies.
 
-## ▶ Cycle 37 picks up: **M6 unit ① crafting-chooser-colliding-recipe** (S/low)
-Lead the block with the guaranteed win: the multi-match crafting chooser UI is already built + verified (dormant
-since ACAS B3) — add ONE colliding recipe (`fire_kit` vs a new `signal_kit`, both `scrap×2 + branch×1`) so it
-fires in real play. Then ② survival-rebalance (the keystone), ③ flat-color audit, ④ HUD removal, then M7→M10.
+## Cycle 38 focus — **M6 ② survival-rebalance-newgame (the KEYSTONE, M/med)**
+Make survival REAL + forgiving (Long Dark tone). This is the hard-dep for M6 ④ (HUD removal) and M10's broken-speeder economy.
 
-Verify gate: `npm run verify:all`. Visual/feel units: the adversarial appearance gate + rule-8 iteration.
-Scope-cut order (if the cap tightens) is in the proposal. **Resume the loop with `/loop /campaign-cycle`.**
+### Priority items (in order)
+1. **Flip the testing flags off for the real new-game** — `src/config/tuning.ts`: `GOD_MODE: true → false` (line ~18; the
+   floor path is `survival.ts:117`) and `DEBUG_UNLIMITED_STAMINA: true → false` (line ~20). These are reversible tuning flags; the
+   charter authorizes the loop to flip them once gates pass — the USER vetoes FEEL at the Phase-B review. Keep a clear D-entry.
+2. **Tune the forgiving Long-Dark curve in `tuning.ts`** — target: a PREPARED player (water + food + fire/shelter managed) survives
+   **indefinitely**; a NEGLECTED player dies in **~8–12 in-game minutes**. Levers: `THIRST_DRAIN_PER_SEC` (1/300), `HUNGER_DRAIN_PER_SEC`
+   (1/600), `HUNGER_STARVATION_DAMAGE`, `COLD_NIGHT_DRAIN` (1/120), the heat/shelter/shade path (sun-exposure C31 already scales heat),
+   restore values (`CANTEEN_THIRST_RESTORE`, food). Make the death SPIRAL gentle (telegraphed, recoverable) not a cliff.
+3. **Verify the death→continue loop actually works** with GOD_MODE off — `die()` / the death overlay / `handoffToGame` restore path
+   (a real death must show the overlay + let Continue reload the autosave, not soft-lock). This is the highest-risk regression.
+4. **Headless probe + walk-test framing** — there's no rig-shot for survival feel; add a deterministic survival probe (advance the
+   stat clock N seconds under prepared vs neglected loadouts, assert the time-to-death band) so the curve is gate-checkable. The actual
+   FELT pacing is **walk-test-pending** (record `feel-pending` in the cycle log — the user judges it at the Phase-B review).
 
-## Owed (deferred to backlog, for a later focused pass)
-The Phase-A FEEL walk-test (`docs/backlog.md` §A lists the per-cycle items) · art-direct the C28 horizon-landmark
-+ C36 distant-worm `[partial]` looks · the silent day/night-life + music audio beds.
+### Stretch (only if the unit fits the cycle)
+- Scope-first scouting of **M6 ③ flat-color-texture-audit** (name the ~6–8 weakest flat-shaded surfaces) so cycle 39 can start fast.
+
+## Autonomy contract
+Ambiguous call → pick the realism/forgiveness dial that fits "forgiving Long Dark", log a D-entry, continue — never ask the human.
+Flipping `FEATURES.*`/kill-switches/testing-flags ON is AUTHORIZED once the headless + visual/adversarial gates pass (reversible; the
+user vetoes FEEL at the Phase-B review). **The D81 SAVE-VERSION-BUMP rule still STOPs the loop — never bump autonomously; surface it.**
+
+## Stop conditions
+Terminal: max-cycles (75) · catastrophic verify-baseline break · 3 consecutive fix-walls on one gate · a needed save-version bump
+(STOP + surface) · destructive-action attempt (blocked by the overnight guard). Pause: steering "pause" · the Phase-B milestone (after M10).
+
+## Verification protocol
+`npm run verify:all` (tsc + `verify:placement` ×5 seeds + `verify:colliders`). Visual/feel units → the adversarial appearance gate +
+Rule-8 iteration. For this survival unit: the headless gate + the new survival probe; FELT pacing is the user's Phase-B walk-test.
+
+## Notable footguns
+- Survival rebalance is FEEL-critical and headless can't judge it — tune toward the time-to-death BAND, don't blind-chase a number.
+- GOD_MODE off exposes the real death path for the first time in a long while — test the overlay + Continue reload carefully (regression risk).
+- `verify:placement` buffers output to the END + is slow; don't kill it early or premature `taskkill node.exe` spawns port-contending zombies (C18).
+
+## Begin
+Read the order above → `TaskCreate` the priority items → flip the flags → tune the curve → add the survival probe → `verify:all` →
+`/session-end`. Boot fresh from FILES; don't trust chat memory.

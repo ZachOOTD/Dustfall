@@ -24,6 +24,8 @@ export type ItemId =
   | 'branch'
   | 'cloth'
   | 'fire_kit'
+  // M6 (C37) — one-shot signal flare; shares fire_kit's recipe to light the multi-match chooser
+  | 'signal_kit'
   | 'tent_kit'
   // Session W — alien cactus harvest
   | 'alien_fruit'

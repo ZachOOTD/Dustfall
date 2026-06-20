@@ -66,30 +66,22 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 
 **🟢 CAMPAIGN ACTIVE — `campaign/2026-06-18`** (autonomous; PHASE-level review). Each `/campaign-cycle` boots from
 `docs/campaign/campaign-state.json` + `docs/roadmap.md` "Up next" (the AUTHORITATIVE queue) — NOT from this
-"Last shipped" note or the stale "Next session" pointer below. Current target: **Phase A → M1 (Wreck-arc finish)**.
-The loop runs the whole phase unattended, commits every cycle, and pauses only at "Phase A — Build-out complete".
-Charter + how-to-steer: `docs/campaign/campaign.md`.
+"Last shipped" note. Current target: **Phase B (M6→M10) — APPROVED + RELEASED**. The loop runs M6→M10 unattended,
+commits every cycle, and pauses only at "Phase B — Build-out complete" (after M10). Charter: `docs/campaign/campaign.md`.
 
-**Last shipped**: Session ACBB — **FINISH THE WRECK ARC: weathering cohesion + sand integration + a COLLIDER-AUDIT gate + husk/derelict
-silhouette + §E polish** (tsc clean, `verify:placement` 0/0 ×5 seeds, **NEW `verify:colliders` 0 fails / 25 audits**, perf field drawCalls
-**842**/programs 69, no save bump; D234-D237). A long autonomous overnight finishing the ACBA 5-archetype system. **Tier 1 — weathering
-cohesion (D234):** the 3 hull buckets were collapsing to one warm-brown + the satellite wings rendered near-black; fixed at the
-`getBucketMats` lever via per-bucket `BUCKET_WEATHERING` channel-strength overrides (cool stays cool-steel, dark = a genuine DARK-steel
-anchor on a cooler base `0x3a3d43`, warm unchanged) + wings lifted to in-family grey + LED bezel + `wearAmplitude` break-up; material-only,
-ZERO new programs. Gated by a 3-critic adversarial cohesion pass. **Tier 2 — sand integration:** root-caused `makeSandMound` sinking drifts
-BELOW the sand → added a `proud` param (ship callers byte-identical) so drifts BANK against the base; the SATELLITE now reads crash-landed
-(list+seat, was floating/showroom — the critique's #1 issue), derelict bedded in, debris gets an impact scorch-disc, tank a sand-tongue
-through its torn mouth. **Tier 3 — the COLLIDER-AUDIT gate (D235):** NEW `npm run verify:colliders` + `collider-audit` scenario +
-`auditPOIColliders` (structural meshes ≥40%-covered by a declared collider via a 3×3×3 grid; decorations/overhead/hollow-shells exempt),
-wired into `verify:all` — turns the ACBA found-by-eye author errors into a headless gate; + a grounded collider for the flagship
-satelliteDish (§E walkthrough). **Tier 4:** husk hollow read FIXED (gap 126°→153° → reads as a gutted ribbed shell, not a flat plate);
-derelict wide-body rebuilt as a parallel-hull TRIMARAN (was a perpendicular plus-sign). **§E polish (4/4):** brighter stars, antenna
-leans rearward, F8 opens the dev panel under pointer-lock, scrap pickup → a torn rusted-metal sheet. **Tier 5 (yard merge) SCOPE-CUT
-(D237).** Inspection: rig-shot `--archetype=` / `--scenario=collider-audit`.
+**Last shipped**: Campaign **C37** (2026-06-20, cycle 37/75) — **M6 ① crafting-chooser-colliding-recipe → Phase B begins**
+(`verify:all` PASS — tsc + placement 0/0 ×5 + colliders 0/25; adversarial visual gate PASS in 2 rounds; **no save bump**).
+Lit up the dormant multi-match crafting **chooser** (built ACAS B3, idle — no recipe collisions existed) via ONE data-level
+collision: a NEW **`signal_kit` (SIGNAL FLARE)** shares `fire_kit`'s recipe (`branch×3 + scrap×1`) → combining those surfaces a
+"fire kit OR signal flare" choice ("warm yourself OR call out"). `signal_kit` is a **one-shot transient flare** (LMB fires a bright
+ember-trailing arc skyward, consumed; `world/signalFlare.ts`, additive sprites only, never touches the fire list/save — D245). The
+`craft-chooser` scenario now asserts the real collision fires (`["fire kit","signal flare"]`, CRAFT gated). D245: used fire_kit's
+existing recipe rather than the proposal's `scrap×2+branch×1` (already owned by `scrap_bar` id 15 — the literal spec would have made
+a 3-way pileup).
 
-**Next session** = (1) the **OWED attended WALK-TEST** in `npm run dev` (eyes-only — headless can't judge it): walk INTO a
-tank/satellite/husk/derelict (declared-collider feel) + the NEW flagship dish collider; judge the in-world feel of the banking drifts +
-crash-poses + the fleet cohesion under sky/fog. (2) The §G fleet polish (satellite-wing brightness, debris metal-read, husk seams + derelict barrel detail) is DONE (ACBB follow-up); what remains is the deferred **Tier 5 yard cross-POI merge** (D237/D239 — attempted + reverted: the rim-greeble merge cut ~18% but regressed the terrain-audit; re-attempt carefully). The reworked **scrap pickup's 3q edge-on read is still thin** (re-judge in hand). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
+**Next session** = cycle 38 = **M6 ② survival-rebalance-newgame** (M, the **KEYSTONE**): flip `GOD_MODE` off for the real new-game +
+tune a forgiving Long-Dark survival curve in `tuning.ts` (prepared player → indefinite; unmanaged → ~8–12 in-game min). Hard-dep for
+M6 ④ HUD removal + M10's broken-speeder economy. **Watch the D81 save-bump STOP rule.** See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 

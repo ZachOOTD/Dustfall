@@ -274,6 +274,24 @@ export const RECIPES: Recipe[] = [
     output: { id: 'spyglass', count: 1 },
     category: 'tool',
   },
+  {
+    // M6 (C37) — signal flare. DELIBERATELY shares fire_kit's input multiset
+    // (branch×3 + scrap×1) → the first live recipe COLLISION, which lights up the
+    // multi-match chooser (built ACAS B3, dormant until now): the same scavenged
+    // sticks + scrap can become a fire ("warm yourself") OR a flare ("call out").
+    // NOTE: the Phase-B proposal suggested scrap×2+branch×1, but that key is already
+    // owned by scrap_bar (id 15) — using it would make a 3-way pileup and change
+    // fire_kit's long-standing recipe. Reusing fire_kit's existing recipe yields the
+    // intended clean 2-way fire_kit/signal_kit chooser with zero churn (D-entry C37).
+    id: 18,
+    displayName: 'signal flare',
+    inputs: [
+      { id: 'branch', count: 3 },
+      { id: 'scrap', count: 1 },
+    ],
+    output: { id: 'signal_kit', count: 1 },
+    category: 'tool',
+  },
 ];
 
 /** Session ABE — display order for category sub-headers. Recipes within

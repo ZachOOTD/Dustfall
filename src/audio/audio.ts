@@ -507,6 +507,44 @@ export function playFireCrackle(): void {
   src.stop(t + 0.08);
 }
 
+/** M6 (C37) — signal flare launch: a sharp launch HISS (noise sweep) + a rising
+ *  whistle as the flare climbs + a soft sustained burn tail. The "call out" beat
+ *  for signal_kit. On the sfx bus (a deliberate, audible event the player triggers). */
+export function playSignalFlare(): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  // Launch hiss — high-passed noise punching up fast, then tailing into the burn.
+  const hiss = a.ctx.createBufferSource();
+  hiss.buffer = a.noiseBuffer;
+  hiss.playbackRate.value = 1.1;
+  const hp = a.ctx.createBiquadFilter();
+  hp.type = 'highpass';
+  hp.frequency.setValueAtTime(900, t);
+  hp.frequency.exponentialRampToValueAtTime(3200, t + 0.25);
+  const hissEnv = a.ctx.createGain();
+  hissEnv.gain.setValueAtTime(0.0, t);
+  hissEnv.gain.linearRampToValueAtTime(0.14, t + 0.02);
+  hissEnv.gain.exponentialRampToValueAtTime(0.02, t + 0.5);
+  hissEnv.gain.exponentialRampToValueAtTime(0.001, t + 1.6);   // burn tail
+  hiss.connect(hp).connect(hissEnv).connect(a.sfx);
+  hiss.start(t);
+  hiss.stop(t + 1.7);
+  // Rising whistle — a thin tone sweeping up as the flare climbs, then fading.
+  const w = a.ctx.createOscillator();
+  w.type = 'sine';
+  w.frequency.setValueAtTime(620, t);
+  w.frequency.exponentialRampToValueAtTime(1500, t + 0.6);
+  w.frequency.exponentialRampToValueAtTime(820, t + 1.4);     // settles as it peaks + falls
+  const wEnv = a.ctx.createGain();
+  wEnv.gain.setValueAtTime(0.0, t);
+  wEnv.gain.linearRampToValueAtTime(0.07, t + 0.08);
+  wEnv.gain.exponentialRampToValueAtTime(0.001, t + 1.5);
+  w.connect(wEnv).connect(a.sfx);
+  w.start(t);
+  w.stop(t + 1.6);
+}
+
 /** Cook sizzle — ~0.6s filtered noise sweep with low rumble undertone. */
 export function playCookSizzle(): void {
   const a = getAudioInternals();

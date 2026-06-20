@@ -4,8 +4,9 @@
 import * as THREE from 'three';
 import type { ItemDef, ItemId } from './types.ts';
 import { Tuning } from '../config/tuning.ts';
-import { playDrink, playPour, playBandageUse } from '../audio/audio.ts';
+import { playDrink, playPour, playBandageUse, playSignalFlare } from '../audio/audio.ts';
 import { deployFire, findFireById, attachGrillToFire } from '../world/fire.ts';
+import { fireSignalFlare } from '../world/signalFlare.ts';   // M6 (C37) — signal_kit's transient flare
 import { deployTent } from '../world/tent.ts';
 import { deploySled } from '../world/sled.ts';
 import { deployLargeTent } from '../world/largeTent.ts';
@@ -2032,6 +2033,70 @@ const _DEFS: Record<ItemId, ItemDef> = {
     },
   },
 
+  // M6 (C37) — signal flare: signal_kit's "call out" half of the fire_kit
+  // recipe collision. LMB fires a transient bright flare skyward (no fire, no
+  // placeable, no save state — see world/signalFlare.ts). A genuine either/or
+  // against fire_kit's "warm yourself".
+  signal_kit: {
+    id: 'signal_kit',
+    name: 'SIGNAL FLARE',
+    glyph: '✺',
+    description: 'a scrap tube packed to burn bright — fire it skyward to call out',
+    stackable: true,
+    maxStack: 4,
+    wieldLmb: 'place',        // single LMB-click fires it (deploy-style dispatch); ghost ring exempted in ghostPreview
+    thirdPersonScale: 1.3,    // small cartridge — bump for the 3P silhouette (matches fire_kit-class kits)
+    onUse(ctx, _slot) {
+      fireSignalFlare(ctx);
+      playSignalFlare();
+      return { consumed: true, message: 'signal flare fired' };
+    },
+    makeViewModel() {
+      // A short scrap-metal flare tube: rusted body, a dark cap at the base,
+      // a bright charge tip, and a striker tab — reads as an improvised flare.
+      const group = new THREE.Group();
+      const bodyMat = vmMetal(0x8a5230, { rustLevel: 0.5, wornScale: 11.0 });   // rusty scrap brass
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.02, 0.13, 10), bodyMat);
+      body.rotation.z = Math.PI / 2;   // lie it along the hand (X axis)
+      group.add(body);
+      // Dark base cap.
+      const capMat = vmMetal(0x3a3330, { rustLevel: 0.4 });
+      const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.021, 0.021, 0.018, 10), capMat);
+      cap.rotation.z = Math.PI / 2;
+      cap.position.x = -0.066;
+      group.add(cap);
+      // Bright charge tip — a self-luminous nub at the firing end.
+      const tipMat = new THREE.MeshBasicMaterial({ color: 0xffd27a, toneMapped: false });
+      const tip = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.016, 0.022, 10), tipMat);
+      tip.rotation.z = Math.PI / 2;
+      tip.position.x = 0.072;
+      group.add(tip);
+      // Striker tab on the side.
+      const tabMat = vmMetal(0x9aa0a8, { wornScale: 12.0 });
+      const tab = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.006, 0.012), tabMat);
+      tab.position.set(0.01, 0.022, 0);
+      tab.rotation.z = 0.25;
+      group.add(tab);
+      return group;
+    },
+    makeIcon() {
+      const s = svg();
+      // Flare tube angled up + radiating spark lines (a "going off" burst).
+      s.appendChild(svgEl('rect', { x: '6', y: '13', width: '9', height: '4', rx: '1', transform: 'rotate(-35 10 15)' }));
+      // Burst at the tip.
+      s.appendChild(svgEl('circle', { cx: '16', cy: '8', r: '1.6', fill: 'currentColor', stroke: 'none' }));
+      for (const a of [-60, -30, 0, 30]) {
+        const rad = (a * Math.PI) / 180;
+        s.appendChild(svgEl('line', {
+          x1: String(16 + Math.cos(rad) * 2.6), y1: String(8 + Math.sin(rad) * 2.6),
+          x2: String(16 + Math.cos(rad) * 5), y2: String(8 + Math.sin(rad) * 5),
+          'stroke-width': '1.2',
+        }));
+      }
+      return s;
+    },
+  },
+
   // Session AAM — grill attachment for a fire (multi-cook).
   grill_kit: {
     id: 'grill_kit',
@@ -3233,7 +3298,7 @@ export const ALL_ITEM_IDS: ReadonlyArray<ItemId> = [
   'raw_worm_meat', 'cooked_worm_meat',
   'raw_shrew_meat', 'cooked_shrew_meat',
   'raw_vulture_meat', 'cooked_vulture_meat',
-  'branch', 'cloth', 'fire_kit', 'grill_kit', 'tent_kit',
+  'branch', 'cloth', 'fire_kit', 'signal_kit', 'grill_kit', 'tent_kit',
   'alien_fruit',
   'torch', 'flashlight',
   'lizard_on_a_stick_raw', 'lizard_on_a_stick_cooked',
