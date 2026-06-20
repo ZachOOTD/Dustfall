@@ -94,7 +94,6 @@ export function placeRibcage(
 const HERO_WRECK_TYPES: ReadonlyArray<WreckKind> = [
   'engine_cluster',
   'fuselage',
-  'escape_pod',
   'cargo_container',
   'engine_bell',
 ];

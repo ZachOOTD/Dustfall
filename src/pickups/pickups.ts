@@ -79,8 +79,11 @@ const _worldBranchMat = createWoodGrainMaterial(BRANCH_WOOD_COLOR, {
 // ACAH — shared world-space metal for the scrap scattered around wrecks (rusty
 // salvage debris). World-space (not localSpace) — these are STATIC pickups, so
 // the cheaper world-space sampling is fine and varies the weathering per-position.
-const _worldScrapMat = createMetalMaterial(0x7a3c1c, { wornScale: 6.0, rustLevel: 0.92 });
-const _worldScrapAccentMat = createMetalMaterial(0x52260f, { wornScale: 7.0, scratchStrength: 0.04, rustLevel: 0.97 });
+// ACBD — wornScale bumped hard (6→44): the scrap is only ~15cm, so at the old low
+// scale the world-space rust noise barely cycled once across it and read as one
+// flat blotch. Finer scale = the detailed per-flake rust mottling the user wanted.
+const _worldScrapMat = createMetalMaterial(0x7a3c1c, { wornScale: 44.0, scratchStrength: 0.08, rustLevel: 0.92 });
+const _worldScrapAccentMat = createMetalMaterial(0x52260f, { wornScale: 52.0, scratchStrength: 0.06, rustLevel: 0.97 });
 
 export interface Pickup {
   id: number;                 // unique handle for hover/take

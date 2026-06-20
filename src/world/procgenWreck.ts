@@ -190,6 +190,12 @@ export function getBucketMats(bucket: HullBucket): ClassHullMats {
     dark: createRustedHullMaterial({ baseColor: dark.getHex(), ...HULL_WEATHERING_ACAY, ...wx, streakIntensity: 0.34 }),
     rust: createRustedHullMaterial({ baseColor: rust.getHex(), ...HULL_WEATHERING_ACAY, ...wx, streakIntensity: 0.46 }),
   };
+  // ACBD — DoubleSide across the wreck hull/POI archetypes: the ACBA archetypes
+  // (tank, satellite, husk, derelict) showed one-sided faces that vanished when
+  // viewed from behind/inside (user-reported, esp. the fuel tank). One shared lever.
+  mats.hull.side = THREE.DoubleSide;
+  mats.dark.side = THREE.DoubleSide;
+  mats.rust.side = THREE.DoubleSide;
   _bucketMatCache.set(bucket, mats);
   return mats;
 }

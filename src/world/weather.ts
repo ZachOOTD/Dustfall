@@ -8,6 +8,7 @@
 
 import * as THREE from 'three';
 import type { GameContext } from '../GameContext.ts';
+import { getPlayerWorldPos } from '../player/effectivePos.ts';   // ACBD — effective player pos (speeder seat while mounted)
 import { Tuning } from '../config/tuning.ts';
 
 export type WeatherState = 'clear' | 'building' | 'storm' | 'settling';
@@ -405,7 +406,7 @@ export function updateWeather(ctx: GameContext, dt: number): void {
 
   // ACL SKY+WEATHER — player XZ drives both wall spawning and the
   // distance-derived intensity. Read once per tick.
-  const ptr = ctx.player.body.body.translation();
+  const ptr = getPlayerWorldPos(ctx);   // ACBD — speeder seat while mounted, else player body (was reading the off-world-parked body → storm desync)
   const px = ptr.x;
   const pz = ptr.z;
   const wall = w.wall;
@@ -556,7 +557,7 @@ export function triggerStorm(ctx: GameContext): void {
   ctx.weather.stateTimer = 0;
   // ACL SKY+WEATHER — arm the sweeping wall upwind of the player so the
   // debug-triggered storm actually ramps in (intensity is wall-derived).
-  const tr = ctx.player.body.body.translation();
+  const tr = getPlayerWorldPos(ctx);
   armWall(ctx.weather.wall, tr.x, tr.z, Math.random);
 }
 

@@ -12,7 +12,7 @@ import type { WreckKind } from './wrecks.ts';
 import type { BiomeSampler } from './biomes.ts';
 import { Tuning } from '../config/tuning.ts';
 
-export type SalvageKind = WreckKind | 'massive';
+export type SalvageKind = WreckKind | 'massive' | 'escape_pod';   // ACBD — 'escape_pod' is a loot palette (medical); the wreck MODEL was removed but the palette stays
 
 /** AAT — per-panel condition tier. Set deterministically at
  *  registerSalvageable time from (rand + biome-at-pos). Affects pry

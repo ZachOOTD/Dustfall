@@ -341,13 +341,15 @@ const _DEFS: Record<ItemId, ItemDef> = {
       return { consumed: false, message: 'no use for it yet' };
     },
     makeViewModel() {
-      // ACBC — one torn, bent, rusted SHEET of hull plating via the SHARED
+      // ACBC/ACBD — one torn, bent, rusted SHEET of hull plating via the SHARED
       // buildScrapMesh (matches the world pickups scattered around wrecks, like
-      // branchMesh does for branches). Heavily-rusted oxidized steel (rustLevel
-      // via vmMetal) — buckled plate + curling edge + bitten corners + fold
-      // crease + riveted seam + a peeled accent tab.
-      const mat = vmMetal(0x7a3c1c, { wornScale: 6.0, rustLevel: 0.92 });        // saturated rust-orange base
-      const accentMat = vmMetal(0x52260f, { wornScale: 7.0, scratchStrength: 0.04, rustLevel: 0.97 }); // deep-rust crevice tone
+      // branchMesh does for branches). Heavily-rusted oxidized steel — buckled
+      // plate + curling edge + bitten corners + fold crease + a peeled accent tab
+      // + a darker shard. (ACBD: rivets dropped — read as floating bolts.)
+      // wornScale bumped 6→44: at the old low scale the rust noise barely cycled
+      // once across the ~15cm sheet (one flat blotch); finer = per-flake detail.
+      const mat = vmMetal(0x7a3c1c, { wornScale: 44.0, scratchStrength: 0.08, rustLevel: 0.92 });        // saturated rust-orange base
+      const accentMat = vmMetal(0x52260f, { wornScale: 52.0, scratchStrength: 0.06, rustLevel: 0.97 });  // deep-rust crevice tone
       return buildScrapMesh(mat, accentMat);
     },
     makeIcon() {
@@ -3131,7 +3133,7 @@ const _DEFS: Record<ItemId, ItemDef> = {
     id: 'spyglass',
     name: 'SPYGLASS',
     glyph: '⊙',
-    description: 'a salvaged brass spyglass — hold RMB to scan the horizon',
+    description: 'a salvaged, pitted-iron spyglass — hold RMB to scan the horizon',
     stackable: false,
     maxStack: 1,
     wieldLmb: 'click_use',
@@ -3147,8 +3149,12 @@ const _DEFS: Record<ItemId, ItemDef> = {
       // glass showed brass through it → read as a flat painted cap). Bold steel joint
       // collars + a leather grip. Brass reads metallic in-hand under the sun.
       const group = new THREE.Group();
-      const brass = vmMetal(0xcf9a3a, { wornScale: 3.0, rustLevel: 0.025, scratchStrength: 0.07 });
-      const brassDark = vmMetal(0xa1731f, { wornScale: 3.6, rustLevel: 0.05, scratchStrength: 0.06 });
+      // ACBD — was shiny brass (0xcf9a3a, rustLevel 0.025) which read as a flat
+      // yellow that clashed with the all-rusty world. Now weathered pitted IRON:
+      // rust-brown hue + high rustLevel. (Var names kept for the geometry below;
+      // the material is rusty iron, not brass.)
+      const brass = vmMetal(0x6b4a33, { wornScale: 3.4, rustLevel: 0.62, scratchStrength: 0.09 });
+      const brassDark = vmMetal(0x44301f, { wornScale: 3.9, rustLevel: 0.74, scratchStrength: 0.08 });
       const steel = vmMetal(0xb7bcc4, { wornScale: 4.5, rustLevel: 0.02, scratchStrength: 0.05 });
       const leather = createFabricMaterial(0x33210e, undefined, { disableShimmer: true });
       const lensMat = new THREE.MeshStandardMaterial({ color: 0x070a11, roughness: 0.22, metalness: 0.15, side: THREE.DoubleSide });

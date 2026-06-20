@@ -130,6 +130,11 @@ export function wireOverlays(ctx: GameContext): void {
       startOverlay.classList.remove('hidden');
       return;
     }
+    // The dev panel (F8 / `) unlocks the pointer ITSELF so its buttons are
+    // clickable — don't treat that as an Esc-pause (which would pop the pause
+    // overlay over the panel and eat its clicks). The panel sits over the LIVE
+    // game; closing it (F8-again / Close) re-locks via resumeFromPause().
+    if (ctx.flags.devPanelOpen) return;
     // Subsequent unlock = the player pressed Esc → pause
     showPauseOverlay();
   });

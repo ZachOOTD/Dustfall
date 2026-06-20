@@ -20,7 +20,7 @@ import { placePOIs, getAnchorPOIPositions, getWreckYardCarcasses } from './world
 import { placeProcgenPOIs } from './world/procgenPoi.ts';
 import { placeHeroLandmarks } from './world/heroLandmarks.ts';
 import { placeWordlessScenes } from './world/wordlessScenes.ts';   // M5b (C32) — environmental-storytelling tableaux
-import { updateHorizonSilhouettes, addHorizonSilhouettesByName } from './world/horizonSilhouettes.ts';   // M5a (C28) — skyline nav silhouettes
+import { addHorizonSilhouettesByName } from './world/horizonSilhouettes.ts';   // M5a (C28) — registers tall wrecks as sun occluders (billboards removed ACBD)
 import { initSpyglass, updateSpyglass } from './player/spyglass.ts';   // M5a (C29) — hold-RMB spyglass zoom
 import { updateVistaReveal } from './world/vistaReveal.ts';   // M5a (C30) — crest-a-ridge fog-lift + swell
 import { updateSunExposure } from './world/sunExposure.ts';   // M5a (C31) — direct-sun vs shade (heat relief)
@@ -459,6 +459,7 @@ const ctx: GameContext = {
     // ABO A3 — third-person camera mode. Default false (FP at boot).
     // Toggled by F-key (pause-gated).
     thirdPerson: false,
+    devPanelOpen: false,
   },
 };
 
@@ -861,7 +862,6 @@ startLoop(ctx, (c, dt) => {
   updateSleds(c, dt);            // QQ — per-sled tow spring + rope visual. Moved BEFORE updatePlayer so this-frame's sled XZ delta is fresh when updatePlayer reads it for moving-platform-ride. Tether endpoint resolution reads ctx.player.body.body.translation() = position committed by this-frame's physics.step (one frame behind setNext, but negligible at tow speeds).
   updatePlayer(c, dt);           // movement + camera + advance dayTime
   updateStaminaWobble(c);        // WW — sin-driven camera jitter when stamina low (must run AFTER updatePlayer's camera-anchor)
-  updateHorizonSilhouettes(c.three.camera);   // M5a (C28) — distance-gate + billboard the skyline silhouettes (camera is final here)
   updateSpyglass(c, dt);         // M5a (C29) — ease the camera FOV toward the spyglass zoom + drive the scope vignette
   updateVistaReveal(c, dt);      // M5a (C30) — crest detection: re-multiply the weather fog density to LIFT it on a vista reveal (after updateWeather set it)
   updateWormHorizonCrossing(c, c.terrain, dt);   // M5b (C36) — the distant worm dorsal-ridge sweeping the horizon (decoupled spectacle)

@@ -17,6 +17,7 @@ import * as THREE from 'three';
 import type { GameContext } from '../GameContext.ts';
 import { Tuning } from '../config/tuning.ts';
 import { playVistaReveal } from '../audio/audio.ts';
+import { getPlayerWorldPos } from '../player/effectivePos.ts';   // ACBD — effective player pos (speeder seat while mounted)
 
 const RING_DIRS = 8;
 const RING_RADII = [34, 68];   // m — sample the surroundings at two rings
@@ -52,7 +53,7 @@ export function updateVistaReveal(ctx: GameContext, dt: number): void {
   _sampleAccum += dt;
   if (_sampleAccum >= Tuning.VISTA_SAMPLE_INTERVAL_S) {
     _sampleAccum = 0;
-    const tr = ctx.player.body.body.translation();
+    const tr = getPlayerWorldPos(ctx);
     const ph = ctx.terrain.heightAt(tr.x, tr.z);
     let sum = 0, n = 0;
     for (let d = 0; d < RING_DIRS; d++) {

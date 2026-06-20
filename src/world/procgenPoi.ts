@@ -34,7 +34,6 @@ import { Tuning } from '../config/tuning.ts';
 const PROCGEN_WRECK_KINDS: ReadonlyArray<WreckKind> = [
   'engine_bell',
   'fuselage',
-  'escape_pod',
   'engine_cluster',
 ];
 

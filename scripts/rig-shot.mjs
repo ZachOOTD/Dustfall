@@ -1145,7 +1145,7 @@ const SCENARIOS = {
   // The framer for the whole wreck-yard build (biome → graveyard → pit).
   'wreck-yard': async (page) => {
     const angle = argv.angle || 'aerial';
-    const r = await page.evaluate(({ ang, doBreakdown }) => {
+    const r = await page.evaluate(({ ang, doBreakdown, openAmt }) => {
       const ctx = window.__game.ctx;
       ctx.weather.intensity = 0; ctx.weather.cloudiness = 0.15;
       window.__game.setTime(0.36);
@@ -1171,7 +1171,17 @@ const SCENARIOS = {
         const pit = ctx.sarlaccPit;
         const pr = (pit && pit.rOuter) || 10;
         const pb = pit ? pit.basePos : { x: anchor.x, y: groundY, z: anchor.z };
-        if (pit) pit.openAmt = 1;
+        if (pit) {
+          pit.openAmt = openAmt;
+          // ACBD — replicate updateSarlaccPit's buried-rise pose (the FSM doesn't run
+          // while the shot is paused) so the still shows the real sink for this openAmt.
+          const sink = 11 * (1 - openAmt);   // = SARLACC_PIT_BURY_DEPTH
+          pit.parts.teeth.position.y = -sink;
+          pit.parts.innerTeeth.position.y = -sink;
+          for (const t of pit.parts.tendrils) t.position.y = -sink;
+          const bk = pit.parts.beak;
+          bk.position.y = (bk.userData.baseY || 0) + openAmt * pr * 0.16 - sink;
+        }
         // Lower, raking sun + tamer exposure so the funnel's near-wall shadow reads
         // (overhead noon light flattens the depression). The crater depth shows as a
         // light/shadow gradient across the bowl.
@@ -1297,7 +1307,7 @@ const SCENARIOS = {
         };
       }
       return { anchor: [+anchor.x.toFixed(0), +anchor.z.toFixed(0)], rad, biomeHere, groundY: +groundY.toFixed(1), nearObjects: near, nearSalvage, drawCalls: info.render.calls, tris: info.render.triangles, breakdown };
-    }, { ang: angle, doBreakdown: !!argv.breakdown });
+    }, { ang: angle, doBreakdown: !!argv.breakdown, openAmt: argv.openamt !== undefined ? Number(argv.openamt) : 1 });
     await page.waitForTimeout(350);
     await page.screenshot({ path: join(OUT, `scen-wreckyard-${angle}.png`), fullPage: false });
     console.log(`[wreck-yard] ${JSON.stringify(r)}`);

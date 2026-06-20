@@ -16,6 +16,7 @@
 import type { GameContext } from '../GameContext.ts';
 import { Tuning } from '../config/tuning.ts';
 import { getSunOccluders } from './horizonSilhouettes.ts';   // big wreck boxes = sun occluders
+import { getPlayerWorldPos } from '../player/effectivePos.ts';   // ACBD — effective player pos (speeder seat while mounted)
 
 let _accum = 0;
 let _target = 1;
@@ -57,7 +58,7 @@ export function updateSunExposure(ctx: GameContext, dt: number): void {
       // already-weak low-sun heating.
       _target = 1;
     } else {
-      const tr = ctx.player.body.body.translation();
+      const tr = getPlayerWorldPos(ctx);
       const headY = tr.y + 0.6;
       const maxD = Tuning.SUN_EXPOSURE_MAX_M;
       let blocked = false;

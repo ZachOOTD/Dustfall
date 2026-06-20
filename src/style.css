@@ -257,7 +257,7 @@ canvas {
   border: 1px dashed rgba(217, 122, 74, 0.7);
   color: #d8cbb8;
   font-family: 'JetBrains Mono', monospace;
-  z-index: 40;
+  z-index: 200;                /* above the pause overlay (z=100) so dev buttons are clickable */
   pointer-events: auto;
 }
 #dev-item-panel.hidden { display: none; }

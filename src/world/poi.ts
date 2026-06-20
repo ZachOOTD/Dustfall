@@ -586,10 +586,10 @@ export function placePOIs(
         placeMegaWreck(scene, world, terrain, buryPos, yaw, tilt, rand, shelter, salvageables, journals);
         // 3 small companion wrecks at 30-60m around the mega-wreck (BB-3
         // polish — scale-reference props that suggest "crashed in formation").
-        const companions: ReadonlyArray<{ kind: 'fuselage' | 'engine_cluster' | 'escape_pod'; dx: number; dz: number; scale: number; tiltX?: number; tiltZ?: number; }> = [
+        const companions: ReadonlyArray<{ kind: 'fuselage' | 'engine_cluster' | 'cargo_container'; dx: number; dz: number; scale: number; tiltX?: number; tiltZ?: number; }> = [
           { kind: 'fuselage',       dx:  35, dz: -40, scale: 1.5, tiltZ:  0.3 },
           { kind: 'engine_cluster', dx: -45, dz:  20, scale: 1.0, tiltX: -0.4 },
-          { kind: 'escape_pod',     dx:  25, dz:  35, scale: 1.2, tiltZ: -0.2 },
+          { kind: 'cargo_container', dx:  25, dz:  35, scale: 1.2, tiltZ: -0.2 },   // ACBD — was escape_pod (removed)
         ];
         for (const c of companions) {
           const cx = bestX + c.dx;

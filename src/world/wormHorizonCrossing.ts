@@ -13,6 +13,7 @@ import * as THREE from 'three';
 import type { GameContext } from '../GameContext.ts';
 import type { Terrain } from './terrain.ts';
 import { Tuning } from '../config/tuning.ts';
+import { getPlayerWorldPos } from '../player/effectivePos.ts';   // ACBD — effective player pos (speeder seat while mounted)
 import { playWormRoarAttenuated } from '../audio/audio.ts';
 
 const N = Tuning.WORM_CROSSING_SEGMENTS;
@@ -78,7 +79,7 @@ export function resetWormHorizonCrossing(): void {
 export function spawnWormCrossing(ctx: GameContext): { cx: number; cz: number } | null {
   const c = _c;
   if (!c || c.active) return null;
-  const tr = ctx.player.body.body.translation();
+  const tr = getPlayerWorldPos(ctx);
   const ang = Math.random() * Math.PI * 2;
   const D = Tuning.WORM_CROSSING_DIST_MIN
     + Math.random() * (Tuning.WORM_CROSSING_DIST_MAX - Tuning.WORM_CROSSING_DIST_MIN);
@@ -118,7 +119,7 @@ export function updateWormHorizonCrossing(ctx: GameContext, terrain: Terrain, dt
   const headDist = Tuning.WORM_CROSSING_SPEED * c.elapsed;
   // A low attenuated rumble once it has surfaced (distance-faded).
   if (!c.roared && t > 0.08) {
-    const tr = ctx.player.body.body.translation();
+    const tr = getPlayerWorldPos(ctx);
     const hx = c.start.x + c.dir.x * headDist, hz = c.start.z + c.dir.z * headDist;
     playWormRoarAttenuated(Math.hypot(hx - tr.x, hz - tr.z));
     c.roared = true;

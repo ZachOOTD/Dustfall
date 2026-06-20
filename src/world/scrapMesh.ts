@@ -18,7 +18,7 @@ import * as THREE from 'three';
 
 // Sheet footprint (metres, held-item scale — matches the old ~0.11 × 0.085 plate).
 const SHEET_W = 0.125;   // along local X
-const SHEET_L = 0.115;   // along local Z — closer to square so it reads as a SHEET, not a fin
+const SHEET_L = 0.155;   // along local Z — ACBD: lengthened so it reads as a longer torn plate (was 0.115, near-square)
 const SHEET_T = 0.014;   // plate thickness — heftier hull plating so the EDGE reads as real metal mass at a 3q/edge-on angle (ACBC §G: 6mm read paper-thin oblique)
 const SEG_W = 6;         // subdivisions — enough for buckle + tears, still low-poly
 const SEG_L = 5;
@@ -121,29 +121,15 @@ export function buildScrapMesh(mat: THREE.Material, accentMat: THREE.Material): 
   // seam are CHILDREN of the sheet so they ride its warp + tilt as one panel.
   const sheet = buildTornSheet(mat);
 
-  // A small folded-back flap of sheet peeled off one torn edge — a thin bent
-  // tab that catches the light and reinforces the "ripped metal" read.
-  const flap = new THREE.Mesh(new THREE.BoxGeometry(0.034, 0.005, 0.044, 1, 1, 1), mat);
+  // A small folded-back flap of sheet peeled off one torn edge — a thin bent tab
+  // that catches the light and reinforces the "ripped metal" read. In the darker
+  // accent rust for a two-tone break-up. (ACBD — replaces the riveted seam, whose
+  // proud studs read as "floating bolts" off the warped surface; user asked to
+  // drop them.)
+  const flap = new THREE.Mesh(new THREE.BoxGeometry(0.034, 0.005, 0.05, 1, 1, 1), accentMat);
   flap.position.set(-0.052, 0.03, 0.03); // hinged at the -X torn edge of the sheet
   flap.rotation.set(-1.05, 0.22, -0.28); // peeled sharply up off the surface
   sheet.add(flap);
-
-  // A riveted seam: a short line of low-poly rivet studs across the plate. Reads
-  // as a real fabricated panel rather than raw shapeless metal. Y sits just
-  // above the warped top face (top surface ≈ +0.02..0.04 after the buckle).
-  const rivetMat = accentMat;
-  const rivets: Array<[number, number, number]> = [
-    [-0.03, 0.035, -0.03],
-    [-0.006, 0.035, -0.018],
-    [0.018, 0.034, -0.006],
-    [0.042, 0.033, 0.006],
-  ];
-  for (const [x, y, z] of rivets) {
-    const rivet = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.007, 0.008, 6), rivetMat);
-    rivet.position.set(x, y, z);
-    rivet.rotation.x = Math.PI / 2; // domed head facing up out of the sheet
-    sheet.add(rivet);
-  }
 
   // Tilt the whole panel so the broad face presents to the camera (so the 3q
   // angle shows the plate, not its edge).

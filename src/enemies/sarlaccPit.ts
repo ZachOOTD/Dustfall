@@ -242,6 +242,15 @@ export function updateSarlaccPit(ctx: GameContext, dt: number): void {
     : target > 0 ? 'alerted'
     : pit.openAmt > 0.05 ? 'closing' : 'idle';
 
+  // ── Buried-until-entered (ACBD) — the teeth, tentacles + beak sink below the
+  //    crater floor when dormant and RISE out of the sand as the maw gapes, tied to
+  //    openAmt so they emerge exactly as the player enters the pit (and sink back
+  //    when they leave). The static collar/throat/lip stay — only the living parts
+  //    erupt. (The crater terrain occludes them while buried.) ──
+  const sink = Tuning.SARLACC_PIT_BURY_DEPTH * (1 - pit.openAmt);
+  pit.parts.teeth.position.y = -sink;
+  pit.parts.innerTeeth.position.y = -sink;
+
   // ── Pose: the crater is PERMANENT terrain now — the mesh never sinks. Only the
   //    living maw animates: the beak extends + gnashes, the teeth gape (lean back)
   //    when open / clench (lean in) when dormant, the tentacles writhe, the gullet
@@ -253,7 +262,7 @@ export function updateSarlaccPit(ctx: GameContext, dt: number): void {
   // Beak — rises from the throat + a slow gnash when open; mandibles splay.
   const beak = pit.parts.beak;
   const beakBaseY = (beak.userData.baseY as number) || 0;
-  beak.position.y = beakBaseY + pit.openAmt * r * 0.16 + Math.sin(elapsed * 1.8) * 0.04 * pit.openAmt;
+  beak.position.y = beakBaseY + pit.openAmt * r * 0.16 + Math.sin(elapsed * 1.8) * 0.04 * pit.openAmt - sink;
   for (const ch of beak.children) {
     const ma = ch.userData.mandAngle as number | undefined;
     if (ma === undefined) continue;
@@ -277,6 +286,7 @@ export function updateSarlaccPit(ctx: GameContext, dt: number): void {
   // Tentacles — sway (idle) → writhe + reach (open). Keep the pivot's y-orient.
   for (const tend of pit.parts.tendrils) {
     const ph = (tend.userData.baseAngle as number) || 0;
+    tend.position.y = -sink;   // ACBD — rise from below the sand with the teeth
     tend.rotation.z = Math.sin(elapsed * 1.1 + ph) * (0.12 + pit.openAmt * 0.22);
     tend.rotation.x = Math.cos(elapsed * 0.9 + ph) * 0.1 * (0.4 + pit.openAmt);
   }

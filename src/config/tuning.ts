@@ -527,6 +527,7 @@ export const Tuning = {
   SARLACC_PIT_DETECT_RADIUS: 34,       // m — the maw gapes when the player enters
   SARLACC_PIT_PULL_RADIUS: 20,         // m — within this the player is dragged toward the throat
   SARLACC_PIT_DANGER_RADIUS: 9,        // m — within this (open maw) damage ticks
+  SARLACC_PIT_BURY_DEPTH: 11,          // m — teeth/tentacles/beak sink THIS far below the crater floor when dormant + rise flush as openAmt→1 (ACBD: hidden under the sand until the player enters the pit)
   SARLACC_PIT_PULL_ACCEL: 7.0,         // m/s² toward center while open (FEEL — attended tune)
   SARLACC_PIT_DAMAGE_PER_TICK: 0.07,   // health/0..1 per damage tick
   SARLACC_PIT_DAMAGE_INTERVAL: 0.45,   // s between damage ticks
@@ -668,7 +669,7 @@ export const Tuning = {
   FOV: 78,
   // M5a (C29) — salvaged-spyglass zoom: hold RMB while the spyglass is equipped to
   // narrow the camera FOV (scan the horizon). Restores to the player's settings FOV.
-  SPYGLASS_FOV: 24,            // zoomed FOV in degrees — ~3.25× over the 78° base (a strong but not nauseating glass)
+  SPYGLASS_FOV: 12,            // zoomed FOV in degrees — ~7.5× over the 78° base (ACBD: doubled the zoom, 24°→12°)
   SPYGLASS_ZOOM_LERP: 9,       // FOV ease rate (per-second); higher = snappier zoom in/out
   SPYGLASS_VIGNETTE_MAX: 0.96, // peak darkness of the scope vignette ring at full zoom (0..1)
 

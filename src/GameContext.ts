@@ -205,6 +205,11 @@ export interface GameContext {
      *  first-person. When true: rig becomes visible, viewmodel hidden,
      *  camera offsets behind+above player. */
     thirdPerson: boolean;
+    /** True while the dev item/action panel (F8 / `) is open. The input.ts
+     *  pointer-lock 'unlock' handler reads this to SUPPRESS the pause overlay
+     *  when the dev panel is what freed the cursor — so the panel sits over the
+     *  LIVE game with a clickable cursor instead of behind the pause menu. */
+    devPanelOpen: boolean;
   };
 }
 

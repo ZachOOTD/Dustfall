@@ -142,7 +142,11 @@ export type PanelComponentKind =
 /** AAS — kind hint for variant interior layouts. Mirrors SalvageKind
  *  (WreckKind | 'massive') from salvage.ts, redeclared here to avoid
  *  circular imports (salvage.ts imports WreckKind from this file). */
-export type PanelKind = WreckKind | 'massive';
+// ACBD — 'escape_pod' kept here (and in SalvageKind) as a salvage-panel LOOT
+// PALETTE (medical-leaning) even though the escape_pod WRECK MODEL was removed
+// from placement: rocky entrances, the satellite archetype, and the orbital pod
+// cluster still use the medical palette.
+export type PanelKind = WreckKind | 'massive' | 'escape_pod';
 
 // ── ACAV Tier 3+ — panel shape / size / archetype ───────────────────
 /** Panel silhouette. `'square'` is `'rect'` with aspect 1 (one geometry path);
@@ -987,10 +991,12 @@ export function placeDebrisField(
 // ────────────────────────────────────────────────────────────────
 // Public: place + collider for a hero-size wreck of a given kind.
 // ────────────────────────────────────────────────────────────────
+// ACBD — 'escape_pod' removed from the in-world wreck rotation (user: legacy
+// 2-panel drop-pod model). makeEscapePod() is kept (still used by titleScene.ts
+// as a menu decoration); it's just no longer placed in the game world.
 export type WreckKind =
   | 'engine_cluster'
   | 'fuselage'
-  | 'escape_pod'
   | 'cargo_container'
   | 'engine_bell';
 
@@ -1018,7 +1024,6 @@ export function placeWreck(
   switch (kind) {
     case 'engine_cluster':  group = makeEngineCluster(rand, scale); break;
     case 'fuselage':        group = makeFuselage(rand, scale); break;
-    case 'escape_pod':      group = makeEscapePod(rand, scale); break;
     case 'cargo_container': group = makeCargoContainer(rand, scale); break;
     case 'engine_bell':     group = makeEngineBell(rand, scale); break;
   }
