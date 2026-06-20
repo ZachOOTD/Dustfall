@@ -69,17 +69,18 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 "Last shipped" note. Current target: **Phase B (M6→M10) — APPROVED + RELEASED**. The loop runs M6→M10 unattended,
 commits every cycle, and pauses only at "Phase B — Build-out complete" (after M10). Charter: `docs/campaign/campaign.md`.
 
-**Last shipped**: Campaign **C39** (2026-06-20, cycle 39/75) — **M6 ③ flat-color-texture-audit**
-(`verify:all` PASS — tsc + placement 0/0 ×5 + colliders 0/25; **visual gate PASS**; **0 new shader programs** [git-stash A/B: 82=82]; **no save bump**).
-Scope-first: an Explore-agent scan ranked the weakest flat `MeshLambertMaterial` surfaces the player sees up close; upgraded **8 surface-groups**
-to the project's EXISTING procedural shader factories (zero new programs/assets — NOT the D107 PBR fork): fire logs + tent poles → wood-grain;
-bedroll pad/pillow/blanket + journal cover/spine + largeTent rug → woven fabric; journal black-box body + lantern wires → weathered metal. No
-program creep because all three factories already exist in-scene (locker/posts wood, tents fabric, wrecks metal) and `bark` is a runtime uniform,
-not a shader fork. NEW `__game.campStudio()` + a `camp-studio` rig scenario (deploy the camp objects + report the program count) verify it.
+**Last shipped**: Campaign **C40** (2026-06-20, cycle 40/75) — **M6 ④ remove-hud-stat-bars → M6 COMPLETE**
+(`verify:all` PASS — tsc + placement 0/0 ×5 + colliders 0/25; **diegetic-probe PASS**; **visual gate PASS in 3 rounds**; **no save bump**).
+Replaced the always-on HUD stat bars with DIEGETIC survival tells: per-stat screen-edge vignettes (cold=blue, thirst=sepia, heat=amber,
+hunger=sickly-green pall, low-health=blood-crimson PULSE) + procedural audio (`playHeartbeat`, `playStomachGrowl`). Behind
+`FEATURES.diegeticSurvival` (master flag, **flipped ON** — bars hidden by default) + `settings.diegeticSurvival` (a pause-menu opt-in,
+default-ON; bars are the always-available floor). NEW `ui/diegeticMode.ts` shared state · `hud.setStatsBarsVisible` · heat/hunger/health
+added to `statVignette.ts` · `__game.diegeticProbe`/`showDiegeticVignette` + `diegetic-probe`/`diegetic-vignette` rig gates (D248).
+**FELT read — can I survive without bars? — → Phase-B walk-test.**
 
-**Next session** = cycle 40 = **M6 ④ remove-hud-stat-bars** (L, dep on C38's survival): behind `FEATURES.diegeticSurvival` (default OFF) + a
-pause-menu opt-in (default-ON; bars stay the floor). Replace the always-on HUD stat bars with diegetic tells — screen vignette / procedural
-audio / viewmodel cues. The loop MAY flip the FEATURES flag ON once the gates pass (reversible; user vetoes FEEL). This COMPLETES M6.
+**Next session** = cycle 41 = **M7 ⑤ procedural-wreck-overhaul** (L — net-new structure axes in the socket grammar: `world/poiArchetypes.ts`
++ `poiComponents.ts`; wider/weirder ships beyond the current tube-ish hulls). **M6 is DONE** (chooser · survival · flat-color · diegetic HUD).
+M7 = wreck depth & new POIs (⑤ overhaul · ⑥ watchtower/debris-trail/well · ⑦ walkable interiors; the crashing-ship-event is already DONE via D1).
 See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).

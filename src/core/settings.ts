@@ -8,6 +8,11 @@ export interface Settings {
   fov: number;             // 60 .. 100 (degrees)
   renderQuality: RenderQuality;
   shadowsEnabled: boolean; // Sun cast-shadow on/off (biggest GPU lever)
+  /** M6 ④ (C40) — diegetic survival opt-in. Only honored when `FEATURES.diegeticSurvival`
+   *  is ON. true (default) = hide the HUD stat bars + feel survival via vignettes/audio;
+   *  false = show the classic bars (the always-available floor). Persisted in localStorage,
+   *  NOT the save schema — so adding it is not a D81 save-version bump. */
+  diegeticSurvival: boolean;
 }
 
 const DEFAULT: Settings = {
@@ -16,6 +21,7 @@ const DEFAULT: Settings = {
   fov: 78,
   renderQuality: 'medium',
   shadowsEnabled: true,
+  diegeticSurvival: true,
 };
 
 const STORAGE_KEY = 'dustfall.settings.v1';
@@ -41,6 +47,9 @@ export function loadSettings(): Settings {
       shadowsEnabled: typeof parsed.shadowsEnabled === 'boolean'
         ? parsed.shadowsEnabled
         : DEFAULT.shadowsEnabled,
+      diegeticSurvival: typeof parsed.diegeticSurvival === 'boolean'
+        ? parsed.diegeticSurvival
+        : DEFAULT.diegeticSurvival,
     };
   } catch {
     return { ...DEFAULT };

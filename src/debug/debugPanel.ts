@@ -8,6 +8,9 @@ import { spawnFireAt, warmFireSmoke } from '../world/fire.ts';   // M4 (C21) —
 import { spawnBedrollAt } from '../world/bedroll.ts';   // M6 ③ (C39) — camp-studio render
 import { spawnTentAt } from '../world/tent.ts';
 import { spawnLanternAt } from '../world/lantern.ts';
+import { updateStatVignette } from '../ui/statVignette.ts';   // M6 ④ (C40) — diegetic-probe
+import { setDiegeticActive } from '../ui/diegeticMode.ts';
+import { setStatsBarsVisible } from '../ui/hud.ts';
 import { getSunOccluders } from '../world/horizonSilhouettes.ts';   // M5a (C31) — __game.sunInfo
 import { triggerCrash, crashState, advanceCrash, crashSites, crashHeatAt, resetMeteorCrash, applyPendingCrashRestore, type CrashRole } from '../world/meteorCrash.ts';   // ACBE (D1) — __game.triggerCrash
 import { saveGameState, loadGameState } from '../persistence/save.ts';   // ACBE (D1) — crash save round-trip test hook
@@ -127,6 +130,14 @@ interface DebugApi {
    *  and report the scene shader-program count (must NOT rise — the audit reuses existing
    *  factories). Returns the cluster centre + per-object positions for framing. */
   campStudio: () => { center: [number, number, number]; programs: number };
+  /** M6 ④ (C40) — DEV-only: force diegetic-survival mode + drive each stat to its tell,
+   *  tick the vignette system, and report each vignette's opacity per scenario (the
+   *  intended one > 0, the rest ~0) + that the HUD stat bars hide/show on toggle. For the
+   *  diegetic-survival wiring gate. Restores stats + mode afterward. */
+  diegeticProbe: () => Record<string, unknown>;
+  /** M6 ④ (C40) — DEV-only: force diegetic mode + set ONE stat to its tell level so the
+   *  screen-edge vignette renders for a screenshot. stat: thirst|cold|heat|hunger|health. */
+  showDiegeticVignette: (stat: 'thirst' | 'cold' | 'heat' | 'hunger' | 'health') => void;
   /** ACG (Cycle 1) — DEV-only: kill a raider by id (drives the real death
    *  path → dead pose + corpse interaction tag), so the corpse-drag flow is
    *  testable without melee aiming. Returns true if a live raider matched. */
@@ -359,6 +370,58 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
         center: [base.x, ctx.terrain.heightAt(base.x, base.z), base.z],
         programs: ren.info.programs ? ren.info.programs.length : -1,
       };
+    },
+    diegeticProbe: () => {
+      const s = ctx.stats, w = ctx.weather;
+      const snap = { thirst: s.thirst, hunger: s.hunger, temperature: s.temperature, health: s.health, wInt: w.intensity };
+      setDiegeticActive(true);
+      w.intensity = 0;   // peak storm suppresses the warning tints
+      const op = (id: string) => +((document.getElementById(id) as HTMLElement | null)?.style.opacity ?? '0');
+      const probe = (over: Partial<typeof snap>) => {
+        s.thirst = 1; s.hunger = 1; s.temperature = 0; s.health = 1;
+        Object.assign(s, over);
+        updateStatVignette(ctx);
+        return {
+          cold: op('stat-vignette-cold'), thirst: op('stat-vignette-thirst'),
+          heat: op('stat-vignette-heat'), hunger: op('stat-vignette-hunger'),
+          health: op('stat-vignette-health'),
+        };
+      };
+      const r = {
+        thirsty: probe({ thirst: 0.04 }),
+        cold: probe({ temperature: -0.9 }),
+        hot: probe({ temperature: 0.9 }),
+        starving: probe({ hunger: 0.04 }),
+        wounded: probe({ health: 0.08 }),
+        healthy: probe({}),
+      };
+      // Bar hide/show.
+      setStatsBarsVisible(false);
+      const barsHidden = ((document.getElementById('stats') as HTMLElement | null)?.style.display) === 'none';
+      setStatsBarsVisible(true);
+      const barsShown = ((document.getElementById('stats') as HTMLElement | null)?.style.display) !== 'none';
+      // Restore.
+      s.thirst = snap.thirst; s.hunger = snap.hunger; s.temperature = snap.temperature; s.health = snap.health;
+      w.intensity = snap.wInt; setDiegeticActive(false); updateStatVignette(ctx);
+      return { ...r, barsHidden, barsShown };
+    },
+    showDiegeticVignette: (stat) => {
+      setDiegeticActive(true);
+      ctx.weather.intensity = 0;
+      const s = ctx.stats;
+      s.thirst = 1; s.hunger = 1; s.temperature = 0; s.health = 1;
+      if (stat === 'thirst') s.thirst = 0.04;
+      else if (stat === 'cold') s.temperature = -0.92;
+      else if (stat === 'heat') s.temperature = 0.92;
+      else if (stat === 'hunger') s.hunger = 0.04;
+      else if (stat === 'health') s.health = 0.06;
+      // Kill the CSS opacity transition so the screenshot shows the exact target opacity
+      // instantly (otherwise the 0.4s ease lags behind a single-frame render).
+      for (const id of ['cold', 'thirst', 'heat', 'hunger', 'health']) {
+        const el = document.getElementById('stat-vignette-' + id) as HTMLElement | null;
+        if (el) el.style.transition = 'none';
+      }
+      updateStatVignette(ctx);
     },
     setStats: (s) => {
       if (s.thirst !== undefined) ctx.stats.thirst = s.thirst;

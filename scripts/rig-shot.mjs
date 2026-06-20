@@ -1447,6 +1447,60 @@ const SCENARIOS = {
     console.log(`[camp-studio] programs=${r.programs} ${JSON.stringify(r)}`);
   },
 
+  // M6 ④ (C40) — diegetic-survival WIRING gate (numeric). Forces diegetic mode + drives each
+  // stat to its tell; asserts the matching vignette lights (>0) while the others stay dark
+  // (~0), a healthy player shows nothing, and the HUD stat bars hide/show on toggle.
+  'diegetic-probe': async (page) => {
+    const r = await page.evaluate(() => { const g = window.__game; g.enterGame(true); return g.diegeticProbe(); });
+    const lit = (v) => v > 0.02, dark = (v) => v < 0.02;
+    const pass =
+      lit(r.thirsty.thirst) && dark(r.thirsty.cold) && dark(r.thirsty.heat) && dark(r.thirsty.health) &&
+      lit(r.cold.cold) && dark(r.cold.thirst) && dark(r.cold.heat) &&
+      lit(r.hot.heat) && dark(r.hot.cold) &&
+      lit(r.starving.hunger) &&
+      lit(r.wounded.health) &&
+      dark(r.healthy.thirst) && dark(r.healthy.cold) && dark(r.healthy.heat) && dark(r.healthy.hunger) && dark(r.healthy.health) &&
+      r.barsHidden === true && r.barsShown === true;
+    console.log(`[diegetic-probe] ${pass ? 'PASS' : 'FAIL'} ${JSON.stringify(r)}`);
+  },
+
+  // M6 ④ (C40) — diegetic-survival vignette RENDER (appearance gate). Forces diegetic mode +
+  // sets ONE stat to its tell level so the screen-edge vignette shows over the game, then
+  // screenshots. --stat=thirst|cold|heat|hunger|health (default health).
+  'diegetic-vignette': async (page) => {
+    const stat = argv.stat || 'health';
+    await page.evaluate((stat) => {
+      const g = window.__game; g.enterGame(true);
+      const ctx = g.ctx;
+      g.setTime(0.5);                       // noon — a cooler, brighter backdrop so the coloured tints read
+      ctx.weather.cloudiness = 0.1; ctx.weather.intensity = 0;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      ctx.three.renderer.setSize(820, 520, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 820 / 520; cam.updateProjectionMatrix(); }
+      // Aim at a clean dune horizon (slightly down), away from the spawn wreck.
+      cam.rotation.set(-0.08, 0, 0);
+      cam.updateMatrixWorld(true);
+      g.showDiegeticVignette(stat);
+      ctx.three.renderer.render(ctx.three.scene, cam);
+      ctx.flags.paused = true;   // freeze so the live tick doesn't recompute the vignette
+    }, stat);
+    await page.waitForTimeout(550);   // let the CSS opacity transition settle to the target
+    const op = await page.evaluate(() => {
+      const ids = ['cold', 'thirst', 'heat', 'hunger', 'health'];
+      const out = {};
+      for (const id of ids) {
+        const el = document.getElementById('stat-vignette-' + id);
+        out[id] = el ? { o: el.style.opacity, comp: getComputedStyle(el).opacity, z: getComputedStyle(el).zIndex, disp: getComputedStyle(el).display } : null;
+      }
+      return out;
+    });
+    await page.screenshot({ path: join(OUT, `scen-diegetic-${stat}.png`), fullPage: false });
+    console.log(`[diegetic-vignette] ${stat} rendered — ${JSON.stringify(op)}`);
+  },
+
   // ACAQ — Sarlacc-pit behavior smoke test. Teleport the player onto the maw, let
   // the live game tick, confirm the maw OPENS + BITES (health drops). The pull
   // FEEL can't be judged headless (attended walk-test); this gates the wiring.

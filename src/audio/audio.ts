@@ -545,6 +545,59 @@ export function playSignalFlare(): void {
   w.stop(t + 1.6);
 }
 
+/** M6 ④ (C40) — diegetic low-health HEARTBEAT: a soft "lub-dub" of two low thuds.
+ *  `intensity` (0..1, how close to death) scales the volume + tightens the second beat
+ *  so it reads more urgent near death. On the sfx bus; called on a cadence by statVignette. */
+export function playHeartbeat(intensity = 0.5): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  const vol = 0.10 + 0.16 * Math.max(0, Math.min(1, intensity));
+  const gap = 0.22 - 0.06 * intensity;   // lub→dub gap tightens near death
+  const thud = (at: number, freq: number, gain: number) => {
+    const o = a.ctx.createOscillator();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(freq, at);
+    o.frequency.exponentialRampToValueAtTime(freq * 0.6, at + 0.14);   // a downward "thump"
+    const lp = a.ctx.createBiquadFilter();
+    lp.type = 'lowpass'; lp.frequency.value = 220;
+    const env = a.ctx.createGain();
+    env.gain.setValueAtTime(0.0001, at);
+    env.gain.linearRampToValueAtTime(gain, at + 0.012);
+    env.gain.exponentialRampToValueAtTime(0.0008, at + 0.18);
+    o.connect(lp).connect(env).connect(a.sfx);
+    o.start(at);
+    o.stop(at + 0.2);
+  };
+  thud(t, 62, vol);                 // lub
+  thud(t + gap, 52, vol * 0.78);    // dub (lower + softer)
+}
+
+/** M6 ④ (C40) — diegetic STOMACH GROWL while starving: a low gurgling rumble (filtered
+ *  noise through a slow wobbling band-pass). On the sfx bus; called periodically by statVignette. */
+export function playStomachGrowl(): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  const src = a.ctx.createBufferSource();
+  src.buffer = a.noiseBuffer;
+  src.playbackRate.value = 0.35;          // slow → low rumble
+  const bp = a.ctx.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.Q.value = 4;
+  bp.frequency.setValueAtTime(90, t);
+  bp.frequency.linearRampToValueAtTime(160, t + 0.4);   // a gurgle that rises then settles
+  bp.frequency.linearRampToValueAtTime(70, t + 0.9);
+  const env = a.ctx.createGain();
+  env.gain.setValueAtTime(0.0001, t);
+  env.gain.linearRampToValueAtTime(0.07, t + 0.12);
+  env.gain.linearRampToValueAtTime(0.05, t + 0.6);
+  env.gain.exponentialRampToValueAtTime(0.001, t + 1.1);
+  src.connect(bp).connect(env).connect(a.sfx);
+  src.start(t);
+  src.stop(t + 1.2);
+}
+
 /** Cook sizzle — ~0.6s filtered noise sweep with low rumble undertone. */
 export function playCookSizzle(): void {
   const a = getAudioInternals();

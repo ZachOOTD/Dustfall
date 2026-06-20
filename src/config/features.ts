@@ -30,6 +30,15 @@ export const FEATURES = {
    *  on `realRope` landing first. OFF = the current shader-only fabric (the
    *  `fabricMaterial` vertex-shader wind ripple). M9 `real-cloth-physics`. */
   realCloth: false,
+
+  /** M6 ④ (C40) — diegetic survival: remove the always-on HUD stat bars and surface
+   *  survival state through DIEGETIC tells instead (screen-edge vignettes per stat +
+   *  procedural audio: heartbeat at low health, stomach growl when starving). OFF = the
+   *  classic stat bars always show (the proven floor). ON = the bars hide by default and
+   *  the player FEELS their state; a pause-menu toggle (`settings.diegeticSurvival`,
+   *  default-ON when this flag is on) lets them switch the bars back any time. Flipped ON
+   *  in C40 once the headless + visual gates passed; the user vetoes FEEL at the review. */
+  diegeticSurvival: true,
 } as const;
 
 /** A valid feature-flag key (e.g. for a dev-panel toggle list later). */

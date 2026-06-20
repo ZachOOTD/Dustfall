@@ -212,6 +212,21 @@ export const Tuning = {
   THIRST_VIGNETTE_THRESHOLD: 0.25,     // thirst below this triggers brown tint
   STAT_VIGNETTE_MAX_OPACITY: 0.35,     // peak opacity at stat=0
   // (colors hardcoded in statVignette.ts CSS since they're tone-locked)
+  // M6 ④ (C40) — diegetic survival: the HEAT / HUNGER / LOW-HEALTH tells that complete the
+  // per-stat vignette set so the player can FEEL every lethal stat with the HUD bars hidden.
+  HEAT_VIGNETTE_THRESHOLD: 0.3,        // positive temperature above this triggers the amber heat tint
+  HUNGER_VIGNETTE_THRESHOLD: 0.25,     // hunger below this triggers a desaturating dark edge
+  HEALTH_VIGNETTE_THRESHOLD: 0.45,     // health below this triggers the red "wounded" pulse (kicks in earlier — health is the last line)
+  HEALTH_VIGNETTE_MAX_OPACITY: 0.62,   // peak red pulse at health=0 (stronger than the warning vignettes — it's mortal)
+  // In DIEGETIC mode the tints REPLACE the bars, so they must read even over the bright
+  // noon desert (a 0.35 tint there just muddies the edges). Boost the colored warnings
+  // (cold/thirst/heat/hunger) when diegetic; bar-mode keeps the subtle WW warning level.
+  DIEGETIC_VIGNETTE_BOOST: 1.7,        // ×STAT_VIGNETTE_MAX_OPACITY when diegetic → ~0.6 peak
+  HEALTH_PULSE_HZ: 1.4,                // heartbeat-rate pulse of the low-health vignette (sin); faster as health drops
+  // Diegetic AUDIO cadence (procedural — heartbeat at low health, stomach growl when starving).
+  HEARTBEAT_INTERVAL_FAR_S: 1.4,       // seconds between heartbeats just under the health threshold
+  HEARTBEAT_INTERVAL_NEAR_S: 0.55,     // seconds between heartbeats near death (ramps faster as health drops)
+  GROWL_INTERVAL_S: 14.0,              // a stomach growl roughly this often while hunger is below its threshold (jittered)
 
   // Session WW — low-stamina screen wobble. Sin-driven sub-cm camera
   // jitter that mirrors the sandworm-tremor pattern in scale + shape.

@@ -26,6 +26,16 @@ interface HudRefs {
 
 let refs: HudRefs | null = null;
 let toastTimeout: number | undefined;
+// M6 ④ (C40) — the #stats container (all the stat bars). Hidden when diegetic-survival
+// mode is active; toggled by menus.applySettings via setStatsBarsVisible().
+let _statsEl: HTMLElement | null = null;
+
+/** M6 ④ (C40) — show/hide the HUD stat-bar column. Called by menus.applySettings on boot
+ *  + on every settings change so the diegetic-survival opt-in takes effect immediately. */
+export function setStatsBarsVisible(visible: boolean): void {
+  if (!_statsEl) _statsEl = document.getElementById('stats');
+  if (_statsEl) _statsEl.style.display = visible ? '' : 'none';
+}
 
 export interface HudApi {
   /** Standard toast: muted text, 1.6s. Optional `opts.kind='discovery'`

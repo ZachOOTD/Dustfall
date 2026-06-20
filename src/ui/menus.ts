@@ -14,6 +14,9 @@ import {
 import { setMasterVolume, playUiHover, playUiClick } from '../audio/audio.ts';
 import { hasSave, saveGameState, loadGameState, clearSave } from '../persistence/save.ts';
 import { resetMeteorCrash, applyPendingCrashRestore } from '../world/meteorCrash.ts';   // ACBE (D1) — death-continue crash reset+restore
+import { FEATURES } from '../config/features.ts';            // M6 ④ (C40) — diegeticSurvival master flag
+import { setStatsBarsVisible } from './hud.ts';              // M6 ④ (C40) — hide the stat bars in diegetic mode
+import { setDiegeticActive } from './diegeticMode.ts';       // M6 ④ (C40) — broadcast the effective mode to statVignette
 
 let _settings: Settings = loadSettings();
 
@@ -26,6 +29,7 @@ interface SettingsRefs {
   fovVal: HTMLSpanElement;
   renderQuality: HTMLSelectElement;
   shadows: HTMLInputElement;
+  diegetic: HTMLInputElement;   // M6 ④ (C40)
 }
 
 let _ctx: GameContext | null = null;
@@ -308,6 +312,11 @@ export function createMenus(ctx: GameContext): void {
     ['high', 'high'],
   ]));
   rows.appendChild(makeSettingsToggle('shadows', 'set-shadows'));
+  // M6 ④ (C40) — diegetic-survival opt-in. The row only shows when the feature is enabled
+  // (else it's a dead toggle); the ref still exists so the wiring below never null-crashes.
+  const diegeticRow = makeSettingsToggle('hide stat bars · feel survival', 'set-diegetic');
+  if (!FEATURES.diegeticSurvival) diegeticRow.style.display = 'none';
+  rows.appendChild(diegeticRow);
   sp.appendChild(rows);
 
   const closeBtn = makeButton('close', 'close');
@@ -329,6 +338,7 @@ export function createMenus(ctx: GameContext): void {
     fovVal:         sp.querySelector<HTMLSpanElement>('#set-fov-val')!,
     renderQuality:  sp.querySelector<HTMLSelectElement>('#set-quality')!,
     shadows:        sp.querySelector<HTMLInputElement>('#set-shadows')!,
+    diegetic:       sp.querySelector<HTMLInputElement>('#set-diegetic')!,
   };
 
   // Reflect saved settings into sliders
@@ -340,6 +350,7 @@ export function createMenus(ctx: GameContext): void {
   _settingsRefs.fovVal.textContent = String(_settings.fov);
   _settingsRefs.renderQuality.value = _settings.renderQuality;
   _settingsRefs.shadows.checked = _settings.shadowsEnabled;
+  _settingsRefs.diegetic.checked = _settings.diegeticSurvival;
 
   // Live-apply on drag, save on release.
   _settingsRefs.sensitivity.addEventListener('input', () => {
@@ -393,6 +404,15 @@ export function createMenus(ctx: GameContext): void {
     applySettings(_settings);
     saveSettings(_settings);
   });
+
+  // M6 ④ (C40) — diegetic survival opt-in: hide the HUD stat bars + feel survival via tells.
+  _settingsRefs.diegetic.addEventListener('mouseenter', playUiHover);
+  _settingsRefs.diegetic.addEventListener('change', () => {
+    _settings.diegeticSurvival = _settingsRefs!.diegetic.checked;
+    playUiClick();
+    applySettings(_settings);
+    saveSettings(_settings);
+  });
 }
 
 function applySettings(s: Settings): void {
@@ -407,6 +427,12 @@ function applySettings(s: Settings): void {
   setMasterVolume(s.masterVolume);
   applyRenderQuality(_ctx, s.renderQuality);
   applyShadows(_ctx, s.shadowsEnabled);
+  // M6 ④ (C40) — diegetic survival: only active when BOTH the feature flag + the player
+  // opt-in are on. Broadcast to statVignette (gate the heat/hunger/health tells) + hide
+  // the HUD stat bars. Bars are the always-available floor when either is off.
+  const diegeticActive = FEATURES.diegeticSurvival && s.diegeticSurvival;
+  setDiegeticActive(diegeticActive);
+  setStatsBarsVisible(!diegeticActive);
 }
 
 /** Toggle sun shadow casting. Off = scene renders once per frame (vs twice).

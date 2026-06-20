@@ -1414,29 +1414,65 @@ canvas {
    src/ui/statVignette.ts each frame from ctx.stats.
    ────────────────────────────────────────────────────────── */
 #stat-vignette-cold,
-#stat-vignette-thirst {
+#stat-vignette-thirst,
+#stat-vignette-heat,
+#stat-vignette-hunger,
+#stat-vignette-health {
   position: fixed;
   inset: 0;
   pointer-events: none;
   z-index: 17;                /* below damage-vignette (18), above HUD (10-15) */
   transition: opacity 0.4s ease-out;
 }
+/* M6 ④ (C40) — the low-health pulse drives its own opacity per frame (heartbeat), so it
+   must NOT lerp through the CSS transition (that would smear the pulse into a dull glow). */
+#stat-vignette-health { transition: opacity 0.08s linear; }
 
 #stat-vignette-cold {
-  /* Blue cold tint, strongest at the corners, transparent at center */
+  /* Deep blue cold tint — reaches well in from the corners so it reads over a bright
+     desert (C40: was a faint 38%/0.65 edge-only tint that washed out in diegetic mode). */
   background: radial-gradient(
     ellipse at center,
-    rgba(64, 96, 160, 0) 38%,
-    rgba(64, 96, 160, 0.65) 100%
+    rgba(48, 84, 170, 0) 26%,
+    rgba(34, 64, 150, 0.9) 100%
   );
 }
 
 #stat-vignette-thirst {
-  /* Brown/sepia thirst tint, same falloff shape */
+  /* Brown/sepia thirst tint, same bolder falloff */
   background: radial-gradient(
     ellipse at center,
-    rgba(138, 96, 56, 0) 38%,
-    rgba(138, 96, 56, 0.65) 100%
+    rgba(150, 100, 44, 0) 26%,
+    rgba(120, 78, 34, 0.9) 100%
+  );
+}
+
+/* M6 ④ (C40) — diegetic tells: heat (amber, overheating), hunger (a desaturating dark
+   edge, starving), low-health (a deep red mortal pulse). Same corner-weighted falloff. */
+#stat-vignette-heat {
+  /* Hot AMBER-ORANGE (kept clear of red so it can't be confused with the mortal-red health
+     pulse) — a sun-glare/overheating wash. */
+  background: radial-gradient(
+    ellipse at center,
+    rgba(230, 130, 28, 0) 28%,
+    rgba(208, 92, 12, 0.92) 100%
+  );
+}
+#stat-vignette-hunger {
+  /* A dark, SICKLY green-grey starvation pall — a hue signature so it can't read as mere dusk */
+  background: radial-gradient(
+    ellipse at center,
+    rgba(30, 38, 20, 0) 24%,
+    rgba(20, 30, 14, 0.95) 100%
+  );
+}
+#stat-vignette-health {
+  /* Deep BLOOD-crimson (a touch of magenta so it owns the "mortal" register, distinct from
+     heat's orange) — reaches furthest toward center; pulses with the heartbeat in play. */
+  background: radial-gradient(
+    ellipse at center,
+    rgba(158, 8, 30, 0) 16%,
+    rgba(112, 4, 26, 0.96) 100%
   );
 }
 
