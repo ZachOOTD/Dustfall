@@ -583,7 +583,7 @@
       "save": "no bump — a localStorage settings field + CSS/audio; no save schema change",
       "decisions": ["D248 — diegetic survival: per-stat vignettes + procedural audio replace the HUD bars, behind a flag + a default-ON opt-in; hue-separation + a CSS-transition render footgun (friction 2)"],
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "e537ca8",
       "spend_approx_tokens": 300000
     }
   ]
