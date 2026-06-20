@@ -69,18 +69,17 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 "Last shipped" note. Current target: **Phase B (M6→M10) — APPROVED + RELEASED**. The loop runs M6→M10 unattended,
 commits every cycle, and pauses only at "Phase B — Build-out complete" (after M10). Charter: `docs/campaign/campaign.md`.
 
-**Last shipped**: Campaign **C41** (2026-06-20, cycle 41/75) — **M7 ⑤ procedural-wreck-overhaul → M7 begins**
-(`verify:all` PASS — tsc + placement 0/0 ×5 + colliders 0/25; **visual gate PASS in 3 rounds** [recon agent + 5 critics]; **no save bump**).
-Fixed the "every wreck is a long tube" complaint: the socket-grammar `derelict` archetype gained 2 NEW structure-axis components
-(`splayedEngineCluster` — a fanned multi-engine stern; `dorsalMast` — a tall housing'd sensor spike) + grew **3 forms → 5** (trimaran w/
-pod noses · stacked tower · NEW mast · NEW asymmetric outrigger+mast · NEW layered tower+mast — no bare-tube form left), the hull was
-elongated, and `ARCH_WEIGHTS` shifted ~0.08 from the legacy linear `ship` → `derelict` so the wider/weirder hulls show ~as often as tubes.
-D249 — also a NEW rig `--pinyaw` length-frame (a Z-long ship in an X-long-assuming framer read END-ON as a "blob"; the pin frames it broadside).
+**Last shipped**: Campaign **C42** (2026-06-20, cycle 42/75) — **M7 ⑥ more-wreck-types-new-pois `[partial]` — the WATCHTOWER**
+(`verify:all` PASS — tsc + placement 0/0 ×5 + colliders 0/30; **visual gate PASS in 2 rounds**; **no save bump**).
+Added a NEW non-ship landmark to the procedural scatter via the socket grammar: a scavenged-metal desert LOOKOUT — 4 braced legs carrying
+a railed deck under a wide hipped sun-shade roof, with a straight **walkable RAMP** up to the deck (a "ramp-vantage", NOT a ladder — D250;
+the ramp is a real inclined collider at ~37°, under the KCC climb limit). NEW `watchtower()` component + `assembleWatchtower` archetype +
+`ARCH_WEIGHTS` (~0.07/biome) + added to the collider-audit (25→30). r1 FAIL (squat/parasol-roof/narrow-ramp) → r2 (taller + braced + wide
+roof on posts + wider overlapping ramp) → PASS. **`[partial]`: watchtower done; the well/cistern + debris-trail continue ⑥ next cycle.**
 
-**Next session** = cycle 42 = **M7 ⑥ more-wreck-types-new-pois** (L — NEW non-ship POIs: a watchtower · a debris-trail · a well/cistern;
-ramp-vantage not a ladder. Same socket grammar — `world/poiArchetypes.ts` + new components in `poiComponents.ts`; register in
-`ARCH_WEIGHTS`). Then ⑦ walkable-wreck-interiors (XL, spike→build — generalize D1's enterable `crash_husk`). M7 = wreck depth & new POIs
-(the crashing-ship-event is already DONE via D1). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
+**Next session** = cycle 43 = **M7 ⑥ continued** — the **well/cistern** (a sunken stone/metal water structure) + a **debris-trail** (a streak
+of crash ejecta to follow), via the same socket grammar (`poiComponents.ts` + `poiArchetypes.ts`; register in `ARCH_WEIGHTS` + the
+collider-audit list). Then ⑦ walkable-wreck-interiors (XL, spike→build — generalize D1's enterable `crash_husk`). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 

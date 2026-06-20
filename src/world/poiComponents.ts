@@ -678,4 +678,88 @@ export function dorsalMast(seed: number): BuiltComponent {
   return { mesh: g, sockets, colliders, panelMounts: [], bbox };
 }
 
+/** M7 ⑥ (C42) — WATCHTOWER: a scavenged-metal desert lookout. 4 vertical corner legs (with
+ *  cross-braces) carry a railed deck under a slanted roof, and a single straight RAMP runs up
+ *  to the deck — a "ramp-vantage" the player walks (NOT a ladder). Standing structure (rests on
+ *  the sand). The ramp + deck + legs declare colliders; the ramp slope is kept ~30° (< the KCC
+ *  climb limit) so it's walkable. Railing/roof/braces are decoration (collider-audit exempt). */
+export function watchtower(seed: number): BuiltComponent {
+  const g = new THREE.Group();
+  const platH = 5.0 + phash(seed, 1) * 2.5;       // C42 r2 — TALL (was 3.2-4.6) so it reads as a LOOKOUT, clears the dune line
+  const half = 1.35 + phash(seed, 2) * 0.6;       // deck half-width (legs at the corners)
+  const legR = 0.14;                              // C42 r2 — thicker (was 0.11)
+  const colliders: ColliderSpec[] = [];
+  // ── 4 vertical corner legs ──
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    const topX = sx * half, topZ = sz * half;
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(legR, legR * 1.4, platH, 7), _hullMat);
+    leg.position.set(topX, platH / 2, topZ);
+    g.add(leg);
+    colliders.push({ kind: 'cylinder', halfHeight: platH / 2, radius: legR * 1.25, pos: { x: topX, y: platH / 2, z: topZ } });
+  }
+  // ── horizontal ties at 3 heights + a diagonal brace per ±Z face (decoration; "braced scrap") ──
+  for (const hy of [platH * 0.2, platH * 0.5, platH * 0.8]) {
+    for (const [ax, az] of [[1, 0], [0, 1]] as const) for (const sgn of [-1, 1]) {
+      const tie = new THREE.Mesh(new THREE.BoxGeometry(ax ? half * 2 : 0.07, 0.07, az ? half * 2 : 0.07), _hullDarkMat);
+      tie.position.set(az ? sgn * half : 0, hy, ax ? sgn * half : 0);
+      tie.userData.isWreckDecoration = true; g.add(tie);
+    }
+  }
+  for (const sz of [-1, 1]) {
+    const dLen = Math.hypot(half * 2, platH);
+    const diag = new THREE.Mesh(new THREE.BoxGeometry(dLen, 0.06, 0.06), _hullDarkMat);
+    diag.position.set(0, platH / 2, sz * half);
+    diag.rotation.z = sz > 0 ? Math.atan2(platH, half * 2) : -Math.atan2(platH, half * 2);
+    diag.userData.isWreckDecoration = true; g.add(diag);
+  }
+  // ── deck (walkable platform) ──
+  const deck = new THREE.Mesh(new THREE.BoxGeometry(half * 2 + 0.3, 0.16, half * 2 + 0.3), _hullMat);
+  deck.position.y = platH; g.add(deck);
+  colliders.push({ kind: 'box', half: { x: half + 0.15, y: 0.08, z: half + 0.15 }, pos: { x: 0, y: platH, z: 0 } });
+  // ── railing (decoration) — corner posts + a top rail on 3 sides (open +X for the ramp) ──
+  const railH = 0.8;
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, railH, 5), _rustMat);
+    post.position.set(sx * half, platH + railH / 2, sz * half); post.userData.isWreckDecoration = true; g.add(post);
+  }
+  for (const [ax, off] of [[1, -half], [0, -half], [0, half]] as const) {
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(ax ? half * 2 : 0.05, 0.05, ax ? 0.05 : half * 2), _rustMat);
+    rail.position.set(ax ? 0 : off, platH + railH, ax ? off : 0); rail.userData.isWreckDecoration = true; g.add(rail);
+  }
+  // ── roof posts + a WIDE hipped roof overhanging the deck (decoration) ──
+  const roofPostH = 1.1;
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    const rp = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, roofPostH, 5), _rustMat);
+    rp.position.set(sx * half, platH + roofPostH / 2, sz * half); rp.userData.isWreckDecoration = true; g.add(rp);
+  }
+  const roof = new THREE.Mesh(new THREE.ConeGeometry(half * 2.05, 0.85, 4), _rustMat);   // C42 r2 — overhangs the deck (was half·1.5, perched)
+  roof.position.y = platH + roofPostH + 0.25; roof.rotation.y = Math.PI / 4; roof.userData.isWreckDecoration = true; g.add(roof);
+  // ── the RAMP — a straight walk-up the +X side; ~37° (compact at the taller height, < KCC ~50°) ──
+  const rampRun = platH * 1.33;
+  const rampW = half * 1.1;                        // C42 r2 — wider (was 0.85·half, read as a plank)
+  const theta = Math.atan2(platH, -rampRun);       // local +X points up-left toward the deck edge
+  const rampLen = Math.hypot(rampRun, platH) + 0.6;   // +0.6 → the top overlaps onto the deck (no ambiguous seam) + the foot beds
+  const ramp = new THREE.Mesh(new THREE.BoxGeometry(rampLen, 0.14, rampW), _hullMat);
+  ramp.position.set(half + rampRun / 2, platH / 2, 0);
+  ramp.rotation.z = theta; g.add(ramp);
+  const rampQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), theta);
+  colliders.push({ kind: 'box', half: { x: rampLen / 2, y: 0.07, z: rampW / 2 }, pos: { x: half + rampRun / 2, y: platH / 2, z: 0 }, quat: { x: rampQuat.x, y: rampQuat.y, z: rampQuat.z, w: rampQuat.w } });
+  for (const sz of [-1, 1]) {                       // ramp side-rails (decoration)
+    const sr = new THREE.Mesh(new THREE.BoxGeometry(rampLen, 0.05, 0.05), _rustMat);
+    sr.position.set(half + rampRun / 2, platH / 2 + 0.2, sz * rampW / 2);
+    sr.rotation.z = theta; sr.userData.isWreckDecoration = true; g.add(sr);
+  }
+  const midStrut = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, platH * 0.5, 5), _hullDarkMat);   // mid-support (decoration)
+  midStrut.position.set(half + rampRun * 0.5, platH * 0.25, 0); midStrut.userData.isWreckDecoration = true; g.add(midStrut);
+  const sockets: Socket[] = [{ name: 'base', pos: new THREE.Vector3(0, 0, 0), quat: FACE.posY(), radius: half, tag: 'base' }];
+  const panelMounts: PanelMount[] = [
+    { pos: new THREE.Vector3(-half - 0.05, platH * 0.45, 0), quat: FACE.negX(), kind: 'fuselage' as PanelKind },
+  ];
+  const bbox = new THREE.Box3(
+    new THREE.Vector3(-half - 0.3, 0, -half - 0.3),
+    new THREE.Vector3(half + rampRun + 0.4, platH + roofPostH + 0.9, half + 0.3),
+  );
+  return { mesh: g, sockets, colliders, panelMounts, bbox };
+}
+
 export const _IDENT_MAT = new THREE.Matrix4();   // root placement
