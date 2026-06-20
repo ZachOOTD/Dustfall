@@ -1,0 +1,17 @@
+# Steering archive — Dustfall campaign
+
+Processed steering directives, dated, with the action taken. Moved here by the
+loop at the cycle boundary so they're not re-applied each cycle.
+
+---
+
+## 2026-06-20 (applied at cycle 44) — Remove the watchtower; POIs must read as long-decayed, no signs of living human life
+
+**Directive:**
+> "don't like the watchtower, lets remove the watchtower. the watchtower is too much of a sign of infrastructure, everything in the world should be a wreck/decayed for a hundred years, a watchower still standing reads as recent and that people could be close by which is not what i want, i want the player to feel alone and have almost no signs of living human life, this goes for pois as well."
+
+**Action taken (cycle 44, the "solitude pass"):**
+- Removed the `watchtower` archetype entirely (component + assembler + `ARCH_WEIGHTS` + collider-audit list).
+- Re-scoped the `well` into a long-dry collapsed ruin (no bucket/rope/working crank) — kept but de-peopled (user-confirmed scope: option 2 + the well treated per option 3).
+- Codified the principle as a standing constraint: [decisions.md](../decisions.md) D252 + [vision-deltas.md](../vision-deltas.md).
+- Older wreck POIs (satellite, wrecked_tank, debris_field, husks, derelict, debris_trail) already read as decayed — left untouched per the confirmed scope.

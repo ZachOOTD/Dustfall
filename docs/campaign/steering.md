@@ -11,11 +11,10 @@ Special keywords:
 ---
 
 ## Pending (unread by the loop)
-don't like the watchtower, lets remove the watchtower. the watchtower is too much of a sign of infrastructure, everything in the world should be a wreck/decayed for a hundred years, a watchower still standing reads as recent and that people could be close by which is not what i want, i want the player to feel alone and have almost no signs of living human life, this goes for pois as well.
 _(empty — drop steering notes above this line)_
 
 ---
 
 ## Applied (archived by the loop)
 
-_(none yet)_
+See [steering-archive.md](steering-archive.md). Most recent: C44 — remove the watchtower + ruin the well (the solitude principle, D252).

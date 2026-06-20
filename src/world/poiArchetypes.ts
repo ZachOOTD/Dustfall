@@ -15,7 +15,7 @@ import type { ColliderSpec } from '../physics/bodies.ts';
 import {
   type BuiltComponent, type PanelMount, mate, transformCollider, transformPanelMount, phash,
   busBody, solarWing, dishAntenna, wreckedTank, debrisPiece, huskShell,
-  noseCone, hullBarrel, engineNozzle, splayedEngineCluster, dorsalMast, watchtower, wellHead,
+  noseCone, hullBarrel, engineNozzle, splayedEngineCluster, dorsalMast, wellHead,
 } from './poiComponents.ts';
 
 export interface ArchetypeParams {
@@ -398,21 +398,7 @@ function assembleDerelict(rand: Rng): AssembleResult {
   return a.result();
 }
 
-// ════════════════════════════════════════════════════════════════════
-// WATCHTOWER (M7 ⑥, C42) — a scavenged-metal lookout: legs + a railed deck + a slanted roof +
-// a WALKABLE ramp up to the vantage. A BUILT human landmark (someone raised this), not a wreck —
-// adds non-ship variety to the scatter. Stands ~level on the surface; the ramp slope (~30°) is
-// under the KCC climb limit so the player can walk up to the deck (feel → walk-test).
-// ════════════════════════════════════════════════════════════════════
-function assembleWatchtower(rand: Rng): AssembleResult {
-  const a = new Assembly();
-  const s = seedOf(rand);
-  const tower = watchtower(s);
-  a.place(tower, liftToGround(tower));
-  return a.result();
-}
-
-// M7 ⑥ (C43) — WELL: a single built water-cache structure, stands on the surface.
+// M7 ⑥ (C43; re-scoped C44, D252) — WELL: a single long-DRY RUINED well, stands on the surface.
 function assembleWell(rand: Rng): AssembleResult {
   const a = new Assembly();
   const s = seedOf(rand);
@@ -466,17 +452,10 @@ function assembleDebrisTrail(rand: Rng): AssembleResult {
 
 // ── Archetype registry + biome-weighted roulette ─────────────────────
 export const ARCHETYPES: Record<string, Archetype> = {
-  watchtower: {
-    id: 'watchtower',
-    // A standing BUILT structure — rests ~level on the surface (no crash-list to speak of, so the
-    // ramp stays walkable; a shallow seat beds the legs), a salvage panel on a leg, a windward drift.
-    params: { bucket: 'dark', burySink: false, bury: 0, list: 0.04, panelMin: 1, panelMax: 1, sandMound: true, seatSink: 0.12, salvageKind: 'fuselage' },
-    assemble: assembleWatchtower,
-  },
   well: {
     id: 'well',
-    // M7 ⑥ (C43) — a BUILT water cache; stands ~level (the curb beds shallow, a hair of list),
-    // a salvage panel on the curb, a windward drift banks the base.
+    // M7 ⑥ (C43; re-scoped C44, D252) — a long-DRY RUINED well; stands ~level (the curb beds
+    // shallow, a hair of list), a salvage panel on the curb, a windward drift banks the base.
     params: { bucket: 'dark', burySink: false, bury: 0, list: 0.03, panelMin: 1, panelMax: 1, sandMound: true, seatSink: 0.10, salvageKind: 'cargo_container' },
     assemble: assembleWell,
   },
@@ -539,16 +518,15 @@ export type ArchetypeId = 'ship' | keyof typeof ARCHETYPES;
 // M7 ⑤ (C41) — the socket-grammar `derelict` (now 5 silhouette forms × 2 stern types) is
 // the answer to "all long tubes"; shifted ~0.08 from the legacy linear `ship` → `derelict`
 // in every biome so the wider/weirder hulls appear roughly as often as the tube hulls.
-// M7 ⑥ (C42) — the `watchtower` (a BUILT human landmark) joins at ~0.07 per biome; it's
-// rarest in the wreck_yard (a ship graveyard, not a settlement) and slightly more common on the
-// open salt/dune flats where a lookout makes sense.
-// M7 ⑥ (C43) — `well` (a built water cache, rare — ~0.04, rarest in the wreck_yard) + `debris_trail`
-// (crash ejecta — commoner, peaks in the wreck_yard where everything came down).
+// M7 ⑥ (C43; the solitude pass C44, D252) — `well` (a long-DRY RUINED well, rare — ~0.04, rarest
+// in the wreck_yard) + `debris_trail` (crash ejecta — commoner, peaks in the wreck_yard where
+// everything came down). The C42 `watchtower` was REMOVED in C44: a standing lookout read as
+// recent, maintained infrastructure — the world should show almost no signs of living human life.
 const ARCH_WEIGHTS: Record<BiomeId, Array<[ArchetypeId, number]>> = {
-  salt:       [['ship', 0.26], ['derelict', 0.22], ['satellite', 0.15], ['wrecked_tank', 0.12], ['debris_field', 0.10], ['hollow_husk', 0.08], ['watchtower', 0.08], ['well', 0.05], ['debris_trail', 0.06]],
-  rocky:      [['ship', 0.20], ['derelict', 0.21], ['satellite', 0.13], ['wrecked_tank', 0.19], ['debris_field', 0.10], ['hollow_husk', 0.11], ['watchtower', 0.07], ['well', 0.04], ['debris_trail', 0.06]],
-  dune:       [['ship', 0.18], ['derelict', 0.23], ['satellite', 0.17], ['wrecked_tank', 0.15], ['debris_field', 0.08], ['hollow_husk', 0.13], ['watchtower', 0.08], ['well', 0.06], ['debris_trail', 0.05]],
-  wreck_yard: [['ship', 0.18], ['derelict', 0.22], ['satellite', 0.13], ['wrecked_tank', 0.17], ['debris_field', 0.16], ['hollow_husk', 0.12], ['watchtower', 0.04], ['well', 0.03], ['debris_trail', 0.10]],
+  salt:       [['ship', 0.26], ['derelict', 0.22], ['satellite', 0.15], ['wrecked_tank', 0.12], ['debris_field', 0.10], ['hollow_husk', 0.08], ['well', 0.05], ['debris_trail', 0.06]],
+  rocky:      [['ship', 0.20], ['derelict', 0.21], ['satellite', 0.13], ['wrecked_tank', 0.19], ['debris_field', 0.10], ['hollow_husk', 0.11], ['well', 0.04], ['debris_trail', 0.06]],
+  dune:       [['ship', 0.18], ['derelict', 0.23], ['satellite', 0.17], ['wrecked_tank', 0.15], ['debris_field', 0.08], ['hollow_husk', 0.13], ['well', 0.06], ['debris_trail', 0.05]],
+  wreck_yard: [['ship', 0.18], ['derelict', 0.22], ['satellite', 0.13], ['wrecked_tank', 0.17], ['debris_field', 0.16], ['hollow_husk', 0.12], ['well', 0.03], ['debris_trail', 0.10]],
 };
 
 export function pickArchetype(rand: Rng, biome?: BiomeId): ArchetypeId {

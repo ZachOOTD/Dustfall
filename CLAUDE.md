@@ -69,16 +69,18 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 "Last shipped" note. Current target: **Phase B (M6→M10) — APPROVED + RELEASED**. The loop runs M6→M10 unattended,
 commits every cycle, and pauses only at "Phase B — Build-out complete" (after M10). Charter: `docs/campaign/campaign.md`.
 
-**Last shipped**: Campaign **C43** (2026-06-20, cycle 43/75) — **M7 ⑥ more-wreck-types-new-pois COMPLETE — the WELL + the DEBRIS-TRAIL**
-(`verify:all` PASS — tsc + placement 0/0 ×5 + colliders 0/40; **visual gate PASS** [well 2 rounds, trail 3 rounds]; **no save bump**).
-Finished ⑥ (watchtower was C42): a **WELL** (NEW `wellHead()` — a metal curb around a recessed dark shaft + a 2-post windlass-drum winch with
-a hanging bucket) + a **DEBRIS-TRAIL** (NEW `assembleDebrisTrail` — a directional crash-ejecta streak: a big tilted impact chunk + a dark
-skid/crater with debris trailing back getting SMALLER; reuses `debrisPiece`, now given a `scale` param + a dark `_skidMat`). Both registered
-in `ARCH_WEIGHTS` + the collider-audit (30→40). D251. **3 new non-ship POIs now vary the scatter beyond ships; ⑥ DONE.**
+**Last shipped**: Campaign **C44** (2026-06-20, cycle 44/75) — **the SOLITUDE PASS (steering, D252) — remove the watchtower + ruin the well**
+(`verify:all` PASS — tsc + placement 0/0 ×5 + colliders 0/35; **visual gate PASS** [well re-rendered 3 seeds, 1 refinement round]; **no save bump**).
+A steering-driven cycle: the user wants the world to read as abandoned-for-a-century with the player utterly alone — **almost no signs of living
+human life**. The C42 watchtower + the C43 working winch-well both read as recent/maintained infrastructure → **removed the `watchtower` archetype
+entirely** + **re-scoped the `well` into a long-DRY collapsed RUIN** (kept the curb + dry shaft; collapsed the winch — a leaning broken post, a
+snapped stub, a fallen beam, slumped plates; NO bucket/rope/working crank). **D252** codifies the solitude principle as a standing constraint on
+all future POIs (incl. M7 ⑦); also a new `docs/vision-deltas.md`. Audit list 40→35.
 
-**Next session** = cycle 44 = **M7 ⑦ walkable-wreck-interiors** (the LAST M7 unit; XL, spike→build) — generalize D1's enterable `crash_husk`
-(the dressed interior + portal) so other large wrecks become enterable. Likely an A/B architecture spike first. After ⑦, M7 is complete (but
-the loop only PAUSES at the Phase-B milestone, after M10). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
+**Next session** = cycle 45 = **M7 ⑦ walkable-wreck-interiors** (the LAST M7 unit; XL, spike→build) — generalize D1's enterable `crash_husk`
+(the dressed interior + portal) so other large wrecks become enterable. **The interior must read DEAD/decayed per D252**, not a livable shelter.
+Likely an A/B architecture spike first. After ⑦, M7 is complete (but the loop only PAUSES at the Phase-B milestone, after M10).
+See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 

@@ -390,3 +390,14 @@ The focal mass also has to DOMINATE: the impact chunk is scaled 1.7× (decisivel
 **The well** (same cycle, 2 rounds) reinforced architecture-rule-7-adjacent reads: a "hole" reads as a hole only with a RECESSED shaft (an inner wall into shadow + a near-black unlit void floor), not a dark disc on top (which reads as a lid); a winch reads only with a THICK drum (a thin crossbar reads as a bare gallows); a built structure needs visible MASS + salvaged irregularity (rim-plates), not a thin clean rim.
 
 **friction-score:** 1 (both POIs gate-passed + verify-clean; the forward note is the sev-3 robustness nits — the trail's weakest seed [s7] has a less-dominant impact chunk / fainter crater — and that the directional FEEL is walk-test-only).
+
+## D252 — The solitude principle: POIs must read as century-decayed wreckage, never as recent/maintained human infrastructure (Session C44, campaign)
+
+**Steering (user, 2026-06-20):** *"remove the watchtower… everything in the world should be a wreck/decayed for a hundred years… a watchtower still standing reads as recent and that people could be close by… i want the player to feel alone and have almost no signs of living human life, this goes for pois as well."*
+
+**Decision.** A standing scavenged-metal **watchtower** (C42 — a railed deck, a sun-shade roof, a maintained walkable ramp) and a **working winch-well** (C43 — a windlass drum, an L-crank, a rope, a hanging bucket) both read as RECENT, in-use human infrastructure: they imply living people nearby, which breaks the intended tone (total solitude; a world abandoned for a century). So:
+- **Removed the `watchtower` archetype entirely** — the `watchtower()` component + `assembleWatchtower` + its `ARCH_WEIGHTS` rows + its collider-audit-list entry. The audit count drops 40→35 (7 archetypes × 5 seeds).
+- **Re-scoped the `well` from a maintained water cache to a long-DRY RUIN** — kept the curb + the recessed dry shaft, but COLLAPSED the winch: one leaning broken post, one snapped stub, a fallen cross-beam, slumped rim-plates, scattered rubble. NO rope, NO bucket, NO working crank. (The user chose "keep the well but de-people it" over outright removal.) The curb + the 2 posts still declare colliders.
+- **Standing constraint going forward:** every POI and every future structure (incl. M7 ⑦ walkable-wreck-interiors) must read as decayed/abandoned wreckage — NO maintained, currently-used, or recently-built infrastructure. The older POIs (satellite, wrecked_tank, debris_field, husks, derelict, debris_trail) already satisfy this and were left untouched (the user scoped this pass to the two C42/C43 "inhabited-reading" POIs).
+
+**friction-score:** 1 (a clean, reversible removal + re-scope; tsc + the visual gate pass). The forward weight: this is now a **tone INVARIANT** the campaign must hold — a single "someone lives here" prop can undo the solitude the whole world is built for. Also recorded as a vision-delta.

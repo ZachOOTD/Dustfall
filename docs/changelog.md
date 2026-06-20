@@ -3,6 +3,16 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign C44 — 2026-06-20 — M7: **the SOLITUDE PASS** (steering, D252) — remove the watchtower + ruin the well ✓ verify pass (ultracode)
+
+`verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders **0/35** — the `watchtower` removal drops the collider-audit list to 7 archetypes × 5 seeds; the re-scoped `well` still covered by its curb + 2 posts). **Visual gate PASS** — re-rendered the well at seeds 1/42/1337 (`--scenario=procgen-wreck --archetype=well`): reads as an abandoned, collapsed, long-DRY well ruin across seeds, no maintained-infrastructure read; 1 refinement round (dropped the fallen beam onto the curb mouth). The watchtower removal is pure deletion. **No save bump** (additive archetype removal + a re-scope; placement is archetype-agnostic, D227). Cycle 44/75.
+
+**The SOLITUDE PASS** — a steering-driven cycle (user: *"everything should be a wreck/decayed for a hundred years… i want the player to feel alone and have almost no signs of living human life, this goes for pois as well"*). The C42 watchtower + the C43 working winch-well both read as RECENT, maintained, inhabited infrastructure → broke the intended solitude. **D252** codifies the principle (a standing constraint on all future POIs, incl. M7 ⑦).
+- **Removed the `watchtower` archetype entirely** — `watchtower()` component (`world/poiComponents.ts`) + `assembleWatchtower` + its `ARCH_WEIGHTS` rows (4 biomes) + its `collider-audit` list entry (`scripts/rig-shot.mjs`).
+- **Re-scoped the `well` into a long-DRY RUIN** (`wellHead()`): kept the weathered curb + the recessed dry shaft, but COLLAPSED the winch — a tall leaning broken post + a snapped stub (both still declare colliders) + a fallen cross-beam across the mouth + ~40% of the rim-plates slumped onto the sand + scattered rubble. **No rope, no bucket, no working crank/drum.**
+- **Codified:** **D252** + a new `docs/vision-deltas.md`; the directive archived to `docs/campaign/steering-archive.md`.
+- **Owed/backlog:** the in-play solitary FEEL → walk-test. **⑦ walkable-wreck-interiors is the last M7 unit (its interior must read DEAD per D252).**
+
 ## Campaign C43 — 2026-06-20 — M7: **more-wreck-types-new-pois COMPLETE** — a WELL + a DEBRIS-TRAIL join the watchtower (⑥ done) ✓ verify pass (ultracode)
 
 `verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders **0/40** — well + debris_trail added to the collider-audit list, 30→40 audits; phash-deterministic, one `seedOf` draw each). **Visual gate PASS** (2 critics, multi-round): the **WELL** PASS in 2 rounds (r1 FAIL: bare-gallows winch · capped-looking mouth · thin clean curb → r2: thick windlass drum + L-crank · recessed shaft void · taller curb w/ rim-plates → PASS); the **DEBRIS-TRAIL** PASS in 3 rounds (r1+r2 FAIL: read as a scattered PILE, weak gradient, invisible scorch → r3: longer 15-19m tight-centreline line + strict monotonic small→big scale + a dark skid/crater + a decisively-bigger tilted impact chunk → PASS). **No save bump** (additive archetypes). Cycle 43/75. **M7 unit ⑥ COMPLETE.**
