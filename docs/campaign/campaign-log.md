@@ -524,5 +524,5 @@ first stop will be `max-cycles` ~mid-Phase-A; resume via `/campaign-start --resu
 - **Visual iteration:** appearance gate PASS in **2 ROUNDS** (2 critics). r1 FAIL/split (too squat → a raised hide · a tiny floating-parasol roof · a narrow ambiguous ramp) → r2 (TALLER ~1.6× + diagonal X-bracing + thicker legs · a WIDE roof overhanging the deck on visible posts · a wider ramp overlapping the deck + a mid-support strut) → PASS, reads as an intentional scavenged lookout. The walkable-ramp **FEEL → walk-test**.
 - **Decisions:** **D250** — the watchtower's ramp-vantage as a WALKABLE inclined collider at a KCC-safe slope (not a new ladder movement-mode); + the load-bearing reminder that a new archetype must be ADDED to the `collider-audit` list or its coverage isn't gate-verified. friction 1.
 - **Spend:** ~250K (the watchtower component + archetype + 2 visual rounds + 3 critics + verify:all ×2); campaign total ~11.31M; cycle **42/75**.
-- **Commit:** `PENDING`.
+- **Commit:** `76b6ccd`.
 - **M7 ⑥ `[partial]` — watchtower DONE (1 of ~3 new POIs).** **Next (cycle 43):** **⑥ continued** — the well/cistern + the debris-trail. **Verdict: CONTINUE** — not terminal (roadmap non-empty, cycle 42/75), not a milestone; a partial-SHIPPED (the watchtower is complete + gate-passed) is progress, not a stuck wall (`consecutive_no_progress` stays 0).

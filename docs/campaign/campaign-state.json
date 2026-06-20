@@ -613,7 +613,7 @@
       "save": "no bump — additive archetype, archetype-agnostic placement (D227); no schema change",
       "decisions": ["D250 — the watchtower's ramp-vantage: a WALKABLE inclined collider at a KCC-safe slope, not a ladder movement-mode; + the collider-audit-list reminder (friction 1)"],
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "76b6ccd",
       "spend_approx_tokens": 250000
     }
   ]
