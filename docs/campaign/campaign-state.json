@@ -598,7 +598,7 @@
       "save": "no bump — procgen POI placement is archetype-agnostic + additive (D227); no schema change",
       "decisions": ["D249 — extend the socket-grammar derelict (not the legacy ship) with new structure-axis components + a length-frame rig pin; the end-on-framing footgun (friction 2)"],
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "69765a9",
       "spend_approx_tokens": 400000
     }
   ]
