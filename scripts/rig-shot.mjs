@@ -2007,7 +2007,7 @@ const SCENARIOS = {
       window.__game.advanceCrash(7, 120);   // land a fresh crash so its fires are at full burn
       return window.__game.crashHeatProbe();
     });
-    const pass = !r.error && r.center > r.near && r.near > r.half && r.half > r.edge && r.edge === 0 && r.dTemp > 0;
+    const pass = !r.error && r.center > r.near && r.near > r.half && r.half > r.edge && r.edge === 0 && r.dTemp > 0 && r.shelterAfter > 0;
     console.log(`[crash-heat] ${pass ? 'PASS' : 'FAIL'} ${JSON.stringify(r)}`);
   },
 

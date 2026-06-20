@@ -13,6 +13,7 @@ import {
 } from '../core/settings.ts';
 import { setMasterVolume, playUiHover, playUiClick } from '../audio/audio.ts';
 import { hasSave, saveGameState, loadGameState, clearSave } from '../persistence/save.ts';
+import { resetMeteorCrash, applyPendingCrashRestore } from '../world/meteorCrash.ts';   // ACBE (D1) — death-continue crash reset+restore
 
 let _settings: Settings = loadSettings();
 
@@ -269,6 +270,13 @@ export function createMenus(ctx: GameContext): void {
         ctx.ui.showToast(result.error ?? 'load failed');
         return;
       }
+      // ACBE (D1) — mirror main.ts onContinue's crash sequence: tear down the dead run's
+      // in-session crash sites (Rapier bodies + journal/cache/salvage registries) then re-spawn
+      // the SAVED ones (loadGameState only STASHED them via setPendingCrashRestore). Without this
+      // a death-continue resumes showing the dead run's crashes + orphaned walk-into colliders,
+      // and the heat hazard reflects the wrong sites.
+      resetMeteorCrash(ctx);
+      applyPendingCrashRestore(ctx);
       // Restore: hide death screen, re-lock pointer, resume play.
       deathScreen.classList.add('hidden');
       ctx.input.controls.lock();

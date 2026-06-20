@@ -66,9 +66,9 @@ let _ejecta: ParticleTrail | null = null;     // debris/dust thrown at impact (f
 
 // ── Tier 2: landed crash SITES (the explorable destinations) + a persistent beacon. ──
 interface CrashSite { pos: THREE.Vector3; seed: number; role: CrashRole; wreck: THREE.Group; decor: THREE.Group; journal: Journal; cache: Pickup[]; body: RAPIER.RigidBody | null; salvage: Salvageable | null; age: number; }
-interface CrashRestore { ageS: number; salvageStripped: boolean; salvageRemaining: number; }
+interface CrashRestore { ageS: number; salvageStripped: boolean; salvageRemaining: number; extractedIndices?: number[]; }
 /** Save record for one landed crash — enough to reproduce it deterministically on load (Tier 4). */
-export interface SavedCrash { seed: number; role: CrashRole; pos: { x: number; y: number; z: number }; ageS: number; salvageStripped: boolean; salvageRemaining: number; }
+export interface SavedCrash { seed: number; role: CrashRole; pos: { x: number; y: number; z: number }; ageS: number; salvageStripped: boolean; salvageRemaining: number; extractedIndices?: number[]; }
 const _sites: CrashSite[] = [];
 let _beacon: ParticleTrail | null = null;     // shared persistent smoke-column beacon (outlives the fires)
 let _embers: ParticleTrail | null = null;     // Tier 4 (E) — warm rising embers off a FRESH burning site (fade with the fires)
@@ -255,6 +255,13 @@ function land(ctx: GameContext, seed: number, role: CrashRole, pos: THREE.Vector
   if (restore && salvage) {   // re-apply the saved loot state to the freshly-registered panel
     salvage.salvageRemaining = restore.salvageRemaining;
     if (restore.salvageStripped) markSalvageStripped(salvage);
+    // ACAX WYSIWYG — re-hide the components already extracted at save time so the visible set
+    // matches salvageRemaining. The generic salvageables[] restore can't do this: the crash panel
+    // re-registers with a NEW id and is skipped by the id-match — so we carry it in crashes[].
+    if (restore.extractedIndices && restore.extractedIndices.length) {
+      const comps = (salvage.panel.userData.panelComponents as Array<{ visible: boolean }> | undefined) ?? [];
+      for (const idx of restore.extractedIndices) { if (comps[idx]) comps[idx].visible = false; }
+    }
   }
 
   // Scorch + ejecta in their own group (so reset can drop the whole site's decor cleanly).
@@ -327,13 +334,17 @@ function landCrashAt(ctx: GameContext, c: ActiveCrash): void {
 
 /** Tier 4 — serialize landed sites for the save (enough to reproduce each deterministically). */
 export function serializeCrashes(): SavedCrash[] {
-  return _sites.map((s) => ({
-    seed: s.seed, role: s.role,
-    pos: { x: s.pos.x, y: s.pos.y, z: s.pos.z },
-    ageS: s.age,
-    salvageStripped: s.salvage?.stripped ?? false,
-    salvageRemaining: s.salvage?.salvageRemaining ?? 0,
-  }));
+  return _sites.map((s) => {
+    const comps = (s.salvage?.panel.userData.panelComponents as Array<{ visible: boolean }> | undefined) ?? [];
+    return {
+      seed: s.seed, role: s.role,
+      pos: { x: s.pos.x, y: s.pos.y, z: s.pos.z },
+      ageS: s.age,
+      salvageStripped: s.salvage?.stripped ?? false,
+      salvageRemaining: s.salvage?.salvageRemaining ?? 0,
+      extractedIndices: comps.flatMap((c, i) => (c.visible ? [] : [i])),   // ACAX WYSIWYG, carried in crashes[]
+    };
+  });
 }
 
 /** Tier 4 — re-spawn saved crash sites on load (call AFTER resetMeteorCrash cleared any
@@ -341,7 +352,7 @@ export function serializeCrashes(): SavedCrash[] {
 export function restoreCrashes(ctx: GameContext, saved: ReadonlyArray<SavedCrash>): void {
   for (const sc of saved) {
     land(ctx, sc.seed, sc.role, new THREE.Vector3(sc.pos.x, sc.pos.y, sc.pos.z),
-      { ageS: sc.ageS, salvageStripped: sc.salvageStripped, salvageRemaining: sc.salvageRemaining });
+      { ageS: sc.ageS, salvageStripped: sc.salvageStripped, salvageRemaining: sc.salvageRemaining, extractedIndices: sc.extractedIndices });
   }
 }
 

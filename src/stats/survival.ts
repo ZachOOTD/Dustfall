@@ -15,11 +15,18 @@ export function updateStats(ctx: GameContext, dt: number): void {
   const exposure = Math.max(0, ctx.time.sunHeight);
   const t = ctx.stats;
 
+  // Tier 4 (C) — compute the crash HEAT bake UP FRONT. A crash fire registers a shelter zone
+  // (fire.ts) and the first one sits dead-centre, so without this the inShelter branch below would
+  // COOL the player at exactly the loot-rich wreck centre — canceling the hazard at the spot it's
+  // meant to gate. While the bake is active (crashHeat>0) shelter relief is SUPPRESSED and the
+  // ambient (sun/night) branch + the bake run instead.
+  const crashHeat = crashHeatAt(ctx);
+
   // Temperature — two-way.
   //   Positive side: sun exposure heats you up (capped at +1 = heatstroke).
   //   Negative side: cold nights without shelter chill you (down to -1 = freeze).
   //   Shelter pulls you toward 0 from either side.
-  if (ctx.player.inShelter) {
+  if (ctx.player.inShelter && crashHeat <= 0) {
     if (t.temperature > 0) {
       t.temperature = Math.max(0, t.temperature - Tuning.HEAT_COOL_PER_SEC * 2 * dt);
     } else if (t.temperature < 0) {
@@ -62,10 +69,8 @@ export function updateStats(ctx: GameContext, dt: number): void {
   }
 
   // Tier 4 (C) — crash-wreck HEAT HAZARD: lingering in/near a still-burning crash bakes you,
-  // pushing temperature UP toward heatstroke (the risk that gates the rich interior loot). Stacks
-  // on top of the ambient branch above (applied before the thirst calc so the bake also parches
-  // you), and falls off with distance + as the fires gutter out.
-  const crashHeat = crashHeatAt(ctx);
+  // pushing temperature UP toward heatstroke (the risk that gates the rich interior loot). Applied
+  // before the thirst calc so the bake also parches you; falls off with distance + as fires die.
   if (crashHeat > 0) {
     t.temperature = Math.min(1, t.temperature + Tuning.CRASH_HEAT_GAIN_PER_SEC * dt * crashHeat);
   }
