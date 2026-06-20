@@ -645,7 +645,7 @@
       "save": "no bump — additive archetype removal + a re-scope; archetype-agnostic placement (D227).",
       "decisions": ["D252 — the solitude principle: POIs must read as century-decayed wreckage, never recent/maintained human infrastructure (friction 1; now a tone invariant the campaign must hold)"],
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "dbd0d75",
       "spend_approx_tokens": 250000
     }
   ]
