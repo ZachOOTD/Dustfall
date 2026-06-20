@@ -662,7 +662,7 @@
       "save": "no bump — additive archetype spawned from the world seed; entering/exiting touches zero save state (recon-confirmed). D227 archetype-agnostic placement.",
       "decisions": ["D253 — generalize crash_husk via a self-contained enterable_wreck archetype (not a decorator); isolated dressing RNG for determinism; an aged dead-console for D252; no save bump (friction 2 — interior FEEL is walk-test-only; coupled to the crash interior kit)"],
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "15d6e02",
       "spend_approx_tokens": 350000
     }
   ]
