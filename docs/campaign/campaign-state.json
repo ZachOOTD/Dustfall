@@ -552,7 +552,7 @@
       "save": "no bump — tuning constants + a new transient health-regen path + debug hooks; no schema change",
       "decisions": ["D246 — forgiving Long-Dark curve via computed time-to-death targets + a dev-mode-gated godmode floor + health-regen-when-provisioned (friction 2)"],
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "64eb812",
       "spend_approx_tokens": 200000
     }
   ]
