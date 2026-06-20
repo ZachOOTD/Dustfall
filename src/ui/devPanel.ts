@@ -81,7 +81,7 @@ function makeActionsSection(): HTMLDivElement {
   ]);
   group('events', [
     // Fireball is night-only — jump to night first so it's reliably visible.
-    ['fireball', () => { if ((_ctx?.time.sunHeight ?? 0) > 0) g()?.setTime(0.0); g()?.triggerFireball(); toast('fireball — look up!'); }],
+    ['crash', () => { g()?.triggerCrash(); toast('incoming — a wreck is falling!'); }],
     ['worm sweep', () => { g()?.triggerWormCrossing(); toast('worm crossing — scan the horizon'); }],
   ]);
   group('spawn', [

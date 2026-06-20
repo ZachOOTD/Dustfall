@@ -585,6 +585,34 @@ export const Tuning = {
   FIREBALL_FLASH_SCALE: 135,         // the entry-flash bloom (peaks early, then shrinks)
   FIREBALL_TRAIL_LEN: 0.3,           // trail spans this fraction of the arc behind the head
   FIREBALL_TRAIL_PUFFS: 8,           // glow sprites forming the tapering trail ribbon
+  // ── ACBE (D1) — SKYFALL: a burning wreck streaks across the sky + CRASHES into the
+  // desert, leaving an explorable, lootable, lore-bearing wreck (replaces the C34 sky-
+  // only fireball). Rarity + the travel-to-it payoff are the point. FEEL → walk-test.
+  CRASH_MIN_INTERVAL: 360,           // s — min wait between ambient crashes (rare hero event)
+  CRASH_MAX_INTERVAL: 900,
+  CRASH_FLIGHT_S: 5.5,               // s — sky-streak duration (slow = reads distant + huge)
+  CRASH_IMPACT_DIST_MIN: 150,        // m — impact band: far enough to travel to…
+  CRASH_IMPACT_DIST_MAX: 380,        // …near enough to reach + see the beacon
+  CRASH_START_ALT: 620,              // m — arc apex altitude (high sky)
+  CRASH_HEAD_SCALE: 58,              // white-hot head halo sprite scale (billboarded) — reads big at 150-380m (FEEL → iterate)
+  CRASH_TRAIL_FIRE_LIFE: 0.7,        // s — fire-trail particle life (additive orange)
+  CRASH_TRAIL_SMOKE_LIFE: 2.2,       // s — smoke-trail particle life (alpha, drifts up)
+  CRASH_TRAIL_EMIT_HZ: 60,           // particles/sec emitted at the head along the arc
+  CRASH_SHOCKWAVE_S: 1.4,            // s — impact shockwave ring expand + fade
+  CRASH_SHOCKWAVE_R: 28,             // m — shockwave ring final radius
+  CRASH_EJECTA_COUNT: 44,            // debris/dust ejecta particles at impact
+  CRASH_PLUME_COUNT: 34,             // dust mushroom-plume particles at impact
+  CRASH_FIRE_FUEL_S: 240,            // s — crash fire burn time before it smolders out
+  CRASH_SOUND_SPEED: 343,            // m/s — for the flash-then-boom delay (dist / this)
+  CRASH_FLASH_STRENGTH: 0.55,        // peak screen-flash opacity at impact (proximity-scaled)
+  CRASH_SHAKE_TRAUMA: 0.9,           // peak camera trauma at a near impact (proximity-scaled)
+  // camera shake (trauma model; fx/cameraShake.ts)
+  CAMERA_SHAKE_DECAY_S: 0.9,         // s — trauma fully decays over this
+  CAMERA_SHAKE_FREQ: 28,             // shake noise frequency — higher = buzzier
+  CAMERA_SHAKE_MAX_ANGLE: 0.05,      // rad — peak rotational offset at trauma²=1
+  CAMERA_SHAKE_MAX_POS: 0.18,        // m — peak positional kick at trauma²=1
+  // screen flash (fx/screenFlash.ts)
+  SCREEN_FLASH_DECAY_S: 0.35,        // s — flash opacity decays to 0 over this
   // M5b (C36) — worm far-horizon crossing: a distant sandworm's dorsal ridge surfaces
   // FAR away + sweeps across the horizon (awe, the world's scale), then submerges.
   // Decoupled from the threat AI (pure spectacle, no collider/threat). FEEL → walk-test.

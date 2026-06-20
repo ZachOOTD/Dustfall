@@ -7,6 +7,7 @@ import { spawnRaider as spawnRaiderEntity, damageRaider } from '../enemies/raide
 import { spawnFireAt, warmFireSmoke } from '../world/fire.ts';   // M4 (C21) — __game.spawnFire / warmSmoke test hooks
 import { getSunOccluders } from '../world/horizonSilhouettes.ts';   // M5a (C31) — __game.sunInfo
 import { debugTriggerFireball } from '../world/sky.ts';   // M5b (C34) — __game.triggerFireball
+import { triggerCrash, crashState, advanceCrash, type CrashRole } from '../world/meteorCrash.ts';   // ACBE (D1) — __game.triggerCrash
 import { spawnWormCrossing, updateWormHorizonCrossing } from '../world/wormHorizonCrossing.ts';   // M5b (C36) — __game.triggerWormCrossing
 import { damageVulture } from '../enemies/vulture.ts';
 import { makeLatheHull, fuselageProfile, makeFormerRings, makeBreach, makeSandMound } from '../world/wreckForms.ts';
@@ -86,6 +87,14 @@ interface DebugApi {
   /** M5b (C34) — DEV-only: force a rare fireball/bolide now + return its head's peak
    *  direction (so the rig-shot can aim). For the sky walk-test + headless render. */
   triggerFireball: () => { dir: [number, number, number] } | null;
+  /** ACBE (D1) — DEV-only: force a crashing-wreck event now (optionally at x,z); returns
+   *  the impact point + the rolled ship role. */
+  triggerCrash: (x?: number, z?: number) => { x: number; z: number; role: CrashRole } | null;
+  crashState: () => { active: boolean; t: number; impacted: boolean; role: CrashRole | null; headPos: [number, number, number] | null };
+  /** ACBE (D1) — DEV/headless: step the active crash by `seconds` (deterministic; pair with
+   *  ctx.flags.paused so the live tick doesn't double-advance). Lets the rig-shot capture an
+   *  exact moment without depending on the slow headless wall-clock. */
+  advanceCrash: (seconds: number, substeps?: number) => void;
   /** M5b (C36) — DEV-only: force a distant worm horizon-crossing now (returns its
    *  centre point); + fast-forward it `seconds` for a deterministic rig-shot frame. */
   triggerWormCrossing: () => { cx: number; cz: number } | null;
@@ -199,6 +208,9 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
       boxes: getSunOccluders().map((o) => ({ cx: o.cx, cy: o.cy, cz: o.cz, hx: o.hx, hy: o.hy, hz: o.hz })),
     }),
     triggerFireball: () => debugTriggerFireball(),
+    triggerCrash: (x, z) => triggerCrash(ctx, x, z),
+    crashState: () => crashState(),
+    advanceCrash: (seconds, substeps) => advanceCrash(ctx, seconds, substeps),
     triggerWormCrossing: () => spawnWormCrossing(ctx),
     advanceWormCrossing: (seconds: number) => updateWormHorizonCrossing(ctx, ctx.terrain, seconds),
     setStats: (s) => {

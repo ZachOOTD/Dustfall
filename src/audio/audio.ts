@@ -30,6 +30,61 @@ export function getAudioInternals(): AudioInternals | null {
   return { ctx: _ctx, ambient: _ambient, sfx: _sfx, noiseBuffer: _noiseBuffer };
 }
 
+/** ACBE (D1) — the crashing-wreck IMPACT: a dull, distant SONIC BOOM (filtered brown
+ *  noise, slow attack), a deep sub-bass IMPACT rumble, and a leading low crack. Distance-
+ *  attenuated AND low-passed harder the farther it is (far crashes read as a soft, rolling
+ *  boom). Call when the SOUND arrives — the caller delays it by dist / speed-of-sound. */
+export function playCrashImpact(distance: number): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  const NEAR = 120, FAR = 500, CUT = 950;
+  if (distance >= CUT) return;
+  let vol: number;
+  if (distance <= NEAR) vol = 1;
+  else if (distance >= FAR) vol = Math.max(0, 0.28 * (CUT - distance) / (CUT - FAR));
+  else vol = 1 - (1 - 0.28) * ((distance - NEAR) / (FAR - NEAR));
+  const farFrac = Math.min(1, distance / FAR);
+  const cutoff = 2400 - farFrac * 1700;   // 2400Hz near → 700Hz far (duller with distance)
+
+  // 1. BOOM — slow brown-noise burst through a distance-dulled lowpass.
+  const src = a.ctx.createBufferSource();
+  src.buffer = a.noiseBuffer;
+  src.playbackRate.value = 0.35;          // slow playback → browner, heavier noise
+  const lp = a.ctx.createBiquadFilter();
+  lp.type = 'lowpass'; lp.frequency.setValueAtTime(cutoff, t); lp.Q.value = 0.7;
+  const bEnv = a.ctx.createGain();
+  bEnv.gain.setValueAtTime(0, t);
+  bEnv.gain.linearRampToValueAtTime(0.5 * vol, t + 0.03 + farFrac * 0.06);  // softer attack when far
+  bEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.7);
+  src.connect(lp).connect(bEnv).connect(a.sfx);
+  src.start(t); src.stop(t + 0.75);
+
+  // 2. SUB-BASS RUMBLE — 70→38Hz sine, slow swell + long tail.
+  const sub = a.ctx.createOscillator();
+  sub.type = 'sine';
+  sub.frequency.setValueAtTime(70, t);
+  sub.frequency.exponentialRampToValueAtTime(38, t + 1.2);
+  const sEnv = a.ctx.createGain();
+  sEnv.gain.setValueAtTime(0, t);
+  sEnv.gain.linearRampToValueAtTime(0.22 * vol, t + 0.06);
+  sEnv.gain.exponentialRampToValueAtTime(0.001, t + 1.9);
+  sub.connect(sEnv).connect(a.sfx);
+  sub.start(t); sub.stop(t + 1.95);
+
+  // 3. Leading low CRACK transient (only reads near; gone far).
+  const thud = a.ctx.createOscillator();
+  thud.type = 'triangle';
+  thud.frequency.setValueAtTime(130, t);
+  thud.frequency.exponentialRampToValueAtTime(48, t + 0.18);
+  const tEnv = a.ctx.createGain();
+  tEnv.gain.setValueAtTime(0, t);
+  tEnv.gain.linearRampToValueAtTime(0.16 * vol * (1 - farFrac * 0.7), t + 0.005);
+  tEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.26);
+  thud.connect(tEnv).connect(a.sfx);
+  thud.start(t); thud.stop(t + 0.3);
+}
+
 /** Set master volume, 0..1. Settings panel calls this. */
 export function setMasterVolume(v: number): void {
   if (_master) _master.gain.value = v;

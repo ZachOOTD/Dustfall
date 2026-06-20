@@ -26,6 +26,9 @@ import { updateVistaReveal } from './world/vistaReveal.ts';   // M5a (C30) — c
 import { updateSunExposure } from './world/sunExposure.ts';   // M5a (C31) — direct-sun vs shade (heat relief)
 import { updateDayBeats, resetDayBeats } from './world/dayBeats.ts';   // M5b (C35) — dawn/dusk tonal beats
 import { initWormHorizonCrossing, updateWormHorizonCrossing, resetWormHorizonCrossing } from './world/wormHorizonCrossing.ts';   // M5b (C36) — distant worm sighting
+import { initMeteorCrash, updateMeteorCrash, resetMeteorCrash } from './world/meteorCrash.ts';   // ACBE (D1) — the crashing-wreck hero event
+import { updateCameraShake, resetCameraShake } from './fx/cameraShake.ts';   // ACBE (D1) — trauma camera shake
+import { initScreenFlash, updateScreenFlash, resetScreenFlash } from './fx/screenFlash.ts';   // ACBE (D1) — impact screen flash
 import { createSalvageableRegistry, setSalvageBiomesContext } from './world/salvage.ts';
 import { createSky, updateSky } from './world/sky.ts';
 import { updateStats } from './stats/survival.ts';
@@ -552,6 +555,8 @@ spawnCompanionAt(ctx, openingResult.companionSpawnPos, 'idle');
 createMenus(ctx);
 initSpyglass();          // M5a (C29) — the scope vignette overlay (owns its div)
 initWormHorizonCrossing(three.scene);   // M5b (C36) — the distant worm dorsal-ridge (hidden until a crossing)
+initMeteorCrash(three.scene);   // ACBE (D1) — the crash event (flying burning wreck + impact FX), idle until armed
+initScreenFlash(three.scene);   // ACBE (D1) — fullscreen impact-flash quad
 createLootMenu(ctx);
 createCraftingMenu(ctx);
 createSleepOverlay(ctx);
@@ -706,6 +711,9 @@ function handoffToGame(opts?: { skipLock?: boolean }): void {
   else devModeBadge.classList.remove('visible');
   resetDayBeats();   // C35 — seed fresh so a new-game/load sun position can't fire a stray dawn/dusk beat
   resetWormHorizonCrossing();   // C36 — clear any in-flight distant crossing on new-game/load
+  resetMeteorCrash();   // ACBE (D1) — clear any in-flight crash + reset the ambient cadence
+  resetCameraShake();   // ACBE (D1)
+  resetScreenFlash();   // ACBE (D1)
   ensureAudioStarted();
   startSoundscape();
   // AAP — atmospheric music tracks. Three procedural Web Audio tracks
@@ -862,9 +870,12 @@ startLoop(ctx, (c, dt) => {
   updateSleds(c, dt);            // QQ — per-sled tow spring + rope visual. Moved BEFORE updatePlayer so this-frame's sled XZ delta is fresh when updatePlayer reads it for moving-platform-ride. Tether endpoint resolution reads ctx.player.body.body.translation() = position committed by this-frame's physics.step (one frame behind setNext, but negligible at tow speeds).
   updatePlayer(c, dt);           // movement + camera + advance dayTime
   updateStaminaWobble(c);        // WW — sin-driven camera jitter when stamina low (must run AFTER updatePlayer's camera-anchor)
+  updateCameraShake(c, dt);      // ACBE (D1) — trauma shake (stacks on the anchored camera, like stamina wobble)
+  updateScreenFlash(c, dt);      // ACBE (D1) — decay the impact flash overlay
   updateSpyglass(c, dt);         // M5a (C29) — ease the camera FOV toward the spyglass zoom + drive the scope vignette
   updateVistaReveal(c, dt);      // M5a (C30) — crest detection: re-multiply the weather fog density to LIFT it on a vista reveal (after updateWeather set it)
   updateWormHorizonCrossing(c, c.terrain, dt);   // M5b (C36) — the distant worm dorsal-ridge sweeping the horizon (decoupled spectacle)
+  updateMeteorCrash(c, dt);      // ACBE (D1) — the crashing-wreck event (flight → impact → fire/smoke); ambient-armed
   updateShelter(c, dt);          // before stats so heat path sees inShelter
   updateSunExposure(c, dt);      // M5a (C31) — before stats so the heat path sees sunExposure01 (direct sun vs dune shade)
   updateStats(c, dt);            // thirst/heat/health drain + death

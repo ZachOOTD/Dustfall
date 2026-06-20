@@ -1914,6 +1914,59 @@ const SCENARIOS = {
     console.log('[fireball] ' + JSON.stringify(r));
   },
 
+  // ACBE (D1) — the crashing-wreck event, captured DETERMINISTICALLY: trigger, PAUSE the
+  // main tick, then step the FSM via __game.advanceCrash to an exact moment (the live sim
+  // runs slow headless, so wall-clock waits are unreliable). The paused scene still renders,
+  // so the static screenshot doesn't time out. --phase=streak (mid-flight asset shot) |
+  // impact (settled FX) | ground (player POV up at the descending streak). --time=day|night.
+  'crash': async (page) => {
+    const phase = argv.phase || 'impact';
+    const dn = argv.time === 'day' ? 0.5 : 0.0;
+    await page.evaluate(({ dn }) => {
+      const ctx = window.__game.ctx;
+      window.__game.setTime(dn);
+      ctx.weather.intensity = 0; ctx.weather.cloudiness = 0.12;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      ctx.three.renderer.setSize(900, 760, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 900 / 760; cam.updateProjectionMatrix(); }
+    }, { dn });
+    await page.waitForTimeout(550);   // let lighting/sky settle to the set time of day (paused would freeze it)
+    const r = await page.evaluate(({ phase }) => {
+      const ctx = window.__game.ctx;
+      const FLIGHT = 5.5;   // = Tuning.CRASH_FLIGHT_S
+      const pp = ctx.player.body.body.translation();
+      const res = window.__game.triggerCrash();
+      if (!res) return { found: false };
+      const ix = res.x, iz = res.z, iy = ctx.terrain.heightAt(ix, iz);
+      ctx.flags.paused = true;                                                    // freeze the live tick
+      // Fine sub-steps → the trail builds densely like real 60fps play (not blobby).
+      window.__game.advanceCrash(phase === 'impact' ? FLIGHT + 0.5 : FLIGHT * 0.5, 200);
+      const st = window.__game.crashState();
+      const hp = st.headPos;
+      const cam = ctx.three.camera;
+      if (phase === 'streak' && hp) {
+        cam.position.set(hp[0] + 120, hp[1] - 70, hp[2] + 120);   // side + below the head → trail streaks up-back
+        cam.lookAt(hp[0], hp[1] - 4, hp[2]);
+      } else if (phase === 'ground' && hp) {
+        cam.position.set(pp.x, iy + 2.6, pp.z);                   // player eye, look up at the streak
+        cam.lookAt(hp[0], hp[1], hp[2]);
+      } else {
+        cam.position.set(ix + 36, iy + 16, iz + 36);             // 3/4 over the impact site
+        cam.lookAt(ix, iy + 3, iz);
+      }
+      cam.updateMatrixWorld(true);
+      return { found: true, ix: +ix.toFixed(1), iy: +iy.toFixed(1), iz: +iz.toFixed(1),
+        role: res.role, t: +st.t.toFixed(2), impacted: st.impacted, head: hp ? hp.map((v) => +v.toFixed(0)) : null };
+    }, { phase });
+    if (!r.found) { console.log('[crash] not armed'); return; }
+    await page.waitForTimeout(250);
+    await page.screenshot({ path: join(OUT, `scen-crash-${phase}-${argv.time || 'night'}.png`), fullPage: false });
+    console.log('[crash] ' + JSON.stringify(r));
+  },
+
   // Vulture (ACAH): frame a perched vulture on its tree for model iteration.
   // --angle=3q|side|front; head faces +X (rotation forced to 0 for a stable read).
   'vulture': async (page) => {
