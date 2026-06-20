@@ -15,9 +15,13 @@ export const Tuning = {
   CROUCH_SPEED_MULTIPLIER: 0.5,      // walk speed * this while crouched
 
   // Debug — flip back to false before any "real" play test.
-  GOD_MODE: true,                    // never dies; die() floors stats instead
+  // M6 ② (C38) — survival-rebalance: GOD_MODE + unlimited-stamina FLIPPED OFF so the
+  // real NEW GAME is lethal (the forgiving Long-Dark curve below). DEV-mode boots still
+  // get the godmode floor (survival.ts gates it on `Tuning.GOD_MODE || ctx.flags.devMode`)
+  // so rig-shots / feature walk-tests aren't interrupted by starvation. Reversible flags.
+  GOD_MODE: false,                   // real death in a normal new-game; dev-mode boots still floor (survival.ts)
   DEBUG_STARTER_LOADOUT: false,      // AAV — flipped to false; regular NEW GAME starts empty. DEV MODE title-menu button sets the localStorage flag to override and apply the starter loadout for testing.
-  DEBUG_UNLIMITED_STAMINA: true,     // JJ-2 — skip sprint stamina drain so testing isn't gated on rest
+  DEBUG_UNLIMITED_STAMINA: false,    // C38 — sprint now drains stamina in real play (was JJ-2 testing pin)
 
   // Day/night
   DAY_LENGTH_SECONDS: 720,  // CC-4 — was 480 (8 min); now 12 min for less rushed pacing
@@ -50,11 +54,16 @@ export const Tuning = {
    *  (fog hides their shadows anyway and they make up the bulk of the cost). */
   SHADOW_CULL_DISTANCE: 120,  // EE — bumped from 80 with the larger world
 
-  // Stats
-  THIRST_DRAIN_PER_SEC: 1 / 300, // idle death in ~5 min
+  // Stats — M6 ② (C38) FORGIVING Long-Dark rebalance. Targets (per real-second drains,
+  // each stat 0..1 starting full): a PREPARED player (drinks/eats/shelters) survives
+  // INDEFINITELY and slowly heals (HEALTH_REGEN_* below); a NEGLECTED player dies in
+  // ~8–12 min on whichever urgent need they ignore (hunger is the slow background
+  // pressure at ~15 min). Shade/shelter cool/warm an order of magnitude faster than the
+  // drains, so retreating to cover is always a way out. Gate-checked by `survival-probe`.
+  THIRST_DRAIN_PER_SEC: 1 / 480, // ~8 min to empty (was 1/300); + ~2 min dehydration → ~10 min thirst death
   THIRST_SPRINT_FACTOR: 2.2,
   THIRST_HEAT_FACTOR: 1.8,
-  HEAT_GAIN_PER_SEC: 1 / 90,         // positive temperature gain in sun
+  HEAT_GAIN_PER_SEC: 1 / 420,        // ~7 min to heatstroke at FULL noon sun (was 1/90); shade/shelter cool far faster
   HEAT_COOL_PER_SEC: 1 / 40,         // shelter cooling on positive side
   // M5a (C31) — sun-shade-exposure: direct sun vs SHADE (a dune's lee / low-sun
   // shadow). updateSunExposure raymarches the heightfield toward the sun → a
@@ -82,19 +91,27 @@ export const Tuning = {
   WIND_CUTOFF_STORM: 5200,           // Hz — a storm opens the wind to full-spectrum roar
   WIND_BODY_MASTER: 0.5,             // peak wind-bed gain (× windLvl × gust)
   WIND_WHISTLE_MASTER: 0.16,         // the lonely band-pass moan (subtle; fuller at night)
-  DEHYDRATION_DAMAGE: 1 / 30,
-  HEATSTROKE_DAMAGE: 1 / 25,
-  // Hunger
-  HUNGER_DRAIN_PER_SEC: 1 / 600,     // ~10 min to starve from full
-  HUNGER_STARVATION_DAMAGE: 1 / 40,
+  DEHYDRATION_DAMAGE: 1 / 120,       // ~2 min health drain once thirst hits 0 (was 1/30 = 30s) — a recoverable spiral, not a cliff
+  HEATSTROKE_DAMAGE: 1 / 150,        // ~2.5 min once temp ≥ 1 (was 1/25 = 25s)
+  // M6 ② (C38) — health REGEN when fully provisioned: the forgiving keystone. A player
+  // who keeps thirst+hunger up and temperature near neutral slowly heals back to full,
+  // so a bad patch is recoverable (Long Dark "condition recovers when needs are met").
+  // The thresholds sit strictly inside the no-damage zone, so regen + damage never overlap.
+  HEALTH_REGEN_PER_SEC: 1 / 150,     // ~2.5 min from near-death to full when well-provisioned
+  HEALTH_REGEN_THIRST_MIN: 0.4,      // need thirst above this to heal
+  HEALTH_REGEN_HUNGER_MIN: 0.4,      // need hunger above this to heal
+  HEALTH_REGEN_TEMP_MAX: 0.5,        // need |temperature| below this (not too hot/cold) to heal
+  // Hunger — the SLOW background pressure (food is the most involved need to satisfy).
+  HUNGER_DRAIN_PER_SEC: 1 / 720,     // ~12 min to empty (was 1/600); + ~3 min starvation → ~15 min, the gentlest path
+  HUNGER_STARVATION_DAMAGE: 1 / 180,
   // Stamina (controller.ts ticks it)
   STAMINA_DRAIN_SPRINT: 1 / 6,       // 6s of sprint at full
   STAMINA_RECOVER_PER_SEC: 1 / 9,    // 9s recovery from empty
   STAMINA_SPRINT_THRESHOLD: 0.05,    // can't initiate sprint below this
   // Cold (negative side of temperature)
-  COLD_NIGHT_DRAIN: 1 / 120,         // at night without shelter
-  COLD_SHELTER_RECOVER: 1 / 30,      // recover toward 0 in shelter
-  COLD_DAMAGE_PER_SEC: 1 / 35,       // when temperature ≤ -1
+  COLD_NIGHT_DRAIN: 1 / 420,         // ~7 min to freeze at night without shelter (was 1/120); a fire/tent warms ~14× faster
+  COLD_SHELTER_RECOVER: 1 / 30,      // recover toward 0 in shelter (unchanged — shelter must out-pace the drain)
+  COLD_DAMAGE_PER_SEC: 1 / 150,      // ~2.5 min once temperature ≤ -1 (was 1/35 = 35s)
   // Canteen (container)
   CANTEEN_DRINK_DELTA: 0.25,         // fillLevel consumed per drink (Q-key single-gulp)
   // Session UU — hold-LMB sustained drinking. Time between automatic

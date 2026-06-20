@@ -8,7 +8,7 @@ import { spawnFireAt, warmFireSmoke } from '../world/fire.ts';   // M4 (C21) —
 import { getSunOccluders } from '../world/horizonSilhouettes.ts';   // M5a (C31) — __game.sunInfo
 import { triggerCrash, crashState, advanceCrash, crashSites, crashHeatAt, resetMeteorCrash, applyPendingCrashRestore, type CrashRole } from '../world/meteorCrash.ts';   // ACBE (D1) — __game.triggerCrash
 import { saveGameState, loadGameState } from '../persistence/save.ts';   // ACBE (D1) — crash save round-trip test hook
-import { updateStats } from '../stats/survival.ts';   // ACBE (D1) — crash heat-hazard probe
+import { updateStats, die } from '../stats/survival.ts';   // ACBE (D1) — crash heat-hazard probe; C38 — triggerDeath
 import { spawnWormCrossing, updateWormHorizonCrossing } from '../world/wormHorizonCrossing.ts';   // M5b (C36) — __game.triggerWormCrossing
 import { fireSignalFlare, advanceSignalFlares, activeSignalFlareCount } from '../world/signalFlare.ts';   // M6 (C37) — __game.fireSignalFlare
 import { damageVulture } from '../enemies/vulture.ts';
@@ -108,6 +108,17 @@ interface DebugApi {
   /** M6 (C37) — DEV-only: fire a signal flare from the player's view + fast-forward
    *  its arc `seconds` for a deterministic rig-shot frame. Returns the live count. */
   fireSignalFlare: (seconds?: number) => number;
+  /** M6 ② (C38) — DEV-only: deterministically simulate the survival curve under a
+   *  controlled scenario (forces real death even in dev mode), measuring time-to-death.
+   *  env: 'heat' (full noon sun) | 'cold' (night) | 'thirst' (sheltered, no water) |
+   *  'hunger' (sheltered+hydrated, no food) | 'prepared' (sheltered+fed+watered, starts
+   *  hurt → must HEAL + never die). Restores all state afterward. For the survival-probe gate. */
+  survivalProbe: (env: 'heat' | 'cold' | 'thirst' | 'hunger' | 'prepared', maxSeconds?: number) =>
+    { env: string; died: boolean; timeToDeathMin: number | null; finalHealth: number; minHealth: number };
+  /** M6 ② (C38) — DEV-only: force the REAL death path (bypassing the dev-mode godmode floor)
+   *  and report whether it fired + the death overlay un-hid. Verifies the death→Continue UI
+   *  still works now that GOD_MODE is off. Leaves the game in the death state (call last). */
+  triggerDeath: (cause?: string) => { dead: boolean; overlayShown: boolean };
   /** ACG (Cycle 1) — DEV-only: kill a raider by id (drives the real death
    *  path → dead pose + corpse interaction tag), so the corpse-drag flow is
    *  testable without melee aiming. Returns true if a live raider matched. */
@@ -262,6 +273,55 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
       fireSignalFlare(ctx);
       if (seconds > 0) advanceSignalFlares(ctx, seconds);
       return activeSignalFlareCount();
+    },
+    survivalProbe: (env, maxSeconds = 1500) => {
+      const s = ctx.stats, p = ctx.player, tm = ctx.time, w = ctx.weather, f = ctx.flags;
+      // Snapshot everything updateStats reads/writes.
+      const snap = {
+        thirst: s.thirst, hunger: s.hunger, temperature: s.temperature, health: s.health,
+        stamina: s.stamina, dead: s.dead,
+        inShelter: p.inShelter, sun01: p.sunExposure01, sunHeight: tm.sunHeight,
+        wInt: w.intensity, devMode: f.devMode, paused: f.paused,
+      };
+      // Full stats + controlled environment. devMode=false forces the REAL death path
+      // (the godmode floor is gated on GOD_MODE||devMode) so we can measure time-to-death.
+      s.thirst = 1; s.hunger = 1; s.temperature = 0; s.health = 1; s.dead = false;
+      w.intensity = 0; f.paused = false; f.devMode = false;
+      if (env === 'heat') { tm.sunHeight = 1.0; p.sunExposure01 = 1; p.inShelter = false; }
+      else if (env === 'cold') { tm.sunHeight = -0.5; p.sunExposure01 = 0; p.inShelter = false; }
+      else { tm.sunHeight = 0.3; p.sunExposure01 = 0; p.inShelter = true; }   // thirst/hunger/prepared: shelter neutralizes temperature
+      if (env === 'prepared') s.health = 0.3;   // start hurt → must heal back + never die
+      const dt = 1 / 30;
+      let elapsed = 0, died = false, minHealth = 1;
+      for (; elapsed < maxSeconds; elapsed += dt) {
+        // Isolate the path under test by topping the OTHER consumable needs each tick.
+        if (env === 'thirst') s.hunger = 1;
+        else if (env === 'hunger') s.thirst = 1;
+        else if (env === 'prepared') { s.thirst = 1; s.hunger = 1; }
+        updateStats(ctx, dt);
+        minHealth = Math.min(minHealth, s.health);
+        if (s.dead) { died = true; elapsed += dt; break; }
+      }
+      const result = {
+        env, died,
+        timeToDeathMin: died ? +(elapsed / 60).toFixed(2) : null,
+        finalHealth: +s.health.toFixed(3), minHealth: +minHealth.toFixed(3),
+      };
+      // Restore.
+      s.thirst = snap.thirst; s.hunger = snap.hunger; s.temperature = snap.temperature;
+      s.health = snap.health; s.stamina = snap.stamina; s.dead = snap.dead;
+      p.inShelter = snap.inShelter; p.sunExposure01 = snap.sun01; tm.sunHeight = snap.sunHeight;
+      w.intensity = snap.wInt; f.devMode = snap.devMode; f.paused = snap.paused;
+      return result;
+    },
+    triggerDeath: (cause = 'the desert took you') => {
+      // Force the real death path: GOD_MODE is already off; clear the dev-mode floor so die() commits.
+      ctx.flags.devMode = false;
+      ctx.stats.dead = false;
+      ctx.stats.health = 0;
+      die(ctx, cause);
+      const overlay = document.getElementById('death-screen');
+      return { dead: ctx.stats.dead, overlayShown: !!overlay && !overlay.classList.contains('hidden') };
     },
     setStats: (s) => {
       if (s.thirst !== undefined) ctx.stats.thirst = s.thirst;

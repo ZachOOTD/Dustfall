@@ -1,4 +1,4 @@
-# ▶ CAMPAIGN cycle 38 — Kickoff Brief — `campaign/2026-06-18`
+# ▶ CAMPAIGN cycle 39 — Kickoff Brief — `campaign/2026-06-18`
 
 **Phase B is building unattended (M6→M10).** Boot from `docs/campaign/campaign-state.json` + `docs/roadmap.md` "Up next"
 (the AUTHORITATIVE queue) — NOT from this file's hints. The loop commits every cycle and pauses only at
@@ -8,53 +8,57 @@
 1. `CLAUDE.md` (auto-loaded) — esp. "Where we are now".
 2. `docs/campaign/campaign-state.json` + `docs/campaign/steering.md` (your inbox) + `docs/campaign/campaign-log.md` (recent cycles).
 3. `docs/roadmap.md` "Up next" → Phase B unit list.
-4. `docs/decisions.md` tail (D245 — the C37 recipe-collision call) + `docs/backlog.md` §A.
+4. `docs/decisions.md` tail (D245 chooser, D246 survival) + `docs/backlog.md` §A + `shared-memory/iterative-polish-discipline.md`.
 
 ## What's already built (one paragraph)
-Phase A (M1–M5b) shipped: the wreck arc (procgen socket grammar + 5 archetypes + collider-audit gate), the worm + sarlacc + lure,
-critters + atmosphere (vultures, storm, smoke plume), riding & rest, the M5a exploration pull (silhouettes/spyglass/vista/sun-shade),
-and the M5b tone layer (wordless scenes, procedural wind, fireball, dawn/dusk beats, distant-worm crossing). C37 (Phase B start) lit
-up the crafting **chooser** via a new `signal_kit` flare. The survival STATS exist (thirst/hunger/temperature/stamina/health in
-`src/stats/survival.ts`, HUD bars in the UI) but the game currently runs with **`GOD_MODE: true`** — the player never actually dies.
+Phase A (M1–M5b) shipped + Phase B is underway: C37 lit the crafting **chooser** via a new `signal_kit` flare; C38 made survival
+REAL + forgiving (GOD_MODE off, a Long-Dark curve + health regen, gated by a `survival-probe`). The world already uses **9 procedural
+shader factories** for its hero surfaces — `src/world/*Material.ts`: `metalMaterial.ts` (createMetalMaterial), `hullMaterial.ts`
+(createRustedHullMaterial), `woodGrainMaterial.ts`, `boneMaterial.ts`, `glassMaterial.ts`, `fabricMaterial.ts`, plus stone/concrete/
+terrain/skin variants. But a number of secondary surfaces still use **flat `MeshLambertMaterial`/`MeshBasicMaterial` single colors**
+that read cheap up close (e.g. fire logs in `world/fire.ts`, various prop/decoration meshes).
 
-## Cycle 38 focus — **M6 ② survival-rebalance-newgame (the KEYSTONE, M/med)**
-Make survival REAL + forgiving (Long Dark tone). This is the hard-dep for M6 ④ (HUD removal) and M10's broken-speeder economy.
+## Cycle 39 focus — **M6 ③ flat-color-texture-audit (L, SCOPE-FIRST)**
+Upgrade the ~6–8 WEAKEST flat-shaded surfaces to the existing procedural shaders. **Zero new shader programs, zero asset bytes** — this
+is NOT the D107 real-PBR fork. Reuse the 9 factories; do not author new material classes or import textures.
 
 ### Priority items (in order)
-1. **Flip the testing flags off for the real new-game** — `src/config/tuning.ts`: `GOD_MODE: true → false` (line ~18; the
-   floor path is `survival.ts:117`) and `DEBUG_UNLIMITED_STAMINA: true → false` (line ~20). These are reversible tuning flags; the
-   charter authorizes the loop to flip them once gates pass — the USER vetoes FEEL at the Phase-B review. Keep a clear D-entry.
-2. **Tune the forgiving Long-Dark curve in `tuning.ts`** — target: a PREPARED player (water + food + fire/shelter managed) survives
-   **indefinitely**; a NEGLECTED player dies in **~8–12 in-game minutes**. Levers: `THIRST_DRAIN_PER_SEC` (1/300), `HUNGER_DRAIN_PER_SEC`
-   (1/600), `HUNGER_STARVATION_DAMAGE`, `COLD_NIGHT_DRAIN` (1/120), the heat/shelter/shade path (sun-exposure C31 already scales heat),
-   restore values (`CANTEEN_THIRST_RESTORE`, food). Make the death SPIRAL gentle (telegraphed, recoverable) not a cliff.
-3. **Verify the death→continue loop actually works** with GOD_MODE off — `die()` / the death overlay / `handoffToGame` restore path
-   (a real death must show the overlay + let Continue reload the autosave, not soft-lock). This is the highest-risk regression.
-4. **Headless probe + walk-test framing** — there's no rig-shot for survival feel; add a deterministic survival probe (advance the
-   stat clock N seconds under prepared vs neglected loadouts, assert the time-to-death band) so the curve is gate-checkable. The actual
-   FELT pacing is **walk-test-pending** (record `feel-pending` in the cycle log — the user judges it at the Phase-B review).
+1. **SCOPE FIRST — identify the worst offenders.** `grep` for `MeshLambertMaterial` / `MeshBasicMaterial` / `flatShading: true` across
+   `src/world/`, `src/inventory/items.ts`, `src/enemies/`. Rank by (a) how often the player sees the surface up close and (b) how cheap
+   the flat color reads. Pick the **~6–8** highest-impact surfaces. Write the shortlist into the cycle plan BEFORE editing (and `log()`
+   anything you DON'T get to, so the cut is visible — no silent truncation). Candidates to check: fire logs/ember, prop tableaux
+   set-dressing (`world/wordlessScenes.ts`), skeleton bone (already `boneMaterial`? confirm), pickup/decoration meshes, tent/kit fabric.
+2. **Upgrade each via the nearest existing factory** — wood → `woodGrainMaterial`, metal → `metalMaterial`, stone/rock → the stone/
+   concrete factory, bone → `boneMaterial`, cloth → `fabricMaterial`. Match the `localSpace` convention the viewmodel helpers use
+   (`vmWood`/`vmMetal` in items.ts) for held items. Keep the program count flat — confirm with the perf-probe (`programs` must not rise).
+3. **Per-surface visual iteration (Rule 8 — this is VISUAL work).** For each upgraded surface: render via the rig-shot/studio harness →
+   critique → iterate. This is TUNING existing factories onto existing geometry (3–5 rounds), not net-new elements. Run the adversarial
+   appearance gate (lighter pass — these are secondary surfaces, not hero assets) as the pass/fail; PASS iff no finding ≥ sev 2.
+4. **Verify** — `npm run verify:all` + a perf-probe check that `programs` did NOT increase (the whole point: reuse, no new compiles).
 
-### Stretch (only if the unit fits the cycle)
-- Scope-first scouting of **M6 ③ flat-color-texture-audit** (name the ~6–8 weakest flat-shaded surfaces) so cycle 39 can start fast.
+### Stretch (only if the unit fits)
+- Scout **M6 ④ remove-hud-stat-bars** (the next unit, dep on C38's survival): where the HUD bars live (`ui/hud.ts`), how `FEATURES`
+  flags gate UI, what diegetic tells (screen vignette, audio, viewmodel) would replace each bar.
 
 ## Autonomy contract
-Ambiguous call → pick the realism/forgiveness dial that fits "forgiving Long Dark", log a D-entry, continue — never ask the human.
-Flipping `FEATURES.*`/kill-switches/testing-flags ON is AUTHORIZED once the headless + visual/adversarial gates pass (reversible; the
-user vetoes FEEL at the Phase-B review). **The D81 SAVE-VERSION-BUMP rule still STOPs the loop — never bump autonomously; surface it.**
+Ambiguous call → pick the realism dial that fits the moody Dune/Long-Dark tone, log a D-entry, continue — never ask the human.
+Flipping `FEATURES.*` ON is AUTHORIZED once the headless + visual gates pass (reversible; user vetoes FEEL at review). **D81 SAVE-VERSION
+bump still STOPs the loop — surface it, never bump autonomously** (a material swap shouldn't need one, but watch it).
 
 ## Stop conditions
-Terminal: max-cycles (75) · catastrophic verify-baseline break · 3 consecutive fix-walls on one gate · a needed save-version bump
-(STOP + surface) · destructive-action attempt (blocked by the overnight guard). Pause: steering "pause" · the Phase-B milestone (after M10).
-
-## Verification protocol
-`npm run verify:all` (tsc + `verify:placement` ×5 seeds + `verify:colliders`). Visual/feel units → the adversarial appearance gate +
-Rule-8 iteration. For this survival unit: the headless gate + the new survival probe; FELT pacing is the user's Phase-B walk-test.
+Terminal: max-cycles (75) · catastrophic verify-baseline break · 3 consecutive fix-walls on one gate · a needed save-version bump (STOP
++ surface) · destructive-action attempt (blocked). Pause: steering "pause" · the Phase-B milestone (after M10).
 
 ## Notable footguns
-- Survival rebalance is FEEL-critical and headless can't judge it — tune toward the time-to-death BAND, don't blind-chase a number.
-- GOD_MODE off exposes the real death path for the first time in a long while — test the overlay + Continue reload carefully (regression risk).
-- `verify:placement` buffers output to the END + is slow; don't kill it early or premature `taskkill node.exe` spawns port-contending zombies (C18).
+- **Program-count creep** is the trap: every NEW material *factory call with new uniforms* can add a shader program. Reuse the SHARED
+  factories with the same options so the program cache hits (`three-js-procedural-material-onbeforecompile.md`, D207). Perf-probe `programs` before/after.
+- Visual work demands screenshots — do NOT ship a material swap on `tsc`-clean alone (Rule 8 / `iterative-polish-discipline.md`).
+- `verify:placement` buffers output to the END + is slow; don't kill it early or `taskkill node.exe` mid-run (C18 zombie footgun).
+
+## Verification protocol
+`npm run verify:all` (tsc + `verify:placement` ×5 + `verify:colliders`) + a perf-probe `programs` check. Visual surfaces → the
+adversarial appearance gate + Rule-8 iteration per surface.
 
 ## Begin
-Read the order above → `TaskCreate` the priority items → flip the flags → tune the curve → add the survival probe → `verify:all` →
-`/session-end`. Boot fresh from FILES; don't trust chat memory.
+Read the order above → `TaskCreate` the scope-shortlist → upgrade surface-by-surface with screenshot iteration → `verify:all` + perf
+check → `/session-end`. Boot fresh from FILES; don't trust chat memory.

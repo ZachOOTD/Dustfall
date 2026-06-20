@@ -69,19 +69,19 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 "Last shipped" note. Current target: **Phase B (M6→M10) — APPROVED + RELEASED**. The loop runs M6→M10 unattended,
 commits every cycle, and pauses only at "Phase B — Build-out complete" (after M10). Charter: `docs/campaign/campaign.md`.
 
-**Last shipped**: Campaign **C37** (2026-06-20, cycle 37/75) — **M6 ① crafting-chooser-colliding-recipe → Phase B begins**
-(`verify:all` PASS — tsc + placement 0/0 ×5 + colliders 0/25; adversarial visual gate PASS in 2 rounds; **no save bump**).
-Lit up the dormant multi-match crafting **chooser** (built ACAS B3, idle — no recipe collisions existed) via ONE data-level
-collision: a NEW **`signal_kit` (SIGNAL FLARE)** shares `fire_kit`'s recipe (`branch×3 + scrap×1`) → combining those surfaces a
-"fire kit OR signal flare" choice ("warm yourself OR call out"). `signal_kit` is a **one-shot transient flare** (LMB fires a bright
-ember-trailing arc skyward, consumed; `world/signalFlare.ts`, additive sprites only, never touches the fire list/save — D245). The
-`craft-chooser` scenario now asserts the real collision fires (`["fire kit","signal flare"]`, CRAFT gated). D245: used fire_kit's
-existing recipe rather than the proposal's `scrap×2+branch×1` (already owned by `scrap_bar` id 15 — the literal spec would have made
-a 3-way pileup).
+**Last shipped**: Campaign **C38** (2026-06-20, cycle 38/75) — **M6 ② survival-rebalance-newgame (the KEYSTONE)**
+(`verify:all` PASS — tsc + placement 0/0 ×5 + colliders 0/25; **survival-probe gate PASS**; **code-auditor PASS**; **no save bump**).
+Survival was never real (`GOD_MODE: true` → never died). Flipped `GOD_MODE` + `DEBUG_UNLIMITED_STAMINA` OFF and tuned a **forgiving
+Long-Dark** curve: a PREPARED player (drinks/eats/shelters) survives indefinitely + slowly HEALS (new health-regen-when-provisioned);
+a NEGLECTED player dies in ~8–10 min on the urgent paths (heat/cold/thirst), ~15 min on hunger. Damage rates softened so a depleted
+stat is a recoverable spiral, not a cliff. The godmode floor is now gated on `GOD_MODE || ctx.flags.devMode` (D246) so dev-mode boots
+stay safe for rig-shots while real new-games are lethal. NEW `__game.survivalProbe`/`triggerDeath` hooks + a `survival-probe` rig
+scenario assert the time-to-death bands + prepared-indefinite + the death→overlay wiring (heat 7.5 / cold 8.7 / thirst 10 / hunger 15 min).
+**FELT pacing + the re-enabled stamina cadence → Phase-B walk-test.**
 
-**Next session** = cycle 38 = **M6 ② survival-rebalance-newgame** (M, the **KEYSTONE**): flip `GOD_MODE` off for the real new-game +
-tune a forgiving Long-Dark survival curve in `tuning.ts` (prepared player → indefinite; unmanaged → ~8–12 in-game min). Hard-dep for
-M6 ④ HUD removal + M10's broken-speeder economy. **Watch the D81 save-bump STOP rule.** See [docs/next-session-prompt.md](docs/next-session-prompt.md).
+**Next session** = cycle 39 = **M6 ③ flat-color-texture-audit** (L, scope-first): identify the ~6–8 weakest flat-shaded surfaces and
+upgrade them via the EXISTING 9 procedural shader factories (metal/hull/wood/stone/…) — **zero new shader programs, zero asset bytes**
+(NOT the D107 PBR fork). Then ④ remove-hud-stat-bars (dep ②). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 

@@ -101,6 +101,20 @@ export function updateStats(ctx: GameContext, dt: number): void {
     t.health = Math.max(0, t.health - Tuning.HUNGER_STARVATION_DAMAGE * dt);
   }
 
+  // M6 ② (C38) — health REGEN when fully provisioned (the forgiving keystone). If thirst +
+  // hunger are comfortably up AND temperature is near neutral, slowly heal back toward full.
+  // The thresholds sit strictly inside the no-damage zone (thirst/hunger > 0, |temp| < 1), so
+  // a player can never be taking damage and regenerating in the same tick. Lets a bad patch
+  // heal off once you've re-secured water/food/shelter — Long Dark "condition recovers".
+  if (
+    t.health < 1 &&
+    t.thirst > Tuning.HEALTH_REGEN_THIRST_MIN &&
+    t.hunger > Tuning.HEALTH_REGEN_HUNGER_MIN &&
+    Math.abs(t.temperature) < Tuning.HEALTH_REGEN_TEMP_MAX
+  ) {
+    t.health = Math.min(1, t.health + Tuning.HEALTH_REGEN_PER_SEC * dt);
+  }
+
   // Death — pick the most severe cause
   if (t.health <= 0) {
     let cause = 'the desert took you';
@@ -114,9 +128,10 @@ export function updateStats(ctx: GameContext, dt: number): void {
 
 export function die(ctx: GameContext, cause: string): void {
   if (ctx.stats.dead) return;
-  // Testing godmode (Tuning.GOD_MODE). Floor the stats so the player can keep
-  // playing, but otherwise behave like nothing happened.
-  if (Tuning.GOD_MODE) {
+  // Godmode floor. M6 ② (C38): GOD_MODE flipped OFF so the real NEW GAME is lethal, but
+  // DEV-mode boots (rig-shots, feature walk-tests) still floor the stats so a long testing
+  // session isn't interrupted by starvation. So: floor iff GOD_MODE OR we're in dev mode.
+  if (Tuning.GOD_MODE || ctx.flags.devMode) {
     ctx.stats.health = Math.max(ctx.stats.health, 0.5);
     ctx.stats.thirst = Math.max(ctx.stats.thirst, 0.1);
     ctx.stats.hunger = Math.max(ctx.stats.hunger, 0.1);

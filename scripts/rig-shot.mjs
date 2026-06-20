@@ -1380,6 +1380,34 @@ const SCENARIOS = {
     console.log(`[craft-chooser] ${pass ? 'PASS' : 'FAIL'} (real=${realPass} injected=${injPass}) ${JSON.stringify(r)}`);
   },
 
+  // M6 ② (C38) — survival-rebalance gate. Drives the REAL updateStats deterministically
+  // under controlled scenarios (the godmode floor is bypassed inside survivalProbe) to
+  // assert the FORGIVING Long-Dark curve: each urgent single-neglect path (heat/cold/thirst)
+  // kills in ~7-13 min; hunger is the slow background path (~12-18 min); a PREPARED player
+  // never dies and HEALS back to full. Numeric only — no screenshot.
+  'survival-probe': async (page) => {
+    const r = await page.evaluate(() => {
+      const g = window.__game; g.enterGame(true);
+      return {
+        heat: g.survivalProbe('heat'),
+        cold: g.survivalProbe('cold'),
+        thirst: g.survivalProbe('thirst'),
+        hunger: g.survivalProbe('hunger'),
+        prepared: g.survivalProbe('prepared'),
+      };
+    });
+    // Death→overlay path (dormant under GOD_MODE for a long time): force a real death LAST
+    // (it leaves the game in the death state) and confirm the overlay un-hides.
+    const deathUi = await page.evaluate(() => window.__game.triggerDeath('the desert took you'));
+    const inBand = (m, lo, hi) => m != null && m >= lo && m <= hi;
+    const urgent = ['heat', 'cold', 'thirst'].every((k) => r[k].died && inBand(r[k].timeToDeathMin, 7, 13));
+    const hungerOk = r.hunger.died && inBand(r.hunger.timeToDeathMin, 12, 18);
+    const preparedOk = !r.prepared.died && r.prepared.finalHealth >= 0.95;
+    const deathOk = deathUi.dead === true && deathUi.overlayShown === true;
+    const pass = urgent && hungerOk && preparedOk && deathOk;
+    console.log(`[survival-probe] ${pass ? 'PASS' : 'FAIL'} (urgent=${urgent} hunger=${hungerOk} prepared=${preparedOk} deathUi=${deathOk}) ${JSON.stringify({ ...r, deathUi })}`);
+  },
+
   // ACAQ — Sarlacc-pit behavior smoke test. Teleport the player onto the maw, let
   // the live game tick, confirm the maw OPENS + BITES (health drops). The pull
   // FEEL can't be judged headless (attended walk-test); this gates the wiring.
