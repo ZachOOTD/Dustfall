@@ -613,6 +613,14 @@ export const Tuning = {
   CAMERA_SHAKE_MAX_POS: 0.18,        // m — peak positional kick at trauma²=1
   // screen flash (fx/screenFlash.ts)
   SCREEN_FLASH_DECAY_S: 0.35,        // s — flash opacity decays to 0 over this
+  // crash SITE (Tier 2 — the explorable destination)
+  CRASH_WRECK_BURY: 0.4,             // m — light extra burial (the procgen class already buries; keep the wreck mostly proud + explorable)
+  CRASH_SCORCH_RADIUS: 9,            // m — blackened impact-scorch disc radius
+  CRASH_EJECTA_CHUNKS: 9,            // hull fragments thrown radially out around the crater
+  CRASH_BEACON_LIFE_S: 600,          // s — the smoke-column beacon smolders this long (outlives the ~240s fire)
+  CRASH_BEACON_RATE: 16,             // beacon smoke particles/sec per active site
+  CRASH_BEACON_RISE: 4.5,            // m/s — beacon smoke rise speed (a tall findable column)
+  CRASH_FIRES: 3,                    // number of fires lit across the fresh wreck
   // M5b (C36) — worm far-horizon crossing: a distant sandworm's dorsal ridge surfaces
   // FAR away + sweeps across the horizon (awe, the world's scale), then submerges.
   // Decoupled from the threat AI (pure spectacle, no collider/threat). FEEL → walk-test.

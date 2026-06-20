@@ -1943,7 +1943,8 @@ const SCENARIOS = {
       const ix = res.x, iz = res.z, iy = ctx.terrain.heightAt(ix, iz);
       ctx.flags.paused = true;                                                    // freeze the live tick
       // Fine sub-steps → the trail builds densely like real 60fps play (not blobby).
-      window.__game.advanceCrash(phase === 'impact' ? FLIGHT + 0.5 : FLIGHT * 0.5, 200);
+      const adv = phase === 'site' ? FLIGHT + 9 : phase === 'impact' ? FLIGHT + 0.5 : FLIGHT * 0.5;
+      window.__game.advanceCrash(adv, 220);
       const st = window.__game.crashState();
       const hp = st.headPos;
       const cam = ctx.three.camera;
@@ -1953,8 +1954,11 @@ const SCENARIOS = {
       } else if (phase === 'ground' && hp) {
         cam.position.set(pp.x, iy + 2.6, pp.z);                   // player eye, look up at the streak
         cam.lookAt(hp[0], hp[1], hp[2]);
+      } else if (phase === 'site') {
+        cam.position.set(ix + 24, iy + 11, iz + 24);             // settled site: wreck + scorch + beacon column
+        cam.lookAt(ix, iy + 4, iz);
       } else {
-        cam.position.set(ix + 36, iy + 16, iz + 36);             // 3/4 over the impact site
+        cam.position.set(ix + 36, iy + 16, iz + 36);             // 3/4 over the impact moment
         cam.lookAt(ix, iy + 3, iz);
       }
       cam.updateMatrixWorld(true);
@@ -1962,8 +1966,10 @@ const SCENARIOS = {
         role: res.role, t: +st.t.toFixed(2), impacted: st.impacted, head: hp ? hp.map((v) => +v.toFixed(0)) : null };
     }, { phase });
     if (!r.found) { console.log('[crash] not armed'); return; }
-    await page.waitForTimeout(250);
-    await page.screenshot({ path: join(OUT, `scen-crash-${phase}-${argv.time || 'night'}.png`), fullPage: false });
+    // 'site' adds a wreck (new materials) → let the paused scene render a few frames first so
+    // the cold shader compile (ABL multi-second stall) finishes BEFORE the screenshot.
+    await page.waitForTimeout(phase === 'site' ? 2200 : 300);
+    await page.screenshot({ path: join(OUT, `scen-crash-${phase}-${argv.time || 'night'}.png`), fullPage: false, timeout: 90000 });
     console.log('[crash] ' + JSON.stringify(r));
   },
 
