@@ -220,10 +220,12 @@ function landCrashAt(ctx: GameContext, c: ActiveCrash): void {
   const pos = c.impact.clone();
   const rng = makeRng(c.seed);   // independent stream — never perturbs the seeded world scatter
 
-  // The wreck (Tier 2: a varied procgen ship; Tier 3 swaps in the bespoke enterable hull).
+  // The wreck — the ENTERABLE hollow-husk archetype (a gutted hull section you walk into
+  // through the breach: side-wall colliders + an auditExempt hollow shell). Tier 3 dresses
+  // its interior + adds the light shaft + the black-box lore.
   const wreck = placeProcgenPOI(
     ctx.three.scene, ctx.physics.world, ctx.terrain, pos, rng, ctx.salvageables,
-    { archetype: 'ship', buryY: Tuning.CRASH_WRECK_BURY },
+    { archetype: 'hollow_husk', buryY: Tuning.CRASH_WRECK_BURY },
   );
 
   // Scorch + ejecta in their own group (so reset can drop the whole site's decor cleanly).
