@@ -6,6 +6,7 @@ import { isPlaying } from '../GameContext.ts';
 import { Tuning } from '../config/tuning.ts';
 import { playDeath } from '../audio/audio.ts';
 import { updateDeathScreenButtons } from '../ui/menus.ts';
+import { crashHeatAt } from '../world/meteorCrash.ts';   // Tier 4 (C) — crash-wreck interior heat hazard
 
 export function updateStats(ctx: GameContext, dt: number): void {
   if (!isPlaying(ctx)) return;
@@ -58,6 +59,15 @@ export function updateStats(ctx: GameContext, dt: number): void {
     } else if (t.temperature < 0) {
       t.temperature = Math.min(0, t.temperature + Tuning.HEAT_COOL_PER_SEC * dt);
     }
+  }
+
+  // Tier 4 (C) — crash-wreck HEAT HAZARD: lingering in/near a still-burning crash bakes you,
+  // pushing temperature UP toward heatstroke (the risk that gates the rich interior loot). Stacks
+  // on top of the ambient branch above (applied before the thirst calc so the bake also parches
+  // you), and falls off with distance + as the fires gutter out.
+  const crashHeat = crashHeatAt(ctx);
+  if (crashHeat > 0) {
+    t.temperature = Math.min(1, t.temperature + Tuning.CRASH_HEAT_GAIN_PER_SEC * dt * crashHeat);
   }
 
   // Thirst — sandstorms + sprint + heat all accelerate.

@@ -7,8 +7,9 @@ import { spawnRaider as spawnRaiderEntity, damageRaider } from '../enemies/raide
 import { spawnFireAt, warmFireSmoke } from '../world/fire.ts';   // M4 (C21) — __game.spawnFire / warmSmoke test hooks
 import { getSunOccluders } from '../world/horizonSilhouettes.ts';   // M5a (C31) — __game.sunInfo
 import { debugTriggerFireball } from '../world/sky.ts';   // M5b (C34) — __game.triggerFireball
-import { triggerCrash, crashState, advanceCrash, crashSites, resetMeteorCrash, applyPendingCrashRestore, type CrashRole } from '../world/meteorCrash.ts';   // ACBE (D1) — __game.triggerCrash
+import { triggerCrash, crashState, advanceCrash, crashSites, crashHeatAt, resetMeteorCrash, applyPendingCrashRestore, type CrashRole } from '../world/meteorCrash.ts';   // ACBE (D1) — __game.triggerCrash
 import { saveGameState, loadGameState } from '../persistence/save.ts';   // ACBE (D1) — crash save round-trip test hook
+import { updateStats } from '../stats/survival.ts';   // ACBE (D1) — crash heat-hazard probe
 import { spawnWormCrossing, updateWormHorizonCrossing } from '../world/wormHorizonCrossing.ts';   // M5b (C36) — __game.triggerWormCrossing
 import { damageVulture } from '../enemies/vulture.ts';
 import { makeLatheHull, fuselageProfile, makeFormerRings, makeBreach, makeSandMound } from '../world/wreckForms.ts';
@@ -99,6 +100,10 @@ interface DebugApi {
   /** ACBE (D1) — DEV/headless: full crash save round-trip (save → clear → load → restore) and
    *  report the site count at each stage (before === afterRestore + afterReset === 0 ⇒ OK). */
   crashRoundtrip: () => { before: number; afterReset: number; afterRestore: number; saveOk: boolean; loadOk: boolean; loadErr: string | null };
+  /** ACBE (D1) Tier 4 (C) — DEV/headless: probe the crash interior HEAT hazard. Teleports the
+   *  player to the first crash site, samples crashHeatAt at 4 distances, then bakes ~3s of stats
+   *  at centre. PASS ⇒ center>near>half>edge==0 and dTemp>0 (temperature climbs). */
+  crashHeatProbe: () => { center: number; near: number; half: number; edge: number; tempBefore: number; tempAfter: number; dTemp: number; error?: string };
   /** M5b (C36) — DEV-only: force a distant worm horizon-crossing now (returns its
    *  centre point); + fast-forward it `seconds` for a deterministic rig-shot frame. */
   triggerWormCrossing: () => { cx: number; cz: number } | null;
@@ -224,6 +229,25 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
       applyPendingCrashRestore(ctx);               // re-spawn the saved crash sites
       const afterRestore = crashSites().length;
       return { before, afterReset, afterRestore, saveOk: sv.ok, loadOk: ld.ok, loadErr: ld.error ?? null };
+    },
+    crashHeatProbe: () => {
+      const sites = crashSites();
+      const z0 = { center: 0, near: 0, half: 0, edge: 0, tempBefore: 0, tempAfter: 0, dTemp: 0 };
+      if (!sites.length) return { ...z0, error: 'no crash site' };
+      const s = sites[0];
+      const body = ctx.player.body.body;
+      const y = body.translation().y;
+      const at = (dist: number): number => { body.setTranslation({ x: s.x + dist, y, z: s.z }, true); return crashHeatAt(ctx); };
+      const center = at(0), near = at(2), half = at(Tuning.CRASH_HEAT_RADIUS * 0.5), edge = at(Tuning.CRASH_HEAT_RADIUS + 2);
+      // Bake test: sit at centre, zero the temperature, tick the real stats ~3s; expect a climb.
+      body.setTranslation({ x: s.x, y, z: s.z }, true);
+      ctx.stats.temperature = 0;
+      const wasPaused = ctx.flags.paused; ctx.flags.paused = false;
+      const tempBefore = ctx.stats.temperature;
+      for (let i = 0; i < 180; i++) updateStats(ctx, 1 / 60);
+      const tempAfter = +ctx.stats.temperature.toFixed(4);
+      ctx.flags.paused = wasPaused;
+      return { center: +center.toFixed(3), near: +near.toFixed(3), half: +half.toFixed(3), edge: +edge.toFixed(3), tempBefore, tempAfter, dTemp: +(tempAfter - tempBefore).toFixed(4) };
     },
     triggerWormCrossing: () => spawnWormCrossing(ctx),
     advanceWormCrossing: (seconds: number) => updateWormHorizonCrossing(ctx, ctx.terrain, seconds),

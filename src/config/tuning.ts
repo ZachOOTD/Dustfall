@@ -621,6 +621,11 @@ export const Tuning = {
   CRASH_BEACON_RATE: 16,             // beacon smoke particles/sec per active site
   CRASH_BEACON_RISE: 4.5,            // m/s — beacon smoke rise speed (a tall findable column)
   CRASH_FIRES: 3,                    // number of fires lit across the fresh wreck
+  // Tier 4 (C) — INTERIOR HEAT HAZARD: lingering in/near a still-burning crash bakes you (pushes
+  // temperature toward heatstroke) — the risk that gates the rich interior loot. Falls off with
+  // distance to the wreck centre AND as the fires gutter out over CRASH_FIRE_FUEL_S.
+  CRASH_HEAT_RADIUS: 6.5,            // m — heat falloff radius from the wreck centre (inside + at the breach)
+  CRASH_HEAT_GAIN_PER_SEC: 1 / 30,   // temperature/s at the heart of a FRESH blaze (~3× midday sun → ~30s to heatstroke)
   // M5b (C36) — worm far-horizon crossing: a distant sandworm's dorsal ridge surfaces
   // FAR away + sweeps across the horizon (awe, the world's scale), then submerges.
   // Decoupled from the threat AI (pure spectacle, no collider/threat). FEEL → walk-test.

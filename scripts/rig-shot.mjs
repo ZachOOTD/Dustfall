@@ -1995,6 +1995,22 @@ const SCENARIOS = {
     console.log(`[crash-roundtrip] ${pass ? 'PASS' : 'FAIL'} ${JSON.stringify(r)}`);
   },
 
+  // ACBE (D1) Tier 4 (C) — interior HEAT-HAZARD probe (no screenshot). Land a fresh crash, then
+  // sample the heat falloff + bake the player at centre. PASS iff center>near>half>edge==0 and
+  // the temperature CLIMBS while baking. Runs at NIGHT so the climb is the crash heat, not the sun.
+  'crash-heat': async (page) => {
+    const r = await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      window.__game.setTime(0.92);          // night — cold drains, so a temp climb = the crash bake
+      ctx.weather.intensity = 0;
+      window.__game.triggerCrash();
+      window.__game.advanceCrash(7, 120);   // land a fresh crash so its fires are at full burn
+      return window.__game.crashHeatProbe();
+    });
+    const pass = !r.error && r.center > r.near && r.near > r.half && r.half > r.edge && r.edge === 0 && r.dTemp > 0;
+    console.log(`[crash-heat] ${pass ? 'PASS' : 'FAIL'} ${JSON.stringify(r)}`);
+  },
+
   // Vulture (ACAH): frame a perched vulture on its tree for model iteration.
   // --angle=3q|side|front; head faces +X (rotation forced to 0 for a stable read).
   'vulture': async (page) => {

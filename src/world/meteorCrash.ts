@@ -352,6 +352,26 @@ export function applyPendingCrashRestore(ctx: GameContext): void {
   if (p.length) restoreCrashes(ctx, p);
 }
 
+/** Tier 4 (C) — how hard the player is being BAKED by nearby still-burning crash wreck(s):
+ *  0 = clear, 1 = standing in the heart of a FRESH blaze. Falls off with horizontal distance to
+ *  the wreck centre and as the fires gutter out over CRASH_FIRE_FUEL_S. survival.ts turns this
+ *  into a temperature push toward heatstroke. Site-based (not per-fire) so it survives save/load. */
+export function crashHeatAt(ctx: GameContext): number {
+  if (!_sites.length) return 0;
+  const p = getPlayerWorldPos(ctx);
+  let best = 0;
+  for (const s of _sites) {
+    const burn = 1 - s.age / Tuning.CRASH_FIRE_FUEL_S;   // fires gutter out over the fuel window
+    if (burn <= 0) continue;
+    const dx = p.x - s.pos.x, dz = p.z - s.pos.z;
+    const d = Math.sqrt(dx * dx + dz * dz);
+    if (d >= Tuning.CRASH_HEAT_RADIUS) continue;
+    const h = (1 - d / Tuning.CRASH_HEAT_RADIUS) * burn;   // prox (1 at centre) × burn
+    if (h > best) best = h;
+  }
+  return best;
+}
+
 /** Per-frame: emit the tall smoke-column beacon from each active site (thins over its life,
  *  but outlives the fires so the site stays findable). Runs whether or not a crash is in the
  *  air. */
