@@ -415,3 +415,17 @@ The focal mass also has to DOMINATE: the impact chunk is scaled 1.7× (decisivel
 **Audit:** passes via the existing hollow-shell exemption (`auditExempt` on the shell + declared side-wall colliders); added `enterable_wreck` to the collider-audit list (35→40 audits). **SAVE: no bump** — additive archetype spawned from the world seed; entering/exiting touches zero save state (the recon confirmed there is none). The `ARCH_WEIGHTS` rows were renormalized to sum to 1.0 (they summed to ~1.04, compressing the reachable tail; slack trimmed mostly off the legacy `ship` tube per C41/D249).
 
 **friction-score:** 2 (the architecture + determinism are sound and gate-verified, but the in-world INTERIOR FEEL — walking in, dark-nav, the dead-console read up close — is walk-test-only; and reusing `dressCrashInterior` couples the ambient wreck to the crash kit, so a future interior-kit change must keep the `aged` path dead).
+
+## D254 — Deep cave = a Sarlacc-style terrain FUNNEL descent + a box/cylinder room-kit enclosed interior (not a trimesh/marching-cubes carve) (Session C46, campaign — M8 ⑧ spike)
+
+**Context.** M8 wants ONE enterable, enclosed underground cave. The world ground is a Rapier **heightfield** (one Y per XZ) — it cannot represent an overhang or an enclosed volume. The ⑧ spike had to pick the collision topology before the XL ⑨ build. (Spike recon: a fanned Explore agent.)
+
+**Decision — Option A.** Reuse the proven **Sarlacc crater carve** (`terrain.ts:163-173` — a seed-derived anchor lowers the heightfield + mesh bit-identically, deterministic, no save state) to make a **walk-down funnel** (slope clamped ≤ ~37°, under the 50° KCC limit — D125, no new movement mode), then place an **enclosed interior** built from declared **box + cylinder colliders** (`attachDeclaredColliders`) — walls + a real **roof collider** + short ramps — with a doorway gap using the hollow-shell `auditExempt` idiom (D253). Dressed decayed/dead (D252). Full spec + ⑨/⑩ sub-tasks: [feature-deep-cave.md](feature-deep-cave.md).
+
+**Rejected:** (B) a trimesh/marching-cubes tunnel — needs a brand-new voxel subsystem, the priciest colliders, and concave-carve clip/stuck risk (friction 3-4, disproportionate for one location). (C) a pure box kit with no carved descent — folded into A (A = C + the dramatic Sarlacc funnel mouth).
+
+**Dark-nav recommendation (decided for real in ⑨):** prefer a cheap **ambient darken-below-Y + an emissive torch glow** over a dynamic point light (which adds per-frame shadow cost); gate a point light behind `FEATURES` only if the cheap path fails. Torch-only, no-horror.
+
+**SAVE:** ⑧ touches nothing. ⑨/⑩ persist only an **additive** `companionEggTaken?: boolean` (default false on load) — D81-compliant, **no `SAVE_VERSION` bump**. If ⑨ discovers it needs more persisted state, it STOPs and surfaces (never bump autonomously).
+
+**friction-score:** 2 (the topology reuses three proven subsystems [Sarlacc carve · the box/cylinder collider kit · the husk hollow-shell idiom] so it's low-risk to build, but the cave is the campaign's biggest single net-new BUILD [⑨ is XL] and its dark-nav FEEL + the roof-collider × snap-to-ground interaction are walk-test/prototype-only — proven in ⑨, not here).

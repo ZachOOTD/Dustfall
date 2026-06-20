@@ -69,17 +69,19 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 "Last shipped" note. Current target: **Phase B (M6→M10) — APPROVED + RELEASED**. The loop runs M6→M10 unattended,
 commits every cycle, and pauses only at "Phase B — Build-out complete" (after M10). Charter: `docs/campaign/campaign.md`.
 
-**Last shipped**: Campaign **C45** (2026-06-20, cycle 45/75) — **M7 ⑦ walkable-wreck-interiors → M7 COMPLETE**
-(`verify:all` PASS — tsc + placement 0/0 ×5 + colliders 0/40; **visual gate PASS** [3 seeds — enterable read + dead interior]; **no save bump**).
-Generalized the D1 enterable `crash_husk` into a NEW ambient **`enterable_wreck`** archetype so walkable-interior wrecks appear in the procedural
-scatter. A recon agent confirmed there is **no portal mechanic** — a wreck is enterable purely because `huskShell` is a hollow shell (torn ends +
-open top + only side-wall colliders + `auditExempt`), so the player walks IN. Reuses `huskShell` + `dressCrashInterior` (Option B — a self-contained
-archetype, D253); determinism via ONE `seedOf` draw + an **isolated `makeRng(s)`** dressing stream; an `aged` flag gives a DEAD console (no glow) per
-D252; `ARCH_WEIGHTS` renormalized to 1.0. **No save bump** (entering touches zero save state). **M7 COMPLETE** (⑤ overhaul · ⑥ new POIs · C44 solitude · ⑦ interiors).
+**Last shipped**: Campaign **C46** (2026-06-20, cycle 46/75) — **M8 ⑧ deep-cave-design-spike** (the cave collision-topology decision)
+(docs-only — `tsc` clean + placement/colliders hold from C45; **no save bump**; **M8 begins**).
+The design spike that de-risks the cave before the XL build. The blocker: the world ground is a Rapier **heightfield** (one Y per XZ) — it can't
+enclose an underground volume. A recon agent mapped terrain/KCC/colliders + precedents; the decision (**D254**): **Option A — a Sarlacc-style terrain
+FUNNEL descent** (reuse the deterministic heightfield+mesh carve in `terrain.ts`) **+ a box/cylinder room-kit enclosed interior** (walls + a real
+roof collider + ≤37° ramps + a doorway gap via the hollow-shell `auditExempt` idiom), dressed dead (D252); dark-nav via a cheap ambient-darken +
+torch glow. Rejected a trimesh/marching-cubes carve. Full spec + the ⑨/⑩ sub-tasks in [docs/feature-deep-cave.md](docs/feature-deep-cave.md). **No
+save bump** (⑨/⑩ persist only an additive `companionEggTaken?` flag).
 
-**Next session** = cycle 46 = **M8 ⑧ deep-cave-design-spike** (A/B worktree — collision topology; writes `docs/feature-deep-cave.md`) — the first
-unit of **M8 (deep cave & companion)**. After ⑧: ⑨ deep-cave-build (XL — seeded tunnel-carving, ONE rare location, dark-nav, no-horror) · ⑩
-companion-egg-cherry-pick. The loop only PAUSES at the Phase-B milestone (after M10). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
+**Next session** = cycle 47 = **M8 ⑨ deep-cave-build** (XL — the seeded `caveAnchor` + the Sarlacc-style funnel carve + the box/cylinder room-kit
+interior [walls + roof + ramps + doorway gap, audit-listed] + the ambient-darken dark-nav, per `feature-deep-cave.md`). Watch the D81 save-bump STOP
+(should only need the additive `companionEggTaken?` flag). After ⑨: ⑩ companion-egg-cherry-pick. The loop only PAUSES at the Phase-B milestone (after
+M10). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 

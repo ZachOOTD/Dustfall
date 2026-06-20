@@ -3,6 +3,17 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign C46 — 2026-06-20 — M8: **deep-cave-design-spike** — pick the cave collision topology (design doc) ✓ verify pass (ultracode) · M8 BEGINS
+
+`verified` — docs-only cycle (no `src/`/`scripts/` change → `src` byte-identical to C45); `tsc` re-confirmed clean; placement 0/0 ×5 + colliders 0/40 hold from C45 (the C11/C23/C25 docs-only precedent). **No visual gate** (a design spike — the deliverable is a doc + a decision, no shipped gameplay). **No save bump.** Cycle 46/75. **M8 begins.**
+
+**deep-cave-design-spike (M8 ⑧).** The spike that de-risks the cave before the XL build. The blocker: the world ground is a Rapier **heightfield** (one Y per XZ) — it can't enclose an underground volume. A recon agent mapped the terrain/KCC/collider systems + precedents, and the decision (**D254**) is:
+- **Topology = Option A:** a **Sarlacc-style terrain FUNNEL descent** (reuse `terrain.ts`'s deterministic heightfield+mesh carve — no save state) + a **box/cylinder room-kit enclosed interior** (walls + a real **roof collider** + ≤37° ramps under the 50° KCC limit [D125] + a doorway gap via the hollow-shell `auditExempt` idiom [D253]). Dressed dead (D252). Rejected (B) a trimesh/marching-cubes carve (new voxel subsystem + clip risk) and (C) a no-descent kit (folded into A).
+- **Dark-nav:** a cheap ambient-darken-below-Y + torch glow (a dynamic point light only if that fails, behind `FEATURES`). Torch-only, no-horror.
+- **Deliverable:** NEW `docs/feature-deep-cave.md` (full spec + the ⑨/⑩ sub-task breakdown + success criteria) + **D254**.
+- **SAVE:** no bump — ⑨/⑩ persist only an additive `companionEggTaken?` flag (D81-compliant). **D254.**
+- **Next:** ⑨ deep-cave-build (XL — the seeded `caveAnchor` + the funnel carve + the room-kit interior + dark-nav).
+
 ## Campaign C45 — 2026-06-20 — M7: **walkable-wreck-interiors** — enterable wrecks join the ambient scatter → **M7 COMPLETE** ✓ verify pass (ultracode)
 
 `verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders **0/40** — 8 archetypes × 5 seeds; the new `enterable_wreck` passes via the hollow-shell exemption + side-wall colliders). **Visual gate PASS** — rendered `--scenario=procgen-wreck --archetype=enterable_wreck` at seeds 1/42/1337: reads as a large hollow walkable hull (torn-end cavity / open ribbed trough with a dark furnished interior), interior reads DEAD (no powered glow → D252). **No save bump** (additive archetype, world-seed spawned; entering touches zero save state). Cycle 45/75. **M7 COMPLETE.**
