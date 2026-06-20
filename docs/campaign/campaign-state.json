@@ -537,7 +537,7 @@
       "save": "no bump — additive ItemId + an additive discoveredRecipes id (the C29 spyglass precedent); the flare is fully transient (no ctx.fires/save interaction)",
       "decisions": ["D245 — signal_kit shares fire_kit's recipe (not scrap×2+branch×1) + the flare is a transient consumable not a fire (friction 1)"],
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "4efbea2",
       "spend_approx_tokens": 250000
     }
   ]
