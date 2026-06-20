@@ -1059,8 +1059,9 @@ const SCENARIOS = {
     const fa = argv.forceanchor !== undefined;   // ACAZ T2A — pin the scale-anchor hatch to the +Z camera flank
     const variant = argv.variant !== undefined ? Number(argv.variant) : -1;   // ACAZ T2B — force one hull variant
     const archetype = argv.archetype || '';      // ACBA — POI archetype (satellite/tank_cluster/…); '' = ship
+    const pinyaw = argv.pinyaw !== undefined;     // C41 — length-frame pin (spine broadside) for the visual gate
     for (const seed of seeds) {
-    const r = await page.evaluate(({ cls, ang, seed, zoom, fa, variant, archetype }) => {
+    const r = await page.evaluate(({ cls, ang, seed, zoom, fa, variant, archetype, pinyaw }) => {
       const ctx = window.__game.ctx;
       window.__FORCE_ANCHOR_NEAR = fa;   // inspection only — forces the hatch camera-facing
       if (variant >= 0) window.__FORCE_HULL_VARIANT = variant; else delete window.__FORCE_HULL_VARIANT;
@@ -1069,7 +1070,7 @@ const SCENARIOS = {
       ctx.three.renderer.toneMappingExposure = 1.5;
       ctx.flags.thirdPerson = false;
       if (ctx.player.rig) ctx.player.rig.group.visible = false;
-      const spawn = window.__game.spawnProcgenWreckRig(cls, seed, archetype || undefined);
+      const spawn = window.__game.spawnProcgenWreckRig(cls, seed, archetype || undefined, pinyaw);
       let mw = null;
       ctx.three.scene.traverse((o) => { if (!mw && o.name === 'procgenWreckRig') mw = o; });
       if (!mw) return { found: false, cls, seed, spawn };
@@ -1132,7 +1133,7 @@ const SCENARIOS = {
       if (key) { const toC = new V(cx - cam.position.x, 0, cz - cam.position.z); key.position.set(cam.position.x + toC.x * 0.2 + span * 0.25, cam.position.y + h * 0.6, cam.position.z + toC.z * 0.2); key.target.position.set(cx, cy, cz); key.target.updateMatrixWorld(true); }
       if (!ctx.three.scene.getObjectByName('__procgenFill') && HemiCtor) { const fill = new HemiCtor(0xbfccdd, 0x6b5840, 0.7); fill.name = '__procgenFill'; ctx.three.scene.add(fill); }
       return { found: true, cls: archetype || cls, seed, span: +span.toFixed(1), height: +h.toFixed(1), meshes };
-    }, { cls, ang: angle, seed, zoom, fa, variant, archetype });
+    }, { cls, ang: angle, seed, zoom, fa, variant, archetype, pinyaw });
     await page.waitForTimeout(320);
     const tag = archetype ? archetype : cls;
     await page.screenshot({ path: join(OUT, `scen-procgen-${tag}-${angle}-s${seed}${variant >= 0 ? `-v${variant}` : ''}.png`), fullPage: false });

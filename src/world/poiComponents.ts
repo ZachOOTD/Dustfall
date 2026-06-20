@@ -559,8 +559,10 @@ export function noseCone(seed: number): BuiltComponent {
  *  sockets for wide-body / stacked grafting. Salvage hatch on top (never occluded). */
 export function hullBarrel(seed: number, scale = 1): BuiltComponent {
   const g = new THREE.Group();
-  const len = (2.4 + phash(seed, 1) * 2.0) * scale;
-  const r = (0.9 + phash(seed, 2) * 0.5) * scale;
+  // C41 r3 — longer + thinner range (was 2.4-4.4 len / 0.9-1.4 r) so a short-fat roll can't
+  // read as a buried BLOB end-on; min aspect len/diam ≈ 1.36 → always a hull, never a sphere.
+  const len = (3.2 + phash(seed, 1) * 1.8) * scale;
+  const r = (0.82 + phash(seed, 2) * 0.36) * scale;
   const body = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 0.96, len, 10), _hullMat);
   body.rotation.x = Math.PI / 2; g.add(body);   // axis along Z
   // ACBC §G — more hoop bands (plated sections) + a dorsal spine ridge + a sensor box so the
@@ -604,6 +606,75 @@ export function engineNozzle(seed: number): BuiltComponent {
     { kind: 'cylinder', halfHeight: depth / 2, radius: r, pos: { x: 0, y: 0, z: depth / 2 }, quat: FACE.posY() },
   ];
   const bbox = new THREE.Box3(new THREE.Vector3(-r, -r, 0), new THREE.Vector3(r, r, depth));
+  return { mesh: g, sockets, colliders, panelMounts: [], bbox };
+}
+
+/** M7 ⑤ (C41) — Splayed multi-engine cluster: a hub + 3-4 bells FANNED around the axis,
+ *  a wider/weirder stern than the single nozzle. Its 'mount' (axialIn at origin, −Z) mates
+ *  onto a barrel's 'aft'; the cluster opens aft (+Z). One envelope cylinder collider covers
+ *  the hub + the fanned bells (bells are decoration → exempt from the collider audit). */
+export function splayedEngineCluster(seed: number): BuiltComponent {
+  const g = new THREE.Group();
+  const count = 3 + Math.floor(phash(seed, 0) * 2);          // 3-4 bells
+  const hubR = 0.5 + phash(seed, 1) * 0.25;
+  const hubDepth = hubR * 1.1;
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(hubR, hubR * 0.9, hubDepth, 9), _hullMat);
+  hub.rotation.x = Math.PI / 2; hub.position.z = hubDepth / 2; g.add(hub);   // axis along Z
+  const nozR = 0.30 + phash(seed, 2) * 0.12;
+  const nozDepth = nozR * 1.5;
+  const ringR = hubR + nozR * 0.7;
+  for (let i = 0; i < count; i++) {
+    const ang = (i / count) * Math.PI * 2 + phash(seed, 10 + i) * 0.3;
+    const bell = makeEngineBellMesh(nozR, nozDepth, _hullMat, _hullDarkMat);
+    bell.rotation.x = Math.PI / 2;                          // opens +Z (aft)
+    bell.position.set(Math.cos(ang) * ringR, Math.sin(ang) * ringR, hubDepth + nozDepth * 0.35);
+    bell.userData.isWreckDecoration = true;                 // detail; envelope collider covers it
+    g.add(bell);
+  }
+  const envR = ringR + nozR;
+  const envDepth = hubDepth + nozDepth;
+  const sockets: Socket[] = [{ name: 'mount', pos: new THREE.Vector3(0, 0, 0), quat: FACE.negZ(), radius: hubR, tag: 'axialIn' }];
+  const colliders: ColliderSpec[] = [
+    { kind: 'cylinder', halfHeight: envDepth / 2, radius: envR, pos: { x: 0, y: 0, z: envDepth / 2 }, quat: FACE.posY() },
+  ];
+  const bbox = new THREE.Box3(new THREE.Vector3(-envR, -envR, 0), new THREE.Vector3(envR, envR, envDepth));
+  return { mesh: g, sockets, colliders, panelMounts: [], bbox };
+}
+
+/** M7 ⑤ (C41) — Dorsal sensor mast: a tall thin comms spike with cross-arms + a tilted
+ *  dish, for a distinctive VERTICAL silhouette (a different read from the fat stacked
+ *  "tower"). Built along +Z; its 'base' mates onto a barrel's 'top' so mate() stands it
+ *  upright. A thin cylinder collider covers the mast (arms + dish are decoration). */
+export function dorsalMast(seed: number): BuiltComponent {
+  const g = new THREE.Group();
+  const h = 1.7 + phash(seed, 1) * 1.0;
+  const r = 0.17 + phash(seed, 2) * 0.08;    // C41 r2 — THICKER (was 0.10-0.15, read as a pin antenna)
+  // C41 r2 — a boxy sensor HOUSING at the base gives the mast visual mass + anchors it to the
+  // hull (the critique: "a stick stabbed into sand"). Then a tapered mast above it.
+  const baseH = 0.5 + phash(seed, 4) * 0.3;
+  const housing = new THREE.Mesh(new THREE.BoxGeometry(r * 4.0, r * 4.0, baseH), _hullMat);
+  housing.position.z = baseH / 2; g.add(housing);
+  const mast = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.6, r, h, 8), _hullMat);
+  mast.rotation.x = Math.PI / 2; mast.position.z = baseH + h / 2; g.add(mast);    // along +Z
+  const arms = 2 + Math.floor(phash(seed, 3) * 2);
+  for (let i = 0; i < arms; i++) {
+    const az = baseH + h * (0.42 + 0.5 * (i / Math.max(1, arms - 1)));
+    const armLen = 0.5 + phash(seed, 10 + i) * 0.6;
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(armLen, 0.07, 0.07), _hullDarkMat);
+    bar.position.set(0, phash(seed, 20 + i) < 0.5 ? 0.08 : -0.08, az);
+    bar.rotation.z = (phash(seed, 30 + i) - 0.5) * 0.5;
+    bar.userData.isWreckDecoration = true; g.add(bar);
+  }
+  const dish = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.34, 0.07, 12), _rustMat);
+  dish.rotation.x = Math.PI / 2.4; dish.position.set(0, 0.2, baseH + h * 0.9);
+  dish.userData.isWreckDecoration = true; g.add(dish);
+  const totalH = baseH + h;
+  const sockets: Socket[] = [{ name: 'base', pos: new THREE.Vector3(0, 0, 0), quat: FACE.negZ(), radius: r * 1.5, tag: 'axialIn' }];
+  const colliders: ColliderSpec[] = [
+    { kind: 'box', half: { x: r * 2.0, y: r * 2.0, z: baseH / 2 }, pos: { x: 0, y: 0, z: baseH / 2 } },
+    { kind: 'cylinder', halfHeight: h / 2, radius: r, pos: { x: 0, y: 0, z: baseH + h / 2 }, quat: FACE.posY() },
+  ];
+  const bbox = new THREE.Box3(new THREE.Vector3(-0.6, -0.6, 0), new THREE.Vector3(0.6, 0.6, totalH));
   return { mesh: g, sockets, colliders, panelMounts: [], bbox };
 }
 

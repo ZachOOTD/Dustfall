@@ -69,19 +69,18 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 "Last shipped" note. Current target: **Phase B (M6→M10) — APPROVED + RELEASED**. The loop runs M6→M10 unattended,
 commits every cycle, and pauses only at "Phase B — Build-out complete" (after M10). Charter: `docs/campaign/campaign.md`.
 
-**Last shipped**: Campaign **C40** (2026-06-20, cycle 40/75) — **M6 ④ remove-hud-stat-bars → M6 COMPLETE**
-(`verify:all` PASS — tsc + placement 0/0 ×5 + colliders 0/25; **diegetic-probe PASS**; **visual gate PASS in 3 rounds**; **no save bump**).
-Replaced the always-on HUD stat bars with DIEGETIC survival tells: per-stat screen-edge vignettes (cold=blue, thirst=sepia, heat=amber,
-hunger=sickly-green pall, low-health=blood-crimson PULSE) + procedural audio (`playHeartbeat`, `playStomachGrowl`). Behind
-`FEATURES.diegeticSurvival` (master flag, **flipped ON** — bars hidden by default) + `settings.diegeticSurvival` (a pause-menu opt-in,
-default-ON; bars are the always-available floor). NEW `ui/diegeticMode.ts` shared state · `hud.setStatsBarsVisible` · heat/hunger/health
-added to `statVignette.ts` · `__game.diegeticProbe`/`showDiegeticVignette` + `diegetic-probe`/`diegetic-vignette` rig gates (D248).
-**FELT read — can I survive without bars? — → Phase-B walk-test.**
+**Last shipped**: Campaign **C41** (2026-06-20, cycle 41/75) — **M7 ⑤ procedural-wreck-overhaul → M7 begins**
+(`verify:all` PASS — tsc + placement 0/0 ×5 + colliders 0/25; **visual gate PASS in 3 rounds** [recon agent + 5 critics]; **no save bump**).
+Fixed the "every wreck is a long tube" complaint: the socket-grammar `derelict` archetype gained 2 NEW structure-axis components
+(`splayedEngineCluster` — a fanned multi-engine stern; `dorsalMast` — a tall housing'd sensor spike) + grew **3 forms → 5** (trimaran w/
+pod noses · stacked tower · NEW mast · NEW asymmetric outrigger+mast · NEW layered tower+mast — no bare-tube form left), the hull was
+elongated, and `ARCH_WEIGHTS` shifted ~0.08 from the legacy linear `ship` → `derelict` so the wider/weirder hulls show ~as often as tubes.
+D249 — also a NEW rig `--pinyaw` length-frame (a Z-long ship in an X-long-assuming framer read END-ON as a "blob"; the pin frames it broadside).
 
-**Next session** = cycle 41 = **M7 ⑤ procedural-wreck-overhaul** (L — net-new structure axes in the socket grammar: `world/poiArchetypes.ts`
-+ `poiComponents.ts`; wider/weirder ships beyond the current tube-ish hulls). **M6 is DONE** (chooser · survival · flat-color · diegetic HUD).
-M7 = wreck depth & new POIs (⑤ overhaul · ⑥ watchtower/debris-trail/well · ⑦ walkable interiors; the crashing-ship-event is already DONE via D1).
-See [docs/next-session-prompt.md](docs/next-session-prompt.md).
+**Next session** = cycle 42 = **M7 ⑥ more-wreck-types-new-pois** (L — NEW non-ship POIs: a watchtower · a debris-trail · a well/cistern;
+ramp-vantage not a ladder. Same socket grammar — `world/poiArchetypes.ts` + new components in `poiComponents.ts`; register in
+`ARCH_WEIGHTS`). Then ⑦ walkable-wreck-interiors (XL, spike→build — generalize D1's enterable `crash_husk`). M7 = wreck depth & new POIs
+(the crashing-ship-event is already DONE via D1). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 

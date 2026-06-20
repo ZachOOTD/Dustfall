@@ -837,7 +837,7 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
       cam.updateMatrixWorld(true);
       return { form, angle: angle ?? 'side', ok: true, radius: +radius.toFixed(2) };
     },
-    spawnProcgenWreckRig(cls = 'corvette', seed = 1337, archetype?: ArchetypeId) {
+    spawnProcgenWreckRig(cls = 'corvette', seed = 1337, archetype?: ArchetypeId, pinYaw = false) {
       // Ensure the world is live (idempotent) — same enter path the studios use.
       if (hooks.enterGame) hooks.enterGame(true);
       else { ctx.flags.titleActive = false; ctx.flags.paused = false; }
@@ -868,7 +868,17 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
       // broadside reliably sees the detail flank. POIs KEEP their real terrain-aligned
       // seating (so the inspection shows true in-world ground contact, not a forced level
       // that would float a wide slab on a slope).
-      if (!(archetype && archetype !== 'ship')) group.rotation.set(0, 0, -0.06);
+      if (!(archetype && archetype !== 'ship')) {
+        group.rotation.set(0, 0, -0.06);
+      } else if (pinYaw) {
+        // M7 ⑤ (C41) — LENGTH-FRAME pin for the visual gate: the socket-grammar ship spine
+        // is built along local +Z; the rig framer assumes the subject is X-long, so a random
+        // world-yaw can catch a derelict END-ON (reads as a blob, grades the camera not the
+        // asset — the harness footgun). Pin the spine broadside (+Z → +X) + a slight list so
+        // every seed is consistently length-framed. (Default off: normal inspection keeps the
+        // real terrain-aligned yaw so ground contact reads true.)
+        group.rotation.set(0.07, Math.PI / 2, 0);
+      }
       group.updateMatrixWorld(true);
       group.name = 'procgenWreckRig';
       procgenRigGroup = group;

@@ -15,7 +15,7 @@ import type { ColliderSpec } from '../physics/bodies.ts';
 import {
   type BuiltComponent, type PanelMount, mate, transformCollider, transformPanelMount, phash,
   busBody, solarWing, dishAntenna, wreckedTank, debrisPiece, huskShell,
-  noseCone, hullBarrel, engineNozzle,
+  noseCone, hullBarrel, engineNozzle, splayedEngineCluster, dorsalMast,
 } from './poiComponents.ts';
 
 export interface ArchetypeParams {
@@ -330,39 +330,67 @@ function assembleCrashHusk(rand: Rng): AssembleResult {
 // ════════════════════════════════════════════════════════════════════
 function assembleDerelict(rand: Rng): AssembleResult {
   const a = new Assembly();
-  const s = seedOf(rand);
+  const s = seedOf(rand);                  // the ONLY rand draw — everything below is phash (D208/D221)
   const form = phash(s, 0);
+  const splayEngine = phash(s, 1) < 0.6;   // C41 r2 — show the SPLAYED cluster more often (was 0.45)
   const spine = hullBarrel(s);
   const spinePl = a.place(spine, liftToGround(spine));
   const nose = noseCone(s + 100);
   a.place(nose, mate(spinePl, socket(spine, 'fwd'), socket(nose, 'base')));
-  const engine = engineNozzle(s + 200);
-  a.place(engine, mate(spinePl, socket(spine, 'aft'), socket(engine, 'mount')));
-  if (form < 0.45) {
-    // WIDE-BODY — twin outrigger hulls running PARALLEL to the spine (a trimaran hauler).
-    // ACBB Tier 4: was mate()'d onto the radial sockets, which oriented them PERPENDICULAR
-    // (a plus-sign cross, not a wide ship). Placed directly now — spine frame translated to
-    // each flank with NO rotation → they stay axis-aligned alongside the spine + a connecting
-    // cross-strut so the trio reads as one welded wide hull, not three loose tubes.
+  // Stern: a single bell OR a SPLAYED multi-engine cluster (M7 ⑤ — a wider/weirder stern).
+  if (splayEngine) {
+    const cluster = splayedEngineCluster(s + 200);
+    a.place(cluster, mate(spinePl, socket(spine, 'aft'), socket(cluster, 'mount')));
+  } else {
+    const engine = engineNozzle(s + 200);
+    a.place(engine, mate(spinePl, socket(spine, 'aft'), socket(engine, 'mount')));
+  }
+  // Superstructure form. M7 ⑤ (C41 r2) — 5 forms, and EVERY form now carries a secondary
+  // feature (the bare-linear branch is gone → no "all tubes" regression).
+  if (form < 0.24) {
+    // WIDE-BODY trimaran — twin outrigger HULLS (pod + its own nose so it reads as a hull
+    // section, not an open barrel) PARALLEL to the spine + a beefier cross-strut.
     const spoX = socket(spine, 'spoL').pos.x;          // = r·0.85
-    const offX = spoX * 1.85;                          // pods nearly kiss the spine flanks
+    const offX = spoX * 1.7;                            // C41 r2 — pods closer (cohesion)
     for (const sgn of [1, -1]) {
-      const pod = hullBarrel(s + 300 + (sgn > 0 ? 7 : 17), 0.7);
-      const pl = spinePl.clone().multiply(new THREE.Matrix4().makeTranslation(sgn * offX, -0.12, -0.25));
-      a.place(pod, pl);
+      const pod = hullBarrel(s + 300 + (sgn > 0 ? 7 : 17), 0.72);
+      const podPl = a.place(pod, spinePl.clone().multiply(new THREE.Matrix4().makeTranslation(sgn * offX, -0.1, -0.2)));
+      const podNose = noseCone(s + 340 + (sgn > 0 ? 1 : 2));
+      a.place(podNose, mate(podPl, socket(pod, 'fwd'), socket(podNose, 'base')));
     }
-    // Cross-strut tying the three hulls together (a transverse bar across the spine top).
-    const strut = hullBarrel(s + 360, 0.34);
+    const strut = hullBarrel(s + 360, 0.42);
     const strutPl = spinePl.clone()
-      .multiply(new THREE.Matrix4().makeTranslation(0, spoX * 0.5, 0))
+      .multiply(new THREE.Matrix4().makeTranslation(0, spoX * 0.45, 0))
       .multiply(new THREE.Matrix4().makeRotationY(Math.PI / 2));   // lie across ±X
     a.place(strut, strutPl);
-  } else if (form < 0.75) {
-    // STACKED — a dorsal superstructure barrel (a conning-tower silhouette).
+  } else if (form < 0.46) {
+    // STACKED — a dorsal superstructure barrel (a conning-tower silhouette) (ACBB).
     const tower = hullBarrel(s + 400, 0.55);
     a.place(tower, mate(spinePl, socket(spine, 'top'), socket(tower, 'aft')));
+  } else if (form < 0.66) {
+    // MASTED (NEW) — a tall sensor mast (now a housing + thicker spike) off the spine top.
+    const mast = dorsalMast(s + 500);
+    a.place(mast, mate(spinePl, socket(spine, 'top'), socket(mast, 'base')));
+  } else if (form < 0.84) {
+    // ASYMMETRIC (NEW) — a BIG single outrigger HULL (pod + its own nose) on one (phash-chosen)
+    // flank + a mast: an off-balance "welded from salvage" read instead of mirror-symmetry.
+    const sgn = phash(s, 7) < 0.5 ? 1 : -1;
+    const spoX = socket(spine, 'spoL').pos.x;
+    const pod = hullBarrel(s + 320, 0.85);             // C41 r2 — bigger (was 0.62, read as a blob+stick)
+    const podPl = a.place(pod, spinePl.clone()
+      .multiply(new THREE.Matrix4().makeTranslation(sgn * spoX * 2.0, -0.08, phash(s, 8) * 0.8 - 0.4)));
+    const podNose = noseCone(s + 348);
+    a.place(podNose, mate(podPl, socket(pod, 'fwd'), socket(podNose, 'base')));
+    const mast = dorsalMast(s + 520);
+    a.place(mast, mate(spinePl, socket(spine, 'top'), socket(mast, 'base')));
+  } else {
+    // LAYERED (NEW, replaces the bare-tube linear) — a stacked tower with a mast on its top:
+    // a tall layered superstructure so even the simplest roll carries vertical mass.
+    const tower = hullBarrel(s + 400, 0.5);
+    const towerPl = a.place(tower, mate(spinePl, socket(spine, 'top'), socket(tower, 'aft')));
+    const mast = dorsalMast(s + 540);
+    a.place(mast, mate(towerPl, socket(tower, 'top'), socket(mast, 'base')));
   }
-  // else: a clean LINEAR ship (nose + spine + engine).
   return a.result();
 }
 
@@ -405,8 +433,9 @@ export const ARCHETYPES: Record<string, Archetype> = {
   derelict: {
     id: 'derelict',
     // ACBB Tier 2 — the derelict rested ON the sand like a prop (critique sev2); give it a
-    // real settle (bury 0.25→0.55) + a touch more crash-list so it reads CRASHED + bedded.
-    params: { bucket: 'cool', burySink: true, bury: 0.55, list: 0.20, panelMin: 1, panelMax: 1, sandMound: true, salvageKind: 'fuselage' },
+    // real settle + crash-list so it reads CRASHED + bedded. C41 r2: list 0.20→0.26. C41 r3:
+    // bury 0.55→0.45 so the nose/stern show + a short-fat hull doesn't read as a buried blob+mast.
+    params: { bucket: 'cool', burySink: true, bury: 0.45, list: 0.26, panelMin: 1, panelMax: 1, sandMound: true, salvageKind: 'fuselage' },
     assemble: assembleDerelict,
   },
 };
@@ -416,11 +445,14 @@ export type ArchetypeId = 'ship' | keyof typeof ARCHETYPES;
 // Biome-weighted: dune favours tank/satellite (industrial relics half-sunk in sand),
 // salt favours ships (freight routes), wreck_yard mixes everything. `ship` delegates to
 // the legacy linear assembler (placeProcgenComposite) so today's hulls still appear.
+// M7 ⑤ (C41) — the socket-grammar `derelict` (now 5 silhouette forms × 2 stern types) is
+// the answer to "all long tubes"; shifted ~0.08 from the legacy linear `ship` → `derelict`
+// in every biome so the wider/weirder hulls appear roughly as often as the tube hulls.
 const ARCH_WEIGHTS: Record<BiomeId, Array<[ArchetypeId, number]>> = {
-  salt:       [['ship', 0.38], ['derelict', 0.14], ['satellite', 0.16], ['wrecked_tank', 0.12], ['debris_field', 0.10], ['hollow_husk', 0.10]],
-  rocky:      [['ship', 0.30], ['derelict', 0.14], ['satellite', 0.14], ['wrecked_tank', 0.20], ['debris_field', 0.10], ['hollow_husk', 0.12]],
-  dune:       [['ship', 0.28], ['derelict', 0.14], ['satellite', 0.18], ['wrecked_tank', 0.18], ['debris_field', 0.08], ['hollow_husk', 0.14]],
-  wreck_yard: [['ship', 0.26], ['derelict', 0.14], ['satellite', 0.13], ['wrecked_tank', 0.18], ['debris_field', 0.16], ['hollow_husk', 0.13]],
+  salt:       [['ship', 0.28], ['derelict', 0.24], ['satellite', 0.16], ['wrecked_tank', 0.12], ['debris_field', 0.10], ['hollow_husk', 0.10]],
+  rocky:      [['ship', 0.22], ['derelict', 0.22], ['satellite', 0.14], ['wrecked_tank', 0.20], ['debris_field', 0.10], ['hollow_husk', 0.12]],
+  dune:       [['ship', 0.20], ['derelict', 0.24], ['satellite', 0.18], ['wrecked_tank', 0.16], ['debris_field', 0.08], ['hollow_husk', 0.14]],
+  wreck_yard: [['ship', 0.18], ['derelict', 0.22], ['satellite', 0.13], ['wrecked_tank', 0.18], ['debris_field', 0.16], ['hollow_husk', 0.13]],
 };
 
 export function pickArchetype(rand: Rng, biome?: BiomeId): ArchetypeId {
