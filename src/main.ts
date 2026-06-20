@@ -26,7 +26,7 @@ import { updateVistaReveal } from './world/vistaReveal.ts';   // M5a (C30) — c
 import { updateSunExposure } from './world/sunExposure.ts';   // M5a (C31) — direct-sun vs shade (heat relief)
 import { updateDayBeats, resetDayBeats } from './world/dayBeats.ts';   // M5b (C35) — dawn/dusk tonal beats
 import { initWormHorizonCrossing, updateWormHorizonCrossing, resetWormHorizonCrossing } from './world/wormHorizonCrossing.ts';   // M5b (C36) — distant worm sighting
-import { initMeteorCrash, updateMeteorCrash, resetMeteorCrash } from './world/meteorCrash.ts';   // ACBE (D1) — the crashing-wreck hero event
+import { initMeteorCrash, updateMeteorCrash, resetMeteorCrash, applyPendingCrashRestore } from './world/meteorCrash.ts';   // ACBE (D1) — the crashing-wreck hero event
 import { updateCameraShake, resetCameraShake } from './fx/cameraShake.ts';   // ACBE (D1) — trauma camera shake
 import { initScreenFlash, updateScreenFlash, resetScreenFlash } from './fx/screenFlash.ts';   // ACBE (D1) — impact screen flash
 import { createSalvageableRegistry, setSalvageBiomesContext } from './world/salvage.ts';
@@ -711,7 +711,7 @@ function handoffToGame(opts?: { skipLock?: boolean }): void {
   else devModeBadge.classList.remove('visible');
   resetDayBeats();   // C35 — seed fresh so a new-game/load sun position can't fire a stray dawn/dusk beat
   resetWormHorizonCrossing();   // C36 — clear any in-flight distant crossing on new-game/load
-  resetMeteorCrash();   // ACBE (D1) — clear any in-flight crash + reset the ambient cadence
+  resetMeteorCrash(ctx);   // ACBE (D1) — tear down in-session crash sites (bodies + registries) + reset the cadence
   resetCameraShake();   // ACBE (D1)
   resetScreenFlash();   // ACBE (D1)
   ensureAudioStarted();
@@ -805,6 +805,7 @@ const titleOverlay = createTitleOverlay(ctx, {
     // becomes a regular saved game.)
     ctx.flags.devMode = false;
     handoffToGame();
+    applyPendingCrashRestore(ctx);   // ACBE (D1) — re-spawn saved crash sites AFTER handoff's reset cleared in-session ones
   } : undefined,
   // AAX — DEV MODE button. Pre-AAX this set a localStorage flag + cleared
   // the save + reloaded; the boot-time loadout block then fired from the

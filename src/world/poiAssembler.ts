@@ -88,8 +88,11 @@ export function placeProcgenPOI(
   });
   (opts.parent ?? scene).add(group);
 
-  // Declared colliders → exact Rapier primitives at the placed world transform.
-  attachDeclaredColliders(world, group, result.colliders);
+  // Declared colliders → exact Rapier primitives at the placed world transform. Stash the
+  // body on userData so a RUNTIME caller (the crash event) can remove it on reset/load —
+  // world-gen POIs never need this, so it's a harmless additive tag for them.
+  const poiBody = attachDeclaredColliders(world, group, result.colliders);
+  group.userData.poiBody = poiBody;
 
   // Re-skin shared hull mats to the archetype's bucket (BEFORE merge groups by material).
   reskinToBucket(group, getBucketMats(arch.params.bucket));

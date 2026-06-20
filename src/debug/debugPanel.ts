@@ -7,7 +7,8 @@ import { spawnRaider as spawnRaiderEntity, damageRaider } from '../enemies/raide
 import { spawnFireAt, warmFireSmoke } from '../world/fire.ts';   // M4 (C21) — __game.spawnFire / warmSmoke test hooks
 import { getSunOccluders } from '../world/horizonSilhouettes.ts';   // M5a (C31) — __game.sunInfo
 import { debugTriggerFireball } from '../world/sky.ts';   // M5b (C34) — __game.triggerFireball
-import { triggerCrash, crashState, advanceCrash, type CrashRole } from '../world/meteorCrash.ts';   // ACBE (D1) — __game.triggerCrash
+import { triggerCrash, crashState, advanceCrash, crashSites, resetMeteorCrash, applyPendingCrashRestore, type CrashRole } from '../world/meteorCrash.ts';   // ACBE (D1) — __game.triggerCrash
+import { saveGameState, loadGameState } from '../persistence/save.ts';   // ACBE (D1) — crash save round-trip test hook
 import { spawnWormCrossing, updateWormHorizonCrossing } from '../world/wormHorizonCrossing.ts';   // M5b (C36) — __game.triggerWormCrossing
 import { damageVulture } from '../enemies/vulture.ts';
 import { makeLatheHull, fuselageProfile, makeFormerRings, makeBreach, makeSandMound } from '../world/wreckForms.ts';
@@ -95,6 +96,9 @@ interface DebugApi {
    *  ctx.flags.paused so the live tick doesn't double-advance). Lets the rig-shot capture an
    *  exact moment without depending on the slow headless wall-clock. */
   advanceCrash: (seconds: number, substeps?: number) => void;
+  /** ACBE (D1) — DEV/headless: full crash save round-trip (save → clear → load → restore) and
+   *  report the site count at each stage (before === afterRestore + afterReset === 0 ⇒ OK). */
+  crashRoundtrip: () => { before: number; afterReset: number; afterRestore: number; saveOk: boolean; loadOk: boolean; loadErr: string | null };
   /** M5b (C36) — DEV-only: force a distant worm horizon-crossing now (returns its
    *  centre point); + fast-forward it `seconds` for a deterministic rig-shot frame. */
   triggerWormCrossing: () => { cx: number; cz: number } | null;
@@ -211,6 +215,16 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
     triggerCrash: (x, z) => triggerCrash(ctx, x, z),
     crashState: () => crashState(),
     advanceCrash: (seconds, substeps) => advanceCrash(ctx, seconds, substeps),
+    crashRoundtrip: () => {
+      const before = crashSites().length;
+      const sv = saveGameState(ctx);              // → localStorage at v15, incl. crashes[]
+      resetMeteorCrash(ctx);                       // simulate the world-clear that a load does
+      const afterReset = crashSites().length;
+      const ld = loadGameState(ctx);               // re-read v15 (gate must accept it) + stash crashes
+      applyPendingCrashRestore(ctx);               // re-spawn the saved crash sites
+      const afterRestore = crashSites().length;
+      return { before, afterReset, afterRestore, saveOk: sv.ok, loadOk: ld.ok, loadErr: ld.error ?? null };
+    },
     triggerWormCrossing: () => spawnWormCrossing(ctx),
     advanceWormCrossing: (seconds: number) => updateWormHorizonCrossing(ctx, ctx.terrain, seconds),
     setStats: (s) => {

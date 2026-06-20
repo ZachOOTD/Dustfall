@@ -1979,6 +1979,22 @@ const SCENARIOS = {
     console.log('[crash] ' + JSON.stringify(r));
   },
 
+  // ACBE (D1) Tier 4 — crash SAVE ROUND-TRIP test (no screenshot). Land a crash, then run the
+  // full save → clear → load(v15) → restore cycle and report site counts: PASS iff
+  // before === afterRestore (>0) && afterReset === 0 && saveOk && loadOk.
+  'crash-roundtrip': async (page) => {
+    const r = await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      window.__game.setTime(0.5);
+      ctx.weather.intensity = 0;
+      window.__game.triggerCrash();
+      window.__game.advanceCrash(7, 120);   // fly + land the crash so a site exists
+      return window.__game.crashRoundtrip();
+    });
+    const pass = r.before > 0 && r.afterReset === 0 && r.afterRestore === r.before && r.saveOk && r.loadOk;
+    console.log(`[crash-roundtrip] ${pass ? 'PASS' : 'FAIL'} ${JSON.stringify(r)}`);
+  },
+
   // Vulture (ACAH): frame a perched vulture on its tree for model iteration.
   // --angle=3q|side|front; head faces +X (rotation forced to 0 for a stable read).
   'vulture': async (page) => {

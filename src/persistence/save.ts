@@ -19,6 +19,7 @@ import type { LootEntry } from '../world/lootContainers.ts';
 import { despawnPickup, spawnDroppedPickup } from '../pickups/pickups.ts';
 import { harvestCactus } from '../world/cactus.ts';
 import { markSalvageStripped } from '../world/salvage.ts';
+import { serializeCrashes, setPendingCrashRestore, type SavedCrash } from '../world/meteorCrash.ts';   // ACBE (D1) — crash-site persistence
 import {
   applyDeadPose,
   lootLizard,
@@ -100,12 +101,12 @@ export const SAVE_KEY = 'dustfall.save.v1';
 // pre-v14 saves load with them absent (shrews rebuild from procgen; the wall
 // defaults to the dormant struct from createWeather and re-derives intensity
 // on the first updateWeather tick).
-export const SAVE_VERSION = 14;
+export const SAVE_VERSION = 15;
 
 type V3 = { x: number; y: number; z: number };
 
 export interface SaveV1 {
-  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14;
+  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15;
   seed: number;
   savedAt: number;
   /** ABJ — v11: persist the dev-mode flag so a Continue from a
@@ -200,6 +201,10 @@ export interface SaveV1 {
   // AAM (v10) — optional hasGrill boolean per fire. Pre-v10 saves omit the
   // field; loader defaults to false. Additive change per D81.
   fires: Array<{ id: number; pos: V3; fuelSeconds: number; alive: boolean; hasGrill?: boolean }>;
+  /** ACBE (D1) — v15: landed crash sites, re-spawned deterministically from each seed on load
+   *  (the wreck + colliders + salvage + black box reappear, aged). Pre-v15 saves omit it → no
+   *  crashes (D81 additive — no migration). */
+  crashes?: SavedCrash[];
   tents: Array<{ id: number; pos: V3; rotationY: number }>;
   /** Session QQ — placed sleds with their cargo + tether state. Optional
    *  so pre-v5 saves still load (sleds field is just absent).
@@ -521,6 +526,8 @@ export function saveGameState(ctx: GameContext): { ok: boolean; error?: string }
         alive: f.alive,
         hasGrill: f.hasGrill,    // AAM — v10 additive
       })),
+      crashes: serializeCrashes(),   // ACBE (D1) — v15: landed crash sites
+
       tents: ctx.tents.list.map((t) => ({
         id: t.id,
         pos: { x: t.pos.x, y: t.pos.y, z: t.pos.z },
@@ -666,7 +673,10 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
   // `inventory.discoveredRecipes` seeded with ALL_RECIPE_IDS so
   // pre-TT playtesters keep their recipe knowledge).
   // ABJ — v11 adds 3 optional fields (bornInDevMode + journalReadKinds + companion.huddleState).
-  if (save.version !== 1 && save.version !== 2 && save.version !== 3 && save.version !== 4 && save.version !== 5 && save.version !== 6 && save.version !== 7 && save.version !== 8 && save.version !== 9 && save.version !== 10 && save.version !== 11 && save.version !== 12 && save.version !== 13) {
+  // ACBE — a RANGE check (replaces the explicit chain that stopped at 13 and would have
+  // rejected the then-current v14): accept any 1..SAVE_VERSION; reject only garbage / a future
+  // version this build doesn't know. Every version is forward-only/additive, so old saves load.
+  if (!(save.version >= 1 && save.version <= SAVE_VERSION)) {
     return { ok: false, error: `unsupported save version ${save.version}` };
   }
   // AAM — was `Tuning.RNG_SEED` (legacy from pre-AAI); should be `ctx.seed`
@@ -1309,6 +1319,11 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
 
   // ── Reset transients ──
   ctx.flags.damageFlashUntil = 0;
+
+  // ACBE (D1) — STASH the saved crash sites; main.ts onContinue applies them right AFTER
+  // handoffToGame (whose resetMeteorCrash clears in-session sites; load runs before that, so
+  // restoring here would be wiped). Pre-v15 saves have no `crashes` → an empty stash.
+  setPendingCrashRestore(save.crashes ?? []);
 
   return { ok: true };
 }
