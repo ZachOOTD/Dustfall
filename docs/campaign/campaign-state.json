@@ -567,7 +567,7 @@
       "save": "no bump — material-factory swaps on unchanged geometry; no schema change",
       "decisions": ["D247 — swap flat Lambert to EXISTING world-space factories, proven zero-new-programs by a git-stash A/B render (friction 1)"],
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "4372e29",
       "spend_approx_tokens": 210000
     }
   ]

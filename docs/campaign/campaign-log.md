@@ -494,5 +494,5 @@ first stop will be `max-cycles` ~mid-Phase-A; resume via `/campaign-start --resu
 - **Visual iteration:** appearance gate PASS — 1 adversarial critic on the camp render (fire/bedroll/lantern): reads as aged wood / woven cloth / weathered metal, colors preserved, no broken surfaces, no sev≤2 (took ~4 framing iterations to get a usable close shot — the harness only had distant/held-item scenarios). Residual sev3 nits + the journal/tent-pole close-up reads (factory-transitivity-covered) → backlog/walk-test.
 - **Decisions:** **D247** — swap flat Lambert to the EXISTING world-space factories (locker wood, tents fabric, wrecks metal), proven zero-new-programs by a git-stash A/B render. friction 1.
 - **Spend:** ~210K (1 scan agent + 8 swaps + the camp-studio render harness + ~4 framing iterations + 1 critic + the git-stash A/B proof + verify:all); campaign total ~10.36M; cycle **39/75**.
-- **Commit:** `PENDING`.
+- **Commit:** `4372e29`.
 - **M6 unit 3/4 ✓.** **Next (cycle 40):** **M6 ④ remove-hud-stat-bars** (behind `FEATURES.diegeticSurvival` + a pause-menu opt-in; diegetic survival tells replace the HUD bars) — **COMPLETES M6**. **Verdict: CONTINUE** — not terminal (roadmap non-empty, cycle 39/75), not a milestone (the Phase-B marker is after M10; M6 completing does not pause per checkpoint=milestone).
