@@ -770,7 +770,7 @@
       "visual": "appearance gate PASS — --scenario=cave --angle=inside (egg re-attached for the shot; the rig boots dev so the reconcile detaches it): a pale, softly-glowing ovoid on the dais, the focal point of the dark chamber under the torch. D252-safe (the one intentional artifact). The acquisition FEEL (find -> hatch -> the boot spawn-then-despawn timing) -> walk-test.",
       "decisions": ["D256 — ⑩ re-applied the 2d4035b spine retargeted to the deep cave with NO SAVE_VERSION bump (additive companionAcquired?; the biggest D81 risk navigated cleanly). friction 2"],
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "690cfcd",
       "spend_approx_tokens": 400000
     }
   ]
