@@ -834,7 +834,7 @@
       "decisions": ["D260 — ⑬ real-cloth = a 2D Verlet grid reusing ⑫'s solver, driving the large-tent door-flap's billow behind FEATURES.realCloth. friction 1"],
       "ultracode": true,
       "paused": "steering-pause-before-M10 — M9 COMPLETE; the loop STOPS before M10 for the user's review + planning. Resume into M10 via /campaign-approve (clears pause_before).",
-      "commit": "PENDING",
+      "commit": "bc987ed",
       "spend_approx_tokens": 260000
     }
   ]

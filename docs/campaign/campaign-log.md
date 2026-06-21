@@ -674,5 +674,5 @@ first stop will be `max-cycles` ~mid-Phase-A; resume via `/campaign-start --resu
 - **Decisions:** **D260** — ⑬ real-cloth = a 2D Verlet grid reusing ⑫'s solver, driving the large-tent door-flap's billow behind `FEATURES.realCloth`. friction 1.
 - **M9 COMPLETE** — ⑪ (C53) + ⑫ (C54+C55) + ⑬ (C56). All M9 units shipped behind their flags (`rideableSled`/`realRope`/`realCloth`, all OFF, walk-test-gated).
 - **Spend:** ~260K (the boot + the cloth-target recon [tent/largeTent/door-flap] + `verletCloth.ts` + the largeTent wiring + the math probe + verify:all + D260 + the doc suite); campaign total ~15.23M; cycle **56/75**.
-- **Commit:** `PENDING` (patched in the follow-up ledger commit).
+- **Commit:** `bc987ed`.
 - **⏸ PAUSED — steering `pause_before: "M10"` (C53).** M9 is complete; the next work is M10. Per the user's directive ("pause before starting M10 so I can review and plan accordingly"), the loop STOPS here: `status=paused`, `awaiting_approval=true`, `stop_reasons=["steering-pause-before-M10"]`. **Verdict: STOP (pause).** The loop does NOT schedule another cycle. **Human action:** review M9 (walk-test the 3 flag-gated systems — flip `rideableSled`/`realRope`/`realCloth` in `npm run dev`; see [backlog.md](../backlog.md) §A for the owed walk-tests) + plan M10, then resume into M10 via `/campaign-approve` (which clears `pause_before`).
