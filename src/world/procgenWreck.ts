@@ -2101,6 +2101,16 @@ export function pruneBuriedPanels(
       delete s.panel.userData.interactType;
       delete s.panel.userData.interactId;
       delete s.panel.userData.interactRegistry;
+      // M11 ⓐ (C61) — a culled panel (buried below sand or occluded by its own hull)
+      // was left VISIBLE but untagged → it read as a panel that won't open (the user's
+      // "some panels not openable" bug). Hide the whole panel subtree so a culled panel
+      // is simply not there, never a dead tease. (visible=false propagates to the door +
+      // interior children at render; also hidden explicitly in case they're siblings.)
+      s.panel.visible = false;
+      const door = s.panel.userData.panelDoor as THREE.Object3D | undefined;
+      if (door) door.visible = false;
+      const interior = s.panel.userData.panelInterior as THREE.Object3D | undefined;
+      if (interior) interior.visible = false;
     },
   }));
   validatePanels(entries, { root: wreckRoot, terrain });

@@ -68,8 +68,8 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 held Phase-A/B feedback → triaged → chose: **campaign runs a REVIEW-FIX PASS (M11→M13); the Skyfall hero wreck + the cave rework are DEDICATED solo sessions
 (NOT the loop).** The loop pauses next at the "Phase-B review fixes complete" milestone (after M13). Each `/campaign-cycle` boots from `docs/campaign/campaign-state.json` + `docs/roadmap.md` — NOT this note.
 
-**Review-fix pass (from the 2026-06-20 triage — backlog "Fresh triage" block):**
-- **M11 — wreck/panel fixes** ← current: procgen-wreck panels not-openable + floating; `wrecked_tank` ribbing/structure/panel floating.
+**Review-fix pass (from the 2026-06-20 triage — backlog "Fresh triage" block). Autonomous, PAUSE-per-tier for the user's batch walk-test/listen:**
+- **M11 — wreck/panel fixes** ← current: ✅ ⓐ not-openable panels FIXED (C61/D264 — culled panels now hide; the raycast hits only the targets list so it was never occlusion). Remaining: ⓑ floating panels (seat mounts flush) · ⓒⓓⓔ `wrecked_tank` ribbing/structure/panel · 3 hand/hero-wreck straggler panels (§A).
 - **M12 — sand worm:** remove dorsal ridges · attack = charge→dive (no high jump) · alert audio → quiet rumble buildup.
 - **M13 — weapon & vehicle audio:** gunshot + reload SFX (all guns) · smoother/lower speeder hum.
 
@@ -77,8 +77,10 @@ held Phase-A/B feedback → triaged → chose: **campaign runs a REVIEW-FIX PASS
 research → model → iterate WITH the user; + its fire-from-the-wreck fix) and the **CAVE rework** (user planning the direction). Both in [docs/backlog.md](docs/backlog.md).
 Also still queued for the user: ⑯ drop-pod-intro, ⑰ pickup-instancing (human-attended), + the §A walk-tests/flag-flips.
 
-**Last shipped**: Campaign **C59** (2026-06-20, cycle 59/75) — M10 ⑰ pickup-instancing measured (382 pickups = ~75% of draw calls) + planned + human-deferred → M10
-done → paused at the Phase-B milestone (now reviewed + resumed). **Next** = cycle 60 = **M11 ⓐ+ⓑ** — procgen-wreck panels not-openable + floating (same placement/registration root). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
+**Last shipped**: Campaign **C61** (2026-06-20, cycle 61/75) — M11 ⓐ wreck panels "not openable" FIXED (`verify:all` PASS; live-verified 21 culled panels hidden / 79
+openable; no save touch). Root (D264): the interaction raycast hits only the targets list (no hull occlusion), so "not openable" = `pruneBuriedPanels`' `cull()`
+leaving culled panels VISIBLE; fix = `cull()` now hides the panel mesh. **Next** = cycle 62 = **M11 ⓑ floating panels + ⓒⓓⓔ wrecked_tank** (render-iterate via the
+isolated `procgen-wreck` rig; phash-only mounts), then the M11 batch pause for the user's wreck walk-test. See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 

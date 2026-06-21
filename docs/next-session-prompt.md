@@ -1,44 +1,38 @@
-# ▶ CAMPAIGN cycle 60 — Kickoff Brief — `campaign/2026-06-18`
+# ▶ CAMPAIGN cycle 62 — Kickoff Brief — `campaign/2026-06-18`
 
-**RESUMED into a Phase-B review-fix pass (M11→M13).** The Phase-B milestone review happened (2026-06-20): the user gave feedback → triaged → chose "campaign for the bounded fixes; Skyfall hero wreck + cave rework are DEDICATED solo sessions (NOT the loop)." Now grinding the fixes.
-Boot from `docs/campaign/campaign-state.json` + `docs/roadmap.md` (the "Phase-B review-fix pass" block). The loop commits every cycle. Charter: `docs/campaign/campaign.md`.
+**Phase-B review-fix pass, M11 (wreck/panel fixes) in progress.** ⓐ not-openable panels FIXED (C61). Now ⓑ floating panels + ⓒⓓⓔ wrecked_tank.
+**Execution: autonomous, PAUSE after M11 completes for the user's batch walk-test** (then M12 worm, M13 audio). Boot from `docs/campaign/campaign-state.json` + `docs/roadmap.md`.
 
 ## Read these now (in order)
-1. `CLAUDE.md` (auto-loaded) — "Where we are now".
-2. `docs/campaign/campaign-state.json` + `docs/campaign/steering.md` + `docs/campaign/campaign-log.md` (the C59 pause + the 2026-06-20 resume).
-3. `docs/backlog.md` — the **"Fresh triage (2026-06-20 — Phase-B review dump)"** block at the bottom = the source of these fixes (the verbatim user feedback).
-4. For M11: `src/world/poiAssembler.ts` (`placeProcgenPOI`, panel registration), `src/world/panelPlacement.ts` (`findSurfaceMounts`/`validatePanels`/`pruneBuriedPanels`), `src/player/interaction.ts` (the `salvageables` case — what makes a panel openable), + `src/world/poiArchetypes.ts`/`poiComponents.ts` (the `wrecked_tank` assembly).
+1. `CLAUDE.md` (auto-loaded).
+2. `docs/decisions.md` tail — **D264 (the not-openable fix + the panel structure: wrapper Group + body Mesh with `userData.panelShape`)**, D226 (phash determinism — NO new world-rand).
+3. `docs/backlog.md` "Fresh triage 2026-06-20" (the verbatim feedback) + §A (the 3 hand/hero-wreck straggler panels).
+4. `src/world/poiComponents.ts` (the component `panelMounts` + the `wreckedTank` component ~285-385) + `src/world/wrecks.ts` (`addAccessPanelOriented` — how a panel mesh seats at a mount) + `src/world/poiAssembler.ts` (`placeProcgenPOI` panel placement).
 
-## The review-fix pass (M11→M13) — pause after M13
-- **M11 — wreck/panel fixes (THIS tier, ~the next few cycles):** ⓐ procgen-wreck access panels **not openable** · ⓑ procgen-wreck panels **floating** · ⓒ `wrecked_tank` interior **ribbing floats** · ⓓ `wrecked_tank` reads **disconnected/floating → structural** · ⓔ `wrecked_tank` access **panel floats/unconnected**.
-- **M12 — sand worm:** ⓕ remove dorsal ridges · ⓖ attack: remove the high jump → charge-straight then dive from current pos · ⓗ alert audio → quiet rumble + screen-shake buildup.
-- **M13 — weapon & vehicle audio:** ⓘ gunshot + reload SFX (all guns) · ⓙ speeder engine → lower/smoother hum.
-- After M13 → **PAUSE** at the "Phase-B review fixes complete" milestone (`checkpoint: milestone`).
+## What ⓐ landed (C61)
+`pruneBuriedPanels`' `cull()` now hides culled panels (was leaving them visible = the "not openable" teases). 21 hidden / 79 openable, verified. D264.
 
-## Cycle 60 focus — **M11 ⓐ + ⓑ (do them together — same root): procgen-wreck panels not-openable + floating**
-These are almost certainly the SAME placement/registration path on the socket-grammar archetypes (derelict / satellite / tank_cluster / enterable_wreck), so fix them in one pass.
+## Cycle 62 focus — **M11 ⓑ floating panels + ⓒⓓⓔ wrecked_tank**
+**Use the isolated rig to SEE + iterate** (it renders where the heavy field scene times out):
+`node scripts/rig-shot.mjs --scenario=procgen-wreck --archetype=<x> --seed=42 --angles=side --zoom=0.4` → `verification/scen-procgen-<x>-side-s42.png`.
 
-### Priority items (in order)
-1. **Recon FIRST — reproduce + locate.** Which archetypes have the broken panels? Spawn each via the rig (`spawnProcgenWreckRig` / the POI rig) + check: (a) do the access panels register as salvageable (`registerSalvageable` / the `salvageables` registry — "not openable" = the panel exists visually but isn't in the registry, or its pry collider/`pickupId`-equiv isn't hit)? (b) are they seated FLUSH on the hull (`findSurfaceMounts` flush-quaternion) or floating off it? The existing `verify:placement` bury-audit + `verify:colliders` cover SOME of this — check whether the new archetypes are even IN those audits.
-2. **Not-openable (ⓐ).** Trace the salvage path: a panel is openable iff it's registered + the `salvageables` interaction resolves it + a pry tool is held (scrap_bar/scrap_machete, C57). Likely the socket-grammar panels aren't being `registerSalvageable`'d (the legacy `placeWreck`/flagship path registers; the new `placeProcgenPOI` may not). Wire registration for the archetype panels.
-3. **Floating (ⓑ).** The panel mount on the new archetypes sits off-surface — fix the `findSurfaceMounts` flush-seat (full-quaternion + inward offset) for the socket-component hull shapes, OR the component's panel socket is mis-placed. Render to confirm flush.
-4. **Verify** — `npm run verify:all` (the placement + collider audits are directly relevant; if the new archetypes aren't audited, consider extending the audit so this can't regress — that's the D235 contract). Render the fixed archetypes (panels flush + the pry-glow). A probe that the panels are registered + openable.
-5. **Scope** — if ⓐ+ⓑ across all archetypes is too big for one cycle, fix the worst archetype(s) `[partial]` + continue; log which remain.
+### Priority items
+1. **ⓑ floating panels — seat the mounts flush.** A panel is FLOATING when its `panelMount` (component-declared `pos`/`quat`, `poiComponents.ts`) sits off the hull surface, OR a flat panel rides a CURVED hull and lifts at the corners. Per archetype with a panel (satellite/derelict/well/debris/husk/wreckedTank): render → check the panel sits flush → fix the mount `pos` (onto the surface) and/or sink the panel slightly into the curve / add a small mounting frame so the corners don't lift. **Determinism: reuse the rolled values — NO new world-rand draws (phash only, D226), or `verify:placement` desyncs.**
+2. **ⓒⓓⓔ wrecked_tank** (`wreckedTank` in `poiComponents.ts` ~285-385): ⓒ interior ribbing reads floating — the `makeFormerRings(r*0.9, …)` ribs sit 0.1r inside the hull with no longitudinal tie; connect them to the hull edge / add stringers so they don't float. ⓓ overall reads disconnected — seat the decoration pieces (dents/flaps/plates/buckle) on the hull surface; ensure the dome + hoops meet the body. ⓔ the salvage panel mount (`pos:(−len*0.36, r*2, 0)` = the curved top crest, FACE.posY) — a flat panel on the curved crest lifts at the edges → seat it onto a flatter shoulder or sink it into the curve. Render the tank (`--archetype=wrecked_tank --angles=side,3q --zoom=0.4`) → iterate 3-5 rounds until it reads connected + the panel seated.
+3. **The 3 hand/hero-wreck straggler panels** (backlog §A) — if time: register-or-hide the unregistered `addAccessPanel` meshes on crashedHull/megaShip/megaWreck/heroLandmarks (the ACAS A4 "above-ground only" remainder).
+4. **Verify** — `npm run verify:all` (placement + colliders MUST stay green; any mount change is phash-only). Render each fixed archetype to confirm flush/seated.
 
-### CRITICAL — stop conditions
-- **D81:** these are geometry/registration fixes — almost certainly NO save change. If one appears, STOP + surface (never bump SAVE_VERSION).
-- **Determinism:** the socket grammar is `phash`-driven (one `seedOf` draw, D226); any change to panel placement/registration must NOT add world-rand draws (it desyncs the salvage stream). Reuse the existing rolled values.
-- **Don't touch the Skyfall wreck or the cave** — those are the user's dedicated sessions (not the loop).
+### After M11 (all of ⓐⓑⓒⓓⓔ + stragglers)
+**PAUSE at the "M11 wreck/panel fixes — USER BATCH-VALIDATE" milestone** (`status: paused`, `stop_reasons: ["milestone-review"]`, don't schedule). The user walk-tests the wreck looks + that panels open + sit flush, then `/campaign-approve` → M12 (sand worm).
 
 ## Notable footguns
-- **"Openable" = registered + interaction-resolvable + pry-tool-gated** — a visible panel that isn't `registerSalvageable`'d looks fine but won't open.
-- **Flush seat** = full-quaternion mount + inward offset (the `findSurfaceMounts` path); a fixed-Y or wrong-normal mount floats.
-- **The collider/placement audits** are the regression guard — extend them to the new archetypes if they're not covered (D235).
+- **NO new world-rand** in panel mounts/placement (phash only — D226) or `verify:placement` desyncs across seeds.
+- **Flat panel on a curved hull** lifts at the corners → sink it / frame it / pick a flatter spot. (The likely ⓔ + general ⓑ cause.)
+- **Render via the ISOLATED rig** (`procgen-wreck` scenario) — the heavy full-world preview screenshot times out (documented gotcha), the isolated one renders.
 - `verify:placement` buffers output to the END + is slow; don't kill it early.
-- Determinism: NO new world-rand draws (phash only).
 
 ## Verification protocol
-`npm run verify:all` (placement + colliders) + a render of the fixed archetypes (panels flush + pry-glow) + an eval/probe that the panels register + resolve as salvageable. Pry FEEL → walk-test (flag for the post-M13 review).
+`npm run verify:all` + a rig render of each fixed archetype (panel flush + structure connected). Pry FEEL + close-up reads → the user's M11 batch walk-test.
 
 ## Begin
-Read the order → reproduce the not-openable + floating panels per archetype (rig spawn) → trace registration + the flush-mount → fix ⓐ+ⓑ (no new rand; extend the audit) → `verify:all` + render → `/session-end`. `[partial]` ok. Boot fresh from FILES.
+Read the order → render the floating-panel archetypes + the wrecked_tank → fix mounts/seating (phash-only) → re-render to verify → `verify:all` → if all of M11 done, set the M11 batch-pause verdict; else `/session-end` CONTINUE. Boot fresh from FILES.

@@ -3,6 +3,15 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign C61 — 2026-06-20 — M11 ⓐ: **wreck panels "not openable" fixed** (culled panels now hide) ✓ verify pass (ultracode)
+
+`verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40; render-only fix). Live-preview: **21 culled panels now hidden, 79 openable intact, 0 visible-orphan procgen panels.** No save touch. Cycle 61/75. *(First M11 build fix; C60 was the investigation. Resumed into the Phase-B review-fix pass.)*
+
+**M11 ⓐ — wreck panels "not openable" (D264).** Root-caused + fixed the user's Phase-B complaint.
+- The interaction raycast is `intersectObjects(targets, true)` over *only* the registered panels — so the hull doesn't occlude; "not openable" was **not** a reachability issue. The real bug: `pruneBuriedPanels`'s `cull()` (the shared prune for buried/occluded panels) removed the registry entry + deleted the panel's interact tags **but left the mesh visible** → a visible panel that won't open.
+- **Fix:** `cull()` now also hides the culled panel subtree (`s.panel.visible=false` + door/interior). One fix covers every procgen + wreck-yard cull path (all route through the shared prune).
+- **Remainder → backlog §A:** ~3 far-out hand/hero-wreck panels stay visible-but-unregistered (a different path — ACAS A4 "above-ground only" registration). Targeted follow-up.
+
 ## Campaign C59 — 2026-06-20 — M10: **pickup-instancing ⑰ measured + planned** → **M10 done → ⏸ PAUSED at the Phase-B milestone** ✓ tsc pass (ultracode)
 
 `verified` — `tsc` clean (no `src/` change — the measure was a preview eval; the build is deferred). placement/colliders hold (docs-only; byte-identical to C58). **No save change.** Cycle 59/75.
