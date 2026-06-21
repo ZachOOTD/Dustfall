@@ -608,5 +608,5 @@ first stop will be `max-cycles` ~mid-Phase-A; resume via `/campaign-start --resu
 - **Visual iteration:** appearance gate PASS — `--scenario=cave --angle=inside` reads as a dead, debris-strewn cave under the torch: dark rubble piles, a fallen slab, and rock chunks scattered on the floor in the warm torch pool, fading to black. Dead, decayed, solitary, no-horror (D252). The skeleton's visibility (against the dark back wall) + the overall feel → walk-test.
 - **Decisions:** none new — executes D254.
 - **Spend:** ~230K (the dressing props + the bone material + the inside render + verify:all + the doc suite); campaign total ~13.72M; cycle **50/75**.
-- **Commit:** `PENDING` (patched in the follow-up ledger commit).
+- **Commit:** `8d0a093`.
 - **Next (cycle 51):** **M8 ⑨ continued** — multi-chamber depth (extend `deepCave.ts` to 2-3 connected chambers + ≤37° ramps + doorways toward the spec's 4-8 chambers) reserving the DEEPEST chamber as the **M8 ⑩ companion-egg site**; this completes ⑨ and preps ⑩. **Verdict: CONTINUE** — not terminal (cycle 50/75); not a milestone; a `[partial]`-SHIPPED is progress (the dressing is built + gate-verified). `consecutive_no_progress` stays 0.
