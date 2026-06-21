@@ -21,6 +21,8 @@ import type { GameContext } from '../GameContext.ts';
 import type { Rng } from '../core/rng.ts';
 import type { Terrain } from './terrain.ts';
 import { Tuning } from '../config/tuning.ts';
+import { FEATURES } from '../config/features.ts';                       // M10 ⑮ (C58) — repairableSpeeder gate
+import { countItems, removeItems } from '../inventory/inventory.ts';    // M10 ⑮ — repair parts gate
 import { makeEngineBellMesh } from './wrecks.ts';
 import { mergeStaticByMaterial } from './wreckForms.ts';   // ACAS A2 — static-merge the speeder body
 import { createMetalMaterial } from './metalMaterial.ts';
@@ -41,6 +43,10 @@ export interface SpeederState {
   body: RAPIER.RigidBody;
   group: THREE.Group;
   mounted: boolean;
+  /** M10 ⑮ (C58) — broken state. When true the bike is dead: grounded, no hover, not
+   *  mountable, lights off — repaired with scrap via E (updateBrokenSpeeder). Only ever
+   *  true behind FEATURES.repairableSpeeder (at spawn) or restored from a save that had it. */
+  broken: boolean;
   /** Last-frame yaw of the bike (radians around Y). Cached so we can
    *  rotate rider-seat offsets without re-extracting from quaternion. */
   yaw: number;
@@ -595,7 +601,11 @@ export function placeSpeeder(
   rand: Rng,
 ): SpeederState {
   const group = makeSpeeder(rand);
-  group.position.copy(pos);
+  // M10 ⑮ (C58) — spawn BROKEN when the flag is on: grounded (resting on terrain, not
+  // hovering) + frozen (gravityScale stays 0; updateBrokenSpeeder skips the hover drive).
+  const broken = FEATURES.repairableSpeeder;
+  const spawnY = broken ? _terrain.heightAt(pos.x, pos.z) + Tuning.SPEEDER_BROKEN_REST_Y : pos.y;
+  group.position.set(pos.x, spawnY, pos.z);
   group.rotation.y = yaw;
   scene.add(group);
 
@@ -604,7 +614,7 @@ export function placeSpeeder(
   // it spawns facing the desired direction.
   const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
   const bodyDesc = RAPIER.RigidBodyDesc.dynamic()
-    .setTranslation(pos.x, pos.y, pos.z)
+    .setTranslation(pos.x, spawnY, pos.z)
     .setRotation({ x: q.x, y: q.y, z: q.z, w: q.w })
     .setLinearDamping(Tuning.SPEEDER_LINEAR_DAMP)
     .setAngularDamping(Tuning.SPEEDER_ANGULAR_DAMP);
@@ -615,8 +625,10 @@ export function placeSpeeder(
   // Disable gravity for the bike — we drive Y entirely via velocity
   // control in updateSpeeder. Rapier's Euler-integrated gravity
   // re-applied per step otherwise cancels our hover velocity and the
-  // bike settles below the target.
-  body.setGravityScale(0, true);
+  // bike settles below the target. M10 ⑮ (C58): a BROKEN bike instead gets
+  // gravity ON so it FALLS + rests flush on the terrain (a dead bike on the
+  // ground, not a floating one); repair flips gravity back off so hover resumes.
+  body.setGravityScale(broken ? 1 : 0, true);
 
   // ── Collider — single cuboid matching the fuselage (plus a little
   // margin for the cockpit + pods).
@@ -673,6 +685,7 @@ export function placeSpeeder(
     body,
     group,
     mounted: false,
+    broken,
     yaw,
     speed: 0,
     visualPitch: 0,
@@ -806,9 +819,49 @@ function updateSpeederFX(ctx: GameContext, s: SpeederState, dt: number): void {
   }
 }
 
+// M10 ⑮ (C58) — broken-speeder update: the dead, grounded bike. No hover / ride / mount —
+// it sits frozen (gravityScale 0, spawned at ground level) with a static dead lean + lights
+// off, and handles the REPAIR action (E nearby with enough scrap → restore). Runs instead of
+// the full updateSpeeder while `s.broken` (behind FEATURES.repairableSpeeder).
+function updateBrokenSpeeder(ctx: GameContext, s: SpeederState): void {
+  const body = s.body;
+  const pos = body.translation();
+  const rot = body.rotation();
+  _bikeQuat.set(rot.x, rot.y, rot.z, rot.w);
+  _bikeEuler.setFromQuaternion(_bikeQuat, 'YXZ');
+  s.yaw = _bikeEuler.y;
+  // Static dead lean (nose-down + roll) so it reads collapsed, not parked-flat.
+  _yawQ.setFromAxisAngle(_axisY, s.yaw);
+  _pitchQ.setFromAxisAngle(_axisX, Tuning.SPEEDER_BROKEN_PITCH);
+  _rollQ.setFromAxisAngle(_axisZ, Tuning.SPEEDER_BROKEN_ROLL);
+  _visualQ.multiplyQuaternions(_yawQ, _pitchQ).multiply(_rollQ);
+  s.group.position.set(pos.x, pos.y, pos.z);
+  s.group.quaternion.copy(_visualQ);
+  // Dead → lights off.
+  s.headlampOn = false;
+  s.headlamp.intensity = 0;
+  // ── Repair: E nearby with enough scrap → restore the bike (the hover drive resumes
+  // next frame via updateSpeeder, lifting it off the ground; gravityScale is already 0).
+  const cam = ctx.three.camera;
+  const dx = pos.x - cam.position.x;
+  const dz = pos.z - cam.position.z;
+  const distSq = dx * dx + dz * dz;
+  if (distSq <= Tuning.SPEEDER_MOUNT_RANGE * Tuning.SPEEDER_MOUNT_RANGE && ctx.input.pressed.has('KeyE')) {
+    if (countItems(ctx.inventory, 'scrap') >= Tuning.SPEEDER_REPAIR_SCRAP) {
+      removeItems(ctx.inventory, 'scrap', Tuning.SPEEDER_REPAIR_SCRAP);
+      s.broken = false;
+      body.setGravityScale(0, true);   // hover drive takes over Y again (updateSpeeder)
+      ctx.ui.showToast?.('speeder repaired — the hover drive hums back to life');
+    } else {
+      ctx.ui.showToast?.(`need ${Tuning.SPEEDER_REPAIR_SCRAP} scrap to repair the speeder`);
+    }
+  }
+}
+
 export function updateSpeeder(ctx: GameContext, dt: number): void {
   const s = ctx.speeder;
   if (!s) return;
+  if (s.broken) { updateBrokenSpeeder(ctx, s); return; }
   const body = s.body;
   const pos = body.translation();
   const lv = body.linvel();

@@ -22,6 +22,7 @@ const VERBS: Record<InteractType, string> = {
   salvage: 'salvage',
   read: 'read',
   mount: 'mount',
+  repair: 'repair',     // M10 ⑮ (C58) — broken speeder → E repairs with scrap
   open_sled: 'open',    // QQ — E opens the sled cargo (sled inventory menu)
   attach_rope: '',      // QQ — LMB-driven; verb is empty so the [E] chip is hidden. promptNoun carries the click-to-attach copy.
   open_locker: 'open',  // AAC — E opens the locker (chest inventory menu)

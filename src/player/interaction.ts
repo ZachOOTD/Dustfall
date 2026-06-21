@@ -13,7 +13,7 @@
 import * as THREE from 'three';
 import type { GameContext } from '../GameContext.ts';
 import { isPlaying } from '../GameContext.ts';
-import { addItem } from '../inventory/inventory.ts';
+import { addItem, countItems } from '../inventory/inventory.ts';
 import { despawnPickup, findPickupById, spawnDroppedPickup } from '../pickups/pickups.ts';
 import { findWaterSourceById } from '../world/waterSources.ts';
 import { findCactusById, harvestCactus } from '../world/cactus.ts';
@@ -1184,6 +1184,18 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
       }
       // CC-3.1 — the SEAT: "[E] mount speeder". The mount action is handled by
       // updateSpeeder earlier in the tick (SPEEDER_MOUNT_RANGE), so no E here.
+      // M10 ⑮ (C58): a BROKEN speeder shows "[E] repair" instead (handled by
+      // updateBrokenSpeeder); a passive prompt notes the scrap cost if short.
+      if (ctx.speeder?.broken) {
+        const haveScrap = countItems(ctx.inventory, 'scrap') >= Tuning.SPEEDER_REPAIR_SCRAP;
+        ctx.inventory.hover = {
+          type: 'repair',
+          distance: info.distance,
+          promptNoun: haveScrap ? 'speeder' : `speeder — need ${Tuning.SPEEDER_REPAIR_SCRAP} scrap`,
+          passive: !haveScrap,
+        };
+        return;
+      }
       ctx.inventory.hover = {
         type: 'mount',
         distance: info.distance,

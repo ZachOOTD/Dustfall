@@ -3,6 +3,17 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign C58 — 2026-06-20 — M10: **craftable-hover-bike ⑮** — the speeder, now repairable (broken→working) ✓ verify pass (ultracode)
+
+`verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40; `FEATURES.repairableSpeeder` OFF → the speeder spawns working, current behavior). **No save bump** (additive optional `speeder.broken?`). Cycle 58/75.
+
+**craftable-hover-bike ⑮ (D262).** The design call is "hover-bike = repairable-speeder" — ONE vehicle, two states. The speeder already *is* the hover-bike, so ⑮ makes it **repairable** behind `FEATURES.repairableSpeeder` (default OFF) rather than adding a vehicle.
+- **`SpeederState.broken`** — `updateSpeeder` early-outs to a new **`updateBrokenSpeeder`** when broken: no hover/ride/mount (a dead bike can't be mounted), lights off, a static dead lean.
+- **Repair** — E nearby with `SPEEDER_REPAIR_SCRAP` (4) scrap → consume → `broken=false` → hover resumes. A new `'repair'` interactType + verb; the seat shows "[E] repair" (or a passive "need N scrap") when broken.
+- **Gravity-settle for the broken rest** — a broken bike gets `gravityScale 1` so it *falls and rests flush* on the terrain (verified numerically: 0.49 m above ground = collider resting, settled); repair flips gravity back to 0 so the PD hover takes over. (First attempt floated ~0.86 m — read "hovering-tilted"; gravity-settle fixed it.)
+- **Additive save** (`speeder.broken?`) — **no SAVE_VERSION bump**; pre-⑮ saves load with the working speeder (D81 honored).
+- **Default OFF** because the broken-*spawn* flow is coupled to the deferred ⑯ drop-pod-intro; this lands the repair mechanic for the ⑯ flow to wire in later. Broken LOOK + repair FEEL → walk-test.
+
 ## Campaign C57 — 2026-06-20 — M10: **scrap-machete-pry-tool ⑭** — a craftable machete that pries panels ✓ verify pass (ultracode)
 
 `verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40). **No save bump** (a new item id is additive). Cycle 57/75. *(Resumed into M10 after the M9 review — drop-pod ⑯ deferred per user steering; commit `ea5920e`.)*

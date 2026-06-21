@@ -49,6 +49,16 @@ export const FEATURES = {
    *  spike (gate-and-wait); the ⑪-build wires it + the user walk-tests the ride feel before any
    *  flip (riding FEEL is the exact D125 failure mode — headless can't judge it). */
   rideableSled: false,
+
+  /** M10 ⑮ (C58) — repairable speeder (the "craftable hover-bike" = ONE vehicle, two states).
+   *  OFF = the speeder spawns WORKING + rideable (the proven flow; current game unchanged).
+   *  ON = it spawns BROKEN (grounded, dead, unmountable) and must be REPAIRED with scrap
+   *  (E on it → consumes scrap → restored to a hovering, rideable bike). Default OFF because
+   *  the broken-spawn flow is COUPLED to the deferred ⑯ drop-pod-intro (the intended "arrive →
+   *  find your speeder broken → repair it" beat); this lands the repair MECHANIC behind the
+   *  flag so the user walk-tests it + the ⑯ flow wires it in later. Additive save (`broken?`),
+   *  no SAVE_VERSION bump. */
+  repairableSpeeder: false,
 } as const;
 
 /** A valid feature-flag key (e.g. for a dev-panel toggle list later). */

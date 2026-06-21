@@ -357,7 +357,13 @@ export const Tuning = {
   // within ~60° of facing the bike.
   SPEEDER_MOUNT_LOOK_DOT: 0.5,
   SPEEDER_DISMOUNT_OFFSET: 1.8,
-  SPEEDER_RIDER_SEAT_X: 0,              // local rider offset relative to bike center
+  // M10 ⑮ (C58) — repairable speeder (behind FEATURES.repairableSpeeder). When broken it
+  // rests on the ground with a static dead lean + lights off, and E with this much scrap repairs it.
+  SPEEDER_BROKEN_REST_Y: 0.5,          // body Y above terrain when broken (collider half-height ≈ 0.45, sits flush)
+  SPEEDER_BROKEN_PITCH: -0.18,         // static nose-down lean (rad) so the dead bike reads collapsed, not parked-flat
+  SPEEDER_BROKEN_ROLL: 0.13,           // static roll lean (rad)
+  SPEEDER_REPAIR_SCRAP: 4,             // scrap consumed to repair the broken speeder
+  SPEEDER_RIDER_SEAT_X: 0,             // local rider offset relative to bike center
   SPEEDER_RIDER_SEAT_Y: 1.00,           // mid-height (CC-2) — sees over handlebars (Y≈0.42) without floating
   SPEEDER_RIDER_SEAT_Z: 0.55,           // over the sunken cockpit seat (CC-2 redesign moved the seat back)
   // ACV #148 — where the 3P RIG (not the camera) sits on the bike while mounted.

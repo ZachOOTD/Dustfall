@@ -256,6 +256,7 @@ export type InteractType =
   | 'salvage'   // wreck (Session T) — E starts a 1.5s salvage
   | 'read'      // journal (Session W) — E opens the journal panel
   | 'mount'     // speeder seat (Session CC-3.1) — E mounts the bike
+  | 'repair'    // broken speeder (M10 ⑮, C58) — E repairs it with scrap
   | 'open_sled' // sled cargo deck (Session QQ) — E opens the sled inventory
   | 'attach_rope' // sled rope stub (Session QQ) — LMB w/ rope equipped attaches/detaches
   | 'open_locker' // locker chest (Session AAC) — E opens the locker inventory

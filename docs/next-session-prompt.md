@@ -1,50 +1,45 @@
-# ▶ CAMPAIGN cycle 58 — Kickoff Brief — `campaign/2026-06-18`
+# ▶ CAMPAIGN cycle 59 — Kickoff Brief — `campaign/2026-06-18`
 
-**Phase B FINAL tier. M6 ✓ · M7 ✓ · M8 ✓ · M9 ✓ · M10 underway (⑭ scrap-machete ✓ C57). Now ⑮ craftable-hover-bike.**
-**M10 = ⑭ ✓ · ⑮ (this) · ⑰ pickup-instancing. ⑯ drop-pod-intro is DEFERRED (user steering). After ⑰ → the Phase-B milestone pause (the big Phase-A/B feedback + walk-test).**
+**Phase B FINAL tier, almost done. M6–M9 ✓ · M10: ⑭ ✓ · ⑮ ✓ · NOW ⑰ pickup-instancedmesh = the LAST unit.**
+**⚠️ After ⑰ ships, M10 is COMPLETE → the loop PAUSES at the "Phase B — Build-out complete" milestone** (checkpoint=milestone) — the user's BIG Phase-A/B feedback + walk-test session (they've held all feedback for this gate). **⑯ drop-pod-intro stays DEFERRED.**
 Boot from `docs/campaign/campaign-state.json` + `docs/roadmap.md`. The loop commits every cycle. Charter: `docs/campaign/campaign.md`.
 
 ## Read these now (in order)
 1. `CLAUDE.md` (auto-loaded) — esp. "Where we are now".
-2. `docs/campaign/campaign-state.json` + `docs/campaign/steering.md` + `docs/campaign/campaign-log.md` (the C57 entry + the C56→C57 approve boundary).
-3. `docs/decisions.md` tail — D261 (⑭ machete), D257 (the rideable-sled spike — relevant: the speeder's ride/mount pattern), D81 (NEVER bump SAVE_VERSION).
-4. `src/world/speeder.ts` (the existing vehicle — the hover-bike IS the speeder; recon how it spawns / is ridden / its state) + `src/inventory/recipeDiscovery.ts` (the recipe pattern, last id 19) + `src/inventory/items.ts` (item-def pattern, esp. any `*_kit` deploy items).
+2. `docs/campaign/campaign-state.json` + `docs/campaign/steering.md` + `docs/campaign/campaign-log.md` (the C58 entry).
+3. `docs/decisions.md` tail — D262 (⑮), D192/D198 (`mergeStaticByMaterial` — the existing static-merge perf pattern), D81.
+4. The pickup system: grep `bobPickups`, `spawnDroppedPickup`, `pickups` in `src/` — find where world pickups are spawned/rendered (likely `src/world/` + `main.ts`'s `bobPickups` tick) + the perf HUD (`drawCalls`/`programs`, the `updatePerfHud` tick).
 
-## What ⑭ landed (C57)
-NEW `scrap_machete` craftable pry tool (recipe id 19, scrap×2+cloth×1) — pries panels alongside `scrap_bar`; crude-bolo viewmodel. D261. The found `machete` stays the melee blade.
+## What ⑮ landed (C58)
+The speeder is now REPAIRABLE (broken→working) behind `FEATURES.repairableSpeeder` (OFF). D262. The current game is unchanged (flag OFF).
 
-## Cycle 58 focus — **M10 ⑮ craftable-hover-bike (repairable-speeder)**
-Design call (Phase-B proposal): **"hover-bike = repairable-speeder"** — ONE vehicle, TWO states. The speeder spawns/exists **broken** and the player **repairs it** (with scrap + the tools) into a working hover-bike. NOT a second vehicle — reuse `speeder.ts`.
+## Cycle 59 focus — **M10 ⑰ pickup-instancedmesh (perf — human-attended)**
+Convert the world's scattered pickups from per-item meshes (one draw call each) to **`THREE.InstancedMesh`** (one draw call per pickup TYPE), to cut draw calls. "Human-attended" = the perf win is validated by a human watching the perf HUD; you verify it doesn't REGRESS visuals/behavior.
 
 ### Priority items (in order)
-1. **Recon FIRST (cheap, decides scope).** Read `speeder.ts`: how the speeder is spawned (a world POI? a deploy item? already in the opening scene?), how it's ridden/mounted, and whether it ALREADY has any "broken/disabled" state or condition field. Decide the repair mechanic: likely a `broken` flag on the speeder + a repair interaction (E with scrap/parts, or feed it N `scrap`/a new part item) that flips it to `working`. **Confirm D81:** if the speeder's broken/working state must persist across save/load, it needs a save field — that is a SAVE-VERSION concern. Prefer an ADDITIVE optional field (default = the existing behaviour for old saves) so NO version bump (like C52's `companionAcquired?`). If you cannot avoid a bump, STOP + surface.
-2. **Broken state + repair interaction.** Spawn the speeder broken (visually: drooped/dead, no hover glow, maybe a missing-panel look — reuse wreck/dead-material idioms); a repair interaction (E, gated on having the parts) that plays a beat + flips it to working (hover restored, rideable). Keep it bounded — one repair step, not a multi-part minigame (that can be a follow-up).
-3. **Recipe / parts** — if repair consumes a craftable part, add it (recipe id 20) following the id-19 pattern; or consume raw `scrap`. Keep the input multiset free (avoid the collision-chooser unless intended).
-4. **Verify** — `npm run verify:all` green. If you added a save field, confirm it's additive + load-defaults cleanly (a save-roundtrip probe like C52's `crashRoundtrip` if one fits).
-5. **Visual/feel** — the broken→repaired LOOK gets a render pass (the speeder studio rig if one exists; else a world shot). The repair FEEL + the ride → walk-test at the Phase-B milestone.
+1. **Recon FIRST (decides scope + risk).** How are pickups rendered today? (a) per-pickup `THREE.Mesh` added to the scene, bobbed each frame by `bobPickups`? (b) how many distinct pickup item types/models? (c) do pickups share a geometry+material per type (instanceable) or is each bespoke? (d) how is a pickup picked up (raycast/proximity → which object identifies it)? InstancedMesh requires per-instance transforms + a way to map an instance back to its pickup id (for the E-take + the bob). **If pickups are already instanced or already cheap (few draw calls), this may be a no-op — confirm the perf HUD shows pickups are actually a cost before rewriting.**
+2. **Instance per type.** One `InstancedMesh` per pickup model; per-instance matrix = the pickup's bobbed transform (write `setMatrixAt` each frame in `bobPickups`, `instanceMatrix.needsUpdate = true`). Maintain an index↔pickup-id map so take/remove updates the right instance (swap-remove + count-- is the usual pattern; or hide via a zero-scale matrix). Preserve the bob animation + the E-take + any glow/highlight.
+3. **D81 — almost certainly no save touch** (pickups are runtime-spawned/positioned; the save stores pickup STATE [positions/ids], not render objects). If a save change somehow appears, STOP + surface (never bump SAVE_VERSION).
+4. **Verify** — `verify:all` green. **Perf:** capture `drawCalls`/`programs` before/after (the perf HUD or a `__game` probe) and LOG the delta — that's the unit's whole point; a silent "done" with no number is the anti-pattern. Confirm pickups still bob + take correctly (a render + an eval probe of the pickup list).
+5. **Scope:** if instancing all pickup types is too big, instance the most-numerous type(s) `[partial]` + log what's left. Don't regress correctness for the perf win.
 
-### CRITICAL — stop conditions
-- **D81 SAVE BUMP = STOP.** The broken/working state is the likely trap. Make it additive-optional; never bump SAVE_VERSION autonomously.
-- **Reuse the speeder, don't fork a new vehicle** (the design call is explicit: one vehicle, two states).
-- **Scope:** if the full repair mechanic + the broken art can't fit one cycle, ship `[partial]` (e.g. the broken state + repair flag this cycle, the art/feel polish next) rather than an unbounded build.
+### CRITICAL — after ⑰ ships: PAUSE at the Phase-B milestone
+⑰ is the LAST M10 unit. When it ships, **M10 is complete** → the "Phase B — Build-out complete" milestone is reached. Per `checkpoint: "milestone"`, **set the verdict to STOP (pause):** `status: "paused"`, `awaiting_approval: true`, `stop_reasons: ["milestone-review"]`, and do NOT schedule another cycle. This is the planned BIG review: the user gives ALL their held Phase-A/B feedback, walk-tests everything (the flag-gated M9/M10 systems + the whole game), and designs the deferred ⑯ drop-pod-intro. Resume via `/campaign-approve`.
 
-### After ⑮
-⑰ pickup-instancedmesh (perf — human-attended; the LAST M10 unit). Then **the Phase-B milestone pause** — the user gives ALL their held Phase-A/B feedback + walk-tests everything. Do NOT start anything past ⑰ autonomously.
-
-## Autonomy contract
-Reuse `speeder.ts`. Additive save only (D81 STOP on a bump). `[partial]` is fine if the cycle won't fit. Recon the speeder's spawn/ride/state BEFORE building. Render the broken→repaired look; the feel → walk-test.
+### If pickups are already cheap / instanced
+Then ⑰ is a no-op — don't invent a rewrite. Log the finding (perf HUD numbers proving pickups aren't a draw-call cost), mark ⑰ done-by-assessment, and STILL pause at the Phase-B milestone (M10 complete).
 
 ## Stop conditions
-Terminal: max-cycles (75) · catastrophic verify break · 3 fix-walls on one gate · **save-version bump (STOP)** · destructive attempt. Pause: steering "pause" · the Phase-B milestone (after M10 = after ⑰).
+Terminal: max-cycles (75) · catastrophic verify break · 3 fix-walls on one gate · save-version bump (STOP) · destructive attempt. **Pause: the Phase-B milestone (after ⑰ = M10 complete) — THIS fires next cycle.**
 
 ## Notable footguns
-- **The speeder's broken/working state + save** is the D81 trap — additive-optional field, default to current behaviour for old saves.
-- **One vehicle, two states** — don't build a second vehicle.
+- **InstancedMesh index↔id mapping** is the trap — take/remove must update the right instance (swap-remove + count, or zero-scale hide); a stale map shows ghost/wrong pickups.
+- **Measure before rewriting** — confirm pickups are actually a draw-call cost (perf HUD) before instancing; don't rewrite a non-problem.
+- **The perf delta is the deliverable** — LOG drawCalls before/after; don't ship silently.
 - `verify:placement` buffers output to the END + is slow; don't kill it early.
-- The dev item spawner (DEV badge / backquote) auto-lists new items via `ALL_REGISTERED_ITEM_IDS`.
 
 ## Verification protocol
-`npm run verify:all` + (if a save field is added) a roundtrip probe. The broken→repaired LOOK via a render; the repair/ride FEEL → walk-test.
+`verify:all` + a perf-HUD/probe drawCalls before/after + a pickup take/bob correctness check (render + eval). Perf FEEL (smoothness) → the walk-test.
 
 ## Begin
-Read the order → recon `speeder.ts` (spawn/ride/state) + confirm the save approach (D81) → `TaskCreate` the broken-state + repair → build (reuse the speeder) → render the look → `verify:all` → `/session-end`. `[partial]` ok. Boot fresh from FILES.
+Read the order → recon the pickup render/take path + the perf HUD → confirm pickups ARE a draw-call cost → `TaskCreate` the instancing → build (preserve bob + take + the index map) → measure drawCalls before/after → `verify:all` → `/session-end` → **set the Phase-B milestone PAUSE verdict (don't schedule another cycle).** `[partial]` ok. Boot fresh from FILES.

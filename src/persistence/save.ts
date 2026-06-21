@@ -316,6 +316,9 @@ export interface SaveV1 {
     rotationQuat: { x: number; y: number; z: number; w: number };
     mounted: boolean;
     headlampOn: boolean;
+    /** M10 ⑮ (C58) — repairable-speeder broken state. Optional + additive: saves written
+     *  before this field load with the speeder NOT broken (current rideable behaviour). */
+    broken?: boolean;
   };
 
   /** Sand worm — DD-2 (roaming). LEGACY singleton field — present in
@@ -635,6 +638,7 @@ export function saveGameState(ctx: GameContext): { ok: boolean; error?: string }
           rotationQuat: { x: rt.x, y: rt.y, z: rt.z, w: rt.w },
           mounted: ctx.speeder!.mounted,
           headlampOn: ctx.speeder!.headlampOn,
+          broken: ctx.speeder!.broken,
         };
       })() : undefined,
       // ACE Tier 2 — v13 multi-worm. Each worm serialized independently
@@ -1326,6 +1330,9 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
     ctx.speeder.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
     ctx.speeder.mounted = save.speeder.mounted;
     ctx.speeder.headlampOn = save.speeder.headlampOn;
+    // M10 ⑮ (C58) — restore broken state (additive; absent in pre-⑮ saves → not broken,
+    // i.e. the proven rideable speeder). updateBrokenSpeeder re-applies the grounded pose.
+    ctx.speeder.broken = save.speeder.broken ?? false;
     // Headlamp visual sync — updateSpeeder reads .headlampOn each frame
     // and toggles the SpotLight + emissive disc, so just setting the flag
     // is enough. Same for mounted: the next updateSpeeder applies.
