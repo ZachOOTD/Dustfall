@@ -927,7 +927,7 @@
       "decisions": ["(extends D264 — same panel system; no new D-entry) panel seating: sink flat panels into curved-hull crests so edges embed."],
       "ultracode": true,
       "paused": "milestone-review (M11 batch-1) — the confident panel fixes (ⓐ not-openable + ⓑⓔ floating-seating) are in; PAUSE for the user to walk-test (panels open? flush?) + describe the tank ribbing/structure (ⓒⓓ) so it's fixed right. Resume via /campaign-approve with notes.",
-      "commit": "PENDING",
+      "commit": "c62e71e",
       "spend_approx_tokens": 280000
     }
   ]
