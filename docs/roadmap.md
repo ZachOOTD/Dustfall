@@ -172,12 +172,15 @@ the headless+visual gates pass; reversible; user vetoes FEEL at the review; **D8
 **✅ Phase-B milestone REACHED + reviewed (2026-06-20).** User gave the held Phase-A/B feedback → triaged into [backlog.md](backlog.md) (the 2026-06-20 dump). **Decision (user):** the bounded fixes run as a campaign **review-fix pass (M11–M13)** below; the **Skyfall crashed-ship** (new researched hero wreck) + the **cave rework** are DEDICATED solo sessions, NOT the loop. Resumed into M11.
 
 ### Phase-B review-fix pass (campaign — M11→M13; from the 2026-06-20 triage)
+**Execution (user 2026-06-20):** autonomous fixes, **PAUSE after EACH tier for user batch-validation** (the audio + close-up feel can't be self-verified — checkpoint=milestone + a marker after every tier). C60 was an investigation: confirmed the "not-openable" panels are a GEOMETRY-REACHABILITY issue (all panels register fine; they're placed where the look-ray hits the hull first — same root as the floaters → seat the mounts flush + reachable, no new rand); the isolated procgen-wreck rig DOES render (only the heavy field scene times out) so wreck looks ARE iterable.
 - **M11 — wreck/panel fixes:** ⓐ procgen-wreck access panels not openable [bug] · ⓑ procgen-wreck panels floating [bug] · ⓒ wrecked_tank (on-side) interior ribbing reads floating [bug] · ⓓ wrecked_tank reads disconnected/floating → structural, connected, realistic [bug] · ⓔ wrecked_tank access panel floats/unconnected [bug] **← next**
+### Milestone: M11 wreck/panel fixes — USER BATCH-VALIDATE (walk-test the wreck looks + that panels open + sit flush) → /campaign-approve
 - **M12 — sand worm fixes:** ⓕ remove the dorsal ridges [polish] · ⓖ attack: remove the high jump → charge-straight then DIVE from the current position (no airborne hop) [polish] · ⓗ alert audio → a low quiet rumble + screen-shake buildup (mysterious; "you don't know what it is") [polish]
+### Milestone: M12 sand-worm — USER BATCH-VALIDATE (worm attack FEEL + LISTEN to the alert rumble) → /campaign-approve
 - **M13 — weapon & vehicle audio:** ⓘ gunshot + reload SFX for ALL guns [feat] · ⓙ speeder engine → a lower-pitched, smoother hum [polish]
 
-### Milestone: Phase-B review fixes complete (review)
-*The loop PAUSES here after M13. Owed walk-tests/LISTENS (headless can't judge): the worm attack feel, the worm/speeder/gun audio (must be HEARD), the wreck-fix looks. Then the user sequences the next block.*
+### Milestone: M13 audio + Phase-B review fixes complete — USER BATCH-VALIDATE (LISTEN: gunshots/reload/speeder hum)
+*The loop PAUSES here after M13. Audio must be HEARD by the user (headless can't judge). Then the user sequences the next block.*
 
 **NOT in the loop — dedicated solo sessions (in [backlog.md](backlog.md) §A + the triage block):** (1) the **Skyfall crashed-ship** — a NEW researched extremely-high-quality enterable HERO wreck (its own `/feature-slice`: research crashed-sci-fi-ship design → model → multi-round iterate WITH the user; no floating pieces / one-sided textures) + its **fire-from-the-wreck** fix (coupled to the new model); (2) the **CAVE rework** (user is planning the direction). Also still queued for the user: ⑯ drop-pod-intro, ⑰ pickup-instancing (human-attended), + the §A walk-tests/flag-flips.
 
