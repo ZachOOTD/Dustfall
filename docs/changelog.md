@@ -3,6 +3,17 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign C55 — 2026-06-20 — M9: **real-rope-physics ⑫ COMPLETE** (scope call D259) — ship the Verlet foundation, defer body-coupling to a walk-test ✓ tsc pass (ultracode)
+
+`verified` — `tsc --noEmit` PASS (no `src/` change — byte-identical to C54). placement/colliders unaffected (docs-only; the C11/C23/C46 precedent). **No save bump.** Cycle 55/75. ⑫ now reads COMPLETE on the roadmap.
+
+**A scope/decision cycle (D259).** ⑫ ships as the **Verlet real-rope FOUNDATION** — C54's solver (`world/verletRope.ts`) + the sled rope's dynamic-sag VISUAL behind `FEATURES.realRope` (default OFF) — and the remainder is **deferred to a walk-test-gated backlog**:
+- **Body-coupling + CCD deferred.** Making the Verlet rope drive the towed body (replacing the inextensible snap) is D125-ADJACENT (a towed body chasing a moving rope-end is the exact KCC tar-pit D125 documents) AND feel-dominant (can't be validated headless). The sled tow already works crisply via the snap; replacing it BLIND, before the user has confirmed they even want the Verlet rope, is premature + risks worse feel. → backlog §A, gated on the rope-VISUAL walk-test at the M10 pause.
+- **Other-caller visuals deferred.** kill-drag's per-entity tubes (need a `Map<id,RopeVerlet>` + `dt`) + the companion/stake tethers (no sagging tube today) are low-value (default-OFF, rare ropes) before the direction is validated. → backlog §A.
+- Also surfaced the **⑪ rideable-sled BUILD** to backlog §A (C53 decided the approach; the build + walk-test are owed).
+- **Why now:** correct gate-and-wait sequencing — the user evaluates the rope VISUAL at the imminent M10 pause (C53 steering); if wanted, the body-coupling is the follow-up (with the D125 re-table escape hatch). Mirrors the cave (D255) + sled-ride (D257) scope calls.
+- **Next:** ⑬ real-cloth-physics (the last M9 unit; reuses the solver) → then the `pause_before: "M10"` steering gate fires for the user's review.
+
 ## Campaign C54 — 2026-06-20 — M9: **real-rope-physics `[partial]`** — the Verlet rope SOLVER + the dynamic-sag visual ✓ verify pass (ultracode)
 
 `verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40; `FEATURES.realRope` OFF → the proven static-sag rope runs unchanged — the realRope branch is the first reader of the M2 inert flag). **Solver math probe:** a slack rope sags below the chord (midpoint Y 2.76 vs 5), a taut rope stays straight (4.81). **No save bump.** Cycle 54/75. **`[partial]`** — visual-first; body-coupling + CCD + other callers continue.

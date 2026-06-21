@@ -473,3 +473,15 @@ The focal mass also has to DOMINATE: the impact chunk is scaled 1.7× (decisivel
 **Why split this way.** The visual sag is the low-risk, high-visibility 80% (no body-physics rewrite, no D125-adjacent risk); the body-coupling is the risky, feel-dominant part best validated on a walk-test. Landing the solver also unblocks ⑬ (real-cloth reuses it). Mirrors the gate-and-wait pattern (land behind the flag, flip + validate later).
 
 **friction-score:** 2 (the solver is textbook + probe-validated, the integration is flag-OFF-safe; but the dynamic-sag LOOK + the eventual body-coupling/tow FEEL are walk-test-gated, and the continuation [body-physics + CCD + 4 callers] is the bulk of the work).
+
+## D259 — ⑫ ships as the Verlet real-rope FOUNDATION (solver + sled-rope visual); body-coupling + CCD + other-caller visuals deferred to backlog, gated on the user's rope walk-test (Session C55, campaign — M9 ⑫ scope call)
+
+**Context.** C54 landed ⑫'s Verlet solver (`verletRope.ts`) + the sled rope's dynamic-sag VISUAL behind `FEATURES.realRope` (D258). The continuation was the **body-coupling** (the rope drives the towed body, replacing the inextensible snap) + **CCD** (D124) + extending the Verlet visual to the **other rope callers** (kill-drag's per-entity tubes; the companion/stake tethers have no dedicated sagging tube).
+
+**Decision — ship ⑫ as the foundation; defer the rest to a walk-test-gated backlog.** Mark ⑫ COMPLETE with the C54 demonstration (the solver + the sled-rope Verlet sag, behind the flag) and move the remainder to [backlog.md](backlog.md) §A:
+- **Body-coupling + CCD** — D125-ADJACENT (a towed body chasing a moving rope-end is the exact class D125 documents as a tar pit after extensive failed effort) AND feel-dominant (can't be validated headless). The sled tow already works crisply via the inextensible snap; replacing it with Verlet tension, BLIND, before the user has even confirmed they want the Verlet rope, is premature + risks worse feel. **Validate the rope VISUAL at the M10-pause walk-test FIRST; if the Verlet rope direction is wanted, the body-coupling is the follow-up (with the re-table escape hatch per D125).**
+- **Other-caller visuals** (kill-drag etc.) — low marginal value (default-OFF, rare ropes) + non-trivial plumbing (per-entity Verlet state + dt threading); not worth investing across all callers before the direction is validated.
+
+**Why now.** The user set a `pause_before: "M10"` to review M9 imminently (C53 steering). Sequencing the experimental rope so the user evaluates the VISUAL before the campaign invests in the risky coupling is correct gate-and-wait discipline — and avoids repeating the D125 build-blind mistake. Mirrors the cave (D255) + sled-ride (D257) scope calls: ship the sound, demonstrable core; defer the feel-gated/risky remainder to the human review.
+
+**friction-score:** 2 (a scope reduction of ⑫ from "full body-physics rope" to "the Verlet foundation + a visual demo behind a flag"; defensible given the imminent walk-test + the D125 risk, but the real-rope PHYSICS is genuinely deferred, to be reconsidered at the M10 review).

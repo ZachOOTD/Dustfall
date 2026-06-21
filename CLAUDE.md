@@ -69,17 +69,16 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 "Last shipped" note. Current target: **Phase B (M6→M10) — APPROVED + RELEASED**. The loop runs M6→M10 unattended,
 commits every cycle, and pauses only at "Phase B — Build-out complete" (after M10). Charter: `docs/campaign/campaign.md`.
 
-**Last shipped**: Campaign **C54** (2026-06-20, cycle 54/75) — **M9 ⑫ real-rope-physics [partial]** — the Verlet solver + the dynamic-sag visual
-(`verify:all` PASS — tsc + placement 0/0 ×5 + colliders 0/40; `FEATURES.realRope` OFF → shipped rope unchanged; **no save bump**).
-Visual-first (D258): NEW **`world/verletRope.ts`** Verlet rope solver (probe-validated — sags when slack, taut at length) wired into the sled rope's
-VISUAL — when `realRope` is ON, the static parabolic droop becomes a **dynamic Verlet sag** (swing/settle/taut) via the 7-point CatmullRom's 3 mid-points.
-`Tuning.VERLET_ROPE_*`; per-sled `ropeVerlet` state. Default OFF → the proven rope runs unchanged. **`[partial]`** — the body-coupling (rope drives the
-towed body) + CCD (D124) + the other 3 callers (companion/stake/kill-drag) continue next cycle; the sag LOOK + tow FEEL → walk-test.
+**Last shipped**: Campaign **C55** (2026-06-20, cycle 55/75) — **M9 ⑫ real-rope-physics COMPLETE** (scope call D259) — ship the Verlet foundation, defer
+body-coupling (`tsc` PASS — no `src/` change since C54's green `verify:all`; **no save bump**).
+A scope/decision cycle: ⑫ ships as the **Verlet real-rope FOUNDATION** (C54's `world/verletRope.ts` solver + the sled-rope dynamic-sag visual behind
+`FEATURES.realRope`, OFF). The **body-coupling** (rope drives the towed body) + **CCD** (D124) + the **other-caller visuals** (kill-drag/companion/stake)
+are **deferred to [backlog.md](docs/backlog.md) §A, gated on the rope-VISUAL walk-test** at the imminent M10 pause — body-coupling is D125-adjacent +
+feel-dominant, so it's not built blind before the user validates the rope direction. Also surfaced the ⑪ rideable-sled BUILD to §A. D259.
 
-**Next session** = cycle 55 = **M9 ⑫ continued** — the rope **body-coupling** (the Verlet rope drives the towed body, replacing the inextensible snap) +
-**CCD** (D124) + the other 3 caller visuals; OR, if the body-coupling proves walk-test-gated/risky, defer it to backlog + move to **⑬ real-cloth-physics**
-(which reuses ⑫'s now-landed solver). **NOTE the steering `pause_before: "M10"`** — once M9 (⑫+⑬) completes, the loop PAUSES for the user's M10 review
-(resume via `/campaign-approve`). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
+**Next session** = cycle 56 = **M9 ⑬ real-cloth-physics** — a 2D Verlet grid behind `FEATURES.realCloth` (default OFF), tent-door/flag only, **reusing
+⑫'s now-landed `verletRope.ts` solver primitives**. ⑬ is the **LAST M9 unit** → **after ⑬ ships, the steering `pause_before: "M10"` FIRES**: the next cycle
+PAUSES (status=paused, awaiting_approval) for the user's M10 review + planning (resume via `/campaign-approve`). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 
