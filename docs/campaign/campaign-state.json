@@ -864,7 +864,7 @@
       "save": "no bump — additive optional speeder.broken? inside the already-optional speeder? object; pre-⑮ saves load broken=false (the proven rideable speeder). D81 honored.",
       "decisions": ["D262 — ⑮ = the existing speeder made repairable (broken→working) behind FEATURES.repairableSpeeder; reuse-not-fork; gravity-settle for the broken rest; additive save (no version bump). friction 1"],
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "33cd3d2",
       "spend_approx_tokens": 340000
     }
   ]
