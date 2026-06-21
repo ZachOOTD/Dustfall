@@ -69,17 +69,17 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 "Last shipped" note. Current target: **Phase B (M6→M10) — APPROVED + RELEASED**. The loop runs M6→M10 unattended,
 commits every cycle, and pauses only at "Phase B — Build-out complete" (after M10). Charter: `docs/campaign/campaign.md`.
 
-**Last shipped**: Campaign **C52** (2026-06-20, cycle 52/75) — **M8 ⑩ companion-egg-cherry-pick → M8 COMPLETE** (no save bump)
-(`verify:all` PASS — tsc + placement 0/0 ×5 + colliders 0/40; **visual gate PASS** [the egg reads on the dais]; **no `SAVE_VERSION` bump**).
-Re-applied the `2d4035b` companion-acquisition spine across 8 files, retargeted from the old `rockyEntrance` to the new `deepCave` egg-dais: a glowing
-ovoid egg → E **hatches** the companion (`spawnCompanionAt`), sets `flags.companionAcquired`, removes the egg. Additive `companionAcquired?` save field
-(absent → default TRUE so legacy saves keep the companion); a boot reconcile in `handoffToGame` (acquired → remove egg, else → despawn the boot
-companion). **D81 cleared** — the spine's save is additive, so the bump-STOP did NOT trigger (D256). A NEW game now finds the companion in the cave.
-**✓ M8 COMPLETE** (⑧ spike · ⑨ cave · ⑩ companion).
+**Last shipped**: Campaign **C53** (2026-06-20, cycle 53/75) — **M9 ⑪ rideable-sled-spike** — Option C decided, flag landed
+(`verify:all` PASS — tsc + placement 0/0 ×5 + colliders 0/40; `FEATURES.rideableSled` landed inert; **no save bump**). **M9 begins.**
+The architectural-risk spike for "ride a towed sled". Recon: D125 tabled the old attempt (the KCC fights a moving platform; 3 delta-based architectures
+failed). **Finding:** Option C ("skip the KCC while riding") is already proven — the SPEEDER ride gates `updatePlayer` + teleports the capsule to the
+rider seat each frame. **Decision (D257):** generalize that to the sled (a `ridingSled` state + a per-frame capsule-to-sled-seat teleport in
+`updateSleds`), behind `FEATURES.rideableSled` (inert). The D125 delta approaches stay dead; NOT re-tabled. Riding FEEL → walk-test (the ⑪-build wires
+it behind the flag; the user flips + walk-tests before adoption).
 
-**Next session** = cycle 53 = **M9 ⑪ rideable-sled-spike** — the first unit of **M9 (architectural-risk physics)**. An A/B-worktree spike behind a
-kill-switch; **re-table if both candidates fail** (no 3rd KCC attempt, per D125). After ⑪: ⑫ real-rope-physics (Verlet, `FEATURES.realRope`) · ⑬
-real-cloth-physics. The loop only PAUSES at the Phase-B milestone (after M10). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
+**Next session** = cycle 54 = **M9 ⑫ real-rope-physics** — a Verlet/segmented rope sim behind `FEATURES.realRope` (default OFF; CCD-from-the-start per
+D124), replacing the inextensible position-snap constraint (D126) for the sled tow / companion tether / stake / kill-drag. After ⑫: ⑬ real-cloth-physics
+(depends on ⑫). The loop only PAUSES at the Phase-B milestone (after M10). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 

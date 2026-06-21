@@ -39,6 +39,16 @@ export const FEATURES = {
    *  default-ON when this flag is on) lets them switch the bars back any time. Flipped ON
    *  in C40 once the headless + visual gates passed; the user vetoes FEEL at the review. */
   diegeticSurvival: true,
+
+  /** M9 ⑪ (C53 spike, D257) — rideable sled: stand on a towed sled + ride it as the speeder
+   *  pulls it. OFF = the proven non-ride tow (the player walks/tows; D125 tabled the old
+   *  delta-based ride). ON = the experimental ride via the SPEEDER's proven seat-teleport
+   *  pattern ("Option C" per D125 — while riding, gate `updatePlayer` like `speeder.mounted`
+   *  + teleport the capsule to a sled rider-seat each frame in `updateSleds`, bypassing the
+   *  KCC slope/contact issues that killed the old attempts). Landed INERT here by the C53
+   *  spike (gate-and-wait); the ⑪-build wires it + the user walk-tests the ride feel before any
+   *  flip (riding FEEL is the exact D125 failure mode — headless can't judge it). */
+  rideableSled: false,
 } as const;
 
 /** A valid feature-flag key (e.g. for a dev-panel toggle list later). */

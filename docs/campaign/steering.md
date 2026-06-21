@@ -17,4 +17,4 @@ _(empty — drop steering notes above this line)_
 
 ## Applied (archived by the loop)
 
-See [steering-archive.md](steering-archive.md). Most recent: C44 — remove the watchtower + ruin the well (the solitude principle, D252).
+See [steering-archive.md](steering-archive.md). Most recent: C53 — **pause before M10** for a user review (a pause gate at the M9→M10 boundary; M9 finishes first). Prior: C44 — remove the watchtower + ruin the well (D252).

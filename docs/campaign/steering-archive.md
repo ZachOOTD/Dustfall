@@ -15,3 +15,10 @@ loop at the cycle boundary so they're not re-applied each cycle.
 - Re-scoped the `well` into a long-dry collapsed ruin (no bucket/rope/working crank) — kept but de-peopled (user-confirmed scope: option 2 + the well treated per option 3).
 - Codified the principle as a standing constraint: [decisions.md](../decisions.md) D252 + [vision-deltas.md](../vision-deltas.md).
 - Older wreck POIs (satellite, wrecked_tank, debris_field, husks, derelict, debris_trail) already read as decayed — left untouched per the confirmed scope.
+
+## 2026-06-20 (received during cycle 53; applied) — Pause before starting M10 for a user review
+
+**Directive:**
+> "lets pause before starting M10 so I can review and plan accordingly"
+
+**Action taken (recorded C53):** added a **PAUSE-FOR-USER-REVIEW gate at the M9→M10 boundary**. M9 continues unattended (⑫ real-rope-physics · ⑬ real-cloth-physics — they're M9, not M10); when M9 completes, the cycle that WOULD start M10 ⑭ instead PAUSES (`status: paused`, `awaiting_approval: true`, `stop_reasons: ["steering-pause-before-M10"]`) so the user reviews + plans M10 (the final tier) before it begins. Recorded in `campaign-state.json` (`pause_before: "M10"`) + a ⏸ marker in `roadmap.md` before the M10 line + the ⑫/⑬ next-session-prompts carry the reminder. (The campaign's other pause — the Phase-B milestone after M10 — is unchanged; this adds an earlier user-requested gate.)

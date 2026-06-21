@@ -3,6 +3,17 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign C53 — 2026-06-20 — M9: **rideable-sled-spike** — Option C decided (the speeder ride generalizes), flag landed ✓ verify pass (ultracode) · M9 BEGINS
+
+`verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40; `FEATURES.rideableSled` landed INERT — nothing reads it yet, shipped behavior unchanged). **No save bump.** Cycle 53/75. **M9 begins.**
+
+**rideable-sled-spike (M9 ⑪) — a design/architecture spike.** Decides how to make a towed sled rideable.
+- **Recon:** D125 (Session ACD) **tabled** an earlier attempt — 3 delta-based architectures all failed (the Rapier KCC's slope-projection/autostep/contact fights a moving kinematic platform; the player slid off in 5-10 frames). D125 named "full Option C parenting (skip the KCC while riding)" as the next attempt.
+- **Finding:** Option C is **already proven in-engine** — the SPEEDER ride is exactly it: `speeder.mounted` gates `updatePlayer` + `updateSpeeder` teleports the capsule to the rider seat each frame, bypassing the KCC moving-platform issue. The sled is a moving body like the speeder → the pattern generalizes.
+- **Decision (D257):** adopt Option C for the sled — a `ridingSled` state gating `updatePlayer` + a per-frame capsule-to-sled-rider-seat teleport in `updateSleds` (already runs before `updatePlayer`); mount via E, jump/E to dismount. Behind **`FEATURES.rideableSled`** (landed inert, default OFF — gate-and-wait). The D125 delta approaches stay DEAD. **NOT re-tabled** (a viable path found).
+- **Why decision-+-scaffold (not a full build):** riding FEEL is the exact D125 failure mode (slide-off over time) — walk-test-only, headless can't judge it. The ⑪-build wires it behind the flag; the user flips + walk-tests before adoption. Mirrors C46 (cave design spike).
+- **Next:** ⑫ real-rope-physics.
+
 ## Campaign C52 — 2026-06-20 — M8: **companion-egg-cherry-pick → M8 COMPLETE** (no save bump) ✓ verify pass (ultracode)
 
 `verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40; the egg is an interaction target, no collider). **Visual gate PASS** — the egg reads as a glowing ovoid on the dais. **No `SAVE_VERSION` bump** (additive `companionAcquired?`, stays 15 — the campaign's biggest D81 risk, navigated cleanly). Cycle 52/75. **M8 COMPLETE.**
