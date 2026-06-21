@@ -69,18 +69,17 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 "Last shipped" note. Current target: **Phase B (M6→M10) — APPROVED + RELEASED**. The loop runs M6→M10 unattended,
 commits every cycle, and pauses only at "Phase B — Build-out complete" (after M10). Charter: `docs/campaign/campaign.md`.
 
-**Last shipped**: Campaign **C51** (2026-06-20, cycle 51/75) — **M8 ⑨ deep-cave-build COMPLETE** (the ⑩-egg dais + a scope call)
-(`verify:all` PASS — tsc + placement 0/0 ×5 + colliders 0/40; **visual gate PASS**; **no save bump**).
-Added the **M8 ⑩ companion-egg SITE** — a low stone dais at the chamber's deep end (`world/deepCave.ts`) — and made the **scope call (D255)**: ⑨ ships
-as a COMPLETE **single-chamber** cave (funnel descent + roofed chamber + dark-nav + dressing + the dais). The spec's **4-8-chamber expansion → backlog
-§A**: the funnel bowl is too small/steep to host adjacent rooms, and descending rooms need walking UNDER the terrain heightfield (D254's open KCC-from-
-below risk) — unvalidatable headless, so deferred to a walk-test rather than built blind. The cave is a dark, navigable, dressed, enterable space.
-**✓ M8 ⑨ COMPLETE.**
+**Last shipped**: Campaign **C52** (2026-06-20, cycle 52/75) — **M8 ⑩ companion-egg-cherry-pick → M8 COMPLETE** (no save bump)
+(`verify:all` PASS — tsc + placement 0/0 ×5 + colliders 0/40; **visual gate PASS** [the egg reads on the dais]; **no `SAVE_VERSION` bump**).
+Re-applied the `2d4035b` companion-acquisition spine across 8 files, retargeted from the old `rockyEntrance` to the new `deepCave` egg-dais: a glowing
+ovoid egg → E **hatches** the companion (`spawnCompanionAt`), sets `flags.companionAcquired`, removes the egg. Additive `companionAcquired?` save field
+(absent → default TRUE so legacy saves keep the companion); a boot reconcile in `handoffToGame` (acquired → remove egg, else → despawn the boot
+companion). **D81 cleared** — the spine's save is additive, so the bump-STOP did NOT trigger (D256). A NEW game now finds the companion in the cave.
+**✓ M8 COMPLETE** (⑧ spike · ⑨ cave · ⑩ companion).
 
-**Next session** = cycle 52 = **M8 ⑩ companion-egg-cherry-pick** (re-apply the `2d4035b` companion spine at the cave dais; the additive
-`companionEggTaken?` save field). **Watch the D81 save-bump STOP** — ⑩ is the M8 unit most likely to touch the save; an additive optional field is OK,
-but a `SAVE_VERSION` bump STOPs the loop (surface, never bump autonomously). The loop only PAUSES at the Phase-B milestone (after M10).
-See [docs/next-session-prompt.md](docs/next-session-prompt.md).
+**Next session** = cycle 53 = **M9 ⑪ rideable-sled-spike** — the first unit of **M9 (architectural-risk physics)**. An A/B-worktree spike behind a
+kill-switch; **re-table if both candidates fail** (no 3rd KCC attempt, per D125). After ⑪: ⑫ real-rope-physics (Verlet, `FEATURES.realRope`) · ⑬
+real-cloth-physics. The loop only PAUSES at the Phase-B milestone (after M10). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 

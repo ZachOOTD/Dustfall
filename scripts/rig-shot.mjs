@@ -1332,6 +1332,10 @@ const SCENARIOS = {
       const rimY = ctx.terrain.heightAt(a.x + 30, a.z);            // undisturbed dune just outside the rim
       const R = 22;                                                // ~CAVE_PIT_CLEARING
       if (ang === 'interior' || ang === 'door' || ang === 'inside') {
+        // C52 — the rig boots in DEV MODE (companionAcquired=true → the boot reconcile
+        // detaches the egg). Re-attach it so the M8 ⑩ egg renders on the dais for the shot.
+        const dc = ctx.deepCave;
+        if (dc && dc.egg && !dc.egg.group.parent) dc.group.add(dc.egg.group);
         // C49 dark-nav LOOK: emulate updateDeepCave for the shot (the real effect is
         // player-position-driven) — darken ambient/sun + light the REAL cave torch.
         ctx.lights.ambient.intensity *= 0.1;

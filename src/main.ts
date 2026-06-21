@@ -43,7 +43,7 @@ import { setupOpeningScene } from './world/openingScene.ts';
 import { updateOpeningWreckGodRay } from './world/openingWreck.ts';
 import { updateLanterns } from './world/lantern.ts';
 import { updateLargeTents } from './world/largeTent.ts';
-import { updateCompanion, spawnCompanionAt } from './enemies/companion.ts';
+import { updateCompanion, spawnCompanionAt, despawnCompanion } from './enemies/companion.ts';
 import { createFootprintPuffs, updateFootprintPuffs } from './world/footprintPuffs.ts';
 import { hasSave } from './persistence/save.ts';
 import { createJournalPanel } from './ui/journalPanel.ts';
@@ -447,6 +447,7 @@ const ctx: GameContext = {
   companion: null,                   // Session AAE
   sarlaccPit,                        // ACAQ Cycle 8 — wreck-yard hero hazard
   deepCave,                          // M8 ⑨ (C48/C49) — the deep cave interior + dark-nav
+  egg: deepCave.egg,                  // M8 ⑩ (C52) — the companion egg on the cave dais (reconciled in handoffToGame)
 
   salvageables,
   weather,
@@ -468,6 +469,9 @@ const ctx: GameContext = {
     // ABO A3 — third-person camera mode. Default false (FP at boot).
     // Toggled by F-key (pause-gated).
     thirdPerson: false,
+    // M8 ⑩ (C52) — companion acquired? Default false (NEW game → the cave egg is the
+    // acquisition path). loadGameState sets it from the save (legacy → true).
+    companionAcquired: false,
     devPanelOpen: false,
   },
 };
@@ -587,6 +591,7 @@ installDebugPanel(ctx, {
   // just add the paused=false the 'lock' handler would have set. Idempotent.
   enterGame: (dev?: boolean) => {
     if (dev && !ctx.flags.devMode) { applyDevLoadout(ctx); ctx.flags.devMode = true; }
+    if (dev) ctx.flags.companionAcquired = true;   // M8 ⑩ (C52) — headless dev entry keeps the companion (skips the egg hunt)
     // ACN — skipLock: automated entry must NEVER acquire PointerLock (it would
     // trap the OS cursor in the headless/offscreen window — the focus heuristic
     // doesn't catch headless Playwright). Verification drives input via evals.
@@ -709,6 +714,15 @@ function handoffToGame(opts?: { skipLock?: boolean }): void {
   titleOverlay.hide();
   ctx.flags.titleActive = false;
   inGameEls.forEach((el) => { el.style.visibility = ''; });
+  // M8 ⑩ (C52) — reconcile companion vs. cave egg. Boot always spawns the companion +
+  // builds the egg; resolve the final state per flags.companionAcquired (false on a NEW
+  // game, set from the save on Continue, true on DEV): acquired → remove the egg; NOT
+  // acquired → despawn the boot companion so the cave egg is the only acquisition path.
+  if (ctx.flags.companionAcquired) {
+    if (ctx.egg) { ctx.egg.group.removeFromParent(); ctx.egg = null; }
+  } else {
+    despawnCompanion(ctx);
+  }
   // AAX — surface the DEV MODE badge from the in-memory flag (set by the
   // DEV MODE button's onDevMode callback or by Tuning.DEBUG_STARTER_LOADOUT
   // at boot). Replaces the AAW localStorage-driven check, which got out of
@@ -829,6 +843,7 @@ const titleOverlay = createTitleOverlay(ctx, {
   onDevMode: () => {
     applyDevLoadout(ctx);
     ctx.flags.devMode = true;
+    ctx.flags.companionAcquired = true;   // M8 ⑩ (C52) — dev sessions keep the companion (test affordance)
     handoffToGame();
   },
 });

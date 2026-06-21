@@ -18,6 +18,7 @@ import { despawnPickup, findPickupById, spawnDroppedPickup } from '../pickups/pi
 import { findWaterSourceById } from '../world/waterSources.ts';
 import { findCactusById, harvestCactus } from '../world/cactus.ts';
 import { findLizardById, lootLizard } from '../enemies/lizard.ts';
+import { spawnCompanionAt } from '../enemies/companion.ts';   // M8 ⑩ (C52) — egg hatch
 import { findShrewById, lootShrew } from '../enemies/shrew.ts';
 import { findVultureById, lootVulture } from '../enemies/vulture.ts';  // ACAH
 import { lootSandWorm } from '../enemies/sandWorm.ts';
@@ -82,7 +83,7 @@ export function getHoverWorldPos(): THREE.Vector3 | null {
 interface InteractHit {
   type: InteractType;
   id: number;
-  registry: 'pickups' | 'waterSources' | 'cacti' | 'lizards' | 'shrews' | 'vultures' | 'sandWorms' | 'lootContainers' | 'fires' | 'tents' | 'largeTents' | 'bedrolls' | 'lanterns' | 'lockers' | 'salvageables' | 'journals' | 'speeder' | 'sleds' | 'companion' | 'stakes' | 'raiders';
+  registry: 'pickups' | 'waterSources' | 'cacti' | 'lizards' | 'shrews' | 'vultures' | 'sandWorms' | 'lootContainers' | 'fires' | 'tents' | 'largeTents' | 'bedrolls' | 'lanterns' | 'lockers' | 'salvageables' | 'journals' | 'speeder' | 'sleds' | 'companion' | 'stakes' | 'raiders' | 'eggs';
   distance: number;
   /** AAZ — optional sub-mesh discriminator. When the hit object's
    *  userData.interactSubKind is set, it's captured here so case handlers
@@ -208,6 +209,7 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
   for (const s of ctx.salvageables.list) s.hovered = false;
   for (const sl of ctx.sleds.list) sl.hovered = false;
   for (const st of ctx.stakes.list) st.hovered = false;
+  if (ctx.egg) ctx.egg.hovered = false;   // M8 ⑩ (C52)
   ctx.inventory.hover = null;
   _hoverWorldValid = false;   // ACW F — invalidated until this frame's raycast resolves a hit
   // AAO — default cook bars to hidden each frame; re-shown inside the
@@ -293,6 +295,8 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
   for (const r of ctx.raiders) if (r.bb.state === 'dead') targets.push(r.group);
   for (const s of ctx.salvageables.list) targets.push(s.panel);
   for (const j of ctx.journals.list) targets.push(j.mesh);
+  // M8 ⑩ (C52) — the cave egg is interactable only while the companion isn't acquired.
+  if (ctx.egg && !ctx.flags.companionAcquired) targets.push(ctx.egg.group);
   // CC-3.1 — speeder seat is interactable when not already mounted; the
   // seat mesh is tagged with userData.interactType='mount' inside
   // makeSpeeder so resolveInteractable picks it up on raycast hit.
@@ -332,6 +336,24 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
 
   // Dispatch to set hover state + prompt + handle E
   switch (info.registry) {
+    case 'eggs': {
+      // M8 ⑩ (C52) — the cave egg. E hatches the companion at the egg, sets the
+      // acquired flag, and removes the egg. Guarded on !companionAcquired (the boot
+      // reconcile also removes a hatched/already-had egg, but guard defensively).
+      const egg = ctx.egg;
+      if (!egg || ctx.flags.companionAcquired) return;
+      egg.hovered = true;
+      ctx.inventory.hover = { type: 'hatch', distance: info.distance, promptNoun: 'egg — something stirs inside' };
+      if (ctx.input.pressed.has('KeyE')) {
+        spawnCompanionAt(ctx, egg.pos, 'idle');
+        ctx.flags.companionAcquired = true;
+        egg.group.removeFromParent();
+        ctx.egg = null;
+        ctx.ui.showToast('the egg cracks open — Pebble uncurls');
+      }
+      return;
+    }
+
     case 'pickups': {
       // AAA — E is the take/pickup button (UU's LMB-take reverted).
       // LMB stays for "use the wielded item" (attack/place/hold_use);

@@ -37,7 +37,7 @@ import type { Locker } from './world/locker.ts';
 import type { Stake } from './world/stake.ts';
 import type { Companion } from './enemies/companion.ts';
 import type { SarlaccPit } from './enemies/sarlaccPit.ts';
-import type { DeepCave } from './world/deepCave.ts';
+import type { DeepCave, CaveEgg } from './world/deepCave.ts';
 import type { BiomeSampler } from './world/biomes.ts';
 import type { SalvageableRegistry } from './world/salvage.ts';
 import type { FootprintRegistry } from './world/footprints.ts';
@@ -169,6 +169,10 @@ export interface GameContext {
   sarlaccPit: SarlaccPit | null;
   /** M8 ⑨ — the deep cave interior + dark-nav (one per world). */
   deepCave: DeepCave;
+  /** M8 ⑩ — the companion egg on the cave dais. Non-null only while the companion
+   *  is NOT yet acquired (re-derived at boot from `flags.companionAcquired`);
+   *  hatching it spawns the companion + clears this. */
+  egg: CaveEgg | null;
   salvageables: SalvageableRegistry;
   weather: Weather;
   ambientDust: AmbientDust;
@@ -208,6 +212,12 @@ export interface GameContext {
      *  first-person. When true: rig becomes visible, viewmodel hidden,
      *  camera offsets behind+above player. */
     thirdPerson: boolean;
+    /** M8 ⑩ (C52) — has the player acquired the companion (hatched the cave egg)?
+     *  Default false on a NEW game (the egg is the acquisition path). Legacy saves
+     *  (pre-feature) default TRUE on load so existing players keep their companion.
+     *  Drives the boot reconcile (egg vs. companion) + is persisted additively
+     *  (NO SAVE_VERSION bump — D81/D254). */
+    companionAcquired: boolean;
     /** True while the dev item/action panel (F8 / `) is open. The input.ts
      *  pointer-lock 'unlock' handler reads this to SUPPRESS the pause overlay
      *  when the dev panel is what freed the cursor — so the panel sits over the

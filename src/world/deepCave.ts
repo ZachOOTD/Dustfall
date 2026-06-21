@@ -40,6 +40,16 @@ const _caveRockDark = new THREE.MeshLambertMaterial({ color: 0x1c1813, flatShadi
 // C50 dressing — a muted, DRIED old bone (not bright white): a long-dead skeleton, D252.
 const _caveBoneMat = new THREE.MeshLambertMaterial({ color: 0x8a7d68, flatShading: true });
 
+/** M8 ⑩ (C52) — the companion egg on the cave dais (re-applies the 2d4035b spine,
+ *  retargeted from the old rockyEntrance to the deep cave). Present only while the
+ *  companion isn't acquired (the boot reconcile removes it if it is). */
+export interface CaveEgg {
+  group: THREE.Group;
+  /** World-space position (for spawning the companion on hatch). */
+  pos: THREE.Vector3;
+  hovered: boolean;
+}
+
 export interface DeepCave {
   group: THREE.Group;
   body: RAPIER.RigidBody;
@@ -47,6 +57,9 @@ export interface DeepCave {
   /** C49 dark-nav — a cheap NO-SHADOW point light that follows the player while
    *  they're inside the cave (the "torch" glow); off elsewhere. */
   torch: THREE.PointLight;
+  /** M8 ⑩ — the companion egg resting on the dais (always built; the boot
+   *  reconcile in main.ts removes it iff `flags.companionAcquired`). */
+  egg: CaveEgg;
 }
 
 /** Build + place the deep-cave interior chamber at the carved funnel floor. */
@@ -140,17 +153,34 @@ export function spawnDeepCave(
     slab.rotation.set(0.1, i * 0.8, 0.06);
     deco(slab);
   }
-  // ── the M8 ⑩ companion-egg SITE — a low stone dais in a clear spot at the chamber's deep
-  //    end, marking where the companion egg will rest. The EGG itself is ⑩; this is just the
-  //    prepared site (decoration, low enough to step onto via autostep). ──
+  // ── the M8 ⑩ companion-egg SITE — a low stone dais at the chamber's deep end with the
+  //    companion EGG resting on it (M8 ⑩). The dais is decoration; the egg is tagged for the
+  //    'eggs' interaction (E hatches → spawns the companion; interaction.ts). ──
+  const daisX = hx * 0.35, daisZ = -hz * 0.55;
   {
     const dais = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.62, 0.22, 12), _caveRockMat);
-    dais.position.set(hx * 0.35, 0.11, -hz * 0.55);
+    dais.position.set(daisX, 0.11, daisZ);
     dais.userData.isWreckDecoration = true; dais.castShadow = true; dais.receiveShadow = true; g.add(dais);
     const rim = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.05, 5, 14), _caveRockDark);
-    rim.rotation.x = Math.PI / 2; rim.position.set(hx * 0.35, 0.23, -hz * 0.55);
+    rim.rotation.x = Math.PI / 2; rim.position.set(daisX, 0.23, daisZ);
     rim.userData.isWreckDecoration = true; g.add(rim);
   }
+  // the EGG — a softly-glowing ovoid resting on the dais ("Pebble curls inside, asleep").
+  // Procedural, zero-asset (D107). Tagged for the interaction raycast (registry 'eggs').
+  const eggGroup = new THREE.Group();
+  const eggMat = new THREE.MeshStandardMaterial({ color: 0xcab89a, roughness: 0.55, metalness: 0.0, emissive: 0x3a2614, emissiveIntensity: 0.7 });
+  const eggShell = new THREE.Mesh(new THREE.SphereGeometry(0.16, 18, 14), eggMat);
+  eggShell.scale.set(1.0, 1.4, 1.0);      // ovoid
+  eggGroup.add(eggShell);
+  const eggLocalY = 0.22 + 0.16 * 1.4;    // resting on the dais top (dais half-height 0.11 + center 0.11)
+  eggGroup.position.set(daisX, eggLocalY, daisZ);
+  eggGroup.traverse((o) => { o.userData.interactType = 'hatch'; o.userData.interactRegistry = 'eggs'; o.userData.interactId = 1; });
+  g.add(eggGroup);
+  const egg: CaveEgg = {
+    group: eggGroup,
+    pos: new THREE.Vector3(anchor.x + daisX, floorY + eggLocalY, anchor.z + daisZ),
+    hovered: false,
+  };
 
   scene.add(g);
   const body = attachDeclaredColliders(world, g, colliders);
@@ -162,7 +192,7 @@ export function spawnDeepCave(
   torch.visible = false;
   scene.add(torch);
 
-  return { group: g, body, basePos: new THREE.Vector3(anchor.x, floorY, anchor.z), torch };
+  return { group: g, body, basePos: new THREE.Vector3(anchor.x, floorY, anchor.z), torch, egg };
 }
 
 // C49 dark-nav — darken the scene when the player is DOWN IN the cave (ambient/sun fall

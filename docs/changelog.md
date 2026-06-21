@@ -3,6 +3,20 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign C52 — 2026-06-20 — M8: **companion-egg-cherry-pick → M8 COMPLETE** (no save bump) ✓ verify pass (ultracode)
+
+`verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40; the egg is an interaction target, no collider). **Visual gate PASS** — the egg reads as a glowing ovoid on the dais. **No `SAVE_VERSION` bump** (additive `companionAcquired?`, stays 15 — the campaign's biggest D81 risk, navigated cleanly). Cycle 52/75. **M8 COMPLETE.**
+
+**companion-egg-cherry-pick (M8 ⑩, the last M8 unit).** Re-applied the `2d4035b` companion-acquisition spine across 8 files, retargeted from the old `rockyEntrance` to the new `deepCave` egg-dais. A NEW game no longer spawns the companion at the player's side — it's found by descending the cave + hatching the egg.
+- **`deepCave.ts`:** `CaveEgg` type + a softly-glowing ovoid egg on the dais (tagged for the `'eggs'` interaction).
+- **`GameContext.ts`:** `ctx.egg` + `flags.companionAcquired`.
+- **`companion.ts`:** `despawnCompanion` (remove the boot companion without a pod).
+- **`save.ts`:** additive `companionAcquired?: boolean` + save/load — absent → default TRUE (legacy keeps the companion). **NO version bump (D81/D256).**
+- **`interaction.ts` / `inventory/types.ts` / `interactPrompt.ts`:** the `'eggs'` registry + the `'hatch'` case (E → `spawnCompanionAt` at the egg, set acquired, remove egg) + the `'hatch'` `InteractType` + VERB.
+- **`main.ts`:** the boot reconcile in `handoffToGame` (boot always spawns the companion + builds the egg; acquired → remove egg, else → despawn the companion) + dev paths set acquired.
+- **D81 cleared:** the recon (FIRST) confirmed the spine's save is additive → the save-bump STOP did NOT trigger; ⑩ shipped autonomously. **D256.** The acquisition FEEL → walk-test.
+- **Next:** M9 (architectural-risk physics) → ⑪ rideable-sled-spike.
+
 ## Campaign C51 — 2026-06-20 — M8: **deep-cave-build COMPLETE** — the ⑩-egg dais + a scope call (single-chamber cave) ✓ verify pass (ultracode)
 
 `verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40; the dais is decoration — cave mesh count 25→27). **Visual gate PASS** — the dais reads as a marked site on the torch-lit cave floor. **No save bump.** Cycle 51/75. **⑨ COMPLETE.**

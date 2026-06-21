@@ -1,65 +1,58 @@
-# ▶ CAMPAIGN cycle 52 — Kickoff Brief — `campaign/2026-06-18`
+# ▶ CAMPAIGN cycle 53 — Kickoff Brief — `campaign/2026-06-18`
 
-**Phase B building unattended (M6→M10). M6 ✓ · M7 ✓ · M8: ⑧ ✓ · ⑨ ✓ COMPLETE (the cave). Now ⑩ — the companion (the LAST M8 unit).**
+**Phase B building unattended (M6→M10). M6 ✓ · M7 ✓ · M8 ✓ COMPLETE. Now M9 — architectural-risk physics (⑪ rideable-sled-spike).**
 Boot from `docs/campaign/campaign-state.json` + `docs/roadmap.md` "Up next" (the AUTHORITATIVE queue). The loop commits every cycle and pauses only at
 `### Milestone: Phase B — Build-out complete` (after M10). Charter: `docs/campaign/campaign.md`.
 
 ## Read these now (in order)
 1. `CLAUDE.md` (auto-loaded) — esp. "Where we are now".
-2. `docs/campaign/campaign-state.json` + `docs/campaign/steering.md` + `docs/campaign/campaign-log.md` (the C46-C51 entries — the cave).
-3. `docs/roadmap.md` "Up next" → Phase B → **M8 ⑩**.
-4. `docs/decisions.md` tail — **D255 (cave scope)**, D254 (cave topology), D252 (tone), **D81 (NEVER bump SAVE_VERSION autonomously — THIS is the cycle most likely to hit it)**, D226 (phash).
+2. `docs/campaign/campaign-state.json` + `docs/campaign/steering.md` + `docs/campaign/campaign-log.md` (recent cycles).
+3. `docs/roadmap.md` "Up next" → Phase B → **M9 ⑪**.
+4. `docs/decisions.md` — **D125 (the riding/KCC wall — READ THIS; it's the whole risk of ⑪)**, D124 (rope-physics CCD, for ⑫), D226 (phash), D81 (save-bump STOP).
 
-## What ⑨ left for ⑩
-A complete single-chamber cave at `biomes.caveAnchor` (`world/deepCave.ts`, on `ctx.deepCave`): descend the funnel → enter the roofed dark chamber →
-a **low stone DAIS at the chamber's deep end** (`hx*0.35, ~floorY, -hz*0.55` in the cave's local frame) = the prepared **companion-egg site**. The egg
-itself is this cycle.
-
-## Cycle 52 focus — **M8 ⑩ companion-egg-cherry-pick (M; the LAST M8 unit)**
-Re-apply the `2d4035b` companion spine so the player acquires a companion creature at the cave dais. After this, M8 is COMPLETE.
+## Cycle 53 focus — **M9 ⑪ rideable-sled-spike (A/B worktree spike — architectural-risk)**
+Spike making the **sled rideable** (the player stands/rides on a towed sled while the speeder tows it — a moving-platform-ride). This is an
+**architectural-risk** unit: a prior riding attempt hit the KCC/moving-platform wall (**D125** — read it: the kinematic character controller fights
+a moving platform under it). The spike's job is to find whether a sound approach exists — NOT to ship polished gameplay.
 
 ### Priority items (in order)
-1. **Recon FIRST.** (a) `git show 2d4035b --stat` + the diff — what the companion spine added (the creature, its follow AI, acquisition). (b) The
-   CURRENT companion code already present: `ctx.companion: Companion | null`, `updateCompanion(c, dt)` in the `main.ts` tick (Session AAE), and any
-   `companion`/`Companion` files (`grep`). Establish what exists vs. what `2d4035b` had — ⑩ is a CHERRY-PICK/re-enable, not a from-scratch build. Decide
-   exactly what to re-apply + how to gate acquisition on the cave egg.
-2. **The egg pickup at the dais.** Place an egg object on the cave dais (`ctx.deepCave` / `deepCave.ts`). Interacting with it (E) acquires the companion
-   (spawn/enable `ctx.companion`, following the player). Reuse the existing pickup/interaction patterns. Decayed-tone-safe (D252 — the egg is the ONE
-   intentional non-wreck object; keep it reading as a found artifact, not maintained tech).
-3. **SAVE — the D81 watch (CRITICAL).** Persisting "the egg was taken / the companion exists" should be an **additive** optional field
-   (`companionEggTaken?: boolean`, default false on load) per D254/D81 — NO `SAVE_VERSION` bump. **Before writing any save code, check `src/persistence/
-   save.ts`:** if the companion can be re-derived/re-spawned from an additive optional field with a safe default, proceed. **If it genuinely needs a
-   `SAVE_VERSION` bump (a non-additive schema change), STOP the loop + surface to the user — do NOT bump autonomously.** This is the single most likely
-   STOP trigger of the whole campaign so far; treat it carefully.
-4. **Verify** — `npm run verify:all` (tsc + placement 0/0 ×5 + colliders 0/40). If the egg declares a collider, account for it; if it's a pickup, follow
-   the pickup conventions.
-5. **Visual gate** — render the egg on the dais (`--scenario=cave --angle=inside`) — it reads as a findable egg/artifact in the dark chamber. The
-   companion MODEL (if `2d4035b` brings one) gets its own gate/feel pass; the acquisition + follow FEEL → walk-test.
+1. **Recon FIRST — read D125 + the current riding/tow code.** What exactly failed before (KCC vs. moving platform; slope projection)? Map the CURRENT
+   state: the speeder ride (mount/dismount, the rider seat, `updatePlayer`'s moving-platform-ride read — `grep` moving-platform / ride / sled XZ delta),
+   the sled tow (`updateSleds`, the tow spring, `ctx.sleds`), and how `updatePlayer` already handles "this-frame's sled XZ delta" (the C24/QQ note in
+   the main.ts tick mentions sleds run before updatePlayer so the delta is fresh). Establish what's reusable.
+2. **Spike 2 candidate approaches CONCURRENTLY (worktrees — `isolation: worktree`), behind a `FEATURES.rideableSled` KILL-SWITCH (default OFF).**
+   Candidates to consider (pick the real ones after recon): **(A)** parent/teleport the player capsule to the sled each frame (carry the sled's XZ
+   delta onto the KCC like the speeder seat does) vs **(B)** a kinematic "platform" body the KCC rides via Rapier's character-controller move + the
+   platform velocity. Each spike: can the player stand on a moving (towed) sled without jitter/ejection/sinking, on flat ground + a gentle slope?
+3. **Decide + write the verdict.** If ONE candidate works → keep it behind the flag (default OFF until walk-tested), log a D-entry, ship the spike.
+   **If BOTH candidates fail → RE-TABLE (D125): do NOT force a 3rd KCC attempt.** Mark ⑪ re-tabled, move the idea to `backlog.md` PARKED with the
+   failure notes, log a D-entry, and CONTINUE to ⑫ (don't STOP the loop — re-table is a normal outcome for this flagged-risk unit).
+4. **Verify** — `npm run verify:all` stays green (the flag is default-OFF, so shipped behavior is unchanged). A worktree spike that lands only a
+   flagged-OFF prototype + a verdict doc is a valid outcome.
+5. **Visual/feel** — riding is FEEL-dominant + headless can't judge it; the spike proves the MECHANISM works structurally (no jitter/NaN in a physics
+   probe), and the actual ride feel → walk-test. Don't claim feel from a screenshot.
 
-### After ⑩ → M8 COMPLETE
-M8 is done (⑧ spike · ⑨ cave · ⑩ companion). The loop does NOT pause (only the Phase-B milestone after M10). Next is **M9 — Architectural-risk
-physics** (⑪ rideable-sled-spike [A/B worktree, kill-switch, re-table if both fail per D125] · ⑫ real-rope-physics · ⑬ real-cloth-physics) — read
-`docs/roadmap.md` "Up next" → M9 fresh.
-
-## Autonomy contract
-Ambiguous call → fit the tone (D252) + log a D-entry, continue. **D81 save-bump STOPs the loop — and ⑩ is where it's most likely.** If the companion
-needs more than an additive optional save field, STOP + surface.
+### Autonomy contract / stop conditions
+- **D125 re-table escape hatch:** if both A/B fail, re-table (backlog PARKED) + a D-entry + CONTINUE — that's the designed outcome, NOT a STOP.
+- **Kill-switch:** ship behind `FEATURES.rideableSled` default OFF (flip-authority is autonomous per the Phase-B calls ONLY once a headless+feel gate
+  passes — but riding feel is walk-test-only, so leave it OFF for the user's milestone review).
+- **D81:** a sled-ride shouldn't need a save change (it's a runtime mount state). If it does, STOP + surface.
+- **`isolation: worktree`** for the concurrent A/B prototypes so they don't collide on `updatePlayer`/`updateSleds`.
 
 ## Stop conditions
-Terminal: max-cycles (75) · catastrophic verify break · 3 fix-walls on one gate · **save-version bump (STOP)** · destructive attempt. Pause:
-steering "pause" · the Phase-B milestone (after M10 — M8 units don't pause).
+Terminal: max-cycles (75) · catastrophic verify break · 3 fix-walls on one gate · save-version bump (STOP) · destructive attempt. Pause:
+steering "pause" · the Phase-B milestone (after M10 — M9 units don't pause). **D125 re-table is a CONTINUE, not a stop.**
 
 ## Notable footguns
-- **D81 / the save schema:** ⑩'s whole risk. Additive optional field = OK; a `SAVE_VERSION` bump = STOP + surface.
-- **`2d4035b` may predate other refactors** — the cherry-pick may not apply cleanly; re-apply the SPINE (the intent) adapted to current code, don't force a raw cherry-pick.
-- **The cave is `ctx.deepCave`** (a fixed module, not an archetype); the egg/dais live in `world/deepCave.ts`.
-- **Heavy-world screenshot flake:** the `cave` scenario logs numbers before the screenshot + try/catches — reuse for the egg shot.
-- `verify:placement` buffers output to the END + is slow; don't kill it early. Rig renders use `--scenario=<name>`.
+- **D125 is the whole risk** — read it before spiking. The KCC + a moving platform is the known wall.
+- **Tick order:** `updateSleds` runs BEFORE `updatePlayer` (so the sled's this-frame XZ delta is fresh for a moving-platform-ride read) — the speeder
+  ride relies on this; the sled ride likely must too.
+- **Worktree spikes auto-clean** if unchanged. Behind a default-OFF `FEATURES` flag → verify:all unaffected.
+- `verify:placement` buffers output to the END + is slow; don't kill it early.
 
 ## Verification protocol
-`npm run verify:all` + the visual gate on the egg (`--scenario=cave --angle=inside`) + the companion model if one ships. Acquisition + follow FEEL → walk-test.
+`npm run verify:all` (green with the flag OFF). The spike's deliverable is a verdict (works-behind-flag | re-tabled) + a D-entry; riding feel → walk-test.
 
 ## Begin
-Read the order → `git show 2d4035b` + `grep` the current companion code → `TaskCreate` the ⑩ cherry-pick → place the egg on the dais + wire acquisition →
-**check `save.ts` for the D81 risk FIRST** → build (additive save field only) → `verify:all` + the egg visual gate → `/session-end`. **If a SAVE_VERSION
-bump is needed, STOP + surface.** Boot fresh from FILES.
+Read the order (esp. **D125**) → `git`/`grep` the speeder-ride + sled-tow + `updatePlayer` moving-platform code → `TaskCreate` the A/B spike →
+spike both in worktrees behind `FEATURES.rideableSled` → pick one OR re-table (D125) + log a D-entry → `verify:all` → `/session-end`. Boot fresh from FILES.
