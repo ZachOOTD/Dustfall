@@ -1331,7 +1331,17 @@ const SCENARIOS = {
       const floorY = ctx.terrain.heightAt(a.x, a.z);               // carved funnel floor
       const rimY = ctx.terrain.heightAt(a.x + 30, a.z);            // undisturbed dune just outside the rim
       const R = 22;                                                // ~CAVE_PIT_CLEARING
-      if (ang === 'approach') {
+      if (ang === 'interior' || ang === 'door') {
+        // peer through the -X doorway into the enclosed chamber. Boost exposure: the
+        // dark-nav lighting isn't in yet (C49), so this checks the GEOMETRY reads as a room.
+        ctx.three.renderer.toneMappingExposure = 1.8;
+        cam.position.set(a.x - 6.5, floorY + 1.7, a.z);
+        cam.lookAt(a.x + 1, floorY + 1.5, a.z);
+      } else if (ang === 'inside') {
+        ctx.three.renderer.toneMappingExposure = 2.0;
+        cam.position.set(a.x - 2.2, floorY + 1.7, a.z + 1.6);
+        cam.lookAt(a.x + 3, floorY + 1.4, a.z - 1.2);
+      } else if (ang === 'approach') {
         cam.position.set(a.x + R * 1.7, rimY + 3.0, a.z + R * 0.5);
         cam.lookAt(a.x, floorY + 2.0, a.z);
       } else {
@@ -1340,7 +1350,11 @@ const SCENARIOS = {
       }
       cam.updateMatrixWorld(true);
       ctx.three.renderer.render(ctx.three.scene, cam);
-      return { anchor: [+a.x.toFixed(0), +a.z.toFixed(0)], floorY: +floorY.toFixed(1), rimY: +rimY.toFixed(1), depth: +(rimY - floorY).toFixed(1) };
+      // structural sanity: the deepCave interior group + its meshes (1 box mesh : 1 collider).
+      let caveMeshes = 0, caveGroup = null;
+      ctx.three.scene.traverse((o) => { if (o.name === 'deepCave') caveGroup = o; });
+      if (caveGroup) caveGroup.traverse((o) => { if (o.isMesh) caveMeshes++; });
+      return { anchor: [+a.x.toFixed(0), +a.z.toFixed(0)], floorY: +floorY.toFixed(1), rimY: +rimY.toFixed(1), depth: +(rimY - floorY).toFixed(1), caveMeshes, caveFound: !!caveGroup };
     }, { ang: angle });
     console.log(`[cave] ${JSON.stringify(r)}`);   // log BEFORE the screenshot so the carve numbers survive a screenshot flake
     await page.waitForTimeout(350);

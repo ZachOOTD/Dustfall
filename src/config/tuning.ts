@@ -605,6 +605,14 @@ export const Tuning = {
   CAVE_PIT_SARLACC_CLEAR: 180,         // m — keep the cave clear of the Sarlacc pit (both carve terrain)
   CAVE_PIT_CLEARING: 22,               // m — the descent-funnel rim radius (the mouth)
   CAVE_PIT_CRATER_DEPTH: 12,           // m — funnel depth at center; peak wall ~39° (< KCC 50° climb, D125)
+  // M8 ⑨ (C48) — the enclosed ROOFED chamber on the funnel floor (deepCave.ts). Kept modest so
+  // the bowl floor stays ~flat across it; the roof is well below the funnel rim (the whole room
+  // sits down in the pit). Walls + roof + a doorway declare colliders; the floor is the terrain.
+  CAVE_ROOM_HALF_X: 3.5,               // m — room half-width
+  CAVE_ROOM_HALF_Z: 3.0,               // m — room half-depth
+  CAVE_ROOM_HEIGHT: 3.8,               // m — interior clear height at centre (>= ~2.3 at the edges)
+  CAVE_DOOR_HALF: 0.9,                 // m — doorway half-width (the gap in the -X entrance wall)
+  CAVE_DOOR_HEIGHT: 2.3,               // m — doorway clear height (lintel underside)
 
   // Wreck palette (Session S). Cool grey-rust industrial; avoids pure
   // blacks/whites so primitives feel weathered, not cartoon.

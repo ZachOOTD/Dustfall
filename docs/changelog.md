@@ -3,6 +3,16 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign C48 — 2026-06-20 — M8: **deep-cave-build `[partial]`** — the enclosed roofed CHAMBER at the funnel floor ✓ verify pass (ultracode)
+
+`verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 [deterministic — counts unchanged from C47] + colliders 0/40). The cave interior is a FIXED module (not an `ARCH_WEIGHTS` archetype) so it's outside the archetype collider sweep — its 7 colliders are declared explicitly + structurally confirmed (`cave` scenario → `caveFound:true, caveMeshes:7`). **No save bump.** Cycle 48/75. **`[partial]`** — the interior shell; dark-nav + dressing + the companion continue next cycle.
+
+**deep-cave-build `[partial]` — the enclosed roofed CHAMBER.** Turns the C47 descent funnel into a space the player walks INTO, per `feature-deep-cave.md` (D254).
+- **NEW `world/deepCave.ts`** — `spawnDeepCave(scene, world, terrain, caveAnchor)` places a roofed chamber on the carved funnel floor: 4 walls + a roof + a SPLIT entrance wall leaving a **doorway gap** (+ a lintel), all declared as box colliders via `attachDeclaredColliders` (7 meshes : 7 colliders). Wired into `main.ts` as a fixed feature (one per world, after the Sarlacc pit). `Tuning.CAVE_ROOM_*`.
+- **Geometry call:** NO separate floor slab — the player walks the **continuous funnel terrain** inside the room (a flat slab at the deepest centre would sit below the bowl-shaped terrain at the room edges → an unclimbable >0.3 m step at the doorway). Walls extend ~1 m below the centre floor to seal into the rising bowl (no under-wall gap); the roof is kept tall (~3.8 m centre / ≥2.3 m edges) so it clears the KCC 0.3 m snap-to-ground.
+- **Visual:** the `cave` rig scenario gained `interior`/`inside` angles. The renders confirm the chamber's walls + floor + dark enclosure EXIST, but the interior is inherently too dark for a full LOOK gate until the dark-nav lighting lands — that gate belongs with the dark-nav cycle. The walk-IN FEEL → walk-test.
+- **Remaining → cycle 49:** the **dark-nav** (ambient-darken-below-Y + torch glow — makes the interior dark-but-navigable AND visually gate-able) + decayed dressing (D252) + multi-chamber depth + the M8 ⑩ companion-egg site.
+
 ## Campaign C47 — 2026-06-20 — M8: **deep-cave-build `[partial]`** — the cave descent FUNNEL ✓ verify pass (ultracode)
 
 `verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40). Determinism win: the placement panel counts are IDENTICAL to C45/C46 (74/68/83/87/93) → the biome sampler's rng is **isolated** from the POI-scatter stream, so the new `caveAnchor` draws perturbed nothing; the carve buried no panels. **Visual gate PASS** (`--scenario=cave --angle=aerial`): reads as a distinct dark recessed funnel mouth (an 8.8 m carve). **No save bump.** Cycle 47/75. **`[partial]`** — the funnel foundation; the enclosed interior continues next cycle.

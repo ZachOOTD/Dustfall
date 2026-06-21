@@ -61,6 +61,7 @@ import { spawnShrewsProcgen, updateShrews } from './enemies/shrew.ts'; // ACL DE
 import { spawnVulturesProcgen, spawnCirclingVultures, updateVultures } from './enemies/vulture.ts'; // ACAH
 import { spawnSandWorm, sampleSandwormHome, updateSandWorm } from './enemies/sandWorm.ts';
 import { spawnSarlaccPit, updateSarlaccPit } from './enemies/sarlaccPit.ts';
+import { spawnDeepCave } from './world/deepCave.ts';
 import { updateWieldAction } from './player/wieldAction.ts';
 import { updateReload } from './player/combat.ts';
 import { createGhostPreview, updateGhostPreview } from './player/ghostPreview.ts';
@@ -279,6 +280,10 @@ _mark('scrap');
 // ACAQ/ACAR (Cycle 8) — the Sarlacc pit: a SEPARATE dune-desert hazard at its own
 // seed-derived anchor (a sand-maw belongs in open sand, not the ship graveyard).
 const sarlaccPit = spawnSarlaccPit(three.scene, terrain, biomes.sarlaccPitAnchor, Tuning.SARLACC_PIT_RADIUS);
+// M8 ⑨ (C48) — the deep-cave enclosed interior at the carved funnel floor (biomes.caveAnchor).
+// A fixed feature (one per world); the funnel descent itself is carved in terrain.ts (C47).
+const deepCave = spawnDeepCave(three.scene, physics.world, terrain, biomes.caveAnchor);
+void deepCave;   // (no per-frame update yet — static colliders; dark-nav + dressing land next cycle)
 const lizards = spawnLizardsProcgen(
   three.scene, physics.world, terrain, biomes, scatterRand, allPoiPositions,
 );
