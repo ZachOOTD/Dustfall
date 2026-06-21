@@ -911,7 +911,7 @@
       "save": "no change.",
       "decisions": ["D264 — wreck panels 'not openable' = culled panels left visible; fix = hide the panel mesh on cull. friction 1"],
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "959df3f",
       "spend_approx_tokens": 300000
     }
   ]

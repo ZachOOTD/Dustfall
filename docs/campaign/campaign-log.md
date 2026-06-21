@@ -729,5 +729,5 @@ first stop will be `max-cycles` ~mid-Phase-A; resume via `/campaign-start --resu
 - **Known remainder → backlog §A:** ~3 far-out (wreck-yard/hero range) `addAccessPanel` meshes stay visible-but-unregistered — a DIFFERENT path (hand/hero wrecks register only "above-ground" panels, ACAS A4; the rest are un-culled + unregistered, not reached by `pruneBuriedPanels`). Targeted follow-up: register-or-hide them.
 - **Decisions:** **D264** — not-openable = culled-but-visible panels; fix = hide on cull. friction 1.
 - **Spend:** ~300K (the raycast/prune/registration trace + the live-preview root-cause audit [panel structure: wrapper+body, `panelShape` marker] + the cull-hide fix + verify:all + D264 + the doc suite); campaign total ~16.49M; cycle **61/75**.
-- **Commit:** `PENDING` (patched in the follow-up ledger commit).
+- **Commit:** `959df3f`.
 - **Next (cycle 62):** **M11 continued** — ⓑ floating panels (seat the mounts flush — esp. flat panels lifting on curved hulls) + ⓒⓓⓔ wrecked_tank (ribbing/structure/panel), render-verified via the isolated rig. Then the M11 batch pause for the user's wreck walk-test. **Verdict: CONTINUE** — M11 not done (ⓑⓒⓓⓔ remain before the batch milestone). `consecutive_no_progress` stays 0 (SHIPPED).
