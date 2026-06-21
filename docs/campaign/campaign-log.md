@@ -688,5 +688,5 @@ first stop will be `max-cycles` ~mid-Phase-A; resume via `/campaign-start --resu
 - **Visual iteration:** rendered scrap_machete vs `machete` vs `scrap_bar` via `item-studio` (front + 3q); **2 rounds** — r1 read a touch clean → darkened the blade to oxidized scrap + enlarged the edge-chips → r2 reads clearly as a crude, damaged, improvised bolo, distinct from both neighbours. In-hand swing/pry FEEL → walk-test.
 - **Decisions:** **D261** — scrap_machete is a new craftable pry tool that ADDS to the gate (not a destructive scrap_bar swap); the found `machete` stays the melee blade; the dual chop+pry unification + scrap_bar retirement + the bespoke pry animation are deferred (user/feel calls). friction 1.
 - **Spend:** ~280K (the recon [item union + machete/scrap_bar defs + pry-gate + recipe system] + the item def/model + recipe + gate + 2 render rounds + verify:all + D261 + the doc suite); campaign total ~15.51M; cycle **57/75**.
-- **Commit:** `PENDING` (patched in the follow-up ledger commit).
+- **Commit:** `6baf105`.
 - **Next (cycle 58):** **M10 ⑮ craftable-hover-bike** — the repairable-speeder (one vehicle, two states: broken → repaired hover-bike; dep ⑭). **Verdict: CONTINUE** — not terminal (cycle 57/75); not a milestone (the Phase-B pause is after M10 completes, i.e. after ⑰). `consecutive_no_progress` stays 0 (SHIPPED).

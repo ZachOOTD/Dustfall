@@ -849,7 +849,7 @@
       "save": "no bump — a new item id is additive (old saves just lack it; D81-safe).",
       "decisions": ["D261 — scrap_machete is a new craftable pry tool that ADDS to the pry-gate (not a destructive scrap_bar swap); the found machete stays the melee blade; dual chop+pry unification + scrap_bar retirement + the bespoke pry animation deferred (user/feel calls). friction 1"],
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "6baf105",
       "spend_approx_tokens": 280000
     }
   ]
