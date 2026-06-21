@@ -3,6 +3,16 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign C59 — 2026-06-20 — M10: **pickup-instancing ⑰ measured + planned** → **M10 done → ⏸ PAUSED at the Phase-B milestone** ✓ tsc pass (ultracode)
+
+`verified` — `tsc` clean (no `src/` change — the measure was a preview eval; the build is deferred). placement/colliders hold (docs-only; byte-identical to C58). **No save change.** Cycle 59/75.
+
+**pickup-instancing ⑰ (D263) — measure-first + plan, build deferred to the human review.**
+- **Measured (the deliverable):** a live preview eval on a new-game world found **382 world-scatter pickups** (239 scrap + 137 branch + 6 relic), each a separate draw call (already sharing pooled geometry/materials, but still 1 call each) = **~75% of 505 total draw calls.** Instancing each type → ~3 calls → ~126 total (a ~75% cut). High-value — the measure-first check passed (a real cost, not a non-problem).
+- **Deferred the build** to the human-attended Phase-B review: ⑰ is roadmap-labeled "human-attended perf," the review is the immediate next step, and instancing is a **core item-collection-loop rewrite** (the take raycast reads `userData.pickupId` off the hit mesh → instancing needs an `instanceId`→pickup map + swap-remove + the bob-matrix path) that shouldn't be blind-shipped autonomously. Concrete plan in D263 + [backlog.md](backlog.md) §A.
+
+**⏸ CAMPAIGN PAUSED — Phase-B milestone ("Phase B — Build-out complete").** The autonomous Phase-B block (M6→M10) is done to the boundary: ⑭ scrap-machete ✓ + ⑮ repairable-speeder ✓ built; ⑯ drop-pod-intro user-deferred; ⑰ pickup-instancing measured+planned (human-deferred). `status=paused`, `awaiting_approval=true`, `stop_reasons=["milestone-review"]`. **The big review:** give all held Phase-A/B feedback; walk-test everything (flip the M9/M10 flags — `realRope`/`realCloth`/`rideableSled`/`repairableSpeeder` — and play through; backlog §A lists the owed walk-tests); design the deferred ⑯; decide ⑰ (build it human-attended). Then `/campaign-approve` to resume/steer.
+
 ## Campaign C58 — 2026-06-20 — M10: **craftable-hover-bike ⑮** — the speeder, now repairable (broken→working) ✓ verify pass (ultracode)
 
 `verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40; `FEATURES.repairableSpeeder` OFF → the speeder spawns working, current behavior). **No save bump** (additive optional `speeder.broken?`). Cycle 58/75.

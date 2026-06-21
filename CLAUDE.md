@@ -64,19 +64,19 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      Prior milestones live in docs/changelog.md — do NOT accumulate "Prior milestone"
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
-**🟢 CAMPAIGN ACTIVE — `campaign/2026-06-18`** (autonomous; PHASE-level review). **In M10 — the FINAL Phase-B tier.** M9 gate approved (2026-06-20);
-the loop runs M10 (⑭✓ · ⑮✓ · ⑰ next; **⑯ drop-pod-intro DEFERRED** by user steering) and **pauses next cycle at the Phase-B milestone** (after ⑰ = M10
-complete) for the user's full Phase-A/B feedback + walk-test. Each `/campaign-cycle` boots from `docs/campaign/campaign-state.json` + `docs/roadmap.md` — NOT this note.
+**⏸ CAMPAIGN PAUSED — `campaign/2026-06-18`** (autonomous; PHASE-level review). **PHASE B COMPLETE (M6→M10) → paused at the "Phase B — Build-out complete"
+milestone** — the planned BIG review. `status: paused`, `awaiting_approval: true`, `stop_reasons: ["milestone-review"]` (59/75 cycles). **To resume:** give
+the held Phase-A/B feedback + walk-test, then `/campaign-approve` (or steer). Each `/campaign-cycle` boots from `docs/campaign/campaign-state.json` + `docs/roadmap.md` — NOT this note.
 
-**Last shipped**: Campaign **C58** (2026-06-20, cycle 58/75) — **M10 ⑮ craftable-hover-bike** (the repairable-speeder)
-(`verify:all` PASS — tsc + placement 0/0 ×5 + colliders 0/40; `FEATURES.repairableSpeeder` OFF → speeder spawns working; **no save bump** — additive `broken?`).
-The "hover-bike = repairable-speeder" call: the existing speeder is now REPAIRABLE (broken→working) behind the flag — `SpeederState.broken`, `updateBrokenSpeeder`
-(no hover/ride/mount when dead), E-with-scrap repair, **gravity-settle** broken rest (falls + rests flush on terrain; repair → hover resumes), additive save. D262.
-Reuse-not-fork (no new vehicle); broken-spawn flow is coupled to the deferred ⑯, so it's flag-gated for now. Broken LOOK + repair FEEL → walk-test.
+**Last shipped**: Campaign **C59** (2026-06-20, cycle 59/75) — **M10 ⑰ pickup-instancing MEASURED + planned → M10 done → ⏸ PAUSED at the Phase-B milestone**
+(`tsc` clean — no `src/` change; the measure was a preview eval). Measured **382 world pickups = ~75% of 505 draw calls** → instancing ≈ a 75% cut (high-value);
+the build is a CORE item-collection-loop rewrite + ⑰ is "human-attended perf," so it's DEFERRED to this review (plan in D263 + backlog §A). **Phase B is built to the boundary:**
+⑭ scrap-machete ✓ + ⑮ repairable-speeder ✓; ⑯ drop-pod-intro user-deferred; ⑰ measured+planned. M9's physics + M10's repairable-speeder are all behind default-OFF flags.
 
-**Next** = cycle 59 = **M10 ⑰ pickup-instancedmesh** — the LAST M10 unit (perf: `InstancedMesh` for world pickups; measure drawCalls before/after; human-attended).
-**After ⑰ ships → PAUSE at the Phase-B milestone** (`status: paused`, `stop_reasons: ["milestone-review"]`) — the user's big Phase-A/B feedback + walk-test +
-the ⑯ drop-pod design. See [docs/next-session-prompt.md](docs/next-session-prompt.md).
+**⏸ Next = THE BIG REVIEW (not a build cycle).** Phase B (M6→M10) is done; the loop is paused for the planned review. **Human action:** give all held Phase-A/B
+feedback (`docs/campaign/steering.md` or directly); walk-test everything (flip `realRope`/`realCloth`/`rideableSled`/`repairableSpeeder` in `npm run dev` + play
+through — owed tests in [docs/backlog.md](docs/backlog.md) §A); design the deferred **⑯ drop-pod-intro**; decide **⑰ pickup-instancing** (build it human-attended — a
+measured ~75% draw-call win, planned in D263). Then **`/campaign-approve`** to resume/steer. See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 
