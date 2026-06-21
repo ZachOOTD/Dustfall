@@ -619,5 +619,5 @@ first stop will be `max-cycles` ~mid-Phase-A; resume via `/campaign-start --resu
 - **Visual iteration:** appearance gate PASS — `--scenario=cave --angle=inside` shows the dais as a low circular platform (a marked site) on the torch-lit cave floor among the dressing. The cave remains dark/dead/navigable (D252).
 - **Decisions:** **D255** — deep cave ships as ONE chamber; the 4-8-chamber expansion deferred to backlog (the bowl can't host a spread; descending rooms are walk-test-gated). friction 2 (an honest scope reduction surfaced rather than built-blind; revisited at the milestone review).
 - **Spend:** ~230K (the ⑩-site dais + the bowl-geometry analysis + D255 + the backlog entry + verify:all + the doc suite); campaign total ~13.95M; cycle **51/75**.
-- **Commit:** `PENDING` (patched in the follow-up ledger commit).
+- **Commit:** `898a796`.
 - **M8 ⑨ COMPLETE** (funnel · chamber · dark-nav · dressing · ⑩-site; multi-chamber → backlog). **Next (cycle 52):** **M8 ⑩ companion-egg-cherry-pick** (re-apply the `2d4035b` spine at the dais; the additive `companionEggTaken?` save field — watch D81). **Verdict: CONTINUE** — not terminal (cycle 51/75); not a milestone (⑨ is a unit; M8 still has ⑩; the Phase-B pause is after M10). `consecutive_no_progress` stays 0 (SHIPPED).

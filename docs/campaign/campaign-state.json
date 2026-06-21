@@ -754,7 +754,7 @@
       "decisions": ["D255 — deep cave ships as ONE chamber; the 4-8-chamber expansion deferred to backlog (the bowl can't host a room-spread; descending rooms are walk-test-gated on the under-terrain KCC question). friction 2 (an honest scope reduction, revisited at the milestone review)"],
       "milestone_complete": "M8 ⑨ unit COMPLETE (funnel · chamber · dark-nav · dressing · ⑩-site) — NOT a milestone (M8 still has ⑩; the Phase-B pause is after M10), no pause",
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "898a796",
       "spend_approx_tokens": 230000
     }
   ]
