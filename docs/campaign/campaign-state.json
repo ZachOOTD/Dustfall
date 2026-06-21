@@ -693,7 +693,7 @@
       "save": "no bump — terrain carve is seed-derived (no save state); the carve feeds the heightfield like the Sarlacc pit.",
       "decisions": [],
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "b09a136",
       "spend_approx_tokens": 300000
     }
   ]
