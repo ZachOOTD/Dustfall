@@ -723,7 +723,7 @@
       "save": "no bump — render/scene-only (a per-frame light dim + a point light); no save state.",
       "decisions": [],
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "dff3abe",
       "spend_approx_tokens": 300000
     }
   ]

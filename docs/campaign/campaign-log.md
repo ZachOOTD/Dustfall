@@ -598,5 +598,5 @@ first stop will be `max-cycles` ~mid-Phase-A; resume via `/campaign-start --resu
 - **Visual iteration:** appearance gate PASS — extended the `cave` rig scenario's `interior`/`inside` angles to render the REAL dark-nav (dark ambient/sun + the real cave torch). The `inside` shot reads as a dark cave with a warm torch pool on the floor + near walls fading to black; the `interior` shot reads as a torch-lit funnel floor with a dark doorway portal into the chamber. "Dark but navigable", no-horror, solitary (D252). The exact darkness balance + the in-MOTION torch reach → walk-test.
 - **Decisions:** none new — executes D254.
 - **Spend:** ~300K (the updateDeepCave logic + torch + tuning + main/ctx wiring + the rig dark-nav render + verify:all + the doc suite); campaign total ~13.49M; cycle **49/75**.
-- **Commit:** `PENDING` (patched in the follow-up ledger commit).
+- **Commit:** `dff3abe`.
 - **Next (cycle 50):** **M8 ⑨ continued** — decayed dressing (D252, sparse dark props) + (stretch) multi-chamber depth + the **M8 ⑩ companion-egg site** at the deepest chamber. **Verdict: CONTINUE** — not terminal (cycle 49/75); not a milestone; a `[partial]`-SHIPPED is progress (the dark-nav is built + gate-verified). `consecutive_no_progress` stays 0.
