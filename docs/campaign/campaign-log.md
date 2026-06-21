@@ -652,5 +652,5 @@ first stop will be `max-cycles` ~mid-Phase-A; resume via `/campaign-start --resu
 - **Visual iteration:** the dynamic-sag LOOK is behind the default-OFF flag (I didn't flip it — gate-and-wait + the rope feel is walk-test-gated); the solver is validated by the math probe. The in-game sag/swing LOOK + the tow FEEL → walk-test (flag flip).
 - **Decisions:** **D258** — ⑫ lands visual-first (the Verlet solver + the dynamic sag behind `FEATURES.realRope`); body-coupling + CCD + the other callers are the continuation. friction 2.
 - **Spend:** ~300K (the recon [D124/D126 + the rope code] + the Verlet solver + the sled wiring + the math probe + verify:all + D258 + the doc suite); campaign total ~14.85M; cycle **54/75**.
-- **Commit:** `PENDING` (patched in the follow-up ledger commit).
+- **Commit:** `3cdcc4e`.
 - **Next (cycle 55):** **M9 ⑫ continued** — the rope body-coupling (the Verlet rope drives the towed body, replacing the inextensible snap) + CCD (D124) + the other 3 caller visuals; OR (if the body-coupling proves walk-test-gated/risky like the cave) defer it to backlog + move to ⑬ real-cloth-physics (which reuses the now-landed solver). **Verdict: CONTINUE** — not terminal (cycle 54/75); not a milestone (the Phase-B pause is after M10; note the steering `pause_before: "M10"` fires once M9 completes). `consecutive_no_progress` stays 0.

@@ -802,7 +802,7 @@
       "save": "no bump — render/physics behind a flag; no save state.",
       "decisions": ["D258 — ⑫ lands visual-first (the Verlet solver + the dynamic sag behind FEATURES.realRope); body-coupling + CCD + the other callers = the continuation. friction 2"],
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "3cdcc4e",
       "spend_approx_tokens": 300000
     }
   ]
