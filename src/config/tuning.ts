@@ -598,6 +598,13 @@ export const Tuning = {
   // under the KCC 50° climb limit so the player can still walk out). The maw mesh
   // sits at the carved crater floor (its origin auto-lands there via heightAt).
   SARLACC_PIT_CRATER_DEPTH: 13,        // m — funnel depth at center (terrain carve); peak wall ~39° (< KCC 50° climb)
+  // M8 ⑨ (C47) — the DEEP CAVE descent funnel: a separate, FARther, rarer terrain carve than the
+  // Sarlacc pit (the cave MOUTH the player walks down into; the enclosed interior is a later module).
+  CAVE_PIT_DIST_MIN: 520,              // m from spawn — the cave is FAR (a distinct, distant find)
+  CAVE_PIT_DIST_MAX: 1150,
+  CAVE_PIT_SARLACC_CLEAR: 180,         // m — keep the cave clear of the Sarlacc pit (both carve terrain)
+  CAVE_PIT_CLEARING: 22,               // m — the descent-funnel rim radius (the mouth)
+  CAVE_PIT_CRATER_DEPTH: 12,           // m — funnel depth at center; peak wall ~39° (< KCC 50° climb, D125)
 
   // Wreck palette (Session S). Cool grey-rust industrial; avoids pure
   // blacks/whites so primitives feel weathered, not cartoon.

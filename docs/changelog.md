@@ -3,6 +3,16 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign C47 — 2026-06-20 — M8: **deep-cave-build `[partial]`** — the cave descent FUNNEL ✓ verify pass (ultracode)
+
+`verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40). Determinism win: the placement panel counts are IDENTICAL to C45/C46 (74/68/83/87/93) → the biome sampler's rng is **isolated** from the POI-scatter stream, so the new `caveAnchor` draws perturbed nothing; the carve buried no panels. **Visual gate PASS** (`--scenario=cave --angle=aerial`): reads as a distinct dark recessed funnel mouth (an 8.8 m carve). **No save bump.** Cycle 47/75. **`[partial]`** — the funnel foundation; the enclosed interior continues next cycle.
+
+**deep-cave-build `[partial]` — the cave DESCENT FUNNEL.** The foundation of the XL cave build (the riskiest core-terrain piece), per `feature-deep-cave.md` (D254).
+- **Seeded `caveAnchor`** (`world/biomes.ts`): a far (520-1150 m), seed-derived dune spot, clear of spawn / the graveyard / the Sarlacc pit; its rng is appended after the Sarlacc anchor so prior draws stay stable. + a `caveAt()` falloff.
+- **Funnel carve** (`world/terrain.ts`): the proven Sarlacc recessed-funnel technique — a soft rim lip, a ~39° mid-wall (< the KCC 50° climb limit, D125), a flat floor. Carved into the shared heights array → the visual mesh + the Rapier heightfield collider + `heightAt()` all dip together, so the player physically walks down into it.
+- **Dark cave-mouth coloring** (darker than the Sarlacc pit) so the descent reads as a hole into the earth; `Tuning.CAVE_PIT_*`; a NEW `cave` rig scenario (with a screenshot-flake-robustness fix: log the numbers before the screenshot + try/catch).
+- **Remaining → cycle 48 (⑨ continued):** the enclosed roofed interior module (box/cylinder room-kit + a roof collider + ≤37° ramps + a doorway gap, audit-listed) + the ambient-darken dark-nav + decayed dressing + the companion-egg site.
+
 ## Campaign C46 — 2026-06-20 — M8: **deep-cave-design-spike** — pick the cave collision topology (design doc) ✓ verify pass (ultracode) · M8 BEGINS
 
 `verified` — docs-only cycle (no `src/`/`scripts/` change → `src` byte-identical to C45); `tsc` re-confirmed clean; placement 0/0 ×5 + colliders 0/40 hold from C45 (the C11/C23/C25 docs-only precedent). **No visual gate** (a design spike — the deliverable is a doc + a decision, no shipped gameplay). **No save bump.** Cycle 46/75. **M8 begins.**

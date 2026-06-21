@@ -69,19 +69,18 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 "Last shipped" note. Current target: **Phase B (M6→M10) — APPROVED + RELEASED**. The loop runs M6→M10 unattended,
 commits every cycle, and pauses only at "Phase B — Build-out complete" (after M10). Charter: `docs/campaign/campaign.md`.
 
-**Last shipped**: Campaign **C46** (2026-06-20, cycle 46/75) — **M8 ⑧ deep-cave-design-spike** (the cave collision-topology decision)
-(docs-only — `tsc` clean + placement/colliders hold from C45; **no save bump**; **M8 begins**).
-The design spike that de-risks the cave before the XL build. The blocker: the world ground is a Rapier **heightfield** (one Y per XZ) — it can't
-enclose an underground volume. A recon agent mapped terrain/KCC/colliders + precedents; the decision (**D254**): **Option A — a Sarlacc-style terrain
-FUNNEL descent** (reuse the deterministic heightfield+mesh carve in `terrain.ts`) **+ a box/cylinder room-kit enclosed interior** (walls + a real
-roof collider + ≤37° ramps + a doorway gap via the hollow-shell `auditExempt` idiom), dressed dead (D252); dark-nav via a cheap ambient-darken +
-torch glow. Rejected a trimesh/marching-cubes carve. Full spec + the ⑨/⑩ sub-tasks in [docs/feature-deep-cave.md](docs/feature-deep-cave.md). **No
-save bump** (⑨/⑩ persist only an additive `companionEggTaken?` flag).
+**Last shipped**: Campaign **C47** (2026-06-20, cycle 47/75) — **M8 ⑨ deep-cave-build [partial] — the cave DESCENT FUNNEL**
+(`verify:all` PASS — tsc + placement 0/0 ×5 + colliders 0/40; **visual gate PASS** [aerial = a dark recessed funnel]; **no save bump**).
+The foundation of the XL cave build (the riskiest core-terrain piece). A seed-derived **`caveAnchor`** (`biomes.ts` — far, clear of spawn/graveyard/
+Sarlacc) + a **funnel carve** in `terrain.ts` (the proven Sarlacc recessed-funnel technique — a ~39° wall < the KCC limit, carved into the shared
+heights so the mesh + heightfield + `heightAt` all dip → the player walks down) + a dark cave-mouth coloring + `Tuning.CAVE_PIT_*` + a NEW `cave` rig
+scenario. Determinism win: the placement panel counts are unchanged (the biome sampler's rng is isolated from the POI scatter). **`[partial]`** — the
+enclosed roofed interior + dark-nav + the companion-egg site continue next cycle.
 
-**Next session** = cycle 47 = **M8 ⑨ deep-cave-build** (XL — the seeded `caveAnchor` + the Sarlacc-style funnel carve + the box/cylinder room-kit
-interior [walls + roof + ramps + doorway gap, audit-listed] + the ambient-darken dark-nav, per `feature-deep-cave.md`). Watch the D81 save-bump STOP
-(should only need the additive `companionEggTaken?` flag). After ⑨: ⑩ companion-egg-cherry-pick. The loop only PAUSES at the Phase-B milestone (after
-M10). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
+**Next session** = cycle 48 = **M8 ⑨ continued** — the **enclosed roofed interior** module at the funnel floor (a box/cylinder room-kit: walls + a real
+roof collider + ≤37° ramps + a doorway gap via the hollow-shell `auditExempt` idiom, audit-listed) + the **ambient-darken dark-nav** + decayed dressing
+(D252), per `feature-deep-cave.md`. Watch the **D81** save-bump STOP (should need none until ⑩'s additive `companionEggTaken?` flag). After ⑨: ⑩
+companion-egg-cherry-pick. The loop only PAUSES at the Phase-B milestone (after M10). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 

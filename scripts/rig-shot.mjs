@@ -1314,6 +1314,44 @@ const SCENARIOS = {
     console.log(`[wreck-yard] ${JSON.stringify(r)}`);
   },
 
+  // M8 ⑨ (C47) — render the DEEP CAVE descent funnel at its seeded anchor (the cave MOUTH).
+  // `--angle=aerial` (3/4 look-down framing the whole funnel) | `approach` (peer over the rim).
+  // Low raking sun + tame exposure so the funnel's near-wall shadow + the dark coloring read.
+  'cave': async (page) => {
+    const angle = argv.angle || 'aerial';
+    const r = await page.evaluate(({ ang }) => {
+      const ctx = window.__game.ctx;
+      ctx.weather.intensity = 0; ctx.weather.cloudiness = 0.15;
+      window.__game.setTime(0.4);                                   // low raking sun
+      ctx.three.renderer.toneMappingExposure = 1.1;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      const a = ctx.biomes.caveAnchor;
+      const cam = ctx.three.camera; ctx.flags.paused = true;
+      const floorY = ctx.terrain.heightAt(a.x, a.z);               // carved funnel floor
+      const rimY = ctx.terrain.heightAt(a.x + 30, a.z);            // undisturbed dune just outside the rim
+      const R = 22;                                                // ~CAVE_PIT_CLEARING
+      if (ang === 'approach') {
+        cam.position.set(a.x + R * 1.7, rimY + 3.0, a.z + R * 0.5);
+        cam.lookAt(a.x, floorY + 2.0, a.z);
+      } else {
+        cam.position.set(a.x + R * 2.2, rimY + R * 1.9, a.z + R * 2.2);
+        cam.lookAt(a.x, floorY + 1.0, a.z);
+      }
+      cam.updateMatrixWorld(true);
+      ctx.three.renderer.render(ctx.three.scene, cam);
+      return { anchor: [+a.x.toFixed(0), +a.z.toFixed(0)], floorY: +floorY.toFixed(1), rimY: +rimY.toFixed(1), depth: +(rimY - floorY).toFixed(1) };
+    }, { ang: angle });
+    console.log(`[cave] ${JSON.stringify(r)}`);   // log BEFORE the screenshot so the carve numbers survive a screenshot flake
+    await page.waitForTimeout(350);
+    try {
+      await page.screenshot({ path: join(OUT, `scen-cave-${angle}.png`), fullPage: false, timeout: 60000 });
+      console.log(`[cave] saved scen-cave-${angle}.png`);
+    } catch (e) {
+      console.log(`[cave] screenshot flaked (${e.name}) — numeric result above stands`);
+    }
+  },
+
   // ACAS B2 — drop-test: drop capsule/sphere/box pickups + tick; confirm the bodies
   // SETTLE (finite + near terrain), i.e. the per-item collider shapes don't NaN or
   // explode. The settle FEEL (natural lie vs box) still needs an attended walk-test.

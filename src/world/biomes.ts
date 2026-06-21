@@ -31,6 +31,11 @@ export interface BiomeSampler {
   sarlaccPitAnchor: { x: number; z: number };
   /** Sarlacc-pit terrain-clearing strength 0..1 (a flattened sand bowl). */
   sarlaccPitAt: (x: number, z: number) => number;
+  /** M8 ⑨ — the deep cave's own seed-derived anchor (a far descent funnel; the
+   *  enclosed interior is a separate module placed at this funnel's floor). */
+  caveAnchor: { x: number; z: number };
+  /** Deep-cave terrain-clearing strength 0..1 (the recessed descent funnel). */
+  caveAt: (x: number, z: number) => number;
 }
 
 export function createBiomeSampler(rand: Rng): BiomeSampler {
@@ -87,6 +92,37 @@ export function createBiomeSampler(rand: Rng): BiomeSampler {
     return t * t * (3 - 2 * t);
   };
 
+  // M8 ⑨ (C47) — the DEEP CAVE's own seed-derived anchor: a FAR dune spot, away from spawn,
+  // the graveyard, AND the Sarlacc pit (both carve terrain — they must not overlap). rng is
+  // consumed after the Sarlacc anchor → the prior draws stay stable (deterministic append).
+  let caveAnchor: { x: number; z: number } = {
+    x: Tuning.OPENING_SCENE_ANCHOR_X - Tuning.CAVE_PIT_DIST_MIN,
+    z: Tuning.OPENING_SCENE_ANCHOR_Z,
+  };
+  for (let i = 0; i < 80; i++) {
+    const d = Tuning.CAVE_PIT_DIST_MIN + rand() * (Tuning.CAVE_PIT_DIST_MAX - Tuning.CAVE_PIT_DIST_MIN);
+    const a = rand() * Math.PI * 2;
+    const x = Tuning.OPENING_SCENE_ANCHOR_X + Math.cos(a) * d;
+    const z = Tuning.OPENING_SCENE_ANCHOR_Z + Math.sin(a) * d;
+    if (wreckYardAt(x, z) > 0) continue;                  // not in/near the graveyard
+    const sdx = x - sarlaccPitAnchor.x, sdz = z - sarlaccPitAnchor.z;
+    if (Math.sqrt(sdx * sdx + sdz * sdz) < Tuning.CAVE_PIT_SARLACC_CLEAR) continue;   // clear of the Sarlacc pit
+    const n = rawAt(x, z);
+    if (n >= Tuning.BIOME_THRESHOLD_ROCKY && n <= Tuning.BIOME_THRESHOLD_SALT) {  // a dune cell
+      caveAnchor = { x, z };
+      break;
+    }
+  }
+  const caveClearing = Tuning.CAVE_PIT_CLEARING;
+  const caveAt = (x: number, z: number): number => {
+    const dx = x - caveAnchor.x, dz = z - caveAnchor.z;
+    const d = Math.sqrt(dx * dx + dz * dz);
+    if (d >= caveClearing) return 0;
+    if (d <= caveClearing * 0.5) return 1;
+    const t = (caveClearing - d) / (caveClearing * 0.5);
+    return t * t * (3 - 2 * t);
+  };
+
   const biomeAt = (x: number, z: number): BiomeId => {
     if (wreckYardAt(x, z) > 0.5) return 'wreck_yard';
     const n = rawAt(x, z);
@@ -95,7 +131,7 @@ export function createBiomeSampler(rand: Rng): BiomeSampler {
     return 'dune';
   };
 
-  return { biomeAt, rawAt, wreckYardAt, wreckYardAnchor, wreckYardRadius, sarlaccPitAnchor, sarlaccPitAt };
+  return { biomeAt, rawAt, wreckYardAt, wreckYardAnchor, wreckYardRadius, sarlaccPitAnchor, sarlaccPitAt, caveAnchor, caveAt };
 }
 
 // GG — find the cell deepest into `target` biome via a grid sweep over a

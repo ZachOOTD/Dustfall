@@ -35,6 +35,9 @@ const BIOME_COLOR_WRECK_YARD_ASH: readonly [number, number, number] = [0x71 / 25
 // ACAR2 — Sarlacc crater interior: a shadowed dusky dune-brown so the recessed
 // funnel reads as a pit (darkest at center, fading to dune at the rim).
 const BIOME_COLOR_SARLACC_PIT: readonly [number, number, number] = [0x5a / 255, 0x44 / 255, 0x30 / 255];
+// M8 ⑨ (C47) — the deep-cave MOUTH reads DARKER than the Sarlacc pit (a shadowed descent into
+// the earth, not just a sand bowl): a near-black shadowed brown, deepening to the center.
+const BIOME_COLOR_CAVE_MOUTH: readonly [number, number, number] = [0x24 / 255, 0x1d / 255, 0x16 / 255];
 
 function smoothstep(edge0: number, edge1: number, x: number): number {
   const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)));
@@ -171,6 +174,21 @@ export function createTerrain(
               h -= profile * Tuning.SARLACC_PIT_CRATER_DEPTH;
             }
           }
+          // M8 ⑨ (C47) — carve the DEEP CAVE descent funnel (same recessed-funnel
+          // technique: a soft lip at the rim, a steep mid-wall ~39° < the KCC climb
+          // limit, a flat floor). This is the cave MOUTH the player walks down into;
+          // the enclosed roofed interior is a separate module placed at the floor.
+          {
+            const cdx = x - biomes.caveAnchor.x;
+            const cdz = z - biomes.caveAnchor.z;
+            const cr = Math.sqrt(cdx * cdx + cdz * cdz);
+            const CR = Tuning.CAVE_PIT_CLEARING;
+            if (cr < CR) {
+              const t = 1 - cr / CR;
+              const profile = t * t * (3 - 2 * t);
+              h -= profile * Tuning.CAVE_PIT_CRATER_DEPTH;
+            }
+          }
           heights[i * stride + j] = h;
         }
       }
@@ -210,6 +228,9 @@ export function createTerrain(
           // depression alone is too subtle). Darkens to a shadowed dune-brown.
           const pitC = biomes.sarlaccPitAt(wx2, wz2);
           if (pitC > 0) c = lerp3(c, BIOME_COLOR_SARLACC_PIT, pitC * 0.82);
+          // M8 ⑨ — dusk the sand toward the cave mouth so the descent reads as a dark hole.
+          const caveC = biomes.caveAt(wx2, wz2);
+          if (caveC > 0) c = lerp3(c, BIOME_COLOR_CAVE_MOUTH, caveC * 0.9);
           colors[idx]     = c[0];
           colors[idx + 1] = c[1];
           colors[idx + 2] = c[2];
