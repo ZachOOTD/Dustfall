@@ -708,7 +708,7 @@
       "save": "no bump — a fixed feature spawned at boot from the seed-derived caveAnchor; no save state.",
       "decisions": [],
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "528b6d8",
       "spend_approx_tokens": 330000
     }
   ]
