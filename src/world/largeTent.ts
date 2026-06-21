@@ -39,6 +39,8 @@ import {
 import { addItem } from '../inventory/inventory.ts';
 import { playBandageUse } from '../audio/audio.ts';
 import { createFabricMaterial } from './fabricMaterial.ts';
+import { FEATURES } from '../config/features.ts';                                  // M9 ⑬ (C56) — realCloth gate
+import { makeVerletCloth, stepVerletCloth, applyClothToGeometry, type VerletCloth } from './verletCloth.ts';
 import { createWoodGrainMaterial } from './woodGrainMaterial.ts';   // M6 ③ (C39) — wood-grain tent poles (was flat Lambert)
 import { alignToTerrain } from '../util/terrainAlign.ts';
 
@@ -59,6 +61,9 @@ export interface LargeTent {
    *  so it shrinks upward as it rolls. */
   doorPanel: THREE.Mesh;
   doorRoll: THREE.Mesh;
+  /** M9 ⑬ (C56) — Verlet cloth grid for the door-flap VISUAL, used only when
+   *  FEATURES.realCloth is ON (else the static catenary panel runs). Lazily allocated. */
+  clothState?: VerletCloth | null;
 }
 
 let _nextId = 1;
@@ -538,6 +543,18 @@ export function spawnLargeTentAt(
 export function updateLargeTents(ctx: GameContext, dt: number): void {
   const speed = Tuning.LARGE_TENT_DOOR_ANIM_SPEED;
   for (const t of ctx.largeTents.list) {
+    // M9 ⑬ (C56) — real cloth door-flap: when realCloth is ON and the flap is
+    // hanging (not rolled up), drive its vertices with a Verlet grid (top row pinned
+    // to the lintel, gravity + a gentle billow). This runs EVERY frame the flap is
+    // visible, so it must precede the doorAnim===target early-out below. With the flag
+    // OFF the static flat panel + the scale.y roll are untouched.
+    if (FEATURES.realCloth && t.doorAnim < 0.99) {
+      const geo = t.doorPanel.geometry;
+      if (!t.clothState) t.clothState = makeVerletCloth(geo, 10, 5);   // 10×5 = the doorGeo segment counts
+      const billow = Math.sin(ctx.time.elapsed * Tuning.CLOTH_WIND_FREQ) * Tuning.CLOTH_WIND;
+      stepVerletCloth(t.clothState, dt, Tuning.CLOTH_GRAVITY, 0, billow, Tuning.CLOTH_ITERS, Tuning.CLOTH_DAMPING);
+      applyClothToGeometry(t.clothState, geo);
+    }
     const target = t.doorOpen ? 1 : 0;
     if (t.doorAnim === target) continue;
     const step = speed * dt;

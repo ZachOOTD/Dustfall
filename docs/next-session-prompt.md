@@ -1,73 +1,43 @@
-# ▶ CAMPAIGN cycle 56 — Kickoff Brief — `campaign/2026-06-18`
+# ⏸ CAMPAIGN PAUSED — M9 COMPLETE, awaiting your M10 review — `campaign/2026-06-18`
 
-**Phase B building unattended (M6→M10). M6 ✓ · M7 ✓ · M8 ✓ · M9 nearly done (⑪ ✓ · ⑫ ✓ C54+C55). Now ⑬ — the LAST M9 unit.**
-**⚠️ STEERING `pause_before: "M10"` (C53): ⑬ is M9 → build it. But after ⑬ ships, the NEXT cycle (which would start M10) MUST PAUSE for the user's review.**
-Boot from `docs/campaign/campaign-state.json` + `docs/roadmap.md` "Up next". The loop commits every cycle. Charter: `docs/campaign/campaign.md`.
+**The autonomous loop has STOPPED on purpose.** You asked (C53 steering) to "pause before starting M10 so I can review and plan accordingly."
+M9 is now complete, so the loop paused itself here rather than starting M10. `status: paused`, `awaiting_approval: true`,
+`stop_reasons: ["steering-pause-before-M10"]`. **It will not run another cycle until you `/campaign-approve`.**
 
-## Read these now (in order)
-1. `CLAUDE.md` (auto-loaded) — esp. "Where we are now".
-2. `docs/campaign/campaign-state.json` (note `pause_before: "M10"`) + `docs/campaign/steering.md` + `docs/campaign/campaign-log.md` (the C54+C55 entries).
-3. `docs/decisions.md` tail — **D258 (the Verlet solver), D259 (⑫'s scope: foundation shipped, body-coupling deferred)**, D81 (NEVER bump SAVE_VERSION).
-4. `src/world/verletRope.ts` (the landed Verlet solver — ⑬ REUSES its `stepRopeVerlet`/`makeRopeVerlet` integration + distance-constraint pattern) + `src/config/features.ts` (`realCloth` is landed inert — this cycle is its first reader).
+## Where the campaign is
+- **Phase B progress:** M6 ✓ · M7 ✓ · M8 ✓ · **M9 ✓ (just completed)** · **M10 ⏳ (gated — your review)**.
+- **Cycles:** 56 / 75 used. Spend ~15.23M tokens (approximate).
+- **Branch:** `campaign/2026-06-18`, all work committed (one commit per cycle, revertible).
 
-## What ⑫ landed (C54+C55)
-A Verlet rope SOLVER (`world/verletRope.ts`) + the sled rope's dynamic-sag VISUAL behind `FEATURES.realRope` (OFF). D259 deferred the body-coupling +
-other-caller visuals to a walk-test-gated backlog. **The solver primitives (Verlet integrate + relax distance constraints to a rest length) are exactly
-what cloth needs** — a 2D grid is the same relaxation over a mesh of constraints instead of a 1D chain.
+## What M9 shipped (all behind default-OFF flags — gate-and-wait)
+M9 was "architectural-risk physics." Each unit landed behind a feature flag so `verify:all` stays green and YOU validate the FEEL before adoption:
+- **⑪ rideable-sled (C53, D257)** — DECIDED the approach (generalize the speeder's seat-teleport ride to the sled), behind `FEATURES.rideableSled`. The
+  BUILD is owed (backlog §A) — the spike de-risked it but didn't wire it.
+- **⑫ real-rope (C54+C55, D258/D259)** — NEW `world/verletRope.ts` Verlet solver + the sled rope's dynamic-sag VISUAL behind `FEATURES.realRope`. The
+  body-coupling (rope drives the towed body) + CCD + the other rope callers are DEFERRED to backlog §A, gated on YOUR rope-visual walk-test (body-coupling
+  is D125-adjacent — a towed body fighting the KCC — so it wasn't built blind).
+- **⑬ real-cloth (C56, D260)** — NEW `world/verletCloth.ts` 2D Verlet cloth + the large-tent door-flap's billow behind `FEATURES.realCloth`.
 
-## Cycle 56 focus — **M9 ⑬ real-cloth-physics (the last M9 unit)**
-A **2D Verlet grid** cloth sim behind `FEATURES.realCloth` (default OFF), **tent-door / flag only** (a small, bounded surface — NOT a general cloth system).
-Mirror ⑫'s shape: a self-contained solver + a VISUAL integration behind the flag; default OFF → the existing static mesh runs unchanged → verify green.
+## ▶ What to do now (your review)
+1. **Walk-test the flag-gated systems** (the headless harness CANNOT judge feel — this is the whole point of the pause). In `npm run dev`, flip the flags in
+   `src/config/features.ts` (`rideableSled`, `realRope`, `realCloth`) ON and evaluate:
+   - **realRope** — deploy/tow the sled; does the dynamic rope sag/swing/taut look + feel BETTER than the old static droop? (decides whether the deferred
+     body-coupling is worth building)
+   - **realCloth** — place a large tent, close the door; does the door-flap billow/breathe believably? (`Tuning.CLOTH_*` to tune)
+   - **rideableSled** — note: the ride is only DECIDED, not built (the flag is inert). The build is in backlog §A.
+   - Other owed M9-adjacent walk-tests are listed in [backlog.md](backlog.md) **§A** (cave dark-nav/multi-chamber, companion acquisition, survival curve…).
+2. **Plan M10 — Arrival & tools** (the final Phase-B tier): ⑭ scrap-machete-pry-tool · ⑮ craftable-hover-bike (repairable-speeder; dep ⑭) ·
+   ⑯ drop-pod-intro-cutscene (`FEATURES.dropPodIntro`) · ⑰ pickup-instancedmesh (perf). Re-order / cut / add per your walk-test findings. The scope-cut
+   order if the cap tightens: pickup-instancing → real-cloth → flat-color FIX tail → companion-egg → drop-pod beats → hover-bike coupling.
+3. **Steer if needed** — drop notes in `docs/campaign/steering.md` (above the marker line); the next cycle reads + archives them at boot.
 
-### Priority items (in order)
-1. **Recon FIRST (cheap).** Find the target surface — a tent door-flap and/or a flag mesh in the world (grep `tent`, `flag`, `banner`, `door.*flap`,
-   `cloth` across `src/world/`). Confirm it's a static quad/plane mesh you can replace with a Verlet-driven grid. **Also confirm D81:** the cloth is a
-   runtime VISUAL behind a flag → it must NOT touch the save schema. If a target surface doesn't exist, the lightest path is to ADD a small flag/banner to
-   an existing camp/wreck prop (a pole + a cloth quad) and drive THAT — but keep it bounded.
-2. **The cloth solver** — `src/world/verletCloth.ts` (new): an `W×H` grid of point-masses + structural distance constraints (right + down neighbours) +
-   the same Verlet integrate / relax loop as `verletRope.ts` (lift the shared math; don't fork a divergent copy — extract a tiny shared helper if clean).
-   Pin the TOP edge (a hanging flag) or the HINGE edge (a tent flap); gravity + a little wind sway (reuse the existing wind/weather phase if cheap). Pure +
-   deterministic given inputs, like the rope solver. Standalone math-probe it (a pinned-top grid sags + settles; no NaN).
-3. **The VISUAL integration** — when `realCloth` is ON, rebuild the target mesh's vertices from the cloth grid each frame (or drive a small BufferGeometry).
-   Default OFF → the static mesh path runs unchanged.
-4. **Verify** — `npm run verify:all` green with `realCloth` OFF (the proven path untouched). If you added a flag prop, the placement/collider gates must
-   still pass (a flag quad is `isWreckDecoration`/no-collider, or declare its pole collider).
-5. **Visual/feel** — the flag stays OFF (don't flip); the cloth's LOOK + sway FEEL → walk-test at the user's M10 review. A render with the flag temporarily
-   forced on (uncommitted) is OK to confirm the cloth sags/sways, then revert — but don't commit the flag flipped.
+## ▶ How to resume
+- **`/campaign-approve`** — clears the `pause_before: "M10"` gate, sets `status: active`, and the loop resumes into **M10** on the next `/loop /campaign-cycle`.
+- If you want changes first, edit `docs/roadmap.md` "Up next" (the authoritative queue) and/or `steering.md`, THEN `/campaign-approve`.
+- After M10 ships, the loop pauses again at the **Phase B — Build-out complete** milestone (the big walk-test of everything).
 
-### CRITICAL — stop conditions
-- **D81:** a runtime cloth VISUAL behind a flag → NO save change. If ⑬ somehow needs a save field, STOP + surface (never bump SAVE_VERSION autonomously).
-- **`pause_before: "M10"` — THIS IS THE BIG ONE.** ⑬ is the last M9 unit. **After ⑬ ships this cycle, set the verdict so the NEXT cycle PAUSES:** in
-  `campaign-state.json` the cycle that would start M10 ⑭ must instead set `status: "paused"`, `awaiting_approval: true`,
-  `stop_reasons: ["steering-pause-before-M10"]`. **Concretely: this cycle (⑬) ends CONTINUE** (⑬ is M9), **but the next `/campaign-cycle` boot will gate
-  on `pause_before == "M10"` + M9-complete and STOP.** Make the next-session-prompt + the campaign-log "Next" line say this loudly so the next boot pauses
-  cleanly rather than starting M10. (The user resumes into M10 via `/campaign-approve`, which clears `pause_before`.)
-- **Scope:** cloth is open-ended — keep it to ONE small bounded surface (a flag or a tent flap). If it can't fit the cycle, ship `[partial]` (the solver +
-  a probe) and finish the visual next cycle. Don't build a general cloth system.
-
-### After ⑬
-**The `pause_before: "M10"` gate.** The next cycle pauses for the user's M10 review + planning. Do NOT start M10 (⑭+) autonomously.
-
-## Autonomy contract
-Build behind `FEATURES.realCloth` (OFF) so verify stays green + the existing mesh is untouched. Reuse the `verletRope.ts` solver math. `[partial]` is fine.
-**D81 save-bump STOPs.** Don't flip the flag (walk-test-gated). Recon the target surface BEFORE building.
-
-## Stop conditions
-Terminal: max-cycles (75) · catastrophic verify break · 3 fix-walls on one gate · save-version bump (STOP) · destructive attempt. Pause:
-steering "pause" · **`pause_before: "M10"` (fires NEXT cycle, after this ⑬ ships — M9 complete)** · the Phase-B milestone (after M10).
-
-## Notable footguns
-- **Reuse the rope solver math** — cloth = the same Verlet integrate + relax, over a 2D constraint grid; don't reinvent a divergent integrator.
-- **Pin the right edge** — a flag pins its top (or pole-side) edge; a tent flap pins its hinge edge. An unpinned cloth falls away.
-- **Gate-and-wait:** `realCloth` stays OFF; verify:all green with it OFF.
-- **The M10 pause is the headline** — make sure the next boot stops cleanly (the gate reads `pause_before` + M9-complete).
-- `verify:placement` buffers output to the END + is slow; don't kill it early.
-
-## Verification protocol
-`npm run verify:all` (green with `realCloth` OFF) + a standalone cloth-solver math probe (a pinned grid sags/settles, no NaN). The cloth LOOK/sway FEEL →
-walk-test at the M10 review.
-
-## Begin
-Read the order → recon the flag/tent-door target (grep) + confirm D81-clean → `TaskCreate` the cloth solver → write `verletCloth.ts` (reuse the rope math)
-+ the flagged visual integration → math-probe + `verify:all` (flag OFF) → `/session-end`. **Then ensure the verdict + docs set up the `pause_before: M10`
-stop for the next boot.** `[partial]` ok. Boot fresh from FILES.
+## State pointers (for the resuming cycle)
+- `docs/campaign/campaign-state.json` — `status: paused`, `awaiting_approval: true`, `pause_before: "M10"` (clear via `/campaign-approve`).
+- `docs/roadmap.md` — M9 ✅ + the "⏸ PAUSE FOR USER REVIEW before M10" marker + the M10 entry.
+- `docs/decisions.md` — D257 (sled-ride), D258/D259 (rope), D260 (cloth).
+- `docs/backlog.md` §A — the owed walk-tests + deferred builds (⑪ ride, ⑫ body-coupling, cave expansion…).

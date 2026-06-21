@@ -3,6 +3,19 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign C56 — 2026-06-20 — M9: **real-cloth-physics ⑬** — a 2D Verlet door-flap → **M9 COMPLETE → ⏸ PAUSED before M10** ✓ verify pass (ultracode)
+
+`verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40; `FEATURES.realCloth` OFF → the static door panel runs unchanged). **Cloth solver math probe:** top row pinned (no drift), the flap hangs at rest length, a steady wind billows it +1.0 m in local Z, no NaN. **No save bump.** Cycle 56/75.
+
+**real-cloth-physics ⑬ (D260).** A real 2D cloth sim behind `FEATURES.realCloth` (default OFF).
+- **NEW `world/verletCloth.ts`** — a 2D Verlet cloth solver (the 2D extension of ⑫'s `verletRope.ts`: the same integrate + distance-constraint relax loop, over a `cols×rows` grid with structural links to each point's right + down neighbour, the **top row pinned**, gravity + a gentle local-Z **billow**).
+- **Large-tent door-flap VISUAL:** when `realCloth` is ON, `updateLargeTents` drives the existing subdivided `doorPanel` PlaneGeometry's vertices from the grid each frame the flap hangs (in LOCAL space, so the parent transform + the `scale.y` roll-up still work). `Tuning.CLOTH_*`; per-tent `clothState`.
+- **Default OFF** → the static flat panel runs unchanged (verify green).
+
+**✅ M9 COMPLETE** — ⑪ rideable-sled-spike (C53) + ⑫ real-rope (C54+C55) + ⑬ real-cloth (C56), all landed behind their flags (`rideableSled` / `realRope` / `realCloth`, all OFF, walk-test-gated).
+
+**⏸ CAMPAIGN PAUSED before M10** (steering `pause_before: "M10"`, C53). M9 is done; the next work is M10 (tools/arrival). Per the user's directive, the loop STOPS here for review + planning. **To resume:** walk-test the 3 flag-gated M9 systems (flip the flags in `npm run dev`; the owed walk-tests are in [backlog.md](backlog.md) §A), then `/campaign-approve` to clear the gate + enter M10.
+
 ## Campaign C55 — 2026-06-20 — M9: **real-rope-physics ⑫ COMPLETE** (scope call D259) — ship the Verlet foundation, defer body-coupling to a walk-test ✓ tsc pass (ultracode)
 
 `verified` — `tsc --noEmit` PASS (no `src/` change — byte-identical to C54). placement/colliders unaffected (docs-only; the C11/C23/C46 precedent). **No save bump.** Cycle 55/75. ⑫ now reads COMPLETE on the roadmap.

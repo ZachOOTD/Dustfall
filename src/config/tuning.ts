@@ -1558,6 +1558,13 @@ export const Tuning = {
   VERLET_ROPE_GRAVITY: 16,                   // m/s² pull on the interior rope points (visual; > real-g for a snappier drape)
   VERLET_ROPE_ITERS: 10,                     // distance-constraint relaxation iterations / frame
   VERLET_ROPE_DAMPING: 0.9,                  // Verlet velocity retention (1 = none; <1 settles the swing)
+  // M9 ⑬ (C56) — Verlet cloth (the large-tent door-flap's DYNAMIC sag/billow when
+  // FEATURES.realCloth is ON; OFF runs the static flat panel). FEEL → walk-test before any flip.
+  CLOTH_GRAVITY: 9,                          // m/s² pull on the free cloth points (gentler than the rope — fabric, not weight)
+  CLOTH_ITERS: 8,                            // structural-constraint relaxation iterations / frame
+  CLOTH_DAMPING: 0.92,                       // Verlet velocity retention (<1 settles the sway)
+  CLOTH_WIND: 2.2,                           // peak local-Z billow accel (m/s²) — the flap breathes in/out of the doorway
+  CLOTH_WIND_FREQ: 0.8,                      // billow oscillation rate (rad/s) on ctx.time.elapsed
   // ACC P1 — top deck collider. A 2nd cuboid attached to the sled body
   // sits just above the main collider's top face. Items dropped on the
   // sled land here (it's the highest surface). High friction so items

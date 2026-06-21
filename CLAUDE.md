@@ -64,21 +64,20 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      Prior milestones live in docs/changelog.md — do NOT accumulate "Prior milestone"
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
-**🟢 CAMPAIGN ACTIVE — `campaign/2026-06-18`** (autonomous; PHASE-level review). Each `/campaign-cycle` boots from
-`docs/campaign/campaign-state.json` + `docs/roadmap.md` "Up next" (the AUTHORITATIVE queue) — NOT from this
-"Last shipped" note. Current target: **Phase B (M6→M10) — APPROVED + RELEASED**. The loop runs M6→M10 unattended,
-commits every cycle, and pauses only at "Phase B — Build-out complete" (after M10). Charter: `docs/campaign/campaign.md`.
+**⏸ CAMPAIGN PAUSED — `campaign/2026-06-18`** (autonomous; PHASE-level review). **M9 COMPLETE → paused before M10** per the user's C53 steering
+(`pause_before: "M10"`). `status: paused`, `awaiting_approval: true`. **To resume:** review/walk-test M9, then `/campaign-approve` (clears `pause_before`,
+enters M10). Each `/campaign-cycle` boots from `docs/campaign/campaign-state.json` + `docs/roadmap.md` "Up next" — NOT this note. Charter: `docs/campaign/campaign.md`.
 
-**Last shipped**: Campaign **C55** (2026-06-20, cycle 55/75) — **M9 ⑫ real-rope-physics COMPLETE** (scope call D259) — ship the Verlet foundation, defer
-body-coupling (`tsc` PASS — no `src/` change since C54's green `verify:all`; **no save bump**).
-A scope/decision cycle: ⑫ ships as the **Verlet real-rope FOUNDATION** (C54's `world/verletRope.ts` solver + the sled-rope dynamic-sag visual behind
-`FEATURES.realRope`, OFF). The **body-coupling** (rope drives the towed body) + **CCD** (D124) + the **other-caller visuals** (kill-drag/companion/stake)
-are **deferred to [backlog.md](docs/backlog.md) §A, gated on the rope-VISUAL walk-test** at the imminent M10 pause — body-coupling is D125-adjacent +
-feel-dominant, so it's not built blind before the user validates the rope direction. Also surfaced the ⑪ rideable-sled BUILD to §A. D259.
+**Last shipped**: Campaign **C56** (2026-06-20, cycle 56/75) — **M9 ⑬ real-cloth-physics → M9 COMPLETE → ⏸ PAUSED before M10**
+(`verify:all` PASS — tsc + placement 0/0 ×5 + colliders 0/40; `FEATURES.realCloth` OFF → static door panel unchanged; **no save bump**).
+NEW **`world/verletCloth.ts`** — a 2D Verlet cloth solver (the 2D extension of ⑫'s `verletRope.ts`: structural right+down links, top row pinned, gravity +
+a local-Z billow) driving the **large-tent door-flap**'s billow behind `FEATURES.realCloth` (OFF). Probe-validated (pinned/hangs/billows/no-NaN). D260.
+**M9 COMPLETE** — ⑪ sled-spike (C53) + ⑫ real-rope (C54+C55) + ⑬ real-cloth (C56), all behind their flags (`rideableSled`/`realRope`/`realCloth`, all OFF).
 
-**Next session** = cycle 56 = **M9 ⑬ real-cloth-physics** — a 2D Verlet grid behind `FEATURES.realCloth` (default OFF), tent-door/flag only, **reusing
-⑫'s now-landed `verletRope.ts` solver primitives**. ⑬ is the **LAST M9 unit** → **after ⑬ ships, the steering `pause_before: "M10"` FIRES**: the next cycle
-PAUSES (status=paused, awaiting_approval) for the user's M10 review + planning (resume via `/campaign-approve`). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
+**⏸ Next = USER REVIEW (not a build cycle).** The loop is PAUSED before M10. **Human action:** walk-test the 3 flag-gated M9 systems (flip `rideableSled` /
+`realRope` / `realCloth` in `npm run dev` — the owed walk-tests + the deferred ⑪ build / ⑫ body-coupling are in [docs/backlog.md](docs/backlog.md) §A),
+review + plan M10 (⑭ machete · ⑮ hover-bike · ⑯ drop-pod-intro · ⑰ pickup-instancing), then **`/campaign-approve`** to clear the gate + resume into M10.
+See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 
