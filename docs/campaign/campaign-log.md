@@ -642,5 +642,5 @@ first stop will be `max-cycles` ~mid-Phase-A; resume via `/campaign-start --resu
 - **Visual iteration:** N/A — a design/architecture spike (the deliverable is the decision + the flag scaffold; the ride is feel-gated, no visual output this cycle).
 - **Decisions:** **D257** — generalize the speeder's proven seat-teleport ride to the sled (Option C, behind `FEATURES.rideableSled`); the D125 delta approaches stay dead. friction 2.
 - **Spend:** ~200K (the D125 recon + the speeder-ride recon + the flag + D257 + the doc suite + verify:all); campaign total ~14.55M; cycle **53/75**.
-- **Commit:** `PENDING` (patched in the follow-up ledger commit).
+- **Commit:** `de5c8b5`.
 - **Next (cycle 54):** **M9 ⑫ real-rope-physics** (a Verlet/segmented rope sim behind `FEATURES.realRope`, default OFF; CCD-from-the-start per D124). **Verdict: CONTINUE** — not terminal (cycle 53/75); not a milestone (⑪ is a unit; M9 has ⑫/⑬; the Phase-B pause is after M10). `consecutive_no_progress` stays 0 (SHIPPED).

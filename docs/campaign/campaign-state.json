@@ -787,7 +787,7 @@
       "save": "no bump — a feature flag + docs.",
       "decisions": ["D257 — generalize the speeder's proven seat-teleport ride to the sled (Option C, behind FEATURES.rideableSled); the D125 delta approaches stay dead. friction 2 (low build risk via the proven reuse, but adoption is walk-test-gated)"],
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "de5c8b5",
       "spend_approx_tokens": 200000
     }
   ]
