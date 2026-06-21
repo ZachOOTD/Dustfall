@@ -1,63 +1,63 @@
-# ▶ CAMPAIGN cycle 54 — Kickoff Brief — `campaign/2026-06-18`
+# ▶ CAMPAIGN cycle 55 — Kickoff Brief — `campaign/2026-06-18`
 
-**Phase B building unattended (M6→M10). M6 ✓ · M7 ✓ · M8 ✓ · M9 underway (⑪ sled-ride-spike decided C53). Now ⑫ real-rope-physics.**
-Boot from `docs/campaign/campaign-state.json` + `docs/roadmap.md` "Up next" (the AUTHORITATIVE queue). The loop commits every cycle and pauses only at
-`### Milestone: Phase B — Build-out complete` (after M10). Charter: `docs/campaign/campaign.md`.
+**Phase B building unattended (M6→M10). M6 ✓ · M7 ✓ · M8 ✓ · M9 underway (⑪ ✓ · ⑫ rope solver+visual ✓ C54). Now ⑫ continued.**
+**⚠️ STEERING: `pause_before: "M10"` is set (C53) — once M9 (⑫+⑬) completes, the loop PAUSES for the user's M10 review.**
+Boot from `docs/campaign/campaign-state.json` + `docs/roadmap.md` "Up next". The loop commits every cycle. Charter: `docs/campaign/campaign.md`.
 
 ## Read these now (in order)
 1. `CLAUDE.md` (auto-loaded) — esp. "Where we are now".
-2. `docs/campaign/campaign-state.json` + `docs/campaign/steering.md` + `docs/campaign/campaign-log.md` (recent cycles).
-3. `docs/roadmap.md` "Up next" → Phase B → **M9 ⑫**.
-4. `docs/decisions.md` / `docs/decisions-archive.md` — **D124 (rope CCD — tunnelling; READ IT, it gates the sim design)**, **D126 (the current inextensible position-snap rope constraint)**, D257 (sled-ride, sibling M9 flag), D81 (save-bump STOP).
+2. `docs/campaign/campaign-state.json` (note `pause_before: "M10"`) + `docs/campaign/steering.md` + `docs/campaign/campaign-log.md` (the C54 entry).
+3. `docs/decisions.md` tail — **D258 (⑫ visual-first; the body-coupling is THIS cycle)**, **D124 (CCD — now relevant, the rope drives bodies)**, D126 (the inextensible constraint being replaced), **D125 (the KCC/moving-body wall — adjacent to body-coupling; re-table-ish discipline if it fights back)**, D81.
+4. `src/world/verletRope.ts` (the landed solver) + `src/world/ropeConstraint.ts` (`applyInextensibleConstraint`, D126) + `src/world/sled.ts` (the C54 visual wiring + the tow constraint call).
 
-## Cycle 54 focus — **M9 ⑫ real-rope-physics (behind `FEATURES.realRope`, default OFF)**
-Replace the inextensible position-snap rope (D126, `ropeConstraint.ts`) with a real **Verlet/segmented rope sim** — so the rope hangs, drags, and goes
-taut believably — gated behind `FEATURES.realRope` (already landed inert in M2). OFF = the proven inextensible path runs unchanged (sled tow / companion
-tether / stake / kill-drag); ON = the experimental Verlet sim. **CCD-from-the-start (D124)** — the rope must not tunnel through bodies at speed.
+## What C54 landed (the ⑫ [partial])
+`world/verletRope.ts` — a Verlet rope SOLVER (probe-validated). The SLED rope's VISUAL sag is now Verlet-driven when `FEATURES.realRope` is ON (the 3
+CatmullRom mid-points swing/settle/taut vs. the static droop). Default OFF → the proven rope runs. `Tuning.VERLET_ROPE_*`; per-sled `ropeVerlet`.
+
+## Cycle 55 focus — **M9 ⑫ continued: body-coupling + CCD + the other caller visuals**
+Make the rope's PHYSICS real (not just the visual): the Verlet rope's tautness drives the towed body, replacing `applyInextensibleConstraint` when
+`realRope` is ON; + CCD (D124) so a fast body can't tunnel; + extend the Verlet visual to the other 3 rope callers.
 
 ### Priority items (in order)
-1. **Recon FIRST.** Read **D124** (why CCD is mandatory — the rope tunnels at speed without it), **D126** (the current `ropeConstraint.ts` inextensible
-   snap — its API + every caller: sled tow, companion tether, stake, kill-drag — `grep ropeConstraint` / `FEATURES.realRope`), and the rope VISUAL (how the
-   rope line is drawn today). Map exactly what the `realRope` branch must replace + the shared endpoints (the constraint is reused by 4 systems).
-2. **Build the Verlet rope sim** behind `if (FEATURES.realRope)` (default OFF): N point-masses + distance constraints (a few relaxation iterations/frame),
-   anchored at the two endpoints (the same endpoints the inextensible path uses), gravity + damping; **CCD** so a fast endpoint can't tunnel the rope
-   through a body (D124). Drive the rope VISUAL from the simulated points. Keep it deterministic enough not to break verify (the flag is OFF for the gate).
-3. **Wire all 4 callers behind the flag** — sled tow / companion tether / stake / kill-drag each select the Verlet sim when `realRope`, else the proven
-   inextensible snap. Don't disturb the OFF path.
-4. **Verify** — `npm run verify:all` stays green (flag OFF → shipped behavior unchanged; the placement/collider gates don't exercise rope). A flagged-OFF
-   sim that compiles + leaves the proven path intact is a valid landing (gate-and-wait — flip + walk-test later).
-5. **Visual/feel** — the rope LOOK (hang/drag/taut) + the tow FEEL are best judged live; render a static hang if useful, but the real validation is a
-   walk-test (leave `realRope` OFF until then). Don't claim feel from a screenshot.
+1. **Body-coupling (the core, the risk).** When `realRope`, the towed body (sled) is constrained by the Verlet rope's end segment going taut — i.e. the
+   rope's attach-end point pulls the body — instead of the D126 position-snap. Keep the SAME `{snapped, torn, postX/Y/Z}` contract the callers expect (so
+   the OFF path + the callers are untouched). **D125-adjacent risk:** the body responding to a moving rope-end can fight the KCC/contact like the sled-ride
+   did. **If it drifts/jitters and 2 approaches fail, DON'T force a 3rd** — keep the visual-only ⑫ (C54), DEFER body-coupling to backlog (a D-entry), and
+   move to ⑬ (the solver's already landed for cloth). Re-table-ish, per the D125 discipline.
+2. **CCD (D124).** Once the rope drives the body, enable CCD on the relevant body so a fast tow can't tunnel the rope/body through colliders (mirror the
+   D124 dropped-pickup CCD). Only meaningful with body-coupling — if body-coupling is deferred, CCD defers with it.
+3. **The other 3 caller visuals.** Extend the Verlet-visual (like the sled rope) to the companion tether / stake / kill-drag ropes behind `realRope`
+   (each reuses `verletRope.ts`). Lower-risk (visual-only, like C54's sled rope). Can be its own `[partial]` if body-coupling eats the cycle.
+4. **Verify** — `npm run verify:all` stays green with `realRope` OFF. If body-coupling lands, the OFF path (inextensible snap) must stay byte-proven.
+5. **Visual/feel** — flag stays OFF (don't flip); the rope sim's LOOK + the tow FEEL (and especially body-coupling feel) → walk-test at the user's M10 review.
 
 ### CRITICAL — stop conditions
-- **D81:** a rope-sim is runtime physics → NO save change. If it somehow needs one, STOP + surface (don't bump).
-- **D124 (CCD):** build CCD in from the start — a non-CCD rope that tunnels is a known dead end; don't ship the sim without it.
-- **Scope:** this is a load-bearing-system reimplementation behind a flag. If the full 4-caller wiring + CCD can't fit one cycle, ship `[partial]` (e.g.
-  the sim + the sled-tow caller this cycle, the other 3 callers next) — keep the OFF path proven throughout.
+- **D81:** runtime physics behind a flag → NO save change. STOP + surface if it somehow needs one.
+- **D125 discipline:** if body-coupling fights the KCC/contact (drift/jitter) and won't settle in ≤2 approaches, DEFER it to backlog (don't thrash) + move on — the visual ⑫ + the other-caller visuals are a fine M9-⑫ landing for the user's review.
+- **`pause_before: "M10"`:** after ⑬ (M9 complete), the next cycle PAUSES (don't start M10). This cycle is ⑫ (M9) → no pause yet.
 
 ### After ⑫
-⑬ real-cloth-physics (a 2D Verlet grid behind `FEATURES.realCloth`, tent-door/flag only; **depends on ⑫'s solver**) — the LAST M9 unit. **Then a STEERING
-PAUSE before M10** (`pause_before: "M10"` in campaign-state, C53 steering): when ⑬ completes (M9 done), the cycle that would start M10 ⑭ must instead
-PAUSE (`status: paused`, `awaiting_approval: true`, `stop_reasons: ["steering-pause-before-M10"]`) for the user's M10 review — do NOT start M10; the user
-resumes via `/campaign-approve` (which clears `pause_before`). (This is earlier than the Phase-B milestone pause after M10.)
+⑬ real-cloth-physics (a 2D Verlet grid behind `FEATURES.realCloth`, tent-door/flag only; reuses `verletRope.ts`'s solver). Then **the M10 pause** (C53 steering).
 
 ## Autonomy contract
-Build behind `FEATURES.realRope` (default OFF) so the proven path is untouched + verify stays green. Ambiguous call → log a D-entry, continue.
-**D81 save-bump STOPs the loop.** `[partial]` is fine. Don't flip the flag ON (rope feel is walk-test-gated → the user's review).
+Build behind `FEATURES.realRope` (OFF) so verify stays green + the proven path is untouched. Body-coupling is the risk — re-table-to-backlog if it won't
+settle (D125 discipline), don't force it. `[partial]` is fine. **D81 save-bump STOPs.** Don't flip the flag (walk-test-gated).
 
 ## Stop conditions
 Terminal: max-cycles (75) · catastrophic verify break · 3 fix-walls on one gate · save-version bump (STOP) · destructive attempt. Pause:
-steering "pause" · the Phase-B milestone (after M10 — M9 units don't pause).
+steering "pause" · `pause_before: "M10"` (after M9) · the Phase-B milestone (after M10).
 
 ## Notable footguns
-- **CCD (D124)** is mandatory — design the sim with it, not bolted on.
-- **The rope constraint is shared by 4 systems** (sled tow / companion tether / stake / kill-drag) — the `realRope` branch must cover (or `[partial]`-stage) all; the OFF path must stay byte-proven.
-- **Gate-and-wait:** `FEATURES.realRope` defaults OFF; verify:all must pass with it OFF (the proven inextensible path runs).
+- **Body-coupling is D125-adjacent** — a body chasing a moving rope-end can fight the KCC; cap attempts + defer to backlog rather than thrash.
+- **Keep the constraint contract** (`{snapped, torn, postX/Y/Z}`) so the 4 callers + the OFF path are untouched.
+- **CCD (D124)** only matters once the rope drives bodies.
+- **Gate-and-wait:** `realRope` stays OFF; verify:all green with it OFF.
 - `verify:placement` buffers output to the END + is slow; don't kill it early.
 
 ## Verification protocol
-`npm run verify:all` (green with `realRope` OFF). The rope sim's LOOK/FEEL (hang/drag/taut/tow) → walk-test; the cycle's gate is "compiles + OFF path intact".
+`npm run verify:all` (green with `realRope` OFF) + the standalone solver-style probe if you change the solver. The sim LOOK/body-FEEL → walk-test.
 
 ## Begin
-Read the order (esp. **D124 + D126**) → `grep ropeConstraint` + the 4 callers + `FEATURES.realRope` → `TaskCreate` the Verlet rope → build the sim
-(CCD-from-start) behind the flag + wire the callers → `verify:all` (flag OFF) → `/session-end`. `[partial]` ok. Boot fresh from FILES.
+Read the order (esp. D258 + D124 + D125) → study `verletRope.ts` + `ropeConstraint.ts` + the sled tow constraint → `TaskCreate` the body-coupling →
+attempt it behind `realRope` (cap at 2 approaches; defer to backlog if it fights, per D125) + the other-caller visuals → `verify:all` (flag OFF) →
+`/session-end`. `[partial]` ok. Boot fresh from FILES.

@@ -463,3 +463,13 @@ The focal mass also has to DOMINATE: the impact chunk is scaled 1.7× (decisivel
 **Why a decision-+-scaffold spike (not a full build this cycle).** Riding FEEL — the exact D125 failure mode (does the capsule stay on the deck over time, input/camera/mount feel) — is walk-test-only; headless can't judge it. So the spike DECIDES the approach + lands the flag scaffold + the implementation plan (the ⑪-build wires it behind the flag; the user flips + walk-tests before adoption). Mirrors C46 (the cave design spike) + the M2 inert-flag-infra precedent.
 
 **friction-score:** 2 (the approach is de-risked by the proven speeder reuse — low build risk — but it IS a core-controller change whose adoption is walk-test-gated; if Option C's feel fails, the ride-peg fallback or a re-table per D125 remains).
+
+## D258 — Real-rope ⑫ lands VISUAL-FIRST: a Verlet sim drives the rope's dynamic sag behind `FEATURES.realRope`; body-coupling + CCD are the continuation (Session C54, campaign — M9 ⑫ [partial])
+
+**Context.** ⑫ replaces the inextensible position-snap rope (D126) with a real Verlet sim, behind `FEATURES.realRope` (default OFF). The full feature = the rope *hangs/swings/goes-taut* AND its tautness drives the towed body's motion (with CCD per D124 so a fast body can't tunnel the rope through colliders). Both halves are feel-gated (the sag look + the tow feel are walk-test-only).
+
+**Decision — decompose visual-first.** Land the **Verlet SOLVER** (`world/verletRope.ts` — point-masses + distance-constraint relaxation + gravity/damping; pure, standalone-probe-validated: a slack rope sags below the chord, a stretched one goes taut) + wire it to the **sled rope's VISUAL** (the 3 sag mid-points of the existing 7-point CatmullRom tube become Verlet-simulated — dynamic swing/settle vs. the static parabolic droop) when `realRope` is ON. The **body-coupling** (the rope drives the towed body, replacing the inextensible snap) + **CCD** (D124, only needed once the rope drives bodies) + the **other 3 callers** (companion tether / stake / kill-drag visuals) are the ⑫-continuation. OFF path unchanged → verify green.
+
+**Why split this way.** The visual sag is the low-risk, high-visibility 80% (no body-physics rewrite, no D125-adjacent risk); the body-coupling is the risky, feel-dominant part best validated on a walk-test. Landing the solver also unblocks ⑬ (real-cloth reuses it). Mirrors the gate-and-wait pattern (land behind the flag, flip + validate later).
+
+**friction-score:** 2 (the solver is textbook + probe-validated, the integration is flag-OFF-safe; but the dynamic-sag LOOK + the eventual body-coupling/tow FEEL are walk-test-gated, and the continuation [body-physics + CCD + 4 callers] is the bulk of the work).

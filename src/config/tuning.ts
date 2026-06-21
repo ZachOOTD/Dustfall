@@ -1552,6 +1552,12 @@ export const Tuning = {
   SLED_ROPE_COLOR_HEX: 0x6e4a2a,             // matches branch/wood palette
   SLED_ROPE_RADIUS: 0.04,                    // QQ-2 tube radius — thicker than the previous 2-vertex Line
   SLED_ROPE_SAG: 0.45,                       // QQ-2 max midpoint drop (m) when the rope is taut; scales with slack to 0 at fully-stretched
+  // M9 ⑫ (C54) — Verlet rope sim (the DYNAMIC visual sag/swing when FEATURES.realRope is ON;
+  // OFF uses the static SLED_ROPE_SAG droop above). Tuned for a believable hang that goes taut
+  // at SLED_TOW_DISTANCE; FEEL → walk-test before any flag flip.
+  VERLET_ROPE_GRAVITY: 16,                   // m/s² pull on the interior rope points (visual; > real-g for a snappier drape)
+  VERLET_ROPE_ITERS: 10,                     // distance-constraint relaxation iterations / frame
+  VERLET_ROPE_DAMPING: 0.9,                  // Verlet velocity retention (1 = none; <1 settles the swing)
   // ACC P1 — top deck collider. A 2nd cuboid attached to the sled body
   // sits just above the main collider's top face. Items dropped on the
   // sled land here (it's the highest surface). High friction so items

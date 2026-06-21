@@ -3,6 +3,16 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign C54 — 2026-06-20 — M9: **real-rope-physics `[partial]`** — the Verlet rope SOLVER + the dynamic-sag visual ✓ verify pass (ultracode)
+
+`verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40; `FEATURES.realRope` OFF → the proven static-sag rope runs unchanged — the realRope branch is the first reader of the M2 inert flag). **Solver math probe:** a slack rope sags below the chord (midpoint Y 2.76 vs 5), a taut rope stays straight (4.81). **No save bump.** Cycle 54/75. **`[partial]`** — visual-first; body-coupling + CCD + other callers continue.
+
+**real-rope-physics `[partial]` — visual-first (D258).** Replaces the static rope droop with a real Verlet sim (the rope hangs/swings/goes taut), behind `FEATURES.realRope`.
+- **NEW `world/verletRope.ts`** — a Verlet rope SOLVER (point-masses + distance-constraint relaxation + gravity/damping; pure, standalone-validated).
+- **Sled rope VISUAL:** when `realRope` is ON, the 3 sag mid-points of the existing 7-point CatmullRom tube become Verlet-simulated (dynamic swing/settle/taut) instead of the static parabolic droop. `Tuning.VERLET_ROPE_GRAVITY/ITERS/DAMPING`; per-sled `ropeVerlet` state.
+- **Default OFF** → the proven static-sag rope runs unchanged (verify green).
+- **Remaining → cycle 55 (⑫ cont):** the body-coupling (the Verlet rope drives the towed body, replacing the inextensible snap) + CCD (D124) + the other 3 callers (companion tether / stake / kill-drag). The dynamic-sag LOOK + tow FEEL → walk-test (flag flip).
+
 ## Campaign C53 — 2026-06-20 — M9: **rideable-sled-spike** — Option C decided (the speeder ride generalizes), flag landed ✓ verify pass (ultracode) · M9 BEGINS
 
 `verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40; `FEATURES.rideableSled` landed INERT — nothing reads it yet, shipped behavior unchanged). **No save bump.** Cycle 53/75. **M9 begins.**

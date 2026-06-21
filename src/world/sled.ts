@@ -51,6 +51,8 @@ import { resolveEndpointWorldPos } from './rope.ts';
 // in updateSleds (replacing the inline math); also available for new
 // non-sled endpoint kinds (raider_corpse, sandworm_carcass) to reuse.
 import { applyInextensibleConstraint } from './ropeConstraint.ts';
+import { FEATURES } from '../config/features.ts';                       // M9 ⑫ (C54) — realRope gate
+import { makeRopeVerlet, stepRopeVerlet, type RopeVerlet } from './verletRope.ts';
 import { stormWindAccel } from './weather.ts';
 export type SledTether = RopeEndpoint;
 
@@ -68,6 +70,9 @@ export interface Sled {
    *  frame in updateSleds via a 5-point CatmullRomCurve3 with mid-point
    *  sag. Allocated on attach, disposed on detach. */
   ropeMesh: THREE.Mesh | null;
+  /** M9 ⑫ (C54) — Verlet rope sim state for the VISUAL rope sag, used only when
+   *  FEATURES.realRope is ON (else the static parabolic droop runs). Lazily allocated. */
+  ropeVerlet?: RopeVerlet | null;
   /** ACB P1 — locker attached on top of the sled deck for mobile
    *  storage. When set, the locker's mesh is parented to sled.group
    *  (visual follows automatically) and locker.pos is synced each
@@ -1171,7 +1176,7 @@ export function updateSleds(ctx: GameContext, dt: number): void {
       }
     }
 
-    rebuildRopeMesh(sled, _anchor);
+    rebuildRopeMesh(sled, _anchor, dt);
 
     // Refinalize group/pos + frame delta in case the rope-snap above
     // updated `tr`. For non-tethered sleds we already finalized earlier
@@ -1200,7 +1205,7 @@ const _ropeCurvePoints: THREE.Vector3[] = [
   new THREE.Vector3(),
 ];
 
-function rebuildRopeMesh(sled: Sled, anchor: THREE.Vector3): void {
+function rebuildRopeMesh(sled: Sled, anchor: THREE.Vector3, dt: number): void {
   if (!sled.ropeMesh) return;
   const tr = sled.body.translation();
   // ACC playtest — derive forward from full body quaternion (was: yaw-only).
@@ -1229,13 +1234,24 @@ function rebuildRopeMesh(sled: Sled, anchor: THREE.Vector3): void {
   // Main span: anchor → 3 sag midpoints → approach (front of the bar).
   _ropeCurvePoints[0].set(anchor.x, anchor.y, anchor.z);
   _ropeCurvePoints[4].set(approachX, approachY, approachZ);
-  for (let i = 1; i <= 3; i++) {
-    const t = i / 4;
-    const px = anchor.x + (approachX - anchor.x) * t;
-    const py = anchor.y + (approachY - anchor.y) * t;
-    const pz = anchor.z + (approachZ - anchor.z) * t;
-    // Parabolic drop — sin(π·t) peaks at t=0.5.
-    _ropeCurvePoints[i].set(px, py - Math.sin(Math.PI * t) * sag, pz);
+  if (FEATURES.realRope) {
+    // M9 ⑫ (C54) — DYNAMIC sag: a Verlet rope between the anchor + the bar approach (4
+    // segments → 3 interior points feed the 3 sag midpoints). Hangs/swings/goes taut with
+    // motion, vs. the static parabolic droop. Visual-only here — the body constraint is
+    // still the inextensible snap (the body coupling + CCD are the ⑫-continuation).
+    const p0 = _ropeCurvePoints[0], pN = _ropeCurvePoints[4];
+    if (!sled.ropeVerlet) sled.ropeVerlet = makeRopeVerlet(4, p0, pN);
+    stepRopeVerlet(sled.ropeVerlet, p0, pN, dt, Tuning.SLED_TOW_DISTANCE, Tuning.VERLET_ROPE_GRAVITY, Tuning.VERLET_ROPE_ITERS, Tuning.VERLET_ROPE_DAMPING);
+    for (let i = 1; i <= 3; i++) _ropeCurvePoints[i].copy(sled.ropeVerlet.pts[i]);
+  } else {
+    for (let i = 1; i <= 3; i++) {
+      const t = i / 4;
+      const px = anchor.x + (approachX - anchor.x) * t;
+      const py = anchor.y + (approachY - anchor.y) * t;
+      const pz = anchor.z + (approachZ - anchor.z) * t;
+      // Parabolic drop — sin(π·t) peaks at t=0.5.
+      _ropeCurvePoints[i].set(px, py - Math.sin(Math.PI * t) * sag, pz);
+    }
   }
   // Wrap: over the top of the bar, then tuck behind + slightly under it.
   _ropeCurvePoints[5].set(barX, barY + WRAP_R, barZ);

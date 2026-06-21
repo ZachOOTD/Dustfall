@@ -69,17 +69,17 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 "Last shipped" note. Current target: **Phase B (M6→M10) — APPROVED + RELEASED**. The loop runs M6→M10 unattended,
 commits every cycle, and pauses only at "Phase B — Build-out complete" (after M10). Charter: `docs/campaign/campaign.md`.
 
-**Last shipped**: Campaign **C53** (2026-06-20, cycle 53/75) — **M9 ⑪ rideable-sled-spike** — Option C decided, flag landed
-(`verify:all` PASS — tsc + placement 0/0 ×5 + colliders 0/40; `FEATURES.rideableSled` landed inert; **no save bump**). **M9 begins.**
-The architectural-risk spike for "ride a towed sled". Recon: D125 tabled the old attempt (the KCC fights a moving platform; 3 delta-based architectures
-failed). **Finding:** Option C ("skip the KCC while riding") is already proven — the SPEEDER ride gates `updatePlayer` + teleports the capsule to the
-rider seat each frame. **Decision (D257):** generalize that to the sled (a `ridingSled` state + a per-frame capsule-to-sled-seat teleport in
-`updateSleds`), behind `FEATURES.rideableSled` (inert). The D125 delta approaches stay dead; NOT re-tabled. Riding FEEL → walk-test (the ⑪-build wires
-it behind the flag; the user flips + walk-tests before adoption).
+**Last shipped**: Campaign **C54** (2026-06-20, cycle 54/75) — **M9 ⑫ real-rope-physics [partial]** — the Verlet solver + the dynamic-sag visual
+(`verify:all` PASS — tsc + placement 0/0 ×5 + colliders 0/40; `FEATURES.realRope` OFF → shipped rope unchanged; **no save bump**).
+Visual-first (D258): NEW **`world/verletRope.ts`** Verlet rope solver (probe-validated — sags when slack, taut at length) wired into the sled rope's
+VISUAL — when `realRope` is ON, the static parabolic droop becomes a **dynamic Verlet sag** (swing/settle/taut) via the 7-point CatmullRom's 3 mid-points.
+`Tuning.VERLET_ROPE_*`; per-sled `ropeVerlet` state. Default OFF → the proven rope runs unchanged. **`[partial]`** — the body-coupling (rope drives the
+towed body) + CCD (D124) + the other 3 callers (companion/stake/kill-drag) continue next cycle; the sag LOOK + tow FEEL → walk-test.
 
-**Next session** = cycle 54 = **M9 ⑫ real-rope-physics** — a Verlet/segmented rope sim behind `FEATURES.realRope` (default OFF; CCD-from-the-start per
-D124), replacing the inextensible position-snap constraint (D126) for the sled tow / companion tether / stake / kill-drag. After ⑫: ⑬ real-cloth-physics
-(depends on ⑫). The loop only PAUSES at the Phase-B milestone (after M10). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
+**Next session** = cycle 55 = **M9 ⑫ continued** — the rope **body-coupling** (the Verlet rope drives the towed body, replacing the inextensible snap) +
+**CCD** (D124) + the other 3 caller visuals; OR, if the body-coupling proves walk-test-gated/risky, defer it to backlog + move to **⑬ real-cloth-physics**
+(which reuses ⑫'s now-landed solver). **NOTE the steering `pause_before: "M10"`** — once M9 (⑫+⑬) completes, the loop PAUSES for the user's M10 review
+(resume via `/campaign-approve`). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 
