@@ -1082,18 +1082,19 @@ export function updateInteraction(ctx: GameContext, _dt: number): void {
         return;
       }
       // AAR — two-stage flow: door must be pried open before components
-      // can be extracted. Pry requires scrap_bar equipped (gates the
-      // entire salvage loop behind tool acquisition). Once open, any
-      // E-press extracts a single component until panel is stripped.
+      // can be extracted. Pry requires a pry tool equipped (gates the
+      // entire salvage loop behind tool acquisition). M10 ⑭ (C57): the
+      // craftable scrap_machete pries too, alongside scrap_bar. Once open,
+      // any E-press extracts a single component until panel is stripped.
       const panelBody = s.panel as THREE.Object3D;
       const isOpen = panelBody.userData.panelOpened === true;
       if (!isOpen) {
         const sel = ctx.inventory.slots[ctx.inventory.selectedIdx];
-        if (sel.item !== 'scrap_bar') {
+        if (sel.item !== 'scrap_bar' && sel.item !== 'scrap_machete') {
           ctx.inventory.hover = {
             type: 'salvage',
             distance: info.distance,
-            promptNoun: `${name} — need a scrap bar`,
+            promptNoun: `${name} — need a pry tool`,
             passive: true,
           };
           return;
@@ -1252,10 +1253,11 @@ function tickSalvage(ctx: GameContext): void {
     cancelSalvage();
     return;
   }
-  // AAR — cancel pry if scrap_bar is no longer equipped (player swapped slots).
+  // AAR — cancel pry if a pry tool is no longer equipped (player swapped slots).
+  // M10 ⑭ (C57): scrap_machete pries too.
   if (c.mode === 'pry') {
     const sel = ctx.inventory.slots[ctx.inventory.selectedIdx];
-    if (sel.item !== 'scrap_bar') {
+    if (sel.item !== 'scrap_bar' && sel.item !== 'scrap_machete') {
       cancelSalvage();
       return;
     }

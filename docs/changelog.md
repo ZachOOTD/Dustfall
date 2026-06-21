@@ -3,6 +3,17 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign C57 — 2026-06-20 — M10: **scrap-machete-pry-tool ⑭** — a craftable machete that pries panels ✓ verify pass (ultracode)
+
+`verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40). **No save bump** (a new item id is additive). Cycle 57/75. *(Resumed into M10 after the M9 review — drop-pod ⑯ deferred per user steering; commit `ea5920e`.)*
+
+**scrap-machete-pry-tool ⑭ (D261).** A new craftable pry tool, the start of M10's "arrival & tools."
+- **NEW `scrap_machete` item** — `wieldLmb: 'click_use'` (pries salvage panels via the same hover-path as `scrap_bar`), with a distinct **crude-bolo viewmodel** (wide blunt belly, chipped edge, bolted tang, cloth grip, dark oxidized-scrap material — reads as improvised, distinct from the honed `machete` weapon + the `scrap_bar` crowbar).
+- **Recipe** (id 19): `scrap×2 + cloth×1` — a free input multiset, so no recipe-collision chooser.
+- **Pry-gate** now accepts **either** `scrap_bar` or `scrap_machete` (additive — existing scrap_bar holders aren't stranded; prompt → "need a pry tool").
+- **Additive, not a destructive swap** (D261): the found `machete` stays the melee blade; fully retiring `scrap_bar` + a dual chop+pry machete + the bespoke pry animation are deferred (user/feel calls).
+- **Visual:** 2 render rounds (`item-studio` vs machete/scrap_bar) — darkened the blade + enlarged the edge-chips so the "scrap" read lands. In-hand swing/pry FEEL → walk-test.
+
 ## Campaign C56 — 2026-06-20 — M9: **real-cloth-physics ⑬** — a 2D Verlet door-flap → **M9 COMPLETE → ⏸ PAUSED before M10** ✓ verify pass (ultracode)
 
 `verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40; `FEATURES.realCloth` OFF → the static door panel runs unchanged). **Cloth solver math probe:** top row pinned (no drift), the flap hangs at rest length, a steady wind billows it +1.0 m in local Z, no NaN. **No save bump.** Cycle 56/75.

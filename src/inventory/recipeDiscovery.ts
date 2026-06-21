@@ -292,6 +292,20 @@ export const RECIPES: Recipe[] = [
     output: { id: 'signal_kit', count: 1 },
     category: 'tool',
   },
+  // M10 ⑭ (C57) — scrap machete: the craftable pry tool. A scrap blade + a cloth-wrapped
+  // grip. Distinct input multiset (scrap×2 + cloth×1) from scrap_bar (scrap×2 + branch×1)
+  // + spyglass (scrap×3 + cloth×1), so no recipe-collision chooser. Pries panels just like
+  // scrap_bar (interaction.ts accepts either); the machete is the intended tool going forward.
+  {
+    id: 19,
+    displayName: 'scrap machete',
+    inputs: [
+      { id: 'scrap', count: 2 },
+      { id: 'cloth', count: 1 },
+    ],
+    output: { id: 'scrap_machete', count: 1 },
+    category: 'tool',
+  },
 ];
 
 /** Session ABE — display order for category sub-headers. Recipes within

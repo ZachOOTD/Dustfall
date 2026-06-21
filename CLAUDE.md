@@ -64,20 +64,19 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      Prior milestones live in docs/changelog.md — do NOT accumulate "Prior milestone"
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
-**⏸ CAMPAIGN PAUSED — `campaign/2026-06-18`** (autonomous; PHASE-level review). **M9 COMPLETE → paused before M10** per the user's C53 steering
-(`pause_before: "M10"`). `status: paused`, `awaiting_approval: true`. **To resume:** review/walk-test M9, then `/campaign-approve` (clears `pause_before`,
-enters M10). Each `/campaign-cycle` boots from `docs/campaign/campaign-state.json` + `docs/roadmap.md` "Up next" — NOT this note. Charter: `docs/campaign/campaign.md`.
+**🟢 CAMPAIGN ACTIVE — `campaign/2026-06-18`** (autonomous; PHASE-level review). **In M10 — the FINAL Phase-B tier.** The M9 review gate was approved
+(2026-06-20); the loop runs M10 (⑭✓ · ⑮ · ⑰; **⑯ drop-pod-intro DEFERRED** by user steering) and pauses next at the **Phase-B milestone** (after M10) for
+the user's full Phase-A/B feedback + walk-test. Each `/campaign-cycle` boots from `docs/campaign/campaign-state.json` + `docs/roadmap.md` — NOT this note.
 
-**Last shipped**: Campaign **C56** (2026-06-20, cycle 56/75) — **M9 ⑬ real-cloth-physics → M9 COMPLETE → ⏸ PAUSED before M10**
-(`verify:all` PASS — tsc + placement 0/0 ×5 + colliders 0/40; `FEATURES.realCloth` OFF → static door panel unchanged; **no save bump**).
-NEW **`world/verletCloth.ts`** — a 2D Verlet cloth solver (the 2D extension of ⑫'s `verletRope.ts`: structural right+down links, top row pinned, gravity +
-a local-Z billow) driving the **large-tent door-flap**'s billow behind `FEATURES.realCloth` (OFF). Probe-validated (pinned/hangs/billows/no-NaN). D260.
-**M9 COMPLETE** — ⑪ sled-spike (C53) + ⑫ real-rope (C54+C55) + ⑬ real-cloth (C56), all behind their flags (`rideableSled`/`realRope`/`realCloth`, all OFF).
+**Last shipped**: Campaign **C57** (2026-06-20, cycle 57/75) — **M10 ⑭ scrap-machete-pry-tool**
+(`verify:all` PASS — tsc + placement 0/0 ×5 + colliders 0/40; **no save bump** — a new item id is additive).
+NEW **`scrap_machete`** craftable pry tool (recipe id 19, scrap×2+cloth×1) — `wieldLmb: 'click_use'`, pries salvage panels via the same hover-path as
+`scrap_bar` (the gate now accepts either); a distinct **crude-bolo viewmodel** (chipped, oxidized-scrap — distinct from the honed `machete` + the crowbar).
+Additive, not a destructive swap (D261): the found `machete` stays the melee blade; scrap_bar retirement + a dual chop+pry machete + the pry animation are deferred.
 
-**⏸ Next = USER REVIEW (not a build cycle).** The loop is PAUSED before M10. **Human action:** walk-test the 3 flag-gated M9 systems (flip `rideableSled` /
-`realRope` / `realCloth` in `npm run dev` — the owed walk-tests + the deferred ⑪ build / ⑫ body-coupling are in [docs/backlog.md](docs/backlog.md) §A),
-review + plan M10 (⑭ machete · ⑮ hover-bike · ⑯ drop-pod-intro · ⑰ pickup-instancing), then **`/campaign-approve`** to clear the gate + resume into M10.
-See [docs/next-session-prompt.md](docs/next-session-prompt.md).
+**Next** = cycle 58 = **M10 ⑮ craftable-hover-bike** — the **repairable-speeder** (ONE vehicle, two states: broken → repaired; reuse `speeder.ts`; dep ⑭).
+**D81 trap:** the broken/working state must be an ADDITIVE save field (default to current behaviour for old saves) — never bump SAVE_VERSION autonomously.
+After ⑮: ⑰ pickup-instancing (last M10 unit) → the Phase-B milestone pause. See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 

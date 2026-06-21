@@ -474,6 +474,99 @@ const _DEFS: Record<ItemId, ItemDef> = {
     useAnimDuration: Tuning.VIEWMODEL_MACHETE_ANIM_S,
   },
 
+  // M10 ⑭ (C57) — scrap machete: a crude blade beaten from salvage. Functions as a
+  // PRY TOOL (wieldLmb 'click_use' → the salvageables hover-path in interaction.ts
+  // levers panels open, same as scrap_bar) but reads as an improvised machete rather
+  // than a crowbar. Cruder than the found `machete` weapon (rough bolo blade, chipped
+  // edge, bolted tang) — that one stays the honed melee blade; this is the tool you craft.
+  scrap_machete: {
+    id: 'scrap_machete',
+    name: 'SCRAP MACHETE',
+    glyph: '|',
+    description: 'a crude blade beaten from scrap — bites panels open',
+    stackable: false,
+    maxStack: 1,
+    wieldLmb: 'click_use',
+    thirdPersonScale: 1.35,
+    // 3P grip: blade is mesh +Y (machete convention) → -90° X points it forward.
+    handAttachTransform: { pos: [0, 0, 0], rot: [-1.571, 0, 0] },
+    onUse(_ctx, _slot) {
+      // Pry logic lives in interaction.ts's 'salvageables' case (hover-aware), same
+      // as scrap_bar. LMB without a salvageable hovered is a no-op.
+      return { consumed: false };
+    },
+    makeViewModel() {
+      const group = new THREE.Group();
+      // A crude bolo: a rough scrap-steel plate (wide belly, blunt angled tip), a
+      // chipped edge, a bolted iron tang + rivets, and a cloth-wrapped grip. Dirtier
+      // + simpler than the honed `machete` so the two read as distinct items.
+      const bladeMat = vmMetal(0x6b5f51, { scratchAngle: Math.PI / 2, wornScale: 4.5, scratchStrength: 0.14 });
+      bladeMat.emissive = new THREE.Color(0x0a0806);               // dark oxidized scrap steel
+      const edgeMat = vmMetal(0xa1937b, { wornScale: 5.0 });        // worn-bright sharpened edge (only the honed bevel catches light)
+      const ironMat = vmMetal(0x34302a, { wornScale: 5.0 });        // dark iron tang / rivets
+      ironMat.emissive = new THREE.Color(0x070605);
+      const gripMat = createFabricMaterial(0x3a2b1e, undefined, { disableShimmer: true });
+      const rivetMat = vmMetal(0x968d80, { wornScale: 3.0 });
+
+      // --- Blade: extruded crude bolo profile (flat in XY, thickness in Z) ---
+      const bs = new THREE.Shape();
+      bs.moveTo(-0.013, 0.0);                       // spine at the ricasso
+      bs.lineTo(-0.017, 0.165);                     // up the slightly-irregular spine
+      bs.lineTo(-0.011, 0.224);                     // spine near the tip
+      bs.lineTo(0.012, 0.236);                      // blunt angled chopping tip
+      bs.lineTo(0.024, 0.12);                       // fat bolo belly
+      bs.lineTo(0.014, 0.0);                        // cutting edge at the ricasso
+      bs.lineTo(-0.013, 0.0);
+      const bladeGeo = new THREE.ExtrudeGeometry(bs, {
+        depth: 0.006, bevelEnabled: true, bevelThickness: 0.0014, bevelSize: 0.0013, bevelSegments: 1, steps: 1,
+      });
+      bladeGeo.translate(0, 0, -0.003);
+      group.add(new THREE.Mesh(bladeGeo, bladeMat));
+
+      // Honed edge strip — a thin worn-bright bevel along the belly.
+      const edge = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.2, 0.0085), edgeMat);
+      edge.position.set(0.015, 0.1, 0); edge.rotation.z = 0.06; group.add(edge);
+
+      // Chips knocked out of the edge (dark notch boxes) — improvised, damaged.
+      const chip1 = new THREE.Mesh(new THREE.BoxGeometry(0.011, 0.014, 0.012), ironMat);
+      chip1.position.set(0.02, 0.072, 0); group.add(chip1);
+      const chip2 = new THREE.Mesh(new THREE.BoxGeometry(0.009, 0.011, 0.012), ironMat);
+      chip2.position.set(0.013, 0.155, 0); group.add(chip2);
+      const chip3 = new THREE.Mesh(new THREE.BoxGeometry(0.007, 0.009, 0.012), ironMat);
+      chip3.position.set(0.022, 0.105, 0); group.add(chip3);
+
+      // Bolted iron tang/bolster where the blade meets the grip.
+      const tang = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.045, 0.016), ironMat);
+      tang.position.set(0.0, -0.02, 0); group.add(tang);
+      for (let i = 0; i < 2; i++) {
+        const rivet = new THREE.Mesh(new THREE.CylinderGeometry(0.0035, 0.0035, 0.02, 6), rivetMat);
+        rivet.rotation.x = Math.PI / 2; rivet.position.set(0, -0.01 - i * 0.022, 0); group.add(rivet);
+      }
+
+      // Cloth-wrapped grip (bands straddling the hand origin).
+      for (let i = 0; i < 6; i++) {
+        const band = new THREE.Mesh(new THREE.TorusGeometry(0.0135, 0.0032, 6, 14), gripMat);
+        band.rotation.x = Math.PI / 2; band.position.y = -0.045 - i * 0.016; group.add(band);
+      }
+      group.rotation.set(-0.15, 0.0, 0.10);
+      return group;
+    },
+    makeIcon() {
+      const s = svg();
+      // Wide bolo blade + short grip.
+      s.appendChild(svgEl('polygon', { points: '11,3 14,5 13,14 9,14' }));
+      s.appendChild(svgEl('line', { x1: '10', y1: '14', x2: '10', y2: '21', 'stroke-width': '2.4' }));
+      return s;
+    },
+    playUseAnim(itemRoot, t) {
+      // Pry-thrust — forward jab + slight roll, recovers cubic (mirrors scrap_bar).
+      const p = t < 0.35 ? easeOutBack(t / 0.35) : 1 - easeInOutCubic((t - 0.35) / 0.65);
+      itemRoot.position.set(-0.06 * p, 0.03 * p, -0.16 * p);
+      itemRoot.rotation.set(-0.5 * p, -0.15 * p, 0.10 + 0.4 * p);
+    },
+    useAnimDuration: Tuning.VIEWMODEL_MACHETE_ANIM_S,
+  },
+
   machete: {
     id: 'machete',
     name: 'MACHETE',
@@ -3292,7 +3385,7 @@ export const ALL_REGISTERED_ITEM_IDS: ReadonlyArray<ItemId> =
   Object.keys(_DEFS) as ItemId[];
 
 export const ALL_ITEM_IDS: ReadonlyArray<ItemId> = [
-  'canteen', 'scrap', 'bandage', 'machete', 'scrap_bar',
+  'canteen', 'scrap', 'bandage', 'machete', 'scrap_bar', 'scrap_machete',
   'cactus_pulp', 'cooked_cactus_pulp',
   'raw_lizard_meat', 'cooked_lizard_meat',
   'raw_worm_meat', 'cooked_worm_meat',

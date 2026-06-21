@@ -55,6 +55,8 @@ export type ItemId =
   | 'grill_kit'
   // Session AAR — heavy iron lever for prying salvage panels open
   | 'scrap_bar'
+  // M10 ⑭ (C57) — craftable crude machete; pries salvage panels (like scrap_bar) + reads as a tool
+  | 'scrap_machete'
   // Session ACE — craftable world-anchor stake (B1 Phase 3 rope endpoint)
   | 'stake_kit'
   // ACL ITEMS — long-barreled procedural rifle (ranged weapon)
