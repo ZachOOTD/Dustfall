@@ -212,3 +212,18 @@ detail + the "consciously NOT chasing" list in [iteration-plan.md](iteration-pla
 [polish] yard ground-view worst-case 3215 draw calls — a yard-level cluster-merge across already-merged POIs (38 sub-groups un-merged) would cut it; field perf is fine (869)
 [done-partial] §F SHEARED breach-patch depth 0.06→0.15 SHIPPED (ACBA); recessed gash floor stays N/A (D223 — recessed voids don't read at procgen scale, built proud instead)
 [polish] wrecked_tank (ACBA critique deferred): bank sand UP the lower flank so the dune visibly laps the curve (the placement makeSandMound lands BESIDE it; needs an assembler-seated drift, since a component-baked drift sinks with the burial) + sand TONGUES intruding through the torn mouth/breaches + spilled-debris fragments seated on terrain.heightAt in the assembler (component-baked chunks drag under after the deep sink/list). The deeper burial (buryFrac 0.57) + whole-silhouette damage (2 flank breaches + crushed dome + torn end) already shipped; these are the remaining sev-2 "swallowed by a living dune" polish.
+
+### Fresh triage (2026-06-20 — Phase-B review dump)
+[bug] Skyfall landing fire emits from the camp-fire placements — fire should come from the WRECK itself / around it, not ground camp fires
+[feat] Skyfall crashed-ship: a NEW unique high-quality enterable wreck (larger, never-before-modeled) — RESEARCH crashed-sci-fi-ship design first; currently reads as a copy of the enterable tank; no floating pieces, no one-sided see-through textures
+[polish] remove the new ridges on top of the sand worm
+[polish] worm attack: remove the high jump — charge straight then dive from the CURRENT position (no airborne jump; current jump too high / unrealistic)
+[polish] worm alert audio too loud/abrasive — make it a low quiet rumble + screen-shake buildup (mysterious; "you don't know what it is")
+[bug] some wreck panels are not openable on the new procgen wrecks
+[bug] some wreck panels float on the new procgen wrecks
+[bug] wrecked_tank (on-side) interior ribbing reads as floating
+[bug] wrecked_tank (on-side) reads disconnected/floating — needs a structural, connected, realistic assembly
+[bug] wrecked_tank (on-side) access panel floats / is unconnected
+[feat] gunshot + reload SFX for all guns (scrap_gun / energy_pistol / amban_rifle / scrap-bolt etc.)
+[polish] speeder engine sound too loud/abrasive — lower-pitched, smoother engine hum
+[feat] cave rework — currently a recessed box in the sand, not a real cave; rethink (DEDICATED session, user direction pending)

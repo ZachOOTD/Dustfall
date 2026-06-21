@@ -169,6 +169,18 @@ the headless+visual gates pass; reversible; user vetoes FEEL at the review; **D8
 ### Milestone: Phase B — Build-out complete (full review + walk-test)
 *The loop PAUSES here after M10 ships. **The user is holding ALL Phase-A/B feedback for this gate** (stated 2026-06-20 — "lots of feedback to give on phase A and B but want to wait till we run through the remaining before we tackle"). Batch every feel-pending + flag-flip veto: the survival curve, the diegetic-HUD read, the cave descent/dark-nav feel, the sled-ride feel, the rope/cloth looks, the bike-repair beat — PLUS the deferred ⑯ drop-pod-intro (to be designed in detail then). Conditional mid-block risk notes: after the sled spike (if both candidates fail).*
 
+**✅ Phase-B milestone REACHED + reviewed (2026-06-20).** User gave the held Phase-A/B feedback → triaged into [backlog.md](backlog.md) (the 2026-06-20 dump). **Decision (user):** the bounded fixes run as a campaign **review-fix pass (M11–M13)** below; the **Skyfall crashed-ship** (new researched hero wreck) + the **cave rework** are DEDICATED solo sessions, NOT the loop. Resumed into M11.
+
+### Phase-B review-fix pass (campaign — M11→M13; from the 2026-06-20 triage)
+- **M11 — wreck/panel fixes:** ⓐ procgen-wreck access panels not openable [bug] · ⓑ procgen-wreck panels floating [bug] · ⓒ wrecked_tank (on-side) interior ribbing reads floating [bug] · ⓓ wrecked_tank reads disconnected/floating → structural, connected, realistic [bug] · ⓔ wrecked_tank access panel floats/unconnected [bug] **← next**
+- **M12 — sand worm fixes:** ⓕ remove the dorsal ridges [polish] · ⓖ attack: remove the high jump → charge-straight then DIVE from the current position (no airborne hop) [polish] · ⓗ alert audio → a low quiet rumble + screen-shake buildup (mysterious; "you don't know what it is") [polish]
+- **M13 — weapon & vehicle audio:** ⓘ gunshot + reload SFX for ALL guns [feat] · ⓙ speeder engine → a lower-pitched, smoother hum [polish]
+
+### Milestone: Phase-B review fixes complete (review)
+*The loop PAUSES here after M13. Owed walk-tests/LISTENS (headless can't judge): the worm attack feel, the worm/speeder/gun audio (must be HEARD), the wreck-fix looks. Then the user sequences the next block.*
+
+**NOT in the loop — dedicated solo sessions (in [backlog.md](backlog.md) §A + the triage block):** (1) the **Skyfall crashed-ship** — a NEW researched extremely-high-quality enterable HERO wreck (its own `/feature-slice`: research crashed-sci-fi-ship design → model → multi-round iterate WITH the user; no floating pieces / one-sided textures) + its **fire-from-the-wreck** fix (coupled to the new model); (2) the **CAVE rework** (user is planning the direction). Also still queued for the user: ⑯ drop-pod-intro, ⑰ pickup-instancing (human-attended), + the §A walk-tests/flag-flips.
+
 **Net-new (Phase C, 2026-06-18):** C2 exploration + sun-shade **promoted → M5a** · tone/ecology **→ M5b** · rest of C1 (water-in-wrecks / wind-chill) **deferred** · **C3 endgame NOT pursued** (user: no endgame — keep the open-ended "days survived" model; the self-author phase must not resurface a storm-finale). See [iteration-plan.md](iteration-plan.md) "Phase C".
 
 **Excluded (GDD §11/§14 + user 2026-06-18):** base-building · multiplayer + char-customization · real-PBR-textures (D107 fork, user call) · WebGPU/Electron/dynamic-POI-gen (deferred) · player-model §D optional (deferred) · the 5 PARKED items (DROPPED, won't-do). See [iteration-plan.md](iteration-plan.md) "Excluded / deferred".

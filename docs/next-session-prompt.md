@@ -1,37 +1,44 @@
-# ⏸ CAMPAIGN PAUSED — PHASE B COMPLETE — the big review — `campaign/2026-06-18`
+# ▶ CAMPAIGN cycle 60 — Kickoff Brief — `campaign/2026-06-18`
 
-**The autonomous loop has reached its major checkpoint and STOPPED.** Phase B (M6→M10) is built to the boundary. This is the **"Phase B — Build-out complete"** milestone pause — the planned big review where you give your held Phase-A/B feedback, walk-test everything, and we plan the rest. `status: paused`, `awaiting_approval: true`, `stop_reasons: ["milestone-review"]`. **The loop will NOT run another cycle until you `/campaign-approve` (or steer).**
+**RESUMED into a Phase-B review-fix pass (M11→M13).** The Phase-B milestone review happened (2026-06-20): the user gave feedback → triaged → chose "campaign for the bounded fixes; Skyfall hero wreck + cave rework are DEDICATED solo sessions (NOT the loop)." Now grinding the fixes.
+Boot from `docs/campaign/campaign-state.json` + `docs/roadmap.md` (the "Phase-B review-fix pass" block). The loop commits every cycle. Charter: `docs/campaign/campaign.md`.
 
-## Where the campaign is
-- **Phase B: M6 ✓ · M7 ✓ · M8 ✓ · M9 ✓ · M10 ✓ (to the boundary).** The whole M6→M10 build-out is done.
-- **Cycles:** 59 / 75 used. Spend ~15.99M tokens. Branch `campaign/2026-06-18`, all committed (one commit per cycle).
+## Read these now (in order)
+1. `CLAUDE.md` (auto-loaded) — "Where we are now".
+2. `docs/campaign/campaign-state.json` + `docs/campaign/steering.md` + `docs/campaign/campaign-log.md` (the C59 pause + the 2026-06-20 resume).
+3. `docs/backlog.md` — the **"Fresh triage (2026-06-20 — Phase-B review dump)"** block at the bottom = the source of these fixes (the verbatim user feedback).
+4. For M11: `src/world/poiAssembler.ts` (`placeProcgenPOI`, panel registration), `src/world/panelPlacement.ts` (`findSurfaceMounts`/`validatePanels`/`pruneBuriedPanels`), `src/player/interaction.ts` (the `salvageables` case — what makes a panel openable), + `src/world/poiArchetypes.ts`/`poiComponents.ts` (the `wrecked_tank` assembly).
 
-## What Phase B shipped (the headlines)
-- **M6** — survival rebalance (GOD_MODE off, tuned curve) + diegetic-HUD (`FEATURES.diegeticSurvival`, ON) + flat-color texture audit + procedural-wreck realism overhaul.
-- **M7** — crashing-ship "Skyfall" event + walkable wreck interiors (`enterable_wreck`).
-- **M8** — the deep cave (descent funnel → roofed chamber → dark-nav → dressing → dais) + the companion egg (E to hatch).
-- **M9 — architectural-risk physics, ALL behind default-OFF flags (walk-test-gated):** ⑪ rideable-sled (decided, `rideableSled`) · ⑫ real-rope Verlet (`realRope`) · ⑬ real-cloth Verlet door-flap (`realCloth`).
-- **M10 — arrival & tools:** ⑭ scrap-machete pry tool (live) · ⑮ repairable-speeder (`repairableSpeeder`, OFF) · ⑯ drop-pod-intro (DEFERRED by you) · ⑰ pickup-instancing (measured: 75% of draw calls — build deferred to this review).
+## The review-fix pass (M11→M13) — pause after M13
+- **M11 — wreck/panel fixes (THIS tier, ~the next few cycles):** ⓐ procgen-wreck access panels **not openable** · ⓑ procgen-wreck panels **floating** · ⓒ `wrecked_tank` interior **ribbing floats** · ⓓ `wrecked_tank` reads **disconnected/floating → structural** · ⓔ `wrecked_tank` access **panel floats/unconnected**.
+- **M12 — sand worm:** ⓕ remove dorsal ridges · ⓖ attack: remove the high jump → charge-straight then dive from current pos · ⓗ alert audio → quiet rumble + screen-shake buildup.
+- **M13 — weapon & vehicle audio:** ⓘ gunshot + reload SFX (all guns) · ⓙ speeder engine → lower/smoother hum.
+- After M13 → **PAUSE** at the "Phase-B review fixes complete" milestone (`checkpoint: milestone`).
 
-## ▶ The review — what to do (no rush; the loop waits)
-1. **Give your held Phase-A/B feedback.** You said you had lots — drop it in `docs/campaign/steering.md` (above the marker) and/or tell me directly. I'll fold it into the roadmap/backlog at resume.
-2. **Walk-test in `npm run dev`** (the headless harness can't judge feel). Flip these flags in `src/config/features.ts` and evaluate:
-   - `realRope` — sled tow rope dynamic sag/swing.
-   - `realCloth` — large-tent door-flap billow (close the door).
-   - `repairableSpeeder` — the speeder spawns broken; repair it with 4 scrap (E).
-   - `rideableSled` — inert (the ride isn't built; backlog §A).
-   - Plus the wider game: the cave + companion egg, the diegetic HUD, the survival curve, the scrap-machete pry. Owed walk-tests are listed in [backlog.md](backlog.md) **§A**.
-3. **Decisions queued for you:**
-   - **⑯ drop-pod-intro** — the big deferred feature; design it in detail (its own `/feature-slice` when ready).
-   - **⑰ pickup-instancing** — measured at ~75% of draw calls (high-value); the plan is in **D263** + backlog §A. Decide: build it human-attended (you watch the frame counter + confirm item collection still works), or defer.
-   - Which M9/M10 flags to flip ON for real (you veto/approve the FEEL).
+## Cycle 60 focus — **M11 ⓐ + ⓑ (do them together — same root): procgen-wreck panels not-openable + floating**
+These are almost certainly the SAME placement/registration path on the socket-grammar archetypes (derelict / satellite / tank_cluster / enterable_wreck), so fix them in one pass.
 
-## ▶ How to resume
-- **`/campaign-approve`** — clears the gate, sets `status: active`. With 59/75 cycles left there's headroom; the next `/loop /campaign-cycle` continues per whatever you've put in the roadmap/steering.
-- The roadmap "Up next" past M10 is currently empty (Phase B was the plan), so before resuming, either: add new work to `docs/roadmap.md` "Up next" / `steering.md`, or point me at the backlog items (⑯ design, ⑰ build, the flag flips, the owed walk-tests). If you resume with an empty roadmap + backlog, the loop will treat the planned work as DONE (`until: roadmap-empty`) and propose new direction for your approval.
+### Priority items (in order)
+1. **Recon FIRST — reproduce + locate.** Which archetypes have the broken panels? Spawn each via the rig (`spawnProcgenWreckRig` / the POI rig) + check: (a) do the access panels register as salvageable (`registerSalvageable` / the `salvageables` registry — "not openable" = the panel exists visually but isn't in the registry, or its pry collider/`pickupId`-equiv isn't hit)? (b) are they seated FLUSH on the hull (`findSurfaceMounts` flush-quaternion) or floating off it? The existing `verify:placement` bury-audit + `verify:colliders` cover SOME of this — check whether the new archetypes are even IN those audits.
+2. **Not-openable (ⓐ).** Trace the salvage path: a panel is openable iff it's registered + the `salvageables` interaction resolves it + a pry tool is held (scrap_bar/scrap_machete, C57). Likely the socket-grammar panels aren't being `registerSalvageable`'d (the legacy `placeWreck`/flagship path registers; the new `placeProcgenPOI` may not). Wire registration for the archetype panels.
+3. **Floating (ⓑ).** The panel mount on the new archetypes sits off-surface — fix the `findSurfaceMounts` flush-seat (full-quaternion + inward offset) for the socket-component hull shapes, OR the component's panel socket is mis-placed. Render to confirm flush.
+4. **Verify** — `npm run verify:all` (the placement + collider audits are directly relevant; if the new archetypes aren't audited, consider extending the audit so this can't regress — that's the D235 contract). Render the fixed archetypes (panels flush + the pry-glow). A probe that the panels are registered + openable.
+5. **Scope** — if ⓐ+ⓑ across all archetypes is too big for one cycle, fix the worst archetype(s) `[partial]` + continue; log which remain.
 
-## State pointers
-- `docs/campaign/campaign-state.json` — `status: paused`, `stop_reasons: ["milestone-review"]`.
-- `docs/decisions.md` — D257–D263 (the M9/M10 calls; D263 = the ⑰ measure+plan).
-- `docs/backlog.md` §A — the owed walk-tests + deferred builds (⑪ ride, ⑫ body-coupling, ⑯ drop-pod, ⑰ instancing, cave expansion…).
-- `docs/changelog.md` — the full Phase-B per-cycle history.
+### CRITICAL — stop conditions
+- **D81:** these are geometry/registration fixes — almost certainly NO save change. If one appears, STOP + surface (never bump SAVE_VERSION).
+- **Determinism:** the socket grammar is `phash`-driven (one `seedOf` draw, D226); any change to panel placement/registration must NOT add world-rand draws (it desyncs the salvage stream). Reuse the existing rolled values.
+- **Don't touch the Skyfall wreck or the cave** — those are the user's dedicated sessions (not the loop).
+
+## Notable footguns
+- **"Openable" = registered + interaction-resolvable + pry-tool-gated** — a visible panel that isn't `registerSalvageable`'d looks fine but won't open.
+- **Flush seat** = full-quaternion mount + inward offset (the `findSurfaceMounts` path); a fixed-Y or wrong-normal mount floats.
+- **The collider/placement audits** are the regression guard — extend them to the new archetypes if they're not covered (D235).
+- `verify:placement` buffers output to the END + is slow; don't kill it early.
+- Determinism: NO new world-rand draws (phash only).
+
+## Verification protocol
+`npm run verify:all` (placement + colliders) + a render of the fixed archetypes (panels flush + pry-glow) + an eval/probe that the panels register + resolve as salvageable. Pry FEEL → walk-test (flag for the post-M13 review).
+
+## Begin
+Read the order → reproduce the not-openable + floating panels per archetype (rig spawn) → trace registration + the flush-mount → fix ⓐ+ⓑ (no new rand; extend the audit) → `verify:all` + render → `/session-end`. `[partial]` ok. Boot fresh from FILES.

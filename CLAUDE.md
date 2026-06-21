@@ -64,19 +64,21 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      Prior milestones live in docs/changelog.md — do NOT accumulate "Prior milestone"
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
-**⏸ CAMPAIGN PAUSED — `campaign/2026-06-18`** (autonomous; PHASE-level review). **PHASE B COMPLETE (M6→M10) → paused at the "Phase B — Build-out complete"
-milestone** — the planned BIG review. `status: paused`, `awaiting_approval: true`, `stop_reasons: ["milestone-review"]` (59/75 cycles). **To resume:** give
-the held Phase-A/B feedback + walk-test, then `/campaign-approve` (or steer). Each `/campaign-cycle` boots from `docs/campaign/campaign-state.json` + `docs/roadmap.md` — NOT this note.
+**🟢 CAMPAIGN ACTIVE — `campaign/2026-06-18`** (autonomous; PHASE-level review). **Phase B (M6→M10) COMPLETE + reviewed (2026-06-20).** The user gave the
+held Phase-A/B feedback → triaged → chose: **campaign runs a REVIEW-FIX PASS (M11→M13); the Skyfall hero wreck + the cave rework are DEDICATED solo sessions
+(NOT the loop).** The loop pauses next at the "Phase-B review fixes complete" milestone (after M13). Each `/campaign-cycle` boots from `docs/campaign/campaign-state.json` + `docs/roadmap.md` — NOT this note.
 
-**Last shipped**: Campaign **C59** (2026-06-20, cycle 59/75) — **M10 ⑰ pickup-instancing MEASURED + planned → M10 done → ⏸ PAUSED at the Phase-B milestone**
-(`tsc` clean — no `src/` change; the measure was a preview eval). Measured **382 world pickups = ~75% of 505 draw calls** → instancing ≈ a 75% cut (high-value);
-the build is a CORE item-collection-loop rewrite + ⑰ is "human-attended perf," so it's DEFERRED to this review (plan in D263 + backlog §A). **Phase B is built to the boundary:**
-⑭ scrap-machete ✓ + ⑮ repairable-speeder ✓; ⑯ drop-pod-intro user-deferred; ⑰ measured+planned. M9's physics + M10's repairable-speeder are all behind default-OFF flags.
+**Review-fix pass (from the 2026-06-20 triage — backlog "Fresh triage" block):**
+- **M11 — wreck/panel fixes** ← current: procgen-wreck panels not-openable + floating; `wrecked_tank` ribbing/structure/panel floating.
+- **M12 — sand worm:** remove dorsal ridges · attack = charge→dive (no high jump) · alert audio → quiet rumble buildup.
+- **M13 — weapon & vehicle audio:** gunshot + reload SFX (all guns) · smoother/lower speeder hum.
 
-**⏸ Next = THE BIG REVIEW (not a build cycle).** Phase B (M6→M10) is done; the loop is paused for the planned review. **Human action:** give all held Phase-A/B
-feedback (`docs/campaign/steering.md` or directly); walk-test everything (flip `realRope`/`realCloth`/`rideableSled`/`repairableSpeeder` in `npm run dev` + play
-through — owed tests in [docs/backlog.md](docs/backlog.md) §A); design the deferred **⑯ drop-pod-intro**; decide **⑰ pickup-instancing** (build it human-attended — a
-measured ~75% draw-call win, planned in D263). Then **`/campaign-approve`** to resume/steer. See [docs/next-session-prompt.md](docs/next-session-prompt.md).
+**NOT in the loop (dedicated solo sessions):** the **Skyfall crashed-ship** (a NEW researched extremely-high-quality enterable HERO wreck — its own `/feature-slice`:
+research → model → iterate WITH the user; + its fire-from-the-wreck fix) and the **CAVE rework** (user planning the direction). Both in [docs/backlog.md](docs/backlog.md).
+Also still queued for the user: ⑯ drop-pod-intro, ⑰ pickup-instancing (human-attended), + the §A walk-tests/flag-flips.
+
+**Last shipped**: Campaign **C59** (2026-06-20, cycle 59/75) — M10 ⑰ pickup-instancing measured (382 pickups = ~75% of draw calls) + planned + human-deferred → M10
+done → paused at the Phase-B milestone (now reviewed + resumed). **Next** = cycle 60 = **M11 ⓐ+ⓑ** — procgen-wreck panels not-openable + floating (same placement/registration root). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 
