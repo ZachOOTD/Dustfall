@@ -37,6 +37,8 @@ import { Tuning } from '../config/tuning.ts';
 // stone/scrap, not maintained structure (D252).
 const _caveRockMat = new THREE.MeshLambertMaterial({ color: 0x2c2620, flatShading: true });
 const _caveRockDark = new THREE.MeshLambertMaterial({ color: 0x1c1813, flatShading: true });
+// C50 dressing — a muted, DRIED old bone (not bright white): a long-dead skeleton, D252.
+const _caveBoneMat = new THREE.MeshLambertMaterial({ color: 0x8a7d68, flatShading: true });
 
 export interface DeepCave {
   group: THREE.Group;
@@ -94,6 +96,50 @@ export function spawnDeepCave(
   // a lintel over the doorway (its underside above head height so the gap reads as a portal)
   const lintelH = (H - Tuning.CAVE_DOOR_HEIGHT) / 2;
   addBox(_caveRockMat, { x: t, y: lintelH, z: doorHalf }, { x: -hx, y: Tuning.CAVE_DOOR_HEIGHT + lintelH, z: 0 });
+
+  // ── decayed dressing (D252) — sparse, dark, long-dead: rubble piles, fallen rock, a dry
+  //    skeleton, collapsed ceiling slabs. All isWreckDecoration (no colliders), on the floor,
+  //    within the room footprint. NO powered/lit/maintained objects. ──
+  const deco = (m: THREE.Object3D) => { m.traverse((o) => { o.userData.isWreckDecoration = true; const mm = o as THREE.Mesh; if (mm.isMesh) { mm.castShadow = true; mm.receiveShadow = true; } }); g.add(m); };
+  // rubble piles tucked in the two back corners
+  for (const sz of [-1, 1]) {
+    for (let i = 0; i < 4; i++) {
+      const s = 0.16 + (i % 3) * 0.11;
+      const chunk = new THREE.Mesh(new THREE.IcosahedronGeometry(s, 0), i % 2 ? _caveRockMat : _caveRockDark);
+      chunk.position.set(hx - 0.5 - (i % 2) * 0.4, s * 0.6, sz * (hz - 0.5) - (i - 1.5) * 0.28);
+      chunk.rotation.set(i * 0.7, i * 1.3, i * 0.5);
+      deco(chunk);
+    }
+  }
+  // a few scattered fallen rocks across the floor
+  for (const [rx, rz, k] of [[-0.6, 0.8, 0], [1.2, -1.0, 1], [0.2, 1.4, 2], [-1.5, -0.6, 3]] as const) {
+    const s = 0.18 + (k % 3) * 0.1;
+    const r = new THREE.Mesh(new THREE.IcosahedronGeometry(s, 0), _caveRockDark);
+    r.position.set(rx, s * 0.55, rz); r.rotation.set(k, k * 0.6, k * 1.1);
+    deco(r);
+  }
+  // a dry skeleton slumped against the +X back wall — a long-dead scavenger, NOT a fresh body (D252)
+  {
+    const sk = new THREE.Group();
+    const skull = new THREE.Mesh(new THREE.IcosahedronGeometry(0.12, 0), _caveBoneMat);
+    skull.position.set(0, 0.5, 0);
+    const ribs = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.1, 0.4, 7), _caveBoneMat);
+    ribs.position.set(0, 0.26, 0.04); ribs.rotation.x = 0.5;
+    const legA = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.5, 5), _caveBoneMat);
+    legA.position.set(-0.18, 0.08, 0.2); legA.rotation.z = 1.3;
+    const legB = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.5, 5), _caveBoneMat);
+    legB.position.set(-0.14, 0.08, -0.12); legB.rotation.z = 1.1;
+    sk.add(skull, ribs, legA, legB);
+    sk.position.set(hx - 0.6, 0, 0.4); sk.rotation.y = -0.6;
+    deco(sk);
+  }
+  // a couple of collapsed ceiling slabs on the floor
+  for (let i = 0; i < 2; i++) {
+    const slab = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.18, 0.5), _caveRockDark);
+    slab.position.set(-1.0 + i * 1.8, 0.09, -1.3 + i * 0.6);
+    slab.rotation.set(0.1, i * 0.8, 0.06);
+    deco(slab);
+  }
 
   scene.add(g);
   const body = attachDeclaredColliders(world, g, colliders);

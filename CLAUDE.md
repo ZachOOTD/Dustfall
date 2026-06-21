@@ -69,17 +69,16 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 "Last shipped" note. Current target: **Phase B (M6→M10) — APPROVED + RELEASED**. The loop runs M6→M10 unattended,
 commits every cycle, and pauses only at "Phase B — Build-out complete" (after M10). Charter: `docs/campaign/campaign.md`.
 
-**Last shipped**: Campaign **C49** (2026-06-20, cycle 49/75) — **M8 ⑨ [partial] — cave DARK-NAV (ambient-darken + torch glow)**
-(`verify:all` PASS — tsc + placement 0/0 ×5 + colliders 0/40; **visual gate PASS** [dark-but-navigable, torch pool]; **no save bump**).
-Makes the cave dark-but-navigable. **`updateDeepCave(ctx, cave)`** (`world/deepCave.ts`, wired into the `main.ts` tick after `updateLighting`/
-`updatePlayer`): as the player descends into the cave (depth-below-rim × proximity-to-anchor → `d`), it multiplies `ctx.lights.ambient`/`sun` down to a
-floor (the cave reads DARK) + lights the immediate area with a NEW **torch** (a cheap no-shadow `PointLight` following the player; off elsewhere). Global
-dimming is safe (the player only sees the cave once enclosed). `Tuning.CAVE_*_FLOOR/TORCH_*`; exposed `ctx.deepCave`. Tone: no-horror, solitary (D252).
-**`[partial]`** — dressing + multi-chamber + the companion continue next cycle.
+**Last shipped**: Campaign **C50** (2026-06-20, cycle 50/75) — **M8 ⑨ [partial] — cave DECAYED DRESSING**
+(`verify:all` PASS — tsc + placement 0/0 ×5 + colliders 0/40; **visual gate PASS** [a dead, debris-strewn cave under the torch]; **no save bump**).
+Dresses the dark cave chamber as a long-dead place (D252): 18 sparse, dark decoration meshes in `world/deepCave.ts` — 2 rubble piles, 4 fallen rock
+chunks, a **dry skeleton** slumped against the back wall (NEW `_caveBoneMat` — a long-dead scavenger, not a fresh body), 2 collapsed ceiling slabs.
+All `isWreckDecoration`, no colliders; NO powered/lit objects. The cave mesh count rose 7→25. The cave is now a dark, navigable, dressed enterable
+space (funnel descent + roofed chamber + dark-nav + dressing). **`[partial]`** — multi-chamber + the companion continue next cycle.
 
-**Next session** = cycle 50 = **M8 ⑨ continued** — decayed dressing (D252, sparse dark props in the chamber) + (stretch) multi-chamber depth + the
-**M8 ⑩ companion-egg site** at the deepest chamber, per `feature-deep-cave.md`. Watch the **D81** save-bump STOP (none until ⑩'s additive
-`companionEggTaken?` flag). The loop only PAUSES at the Phase-B milestone (after M10). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
+**Next session** = cycle 51 = **M8 ⑨ continued** — multi-chamber depth (extend `deepCave.ts` to 2-3 connected chambers + ≤37° ramps + doorways toward
+the spec's 4-8 chambers) reserving the deepest chamber as the **M8 ⑩ companion-egg site**; this completes ⑨ and preps ⑩. Watch the **D81** save-bump
+STOP (none until ⑩'s additive `companionEggTaken?` flag). The loop only PAUSES at the Phase-B milestone (after M10). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 

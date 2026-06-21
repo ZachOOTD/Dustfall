@@ -3,6 +3,15 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign C50 — 2026-06-20 — M8: **deep-cave-build `[partial]`** — cave DECAYED DRESSING ✓ verify pass (ultracode)
+
+`verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40; the cave mesh count rose 7→25 — the +18 dressing meshes, all decoration). **Visual gate PASS** — `--scenario=cave --angle=inside` reads as a dead, debris-strewn cave under the torch. **No save bump.** Cycle 50/75. **`[partial]`** — dressing done; multi-chamber + the companion continue next cycle.
+
+**deep-cave-build `[partial]` — DECAYED DRESSING.** Dresses the dark cave chamber as a long-dead place (D252) so it reads as somewhere, not a bare box.
+- 18 sparse, dark, long-dead decoration meshes in `world/deepCave.ts`'s chamber (all `isWreckDecoration`, NO colliders, on the floor): 2 rubble piles tucked in the back corners, 4 scattered fallen rock chunks, a **dry skeleton** slumped against the back wall (NEW `_caveBoneMat` muted-bone group — a long-dead scavenger, NOT a fresh body), and 2 collapsed ceiling slabs. NO powered/lit/maintained objects.
+- **Visual:** the torch pool now lights dark rubble, a fallen slab, and rock chunks scattered on the floor, fading to black — dead, decayed, solitary, no-horror (D252). The skeleton's visibility + the overall feel → walk-test.
+- **Remaining → cycle 51:** multi-chamber depth (2-3 connected chambers + ≤37° ramps + doorways toward the spec's 4-8) reserving the deepest chamber as the **M8 ⑩ companion-egg site**; this completes ⑨ and preps ⑩.
+
 ## Campaign C49 — 2026-06-20 — M8: **deep-cave-build `[partial]`** — cave DARK-NAV (ambient-darken + torch glow) ✓ verify pass (ultracode)
 
 `verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 [deterministic; the new per-frame dark-nav runs clean in the harness] + colliders 0/40). **Visual gate PASS** — the cave rig `interior`/`inside` angles render the REAL dark-nav: a dark cave with a warm torch pool on the floor + near walls fading to black; a dark doorway portal from the torch-lit funnel floor. **No save bump.** Cycle 49/75. **`[partial]`** — dressing + multi-chamber + the companion continue next cycle.

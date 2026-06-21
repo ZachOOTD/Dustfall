@@ -600,3 +600,13 @@ first stop will be `max-cycles` ~mid-Phase-A; resume via `/campaign-start --resu
 - **Spend:** ~300K (the updateDeepCave logic + torch + tuning + main/ctx wiring + the rig dark-nav render + verify:all + the doc suite); campaign total ~13.49M; cycle **49/75**.
 - **Commit:** `dff3abe`.
 - **Next (cycle 50):** **M8 ⑨ continued** — decayed dressing (D252, sparse dark props) + (stretch) multi-chamber depth + the **M8 ⑩ companion-egg site** at the deepest chamber. **Verdict: CONTINUE** — not terminal (cycle 49/75); not a milestone; a `[partial]`-SHIPPED is progress (the dark-nav is built + gate-verified). `consecutive_no_progress` stays 0.
+
+## Cycle 50 — M8 ⑨ continued [partial]: cave DECAYED DRESSING (2026-06-20) — PARTIAL ⚡ULTRACODE
+- **Planned:** dress the dark cave chamber as a long-dead place (D252) so it reads as somewhere, not a bare box.
+- **Shipped (`[partial]` — the dressing):** sparse, dark, long-dead props in `world/deepCave.ts`'s chamber (18 decoration meshes, all `isWreckDecoration`, NO colliders, on the floor within the room footprint): 2 rubble piles tucked in the back corners, 4 scattered fallen rock chunks, a **dry skeleton** slumped against the back wall (a muted-bone group — a long-dead scavenger, NOT a fresh body, D252), and 2 collapsed ceiling slabs. NEW `_caveBoneMat` (muted dried bone). NO powered/lit/maintained objects.
+- **Verify:** `verify:all` PASS — tsc + placement **0/0 ×5** (deterministic; the dressing is decoration, no colliders, no scatter impact) + colliders **0/40**. The cave mesh count rose 7→**25** (confirmed via the `cave` scenario) — the +18 dressing meshes.
+- **Visual iteration:** appearance gate PASS — `--scenario=cave --angle=inside` reads as a dead, debris-strewn cave under the torch: dark rubble piles, a fallen slab, and rock chunks scattered on the floor in the warm torch pool, fading to black. Dead, decayed, solitary, no-horror (D252). The skeleton's visibility (against the dark back wall) + the overall feel → walk-test.
+- **Decisions:** none new — executes D254.
+- **Spend:** ~230K (the dressing props + the bone material + the inside render + verify:all + the doc suite); campaign total ~13.72M; cycle **50/75**.
+- **Commit:** `PENDING` (patched in the follow-up ledger commit).
+- **Next (cycle 51):** **M8 ⑨ continued** — multi-chamber depth (extend `deepCave.ts` to 2-3 connected chambers + ≤37° ramps + doorways toward the spec's 4-8 chambers) reserving the DEEPEST chamber as the **M8 ⑩ companion-egg site**; this completes ⑨ and preps ⑩. **Verdict: CONTINUE** — not terminal (cycle 50/75); not a milestone; a `[partial]`-SHIPPED is progress (the dressing is built + gate-verified). `consecutive_no_progress` stays 0.
