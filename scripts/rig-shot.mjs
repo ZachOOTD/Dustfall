@@ -1331,16 +1331,21 @@ const SCENARIOS = {
       const floorY = ctx.terrain.heightAt(a.x, a.z);               // carved funnel floor
       const rimY = ctx.terrain.heightAt(a.x + 30, a.z);            // undisturbed dune just outside the rim
       const R = 22;                                                // ~CAVE_PIT_CLEARING
-      if (ang === 'interior' || ang === 'door') {
-        // peer through the -X doorway into the enclosed chamber. Boost exposure: the
-        // dark-nav lighting isn't in yet (C49), so this checks the GEOMETRY reads as a room.
-        ctx.three.renderer.toneMappingExposure = 1.8;
-        cam.position.set(a.x - 6.5, floorY + 1.7, a.z);
-        cam.lookAt(a.x + 1, floorY + 1.5, a.z);
-      } else if (ang === 'inside') {
-        ctx.three.renderer.toneMappingExposure = 2.0;
-        cam.position.set(a.x - 2.2, floorY + 1.7, a.z + 1.6);
-        cam.lookAt(a.x + 3, floorY + 1.4, a.z - 1.2);
+      if (ang === 'interior' || ang === 'door' || ang === 'inside') {
+        // C49 dark-nav LOOK: emulate updateDeepCave for the shot (the real effect is
+        // player-position-driven) — darken ambient/sun + light the REAL cave torch.
+        ctx.lights.ambient.intensity *= 0.1;
+        ctx.lights.sun.intensity *= 0.06;
+        const torch = ctx.deepCave && ctx.deepCave.torch;
+        if (ang === 'inside') {
+          if (torch) { torch.visible = true; torch.intensity = 2.4; torch.position.set(a.x - 1.5, floorY + 1.6, a.z + 1.0); }
+          cam.position.set(a.x - 2.2, floorY + 1.7, a.z + 1.6);
+          cam.lookAt(a.x + 3, floorY + 1.4, a.z - 1.2);
+        } else {
+          if (torch) { torch.visible = true; torch.intensity = 2.4; torch.position.set(a.x - 4.5, floorY + 1.6, a.z); }
+          cam.position.set(a.x - 6.5, floorY + 1.7, a.z);
+          cam.lookAt(a.x + 1, floorY + 1.5, a.z);
+        }
       } else if (ang === 'approach') {
         cam.position.set(a.x + R * 1.7, rimY + 3.0, a.z + R * 0.5);
         cam.lookAt(a.x, floorY + 2.0, a.z);

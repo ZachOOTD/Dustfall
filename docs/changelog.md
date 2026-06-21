@@ -3,6 +3,16 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign C49 — 2026-06-20 — M8: **deep-cave-build `[partial]`** — cave DARK-NAV (ambient-darken + torch glow) ✓ verify pass (ultracode)
+
+`verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 [deterministic; the new per-frame dark-nav runs clean in the harness] + colliders 0/40). **Visual gate PASS** — the cave rig `interior`/`inside` angles render the REAL dark-nav: a dark cave with a warm torch pool on the floor + near walls fading to black; a dark doorway portal from the torch-lit funnel floor. **No save bump.** Cycle 49/75. **`[partial]`** — dressing + multi-chamber + the companion continue next cycle.
+
+**deep-cave-build `[partial]` — the DARK-NAV.** Makes the cave dark-but-navigable (and unblocks the interior visual gate), per `feature-deep-cave.md` (D254).
+- **`updateDeepCave(ctx, cave)`** in `world/deepCave.ts`, wired into the `main.ts` tick after `updateLighting`/`updatePlayer`. As the player descends into the cave (depth below the funnel rim × horizontal proximity to the anchor → a `d` factor), it multiplies `ctx.lights.ambient`/`sun` down to a floor (the cave reads DARK) and lights the immediate area with a NEW **torch** — a cheap NO-SHADOW `PointLight` that follows the player (off elsewhere; no shadow map → cheap). Global dimming is safe (the player only SEES the cave once enclosed; `d`=0 on the surface).
+- `Tuning.CAVE_AMBIENT_FLOOR/SUN_FLOOR/TORCH_INTENSITY/TORCH_DIST`. Exposed `ctx.deepCave` (+ the `GameContext` type) so the rig can render the real effect; the `cave` scenario's `interior`/`inside` angles now render the dark-nav (not a fake exposure boost).
+- **Tone:** dark = isolation, no-horror, solitary (D252). The exact darkness balance + the in-MOTION torch reach → walk-test.
+- **Remaining → cycle 50:** decayed dressing (D252, sparse dark props) + (stretch) multi-chamber depth + the M8 ⑩ companion-egg site at the deepest chamber.
+
 ## Campaign C48 — 2026-06-20 — M8: **deep-cave-build `[partial]`** — the enclosed roofed CHAMBER at the funnel floor ✓ verify pass (ultracode)
 
 `verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 [deterministic — counts unchanged from C47] + colliders 0/40). The cave interior is a FIXED module (not an `ARCH_WEIGHTS` archetype) so it's outside the archetype collider sweep — its 7 colliders are declared explicitly + structurally confirmed (`cave` scenario → `caveFound:true, caveMeshes:7`). **No save bump.** Cycle 48/75. **`[partial]`** — the interior shell; dark-nav + dressing + the companion continue next cycle.

@@ -28,6 +28,7 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
 import type { Terrain } from './terrain.ts';
+import type { GameContext } from '../GameContext.ts';
 import type { ColliderSpec } from '../physics/bodies.ts';
 import { attachDeclaredColliders } from '../physics/bodies.ts';
 import { Tuning } from '../config/tuning.ts';
@@ -41,6 +42,9 @@ export interface DeepCave {
   group: THREE.Group;
   body: RAPIER.RigidBody;
   basePos: THREE.Vector3;
+  /** C49 dark-nav — a cheap NO-SHADOW point light that follows the player while
+   *  they're inside the cave (the "torch" glow); off elsewhere. */
+  torch: THREE.PointLight;
 }
 
 /** Build + place the deep-cave interior chamber at the carved funnel floor. */
@@ -93,5 +97,45 @@ export function spawnDeepCave(
 
   scene.add(g);
   const body = attachDeclaredColliders(world, g, colliders);
-  return { group: g, body, basePos: new THREE.Vector3(anchor.x, floorY, anchor.z) };
+
+  // C49 dark-nav — the torch glow: a warm NO-SHADOW point light, off until the player
+  // is inside the cave (driven by updateDeepCave). No shadow map => cheap per-frame.
+  const torch = new THREE.PointLight(0xffb066, 0, Tuning.CAVE_TORCH_DIST, 1.7);
+  torch.castShadow = false;
+  torch.visible = false;
+  scene.add(torch);
+
+  return { group: g, body, basePos: new THREE.Vector3(anchor.x, floorY, anchor.z), torch };
+}
+
+// C49 dark-nav — darken the scene when the player is DOWN IN the cave (ambient/sun fall
+// to a floor as they descend the funnel + near the centre), and light the immediate area
+// with the torch. Cheap + global: dimming scene-wide is fine because the player only SEES
+// the cave once enclosed (the walls occlude the surface), and `d`=0 elsewhere so the surface
+// is untouched. Call AFTER updateLighting (which sets the surface values each frame) +
+// updatePlayer (current player pos). Pause-safe (the tick's pause-gate skips the whole chain).
+export function updateDeepCave(ctx: GameContext, cave: DeepCave): void {
+  const t = ctx.player.body.body.translation();
+  const a = cave.basePos;
+  const dx = t.x - a.x, dz = t.z - a.z;
+  const horiz = Math.sqrt(dx * dx + dz * dz);
+  const R = Tuning.CAVE_PIT_CLEARING;
+  let d = 0;
+  if (horiz < R) {
+    const rimY = a.y + Tuning.CAVE_PIT_CRATER_DEPTH;                       // ~the surrounding surface level
+    const belowRim = Math.min(1, Math.max(0, (rimY - t.y) / Tuning.CAVE_PIT_CRATER_DEPTH));
+    let hf = Math.min(1, Math.max(0, 1 - horiz / R));
+    hf = hf * hf * (3 - 2 * hf);                                           // smoothstep on horizontal proximity
+    d = belowRim * hf;                                                     // dark only when DEEP and CENTRAL
+  }
+  if (d > 0) {
+    ctx.lights.ambient.intensity *= (1 - d) + d * Tuning.CAVE_AMBIENT_FLOOR;
+    ctx.lights.sun.intensity *= (1 - d) + d * Tuning.CAVE_SUN_FLOOR;
+  }
+  const torch = cave.torch;
+  torch.visible = d > 0.05;
+  if (torch.visible) {
+    torch.position.set(t.x, t.y + 1.4, t.z);                              // ~chest height on the player
+    torch.intensity = d * Tuning.CAVE_TORCH_INTENSITY;
+  }
 }

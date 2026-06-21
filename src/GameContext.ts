@@ -37,6 +37,7 @@ import type { Locker } from './world/locker.ts';
 import type { Stake } from './world/stake.ts';
 import type { Companion } from './enemies/companion.ts';
 import type { SarlaccPit } from './enemies/sarlaccPit.ts';
+import type { DeepCave } from './world/deepCave.ts';
 import type { BiomeSampler } from './world/biomes.ts';
 import type { SalvageableRegistry } from './world/salvage.ts';
 import type { FootprintRegistry } from './world/footprints.ts';
@@ -166,6 +167,8 @@ export interface GameContext {
   companion: Companion | null;
   /** Cycle 8 — the wreck-yard Sarlacc pit (one per world; null until placed). */
   sarlaccPit: SarlaccPit | null;
+  /** M8 ⑨ — the deep cave interior + dark-nav (one per world). */
+  deepCave: DeepCave;
   salvageables: SalvageableRegistry;
   weather: Weather;
   ambientDust: AmbientDust;

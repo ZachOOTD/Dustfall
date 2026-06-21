@@ -61,7 +61,7 @@ import { spawnShrewsProcgen, updateShrews } from './enemies/shrew.ts'; // ACL DE
 import { spawnVulturesProcgen, spawnCirclingVultures, updateVultures } from './enemies/vulture.ts'; // ACAH
 import { spawnSandWorm, sampleSandwormHome, updateSandWorm } from './enemies/sandWorm.ts';
 import { spawnSarlaccPit, updateSarlaccPit } from './enemies/sarlaccPit.ts';
-import { spawnDeepCave } from './world/deepCave.ts';
+import { spawnDeepCave, updateDeepCave } from './world/deepCave.ts';
 import { updateWieldAction } from './player/wieldAction.ts';
 import { updateReload } from './player/combat.ts';
 import { createGhostPreview, updateGhostPreview } from './player/ghostPreview.ts';
@@ -283,7 +283,6 @@ const sarlaccPit = spawnSarlaccPit(three.scene, terrain, biomes.sarlaccPitAnchor
 // M8 ⑨ (C48) — the deep-cave enclosed interior at the carved funnel floor (biomes.caveAnchor).
 // A fixed feature (one per world); the funnel descent itself is carved in terrain.ts (C47).
 const deepCave = spawnDeepCave(three.scene, physics.world, terrain, biomes.caveAnchor);
-void deepCave;   // (no per-frame update yet — static colliders; dark-nav + dressing land next cycle)
 const lizards = spawnLizardsProcgen(
   three.scene, physics.world, terrain, biomes, scatterRand, allPoiPositions,
 );
@@ -447,6 +446,7 @@ const ctx: GameContext = {
   stakes: { list: [] },              // Session ACE
   companion: null,                   // Session AAE
   sarlaccPit,                        // ACAQ Cycle 8 — wreck-yard hero hazard
+  deepCave,                          // M8 ⑨ (C48/C49) — the deep cave interior + dark-nav
 
   salvageables,
   weather,
@@ -903,6 +903,7 @@ startLoop(ctx, (c, dt) => {
   updateCompanion(c, dt);        // AAE — Rocky-inspired creature follows player
   updateSandWorm(c, dt);         // DD — buried boss; breaches when player enters territory
   updateSarlaccPit(c, dt);       // ACAQ Cycle 8 — wreck-yard maw; gapes + pulls + bites near the player
+  updateDeepCave(c, deepCave);   // M8 ⑨ (C49) — dark-nav: darken ambient/sun + torch glow when the player is down in the cave (AFTER updateLighting set the surface values)
   updateKillDrag(c);             // ACF — drag a slain raider corpse (on foot/sled) or worm carcass (speeder) via the shared rope constraint. AFTER updateRaiders/updateSandWorm (they skip dead entities, leaving drag-movement to this) + BEFORE updateSledRiders.
   updateFootprints(c.footprints, c.time.elapsed); // age + fade pooled decals
   updateFootprintPuffs(c, dt);   // AAG — particle puffs from each footstep

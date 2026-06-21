@@ -613,6 +613,12 @@ export const Tuning = {
   CAVE_ROOM_HEIGHT: 3.8,               // m — interior clear height at centre (>= ~2.3 at the edges)
   CAVE_DOOR_HALF: 0.9,                 // m — doorway half-width (the gap in the -X entrance wall)
   CAVE_DOOR_HEIGHT: 2.3,               // m — doorway clear height (lintel underside)
+  // M8 ⑨ (C49) — dark-nav: as the player descends into the cave, ambient + sun fall to a floor
+  // (the cave reads dark), and a cheap no-shadow TORCH lights the immediate area (navigable).
+  CAVE_AMBIENT_FLOOR: 0.1,             // ambient intensity multiplier deep in the cave (0 = pitch black)
+  CAVE_SUN_FLOOR: 0.06,                // sun intensity multiplier deep in the cave
+  CAVE_TORCH_INTENSITY: 2.4,           // the player's torch glow (point light, no shadows) when in the cave
+  CAVE_TORCH_DIST: 11,                 // m — torch falloff distance
 
   // Wreck palette (Session S). Cool grey-rust industrial; avoids pure
   // blacks/whites so primitives feel weathered, not cartoon.

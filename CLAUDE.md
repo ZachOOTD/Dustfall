@@ -69,19 +69,17 @@ Run with `npm run dev` (port 5173). Type-check / verify with
 "Last shipped" note. Current target: **Phase B (M6→M10) — APPROVED + RELEASED**. The loop runs M6→M10 unattended,
 commits every cycle, and pauses only at "Phase B — Build-out complete" (after M10). Charter: `docs/campaign/campaign.md`.
 
-**Last shipped**: Campaign **C48** (2026-06-20, cycle 48/75) — **M8 ⑨ [partial] — the enclosed roofed CHAMBER at the funnel floor**
-(`verify:all` PASS — tsc + placement 0/0 ×5 + colliders 0/40; **no save bump**).
-Turns the C47 descent funnel into a space the player walks INTO. NEW **`world/deepCave.ts`** — `spawnDeepCave` places a roofed chamber on the carved
-funnel floor (4 walls + a roof + a **doorway gap** + a lintel; 7 declared box colliders via `attachDeclaredColliders`), wired into `main.ts` as a fixed
-feature. Key geometry call: **no separate floor slab** — the player walks the continuous funnel terrain (a flat slab would make an unclimbable doorway
-step); walls extend ~1 m below centre to seal the rising bowl; the roof clears the KCC snap. `Tuning.CAVE_ROOM_*`. The cave is a fixed module (not an
-archetype), so its colliders are declared explicitly + sanity-confirmed (7 meshes : 7 colliders). **`[partial]`** — the interior shell; the dark-nav
-(needed for the interior LOOK gate) + dressing + the companion continue next cycle.
+**Last shipped**: Campaign **C49** (2026-06-20, cycle 49/75) — **M8 ⑨ [partial] — cave DARK-NAV (ambient-darken + torch glow)**
+(`verify:all` PASS — tsc + placement 0/0 ×5 + colliders 0/40; **visual gate PASS** [dark-but-navigable, torch pool]; **no save bump**).
+Makes the cave dark-but-navigable. **`updateDeepCave(ctx, cave)`** (`world/deepCave.ts`, wired into the `main.ts` tick after `updateLighting`/
+`updatePlayer`): as the player descends into the cave (depth-below-rim × proximity-to-anchor → `d`), it multiplies `ctx.lights.ambient`/`sun` down to a
+floor (the cave reads DARK) + lights the immediate area with a NEW **torch** (a cheap no-shadow `PointLight` following the player; off elsewhere). Global
+dimming is safe (the player only sees the cave once enclosed). `Tuning.CAVE_*_FLOOR/TORCH_*`; exposed `ctx.deepCave`. Tone: no-horror, solitary (D252).
+**`[partial]`** — dressing + multi-chamber + the companion continue next cycle.
 
-**Next session** = cycle 49 = **M8 ⑨ continued** — the **dark-nav** (ambient-darken-below-Y + an emissive torch glow — makes the interior dark-but-
-navigable AND visually gate-able) + decayed dressing (D252) + multi-chamber depth + the M8 ⑩ companion-egg site, per `feature-deep-cave.md`. Watch the
-**D81** save-bump STOP (none until ⑩'s additive `companionEggTaken?` flag). The loop only PAUSES at the Phase-B milestone (after M10).
-See [docs/next-session-prompt.md](docs/next-session-prompt.md).
+**Next session** = cycle 50 = **M8 ⑨ continued** — decayed dressing (D252, sparse dark props in the chamber) + (stretch) multi-chamber depth + the
+**M8 ⑩ companion-egg site** at the deepest chamber, per `feature-deep-cave.md`. Watch the **D81** save-bump STOP (none until ⑩'s additive
+`companionEggTaken?` flag). The loop only PAUSES at the Phase-B milestone (after M10). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 
