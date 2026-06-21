@@ -64,9 +64,10 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      Prior milestones live in docs/changelog.md — do NOT accumulate "Prior milestone"
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
-**🟢 CAMPAIGN ACTIVE — `campaign/2026-06-18`** (autonomous; PHASE-level review). **Phase B (M6→M10) COMPLETE + reviewed (2026-06-20).** The user gave the
-held Phase-A/B feedback → triaged → chose: **campaign runs a REVIEW-FIX PASS (M11→M13); the Skyfall hero wreck + the cave rework are DEDICATED solo sessions
-(NOT the loop).** The loop pauses next at the "Phase-B review fixes complete" milestone (after M13). Each `/campaign-cycle` boots from `docs/campaign/campaign-state.json` + `docs/roadmap.md` — NOT this note.
+**⏸ CAMPAIGN PAUSED — M11 batch-1 walk-test — `campaign/2026-06-18`** (autonomous review-fix pass; user batch-validates each tier). Phase B (M6→M10) complete +
+reviewed; now in the M11→M13 review-fix pass. **M11's confident panel fixes shipped → PAUSED for the user's walk-test** (`status: paused`, `stop_reasons:
+["milestone-review"]`). **To resume:** walk-test the wrecks (panels open? flush? + describe the tank ribbing/structure) then `/campaign-approve` with notes. The
+**Skyfall hero wreck + cave rework are DEDICATED solo sessions (NOT the loop).** Each `/campaign-cycle` boots from `docs/campaign/campaign-state.json` + `docs/roadmap.md` — NOT this note.
 
 **Review-fix pass (from the 2026-06-20 triage — backlog "Fresh triage" block). Autonomous, PAUSE-per-tier for the user's batch walk-test/listen:**
 - **M11 — wreck/panel fixes** ← current: ✅ ⓐ not-openable panels FIXED (C61/D264 — culled panels now hide; the raycast hits only the targets list so it was never occlusion). Remaining: ⓑ floating panels (seat mounts flush) · ⓒⓓⓔ `wrecked_tank` ribbing/structure/panel · 3 hand/hero-wreck straggler panels (§A).

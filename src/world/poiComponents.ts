@@ -379,8 +379,11 @@ export function wreckedTank(seed: number, _state = 'breached'): BuiltComponent {
     { kind: 'ball', radius: r * 0.95, pos: { x: -len / 2, y: r, z: 0 } },   // dome cap
   ];
   const panelMounts: PanelMount[] = [
-    // Salvage hatch on the exposed UPPER surface (faces +Y → never occluded).
-    { pos: new THREE.Vector3(-len * 0.36, r * 2, 0), quat: FACE.posY(), kind: 'cargo_container' as PanelKind },
+    // Salvage hatch on the exposed UPPER surface (faces +Y → never occluded). M11 ⓔ (C62):
+    // SUNK below the crest peak (2r) so the flat panel's edges embed into the curving hull
+    // instead of overhanging it with a daylight gap (the "floating/unconnected" read). The
+    // crest is the flattest spot (the tank is long in X), so a sunk panel here seats cleanly.
+    { pos: new THREE.Vector3(-len * 0.36, r * 2 - 0.28, 0), quat: FACE.posY(), kind: 'cargo_container' as PanelKind },
   ];
   const bbox = new THREE.Box3(new THREE.Vector3(-len / 2 - r, 0, -r * 1.2), new THREE.Vector3(len / 2 + r, r * 2, r * 1.2));
   return { mesh: g, sockets: [], colliders, panelMounts, bbox };
@@ -593,7 +596,10 @@ export function hullBarrel(seed: number, scale = 1): BuiltComponent {
     { kind: 'cylinder', halfHeight: len / 2, radius: r, pos: { x: 0, y: 0, z: 0 }, quat: FACE.posY() },
   ];
   const panelMounts: PanelMount[] = [
-    { pos: new THREE.Vector3(0, r, 0), quat: FACE.posY(), kind: 'fuselage' as PanelKind },
+    // M11 ⓑ (C62) — SUNK below the crest (y=r) so the flat panel's edges embed into the
+    // curving hull instead of overhanging it (the flat-panel-on-curved-hull float, same as
+    // the wrecked_tank). The Z-axis barrel is flattest along its length here.
+    { pos: new THREE.Vector3(0, r - 0.22, 0), quat: FACE.posY(), kind: 'fuselage' as PanelKind },
   ];
   const bbox = new THREE.Box3(new THREE.Vector3(-r, -r, -len / 2), new THREE.Vector3(r, r, len / 2));
   return { mesh: g, sockets, colliders, panelMounts, bbox };

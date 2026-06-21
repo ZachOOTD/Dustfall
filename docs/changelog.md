@@ -3,6 +3,16 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign C62 — 2026-06-20 — M11 ⓑ+ⓔ: **floating salvage panels seated** → ⏸ PAUSED for M11 batch-1 walk-test ✓ verify pass (ultracode)
+
+`verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40; deterministic mount sinks, no new rand). Cycle 62/75.
+
+**M11 ⓑ+ⓔ — floating salvage panels.** Root: a flat panel centered on a **curved hull crest** overhangs the curving-away hull → a daylight gap from 3/4 angles = the "floating/unconnected" read. **Fix:** sink the crest panel mounts so the edges embed into the curve — `wreckedTank` (`r*2 → r*2-0.28`) + `derelict` (`r → r-0.22`) in `poiComponents.ts` (fixed-value offsets, no new world-rand). Rig-confirmed.
+
+**Could not fix blind → user batch-validation:** ⓒ tank interior ribbing + ⓓ tank "disconnected/floating" structure are close-up/interior reads I couldn't reproduce from the rig's framed exterior angles — deferred to the walk-test rather than churn.
+
+**⏸ CAMPAIGN PAUSED — M11 batch-1** (autonomous + batch-validate model). The confident panel fixes are in: ⓐ not-openable (C61) + ⓑⓔ floating-seating (C62). `status=paused`. **Walk-test:** (1) do panels open (no dead teases)? (2) salvage panels flush (no float)? (3) describe the wrecked_tank ribbing/structure float so ⓒⓓ lands right. Then `/campaign-approve` (with notes) → M11-cont → M12 worm → M13 audio.
+
 ## Campaign C61 — 2026-06-20 — M11 ⓐ: **wreck panels "not openable" fixed** (culled panels now hide) ✓ verify pass (ultracode)
 
 `verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40; render-only fix). Live-preview: **21 culled panels now hidden, 79 openable intact, 0 visible-orphan procgen panels.** No save touch. Cycle 61/75. *(First M11 build fix; C60 was the investigation. Resumed into the Phase-B review-fix pass.)*
