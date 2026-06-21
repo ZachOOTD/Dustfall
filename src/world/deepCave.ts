@@ -140,6 +140,17 @@ export function spawnDeepCave(
     slab.rotation.set(0.1, i * 0.8, 0.06);
     deco(slab);
   }
+  // ── the M8 ⑩ companion-egg SITE — a low stone dais in a clear spot at the chamber's deep
+  //    end, marking where the companion egg will rest. The EGG itself is ⑩; this is just the
+  //    prepared site (decoration, low enough to step onto via autostep). ──
+  {
+    const dais = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.62, 0.22, 12), _caveRockMat);
+    dais.position.set(hx * 0.35, 0.11, -hz * 0.55);
+    dais.userData.isWreckDecoration = true; dais.castShadow = true; dais.receiveShadow = true; g.add(dais);
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.05, 5, 14), _caveRockDark);
+    rim.rotation.x = Math.PI / 2; rim.position.set(hx * 0.35, 0.23, -hz * 0.55);
+    rim.userData.isWreckDecoration = true; g.add(rim);
+  }
 
   scene.add(g);
   const body = attachDeclaredColliders(world, g, colliders);

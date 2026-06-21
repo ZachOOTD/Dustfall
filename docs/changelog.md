@@ -3,6 +3,16 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign C51 — 2026-06-20 — M8: **deep-cave-build COMPLETE** — the ⑩-egg dais + a scope call (single-chamber cave) ✓ verify pass (ultracode)
+
+`verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40; the dais is decoration — cave mesh count 25→27). **Visual gate PASS** — the dais reads as a marked site on the torch-lit cave floor. **No save bump.** Cycle 51/75. **⑨ COMPLETE.**
+
+**deep-cave-build COMPLETE — the ⑩ site + a scope decision (D255).**
+- **The M8 ⑩ companion-egg SITE:** a low stone dais (+ rim) at the chamber's deep end (`world/deepCave.ts`, decoration) marking where the egg will rest (the egg itself is ⑩).
+- **Scope call (D255):** ⑨ ships as a **complete single-chamber cave** (funnel descent + roofed chamber + dark-nav + dressing + the dais — verified, delivers the M8 deep-cave experience). The spec's **4-8-chamber expansion is deferred to `backlog.md` §A**, gated on a walk-test: the funnel bowl is too small/steep to host adjacent rooms (a chamber offset ~6 m sits on terrain +2.5-5 m → sub-2 m ceilings/buried walls), and descending rooms require walking UNDER the terrain heightfield — whether the KCC is blocked from below is unresolved (D254's open risk) and can't be walk-tested headless. Building multi-level rooms blind would risk broken traversal, so it's surfaced to the user (Phase-B milestone review) rather than built blind.
+- **The cave now:** a dark, navigable, dressed, enterable single-chamber cave at a far seeded `caveAnchor` — descend the funnel, enter the roofed chamber, torch-lit dark with rubble + a dry skeleton + the egg dais.
+- **Next:** ⑩ companion-egg-cherry-pick (the `2d4035b` spine at the dais; the additive `companionEggTaken?` save field).
+
 ## Campaign C50 — 2026-06-20 — M8: **deep-cave-build `[partial]`** — cave DECAYED DRESSING ✓ verify pass (ultracode)
 
 `verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40; the cave mesh count rose 7→25 — the +18 dressing meshes, all decoration). **Visual gate PASS** — `--scenario=cave --angle=inside` reads as a dead, debris-strewn cave under the torch. **No save bump.** Cycle 50/75. **`[partial]`** — dressing done; multi-chamber + the companion continue next cycle.
