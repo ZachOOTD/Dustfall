@@ -663,5 +663,5 @@ first stop will be `max-cycles` ~mid-Phase-A; resume via `/campaign-start --resu
 - **Visual iteration:** N/A — a scope/decision cycle, no new visual output (the C54 rope visual stands; its LOOK + the deferred body-coupling FEEL → the M10 walk-test).
 - **Decisions:** **D259** — ⑫ ships as the Verlet foundation; body-coupling + CCD + other-caller visuals deferred to a walk-test-gated backlog. friction 2.
 - **Spend:** ~120K (the boot + the rope-caller recon [killDrag/companion/stake rope sites] + D259 + the backlog items + the doc suite + tsc); campaign total ~14.97M; cycle **55/75**.
-- **Commit:** `PENDING` (patched in the follow-up ledger commit).
+- **Commit:** `61081c0`.
 - **Next (cycle 56):** **M9 ⑬ real-cloth-physics** — a 2D Verlet grid behind `FEATURES.realCloth` (default OFF), tent-door/flag only; **reuses ⑫'s now-landed `verletRope.ts` solver primitives**. ⑬ is the LAST M9 unit → **after ⑬, the steering `pause_before: "M10"` FIRES** (the loop pauses for the user's M10 review). **Verdict: CONTINUE** — not terminal (cycle 55/75); ⑬ is M9 (the pause is after M9 completes, i.e. after ⑬). `consecutive_no_progress` stays 0 (SHIPPED — a scope decision that advances the roadmap).

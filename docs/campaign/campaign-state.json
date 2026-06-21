@@ -817,7 +817,7 @@
       "save": "no bump — docs + a scope decision; no code/save change.",
       "decisions": ["D259 — ⑫ ships as the Verlet foundation (solver + sled-rope visual); body-coupling + CCD + other-caller visuals deferred to a walk-test-gated backlog. friction 2"],
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "61081c0",
       "spend_approx_tokens": 120000
     }
   ]
