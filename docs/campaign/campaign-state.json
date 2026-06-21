@@ -881,7 +881,7 @@
       "decisions": ["D263 — ⑰ measure-first (pickups = ~75% of draw calls → high-value) + a concrete instancing plan; the core-loop rewrite deferred to the human-attended Phase-B review. friction 2"],
       "ultracode": true,
       "paused": "milestone-review — M10 reached the Phase-B boundary; the loop PAUSES for the user's full Phase-A/B feedback + walk-test + the ⑯ drop-pod design + the ⑰ build call. Resume via /campaign-approve.",
-      "commit": "PENDING",
+      "commit": "ad8f97a",
       "spend_approx_tokens": 140000
     }
   ]
