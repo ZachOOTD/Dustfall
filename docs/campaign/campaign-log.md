@@ -756,3 +756,9 @@ first stop will be `max-cycles` ~mid-Phase-A; resume via `/campaign-start --resu
 - **Shipped (poiComponents.ts `huskShell`):** ribs — arc clamped to ≤ the shell's covered arc (1.25π→1.05π so tips don't poke past the shell edge) + 3 longitudinal stringers tie the rings into a cage (was floating hoops); torn-rim flaps SHORTENED (0.5-0.9 → 0.2-0.36) + peeled flatter (were long side spikes); breach flaps shortened; salvage panel reseated FLUSH on the +Z flank at the widest point (θ≈π/2, normal=+Z; was floating at a fixed y=1.4 on the curve). phash-only, no new rand.
 - **Verify:** `verify:all` PASS. Rig 3q render confirms the ribs now read as CONNECTED ARCHES (a cage) + short flaps. The flank panel + the end-on view couldn't be rig-rendered (the spawned rig server degraded after many runs + the into-the-dark-end angle flakes) → user confirms the panel close-up.
 - **Commit:** `383b43d`. Still ⏸ paused at M11 batch-1 for the user's close-up re-validation (tank + husk).
+
+## Cycle 63 (cont 2) — M11 husk ROOT-CAUSE fix: ribs touch the shell + spikes removed (2026-06-20) — SHIPPED [partial]
+- **Root cause (the "ribs not connected"):** `makeFormerRings` applies a hidden 0.84× shrink (`radius*(0.84−i·taper)`), so passing ~r put the ribs at ~0.81r — floating ~19% inside the shell. Both wrecks. FIX: pass `r*1.14` → the largest ring lands ~0.96r, touching the shell wall.
+- Also: REMOVED the torn-rim + breach CONE FLAPS (persistent floating spikes across rounds — the open-top edge + flank gash carry the torn read) · removed the floating stringer I'd added (the rib-radius fix makes the ribs read connected without it) · embedded the flank panel deeper (`r-0.15 → r*0.82`).
+- **Verify:** `verify:all` PASS. Rig 3q render confirms the ribs now read as CONNECTED ARCHES spanning the trough + NO spikes. Panel + multi-angle → user confirm (rig flank/end angles flake).
+- **Commit:** `PENDING`. Still ⏸ paused at M11 batch-1 for user re-validation (husk + tank).
