@@ -310,16 +310,44 @@ export function wreckedTank(seed: number, _state = 'breached'): BuiltComponent {
     dent.rotation.set((phash(seed, 200 + i) - 0.5) * 1.2, (phash(seed, 210 + i) - 0.5), (phash(seed, 220 + i) - 0.5));
     dent.userData.isWreckDecoration = true; g.add(dent);
   }
-  // TORN-OPEN +X end — exposed internal ribs + a JAGGED, irregular ring of torn flaps (some
-  // dropped for asymmetric gaps) + two big peel-back plates of torn sheet metal.
-  const formers = makeFormerRings(r * 0.9, 3, len * 0.1, { startX: len / 2 - len * 0.32, arc: Math.PI * 1.2, taper: 0.03 });
+  // TORN-OPEN +X end. M11 ⓒⓓ (C63, user batch-1 walk-test): the ribs were 3 floating hoops
+  // (sat in the wall gap, nothing tying them); the shell read knife-thin at the cut; the torn
+  // flaps floated as cones centered at the ring radius. Now: ribs HUG the inner wall + are tied
+  // by longitudinal STRINGERS (a rib cage); a thick cut-RIM annulus caps the outer↔liner wall
+  // gap (the shell reads thick); flaps ANCHOR their base on the rim + peel outward over the lip.
+  const ribR = r * 0.85;                                          // hug the inner liner (0.88r) — ribs touch the wall
+  const ribStartX = len / 2 - len * 0.36, ribCount = 4, ribSpacing = len * 0.085;
+  const formers = makeFormerRings(ribR, ribCount, ribSpacing, { startX: ribStartX, arc: Math.PI * 1.3, taper: 0.02 });
   formers.position.y = r; formers.traverse((o) => { o.userData.isWreckDecoration = true; }); g.add(formers);
+  // Longitudinal stringers tie the rib rings into a cage (not isolated hoops).
+  const ribSpan = ribSpacing * (ribCount - 1);
+  for (const sa of [Math.PI * 0.18, Math.PI * 0.5, Math.PI * 0.82]) {
+    const stringer = new THREE.Mesh(new THREE.BoxGeometry(ribSpan, 0.07, 0.07), _hullDarkMat);
+    stringer.position.set(ribStartX + ribSpan / 2, r + Math.cos(sa) * ribR, Math.sin(sa) * ribR);
+    stringer.userData.isWreckDecoration = true; g.add(stringer);
+  }
+  // Thick cut-RIM annulus at the torn lip — caps the wall gap (liner 0.88r → hull r) so the
+  // shell reads as a thick wall cross-section, not a single knife-edge (the user's "very thin").
+  const rim = new THREE.Mesh(new THREE.RingGeometry(r * 0.85, r, 18), _hullDarkMat);
+  rim.rotation.y = Math.PI / 2; rim.position.set(len / 2 - 0.04, r, 0);
+  (rim.material as THREE.Material).side = THREE.DoubleSide; rim.userData.isWreckDecoration = true; g.add(rim);
+  // Torn flaps — base ANCHORED on the rim, peeling outward + back over the lip (were floating cones).
+  const _flapDir = new THREE.Vector3(), _flapQ = new THREE.Quaternion(), _flapUp = new THREE.Vector3(0, 1, 0);
   for (let i = 0; i < 11; i++) {
     if (phash(seed, 12 + i) < 0.2) continue;   // skip → asymmetric jagged gaps
     const ang = (i / 11) * Math.PI * 2 + (phash(seed, 14 + i) - 0.5) * 0.5;
-    const flap = new THREE.Mesh(new THREE.ConeGeometry(r * (0.12 + phash(seed, 16 + i) * 0.14), r * (0.45 + phash(seed, 17 + i) * 0.7), 3), _rustMat);
-    flap.position.set(len / 2 - 0.1, r + Math.cos(ang) * r * 0.92, Math.sin(ang) * r * 0.92);
-    flap.rotation.z = ang - Math.PI / 2; flap.rotation.x = (phash(seed, 20 + i) - 0.5) * 2.2;
+    const fh = r * (0.16 + phash(seed, 17 + i) * 0.22), fr = r * (0.10 + phash(seed, 16 + i) * 0.08);  // SHORT jagged torn-lip teeth (not long spikes)
+    const flap = new THREE.Mesh(new THREE.ConeGeometry(fr, fh, 4), _rustMat);
+    const ry = Math.cos(ang), rz = Math.sin(ang);
+    const peel = 0.5 + phash(seed, 20 + i) * 0.5;               // peel back over the lip (−X) — flatter against the rim
+    _flapDir.set(-peel, ry, rz).normalize();
+    _flapQ.setFromUnitVectors(_flapUp, _flapDir);
+    flap.quaternion.copy(_flapQ);                                // align cone axis to the peeled direction
+    flap.position.set(                                           // BASE on the rim → center = rim + dir·(fh/2)
+      len / 2 - 0.05 + _flapDir.x * fh * 0.5,
+      r + ry * r + _flapDir.y * fh * 0.5,
+      rz * r + _flapDir.z * fh * 0.5,
+    );
     flap.userData.isWreckDecoration = true; g.add(flap);
   }
   for (let i = 0; i < 2; i++) {   // peel-back plates (torn sheet metal, rule-7 0.12m)

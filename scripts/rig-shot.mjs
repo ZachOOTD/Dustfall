@@ -1107,6 +1107,7 @@ const SCENARIOS = {
       const aim = (p) => { cam.position.copy(p); cam.lookAt(cx, expMid, cz); };
       if (ang === 'side') aim(new V(cx, eyeY, cz + D));
       else if (ang === 'front') aim(new V(cx - D, eyeY, cz + D * 0.12));
+      else if (ang === 'tear') aim(new V(cx + D * 0.95, eyeY, cz + D * 0.22));   // look INTO the torn +X end (ribbing/flaps)
       else aim(new V(cx + D * 0.55, eyeY, cz + D * 0.62));   // 3q — length + +Z flank
       // ACAZ T2A — when --forceanchor, aim a CLOSE 3/4 shot straight at a hatch (its
       // world pos was recorded pre-merge on the wreck group). `--zoom` sets the

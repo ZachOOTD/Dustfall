@@ -3,6 +3,17 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign C63 — 2026-06-20 — M11 ⓒⓓ: **wrecked_tank ribbing/structure/flap rework** (user batch-1 notes) ✓ verify pass (ultracode)
+
+`verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40; phash-only, no save touch). Cycle 63/75.
+
+**wrecked_tank rework** (from the user's batch-1 walk-test: floating ribbing, floating "spike" flaps, knife-thin shell):
+- **Ribs** now hug the inner liner (`0.9r → 0.85r`) + **3 longitudinal stringers** tie the rings into a cage (were floating hoops).
+- **Thick cut-rim** annulus (`0.85r→r`) caps the outer↔liner wall gap at the torn lip → the shell reads as a real wall thickness, not a knife-edge.
+- **Torn flaps** re-anchored — base on the rim, peeling back, and **shortened** to a jagged torn lip (were long floating spikes).
+- NEW rig `tear` angle (into the torn +X end) for future verification.
+- **Caveat:** the rig buries the tank deeper than the in-game instance, so the into-the-tunnel ribbing angle couldn't be reproduced headless → **user re-validates the ribbing close-up.** Campaign stays paused at M11 batch-1.
+
 ## Campaign C62 — 2026-06-20 — M11 ⓑ+ⓔ: **floating salvage panels seated** → ⏸ PAUSED for M11 batch-1 walk-test ✓ verify pass (ultracode)
 
 `verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40; deterministic mount sinks, no new rand). Cycle 62/75.
