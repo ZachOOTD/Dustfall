@@ -958,7 +958,7 @@
       "decisions": ["D265 — M11 stragglers = 3 mega-wreck companion wrecks placed via placeWreck but never registered; fix = hide them (not register, which would consume rand + re-baseline the world). Tradeoff: companions sealed (decorative) not lootable — user veto at the M-review. friction 1"],
       "docs": "archived D207-D220 -> decisions-archive.md (active decisions 59 -> 45: D221-D265).",
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "838c7e1",
       "spend_approx_tokens": 250000
     }
   ]
