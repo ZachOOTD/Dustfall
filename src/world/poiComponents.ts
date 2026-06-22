@@ -315,15 +315,19 @@ export function wreckedTank(seed: number, _state = 'breached'): BuiltComponent {
   // flaps floated as cones centered at the ring radius. Now: ribs HUG the inner wall + are tied
   // by longitudinal STRINGERS (a rib cage); a thick cut-RIM annulus caps the outer↔liner wall
   // gap (the shell reads thick); flaps ANCHOR their base on the rim + peel outward over the lip.
-  const ribR = r * 0.85;                                          // hug the inner liner (0.88r) — ribs touch the wall
+  // C63c root-cause: makeFormerRings shrinks by 0.84 internally (radius*(0.84−i·taper)), so the
+  // earlier `r*0.85` pass put the ribs at 0.71r — floating inside the liner (0.88r), and the
+  // stringers (at 0.85r) floated above them. Pass ribActualR/0.84 so the largest ring lands AT
+  // ribActualR (0.85r, just inside the liner), and place the stringers at that same radius.
+  const ribActualR = r * 0.85;
   const ribStartX = len / 2 - len * 0.36, ribCount = 4, ribSpacing = len * 0.085;
-  const formers = makeFormerRings(ribR, ribCount, ribSpacing, { startX: ribStartX, arc: Math.PI * 1.3, taper: 0.02 });
+  const formers = makeFormerRings(ribActualR / 0.84, ribCount, ribSpacing, { startX: ribStartX, arc: Math.PI * 1.3, taper: 0.03 });
   formers.position.y = r; formers.traverse((o) => { o.userData.isWreckDecoration = true; }); g.add(formers);
-  // Longitudinal stringers tie the rib rings into a cage (not isolated hoops).
+  // Longitudinal stringers tie the rib rings into a cage (at the ribs' actual radius).
   const ribSpan = ribSpacing * (ribCount - 1);
   for (const sa of [Math.PI * 0.18, Math.PI * 0.5, Math.PI * 0.82]) {
     const stringer = new THREE.Mesh(new THREE.BoxGeometry(ribSpan, 0.07, 0.07), _hullDarkMat);
-    stringer.position.set(ribStartX + ribSpan / 2, r + Math.cos(sa) * ribR, Math.sin(sa) * ribR);
+    stringer.position.set(ribStartX + ribSpan / 2, r + Math.cos(sa) * ribActualR, Math.sin(sa) * ribActualR);
     stringer.userData.isWreckDecoration = true; g.add(stringer);
   }
   // Thick cut-RIM annulus at the torn lip — caps the wall gap (liner 0.88r → hull r) so the
