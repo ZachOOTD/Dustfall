@@ -762,3 +762,7 @@ first stop will be `max-cycles` ~mid-Phase-A; resume via `/campaign-start --resu
 - Also: REMOVED the torn-rim + breach CONE FLAPS (persistent floating spikes across rounds — the open-top edge + flank gash carry the torn read) · removed the floating stringer I'd added (the rib-radius fix makes the ribs read connected without it) · embedded the flank panel deeper (`r-0.15 → r*0.82`).
 - **Verify:** `verify:all` PASS. Rig 3q render confirms the ribs now read as CONNECTED ARCHES spanning the trough + NO spikes. Panel + multi-angle → user confirm (rig flank/end angles flake).
 - **Commit:** `c81f807`.
+
+## M11 batch-1 — wreck fixes VALIDATED by the user (2026-06-21) — session handoff
+- User walk-tested the tank + husk wreck fixes (ribs connected, spikes gone, floating plank/seam fixed, panels relocated off the ribs): **"this looks ok for now."** The root cause across both wrecks was `makeFormerRings`' hidden `0.84×` radius shrink (ribs floated ~19% inside the shell). All committed (C61-C63 + follow-ups), `verify:all` green, no save touch.
+- User is starting a FRESH session to continue. Campaign left ⏸ paused at M11 batch-1 (`/campaign-approve` to continue). **Next:** the 3 hand/hero-wreck straggler panels (§A) → M12 sand-worm (ridges/jump/audio) → M13 weapon+vehicle audio. Resume brief written to `docs/next-session-prompt.md`.

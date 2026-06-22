@@ -1,21 +1,28 @@
-# ⏸ CAMPAIGN PAUSED — M11 batch-1 walk-test — `campaign/2026-06-18`
+# ▶ RESUME — M11 review-fix pass (wreck fixes validated) — `campaign/2026-06-18`
 
-**The loop paused on purpose for your batch-validation** (the autonomous + validate-per-batch model you chose). M11's CONFIDENT wreck/panel fixes are in; the parts I couldn't verify without your eyes are waiting on your walk-test. `status: paused`, `awaiting_approval: true`, `stop_reasons: ["milestone-review"]`. **The loop won't run again until you `/campaign-approve` (ideally with notes).**
+**Picking up where the last session left off.** The campaign is in the **Phase-B review-fix pass (M11→M13)** from the user's 2026-06-20 triage. The wreck/panel fixes (M11) are done + the user walk-tested them ("looks ok for now", 2026-06-21). Boot from `docs/campaign/campaign-state.json` + `docs/roadmap.md`.
 
-## What landed (M11 batch-1 — verified)
-- **ⓐ panels "not openable" FIXED** (C61/D264) — root: the interaction raycast only hits the registered-panel list (the hull never occludes), so it was never a reachability bug; `pruneBuriedPanels` was culling panels (removing them from the registry) but **leaving the mesh visible** → dead teases. Now a culled panel hides its mesh. Live-verified: 21 hidden, 79 openable.
-- **ⓑ + ⓔ floating salvage panels SEATED** (C62) — root: a flat panel on a curved hull crest overhangs the curving-away hull (gap from 3/4 angles). Sank the crest mounts on `wreckedTank` + `derelict` so the edges embed. Rig-confirmed.
+## Status — what's DONE (M11, user-validated)
+- **ⓐ panels "not openable"** (C61/D264) — culled panels were left visible; `pruneBuriedPanels` cull() now hides them. 21 hidden / 79 openable, verified.
+- **ⓑ floating panels** (C62) — flat-on-curved-crest panels overhang; sank the crest mounts (wreckedTank + derelict).
+- **ⓒⓓ wrecked_tank + ⓒⓓⓔ husk** (C63 + 4 follow-ups) — **the root cause was `makeFormerRings`' hidden `0.84×` shrink** (`radius*(0.84−i·taper)`): ribs rendered ~19% inside the shell, floating. Fix: pass `ribActualR/0.84` so ribs touch the wall (BOTH wrecks). Plus: removed the floating cone-spikes (huskShell), removed a bad stringer, clamped a seam that floated past the shell's open-top edge, embedded/relocated the salvage panels off the ribs. tank + husk both walk-tested ok.
 
-## ▶ Walk-test these (in `npm run dev` — http://localhost:5180/)
-1. **Do panels OPEN now?** Find procgen wrecks (derelict/satellite/tank/etc.), look for access panels, pry them with the scrap_bar or scrap_machete. Are there still **visible panels that won't open** (dead teases)? (Should be gone for procgen wrecks; ~3 far-out hand/hero-wreck ones may remain — backlog §A.)
-2. **Do salvage panels sit FLUSH?** Any still **floating** off the hull (esp. on the tank + derelict tops)?
-3. **The wrecked_tank** — this is the one I couldn't fix blind. Walk up to it and **describe what reads as floating/disconnected**: the interior ribbing (the ribs at the torn-open end)? specific pieces (flaps, plates, dome, hoops)? the whole thing? The more specific, the better ⓒ (ribbing) + ⓓ (structure) land next.
+**Hard-won learning** (see `shared-memory`/the `verify-visual-multi-angle` memory): verify wreck fixes from MULTIPLE angles INCLUDING the player's-eye / into-the-tear view — a single framed exterior shot hid the floating ribbing for several rounds. The isolated `procgen-wreck` rig works for side/3q but its **into-the-torn-end / front angle reliably flakes** (near-all-dark frame), so that angle needs the user's in-game eyes.
 
-## ▶ How to resume
-- **`/campaign-approve`** (drop your notes in `docs/campaign/steering.md` or just tell me) — clears the gate → the loop continues **M11-cont** (tank ribbing/structure per your notes + the 3 hand/hero-wreck straggler panels), then **M12 sand-worm** (remove ridges · charge→dive no-jump · alert audio → quiet rumble) — *that batch needs your LISTEN* — then **M13 audio** (gunshots/reload/speeder hum) — *also needs your ears*.
+## REMAINING in this review-fix pass
+- **M11 stragglers:** ~3 far-out **hand/hero-wreck unregistered panels** still visible-but-not-openable (a different path from the procgen cull — `crashedHull`/`megaShip`/`megaWreck`/`heroLandmarks` register only "above-ground" panels, ACAS A4). → [backlog.md](backlog.md) §A. Register-or-hide them.
+- **M12 — sand worm** (needs the user's LISTEN + feel): remove the dorsal ridges · attack = charge-straight then DIVE from the current position (no airborne jump) · alert audio → a low quiet rumble + screen-shake buildup (mysterious).
+- **M13 — weapon & vehicle audio** (needs the user's EARS): gunshot + reload SFX for all guns · speeder engine → a lower-pitched smoother hum.
 
-## State pointers
-- `docs/campaign/campaign-state.json` — `status: paused`, M11 batch-1.
-- `docs/decisions.md` — D264 (the not-openable root + fix).
-- `docs/backlog.md` "Fresh triage 2026-06-20" (your feedback) + §A (the 3 hand/hero-wreck stragglers).
-- The Skyfall hero wreck + the cave rework remain your DEDICATED sessions (not the loop).
+## How to resume
+- The campaign is **paused at M11 batch-1** (`status: paused`, `awaiting_approval: true`) — the user validated the wreck fixes but the explicit gate is still set. **`/campaign-approve`** to clear it + continue → M11 stragglers → M12 → M13.
+- Execution model (user, 2026-06-20): **autonomous fixes, PAUSE after each tier (batch) for the user's walk-test/listen** — audio + feel can't be self-verified. Keep the per-tier milestone pauses.
+- **NOT in the loop — dedicated solo sessions:** the **Skyfall crashed-ship** (new researched high-quality enterable HERO wreck — its own `/feature-slice`) and the **CAVE rework** (user planning the direction). Both in [backlog.md](backlog.md).
+
+## Verify protocol
+`npm run verify:all` (tsc + placement 0/0 ×5 + colliders 0/40). For wreck visuals: the isolated `procgen-wreck` rig (`--archetype=<x> --seed=42 --angles=3q,side --zoom=`) for exterior; the user confirms the into-the-tear/inside angle + all audio/feel. phash-only edits (no new world-rand) or `verify:placement` desyncs.
+
+## Pointers
+- `docs/decisions.md` — D264 (panels). The `0.84×` rib root-cause is in the C63 campaign-log + the `wreckedTank`/`huskShell` comments.
+- `docs/campaign/campaign-log.md` — the C61-C63 detail.
+- Dev server: `npm run dev` (port 5173, or 5180 via the preview).

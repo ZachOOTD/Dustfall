@@ -64,13 +64,13 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      Prior milestones live in docs/changelog.md — do NOT accumulate "Prior milestone"
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
-**⏸ CAMPAIGN PAUSED — M11 batch-1 walk-test — `campaign/2026-06-18`** (autonomous review-fix pass; user batch-validates each tier). Phase B (M6→M10) complete +
-reviewed; now in the M11→M13 review-fix pass. **M11's confident panel fixes shipped → PAUSED for the user's walk-test** (`status: paused`, `stop_reasons:
-["milestone-review"]`). **To resume:** walk-test the wrecks (panels open? flush? + describe the tank ribbing/structure) then `/campaign-approve` with notes. The
-**Skyfall hero wreck + cave rework are DEDICATED solo sessions (NOT the loop).** Each `/campaign-cycle` boots from `docs/campaign/campaign-state.json` + `docs/roadmap.md` — NOT this note.
+**⏸ CAMPAIGN PAUSED — M11 batch-1 (wreck fixes validated) — `campaign/2026-06-18`** (autonomous review-fix pass; user batch-validates each tier). Phase B (M6→M10)
+complete + reviewed; now in the M11→M13 review-fix pass. **M11's wreck/panel fixes are DONE + user-walk-tested ("looks ok for now", 2026-06-21)** (`status: paused`,
+`awaiting_approval: true`). **Fresh session resumes from [docs/next-session-prompt.md](docs/next-session-prompt.md); `/campaign-approve` to clear the gate + continue.**
+The **Skyfall hero wreck + cave rework are DEDICATED solo sessions (NOT the loop).** Each `/campaign-cycle` boots from `docs/campaign/campaign-state.json` + `docs/roadmap.md` — NOT this note.
 
 **Review-fix pass (from the 2026-06-20 triage — backlog "Fresh triage" block). Autonomous, PAUSE-per-tier for the user's batch walk-test/listen:**
-- **M11 — wreck/panel fixes** ← current: ✅ ⓐ not-openable panels FIXED (C61/D264 — culled panels now hide; the raycast hits only the targets list so it was never occlusion). Remaining: ⓑ floating panels (seat mounts flush) · ⓒⓓⓔ `wrecked_tank` ribbing/structure/panel · 3 hand/hero-wreck straggler panels (§A).
+- **M11 — wreck/panel fixes** ✅ DONE + validated: ⓐ not-openable (culled panels now hide; D264) · ⓑ floating panels seated · ⓒⓓⓔ tank + husk rib/structure/flap/panel rework (root cause: `makeFormerRings`' hidden `0.84×` shrink floated ribs inside the shell on both wrecks; C61-C63). **Remaining: the 3 hand/hero-wreck straggler panels (§A)** → then M12, M13.
 - **M12 — sand worm:** remove dorsal ridges · attack = charge→dive (no high jump) · alert audio → quiet rumble buildup.
 - **M13 — weapon & vehicle audio:** gunshot + reload SFX (all guns) · smoother/lower speeder hum.
 
