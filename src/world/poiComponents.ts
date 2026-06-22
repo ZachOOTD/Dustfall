@@ -504,7 +504,9 @@ export function huskShell(seed: number, _state = 'breached'): BuiltComponent {
   // reads as riveted PLATING, not a smooth pipe. φ measured from the open +Y top; placed on
   // the lower/flank closed arc only. rotation.x=φ aligns the strip's thin face to the surface
   // normal; pushed proud by ~5cm (rule-7). Decoration (no collider, doesn't affect the audit).
-  for (const phi of [Math.PI * 0.60, Math.PI * 0.92, Math.PI * 1.30, Math.PI * 1.62]) {
+  // M11 (C63d): φ values CLAMPED within the shell's covered arc (~0.43π..1.575π) so a seam
+  // never lands past the open-top edge floating in the gap (1.62π did → the "floating plank").
+  for (const phi of [Math.PI * 0.62, Math.PI * 0.92, Math.PI * 1.22, Math.PI * 1.48]) {
     const rho = r + 0.05;
     const seam = new THREE.Mesh(new THREE.BoxGeometry(len * 0.8, 0.12, 0.20), _hullDarkMat);
     seam.position.set((phash(seed, 90 + Math.round(phi * 10)) - 0.5) * len * 0.12, r + Math.cos(phi) * rho, Math.sin(phi) * rho);
@@ -555,7 +557,7 @@ export function huskShell(seed: number, _state = 'breached'): BuiltComponent {
     // 'massive' salvage hatch seated FLUSH on the +Z flank at the widest point (θ≈π/2 → the
     // surface normal IS +Z, so FACE.posZ is correct), sunk so the panel front meets the curved
     // surface instead of floating off it at a fixed height. M11 ⓔ (C63b, user note).
-    { pos: new THREE.Vector3(len * 0.18, r, r * 0.82), quat: FACE.posZ(), kind: 'massive' as PanelKind },
+    { pos: new THREE.Vector3(len * 0.42, r, r * 0.85), quat: FACE.posZ(), kind: 'massive' as PanelKind },
   ];
   const bbox = new THREE.Box3(new THREE.Vector3(-len / 2, 0, -r), new THREE.Vector3(len / 2, r * 1.9, r));
   return { mesh: g, sockets: [], colliders, panelMounts, bbox };
