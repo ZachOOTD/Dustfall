@@ -973,7 +973,7 @@
       "save": "no change.",
       "decisions": ["(no new D-entry — a straightforward execution of the user's 'remove dorsal ridges' directive; the keep-segmentation-rings interpretation is noted in the changelog + next-session-prompt for the walk-test)"],
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "9ac3ea0",
       "spend_approx_tokens": 130000
     }
   ]

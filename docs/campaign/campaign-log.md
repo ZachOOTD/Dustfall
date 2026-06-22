@@ -792,5 +792,5 @@ first stop will be `max-cycles` ~mid-Phase-A; resume via `/campaign-start --resu
 - **Cycle scope:** ⓕ only this cycle. The feel-critical ⓖ (charge-dive — the defining M12 unit) gets cycle 66 with proper dive-pose iteration; ⓗ (audio) cycle 67. ~10 cycles headroom → no need to cram the feel-critical work.
 - **Decisions:** none (a straightforward execution of "remove dorsal ridges"; the keep-segmentation-rings interpretation noted for the walk-test). Post-mortem SKIPPED (pure polish cycle — no new D-entries / tier move / system addition).
 - **Spend:** ~130K (the worm recon + the scute removal + verify:all + 3 rig renders + the doc suite); campaign total ~17.55M; cycle **65/75**.
-- **Commit:** `PENDING`.
+- **Commit:** `9ac3ea0`.
 - **Next (cycle 66):** **M12 ⓖ attack = charge-straight then DIVE from current position (no airborne jump)** — FEEL-CRITICAL; replace the `tickLunge` high arc with a head-first plunge, render the dive pose via the real worm view. **Verdict: CONTINUE** — M12 not complete (ⓖ + ⓗ remain before the M12 milestone pause); M12's marker is un-consumed. `consecutive_no_progress` stays 0 (SHIPPED).
