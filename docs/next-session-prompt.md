@@ -1,39 +1,49 @@
-# ▶ RESUME — M12 sand-worm fixes (M11 complete) — `campaign/2026-06-18`
+# ▶ RESUME — M12 ⓖ sand-worm attack: charge → dive (no high jump) — `campaign/2026-06-18`
 
-**Picking up where C64 left off.** The campaign is ACTIVE in the **Phase-B review-fix pass (M11→M13)**. **M11 is COMPLETE + user-validated** (wreck/panel fixes walk-tested "looks ok for now" 2026-06-21; the straggler panels closed in C64). Next tier: **M12 sand-worm**. Boot from `docs/campaign/campaign-state.json` + `docs/roadmap.md` (NOT chat memory).
+**Picking up where C65 left off.** The campaign is ACTIVE in the **Phase-B review-fix pass (M11→M13)**. **M11 COMPLETE** (user-validated). **M12 sand-worm IN PROGRESS:** ✅ ⓕ dorsal ridges removed (C65). Boot from `docs/campaign/campaign-state.json` + `docs/roadmap.md` (NOT chat memory).
 
 ## Read these now (in order)
 1. `CLAUDE.md` (auto-loaded) — "Where we are now"
-2. `docs/campaign/campaign-state.json` — cycle count (64/75), status, current_tier, the framework-upgrade directives in `resume_note`
-3. `docs/campaign/campaign-log.md` (tail) — C64 detail
-4. `docs/decisions.md` (tail) — D265 (straggler fix)
-5. `docs/roadmap.md` — the M11→M13 block (line ~178)
+2. `docs/campaign/campaign-state.json` — cycle count (65/75), status, current_tier, the framework-upgrade directives in `resume_note`
+3. `docs/campaign/campaign-log.md` (tail) — C65 + the full M12 worm-system recon (Cycle 65 entry has the file/line map)
+4. `docs/roadmap.md` — the M12 block (line ~178)
 
 ## What's already built
-A deep procedural desert-survival game. The sand worm already exists and is heavily built (C12-C18): model + maw fangs + dorsal armor crest, `applyBodyBend` pose (tail-sink, charge-dive submerge), a Web-Audio approach rumble, multi-worm population (`ctx.sandWorms`), and the `worm_lure` bait. M12 is a FEEL/look REVISION of that worm per the user's 2026-06-20 review — not a rebuild.
+The sand worm (`src/enemies/sandWorm.ts`) is a full creature with an attack FSM, audio, multi-worm population, and the `worm_lure` bait. C65 removed the dorsal armor scutes (smoother Dune silhouette). M12 is a FEEL/look REVISION per the user's 2026-06-20 review.
 
-## Cycle 65 focus — M12 sand worm (3 units, all from the user's triage)
-Per the user: the worm's current attack reads as a silly "high jump"; the dorsal ridges are unwanted; the alert should be mysterious dread, not a loud tell. **This is hero-creature work** → per the framework upgrade, **delegate the modeling/pose changes to the `procedural-modeler` agent** and **render the PLAYER'S REAL in-game view** (the worm surfacing/charging in the actual scene at the distance/angle a player sees), NOT an isolated rig. Iterate to a quality BAR (5-8 rounds for hero); do NOT ship a scaffold and defer the defining motion (anti-punt).
+## Cycle 66 focus — M12 ⓖ: attack = charge-straight then DIVE from current position (NO airborne jump) — FEEL-CRITICAL, the DEFINING M12 unit
+The user: the current attack reads as a silly "high jump." Replace the high parabolic arc with a charge-straight-then-plunge: the worm charges along the surface toward the player, then dives down from where it is (a downward plunge into the sand), no launch up-and-over.
 
-Priority items (verify each against the real in-game view + `npm run verify:all`):
-1. **ⓕ Remove the dorsal ridges** [polish] — strip the C13 dorsal-armor crest/ridges from the worm model. Find the worm model builder (grep `dorsal`, `worm-model`, `applyBodyBend`; likely `src/**/sandWorm*.ts` + the `worm-model` rig scenario). Keep the maw + body silhouette; just remove the spiky dorsal crest. Determinism: the worm is a creature, not a placement/collider POI — tsc is the relevant gate, but re-run `verify:all`.
-2. **ⓖ Attack = charge-straight then DIVE from current position, NO airborne jump** [polish] — find the worm attack FSM (grep the charge/lunge/jump states). Replace the high-arc jump with: charge along the surface toward the player, then dive down from where it is (a downward plunge, not a launch up-and-over). This is the FEEL-critical unit → the user walk-tests it. Build it to completion; don't leave the jump in behind a flag.
-3. **ⓗ Alert audio → a low, quiet rumble + screen-shake buildup** [polish] — the alert should be mysterious ("you don't know what it is"), not a loud growl/roar. Find the worm alert/approach audio (the C16 `worm-audio-rumble` Web-Audio synth) + any screen-shake. Make the tell a subtle sub-bass rumble that builds + a gentle camera shake. AUDIO can't be self-verified → the user LISTENS at the M12 batch pause.
+**This is hero/feel work** → per the framework upgrade, render the worm attack in the PLAYER'S REAL view (the `worm-model` rig poses the REAL `ctx.sandWorms.list[0]` and has `--angle=arc` and `--angle=charge` poses — but those mirror the CURRENT arc; you'll need to update the rig's pose math to match the new dive, or add a `--angle=dive`). Iterate the dive pose build→render→critique to a quality bar (it's the defining motion). ANTI-PUNT: don't leave the high jump behind a flag — replace it.
 
-## Stop / pause condition
-M12 is a milestone with a pause marker after it (`### Milestone: M12 sand-worm — USER BATCH-VALIDATE`). When all 3 units ship, the cycle that completes M12 **PAUSES** (`awaiting_approval`, `milestone-review`) for the user's worm-attack-FEEL walk-test + alert-rumble LISTEN. Then `/campaign-approve` → M13 audio. **Headroom: 64/75 cycles (~11 left).** If M12+M13 need more than the cap, STOP at 75 and tell the user to `/campaign-start --resume --max-cycles=N`.
+### The exact code (from the C65 recon — verify line numbers, they shift):
+- **`tickLunge()`** (`sandWorm.ts` ~lines 1195–1232) — the current HIGH ARC. The Y-curve is: `baseY = surfaceGroundY*(1-t) + (surfaceGroundY - UNDERGROUND_DEPTH)*t` then `basePos.y = baseY + sin(t·π) * SANDWORM_BREACH_ARC_PEAK`. **The `sin(t·π) * BREACH_ARC_PEAK` term is the high jump — remove/replace it.** For a dive: start at the charge Y (submerged back-ridge exposed, `ground − MAX_RADIUS*CHARGE_SUBMERGE`), then plunge monotonically DOWN to `ground − UNDERGROUND_DEPTH` over the lunge — no rise above ground. Keep the XZ linear interp toward the player (or shorten it — a dive-from-current-pos may not need much XZ travel). Keep the bite damage window.
+- **`enterLunge()`** (~lines 1159–1193) — sets `lungeStart`/`lungeEnd`/timing. For dive-from-current-position, `lungeStart` = the current charge basePos; `lungeEnd` = at/just past the player (or the current pos if "dive straight down"). Decide how much forward lunge vs straight-down plunge reads best (realism dial → walk-test).
+- **`applyBodyBend()`** (~lines 1560–1594) — the pose. The `bend` arch (`sin(t·π)*2.5`) currently arches the body through the air; for a dive, the front should pitch DOWN into the sand (head-first plunge), tail following. Tune `worm.pitch` (head pitches down on the dive) + the bend so it reads as a head-first dive, not an arch.
+- **`SANDWORM_BREACH_ARC_PEAK`** (tuning.ts ~1311 = 20) — the jump height; remove its use or set the dive depth via `SANDWORM_UNDERGROUND_DEPTH`. Add a dive-specific constant if needed.
+- Note the **`stationaryBreach`** state (a separate every-Nth vertical breach, `SANDWORM_STATIONARY_BREACH_*`) — the user's "no high jump" likely targets the `lunge` attack; confirm whether the stationary vertical breach should also change (probably keep it — it's a distinct telegraphed attack, not the "jump"). Note the call for the user at the M12 walk-test.
+
+### Acceptance
+- The worm no longer launches into a high airborne arc on attack; it charges then plunges head-first down from its position. Verified via the real worm render (the dive pose reads head-first-into-sand, not arching-over). Headless `verify:all` PASS.
+- The ATTACK FEEL (timing, does it feel like a menacing ambush dive vs the silly hop) → the user's M12 walk-test. Don't self-certify feel.
+
+## After ⓖ: cycle 67 = M12 ⓗ alert audio
+ⓗ — alert audio → a quiet low rumble + screen-shake buildup (mysterious, "you don't know what it is"). The recon map (C65 campaign-log): `playWormRoar()` (audio.ts ~657, the loud one-shot on `enterAlert` ~1033 — make it quiet/subtle or replace with the sustained rumble starting on alert), `startWormRumble()`/`setWormRumbleLevel()` (audio.ts ~717 — the sustained sub-bass, currently starts on charge; start it quietly on ALERT and ramp), `applyTremorEffects()` (sandWorm.ts ~860 — the camera shake; ramp it smoothly during alert→charge as a buildup). AUDIO can't be self-verified → the user LISTENS at the M12 pause. **After ⓗ, the cycle PAUSES at the M12 milestone.**
+
+## Stop / pause
+M12 has a milestone pause marker after it (`### Milestone: M12 sand-worm — USER BATCH-VALIDATE`). The cycle that completes ⓗ (all 3 M12 units shipped) PAUSES for the user's worm-attack-FEEL walk-test + alert-rumble LISTEN. **Headroom: 65/75 (~10 left)** — M12 (ⓖ,ⓗ) + M13 (ⓘ,ⓙ) ≈ 4 more cycles, pause at M13 ~cycle 69. If it overruns, STOP at 75 and tell the user.
 
 ## Autonomy contract
-Autonomous fixes; when a call is ambiguous, pick the realism-forward option, log a D-entry, and continue — don't ask. Pause ONLY at the per-tier milestone markers (feel/audio can't be self-verified). The visual/look units (ⓕ, the dive pose) self-verify via the real-in-game-view adversarial gate; the FEEL (attack timing) + AUDIO (ⓗ) verify at the user pause.
+Autonomous; ambiguous calls → realism-forward + a D-entry + continue, don't ask. Pause only at the M12/M13 milestone markers (feel/audio can't be self-verified). The dive LOOK self-verifies via the real worm render; the dive FEEL + the audio verify at the user pause.
 
 ## NOT in the loop (dedicated solo sessions)
-The **Skyfall crashed-ship** (new researched hero wreck + its fire-from-wreck fix) and the **CAVE rework** — both `docs/backlog.md` §A. Do NOT start them in the loop.
+The **Skyfall crashed-ship** (new hero wreck + fire-from-wreck) and the **CAVE rework** — `docs/backlog.md` §A. Do NOT start them in the loop.
 
-## Notable footguns
-- **Worm = creature, not a placement POI** → `verify:placement`/`verify:colliders` won't exercise it; tsc + the real-view render + the FEEL walk-test are the gates.
-- **Real-view over rig** (the C60/C63 lesson + the `verify-visual-multi-angle` memory): the isolated rig grades a different scene than ships. Drive the game's own camera at the surfacing/charging worm. The heavy-scene SCREENSHOT can flake (`dustfall_preview_gotchas`) — prefer a numeric/eval check where possible + a framed shot when the scene is light enough.
-- **Determinism:** if any worm change touches the world `rand` stream, it'll desync `verify:placement`. The worm runtime is decoupled from world-gen, so this is unlikely, but keep model/pose/audio edits out of the seeded scatter path.
-- **No save bump** unless a schema change is unavoidable (D81 — a `SAVE_VERSION` bump STOPS the loop; never bump autonomously).
+## Footguns
+- **Worm = creature, not a placement POI** → tsc + the real worm render + the FEEL walk-test are the gates; `verify:placement`/`colliders` won't exercise it.
+- **Real worm render** = the `worm-model` rig poses the REAL `ctx.sandWorms.list[0]` (not a fake mesh) → valid for a creature; but its `arc`/`charge` pose math mirrors the OLD behavior — update it to match the new dive or the render won't reflect the change.
+- **Determinism:** keep worm edits out of the seeded world-scatter path (the worm runtime is decoupled; model/pose/audio edits are safe). No save bump (D81).
+- Heavy-scene live screenshots flake (`dustfall_preview_gotchas`) — the `worm-model` rig (its own headless boot) is reliable; serialize it AFTER `verify:all` to avoid port contention.
 
 ## Verify protocol
-`npm run verify:all` (tsc + placement 0/0 ×5 + colliders 0/40). For the worm LOOK: the real in-game view via the live preview (port 5180) — render the surfacing/charging worm at player distance, multiple angles. The user confirms the attack FEEL + the alert audio.
+`npm run verify:all` (tsc + placement 0/0 ×5 + colliders 0/40). Worm LOOK: `npm run rig-shot -- --scenario=worm-model --angle=<side|3q|arc|charge|dive>`. The user confirms the dive FEEL + (cycle 67) the alert audio.

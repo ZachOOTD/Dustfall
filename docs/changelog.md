@@ -3,6 +3,17 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign C65 — 2026-06-22 — M12 ⓕ: **remove the sand-worm dorsal ridges** ✓ verify pass (ultracode)
+
+`verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40; creature model edit, no rand, no save touch). Cycle 65/75.
+
+**M12 ⓕ — dorsal ridges removed** (first of 3 M12 sand-worm units, from the user's 2026-06-20 review):
+- Removed the **C13 dorsal-armor SCUTES** (`sandWorm.ts` — the 13 keeled spine plates that read as an armored stegosaurus-style sawback). The user wants the smoother Dune-leviathan silhouette.
+- **Kept** the segmented body: the tapered body segments + the circumferential ridge rings (those read as body *segmentation*, not a dorsal crest — Dune worms are segmented). Noted for the user to confirm/flag at the M12 walk-test.
+- Removal consumes no `rand` (the scutes were hand-modeled) → determinism-safe; worm is a creature, not a placement POI.
+- **Verified** via the `worm-model` rig (which poses the REAL `ctx.sandWorms.list[0]` mesh): side + 3q renders show a coherent smooth segmented worm, scutes gone, no holes/remnants (mesh count 66→53). Worm-in-motion FEEL → user's M12 walk-test.
+- **Next M12:** ⓖ attack charge-straight-then-dive (no airborne jump), ⓗ alert audio → quiet rumble + screen-shake buildup.
+
 ## Campaign C64 — 2026-06-22 — M11 stragglers: **hide the 3 mega-wreck companion panels** → M11 COMPLETE ✓ verify pass (ultracode)
 
 `verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40; render-only, zero new `rand`, no save touch). Cycle 64/75.
