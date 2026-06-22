@@ -1155,9 +1155,9 @@ function enterLunge(worm: SandWorm, ctx: GameContext): void {
   _heading.normalize();
   worm.lungeStart.copy(worm.basePos);
   worm.lungeEnd.set(
-    worm.target.x + _heading.x * 12,
+    worm.target.x + _heading.x * Tuning.SANDWORM_LUNGE_FORWARD_OVERSHOOT,
     0,
-    worm.target.z + _heading.z * 12,
+    worm.target.z + _heading.z * Tuning.SANDWORM_LUNGE_FORWARD_OVERSHOOT,
   );
   worm.yaw = Math.atan2(-_heading.z, _heading.x);
   worm.mesh.visible = true;
@@ -1173,32 +1173,49 @@ function enterLunge(worm: SandWorm, ctx: GameContext): void {
   playWormRoar();
 }
 
+/** M12 ⓖ (C66) — the lunge BREACH-and-DIVE pose at normalized lunge time `t` (0..1).
+ *  Sets worm.basePos.y / pitch / bend. The body CENTER never rises above the charge
+ *  level (no airborne hop): it HOLDS at the charge depth through the strike (the head
+ *  rears UP out of the sand via pitch+bend to bite), then DIVES head-first DOWN to
+ *  underground. Exported so the worm-model rig renders the EXACT same pose the game
+ *  runs — no rig-vs-real drift (the C63 false-pass lesson). Requires worm.surfaceGroundY. */
+export function applyLungePose(worm: SandWorm, t: number): void {
+  const chargeY = worm.surfaceGroundY - Tuning.SANDWORM_MAX_RADIUS * Tuning.SANDWORM_CHARGE_SUBMERGE;
+  const undergroundY = worm.surfaceGroundY - Tuning.SANDWORM_UNDERGROUND_DEPTH;
+  const STRIKE_T = 0.5;   // strike peak ≈ when the forward surge reaches the player
+  if (t < STRIKE_T) {
+    // Strike: head rears UP out of the sand to bite, peaking at STRIKE_T. Body stays in the dune.
+    const rear = Math.sin((t / STRIKE_T) * Math.PI / 2);       // 0 → 1 (eased to the peak)
+    worm.pitch = Tuning.SANDWORM_LUNGE_STRIKE_PITCH * rear;
+    worm.bend = Tuning.SANDWORM_LUNGE_STRIKE_BEND * rear;
+    worm.basePos.y = chargeY;                                  // no upward hop — body held at charge depth
+  } else {
+    // Dive: head drives DOWN, head-first into the dune; the body center plunges to underground.
+    const dive = Math.sin(((t - STRIKE_T) / (1 - STRIKE_T)) * Math.PI / 2);   // 0 → 1 (eased)
+    // Pitch swings from the reared strike (+) through level to a head-down plunge (−).
+    worm.pitch = Tuning.SANDWORM_LUNGE_STRIKE_PITCH * (1 - dive)
+      - Tuning.SANDWORM_LUNGE_DIVE_PITCH * dive;
+    worm.bend = Tuning.SANDWORM_LUNGE_STRIKE_BEND * (1 - dive)
+      - Tuning.SANDWORM_LUNGE_DIVE_BEND * dive;
+    worm.basePos.y = chargeY + (undergroundY - chargeY) * (dive * dive);   // accelerating plunge
+  }
+}
+
 function tickLunge(worm: SandWorm, ctx: GameContext, elapsed: number, distToPlayer: number): void {
   const t = (elapsed - worm.phaseStartedAt) / Tuning.SANDWORM_LUNGE_DURATION;
   if (t >= 1) {
     finishAttack(worm, ctx);
     return;
   }
-  // XZ interpolates linearly start → end.
+  // XZ interpolates linearly start → end (forward charge momentum into the strike).
   const xz = Math.min(1, t);
   worm.basePos.x = worm.lungeStart.x + (worm.lungeEnd.x - worm.lungeStart.x) * xz;
   worm.basePos.z = worm.lungeStart.z + (worm.lungeEnd.z - worm.lungeStart.z) * xz;
-  // Y curve: start at surfaceGroundY (continues smoothly from the half-
-  // exposed charge), arc up to peak height, sink to underground at the end.
-  // Compose: baseLine = lerp(groundY, groundY - UNDERGROUND_DEPTH, t) +
-  //          arcBump = sin(t*π) * BREACH_ARC_PEAK
-  const baseY = worm.surfaceGroundY * (1 - t)
-    + (worm.surfaceGroundY - Tuning.SANDWORM_UNDERGROUND_DEPTH) * t;
-  const arc = Math.sin(t * Math.PI);
-  worm.basePos.y = baseY + arc * Tuning.SANDWORM_BREACH_ARC_PEAK;
-  // Pitch: head tilts up on the rise (+0.6 rad), level at peak, down on descent.
-  worm.pitch = Math.cos(t * Math.PI) * 0.6;
-  // Body bend — arches through the air. Amplitude ramps with sin(t·π) so
-  // the worm is straight at start/end and most curved at peak.
-  worm.bend = Math.sin(t * Math.PI) * 2.5;
+  // Y / pitch / bend — the breach-and-dive (shared with the rig render so it never drifts).
+  applyLungePose(worm, t);
   worm.mesh.visible = true;
-  // Damage tick at arc midpoint.
-  if (t >= 0.45 && t <= 0.55 && !worm._biteDealt) {
+  // Damage tick at the strike apex (the maw sweeps the player as the head comes down).
+  if (t >= 0.45 && t <= 0.58 && !worm._biteDealt) {
     worm._biteDealt = true;
     if (distToPlayer <= Tuning.SANDWORM_BITE_RANGE) {
       ctx.stats.health = Math.max(0, ctx.stats.health - Tuning.SANDWORM_BITE_DAMAGE);
@@ -1502,7 +1519,7 @@ function composeWormQuat(worm: SandWorm, out: THREE.Quaternion): void {
   }
 }
 
-function applyMeshTransform(worm: SandWorm): void {
+export function applyMeshTransform(worm: SandWorm): void {
   worm.mesh.position.copy(worm.basePos);
   composeWormQuat(worm, worm.mesh.quaternion);
   // Apply per-child body bend so the worm looks curved through the air

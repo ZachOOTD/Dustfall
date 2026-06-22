@@ -460,3 +460,17 @@ Consistent with this campaign's "ship the foundation/measure, defer the human/fe
 **Considered alternative.** Register the companions (making them lootable, like convoy/caravan wrecks of the same kinds) — rejected for the determinism cost above; out of scope for a no-dead-tease fix. **Tradeoff for the user to veto at the M-review:** the companions are now SEALED (non-lootable) rather than openable salvage.
 
 **friction-score:** 1 (a contained, determinism-safe render fix; empirically root-caused + cross-seed verified; the only open item is the noted lootable-vs-decorative user preference).
+
+## D266 — the sand-worm lunge is a breach-and-DIVE (body stays in the sand, head rears then drives down), not a high airborne arc; rig renders the REAL pose via a shared helper (Session C66, campaign — M12 ⓖ)
+
+**When**: M12 ⓖ — the user's review flagged the worm attack as a silly "high jump": `tickLunge` launched the body CENTER on a `sin(t·π) * SANDWORM_BREACH_ARC_PEAK` (+20 m) parabolic arc, sailing the whole worm over the player.
+
+**Decision**: the lunge is now a **breach-and-dive**. The body center HOLDS at the charge depth (`groundY − MAX_RADIUS*CHARGE_SUBMERGE`, back-ridge exposed) through the strike, then DIVES head-first to `groundY − UNDERGROUND_DEPTH`. The strike (the head rearing out of the sand to bite) comes from **pitch + bend**, NOT from raising the body center — so the body never goes airborne (verified numerically: max centerY 1.77 < groundY 5.97 across the lunge). Pitch is about Z: `+STRIKE_PITCH` rears the head up at the strike (t<0.5), then swings to `−DIVE_PITCH` for the head-first plunge.
+
+**Constraint discovered (worth remembering)**: the worm pose system is a RIGID body (yaw+pitch quaternion) plus a SYMMETRIC parabolic `applyBodyBend` (peak near s=0.15). Neither can express a true "head dives under while the tail stays put" — a rigid head-down pitch **see-saws the tail UP** (a 120 m worm at pitch −0.85 throws the tail ~27 m into the air). A real head-first dive (each segment follows the head's path) needs **path-following**, which this system doesn't do. So `DIVE_PITCH` is kept MODERATE (0.6) to bound the tail-rise to a natural "sounding" flick rather than a tail-launch. A future path-following dive is the deeper fix if the user wants it.
+
+**Also**: extracted the pose math into `applyLungePose(worm, t)` (exported) so the worm-model rig renders the EXACT pose the game runs — no rig-vs-real drift (the C63 false-pass class). Exposed it via a `__game.poseLunge(t)` debug hook + `worm-model --angle=strike|dive` rig angles (the rig can only call `window.__game.*`, not module internals).
+
+**FEEL is the human gate**: the LOOK/structure (no hop · breach-strike · head-first dive) is self-verified via the real render; the attack FEEL (timing, menace, the right pitch/overshoot values) is the user's M12 walk-test — feel can't be headless-verified (the campaign per-tier pause). Not a punt: the defining structure is done; the residual is feel-tuning, which is inherently the user's gate.
+
+**friction-score:** 2 (a feel-critical behavior rewrite; the structure is solid + verified, but the rigid-pose see-saw is a known limitation that may need a path-following follow-up, and the exact feel values pend the walk-test).

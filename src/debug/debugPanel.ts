@@ -18,6 +18,7 @@ import { updateStats, die } from '../stats/survival.ts';   // ACBE (D1) — cras
 import { spawnWormCrossing, updateWormHorizonCrossing } from '../world/wormHorizonCrossing.ts';   // M5b (C36) — __game.triggerWormCrossing
 import { fireSignalFlare, advanceSignalFlares, activeSignalFlareCount } from '../world/signalFlare.ts';   // M6 (C37) — __game.fireSignalFlare
 import { damageVulture } from '../enemies/vulture.ts';
+import { applyLungePose, applyMeshTransform } from '../enemies/sandWorm.ts';   // M12 ⓖ (C66) — __game.poseLunge (dive render)
 import { makeLatheHull, fuselageProfile, makeFormerRings, makeBreach, makeSandMound } from '../world/wreckForms.ts';
 import { createRustedHullMaterial, HULL_WEATHERING_ACAY } from '../world/hullMaterial.ts';
 import { placeProcgenComposite, type ProcgenWreckClass } from '../world/procgenWreck.ts';
@@ -111,6 +112,11 @@ interface DebugApi {
    *  centre point); + fast-forward it `seconds` for a deterministic rig-shot frame. */
   triggerWormCrossing: () => { cx: number; cz: number } | null;
   advanceWormCrossing: (seconds: number) => void;
+  /** M12 ⓖ (C66) — DEV/rig-only: pose ctx.sandWorms.list[0] at the breach-and-dive lunge
+   *  time `t` (0..1) using the REAL applyLungePose (no rig-vs-real drift). Returns the body
+   *  center + head world Y + pitch so the no-airborne-hop claim is numerically checkable
+   *  (basePos.y must stay ≤ the charge level; head rears up at the strike, drives down on the dive). */
+  poseLunge: (t?: number) => { found: boolean; t?: number; groundY?: number; chargeY?: number; centerY?: number; headWorldY?: number; pitch?: number; bend?: number };
   /** M6 (C37) — DEV-only: fire a signal flare from the player's view + fast-forward
    *  its arc `seconds` for a deterministic rig-shot frame. Returns the live count. */
   fireSignalFlare: (seconds?: number) => number;
@@ -288,6 +294,25 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
     },
     triggerWormCrossing: () => spawnWormCrossing(ctx),
     advanceWormCrossing: (seconds: number) => updateWormHorizonCrossing(ctx, ctx.terrain, seconds),
+    poseLunge: (t = 0.5) => {
+      const worm = ctx.sandWorms?.list?.[0];
+      if (!worm) return { found: false };
+      const groundY = ctx.terrain.heightAt(worm.basePos.x, worm.basePos.z);
+      worm.surfaceGroundY = groundY;
+      worm.state = 'lunge';
+      applyLungePose(worm, t);
+      worm.mesh.visible = true;
+      applyMeshTransform(worm);
+      worm.mesh.updateMatrixWorld(true);
+      const halfLen = Tuning.SANDWORM_LENGTH / 2;
+      const head = new THREE.Vector3(halfLen, 0, 0).applyMatrix4(worm.mesh.matrixWorld);
+      const chargeY = groundY - Tuning.SANDWORM_MAX_RADIUS * Tuning.SANDWORM_CHARGE_SUBMERGE;
+      return {
+        found: true, t, groundY: +groundY.toFixed(2), chargeY: +chargeY.toFixed(2),
+        centerY: +worm.basePos.y.toFixed(2), headWorldY: +head.y.toFixed(2),
+        pitch: +worm.pitch.toFixed(3), bend: +worm.bend.toFixed(3),
+      };
+    },
     fireSignalFlare: (seconds = 0) => {
       fireSignalFlare(ctx);
       if (seconds > 0) advanceSignalFlares(ctx, seconds);

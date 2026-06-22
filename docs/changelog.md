@@ -3,6 +3,17 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign C66 — 2026-06-22 — M12 ⓖ: **sand-worm attack = charge → breach-and-dive (no high jump)** ✓ verify pass (ultracode)
+
+`verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40; creature behavior, no rand, no save touch). Cycle 66/75.
+
+**M12 ⓖ — the lunge is now a breach-and-DIVE, not a high airborne jump** (feel-critical; user: "remove the high jump → charge-straight then dive from the current position"):
+- **`tickLunge` rewritten** (`sandWorm.ts`): the old `basePos.y += sin(t·π) * SANDWORM_BREACH_ARC_PEAK` (a +20 m parabolic body arc — the "jump") is GONE. The body CENTER now never rises above the charge level: it HOLDS at the charge depth (back-ridge exposed) through the **strike** (the HEAD rears up out of the sand via pitch+bend to bite), then DIVES **head-first** down to underground (pitch → head-down, center plunges accelerating).
+- **Pose math extracted to `applyLungePose(worm, t)`** (exported) so the worm-model rig renders the EXACT same pose the game runs — no rig-vs-real drift (the C63 false-pass lesson). Also exported `applyMeshTransform`; added a `__game.poseLunge(t)` debug hook + `worm-model --angle=strike|dive` rig angles.
+- **New tuning** (`SANDWORM_LUNGE_STRIKE_PITCH/DIVE_PITCH/STRIKE_BEND/DIVE_BEND/FORWARD_OVERSHOOT`); replaced `SANDWORM_BREACH_ARC_PEAK`.
+- **Verified (real pose render + numbers, drift-free):** strike (t=0.5) — centerY=1.77 < groundY=5.97 (no hop), head reared to +13.5 m (breach); dive (t=0.82) — centerY=−4.15 (plunging), head driven head-first below ground. Body center never above ground. The renders read as a low surfacing strike then a head-first dive.
+- **D266.** Attack FEEL (timing/menace/steepness) → the user's M12 walk-test (the inherent human gate). **Next M12:** ⓗ alert audio → quiet rumble + screen-shake buildup, then the M12 milestone pause.
+
 ## Campaign C65 — 2026-06-22 — M12 ⓕ: **remove the sand-worm dorsal ridges** ✓ verify pass (ultracode)
 
 `verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40; creature model edit, no rand, no save touch). Cycle 65/75.

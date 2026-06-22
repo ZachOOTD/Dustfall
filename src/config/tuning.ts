@@ -1308,7 +1308,17 @@ export const Tuning = {
   SANDWORM_ALERT_DURATION: 2.0,              // s — long windup so player can react (UNCHANGED — timing-based)
   SANDWORM_LUNGE_RANGE: 15,                  // m — trigger lunge when this close to player (was 30)
   SANDWORM_LUNGE_DURATION: 2.6,              // s — slower arc gives a real damage window (UNCHANGED)
-  SANDWORM_BREACH_ARC_PEAK: 20,              // m — peak Y of lunge arc above ground (was 40)
+  // M12 ⓖ (C66) — the lunge is a breach-and-DIVE, not a high airborne jump (user: "remove the
+  // high jump → charge-straight then dive from the current position"). The body CENTER never
+  // launches above the charge level; the HEAD rears out of the sand to strike (pitch), then the
+  // worm drives head-first DOWN into the dune. (Replaced SANDWORM_BREACH_ARC_PEAK — the old +20m
+  // body arc.) Pitch is about Z: +rear = head up, −dive = head down. Bend: + arches the front up,
+  // − dips it down. Tuned via the worm-model `dive` render.
+  SANDWORM_LUNGE_STRIKE_PITCH: 0.30,         // rad — head rears UP out of the sand at the strike (a breach, not a hop)
+  SANDWORM_LUNGE_DIVE_PITCH: 0.6,            // rad — head drives DOWN, head-first into the dune (kept moderate so the rigid see-saw doesn't launch the tail too high — the body goes DOWN, not up)
+  SANDWORM_LUNGE_STRIKE_BEND: 1.2,           // front of the body arches up as the head rears
+  SANDWORM_LUNGE_DIVE_BEND: 1.6,             // front dips down as it plunges (head-first read)
+  SANDWORM_LUNGE_FORWARD_OVERSHOOT: 6,       // m — forward surge past the target before diving (was hardcoded 12 — shorter = dives more AT you)
   SANDWORM_STATIONARY_BREACH_DURATION: 5.5,  // s — vertical hold during stationary breach (UNCHANGED)
   SANDWORM_STATIONARY_BREACH_HEIGHT: 25,     // m — head rises above the dunes (was 50)
   SANDWORM_STATIONARY_BREACH_EVERY: 3,       // every Nth retreat → stationary breach

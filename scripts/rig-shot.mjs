@@ -2768,6 +2768,7 @@ const SCENARIOS = {
       worm.mesh.visible = true;
       worm.mesh.rotation.set(0, 0, 0);
       let meshes = 0; worm.mesh.traverse((o) => { if (o.isMesh) meshes++; });
+      let diveInfo = null;   // M12 ⓖ — the real poseLunge numbers for the dive/strike angles
       if (ang === 'arc') {
         // Faithful LUNGE-PEAK pose — mirrors sandWorm.ts applyBodyBend + the lunge Y-curve at t=0.5:
         // PEAK=20, DEPTH=12.5, RAD=10 → basePos.y = ground − DEPTH/2 + PEAK = ground+13.75; bend amp 2.5;
@@ -2793,6 +2794,11 @@ const SCENARIOS = {
           const rear = Math.max(0, -s);
           child.position.y = child.userData._nomY - rear * rear * chargeDip;
         }
+      } else if (ang === 'dive' || ang === 'strike') {
+        // M12 ⓖ — the REAL breach-and-dive lunge pose (applyLungePose + applyMeshTransform via
+        // the poseLunge hook → no rig-vs-real drift). 'strike' = head reared (t=0.5), 'dive' = plunging (t=0.82).
+        worm.yaw = 0;   // lie along +X so the broadside camera sees the breach/dive profile
+        diveInfo = window.__game.poseLunge(ang === 'strike' ? 0.5 : 0.82);
       } else {
         worm.mesh.position.set(ax, groundY + rad * 0.55, az);
       }
@@ -2805,6 +2811,9 @@ const SCENARIOS = {
       } else if (ang === 'charge') {                 // low 3q — the armored back-ridge breaking the surface
         cam.position.set(ax + halfLen * 0.55, groundY + rad * 1.1, az + halfLen * 0.65);
         cam.lookAt(ax, groundY + rad * 0.15, az);
+      } else if (ang === 'dive' || ang === 'strike') {   // M12 ⓖ — full broadside (body in the sand, head rearing/diving)
+        cam.position.set(ax + halfLen * 0.05, groundY + rad * 4.0, az + halfLen * 2.0);
+        cam.lookAt(ax + halfLen * 0.05, groundY + rad * 0.8, az);
       } else if (ang === 'head') {                   // close 3/4 on the maw + front body
         cam.position.set(headX + rad * 2.0, groundY + rad * 1.5, az + rad * 2.4);
         cam.lookAt(headX - rad * 0.8, groundY + rad * 0.7, az);
@@ -2822,7 +2831,7 @@ const SCENARIOS = {
       if (!key && DirCtor) { key = new DirCtor(); key.name = '__wormKey'; key.intensity = 2.1; key.color.set(0xfff2e0); ctx.three.scene.add(key.target); ctx.three.scene.add(key); }
       if (key) { key.position.set(cam.position.x + rad, cam.position.y + 24, cam.position.z + 12); key.target.position.set(ax + halfLen * 0.4, groundY, az); key.target.updateMatrixWorld(true); }
       if (!ctx.three.scene.getObjectByName('__wormFill') && HemiCtor) { const fill = new HemiCtor(0xbfccdd, 0x6b5840, 0.7); fill.name = '__wormFill'; ctx.three.scene.add(fill); }
-      return { found: true, meshes, angle: ang, halfLen };
+      return { found: true, meshes, angle: ang, halfLen, diveInfo };
     }, { ang: angle });
     await page.waitForTimeout(340);
     if (!r.found) { console.log('[worm-model] SKIP — no worm in world'); return; }

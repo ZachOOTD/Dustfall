@@ -72,17 +72,18 @@ delegated to the **procedural-modeler** agent (quality BAR, 5-8 rounds); the **a
 
 **Review-fix pass (from the 2026-06-20 triage). Autonomous, PAUSE-per-tier for the user's batch walk-test/listen:**
 - **M11 — wreck/panel fixes** ✅ COMPLETE: ⓐ not-openable (culled panels hide; D264) · ⓑ floating panels seated · ⓒⓓⓔ tank + husk rib/structure rework (root: `makeFormerRings`' hidden `0.84×` shrink; C61-C63) · stragglers (3 mega-wreck companion panels hidden; D265, C64).
-- **M12 — sand worm** (IN PROGRESS; hero modeling → procedural-modeler + real-view gate): ✅ ⓕ dorsal ridges removed (C65 — the C13 armor scutes; kept the segmentation rings) · ⓖ attack = charge→dive from current pos, no high jump (NEXT, feel-critical) · ⓗ alert audio → quiet rumble + screen-shake buildup.
+- **M12 — sand worm** (IN PROGRESS; real-view gate): ✅ ⓕ dorsal ridges removed (C65) · ✅ ⓖ attack = breach-and-dive, no high jump (C66/D266 — body stays in the sand, head rears to strike then drives head-first down; FEEL → user walk-test) · ⓗ alert audio → quiet rumble + screen-shake buildup (NEXT).
 - **M13 — weapon & vehicle audio:** gunshot + reload SFX (all guns) · smoother/lower speeder hum.
 
 **NOT in the loop (dedicated solo sessions):** the **Skyfall crashed-ship** (a NEW researched extremely-high-quality enterable HERO wreck — its own `/feature-slice`:
 research → model → iterate WITH the user; + its fire-from-the-wreck fix) and the **CAVE rework** (user planning the direction). Both in [docs/backlog.md](docs/backlog.md).
 Also still queued for the user: ⑯ drop-pod-intro, ⑰ pickup-instancing (human-attended), + the §A walk-tests/flag-flips.
 
-**Last shipped**: Campaign **C65** (2026-06-22, cycle 65/75) — M12 ⓕ: removed the sand-worm dorsal ridges (`verify:all` PASS; creature model edit, no rand, no save touch). Removed the C13
-dorsal-armor SCUTES (13 keeled spine plates reading as a stegosaurus sawback) for the smoother Dune-leviathan silhouette; kept the segmented body (tapered segments + circumferential ridge
-rings). Verified via the `worm-model` rig (real worm mesh): side + 3q show a coherent smooth segmented worm, scutes gone (mesh 66→53). **Next** = cycle 66 = **M12 ⓖ attack charge→dive**
-(no airborne jump — feel-critical; the defining M12 unit, render the dive pose via the real worm view) → then ⓗ alert audio → the M12 batch pause for the user's worm-feel walk-test + alert listen. See [docs/next-session-prompt.md](docs/next-session-prompt.md).
+**Last shipped**: Campaign **C66** (2026-06-22, cycle 66/75) — M12 ⓖ: the sand-worm attack is now a breach-and-DIVE, not a high airborne jump (`verify:all` PASS; creature behavior, no rand, no save
+touch). Removed the old `+20 m` parabolic body arc; the body center HOLDS in the sand through the strike (the head rears up to bite via pitch+bend) then DIVES head-first down (D266). Pose math
+extracted to `applyLungePose` so the rig renders the REAL pose (no drift); new `__game.poseLunge` + `worm-model --angle=strike|dive`. Verified numerically (centerY never above ground) + real
+renders (low breach-strike → head-first dive). Known limit: the rigid pose see-saws the tail up on a steep dive → DIVE_PITCH kept moderate. **Next** = cycle 67 = **M12 ⓗ alert audio** → a quiet
+low rumble + screen-shake buildup (start `startWormRumble` on alert + ramp `applyTremorEffects`; quiet `playWormRoar`) → then the **M12 milestone pause** for the user's worm-attack-FEEL walk-test + alert-rumble LISTEN. See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 
