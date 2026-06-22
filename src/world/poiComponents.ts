@@ -514,23 +514,36 @@ export function huskShell(seed: number, _state = 'breached'): BuiltComponent {
       rivet.rotation.x = phi; rivet.userData.isWreckDecoration = true; g.add(rivet);
     }
   }
-  // Exposed rib formers inside (arc gap at bottom → ribs spring from the floor), shown
-  // through the open top. Spaced along the length.
+  // Exposed rib formers inside, hugging the shell, TIED by longitudinal stringers into a cage.
+  // M11 ⓒ (C63b, user note: ribs read as floating hoops): arc CLAMPED to ≤ the shell's covered
+  // arc (2π−gap) so rib tips don't poke past the shell edge into the open top, and stringers
+  // connect the rings so they read as structure, not isolated arcs.
   const ribN = 3 + Math.floor(phash(seed, 3) * 3);
-  const formers = makeFormerRings(r * 0.98, ribN, len / (ribN + 1), {
-    startX: -len / 2 + len / (ribN + 1), arc: Math.PI * 1.25, taper: 0.02,
+  const ribRr = r * 0.97;
+  const ribSpacingH = len / (ribN + 1), ribStartXH = -len / 2 + ribSpacingH;
+  const formers = makeFormerRings(ribRr, ribN, ribSpacingH, {
+    startX: ribStartXH, arc: Math.PI * 1.05, taper: 0.02,
   });
   formers.position.y = r;
   formers.traverse((o) => { o.userData.isWreckDecoration = true; });
   g.add(formers);
+  // Longitudinal stringers tie the rib rings into a cage (angles on the lower closed arc).
+  const ribSpanH = ribSpacingH * (ribN - 1);
+  for (const sa of [Math.PI * 0.6, Math.PI, Math.PI * 1.4]) {
+    const st = new THREE.Mesh(new THREE.BoxGeometry(ribSpanH, 0.07, 0.07), _hullDarkMat);
+    st.position.set(ribStartXH + ribSpanH / 2, r + Math.cos(sa) * ribRr, Math.sin(sa) * ribRr);
+    st.userData.isWreckDecoration = true; g.add(st);
+  }
   // Torn rim along the two open top edges (jagged dark flaps).
   for (const zside of [-1, 1] as const) {
     const nFlap = 4 + Math.floor(phash(seed, 10 + zside) * 3);
     for (let i = 0; i < nFlap; i++) {
       const fx = -len / 2 + (i + 0.5) * (len / nFlap);
-      const flap = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.5 + phash(seed, 20 + i) * 0.4, 3), _rustMat);
+      // M11 ⓓ (C63b): SHORT jagged torn-lip teeth peeling flatter along the rim (were long
+      // spikes sticking off the side). Cone base seated on the open-top edge.
+      const flap = new THREE.Mesh(new THREE.ConeGeometry(0.15, 0.2 + phash(seed, 20 + i) * 0.16, 3), _rustMat);
       flap.position.set(fx, r + Math.cos(gap / 2) * r, zside * Math.sin(gap / 2) * r);
-      flap.rotation.x = zside * (0.5 + phash(seed, 30 + i) * 0.5);
+      flap.rotation.x = zside * (1.0 + phash(seed, 30 + i) * 0.4);
       flap.userData.isWreckDecoration = true; g.add(flap);
     }
   }
@@ -548,7 +561,7 @@ export function huskShell(seed: number, _state = 'breached'): BuiltComponent {
   gash.position.set(bx, r * 0.75, -r * 0.9); gash.userData.isWreckDecoration = true; g.add(gash);
   for (let i = 0; i < 5; i++) {
     const ang = (i / 5) * Math.PI * 2;
-    const flap = new THREE.Mesh(new THREE.ConeGeometry(r * 0.12, r * 0.4, 3), _rustMat);
+    const flap = new THREE.Mesh(new THREE.ConeGeometry(r * 0.1, r * 0.17, 3), _rustMat);   // M11 ⓓ — shorter breach teeth
     flap.position.set(bx + Math.cos(ang) * r * 0.38, r * 0.75 + Math.sin(ang) * r * 0.3, -r * 0.95);
     flap.rotation.z = ang; flap.rotation.x = -0.6;
     flap.userData.isWreckDecoration = true; g.add(flap);
@@ -560,8 +573,10 @@ export function huskShell(seed: number, _state = 'breached'): BuiltComponent {
     { kind: 'box', half: { x: len / 2, y: r * 0.85, z: 0.3 }, pos: { x: 0, y: r * 0.7, z: -r * 0.82 } },
   ];
   const panelMounts: PanelMount[] = [
-    // Rich 'massive' salvage hatch on the outer +Z flank at human height.
-    { pos: new THREE.Vector3(len * 0.18, 1.4, r * 0.9), quat: FACE.posZ(), kind: 'massive' as PanelKind },
+    // 'massive' salvage hatch seated FLUSH on the +Z flank at the widest point (θ≈π/2 → the
+    // surface normal IS +Z, so FACE.posZ is correct), sunk so the panel front meets the curved
+    // surface instead of floating off it at a fixed height. M11 ⓔ (C63b, user note).
+    { pos: new THREE.Vector3(len * 0.18, r, r - 0.15), quat: FACE.posZ(), kind: 'massive' as PanelKind },
   ];
   const bbox = new THREE.Box3(new THREE.Vector3(-len / 2, 0, -r), new THREE.Vector3(len / 2, r * 1.9, r));
   return { mesh: g, sockets: [], colliders, panelMounts, bbox };

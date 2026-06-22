@@ -750,3 +750,9 @@ first stop will be `max-cycles` ~mid-Phase-A; resume via `/campaign-start --resu
 - **Spend:** ~400K (the user-feedback diagnosis + the rib/stringer/rim/flap rework + ~6 rig render rounds [fighting the burial/framing + the tear-angle flake] + verify:all); campaign total ~17.17M; cycle **63/75**.
 - **Commit:** `PENDING`.
 - **⏸ STILL PAUSED — M11 batch-1** (awaiting the user's close-up re-validation of the tank ribbing). Reload `localhost:5180` → walk to a tank → confirm the ribbing reads connected (not floating). If good → `/campaign-approve` → M11 stragglers → M12. If still off → iterate.
+
+## Cycle 63 (cont) — M11 ⓒⓓⓔ applied to the HUSK too (huskShell) (2026-06-20) — SHIPPED [partial]
+- **User clarified** the floating wreck is the HALF-CYLINDER **husk** (huskShell — `hollow_husk`/`crash_husk`/`enterable_wreck`), NOT the tank. Same 3 issues, separate component.
+- **Shipped (poiComponents.ts `huskShell`):** ribs — arc clamped to ≤ the shell's covered arc (1.25π→1.05π so tips don't poke past the shell edge) + 3 longitudinal stringers tie the rings into a cage (was floating hoops); torn-rim flaps SHORTENED (0.5-0.9 → 0.2-0.36) + peeled flatter (were long side spikes); breach flaps shortened; salvage panel reseated FLUSH on the +Z flank at the widest point (θ≈π/2, normal=+Z; was floating at a fixed y=1.4 on the curve). phash-only, no new rand.
+- **Verify:** `verify:all` PASS. Rig 3q render confirms the ribs now read as CONNECTED ARCHES (a cage) + short flaps. The flank panel + the end-on view couldn't be rig-rendered (the spawned rig server degraded after many runs + the into-the-dark-end angle flakes) → user confirms the panel close-up.
+- **Commit:** `PENDING`. Still ⏸ paused at M11 batch-1 for the user's close-up re-validation (tank + husk).
