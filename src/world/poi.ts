@@ -18,6 +18,7 @@ import {
   placeWreck,
   placeDebrisField,
   addAccessPanel,
+  hideAccessPanel,
   type WreckKind,
 } from './wrecks.ts';
 import { attachCompoundCollider } from '../physics/bodies.ts';
@@ -595,12 +596,20 @@ export function placePOIs(
           const cx = bestX + c.dx;
           const cz = bestZ + c.dz;
           const cy = terrain.heightAt(cx, cz);
-          placeWreck(scene, world, terrain, new THREE.Vector3(cx, cy, cz), c.kind, rand, {
+          const cg = placeWreck(scene, world, terrain, new THREE.Vector3(cx, cy, cz), c.kind, rand, {
             scale: c.scale,
             buryY: 0.6,
             tiltX: c.tiltX,
             tiltZ: c.tiltZ,
           });
+          // M11 straggler fix (C64) — these mega-wreck companions are decorative
+          // "scale-reference props"; placeWreck builds an access panel but this
+          // path never registers it (unlike the convoy/caravan/heroLandmark/yard
+          // callers). An unregistered-but-visible panel reads as a panel that
+          // won't open (the §A "3 hand/hero-wreck straggler panels" — confirmed
+          // in-engine as exactly these 3 companions). Hide it: determinism-safe
+          // (no registerSalvageable → no `rand` draw), removing the dead tease.
+          hideAccessPanel(cg);
         }
         break;
       }

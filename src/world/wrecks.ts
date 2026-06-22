@@ -596,6 +596,23 @@ export function addAccessPanel(
   return body;
 }
 
+/** M11 straggler fix (C64) — hide a wreck group's access-panel subtree (body +
+ *  door + interior), the same idiom `pruneBuriedPanels`' cull() uses (C61/D264).
+ *  For decorative wrecks that are built but intentionally NOT registered as
+ *  salvageables: an UNregistered-but-visible panel reads as a panel that won't
+ *  open (the "not openable" dead tease). Hiding it removes the tease without
+ *  consuming any `rand` (determinism-safe — no registerSalvageable call). Pass
+ *  the group returned by placeWreck; no-op if it carries no access panel. */
+export function hideAccessPanel(group: THREE.Object3D): void {
+  const body = group.userData.accessPanel as THREE.Object3D | undefined;
+  if (!body) return;
+  body.visible = false;
+  const door = body.userData.panelDoor as THREE.Object3D | undefined;
+  if (door) door.visible = false;
+  const interior = body.userData.panelInterior as THREE.Object3D | undefined;
+  if (interior) interior.visible = false;
+}
+
 /** ACAV Tier 2 — mount a panel with a FULL part-local quaternion (from the
  *  shape-agnostic `findSurfaceMounts` sampler) so it sits flush on any hull
  *  surface. Thin wrapper over addAccessPanel; the faceYaw arg is unused because

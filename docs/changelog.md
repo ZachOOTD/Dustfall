@@ -3,6 +3,17 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign C64 — 2026-06-22 — M11 stragglers: **hide the 3 mega-wreck companion panels** → M11 COMPLETE ✓ verify pass (ultracode)
+
+`verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40; render-only, zero new `rand`, no save touch). Cycle 64/75.
+
+**M11 straggler bug RESOLVED (the D264/D265 remainder):**
+- In-engine enumeration (live preview, the C61 method) found the "3 hand/hero-wreck unregistered panels" are exactly the mega-wreck flagship's **3 decorative companion wrecks** (`fuselage`/`engine_cluster`/`cargo_container`, ~172-245 m) — placed via `placeWreck` in `poi.ts` with the return **discarded, never `registerSalvageable`**. (The backlog's "545-626 m / ACAS A4 above-ground" guess was wrong.)
+- **Fix:** new `hideAccessPanel(group)` helper (`wrecks.ts`) — mirrors D264's cull-hide idiom (body + `panelDoor` + `panelInterior` → `visible=false`) — called on each companion. Determinism-safe (no `registerSalvageable` → no `rand` draw).
+- **Verified 3→0** visible-unregistered stragglers across 3 independent seeds (seed is random per boot; the mega-wreck spawns every seed → structural, not seed-luck). 67 registered + 21 culled-hidden panels on the original seed all intact.
+- **Tradeoff (user veto at the M-review):** the companions are now SEALED (decorative scale-reference props) rather than openable salvage — registering them would re-baseline world placement (3 new `rand` draws). D265.
+- **Docs:** archived D207–D220 → `decisions-archive.md` (active decisions back to 45: D221–D265).
+
 ## Campaign C63 — 2026-06-20 — M11 ⓒⓓ: **wrecked_tank ribbing/structure/flap rework** (user batch-1 notes) ✓ verify pass (ultracode)
 
 `verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40; phash-only, no save touch). Cycle 63/75.

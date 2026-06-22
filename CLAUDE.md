@@ -64,24 +64,25 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      Prior milestones live in docs/changelog.md — do NOT accumulate "Prior milestone"
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
-**⏸ CAMPAIGN PAUSED — M11 batch-1 (wreck fixes validated) — `campaign/2026-06-18`** (autonomous review-fix pass; user batch-validates each tier). Phase B (M6→M10)
-complete + reviewed; now in the M11→M13 review-fix pass. **M11's wreck/panel fixes are DONE + user-walk-tested ("looks ok for now", 2026-06-21)** (`status: paused`,
-`awaiting_approval: true`). **Fresh session resumes from [docs/next-session-prompt.md](docs/next-session-prompt.md); `/campaign-approve` to clear the gate + continue.**
-The **Skyfall hero wreck + cave rework are DEDICATED solo sessions (NOT the loop).** Each `/campaign-cycle` boots from `docs/campaign/campaign-state.json` + `docs/roadmap.md` — NOT this note.
+**▶ CAMPAIGN ACTIVE — M11→M13 review-fix pass — `campaign/2026-06-18`** (autonomous; user batch-validates each tier). Phase B (M6→M10) complete + reviewed. **M11 wreck/panel
+fixes COMPLETE + validated** (wreck-arc walk-tested "looks ok for now" 2026-06-21; the straggler panels closed C64). The loop continues **M12 sand-worm → M13 audio**, pausing
+at each tier for the user's walk-test/listen. Framework upgrade in force (C64): the visual gate renders the **PLAYER'S REAL in-game view** (not an isolated rig); hero geometry is
+delegated to the **procedural-modeler** agent (quality BAR, 5-8 rounds); the **anti-punt** rule holds (no scaffold-then-defer). Each `/campaign-cycle` boots from
+`docs/campaign/campaign-state.json` + `docs/roadmap.md` — NOT this note.
 
-**Review-fix pass (from the 2026-06-20 triage — backlog "Fresh triage" block). Autonomous, PAUSE-per-tier for the user's batch walk-test/listen:**
-- **M11 — wreck/panel fixes** ✅ DONE + validated: ⓐ not-openable (culled panels now hide; D264) · ⓑ floating panels seated · ⓒⓓⓔ tank + husk rib/structure/flap/panel rework (root cause: `makeFormerRings`' hidden `0.84×` shrink floated ribs inside the shell on both wrecks; C61-C63). **Remaining: the 3 hand/hero-wreck straggler panels (§A)** → then M12, M13.
-- **M12 — sand worm:** remove dorsal ridges · attack = charge→dive (no high jump) · alert audio → quiet rumble buildup.
+**Review-fix pass (from the 2026-06-20 triage). Autonomous, PAUSE-per-tier for the user's batch walk-test/listen:**
+- **M11 — wreck/panel fixes** ✅ COMPLETE: ⓐ not-openable (culled panels hide; D264) · ⓑ floating panels seated · ⓒⓓⓔ tank + husk rib/structure rework (root: `makeFormerRings`' hidden `0.84×` shrink; C61-C63) · stragglers (3 mega-wreck companion panels hidden; D265, C64).
+- **M12 — sand worm** (NEXT; hero modeling → procedural-modeler + real-view gate): remove dorsal ridges · attack = charge→dive from current pos (no high jump) · alert audio → quiet rumble + screen-shake buildup.
 - **M13 — weapon & vehicle audio:** gunshot + reload SFX (all guns) · smoother/lower speeder hum.
 
 **NOT in the loop (dedicated solo sessions):** the **Skyfall crashed-ship** (a NEW researched extremely-high-quality enterable HERO wreck — its own `/feature-slice`:
 research → model → iterate WITH the user; + its fire-from-the-wreck fix) and the **CAVE rework** (user planning the direction). Both in [docs/backlog.md](docs/backlog.md).
 Also still queued for the user: ⑯ drop-pod-intro, ⑰ pickup-instancing (human-attended), + the §A walk-tests/flag-flips.
 
-**Last shipped**: Campaign **C61** (2026-06-20, cycle 61/75) — M11 ⓐ wreck panels "not openable" FIXED (`verify:all` PASS; live-verified 21 culled panels hidden / 79
-openable; no save touch). Root (D264): the interaction raycast hits only the targets list (no hull occlusion), so "not openable" = `pruneBuriedPanels`' `cull()`
-leaving culled panels VISIBLE; fix = `cull()` now hides the panel mesh. **Next** = cycle 62 = **M11 ⓑ floating panels + ⓒⓓⓔ wrecked_tank** (render-iterate via the
-isolated `procgen-wreck` rig; phash-only mounts), then the M11 batch pause for the user's wreck walk-test. See [docs/next-session-prompt.md](docs/next-session-prompt.md).
+**Last shipped**: Campaign **C64** (2026-06-22, cycle 64/75) — M11 straggler panels FIXED → **M11 COMPLETE** (`verify:all` PASS; render-only, no save touch). The "3 hand/hero-wreck
+unregistered panels" were empirically (live preview) the mega-wreck flagship's 3 decorative companion wrecks (`poi.ts`), placed via `placeWreck` but never `registerSalvageable`'d
+→ a visible "won't-open" tease. Fix (D265): new `hideAccessPanel()` helper hides them (determinism-safe — no `rand`); verified 3→0 stragglers across 3 seeds. **Next** = cycle 65 =
+**M12 ⓕ remove worm dorsal ridges** (then ⓖ charge-dive, ⓗ alert audio) → the M12 batch pause for the user's worm-feel walk-test + alert-rumble listen. See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 
