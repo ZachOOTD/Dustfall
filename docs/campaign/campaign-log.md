@@ -816,5 +816,5 @@ first stop will be `max-cycles` ~mid-Phase-A; resume via `/campaign-start --resu
 - **Decisions:** **D267** — the worm alert is a quiet mysterious dread buildup (rumble + growing shake), not a roar; reused the C16 graph (changed WHEN/level, not the nodes). friction 1.
 - **✅ M12 COMPLETE** (ⓕ ridges C65 · ⓖ breach-dive C66 · ⓗ alert audio C67).
 - **Spend:** ~180K (the audio/tremor driving rework + new tuning + D267 + verify:all + the doc suite); campaign total ~18.01M; cycle **67/75**.
-- **Commit:** `PENDING`.
+- **Commit:** `7d693ed`.
 - **⏸ PAUSED — M12 milestone review** (`checkpoint: milestone`; M12 is the last tier before the `### Milestone: M12 sand-worm` marker → all M12 units Shipped → milestone reached). `status=paused`, `awaiting_approval=true`, `stop_reasons=["milestone-review"]`. **Verdict: STOP (pause).** The loop does NOT schedule another cycle. **Human action:** walk-test the worm-attack FEEL (the C66 charge → breach-and-dive — no high jump) + LISTEN to the alert rumble/shake buildup (C67 — quiet, mysterious, building). Then `/campaign-approve` → **M13** (the FINAL review-fix tier: ⓘ gunshot+reload SFX all guns · ⓙ lower smoother speeder hum). `consecutive_no_progress` stays 0 (SHIPPED).

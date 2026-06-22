@@ -1005,7 +1005,7 @@
       "ultracode": true,
       "milestone_complete": "M12 (ⓕ ridges C65 · ⓖ breach-dive C66 · ⓗ alert audio C67) — the last tier before the '### Milestone: M12 sand-worm' marker → PAUSE",
       "paused": "milestone-review (M12) — autonomous fixes done; PAUSE for the user to walk-test the worm-attack FEEL (C66 breach-dive) + LISTEN to the alert rumble/shake buildup (C67). Resume via /campaign-approve → M13 weapon+vehicle audio.",
-      "commit": "PENDING",
+      "commit": "7d693ed",
       "spend_approx_tokens": 180000
     }
   ]
