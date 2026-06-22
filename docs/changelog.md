@@ -3,6 +3,15 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign C66 follow-up (C68) — 2026-06-22 — M12 ⓖ: **smoother worm dive — natural bend, tail curls under (user feedback during the M12 review)** ✓ verify pass
+
+`verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40; creature pose, no rand, no save touch). A within-pause fix from the user's M12 review.
+
+**User feedback:** the dive's tail pointed straight out at a stiff angle; wanted a smoother natural bend, the tail curling DOWN toward the terrain so the tail tip is never seen (you never learn how long the worm is).
+- **Reworked the DIVE from a rigid head-down pitch → a natural BEND CURVE** (`sandWorm.ts` `applyBodyBend` + `applyLungePose`). The rigid pitch see-sawed the tail up (D266); now the dive pitch decays the strike rear to 0 (no see-saw) and a new `worm.lungeDive` (0..1) drives a per-child power-curve sink: the HEAD leads DOWN (head-first) and the TAIL CURLS DOWN into the dune, with the mid-body crest near the surface.
+- **New tuning:** `SANDWORM_LUNGE_DIVE_HEAD_DROP` (2.2×R) · `SANDWORM_LUNGE_DIVE_TAIL_DROP` (1.7×R); removed `SANDWORM_LUNGE_DIVE_PITCH`/`_BEND`. New `SandWorm.lungeDive` field.
+- **Verified** via the worm-model `dive` render (now `--t=<0..1>` to scan the motion): t=0.6 reads as a coherent curved body diving in, t=0.7 mostly submerged with the tail curling under — no straight-out tail; the tip is never visible. Strike pose unchanged (head rears to bite). D266 updated (the see-saw limitation RESOLVED). **Feel → the user's M12 walk-test** (still paused at the M12 milestone for re-validation).
+
 ## Campaign C67 — 2026-06-22 — M12 ⓗ: **sand-worm alert = quiet rumble + screen-shake buildup** → M12 COMPLETE → ⏸ pause ✓ verify pass (ultracode)
 
 `verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40; audio + camera-shake driving logic, no rand, no save touch). Cycle 67/75.

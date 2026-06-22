@@ -9,7 +9,7 @@
 4. `docs/roadmap.md` — the M13 block (line ~180)
 
 ## What the user validates at THIS pause (M12)
-- **Worm attack FEEL** (C66/D266): the lunge is now a charge → breach-and-dive (head rears to strike, then drives head-first down — no high airborne jump). Does it feel like a menacing ambush dive? (Known limit: the rigid pose see-saws the tail up on a steep dive; `SANDWORM_LUNGE_DIVE_PITCH` is the lever; a path-following dive is the deeper fix if wanted.)
+- **Worm attack FEEL** (C66/D266 + C68): the lunge is now a charge → breach-and-dive (head rears to strike, then bends head-first down into the dune). **C68 (your feedback) smoothed the dive into a natural bend curve — the head leads down + the tail curls down into the terrain, so the tail tip is never seen.** Does it feel like a menacing ambush dive? Levers: `SANDWORM_LUNGE_DIVE_HEAD_DROP`/`_TAIL_DROP` (dive curve depth), `SANDWORM_LUNGE_STRIKE_PITCH` (the strike rear).
 - **Alert audio + shake** (C67/D267): the alert is now a quiet rumble + a growing screen-shake (no loud roar). Is the dread buildup right / mysterious? Levers: `SANDWORM_ALERT_RUMBLE_MAX`, `SANDWORM_TREMOR_SHAKE`, `SANDWORM_ALERT_DURATION`.
 - Also: ⓕ removed the dorsal ridges (C65) — confirm the smoother worm reads ok, and whether the circumferential segmentation rings should also go.
 

@@ -107,6 +107,11 @@ export interface SandWorm {
    *  arches above its base line. Lunge cranks this up to make the body
    *  look curved through the air; other states leave it at 0. */
   bend: number;
+  /** M12 ⓖ (C66/C68) — lunge DIVE progress 0..1 (0 outside the dive). Drives the
+   *  natural diving BEND in applyBodyBend: the head leads down + the tail curls
+   *  DOWN into the terrain (so the tail tip is never seen) — instead of a rigid
+   *  pitch see-saw that threw the tail straight up. */
+  lungeDive: number;
   particles: SandPuff[];
   /** Smoothed wake-puff cadence. */
   nextWakePuffAt: number;
@@ -637,6 +642,7 @@ export function spawnSandWorm(
     pitch: 0,
     sway: 0,
     bend: 0,
+    lungeDive: 0,
     particles: makePuffPool(scene, 140),     // bumped 56 → 140 for boss-tier bursts (Session MM rescale)
     nextWakePuffAt: 0,
     nextTremorDustAt: 0,
@@ -1208,16 +1214,18 @@ export function applyLungePose(worm: SandWorm, t: number): void {
     const rear = Math.sin((t / STRIKE_T) * Math.PI / 2);       // 0 → 1 (eased to the peak)
     worm.pitch = Tuning.SANDWORM_LUNGE_STRIKE_PITCH * rear;
     worm.bend = Tuning.SANDWORM_LUNGE_STRIKE_BEND * rear;
+    worm.lungeDive = 0;
     worm.basePos.y = chargeY;                                  // no upward hop — body held at charge depth
   } else {
-    // Dive: head drives DOWN, head-first into the dune; the body center plunges to underground.
+    // Dive: a NATURAL BEND into the dune (C68), NOT a rigid head-down pitch (that see-sawed the tail
+    // straight up + out). Decay the strike rear to 0 — no negative pitch, so no see-saw — and let the
+    // BEND CURVE (applyBodyBend, driven by worm.lungeDive) do the dive: the head leads DOWN and the
+    // tail CURLS DOWN into the terrain (the tail tip is never seen). The crest (mid-body) sinks late.
     const dive = Math.sin(((t - STRIKE_T) / (1 - STRIKE_T)) * Math.PI / 2);   // 0 → 1 (eased)
-    // Pitch swings from the reared strike (+) through level to a head-down plunge (−).
-    worm.pitch = Tuning.SANDWORM_LUNGE_STRIKE_PITCH * (1 - dive)
-      - Tuning.SANDWORM_LUNGE_DIVE_PITCH * dive;
-    worm.bend = Tuning.SANDWORM_LUNGE_STRIKE_BEND * (1 - dive)
-      - Tuning.SANDWORM_LUNGE_DIVE_BEND * dive;
-    worm.basePos.y = chargeY + (undergroundY - chargeY) * (dive * dive);   // accelerating plunge
+    worm.pitch = Tuning.SANDWORM_LUNGE_STRIKE_PITCH * (1 - dive);   // strike rear smoothly relaxes to level
+    worm.bend = Tuning.SANDWORM_LUNGE_STRIKE_BEND * (1 - dive);     // strike arch relaxes; the dive curve takes over
+    worm.lungeDive = dive;
+    worm.basePos.y = chargeY + (undergroundY - chargeY) * (dive * dive);   // crest sinks late (accelerating)
   }
 }
 
@@ -1256,6 +1264,7 @@ function finishAttack(worm: SandWorm, ctx: GameContext): void {
   worm.mesh.visible = false;
   worm.bend = 0;
   worm.pitch = 0;
+  worm.lungeDive = 0;
   pickRetreatTarget(worm, ctx);
 }
 
@@ -1591,11 +1600,16 @@ function applyBodyBend(worm: SandWorm): void {
   // reads as a body continuing UNDER the sand, not a hump ending in a flat vertical face (gate sev2).
   const chargeDip = worm.state === 'charging' ? Tuning.SANDWORM_MAX_RADIUS * 1.0 : 0;
   const rearSink = tailSink + chargeDip;
+  // M12 ⓖ (C68) — the DIVE bend: when the worm dives (lunge, past the strike) it bends NATURALLY into
+  // the dune instead of a rigid head-down pitch. The head leads DOWN (head-first) and the tail CURLS
+  // DOWN into the terrain so its tip is never seen (you never learn how long the worm is). A smooth
+  // power curve from the mid-body crest out to each end. Driven by worm.lungeDive (0..1).
+  const dive = worm.state === 'lunge' ? worm.lungeDive : 0;
   for (const child of worm.mesh.children) {
     if (child.userData.baseY === undefined) {
       child.userData.baseY = child.position.y;
     }
-    if (amp === 0 && rearSink === 0) {
+    if (amp === 0 && rearSink === 0 && dive === 0) {
       child.position.y = child.userData.baseY;
       continue;
     }
@@ -1607,7 +1621,15 @@ function applyBodyBend(worm: SandWorm): void {
     // arc (tailSink) AND tapering the rear into the dune during the charge (chargeDip).
     const rear = Math.max(0, -s);
     const sink = rear * rear * rearSink;
-    child.position.y = child.userData.baseY + arch - sink;
+    // Dive curve: head leads deepest, tail curls down too; mid-body (the crest) stays near the surface.
+    let diveSink = 0;
+    if (dive > 0) {
+      const headSink = Math.pow(Math.max(0, s), 1.4);   // 0 at mid → 1 at head
+      const tailCurl = Math.pow(Math.max(0, -s), 1.4);  // 0 at mid → 1 at tail
+      diveSink = (headSink * Tuning.SANDWORM_LUNGE_DIVE_HEAD_DROP
+        + tailCurl * Tuning.SANDWORM_LUNGE_DIVE_TAIL_DROP) * dive * Tuning.SANDWORM_MAX_RADIUS;
+    }
+    child.position.y = child.userData.baseY + arch - sink - diveSink;
   }
 }
 

@@ -1308,16 +1308,17 @@ export const Tuning = {
   SANDWORM_ALERT_DURATION: 2.0,              // s — long windup so player can react (UNCHANGED — timing-based)
   SANDWORM_LUNGE_RANGE: 15,                  // m — trigger lunge when this close to player (was 30)
   SANDWORM_LUNGE_DURATION: 2.6,              // s — slower arc gives a real damage window (UNCHANGED)
-  // M12 ⓖ (C66) — the lunge is a breach-and-DIVE, not a high airborne jump (user: "remove the
-  // high jump → charge-straight then dive from the current position"). The body CENTER never
-  // launches above the charge level; the HEAD rears out of the sand to strike (pitch), then the
-  // worm drives head-first DOWN into the dune. (Replaced SANDWORM_BREACH_ARC_PEAK — the old +20m
-  // body arc.) Pitch is about Z: +rear = head up, −dive = head down. Bend: + arches the front up,
-  // − dips it down. Tuned via the worm-model `dive` render.
+  // M12 ⓖ (C66 + C68) — the lunge is a breach-and-DIVE, not a high airborne jump (user: "remove the
+  // high jump → charge-straight then dive"). The body CENTER never launches above the charge level;
+  // the HEAD rears out of the sand to strike (pitch +), then the worm DIVES head-first into the dune.
+  // C68 reworked the DIVE from a rigid pitch (which see-sawed the tail straight UP and out) into a
+  // natural BEND CURVE (applyBodyBend): the head leads DOWN and the tail CURLS DOWN into the terrain,
+  // so the tail tip is never seen + the worm bends naturally. The dive pitch decays the strike rear
+  // to 0 (no negative pitch → no see-saw). Tuned via the worm-model `dive` render.
   SANDWORM_LUNGE_STRIKE_PITCH: 0.30,         // rad — head rears UP out of the sand at the strike (a breach, not a hop)
-  SANDWORM_LUNGE_DIVE_PITCH: 0.6,            // rad — head drives DOWN, head-first into the dune (kept moderate so the rigid see-saw doesn't launch the tail too high — the body goes DOWN, not up)
-  SANDWORM_LUNGE_STRIKE_BEND: 1.2,           // front of the body arches up as the head rears
-  SANDWORM_LUNGE_DIVE_BEND: 1.6,             // front dips down as it plunges (head-first read)
+  SANDWORM_LUNGE_STRIKE_BEND: 1.2,           // front of the body arches up as the head rears (decays to 0 over the dive)
+  SANDWORM_LUNGE_DIVE_HEAD_DROP: 2.2,        // × MAX_RADIUS — how deep the HEAD drives under on the dive (head-first; > tail drop)
+  SANDWORM_LUNGE_DIVE_TAIL_DROP: 1.7,        // × MAX_RADIUS — how far the TAIL curls DOWN into the terrain (so the tip is never seen)
   SANDWORM_LUNGE_FORWARD_OVERSHOOT: 6,       // m — forward surge past the target before diving (was hardcoded 12 — shorter = dives more AT you)
   // M12 ⓗ (C67) — the ALERT is a quiet, mysterious rumble + screen-shake BUILDUP ("you don't know what
   // it is"), not a loud roar (the roar was removed from enterAlert; it stays on the lunge STRIKE — the payoff).

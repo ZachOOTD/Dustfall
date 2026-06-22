@@ -2747,7 +2747,9 @@ const SCENARIOS = {
   // at spawn, tries ctx.sandWorms.spawnAt/forceSpawn; SKIPs if it can't make one.
   'worm-model': async (page) => {
     const angle = argv.angle || 'head';
-    const r = await page.evaluate(({ ang }) => {
+    // M12 ⓖ — lunge time for the strike/dive angles (default a visible MID-dive; --t=<0..1> to scan).
+    const lungeT = argv.t !== undefined ? parseFloat(argv.t) : (angle === 'strike' ? 0.5 : 0.65);
+    const r = await page.evaluate(({ ang, lt }) => {
       const ctx = window.__game.ctx;
       ctx.weather.intensity = 0; ctx.weather.cloudiness = 0.12;
       window.__game.setTime(0.42);                 // raking light — reads the body taper + ridges
@@ -2798,7 +2800,7 @@ const SCENARIOS = {
         // M12 ⓖ — the REAL breach-and-dive lunge pose (applyLungePose + applyMeshTransform via
         // the poseLunge hook → no rig-vs-real drift). 'strike' = head reared (t=0.5), 'dive' = plunging (t=0.82).
         worm.yaw = 0;   // lie along +X so the broadside camera sees the breach/dive profile
-        diveInfo = window.__game.poseLunge(ang === 'strike' ? 0.5 : 0.82);
+        diveInfo = window.__game.poseLunge(lt);
       } else {
         worm.mesh.position.set(ax, groundY + rad * 0.55, az);
       }
@@ -2832,7 +2834,7 @@ const SCENARIOS = {
       if (key) { key.position.set(cam.position.x + rad, cam.position.y + 24, cam.position.z + 12); key.target.position.set(ax + halfLen * 0.4, groundY, az); key.target.updateMatrixWorld(true); }
       if (!ctx.three.scene.getObjectByName('__wormFill') && HemiCtor) { const fill = new HemiCtor(0xbfccdd, 0x6b5840, 0.7); fill.name = '__wormFill'; ctx.three.scene.add(fill); }
       return { found: true, meshes, angle: ang, halfLen, diveInfo };
-    }, { ang: angle });
+    }, { ang: angle, lt: lungeT });
     await page.waitForTimeout(340);
     if (!r.found) { console.log('[worm-model] SKIP — no worm in world'); return; }
     await page.screenshot({ path: join(OUT, `scen-worm-${angle}.png`), fullPage: false });
