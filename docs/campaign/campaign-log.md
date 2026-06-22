@@ -761,4 +761,4 @@ first stop will be `max-cycles` ~mid-Phase-A; resume via `/campaign-start --resu
 - **Root cause (the "ribs not connected"):** `makeFormerRings` applies a hidden 0.84× shrink (`radius*(0.84−i·taper)`), so passing ~r put the ribs at ~0.81r — floating ~19% inside the shell. Both wrecks. FIX: pass `r*1.14` → the largest ring lands ~0.96r, touching the shell wall.
 - Also: REMOVED the torn-rim + breach CONE FLAPS (persistent floating spikes across rounds — the open-top edge + flank gash carry the torn read) · removed the floating stringer I'd added (the rib-radius fix makes the ribs read connected without it) · embedded the flank panel deeper (`r-0.15 → r*0.82`).
 - **Verify:** `verify:all` PASS. Rig 3q render confirms the ribs now read as CONNECTED ARCHES spanning the trough + NO spikes. Panel + multi-angle → user confirm (rig flank/end angles flake).
-- **Commit:** `PENDING`. Still ⏸ paused at M11 batch-1 for user re-validation (husk + tank).
+- **Commit:** `c81f807`.
