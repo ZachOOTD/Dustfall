@@ -988,7 +988,7 @@
       "save": "no change.",
       "decisions": ["D266 — the lunge is a breach-and-dive (body stays in the sand, head rears then drives down), NOT a high arc; rig renders the real pose via the shared applyLungePose; known limit: the rigid pose see-saws the tail up on a steep dive (path-following is the deeper fix). friction 2"],
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "d5586f9",
       "spend_approx_tokens": 280000
     }
   ]

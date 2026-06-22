@@ -805,5 +805,5 @@ first stop will be `max-cycles` ~mid-Phase-A; resume via `/campaign-start --resu
 - **Known limit (D266):** the worm pose system is rigid (yaw+pitch) + a symmetric `applyBodyBend` — it can't do a true "head dives under while the tail stays put" without a see-saw; a path-following dive is the deeper fix if the user wants it.
 - **Decisions:** **D266** — breach-and-dive over a high arc; rig renders the real pose; the see-saw limit. friction 2.
 - **Spend:** ~280K (the design + the tickLunge rewrite + applyLungePose extraction + the poseLunge hook + the rig angles + 3 render rounds + D266 + verify:all + the doc suite); campaign total ~17.83M; cycle **66/75**.
-- **Commit:** `PENDING`.
+- **Commit:** `d5586f9`.
 - **Next (cycle 67):** **M12 ⓗ alert audio → a quiet low rumble + screen-shake buildup** (the LAST M12 unit). **Verdict: CONTINUE** — M12 not complete (ⓗ remains before the M12 milestone marker). After ⓗ ships, the cycle PAUSES at the M12 milestone for the user's worm-attack FEEL walk-test + alert-rumble LISTEN. `consecutive_no_progress` stays 0 (SHIPPED).
