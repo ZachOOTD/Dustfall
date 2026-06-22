@@ -72,18 +72,18 @@ delegated to the **procedural-modeler** agent (quality BAR, 5-8 rounds); the **a
 
 **Review-fix pass (from the 2026-06-20 triage). Autonomous, PAUSE-per-tier for the user's batch walk-test/listen:**
 - **M11 — wreck/panel fixes** ✅ COMPLETE: ⓐ not-openable (culled panels hide; D264) · ⓑ floating panels seated · ⓒⓓⓔ tank + husk rib/structure rework (root: `makeFormerRings`' hidden `0.84×` shrink; C61-C63) · stragglers (3 mega-wreck companion panels hidden; D265, C64).
-- **M12 — sand worm** (IN PROGRESS; real-view gate): ✅ ⓕ dorsal ridges removed (C65) · ✅ ⓖ attack = breach-and-dive, no high jump (C66/D266 — body stays in the sand, head rears to strike then drives head-first down; FEEL → user walk-test) · ⓗ alert audio → quiet rumble + screen-shake buildup (NEXT).
+- **M12 — sand worm** ✅ COMPLETE (⏸ PAUSED at the milestone for the user's batch validation): ✅ ⓕ dorsal ridges removed (C65) · ✅ ⓖ attack = breach-and-dive, no high jump (C66/D266) · ✅ ⓗ alert = quiet rumble + screen-shake buildup, roar removed from alert (C67/D267). **User: walk-test the worm-attack FEEL + LISTEN to the alert rumble → `/campaign-approve` → M13.**
 - **M13 — weapon & vehicle audio:** gunshot + reload SFX (all guns) · smoother/lower speeder hum.
 
 **NOT in the loop (dedicated solo sessions):** the **Skyfall crashed-ship** (a NEW researched extremely-high-quality enterable HERO wreck — its own `/feature-slice`:
 research → model → iterate WITH the user; + its fire-from-the-wreck fix) and the **CAVE rework** (user planning the direction). Both in [docs/backlog.md](docs/backlog.md).
 Also still queued for the user: ⑯ drop-pod-intro, ⑰ pickup-instancing (human-attended), + the §A walk-tests/flag-flips.
 
-**Last shipped**: Campaign **C66** (2026-06-22, cycle 66/75) — M12 ⓖ: the sand-worm attack is now a breach-and-DIVE, not a high airborne jump (`verify:all` PASS; creature behavior, no rand, no save
-touch). Removed the old `+20 m` parabolic body arc; the body center HOLDS in the sand through the strike (the head rears up to bite via pitch+bend) then DIVES head-first down (D266). Pose math
-extracted to `applyLungePose` so the rig renders the REAL pose (no drift); new `__game.poseLunge` + `worm-model --angle=strike|dive`. Verified numerically (centerY never above ground) + real
-renders (low breach-strike → head-first dive). Known limit: the rigid pose see-saws the tail up on a steep dive → DIVE_PITCH kept moderate. **Next** = cycle 67 = **M12 ⓗ alert audio** → a quiet
-low rumble + screen-shake buildup (start `startWormRumble` on alert + ramp `applyTremorEffects`; quiet `playWormRoar`) → then the **M12 milestone pause** for the user's worm-attack-FEEL walk-test + alert-rumble LISTEN. See [docs/next-session-prompt.md](docs/next-session-prompt.md).
+**Last shipped**: Campaign **C67** (2026-06-22, cycle 67/75) — M12 ⓗ: the sand-worm ALERT is now a quiet, mysterious dread buildup (a low rumble + a growing screen-shake), not a loud roar
+(`verify:all` PASS; audio/camera driving logic, no rand, no save touch). Removed `playWormRoar()` from `enterAlert`; the C16 rumble graph (reused) now starts quietly on alert + ramps `0→0.28`
+over the windup then louder by proximity on the charge; `applyTremorEffects` gained a buildup factor that ramps the shake from ~0 over the alert (D267). The roar stays for the lunge STRIKE.
+**✅ M12 COMPLETE (ⓕ+ⓖ+ⓗ) → ⏸ PAUSED at the M12 milestone** for the user's batch validation. **Next (on `/campaign-approve`)** = **M13 weapon & vehicle audio** (ⓘ gunshot + reload SFX for all
+guns · ⓙ lower-pitched smoother speeder hum) — the final review-fix tier; pauses at the M13 milestone (audio LISTEN). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 

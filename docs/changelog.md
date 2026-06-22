@@ -3,6 +3,17 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign C67 — 2026-06-22 — M12 ⓗ: **sand-worm alert = quiet rumble + screen-shake buildup** → M12 COMPLETE → ⏸ pause ✓ verify pass (ultracode)
+
+`verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40; audio + camera-shake driving logic, no rand, no save touch). Cycle 67/75.
+
+**M12 ⓗ — the alert is now a quiet, mysterious dread BUILDUP, not a loud roar** (the last M12 unit; user: "low quiet rumble + screen-shake buildup — you don't know what it is"):
+- **Removed the loud one-shot `playWormRoar()` from `enterAlert`** (`sandWorm.ts`). The roar stays on the LUNGE STRIKE (the payoff) + death/stationary-breach — it's no longer the warning.
+- **Rumble now starts on ALERT** (`applyWormRumble` includes `alert`, was charging-only): a QUIET sub-bass that ramps `0 → SANDWORM_ALERT_RUMBLE_MAX (0.28)` over the alert windup, then grows louder by proximity through the charge. The existing C16 rumble graph (detuned sub-sines + lowpassed noise + tremolo LFO) is reused unchanged — only the driving level/state changed.
+- **Camera-shake BUILDS UP** (`applyTremorEffects`): a new buildup factor ramps the shake from ~0 over the alert duration (then full on charge/retreat); `SANDWORM_TREMOR_SHAKE` constant (was hardcoded 0.10).
+- **Verify:** `verify:all` PASS. The audio node graph is unchanged (no new C16-lifecycle risk); the driving logic was self-audited (silent-emerging on alert, fades on leaving alert/charging, no leak). **SOUND quality + the buildup FEEL → the user's M12 LISTEN** (audio can't be self-verified). D267.
+- **✅ M12 COMPLETE** (ⓕ ridges C65 · ⓖ breach-dive C66 · ⓗ alert audio C67) → ⏸ **PAUSED at the M12 milestone** for the user's batch walk-test (worm attack feel) + listen (alert rumble). Then `/campaign-approve` → M13 weapon+vehicle audio.
+
 ## Campaign C66 — 2026-06-22 — M12 ⓖ: **sand-worm attack = charge → breach-and-dive (no high jump)** ✓ verify pass (ultracode)
 
 `verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40; creature behavior, no rand, no save touch). Cycle 66/75.

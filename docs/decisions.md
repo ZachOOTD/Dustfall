@@ -474,3 +474,15 @@ Consistent with this campaign's "ship the foundation/measure, defer the human/fe
 **FEEL is the human gate**: the LOOK/structure (no hop · breach-strike · head-first dive) is self-verified via the real render; the attack FEEL (timing, menace, the right pitch/overshoot values) is the user's M12 walk-test — feel can't be headless-verified (the campaign per-tier pause). Not a punt: the defining structure is done; the residual is feel-tuning, which is inherently the user's gate.
 
 **friction-score:** 2 (a feel-critical behavior rewrite; the structure is solid + verified, but the rigid-pose see-saw is a known limitation that may need a path-following follow-up, and the exact feel values pend the walk-test).
+
+## D267 — the sand-worm ALERT is a quiet, mysterious dread BUILDUP (a low rumble + a growing screen-shake), not a loud roar (Session C67, campaign — M12 ⓗ)
+
+**When**: M12 ⓗ — the user's review wanted the worm's alert/approach to be mysterious ("you don't know what it is"), not the loud one-shot roar that `enterAlert` fired.
+
+**Decision**: REMOVED `playWormRoar()` from `enterAlert`. The alert is now carried by (1) the sustained sub-bass rumble (the C16 graph, reused unchanged) started on ALERT and ramped quietly `0 → SANDWORM_ALERT_RUMBLE_MAX (0.28)` over the alert windup, then grown by proximity through the charge; and (2) the camera-shake (`applyTremorEffects`) given a buildup factor that ramps it from ~0 over the alert duration. So the dread CREEPS IN (silent → quiet rumble + faint tremor → growing) rather than announcing itself. The roar is kept for the LUNGE STRIKE (the payoff) + death + the stationary breach.
+
+**Why not a new sound**: the existing rumble graph already had the right timbre + lifecycle (C16: detached LFO, disconnect-on-stop, pause-safe); the fix was WHEN/at-what-LEVEL it plays, not a new node graph — lower risk, no new audio-lifecycle surface.
+
+**Gate**: the audio node graph is unchanged (no new C16-lifecycle risk); the driving logic was self-audited (silent-emerging on alert, fades on leaving alert/charging). The SOUND quality + the buildup FEEL are the user's M12 LISTEN — audio can't be headless-verified (the campaign per-tier pause).
+
+**friction-score:** 1 (a localized audio/camera driving-logic change reusing the proven rumble graph; reversible; the only open item is the user's listen).

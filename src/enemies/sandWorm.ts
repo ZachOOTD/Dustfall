@@ -800,17 +800,29 @@ export function updateSandWorm(ctx: GameContext, dt: number): void {
 /** C17 — multi-worm approach rumble: one global rumble, driven by the nearest CHARGING worm (the
  *  player hears the closest underground threat). No charging worm → fade out. Idempotent each frame. */
 function applyWormRumble(ctx: GameContext, playerTr: { x: number; z: number }): void {
+  // M12 ⓗ (C67) — the rumble is the ALERT's quiet mysterious tell, then the charge's growing
+  // dread. Drive it from the nearest worm in ALERT or CHARGING (was charging-only): a quiet
+  // buildup over the alert windup, then louder by proximity through the charge.
   let nearest: SandWorm | null = null;
   let nearestDist = Infinity;
   for (const worm of ctx.sandWorms.list) {
-    if (worm.state !== 'charging') continue;
+    if (worm.state !== 'alert' && worm.state !== 'charging') continue;
     const d = Math.hypot(playerTr.x - worm.basePos.x, playerTr.z - worm.basePos.z);
     if (d < nearestDist) { nearestDist = d; nearest = worm; }
   }
   if (!nearest) { stopWormRumble(); return; }
   startWormRumble();   // idempotent — no-op if already playing
-  const prox = 1 - Math.min(1, nearestDist / Tuning.SANDWORM_DISENGAGE_RADIUS);
-  setWormRumbleLevel(0.25 + prox * 0.75);
+  let level: number;
+  if (nearest.state === 'alert') {
+    // Quiet, building tell over the alert windup (0 → the quiet ALERT_RUMBLE_MAX ceiling).
+    const prog = Math.min(1, (ctx.time.elapsed - nearest.phaseStartedAt) / Tuning.SANDWORM_ALERT_DURATION);
+    level = prog * Tuning.SANDWORM_ALERT_RUMBLE_MAX;
+  } else {
+    // Charging — the dread grows: continue ABOVE the alert ceiling, ramping with proximity toward full.
+    const prox = 1 - Math.min(1, nearestDist / Tuning.SANDWORM_DISENGAGE_RADIUS);
+    level = Tuning.SANDWORM_ALERT_RUMBLE_MAX + prox * (1 - Tuning.SANDWORM_ALERT_RUMBLE_MAX);
+  }
+  setWormRumbleLevel(level);
 }
 
 /** ACE Tier 2 — multi-worm tremor selection. Pick the worm in a threat
@@ -862,8 +874,13 @@ function applyTremorEffects(worm: SandWorm, ctx: GameContext): void {
   const intensity = Math.max(0, Math.min(1,
     1 - (dist - TREMOR_NEAR) / (TREMOR_FAR - TREMOR_NEAR),
   ));
-  // Camera position jitter — bumped for boss-tier presence (0.06→0.10).
-  const shakeAmt = 0.10 * intensity;
+  // M12 ⓗ (C67) — the shake BUILDS UP during the alert windup (ramps from ~0 over ALERT_DURATION)
+  // so the dread grows from the first quiet tremor → full by the charge. Charge/retreat = full.
+  const buildup = worm.state === 'alert'
+    ? Math.min(1, (ctx.time.elapsed - worm.phaseStartedAt) / Tuning.SANDWORM_ALERT_DURATION)
+    : 1;
+  // Camera position jitter — proximity × the alert buildup.
+  const shakeAmt = Tuning.SANDWORM_TREMOR_SHAKE * intensity * buildup;
   const cam = ctx.three.camera;
   cam.position.x += (Math.random() - 0.5) * shakeAmt;
   cam.position.y += (Math.random() - 0.5) * shakeAmt;
@@ -1011,7 +1028,10 @@ function enterAlert(worm: SandWorm, ctx: GameContext): void {
   worm.phaseStartedAt = ctx.time.elapsed;
   const playerTr = getPlayerPos(ctx);
   worm.target.set(playerTr.x, 0, playerTr.z);
-  playWormRoar();
+  // M12 ⓗ (C67) — NO loud roar on alert. The alert is a quiet, mysterious dread BUILDUP
+  // (a low rumble + a growing screen-shake — "you don't know what it is yet"): the sustained
+  // rumble starts quietly here via applyWormRumble + ramps over the windup; the camera-shake
+  // ramps from ~0 in applyTremorEffects. The roar is the LUNGE STRIKE's payoff, not the warning.
 }
 
 /** ABO B3 — ambush. Worm enters this state from patrol when the player

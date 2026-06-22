@@ -1319,6 +1319,12 @@ export const Tuning = {
   SANDWORM_LUNGE_STRIKE_BEND: 1.2,           // front of the body arches up as the head rears
   SANDWORM_LUNGE_DIVE_BEND: 1.6,             // front dips down as it plunges (head-first read)
   SANDWORM_LUNGE_FORWARD_OVERSHOOT: 6,       // m — forward surge past the target before diving (was hardcoded 12 — shorter = dives more AT you)
+  // M12 ⓗ (C67) — the ALERT is a quiet, mysterious rumble + screen-shake BUILDUP ("you don't know what
+  // it is"), not a loud roar (the roar was removed from enterAlert; it stays on the lunge STRIKE — the payoff).
+  // The sustained sub-bass rumble now starts QUIETLY on alert + ramps over the windup, then grows louder
+  // through the charge by proximity. The camera-shake ramps from ~0 over the alert so the dread builds.
+  SANDWORM_ALERT_RUMBLE_MAX: 0.28,           // 0..1 — the QUIET ceiling the rumble builds to over the alert windup (charge ramps it above this toward 1.0)
+  SANDWORM_TREMOR_SHAKE: 0.10,               // m — peak camera-shake amplitude (was hardcoded), scaled by proximity × the alert buildup
   SANDWORM_STATIONARY_BREACH_DURATION: 5.5,  // s — vertical hold during stationary breach (UNCHANGED)
   SANDWORM_STATIONARY_BREACH_HEIGHT: 25,     // m — head rises above the dunes (was 50)
   SANDWORM_STATIONARY_BREACH_EVERY: 3,       // every Nth retreat → stationary breach
