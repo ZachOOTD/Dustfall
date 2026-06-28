@@ -38,9 +38,10 @@ import {
   buildShipScene, disposeShipScene, getShipSpawn,
   SHIP_CORRIDOR_ENTER_Z, SHIP_DEAD_END_Z,
 } from './shipScene.ts';
-import { buildPodScene, disposePodScene, getPodSpawn } from './podScene.ts';
+import { buildPodScene, disposePodScene, getPodSpawn, setDescentProgress } from './podScene.ts';
 import { setGameHudHidden, showIntroPrompt, hideIntroPrompt } from './introHud.ts';
 import { flashScreen } from '../../fx/screenFlash.ts';
+import { addTrauma } from '../../fx/cameraShake.ts';
 
 /** Seconds the cockpit opens SEATED (looking at the planet) before control + the cue. */
 const COCKPIT_DWELL = 3.0;
@@ -48,6 +49,14 @@ const COCKPIT_DWELL = 3.0;
 const EJECT_FALLBACK = 6.0;
 /** Seconds the ship-explosion beat holds (watch it blow) before the descent. */
 const SHIP_EXPLODE_DWELL = 2.5;
+/** Seconds of atmospheric fall before the parachute beat (greybox pacing). */
+const DESCENT_DURATION = 8.0;
+/** Pulls before the lever snaps off — THE GAG (3 pulls → no chute). */
+const PARACHUTE_PULLS = 3;
+/** Anti-softlock: auto-fire a pull this often if the player just stares (seconds). */
+const PARACHUTE_AUTOPULL = 2.5;
+/** Beat of silent free-fall after the lever snaps, before impact (seconds). */
+const PARACHUTE_SNAP_FALL = 2.0;
 
 /** Did the player "pull the lever" this frame (click or E)? */
 function pulledLever(ctx: GameContext): boolean {
@@ -61,6 +70,15 @@ function seatPlayerAt(ctx: GameContext, spawn: { x: number; y: number; z: number
   ctx.player.cameraSnapNextFrame = true;
   ctx.three.camera.position.set(spawn.x, spawn.y + ctx.player.eyeOffset, spawn.z);
   ctx.three.camera.rotation.set(0, 0, 0);   // face −Z
+}
+
+/** Ensure the player is seated in the (built) pod, mode seated. Idempotent — used by every
+ *  pod beat so each is independently jumpable (a dev `jumpToBeat('descent')` builds the pod
+ *  too, not just the real enterPod→… chain). */
+function ensureInPod(ctx: GameContext): void {
+  buildPodScene(ctx);
+  seatPlayerAt(ctx, getPodSpawn(ctx));
+  if (ctx.intro) ctx.intro.mode = 'seated';
 }
 
 /** The intro beats, in order (Beats 0-11 of the vision; `done` = handed off). */
@@ -214,9 +232,7 @@ function tickEnterPod(ctx: GameContext, dt: number): void {
   const intro = ctx.intro;
   if (!intro) return;
   if (!intro.scratch.init) {
-    buildPodScene(ctx);
-    seatPlayerAt(ctx, getPodSpawn(ctx));
-    intro.mode = 'seated';
+    ensureInPod(ctx);
     showIntroPrompt('Pull the eject lever  [click]');
     intro.scratch.init = true;
     intro.scratch.dwell = 0;
@@ -241,19 +257,83 @@ function tickShipExplode(ctx: GameContext, dt: number): void {
   if ((intro.scratch.dwell as number) > SHIP_EXPLODE_DWELL) advanceBeat(ctx);   // → descent
 }
 
-/** descent beat — T0.3b STUB. The atmospheric fall (descentProgress effect stack is
- *  Phase 2) + the parachute gag land in T0.3b; for now the greybox flow holds here with a
- *  placeholder cue (exit via `__game.skipIntro()`). */
-function tickDescent(ctx: GameContext): void {
+/** descent beat (T0.3b) — the atmospheric fall: the planet swells (setDescentProgress)
+ *  + a low continuous rumble (re-added each frame so it persists). Greybox stand-in for
+ *  the Phase-2 descentProgress effect stack. At full progress → parachute. */
+function tickDescent(ctx: GameContext, dt: number): void {
+  const intro = ctx.intro;
+  if (!intro) return;
+  if (!intro.scratch.init) {
+    ensureInPod(ctx);
+    showIntroPrompt('');
+    intro.scratch.t = 0;
+    intro.scratch.init = true;
+  }
+  intro.scratch.t = (intro.scratch.t as number) + dt;
+  const progress = Math.min(1, (intro.scratch.t as number) / DESCENT_DURATION);
+  setDescentProgress(progress);
+  addTrauma(0.04);                       // low rumble (decays; re-added → persistent shake)
+  if (progress >= 1) advanceBeat(ctx);   // → parachute
+}
+
+/** parachute beat (T0.3b) — THE GAG. Cue the player to pull; each pull (E/click, edge-
+ *  triggered) jolts but doesn't deploy; the 3rd pull SNAPS the lever off → a beat of
+ *  free-fall → impact. An auto-pull fallback keeps it from softlocking. */
+function tickParachute(ctx: GameContext, dt: number): void {
+  const intro = ctx.intro;
+  if (!intro) return;
+  if (!intro.scratch.init) {
+    ensureInPod(ctx);
+    showIntroPrompt('Pull the parachute!  [click]');
+    intro.scratch.pulls = 0;
+    intro.scratch.sincePull = 0;
+    intro.scratch.snapped = false;
+    intro.scratch.init = true;
+  }
+  addTrauma(0.05);   // keep falling — persistent rumble
+
+  // After the lever snaps: a beat of faster free-fall, then impact.
+  if (intro.scratch.snapped) {
+    intro.scratch.t = (intro.scratch.t as number ?? 0) + dt;
+    addTrauma(0.06);
+    if ((intro.scratch.t as number) > PARACHUTE_SNAP_FALL) advanceBeat(ctx);   // → impact
+    return;
+  }
+
+  // Count pulls (edge-triggered input; auto-pull fallback so it can't softlock).
+  intro.scratch.sincePull = (intro.scratch.sincePull as number) + dt;
+  const autoPull = (intro.scratch.sincePull as number) > PARACHUTE_AUTOPULL;
+  if (pulledLever(ctx) || autoPull) {
+    intro.scratch.pulls = (intro.scratch.pulls as number) + 1;
+    intro.scratch.sincePull = 0;
+    addTrauma(0.35);   // each yank jolts the pod
+    const pulls = intro.scratch.pulls as number;
+    if (pulls >= PARACHUTE_PULLS) {
+      // The 3rd pull — the lever snaps off. No chute.
+      intro.scratch.snapped = true;
+      intro.scratch.t = 0;
+      flashScreen(0xffffff, 0.25);
+      showIntroPrompt('The lever snaps off.');
+    } else {
+      showIntroPrompt(pulls === 1 ? 'Pull harder!' : 'Come on — PULL!');
+    }
+  }
+}
+
+/** impact beat — T0.4 STUB. The crash/blackout/wake + the desert handoff are T0.4; for
+ *  now a hard flash + a placeholder cue (exit via `__game.skipIntro()`). */
+function tickImpact(ctx: GameContext): void {
   const intro = ctx.intro;
   if (!intro || intro.scratch.init) return;
-  showIntroPrompt('[ falling — descent + parachute: T0.3b ]');
+  flashScreen(0xffffff, 1.0);
+  addTrauma(1.0);
+  showIntroPrompt('[ impact — crash/wake/desert handoff: T0.4 ]');
   intro.scratch.init = true;
 }
 
 /** Per-frame intro driver — inserted into the main tick BEFORE updatePlayer. No-op
  *  unless the intro is active. Dispatches the current beat's controller; each calls
- *  advanceBeat()/jumpToBeat() on its trigger. Beats 6-11 land in T0.3b+. */
+ *  advanceBeat()/jumpToBeat() on its trigger. Beats 7-11 land in T0.4+. */
 export function updateEscapePodIntro(ctx: GameContext, dt: number): void {
   const intro = ctx.intro;
   if (!intro || !intro.active) return;
@@ -263,8 +343,10 @@ export function updateEscapePodIntro(ctx: GameContext, dt: number): void {
     case 'corridor': tickCorridor(ctx); break;
     case 'enterPod': tickEnterPod(ctx, dt); break;
     case 'shipExplode': tickShipExplode(ctx, dt); break;
-    case 'descent': tickDescent(ctx); break;
-    // Beats 6-11 (parachute, impact, wake, stepOut, tutorial, payoff) land in T0.3b+.
+    case 'descent': tickDescent(ctx, dt); break;
+    case 'parachute': tickParachute(ctx, dt); break;
+    case 'impact': tickImpact(ctx); break;
+    // Beats 7-11 (wake, stepOut, tutorial, payoff) land in T0.4+.
     default: break;
   }
 }

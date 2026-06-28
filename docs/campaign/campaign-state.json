@@ -3,8 +3,8 @@
   "campaign": "escape-pod-intro",
   "started": "2026-06-28",
   "branch": "campaign/escape-pod-intro",
-  "cycles_completed": 5,
-  "current_tier": "Phase 0 — playable greybox spine. ✅ T0.0 (C1) framework (D269). ✅ T0.1 (C2) boot/new-game/save wiring (D270). ✅ T0.2 (C3+C4) greybox SHIP + Beats 0-2 + HUD suppression. ✅ T0.3a DONE (C5) — greybox POD + eject + ship-explode (Beats 3-5): NEW podScene.ts (tight 2.6×2.2×2.8 greybox capsule + framed viewport + seat; matched colliders; offset (0,3200,0) above the ship; planet disc); sequence.ts beats — enterPod (build pod + seat looking out + 'pull eject' prompt → E/click or fallback dwell) → shipExplode (reuses fx/screenFlash.flashScreen + disposes ship → ~2.5s) → descent stub; seatPlayerAt/pulledLever helpers; HUD-hide ROBUSTNESS FIX (moved from tickCockpit → startEscapePodIntro + handoffToGame re-assert, so any entry path incl jumpToBeat-past-cockpit gets a clean view — caught a dev-jump HUD leak); endEscapePodIntro disposes pod too. verify:all PASS (re-run on final code) + live visual gate (pod renders; enterPod→shipExplode→descent advances; HUD clean; skipIntro disposes pod+ship; 0 console errors). NEXT unit = T0.3b: the real DESCENT (descentProgress 0→1, growing planet + camera shake; hero FX stack = Phase 2) + the parachute GAG (3 debounced pulls → snap → impact) + impact stub. Then T0.4 impact/blackout/wake → desert handoff (teleport to spawn + mark introComplete + restore play) + tutorial scaffold + smoke -> Phase 0 milestone PAUSE (user walk-test). Plan: docs/feature-escape-pod-intro.md. ENRICH-NOT-CUT.",
+  "cycles_completed": 6,
+  "current_tier": "Phase 0 — playable greybox spine. ✅ T0.0 (C1) framework (D269). ✅ T0.1 (C2) boot/new-game/save wiring (D270). ✅ T0.2 (C3+C4) greybox SHIP + Beats 0-2 + HUD suppression. ✅ T0.3 (C5 a + C6 b) DONE — greybox POD + DESCENT + the parachute GAG (Beats 3-7): podScene.ts (capsule + viewport + setDescentProgress grows the planet) + sequence.ts beats enterPod→shipExplode→descent (descentProgress 0→1, planet swells 1→4.5×, fx/cameraShake.addTrauma rumble)→parachute (THE GAG: 3 edge-triggered pulls via pulledLever, escalating cues, addTrauma jolts, 3rd pull SNAPS → free-fall → impact; autopull anti-softlock)→impact stub (flash + max trauma). ensureInPod helper (pod beats build+seat idempotently → independently jumpable; same robustness principle as the C5 HUD-decouple). verify:all PASS (re-run on final) + live visual gate (planet grew to 4.5×; gag escalates+snaps→impact; camera shake visible; HUD clean; skipIntro disposes pod; 0 console errors). The greybox intro now PLAYS cockpit→corridor→pod→eject→ship-explode→descent→chute-gag→impact-stub. NEXT unit = T0.4 (LAST Phase 0 unit): impact/blackout/wake → THE DESERT HANDOFF (teleport to the real new-game spawn + endEscapePodIntro restores play [locomotion/HUD/survival] + mark introComplete + dispose geometry) + a fade-to-black overlay; tutorial scaffold may be T0.4b (check the Phase 0 ### Milestone marker in roadmap.md). COMPLETES Phase 0 → milestone PAUSE (the user's first full walk-test). Plan: docs/feature-escape-pod-intro.md. ENRICH-NOT-CUT.",
   "awaiting_approval": false,
   "stop_reasons": [],
   "plan_doc": "docs/feature-escape-pod-intro.md",
@@ -18,7 +18,7 @@
   "circuit_breaker_n": 3,
   "consecutive_no_progress": 0,
   "ceiling": { "max_cycles": 150, "total": null, "per_cycle": null, "unit": "tokens" },
-  "spend": { "total": 1330000, "note": "escape-pod intro campaign, started 2026-06-28. C1 ~280K (T0.0). C2 ~210K (T0.1). C3 ~270K (T0.2a). C4 ~280K (T0.2b). C5 ~290K (T0.3a: podScene.ts + sequence pod beats + flashScreen-reuse recon + the HUD-decouple robustness fix [caught via a dev-jump HUD leak] + live gate [enter/jump/screenshots/skipIntro] + 2 verify:all runs [first ran on pre-fix code → re-ran on final] + docs). Prior M11->M13 campaign concluded + user-approved (~18.5M tokens / 69 cycles; chronicle archived to campaign-log-2026-06-18-m1-m13.md)." },
+  "spend": { "total": 1620000, "note": "escape-pod intro campaign, started 2026-06-28. C1 ~280K. C2 ~210K. C3 ~270K. C4 ~280K. C5 ~290K. C6 ~290K (T0.3b: podScene.setDescentProgress + sequence descent/parachute/impact beats + cameraShake recon + ensureInPod jump-robustness helper + live gate [descent growth, gag escalation, impact shake, skipIntro] + 2 verify:all runs [re-ran on final] + docs). Prior M11->M13 campaign concluded + user-approved (~18.5M tokens / 69 cycles; chronicle archived to campaign-log-2026-06-18-m1-m13.md)." },
   "policy_notes": "ENRICH-NOT-CUT: the scope-cut list (docs/feature-escape-pod-intro.md) is a TRUE-TECHNICAL-WALL safety net ONLY, never a target, ALWAYS surfaced to the user before any cut; the spine + pod + descent + tutorial are NOT cuttable. Hero geometry/FX -> the procedural-modeler agent, iterated to a quality BAR (5-8 rounds new hero elements). Real first-person in-game-view visual gate (not an isolated rig). Anti-punt. Behind FEATURES.escapePodIntro (default off until shipped). No SAVE_VERSION bump unless unavoidable (D81; the introComplete marker is additive, legacy=true). New game -> the intro; old spawn -> dev-mode only. Key early-build decisions to lock in Phase 0: R1 save-marker, R2 world-loading-during-descent, R3 handoff seam, R4 state-machine contract + KCC-on-ship-floor, R5 scrap_machete-as-pry-tool (D261, additive), R6 entry point, R7 parachute-gag fallback, R10 accessibility/photosensitivity. See the feature doc's 'Pre-build review'.",
   "cycles": [
     {
@@ -100,6 +100,22 @@
       "recon": "found fx/screenFlash.flashScreen(color,strength) to reuse for the blast — no agent.",
       "ultracode": true,
       "commit": "1ee093b",
+      "spend_approx_tokens": 290000
+    },
+    {
+      "cycle": 6,
+      "date": "2026-06-28",
+      "focus": "Phase 0 T0.3b — the descent + the parachute gag (Beats 5-7); T0.3 pod/descent complete",
+      "tier": "Phase 0 — greybox spine (escape-pod intro)",
+      "outcome": "SHIPPED",
+      "units": ["T0.3b — podScene.setDescentProgress (grows/sinks the viewport planet) + planetMesh ref. sequence.ts beats: descent (descentProgress 0→1 over DESCENT_DURATION 8s → setDescentProgress swells the planet 1×→4.5×; continuous fx/cameraShake.addTrauma rumble → parachute); parachute = THE GAG (cue 'pull the parachute'; pulledLever E/left-click edge-triggered; each pull addTrauma jolt + escalating cue; 3rd pull [PARACHUTE_PULLS] SNAPS the lever → flash + 'The lever snaps off' → PARACHUTE_SNAP_FALL free-fall → impact; PARACHUTE_AUTOPULL anti-softlock fallback); impact = T0.4 stub (hard flash + max trauma + cue). ensureInPod helper (buildPodScene + seatPlayerAt idempotent → every pod beat independently jumpable). Imports addTrauma + setDescentProgress."],
+      "verify": "verify:all PASS (tsc + placement 0/0 x5 + colliders 0/40) — re-ran on the final code (the first run started before the ensureInPod edits; both green).",
+      "visual": "appearance+flow-verified (greybox, routine bar) — live-preview: descent grew the pod planet to scale 4.5×; the parachute gag escalated ('Pull harder!'→'COME ON — PULL!') → snapped at 3 pulls → impact; camera shake visibly tilts the view through descent/parachute/impact; HUD clean; skipIntro disposes the pod (scene-children round-trip); 0 console errors. The 3-DISTINCT-manual-pull comedic timing is feel-critical — user judges it at the Phase 0 walk-test. feel-pending.",
+      "save": "no change (SAVE_VERSION stays 15).",
+      "decisions": ["(no new D-entry — execution. Reinforces the C5 lesson: any beat that does setup must be robust to being jumped-to → ensureInPod makes pod beats build+seat idempotently.)"],
+      "recon": "found fx/cameraShake.addTrauma(amount) to reuse for the descent rumble + parachute jolts + impact — no agent.",
+      "ultracode": true,
+      "commit": "PENDING",
       "spend_approx_tokens": 290000
     }
   ]

@@ -3,6 +3,17 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Escape-pod campaign C6 — 2026-06-28 — Phase 0 T0.3b: **the descent + the parachute GAG** (Beats 5-7) — T0.3 pod/descent COMPLETE ✓ verify + visual pass
+
+`verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40) + a live-preview **visual gate**: descent grows the planet (scale 1→4.5) + rumbles, the parachute gag escalates ("Pull harder!" → "COME ON — PULL!") → snaps at 3 pulls → impact with heavy camera shake; HUD clean; `skipIntro` disposes the pod; 0 console errors. Flag OFF → live game byte-unchanged.
+
+**T0.3b — the fall + the gag (greybox; the emotional core):**
+- **`descent` beat** (`sequence.ts`) — `descentProgress` 0→1 over ~8s drives `podScene.setDescentProgress` (the planet **swells** 1×→4.5× + sinks) + a continuous `fx/cameraShake.addTrauma` rumble. → `parachute`. (The hero descentProgress effect stack is Phase 2.)
+- **`parachute` beat — THE GAG** — cue "pull the parachute"; each pull (`pulledLever` = E/left-click, edge-triggered) jolts (`addTrauma`) + escalates the cue; the **3rd pull snaps the lever off** (flash + "The lever snaps off") → a beat of free-fall → `impact`. An auto-pull fallback prevents softlock.
+- **`impact` beat** — a T0.4 stub (hard flash + max trauma + "[ impact — crash/wake/desert handoff: T0.4 ]").
+- **`podScene.setDescentProgress`** added (grows/sinks the viewport planet); **`ensureInPod` helper** — pod beats build+seat the pod idempotently so each is independently jumpable (dev-jump robustness, same principle as the C5 HUD-decouple).
+- **Next:** T0.4 — impact/blackout/wake → **the desert handoff** (teleport to the spawn, restore play, mark `introComplete`, dispose pod) + the craft+salvage tutorial scaffold → **completes Phase 0** → milestone PAUSE for the user's walk-test.
+
 ## Escape-pod campaign C5 — 2026-06-28 — Phase 0 T0.3a: **the greybox POD + eject + ship-explode** (Beats 3-5) ✓ verify + visual pass
 
 `verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40) + a live-preview **visual gate**: the pod interior + viewport render, the chain enterPod → shipExplode → descent advances (eject on E/click or a fallback dwell; the warm blast flash; the ship disposes), HUD stays clean, `skipIntro` disposes the pod + ship; 0 console errors. Flag OFF → live game byte-unchanged.

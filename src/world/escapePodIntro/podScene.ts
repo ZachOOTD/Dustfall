@@ -45,6 +45,7 @@ const SPECS: ReadonlyArray<readonly [BoxSpec, number]> = [
 
 let podGroup: THREE.Group | null = null;
 const podBodies: RAPIER.RigidBody[] = [];
+let planetMesh: THREE.Mesh | null = null;   // grown during the descent (setDescentProgress)
 
 /** Is the greybox pod currently built? */
 export function podBuilt(): boolean {
@@ -94,9 +95,20 @@ export function buildPodScene(ctx: GameContext): void {
   );
   planet.position.set(0, -2.5, -12);
   group.add(planet);
+  planetMesh = planet;
 
   ctx.three.scene.add(group);
   podGroup = group;
+}
+
+/** Descent visual — grow the planet as the fall progresses (0 → 1) so it swells to fill
+ *  the viewport. Greybox stand-in for the Phase-2 descentProgress effect stack. */
+export function setDescentProgress(progress: number): void {
+  if (!planetMesh) return;
+  const p = Math.max(0, Math.min(1, progress));
+  const s = 1 + p * 3.5;             // 1× → 4.5× as you fall toward the surface
+  planetMesh.scale.setScalar(s);
+  planetMesh.position.y = -2.5 - p * 2.5;   // sink lower (you drop toward it)
 }
 
 /** Tear down the greybox pod (meshes + geometry + colliders). */
@@ -111,6 +123,7 @@ export function disposePodScene(ctx: GameContext): void {
     ctx.three.scene.remove(podGroup);
     podGroup = null;
   }
+  planetMesh = null;
   for (const body of podBodies) ctx.physics.world.removeRigidBody(body);
   podBodies.length = 0;
 }

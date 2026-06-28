@@ -77,12 +77,12 @@ first-person throughout; pod identity = **industrial modular box**. References +
 merged to master + live at https://zachootd.github.io/Dustfall/. Its log is archived at `docs/campaign/campaign-log-2026-06-18-m1-m13.md`. Still queued for the user (out-of-loop): the **Skyfall
 hero wreck** + the **CAVE rework** (dedicated solo sessions), ⑰ pickup-instancing (human-attended), + the §A walk-tests.
 
-**Last shipped**: Escape-pod **C5** (2026-06-28, Phase 0 T0.3a) — the greybox POD + eject + ship-explode (`verify:all` PASS + live-preview visual gate; flag OFF → live game byte-unchanged). NEW
-`src/world/escapePodIntro/podScene.ts` — a tight greybox escape-pod interior (2.6×2.2×2.8 capsule + framed viewport + seat), matched colliders, unlit greybox, at its own offset `(0,3200,0)` above the ship;
-planet disc beyond the viewport. Beat controllers (`sequence.ts`): `enterPod` builds the pod + seats the player looking out + cues "pull the eject lever" → pull (E/click) or fallback dwell → `shipExplode`
-(reuses `fx/screenFlash.flashScreen` + disposes the ship) → ~2.5s → `descent` (a T0.3b stub). Added `seatPlayerAt`/`pulledLever` helpers. **Robustness fix:** moved the HUD-hide from `tickCockpit` →
-`startEscapePodIntro` + a `handoffToGame` re-assert, so ANY entry path (new game, force-start, jumpToBeat-past-cockpit) gets a clean view (caught a dev-jump HUD leak). **Next** = Phase 0 T0.3b — the real
-DESCENT (descentProgress FX = Phase 2; greybox growing-planet/shake) + the parachute GAG (3 pulls → snap) → impact. See [docs/next-session-prompt.md](docs/next-session-prompt.md).
+**Last shipped**: Escape-pod **C6** (2026-06-28, Phase 0 T0.3b — **T0.3 pod/descent COMPLETE**) — the descent + the parachute GAG (`verify:all` PASS + live-preview visual gate; flag OFF → live game
+byte-unchanged). `descent` beat: `descentProgress` 0→1 over ~8s → `podScene.setDescentProgress` swells the planet 1×→4.5× + a continuous `fx/cameraShake.addTrauma` rumble → `parachute`. **The GAG**: each
+pull (`pulledLever` E/click, edge-triggered) jolts + escalates the cue; the **3rd pull snaps the lever off** (flash) → free-fall → `impact` (a T0.4 stub: flash + max trauma). Auto-pull fallback prevents
+softlock. Added `setDescentProgress` + an `ensureInPod` helper (pod beats build+seat idempotently → independently jumpable; same robustness principle as the C5 HUD-decouple). **The greybox intro now plays
+cockpit → corridor → pod → eject → ship-explode → descent → chute-gag → impact-stub.** **Next** = Phase 0 T0.4 — impact/blackout/wake → **the desert handoff** (teleport to spawn + restore play + mark
+`introComplete` + dispose pod) + the craft+salvage tutorial scaffold → **completes Phase 0 → milestone PAUSE** (the user's first full walk-test). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 
