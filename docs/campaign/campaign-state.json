@@ -1037,7 +1037,7 @@
       "ultracode": true,
       "milestone_complete": "M13 (ⓘ gun SFX C68 · ⓙ speeder hum C69) — the last tier before the '### Milestone: M13 audio + Phase-B review fixes complete' marker → PAUSE. This ENDS the M11→M13 review-fix pass.",
       "paused": "milestone-review (M13) — the WHOLE M11→M13 review-fix pass is shipped + validated per tier. PAUSE for the user's final audio LISTEN (gunshots/reload/speeder hum). NOTE: the in-loop review-fix work is COMPLETE — /campaign-approve does NOT auto-continue; the next block (Skyfall hero wreck + cave rework = dedicated solo sessions; ⑯ drop-pod, ⑰ pickup-instancing, §A walk-tests) is user-sequenced. The loop should stay paused until the user explicitly steers.",
-      "commit": "PENDING",
+      "commit": "1665bc2",
       "spend_approx_tokens": 120000
     }
   ]
