@@ -129,12 +129,33 @@ and promotes the second.
 
 ## Up next
 
-> **ACTIVE: campaign `campaign/2026-06-18`** (`--until=roadmap-empty --checkpoint=milestone
-> --max-cycles=12 --visual-gate=auto`, gate `npm run verify:all`). **Review cadence = PHASE-level**
-> (user, 2026-06-18): the loop runs an ENTIRE phase unattended — **committing every cycle** (one cycle ≈
-> one session ≈ a chunk of a milestone; a milestone spans several cycles/commits) — and PAUSES for review
-> only at a `### Milestone:` PHASE marker below, **not** at each M-milestone. Full per-unit detail in
-> [iteration-plan.md](iteration-plan.md). **Awaiting `/campaign-approve` at the `plan-review` checkpoint.**
+> **ACTIVE: campaign `campaign/escape-pod-intro`** (`--until=roadmap-empty --checkpoint=milestone
+> --max-cycles=150 --visual-gate=auto`, gate `npm run verify:all`). **ENRICH-NOT-CUT.** Review cadence
+> = **PHASE-level** — the loop builds each phase unattended (commit every cycle) and PAUSES at each
+> `### Milestone:` (phase boundary) for the user's **walk-test**. Full plan + per-tier detail:
+> [feature-escape-pod-intro.md](feature-escape-pod-intro.md) (the BUILD PLAN). The prior
+> `campaign/2026-06-18` (M11→M13 + Phase A/B) is COMPLETE + user-approved — its tiers below are SHIPPED.
+
+### Escape-pod intro — the phased build ([feature-escape-pod-intro.md](feature-escape-pod-intro.md)) · [ACTIVE CAMPAIGN]
+The loop builds these in order, pausing at each `### Milestone:` (phase boundary) for the user's walk-test.
+DoD = a new game plays the whole sequence (Beats 0-11) hero-quality, behind `FEATURES.escapePodIntro`.
+- **Phase 0 — Greybox spine + new-game flow:** T0.0 state-machine contract spike · T0.1 new-game flow + `introComplete` save marker + entry point · T0.2 greybox ship · T0.3 greybox descent + seated pod interaction (+ parachute-gag fallback) · T0.4 greybox wake → desert handoff (world-loading + the pod-as-spawn-wreck seam) → tutorial scaffold · the `feature-escape-pod-intro` smoke check. **DoD:** the whole sequence plays end-to-end in placeholder art (feel the pacing/flow).
+### Milestone: escape-pod Phase 0 — greybox spine COMPLETE — USER WALK-TEST (the whole flow + pacing; validates FLOW not beauty) → /campaign-approve
+- **Phase 1 — The pod (hero):** T1.1 exterior (industrial modular box; procedural-modeler; half-buried-in-sand gate) · T1.2 interior (panel, the chunky parachute lever, door-blow button, viewport, warm cabin) · T1.3 seated-FP camera + viewport framing.
+### Milestone: escape-pod Phase 1 — pod hero COMPLETE — USER WALK-TEST (pod in + out) → /campaign-approve
+- **Phase 2 — The descent showpiece:** T2.1 `descentProgress` stack (Fresnel atmo + fog ramp + planet/horizon + detail pop-in + lighting shift) · T2.2 re-entry FX (plasma, white flash, heat-shimmer, shake) · T2.3 tumbling reveal + interior-lit-by-exterior.
+### Milestone: escape-pod Phase 2 — descent COMPLETE — USER WALK-TEST (the beautiful descent) → /campaign-approve
+- **Phase 3 — The hauler + disaster:** T3.1 exterior · T3.2 explosion FX · T3.3 cockpit (escalating consoles + personal touch) · T3.4 corridor + disaster staging (3 lighting zones, only-open-door funnel, fire, red-alert, spatial-audio).
+### Milestone: escape-pod Phase 3 — ship COMPLETE — USER WALK-TEST (ship + explosion + diegetic guidance) → /campaign-approve
+- **Phase 4 — Crash · wake · reveal + tutorial:** T4.1 impact + wake (dust, spiderweb, cut-to-black, the BLOW-DOOR) · T4.2 desert reveal (dawn, half-buried pod, aftermath-silence, horizon hook) · T4.3 craft+salvage tutorial (scrap glints, machete→pry [D261], starting supplies) + the chute-pop payoff.
+### Milestone: escape-pod Phase 4 — crash/tutorial COMPLETE — USER WALK-TEST (crash→desert→tutorial→gag; fresh-player clarity) → /campaign-approve
+- **Phase 5 — Audio + music:** T5.1 the full SFX arc + tutorial sounds + the chute fwoomp (Web-Audio; code-auditor the graph) · T5.2 music cues (escape sting + descent swell + desert easing).
+### Milestone: escape-pod Phase 5 — audio COMPLETE → FEATURE COMPLETE — USER LISTEN + final review → /campaign-approve
+
+---
+**↓ SHIPPED — prior campaign `campaign/2026-06-18` (M11→M13 + Phase A/B), complete + user-approved. Historical record below.**
+
+> *(historical) The 2026-06-18 campaign banner + its Phase A/B/M11-M13 ladder follows. All shipped.*
 
 ### Phase A — Build-out (M1→M5b; all build-now, runs unattended → ONE review after) · [BUILD-NOW]
 Tiers in order (each spans 1+ cycles; the loop commits every cycle and pauses at NONE of these):
