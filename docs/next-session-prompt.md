@@ -1,35 +1,30 @@
-# ▶ RESUME — M13 ⓙ speeder hum (the LAST review-fix unit → M13 milestone pause) — `campaign/2026-06-18`
+# ⏸ PAUSED — M11→M13 review-fix pass COMPLETE — `campaign/2026-06-18`
 
-**Picking up where C68 left off.** Campaign ACTIVE, Phase-B review-fix pass (M11→M13). **M11 + M12 COMPLETE + approved.** **M13 weapon & vehicle audio:** ✅ ⓘ gunshot + reload SFX (C68). **ⓙ is the LAST unit of the whole M11→M13 pass — after it ships, the cycle PAUSES at the M13 milestone** for the user's audio LISTEN (gunshots/reload/speeder hum), which ENDS the review-fix pass. Boot from `docs/campaign/campaign-state.json` + `docs/roadmap.md` (NOT chat memory).
+**The campaign is paused at the M13 milestone** (`status: paused`, `awaiting_approval: true`, `stop_reasons: ["milestone-review"]`). The entire **M11→M13 review-fix pass is shipped + validated per tier** — there is no more in-loop review-fix work. The next block is the **user's call** (the remaining items are dedicated solo sessions + human-attended work, NOT loop cycles). Boot from `docs/campaign/campaign-state.json` + `docs/roadmap.md` if resuming.
 
-## Read these now (in order)
-1. `CLAUDE.md` (auto-loaded)
-2. `docs/campaign/campaign-state.json` — cycle 68/75, status, current_tier
-3. `docs/campaign/campaign-log.md` (tail) — C68 (gun audio) + the audio file map
-4. `docs/decisions.md` (tail) — D268 (gun SFX)
+## What the user validates at THIS pause (the final audio LISTEN)
+Run `npm run dev` and listen:
+- **Gunshots** (C68/D268): each gun has a distinct muzzle report — scrap_gun (ballistic crack+boom), amban_rifle (heavier + sub thump), pulse_rifle (rapid short zappy pew), energy_pistol (meatier charged zap). Reload SFX on scrap_gun + amban (R key). Levers: the synth params in `audio.ts` (`ballisticShot`/`energyShot`/`playReloadGun`).
+- **Speeder hum** (C69): a lower, smoother thrum (was a harsh sawtooth whine). Levers: `startSpeederThrust`/`setSpeederThrustSpeed` in `audio.ts` (the triangle osc + lowpass + the 46-90 Hz range).
+- (Already approved earlier this pass: M11 wreck/panel fixes; M12 sand-worm — the breach-dive attack + the smoothed dive + the quiet alert rumble/shake.)
 
-## Cycle 69 focus — M13 ⓙ: speeder engine → a lower-pitched, smoother hum
-The user: the speeder engine hum is too high/harsh — make it lower-pitched + smoother.
-- **Find the speeder engine audio** in `src/audio/audio.ts` (grep `speeder` / `hum` / `engine` / `startSpeeder` / a sustained engine voice). It's likely a SUSTAINED voice (a looping/oscillator hum with a level driven by speed) — so unlike the gun one-shots, it has C16-style lifecycle (start/setLevel/stop, an LFO maybe). `src/world/speeder.ts` drives it (start on mount, level by speed, stop on dismount).
-- **Lower + smooth it:** drop the base oscillator frequency (lower pitch); soften the timbre (a gentler low-pass, fewer/weaker high harmonics, less aggressive LFO/tremolo) so it's a smooth low hum rather than a harsh whine. Keep the speed→pitch/level coupling (faster = a bit higher/louder) but over a lower, smoother range.
-- **Lifecycle (C16):** if it's a sustained voice, honor the discipline — detach LFOs + `disconnect()` on stop, no tail-click, pause-safe (the speeder hum should stop/duck when paused or dismounted). Check the existing stop path.
+## The M11→M13 review-fix pass — what shipped (all from the 2026-06-20 triage)
+- **M11 — wreck/panel fixes** ✅ (C61-C64): not-openable panels hide (D264); floating panels seated; tank/husk rib/structure rework (the `makeFormerRings` 0.84× root cause); the 3 mega-wreck companion straggler panels hidden (D265). User-validated.
+- **M12 — sand worm** ✅ (C65-C67 + the b7b6a52 dive-smoothing): dorsal ridges removed; attack = breach-and-dive not a high jump (D266) + the natural-bend dive (tail curls under, tip never seen); quiet alert rumble + screen-shake buildup, roar removed from alert (D267). User-approved.
+- **M13 — weapon & vehicle audio** ✅ (C68-C69): per-weapon gunshot + reload SFX (D268); lower/smoother speeder hum. ← this pause.
 
-### Acceptance
-- The speeder hum is lower-pitched + smoother (a low engine thrum, not a harsh whine). `verify:all` PASS. Code-auditor the sustained-voice lifecycle (no leak, pause/dismount-safe). **SOUND quality → the user's M13 LISTEN.**
+## The next block — USER-SEQUENCED (NOT auto-loop)
+`/campaign-approve` does NOT auto-continue here (the planned in-loop work is done). When the user is ready they pick the next thing; these are NOT loop cycles:
+- **Skyfall crashed-ship** — a NEW researched extremely-high-quality enterable HERO wreck (its own `/feature-slice`: research → model → iterate WITH the user; no floating pieces / one-sided textures) + its fire-from-the-wreck fix. `docs/backlog.md` §A. **Dedicated solo session.**
+- **CAVE rework** — the user is planning the direction. `docs/backlog.md` §A. **Dedicated solo session.**
+- **⑯ drop-pod-intro-cutscene** — deferred XL feature; bring back via `/feature-slice` when ready.
+- **⑰ pickup-instancing** — measured (75% of draw calls; D263) + planned; build is **human-attended** (a core item-collection-loop rewrite).
+- **§A owed walk-tests / flag-flips** — the M9/M10 flag-gated systems (realRope/realCloth/rideableSled/repairableSpeeder), diegetic-HUD, survival curve.
+- **Housekeeping:** 1 post-mortem draft pending (`hide-mesh-when-unregistering`, C64) → `/consolidate-shared-memory` whenever convenient.
 
-## Stop / pause — THIS CYCLE COMPLETES M13 → PAUSE (ends the review-fix pass)
-ⓙ is the last M13 unit AND the last unit of the M11→M13 review-fix pass. When it ships, M13 is complete → **PAUSE** at the M13 milestone (`status: paused`, `awaiting_approval: true`, `stop_reasons: ["milestone-review"]`). The user LISTENS to the whole audio batch (gunshots per weapon, reload, the new speeder hum) + has the worm from M12. Then the user sequences the NEXT block — the **Skyfall hero wreck** + the **cave rework** are dedicated solo sessions (NOT the loop); also queued: ⑯ drop-pod-intro, ⑰ pickup-instancing (human-attended), + the §A walk-tests/flag-flips. **Headroom: 68/75 (~7 left).**
-
-## Autonomy contract
-Autonomous; ambiguous → realism-forward + a D-entry + continue. Audio gate = a code-auditor pass on the Web Audio graph (lifecycle correctness) + the user's LISTEN. PAUSE at the M13 milestone after ⓙ ships.
-
-## NOT in the loop (dedicated solo sessions)
-The **Skyfall crashed-ship** + the **CAVE rework** — `docs/backlog.md` §A. Do NOT start them.
-
-## Footguns
-- The speeder hum is likely a SUSTAINED voice (unlike the C68 gun one-shots) → C16 lifecycle applies (detach LFOs, disconnect on stop, pause/dismount-safe). Confirm the stop path doesn't leak or click.
-- Audio can't be self-verified → tsc + a graph review are the gates; the SOUND is the user's LISTEN.
-- Determinism/save: audio is runtime-only — no scatter/save impact (no D81 bump).
+## Campaign status
+- **69/75 cycles** (~6 headroom remain, but the planned roadmap work is complete). If the user wants the loop to do MORE (e.g. self-author a new roadmap from the GDD), that needs an explicit steer — `self_author: propose` would draft a proposal at the next idle cycle, but the user said the next block is dedicated solo sessions, so the loop should stay paused until steered.
+- Branch `campaign/2026-06-18`, working tree clean, `verify:all` green. SAVE_VERSION untouched across the whole pass (no D81 bumps).
 
 ## Verify protocol
-`npm run verify:all` (tsc + placement 0/0 ×5 + colliders 0/40). Audio: a code-auditor review of the Web Audio graph — the SOUND is the user's LISTEN at the M13 pause.
+`npm run verify:all` (tsc + placement 0/0 ×5 + colliders 0/40). Audio = the user's LISTEN; visuals = the real in-game view / the rig.

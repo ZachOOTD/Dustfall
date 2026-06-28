@@ -64,26 +64,25 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      Prior milestones live in docs/changelog.md — do NOT accumulate "Prior milestone"
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
-**▶ CAMPAIGN ACTIVE — M11→M13 review-fix pass — `campaign/2026-06-18`** (autonomous; user batch-validates each tier). Phase B (M6→M10) complete + reviewed. **M11 wreck/panel
-fixes COMPLETE + validated** (wreck-arc walk-tested "looks ok for now" 2026-06-21; the straggler panels closed C64). The loop continues **M12 sand-worm → M13 audio**, pausing
-at each tier for the user's walk-test/listen. Framework upgrade in force (C64): the visual gate renders the **PLAYER'S REAL in-game view** (not an isolated rig); hero geometry is
-delegated to the **procedural-modeler** agent (quality BAR, 5-8 rounds); the **anti-punt** rule holds (no scaffold-then-defer). Each `/campaign-cycle` boots from
-`docs/campaign/campaign-state.json` + `docs/roadmap.md` — NOT this note.
+**⏸ CAMPAIGN PAUSED — M13 milestone (M11→M13 review-fix pass COMPLETE) — `campaign/2026-06-18`** (autonomous; user batch-validates each tier). Phase B (M6→M10) complete + reviewed.
+**The whole review-fix pass is shipped + validated per tier: M11 wreck/panel · M12 sand-worm · M13 weapon+vehicle audio.** Paused at the M13 milestone (`awaiting_approval`) for the user's
+final audio LISTEN — then the user sequences the next block (the in-loop review-fix work is done; what remains is dedicated solo sessions + human-attended items, below). Framework upgrade
+in force (C64): the visual gate renders the **PLAYER'S REAL in-game view** (not an isolated rig); hero geometry → the **procedural-modeler** agent (quality BAR); the **anti-punt** rule holds.
+Each `/campaign-cycle` boots from `docs/campaign/campaign-state.json` + `docs/roadmap.md` — NOT this note. **`/campaign-approve` is NOT auto-continue here** — the next block is the user's call.
 
 **Review-fix pass (from the 2026-06-20 triage). Autonomous, PAUSE-per-tier for the user's batch walk-test/listen:**
 - **M11 — wreck/panel fixes** ✅ COMPLETE: ⓐ not-openable (culled panels hide; D264) · ⓑ floating panels seated · ⓒⓓⓔ tank + husk rib/structure rework (root: `makeFormerRings`' hidden `0.84×` shrink; C61-C63) · stragglers (3 mega-wreck companion panels hidden; D265, C64).
 - **M12 — sand worm** ✅ COMPLETE (⏸ PAUSED at the milestone for the user's batch validation): ✅ ⓕ dorsal ridges removed (C65) · ✅ ⓖ attack = breach-and-dive, no high jump (C66/D266; **C68 smoothed the dive per review feedback — a natural bend, head leads down + tail curls under, tail tip never seen**) · ✅ ⓗ alert = quiet rumble + screen-shake buildup, roar removed from alert (C67/D267). **User: walk-test the worm-attack FEEL + LISTEN to the alert rumble → `/campaign-approve` → M13.**
-- **M13 — weapon & vehicle audio** (IN PROGRESS): ✅ ⓘ gunshot + reload SFX (C68/D268 — per-weapon muzzle reports via `playWeaponShot` from `preFire` [was a melee whoosh for all guns]; weapon-aware reload; pulse/energy don't reload) · ⓙ smoother/lower speeder hum (NEXT) → then the M13 milestone pause (audio LISTEN).
+- **M13 — weapon & vehicle audio** ✅ COMPLETE (⏸ PAUSED at the milestone — ENDS the M11→M13 review-fix pass): ✅ ⓘ gunshot + reload SFX (C68/D268) · ✅ ⓙ lower-pitched, smoother speeder hum (C69 — triangle+lowpass not sawtooth; pitch 70-140→46-90 Hz). **User: LISTEN to the audio batch (gunshots/reload/speeder hum) → then sequence the next block.**
 
 **NOT in the loop (dedicated solo sessions):** the **Skyfall crashed-ship** (a NEW researched extremely-high-quality enterable HERO wreck — its own `/feature-slice`:
 research → model → iterate WITH the user; + its fire-from-the-wreck fix) and the **CAVE rework** (user planning the direction). Both in [docs/backlog.md](docs/backlog.md).
 Also still queued for the user: ⑯ drop-pod-intro, ⑰ pickup-instancing (human-attended), + the §A walk-tests/flag-flips.
 
-**Last shipped**: Campaign **C68** (2026-06-22, cycle 68/75) — M13 ⓘ: gunshot + reload SFX for all guns (`verify:all` PASS; audio only, no rand, no save touch). `combat.ts preFire` played a melee whoosh
-for every weapon; now it dispatches per-weapon muzzle reports via `playWeaponShot` (scrap_gun = ballistic crack+boom · amban = heavier + sub thump · pulse = rapid short zap · energy_pistol =
-meatier charged zap), + a weapon-aware `playReloadGun(heavy)` for the amban; pulse/energy don't reload (recharge/charged). D268. M12 was user-APPROVED 2026-06-22. **Next** = cycle 69 = **M13 ⓙ
-speeder engine → a lower-pitched, smoother hum** (the LAST review-fix unit; `audio.ts` speeder hum, `speeder.ts` drives it) → then the **M13 milestone pause** (audio LISTEN) which ENDS the
-M11→M13 review-fix pass. See [docs/next-session-prompt.md](docs/next-session-prompt.md).
+**Last shipped**: Campaign **C69** (2026-06-22, cycle 69/75) — M13 ⓙ: the speeder engine hum is now a lower, smoother thrum (`verify:all` PASS; audio only, no rand, no save touch). Base oscillator
+sawtooth→**triangle** through a warm lowpass (the harsh whine gone); pitch 70-140→**46-90 Hz**; deeper noise rumble; the speed-coupling + start/stop lifecycle unchanged (`audio.ts startSpeederThrust`/
+`setSpeederThrustSpeed`). **✅ M13 COMPLETE (ⓘ gun SFX + ⓙ speeder hum) → ⏸ PAUSED at the M13 milestone, which ENDS the M11→M13 review-fix pass.** **Next (user-sequenced, NOT auto-loop):** LISTEN to
+the audio batch; then the deferred blocks — the **Skyfall hero wreck** + the **CAVE rework** (dedicated solo sessions), ⑯ drop-pod-intro, ⑰ pickup-instancing (human-attended), + the §A walk-tests. See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 

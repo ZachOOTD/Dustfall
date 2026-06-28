@@ -3,6 +3,16 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Campaign C69 — 2026-06-22 — M13 ⓙ: **lower-pitched, smoother speeder hum** → M13 COMPLETE → ⏸ PAUSE (review-fix pass complete) ✓ verify pass (ultracode)
+
+`verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40; audio only, no rand, no save touch). Cycle 69/75. The LAST unit of the M11→M13 review-fix pass.
+
+**M13 ⓙ — the speeder engine hum is now a lower, smoother thrum** (the harsh whine is gone):
+- **Timbre:** the base oscillator is a **triangle** (was a buzzy **sawtooth** — the harshness source) through a new warm **lowpass** (~280 Hz) → a smooth low hum, not a whine. `audio.ts startSpeederThrust`.
+- **Pitch lowered:** 70→140 Hz → **46→90 Hz** (idle→top speed). The noise rumble layer deepened (lowpass 220→180 base, playbackRate 0.6→0.5). The speed→pitch/level coupling is kept (faster = a bit higher/louder), over the lower, smoother range. `setSpeederThrustSpeed`.
+- **Lifecycle intact** (sustained voice): `speeder.ts` start-on-mount / stop-on-dismount / per-frame modulate unchanged — timbre-only change. `verify:all` PASS. **SOUND quality → the user's M13 LISTEN.**
+- **✅ M13 COMPLETE** (ⓘ gun SFX C68 · ⓙ speeder hum C69) → ⏸ **PAUSED at the M13 milestone**, which ENDS the **M11→M13 review-fix pass** (M11 wreck/panel · M12 sand-worm · M13 audio — all shipped + user-validated per tier). The user LISTENS to the audio batch (gunshots/reload/speeder hum) + then sequences the next block (Skyfall hero wreck + cave rework = dedicated solo sessions; ⑯ drop-pod, ⑰ pickup-instancing, §A walk-tests).
+
 ## Campaign C68 (cycle 68) — 2026-06-22 — M13 ⓘ: **gunshot + reload SFX for all guns** ✓ verify pass (ultracode)
 
 `verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40; audio only, no rand, no save touch). The numbered **cycle 68** (distinct from the `b7b6a52` within-pause "C68" M12-dive review fix).

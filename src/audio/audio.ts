@@ -1585,24 +1585,29 @@ export function startSpeederThrust(): void {
   master.gain.linearRampToValueAtTime(1, t + 0.35);
   master.connect(a.ambient);
 
-  // Low oscillator — base engine pitch
+  // Low oscillator — base engine pitch. M13 ⓙ (C69): a TRIANGLE (was a buzzy sawtooth) +
+  // a warm lowpass → a smooth low hum, not a harsh whine; pitched lower (46 Hz idle).
   const osc = a.ctx.createOscillator();
-  osc.type = 'sawtooth';
-  osc.frequency.setValueAtTime(70, t);
+  osc.type = 'triangle';
+  osc.frequency.setValueAtTime(46, t);
+  const oscFilter = a.ctx.createBiquadFilter();   // round off the top so it's a smooth thrum
+  oscFilter.type = 'lowpass';
+  oscFilter.frequency.value = 280;
+  oscFilter.Q.value = 0.7;
   const oscGain = a.ctx.createGain();
   oscGain.gain.value = 0.04;        // quiet at idle, modulated up
-  osc.connect(oscGain).connect(master);
+  osc.connect(oscFilter).connect(oscGain).connect(master);
   osc.start(t);
 
-  // Filtered noise — rumble layer
+  // Filtered noise — rumble layer (deeper + lower for the smoother engine).
   const noise = a.ctx.createBufferSource();
   noise.buffer = a.noiseBuffer;
   noise.loop = true;
-  noise.playbackRate.value = 0.6;
+  noise.playbackRate.value = 0.5;
   const noiseFilter = a.ctx.createBiquadFilter();
   noiseFilter.type = 'lowpass';
-  noiseFilter.frequency.value = 220;
-  noiseFilter.Q.value = 1.2;
+  noiseFilter.frequency.value = 180;
+  noiseFilter.Q.value = 1.0;
   const noiseGain = a.ctx.createGain();
   noiseGain.gain.value = 0.05;
   noise.connect(noiseFilter).connect(noiseGain).connect(master);
@@ -1618,13 +1623,13 @@ export function setSpeederThrustSpeed(speed: number, maxSpeed: number): void {
   if (!a) return;
   const t = a.ctx.currentTime;
   const u = Math.min(1, Math.max(0, speed / maxSpeed));   // 0..1
-  // Pitch climbs 70 Hz idle → 140 Hz top speed.
-  _speederThrust.osc.frequency.setTargetAtTime(70 + u * 70, t, 0.05);
+  // M13 ⓙ (C69) — lower, smoother: pitch climbs 46 Hz idle → 90 Hz top (was 70→140 — harsher).
+  _speederThrust.osc.frequency.setTargetAtTime(46 + u * 44, t, 0.05);
   // Oscillator gain quiet at idle (0.04), louder under throttle (0.10).
   _speederThrust.oscGain.gain.setTargetAtTime(0.04 + u * 0.06, t, 0.08);
-  // Noise rumble opens up with speed.
+  // Noise rumble opens up with speed (deeper range than before).
   _speederThrust.noiseGain.gain.setTargetAtTime(0.05 + u * 0.12, t, 0.08);
-  _speederThrust.noiseFilter.frequency.setTargetAtTime(220 + u * 280, t, 0.08);
+  _speederThrust.noiseFilter.frequency.setTargetAtTime(180 + u * 220, t, 0.08);
 }
 
 export function stopSpeederThrust(): void {
