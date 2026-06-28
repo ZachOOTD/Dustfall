@@ -67,7 +67,7 @@
       "recon": "direct reads of controller.ts updatePlayer (locomotion + camera-sync), bodies.ts makeStaticBox, debugPanel enterGame hook — no agent.",
       "deferred_to_T0.2b": "the Beat 0-2 FLOW (cockpit seated-open + 'check engines' prompt → checkEngines walk → corridor-end disaster trigger → advance), HUD-during-intro suppression (clock/hotbar still overlay), broader AI/weather suppression. NOT a punt — T0.2a's deliverable (a walkable, legible greybox ship + placement + gating) is delivered + verified; the beat flow is the next sub-task.",
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "eb38a1f",
       "spend_approx_tokens": 270000
     }
   ]
