@@ -23,7 +23,7 @@ import { damageLizard, getLizardForCollider, knockbackLizard } from '../enemies/
 import { damageShrew, getShrewForCollider } from '../enemies/shrew.ts';
 import { damageVulture, getVultureForCollider } from '../enemies/vulture.ts';  // ACAH
 import { damageSandWorm, getSandWormForCollider } from '../enemies/sandWorm.ts';
-import { playSwing, playHit, playLizardSquish, playReloadGun } from '../audio/audio.ts';
+import { playSwing, playHit, playLizardSquish, playReloadGun, playWeaponShot } from '../audio/audio.ts';
 
 type WeaponKind = 'melee' | 'ranged' | 'charged';
 
@@ -227,7 +227,14 @@ export function updateCombat(ctx: GameContext, dt: number): void {
 function preFire(ctx: GameContext, spec: WeaponSpec): void {
   _nextSwingAt = ctx.time.elapsed + spec.cooldown;
   _swingViewKick = 1.0;
-  playSwing();
+  // M13 ⓘ (C68) — melee = the whoosh; guns = a per-weapon muzzle report (was the
+  // melee whoosh for ALL weapons). preFire only runs on a real shot (the empty-ammo
+  // case returns earlier in updateCombat), so the gunshot never plays on a dry click.
+  if (spec.kind === 'melee') {
+    playSwing();
+  } else {
+    playWeaponShot(ctx.inventory.slots[ctx.inventory.selectedIdx].item ?? '');
+  }
   ctx.player.viewModel?.triggerUse();
   const cam = ctx.three.camera;
   cam.getWorldDirection(_fwd);
@@ -385,6 +392,6 @@ export function updateReload(ctx: GameContext): void {
   }
   if (!slot.meta) slot.meta = {};
   slot.meta.ammoRemaining = cur + loaded;
-  playReloadGun();
+  playReloadGun(slot.item === 'amban_rifle');   // M13 ⓘ — chunkier reload for the heavy rifle
   ctx.ui.showToast(`reloaded (${cur + loaded}/${maxAmmo})`);
 }

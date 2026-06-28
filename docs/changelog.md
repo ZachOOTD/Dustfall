@@ -3,7 +3,17 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
-## Campaign C66 follow-up (C68) — 2026-06-22 — M12 ⓖ: **smoother worm dive — natural bend, tail curls under (user feedback during the M12 review)** ✓ verify pass
+## Campaign C68 (cycle 68) — 2026-06-22 — M13 ⓘ: **gunshot + reload SFX for all guns** ✓ verify pass (ultracode)
+
+`verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40; audio only, no rand, no save touch). The numbered **cycle 68** (distinct from the `b7b6a52` within-pause "C68" M12-dive review fix).
+
+**M13 ⓘ — per-weapon GUNSHOT SFX + weapon-aware reload** (1st of 2 M13 units):
+- **Root gap:** `combat.ts preFire()` played the MELEE whoosh (`playSwing`) for *every* weapon — guns had no muzzle report. Now `preFire` dispatches by kind: melee → `playSwing`, gun → `playWeaponShot(id)`. preFire only runs on a real shot (the empty-ammo case returns earlier), so no dry-click gunshot.
+- **4 new gun synths** (`audio.ts`, one-shots on the `sfx` bus): `scrap_gun` = a sharp ballistic crack + report boom; `amban_rifle` = heavier/deeper boom + a sub thump (marksman weight); `pulse_rifle` = a rapid SHORT zappy "pew" (~0.1 s so the 0.13 s auto-cadence doesn't muddy); `energy_pistol` = a meatier charged-release zap (deeper + a sub thump). Dispatched via `playWeaponShot(weaponId)`.
+- **Reload now weapon-aware:** `playReloadGun(heavy)` — the amban gets a chunkier, lower reload + a magazine-seat thunk; the scrap_gun keeps the lighter clack+tick. Only `scrap_gun` + `amban_rifle` reload (R + scrap_bullet); `pulse_rifle` self-recharges + `energy_pistol` is charged → no reload (correct). D268.
+- **Verify:** `verify:all` PASS; the Web Audio graph is all one-shots (start/stop, GC after — the existing one-shot convention; no sustained-voice lifecycle risk), self-audited; pause-safe (combat gates on `isPlaying`). **SOUND quality → the user's M13 LISTEN.** **Next M13:** ⓙ lower/smoother speeder hum → then the M13 milestone pause.
+
+## Campaign C66 follow-up (b7b6a52) — 2026-06-22 — M12 ⓖ: **smoother worm dive — natural bend, tail curls under (user feedback during the M12 review)** ✓ verify pass
 
 `verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40; creature pose, no rand, no save touch). A within-pause fix from the user's M12 review.
 

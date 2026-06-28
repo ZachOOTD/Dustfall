@@ -486,3 +486,15 @@ Consistent with this campaign's "ship the foundation/measure, defer the human/fe
 **Gate**: the audio node graph is unchanged (no new C16-lifecycle risk); the driving logic was self-audited (silent-emerging on alert, fades on leaving alert/charging). The SOUND quality + the buildup FEEL are the user's M12 LISTEN — audio can't be headless-verified (the campaign per-tier pause).
 
 **friction-score:** 1 (a localized audio/camera driving-logic change reusing the proven rumble graph; reversible; the only open item is the user's listen).
+
+## D268 — per-weapon gunshot SFX dispatched from preFire (was the melee whoosh for ALL weapons); reload SFX only for the guns that reload (Session C68, campaign — M13 ⓘ)
+
+**When**: M13 ⓘ — adding gunshot + reload SFX for all guns. Found `combat.ts preFire()` (the shared melee+ranged pre-fire setup) played `playSwing()` — the MELEE whoosh — for EVERY weapon, so guns had no muzzle report (a latent gap).
+
+**Decision**: `preFire` now dispatches the fire sound by `spec.kind` — melee → `playSwing()`, ranged/charged → `playWeaponShot(id)`. `playWeaponShot` (audio.ts) switches per weapon: `scrap_gun`/`amban_rifle` → a ballistic crack + report boom (`ballisticShot(heavy)`, the amban heavier + a sub thump); `pulse_rifle`/`energy_pistol` → a zappy descending pew (`energyShot(big)`, the energy pistol's charged release meatier). All ONE-SHOTS (start/stop, GC after — the existing one-shot convention; the C16 disconnect-on-stop discipline is only for sustained voices). preFire only runs on a REAL shot (updateCombat returns on empty ammo before fireRanged) → no dry-click gunshot. Pause-safe (combat gates on `isPlaying`).
+
+**Reload applicability**: `playReloadGun(heavy)` is now weapon-aware (the amban chunkier + a mag-seat thunk). Only `scrap_gun` + `amban_rifle` RELOAD (R + scrap_bullet); `pulse_rifle` self-recharges (no reload action) + `energy_pistol` is a charged weapon (no ammo) → neither gets a reload SFX (correct — "all guns" = the guns that actually reload). A charge-up whine for the energy pistol + a recharge cue for the pulse rifle are possible future polish (not this unit).
+
+**Gate**: tsc + a self-audit of the one-shot graph (no sustained voices → no leak risk). The SOUND quality is the user's M13 LISTEN — audio can't be headless-verified.
+
+**friction-score:** 1 (additive audio + a one-line dispatch fix; reversible; the only open item is the user's listen).

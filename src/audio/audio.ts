@@ -1163,36 +1163,173 @@ export function playBandageUse(): void {
  *  Two-stage envelope: hard metal-on-metal clack (highpass noise burst)
  *  followed by a soft bullet-in-chamber tick (low-pitched click). ~0.45s
  *  total. */
-export function playReloadGun(): void {
+/** Gun reload — slide-clack then a chamber tick. `heavy` (the amban rifle) is
+ *  lower-pitched + chunkier with an added magazine-seat thunk. */
+export function playReloadGun(heavy = false): void {
   const a = getAudioInternals();
   if (!a) return;
   const t = a.ctx.currentTime;
-  // Clack — metal slide hitting frame. Highpass noise burst.
+  // Clack — metal slide hitting frame. Highpass noise burst (lower/chunkier for the heavy rifle).
   const clackSrc = a.ctx.createBufferSource();
   clackSrc.buffer = a.noiseBuffer;
-  clackSrc.playbackRate.value = 1.6;
+  clackSrc.playbackRate.value = heavy ? 1.15 : 1.6;
   const clackHp = a.ctx.createBiquadFilter();
   clackHp.type = 'highpass';
-  clackHp.frequency.value = 1600;
+  clackHp.frequency.value = heavy ? 1050 : 1600;
   const clackEnv = a.ctx.createGain();
   clackEnv.gain.setValueAtTime(0.0, t);
-  clackEnv.gain.linearRampToValueAtTime(0.18, t + 0.003);
-  clackEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+  clackEnv.gain.linearRampToValueAtTime(heavy ? 0.22 : 0.18, t + 0.003);
+  clackEnv.gain.exponentialRampToValueAtTime(0.001, t + (heavy ? 0.11 : 0.08));
   clackSrc.connect(clackHp).connect(clackEnv).connect(a.sfx);
   clackSrc.start(t);
-  clackSrc.stop(t + 0.10);
-  // Chamber tick — short low percussive blip.
+  clackSrc.stop(t + (heavy ? 0.13 : 0.10));
+  // Heavy only — a low magazine-seat THUNK up front (the big mag slapping home).
+  if (heavy) {
+    const mag = a.ctx.createOscillator();
+    mag.type = 'triangle';
+    mag.frequency.setValueAtTime(130, t + 0.02);
+    mag.frequency.exponentialRampToValueAtTime(55, t + 0.12);
+    const magEnv = a.ctx.createGain();
+    magEnv.gain.setValueAtTime(0.0, t + 0.02);
+    magEnv.gain.linearRampToValueAtTime(0.2, t + 0.03);
+    magEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
+    mag.connect(magEnv).connect(a.sfx);
+    mag.start(t + 0.02);
+    mag.stop(t + 0.18);
+  }
+  // Chamber tick — short low percussive blip (the bolt/slide closing).
+  const tickT = heavy ? 0.34 : 0.30;
   const tickOsc = a.ctx.createOscillator();
   tickOsc.type = 'square';
-  tickOsc.frequency.setValueAtTime(180, t + 0.30);
-  tickOsc.frequency.exponentialRampToValueAtTime(90, t + 0.38);
+  tickOsc.frequency.setValueAtTime(heavy ? 150 : 180, t + tickT);
+  tickOsc.frequency.exponentialRampToValueAtTime(heavy ? 72 : 90, t + tickT + 0.08);
   const tickEnv = a.ctx.createGain();
-  tickEnv.gain.setValueAtTime(0.0, t + 0.30);
-  tickEnv.gain.linearRampToValueAtTime(0.10, t + 0.31);
-  tickEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.42);
+  tickEnv.gain.setValueAtTime(0.0, t + tickT);
+  tickEnv.gain.linearRampToValueAtTime(heavy ? 0.13 : 0.10, t + tickT + 0.01);
+  tickEnv.gain.exponentialRampToValueAtTime(0.001, t + tickT + 0.12);
   tickOsc.connect(tickEnv).connect(a.sfx);
-  tickOsc.start(t + 0.30);
-  tickOsc.stop(t + 0.44);
+  tickOsc.start(t + tickT);
+  tickOsc.stop(t + tickT + 0.14);
+}
+
+// ── M13 ⓘ (C68) — GUNSHOT SFX (the muzzle report on fire, per weapon) ──────────
+// preFire() previously played the melee whoosh (playSwing) for ALL weapons; now the
+// ranged/charged paths call playWeaponShot(id). Ballistic guns (scrap_gun/amban_rifle)
+// get a noise crack + a low report boom; energy guns (pulse_rifle/energy_pistol) get a
+// zappy descending pew. All one-shots (start/stop, GC after stop — the established
+// one-shot pattern; only sustained voices need explicit disconnect).
+
+/** Ballistic muzzle report. `heavy` = the amban marksman rifle (deeper, louder, longer,
+ *  + a sub thump); else the scrap gun (sharper, smaller). */
+function ballisticShot(a: AudioInternals, heavy: boolean): void {
+  const t = a.ctx.currentTime;
+  // Crack — the sharp transient (highpassed noise burst).
+  const crack = a.ctx.createBufferSource();
+  crack.buffer = a.noiseBuffer;
+  crack.playbackRate.value = heavy ? 0.9 : 1.25;
+  const hp = a.ctx.createBiquadFilter();
+  hp.type = 'highpass';
+  hp.frequency.value = heavy ? 1400 : 2200;
+  const cEnv = a.ctx.createGain();
+  cEnv.gain.setValueAtTime(0.0, t);
+  cEnv.gain.linearRampToValueAtTime(heavy ? 0.30 : 0.24, t + 0.002);
+  cEnv.gain.exponentialRampToValueAtTime(0.001, t + (heavy ? 0.10 : 0.06));
+  crack.connect(hp).connect(cEnv).connect(a.sfx);
+  crack.start(t);
+  crack.stop(t + (heavy ? 0.13 : 0.09));
+  // Report body — the gunpowder thump (triangle pitch-drop).
+  const boom = a.ctx.createOscillator();
+  boom.type = 'triangle';
+  boom.frequency.setValueAtTime(heavy ? 175 : 240, t);
+  boom.frequency.exponentialRampToValueAtTime(heavy ? 48 : 72, t + (heavy ? 0.22 : 0.13));
+  const bEnv = a.ctx.createGain();
+  bEnv.gain.setValueAtTime(0.0, t);
+  bEnv.gain.linearRampToValueAtTime(heavy ? 0.34 : 0.24, t + 0.004);
+  bEnv.gain.exponentialRampToValueAtTime(0.001, t + (heavy ? 0.30 : 0.17));
+  boom.connect(bEnv).connect(a.sfx);
+  boom.start(t);
+  boom.stop(t + (heavy ? 0.32 : 0.19));
+  // Sub thump (weight) — heavy rifle only.
+  if (heavy) {
+    const sub = a.ctx.createOscillator();
+    sub.type = 'sine';
+    sub.frequency.setValueAtTime(72, t);
+    sub.frequency.exponentialRampToValueAtTime(38, t + 0.18);
+    const sEnv = a.ctx.createGain();
+    sEnv.gain.setValueAtTime(0.0, t);
+    sEnv.gain.linearRampToValueAtTime(0.22, t + 0.006);
+    sEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.26);
+    sub.connect(sEnv).connect(a.sfx);
+    sub.start(t);
+    sub.stop(t + 0.28);
+  }
+}
+
+/** Energy muzzle "pew". `big` = the energy pistol's charged release (deeper, longer,
+ *  + a sub thump); else the pulse rifle's rapid SHORT zap (kept ~0.1s so the 0.13s
+ *  auto-cadence doesn't muddy). */
+function energyShot(a: AudioInternals, big: boolean): void {
+  const t = a.ctx.currentTime;
+  // Zap — a fast descending saw through a resonant lowpass.
+  const osc = a.ctx.createOscillator();
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(big ? 900 : 1300, t);
+  osc.frequency.exponentialRampToValueAtTime(big ? 120 : 300, t + (big ? 0.18 : 0.07));
+  const lp = a.ctx.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.Q.value = 6;
+  lp.frequency.setValueAtTime(big ? 2600 : 3200, t);
+  lp.frequency.exponentialRampToValueAtTime(big ? 500 : 900, t + (big ? 0.18 : 0.07));
+  const env = a.ctx.createGain();
+  env.gain.setValueAtTime(0.0, t);
+  env.gain.linearRampToValueAtTime(big ? 0.26 : 0.18, t + 0.003);
+  env.gain.exponentialRampToValueAtTime(0.001, t + (big ? 0.20 : 0.09));
+  osc.connect(lp).connect(env).connect(a.sfx);
+  osc.start(t);
+  osc.stop(t + (big ? 0.22 : 0.10));
+  // Sizzle — a brief bandpassed noise tick for the electric edge.
+  const nz = a.ctx.createBufferSource();
+  nz.buffer = a.noiseBuffer;
+  nz.playbackRate.value = 1.5;
+  const bp = a.ctx.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.value = big ? 1800 : 2600;
+  bp.Q.value = 1.5;
+  const nEnv = a.ctx.createGain();
+  nEnv.gain.setValueAtTime(0.0, t);
+  nEnv.gain.linearRampToValueAtTime(big ? 0.10 : 0.07, t + 0.002);
+  nEnv.gain.exponentialRampToValueAtTime(0.001, t + (big ? 0.08 : 0.05));
+  nz.connect(bp).connect(nEnv).connect(a.sfx);
+  nz.start(t);
+  nz.stop(t + (big ? 0.10 : 0.06));
+  // Sub thump — the charged release's weight (energy pistol only).
+  if (big) {
+    const sub = a.ctx.createOscillator();
+    sub.type = 'sine';
+    sub.frequency.setValueAtTime(110, t);
+    sub.frequency.exponentialRampToValueAtTime(45, t + 0.16);
+    const sEnv = a.ctx.createGain();
+    sEnv.gain.setValueAtTime(0.0, t);
+    sEnv.gain.linearRampToValueAtTime(0.18, t + 0.006);
+    sEnv.gain.exponentialRampToValueAtTime(0.001, t + 0.20);
+    sub.connect(sEnv).connect(a.sfx);
+    sub.start(t);
+    sub.stop(t + 0.22);
+  }
+}
+
+/** Dispatch the muzzle report for the firing weapon (called from combat.ts preFire).
+ *  Non-gun ids are a no-op (melee uses playSwing). */
+export function playWeaponShot(weaponId: string): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  switch (weaponId) {
+    case 'scrap_gun': ballisticShot(a, false); break;
+    case 'amban_rifle': ballisticShot(a, true); break;
+    case 'pulse_rifle': energyShot(a, false); break;
+    case 'energy_pistol': energyShot(a, true); break;
+    default: break;
+  }
 }
 
 /** Harvest (cactus snap) — short crackly snap. */
