@@ -77,12 +77,12 @@ first-person throughout; pod identity = **industrial modular box**. References +
 merged to master + live at https://zachootd.github.io/Dustfall/. Its log is archived at `docs/campaign/campaign-log-2026-06-18-m1-m13.md`. Still queued for the user (out-of-loop): the **Skyfall
 hero wreck** + the **CAVE rework** (dedicated solo sessions), ⑰ pickup-instancing (human-attended), + the §A walk-tests.
 
-**Last shipped**: Escape-pod **C3** (2026-06-28, Phase 0 T0.2a) — the greybox SHIP, the first VISUAL cycle (`verify:all` PASS + live-preview visual gate; flag OFF → live game byte-unchanged). NEW
-`src/world/escapePodIntro/shipScene.ts` — a data-driven box layout (cockpit 6×3×5 with a framed window + a 12m corridor to a dead-end), each box a mesh + a **matched static collider** (WYSIWYG),
-unlit `MeshBasicMaterial` (obviously-greybox), at a far offset `(0,3000,0)`, planet disc beyond the window; the KCC walks it (R4). The cockpit beat builds the ship + drops the capsule facing the window
-(`sequence.ts tickCockpit`; `endEscapePodIntro` tears it down). Locomotion mode-gating (`ctx.intro.mode` walk/seated/scripted) in `controller.ts`; survival drain suppressed during the intro
-(`survival.ts`). The space reads + is walkable from all 3 reads. **Greybox = blockout, NOT hero art (Phase 3).** **Next** = Phase 0 T0.2b — the beat FLOW (cockpit "check engines" → checkEngines walk →
-corridor-end disaster → advance) + suppress the game HUD during the intro (clock/hotbar still overlay). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
+**Last shipped**: Escape-pod **C4** (2026-06-28, Phase 0 T0.2b — **T0.2 ship section COMPLETE**) — the cockpit→corridor section now PLAYS as a sequence (`verify:all` PASS + full live-preview visual gate;
+flag OFF → live game byte-unchanged). Beat controllers (`sequence.ts`): cockpit opens **seated** at the window, dwells ~3s → checkEngines (mode walk + diegetic "check engines" prompt) → crossing into the
+corridor (world-Z threshold) → corridor → reaching the dead-end (Z threshold) → enterPod (a T0.3 stub). NEW `src/world/escapePodIntro/introHud.ts` — `setGameHudHidden` (suppresses the game HUD during the
+intro: `hud`/`hotbar`/`crosshair` + `long-storm-indicator` + `dev-mode-badge`) + `showIntroPrompt`/`hideIntroPrompt` (centered diegetic prompt). `endEscapePodIntro` restores the HUD + hides the prompt +
+disposes the ship; `skipIntro` verified to hand back cleanly. **Next** = Phase 0 T0.3 — the greybox DESCENT (eject → ship-explode → atmospheric fall) + the seated pod + the parachute-gag fallback (3 pulls →
+snap). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 

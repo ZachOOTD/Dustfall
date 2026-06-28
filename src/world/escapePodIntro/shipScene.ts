@@ -18,6 +18,12 @@ import { makeStaticBox } from '../../physics/bodies.ts';
 /** Far offset — high "in orbit", enclosed so the desert far below is not seen. */
 const SHIP_ORIGIN = new THREE.Vector3(0, 3000, 0);
 
+/** World-Z beat triggers (the corridor runs +Z from SHIP_ORIGIN; mouth ≈ z 2.6,
+ *  dead-end ≈ z 14.6). Crossing ENTER_Z = "stepped into the corridor"; passing
+ *  DEAD_END_Z = "reached the engine bay" (the disaster trigger). */
+export const SHIP_CORRIDOR_ENTER_Z = SHIP_ORIGIN.z + 3.2;
+export const SHIP_DEAD_END_Z = SHIP_ORIGIN.z + 13.6;
+
 // Greybox palette (flat / unlit). Distinct tones so faces read at oblique angles.
 const C_FLOOR = 0x484c54;
 const C_WALL = 0x676c74;

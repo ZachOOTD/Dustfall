@@ -3,8 +3,8 @@
   "campaign": "escape-pod-intro",
   "started": "2026-06-28",
   "branch": "campaign/escape-pod-intro",
-  "cycles_completed": 3,
-  "current_tier": "Phase 0 — playable greybox spine. ✅ T0.0 (C1) framework scaffold (D269). ✅ T0.1 (C2) boot/new-game/save wiring + dev hooks (D270). ✅ T0.2a DONE (C3) — the greybox SHIP (first visual cycle): NEW world/escapePodIntro/shipScene.ts (data-driven box layout — cockpit 6×3×5 with a framed window + a 12m corridor to a dead-end; each box = mesh + matched static collider WYSIWYG; unlit MeshBasicMaterial greybox; far offset (0,3000,0); planet disc beyond the window; KCC walks it R4). Cockpit beat (sequence.ts tickCockpit) builds the ship + drops the capsule facing the window; endEscapePodIntro tears it down. Locomotion mode-gating (ctx.intro.mode walk/seated/scripted) in controller.ts; survival drain suppressed during intro (survival.ts). verify:all PASS + live visual gate (walkable from 3 reads; capsule on colliders; 0 console errors). NEXT unit = T0.2b: the Beat 0-2 FLOW (cockpit seated-open + 'check engines' prompt → checkEngines walk-out → corridor-end disaster trigger → advance; enterPod stub → desert until T0.3) + HUD-during-intro suppression (clock/hotbar still overlay — the T0.2a-noted gap) + diegetic prompts. Then T0.3 greybox descent+pod -> T0.4 wake/handoff/tutorial scaffold + smoke -> Phase 0 milestone PAUSE (user walk-test). Plan: docs/feature-escape-pod-intro.md. ENRICH-NOT-CUT.",
+  "cycles_completed": 4,
+  "current_tier": "Phase 0 — playable greybox spine. ✅ T0.0 (C1) framework (D269). ✅ T0.1 (C2) boot/new-game/save wiring (D270). ✅ T0.2a (C3) greybox ship geometry. ✅ T0.2b DONE (C4) — Beat 0-2 FLOW + HUD suppression (T0.2 SHIP SECTION COMPLETE): sequence.ts beat controllers (cockpit seated-open + ~3s dwell → checkEngines walk + 'check engines' prompt → corridor [world-Z thresholds SHIP_CORRIDOR_ENTER_Z/SHIP_DEAD_END_Z from shipScene] → enterPod stub); NEW introHud.ts (setGameHudHidden suppresses hud/hotbar/crosshair/long-storm-indicator/dev-mode-badge during intro + showIntroPrompt/hideIntroPrompt centered diegetic prompt); tickCockpit re-hides HUD post-handoff (no flash); endEscapePodIntro restores HUD + hides prompt + disposes ship. verify:all PASS + full live visual gate (flow advances via dwell + thresholds; HUD fully hidden incl the fixed storm-warning leak; skipIntro restores HUD + disposes ship, scene-children round-trips; 0 console errors). NEXT unit = T0.3: the greybox DESCENT + the pod (Beats 3-6: enterPod/eject → shipExplode → descent → parachute GAG [3 pulls → snap]). LARGE — decompose like T0.2 (T0.3a pod+eject+ship-explode, T0.3b descent+parachute gag). Greybox blockout (hero pod = Phase 1, descentProgress FX = Phase 2). Then T0.4 impact/wake/desert-handoff/tutorial scaffold + smoke -> Phase 0 milestone PAUSE (user walk-test). Plan: docs/feature-escape-pod-intro.md. ENRICH-NOT-CUT.",
   "awaiting_approval": false,
   "stop_reasons": [],
   "plan_doc": "docs/feature-escape-pod-intro.md",
@@ -18,7 +18,7 @@
   "circuit_breaker_n": 3,
   "consecutive_no_progress": 0,
   "ceiling": { "max_cycles": 150, "total": null, "per_cycle": null, "unit": "tokens" },
-  "spend": { "total": 760000, "note": "escape-pod intro campaign, started 2026-06-28. C1 ~280K (T0.0). C2 ~210K (T0.1). C3 ~270K (T0.2a greybox ship: controller/bodies recon + shipScene.ts + sequence/controller/survival wiring + a live-preview visual gate [enterGame+startIntro, 3-angle screenshots] + a tsc fix [BoxSpec arity] + verify:all + docs). Prior M11->M13 campaign concluded + user-approved (~18.5M tokens / 69 cycles; chronicle archived to campaign-log-2026-06-18-m1-m13.md)." },
+  "spend": { "total": 1040000, "note": "escape-pod intro campaign, started 2026-06-28. C1 ~280K (T0.0). C2 ~210K (T0.1). C3 ~270K (T0.2a greybox ship). C4 ~280K (T0.2b: HUD recon + introHud.ts + shipScene Z consts + sequence beat controllers + an extensive live-preview gate [reload, beat-by-beat evals + screenshots, fixed the storm-warning HUD leak, skipIntro round-trip] + verify:all + docs). Prior M11->M13 campaign concluded + user-approved (~18.5M tokens / 69 cycles; chronicle archived to campaign-log-2026-06-18-m1-m13.md)." },
   "policy_notes": "ENRICH-NOT-CUT: the scope-cut list (docs/feature-escape-pod-intro.md) is a TRUE-TECHNICAL-WALL safety net ONLY, never a target, ALWAYS surfaced to the user before any cut; the spine + pod + descent + tutorial are NOT cuttable. Hero geometry/FX -> the procedural-modeler agent, iterated to a quality BAR (5-8 rounds new hero elements). Real first-person in-game-view visual gate (not an isolated rig). Anti-punt. Behind FEATURES.escapePodIntro (default off until shipped). No SAVE_VERSION bump unless unavoidable (D81; the introComplete marker is additive, legacy=true). New game -> the intro; old spawn -> dev-mode only. Key early-build decisions to lock in Phase 0: R1 save-marker, R2 world-loading-during-descent, R3 handoff seam, R4 state-machine contract + KCC-on-ship-floor, R5 scrap_machete-as-pry-tool (D261, additive), R6 entry point, R7 parachute-gag fallback, R10 accessibility/photosensitivity. See the feature doc's 'Pre-build review'.",
   "cycles": [
     {
@@ -69,6 +69,22 @@
       "ultracode": true,
       "commit": "eb38a1f",
       "spend_approx_tokens": 270000
+    },
+    {
+      "cycle": 4,
+      "date": "2026-06-28",
+      "focus": "Phase 0 T0.2b — the Beat 0-2 flow + HUD suppression (T0.2 ship section complete)",
+      "tier": "Phase 0 — greybox spine (escape-pod intro)",
+      "outcome": "SHIPPED",
+      "units": ["T0.2b — sequence.ts beat controllers: cockpit opens SEATED (look-only) at the window, dwells ~3s (dt-accumulated) → checkEngines (mode walk + diegetic prompt 'check engines — head to the engine bay') → crossing into the corridor (world-Z > SHIP_CORRIDOR_ENTER_Z) → corridor → reaching the dead-end (world-Z > SHIP_DEAD_END_Z) → enterPod (a T0.3 STUB with a placeholder cue). Z thresholds exported from shipScene.ts. NEW world/escapePodIntro/introHud.ts: setGameHudHidden (suppresses the game HUD by id during the intro — hud/hotbar/crosshair + the body-appended long-storm-indicator + dev-mode-badge) + showIntroPrompt/hideIntroPrompt (lazily-created centered diegetic prompt). tickCockpit re-hides the HUD after handoffToGame un-hid it (no flash); endEscapePodIntro restores the HUD + hides the prompt + disposes the ship."],
+      "verify": "verify:all PASS (tsc + placement 0/0 x5 + colliders 0/40; real exit code captured, not piped through tail).",
+      "visual": "appearance+flow-verified (greybox, routine bar) — full live-preview gate: cockpit(seated dwell)→checkEngines(prompt)→corridor→enterPod advances via the dwell timer + the 2 corridor Z-thresholds (tested by teleporting the capsule across them); HUD fully suppressed (caught + fixed the long-storm-indicator leaking into the intro); skipIntro restores the HUD + disposes the ship (scene-children 1551→1550 round-trip); 0 console errors. feel-pending = the Phase 0 milestone walk-test.",
+      "save": "no change (SAVE_VERSION stays 15).",
+      "decisions": ["(no new D-entry — execution of D269/D270; the beat flow + HUD suppression are documented in sequence.ts/introHud.ts)"],
+      "recon": "found the game HUD ids (main.ts inGameEls = hud/hotbar/crosshair) + the body-appended long-storm-indicator (hud.ts) + dev-mode-badge (main.ts) — no agent.",
+      "ultracode": true,
+      "commit": "PENDING",
+      "spend_approx_tokens": 280000
     }
   ]
 }

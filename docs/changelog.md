@@ -3,6 +3,16 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Escape-pod campaign C4 — 2026-06-28 — Phase 0 T0.2b: **the Beat 0-2 flow + HUD suppression** (T0.2 ship section COMPLETE) ✓ verify + visual pass
+
+`verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40) + a live-preview **visual gate** of the full flow: cockpit (seated dwell) → checkEngines (prompt) → corridor → enterPod, advancing on the dwell timer + the two corridor Z-thresholds; HUD fully suppressed; `skipIntro` restores it + disposes the ship; 0 console errors. Flag OFF → live game byte-unchanged.
+
+**T0.2b — the cockpit→corridor section now PLAYS as a sequence (still greybox):**
+- **Beat controllers** (`sequence.ts`) — `cockpit` opens **seated** (look-only) at the window, dwells ~3s, → `checkEngines` (mode `walk` + diegetic prompt "check engines — head to the engine bay") → crossing into the corridor (world-Z threshold) → `corridor` → reaching the dead-end (Z threshold) → `enterPod` (a T0.3 **stub** with a placeholder cue; exit via `__game.skipIntro()`). Triggers read the capsule world-Z (`SHIP_CORRIDOR_ENTER_Z`/`SHIP_DEAD_END_Z` exported from `shipScene.ts`).
+- **NEW `src/world/escapePodIntro/introHud.ts`** — the intro's thin HUD: `setGameHudHidden` (suppresses the game HUD by id during the intro) + `showIntroPrompt`/`hideIntroPrompt` (lazily-created centered diegetic prompt). HUD ids: `hud`/`hotbar`/`crosshair` + the body-appended `long-storm-indicator` + `dev-mode-badge` (caught the storm-warning leaking into the intro view + fixed it).
+- **`tickCockpit`** re-hides the HUD after `handoffToGame` un-hid it (no flash); **`endEscapePodIntro`** restores the HUD + hides the prompt + disposes the ship.
+- **Next:** T0.3 — the greybox DESCENT (eject → ship-explode → atmospheric fall) + the seated pod + the parachute-gag fallback (3 pulls → snap).
+
 ## Escape-pod campaign C3 — 2026-06-28 — Phase 0 T0.2a: **the greybox SHIP (walkable cockpit + corridor) + capsule placement + locomotion gating** ✓ verify + visual pass
 
 `verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40 — the intro's lazy colliders don't touch the POI gate) + a live-preview **visual gate**: the greybox space reads + is walkable from all 3 player reads (cockpit/window, corridor mouth, corridor interior); the capsule stands on the floor colliders (didn't fall through); 0 console errors. Flag OFF by default → live game byte-unchanged.

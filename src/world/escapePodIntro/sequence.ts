@@ -34,7 +34,14 @@
 
 import type { GameContext } from '../../GameContext.ts';
 import { FEATURES } from '../../config/features.ts';
-import { buildShipScene, disposeShipScene, getShipSpawn } from './shipScene.ts';
+import {
+  buildShipScene, disposeShipScene, getShipSpawn,
+  SHIP_CORRIDOR_ENTER_Z, SHIP_DEAD_END_Z,
+} from './shipScene.ts';
+import { setGameHudHidden, showIntroPrompt, hideIntroPrompt } from './introHud.ts';
+
+/** Seconds the cockpit opens SEATED (looking at the planet) before control + the cue. */
+const COCKPIT_DWELL = 3.0;
 
 /** The intro beats, in order (Beats 0-11 of the vision; `done` = handed off). */
 export type BeatId =
@@ -119,47 +126,89 @@ export function advanceBeat(ctx: GameContext): void {
   jumpToBeat(ctx, next);
 }
 
-/** End the intro + hand control back to the normal game. Tears down the greybox ship
- *  (T0.2). T0.4 will teleport the player to the desert spawn + mark `introComplete` in
- *  the save; for now this clears the flag + disposes the ship geometry. */
+/** End the intro + hand control back to the normal game. Restores the game HUD, hides
+ *  the beat prompt, tears down the greybox ship. T0.4 will teleport the player to the
+ *  desert spawn + mark `introComplete`; for now this clears the flag + cleans up. */
 export function endEscapePodIntro(ctx: GameContext): void {
   if (!ctx.intro) return;
   ctx.intro.active = false;
   ctx.intro.beat = 'done';
+  hideIntroPrompt();
+  setGameHudHidden(false);
   disposeShipScene(ctx);
 }
 
-/** Cockpit beat (T0.2a) — on first entry, build the greybox ship + drop the player
- *  capsule into the bridge facing the window, in WALK mode (so the space is walkable
- *  for the blockout). T0.2b adds the "check engines" prompt + the advance trigger. */
-function tickCockpit(ctx: GameContext): void {
+/** Cockpit beat (T0.2a/b) — on first entry, build the greybox ship, hide the game HUD,
+ *  drop the capsule into the bridge facing the window, SEATED (look-only). After a short
+ *  dwell looking at the planet, advance to checkEngines (which hands control + cues the
+ *  player aft). */
+function tickCockpit(ctx: GameContext, dt: number): void {
   const intro = ctx.intro;
-  if (!intro || intro.scratch.shipBuilt) return;
-  buildShipScene(ctx);
-  const spawn = getShipSpawn(ctx);
-  const pb = ctx.player.body;
-  pb.body.setTranslation({ x: spawn.x, y: spawn.y, z: spawn.z }, true);
-  ctx.player.velocityY = 0;
-  ctx.player.cameraSnapNextFrame = true;
-  ctx.three.camera.position.set(spawn.x, spawn.y + ctx.player.eyeOffset, spawn.z);
-  ctx.three.camera.rotation.set(0, 0, 0);   // face −Z → straight out the window
-  intro.mode = 'walk';                        // T0.2a: walkable for the blockout (T0.2b → seated open)
-  intro.scratch.shipBuilt = true;
+  if (!intro) return;
+  if (!intro.scratch.shipBuilt) {
+    buildShipScene(ctx);
+    setGameHudHidden(true);           // re-hide after handoffToGame un-hid the in-game HUD
+    const spawn = getShipSpawn(ctx);
+    const pb = ctx.player.body;
+    pb.body.setTranslation({ x: spawn.x, y: spawn.y, z: spawn.z }, true);
+    ctx.player.velocityY = 0;
+    ctx.player.cameraSnapNextFrame = true;
+    ctx.three.camera.position.set(spawn.x, spawn.y + ctx.player.eyeOffset, spawn.z);
+    ctx.three.camera.rotation.set(0, 0, 0);   // face −Z → straight out the window
+    intro.mode = 'seated';                      // open seated, looking at the planet
+    intro.scratch.shipBuilt = true;
+    intro.scratch.dwell = 0;
+  }
+  intro.scratch.dwell = (intro.scratch.dwell as number) + dt;
+  if ((intro.scratch.dwell as number) > COCKPIT_DWELL) advanceBeat(ctx);   // → checkEngines
+}
+
+/** checkEngines beat — hand control (walk), cue the player to the engine bay, advance
+ *  once they step into the corridor. */
+function tickCheckEngines(ctx: GameContext): void {
+  const intro = ctx.intro;
+  if (!intro) return;
+  if (!intro.scratch.init) {
+    intro.mode = 'walk';
+    showIntroPrompt('Check engines — head to the engine bay');
+    intro.scratch.init = true;
+  }
+  if (ctx.player.body.body.translation().z > SHIP_CORRIDOR_ENTER_Z) advanceBeat(ctx);   // → corridor
+}
+
+/** corridor beat — walk aft to the engine bay (the dead-end). Reaching it triggers the
+ *  disaster (T0.3); for greybox, advance to enterPod. */
+function tickCorridor(ctx: GameContext): void {
+  const intro = ctx.intro;
+  if (!intro) return;
+  if (!intro.scratch.init) {
+    hideIntroPrompt();
+    intro.scratch.init = true;
+  }
+  if (ctx.player.body.body.translation().z > SHIP_DEAD_END_Z) advanceBeat(ctx);   // → enterPod
+}
+
+/** enterPod beat — T0.2b STUB. The disaster + the escape pod + the eject are T0.3; for
+ *  now the greybox flow holds here with a placeholder cue (exit via `__game.skipIntro()`). */
+function tickEnterPod(ctx: GameContext): void {
+  const intro = ctx.intro;
+  if (!intro || intro.scratch.init) return;
+  showIntroPrompt('[ the ship lurches — escape pod: T0.3 ]');
+  intro.scratch.init = true;
 }
 
 /** Per-frame intro driver — inserted into the main tick BEFORE updatePlayer. No-op
- *  unless the intro is active. T0.0: the beat-dispatch skeleton; the per-beat
- *  controllers (camera/locomotion/FX + the advance triggers) land in T0.2+. */
-export function updateEscapePodIntro(ctx: GameContext, _dt: number): void {
+ *  unless the intro is active. Dispatches the current beat's controller; each calls
+ *  advanceBeat()/jumpToBeat() on its trigger. Beats 3-11 land in T0.3+. */
+export function updateEscapePodIntro(ctx: GameContext, dt: number): void {
   const intro = ctx.intro;
   if (!intro || !intro.active) return;
   switch (intro.beat) {
-    case 'cockpit':
-      tickCockpit(ctx);
-      break;
-    // T0.2b+ — each remaining case drives its beat + calls advanceBeat()/jumpToBeat()
-    // on its trigger (checkEngines walk-out, corridor end → disaster, descent, …).
-    default:
-      break;
+    case 'cockpit': tickCockpit(ctx, dt); break;
+    case 'checkEngines': tickCheckEngines(ctx); break;
+    case 'corridor': tickCorridor(ctx); break;
+    case 'enterPod': tickEnterPod(ctx); break;
+    // Beats 3-11 (shipExplode, descent, parachute, impact, wake, stepOut, …) land in T0.3+.
+    default: break;
   }
 }
