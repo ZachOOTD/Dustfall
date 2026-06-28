@@ -147,7 +147,7 @@
       "save": "no change (SAVE_VERSION stays 15).",
       "decisions": ["(no new D-entry — execution. Tutorial model: handoff-then-hints [the wreck + a toast in normal gameplay], NOT an intro beat — the hero craft+salvage is Phase 4.)"],
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "bfddd70",
       "spend_approx_tokens": 250000
     }
   ]

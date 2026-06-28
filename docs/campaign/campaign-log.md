@@ -105,7 +105,7 @@ is the **Phase 0 milestone** (the greybox-spine walk-test).
 - **Shipped:** ① **`podScene.placeCrashedPodWreck`** — a greybox crashed pod (tilted, half-buried box + a dark "blown hatch" salvage face + a rough AABB collider) at the desert spawn; a **persistent world object** (NOT disposed by `endEscapePodIntro`); idempotent + `removeCrashedPodWreck`. ② **`stepOut`** now places the wreck ~4m from `returnPos` + `camera.lookAt(wreck)` (wake beside your own pod) + a tutorial-scaffold hint toast ("Salvage your pod — craft a machete to pry it open"; the real craft→pry→chute-pop is Phase 4). ③ **`smokeTestIntro` + `__game.smokeIntro()`** — force every beat + tick it, confirming the sequence is wired.
 - **Verify:** `verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40). **Visual iteration:** live-preview — `__game.smokeIntro()` → **`{ok:true, beats:10}`**; the handoff places the crashed pod + the player wakes looking at it (greybox box in the dunes), HUD restored; 0 console errors. **THE GREYBOX SPINE IS COMPLETE end-to-end.**
 - **Spend:** ~250K; campaign total ~2.13M; cycle **8/150**.
-- **Commit:** `PENDING`.
+- **Commit:** `bfddd70`.
 
 ---
 
