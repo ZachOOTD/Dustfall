@@ -99,3 +99,17 @@ is the **Phase 0 milestone** (the greybox-spine walk-test).
 - **Spend:** ~260K (Phase-0-DoD + spawn recon + setIntroBlack + the 3 handoff beats + the live gate + verify:all + docs); campaign total ~1.88M; cycle **7/150**.
 - **Commit:** `bee75d2`.
 - **Next (cycle 8):** **Phase 0 T0.4b** (LAST Phase 0 unit) — the pod-as-spawn-wreck seam (a greybox crashed pod at the desert spawn, persists into the real game) + the craft+salvage tutorial SCAFFOLD + the `feature-escape-pod-intro` smoke check → **COMPLETES Phase 0 → ⏸ milestone PAUSE** (the user's first full greybox walk-test → `/campaign-approve`). **Verdict: CONTINUE** — Phase 0 not complete (T0.4b remains). `consecutive_no_progress` stays 0 (SHIPPED).
+
+## Cycle 8 — Phase 0 T0.4b: pod-as-spawn-wreck + tutorial scaffold + smoke → ⏸ PHASE 0 COMPLETE (2026-06-28) — SHIPPED → MILESTONE PAUSE
+- **Planned:** the final Phase 0 unit — the pod-as-spawn-wreck seam + the tutorial scaffold + the smoke check (per the Phase 0 DoD).
+- **Shipped:** ① **`podScene.placeCrashedPodWreck`** — a greybox crashed pod (tilted, half-buried box + a dark "blown hatch" salvage face + a rough AABB collider) at the desert spawn; a **persistent world object** (NOT disposed by `endEscapePodIntro`); idempotent + `removeCrashedPodWreck`. ② **`stepOut`** now places the wreck ~4m from `returnPos` + `camera.lookAt(wreck)` (wake beside your own pod) + a tutorial-scaffold hint toast ("Salvage your pod — craft a machete to pry it open"; the real craft→pry→chute-pop is Phase 4). ③ **`smokeTestIntro` + `__game.smokeIntro()`** — force every beat + tick it, confirming the sequence is wired.
+- **Verify:** `verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40). **Visual iteration:** live-preview — `__game.smokeIntro()` → **`{ok:true, beats:10}`**; the handoff places the crashed pod + the player wakes looking at it (greybox box in the dunes), HUD restored; 0 console errors. **THE GREYBOX SPINE IS COMPLETE end-to-end.**
+- **Spend:** ~250K; campaign total ~2.13M; cycle **8/150**.
+- **Commit:** `PENDING`.
+
+---
+
+## ⏸ PHASE 0 MILESTONE — GREYBOX SPINE COMPLETE — AWAITING USER WALK-TEST (2026-06-28)
+**The escape-pod intro's greybox spine plays END-TO-END** (C1-C8): new game → cockpit (seated, planet out the window) → "check engines" → corridor → pod → eject → ship explodes → descent (planet swells + rumble) → **the parachute gag** (3 pulls → snap) → impact → fade-to-black → wake → step into the dawn desert beside your crashed pod + a "craft a machete" hint. All behind `FEATURES.escapePodIntro` (default off → live game byte-unchanged); `verify:all` + a live/visual gate every cycle; no SAVE_VERSION bump.
+
+**▶ USER ACTION:** walk-test the flow + pacing (it's GREYBOX — judge FLOW, not beauty). Play via `__game.startIntro()` (console; `jumpToBeat`/`skipIntro`/`smokeIntro` to navigate) or set `FEATURES.escapePodIntro = true` + new game. Feedback → `docs/campaign/steering.md` or inline. Then **`/campaign-approve`** to release **Phase 1 — the HERO pod** (procedural-modeler; industrial modular box; replaces the greybox wreck). **Verdict: STOP — `milestone-review`** (`status: paused`, `awaiting_approval: true`). The loop will NOT continue until approved.

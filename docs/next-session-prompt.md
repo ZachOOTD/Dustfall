@@ -1,48 +1,58 @@
-# ▶ RESUME — Escape-pod intro · Phase 0 · T0.4b (pod-as-spawn-wreck + tutorial scaffold + smoke) — COMPLETES PHASE 0 — `campaign/escape-pod-intro`
+# ⏸ PAUSED — Escape-pod intro · PHASE 0 MILESTONE (greybox spine COMPLETE) — `campaign/escape-pod-intro`
 
-**Cycle 8 of the escape-pod-intro campaign.** Phase 0 (the greybox spine). **T0.4a (impact → wake →
-desert handoff) COMPLETE — the spine plays end-to-end into the desert.** T0.4b is the **LAST Phase 0
-unit**: after it, the cycle **PAUSES at the Phase 0 milestone** for the user's walk-test. Boot from
-`docs/campaign/campaign-state.json` + `docs/roadmap.md` (NOT chat memory).
+**The campaign is PAUSED at the Phase 0 milestone** (`status: paused`, `awaiting_approval: true`,
+`stop_reasons: ["milestone-review"]`). The greybox spine plays end-to-end. **The user walk-tests, then
+`/campaign-approve` releases Phase 1.** Do NOT auto-continue the loop until approved.
 
-## Read first
-1. `CLAUDE.md` (auto-loaded) — "Where we are now"
-2. `docs/campaign/campaign-state.json` — cycle 7/150, current_tier (T0.4b)
-3. `docs/roadmap.md` Phase 0 DoD (line ~142): "T0.4 … the pod-as-spawn-wreck seam → tutorial scaffold · the `feature-escape-pod-intro` smoke check." + the `### Milestone: escape-pod Phase 0` marker (~line 143).
-4. `docs/feature-escape-pod-intro.md` — the vision (Beat 10 craft+salvage tutorial, Beat 11 chute-pop payoff; D261 machete-as-pry-tool)
-5. `src/world/escapePodIntro/sequence.ts` (`tickStepOut`, `endEscapePodIntro`, `returnPos`) + `podScene.ts` (the greybox pod pattern)
+## 🎮 FOR THE USER — walk-test the greybox intro (Phase 0)
+The whole sequence is wired in **placeholder greybox art** — judge the **FLOW + PACING**, not the looks
+(the hero art is Phases 1-5). Two ways to play it:
+- **In-console (fastest):** open the game, then `__game.startIntro()` (force-starts even with the flag off).
+  Navigate with `__game.jumpToBeat('<beat>')` (`cockpit`, `checkEngines`, `corridor`, `enterPod`,
+  `shipExplode`, `descent`, `parachute`, `impact`, `wake`, `stepOut`), `__game.skipIntro()` to bail to the
+  desert, `__game.smokeIntro()` to auto-run the whole chain.
+- **Real flow:** set `FEATURES.escapePodIntro = true` (`src/config/features.ts`) → start a NEW game → it
+  plays the intro, then hands you into the desert. (Dev Mode + Continue keep the normal spawn.)
 
-## What's built (T0.0 → T0.4a)
-- The WHOLE greybox spine plays: new game → cockpit → corridor → pod → eject → ship-explode → descent → chute-gag → impact → blackout → wake → **stepOut teleports to the desert spawn, normal game resumes**.
-- `stepOut` currently calls `endEscapePodIntro` directly (ends at the handoff). HUD/locomotion/survival restored; ship+pod disposed; black cleared; `introComplete` derives true.
-- Dev hooks: `__game.startIntro()`/`skipIntro()`/`jumpToBeat(beat)`. `returnPos` = the captured desert spawn.
+**The beats:** seated cockpit (planet out the window) → "check engines" → walk the corridor → into the pod
+→ pull eject → ship explodes (flash) → the fall (planet swells, rumble) → **the parachute gag** (pull 3×,
+the lever snaps off) → crash + fade to black → wake → step into the dawn desert beside your crashed pod +
+a "craft a machete to pry it" hint.
 
-## Cycle 8 focus — T0.4b: pod-as-spawn-wreck + tutorial scaffold + smoke check
-Finish Phase 0. **Greybox scaffold, NOT the hero tutorial** (the real craft→pry→chute-pop is Phase 4 enrichment).
-- **Pod-as-spawn-wreck seam** — on `stepOut`/handoff, place a **greybox crashed pod** at the desert spawn (near `returnPos`, half-buried/tilted) so the player wakes beside their own pod (the vision: "salvage your own pod"). Reuse the `podScene` box pattern, but this one is a WORLD object that persists into the real game (added to the scene at the spawn, NOT disposed by `endEscapePodIntro`). Keep it minimal greybox — the hero pod exterior is Phase 1.
-- **Tutorial scaffold (Beats 10-11)** — the stepOut → tutorial → payoff flow. Greybox: after the handoff, show a diegetic hint ("scavenge scrap → craft a machete → pry the pod panel") — wire it as a **scaffold** (the hint + a placeholder salvage point on the pod), NOT the full crafting integration (that's Phase 4 + the real D261 machete-as-pry-tool). The chute-pop payoff (the parachute comically deploys from the crashed pod) can be a greybox stub/cue. **Decide:** keep this light — the milestone validates FLOW, and the real tutorial is a hero pass later. If wiring real crafting is more than a scaffold, keep it a scaffold + note the enrichment.
-- **`feature-escape-pod-intro` smoke check** — add a smoke verification that the whole sequence is wired: either a `verification/checks/feature-escape-pod-intro.ts` (if the harness supports it — check `scripts/`/`verification/`) OR a documented `__game`-driven smoke (startIntro → jumpToBeat through all beats → reaches `done` + lands in the desert, no throw). Wire it into `verify:all` if cheap; else document the manual smoke in the changelog.
-- **stepOut wiring** — if you add a tutorial beat, change `tickStepOut` to advance to `tutorial` (place the wreck + restore play but keep `intro` active for the tutorial beat) rather than ending immediately; the intro ends after `payoff`. OR keep the handoff-ends-the-intro model and run the tutorial as normal gameplay with hints. **Pick the simpler model that matches the vision** (the tutorial IS the first real gameplay, so handoff-then-hints is likely cleaner than keeping `intro.active`).
+**What to give feedback on:** the order/pacing of beats, how long each holds, the gag's timing, the
+seated-vs-walk transitions, anything that drags or rushes. Drop notes in `docs/campaign/steering.md` (the
+loop reads it next cycle) or just say them. Known greybox limitations (NOT bugs): box-art everything, the
+window shows the desert sky (no space backdrop yet), no audio, the manual 3-pull timing is rough, the
+crashed pod is a plain box. All of that is the Phase 1-5 hero work.
 
-### Acceptance (T0.4b → Phase 0 complete)
-- Full play: new game → … → wake → desert, **and the crashed pod is there beside you** with a "craft a machete / pry the pod" hint. The whole sequence is smoke-verified (all beats reachable → done). `verify:all` green; flag OFF → live game byte-unchanged; no SAVE_VERSION bump. `skipIntro` still lands cleanly.
-
-## ⏸ AFTER THIS CYCLE: PHASE 0 MILESTONE PAUSE
-When `/session-end` moves the Phase 0 tiers to Shipped (all tiers before `### Milestone: escape-pod Phase 0`),
-the cycle sets `status: paused`, `awaiting_approval: true`, `stop_reasons: ["milestone-review"]` and **STOPS the
-loop**. Surface to the user: **play the whole greybox intro** (new game with the flag on, or `__game.startIntro()`)
-— feel the FLOW + PACING (not beauty; it's greybox). Then `/campaign-approve` to release Phase 1 (the hero pod).
-Do NOT schedule another wakeup on the milestone-pause verdict.
+## ▶ AFTER `/campaign-approve` → Phase 1 — The pod (hero)
+The first HERO-ART phase. Boot from `docs/campaign/campaign-state.json` + `docs/roadmap.md`.
+- **T1.1 — pod exterior** → **delegate to the `procedural-modeler` agent**: the chosen identity = **industrial
+  modular box** (NOT an ODST clone — see `docs/research/escape-pod-design-variety.md`). Render the **real
+  first-person in-game view** (the player walks up to it half-buried in the dunes — the C60/C63 "real
+  placement, real angles" gate); iterate build→shoot→critique 5-8 rounds to a quality BAR. Replace the
+  greybox `placeCrashedPodWreck` box with the hero exterior. **Half-buried-in-sand gate** (per the
+  `verify-visual-multi-angle` memory + D-precedent: shoot from the player's eye + into any opening, not one
+  framed hero shot).
+- **T1.2 — pod interior** (the panel, the chunky parachute lever, the door-blow button, the viewport, a warm
+  cabin) — replaces the greybox `podScene` interior; the descent/eject/gag beats re-point at the hero geometry.
+- **T1.3 — seated-FP camera + viewport framing** (the descent showpiece in Phase 2 frames through this).
+- **Milestone: Phase 1 — pod hero COMPLETE → USER WALK-TEST (pod in + out) → `/campaign-approve`.**
 
 ## Campaign rules
-ENRICH-NOT-CUT · greybox now / hero art in Phases 1-5 (procedural-modeler) · anti-punt · behind the flag ·
-no save bump · `verify:all` (capture the real exit) + a live check · commit each cycle · checkpoint = per phase.
+ENRICH-NOT-CUT · hero geometry → procedural-modeler + the real FP-view gate (5-8 rounds) · anti-punt · behind
+the flag · no save bump · `verify:all` (capture the real exit — don't pipe through `tail`) + the live/visual
+gate each cycle · commit each cycle · checkpoint = per phase.
 
-## Footguns
-- Keep the flag OFF by default — live game byte-identical when the intro isn't active.
-- The pod-as-spawn-wreck PERSISTS into the real game (a world object) — do NOT dispose it in `endEscapePodIntro` (that disposes the intro's offset ship/pod). It's a separate spawn-side object.
-- Don't over-build the tutorial — it's a SCAFFOLD for the Phase 0 flow walk-test; the hero craft+salvage is Phase 4.
-- `verify:all`: capture the real exit (don't pipe through `tail`).
+## State of the code (Phase 0)
+- `src/world/escapePodIntro/` — `sequence.ts` (the beat state machine + all 10 beat controllers + `smokeTestIntro`),
+  `shipScene.ts` (greybox ship), `podScene.ts` (greybox pod + `setDescentProgress` + `placeCrashedPodWreck`),
+  `introHud.ts` (`setGameHudHidden`/`showIntroPrompt`/`setIntroBlack`).
+- Gating: `ctx.intro.active` + `ctx.intro.mode` (walk/seated/scripted); `introActive(ctx)` guards (controller
+  locomotion, survival drain). `returnPos` = the captured desert spawn. `introComplete` save marker (no version bump).
+- Dev hooks: `__game.startIntro/skipIntro/jumpToBeat/smokeIntro`. Decisions: **D269** (architecture), **D270** (wiring).
 
-## Verify
-`npm run verify:all` (real exit) + a live preview: full `startIntro` → play/jump to the desert → confirm the crashed pod is at the spawn + the tutorial hint shows + the sequence smoke-completes + `skipIntro` clean + 0 console errors. Then `/session-end` → the Phase 0 milestone pause.
+## Footguns (for Phase 1)
+- The hero pod exterior REPLACES the greybox `placeCrashedPodWreck` box — keep it a persistent world object (don't dispose on handoff).
+- Hero modeling = the procedural-modeler agent + the REAL in-game view (not an isolated studio rig) — re-apply the C60/C63 lesson.
+- Keep `FEATURES.escapePodIntro` OFF by default until the whole feature ships.

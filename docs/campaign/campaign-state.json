@@ -1,12 +1,12 @@
 {
-  "status": "active",
+  "status": "paused",
   "campaign": "escape-pod-intro",
   "started": "2026-06-28",
   "branch": "campaign/escape-pod-intro",
-  "cycles_completed": 7,
-  "current_tier": "Phase 0 — playable greybox spine. ✅ T0.0 (C1) framework. ✅ T0.1 (C2) boot/new-game/save wiring. ✅ T0.2 (C3+C4) greybox SHIP + Beats 0-2. ✅ T0.3 (C5+C6) greybox POD + DESCENT + chute GAG (Beats 3-7). ✅ T0.4a DONE (C7) — impact → wake → THE DESERT HANDOFF (Beats 7-9): impact (flash+max trauma → introHud.setIntroBlack fade-to-black + hold) → wake (fade from black + hold) → stepOut (teleport the capsule to returnPos [the real new-game spawn, captured in startEscapePodIntro before the intro moves the player] + endEscapePodIntro restores HUD/locomotion/survival + disposes ship+pod + clears the black). NEW introHud.setIntroBlack overlay; returnPos added to IntroState; introComplete derives true post-handoff (beat='done'). verify:all PASS (covers final code — all edits preceded the run) + live gate (handoff lands the player at the desert spawn -46.2,10.7,11.3, HUD back, playing, NOT stuck at altitude; black cleared; 0 console errors). THE GREYBOX INTRO NOW PLAYS END-TO-END: new game → cockpit → corridor → pod → eject → ship-explode → descent → chute-gag → impact → blackout → wake → desert. NEXT unit = T0.4b (LAST Phase 0 unit): the pod-as-spawn-wreck seam (place a greybox crashed pod at the desert spawn, persists into the real game — NOT disposed by endEscapePodIntro) + the craft+salvage tutorial SCAFFOLD (hint + placeholder salvage; real tutorial = Phase 4) + the feature-escape-pod-intro smoke check. COMPLETES Phase 0 → milestone PAUSE (the user's first full greybox walk-test → /campaign-approve). Plan: docs/feature-escape-pod-intro.md. ENRICH-NOT-CUT.",
-  "awaiting_approval": false,
-  "stop_reasons": [],
+  "cycles_completed": 8,
+  "current_tier": "⏸ PHASE 0 MILESTONE — greybox spine COMPLETE (C1-C8), awaiting the user's walk-test → /campaign-approve releases Phase 1. ✅ T0.0 framework (D269) · T0.1 boot/new-game/save wiring + dev hooks (D270) · T0.2 greybox ship + Beats 0-2 + HUD suppression · T0.3 greybox pod + descent + parachute gag · T0.4 wake → desert handoff + pod-as-spawn-wreck + tutorial scaffold + smoke. The greybox intro plays END-TO-END: new game → cockpit → corridor → pod → eject → ship-explode → descent → chute-gag → impact → blackout → wake → desert + crashed pod + salvage hint. All cycles verify:all PASS + live/visual gates; flag OFF → live game byte-unchanged; no SAVE_VERSION bump. NEXT (after approval) = Phase 1 (HERO pod): T1.1 exterior via the procedural-modeler (industrial modular box, half-buried gate, real FP-view) replacing the greybox placeCrashedPodWreck · T1.2 interior · T1.3 seated-FP camera. Plan: docs/feature-escape-pod-intro.md. ENRICH-NOT-CUT.",
+  "awaiting_approval": true,
+  "stop_reasons": ["milestone-review"],
   "plan_doc": "docs/feature-escape-pod-intro.md",
   "plan_review_note": "The plan was authored (feature-slice) + critically reviewed + the review fixes folded in + USER-APPROVED in-conversation 2026-06-28 ('proceed with your recommendation'). So NO plan-review pause — cycle 1 (Phase 0 T0.0) is released. The next pause is the Phase 0 milestone (the greybox-spine walk-test).",
   "self_author": "propose",
@@ -18,7 +18,7 @@
   "circuit_breaker_n": 3,
   "consecutive_no_progress": 0,
   "ceiling": { "max_cycles": 150, "total": null, "per_cycle": null, "unit": "tokens" },
-  "spend": { "total": 1880000, "note": "escape-pod intro campaign, started 2026-06-28. C1 ~280K. C2 ~210K. C3 ~270K. C4 ~280K. C5 ~290K. C6 ~290K. C7 ~260K (T0.4a: roadmap Phase-0-DoD + spawn-position recon + introHud.setIntroBlack + IntroState.returnPos + impact/wake/stepOut handoff beats + live gate [returnPos capture, handoff lands at desert spawn, black-clear] + verify:all [single run — all edits preceded it] + docs). Prior M11->M13 campaign concluded + user-approved (~18.5M tokens / 69 cycles; chronicle archived to campaign-log-2026-06-18-m1-m13.md)." },
+  "spend": { "total": 2130000, "note": "escape-pod intro campaign, started 2026-06-28. PHASE 0 (greybox spine) = C1-C8, ~2.13M total: C1 280K (T0.0 framework) · C2 210K (T0.1 wiring) · C3 270K (T0.2a ship) · C4 280K (T0.2b flow+HUD) · C5 290K (T0.3a pod+eject) · C6 290K (T0.3b descent+gag) · C7 260K (T0.4a handoff) · C8 250K (T0.4b pod-wreck+tutorial-scaffold+smoke: placeCrashedPodWreck + stepOut wreck/lookAt/hint + smokeTestIntro + __game.smokeIntro + live gate [smoke ok 10 beats, wake-beside-pod] + verify:all + the milestone-pause doc suite). Prior M11->M13 campaign concluded + user-approved (~18.5M tokens / 69 cycles; chronicle archived to campaign-log-2026-06-18-m1-m13.md)." },
   "policy_notes": "ENRICH-NOT-CUT: the scope-cut list (docs/feature-escape-pod-intro.md) is a TRUE-TECHNICAL-WALL safety net ONLY, never a target, ALWAYS surfaced to the user before any cut; the spine + pod + descent + tutorial are NOT cuttable. Hero geometry/FX -> the procedural-modeler agent, iterated to a quality BAR (5-8 rounds new hero elements). Real first-person in-game-view visual gate (not an isolated rig). Anti-punt. Behind FEATURES.escapePodIntro (default off until shipped). No SAVE_VERSION bump unless unavoidable (D81; the introComplete marker is additive, legacy=true). New game -> the intro; old spawn -> dev-mode only. Key early-build decisions to lock in Phase 0: R1 save-marker, R2 world-loading-during-descent, R3 handoff seam, R4 state-machine contract + KCC-on-ship-floor, R5 scrap_machete-as-pry-tool (D261, additive), R6 entry point, R7 parachute-gag fallback, R10 accessibility/photosensitivity. See the feature doc's 'Pre-build review'.",
   "cycles": [
     {
@@ -133,6 +133,22 @@
       "ultracode": true,
       "commit": "bee75d2",
       "spend_approx_tokens": 260000
+    },
+    {
+      "cycle": 8,
+      "date": "2026-06-28",
+      "focus": "Phase 0 T0.4b — pod-as-spawn-wreck + tutorial scaffold + smoke (COMPLETES PHASE 0)",
+      "tier": "Phase 0 — greybox spine (escape-pod intro) — COMPLETE",
+      "outcome": "SHIPPED",
+      "milestone": "escape-pod Phase 0 — greybox spine COMPLETE",
+      "units": ["T0.4b — podScene.placeCrashedPodWreck (greybox crashed pod at the desert spawn: tilted/half-buried box + a dark 'blown hatch' salvage face + rough AABB collider; a PERSISTENT world object, NOT disposed by endEscapePodIntro; idempotent + removeCrashedPodWreck). stepOut now places the wreck ~4m from returnPos + camera.lookAt(wreck) (wake beside your own pod) + ctx.ui.showToast tutorial hint ('craft a machete to pry it open'; real craft→pry→chute-pop = Phase 4). smokeTestIntro(ctx) + __game.smokeIntro() — programmatically force every beat + tick it, confirming the whole sequence is wired."],
+      "verify": "verify:all PASS (tsc + placement 0/0 x5 + colliders 0/40; single run covers final code). Live gate: __game.smokeIntro() → {ok:true, beats:10}; the handoff places the crashed pod + the player wakes looking at it; HUD restored; 0 console errors.",
+      "visual": "appearance+flow-verified (greybox, routine bar) — the desert handoff lands the player beside the greybox crashed pod (tilted box in the dunes), HUD back, playing; the smoke confirms all 10 beats tick without throwing. THE GREYBOX SPINE IS COMPLETE end-to-end. feel-pending = the Phase 0 WALK-TEST (this milestone pause).",
+      "save": "no change (SAVE_VERSION stays 15).",
+      "decisions": ["(no new D-entry — execution. Tutorial model: handoff-then-hints [the wreck + a toast in normal gameplay], NOT an intro beat — the hero craft+salvage is Phase 4.)"],
+      "ultracode": true,
+      "commit": "PENDING",
+      "spend_approx_tokens": 250000
     }
   ]
 }

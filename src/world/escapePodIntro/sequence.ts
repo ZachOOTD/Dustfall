@@ -38,7 +38,7 @@ import {
   buildShipScene, disposeShipScene, getShipSpawn,
   SHIP_CORRIDOR_ENTER_Z, SHIP_DEAD_END_Z,
 } from './shipScene.ts';
-import { buildPodScene, disposePodScene, getPodSpawn, setDescentProgress } from './podScene.ts';
+import { buildPodScene, disposePodScene, getPodSpawn, setDescentProgress, placeCrashedPodWreck } from './podScene.ts';
 import { setGameHudHidden, showIntroPrompt, hideIntroPrompt, setIntroBlack } from './introHud.ts';
 import { flashScreen } from '../../fx/screenFlash.ts';
 import { addTrauma } from '../../fx/cameraShake.ts';
@@ -380,7 +380,14 @@ function tickStepOut(ctx: GameContext): void {
   ctx.player.velocityY = 0;
   ctx.player.cameraSnapNextFrame = true;
   ctx.three.camera.position.set(rp.x, rp.y + ctx.player.eyeOffset, rp.z);
+  // T0.4b — place the crashed pod a few metres away + wake looking at it (the "salvage your
+  // own pod" seam). The wreck PERSISTS into the real game (endEscapePodIntro won't dispose it).
+  const wx = rp.x + 4, wz = rp.z + 4;
+  placeCrashedPodWreck(ctx, wx, wz);
+  ctx.three.camera.lookAt(wx, ctx.terrain.heightAt(wx, wz) + 1, wz);
   endEscapePodIntro(ctx);   // hand control back — the desert game runs from here
+  // T0.4b tutorial scaffold — the first-gameplay hint (real craft→pry→chute-pop is Phase 4).
+  ctx.ui.showToast('Salvage your pod — craft a machete to pry it open', { kind: 'discovery' });
 }
 
 /** Per-frame intro driver — inserted into the main tick BEFORE updatePlayer. No-op
@@ -400,7 +407,31 @@ export function updateEscapePodIntro(ctx: GameContext, dt: number): void {
     case 'impact': tickImpact(ctx, dt); break;
     case 'wake': tickWake(ctx, dt); break;
     case 'stepOut': tickStepOut(ctx); break;
-    // Beats 10-11 (tutorial, payoff) land in T0.4b+ (stepOut currently ends the intro).
+    // The tutorial (Beats 10-11: craft+salvage + chute-pop) runs as normal gameplay AFTER the
+    // handoff (the wreck + the hint from stepOut), not as an intro beat — the hero pass is Phase 4.
     default: break;
+  }
+}
+
+/** Dev smoke (T0.4b) — programmatically force every beat + tick it, confirming the whole
+ *  sequence is wired (each controller ticks without throwing; the chain reaches the desert
+ *  handoff). Returns {ok, beats, error?}. Exposed via `__game.smokeIntro()`. Leaves the game
+ *  in the post-handoff state (a greybox crashed wreck at the spawn). */
+export function smokeTestIntro(ctx: GameContext): { ok: boolean; beats: number; error?: string } {
+  let beats = 0;
+  try {
+    startEscapePodIntro(ctx, true);
+    for (const beat of BEAT_ORDER) {
+      if (beat === 'done') break;
+      if (!introActive(ctx)) break;          // stepOut ends the intro mid-chain
+      jumpToBeat(ctx, beat);
+      for (let i = 0; i < 3; i++) updateEscapePodIntro(ctx, 0.05);
+      beats++;
+    }
+    if (introActive(ctx)) endEscapePodIntro(ctx);
+    return { ok: true, beats };
+  } catch (e) {
+    if (introActive(ctx)) endEscapePodIntro(ctx);
+    return { ok: false, beats, error: e instanceof Error ? e.message : String(e) };
   }
 }

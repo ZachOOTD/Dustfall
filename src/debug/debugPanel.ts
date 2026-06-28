@@ -19,7 +19,7 @@ import { spawnWormCrossing, updateWormHorizonCrossing } from '../world/wormHoriz
 import { fireSignalFlare, advanceSignalFlares, activeSignalFlareCount } from '../world/signalFlare.ts';   // M6 (C37) — __game.fireSignalFlare
 import { damageVulture } from '../enemies/vulture.ts';
 import { applyLungePose, applyMeshTransform } from '../enemies/sandWorm.ts';   // M12 ⓖ (C66) — __game.poseLunge (dive render)
-import { startEscapePodIntro, endEscapePodIntro, jumpToBeat as jumpToIntroBeat, type BeatId } from '../world/escapePodIntro/sequence.ts';   // escape-pod intro (T0.1) — __game.startIntro/skipIntro/jumpToBeat
+import { startEscapePodIntro, endEscapePodIntro, jumpToBeat as jumpToIntroBeat, smokeTestIntro, type BeatId } from '../world/escapePodIntro/sequence.ts';   // escape-pod intro — __game.startIntro/skipIntro/jumpToBeat/smokeIntro
 import { makeLatheHull, fuselageProfile, makeFormerRings, makeBreach, makeSandMound } from '../world/wreckForms.ts';
 import { createRustedHullMaterial, HULL_WEATHERING_ACAY } from '../world/hullMaterial.ts';
 import { placeProcgenComposite, type ProcgenWreckClass } from '../world/procgenWreck.ts';
@@ -54,6 +54,8 @@ interface DebugApi {
   skipIntro: () => void;
   /** Escape-pod intro (T0.1) — jump straight to a named beat (cockpit, corridor, descent, …). */
   jumpToBeat: (beat: BeatId) => void;
+  /** Escape-pod intro (T0.4b) — smoke the whole sequence (force every beat, confirm no throw). */
+  smokeIntro: () => { ok: boolean; beats: number; error?: string };
   setStats: (s: {
     thirst?: number;
     temperature?: number;
@@ -258,6 +260,7 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
     startIntro: () => startEscapePodIntro(ctx, true),
     skipIntro: () => endEscapePodIntro(ctx),
     jumpToBeat: (beat) => jumpToIntroBeat(ctx, beat),
+    smokeIntro: () => smokeTestIntro(ctx),
     sunInfo: () => ({
       exposure: ctx.player.sunExposure01,
       occluders: getSunOccluders().length,

@@ -127,3 +127,56 @@ export function disposePodScene(ctx: GameContext): void {
   for (const body of podBodies) ctx.physics.world.removeRigidBody(body);
   podBodies.length = 0;
 }
+
+// ─── The crashed pod as a desert SPAWN WRECK (T0.4b) ──────────────────────────
+// Distinct from the intro's offset flying pod: this is the wreck the player wakes beside
+// in the real desert ("salvage your own pod"). A WORLD object that PERSISTS into gameplay
+// (NOT disposed by endEscapePodIntro). Greybox; the hero half-buried exterior is Phase 1.
+
+let crashedWreck: THREE.Group | null = null;
+let crashedWreckBody: RAPIER.RigidBody | null = null;
+
+/** Remove the crashed-pod wreck (so a re-played intro doesn't stack duplicates). */
+export function removeCrashedPodWreck(ctx: GameContext): void {
+  if (crashedWreck) {
+    crashedWreck.traverse((o) => {
+      if (o instanceof THREE.Mesh) {
+        o.geometry.dispose();
+        (o.material as THREE.Material).dispose();
+      }
+    });
+    ctx.three.scene.remove(crashedWreck);
+    crashedWreck = null;
+  }
+  if (crashedWreckBody) {
+    ctx.physics.world.removeRigidBody(crashedWreckBody);
+    crashedWreckBody = null;
+  }
+}
+
+/** Place a greybox crashed pod at desert (x,z) — tilted + half-buried, with a dark "blown
+ *  hatch" panel (the salvage-point hint). Idempotent (replaces any prior). Persists into the
+ *  real game; a rough AABB collider keeps the player from walking through it. */
+export function placeCrashedPodWreck(ctx: GameContext, x: number, z: number): void {
+  removeCrashedPodWreck(ctx);
+  const gy = ctx.terrain.heightAt(x, z);
+  const group = new THREE.Group();
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(2.6, 2.2, 2.8),
+    new THREE.MeshBasicMaterial({ color: 0x55585f }),
+  );
+  group.add(body);
+  const hatch = new THREE.Mesh(
+    new THREE.BoxGeometry(1.4, 1.4, 0.16),
+    new THREE.MeshBasicMaterial({ color: 0x2a2d31 }),
+  );
+  hatch.position.set(0, 0.15, 1.45);   // the pried-open salvage face
+  group.add(hatch);
+  group.position.set(x, gy + 0.4, z);  // sunk ~half into the sand (body h=2.2)
+  group.rotation.set(0.22, 0.6, 0.12); // tilted crash pose
+  ctx.three.scene.add(group);
+  // Rough AABB collider (the tilt is cosmetic; greybox solidity is enough).
+  const col = makeStaticBox(ctx.physics.world, { x: 1.5, y: 1.1, z: 1.6 }, { x, y: gy + 0.4, z });
+  crashedWreck = group;
+  crashedWreckBody = col.parent();
+}

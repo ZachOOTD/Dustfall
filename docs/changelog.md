@@ -3,6 +3,16 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Escape-pod campaign C8 — 2026-06-28 — Phase 0 T0.4b: **pod-as-spawn-wreck + tutorial scaffold + smoke** → ⏸ PHASE 0 COMPLETE (greybox spine) — milestone PAUSE ✓ verify + visual pass
+
+`verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40) + a live-preview **visual gate**: `__game.smokeIntro()` → `{ok:true, beats:10}` (every beat forced + ticked, no throw); the handoff places the crashed pod at the spawn + the player wakes looking at it; HUD restored; 0 console errors. Flag OFF → live game byte-unchanged.
+
+**T0.4b — the last Phase 0 unit; the greybox spine is COMPLETE:**
+- **`podScene.placeCrashedPodWreck`** — a greybox crashed pod (tilted, half-buried, with a dark "blown hatch" salvage face) placed at the desert spawn; a **persistent world object** (NOT disposed by `endEscapePodIntro`), idempotent, with a rough AABB collider. `removeCrashedPodWreck` for re-plays.
+- **`stepOut`** now places the wreck a few metres from `returnPos`, snaps the camera to **look at it** (wake beside your own pod), and fires the **tutorial-scaffold hint** toast ("Salvage your pod — craft a machete to pry it open"). The real craft→pry→chute-pop is Phase 4.
+- **`smokeTestIntro` + `__game.smokeIntro()`** — programmatically forces every beat + ticks it, confirming the whole sequence is wired (returns `{ok, beats, error?}`).
+- **▶ PHASE 0 COMPLETE** — the greybox spine plays new game → cockpit → corridor → pod → eject → ship-explode → descent → chute-gag → impact → blackout → wake → **desert + your crashed pod + the salvage hint**, end-to-end. ⏸ **Milestone PAUSE** for the user's first walk-test (flow + pacing; greybox, not beauty) → `/campaign-approve` releases Phase 1 (the hero pod).
+
 ## Escape-pod campaign C7 — 2026-06-28 — Phase 0 T0.4a: **impact → wake → THE DESERT HANDOFF** (the greybox spine plays end-to-end) ✓ verify + visual pass
 
 `verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40) + a live-preview **visual gate**: the handoff teleports the player from the offset pod scene back to the **real desert spawn** (captured at start: `-46.2, 10.7, 11.3`) — intro inactive, HUD restored, black overlay cleared, standing in the dawn dunes playing the normal game; 0 console errors. Flag OFF → live game byte-unchanged.
