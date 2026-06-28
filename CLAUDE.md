@@ -77,10 +77,11 @@ first-person throughout; pod identity = **industrial modular box**. References +
 merged to master + live at https://zachootd.github.io/Dustfall/. Its log is archived at `docs/campaign/campaign-log-2026-06-18-m1-m13.md`. Still queued for the user (out-of-loop): the **Skyfall
 hero wreck** + the **CAVE rework** (dedicated solo sessions), ⑰ pickup-instancing (human-attended), + the §A walk-tests.
 
-**Last shipped**: Escape-pod **C1** (2026-06-28, Phase 0 T0.0) — the intro sequence-framework scaffold (`verify:all` PASS; inert behind `FEATURES.escapePodIntro`, game unaffected). NEW
-`src/world/escapePodIntro/sequence.ts` — the beat state machine (BeatId · IntroState · `updateEscapePodIntro` dispatch + the `introActive` gating helper), `ctx.intro?` on GameContext, the tick
-insertion before `updatePlayer`. **Architecture contract D269:** gate via `ctx.intro.active` (not pause); the KCC is collision-general (walks bespoke ship-floor box colliders — R4 ✓); the world is
-boot-built so the handoff is a teleport (R2 ✓). **Next** = Phase 0 T0.1 — wire the new-game branch + the `introComplete` save marker + the entry point + the `__game` skip/jump dev hooks. See [docs/next-session-prompt.md](docs/next-session-prompt.md).
+**Last shipped**: Escape-pod **C2** (2026-06-28, Phase 0 T0.1) — wired the (T0.0) sequence framework into boot/new-game/save (`verify:all` PASS + live-smoke PASS; flag still OFF → live game
+byte-unchanged; no SAVE_VERSION bump). `startEscapePodIntro` fires only in `main.ts`'s `onNewGame` **path-3** (fresh-boot), gated `FEATURES.escapePodIntro && !devMode` — Continue + Dev never start it
+(D270). Additive `introComplete` save marker (R1, legacy→true, derived from `ctx.intro`, no version bump) + Save blocked mid-intro (`menus.ts`) + dev hooks `__game.startIntro()`/`skipIntro()`/`jumpToBeat()`
+(`debugPanel.ts`; `startEscapePodIntro` gained a `force` param). **Next** = Phase 0 T0.2 — the greybox SHIP (cockpit + corridor box-collider geometry the KCC walks) + the first real beats (cockpit →
+checkEngines → corridor). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 

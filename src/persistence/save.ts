@@ -308,6 +308,14 @@ export interface SaveV1 {
    *  + the boot-spawned companion is despawned. */
   companionAcquired?: boolean;
 
+  /** Escape-pod intro (T0.1) — has this save completed (or never run) the crash intro?
+   *  Additive, NO version bump (D81). ABSENT on pre-feature saves → loader treats as
+   *  TRUE (legacy games never had the intro). A new game sets the intro running, then the
+   *  desert handoff (T0.4) marks it done; the intro is never saved mid-sequence (the menu
+   *  Save is blocked while it runs), so a written save always records true. Continue never
+   *  replays the intro regardless — this field documents + future-proofs that invariant. */
+  introComplete?: boolean;
+
   /** Hover speeder pose. Optional so v1 saves written before this field
    *  was added still load cleanly (the speeder just stays at the default
    *  position from setupOpeningScene). */
@@ -579,6 +587,9 @@ export function saveGameState(ctx: GameContext): { ok: boolean; error?: string }
         huddleState: ctx.companion.state === 'huddle',
       } : undefined,
       companionAcquired: ctx.flags.companionAcquired,   // M8 ⑩ (C52) — additive, no version bump
+      // Escape-pod intro (T0.1) — additive, no version bump. True unless mid-intro (and the
+      // menu Save is blocked mid-intro, so a written save always records true).
+      introComplete: ctx.intro ? ctx.intro.beat === 'done' : true,
       sleds: ctx.sleds.list.map((s) => {
         const tr = s.body.translation();
         return {
@@ -1337,6 +1348,12 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
     // and toggles the SpotLight + emissive disc, so just setting the flag
     // is enough. Same for mounted: the next updateSpeeder applies.
   }
+
+  // Escape-pod intro (T0.1) — defensive: a save is never written mid-intro (the menu Save
+  // is blocked while it runs) and Continue never starts the intro, so this is normally a
+  // no-op. If a stale save somehow recorded introComplete=false, ensure the loaded game
+  // runs normally (no intro). Pre-feature saves omit the field → treated as complete.
+  if (save.introComplete === false && ctx.intro) ctx.intro.active = false;
 
   // ── Reset transients ──
   ctx.flags.damageFlashUntil = 0;

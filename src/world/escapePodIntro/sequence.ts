@@ -85,10 +85,12 @@ export function introActive(ctx: GameContext): boolean {
 }
 
 /** Begin the intro. Called from the new-game branch (T0.1) when FEATURES.escapePodIntro
- *  is on. T0.0: scaffold only — sets the state to beat 0; the per-beat controllers
- *  (placing the player in the ship cockpit, etc.) land in T0.2+. No-op if the flag is off. */
-export function startEscapePodIntro(ctx: GameContext): void {
-  if (!FEATURES.escapePodIntro) return;
+ *  is on. Sets the state to beat 0; the per-beat controllers (placing the player in the
+ *  ship cockpit, etc.) land in T0.2+. No-op if the flag is off, UNLESS `force` (the
+ *  `__game.startIntro()` dev hook passes force so the intro is testable without flipping
+ *  the build flag). */
+export function startEscapePodIntro(ctx: GameContext, force = false): void {
+  if (!force && !FEATURES.escapePodIntro) return;
   ctx.intro = {
     active: true,
     beat: 'cockpit',

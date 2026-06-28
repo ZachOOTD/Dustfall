@@ -3,8 +3,8 @@
   "campaign": "escape-pod-intro",
   "started": "2026-06-28",
   "branch": "campaign/escape-pod-intro",
-  "cycles_completed": 1,
-  "current_tier": "Phase 0 — playable greybox spine. ✅ T0.0 DONE (C1) — the sequence-framework scaffold (world/escapePodIntro/sequence.ts: beat state machine + IntroState + updateEscapePodIntro dispatch + introActive gating helper; ctx.intro?; tick insertion before updatePlayer; FEATURES.escapePodIntro off; architecture contract D269 — gate via ctx.intro.active not pause; R4 KCC collision-general ✓; R2 world boot-built ✓). NEXT unit = T0.1: wire the new-game branch (FEATURES.escapePodIntro && fresh new game → startEscapePodIntro; dev mode + Continue → current spawn) + the additive introComplete save marker (legacy=true, no SAVE_VERSION bump; disable save while introActive) + the entry point (R6) + dev hooks (__game.startIntro/skipIntro/jumpToBeat). Still greybox. Then T0.2 greybox ship -> T0.3 greybox descent+pod -> T0.4 wake/handoff/tutorial scaffold + smoke check -> Phase 0 milestone PAUSE (user walk-test). Plan: docs/feature-escape-pod-intro.md. ENRICH-NOT-CUT.",
+  "cycles_completed": 2,
+  "current_tier": "Phase 0 — playable greybox spine. ✅ T0.0 DONE (C1) sequence-framework scaffold (D269). ✅ T0.1 DONE (C2) — wired the framework into boot/new-game/save (D270): startEscapePodIntro in main.ts onNewGame path-3 only (FEATURES.escapePodIntro && !devMode; Continue+Dev never start it); additive introComplete save marker (legacy=true, derived from ctx.intro, no SAVE_VERSION bump); Save blocked mid-intro (menus.ts); dev hooks __game.startIntro/skipIntro/jumpToBeat (debugPanel.ts; startEscapePodIntro gained force). verify:all + live-smoke PASS; flag off → live game byte-unchanged. NEXT unit = T0.2: the greybox SHIP (cockpit+corridor box-collider geometry the KCC walks, placed offset from the desert) + Beats 0-2 (cockpit → checkEngines → corridor) + locomotion gating via ctx.intro.mode (walk/seated/scripted) in controller.ts + introActive system-suppression (stats/AI/combat stand down). Greybox = SPACE/FLOW correctness, NOT beauty (hero ship art is Phase 3 via procedural-modeler). Then T0.3 greybox descent+pod -> T0.4 wake/handoff/tutorial scaffold + smoke -> Phase 0 milestone PAUSE (user walk-test). Plan: docs/feature-escape-pod-intro.md. ENRICH-NOT-CUT.",
   "awaiting_approval": false,
   "stop_reasons": [],
   "plan_doc": "docs/feature-escape-pod-intro.md",
@@ -18,7 +18,7 @@
   "circuit_breaker_n": 3,
   "consecutive_no_progress": 0,
   "ceiling": { "max_cycles": 150, "total": null, "per_cycle": null, "unit": "tokens" },
-  "spend": { "total": 280000, "note": "escape-pod intro campaign, started 2026-06-28. C1 ~280K (Phase 0 T0.0: a code-archaeologist recon of the boot/tick/controller/world-gen integration points [~62K] + the sequence-framework scaffold + the architecture contract D269 + verify:all + the doc suite). Prior M11->M13 campaign concluded + user-approved (~18.5M tokens / 69 cycles; chronicle archived to campaign-log-2026-06-18-m1-m13.md)." },
+  "spend": { "total": 490000, "note": "escape-pod intro campaign, started 2026-06-28. C1 ~280K (T0.0 scaffold + recon). C2 ~210K (T0.1: save-system + new-game-flow recon [direct reads, no agent] + 12 edits across main/save/menus/debugPanel/sequence + verify:all + a live-preview smoke test + the doc suite). Prior M11->M13 campaign concluded + user-approved (~18.5M tokens / 69 cycles; chronicle archived to campaign-log-2026-06-18-m1-m13.md)." },
   "policy_notes": "ENRICH-NOT-CUT: the scope-cut list (docs/feature-escape-pod-intro.md) is a TRUE-TECHNICAL-WALL safety net ONLY, never a target, ALWAYS surfaced to the user before any cut; the spine + pod + descent + tutorial are NOT cuttable. Hero geometry/FX -> the procedural-modeler agent, iterated to a quality BAR (5-8 rounds new hero elements). Real first-person in-game-view visual gate (not an isolated rig). Anti-punt. Behind FEATURES.escapePodIntro (default off until shipped). No SAVE_VERSION bump unless unavoidable (D81; the introComplete marker is additive, legacy=true). New game -> the intro; old spawn -> dev-mode only. Key early-build decisions to lock in Phase 0: R1 save-marker, R2 world-loading-during-descent, R3 handoff seam, R4 state-machine contract + KCC-on-ship-floor, R5 scrap_machete-as-pry-tool (D261, additive), R6 entry point, R7 parachute-gag fallback, R10 accessibility/photosensitivity. See the feature doc's 'Pre-build review'.",
   "cycles": [
     {
@@ -36,6 +36,22 @@
       "ultracode": true,
       "commit": "c86ab21",
       "spend_approx_tokens": 280000
+    },
+    {
+      "cycle": 2,
+      "date": "2026-06-28",
+      "focus": "Phase 0 T0.1 — new-game flow + introComplete save marker + dev hooks",
+      "tier": "Phase 0 — greybox spine (escape-pod intro)",
+      "outcome": "SHIPPED",
+      "units": ["T0.1 — wired the (T0.0) sequence framework into boot/new-game/save (D270). startEscapePodIntro fires only in main.ts onNewGame path-3 (fresh boot), gated FEATURES.escapePodIntro && !ctx.flags.devMode — Continue + Dev Mode reach the shared handoffToGame from their own branches so they never start the intro. Additive introComplete SaveV1 field (written ctx.intro?beat==='done':true; legacy absent→true; defensive load guard) — no SAVE_VERSION bump (stays v15). Save blocked while introActive (menus.ts pause-menu Save toasts 'no saving during the intro'). Dev hooks __game.startIntro (force-start via startEscapePodIntro(ctx,true)) / skipIntro (endEscapePodIntro) / jumpToBeat (debugPanel.ts). startEscapePodIntro gained a force param. FEATURES imported into main.ts."],
+      "verify": "verify:all PASS (tsc + placement 0/0 x5 + colliders 0/40) + live-preview smoke: flag-off boot → ctx.intro null (no intro; live game byte-unchanged); __game.startIntro → active@cockpit; jumpToBeat('descent') → descent; skipIntro → done/inactive; all 3 hooks are functions; 0 console errors.",
+      "visual": "N/A — logic/wiring cycle, no visual output (greybox geometry is T0.2).",
+      "save": "additive introComplete?: boolean (legacy→true); NO SAVE_VERSION bump (v15).",
+      "decisions": ["D270 — entry point = onNewGame path-3 only (not the shared handoffToGame); introComplete derived from ctx.intro (no new flag, no version bump); Save blocked mid-intro; dev hooks. friction 1"],
+      "recon": "direct reads of save.ts (full schema + save/load), main.ts new-game/title/handoff flow, menus.ts Save action, debugPanel __game object, GameContext flags — no agent (targeted reads).",
+      "ultracode": true,
+      "commit": "PENDING",
+      "spend_approx_tokens": 210000
     }
   ]
 }

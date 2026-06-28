@@ -52,7 +52,8 @@ import type { Journal } from './world/journal.ts';
 import { createInventory, updateInventoryInput } from './inventory/inventory.ts';
 import { updateInteraction } from './player/interaction.ts';
 import { updatePlayer } from './player/controller.ts';
-import { updateEscapePodIntro } from './world/escapePodIntro/sequence.ts';   // escape-pod intro (FEATURES.escapePodIntro) — inert until T0.1 wires the new-game branch
+import { updateEscapePodIntro, startEscapePodIntro } from './world/escapePodIntro/sequence.ts';   // escape-pod intro (FEATURES.escapePodIntro) — T0.1 wires the new-game branch
+import { FEATURES } from './config/features.ts';
 import { createShelterRegistry, updateShelter } from './shelter/shelterZones.ts';
 import { updateSoundscape } from './audio/soundscape.ts';
 import { startMusic, updateMusic } from './audio/music.ts';
@@ -807,6 +808,13 @@ const titleOverlay = createTitleOverlay(ctx, {
       return;
     }
     // Fresh-boot, no override: this world was auto-rolled; play it.
+    // Escape-pod intro (FEATURES.escapePodIntro) — a NEW game plays the intro before
+    // gameplay; DEV MODE + Continue use the normal spawn (they call handoffToGame from
+    // their own branches, never reach here). No-op when the flag is off (today's
+    // behaviour, byte-identical). The intro hands off to the desert spawn (T0.4); for
+    // now it sits at beat 0 until the per-beat controllers land (T0.2+) — exit via
+    // `__game.skipIntro()`.
+    if (FEATURES.escapePodIntro && !ctx.flags.devMode) startEscapePodIntro(ctx);
     handoffToGame();
   },
   onContinue: hadSaveAtBoot ? () => {

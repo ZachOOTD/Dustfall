@@ -19,6 +19,7 @@ import { spawnWormCrossing, updateWormHorizonCrossing } from '../world/wormHoriz
 import { fireSignalFlare, advanceSignalFlares, activeSignalFlareCount } from '../world/signalFlare.ts';   // M6 (C37) — __game.fireSignalFlare
 import { damageVulture } from '../enemies/vulture.ts';
 import { applyLungePose, applyMeshTransform } from '../enemies/sandWorm.ts';   // M12 ⓖ (C66) — __game.poseLunge (dive render)
+import { startEscapePodIntro, endEscapePodIntro, jumpToBeat as jumpToIntroBeat, type BeatId } from '../world/escapePodIntro/sequence.ts';   // escape-pod intro (T0.1) — __game.startIntro/skipIntro/jumpToBeat
 import { makeLatheHull, fuselageProfile, makeFormerRings, makeBreach, makeSandMound } from '../world/wreckForms.ts';
 import { createRustedHullMaterial, HULL_WEATHERING_ACAY } from '../world/hullMaterial.ts';
 import { placeProcgenComposite, type ProcgenWreckClass } from '../world/procgenWreck.ts';
@@ -47,6 +48,12 @@ declare global {
 
 interface DebugApi {
   setTime: (t: number) => void;
+  /** Escape-pod intro (T0.1) — force-start the intro (works even with the build flag off). */
+  startIntro: () => void;
+  /** Escape-pod intro (T0.1) — end the intro + hand back to the normal game (desert spawn). */
+  skipIntro: () => void;
+  /** Escape-pod intro (T0.1) — jump straight to a named beat (cockpit, corridor, descent, …). */
+  jumpToBeat: (beat: BeatId) => void;
   setStats: (s: {
     thirst?: number;
     temperature?: number;
@@ -247,6 +254,10 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
 
   window.__game = {
     setTime: (t) => { ctx.time.dayTime = t; },
+    // Escape-pod intro (T0.1) — dev hooks for fast iteration (T0.2+ beats).
+    startIntro: () => startEscapePodIntro(ctx, true),
+    skipIntro: () => endEscapePodIntro(ctx),
+    jumpToBeat: (beat) => jumpToIntroBeat(ctx, beat),
     sunInfo: () => ({
       exposure: ctx.player.sunExposure01,
       occluders: getSunOccluders().length,

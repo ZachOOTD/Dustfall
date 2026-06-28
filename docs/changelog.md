@@ -3,6 +3,17 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Escape-pod campaign C2 — 2026-06-28 — Phase 0 T0.1: **new-game flow + introComplete save marker + dev hooks** ✓ verify + live smoke pass
+
+`verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40) + a live-preview smoke test of the dev hooks (flag-off boot → no intro; force-start → active@cockpit; jumpToBeat→descent; skipIntro→done/inactive; no console errors). Flag still OFF by default → live game byte-unchanged. No SAVE_VERSION bump (stays v15).
+
+**T0.1 — wired the (T0.0) framework into boot/new-game/save (D270):**
+- **New-game branch** (`main.ts`): `startEscapePodIntro(ctx)` fires only in the `onNewGame` **path-3** (fresh-boot) branch, gated `FEATURES.escapePodIntro && !ctx.flags.devMode`. Continue + Dev Mode reach the shared `handoffToGame` from their own branches → never start the intro. Added the `FEATURES` import.
+- **`introComplete` save marker (R1)** — additive `SaveV1` field, written `ctx.intro ? beat==='done' : true`, legacy=absent→true, **no version bump**; a defensive load guard clears a stray mid-intro save. The real no-replay guarantee is structural (Continue never starts the intro).
+- **Save blocked mid-intro** (`menus.ts`) — the pause-menu Save toasts "no saving during the intro" while `introActive(ctx)`.
+- **Dev hooks** (`debugPanel.ts`) — `__game.startIntro()` (force-start, ignores the build flag), `__game.skipIntro()`, `__game.jumpToBeat(beat)`. `startEscapePodIntro` gained a `force` param.
+- **Next:** T0.2 — the greybox ship (cockpit + corridor box-collider geometry the KCC walks) + the first real beats (cockpit → checkEngines → corridor).
+
 ## Escape-pod campaign C1 — 2026-06-28 — Phase 0 T0.0: **the intro sequence-framework scaffold (contract spike)** ✓ verify pass
 
 `verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40; inert scaffold, game unaffected, no save touch). First cycle of the dedicated **escape-pod-intro** campaign (`campaign/escape-pod-intro`).

@@ -512,3 +512,17 @@ Consistent with this campaign's "ship the foundation/measure, defer the human/fe
 **Why**: locking these before any beats prevents every beat from fighting the framework (the spine is load-bearing). T0.0 lands the scaffold INERT (behind `FEATURES.escapePodIntro`, default off; nothing starts the intro yet) so the live game is untouched + tsc/verify stays green.
 
 **friction-score:** 2 (foundational architecture the whole feature depends on; reversible — inert behind the flag — but the gating/camera/save contract shapes all later tiers, so getting it right early matters).
+
+## D270 — the intro entry point is `onNewGame` path-3 (fresh boot) ONLY; `introComplete` is an additive save marker derived from `ctx.intro` (no new flag, no version bump); Save is blocked mid-intro (Session escape-pod C2, T0.1)
+
+**When**: T0.1, wiring the (T0.0) sequence framework into the boot/new-game/save path. Implements the D269 contract.
+
+**Decisions:**
+- **Entry point = `onNewGame` path-3 only.** In `main.ts`, all three start buttons (New Game / Continue / Dev Mode) funnel through the SHARED `handoffToGame()`. The intro must NOT start from the shared handoff (Continue + Dev would replay it). So `startEscapePodIntro(ctx)` is called in the `onNewGame` **path-3 branch** (fresh-boot, no-reload — the single "a new game actually begins" point), gated `FEATURES.escapePodIntro && !ctx.flags.devMode`. Continue (load) + Dev (loadout) reach `handoffToGame` from their own branches and never start the intro. Flag off → the call no-ops → today's spawn, byte-identical.
+- **`introComplete` is derived, not a new flag.** R1's "post-intro saves don't replay" marker is the additive save field `introComplete?: boolean`, written as `ctx.intro ? ctx.intro.beat === 'done' : true` — no new `ctx.flags` field needed. The real no-replay guarantee is **structural** (Continue never calls `startEscapePodIntro`); the field documents + future-proofs the invariant + drives a defensive load guard. Additive, legacy=absent→true, **NO SAVE_VERSION bump** (D81; stays v15).
+- **Save is blocked while `introActive(ctx)`** (the pause-menu Save action toasts "no saving during the intro"). The intro is never persisted mid-sequence; the first real save is the desert handoff (T0.4).
+- **Dev hooks** (`__game.startIntro()` force-starts even with the flag off via `startEscapePodIntro(ctx, true)`, `skipIntro()` → `endEscapePodIntro`, `jumpToBeat(beat)`) make T0.2+ beats iterable without rebuilding. Smoke-verified live: flag-off boot → no intro; force-start → active@cockpit; jump → descent; skip → done/inactive.
+
+**Why**: the shared `handoffToGame` is the footgun — starting the intro there would replay it on every Continue. Path-3 is the precise new-game seam. Deriving `introComplete` keeps the state surface minimal while still satisfying R1.
+
+**friction-score:** 1 (mechanical wiring flowing from D269; additive + reversible; behind the flag; verify + live smoke both green).
