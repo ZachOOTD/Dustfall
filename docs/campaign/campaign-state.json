@@ -131,7 +131,7 @@
       "decisions": ["(no new D-entry — execution. R3 handoff seam resolved: capture the desert spawn at startEscapePodIntro [player is there at boot via setupOpeningScene], teleport back at stepOut.)"],
       "recon": "main.ts setupOpeningScene teleports the player to the desert spawn at boot (so the player body is AT the spawn when startEscapePodIntro runs) — no agent.",
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "bee75d2",
       "spend_approx_tokens": 260000
     }
   ]
