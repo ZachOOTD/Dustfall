@@ -498,3 +498,17 @@ Consistent with this campaign's "ship the foundation/measure, defer the human/fe
 **Gate**: tsc + a self-audit of the one-shot graph (no sustained voices → no leak risk). The SOUND quality is the user's M13 LISTEN — audio can't be headless-verified.
 
 **friction-score:** 1 (additive audio + a one-line dispatch fix; reversible; the only open item is the user's listen).
+
+## D269 — the escape-pod intro architecture: a beat state-machine gated by `ctx.intro.active` (selective suppression, NOT pause); the KCC is collision-general; the world is boot-built so the handoff is a teleport (Session escape-pod C1, T0.0)
+
+**When**: T0.0, the contract spike for the escape-pod intro (`docs/feature-escape-pod-intro.md`). Before building beats, lock how the scripted first-person sequence integrates with the engine.
+
+**Decisions (the contract, in `world/escapePodIntro/sequence.ts`):**
+- **Gating model:** the intro runs as a beat state machine driven by `updateEscapePodIntro(ctx, dt)` inserted in the main tick BEFORE `updatePlayer`. While `ctx.intro.active`, normal gameplay systems stand down via an **`introActive(ctx)` guard** — NOT `ctx.flags.paused` (pause would freeze the intro's own tick too). This selective suppression lets the intro own the player capsule + camera while still ticking. The per-beat `mode` (`walk`/`seated`/`scripted`) tells `updatePlayer` whether to allow locomotion + free-look vs drive the camera.
+- **R4 — KCC is collision-general (confirmed):** the character controller (`bodies.ts makePlayer` + `controller.ts computeColliderMovement`) moves against ANY Rapier collider, with no terrain-heightfield coupling. So the player walks on bespoke **ship-interior box-collider floors** with the existing controller, unchanged. (This de-risked the whole ship-section walk.)
+- **R2 — world is built at boot (confirmed):** the procedural desert generates synchronously at boot, before the title — so when the intro runs (after `handoffToGame`), the desert is already ready. The intro's stepOut → desert handoff is therefore a **teleport to the spawn**, not a stream/background-gen; the ship/pod beats run in their own offset geometry while the desert sits ready. (Simpler than the feared "generate during descent.")
+- **Save (R1):** the intro is NOT saved mid-sequence; the first real save is at the desert handoff; an additive `introComplete` save field (legacy=true) stops a post-intro save from replaying the intro — **no SAVE_VERSION bump**. (Wired in T0.1.)
+
+**Why**: locking these before any beats prevents every beat from fighting the framework (the spine is load-bearing). T0.0 lands the scaffold INERT (behind `FEATURES.escapePodIntro`, default off; nothing starts the intro yet) so the live game is untouched + tsc/verify stays green.
+
+**friction-score:** 2 (foundational architecture the whole feature depends on; reversible — inert behind the flag — but the gating/camera/save contract shapes all later tiers, so getting it right early matters).

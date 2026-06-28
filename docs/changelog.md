@@ -3,6 +3,16 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Escape-pod campaign C1 — 2026-06-28 — Phase 0 T0.0: **the intro sequence-framework scaffold (contract spike)** ✓ verify pass
+
+`verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40; inert scaffold, game unaffected, no save touch). First cycle of the dedicated **escape-pod-intro** campaign (`campaign/escape-pod-intro`).
+
+**T0.0 — the spine + the integration contract (D269), landed INERT behind `FEATURES.escapePodIntro` (default off):**
+- **NEW `src/world/escapePodIntro/sequence.ts`** — the beat state machine: `BeatId` (the 12 beats + `done`), `BEAT_ORDER`, `IntroState` (active · beat · beatStartedAt · `mode` walk/seated/scripted · scratch), `IntroControlMode`, and the manager (`startEscapePodIntro` · `advanceBeat` · `jumpToBeat` · `endEscapePodIntro` · `updateEscapePodIntro` dispatch skeleton · `introActive` guard). The per-beat controllers are T0.2+.
+- **`FEATURES.escapePodIntro`** (features.ts, default off) · **`ctx.intro?: IntroState`** (GameContext, undefined=inactive) · **`updateEscapePodIntro` inserted in the main tick before `updatePlayer`** (no-op unless active).
+- **Architecture contract (D269):** gate via `ctx.intro.active` (selective suppression, NOT pause); **R4 confirmed** — the KCC is collision-general → walks on bespoke ship-floor box colliders, no terrain coupling; **R2 confirmed** — the desert is built at boot → the handoff is a teleport, not a stream; the intro is unsaved mid-sequence (additive `introComplete`, no version bump).
+- **Verify:** `verify:all` PASS (inert — nothing starts the intro yet). No visual gate (architecture cycle, no visual output). **Next:** T0.1 — wire the new-game branch + the save marker + the entry point + the dev skip/jump hooks.
+
 ## Campaign C69 — 2026-06-22 — M13 ⓙ: **lower-pitched, smoother speeder hum** → M13 COMPLETE → ⏸ PAUSE (review-fix pass complete) ✓ verify pass (ultracode)
 
 `verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40; audio only, no rand, no save touch). Cycle 69/75. The LAST unit of the M11→M13 review-fix pass.

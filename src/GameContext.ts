@@ -42,6 +42,7 @@ import type { BiomeSampler } from './world/biomes.ts';
 import type { SalvageableRegistry } from './world/salvage.ts';
 import type { FootprintRegistry } from './world/footprints.ts';
 import type { LightPool } from './core/lightPool.ts';
+import type { IntroState } from './world/escapePodIntro/sequence.ts';   // escape-pod intro (FEATURES.escapePodIntro)
 
 export interface GameContext {
   /** Session AAI — world seed. Drives all 3 RNG streams (terrain,
@@ -190,6 +191,10 @@ export interface GameContext {
    *  `src/core/lightPool.ts`. */
   lightPool: LightPool;
   journals: { list: Journal[] };
+  /** Escape-pod intro sequence state (FEATURES.escapePodIntro). `undefined` =
+   *  inactive (the normal game). Set by startEscapePodIntro on a new game when the
+   *  flag is on; cleared at the desert handoff. See world/escapePodIntro/sequence.ts. */
+  intro?: IntroState;
   flags: {
     started: boolean;     // true once the player has clicked into the game
     paused: boolean;      // true while the pause overlay is visible

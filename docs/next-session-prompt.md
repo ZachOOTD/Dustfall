@@ -1,30 +1,48 @@
-# ⏸ PAUSED — M11→M13 review-fix pass COMPLETE — `campaign/2026-06-18`
+# ▶ RESUME — Escape-pod intro · Phase 0 · T0.1 (new-game flow + save marker) — `campaign/escape-pod-intro`
 
-**The campaign is paused at the M13 milestone** (`status: paused`, `awaiting_approval: true`, `stop_reasons: ["milestone-review"]`). The entire **M11→M13 review-fix pass is shipped + validated per tier** — there is no more in-loop review-fix work. The next block is the **user's call** (the remaining items are dedicated solo sessions + human-attended work, NOT loop cycles). Boot from `docs/campaign/campaign-state.json` + `docs/roadmap.md` if resuming.
+**Cycle 2 of the escape-pod-intro campaign.** Phase 0 (the greybox spine). T0.0 (the sequence
+framework scaffold) shipped C1. Boot from `docs/campaign/campaign-state.json` + `docs/roadmap.md`
+(NOT chat memory).
 
-## What the user validates at THIS pause (the final audio LISTEN)
-Run `npm run dev` and listen:
-- **Gunshots** (C68/D268): each gun has a distinct muzzle report — scrap_gun (ballistic crack+boom), amban_rifle (heavier + sub thump), pulse_rifle (rapid short zappy pew), energy_pistol (meatier charged zap). Reload SFX on scrap_gun + amban (R key). Levers: the synth params in `audio.ts` (`ballisticShot`/`energyShot`/`playReloadGun`).
-- **Speeder hum** (C69): a lower, smoother thrum (was a harsh sawtooth whine). Levers: `startSpeederThrust`/`setSpeederThrustSpeed` in `audio.ts` (the triangle osc + lowpass + the 46-90 Hz range).
-- (Already approved earlier this pass: M11 wreck/panel fixes; M12 sand-worm — the breach-dive attack + the smoothed dive + the quiet alert rumble/shake.)
+## Read first
+1. `CLAUDE.md` (auto-loaded) — "Where we are now"
+2. `docs/campaign/campaign-state.json` — cycle 1/150, current_tier (T0.1)
+3. `docs/feature-escape-pod-intro.md` — the BUILD PLAN (Phase 0) + the "Pre-build review" (R1-R10)
+4. `docs/decisions.md` (tail) — **D269** (the intro architecture contract)
+5. `src/world/escapePodIntro/sequence.ts` — the framework you're wiring into (read the contract comment)
 
-## The M11→M13 review-fix pass — what shipped (all from the 2026-06-20 triage)
-- **M11 — wreck/panel fixes** ✅ (C61-C64): not-openable panels hide (D264); floating panels seated; tank/husk rib/structure rework (the `makeFormerRings` 0.84× root cause); the 3 mega-wreck companion straggler panels hidden (D265). User-validated.
-- **M12 — sand worm** ✅ (C65-C67 + the b7b6a52 dive-smoothing): dorsal ridges removed; attack = breach-and-dive not a high jump (D266) + the natural-bend dive (tail curls under, tip never seen); quiet alert rumble + screen-shake buildup, roar removed from alert (D267). User-approved.
-- **M13 — weapon & vehicle audio** ✅ (C68-C69): per-weapon gunshot + reload SFX (D268); lower/smoother speeder hum. ← this pause.
+## What's built (T0.0)
+The inert sequence framework: `FEATURES.escapePodIntro` (off), `ctx.intro?: IntroState`, the beat
+state machine (`BeatId`/`BEAT_ORDER`/`IntroState`/`IntroControlMode`), the manager
+(`startEscapePodIntro`/`advanceBeat`/`jumpToBeat`/`endEscapePodIntro`/`updateEscapePodIntro`/`introActive`),
+and `updateEscapePodIntro` inserted in the main tick before `updatePlayer`. Nothing starts the intro yet.
 
-## The next block — USER-SEQUENCED (NOT auto-loop)
-`/campaign-approve` does NOT auto-continue here (the planned in-loop work is done). When the user is ready they pick the next thing; these are NOT loop cycles:
-- **Skyfall crashed-ship** — a NEW researched extremely-high-quality enterable HERO wreck (its own `/feature-slice`: research → model → iterate WITH the user; no floating pieces / one-sided textures) + its fire-from-the-wreck fix. `docs/backlog.md` §A. **Dedicated solo session.**
-- **CAVE rework** — the user is planning the direction. `docs/backlog.md` §A. **Dedicated solo session.**
-- **⑯ drop-pod-intro-cutscene** — deferred XL feature; bring back via `/feature-slice` when ready.
-- **⑰ pickup-instancing** — measured (75% of draw calls; D263) + planned; build is **human-attended** (a core item-collection-loop rewrite).
-- **§A owed walk-tests / flag-flips** — the M9/M10 flag-gated systems (realRope/realCloth/rideableSled/repairableSpeeder), diegetic-HUD, survival curve.
-- **Housekeeping:** 1 post-mortem draft pending (`hide-mesh-when-unregistering`, C64) → `/consolidate-shared-memory` whenever convenient.
+## Cycle 2 focus — T0.1: new-game flow + save marker + entry point + dev hooks
+Wire the framework into the boot/new-game path so a NEW game (with the flag on) enters the intro,
+without breaking the existing game (flag off / dev mode = current spawn). Still **greybox** (no art).
+- **New-game branch** (`main.ts` — `handoffToGame` / the `createTitleOverlay` `onNewGame` callback ~782; `setupOpeningScene` ~553): when `FEATURES.escapePodIntro` && a fresh new game (not Continue, not devMode) → `startEscapePodIntro(ctx)` instead of the normal spawn. Dev mode + Continue → the current path, untouched.
+- **`introComplete` save marker (R1):** additive field on the save (default **true** for legacy → never replay); a post-intro save → no replay; mid-intro = unsaved; the first save is at the desert handoff. **No SAVE_VERSION bump** (additive). Disable the save action while `introActive(ctx)`.
+- **Entry point (R6):** decide how "new game" reaches the intro vs the current "click to begin" overlay (the intro should start cleanly on new game).
+- **Dev hooks (`debugPanel.ts`):** `__game.startIntro()` (force-start for testing), `__game.skipIntro()` (→ `endEscapePodIntro` → desert handoff), `__game.jumpToBeat(beatId)`. These make T0.2-T0.4 iterable fast.
+- **Gating stub:** add the `introActive(ctx)` guard where it's needed at this stage (at minimum, the save-block; full system suppression comes as beats need it in T0.2+). Keep the flag OFF by default so the live game is unchanged.
 
-## Campaign status
-- **69/75 cycles** (~6 headroom remain, but the planned roadmap work is complete). If the user wants the loop to do MORE (e.g. self-author a new roadmap from the GDD), that needs an explicit steer — `self_author: propose` would draft a proposal at the next idle cycle, but the user said the next block is dedicated solo sessions, so the loop should stay paused until steered.
-- Branch `campaign/2026-06-18`, working tree clean, `verify:all` green. SAVE_VERSION untouched across the whole pass (no D81 bumps).
+### Acceptance
+- Flag OFF (default) + dev mode → the game boots exactly as today (`verify:all` green). Flag ON + new game → `ctx.intro.active` true, beat `cockpit` (even if no beat content yet — T0.2 adds it); `__game.skipIntro()` returns to a normal desert spawn; a save made post-handoff does NOT replay the intro. No SAVE_VERSION bump.
 
-## Verify protocol
-`npm run verify:all` (tsc + placement 0/0 ×5 + colliders 0/40). Audio = the user's LISTEN; visuals = the real in-game view / the rig.
+## Then (rest of Phase 0)
+T0.2 greybox ship · T0.3 greybox descent + seated pod + the parachute-gag fallback · T0.4 greybox
+wake → desert handoff (the pod-as-spawn-wreck seam) → tutorial scaffold + the `feature-escape-pod-intro`
+smoke check. **Phase 0 milestone → PAUSE** for the user's first walk-test (the whole flow + pacing).
+
+## Campaign rules
+ENRICH-NOT-CUT · hero work → procedural-modeler + real FP-view gate (not yet — T0.1 is logic) ·
+anti-punt · behind the flag · no save bump · `verify:all` each cycle · commit each cycle · checkpoint
+= per phase. Steer via `docs/campaign/steering.md`. Build-until-done (max-cycles 150 guardrail).
+
+## Footguns
+- Keep the flag OFF by default — the live game (on master) must stay byte-identical when the intro isn't active.
+- The intro/GameContext type import is circular but type-only (fine). Don't add a runtime cycle.
+- `introActive` gating ≠ pause (D269) — don't freeze the intro's own tick.
+
+## Verify
+`npm run verify:all` (tsc + placement 0/0 ×5 + colliders 0/40). Plus, once `__game.startIntro` exists, a quick live-preview eval that flips the flag + starts the intro + confirms `ctx.intro.active` + `skipIntro` hands back cleanly.

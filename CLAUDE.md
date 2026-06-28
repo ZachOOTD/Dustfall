@@ -64,25 +64,23 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      Prior milestones live in docs/changelog.md — do NOT accumulate "Prior milestone"
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
-**⏸ CAMPAIGN PAUSED — M13 milestone (M11→M13 review-fix pass COMPLETE) — `campaign/2026-06-18`** (autonomous; user batch-validates each tier). Phase B (M6→M10) complete + reviewed.
-**The whole review-fix pass is shipped + validated per tier: M11 wreck/panel · M12 sand-worm · M13 weapon+vehicle audio.** Paused at the M13 milestone (`awaiting_approval`) for the user's
-final audio LISTEN — then the user sequences the next block (the in-loop review-fix work is done; what remains is dedicated solo sessions + human-attended items, below). Framework upgrade
-in force (C64): the visual gate renders the **PLAYER'S REAL in-game view** (not an isolated rig); hero geometry → the **procedural-modeler** agent (quality BAR); the **anti-punt** rule holds.
-Each `/campaign-cycle` boots from `docs/campaign/campaign-state.json` + `docs/roadmap.md` — NOT this note. **`/campaign-approve` is NOT auto-continue here** — the next block is the user's call.
+**▶ CAMPAIGN ACTIVE — Escape-Pod Intro — `campaign/escape-pod-intro`** (autonomous; checkpoint=PHASE — pauses per phase for the user's walk-test). Building the game's first-person crash-landing
+opening to a world-class bar. Full vision + phased plan: [docs/feature-escape-pod-intro.md](docs/feature-escape-pod-intro.md). **ENRICH-NOT-CUT** · hero geometry/FX → the **procedural-modeler** agent ·
+**real first-person in-game-view** visual gate · anti-punt · behind `FEATURES.escapePodIntro` (default off) · no SAVE_VERSION bump. Phases: **0 greybox spine → 1 pod → 2 descent → 3 ship → 4
+crash/tutorial → 5 audio**; the loop pauses at each phase boundary. Each `/campaign-cycle` boots from `docs/campaign/campaign-state.json` + `docs/roadmap.md` — NOT this note.
 
-**Review-fix pass (from the 2026-06-20 triage). Autonomous, PAUSE-per-tier for the user's batch walk-test/listen:**
-- **M11 — wreck/panel fixes** ✅ COMPLETE: ⓐ not-openable (culled panels hide; D264) · ⓑ floating panels seated · ⓒⓓⓔ tank + husk rib/structure rework (root: `makeFormerRings`' hidden `0.84×` shrink; C61-C63) · stragglers (3 mega-wreck companion panels hidden; D265, C64).
-- **M12 — sand worm** ✅ COMPLETE (⏸ PAUSED at the milestone for the user's batch validation): ✅ ⓕ dorsal ridges removed (C65) · ✅ ⓖ attack = breach-and-dive, no high jump (C66/D266; **C68 smoothed the dive per review feedback — a natural bend, head leads down + tail curls under, tail tip never seen**) · ✅ ⓗ alert = quiet rumble + screen-shake buildup, roar removed from alert (C67/D267). **User: walk-test the worm-attack FEEL + LISTEN to the alert rumble → `/campaign-approve` → M13.**
-- **M13 — weapon & vehicle audio** ✅ COMPLETE (⏸ PAUSED at the milestone — ENDS the M11→M13 review-fix pass): ✅ ⓘ gunshot + reload SFX (C68/D268) · ✅ ⓙ lower-pitched, smoother speeder hum (C69 — triangle+lowpass not sawtooth; pitch 70-140→46-90 Hz). **User: LISTEN to the audio batch (gunshots/reload/speeder hum) → then sequence the next block.**
+**The intro (per the 2026-06-28 vision interview):** lone hauler pilot in orbit → ship disaster → flee to the escape pod → eject → watch the ship explode → a beautiful atmospheric descent → the
+parachute fails (3 pulls → snaps) → crash + blackout → wake → step into the dawn dunes → craft a machete + salvage your own pod (the first tutorial) → the chute comically pops out. Solo/clean;
+first-person throughout; pod identity = **industrial modular box**. References + decisions captured in the feature doc + `docs/research/escape-pod-*.md`.
 
-**NOT in the loop (dedicated solo sessions):** the **Skyfall crashed-ship** (a NEW researched extremely-high-quality enterable HERO wreck — its own `/feature-slice`:
-research → model → iterate WITH the user; + its fire-from-the-wreck fix) and the **CAVE rework** (user planning the direction). Both in [docs/backlog.md](docs/backlog.md).
-Also still queued for the user: ⑯ drop-pod-intro, ⑰ pickup-instancing (human-attended), + the §A walk-tests/flag-flips.
+**PRIOR (shipped, on `master` + deployed):** the M11→M13 review-fix pass (campaign `campaign/2026-06-18`, 69 cycles — wreck/panel · sand-worm · weapon+vehicle audio) COMPLETED + user-approved +
+merged to master + live at https://zachootd.github.io/Dustfall/. Its log is archived at `docs/campaign/campaign-log-2026-06-18-m1-m13.md`. Still queued for the user (out-of-loop): the **Skyfall
+hero wreck** + the **CAVE rework** (dedicated solo sessions), ⑰ pickup-instancing (human-attended), + the §A walk-tests.
 
-**Last shipped**: Campaign **C69** (2026-06-22, cycle 69/75) — M13 ⓙ: the speeder engine hum is now a lower, smoother thrum (`verify:all` PASS; audio only, no rand, no save touch). Base oscillator
-sawtooth→**triangle** through a warm lowpass (the harsh whine gone); pitch 70-140→**46-90 Hz**; deeper noise rumble; the speed-coupling + start/stop lifecycle unchanged (`audio.ts startSpeederThrust`/
-`setSpeederThrustSpeed`). **✅ M13 COMPLETE (ⓘ gun SFX + ⓙ speeder hum) → ⏸ PAUSED at the M13 milestone, which ENDS the M11→M13 review-fix pass.** **Next (user-sequenced, NOT auto-loop):** LISTEN to
-the audio batch; then the deferred blocks — the **Skyfall hero wreck** + the **CAVE rework** (dedicated solo sessions), ⑯ drop-pod-intro, ⑰ pickup-instancing (human-attended), + the §A walk-tests. See [docs/next-session-prompt.md](docs/next-session-prompt.md).
+**Last shipped**: Escape-pod **C1** (2026-06-28, Phase 0 T0.0) — the intro sequence-framework scaffold (`verify:all` PASS; inert behind `FEATURES.escapePodIntro`, game unaffected). NEW
+`src/world/escapePodIntro/sequence.ts` — the beat state machine (BeatId · IntroState · `updateEscapePodIntro` dispatch + the `introActive` gating helper), `ctx.intro?` on GameContext, the tick
+insertion before `updatePlayer`. **Architecture contract D269:** gate via `ctx.intro.active` (not pause); the KCC is collision-general (walks bespoke ship-floor box colliders — R4 ✓); the world is
+boot-built so the handoff is a teleport (R2 ✓). **Next** = Phase 0 T0.1 — wire the new-game branch + the `introComplete` save marker + the entry point + the `__game` skip/jump dev hooks. See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 

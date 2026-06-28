@@ -59,6 +59,17 @@ export const FEATURES = {
    *  flag so the user walk-tests it + the ⑯ flow wires it in later. Additive save (`broken?`),
    *  no SAVE_VERSION bump. */
   repairableSpeeder: false,
+
+  /** Escape-pod intro (dedicated campaign, 2026-06-28) — the first-person crash-landing
+   *  opening: cockpit → ship disaster → escape pod → eject → ship explosion → atmospheric
+   *  descent → parachute-fail gag → crash → wake → desert reveal → craft+salvage tutorial.
+   *  OFF = the current new-game spawn runs (the proven path; dev mode always uses it). ON =
+   *  a NEW game plays the intro sequence instead, handing off to the desert at the spawn.
+   *  Built behind this flag per the gate-and-wait pattern (full plan:
+   *  docs/feature-escape-pod-intro.md). Landed INERT by T0.0 (the sequence framework
+   *  scaffold); T0.1 wires the new-game branch. The `introComplete` save field is additive
+   *  (legacy saves default true → never replay) — no SAVE_VERSION bump. */
+  escapePodIntro: false,
 } as const;
 
 /** A valid feature-flag key (e.g. for a dev-panel toggle list later). */

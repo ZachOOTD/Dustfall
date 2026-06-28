@@ -52,6 +52,7 @@ import type { Journal } from './world/journal.ts';
 import { createInventory, updateInventoryInput } from './inventory/inventory.ts';
 import { updateInteraction } from './player/interaction.ts';
 import { updatePlayer } from './player/controller.ts';
+import { updateEscapePodIntro } from './world/escapePodIntro/sequence.ts';   // escape-pod intro (FEATURES.escapePodIntro) — inert until T0.1 wires the new-game branch
 import { createShelterRegistry, updateShelter } from './shelter/shelterZones.ts';
 import { updateSoundscape } from './audio/soundscape.ts';
 import { startMusic, updateMusic } from './audio/music.ts';
@@ -891,6 +892,7 @@ startLoop(ctx, (c, dt) => {
   updateOpeningWreckGodRay(c);   // AAB — skylight beam opacity tracks sun height + storm intensity
   updateSpeeder(c, dt);          // hover speeder forces + mount/dismount (CC) — must run BEFORE updatePlayer so the player capsule is teleported to the rider seat before camera-sync
   updateSleds(c, dt);            // QQ — per-sled tow spring + rope visual. Moved BEFORE updatePlayer so this-frame's sled XZ delta is fresh when updatePlayer reads it for moving-platform-ride. Tether endpoint resolution reads ctx.player.body.body.translation() = position committed by this-frame's physics.step (one frame behind setNext, but negligible at tow speeds).
+  updateEscapePodIntro(c, dt);   // escape-pod intro sequence (FEATURES.escapePodIntro) — no-op unless ctx.intro.active; runs BEFORE updatePlayer so it can set the capsule + drive the camera first
   updatePlayer(c, dt);           // movement + camera + advance dayTime
   updateStaminaWobble(c);        // WW — sin-driven camera jitter when stamina low (must run AFTER updatePlayer's camera-anchor)
   updateCameraShake(c, dt);      // ACBE (D1) — trauma shake (stacks on the anchored camera, like stamina wobble)

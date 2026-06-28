@@ -3,8 +3,8 @@
   "campaign": "escape-pod-intro",
   "started": "2026-06-28",
   "branch": "campaign/escape-pod-intro",
-  "cycles_completed": 0,
-  "current_tier": "Phase 0 — playable greybox spine + new-game flow. NEXT unit = T0.0 (the sequence/state-machine contract spike): design + stub the beat framework [beat definition, input-gating, FP-camera driving (scripted vs free-look), beat-completion, Esc/pause behavior, dev skip-to-gameplay + jump-to-beat hooks] + confirm the KCC controller works on a bespoke ship floor (R4). Full plan: docs/feature-escape-pod-intro.md (BUILD PLAN). Phases: 0 greybox spine -> 1 pod -> 2 descent -> 3 ship -> 4 crash/tutorial -> 5 audio; checkpoint=milestone at PHASE boundaries (pause per phase for the user's walk-test). ENRICH-NOT-CUT.",
+  "cycles_completed": 1,
+  "current_tier": "Phase 0 — playable greybox spine. ✅ T0.0 DONE (C1) — the sequence-framework scaffold (world/escapePodIntro/sequence.ts: beat state machine + IntroState + updateEscapePodIntro dispatch + introActive gating helper; ctx.intro?; tick insertion before updatePlayer; FEATURES.escapePodIntro off; architecture contract D269 — gate via ctx.intro.active not pause; R4 KCC collision-general ✓; R2 world boot-built ✓). NEXT unit = T0.1: wire the new-game branch (FEATURES.escapePodIntro && fresh new game → startEscapePodIntro; dev mode + Continue → current spawn) + the additive introComplete save marker (legacy=true, no SAVE_VERSION bump; disable save while introActive) + the entry point (R6) + dev hooks (__game.startIntro/skipIntro/jumpToBeat). Still greybox. Then T0.2 greybox ship -> T0.3 greybox descent+pod -> T0.4 wake/handoff/tutorial scaffold + smoke check -> Phase 0 milestone PAUSE (user walk-test). Plan: docs/feature-escape-pod-intro.md. ENRICH-NOT-CUT.",
   "awaiting_approval": false,
   "stop_reasons": [],
   "plan_doc": "docs/feature-escape-pod-intro.md",
@@ -18,7 +18,24 @@
   "circuit_breaker_n": 3,
   "consecutive_no_progress": 0,
   "ceiling": { "max_cycles": 150, "total": null, "per_cycle": null, "unit": "tokens" },
-  "spend": { "total": 0, "note": "fresh campaign (escape-pod intro), started 2026-06-28. Prior M11->M13 campaign concluded + user-approved (~18.5M tokens / 69 cycles; chronicle archived to campaign-log-2026-06-18-m1-m13.md)." },
+  "spend": { "total": 280000, "note": "escape-pod intro campaign, started 2026-06-28. C1 ~280K (Phase 0 T0.0: a code-archaeologist recon of the boot/tick/controller/world-gen integration points [~62K] + the sequence-framework scaffold + the architecture contract D269 + verify:all + the doc suite). Prior M11->M13 campaign concluded + user-approved (~18.5M tokens / 69 cycles; chronicle archived to campaign-log-2026-06-18-m1-m13.md)." },
   "policy_notes": "ENRICH-NOT-CUT: the scope-cut list (docs/feature-escape-pod-intro.md) is a TRUE-TECHNICAL-WALL safety net ONLY, never a target, ALWAYS surfaced to the user before any cut; the spine + pod + descent + tutorial are NOT cuttable. Hero geometry/FX -> the procedural-modeler agent, iterated to a quality BAR (5-8 rounds new hero elements). Real first-person in-game-view visual gate (not an isolated rig). Anti-punt. Behind FEATURES.escapePodIntro (default off until shipped). No SAVE_VERSION bump unless unavoidable (D81; the introComplete marker is additive, legacy=true). New game -> the intro; old spawn -> dev-mode only. Key early-build decisions to lock in Phase 0: R1 save-marker, R2 world-loading-during-descent, R3 handoff seam, R4 state-machine contract + KCC-on-ship-floor, R5 scrap_machete-as-pry-tool (D261, additive), R6 entry point, R7 parachute-gag fallback, R10 accessibility/photosensitivity. See the feature doc's 'Pre-build review'.",
-  "cycles": []
+  "cycles": [
+    {
+      "cycle": 1,
+      "date": "2026-06-28",
+      "focus": "Phase 0 T0.0 — the intro sequence-framework scaffold (contract spike)",
+      "tier": "Phase 0 — greybox spine (escape-pod intro)",
+      "outcome": "SHIPPED",
+      "units": ["T0.0 — NEW world/escapePodIntro/sequence.ts (beat state machine: BeatId/BEAT_ORDER/IntroState/IntroControlMode + manager start/advance/jumpTo/end + updateEscapePodIntro dispatch + introActive gating helper). FEATURES.escapePodIntro (off). ctx.intro? on GameContext. updateEscapePodIntro inserted in the main tick before updatePlayer (no-op unless active). Architecture contract D269: gate via ctx.intro.active (selective suppression, NOT pause); R4 CONFIRMED the KCC is collision-general (walks bespoke ship-floor box colliders, no terrain coupling); R2 CONFIRMED the desert is boot-built so the handoff is a teleport. Landed INERT behind the flag."],
+      "verify": "verify:all PASS (tsc + placement 0/0 x5 + colliders 0/40). Inert scaffold; nothing starts the intro yet; live game byte-unchanged.",
+      "visual": "N/A — architecture/scaffold cycle, no visual output.",
+      "save": "no change (the additive introComplete marker is T0.1).",
+      "decisions": ["D269 — the escape-pod intro architecture contract: ctx.intro.active gating (not pause); KCC collision-general (R4); world boot-built → teleport handoff (R2); intro unsaved mid-sequence + additive introComplete (no version bump). friction 2"],
+      "recon": "a code-archaeologist mapped boot/new-game/spawn (handoffToGame, setupOpeningScene), the tick + pause gate, the FP controller/camera/input, FEATURES + dev hooks, and world-gen timing.",
+      "ultracode": true,
+      "commit": "PENDING",
+      "spend_approx_tokens": 280000
+    }
+  ]
 }
