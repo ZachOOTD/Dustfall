@@ -1020,7 +1020,7 @@
       "save": "no change.",
       "decisions": ["D268 — per-weapon gunshot SFX dispatched from preFire (was a melee whoosh for all guns); reload only for the guns that reload (scrap_gun/amban); pulse self-recharges + energy is charged → no reload. friction 1"],
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "b9beb16",
       "spend_approx_tokens": 250000
     }
   ]

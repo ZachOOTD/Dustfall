@@ -839,5 +839,5 @@ first stop will be `max-cycles` ~mid-Phase-A; resume via `/campaign-start --resu
 - **Visual iteration:** N/A — AUDIO only. The Web Audio graph is all one-shots (start/stop, GC after — the existing one-shot convention; no sustained-voice C16-lifecycle risk), self-audited; pause-safe (combat gates on `isPlaying`; `preFire` only runs on a real shot → no dry-click gunshot). **SOUND quality → the user's M13 LISTEN.** Not a punt: the wiring is complete + verified; the sound quality is inherently the human gate.
 - **Decisions:** **D268** — per-weapon gunshot SFX dispatched from preFire (was a melee whoosh for all); reload only for the guns that reload. friction 1. Post-mortem: no new candidate (one-shot SFX synthesis is covered by `web-audio-synthesis.md`).
 - **Spend:** ~250K (the recon + 4 synths + the preFire dispatch + the weapon-aware reload + D268 + verify:all + the doc suite); campaign total ~18.41M; cycle **68/75**.
-- **Commit:** `PENDING`.
+- **Commit:** `b9beb16`.
 - **Next (cycle 69):** **M13 ⓙ speeder engine → a lower-pitched, smoother hum** — the LAST review-fix unit. **Verdict: CONTINUE** — M13 not complete (ⓙ remains before the M13 milestone marker). After ⓙ ships, the cycle PAUSES at the M13 milestone (audio LISTEN), ENDING the M11→M13 review-fix pass. `consecutive_no_progress` stays 0 (SHIPPED).
