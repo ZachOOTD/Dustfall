@@ -1,53 +1,54 @@
-# ▶ RESUME — Escape-pod intro · Phase 0 · T0.2 (greybox ship + first beats) — `campaign/escape-pod-intro`
+# ▶ RESUME — Escape-pod intro · Phase 0 · T0.2b (Beats 0-2 flow + HUD suppression) — `campaign/escape-pod-intro`
 
-**Cycle 3 of the escape-pod-intro campaign.** Phase 0 (the greybox spine). T0.0 (framework) +
-T0.1 (new-game/save wiring + dev hooks) shipped. Boot from `docs/campaign/campaign-state.json` +
-`docs/roadmap.md` (NOT chat memory).
+**Cycle 4 of the escape-pod-intro campaign.** Phase 0 (the greybox spine). T0.0 framework + T0.1
+new-game/save wiring + **T0.2a greybox SHIP (walkable cockpit + corridor)** shipped. Boot from
+`docs/campaign/campaign-state.json` + `docs/roadmap.md` (NOT chat memory).
 
 ## Read first
 1. `CLAUDE.md` (auto-loaded) — "Where we are now"
-2. `docs/campaign/campaign-state.json` — cycle 2/150, current_tier (T0.2)
-3. `docs/feature-escape-pod-intro.md` — the BUILD PLAN (Phase 0) + the vision (Beats 0-2)
-4. `docs/decisions.md` (tail) — **D269** (the architecture contract) + **D270** (the T0.1 wiring)
-5. `src/world/escapePodIntro/sequence.ts` — the framework + the per-beat dispatch (read the contract comment)
+2. `docs/campaign/campaign-state.json` — cycle 3/150, current_tier (T0.2b)
+3. `docs/feature-escape-pod-intro.md` — the vision (Beats 0-2) + BUILD PLAN (Phase 0)
+4. `docs/decisions.md` (tail) — **D269** (architecture) + **D270** (T0.1 wiring)
+5. `src/world/escapePodIntro/sequence.ts` (the dispatch + `tickCockpit`) + `shipScene.ts` (the greybox + `getShipSpawn`)
 
-## What's built (T0.0 + T0.1)
-- The beat state machine + `updateEscapePodIntro` dispatch (no-op beats so far) + `introActive` guard, `ctx.intro?`.
-- New game (flag on) → `startEscapePodIntro`; Continue/Dev → normal spawn. `introComplete` save marker. Save blocked mid-intro.
-- Dev hooks: `__game.startIntro()` (force, ignores flag) / `__game.skipIntro()` / `__game.jumpToBeat(beat)`. Use these to iterate.
+## What's built (T0.0 → T0.2a)
+- Framework + new-game/save wiring + dev hooks (`__game.startIntro()` force-starts; `skipIntro()`; `jumpToBeat(beat)`).
+- Greybox ship (cockpit + corridor + window/planet) built on the cockpit beat; capsule placed facing the window, mode `walk`; ship torn down on `endEscapePodIntro`.
+- Locomotion mode-gating (`controller.ts` reads `ctx.intro.mode`); survival drain suppressed during the intro (`survival.ts`).
+- **Verified walkable** from cockpit/window, corridor mouth, corridor interior. Capsule stands on the colliders.
 
-## Cycle 3 focus — T0.2: the greybox SHIP + Beats 0-2
-The first **playable** beats. **Greybox = placeholder boxes; correctness of SPACE + FLOW, not beauty** (hero ship art is Phase 3). Build:
-- **Greybox ship-interior geometry** (`src/world/escapePodIntro/` — new e.g. `shipScene.ts`): a cockpit/bridge room + a corridor, as **box-collider floors + walls** the KCC walks (R4 ✓ — collision-general). Place it at an OFFSET from the desert (e.g. far +Y or far XZ) so it coexists with the boot-built world without interference. A greybox "window" (a colored quad) with the planet below. Built into the scene at boot only when the intro is active (or built lazily on intro start) — keep it out of the normal game.
-- **Beat controllers** (in `sequence.ts`'s dispatch / per-beat tick fns):
-  - `cockpit` (mode `seated`/`scripted`) — place the capsule in the bridge looking at the planet; a diegetic "check engines" prompt; trigger (timer or a look/keypress) → `advanceBeat`.
-  - `checkEngines` (mode `walk`) — free locomotion; get up + move toward the corridor mouth; reaching it → advance.
-  - `corridor` (mode `walk`) — walk the corridor; reaching the far end triggers the disaster beat (for greybox, → advance to `enterPod`, which can be a stub that hands to the desert via `endEscapePodIntro` until T0.3 builds it).
-- **Locomotion gating** — wire `updatePlayer` to read `ctx.intro.mode`: `walk` = normal WASD+look; `seated` = look only (no locomotion); `scripted` = camera driven. (Add the `introActive`/mode read in `controller.ts`.)
-- **System suppression** — while `introActive(ctx)`, stand down the systems that would interfere (stats drain, raiders/lizards/worm AI, combat). Add `introActive(ctx)` early-outs where needed (per D269 — NOT pause).
-- **Capsule placement** — the cockpit beat teleports the player capsule onto the ship floor (set `cameraSnapNextFrame`). The handoff (T0.4) teleports back to the desert spawn.
+## Cycle 4 focus — T0.2b: the Beat 0-2 FLOW + HUD suppression
+Make the cockpit→corridor section actually PLAY as a sequence (still greybox).
+- **Beat controllers** (`sequence.ts` — add `tickCheckEngines`, `tickCorridor`; refine `tickCockpit`):
+  - `cockpit` — open **seated** (mode `seated`: look-only, no WASD) looking out the window; after a short beat (timer or a keypress/click), a diegetic **"check engines"** prompt appears + the mode flips to `walk` → `advanceBeat()` to `checkEngines`. (The seated-open is the vision; T0.2a used walk for inspection.)
+  - `checkEngines` (mode `walk`) — the player walks toward/through the corridor opening; crossing into the corridor (a Z-threshold check on the capsule) → `advanceBeat()` to `corridor`.
+  - `corridor` (mode `walk`) — walk to the far dead-end; reaching it (Z-threshold near the dead-end) triggers the disaster → for greybox, `advanceBeat()` to `enterPod`, which can be a **stub** that calls `endEscapePodIntro` (hand to the desert) until T0.3 builds the pod/descent.
+  - Triggers read the capsule world Z (corridor runs +Z from `SHIP_ORIGIN`; mouth ≈ z 2.6, dead-end ≈ z 14.6). Keep it simple + robust.
+- **Diegetic prompts** — reuse the interact-prompt / a small centered hint (see `updateInteractPrompt` / tutorial hint patterns) for "check engines" + (optionally) "go to the engine bay". Greybox text is fine.
+- **HUD suppression during the intro (the T0.2a-noted gap)** — hide the game HUD (clock, storm-warning, hotbar) while `introActive`. Cleanest: toggle the in-game HUD DOM container(s) hidden on intro start + restored at handoff (or gate `updateHud`/`updateHotbar` to also hide their elements). Do NOT hide the diegetic beat prompts. Verify the intro view is clean (no clock/hotbar) in the preview.
+- **Broader system suppression (optional, if cheap)** — if desert AI/weather visibly interfere, add `introActive` early-outs (raiders/lizards/worm/weather-vignette). Lower priority — the player is offset far away.
 
 ### Acceptance
-- Flag OFF (default) → game boots exactly as today (`verify:all` green). `__game.startIntro()` (or flag ON + new game) → you spawn in the greybox cockpit, see the planet, get the "check engines" prompt, walk out through the corridor, and at the corridor end it advances (to enterPod stub → desert, until T0.3). No stats drain / no enemies during the intro. `__game.skipIntro()` still hands back cleanly. No SAVE_VERSION bump.
+- `__game.startIntro()` (or flag ON + new game) → you open seated in the cockpit looking at the planet → "check engines" prompt → you can walk → through the corridor → at the dead-end it advances (→ enterPod stub → desert, until T0.3). **No game HUD visible during the intro.** `__game.jumpToBeat('corridor')` drops you in the corridor. `__game.skipIntro()` still hands back cleanly. `verify:all` green; no SAVE_VERSION bump.
 
-## Visual gate (T0.2 = greybox, routine bar)
-This is greybox blockout, NOT hero art — the gate verifies the SPACE reads + is walkable (legible cockpit, corridor you can traverse, planet visible), not beauty. Render the **real first-person in-game view** (drive `__game.startIntro` + walk via evals/`poseLunge`-style hooks or camera evals), 1-2 critics / `/visual-triage`, FLOOR bar (no sev≥2). Hero ship modeling is Phase 3 (procedural-modeler) — do NOT gold-plate greybox.
+## Visual/feel gate (greybox, routine bar)
+Drive `__game.startIntro` + screenshot the real FP view at each beat (seated cockpit, mid-corridor, dead-end). Confirm: HUD hidden, prompt readable, the flow advances. Routine bar (no sev≥2). Hero art is Phase 3.
 
 ## Then (rest of Phase 0)
 T0.3 greybox descent + seated pod + the parachute-gag fallback · T0.4 greybox wake → desert handoff
 (pod-as-spawn seam) → tutorial scaffold + smoke check. **Phase 0 milestone → PAUSE** for the user's
-first walk-test (the whole flow + pacing).
+first walk-test (whole flow + pacing).
 
 ## Campaign rules
 ENRICH-NOT-CUT · greybox now / hero art (procedural-modeler + real FP-view gate) in Phases 1-5 ·
-anti-punt · behind the flag · no save bump · `verify:all` + a live smoke each cycle · commit each
+anti-punt · behind the flag · no save bump · `verify:all` + a live check each cycle · commit each
 cycle · checkpoint = per phase. Steer via `docs/campaign/steering.md`.
 
 ## Footguns
-- Keep the flag OFF by default — the live game (on master) must stay byte-identical when the intro isn't active.
-- Greybox ship geometry must NOT spawn in the normal game — gate its build on the intro.
-- `introActive` gating ≠ pause (D269). Place the ship offset so it doesn't collide with desert POIs.
-- The KCC walks box colliders (R4) — no terrain coupling needed for the ship floor.
+- Keep the flag OFF by default — live game byte-identical when the intro isn't active.
+- **Don't pipe `verify:all` through `tail`** — `tail`'s exit code (0) masks a tsc failure. Capture the real exit (`... > out 2>&1; echo EXIT=$?`).
+- `introActive` gating ≠ pause (D269). Restore the HUD on handoff so the normal game isn't left HUD-less.
+- Beat triggers on capsule Z must use WORLD coords (`SHIP_ORIGIN` offset). The KCC walks box colliders (R4).
 
 ## Verify
-`npm run verify:all` (tsc + placement 0/0 ×5 + colliders 0/40 — watch the collider gate if you add ship colliders). Plus a live smoke: `__game.startIntro()` → walk the cockpit→corridor → confirm beat advance + no errors.
+`npm run verify:all` (capture the real exit code) + a live preview: `__game.startIntro()` → screenshot the seated cockpit (HUD hidden) → `jumpToBeat('corridor')` → walk/teleport to the dead-end → confirm advance + no errors.

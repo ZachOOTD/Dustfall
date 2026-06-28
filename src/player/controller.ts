@@ -105,8 +105,13 @@ export function updatePlayer(ctx: GameContext, dt: number): void {
 
   const { body, collider, controller } = ctx.player.body;
   const { keys } = ctx.input;
-  const f = (keys['KeyW'] ? 1 : 0) - (keys['KeyS'] ? 1 : 0);
-  const r = (keys['KeyD'] ? 1 : 0) - (keys['KeyA'] ? 1 : 0);
+  let f = (keys['KeyW'] ? 1 : 0) - (keys['KeyS'] ? 1 : 0);
+  let r = (keys['KeyD'] ? 1 : 0) - (keys['KeyA'] ? 1 : 0);
+  // Escape-pod intro (T0.2) — gate locomotion by the beat's control mode (D269).
+  // 'seated'/'scripted' disable WASD + jump (the intro owns the capsule); free-look
+  // stays (camera rotation is independent). 'walk' (+ the normal game) moves normally.
+  const introLocoLocked = ctx.intro?.active === true && ctx.intro.mode !== 'walk';
+  if (introLocoLocked) { f = 0; r = 0; }
   const moving = f !== 0 || r !== 0;
   // Crouch: hold LeftControl. Disables sprint, lowers camera, slows speed.
   ctx.player.crouching = !!(keys['ControlLeft'] || keys['ControlRight']);
@@ -218,7 +223,7 @@ export function updatePlayer(ctx: GameContext, dt: number): void {
   desired.multiplyScalar(speed * dt);
 
   // Jump: Space while grounded kicks velocityY upward; gravity does the rest.
-  if (ctx.player.onGround && ctx.input.pressed.has('Space')) {
+  if (ctx.player.onGround && ctx.input.pressed.has('Space') && !introLocoLocked) {
     ctx.player.velocityY = Tuning.JUMP_VELOCITY;
   }
 

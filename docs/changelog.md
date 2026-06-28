@@ -3,6 +3,18 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Escape-pod campaign C3 — 2026-06-28 — Phase 0 T0.2a: **the greybox SHIP (walkable cockpit + corridor) + capsule placement + locomotion gating** ✓ verify + visual pass
+
+`verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40 — the intro's lazy colliders don't touch the POI gate) + a live-preview **visual gate**: the greybox space reads + is walkable from all 3 player reads (cockpit/window, corridor mouth, corridor interior); the capsule stands on the floor colliders (didn't fall through); 0 console errors. Flag OFF by default → live game byte-unchanged.
+
+**T0.2a — the first VISUAL cycle (greybox blockout, NOT hero art — that's Phase 3):**
+- **NEW `src/world/escapePodIntro/shipScene.ts`** — the greybox ship interior: a data-driven box layout (cockpit 6×3×5 with a framed front window + a corridor 2×2.4×12 to a dead-end), each box a mesh + a **matched static box collider** (WYSIWYG), unlit `MeshBasicMaterial` (obviously-placeholder, zero lighting/recompile dependency), at a far offset `(0,3000,0)` (R2 — desert is boot-built + sits ready), with a planet disc beyond the window. `buildShipScene`/`disposeShipScene`/`getShipSpawn`. The KCC walks it unchanged (R4).
+- **Cockpit beat** (`sequence.ts` `tickCockpit`) — on first entry builds the ship + drops the capsule into the bridge facing the window, mode `walk`. `endEscapePodIntro` now tears the ship down.
+- **Locomotion mode-gating** (`controller.ts`) — `ctx.intro.mode` (`walk`/`seated`/`scripted`) gates WASD + jump while `introActive`; free-look stays (D269).
+- **System suppression** (`survival.ts`) — no thirst/hunger/temperature drain (no death) during the intro.
+- **Deferred to T0.2b:** the beat FLOW (cockpit "check engines" prompt → checkEngines walk-out → corridor-end disaster trigger → advance), the seated cockpit open, **HUD-during-intro suppression** (clock/hotbar still overlay the intro), broader AI/weather suppression.
+- **Next:** T0.2b — wire Beats 0-2 + suppress the game HUD during the intro.
+
 ## Escape-pod campaign C2 — 2026-06-28 — Phase 0 T0.1: **new-game flow + introComplete save marker + dev hooks** ✓ verify + live smoke pass
 
 `verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40) + a live-preview smoke test of the dev hooks (flag-off boot → no intro; force-start → active@cockpit; jumpToBeat→descent; skipIntro→done/inactive; no console errors). Flag still OFF by default → live game byte-unchanged. No SAVE_VERSION bump (stays v15).

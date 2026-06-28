@@ -34,6 +34,7 @@
 
 import type { GameContext } from '../../GameContext.ts';
 import { FEATURES } from '../../config/features.ts';
+import { buildShipScene, disposeShipScene, getShipSpawn } from './shipScene.ts';
 
 /** The intro beats, in order (Beats 0-11 of the vision; `done` = handed off). */
 export type BeatId =
@@ -118,12 +119,32 @@ export function advanceBeat(ctx: GameContext): void {
   jumpToBeat(ctx, next);
 }
 
-/** End the intro + hand control back to the normal game. T0.4 will teleport the player
- *  to the desert spawn + mark `introComplete` in the save; T0.0 just clears the flag. */
+/** End the intro + hand control back to the normal game. Tears down the greybox ship
+ *  (T0.2). T0.4 will teleport the player to the desert spawn + mark `introComplete` in
+ *  the save; for now this clears the flag + disposes the ship geometry. */
 export function endEscapePodIntro(ctx: GameContext): void {
   if (!ctx.intro) return;
   ctx.intro.active = false;
   ctx.intro.beat = 'done';
+  disposeShipScene(ctx);
+}
+
+/** Cockpit beat (T0.2a) — on first entry, build the greybox ship + drop the player
+ *  capsule into the bridge facing the window, in WALK mode (so the space is walkable
+ *  for the blockout). T0.2b adds the "check engines" prompt + the advance trigger. */
+function tickCockpit(ctx: GameContext): void {
+  const intro = ctx.intro;
+  if (!intro || intro.scratch.shipBuilt) return;
+  buildShipScene(ctx);
+  const spawn = getShipSpawn(ctx);
+  const pb = ctx.player.body;
+  pb.body.setTranslation({ x: spawn.x, y: spawn.y, z: spawn.z }, true);
+  ctx.player.velocityY = 0;
+  ctx.player.cameraSnapNextFrame = true;
+  ctx.three.camera.position.set(spawn.x, spawn.y + ctx.player.eyeOffset, spawn.z);
+  ctx.three.camera.rotation.set(0, 0, 0);   // face −Z → straight out the window
+  intro.mode = 'walk';                        // T0.2a: walkable for the blockout (T0.2b → seated open)
+  intro.scratch.shipBuilt = true;
 }
 
 /** Per-frame intro driver — inserted into the main tick BEFORE updatePlayer. No-op
@@ -133,11 +154,11 @@ export function updateEscapePodIntro(ctx: GameContext, _dt: number): void {
   const intro = ctx.intro;
   if (!intro || !intro.active) return;
   switch (intro.beat) {
-    // T0.2+ — each case drives its beat + calls advanceBeat()/jumpToBeat() on its trigger:
-    //   case 'cockpit':     tickCockpit(ctx, _dt); break;
-    //   case 'corridor':    tickCorridor(ctx, _dt); break;
-    //   case 'descent':     tickDescent(ctx, _dt); break;
-    //   ... etc.
+    case 'cockpit':
+      tickCockpit(ctx);
+      break;
+    // T0.2b+ — each remaining case drives its beat + calls advanceBeat()/jumpToBeat()
+    // on its trigger (checkEngines walk-out, corridor end → disaster, descent, …).
     default:
       break;
   }

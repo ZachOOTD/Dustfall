@@ -3,8 +3,8 @@
   "campaign": "escape-pod-intro",
   "started": "2026-06-28",
   "branch": "campaign/escape-pod-intro",
-  "cycles_completed": 2,
-  "current_tier": "Phase 0 — playable greybox spine. ✅ T0.0 DONE (C1) sequence-framework scaffold (D269). ✅ T0.1 DONE (C2) — wired the framework into boot/new-game/save (D270): startEscapePodIntro in main.ts onNewGame path-3 only (FEATURES.escapePodIntro && !devMode; Continue+Dev never start it); additive introComplete save marker (legacy=true, derived from ctx.intro, no SAVE_VERSION bump); Save blocked mid-intro (menus.ts); dev hooks __game.startIntro/skipIntro/jumpToBeat (debugPanel.ts; startEscapePodIntro gained force). verify:all + live-smoke PASS; flag off → live game byte-unchanged. NEXT unit = T0.2: the greybox SHIP (cockpit+corridor box-collider geometry the KCC walks, placed offset from the desert) + Beats 0-2 (cockpit → checkEngines → corridor) + locomotion gating via ctx.intro.mode (walk/seated/scripted) in controller.ts + introActive system-suppression (stats/AI/combat stand down). Greybox = SPACE/FLOW correctness, NOT beauty (hero ship art is Phase 3 via procedural-modeler). Then T0.3 greybox descent+pod -> T0.4 wake/handoff/tutorial scaffold + smoke -> Phase 0 milestone PAUSE (user walk-test). Plan: docs/feature-escape-pod-intro.md. ENRICH-NOT-CUT.",
+  "cycles_completed": 3,
+  "current_tier": "Phase 0 — playable greybox spine. ✅ T0.0 (C1) framework scaffold (D269). ✅ T0.1 (C2) boot/new-game/save wiring + dev hooks (D270). ✅ T0.2a DONE (C3) — the greybox SHIP (first visual cycle): NEW world/escapePodIntro/shipScene.ts (data-driven box layout — cockpit 6×3×5 with a framed window + a 12m corridor to a dead-end; each box = mesh + matched static collider WYSIWYG; unlit MeshBasicMaterial greybox; far offset (0,3000,0); planet disc beyond the window; KCC walks it R4). Cockpit beat (sequence.ts tickCockpit) builds the ship + drops the capsule facing the window; endEscapePodIntro tears it down. Locomotion mode-gating (ctx.intro.mode walk/seated/scripted) in controller.ts; survival drain suppressed during intro (survival.ts). verify:all PASS + live visual gate (walkable from 3 reads; capsule on colliders; 0 console errors). NEXT unit = T0.2b: the Beat 0-2 FLOW (cockpit seated-open + 'check engines' prompt → checkEngines walk-out → corridor-end disaster trigger → advance; enterPod stub → desert until T0.3) + HUD-during-intro suppression (clock/hotbar still overlay — the T0.2a-noted gap) + diegetic prompts. Then T0.3 greybox descent+pod -> T0.4 wake/handoff/tutorial scaffold + smoke -> Phase 0 milestone PAUSE (user walk-test). Plan: docs/feature-escape-pod-intro.md. ENRICH-NOT-CUT.",
   "awaiting_approval": false,
   "stop_reasons": [],
   "plan_doc": "docs/feature-escape-pod-intro.md",
@@ -18,7 +18,7 @@
   "circuit_breaker_n": 3,
   "consecutive_no_progress": 0,
   "ceiling": { "max_cycles": 150, "total": null, "per_cycle": null, "unit": "tokens" },
-  "spend": { "total": 490000, "note": "escape-pod intro campaign, started 2026-06-28. C1 ~280K (T0.0 scaffold + recon). C2 ~210K (T0.1: save-system + new-game-flow recon [direct reads, no agent] + 12 edits across main/save/menus/debugPanel/sequence + verify:all + a live-preview smoke test + the doc suite). Prior M11->M13 campaign concluded + user-approved (~18.5M tokens / 69 cycles; chronicle archived to campaign-log-2026-06-18-m1-m13.md)." },
+  "spend": { "total": 760000, "note": "escape-pod intro campaign, started 2026-06-28. C1 ~280K (T0.0). C2 ~210K (T0.1). C3 ~270K (T0.2a greybox ship: controller/bodies recon + shipScene.ts + sequence/controller/survival wiring + a live-preview visual gate [enterGame+startIntro, 3-angle screenshots] + a tsc fix [BoxSpec arity] + verify:all + docs). Prior M11->M13 campaign concluded + user-approved (~18.5M tokens / 69 cycles; chronicle archived to campaign-log-2026-06-18-m1-m13.md)." },
   "policy_notes": "ENRICH-NOT-CUT: the scope-cut list (docs/feature-escape-pod-intro.md) is a TRUE-TECHNICAL-WALL safety net ONLY, never a target, ALWAYS surfaced to the user before any cut; the spine + pod + descent + tutorial are NOT cuttable. Hero geometry/FX -> the procedural-modeler agent, iterated to a quality BAR (5-8 rounds new hero elements). Real first-person in-game-view visual gate (not an isolated rig). Anti-punt. Behind FEATURES.escapePodIntro (default off until shipped). No SAVE_VERSION bump unless unavoidable (D81; the introComplete marker is additive, legacy=true). New game -> the intro; old spawn -> dev-mode only. Key early-build decisions to lock in Phase 0: R1 save-marker, R2 world-loading-during-descent, R3 handoff seam, R4 state-machine contract + KCC-on-ship-floor, R5 scrap_machete-as-pry-tool (D261, additive), R6 entry point, R7 parachute-gag fallback, R10 accessibility/photosensitivity. See the feature doc's 'Pre-build review'.",
   "cycles": [
     {
@@ -52,6 +52,23 @@
       "ultracode": true,
       "commit": "76a30c7",
       "spend_approx_tokens": 210000
+    },
+    {
+      "cycle": 3,
+      "date": "2026-06-28",
+      "focus": "Phase 0 T0.2a — the greybox SHIP (walkable cockpit + corridor) + capsule placement + locomotion gating + survival suppression",
+      "tier": "Phase 0 — greybox spine (escape-pod intro)",
+      "outcome": "SHIPPED",
+      "units": ["T0.2a — NEW world/escapePodIntro/shipScene.ts: greybox ship interior (data-driven box layout, cockpit 6x3x5 with a framed front window + a 2x2.4x12 corridor to a dead-end; each box a mesh + a matched static box collider [WYSIWYG]; unlit MeshBasicMaterial = obviously-greybox + zero lighting/recompile dependency; far offset (0,3000,0) per R2; planet disc beyond the window; KCC walks it per R4). buildShipScene/disposeShipScene/getShipSpawn. sequence.ts tickCockpit builds the ship + teleports the capsule into the bridge facing the window (mode walk); endEscapePodIntro disposes the ship. controller.ts locomotion mode-gating (ctx.intro.mode walk/seated/scripted gates WASD+jump; free-look untouched). survival.ts no stats drain (no death) during the intro."],
+      "verify": "verify:all PASS (tsc + placement 0/0 x5 + colliders 0/40 — the intro's lazy colliders are not POI archetypes so the POI gate is unaffected). NOTE: a first run masked a tsc error because the cmd was piped through tail (tail's exit 0 hid tsc's failure) — re-ran capturing the real exit. Fixed a BoxSpec arity typo (7→6).",
+      "visual": "appearance-verified (greybox blockout, routine bar) — live-preview FP-view from 3 player reads (cockpit/window, corridor mouth, corridor interior): the space reads + is walkable, the capsule stands on the floor colliders (no fall-through), 0 console errors. feel-pending (real walk = the Phase 0 milestone walk-test).",
+      "save": "no change (no save fields touched; SAVE_VERSION stays 15).",
+      "decisions": ["(no new D-entry — execution of D269/D270; the greybox ship design is documented in shipScene.ts)"],
+      "recon": "direct reads of controller.ts updatePlayer (locomotion + camera-sync), bodies.ts makeStaticBox, debugPanel enterGame hook — no agent.",
+      "deferred_to_T0.2b": "the Beat 0-2 FLOW (cockpit seated-open + 'check engines' prompt → checkEngines walk → corridor-end disaster trigger → advance), HUD-during-intro suppression (clock/hotbar still overlay), broader AI/weather suppression. NOT a punt — T0.2a's deliverable (a walkable, legible greybox ship + placement + gating) is delivered + verified; the beat flow is the next sub-task.",
+      "ultracode": true,
+      "commit": "PENDING",
+      "spend_approx_tokens": 270000
     }
   ]
 }

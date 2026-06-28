@@ -77,11 +77,12 @@ first-person throughout; pod identity = **industrial modular box**. References +
 merged to master + live at https://zachootd.github.io/Dustfall/. Its log is archived at `docs/campaign/campaign-log-2026-06-18-m1-m13.md`. Still queued for the user (out-of-loop): the **Skyfall
 hero wreck** + the **CAVE rework** (dedicated solo sessions), ⑰ pickup-instancing (human-attended), + the §A walk-tests.
 
-**Last shipped**: Escape-pod **C2** (2026-06-28, Phase 0 T0.1) — wired the (T0.0) sequence framework into boot/new-game/save (`verify:all` PASS + live-smoke PASS; flag still OFF → live game
-byte-unchanged; no SAVE_VERSION bump). `startEscapePodIntro` fires only in `main.ts`'s `onNewGame` **path-3** (fresh-boot), gated `FEATURES.escapePodIntro && !devMode` — Continue + Dev never start it
-(D270). Additive `introComplete` save marker (R1, legacy→true, derived from `ctx.intro`, no version bump) + Save blocked mid-intro (`menus.ts`) + dev hooks `__game.startIntro()`/`skipIntro()`/`jumpToBeat()`
-(`debugPanel.ts`; `startEscapePodIntro` gained a `force` param). **Next** = Phase 0 T0.2 — the greybox SHIP (cockpit + corridor box-collider geometry the KCC walks) + the first real beats (cockpit →
-checkEngines → corridor). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
+**Last shipped**: Escape-pod **C3** (2026-06-28, Phase 0 T0.2a) — the greybox SHIP, the first VISUAL cycle (`verify:all` PASS + live-preview visual gate; flag OFF → live game byte-unchanged). NEW
+`src/world/escapePodIntro/shipScene.ts` — a data-driven box layout (cockpit 6×3×5 with a framed window + a 12m corridor to a dead-end), each box a mesh + a **matched static collider** (WYSIWYG),
+unlit `MeshBasicMaterial` (obviously-greybox), at a far offset `(0,3000,0)`, planet disc beyond the window; the KCC walks it (R4). The cockpit beat builds the ship + drops the capsule facing the window
+(`sequence.ts tickCockpit`; `endEscapePodIntro` tears it down). Locomotion mode-gating (`ctx.intro.mode` walk/seated/scripted) in `controller.ts`; survival drain suppressed during the intro
+(`survival.ts`). The space reads + is walkable from all 3 reads. **Greybox = blockout, NOT hero art (Phase 3).** **Next** = Phase 0 T0.2b — the beat FLOW (cockpit "check engines" → checkEngines walk →
+corridor-end disaster → advance) + suppress the game HUD during the intro (clock/hotbar still overlay). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 
