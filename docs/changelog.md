@@ -3,6 +3,18 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Escape-pod campaign C7 — 2026-06-28 — Phase 0 T0.4a: **impact → wake → THE DESERT HANDOFF** (the greybox spine plays end-to-end) ✓ verify + visual pass
+
+`verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40) + a live-preview **visual gate**: the handoff teleports the player from the offset pod scene back to the **real desert spawn** (captured at start: `-46.2, 10.7, 11.3`) — intro inactive, HUD restored, black overlay cleared, standing in the dawn dunes playing the normal game; 0 console errors. Flag OFF → live game byte-unchanged.
+
+**T0.4a — the spine closes (greybox):**
+- **`impact` beat** (`sequence.ts`) — the crash: hard flash + max trauma, then **fade to black** (`introHud.setIntroBlack` 0→1) + hold → `wake`.
+- **`wake` beat** — come to: fade **from** black (the vision's muffled rouse; audio is Phase 5) + hold → `stepOut`.
+- **`stepOut` beat — THE DESERT HANDOFF (R3):** teleport the capsule to the captured `returnPos` (the real new-game spawn, snapshotted in `startEscapePodIntro` before the intro moves the player) + `cameraSnapNextFrame` + `endEscapePodIntro` (restores HUD/locomotion/survival, disposes ship+pod, clears the black). The player is now in the dunes, playing.
+- **NEW `introHud.setIntroBlack(opacity)`** — a full-screen black overlay (the blackout/wake fades); `endEscapePodIntro` clears it (never lingers over the real game). Added `returnPos` to `IntroState`.
+- **`introComplete`** derives `true` post-handoff (intro `beat='done'`) → a save won't replay the intro. **The greybox intro now plays new game → cockpit → corridor → pod → eject → ship-explode → descent → chute-gag → impact → blackout → wake → desert, end-to-end.**
+- **Next:** T0.4b — the pod-as-spawn-wreck seam + the craft+salvage tutorial scaffold + the `feature-escape-pod-intro` smoke check → **completes Phase 0 → milestone PAUSE** (the user's first full walk-test).
+
 ## Escape-pod campaign C6 — 2026-06-28 — Phase 0 T0.3b: **the descent + the parachute GAG** (Beats 5-7) — T0.3 pod/descent COMPLETE ✓ verify + visual pass
 
 `verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40) + a live-preview **visual gate**: descent grows the planet (scale 1→4.5) + rumbles, the parachute gag escalates ("Pull harder!" → "COME ON — PULL!") → snaps at 3 pulls → impact with heavy camera shake; HUD clean; `skipIntro` disposes the pod; 0 console errors. Flag OFF → live game byte-unchanged.

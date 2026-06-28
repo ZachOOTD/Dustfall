@@ -77,12 +77,12 @@ first-person throughout; pod identity = **industrial modular box**. References +
 merged to master + live at https://zachootd.github.io/Dustfall/. Its log is archived at `docs/campaign/campaign-log-2026-06-18-m1-m13.md`. Still queued for the user (out-of-loop): the **Skyfall
 hero wreck** + the **CAVE rework** (dedicated solo sessions), ⑰ pickup-instancing (human-attended), + the §A walk-tests.
 
-**Last shipped**: Escape-pod **C6** (2026-06-28, Phase 0 T0.3b — **T0.3 pod/descent COMPLETE**) — the descent + the parachute GAG (`verify:all` PASS + live-preview visual gate; flag OFF → live game
-byte-unchanged). `descent` beat: `descentProgress` 0→1 over ~8s → `podScene.setDescentProgress` swells the planet 1×→4.5× + a continuous `fx/cameraShake.addTrauma` rumble → `parachute`. **The GAG**: each
-pull (`pulledLever` E/click, edge-triggered) jolts + escalates the cue; the **3rd pull snaps the lever off** (flash) → free-fall → `impact` (a T0.4 stub: flash + max trauma). Auto-pull fallback prevents
-softlock. Added `setDescentProgress` + an `ensureInPod` helper (pod beats build+seat idempotently → independently jumpable; same robustness principle as the C5 HUD-decouple). **The greybox intro now plays
-cockpit → corridor → pod → eject → ship-explode → descent → chute-gag → impact-stub.** **Next** = Phase 0 T0.4 — impact/blackout/wake → **the desert handoff** (teleport to spawn + restore play + mark
-`introComplete` + dispose pod) + the craft+salvage tutorial scaffold → **completes Phase 0 → milestone PAUSE** (the user's first full walk-test). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
+**Last shipped**: Escape-pod **C7** (2026-06-28, Phase 0 T0.4a) — impact → wake → **THE DESERT HANDOFF** (`verify:all` PASS + live-preview visual gate; flag OFF → live game byte-unchanged). `impact` (flash +
+max trauma → fade to black via NEW `introHud.setIntroBlack`) → `wake` (fade from black) → `stepOut` = **the R3 handoff**: teleport the capsule to `returnPos` (the real new-game spawn, captured in
+`startEscapePodIntro` before the intro moves the player) + `endEscapePodIntro` (restores HUD/locomotion/survival, disposes ship+pod, clears the black). Verified: lands the player at the desert spawn (`-46.2,
+10.7, 11.3`), HUD back, playing — NOT stuck at altitude. `introComplete` derives true post-handoff. **The greybox intro now plays new game → cockpit → corridor → pod → eject → ship-explode → descent →
+chute-gag → impact → blackout → wake → desert, END-TO-END.** **Next** = Phase 0 T0.4b — the pod-as-spawn-wreck seam + the craft+salvage tutorial scaffold + the smoke check → **completes Phase 0 → milestone
+PAUSE** (the user's first full greybox walk-test). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 

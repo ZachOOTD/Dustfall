@@ -61,3 +61,29 @@ export function showIntroPrompt(text: string): void {
 export function hideIntroPrompt(): void {
   if (promptEl) promptEl.style.opacity = '0';
 }
+
+let fadeEl: HTMLDivElement | null = null;
+
+function ensureFade(): HTMLDivElement {
+  if (fadeEl) return fadeEl;
+  const el = document.createElement('div');
+  el.id = 'intro-fade';
+  Object.assign(el.style, {
+    position: 'fixed',
+    inset: '0',
+    background: '#000',
+    pointerEvents: 'none',
+    zIndex: '70',          // above the beat prompt — the blackout covers everything
+    opacity: '0',
+  } as Partial<CSSStyleDeclaration>);
+  document.body.appendChild(el);
+  fadeEl = el;
+  return el;
+}
+
+/** Set the full-screen black overlay opacity (0 = clear, 1 = blackout). Driven directly
+ *  by the impact (fade to black) + wake (fade from black) beats; cleared (0) at the
+ *  desert handoff so it never lingers over the real game. */
+export function setIntroBlack(opacity: number): void {
+  ensureFade().style.opacity = String(Math.max(0, Math.min(1, opacity)));
+}

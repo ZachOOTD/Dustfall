@@ -39,7 +39,7 @@ import {
   SHIP_CORRIDOR_ENTER_Z, SHIP_DEAD_END_Z,
 } from './shipScene.ts';
 import { buildPodScene, disposePodScene, getPodSpawn, setDescentProgress } from './podScene.ts';
-import { setGameHudHidden, showIntroPrompt, hideIntroPrompt } from './introHud.ts';
+import { setGameHudHidden, showIntroPrompt, hideIntroPrompt, setIntroBlack } from './introHud.ts';
 import { flashScreen } from '../../fx/screenFlash.ts';
 import { addTrauma } from '../../fx/cameraShake.ts';
 
@@ -57,6 +57,12 @@ const PARACHUTE_PULLS = 3;
 const PARACHUTE_AUTOPULL = 2.5;
 /** Beat of silent free-fall after the lever snaps, before impact (seconds). */
 const PARACHUTE_SNAP_FALL = 2.0;
+/** Impact: seconds to fade to black, then hold in blackout, before waking. */
+const IMPACT_FADE = 1.2;
+const IMPACT_HOLD = 1.0;
+/** Wake: seconds to fade FROM black (come to), then hold, before the desert handoff. */
+const WAKE_FADE = 2.5;
+const WAKE_HOLD = 1.2;
 
 /** Did the player "pull the lever" this frame (click or E)? */
 function pulledLever(ctx: GameContext): boolean {
@@ -119,6 +125,10 @@ export interface IntroState {
   beatStartedAt: number;
   /** Capsule/camera control mode for the current beat (T0.2+ set per beat). */
   mode: IntroControlMode;
+  /** The desert position to hand back to — captured at startEscapePodIntro (the player is
+   *  at the real new-game spawn at that point, before the intro teleports them to the ship).
+   *  stepOut teleports the capsule here for the desert handoff (R3). */
+  returnPos: { x: number; y: number; z: number };
   /** Per-beat scratch — added by later tiers (e.g. parachutePulls, doorBlown).
    *  Kept loose so beat controllers can stash transient state without growing this type. */
   scratch: Record<string, number | boolean>;
@@ -137,11 +147,15 @@ export function introActive(ctx: GameContext): boolean {
  *  the build flag). */
 export function startEscapePodIntro(ctx: GameContext, force = false): void {
   if (!force && !FEATURES.escapePodIntro) return;
+  // Capture the desert spawn NOW — setupOpeningScene placed the player there at boot, and
+  // we're about to teleport them to the ship; stepOut hands back to this position (R3).
+  const t = ctx.player.body.body.translation();
   ctx.intro = {
     active: true,
     beat: 'cockpit',
     beatStartedAt: ctx.time.elapsed,
     mode: 'scripted',
+    returnPos: { x: t.x, y: t.y, z: t.z },
     scratch: {},
   };
   // Suppress the game HUD up front (decoupled from any single beat) so ANY entry path —
@@ -177,6 +191,7 @@ export function endEscapePodIntro(ctx: GameContext): void {
   ctx.intro.active = false;
   ctx.intro.beat = 'done';
   hideIntroPrompt();
+  setIntroBlack(0);        // never leave a black overlay over the real game
   setGameHudHidden(false);
   disposeShipScene(ctx);
   disposePodScene(ctx);
@@ -320,20 +335,57 @@ function tickParachute(ctx: GameContext, dt: number): void {
   }
 }
 
-/** impact beat — T0.4 STUB. The crash/blackout/wake + the desert handoff are T0.4; for
- *  now a hard flash + a placeholder cue (exit via `__game.skipIntro()`). */
-function tickImpact(ctx: GameContext): void {
+/** impact beat (T0.4a) — the crash: a hard flash + max trauma, then fade to black + hold
+ *  (the blackout). → wake. */
+function tickImpact(ctx: GameContext, dt: number): void {
   const intro = ctx.intro;
-  if (!intro || intro.scratch.init) return;
-  flashScreen(0xffffff, 1.0);
-  addTrauma(1.0);
-  showIntroPrompt('[ impact — crash/wake/desert handoff: T0.4 ]');
-  intro.scratch.init = true;
+  if (!intro) return;
+  if (!intro.scratch.init) {
+    flashScreen(0xffffff, 1.0);
+    addTrauma(1.0);
+    showIntroPrompt('');
+    intro.scratch.t = 0;
+    intro.scratch.init = true;
+  }
+  intro.scratch.t = (intro.scratch.t as number) + dt;
+  setIntroBlack(Math.min(1, (intro.scratch.t as number) / IMPACT_FADE));
+  if ((intro.scratch.t as number) > IMPACT_FADE + IMPACT_HOLD) advanceBeat(ctx);   // → wake
+}
+
+/** wake beat (T0.4a) — come to: fade FROM black (the vision's muffled/ringing rouse;
+ *  audio is Phase 5), hold a beat, → stepOut. */
+function tickWake(ctx: GameContext, dt: number): void {
+  const intro = ctx.intro;
+  if (!intro) return;
+  if (!intro.scratch.init) {
+    intro.mode = 'scripted';
+    setIntroBlack(1);
+    intro.scratch.t = 0;
+    intro.scratch.init = true;
+  }
+  intro.scratch.t = (intro.scratch.t as number) + dt;
+  setIntroBlack(Math.max(0, 1 - (intro.scratch.t as number) / WAKE_FADE));
+  if ((intro.scratch.t as number) > WAKE_FADE + WAKE_HOLD) advanceBeat(ctx);   // → stepOut
+}
+
+/** stepOut beat (T0.4a) — THE DESERT HANDOFF (R3): teleport the capsule to the real
+ *  new-game spawn (captured at start) + endEscapePodIntro (restores HUD/locomotion/survival,
+ *  disposes all intro geometry, clears the black). The player is now in the dunes, playing.
+ *  T0.4b adds the pod-as-spawn-wreck + the craft/salvage tutorial scaffold. */
+function tickStepOut(ctx: GameContext): void {
+  const intro = ctx.intro;
+  if (!intro) return;
+  const rp = intro.returnPos;
+  ctx.player.body.body.setTranslation({ x: rp.x, y: rp.y, z: rp.z }, true);
+  ctx.player.velocityY = 0;
+  ctx.player.cameraSnapNextFrame = true;
+  ctx.three.camera.position.set(rp.x, rp.y + ctx.player.eyeOffset, rp.z);
+  endEscapePodIntro(ctx);   // hand control back — the desert game runs from here
 }
 
 /** Per-frame intro driver — inserted into the main tick BEFORE updatePlayer. No-op
  *  unless the intro is active. Dispatches the current beat's controller; each calls
- *  advanceBeat()/jumpToBeat() on its trigger. Beats 7-11 land in T0.4+. */
+ *  advanceBeat()/jumpToBeat() on its trigger. Beats 10-11 (tutorial, payoff) land in T0.4b+. */
 export function updateEscapePodIntro(ctx: GameContext, dt: number): void {
   const intro = ctx.intro;
   if (!intro || !intro.active) return;
@@ -345,8 +397,10 @@ export function updateEscapePodIntro(ctx: GameContext, dt: number): void {
     case 'shipExplode': tickShipExplode(ctx, dt); break;
     case 'descent': tickDescent(ctx, dt); break;
     case 'parachute': tickParachute(ctx, dt); break;
-    case 'impact': tickImpact(ctx); break;
-    // Beats 7-11 (wake, stepOut, tutorial, payoff) land in T0.4+.
+    case 'impact': tickImpact(ctx, dt); break;
+    case 'wake': tickWake(ctx, dt); break;
+    case 'stepOut': tickStepOut(ctx); break;
+    // Beats 10-11 (tutorial, payoff) land in T0.4b+ (stepOut currently ends the intro).
     default: break;
   }
 }
