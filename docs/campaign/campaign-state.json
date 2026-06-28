@@ -83,7 +83,7 @@
       "decisions": ["(no new D-entry — execution of D269/D270; the beat flow + HUD suppression are documented in sequence.ts/introHud.ts)"],
       "recon": "found the game HUD ids (main.ts inGameEls = hud/hotbar/crosshair) + the body-appended long-storm-indicator (hud.ts) + dev-mode-badge (main.ts) — no agent.",
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "8905e68",
       "spend_approx_tokens": 280000
     }
   ]
