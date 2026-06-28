@@ -50,7 +50,7 @@
       "decisions": ["D270 — entry point = onNewGame path-3 only (not the shared handoffToGame); introComplete derived from ctx.intro (no new flag, no version bump); Save blocked mid-intro; dev hooks. friction 1"],
       "recon": "direct reads of save.ts (full schema + save/load), main.ts new-game/title/handoff flow, menus.ts Save action, debugPanel __game object, GameContext flags — no agent (targeted reads).",
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "76a30c7",
       "spend_approx_tokens": 210000
     }
   ]
