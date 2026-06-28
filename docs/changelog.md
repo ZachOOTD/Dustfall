@@ -3,6 +3,16 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Escape-pod campaign C5 — 2026-06-28 — Phase 0 T0.3a: **the greybox POD + eject + ship-explode** (Beats 3-5) ✓ verify + visual pass
+
+`verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40) + a live-preview **visual gate**: the pod interior + viewport render, the chain enterPod → shipExplode → descent advances (eject on E/click or a fallback dwell; the warm blast flash; the ship disposes), HUD stays clean, `skipIntro` disposes the pod + ship; 0 console errors. Flag OFF → live game byte-unchanged.
+
+**T0.3a — the descent begins (greybox):**
+- **NEW `src/world/escapePodIntro/podScene.ts`** — a tight greybox escape-pod interior (2.6×2.2×2.8 capsule + a framed viewport + a seat block), matched static colliders, unlit greybox, at its own offset `(0,3200,0)` above the ship (so you watch it blow up below); planet disc beyond the viewport. `buildPodScene`/`disposePodScene`/`getPodSpawn`.
+- **Beat controllers** (`sequence.ts`) — `enterPod` builds the pod, seats the player (mode `seated`) looking out the viewport, cues "pull the eject lever [click]"; pulling it (E/click) or a fallback dwell → `shipExplode` (reuses `fx/screenFlash.flashScreen` for the warm blast + disposes the ship) → holds ~2.5s → `descent` (a T0.3b stub). Added `seatPlayerAt` + `pulledLever` helpers.
+- **HUD-suppression robustness fix** — moved `setGameHudHidden(true)` from `tickCockpit` to **`startEscapePodIntro`** (the single entry) + a re-assert in `handoffToGame`, so ANY entry path (new game, `__game.startIntro`, a `jumpToBeat` past cockpit) gets a clean view (caught via a dev-jump HUD leak). `endEscapePodIntro` now disposes the pod too.
+- **Next:** T0.3b — the real DESCENT (the descentProgress effect stack is Phase 2; greybox: a growing planet / shake) + the parachute GAG (3 pulls → snap) → impact.
+
 ## Escape-pod campaign C4 — 2026-06-28 — Phase 0 T0.2b: **the Beat 0-2 flow + HUD suppression** (T0.2 ship section COMPLETE) ✓ verify + visual pass
 
 `verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40) + a live-preview **visual gate** of the full flow: cockpit (seated dwell) → checkEngines (prompt) → corridor → enterPod, advancing on the dwell timer + the two corridor Z-thresholds; HUD fully suppressed; `skipIntro` restores it + disposes the ship; 0 console errors. Flag OFF → live game byte-unchanged.

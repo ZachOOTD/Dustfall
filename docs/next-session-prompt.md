@@ -1,53 +1,49 @@
-# ▶ RESUME — Escape-pod intro · Phase 0 · T0.3 (greybox descent + pod) — `campaign/escape-pod-intro`
+# ▶ RESUME — Escape-pod intro · Phase 0 · T0.3b (descent + the parachute gag) — `campaign/escape-pod-intro`
 
-**Cycle 5 of the escape-pod-intro campaign.** Phase 0 (the greybox spine). **T0.2 (greybox ship +
-Beats 0-2) COMPLETE.** Boot from `docs/campaign/campaign-state.json` + `docs/roadmap.md` (NOT chat memory).
+**Cycle 6 of the escape-pod-intro campaign.** Phase 0 (the greybox spine). T0.2 (ship) + **T0.3a
+(pod + eject + ship-explode) COMPLETE**. Boot from `docs/campaign/campaign-state.json` +
+`docs/roadmap.md` (NOT chat memory).
 
 ## Read first
 1. `CLAUDE.md` (auto-loaded) — "Where we are now"
-2. `docs/campaign/campaign-state.json` — cycle 4/150, current_tier (T0.3)
-3. `docs/feature-escape-pod-intro.md` — the vision (Beats 3-6: enterPod → shipExplode → descent → parachute) + BUILD PLAN
+2. `docs/campaign/campaign-state.json` — cycle 5/150, current_tier (T0.3b)
+3. `docs/feature-escape-pod-intro.md` — the vision (Beats 5-7: descent → parachute gag → impact) + BUILD PLAN
 4. `docs/decisions.md` (tail) — **D269** (architecture) + **D270** (T0.1 wiring)
-5. `src/world/escapePodIntro/sequence.ts` (the dispatch + the beat ticks) + `shipScene.ts` (the greybox pattern) + `introHud.ts` (prompts/HUD)
+5. `src/world/escapePodIntro/sequence.ts` (the beat ticks + `pulledLever`/`seatPlayerAt` helpers) + `podScene.ts`
 
-## What's built (T0.0 → T0.2)
-- Framework + new-game/save wiring + dev hooks. Greybox ship (cockpit + corridor) that PLAYS: cockpit (seated dwell) → checkEngines (prompt) → corridor → **enterPod (a T0.3 stub)**.
-- `introHud.ts`: `setGameHudHidden` (HUD suppressed during intro) + `showIntroPrompt`/`hideIntroPrompt`. Locomotion mode-gating (`ctx.intro.mode`). Survival suppressed during intro.
-- Dev hooks: `__game.startIntro()` (force), `skipIntro()`, `jumpToBeat(beat)`. Triggers read capsule world-Z (`SHIP_CORRIDOR_ENTER_Z`/`SHIP_DEAD_END_Z`).
+## What's built (T0.0 → T0.3a)
+- Full ship section (cockpit → checkEngines → corridor) + pod section start (enterPod → shipExplode → **descent stub**). The pod (`podScene.ts`) builds + seats + has a viewport/planet.
+- HUD suppression (decoupled to `startEscapePodIntro` + `handoffToGame`), diegetic prompts (`introHud.ts`), locomotion mode-gating, survival suppressed, `flashScreen` reused for the blast.
+- Dev hooks: `__game.startIntro()`/`skipIntro()`/`jumpToBeat(beat)`. Beat input: `pulledLever(ctx)` = E or left-click; beats auto-advance via a fallback dwell (anti-softlock).
 
-## Cycle 5 focus — T0.3: the greybox DESCENT + the pod (Beats 3-6)
-Continue the spine from `enterPod` through the fall. **Greybox = blockout + correct beat flow + the gag, NOT beauty** (the descentProgress hero effect stack is Phase 2; the hero pod is Phase 1). **This is large — DECOMPOSE it** (like T0.2 → a/b):
-- **T0.3a — the pod + eject + ship-explode** (this cycle, probably):
-  - A greybox **escape-pod interior** (a small enclosed capsule, seated, with a viewport) — new geometry in `shipScene.ts` or a new `podScene.ts`, same pattern (box meshes + a viewport quad, far offset, built lazily). Reuse `getShipSpawn`-style placement.
-  - `enterPod` — replace the stub: teleport the capsule into the pod, mode `seated`, a "pull the eject lever" prompt; on a key/click (or a short dwell) → `shipExplode`.
-  - `shipExplode` — through the viewport, the ship explodes (greybox: a white flash / a placeholder burst via `introHud` or a quick scene tint); brief, then → `descent`.
-- **T0.3b — the descent + the parachute gag** (likely next cycle):
-  - `descent` — the atmospheric fall (greybox: a timer + a growing planet / placeholder shake; the real descentProgress effect stack is Phase 2). After a beat → `parachute`.
-  - `parachute` — **THE GAG**: a "pull the parachute" prompt; the player pulls (key/click) **3 times** (track `scratch.pulls`); pulls 1-2 jolt but hold; pull 3 → the lever **snaps off** (no chute) → a beat of falling → `impact` (T0.4 handles impact/blackout/wake).
-- **Camera during descent** — mode `scripted` or `seated` (the pod owns the view); free-look optionally allowed. The pod/viewport frames the fall.
+## Cycle 6 focus — T0.3b: the descent + the parachute GAG (Beats 5-7)
+Finish the pod section through the fall. **Greybox = the beat flow + the gag landing, NOT beauty** (the hero descentProgress effect stack is Phase 2). Replace the `descent` stub:
+- **`descent` beat** — the atmospheric fall. Greybox: drive a `descentProgress` 0→1 over ~N seconds (store in `scratch`); make the **planet disc grow** (scale it up as progress climbs — grab the pod's planet mesh, or add a `setDescentProgress` to `podScene.ts`) and add a little camera shake (reuse `fx/cameraShake` — `triggerCameraShake`/`addTrauma`, grep it). Mode `seated`/`scripted` (pod owns the view). After a beat → `parachute`.
+- **`parachute` beat — THE GAG** (the emotional core, even in greybox): cue "pull the parachute"; the player pulls (`pulledLever`) — track `scratch.pulls`. Pulls 1 & 2: a jolt (small shake / a "—snap?" flicker) but nothing deploys. Pull 3: the lever **snaps off** — a beat of silence/faster-fall — then → `impact`. Use a per-pull debounce (require the press to release between pulls, or a small cooldown) so one held click ≠ 3 pulls. Keep a fallback (after M seconds or M auto-pulls) so it can't softlock.
+- **`impact` beat** — T0.4 STUB for now (the crash/blackout/wake + the **desert handoff** are T0.4). Greybox: a hard `flashScreen` + a "[ impact — T0.4 ]" cue, hold. (T0.4 will: blackout → wake → teleport to the desert spawn → `endEscapePodIntro` + mark `introComplete`.)
 
-### Acceptance (T0.3a, this cycle)
-- From `enterPod`: you're seated in the greybox pod looking out the viewport → "pull eject" → `shipExplode` (a flash through the viewport) → `descent` (stub/handoff to T0.3b). HUD stays suppressed. `__game.jumpToBeat('enterPod'|'shipExplode')` works. `skipIntro` hands back cleanly (disposes pod + ship geometry). `verify:all` green; no SAVE_VERSION bump.
+### Acceptance (T0.3b)
+- From `descent`: the planet grows + a shake conveys falling → `parachute` → the **3-pull gag** works (1-2 jolt, 3rd snaps, then falls) → `impact` stub. HUD clean throughout; `__game.jumpToBeat('descent'|'parachute')` works; `skipIntro` disposes everything (scene-children round-trips). `verify:all` green; no SAVE_VERSION bump.
 
 ## Visual/feel gate (greybox, routine bar)
-Drive `__game.jumpToBeat(...)` + screenshot the real FP view at each new beat (seated pod, the explosion flash, the descent). Confirm HUD hidden, prompts readable, flow advances, geometry disposes on skip. Routine bar (no sev≥2). Hero pod/descent FX are Phases 1-2.
+Drive `__game.jumpToBeat('descent')` / `'parachute'` + screenshot the real FP view (the growing planet, the gag pulls). Confirm HUD hidden, the gag reads (3 distinct pulls → snap), flow advances, geometry disposes on skip. Routine bar. Note: the 3-pull gag is **feel-critical comedy** — the user will judge the timing at the Phase 0 walk-test; get the beats *roughly* right, real polish is later phases.
 
 ## Then (rest of Phase 0)
-T0.3b descent + parachute gag (if split) · T0.4 greybox impact/wake → **desert handoff** (the
-pod-as-spawn seam: teleport to the desert spawn, mark `introComplete`, restore normal play) →
-tutorial scaffold + smoke check. **Phase 0 milestone → PAUSE** for the user's first full walk-test.
+T0.4 — greybox impact/blackout/wake → **the desert handoff** (teleport to the desert spawn, restore
+play, mark `introComplete`, dispose pod) → the craft+salvage tutorial scaffold + a `feature-escape-pod-intro`
+smoke check. **Phase 0 milestone → PAUSE** for the user's first full greybox-spine walk-test.
 
 ## Campaign rules
 ENRICH-NOT-CUT · greybox now / hero art (procedural-modeler + real FP-view gate) in Phases 1-5 ·
-anti-punt (decompose big tiers, don't hollow them) · behind the flag · no save bump · `verify:all` +
-a live check each cycle · commit each cycle · checkpoint = per phase. Steer via `docs/campaign/steering.md`.
+anti-punt (decompose, don't hollow) · behind the flag · no save bump · `verify:all` (capture the real
+exit — don't pipe through `tail`) + a live check each cycle · commit each cycle · checkpoint = per phase.
 
 ## Footguns
 - Keep the flag OFF by default — live game byte-identical when the intro isn't active.
-- **Don't pipe `verify:all` through `tail`** — `tail`'s exit (0) masks tsc failures. Capture the real exit (`... > out 2>&1; echo EXIT=$?`).
-- Dispose ALL intro geometry (ship + pod) on `endEscapePodIntro` — check `scene.children` count round-trips on `skipIntro`.
-- New body-appended HUD elements must be added to `introHud.ts` `GAME_HUD_IDS` or they leak into the intro (the storm-warning did).
-- Beat prompts/flow use `ctx.intro.scratch` (reset each beat by `jumpToBeat`). `introActive` gating ≠ pause.
+- Debounce the parachute pulls (one held click must not count as 3). Always have an anti-softlock fallback.
+- Dispose ALL intro geometry on `endEscapePodIntro` (ship + pod) — check `scene.children` round-trips on `skipIntro`.
+- `introActive` gating ≠ pause. New body-appended HUD must be added to `introHud.ts` `GAME_HUD_IDS`.
+- Reuse `fx/cameraShake` + `fx/screenFlash` (don't reinvent). Beat state in `ctx.intro.scratch` (reset per beat).
 
 ## Verify
-`npm run verify:all` (capture the real exit code) + a live preview: `__game.jumpToBeat('enterPod')` → screenshot the seated pod (HUD hidden) → step the beats (dwell/click) → confirm `shipExplode`/`descent` advance + `skipIntro` round-trips the scene-children count + no console errors.
+`npm run verify:all` (capture the real exit code) + a live preview: `jumpToBeat('descent')` → confirm planet grows + advances; `jumpToBeat('parachute')` → simulate 3 pulls (`pulledLever` via input, or step `scratch.pulls`) → confirm snap → impact; `skipIntro` round-trips scene-children; 0 console errors.

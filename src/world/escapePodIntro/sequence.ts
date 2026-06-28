@@ -38,10 +38,30 @@ import {
   buildShipScene, disposeShipScene, getShipSpawn,
   SHIP_CORRIDOR_ENTER_Z, SHIP_DEAD_END_Z,
 } from './shipScene.ts';
+import { buildPodScene, disposePodScene, getPodSpawn } from './podScene.ts';
 import { setGameHudHidden, showIntroPrompt, hideIntroPrompt } from './introHud.ts';
+import { flashScreen } from '../../fx/screenFlash.ts';
 
 /** Seconds the cockpit opens SEATED (looking at the planet) before control + the cue. */
 const COCKPIT_DWELL = 3.0;
+/** Eject auto-fires after this long if the player doesn't pull the lever (anti-softlock). */
+const EJECT_FALLBACK = 6.0;
+/** Seconds the ship-explosion beat holds (watch it blow) before the descent. */
+const SHIP_EXPLODE_DWELL = 2.5;
+
+/** Did the player "pull the lever" this frame (click or E)? */
+function pulledLever(ctx: GameContext): boolean {
+  return ctx.input.pressed.has('KeyE') || ctx.input.mousePressed.has(0);
+}
+
+/** Place the player capsule + camera at a world spawn, facing −Z, and snap the camera. */
+function seatPlayerAt(ctx: GameContext, spawn: { x: number; y: number; z: number }): void {
+  ctx.player.body.body.setTranslation(spawn, true);
+  ctx.player.velocityY = 0;
+  ctx.player.cameraSnapNextFrame = true;
+  ctx.three.camera.position.set(spawn.x, spawn.y + ctx.player.eyeOffset, spawn.z);
+  ctx.three.camera.rotation.set(0, 0, 0);   // face −Z
+}
 
 /** The intro beats, in order (Beats 0-11 of the vision; `done` = handed off). */
 export type BeatId =
@@ -106,6 +126,11 @@ export function startEscapePodIntro(ctx: GameContext, force = false): void {
     mode: 'scripted',
     scratch: {},
   };
+  // Suppress the game HUD up front (decoupled from any single beat) so ANY entry path —
+  // new game, the force-start dev hook, or a jumpToBeat past cockpit — gets a clean intro
+  // view. handoffToGame re-asserts this after it un-hides the in-game HUD; endEscapePodIntro
+  // restores it.
+  setGameHudHidden(true);
 }
 
 /** Jump straight to a beat (the per-beat controllers call this to advance; the dev
@@ -136,6 +161,7 @@ export function endEscapePodIntro(ctx: GameContext): void {
   hideIntroPrompt();
   setGameHudHidden(false);
   disposeShipScene(ctx);
+  disposePodScene(ctx);
 }
 
 /** Cockpit beat (T0.2a/b) — on first entry, build the greybox ship, hide the game HUD,
@@ -147,14 +173,7 @@ function tickCockpit(ctx: GameContext, dt: number): void {
   if (!intro) return;
   if (!intro.scratch.shipBuilt) {
     buildShipScene(ctx);
-    setGameHudHidden(true);           // re-hide after handoffToGame un-hid the in-game HUD
-    const spawn = getShipSpawn(ctx);
-    const pb = ctx.player.body;
-    pb.body.setTranslation({ x: spawn.x, y: spawn.y, z: spawn.z }, true);
-    ctx.player.velocityY = 0;
-    ctx.player.cameraSnapNextFrame = true;
-    ctx.three.camera.position.set(spawn.x, spawn.y + ctx.player.eyeOffset, spawn.z);
-    ctx.three.camera.rotation.set(0, 0, 0);   // face −Z → straight out the window
+    seatPlayerAt(ctx, getShipSpawn(ctx));
     intro.mode = 'seated';                      // open seated, looking at the planet
     intro.scratch.shipBuilt = true;
     intro.scratch.dwell = 0;
@@ -188,18 +207,53 @@ function tickCorridor(ctx: GameContext): void {
   if (ctx.player.body.body.translation().z > SHIP_DEAD_END_Z) advanceBeat(ctx);   // → enterPod
 }
 
-/** enterPod beat — T0.2b STUB. The disaster + the escape pod + the eject are T0.3; for
- *  now the greybox flow holds here with a placeholder cue (exit via `__game.skipIntro()`). */
-function tickEnterPod(ctx: GameContext): void {
+/** enterPod beat (T0.3a) — on entry, build the pod + seat the player inside it (mode
+ *  seated) looking out the viewport, cue "pull the eject lever". Pulling it (E/click), or
+ *  a fallback dwell (anti-softlock), → shipExplode. */
+function tickEnterPod(ctx: GameContext, dt: number): void {
+  const intro = ctx.intro;
+  if (!intro) return;
+  if (!intro.scratch.init) {
+    buildPodScene(ctx);
+    seatPlayerAt(ctx, getPodSpawn(ctx));
+    intro.mode = 'seated';
+    showIntroPrompt('Pull the eject lever  [click]');
+    intro.scratch.init = true;
+    intro.scratch.dwell = 0;
+  }
+  intro.scratch.dwell = (intro.scratch.dwell as number) + dt;
+  if (pulledLever(ctx) || (intro.scratch.dwell as number) > EJECT_FALLBACK) advanceBeat(ctx);   // → shipExplode
+}
+
+/** shipExplode beat (T0.3a) — eject fires: flash, the ship blows up (greybox: dispose it
+ *  behind the flash). Holds a beat (watch it go) then → descent. */
+function tickShipExplode(ctx: GameContext, dt: number): void {
+  const intro = ctx.intro;
+  if (!intro) return;
+  if (!intro.scratch.init) {
+    flashScreen(0xffe6c0, 1.0);     // warm blast flash (decays via updateScreenFlash)
+    disposeShipScene(ctx);           // the ship is gone after the blast
+    showIntroPrompt('');
+    intro.scratch.init = true;
+    intro.scratch.dwell = 0;
+  }
+  intro.scratch.dwell = (intro.scratch.dwell as number) + dt;
+  if ((intro.scratch.dwell as number) > SHIP_EXPLODE_DWELL) advanceBeat(ctx);   // → descent
+}
+
+/** descent beat — T0.3b STUB. The atmospheric fall (descentProgress effect stack is
+ *  Phase 2) + the parachute gag land in T0.3b; for now the greybox flow holds here with a
+ *  placeholder cue (exit via `__game.skipIntro()`). */
+function tickDescent(ctx: GameContext): void {
   const intro = ctx.intro;
   if (!intro || intro.scratch.init) return;
-  showIntroPrompt('[ the ship lurches — escape pod: T0.3 ]');
+  showIntroPrompt('[ falling — descent + parachute: T0.3b ]');
   intro.scratch.init = true;
 }
 
 /** Per-frame intro driver — inserted into the main tick BEFORE updatePlayer. No-op
  *  unless the intro is active. Dispatches the current beat's controller; each calls
- *  advanceBeat()/jumpToBeat() on its trigger. Beats 3-11 land in T0.3+. */
+ *  advanceBeat()/jumpToBeat() on its trigger. Beats 6-11 land in T0.3b+. */
 export function updateEscapePodIntro(ctx: GameContext, dt: number): void {
   const intro = ctx.intro;
   if (!intro || !intro.active) return;
@@ -207,8 +261,10 @@ export function updateEscapePodIntro(ctx: GameContext, dt: number): void {
     case 'cockpit': tickCockpit(ctx, dt); break;
     case 'checkEngines': tickCheckEngines(ctx); break;
     case 'corridor': tickCorridor(ctx); break;
-    case 'enterPod': tickEnterPod(ctx); break;
-    // Beats 3-11 (shipExplode, descent, parachute, impact, wake, stepOut, …) land in T0.3+.
+    case 'enterPod': tickEnterPod(ctx, dt); break;
+    case 'shipExplode': tickShipExplode(ctx, dt); break;
+    case 'descent': tickDescent(ctx); break;
+    // Beats 6-11 (parachute, impact, wake, stepOut, tutorial, payoff) land in T0.3b+.
     default: break;
   }
 }

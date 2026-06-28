@@ -52,7 +52,8 @@ import type { Journal } from './world/journal.ts';
 import { createInventory, updateInventoryInput } from './inventory/inventory.ts';
 import { updateInteraction } from './player/interaction.ts';
 import { updatePlayer } from './player/controller.ts';
-import { updateEscapePodIntro, startEscapePodIntro } from './world/escapePodIntro/sequence.ts';   // escape-pod intro (FEATURES.escapePodIntro) — T0.1 wires the new-game branch
+import { updateEscapePodIntro, startEscapePodIntro, introActive } from './world/escapePodIntro/sequence.ts';   // escape-pod intro (FEATURES.escapePodIntro) — T0.1 wires the new-game branch
+import { setGameHudHidden } from './world/escapePodIntro/introHud.ts';   // escape-pod intro — re-assert HUD-hide after handoff
 import { FEATURES } from './config/features.ts';
 import { createShelterRegistry, updateShelter } from './shelter/shelterZones.ts';
 import { updateSoundscape } from './audio/soundscape.ts';
@@ -716,6 +717,9 @@ function handoffToGame(opts?: { skipLock?: boolean }): void {
   titleOverlay.hide();
   ctx.flags.titleActive = false;
   inGameEls.forEach((el) => { el.style.visibility = ''; });
+  // Escape-pod intro — if a new game started the intro before this handoff, re-hide the
+  // in-game HUD we just un-hid (the intro owns a clean view; endEscapePodIntro restores it).
+  if (introActive(ctx)) setGameHudHidden(true);
   // M8 ⑩ (C52) — reconcile companion vs. cave egg. Boot always spawns the companion +
   // builds the egg; resolve the final state per flags.companionAcquired (false on a NEW
   // game, set from the save on Continue, true on DEV): acquired → remove the egg; NOT
