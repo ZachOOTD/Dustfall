@@ -115,7 +115,7 @@
       "decisions": ["(no new D-entry — execution. Reinforces the C5 lesson: any beat that does setup must be robust to being jumped-to → ensureInPod makes pod beats build+seat idempotently.)"],
       "recon": "found fx/cameraShake.addTrauma(amount) to reuse for the descent rumble + parachute jolts + impact — no agent.",
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "70b512a",
       "spend_approx_tokens": 290000
     }
   ]
