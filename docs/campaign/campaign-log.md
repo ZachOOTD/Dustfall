@@ -47,5 +47,5 @@ is the **Phase 0 milestone** (the greybox-spine walk-test).
 - **Architecture contract (D269):** gate via `ctx.intro.active` (selective system suppression, NOT `flags.paused` — pause would freeze the intro's own tick); per-beat `mode` tells updatePlayer whether to allow locomotion + free-look or drive the camera; R4 (KCC on box floors ✓) + R2 (world boot-built ✓) confirmed; the intro is unsaved mid-sequence + an additive `introComplete` marker (legacy=true) prevents replay (no SAVE_VERSION bump; wired T0.1).
 - **Verify:** `verify:all` PASS — tsc + placement 0/0 ×5 + colliders 0/40. **Visual iteration:** N/A (architecture scaffold, no visual output). The live game is byte-unchanged (the scaffold is inert; nothing starts the intro yet).
 - **Spend:** ~280K (recon + the scaffold + D269 + verify:all + the doc suite); campaign total ~280K; cycle **1/150**.
-- **Commit:** `PENDING`.
+- **Commit:** `c86ab21`.
 - **Next (cycle 2):** **Phase 0 T0.1** — wire the new-game branch + the `introComplete` save marker + the entry point + the `__game` start/skip/jumpToBeat dev hooks (still greybox). **Verdict: CONTINUE** — Phase 0 not complete (T0.1-T0.4 remain before the Phase 0 milestone). `consecutive_no_progress` stays 0 (SHIPPED).

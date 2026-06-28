@@ -34,7 +34,7 @@
       "decisions": ["D269 — the escape-pod intro architecture contract: ctx.intro.active gating (not pause); KCC collision-general (R4); world boot-built → teleport handoff (R2); intro unsaved mid-sequence + additive introComplete (no version bump). friction 2"],
       "recon": "a code-archaeologist mapped boot/new-game/spawn (handoffToGame, setupOpeningScene), the tick + pause gate, the FP controller/camera/input, FEATURES + dev hooks, and world-gen timing.",
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "c86ab21",
       "spend_approx_tokens": 280000
     }
   ]
