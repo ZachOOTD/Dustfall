@@ -99,7 +99,7 @@
       "decisions": ["(no new D-entry — execution of D269/D270; the HUD-decouple + pod beats are documented in code. LESSON: scene/HUD setup tied to a single beat leaks when an entry path skips that beat → tie it to the lifecycle entry point instead.)"],
       "recon": "found fx/screenFlash.flashScreen(color,strength) to reuse for the blast — no agent.",
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "1ee093b",
       "spend_approx_tokens": 290000
     }
   ]
