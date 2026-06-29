@@ -64,11 +64,13 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      Prior milestones live in docs/changelog.md — do NOT accumulate "Prior milestone"
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
-**▶ CAMPAIGN ACTIVE — Escape-Pod Intro — Phase 1 (the HERO pod) — `campaign/escape-pod-intro`** (autonomous; checkpoint=PHASE). **Phase 0 (greybox spine, C1-C8) COMPLETE + USER-APPROVED** (the whole intro plays
-new game → cockpit → corridor → pod → eject → ship-explode → descent → parachute-gag → impact → wake → desert). Now building the hero art — **REDESIGNED CYLINDRICAL per user steering (D271): a vertical riveted
-aluminium capsule/torpedo** (the box was rejected). **✅ C11 cylindrical EXTERIOR + ✅ C12 cylindrical INTERIOR shipped** (half-buried hero capsule + a round riveted-aluminium cabin; adversarial gates caught + fixed a helmet-read, a float, a forward-face, a void floor, boxy-walls). Next: **T1.3 seated camera** (+ the eject-vs-parachute beat-framing) → Phase 1 milestone walk-test. Live ref: `docs/research/escape-pod-cylindrical.md`. Full vision + phased plan: [docs/feature-escape-pod-intro.md](docs/feature-escape-pod-intro.md). **ENRICH-NOT-CUT** · hero geometry/FX → the
-**procedural-modeler** agent (real in-game-view gate; preview_screenshot hangs on the full desert → use `rig-shot --scenario=crashed-pod`) · anti-punt · behind `FEATURES.escapePodIntro` (default off) · no
-SAVE_VERSION bump. Remaining phases: **1 pod → 2 descent → 3 ship → 4 crash/tutorial → 5 audio**; the loop pauses at each phase boundary. Each `/campaign-cycle` boots from `docs/campaign/campaign-state.json` + `docs/roadmap.md` — NOT this note.
+**⏸ CAMPAIGN PAUSED — Escape-Pod Intro — Phase 1 milestone (the HERO pod COMPLETE) — `campaign/escape-pod-intro`** (autonomous; checkpoint=PHASE). **Phase 0 (greybox spine, C1-C8) + Phase 1 (the hero pod,
+C9-C13) COMPLETE.** The pod was REDESIGNED CYLINDRICAL per the user's C10 steering (D271): a **vertical riveted-aluminium capsule** — a half-buried hero exterior you wake beside + a round riveted cabin you ride
+(viewport, the chunky red parachute lever, the guarded yellow eject, console, seat) + the seated-FP camera. **AWAITING the user's "POD IN + OUT" WALK-TEST** → `/campaign-approve` releases **Phase 2 (the descent
+showpiece)**. Built via the **procedural-modeler** + **adversarial 5-critic visual gates** (caught + fixed a helmet-read, a float, a forward-face, a void floor, boxy-walls — see [[hero-asset-adversarial-gate]]).
+Live pod ref: `docs/research/escape-pod-cylindrical.md`. Full plan: [docs/feature-escape-pod-intro.md](docs/feature-escape-pod-intro.md). **ENRICH-NOT-CUT** · hero geometry/FX → the procedural-modeler + the
+adversarial gate (preview_screenshot hangs on the full desert → use `rig-shot --scenario=crashed-pod|pod-interior`) · anti-punt · behind `FEATURES.escapePodIntro` (default off) · no SAVE_VERSION bump. Remaining
+phases: **2 descent → 3 ship → 4 crash/tutorial → 5 audio**; the loop pauses at each phase boundary. Each `/campaign-cycle` boots from `docs/campaign/campaign-state.json` + `docs/roadmap.md` — NOT this note.
 **To walk-test:** set `FEATURES.escapePodIntro = true` + new game, OR in the console `__game.startIntro()` (force-start; `__game.jumpToBeat('<beat>')` / `__game.skipIntro()` to navigate; `__game.smokeIntro()` runs the whole chain).
 
 **The intro (per the 2026-06-28 vision interview):** lone hauler pilot in orbit → ship disaster → flee to the escape pod → eject → watch the ship explode → a beautiful atmospheric descent → the
@@ -79,12 +81,12 @@ first-person throughout; pod identity = **vertical riveted aluminium capsule/tor
 merged to master + live at https://zachootd.github.io/Dustfall/. Its log is archived at `docs/campaign/campaign-log-2026-06-18-m1-m13.md`. Still queued for the user (out-of-loop): the **Skyfall
 hero wreck** + the **CAVE rework** (dedicated solo sessions), ⑰ pickup-instancing (human-attended), + the §A walk-tests.
 
-**Last shipped**: Escape-pod **C12** (2026-06-29, Phase 1) — the **CYLINDRICAL pod INTERIOR REDO** (the round capsule cabin; `verify:all` PASS end-to-end + TWO adversarial 5-critic gates + build + 2 revise rounds;
-flag OFF → live game byte-unchanged). The procedural-modeler rebuilt `podScene.buildPodScene` from the box into the inside of the capsule (matching the C11 exterior): a round back-faced bore + ogive dome,
-**bent ring-frame hoops curving at EYE LEVEL**, a continuous-barrel round **porthole** (no face), a curved riveted **floor + bucket seat + harness**, the red **parachute lever** (snap reads dead), a legible
-guarded **yellow eject**, a console, the forward viewport (the `setDescentProgress` planet swells through it). Cool aluminium materials + cramped lighting. The gates caught a forward-FACE pareidolia + a void
-floor (gate-1) + boxy-walls + brown-material (gate-2) — all fixed. Smoke `{ok:true, beats:10}`. **Deferred:** the hero planet/atmosphere VISTA = Phase 2; the eject-vs-parachute beat-framing = T1.3. **Next** =
-T1.3 — the seated-FP camera + viewport framing (lower the seated eye; frame the right control per beat) → completes Phase 1 → milestone walk-test. See [docs/next-session-prompt.md](docs/next-session-prompt.md).
+**Last shipped**: Escape-pod **C13** (2026-06-29, Phase 1 T1.3 — **PHASE 1 COMPLETE**) — the seated-FP camera + beat-framing (`verify:all` PASS end-to-end + live check; flag OFF → live game byte-unchanged).
+A new `Tuning.POD_SEATED_EYE_OFFSET (0.50)` lowers the eye to the viewport line (`VP_CY≈1.34`) while seated so the window reads at eye level (set in `updateEscapePodIntro` for the !isPlaying preview/rig +
+maintained in `controller.ts` in-game; reverts at the handoff). A `faceControl(yaw,pitch)` helper (rotation.set with **YXZ** order — XYZ floor-stared after a 90° yaw) frames each beat at its control: enterPod →
+the yellow eject, parachute → the red lever (resolving the C12-gate confusion). **⏸ Phase 1 milestone — the hero cylindrical pod is whole (exterior C11 + interior C12 + seated camera C13); awaiting the user's
+"pod in + out" walk-test.** **Next (after `/campaign-approve`)** = Phase 2 — the descent showpiece (T2.1 the `descentProgress` effect stack [Fresnel atmo + fog ramp + planet/horizon + lighting] · T2.2 re-entry FX ·
+T2.3 tumbling reveal), incl. the hero planet/atmosphere vista that frames through the pod viewport. See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 

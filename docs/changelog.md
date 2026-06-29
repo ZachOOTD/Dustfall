@@ -3,6 +3,15 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Escape-pod campaign C13 — 2026-06-29 — Phase 1 T1.3: **the seated-FP camera + beat-framing** → ⏸ PHASE 1 COMPLETE (the hero pod) — milestone PAUSE ✓ verify + visual pass
+
+`verified` — `npm run verify:all` PASS end-to-end (tsc + placement 0/0 ×5 + colliders 0/40) + a live-preview check: the seated eye sits at the viewport line; enterPod faces the eject, parachute faces the lever; smoke `{ok:true, beats:10}`; 0 console errors. Flag OFF → live game byte-unchanged.
+
+**T1.3 — the seated camera (camera/feel + light sequence work, main loop):**
+- **Seated eye** — new `Tuning.POD_SEATED_EYE_OFFSET (0.50)`; while the intro owns the camera in a seated/scripted beat, the eye lowers from standing (0.85) to the viewport line (`VP_CY≈1.34`) so the window reads **at eye level**, not looked-down-at. Set in `updateEscapePodIntro` (so it applies even in the !isPlaying preview/rig where `updatePlayer` early-returns) + maintained in `controller.ts` in-game; reverts to standing automatically at the desert handoff.
+- **Beat-framing (resolves the C12-gate eject/parachute confusion)** — a `faceControl(yaw, pitch)` helper (rotation.set with **YXZ** order — the FPS-correct yaw-then-pitch; the default XYZ mis-applied pitch after a 90° yaw → floor-stare) orients each beat at its control: **enterPod → the yellow eject (−X)**, **parachute → the red lever (+X)**. So each beat's prompt points at the right control.
+- **▶ PHASE 1 COMPLETE** — the hero pod (cylindrical riveted-aluminium capsule): C11 exterior + C12 interior + C13 seated camera. ⏸ **Milestone PAUSE** for the user's **"pod in + out" walk-test** (wake beside the half-buried capsule + ride the cabin through eject/descent/parachute) → `/campaign-approve` releases Phase 2 (the descent showpiece — the `descentProgress` effect stack + the planet/atmosphere vista that frames through the pod viewport).
+
 ## Escape-pod campaign C12 — 2026-06-29 — Phase 1: **the CYLINDRICAL pod INTERIOR REDO** (the round capsule cabin) ✓ verify + 2 adversarial visual gates
 
 `verified` — `npm run verify:all` PASS end-to-end (tsc + placement 0/0 ×5 + colliders 0/40) + **two adversarial 5-critic visual gates** + a build + 2 revise rounds. The box cabin is replaced by the inside of the cylindrical capsule (D271), matching the C11 exterior. Flag OFF → live game byte-unchanged.

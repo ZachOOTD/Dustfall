@@ -34,6 +34,7 @@
 
 import type { GameContext } from '../../GameContext.ts';
 import { FEATURES } from '../../config/features.ts';
+import { Tuning } from '../../config/tuning.ts';
 import {
   buildShipScene, disposeShipScene, getShipSpawn,
   SHIP_CORRIDOR_ENTER_Z, SHIP_DEAD_END_Z,
@@ -85,6 +86,20 @@ function ensureInPod(ctx: GameContext): void {
   buildPodScene(ctx);
   seatPlayerAt(ctx, getPodSpawn(ctx));
   if (ctx.intro) ctx.intro.mode = 'seated';
+}
+
+/** Orient the seated camera toward a control (T1.3 beat-framing) — point the initial look
+ *  at the control the current beat wants the player to operate, so each beat clearly shows
+ *  ITS control (resolves the eject-vs-parachute confusion). Uses rotation.set (the proven
+ *  seatPlayerAt method; lookAt fought the camera/up setup). Yaw about +Y: 0 faces −Z (the
+ *  viewport), +π/2 faces −X (the eject, LEFT), −π/2 faces +X (the parachute lever, RIGHT).
+ *  Free-look stays active afterwards. */
+function faceControl(ctx: GameContext, yaw: number, pitch: number): void {
+  // YXZ order = the FPS-correct yaw-then-pitch (matches PointerLockControls). With the
+  // default XYZ order the pitch mis-applies after a 90° yaw (camera stares at the floor).
+  ctx.three.camera.rotation.order = 'YXZ';
+  ctx.three.camera.rotation.set(pitch, yaw, 0);
+  ctx.player.cameraSnapNextFrame = true;
 }
 
 /** The intro beats, in order (Beats 0-11 of the vision; `done` = handed off). */
@@ -248,6 +263,7 @@ function tickEnterPod(ctx: GameContext, dt: number): void {
   if (!intro) return;
   if (!intro.scratch.init) {
     ensureInPod(ctx);
+    faceControl(ctx, Math.PI / 2, -0.12);   // T1.3 — turn LEFT (−X) to the YELLOW eject control so the "pull the eject lever" cue points at the right control
     showIntroPrompt('Pull the eject lever  [click]');
     intro.scratch.init = true;
     intro.scratch.dwell = 0;
@@ -299,6 +315,7 @@ function tickParachute(ctx: GameContext, dt: number): void {
   if (!intro) return;
   if (!intro.scratch.init) {
     ensureInPod(ctx);
+    faceControl(ctx, -Math.PI / 2, -0.16);   // T1.3 — turn RIGHT (+X) to the RED parachute lever so the gag's "pull the parachute" cue points at the right control
     showIntroPrompt('Pull the parachute!  [click]');
     intro.scratch.pulls = 0;
     intro.scratch.sincePull = 0;
@@ -406,6 +423,10 @@ function tickStepOut(ctx: GameContext): void {
 export function updateEscapePodIntro(ctx: GameContext, dt: number): void {
   const intro = ctx.intro;
   if (!intro || !intro.active) return;
+  // T1.3 — seated eye while the intro owns the camera. Set here (runs every frame, before
+  // updatePlayer + regardless of isPlaying) so the lower seated eye also applies in the
+  // preview/rig where updatePlayer early-returns at !isPlaying. 'walk' beats keep standing.
+  if (intro.mode !== 'walk') ctx.player.eyeOffset = Tuning.POD_SEATED_EYE_OFFSET;
   switch (intro.beat) {
     case 'cockpit': tickCockpit(ctx, dt); break;
     case 'checkEngines': tickCheckEngines(ctx); break;

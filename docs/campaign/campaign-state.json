@@ -1,12 +1,12 @@
 {
-  "status": "active",
+  "status": "paused",
   "campaign": "escape-pod-intro",
   "started": "2026-06-28",
   "branch": "campaign/escape-pod-intro",
-  "cycles_completed": 12,
-  "current_tier": "▶ PHASE 1 — the HERO pod (CYLINDRICAL, D271). ✅ C11 exterior + ✅ C12 INTERIOR DONE — the round riveted-aluminium capsule (exterior + cabin), both via the procedural-modeler + adversarial 5-critic gates. C12 (interior): podScene.buildPodScene rebuilt box→a round capsule cabin (back-faced cylinder bore + ogive dome; bent ring-frame hoops curving at EYE LEVEL; continuous-barrel round porthole [bezel ring, no face]; curved riveted floor + footwell + bucket seat + harness; red parachute lever [setParachuteLeverPull, snap reads dead]; legible guarded yellow eject [toggle + EJECT placard]; console [amber/LEDs/toggles/gauges]; forward viewport [setDescentProgress planet swells through]; cool aluminium materials + warm-key/cool-ambient cramped lighting; flush rivets). The 2 gates caught a forward-FACE pareidolia + a void floor (gate-1, fixed) + boxy-eye-level-walls + brown-material (gate-2, fixed). verify:all PASS end-to-end + smoke {ok:true,beats:10}. pod-interior rig added. DEFERRED (noted): the HERO planet/atmosphere VISTA through the viewport = PHASE 2 (greybox disc+swell stands in); the eject-vs-parachute BEAT-FRAMING = T1.3. NEXT unit = T1.3 (LAST Phase 1 unit) — the seated-FP camera + viewport framing: lower the seated eye into the bucket seat (seated eyeOffset while mode==='seated', restore at handoff), frame the viewport at eye level, RESOLVE the beat-framing (enterPod cues the YELLOW eject; parachute cues the RED lever), optional free-look clamp. Mostly camera/feel — light gate. COMPLETES Phase 1 → milestone PAUSE (user walk-test: pod in+out) → /campaign-approve releases Phase 2 (descent showpiece). Plan: docs/feature-escape-pod-intro.md. ENRICH-NOT-CUT.",
-  "awaiting_approval": false,
-  "stop_reasons": [],
+  "cycles_completed": 13,
+  "current_tier": "⏸ PHASE 1 MILESTONE — the HERO pod COMPLETE (C9-C13, CYLINDRICAL per D271), awaiting the user's 'pod in + out' walk-test → /campaign-approve releases Phase 2. The vertical riveted-aluminium capsule: ✅ C11 exterior (half-buried hero capsule) + ✅ C12 interior (round riveted cabin: viewport, red parachute lever, guarded yellow eject, console, bucket seat) + ✅ C13 seated-FP camera (POD_SEATED_EYE_OFFSET 0.50 → eye at the viewport line; faceControl YXZ-rotation frames enterPod→yellow eject, parachute→red lever). Built via the procedural-modeler + adversarial 5-critic visual gates (caught + fixed a helmet-read, a float, a forward-face, a void floor, boxy-walls — see memory/hero-asset-adversarial-gate.md). All verify:all PASS + smoke {ok:true,beats:10}; flag OFF → live game byte-unchanged; no SAVE_VERSION bump. NEXT (after approval) = Phase 2 (the descent showpiece): T2.1 descentProgress effect stack (Fresnel atmo + fog ramp + the HERO planet/atmosphere VISTA replacing the greybox disc in the pod viewport + lighting shift) · T2.2 re-entry FX (plasma, white flash, heat-shimmer, shake) · T2.3 tumbling reveal + interior-lit-by-exterior. Plan: docs/feature-escape-pod-intro.md. ENRICH-NOT-CUT; hero FX → procedural-modeler + the adversarial gate (once per asset).",
+  "awaiting_approval": true,
+  "stop_reasons": ["milestone-review"],
   "plan_doc": "docs/feature-escape-pod-intro.md",
   "plan_review_note": "The plan was authored (feature-slice) + critically reviewed + the review fixes folded in + USER-APPROVED in-conversation 2026-06-28 ('proceed with your recommendation'). So NO plan-review pause — cycle 1 (Phase 0 T0.0) is released. The next pause is the Phase 0 milestone (the greybox-spine walk-test).",
   "self_author": "propose",
@@ -18,7 +18,7 @@
   "circuit_breaker_n": 3,
   "consecutive_no_progress": 0,
   "ceiling": { "max_cycles": 150, "total": null, "per_cycle": null, "unit": "tokens" },
-  "spend": { "total": 5300000, "note": "escape-pod intro campaign, started 2026-06-28. PHASE 0 = C1-C8 ~2.13M. PHASE 1 (hero pod): C9 ~380K (box exterior) + C10 ~320K (box interior) [SUPERSEDED by the cylindrical redesign]; user steering C10 → cylindrical + research ~50K; C11 ~1.2M (cylindrical EXTERIOR: build + 2 revises + 2 adversarial gates); C12 ~1.27M (cylindrical INTERIOR: build ~246K + gate ~251K + revise ~194K + gate ~243K + finish ~131K + rig shots + my orchestration/docs). The pod is a USER-CRITICAL hero asset they redirected (box→cylindrical); the adversarial gates caught a helmet-read, a float, a forward-face, a void-floor + boxy-walls that self-critique missed — worth the spend vs shipping wrong hero geometry. NOTE: hero-modeling cycles are EXPENSIVE (~1.2M each w/ 2 gates); Phase 2-3 will be similar — per the user's 'build it fully, don't hold back' directive. Prior M11->M13 campaign concluded + user-approved (~18.5M tokens / 69 cycles; chronicle archived to campaign-log-2026-06-18-m1-m13.md)." },
+  "spend": { "total": 5660000, "note": "escape-pod intro campaign, started 2026-06-28. PHASE 0 (greybox spine) = C1-C8 ~2.13M. PHASE 1 (the HERO pod, C9-C13) = ~3.53M: C9+C10 ~700K (box ext+int, SUPERSEDED) + steering/research ~50K + C11 ~1.2M (cylindrical exterior: build+2 revises+2 gates) + C12 ~1.27M (cylindrical interior: build+2 gates+revise+finish) + C13 ~360K (seated camera + beat-framing). The pod was a USER-CRITICAL hero asset redirected box→cylindrical; the adversarial gates caught a helmet-read, a float, a forward-face, a void-floor, boxy-walls + brown-material that self-critique missed. LESSON for Phase 2-3 cadence: hero-modeling cycles are ~1.2M with 2 gates; run the adversarial gate ONCE per asset when the structure is sound (not 2x) to keep spend proportionate — per the user's 'build it fully' directive but cost-aware. Prior M11->M13 campaign concluded + user-approved (~18.5M tokens / 69 cycles; chronicle archived to campaign-log-2026-06-18-m1-m13.md)." },
   "policy_notes": "ENRICH-NOT-CUT: the scope-cut list (docs/feature-escape-pod-intro.md) is a TRUE-TECHNICAL-WALL safety net ONLY, never a target, ALWAYS surfaced to the user before any cut; the spine + pod + descent + tutorial are NOT cuttable. Hero geometry/FX -> the procedural-modeler agent, iterated to a quality BAR (5-8 rounds new hero elements). Real first-person in-game-view visual gate (not an isolated rig). Anti-punt. Behind FEATURES.escapePodIntro (default off until shipped). No SAVE_VERSION bump unless unavoidable (D81; the introComplete marker is additive, legacy=true). New game -> the intro; old spawn -> dev-mode only. Key early-build decisions to lock in Phase 0: R1 save-marker, R2 world-loading-during-descent, R3 handoff seam, R4 state-machine contract + KCC-on-ship-floor, R5 scrap_machete-as-pry-tool (D261, additive), R6 entry point, R7 parachute-gag fallback, R10 accessibility/photosensitivity. See the feature doc's 'Pre-build review'.",
   "cycles": [
     {
@@ -214,6 +214,22 @@
       "ultracode": true,
       "commit": "f06592d",
       "spend_approx_tokens": 1270000
+    },
+    {
+      "cycle": 13,
+      "date": "2026-06-29",
+      "focus": "Phase 1 T1.3 — the seated-FP camera + beat-framing (COMPLETES PHASE 1)",
+      "tier": "Phase 1 — the hero pod (escape-pod intro) — COMPLETE",
+      "outcome": "SHIPPED",
+      "milestone": "escape-pod Phase 1 — pod hero COMPLETE",
+      "units": ["T1.3 — camera/feel (main loop, light gate). SEATED EYE: new Tuning.POD_SEATED_EYE_OFFSET (0.50) — while the intro owns the camera in a seated/scripted beat, the eye lowers from standing (0.85) to the viewport line (VP_CY 1.34) so the window reads at eye level. Set in updateEscapePodIntro (applies even in the !isPlaying preview/rig where updatePlayer early-returns at the isPlaying gate) + maintained in controller.ts in-game; reverts to standing at the desert handoff. BEAT-FRAMING (resolves the C12-gate eject/parachute confusion): a faceControl(yaw,pitch) helper using rotation.set with YXZ Euler order (the FPS-correct yaw-then-pitch; default XYZ mis-applied pitch after a 90° yaw → floor-stare) orients each beat at its control — enterPod → the yellow eject (yaw +PI/2 = -X), parachute → the red lever (yaw -PI/2 = +X)."],
+      "verify": "verify:all PASS end-to-end (tsc + placement 0/0 x5 + colliders 0/40) + smoke {ok:true,beats:10}.",
+      "visual": "live-preview verified (light gate — camera/feel, not hero geometry): the seated eye sits at the viewport line (eyeOffset 0.50, camY local 1.39 ≈ VP_CY 1.34); enterPod faces the yellow eject control at eye level (the YXZ fix corrected an initial floor-stare); parachute faces the red lever (+X). 0 console errors. Resolved a faceControl bug live (XYZ Euler order → YXZ).",
+      "save": "no change (SAVE_VERSION stays 15).",
+      "decisions": ["(no new D-entry — camera/feel. Note: drive a scripted look via camera.rotation with YXZ order; the D269 'controls euler' note — the camera.rotation set holds because syncCameraToBody is position-only + PointerLockControls only overrides on pointermove [in-game the beat sets the INITIAL look, the player can then mouse-look].)"],
+      "ultracode": true,
+      "commit": "PENDING",
+      "spend_approx_tokens": 360000
     }
   ]
 }

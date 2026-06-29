@@ -115,9 +115,14 @@ export function updatePlayer(ctx: GameContext, dt: number): void {
   const moving = f !== 0 || r !== 0;
   // Crouch: hold LeftControl. Disables sprint, lowers camera, slows speed.
   ctx.player.crouching = !!(keys['ControlLeft'] || keys['ControlRight']);
-  ctx.player.eyeOffset = ctx.player.crouching
-    ? Tuning.CROUCH_EYE_OFFSET
-    : Tuning.PLAYER_EYE_OFFSET;
+  // Escape-pod intro (T1.3) — while SEATED in a pod/cockpit chair (mode seated/scripted),
+  // lower the eye to the viewport line (POD_SEATED_EYE_OFFSET) so the window reads at eye
+  // level. Reverts automatically once the intro ends (introLocoLocked false → standing eye).
+  ctx.player.eyeOffset = introLocoLocked
+    ? Tuning.POD_SEATED_EYE_OFFSET
+    : ctx.player.crouching
+      ? Tuning.CROUCH_EYE_OFFSET
+      : Tuning.PLAYER_EYE_OFFSET;
   // ACC playtest — player towing a sled on foot disables sprint +
   // slows walk. Realism: dragging a loaded scrap-metal sled across
   // sand is hard work. Engages only for player-tethered sleds (the
