@@ -3,6 +3,17 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Escape-pod campaign C12 — 2026-06-29 — Phase 1: **the CYLINDRICAL pod INTERIOR REDO** (the round capsule cabin) ✓ verify + 2 adversarial visual gates
+
+`verified` — `npm run verify:all` PASS end-to-end (tsc + placement 0/0 ×5 + colliders 0/40) + **two adversarial 5-critic visual gates** + a build + 2 revise rounds. The box cabin is replaced by the inside of the cylindrical capsule (D271), matching the C11 exterior. Flag OFF → live game byte-unchanged.
+
+**C12 — the cylindrical interior (procedural-modeler; build + 2 revise rounds, gated):**
+- **`podScene.buildPodScene` rebuilt** from the box into a **round riveted-aluminium capsule cabin**: a back-faced cylinder bore + ogive dome ceiling, curved welded ribs + **bent horizontal ring-frame hoops** (the curvature reads at EYE LEVEL, not just the ceiling), a continuous-barrel **round porthole** (bezel ring + ribs running past it — no visor/face), a curved riveted **deck floor + footwell**, a **contoured bucket seat + harness**, the chunky **red parachute lever** (`setParachuteLeverPull` jab-per-pull + a snap pose that reads wrenched/dead), a big legible **guarded yellow eject control** (toggle + EJECT placard), a **console** (amber, telltale LEDs, toggles, gauges), the forward **viewport** (the `setDescentProgress` planet shows + swells through it). Cool weathered-aluminium materials matching the exterior, a warm key + cool ambient/porthole accent (cramped lived-in lighting), flush rivets.
+- **2 adversarial gates earned their keep (the C11 lesson):** gate-1 caught a **forward-FACE pareidolia** (the viewport framed by two visor uprights) + an **unfinished void floor** → revise fixed both (round bezel + continuous bands; real deck + bucket seat); gate-2 caught the revise had **flattened the eye-level curvature** (over-added flat panels/beams read boxy) + a **brown-not-aluminium** material/lighting read → a finish round restored the eye-level curve (bent chest ring, thinned beams, raked light) + cool aluminium + flush rivets. Also fixed a shared-material side-effect bug.
+- **Contracts intact** (`buildPodScene`/`getPodSpawn`/`setDescentProgress`/`setParachuteLeverPull`/`disposePodScene`); `__game.smokeIntro()` → `{ok:true, beats:10}`. A `pod-interior` rig added to `rig-shot.mjs`.
+- **Deferred (noted):** the HERO planet/atmosphere VISTA through the viewport = **Phase 2** (the greybox disc-against-void + swell stands in); the eject-vs-parachute **beat-framing** (the camera must show the right control per beat) = **T1.3**. Residual finish (slightly-warm console) → the user's walk-test.
+- **Next:** T1.3 — the seated-FP camera + viewport framing (lower the seated eye; frame the eject control during enterPod + the parachute lever during parachute — resolving the beat-framing) → completes Phase 1 → milestone walk-test.
+
 ## Escape-pod campaign C11 — 2026-06-29 — Phase 1: **the CYLINDRICAL pod exterior REDO** (box→capsule, per the user steering) ✓ verify + adversarial visual gate
 
 `verified` — `npm run verify:all` PASS end-to-end (tsc + placement 0/0 ×5 + colliders 0/40) + **two adversarial 5-critic visual gates** + 2 revise rounds. The redesign (D271): the boxy pod is replaced by a **vertical riveted aluminium capsule/torpedo**, half-buried in the dune. Flag OFF → live game byte-unchanged.

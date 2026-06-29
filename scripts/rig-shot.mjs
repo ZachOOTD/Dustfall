@@ -1744,6 +1744,7 @@ const SCENARIOS = {
       else if (angle === 'lever') look = new V(eye.x + 1, eye.y - 0.25, eye.z - 0.55);
       else if (angle === 'eject') look = new V(eye.x - 0.9, eye.y - 0.25, eye.z - 0.8);
       else if (angle === 'wide') look = new V(eye.x + 0.7, eye.y - 0.1, eye.z - 0.7);
+      else if (angle === 'floor') look = new V(eye.x, eye.y - 1.0, eye.z - 0.6);   // look DOWN at the deck/footwell
       else look = new V(eye.x, eye.y - 0.08, eye.z - 1);
       cam.lookAt(look);
       cam.updateMatrixWorld(true);

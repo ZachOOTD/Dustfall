@@ -1,17 +1,21 @@
-// Escape-pod intro — the HERO ESCAPE POD INTERIOR (Phase 1 / T1.2).
+// Escape-pod intro — the HERO ESCAPE POD INTERIOR (Phase 1 / T1.2; C12 CYLINDRICAL redo).
 // ─────────────────────────────────────────────────────────────────────────────
-// The tight worn industrial lifeboat cabin the player RIDES, SEATED, in first-person
-// through enterPod → shipExplode → descent → the parachute gag → impact. ~20-30s of
-// up-close, head-turn-range hero read — NOT set dressing. Built lazily when the intro
-// reaches the pod, disposed at the desert handoff, at its OWN offset above the ship so
-// both can coexist briefly (you watch the ship explode from the pod's viewport).
+// The tight worn lifeboat cabin the player RIDES, SEATED, in first-person through
+// enterPod → shipExplode → descent → the parachute gag → impact. ~20-30s of up-close,
+// head-turn-range hero read — NOT set dressing. Built lazily when the intro reaches the
+// pod, disposed at the desert handoff, at its OWN offset above the ship so both can
+// coexist briefly (you watch the ship explode from the pod's viewport).
 //
-// IDENTITY (matches the T1.1 exterior `placeCrashedPodWreck` below): the INDUSTRIAL
-// MODULAR BOX — a worn hauler's lifeboat (Nostromo/Narcissus; explicitly NOT ODST).
-// Same weathered idiom (createRustedHullMaterial + the WRECK_* palette): grey-beige
-// painted panels over an exposed dark-steel rib/frame, conduit + cabling, panel seams,
-// a low cramped ceiling, a warm dim ambient. The viewport is channel-steel framed on
-// the −Z wall (the seated camera faces −Z → looks straight out at the descent planet).
+// IDENTITY (matches the T1.1 exterior `placeCrashedPodWreck` below, D271): the inside of
+// a VERTICAL RIVETED-ALUMINIUM CAPSULE. The cabin is a ROUND back-faced cylindrical
+// SHELL (NOT the old flat box walls) capped by a low OGIVE DOME matching the exterior's
+// nose, with riveted RING-FRAMES + curved vertical RIBS, exposed conduit, and the SAME
+// weathered-aluminium material idiom as the exterior skin (light cool-grey aluminium,
+// dark channel-steel hardware). A wide channel-steel VIEWPORT is set into the forward
+// (−Z) arc (the seated camera faces −Z → looks straight out at the descent planet). The
+// praised C10 hardware (red parachute lever, yellow guarded eject, amber console, seat)
+// is re-homed curve-seated on the round wall within natural seated reach. Warm dim,
+// cramped, lived-in.
 //
 // CONTRACTS (read sequence.ts before touching): buildPodScene/disposePodScene/
 // getPodSpawn/setDescentProgress are the ONLY surface the beats touch; setParachute-
@@ -29,40 +33,104 @@ import { createRustedHullMaterial } from '../hullMaterial.ts';
 const POD_ORIGIN = new THREE.Vector3(0, 3200, 0);
 
 // ── Cabin dimensions (pod-LOCAL frame; floor top = y=0, +Z = aft/behind seat, −Z =
-//    forward/viewport, +X = the seated player's RIGHT). A tight cramped lifeboat. The
-//    capsule's FP eye lands ~1.7 above the floor, so the cabin is sized so the viewport
-//    + controls centre NEAR the eye (the player reads the planet dead-ahead + glances
-//    down-right to the lever). NOT a spaceship bridge — a humble welded box.
-const CAB_W = 2.2;    // X — interior width (x −1.1..1.1)
-const CAB_H = 2.35;   // Y — cramped ceiling (floor 0 → ceiling 2.35); head clearance over the ~1.7 eye
-const CAB_D = 2.6;    // Z — depth (z −1.3..1.3); viewport on the −Z front wall
-const SHELL = 0.18;   // wall/floor/ceiling slab thickness (hull-substantial, rule 7)
+//    forward/viewport, +X = the seated player's RIGHT). A tight cramped CAPSULE cabin —
+//    the INSIDE of the vertical riveted-aluminium pod. The FP eye lands ~1.7 above the
+//    floor, so the cabin is sized so the viewport + controls centre NEAR the eye (the
+//    player reads the planet dead-ahead + glances down-right to the lever). NOT a bridge
+//    — a humble welded capsule. The shell is a ROUND back-faced cylinder, NOT a box.
+const CAB_R = 1.28;       // interior radius (≈2.56m-diameter capsule bore — 1-person believable)
+const WALL_H = 1.95;      // straight cylindrical-wall height (floor 0 → shoulder where the dome springs)
+const DOME_H = 0.62;      // ogive dome rise (LOWERED — a cramped capsule, not a rotunda; was 0.95)
+const CAB_APEX = WALL_H + DOME_H;   // ceiling apex
+const SHELL = 0.16;       // panel/ring depth (hull-substantial, rule 7)
+const WALL_SEG = 48;      // shell radial segments — round + smooth (raised from 32; faceting bands showed)
 // (the seated FP eye lands ~1.7 above the floor — the viewport + controls are centred near it)
+// ── Azimuth convention (matches THREE.CylinderGeometry's theta): θ measured from +Z
+//    toward +X, so a direction is `dir = (sin θ, 0, cos θ)`. θ=0 → +Z (aft/seat-back),
+//    θ=π → −Z (FORWARD/viewport), θ=+π/2 → +X (right), θ=−π/2 → −X (left). Using the
+//    SAME convention for the wall-gap, the ring-frames, AND the curve-seated hardware
+//    means the cut arc, the rings, and the viewport frame all line up.
+// ── Viewport: a ROUND PORTHOLE cut into the FORWARD (−Z, θ=π) wall — a porthole in a
+//    riveted barrel, NOT a wide rectangle flanked by two posts (the C12 face/visor
+//    pareidolia, P1). The wall is built CONTINUOUS (full hoops + ribs run PAST the
+//    window) and the porthole is a real circular aperture: an arc of the wall is omitted
+//    only over the disc's angular extent (so the planet reads through a true lofted gap,
+//    not a decal — procedural-mesh-authoring.md fake-hole gotcha), and a continuous
+//    channel-steel BEZEL RING set into the curve frames it.
+const VP_AZ_C = Math.PI;          // porthole centre azimuth = straight forward (−Z)
+const VP_R = 0.52;                // porthole radius (the round window's radius along the wall)
+const VP_CY = 1.34;              // porthole centre height (on the seated ~1.4 eye glance)
+// the porthole's angular half-extent on the cylinder (arc subtended by VP_R at radius CAB_R)
+const VP_AZ_HALF = Math.asin(Math.min(0.95, VP_R / CAB_R));   // ≈ the disc's azimuth radius
 
-// ── Materials — the SAME weathered idiom as the exterior hero pod (below). Module-
-//    scope so a rebuild doesn't realloc; disposePodScene disposes GEOMETRY only, never
-//    these shared materials. Dim/warm tuned for an INTERIOR (less sun-bleach than the
-//    sun-baked exterior; the cabin is lit by a warm dim ambient, not desert noon).
-const _cabPaint = createRustedHullMaterial({
-  baseColor: 0xa9a288,           // grey-beige painted interior panels — the dominant read
-  streakIntensity: 0.32, wearAmplitude: 0.30,
-  oxStrength: 0.16, oxHex: 0x8a4a26,    // sparse rust-accent zones only (interior is less corroded)
-  fleckStrength: 0.6,
-});
-// Exposed dark-steel ribs / frame / channel — the structural skeleton you see from
-// inside (value-contrast against the beige panels).
+// ── Materials — the SAME weathered-ALUMINIUM idiom as the exterior hero pod (below,
+//    D271). Module-scope so a rebuild doesn't realloc; disposePodScene disposes GEOMETRY
+//    only, never these shared materials. Dim/warm tuned for an INTERIOR (less sun-bleach
+//    than the sun-baked exterior; lit by a warm dim ambient, not desert noon) but the
+//    SAME light cool aluminium skin as the exterior so the cabin reads as the inside of
+//    THIS capsule, not a beige box.
+const _cabPaintOpts = {
+  baseColor: 0xa3a8ac,           // COOL aluminium-grey shell skin (lifted + cooled — the warm key was pushing the prior 0x9ba0a2 to brown)
+  bareMetalHex: 0xccd2d6,        // bright cool scuffed-aluminium reveal (near-white, cool)
+  rustHex: 0x3a3a3e,             // COOL near-grey grime tone (was warm 0x4a3826 → read as brown wash; now a neutral shadow accent)
+  streakIntensity: 0.22, wearAmplitude: 0.34,   // plate-to-plate tonal break-up (denting), streaks pulled down (less drip-brown)
+  fleckStrength: 0.55,           // moderate scuff scratches (high fleck read as speckle dots under the lamp)
+  oxStrength: 0.08, oxHex: 0x6a6a66,            // very sparse, NEUTRAL patina (interior clean; warm oxide was the brown culprit)
+} as const;
+// BACK-FACED aluminium shell — the curved wall + dome are viewed from INSIDE (back faces).
+const _cabShell = createRustedHullMaterial(_cabPaintOpts);
+_cabShell.side = THREE.BackSide;
+// Exposed dark channel-steel — ribs / ring-frames / viewport frame / console body. A
+// value contrast to the bright aluminium skin so the steel structure reads as fitted-on.
 const _cabSteel = createRustedHullMaterial({
-  baseColor: 0x4a4842,           // dark warm-grey steel
-  rustHex: 0x3a1c0c, streakIntensity: 0.45, wearAmplitude: 0.28,
-  oxStrength: 0.4, oxHex: 0x8a4119, seamRustStrength: 0.42,
+  baseColor: 0x40454b,           // COOL dark-grey steel (lifted a touch; value contrast vs bright skin)
+  rustHex: 0x242830, streakIntensity: 0.26, wearAmplitude: 0.24,
+  oxStrength: 0.08, oxHex: 0x55555a, seamRustStrength: 0.12,   // neutral grime (warm oxide stripped → no brown)
 });
-// Recessed channel-steel (viewport frame, console body) — darker, greyer.
+// Mid grey-aluminium ring/band metal (the riveted hoops) — lighter than the dark channel
+// so the latitude rings read as fitted RIVETED FRAMES, not dark drum-divisions (matches
+// the exterior _podBandMat).
+const _cabBandOpts = {
+  baseColor: 0xb0b5b8,           // BRIGHT cool grey-aluminium band — lighter than the shell so the riveted hoops POP as proud bright frames (sells the curve)
+  bareMetalHex: 0xd2d8dc,
+  streakIntensity: 0.18, wearAmplitude: 0.26, fleckStrength: 0.6,
+  oxStrength: 0.06, oxHex: 0x6a6a66, seamRustStrength: 0.10,   // near-clean: the hoops are the curvature read, keep them bright + cool
+} as const;
+const _cabBand = createRustedHullMaterial(_cabBandOpts);
+// BACK-FACED band for the riveted ring-frame hoops (open tubes seen from inside) — a
+// separate material so the front-faced _cabBand (rib plates, dome seams) keeps its side.
+const _cabBandShell = createRustedHullMaterial(_cabBandOpts);
+_cabBandShell.side = THREE.BackSide;
+// Recessed channel-steel (console body, deep frame) — COOL dark steel (NOT the warm
+// WRECK_HULL_DARK_HEX which read wood-brown). A value contrast to the bright aluminium.
 const _cabChannel = createRustedHullMaterial({
-  baseColor: Tuning.WRECK_HULL_DARK_HEX,
-  streakIntensity: 0.4, wearAmplitude: 0.25, oxStrength: 0.35, seamRustStrength: 0.4,
+  baseColor: 0x363b41,           // cool near-charcoal steel
+  rustHex: 0x222631,
+  streakIntensity: 0.24, wearAmplitude: 0.22, oxStrength: 0.08, oxHex: 0x55555a, seamRustStrength: 0.12,
+});
+// Dedicated DoubleSide variant of the channel steel for the curved viewport bezel ring
+// (seen from both faces). A SEPARATE material so we never mutate the shared _cabChannel
+// (P2 code bug: buildViewport set _cabChannel.side = DoubleSide on the module-shared mat).
+const _cabChannelDS = _cabChannel.clone();
+_cabChannelDS.side = THREE.DoubleSide;
+// BackSide variant for the porthole bezel RING tube (an open tube whose inner face the
+// camera sees — a proud rim set into the curved hull around the window).
+const _cabChannelBack = _cabChannel.clone();
+_cabChannelBack.side = THREE.BackSide;
+// Rivets / studs / small hardware — mid steel-grey (cast/forged fittings; matches the
+// exterior _podFrameMat so the rivet language is identical inside + out).
+const _cabRivet = createRustedHullMaterial({
+  baseColor: 0x8d9094, rustHex: 0x3a3a3e, streakIntensity: 0.18,   // cool mid steel-grey studs (warm rivet read as brassy)
+  oxStrength: 0.08, oxHex: 0x6a6a66, fleckStrength: 0.5,
 });
 // Conduit / cabling — dark matte near-black (lambert, flat).
 const _cabCable = new THREE.MeshLambertMaterial({ color: 0x201d18, flatShading: true });
+// Floor DECK plate — bright cool aluminium tread-plate (a lit, finished floor, not a void).
+const _cabDeck = createRustedHullMaterial({
+  baseColor: 0x969a9e, bareMetalHex: 0xc4c9cc,
+  streakIntensity: 0.18, wearAmplitude: 0.28, fleckStrength: 0.7,
+  oxStrength: 0.08, oxHex: 0x66666a, seamRustStrength: 0.10,   // neutralised (deck was reading warm-tan under the lamp)
+});
 // Seat cushion — worn padded vinyl, a desaturated warm tan, slightly soft (lambert).
 const _cabSeat = new THREE.MeshLambertMaterial({ color: 0x6e6353, flatShading: true });
 // Restraint webbing — faded olive-tan strap.
@@ -74,8 +142,22 @@ const _ledAmber = new THREE.MeshBasicMaterial({ color: 0xd98a32 });
 const _ledRed = new THREE.MeshBasicMaterial({ color: 0xc0392b });
 // Dim screen face — a faint amber CRT glow.
 const _cabScreen = new THREE.MeshBasicMaterial({ color: 0x2a2410 });
+// Inner-rim shadow well behind the porthole bezel — near-black, unlit, so the aperture
+// reads as a deep inset recess (a dark ring inside the bezel → "inset window").
+const _cabRimShadow = new THREE.MeshBasicMaterial({ color: 0x07090a, side: THREE.DoubleSide });
+// Porthole GLASS — a faint cool tint, glossy so a small spec catch reads (a window, not an
+// open hole). Slightly emissive so it never goes fully black against the void.
+const _cabGlass = new THREE.MeshStandardMaterial({
+  color: 0x2a3640, roughness: 0.16, metalness: 0.30,
+  emissive: 0x0a1418, emissiveIntensity: 0.45,
+  transparent: true, opacity: 0.32,   // see the planet through it, but a glazed pane reads
+});
+// A faint bright spec-streak highlight on the porthole glass (a glazed-pane tell).
+const _cabGlassSpec = new THREE.MeshBasicMaterial({
+  color: 0xbfd0dc, transparent: true, opacity: 0.13, depthWrite: false,   // softer (the bright crescent read as a stray diagonal across the void)
+});
 // The EJECT control handle (a hazard-striped pull) — warm safety-yellow grip.
-const _ejectGrip = new THREE.MeshLambertMaterial({ color: 0xc9a227, flatShading: true });
+const _ejectGrip = new THREE.MeshLambertMaterial({ color: 0xe0b52e, flatShading: true });   // brighter safety-yellow (was dim mustard → read as a dark patch)
 // The PARACHUTE lever grip — worn red rubber (the gag star; reads "pull me").
 const _chuteGrip = new THREE.MeshLambertMaterial({ color: 0xb23a2e, flatShading: true });
 // The descent planet seen through the viewport — flat unlit, warm desert ochre.
@@ -84,8 +166,11 @@ const C_PLANET = 0xc98a5a;
 let podGroup: THREE.Group | null = null;
 const podBodies: RAPIER.RigidBody[] = [];
 let planetMesh: THREE.Mesh | null = null;   // grown during the descent (setDescentProgress)
+let planetHaloMesh: THREE.Mesh | null = null; // the atmosphere-rim halo behind the planet (per-build mat)
+let voidPlaneMesh: THREE.Mesh | null = null; // the dark space backdrop behind the viewport (per-build mat)
 let chuteLever: THREE.Group | null = null;  // the parachute lever pivot (setParachuteLeverPull)
 let chuteLeverRestX = 0;                     // its resting pitch (radians); pulls jolt from here
+let leverBrokenTell: THREE.Group | null = null;  // the snapped-mount reveal (shown on snap)
 const _cabinDisposables: THREE.BufferGeometry[] = [];   // per-build geometry to free on dispose
 
 /** Is the pod currently built? */
@@ -118,256 +203,496 @@ function _cyl(rt: number, rb: number, h: number, seg: number, mat: THREE.Materia
   return new THREE.Mesh(g, mat);
 }
 
-/** Build the HERO cabin interior (mesh group) in the pod-LOCAL frame (floor top=0). */
+// ── Round-cabin build helpers ────────────────────────────────────────────────
+/** A LatheGeometry mesh (tracked for disposal). */
+function _lathe(prof: THREE.Vector2[], seg: number, mat: THREE.Material): THREE.Mesh {
+  const g = new THREE.LatheGeometry(prof, seg);
+  g.computeVertexNormals();
+  _cabinDisposables.push(g);
+  return new THREE.Mesh(g, mat);
+}
+/** An open (no-cap) cylinder mesh (tracked) — used for the ring-frames + the shell. */
+function _tube(r: number, h: number, seg: number, mat: THREE.Material, thetaStart = 0, thetaLen = Math.PI * 2): THREE.Mesh {
+  const g = new THREE.CylinderGeometry(r, r, h, seg, 1, true, thetaStart, thetaLen);
+  _cabinDisposables.push(g);
+  return new THREE.Mesh(g, mat);
+}
+/** Seat a mesh flush on the cylinder wall at azimuth `az` (θ from +Z toward +X — the
+ *  CylinderGeometry convention; dir = (sin az, 0, cos az)), radius `r`, height `y`. The
+ *  mesh is yawed so its local +Z faces the cabin centre (inward), matching the box-face
+ *  convention used by the hardware groups. */
+function _seatOnWall(mesh: THREE.Mesh, az: number, r: number, y: number): void {
+  mesh.position.set(Math.sin(az) * r, y, Math.cos(az) * r);
+  mesh.rotation.y = az + Math.PI;        // local +Z → inward (toward centre)
+}
+
+/** Build the HERO cabin interior (mesh group) in the pod-LOCAL frame (floor top=0).
+ *  A ROUND riveted-aluminium CAPSULE bore: a back-faced cylinder wall + an ogive dome
+ *  ceiling, riveted ring-frames + curved ribs, a forward viewport arc, with the C10
+ *  hardware (lever / eject / console / seat) re-homed curve-seated on the round wall. */
 function buildCabinInterior(group: THREE.Group): void {
-  const hw = CAB_W / 2, hd = CAB_D / 2;
+  // ── 1. SHELL — the ROUND capsule bore. A back-faced cylinder wall (you see the
+  //    INSIDE of the curve) from the floor up to the shoulder, with a small ROUND
+  //    PORTHOLE cut in the forward arc; a lathe OGIVE DOME ceiling; a floor disc + deck.
+  // 1.a the curved wall — built CONTINUOUS (a full banded barrel) except for the round
+  //     porthole forward: a full-circle band BELOW the window, a full-circle band ABOVE
+  //     it, and two side arcs at window height that bracket the porthole azimuth. The
+  //     planet reads through the real lofted gap; the wall reads as an unbroken barrel
+  //     with a hole, NOT two posts flanking a rectangle (P1 — kills the visor gestalt).
+  const vpY0 = VP_CY - VP_R, vpY1 = VP_CY + VP_R;   // porthole vertical span
+  // lower full band: floor → porthole bottom
+  const wallLo = _tube(CAB_R, vpY0, WALL_SEG, _cabShell);
+  wallLo.position.y = vpY0 / 2;
+  group.add(wallLo);
+  // upper full band: porthole top → shoulder
+  const wallHi = _tube(CAB_R, WALL_H - vpY1, WALL_SEG, _cabShell);
+  wallHi.position.y = (vpY1 + WALL_H) / 2;
+  group.add(wallHi);
+  // the two side arcs at window height — everything EXCEPT the porthole azimuth window
+  const vpStart = VP_AZ_C + VP_AZ_HALF;             // CCW end of the porthole arc
+  const vpLen = Math.PI * 2 - VP_AZ_HALF * 2;       // the wall arc = everything BUT the porthole
+  const wallMid = _tube(CAB_R, vpY1 - vpY0, WALL_SEG, _cabShell, vpStart, vpLen);
+  wallMid.position.y = (vpY0 + vpY1) / 2;
+  group.add(wallMid);
+  // 1.b the OGIVE DOME ceiling — a lathe cap from the shoulder radius pulling in to a
+  //     blunt apex, matching the exterior's tucked nose. Back-faced (seen from inside).
+  const domeProf: THREE.Vector2[] = [];
+  const domeSegs = 7;
+  for (let i = 0; i <= domeSegs; i++) {
+    const t = i / domeSegs;
+    const a = t * (Math.PI / 2);
+    const r = CAB_R * Math.pow(Math.cos(a), 1.45) + 0.001;   // tucked ogive (matches exterior nose)
+    const y = WALL_H + Math.sin(a) * DOME_H;
+    domeProf.push(new THREE.Vector2(Math.max(0.04, r), y));
+  }
+  const dome = _lathe(domeProf, WALL_SEG, _cabShell);
+  group.add(dome);
+  // (the dome is left as smooth back-faced aluminium with the shoulder ring §2 capping it
+  //  — radial seam ribs read as floating bars in the seated FP frame, and the exterior's
+  //  ogive nose is itself mostly smooth aluminium, so smooth is the faithful read.)
+  // a short riveted spoke RING at the dome base (just above the shoulder) reinforces the
+  //  "nose bolts to the body" read without crossing the cabin.
+  for (let s = 0; s < 16; s++) {
+    const az = (s / 16) * Math.PI * 2 + 0.15;
+    const sg = new THREE.SphereGeometry(0.012, 6, 4, 0, Math.PI * 2, 0, Math.PI / 2);
+    _cabinDisposables.push(sg);
+    const stud = new THREE.Mesh(sg, _cabRivet);
+    const r = CAB_R * 0.92;
+    const y = WALL_H + 0.08;
+    stud.position.set(Math.sin(az) * r, y, Math.cos(az) * r);
+    stud.lookAt(0, y, 0);
+    group.add(stud);
+  }
+  // 1.c FLOOR — a real curved riveted-aluminium DECK plate (the seated player stares down
+  //     at this for 20-30s, so it must be a finished floor, NOT a dark void, P2). A solid
+  //     aluminium deck disc (bright skin tone) + a ring of deck-plate rivets + a forward
+  //     FOOTWELL recess (where the feet rest below the seat). A dark structural sub-floor
+  //     disc beneath the deck so any rim gap reads as hull, not space.
+  const subFloor = _cyl(CAB_R + SHELL, CAB_R + SHELL, SHELL, WALL_SEG, _cabChannel);
+  subFloor.position.y = -SHELL / 2;
+  group.add(subFloor);
+  // the visible aluminium deck plate (bright skin so the floor is LIT, not a void)
+  const deck = _cyl(CAB_R - 0.02, CAB_R - 0.02, 0.05, WALL_SEG, _cabDeck);
+  deck.position.y = 0.025;
+  group.add(deck);
+  // deck-plate rivet ring near the floor edge (the riveted-deck tell)
+  for (let i = 0; i < 32; i++) {
+    const a = (i / 32) * Math.PI * 2 + 0.07;
+    const sg = new THREE.SphereGeometry(0.015, 6, 4, 0, Math.PI * 2, 0, Math.PI / 2);
+    _cabinDisposables.push(sg);
+    const rv = new THREE.Mesh(sg, _cabRivet);   // flush up-facing deck stud (low dome, not a peg)
+    rv.position.set(Math.sin(a) * (CAB_R - 0.16), 0.052, Math.cos(a) * (CAB_R - 0.16));
+    group.add(rv);
+  }
+  // raised tread strips across the deck (anti-slip plate ribs — break up the flat disc so
+  // the floor reads as a fabricated deck, not a smooth pan). Run fore-aft, offset rows.
+  for (let r = -2; r <= 2; r++) {
+    const tread = _box(0.07, 0.018, 1.5, _cabSteel);
+    tread.position.set(r * 0.34, 0.06, 0.05);
+    group.add(tread);
+  }
+  // FOOTWELL — a shallow recessed pan FORWARD of the seat (−Z) where the feet rest. A dark
+  // recessed box sunk into the deck + a bright rim lip so it reads as a real footwell.
+  const wellRim = _cyl(0.44, 0.44, 0.06, 20, _cabBand);
+  wellRim.position.set(0, 0.05, -0.62);
+  group.add(wellRim);
+  const wellPan = _cyl(0.38, 0.38, 0.10, 20, _cabSteel);
+  wellPan.position.set(0, -0.02, -0.62);
+  group.add(wellPan);
+  // a couple of foot-rest treads in the well
+  for (const wz of [-0.5, -0.74]) {
+    const ft = _box(0.5, 0.025, 0.07, _cabRivet);
+    ft.position.set(0, 0.02, wz);
+    group.add(ft);
+  }
+  // 1.d a chunky channel-steel FLOOR RING capping the wall-to-floor seam (full circle —
+  //     well below the porthole, so the curve springs from a real welded foot).
+  const footRing = _tube(CAB_R - 0.03, 0.18, WALL_SEG, _cabBandShell);
+  footRing.position.y = 0.09;
+  group.add(footRing);
 
-  // ── 1. SHELL — floor, low ceiling, side walls, aft wall. Painted beige panel slabs.
-  //    (The −Z front wall is built in §3 around the viewport opening.)
-  const floor = _box(CAB_W + SHELL, SHELL, CAB_D + SHELL, _cabChannel);
-  floor.position.set(0, -SHELL / 2, 0);
-  group.add(floor);
-  const ceil = _box(CAB_W + SHELL, SHELL, CAB_D + SHELL, _cabPaint);
-  ceil.position.set(0, CAB_H + SHELL / 2, 0);
-  group.add(ceil);
-  for (const sx of [-1, 1]) {
-    const wall = _box(SHELL, CAB_H, CAB_D, _cabPaint);
-    wall.position.set(sx * (hw + SHELL / 2), CAB_H / 2, 0);
-    group.add(wall);
-  }
-  const aft = _box(CAB_W, CAB_H, SHELL, _cabPaint);
-  aft.position.set(0, CAB_H / 2, hd + SHELL / 2);
-  group.add(aft);
-
-  // Panel-seam tells on the side + aft walls — thin proud steel strips that read as the
-  //  modular bolted plates of the exterior (break up the flat beige). Horizontal beltline
-  //  + a couple of vertical seams per wall, with small bolt studs at the crossings.
-  for (const sx of [-1, 1]) {
-    const wallX = sx * (hw - 0.02);
-    // horizontal beltline strip
-    const belt = _box(0.05, 0.07, CAB_D - 0.1, _cabSteel);
-    belt.position.set(wallX, 0.95, 0);
-    group.add(belt);
-    // vertical seams dividing the wall into plates
-    for (const sz of [-0.55, 0.55]) {
-      const seam = _box(0.05, CAB_H - 0.1, 0.06, _cabSteel);
-      seam.position.set(wallX, CAB_H / 2, sz);
-      group.add(seam);
-      // bolt studs where the beltline meets each vertical seam
-      for (const by of [-0.35, 0.35]) {
-        const stud = _cyl(0.018, 0.018, 0.05, 6, _cabSteel);
-        stud.rotation.z = Math.PI / 2;
-        stud.position.set(wallX, 0.95 + by, sz);
-        group.add(stud);
-      }
-    }
-  }
-
-  // ── 2. RIBS — exposed dark-steel hoop frames at intervals down the cabin length,
-  //    proud of the panels (the "you can see how it's welded" read). Each rib is a
-  //    U of steel running up one wall, across the ceiling, down the other wall.
-  const ribT = 0.12, ribProud = 0.05;
-  for (const rz of [-0.75, 0.0, 0.75]) {
-    // ceiling cross-beam
-    const top = _box(CAB_W + 0.02, ribT, ribT, _cabSteel);
-    top.position.set(0, CAB_H - ribProud, rz);
-    group.add(top);
-    // side uprights
-    for (const sx of [-1, 1]) {
-      const up = _box(ribT, CAB_H, ribT, _cabSteel);
-      up.position.set(sx * (hw - ribProud), CAB_H / 2, rz);
-      group.add(up);
-    }
-  }
-  // A couple of longitudinal stringers tying the ribs (ceiling) — more "structure".
-  for (const sx of [-0.55, 0.55]) {
-    const str = _box(0.08, 0.08, CAB_D - 0.1, _cabSteel);
-    str.position.set(sx, CAB_H - 0.03, 0);
-    group.add(str);
-  }
-
-  // ── 3. The −Z FRONT WALL + the VIEWPORT. A wide opening centred on the eye (~1.6),
-  //    framed in proud channel-steel; the descent planet shows through dead-ahead.
-  const vpX0 = -0.78, vpX1 = 0.78, vpY0 = 1.08, vpY1 = 2.12;
-  const vpW = vpX1 - vpX0, vpH = vpY1 - vpY0;
-  const frontZ = -hd - SHELL / 2;
-  // wall slabs around the opening (below / above / left / right)
-  const below = _box(CAB_W, vpY0, SHELL, _cabPaint);
-  below.position.set(0, vpY0 / 2, frontZ);
-  group.add(below);
-  const above = _box(CAB_W, CAB_H - vpY1, SHELL, _cabPaint);
-  above.position.set(0, (CAB_H + vpY1) / 2, frontZ);
-  group.add(above);
-  for (const [sx, sw] of [[-1, hw - vpW / 2], [1, hw - vpW / 2]] as const) {
-    const side = _box(sw, vpH, SHELL, _cabPaint);
-    side.position.set(sx * (hw - sw / 2), (vpY0 + vpY1) / 2, frontZ);
-    group.add(side);
-  }
-  // Channel-steel frame ring around the opening, proud INTO the cabin (toward +Z).
-  const vpCY = (vpY0 + vpY1) / 2, vpFrameZ = frontZ + 0.10, vpFt = 0.14;
-  const vpBar = (w: number, h: number, ox: number, oy: number) => {
-    const bar = _box(w, h, 0.16, _cabChannel);
-    bar.position.set(ox, vpCY + oy, vpFrameZ);
-    group.add(bar);
+  // ── 2. RIVETED RING-FRAMES — proud aluminium hoops banding the curved wall at
+  //    intervals (the "riveted aluminium capsule" read, matching the exterior latitude
+  //    bands), each with a ring of rivet studs. Built as FULL-circle open tubes JUST
+  //    inside the wall radius (proud into the cabin) — they run PAST the porthole so the
+  //    window reads as a hole cut in a continuous BANDED BARREL (P1). A hoop crossing the
+  //    porthole height passes behind the bezel; only the rivet studs inside the round
+  //    aperture are skipped (so no studs float across the glass).
+  const RING_RIVETS = 48;   // FIX 3 — denser, smaller flush studs (was 30 chunky pegs)
+  // is the wall point at (az, y) INSIDE the round porthole disc? (on the forward arc, an
+  // ellipse in azimuth-offset × height; az-offset scaled to arc-length by CAB_R)
+  const inPorthole = (az: number, y: number) => {
+    let d = az - VP_AZ_C; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2;
+    const arc = d * CAB_R;                              // approx along-wall horizontal offset
+    return (arc * arc + (y - VP_CY) * (y - VP_CY)) < (VP_R + 0.04) * (VP_R + 0.04);
   };
-  vpBar(vpW + vpFt * 2, vpFt, 0, vpH / 2 + vpFt / 2);
-  vpBar(vpW + vpFt * 2, vpFt, 0, -vpH / 2 - vpFt / 2);
-  vpBar(vpFt, vpH, -vpW / 2 - vpFt / 2, 0);
-  vpBar(vpFt, vpH, vpW / 2 + vpFt / 2, 0);
-  // A single vertical mullion offset to one side (a fabricated, mechanic's window) — it
-  //  frames the planet without bisecting the centre.
-  const mullion = _box(0.07, vpH, 0.13, _cabChannel);
-  mullion.position.set(-vpW * 0.22, vpCY, vpFrameZ);
-  group.add(mullion);
-  // 4 corner bolt studs on the frame.
-  for (const bx of [-1, 1]) for (const by of [-1, 1]) {
-    const bolt = _cyl(0.03, 0.03, 0.18, 6, _cabSteel);
-    bolt.rotation.x = Math.PI / 2;
-    bolt.position.set(bx * (vpW / 2 + vpFt / 2), vpCY + by * (vpH / 2 + vpFt / 2), vpFrameZ + 0.02);
-    group.add(bolt);
-  }
-  // Below the viewport: a vent GRILLE + a low forward shelf with a couple of small
-  //  fixtures — fills the blank wall under the window with lived-in detail.
-  const grilleY = vpY0 - 0.32;
-  const grilleBack = _box(0.9, 0.34, 0.04, _cabScreen);
-  grilleBack.position.set(0.1, grilleY, frontZ + 0.06);
-  group.add(grilleBack);
-  for (let i = 0; i < 6; i++) {
-    const slat = _box(0.86, 0.025, 0.05, _cabSteel);
-    slat.position.set(0.1, grilleY - 0.13 + i * 0.052, frontZ + 0.08);
-    group.add(slat);
-  }
-  // a small forward parcel shelf lip under the window (a ledge you'd brace gear on)
-  const shelf = _box(CAB_W - 0.2, 0.05, 0.18, _cabSteel);
-  shelf.position.set(0, vpY0 - 0.06, frontZ + 0.12);
-  group.add(shelf);
-  for (const sx of [-0.7, 0.7]) {
-    const bracket = _box(0.06, 0.14, 0.16, _cabSteel);
-    bracket.position.set(sx, vpY0 - 0.13, frontZ + 0.11);
-    group.add(bracket);
-  }
-  // a couple of warning placards on the lower wall
-  for (const [px, mat] of [[-0.7, _ledAmber], [0.62, _ledRed]] as const) {
-    const plac = _box(0.16, 0.1, 0.012, mat);
-    plac.position.set(px, grilleY + 0.02, frontZ + 0.05);
-    group.add(plac);
-  }
+  // half-angle the porthole subtends at a given height y (0 if the row is clear of the
+  // disc) — used to GAP a hoop that crosses the window height so it doesn't bar the glass.
+  const portholeAzHalfAt = (y: number) => {
+    const dy = Math.abs(y - VP_CY);
+    if (dy >= VP_R + 0.06) return 0;
+    const halfW = Math.sqrt(Math.max(0, (VP_R + 0.06) * (VP_R + 0.06) - dy * dy));  // along-wall horiz half-width
+    return Math.min(Math.PI * 0.9, halfW / CAB_R + 0.04);
+  };
+  // A ring-frame hoop. `proud` = how far it stands INTO the cabin off the wall (a BENT
+  //  bright band that visibly arcs L→R is the fastest "this is round" cue — FIX 1). Rivets
+  //  are small FLUSH dome studs seated tight to the wall (FIX 3 — not chunky proud pegs).
+  const addRing = (y: number, h: number, proud = 0.05, riveted = true) => {
+    const ringR = CAB_R - proud;
+    const gapHalf = portholeAzHalfAt(y);
+    if (gapHalf > 0) {
+      // the hoop CROSSES the porthole → build it as an arc that brackets the window (so it
+      // doesn't bar the glass, but the band continues past the porthole on each side).
+      const start = VP_AZ_C + gapHalf;
+      const len = Math.PI * 2 - gapHalf * 2;
+      const hoop = _tube(ringR, h, WALL_SEG, _cabBandShell, start, len);
+      hoop.position.y = y;
+      group.add(hoop);
+    } else {
+      const hoop = _tube(ringR, h, WALL_SEG, _cabBandShell);
+      hoop.position.y = y;
+      group.add(hoop);
+    }
+    if (!riveted) return;
+    for (let i = 0; i < RING_RIVETS; i++) {
+      const az = (i / RING_RIVETS) * Math.PI * 2;
+      if (inPorthole(az, y)) continue;                 // skip studs that fall on the glass
+      // small low-poly FLUSH dome stud (a half-sphere flush to the wall — reads as a
+      // fastened seam rivet, NOT a furniture bolt sticking proud).
+      const sg = new THREE.SphereGeometry(0.013, 6, 4, 0, Math.PI * 2, 0, Math.PI / 2);
+      _cabinDisposables.push(sg);
+      const stud = new THREE.Mesh(sg, _cabRivet);
+      const dir = new THREE.Vector3(Math.sin(az), 0, Math.cos(az));
+      stud.position.set(dir.x * (CAB_R - 0.012), y, dir.z * (CAB_R - 0.012));
+      stud.lookAt(0, y, 0);                             // dome faces into the cabin (flush cap)
+      group.add(stud);
+    }
+  };
+  // The hoop set. The CHEST-height hoop (≈VP_CY) is the headline bent band — built PROUD +
+  // bright + DOUBLED (a taller channel) so it visibly arcs across the eye-level frame. The
+  // foot + shoulder hoops are flush bands that close the barrel top + bottom.
+  addRing(0.46, 0.13, 0.05);
+  addRing(0.92, 0.10, 0.045);                          // an extra mid-low hoop → denser banding (more "round" cues)
+  addRing(VP_CY - 0.02, 0.17, 0.085);                  // HEADLINE chest hoop: tall + proud, brackets the porthole, arcs L→R
+  addRing(VP_CY + 0.40, 0.10, 0.05, false);            // a thin un-riveted upper hoop (extra horizontal cue, clear of the porthole-stud field)
+  addRing(WALL_H - 0.12, 0.14, 0.06);                  // shoulder ring where the dome springs
 
-  // ── 4. The SEAT + restraints (the player rides this; spawn sits just forward of it).
-  //    A steel pedestal base + a worn cushion seat + a high back + a head rest + two
-  //    over-shoulder restraint straps crossing the chest. Behind the seated eye (+Z).
-  const seatZ = 0.62, seatY = 0.42;
-  const seatBase = _box(0.66, 0.42, 0.6, _cabChannel);
-  seatBase.position.set(0, 0.21, seatZ + 0.05);
-  group.add(seatBase);
-  const cushion = _box(0.62, 0.16, 0.58, _cabSeat);
+  // ── 3. VERTICAL RIBS — channel-steel battens running UP the wall (the welded skeleton).
+  //    C12 FIX 1: dominant verticals read RECTILINEAR/BOXY on a cylinder — they made the
+  //    eye-level wall read as a panelled box. So: (a) NO ribs on the FORWARD arc (the
+  //    viewport view must be all curved hoop + arc, no vertical posts flanking the porthole
+  //    — that was the boxy read); (b) ribs only on the REAR/SIDE arcs (θ near 0 / ±2.x,
+  //    behind the seated head-turn-forward read); (c) THINNER (a slim batten, not a wide
+  //    plate+spine slab) so even when a head-turn catches one it doesn't chord the arc.
+  //    The horizontal RING-FRAMES (§2) now carry the structure read instead.
+  const ribAzs = [0.0, 2.25, -2.25];   // rear + far-side only; nothing on the forward arc
+  const ribY = WALL_H / 2 - 0.02, ribH = WALL_H - 0.30;
+  for (const az of ribAzs) {
+    // a SLIM batten hugging the wall (band-metal so it reads welded-on, but narrow → no chord)
+    const base = _box(0.08, ribH, 0.035, _cabBand);
+    _seatOnWall(base, az, CAB_R - 0.035, ribY);
+    group.add(base);
+    // a thin proud spine (darker steel) — slim so it reads as a seam batten, not a beam
+    const spine = _box(0.04, ribH, 0.05, _cabSteel);
+    _seatOnWall(spine, az, CAB_R - 0.075, ribY);
+    group.add(spine);
+    // rivet studs down the rib (small + flush — FIX 3 idiom)
+    for (let k = 0; k < 5; k++) {
+      const ry = 0.32 + k * ((ribH - 0.5) / 4);
+      const stud = _cyl(0.013, 0.013, 0.02, 6, _cabRivet);
+      stud.rotation.x = Math.PI / 2;
+      _seatOnWall(stud, az, CAB_R - 0.045, ry);
+      group.add(stud);
+    }
+  }
+  // (no big cross-cabin ceiling stringers — they read as a pipe arcing across the view;
+  //  the riveted ring-frames §2 carry the structure read.)
+
+  // ── 4. The forward PORTHOLE viewport — a continuous bezel ring set into the curved −Z
+  //    hull + a recessed well + a glass pane (the descent planet shows through). NO jamb
+  //    posts, NO sill/grille below (that formed the visor + chin face gestalt, P1).
+  buildViewport(group);
+
+  // ── 5. The SEAT + restraints — a real CONTOURED BUCKET seat you sit IN (not stacked
+  //    boxes that read as a staircase, P2): a steel PEDESTAL → a cushion pan with raised
+  //    side BOLSTERS → a back with side WINGS → a headrest → over-shoulder straps + a lap
+  //    buckle. Re-homed at the rear (+Z) curve, just aft of the seated spawn.
+  const seatZ = 0.70, seatY = 0.44;
+  // pedestal column (a single tapered post, not a wide box-base that reads as a step)
+  const pedestal = _cyl(0.16, 0.22, seatY - 0.02, 12, _cabChannel);
+  pedestal.position.set(0, (seatY - 0.02) / 2, seatZ + 0.04);
+  group.add(pedestal);
+  const pedFoot = _cyl(0.30, 0.30, 0.05, 14, _cabSteel);
+  pedFoot.position.set(0, 0.03, seatZ + 0.04);
+  group.add(pedFoot);
+  // cushion pan (the seat base) — a rounded slab; slightly scaled to read soft
+  const cushion = _box(0.54, 0.14, 0.50, _cabSeat);
   cushion.position.set(0, seatY, seatZ);
   group.add(cushion);
-  const seatBack = _box(0.62, 0.95, 0.16, _cabSeat);
-  seatBack.position.set(0, seatY + 0.5, seatZ + 0.3);
-  group.add(seatBack);
-  const headRest = _box(0.34, 0.22, 0.14, _cabSeat);
-  headRest.position.set(0, seatY + 1.02, seatZ + 0.28);
-  group.add(headRest);
-  // Over-shoulder restraint straps — two angled webbing bars from the seat-back top
-  // down past the chest (they read as the 5-point harness you're buckled into).
+  // raised side bolsters on the cushion (the "bucket" — you sit BETWEEN them)
   for (const sx of [-1, 1]) {
-    const strap = _box(0.10, 1.05, 0.04, _cabStrap);
-    strap.position.set(sx * 0.18, seatY + 0.5, seatZ - 0.02);
-    strap.rotation.x = 0.32;          // angle forward over the chest
+    const bolster = _box(0.10, 0.12, 0.46, _cabSeat);
+    bolster.position.set(sx * 0.26, seatY + 0.08, seatZ);
+    group.add(bolster);
+  }
+  // the seat BACK — canted back slightly so you recline INTO it (not a vertical wall)
+  const seatBack = _box(0.50, 0.88, 0.14, _cabSeat);
+  seatBack.position.set(0, seatY + 0.46, seatZ + 0.26);
+  seatBack.rotation.x = -0.12;          // recline
+  group.add(seatBack);
+  // back side WINGS (wrap-around — reinforces "you sit in it")
+  for (const sx of [-1, 1]) {
+    const wing = _box(0.10, 0.78, 0.20, _cabSeat);
+    wing.position.set(sx * 0.27, seatY + 0.44, seatZ + 0.20);
+    wing.rotation.x = -0.12;
+    group.add(wing);
+  }
+  const headRest = _box(0.30, 0.20, 0.13, _cabSeat);
+  headRest.position.set(0, seatY + 0.96, seatZ + 0.34);
+  group.add(headRest);
+  // over-shoulder restraint straps (5-point harness tells)
+  for (const sx of [-1, 1]) {
+    const strap = _box(0.09, 0.92, 0.035, _cabStrap);
+    strap.position.set(sx * 0.16, seatY + 0.46, seatZ + 0.04);
+    strap.rotation.x = 0.30;
     group.add(strap);
   }
-  // Buckle hub at the lap.
-  const buckle = _box(0.16, 0.12, 0.08, _cabSteel);
-  buckle.position.set(0, seatY + 0.12, seatZ - 0.34);
+  const buckle = _box(0.15, 0.11, 0.07, _cabSteel);
+  buckle.position.set(0, seatY + 0.10, seatZ - 0.26);
   group.add(buckle);
 
-  // ── 5. RIGHT-side CONSOLE (+X) — a humble waist-high cabinet with an angled
-  //    instrument deck the seated pilot reads at a glance-down: a few dials, toggle
-  //    switches, a small dim screen + telltale LEDs. The PARACHUTE lever rises off its
-  //    forward end. A lifeboat panel, NOT a bridge. Built in the world frame (no group
-  //    rotation — placement is explicit so instruments sit ON the canted deck plane).
-  const conX = hw - 0.20;            // console centre, just inboard of the +X wall
-  const deckY = 1.34;                // the deck top — readable at the seated eye glance-down
-  // cabinet body (the boxed-in console under the deck)
-  const conBody = _box(0.46, deckY, 1.15, _cabChannel);
-  conBody.position.set(conX, deckY / 2, 0.0);
-  group.add(conBody);
-  // the angled instrument DECK (tilted up toward the seat = toward −X + a touch up)
-  const deck = _box(0.5, 0.05, 1.15, _cabSteel);
-  deck.position.set(conX - 0.02, deckY + 0.05, 0.0);
-  deck.rotation.z = 0.32;            // cant the deck up on its inboard edge toward the pilot
-  group.add(deck);
-  // a small dim CRT screen recessed in the deck (forward end), faintly amber.
-  const screen = _box(0.26, 0.02, 0.22, _cabScreen);
-  screen.position.set(conX - 0.10, deckY + 0.11, -0.34);
-  screen.rotation.z = 0.32;
-  group.add(screen);
-  const screenGlow = _box(0.18, 0.015, 0.14, _ledAmber);
-  screenGlow.position.set(conX - 0.115, deckY + 0.125, -0.34);
-  screenGlow.rotation.z = 0.32;
-  group.add(screenGlow);
-  // a row of telltale LEDs across the deck (aft of the screen).
+  // ── 6. RIGHT-side CONSOLE (+X) + the PARACHUTE LEVER — curve-seated against the round
+  //    wall. A waist-high cabinet hugging the curve + a canted instrument deck + the
+  //    chunky red parachute lever rising off it. The defining usable hardware.
+  buildConsoleAndLever(group);
+
+  // ── 7. The EJECT control (LEFT/−X side) — a guarded hazard-yellow T-handle on a panel
+  //    curve-seated on the left wall, in seated reach (the enterPod "pull eject" beat).
+  buildEjectControl(group);
+
+  // ── 8. CONDUIT + CABLING + a ceiling dome light — lived-in tells following the curve.
+  buildConduitAndLight(group);
+
+  // ── 9. A grab handle overhead (brace against the jolts) — a humanising prop on the
+  //    aft-left (θ≈−0.85) so it doesn't block the forward viewport read. A tangential bar
+  //    on two stubby standoffs off the curve.
+  const grabAz = -0.85;
+  const gDir = new THREE.Vector3(Math.sin(grabAz), 0, Math.cos(grabAz));
+  const grab = _cyl(0.026, 0.026, 0.42, 8, _cabSteel);
+  grab.position.set(gDir.x * (CAB_R - 0.14), WALL_H - 0.18, gDir.z * (CAB_R - 0.14));
+  grab.rotation.y = grabAz;          // run the bar tangentially (along the wall arc)
+  grab.rotation.z = Math.PI / 2;
+  group.add(grab);
+  // tangent direction along the wall arc (perpendicular to the radial gDir, in XZ)
+  const tang = new THREE.Vector3(Math.cos(grabAz), 0, -Math.sin(grabAz));
+  for (const t of [-0.18, 0.18]) {
+    const standoff = _cyl(0.02, 0.02, 0.1, 6, _cabSteel);
+    standoff.position.set(
+      gDir.x * (CAB_R - 0.09) + tang.x * t,
+      WALL_H - 0.18,
+      gDir.z * (CAB_R - 0.09) + tang.z * t,
+    );
+    standoff.rotation.set(0, 0, 0);          // short radial stub (vertical-ish is fine; tiny)
+    group.add(standoff);
+  }
+}
+
+// ── Section builders (split out so buildCabinInterior reads as the cabin assembly) ──
+
+/** The forward viewport — a ROUND PORTHOLE: a continuous channel-steel BEZEL RING set
+ *  into the curved −Z hull, a recessed inner-rim SHADOW well (aperture depth), and a
+ *  faint tinted curved GLASS pane. The planet reads through the round gap. This replaces
+ *  the C12 rectangle-flanked-by-two-posts (the visor/face gestalt, P1) — there is NO
+ *  vertical jamb post, NO sill/grille/placard chin below the window. The bezel ring +
+ *  the continuous wall hoops/ribs read it as "a porthole in a riveted barrel". */
+function buildViewport(group: THREE.Group): void {
+  // The porthole sits on the wall at az=π (−Z); the wall point there is (0, y, −CAB_R) and
+  // its inward normal is +Z. Build the round bezel/well/glass in a forward-facing plane
+  // (XY plane) at z ≈ −CAB_R, slightly proud into the cabin. Over a 0.52m window on a
+  // 1.28m bore the flat-ring approximation hugs the curve closely enough.
+  const zWall = -CAB_R;                 // the −Z wall surface plane
+  const TUBE_SEG = 36;                  // smooth ring (no facet streaks on the rim)
+  // ── BEZEL RING — a proud channel-steel torus framing the round aperture (continuous,
+  //    NOT two posts). Set just inside the wall so it stands proud into the cabin.
+  const bezelGeo = new THREE.TorusGeometry(VP_R + 0.05, 0.06, 12, TUBE_SEG);
+  _cabinDisposables.push(bezelGeo);
+  const bezel = new THREE.Mesh(bezelGeo, _cabChannel);
+  bezel.position.set(0, VP_CY, zWall + 0.10);   // proud into the cabin
+  group.add(bezel);
+  // a second thinner inner trim ring (the glazing retainer) — a LIGHTER aluminium value
+  // (the deck-plate tone) so the rim reads as a fabricated bright port, not all-dark.
+  const trimGeo = new THREE.TorusGeometry(VP_R - 0.02, 0.03, 10, TUBE_SEG);
+  _cabinDisposables.push(trimGeo);
+  const trim = new THREE.Mesh(trimGeo, _cabDeck);
+  trim.position.set(0, VP_CY, zWall + 0.13);
+  group.add(trim);
+  // ── INNER-RIM SHADOW WELL — a short open tube going OUTWARD (−Z) from the bezel into
+  //    the hull thickness so the aperture reads as a deep inset window, not a flat hole.
+  //    Axis along Z (rotate the cylinder from Y to Z). Dark unlit inner face.
+  const wellGeo = new THREE.CylinderGeometry(VP_R + 0.01, VP_R + 0.01, 0.26, TUBE_SEG, 1, true);
+  _cabinDisposables.push(wellGeo);
+  const well = new THREE.Mesh(wellGeo, _cabRimShadow);
+  well.rotation.x = Math.PI / 2;        // axis Y → Z
+  well.position.set(0, VP_CY, zWall - 0.02);   // recessed into the hull (behind the bezel)
+  group.add(well);
+  // ── GLASS PANE — a shallow convex tinted disc filling the aperture, slightly proud of
+  //    the wall plane so it reads as a real pane in front of the void, with a faint spec.
+  const glassGeo = new THREE.SphereGeometry(VP_R, TUBE_SEG, 16, 0, Math.PI * 2, 0, Math.PI * 0.30);
+  _cabinDisposables.push(glassGeo);
+  const glass = new THREE.Mesh(glassGeo, _cabGlass);
+  glass.rotation.x = -Math.PI / 2;      // bulge toward +Z (into the cabin) so the spec catches the dome light
+  glass.position.set(0, VP_CY, zWall + 0.06);
+  group.add(glass);
+  // a faint SPEC streak on the glass (top-left) so the pane reads as glazed, not an open
+  // hole (P3 — "a window not an open hole"). A thin bright unlit crescent (module-shared mat).
+  const specGeo = new THREE.PlaneGeometry(VP_R * 0.7, 0.05);
+  _cabinDisposables.push(specGeo);
+  const spec = new THREE.Mesh(specGeo, _cabGlassSpec);
+  spec.position.set(-VP_R * 0.18, VP_CY + VP_R * 0.42, zWall + 0.18);
+  spec.rotation.z = -0.6;
+  group.add(spec);
+  // ── BOLT STUDS around the bezel (a ring of fasteners) — small flush dome studs (FIX 3),
+  //    denser, seated on the bezel face (not chunky proud cylinders).
+  for (let i = 0; i < 20; i++) {
+    const a = (i / 20) * Math.PI * 2;
+    const sg = new THREE.SphereGeometry(0.014, 6, 4, 0, Math.PI * 2, 0, Math.PI / 2);
+    _cabinDisposables.push(sg);
+    const bolt = new THREE.Mesh(sg, _cabRivet);
+    bolt.rotation.x = -Math.PI / 2;     // dome faces +Z (into the cabin)
+    bolt.position.set(
+      Math.cos(a) * (VP_R + 0.05),
+      VP_CY + Math.sin(a) * (VP_R + 0.05),
+      zWall + 0.135,
+    );
+    group.add(bolt);
+  }
+  // ── A small stencilled "VIEWPORT"-style HAZARD placard set on the wall to the LOWER-
+  //    LEFT of the porthole (off-centre, NOT centred below — a centred plate re-forms the
+  //    chin/mouth). A single subtle amber strip, curve-seated.
+  const plac = _box(0.18, 0.07, 0.012, _ledAmber);
+  _seatOnWall(plac, VP_AZ_C + 0.55, CAB_R - 0.05, VP_CY - VP_R - 0.02);
+  group.add(plac);
+}
+
+/** The right-side console + the chunky red PARACHUTE LEVER, curve-seated on the +X wall.
+ *  Sets the module `chuteLever` pivot (the setParachuteLeverPull hook drives it). */
+function buildConsoleAndLever(group: THREE.Group): void {
+  // The console sits on the +X (right) flank, canted toward FORWARD (θ from +Z→+X; right
+  // = π/2, forward = π), so the seated player glances down-forward-right to it + the lever
+  // is in natural reach. dir = (sin az, 0, cos az); group local +X → outward at az−π/2.
+  const conAz = Math.PI / 2 + 0.42;   // right flank, swung toward the forward viewport
+  const conDir = new THREE.Vector3(Math.sin(conAz), 0, Math.cos(conAz));
+  const conR = CAB_R - 0.42;          // console body centre, inboard of the wall
+  const deckY = 1.30;
+  // a console GROUP yawed so its local +X points radially OUTWARD (toward the wall); local
+  // −X then faces the cabin centre / seat (where the instruments + lever read).
+  const con = new THREE.Group();
+  con.position.set(conDir.x * conR, 0, conDir.z * conR);
+  con.rotation.y = conAz - Math.PI / 2;
+  group.add(con);
+  // cabinet body (a curved-back cabinet hugging the wall) — in console-local frame, +X
+  // is outward (toward wall), local −X faces the seat. WIDER + a closed seat-facing FACE
+  // panel + a kickplate skirt so looking DOWN at it shows a solid lit cabinet, not a dark
+  // void cavity under the deck (P2 floor-shot fix).
+  const body = _box(0.46, deckY, 1.0, _cabChannel);
+  body.position.set(0.13, deckY / 2, 0);
+  con.add(body);
+  // seat-facing FACE panel (closes the front of the cabinet, lighter band-metal so it's lit)
+  const facePanel = _box(0.03, deckY - 0.04, 0.94, _cabBand);
+  facePanel.position.set(-0.10, deckY / 2, 0);
+  con.add(facePanel);
+  // kickplate skirt at the floor (a recessed darker base — the cabinet meets the deck)
+  const kick = _box(0.40, 0.12, 0.96, _cabSteel);
+  kick.position.set(-0.06, 0.06, 0);
+  con.add(kick);
+  // angled instrument DECK canted up toward the seat
+  const deck = _box(0.46, 0.05, 1.0, _cabSteel);
+  deck.position.set(0.0, deckY + 0.05, 0);
+  deck.rotation.z = 0.34;             // cant up on the inboard (seat-facing) edge
+  con.add(deck);
+  // dim amber CRT screen recessed in the deck (forward end)
+  const screen = _box(0.24, 0.02, 0.2, _cabScreen);
+  screen.position.set(-0.06, deckY + 0.12, -0.3);
+  screen.rotation.z = 0.34;
+  con.add(screen);
+  const screenGlow = _box(0.17, 0.015, 0.13, _ledAmber);
+  screenGlow.position.set(-0.075, deckY + 0.135, -0.3);
+  screenGlow.rotation.z = 0.34;
+  con.add(screenGlow);
+  // a row of telltale LEDs (aft of the screen)
   for (let i = 0; i < 4; i++) {
     const mat = [_ledGreen, _ledGreen, _ledAmber, _ledRed][i];
     const led = _cyl(0.018, 0.018, 0.018, 6, mat);
     led.rotation.x = Math.PI / 2;
-    led.rotation.z = 0.32;
-    led.position.set(conX - 0.18, deckY + 0.145, -0.05 + i * 0.09);
-    group.add(led);
+    led.rotation.z = 0.34;
+    led.position.set(-0.14, deckY + 0.155, -0.02 + i * 0.085);
+    con.add(led);
   }
-  // 3 toggle switches in a row on the deck.
+  // 3 toggle switches
   for (let i = 0; i < 3; i++) {
-    const sw = _cyl(0.012, 0.012, 0.06, 6, _cabSteel);
-    sw.rotation.z = 0.32 - 0.4;
-    sw.position.set(conX - 0.02, deckY + 0.12, 0.18 + i * 0.08);
-    group.add(sw);
+    const sw = _cyl(0.012, 0.012, 0.06, 6, _cabRivet);
+    sw.rotation.z = 0.34 - 0.4;
+    sw.position.set(0.0, deckY + 0.13, 0.16 + i * 0.075);
+    con.add(sw);
   }
-  // two round gauge dials on the FORWARD vertical face of the cabinet (face the seat
-  // along −Z), so the front of the console isn't a blank slab.
-  for (const dy of [0.95, 0.6]) {
-    const ring = _cyl(0.08, 0.08, 0.03, 14, _cabSteel);
+  // two round gauge dials on the seat-facing vertical face (local −X face)
+  for (const dy of [0.92, 0.58]) {
+    const ring = _cyl(0.075, 0.075, 0.03, 14, _cabRivet);
     ring.rotation.x = Math.PI / 2;
-    ring.position.set(conX, dy, -0.58);
-    group.add(ring);
-    const face = _cyl(0.062, 0.062, 0.012, 14, _cabScreen);
+    ring.position.set(-0.18, dy, -0.38);
+    con.add(ring);
+    const face = _cyl(0.058, 0.058, 0.012, 14, _cabScreen);
     face.rotation.x = Math.PI / 2;
-    face.position.set(conX, dy, -0.6);
-    group.add(face);
-    // a needle hint (a thin bar across the dial face)
+    face.position.set(-0.2, dy, -0.38);
+    con.add(face);
     const needle = _box(0.05, 0.008, 0.004, _ledAmber);
-    needle.position.set(conX - 0.01, dy + 0.01, -0.61);
+    needle.position.set(-0.21, dy + 0.01, -0.38);
     needle.rotation.z = dy > 0.8 ? 0.6 : -0.4;
-    group.add(needle);
+    con.add(needle);
   }
 
-  // ── 6. The chunky PARACHUTE LEVER — the gag STAR. Rises off the console deck's
-  //    forward end, into easy seated reach (the grip ball ends ~at chest/eye height):
-  //    a steel pivot bracket + a stout shaft + a fat worn-red rubber grip, canted back
-  //    toward the pilot so it reads "grab and yank". A pivot GROUP (chuteLever) so
-  //    setParachuteLeverPull jolts it per pull + droops it on the snap.
-  const leverBaseX = conX - 0.12, leverBaseY = deckY + 0.06, leverBaseZ = -0.5;
-  // pivot bracket (a steel clevis at the deck — NOT rotated with the shaft).
+  // ── the chunky PARACHUTE LEVER — rises off the deck's forward end into easy seated
+  //    reach. A steel clevis bracket + a stout shaft + a fat worn-red rubber grip, canted
+  //    back toward the pilot. A pivot GROUP (chuteLever) so setParachuteLeverPull jolts /
+  //    droops it. Built in console-local space (folds into the console's curve-seat yaw).
+  const leverBaseX = -0.04, leverBaseY = deckY + 0.08, leverBaseZ = -0.42;
   const bracket = _box(0.14, 0.16, 0.18, _cabSteel);
   bracket.position.set(leverBaseX, leverBaseY, leverBaseZ);
-  group.add(bracket);
+  con.add(bracket);
   const leverPivot = new THREE.Group();
   leverPivot.position.set(leverBaseX, leverBaseY + 0.04, leverBaseZ);
-  chuteLeverRestX = -0.32;            // resting: tilted back toward the seat (−X pitch)
+  chuteLeverRestX = -0.32;
   leverPivot.rotation.x = chuteLeverRestX;
-  group.add(leverPivot);
-  // shaft (rises from the pivot)
+  con.add(leverPivot);
   const shaft = _cyl(0.028, 0.034, 0.46, 8, _cabSteel);
   shaft.position.set(0, 0.23, 0);
   leverPivot.add(shaft);
-  // a collar mid-shaft + a hazard band
   const collar = _cyl(0.05, 0.05, 0.05, 10, _cabSteel);
   collar.position.set(0, 0.16, 0);
   leverPivot.add(collar);
   const hazBand = _cyl(0.038, 0.038, 0.06, 8, _ejectGrip);
   hazBand.position.set(0, 0.30, 0);
   leverPivot.add(hazBand);
-  // fat red grip at the top (the "pull me" affordance) — a stubby cylinder + a ball cap.
   const grip = _cyl(0.078, 0.085, 0.16, 12, _chuteGrip);
   grip.position.set(0, 0.5, 0);
   leverPivot.add(grip);
@@ -377,115 +702,158 @@ function buildCabinInterior(group: THREE.Group): void {
   gripCap.position.set(0, 0.58, 0);
   leverPivot.add(gripCap);
   chuteLever = leverPivot;
-  // a hazard-striped placard on the deck beside the lever (reads "this is the chute").
-  const placard = _box(0.2, 0.012, 0.12, _ledAmber);
-  placard.position.set(conX - 0.06, deckY + 0.1, -0.66);
-  placard.rotation.z = 0.32;
-  group.add(placard);
+  // ── the SNAPPED-MOUNT tell (hidden until setParachuteLeverPull(_, true) shows it): a
+  //    bent/sprung clevis pin + a torn bracket lip at the lever base, so the 3rd-pull SNAP
+  //    reads as a wrenched-off mount, not just an extreme lever angle (P4).
+  const brokenTell = new THREE.Group();
+  brokenTell.position.set(leverBaseX, leverBaseY, leverBaseZ);
+  brokenTell.visible = false;
+  const tornLip = _box(0.12, 0.05, 0.06, _cabSteel);
+  tornLip.position.set(0, 0.06, 0.0);
+  tornLip.rotation.set(0.6, 0, 0.4);            // peeled up (metal tore)
+  brokenTell.add(tornLip);
+  const sprungPin = _cyl(0.014, 0.014, 0.14, 6, _cabRivet);
+  sprungPin.rotation.set(0.3, 0, 1.1);          // the clevis pin sprung out at an angle
+  sprungPin.position.set(0.06, 0.05, 0.03);
+  brokenTell.add(sprungPin);
+  con.add(brokenTell);
+  leverBrokenTell = brokenTell;
+  // a hazard-yellow "CHUTE" placard on the deck beside the lever (a dark stencil bar on the
+  // yellow plate reads as a label, P4)
+  const placard = _box(0.18, 0.012, 0.11, _ledAmber);
+  placard.position.set(-0.02, deckY + 0.12, -0.56);
+  placard.rotation.z = 0.34;
+  con.add(placard);
+  const placardText = _box(0.13, 0.014, 0.025, _cabScreen);
+  placardText.position.set(-0.018, deckY + 0.135, -0.56);
+  placardText.rotation.z = 0.34;
+  con.add(placardText);
+}
 
-  // ── 7. The EJECT control (LEFT/−X side) — DISTINCT from the parachute lever: a
-  //    guarded T-handle on a left-side panel, hazard-yellow grip, in seated reach. The
-  //    player "pulls" this in enterPod. A mounting plate + flip-guard + T-handle + LED.
-  // The whole control sits on the left wall (x=ejX) and faces INBOARD (+X), so its
-  //  local +X points toward the cabin centre where the seated pilot reaches it.
-  const ejX = -(hw - 0.04);
-  const ejGroup = new THREE.Group();
-  ejGroup.position.set(ejX, 1.5, -0.4);
-  group.add(ejGroup);
-  // a recessed panel box flush on the wall (thin in X, faces +X)
-  const ejPanel = _box(0.1, 0.56, 0.5, _cabChannel);
-  ejPanel.position.set(0.05, 0, 0);
-  ejGroup.add(ejPanel);
-  // hazard-yellow recessed inset (the "this is the eject control" callout)
-  const ejInset = _box(0.04, 0.46, 0.4, _ejectGrip);
-  ejInset.position.set(0.11, 0, 0);
-  ejGroup.add(ejInset);
-  // a dark recessed well the handle sits in
-  const ejWell = _box(0.06, 0.34, 0.3, _cabScreen);
-  ejWell.position.set(0.13, 0, 0);
-  ejGroup.add(ejWell);
-  // flip-up safety guard (a wire cage arched OUT into the cabin over the handle, +X)
-  const guard = _box(0.22, 0.03, 0.34, _cabSteel);
-  guard.position.set(0.28, 0.16, 0);
-  ejGroup.add(guard);
-  for (const sz of [-1, 1]) {
-    const guardLeg = _box(0.18, 0.03, 0.03, _cabSteel);
-    guardLeg.position.set(0.21, 0.09, sz * 0.15);
-    guardLeg.rotation.z = -0.7;
-    ejGroup.add(guardLeg);
+/** The eject control — a guarded hazard-yellow T-handle on a panel curve-seated on the
+ *  −X (left) wall, facing inboard (toward the seat). The enterPod "pull eject" beat. */
+function buildEjectControl(group: THREE.Group): void {
+  // Left (−X) flank, canted toward forward (left = −π/2, forward = π). dir=(sin,cos);
+  // group local +X → outward at az−π/2, so local −X faces the seat (where the T-handle reaches).
+  const ejAz = -Math.PI / 2 - 0.40;
+  const ej = new THREE.Group();
+  const ejR = CAB_R - 0.05;
+  ej.position.set(Math.sin(ejAz) * ejR, 1.42, Math.cos(ejAz) * ejR);
+  ej.rotation.y = ejAz - Math.PI / 2;
+  group.add(ej);
+  // In ej-local: −X faces the cabin centre. Build the control reaching inboard (−X).
+  // C12 FIX 3: BIGGER + clearer so it reads as a real distinct control (the other control),
+  // not a tiny dim yellow rectangle. A chunky steel mounting plate → a bright safety-yellow
+  // guarded housing → a real guarded toggle inside.
+  const panel = _box(0.12, 0.72, 0.62, _cabChannel);   // bigger steel mounting plate
+  panel.position.set(-0.04, 0, 0);
+  ej.add(panel);
+  // hazard-stripe top + bottom bars on the plate (the warning-placard tell — reads "danger")
+  for (const sy of [-1, 1]) {
+    const hz = _box(0.02, 0.10, 0.60, _ejectGrip);
+    hz.position.set(-0.11, sy * 0.30, 0);
+    ej.add(hz);
   }
-  // the T-handle: a stem reaching OUT into the cabin (+X) + a vertical crossbar grip
-  const ejStem = _cyl(0.03, 0.03, 0.24, 8, _cabSteel);
-  ejStem.rotation.z = Math.PI / 2;
-  ejStem.position.set(0.26, 0, 0);
-  ejGroup.add(ejStem);
-  const ejBar = _cyl(0.045, 0.045, 0.3, 8, _ejectGrip);
-  ejBar.position.set(0.38, 0, 0);   // crossbar runs along Z (the grip you wrap a hand around)
-  ejGroup.add(ejBar);
+  const inset = _box(0.05, 0.50, 0.50, _ejectGrip);    // bright-yellow guarded housing (bigger)
+  inset.position.set(-0.11, 0, 0);
+  ej.add(inset);
+  const well = _box(0.07, 0.38, 0.38, _cabScreen);     // recessed dark guard cavity
+  well.position.set(-0.135, 0, 0);
+  ej.add(well);
+  // a visible red ARMING TOGGLE inside the well — a chunky base + a canted red switch body
+  // so the guard clearly protects a real control (bigger to match the enlarged housing).
+  const togBase = _cyl(0.06, 0.07, 0.05, 10, _cabSteel);
+  togBase.rotation.z = Math.PI / 2;
+  togBase.position.set(-0.155, -0.02, 0);
+  ej.add(togBase);
+  const togSwitch = _cyl(0.028, 0.038, 0.15, 8, _ledRed);
+  togSwitch.rotation.z = Math.PI / 2 + 0.5;     // canted (a thrown toggle)
+  togSwitch.position.set(-0.21, 0.0, 0);
+  ej.add(togSwitch);
+  const togTip = new THREE.Mesh(new THREE.SphereGeometry(0.032, 8, 6), _ledRed);
+  _cabinDisposables.push(togTip.geometry);
+  togTip.position.set(-0.275, 0.035, 0);
+  ej.add(togTip);
+  // flip-up guard arching inboard over the toggle (a chunky steel cage — reads "guarded")
+  const guard = _box(0.26, 0.04, 0.42, _cabSteel);
+  guard.position.set(-0.32, 0.20, 0);
+  ej.add(guard);
   for (const sz of [-1, 1]) {
-    const ejCap = _cyl(0.055, 0.045, 0.03, 8, _cabSteel);
-    ejCap.rotation.x = Math.PI / 2;
-    ejCap.position.set(0.38, 0, sz * 0.15);
-    ejGroup.add(ejCap);
+    const leg = _box(0.22, 0.04, 0.04, _cabSteel);
+    leg.position.set(-0.24, 0.10, sz * 0.18);
+    leg.rotation.z = 0.7;
+    ej.add(leg);
   }
-  // a red status LED above + a small green LED below the handle.
-  const ejLed = _cyl(0.024, 0.024, 0.02, 8, _ledRed);
-  ejLed.rotation.z = Math.PI / 2;
-  ejLed.position.set(0.12, 0.2, 0.0);
-  ejGroup.add(ejLed);
-  const ejLed2 = _cyl(0.02, 0.02, 0.02, 8, _ledGreen);
-  ejLed2.rotation.z = Math.PI / 2;
-  ejLed2.position.set(0.12, -0.2, 0.0);
-  ejGroup.add(ejLed2);
+  // stencilled "EJECT" label strip on the lower housing (a dark-on-yellow placard tell)
+  const ejLabel = _box(0.025, 0.07, 0.40, _cabScreen);
+  ejLabel.position.set(-0.122, -0.34, 0);
+  ej.add(ejLabel);
+  // the T-handle reaching inboard (−X) + a vertical crossbar grip (chunkier)
+  const stem = _cyl(0.038, 0.038, 0.28, 8, _cabSteel);
+  stem.rotation.z = Math.PI / 2;
+  stem.position.set(-0.30, 0.20, 0);
+  ej.add(stem);
+  const barT = _cyl(0.055, 0.055, 0.34, 8, _ejectGrip);
+  barT.position.set(-0.44, 0.20, 0);
+  ej.add(barT);
+  for (const sz of [-1, 1]) {
+    const cap = _cyl(0.065, 0.052, 0.035, 8, _cabSteel);
+    cap.rotation.x = Math.PI / 2;
+    cap.position.set(-0.44, 0.20, sz * 0.17);
+    ej.add(cap);
+  }
+  // status LEDs (on the lower housing face)
+  const ledR = _cyl(0.026, 0.026, 0.02, 8, _ledRed);
+  ledR.rotation.z = Math.PI / 2;
+  ledR.position.set(-0.125, -0.20, 0.12);
+  ej.add(ledR);
+  const ledG = _cyl(0.022, 0.022, 0.02, 8, _ledGreen);
+  ledG.rotation.z = Math.PI / 2;
+  ledG.position.set(-0.125, -0.20, -0.12);
+  ej.add(ledG);
+}
 
-  // ── 8. CONDUIT + CABLING — the lived-in tells. Thick conduit pipes up the aft
-  //    corners, a junction box on the aft wall, and loose cables drooping under the ribs.
-  const conduit = _cyl(0.055, 0.055, CAB_H - 0.2, 8, _cabCable);
-  conduit.position.set(-(hw - 0.1), CAB_H / 2, hd - 0.2);
-  group.add(conduit);
-  const conduit2 = _cyl(0.045, 0.045, CAB_H - 0.5, 8, _cabCable);
-  conduit2.position.set(hw - 0.12, CAB_H / 2 + 0.15, hd - 0.32);
-  group.add(conduit2);
-  // junction box on the aft wall
-  const jbox = _box(0.24, 0.3, 0.13, _cabSteel);
-  jbox.position.set(-0.55, 1.45, hd - 0.04);
+/** Conduit pipes following the curve, a junction box, drooping cables, a ceiling dome
+ *  light — the lived-in cramped-capsule tells. */
+function buildConduitAndLight(group: THREE.Group): void {
+  // NOTE (NEW azimuth convention θ from +Z→+X): forward/viewport = θ=π, aft/seat = θ=0.
+  // Keep all conduit/cables on the REAR + side arcs (θ near 0 / ±2.x) so NOTHING crosses
+  // the forward viewport read.
+  // two conduit pipes running UP the REAR curve (θ near 0, behind/beside the seat where
+  // they NEVER cross the forward viewport OR sit behind the console/eject as a stray
+  // diagonal). Vertical pipes + a couple of bracket clamps each so they read as conduit.
+  for (const [az, yc] of [[0.85, WALL_H / 2], [-0.85, WALL_H / 2 + 0.05]] as const) {
+    const conduit = _cyl(0.05, 0.05, WALL_H - 0.35, 8, _cabCable);
+    _seatOnWall(conduit, az, CAB_R - 0.1, yc);
+    group.add(conduit);
+    for (const cy of [yc - 0.4, yc + 0.4]) {
+      const clamp = _box(0.1, 0.05, 0.05, _cabSteel);
+      _seatOnWall(clamp, az, CAB_R - 0.08, cy);
+      group.add(clamp);
+    }
+  }
+  // junction box on the rear wall (directly behind the seat, θ≈0)
+  const jbox = _box(0.22, 0.28, 0.13, _cabSteel);
+  _seatOnWall(jbox, -0.3, CAB_R - 0.07, 1.45);
   group.add(jbox);
-  for (const [jx, mat] of [[-0.05, _ledGreen], [0.05, _ledAmber]] as const) {
+  for (const [aoff, mat] of [[-0.05, _ledGreen], [0.05, _ledAmber]] as const) {
     const led = _box(0.025, 0.025, 0.02, mat);
-    led.position.set(-0.55 + jx, 1.54, hd - 0.1);
+    _seatOnWall(led, -0.3 + aoff, CAB_R - 0.12, 1.55);
     group.add(led);
   }
-  // drooping cables under the ceiling ribs (tilted short cylinders)
-  const cableSpecs: ReadonlyArray<[number, number, number, number]> = [
-    [-0.45, CAB_H - 0.18, 0.4, 0.9],
-    [0.4, CAB_H - 0.16, -0.45, 0.85],
-  ];
-  for (const [cx, cy, cz, len] of cableSpecs) {
-    const cable = _cyl(0.025, 0.025, len, 6, _cabCable);
-    cable.position.set(cx, cy, cz);
-    cable.rotation.set(0, 0, Math.PI / 2 - 0.4);
-    group.add(cable);
-  }
-  // a recessed dim dome light in the ceiling (the warm interior source, unlit mat). Set
-  //  small + flush so it reads as a fixture, not a floating disc.
-  const domeRing = _cyl(0.13, 0.15, 0.05, 14, _cabSteel);
-  domeRing.position.set(0.0, CAB_H - 0.03, -0.1);
+  // a short drooping cable on the REAR-left flank (θ≈−0.5, behind the seat) — minimal
+  //  tilt so it reads as a slack loop, not a bar crossing the cabin.
+  const cable = _cyl(0.024, 0.024, 0.5, 6, _cabCable);
+  _seatOnWall(cable, -0.5, CAB_R - 0.14, WALL_H - 0.32);
+  cable.rotation.x += 0.35;   // sag forward-down a touch (stays tucked against the rear wall)
+  group.add(cable);
+  // ceiling dome light at the apex (the warm interior source; unlit glow mat)
+  const domeRing = _cyl(0.14, 0.16, 0.05, 14, _cabSteel);
+  domeRing.position.set(0, CAB_APEX - 0.06, -0.1);
   group.add(domeRing);
-  const dome = _cyl(0.10, 0.12, 0.03, 14, _ledAmber);
-  dome.position.set(0.0, CAB_H - 0.05, -0.1);
-  group.add(dome);
-
-  // ── 9. A grab handle overhead (brace against the jolts) — a humanising prop on the
-  //    aft-left so it doesn't block the forward viewport read.
-  const grab = _cyl(0.026, 0.026, 0.46, 8, _cabSteel);
-  grab.rotation.x = Math.PI / 2;
-  grab.position.set(-0.5, CAB_H - 0.16, 0.5);
-  group.add(grab);
-  for (const sz of [-1, 1]) {
-    const grabEnd = _cyl(0.026, 0.026, 0.12, 8, _cabSteel);
-    grabEnd.position.set(-0.5, CAB_H - 0.22, 0.5 + sz * 0.23);
-    group.add(grabEnd);
-  }
+  const lamp = _cyl(0.11, 0.13, 0.03, 14, _ledAmber);
+  lamp.position.set(0, CAB_APEX - 0.09, -0.1);
+  group.add(lamp);
 }
 
 /** Build the pod (hero cabin mesh group + a static shell collider) at POD_ORIGIN.
@@ -503,23 +871,54 @@ export function buildPodScene(ctx: GameContext): void {
   // ── Lighting: the cabin is OFF in deep space at the offset (no terrain sun reaching
   //    it), so add a warm dim interior point light + a faint fill hemisphere parented
   //    to the group, giving the cramped-lived-in glow + form on the lambert surfaces.
-  const lamp = new THREE.PointLight(0xffcf9e, 2.4, 7, 1.6);
-  lamp.position.set(0, CAB_H - 0.12, -0.1);   // at the ceiling dome
+  // ── Lighting (C12 FIX 2): a dim LIVED-IN cabin with FORM + a cool aluminium read —
+  //    NOT a flat warm fill. The prior rig (high flat warm-ish hemisphere ×1.05) washed
+  //    the whole bore brown. New scheme: a tight WARM KEY pool from the ceiling lamp (POOLED,
+  //    fast decay → shadowed cramped corners), a LOW COOL ambient (so the bare aluminium
+  //    reads grey, not warm-bathed), an OFF-CENTRE directional that rakes the curved wall
+  //    left-to-right (a gradient across the arc → the curvature reads, FIX 1 support), and a
+  //    brighter cool PORTHOLE spill (a cool accent pool forward).
+  // Warm ceiling lamp KEY — pooled (lower range + faster decay) so it pools at the apex
+  // and the lower wall / corners fall off into shadow (form, not a flat fill).
+  const lamp = new THREE.PointLight(0xffd2a0, 1.7, 3.8, 2.9);   // cooler tint + tighter pool (was washing the upper wall warm-tan)
+  lamp.position.set(0.1, CAB_APEX - 0.20, 0.05);   // at the ceiling dome light, nudged off-axis
   group.add(lamp);
-  const fill = new THREE.HemisphereLight(0x6a7282, 0x2a2620, 0.55);
+  // LOW COOL ambient — a cool-grey sky / dark-cool ground hemisphere, so the aluminium skin
+  // reads as cool bare metal (the warm key is a POOL on top, not a bath). Lifted a touch so
+  // the cool grey dominates the warm pool away from the lamp.
+  const fill = new THREE.HemisphereLight(0x93a0b0, 0x2a2d30, 0.72);   // cooler + a touch brighter
   group.add(fill);
-  // A second cooler fill from the viewport (the planet-glow spilling in from −Z).
-  const vpGlow = new THREE.PointLight(0x9fb4c4, 0.9, 5.5, 2);
-  vpGlow.position.set(0, 1.6, -CAB_D / 2 - 0.05);
+  // OFF-CENTRE warm directional — rakes ACROSS the bore from upper-right so the curved wall
+  // picks up a clear left→right brightness GRADIENT (the single biggest "this is round" cue
+  // at eye level — a flat-lit cylinder reads boxy; a raked one reads curved).
+  const key = new THREE.DirectionalLight(0xffe8cc, 0.6);   // gentler, slightly cooler warm rake
+  key.position.set(1.6, CAB_APEX, 0.2);          // from the right, so the arc brightens R→L
+  key.target.position.set(-0.8, 0.7, 0.0);
+  group.add(key);
+  group.add(key.target);
+  // a faint COOL counter-rake from the left so the far-left arc doesn't go dead black (keeps
+  // the gradient readable as curvature, not a hard light/dark split).
+  const coolRake = new THREE.DirectionalLight(0x8ea4ba, 0.28);
+  coolRake.position.set(-1.4, WALL_H, -0.3);
+  coolRake.target.position.set(0.6, 0.8, 0.4);
+  group.add(coolRake);
+  group.add(coolRake.target);
+  // Cool PORTHOLE spill (the planet-glow from −Z) — brighter so the forward arc + bezel get
+  // a cool accent pool (a window casts cool light into a warm-lamp cabin).
+  const vpGlow = new THREE.PointLight(0xa6c0d6, 0.95, 4.2, 2.2);
+  vpGlow.position.set(0, VP_CY, -CAB_R + 0.05);
   group.add(vpGlow);
 
-  // ── Conservative shell collider (seated → can't walk, but keep the capsule caged).
+  // ── Conservative cage collider (seated → can't walk, but keep the capsule caged so a
+  //    physics nudge can't drop the player out). The cabin is a round bore; a boxy AABB
+  //    cage that ENCLOSES it (±CAB_R) is fine — the player never touches the walls seated.
+  const D = (CAB_R + SHELL) * 2;
   const shellSpecs: ReadonlyArray<[number, number, number, number, number, number]> = [
-    [CAB_W + SHELL, SHELL, CAB_D + SHELL, 0, -SHELL / 2, 0],                 // floor
-    [CAB_W + SHELL, SHELL, CAB_D + SHELL, 0, CAB_H + SHELL / 2, 0],          // ceiling
-    [SHELL, CAB_H, CAB_D, hwCollider(), CAB_H / 2, 0],                       // +X wall
-    [SHELL, CAB_H, CAB_D, -hwCollider(), CAB_H / 2, 0],                      // −X wall
-    [CAB_W, CAB_H, SHELL, 0, CAB_H / 2, CAB_D / 2 + SHELL / 2],              // aft (+Z)
+    [D, SHELL, D, 0, -SHELL / 2, 0],                          // floor
+    [D, SHELL, D, 0, CAB_APEX + SHELL / 2, 0],                // ceiling cap
+    [SHELL, CAB_APEX, D, CAB_R + SHELL / 2, CAB_APEX / 2, 0], // +X wall
+    [SHELL, CAB_APEX, D, -(CAB_R + SHELL / 2), CAB_APEX / 2, 0], // −X wall
+    [D, CAB_APEX, SHELL, 0, CAB_APEX / 2, CAB_R + SHELL / 2], // aft (+Z) wall
   ];
   for (const [w, h, d, cx, cy, cz] of shellSpecs) {
     const col = makeStaticBox(
@@ -531,30 +930,78 @@ export function buildPodScene(ctx: GameContext): void {
     if (body) podBodies.push(body);
   }
 
-  // The planet, seen through the viewport — a flat unlit disc, ahead + below. The
-  // descent (setDescentProgress) grows it; here it's the static stand-in.
-  const planetGeo = new THREE.CircleGeometry(5, 48);
+  // A DARK SPACE backdrop far behind the viewport so the window reads as a window onto a
+  // VOID, not a flat beige fill (P3). A large unlit plane in deep blue-black; the planet
+  // is a SMALLER disc against it so the descent swell visibly reads (forward vs descent).
+  const voidGeo = new THREE.PlaneGeometry(80, 80);
+  _cabinDisposables.push(voidGeo);
+  const voidPlane = new THREE.Mesh(voidGeo, new THREE.MeshBasicMaterial({ color: 0x03040a }));
+  voidPlane.position.set(0, 0, -20);
+  group.add(voidPlane);
+  voidPlaneMesh = voidPlane;
+
+  // The planet — a graded unlit disc (lit crown → warm terminator) reading as a curved
+  // LIMB. SMALL at rest (occupies only PART of the porthole) so setDescentProgress can
+  // visibly SWELL it (P3 — forward vs descent must differ; before it filled the window at
+  // rest so the swell was invisible). Placed low-and-ahead so the curved top limb reads
+  // against the void above it.
+  const PLANET_R = 1.7;
+  const planetGeo = new THREE.CircleGeometry(PLANET_R, 48);
+  {
+    const pos = planetGeo.attributes.position;
+    const cols = new Float32Array(pos.count * 3);
+    const cLit = new THREE.Color(0xe8b074);   // sunlit warm ochre crown
+    const cMid = new THREE.Color(C_PLANET);   // body desert ochre
+    const cDark = new THREE.Color(0x2e2016);  // shadowed terminator (darker → more curvature)
+    const tmp = new THREE.Color();
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), y = pos.getY(i);
+      // lit gradient runs from top-left (lit) to bottom-right (dark)
+      const t = (y * 0.7 - x * 0.5) / PLANET_R * 0.5 + 0.5;   // 0 (dark) → 1 (lit)
+      if (t > 0.55) tmp.copy(cMid).lerp(cLit, (t - 0.55) / 0.45);
+      else tmp.copy(cDark).lerp(cMid, t / 0.55);
+      cols.set([tmp.r, tmp.g, tmp.b], i * 3);
+    }
+    planetGeo.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
+  }
   _cabinDisposables.push(planetGeo);
-  const planet = new THREE.Mesh(planetGeo, new THREE.MeshBasicMaterial({ color: C_PLANET }));
-  planet.position.set(0, -0.6, -11);   // ahead + slightly below the eye → reads through the window
+  const planet = new THREE.Mesh(planetGeo, new THREE.MeshBasicMaterial({ vertexColors: true }));
+  // z=−9: at the porthole (window half-angle ≈0.31 from the eye at z≈0.35) a R=1.7 disc at
+  // ~9.3m subtends ≈0.18 rad → fills ~55% of the window radius. Sits low so the top limb
+  // curves against the void; the descent swell grows it past the rim.
+  planet.position.set(0.2, -1.6, -9);
   group.add(planet);
   planetMesh = planet;
+  // a faint atmosphere RIM glow just inside the limb (a thin lighter annulus) so the limb
+  // reads as a planet's edge, not a flat coin. A slightly larger dim disc BEHIND the planet.
+  const haloGeo = new THREE.CircleGeometry(PLANET_R * 1.12, 40);
+  _cabinDisposables.push(haloGeo);
+  const halo = new THREE.Mesh(haloGeo, new THREE.MeshBasicMaterial({
+    color: 0x6a5a48, transparent: true, opacity: 0.35,
+  }));
+  halo.position.set(0.2, -1.6, -9.2);
+  group.add(halo);
+  planetHaloMesh = halo;
 
   group.traverse((o) => { if ((o as THREE.Mesh).isMesh) { o.castShadow = false; o.receiveShadow = false; } });
   ctx.three.scene.add(group);
   podGroup = group;
 }
 
-function hwCollider(): number { return CAB_W / 2 + SHELL / 2; }
-
 /** Descent visual — grow the planet as the fall progresses (0 → 1) so it swells to fill
  *  the viewport. Greybox stand-in for the Phase-2 descentProgress effect stack. */
 export function setDescentProgress(progress: number): void {
   if (!planetMesh) return;
   const p = Math.max(0, Math.min(1, progress));
-  const s = 1 + p * 3.5;             // 1× → 4.5× as you fall toward the surface
+  // grow from the small rest disc (≈55% of the window) to filling + overflowing it as you
+  // fall toward the surface — the swell must be unmistakable vs the rest frame (P3).
+  const s = 1 + p * 3.2;
   planetMesh.scale.setScalar(s);
-  planetMesh.position.y = -0.6 - p * 1.8;   // sink lower (you drop toward it)
+  planetMesh.position.y = -1.6 - p * 2.4;    // sink lower (you drop toward the surface)
+  if (planetHaloMesh) {
+    planetHaloMesh.scale.setScalar(s);
+    planetHaloMesh.position.y = planetMesh.position.y;
+  }
 }
 
 /** Pose the PARACHUTE lever (the gag hook). `t` in [0,1]: 0 = at rest, 1 = fully yanked
@@ -565,12 +1012,18 @@ export function setDescentProgress(progress: number): void {
 export function setParachuteLeverPull(t: number, snapped = false): void {
   if (!chuteLever) return;
   if (snapped) {
-    // The lever snaps off: it flops forward + over-rotates past its travel, then sags
-    // sideways off the pivot (dead/limp) — reads "broken", not "fully pulled".
-    chuteLever.rotation.x = chuteLeverRestX + 1.9;   // over-rotated past the pull stop
-    chuteLever.rotation.z = 0.7;                      // slack sideways droop off the pivot
+    // The lever SNAPPED off its mount: it hangs DEAD — flopped fully forward + past its
+    // travel stop AND drooped hard sideways off the pivot, so it reads limp/wrenched, not
+    // a valid pulled position (P4). Combined with the broken-mount tell built below it
+    // (the bent bracket reveal), the gag's "no chute" beat is unmistakable.
+    chuteLever.rotation.x = chuteLeverRestX + 2.5;   // flopped well past the pull stop (dead)
+    chuteLever.rotation.z = 1.05;                     // hard sideways droop (hangs limp)
+    chuteLever.rotation.y = 0.35;                     // twisted off-axis (wrenched)
+    if (leverBrokenTell) leverBrokenTell.visible = true;   // expose the snapped-mount bracket
     return;
   }
+  // a valid (live) lever position — keep the broken-mount tell hidden.
+  if (leverBrokenTell) leverBrokenTell.visible = false;
   const k = Math.max(0, Math.min(1, t));
   // Pull travel: rotate forward (toward +X pitch) from the resting back-cant.
   chuteLever.rotation.x = chuteLeverRestX + k * 0.75;
@@ -580,22 +1033,21 @@ export function setParachuteLeverPull(t: number, snapped = false): void {
 /** Tear down the pod (meshes + geometry + colliders + the per-build geometry pool). */
 export function disposePodScene(ctx: GameContext): void {
   if (podGroup) {
-    podGroup.traverse((o) => {
-      if (o instanceof THREE.Mesh) {
-        // Materials are module-shared (NOT disposed); the planet's basic material is
-        // per-build → dispose only that one.
-        if ((o.material as THREE.Material) instanceof THREE.MeshBasicMaterial && o === planetMesh) {
-          (o.material as THREE.Material).dispose();
-        }
-      }
-    });
+    // Materials are module-shared (NOT disposed) EXCEPT the planet + halo + void-backdrop
+    // basic materials, which are built per-placement → dispose only those.
+    if (planetMesh) (planetMesh.material as THREE.Material).dispose();
+    if (planetHaloMesh) (planetHaloMesh.material as THREE.Material).dispose();
+    if (voidPlaneMesh) (voidPlaneMesh.material as THREE.Material).dispose();
     ctx.three.scene.remove(podGroup);
     podGroup = null;
   }
   for (const g of _cabinDisposables) g.dispose();
   _cabinDisposables.length = 0;
   planetMesh = null;
+  planetHaloMesh = null;
+  voidPlaneMesh = null;
   chuteLever = null;
+  leverBrokenTell = null;
   for (const body of podBodies) ctx.physics.world.removeRigidBody(body);
   podBodies.length = 0;
 }
