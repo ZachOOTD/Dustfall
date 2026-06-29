@@ -273,7 +273,7 @@
       "save": "no change (SAVE_VERSION stays 15).",
       "decisions": ["(no new D-entry. Technique notes in the changelog: split hero-ish FX into a modeler visual half + a main-loop felt half on a SHARED driver curve [kept byte-identical across the two files]; time re-entry HIGH+EARLY so it doesn't stack on the desert cross-fade; additive toneMapped:false white-hot core for ionized-air read; GLSL backtick-in-comment breaks the TS template literal [caught by the modeler].)"],
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "0309d81",
       "spend_approx_tokens": 600000
     }
   ]
