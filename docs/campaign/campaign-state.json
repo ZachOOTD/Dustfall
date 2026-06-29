@@ -163,7 +163,7 @@
       "decisions": ["(no new D-entry — execution of the locked identity. Tooling note persisted to memory: preview_screenshot hangs on the heavy desert scene → use rig-shot reproducing the real placement.)"],
       "agent": "procedural-modeler (~209K subagent tokens, 8 rounds, 111 tool uses).",
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "1c0de3d",
       "spend_approx_tokens": 380000
     }
   ]
