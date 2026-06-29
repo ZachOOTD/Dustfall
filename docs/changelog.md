@@ -3,6 +3,16 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Escape-pod campaign C11 — 2026-06-29 — Phase 1: **the CYLINDRICAL pod exterior REDO** (box→capsule, per the user steering) ✓ verify + adversarial visual gate
+
+`verified` — `npm run verify:all` PASS end-to-end (tsc + placement 0/0 ×5 + colliders 0/40) + **two adversarial 5-critic visual gates** + 2 revise rounds. The redesign (D271): the boxy pod is replaced by a **vertical riveted aluminium capsule/torpedo**, half-buried in the dune. Flag OFF → live game byte-unchanged.
+
+**C11 — the cylindrical exterior (procedural-modeler agent; build + 2 revise rounds, gated):**
+- **`podScene.placeCrashedPodWreck` rebuilt** from the box into the D271 identity: a **lathe-revolved vertical capsule** (tall straight riveted cylinder body dominant + a small tucked **ogive nose** + a scorched flat heat-shield base), 4 riveted latitude bands + vertical battens + rivet studs, asymmetric vertex dents, a **blown hatch** (door flung wide off a torn-steel rim + dark cavity + sprung rivets — the salvage face), a **small off-center recessed porthole** (bezel + inner-rim well + convex tinted glass), a shoulder-mounted antenna mast, **reentry scorch** (near-black char fading up ~50% of the body, asymmetric soot licks), removable seam-rimmed panels (one pried). Weathered-aluminium `createRustedHullMaterial` tuning; **lean-aware burial** (apply the lean, derive the sink from the leaned base rim so it sits ~35% buried with no float gap) + a downhill sand berm + a cylinder collider that re-seats to the pose.
+- **The adversarial gate earned its keep:** gate-1 caught a **Boba-Fett/Mandalorian HELMET read** (the builder's self-critique + a single review both missed it) → revise re-proportioned (cylinder dominates, tucked ogive, antenna off-apex, porthole off-dome) → gate-2 confirmed the capsule identity (5/5 critics) but caught the pod **FLOATING** (vertical-drop burial applied before the lean) → final revise fixed the lean-aware burial + scorch + blown hatch + recessed porthole. Score 4.6→5.4→(identity locked + float fixed).
+- **Tooling:** the `crashed-pod` rig (`rig-shot.mjs`) reframed for the tall capsule; the box `escape-pod-design-variety.md §B` is now historical, `escape-pod-cylindrical.md` is live. `__game.smokeIntro()` → `{ok:true, beats:10}`.
+- **Next:** C12 — the cylindrical pod INTERIOR (rebuild `buildPodScene` as the round capsule cabin, matching the exterior; re-home the viewport/parachute-lever/eject/console). Residual sev-2/3 art nits (hatch composition, berm micro-conform, felt scale) → the user's Phase 1 walk-test.
+
 ## Escape-pod campaign C10 — 2026-06-28 — Phase 1 T1.2: **the HERO pod INTERIOR (the cabin you ride)** ✓ verify + visual pass
 
 `verified` — `npm run verify:all` PASS end-to-end (tsc + placement 0/0 ×5 + colliders 0/40) + a seated-FP visual gate (preview screenshot at the enterPod beat): a worn industrial lifeboat cabin matching the exterior, with the framed viewport (planet through it), the chunky red parachute lever, the guarded yellow eject control, a console + seat. `__game.smokeIntro()` → `{ok:true, beats:10}` (the beats still play). Flag OFF → live game byte-unchanged.

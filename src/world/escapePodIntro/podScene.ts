@@ -607,6 +607,7 @@ export function disposePodScene(ctx: GameContext): void {
 
 let crashedWreck: THREE.Group | null = null;
 let crashedWreckBody: RAPIER.RigidBody | null = null;
+let crashedBerm: THREE.Mesh | null = null;   // displaced-sand drift banked against the pod
 
 /** Remove the crashed-pod wreck (so a re-played intro doesn't stack duplicates).
  *  Disposes per-mesh GEOMETRY but NOT the materials — the hero pod's materials are
@@ -619,357 +620,672 @@ export function removeCrashedPodWreck(ctx: GameContext): void {
     ctx.three.scene.remove(crashedWreck);
     crashedWreck = null;
   }
+  if (crashedBerm) {
+    crashedBerm.geometry.dispose();
+    ctx.three.scene.remove(crashedBerm);
+    crashedBerm = null;
+  }
   if (crashedWreckBody) {
     ctx.physics.world.removeRigidBody(crashedWreckBody);
     crashedWreckBody = null;
   }
 }
 
-// ─── The HERO crashed escape pod (Phase 1 / T1.1) ─────────────────────────────
-// Industrial modular box (the LOCKED identity — docs/research/escape-pod-design-
-// variety.md §B; explicitly NOT an ODST drop-pod). A worn hauler's lifeboat:
-// steel-tube exoskeleton over frame-and-panel construction, modular cargo-hatch
-// panels at cracked seams that read as REMOVABLE (sells the salvage tutorial),
-// one BLOWN-OPEN hatch (the salvage face the player escaped through), a small
-// OFF-CENTER RECESSED viewport in channel-steel, external cables / struts / a
-// stubby thruster nub, grey-beige industrial paint + rust + sand abrasion + a
-// scorched base (it reentered + crashed). Built in the game's weathered-low-poly
-// idiom (wrecks.ts): createRustedHullMaterial + the WRECK_* palette, flat-shaded,
-// ≥10cm panel depth (CLAUDE.md rule 7). Half-buried + tilted in the dunes.
+// ─── The HERO crashed escape pod (Phase 1 / T1.1 — C11 CYLINDRICAL redo) ──────
+// A VERTICAL RIVETED ALUMINIUM CAPSULE / TORPEDO (the LOCKED identity — D271,
+// docs/research/escape-pod-cylindrical.md; the user rejected the boxy pod and
+// chose "riveted aluminium capsule/torpedo" + "vertical standing capsule").
+// A 1-person reentry capsule standing UPRIGHT on its base: a scorched flat
+// HEAT-SHIELD base sunk in the sand, a short+fat cylindrical BODY (hand-riveted
+// weathered aluminium — dense latitude rivet bands + vertical seams, dented +
+// patina'd), a rounded/hemispherical NOSE CAP on top, + a stubby chute-mast /
+// antenna. A small OFF-CENTER RECESSED porthole in channel-steel. A pried-open
+// /blown HATCH (the salvage face the player escaped through) + a couple of bolted
+// removable panels with seam-rims (the strip-it-apart tutorial read). Built in
+// the game's weathered-low-poly idiom (wrecks.ts): createRustedHullMaterial TUNED
+// toward aluminium (lighter, less full-rust) + LatheGeometry/CylinderGeometry for
+// the round body (inherently thick → rule 7's box-depth caveat mostly N/A).
+// Half-buried + TILTED (leaning) in the dune for drama.
 //
-// LOCAL FRAME (pre-tilt): the box long axis is X (width 2.5), height Y (2.4),
-// depth Z (2.2). The BLOWN HATCH (salvage face) is on the +Z face. Origin is the
-// box CENTRE; the caller drops it so ~45% sinks below the sand line.
+// LOCAL FRAME (pre-tilt/bury): the capsule stands on +Y. The heat-shield base is
+// at y=0; the body rises to y≈POD_BODY_H; the nose cap domes above that to
+// y≈POD_TOTAL_H. Origin is at the base centre (y=0 = heat-shield underside top).
+// The HATCH (salvage face) + porthole are on the +Z side. The caller sinks the
+// base below the sand line + leans the capsule a touch.
 
 // Pod-local dimensions (self-contained feature module; named consts per the brief).
-const POD_W = 2.5;   // X — width
-const POD_H = 2.4;   // Y — height
-const POD_D = 2.2;   // Z — depth (the +Z face carries the blown hatch)
-const FRAME = 0.16;  // exoskeleton tube half-thickness-ish (full ~0.30 square steel tube)
-const SKIN = 0.16;   // hull-panel depth (rule 7: ≥15cm for hull-substantial)
+// A standing CAPSULE/TORPEDO: the straight riveted CYLINDER must DOMINATE the
+// silhouette (the C11-revise headline fix — a wide body + a big full-width dome
+// read as a Mandalorian HELMET). Target visible height:width ≥ ~2:1 with a small,
+// tucked ogive nose (~25% of total height, crown ~65% of body width — NOT a
+// full-width hemisphere). Diameter ~1.7m, ~3.1m tall to the apex.
+const POD_R = 0.85;        // body radius (≈1.7m diameter — narrow → TALL capsule, not a head)
+const POD_BASE_H = 0.34;   // heat-shield base slab height (scorched, sunk in sand)
+const POD_BODY_H = 2.5;    // straight cylindrical body height — the DOMINANT visual zone
+const POD_NOSE_H = 0.84;   // tucked ogive nose-cap (~25% of total; crown well inside body width)
+const POD_SEG = 28;        // lathe/cylinder radial segments — round but low-poly
+const SKIN = 0.16;         // panel / rim depth (rule 7: ≥15cm for hull-substantial)
 
 // ── Shared pod materials (module-scope so re-placing the wreck doesn't realloc;
 //    disposed materials in removeCrashedPodWreck reference these — see note there).
-// Grey-beige industrial paint with desert-weathering opted in (dust on tops, deep
-// underside oxidation, seam-pooled rust, lower-hull sand abrasion) so it sits in
-// the world like the procgen wrecks, not like a clean hero prop.
+// WEATHERED ALUMINIUM skin (D271) — the dominant read. TUNED toward aluminium vs
+// the procgen desert profile: a LIGHTER cool-grey base, the HUE-shifting rust
+// layers pulled to ACCENTS (sand-abrasion + sparse oxide patina, not a rust-brown
+// wash), more bare-metal flecks (scuffed aluminium scratches to bright metal), a
+// cool bare-metal reveal. Reads as a dented hand-riveted aluminium capsule that's
+// sat in the dunes — patina'd + sand-abraded, but unmistakably ALUMINIUM not iron.
 const _podPaint = createRustedHullMaterial({
-  baseColor: 0xb4ad96,           // grey-beige industrial paint — the DOMINANT read
-  // Keep the value-only layers (wear/streak/bleach/chalk preserve the beige); pull
-  // the HUE-shifting rust layers DOWN to accents so it's "beige + rust streaks",
-  // NOT a rust-brown wash (the procgen desert profile is too aggressive for a hero).
-  streakIntensity: 0.4,
-  wearAmplitude: 0.28,
-  oxStrength: 0.18, oxHex: 0x9a5026,    // sparse rust-orange accent zones only
-  dustStrength: 0.3, chalkStrength: 0.32,
-  oxDeepStrength: 0.22, seamRustStrength: 0.28, abrasionStrength: 0.3,
+  baseColor: 0xb6b9b3,           // light cool aluminium-grey — the DOMINANT read
+  bareMetalHex: 0xd6d9da,        // bright scuffed-aluminium reveal (cool, near-white)
+  rustHex: 0x6a4a2c,             // warm grime tone for the drip-staining channel
+  streakIntensity: 0.42,         // grime drip-runs (the seam channel rides this hue too)
+  wearAmplitude: 0.46,           // STRONG plate-to-plate tonal break-up (dents + denting)
+  fleckStrength: 1.0,            // dense tight bare-metal scuff scratches → scrappy aluminium
+  oxStrength: 0.34, oxHex: 0x9a6a3e,    // more warm oxide/patina patches (weathered hero)
+  // dust + chalk PULLED DOWN — they washed the up-facing nose dome chalky-white
+  // (P5: the nose must read as the SAME weathered aluminium as the body, not plaster).
+  dustStrength: 0.28, dustHex: 0xa89c84, chalkStrength: 0.16,
+  oxDeepStrength: 0.28, seamRustStrength: 0.46, abrasionStrength: 0.62,  // drip-stain + sand-blast
 });
-// Darker recessed-panel / channel-steel material (frames, viewport channel).
+// Darker channel-steel material (porthole + hatch frames, rivet bands) — a value
+// contrast to the bright aluminium skin so the steel hardware reads as fitted-on.
 const _podSteel = createRustedHullMaterial({
-  baseColor: Tuning.WRECK_HULL_DARK_HEX,
-  streakIntensity: 0.45, wearAmplitude: 0.3,
-  oxStrength: 0.45, oxDeepStrength: 0.5, seamRustStrength: 0.5,
+  baseColor: 0x4f4c46,           // dark warm-grey channel steel
+  streakIntensity: 0.4, wearAmplitude: 0.3,
+  oxStrength: 0.4, oxDeepStrength: 0.45, seamRustStrength: 0.45,
 });
-// Exoskeleton tubes / struts — darker structural steel, GREYER than the panels so
-// the frame-and-panel construction reads as a value contrast (dark grey steel vs
-// grey-beige panel), with rust pooling as an accent — not an all-rust wash.
+// Rivets / studs / small hardware — mid steel-grey (reads as cast/forged fittings,
+// distinct from both the bright skin and the dark channel frames).
 const _podFrameMat = createRustedHullMaterial({
-  baseColor: 0x53504a,           // dark warm-grey steel
-  rustHex: 0x3a1c0c, streakIntensity: 0.5, oxStrength: 0.35, oxHex: 0x8a4119,
-  oxDeepStrength: 0.4, seamRustStrength: 0.45,
+  baseColor: 0x7d7a72,           // mid steel-grey hardware
+  rustHex: 0x4a2810, streakIntensity: 0.3, oxStrength: 0.3, oxHex: 0x9a5a2e,
+  oxDeepStrength: 0.3, seamRustStrength: 0.3, fleckStrength: 0.6,
 });
 // Cables / antenna — dark matte, near-black.
 const _podCableMat = new THREE.MeshLambertMaterial({ color: Tuning.WRECK_ANTENNA_HEX, flatShading: true });
-// Scorched lower band — heavily darkened reentry char.
-const _podScorchMat = new THREE.MeshLambertMaterial({ color: 0x1a1714, flatShading: true });
+// Displaced-sand berm (the drift banked against the speared-in pod). Sand tone.
+const _podBermMat = new THREE.MeshLambertMaterial({ color: 0xc69a5a, flatShading: true });
+// Reentry SCORCH — a vertex-COLOR-driven Lambert so the char→tarnish→aluminium
+// fade is baked into the geometry (no hard top edge, no painted-stripe read). The
+// per-vertex gradient (built in §2) supplies the color; flat-shaded low-poly.
+const _podScorchFadeMat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
+// Charred heat-shield base cap (the flat burnt end-down slab peeking at the sand).
+const _podScorchMat = createRustedHullMaterial({
+  baseColor: 0x1c140d,           // charred near-black, warm
+  rustHex: 0x120b06, bleachHex: 0x2e2218,
+  streakIntensity: 0.3, wearAmplitude: 0.35,
+  oxStrength: 0.5, oxHex: 0x5e3a1e,     // burnt-umber discolouration zones
+  oxTopStrength: 0.4, abrasionStrength: 0.3,
+});
+// Riveted SEAM-BAND metal — a mid grey-aluminium tone (lighter than the dark
+// channel steel) so the latitude bands read as fitted RIVETED HOOPS, not as dark
+// drum-divisions cutting the capsule into stacked segments.
+const _podBandMat = createRustedHullMaterial({
+  baseColor: 0x8c8d85,           // mid grey-aluminium band
+  streakIntensity: 0.3, wearAmplitude: 0.34, fleckStrength: 0.7,
+  oxStrength: 0.32, oxHex: 0x96602e, oxDeepStrength: 0.28, seamRustStrength: 0.3,
+});
+// PRIED-OPEN HATCH DOOR — a distinctly LIGHTER bright-aluminium value so the
+// strippable salvage door POPS off the body (it's the tutorial target, must read
+// as the clearest thing on the model). Heavy bare-metal scuffs (it's been forced).
+const _podDoorMat = createRustedHullMaterial({
+  baseColor: 0xcdd0cb,           // bright pried aluminium — lighter than the body skin
+  bareMetalHex: 0xe2e4e2,
+  streakIntensity: 0.2, wearAmplitude: 0.34, fleckStrength: 1.0,
+  oxStrength: 0.18, oxHex: 0x9a6a3e, abrasionStrength: 0.4,
+});
 // Dark cavity (blown hatch interior + viewport glass void).
 const _podVoidMat = new THREE.MeshBasicMaterial({ color: 0x0a0908 });
 // Recessed viewport "glass" — dim cool tint, slightly emissive so it reads as a
 // real window, not a painted square.
 const _podGlassMat = new THREE.MeshStandardMaterial({
-  color: 0x2b3a40, roughness: 0.35, metalness: 0.2,
-  emissive: 0x0c161a, emissiveIntensity: 0.6,
+  color: 0x223038, roughness: 0.18, metalness: 0.35,   // glossier → a faint spec catch (P4)
+  emissive: 0x0a1318, emissiveIntensity: 0.5,
 });
+// Inner-rim shadow well behind the recessed glass (so the porthole reads as a deep
+// inset window, not a flat disc on the skin) — near-black, unlit.
+const _podRimShadowMat = new THREE.MeshBasicMaterial({ color: 0x07090a });
 
-/** Build the hero pod mesh group in its LOCAL frame (box centre = origin, +Z =
- *  salvage face). The caller positions / tilts / buries it. */
+/** Build the hero pod mesh group in its LOCAL frame: a VERTICAL riveted-aluminium
+ *  capsule standing on its heat-shield base (base centre = origin, y=0 at the base
+ *  underside top; the body rises on +Y; the HATCH + porthole face +Z). The caller
+ *  positions / tilts (leans) / buries it. */
 function buildHeroPodMesh(): THREE.Group {
   const g = new THREE.Group();
-  const hw = POD_W / 2, hh = POD_H / 2, hd = POD_D / 2;
 
-  // ── 1. Core hull box (the painted shell the panels + frame sit on). Slightly
-  //    inset from the exoskeleton so the steel tubes read PROUD of the skin.
-  const core = new THREE.Mesh(
-    new THREE.BoxGeometry(POD_W - 0.06, POD_H - 0.06, POD_D - 0.06),
-    _podPaint,
-  );
-  g.add(core);
+  // Body-surface y-bands (local). Base slab → body → nose dome.
+  const baseTop = POD_BASE_H;                       // top of the heat-shield slab
+  const bodyTop = baseTop + POD_BODY_H;             // shoulder where the nose begins
+  const apex = bodyTop + POD_NOSE_H;                // nose apex
 
-  // ── 2. Steel-tube EXOSKELETON — square tubes running the vertical edges + a
-  //    mid girth band + top/bottom rails on the front/back, so "you can see how
-  //    it's built" reads from outside. Tubes are box prisms (inherently thick).
-  const tube = (w: number, h: number, d: number, x: number, y: number, z: number) => {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), _podFrameMat);
-    m.position.set(x, y, z);
-    g.add(m);
-    return m;
-  };
-  const t = FRAME * 2;   // ~0.24 tube cross-section
-  // 4 vertical corner posts (proud of the skin on X and Z).
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-    tube(t, POD_H + 0.04, t, sx * hw, 0, sz * hd);
+  // ── 1. The CAPSULE BODY — one revolved LatheGeometry profile so it reads truly
+  //    ROUND + smooth: a flared heat-shield foot, a TALL straight cylindrical body
+  //    (the dominant silhouette), a SHOULDER that pulls IN, then a small tucked
+  //    OGIVE nose (NOT a full-width hemisphere — that read as a helmet crown). The
+  //    crown ends well inside the body width. Built as the aluminium skin.
+  const SHOULDER_R = POD_R * 0.78;   // the nose starts pulled IN from the body radius
+  const prof: THREE.Vector2[] = [];
+  // base: closed bottom centre → out to a slightly flared foot rim
+  prof.push(new THREE.Vector2(0.0, 0.0));
+  prof.push(new THREE.Vector2(POD_R * 0.86, 0.0));
+  prof.push(new THREE.Vector2(POD_R * 1.02, POD_BASE_H * 0.55));   // flared heat-shield foot
+  prof.push(new THREE.Vector2(POD_R, baseTop));                    // foot → body radius
+  // straight cylindrical body (the DOMINANT silhouette zone)
+  prof.push(new THREE.Vector2(POD_R, baseTop + POD_BODY_H * 0.35));
+  prof.push(new THREE.Vector2(POD_R, baseTop + POD_BODY_H * 0.7));
+  prof.push(new THREE.Vector2(POD_R, bodyTop - 0.06));
+  // SHOULDER chamfer — pull the radius IN at the top of the cylinder (a fabricated
+  //   shoulder ring, not a smooth bulge) so the nose springs from a NARROWER base.
+  prof.push(new THREE.Vector2(SHOULDER_R, bodyTop + 0.04));
+  // tucked OGIVE nose from the shoulder radius → a blunt narrow crown. A high
+  //   exponent keeps the cap NARROW (crown ≈0.45·SHOULDER_R) so it can never read
+  //   as a full-width helmet crown; the apex stays slightly blunt for the mast base.
+  const noseSegs = 8;
+  for (let i = 1; i <= noseSegs; i++) {
+    const t = i / noseSegs;                  // 0→1 up the dome
+    const a = t * (Math.PI / 2);
+    const r = SHOULDER_R * Math.pow(Math.cos(a), 1.7) + 0.001;   // narrow tucked ogive
+    const y = bodyTop + 0.04 + Math.sin(a) * (POD_NOSE_H - 0.04);
+    prof.push(new THREE.Vector2(Math.max(0.05, r), y));
   }
-  // Mid girth band — horizontal tubes wrapping all 4 faces at mid-height, the
-  // "modular seam" line the panels clip below/above.
-  const bandY = -0.05;
-  tube(POD_W + 0.04, t * 0.8, t * 0.7, 0, bandY, hd);     // front band
-  tube(POD_W + 0.04, t * 0.8, t * 0.7, 0, bandY, -hd);    // back band
-  tube(t * 0.7, t * 0.8, POD_D + 0.04, hw, bandY, 0);     // +X band
-  tube(t * 0.7, t * 0.8, POD_D + 0.04, -hw, bandY, 0);    // -X band
-  // Top rails (front + back) — the lifting/frame top edge.
-  for (const sz of [-1, 1]) tube(POD_W + 0.04, t * 0.7, t * 0.6, 0, hh, sz * hd);
-  for (const sz of [-1, 1]) tube(t * 0.6, t * 0.7, t * 0.6, hw, hh, sz * hd); // short top corner caps +X
-  for (const sz of [-1, 1]) tube(t * 0.6, t * 0.7, t * 0.6, -hw, hh, sz * hd);
-
-  // ── 3. Modular cargo-hatch PANELS on the side + back faces — slightly proud
-  //    bolted plates with a recessed border groove, so they read as REMOVABLE
-  //    ("you can strip this"). Each is a panel plate + a thin inset + 4 corner
-  //    bolt studs. Depth ≥SKIN (rule 7). Placed BELOW the mid band on the flanks.
-  const addModularPanel = (face: '+X' | '-X' | '-Z', cx: number, cy: number, pw: number, ph: number) => {
-    const grp = new THREE.Group();
-    // Plate = grey-beige paint (a removable hull panel), with a steel border groove
-    // + bolt studs so it reads as bolted-on + strippable (vs the painted core skin).
-    const plate = new THREE.Mesh(new THREE.BoxGeometry(pw, ph, SKIN), _podPaint);
-    grp.add(plate);
-    const inset = new THREE.Mesh(new THREE.BoxGeometry(pw * 0.78, ph * 0.78, SKIN * 1.4), _podPaint);
-    inset.position.z = SKIN * 0.25;   // raised stamped centre → border groove shadow
-    grp.add(inset);
-    // A thin steel rim around the plate edge → the "removable panel seam" tell.
-    const rim = new THREE.Mesh(new THREE.BoxGeometry(pw * 1.04, ph * 1.04, SKIN * 0.6), _podFrameMat);
-    rim.position.z = -SKIN * 0.2;
-    grp.add(rim);
-    for (const bx of [-1, 1]) for (const by of [-1, 1]) {
-      const bolt = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, SKIN * 0.7, 6), _podFrameMat);
-      bolt.rotation.x = Math.PI / 2;
-      bolt.position.set(bx * pw * 0.4, by * ph * 0.4, SKIN * 0.55);
-      grp.add(bolt);
+  prof.push(new THREE.Vector2(0.001, apex));   // closed apex (clean pole, per lathe caveat)
+  const bodyGeo = new THREE.LatheGeometry(prof, POD_SEG);
+  // Asymmetric DENTS — push a few clusters of body verts inward so the capsule
+  // reads hand-built + crash-battered, not a perfect machined tube (the lathe is
+  // radially symmetric otherwise). Deterministic (fixed centres), only on the
+  // straight body band (leave the nose dome + base clean). procedural-mesh-
+  // authoring.md "slight vertex displacement" → reads as carved/dented, not box.
+  {
+    const pos = bodyGeo.attributes.position;
+    const dents = [
+      { az: 1.15, y: baseTop + POD_BODY_H * 0.55, rad: 0.6, depth: 0.13 },
+      { az: 2.7, y: baseTop + POD_BODY_H * 0.30, rad: 0.5, depth: 0.10 },
+      { az: -1.3, y: baseTop + POD_BODY_H * 0.7, rad: 0.45, depth: 0.09 },
+      { az: 0.5, y: baseTop + POD_BODY_H * 0.18, rad: 0.5, depth: 0.08 },
+    ];
+    const v = new THREE.Vector3();
+    for (let i = 0; i < pos.count; i++) {
+      v.set(pos.getX(i), pos.getY(i), pos.getZ(i));
+      const r = Math.hypot(v.x, v.z);
+      if (r < POD_R * 0.6) continue;             // skip near-axis (caps)
+      const az = Math.atan2(v.x, v.z);
+      for (const d of dents) {
+        // angular distance (wrapped) + vertical distance → a soft radial falloff
+        let da = az - d.az; while (da > Math.PI) da -= Math.PI * 2; while (da < -Math.PI) da += Math.PI * 2;
+        const dy = (v.y - d.y);
+        const dist = Math.hypot(da * 0.9, dy);
+        if (dist < d.rad) {
+          const k = (1 - dist / d.rad);
+          const push = d.depth * k * k;          // pull radius inward
+          const nr = Math.max(0.05, r - push);
+          const s = nr / r;
+          v.x *= s; v.z *= s;
+        }
+      }
+      pos.setXYZ(i, v.x, v.y, v.z);
     }
-    // Orient + position the panel group onto the requested face.
-    if (face === '+X') { grp.rotation.y = Math.PI / 2; grp.position.set(hw + SKIN * 0.3, cy, cx); }
-    else if (face === '-X') { grp.rotation.y = -Math.PI / 2; grp.position.set(-hw - SKIN * 0.3, cy, cx); }
-    else { grp.position.set(cx, cy, -hd - SKIN * 0.3); }   // -Z (back) face
-    g.add(grp);
-  };
-  // +X flank: two stacked-ish cargo panels (asymmetric sizes).
-  addModularPanel('+X', -0.35, -0.45, 1.1, 0.9);
-  addModularPanel('+X', 0.5, 0.55, 0.85, 0.7);
-  // -X flank: one big panel + a small inspection plate.
-  addModularPanel('-X', 0.2, -0.4, 1.2, 1.0);
-  addModularPanel('-X', -0.55, 0.65, 0.6, 0.55);
-  // -Z back: two cargo panels (the back is also strippable, not a bare slab).
-  addModularPanel('-Z', 0.55, -0.3, 1.0, 1.1);
-  addModularPanel('-Z', -0.6, 0.35, 0.8, 0.85);
-
-  // ── 4. The BLOWN-OPEN HATCH on the +Z (front / salvage) face — the defining
-  //    feature. A torn-open rectangular bay: a dark recessed cavity, a hatch
-  //    DOOR hanging ajar off one hinge edge (bent outward), and a ragged frame
-  //    of channel-steel around the opening. Off-center (the player's escape).
-  const hatchCX = 0.35, hatchCY = -0.15;   // off-center on the +Z face
-  const hatchW = 1.15, hatchH = 1.35;
-  // 4.a cavity — a real recessed interior you peer INTO (the salvage face), not a
-  //    painted black square. A deep dark box bay + a back wall set deeper + a few
-  //    bent interior struts / a torn lip so the opening reads as a ripped-open hull.
-  const cavity = new THREE.Mesh(
-    new THREE.BoxGeometry(hatchW * 0.92, hatchH * 0.92, 0.55),
-    _podVoidMat,
-  );
-  cavity.position.set(hatchCX, hatchCY, hd - 0.28);   // recessed INTO the box
-  cavity.userData.noCollider = true;   // sits inside the core box (which has the collider)
-  g.add(cavity);
-  // 4.a.ii a slightly-lit back wall deep in the bay so the cavity has depth, not a flat void.
-  const cavityBack = new THREE.Mesh(
-    new THREE.BoxGeometry(hatchW * 0.8, hatchH * 0.8, 0.06),
-    new THREE.MeshLambertMaterial({ color: 0x322a22, flatShading: true }),
-  );
-  cavityBack.position.set(hatchCX, hatchCY, hd - 0.52);
-  cavityBack.userData.noCollider = true;
-  g.add(cavityBack);
-  // 4.a.iii a couple of bent interior struts crossing the bay (ripped-open frame).
-  for (const [sy, rz] of [[0.25, 0.4], [-0.3, -0.25]] as const) {
-    const strut = new THREE.Mesh(new THREE.BoxGeometry(hatchW * 0.85, 0.06, 0.06), _podFrameMat);
-    strut.position.set(hatchCX + 0.05, hatchCY + sy, hd - 0.4);
-    strut.rotation.z = rz;
-    strut.userData.noCollider = true;
-    g.add(strut);
+    pos.needsUpdate = true;
   }
-  // 4.b channel-steel frame ring around the opening (4 bars, proud of the skin).
-  const frameBar = (w: number, h: number, ox: number, oy: number) => {
-    const bar = new THREE.Mesh(new THREE.BoxGeometry(w, h, SKIN * 1.1), _podSteel);
-    bar.position.set(hatchCX + ox, hatchCY + oy, hd + SKIN * 0.2);
-    g.add(bar);
-  };
-  const fbT = 0.16;   // frame bar thickness
-  frameBar(hatchW + fbT * 2, fbT, 0, hatchH / 2 + fbT / 2);     // top
-  frameBar(hatchW + fbT * 2, fbT, 0, -hatchH / 2 - fbT / 2);    // bottom
-  frameBar(fbT, hatchH, -hatchW / 2 - fbT / 2, 0);             // left (hinge side)
-  frameBar(fbT, hatchH, hatchW / 2 + fbT / 2, 0);              // right
-  // 4.c the hatch DOOR hanging ajar — hinged at the LEFT frame edge, swung out +
-  //    twisted (blown). A riveted plate with a raised inset + a handle.
-  const door = new THREE.Group();
-  const doorPlate = new THREE.Mesh(new THREE.BoxGeometry(hatchW * 0.98, hatchH * 0.98, SKIN), _podSteel);
-  door.add(doorPlate);
-  const doorInset = new THREE.Mesh(new THREE.BoxGeometry(hatchW * 0.7, hatchH * 0.7, SKIN * 1.3), _podSteel);
-  doorInset.position.z = SKIN * 0.2;
-  door.add(doorInset);
-  for (const bx of [-1, 1]) for (const by of [-1, 1]) {
-    const rivet = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, SKIN * 0.6, 6), _podFrameMat);
-    rivet.rotation.x = Math.PI / 2;
-    rivet.position.set(bx * hatchW * 0.38, by * hatchH * 0.38, SKIN * 0.5);
-    door.add(rivet);
+  bodyGeo.computeVertexNormals();
+  const body = new THREE.Mesh(bodyGeo, _podPaint);
+  body.userData.noCollider = true;   // a CylinderGeometry collider-proxy (§9) carries collision
+  g.add(body);
+
+  // Helper — radius of the straight body (used to seat hardware flush on the curve).
+  const bodyR = POD_R;
+
+  // ── 2. REENTRY SCORCH — a real blackened char driven UP the lower body as a
+  //    vertex-color fade (near-BLACK char at the base → tarnish → aluminium), with
+  //    ASYMMETRIC wind-driven soot LICKS climbing higher up one side (P2 — the warm
+  //    wake sun washed out the old soft radial fade + shallow grey). It's the heat-
+  //    shield capsule's headline weathering signature → must read in WAKE light.
+  //    Raised to ~50% of body height; proud lathe shell over the body + a base cap.
+  const scorchTopY = baseTop + POD_BODY_H * 0.5;    // char reaches ~50% up the body
+  const scorchProf: THREE.Vector2[] = [
+    new THREE.Vector2(POD_R * 0.86 + 0.008, 0.0),
+    new THREE.Vector2(POD_R * 1.05, POD_BASE_H * 0.55),  // flared foot rim (proud → peeks at sand)
+    new THREE.Vector2(POD_R + 0.012, baseTop),
+    new THREE.Vector2(POD_R + 0.012, baseTop + (scorchTopY - baseTop) * 0.5),
+    new THREE.Vector2(POD_R + 0.010, scorchTopY),
+  ];
+  const scorchGeo = new THREE.LatheGeometry(scorchProf, POD_SEG);
+  scorchGeo.computeVertexNormals();
+  // vertex-color fade with azimuthal soot licks. The base is near-black char; it
+  // fades to tarnish then aluminium up the body, BUT the fade-out height is pushed
+  // HIGHER on the windward (~+Z/+X) flank by an azimuth+noise term so charred soot
+  // tongues lick up one side instead of a clean radial ring.
+  {
+    const pos = scorchGeo.attributes.position;
+    const cols = new Float32Array(pos.count * 3);
+    const cChar = new THREE.Color(0x0d0906);   // near-black reentry char (deepened — P2)
+    const cTarn = new THREE.Color(0x5a4126);   // tarnished warm transition
+    const cAlu = new THREE.Color(0xb6b9b3);    // body aluminium (top → blends in)
+    const tmp = new THREE.Color();
+    for (let i = 0; i < pos.count; i++) {
+      const vx = pos.getX(i), vy = pos.getY(i), vz = pos.getZ(i);
+      const az = Math.atan2(vx, vz);            // 0 = +Z (windward flank)
+      // soot reaches higher near az≈0.4 (the +Z/+X visible flank) + 2 noise licks
+      const lick = 0.5 * Math.exp(-Math.pow((az - 0.4) / 0.7, 2))    // broad windward tongue
+                 + 0.3 * Math.exp(-Math.pow((az + 1.6) / 0.4, 2))    // a thin lick on the far side
+                 + 0.18 * Math.sin(az * 5.0 + vy * 3.0);             // ragged edge wobble
+      const span = Math.max(0.01, (scorchTopY - baseTop) * (1 + lick));
+      const t = Math.max(0, Math.min(1, (vy - baseTop) / span));
+      if (t < 0.45) tmp.copy(cChar).lerp(cTarn, t / 0.45);
+      else tmp.copy(cTarn).lerp(cAlu, (t - 0.45) / 0.55);
+      cols.set([tmp.r, tmp.g, tmp.b], i * 3);
+    }
+    scorchGeo.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
   }
-  const handle = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.3, 0.1), _podFrameMat);
-  handle.position.set(hatchW * 0.32, 0, SKIN * 0.7);
-  door.add(handle);
-  // Hinge the door on the RIGHT vertical edge of the opening; swing it OUT (away
-  // from the box, toward +Z) ~95° so the door stands proud of the hull beside the
-  // dark cavity (a door across the hole reads as "shut" — the cavity must show).
-  // A small blown twist so it reads as forced/torn, not a tidy open. The door
-  // pivots about its own vertical (Y) edge.
-  const hinge = new THREE.Group();
-  hinge.position.set(hatchCX + hatchW / 2 + fbT / 2, hatchCY, hd + SKIN * 0.4);
-  door.position.set(-hatchW / 2, 0, 0);   // door's local origin → RIGHT (hinge) edge
-  hinge.add(door);
-  hinge.rotation.y = -1.6;   // negative-Y swing → free (left) edge throws OUT to +Z, off the hull
-  hinge.rotation.x = -0.12;  // tipped slightly out at the top (blown ajar, not flat)
-  hinge.rotation.z = 0.1;    // small bent twist
-  door.userData.noCollider = true;       // the door is a thin swung plate — skip collider
-  hinge.traverse((o) => { o.userData.noCollider = true; });
-  g.add(hinge);
-
-  // ── 5. RECESSED off-center VIEWPORT in channel-steel — small, on the +Z FRONT
-  //    face UPPER-LEFT (clearly separated from the hatch at lower-right), a
-  //    mechanic's window (anti-ODST: small / offset / recessed, NOT a wide central
-  //    vista). A proud channel-steel ring + a dim recessed glass pane facing +Z.
-  const vpCX = -0.62, vpCY = 0.62, vpW = 0.52, vpH = 0.4;
-  const vpRingT = 0.13;   // channel-steel ring bar thickness (proud frame)
-  // 4 channel bars around the window (a real recessed frame, not a flat plate).
-  const vpBar = (w: number, h: number, ox: number, oy: number) => {
-    const bar = new THREE.Mesh(new THREE.BoxGeometry(w, h, SKIN * 1.4), _podSteel);
-    bar.position.set(vpCX + ox, vpCY + oy, hd + SKIN * 0.15);
-    g.add(bar);
-  };
-  vpBar(vpW + vpRingT * 2, vpRingT, 0, vpH / 2 + vpRingT / 2);
-  vpBar(vpW + vpRingT * 2, vpRingT, 0, -vpH / 2 - vpRingT / 2);
-  vpBar(vpRingT, vpH, -vpW / 2 - vpRingT / 2, 0);
-  vpBar(vpRingT, vpH, vpW / 2 + vpRingT / 2, 0);
-  const vpGlass = new THREE.Mesh(
-    new THREE.BoxGeometry(vpW, vpH, 0.06),
-    _podGlassMat,
-  );
-  vpGlass.position.set(vpCX, vpCY, hd - 0.06);   // recessed behind the channel frame
-  vpGlass.userData.noCollider = true;
-  g.add(vpGlass);
-
-  // ── 6. External CABLES + CONDUIT + a stubby THRUSTER nub — asymmetric, lived-
-  //    in. A conduit pipe running up the -X/+Z corner, a loose cable drooping off
-  //    the top, and a short thruster/antenna nub off the top-back corner.
-  // 6.a conduit pipe up the front-left corner.
-  const conduit = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.07, 0.07, POD_H * 0.85, 8),
-    _podCableMat,
-  );
-  conduit.position.set(-hw - 0.04, 0.1, hd - 0.18);
-  conduit.userData.noCollider = true;
-  g.add(conduit);
-  // 6.b a drooping loose cable across the top (a short tilted cylinder).
-  const cable = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.04, 0.04, 1.3, 6),
-    _podCableMat,
-  );
-  cable.rotation.set(0, 0.3, Math.PI / 2 - 0.5);
-  cable.position.set(0.2, hh - 0.05, hd * 0.4);
-  cable.userData.noCollider = true;
-  g.add(cable);
-  // 6.c stubby thruster nub off the top-back — a short flared cone + collar.
-  const thrusterCollar = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.22, 0.22, 0.18, 10),
-    _podSteel,
-  );
-  thrusterCollar.position.set(-0.5, hh + 0.05, -hd + 0.3);
-  g.add(thrusterCollar);
-  const thruster = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.3, 0.18, 0.4, 10, 1, true),
+  const scorch = new THREE.Mesh(scorchGeo, _podScorchFadeMat);
+  scorch.userData.noCollider = true;
+  g.add(scorch);
+  // charred flat heat-shield base CAP (the burnt end-down face) — a short fat
+  // scorched cylinder at the very bottom; a rim of it peeks at the sand line to
+  // confirm "burnt end down" (it reentered base-first + crashed).
+  const baseCap = new THREE.Mesh(
+    new THREE.CylinderGeometry(POD_R * 0.92, POD_R * 0.8, POD_BASE_H * 0.7, POD_SEG),
     _podScorchMat,
   );
-  thruster.position.set(-0.5, hh + 0.32, -hd + 0.3);
-  thruster.userData.noCollider = true;   // hollow open cone
-  g.add(thruster);
-  // 6.d a stubby antenna off the top-front corner.
-  const antenna = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.02, 0.04, 0.9, 5),
-    _podCableMat,
+  baseCap.position.y = POD_BASE_H * 0.32;
+  baseCap.userData.noCollider = true;
+  g.add(baseCap);
+
+  // ── 3. RIVETED LATITUDE BANDS + vertical seams — the hand-riveted aluminium
+  //    read. Each band = a thin proud steel hoop (a short open cylinder slightly
+  //    proud of the skin) + a ring of small low-poly rivet studs around it. Studs
+  //    are tiny cylinders laid flat against the curve. Kept sparse (poly budget):
+  //    ~16 rivets/band on a few bands, not every segment.
+  const RIVET_N = 16;                  // rivets per latitude band (sparse, not POD_SEG)
+  const addRivetRing = (y: number, studR: number, studLen: number, ringR = bodyR) => {
+    for (let i = 0; i < RIVET_N; i++) {
+      const a = (i / RIVET_N) * Math.PI * 2 + 0.1;
+      const rivet = new THREE.Mesh(
+        new THREE.CylinderGeometry(studR, studR, studLen, 5),
+        _podFrameMat,
+      );
+      // lay the stud flat against the hull, head pointing radially out
+      rivet.position.set(Math.sin(a) * (ringR + studLen * 0.4), y, Math.cos(a) * (ringR + studLen * 0.4));
+      rivet.rotation.x = Math.PI / 2;
+      rivet.rotation.y = -a;          // axis points radially outward
+      rivet.userData.noCollider = true;
+      g.add(rivet);
+    }
+  };
+  // proud seam hoop at a band height (radius staggered well clear of the scorch
+  // shell at +0.012 to avoid z-fighting — P4 code-audit note).
+  const addSeamHoop = (y: number, h: number) => {
+    const hoop = new THREE.Mesh(
+      new THREE.CylinderGeometry(bodyR + 0.05, bodyR + 0.05, h, POD_SEG, 1, true),
+      _podBandMat,
+    );
+    hoop.position.y = y;
+    hoop.userData.noCollider = true;
+    g.add(hoop);
+  };
+  // FOUR latitude bands up the TALL body (strong "banded cylinder" read — the
+  // upper body needs the horizontal banding so it can't read as a smooth crown),
+  // each a hoop + a rivet ring on each edge.
+  const bandYs = [
+    baseTop + POD_BODY_H * 0.16,
+    baseTop + POD_BODY_H * 0.40,
+    baseTop + POD_BODY_H * 0.64,
+    baseTop + POD_BODY_H * 0.88,
+  ];
+  for (const by of bandYs) {
+    addSeamHoop(by, 0.10);
+    addRivetRing(by + 0.075, 0.026, 0.06);
+    addRivetRing(by - 0.075, 0.026, 0.06);
+  }
+  // a couple of VERTICAL riveted seam strips (longitude) — proud thin steel battens
+  // with rivets, on the +X and −X sides (away from the hatch/porthole on +Z).
+  for (const seamA of [Math.PI * 0.5, Math.PI * 1.5, Math.PI * 0.92]) {
+    const sx = Math.sin(seamA), sz = Math.cos(seamA);
+    const batten = new THREE.Mesh(
+      new THREE.BoxGeometry(0.09, POD_BODY_H - 0.2, 0.05),
+      _podSteel,
+    );
+    batten.position.set(sx * (bodyR + 0.02), baseTop + POD_BODY_H / 2, sz * (bodyR + 0.02));
+    batten.rotation.y = -seamA;
+    batten.userData.noCollider = true;
+    g.add(batten);
+    // rivets down the batten
+    for (let k = 0; k < 5; k++) {
+      const ry = baseTop + 0.25 + k * ((POD_BODY_H - 0.5) / 4);
+      const rivet = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.024, 0.05, 5), _podFrameMat);
+      rivet.position.set(sx * (bodyR + 0.05), ry, sz * (bodyR + 0.05));
+      rivet.rotation.x = Math.PI / 2;
+      rivet.rotation.y = -seamA;
+      rivet.userData.noCollider = true;
+      g.add(rivet);
+    }
+  }
+  // rivet ring around the nose-cap shoulder seam (seated on the pulled-IN shoulder
+  // radius where the tucked nose bolts to the body).
+  addRivetRing(bodyTop + 0.06, 0.024, 0.055, SHOULDER_R);
+
+  // ── 4. The BLOWN-OPEN HATCH on the +Z side (salvage face) — the defining damage.
+  //    On a curved hull a recessed void behind intact skin would be occluded
+  //    (procedural-mesh-authoring.md fake-hole gotcha), so the opening is built as a
+  //    real DARK CAVITY that PROTRUDES through the skin plane (its mouth clears the
+  //    curve) + a torn channel-steel frame + an ajar door swung off one edge. The
+  //    hatch spans a mid-body band so the player can peer in at the wake height.
+  // hatch faces +Z directly (azimuth 0) → all hatch geometry sits at x≈0, z=+bodyR.
+  // A CLEAN rectangular recessed opening (the tutorial salvage target — it must be
+  // the clearest, least-cluttered feature; no cross-struts/scaffolding in front).
+  const hatchCY = baseTop + POD_BODY_H * 0.42;
+  const hatchW = 0.74, hatchH = 1.0;     // narrower → fits cleanly on the slim body
+  const hzOut = bodyR;                    // the +Z body-surface point at the hatch centre
+  const seatZ = (x: number) => Math.sqrt(Math.max(0.01, bodyR * bodyR - x * x)) + 0.03;
+  const seatYaw = (x: number) => -Math.asin(Math.max(-1, Math.min(1, x / bodyR)));
+  // 4.a a GAPING dark recessed cavity — the blown-open mouth. Deep + wide so the
+  //     opening reads as a real hole into darkness at wake distance (the tutorial
+  //     target must POP). The body curves away inside; a dim back wall sets depth.
+  const cavity = new THREE.Mesh(
+    new THREE.BoxGeometry(hatchW * 0.98, hatchH * 0.98, 0.6),
+    _podVoidMat,
   );
-  antenna.position.set(0.85, hh + 0.4, hd - 0.2);
-  antenna.rotation.z = 0.25;
-  antenna.userData.noCollider = true;
-  g.add(antenna);
-  // 6.e a bent lifting-eye / hoist ring on the top (asymmetric, lived-in) — a small
-  //    torus on a short stalk, knocked askew by the crash. Reads as a hauler's
-  //    craned-cargo fitting (anti-ODST: this is a worked container, not a weapon).
-  const eyeStalk = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 0.22, 8), _podSteel);
-  eyeStalk.position.set(0.15, hh + 0.1, -0.2);
+  cavity.position.set(0, hatchCY, hzOut - 0.34);
+  cavity.userData.noCollider = true;
+  g.add(cavity);
+  // 4.a.ii a dim back wall deep in the bay so the cavity has depth, not a flat void.
+  const cavityBack = new THREE.Mesh(
+    new THREE.BoxGeometry(hatchW * 0.86, hatchH * 0.86, 0.06),
+    new THREE.MeshLambertMaterial({ color: 0x29221b, flatShading: true }),
+  );
+  cavityBack.position.set(0, hatchCY, hzOut - 0.62);
+  cavityBack.userData.noCollider = true;
+  g.add(cavityBack);
+  // 4.b TORN RIM around the opening — short bent dark-steel teeth/lips proud of the
+  //     skin, so the edge reads RIPPED (blown outward), not a clean machined port.
+  //     Brighter steel frame value so the opening's border contrasts the skin.
+  const torn = 8;
+  for (let i = 0; i < torn; i++) {
+    const u = (i / torn);
+    // walk the rim perimeter (top, right, bottom, left quarters)
+    let rx: number, ry: number, ang: number;
+    if (u < 0.25) { rx = (u / 0.25 - 0.5) * hatchW; ry = hatchH / 2; ang = 0.5; }
+    else if (u < 0.5) { rx = hatchW / 2; ry = (1 - (u - 0.25) / 0.25 - 0.5) * hatchH; ang = -0.4; }
+    else if (u < 0.75) { rx = (0.5 - (u - 0.5) / 0.25) * hatchW; ry = -hatchH / 2; ang = 0.3; }
+    else { rx = -hatchW / 2; ry = ((u - 0.75) / 0.25 - 0.5) * hatchH; ang = -0.5; }
+    const tooth = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.09, 0.05), _podSteel);
+    tooth.position.set(rx, hatchCY + ry, seatZ(rx) + 0.02);
+    tooth.rotation.set(ang, seatYaw(rx), (i % 2 ? 0.4 : -0.3));   // bent outward, alternating
+    tooth.userData.noCollider = true;
+    g.add(tooth);
+  }
+  // 4.c slim channel-steel frame bordering the opening (curve-seated). A LIGHTER
+  //     steel value than the torn teeth so the port edge contrasts + reads framed.
+  const fbT = 0.08;
+  const frameBar = (w: number, h: number, ox: number, oy: number) => {
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(w, h, SKIN * 0.9), _podBandMat);
+    bar.position.set(ox, hatchCY + oy, seatZ(ox) - 0.01);
+    bar.rotation.y = seatYaw(ox);
+    bar.userData.noCollider = true;
+    g.add(bar);
+  };
+  frameBar(hatchW + fbT * 2, fbT, 0, hatchH / 2 + fbT / 2);     // top
+  frameBar(hatchW + fbT * 2, fbT, 0, -hatchH / 2 - fbT / 2);    // bottom
+  frameBar(fbT, hatchH, -hatchW / 2 - fbT / 2, 0);             // left
+  frameBar(fbT, hatchH, hatchW / 2 + fbT / 2, 0);             // right (hinge side)
+  // 4.d the blown DOOR — flung WIDE off the right edge (~1.55 rad ≈ 89°) so it sits
+  //     flat against the hull BESIDE the opening, leaving the dark cavity fully
+  //     exposed (a door swung partway READS as a shut panel — the critique's note).
+  //     A THICK bright pried-aluminium plate (deformed: a corner bent) + a handle.
+  const door = new THREE.Group();
+  const doorTh = SKIN * 1.7;             // THICK door plate (visible edge)
+  const doorPlate = new THREE.Mesh(new THREE.BoxGeometry(hatchW * 0.98, hatchH * 0.98, doorTh), _podDoorMat);
+  door.add(doorPlate);
+  const doorInset = new THREE.Mesh(new THREE.BoxGeometry(hatchW * 0.64, hatchH * 0.7, doorTh * 0.8), _podDoorMat);
+  doorInset.position.z = doorTh * 0.4;
+  door.add(doorInset);
+  // a bent/peeled top-free corner (deformed edge — it was forced)
+  const peel = new THREE.Mesh(new THREE.BoxGeometry(hatchW * 0.4, hatchH * 0.22, doorTh * 0.8), _podDoorMat);
+  peel.position.set(-hatchW * 0.28, hatchH * 0.42, doorTh * 0.2);
+  peel.rotation.set(-0.5, 0.2, 0);
+  door.add(peel);
+  for (const bx of [-1, 1]) for (const by of [-1, 1]) {
+    const rivet = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.026, doorTh * 0.6, 6), _podFrameMat);
+    rivet.rotation.x = Math.PI / 2;
+    rivet.position.set(bx * hatchW * 0.36, by * hatchH * 0.38, doorTh * 0.6);
+    door.add(rivet);
+  }
+  const handle = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.26, 0.1), _podFrameMat);
+  handle.position.set(-hatchW * 0.3, 0, doorTh * 0.9);   // handle near the free (swung-out) edge
+  door.add(handle);
+  const hinge = new THREE.Group();
+  hinge.position.set(hatchW / 2 + fbT / 2, hatchCY, seatZ(hatchW / 2 + fbT / 2) + SKIN * 0.2);
+  door.position.set(-hatchW / 2, 0, 0);   // door local origin → hinge (right) edge
+  hinge.add(door);
+  hinge.rotation.y = -1.2;    // flung wide OUT (stands proud beside the opening) so the
+                              //   dark cavity is exposed but the door reads as a door
+  hinge.rotation.x = 0.12;    // slight downward sag
+  hinge.rotation.z = 0.06;    // small bent twist
+  hinge.traverse((o) => { o.userData.noCollider = true; });
+  g.add(hinge);
+  // bent torn HINGE STRAP at the right edge — the door reads still-attached, not a
+  //  floating slab. (Single low strap; the wide swing makes the connection obvious.)
+  const strap = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.08, 0.045), _podSteel);
+  strap.position.set(hatchW / 2 + 0.08, hatchCY - 0.05, seatZ(hatchW / 2) + 0.06);
+  strap.rotation.set(0, -0.7, -0.2);   // bent
+  strap.userData.noCollider = true;
+  g.add(strap);
+  // 4.e a few SCATTERED torn rivets sprung off the frame (blown — debris tells).
+  for (const [dx, dy] of [[-0.16, 0.3], [0.1, -0.42], [0.22, 0.12]] as const) {
+    const sprung = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.06, 6), _podFrameMat);
+    sprung.position.set(dx, hatchCY + dy, seatZ(dx) + 0.05);
+    sprung.rotation.set(Math.PI / 2 + (dy > 0 ? 0.4 : -0.3), seatYaw(dx), 0.5);
+    sprung.userData.noCollider = true;
+    g.add(sprung);
+  }
+
+  // ── 5. RECESSED off-center PORTHOLE — SMALL (~half the old diameter), truly inset:
+  //    a proud bezel RING + a deep inner-rim SHADOW well + a slightly convex tinted
+  //    GLASS disc with a faint spec catch. High segment count so no flat facet
+  //    streaks the glass (P4). On the mid-upper CYLINDER body, off the centreline.
+  const vpA = 0.95;                       // off-centre on the +X/+Z flank the wake cam sees
+  const vpY = baseTop + POD_BODY_H * 0.62;
+  const vpR = 0.15;                       // SMALL window (was 0.27) — a mechanic's port
+  const vpDir = new THREE.Vector3(Math.sin(vpA), 0, Math.cos(vpA));
+  const vpQuat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), vpDir);
+  // proud bezel ring (the frame standing off the skin)
+  const vpRing = new THREE.Mesh(new THREE.CylinderGeometry(vpR + 0.04, vpR + 0.05, 0.1, 20, 1, true), _podSteel);
+  vpRing.position.set(vpDir.x * (bodyR + 0.03), vpY, vpDir.z * (bodyR + 0.03));
+  vpRing.quaternion.copy(vpQuat);
+  vpRing.userData.noCollider = true;
+  g.add(vpRing);
+  // inner-rim SHADOW well — a dark tube set INTO the hull behind the bezel so the
+  // recess reads deep (the eye sees a dark ring inside the bezel → "inset window").
+  const vpWell = new THREE.Mesh(new THREE.CylinderGeometry(vpR + 0.005, vpR + 0.005, 0.16, 20, 1, true), _podRimShadowMat);
+  vpWell.position.set(vpDir.x * (bodyR - 0.06), vpY, vpDir.z * (bodyR - 0.06));
+  vpWell.quaternion.copy(vpQuat);
+  vpWell.userData.noCollider = true;
+  g.add(vpWell);
+  // slightly CONVEX tinted glass (a shallow sphere cap) recessed inside the well.
+  const vpGlass = new THREE.Mesh(new THREE.SphereGeometry(vpR, 20, 12, 0, Math.PI * 2, 0, Math.PI * 0.34), _podGlassMat);
+  vpGlass.position.set(vpDir.x * (bodyR - 0.05), vpY, vpDir.z * (bodyR - 0.05));
+  // orient the sphere-cap to bulge OUT along vpDir (cap opens toward +Y by default)
+  vpGlass.quaternion.copy(vpQuat);
+  vpGlass.userData.noCollider = true;
+  g.add(vpGlass);
+  // five small bolt studs around the bezel.
+  for (let i = 0; i < 5; i++) {
+    const ba = (i / 5) * Math.PI * 2 + Math.PI / 5;
+    const tangent = new THREE.Vector3(Math.cos(vpA), 0, -Math.sin(vpA));
+    const up = new THREE.Vector3(0, 1, 0);
+    const off = up.clone().multiplyScalar(Math.sin(ba) * (vpR + 0.05)).add(tangent.clone().multiplyScalar(Math.cos(ba) * (vpR + 0.05)));
+    const bolt = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.06, 6), _podFrameMat);
+    bolt.position.set(vpDir.x * (bodyR + 0.04) + off.x, vpY + off.y, vpDir.z * (bodyR + 0.04) + off.z);
+    bolt.quaternion.copy(vpQuat);
+    bolt.userData.noCollider = true;
+    g.add(bolt);
+  }
+
+  // ── 6. BOLTED REMOVABLE PANELS (the strip-it-apart tutorial read) — distinctly
+  //    LIGHTER-value plates (the band-metal tone, not the skin tone) with a DARK
+  //    seam-rim groove so they POP off the body (P5: same-value panels were
+  //    invisible). One panel has a corner PRIED up to telegraph "these come off".
+  const addPanel = (az: number, py: number, pw: number, ph: number, pried = false) => {
+    const dir = new THREE.Vector3(Math.sin(az), 0, Math.cos(az));
+    const grp = new THREE.Group();
+    // dark recessed seam-rim groove (a value-contrast border so the plate edge reads)
+    const rim = new THREE.Mesh(new THREE.BoxGeometry(pw * 1.1, ph * 1.1, SKIN * 0.6), _podSteel);
+    rim.position.z = -SKIN * 0.2;
+    grp.add(rim);
+    // the plate — band-metal (lighter than the skin) so it stands out as bolted-on
+    const plate = new THREE.Mesh(new THREE.BoxGeometry(pw, ph, SKIN), _podBandMat);
+    grp.add(plate);
+    const inset = new THREE.Mesh(new THREE.BoxGeometry(pw * 0.78, ph * 0.78, SKIN * 1.2), _podBandMat);
+    inset.position.z = SKIN * 0.2;
+    grp.add(inset);
+    for (const bx of [-1, 1]) for (const by of [-1, 1]) {
+      const bolt = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, SKIN * 0.7, 6), _podFrameMat);
+      bolt.rotation.x = Math.PI / 2;
+      bolt.position.set(bx * pw * 0.42, by * ph * 0.42, SKIN * 0.5);
+      grp.add(bolt);
+    }
+    if (pried) {
+      // one corner peeled OUT (a wedge lip lifted off the hull) — "this one's loose".
+      const lip = new THREE.Mesh(new THREE.BoxGeometry(pw * 0.5, ph * 0.32, SKIN), _podBandMat);
+      lip.position.set(pw * 0.22, ph * 0.3, SKIN * 0.6);
+      lip.rotation.set(-0.5, 0.0, 0.18);   // pried up + out
+      grp.add(lip);
+    }
+    grp.position.set(dir.x * (bodyR + SKIN * 0.3), py, dir.z * (bodyR + SKIN * 0.3));
+    grp.rotation.y = -az;
+    grp.traverse((o) => { o.userData.noCollider = true; });
+    g.add(grp);
+  };
+  addPanel(Math.PI * 1.18, baseTop + POD_BODY_H * 0.4, 0.62, 0.84, true);   // −X flank, corner PRIED
+  addPanel(Math.PI * 0.72, baseTop + POD_BODY_H * 0.6, 0.5, 0.5);           // small inspection plate
+  addPanel(Math.PI, baseTop + POD_BODY_H * 0.72, 0.46, 0.4);               // −Z back inspection plate
+
+  // ── 7. SHOULDER-MOUNTED ANTENNA MAST (the chute-deploy / comms mast). Moved OFF
+  //    the apex (a single thin stalk from the dome centre read as a Mandalorian
+  //    rangefinder); now a CHUNKY mast bolted to the upper-body SHOULDER, built up
+  //    so it survives at distance: a riveted base flange → a thick lower mast →
+  //    a thinner whip → a tip nub, leaning (crash-knocked). The apex stays clean.
+  const mastAz = 2.5;   // upper-body shoulder, away from the hatch/porthole flank
+  const mastDir = new THREE.Vector3(Math.sin(mastAz), 0, Math.cos(mastAz));
+  const mastY = baseTop + POD_BODY_H * 0.86;
+  const mastGrp = new THREE.Group();
+  mastGrp.position.set(mastDir.x * (bodyR - 0.02), mastY, mastDir.z * (bodyR - 0.02));
+  mastGrp.rotation.y = -mastAz;          // local +X points radially outward
+  mastGrp.rotation.z = -1.05;            // tip the mast up-and-out off the flank
+  g.add(mastGrp);
+  // riveted base flange seated on the hull (a real bolt-down plate)
+  const mastFlange = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.15, 0.1, 10), _podSteel);
+  mastFlange.rotation.z = Math.PI / 2;
+  mastFlange.position.set(0.04, 0, 0);
+  mastGrp.add(mastFlange);
+  for (let i = 0; i < 4; i++) {
+    const ba = (i / 4) * Math.PI * 2 + Math.PI / 4;
+    const bolt = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.06, 5), _podFrameMat);
+    bolt.rotation.z = Math.PI / 2;
+    bolt.position.set(0.05, Math.sin(ba) * 0.11, Math.cos(ba) * 0.11);
+    bolt.userData.noCollider = true;
+    mastGrp.add(bolt);
+  }
+  // thick lower mast (a real radius so it reads at distance)
+  const mastLower = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.085, 0.55, 8), _podSteel);
+  mastLower.rotation.z = Math.PI / 2;
+  mastLower.position.set(0.36, 0, 0);
+  mastGrp.add(mastLower);
+  // collar where the whip steps down
+  const mastCollar = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.06, 8), _podFrameMat);
+  mastCollar.rotation.z = Math.PI / 2;
+  mastCollar.position.set(0.64, 0, 0);
+  mastCollar.userData.noCollider = true;
+  mastGrp.add(mastCollar);
+  // thinner whip
+  const mastWhip = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.04, 0.6, 6), _podFrameMat);
+  mastWhip.rotation.z = Math.PI / 2;
+  mastWhip.position.set(0.97, 0, 0);
+  mastWhip.userData.noCollider = true;
+  mastGrp.add(mastWhip);
+  // tip nub
+  const mastTip = new THREE.Mesh(new THREE.SphereGeometry(0.045, 8, 6), _podFrameMat);
+  mastTip.position.set(1.28, 0, 0);
+  mastTip.userData.noCollider = true;
+  mastGrp.add(mastTip);
+  // a small clean apex cap (the closed nose pole — NO stalk that reads as a rangefinder)
+  const apexCap = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 0.07, 10), _podSteel);
+  apexCap.position.set(0, apex - 0.02, 0);
+  apexCap.userData.noCollider = true;
+  g.add(apexCap);
+
+  // ── 8. EXTERNAL CABLE + a bent lifting-eye — lived-in asymmetric tells. A loose
+  //    cable drooping down one flank + a hoist ring knocked askew near the shoulder.
+  const cable = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 1.1, 6), _podCableMat);
+  cable.position.set(Math.sin(-1.0) * (bodyR + 0.04), baseTop + POD_BODY_H * 0.5, Math.cos(-1.0) * (bodyR + 0.04));
+  cable.rotation.set(0.18, 0, 0.32);
+  cable.userData.noCollider = true;
+  g.add(cable);
+  const eyeStalk = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 0.16, 8), _podSteel);
+  eyeStalk.position.set(Math.sin(1.7) * bodyR * 0.6, bodyTop + 0.02, Math.cos(1.7) * bodyR * 0.6);
   g.add(eyeStalk);
-  const liftEye = new THREE.Mesh(new THREE.TorusGeometry(0.14, 0.045, 7, 14), _podSteel);
-  liftEye.position.set(0.15, hh + 0.26, -0.2);
-  liftEye.rotation.set(Math.PI / 2 + 0.5, 0.3, 0);   // knocked askew
+  const liftEye = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.04, 7, 14), _podSteel);
+  liftEye.position.set(Math.sin(1.7) * bodyR * 0.6, bodyTop + 0.14, Math.cos(1.7) * bodyR * 0.6);
+  liftEye.rotation.set(Math.PI / 2 + 0.5, 0.3, 0);
   liftEye.userData.noCollider = true;
   g.add(liftEye);
-  // 6.f a short stamped data/ID plate on the front face (upper-right) — a tiny bit
-  //    of human signage so it reads as a built, labelled craft.
-  const idPlate = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.22, SKIN * 0.9), _podSteel);
-  idPlate.position.set(0.7, 0.78, hd + SKIN * 0.1);
+  // a small stamped ID plate near the porthole (a built, labelled craft).
+  const idPlate = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.18, SKIN * 0.8), _podSteel);
+  const idDir = new THREE.Vector3(Math.sin(-0.45), 0, Math.cos(-0.45));
+  idPlate.position.set(idDir.x * (bodyR + SKIN * 0.2), baseTop + POD_BODY_H * 0.72, idDir.z * (bodyR + SKIN * 0.2));
+  idPlate.rotation.y = 0.45;
   idPlate.userData.noCollider = true;
   g.add(idPlate);
 
-  // ── 7. SCORCHED BASE band — the reentry + crash char on the lower hull. A
-  //    slightly-proud darkened wrap on the lower ~third of all 4 faces. (Mostly
-  //    buried, but the upper edge of the char shows above the sand line.)
-  const scorchY = -hh + POD_H * 0.18;
-  const scorch = (w: number, d: number, x: number, z: number) => {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w, POD_H * 0.34, d), _podScorchMat);
-    m.position.set(x, scorchY, z);
-    m.userData.noCollider = true;   // cosmetic skin over the core (core has the collider)
-    g.add(m);
-  };
-  scorch(POD_W + 0.02, SKIN, 0, hd);
-  scorch(POD_W + 0.02, SKIN, 0, -hd);
-  scorch(SKIN, POD_D + 0.02, hw, 0);
-  scorch(SKIN, POD_D + 0.02, -hw, 0);
+  // ── 9. COLLIDER PROXY — an invisible vertical CylinderGeometry mesh sized to the
+  //    body so attachCompoundCollider emits an EXACT vertical cylinder (the curved
+  //    lathe body is noCollider → would otherwise fall back to a loose AABB). The
+  //    proxy spans base→shoulder; the nose dome + antenna are non-blocking overhead.
+  const colliderProxy = new THREE.Mesh(
+    new THREE.CylinderGeometry(POD_R, POD_R, POD_BASE_H + POD_BODY_H, 12),
+    _podPaint,
+  );
+  colliderProxy.position.y = (POD_BASE_H + POD_BODY_H) / 2;
+  colliderProxy.visible = false;   // collision-only; the lathe body is the visible skin
+  g.add(colliderProxy);
 
   // Flat-shaded low-poly: shadow flags set by the caller after placement.
   return g;
 }
 
-/** Place the HERO crashed pod at desert (x,z) — tilted + half-buried, blown hatch
- *  facing the player's wake spot. Idempotent (replaces any prior). PERSISTS into
- *  the real game (NOT disposed by endEscapePodIntro). A compound collider follows
- *  the structural silhouette (the blown door + decorations are noCollider). */
+/** Place the HERO crashed pod at desert (x,z) — the VERTICAL aluminium capsule
+ *  standing on its heat-shield base, LEANED + half-buried in the dune, hatch +
+ *  porthole facing the player's wake spot. Idempotent (replaces any prior).
+ *  PERSISTS into the real game (NOT disposed by endEscapePodIntro). A vertical
+ *  cylinder collider (from the invisible proxy) follows the standing silhouette;
+ *  the dome/antenna/door/decorations are noCollider. */
 export function placeCrashedPodWreck(ctx: GameContext, x: number, z: number): void {
   removeCrashedPodWreck(ctx);
   const gy = ctx.terrain.heightAt(x, z);
   const group = buildHeroPodMesh();
   group.name = 'crashedPod';   // findable by the rig-shot framer (visual-diagnostic-methodology.md)
 
-  // Half-buried: the box centre is at origin (height POD_H). Sink it so ~45% of
-  // the hull is below the sand line, keeping the blown hatch + viewport + the
-  // upper exoskeleton legibly ABOVE the sand. centre at gy + (sand line offset).
-  const buryFraction = 0.42;
-  const centreY = gy + POD_H * (0.5 - buryFraction);   // 0.5 → centre at sand; less → sunk
-  group.position.set(x, centreY, z);
-  // Crash pose: yaw to a 3/4 so the wake camera (from +X/+Z) sees BOTH the +Z
-  // hatch face AND the +X modular-panel flank → the box reads as a 3D volume, not
-  // a flat board. A forward pitch + roll for the tipped-into-dune look.
-  group.rotation.set(0.08, 0.7, 0.14);
+  // ── Crash pose + LEAN-AWARE burial (P1 float fix). The capsule origin is at the
+  //    heat-shield BASE centre (y=0). The previous bug: sink was a PURE VERTICAL
+  //    drop, then the group leaned ~22° ABOUT that origin — which rotated the base
+  //    rim UP out of the sand → a visible float gap + a detached shadow.
+  //
+  //    Fix: apply the lean FIRST, then compute the sink from the LEANED base disc.
+  //    A base disc of radius POD_R, tilted by the total lean angle θ, has its
+  //    HIGHEST rim point at +POD_R·sin(θ) above the base centre. To bury the whole
+  //    leaned base + ~35% of the body, the centre must drop so that highest rim
+  //    point sits clearly (BURY_MARGIN) below grade.
+  group.rotation.set(0.34, 0.55, 0.18);   // pitch (lean) + yaw (face cam) + roll
+  // total tilt of the local +Y axis away from world-up (how far the base disc tilts)
+  const _up = new THREE.Vector3(0, 1, 0).applyEuler(group.rotation);
+  const tiltCos = Math.max(-1, Math.min(1, _up.y));
+  const tilt = Math.acos(tiltCos);                       // radians off vertical
+  const rimRise = POD_R * Math.sin(tilt);               // highest base-rim point above centre
+  const BURY_MARGIN = 0.22;                              // clearance of the high rim below grade
+  const bodyBury = POD_BODY_H * 0.35;                    // ~35% of the body below grade
+  // centre must sit this far below grade so (centre + rimRise) ≤ grade − margin AND
+  // ~35% of the (vertical-ish) body is swallowed.
+  const sink = Math.max(POD_BASE_H + rimRise + BURY_MARGIN, bodyBury);
+  group.position.set(x, gy - sink, z);
 
   group.traverse((o) => {
     const m = o as THREE.Mesh;
@@ -977,11 +1293,42 @@ export function placeCrashedPodWreck(ctx: GameContext, x: number, z: number): vo
   });
   ctx.three.scene.add(group);
 
-  // Compound collider matching the structural meshes (core box + frame tubes +
-  // panels). Decorations (door, cables, viewport glass, thruster cone, scorch
-  // skins) are tagged noCollider so they don't spawn phantom walls. The tilt +
-  // burial are baked into the group's world matrix that attachCompoundCollider reads.
+  // Collider: the invisible CylinderGeometry proxy (§9) → attachCompoundCollider
+  // emits an EXACT vertical cylinder capturing the CORRECTED lean + burial baked
+  // into the group world matrix (re-seated by the lean-aware sink above). The lathe
+  // body + dome + all decorations are tagged noCollider so they don't spawn phantom
+  // walls or a loose AABB.
   group.updateMatrixWorld(true);
   crashedWreckBody = attachCompoundCollider(ctx.physics.world, group);
   crashedWreck = group;
+
+  // ── DISPLACED-SAND BERM banked against the buried/down-tilt side so the dune
+  //    visibly SWALLOWS the pod (no clean float seam). The pod's local +Y tilts
+  //    toward (_up.x, _, _up.z) in world → the DOWNHILL base contact is the
+  //    OPPOSITE horizontal direction; pile the berm there + wrap it around the base.
+  {
+    const downhill = new THREE.Vector2(-_up.x, -_up.z);
+    if (downhill.lengthSq() < 1e-4) downhill.set(0.6, 0.8);
+    downhill.normalize();
+    const bx = x + downhill.x * (POD_R + 0.35);
+    const bz = z + downhill.y * (POD_R + 0.35);
+    const bgy = ctx.terrain.heightAt(bx, bz);
+    // a broad, organic drift ring that banks UP against the hull on the downhill side
+    const bermGeo = new THREE.ConeGeometry(POD_R + 1.25, 0.92, 14, 2, false);
+    const bp = bermGeo.attributes.position;
+    for (let i = 0; i < bp.count; i++) {
+      const vx = bp.getX(i), vy = bp.getY(i), vz = bp.getZ(i);
+      const t = (vy + 0.46) / 0.92;                // 0 base → 1 apex
+      const wob = 1 + (Math.sin(vx * 4.6 + vz * 3.3) * 0.24 + Math.cos(vz * 5.2) * 0.12) * (1 - t);
+      bp.setXYZ(i, vx * wob, vy * 0.4, vz * wob);  // flatten + organic rim
+    }
+    bermGeo.computeVertexNormals();
+    const berm = new THREE.Mesh(bermGeo, _podBermMat);
+    // crest packed up against the hull; base set below grade so it never floats.
+    berm.position.set(bx, bgy + 0.12, bz);
+    berm.receiveShadow = true;
+    berm.castShadow = false;
+    crashedBerm = berm;
+    ctx.three.scene.add(berm);
+  }
 }

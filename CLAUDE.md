@@ -65,25 +65,26 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
 **▶ CAMPAIGN ACTIVE — Escape-Pod Intro — Phase 1 (the HERO pod) — `campaign/escape-pod-intro`** (autonomous; checkpoint=PHASE). **Phase 0 (greybox spine, C1-C8) COMPLETE + USER-APPROVED** (the whole intro plays
-new game → cockpit → corridor → pod → eject → ship-explode → descent → parachute-gag → impact → wake → desert). Now building the hero art. **⚠ REDESIGN (user steering C10):** the box pod (C9 exterior + C10 interior) is REJECTED — the user wants it CYLINDRICAL. New identity LOCKED (D271, user pick): a
-**vertical riveted aluminium capsule/torpedo**. Next: C11 cylindrical exterior REDO → C12 cylindrical interior REDO → T1.3 seated camera → Phase 1 milestone walk-test. Live ref: `docs/research/escape-pod-cylindrical.md`. Full vision + phased plan: [docs/feature-escape-pod-intro.md](docs/feature-escape-pod-intro.md). **ENRICH-NOT-CUT** · hero geometry/FX → the
+new game → cockpit → corridor → pod → eject → ship-explode → descent → parachute-gag → impact → wake → desert). Now building the hero art — **REDESIGNED CYLINDRICAL per user steering (D271): a vertical riveted
+aluminium capsule/torpedo** (the box was rejected). **✅ C11 cylindrical EXTERIOR shipped** (half-buried hero capsule; 2 adversarial gates caught + fixed a helmet-read + a float). Next: **C12 cylindrical interior REDO**
+→ T1.3 seated camera → Phase 1 milestone walk-test. Live ref: `docs/research/escape-pod-cylindrical.md`. Full vision + phased plan: [docs/feature-escape-pod-intro.md](docs/feature-escape-pod-intro.md). **ENRICH-NOT-CUT** · hero geometry/FX → the
 **procedural-modeler** agent (real in-game-view gate; preview_screenshot hangs on the full desert → use `rig-shot --scenario=crashed-pod`) · anti-punt · behind `FEATURES.escapePodIntro` (default off) · no
 SAVE_VERSION bump. Remaining phases: **1 pod → 2 descent → 3 ship → 4 crash/tutorial → 5 audio**; the loop pauses at each phase boundary. Each `/campaign-cycle` boots from `docs/campaign/campaign-state.json` + `docs/roadmap.md` — NOT this note.
 **To walk-test:** set `FEATURES.escapePodIntro = true` + new game, OR in the console `__game.startIntro()` (force-start; `__game.jumpToBeat('<beat>')` / `__game.skipIntro()` to navigate; `__game.smokeIntro()` runs the whole chain).
 
 **The intro (per the 2026-06-28 vision interview):** lone hauler pilot in orbit → ship disaster → flee to the escape pod → eject → watch the ship explode → a beautiful atmospheric descent → the
 parachute fails (3 pulls → snaps) → crash + blackout → wake → step into the dawn dunes → craft a machete + salvage your own pod (the first tutorial) → the chute comically pops out. Solo/clean;
-first-person throughout; pod identity = **industrial modular box**. References + decisions captured in the feature doc + `docs/research/escape-pod-*.md`.
+first-person throughout; pod identity = **vertical riveted aluminium capsule/torpedo** (D271 — revised from the originally-chosen "industrial modular box" after the user walk-tested it C10). References + decisions captured in the feature doc + `docs/research/escape-pod-*.md`.
 
 **PRIOR (shipped, on `master` + deployed):** the M11→M13 review-fix pass (campaign `campaign/2026-06-18`, 69 cycles — wreck/panel · sand-worm · weapon+vehicle audio) COMPLETED + user-approved +
 merged to master + live at https://zachootd.github.io/Dustfall/. Its log is archived at `docs/campaign/campaign-log-2026-06-18-m1-m13.md`. Still queued for the user (out-of-loop): the **Skyfall
 hero wreck** + the **CAVE rework** (dedicated solo sessions), ⑰ pickup-instancing (human-attended), + the §A walk-tests.
 
-**Last shipped**: Escape-pod **C10** (2026-06-28, Phase 1 T1.2) — the HERO pod INTERIOR (`verify:all` PASS end-to-end + a seated-FP visual gate; flag OFF → live game byte-unchanged). The procedural-modeler
-agent (4 rounds) rebuilt `podScene.buildPodScene` from greybox into a worn industrial lifeboat cabin matching the exterior (`createRustedHullMaterial`): grey-beige panels + dark-steel ribs + conduit, a
-channel-steel **viewport** dead-ahead (the `setDescentProgress` planet shows through), a **chunky red parachute lever** (jabs per-pull + droops on the snap via the new `setParachuteLeverPull` hook, wired into
-`tickParachute`), a guarded **yellow eject T-handle**, a console + seat. Smoke `{ok:true, beats:10}`; contracts (`buildPodScene`/`getPodSpawn`/`setDescentProgress`/`disposePodScene`) intact. **Next** = Phase 1
-T1.3 — the seated-FP camera + viewport framing (lock the seated pose for the Phase-2 descent showpiece) → **completes Phase 1 → milestone PAUSE** (the user's "pod in + out" walk-test). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
+**Last shipped**: Escape-pod **C11** (2026-06-29, Phase 1) — the **CYLINDRICAL pod EXTERIOR REDO** (box→capsule per the user's C10 steering; `verify:all` PASS end-to-end + TWO adversarial 5-critic visual gates + 2
+revise rounds; flag OFF → live game byte-unchanged). The procedural-modeler rebuilt `podScene.placeCrashedPodWreck` into the D271 identity: a **lathe-revolved vertical riveted-aluminium capsule** (tall straight
+cylinder body + tucked ogive nose + scorched heat-shield base), blown hatch (door flung off a torn rim + cavity), small recessed porthole, antenna, reentry scorch fading up the body, **lean-aware burial** (no
+float) + a sand berm. The adversarial gate caught what self-critique missed — a **Boba-Fett-HELMET read** (gate-1) + the pod **FLOATING** (gate-2), both fixed. Smoke `{ok:true, beats:10}`. **Next** = C12 — the
+cylindrical pod INTERIOR REDO (rebuild `buildPodScene` as the round cabin matching the exterior; re-home viewport/lever/eject/console) → then T1.3 seated camera → Phase 1 milestone walk-test. See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 

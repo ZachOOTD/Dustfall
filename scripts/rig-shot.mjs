@@ -1628,39 +1628,45 @@ const SCENARIOS = {
       const gy = ctx.terrain.heightAt(px, pz);
       const V = cam.position.constructor;
       ctx.flags.paused = true;
-      // The pod's "above-sand" centre of interest (the hatch sits a touch below mid).
-      const aimY = gy + 1.0;
+      // C11 — TALL VERTICAL CAPSULE: the visible standing pod runs ~gy → gy+1.9
+      // (hatch centred ~gy+0.65, porthole ~gy+1.25). Aim at the mid-body so the
+      // whole standing silhouette frames; cameras pulled back + raised vs the old
+      // wide box. Still reproduces the real half-buried wake placement.
+      const aimY = gy + 0.95;
       if (ang === 'wake') {
-        // Player's-eye: standing ~4.5m away at eye height, biased to the +X side so
-        // the hatch (+Z) face AND the +X panel flank both read at ~45° (3D volume,
-        // not a flat-on slab). The real wake-beside-the-pod read.
-        cam.position.set(px + 3.6, gy + 1.6, pz + 1.3);
-        cam.lookAt(px - 0.1, aimY - 0.1, pz);
+        // Player's-eye: standing ~4.5m away, eye height, biased to the +X side so
+        // the +Z hatch/porthole face AND the +X riveted flank both read at ~45°
+        // (a round 3D volume, not a flat-on slab). The real wake-beside read.
+        cam.position.set(px + 4.0, gy + 1.7, pz + 2.6);
+        cam.lookAt(px - 0.1, aimY, pz);
       } else if (ang === 'hatch') {
-        // Close-up INTO the blown-open hatch (the salvage face). The hatch is on
-        // the pod's +Z local face, yawed by the crash pose toward +X/+Z.
-        cam.position.set(px + 1.9, gy + 1.25, pz + 2.0);
-        cam.lookAt(px + 0.2, gy + 0.7, pz + 0.2);
+        // Close-up squarely onto the blown-open hatch (the salvage face). The hatch
+        // is on the capsule's LOCAL +Z face; the pod is yawed ~0.55, so the hatch
+        // world-normal is (sin0.55, 0, cos0.55). Frame dead-on along that normal.
+        const hy = 0.55, hnx = Math.sin(hy), hnz = Math.cos(hy);
+        const hd2 = 3.0;
+        cam.position.set(px + hnx * hd2, gy + 1.2, pz + hnz * hd2);
+        cam.lookAt(px + hnx * 0.3, gy + 0.8, pz + hnz * 0.3);
       } else if (ang === 'oblique') {
-        // 3/4 of the whole silhouette from a slightly higher, further vantage.
-        cam.position.set(px + 4.6, gy + 2.3, pz + 3.0);
-        cam.lookAt(px, aimY, pz);
+        // 3/4 of the WHOLE standing silhouette from a higher, further vantage so
+        // the nose dome + base both frame.
+        cam.position.set(px + 4.6, gy + 2.6, pz + 4.0);
+        cam.lookAt(px, aimY + 0.1, pz);
       } else if (ang === 'back') {
-        // The modular-panel flank (away from the hatch) — verifies the strippable read.
-        cam.position.set(px - 3.8, gy + 1.7, pz - 3.6);
+        // The riveted flank away from the hatch — verifies the strippable panels.
+        cam.position.set(px - 4.0, gy + 1.9, pz - 3.4);
         cam.lookAt(px, aimY, pz);
       } else if (ang === 'iso') {
-        // DIAGNOSTIC studio: lift the whole pod ABOVE the sand (un-bury) so the FULL
-        // box geometry is judgeable in isolation (additional shot, never the verdict —
-        // the buried wake read is the gate). Re-pose flat-ish, frame a clean 3/4.
+        // DIAGNOSTIC studio: lift the whole capsule ABOVE the sand (un-bury) so the
+        // FULL standing form is judgeable in isolation (additional shot, never the
+        // verdict — the buried wake read is the gate). Re-pose upright, clean 3/4.
         const pod2 = ctx.three.scene.getObjectByName('crashedPod');
-        if (pod2) { pod2.position.y = gy + 1.4; pod2.rotation.set(0, 0.7, 0); pod2.updateMatrixWorld(true); }
-        const cYy = gy + 1.4;
-        cam.position.set(px + 2.7, cYy + 1.6, pz + 2.7);
-        cam.lookAt(px, cYy, pz);
-      } else { // close — tight detail of the upper hull (frame/viewport/weathering)
-        cam.position.set(px + 2.6, gy + 1.9, pz + 2.6);
+        if (pod2) { pod2.position.y = gy + 0.1; pod2.rotation.set(0, 0.55, 0); pod2.updateMatrixWorld(true); }
+        cam.position.set(px + 3.6, gy + 1.9, pz + 4.0);
         cam.lookAt(px, gy + 1.2, pz);
+      } else { // close — tight detail of the upper hull (porthole / rivets / nose)
+        cam.position.set(px + 2.8, gy + 2.0, pz + 2.8);
+        cam.lookAt(px, gy + 1.3, pz);
       }
       cam.updateMatrixWorld(true);
       // Front KEY light from above + beside the camera so the camera-facing hull is
