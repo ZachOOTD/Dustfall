@@ -3,6 +3,17 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Escape-pod campaign C14 — 2026-06-29 — Phase 2 T2.1: **the HERO descent VISTA** (planet → atmosphere → desert through the pod viewport) ✓ verify:all + 4 adversarial hero gates (passed @ beauty 8)
+
+`verified` — `npm run verify:all` PASS end-to-end (tsc + placement + colliders) + smoke `{ok:true,beats:10}` + the **adversarial visual gate PASSED** (both prior-failing critics flipped to hitsBar=true, beauty 8; only sev-3 nits remain). Flag OFF → live game byte-unchanged. No SAVE_VERSION bump.
+
+**T2.1 — the descentProgress VISTA (the showpiece centerpiece; the explicitly-deferred-from-Phase-1 item).** Replaced the greybox planet-disc in `podScene.ts` with a real **descentProgress-driven orbit→atmosphere→desert fall** seen through the round porthole, built by the **procedural-modeler** across 5 rounds:
+- **HIGH (orbital):** a curved Dune/Mars desert planet (fbm relief surface + soft-penumbra terminator from a coherent object-space sun), a soft continuous **Fresnel atmosphere limb-glow** (blue→white→warm, off the tone-mapper so the blue survives Reinhard) + outer halo, and a dense 3-layer **starfield** + milky band.
+- **Cross-fade → LOW (surface):** as `descentProgress` passes ~0.4 the orbital sphere retracts/fades and a **ground/horizon/sky scene** fades in — asymmetric **barchan dune** ridgelines (raking off-axis dawn sun → lit crests + shadowed lee), a cool-trough→ochre→pale-crest **sand palette**, aerial-perspective haze, a dawn sky — with **closing scale** (d09 reads clearly nearer the surface than d05, the desert rushing up to meet you).
+- **Disposal/contract:** 4 new ShaderMaterials (planet/atmo/star/lowalt) disposed in `disposePodScene`; the single `setDescentProgress(0..1)` animation contract + all null-guards preserved.
+- **The adversarial gate earned its keep** — across 4 gate rounds it caught what the builder's self-critique + my own eyes missed: a flat-coin planet, a flat-orange/lava read, a **z-occluder bug** (the planet was being z-occluded so the game sky-dome showed through), 2 cross-fade artifacts (star-bleed, an asteroid/neon-limb), and a **porthole-band mapping bug** (the horizon/sun were mis-framed so the window showed sky+blown-sun while the desert rendered as far-haze). Each diagnosed + fixed, re-gated to PASS.
+- **Remaining T2.1 (queued, C15):** the scene **fog color-ramp** + the **cabin interior-lit-by-exterior** lighting shift (the cabin warming as the dawn desert fills the viewport) — integration polish, not the hero vista. Then T2.2 (re-entry FX) · T2.3 (tumbling reveal).
+
 ## Escape-pod campaign C13 — 2026-06-29 — Phase 1 T1.3: **the seated-FP camera + beat-framing** → ⏸ PHASE 1 COMPLETE (the hero pod) — milestone PAUSE ✓ verify + visual pass
 
 `verified` — `npm run verify:all` PASS end-to-end (tsc + placement 0/0 ×5 + colliders 0/40) + a live-preview check: the seated eye sits at the viewport line; enterPod faces the eject, parachute faces the lever; smoke `{ok:true, beats:10}`; 0 console errors. Flag OFF → live game byte-unchanged.

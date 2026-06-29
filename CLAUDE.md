@@ -64,13 +64,14 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      Prior milestones live in docs/changelog.md — do NOT accumulate "Prior milestone"
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
-**⏸ CAMPAIGN PAUSED — Escape-Pod Intro — Phase 1 milestone (the HERO pod COMPLETE) — `campaign/escape-pod-intro`** (autonomous; checkpoint=PHASE). **Phase 0 (greybox spine, C1-C8) + Phase 1 (the hero pod,
-C9-C13) COMPLETE.** The pod was REDESIGNED CYLINDRICAL per the user's C10 steering (D271): a **vertical riveted-aluminium capsule** — a half-buried hero exterior you wake beside + a round riveted cabin you ride
-(viewport, the chunky red parachute lever, the guarded yellow eject, console, seat) + the seated-FP camera. **AWAITING the user's "POD IN + OUT" WALK-TEST** → `/campaign-approve` releases **Phase 2 (the descent
-showpiece)**. Built via the **procedural-modeler** + **adversarial 5-critic visual gates** (caught + fixed a helmet-read, a float, a forward-face, a void floor, boxy-walls — see [[hero-asset-adversarial-gate]]).
-Live pod ref: `docs/research/escape-pod-cylindrical.md`. Full plan: [docs/feature-escape-pod-intro.md](docs/feature-escape-pod-intro.md). **ENRICH-NOT-CUT** · hero geometry/FX → the procedural-modeler + the
-adversarial gate (preview_screenshot hangs on the full desert → use `rig-shot --scenario=crashed-pod|pod-interior`) · anti-punt · behind `FEATURES.escapePodIntro` (default off) · no SAVE_VERSION bump. Remaining
-phases: **2 descent → 3 ship → 4 crash/tutorial → 5 audio**; the loop pauses at each phase boundary. Each `/campaign-cycle` boots from `docs/campaign/campaign-state.json` + `docs/roadmap.md` — NOT this note.
+**▶ CAMPAIGN ACTIVE — Escape-Pod Intro — Phase 2 (the descent showpiece) — `campaign/escape-pod-intro`** (autonomous; checkpoint=PHASE). **Phase 0 (greybox spine, C1-C8) + Phase 1 (the hero cylindrical pod, C9-C13)
+COMPLETE + USER-APPROVED.** Now in **Phase 2 — the beautiful atmospheric descent.** **✅ C14 shipped the HERO descent VISTA** (T2.1 centerpiece): a `descentProgress`-driven orbit→atmosphere→desert fall through the
+pod viewport — a curved Dune-desert planet + Fresnel atmosphere limb + starfield, cross-fading to a barchan dune surface with raking dawn light + closing scale (replaces the greybox disc; gate-passed @ beauty 8 after
+5 modeler rounds + 4 adversarial gates that caught a z-occluder bug + a porthole-band mapping bug + flat-coin/lava/cloud reads). **Next:** the T2.1 remainder (scene fog ramp + cabin interior-lit-by-exterior) → T2.2
+re-entry FX → T2.3 tumbling reveal → the **Phase 2 milestone walk-test** (the beautiful descent, incl. its felt MOTION) → `/campaign-approve` releases Phase 3. Built via the **procedural-modeler** + **adversarial
+visual gates** (the lesson: builder self-critique + my own eyes miss real defects; the N-critic gate catches them — see [[hero-asset-adversarial-gate]]). **ENRICH-NOT-CUT** · hero geometry/FX → the procedural-modeler +
+the adversarial gate (`preview_screenshot` works for the offset pod interior; hangs on the full desert → use `rig-shot --scenario=crashed-pod|pod-interior --descent=<0..1>`) · anti-punt · behind `FEATURES.escapePodIntro`
+(default off) · no SAVE_VERSION bump. Remaining phases: **2 descent → 3 ship → 4 crash/tutorial → 5 audio**; the loop pauses at each phase boundary. Each `/campaign-cycle` boots from `docs/campaign/campaign-state.json` + `docs/roadmap.md` — NOT this note.
 **To walk-test:** set `FEATURES.escapePodIntro = true` + new game, OR in the console `__game.startIntro()` (force-start; `__game.jumpToBeat('<beat>')` / `__game.skipIntro()` to navigate; `__game.smokeIntro()` runs the whole chain).
 
 **The intro (per the 2026-06-28 vision interview):** lone hauler pilot in orbit → ship disaster → flee to the escape pod → eject → watch the ship explode → a beautiful atmospheric descent → the
@@ -81,12 +82,12 @@ first-person throughout; pod identity = **vertical riveted aluminium capsule/tor
 merged to master + live at https://zachootd.github.io/Dustfall/. Its log is archived at `docs/campaign/campaign-log-2026-06-18-m1-m13.md`. Still queued for the user (out-of-loop): the **Skyfall
 hero wreck** + the **CAVE rework** (dedicated solo sessions), ⑰ pickup-instancing (human-attended), + the §A walk-tests.
 
-**Last shipped**: Escape-pod **C13** (2026-06-29, Phase 1 T1.3 — **PHASE 1 COMPLETE**) — the seated-FP camera + beat-framing (`verify:all` PASS end-to-end + live check; flag OFF → live game byte-unchanged).
-A new `Tuning.POD_SEATED_EYE_OFFSET (0.50)` lowers the eye to the viewport line (`VP_CY≈1.34`) while seated so the window reads at eye level (set in `updateEscapePodIntro` for the !isPlaying preview/rig +
-maintained in `controller.ts` in-game; reverts at the handoff). A `faceControl(yaw,pitch)` helper (rotation.set with **YXZ** order — XYZ floor-stared after a 90° yaw) frames each beat at its control: enterPod →
-the yellow eject, parachute → the red lever (resolving the C12-gate confusion). **⏸ Phase 1 milestone — the hero cylindrical pod is whole (exterior C11 + interior C12 + seated camera C13); awaiting the user's
-"pod in + out" walk-test.** **Next (after `/campaign-approve`)** = Phase 2 — the descent showpiece (T2.1 the `descentProgress` effect stack [Fresnel atmo + fog ramp + planet/horizon + lighting] · T2.2 re-entry FX ·
-T2.3 tumbling reveal), incl. the hero planet/atmosphere vista that frames through the pod viewport. See [docs/next-session-prompt.md](docs/next-session-prompt.md).
+**Last shipped**: Escape-pod **C14** (2026-06-29, Phase 2 T2.1 — the **HERO descent VISTA**) — the `descentProgress`-driven orbit→atmosphere→desert fall through the pod viewport (`verify:all` PASS + smoke
+`{ok:true,beats:10}` + the **adversarial hero gate PASSED @ beauty 8**; flag OFF → live game byte-unchanged). In `podScene.ts` the greybox planet-disc is replaced by real shaders: a curved Dune-desert planet
+(fbm relief + soft terminator), a soft **Fresnel atmosphere limb** (off the tone-mapper) + halo, a 3-layer **starfield**; cross-fading past `descentProgress≈0.4` to a **barchan dune ground/horizon/sky** scene (raking
+off-axis dawn sun, cool→ochre→pale sand palette, aerial haze, **closing scale** so d09 reads nearer than d05). 5 procedural-modeler rounds + 4 adversarial gates caught a **z-occluder bug** (sky-dome showing through),
+2 cross-fade artifacts, and a **porthole-band mapping bug** — all fixed. `setDescentProgress(0..1)` contract preserved; 4 ShaderMaterials disposed. **Next** = the T2.1 remainder (scene fog ramp + the cabin
+interior-lit-by-exterior lighting shift) → T2.2 re-entry FX → T2.3 tumbling reveal → the Phase 2 milestone walk-test. See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 

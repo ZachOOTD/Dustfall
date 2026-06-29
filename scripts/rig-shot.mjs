@@ -1704,7 +1704,10 @@ const SCENARIOS = {
     const beat = argv.beat || (angle === 'descent' ? 'descent' : 'enterPod');
     const pull = argv.pull !== undefined ? Number(argv.pull) : 0;
     const snap = !!argv.snap;
-    const r = await page.evaluate(({ angle, beat, pull, snap }) => {
+    // --descent=<0..1> drives the vista swell/atmosphere ramp so the planet can be shot
+    // at several altitudes (high 0.0 → low 0.9). Overrides the beat's own 0.7 default.
+    const descent = argv.descent !== undefined ? Number(argv.descent) : null;
+    const r = await page.evaluate(({ angle, beat, pull, snap, descent }) => {
       const g = window.__game;
       const ctx = g.ctx;
       // First-person (the seated read); hide the rig so it doesn't block the FP camera.
@@ -1718,18 +1721,20 @@ const SCENARIOS = {
       ctx.three.renderer.setSize(1000, 760, false);
       const cam = ctx.three.camera;
       if (cam.isPerspectiveCamera) { cam.aspect = 1000 / 760; cam.updateProjectionMatrix(); }
-      if (angle === 'descent' || beat === 'descent') { try { g.setDescentProgress(0.7); } catch {} }
+      if (descent !== null) { try { g.setDescentProgress(descent); } catch {} }
+      else if (angle === 'descent' || beat === 'descent') { try { g.setDescentProgress(0.7); } catch {} }
       if (pull > 0 || snap) { try { g.setParachuteLeverPull(pull, snap); } catch {} }
       return { beat, angle };
-    }, { angle, beat, pull, snap });
+    }, { angle, beat, pull, snap, descent });
     // Let the beat controller tick (it runs in the page's RAF loop) so the pod builds +
     // the player is seated, THEN pose the camera for the chosen look. We re-seat from the
     // real spawn + aim the head — mirroring the seated FP look directions.
     await page.waitForTimeout(600);
-    const meas = await page.evaluate(({ angle, pull, snap }) => {
+    const meas = await page.evaluate(({ angle, pull, snap, descent }) => {
       const g = window.__game;
       const ctx = g.ctx;
       ctx.flags.paused = true;
+      if (descent !== null) { try { g.setDescentProgress(descent); } catch {} }
       if (pull > 0 || snap) { try { g.setParachuteLeverPull(pull, snap); } catch {} }
       const cam = ctx.three.camera;
       const V = cam.position.constructor;
@@ -1753,9 +1758,10 @@ const SCENARIOS = {
       let meshes = 0;
       if (pod) pod.traverse((o) => { if (o.isMesh) meshes++; });
       return { found: !!pod, meshes, eye: [+eye.x.toFixed(2), +eye.y.toFixed(2), +eye.z.toFixed(2)] };
-    }, { angle, pull, snap });
+    }, { angle, pull, snap, descent });
     await page.waitForTimeout(300);
-    const tag = `pod-interior-${angle}${pull > 0 ? '-pull' + pull : ''}${snap ? '-snap' : ''}`;
+    const dtag = descent !== null ? `-d${String(descent).replace('.', '')}` : '';
+    const tag = `pod-interior-${angle}${dtag}${pull > 0 ? '-pull' + pull : ''}${snap ? '-snap' : ''}`;
     await page.screenshot({ path: join(OUT, `scen-${tag}.png`), fullPage: false });
     console.log(`[pod-interior] ${JSON.stringify(meas)} → scen-${tag}.png`);
   },

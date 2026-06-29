@@ -152,22 +152,41 @@ const _cabGlass = new THREE.MeshStandardMaterial({
   emissive: 0x0a1418, emissiveIntensity: 0.45,
   transparent: true, opacity: 0.32,   // see the planet through it, but a glazed pane reads
 });
-// A faint bright spec-streak highlight on the porthole glass (a glazed-pane tell).
-const _cabGlassSpec = new THREE.MeshBasicMaterial({
-  color: 0xbfd0dc, transparent: true, opacity: 0.13, depthWrite: false,   // softer (the bright crescent read as a stray diagonal across the void)
+// A faint bright spec highlight on the porthole glass (a glazed-pane tell). A SOFT
+// radial-falloff additive blob (NOT a hard-edged plane — the old PlaneGeometry quad read
+// as a grey rectangle floating in the void; gate gave a fake decal edge). Feathered to an
+// elongated crescent via the UV ellipse so it reads as a glint, with no hard parallel edges.
+const _cabGlassSpec = new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false,
+  uniforms: {},
+  vertexShader: 'varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
+  fragmentShader: [
+    'precision mediump float; varying vec2 vUv;',
+    'void main(){',
+    '  vec2 p = vUv - 0.5;',
+    '  p.x *= 2.6;',                                  // elongate into a streak
+    '  float d = length(p);',
+    '  float a = smoothstep(0.5, 0.0, d) * 0.16;',    // soft radial falloff, faint
+    '  gl_FragColor = vec4(vec3(0.62,0.72,0.82) * a, a);',
+    '}',
+  ].join('\n'),
 });
 // The EJECT control handle (a hazard-striped pull) — warm safety-yellow grip.
 const _ejectGrip = new THREE.MeshLambertMaterial({ color: 0xe0b52e, flatShading: true });   // brighter safety-yellow (was dim mustard → read as a dark patch)
 // The PARACHUTE lever grip — worn red rubber (the gag star; reads "pull me").
 const _chuteGrip = new THREE.MeshLambertMaterial({ color: 0xb23a2e, flatShading: true });
-// The descent planet seen through the viewport — flat unlit, warm desert ochre.
-const C_PLANET = 0xc98a5a;
-
 let podGroup: THREE.Group | null = null;
 const podBodies: RAPIER.RigidBody[] = [];
 let planetMesh: THREE.Mesh | null = null;   // grown during the descent (setDescentProgress)
-let planetHaloMesh: THREE.Mesh | null = null; // the atmosphere-rim halo behind the planet (per-build mat)
-let voidPlaneMesh: THREE.Mesh | null = null; // the dark space backdrop behind the viewport (per-build mat)
+let planetHaloMesh: THREE.Mesh | null = null; // the Fresnel atmosphere shell wrapping the limb (per-build mat)
+let starOccluderMesh: THREE.Mesh | null = null; // depth-only occluder so stars don't punch through the air band
+// The descent vista's three ShaderMaterials — refs kept so setDescentProgress can push
+// uniforms (altitude → swell/atmosphere ramp/detail). Null when the pod isn't built.
+let planetMat: THREE.ShaderMaterial | null = null;
+let atmoMat: THREE.ShaderMaterial | null = null;
+let starMat: THREE.ShaderMaterial | null = null;
+let lowAltMat: THREE.ShaderMaterial | null = null;   // the low-altitude ground/horizon scene (cross-fades in past ~mid)
+let lowAltMesh: THREE.Mesh | null = null;
 let chuteLever: THREE.Group | null = null;  // the parachute lever pivot (setParachuteLeverPull)
 let chuteLeverRestX = 0;                     // its resting pitch (radians); pulls jolt from here
 let leverBrokenTell: THREE.Group | null = null;  // the snapped-mount reveal (shown on snap)
@@ -565,10 +584,10 @@ function buildViewport(group: THREE.Group): void {
   group.add(glass);
   // a faint SPEC streak on the glass (top-left) so the pane reads as glazed, not an open
   // hole (P3 — "a window not an open hole"). A thin bright unlit crescent (module-shared mat).
-  const specGeo = new THREE.PlaneGeometry(VP_R * 0.7, 0.05);
+  const specGeo = new THREE.PlaneGeometry(VP_R * 0.62, VP_R * 0.30);
   _cabinDisposables.push(specGeo);
   const spec = new THREE.Mesh(specGeo, _cabGlassSpec);
-  spec.position.set(-VP_R * 0.18, VP_CY + VP_R * 0.42, zWall + 0.18);
+  spec.position.set(-VP_R * 0.20, VP_CY + VP_R * 0.40, zWall + 0.18);
   spec.rotation.z = -0.6;
   group.add(spec);
   // ── BOLT STUDS around the bezel (a ring of fasteners) — small flush dome studs (FIX 3),
@@ -856,6 +875,528 @@ function buildConduitAndLight(group: THREE.Group): void {
   group.add(lamp);
 }
 
+// ─── The DESCENT VISTA (Phase 2 / T2.1) — the hero planet seen through the viewport ──
+// What the player watches fall toward through the −Z porthole: a real curved desert
+// world (Dune/Mars ochre, banded + mottled, with a soft-penumbra terminator), wrapped
+// in a glowing Fresnel atmosphere limb (cool-blue high → warm orange at the terminator),
+// against a starfield. NOT a flat coin. Three custom ShaderMaterials (planet body /
+// atmosphere shell / starfield) so the curvature + terminator + limb-glow are real from
+// any swell, all driven CHEAP off setDescentProgress's single 0..1 input.
+//
+// The light direction (uLightDir) is fixed: a dawn sun up-and-to-the-left so the lit
+// crown reads top-left and the terminator curves down the right + bottom of the disc —
+// matching the warm dawn-descent tone. Unlit (no scene lights reach the offset pod), so
+// all shading is baked in the shaders + tone-mapped by the Reinhard pipeline.
+
+const _VISTA_LIGHT = /* keep in sync with the shaders */ new THREE.Vector3(-0.55, 0.42, 0.72).normalize();
+
+// Planet body — a lit sphere: Lambert-ish day term with a SOFT terminator penumbra,
+// desert latitude bands + large-scale mottling (value-noise fbm in object space so it
+// doesn't swim under the descent scale), faint polar lightening, a warm dawn palette.
+const PLANET_VS = /* glsl */ `
+  varying vec3 vPos;     // object-space unit dir (stable under scale — for surface features)
+  varying vec3 vONrm;    // object-space normal (for the day/night terminator vs object light)
+  varying vec3 vVNrm;    // view-space normal + toward-camera (for the inner atmosphere scatter)
+  varying vec3 vView;
+  varying vec3 vSurf;    // a SCALE-INDEPENDENT surface coordinate for near-ground dune detail
+  void main() {
+    vPos = normalize(position);
+    vONrm = normalize(normal);
+    vVNrm = normalize(normalMatrix * normal);
+    vec4 mv = modelViewMatrix * vec4(position, 1.0);
+    vView = normalize(-mv.xyz);
+    // The object-dir patch shrinks to a point as the sphere swells (you see a sub-degree
+    // patch), so object-space noise reads uniform at low altitude. Use a TANGENT-PLANE
+    // coordinate (object-dir × a large factor, recentred per-frame would swim) — instead we
+    // use the view-space XY of the fragment, scale-independent, so near-ground dunes show.
+    vSurf = vec3(mv.xy, mv.z * 0.05);
+    gl_Position = projectionMatrix * mv;
+  }
+`;
+const PLANET_FS = /* glsl */ `
+  precision highp float;
+  varying vec3 vPos;
+  varying vec3 vONrm;
+  varying vec3 vVNrm;
+  varying vec3 vView;
+  varying vec3 vSurf;
+  uniform vec3 uLightDir;     // object-space light dir (mesh is unrotated → ≈ world)
+  uniform float uDetail;      // 0..1 — surface detail/contrast presence (rises low-altitude)
+  uniform float uWarm;        // 0..1 — palette warmth (rises as you enter the air)
+  uniform float uLow;         // 0..1 — low-altitude (near-surface) — drives relief + horizon haze
+  uniform float uFade;        // 1 → 0 — dims the whole body to black during the low-alt cross-fade
+
+  // cheap value-noise + fbm (object-space, so the bands don't crawl when scaled)
+  float hash(vec3 p){ p = fract(p*0.3183099+0.1); p*=17.0; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
+  float vnoise(vec3 x){
+    vec3 p=floor(x), f=fract(x); f=f*f*(3.0-2.0*f);
+    return mix(mix(mix(hash(p+vec3(0,0,0)),hash(p+vec3(1,0,0)),f.x),
+                   mix(hash(p+vec3(0,1,0)),hash(p+vec3(1,1,0)),f.x),f.y),
+               mix(mix(hash(p+vec3(0,0,1)),hash(p+vec3(1,0,1)),f.x),
+                   mix(hash(p+vec3(0,1,1)),hash(p+vec3(1,1,1)),f.x),f.y),f.z);
+  }
+  float fbm(vec3 p){
+    float a=0.5, s=0.0;
+    for(int i=0;i<4;i++){ s+=a*vnoise(p); p*=2.03; a*=0.5; }
+    return s;
+  }
+  // 2D value-noise + fbm for the NEAR-GROUND dunes (driven by the scale-independent vSurf
+  // tangent coordinate, so dunes stay visible no matter how huge the swelled sphere gets).
+  float h2(vec2 p){ p=fract(p*vec2(127.1,311.7)*0.1); p+=dot(p,p+34.5); return fract(p.x*p.y); }
+  float vn2(vec2 x){ vec2 p=floor(x),f=fract(x); f=f*f*(3.0-2.0*f);
+    return mix(mix(h2(p),h2(p+vec2(1,0)),f.x),mix(h2(p+vec2(0,1)),h2(p+vec2(1,1)),f.x),f.y); }
+  float fbm2(vec2 p){ float a=0.5,s=0.0; for(int i=0;i<5;i++){ s+=a*vn2(p); p=p*2.07+1.3; a*=0.5; } return s; }
+  // Dune field: ridged streaks (wind-blown) + grain — a real desert-surface elevation.
+  float dunes(vec2 p){
+    float ridge = abs(sin(p.x*0.9 + fbm2(p*0.4)*3.0));   // long wind ridges
+    float field = fbm2(p*1.1);
+    return mix(field, 1.0-ridge, 0.45);
+  }
+  // height field = the terrain elevation at an object-space dir (dunes/highlands/valleys).
+  float terrain(vec3 d){
+    float bands = sin(d.y*8.0 + fbm(d*1.8)*3.4)*0.5+0.5;   // latitude dune-bands (stronger warp)
+    float cont  = fbm(d*1.7 + 2.0);                        // big continents/seas of sand
+    float mott  = fbm(d*3.6 + 5.0);                        // regional mottling
+    float fine  = fbm(d*8.5 + 11.0);                       // mid grain
+    float micro = fbm(d*13.0 + 17.0);                      // close-in dune grain (larger dunes)
+    // contrast the continents (smoothstep) so there are clear light highlands + dark basins
+    cont = smoothstep(0.30, 0.72, cont);
+    float h = cont*0.50 + bands*0.26 + mott*0.24;
+    h = mix(h, h*0.62 + fine*0.38, 0.55 + 0.45*uDetail);   // fine resolves with altitude
+    h = mix(h, h*0.7 + micro*0.3, uLow);                   // dune grain near the surface
+    return h;
+  }
+
+  void main(){
+    vec3 n = normalize(vONrm);
+    vec3 d = normalize(vPos);   // object-space surface dir (stable under scale)
+    vec3 L = normalize(uLightDir);
+    float lat = d.y;
+
+    // ── Surface height + a RELIEF normal (finite-difference of the height field along two
+    //    tangents) so the directional sun carves real light/shadow into the dunes — this is
+    //    what makes the near surface read as TERRAIN, not a flat orange fill, even when the
+    //    whole near-disc is technically "day".
+    float h = terrain(d);
+    vec3 t1 = normalize(cross(n, vec3(0.0,1.0,0.0)) + vec3(1e-4));
+    vec3 t2 = normalize(cross(n, t1));
+    float e = 0.010;
+    float hx = terrain(normalize(d + t1*e)) - h;
+    float hy = terrain(normalize(d + t2*e)) - h;
+    float relief = (2.4 + 4.5*uLow);                       // relief always present, much bumpier near
+    vec3 rn = normalize(n - (t1*hx + t2*hy) * relief * 26.0);
+
+    // NEAR-GROUND dunes (scale-independent vSurf): as you descend, a real dune field
+    // resolves on the surface — its gradient gives directional dune shading (sun-lit crests,
+    // shadowed lee slopes) + feeds the albedo, so LOW reads as terrain rushing up, not flat.
+    vec2 sc = vSurf.xy * 3.2;
+    float dh = dunes(sc);
+    float de = 0.5;
+    float dhx = (dunes(sc + vec2(de,0.0)) - dunes(sc - vec2(de,0.0))) / (2.0*de);
+    float dhy = (dunes(sc + vec2(0.0,de)) - dunes(sc - vec2(0.0,de))) / (2.0*de);
+    // Direct dune shading: a fixed screen-space sun (upper-left, matching the lit limb) lights
+    // the dune slopes — gradient·sunDir gives bright crests + dark troughs. Reads reliably.
+    vec2 sunSS = normalize(vec2(-0.6, 0.55));
+    float duneShade = clamp(dot(vec2(dhx, dhy), sunSS) * 0.8, -0.45, 0.5);
+    duneShade *= uLow*uLow;                                // only near the surface
+
+    // ── Desert palette: rust valleys → ochre body → pale tan highlands. Warm shift is
+    //    APPLIED TO HUE only (kept subtle) so tonal contrast survives the warm ramp.
+    // Wider tonal spread (darker rust valleys, paler tan highlands) so the desert banding
+    // + mottling actually READ from orbit (not a uniform billiard-ball gradient).
+    vec3 cRust = mix(vec3(0.30,0.13,0.08), vec3(0.44,0.18,0.09), uWarm*0.7);
+    vec3 cBody = mix(vec3(0.66,0.41,0.23), vec3(0.80,0.46,0.22), uWarm*0.7);
+    vec3 cTan  = mix(vec3(0.92,0.72,0.49), vec3(0.98,0.76,0.48), uWarm*0.7);
+    vec3 cPolar= vec3(0.90,0.83,0.72);
+    // Blend the near-ground dune height into the surface value as you descend (so the LOW
+    // surface has real tonal variation — light dune crests, shadowed troughs — not flat).
+    float hs = mix(h, mix(h, dh, 0.7), uLow);
+    vec3 albedo = mix(cRust, cBody, smoothstep(0.16,0.50,hs));
+    albedo = mix(albedo, cTan, smoothstep(0.50,0.88,hs));
+    albedo = mix(albedo, cPolar, smoothstep(0.74,0.98,abs(lat))*0.55);
+
+    // ── ONE coherent directional light. Geometric day/night (terminator) from the smooth
+    //    sphere normal; SURFACE shading (dune light/shadow) from the relief normal. Both use
+    //    the SAME light vector → no "two suns".
+    float ndlGeo = dot(n, L);
+    float day = smoothstep(-0.10, 0.34, ndlGeo);          // soft-penumbra terminator
+    float night = 1.0 - day;
+    float ndlSurf = max(dot(rn, L), 0.0);                  // dune self-shading (sun-facing slopes bright)
+    // Directional surface lighting: a bright sun-facing key + a small ambient floor. The
+    // contrast (key vs ambient) is what reads as desert relief; preserved at all warmths.
+    // Stronger key + lower floor → dunes carve clearly; a soft AO in the noise troughs.
+    float shade = 0.20 + 1.35*pow(ndlSurf, 0.78);
+    float ao = mix(1.0, 0.62 + 0.38*smoothstep(0.25, 0.65, h), 0.55); // valleys a touch darker
+    shade *= (1.0 + duneShade);                            // near-ground dune crests/troughs
+    vec3 sun = mix(vec3(1.08,0.97,0.82), vec3(1.14,0.78,0.48), uWarm); // warms toward low sun
+    vec3 lit = albedo * shade * ao * sun;
+    vec3 dark = albedo * 0.05 + vec3(0.010,0.016,0.028);  // near-black cool night side
+    vec3 col = mix(dark, lit, day);
+    // a warm crescent of dawn light right AT the terminator (sunrise glow on the day edge)
+    float term = day*night*4.0;
+    col += vec3(0.60,0.28,0.10) * term * (0.6+0.5*uWarm);
+
+    // ── Low-altitude HORIZON HAZE: as you near the surface, a warm hazy band builds toward
+    //    the limb (the air thickening at the horizon) — softens the planet edge into a sky,
+    //    so the near frame reads "ground below, hazy sky above the horizon", not a hard ball.
+    float limb = pow(1.0 - max(dot(normalize(vVNrm), normalize(vView)), 0.0), 2.2);
+    vec3 hazeCol = mix(vec3(0.85,0.62,0.40), vec3(0.97,0.76,0.56), uWarm);
+    col = mix(col, hazeCol, clamp(limb * uLow * 0.85, 0.0, 0.7) * day);
+
+    // Inner atmospheric scatter: blue air sitting over the desert at the sunlit limb —
+    // brightest where the surface grazes the view AND is in daylight (sells the air on
+    // the surface, complementing the outer halo). Cool high — fades out near the surface
+    // (the horizon haze above takes over the limb at low altitude).
+    float vrim = pow(1.0 - max(dot(normalize(vVNrm), normalize(vView)), 0.0), 2.6);
+    vec3 air = mix(vec3(0.30,0.52,0.92), vec3(0.80,0.50,0.22), uWarm);
+    col += air * vrim * day * (0.35 + 0.4*uWarm) * (1.0 - uLow*0.7);
+
+    gl_FragColor = vec4(col * uFade, 1.0);   // dim to black as the low-alt scene crosses in
+  }
+`;
+
+// Atmosphere shell — a slightly larger back-faced sphere; a Fresnel rim that's BRIGHTEST
+// at the grazing limb, fading inward, and only on the LIT hemisphere (the day-side air).
+// Cool blue-cyan high on the limb grading WARM (orange) toward the terminator. Additive.
+const ATMO_VS = /* glsl */ `
+  varying vec3 vNrm;     // VIEW-space normal (for the Fresnel limb term)
+  varying vec3 vView;    // VIEW-space toward-camera dir
+  varying float vNdl;    // day/night term — OBJECT-space normal · OBJECT-space light
+  uniform vec3 uLightDir;
+  void main(){
+    vNrm = normalize(normalMatrix * normal);
+    vec4 mv = modelViewMatrix * vec4(position, 1.0);
+    vView = normalize(-mv.xyz);
+    // The mesh isn't rotated, so object-space normal ≈ world-space normal. Compute the
+    // day/night against the object-space light dir directly (avoids the view-space
+    // normal vs world-space light mismatch — the vNormal-is-view-space gotcha).
+    vNdl = dot(normalize(normal), normalize(uLightDir));
+    gl_Position = projectionMatrix * mv;
+  }
+`;
+const ATMO_FS = /* glsl */ `
+  precision highp float;
+  varying vec3 vNrm;
+  varying vec3 vView;
+  varying float vNdl;
+  uniform float uIntensity;   // 0..1 — atmosphere strength (rises as you enter the air)
+  uniform float uWarm;        // 0..1 — warm-shift (rises low-altitude)
+  void main(){
+    vec3 n = normalize(vNrm);
+    vec3 v = normalize(vView);
+    // SOFT scattered air, not a decal ribbon. A wide low-exponent Fresnel (broad halo that
+    // bleeds INWARD onto the limb) + a faint very-wide outer bleed into space (glow), and a
+    // gentle hot core at the very edge — one continuous falloff, no hard step.
+    float rim = clamp(1.0 - max(dot(n, v), 0.0), 0.0, 1.0);
+    float halo  = pow(rim, 1.05);                       // broad inward bleed
+    float core  = pow(rim, 3.5) * 0.55;                 // gentle hot edge
+    float outer = pow(rim, 0.45) * 0.45;                // wider faint bleed into the black (halo)
+    float fres = halo + core + outer;
+    // Wrap the WHOLE sunlit limb as a continuous thinning band (no abrupt arc stop). The
+    // lower bound widens toward the night side as you enter the air (near-uniform low-alt haze).
+    float day = smoothstep(-0.55 - 0.40*uIntensity, 0.10, vNdl);
+    // ONE continuous blue→white→warm ramp keyed on the sun angle (no stacked stripes):
+    //   sunlit limb = blue air → toward the terminator pales to white → warm orange at the edge.
+    float k = clamp(vNdl, 0.0, 1.0);
+    vec3 blue  = vec3(0.26, 0.56, 1.05);               // sunlit-limb air blue
+    vec3 white = vec3(0.85, 0.86, 0.92);               // pale scatter mid
+    vec3 warm  = vec3(1.05, 0.46, 0.16);               // sunrise orange at the terminator
+    vec3 tint = mix(warm, white, smoothstep(0.0, 0.30, k));
+    tint = mix(tint, blue, smoothstep(0.22, 0.60, k));
+    tint = mix(tint, mix(tint, warm, 0.65), uWarm);    // whole limb warms as you descend
+    float glow = fres * day * (0.55 + 0.95*uIntensity);
+    // a faint TWILIGHT crescent just past the terminator (scattered light bending around
+    // the night edge) — a thin cool band so the lit limb doesn't just stop dead.
+    float twilight = smoothstep(-0.55, -0.20, vNdl) * (1.0 - day) * core;
+    vec3 col = tint * glow + vec3(0.18, 0.30, 0.55) * twilight * (0.4 + 0.6*uIntensity);
+    float alpha = glow + twilight * 0.5;
+    gl_FragColor = vec4(col, alpha);
+  }
+`;
+
+// Starfield — a procedural deep-space backdrop on the far plane: a deep blue-black
+// vertical gradient + a faint dust band + sparse stars of varied brightness. One draw.
+const STAR_VS = /* glsl */ `
+  varying vec2 vUv;
+  void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }
+`;
+const STAR_FS = /* glsl */ `
+  precision highp float;
+  varying vec2 vUv;
+  uniform float uOpacity;   // cross-fade retire (1 at orbit → 0 before the ground goes opaque)
+  float hash(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }
+  float vn(vec2 x){ vec2 p=floor(x),f=fract(x); f=f*f*(3.0-2.0*f);
+    return mix(mix(hash(p),hash(p+vec2(1,0)),f.x),mix(hash(p+vec2(0,1)),hash(p+vec2(1,1)),f.x),f.y); }
+  // one cell-grid star layer; freq sets density, seed decorrelates layers.
+  vec3 starLayer(vec2 uv, float freq, float seed, float thresh){
+    vec2 g = uv*freq + seed;
+    vec2 cell = floor(g), f = fract(g);
+    float h = hash(cell+seed);
+    if (h <= thresh) return vec3(0.0);
+    vec2 sp = vec2(hash(cell+seed+1.3), hash(cell+seed+7.7));
+    float d = length(f - sp);
+    float bright = pow(hash(cell+seed+3.1), 2.4);        // magnitude: mostly dim, a few bright
+    float core = smoothstep(0.085, 0.0, d) * (0.45 + 2.0*bright);
+    float glow = smoothstep(0.30, 0.0, d) * 0.16 * bright; // faint bloom on the bright ones
+    // colour temperature: cool blue-white ↔ warm — most near white, a few coloured.
+    float ct = hash(cell+seed+9.2);
+    vec3 tint = mix(vec3(0.74,0.82,1.0), vec3(1.0,0.90,0.78), ct);
+    tint = mix(vec3(0.92,0.94,1.0), tint, smoothstep(0.30,0.85,abs(ct-0.5)*2.0));
+    return tint * (core + glow);
+  }
+  void main(){
+    vec2 uv = vUv;
+    // deep blue-black gradient (a touch lighter low, toward the planet glow)
+    vec3 sky = mix(vec3(0.005,0.009,0.020), vec3(0.016,0.022,0.042), uv.y);
+    // a faint MILKY/dust band: a soft diagonal swath with mottled brightness + dim field stars
+    float bandAxis = (uv.x*0.62 + uv.y*0.78 - 0.66);
+    float band = exp(-pow(bandAxis*3.6, 2.0));
+    float milkMott = 0.5 + 0.5*vn(uv*vec2(7.0,3.0) + 4.0);
+    sky += vec3(0.016,0.020,0.032) * band * milkMott;
+    // STARS — three decorrelated layers (dense faint field + medium + sparse bright),
+    // with extra faint stars concentrated in the milky band (sells the lonely vastness).
+    vec3 stars = vec3(0.0);
+    stars += starLayer(uv, 200.0, 0.0,  0.62);           // dense faint field
+    stars += starLayer(uv, 120.0, 31.0, 0.74);           // medium
+    stars += starLayer(uv, 70.0,  61.0, 0.88) * 1.3;     // sparse bright (the named stars)
+    stars += starLayer(uv, 260.0, 91.0, 1.0 - band*0.45) * 0.7; // band-concentrated dust stars
+    gl_FragColor = vec4(sky + stars, 1.0) * uOpacity;            // premultiplied retire (no star bleed-through)
+  }
+`;
+
+// ─── LOW-ALTITUDE SCENE (Phase 2 / T2.1 — the descent CLIMAX) ─────────────────
+// The root problem with the orbital sphere up close is geometric: a swelling sphere
+// is a uniform curved PATCH near the surface — no horizon, no "down", no ground plane —
+// so it reads as wallpaper/fire no matter the surface noise. So the low-altitude beats
+// CROSS-FADE the orbital sphere OUT and THIS scene IN (the standard atmospheric-descent
+// technique): a full-frame SKY+GROUND shader on a single large plane behind the viewport,
+// where the HORIZON line, a perspective-receding DUNE field with RAKING dawn light, and
+// warm aerial-perspective haze are all computed per-fragment. The horizon sits HIGH at MID
+// (lots of sky) and drops + the dunes swell as you near the surface (kept high enough that
+// some sky/horizon stays visible even at LOW — never a uniform fill). Driven by uLowAlt
+// (0..1 cross-fade), uNear (0..1 closeness within the low-alt band → horizon drop + dune
+// scale), and uWarm (shared dawn warmth). Unlit; all shading baked, tone-mapped.
+const LOWALT_VS = /* glsl */ `
+  varying vec2 vUv;
+  void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }
+`;
+const LOWALT_FS = /* glsl */ `
+  precision highp float;
+  varying vec2 vUv;
+  uniform float uLowAlt;   // 0..1 — overall presence (drives the cross-fade alpha)
+  uniform float uNear;     // 0..1 — closeness within the band (horizon drop + dune swell)
+  uniform float uWarm;     // 0..1 — dawn warmth (shared with the orbital phase)
+
+  // ── value-noise + fbm (2D) for the dune field ──
+  float h2(vec2 p){ p=fract(p*vec2(127.1,311.7)); p+=dot(p,p+34.5); return fract(p.x*p.y); }
+  float vn2(vec2 x){ vec2 p=floor(x),f=fract(x); f=f*f*(3.0-2.0*f);
+    return mix(mix(h2(p),h2(p+vec2(1,0)),f.x),mix(h2(p+vec2(0,1)),h2(p+vec2(1,1)),f.x),f.y); }
+  float fbm2(vec2 p){ float a=0.55,s=0.0; for(int i=0;i<5;i++){ s+=a*vn2(p); p=p*2.04+1.7; a*=0.5; } return s; }
+  // Dune elevation at a ground-plane coordinate. TRANSVERSE dune ridges that run roughly
+  // left-right across the view and march toward the horizon (a receding barchan field) —
+  // higher-frequency in the view-depth axis so several ridgelines fall within the visible
+  // ground band (not one smooth swell). Domain-warped so the ridges meander, plus a sand
+  // grain octave. Returns ~0..1.
+  float duneH(vec2 p){
+    vec2 w = vec2(fbm2(p*0.3 + 3.0), fbm2(p*0.3 + 9.0)) - 0.5;
+    vec2 q = p + w * 1.1;                                       // gentle domain-warp (meandering crests, not fuzz)
+    // ASYMMETRIC barchan-style dunes: a sawtooth crest (gentle windward rise → sharp slip-face
+    // drop) reads far more as SAND than a soft sine billow. fract() gives the sawtooth; the
+    // crestline is sharpened with a pow so each dune has a defined bright spine + a hard lee.
+    float ph = q.y*0.9 + q.x*0.22;
+    float saw = fract(ph);                                      // 0..1 ramp per dune (windward → slipface)
+    float dune = pow(saw, 0.7) * smoothstep(1.0, 0.78, saw);   // rise then a sharp drop at the slipface
+    float dune2 = pow(fract(q.y*0.34 - q.x*0.4), 0.8) * 0.45;  // larger underlying dune set
+    float grain = (fbm2(p*2.4) - 0.5) * 0.14;                  // fine sand grain (small)
+    return clamp(dune*0.6 + dune2*0.34 + grain + 0.06, 0.0, 1.0);
+  }
+
+  void main(){
+    vec2 uv = vUv;
+    // ── HORIZON. CALIBRATED to the porthole: pixel-probing the rig showed the round
+    //    aperture reveals plane-uv.y ≈ 0.32 (bottom of the window) → 0.69 (top). So the
+    //    horizon sits NEAR THE TOP of that visible band (~0.64) so the GROUND fills most of
+    //    the porthole and the player actually SEES the desert; only a thin sky strip rides
+    //    along the top of the window. Drops slightly as you near so the horizon visibly
+    //    shifts d05→d09.
+    float horizon = mix(0.66, 0.60, uNear);
+
+    // ── The DAWN SUN: well OFF-AXIS (far right, low, near the horizon) so it does NOT blow
+    //    out the central band the porthole shows — it's a light ANCHOR off to the side, not a
+    //    central wash. Drives both the sky bloom and the directional dune rake.
+    vec2 sunPos = vec2(0.88, horizon + 0.05);
+
+    // ── SKY (above the horizon): a thin warm dawn strip → cooler higher.
+    float skyT = clamp((uv.y - horizon) / max(0.001, 1.0 - horizon), 0.0, 1.0);
+    vec3 skyHorizon = mix(vec3(0.90,0.70,0.50), vec3(0.99,0.76,0.52), uWarm);
+    vec3 skyZenith  = mix(vec3(0.44,0.56,0.70), vec3(0.56,0.58,0.66), uWarm);
+    vec3 skyCol = mix(skyHorizon, skyZenith, pow(skyT, 0.80));
+    float sunD = distance(vec2((uv.x-sunPos.x)*1.1, uv.y-sunPos.y), vec2(0.0));
+    vec3 sunTint = mix(vec3(1.08,0.84,0.54), vec3(1.14,0.76,0.42), uWarm);
+    skyCol += sunTint * smoothstep(0.10, 0.0, sunD) * 0.5;       // contained core, off to the right
+
+    // ── GROUND (below the horizon) — a perspective dune field. The porthole only ever sees
+    //    the ground JUST below the horizon, so the projection is tuned GENTLE (small dist
+    //    range) so that band shows NEAR-to-MID dunes (big, crisp, readable), not far haze.
+    //    prox 0 (at horizon) goes to 1 (bottom of frame). dist maps prox to a modest ground
+    //    distance; dune SIZE + the dist range grow with uNear so d09 reads markedly closer.
+    float prox = clamp((horizon - uv.y) / max(0.001, horizon), 0.0, 1.0);      // 0 horizon → 1 bottom
+    float dist = mix(2.2, 0.25, prox);                                         // near horizon=far, frame bottom=near (linear, gentle)
+    float across = (uv.x - 0.5) * (0.6 + dist*1.3);                            // widen with distance
+    float duneScale = mix(1.3, 4.2, uNear);                                    // dunes grow markedly as you near → "rushing up" (wide range = clear d05≠d09)
+    vec2 gp = vec2(across, dist) * duneScale + vec2(0.0, uNear*3.0);           // scroll toward you as you near
+
+    float hC = duneH(gp);
+    // relief normal via central differences (small fixed epsilon → crisp slopes)
+    float e = 0.04;
+    float hX = (duneH(gp + vec2(e,0.0)) - duneH(gp - vec2(e,0.0))) / (2.0*e);
+    float hY = (duneH(gp + vec2(0.0,e)) - duneH(gp - vec2(0.0,e))) / (2.0*e);
+    // RAKING low-sun across the dunes: light points FROM the sun (screen-right) → +x/−y-facing
+    // slopes catch the warm key, lee slopes fall into cool shadow, shadows one consistent way.
+    vec2 sunGround = normalize(vec2(0.85, 0.30));
+    float slope = clamp(dot(vec2(hX, hY), sunGround), -2.0, 2.0);
+    float shade = clamp(0.55 + slope*0.85, 0.08, 1.8);                         // strong directional carve
+
+    // desert SAND palette — DISTINCTLY cool-violet troughs → ochre body → pale dawn-lit
+    // crests. 3-tone keyed off HEIGHT so it reads regardless of the warm light; crests gated
+    // by the rake so only sun-lit crests go pale → directional dune relief.
+    vec3 cTrough = mix(vec3(0.28,0.26,0.44), vec3(0.36,0.30,0.44), uWarm);     // COOL blue-violet lee shadow (deeper, cooler)
+    vec3 cBody   = mix(vec3(0.78,0.55,0.34), vec3(0.86,0.58,0.32), uWarm);     // ochre sand body
+    vec3 cCrest  = mix(vec3(1.02,0.90,0.66), vec3(1.06,0.90,0.60), uWarm);     // pale dawn-lit crest
+    float hn = clamp(hC, 0.0, 1.0);
+    vec3 sand = mix(cTrough, cBody, smoothstep(0.16, 0.46, hn));
+    sand = mix(sand, cCrest, smoothstep(0.50, 0.80, hn) * smoothstep(0.65, 1.25, shade));
+    // raking light: warm key on lit slopes, COOL sky-fill in shadow (keeps the troughs cool).
+    vec3 keyCol  = mix(vec3(1.14,1.04,0.84), vec3(1.20,0.92,0.62), uWarm);
+    vec3 fillCol = vec3(0.42,0.48,0.64);                                        // cool sky-fill in shadow (cooler)
+    vec3 groundCol = sand * mix(fillCol, keyCol, smoothstep(0.08, 1.35, shade));
+
+    // ── AERIAL PERSPECTIVE — only the THIN sliver of most-DISTANT dunes right at the horizon
+    //    hazes toward the warm sky; the rest of the dune field stays crisp + cool-shadowed
+    //    (the haze was washing the whole ground warm = the "cloud deck" read).
+    float haze = pow(smoothstep(0.78, 1.0, 1.0 - prox), 2.0) * 0.7;
+    groundCol = mix(groundCol, skyHorizon * 1.0, haze);
+
+    // ── compose at the horizon (thin anti-aliased line) + a slim warm horizon glow.
+    float edge = smoothstep(-0.008, 0.008, uv.y - horizon);                     // 0 ground → 1 sky
+    vec3 col = mix(groundCol, skyCol, edge);
+    float hb = exp(-pow((uv.y - horizon)*36.0, 2.0));
+    col += mix(vec3(0.45,0.34,0.24), vec3(0.54,0.36,0.22), uWarm) * hb * 0.22;
+
+    gl_FragColor = vec4(col, uLowAlt);
+  }
+`;
+
+/** Build the descent vista (starfield backdrop + planet body + atmosphere shell) into
+ *  the group, behind the −Z viewport. Pushes geometry to _cabinDisposables + sets the
+ *  module mesh/material refs that setDescentProgress + disposePodScene touch. */
+function buildDescentVista(group: THREE.Group): void {
+  // ── Starfield backdrop far behind the viewport (the window onto deep space). A large
+  //    plane carrying the star shader; sits past the planet so it reads as the void.
+  const starGeo = new THREE.PlaneGeometry(90, 90);
+  _cabinDisposables.push(starGeo);
+  starMat = new THREE.ShaderMaterial({
+    vertexShader: STAR_VS, fragmentShader: STAR_FS,
+    uniforms: { uOpacity: { value: 1.0 } }, depthWrite: true, toneMapped: true,
+  });
+  const stars = new THREE.Mesh(starGeo, starMat);
+  stars.position.set(0, 0.5, -22);
+  group.add(stars);
+
+  // ── The planet body — a real curved sphere (lit, soft terminator, banded desert). SMALL
+  //    at rest so the descent swell reads; placed low-and-ahead so the curved top limb +
+  //    atmosphere arc against the stars within the porthole circle.
+  const PLANET_R = 2.0;
+  const planetGeo = new THREE.SphereGeometry(PLANET_R, 64, 48);
+  _cabinDisposables.push(planetGeo);
+  planetMat = new THREE.ShaderMaterial({
+    vertexShader: PLANET_VS, fragmentShader: PLANET_FS,
+    uniforms: {
+      uLightDir: { value: _VISTA_LIGHT.clone() },
+      uDetail: { value: 0.0 },
+      uWarm: { value: 0.0 },
+      uLow: { value: 0.0 },
+      uFade: { value: 1.0 },
+    },
+    toneMapped: true,
+  });
+  const planet = new THREE.Mesh(planetGeo, planetMat);
+  // Centred-low + ahead so the curved upper limb, the lit crown AND the day/night
+  // terminator all read within the porthole circle (the round frame is the composition);
+  // the descent swell grows it past the rim + sinks it (setDescentProgress).
+  planet.position.set(0.12, -0.95, -9.2);
+  planet.frustumCulled = false;   // it's scaled/sunk far past its build bounds during descent
+  group.add(planet);
+  planetMesh = planet;
+
+  // ── The atmosphere shell — a slightly larger back-faced sphere; an additive Fresnel
+  //    rim hugging the lit limb (the signature glow). Renders behind/around the body.
+  const atmoGeo = new THREE.SphereGeometry(PLANET_R * 1.16, 64, 48);
+  _cabinDisposables.push(atmoGeo);
+  atmoMat = new THREE.ShaderMaterial({
+    vertexShader: ATMO_VS, fragmentShader: ATMO_FS,
+    uniforms: {
+      uLightDir: { value: _VISTA_LIGHT.clone() },
+      uIntensity: { value: 0.0 },
+      uWarm: { value: 0.0 },
+    },
+    transparent: true, blending: THREE.AdditiveBlending,
+    side: THREE.BackSide, depthWrite: false, toneMapped: false,
+  });
+  const atmo = new THREE.Mesh(atmoGeo, atmoMat);
+  atmo.position.copy(planet.position);
+  atmo.frustumCulled = false;
+  group.add(atmo);
+  planetHaloMesh = atmo;
+
+  // ── Depth-only OCCLUDER so the starfield doesn't punch through the planet + its glowing
+  //    air band. A BACK-FACE sphere at the planet radius writing DEPTH only (no colour):
+  //    BackSide ⇒ it writes depth at the FAR hemisphere (behind the planet), culling the
+  //    far stars — but it does NOT block the planet's own near face (a FrontSide/larger
+  //    occluder would z-fail the planet itself, the bug that hid the vista). Radius 1.06×
+  //    so it also covers just under the inner edge of the additive atmosphere band.
+  const occGeo = new THREE.SphereGeometry(PLANET_R * 1.06, 48, 32);
+  _cabinDisposables.push(occGeo);
+  const occMat = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: true, side: THREE.BackSide });
+  const occ = new THREE.Mesh(occGeo, occMat);
+  occ.position.copy(planet.position);
+  occ.renderOrder = 1;                     // AFTER the planet (so the planet writes its own depth first)
+  occ.frustumCulled = false;
+  occ.userData.starOccluder = true;
+  group.add(occ);
+  starOccluderMesh = occ;
+
+  // ── LOW-ALTITUDE SCENE — a large full-frame plane carrying the sky+ground+horizon
+  //    shader, BETWEEN the planet and the stars. Transparent (alpha = uLowAlt) so it's
+  //    invisible at orbit + cross-fades IN over the orbital sphere past ~mid altitude,
+  //    replacing the "uniform curved patch" with a real horizon, raking-lit dunes, and
+  //    warm aerial haze. renderOrder past the occluder so it composites over the planet.
+  //    Placed IN FRONT of the planet (z−6, the planet is at z−9) so when it fades up it
+  //    COVERS the orbital sphere; depthTest ON so the CABIN foreground (porthole bezel +
+  //    walls, all nearer than z−6) still occludes it — it reads only through the round gap.
+  const lowGeo = new THREE.PlaneGeometry(9, 7);
+  _cabinDisposables.push(lowGeo);
+  lowAltMat = new THREE.ShaderMaterial({
+    vertexShader: LOWALT_VS, fragmentShader: LOWALT_FS,
+    uniforms: {
+      uLowAlt: { value: 0.0 },
+      uNear: { value: 0.0 },
+      uWarm: { value: 0.0 },
+    },
+    transparent: true, depthWrite: false, depthTest: true, toneMapped: true,
+  });
+  const lowAlt = new THREE.Mesh(lowGeo, lowAltMat);
+  // Centred on the porthole sight-line (eye≈y1.35 through the porthole centre y1.34 → the
+  // ray meets z−5 near y1.33) so uv.y≈0.5 lands at the porthole centre, putting the full
+  // sky/horizon/ground composition within the round window.
+  lowAlt.position.set(0, 1.33, -5);
+  lowAlt.renderOrder = 3;          // after the planet + occluder (composites over them)
+  lowAlt.frustumCulled = false;
+  lowAlt.visible = false;          // toggled on once uLowAlt > 0 (skips the draw at orbit)
+  group.add(lowAlt);
+  lowAltMesh = lowAlt;
+}
+
 /** Build the pod (hero cabin mesh group + a static shell collider) at POD_ORIGIN.
  *  Idempotent. The player rides SEATED (locomotion off), so the collider is just a
  *  conservative shell (floor + 4 walls + ceiling) so the capsule can't fall through —
@@ -930,78 +1471,99 @@ export function buildPodScene(ctx: GameContext): void {
     if (body) podBodies.push(body);
   }
 
-  // A DARK SPACE backdrop far behind the viewport so the window reads as a window onto a
-  // VOID, not a flat beige fill (P3). A large unlit plane in deep blue-black; the planet
-  // is a SMALLER disc against it so the descent swell visibly reads (forward vs descent).
-  const voidGeo = new THREE.PlaneGeometry(80, 80);
-  _cabinDisposables.push(voidGeo);
-  const voidPlane = new THREE.Mesh(voidGeo, new THREE.MeshBasicMaterial({ color: 0x03040a }));
-  voidPlane.position.set(0, 0, -20);
-  group.add(voidPlane);
-  voidPlaneMesh = voidPlane;
-
-  // The planet — a graded unlit disc (lit crown → warm terminator) reading as a curved
-  // LIMB. SMALL at rest (occupies only PART of the porthole) so setDescentProgress can
-  // visibly SWELL it (P3 — forward vs descent must differ; before it filled the window at
-  // rest so the swell was invisible). Placed low-and-ahead so the curved top limb reads
-  // against the void above it.
-  const PLANET_R = 1.7;
-  const planetGeo = new THREE.CircleGeometry(PLANET_R, 48);
-  {
-    const pos = planetGeo.attributes.position;
-    const cols = new Float32Array(pos.count * 3);
-    const cLit = new THREE.Color(0xe8b074);   // sunlit warm ochre crown
-    const cMid = new THREE.Color(C_PLANET);   // body desert ochre
-    const cDark = new THREE.Color(0x2e2016);  // shadowed terminator (darker → more curvature)
-    const tmp = new THREE.Color();
-    for (let i = 0; i < pos.count; i++) {
-      const x = pos.getX(i), y = pos.getY(i);
-      // lit gradient runs from top-left (lit) to bottom-right (dark)
-      const t = (y * 0.7 - x * 0.5) / PLANET_R * 0.5 + 0.5;   // 0 (dark) → 1 (lit)
-      if (t > 0.55) tmp.copy(cMid).lerp(cLit, (t - 0.55) / 0.45);
-      else tmp.copy(cDark).lerp(cMid, t / 0.55);
-      cols.set([tmp.r, tmp.g, tmp.b], i * 3);
-    }
-    planetGeo.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
-  }
-  _cabinDisposables.push(planetGeo);
-  const planet = new THREE.Mesh(planetGeo, new THREE.MeshBasicMaterial({ vertexColors: true }));
-  // z=−9: at the porthole (window half-angle ≈0.31 from the eye at z≈0.35) a R=1.7 disc at
-  // ~9.3m subtends ≈0.18 rad → fills ~55% of the window radius. Sits low so the top limb
-  // curves against the void; the descent swell grows it past the rim.
-  planet.position.set(0.2, -1.6, -9);
-  group.add(planet);
-  planetMesh = planet;
-  // a faint atmosphere RIM glow just inside the limb (a thin lighter annulus) so the limb
-  // reads as a planet's edge, not a flat coin. A slightly larger dim disc BEHIND the planet.
-  const haloGeo = new THREE.CircleGeometry(PLANET_R * 1.12, 40);
-  _cabinDisposables.push(haloGeo);
-  const halo = new THREE.Mesh(haloGeo, new THREE.MeshBasicMaterial({
-    color: 0x6a5a48, transparent: true, opacity: 0.35,
-  }));
-  halo.position.set(0.2, -1.6, -9.2);
-  group.add(halo);
-  planetHaloMesh = halo;
+  // The HERO descent vista seen through the −Z viewport: starfield + a real curved
+  // desert planet + its glowing Fresnel atmosphere limb (Phase 2 / T2.1). Driven by
+  // setDescentProgress (swell + atmosphere/colour ramp + detail pop-in).
+  buildDescentVista(group);
 
   group.traverse((o) => { if ((o as THREE.Mesh).isMesh) { o.castShadow = false; o.receiveShadow = false; } });
   ctx.three.scene.add(group);
   podGroup = group;
 }
 
-/** Descent visual — grow the planet as the fall progresses (0 → 1) so it swells to fill
- *  the viewport. Greybox stand-in for the Phase-2 descentProgress effect stack. */
+/** Descent visual (Phase 2 / T2.1) — drive the through-window vista off the fall's
+ *  single 0..1 input: (1) SWELL — the planet grows to fill then overflow the porthole +
+ *  sinks lower (you drop toward the surface); (2) ATMOSPHERE/COLOUR RAMP — the Fresnel
+ *  limb intensifies + the whole vista warms (cool-blue high → orange/tan low) as you
+ *  enter the air; (3) DETAIL POP-IN — surface bands/mottling resolve as it nears. All
+ *  cheap uniform pushes. Safe no-op (null-guarded) if the pod isn't built yet. */
 export function setDescentProgress(progress: number): void {
-  if (!planetMesh) return;
   const p = Math.max(0, Math.min(1, progress));
-  // grow from the small rest disc (≈55% of the window) to filling + overflowing it as you
-  // fall toward the surface — the swell must be unmistakable vs the rest frame (P3).
-  const s = 1 + p * 3.2;
-  planetMesh.scale.setScalar(s);
-  planetMesh.position.y = -1.6 - p * 2.4;    // sink lower (you drop toward the surface)
+  // The low-alt cross-fade window (the orbital sphere hands off to the ground/horizon
+  // scene here). Computed up front so the planet RETRACTS as the low-alt scene rises.
+  // Pulled EARLIER (starts ~0.34, full by ~0.48) so the MID (~0.5) frame is already a
+  // fully-established high desert with a real horizon — not a half-faded mottled patch.
+  const lowAltRaw = Math.max(0, Math.min(1, (p - 0.34) / 0.14));
+  const lowAlt = lowAltRaw * lowAltRaw * (3 - 2 * lowAltRaw);   // smoothstep the cross-fade
+  // (1) Swell + sink — the HIGH→MID growth (a small limb grows toward the porthole). The
+  //     swell is HELD once the low-alt scene starts taking over (the swelling sphere can't
+  //     make a horizon up close, so we hand off rather than push it nearer), THEN RETRACTED
+  //     under the cross-fade so its near face stays BEHIND the low-alt plane (z−5) — i.e. the
+  //     opaque low-alt scene cleanly covers it instead of the planet poking through in front.
+  const swellRaw = Math.pow(Math.min(p, 0.46), 1.35);    // capped at the handoff altitude
+  // The planet retracts + sinks on a FRONT-LOADED curve (sqrt) so it drops out of the
+  // porthole EARLY in the cross-fade — gone before the ground/horizon becomes visible, so
+  // its hard lit limb never overlaps the emerging desert (the "double-image / asteroid over
+  // the ground" artifact). retractK ramps fast at the start of the fade.
+  const retractK = Math.sqrt(lowAlt);
+  const swell = swellRaw * (1.0 - retractK);             // retracts to 0 quickly as the ground fills
+  const s = 1 + swell * 3.6;
+  const py = -0.95 - swell * 3.0 - retractK * 11.0;      // sink HARD + early so the limb clears the frame fast
+  if (planetMesh) {
+    planetMesh.scale.setScalar(s);
+    planetMesh.position.y = py;
+  }
   if (planetHaloMesh) {
     planetHaloMesh.scale.setScalar(s);
-    planetHaloMesh.position.y = planetMesh.position.y;
+    planetHaloMesh.position.y = py;
   }
+  if (starOccluderMesh) {
+    starOccluderMesh.scale.setScalar(s);
+    starOccluderMesh.position.y = py;
+  }
+  // (2) Atmosphere ramp + (3) detail pop-in + (4) the near-surface (uLow) horizon/relief.
+  //     Atmosphere arrives ahead of the warmth (blue air first, then it warms as you sink
+  //     in). uLow builds late (the last leg = the surface rush) so MID is still an air-clad
+  //     planet and LOW is a textured surface under a hazy horizon.
+  //     The atmosphere limb is FADED OUT under the cross-fade (×(1-lowAlt)) so the bright
+  //     additive rim doesn't read as a glowing/neon-edged asteroid as the planet retracts —
+  //     the orbital sphere should dissolve as a hazy world, not a hard-rimmed rock.
+  const atmoIntensity = Math.min(1, p * 1.3) * (1.0 - lowAlt);
+  const warm = Math.pow(p, 1.7);            // warms gradually, not a hard early saturate
+  const detail = Math.min(1, p * 1.5);      // bands/mottling resolve as it nears
+  const low = Math.pow(Math.max(0, (p - 0.35) / 0.65), 1.3); // 0 until ~mid, → 1 at low alt
+  if (planetMat) {
+    planetMat.uniforms.uDetail.value = detail;
+    planetMat.uniforms.uWarm.value = warm;
+    planetMat.uniforms.uLow.value = low;
+    // Dim the orbital body to black FAST as the ground scene crosses in (front-loaded), so
+    // its hard lit limb is gone well before the desert is visible — no double-image/asteroid.
+    planetMat.uniforms.uFade.value = Math.max(0, 1 - Math.sqrt(lowAlt) * 1.4);
+  }
+  if (atmoMat) { atmoMat.uniforms.uIntensity.value = atmoIntensity; atmoMat.uniforms.uWarm.value = warm; }
+  // (4) STARFIELD RETIRE — fade the stars out EARLY in the cross-fade (gone by lowAlt≈0.6,
+  //     well before the ground plane is fully opaque) so star pixels never bleed THROUGH the
+  //     transparent ground onto the desert (the "static/snow on the terrain" artifact).
+  if (starMat) {
+    const starFade = Math.max(0, 1.0 - lowAlt / 0.4);   // gone by lowAlt≈0.4, before the ground is opaque
+    starMat.transparent = lowAlt > 0.001;        // only transparent while retiring (orbit stays opaque)
+    starMat.uniforms.uOpacity.value = starFade;
+    starMat.depthWrite = starFade > 0.5;         // stop writing depth as it fades (so the ground composites)
+    starMat.visible = starFade > 0.001;
+  }
+  // (5) LOW-ALTITUDE CROSS-FADE. The orbital sphere can't make a horizon up close (a
+  //     swelling sphere is a uniform curved patch — reads as wallpaper/fire), so past ~mid
+  //     altitude the low-alt ground/horizon scene cross-fades IN and (being opaque at full
+  //     strength, drawn over the planet) replaces it. uLowAlt = the fade alpha (0 → 1 over
+  //     p∈[0.34,0.48]); uNear = closeness WITHIN the low band (drops the horizon + swells
+  //     the dunes from MID to LOW so the two beats read clearly distinct).
+  const near = Math.max(0, Math.min(1, (p - 0.48) / 0.42));
+  if (lowAltMat) {
+    lowAltMat.uniforms.uLowAlt.value = lowAlt;
+    lowAltMat.uniforms.uNear.value = near;
+    lowAltMat.uniforms.uWarm.value = warm;
+  }
+  if (lowAltMesh) lowAltMesh.visible = lowAlt > 0.001;   // skip the draw entirely at orbit
 }
 
 /** Pose the PARACHUTE lever (the gag hook). `t` in [0,1]: 0 = at rest, 1 = fully yanked
@@ -1033,19 +1595,28 @@ export function setParachuteLeverPull(t: number, snapped = false): void {
 /** Tear down the pod (meshes + geometry + colliders + the per-build geometry pool). */
 export function disposePodScene(ctx: GameContext): void {
   if (podGroup) {
-    // Materials are module-shared (NOT disposed) EXCEPT the planet + halo + void-backdrop
-    // basic materials, which are built per-placement → dispose only those.
-    if (planetMesh) (planetMesh.material as THREE.Material).dispose();
-    if (planetHaloMesh) (planetHaloMesh.material as THREE.Material).dispose();
-    if (voidPlaneMesh) (voidPlaneMesh.material as THREE.Material).dispose();
     ctx.three.scene.remove(podGroup);
     podGroup = null;
   }
+  // Materials are module-shared (NOT disposed) EXCEPT the vista's per-placement materials
+  // (planet body / atmosphere shell / starfield ShaderMaterials + the occluder basic).
+  // Dispose them UNCONDITIONALLY (outside the podGroup guard) — the ref-nulling below is
+  // already unconditional, so a torn state (podGroup already null) would otherwise leak them.
+  if (planetMat) planetMat.dispose();
+  if (atmoMat) atmoMat.dispose();
+  if (starMat) starMat.dispose();
+  if (lowAltMat) lowAltMat.dispose();
+  if (starOccluderMesh) (starOccluderMesh.material as THREE.Material).dispose();
   for (const g of _cabinDisposables) g.dispose();
   _cabinDisposables.length = 0;
   planetMesh = null;
   planetHaloMesh = null;
-  voidPlaneMesh = null;
+  starOccluderMesh = null;
+  planetMat = null;
+  atmoMat = null;
+  starMat = null;
+  lowAltMat = null;
+  lowAltMesh = null;
   chuteLever = null;
   leverBrokenTell = null;
   for (const body of podBodies) ctx.physics.world.removeRigidBody(body);
