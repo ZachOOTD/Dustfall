@@ -1597,6 +1597,95 @@ const SCENARIOS = {
     console.log(`[sarlacc-test] ${JSON.stringify({ before, after })}`);
   },
 
+  // Crashed-pod (T1.1) — the HERO escape-pod exterior at the desert wake spot.
+  // Reproduces the REAL stepOut placement (placeCrashedPodWreck at player+4,+4,
+  // half-buried + tilted; camera at the player's wake eye looking at the pod), NOT
+  // an isolated studio rig (the C60/C63 false-pass trap — visual-diagnostic-
+  // methodology.md D165). Angles: wake (player's-eye approach), hatch (close-up into
+  // the blown salvage face), oblique (3/4 of the whole silhouette), back (the modular
+  // panels). --time=<0..1> for the dawn/morning desert light. Front-lit.
+  'crashed-pod': async (page) => {
+    const angle = argv.angle || 'wake';
+    const t = argv.time !== undefined ? Number(argv.time) : 0.32;   // dawn-ish, sun low + warm
+    const r = await page.evaluate(({ ang, t }) => {
+      const g = window.__game;
+      const ctx = g.ctx;
+      g.setTime(t);
+      ctx.weather.intensity = 0; ctx.weather.cloudiness = 0.12;
+      ctx.three.renderer.toneMappingExposure = 1.25;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      ctx.three.renderer.setSize(960, 720, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 960 / 720; cam.updateProjectionMatrix(); }
+      // Place the pod at a clear anchor near the player (mirrors stepOut's +4,+4
+      // wake-beside read, offset further to clear the spawn-area fuselage wreck so
+      // the hero pod is the subject — the real stepOut spot still applies in-game).
+      const tr = ctx.player.body.body.translation();
+      const px = tr.x + 14, pz = tr.z - 12;
+      g.placeCrashedPod(px, pz);
+      const gy = ctx.terrain.heightAt(px, pz);
+      const V = cam.position.constructor;
+      ctx.flags.paused = true;
+      // The pod's "above-sand" centre of interest (the hatch sits a touch below mid).
+      const aimY = gy + 1.0;
+      if (ang === 'wake') {
+        // Player's-eye: standing ~4.5m away at eye height, biased to the +X side so
+        // the hatch (+Z) face AND the +X panel flank both read at ~45° (3D volume,
+        // not a flat-on slab). The real wake-beside-the-pod read.
+        cam.position.set(px + 3.6, gy + 1.6, pz + 1.3);
+        cam.lookAt(px - 0.1, aimY - 0.1, pz);
+      } else if (ang === 'hatch') {
+        // Close-up INTO the blown-open hatch (the salvage face). The hatch is on
+        // the pod's +Z local face, yawed by the crash pose toward +X/+Z.
+        cam.position.set(px + 1.9, gy + 1.25, pz + 2.0);
+        cam.lookAt(px + 0.2, gy + 0.7, pz + 0.2);
+      } else if (ang === 'oblique') {
+        // 3/4 of the whole silhouette from a slightly higher, further vantage.
+        cam.position.set(px + 4.6, gy + 2.3, pz + 3.0);
+        cam.lookAt(px, aimY, pz);
+      } else if (ang === 'back') {
+        // The modular-panel flank (away from the hatch) — verifies the strippable read.
+        cam.position.set(px - 3.8, gy + 1.7, pz - 3.6);
+        cam.lookAt(px, aimY, pz);
+      } else if (ang === 'iso') {
+        // DIAGNOSTIC studio: lift the whole pod ABOVE the sand (un-bury) so the FULL
+        // box geometry is judgeable in isolation (additional shot, never the verdict —
+        // the buried wake read is the gate). Re-pose flat-ish, frame a clean 3/4.
+        const pod2 = ctx.three.scene.getObjectByName('crashedPod');
+        if (pod2) { pod2.position.y = gy + 1.4; pod2.rotation.set(0, 0.7, 0); pod2.updateMatrixWorld(true); }
+        const cYy = gy + 1.4;
+        cam.position.set(px + 2.7, cYy + 1.6, pz + 2.7);
+        cam.lookAt(px, cYy, pz);
+      } else { // close — tight detail of the upper hull (frame/viewport/weathering)
+        cam.position.set(px + 2.6, gy + 1.9, pz + 2.6);
+        cam.lookAt(px, gy + 1.2, pz);
+      }
+      cam.updateMatrixWorld(true);
+      // Front KEY light from above + beside the camera so the camera-facing hull is
+      // LIT (not a backlit silhouette — the harness front-light prerequisite).
+      let DirCtor = null, HemiCtor = null;
+      ctx.three.scene.traverse((o) => { if (o.isDirectionalLight && !DirCtor) DirCtor = o.constructor; if (o.isHemisphereLight && !HemiCtor) HemiCtor = o.constructor; });
+      let key = ctx.three.scene.getObjectByName('__podKey');
+      if (!key && DirCtor) { key = new DirCtor(); key.name = '__podKey'; key.intensity = 1.8; key.color.set(0xffe9cf); ctx.three.scene.add(key.target); ctx.three.scene.add(key); }
+      if (key) {
+        const toP = new V(px - cam.position.x, 0, pz - cam.position.z);
+        key.position.set(cam.position.x + toP.x * 0.2 + 2, cam.position.y + 3, cam.position.z + toP.z * 0.2 + 1);
+        key.target.position.set(px, aimY, pz); key.target.updateMatrixWorld(true);
+      }
+      if (!ctx.three.scene.getObjectByName('__podFill') && HemiCtor) { const fill = new HemiCtor(0xbfccdd, 0x6b5840, 0.5); fill.name = '__podFill'; ctx.three.scene.add(fill); }
+      // Report: the pod's exposed height above the sand + structural mesh count.
+      const pod = ctx.three.scene.getObjectByName('crashedPod');
+      let meshes = 0, maxY = -1e9, minY = 1e9;
+      if (pod) { pod.updateMatrixWorld(true); pod.traverse((o) => { if (o.isMesh && o.geometry) { meshes++; o.geometry.computeBoundingBox(); const bb = o.geometry.boundingBox; for (const cy of [bb.min.y, bb.max.y]) { const wv = new V(0, cy, 0); o.localToWorld(wv); maxY = Math.max(maxY, wv.y); minY = Math.min(minY, wv.y); } } }); }
+      return { angle: ang, podAt: [+px.toFixed(1), +pz.toFixed(1)], groundY: +gy.toFixed(2), exposedH: +(maxY - gy).toFixed(2), meshes, found: !!pod };
+    }, { ang: angle, t });
+    await page.waitForTimeout(350);
+    await page.screenshot({ path: join(OUT, `scen-crashed-pod-${angle}.png`), fullPage: false });
+    console.log(`[crashed-pod] ${JSON.stringify(r)}`);
+  },
+
   'tree': async (page) => {
     const t = argv.time !== undefined ? Number(argv.time) : 0.42;
     const r = await page.evaluate((t) => {

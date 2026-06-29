@@ -3,6 +3,15 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Escape-pod campaign C9 — 2026-06-28 — Phase 1 T1.1: **the HERO pod exterior (industrial modular box)** — first hero-art cycle ✓ verify + visual pass
+
+`verified` — `npm run verify:all` PASS end-to-end (tsc + placement 0/0 ×5 + colliders 0/40) + a hero visual gate (the `crashed-pod` rig reproducing the REAL stepOut placement — wake + hatch + oblique): reads as a weathered, asymmetric, half-buried, strippable industrial pod. Flag OFF → live game byte-unchanged. **Phase 1 milestone approved + released (C8 walk-test).**
+
+**T1.1 — hero crashed-pod exterior (procedural-modeler agent, 8 build→shoot→critique rounds):**
+- **`podScene.placeCrashedPodWreck` rebuilt as the hero asset** — replaces the greybox box with the **industrial modular box** identity (the locked §B pick; explicitly NOT ODST): a painted grey-beige core + a dark-steel **exoskeleton** (corner posts, girth band, top rails), **removable bolted cargo panels** with steel seam-rims, a **blown-open hatch** on the salvage face (recessed torn cavity + bent interior struts + a door hung ajar in a channel-steel frame), a **small off-center recessed viewport**, external conduit/cable/antenna/askew lift-eye/thruster nub, a scorched base. Built in the wrecks.ts weathered-low-poly idiom (`createRustedHullMaterial`, ≥10cm panel depth per rule 7); half-buried ~42% + crash-tilted; `group.name='crashedPod'`; a **compound collider** over the structural meshes (door/cables/viewport tagged `noCollider`). `removeCrashedPodWreck` disposes geometry only (materials are module-shared/reused).
+- **Dev/verify tooling:** `__game.placeCrashedPod(x,z)` hook (debugPanel) + a `crashed-pod` rig scenario in `rig-shot.mjs` (`--angle=wake|hatch|oblique|back|close|iso`, reproducing the real placement). NOTE: live `preview_screenshot` hangs on the full ~723K-tri desert scene → use the rig for the gate (it mirrors the real wake placement, not an idealized isolated rig).
+- **Next:** T1.2 — the hero pod INTERIOR (panel, chunky parachute lever, door-blow button, viewport, warm cabin) replacing the greybox `buildPodScene`; the eject/descent/gag beats re-point at it.
+
 ## Escape-pod campaign C8 — 2026-06-28 — Phase 0 T0.4b: **pod-as-spawn-wreck + tutorial scaffold + smoke** → ⏸ PHASE 0 COMPLETE (greybox spine) — milestone PAUSE ✓ verify + visual pass
 
 `verified` — `npm run verify:all` PASS (tsc + placement 0/0 ×5 + colliders 0/40) + a live-preview **visual gate**: `__game.smokeIntro()` → `{ok:true, beats:10}` (every beat forced + ticked, no throw); the handoff places the crashed pod at the spawn + the player wakes looking at it; HUD restored; 0 console errors. Flag OFF → live game byte-unchanged.

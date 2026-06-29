@@ -20,6 +20,7 @@ import { fireSignalFlare, advanceSignalFlares, activeSignalFlareCount } from '..
 import { damageVulture } from '../enemies/vulture.ts';
 import { applyLungePose, applyMeshTransform } from '../enemies/sandWorm.ts';   // M12 ⓖ (C66) — __game.poseLunge (dive render)
 import { startEscapePodIntro, endEscapePodIntro, jumpToBeat as jumpToIntroBeat, smokeTestIntro, type BeatId } from '../world/escapePodIntro/sequence.ts';   // escape-pod intro — __game.startIntro/skipIntro/jumpToBeat/smokeIntro
+import { placeCrashedPodWreck } from '../world/escapePodIntro/podScene.ts';   // T1.1 — __game.placeCrashedPod (hero-pod rig-shot)
 import { makeLatheHull, fuselageProfile, makeFormerRings, makeBreach, makeSandMound } from '../world/wreckForms.ts';
 import { createRustedHullMaterial, HULL_WEATHERING_ACAY } from '../world/hullMaterial.ts';
 import { placeProcgenComposite, type ProcgenWreckClass } from '../world/procgenWreck.ts';
@@ -56,6 +57,9 @@ interface DebugApi {
   jumpToBeat: (beat: BeatId) => void;
   /** Escape-pod intro (T0.4b) — smoke the whole sequence (force every beat, confirm no throw). */
   smokeIntro: () => { ok: boolean; beats: number; error?: string };
+  /** Escape-pod T1.1 — place the HERO crashed pod at world (x,z), half-buried + tilted. For the
+   *  crashed-pod rig-shot (reproduces the real stepOut wake-beside-the-pod placement). */
+  placeCrashedPod: (x: number, z: number) => void;
   setStats: (s: {
     thirst?: number;
     temperature?: number;
@@ -261,6 +265,7 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
     skipIntro: () => endEscapePodIntro(ctx),
     jumpToBeat: (beat) => jumpToIntroBeat(ctx, beat),
     smokeIntro: () => smokeTestIntro(ctx),
+    placeCrashedPod: (x, z) => { placeCrashedPodWreck(ctx, x, z); },
     sunInfo: () => ({
       exposure: ctx.player.sunExposure01,
       occluders: getSunOccluders().length,

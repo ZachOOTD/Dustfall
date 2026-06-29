@@ -3,8 +3,8 @@
   "campaign": "escape-pod-intro",
   "started": "2026-06-28",
   "branch": "campaign/escape-pod-intro",
-  "cycles_completed": 8,
-  "current_tier": "▶ PHASE 1 — the HERO pod (Phase 0 greybox spine COMPLETE + USER-APPROVED 2026-06-28, no change requests). NEXT unit = T1.1 — the pod EXTERIOR: delegate to the procedural-modeler agent; chosen identity = INDUSTRIAL MODULAR BOX (NOT an ODST clone — docs/research/escape-pod-design-variety.md); render the REAL first-person in-game view (player walks up to it half-buried in the dunes — the C60/C63 real-placement/real-angles gate), iterate build→shoot→critique 5-8 rounds to a quality BAR; REPLACE the greybox placeCrashedPodWreck box (podScene.ts) with the hero exterior (keep it a persistent world object, not disposed on handoff); half-buried-in-sand multi-angle gate. Then T1.2 interior (panel, chunky parachute lever, door-blow button, viewport, warm cabin — replaces the greybox podScene interior; eject/descent/gag beats re-point at hero geometry) · T1.3 seated-FP camera + viewport framing. Milestone: Phase 1 pod hero COMPLETE → user walk-test (pod in+out) → /campaign-approve. Plan: docs/feature-escape-pod-intro.md. ENRICH-NOT-CUT; hero geometry → procedural-modeler + real FP-view gate.",
+  "cycles_completed": 9,
+  "current_tier": "▶ PHASE 1 — the HERO pod (Phase 0 greybox spine COMPLETE + USER-APPROVED). ✅ T1.1 DONE (C9) — the hero pod EXTERIOR (industrial modular box, procedural-modeler, 8 rounds): podScene.placeCrashedPodWreck rebuilt from greybox into the hero crashed pod (grey-beige core + dark-steel exoskeleton + removable bolted panels + blown-open hatch [torn cavity + ajar door + channel-steel frame] + small off-center recessed viewport + conduit/antenna/lift-eye/thruster + scorched base; wrecks.ts createRustedHullMaterial idiom; half-buried ~42% + tilted; compound collider). Dev: __game.placeCrashedPod + a crashed-pod rig in rig-shot.mjs. verify:all PASS end-to-end + hero visual gate (crashed-pod rig wake/hatch/oblique: weathered, strippable, half-buried — reads as the identity). NOTE: preview_screenshot hangs on the full ~723K-tri desert scene → use the rig (it mirrors the REAL stepOut placement). NEXT unit = T1.2 — the hero pod INTERIOR (procedural-modeler): replace the greybox buildPodScene with a worn industrial cabin matching the exterior — the chunky parachute lever (the gag), the door-blow/eject control, a seat+console, the viewport (keep setDescentProgress's planet showing through); keep buildPodScene/getPodSpawn/setDescentProgress/disposePodScene contracts so the eject/descent/gag beats keep playing. Then T1.3 seated-FP camera + viewport framing → Phase 1 milestone walk-test (pod in+out) → /campaign-approve. Plan: docs/feature-escape-pod-intro.md. ENRICH-NOT-CUT; hero geometry → procedural-modeler + real in-game-view gate.",
   "awaiting_approval": false,
   "stop_reasons": [],
   "plan_doc": "docs/feature-escape-pod-intro.md",
@@ -18,7 +18,7 @@
   "circuit_breaker_n": 3,
   "consecutive_no_progress": 0,
   "ceiling": { "max_cycles": 150, "total": null, "per_cycle": null, "unit": "tokens" },
-  "spend": { "total": 2130000, "note": "escape-pod intro campaign, started 2026-06-28. PHASE 0 (greybox spine) = C1-C8, ~2.13M total: C1 280K (T0.0 framework) · C2 210K (T0.1 wiring) · C3 270K (T0.2a ship) · C4 280K (T0.2b flow+HUD) · C5 290K (T0.3a pod+eject) · C6 290K (T0.3b descent+gag) · C7 260K (T0.4a handoff) · C8 250K (T0.4b pod-wreck+tutorial-scaffold+smoke: placeCrashedPodWreck + stepOut wreck/lookAt/hint + smokeTestIntro + __game.smokeIntro + live gate [smoke ok 10 beats, wake-beside-pod] + verify:all + the milestone-pause doc suite). Prior M11->M13 campaign concluded + user-approved (~18.5M tokens / 69 cycles; chronicle archived to campaign-log-2026-06-18-m1-m13.md)." },
+  "spend": { "total": 2510000, "note": "escape-pod intro campaign, started 2026-06-28. PHASE 0 (greybox spine) = C1-C8 ~2.13M. PHASE 1 (hero pod) started C9. C9 ~380K (T1.1 hero pod exterior: the procedural-modeler agent ~209K subagent [8 build→shoot→critique rounds] + my brief/verify-end-to-end/rig-shot gate/screenshots/docs ~170K). Prior M11->M13 campaign concluded + user-approved (~18.5M tokens / 69 cycles; chronicle archived to campaign-log-2026-06-18-m1-m13.md)." },
   "policy_notes": "ENRICH-NOT-CUT: the scope-cut list (docs/feature-escape-pod-intro.md) is a TRUE-TECHNICAL-WALL safety net ONLY, never a target, ALWAYS surfaced to the user before any cut; the spine + pod + descent + tutorial are NOT cuttable. Hero geometry/FX -> the procedural-modeler agent, iterated to a quality BAR (5-8 rounds new hero elements). Real first-person in-game-view visual gate (not an isolated rig). Anti-punt. Behind FEATURES.escapePodIntro (default off until shipped). No SAVE_VERSION bump unless unavoidable (D81; the introComplete marker is additive, legacy=true). New game -> the intro; old spawn -> dev-mode only. Key early-build decisions to lock in Phase 0: R1 save-marker, R2 world-loading-during-descent, R3 handoff seam, R4 state-machine contract + KCC-on-ship-floor, R5 scrap_machete-as-pry-tool (D261, additive), R6 entry point, R7 parachute-gag fallback, R10 accessibility/photosensitivity. See the feature doc's 'Pre-build review'.",
   "cycles": [
     {
@@ -149,6 +149,22 @@
       "ultracode": true,
       "commit": "bfddd70",
       "spend_approx_tokens": 250000
+    },
+    {
+      "cycle": 9,
+      "date": "2026-06-28",
+      "focus": "Phase 1 T1.1 — the HERO pod exterior (industrial modular box; procedural-modeler)",
+      "tier": "Phase 1 — the hero pod (escape-pod intro)",
+      "outcome": "SHIPPED",
+      "units": ["T1.1 — delegated to the procedural-modeler agent (8 build→shoot→critique rounds). podScene.placeCrashedPodWreck rebuilt from greybox into the HERO crashed pod: the INDUSTRIAL MODULAR BOX identity (locked §B, NOT ODST) — painted grey-beige core + dark-steel exoskeleton (corner posts/girth band/top rails) + removable bolted cargo panels w/ steel seam-rims + a blown-open hatch on the salvage face (recessed torn cavity + bent interior struts + a door ajar in a channel-steel frame) + a small off-center recessed viewport + external conduit/cable/antenna/askew lift-eye/thruster nub + scorched base. Built in the wrecks.ts weathered idiom (createRustedHullMaterial, ≥10cm panel depth per rule 7); half-buried ~42% + crash-tilted; group.name='crashedPod'; compound collider (door/cables/viewport tagged noCollider). removeCrashedPodWreck disposes geometry only (materials module-shared). Dev: __game.placeCrashedPod(x,z) hook + a crashed-pod rig scenario in rig-shot.mjs (--angle=wake|hatch|oblique|back|close|iso, reproducing the REAL stepOut placement)."],
+      "verify": "verify:all PASS end-to-end (tsc + placement 0/0 x5 + colliders 0/40) — re-ran with a 600s budget (the agent's shorter Bash timeout falsely 'timed out'; my run confirms end-to-end).",
+      "visual": "HERO bar — appearance-verified via the crashed-pod rig (reproduces the REAL stepOut placement, not an isolated studio rig) at wake/hatch/oblique: a weathered, asymmetric, half-buried, strippable industrial pod; the salvage face reads (blown hatch + ajar door + viewport + steel frame). LIMITATION: live preview_screenshot hangs on the full ~723K-tri desert scene → used the rig (mirrors the real placement). The user sees it live at the Phase 1 walk-test. feel/in-game-live-view pending the walk-test.",
+      "save": "no change (SAVE_VERSION stays 15).",
+      "decisions": ["(no new D-entry — execution of the locked identity. Tooling note persisted to memory: preview_screenshot hangs on the heavy desert scene → use rig-shot reproducing the real placement.)"],
+      "agent": "procedural-modeler (~209K subagent tokens, 8 rounds, 111 tool uses).",
+      "ultracode": true,
+      "commit": "PENDING",
+      "spend_approx_tokens": 380000
     }
   ]
 }
