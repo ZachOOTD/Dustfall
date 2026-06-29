@@ -1,62 +1,54 @@
-# ▶ Escape-pod intro · Phase 2 (the descent showpiece) — C15 — `campaign/escape-pod-intro`
+# ▶ Escape-pod intro · Phase 2 (the descent showpiece) — C16 — `campaign/escape-pod-intro`
 
-**Campaign ACTIVE** (`status: active`). Phase 2 in progress. **C14 shipped the HERO descent VISTA** (T2.1
-centerpiece — gate-passed @ beauty 8). C15 picks up the **T2.1 remainder**, then T2.2/T2.3. Boot from
-`docs/campaign/campaign-state.json` + `docs/roadmap.md` (not chat memory).
+**Campaign ACTIVE** (`status: active`). Phase 2 in progress. **T2.1 COMPLETE (C14 vista + C15 cabin-light).**
+C16 = **T2.2 — re-entry FX.** Boot from `docs/campaign/campaign-state.json` + `docs/roadmap.md` (not chat memory).
 
-## What C14 shipped (so you don't redo it)
-The greybox planet-disc in `src/world/escapePodIntro/podScene.ts` is replaced by a real `descentProgress`-driven
-orbit→atmosphere→desert fall through the pod viewport:
-- **Orbital (descentProgress 0→~0.4):** a curved Dune-desert planet (`PLANET_VS/FS` — fbm relief + soft terminator
-  from a coherent object-space sun), a soft **Fresnel atmosphere limb** (`ATMO_FS`, `toneMapped:false`) + halo, a
-  3-layer **starfield** (`STAR_FS`) + milky band.
-- **Cross-fade → surface (~0.4→1.0):** the orbital sphere retracts/fades (`uFade`) and a **ground/horizon/sky** scene
-  (`LOWALT_FS`) fades in — asymmetric **barchan dunes** with raking off-axis dawn sun, cool-trough→ochre→pale-crest
-  sand palette, aerial haze, **closing scale** (d09 nearer than d05).
-- Driven entirely by `setDescentProgress(0..1)` (the single animation contract); 4 ShaderMaterials disposed in
-  `disposePodScene`. Module refs: `planetMat/atmoMat/starMat/lowAltMat` (+ meshes).
-- Rig: `node scripts/rig-shot.mjs --scenario=pod-interior --descent=<0..1>` shoots the real through-porthole view at
-  any altitude (the `--descent` flag exists). `preview_screenshot` also works for the offset pod interior.
+## What's shipped in Phase 2 so far (don't redo)
+- **C14 — the descent VISTA** (`podScene.ts`): a `descentProgress`-driven orbit→atmosphere→desert fall through
+  the round porthole (curved desert planet + Fresnel atmosphere limb + starfield → cross-fade to a barchan dune
+  ground/horizon/sky with raking dawn light + closing scale). Gate-passed @ beauty 8. Shaders: `PLANET_VS/FS`,
+  `ATMO_FS`, `STAR_FS`, `LOWALT_FS`. The single `setDescentProgress(0..1)` is the only animation surface.
+- **C15 — the cabin interior-lit-by-exterior**: `setDescentProgress` drives the porthole-spill `PointLight`
+  (`vpGlowLight`) + the hemisphere `cabinFill` cool→warm as the dawn desert swells (driver `dawn=clamp((p−0.25)/0.6)`).
+- Rig: `node scripts/rig-shot.mjs --scenario=pod-interior --descent=<0..1>`; `preview_screenshot` works for the offset
+  pod interior. The descent beat lives in `sequence.ts` (`tickDescent`); it calls `setDescentProgress(beatProgress)`.
 
-## C15 — finish T2.1: the descent's SCENE/CABIN reaction (the bits not in the through-window vista)
-The vista (the thing through the glass) is done. T2.1 also calls for the WHOLE view + cabin to react to the fall:
-1. **Scene fog color-ramp** — tint the cabin/scene atmosphere across the descent (cool/blue high → warm orange→tan low),
-   driven off `descentProgress`, so the whole frame (not just the window) shifts with altitude. (Don't fight the vista —
-   complement it.)
-2. **Cabin interior-lit-by-exterior** — the round cabin interior should warm/brighten as the dawn desert swells in the
-   viewport: a `descentProgress`-driven light (or ambient/emissive shift) washing the cabin with the exterior's shifting
-   colour (cool high → warm dawn glow low). This is the "lived-in, lit-by-the-world" feel; it also seeds T2.3's
-   interior-lit-by-exterior.
-3. **Detail pop-in** (if not already sufficient via the vista) — confirm surface/atmosphere detail resolves believably
-   on approach; tune if needed.
-Keep it cheap + driven off the single `descentProgress`. Hook the cabin-light/fog update where `setDescentProgress` runs
-(or in `updateEscapePodIntro`'s descent beat). Light visual gate (it's scene-integration, not a new hero asset — 1-2
-critics or a solo `/visual-triage`, not the full 4-critic hunt).
+## C16 — T2.2: re-entry FX (the heat + violence of the atmospheric entry)
+Make the entry into the atmosphere read as PHYSICAL + tense (the vision: "beautiful + tense + physical"). All driven
+off `descentProgress` (and/or a dedicated re-entry window within it). Build:
+1. **Plasma / fire past the glass** — additive plasma streaks/glow building as you hit the atmosphere (a re-entry window,
+   e.g. descentProgress ~0.15–0.45 as you punch through), licking past/around the porthole. Hottest at peak entry, fading
+   as you slow into the lower atmosphere. (Lives in front of/around the viewport vista — don't break the C14 vista; layer
+   over/around it.)
+2. **The white flash on entry** — a bright bloom/flash at the peak of re-entry (the screen/viewport blows out briefly),
+   then clears to the descent. Use the existing screen-flash fx if suitable (`src/fx/screenFlash.ts` — `flashScreen`,
+   already imported in `sequence.ts`).
+3. **Viewport heat-shimmer** — a heat-haze distortion over the porthole during entry (a subtle wobble/refraction), easing
+   as you descend.
+4. **Speed-coupled camera shake** — `addTrauma`/the camera-shake fx (`src/fx/cameraShake.ts`, already imported) ramped by
+   the re-entry intensity — buffeting at peak entry, smoothing out into the calm beautiful descent.
+- This is hero-ish FX → consider the **procedural-modeler** for the plasma/shimmer shaders + run the **adversarial gate
+  ONCE** when the structure is sound (it's FX over the existing vista, not a from-scratch hero asset — don't expect the
+  4-round saga the vista needed; gate to confirm it reads as re-entry heat, not noise). `preview_screenshot` the offset
+  pod interior at the re-entry window.
+- **Arc:** violence at entry (plasma + flash + shake + shimmer peak) → easing into the calm, beautiful, lonely descent
+  (C14's vista + C15's warming cabin). The contrast (tense entry → serene fall) is the beat.
 
-## Then T2.2 / T2.3 (subsequent cycles)
-- **T2.2 — re-entry FX:** additive plasma/fire past the glass + a white flash on entry + viewport heat-shimmer +
-  speed-coupled camera shake. Hero-ish FX → procedural-modeler + a gate.
+## Then T2.3 + the milestone
 - **T2.3 — tumbling reveal + interior-lit-by-exterior:** the pod rotates so the window drifts across ship→space→planet→
-  desert; stage the explosion reveal through the frame; the cabin washed by the shifting exterior light (build on C15's
-  cabin-light hook).
-- **Then: Phase 2 milestone walk-test** — the user rides the descent (the felt MOTION/pace of `descentProgress` over the
-  ~20s fall is a WALK-TEST item stills can't judge; the C14 gate flagged the d05→d09 motion-pace as the one thing to feel
-  in real time). `/campaign-approve` releases Phase 3.
-
-## Known residuals from C14 (sev-3 nits — address opportunistically, NOT blocking)
-- d05 (mid) is the softest frame — its upper haze can read as cloud in isolation before resolving (a faint distant ridge
-  silhouette would lock the desert read at the swing point).
-- The dawn palette leans warm; cool troughs are present but not dominant (lever: dial `uWarm`'s grip down a touch).
-- The horizon line is soft across the lower frames; the sun-glare band borders on hot at d07/d09 (watch for bloom creep
-  if a later exposure pass touches it).
+  desert; stage the ship-explosion reveal through the frame; the cabin washed by the shifting light (build on C15's
+  `vpGlowLight`/`cabinFill` hook — extend it to track the tumble, not just altitude).
+- **Then: Phase 2 milestone walk-test** — the user rides the whole descent. NOTE the felt **MOTION/pace** of
+  `descentProgress` over the ~20s fall is a walk-test item stills can't judge (the C14 gate flagged d05→d09 pacing);
+  the re-entry FX timing (how long the plasma/shake lasts) is also a feel item. `/campaign-approve` releases Phase 3.
 
 ## Campaign rules
-ENRICH-NOT-CUT · hero geometry/FX → procedural-modeler + the adversarial gate (the gate caught real defects the builder +
-my own eyes missed every round — z-occluder, porthole-band mapping, cross-fade artifacts; run it on hero assets, lighter
-on integration polish) · anti-punt · behind `FEATURES.escapePodIntro` (off) · no save bump · `verify:all` (600s, real
-exit, NOT piped through `tail`) · commit each cycle · checkpoint = per phase (next pause = Phase 2 milestone).
+ENRICH-NOT-CUT · hero/FX → procedural-modeler + the adversarial gate (run it on genuinely-new hero assets; lighter/once on
+FX-over-existing + integration polish — C15's 2-light ramp was own-eyes-verified, proportionate) · anti-punt · behind
+`FEATURES.escapePodIntro` (off) · no save bump · `verify:all` (600s, real exit, NOT piped through `tail`) · commit each
+cycle · checkpoint = per phase (next pause = Phase 2 milestone, after T2.3).
 
-## Cost note (for pacing)
-C14 (the hero vista) cost ~2.4M across 5 modeler rounds + 4 gates — high, but it's THE showpiece + each gate found real
-defects. For T2.1-remainder (scene/cabin integration) + similar non-hero work, run the gate ONCE/light. Reserve the full
-multi-round hero treatment for genuinely new hero assets (the explosion, the tumbling reveal FX).
+## Cost note
+C14 (the hero vista) was ~2.4M (5 modeler rounds + 4 gates — justified, it's THE showpiece). C15 (cabin-light) was lean
+(~own-loop + preview, no gate). For T2.2: the plasma/shimmer is real FX work (modeler + 1 gate ~400-700K); the flash +
+shake are cheap (existing fx). Keep the gate to ONCE unless it surfaces a structural miss.

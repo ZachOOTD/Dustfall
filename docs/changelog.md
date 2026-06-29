@@ -3,6 +3,14 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Escape-pod campaign C15 — 2026-06-29 — Phase 2 T2.1 remainder: **the cabin interior-lit-by-exterior** → T2.1 COMPLETE ✓ verify:all + before/after preview
+
+`verified` — `npm run verify:all` PASS (tsc + placement + colliders) + smoke `{ok:true,beats:10}` + a before/after preview (the cabin warms cool→dawn as `descentProgress` rises) + 0 console errors. Flag OFF → live game byte-unchanged. No SAVE_VERSION bump.
+
+**T2.1 remainder — the cabin reacts to the descent.** `setDescentProgress` now drives the cabin lights so the capsule is **washed by the shifting exterior light**: the porthole-spill `PointLight` (`vpGlow` — the literal light entering through the window) goes **cool + dim in space → warm + bright as the dawn desert swells in the viewport** (color `0xa6c0d6→0xffb070`, intensity `0.95→2.0`), and the hemisphere ambient picks up a hint of dawn. A `dawn = clamp((p−0.25)/0.6)` driver holds the cabin COOL through true orbit (the blue planet) and warms it through the atmosphere/desert leg. Idempotent off the single `setDescentProgress(0..1)` (resets to cool at p=0); 2 new light refs nulled in `disposePodScene` (the lights are pod-group children, removed with it — no GPU dispose). Verified in-cabin: cool grey-aluminium at p=0 → a warm dawn glow on the forward arc / bezel / dome at p=0.9.
+- **Decision — the "scene fog color-ramp" (a T2.1 line item) is NOT-APPLICABLE** and was deliberately not built: the pod cabin is an enclosed volume lit by its own lights (the offset intro pod isn't reached by the world sun/sky), so scene fog would just haze the interior oddly. The cabin-light reaction IS the meaningful realization of "the whole view shifts with altitude." Detail pop-in (the other T2.1 line item) already shipped in C14 (the vista's `uDetail`).
+- **▶ T2.1 COMPLETE** (C14 vista + C15 cabin-light). **Next:** T2.2 re-entry FX (plasma past the glass + white flash + heat-shimmer + speed-coupled shake — hero-ish FX → procedural-modeler + a gate) · T2.3 tumbling reveal + interior-lit-by-exterior (builds on this cabin-light hook) → the Phase 2 milestone walk-test.
+
 ## Escape-pod campaign C14 — 2026-06-29 — Phase 2 T2.1: **the HERO descent VISTA** (planet → atmosphere → desert through the pod viewport) ✓ verify:all + 4 adversarial hero gates (passed @ beauty 8)
 
 `verified` — `npm run verify:all` PASS end-to-end (tsc + placement + colliders) + smoke `{ok:true,beats:10}` + the **adversarial visual gate PASSED** (both prior-failing critics flipped to hitsBar=true, beauty 8; only sev-3 nits remain). Flag OFF → live game byte-unchanged. No SAVE_VERSION bump.

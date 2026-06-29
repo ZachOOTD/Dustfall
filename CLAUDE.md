@@ -65,10 +65,11 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
 **▶ CAMPAIGN ACTIVE — Escape-Pod Intro — Phase 2 (the descent showpiece) — `campaign/escape-pod-intro`** (autonomous; checkpoint=PHASE). **Phase 0 (greybox spine, C1-C8) + Phase 1 (the hero cylindrical pod, C9-C13)
-COMPLETE + USER-APPROVED.** Now in **Phase 2 — the beautiful atmospheric descent.** **✅ C14 shipped the HERO descent VISTA** (T2.1 centerpiece): a `descentProgress`-driven orbit→atmosphere→desert fall through the
-pod viewport — a curved Dune-desert planet + Fresnel atmosphere limb + starfield, cross-fading to a barchan dune surface with raking dawn light + closing scale (replaces the greybox disc; gate-passed @ beauty 8 after
-5 modeler rounds + 4 adversarial gates that caught a z-occluder bug + a porthole-band mapping bug + flat-coin/lava/cloud reads). **Next:** the T2.1 remainder (scene fog ramp + cabin interior-lit-by-exterior) → T2.2
-re-entry FX → T2.3 tumbling reveal → the **Phase 2 milestone walk-test** (the beautiful descent, incl. its felt MOTION) → `/campaign-approve` releases Phase 3. Built via the **procedural-modeler** + **adversarial
+COMPLETE + USER-APPROVED.** Now in **Phase 2 — the beautiful atmospheric descent.** **✅ T2.1 SHIPPED (C14+C15)**: a `descentProgress`-driven orbit→atmosphere→desert fall through the pod viewport — a curved
+Dune-desert planet + Fresnel atmosphere limb + starfield, cross-fading to a barchan dune surface with raking dawn light + closing scale (replaces the greybox disc; gate-passed @ beauty 8 after 5 modeler rounds + 4
+adversarial gates that caught a z-occluder bug + a porthole-band mapping bug + flat-coin/lava/cloud reads) **+ the cabin interior-lit-by-exterior** (C15 — the capsule warms cool→dawn as the desert fills the viewport).
+**Next:** **T2.2 re-entry FX** (plasma past the glass + white flash + heat-shimmer + speed-coupled shake — hero-ish → procedural-modeler + a gate) → T2.3 tumbling reveal → the **Phase 2 milestone walk-test** (the
+beautiful descent, incl. its felt MOTION) → `/campaign-approve` releases Phase 3. Built via the **procedural-modeler** + **adversarial
 visual gates** (the lesson: builder self-critique + my own eyes miss real defects; the N-critic gate catches them — see [[hero-asset-adversarial-gate]]). **ENRICH-NOT-CUT** · hero geometry/FX → the procedural-modeler +
 the adversarial gate (`preview_screenshot` works for the offset pod interior; hangs on the full desert → use `rig-shot --scenario=crashed-pod|pod-interior --descent=<0..1>`) · anti-punt · behind `FEATURES.escapePodIntro`
 (default off) · no SAVE_VERSION bump. Remaining phases: **2 descent → 3 ship → 4 crash/tutorial → 5 audio**; the loop pauses at each phase boundary. Each `/campaign-cycle` boots from `docs/campaign/campaign-state.json` + `docs/roadmap.md` — NOT this note.
@@ -82,12 +83,12 @@ first-person throughout; pod identity = **vertical riveted aluminium capsule/tor
 merged to master + live at https://zachootd.github.io/Dustfall/. Its log is archived at `docs/campaign/campaign-log-2026-06-18-m1-m13.md`. Still queued for the user (out-of-loop): the **Skyfall
 hero wreck** + the **CAVE rework** (dedicated solo sessions), ⑰ pickup-instancing (human-attended), + the §A walk-tests.
 
-**Last shipped**: Escape-pod **C14** (2026-06-29, Phase 2 T2.1 — the **HERO descent VISTA**) — the `descentProgress`-driven orbit→atmosphere→desert fall through the pod viewport (`verify:all` PASS + smoke
-`{ok:true,beats:10}` + the **adversarial hero gate PASSED @ beauty 8**; flag OFF → live game byte-unchanged). In `podScene.ts` the greybox planet-disc is replaced by real shaders: a curved Dune-desert planet
-(fbm relief + soft terminator), a soft **Fresnel atmosphere limb** (off the tone-mapper) + halo, a 3-layer **starfield**; cross-fading past `descentProgress≈0.4` to a **barchan dune ground/horizon/sky** scene (raking
-off-axis dawn sun, cool→ochre→pale sand palette, aerial haze, **closing scale** so d09 reads nearer than d05). 5 procedural-modeler rounds + 4 adversarial gates caught a **z-occluder bug** (sky-dome showing through),
-2 cross-fade artifacts, and a **porthole-band mapping bug** — all fixed. `setDescentProgress(0..1)` contract preserved; 4 ShaderMaterials disposed. **Next** = the T2.1 remainder (scene fog ramp + the cabin
-interior-lit-by-exterior lighting shift) → T2.2 re-entry FX → T2.3 tumbling reveal → the Phase 2 milestone walk-test. See [docs/next-session-prompt.md](docs/next-session-prompt.md).
+**Last shipped**: Escape-pod **C15** (2026-06-29, Phase 2 T2.1 remainder — **the cabin interior-lit-by-exterior** → T2.1 COMPLETE) — `setDescentProgress` now drives the cabin lights so the capsule is washed by the
+shifting exterior light: the porthole-spill `PointLight` goes cool+dim in space → warm+bright as the dawn desert swells in the viewport (`0xa6c0d6→0xffb070`, intensity `0.95→2.0`), the hemisphere ambient picks up a hint
+of dawn, on a `dawn=clamp((p−0.25)/0.6)` driver (cool through true orbit, warming through the atmosphere/desert leg). Idempotent off the single `setDescentProgress`; 2 light refs nulled in dispose. `verify:all` PASS +
+smoke `{ok:true,beats:10}` + before/after preview (cool grey cabin → warm dawn glow). **Decision:** the T2.1 "scene fog-ramp" line item is NOT-APPLICABLE (enclosed cabin lit by its own lights; the cabin-light reaction
+is the meaningful realization) + detail pop-in already shipped in the C14 vista — so **T2.1 is COMPLETE (C14 vista + C15 cabin-light)**. **Next** = T2.2 re-entry FX (plasma past the glass + white flash + heat-shimmer +
+speed-coupled shake — procedural-modeler + a gate) → T2.3 tumbling reveal → the Phase 2 milestone walk-test. See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 

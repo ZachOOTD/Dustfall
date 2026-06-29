@@ -187,6 +187,17 @@ let atmoMat: THREE.ShaderMaterial | null = null;
 let starMat: THREE.ShaderMaterial | null = null;
 let lowAltMat: THREE.ShaderMaterial | null = null;   // the low-altitude ground/horizon scene (cross-fades in past ~mid)
 let lowAltMesh: THREE.Mesh | null = null;
+// T2.1 remainder — the cabin interior-lit-by-exterior: setDescentProgress drives the porthole
+// spill (cool space-light → warm dawn wash) + a hint of dawn on the ambient fill, so the cabin
+// warms as the dawn desert swells in the viewport. Refs captured at build; reset by progress.
+let vpGlowLight: THREE.PointLight | null = null;
+let cabinFill: THREE.HemisphereLight | null = null;
+const _VP_COOL = new THREE.Color(0xa6c0d6);    // porthole spill in space — cool window light
+const _VP_WARM = new THREE.Color(0xffb070);    // porthole spill at the dawn desert — warm wash
+const _FILL_COOL = new THREE.Color(0x93a0b0);  // ambient sky-tint in space (matches the build default)
+const _FILL_WARM = new THREE.Color(0xb89a82);  // ambient sky-tint warmed by the dawn
+const _vpScratch = new THREE.Color();
+const _fillScratch = new THREE.Color();
 let chuteLever: THREE.Group | null = null;  // the parachute lever pivot (setParachuteLeverPull)
 let chuteLeverRestX = 0;                     // its resting pitch (radians); pulls jolt from here
 let leverBrokenTell: THREE.Group | null = null;  // the snapped-mount reveal (shown on snap)
@@ -1429,6 +1440,7 @@ export function buildPodScene(ctx: GameContext): void {
   // the cool grey dominates the warm pool away from the lamp.
   const fill = new THREE.HemisphereLight(0x93a0b0, 0x2a2d30, 0.72);   // cooler + a touch brighter
   group.add(fill);
+  cabinFill = fill;   // T2.1 — setDescentProgress nudges the sky-tint warmer as the dawn fills the viewport
   // OFF-CENTRE warm directional — rakes ACROSS the bore from upper-right so the curved wall
   // picks up a clear left→right brightness GRADIENT (the single biggest "this is round" cue
   // at eye level — a flat-lit cylinder reads boxy; a raked one reads curved).
@@ -1449,6 +1461,7 @@ export function buildPodScene(ctx: GameContext): void {
   const vpGlow = new THREE.PointLight(0xa6c0d6, 0.95, 4.2, 2.2);
   vpGlow.position.set(0, VP_CY, -CAB_R + 0.05);
   group.add(vpGlow);
+  vpGlowLight = vpGlow;   // T2.1 — the literal exterior light entering the cabin; warms+brightens on descent
 
   // ── Conservative cage collider (seated → can't walk, but keep the capsule caged so a
   //    physics nudge can't drop the player out). The cabin is a round bore; a boxy AABB
@@ -1564,6 +1577,19 @@ export function setDescentProgress(progress: number): void {
     lowAltMat.uniforms.uWarm.value = warm;
   }
   if (lowAltMesh) lowAltMesh.visible = lowAlt > 0.001;   // skip the draw entirely at orbit
+  // (6) CABIN interior-lit-by-exterior (T2.1 remainder) — the cabin is washed by the shifting
+  //     exterior light. The porthole spill (the literal window light) goes cool+dim in space →
+  //     warm+bright as the dawn desert swells in the viewport; the ambient fill picks up a hint
+  //     of dawn too, so the whole capsule warms on the way down. `dawn` holds COOL through true
+  //     orbit (the blue planet/space), warming through the atmosphere/desert leg.
+  const dawn = Math.max(0, Math.min(1, (p - 0.25) / 0.6));   // 0 in orbit → 1 by low altitude
+  if (vpGlowLight) {
+    vpGlowLight.color.copy(_vpScratch.copy(_VP_COOL).lerp(_VP_WARM, dawn));
+    vpGlowLight.intensity = 0.95 + dawn * 1.05;   // 0.95 cool accent → ~2.0 bright dawn wash on the forward arc
+  }
+  if (cabinFill) {
+    cabinFill.color.copy(_fillScratch.copy(_FILL_COOL).lerp(_FILL_WARM, dawn * 0.8));   // a hint of dawn in the ambient
+  }
 }
 
 /** Pose the PARACHUTE lever (the gag hook). `t` in [0,1]: 0 = at rest, 1 = fully yanked
@@ -1617,6 +1643,8 @@ export function disposePodScene(ctx: GameContext): void {
   starMat = null;
   lowAltMat = null;
   lowAltMesh = null;
+  vpGlowLight = null;
+  cabinFill = null;
   chuteLever = null;
   leverBrokenTell = null;
   for (const body of podBodies) ctx.physics.world.removeRigidBody(body);
