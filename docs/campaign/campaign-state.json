@@ -243,7 +243,7 @@
       "save": "no change (SAVE_VERSION stays 15).",
       "decisions": ["(no new D-entry — within the D269 intro architecture. Technique notes captured in the changelog: cross-fade orbital-sphere→ground/horizon scene for atmospheric descent; toneMapped:false additive atmosphere to survive Reinhard; object-space normal/light for a stable terminator; BackSide depth-only occluder to cull stars behind the planet without z-failing it; probe the porthole's visible UV band when composing a through-window vista.)"],
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "c6f5e5c",
       "spend_approx_tokens": 2400000
     }
   ]
