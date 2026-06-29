@@ -228,7 +228,7 @@
       "save": "no change (SAVE_VERSION stays 15).",
       "decisions": ["(no new D-entry — camera/feel. Note: drive a scripted look via camera.rotation with YXZ order; the D269 'controls euler' note — the camera.rotation set holds because syncCameraToBody is position-only + PointerLockControls only overrides on pointermove [in-game the beat sets the INITIAL look, the player can then mouse-look].)"],
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "f86438c",
       "spend_approx_tokens": 360000
     }
   ]

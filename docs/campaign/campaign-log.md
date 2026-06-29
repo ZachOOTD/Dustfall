@@ -159,7 +159,7 @@ The user walk-tested the hero pod (C9 box exterior + C10 box interior) and steer
 - **Shipped:** ① **Seated eye** — `Tuning.POD_SEATED_EYE_OFFSET (0.50)` lowers the eye from standing (0.85) to the viewport line (`VP_CY 1.34`) while seated so the window reads at eye level. Set in `updateEscapePodIntro` (so it also applies in the !isPlaying preview/rig where `updatePlayer` early-returns) + maintained in `controller.ts` in-game; reverts at the handoff. ② **Beat-framing** — `faceControl(yaw,pitch)` (rotation.set, **YXZ** order — the default XYZ floor-stared after a 90° yaw) orients enterPod → the yellow eject, parachute → the red lever, resolving the C12-gate confusion.
 - **Verify:** `verify:all` PASS end-to-end + smoke `{ok:true,beats:10}`. **Visual iteration:** live-preview (light gate) — seated eye at the viewport line; enterPod faces the eject (the YXZ fix corrected an initial floor-stare); parachute faces the lever; 0 console errors.
 - **Spend:** ~360K; campaign total ~5.66M; cycle **13/150**.
-- **Commit:** `PENDING`.
+- **Commit:** `f86438c`.
 
 ---
 
