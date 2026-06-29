@@ -204,7 +204,7 @@ The user approved the Phase 1 milestone (the cylindrical hero pod) and released 
 - **Verify:** `verify:all` PASS (tsc + placement + colliders) + smoke `{ok:true,beats:10}`.
 - **Visual iteration:** own-loop live preview (proportionate for camera/light STAGING — a still can't gate a spin → no adversarial gate; the tumble MOTION is a walk-test item): the cabin rolls + blast-floods warm at the tumble peak, settling level + cool into the descent; the chain runs through to `wake` (the settle→descent handoff is seamless). 0 console errors.
 - **Spend:** ~320K (own-loop, no gate); campaign total ~9.13M; cycle **17/150**.
-- **Commit:** `PENDING`.
+- **Commit:** `36d9e49`.
 - **Deferred to Phase 3:** the hero ship explosion staged through the C17 tumble frame (the staging + `setTumbleLight` blast-flood hook are built).
 - **Steering received (during C17):** the user wants a pushed campaign branch + a playable preview link to walk-test each cycle. Archived to `steering-archive.md`; surfaced + planned at this milestone pause (it directly serves the walk-test). Pushing/deploy is outward-facing → confirmed with the user before executing (see the milestone-pause handoff).
 

@@ -289,7 +289,7 @@
       "save": "no change (SAVE_VERSION stays 15).",
       "decisions": ["(no new D-entry. Technique notes in the changelog: drive a scripted intro CAMERA via a controller post-multiply [the storm-sway applyStormCameraSway pattern: undo-last-frame, post-multiply] rather than fighting PointerLockControls — 'scripted' mode only locks LOCOMOTION, the look stays controls-owned; settle the tumble onto faceControl(0,0) so the descent handoff is snap-free. The hero ship explosion through the tumble frame = Phase 3 — the staging + setTumbleLight blast-flood hook are built here.)"],
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "36d9e49",
       "spend_approx_tokens": 320000
     }
   ]
