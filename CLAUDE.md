@@ -65,8 +65,8 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
 **▶ CAMPAIGN ACTIVE — Escape-Pod Intro — Phase 1 (the HERO pod) — `campaign/escape-pod-intro`** (autonomous; checkpoint=PHASE). **Phase 0 (greybox spine, C1-C8) COMPLETE + USER-APPROVED** (the whole intro plays
-new game → cockpit → corridor → pod → eject → ship-explode → descent → parachute-gag → impact → wake → desert). Now building the hero art: **T1.1 exterior (C9) + T1.2 interior (C10) shipped**; next
-T1.3 seated-FP camera → Phase 1 milestone walk-test. Full vision + phased plan: [docs/feature-escape-pod-intro.md](docs/feature-escape-pod-intro.md). **ENRICH-NOT-CUT** · hero geometry/FX → the
+new game → cockpit → corridor → pod → eject → ship-explode → descent → parachute-gag → impact → wake → desert). Now building the hero art. **⚠ REDESIGN (user steering C10):** the box pod (C9 exterior + C10 interior) is REJECTED — the user wants it CYLINDRICAL. New identity LOCKED (D271, user pick): a
+**vertical riveted aluminium capsule/torpedo**. Next: C11 cylindrical exterior REDO → C12 cylindrical interior REDO → T1.3 seated camera → Phase 1 milestone walk-test. Live ref: `docs/research/escape-pod-cylindrical.md`. Full vision + phased plan: [docs/feature-escape-pod-intro.md](docs/feature-escape-pod-intro.md). **ENRICH-NOT-CUT** · hero geometry/FX → the
 **procedural-modeler** agent (real in-game-view gate; preview_screenshot hangs on the full desert → use `rig-shot --scenario=crashed-pod`) · anti-punt · behind `FEATURES.escapePodIntro` (default off) · no
 SAVE_VERSION bump. Remaining phases: **1 pod → 2 descent → 3 ship → 4 crash/tutorial → 5 audio**; the loop pauses at each phase boundary. Each `/campaign-cycle` boots from `docs/campaign/campaign-state.json` + `docs/roadmap.md` — NOT this note.
 **To walk-test:** set `FEATURES.escapePodIntro = true` + new game, OR in the console `__game.startIntro()` (force-start; `__game.jumpToBeat('<beat>')` / `__game.skipIntro()` to navigate; `__game.smokeIntro()` runs the whole chain).

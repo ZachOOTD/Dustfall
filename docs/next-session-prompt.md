@@ -1,48 +1,48 @@
-# ▶ RESUME — Escape-pod intro · Phase 1 · T1.3 (seated-FP camera + viewport framing) — LAST Phase 1 unit — `campaign/escape-pod-intro`
+# ▶ RESUME — Escape-pod intro · Phase 1 REDESIGN · the CYLINDRICAL pod exterior (C11) — `campaign/escape-pod-intro`
 
-**Cycle 11 of the escape-pod-intro campaign.** Phase 1 (the hero pod). T1.1 exterior (C9) + T1.2 interior
-(C10) shipped. **T1.3 is the LAST Phase 1 unit** — after it, the cycle **PAUSES at the Phase 1 milestone**
-for the user's "pod in + out" walk-test. Boot from `docs/campaign/campaign-state.json` + `docs/roadmap.md`.
+**Cycle 11 of the escape-pod-intro campaign.** Phase 1 (the hero pod). **The user steered (C10): the
+boxy pod is rejected — REDESIGN cylindrical.** The new identity is locked (D271, user AskUserQuestion):
+a **VERTICAL RIVETED ALUMINUM CAPSULE/TORPEDO**. C11 rebuilds the EXTERIOR; C12 rebuilds the interior to
+match; then T1.3 (seated camera) → Phase 1 milestone. Boot from `docs/campaign/campaign-state.json` +
+`docs/roadmap.md` (NOT chat memory).
 
 ## Read first
 1. `CLAUDE.md` (auto-loaded) — "Where we are now"
-2. `docs/campaign/campaign-state.json` — cycle 10/150, current_tier (T1.3)
-3. `docs/roadmap.md` — Phase 1 line + the `### Milestone: escape-pod Phase 1` marker
-4. `docs/feature-escape-pod-intro.md` — the seated-FP / viewport-framing intent
-5. `src/world/escapePodIntro/podScene.ts` (`getPodSpawn`, the hero cabin + viewport) + `src/world/escapePodIntro/sequence.ts` (`seatPlayerAt`, the seated beats: enterPod/shipExplode/descent/parachute; `ctx.intro.mode === 'seated'`) + `src/player/controller.ts` (the `introLocoLocked` mode-gating + `ctx.player.eyeOffset`)
+2. `docs/decisions.md` **D271** — the identity change (box → vertical riveted aluminum capsule/torpedo)
+3. `docs/research/escape-pod-cylindrical.md` — the LIVE reference (the riveted-torpedo + Vostok/Soyuz candidates; orientation analysis). `escape-pod-design-variety.md` §B (box) is now HISTORICAL.
+4. `src/world/escapePodIntro/podScene.ts` — `placeCrashedPodWreck` (the box exterior to REPLACE) + `buildPodScene` (the box interior — C12 redoes it) + the contracts (`getPodSpawn`/`setDescentProgress`/`setParachuteLeverPull`/`removeCrashedPodWreck`/`disposePodScene`) + `createRustedHullMaterial` usage.
 
-## What's built (Phase 1 so far)
-- **T1.1 hero pod EXTERIOR** (`placeCrashedPodWreck`) + **T1.2 hero pod INTERIOR** (`buildPodScene`: cabin, viewport, red parachute lever w/ `setParachuteLeverPull`, yellow eject, console, seat).
-- The seated beats place the player via `seatPlayerAt(getPodSpawn(ctx))` facing −Z (the viewport), mode `seated` (locomotion off, free-look on). The descent planet shows + grows through the viewport.
-- KNOWN T1.3 gap (flagged by the T1.2 agent): the seated "eye" currently uses the STANDING capsule height (~1.7m, `Tuning.PLAYER_EYE_OFFSET`), so the cabin was sized UP to suit it rather than the player being lowered into the chair. T1.3 fixes the seated camera pose.
+## The new identity (D271 — LOCKED by the user)
+**A vertical riveted aluminum capsule/torpedo:**
+- **Silhouette:** a short, fat **cylinder** standing **UPRIGHT** (vertical), with a **rounded/hemispherical nose cap** on top + an antenna / chute-mast stub; a **scorched flat heat-shield base** at the bottom, sunk into the sand. (NOT a box. NOT an ODST pod.)
+- **Surface:** **hand-riveted weathered aluminum** (Airstream-ish) — dense rivet seams (latitudinal bands + vertical), dented + patina'd + sand-abraded; **scorched/discoloured** toward the base; grey-aluminium with rust/oxide accents (use the `createRustedHullMaterial` idiom, but tuned toward aluminium not heavy rust).
+- **Viewport:** a **small, off-center, recessed** porthole/window (channel-framed) — keep the anti-ODST discipline (small/offset/recessed, a mechanic's window).
+- **Salvageable:** **strippable panels / a pried-or-blown hatch** (the salvage face the player escaped through + will strip) — keep the "you can take this apart" read for the tutorial.
+- **Half-buried + tilted** in the dune for drama (vertical, base sunk, leaning).
 
-## Cycle 11 focus — T1.3: the seated-FP camera + viewport framing
-Lock the seated first-person camera so the player sits BELIEVABLY in the chair and the viewport frames the descent showpiece (Phase 2 frames through it). This is camera/feel work (the procedural-modeler can help if geometry tweaks are needed, but it's mostly camera tuning — do it in the main loop with the visual gate).
-- **Seated eye height** — lower the camera to a true seated eye (sit the player into the chair) instead of standing height. Options: a per-beat seated `eyeOffset` (set `ctx.player.eyeOffset` lower while `ctx.intro.mode === 'seated'`, restore on handoff), or bake a seated offset into `getPodSpawn`/`seatPlayerAt`. Make the viewport sit at eye level dead-ahead, the lever + eject in natural seated reach, the console at a glance-down angle. (Re-frame the cabin if needed — but prefer moving the camera over resizing the hero cabin the T1.2 agent tuned.)
-- **Viewport framing** — confirm the descent planet (via `setDescentProgress`) fills the viewport nicely from the seated eye across progress 0→1 (the Phase-2 showpiece lives here). Adjust the viewport/planet framing so the swelling planet reads centered + dramatic from the seat.
-- **Free-look bounds (optional)** — seated free-look should let the player glance at the lever/eject/console + back to the viewport without clipping out of the cabin; if the look range needs a gentle clamp while seated, add it (small, optional).
-- **Re-verify the seated beats** read well from the new eye: enterPod (eject control reachable), descent (planet framed), parachute (the lever jab/snap visible from the seat).
+## Cycle 11 focus — T1.1 REDO: the cylindrical pod EXTERIOR (procedural-modeler)
+**Delegate to the `procedural-modeler` agent.** Replace the box exterior in `placeCrashedPodWreck` with the vertical riveted aluminum capsule/torpedo (D271). Build it with cylinder/lathe geometry (a CylinderGeometry body + a hemispherical/dome cap + a tapered/flat scorched base ring), riveted-seam detailing (rings of small rivet studs — low-poly), a recessed viewport, a strippable/blown hatch panel (the salvage face), antenna/handholds breaking the silhouette. Match the game's weathered idiom (`createRustedHullMaterial`, ≥10cm depth on box decorations per rule 7 — though cylinders/lathes are inherently thick). Keep it a PERSISTENT world object at the desert spawn (not disposed by `endEscapePodIntro`); refine the collider (a cylinder/compound) to fit. KEEP `placeCrashedPodWreck`/`removeCrashedPodWreck` signatures.
+- **Gate:** the REAL wake view — render via the `crashed-pod` rig (`node scripts/rig-shot.mjs --scenario=crashed-pod --angle=wake|hatch|oblique`), which reproduces the real stepOut placement (preview_screenshot hangs on the full desert — memory #3). Iterate build→shoot→critique 5-8 rounds to the hero bar: reads as a weathered, riveted, vertical aluminium capsule, half-buried + strippable. (You may need to update the rig's camera framing for a vertical-tall pod vs the old wide box.)
+- **Orientation:** vertical standing capsule, base sunk, tilted.
 
-### Acceptance (T1.3 → Phase 1 complete)
-- From the seated FP view the player sits believably in the cabin: viewport at eye level (planet framed across the descent), lever + eject + console in natural seated sightlines, no clipping out of the cabin on free-look. The beats still play (`smokeIntro` ok). `verify:all` green end-to-end (600s budget, real exit); flag OFF → live game byte-unchanged; no SAVE_VERSION bump.
+### Acceptance (C11)
+- The cylindrical riveted-aluminum vertical capsule replaces the box in `placeCrashedPodWreck`, reads as the D271 identity at the wake + hatch + oblique angles (hero bar). `verify:all` green end-to-end (600s, real exit; watch the collider gate). Flag OFF → live game byte-unchanged. The smoke chain still reaches the desert (`__game.smokeIntro()` ok).
 
-## ⏸ AFTER THIS CYCLE: PHASE 1 MILESTONE PAUSE
-When `/session-end` moves the Phase 1 tiers to Shipped (all before `### Milestone: escape-pod Phase 1`),
-set `status: paused`, `awaiting_approval: true`, `stop_reasons: ["milestone-review"]` and **STOP the loop**
-(no ScheduleWakeup). Surface to the user: **walk-test the pod in + out** — wake beside the hero crashed pod
-in the desert (the exterior) + ride the pod through eject/descent/parachute (the interior). Play via
-`FEATURES.escapePodIntro = true` + new game, or `__game.startIntro()`/`jumpToBeat`. Then `/campaign-approve`
-releases Phase 2 (the descent showpiece — the `descentProgress` effect stack).
+## Then
+- **C12 — T1.2 REDO: the cylindrical pod INTERIOR** — rebuild `buildPodScene` as the cylindrical capsule interior (curved ribbed walls, the seated cabin), matching the new exterior; re-home the viewport + the red parachute lever (`setParachuteLeverPull`) + the eject control + console in the round cabin; keep all contracts.
+- **C13 — T1.3: seated-FP camera + viewport framing** (lower the seated eye; frame the viewport).
+- Then **Phase 1 milestone → PAUSE** for the user's "pod in + out" walk-test of the CYLINDRICAL pod.
 
 ## Campaign rules
-ENRICH-NOT-CUT · hero/feel work + the real in-game-view gate · anti-punt · behind the flag · no save bump ·
-`verify:all` (600s, real exit, not piped through `tail`) + the visual gate · commit each cycle · checkpoint = per phase.
+ENRICH-NOT-CUT · hero geometry → procedural-modeler + the real in-game-view (crashed-pod rig) gate, 5-8
+rounds, defining quality not punted · anti-punt · behind the flag · no save bump · `verify:all` (600s, real
+exit, NOT piped through `tail`) · commit each cycle · checkpoint = per phase.
 
 ## Footguns
-- Lowering the seated eye: RESTORE the normal `eyeOffset` at the desert handoff (`endEscapePodIntro`/stepOut) so the player stands normally in the real game — don't leave them crouched.
-- Keep the beats working (`smokeIntro` ok) + the contracts intact.
-- `preview_screenshot` WORKS for the pod interior (offset, light scene); it HANGS on the full desert (use the `crashed-pod` rig for desert views). `verify:all` is slow — 600s + real exit.
-- Keep `FEATURES.escapePodIntro` OFF by default.
+- The box C9/C10 commits stay as the audit trail — C11/C12 REPLACE the box geometry with the cylinder; don't revert the commits, rewrite the builders.
+- Cylinder geometry: use CylinderGeometry/LatheGeometry for the body/cap (inherently thick — rule 7's box-depth caveat mostly doesn't apply); rivet studs can be small instanced bumps (keep poly sane).
+- `preview_screenshot` hangs on the full desert → use the `crashed-pod` rig. `verify:all` is slow → 600s + real exit.
+- Keep `FEATURES.escapePodIntro` OFF by default; keep the podScene contracts intact so the beats keep playing.
 
 ## Verify
-`npm run verify:all` (600s, real exit) + a seated-FP visual gate (preview screenshot at enterPod/descent/parachute from the new seated eye — viewport framed, controls in reach) + `smokeIntro` ok + 0 console errors. Then `/session-end` → the Phase 1 milestone pause.
+`npm run verify:all` (600s, real exit) + the `crashed-pod` rig at wake/hatch/oblique (the cylindrical pod reads at the hero bar) + `__game.smokeIntro()` ok + 0 console errors.

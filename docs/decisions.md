@@ -526,3 +526,21 @@ Consistent with this campaign's "ship the foundation/measure, defer the human/fe
 **Why**: the shared `handoffToGame` is the footgun — starting the intro there would replay it on every Continue. Path-3 is the precise new-game seam. Deriving `introComplete` keeps the state surface minimal while still satisfying R1.
 
 **friction-score:** 1 (mechanical wiring flowing from D269; additive + reversible; behind the flag; verify + live smoke both green).
+
+## D271 — the escape-pod identity is REVISED from "industrial modular box" → a VERTICAL RIVETED ALUMINUM CAPSULE/TORPEDO (user steering, escape-pod C10, 2026-06-28)
+
+**When**: after the hero pod exterior (T1.1, C9) + interior (T1.2, C10) shipped as the **industrial modular box** (the original `/interview-vision` AskUserQuestion pick + `docs/research/escape-pod-design-variety.md` §B). The user walk-tested it + steered: *"make the escape pod exterior more cylindrical. I don't like the boxy model. Maybe look at some more references online... will likely need to update the interior to match."*
+
+**Decision (reverses the box identity):** the pod is now a **vertical riveted aluminum capsule/torpedo** —
+- a short, fat **cylinder** standing **upright** on a **scorched flat heat-shield base** (sunk into the sand), with a **rounded/hemispherical nose cap up top** + an antenna/chute-mast;
+- **hand-riveted weathered aluminum** (Airstream-ish), dented + patina'd + sand-abraded + scorched at the base;
+- a **small, off-center, recessed viewport** (the anti-ODST viewport discipline carries over);
+- **strippable panels/hatches** for the salvage tutorial (the blown/pried salvage face stays);
+- half-buried + tilted in the dune for drama.
+Chosen via a research pass (`docs/research/escape-pod-cylindrical.md`, 5 cylindrical candidates) + a user AskUserQuestion: **form = riveted aluminum capsule/torpedo**, **orientation = vertical standing capsule**.
+
+**Why**: the user saw the real box build + it didn't match their "specific vision" — they want a rounded/cylindrical capsule, not a boxy hauler-crate. A cylinder is also naturally low-poly + a stronger anti-ODST silhouette. Confirmed the new direction up front (rather than blind-rebuilding) because it reverses their own earlier explicit pick + a hero rebuild is ~500K.
+
+**Impact**: rebuild T1.1 exterior (`placeCrashedPodWreck`) + T1.2 interior (`buildPodScene`) to the new cylindrical identity; keep the module contracts (`getPodSpawn`/`setDescentProgress`/`setParachuteLeverPull`/dispose) intact so the beats keep playing. Supersedes the §B box parts of the C9/C10 builds (their commits remain the audit trail). `docs/research/escape-pod-design-variety.md` §B is now historical; `escape-pod-cylindrical.md` is the live reference.
+
+**friction-score:** 3 (a hero re-design reversing an explicit prior choice + ~2 hero cycles of rework; de-risked by confirming the direction before rebuilding — the right call vs. shipping a second wrong pod).
