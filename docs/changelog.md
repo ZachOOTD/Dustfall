@@ -3,6 +3,15 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Escape-pod campaign C10 — 2026-06-28 — Phase 1 T1.2: **the HERO pod INTERIOR (the cabin you ride)** ✓ verify + visual pass
+
+`verified` — `npm run verify:all` PASS end-to-end (tsc + placement 0/0 ×5 + colliders 0/40) + a seated-FP visual gate (preview screenshot at the enterPod beat): a worn industrial lifeboat cabin matching the exterior, with the framed viewport (planet through it), the chunky red parachute lever, the guarded yellow eject control, a console + seat. `__game.smokeIntro()` → `{ok:true, beats:10}` (the beats still play). Flag OFF → live game byte-unchanged.
+
+**T1.2 — hero pod interior (procedural-modeler agent, 4 build→shoot→critique rounds):**
+- **`podScene.buildPodScene` rebuilt as the hero cabin** (replacing greybox) in the wrecks.ts weathered idiom (`createRustedHullMaterial`): a tight worn industrial capsule — grey-beige panels + exposed dark-steel ribs/frame + conduit + bolted seams/studs, low ceiling, warm dim feel; a channel-steel **viewport** dead-ahead (the `setDescentProgress` planet shows through + grows on descent, with a vent grille + parcel shelf below); a **chunky red parachute lever** (rubber grip + hazard band + steel shaft on a pivot bracket) in seated reach; a **guarded hazard-yellow eject T-handle**; a humble lifeboat **console** (dim amber screen, telltales, toggles, gauges) + seat.
+- **`setParachuteLeverPull(t, snapped)` hook** (podScene) wired into `sequence.ts tickParachute` — each pull jabs the lever to full + it springs back; the 3rd pull droops it dead (the gag's snap). `getPodSpawn` z nudged (+0.45→+0.35) so the seat backs the player + the viewport reads dead-ahead. Dev: `__game.setDescentProgress`/`setParachuteLeverPull`; a `pod-interior` rig in `rig-shot.mjs`. Contracts (`buildPodScene`/`getPodSpawn`/`setDescentProgress`/`disposePodScene`) intact.
+- **Next:** T1.3 — the seated-FP camera + viewport framing (lock the seated pose so the Phase-2 descent showpiece frames through the viewport) → **completes Phase 1 → milestone PAUSE** (the user's "pod in + out" walk-test).
+
 ## Escape-pod campaign C9 — 2026-06-28 — Phase 1 T1.1: **the HERO pod exterior (industrial modular box)** — first hero-art cycle ✓ verify + visual pass
 
 `verified` — `npm run verify:all` PASS end-to-end (tsc + placement 0/0 ×5 + colliders 0/40) + a hero visual gate (the `crashed-pod` rig reproducing the REAL stepOut placement — wake + hatch + oblique): reads as a weathered, asymmetric, half-buried, strippable industrial pod. Flag OFF → live game byte-unchanged. **Phase 1 milestone approved + released (C8 walk-test).**

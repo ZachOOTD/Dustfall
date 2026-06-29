@@ -65,8 +65,8 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
 **▶ CAMPAIGN ACTIVE — Escape-Pod Intro — Phase 1 (the HERO pod) — `campaign/escape-pod-intro`** (autonomous; checkpoint=PHASE). **Phase 0 (greybox spine, C1-C8) COMPLETE + USER-APPROVED** (the whole intro plays
-new game → cockpit → corridor → pod → eject → ship-explode → descent → parachute-gag → impact → wake → desert). Now building the hero art: **T1.1 hero pod EXTERIOR shipped (C9, industrial modular box)**; next
-T1.2 interior, T1.3 seated-FP camera → Phase 1 milestone walk-test. Full vision + phased plan: [docs/feature-escape-pod-intro.md](docs/feature-escape-pod-intro.md). **ENRICH-NOT-CUT** · hero geometry/FX → the
+new game → cockpit → corridor → pod → eject → ship-explode → descent → parachute-gag → impact → wake → desert). Now building the hero art: **T1.1 exterior (C9) + T1.2 interior (C10) shipped**; next
+T1.3 seated-FP camera → Phase 1 milestone walk-test. Full vision + phased plan: [docs/feature-escape-pod-intro.md](docs/feature-escape-pod-intro.md). **ENRICH-NOT-CUT** · hero geometry/FX → the
 **procedural-modeler** agent (real in-game-view gate; preview_screenshot hangs on the full desert → use `rig-shot --scenario=crashed-pod`) · anti-punt · behind `FEATURES.escapePodIntro` (default off) · no
 SAVE_VERSION bump. Remaining phases: **1 pod → 2 descent → 3 ship → 4 crash/tutorial → 5 audio**; the loop pauses at each phase boundary. Each `/campaign-cycle` boots from `docs/campaign/campaign-state.json` + `docs/roadmap.md` — NOT this note.
 **To walk-test:** set `FEATURES.escapePodIntro = true` + new game, OR in the console `__game.startIntro()` (force-start; `__game.jumpToBeat('<beat>')` / `__game.skipIntro()` to navigate; `__game.smokeIntro()` runs the whole chain).
@@ -79,11 +79,11 @@ first-person throughout; pod identity = **industrial modular box**. References +
 merged to master + live at https://zachootd.github.io/Dustfall/. Its log is archived at `docs/campaign/campaign-log-2026-06-18-m1-m13.md`. Still queued for the user (out-of-loop): the **Skyfall
 hero wreck** + the **CAVE rework** (dedicated solo sessions), ⑰ pickup-instancing (human-attended), + the §A walk-tests.
 
-**Last shipped**: Escape-pod **C9** (2026-06-28, Phase 1 T1.1) — the HERO pod EXTERIOR, the first hero-art cycle (`verify:all` PASS end-to-end + a hero visual gate; flag OFF → live game byte-unchanged). The
-procedural-modeler agent (8 build→shoot→critique rounds) rebuilt `podScene.placeCrashedPodWreck` from greybox into the **industrial modular box** identity (NOT ODST): grey-beige core + dark-steel exoskeleton +
-removable bolted panels + a blown-open hatch (torn cavity + ajar door + channel-steel frame) + a small off-center recessed viewport + conduit/antenna/lift-eye/thruster + scorched base; in the wrecks.ts
-weathered idiom (`createRustedHullMaterial`), half-buried ~42% + tilted, compound collider. Confirmed via the `crashed-pod` rig (wake + hatch + oblique): reads as a weathered, strippable, half-buried hero pod.
-**Next** = Phase 1 T1.2 — the hero pod INTERIOR (panel, chunky parachute lever, door-blow button, viewport, warm cabin) replacing the greybox `buildPodScene`; the eject/descent/gag beats re-point at it. See [docs/next-session-prompt.md](docs/next-session-prompt.md).
+**Last shipped**: Escape-pod **C10** (2026-06-28, Phase 1 T1.2) — the HERO pod INTERIOR (`verify:all` PASS end-to-end + a seated-FP visual gate; flag OFF → live game byte-unchanged). The procedural-modeler
+agent (4 rounds) rebuilt `podScene.buildPodScene` from greybox into a worn industrial lifeboat cabin matching the exterior (`createRustedHullMaterial`): grey-beige panels + dark-steel ribs + conduit, a
+channel-steel **viewport** dead-ahead (the `setDescentProgress` planet shows through), a **chunky red parachute lever** (jabs per-pull + droops on the snap via the new `setParachuteLeverPull` hook, wired into
+`tickParachute`), a guarded **yellow eject T-handle**, a console + seat. Smoke `{ok:true, beats:10}`; contracts (`buildPodScene`/`getPodSpawn`/`setDescentProgress`/`disposePodScene`) intact. **Next** = Phase 1
+T1.3 — the seated-FP camera + viewport framing (lock the seated pose for the Phase-2 descent showpiece) → **completes Phase 1 → milestone PAUSE** (the user's "pod in + out" walk-test). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 

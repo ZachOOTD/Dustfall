@@ -1686,6 +1686,81 @@ const SCENARIOS = {
     console.log(`[crashed-pod] ${JSON.stringify(r)}`);
   },
 
+  // Pod-interior (T1.2): the REAL seated first-person view inside the HERO escape-pod
+  // cabin. Drives the game's OWN intro path (startIntro → jumpToBeat) so the camera +
+  // seat are EXACTLY what the player sees through enterPod/descent/parachute — NOT an
+  // idealized studio rig. --angle: forward (viewport ahead), lever (look right at the
+  // parachute lever + console), eject (look left at the eject control), wide (head-
+  // turned 3/4 of the cabin), descent (forward with the planet swelled). --pull=<0..1>
+  // poses the parachute lever; --snap droops it (the gag's broken state).
+  'pod-interior': async (page) => {
+    const angle = argv.angle || 'forward';
+    const beat = argv.beat || (angle === 'descent' ? 'descent' : 'enterPod');
+    const pull = argv.pull !== undefined ? Number(argv.pull) : 0;
+    const snap = !!argv.snap;
+    const r = await page.evaluate(({ angle, beat, pull, snap }) => {
+      const g = window.__game;
+      const ctx = g.ctx;
+      // First-person (the seated read); hide the rig so it doesn't block the FP camera.
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      // Drive the real intro: start it (force), jump to the requested beat so the beat
+      // controller builds the pod + seats the player facing −Z (the genuine FP frame).
+      g.startIntro();
+      g.jumpToBeat(beat);
+      ctx.three.renderer.setSize(1000, 760, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1000 / 760; cam.updateProjectionMatrix(); }
+      if (angle === 'descent' || beat === 'descent') { try { g.setDescentProgress(0.7); } catch {} }
+      if (pull > 0 || snap) { try { g.setParachuteLeverPull(pull, snap); } catch {} }
+      return { beat, angle };
+    }, { angle, beat, pull, snap });
+    // Let the beat controller tick (it runs in the page's RAF loop) so the pod builds +
+    // the player is seated, THEN pose the camera for the chosen look. We re-seat from the
+    // real spawn + aim the head — mirroring the seated FP look directions.
+    await page.waitForTimeout(600);
+    const meas = await page.evaluate(({ angle, pull, snap }) => {
+      const g = window.__game;
+      const ctx = g.ctx;
+      ctx.flags.paused = true;
+      if (pull > 0 || snap) { try { g.setParachuteLeverPull(pull, snap); } catch {} }
+      const cam = ctx.three.camera;
+      const V = cam.position.constructor;
+      // The seated EYE world position (the spawn + eye offset; the body sits at the spawn).
+      const tr = ctx.player.body.body.translation();
+      const eye = new V(tr.x, tr.y + (ctx.player.eyeOffset || 0.6), tr.z);
+      cam.position.copy(eye);
+      // Look directions in the pod-local frame: −Z is forward (viewport), +X is right
+      // (the parachute lever / console), −X is left (the eject control).
+      let look;
+      if (angle === 'forward' || angle === 'descent') look = new V(eye.x, eye.y - 0.08, eye.z - 1);
+      else if (angle === 'lever') look = new V(eye.x + 1, eye.y - 0.25, eye.z - 0.55);
+      else if (angle === 'eject') look = new V(eye.x - 0.9, eye.y - 0.25, eye.z - 0.8);
+      else if (angle === 'wide') look = new V(eye.x + 0.7, eye.y - 0.1, eye.z - 0.7);
+      else look = new V(eye.x, eye.y - 0.08, eye.z - 1);
+      cam.lookAt(look);
+      cam.updateMatrixWorld(true);
+      // Report: is the cabin built? mesh count? eye height above floor?
+      const pod = ctx.three.scene.getObjectByName('escapePodCabin');
+      let meshes = 0;
+      if (pod) pod.traverse((o) => { if (o.isMesh) meshes++; });
+      return { found: !!pod, meshes, eye: [+eye.x.toFixed(2), +eye.y.toFixed(2), +eye.z.toFixed(2)] };
+    }, { angle, pull, snap });
+    await page.waitForTimeout(300);
+    const tag = `pod-interior-${angle}${pull > 0 ? '-pull' + pull : ''}${snap ? '-snap' : ''}`;
+    await page.screenshot({ path: join(OUT, `scen-${tag}.png`), fullPage: false });
+    console.log(`[pod-interior] ${JSON.stringify(meas)} → scen-${tag}.png`);
+  },
+
+  // Smoke-intro (T1.2): run the whole intro beat chain headless + report {ok,beats}.
+  // Confirms the new hero cabin + the lever hook don't break the eject→descent→
+  // parachute→impact sequence. No screenshot.
+  'smoke-intro': async (page) => {
+    const r = await page.evaluate(() => window.__game.smokeIntro());
+    console.log(`[smoke-intro] ${JSON.stringify(r)}`);
+  },
+
   'tree': async (page) => {
     const t = argv.time !== undefined ? Number(argv.time) : 0.42;
     const r = await page.evaluate((t) => {

@@ -1,48 +1,48 @@
-# ▶ RESUME — Escape-pod intro · Phase 1 · T1.2 (the HERO pod INTERIOR) — `campaign/escape-pod-intro`
+# ▶ RESUME — Escape-pod intro · Phase 1 · T1.3 (seated-FP camera + viewport framing) — LAST Phase 1 unit — `campaign/escape-pod-intro`
 
-**Cycle 10 of the escape-pod-intro campaign.** Phase 1 (the hero pod). Phase 0 (greybox spine) COMPLETE
-+ approved; **T1.1 hero pod EXTERIOR shipped (C9)**. Boot from `docs/campaign/campaign-state.json` +
-`docs/roadmap.md` (NOT chat memory).
+**Cycle 11 of the escape-pod-intro campaign.** Phase 1 (the hero pod). T1.1 exterior (C9) + T1.2 interior
+(C10) shipped. **T1.3 is the LAST Phase 1 unit** — after it, the cycle **PAUSES at the Phase 1 milestone**
+for the user's "pod in + out" walk-test. Boot from `docs/campaign/campaign-state.json` + `docs/roadmap.md`.
 
 ## Read first
 1. `CLAUDE.md` (auto-loaded) — "Where we are now"
-2. `docs/campaign/campaign-state.json` — cycle 9/150, current_tier (T1.2)
-3. `docs/feature-escape-pod-intro.md` — the vision (the pod interior: seated, the chunky parachute lever, the door-blow button, the viewport, a warm cabin) + `docs/research/escape-pod-intro-references.md`
-4. `src/world/escapePodIntro/podScene.ts` — `buildPodScene` (greybox interior to replace) + the T1.1 hero exterior (`placeCrashedPodWreck`, `createRustedHullMaterial` idiom — match its style) + `getPodSpawn`/`setDescentProgress`
-5. `src/world/escapePodIntro/sequence.ts` — the beats that use the interior: `enterPod` (seated), `shipExplode`, `descent` (setDescentProgress), `parachute` (the gag). They re-point at the hero interior automatically if `buildPodScene` keeps its role.
+2. `docs/campaign/campaign-state.json` — cycle 10/150, current_tier (T1.3)
+3. `docs/roadmap.md` — Phase 1 line + the `### Milestone: escape-pod Phase 1` marker
+4. `docs/feature-escape-pod-intro.md` — the seated-FP / viewport-framing intent
+5. `src/world/escapePodIntro/podScene.ts` (`getPodSpawn`, the hero cabin + viewport) + `src/world/escapePodIntro/sequence.ts` (`seatPlayerAt`, the seated beats: enterPod/shipExplode/descent/parachute; `ctx.intro.mode === 'seated'`) + `src/player/controller.ts` (the `introLocoLocked` mode-gating + `ctx.player.eyeOffset`)
 
-## What's built (Phase 0 + T1.1)
-- The whole intro plays greybox; the **crashed pod EXTERIOR is now hero** (industrial modular box, `placeCrashedPodWreck`).
-- The flying-pod **INTERIOR is still greybox** (`buildPodScene`: box floor/walls/ceiling + a viewport frame + a seat block + a planet disc; the player is seated inside for enterPod→shipExplode→descent→parachute).
-- Dev hooks: `__game.startIntro/jumpToBeat('enterPod'|'descent'|'parachute')/skipIntro/smokeIntro/placeCrashedPod`. `setDescentProgress` grows the viewport planet.
+## What's built (Phase 1 so far)
+- **T1.1 hero pod EXTERIOR** (`placeCrashedPodWreck`) + **T1.2 hero pod INTERIOR** (`buildPodScene`: cabin, viewport, red parachute lever w/ `setParachuteLeverPull`, yellow eject, console, seat).
+- The seated beats place the player via `seatPlayerAt(getPodSpawn(ctx))` facing −Z (the viewport), mode `seated` (locomotion off, free-look on). The descent planet shows + grows through the viewport.
+- KNOWN T1.3 gap (flagged by the T1.2 agent): the seated "eye" currently uses the STANDING capsule height (~1.7m, `Tuning.PLAYER_EYE_OFFSET`), so the cabin was sized UP to suit it rather than the player being lowered into the chair. T1.3 fixes the seated camera pose.
 
-## Cycle 10 focus — T1.2: the hero pod INTERIOR (procedural-modeler)
-**Delegate to the `procedural-modeler` agent.** This is the cabin the player RIDES (seated, first-person) through eject → ship-explode → descent → the parachute gag — so it's seen up-close, head-turn range, for ~20-30s. Replace the greybox `buildPodScene` interior with a hero cabin that MATCHES the T1.1 exterior identity (industrial modular box, `createRustedHullMaterial` idiom, grey-beige + steel + worn):
-- **The cabin shell** — a tight worn industrial capsule interior (frame-and-panel, exposed conduit, a warm/dim cabin light feel) sized to the seated FP view; keep the viewport where `setDescentProgress`'s planet shows through (the descent showpiece in Phase 2 frames through it).
-- **The chunky PARACHUTE LEVER** — a real, readable lever the player yanks in the `parachute` beat (the 3-pull gag). It should look pullable + industrial; ideally animate/jolt per pull (the gag's snap is the payoff). Position it in easy FP reach.
-- **The door-blow button / eject control** — the control the player hits in `enterPod` ("pull the eject lever"). A chunky industrial button/lever.
-- **A seat + restraints** + the panel/console (some readable dials/switches — escalating console energy is more a Phase 3 ship thing, but a believable pod console sells it).
-- **Keep the contract:** `buildPodScene` stays the lazy-built offset pod the beats use; `getPodSpawn` (seated position) + `setDescentProgress` (grow the planet through the viewport) + `disposePodScene` must keep working. The eject/descent/gag beats should need NO changes (they reference the pod via these) — but if the lever/button want a beat hook (e.g. the lever jolts on pull), wire it minimally in `sequence.ts`'s `parachute`/`enterPod` ticks.
-- Iterate via the **real seated FP view** (the player's eye inside the pod): `__game.startIntro()` → `jumpToBeat('enterPod')`/`'descent'`/`'parachute')` → capture. **preview_screenshot hangs on heavy scenes** — but the pod interior at the offset (y=3200) with the desert NOT in view may be light enough to screenshot; if it hangs, add a `pod-interior` rig scenario to `rig-shot.mjs` (mirror the real seated placement, like the `crashed-pod` rig). 5-8 rounds to the hero bar.
+## Cycle 11 focus — T1.3: the seated-FP camera + viewport framing
+Lock the seated first-person camera so the player sits BELIEVABLY in the chair and the viewport frames the descent showpiece (Phase 2 frames through it). This is camera/feel work (the procedural-modeler can help if geometry tweaks are needed, but it's mostly camera tuning — do it in the main loop with the visual gate).
+- **Seated eye height** — lower the camera to a true seated eye (sit the player into the chair) instead of standing height. Options: a per-beat seated `eyeOffset` (set `ctx.player.eyeOffset` lower while `ctx.intro.mode === 'seated'`, restore on handoff), or bake a seated offset into `getPodSpawn`/`seatPlayerAt`. Make the viewport sit at eye level dead-ahead, the lever + eject in natural seated reach, the console at a glance-down angle. (Re-frame the cabin if needed — but prefer moving the camera over resizing the hero cabin the T1.2 agent tuned.)
+- **Viewport framing** — confirm the descent planet (via `setDescentProgress`) fills the viewport nicely from the seated eye across progress 0→1 (the Phase-2 showpiece lives here). Adjust the viewport/planet framing so the swelling planet reads centered + dramatic from the seat.
+- **Free-look bounds (optional)** — seated free-look should let the player glance at the lever/eject/console + back to the viewport without clipping out of the cabin; if the look range needs a gentle clamp while seated, add it (small, optional).
+- **Re-verify the seated beats** read well from the new eye: enterPod (eject control reachable), descent (planet framed), parachute (the lever jab/snap visible from the seat).
 
-### Acceptance (T1.2)
-- The seated FP view inside the pod reads as a worn industrial lifeboat cabin (matching the exterior), with a readable chunky parachute lever + eject control + viewport (planet visible via `setDescentProgress`). The eject→descent→parachute beats still play (smoke ok). `verify:all` green end-to-end (real exit); flag OFF → live game byte-unchanged; no SAVE_VERSION bump.
+### Acceptance (T1.3 → Phase 1 complete)
+- From the seated FP view the player sits believably in the cabin: viewport at eye level (planet framed across the descent), lever + eject + console in natural seated sightlines, no clipping out of the cabin on free-look. The beats still play (`smokeIntro` ok). `verify:all` green end-to-end (600s budget, real exit); flag OFF → live game byte-unchanged; no SAVE_VERSION bump.
 
-## Then
-T1.3 — seated-FP camera + viewport framing (lock the seated camera pose so the descent showpiece frames
-beautifully through the viewport). Then **Phase 1 milestone → PAUSE** for the user's "pod in + out" walk-test.
+## ⏸ AFTER THIS CYCLE: PHASE 1 MILESTONE PAUSE
+When `/session-end` moves the Phase 1 tiers to Shipped (all before `### Milestone: escape-pod Phase 1`),
+set `status: paused`, `awaiting_approval: true`, `stop_reasons: ["milestone-review"]` and **STOP the loop**
+(no ScheduleWakeup). Surface to the user: **walk-test the pod in + out** — wake beside the hero crashed pod
+in the desert (the exterior) + ride the pod through eject/descent/parachute (the interior). Play via
+`FEATURES.escapePodIntro = true` + new game, or `__game.startIntro()`/`jumpToBeat`. Then `/campaign-approve`
+releases Phase 2 (the descent showpiece — the `descentProgress` effect stack).
 
 ## Campaign rules
-ENRICH-NOT-CUT · hero geometry → procedural-modeler + the real in-game-view gate (5-8 rounds; defining quality
-not punted) · anti-punt · behind the flag · no save bump · `verify:all` (real exit, NOT piped through `tail`;
-it's slow — give it ~600s) + the visual gate · commit each cycle · checkpoint = per phase.
+ENRICH-NOT-CUT · hero/feel work + the real in-game-view gate · anti-punt · behind the flag · no save bump ·
+`verify:all` (600s, real exit, not piped through `tail`) + the visual gate · commit each cycle · checkpoint = per phase.
 
 ## Footguns
-- Match the T1.1 exterior identity/material (`createRustedHullMaterial`, the wrecks.ts idiom) — the interior + exterior are the SAME pod; don't drift styles.
-- Keep `buildPodScene`/`getPodSpawn`/`setDescentProgress`/`disposePodScene` contracts so the beats keep working.
-- `verify:all` is slow (tsc + 5 placement seeds + colliders through Playwright) — run with a 600s budget + capture the real exit (the agent's shorter Bash timeout will falsely "time out"; re-run end-to-end yourself).
-- `preview_screenshot` hangs on the full ~723K-tri desert scene → for in-desert views use `rig-shot --scenario=crashed-pod`; for the pod interior (offset, no desert in view) the live screenshot may work — else add a `pod-interior` rig.
+- Lowering the seated eye: RESTORE the normal `eyeOffset` at the desert handoff (`endEscapePodIntro`/stepOut) so the player stands normally in the real game — don't leave them crouched.
+- Keep the beats working (`smokeIntro` ok) + the contracts intact.
+- `preview_screenshot` WORKS for the pod interior (offset, light scene); it HANGS on the full desert (use the `crashed-pod` rig for desert views). `verify:all` is slow — 600s + real exit.
 - Keep `FEATURES.escapePodIntro` OFF by default.
 
 ## Verify
-`npm run verify:all` (600s budget, real exit) + a visual gate of the seated FP interior (live screenshot if it doesn't hang, else a `pod-interior` rig) at enterPod/descent/parachute → confirm the cabin + lever + viewport read + the beats still play (smokeIntro ok) + 0 console errors.
+`npm run verify:all` (600s, real exit) + a seated-FP visual gate (preview screenshot at enterPod/descent/parachute from the new seated eye — viewport framed, controls in reach) + `smokeIntro` ok + 0 console errors. Then `/session-end` → the Phase 1 milestone pause.

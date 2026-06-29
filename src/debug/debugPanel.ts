@@ -20,7 +20,7 @@ import { fireSignalFlare, advanceSignalFlares, activeSignalFlareCount } from '..
 import { damageVulture } from '../enemies/vulture.ts';
 import { applyLungePose, applyMeshTransform } from '../enemies/sandWorm.ts';   // M12 ⓖ (C66) — __game.poseLunge (dive render)
 import { startEscapePodIntro, endEscapePodIntro, jumpToBeat as jumpToIntroBeat, smokeTestIntro, type BeatId } from '../world/escapePodIntro/sequence.ts';   // escape-pod intro — __game.startIntro/skipIntro/jumpToBeat/smokeIntro
-import { placeCrashedPodWreck } from '../world/escapePodIntro/podScene.ts';   // T1.1 — __game.placeCrashedPod (hero-pod rig-shot)
+import { placeCrashedPodWreck, setDescentProgress as setPodDescent, setParachuteLeverPull as setPodChute } from '../world/escapePodIntro/podScene.ts';   // T1.1/T1.2 — __game.placeCrashedPod / setDescentProgress / setParachuteLeverPull (pod rig-shots)
 import { makeLatheHull, fuselageProfile, makeFormerRings, makeBreach, makeSandMound } from '../world/wreckForms.ts';
 import { createRustedHullMaterial, HULL_WEATHERING_ACAY } from '../world/hullMaterial.ts';
 import { placeProcgenComposite, type ProcgenWreckClass } from '../world/procgenWreck.ts';
@@ -60,6 +60,12 @@ interface DebugApi {
   /** Escape-pod T1.1 — place the HERO crashed pod at world (x,z), half-buried + tilted. For the
    *  crashed-pod rig-shot (reproduces the real stepOut wake-beside-the-pod placement). */
   placeCrashedPod: (x: number, z: number) => void;
+  /** Escape-pod T1.2 — grow the descent planet in the cabin viewport (0..1). For the
+   *  pod-interior rig-shot (frame the descent forward view). */
+  setDescentProgress: (p: number) => void;
+  /** Escape-pod T1.2 — pose the parachute lever (the gag): t in [0,1] (0=rest, 1=yanked);
+   *  snapped=true droops it dead. For the pod-interior rig-shot + the parachute beat. */
+  setParachuteLeverPull: (t: number, snapped?: boolean) => void;
   setStats: (s: {
     thirst?: number;
     temperature?: number;
@@ -266,6 +272,8 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
     jumpToBeat: (beat) => jumpToIntroBeat(ctx, beat),
     smokeIntro: () => smokeTestIntro(ctx),
     placeCrashedPod: (x, z) => { placeCrashedPodWreck(ctx, x, z); },
+    setDescentProgress: (p) => { setPodDescent(p); },
+    setParachuteLeverPull: (t, snapped) => { setPodChute(t, snapped); },
     sunInfo: () => ({
       exposure: ctx.player.sunExposure01,
       occluders: getSunOccluders().length,

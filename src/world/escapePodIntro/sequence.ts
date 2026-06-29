@@ -38,7 +38,7 @@ import {
   buildShipScene, disposeShipScene, getShipSpawn,
   SHIP_CORRIDOR_ENTER_Z, SHIP_DEAD_END_Z,
 } from './shipScene.ts';
-import { buildPodScene, disposePodScene, getPodSpawn, setDescentProgress, placeCrashedPodWreck } from './podScene.ts';
+import { buildPodScene, disposePodScene, getPodSpawn, setDescentProgress, setParachuteLeverPull, placeCrashedPodWreck } from './podScene.ts';
 import { setGameHudHidden, showIntroPrompt, hideIntroPrompt, setIntroBlack } from './introHud.ts';
 import { flashScreen } from '../../fx/screenFlash.ts';
 import { addTrauma } from '../../fx/cameraShake.ts';
@@ -303,17 +303,24 @@ function tickParachute(ctx: GameContext, dt: number): void {
     intro.scratch.pulls = 0;
     intro.scratch.sincePull = 0;
     intro.scratch.snapped = false;
+    intro.scratch.leverT = 0;        // the lever's current pull pose (jab → settle)
     intro.scratch.init = true;
   }
   addTrauma(0.05);   // keep falling — persistent rumble
 
-  // After the lever snaps: a beat of faster free-fall, then impact.
+  // After the lever snaps: it hangs dead off its pivot; a beat of faster free-fall → impact.
   if (intro.scratch.snapped) {
+    setParachuteLeverPull(1, true);   // drooped/broken pose
     intro.scratch.t = (intro.scratch.t as number ?? 0) + dt;
     addTrauma(0.06);
     if ((intro.scratch.t as number) > PARACHUTE_SNAP_FALL) advanceBeat(ctx);   // → impact
     return;
   }
+
+  // The lever springs back between yanks: decay leverT toward 0 so a jab reads as a
+  // distinct snap-forward-then-recoil (animates the chuteLever node each frame).
+  intro.scratch.leverT = Math.max(0, (intro.scratch.leverT as number) - dt * 4.5);
+  setParachuteLeverPull(intro.scratch.leverT as number);
 
   // Count pulls (edge-triggered input; auto-pull fallback so it can't softlock).
   intro.scratch.sincePull = (intro.scratch.sincePull as number) + dt;
@@ -321,12 +328,15 @@ function tickParachute(ctx: GameContext, dt: number): void {
   if (pulledLever(ctx) || autoPull) {
     intro.scratch.pulls = (intro.scratch.pulls as number) + 1;
     intro.scratch.sincePull = 0;
+    intro.scratch.leverT = 1;        // jab the lever to full-pull (then it springs back)
+    setParachuteLeverPull(1);
     addTrauma(0.35);   // each yank jolts the pod
     const pulls = intro.scratch.pulls as number;
     if (pulls >= PARACHUTE_PULLS) {
       // The 3rd pull — the lever snaps off. No chute.
       intro.scratch.snapped = true;
       intro.scratch.t = 0;
+      setParachuteLeverPull(1, true);
       flashScreen(0xffffff, 0.25);
       showIntroPrompt('The lever snaps off.');
     } else {

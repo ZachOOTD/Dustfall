@@ -3,8 +3,8 @@
   "campaign": "escape-pod-intro",
   "started": "2026-06-28",
   "branch": "campaign/escape-pod-intro",
-  "cycles_completed": 9,
-  "current_tier": "▶ PHASE 1 — the HERO pod (Phase 0 greybox spine COMPLETE + USER-APPROVED). ✅ T1.1 DONE (C9) — the hero pod EXTERIOR (industrial modular box, procedural-modeler, 8 rounds): podScene.placeCrashedPodWreck rebuilt from greybox into the hero crashed pod (grey-beige core + dark-steel exoskeleton + removable bolted panels + blown-open hatch [torn cavity + ajar door + channel-steel frame] + small off-center recessed viewport + conduit/antenna/lift-eye/thruster + scorched base; wrecks.ts createRustedHullMaterial idiom; half-buried ~42% + tilted; compound collider). Dev: __game.placeCrashedPod + a crashed-pod rig in rig-shot.mjs. verify:all PASS end-to-end + hero visual gate (crashed-pod rig wake/hatch/oblique: weathered, strippable, half-buried — reads as the identity). NOTE: preview_screenshot hangs on the full ~723K-tri desert scene → use the rig (it mirrors the REAL stepOut placement). NEXT unit = T1.2 — the hero pod INTERIOR (procedural-modeler): replace the greybox buildPodScene with a worn industrial cabin matching the exterior — the chunky parachute lever (the gag), the door-blow/eject control, a seat+console, the viewport (keep setDescentProgress's planet showing through); keep buildPodScene/getPodSpawn/setDescentProgress/disposePodScene contracts so the eject/descent/gag beats keep playing. Then T1.3 seated-FP camera + viewport framing → Phase 1 milestone walk-test (pod in+out) → /campaign-approve. Plan: docs/feature-escape-pod-intro.md. ENRICH-NOT-CUT; hero geometry → procedural-modeler + real in-game-view gate.",
+  "cycles_completed": 10,
+  "current_tier": "▶ PHASE 1 — the HERO pod (Phase 0 COMPLETE + APPROVED). ✅ T1.1 (C9) hero pod EXTERIOR (industrial modular box; placeCrashedPodWreck). ✅ T1.2 DONE (C10) — the hero pod INTERIOR (procedural-modeler, 4 rounds): podScene.buildPodScene rebuilt from greybox into a worn industrial lifeboat cabin matching the exterior (createRustedHullMaterial) — grey-beige panels + dark-steel ribs + conduit; a channel-steel viewport dead-ahead (setDescentProgress planet shows through + grows; vent grille + parcel shelf below); a chunky RED parachute lever (rubber grip + hazard band + steel shaft; setParachuteLeverPull(t,snapped) hook jabs it per-pull + droops on snap, wired into tickParachute); a guarded YELLOW eject T-handle; a humble console (dim amber screen, telltales, gauges, toggles) + seat. getPodSpawn z +0.45→+0.35 (seat backs the player). Dev: __game.setDescentProgress/setParachuteLeverPull; pod-interior rig. Contracts (buildPodScene/getPodSpawn/setDescentProgress/disposePodScene) intact. verify:all PASS end-to-end + seated-FP visual gate (preview screenshot at enterPod: cabin + viewport + red lever + yellow eject all read; matches the exterior identity) + smoke {ok:true,beats:10}. KNOWN T1.3 gap: the seated eye uses STANDING height (~1.7) so the cabin was sized up — T1.3 lowers the seated camera. NEXT unit = T1.3 (LAST Phase 1 unit): the seated-FP camera + viewport framing — lower the seated eye (sit the player into the chair; per-beat seated eyeOffset while mode==='seated', restore on handoff), frame the viewport/planet at eye level, controls in natural seated reach, optional free-look clamp. COMPLETES Phase 1 → milestone PAUSE (user walk-test: pod in+out) → /campaign-approve releases Phase 2 (descent showpiece). Plan: docs/feature-escape-pod-intro.md. ENRICH-NOT-CUT.",
   "awaiting_approval": false,
   "stop_reasons": [],
   "plan_doc": "docs/feature-escape-pod-intro.md",
@@ -18,7 +18,7 @@
   "circuit_breaker_n": 3,
   "consecutive_no_progress": 0,
   "ceiling": { "max_cycles": 150, "total": null, "per_cycle": null, "unit": "tokens" },
-  "spend": { "total": 2510000, "note": "escape-pod intro campaign, started 2026-06-28. PHASE 0 (greybox spine) = C1-C8 ~2.13M. PHASE 1 (hero pod) started C9. C9 ~380K (T1.1 hero pod exterior: the procedural-modeler agent ~209K subagent [8 build→shoot→critique rounds] + my brief/verify-end-to-end/rig-shot gate/screenshots/docs ~170K). Prior M11->M13 campaign concluded + user-approved (~18.5M tokens / 69 cycles; chronicle archived to campaign-log-2026-06-18-m1-m13.md)." },
+  "spend": { "total": 2830000, "note": "escape-pod intro campaign, started 2026-06-28. PHASE 0 = C1-C8 ~2.13M. PHASE 1 (hero pod): C9 ~380K (T1.1 exterior). C10 ~320K (T1.2 interior: procedural-modeler ~170K [4 rounds] + brief/verify-end-to-end/preview-gate/docs ~150K). Prior M11->M13 campaign concluded + user-approved (~18.5M tokens / 69 cycles; chronicle archived to campaign-log-2026-06-18-m1-m13.md)." },
   "policy_notes": "ENRICH-NOT-CUT: the scope-cut list (docs/feature-escape-pod-intro.md) is a TRUE-TECHNICAL-WALL safety net ONLY, never a target, ALWAYS surfaced to the user before any cut; the spine + pod + descent + tutorial are NOT cuttable. Hero geometry/FX -> the procedural-modeler agent, iterated to a quality BAR (5-8 rounds new hero elements). Real first-person in-game-view visual gate (not an isolated rig). Anti-punt. Behind FEATURES.escapePodIntro (default off until shipped). No SAVE_VERSION bump unless unavoidable (D81; the introComplete marker is additive, legacy=true). New game -> the intro; old spawn -> dev-mode only. Key early-build decisions to lock in Phase 0: R1 save-marker, R2 world-loading-during-descent, R3 handoff seam, R4 state-machine contract + KCC-on-ship-floor, R5 scrap_machete-as-pry-tool (D261, additive), R6 entry point, R7 parachute-gag fallback, R10 accessibility/photosensitivity. See the feature doc's 'Pre-build review'.",
   "cycles": [
     {
@@ -165,6 +165,22 @@
       "ultracode": true,
       "commit": "1c0de3d",
       "spend_approx_tokens": 380000
+    },
+    {
+      "cycle": 10,
+      "date": "2026-06-28",
+      "focus": "Phase 1 T1.2 — the HERO pod interior (the cabin you ride)",
+      "tier": "Phase 1 — the hero pod (escape-pod intro)",
+      "outcome": "SHIPPED",
+      "units": ["T1.2 — delegated to the procedural-modeler (4 build→shoot→critique rounds). podScene.buildPodScene rebuilt from greybox into a worn industrial lifeboat CABIN matching the T1.1 exterior (createRustedHullMaterial): grey-beige panels + exposed dark-steel ribs/frame + conduit + bolted seams/studs; a channel-steel VIEWPORT dead-ahead (the setDescentProgress planet shows through + grows; vent grille + parcel shelf below); a chunky RED parachute lever (rubber grip + hazard band + steel shaft on a pivot bracket) in seated reach; a guarded hazard-YELLOW eject T-handle; a humble console (dim amber screen, telltales, toggles, needle gauges) + seat. Added setParachuteLeverPull(t,snapped) hook (wired into sequence.ts tickParachute — each pull jabs the lever to full + springs back; 3rd pull droops it dead). getPodSpawn z +0.45→+0.35 (seat backs the player; viewport dead-ahead). Dev hooks __game.setDescentProgress/setParachuteLeverPull; pod-interior + smoke-intro rig scenarios. Contracts (buildPodScene/getPodSpawn/setDescentProgress/disposePodScene) intact."],
+      "verify": "verify:all PASS end-to-end (tsc + placement 0/0 x5 + colliders 0/40; re-ran 600s, real exit). smoke {ok:true, beats:10} — the eject/descent/parachute beats still play with the new cabin + lever hook.",
+      "visual": "HERO bar — seated-FP visual gate via preview_screenshot at the enterPod beat (the offset pod interior is a LIGHT scene → preview works, unlike the heavy desert): a worn industrial cabin matching the exterior, the framed viewport with the planet, the chunky red parachute lever, the guarded yellow eject control, console + seat — all read. 0 console errors. The per-pull lever jab/snap MOTION + the seated-eye height are feel/T1.3 items for the walk-test.",
+      "save": "no change (SAVE_VERSION stays 15).",
+      "decisions": ["(no new D-entry — execution. Confirmed: preview_screenshot WORKS for the offset pod interior [light scene]; the memory #3 hang is the heavy full-desert view.)"],
+      "agent": "procedural-modeler (~170K subagent tokens, 4 rounds, 94 tool uses).",
+      "ultracode": true,
+      "commit": "PENDING",
+      "spend_approx_tokens": 320000
     }
   ]
 }
