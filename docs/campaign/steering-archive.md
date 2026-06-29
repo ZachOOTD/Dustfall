@@ -5,6 +5,15 @@ loop at the cycle boundary so they're not re-applied each cycle.
 
 ---
 
+## 2026-06-29 (received during cycle 17, the Phase 2 milestone) — A pushed campaign branch + a playable preview link to walk-test each cycle
+
+**Directive:**
+> "want to set up a separate branch on github that we can commit to after each cycle that i can create a playable link for and go test it as we continue developing."
+
+**Action taken:** surfaced at the Phase 2 milestone pause (the campaign was already pausing for the walk-test). The campaign already commits each cycle to the `campaign/escape-pod-intro` branch locally; the new ask is to PUSH it to GitHub + deploy a playable preview link (so the in-progress escape-pod intro can be walk-tested via a URL, with `FEATURES.escapePodIntro` ON in that preview build — separate from the live master deploy). Investigated the existing deploy mechanism + proposed a concrete plan to the user at the pause; pushing/deploy is outward-facing so it's confirmed with the user before executing (NOT done unilaterally). Once set up, each cycle's push refreshes the preview link. See the C17 milestone-pause handoff + next-session-prompt.
+
+---
+
 ## 2026-06-20 (applied at cycle 44) — Remove the watchtower; POIs must read as long-decayed, no signs of living human life
 
 **Directive:**

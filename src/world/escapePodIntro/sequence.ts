@@ -39,7 +39,7 @@ import {
   buildShipScene, disposeShipScene, getShipSpawn,
   SHIP_CORRIDOR_ENTER_Z, SHIP_DEAD_END_Z,
 } from './shipScene.ts';
-import { buildPodScene, disposePodScene, getPodSpawn, setDescentProgress, setParachuteLeverPull, placeCrashedPodWreck } from './podScene.ts';
+import { buildPodScene, disposePodScene, getPodSpawn, setDescentProgress, setTumbleLight, setParachuteLeverPull, placeCrashedPodWreck } from './podScene.ts';
 import { setGameHudHidden, showIntroPrompt, hideIntroPrompt, setIntroBlack } from './introHud.ts';
 import { flashScreen } from '../../fx/screenFlash.ts';
 import { addTrauma } from '../../fx/cameraShake.ts';
@@ -48,8 +48,9 @@ import { addTrauma } from '../../fx/cameraShake.ts';
 const COCKPIT_DWELL = 3.0;
 /** Eject auto-fires after this long if the player doesn't pull the lever (anti-softlock). */
 const EJECT_FALLBACK = 6.0;
-/** Seconds the ship-explosion beat holds (watch it blow) before the descent. */
-const SHIP_EXPLODE_DWELL = 2.5;
+/** Seconds the eject/blast + TUMBLING-REVEAL beat holds (the pod tumbles, settling into the
+ *  descent) before the descent. T2.3 lengthened this from 2.5 so the tumble reads + settles. */
+const SHIP_EXPLODE_DWELL = 4.0;
 /** Seconds of atmospheric fall before the parachute beat (greybox pacing). */
 const DESCENT_DURATION = 8.0;
 /** Pulls before the lever snaps off — THE GAG (3 pulls → no chute). */
@@ -272,20 +273,38 @@ function tickEnterPod(ctx: GameContext, dt: number): void {
   if (pulledLever(ctx) || (intro.scratch.dwell as number) > EJECT_FALLBACK) advanceBeat(ctx);   // → shipExplode
 }
 
-/** shipExplode beat (T0.3a) — eject fires: flash, the ship blows up (greybox: dispose it
- *  behind the flash). Holds a beat (watch it go) then → descent. */
+/** shipExplode beat (T0.3a + T2.3 the TUMBLING REVEAL) — eject fires: the ship dies in a blast
+ *  and the pod is flung TUMBLING, the window sweeping space→planet as it stabilizes into the
+ *  descent. The blast floods the cabin with light; the camera tumbles (a decaying pose ridden by
+ *  the controller's applyIntroTumble); a settling buffet eases out. Settles level → descent.
+ *  (The hero ship explosion staged through this frame = Phase 3; here the ship is greybox.) */
 function tickShipExplode(ctx: GameContext, dt: number): void {
   const intro = ctx.intro;
   if (!intro) return;
   if (!intro.scratch.init) {
-    flashScreen(0xffe6c0, 1.0);     // warm blast flash (decays via updateScreenFlash)
-    disposeShipScene(ctx);           // the ship is gone after the blast
+    flashScreen(0xffe6c0, 1.0);     // the blast flash (decays via updateScreenFlash)
+    disposeShipScene(ctx);           // the ship is gone after the blast (greybox; hero ship = Phase 3)
     showIntroPrompt('');
+    setDescentProgress(0);           // the orbital vista (planet + stars) shows through the window during the tumble
+    faceControl(ctx, 0, 0);          // base look = the descent framing (−Z, level) so the tumble settles ONTO it (seamless handoff to the descent — no snap)
+    addTrauma(0.95);                 // the violent eject/blast kick
+    intro.mode = 'scripted';         // the beat owns the camera — the tumble post-multiplies on the look
+    intro.scratch.tumble = 1;        // full tumble at the blast (controller applyIntroTumble rides this)
     intro.scratch.init = true;
     intro.scratch.dwell = 0;
   }
   intro.scratch.dwell = (intro.scratch.dwell as number) + dt;
-  if ((intro.scratch.dwell as number) > SHIP_EXPLODE_DWELL) advanceBeat(ctx);   // → descent
+  const d = intro.scratch.dwell as number;
+  // Ease the TUMBLE out (settle 1 → 0) over the dwell — the pod stabilizing into the descent.
+  const e = Math.min(1, d / SHIP_EXPLODE_DWELL);
+  const settle = 1 - e * e * (3 - 2 * e);   // smoothstep ease-out
+  intro.scratch.tumble = settle;            // the camera tumble rides this (controller post-multiply)
+  addTrauma(0.05 + settle * 0.30);          // a settling buffet (decays with the tumble)
+  setTumbleLight(settle);                   // the cabin-light swing: blast-orange flood → orbital cool
+  if (d > SHIP_EXPLODE_DWELL) {
+    intro.scratch.tumble = 0;               // fully settled → hand off level to the descent
+    advanceBeat(ctx);                       // → descent (ensureInPod sets mode 'seated', free-look back)
+  }
 }
 
 /** descent beat (T0.3b) — the atmospheric fall: the planet swells (setDescentProgress)

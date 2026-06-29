@@ -64,16 +64,15 @@ Run with `npm run dev` (port 5173). Type-check / verify with
      Prior milestones live in docs/changelog.md — do NOT accumulate "Prior milestone"
      blocks here. CLAUDE.md is auto-loaded every turn; keep it ≤5K tokens. -->
 
-**▶ CAMPAIGN ACTIVE — Escape-Pod Intro — Phase 2 (the descent showpiece) — `campaign/escape-pod-intro`** (autonomous; checkpoint=PHASE). **Phase 0 (greybox spine, C1-C8) + Phase 1 (the hero cylindrical pod, C9-C13)
-COMPLETE + USER-APPROVED.** Now in **Phase 2 — the beautiful atmospheric descent.** **✅ T2.1 SHIPPED (C14+C15)**: a `descentProgress`-driven orbit→atmosphere→desert fall through the pod viewport — a curved
-Dune-desert planet + Fresnel atmosphere limb + starfield, cross-fading to a barchan dune surface with raking dawn light + closing scale (replaces the greybox disc; gate-passed @ beauty 8 after 5 modeler rounds + 4
-adversarial gates that caught a z-occluder bug + a porthole-band mapping bug + flat-coin/lava/cloud reads) **+ the cabin interior-lit-by-exterior** (C15) **+ ✅ T2.2 re-entry FX** (C16 — plasma past the glass [white-hot
-core, slipstream] + viewport heat-shimmer + white flash + speed-coupled shake, on a shared re-entry curve peaking p≈0.24 before the desert cross-fade; gate-passed @ beauty 8). **Next:** **T2.3 — tumbling reveal +
-interior-lit-by-exterior** (the window drifts ship→space→planet→desert; the explosion staged through the frame; cabin washed by the shifting light) → the **Phase 2 milestone walk-test** (the beautiful descent, incl. its
-felt MOTION) → `/campaign-approve` releases Phase 3. Built via the **procedural-modeler** + **adversarial
-visual gates** (the lesson: builder self-critique + my own eyes miss real defects; the N-critic gate catches them — see [[hero-asset-adversarial-gate]]). **ENRICH-NOT-CUT** · hero geometry/FX → the procedural-modeler +
-the adversarial gate (`preview_screenshot` works for the offset pod interior; hangs on the full desert → use `rig-shot --scenario=crashed-pod|pod-interior --descent=<0..1>`) · anti-punt · behind `FEATURES.escapePodIntro`
-(default off) · no SAVE_VERSION bump. Remaining phases: **2 descent → 3 ship → 4 crash/tutorial → 5 audio**; the loop pauses at each phase boundary. Each `/campaign-cycle` boots from `docs/campaign/campaign-state.json` + `docs/roadmap.md` — NOT this note.
+**⏸ CAMPAIGN PAUSED — Escape-Pod Intro — Phase 2 milestone (the descent showpiece COMPLETE) — `campaign/escape-pod-intro`** (autonomous; checkpoint=PHASE). **Phase 0 (greybox spine, C1-C8) + Phase 1 (the hero
+cylindrical pod, C9-C13) + Phase 2 (the descent showpiece, C14-C17) COMPLETE.** Phase 0+1 USER-APPROVED. **Phase 2 — the beautiful atmospheric descent — is whole:** **T2.1** the descentProgress orbit→atmosphere→desert
+vista through the pod viewport (curved Dune-desert planet + Fresnel atmosphere limb + starfield → cross-fade → barchan dune surface w/ raking dawn light + closing scale; gate-passed @ beauty 8) **+ the cabin
+interior-lit-by-exterior** · **T2.2** re-entry FX (plasma w/ white-hot core + slipstream + heat-shimmer + white flash + speed-coupled shake; gate-passed @ beauty 8) · **T2.3** the tumbling reveal (eject → blast → the pod
+tumbles + blast-floods, settling into the descent). **AWAITING the user's BEAUTIFUL-DESCENT WALK-TEST** (eject → tumble → re-entry → the calm fall → the parachute gag) → `/campaign-approve` releases **Phase 3 (the hauler
++ disaster)**. The vista built via the **procedural-modeler** + **adversarial visual gates** (4 gate rounds caught a z-occluder bug + a porthole-band mapping bug + flat-coin/lava/cloud reads — the lesson: builder
+self-critique + my own eyes miss real defects; the N-critic gate catches them — see [[hero-asset-adversarial-gate]]). **Deferred to Phase 3:** the hero ship explosion staged through the tumble frame. **ENRICH-NOT-CUT**
+· hero geometry/FX → the procedural-modeler + the adversarial gate (`preview_screenshot` works for the offset pod interior; hangs on the full desert → use `rig-shot --scenario=crashed-pod|pod-interior --descent=<0..1>`) ·
+anti-punt · behind `FEATURES.escapePodIntro` (default off) · no SAVE_VERSION bump. Remaining phases: **3 ship → 4 crash/tutorial → 5 audio**; the loop pauses at each phase boundary. Each `/campaign-cycle` boots from `docs/campaign/campaign-state.json` + `docs/roadmap.md` — NOT this note.
 **To walk-test:** set `FEATURES.escapePodIntro = true` + new game, OR in the console `__game.startIntro()` (force-start; `__game.jumpToBeat('<beat>')` / `__game.skipIntro()` to navigate; `__game.smokeIntro()` runs the whole chain).
 
 **The intro (per the 2026-06-28 vision interview):** lone hauler pilot in orbit → ship disaster → flee to the escape pod → eject → watch the ship explode → a beautiful atmospheric descent → the
@@ -84,12 +83,12 @@ first-person throughout; pod identity = **vertical riveted aluminium capsule/tor
 merged to master + live at https://zachootd.github.io/Dustfall/. Its log is archived at `docs/campaign/campaign-log-2026-06-18-m1-m13.md`. Still queued for the user (out-of-loop): the **Skyfall
 hero wreck** + the **CAVE rework** (dedicated solo sessions), ⑰ pickup-instancing (human-attended), + the §A walk-tests.
 
-**Last shipped**: Escape-pod **C16** (2026-06-29, Phase 2 T2.2 — **re-entry FX**) — the violence of punching into the atmosphere, easing into the calm descent. Split into the **visual half** (procedural-modeler,
-`podScene.ts`: `PLASMA_FS` ionized-air streaks with a white-hot core + slipstream rake, clipped to the porthole; `SHIMMER_FS` heat-wobble) + the **felt half** (`sequence.ts` `tickDescent`: `flashScreen` one-shot at the
-peak + `addTrauma(0.04+re×0.45)` buffet), both on ONE shared curve `re=max(0,1−((p−0.24)/0.16)²)` (peak p≈0.24, gone by ~0.40 — re-entry is HIGH+EARLY, finishing before the desert cross-fade so the warm layers don't
-stack). `verify:all` PASS + smoke `{ok:true,beats:10}` + the **confirm gate PASSED @ beauty 8** (2 rounds — it caught an inverted arc [fade brighter than peak], campfire-orange [no white-hot core], a decal-seam band; all
-fixed). Bookends clean (orbit+surface = zero plasma), no cabin spill. Noted sev-3 polish (whiter core, vista-at-peak) → walk-test. **Next** = T2.3 tumbling reveal + interior-lit-by-exterior → the Phase 2 milestone
-walk-test. See [docs/next-session-prompt.md](docs/next-session-prompt.md).
+**Last shipped**: Escape-pod **C17** (2026-06-29, Phase 2 T2.3 — the **tumbling reveal** → **PHASE 2 COMPLETE**) — reworked the `shipExplode` beat into the cinematic (all main-loop camera/light staging): on eject the
+ship dies in a blast and the pod is flung **tumbling**, settling into the descent. The beat goes `mode='scripted'` + eases an intro `tumble` intensity (1→0); the controller's new **`applyIntroTumble`** rides it as a decaying
+tumbled camera pose (roll + pitch-up + yaw + jostle) post-multiplied onto the look (storm-sway pattern, undo-last-frame); a `faceControl(0,0)` base makes it settle seamlessly into the descent. New `podScene.setTumbleLight`
+floods the cabin hot blast-orange (porthole spill `0xff7a2e`@3.5 + brighter ambient) decaying to the orbital cool. `verify:all` PASS + smoke `{ok:true,beats:10}` + live preview (cabin rolls + blast-floods, settles level).
+Hero ship explosion through the frame = Phase 3; the tumble MOTION = walk-test (own-eyes verified — a still can't gate a spin). **⏸ Phase 2 milestone — the descent showpiece is whole (C14 vista + C15 cabin-light + C16
+re-entry FX + C17 tumble); awaiting the user's beautiful-descent walk-test.** **Next (after `/campaign-approve`)** = Phase 3 (the hauler + disaster staging). See [docs/next-session-prompt.md](docs/next-session-prompt.md).
 
 **Full per-session history**: [docs/changelog.md](docs/changelog.md).
 

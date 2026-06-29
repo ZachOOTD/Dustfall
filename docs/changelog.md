@@ -3,6 +3,16 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Escape-pod campaign C17 — 2026-06-29 — Phase 2 T2.3: **the tumbling reveal + interior-lit-by-exterior** → ⏸ PHASE 2 COMPLETE — milestone PAUSE ✓ verify:all + live preview
+
+`verified` — `npm run verify:all` PASS (tsc + placement + colliders) + smoke `{ok:true,beats:10}` + a live preview (the cabin tumbles + blast-floods, settling level into the descent) + 0 console errors. Flag OFF → live game byte-unchanged. No SAVE_VERSION bump.
+
+**T2.3 — the tumbling reveal: eject → the ship dies in a blast → the pod is flung TUMBLING, settling into the descent.** Reworked the `shipExplode` beat (`sequence.ts`) into the cinematic, all main-loop (camera/light staging — no new geometry):
+- **The tumble** — on eject, the beat goes `mode='scripted'` + eases an intro `tumble` intensity (`scratch.tumble`: 1 at the blast → 0 settled, smoothstep). The controller's new **`applyIntroTumble`** rides it as a decaying tumbled camera POSE (rolled ~1.45rad + pitched up toward the blast + yawed aside + a jostle wobble), post-multiplied onto the look exactly like the storm-sway (undo-last-frame so it never accumulates on the PointerLockControls orientation). A `faceControl(0,0)` at init sets the base look to the descent framing so the tumble **settles seamlessly into the descent** (no snap). A settling buffet (`addTrauma(0.05+settle×0.30)`) + the violent eject kick decay with it.
+- **Interior-lit-by-exterior** — new `podScene.setTumbleLight(settle)` floods the cabin with hot blast-orange light at the explosion (the porthole-spill `PointLight` → `0xff7a2e` @ intensity 3.5, the ambient fill brightens), decaying back to the orbital cool as the pod stabilizes (settle=0 == the descent's `setDescentProgress(0)` cool state → seamless handoff). Builds on the C15 light refs.
+- **Scope (honest):** the **hero ship explosion staged through the frame + a richer ship→space→planet content-sweep = Phase 3** (the ship is greybox until then). Here the explosion is staged via the blast flash + the cabin blast-flood + the violent tumble — the STAGING is in place for Phase 3 to fill. The tumble's felt MOTION is a Phase-2 walk-test item (a still can't judge a spin → no adversarial gate; own-eyes + the pose/handoff/blast verified, proportionate for camera/light staging like C15).
+- **▶ PHASE 2 COMPLETE** (C14 vista + C15 cabin-light + C16 re-entry FX + C17 tumbling reveal). ⏸ **Milestone PAUSE** for the user's **beautiful-descent walk-test** (eject → tumble/reveal → re-entry → the calm fall → the parachute gag) → `/campaign-approve` releases Phase 3 (the hauler + disaster).
+
 ## Escape-pod campaign C16 — 2026-06-29 — Phase 2 T2.2: **re-entry FX** (plasma + heat-shimmer + white flash + speed-coupled shake) ✓ verify:all + 2-round confirm gate (passed @ beauty 8)
 
 `verified` — `npm run verify:all` PASS (tsc + placement + colliders) + smoke `{ok:true,beats:10}` + the **confirm gate PASSED** (both critics hitsBar=true, beauty 8 after 1 fix round). Flag OFF → live game byte-unchanged. No SAVE_VERSION bump.

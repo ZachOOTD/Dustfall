@@ -1,57 +1,64 @@
-# ▶ Escape-pod intro · Phase 2 (the descent showpiece) — C17 — `campaign/escape-pod-intro`
+# ⏸ PAUSED — Escape-pod intro · PHASE 2 MILESTONE (the descent showpiece COMPLETE) — `campaign/escape-pod-intro`
 
-**Campaign ACTIVE** (`status: active`). Phase 2: **T2.1 ✅ (C14+C15), T2.2 ✅ (C16).** C17 = **T2.3 — the tumbling
-reveal + interior-lit-by-exterior**, the LAST Phase 2 unit → then the Phase 2 milestone walk-test. Boot from
-`docs/campaign/campaign-state.json` + `docs/roadmap.md` (not chat memory).
+**The campaign is PAUSED at the Phase 2 milestone** (`status: paused`, `awaiting_approval: true`,
+`stop_reasons: ["milestone-review"]`). The beautiful atmospheric descent is whole — vista + cabin-light +
+re-entry FX + the tumbling reveal. **The user walk-tests, then `/campaign-approve` releases Phase 3.** Do NOT
+auto-continue the loop until approved.
 
-## Phase 2 so far (don't redo)
-- **C14 — descent VISTA** (`podScene.ts`): a `descentProgress`-driven orbit→atmosphere→desert fall through the round
-  porthole (planet + Fresnel atmosphere limb + starfield → cross-fade to a barchan dune ground/horizon/sky). Shaders
-  `PLANET_VS/FS`, `ATMO_FS`, `STAR_FS`, `LOWALT_FS`. Gate-passed @ beauty 8.
-- **C15 — cabin interior-lit-by-exterior**: `setDescentProgress` drives the porthole-spill light (`vpGlowLight`) + the
-  hemisphere `cabinFill` cool→warm as the dawn desert swells (driver `dawn=clamp((p−0.25)/0.6)`).
-- **C16 — re-entry FX**: plasma (`PLASMA_FS`, white-hot core + slipstream, clipped to the porthole) + heat-shimmer
-  (`SHIMMER_FS`) + a white flash + a speed-coupled shake, on a shared `re=max(0,1−((p−0.24)/0.16)²)` curve (peak p≈0.24,
-  gone by ~0.40). Visual half in `podScene.ts`, felt half in `sequence.ts` `tickDescent`.
-- The descent beat is `sequence.ts` `tickDescent` (seated FP, looking −Z at the porthole, `setDescentProgress(progress)`
-  over `DESCENT_DURATION=8s`). The eject + ship-explode beats precede it (`tickEnterPod`, `tickShipExplode`).
-- Rig: `node scripts/rig-shot.mjs --scenario=pod-interior --descent=<0..1>`; `preview_screenshot` works for the offset pod.
+## 🎮 FOR THE USER — walk-test the descent (Phase 2): the beautiful atmospheric fall
+This is the emotional core you described in the vision interview — watch the whole thing play:
+- **Eject → the tumble:** pull the eject lever; the ship dies in a blast and the pod is flung **tumbling** —
+  the cabin rolls + floods with the explosion's orange light, settling level into the fall.
+- **Re-entry:** the pod punches into the upper atmosphere — plasma burns past the glass (a white-hot core),
+  a flash, heat-shimmer, the pod buffeting — then it breaks through into calm.
+- **The descent:** the **beautiful fall** — from orbit you watch a curved Dune-desert planet with a glowing
+  blue atmosphere limb against the stars, then cross-fade down through the atmosphere to a dawn-lit dune
+  surface rushing up, the cabin warming with the dawn light.
+- **The parachute gag** follows (3 pulls → it snaps; no chute → crash). [unchanged from Phase 0]
 
-## C17 — T2.3: the tumbling reveal + interior-lit-by-exterior
-The vision: just after eject + the ship explodes, the pod **tumbles**, and through the window the view **drifts across
-ship → space → planet → desert** as it stabilizes into the descent — the explosion staged through the frame, the cabin
-washed by the shifting exterior light. This is the most architecturally-involved T2 unit (it adds ROTATION + sequences
-the reveal). Scope:
-1. **The tumble (scripted camera/pod rotation)** — during the transition from ship-explode → descent (or the very start of
-   the descent), rotate so the porthole sweeps the view. The seated FP camera is otherwise fixed-look; the tumble is a
-   SCRIPTED rotation over a few seconds that the player rides (then it settles to the stable −Z descent look). Decide:
-   rotate the camera, or rotate the pod's vista group — whichever reads as the capsule spinning. Settle smoothly into the
-   descent's stable framing (don't fight the seated camera contract longer than the tumble; restore the look at the end).
-2. **Stage the explosion reveal THROUGH the frame** — as the window sweeps past the (greybox so far) exploding ship, the
-   blast reads through the porthole (tie into the existing `tickShipExplode` / `flashScreen` + the ship scene). The window
-   drifts ship → space (stars) → the planet below → into the descent. (The ship is greybox until Phase 3 — stage the
-   reveal with what's there + the FX; the hero ship is Phase 3.)
-3. **Interior-lit-by-exterior through the tumble** — extend C15's `vpGlowLight`/`cabinFill` hook so the cabin light tracks
-   the TUMBLE (washes of explosion-orange, then cool space, then the planet glow) — not just altitude. The cabin should
-   catch the swinging exterior light as the window sweeps.
-- Hero-ish (camera/staging + light) → likely a main-loop + procedural-modeler collaboration; gate the visual reveal ONCE.
-  The MOTION (the tumble feel) is a walk-test item — get the staging/look right in stills + the felt spin is the user's call.
-- **This COMPLETES Phase 2** → the **Phase 2 milestone walk-test** (the whole beautiful descent: eject → tumble/reveal →
-  re-entry → the calm fall → the parachute gag). `/campaign-approve` releases Phase 3.
+**How to play it:**
+- **Real flow:** set `FEATURES.escapePodIntro = true` (`src/config/features.ts`) → start a NEW game → play
+  from the start (cockpit → corridor → pod → eject → **the descent** → parachute → crash → desert).
+- **In-console, jump to the descent:** `__game.startIntro()` then `__game.jumpToBeat('enterPod')` (then pull
+  the eject lever to trigger the tumble→descent), or `__game.jumpToBeat('shipExplode')` (the tumble) /
+  `'descent'` (the fall) / `'parachute'`. `__game.smokeIntro()` runs the whole chain.
 
-## Known Phase-2 residuals (sev-3 — address opportunistically / walk-test)
-- Re-entry (C16): the white-hot core could go a touch whiter/larger; the vista is dim (glimpsed, not framed) at the
-  plasma peak — optional polish.
-- Descent (C14): the d05↔d09 scale progression + the felt MOTION/pace of `descentProgress` over the ~20s fall is a
-  walk-test item (stills can't judge it); d05 is the softest vista frame.
-- These are all things the user will feel at the Phase-2 walk-test — surface them then.
+**What to give feedback on:** the FEEL + look of the descent — the **tumble** (does the spin feel right, or
+too much / too little / nauseating?), the **re-entry** (violent + tense?), the **descent pacing** (the ~8s
+fall — too fast / slow? does the surface "rush up"?), the planet/atmosphere beauty, the cabin light, the
+parachute gag. Drop notes in `docs/campaign/steering.md` or say them. **The MOTION/pace is the key thing
+stills couldn't judge** — that's what this walk-test is for.
+
+**Known deferred (NOT bugs):**
+- The **hero ship explosion** seen through the tumble frame is **Phase 3** — right now the blast is staged via
+  the flash + the cabin blast-flood + the tumble (the ship itself is greybox/disposed at the blast).
+- Sev-3 polish noted from the gates: the re-entry white-hot core could go a touch whiter/larger; the descent
+  vista is dim at the plasma peak; the d05↔d09 dune-scale progression is subtle. All walk-test-or-later.
+- Audio is Phase 5 (the descent is silent for now).
+
+## ▶ AFTER `/campaign-approve` → Phase 3 — The hauler (hero) + the disaster staging
+Boot from `docs/campaign/campaign-state.json` + `docs/roadmap.md`. The ship you flee + the disaster that
+drives you to the pod (it precedes the now-built descent):
+- **T3.1 Hauler exterior** (procedural-modeler) — the worn cargo-hauler silhouette (rear engines), a hero
+  asset → the full adversarial gate.
+- **T3.2 Explosion FX** — the ship blowing up; **stage it through the C17 tumble frame** (the tumbling-reveal
+  staging + `setTumbleLight` blast-flood hook are already built — fill them with the hero ship's death; the
+  window can drift across the exploding ship → space → planet as the pod tumbles away).
+- **T3.3 Cockpit** (escalating consoles + a personal touch) · **T3.4 Corridor + disaster staging** (3 lighting
+  zones, only-open-door funnel, fire, red-alert, spatial audio).
+- **Milestone: Phase 3 — ship COMPLETE → USER WALK-TEST → `/campaign-approve`.**
+
+## State of the code (Phase 2)
+- `src/world/escapePodIntro/podScene.ts` — the descent VISTA (`PLANET_VS/FS`, `ATMO_FS`, `STAR_FS`,
+  `LOWALT_FS`), the re-entry FX (`PLASMA_FS`, `SHIMMER_FS`), the cabin-light hooks (`setDescentProgress`'s
+  section 6 + `setTumbleLight`). The single `setDescentProgress(0..1)` is the descent's animation surface.
+- `src/world/escapePodIntro/sequence.ts` — the beat machine; `tickShipExplode` = the tumbling reveal,
+  `tickDescent` = the fall + the re-entry felt half (flash + shake on the shared `re` curve).
+- `src/player/controller.ts` — `applyIntroTumble` (the tumble camera post-multiply, storm-sway pattern).
+- Rig: `rig-shot.mjs --scenario=pod-interior --descent=<0..1>`; `preview_screenshot` works for the offset pod.
 
 ## Campaign rules
-ENRICH-NOT-CUT · hero/FX → procedural-modeler + the adversarial gate (run it on hero assets + the visual reveal; lighter/once
-on FX-over-existing + integration; own-loop preview is fine for a contained light/camera tweak) · anti-punt · behind
-`FEATURES.escapePodIntro` (off) · no save bump · `verify:all` (600s, real exit, NOT piped through `tail`) · commit each
-cycle · checkpoint = per phase (**next pause = the Phase 2 milestone, after T2.3**).
-
-## Cost note
-Phase 2 so far ~3.0M (C14 vista 2.4M [the big one] + C15 0.15M + C16 ~0.45M). T2.3 (camera/staging + light + 1 gate) ~
-0.4-0.7M. Keep the gate to ONCE; the tumble FEEL is a walk-test judgment, not a stills-gate one.
+ENRICH-NOT-CUT · hero geometry/FX → procedural-modeler + the adversarial gate (the gate caught real defects on
+the hero vista every round; run it on hero assets, lighter/once on FX-over-existing, own-loop for contained
+camera/light staging + motion [a still can't gate a spin]) · anti-punt · behind the flag · no save bump ·
+`verify:all` (600s, real exit, NOT piped through `tail`) · commit each cycle · checkpoint = per phase.

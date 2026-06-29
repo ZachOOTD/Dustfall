@@ -206,6 +206,8 @@ const _VP_COOL = new THREE.Color(0xa6c0d6);    // porthole spill in space — co
 const _VP_WARM = new THREE.Color(0xffb070);    // porthole spill at the dawn desert — warm wash
 const _FILL_COOL = new THREE.Color(0x93a0b0);  // ambient sky-tint in space (matches the build default)
 const _FILL_WARM = new THREE.Color(0xb89a82);  // ambient sky-tint warmed by the dawn
+const _VP_BLAST = new THREE.Color(0xff7a2e);   // T2.3 — the explosion flooding the cabin (hot blast-orange) during the tumble
+const _FILL_BLAST = new THREE.Color(0xdc8a48); // T2.3 — the blast wash on the ambient fill
 const _vpScratch = new THREE.Color();
 const _fillScratch = new THREE.Color();
 let chuteLever: THREE.Group | null = null;  // the parachute lever pivot (setParachuteLeverPull)
@@ -1798,6 +1800,23 @@ export function setDescentProgress(progress: number): void {
   if (reentryShimmerMat) { reentryShimmerMat.uniforms.uRe.value = re; reentryShimmerMat.uniforms.uTime.value = reT; }
   if (reentryPlasmaMesh) reentryPlasmaMesh.visible = re > 0.001;   // skip the draw outside the re-entry window
   if (reentryShimmerMesh) reentryShimmerMesh.visible = re > 0.001;
+}
+
+/** T2.3 — the TUMBLING REVEAL's cabin-light swing. The shipExplode beat drives this with a
+ *  `settle` (1 at the eject/blast → 0 as the tumble settles into the descent): the explosion
+ *  FLOODS the cabin with hot blast-orange light (bright porthole spill + warm ambient), decaying
+ *  back to the orbital cool as the pod stabilizes (settle=0 == the descent's setDescentProgress(0)
+ *  cool state, so it hands off seamlessly). Safe no-op before build / after dispose. */
+export function setTumbleLight(settle: number): void {
+  const s = Math.max(0, Math.min(1, settle));
+  if (vpGlowLight) {
+    vpGlowLight.color.copy(_vpScratch.copy(_VP_COOL).lerp(_VP_BLAST, s));
+    vpGlowLight.intensity = 0.95 + s * 2.6;    // 0.95 orbital cool → ~3.5 the blast flooding the cabin
+  }
+  if (cabinFill) {
+    cabinFill.color.copy(_fillScratch.copy(_FILL_COOL).lerp(_FILL_BLAST, s * 0.9));
+    cabinFill.intensity = 0.72 + s * 0.5;       // the whole cabin brightens under the blast
+  }
 }
 
 /** Pose the PARACHUTE lever (the gag hook). `t` in [0,1]: 0 = at rest, 1 = fully yanked

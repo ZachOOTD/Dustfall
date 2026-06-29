@@ -446,8 +446,35 @@ function applyStormCameraSway(ctx: GameContext): void {
   _swayActive = true;
 }
 
+// Escape-pod intro (T2.3) — the TUMBLING REVEAL. The shipExplode beat eases an intro
+// `tumble` intensity (scratch.tumble: 1 at the eject/blast → 0 settled); here we ride it as a
+// decaying tumbled POSE (rolled + pitched up toward the blast + yawed aside, settling level
+// into the descent) plus a jostle wobble — post-multiplied onto the look like the storm sway
+// (undo last frame so it never accumulates on the PointerLockControls orientation).
+const _tumbleQuat = new THREE.Quaternion();
+const _tumbleInv = new THREE.Quaternion();
+const _tumbleEuler = new THREE.Euler(0, 0, 0, 'YXZ');
+let _tumbleActive = false;
+function applyIntroTumble(ctx: GameContext): void {
+  const cam = ctx.three.camera;
+  if (_tumbleActive) { cam.quaternion.multiply(_tumbleInv); _tumbleActive = false; }
+  const s = (ctx.intro?.scratch?.tumble as number) ?? 0;   // 1 at the blast → 0 settled
+  if (s <= 0.001) return;
+  const t = ctx.time.elapsed;
+  const wob = s * 0.16;
+  const roll = 1.45 * s + Math.cos(t * 5.1) * wob;          // big roll, leveling
+  const pitch = 0.55 * s + Math.sin(t * 4.3) * wob;         // pitched up toward the blast, settling
+  const yaw = -0.75 * s + Math.sin(t * 3.7 + 1.0) * wob * 0.7;
+  _tumbleEuler.set(pitch, yaw, roll);
+  _tumbleQuat.setFromEuler(_tumbleEuler);
+  _tumbleInv.copy(_tumbleQuat).invert();
+  cam.quaternion.multiply(_tumbleQuat);
+  _tumbleActive = true;
+}
+
 function syncCameraToBody(ctx: GameContext): void {
   applyStormCameraSway(ctx);
+  applyIntroTumble(ctx);
   const tr = ctx.player.body.body.translation();
   if (ctx.flags.thirdPerson) {
     const cam = ctx.three.camera;
