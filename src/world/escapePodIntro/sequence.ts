@@ -298,12 +298,25 @@ function tickDescent(ctx: GameContext, dt: number): void {
     ensureInPod(ctx);
     showIntroPrompt('');
     intro.scratch.t = 0;
+    intro.scratch.reFlash = false;       // T2.2 — the one-shot re-entry flash hasn't fired yet
     intro.scratch.init = true;
   }
   intro.scratch.t = (intro.scratch.t as number) + dt;
   const progress = Math.min(1, (intro.scratch.t as number) / DESCENT_DURATION);
   setDescentProgress(progress);
-  addTrauma(0.04);                       // low rumble (decays; re-added → persistent shake)
+  // T2.2 — RE-ENTRY FX. The plasma + heat-shimmer VISUALS live in setDescentProgress, driven by
+  // this SAME curve; here we drive the felt half (shake + flash). Re-entry is HIGH + EARLY (the
+  // thin upper atmosphere at hypersonic speed) and DONE before the desert appears, so the plasma
+  // doesn't stack on the warm desert cross-fade (~0.34→0.48): a sharp bump, 0 at p≈0.08, peak at
+  // p≈0.24, gone by p≈0.40 — the violence at entry releases into the calm, beautiful descent.
+  const re = Math.max(0, 1 - Math.pow((progress - 0.24) / 0.16, 2));
+  // Speed-coupled SHAKE — a buffet at peak re-entry layered over the base fall-rumble.
+  addTrauma(0.04 + re * 0.45);
+  // The WHITE FLASH on entry — one warm-white blast at peak heat (the punch-through moment).
+  if (progress >= 0.24 && !intro.scratch.reFlash) {
+    flashScreen(0xfff2e6, 0.7);
+    intro.scratch.reFlash = true;
+  }
   if (progress >= 1) advanceBeat(ctx);   // → parachute
 }
 

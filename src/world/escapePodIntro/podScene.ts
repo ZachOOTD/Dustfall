@@ -187,6 +187,16 @@ let atmoMat: THREE.ShaderMaterial | null = null;
 let starMat: THREE.ShaderMaterial | null = null;
 let lowAltMat: THREE.ShaderMaterial | null = null;   // the low-altitude ground/horizon scene (cross-fades in past ~mid)
 let lowAltMesh: THREE.Mesh | null = null;
+// ── RE-ENTRY FX (Phase 2 / T2.2) — plasma/fire past the glass + viewport heat-shimmer.
+//    Both layer IN FRONT of the vista (between the low-alt plane z−5 and the glass z≈−1.22)
+//    but BEHIND the porthole frame, so depthTest lets the cabin bezel/wall occlude them to
+//    the round aperture (they read THROUGH the porthole only — never on the cabin interior).
+//    Driven by a single `re` (the re-entry bump) computed in setDescentProgress from `p`.
+let reentryPlasmaMat: THREE.ShaderMaterial | null = null;   // additive incandescent air burning past the window
+let reentryPlasmaMesh: THREE.Mesh | null = null;
+let reentryShimmerMat: THREE.ShaderMaterial | null = null;  // the heat-haze wobble over the porthole vista
+let reentryShimmerMesh: THREE.Mesh | null = null;
+let _reentryT0 = 0;   // build-time epoch (for the plasma/shimmer animation time, in seconds)
 // T2.1 remainder — the cabin interior-lit-by-exterior: setDescentProgress drives the porthole
 // spill (cool space-light → warm dawn wash) + a hint of dawn on the ambient fill, so the cabin
 // warms as the dawn desert swells in the viewport. Refs captured at build; reset by progress.
@@ -1298,6 +1308,152 @@ const LOWALT_FS = /* glsl */ `
   }
 `;
 
+// ─── RE-ENTRY FX (Phase 2 / T2.2 — the violent atmospheric-entry climax) ──────
+// As the pod punches the upper atmosphere (the `re` bump, peak ~p0.28) the air ahead
+// IONIZES and burns past the viewport. Two layered shaders, both reading THROUGH the
+// porthole only (the cabin bezel/wall occludes them like the vista — depthTest on):
+//
+//   PLASMA_FS — additive ORANGE→WHITE-HOT incandescent air burning past/around the window.
+//     A leading incandescent EDGE piled up at the lower/leading rim where the air compresses
+//     (the pod falls nose-down → the air rakes UP past the glass), with white-hot streaking
+//     TRAILS raked along the fall direction + flicker, brightest at peak `re`. NON-uniform
+//     (noise-broken, denser at the leading edge) so it isn't a flat glow, and additive over
+//     the vista so the planet/atmosphere still read THROUGH it (air on fire in front of you,
+//     not a solid fill). toneMapped:false so the white-hot core survives the Reinhard curve.
+//
+//   SHIMMER_FS — a subtle heat-haze: faint warm wobbling ripples over the porthole vista
+//     (the air boiling in front of the glass), scaled by `re`. A SHIMMER (low-amplitude
+//     animated bands), not a smear — it makes the air read HOT without occluding the vista.
+//
+// Both are full-screen-ish curved planes between the vista (z−5) and the glass (z≈−1.22);
+// depthTest keeps them inside the round aperture. uRe (0..1) gates strength; uTime animates.
+const REENTRY_VS = /* glsl */ `
+  varying vec2 vUv;
+  void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
+`;
+const PLASMA_FS = /* glsl */ `
+  precision highp float;
+  varying vec2 vUv;
+  uniform float uRe;     // 0..1 re-entry intensity (the bump; peak ~p0.28)
+  uniform float uTime;   // seconds — animates the streak scroll + flicker
+
+  float hash(vec2 p){ p = fract(p*vec2(127.1,311.7)); p += dot(p, p+34.5); return fract(p.x*p.y); }
+  float vn(vec2 x){ vec2 p=floor(x), f=fract(x); f=f*f*(3.0-2.0*f);
+    return mix(mix(hash(p),hash(p+vec2(1,0)),f.x), mix(hash(p+vec2(0,1)),hash(p+vec2(1,1)),f.x), f.y); }
+  float fbm(vec2 p){ float a=0.55, s=0.0; for(int i=0;i<4;i++){ s+=a*vn(p); p=p*2.05+1.7; a*=0.5; } return s; }
+
+  void main(){
+    if (uRe <= 0.001) discard;
+    vec2 p = vUv - 0.5;
+    float t = uTime;
+
+    // ── SLIPSTREAM frame (fix 4). The pod falls nose-down under hypersonic shear, so the air
+    //    rips past the glass along a consistent DIAGONAL (up-and-across), not straight up like a
+    //    campfire. Build a sheared coordinate: s runs along the slipstream (the flow axis),
+    //    q across it. All the fire structure is sampled in this frame so it streaks past.
+    const vec2 flowDir = vec2(0.34, 0.94);             // up + raked right (the slipstream)
+    const vec2 flowPerp = vec2(0.94, -0.34);
+    float s = dot(p, flowDir);                         // along the flow (0 mid, + downstream/up)
+    float q = dot(p, flowPerp);                        // across the flow
+
+    // ── TURBULENT streak field sampled in the slipstream frame, scrolling ALONG the flow fast
+    //    (filaments raked past the glass). Tight across-flow, stretched along-flow → long
+    //    threads. Two octaves at different rates for a turbulent, non-uniform rip.
+    float s1 = fbm(vec2(q*9.0, s*1.7 - t*3.4));
+    float s2 = fbm(vec2(q*17.0 + 4.0, s*2.8 - t*5.0));
+    float streak = s1*0.62 + s2*0.5;
+    // Sharpen HARD into distinct threads with dark lanes between (the vista shows through the
+    // lanes at EVERY altitude including peak — air on fire, not a curtain).
+    streak = smoothstep(0.42, 0.92, streak);
+    streak = pow(streak, 1.3) * 2.2;
+
+    // ── LEADING / STAGNATION EDGE (fix 3 — break the ruled band). The bow-shock incandescence
+    //    piles at the windward (LOWER, leading) edge. Its boundary is NOT a horizontal line: it
+    //    rides the slipstream axis s and its threshold is warped by turbulence + angled, then
+    //    feathered — convected plasma, not a decal seam. Reach scales with uRe (peak climbs the
+    //    window; fade retreats to a thin lower veil → the arc reads build→peak→ease).
+    float warp = (fbm(vec2(q*5.0, s*2.2 - t*2.6)) - 0.5) * 0.42;   // ragged, turbulent boundary
+    float reach = mix(-0.30, 0.66, uRe);                          // how far up the slipstream the fire climbs
+    float lead = smoothstep(reach, -0.46, s + warp + (streak-0.6)*0.22);   // feathered, warped edge (no straight line)
+    float rim = length(vec2(p.x*1.0, p.y*0.95));
+    float rimLick = 0.45 + 0.95*smoothstep(0.08, 0.44, rim);      // licks AROUND the porthole edge
+    float body = lead * rimLick;
+
+    // ── Flicker — a fast shimmer + a per-thread twinkle so the plasma roars/breathes.
+    float flick = 0.80 + 0.20*sin(t*34.0 + q*11.0) + 0.16*(vn(vec2(q*24.0, t*7.0))-0.5);
+
+    // ── COOLER TRAILING WAKE — red/orange only, downstream of the stagnation edge (fix 2: the
+    //    wake stays cooler; the white-hot core lives at the leading edge below).
+    float wake = body * streak * flick;
+    float heat = clamp(wake * (1.4 + 1.9*uRe), 0.0, 3.0);
+    vec3 cRed   = vec3(0.95, 0.10, 0.02);
+    vec3 cOrange= vec3(1.55, 0.46, 0.06);
+    vec3 cYellow= vec3(2.05, 1.20, 0.30);
+    vec3 col = mix(cRed, cOrange, smoothstep(0.12, 0.70, heat));
+    col = mix(col, cYellow, smoothstep(0.75, 1.55, heat));
+
+    // ── WHITE-HOT STAGNATION CORE (fix 2 — the single biggest "this is re-entry" cue). A blown-
+    //    out near-WHITE incandescent ZONE at the LEADING (windward) edge where the ionized air
+    //    compresses hardest. A COHERENT feathered band (not thread-gated to scattered dots, not a
+    //    ruled line) hugging the windward edge along the slipstream, turbulence-warped so it's
+    //    convected plasma. Bright + wide enough to DOMINATE the peak read (the orange is the
+    //    cooler trailing wake behind it).
+    float coreEdge = smoothstep(0.18, -0.46, s + warp);          // WIDE band along the windward edge
+    float coreMod = 0.65 + 0.35*streak;                          // mostly coherent, a little ragged
+    float core = coreEdge * coreMod * rimLick * flick;
+    core = clamp(core * (0.3 + 2.6*uRe), 0.0, 2.0);              // blows hard to white near peak
+    vec3 cWhite = vec3(2.9, 2.65, 2.30);                         // near-white, faint warm (ionized air)
+    // add the white-hot core ON TOP of the wake colour (additive incandescence). A lower
+    // threshold + steeper ramp → a clear blown-out white zone, not a few stray hot pixels.
+    col += cWhite * smoothstep(0.20, 0.95, core);
+
+    // ── Additive emission. Capped + a low FLOOR-DISCARD on the dark lanes so a translucent veil
+    //    of fire never fully occludes the world (fix 5): the planet/desert curve persists through
+    //    the gaps even at peak. Eased by uRe so orbit/surface stay clean.
+    float em = (heat + core*1.3) * uRe;
+    em = min(em, 2.6);
+    if (em < 0.03) discard;                                       // clear lanes → vista shows through
+    gl_FragColor = vec4(col * em, clamp(em*0.85, 0.0, 0.92));     // alpha capped <1 → never a full curtain
+  }
+`;
+const SHIMMER_FS = /* glsl */ `
+  precision highp float;
+  varying vec2 vUv;
+  uniform float uRe;
+  uniform float uTime;
+
+  float hash(vec2 p){ p = fract(p*vec2(127.1,311.7)); p += dot(p, p+34.5); return fract(p.x*p.y); }
+  float vn(vec2 x){ vec2 p=floor(x), f=fract(x); f=f*f*(3.0-2.0*f);
+    return mix(mix(hash(p),hash(p+vec2(1,0)),f.x), mix(hash(p+vec2(0,1)),hash(p+vec2(1,1)),f.x), f.y); }
+
+  void main(){
+    if (uRe <= 0.001) discard;
+    vec2 p = vUv - 0.5;
+    float t = uTime;
+    // Wobbling heat-haze ripples: scrolling noise fields that rise (hot air convecting up past
+    // the glass). The DIFFERENCE of two vertically-offset samples gives thin shimmering ripple
+    // EDGES (a refraction-like wobble) rather than a flat tint — reads as air boiling, a
+    // shimmer not a smear. Two scales layered (broad heat columns + fine quiver).
+    float w1 = vn(vec2(p.x*4.5, p.y*3.2 - t*1.6));
+    float w2 = vn(vec2(p.x*4.5, p.y*3.2 + 0.16 - t*1.6));
+    float ripple = abs(w1 - w2) * 9.0;                 // thin bright ripple edges (refraction-like wobble)
+    float f1 = vn(vec2(p.x*11.0, p.y*8.0 - t*2.8));
+    float f2 = vn(vec2(p.x*11.0, p.y*8.0 + 0.11 - t*2.8));
+    float quiver = abs(f1 - f2) * 6.0;                 // fine high-freq quiver
+    float v = ripple * 0.7 + quiver * 0.3;
+    // Bias the haze toward the UPPER window — where the vista (planet/sky) still shows past the
+    // plasma — so the heat reads as DISTORTING the view, not just glowing where the fire already
+    // is. A soft vertical weight (top-biased) × a gentle radial keep-off-the-bezel falloff.
+    float vert = smoothstep(-0.50, 0.30, p.y);         // weak low, stronger toward the top half
+    float fall = smoothstep(0.52, 0.14, length(vec2(p.x, p.y*1.05)));
+    float a = clamp(v, 0.0, 1.0) * vert * fall * uRe * 0.55;   // subtle but PRESENT (a heat-wobble)
+    if (a < 0.003) discard;
+    // a faintly warm shimmer (hot air) — pale so it tints, doesn't paint.
+    vec3 warm = vec3(1.0, 0.80, 0.58);
+    gl_FragColor = vec4(warm * a, a);
+  }
+`;
+
 /** Build the descent vista (starfield backdrop + planet body + atmosphere shell) into
  *  the group, behind the −Z viewport. Pushes geometry to _cabinDisposables + sets the
  *  module mesh/material refs that setDescentProgress + disposePodScene touch. */
@@ -1406,6 +1562,48 @@ function buildDescentVista(group: THREE.Group): void {
   lowAlt.visible = false;          // toggled on once uLowAlt > 0 (skips the draw at orbit)
   group.add(lowAlt);
   lowAltMesh = lowAlt;
+
+  // ── RE-ENTRY PLASMA + SHIMMER (T2.2) — layered IN FRONT of the vista but BEHIND the
+  //    porthole frame, so depthTest lets the cabin bezel/wall clip them to the round
+  //    aperture (they read THROUGH the window only). Sized to over-fill the porthole's
+  //    visible cone at their z, slightly curved (a shallow sphere cap) so the plasma wraps
+  //    the rim rather than reading as a flat decal. Both invisible until uRe > 0.
+  _reentryT0 = performance.now() / 1000;
+  // PLASMA — a camera-facing plane at z≈−3.4 (between the low-alt plane z−5 and the glass
+  //   z≈−1.22), generously over-sized so it fills the porthole cone at that depth. The
+  //   shader does the rim-licking; a flat plane (DoubleSide) reliably faces the seated camera.
+  const plasmaGeo = new THREE.PlaneGeometry(4.2, 4.2);
+  _cabinDisposables.push(plasmaGeo);
+  reentryPlasmaMat = new THREE.ShaderMaterial({
+    vertexShader: REENTRY_VS, fragmentShader: PLASMA_FS,
+    uniforms: { uRe: { value: 0.0 }, uTime: { value: 0.0 } },
+    transparent: true, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+    depthWrite: false, depthTest: true, toneMapped: false,   // white-hot must survive the tone-mapper
+  });
+  const plasma = new THREE.Mesh(plasmaGeo, reentryPlasmaMat);
+  plasma.position.set(0, VP_CY, -3.4);     // on the porthole sight-line, in front of the vista
+  plasma.renderOrder = 4;                  // after the low-alt scene (composites over the vista)
+  plasma.frustumCulled = false;
+  plasma.visible = false;
+  group.add(plasma);
+  reentryPlasmaMesh = plasma;
+  // SHIMMER — a near-flat plane just in front of the glass-side of the vista (z≈−1.9), over
+  //   the porthole, carrying the faint heat-haze ripple. depthTest clips it to the aperture.
+  const shimGeo = new THREE.PlaneGeometry(1.5, 1.5);
+  _cabinDisposables.push(shimGeo);
+  reentryShimmerMat = new THREE.ShaderMaterial({
+    vertexShader: REENTRY_VS, fragmentShader: SHIMMER_FS,
+    uniforms: { uRe: { value: 0.0 }, uTime: { value: 0.0 } },
+    transparent: true, blending: THREE.AdditiveBlending,
+    depthWrite: false, depthTest: true, toneMapped: false,
+  });
+  const shimmer = new THREE.Mesh(shimGeo, reentryShimmerMat);
+  shimmer.position.set(0, VP_CY, -1.9);
+  shimmer.renderOrder = 5;                 // after the plasma (top heat-haze layer)
+  shimmer.frustumCulled = false;
+  shimmer.visible = false;
+  group.add(shimmer);
+  reentryShimmerMesh = shimmer;
 }
 
 /** Build the pod (hero cabin mesh group + a static shell collider) at POD_ORIGIN.
@@ -1590,6 +1788,16 @@ export function setDescentProgress(progress: number): void {
   if (cabinFill) {
     cabinFill.color.copy(_fillScratch.copy(_FILL_COOL).lerp(_FILL_WARM, dawn * 0.8));   // a hint of dawn in the ambient
   }
+  // (7) RE-ENTRY FX (T2.2) — the violent atmospheric-entry climax. A bump intensity `re`
+  //     peaks as the pod punches the upper air (peak p≈0.28) then fades as it breaks through
+  //     into the calm dawn desert. SAME curve the main loop uses for the flash+shake — keep
+  //     it EXACT. Drives the plasma (incandescent air burning past) + the heat-shimmer.
+  const re = Math.max(0, 1 - Math.pow((p - 0.24) / 0.16, 2.0));   // 0 at p≈0.08, peak 1 at p≈0.24, gone by p≈0.40 — HIGH+EARLY so it's DONE before the warm desert cross-fade (~0.34→0.48); matches sequence.ts byte-for-byte
+  const reT = (performance.now() / 1000) - _reentryT0;            // animation time (streak scroll + flicker)
+  if (reentryPlasmaMat) { reentryPlasmaMat.uniforms.uRe.value = re; reentryPlasmaMat.uniforms.uTime.value = reT; }
+  if (reentryShimmerMat) { reentryShimmerMat.uniforms.uRe.value = re; reentryShimmerMat.uniforms.uTime.value = reT; }
+  if (reentryPlasmaMesh) reentryPlasmaMesh.visible = re > 0.001;   // skip the draw outside the re-entry window
+  if (reentryShimmerMesh) reentryShimmerMesh.visible = re > 0.001;
 }
 
 /** Pose the PARACHUTE lever (the gag hook). `t` in [0,1]: 0 = at rest, 1 = fully yanked
@@ -1632,6 +1840,8 @@ export function disposePodScene(ctx: GameContext): void {
   if (atmoMat) atmoMat.dispose();
   if (starMat) starMat.dispose();
   if (lowAltMat) lowAltMat.dispose();
+  if (reentryPlasmaMat) reentryPlasmaMat.dispose();
+  if (reentryShimmerMat) reentryShimmerMat.dispose();
   if (starOccluderMesh) (starOccluderMesh.material as THREE.Material).dispose();
   for (const g of _cabinDisposables) g.dispose();
   _cabinDisposables.length = 0;
@@ -1643,6 +1853,10 @@ export function disposePodScene(ctx: GameContext): void {
   starMat = null;
   lowAltMat = null;
   lowAltMesh = null;
+  reentryPlasmaMat = null;
+  reentryPlasmaMesh = null;
+  reentryShimmerMat = null;
+  reentryShimmerMesh = null;
   vpGlowLight = null;
   cabinFill = null;
   chuteLever = null;

@@ -3,6 +3,18 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Escape-pod campaign C16 — 2026-06-29 — Phase 2 T2.2: **re-entry FX** (plasma + heat-shimmer + white flash + speed-coupled shake) ✓ verify:all + 2-round confirm gate (passed @ beauty 8)
+
+`verified` — `npm run verify:all` PASS (tsc + placement + colliders) + smoke `{ok:true,beats:10}` + the **confirm gate PASSED** (both critics hitsBar=true, beauty 8 after 1 fix round). Flag OFF → live game byte-unchanged. No SAVE_VERSION bump.
+
+**T2.2 — re-entry FX: the violence of punching into the atmosphere, easing into the calm descent.** Split into the **visual half** (procedural-modeler, `podScene.ts`) + the **felt half** (main loop, `sequence.ts` `tickDescent`), both driven off ONE shared re-entry curve `re = max(0, 1 − ((p−0.24)/0.16)²)` (0 at p≈0.08, **peak at p≈0.24**, gone by p≈0.40 — re-entry happens HIGH + EARLY and finishes *before* the warm desert cross-fade at ~0.34→0.48, so the two warm layers don't stack):
+- **Plasma past the glass** (`PLASMA_FS`, additive, `toneMapped:false`, clipped to the porthole) — turbulent ionized-air streak-threads with dark lanes (the vista shows through), a **white-hot core** at the windward leading edge, a slipstream-raked diagonal flow, the vertical reach scaling with `re` so it builds→peaks→clears.
+- **Viewport heat-shimmer** (`SHIMMER_FS`, additive ripple-edge wobble × `re`) — a subtle hot-air shimmer over the vista at entry.
+- **White flash** (`flashScreen(0xfff2e6, 0.7)` one-shot at the peak) + **speed-coupled camera shake** (`addTrauma(0.04 + re×0.45)` — a buffet at peak over the base fall-rumble).
+- **The gate earned its keep:** round-1 had an **inverted arc** (the plasma faded too slowly → it stacked on the desert cross-fade so the *fade* frame read as more fire than the peak), campfire-orange (no white-hot core), and a hard horizontal decal-seam band. Round 2 (tighter curve + white-hot core + turbulence-broken band + slipstream) fixed all three → PASS. Bookends clean (orbit + surface = zero plasma), no cabin spill, vista glimpsed through the heat. Disposed in `disposePodScene`; the single `setDescentProgress(0..1)` contract preserved.
+- **Noted sev-3 polish (walk-test / backlog):** the white core could go a touch whiter/larger; the vista is dim (glimpsed, not framed) at the peak — both optional, the felt re-entry MOTION (flash+shake+flicker) is a Phase-2 walk-test item.
+- **Next:** T2.3 tumbling reveal + interior-lit-by-exterior → the Phase 2 milestone walk-test.
+
 ## Escape-pod campaign C15 — 2026-06-29 — Phase 2 T2.1 remainder: **the cabin interior-lit-by-exterior** → T2.1 COMPLETE ✓ verify:all + before/after preview
 
 `verified` — `npm run verify:all` PASS (tsc + placement + colliders) + smoke `{ok:true,beats:10}` + a before/after preview (the cabin warms cool→dawn as `descentProgress` rises) + 0 console errors. Flag OFF → live game byte-unchanged. No SAVE_VERSION bump.
