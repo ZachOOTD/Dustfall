@@ -212,7 +212,7 @@
       "decisions": ["(reinforces the hero-asset-adversarial-gate lesson [memory]: the gate caught a face-pareidolia + a void-floor + boxy-walls + brown-material across 2 rounds that the builder's self-critique + my single review missed.)"],
       "agent": "procedural-modeler (build ~246K + revise ~194K + finish ~131K) + 2 adversarial-gate workflows (~251K + ~243K, 5 agents each).",
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "f06592d",
       "spend_approx_tokens": 1270000
     }
   ]
