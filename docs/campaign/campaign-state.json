@@ -195,7 +195,7 @@
       "decisions": ["D271 (prior cycle) — cylindrical identity. LESSON (ultracode adversarial gate): a hero asset's identity/pareidolia failures (the HELMET read) + placement bugs (the FLOAT) slip past the builder's self-critique AND a single reviewer — the N-critic adversarial visual gate caught both. Run it for hero assets."],
       "agent": "procedural-modeler (build ~188K + revise ~244K + ~288K) + 2 adversarial-gate workflows (~209K + ~253K, 5 agents each).",
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "3f09626",
       "spend_approx_tokens": 1200000
     }
   ]
