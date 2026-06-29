@@ -186,5 +186,5 @@ The user approved the Phase 1 milestone (the cylindrical hero pod) and released 
 - **Verify:** `verify:all` PASS (tsc + placement + colliders) + smoke `{ok:true,beats:10}`.
 - **Visual iteration:** own-loop before/after preview (proportionate light gate for a 2-light color ramp — not a hero asset): cool grey cabin at p=0 → warm dawn glow on the forward arc/bezel/dome at p=0.9, unmistakable + not overdone. 0 console errors. (Lean cycle — no adversarial gate; that's reserved for hero assets, per the C14 cost lesson.)
 - **Spend:** ~150K; campaign total ~8.21M; cycle **15/150**.
-- **Commit:** `PENDING`.
+- **Commit:** `f17273a`.
 - **Next (C16):** **T2.2 — re-entry FX** (plasma past the glass + the white flash + viewport heat-shimmer + speed-coupled camera shake; hero-ish FX → procedural-modeler + ONE gate). Then T2.3 tumbling reveal → the Phase 2 milestone walk-test. **Verdict: CONTINUE** (T2.1 complete, but Phase 2 [T2.1+T2.2+T2.3] not done; T2.1 completion is not the milestone). `consecutive_no_progress` = 0 (SHIPPED).

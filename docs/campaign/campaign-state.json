@@ -258,7 +258,7 @@
       "save": "no change (SAVE_VERSION stays 15).",
       "decisions": ["(no new D-entry. Note: the 'scene fog-ramp' T2.1 item was deliberately dropped as not-applicable in an enclosed self-lit cabin — recorded in the changelog + this state. Lean cycle [own-loop + preview, no adversarial gate] — proportionate for integration polish per the C14 cost lesson.)"],
       "ultracode": true,
-      "commit": "PENDING",
+      "commit": "f17273a",
       "spend_approx_tokens": 150000
     }
   ]
