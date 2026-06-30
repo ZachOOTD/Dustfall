@@ -19,11 +19,18 @@ in-progress work each cycle, without touching the live master site. This doc cap
 3. Netlify reads `netlify.toml` (build `npm run build`, env `VITE_ESCAPE_POD_INTRO=1` + `VITE_BASE=/`). Deploy.
 4. The playable link is the site's URL (e.g. `https://<name>.netlify.app/`); it rebuilds on every push to the branch.
 
-### Option B — Cloudflare Pages (dashboard-configured)
-1. Cloudflare dashboard → **Workers & Pages → Create → Pages → Connect to Git →** pick **Dustfall**.
-2. **Production branch = `campaign/escape-pod-intro`**. Build command **`npm run build`**, output dir **`dist`**.
-3. Add env vars: **`VITE_ESCAPE_POD_INTRO = 1`** and **`VITE_BASE = /`** (Settings → Environment variables).
-4. The playable link is `https://<project>.pages.dev/`; it rebuilds on every push to the branch.
+### Option B — Cloudflare **Workers** (the "Create a Worker / Import a repository" flow)
+Cloudflare now routes Git imports through Workers Builds (`npx wrangler deploy`). For a static Vite
+site that needs `wrangler.jsonc` (committed — an assets-only worker serving `./dist` with SPA fallback).
+1. Connect the **Dustfall** repo; set the **production branch = `campaign/escape-pod-intro`** (so
+   `npx wrangler deploy` runs on it).
+2. **Build command = `npm run build`**, **Deploy command = `npx wrangler deploy`** (defaults are fine —
+   `wrangler.jsonc` tells it to upload `./dist`).
+3. Add two **build variables**: **`VITE_ESCAPE_POD_INTRO` = `1`** and **`VITE_BASE` = `/`**.
+4. Deploy. The link is `https://dustfall-preview.<account>.workers.dev/`; rebuilds on each push.
+> Simpler alternative on Cloudflare: the classic **Pages** flow (Workers & Pages → Create → **Pages** tab
+> → Connect to Git → build `npm run build`, output `dist`, same two env vars) needs NO `wrangler.jsonc`.
+> Or just use **Netlify** (Option A) — it's the most turnkey (zero extra config).
 
 ## Per-cycle flow
 The campaign already commits each cycle to `campaign/escape-pod-intro`. With the branch **pushed** (the campaign
