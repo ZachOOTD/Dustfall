@@ -1207,104 +1207,99 @@ const LOWALT_FS = /* glsl */ `
   precision highp float;
   varying vec2 vUv;
   uniform float uLowAlt;   // 0..1 — overall presence (drives the cross-fade alpha)
-  uniform float uNear;     // 0..1 — closeness within the band (horizon drop + dune swell)
+  uniform float uNear;     // 0..1 — closeness within the band (gentle horizon drop)
   uniform float uWarm;     // 0..1 — dawn warmth (shared with the orbital phase)
 
-  // ── value-noise + fbm (2D) for the dune field ──
+  // ── value-noise + fbm (2D) for the gentle dune relief ──
   float h2(vec2 p){ p=fract(p*vec2(127.1,311.7)); p+=dot(p,p+34.5); return fract(p.x*p.y); }
   float vn2(vec2 x){ vec2 p=floor(x),f=fract(x); f=f*f*(3.0-2.0*f);
     return mix(mix(h2(p),h2(p+vec2(1,0)),f.x),mix(h2(p+vec2(0,1)),h2(p+vec2(1,1)),f.x),f.y); }
   float fbm2(vec2 p){ float a=0.55,s=0.0; for(int i=0;i<5;i++){ s+=a*vn2(p); p=p*2.04+1.7; a*=0.5; } return s; }
-  // Dune elevation at a ground-plane coordinate. TRANSVERSE dune ridges that run roughly
-  // left-right across the view and march toward the horizon (a receding barchan field) —
-  // higher-frequency in the view-depth axis so several ridgelines fall within the visible
-  // ground band (not one smooth swell). Domain-warped so the ridges meander, plus a sand
-  // grain octave. Returns ~0..1.
+  // Ground elevation — REWORKED to match the REAL game desert (the crashed-pod rig view):
+  // broad, SMOOTH, gentle dune undulation — NOT sharp transverse barchan ridges (the user
+  // disliked the corrugated/saturated read). A couple of low-frequency, domain-warped FBM
+  // octaves give large soft swells; a faint fine grain breaks up the sheet. Returns ~0..1,
+  // centred ~0.5 with low amplitude (a calm, near-flat sand sea, not a ridge field).
   float duneH(vec2 p){
-    vec2 w = vec2(fbm2(p*0.3 + 3.0), fbm2(p*0.3 + 9.0)) - 0.5;
-    vec2 q = p + w * 1.1;                                       // gentle domain-warp (meandering crests, not fuzz)
-    // ASYMMETRIC barchan-style dunes: a sawtooth crest (gentle windward rise → sharp slip-face
-    // drop) reads far more as SAND than a soft sine billow. fract() gives the sawtooth; the
-    // crestline is sharpened with a pow so each dune has a defined bright spine + a hard lee.
-    float ph = q.y*0.9 + q.x*0.22;
-    float saw = fract(ph);                                      // 0..1 ramp per dune (windward → slipface)
-    float dune = pow(saw, 0.7) * smoothstep(1.0, 0.78, saw);   // rise then a sharp drop at the slipface
-    float dune2 = pow(fract(q.y*0.34 - q.x*0.4), 0.8) * 0.45;  // larger underlying dune set
-    float grain = (fbm2(p*2.4) - 0.5) * 0.14;                  // fine sand grain (small)
-    return clamp(dune*0.6 + dune2*0.34 + grain + 0.06, 0.0, 1.0);
+    vec2 w = vec2(fbm2(p*0.6 + 3.0), fbm2(p*0.6 + 9.0)) - 0.5;
+    vec2 q = p + w * 0.6;                                       // soft domain-warp (meandering swells)
+    float big   = fbm2(q * 0.85);                              // broad slow dune swells
+    float med   = fbm2(q * 2.3 + 11.0) * 0.45;                 // mid relief (lifted — readable dune swells, not fog)
+    float grain = (fbm2(p * 7.0) - 0.5) * 0.06;               // very fine sand grain (subtle)
+    return clamp(big * 0.72 + med + grain + 0.04, 0.0, 1.0);
   }
 
   void main(){
     vec2 uv = vUv;
-    // ── HORIZON. CALIBRATED to the porthole: pixel-probing the rig showed the round
-    //    aperture reveals plane-uv.y ≈ 0.32 (bottom of the window) → 0.69 (top). So the
-    //    horizon sits NEAR THE TOP of that visible band (~0.64) so the GROUND fills most of
-    //    the porthole and the player actually SEES the desert; only a thin sky strip rides
-    //    along the top of the window. Drops slightly as you near so the horizon visibly
-    //    shifts d05→d09.
-    float horizon = mix(0.66, 0.60, uNear);
+    // ── HORIZON. The porthole reveals plane-uv.y ≈ 0.32 (window bottom) → 0.69 (top). Put
+    //    the horizon in the MIDDLE of that band (~0.52) so the seated player looks OUT at a
+    //    real horizon: clear SKY above, desert receding below — NOT a dune field filling the
+    //    whole window. Drops a touch as you near so the ground gains a little as you arrive,
+    //    but it STAYS a horizon view (never collapses to looking-straight-down).
+    float horizon = mix(0.55, 0.48, uNear);
 
-    // ── The DAWN SUN: well OFF-AXIS (far right, low, near the horizon) so it does NOT blow
-    //    out the central band the porthole shows — it's a light ANCHOR off to the side, not a
-    //    central wash. Drives both the sky bloom and the directional dune rake.
-    vec2 sunPos = vec2(0.88, horizon + 0.05);
+    // ── The DAWN SUN: well OFF-AXIS (far right, low) so it warms the sky without blowing out
+    //    the central band the porthole shows — a light anchor, not a central flare.
+    vec2 sunPos = vec2(0.86, horizon + 0.06);
 
-    // ── SKY (above the horizon): a thin warm dawn strip → cooler higher.
+    // ── SKY (above the horizon) — the REAL Dustfall dawn gradient: warm tan at the horizon
+    //    (HORIZON_DAY 0xe2b582) rising to a dusty blue-grey zenith (TOP_DAY 0x6c8aa8), with a
+    //    dawn warm-shift. Soft, hazy, calm — the player gazes out at it.
     float skyT = clamp((uv.y - horizon) / max(0.001, 1.0 - horizon), 0.0, 1.0);
-    vec3 skyHorizon = mix(vec3(0.90,0.70,0.50), vec3(0.99,0.76,0.52), uWarm);
-    vec3 skyZenith  = mix(vec3(0.44,0.56,0.70), vec3(0.56,0.58,0.66), uWarm);
-    vec3 skyCol = mix(skyHorizon, skyZenith, pow(skyT, 0.80));
-    float sunD = distance(vec2((uv.x-sunPos.x)*1.1, uv.y-sunPos.y), vec2(0.0));
-    vec3 sunTint = mix(vec3(1.08,0.84,0.54), vec3(1.14,0.76,0.42), uWarm);
-    skyCol += sunTint * smoothstep(0.10, 0.0, sunD) * 0.5;       // contained core, off to the right
+    vec3 skyHorizon = mix(vec3(0.886,0.710,0.510), vec3(0.97,0.74,0.52), uWarm);   // 0xe2b582 → a hair warmer at dawn
+    vec3 skyZenith  = mix(vec3(0.424,0.541,0.659), vec3(0.52,0.56,0.64), uWarm);   // 0x6c8aa8 dusty blue-grey
+    vec3 skyCol = mix(skyHorizon, skyZenith, pow(skyT, 0.60));   // cool dusty zenith reaches lower into the window (the real dawn gradient)
+    // a soft warm dawn bloom low on the sun side (contained, never a hard disc)
+    float sunD = distance(vec2((uv.x-sunPos.x)*0.9, (uv.y-sunPos.y)*1.4), vec2(0.0));
+    vec3 sunTint = mix(vec3(1.00,0.84,0.58), vec3(1.06,0.80,0.50), uWarm);
+    skyCol = mix(skyCol, sunTint, smoothstep(0.34, 0.0, sunD) * 0.45);             // gentle wash, off to the right
 
-    // ── GROUND (below the horizon) — a perspective dune field. The porthole only ever sees
-    //    the ground JUST below the horizon, so the projection is tuned GENTLE (small dist
-    //    range) so that band shows NEAR-to-MID dunes (big, crisp, readable), not far haze.
-    //    prox 0 (at horizon) goes to 1 (bottom of frame). dist maps prox to a modest ground
-    //    distance; dune SIZE + the dist range grow with uNear so d09 reads markedly closer.
-    float prox = clamp((horizon - uv.y) / max(0.001, horizon), 0.0, 1.0);      // 0 horizon → 1 bottom
-    float dist = mix(2.2, 0.25, prox);                                         // near horizon=far, frame bottom=near (linear, gentle)
-    float across = (uv.x - 0.5) * (0.6 + dist*1.3);                            // widen with distance
-    float duneScale = mix(1.3, 4.2, uNear);                                    // dunes grow markedly as you near → "rushing up" (wide range = clear d05≠d09)
-    vec2 gp = vec2(across, dist) * duneScale + vec2(0.0, uNear*3.0);           // scroll toward you as you near
+    // ── GROUND (below the horizon) — a CALM warm-tan sand sea receding to the horizon. The
+    //    porthole sees the near-to-mid sand; the projection is gentle so the band reads as a
+    //    vast plain melting into aerial haze at the horizon, not a wall of dunes.
+    //    prox 0 (at horizon) → 1 (frame bottom). dist maps prox to ground distance.
+    float prox = clamp((horizon - uv.y) / max(0.001, horizon), 0.0, 1.0);
+    float dist = mix(7.0, 0.6, pow(prox, 1.3));                                 // strong recession: far at the horizon, near at the bottom
+    float across = (uv.x - 0.5) * (0.5 + dist * 0.9);                           // widen with distance (perspective spread)
+    float duneScale = mix(0.5, 0.85, uNear);                                    // dunes a touch larger as you near (subtle — stays a horizon view)
+    vec2 gp = vec2(across, dist) * duneScale + vec2(0.0, uNear * 0.9);
 
     float hC = duneH(gp);
-    // relief normal via central differences (small fixed epsilon → crisp slopes)
-    float e = 0.04;
+    // relief normal via central differences — epsilon scales with distance so far dunes
+    // don't shimmer (the projection compresses the ground hard near the horizon).
+    float e = 0.05 + dist * 0.02;
     float hX = (duneH(gp + vec2(e,0.0)) - duneH(gp - vec2(e,0.0))) / (2.0*e);
     float hY = (duneH(gp + vec2(0.0,e)) - duneH(gp - vec2(0.0,e))) / (2.0*e);
-    // RAKING low-sun across the dunes: light points FROM the sun (screen-right) → +x/−y-facing
-    // slopes catch the warm key, lee slopes fall into cool shadow, shadows one consistent way.
-    vec2 sunGround = normalize(vec2(0.85, 0.30));
-    float slope = clamp(dot(vec2(hX, hY), sunGround), -2.0, 2.0);
-    float shade = clamp(0.55 + slope*0.85, 0.08, 1.8);                         // strong directional carve
+    // SOFT raking dawn light across the sand: sun on screen-right, low → gentle directional
+    // shading (NOT the harsh carve of the old ridge field). Keeps it calm + readable.
+    vec2 sunGround = normalize(vec2(0.80, 0.32));
+    float slope = clamp(dot(vec2(hX, hY), sunGround), -1.4, 1.4);
+    float shade = clamp(0.82 + slope * 0.52, 0.50, 1.34);                       // gentle but readable directional relief
 
-    // desert SAND palette — DISTINCTLY cool-violet troughs → ochre body → pale dawn-lit
-    // crests. 3-tone keyed off HEIGHT so it reads regardless of the warm light; crests gated
-    // by the rake so only sun-lit crests go pale → directional dune relief.
-    vec3 cTrough = mix(vec3(0.33,0.27,0.31), vec3(0.42,0.32,0.32), uWarm);     // cool DUSTY shadow (desaturated — the old blue-violet read as weird purple lines across the dunes)
-    vec3 cBody   = mix(vec3(0.78,0.55,0.34), vec3(0.86,0.58,0.32), uWarm);     // ochre sand body
-    vec3 cCrest  = mix(vec3(1.02,0.90,0.66), vec3(1.06,0.90,0.60), uWarm);     // pale dawn-lit crest
+    // ── SAND PALETTE — warm tan/ochre throughout (the REAL game sand ~0xb89878), NO violet
+    //    troughs, NO blown-white crests. A subtle 2-tone keyed off height: slightly deeper
+    //    warm sand in the lows → a touch paler warm sand on the rises. All warm.
+    vec3 cLow  = mix(vec3(0.64,0.50,0.36), vec3(0.70,0.52,0.34), uWarm);        // deeper warm sand (lows / lee) — warmer ochre
+    vec3 cHi   = mix(vec3(0.82,0.68,0.50), vec3(0.88,0.70,0.48), uWarm);        // pale warm sand (windward rises) — ~0xcca97d
     float hn = clamp(hC, 0.0, 1.0);
-    vec3 sand = mix(cTrough, cBody, smoothstep(0.16, 0.46, hn));
-    sand = mix(sand, cCrest, smoothstep(0.50, 0.80, hn) * smoothstep(0.65, 1.25, shade));
-    // raking light: warm key on lit slopes, COOL sky-fill in shadow (keeps the troughs cool).
-    vec3 keyCol  = mix(vec3(1.14,1.04,0.84), vec3(1.20,0.92,0.62), uWarm);
-    vec3 fillCol = vec3(0.42,0.48,0.64);                                        // cool sky-fill in shadow (cooler)
-    vec3 groundCol = sand * mix(fillCol, keyCol, smoothstep(0.08, 1.35, shade));
+    vec3 sand = mix(cLow, cHi, smoothstep(0.25, 0.72, hn));
+    // warm dawn key vs a still-warm soft fill (the shadows are warm sand-bounce, NOT cool/blue)
+    vec3 keyCol  = mix(vec3(1.08,1.00,0.86), vec3(1.14,0.96,0.74), uWarm);      // warm dawn key
+    vec3 fillCol = mix(vec3(0.78,0.74,0.72), vec3(0.84,0.74,0.66), uWarm);      // warm desaturated fill (sand bounce)
+    vec3 groundCol = sand * mix(fillCol, keyCol, smoothstep(0.55, 1.25, shade));
 
-    // ── AERIAL PERSPECTIVE — only the THIN sliver of most-DISTANT dunes right at the horizon
-    //    hazes toward the warm sky; the rest of the dune field stays crisp + cool-shadowed
-    //    (the haze was washing the whole ground warm = the "cloud deck" read).
-    float haze = pow(smoothstep(0.78, 1.0, 1.0 - prox), 2.0) * 0.7;
-    groundCol = mix(groundCol, skyHorizon * 1.0, haze);
+    // ── AERIAL PERSPECTIVE — the desert recedes into warm dawn haze toward the horizon, so
+    //    the far sand melts into the sky (the vast, calm "looking off at the horizon" read).
+    //    Ramps across most of the ground band (far → near), not just a thin sliver.
+    float haze = pow(smoothstep(0.40, 1.0, 1.0 - prox), 1.9) * 0.90;            // strong at the horizon, but the NEAR sand (frame bottom) stays clear + warm (readable relief)
+    vec3 hazeCol = mix(skyHorizon, vec3(0.90,0.78,0.62), 0.35);                 // warm dusty haze toward the sky tone
+    groundCol = mix(groundCol, hazeCol, haze);
 
-    // ── compose at the horizon (thin anti-aliased line) + a slim warm horizon glow.
-    float edge = smoothstep(-0.008, 0.008, uv.y - horizon);                     // 0 ground → 1 sky
+    // ── compose at the horizon (thin anti-aliased line) + a slim warm horizon glow band.
+    float edge = smoothstep(-0.006, 0.006, uv.y - horizon);                     // 0 ground → 1 sky
     vec3 col = mix(groundCol, skyCol, edge);
-    float hb = exp(-pow((uv.y - horizon)*36.0, 2.0));
-    col += mix(vec3(0.45,0.34,0.24), vec3(0.54,0.36,0.22), uWarm) * hb * 0.22;
+    float hb = exp(-pow((uv.y - horizon)*30.0, 2.0));
+    col += mix(vec3(0.42,0.34,0.24), vec3(0.50,0.36,0.24), uWarm) * hb * 0.18;  // soft warm haze hugging the horizon
 
     gl_FragColor = vec4(col, uLowAlt);
   }
