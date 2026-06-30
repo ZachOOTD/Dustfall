@@ -2022,6 +2022,47 @@ const SCENARIOS = {
     console.log(`[corridor] ${JSON.stringify(meas)} → scen-${tag}.png`);
   },
 
+  // Wake interior (T4.1): the REAL first-person view as you COME TO inside the crashed pod in
+  // the desert, looking out the ajar hatch (the C18 wake-inside read). Drives the intro to the
+  // wake beat (which builds the wake interior + seats the player at the desert spawn), lets the
+  // come-to black fade, then poses the seated eye looking −Z out the hatch + shoots.
+  'wake': async (page) => {
+    await page.evaluate(() => {
+      const g = window.__game;
+      const ctx = g.ctx;
+      g.setTime(0.32);   // dawn — sun low + warm (matches the reveal)
+      ctx.weather.intensity = 0; ctx.weather.cloudiness = 0.12;
+      ctx.three.renderer.toneMappingExposure = 1.2;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      ctx.three.renderer.setSize(1000, 760, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1000 / 760; cam.updateProjectionMatrix(); }
+      g.startIntro();
+      g.jumpToBeat('wake');   // builds the wake interior + seats the player at the desert spawn
+    });
+    await page.waitForTimeout(4200);   // let the come-to black fade naturally (mode seated, ticking)
+    const meas = await page.evaluate(() => {
+      const g = window.__game;
+      const ctx = g.ctx;
+      ctx.flags.paused = true;
+      const cam = ctx.three.camera;
+      const V = cam.position.constructor;
+      const tr = ctx.player.body.body.translation();
+      const eye = new V(tr.x, tr.y + (ctx.player.eyeOffset || 0.5), tr.z);
+      cam.position.copy(eye);
+      cam.lookAt(new V(eye.x, eye.y - 0.06, eye.z - 2));   // out the hatch (−Z), slightly down
+      cam.updateMatrixWorld(true);
+      const wi = ctx.three.scene.getObjectByName('podWakeInterior');
+      let meshes = 0; if (wi) wi.traverse((o) => { if (o.isMesh) meshes++; });
+      return { found: !!wi, meshes, eye: [+eye.x.toFixed(2), +eye.y.toFixed(2), +eye.z.toFixed(2)] };
+    });
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: join(OUT, 'scen-wake.png'), fullPage: false });
+    console.log(`[wake] ${JSON.stringify(meas)} → scen-wake.png`);
+  },
+
   // Smoke-intro (T1.2): run the whole intro beat chain headless + report {ok,beats}.
   // Confirms the new hero cabin + the lever hook don't break the eject→descent→
   // parachute→impact sequence. No screenshot.

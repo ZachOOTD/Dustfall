@@ -27,14 +27,18 @@ needed). The user wakes to a fully-playable intro end-to-end + a hero-visual art
 - **T3.3 cockpit surface-fidelity** — the real cockpit (`shipScene.ts`), much improved, `rig-shot --scenario=cockpit`. Gate: flat untextured walls, no rivets-as-geometry, blank CRT text, candy-button gauges, blank photo, flat lighting, planet cropped too big. The OPENING SHOT reads but needs the user's eye.
 - **T3.2 explosion FX** + the **hero corridor geometry** — deferred with them.
 
-**▶ BUILD NEXT (overnight): T3.4 — the disaster STAGING** (main-loop logic, over the EXISTING greybox corridor — NOT new hero
-geometry). The Beat 1-2 disaster: the "check engines" prompt → the corridor walk → reaching the back triggers the disaster
-(engine fire behind the door) → **red-alert** (drive the cockpit `setCockpitAlert(2)` [hook built C20] + corridor red lighting +
-strobe) → the 3 lighting zones + the only-open-door funnel (guide the player) + spatial-audio cue hooks → flee back to the pod
-(enterPod). Make the ship's DEATH play. Wire the E2 console escalation (ORBIT→CORE TEMP CRITICAL→HULL BREACH) via setCockpitAlert.
-**Then Phase 4** (crash/wake/reveal + tutorial — the C18 reqs: crashed-pod exterior matches the interior size; WAKE INSIDE the pod
-+ blow-the-door to step out, NOT teleport-out; desert reveal; craft+salvage tutorial [machete→pry D261]; the chute-pop payoff) →
-**Phase 5** (audio: the full SFX arc + music cues + the chute fwoomp). These are logic/integration/audio — the main loop's strength.
+**✅ SHIPPED (overnight, main-loop logic):** T3.4 disaster staging (C21 — corridor fire/red-alert/flee) · T4.1 impact + WAKE-INSIDE-POD
++ BLOW-DOOR (C22 — the C18 req: wake inside the crashed pod at the desert, kick the hatch open, walk out; `buildWakeInterior`/
+`blowWakeHatch` + reworked wake/stepOut; `--scenario=wake` rig).
+
+**▶ BUILD NEXT (overnight): T4.2 — the DESERT REVEAL** (main-loop logic): as the player climbs out the hatch (T4.1) into the dunes —
+dawn light, the half-buried crashed pod beside them, **aftermath-silence pacing** (E7 — a held beat of quiet before the game proper),
+and the **horizon hook** (E8 — a distant landmark/wreck silhouette on the horizon that pulls the player onward; reuse the M5a
+horizon-silhouette system). Then **T4.3** — the craft+salvage tutorial (scrap **glints** E10, minimal diegetic prompts, craft the
+machete → pry the pod panel [D261], starting supplies) + the **chute-pop payoff** (the parachute comically pops the pod crown as you
+finish). Then **Phase 5** (audio: the full SFX arc + music cues + the chute fwoomp). These are logic/integration/audio — the main
+loop's strength. **Deferred to the user's morning art-direction:** all the Phase-3/4 HERO VISUALS (hauler, cockpit fidelity, hero
+corridor + fire FX, the HERO crashed-cabin wake interior + exterior↔interior size-match, the explosion FX).
 - Decompose via `/feature-slice` if a tier is >2 sub-tasks; one sub-task per cycle to the DoD (the beat plays as the vision).
 
 ## Then Phase 4 + Phase 5 (continue through them)

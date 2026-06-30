@@ -2575,6 +2575,93 @@ function buildHeroPodMesh(): THREE.Group {
  *  PERSISTS into the real game (NOT disposed by endEscapePodIntro). A vertical
  *  cylinder collider (from the invisible proxy) follows the standing silhouette;
  *  the dome/antenna/door/decorations are noCollider. */
+// ── T4.1 — the CRASHED-POD WAKE INTERIOR. The player comes to INSIDE the pod (in the desert)
+//    and blows the hatch to climb out (the C18 walk-test req: wake in the pod + release the
+//    door, NOT teleport into open desert). Visual-only (noCollider — the player stands on the
+//    REAL terrain + walks straight out the open hatch, so there's no co-location/collision
+//    fragility). A cramped dark capsule shell around the wake camera, slightly crash-tilted,
+//    OPEN at the front (−Z local) where a framed HATCH + an ajar DOOR show the dawn desert; the
+//    real sun lights the interior through the opening. GREYBOX-grade — the HERO crashed-cabin
+//    interior + the exact exterior↔interior size-match (C18) are deferred to the user's
+//    art-direction pass (with the other hero visuals). `yaw` aims the hatch (the look-out
+//    direction — face open desert). Returns the world EYE + LOOK so the beat seats the camera.
+let _wakeGroup: THREE.Group | null = null;
+let _wakeDoorPivot: THREE.Group | null = null;
+const _wakeGeo: THREE.BufferGeometry[] = [];
+const _wakeMats: THREE.Material[] = [];
+
+export function buildWakeInterior(ctx: GameContext, x: number, z: number, eyeY: number): void {
+  removeWakeInterior(ctx);
+  const gy = ctx.terrain.heightAt(x, z);
+  const g = new THREE.Group();
+  g.name = 'podWakeInterior';
+  g.position.set(x, gy, z);
+  g.rotation.set(-0.04, 0, 0.10);   // a slight crashed lean (hatch faces world −Z; player looks −Z)
+  const dark = new THREE.MeshStandardMaterial({
+    color: 0x352e27, roughness: 0.92, metalness: 0.16, side: THREE.DoubleSide, flatShading: true,
+  });
+  _wakeMats.push(dark);
+  const mk = (geo: THREE.BufferGeometry, mat: THREE.Material): THREE.Mesh => {
+    _wakeGeo.push(geo);
+    const m = new THREE.Mesh(geo, mat);
+    m.userData.noCollider = true; m.castShadow = false; m.receiveShadow = true;
+    return m;
+  };
+  // EYE = the player's eye height relative to the group origin, so the hatch frames the seated
+  // wake look + still clears the standing eye when they rise to climb out.
+  const EYE = eyeY - gy;
+  const W = 1.8, H = 2.1, D = 1.7;
+  // cramped dark shell: back (+Z), sides (±X), top, deck — front (−Z) OPEN for the hatch.
+  const back = mk(new THREE.BoxGeometry(W, H, 0.08), dark); back.position.set(0, EYE, D / 2); g.add(back);
+  for (const sx of [-1, 1]) {
+    const side = mk(new THREE.BoxGeometry(0.08, H, D), dark); side.position.set(sx * W / 2, EYE, 0); g.add(side);
+  }
+  const top = mk(new THREE.BoxGeometry(W, 0.08, D), dark); top.position.set(0, EYE + H / 2, 0); g.add(top);
+  const deck = mk(new THREE.BoxGeometry(W, 0.06, D), dark); deck.position.set(0, EYE - H / 2 + 0.03, 0); g.add(deck);
+  // the HATCH FRAME on the open −Z front (worn steel) + an ajar DOOR hinged on the right jamb.
+  const fz = -D / 2 + 0.03, hatchW = 0.92, hatchH = 1.5;
+  const fb = (w: number, h: number, px: number, py: number): void => {
+    const m = mk(new THREE.BoxGeometry(w, h, 0.13), _podFrameMat); m.position.set(px, py, fz); g.add(m);
+  };
+  fb(hatchW + 0.20, 0.12, 0, EYE + hatchH / 2);
+  fb(hatchW + 0.20, 0.12, 0, EYE - hatchH / 2);
+  fb(0.12, hatchH, -hatchW / 2, EYE);
+  fb(0.12, hatchH, hatchW / 2, EYE);
+  const pivot = new THREE.Group();
+  pivot.position.set(hatchW / 2, EYE, fz - 0.04);
+  const doorGeo = new THREE.BoxGeometry(hatchW, hatchH * 0.96, 0.08);
+  _wakeGeo.push(doorGeo);
+  const door = new THREE.Mesh(doorGeo, _podDoorMat);
+  door.position.set(-hatchW / 2, 0, 0);   // spans left from the right-edge hinge
+  door.userData.noCollider = true; door.castShadow = false;
+  pivot.add(door);
+  pivot.rotation.y = -0.5;   // ajar (the blast cracked it open)
+  g.add(pivot);
+  _wakeDoorPivot = pivot;
+  ctx.three.scene.add(g);
+  _wakeGroup = g;
+}
+
+/** Blow/kick the wake hatch off — fling the ajar door fully open + drop it as it tears free.
+ *  `t` 0→1 drives the swing (the beat eases it). No-op if no wake interior. */
+export function blowWakeHatch(t: number): void {
+  if (!_wakeDoorPivot) return;
+  const k = Math.min(1, Math.max(0, t));
+  _wakeDoorPivot.rotation.y = -0.5 - k * 2.1;          // fling wide open
+  (_wakeDoorPivot.children[0] as THREE.Mesh).position.y = -k * 0.35;   // tears down off the hinge
+}
+
+/** Tear down the wake interior (geometry + the per-build dark material; the shared pod frame/
+ *  door mats persist). Called at the desert handoff. */
+export function removeWakeInterior(ctx: GameContext): void {
+  if (_wakeGroup) { ctx.three.scene.remove(_wakeGroup); _wakeGroup = null; }
+  for (const geo of _wakeGeo) geo.dispose();
+  _wakeGeo.length = 0;
+  for (const m of _wakeMats) m.dispose();
+  _wakeMats.length = 0;
+  _wakeDoorPivot = null;
+}
+
 export function placeCrashedPodWreck(ctx: GameContext, x: number, z: number): void {
   removeCrashedPodWreck(ctx);
   const gy = ctx.terrain.heightAt(x, z);

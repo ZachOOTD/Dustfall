@@ -3,6 +3,16 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Escape-pod campaign C22 — 2026-06-30 (overnight) — Phase 4 T4.1: impact + WAKE-INSIDE-POD + BLOW-DOOR (the C18 fix) — SHIPPED ✓ verify:all + smoke + wake rig
+
+`verified` — tsc clean + smoke `{ok:true,beats:10}` + the `--scenario=wake` rig reads (inside the dark crashed pod, the ajar hatch, the dawn desert beyond); verify:all PASS. Flag OFF → live game byte-unchanged.
+
+**T4.1 — the WAKE-INSIDE-THE-POD + BLOW-DOOR flow** (the C18 walk-test req: *"start in the pod in the desert and release the door to walk out — not teleport outside"*). Reworked the `wake`/`stepOut` beats (`sequence.ts`) + a new minimal wake interior (`podScene.ts`):
+- **Under the crash blackout** (invisible), the player leaves the offset descent pod and comes to INSIDE the crashed pod at the desert spawn (the teleport is fully hidden by the black — no more magic "standing in open desert"). New `buildWakeInterior(x,z,eyeY)` — a cramped dark capsule shell around the wake eye (back/sides/top/deck), OPEN at the front with a worn HATCH frame + an ajar DOOR; visual-only (noCollider — the player stands on the REAL terrain + walks straight out, so no co-location/collision fragility).
+- **The flow:** come-to (fade from black, dazed, looking out the ajar hatch at the dawn desert) → "Kick the hatch open [click]" → the door blows off (`blowWakeHatch` flings it + a one-time jolt/flash) → "Climb out" (mode→walk) → the player walks out the hatch into the dunes → leaving the pod radius ends the wake → `stepOut` leaves the crashed pod wreck where they climbed out ("the pod you crawled out of", behind them) + the salvage-tutorial toast. **No teleport** — they physically walk out.
+- Verified via a new `--scenario=wake` rig (the seated FP wake view at the desert). The MOTION (fade-in, the door blow, the climb-out) is a walk-test item.
+- **Deferred to user art-direction (per the pivot):** the HERO crashed-cabin interior (more detail, proper lighting — the wake interior is dark/greybox) + the **exterior↔interior size-match** (C18) — flagged with the other hero visuals. T4.1's defining value (wake in the pod → blow the hatch → walk out) is delivered + plays.
+
 ## Escape-pod campaign C21 — 2026-06-30 (overnight) — Phase 3 T3.4: the DISASTER STAGING (engine fire → red-alert → flee to the pod) — SHIPPED ✓ verify:all + smoke
 
 `verified` — tsc clean + smoke `{ok:true,beats:10}` + the corridor disaster rig-shots (fire + flee) read; verify:all PASS. Flag OFF → live game byte-unchanged. **First cycle of the pivot — it SHIPS (main-loop logic), not defers.**

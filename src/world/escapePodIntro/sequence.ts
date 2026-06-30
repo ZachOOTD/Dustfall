@@ -40,7 +40,7 @@ import {
   SHIP_CORRIDOR_ENTER_Z, SHIP_DEAD_END_Z,
   setCockpitAlert, setShipAlert, setEngineFire,
 } from './shipScene.ts';
-import { buildPodScene, disposePodScene, getPodSpawn, setDescentProgress, setTumbleLight, setParachuteLeverPull, placeCrashedPodWreck } from './podScene.ts';
+import { buildPodScene, disposePodScene, getPodSpawn, setDescentProgress, setTumbleLight, setParachuteLeverPull, placeCrashedPodWreck, buildWakeInterior, blowWakeHatch, removeWakeInterior } from './podScene.ts';
 import { setGameHudHidden, showIntroPrompt, hideIntroPrompt, setIntroBlack } from './introHud.ts';
 import { flashScreen } from '../../fx/screenFlash.ts';
 import { addTrauma } from '../../fx/cameraShake.ts';
@@ -64,9 +64,15 @@ const PARACHUTE_SNAP_FALL = 2.0;
 /** Impact: seconds to fade to black, then hold in blackout, before waking. */
 const IMPACT_FADE = 1.2;
 const IMPACT_HOLD = 1.0;
-/** Wake: seconds to fade FROM black (come to), then hold, before the desert handoff. */
+/** Wake: seconds to fade FROM black (come to), then hold, before the blow-hatch prompt. */
 const WAKE_FADE = 2.5;
 const WAKE_HOLD = 1.2;
+/** T4.1 — wake-inside-the-pod → blow-the-hatch → climb-out (the C18 req). Door blow duration,
+ *  how far you walk to "climb out", and anti-softlock fallbacks (auto-blow / auto-step-out). */
+const WAKE_BLOW_DUR = 0.6;
+const WAKE_CLIMB_DIST = 2.2;
+const WAKE_BLOW_FALLBACK = 5.0;
+const WAKE_CLIMB_FALLBACK = 8.0;
 
 /** C18 (user walk-test: "black out briefly between each phase to make things feel smoother") —
  *  a brief DIP-TO-BLACK at the descent-chain transitions. advanceBeat cuts to black; the new beat
@@ -154,9 +160,9 @@ export interface IntroState {
    *  at the real new-game spawn at that point, before the intro teleports them to the ship).
    *  stepOut teleports the capsule here for the desert handoff (R3). */
   returnPos: { x: number; y: number; z: number };
-  /** Per-beat scratch — added by later tiers (e.g. parachutePulls, doorBlown).
+  /** Per-beat scratch — added by later tiers (e.g. parachutePulls, doorBlown, the wake phase).
    *  Kept loose so beat controllers can stash transient state without growing this type. */
-  scratch: Record<string, number | boolean>;
+  scratch: Record<string, number | boolean | string>;
 }
 
 /** Does the intro currently own input / locomotion / gameplay gating? Cheap; call
@@ -222,6 +228,7 @@ export function endEscapePodIntro(ctx: GameContext): void {
   setGameHudHidden(false);
   disposeShipScene(ctx);
   disposePodScene(ctx);
+  removeWakeInterior(ctx);   // T4.1 — tear down the wake interior on any exit (skip/jump/end)
 }
 
 /** Cockpit beat (T0.2a/b) — on first entry, build the greybox ship, hide the game HUD,
@@ -443,20 +450,73 @@ function tickImpact(ctx: GameContext, dt: number): void {
   if ((intro.scratch.t as number) > IMPACT_FADE + IMPACT_HOLD) advanceBeat(ctx);   // → wake
 }
 
-/** wake beat (T0.4a) — come to: fade FROM black (the vision's muffled/ringing rouse;
- *  audio is Phase 5), hold a beat, → stepOut. */
+/** wake beat (T4.1 — the C18 walk-test rework) — you COME TO INSIDE the crashed pod, in the
+ *  desert, and BLOW THE HATCH to climb out (NOT a magic teleport to standing in open desert).
+ *  Under the crash blackout the player is moved (invisibly) from the offset descent pod to the
+ *  desert spawn, inside a cramped dark wake interior; they fade in dazed looking out the ajar
+ *  hatch, kick it open, then walk out into the dunes. Phases: comeTo → prompt → blowing → climb. */
 function tickWake(ctx: GameContext, dt: number): void {
   const intro = ctx.intro;
   if (!intro) return;
   if (!intro.scratch.init) {
-    intro.mode = 'scripted';
+    // UNDER THE BLACK (invisible): leave the offset descent pod + come to INSIDE the crashed
+    // pod at the desert spawn. The teleport is hidden by the full blackout — the player wakes
+    // in the pod + climbs out, never seeing a magic "standing in the open desert" (C18).
+    disposePodScene(ctx);
+    setDescentProgress(0);
+    const rp = intro.returnPos;
+    buildWakeInterior(ctx, rp.x, rp.z, rp.y + Tuning.POD_SEATED_EYE_OFFSET);
+    seatPlayerAt(ctx, rp);            // body at the desert spawn (the wake spot)
+    faceControl(ctx, 0, -0.05);       // look −Z out the hatch, slightly down (dazed)
+    blowWakeHatch(0);                 // the door sits ajar (the blast cracked it)
+    intro.mode = 'seated';            // dazed: free-look, can't move yet
     setIntroBlack(1);
     intro.scratch.t = 0;
+    intro.scratch.blowT = 0;
+    intro.scratch.phase = 'comeTo';
     intro.scratch.init = true;
   }
   intro.scratch.t = (intro.scratch.t as number) + dt;
-  setIntroBlack(Math.max(0, 1 - (intro.scratch.t as number) / WAKE_FADE));
-  if ((intro.scratch.t as number) > WAKE_FADE + WAKE_HOLD) advanceBeat(ctx);   // → stepOut
+  const t = intro.scratch.t as number;
+  const phase = intro.scratch.phase as string;
+
+  if (phase === 'comeTo') {
+    setIntroBlack(Math.max(0, 1 - t / WAKE_FADE));   // fade in, dazed, the dawn desert past the hatch
+    if (t > WAKE_FADE + WAKE_HOLD) {
+      showIntroPrompt('Kick the hatch open  [click]');
+      intro.scratch.phase = 'prompt';
+      intro.scratch.t = 0;
+    }
+    return;
+  }
+  if (phase === 'prompt') {
+    if (pulledLever(ctx) || t > WAKE_BLOW_FALLBACK) {
+      flashScreen(0xfff0d8, 0.4);
+      addTrauma(0.5);                 // a ONE-TIME kick as the hatch blows off (not per-frame)
+      showIntroPrompt('');
+      intro.scratch.phase = 'blowing';
+      intro.scratch.blowT = 0;
+    }
+    return;
+  }
+  if (phase === 'blowing') {
+    intro.scratch.blowT = Math.min(1, (intro.scratch.blowT as number) + dt / WAKE_BLOW_DUR);
+    blowWakeHatch(intro.scratch.blowT as number);   // fling the hatch open
+    if ((intro.scratch.blowT as number) >= 1) {
+      intro.mode = 'walk';            // hand over control — climb out
+      showIntroPrompt('Climb out into the desert');
+      intro.scratch.phase = 'climb';
+      intro.scratch.t = 0;
+    }
+    return;
+  }
+  // phase 'climb' — the player walks out the hatch; leaving the pod radius ends the wake.
+  const rp = intro.returnPos;
+  const tr = ctx.player.body.body.translation();
+  const dx = tr.x - rp.x, dz = tr.z - rp.z;
+  if (dx * dx + dz * dz > WAKE_CLIMB_DIST * WAKE_CLIMB_DIST || t > WAKE_CLIMB_FALLBACK) {
+    advanceBeat(ctx);   // → stepOut (finalize the desert handoff)
+  }
 }
 
 /** stepOut beat (T0.4a) — THE DESERT HANDOFF (R3): teleport the capsule to the real
@@ -467,17 +527,14 @@ function tickStepOut(ctx: GameContext): void {
   const intro = ctx.intro;
   if (!intro) return;
   const rp = intro.returnPos;
-  ctx.player.body.body.setTranslation({ x: rp.x, y: rp.y, z: rp.z }, true);
-  ctx.player.velocityY = 0;
-  ctx.player.cameraSnapNextFrame = true;
-  ctx.three.camera.position.set(rp.x, rp.y + ctx.player.eyeOffset, rp.z);
-  // T0.4b — place the crashed pod a few metres away + wake looking at it (the "salvage your
-  // own pod" seam). The wreck PERSISTS into the real game (endEscapePodIntro won't dispose it).
-  const wx = rp.x + 4, wz = rp.z + 4;
-  placeCrashedPodWreck(ctx, wx, wz);
-  ctx.three.camera.lookAt(wx, ctx.terrain.heightAt(wx, wz) + 1, wz);
+  // T4.1 — NO teleport: the player ALREADY walked out into the desert (the wake beat). Tear down
+  // the wake interior + leave the crashed pod wreck where they climbed out — now behind them,
+  // "the pod you crawled out of". The wreck PERSISTS into the real game (endEscapePodIntro
+  // won't dispose it — it's the salvage tutorial target).
+  removeWakeInterior(ctx);
+  placeCrashedPodWreck(ctx, rp.x, rp.z);
   endEscapePodIntro(ctx);   // hand control back — the desert game runs from here
-  // T0.4b tutorial scaffold — the first-gameplay hint (real craft→pry→chute-pop is Phase 4).
+  // T0.4b tutorial scaffold — the first-gameplay hint (real craft→pry→chute-pop is Phase 4 T4.3).
   ctx.ui.showToast('Salvage your pod — craft a machete to pry it open', { kind: 'discovery' });
 }
 

@@ -260,3 +260,15 @@ The user approved **Phase 2 (the descent showpiece)** after an extended attended
 - **Spend:** ~300K (main-loop inline, no modeler/gate — the pivot's payoff: ~3× cheaper than the hero-visual cycles); campaign total ~13.48M; cycle **21/150**.
 - **Commit:** `c05ade7`.
 - **Next:** C22 = **Phase 4** (crash/wake/reveal + tutorial — main-loop logic; incl. the C18 reqs: crashed-pod exterior matches the interior size; WAKE INSIDE the pod + blow-the-door, not teleport-out).
+
+---
+
+## Cycle 22 — Phase 4 T4.1: impact + wake-inside-pod + blow-door (2026-06-30, overnight) — SHIPPED
+- **Planned:** the C18 walk-test req — wake INSIDE the crashed pod (in the desert) and release the door to walk out, NOT teleport to standing in open desert.
+- **Shipped:** reworked the `wake`/`stepOut` beats + a new minimal wake interior (`buildWakeInterior`/`blowWakeHatch` in `podScene.ts`). **Under the crash blackout** (invisible), the player leaves the offset descent pod and comes to INSIDE the crashed pod at the desert spawn. The flow: come-to (fade from black, dazed, looking out the ajar hatch at the dawn desert) → "Kick the hatch open [click]" → the door blows off (a one-time jolt/flash) → "Climb out" (mode→walk) → the player WALKS OUT the hatch into the dunes → leaving the pod radius ends the wake → `stepOut` leaves the crashed wreck where they climbed out + the salvage toast. **No magic teleport** — the teleport is hidden under the black; they physically walk out. The wake interior is visual-only (noCollider) so the player stands on the real terrain.
+- **Verify:** verify:all PASS + smoke `{ok:true,beats:10}` + the `--scenario=wake` rig reads.
+- **Visual iteration:** own-loop (greybox wake interior, not a hero asset → no adversarial gate). The wake rig confirms: inside the dark crashed pod, the worn hatch frame + ajar door, the dawn desert beyond — the C18 read. A touch dark; the MOTION (fade-in, door blow, climb-out) is a walk-test item.
+- **Deferred (per the pivot):** the HERO crashed-cabin interior (detail + lighting — the wake interior is dark/greybox) + the crashed-pod EXTERIOR↔INTERIOR size-match (C18) → user art-direction. T4.1's defining value (wake → blow → walk out) is delivered.
+- **Spend:** ~400K (main-loop inline); campaign total ~13.88M; cycle **22/150**.
+- **Commit:** `a8b21a0`.
+- **Next:** C23 = Phase 4 **T4.2 — the desert reveal** (dawn, half-buried pod, aftermath-silence pacing, the horizon hook).
