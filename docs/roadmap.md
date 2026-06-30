@@ -154,9 +154,11 @@ at each `### Milestone:` for the user's art-direction. The v1 logic/audio/stagin
   continuity through ONE consistent pod model; can't be done before the model is unified, so it merges into R3).
   **R1 (the spatial re-grounding — orbit sky + the real-world descent) is COMPLETE at R1a+R1b.**
 ### ✅ Milestone: REBUILD R1 — real-world re-grounding COMPLETE — USER-APPROVED to continue (2026-06-30). Walk-tested; fixed 2 reported bugs live (the orbit planet drawing on top of the ship → depth-test; dust visible in space → re-suppress every frame). **⚠ R1 POLISH TBD — the user will give another round of feedback later** (likely the planet size/placement/surface + the descent feel). The user asked to **keep building (checkpoint→NONE)** through R2-R5, then review the batch. So: build R2→R5, surface the hero looks in the changelog/preview, the user reviews + art-directs later.
-- **R2 — The space scene (hero polish):** lift the space-mode sky to a hero bar — star density/brightness, the
-  planet's scale/surface/atmosphere, the orbit composition through the window. [user art-direction]
-### Milestone: REBUILD R2 — space scene COMPLETE → USER WALK-TEST → /campaign-approve
+- **✅ R2 — The space scene hero-polish SHIPPED** — a milky-way band (dome haze + per-star band weights, gated to
+  space mode) + richer stars; a planet surface that reads as a real world (domain-warped continents/seas, banding,
+  polar caps, cloud swirls, a dramatic terminator, Dune palette); a thin believable atmosphere limb. **Planet
+  SIZE/PLACEMENT kept at the default — the user art-directs the framing in their next feedback round.** Non-destructive.
+### Milestone: REBUILD R2 — space scene COMPLETE (checkpoint=none → no pause; user reviews the batch later)
 - **R3 — The ONE physical pod:** unify the 3 pod models (descent interior · wake interior · crashed wreck) into
   ONE — a walkable interior + a matching exterior; docked in the ship, physically ENTERED, EJECTED, ridden,
   EXITED. No teleports (this is where the old R1c — physical continuity pod→crash→wake→exit — lands). [hero model — user art-direction]

@@ -4,7 +4,7 @@
   "started": "2026-06-28",
   "branch": "campaign/escape-pod-intro",
   "preview_deploy": "User steering 2026-06-29 (C17): the campaign branch is now PUSHED to origin (github.com/ZachOOTD/Dustfall) for a playable preview link. POLICY CHANGE: each cycle now PUSHES the branch after its commit (was local-only) so the preview rebuilds. The preview build is env-gated (VITE_ESCAPE_POD_INTRO=1 turns the intro ON, VITE_BASE=/ serves at root) — see netlify.toml + docs/deploy-preview.md; the live master GitHub-Pages site is untouched (push-to-master-only). The user activates the host (Cloudflare Pages / Netlify) on their side one-time → then each push refreshes the link.",
-  "cycles_completed": 27,
+  "cycles_completed": 28,
   "current_tier": "** REBUILD v2 ACTIVE (2026-06-30, user morning feedback) -> ATTENDED collaborative rebuild (NOT the autonomous loop; the user art-directs the hero/visual pieces). The v1 intro was built at a hidden OFFSET + faked space/descent via shaders + split the pod into 3 teleport-stitched models -> the root of every 'fake' read. USER-APPROVED shift: re-ground in the REAL world; ONE physical pod (enter/eject/ride/crash/wake/exit, no teleport); space = a wrapping celestial SKYBOX (real-scale look, no precision cost); descent = the pod PHYSICALLY falling + crashing into the real desert (viewport = the actual spawn world; multiplayer-ready); orbit->atmosphere is a scripted re-entry (NOT a literal 100km fall -- float precision wall ~10km). Rebuild order R1 real-world re-grounding (keystone) -> R2 space skybox+planet -> R3 the ONE physical pod -> R4 physical descent+crash + timing fixes (parachute MID-fall, longer ~2s+ blackouts) -> R5 ship interior/corridor redesign. The v1 beat-machine + sequence + audio + staging CARRY OVER (re-grounded, not rewritten). Full plan: docs/feature-escape-pod-intro.md '## REBUILD v2'. NEXT = R1. [Prior overnight-complete summary superseded:] ", "current_tier_prior": "** OVERNIGHT RUN COMPLETE (C19-C26) -> PAUSED for the user's morning review. The whole escape-pod intro PLAYS end-to-end (behind FEATURES.escapePodIntro) WITH FULL SFX + MUSIC: cockpit (hum) -> check-engines (console escalation) -> corridor disaster (fire + red-alert + klaxon + escape sting) -> enter pod -> eject + ship explodes -> re-entry -> the beautiful descent (vista + rush + swell) -> the parachute gag -> crash -> WAKE INSIDE the pod -> kick the hatch open -> walk out into the DAWN desert (aftermath-silence + horizon hook + desert-easing music). SHIPPED this overnight: T3.4 disaster staging (C21), T4.1 wake-inside+blow-door [the C18 req] (C22), T4.2 desert reveal (C23), T5.1a SFX (C24), T5.1b loops (C25), T5.2 music (C26). PIVOT (C20): the autonomous procedural-modeler PLATEAUED on Phase-3 hero visuals (hauler, cockpit) -> the loop deferred all hero VISUALS + feel/playtest items to the user + built the playable LOGIC/STAGING/AUDIO instead. AWAITING THE USER (the morning list, prioritized): [hero VISUALS - art-direction] hauler exterior (__game.buildHauler()), cockpit surface-fidelity (rig --scenario=cockpit), ship-explosion FX (T3.2), hero corridor geometry + fire FX, the HERO crashed-cabin wake interior + the crashed-pod EXTERIOR<->INTERIOR size-match (C18), a dedicated horizon-hook landmark; [feel/playtest] T4.3 craft+salvage tutorial (wire the pod as a pryable escape_pod salvageable -- scrap_machete/D261 + the salvage system EXIST) + the comic chute-pop payoff; [audio] LISTEN + balance the mix. Then the Phase 3-5 walk-tests. Resume via /campaign-approve (or steer via steering.md). ENRICH-NOT-CUT; behind FEATURES.escapePodIntro; no SAVE_VERSION bump. Plan: docs/feature-escape-pod-intro.md.",
   "awaiting_approval": false,
   "stop_reasons": [],
@@ -454,6 +454,23 @@
       "ultracode": true,
       "commit": "83bba35",
       "spend_approx_tokens": 1000000
+    },
+    {
+      "cycle": 28,
+      "date": "2026-06-30",
+      "focus": "REBUILD v2 R2 — space scene hero-polish (stars + planet surface + atmosphere). Plus 2 R1 bug-fixes (planet depth-test; dust-in-space) from the user's R1 walk-test.",
+      "tier": "REBUILD v2 R2 — space scene",
+      "outcome": "SHIPPED",
+      "units": ["R1 bug-fixes (user walk-test): the orbit planet drew ON TOP of the ship (transparent+depthTest:false) -> depthTest:true so the hull occludes it (visible only through the window); dust visible in space (the one-time hide was overwritten each frame by updateWeather/Dust which run before updateEscapePodIntro) -> re-suppress every frame in updateEscapePodIntro through the space/ship/descent/crash beats, restored at stepOut.", "R2 -- space scene hero-polish (procedural-modeler, 7 rounds, all in sky.ts, non-destructive): a milky-way band (SKY_FRAGMENT dome haze + per-star band weights, gated to uSpace) + richer star brightness; a planet surface that reads as a real world (SPACE_PLANET_FS domain-warped continents/seas + banding + polar caps + cloud swirls + a dramatic terminator, Dune palette); a thin believable blue atmosphere limb (SPACE_ATMO_FS, was neon). Planet size/placement KEPT at the default (the user art-directs the framing in their next feedback round)."],
+      "verify": "verify:all PASS + smoke {ok:true,beats:12} + rig (cockpit orbit + clear-night/noon controls = normal sky byte-unchanged). Behind the flag.",
+      "visual": "procedural-modeler verified the orbit view across 7 rounds (rig DPR varied -- some shots small; the composition/band/terminator/limb read clearly, user confirms surface detail at full-res). The MOTION (twinkle, parallax) is a walk-test item.",
+      "deferred": "R1 polish + the planet size/placement -> the user's next feedback round (they chose checkpoint=none run-through, review the batch). NEXT (run-through) = R3 (the one physical pod) -> R4 -> R5.",
+      "save": "no change (SAVE_VERSION stays 15).",
+      "decisions": ["(no new D-entry. R2 scoped to QUALITY polish [stars/planet-surface/atmosphere], NOT framing -- the user flagged the planet size/placement for their own feedback round, so the modeler was guarded against locking those. The 2 R1 bug-fixes from the walk-test fixed live during R2.)"],
+      "agent": "procedural-modeler (R2 ~107K) + my R1 bug-fixes + wiring/verify.",
+      "ultracode": true,
+      "commit": "391ae90",
+      "spend_approx_tokens": 500000
     }
   ]
 }

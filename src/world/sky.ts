@@ -71,6 +71,9 @@ const _SPACE_LIGHT = new THREE.Vector3(-0.78, 0.40, 0.30).normalize();
 const _SPACE_TOP = new THREE.Color(0x01020a);
 const _SPACE_HORIZON = new THREE.Color(0x03050f);
 const _spacePlanetPos = new THREE.Vector3();
+// REBUILD v2 R2 — the galactic-plane normal for the milky-way band. MUST match the
+// (gnx,gny,gnz) used in buildStarGeometry so the dome haze + the band stars align.
+const _GAL_NORMAL = new THREE.Vector3(0.62, 0.60, 0.18).normalize();
 
 const _topColor = new THREE.Color();
 const _horizonColor = new THREE.Color();
@@ -109,6 +112,7 @@ const STAR_STORM_STATE_FLOOR = Tuning.STAR_STORM_STATE_FLOOR;  // extra star-kil
 export const STAR_VERTEX = /* glsl */ `
 attribute float size;
 attribute float phase;
+attribute float band;
 uniform float uTime;
 uniform float uOpacity;
 uniform float uTwinkleSpeed;
@@ -116,7 +120,9 @@ uniform float uTwinkleDepth;
 uniform float uSizeDepth;
 uniform float uBaseSize;
 uniform float uBrightness;
+uniform float uSpace;       // REBUILD v2 R2 — 0 normal sky … 1 full orbit. Lifts the milky-way band ONLY in space.
 varying float vAlpha;
+varying float vBand;        // band glow factor passed to the fragment for the soft milky haze
 void main() {
   // Twinkle: a per-star sine in [-1,1], folded to [0,1].
   float tw = 0.5 + 0.5 * sin(uTime * uTwinkleSpeed + phase);
@@ -126,25 +132,40 @@ void main() {
   // uBrightness (>1) lifts the soft-disc mid-tones so stars read clearly on a
   // clear night; the saturated core still clamps in the fragment so we don't
   // get blown-out white blobs. Capped just above 1 to keep the ceiling sane.
-  vAlpha = min(uOpacity * dip * uBrightness, 1.15);
-  // Size pulses subtly with the same phase.
+  // In space mode, milky-way band stars get an additional brightness lift so the
+  // band reads as a luminous river (uSpace gates it → normal sky byte-unchanged).
+  float bandLift = 1.0 + uSpace * band * 1.15;
+  vAlpha = min(uOpacity * dip * uBrightness * bandLift, 1.6);
+  vBand = band * uSpace;
+  // Size pulses subtly with the same phase. Band stars in space swell so the river
+  // has body (the soft haze comes from the fragment soft-disc widening).
   float sizePulse = mix(1.0 - uSizeDepth, 1.0 + uSizeDepth, tw);
-  gl_PointSize = uBaseSize * size * sizePulse;
+  float bandSize = 1.0 + uSpace * band * 0.85;
+  gl_PointSize = uBaseSize * size * sizePulse * bandSize;
   gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
 }
 `;
 
 // Round, soft-edged star point (gl_PointCoord disc) so points aren't squares.
+// REBUILD v2 R2 — milky-way band stars (vBand>0, space-only) get a faint cool
+// haze halo around the core so the band reads as a luminous dust river, not just
+// brighter points. Normal-sky stars (vBand==0) are unchanged.
 export const STAR_FRAGMENT = /* glsl */ `
 uniform vec3 uColor;
 varying float vAlpha;
+varying float vBand;
 void main() {
   vec2 c = gl_PointCoord - vec2(0.5);
   float d = length(c);
   // Soft falloff from center→edge.
   float a = smoothstep(0.5, 0.05, d) * vAlpha;
-  if (a < 0.01) discard;
-  gl_FragColor = vec4(uColor, a);
+  // A wider, dimmer haloed glow for band stars — builds the milky haze.
+  float haze = smoothstep(0.5, 0.0, d) * vBand * 0.65 * vAlpha;
+  float total = a + haze;
+  if (total < 0.01) discard;
+  // Tint the band haze very slightly cool-white (a faint dusty blue-white river).
+  vec3 col = mix(uColor, uColor * vec3(0.86, 0.90, 1.06), vBand * 0.6);
+  gl_FragColor = vec4(col, total);
 }
 `;
 
@@ -189,16 +210,34 @@ const SPACE_PLANET_FS = /* glsl */ `
                mix(mix(hash(p+vec3(0,0,1)),hash(p+vec3(1,0,1)),f.x),
                    mix(hash(p+vec3(0,1,1)),hash(p+vec3(1,1,1)),f.x),f.y),f.z);
   }
-  float fbm(vec3 p){ float a=0.5,s=0.0; for(int i=0;i<4;i++){ s+=a*vnoise(p); p*=2.03; a*=0.5; } return s; }
+  float fbm(vec3 p){ float a=0.5,s=0.0; for(int i=0;i<5;i++){ s+=a*vnoise(p); p=p*2.03+vec3(11.7); a*=0.5; } return s; }
+  // Domain-warped fbm — warps the sample point by another fbm so the features get
+  // swirly, organic edges (the legible "continents/seas" + cloud bands) instead of
+  // the round-1 uniform mottle. REBUILD v2 R2.
+  float warpFbm(vec3 p, float warp){
+    vec3 q = vec3(fbm(p+vec3(0.0)), fbm(p+vec3(5.2,1.3,9.1)), fbm(p+vec3(2.8,7.4,3.6)));
+    return fbm(p + warp*(q-0.5));
+  }
+  // Large-scale terrain HEIGHT: a domain-warped continent field (big legible
+  // landmasses vs basins) + latitude dust-banding + fine mottle for surface tooth.
   float terrain(vec3 d){
-    float bands = sin(d.y*8.0 + fbm(d*1.8)*3.4)*0.5+0.5;
-    float cont  = fbm(d*1.7 + 2.0);
-    float mott  = fbm(d*3.6 + 5.0);
-    float fine  = fbm(d*8.5 + 11.0);
-    cont = smoothstep(0.28, 0.74, cont);
-    float h = cont*0.52 + bands*0.26 + mott*0.24;
-    h = mix(h, h*0.60 + fine*0.40, 0.66);
+    float cont  = warpFbm(d*1.45 + 2.0, 1.6);          // continents / seas — the legible large forms
+    float bands = sin(d.y*7.0 + warpFbm(d*1.1, 1.2)*3.2)*0.5+0.5; // latitude dust banding
+    float mott  = fbm(d*4.0 + 5.0);                    // mid mottle
+    float fine  = fbm(d*9.5 + 11.0);                   // fine tooth
+    cont = smoothstep(0.30, 0.70, cont);
+    float h = cont*0.60 + bands*0.20 + mott*0.20;
+    h = mix(h, h*0.62 + fine*0.38, 0.55);
     return h;
+  }
+  // Separate slow cloud-swirl layer (returned 0..1) — wispy high-altitude streaks
+  // that catch the sun. Domain-warped so they curl into believable weather swirls.
+  float clouds(vec3 d){
+    float c = warpFbm(d*2.1 + 17.0, 2.2);
+    c = smoothstep(0.52, 0.82, c);
+    // Thin the clouds toward the poles + add a faint banded structure.
+    float bandMask = 0.55 + 0.45*sin(d.y*5.0 + warpFbm(d*1.6, 1.0)*2.0);
+    return c * bandMask;
   }
   void main(){
     vec3 n = normalize(vONrm);
@@ -206,35 +245,53 @@ const SPACE_PLANET_FS = /* glsl */ `
     vec3 L = normalize(uLightDir);
     float lat = d.y;
     float h = terrain(d);
+    // Bump from the height field for surface relief shading.
     vec3 t1 = normalize(cross(n, vec3(0.0,1.0,0.0)) + vec3(1e-4));
     vec3 t2 = normalize(cross(n, t1));
     float e = 0.010;
     float hx = terrain(normalize(d + t1*e)) - h;
     float hy = terrain(normalize(d + t2*e)) - h;
-    vec3 rn = normalize(n - (t1*hx + t2*hy) * 2.6 * 26.0);
-    vec3 cRust = vec3(0.34,0.15,0.08);
-    vec3 cBody = vec3(0.70,0.43,0.23);
-    vec3 cTan  = vec3(0.94,0.74,0.50);
-    vec3 cPolar= vec3(0.91,0.84,0.73);
-    vec3 albedo = mix(cRust, cBody, smoothstep(0.14,0.50,h));
-    albedo = mix(albedo, cTan, smoothstep(0.50,0.88,h));
-    albedo = mix(albedo, cPolar, smoothstep(0.74,0.98,abs(lat))*0.55);
+    vec3 rn = normalize(n - (t1*hx + t2*hy) * 2.6 * 22.0);
+
+    // ── Dune-desert palette: dark rust "seas" → ochre body → bright tan highlands,
+    // with a separate cool basin tone so the continents read as legible contrast.
+    vec3 cSea  = vec3(0.26,0.12,0.07);   // low basins / dark seas
+    vec3 cRust = vec3(0.46,0.21,0.11);
+    vec3 cBody = vec3(0.72,0.44,0.24);
+    vec3 cTan  = vec3(0.95,0.76,0.52);
+    vec3 cPolar= vec3(0.93,0.88,0.80);
+    vec3 albedo = mix(cSea,  cRust, smoothstep(0.10,0.32,h));
+    albedo = mix(albedo, cBody, smoothstep(0.32,0.54,h));
+    albedo = mix(albedo, cTan,  smoothstep(0.54,0.82,h));
+    // Subtle polar lightening (dust/ice caps) — eased in only near the poles.
+    float pole = smoothstep(0.66, 0.95, abs(lat));
+    albedo = mix(albedo, cPolar, pole*0.62);
+    // A faint large-scale tonal drift so two hemispheres aren't identical.
+    albedo *= 0.92 + 0.16*warpFbm(d*0.9 + 30.0, 1.0);
+
+    // ── Lighting: a dramatic terminator. The lit gain is kept readable (no blowout).
     float ndlGeo = dot(n, L);
-    float day = smoothstep(-0.10, 0.34, ndlGeo);
+    float day = smoothstep(-0.12, 0.30, ndlGeo);
     float ndlSurf = max(dot(rn, L), 0.0);
-    // Softer lit-side gain so the day hemisphere doesn't blow out to flat white at
-    // exposure (the round-1 "glowing egg" read) — keep the curve readable.
-    float shade = 0.16 + 0.92*pow(ndlSurf, 0.85);
-    float ao = mix(1.0, 0.60 + 0.40*smoothstep(0.25, 0.65, h), 0.55);
-    vec3 sun = vec3(1.02,0.93,0.80);
+    float shade = 0.14 + 0.94*pow(ndlSurf, 0.82);
+    float ao = mix(1.0, 0.58 + 0.42*smoothstep(0.22, 0.62, h), 0.55);
+    vec3 sun = vec3(1.04,0.94,0.80);
     vec3 lit = albedo * shade * ao * sun;
-    vec3 dark = albedo * 0.045 + vec3(0.010,0.016,0.028);
+    vec3 dark = albedo * 0.040 + vec3(0.008,0.014,0.026);
     vec3 col = mix(dark, lit, day);
+
+    // ── Clouds: catch the sun on the lit side, fade across the terminator.
+    float cl = clouds(d);
+    vec3 cloudLit = vec3(0.98,0.93,0.86) * (0.30 + 0.70*max(dot(n,L),0.0));
+    col = mix(col, cloudLit, cl * day * 0.55);
+
+    // ── Warm terminator glow band (the sunset rim curving across the crown).
     float term = day*(1.0-day)*4.0;
-    col += vec3(0.66,0.30,0.11) * term * 0.7;
-    float vrim = pow(1.0 - max(dot(normalize(vVNrm), normalize(vView)), 0.0), 2.6);
-    vec3 air = vec3(0.30,0.52,0.92);
-    col += air * vrim * day * 0.42;
+    col += vec3(0.70,0.32,0.12) * term * 0.65;
+    // A faint cool air-scatter on the lit limb (sells the atmosphere meeting space).
+    float vrim = pow(1.0 - max(dot(normalize(vVNrm), normalize(vView)), 0.0), 2.4);
+    vec3 air = vec3(0.32,0.54,0.94);
+    col += air * vrim * day * 0.40;
     gl_FragColor = vec4(col, uOpacity);
   }
 `;
@@ -261,19 +318,22 @@ const SPACE_ATMO_FS = /* glsl */ `
     vec3 n = normalize(vNrm);
     vec3 v = normalize(vView);
     float rim = clamp(1.0 - max(dot(n, v), 0.0), 0.0, 1.0);
-    float halo  = pow(rim, 1.05);
-    float core  = pow(rim, 3.5) * 0.55;
-    float outer = pow(rim, 0.45) * 0.45;
-    float fres = halo + core + outer;
+    // A THIN air halo: the bulk of the glow hugs the limb (high exponents) with
+    // only a faint soft outer bloom, so it reads as a sliver of atmosphere, not a
+    // thick neon ring. REBUILD v2 R2.
+    float core  = pow(rim, 3.2) * 0.60;   // bright sliver right at the limb
+    float halo  = pow(rim, 1.6)  * 0.34;  // the main band
+    float outer = pow(rim, 0.80) * 0.16;  // faint outer feather (tighter than before)
+    float fres = core + halo + outer;
     float day = smoothstep(-0.55, 0.10, vNdl);
     float k = clamp(vNdl, 0.0, 1.0);
     // Bluer, less white-hot limb so it reads as an AIR halo, not a glowing rim.
-    vec3 blue  = vec3(0.30, 0.58, 1.10);
-    vec3 white = vec3(0.62, 0.74, 0.92);
-    vec3 warm  = vec3(0.95, 0.44, 0.18);
+    vec3 blue  = vec3(0.34, 0.60, 1.08);
+    vec3 white = vec3(0.66, 0.78, 0.96);
+    vec3 warm  = vec3(0.95, 0.46, 0.20);
     vec3 tint = mix(warm, white, smoothstep(0.0, 0.30, k));
-    tint = mix(tint, blue, smoothstep(0.18, 0.55, k));
-    float glow = fres * day * 0.55;
+    tint = mix(tint, blue, smoothstep(0.16, 0.50, k));
+    float glow = fres * day * 0.46;
     float twilight = smoothstep(-0.55, -0.20, vNdl) * (1.0 - day) * core;
     vec3 col = tint * glow + vec3(0.18, 0.30, 0.55) * twilight * 0.5;
     float alpha = (glow + twilight * 0.5) * uOpacity;
@@ -307,8 +367,23 @@ uniform vec3  uCloudDark;      // shaded underside
 uniform float uCloudScale;     // cloud feature size (smaller = bigger puffs)
 uniform vec2  uCloudDrift;     // plane drift per second
 uniform float uCloudAlpha;     // max cloud opacity
+// REBUILD v2 R2 — milky-way band. uSpace gates a soft galactic-haze glow + dust
+// lanes painted along the uGalNormal great circle, so the orbit void reads as a
+// deep starfield with a luminous river (filling BETWEEN the band stars). At
+// uSpace=0 this whole block is skipped → the normal night sky is byte-unchanged.
+uniform float uSpace;
+uniform vec3  uGalNormal;      // unit normal of the galactic plane (band runs perpendicular)
 
 float skyHash(vec2 p){ p = fract(p * vec2(123.34, 345.45)); p += dot(p, p + 34.345); return fract(p.x * p.y); }
+float skyHash3(vec3 p){ p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+float skyVN3(vec3 x){
+  vec3 p = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix(skyHash3(p+vec3(0,0,0)),skyHash3(p+vec3(1,0,0)),f.x),
+                 mix(skyHash3(p+vec3(0,1,0)),skyHash3(p+vec3(1,1,0)),f.x),f.y),
+             mix(mix(skyHash3(p+vec3(0,0,1)),skyHash3(p+vec3(1,0,1)),f.x),
+                 mix(skyHash3(p+vec3(0,1,1)),skyHash3(p+vec3(1,1,1)),f.x),f.y),f.z);
+}
+float skyFbm3(vec3 p){ float a=0.5,s=0.0; for(int i=0;i<4;i++){ s+=a*skyVN3(p); p=p*2.05+vec3(9.1); a*=0.5; } return s; }
 float skyVNoise(vec2 p){
   vec2 i = floor(p); vec2 f = fract(p);
   vec2 u = f * f * (3.0 - 2.0 * f);
@@ -355,6 +430,26 @@ void main() {
     vec3 cloudCol = mix(uCloudDark, uCloudColor, smoothstep(0.3, 0.92, n));
     cloudCol += uSunColor * smoothstep(0.55, 1.0, sd) * 0.3 * uSunGlow;  // sun-tinted edge
     sky = mix(sky, cloudCol, cov * uCloudAlpha);
+  }
+
+  // ── Milky-way band (space-mode only) ──
+  if (uSpace > 0.001) {
+    // Angular distance of this view dir from the galactic plane (0 = on the plane).
+    float dp = abs(dot(d, normalize(uGalNormal)));
+    // A soft luminous core that tapers off the plane, broken up by FBM so it reads
+    // as a clumpy dust river, not a clean airbrush stripe.
+    float core = smoothstep(0.30, 0.0, dp);
+    float tex  = skyFbm3(d * 6.0 + 4.0);
+    float texL = skyFbm3(d * 2.2 + 9.0);
+    float river = core * (0.45 + 0.55 * tex) * (0.55 + 0.45 * texL);
+    // Dark dust lanes — subtract a thin secondary noise so the band has internal
+    // structure (the dark rift) rather than a flat smear.
+    float lane = smoothstep(0.55, 0.85, skyFbm3(d * 3.4 + 21.0));
+    river *= (1.0 - lane * 0.55);
+    // A faint dusty blue-white that warms slightly toward the densest core.
+    vec3 milk = mix(vec3(0.12,0.14,0.24), vec3(0.34,0.34,0.46), river);
+    milk = mix(milk, vec3(0.46,0.39,0.40), smoothstep(0.5,1.0,river)*0.5);
+    sky += milk * river * uSpace * 0.92;
   }
 
   gl_FragColor = vec4(sky, 1.0);
@@ -469,14 +564,35 @@ export function buildStarGeometry(): THREE.BufferGeometry {
   const sizes = new Float32Array(count);
   // ACL SKY+WEATHER — per-star twinkle phase so they blink independently.
   const phases = new Float32Array(count);
+  // REBUILD v2 R2 — per-star "milky-way band" weight (0..1) = closeness to a fixed
+  // galactic plane. Used ONLY in space mode (uSpace) to LIFT the brightness/size of
+  // band stars so the river reads luminous against the orbit void. NON-DESTRUCTIVE:
+  // star POSITIONS are left byte-identical to pre-R2 (uniform-on-sphere) — the band
+  // is built purely from a per-star weight + the dome haze, so the normal night sky
+  // is unchanged at uSpace=0.
+  const band = new Float32Array(count);
+  // The fixed galactic-plane normal — MUST match _GAL_NORMAL (the dome haze). Chosen
+  // perpendicular-ish to the forward (−Z) sightline so the band's great circle cuts
+  // diagonally ACROSS the orbit window (top-left → bottom-right) for a believable read.
+  const gnx = 0.62, gny = 0.60, gnz = 0.18;
+  const gl = Math.hypot(gnx, gny, gnz);
+  const nx = gnx / gl, ny = gny / gl, nz = gnz / gl;
   for (let i = 0; i < count; i++) {
-    // Uniform-on-sphere via cos-z rejection-free formula.
+    // Uniform-on-sphere via cos-z rejection-free formula (UNCHANGED from pre-R2).
     const u = Math.random() * 2 - 1;
     const phi = Math.random() * Math.PI * 2;
     const s = Math.sqrt(1 - u * u);
-    positions[i * 3]     = radius * s * Math.cos(phi);
-    positions[i * 3 + 1] = radius * u;
-    positions[i * 3 + 2] = radius * s * Math.sin(phi);
+    const x = s * Math.cos(phi);
+    const y = u;
+    const z = s * Math.sin(phi);
+    positions[i * 3]     = radius * x;
+    positions[i * 3 + 1] = radius * y;
+    positions[i * 3 + 2] = radius * z;
+    // Band membership weight = closeness to the plane (smooth, 0..1) so the glow
+    // tapers at the band edges. The band's density read comes from the dome haze
+    // filling between these brightened stars (the stars themselves stay uniform).
+    const dist = Math.abs(x * nx + y * ny + z * nz);
+    band[i] = Math.max(0, 1 - dist / 0.34);
     // Brightness jitter — 80% are small/dim, 20% noticeably brighter. This is
     // now a SIZE MULTIPLIER (× uBaseSize in the shader), centered near ~0.8–1.4
     // for the common stars and ~1.4–2.4 for the bright ones.
@@ -488,6 +604,7 @@ export function buildStarGeometry(): THREE.BufferGeometry {
   geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   geo.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
   geo.setAttribute('phase', new THREE.BufferAttribute(phases, 1));
+  geo.setAttribute('band', new THREE.BufferAttribute(band, 1));
   return geo;
 }
 
@@ -516,6 +633,9 @@ export function createSky(scene: THREE.Scene): void {
       uCloudScale:   { value: Tuning.CLOUD_SCALE },
       uCloudDrift:   { value: new THREE.Vector2(Tuning.CLOUD_DRIFT_X, Tuning.CLOUD_DRIFT_Z) },
       uCloudAlpha:   { value: Tuning.CLOUD_MAX_ALPHA },
+      // REBUILD v2 R2 — milky-way band (space-mode only; 0 = normal sky unchanged).
+      uSpace:        { value: 0 },
+      uGalNormal:    { value: _GAL_NORMAL.clone() },
     },
   });
   const sphere = new THREE.Mesh(sphereGeo, sphereMat);
@@ -586,6 +706,7 @@ export function createSky(scene: THREE.Scene): void {
       uSizeDepth:    { value: STAR_TWINKLE_SIZE_DEPTH },
       uBaseSize:     { value: STAR_BASE_SIZE },
       uBrightness:   { value: Tuning.STAR_BRIGHTNESS },
+      uSpace:        { value: 0 },   // REBUILD v2 R2 — 0 normal sky … 1 orbit (lifts the milky-way band)
     },
   });
   const stars = new THREE.Points(buildStarGeometry(), starsMat);
@@ -979,6 +1100,8 @@ function applySpaceMode(cam: THREE.Vector3): void {
   if (s <= 0.001) {
     // Fully restore any uniform space-mode lifts so the normal sky is byte-unchanged.
     bundle.starsMat.uniforms.uBrightness.value = Tuning.STAR_BRIGHTNESS;
+    bundle.starsMat.uniforms.uSpace.value = 0;   // R2 — kill the milky-way band lift
+    bundle.sphereMat.uniforms.uSpace.value = 0;  // R2 — kill the dome milky-way haze
     return;
   }
 
@@ -986,6 +1109,8 @@ function applySpaceMode(cam: THREE.Vector3): void {
   // Dome → near-black space void (lerp from whatever the day/night pass set).
   sphU.uTopColor.value.lerp(_SPACE_TOP, s);
   sphU.uHorizonColor.value.lerp(_SPACE_HORIZON, s);
+  // R2 — fade in the milky-way dome haze with the orbit blend.
+  sphU.uSpace.value = s;
   // Kill the desert clouds bleeding through the window.
   sphU.uCloudiness.value *= (1 - s);
   // Drop the atmospheric sun halo in vacuum (no air to scatter it).
@@ -995,7 +1120,9 @@ function applySpaceMode(cam: THREE.Vector3): void {
   // lift the per-star gain so the field reads richly against the black orbit void.
   const starsU = bundle.starsMat.uniforms;
   starsU.uOpacity.value = Math.max(starsU.uOpacity.value, s);
-  starsU.uBrightness.value = THREE.MathUtils.lerp(Tuning.STAR_BRIGHTNESS, 2.1, s);
+  starsU.uBrightness.value = THREE.MathUtils.lerp(Tuning.STAR_BRIGHTNESS, 2.45, s);
+  // R2 — drive the milky-way band lift by space01 (0 normal sky → 1 luminous river).
+  starsU.uSpace.value = s;
 
   // The small distant-planet SPRITE is replaced by the big celestial body — fade it out.
   bundle.planetMat.opacity *= (1 - s);

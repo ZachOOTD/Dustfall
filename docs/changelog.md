@@ -3,6 +3,12 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Escape-pod REBUILD v2 — 2026-06-30 (attended) — R2 (space scene hero-polish) + 2 R1 walk-test bug-fixes — SHIPPED ✓ verify:all + smoke
+
+`verified` — verify:all + smoke `{ok:true,beats:12}`. The user walk-tested R1 + approved it to continue (checkpoint→none run-through R2-R5, reviews the batch later; R1 polish + the planet framing owed to their next feedback round).
+- **R1 bug-fixes (user walk-test):** the orbit planet drew ON TOP of the ship (transparent + `depthTest:false`) → `depthTest:true` so the hull occludes it (visible only through the window); dust visible in space (the one-time hide was overwritten each frame by `updateWeather`/Dust) → re-suppress every frame in `updateEscapePodIntro` through the space/descent/crash beats, restored at stepOut.
+- **R2 — space scene hero-polish** (procedural-modeler, 7 rounds, all in `sky.ts`, non-destructive): a milky-way band (dome haze + per-star band weights, gated to space mode) + richer stars; a planet surface that reads as a real world (domain-warped continents/seas + banding + polar caps + cloud swirls + a dramatic terminator, Dune palette); a thin believable atmosphere limb. **Planet size/placement kept at the default** — the user art-directs the framing.
+
 ## Escape-pod REBUILD v2 — 2026-06-30 (attended) — R1a (real sky "space mode") + R1b (descent re-grounded to the real world) — SHIPPED ✓ verify:all + smoke
 
 `verified` — tsc + placement + colliders PASS + smoke `{ok:true,beats:12}` + rig (cockpit space + descent at 0.3/0.6/0.9). The user walk-tested the v1 overnight build + directed a **re-architecture** (re-ground in the REAL world; ONE physical pod; space = a wrapping skybox; descent = a physical fall into the real desert). Full plan: `docs/feature-escape-pod-intro.md` `## REBUILD v2`. Driving R1→R5 via the campaign loop (checkpoint=milestone, the user art-directs each phase).

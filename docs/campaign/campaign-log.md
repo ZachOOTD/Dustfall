@@ -352,3 +352,12 @@ Tell me which to tackle (I can drive the hero visuals with you, or wire T4.3) �
 
 ## ✅ R1 APPROVED → continue R2-R5 (checkpoint→none) (2026-06-30)
 The user walk-tested R1, approved it to continue, and reported 2 bugs (both fixed live + pushed): the orbit planet drew ON TOP of the ship (`depthTest:false` → set true, so the hull occludes it — visible only through the window); dust was visible in space (the one-time hide was overwritten each frame by updateWeather/Dust → re-suppress every frame in updateEscapePodIntro). **R1 polish TBD** — the user will give another feedback round later (planet/descent feel). The user asked to **keep building through R2-R5 without per-phase pauses** (checkpoint=milestone→none) and review the batch later. Gate cleared: status active, awaiting_approval false. **Next: R2** (space scene hero-polish). **Verdict: CONTINUE** (run-through).
+
+---
+
+## Cycle 28 — REBUILD v2 R2 (space hero-polish) + 2 R1 walk-test bug-fixes (2026-06-30) — SHIPPED
+- **R1 bug-fixes (user walk-test):** planet drew on top of the ship → `depthTest:true` (occluded by the hull, seen through the window); dust in space (one-time hide overwritten each frame) → re-suppress every frame in `updateEscapePodIntro`.
+- **R2 — space hero-polish** (modeler, 7 rounds, `sky.ts`, non-destructive): milky-way band + richer stars; a planet that reads as a real world (continents/seas/banding/caps/clouds/terminator); a thin atmosphere limb. Planet size/placement KEPT default (user's framing call).
+- **Verify:** verify:all + smoke `{ok:true,beats:12}` + rig (orbit + clear-sky controls byte-clean).
+- **Commit:** `391ae90` (+ docs).
+- **Next (run-through):** R3 — the ONE physical pod (unify the 3 models; enter→eject→ride→exit, no teleport) → R4 → R5.
