@@ -61,4 +61,4 @@ drives you to the pod (it precedes the now-built descent):
 ENRICH-NOT-CUT · hero geometry/FX → procedural-modeler + the adversarial gate (the gate caught real defects on
 the hero vista every round; run it on hero assets, lighter/once on FX-over-existing, own-loop for contained
 camera/light staging + motion [a still can't gate a spin]) · anti-punt · behind the flag · no save bump ·
-`verify:all` (600s, real exit, NOT piped through `tail`) · commit each cycle · checkpoint = per phase.
+`verify:all` (600s, real exit, NOT piped through `tail`) · commit each cycle **+ `git push` the campaign branch after the commit** (NEW C17 policy — the branch is pushed to origin for the playable preview link; each push refreshes it) · checkpoint = per phase.
