@@ -1207,7 +1207,8 @@ const LOWALT_FS = /* glsl */ `
   precision highp float;
   varying vec2 vUv;
   uniform float uLowAlt;   // 0..1 — overall presence (drives the cross-fade alpha)
-  uniform float uNear;     // 0..1 — closeness within the band (gentle horizon drop)
+  uniform float uNear;     // 0..1 — closeness within the band (gentle horizon drop, mid approach)
+  uniform float uRush;     // 0..1 — the FINAL ground-rush (last leg): horizon drops off the top, sand fills + rushes up
   uniform float uWarm;     // 0..1 — dawn warmth (shared with the orbital phase)
 
   // ── value-noise + fbm (2D) for the gentle dune relief ──
@@ -1236,7 +1237,11 @@ const LOWALT_FS = /* glsl */ `
     //    real horizon: clear SKY above, desert receding below — NOT a dune field filling the
     //    whole window. Drops a touch as you near so the ground gains a little as you arrive,
     //    but it STAYS a horizon view (never collapses to looking-straight-down).
-    float horizon = mix(0.55, 0.48, uNear);
+    // The horizon sits MID-window through the mid approach (the "looking off at the horizon"
+    // read), then the FINAL ground-rush (uRush) drives it UP and OFF the top of the porthole
+    // (the window reveals uv.y≈0.32→0.69, so horizon→~0.92 puts it above the frame → the ground
+    // fills the whole window). User direction 2: the surface rushes up to meet you at impact.
+    float horizon = mix(0.55, 0.50, uNear) + uRush * 0.40;
 
     // ── The DAWN SUN: well OFF-AXIS (far right, low) so it warms the sky without blowing out
     //    the central band the porthole shows — a light anchor, not a central flare.
@@ -1259,10 +1264,15 @@ const LOWALT_FS = /* glsl */ `
     //    vast plain melting into aerial haze at the horizon, not a wall of dunes.
     //    prox 0 (at horizon) → 1 (frame bottom). dist maps prox to ground distance.
     float prox = clamp((horizon - uv.y) / max(0.001, horizon), 0.0, 1.0);
-    float dist = mix(7.0, 0.6, pow(prox, 1.3));                                 // strong recession: far at the horizon, near at the bottom
+    // Recession: far at the horizon → near at the frame bottom. As the ground-rush hits, the
+    // NEAR end pulls in CLOSE (dist→~0.18) so the bottom of the window is sand right under you,
+    // rushing up — the surface coming to meet you, not a flat far plain. The dunes also grow
+    // (duneScale up) so individual dune forms read large + close at impact.
+    float nearDist = mix(0.6, 0.18, uRush);                                     // the closest sand pulls right up under the pod at impact
+    float dist = mix(7.0, nearDist, pow(prox, mix(1.3, 1.9, uRush)));           // steeper recession late → more frame is near ground
     float across = (uv.x - 0.5) * (0.5 + dist * 0.9);                           // widen with distance (perspective spread)
-    float duneScale = mix(0.5, 0.85, uNear);                                    // dunes a touch larger as you near (subtle — stays a horizon view)
-    vec2 gp = vec2(across, dist) * duneScale + vec2(0.0, uNear * 0.9);
+    float duneScale = mix(0.5, 0.85, uNear) + uRush * 0.9;                      // dunes grow large + close as the ground rushes up
+    vec2 gp = vec2(across, dist) * duneScale + vec2(0.0, uNear * 0.9 + uRush * 2.6);  // scroll the field toward you (the ground rushing past)
 
     float hC = duneH(gp);
     // relief normal via central differences — epsilon scales with distance so far dunes
@@ -1274,7 +1284,11 @@ const LOWALT_FS = /* glsl */ `
     // shading (NOT the harsh carve of the old ridge field). Keeps it calm + readable.
     vec2 sunGround = normalize(vec2(0.80, 0.32));
     float slope = clamp(dot(vec2(hX, hY), sunGround), -1.4, 1.4);
-    float shade = clamp(0.82 + slope * 0.52, 0.50, 1.34);                       // gentle but readable directional relief
+    // The directional relief STRENGTHENS as the ground rushes up (uRush) so the close surface
+    // at impact reads as real carved dunes rushing toward you — clear sun-lit crests + shadowed
+    // lee — not a soft far plain. Stays gentle through the calm mid approach.
+    float reliefAmt = 0.52 + uRush * 0.42;
+    float shade = clamp(0.82 + slope * reliefAmt, 0.46, 1.40);                  // gentle mid → carved + readable at the close ground-rush
 
     // ── SAND PALETTE — warm tan/ochre throughout (the REAL game sand ~0xb89878), NO violet
     //    troughs, NO blown-white crests. A subtle 2-tone keyed off height: slightly deeper
@@ -1291,7 +1305,7 @@ const LOWALT_FS = /* glsl */ `
     // ── AERIAL PERSPECTIVE — the desert recedes into warm dawn haze toward the horizon, so
     //    the far sand melts into the sky (the vast, calm "looking off at the horizon" read).
     //    Ramps across most of the ground band (far → near), not just a thin sliver.
-    float haze = pow(smoothstep(0.40, 1.0, 1.0 - prox), 1.9) * 0.90;            // strong at the horizon, but the NEAR sand (frame bottom) stays clear + warm (readable relief)
+    float haze = pow(smoothstep(0.40, 1.0, 1.0 - prox), 1.9) * 0.90 * (1.0 - uRush * 0.75);   // recedes as the ground rushes up — the close surface reads SOLID + warm at impact, not hazed-out
     vec3 hazeCol = mix(skyHorizon, vec3(0.90,0.78,0.62), 0.35);                 // warm dusty haze toward the sky tone
     groundCol = mix(groundCol, hazeCol, haze);
 
@@ -1545,6 +1559,7 @@ function buildDescentVista(group: THREE.Group): void {
     uniforms: {
       uLowAlt: { value: 0.0 },
       uNear: { value: 0.0 },
+      uRush: { value: 0.0 },
       uWarm: { value: 0.0 },
     },
     transparent: true, depthWrite: false, depthTest: true, toneMapped: true,
@@ -1714,9 +1729,16 @@ export function setDescentProgress(progress: number): void {
   // its hard lit limb never overlaps the emerging desert (the "double-image / asteroid over
   // the ground" artifact). retractK ramps fast at the start of the fade.
   const retractK = Math.sqrt(lowAlt);
+  // CLOSE ORBIT at p=0 (user direction 1): the planet starts LARGE — a curved world you're
+  // right above filling the lower porthole, the atmosphere limb arcing the upper window, the
+  // stars beyond the limb. BASE_S/BASE_PY set that p=0 framing; the swell then grows it a
+  // touch more into the atmosphere-entry (a gentle drop toward the world), and the retract
+  // sinks it HARD out of frame under the cross-fade (preserved — the handoff is unchanged).
+  const BASE_S = 2.55;      // p=0 scale → planet eff-radius ~5.1, fills the lower porthole as a near world
+  const BASE_PY = -3.55;    // p=0 centre sunk so the curved upper limb + air arc through the window (not a dot)
   const swell = swellRaw * (1.0 - retractK);             // retracts to 0 quickly as the ground fills
-  const s = 1 + swell * 3.6;
-  const py = -0.95 - swell * 3.0 - retractK * 11.0;      // sink HARD + early so the limb clears the frame fast
+  const s = (BASE_S + swell * 2.2) * (1.0 - retractK * 0.55) + 0.0001;  // gentle additional swell, then retract
+  const py = BASE_PY - swell * 2.4 - retractK * 13.0;    // edges lower as you near, then sinks HARD + early under the fade
   if (planetMesh) {
     planetMesh.scale.setScalar(s);
     planetMesh.position.y = py;
@@ -1765,10 +1787,19 @@ export function setDescentProgress(progress: number): void {
   //     strength, drawn over the planet) replaces it. uLowAlt = the fade alpha (0 → 1 over
   //     p∈[0.34,0.48]); uNear = closeness WITHIN the low band (drops the horizon + swells
   //     the dunes from MID to LOW so the two beats read clearly distinct).
-  const near = Math.max(0, Math.min(1, (p - 0.48) / 0.42));
+  // uNear spans the WHOLE low-alt leg up to impact (0 at the handoff p≈0.48 → 1 at p=1.0)
+  // so the shader has resolution all the way to the ground — the prior mapping saturated at
+  // p≈0.9 and couldn't tell 0.9 from 1.0 (the "stays a distant horizon" bug, user direction 2).
+  const near = Math.max(0, Math.min(1, (p - 0.48) / 0.52));
+  // uRush — the FINAL ground-rush (user direction 2): 0 through the mid approach, ramping HARD
+  // over the last leg (p≈0.82→1.0) so the horizon drops off the top + the warm sand fills and
+  // rushes UP close to impact. Squared so it stays gentle until late, then accelerates up.
+  const rushRaw = Math.max(0, Math.min(1, (p - 0.82) / 0.18));
+  const rush = rushRaw * rushRaw;
   if (lowAltMat) {
     lowAltMat.uniforms.uLowAlt.value = lowAlt;
     lowAltMat.uniforms.uNear.value = near;
+    lowAltMat.uniforms.uRush.value = rush;
     lowAltMat.uniforms.uWarm.value = warm;
   }
   if (lowAltMesh) lowAltMesh.visible = lowAlt > 0.001;   // skip the draw entirely at orbit

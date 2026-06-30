@@ -50,7 +50,7 @@ const COCKPIT_DWELL = 3.0;
 const EJECT_FALLBACK = 6.0;
 /** Seconds the eject/blast beat holds (the ship dies in a flash; the cabin briefly lit) before
  *  the descent. C18 (user walk-test): NO tumble — the pod stays UPRIGHT; this is just a brief blast. */
-const SHIP_EXPLODE_DWELL = 2.2;
+const SHIP_EXPLODE_DWELL = 1.2;   // C18: SHORT — the fall begins sooner (less static "freeze" between phases)
 /** Seconds of the SLOW, seamless atmospheric fall (C18 user walk-test: descend slowly + serenely —
  *  watch the planet get closer, space fade to sky, the ground slowly approach). Was 8.0. */
 const DESCENT_DURATION = 18.0;
@@ -340,7 +340,9 @@ function tickParachute(ctx: GameContext, dt: number): void {
   if (!intro) return;
   if (!intro.scratch.init) {
     ensureInPod(ctx);
-    faceControl(ctx, -Math.PI / 2, -0.16);   // T1.3 — turn RIGHT (+X) to the RED parachute lever so the gag's "pull the parachute" cue points at the right control
+    // C18 (user walk-test): DON'T snap to the lever — keep facing the window (−Z) so the player
+    // watches the GROUND rush up to impact (seamless, no camera jump). The prompt cues the pull;
+    // the lever animates off to the right. (Was faceControl(−π/2) to the lever, a jarring snap.)
     showIntroPrompt('Pull the parachute!  [click]');
     intro.scratch.pulls = 0;
     intro.scratch.sincePull = 0;
