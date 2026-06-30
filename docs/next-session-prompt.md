@@ -15,15 +15,21 @@ file-driven).
 - The intro plays behind `FEATURES.escapePodIntro` (off in master; the preview build flips it on).
 - **Each cycle PUSHES the branch** (the preview link refreshes) — keep doing this so the user can re-test in the morning.
 
-## Phase 3 — the hauler (hero) + the disaster staging (BUILD THIS)
-The ship you flee + the disaster that drives you to the pod (it PRECEDES the built descent). Per the roadmap/feature doc:
-- **T3.1 Hauler exterior** (procedural-modeler — a HERO asset → the full adversarial gate, 5-8 rounds): the worn
-  cargo-hauler silhouette (rear engines), the vessel you escape. Render the real in-game view; gate to a quality bar.
-- **T3.2 Explosion FX** — the ship blowing up. **STAGE IT THROUGH the descent's eject/`shipExplode` beat** (the
-  `setTumbleLight` blast-flood hook + the brief-blast structure are built; the user removed the tumble, so the ship
-  explosion plays as a flash/blast through the upright pod window — fill it with the hero ship's death). procedural-modeler + a gate.
-- **T3.3 Cockpit** — escalating consoles + a personal touch (you start here in the cockpit before the disaster).
-- **T3.4 Corridor + disaster staging** — 3 lighting zones, the only-open-door funnel, fire, red-alert, spatial audio cues.
+## ⚠ Phase 3 STATUS (C19 overnight) — the HAULER is DEFERRED to user art-direction; build T3.3 NEXT
+- **T3.1 Hauler exterior — BUILT but BELOW the hero bar → DEFERRED to USER ART-DIRECTION.** The adversarial gate failed
+  it TWICE (beauty 4-5; the silhouette/engines/cockpit don't read through the porthole; the material reads muddy). After
+  8 modeler rounds the autonomous modeler PLATEAUED — this hero ship needs the user's specific eye (as the descent did).
+  The model EXISTS as a wired placeholder: `src/world/escapePodIntro/haulerScene.ts` (`buildHaulerExterior`), viewable via
+  `__game.buildHauler()` or `rig-shot --scenario=hauler --angle=porthole|broadside|engines`. **Do NOT spin more autonomous
+  rounds on it overnight** — it's flagged for the user's morning. **T3.2 (explosion) is DEFERRED with it** (depends on the
+  finalized hauler). When the user art-directs the hauler, finish T3.1 → T3.2.
+- **▶ BUILD NEXT (overnight): T3.3 — the COCKPIT interior** (procedural-modeler — an INTERIOR, which the modeler does well,
+  like the pod cabin; the hauler EXTERIOR silhouette was the hard part): the single-pilot cockpit you START in — a seat, the
+  big forward window, the consoles with the **escalating diegetic readouts** (E2: `ORBIT ACHIEVED → ⚠ CORE TEMP CRITICAL →
+  HULL BREACH`), a 2-second personal touch (photo/mug for the lone pilot). Real in-game FP view (you're seated in it) →
+  the adversarial gate (5-8 rounds). This is Beat 0 (the intro opens here).
+- **Then T3.4 — corridor + disaster staging** (3 lighting zones, only-open-door funnel, engine-fire-behind-the-door, red-alert
+  strobe, spatial audio cues). Then continue to Phase 4 (crash/tutorial — incl. the wake-in-pod + exterior-size reqs) → Phase 5 (audio).
 - Decompose via `/feature-slice` if a tier is >2 sub-tasks; one sub-task per cycle to the DoD (the beat plays as the vision).
 
 ## Then Phase 4 + Phase 5 (continue through them)

@@ -1766,6 +1766,114 @@ const SCENARIOS = {
     console.log(`[pod-interior] ${JSON.stringify(meas)} → scen-${tag}.png`);
   },
 
+  // Hauler (T3.1): the HERO cargo-hauler exterior seen THROUGH the pod porthole at the
+  // shipExplode beat — the worn freighter the player just fled, floating in orbit ahead
+  // (−Z) about to explode. Builds the pod cabin (so the porthole frames the shot) + the
+  // hauler exterior, seats the camera at the seated EYE facing −Z (the real FP-through-
+  // porthole view), then shoots that + a couple of framing angles. --angle:
+  //   porthole  the FP-through-the-window view (the GATE — the seated eye, −Z)         [default]
+  //   wide      a framing angle: the whole hauler in free space (no pod), 3/4
+  //   broadside the hauler dead-on broadside (silhouette legibility)
+  //   engines   a closer 3/4 on the rear engine cluster (the explosion feature)
+  //   nose      a closer 3/4 on the cockpit/bridge
+  'hauler': async (page) => {
+    const angle = argv.angle || 'porthole';
+    await page.evaluate(() => {
+      const g = window.__game;
+      const ctx = g.ctx;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      // Build the real pod cabin (porthole frame) via the intro path, then the hauler.
+      g.startIntro();
+      // enterPod builds the pod cabin + seats the player at the porthole eye (the proven
+      // pod-interior path); shipExplode's scripted camera doesn't seat in the pod.
+      g.jumpToBeat('enterPod');
+      // Reset the descent vista to deep ORBIT (0) so the porthole shows SPACE (the
+      // shipExplode beat sits in orbit) — not the low-altitude desert that swells in
+      // later. The hauler then reads through the window against the star void.
+      try { g.setDescentProgress(0); } catch {}
+      g.buildHauler();
+      ctx.three.renderer.setSize(1000, 760, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1000 / 760; cam.updateProjectionMatrix(); }
+    });
+    // Let the beat controller tick so the pod builds + the player is seated.
+    await page.waitForTimeout(600);
+    const meas = await page.evaluate(({ angle }) => {
+      const g = window.__game;
+      const ctx = g.ctx;
+      ctx.flags.paused = true;
+      try { g.setDescentProgress(0); } catch {}
+      // Hide the descent VISTA (orbital planet + atmosphere + its own starfield + the
+      // depth-occluder) so the porthole shows the HAULER against ITS star backdrop. The
+      // vista meshes use ShaderMaterials or the starOccluder flag; the cabin structure
+      // uses Lambert/rusted-hull mats. Done HERE (after the pod has built on a tick).
+      const cabin0 = ctx.three.scene.getObjectByName('escapePodCabin');
+      if (cabin0) cabin0.traverse((o) => {
+        if (!o.isMesh) return;
+        const m = o.material;
+        if ((m && m.isShaderMaterial) || (o.userData && o.userData.starOccluder)) o.visible = false;
+      });
+      const cam = ctx.three.camera;
+      const V = cam.position.constructor;
+      // Locate the hauler centre (world) so the framing angles can orbit it.
+      const hauler = ctx.three.scene.getObjectByName('escapePodHauler');
+      let hc = null;
+      if (hauler) { hauler.updateMatrixWorld(true); hc = new V(); hauler.getWorldPosition(hc); }
+      if (angle === 'porthole') {
+        // THE GATE: the seated EYE world position, looking straight out −Z (the porthole).
+        const tr = ctx.player.body.body.translation();
+        const eye = new V(tr.x, tr.y + (ctx.player.eyeOffset || 0.6), tr.z);
+        cam.position.copy(eye);
+        cam.lookAt(eye.x, eye.y - 0.05, eye.z - 1);
+      } else if (hc) {
+        // Free-space framing angles (the studio diagnostic — additional, not the verdict).
+        // Hide the pod cabin so it doesn't block the external read.
+        const cabin = ctx.three.scene.getObjectByName('escapePodCabin');
+        if (cabin) cabin.visible = false;
+        // The ship's local axes in WORLD space (so framing angles track the yaw).
+        const Q = cam.quaternion.constructor;
+        const hq = hauler.getWorldQuaternion(new Q());
+        const axX = new V(1, 0, 0).applyQuaternion(hq);   // ship NOSE direction (local +X)
+        const axZ = new V(0, 0, 1).applyQuaternion(hq);   // ship broadside flank (local +Z)
+        if (angle === 'broadside') {
+          cam.position.set(hc.x, hc.y + 1.0, hc.z + 15);
+          cam.lookAt(hc.x, hc.y, hc.z);
+        } else if (angle === 'engines') {
+          // off the TAIL (−X) end + the camera-side flank → the flared nozzles read.
+          const e = new V(hc.x - axX.x * 9 + axZ.x * 6, hc.y + 2.5, hc.z - axX.z * 9 + axZ.z * 6);
+          cam.position.copy(e);
+          cam.lookAt(hc.x - axX.x * 6, hc.y, hc.z - axX.z * 6);
+        } else if (angle === 'nose') {
+          // off the NOSE (+X) end + the camera-side flank → the cockpit/windscreen reads.
+          const n = new V(hc.x + axX.x * 9 + axZ.x * 6, hc.y + 2, hc.z + axX.z * 9 + axZ.z * 6);
+          cam.position.copy(n);
+          cam.lookAt(hc.x + axX.x * 6, hc.y + 0.5, hc.z + axX.z * 6);
+        } else { // wide 3/4
+          cam.position.set(hc.x + 11, hc.y + 5, hc.z + 15);
+          cam.lookAt(hc.x, hc.y, hc.z);
+        }
+      }
+      cam.updateMatrixWorld(true);
+      let meshes = 0;
+      if (hauler) hauler.traverse((o) => { if (o.isMesh) meshes++; });
+      // DIAGNOSTIC: where is the camera, where is the hauler, what's the descent state?
+      const cabin = ctx.three.scene.getObjectByName('escapePodCabin');
+      let lowAltVis = null, planetVis = null;
+      if (cabin) cabin.traverse((o) => {
+        if (o.material && o.material.uniforms && o.material.uniforms.uLowAlt) lowAltVis = { vis: o.visible, lowAlt: o.material.uniforms.uLowAlt.value };
+      });
+      console.error('[hauler-diag] camPos=' + [cam.position.x, cam.position.y, cam.position.z].map((v) => +v.toFixed(1)).join(',') +
+        ' haulerPos=' + (hc ? [hc.x, hc.y, hc.z].map((v) => +v.toFixed(1)).join(',') : 'null') +
+        ' cabin=' + !!cabin + ' lowAlt=' + JSON.stringify(lowAltVis));
+      return { found: !!hauler, meshes, angle };
+    }, { angle });
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: join(OUT, `scen-hauler-${angle}.png`), fullPage: false });
+    console.log(`[hauler] ${JSON.stringify(meas)} → scen-hauler-${angle}.png`);
+  },
+
   // Smoke-intro (T1.2): run the whole intro beat chain headless + report {ok,beats}.
   // Confirms the new hero cabin + the lever hook don't break the eject→descent→
   // parachute→impact sequence. No screenshot.

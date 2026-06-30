@@ -3,6 +3,14 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Escape-pod campaign C19 — 2026-06-30 (overnight) — Phase 3 T3.1: the HAULER EXTERIOR — built, but BELOW the hero bar → ⚠ DEFERRED to user art-direction ✓ verify:all
+
+`verified` — `npm run verify:all` PASS (tsc + placement + colliders) + smoke `{ok:true,beats:10}` + the hauler builds/disposes leak-free. Flag OFF → live game byte-unchanged.
+
+**T3.1 — the worn cargo HAULER the pilot flees** (seen through the pod porthole at eject). The procedural-modeler built `src/world/escapePodIntro/haulerScene.ts` — `buildHaulerExterior`/`disposeHaulerExterior`/`haulerBuilt` + a `--scenario=hauler` rig + `__game.buildHauler()`/`disposeHauler()` debug hooks. A ~22m worn freighter: cockpit/bridge front + cargo spine (containers/tanks) + a rear engine block (rocket bells + ember glow), weathered aluminium/rust, a self-contained starfield + hero lights, placed in front of the pod (−Z) so it frames through the porthole.
+- **⚠ BELOW THE HERO BAR — DEFERRED to user art-direction.** The **adversarial hero gate (4 critics) FAILED it twice** (beauty 4-5, silhouette + engines don't read): through the porthole it reads as a small, dark, anonymous box; the cockpit doesn't read; the engines read as end-caps not nozzle-bells; the silhouette is a slab; the material reads muddy; the porthole framing is small/top-clipped. After **2 redesign rounds (8 modeler rounds total)** the autonomous modeler **plateaued** below the bar — this hero asset needs the user's specific art-direction (as the descent did). Per the hero discipline (plateau → human), it's flagged for the **morning review** rather than shipped as hero or spun further overnight.
+- **The model EXISTS as a wired placeholder** (behind the flag; `__game.buildHauler()` to view; the rig `--scenario=hauler --angle=porthole`); the loop continues to tractable Phase-3 work. **T3.2 (explosion) is deferred** with it (it depends on the finalized hauler). **Next overnight: T3.3 (cockpit interior)** — the modeler succeeds at interiors (the pod), so this should land autonomously.
+
 ## Escape-pod campaign C17 — 2026-06-29 — Phase 2 T2.3: **the tumbling reveal + interior-lit-by-exterior** → ⏸ PHASE 2 COMPLETE — milestone PAUSE ✓ verify:all + live preview
 
 `verified` — `npm run verify:all` PASS (tsc + placement + colliders) + smoke `{ok:true,beats:10}` + a live preview (the cabin tumbles + blast-floods, settling level into the descent) + 0 console errors. Flag OFF → live game byte-unchanged. No SAVE_VERSION bump.
