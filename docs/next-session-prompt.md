@@ -31,11 +31,14 @@ needed). The user wakes to a fully-playable intro end-to-end + a hero-visual art
 T4.2 DESERT REVEAL (C23 — dawn handoff + aftermath-silence pacing E7 + the horizon-hook emergence E8) · T5.1a INTRO SFX (C24 —
 8 procedural Web-Audio one-shots wired to the beats: eject/explosion/klaxon/hull-groan/re-entry/lever-click+snap/crash/door-blow).
 
-**▶ BUILD NEXT (overnight): T5.1b — audio LOOPS + balance** (main-loop, Web Audio): the sustained ambient loops the one-shots don't
-cover — the calm **cockpit hum** (Beat 0, started in tickCockpit, stopped at eject), desert **wind** at the reveal — with start/stop
-lifecycle care (C16 lesson: stop/disconnect on beat exit; the loop fns return a handle). Then balance the mix. Then **T5.2 music**
-cues (a tense escape sting → a beautiful descent swell → desert easing). Audio is buildable + code-auditable unattended; the user
-LISTENS to judge the final sound. **Deferred to the user's morning:** [hero VISUALS] the hauler, cockpit surface-fidelity, the
+**✅ T5.1b ambient LOOPS SHIPPED (C25)** — cockpit hum (Beat 0→eject) + descent rush (descent→impact), with start/stop lifecycle.
+
+**▶ BUILD NEXT (overnight): T5.2 — MUSIC cues** (main-loop, Web Audio synthesis — no samples): cues in the game's current vibe —
+a tense **escape sting** (cockpit→disaster→eject), a **beautiful descent swell** (the calm fall), a **desert easing** (the dawn
+reveal/handoff). Procedural, layered onto the existing audio buses; mind the lifecycle (start/stop per phase, like the loops).
+**T5.2 is the FINAL overnight-tractable piece** — after it, everything remaining needs the user (hero visuals, T4.3, LISTENING to
+balance), so the loop should write the comprehensive morning summary + **STOP** (don't start doing the deferred-to-user work).
+**Deferred to the user's morning:** [hero VISUALS] the hauler, cockpit surface-fidelity, the
 explosion FX, the hero corridor + fire FX, the HERO crashed-cabin wake interior + exterior↔interior size-match, a dedicated hook
 landmark; [feel/playtest] **T4.3** the craft+salvage tutorial + the comic chute-pop payoff (the salvage-pry can't be verified
 unattended; the `scrap_machete`/D261 pry tool + the salvage system EXIST — wire the pod as a pryable `escape_pod` salvageable +

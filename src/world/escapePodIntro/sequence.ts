@@ -47,7 +47,8 @@ import { addTrauma } from '../../fx/cameraShake.ts';
 import {
   ensureAudioStarted, playEjectThunk, playExplosionBoom, playKlaxon, playHullGroan,
   playReentryRumble, playLeverClick, playLeverSnap, playDoorBlow, playCrashImpact,
-} from '../../audio/audio.ts';   // T5.1 — the intro SFX arc
+  startCockpitHum, stopCockpitHum, startDescentRush, stopDescentRush, stopAllIntroLoops,
+} from '../../audio/audio.ts';   // T5.1 — the intro SFX arc + ambient loops
 
 /** Seconds the cockpit opens SEATED (looking at the planet) before control + the cue. */
 const COCKPIT_DWELL = 3.0;
@@ -237,6 +238,7 @@ export function endEscapePodIntro(ctx: GameContext): void {
   disposeShipScene(ctx);
   disposePodScene(ctx);
   removeWakeInterior(ctx);   // T4.1 — tear down the wake interior on any exit (skip/jump/end)
+  stopAllIntroLoops();       // T5.1b — stop any ambient loop (cockpit hum / descent rush) on any exit
 }
 
 /** Cockpit beat (T0.2a/b) — on first entry, build the greybox ship, hide the game HUD,
@@ -249,6 +251,7 @@ function tickCockpit(ctx: GameContext, dt: number): void {
   if (!intro.scratch.shipBuilt) {
     buildShipScene(ctx);
     seatPlayerAt(ctx, getShipSpawn(ctx));
+    startCockpitHum();                          // T5.1b — the calm in-orbit ambient bed (until eject)
     intro.mode = 'seated';                      // open seated, looking at the planet
     intro.scratch.shipBuilt = true;
     intro.scratch.dwell = 0;
@@ -340,6 +343,7 @@ function tickShipExplode(ctx: GameContext, dt: number): void {
     flashScreen(0xffe6c0, 0.85);    // the blast flash (the ship dies)
     playEjectThunk();                // T5.1 — the eject fires
     playExplosionBoom();             // T5.1 — the ship explodes
+    stopCockpitHum();                // T5.1b — the ship's hum dies with it
     disposeShipScene(ctx);           // the ship is gone after the blast (greybox; hero ship = Phase 3)
     showIntroPrompt('');
     setDescentProgress(0);           // the orbital vista (planet + stars) through the window
@@ -366,6 +370,7 @@ function tickDescent(ctx: GameContext, dt: number): void {
   if (!intro.scratch.init) {
     ensureInPod(ctx);
     showIntroPrompt('');
+    startDescentRush();                  // T5.1b — the sustained air-rush of the fall (until impact)
     intro.scratch.t = 0;
     intro.scratch.reFlash = false;       // T2.2 — the one-shot re-entry flash hasn't fired yet
     intro.scratch.init = true;
@@ -457,6 +462,7 @@ function tickImpact(ctx: GameContext, dt: number): void {
   if (!intro.scratch.init) {
     flashScreen(0xffffff, 1.0);
     addTrauma(1.0);
+    stopDescentRush();    // T5.1b — the air-rush cuts at impact
     playCrashImpact(0);   // T5.1 — the crash (a big near boom + sub rumble)
     showIntroPrompt('');
     intro.scratch.t = 0;

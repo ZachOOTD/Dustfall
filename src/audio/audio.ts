@@ -279,6 +279,87 @@ export function playDoorBlow(): void {
   src.start(t); src.stop(t + 0.4);
 }
 
+// ── Looping ambient beds (Phase 5 T5.1b) — sustained intro loops with explicit start/stop
+//    lifecycle (C16 lesson: stop on beat exit so nothing dangles). Keyed by name; idempotent
+//    start, safe fade-out stop, stopAllIntroLoops() on intro teardown. They feed a.ambient.
+interface LoopVoice { nodes: AudioScheduledSourceNode[]; gain: GainNode; }
+const _introLoops = new Map<string, LoopVoice>();
+
+function _stopLoop(name: string, fade = 0.4): void {
+  const v = _introLoops.get(name);
+  if (!v) return;
+  _introLoops.delete(name);
+  const a = getAudioInternals();
+  if (!a) return;
+  const now = a.ctx.currentTime;
+  try {
+    v.gain.gain.cancelScheduledValues(now);
+    v.gain.gain.setValueAtTime(Math.max(0.0001, v.gain.gain.value), now);
+    v.gain.gain.exponentialRampToValueAtTime(0.0001, now + fade);
+  } catch { /* ctx torn down */ }
+  for (const n of v.nodes) { try { n.stop(now + fade + 0.05); } catch { /* already stopped */ } }
+  // the stopped sources auto-disconnect; the now-unreferenced gain GCs.
+}
+
+/** Stop every intro ambient loop (called on intro teardown — any exit path). */
+export function stopAllIntroLoops(): void {
+  for (const name of Array.from(_introLoops.keys())) _stopLoop(name, 0.25);
+}
+
+/** Cockpit hum — the calm low ambient bed aboard the ship in orbit (Beat 0): a steady detuned
+ *  drone + a soft air-handling noise bed + a faint electronics tone. Loops until stopped at
+ *  eject. Idempotent. */
+export function startCockpitHum(): void {
+  const a = getAudioInternals();
+  if (!a || _introLoops.has('cockpitHum')) return;
+  const t = a.ctx.currentTime;
+  const gain = a.ctx.createGain();
+  gain.gain.setValueAtTime(0.0001, t);
+  gain.gain.exponentialRampToValueAtTime(0.16, t + 1.2);   // fade in
+  gain.connect(a.ambient);
+  const nodes: AudioScheduledSourceNode[] = [];
+  for (const f of [58, 58.4]) {   // two slightly detuned saws → a thick steady hum
+    const o = a.ctx.createOscillator();
+    o.type = 'sawtooth'; o.frequency.value = f;
+    const lp = a.ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 220; lp.Q.value = 0.6;
+    const og = a.ctx.createGain(); og.gain.value = 0.5;
+    o.connect(lp).connect(og).connect(gain);
+    o.start(t); nodes.push(o);
+  }
+  const src = a.ctx.createBufferSource();   // air-handling noise bed
+  src.buffer = a.noiseBuffer; src.loop = true; src.playbackRate.value = 0.4;
+  const nlp = a.ctx.createBiquadFilter(); nlp.type = 'bandpass'; nlp.frequency.value = 340; nlp.Q.value = 0.5;
+  const ng = a.ctx.createGain(); ng.gain.value = 0.25;
+  src.connect(nlp).connect(ng).connect(gain);
+  src.start(t); nodes.push(src);
+  const el = a.ctx.createOscillator();   // a faint high electronics tone
+  el.type = 'sine'; el.frequency.value = 1180;
+  const eg = a.ctx.createGain(); eg.gain.value = 0.015;
+  el.connect(eg).connect(gain);
+  el.start(t); nodes.push(el);
+  _introLoops.set('cockpitHum', { nodes, gain });
+}
+export function stopCockpitHum(): void { _stopLoop('cockpitHum', 0.5); }
+
+/** Descent rush — the sustained wind/air-rush of the pod falling through the atmosphere (the
+ *  descent beat); filtered looping noise that swells as you fall faster. Stopped at impact. */
+export function startDescentRush(): void {
+  const a = getAudioInternals();
+  if (!a || _introLoops.has('descentRush')) return;
+  const t = a.ctx.currentTime;
+  const gain = a.ctx.createGain();
+  gain.gain.setValueAtTime(0.0001, t);
+  gain.gain.linearRampToValueAtTime(0.22, t + 3.0);   // swell as the fall accelerates
+  gain.connect(a.ambient);
+  const src = a.ctx.createBufferSource();
+  src.buffer = a.noiseBuffer; src.loop = true; src.playbackRate.value = 0.7;
+  const lp = a.ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 520; lp.Q.value = 0.7;
+  src.connect(lp).connect(gain);
+  src.start(t);
+  _introLoops.set('descentRush', { nodes: [src], gain });
+}
+export function stopDescentRush(): void { _stopLoop('descentRush', 0.6); }
+
 /** Set master volume, 0..1. Settings panel calls this. */
 export function setMasterVolume(v: number): void {
   if (_master) _master.gain.value = v;

@@ -295,3 +295,14 @@ The user approved **Phase 2 (the descent showpiece)** after an extended attended
 - **Spend:** ~400K; campaign total ~14.63M; cycle **24/150**.
 - **Commit:** `64b3744`.
 - **Next:** C25 = T5.1b (audio loops: cockpit hum + wind, with start/stop lifecycle) + mix balance.
+
+---
+
+## Cycle 25 — Phase 5 T5.1b: the ambient audio loops (2026-06-30, overnight) — SHIPPED
+- **Planned:** the sustained ambient loops the C24 one-shots didn't cover (cockpit hum, the fall's air-rush), with start/stop lifecycle.
+- **Shipped:** 2 procedural Web-Audio loops in `audio.ts` → the ambient bus. **`startCockpitHum`/`stopCockpitHum`** — the calm in-orbit bed (detuned drone + air-handling noise + a faint electronics tone), Beat 0 → eject. **`startDescentRush`/`stopDescentRush`** — the swelling air-rush of the fall, descent → impact (fills the 18s descent under the re-entry one-shot). **Lifecycle (C16):** a named `_introLoops` registry, idempotent start, fade-out stop, + `stopAllIntroLoops()` in `endEscapePodIntro` so nothing dangles on any exit. The reveal stays silent by design (E7); the game's soundscape resumes at handoff.
+- **Verify:** verify:all PASS + smoke `{ok:true,beats:12}` + self-audited the lifecycle.
+- **The whole intro now plays end-to-end WITH SOUND** (one-shots C24 + loops C25). The user LISTENS to judge + balance.
+- **Spend:** ~250K; campaign total ~14.88M; cycle **25/150**.
+- **Commit:** `c7265c4`.
+- **Next:** C26 = T5.2 music (escape sting → descent swell → desert easing) — the final overnight-tractable piece; after it, everything remaining needs the user → the loop surfaces the morning summary + stops.

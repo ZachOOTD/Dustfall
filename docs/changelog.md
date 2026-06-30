@@ -3,6 +3,14 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Escape-pod campaign C25 — 2026-06-30 (overnight) — Phase 5 T5.1b: the ambient audio loops (cockpit hum + descent rush) — SHIPPED ✓ verify:all + smoke
+
+`verified` — tsc clean + smoke `{ok:true,beats:12}` + self-audited the loop lifecycle. verify:all PASS. Flag OFF → live game byte-unchanged. The user LISTENS to judge.
+
+**T5.1b — the sustained ambient LOOPS** the C24 one-shots didn't cover (procedural Web Audio, `audio.ts`, feeding the ambient bus): **`startCockpitHum`/`stopCockpitHum`** — the calm in-orbit ambient bed (a detuned low drone + a soft air-handling noise bed + a faint electronics tone); started in `tickCockpit` (Beat 0), stopped at eject (the ship's hum dies with it). **`startDescentRush`/`stopDescentRush`** — the sustained air-rush of the pod falling through the atmosphere (filtered looping noise that swells as the fall accelerates); started in the descent beat, stopped at impact — filling the 18s descent with sound under the re-entry one-shot.
+- **Lifecycle (the C16 lesson):** a named `_introLoops` registry; idempotent start (a `.has` guard), fade-out stop (ramp the gain to 0.0001 + stop the sources after the fade → they GC), and **`stopAllIntroLoops()` in `endEscapePodIntro`** so no loop dangles on ANY exit (skip / jump / end). Self-audited — no leak.
+- The reveal stays SILENT by design (E7 aftermath-silence) + the game's own soundscape provides desert wind post-handoff, so no separate reveal loop. **Deferred (T5.2 / user):** music cues (escape sting → descent swell → desert easing) + the final mix balance — the user LISTENS.
+
 ## Escape-pod campaign C24 — 2026-06-30 (overnight) — Phase 5 T5.1a: the intro SFX arc (procedural one-shots) — SHIPPED ✓ verify:all + smoke ·  T4.3 deferred to user
 
 `verified` — tsc clean + smoke `{ok:true,beats:12}` + self-audited the audio graph (pattern-matches the shipped `playCrashImpact` — finite start/stop, exp-ramp to 0.0001, connect to `a.sfx` → no leak). verify:all PASS. Flag OFF → live game byte-unchanged. **Audio's real judgment is LISTENING → the user confirms the sound design.**
