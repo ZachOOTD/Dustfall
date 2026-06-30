@@ -657,8 +657,9 @@ export function createSky(scene: THREE.Scene): void {
 
 // ── REBUILD v2 R1a — SPACE MODE planet (lazy). A LARGE camera-relative celestial
 // body in the real sky: a banded desert planet body + a soft Fresnel atmosphere
-// limb. Built once on first space-mode use; depthTest off + renderOrder ordered so
-// it draws OVER the stars (the body fills, occluding stars behind it) but behind the
+// limb. Built once on first space-mode use. depthTest ON so WORLD geometry (the cockpit
+// hull) occludes it — it's a far celestial body seen THROUGH the window, not glued to the
+// camera over the ship. renderOrder draws it over the stars (depthWrite off) but behind the
 // sun/moon sprites. Faded by uOpacity = space01 so it cross-blends in/out cleanly.
 function buildSpacePlanet(scene: THREE.Scene): SpacePlanet {
   const group = new THREE.Group();
@@ -674,7 +675,9 @@ function buildSpacePlanet(scene: THREE.Scene): SpacePlanet {
     },
     transparent: true,    // so uOpacity can cross-fade the body in/out
     depthWrite: false,
-    depthTest: false,
+    depthTest: true,      // FIX: the planet is camera-relative at 380m — depth-test so WORLD geometry
+                          // (the cockpit/ship hull at ~1m) OCCLUDES it; it's visible only through the
+                          // window, NOT drawn on top of the ship (matches the moon sprite's depthTest).
     fog: false,
     toneMapped: true,
   });
@@ -696,7 +699,7 @@ function buildSpacePlanet(scene: THREE.Scene): SpacePlanet {
     blending: THREE.AdditiveBlending,
     side: THREE.BackSide,
     depthWrite: false,
-    depthTest: false,
+    depthTest: true,      // FIX: occluded by the ship hull too (only the limb past the window shows)
     fog: false,
     toneMapped: false,
   });
