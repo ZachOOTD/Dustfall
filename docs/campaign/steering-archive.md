@@ -64,3 +64,12 @@ The user walk-tested the descent (Phase 2) via the deployed preview and gave 5 n
 1. **Approved + cleared the gate** — `status: active`, `awaiting_approval: false`, `stop_reasons: []`, `pause_before: null`. The loop resumes into M10.
 2. **Deferred ⑯ drop-pod-intro-cutscene** — removed from the M10 autonomous tier (M10 = ⑭ machete + ⑮ hover-bike + ⑰ pickup-instancing only); moved to `backlog.md` §A as a HELD feature to be designed in detail later via its own `/feature-slice`. Marked DEFERRED on the roadmap M10 line.
 3. **Phase-A/B feedback deferred to the post-M10 gate** — the user is holding all Phase-A/B feedback until M10 ships. Noted on the "Phase B — Build-out complete" milestone in `roadmap.md` so that pause is framed as the big feedback + walk-test session.
+
+## 2026-06-30 (morning) — user walk-test of the overnight build → REBUILD v2 (real-world physical intro)
+The user walk-tested the C19-C26 overnight build + gave major direction (the root: the intro was built at an offset + faked space/descent + a 3-model teleport-stitched pod). USER-APPROVED architectural shift → REBUILD v2 (full plan in docs/feature-escape-pod-intro.md '## REBUILD v2'):
+- **Space = a wrapping celestial skybox** (real moving stars, a real-scale-look planet, a real atmosphere limb, its own scene, no desert-sky bleed). Decision: skybox space (camera-relative) NOT true real-scale physics (the float-precision wall ~10km).
+- **ONE physical pod model** — physically enter it in the ship, physically eject (no teleport), ride it down in that same interior, physically crash, wake in it, physically exit. 100% consistent + multiplayer-ready.
+- **The descent/crash happens PHYSICALLY in the real world** — the viewport shows the actual world the player spawns into; the pod physically crashes into it (a friend could watch your pod come down). NOT a shader faked over a window.
+- **Cockpit redesigned off the greybox box**; the **corridor fully modelled**.
+- **Sequence fixes:** the parachute lever-pull happens MID-descent (currently reads as after landing); blackouts longer (~2s+, not a flash); impact = blackout.
+- **Decisions (AskUserQuestion):** (1) skybox-space + physical-descent [not true-scale floating-origin]; (2) re-plan then rebuild in order (R1 re-grounding → R2 space → R3 pod → R4 descent → R5 ship interiors).

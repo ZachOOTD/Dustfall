@@ -1,5 +1,54 @@
 # Feature: Escape-Pod Intro Sequence — VISION (⏳ awaiting your sign-off)
 
+---
+## ⚑ REBUILD v2 — the REAL-WORLD PHYSICAL intro (2026-06-30, user morning walk-test feedback) — ACTIVE PLAN
+
+**Why a rebuild:** the v1 intro (C1-C26) was built at a hidden OFFSET (~3 km straight up), divorced from
+the real desert, with space + descent **faked** via flat shader planes and the pod split into **3 separate
+models** (descent interior · wake interior · crashed wreck) stitched by **teleports**. That offset-and-fake
+foundation is the ROOT of every "fake" read the user flagged: flat stars with a visible edge + the desert
+sky bleeding through, no real planet scale, the cockpit reading as a box, the pod not being consistent, the
+"crash" being a shader playing over a window, and the mistimed parachute.
+
+**The shift (USER-APPROVED 2026-06-30):** re-ground the intro in the **REAL world** + unify the pod into
+**ONE physical entity**. Decisions locked:
+- **Space = a wrapping celestial SKYBOX** (camera-relative → reads real-scale, zero float-precision cost,
+  occludes the desert sky). Real moving stars + a large planet + a real atmosphere limb. Its OWN scene.
+- **Descent = the pod PHYSICALLY falling + crashing into the real desert** — the viewport shows the ACTUAL
+  world the player spawns into; the pod is a real world entity (multiplayer-ready: a friend could watch your
+  pod come down). Orbit→atmosphere is a **scripted re-entry**, NOT a literal 100 km fall (three.js float32
+  jitters past ~10 km from origin — the precision wall; we don't physically traverse orbit, the skybox
+  establishes it, then the pod physically falls the last feasible stretch).
+- **ONE pod model**, 100% consistent: docked in the ship → physically ENTER it → it physically EJECTS (no
+  teleport) → ride it down in that same interior → it physically CRASHES → wake in it → physically EXIT.
+
+**Realism bar:** as real as feasible; cut only corners the player can't perceive.
+
+**Rebuild order (re-plan-then-rebuild, user-chosen). Each carries over the v1 beat-machine + sequence/timing
+skeleton + the audio (SFX/loops/music) + the disaster staging + the reveal pacing — we RE-GROUND them, not rewrite:**
+- **R1 — Real-world re-grounding (the architectural keystone):** move the intro into the real world. The pod
+  is a real entity at/above the player's spawn; the descent + crash happen in real-world coordinates. Establish
+  the celestial-skybox-for-space layer + the physical-fall altitude scheme (a feasible high altitude, e.g. a few
+  km; the skybox establishes "orbit"). Remove the teleport seams so the player is physically CONTINUOUS from
+  pod-ride → crash → wake → exit. Everything else builds on this.
+- **R2 — The space scene (skybox + planet):** a wrapping celestial skybox (real moving stars — reuse/extend the
+  night-sky system), a large camera-relative planet (real-scale look) + a real atmosphere limb, occluding the
+  desert sky. The orbit view from the cockpit before re-entry.
+- **R3 — The ONE physical pod:** unify the 3 pod models into ONE — a consistent walkable interior + a matching
+  exterior. Docked in the ship; physically entered; physically ejected; ridden; physically exited. [Hero model —
+  user art-direction.]
+- **R4 — The physical descent + crash + the timing fixes:** the pod physically falls through the real world
+  (skybox → real sky → real desert), the player inside seeing the real world, physically crashing at the spawn.
+  **Parachute gag MID-fall** (the user: the lever currently reads as pulled after we're on the ground — it must
+  happen while descending). **Longer REAL blackouts (~2 s+, not a flash).** Impact = blackout. The crash is a
+  real world event.
+- **R5 — The ship interior redesign:** the cockpit redesigned OFF the greybox box (a real ship interior) + the
+  corridor FULLY modelled/detailed. [Hero models — user art-direction.]
+
+**Status:** R1 next. v1 work stays on the branch (revertible); the rebuild re-grounds it. Behind `FEATURES.escapePodIntro`.
+
+---
+
 **This is the captured vision, not yet a build plan.** It's the source of truth for how the
 intro should *play, look, and feel* — written from the 2026-06-22 vision interview. Read it,
 correct anything that isn't exactly what's in your head; once you sign off, we do (1) a
