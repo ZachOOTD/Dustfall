@@ -162,15 +162,16 @@ at each `### Milestone:` for the user's art-direction. The v1 logic/audio/stagin
 - **R3 — The ONE physical pod:** **✅ R3a SHIPPED** — the player wakes in + climbs out of the SAME hero cabin they
   rode down (no model-swap): `setCabinCrashPose` (crashed tilt + drop the collider + dawn wake-light) + a real hatch
   cut into the cabin (`buildCabinHatch`) that swings onto the dawn desert + `blowCabinHatch`; the crashed exterior
-  re-sized to MATCH the cabin (~2.9m capsule, the C18 in↔out size-match); deleted `buildWakeInterior`. **▶ R3b — the
-  docked-in-ship physical ENTER/EJECT** (the pod docked in the ship interior the player physically walks into + that
-  physically detaches — no teleport into the pod). The old R1c continuity (pod→crash→wake→exit) is now done via R3a.
-  [hero model — look polish (exterior silhouette, wake lighting) → user art-direction batch]
+  re-sized to MATCH the cabin (~2.9m capsule, the C18 in↔out size-match); deleted `buildWakeInterior`. **R3b — the docked-in-ship physical ENTER/EJECT → FOLDED INTO R5** (the pod-bay
+  the player walks into IS part of the ship interior — building it in the greybox ship now + redoing it in R5 = double
+  work; R5 builds the pod-bay + the physical enter/eject with the ship). The old R1c continuity (pod→crash→wake→exit)
+  is done via R3a. [hero model — look polish (exterior silhouette, wake lighting) → user art-direction batch]
 ### Milestone: REBUILD R3 — the one physical pod COMPLETE → USER WALK-TEST (enter → eject → ride → exit, consistent) → /campaign-approve
-- **R4 — Physical descent + crash + timing fixes:** the pod physically falls + crashes into the real desert (the
-  viewport = the actual spawn world, multiplayer-ready); **parachute gag MID-fall**; **longer ~2s+ blackouts**;
-  impact = blackout.
-### Milestone: REBUILD R4 — physical descent + crash COMPLETE → USER WALK-TEST → /campaign-approve
+- **✅ R4 — physical descent + crash + timing fixes SHIPPED** — the pod physically falls + crashes into the real
+  desert (R1b). **Parachute gag now MID-FALL** (descent hands off at ~384m; the 3 pulls + snap land between 384m→112m;
+  the pod keeps falling to impact at the ground — `tickParachute` continues the fall; was "on the ground"). **Real
+  ~2s+ blackouts** (`_phaseFade` hold-then-fade ~2.3s; impact→wake ~2.07s; was a 0.35s flash). The fall FEEL is a walk-test item.
+### Milestone: REBUILD R4 — physical descent + crash COMPLETE (checkpoint=none → no pause; user reviews the batch)
 - **R5 — Ship interior redesign:** the cockpit redesigned OFF the greybox box (a real ship interior) + the
   corridor FULLY modelled/detailed. [hero models — user art-direction]
 ### Milestone: REBUILD R5 — ship interiors COMPLETE → FEATURE REWORK COMPLETE → USER final walk-test/listen → /campaign-approve

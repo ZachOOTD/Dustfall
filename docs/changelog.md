@@ -3,6 +3,10 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Escape-pod REBUILD v2 — 2026-06-30 (attended) — R4: parachute mid-fall + real ~2s blackouts (user timing fixes) — SHIPPED ✓ tsc + smoke
+
+`verified` — tsc + smoke `{ok:true,beats:12}` (logic traced against the real tick code). **R4 fixes the 2 timing bugs the user reported.** (1) The parachute gag now plays AIRBORNE (was "on the ground"): `tickDescent` hands off at ~384m; `tickParachute` continues the physical fall (drives `setDescentProgress`, pins the body to the seat, keeps the sky/fog/look blending) so the 3 pulls + snap land 384m→112m and the pod keeps falling to impact at the ground — the dunes rush up under the gag. (2) Real blackouts: `_phaseFade` reworked to hold-then-fade (~2.3s) + impact→wake ~2.07s (was a 0.35s flash). Logic-only (`sequence.ts`); BEAT_ORDER unchanged. Reordered R3b → R5. The fall FEEL is a walk-test item. **NEXT (last piece): R5** — ship interior + corridor + the pod-bay + physical enter/eject.
+
 ## Escape-pod REBUILD v2 — 2026-06-30 (attended) — R3a: the ONE consistent pod (wake in + exit the cabin you rode) — SHIPPED ✓ verify:all + smoke
 
 `verified` — verify:all + smoke `{ok:true,beats:12}`. **R3a delivers the user's #1 consistency requirement** — no more 3-models-stitched-by-a-swap. The player now wakes in + climbs out of the SAME `buildPodScene` hero cabin they rode down: `setCabinCrashPose` (crashed tilt + drop the collider + a dawn wake-light), a real hatch cut into the cabin (`buildCabinHatch`, a genuine lofted opening, not a decal) that swings onto the dawn desert, `blowCabinHatch`. The crashed exterior re-sized to MATCH the cabin (~2.9m capsule — the C18 in↔out size-match). Deleted `buildWakeInterior`. Next: R3b (the docked-in-ship physical enter/eject). Look polish (exterior silhouette, wake lighting) → the user's feedback batch.

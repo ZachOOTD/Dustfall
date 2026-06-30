@@ -60,17 +60,35 @@ const EJECT_FALLBACK = 6.0;
  *  the descent. C18 (user walk-test): NO tumble — the pod stays UPRIGHT; this is just a brief blast. */
 const SHIP_EXPLODE_DWELL = 1.2;   // C18: SHORT — the fall begins sooner (less static "freeze" between phases)
 /** Seconds of the SLOW, seamless atmospheric fall (C18 user walk-test: descend slowly + serenely —
- *  watch the planet get closer, space fade to sky, the ground slowly approach). Was 8.0. */
+ *  watch the planet get closer, space fade to sky, the ground slowly approach). Was 8.0.
+ *  REBUILD v2 R4 — this is the FULL-FALL clock (progress 0→1 over this many seconds AT a fixed
+ *  rate). The descent beat only rides it to DESCENT_HANDOFF_PROGRESS, then HANDS OFF to the
+ *  parachute beat MID-AIR; the parachute beat resumes the SAME clock/rate down to the ground, so
+ *  the fall rate is seamless across the hand-off (no speed change, no camera jump). */
 const DESCENT_DURATION = 18.0;
+/** REBUILD v2 R4 — the descent beat hands off to the parachute gag at THIS progress, MID-FALL.
+ *  At p=0.55 the pod is ~383 m up (altitude = DESCENT_ALT·(1−p^1.7); DESCENT_ALT≈600) with the
+ *  bulk of the fall still ahead — so the gag (3 pulls + the snap) plays clearly AIRBORNE with the
+ *  ground rushing up, NOT on the ground. The parachute beat continues the fall to impact. */
+const DESCENT_HANDOFF_PROGRESS = 0.55;
+/** Progress at which the continued fall reaches the ground → the parachute beat advances to impact
+ *  (just shy of 1.0 so the cabin is essentially on the spawn ground when impact's hard cut lands). */
+const PARACHUTE_GROUND_PROGRESS = 0.98;
 /** Pulls before the lever snaps off — THE GAG (3 pulls → no chute). */
 const PARACHUTE_PULLS = 3;
-/** Anti-softlock: auto-fire a pull this often if the player just stares (seconds). */
-const PARACHUTE_AUTOPULL = 2.5;
-/** Beat of silent free-fall after the lever snaps, before impact (seconds). */
-const PARACHUTE_SNAP_FALL = 2.0;
-/** Impact: seconds to fade to black, then hold in blackout, before waking. */
-const IMPACT_FADE = 1.2;
-const IMPACT_HOLD = 1.0;
+/** Anti-softlock: auto-fire a pull this often if the player just stares (seconds). R4 — 2.0 (was
+ *  2.5) so all 3 auto-pulls + the snap land by ~progress 0.88 (~114 m up) within the continued
+ *  fall, leaving a natural ~1.75 s airborne post-snap beat (ground rushing up) before impact. */
+const PARACHUTE_AUTOPULL = 2.0;
+/** Min beat of continued free-fall AFTER the lever snaps before impact (seconds) — guarantees the
+ *  snap reads as a distinct beat with the ground still coming up even if the snap lands very low.
+ *  (The fall keeps going via the descent clock; this is the floor on the post-snap airborne window.) */
+const PARACHUTE_SNAP_FALL = 1.6;
+/** Impact: seconds to fade to black, HOLD in full blackout, then (wake) fade in. REBUILD v2 R4 —
+ *  the user wanted a REAL blackout (≥2 s of black), not a flash: a quick fade-to-black + a long
+ *  HOLD, so impact→wake reads as a solid ~2.5 s+ of darkness before coming to. */
+const IMPACT_FADE = 0.7;
+const IMPACT_HOLD = 2.0;
 /** Wake: seconds to fade FROM black (come to), then hold, before the blow-hatch prompt. */
 const WAKE_FADE = 2.5;
 const WAKE_HOLD = 1.2;
@@ -85,11 +103,25 @@ const WAKE_CLIMB_FALLBACK = 8.0;
 const REVEAL_DWELL = 4.0;
 
 /** C18 (user walk-test: "black out briefly between each phase to make things feel smoother") —
- *  a brief DIP-TO-BLACK at the descent-chain transitions. advanceBeat cuts to black; the new beat
- *  fades it in over PHASE_FADE_DUR, so the camera/vista change happens under the black. Applied
- *  only to descent + parachute (shipExplode has its own blast flash; impact/wake own the overlay). */
+ *  a DIP-TO-BLACK at the descent-chain transitions. advanceBeat cuts to black; the new beat
+ *  HOLDS full black, then fades it in, so the camera/vista change happens hidden under the black.
+ *  Applied only to descent + parachute (shipExplode has its own blast flash; impact/wake own the
+ *  overlay). REBUILD v2 R4 — the user: "the blackouts just flash for a fraction of a second, make
+ *  them a REAL blackout for at least 2 seconds." So the dip now HOLDS at full black for
+ *  PHASE_FADE_HOLD, THEN fades in over PHASE_FADE_DUR — total ≈2.3 s of black per transition (not a
+ *  flash). `_phaseFade` counts DOWN from (HOLD+DUR): while > DUR it's the hold (clamp to 1=full
+ *  black); from DUR→0 it's the linear fade-in (value/DUR). */
 let _phaseFade = 0;
-const PHASE_FADE_DUR = 0.35;
+const PHASE_FADE_HOLD = 1.2;   // seconds held at FULL black before the fade-in begins
+const PHASE_FADE_DUR = 1.1;    // seconds to fade the black back out (1→0)
+const PHASE_FADE_TOTAL = PHASE_FADE_HOLD + PHASE_FADE_DUR;
+/** The black overlay opacity for the current _phaseFade countdown: full black through the hold,
+ *  then a linear fade-out over the last PHASE_FADE_DUR seconds. */
+function phaseFadeOpacity(remaining: number): number {
+  if (remaining <= 0) return 0;
+  if (remaining >= PHASE_FADE_DUR) return 1;   // still in the HOLD window — full black
+  return remaining / PHASE_FADE_DUR;           // the fade-in (the world emerges from black)
+}
 
 /** Did the player "pull the lever" this frame (click or E)? */
 function pulledLever(ctx: GameContext): boolean {
@@ -236,7 +268,7 @@ export function advanceBeat(ctx: GameContext): void {
   if (!ctx.intro) return;
   const i = BEAT_ORDER.indexOf(ctx.intro.beat);
   const next = i >= 0 && i + 1 < BEAT_ORDER.length ? BEAT_ORDER[i + 1] : 'done';
-  _phaseFade = 1;   // C18 — cut to black at the transition; the new beat fades it in (smoother phases)
+  _phaseFade = PHASE_FADE_TOTAL;   // R4 — cut to FULL black, HOLD, then the new beat fades it in (a REAL ~2 s blackout, not a flash)
   jumpToBeat(ctx, next);
 }
 
@@ -411,7 +443,9 @@ function tickDescent(ctx: GameContext, dt: number): void {
     intro.scratch.init = true;
   }
   intro.scratch.t = (intro.scratch.t as number) + dt;
-  const progress = Math.min(1, (intro.scratch.t as number) / DESCENT_DURATION);
+  // R4 — ride the descent clock only to the MID-FALL hand-off; the parachute beat resumes the
+  //   SAME clock from here down to the ground (so the fall rate is seamless across the hand-off).
+  const progress = Math.min(DESCENT_HANDOFF_PROGRESS, (intro.scratch.t as number) / DESCENT_DURATION);
   setDescentProgress(progress);          // R1b — drives the pod ALTITUDE (group + colliders) + cabin light + FX
   // R1b — ride the descending pod: snap the player BODY onto the pod's seat each frame (the
   // pod floor rides under the body via _syncPodToAltitude, but a direct body-set keeps the
@@ -456,12 +490,21 @@ function tickDescent(ctx: GameContext, dt: number): void {
     playReentryRumble();             // T5.1 — the swelling re-entry roar (then it passes)
     intro.scratch.reFlash = true;
   }
-  if (progress >= 1) advanceBeat(ctx);   // → parachute
+  // R4 — hand off to the parachute gag MID-FALL (the pod is still well up, ~383 m at p=0.55). The
+  //   parachute beat CONTINUES this exact fall to the ground from DESCENT_HANDOFF_PROGRESS (a const,
+  //   so it survives advanceBeat's scratch wipe), at the SAME clock rate — so the gag plays airborne
+  //   with no fall-rate change across the hand-off.
+  if (progress >= DESCENT_HANDOFF_PROGRESS) advanceBeat(ctx);   // → parachute (continues the fall)
 }
 
-/** parachute beat (T0.3b) — THE GAG. Cue the player to pull; each pull (E/click, edge-
- *  triggered) jolts but doesn't deploy; the 3rd pull SNAPS the lever off → a beat of
- *  free-fall → impact. An auto-pull fallback keeps it from softlocking. */
+/** parachute beat (T0.3b · R4) — THE GAG, played MID-FALL. The descent handed off here at
+ *  DESCENT_HANDOFF_PROGRESS (~383 m up); this beat CONTINUES the physical fall (it keeps driving
+ *  setDescentProgress at the same clock rate, pins the player body to the falling seat, and keeps
+ *  the look-pitch / sky / fog blending — so the ride is seamless across the hand-off) WHILE the
+ *  3-pull gag runs. Each pull (E/click, edge-triggered) jolts but doesn't deploy; the 3rd pull
+ *  SNAPS the lever off — no chute. The pod keeps falling after the snap; the ground rushes up;
+ *  when the fall reaches the ground (and the snap has had its airborne beat) → impact. An auto-pull
+ *  fallback keeps it from softlocking. */
 function tickParachute(ctx: GameContext, dt: number): void {
   const intro = ctx.intro;
   if (!intro) return;
@@ -474,17 +517,50 @@ function tickParachute(ctx: GameContext, dt: number): void {
     intro.scratch.pulls = 0;
     intro.scratch.sincePull = 0;
     intro.scratch.snapped = false;
+    intro.scratch.snapT = 0;         // seconds of fall since the snap (the post-snap airborne beat)
     intro.scratch.leverT = 0;        // the lever's current pull pose (jab → settle)
+    // R4 — resume the descent clock from the hand-off so the fall CONTINUES at the same rate. The
+    //   descent ran progress 0→DESCENT_HANDOFF over fallT 0→(HANDOFF·DURATION); we pick the clock
+    //   up at exactly that elapsed time and keep advancing it toward DESCENT_DURATION (progress→1).
+    intro.scratch.fallT = DESCENT_HANDOFF_PROGRESS * DESCENT_DURATION;
     intro.scratch.init = true;
   }
+
+  // ── R4 — CONTINUE THE PHYSICAL FALL every frame (mirrors tickDescent's per-frame ride so the
+  //    hand-off is seamless: same altitude curve, same body-pin, same look-pitch, same sky + fog
+  //    blend). The pod keeps physically falling while the gag plays + after the snap.
+  intro.scratch.fallT = (intro.scratch.fallT as number) + dt;
+  const progress = Math.min(1, (intro.scratch.fallT as number) / DESCENT_DURATION);
+  setDescentProgress(progress);          // drives the pod ALTITUDE (group + colliders) + cabin light + FX
+  // Pin the player body to the falling seat (POSITION only — leave the look to faceControl below;
+  // copied from tickDescent so the eye rides the descent exactly).
+  const ds = getPodSpawn(ctx);
+  ctx.player.body.body.setTranslation({ x: ds.x, y: ds.y, z: ds.z }, true);
+  ctx.player.velocityY = 0;
+  ctx.player.cameraSnapNextFrame = true;
+  // The seated look-pitch steepens as the pod nears the ground (same curve as the descent), so the
+  // dunes fill the porthole + rush up — the gag is clearly airborne with the ground coming up.
+  const pitch = -0.12 - 0.28 * (progress * progress);
+  faceControl(ctx, 0, pitch);
+  // Keep the sky + fog blending so the late descent reads identically through the porthole.
+  setSkyIntroMode(1 - Math.min(1, Math.max(0, (progress - 0.05) / 0.4)));   // ≈0 by now (we handed off at 0.55), but kept exact for seamlessness
+  {
+    const fog = ctx.three.scene.fog as { density?: number } | null;
+    if (fog && 'density' in fog) fog.density = 0.00006 + 0.00006 * progress;
+  }
+
   // (No per-frame rumble — addTrauma stacks every frame → saturates → the disorienting view-spin.
   //  The gag's punch comes from the ONE-TIME per-yank jolts below; the fall stays calm. C18.)
 
-  // After the lever snaps: it hangs dead off its pivot; a beat of faster free-fall → impact.
+  // After the lever snaps: it hangs dead off its pivot. The pod KEEPS falling (above) — we don't
+  // cut the fall short. Advance to impact once the ground is rushing up (progress near 1) AND the
+  // snap has had at least its airborne beat (so a last-moment manual snap still reads before impact).
   if (intro.scratch.snapped) {
     setParachuteLeverPull(1, true);   // drooped/broken pose
-    intro.scratch.t = (intro.scratch.t as number ?? 0) + dt;
-    if ((intro.scratch.t as number) > PARACHUTE_SNAP_FALL) advanceBeat(ctx);   // → impact
+    intro.scratch.snapT = (intro.scratch.snapT as number) + dt;
+    const groundReached = progress >= PARACHUTE_GROUND_PROGRESS;
+    const snapBeatDone = (intro.scratch.snapT as number) > PARACHUTE_SNAP_FALL;
+    if (groundReached && snapBeatDone) advanceBeat(ctx);   // → impact (at the ground)
     return;
   }
 
@@ -505,13 +581,13 @@ function tickParachute(ctx: GameContext, dt: number): void {
     playLeverClick();  // T5.1 — the stiff mechanical yank
     const pulls = intro.scratch.pulls as number;
     if (pulls >= PARACHUTE_PULLS) {
-      // The 3rd pull — the lever snaps off. No chute.
+      // The 3rd pull — the lever snaps off. No chute. The pod KEEPS FALLING (above) to the ground.
       intro.scratch.snapped = true;
-      intro.scratch.t = 0;
+      intro.scratch.snapT = 0;
       setParachuteLeverPull(1, true);
       playLeverSnap();   // T5.1 — the lever breaks off (no chute)
       flashScreen(0xffffff, 0.25);
-      showIntroPrompt('The lever snaps off.');
+      showIntroPrompt('The lever snaps off — no chute.');
     } else {
       showIntroPrompt(pulls === 1 ? 'Pull harder!' : 'Come on — PULL!');
     }
@@ -699,11 +775,13 @@ export function updateEscapePodIntro(ctx: GameContext, dt: number): void {
   // it suppressed each frame here (this runs after them) through the space/ship/descent/crash
   // beats; stepOut restores the desert atmosphere when the player steps out into the dunes.
   if (intro.beat !== 'stepOut' && intro.beat !== 'done') setIntroAtmosphereHidden(ctx, true);
-  // C18 — the phase-transition dip-to-black fades in (1→0) over the new beat. Only on the
-  // descent-chain cinematic beats (shipExplode owns a blast flash; impact/wake own the black).
+  // R4 — the phase-transition dip-to-black: HOLD at full black, then fade in over the new beat
+  // (a REAL ~2 s blackout). _phaseFade counts down in SECONDS from PHASE_FADE_TOTAL; the opacity
+  // is full through the hold, then a linear fade-out. Only on the descent-chain cinematic beats
+  // (shipExplode owns a blast flash; impact/wake own the black via setIntroBlack themselves).
   if (_phaseFade > 0) {
-    _phaseFade = Math.max(0, _phaseFade - dt / PHASE_FADE_DUR);
-    if (intro.beat === 'descent' || intro.beat === 'parachute') setIntroBlack(_phaseFade);
+    _phaseFade = Math.max(0, _phaseFade - dt);
+    if (intro.beat === 'descent' || intro.beat === 'parachute') setIntroBlack(phaseFadeOpacity(_phaseFade));
   }
 }
 

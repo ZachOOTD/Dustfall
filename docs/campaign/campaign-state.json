@@ -4,7 +4,7 @@
   "started": "2026-06-28",
   "branch": "campaign/escape-pod-intro",
   "preview_deploy": "User steering 2026-06-29 (C17): the campaign branch is now PUSHED to origin (github.com/ZachOOTD/Dustfall) for a playable preview link. POLICY CHANGE: each cycle now PUSHES the branch after its commit (was local-only) so the preview rebuilds. The preview build is env-gated (VITE_ESCAPE_POD_INTRO=1 turns the intro ON, VITE_BASE=/ serves at root) — see netlify.toml + docs/deploy-preview.md; the live master GitHub-Pages site is untouched (push-to-master-only). The user activates the host (Cloudflare Pages / Netlify) on their side one-time → then each push refreshes the link.",
-  "cycles_completed": 29,
+  "cycles_completed": 30,
   "current_tier": "** REBUILD v2 ACTIVE (2026-06-30, user morning feedback) -> ATTENDED collaborative rebuild (NOT the autonomous loop; the user art-directs the hero/visual pieces). The v1 intro was built at a hidden OFFSET + faked space/descent via shaders + split the pod into 3 teleport-stitched models -> the root of every 'fake' read. USER-APPROVED shift: re-ground in the REAL world; ONE physical pod (enter/eject/ride/crash/wake/exit, no teleport); space = a wrapping celestial SKYBOX (real-scale look, no precision cost); descent = the pod PHYSICALLY falling + crashing into the real desert (viewport = the actual spawn world; multiplayer-ready); orbit->atmosphere is a scripted re-entry (NOT a literal 100km fall -- float precision wall ~10km). Rebuild order R1 real-world re-grounding (keystone) -> R2 space skybox+planet -> R3 the ONE physical pod -> R4 physical descent+crash + timing fixes (parachute MID-fall, longer ~2s+ blackouts) -> R5 ship interior/corridor redesign. The v1 beat-machine + sequence + audio + staging CARRY OVER (re-grounded, not rewritten). Full plan: docs/feature-escape-pod-intro.md '## REBUILD v2'. NEXT = R1. [Prior overnight-complete summary superseded:] ", "current_tier_prior": "** OVERNIGHT RUN COMPLETE (C19-C26) -> PAUSED for the user's morning review. The whole escape-pod intro PLAYS end-to-end (behind FEATURES.escapePodIntro) WITH FULL SFX + MUSIC: cockpit (hum) -> check-engines (console escalation) -> corridor disaster (fire + red-alert + klaxon + escape sting) -> enter pod -> eject + ship explodes -> re-entry -> the beautiful descent (vista + rush + swell) -> the parachute gag -> crash -> WAKE INSIDE the pod -> kick the hatch open -> walk out into the DAWN desert (aftermath-silence + horizon hook + desert-easing music). SHIPPED this overnight: T3.4 disaster staging (C21), T4.1 wake-inside+blow-door [the C18 req] (C22), T4.2 desert reveal (C23), T5.1a SFX (C24), T5.1b loops (C25), T5.2 music (C26). PIVOT (C20): the autonomous procedural-modeler PLATEAUED on Phase-3 hero visuals (hauler, cockpit) -> the loop deferred all hero VISUALS + feel/playtest items to the user + built the playable LOGIC/STAGING/AUDIO instead. AWAITING THE USER (the morning list, prioritized): [hero VISUALS - art-direction] hauler exterior (__game.buildHauler()), cockpit surface-fidelity (rig --scenario=cockpit), ship-explosion FX (T3.2), hero corridor geometry + fire FX, the HERO crashed-cabin wake interior + the crashed-pod EXTERIOR<->INTERIOR size-match (C18), a dedicated horizon-hook landmark; [feel/playtest] T4.3 craft+salvage tutorial (wire the pod as a pryable escape_pod salvageable -- scrap_machete/D261 + the salvage system EXIST) + the comic chute-pop payoff; [audio] LISTEN + balance the mix. Then the Phase 3-5 walk-tests. Resume via /campaign-approve (or steer via steering.md). ENRICH-NOT-CUT; behind FEATURES.escapePodIntro; no SAVE_VERSION bump. Plan: docs/feature-escape-pod-intro.md.",
   "awaiting_approval": false,
   "stop_reasons": [],
@@ -488,6 +488,23 @@
       "ultracode": true,
       "commit": "8493f49",
       "spend_approx_tokens": 600000
+    },
+    {
+      "cycle": 30,
+      "date": "2026-06-30",
+      "focus": "REBUILD v2 R4 -- the user's TIMING fixes: parachute gag MID-FALL + real ~2s blackouts. Reordered R3b -> R5.",
+      "tier": "REBUILD v2 R4 -- physical descent + crash + timing",
+      "outcome": "SHIPPED",
+      "units": ["R4 (general-purpose agent, logic-only sequence.ts): (1) parachute gag MID-FALL -- tickDescent hands off at DESCENT_HANDOFF_PROGRESS=0.55 (~384m up); tickParachute CONTINUES the physical fall (resumes the descent clock, drives setDescentProgress, pins the body to the seat, keeps the sky/fog/look-pitch blending) so the 3 pulls + snap land between ~384m->112m and the pod keeps falling to impact at the ground (~20m, PARACHUTE_GROUND_PROGRESS=0.98), total ~17.6s -- was 'on the ground' (the descent reached 0 before the parachute beat). PARACHUTE_AUTOPULL 2.5->2.0 so the gag completes airborne. (2) real blackouts -- _phaseFade reworked from a 0.35s fade-only flash to HOLD-then-fade (PHASE_FADE_HOLD 1.2s + PHASE_FADE_DUR 1.1s = ~2.3s); impact->wake ~2.07s contiguous black (IMPACT_FADE 0.7 + IMPACT_HOLD 2.0). BEAT_ORDER + the 12 beats unchanged (bodies restructured)."],
+      "verify": "tsc green + smoke {ok:true,beats:12} (the agent traced the real tick code for the altitudes/durations: handoff 384m -> pulls 303/213/112m -> impact 20m; phase black 2.27s, impact black 2.07s). verify:all running. Behind the flag.",
+      "visual": "N/A (logic/timing). The FALL FEEL (the airborne gag, the ground rushing up, the real blackouts) is a walk-test item -- the preview is throttled/paused so it was verified via a real-code trace, not a live loop.",
+      "deferred": "R3b (docked-in-ship physical enter/eject) REORDERED -> folded into R5 (the pod-bay is part of the ship interior; build it once in R5). NEXT (run-through, the LAST piece) = R5 -- the ship interior + corridor redesign + the pod-bay + the physical enter/eject. Look polish + R1 polish + planet framing -> the user's feedback batch.",
+      "save": "no change (SAVE_VERSION stays 15).",
+      "decisions": ["(no new D-entry. R4 logic delegated to a fresh general-purpose agent [the parachute-mid-fall restructure needed a clean context]; verified via a real-code trace since the preview is throttled. Reordered R3b->R5 to avoid building the pod-bay twice [it's part of the ship interior].)"],
+      "agent": "general-purpose (R4 ~117K) + verify.",
+      "ultracode": true,
+      "commit": "73a09ac",
+      "spend_approx_tokens": 350000
     }
   ]
 }

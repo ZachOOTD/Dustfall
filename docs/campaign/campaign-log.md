@@ -370,3 +370,12 @@ The user walk-tested R1, approved it to continue, and reported 2 bugs (both fixe
 - **Concessions (user look-batch):** the fat exterior reads dome-heavy at low angles; the wake interior is dim; the hatch clock differs in vs out (size matches).
 - **Commit:** `8493f49` (+ docs).
 - **Next (run-through):** R3b — the docked-in-ship physical enter/eject → then R4 → R5.
+
+---
+
+## Cycle 30 — REBUILD v2 R4: parachute mid-fall + real blackouts (2026-06-30) — SHIPPED
+- **R4 (user timing fixes, logic-only):** (1) parachute gag MID-FALL — descent hands off at ~384m, the 3 pulls + snap land 384m→112m, the pod keeps falling to impact at the ground (`tickParachute` continues the fall); was "on the ground." (2) real ~2s blackouts (`_phaseFade` hold-then-fade ~2.3s; impact ~2.07s; was 0.35s).
+- **Verify:** tsc + smoke `{ok:true,beats:12}` (traced against the real tick code; the FEEL is a walk-test item — the preview is throttled).
+- **Reordered:** R3b (docked enter/eject) → folded into R5 (the pod-bay is part of the ship).
+- **Commit:** `73a09ac` (+ docs).
+- **Next (run-through, LAST piece): R5** — ship interior + corridor redesign + the pod-bay + physical enter/eject. Then the rework is feature-complete → the user's big review.
