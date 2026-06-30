@@ -144,10 +144,14 @@ descent = the pod PHYSICALLY falling + crashing into the real desert. The loop b
 at each `### Milestone:` for the user's art-direction. The v1 logic/audio/staging/beats CARRY OVER (re-grounded).
 - **R1 — Real-world re-grounding (the keystone):** **✅ R1a — the real sky in "space mode" SHIPPED** (the cockpit
   window now shows real wrapping stars + a real-scale planet + atmosphere limb; `setSkyIntroMode`; the fake star
-  plane is gone). **▶ R1b — re-ground the DESCENT into real-world coords** (the pod falls toward the REAL spawn;
-  the viewport shows the REAL world, not the `LOWALT_FS` shader fake; delete the pod's `STAR_FS`/`LOWALT_FS` fakes;
-  ease space→dawn is already wired). · **R1c — remove the teleport seams** (physical continuity pod→crash→wake→exit;
-  intertwined with R3's unified pod).
+  plane is gone). **✅ R1b — DESCENT re-grounded to real-world coords (SHIPPED)** — the pod physically FALLS through the
+  real desert above the spawn (`setDescentBase(returnPos)` + `setDescentProgress` drives the altitude; body+camera
+  ride down); the viewport shows the REAL terrain + sky (no fake — ~430 lines of `LOWALT_FS`/`STAR_FS`/planet/atmo
+  shaders deleted; only the re-entry plasma/shimmer kept, over the real world). *Concession:* `DESCENT_ALT`=600m
+  (not 3000m) — the world is only ±1200m + the upright capsule's SIDE porthole looks down only ~22° (cabin occludes
+  more), so high = real sky, the last half = the desert rushing up. A 3000m "from-orbit" read = an R4 enrichment
+  (tilt the capsule nose-down + couple the seated eye). **▶ R1c — remove the teleport seams** (physical continuity
+  pod→crash→wake→exit; intertwined with R3's unified pod) → then the R1 milestone.
 ### Milestone: REBUILD R1 — real-world re-grounding COMPLETE → USER WALK-TEST (orbit + the real-world descent read real) → /campaign-approve
 - **R2 — The space scene (hero polish):** lift the space-mode sky to a hero bar — star density/brightness, the
   planet's scale/surface/atmosphere, the orbit composition through the window. [user art-direction]

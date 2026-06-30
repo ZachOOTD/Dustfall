@@ -3,6 +3,12 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Escape-pod REBUILD v2 — 2026-06-30 (attended) — R1a (real sky "space mode") + R1b (descent re-grounded to the real world) — SHIPPED ✓ verify:all + smoke
+
+`verified` — tsc + placement + colliders PASS + smoke `{ok:true,beats:12}` + rig (cockpit space + descent at 0.3/0.6/0.9). The user walk-tested the v1 overnight build + directed a **re-architecture** (re-ground in the REAL world; ONE physical pod; space = a wrapping skybox; descent = a physical fall into the real desert). Full plan: `docs/feature-escape-pod-intro.md` `## REBUILD v2`. Driving R1→R5 via the campaign loop (checkpoint=milestone, the user art-directs each phase).
+- **R1a — real sky in "space mode"**: `setSkyIntroMode(space01)` (`sky.ts`) drives the game's REAL camera-relative sky into space (dark dome, `uCloudiness→0`, full wrapping stars, a large real-scale planet + atmosphere limb; 0 = the normal sky, byte-unchanged). Removed the v1 fake `buildOrbitView` star/atmo planes from `shipScene.ts`. Wired into the beats (space at the cockpit → eased to dawn at re-entry → restored at handoff; cabin dust hidden in orbit).
+- **R1b — descent re-grounded**: the pod now physically FALLS through the real desert above the spawn (`setDescentBase(returnPos)` + `setDescentProgress` drives the altitude; the body+camera ride down). The viewport shows the REAL terrain + sky. **Deleted ~430 lines of fake vista** (`LOWALT_FS`/`STAR_FS`/planet/atmo shaders); kept only the re-entry plasma/shimmer over the real world. *Concession:* `DESCENT_ALT`=600m (world ±1200m + the side porthole's ~22° down-look cap; high=sky, last-half=ground rushing up) — a 3000m "from-orbit" read is an R4 enrichment (tilt the capsule). The felt motion is a walk-test item.
+
 ## Escape-pod campaign C26 — 2026-06-30 (overnight) — Phase 5 T5.2: the MUSIC cues + ⏸ OVERNIGHT RUN COMPLETE (autonomous work exhausted → user) — SHIPPED ✓ verify:all + smoke
 
 `verified` — tsc clean + smoke `{ok:true,beats:12}` + self-audited the music lifecycle. verify:all PASS. Flag OFF → live game byte-unchanged. The user LISTENS to judge + balance.

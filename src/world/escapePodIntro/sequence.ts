@@ -40,7 +40,7 @@ import {
   SHIP_CORRIDOR_ENTER_Z, SHIP_DEAD_END_Z,
   setCockpitAlert, setShipAlert, setEngineFire,
 } from './shipScene.ts';
-import { buildPodScene, disposePodScene, getPodSpawn, setDescentProgress, setTumbleLight, setParachuteLeverPull, placeCrashedPodWreck, buildWakeInterior, blowWakeHatch, removeWakeInterior } from './podScene.ts';
+import { buildPodScene, disposePodScene, getPodSpawn, setDescentProgress, setDescentBase, setTumbleLight, setParachuteLeverPull, placeCrashedPodWreck, buildWakeInterior, blowWakeHatch, removeWakeInterior } from './podScene.ts';
 import { setGameHudHidden, showIntroPrompt, hideIntroPrompt, setIntroBlack } from './introHud.ts';
 import { flashScreen } from '../../fx/screenFlash.ts';
 import { addTrauma } from '../../fx/cameraShake.ts';
@@ -389,7 +389,20 @@ function tickDescent(ctx: GameContext, dt: number): void {
   const intro = ctx.intro;
   if (!intro) return;
   if (!intro.scratch.init) {
-    ensureInPod(ctx);
+    // REBUILD v2 R1b — RE-GROUND the descent into the REAL world above the player's real
+    // spawn. The pod was built at the orbit OFFSET (the cockpit/eject/explode beats sit in
+    // the space-skybox frame); here we relocate it: set the real-world descent base from
+    // intro.returnPos, then DISPOSE + REBUILD the pod at (returnPos.x, returnPos.y+ALT,
+    // returnPos.z) so the porthole now shows the REAL terrain + sky as the pod physically
+    // falls. (The orbit→real-world jump is the accepted scripted re-entry — the PLAYER stays
+    // inside the pod throughout; only the pod's world coords change, hidden under the re-entry
+    // FX/flash. setDescentProgress then drives the altitude DESCENT_ALT→0 to the spawn ground.)
+    setDescentBase(intro.returnPos);
+    disposePodScene(ctx);   // tear down the offset pod (its group + colliders were at y=3200)
+    setDescentBase(intro.returnPos);   // re-assert after dispose cleared it (dispose nulls the base)
+    ensureInPod(ctx);       // rebuild at the grounded base + full altitude; seat the player there
+    setIntroAtmosphereHidden(ctx, true);   // the desert dust is camera-anchored — hide it at altitude
+    // (the seated look-pitch is driven per-frame below — shallow when high → steep as you near.)
     showIntroPrompt('');
     startDescentRush();                  // T5.1b — the sustained air-rush of the fall (until impact)
     stopMusicEscape();                   // T5.2 — the tension resolves...
@@ -400,10 +413,36 @@ function tickDescent(ctx: GameContext, dt: number): void {
   }
   intro.scratch.t = (intro.scratch.t as number) + dt;
   const progress = Math.min(1, (intro.scratch.t as number) / DESCENT_DURATION);
-  setDescentProgress(progress);
+  setDescentProgress(progress);          // R1b — drives the pod ALTITUDE (group + colliders) + cabin light + FX
+  // R1b — ride the descending pod: snap the player BODY onto the pod's seat each frame (the
+  // pod floor rides under the body via _syncPodToAltitude, but a direct body-set keeps the
+  // eye exactly on the seat regardless of gravity drift). POSITION ONLY — do NOT touch the
+  // camera rotation (the beat is 'seated' free-look; the player turns their head). The FP
+  // camera re-pins to the body each frame in updatePlayer, so the eye follows the fall.
+  const ds = getPodSpawn(ctx);
+  ctx.player.body.body.setTranslation({ x: ds.x, y: ds.y, z: ds.z }, true);
+  ctx.player.velocityY = 0;
+  ctx.player.cameraSnapNextFrame = true;
+  // R1b — the seated look-pitch tracks the altitude: SHALLOW when high (near the horizon, so the
+  // real dawn horizon + distant desert read through the porthole), STEEPENING to the porthole's
+  // ~22° cap as the pod nears the ground (so the dunes fill the window + rush up at impact). This
+  // gives the real arc — high: sky+horizon+far dunes; low: the desert rushing up — within the
+  // fixed side-porthole's down-look limit. Scripted (overwrites free-look) only on the descent.
+  const pitch = -0.12 - 0.28 * (progress * progress);   // ≈7° high → ≈23° low (eased late)
+  faceControl(ctx, 0, pitch);
   // R1a — RE-ENTRY: blend the real sky from space (1) → the dawn desert sky (0) as the pod drops
-  // into the atmosphere (the orbit dissolves into the real sky; sets up R1b's physical descent).
+  // into the atmosphere (the orbit dissolves into the real sky; the pod physically falls through it).
   setSkyIntroMode(1 - Math.min(1, Math.max(0, (progress - 0.05) / 0.4)));
+  // R1b — THIN the fog hard during the fall. The game's FogExp2 (tuned for ~1 km ground-level
+  // survival visibility) blends the terrain into the sky from a few hundred metres up — so from
+  // altitude the real ground would just read as haze. updateWeather already ran THIS frame, so
+  // overriding density here sticks. A high-altitude clear-air value lets the REAL desert read
+  // through the porthole (far + hazy high, crisp as the ground rushes up); restored at handoff
+  // by updateWeather (the descent overrides only while this beat ticks). Clears more as you near.
+  {
+    const fog = ctx.three.scene.fog as { density?: number } | null;
+    if (fog && 'density' in fog) fog.density = 0.00006 + 0.00006 * progress;   // very thin high → a touch denser low (aerial haze on the far dunes)
+  }
   // T2.2 — RE-ENTRY FX. The plasma + heat-shimmer VISUALS live in setDescentProgress, driven by
   // this SAME curve; here we drive the felt half (shake + flash). Re-entry is HIGH + EARLY (the
   // thin upper atmosphere at hypersonic speed) and DONE before the desert appears, so the plasma

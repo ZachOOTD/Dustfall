@@ -327,3 +327,14 @@ Tell me which to tackle (I can drive the hero visuals with you, or wire T4.3) �
 - **Spend:** ~250K; campaign total ~15.13M (~7M this overnight run, C19-C26); cycle **26/150**.
 - **Commit:** `10c7e5d`.
 - **Verdict: STOP — `milestone-review`** (`status: paused`, `awaiting_approval: true`). The overnight autonomous work is complete; the loop awaits the user.
+
+---
+
+## Cycle 27 — REBUILD v2 R1a + R1b (2026-06-30, attended) — SHIPPED
+- **Context:** the user walk-tested the v1 overnight build + directed a re-architecture (re-ground in the REAL world; ONE physical pod; space = a wrapping skybox; descent = a physical fall into the real desert). Plan: `feature-escape-pod-intro.md` `## REBUILD v2`. Driving R1→R5 via the loop, checkpoint=milestone (the user art-directs each phase).
+- **R1a — real sky "space mode":** `setSkyIntroMode` (`sky.ts`) drives the game's REAL camera-relative sky into space (wrapping stars + a real-scale planet; non-destructive). Removed the fake `buildOrbitView` planes. Wired into the beats. The cockpit window now reads as real orbit.
+- **R1b — descent re-grounded:** the pod physically FALLS through the real desert above the spawn (`setDescentBase` + `setDescentProgress` drives the altitude; body+camera ride down). The viewport shows the REAL terrain + sky. Deleted ~430 lines of fake vista. *Concession:* `DESCENT_ALT`=600m (world + porthole-angle limits; a 3000m "from-orbit" read = R4).
+- **Verify:** verify:all PASS + smoke `{ok:true,beats:12}` + rig (cockpit space; descent 0.3/0.6/0.9 = plasma / real dawn sky / real dunes rushing up).
+- Both delegated to fresh procedural-modeler contexts (deep architectural+visual) while the main loop orchestrates/wires/verifies.
+- **Commit:** `83bba35`.
+- **Next:** R1c — remove the teleport seams (physical continuity pod→crash→wake→exit) → then the R1 milestone (user walk-test of the re-grounded orbit + descent).

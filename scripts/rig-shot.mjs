@@ -1736,16 +1736,47 @@ const SCENARIOS = {
       ctx.flags.paused = true;
       if (descent !== null) { try { g.setDescentProgress(descent); } catch {} }
       if (pull > 0 || snap) { try { g.setParachuteLeverPull(pull, snap); } catch {} }
+      // R1b — mirror tickDescent's fog thinning so the rig sees the SAME real-world descent
+      // view the player gets (the game's survival fog otherwise hazes the ground from altitude).
+      if (descent !== null) {
+        const fog = ctx.three.scene.fog;
+        if (fog && 'density' in fog) fog.density = 0.00006 + 0.00006 * descent;
+      }
       const cam = ctx.three.camera;
       const V = cam.position.constructor;
-      // The seated EYE world position (the spawn + eye offset; the body sits at the spawn).
-      const tr = ctx.player.body.body.translation();
-      const eye = new V(tr.x, tr.y + (ctx.player.eyeOffset || 0.6), tr.z);
+      // R1b — the pod now PHYSICALLY descends (setDescentProgress moves the pod GROUP + the
+      // collider cage to the current altitude). setDescentProgress(descent) above moved the
+      // pod, but NOT the player body, so derive the seated EYE from the POD GROUP world origin
+      // (floor-top centre) — the genuine seated FP eye relative to the descending capsule. The
+      // seat math mirrors getPodSpawn: origin + (halfHeight+radius) for the body centre, +0.35
+      // aft, + the seated eyeOffset for the eye. Falls back to the body if the pod isn't found.
+      const pod0 = ctx.three.scene.getObjectByName('escapePodCabin');
+      let eye;
+      if (pod0) {
+        pod0.updateMatrixWorld(true);
+        const o = pod0.getWorldPosition(new V());
+        const pb = ctx.player.body;
+        const bodyY = o.y + (pb.halfHeight || 0.6) + (pb.radius || 0.3);
+        eye = new V(o.x, bodyY + (ctx.player.eyeOffset || 0.5), o.z + 0.35);
+        // Re-seat the actual body too (so any live tick agrees + nothing snaps it back).
+        pb.body.setTranslation({ x: o.x, y: bodyY, z: o.z + 0.35 }, true);
+      } else {
+        const tr = ctx.player.body.body.translation();
+        eye = new V(tr.x, tr.y + (ctx.player.eyeOffset || 0.6), tr.z);
+      }
       cam.position.copy(eye);
       // Look directions in the pod-local frame: −Z is forward (viewport), +X is right
       // (the parachute lever / console), −X is left (the eject control).
       let look;
-      if (angle === 'forward' || angle === 'descent') look = new V(eye.x, eye.y - 0.08, eye.z - 1);
+      if (angle === 'forward') look = new V(eye.x, eye.y - 0.08, eye.z - 1);
+      // R1b — the DESCENT look pitch tracks altitude (matches tickDescent): SHALLOW high (the
+      // horizon + far dunes read) → STEEP low (the desert rushes up). pitch = -0.12 - 0.28·p².
+      else if (angle === 'descent') {
+        const dp = descent !== null ? descent : 0.7;
+        const pitch = -0.12 - 0.28 * (dp * dp);
+        look = new V(eye.x, eye.y + Math.tan(pitch), eye.z - 1);
+      }
+      else if (angle === 'down') look = new V(eye.x, eye.y - 1.0, eye.z - 0.45);   // R1b probe — look DOWN-and-out the porthole at the approaching ground
       else if (angle === 'lever') look = new V(eye.x + 1, eye.y - 0.25, eye.z - 0.55);
       else if (angle === 'eject') look = new V(eye.x - 0.9, eye.y - 0.25, eye.z - 0.8);
       else if (angle === 'wide') look = new V(eye.x + 0.7, eye.y - 0.1, eye.z - 0.7);
@@ -1753,11 +1784,17 @@ const SCENARIOS = {
       else look = new V(eye.x, eye.y - 0.08, eye.z - 1);
       cam.lookAt(look);
       cam.updateMatrixWorld(true);
-      // Report: is the cabin built? mesh count? eye height above floor?
+      // Report: is the cabin built? mesh count? eye world pos? pod altitude above the spawn?
       const pod = ctx.three.scene.getObjectByName('escapePodCabin');
       let meshes = 0;
       if (pod) pod.traverse((o) => { if (o.isMesh) meshes++; });
-      return { found: !!pod, meshes, eye: [+eye.x.toFixed(2), +eye.y.toFixed(2), +eye.z.toFixed(2)] };
+      const rp = ctx.intro && ctx.intro.returnPos ? ctx.intro.returnPos : null;
+      const podY = pod ? +pod.getWorldPosition(new V()).y.toFixed(1) : null;
+      const altAboveSpawn = (pod && rp) ? +(pod.getWorldPosition(new V()).y - rp.y).toFixed(1) : null;
+      return {
+        found: !!pod, meshes, eye: [+eye.x.toFixed(2), +eye.y.toFixed(2), +eye.z.toFixed(2)],
+        podY, altAboveSpawn, spawn: rp ? [+rp.x.toFixed(1), +rp.y.toFixed(1), +rp.z.toFixed(1)] : null,
+      };
     }, { angle, pull, snap, descent });
     await page.waitForTimeout(300);
     const dtag = descent !== null ? `-d${String(descent).replace('.', '')}` : '';
