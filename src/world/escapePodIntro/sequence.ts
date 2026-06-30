@@ -675,6 +675,11 @@ export function updateEscapePodIntro(ctx: GameContext, dt: number): void {
     // handoff (the wreck + the hint from stepOut), not as an intro beat — the hero pass is Phase 4.
     default: break;
   }
+  // R1a — NO DUST IN SPACE. updateWeather/updateAmbientDust/updateDustMotes run BEFORE this in
+  // the tick and re-show their particles every frame, so a one-time hide gets overwritten — keep
+  // it suppressed each frame here (this runs after them) through the space/ship/descent/crash
+  // beats; stepOut restores the desert atmosphere when the player steps out into the dunes.
+  if (intro.beat !== 'stepOut' && intro.beat !== 'done') setIntroAtmosphereHidden(ctx, true);
   // C18 — the phase-transition dip-to-black fades in (1→0) over the new beat. Only on the
   // descent-chain cinematic beats (shipExplode owns a blast flash; impact/wake own the black).
   if (_phaseFade > 0) {
