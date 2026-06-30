@@ -23,6 +23,7 @@ import { startEscapePodIntro, endEscapePodIntro, jumpToBeat as jumpToIntroBeat, 
 import { placeCrashedPodWreck, setDescentProgress as setPodDescent, setParachuteLeverPull as setPodChute } from '../world/escapePodIntro/podScene.ts';   // T1.1/T1.2 — __game.placeCrashedPod / setDescentProgress / setParachuteLeverPull (pod rig-shots)
 import { buildHaulerExterior, disposeHaulerExterior } from '../world/escapePodIntro/haulerScene.ts';   // T3.1 — __game.buildHauler / disposeHauler (hauler-exterior rig-shots)
 import { setCockpitAlert as setShipCockpitAlert, setShipAlert as setShipRedAlert, setEngineFire as setShipEngineFire } from '../world/escapePodIntro/shipScene.ts';   // T3.3/T3.4 — __game.setCockpitAlert / setShipAlert / setEngineFire (alert escalation + the disaster rig-shot)
+import { setSkyIntroMode } from '../world/sky.ts';   // REBUILD v2 R1a — __game.setSkyIntroMode (space mode for the orbit/cockpit beats)
 import { makeLatheHull, fuselageProfile, makeFormerRings, makeBreach, makeSandMound } from '../world/wreckForms.ts';
 import { createRustedHullMaterial, HULL_WEATHERING_ACAY } from '../world/hullMaterial.ts';
 import { placeProcgenComposite, type ProcgenWreckClass } from '../world/procgenWreck.ts';
@@ -78,6 +79,11 @@ interface DebugApi {
   setCockpitAlert: (level: 0 | 1 | 2) => void;
   setShipAlert: (level: 0 | 2, strobe?: number) => void;
   setEngineFire: (intensity: number, t?: number) => void;
+  /** Escape-pod REBUILD v2 R1a — drive the real sky into "space mode" (0 = normal
+   *  game sky, 1 = full in-orbit: black dome, no clouds, full stars, a real-scale
+   *  planet + atmosphere limb). The orbit/cockpit beats turn it on; re-entry eases
+   *  it back to 0. For the cockpit rig-shot (--space) + the space beats. */
+  setSkyIntroMode: (space01: number) => void;
   setStats: (s: {
     thirst?: number;
     temperature?: number;
@@ -289,6 +295,7 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
     buildHauler: () => { buildHaulerExterior(ctx); },
     disposeHauler: () => { disposeHaulerExterior(ctx); },
     setCockpitAlert: (level) => { setShipCockpitAlert(level); },
+    setSkyIntroMode: (space01) => { setSkyIntroMode(space01); },
     setShipAlert: (level, strobe) => { setShipRedAlert(level, strobe); },
     setEngineFire: (intensity, t) => { setShipEngineFire(intensity, t); },
     sunInfo: () => ({

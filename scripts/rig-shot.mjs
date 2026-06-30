@@ -1889,7 +1889,10 @@ const SCENARIOS = {
     const angle = argv.angle || 'forward';
     const stand = !!argv.stand;
     const alert = argv.alert !== undefined ? Number(argv.alert) : 0;
-    await page.evaluate(() => {
+    const space = argv.space !== undefined ? Number(argv.space === true ? 1 : argv.space) : 0; // REBUILD v2 R1a — --space[=0..1] drives the orbit sky
+    const hideStars = !!argv.hidestars;
+    await page.evaluate(({ space, hideStars }) => {
+      window.__RIG_HIDESTARS = hideStars;
       const g = window.__game;
       const ctx = g.ctx;
       // First-person seated read; hide the rig so it doesn't block the FP camera.
@@ -1904,16 +1907,31 @@ const SCENARIOS = {
       // controller builds the ship + seats the player facing −Z (the genuine FP frame).
       g.startIntro();
       g.jumpToBeat('cockpit');
+      // REBUILD v2 R1a — drive the real sky into space mode so the window reads as orbit.
+      if (space > 0) {
+        try { g.setSkyIntroMode(space); } catch {}
+        // Vacuum cabin has no floating dust — suppress the camera-anchored mote/dust
+        // layers (these are atmospheric, not orbital). The space BEATS must do the same
+        // (coordinator handoff); here we mirror that so the sky read is clean.
+        try { if (ctx.dustMotes) ctx.dustMotes.particles.visible = false; } catch {}
+        try { if (ctx.ambientDust) ctx.ambientDust.particles.visible = false; } catch {}
+        try { for (const k of ['near', 'mid', 'far']) { const L = ctx.weather.layers && ctx.weather.layers[k]; if (L && L.particles) L.particles.visible = false; } } catch {}
+      } else { try { g.setSkyIntroMode(0); } catch {} }   // control: prove space-mode off = normal sky
       ctx.three.renderer.setSize(1100, 760, false);
       const cam = ctx.three.camera;
       if (cam.isPerspectiveCamera) { cam.aspect = 1100 / 760; cam.updateProjectionMatrix(); }
-    });
+    }, { space, hideStars });
     // Let the beat controller tick (page RAF) so the ship builds + the player seats.
     await page.waitForTimeout(700);
     const meas = await page.evaluate(({ angle, stand, alert }) => {
       const g = window.__game;
       const ctx = g.ctx;
       if (alert > 0) { try { g.setCockpitAlert(alert); } catch {} }
+      // REBUILD v2 R1a debug — --hidestars proves whether the top speckles are the
+      // real star sphere (set the env via argv passthrough below).
+      if (window.__RIG_HIDESTARS) {
+        ctx.three.scene.traverse((o) => { if (o.isPoints && o.renderOrder === -0.5) o.visible = false; });
+      }
       ctx.flags.paused = true;
       const cam = ctx.three.camera;
       const V = cam.position.constructor;
@@ -1965,7 +1983,7 @@ const SCENARIOS = {
       return { found: !!ship, meshes, eye: [+eye.x.toFixed(2), +eye.y.toFixed(2), +eye.z.toFixed(2)], alert };
     }, { angle, stand, alert });
     await page.waitForTimeout(300);
-    const tag = `cockpit-${angle}${stand ? '-stand' : ''}${alert > 0 ? '-a' + alert : ''}`;
+    const tag = `cockpit-${angle}${stand ? '-stand' : ''}${alert > 0 ? '-a' + alert : ''}${space > 0 ? '-space' + (space === 1 ? '' : space) : ''}${hideStars ? '-nostars' : ''}`;
     await page.screenshot({ path: join(OUT, `scen-${tag}.png`), fullPage: false });
     console.log(`[cockpit] ${JSON.stringify(meas)} → scen-${tag}.png`);
   },

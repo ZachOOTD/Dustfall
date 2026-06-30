@@ -50,6 +50,28 @@ interface SkyBundle {
 
 let bundle: SkyBundle | null = null;
 
+// ── REBUILD v2 R1a — SPACE MODE state (intro-only; 0 = normal sky, untouched).
+interface SpacePlanet {
+  group: THREE.Group;       // camera-anchored; holds the planet body + atmo limb
+  planet: THREE.Mesh;
+  planetMat: THREE.ShaderMaterial;
+  atmoMat: THREE.ShaderMaterial;
+}
+let _space01 = 0;                          // 0 normal → 1 full space
+let _spacePlanet: SpacePlanet | null = null;
+let _spaceScene: THREE.Scene | null = null;  // remembered so we can lazily attach the planet
+// A fixed WORLD direction for the orbit planet (off to one side + below the
+// forward sightline so it reads "below you" out the window). Normalized below.
+const _SPACE_PLANET_DIR = new THREE.Vector3(0.24, -0.04, -1).normalize();
+const _SPACE_PLANET_DISTANCE = 380;        // < SKY_SPHERE_RADIUS (480): sits inside the dome, in front of the stars
+const _SPACE_PLANET_RADIUS = 82;           // a large distant world framed IN the window (ang. radius ~12°)
+// Fixed orbit sun-light dir (side-on so the terminator curves across the crown).
+const _SPACE_LIGHT = new THREE.Vector3(-0.78, 0.40, 0.30).normalize();
+// Near-black space dome colors (the cloud-free orbit void).
+const _SPACE_TOP = new THREE.Color(0x01020a);
+const _SPACE_HORIZON = new THREE.Color(0x03050f);
+const _spacePlanetPos = new THREE.Vector3();
+
 const _topColor = new THREE.Color();
 const _horizonColor = new THREE.Color();
 const _sunColor = new THREE.Color();
@@ -124,6 +146,139 @@ void main() {
   if (a < 0.01) discard;
   gl_FragColor = vec4(uColor, a);
 }
+`;
+
+// ── REBUILD v2 R1a — SPACE MODE (intro-only). A "space mode" drives the SAME
+// real sky into an in-orbit look: a near-black dome, clouds killed, stars at full
+// brightness, + a LARGE camera-relative planet with a Fresnel atmosphere limb.
+// setSkyIntroMode(space01) blends 0 (the normal game sky, byte-unchanged) → 1
+// (full space). The intro turns it on for the orbit/cockpit beats and back to 0
+// at re-entry. Nothing here runs unless space01 > 0 — the default sky is untouched.
+//
+// The planet/atmosphere shaders reuse the proven shipScene orbit idiom (a banded
+// desert planet + a soft blue limb), but built as a camera-relative celestial body
+// in the real wrapping sky (NOT a flat plane in the cockpit). Light dir is fixed so
+// the day/night terminator curves across the crown.
+const SPACE_PLANET_VS = /* glsl */ `
+  varying vec3 vPos;
+  varying vec3 vONrm;
+  varying vec3 vVNrm;
+  varying vec3 vView;
+  void main(){
+    vPos = normalize(position);
+    vONrm = normalize(normal);
+    vVNrm = normalize(normalMatrix * normal);
+    vec4 mv = modelViewMatrix * vec4(position, 1.0);
+    vView = normalize(-mv.xyz);
+    gl_Position = projectionMatrix * mv;
+  }
+`;
+const SPACE_PLANET_FS = /* glsl */ `
+  precision highp float;
+  varying vec3 vPos;
+  varying vec3 vONrm;
+  varying vec3 vVNrm;
+  varying vec3 vView;
+  uniform vec3 uLightDir;
+  uniform float uOpacity;
+  float hash(vec3 p){ p = fract(p*0.3183099+0.1); p*=17.0; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
+  float vnoise(vec3 x){
+    vec3 p=floor(x), f=fract(x); f=f*f*(3.0-2.0*f);
+    return mix(mix(mix(hash(p+vec3(0,0,0)),hash(p+vec3(1,0,0)),f.x),
+                   mix(hash(p+vec3(0,1,0)),hash(p+vec3(1,1,0)),f.x),f.y),
+               mix(mix(hash(p+vec3(0,0,1)),hash(p+vec3(1,0,1)),f.x),
+                   mix(hash(p+vec3(0,1,1)),hash(p+vec3(1,1,1)),f.x),f.y),f.z);
+  }
+  float fbm(vec3 p){ float a=0.5,s=0.0; for(int i=0;i<4;i++){ s+=a*vnoise(p); p*=2.03; a*=0.5; } return s; }
+  float terrain(vec3 d){
+    float bands = sin(d.y*8.0 + fbm(d*1.8)*3.4)*0.5+0.5;
+    float cont  = fbm(d*1.7 + 2.0);
+    float mott  = fbm(d*3.6 + 5.0);
+    float fine  = fbm(d*8.5 + 11.0);
+    cont = smoothstep(0.28, 0.74, cont);
+    float h = cont*0.52 + bands*0.26 + mott*0.24;
+    h = mix(h, h*0.60 + fine*0.40, 0.66);
+    return h;
+  }
+  void main(){
+    vec3 n = normalize(vONrm);
+    vec3 d = normalize(vPos);
+    vec3 L = normalize(uLightDir);
+    float lat = d.y;
+    float h = terrain(d);
+    vec3 t1 = normalize(cross(n, vec3(0.0,1.0,0.0)) + vec3(1e-4));
+    vec3 t2 = normalize(cross(n, t1));
+    float e = 0.010;
+    float hx = terrain(normalize(d + t1*e)) - h;
+    float hy = terrain(normalize(d + t2*e)) - h;
+    vec3 rn = normalize(n - (t1*hx + t2*hy) * 2.6 * 26.0);
+    vec3 cRust = vec3(0.34,0.15,0.08);
+    vec3 cBody = vec3(0.70,0.43,0.23);
+    vec3 cTan  = vec3(0.94,0.74,0.50);
+    vec3 cPolar= vec3(0.91,0.84,0.73);
+    vec3 albedo = mix(cRust, cBody, smoothstep(0.14,0.50,h));
+    albedo = mix(albedo, cTan, smoothstep(0.50,0.88,h));
+    albedo = mix(albedo, cPolar, smoothstep(0.74,0.98,abs(lat))*0.55);
+    float ndlGeo = dot(n, L);
+    float day = smoothstep(-0.10, 0.34, ndlGeo);
+    float ndlSurf = max(dot(rn, L), 0.0);
+    // Softer lit-side gain so the day hemisphere doesn't blow out to flat white at
+    // exposure (the round-1 "glowing egg" read) — keep the curve readable.
+    float shade = 0.16 + 0.92*pow(ndlSurf, 0.85);
+    float ao = mix(1.0, 0.60 + 0.40*smoothstep(0.25, 0.65, h), 0.55);
+    vec3 sun = vec3(1.02,0.93,0.80);
+    vec3 lit = albedo * shade * ao * sun;
+    vec3 dark = albedo * 0.045 + vec3(0.010,0.016,0.028);
+    vec3 col = mix(dark, lit, day);
+    float term = day*(1.0-day)*4.0;
+    col += vec3(0.66,0.30,0.11) * term * 0.7;
+    float vrim = pow(1.0 - max(dot(normalize(vVNrm), normalize(vView)), 0.0), 2.6);
+    vec3 air = vec3(0.30,0.52,0.92);
+    col += air * vrim * day * 0.42;
+    gl_FragColor = vec4(col, uOpacity);
+  }
+`;
+const SPACE_ATMO_VS = /* glsl */ `
+  varying vec3 vNrm;
+  varying vec3 vView;
+  varying float vNdl;
+  uniform vec3 uLightDir;
+  void main(){
+    vNrm = normalize(normalMatrix * normal);
+    vec4 mv = modelViewMatrix * vec4(position, 1.0);
+    vView = normalize(-mv.xyz);
+    vNdl = dot(normalize(normal), normalize(uLightDir));
+    gl_Position = projectionMatrix * mv;
+  }
+`;
+const SPACE_ATMO_FS = /* glsl */ `
+  precision highp float;
+  varying vec3 vNrm;
+  varying vec3 vView;
+  varying float vNdl;
+  uniform float uOpacity;
+  void main(){
+    vec3 n = normalize(vNrm);
+    vec3 v = normalize(vView);
+    float rim = clamp(1.0 - max(dot(n, v), 0.0), 0.0, 1.0);
+    float halo  = pow(rim, 1.05);
+    float core  = pow(rim, 3.5) * 0.55;
+    float outer = pow(rim, 0.45) * 0.45;
+    float fres = halo + core + outer;
+    float day = smoothstep(-0.55, 0.10, vNdl);
+    float k = clamp(vNdl, 0.0, 1.0);
+    // Bluer, less white-hot limb so it reads as an AIR halo, not a glowing rim.
+    vec3 blue  = vec3(0.30, 0.58, 1.10);
+    vec3 white = vec3(0.62, 0.74, 0.92);
+    vec3 warm  = vec3(0.95, 0.44, 0.18);
+    vec3 tint = mix(warm, white, smoothstep(0.0, 0.30, k));
+    tint = mix(tint, blue, smoothstep(0.18, 0.55, k));
+    float glow = fres * day * 0.55;
+    float twilight = smoothstep(-0.55, -0.20, vNdl) * (1.0 - day) * core;
+    vec3 col = tint * glow + vec3(0.18, 0.30, 0.55) * twilight * 0.5;
+    float alpha = (glow + twilight * 0.5) * uOpacity;
+    gl_FragColor = vec4(col, alpha);
+  }
 `;
 
 export const SKY_VERTEX = /* glsl */ `
@@ -337,6 +492,7 @@ export function buildStarGeometry(): THREE.BufferGeometry {
 }
 
 export function createSky(scene: THREE.Scene): void {
+  _spaceScene = scene;   // REBUILD v2 R1a — remembered so space-mode can lazily attach its planet
   const sphereGeo = new THREE.SphereGeometry(Tuning.SKY_SPHERE_RADIUS, 32, 18);
   const sphereMat = new THREE.ShaderMaterial({
     vertexShader: SKY_VERTEX,
@@ -497,6 +653,78 @@ export function createSky(scene: THREE.Scene): void {
     planet, planetMat, shooters,
     nextShooterAt: Tuning.SHOOTING_STAR_MIN_INTERVAL,
   };
+}
+
+// ── REBUILD v2 R1a — SPACE MODE planet (lazy). A LARGE camera-relative celestial
+// body in the real sky: a banded desert planet body + a soft Fresnel atmosphere
+// limb. Built once on first space-mode use; depthTest off + renderOrder ordered so
+// it draws OVER the stars (the body fills, occluding stars behind it) but behind the
+// sun/moon sprites. Faded by uOpacity = space01 so it cross-blends in/out cleanly.
+function buildSpacePlanet(scene: THREE.Scene): SpacePlanet {
+  const group = new THREE.Group();
+  group.frustumCulled = false;
+
+  const planetGeo = new THREE.SphereGeometry(_SPACE_PLANET_RADIUS, 96, 64);
+  const planetMat = new THREE.ShaderMaterial({
+    vertexShader: SPACE_PLANET_VS,
+    fragmentShader: SPACE_PLANET_FS,
+    uniforms: {
+      uLightDir: { value: _SPACE_LIGHT.clone() },
+      uOpacity: { value: 0 },
+    },
+    transparent: true,    // so uOpacity can cross-fade the body in/out
+    depthWrite: false,
+    depthTest: false,
+    fog: false,
+    toneMapped: true,
+  });
+  const planet = new THREE.Mesh(planetGeo, planetMat);
+  planet.renderOrder = -0.4;   // after stars (-0.5), before sun/moon (0)
+  planet.frustumCulled = false;
+  group.add(planet);
+
+  // Atmosphere limb — a slightly larger back-side shell, additive blue rim.
+  const atmoGeo = new THREE.SphereGeometry(_SPACE_PLANET_RADIUS * 1.06, 80, 56);
+  const atmoMat = new THREE.ShaderMaterial({
+    vertexShader: SPACE_ATMO_VS,
+    fragmentShader: SPACE_ATMO_FS,
+    uniforms: {
+      uLightDir: { value: _SPACE_LIGHT.clone() },
+      uOpacity: { value: 0 },
+    },
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    side: THREE.BackSide,
+    depthWrite: false,
+    depthTest: false,
+    fog: false,
+    toneMapped: false,
+  });
+  const atmo = new THREE.Mesh(atmoGeo, atmoMat);
+  atmo.renderOrder = -0.39;    // just after the body, before sprites
+  atmo.frustumCulled = false;
+  group.add(atmo);
+
+  scene.add(group);
+  return { group, planet, planetMat, atmoMat };
+}
+
+/**
+ * REBUILD v2 R1a — drive the real sky into a "space mode" for the intro.
+ * @param space01 0 = the normal game sky (BYTE-UNCHANGED — the default), 1 = full
+ *   in-orbit space: a near-black dome, clouds killed, stars at full brightness, +
+ *   a large camera-relative planet with an atmosphere limb. Intermediate values
+ *   cross-blend (re-entry eases space01 → 0 to dissolve into the real dawn sky).
+ *   Intro-ONLY: call setSkyIntroMode(0) to fully restore the normal sky.
+ * The effect is applied at the END of updateSky each frame, so it overrides the
+ * day/night gradient cleanly while space-mode is on and leaves zero residue at 0.
+ */
+export function setSkyIntroMode(space01: number): void {
+  _space01 = Math.max(0, Math.min(1, space01));
+  // Lazily build the planet the first time we actually enter space.
+  if (_space01 > 0.001 && !_spacePlanet && _spaceScene) {
+    _spacePlanet = buildSpacePlanet(_spaceScene);
+  }
 }
 
 /** Pick an unused shooter and arm it with a random origin + travel arc. */
@@ -730,5 +958,50 @@ export function updateSky(ctx: GameContext, dt: number): void {
   } else if (nightVisibility <= 0.02) {
     // Reset the timer when fully bright so we don't fire 4 in a row at dusk.
     bundle.nextShooterAt = ctx.time.elapsed + Tuning.SHOOTING_STAR_MIN_INTERVAL;
+  }
+
+  // ── REBUILD v2 R1a — SPACE MODE override (intro-only). Applied LAST so it
+  // cleanly overrides the day/night gradient while on, and leaves zero residue at
+  // space01=0 (the normal sky is byte-unchanged). Blends by _space01.
+  applySpaceMode(cam);
+}
+
+/** Blend the real sky toward the in-orbit "space mode" by _space01 (0..1). At 0
+ *  this is a pure no-op except hiding the (already-hidden) planet. */
+function applySpaceMode(cam: THREE.Vector3): void {
+  if (!bundle) return;
+  const s = _space01;
+  const planetVisible = !!_spacePlanet && s > 0.001;
+  if (_spacePlanet) _spacePlanet.group.visible = planetVisible;
+  if (s <= 0.001) {
+    // Fully restore any uniform space-mode lifts so the normal sky is byte-unchanged.
+    bundle.starsMat.uniforms.uBrightness.value = Tuning.STAR_BRIGHTNESS;
+    return;
+  }
+
+  const sphU = bundle.sphereMat.uniforms;
+  // Dome → near-black space void (lerp from whatever the day/night pass set).
+  sphU.uTopColor.value.lerp(_SPACE_TOP, s);
+  sphU.uHorizonColor.value.lerp(_SPACE_HORIZON, s);
+  // Kill the desert clouds bleeding through the window.
+  sphU.uCloudiness.value *= (1 - s);
+  // Drop the atmospheric sun halo in vacuum (no air to scatter it).
+  sphU.uSunGlow.value *= (1 - s * 0.9);
+
+  // Stars at full brightness in space (they may be dimmed/killed by daylight), and
+  // lift the per-star gain so the field reads richly against the black orbit void.
+  const starsU = bundle.starsMat.uniforms;
+  starsU.uOpacity.value = Math.max(starsU.uOpacity.value, s);
+  starsU.uBrightness.value = THREE.MathUtils.lerp(Tuning.STAR_BRIGHTNESS, 2.1, s);
+
+  // The small distant-planet SPRITE is replaced by the big celestial body — fade it out.
+  bundle.planetMat.opacity *= (1 - s);
+
+  // Position + light the large camera-relative planet.
+  if (_spacePlanet) {
+    _spacePlanetPos.copy(cam).addScaledVector(_SPACE_PLANET_DIR, _SPACE_PLANET_DISTANCE);
+    _spacePlanet.group.position.copy(_spacePlanetPos);
+    _spacePlanet.planetMat.uniforms.uOpacity.value = s;
+    _spacePlanet.atmoMat.uniforms.uOpacity.value = s;
   }
 }

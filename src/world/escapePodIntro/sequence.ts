@@ -44,6 +44,7 @@ import { buildPodScene, disposePodScene, getPodSpawn, setDescentProgress, setTum
 import { setGameHudHidden, showIntroPrompt, hideIntroPrompt, setIntroBlack } from './introHud.ts';
 import { flashScreen } from '../../fx/screenFlash.ts';
 import { addTrauma } from '../../fx/cameraShake.ts';
+import { setSkyIntroMode } from '../sky.ts';   // REBUILD v2 R1a — drive the real sky into "space mode" for orbit, ease to dawn at re-entry
 import {
   ensureAudioStarted, playEjectThunk, playExplosionBoom, playKlaxon, playHullGroan,
   playReentryRumble, playLeverClick, playLeverSnap, playDoorBlow, playCrashImpact,
@@ -125,6 +126,20 @@ function faceControl(ctx: GameContext, yaw: number, pitch: number): void {
   ctx.three.camera.rotation.order = 'YXZ';
   ctx.three.camera.rotation.set(pitch, yaw, 0);
   ctx.player.cameraSnapNextFrame = true;
+}
+
+/** R1a — hide/restore the desert ATMOSPHERE (dust motes + ambient dust + the 3 weather dust
+ *  layers) during the intro. They're camera-anchored, so in orbit/descent they read as junk
+ *  floating in "vacuum"; restored at the desert handoff. Null-guarded (a system may be absent
+ *  in a rig/headless run). */
+function setIntroAtmosphereHidden(ctx: GameContext, hidden: boolean): void {
+  const vis = !hidden;
+  const layers = ctx.weather?.layers;
+  if (layers) for (const k of ['near', 'mid', 'far'] as const) {
+    const p = layers[k]?.particles; if (p) p.visible = vis;
+  }
+  const am = ctx.ambientDust?.particles; if (am) am.visible = vis;
+  const dm = ctx.dustMotes?.particles; if (dm) dm.visible = vis;
 }
 
 /** The intro beats, in order (Beats 0-11 of the vision; `done` = handed off). */
@@ -240,6 +255,8 @@ export function endEscapePodIntro(ctx: GameContext): void {
   disposePodScene(ctx);
   removeWakeInterior(ctx);   // T4.1 — tear down the wake interior on any exit (skip/jump/end)
   stopAllIntroLoops();       // T5.1b — stop any ambient loop (cockpit hum / descent rush) on any exit
+  setSkyIntroMode(0);                  // R1a — restore the normal game sky on any exit
+  setIntroAtmosphereHidden(ctx, false); // R1a — restore the desert atmosphere on any exit
 }
 
 /** Cockpit beat (T0.2a/b) — on first entry, build the greybox ship, hide the game HUD,
@@ -253,6 +270,8 @@ function tickCockpit(ctx: GameContext, dt: number): void {
     buildShipScene(ctx);
     seatPlayerAt(ctx, getShipSpawn(ctx));
     startCockpitHum();                          // T5.1b — the calm in-orbit ambient bed (until eject)
+    setSkyIntroMode(1);                         // R1a — the REAL sky in space mode (wrapping stars + planet through the window)
+    setIntroAtmosphereHidden(ctx, true);        // R1a — no desert dust floating in orbit
     intro.mode = 'seated';                      // open seated, looking at the planet
     intro.scratch.shipBuilt = true;
     intro.scratch.dwell = 0;
@@ -382,6 +401,9 @@ function tickDescent(ctx: GameContext, dt: number): void {
   intro.scratch.t = (intro.scratch.t as number) + dt;
   const progress = Math.min(1, (intro.scratch.t as number) / DESCENT_DURATION);
   setDescentProgress(progress);
+  // R1a — RE-ENTRY: blend the real sky from space (1) → the dawn desert sky (0) as the pod drops
+  // into the atmosphere (the orbit dissolves into the real sky; sets up R1b's physical descent).
+  setSkyIntroMode(1 - Math.min(1, Math.max(0, (progress - 0.05) / 0.4)));
   // T2.2 — RE-ENTRY FX. The plasma + heat-shimmer VISUALS live in setDescentProgress, driven by
   // this SAME curve; here we drive the felt half (shake + flash). Re-entry is HIGH + EARLY (the
   // thin upper atmosphere at hypersonic speed) and DONE before the desert appears, so the plasma
@@ -565,6 +587,8 @@ function tickStepOut(ctx: GameContext, dt: number): void {
     // descent's dawn; the game otherwise starts mid-morning at START_DAY_TIME). 0.26 = just past
     // dawn — a low, warm sun raking the dunes.
     ctx.time.dayTime = 0.26;
+    setSkyIntroMode(0);                  // R1a — the REAL dawn desert sky (space mode fully off)
+    setIntroAtmosphereHidden(ctx, false); // R1a — the desert dust/atmosphere returns
     // T4.1 — NO teleport: the player ALREADY walked out into the desert (the wake beat). Tear
     // down the wake interior + leave the crashed pod wreck where they climbed out (behind them,
     // "the pod you crawled out of"). The wreck PERSISTS into the real game (the salvage target).
