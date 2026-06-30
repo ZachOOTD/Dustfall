@@ -44,6 +44,10 @@ import { buildPodScene, disposePodScene, getPodSpawn, setDescentProgress, setTum
 import { setGameHudHidden, showIntroPrompt, hideIntroPrompt, setIntroBlack } from './introHud.ts';
 import { flashScreen } from '../../fx/screenFlash.ts';
 import { addTrauma } from '../../fx/cameraShake.ts';
+import {
+  ensureAudioStarted, playEjectThunk, playExplosionBoom, playKlaxon, playHullGroan,
+  playReentryRumble, playLeverClick, playLeverSnap, playDoorBlow, playCrashImpact,
+} from '../../audio/audio.ts';   // T5.1 — the intro SFX arc
 
 /** Seconds the cockpit opens SEATED (looking at the planet) before control + the cue. */
 const COCKPIT_DWELL = 3.0;
@@ -183,6 +187,7 @@ export function startEscapePodIntro(ctx: GameContext, force = false): void {
   if (!force && !FEATURES.escapePodIntro) return;
   // Capture the desert spawn NOW — setupOpeningScene placed the player there at boot, and
   // we're about to teleport them to the ship; stepOut hands back to this position (R3).
+  ensureAudioStarted();   // T5.1 — the intro starts on a new-game click; make the audio ctx ready for the beat SFX
   const t = ctx.player.body.body.translation();
   ctx.intro = {
     active: true,
@@ -292,6 +297,9 @@ function tickCorridor(ctx: GameContext, dt: number): void {
       setCockpitAlert(2);           // E2 escalation — the bridge console hits HULL BREACH (seen if you glance back)
       flashScreen(0xffd0a0, 0.55);  // the blast flash
       addTrauma(0.55);              // a ONE-TIME concussive jolt (one-shot — never per-frame, which would saturate/spin the view)
+      playExplosionBoom();          // T5.1 — the engine blast
+      playHullGroan();             // T5.1 — the ship groans, dying
+      playKlaxon();                // T5.1 — the red-alert alarm
       showIntroPrompt('🔥 ENGINE FIRE — GET TO THE ESCAPE POD!');
     }
     return;
@@ -330,6 +338,8 @@ function tickShipExplode(ctx: GameContext, dt: number): void {
   if (!intro) return;
   if (!intro.scratch.init) {
     flashScreen(0xffe6c0, 0.85);    // the blast flash (the ship dies)
+    playEjectThunk();                // T5.1 — the eject fires
+    playExplosionBoom();             // T5.1 — the ship explodes
     disposeShipScene(ctx);           // the ship is gone after the blast (greybox; hero ship = Phase 3)
     showIntroPrompt('');
     setDescentProgress(0);           // the orbital vista (planet + stars) through the window
@@ -374,6 +384,7 @@ function tickDescent(ctx: GameContext, dt: number): void {
   // the fall stays perfectly smooth + serene. Only one soft entry FLASH punctuates it.
   if (progress >= 0.24 && !intro.scratch.reFlash) {
     flashScreen(0xfff2e6, 0.55);     // a soft warm flash as you punch into the atmosphere
+    playReentryRumble();             // T5.1 — the swelling re-entry roar (then it passes)
     intro.scratch.reFlash = true;
   }
   if (progress >= 1) advanceBeat(ctx);   // → parachute
@@ -422,12 +433,14 @@ function tickParachute(ctx: GameContext, dt: number): void {
     intro.scratch.leverT = 1;        // jab the lever to full-pull (then it springs back)
     setParachuteLeverPull(1);
     addTrauma(0.35);   // each yank jolts the pod
+    playLeverClick();  // T5.1 — the stiff mechanical yank
     const pulls = intro.scratch.pulls as number;
     if (pulls >= PARACHUTE_PULLS) {
       // The 3rd pull — the lever snaps off. No chute.
       intro.scratch.snapped = true;
       intro.scratch.t = 0;
       setParachuteLeverPull(1, true);
+      playLeverSnap();   // T5.1 — the lever breaks off (no chute)
       flashScreen(0xffffff, 0.25);
       showIntroPrompt('The lever snaps off.');
     } else {
@@ -444,6 +457,7 @@ function tickImpact(ctx: GameContext, dt: number): void {
   if (!intro.scratch.init) {
     flashScreen(0xffffff, 1.0);
     addTrauma(1.0);
+    playCrashImpact(0);   // T5.1 — the crash (a big near boom + sub rumble)
     showIntroPrompt('');
     intro.scratch.t = 0;
     intro.scratch.init = true;
@@ -500,6 +514,7 @@ function tickWake(ctx: GameContext, dt: number): void {
     if (pulledLever(ctx) || t > WAKE_BLOW_FALLBACK) {
       flashScreen(0xfff0d8, 0.4);
       addTrauma(0.5);                 // a ONE-TIME kick as the hatch blows off (not per-frame)
+      playDoorBlow();                 // T5.1 — the hatch kicks off (metal bang + debris)
       showIntroPrompt('');
       intro.scratch.phase = 'blowing';
       intro.scratch.blowT = 0;

@@ -27,18 +27,19 @@ needed). The user wakes to a fully-playable intro end-to-end + a hero-visual art
 - **T3.3 cockpit surface-fidelity** — the real cockpit (`shipScene.ts`), much improved, `rig-shot --scenario=cockpit`. Gate: flat untextured walls, no rivets-as-geometry, blank CRT text, candy-button gauges, blank photo, flat lighting, planet cropped too big. The OPENING SHOT reads but needs the user's eye.
 - **T3.2 explosion FX** + the **hero corridor geometry** — deferred with them.
 
-**✅ SHIPPED (overnight, main-loop logic):** T3.4 disaster staging (C21 — corridor fire/red-alert/flee) · T4.1 impact + WAKE-INSIDE-POD
-+ BLOW-DOOR (C22 — the C18 req: wake inside the crashed pod at the desert, kick the hatch open, walk out; `buildWakeInterior`/
-`blowWakeHatch` + reworked wake/stepOut; `--scenario=wake` rig).
+**✅ SHIPPED (overnight, main-loop logic):** T3.4 disaster staging (C21) · T4.1 WAKE-INSIDE-POD + BLOW-DOOR (C22, the C18 req) ·
+T4.2 DESERT REVEAL (C23 — dawn handoff + aftermath-silence pacing E7 + the horizon-hook emergence E8) · T5.1a INTRO SFX (C24 —
+8 procedural Web-Audio one-shots wired to the beats: eject/explosion/klaxon/hull-groan/re-entry/lever-click+snap/crash/door-blow).
 
-**▶ BUILD NEXT (overnight): T4.2 — the DESERT REVEAL** (main-loop logic): as the player climbs out the hatch (T4.1) into the dunes —
-dawn light, the half-buried crashed pod beside them, **aftermath-silence pacing** (E7 — a held beat of quiet before the game proper),
-and the **horizon hook** (E8 — a distant landmark/wreck silhouette on the horizon that pulls the player onward; reuse the M5a
-horizon-silhouette system). Then **T4.3** — the craft+salvage tutorial (scrap **glints** E10, minimal diegetic prompts, craft the
-machete → pry the pod panel [D261], starting supplies) + the **chute-pop payoff** (the parachute comically pops the pod crown as you
-finish). Then **Phase 5** (audio: the full SFX arc + music cues + the chute fwoomp). These are logic/integration/audio — the main
-loop's strength. **Deferred to the user's morning art-direction:** all the Phase-3/4 HERO VISUALS (hauler, cockpit fidelity, hero
-corridor + fire FX, the HERO crashed-cabin wake interior + exterior↔interior size-match, the explosion FX).
+**▶ BUILD NEXT (overnight): T5.1b — audio LOOPS + balance** (main-loop, Web Audio): the sustained ambient loops the one-shots don't
+cover — the calm **cockpit hum** (Beat 0, started in tickCockpit, stopped at eject), desert **wind** at the reveal — with start/stop
+lifecycle care (C16 lesson: stop/disconnect on beat exit; the loop fns return a handle). Then balance the mix. Then **T5.2 music**
+cues (a tense escape sting → a beautiful descent swell → desert easing). Audio is buildable + code-auditable unattended; the user
+LISTENS to judge the final sound. **Deferred to the user's morning:** [hero VISUALS] the hauler, cockpit surface-fidelity, the
+explosion FX, the hero corridor + fire FX, the HERO crashed-cabin wake interior + exterior↔interior size-match, a dedicated hook
+landmark; [feel/playtest] **T4.3** the craft+salvage tutorial + the comic chute-pop payoff (the salvage-pry can't be verified
+unattended; the `scrap_machete`/D261 pry tool + the salvage system EXIST — wire the pod as a pryable `escape_pod` salvageable +
+the chute-pop). The whole intro now PLAYS end-to-end with sound; the deferred list is the feel/visual/comic polish for the user.
 - Decompose via `/feature-slice` if a tier is >2 sub-tasks; one sub-task per cycle to the DoD (the beat plays as the vision).
 
 ## Then Phase 4 + Phase 5 (continue through them)

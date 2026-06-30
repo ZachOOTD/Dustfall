@@ -3,6 +3,16 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Escape-pod campaign C24 — 2026-06-30 (overnight) — Phase 5 T5.1a: the intro SFX arc (procedural one-shots) — SHIPPED ✓ verify:all + smoke ·  T4.3 deferred to user
+
+`verified` — tsc clean + smoke `{ok:true,beats:12}` + self-audited the audio graph (pattern-matches the shipped `playCrashImpact` — finite start/stop, exp-ramp to 0.0001, connect to `a.sfx` → no leak). verify:all PASS. Flag OFF → live game byte-unchanged. **Audio's real judgment is LISTENING → the user confirms the sound design.**
+
+**T5.1a — the intro SFX arc** (the silent intro gets sound; procedural Web Audio, no samples — the game's idiom). 8 new `playXxx()` one-shots in `audio.ts` wired to the intro beats (`sequence.ts`): **playEjectThunk** + **playExplosionBoom** (eject/shipExplode), **playKlaxon** + **playHullGroan** + a blast (the corridor disaster), **playReentryRumble** (the swelling re-entry roar at the descent peak), **playLeverClick** (each parachute yank) + **playLeverSnap** (the 3rd-pull break), **playCrashImpact** (the crash — reused), **playDoorBlow** (the wake hatch kick-off). `ensureAudioStarted()` on intro start (the new-game click makes the ctx resumable).
+- Scope: ONE-SHOT beat SFX (low-risk, no loop lifecycle). **Deferred (T5.1b / user):** sustained ambient LOOPS (cockpit hum, the wind), the full mix balance, + **T5.2 music** (the escape sting + descent swell + desert easing). The user LISTENS to judge + balance.
+
+### ⚠ T4.3 (craft+salvage tutorial + chute-pop payoff) DEFERRED to the user
+T4.3 is feel-critical (the tutorial teaching) + comic-hero (the chute-pop gag the user will art-direct) + needs a bespoke salvage-panel integration whose **pry INTERACTION can't be verified unattended** (preview hangs on the heavy desert scene). Per the pivot + the framework's feel-critical handling, it's flagged for the user's morning (with the hero visuals): wire the crashed pod as a pryable `escape_pod` salvageable (the `scrap_machete`/D261 pry tool + the salvage system already exist), the scrap glints (E10), + the comic chute-pop. The loop did Phase 5 audio (tractable + verifiable) instead.
+
 ## Escape-pod campaign C23 — 2026-06-30 (overnight) — Phase 4 T4.2: the DESERT REVEAL (dawn + aftermath-silence + horizon hook) — SHIPPED ✓ verify:all + smoke + wake rig
 
 `verified` — tsc clean + smoke `{ok:true,beats:12}` + the `--scenario=wake` rig (dawn desert + horizon glow read past the hatch). verify:all PASS. Flag OFF → live game byte-unchanged.

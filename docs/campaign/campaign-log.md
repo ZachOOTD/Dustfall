@@ -284,3 +284,14 @@ The user approved **Phase 2 (the descent showpiece)** after an extended attended
 - **Spend:** ~350K (main-loop inline); campaign total ~14.23M; cycle **23/150**.
 - **Commit:** `692b2d5`.
 - **Next:** C24 = Phase 4 **T4.3 — the craft+salvage tutorial + the chute-pop payoff** (the last Phase-4 tier).
+
+---
+
+## Cycle 24 — Phase 5 T5.1a: the intro SFX arc + T4.3 deferred (2026-06-30, overnight) — SHIPPED
+- **Planned:** Phase 4 T4.3 (craft+salvage tutorial + chute-pop). **Reordered** → deferred T4.3 to the user (feel-critical + comic-hero + the salvage-pry can't be verified unattended — preview hangs on the desert) and did the verifiable **Phase 5 audio** instead.
+- **Shipped (T5.1a):** the silent intro gets SOUND. 8 procedural Web-Audio one-shots in `audio.ts` (`playEjectThunk`, `playExplosionBoom`, `playKlaxon`, `playHullGroan`, `playReentryRumble`, `playLeverClick`, `playLeverSnap`, `playDoorBlow`) + `playCrashImpact` reused, wired to the intro beats: eject/shipExplode, the corridor disaster (boom + groan + klaxon), the re-entry peak (rumble), each parachute yank (click) + the snap, the crash, the wake hatch blow. `ensureAudioStarted()` on intro start.
+- **Verify:** verify:all PASS + smoke `{ok:true,beats:12}` + self-audited the graph (pattern-matches the shipped `playCrashImpact` — finite start/stop, exp-ramp to 0.0001, no leak). Audio's real judgment is **listening** → the user.
+- **Deferred:** T4.3 (tutorial + chute-pop → user, playtest/comic), T5.1b ambient loops (cockpit hum, wind) + mix balance, T5.2 music — all benefit from the user's ear; + the standing hero-visual list.
+- **Spend:** ~400K; campaign total ~14.63M; cycle **24/150**.
+- **Commit:** `64b3744`.
+- **Next:** C25 = T5.1b (audio loops: cockpit hum + wind, with start/stop lifecycle) + mix balance.

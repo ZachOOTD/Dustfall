@@ -85,6 +85,200 @@ export function playCrashImpact(distance: number): void {
   thud.start(t); thud.stop(t + 0.3);
 }
 
+// ── Escape-pod intro SFX (Phase 5 T5.1) — procedural one-shots wired to the intro beats
+//    (sequence.ts). Web Audio synthesis, no samples — the game's idiom. The intro starts the
+//    audio context (ensureAudioStarted, on the new-game click) so these fire. Sustained ambient
+//    loops (cockpit hum, wind) + music are a follow-up (T5.1b/T5.2).
+
+/** Eject — a heavy pneumatic THUNK + a launch whoosh as the pod fires clear. */
+export function playEjectThunk(): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  const thud = a.ctx.createOscillator();
+  thud.type = 'triangle';
+  thud.frequency.setValueAtTime(180, t);
+  thud.frequency.exponentialRampToValueAtTime(44, t + 0.14);
+  const te = a.ctx.createGain();
+  te.gain.setValueAtTime(0.0001, t);
+  te.gain.exponentialRampToValueAtTime(0.5, t + 0.006);
+  te.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+  thud.connect(te).connect(a.sfx);
+  thud.start(t); thud.stop(t + 0.32);
+  const src = a.ctx.createBufferSource();
+  src.buffer = a.noiseBuffer; src.playbackRate.value = 0.8;
+  const bp = a.ctx.createBiquadFilter();
+  bp.type = 'bandpass'; bp.frequency.setValueAtTime(300, t);
+  bp.frequency.exponentialRampToValueAtTime(1400, t + 0.5); bp.Q.value = 0.8;
+  const we = a.ctx.createGain();
+  we.gain.setValueAtTime(0.0001, t);
+  we.gain.linearRampToValueAtTime(0.32, t + 0.08);
+  we.gain.exponentialRampToValueAtTime(0.001, t + 0.6);
+  src.connect(bp).connect(we).connect(a.sfx);
+  src.start(t); src.stop(t + 0.65);
+}
+
+/** Ship explosion — a big concussive boom (noise burst + deep sub + a bright crack). */
+export function playExplosionBoom(): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  const src = a.ctx.createBufferSource();
+  src.buffer = a.noiseBuffer; src.playbackRate.value = 0.5;
+  const lp = a.ctx.createBiquadFilter();
+  lp.type = 'lowpass'; lp.frequency.setValueAtTime(1800, t);
+  lp.frequency.exponentialRampToValueAtTime(300, t + 0.6); lp.Q.value = 0.6;
+  const be = a.ctx.createGain();
+  be.gain.setValueAtTime(0.0001, t);
+  be.gain.exponentialRampToValueAtTime(0.6, t + 0.02);
+  be.gain.exponentialRampToValueAtTime(0.001, t + 0.9);
+  src.connect(lp).connect(be).connect(a.sfx);
+  src.start(t); src.stop(t + 0.95);
+  const sub = a.ctx.createOscillator();
+  sub.type = 'sine';
+  sub.frequency.setValueAtTime(64, t);
+  sub.frequency.exponentialRampToValueAtTime(32, t + 1.4);
+  const se = a.ctx.createGain();
+  se.gain.setValueAtTime(0.0001, t);
+  se.gain.exponentialRampToValueAtTime(0.32, t + 0.05);
+  se.gain.exponentialRampToValueAtTime(0.001, t + 2.0);
+  sub.connect(se).connect(a.sfx);
+  sub.start(t); sub.stop(t + 2.05);
+  const cr = a.ctx.createOscillator();
+  cr.type = 'square';
+  cr.frequency.setValueAtTime(420, t);
+  cr.frequency.exponentialRampToValueAtTime(120, t + 0.12);
+  const ce = a.ctx.createGain();
+  ce.gain.setValueAtTime(0.0001, t);
+  ce.gain.exponentialRampToValueAtTime(0.18, t + 0.004);
+  ce.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+  cr.connect(ce).connect(a.sfx);
+  cr.start(t); cr.stop(t + 0.2);
+}
+
+/** Klaxon — a 3-pulse two-tone alarm (the disaster). */
+export function playKlaxon(): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t0 = a.ctx.currentTime;
+  for (let i = 0; i < 3; i++) {
+    const t = t0 + i * 0.42;
+    const o = a.ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(620, t);
+    o.frequency.setValueAtTime(440, t + 0.18);
+    const lp = a.ctx.createBiquadFilter();
+    lp.type = 'lowpass'; lp.frequency.value = 1400; lp.Q.value = 1.0;
+    const e = a.ctx.createGain();
+    e.gain.setValueAtTime(0.0001, t);
+    e.gain.linearRampToValueAtTime(0.2, t + 0.02);
+    e.gain.setValueAtTime(0.2, t + 0.32);
+    e.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+    o.connect(lp).connect(e).connect(a.sfx);
+    o.start(t); o.stop(t + 0.42);
+  }
+}
+
+/** Hull groan — a low metallic stress groan (the dying ship). */
+export function playHullGroan(): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  const o = a.ctx.createOscillator();
+  o.type = 'sawtooth';
+  o.frequency.setValueAtTime(70, t);
+  o.frequency.linearRampToValueAtTime(54, t + 1.4);
+  const bp = a.ctx.createBiquadFilter();
+  bp.type = 'bandpass'; bp.frequency.value = 160; bp.Q.value = 3.0;
+  const e = a.ctx.createGain();
+  e.gain.setValueAtTime(0.0001, t);
+  e.gain.linearRampToValueAtTime(0.16, t + 0.3);
+  e.gain.linearRampToValueAtTime(0.11, t + 1.0);
+  e.gain.exponentialRampToValueAtTime(0.001, t + 1.8);
+  o.connect(bp).connect(e).connect(a.sfx);
+  o.start(t); o.stop(t + 1.85);
+}
+
+/** Re-entry rumble — a swelling roar as the pod punches into the atmosphere, then passes. */
+export function playReentryRumble(): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  const src = a.ctx.createBufferSource();
+  src.buffer = a.noiseBuffer; src.playbackRate.value = 0.6; src.loop = true;
+  const lp = a.ctx.createBiquadFilter();
+  lp.type = 'lowpass'; lp.frequency.setValueAtTime(280, t);
+  lp.frequency.linearRampToValueAtTime(900, t + 1.5);
+  lp.frequency.linearRampToValueAtTime(300, t + 4.0); lp.Q.value = 0.8;
+  const e = a.ctx.createGain();
+  e.gain.setValueAtTime(0.0001, t);
+  e.gain.linearRampToValueAtTime(0.32, t + 1.2);
+  e.gain.setValueAtTime(0.32, t + 2.2);
+  e.gain.exponentialRampToValueAtTime(0.001, t + 4.5);
+  src.connect(lp).connect(e).connect(a.sfx);
+  src.start(t); src.stop(t + 4.6);
+}
+
+/** Parachute lever YANK — a stiff mechanical click-clunk. */
+export function playLeverClick(): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  const o = a.ctx.createOscillator();
+  o.type = 'square';
+  o.frequency.setValueAtTime(220, t);
+  o.frequency.exponentialRampToValueAtTime(90, t + 0.05);
+  const e = a.ctx.createGain();
+  e.gain.setValueAtTime(0.0001, t);
+  e.gain.exponentialRampToValueAtTime(0.24, t + 0.003);
+  e.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
+  o.connect(e).connect(a.sfx);
+  o.start(t); o.stop(t + 0.1);
+}
+
+/** Lever SNAP — the parachute lever breaks off (a sharp metal snap). */
+export function playLeverSnap(): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  const o = a.ctx.createOscillator();
+  o.type = 'square';
+  o.frequency.setValueAtTime(900, t);
+  o.frequency.exponentialRampToValueAtTime(180, t + 0.08);
+  const e = a.ctx.createGain();
+  e.gain.setValueAtTime(0.0001, t);
+  e.gain.exponentialRampToValueAtTime(0.3, t + 0.002);
+  e.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
+  o.connect(e).connect(a.sfx);
+  o.start(t); o.stop(t + 0.18);
+}
+
+/** Hatch BLOW — the wake hatch kicks off (a metal bang + debris scatter). */
+export function playDoorBlow(): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  const o = a.ctx.createOscillator();
+  o.type = 'triangle';
+  o.frequency.setValueAtTime(300, t);
+  o.frequency.exponentialRampToValueAtTime(70, t + 0.2);
+  const e = a.ctx.createGain();
+  e.gain.setValueAtTime(0.0001, t);
+  e.gain.exponentialRampToValueAtTime(0.4, t + 0.004);
+  e.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+  o.connect(e).connect(a.sfx);
+  o.start(t); o.stop(t + 0.42);
+  const src = a.ctx.createBufferSource();
+  src.buffer = a.noiseBuffer; src.playbackRate.value = 1.1;
+  const bp = a.ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1600; bp.Q.value = 0.7;
+  const ne = a.ctx.createGain();
+  ne.gain.setValueAtTime(0.0001, t);
+  ne.gain.linearRampToValueAtTime(0.2, t + 0.01);
+  ne.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+  src.connect(bp).connect(ne).connect(a.sfx);
+  src.start(t); src.stop(t + 0.4);
+}
+
 /** Set master volume, 0..1. Settings panel calls this. */
 export function setMasterVolume(v: number): void {
   if (_master) _master.gain.value = v;
