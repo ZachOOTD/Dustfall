@@ -338,3 +338,12 @@ Tell me which to tackle (I can drive the hero visuals with you, or wire T4.3) �
 - Both delegated to fresh procedural-modeler contexts (deep architectural+visual) while the main loop orchestrates/wires/verifies.
 - **Commit:** `83bba35`.
 - **Next:** R1c — remove the teleport seams (physical continuity pod→crash→wake→exit) → then the R1 milestone (user walk-test of the re-grounded orbit + descent).
+
+---
+
+## ⏸ REBUILD R1 MILESTONE — real-world re-grounding COMPLETE → AWAITING USER WALK-TEST (2026-06-30)
+**R1 (the spatial re-grounding keystone) is done** — R1a (the real sky in "space mode": the cockpit window shows real wrapping stars + a real-scale planet, the fake plane gone) + R1b (the descent re-grounded: the pod physically FALLS through the real desert toward the spawn; the viewport shows the REAL terrain + sky; ~430 lines of fake vista deleted). R1c (removing the teleport seams) folded into **R3** — it's inseparable from unifying the 3 pod models into ONE. Behind `FEATURES.escapePodIntro`; verify:all + smoke green.
+
+**▶ USER WALK-TEST:** play the re-grounded **orbit + descent** — `FEATURES.escapePodIntro=true` + new game, or `__game.startIntro()` (jump: `jumpToBeat('cockpit')` for orbit, `jumpToBeat('descent')` for the fall). Check the FEEL/MOTION (which stills can't gate): the orbit view through the cockpit window (real stars + planet), then the pod physically falling through the real desert (real terrain + sky, the ground rushing up at the window). **Known / coming:** the pod is still 3 separate models stitched at impact→wake (the consistency fix = **R3**, next); the fall starts at 600m not 3000m (a "from-orbit" read = R4 — tilt the capsule); the cockpit/ship is still the greybox box (R5). Feedback → `steering.md` or inline. Then **`/campaign-approve`** releases R2 (space hero-polish) → R3 (the one physical pod) → R4 → R5.
+
+**Verdict: STOP — `milestone-review`** (`status: paused`, `awaiting_approval: true`).

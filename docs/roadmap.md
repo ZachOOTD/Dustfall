@@ -150,15 +150,16 @@ at each `### Milestone:` for the user's art-direction. The v1 logic/audio/stagin
   shaders deleted; only the re-entry plasma/shimmer kept, over the real world). *Concession:* `DESCENT_ALT`=600m
   (not 3000m) — the world is only ±1200m + the upright capsule's SIDE porthole looks down only ~22° (cabin occludes
   more), so high = real sky, the last half = the desert rushing up. A 3000m "from-orbit" read = an R4 enrichment
-  (tilt the capsule nose-down + couple the seated eye). **▶ R1c — remove the teleport seams** (physical continuity
-  pod→crash→wake→exit; intertwined with R3's unified pod) → then the R1 milestone.
+  (tilt the capsule nose-down + couple the seated eye). **R1c — folded into R3** (removing the teleport seams = physical
+  continuity through ONE consistent pod model; can't be done before the model is unified, so it merges into R3).
+  **R1 (the spatial re-grounding — orbit sky + the real-world descent) is COMPLETE at R1a+R1b.**
 ### Milestone: REBUILD R1 — real-world re-grounding COMPLETE → USER WALK-TEST (orbit + the real-world descent read real) → /campaign-approve
 - **R2 — The space scene (hero polish):** lift the space-mode sky to a hero bar — star density/brightness, the
   planet's scale/surface/atmosphere, the orbit composition through the window. [user art-direction]
 ### Milestone: REBUILD R2 — space scene COMPLETE → USER WALK-TEST → /campaign-approve
 - **R3 — The ONE physical pod:** unify the 3 pod models (descent interior · wake interior · crashed wreck) into
   ONE — a walkable interior + a matching exterior; docked in the ship, physically ENTERED, EJECTED, ridden,
-  EXITED. No teleports. [hero model — user art-direction]
+  EXITED. No teleports (this is where the old R1c — physical continuity pod→crash→wake→exit — lands). [hero model — user art-direction]
 ### Milestone: REBUILD R3 — the one physical pod COMPLETE → USER WALK-TEST (enter → eject → ride → exit, consistent) → /campaign-approve
 - **R4 — Physical descent + crash + timing fixes:** the pod physically falls + crashes into the real desert (the
   viewport = the actual spawn world, multiplayer-ready); **parachute gag MID-fall**; **longer ~2s+ blackouts**;
