@@ -48,7 +48,8 @@ import {
   ensureAudioStarted, playEjectThunk, playExplosionBoom, playKlaxon, playHullGroan,
   playReentryRumble, playLeverClick, playLeverSnap, playDoorBlow, playCrashImpact,
   startCockpitHum, stopCockpitHum, startDescentRush, stopDescentRush, stopAllIntroLoops,
-} from '../../audio/audio.ts';   // T5.1 — the intro SFX arc + ambient loops
+  startMusicEscape, stopMusicEscape, startMusicDescent, stopMusicDescent, startMusicDesert,
+} from '../../audio/audio.ts';   // T5.1 SFX + ambient loops · T5.2 music cues
 
 /** Seconds the cockpit opens SEATED (looking at the planet) before control + the cue. */
 const COCKPIT_DWELL = 3.0;
@@ -303,6 +304,7 @@ function tickCorridor(ctx: GameContext, dt: number): void {
       playExplosionBoom();          // T5.1 — the engine blast
       playHullGroan();             // T5.1 — the ship groans, dying
       playKlaxon();                // T5.1 — the red-alert alarm
+      startMusicEscape();          // T5.2 — the tense escape sting kicks in
       showIntroPrompt('🔥 ENGINE FIRE — GET TO THE ESCAPE POD!');
     }
     return;
@@ -371,6 +373,8 @@ function tickDescent(ctx: GameContext, dt: number): void {
     ensureInPod(ctx);
     showIntroPrompt('');
     startDescentRush();                  // T5.1b — the sustained air-rush of the fall (until impact)
+    stopMusicEscape();                   // T5.2 — the tension resolves...
+    startMusicDescent();                 // T5.2 — ...into the beautiful descent swell
     intro.scratch.t = 0;
     intro.scratch.reFlash = false;       // T2.2 — the one-shot re-entry flash hasn't fired yet
     intro.scratch.init = true;
@@ -463,6 +467,7 @@ function tickImpact(ctx: GameContext, dt: number): void {
     flashScreen(0xffffff, 1.0);
     addTrauma(1.0);
     stopDescentRush();    // T5.1b — the air-rush cuts at impact
+    stopMusicDescent();   // T5.2 — the descent swell cuts at the crash
     playCrashImpact(0);   // T5.1 — the crash (a big near boom + sub rumble)
     showIntroPrompt('');
     intro.scratch.t = 0;
@@ -565,6 +570,7 @@ function tickStepOut(ctx: GameContext, dt: number): void {
     // "the pod you crawled out of"). The wreck PERSISTS into the real game (the salvage target).
     removeWakeInterior(ctx);
     placeCrashedPodWreck(ctx, rp.x, rp.z);
+    startMusicDesert();               // T5.2 — the gentle desert-easing cue (resolves into gameplay)
     showIntroPrompt('');
     intro.mode = 'walk';              // free to look around / step into the dawn
     intro.scratch.t = 0;

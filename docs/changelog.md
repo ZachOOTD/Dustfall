@@ -3,6 +3,15 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Escape-pod campaign C26 — 2026-06-30 (overnight) — Phase 5 T5.2: the MUSIC cues + ⏸ OVERNIGHT RUN COMPLETE (autonomous work exhausted → user) — SHIPPED ✓ verify:all + smoke
+
+`verified` — tsc clean + smoke `{ok:true,beats:12}` + self-audited the music lifecycle. verify:all PASS. Flag OFF → live game byte-unchanged. The user LISTENS to judge + balance.
+
+**T5.2 — the MUSIC cues** (procedural synthesized PADS, no samples; `audio.ts` → the ambient bus), arcing the intro's emotion: **`startMusicEscape`** — a tense low minor cluster with a dissonant tension note (kicks in at the corridor disaster, through eject); **`startMusicDescent`** — a warm, spacious, slowly-swelling open chord (the beautiful fall, descent→impact); **`startMusicDesert`** — a soft resolving open chord that **fades itself out over a long tail** (self-managed/finite) so it bridges gently into gameplay (the dawn calm). A `_startPad` helper (a chord of detuned oscillators → a shared lowpass + a slow filter LFO + a swell gain) + the `_introLoops` lifecycle. The intro now has its full emotional arc: silence → tension → beauty → calm.
+
+### ⏸ OVERNIGHT RUN COMPLETE — autonomous work exhausted → the loop pauses for the user
+After C26 every remaining roadmap item needs the USER (it can't be built/verified unattended), so the overnight loop **stops + surfaces the morning review** (status `paused`). **What the whole-intro now PLAYS (end-to-end, behind `FEATURES.escapePodIntro`, with full SFX + music):** cockpit (hum) → "check engines" (console escalation) → corridor disaster (fire + red-alert + klaxon + escape sting) → enter pod → eject + ship explodes → re-entry → the beautiful descent (vista + rush + swell) → the parachute gag → crash → **wake INSIDE the pod → kick the hatch open → walk out** into the **dawn** desert (aftermath-silence + the horizon hook + the desert-easing cue). **Awaiting the user (the morning list):** [hero VISUALS] the hauler exterior, the cockpit surface-fidelity, the ship-explosion FX, the hero corridor + fire FX, the HERO crashed-cabin wake interior + the crashed-pod exterior↔interior size-match, a dedicated horizon-hook landmark; [feel/playtest] **T4.3** the craft+salvage tutorial + the comic chute-pop payoff; [audio] LISTEN + balance the mix.
+
 ## Escape-pod campaign C25 — 2026-06-30 (overnight) — Phase 5 T5.1b: the ambient audio loops (cockpit hum + descent rush) — SHIPPED ✓ verify:all + smoke
 
 `verified` — tsc clean + smoke `{ok:true,beats:12}` + self-audited the loop lifecycle. verify:all PASS. Flag OFF → live game byte-unchanged. The user LISTENS to judge.

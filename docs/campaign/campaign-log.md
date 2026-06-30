@@ -306,3 +306,24 @@ The user approved **Phase 2 (the descent showpiece)** after an extended attended
 - **Spend:** ~250K; campaign total ~14.88M; cycle **25/150**.
 - **Commit:** `c7265c4`.
 - **Next:** C26 = T5.2 music (escape sting → descent swell → desert easing) — the final overnight-tractable piece; after it, everything remaining needs the user → the loop surfaces the morning summary + stops.
+
+---
+
+## Cycle 26 — Phase 5 T5.2: music cues + OVERNIGHT RUN COMPLETE (2026-06-30) — SHIPPED → ⏸ PAUSED for the user
+- **Planned:** the music cues (the final overnight-tractable piece).
+- **Shipped:** 3 procedural music PADS in `audio.ts` (no samples) → the ambient bus, wired to the beats: **escape sting** (tense minor cluster — the disaster→eject), **descent swell** (warm swelling open chord — the beautiful fall), **desert easing** (a soft resolving chord that fades itself out, bridging into gameplay — the dawn reveal). A `_startPad` helper + the `_introLoops` lifecycle. The intro's emotional arc is complete: silence → tension → beauty → calm.
+- **Verify:** verify:all PASS + smoke `{ok:true,beats:12}` + self-audited the lifecycle.
+- **⏸ OVERNIGHT RUN COMPLETE (C19-C26):** the whole intro PLAYS end-to-end with full SFX + music. Every remaining item needs the USER, so the loop **paused** (`status: paused`, `milestone-review`).
+
+### ▶ FOR THE USER (the morning review) — what's done + what's next
+**The autonomous overnight run built the entire PLAYABLE intro** (behind `FEATURES.escapePodIntro`): cockpit → check-engines → corridor disaster → eject + explosion → re-entry → the beautiful descent → the parachute gag → crash → **wake inside the pod → kick the hatch open → walk out** into the **dawn** desert — now with full SFX + music. Play it: `FEATURES.escapePodIntro=true` + new game, or `__game.startIntro()` / `smokeIntro()`.
+
+**The PIVOT (C20):** the autonomous procedural-modeler **plateaued** on the Phase-3 hero VISUALS (the hauler, the cockpit) across multiple adversarial-gate rounds — and those are assets you'll want to art-direct anyway (as you did the descent over 5 rounds). So the loop **deferred all hero visuals + feel/playtest/comic work to you** and spent the night building the playable logic/staging/audio that it *can* verify. **Your morning list (prioritized):**
+1. **Hero VISUALS (art-direction):** the **hauler exterior** (`__game.buildHauler()` / `rig-shot --scenario=hauler`), the **cockpit surface-fidelity** (`rig-shot --scenario=cockpit` — the opening shot reads but needs your eye), the **ship-explosion FX** (T3.2), the **hero corridor** geometry + fire FX, the **HERO crashed-cabin wake interior** + the **crashed-pod exterior↔interior size-match** (your C18 req), a **dedicated horizon-hook landmark**.
+2. **Feel/playtest — T4.3:** the **craft+salvage tutorial** (the `scrap_machete`/D261 pry tool + the salvage system EXIST — wire the pod as a pryable `escape_pod` salvageable) + the comic **chute-pop** payoff. Couldn't be verified unattended (the pry interaction needs a playtest; preview hangs on the desert).
+3. **Audio:** **LISTEN + balance** the SFX/loop/music mix.
+
+Tell me which to tackle (I can drive the hero visuals with you, or wire T4.3) — or drop a note in `steering.md` + resume with `/campaign-approve`.
+- **Spend:** ~250K; campaign total ~15.13M (~7M this overnight run, C19-C26); cycle **26/150**.
+- **Commit:** `10c7e5d`.
+- **Verdict: STOP — `milestone-review`** (`status: paused`, `awaiting_approval: true`). The overnight autonomous work is complete; the loop awaits the user.

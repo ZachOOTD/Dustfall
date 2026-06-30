@@ -360,6 +360,80 @@ export function startDescentRush(): void {
 }
 export function stopDescentRush(): void { _stopLoop('descentRush', 0.6); }
 
+// ── Music cues (Phase 5 T5.2) — procedural synthesized PADS (no samples), arcing the intro's
+//    emotion: a tense ESCAPE sting (disaster→eject) → a beautiful DESCENT swell (the calm fall)
+//    → a gentle DESERT easing (the dawn reveal). They feed the ambient bus + reuse the
+//    _introLoops lifecycle (stopAllIntroLoops cleans them on teardown). The user LISTENS to balance.
+interface PadOpts {
+  type: OscillatorType; cutoff: number; peak: number; attack: number;
+  voiceGain: number; detune?: number; lfo?: number; lfoDepth?: number;
+}
+function _startPad(name: string, freqs: number[], opts: PadOpts): void {
+  const a = getAudioInternals();
+  if (!a || _introLoops.has(name)) return;
+  const t = a.ctx.currentTime;
+  const gain = a.ctx.createGain();
+  gain.gain.setValueAtTime(0.0001, t);
+  gain.gain.linearRampToValueAtTime(opts.peak, t + opts.attack);   // swell in
+  gain.connect(a.ambient);
+  const lp = a.ctx.createBiquadFilter();
+  lp.type = 'lowpass'; lp.frequency.value = opts.cutoff; lp.Q.value = 0.6;
+  lp.connect(gain);
+  const nodes: AudioScheduledSourceNode[] = [];
+  for (const f of freqs) {
+    const o = a.ctx.createOscillator();
+    o.type = opts.type; o.frequency.value = f;
+    if (opts.detune) o.detune.value = (Math.random() * 2 - 1) * opts.detune;
+    const og = a.ctx.createGain(); og.gain.value = opts.voiceGain;
+    o.connect(og).connect(lp);
+    o.start(t); nodes.push(o);
+  }
+  if (opts.lfo) {   // a slow filter LFO for movement
+    const lfo = a.ctx.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = opts.lfo;
+    const lg = a.ctx.createGain(); lg.gain.value = opts.lfoDepth ?? 200;
+    lfo.connect(lg).connect(lp.frequency);
+    lfo.start(t); nodes.push(lfo);
+  }
+  _introLoops.set(name, { nodes, gain });
+}
+
+/** ESCAPE sting — a tense low minor cluster with a dissonant tension note (disaster→eject). */
+export function startMusicEscape(): void {
+  _startPad('musicEscape', [110, 130.81, 155.56, 233.08], {   // A2, C3, Eb3 (dim), Bb3 — unease
+    type: 'sawtooth', cutoff: 900, peak: 0.10, attack: 0.8, voiceGain: 0.22, detune: 6,
+  });
+}
+export function stopMusicEscape(): void { _stopLoop('musicEscape', 1.0); }
+
+/** DESCENT swell — a warm, spacious, slowly-swelling open chord (the beautiful fall). */
+export function startMusicDescent(): void {
+  _startPad('musicDescent', [98, 146.83, 196, 246.94, 392], {   // G2, D3, G3, B3, G4 — open major
+    type: 'triangle', cutoff: 1600, peak: 0.13, attack: 4.0, voiceGain: 0.16, detune: 4, lfo: 0.05, lfoDepth: 500,
+  });
+}
+export function stopMusicDescent(): void { _stopLoop('musicDescent', 2.0); }
+
+/** DESERT easing — a soft, warm, resolving chord that fades itself out over a long tail so the
+ *  cue bridges gently into gameplay as the game takes over (the dawn calm). Self-managed (a
+ *  finite life, removed from the loop registry) so it isn't cut short by the intro teardown. */
+export function startMusicDesert(): void {
+  const a = getAudioInternals();
+  if (!a || _introLoops.has('musicDesert')) return;
+  _startPad('musicDesert', [130.81, 196, 261.63, 392], {   // C3, G3, C4, G4 — open + warm
+    type: 'sine', cutoff: 1400, peak: 0.11, attack: 2.5, voiceGain: 0.18, detune: 3, lfo: 0.04, lfoDepth: 300,
+  });
+  const v = _introLoops.get('musicDesert');
+  if (!v) return;
+  const t = a.ctx.currentTime;
+  v.gain.gain.cancelScheduledValues(t);
+  v.gain.gain.setValueAtTime(0.0001, t);
+  v.gain.gain.linearRampToValueAtTime(0.11, t + 2.5);
+  v.gain.gain.setValueAtTime(0.11, t + 6.0);
+  v.gain.gain.exponentialRampToValueAtTime(0.0001, t + 11.0);   // a long, gentle resolve into gameplay
+  for (const n of v.nodes) { try { n.stop(t + 11.3); } catch { /* noop */ } }
+  _introLoops.delete('musicDesert');   // self-managed from here (finite) — not cut by stopAllIntroLoops
+}
+
 /** Set master volume, 0..1. Settings panel calls this. */
 export function setMasterVolume(v: number): void {
   if (_master) _master.gain.value = v;
