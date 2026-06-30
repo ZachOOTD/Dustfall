@@ -1232,16 +1232,14 @@ const LOWALT_FS = /* glsl */ `
 
   void main(){
     vec2 uv = vUv;
-    // ── HORIZON. The porthole reveals plane-uv.y ≈ 0.32 (window bottom) → 0.69 (top). Put
-    //    the horizon in the MIDDLE of that band (~0.52) so the seated player looks OUT at a
-    //    real horizon: clear SKY above, desert receding below — NOT a dune field filling the
-    //    whole window. Drops a touch as you near so the ground gains a little as you arrive,
-    //    but it STAYS a horizon view (never collapses to looking-straight-down).
-    // The horizon sits MID-window through the mid approach (the "looking off at the horizon"
-    // read), then the FINAL ground-rush (uRush) drives it UP and OFF the top of the porthole
-    // (the window reveals uv.y≈0.32→0.69, so horizon→~0.92 puts it above the frame → the ground
-    // fills the whole window). User direction 2: the surface rushes up to meet you at impact.
-    float horizon = mix(0.55, 0.50, uNear) + uRush * 0.40;
+    // ── HORIZON. A CLEAR, ALWAYS-CRISP horizon line splits the window: SKY above, desert
+    //    below. It sits a touch ABOVE mid-window through the whole approach (so most of the
+    //    porthole shows the desert you are falling toward — a real horizon, never an abstract
+    //    fill), drifting DOWN gently as you descend (a falling cue — the horizon sinks toward
+    //    the frame centre as you drop), then the FINAL ground-rush (uRush) drives it UP and OFF
+    //    the top so the surface fills the window at impact. uv.y: 1=top(+Y)=sky, 0=bottom=ground.
+    float horizon = mix(0.62, 0.50, uNear) + uRush * 0.34;   // high in the approach, sinks as you fall, then rushes up (a sliver of sky survives to impact)
+    horizon = clamp(horizon, 0.46, 0.86);
 
     // ── The DAWN SUN: well OFF-AXIS (far right, low) so it warms the sky without blowing out
     //    the central band the porthole shows — a light anchor, not a central flare.
@@ -1259,25 +1257,31 @@ const LOWALT_FS = /* glsl */ `
     vec3 sunTint = mix(vec3(1.00,0.84,0.58), vec3(1.06,0.80,0.50), uWarm);
     skyCol = mix(skyCol, sunTint, smoothstep(0.34, 0.0, sunD) * 0.45);             // gentle wash, off to the right
 
-    // ── GROUND (below the horizon) — a CALM warm-tan sand sea receding to the horizon. The
-    //    porthole sees the near-to-mid sand; the projection is gentle so the band reads as a
-    //    vast plain melting into aerial haze at the horizon, not a wall of dunes.
-    //    prox 0 (at horizon) → 1 (frame bottom). dist maps prox to ground distance.
-    float prox = clamp((horizon - uv.y) / max(0.001, horizon), 0.0, 1.0);
-    // Recession: far at the horizon → near at the frame bottom. As the ground-rush hits, the
-    // NEAR end pulls in CLOSE (dist→~0.18) so the bottom of the window is sand right under you,
-    // rushing up — the surface coming to meet you, not a flat far plain. The dunes also grow
-    // (duneScale up) so individual dune forms read large + close at impact.
-    float nearDist = mix(0.6, 0.18, uRush);                                     // the closest sand pulls right up under the pod at impact
-    float dist = mix(7.0, nearDist, pow(prox, mix(1.3, 1.9, uRush)));           // steeper recession late → more frame is near ground
-    float across = (uv.x - 0.5) * (0.5 + dist * 0.9);                           // widen with distance (perspective spread)
-    float duneScale = mix(0.5, 0.85, uNear) + uRush * 0.9;                      // dunes grow large + close as the ground rushes up
-    vec2 gp = vec2(across, dist) * duneScale + vec2(0.0, uNear * 0.9 + uRush * 2.6);  // scroll the field toward you (the ground rushing past)
+    // ── GROUND (below the horizon) — a REAL perspective sand plain, projected so the felt
+    //    altitude reads as FALLING. The seated eye looks slightly down at a flat desert from a
+    //    height H above it; a screen row a small angle a BELOW the horizon maps to a ground
+    //    distance D = H / tan(a) approx H / a. As the descent advances, H SHRINKS (uNear,uRush)
+    //    so the SAME row maps to a NEARER, BIGGER patch of sand — the ground swells up to meet
+    //    you (the fall). A steady travel offset streams the dunes toward you on top of that.
+    //    below = how far below the horizon this fragment is (0 at horizon, grows downward).
+    float below = max(0.0, horizon - uv.y);
+    // Falling altitude: high & far at the start of the low-alt leg, dropping fast at impact.
+    // (Not literal metres — a perspective-shaped scalar tuned so the recession reads right.)
+    float H = mix(2.6, 0.95, uNear) * (1.0 - uRush * 0.72) + 0.06;              // shrinks as you fall → ground rushes up
+    // Ground distance for this row. +eps avoids a singularity exactly at the horizon (D→∞).
+    float D = H / (below + 0.018);                                              // far (large D) near the horizon → near (small D) at the frame bottom
+    float fade = 1.0 / (1.0 + D * 0.10);                                        // 0 at the far horizon → ~1 underfoot (perspective foreshortening for shading/haze) — tighter so haze hugs the horizon, the mid/near sand stays crisp
+    // World ground coordinates. gz recedes with D and STREAMS toward you via travel (the
+    // surface flowing down-past as you fall/advance). gx spreads with distance (perspective).
+    float travel = uNear * 5.0 + uRush * 9.0;                                   // the field streams toward the viewer over the descent (the felt motion)
+    float worldScale = 1.05;                                                    // FIXED world dune frequency → dunes keep a consistent real size; only the PROJECTION zooms (raised so near dunes carry readable relief, not a flat sheet at impact)
+    vec2 gp = vec2((uv.x - 0.5) * D * 1.6, D - travel) * worldScale;            // (across, into-screen) in world sand units
 
     float hC = duneH(gp);
-    // relief normal via central differences — epsilon scales with distance so far dunes
-    // don't shimmer (the projection compresses the ground hard near the horizon).
-    float e = 0.05 + dist * 0.02;
+    // relief normal via central differences — epsilon GROWS with distance (far rows compress a
+    // huge D-range into a thin band) so the far dunes don't shimmer; tight underfoot for crisp
+    // near crests.
+    float e = 0.06 + D * 0.03;
     float hX = (duneH(gp + vec2(e,0.0)) - duneH(gp - vec2(e,0.0))) / (2.0*e);
     float hY = (duneH(gp + vec2(0.0,e)) - duneH(gp - vec2(0.0,e))) / (2.0*e);
     // SOFT raking dawn light across the sand: sun on screen-right, low → gentle directional
@@ -1287,7 +1291,7 @@ const LOWALT_FS = /* glsl */ `
     // The directional relief STRENGTHENS as the ground rushes up (uRush) so the close surface
     // at impact reads as real carved dunes rushing toward you — clear sun-lit crests + shadowed
     // lee — not a soft far plain. Stays gentle through the calm mid approach.
-    float reliefAmt = 0.52 + uRush * 0.42;
+    float reliefAmt = (0.50 + uRush * 0.70) * (0.45 + 0.55 * fade);            // crisp underfoot, soft at the hazy far horizon; carves HARD at the impact ground-rush
     float shade = clamp(0.82 + slope * reliefAmt, 0.46, 1.40);                  // gentle mid → carved + readable at the close ground-rush
 
     // ── SAND PALETTE — warm tan/ochre throughout (the REAL game sand ~0xb89878), NO violet
@@ -1302,18 +1306,21 @@ const LOWALT_FS = /* glsl */ `
     vec3 fillCol = mix(vec3(0.78,0.74,0.72), vec3(0.84,0.74,0.66), uWarm);      // warm desaturated fill (sand bounce)
     vec3 groundCol = sand * mix(fillCol, keyCol, smoothstep(0.55, 1.25, shade));
 
-    // ── AERIAL PERSPECTIVE — the desert recedes into warm dawn haze toward the horizon, so
-    //    the far sand melts into the sky (the vast, calm "looking off at the horizon" read).
-    //    Ramps across most of the ground band (far → near), not just a thin sliver.
-    float haze = pow(smoothstep(0.40, 1.0, 1.0 - prox), 1.9) * 0.90 * (1.0 - uRush * 0.75);   // recedes as the ground rushes up — the close surface reads SOLID + warm at impact, not hazed-out
+    // ── AERIAL PERSPECTIVE — the desert recedes into warm dawn haze toward the horizon. CAPPED
+    //    so the far sand only SOFTENS into the haze in a band hugging the horizon — it never
+    //    erases the ground (the prior bug: the whole ground band melted into the sky = no clear
+    //    horizon). fade is ~0 only in the thin far band, so haze rides just under the horizon.
+    float haze = (1.0 - fade);                                                  // ~1 only at the far horizon
+    haze = pow(haze, 2.4) * 0.82;                                               // a tight band of softening just below the horizon, capped
     vec3 hazeCol = mix(skyHorizon, vec3(0.90,0.78,0.62), 0.35);                 // warm dusty haze toward the sky tone
     groundCol = mix(groundCol, hazeCol, haze);
 
-    // ── compose at the horizon (thin anti-aliased line) + a slim warm horizon glow band.
-    float edge = smoothstep(-0.006, 0.006, uv.y - horizon);                     // 0 ground → 1 sky
+    // ── compose at the horizon (thin anti-aliased line) + a slim warm horizon glow band. The
+    //    crisp edge guarantees a CLEAR horizon at every altitude (never a mush).
+    float edge = smoothstep(-0.004, 0.004, uv.y - horizon);                     // 0 ground → 1 sky
     vec3 col = mix(groundCol, skyCol, edge);
-    float hb = exp(-pow((uv.y - horizon)*30.0, 2.0));
-    col += mix(vec3(0.42,0.34,0.24), vec3(0.50,0.36,0.24), uWarm) * hb * 0.18;  // soft warm haze hugging the horizon
+    float hb = exp(-pow((uv.y - horizon)*34.0, 2.0));
+    col += mix(vec3(0.42,0.34,0.24), vec3(0.50,0.36,0.24), uWarm) * hb * 0.20;  // soft warm haze hugging the horizon
 
     gl_FragColor = vec4(col, uLowAlt);
   }

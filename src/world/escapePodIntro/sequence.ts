@@ -67,6 +67,13 @@ const IMPACT_HOLD = 1.0;
 const WAKE_FADE = 2.5;
 const WAKE_HOLD = 1.2;
 
+/** C18 (user walk-test: "black out briefly between each phase to make things feel smoother") —
+ *  a brief DIP-TO-BLACK at the descent-chain transitions. advanceBeat cuts to black; the new beat
+ *  fades it in over PHASE_FADE_DUR, so the camera/vista change happens under the black. Applied
+ *  only to descent + parachute (shipExplode has its own blast flash; impact/wake own the overlay). */
+let _phaseFade = 0;
+const PHASE_FADE_DUR = 0.35;
+
 /** Did the player "pull the lever" this frame (click or E)? */
 function pulledLever(ctx: GameContext): boolean {
   return ctx.input.pressed.has('KeyE') || ctx.input.mousePressed.has(0);
@@ -197,6 +204,7 @@ export function advanceBeat(ctx: GameContext): void {
   if (!ctx.intro) return;
   const i = BEAT_ORDER.indexOf(ctx.intro.beat);
   const next = i >= 0 && i + 1 < BEAT_ORDER.length ? BEAT_ORDER[i + 1] : 'done';
+  _phaseFade = 1;   // C18 — cut to black at the transition; the new beat fades it in (smoother phases)
   jumpToBeat(ctx, next);
 }
 
@@ -208,6 +216,7 @@ export function endEscapePodIntro(ctx: GameContext): void {
   ctx.intro.active = false;
   ctx.intro.beat = 'done';
   hideIntroPrompt();
+  _phaseFade = 0;
   setIntroBlack(0);        // never leave a black overlay over the real game
   setGameHudHidden(false);
   disposeShipScene(ctx);
@@ -468,6 +477,12 @@ export function updateEscapePodIntro(ctx: GameContext, dt: number): void {
     // The tutorial (Beats 10-11: craft+salvage + chute-pop) runs as normal gameplay AFTER the
     // handoff (the wreck + the hint from stepOut), not as an intro beat — the hero pass is Phase 4.
     default: break;
+  }
+  // C18 — the phase-transition dip-to-black fades in (1→0) over the new beat. Only on the
+  // descent-chain cinematic beats (shipExplode owns a blast flash; impact/wake own the black).
+  if (_phaseFade > 0) {
+    _phaseFade = Math.max(0, _phaseFade - dt / PHASE_FADE_DUR);
+    if (intro.beat === 'descent' || intro.beat === 'parachute') setIntroBlack(_phaseFade);
   }
 }
 
