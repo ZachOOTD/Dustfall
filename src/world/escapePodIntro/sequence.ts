@@ -48,11 +48,12 @@ import { addTrauma } from '../../fx/cameraShake.ts';
 const COCKPIT_DWELL = 3.0;
 /** Eject auto-fires after this long if the player doesn't pull the lever (anti-softlock). */
 const EJECT_FALLBACK = 6.0;
-/** Seconds the eject/blast + TUMBLING-REVEAL beat holds (the pod tumbles, settling into the
- *  descent) before the descent. T2.3 lengthened this from 2.5 so the tumble reads + settles. */
-const SHIP_EXPLODE_DWELL = 4.0;
-/** Seconds of atmospheric fall before the parachute beat (greybox pacing). */
-const DESCENT_DURATION = 8.0;
+/** Seconds the eject/blast beat holds (the ship dies in a flash; the cabin briefly lit) before
+ *  the descent. C18 (user walk-test): NO tumble — the pod stays UPRIGHT; this is just a brief blast. */
+const SHIP_EXPLODE_DWELL = 2.2;
+/** Seconds of the SLOW, seamless atmospheric fall (C18 user walk-test: descend slowly + serenely —
+ *  watch the planet get closer, space fade to sky, the ground slowly approach). Was 8.0. */
+const DESCENT_DURATION = 18.0;
 /** Pulls before the lever snaps off — THE GAG (3 pulls → no chute). */
 const PARACHUTE_PULLS = 3;
 /** Anti-softlock: auto-fire a pull this often if the player just stares (seconds). */
@@ -273,38 +274,30 @@ function tickEnterPod(ctx: GameContext, dt: number): void {
   if (pulledLever(ctx) || (intro.scratch.dwell as number) > EJECT_FALLBACK) advanceBeat(ctx);   // → shipExplode
 }
 
-/** shipExplode beat (T0.3a + T2.3 the TUMBLING REVEAL) — eject fires: the ship dies in a blast
- *  and the pod is flung TUMBLING, the window sweeping space→planet as it stabilizes into the
- *  descent. The blast floods the cabin with light; the camera tumbles (a decaying pose ridden by
- *  the controller's applyIntroTumble); a settling buffet eases out. Settles level → descent.
- *  (The hero ship explosion staged through this frame = Phase 3; here the ship is greybox.) */
+/** shipExplode beat (T0.3a) — eject fires: the ship dies in a blast (a flash + the cabin briefly
+ *  lit by the explosion), then the pod settles UPRIGHT into the slow, serene descent. C18 (user
+ *  walk-test): NO tumble — the pod stays upright + level, facing the window; you just watch the
+ *  world come up to meet you. (The hero ship explosion staged through this frame = Phase 3.) */
 function tickShipExplode(ctx: GameContext, dt: number): void {
   const intro = ctx.intro;
   if (!intro) return;
   if (!intro.scratch.init) {
-    flashScreen(0xffe6c0, 1.0);     // the blast flash (decays via updateScreenFlash)
+    flashScreen(0xffe6c0, 0.85);    // the blast flash (the ship dies)
     disposeShipScene(ctx);           // the ship is gone after the blast (greybox; hero ship = Phase 3)
     showIntroPrompt('');
-    setDescentProgress(0);           // the orbital vista (planet + stars) shows through the window during the tumble
-    faceControl(ctx, 0, 0);          // base look = the descent framing (−Z, level) so the tumble settles ONTO it (seamless handoff to the descent — no snap)
-    addTrauma(0.55);                 // the eject/blast kick (softened per the C17 walk-test — a kick, not violent)
-    intro.mode = 'scripted';         // the beat owns the camera — the tumble post-multiplies on the look
-    intro.scratch.tumble = 1;        // full tumble at the blast (controller applyIntroTumble rides this)
+    setDescentProgress(0);           // the orbital vista (planet + stars) through the window
+    faceControl(ctx, 0, 0);          // upright, facing the window (−Z) — the pod stays LEVEL (no tumble)
+    addTrauma(0.1);                  // a tiny ONE-TIME nudge at the blast (one-shot, decays — not per-frame, so it can't saturate)
+    intro.mode = 'seated';           // calm seated FP, free-look (no scripted tumble)
     intro.scratch.init = true;
     intro.scratch.dwell = 0;
   }
   intro.scratch.dwell = (intro.scratch.dwell as number) + dt;
   const d = intro.scratch.dwell as number;
-  // Ease the TUMBLE out (settle 1 → 0) over the dwell — the pod stabilizing into the descent.
-  const e = Math.min(1, d / SHIP_EXPLODE_DWELL);
-  const settle = 1 - e * e * (3 - 2 * e);   // smoothstep ease-out
-  intro.scratch.tumble = settle;            // the camera tumble rides this (controller post-multiply)
-  addTrauma(settle * 0.12);                 // a GENTLE jostle that decays as the tumble settles (no base rumble — the tumble is mostly the visual roll now)
-  setTumbleLight(settle);                   // the cabin-light swing: blast-orange flood → orbital cool
-  if (d > SHIP_EXPLODE_DWELL) {
-    intro.scratch.tumble = 0;               // fully settled → hand off level to the descent
-    advanceBeat(ctx);                       // → descent (ensureInPod sets mode 'seated', free-look back)
-  }
+  // A brief warm blast-glow lighting the cabin from the explosion, fading — the pod stays UPRIGHT.
+  const glow = Math.max(0, 1 - d / 1.4);    // the blast light decays over ~1.4s to the orbital cool
+  setTumbleLight(glow * 0.7);
+  if (d > SHIP_EXPLODE_DWELL) advanceBeat(ctx);   // → the slow descent (the calm fall)
 }
 
 /** descent beat (T0.3b) — the atmospheric fall: the planet swells (setDescentProgress)
@@ -328,14 +321,12 @@ function tickDescent(ctx: GameContext, dt: number): void {
   // thin upper atmosphere at hypersonic speed) and DONE before the desert appears, so the plasma
   // doesn't stack on the warm desert cross-fade (~0.34→0.48): a sharp bump, 0 at p≈0.08, peak at
   // p≈0.24, gone by p≈0.40 — the violence at entry releases into the calm, beautiful descent.
-  const re = Math.max(0, 1 - Math.pow((progress - 0.24) / 0.16, 2));
-  // Speed-coupled SHAKE — ONLY during the atmosphere entry (the `re` window), and GENTLE
-  // (user walk-test C17: the descent should be PEACEFUL when still far/high; shake only as you
-  // punch through the air). No constant base rumble → orbit + the calm fall read serene.
-  addTrauma(re * 0.18);
-  // The WHITE FLASH on entry — one warm-white blast at peak heat (the punch-through moment).
+  // NO camera shake during the descent (C18 user walk-test): addTrauma is ROTATIONAL and STACKS
+  // each frame, so calling it per-frame SATURATES the trauma → the view spins/turns ("camera all
+  // over the place, disorienting"). The atmosphere's force reads through the VISUAL plasma instead;
+  // the fall stays perfectly smooth + serene. Only one soft entry FLASH punctuates it.
   if (progress >= 0.24 && !intro.scratch.reFlash) {
-    flashScreen(0xfff2e6, 0.7);
+    flashScreen(0xfff2e6, 0.55);     // a soft warm flash as you punch into the atmosphere
     intro.scratch.reFlash = true;
   }
   if (progress >= 1) advanceBeat(ctx);   // → parachute
@@ -357,13 +348,13 @@ function tickParachute(ctx: GameContext, dt: number): void {
     intro.scratch.leverT = 0;        // the lever's current pull pose (jab → settle)
     intro.scratch.init = true;
   }
-  addTrauma(0.05);   // keep falling — persistent rumble
+  // (No per-frame rumble — addTrauma stacks every frame → saturates → the disorienting view-spin.
+  //  The gag's punch comes from the ONE-TIME per-yank jolts below; the fall stays calm. C18.)
 
   // After the lever snaps: it hangs dead off its pivot; a beat of faster free-fall → impact.
   if (intro.scratch.snapped) {
     setParachuteLeverPull(1, true);   // drooped/broken pose
     intro.scratch.t = (intro.scratch.t as number ?? 0) + dt;
-    addTrauma(0.06);
     if ((intro.scratch.t as number) > PARACHUTE_SNAP_FALL) advanceBeat(ctx);   // → impact
     return;
   }
