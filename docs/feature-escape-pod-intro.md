@@ -31,9 +31,12 @@ skeleton + the audio (SFX/loops/music) + the disaster staging + the reveal pacin
   the celestial-skybox-for-space layer + the physical-fall altitude scheme (a feasible high altitude, e.g. a few
   km; the skybox establishes "orbit"). Remove the teleport seams so the player is physically CONTINUOUS from
   pod-ride → crash → wake → exit. Everything else builds on this.
-- **R2 — The space scene (skybox + planet):** a wrapping celestial skybox (real moving stars — reuse/extend the
-  night-sky system), a large camera-relative planet (real-scale look) + a real atmosphere limb, occluding the
-  desert sky. The orbit view from the cockpit before re-entry.
+- **R2 — The space scene (skybox + planet):** **REUSE the game's real sky system** (`src/world/sky.ts`) — it already
+  has a camera-relative wrapping star sphere (`buildStarGeometry`: uniform-on-sphere, twinkling, rotates with day/night)
+  + `makePlanetTexture` + a sky dome. Drive it into a **"space mode"** for the orbit/cockpit beats: dark/black dome,
+  `uCloudiness=0` (kill the desert clouds bleeding through), full stars, + a LARGE planet (camera-relative → real-scale
+  look) with a real atmosphere limb. Re-entry transitions space-mode → the real dawn sky. **DELETE the v1 fake flat
+  star/atmosphere shader planes** (`STAR_FS`/`LOWALT_FS` in podScene). [Foundation confirmed — the building blocks exist.]
 - **R3 — The ONE physical pod:** unify the 3 pod models into ONE — a consistent walkable interior + a matching
   exterior. Docked in the ship; physically entered; physically ejected; ridden; physically exited. [Hero model —
   user art-direction.]
