@@ -2589,14 +2589,15 @@ let _wakeGroup: THREE.Group | null = null;
 let _wakeDoorPivot: THREE.Group | null = null;
 const _wakeGeo: THREE.BufferGeometry[] = [];
 const _wakeMats: THREE.Material[] = [];
+const WAKE_DOOR_AJAR = -1.05;   // the ajar door's resting swing (well aside so the dawn desert reads past it)
 
-export function buildWakeInterior(ctx: GameContext, x: number, z: number, eyeY: number): void {
+export function buildWakeInterior(ctx: GameContext, x: number, z: number, eyeY: number, yaw = 0): void {
   removeWakeInterior(ctx);
   const gy = ctx.terrain.heightAt(x, z);
   const g = new THREE.Group();
   g.name = 'podWakeInterior';
   g.position.set(x, gy, z);
-  g.rotation.set(-0.04, 0, 0.10);   // a slight crashed lean (hatch faces world −Z; player looks −Z)
+  g.rotation.set(-0.04, yaw, 0.10);   // a slight crashed lean; `yaw` aims the hatch (the look-out direction)
   const dark = new THREE.MeshStandardMaterial({
     color: 0x352e27, roughness: 0.92, metalness: 0.16, side: THREE.DoubleSide, flatShading: true,
   });
@@ -2635,7 +2636,7 @@ export function buildWakeInterior(ctx: GameContext, x: number, z: number, eyeY: 
   door.position.set(-hatchW / 2, 0, 0);   // spans left from the right-edge hinge
   door.userData.noCollider = true; door.castShadow = false;
   pivot.add(door);
-  pivot.rotation.y = -0.5;   // ajar (the blast cracked it open)
+  pivot.rotation.y = WAKE_DOOR_AJAR;   // swung well aside (the blast cracked it open) — the desert reads past it
   g.add(pivot);
   _wakeDoorPivot = pivot;
   ctx.three.scene.add(g);
@@ -2647,7 +2648,7 @@ export function buildWakeInterior(ctx: GameContext, x: number, z: number, eyeY: 
 export function blowWakeHatch(t: number): void {
   if (!_wakeDoorPivot) return;
   const k = Math.min(1, Math.max(0, t));
-  _wakeDoorPivot.rotation.y = -0.5 - k * 2.1;          // fling wide open
+  _wakeDoorPivot.rotation.y = WAKE_DOOR_AJAR - k * 1.5;          // fling the rest of the way wide open
   (_wakeDoorPivot.children[0] as THREE.Mesh).position.y = -k * 0.35;   // tears down off the hinge
 }
 

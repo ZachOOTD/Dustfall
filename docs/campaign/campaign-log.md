@@ -272,3 +272,15 @@ The user approved **Phase 2 (the descent showpiece)** after an extended attended
 - **Spend:** ~400K (main-loop inline); campaign total ~13.88M; cycle **22/150**.
 - **Commit:** `a8b21a0`.
 - **Next:** C23 = Phase 4 **T4.2 — the desert reveal** (dawn, half-buried pod, aftermath-silence pacing, the horizon hook).
+
+---
+
+## Cycle 23 — Phase 4 T4.2: the desert reveal (2026-06-30, overnight) — SHIPPED
+- **Planned:** the desert reveal as the player climbs out — dawn, half-buried pod, aftermath-silence pacing (E7), the horizon hook (E8).
+- **Shipped (main-loop logic, `sequence.ts` + `podScene.ts`):** (1) **DAWN** — `stepOut` sets `ctx.time.dayTime=0.26` so the player emerges into the dawn dunes (cohesive with the descent; the game otherwise starts mid-morning). (2) **Aftermath-silence pacing (E7)** — `stepOut` reworked into a held quiet reveal beat: stand in the dawn, pod beside you, **no HUD/objectives** for 4s, then hand off + the salvage toast. (3) **Horizon hook (E8)** — the emergence faces origin-ward (`hookYaw=atan2(returnPos.x,returnPos.z)`) toward the **M5a hero-landmark silhouette** ring (fog-resistant, placed at boot), so a distant silhouette on the dawn horizon pulls the player onward; `buildWakeInterior` gained a `yaw` + the door swung well aside so the desert reads past it.
+- **Verify:** verify:all PASS + smoke `{ok:true,beats:12}` + the `--scenario=wake` rig (dawn desert + horizon glow through the hatch).
+- **Visual iteration:** own-loop (greybox wake interior). The wake rig reads (dawn + horizon); dark + imperfect door framing at the fixed angle (in-game free-look). The MOTION/feel is a walk-test item.
+- **Deferred (per the pivot):** the HERO crashed-cabin wake interior (lighting/detail/framing) + a bespoke hook landmark + the crashed-pod exterior↔interior size-match → user art-direction. T4.2's defining value (dawn reveal + silence + hook) is delivered.
+- **Spend:** ~350K (main-loop inline); campaign total ~14.23M; cycle **23/150**.
+- **Commit:** `692b2d5`.
+- **Next:** C24 = Phase 4 **T4.3 — the craft+salvage tutorial + the chute-pop payoff** (the last Phase-4 tier).

@@ -73,6 +73,9 @@ const WAKE_BLOW_DUR = 0.6;
 const WAKE_CLIMB_DIST = 2.2;
 const WAKE_BLOW_FALLBACK = 5.0;
 const WAKE_CLIMB_FALLBACK = 8.0;
+/** T4.2 — the desert reveal: seconds of held aftermath-silence (E7) as you stand in the dawn
+ *  (your pod beside you, the horizon hook ahead, no HUD/objectives) before the game takes over. */
+const REVEAL_DWELL = 4.0;
 
 /** C18 (user walk-test: "black out briefly between each phase to make things feel smoother") —
  *  a brief DIP-TO-BLACK at the descent-chain transitions. advanceBeat cuts to black; the new beat
@@ -465,9 +468,13 @@ function tickWake(ctx: GameContext, dt: number): void {
     disposePodScene(ctx);
     setDescentProgress(0);
     const rp = intro.returnPos;
-    buildWakeInterior(ctx, rp.x, rp.z, rp.y + Tuning.POD_SEATED_EYE_OFFSET);
+    // The horizon hook (E8): aim the wake hatch + the emergence toward the world's landmark
+    // field — the M5a hero-landmark silhouettes ring the origin, fog-resistant — so when the
+    // player comes to + climbs out, a distant silhouette on the dawn horizon pulls them onward.
+    const hookYaw = Math.atan2(rp.x, rp.z);   // face from the spawn toward origin (the landmark ring)
+    buildWakeInterior(ctx, rp.x, rp.z, rp.y + Tuning.POD_SEATED_EYE_OFFSET, hookYaw);
     seatPlayerAt(ctx, rp);            // body at the desert spawn (the wake spot)
-    faceControl(ctx, 0, -0.05);       // look −Z out the hatch, slightly down (dazed)
+    faceControl(ctx, hookYaw, -0.05); // look out the hatch toward the horizon hook, slightly down (dazed)
     blowWakeHatch(0);                 // the door sits ajar (the blast cracked it)
     intro.mode = 'seated';            // dazed: free-look, can't move yet
     setIntroBlack(1);
@@ -523,19 +530,34 @@ function tickWake(ctx: GameContext, dt: number): void {
  *  new-game spawn (captured at start) + endEscapePodIntro (restores HUD/locomotion/survival,
  *  disposes all intro geometry, clears the black). The player is now in the dunes, playing.
  *  T0.4b adds the pod-as-spawn-wreck + the craft/salvage tutorial scaffold. */
-function tickStepOut(ctx: GameContext): void {
+function tickStepOut(ctx: GameContext, dt: number): void {
   const intro = ctx.intro;
   if (!intro) return;
-  const rp = intro.returnPos;
-  // T4.1 — NO teleport: the player ALREADY walked out into the desert (the wake beat). Tear down
-  // the wake interior + leave the crashed pod wreck where they climbed out — now behind them,
-  // "the pod you crawled out of". The wreck PERSISTS into the real game (endEscapePodIntro
-  // won't dispose it — it's the salvage tutorial target).
-  removeWakeInterior(ctx);
-  placeCrashedPodWreck(ctx, rp.x, rp.z);
-  endEscapePodIntro(ctx);   // hand control back — the desert game runs from here
-  // T0.4b tutorial scaffold — the first-gameplay hint (real craft→pry→chute-pop is Phase 4 T4.3).
-  ctx.ui.showToast('Salvage your pod — craft a machete to pry it open', { kind: 'discovery' });
+  if (!intro.scratch.init) {
+    const rp = intro.returnPos;
+    // T4.2 — the DESERT REVEAL. DAWN: the player emerges into the dawn dunes (cohesion with the
+    // descent's dawn; the game otherwise starts mid-morning at START_DAY_TIME). 0.26 = just past
+    // dawn — a low, warm sun raking the dunes.
+    ctx.time.dayTime = 0.26;
+    // T4.1 — NO teleport: the player ALREADY walked out into the desert (the wake beat). Tear
+    // down the wake interior + leave the crashed pod wreck where they climbed out (behind them,
+    // "the pod you crawled out of"). The wreck PERSISTS into the real game (the salvage target).
+    removeWakeInterior(ctx);
+    placeCrashedPodWreck(ctx, rp.x, rp.z);
+    showIntroPrompt('');
+    intro.mode = 'walk';              // free to look around / step into the dawn
+    intro.scratch.t = 0;
+    intro.scratch.init = true;
+  }
+  // AFTERMATH-SILENCE pacing (E7): a held QUIET beat — no HUD, no objectives — as you stand in
+  // the dawn, your crashed pod beside you, a distant landmark silhouette on the horizon (E8: the
+  // emergence faces the M5a landmark field) — before the game's bustle. Then hand off + the hint.
+  intro.scratch.t = (intro.scratch.t as number) + dt;
+  if ((intro.scratch.t as number) > REVEAL_DWELL) {
+    endEscapePodIntro(ctx);   // hand control back — the desert game runs from here (HUD returns)
+    // T0.4b tutorial scaffold — the first-gameplay hint (the real craft→pry→chute-pop is T4.3).
+    ctx.ui.showToast('Salvage your pod — craft a machete to pry it open', { kind: 'discovery' });
+  }
 }
 
 /** Per-frame intro driver — inserted into the main tick BEFORE updatePlayer. No-op
@@ -558,7 +580,7 @@ export function updateEscapePodIntro(ctx: GameContext, dt: number): void {
     case 'parachute': tickParachute(ctx, dt); break;
     case 'impact': tickImpact(ctx, dt); break;
     case 'wake': tickWake(ctx, dt); break;
-    case 'stepOut': tickStepOut(ctx); break;
+    case 'stepOut': tickStepOut(ctx, dt); break;
     // The tutorial (Beats 10-11: craft+salvage + chute-pop) runs as normal gameplay AFTER the
     // handoff (the wreck + the hint from stepOut), not as an intro beat — the hero pass is Phase 4.
     default: break;

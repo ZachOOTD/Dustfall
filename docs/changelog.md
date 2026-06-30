@@ -3,6 +3,16 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Escape-pod campaign C23 — 2026-06-30 (overnight) — Phase 4 T4.2: the DESERT REVEAL (dawn + aftermath-silence + horizon hook) — SHIPPED ✓ verify:all + smoke + wake rig
+
+`verified` — tsc clean + smoke `{ok:true,beats:12}` + the `--scenario=wake` rig (dawn desert + horizon glow read past the hatch). verify:all PASS. Flag OFF → live game byte-unchanged.
+
+**T4.2 — the DESERT REVEAL** (the moment you climb out into the dawn dunes; main-loop logic in `sequence.ts` + `podScene.ts`):
+- **DAWN at the handoff** — `stepOut` sets `ctx.time.dayTime = 0.26` (just past dawn, a low warm sun) so the player emerges into the dawn dunes, cohesive with the descent's dawn (the game otherwise starts mid-morning at `START_DAY_TIME` 0.34).
+- **Aftermath-silence pacing (E7)** — `stepOut` reworked into a held QUIET reveal beat: after climbing out the player stands in the dawn (mode walk, free to look), pod beside them, the horizon ahead — **no HUD, no objectives** for `REVEAL_DWELL` (4s) — before `endEscapePodIntro` hands off (HUD returns) + the salvage-tutorial toast. The held silence before the game's bustle.
+- **Horizon hook (E8)** — the wake/emergence now faces the world's **landmark field**: `hookYaw = atan2(returnPos.x, returnPos.z)` aims the wake hatch (and the dazed look) toward origin, where the **M5a hero-landmark silhouettes** ring the map (fog-resistant skyline silhouettes, placed at boot by `placeHeroLandmarks`) — so a distant silhouette on the dawn horizon pulls the player onward as they emerge. `buildWakeInterior` gained a `yaw` param; the door's resting ajar swung well aside so the desert reads past it.
+- Verified via the wake rig (dawn desert + horizon glow through the hatch). The MOTION/feel (the held reveal, the dawn light, spotting the hook) is a walk-test item. **Deferred (per the pivot):** the HERO crashed-cabin wake interior (lighting/detail) + a deliberate dedicated hook landmark → user art-direction; T4.2's defining value (dawn reveal + silence pacing + the hook orientation) is delivered.
+
 ## Escape-pod campaign C22 — 2026-06-30 (overnight) — Phase 4 T4.1: impact + WAKE-INSIDE-POD + BLOW-DOOR (the C18 fix) — SHIPPED ✓ verify:all + smoke + wake rig
 
 `verified` — tsc clean + smoke `{ok:true,beats:10}` + the `--scenario=wake` rig reads (inside the dark crashed pod, the ajar hatch, the dawn desert beyond); verify:all PASS. Flag OFF → live game byte-unchanged.

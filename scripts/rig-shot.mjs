@@ -2052,7 +2052,9 @@ const SCENARIOS = {
       const tr = ctx.player.body.body.translation();
       const eye = new V(tr.x, tr.y + (ctx.player.eyeOffset || 0.5), tr.z);
       cam.position.copy(eye);
-      cam.lookAt(new V(eye.x, eye.y - 0.06, eye.z - 2));   // out the hatch (−Z), slightly down
+      // the emergence faces the horizon hook (origin-ward, atan2(x,z)) — look out the hatch that way
+      const len = Math.hypot(eye.x, eye.z) || 1;
+      cam.lookAt(new V(eye.x - (eye.x / len) * 2, eye.y - 0.06, eye.z - (eye.z / len) * 2));
       cam.updateMatrixWorld(true);
       const wi = ctx.three.scene.getObjectByName('podWakeInterior');
       let meshes = 0; if (wi) wi.traverse((o) => { if (o.isMesh) meshes++; });
