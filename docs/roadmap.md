@@ -136,7 +136,35 @@ and promotes the second.
 > [feature-escape-pod-intro.md](feature-escape-pod-intro.md) (the BUILD PLAN). The prior
 > `campaign/2026-06-18` (M11→M13 + Phase A/B) is COMPLETE + user-approved — its tiers below are SHIPPED.
 
-### Escape-pod intro — the phased build ([feature-escape-pod-intro.md](feature-escape-pod-intro.md)) · [ACTIVE CAMPAIGN]
+### ▶ ACTIVE — REBUILD v2: the real-world physical intro (R1→R5) · supersedes the v1 phased build below
+The user walk-tested the v1 build (overnight C19-C26) + directed a re-architecture — full plan + locked
+decisions in [feature-escape-pod-intro.md](feature-escape-pod-intro.md) `## REBUILD v2`. Re-ground the intro
+in the REAL world; ONE physical pod; space = a wrapping celestial skybox (the real sky in "space mode");
+descent = the pod PHYSICALLY falling + crashing into the real desert. The loop builds R1→R5 IN ORDER, pausing
+at each `### Milestone:` for the user's art-direction. The v1 logic/audio/staging/beats CARRY OVER (re-grounded).
+- **R1 — Real-world re-grounding (the keystone):** **✅ R1a — the real sky in "space mode" SHIPPED** (the cockpit
+  window now shows real wrapping stars + a real-scale planet + atmosphere limb; `setSkyIntroMode`; the fake star
+  plane is gone). **▶ R1b — re-ground the DESCENT into real-world coords** (the pod falls toward the REAL spawn;
+  the viewport shows the REAL world, not the `LOWALT_FS` shader fake; delete the pod's `STAR_FS`/`LOWALT_FS` fakes;
+  ease space→dawn is already wired). · **R1c — remove the teleport seams** (physical continuity pod→crash→wake→exit;
+  intertwined with R3's unified pod).
+### Milestone: REBUILD R1 — real-world re-grounding COMPLETE → USER WALK-TEST (orbit + the real-world descent read real) → /campaign-approve
+- **R2 — The space scene (hero polish):** lift the space-mode sky to a hero bar — star density/brightness, the
+  planet's scale/surface/atmosphere, the orbit composition through the window. [user art-direction]
+### Milestone: REBUILD R2 — space scene COMPLETE → USER WALK-TEST → /campaign-approve
+- **R3 — The ONE physical pod:** unify the 3 pod models (descent interior · wake interior · crashed wreck) into
+  ONE — a walkable interior + a matching exterior; docked in the ship, physically ENTERED, EJECTED, ridden,
+  EXITED. No teleports. [hero model — user art-direction]
+### Milestone: REBUILD R3 — the one physical pod COMPLETE → USER WALK-TEST (enter → eject → ride → exit, consistent) → /campaign-approve
+- **R4 — Physical descent + crash + timing fixes:** the pod physically falls + crashes into the real desert (the
+  viewport = the actual spawn world, multiplayer-ready); **parachute gag MID-fall**; **longer ~2s+ blackouts**;
+  impact = blackout.
+### Milestone: REBUILD R4 — physical descent + crash COMPLETE → USER WALK-TEST → /campaign-approve
+- **R5 — Ship interior redesign:** the cockpit redesigned OFF the greybox box (a real ship interior) + the
+  corridor FULLY modelled/detailed. [hero models — user art-direction]
+### Milestone: REBUILD R5 — ship interiors COMPLETE → FEATURE REWORK COMPLETE → USER final walk-test/listen → /campaign-approve
+
+### Escape-pod intro — the phased build (v1, SUPERSEDED by REBUILD v2 above — historical) ([feature-escape-pod-intro.md](feature-escape-pod-intro.md))
 The loop builds these in order, pausing at each `### Milestone:` (phase boundary) for the user's walk-test.
 DoD = a new game plays the whole sequence (Beats 0-11) hero-quality, behind `FEATURES.escapePodIntro`.
 - **✅ Phase 0 — Greybox spine + new-game flow — SHIPPED (C1-C8, 2026-06-28):** T0.0 framework (D269) · T0.1 new-game flow + `introComplete` marker + dev hooks (D270) · T0.2 greybox ship + Beats 0-2 + HUD suppression · T0.3 greybox descent + seated pod + the parachute gag · T0.4 wake → desert handoff + pod-as-spawn-wreck + tutorial scaffold + the `__game.smokeIntro` smoke check. **DoD MET:** the whole sequence plays end-to-end in greybox (`verify:all` + live gates each cycle; flag-OFF byte-unchanged).

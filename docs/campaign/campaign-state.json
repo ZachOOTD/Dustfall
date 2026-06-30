@@ -11,7 +11,7 @@
   "plan_doc": "docs/feature-escape-pod-intro.md",
   "plan_review_note": "The plan was authored (feature-slice) + critically reviewed + the review fixes folded in + USER-APPROVED in-conversation 2026-06-28 ('proceed with your recommendation'). So NO plan-review pause — cycle 1 (Phase 0 T0.0) is released. The next pause is the Phase 0 milestone (the greybox-spine walk-test).",
   "self_author": "propose",
-  "checkpoint": "none",
+  "checkpoint": "milestone",
   "checkpoint_note": "CHANGED to NONE 2026-06-30 (user: 'pick the campaign loop back up, i'm heading to bed, lots of progress overnight'). For this OVERNIGHT run the loop does NOT pause at phase milestones — it builds Phase 3 → 4 → 5 straight through; the user reviews the whole remaining feature in the morning (async via campaign-log.md + the live preview link, which each cycle refreshes). Was 'milestone' (pause per phase for the user's walk-test) during the attended Phase 0-2 run. Per-cycle adversarial gates still enforce visual quality; the human gate is deferred to the morning. If the user wants per-phase pauses again, set checkpoint back to 'milestone'.",
   "verify_cmd": "npm run verify:all",
   "visual_gate": "auto",

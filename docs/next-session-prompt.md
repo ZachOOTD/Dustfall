@@ -1,19 +1,32 @@
-# ▶ OVERNIGHT RUN — Escape-pod intro · Phase 3 (the hauler + disaster) — `campaign/escape-pod-intro`
+# ▶ REBUILD v2 — Escape-pod intro · the REAL-WORLD physical intro — `campaign/escape-pod-intro`
 
-**Campaign ACTIVE, `checkpoint: none` (OVERNIGHT run-through).** The user approved Phase 2 (after an
-extended attended walk-test) and asked to run the loop overnight through the remaining phases — **do NOT
-pause at phase milestones this run.** Build Phase 3 → 4 → 5 straight through; the user reviews the whole
-remaining feature in the morning (via `campaign-log.md` + the live preview link). Boot every cycle from
-`docs/campaign/campaign-state.json` + `docs/roadmap.md` (NOT chat — the chat may compact; the campaign is
-file-driven).
+**Campaign ACTIVE, `checkpoint: milestone` (ATTENDED — the user art-directs the hero looks; pause at each
+`### Milestone:` R-phase boundary for their review/`/campaign-approve`).** The user walk-tested the v1
+overnight build (C19-C26) + directed a re-architecture. **READ `docs/feature-escape-pod-intro.md` `## REBUILD v2`
+FIRST** (the full plan + locked decisions). Boot every cycle from `docs/campaign/campaign-state.json` +
+`docs/roadmap.md` (the REBUILD R-phases are the active "Up next"). Each cycle PUSHES the branch (the preview refreshes).
 
-## Where the feature stands
-- **Phase 0 (greybox spine) + Phase 1 (hero cylindrical pod) + Phase 2 (the descent showpiece) = DONE + user-seen.**
-- **The descent (Phase 2 + the C18 walk-test polish)** is now: eject → a brief blast (UPRIGHT, no tumble) → close
-  orbit → through the atmosphere (re-entry plasma) → a realistic desert with a clear horizon → the ground rushing
-  up (real perspective parallax) → impact → black, with dip-to-blacks between phases. Calm, slow (18s), seamless.
+## The rework (why + what)
+The v1 intro was built at a hidden OFFSET + faked space/descent via shaders + split the pod into 3 teleport-stitched
+models — the root of the "fake" reads. **The shift (user-approved):** re-ground in the REAL world; ONE physical pod
+(enter/eject/ride/crash/wake/exit, no teleport); space = a wrapping celestial SKYBOX (the real sky in "space mode",
+NOT a flat plane); descent = the pod PHYSICALLY falling + crashing into the real desert (the viewport = the actual
+spawn world; multiplayer-ready). Orbit→atmosphere = a scripted re-entry (NOT a literal 100km fall — float precision
+wall ~10km). The v1 beats/audio/staging CARRY OVER (re-grounded, not rewritten).
+
+## Where the rework stands
+- **✅ R1a SHIPPED — the real sky in "space mode"**: `setSkyIntroMode(space01)` in `src/world/sky.ts` drives the game's
+  REAL camera-relative sky into space (dark dome, `uCloudiness→0`, full wrapping stars, a large real-scale planet +
+  atmosphere limb; `0` = the normal sky, byte-unchanged). The fake `buildOrbitView` star/atmo planes are GONE from
+  `shipScene.ts`. Wired into the beats (space at the cockpit, ease to dawn at re-entry, restored at handoff; cabin
+  dust hidden in orbit). `__game.setSkyIntroMode`; rig `--scenario=cockpit --space`.
+- **▶ R1b NEXT — re-ground the DESCENT into real-world coordinates**: the pod falls toward the player's REAL spawn;
+  the viewport shows the REAL world (real terrain/sky), NOT the `LOWALT_FS` shader fake. Delete the pod's
+  `STAR_FS`/`LOWALT_FS` fakes (`podScene.ts`). The space→dawn sky ease is already wired (`setSkyIntroMode` in
+  `tickDescent`). [the deeper half of the keystone]. Then R1c (remove teleport seams — intertwined with R3).
 - The intro plays behind `FEATURES.escapePodIntro` (off in master; the preview build flips it on).
-- **Each cycle PUSHES the branch** (the preview link refreshes) — keep doing this so the user can re-test in the morning.
+- **Footgun:** float precision jitters past ~10km from origin — the physical fall starts at a FEASIBLE altitude
+  (a few km above the spawn), NOT true orbit; the skybox establishes "orbit." Real-world coords near the spawn.
 
 ## ⚠ Phase 3 STATUS (C20 overnight) — STRATEGIC PIVOT: hero VISUALS → user's morning; overnight builds the PLAYABLE intro
 **Why the pivot:** two consecutive Phase-3 hero VISUAL assets (C19 hauler exterior, C20 cockpit interior) plateaued below the
