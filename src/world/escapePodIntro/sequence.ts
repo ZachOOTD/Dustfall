@@ -38,6 +38,7 @@ import { Tuning } from '../../config/tuning.ts';
 import {
   buildShipScene, disposeShipScene, getShipSpawn,
   SHIP_CORRIDOR_ENTER_Z, SHIP_DEAD_END_Z,
+  setCockpitAlert, setShipAlert, setEngineFire,
 } from './shipScene.ts';
 import { buildPodScene, disposePodScene, getPodSpawn, setDescentProgress, setTumbleLight, setParachuteLeverPull, placeCrashedPodWreck } from './podScene.ts';
 import { setGameHudHidden, showIntroPrompt, hideIntroPrompt, setIntroBlack } from './introHud.ts';
@@ -248,22 +249,49 @@ function tickCheckEngines(ctx: GameContext): void {
   if (!intro) return;
   if (!intro.scratch.init) {
     intro.mode = 'walk';
-    showIntroPrompt('Check engines — head to the engine bay');
+    setCockpitAlert(1);   // E2 escalation — the bridge console flips ORBIT ACHIEVED → CORE TEMP CRITICAL (the diegetic reason to check)
+    showIntroPrompt('⚠ CORE TEMP CRITICAL — check the engines (aft)');
     intro.scratch.init = true;
   }
   if (ctx.player.body.body.translation().z > SHIP_CORRIDOR_ENTER_Z) advanceBeat(ctx);   // → corridor
 }
 
-/** corridor beat — walk aft to the engine bay (the dead-end). Reaching it triggers the
- *  disaster (T0.3); for greybox, advance to enterPod. */
-function tickCorridor(ctx: GameContext): void {
+/** corridor beat (T3.4 disaster staging) — walk aft to the engine bay (the dead-end). Reaching
+ *  it TRIGGERS THE DISASTER: the engine bay erupts in fire, the ship floods red-alert (the
+ *  console hits HULL BREACH), a one-time concussive jolt + flash + the cue flips to "GET TO THE
+ *  ESCAPE POD!". The player then FLEES forward back down the burning corridor; reaching the
+ *  bridge (crossing back past ENTER_Z) → enterPod. (Greybox corridor + greybox fire — the hero
+ *  corridor geometry + smoke/particles are deferred to the user's art-direction pass.) */
+function tickCorridor(ctx: GameContext, dt: number): void {
   const intro = ctx.intro;
   if (!intro) return;
   if (!intro.scratch.init) {
     hideIntroPrompt();
     intro.scratch.init = true;
+    intro.scratch.disaster = false;
+    intro.scratch.t = 0;
   }
-  if (ctx.player.body.body.translation().z > SHIP_DEAD_END_Z) advanceBeat(ctx);   // → enterPod
+  const z = ctx.player.body.body.translation().z;
+  if (!intro.scratch.disaster) {
+    // walking aft, drawn toward the engine bay; reaching the dead-end triggers the disaster
+    if (z > SHIP_DEAD_END_Z) {
+      intro.scratch.disaster = true;
+      intro.scratch.t = 0;
+      setEngineFire(1, 0);          // the bay ERUPTS in fire
+      setShipAlert(2, 1);           // the corridor floods red-alert (full pulse)
+      setCockpitAlert(2);           // E2 escalation — the bridge console hits HULL BREACH (seen if you glance back)
+      flashScreen(0xffd0a0, 0.55);  // the blast flash
+      addTrauma(0.55);              // a ONE-TIME concussive jolt (one-shot — never per-frame, which would saturate/spin the view)
+      showIntroPrompt('🔥 ENGINE FIRE — GET TO THE ESCAPE POD!');
+    }
+    return;
+  }
+  // the disaster is underway — flicker the fire + strobe the red-alert; the player FLEES forward.
+  intro.scratch.t = (intro.scratch.t as number) + dt;
+  const t = intro.scratch.t as number;
+  setEngineFire(1, t);
+  setShipAlert(2, 0.5 + 0.5 * Math.sin(t * 11.0));   // a fast red strobe
+  if (z < SHIP_CORRIDOR_ENTER_Z) advanceBeat(ctx);   // fled back to the bridge → enterPod
 }
 
 /** enterPod beat (T0.3a) — on entry, build the pod + seat the player inside it (mode
@@ -466,7 +494,7 @@ export function updateEscapePodIntro(ctx: GameContext, dt: number): void {
   switch (intro.beat) {
     case 'cockpit': tickCockpit(ctx, dt); break;
     case 'checkEngines': tickCheckEngines(ctx); break;
-    case 'corridor': tickCorridor(ctx); break;
+    case 'corridor': tickCorridor(ctx, dt); break;
     case 'enterPod': tickEnterPod(ctx, dt); break;
     case 'shipExplode': tickShipExplode(ctx, dt); break;
     case 'descent': tickDescent(ctx, dt); break;

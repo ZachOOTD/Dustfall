@@ -1970,6 +1970,58 @@ const SCENARIOS = {
     console.log(`[cockpit] ${JSON.stringify(meas)} → scen-${tag}.png`);
   },
 
+  // Corridor disaster (T3.4): the engine-bay FIRE + the RED-ALERT corridor (the disaster the
+  // player flees). Builds the ship, drives the disaster state (fire + red-alert + HULL BREACH),
+  // and shoots the corridor. --angle: fire (mid-corridor looking AFT at the engine-bay blaze)
+  //   [default] · flee (at the dead-end looking FORWARD down the red corridor toward the bridge).
+  'corridor': async (page) => {
+    const angle = argv.angle || 'fire';
+    await page.evaluate(() => {
+      const g = window.__game;
+      const ctx = g.ctx;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      try { ctx.weather.intensity = 0; ctx.weather.cloudiness = 0; } catch {}
+      g.startIntro();
+      g.jumpToBeat('cockpit');   // builds the ship + seats the player
+    });
+    await page.waitForTimeout(700);
+    const meas = await page.evaluate(({ angle }) => {
+      const g = window.__game;
+      const ctx = g.ctx;
+      // Drive the disaster state directly (the corridor beat does this at the dead-end).
+      try { g.setEngineFire(1, 2.1); g.setShipAlert(2, 0.9); g.setCockpitAlert(2); } catch {}
+      ctx.flags.paused = true;
+      ctx.three.renderer.setSize(1100, 760, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1100 / 760; cam.updateProjectionMatrix(); }
+      const tr = ctx.player.body.body.translation();
+      const floorY = tr.y - (ctx.player.body.halfHeight + ctx.player.body.radius);   // ship floor world-y
+      const V = cam.position.constructor;
+      // Corridor runs +Z (local z 2.6→14.6); the engine-bay fire sits at the dead-end (z≈14.4).
+      let eye, look;
+      if (angle === 'flee') {
+        eye = new V(tr.x, floorY + 1.55, tr.z + 12.5);              // at the dead-end
+        look = new V(tr.x, floorY + 1.2, tr.z + 2.0);              // forward down the red corridor to the bridge
+      } else {
+        eye = new V(tr.x, floorY + 1.5, tr.z + 7.0);               // mid-corridor
+        look = new V(tr.x, floorY + 1.1, tr.z + 14.5);            // aft at the engine-bay blaze
+      }
+      cam.position.copy(eye);
+      cam.lookAt(look);
+      cam.updateMatrixWorld(true);
+      const ship = ctx.three.scene.getObjectByName('escapePodShipCockpit');
+      let meshes = 0;
+      if (ship) ship.traverse((o) => { if (o.isMesh) meshes++; });
+      return { found: !!ship, meshes, shipAlert: g.ctx ? undefined : 0, eye: [+eye.x.toFixed(2), +eye.y.toFixed(2), +eye.z.toFixed(2)] };
+    }, { angle });
+    await page.waitForTimeout(300);
+    const tag = `corridor-${angle}`;
+    await page.screenshot({ path: join(OUT, `scen-${tag}.png`), fullPage: false });
+    console.log(`[corridor] ${JSON.stringify(meas)} → scen-${tag}.png`);
+  },
+
   // Smoke-intro (T1.2): run the whole intro beat chain headless + report {ok,beats}.
   // Confirms the new hero cabin + the lever hook don't break the eject→descent→
   // parachute→impact sequence. No screenshot.

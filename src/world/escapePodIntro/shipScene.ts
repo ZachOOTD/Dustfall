@@ -353,6 +353,16 @@ let _alertAmbient: THREE.HemisphereLight | null = null; // the cabin ambient →
 const _AMBIENT_SKY = new THREE.Color(0xb59878);        // the calm warm-grounded ambient sky tint
 let _cockpitAlertLevel: 0 | 1 | 2 = 0;
 
+// ── T3.4 DISASTER-STAGING hooks (the corridor is greybox MeshBasicMaterial = unlit, so the
+//    red-alert is a material TINT, not a light; the engine fire is additive emissive geometry).
+//    setShipAlert tints the captured corridor mats red + strobes; setEngineFire erupts/flickers
+//    the engine-bay fire at the dead-end. Disposed/cleared in disposeShipScene.
+const _corridorMats: { mat: THREE.MeshBasicMaterial; base: THREE.Color }[] = [];
+const _ALERT_RED = new THREE.Color(0xff1808);
+let _engineFire: THREE.Group | null = null;
+const _fireMats: THREE.MeshBasicMaterial[] = [];
+let _shipAlertLevel: 0 | 2 = 0;
+
 /** Is the ship currently built? */
 export function shipBuilt(): boolean {
   return shipGroup !== null;
@@ -1079,13 +1089,16 @@ export function buildShipScene(ctx: GameContext): void {
   buildLighting(group);
   setCockpitAlert(0);   // wire the calm "ORBIT ACHIEVED" default
 
-  // ── GREYBOX CORRIDOR (T3.4 reworks; flat unlit boxes) ──
+  // ── GREYBOX CORRIDOR (flat unlit boxes; hero geometry deferred). Each mat is captured so
+  //    setShipAlert can tint it red on the disaster (MeshBasicMaterial is unlit → tint = the look).
   for (const [spec, color] of CORRIDOR_SPECS) {
     const [w, h, d, cx, cy, cz] = spec;
     const g = new THREE.BoxGeometry(w, h, d);
     _disposables.push(g);
-    const mesh = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color }));
-    _buildMats.push(mesh.material as THREE.Material);
+    const corrMat = new THREE.MeshBasicMaterial({ color });
+    _buildMats.push(corrMat);
+    _corridorMats.push({ mat: corrMat, base: new THREE.Color(color) });
+    const mesh = new THREE.Mesh(g, corrMat);
     mesh.position.set(cx, cy, cz);
     group.add(mesh);
     const col = makeStaticBox(
@@ -1096,6 +1109,7 @@ export function buildShipScene(ctx: GameContext): void {
     const body = col.parent();
     if (body) shipBodies.push(body);
   }
+  buildEngineBay(group);   // the engine-bay fire at the dead-end (hidden until the disaster)
 
   // ── COCKPIT walkable static colliders (WYSIWYG — match the shell surfaces). ──
   for (const [w, h, d, cx, cy, cz] of COCKPIT_COLLIDERS) {
@@ -1164,6 +1178,65 @@ export function cockpitAlertLevel(): 0 | 1 | 2 {
   return _cockpitAlertLevel;
 }
 
+// ── T3.4 — the engine-bay FIRE at the corridor dead-end (the disaster reveal). Additive
+//    emissive flame quads (the corridor is unlit greybox, so the fire is its own glow). Hidden
+//    until setEngineFire erupts it; setEngineFire flickers it each frame. Greybox-grade — the
+//    hero fire FX (smoke, particles, real light) rides the deferred hero corridor.
+function buildEngineBay(group: THREE.Group): void {
+  const fire = new THREE.Group();
+  // at the dead-end door (local z≈14.5), corridor-side, low so it climbs the bulkhead
+  fire.position.set(0, 0.7, 14.4);
+  const cols = [0xff2c0c, 0xff7a1e, 0xffc23a];   // deep-red → orange → yellow flame tones
+  for (let i = 0; i < 9; i++) {
+    const w = 0.5 + (i % 3) * 0.28, h = 1.0 + (i % 2) * 0.7;
+    const g = new THREE.PlaneGeometry(w, h);
+    _disposables.push(g);
+    const m = new THREE.MeshBasicMaterial({
+      color: cols[i % 3], transparent: true, opacity: 0.0,
+      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+    });
+    _fireMats.push(m); _buildMats.push(m);
+    const q = new THREE.Mesh(g, m);
+    q.position.set(Math.sin(i * 1.7) * 0.55, (i % 3) * 0.32, -0.04 * i);
+    fire.add(q);
+  }
+  fire.visible = false;
+  group.add(fire);
+  _engineFire = fire;
+}
+
+/** Drive the engine-bay FIRE (T3.4 disaster). `intensity` 0 = out, 1 = full blaze; `t` = a
+ *  time accumulator that flickers the flames. Safe no-op if the ship isn't built. */
+export function setEngineFire(intensity: number, t = 0): void {
+  if (!_engineFire) return;
+  _engineFire.visible = intensity > 0.001;
+  for (let i = 0; i < _fireMats.length; i++) {
+    const flick = 0.55 + 0.45 * Math.sin(t * (6.5 + i * 0.7) + i * 1.7);
+    const tier = i % 3 === 0 ? 1.0 : (i % 3 === 1 ? 0.8 : 0.6);   // red core brightest
+    _fireMats[i].opacity = Math.min(1, intensity * tier * flick);
+  }
+  // flicker-scale the blaze (taller/shorter licks)
+  _engineFire.scale.set(1 + 0.10 * Math.sin(t * 8.0), 1 + 0.16 * Math.sin(t * 6.3 + 1.0), 1);
+}
+
+/** Drive the ship RED-ALERT (T3.4 disaster) — tint the greybox corridor mats toward hot-red,
+ *  pulsing with `strobe` (0..1). Level 0 restores the base greybox. Safe no-op if not built. */
+export function setShipAlert(level: 0 | 2, strobe = 0): void {
+  _shipAlertLevel = level;
+  for (const { mat, base } of _corridorMats) {
+    if (level === 0) { mat.color.copy(base); continue; }
+    // lerp base→red, KEEPING ~32-66% of the base greybox so the corridor structure (walls/
+    // floor/ceiling value differences) still reads as FORM under the red, not a flat-red wash;
+    // the strobe pulse breathes the intensity (a hard red flash that ebbs).
+    mat.color.copy(base).lerp(_ALERT_RED, 0.34 + 0.34 * strobe);
+  }
+}
+
+/** Current ship red-alert level (for tests). */
+export function shipAlertLevel(): 0 | 2 {
+  return _shipAlertLevel;
+}
+
 /** Tear down the ship (meshes + per-build geometry + per-build materials + colliders +
  *  lights). The SHARED weathered-hull materials persist (module-scope, reused next build). */
 export function disposeShipScene(ctx: GameContext): void {
@@ -1184,6 +1257,10 @@ export function disposeShipScene(ctx: GameContext): void {
   _alertWashLight = null;
   _alertRimLight = null;
   _alertKeyLights = [];
+  _corridorMats.length = 0;
+  _engineFire = null;
+  _fireMats.length = 0;
+  _shipAlertLevel = 0;
   for (const body of shipBodies) ctx.physics.world.removeRigidBody(body);
   shipBodies.length = 0;
 }

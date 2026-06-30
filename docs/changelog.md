@@ -3,6 +3,14 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Escape-pod campaign C21 — 2026-06-30 (overnight) — Phase 3 T3.4: the DISASTER STAGING (engine fire → red-alert → flee to the pod) — SHIPPED ✓ verify:all + smoke
+
+`verified` — tsc clean + smoke `{ok:true,beats:10}` + the corridor disaster rig-shots (fire + flee) read; verify:all PASS. Flag OFF → live game byte-unchanged. **First cycle of the pivot — it SHIPS (main-loop logic), not defers.**
+
+**T3.4 — the disaster STAGING** (Beats 1-2 now PLAY the ship's death; main-loop logic over the existing greybox corridor). The corridor beat (`sequence.ts`) restructured: walk aft toward the engine bay → reaching the dead-end TRIGGERS THE DISASTER — the engine bay erupts in fire, the corridor floods red-alert, a one-time concussive jolt + flash, the cue flips to "🔥 ENGINE FIRE — GET TO THE ESCAPE POD!" → the player FLEES forward back down the burning corridor → reaching the bridge (crossing back past `SHIP_CORRIDOR_ENTER_Z`) → enterPod. New `shipScene.ts` hooks: `setEngineFire(intensity,t)` (additive emissive flame quads at the dead-end, hidden until the disaster, flickering) + `setShipAlert(0|2,strobe)` (tints the greybox corridor mats red-alert, pulsing — the corridor is unlit greybox so the alert is a material tint). **E2 console escalation wired**: cockpit = ORBIT ACHIEVED (level 0) → checkEngines = CORE TEMP CRITICAL (`setCockpitAlert(1)` + the diegetic prompt) → disaster = HULL BREACH (`setCockpitAlert(2)`). `__game.setShipAlert`/`setEngineFire` + a `--scenario=corridor` rig (fire/flee angles).
+- **The disaster PLAYS** — verified via the corridor rig: the engine-bay fire (yellow core → orange → red) + the red-alert corridor + the flee-toward-the-bridge read. The MOTION (fire flicker, red strobe, the flee, the jolt/flash) is a walk-test item (a still can't gate it). Appearance-verified own-loop (greybox staging, not a hero asset → no adversarial gate, per the cost lesson).
+- **Deferred to user art-direction (per the pivot):** the hero CORRIDOR GEOMETRY + the hero FIRE FX (smoke, particles, real fire light) + the full E1 only-open-door funnel + E3 spatial-audio funnel (audio = Phase 5). The disaster's STAGING (the defining value of T3.4 — the ship dying as you flee) is delivered; its beauty is the deferred visual.
+
 ## Escape-pod campaign C20 — 2026-06-30 (overnight) — Phase 3 T3.3: the COCKPIT INTERIOR (improved) + ⚠ STRATEGIC PIVOT: hero-visuals → user art-direction, overnight builds the playable intro (logic/staging/audio) ✓ verify:all
 
 `verified` — `npm run verify:all` PASS (tsc + placement + colliders) + smoke `{ok:true,beats:10}`. Flag OFF → live game byte-unchanged.

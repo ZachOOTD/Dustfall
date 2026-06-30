@@ -248,3 +248,15 @@ The user approved **Phase 2 (the descent showpiece)** after an extended attended
 - **Commit:** `aaebc37`.
 - **▶ USER (morning):** two hero visuals need your eye — the **cockpit opening shot** (`rig-shot --scenario=cockpit` / play the intro) and the **hauler** (`__game.buildHauler()`). Both read but need a surface-fidelity/art-direction pass. Tell me the direction and I'll finish them + the explosion.
 - **Next:** C21 = Phase 3 **T3.4 — the disaster staging** (main-loop logic over the greybox corridor: the engine-fire disaster → red-alert → flee to the pod; wire the console escalation).
+
+---
+
+## Cycle 21 — Phase 3 T3.4: the disaster staging (2026-06-30, overnight) — SHIPPED
+- **Planned:** the disaster STAGING (the ship's death drives you to the pod) — main-loop logic, the first pivot cycle that ships not defers.
+- **Shipped:** the `corridor` beat (`sequence.ts`) restructured into the disaster — walk aft → the engine bay erupts in fire → red-alert floods the corridor + a one-time concussive jolt/flash → "🔥 ENGINE FIRE — GET TO THE ESCAPE POD!" → flee forward to the bridge → enterPod. New `shipScene.ts` hooks: `setEngineFire(intensity,t)` (additive emissive flame quads at the dead-end, hidden until the disaster, flickering) + `setShipAlert(0|2,strobe)` (tints the greybox corridor red-alert, pulsing). **E2 console escalation wired:** ORBIT ACHIEVED → CORE TEMP CRITICAL (`setCockpitAlert(1)` at check-engines) → HULL BREACH (`setCockpitAlert(2)` at the disaster). `__game.setShipAlert`/`setEngineFire` + a `--scenario=corridor` rig.
+- **Verify:** verify:all PASS (tsc + placement + colliders) + smoke `{ok:true,beats:10}`.
+- **Visual iteration:** own-loop (greybox STAGING, not a hero asset → no adversarial gate). The `--scenario=corridor` rig (fire/flee) confirms the engine-bay fire + red-alert flood + flee-toward-the-bridge read; tuned the red lerp down so the corridor keeps form (1 reshoot). The MOTION (fire flicker, red strobe, the flee, the jolt) is a walk-test item.
+- **Deferred (per the pivot):** the hero CORRIDOR GEOMETRY + hero FIRE FX (smoke/particles/light) + the full E1 door-funnel + E3 spatial-audio (audio = Phase 5) → user art-direction. The disaster PLAYS (the defining value); its beauty is the deferred visual.
+- **Spend:** ~300K (main-loop inline, no modeler/gate — the pivot's payoff: ~3× cheaper than the hero-visual cycles); campaign total ~13.48M; cycle **21/150**.
+- **Commit:** `c05ade7`.
+- **Next:** C22 = **Phase 4** (crash/wake/reveal + tutorial — main-loop logic; incl. the C18 reqs: crashed-pod exterior matches the interior size; WAKE INSIDE the pod + blow-the-door, not teleport-out).
