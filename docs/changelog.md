@@ -3,6 +3,10 @@
 2–4 lines per shipped session. Latest at top. Full plans archived at
 `.claude/plans/archive/`.
 
+## Escape-pod REBUILD v2 — 2026-06-30 (attended) — R3a: the ONE consistent pod (wake in + exit the cabin you rode) — SHIPPED ✓ verify:all + smoke
+
+`verified` — verify:all + smoke `{ok:true,beats:12}`. **R3a delivers the user's #1 consistency requirement** — no more 3-models-stitched-by-a-swap. The player now wakes in + climbs out of the SAME `buildPodScene` hero cabin they rode down: `setCabinCrashPose` (crashed tilt + drop the collider + a dawn wake-light), a real hatch cut into the cabin (`buildCabinHatch`, a genuine lofted opening, not a decal) that swings onto the dawn desert, `blowCabinHatch`. The crashed exterior re-sized to MATCH the cabin (~2.9m capsule — the C18 in↔out size-match). Deleted `buildWakeInterior`. Next: R3b (the docked-in-ship physical enter/eject). Look polish (exterior silhouette, wake lighting) → the user's feedback batch.
+
 ## Escape-pod REBUILD v2 — 2026-06-30 (attended) — R2 (space scene hero-polish) + 2 R1 walk-test bug-fixes — SHIPPED ✓ verify:all + smoke
 
 `verified` — verify:all + smoke `{ok:true,beats:12}`. The user walk-tested R1 + approved it to continue (checkpoint→none run-through R2-R5, reviews the batch later; R1 polish + the planet framing owed to their next feedback round).

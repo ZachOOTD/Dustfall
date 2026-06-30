@@ -159,9 +159,13 @@ at each `### Milestone:` for the user's art-direction. The v1 logic/audio/stagin
   polar caps, cloud swirls, a dramatic terminator, Dune palette); a thin believable atmosphere limb. **Planet
   SIZE/PLACEMENT kept at the default — the user art-directs the framing in their next feedback round.** Non-destructive.
 ### Milestone: REBUILD R2 — space scene COMPLETE (checkpoint=none → no pause; user reviews the batch later)
-- **R3 — The ONE physical pod:** unify the 3 pod models (descent interior · wake interior · crashed wreck) into
-  ONE — a walkable interior + a matching exterior; docked in the ship, physically ENTERED, EJECTED, ridden,
-  EXITED. No teleports (this is where the old R1c — physical continuity pod→crash→wake→exit — lands). [hero model — user art-direction]
+- **R3 — The ONE physical pod:** **✅ R3a SHIPPED** — the player wakes in + climbs out of the SAME hero cabin they
+  rode down (no model-swap): `setCabinCrashPose` (crashed tilt + drop the collider + dawn wake-light) + a real hatch
+  cut into the cabin (`buildCabinHatch`) that swings onto the dawn desert + `blowCabinHatch`; the crashed exterior
+  re-sized to MATCH the cabin (~2.9m capsule, the C18 in↔out size-match); deleted `buildWakeInterior`. **▶ R3b — the
+  docked-in-ship physical ENTER/EJECT** (the pod docked in the ship interior the player physically walks into + that
+  physically detaches — no teleport into the pod). The old R1c continuity (pod→crash→wake→exit) is now done via R3a.
+  [hero model — look polish (exterior silhouette, wake lighting) → user art-direction batch]
 ### Milestone: REBUILD R3 — the one physical pod COMPLETE → USER WALK-TEST (enter → eject → ride → exit, consistent) → /campaign-approve
 - **R4 — Physical descent + crash + timing fixes:** the pod physically falls + crashes into the real desert (the
   viewport = the actual spawn world, multiplayer-ready); **parachute gag MID-fall**; **longer ~2s+ blackouts**;

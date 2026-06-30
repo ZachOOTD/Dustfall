@@ -361,3 +361,12 @@ The user walk-tested R1, approved it to continue, and reported 2 bugs (both fixe
 - **Verify:** verify:all + smoke `{ok:true,beats:12}` + rig (orbit + clear-sky controls byte-clean).
 - **Commit:** `391ae90` (+ docs).
 - **Next (run-through):** R3 — the ONE physical pod (unify the 3 models; enter→eject→ride→exit, no teleport) → R4 → R5.
+
+---
+
+## Cycle 29 — REBUILD v2 R3a: the ONE consistent pod (2026-06-30) — SHIPPED
+- **R3a — the user's #1 consistency req:** removed the 3-model swap. The player now wakes in + climbs out of the SAME `buildPodScene` hero cabin they rode down — `setCabinCrashPose` (crashed tilt + drop the collider + a dawn wake-light), a real hatch cut into the cabin (`buildCabinHatch`) onto the dawn desert, `blowCabinHatch`. The crashed exterior re-sized to MATCH the cabin (~2.9m capsule, C18 size-match). Deleted `buildWakeInterior`.
+- **Verify:** verify:all PASS + smoke `{ok:true,beats:12}` + rigs (wake = the real hero cabin; matching exterior).
+- **Concessions (user look-batch):** the fat exterior reads dome-heavy at low angles; the wake interior is dim; the hatch clock differs in vs out (size matches).
+- **Commit:** `8493f49` (+ docs).
+- **Next (run-through):** R3b — the docked-in-ship physical enter/eject → then R4 → R5.

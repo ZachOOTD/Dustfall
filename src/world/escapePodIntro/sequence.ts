@@ -40,7 +40,7 @@ import {
   SHIP_CORRIDOR_ENTER_Z, SHIP_DEAD_END_Z,
   setCockpitAlert, setShipAlert, setEngineFire,
 } from './shipScene.ts';
-import { buildPodScene, disposePodScene, getPodSpawn, setDescentProgress, setDescentBase, setTumbleLight, setParachuteLeverPull, placeCrashedPodWreck, buildWakeInterior, blowWakeHatch, removeWakeInterior } from './podScene.ts';
+import { buildPodScene, disposePodScene, getPodSpawn, setDescentProgress, setDescentBase, setTumbleLight, setParachuteLeverPull, placeCrashedPodWreck, setCabinCrashPose, blowCabinHatch } from './podScene.ts';
 import { setGameHudHidden, showIntroPrompt, hideIntroPrompt, setIntroBlack } from './introHud.ts';
 import { flashScreen } from '../../fx/screenFlash.ts';
 import { addTrauma } from '../../fx/cameraShake.ts';
@@ -252,8 +252,7 @@ export function endEscapePodIntro(ctx: GameContext): void {
   setIntroBlack(0);        // never leave a black overlay over the real game
   setGameHudHidden(false);
   disposeShipScene(ctx);
-  disposePodScene(ctx);
-  removeWakeInterior(ctx);   // T4.1 — tear down the wake interior on any exit (skip/jump/end)
+  disposePodScene(ctx);       // R3a — the ONE cabin is the only pod interior now (no separate wake shell to tear down)
   stopAllIntroLoops();       // T5.1b — stop any ambient loop (cockpit hum / descent rush) on any exit
   setSkyIntroMode(0);                  // R1a — restore the normal game sky on any exit
   setIntroAtmosphereHidden(ctx, false); // R1a — restore the desert atmosphere on any exit
@@ -519,8 +518,13 @@ function tickParachute(ctx: GameContext, dt: number): void {
   }
 }
 
-/** impact beat (T0.4a) — the crash: a hard flash + max trauma, then fade to black + hold
- *  (the blackout). → wake. */
+/** impact beat (T0.4a · R3a) — the crash: a hard flash + max trauma, then fade to black + hold
+ *  (the blackout). R3a — the ONE-POD unification: the descent cabin landed AT the spawn ground
+ *  (progress=1 → altitude 0); we DON'T dispose it + swap to a separate shell. Instead we SETTLE
+ *  the SAME hero cabin to a crashed LEAN at the spawn (it slammed in) — the player is still inside
+ *  it — and free them to walk out (setCabinCrashPose drops the seated cage). The crash lean eases
+ *  in under the blackout, so when the player comes to (wake) they're inside the SAME tilted cabin
+ *  they rode down. The player body rides the cabin's seat as it tilts. → wake. */
 function tickImpact(ctx: GameContext, dt: number): void {
   const intro = ctx.intro;
   if (!intro) return;
@@ -531,38 +535,48 @@ function tickImpact(ctx: GameContext, dt: number): void {
     stopMusicDescent();   // T5.2 — the descent swell cuts at the crash
     playCrashImpact(0);   // T5.1 — the crash (a big near boom + sub rumble)
     showIntroPrompt('');
+    // R3a — keep the descent cabin grounded at the spawn (do NOT dispose). Ensure the descent
+    //   is fully landed (altitude 0) so the cabin sits on the spawn ground, then begin settling
+    //   it to its crashed pose. The base was set by tickDescent; re-assert nothing — just drive
+    //   the pose. (If we arrived here via a dev jump without a descent, the pod is at the offset;
+    //   setCabinCrashPose is a safe no-op when the cabin isn't grounded — _crashPose still eases.)
+    setDescentProgress(1);   // fully landed (altitude 0; cabin floor on the spawn ground)
     intro.scratch.t = 0;
     intro.scratch.init = true;
   }
   intro.scratch.t = (intro.scratch.t as number) + dt;
-  setIntroBlack(Math.min(1, (intro.scratch.t as number) / IMPACT_FADE));
-  if ((intro.scratch.t as number) > IMPACT_FADE + IMPACT_HOLD) advanceBeat(ctx);   // → wake
+  const t = intro.scratch.t as number;
+  // settle the cabin into its crashed lean over the fade (it tips as it slams in). This ALSO
+  //   drops the seated cage at the first nonzero pose so the player can later walk out the hatch.
+  setCabinCrashPose(Math.min(1, t / (IMPACT_FADE * 0.9)));
+  setIntroBlack(Math.min(1, t / IMPACT_FADE));
+  if (t > IMPACT_FADE + IMPACT_HOLD) advanceBeat(ctx);   // → wake
 }
 
-/** wake beat (T4.1 — the C18 walk-test rework) — you COME TO INSIDE the crashed pod, in the
- *  desert, and BLOW THE HATCH to climb out (NOT a magic teleport to standing in open desert).
- *  Under the crash blackout the player is moved (invisibly) from the offset descent pod to the
- *  desert spawn, inside a cramped dark wake interior; they fade in dazed looking out the ajar
- *  hatch, kick it open, then walk out into the dunes. Phases: comeTo → prompt → blowing → climb. */
+/** wake beat (R3a — the ONE-POD rework) — you COME TO INSIDE the SAME hero cabin you rode down,
+ *  now crashed + tilted at the desert spawn, and BLOW ITS HATCH to climb out (NOT a separate wake
+ *  shell, NOT a teleport into open desert). The impact beat already settled the descent cabin to
+ *  its crashed pose at the spawn + freed the player (dropped the seated cage). Here we just come to
+ *  inside it: fade in dazed, looking at the cabin's own ajar escape HATCH (the blast cracked it),
+ *  kick it open, walk out through it onto the real terrain. Phases: comeTo → prompt → blowing →
+ *  climb. (HATCH_AZ on the cabin is the local hatch azimuth; the look/emergence aims that way.) */
+const CABIN_HATCH_YAW = -1.25 + Math.PI;   // face the cabin's escape hatch (HATCH_AZ=-1.25 → yaw=az+π)
 function tickWake(ctx: GameContext, dt: number): void {
   const intro = ctx.intro;
   if (!intro) return;
   if (!intro.scratch.init) {
-    // UNDER THE BLACK (invisible): leave the offset descent pod + come to INSIDE the crashed
-    // pod at the desert spawn. The teleport is hidden by the full blackout — the player wakes
-    // in the pod + climbs out, never seeing a magic "standing in the open desert" (C18).
-    disposePodScene(ctx);
-    setDescentProgress(0);
-    const rp = intro.returnPos;
-    // The horizon hook (E8): aim the wake hatch + the emergence toward the world's landmark
-    // field — the M5a hero-landmark silhouettes ring the origin, fog-resistant — so when the
-    // player comes to + climbs out, a distant silhouette on the dawn horizon pulls them onward.
-    const hookYaw = Math.atan2(rp.x, rp.z);   // face from the spawn toward origin (the landmark ring)
-    buildWakeInterior(ctx, rp.x, rp.z, rp.y + Tuning.POD_SEATED_EYE_OFFSET, hookYaw);
-    seatPlayerAt(ctx, rp);            // body at the desert spawn (the wake spot)
-    faceControl(ctx, hookYaw, -0.05); // look out the hatch toward the horizon hook, slightly down (dazed)
-    blowWakeHatch(0);                 // the door sits ajar (the blast cracked it)
-    intro.mode = 'seated';            // dazed: free-look, can't move yet
+    // R3a — the SAME cabin the player crashed in is still here (impact kept it, settled to a
+    //   crashed lean at the spawn). DON'T dispose/rebuild — just seat the player inside it + aim
+    //   them at its hatch. If we got here via a dev jump (no descent/impact ran), ensureInPod
+    //   builds the cabin at the grounded spawn + setCabinCrashPose tilts it so the wake still
+    //   reads inside the real tilted cabin.
+    setDescentBase(intro.returnPos);
+    buildPodScene(ctx);          // no-op if already built (the crashed cabin from impact); else builds it at the spawn
+    setCabinCrashPose(1);        // ensure the crashed lean + the dropped cage (idempotent)
+    blowCabinHatch(0);           // the cabin's own door sits ajar (the blast cracked it)
+    seatPlayerAt(ctx, getPodSpawn(ctx));   // body at the seated spawn INSIDE the crashed cabin
+    faceControl(ctx, CABIN_HATCH_YAW, -0.05);   // look at the cabin hatch (the dawn desert past it), slightly down (dazed)
+    intro.mode = 'seated';       // dazed: free-look, can't move yet
     setIntroBlack(1);
     intro.scratch.t = 0;
     intro.scratch.blowT = 0;
@@ -574,7 +588,7 @@ function tickWake(ctx: GameContext, dt: number): void {
   const phase = intro.scratch.phase as string;
 
   if (phase === 'comeTo') {
-    setIntroBlack(Math.max(0, 1 - t / WAKE_FADE));   // fade in, dazed, the dawn desert past the hatch
+    setIntroBlack(Math.max(0, 1 - t / WAKE_FADE));   // fade in, dazed, the dawn desert past the cabin hatch
     if (t > WAKE_FADE + WAKE_HOLD) {
       showIntroPrompt('Kick the hatch open  [click]');
       intro.scratch.phase = 'prompt';
@@ -595,16 +609,17 @@ function tickWake(ctx: GameContext, dt: number): void {
   }
   if (phase === 'blowing') {
     intro.scratch.blowT = Math.min(1, (intro.scratch.blowT as number) + dt / WAKE_BLOW_DUR);
-    blowWakeHatch(intro.scratch.blowT as number);   // fling the hatch open
+    blowCabinHatch(intro.scratch.blowT as number);   // fling the cabin hatch open
     if ((intro.scratch.blowT as number) >= 1) {
-      intro.mode = 'walk';            // hand over control — climb out
+      intro.mode = 'walk';            // hand over control — climb out the cabin hatch
       showIntroPrompt('Climb out into the desert');
       intro.scratch.phase = 'climb';
       intro.scratch.t = 0;
     }
     return;
   }
-  // phase 'climb' — the player walks out the hatch; leaving the pod radius ends the wake.
+  // phase 'climb' — the player walks out the cabin hatch onto the real terrain; leaving the pod
+  //   radius ends the wake (the cabin is visual-only at the spawn — no collider, walk straight out).
   const rp = intro.returnPos;
   const tr = ctx.player.body.body.translation();
   const dx = tr.x - rp.x, dz = tr.z - rp.z;
@@ -628,10 +643,14 @@ function tickStepOut(ctx: GameContext, dt: number): void {
     ctx.time.dayTime = 0.26;
     setSkyIntroMode(0);                  // R1a — the REAL dawn desert sky (space mode fully off)
     setIntroAtmosphereHidden(ctx, false); // R1a — the desert dust/atmosphere returns
-    // T4.1 — NO teleport: the player ALREADY walked out into the desert (the wake beat). Tear
-    // down the wake interior + leave the crashed pod wreck where they climbed out (behind them,
-    // "the pod you crawled out of"). The wreck PERSISTS into the real game (the salvage target).
-    removeWakeInterior(ctx);
+    // R3a — NO teleport: the player ALREADY walked out the cabin hatch into the desert (the wake
+    //   beat). Now SWAP the interior-only crashed cabin (back-faced shell, can't be viewed from
+    //   outside) for the matching EXTERIOR wreck at the SAME spot — the SIZE-MATCHED capsule (C18:
+    //   same diameter/height/proportions as the cabin), so when the player looks back the wreck IS
+    //   the vessel they climbed out of. The exterior wreck PERSISTS into the real game (the salvage
+    //   target). The player is already outside, looking at the exterior, so disposing the interior
+    //   cabin they just left is seamless.
+    disposePodScene(ctx);
     placeCrashedPodWreck(ctx, rp.x, rp.z);
     startMusicDesert();               // T5.2 — the gentle desert-easing cue (resolves into gameplay)
     showIntroPrompt('');

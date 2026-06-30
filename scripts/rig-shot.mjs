@@ -2095,9 +2095,15 @@ const SCENARIOS = {
       const cam = ctx.three.camera;
       if (cam.isPerspectiveCamera) { cam.aspect = 1000 / 760; cam.updateProjectionMatrix(); }
       g.startIntro();
-      g.jumpToBeat('wake');   // builds the wake interior + seats the player at the desert spawn
+      // R3a — the wake now happens INSIDE the real hero cabin (no separate shell). Run the
+      // chain through impact (which settles the cabin to its crashed pose at the spawn + frees
+      // the player), then jump to wake (seats inside the crashed cabin, looking at its hatch).
+      g.jumpToBeat('impact');
     });
+    await page.waitForTimeout(2800);   // let impact settle the crashed cabin + fade
+    await page.evaluate(() => { window.__game.jumpToBeat('wake'); });
     await page.waitForTimeout(4200);   // let the come-to black fade naturally (mode seated, ticking)
+    if (argv.blow) await page.evaluate(() => { try { window.__game.blowCabinHatch(1); } catch {} });   // R3a — force the hatch fully open (the climb-out read: the dawn desert through the wide door)
     const meas = await page.evaluate(() => {
       const g = window.__game;
       const ctx = g.ctx;
@@ -2107,17 +2113,20 @@ const SCENARIOS = {
       const tr = ctx.player.body.body.translation();
       const eye = new V(tr.x, tr.y + (ctx.player.eyeOffset || 0.5), tr.z);
       cam.position.copy(eye);
-      // the emergence faces the horizon hook (origin-ward, atan2(x,z)) — look out the hatch that way
-      const len = Math.hypot(eye.x, eye.z) || 1;
-      cam.lookAt(new V(eye.x - (eye.x / len) * 2, eye.y - 0.06, eye.z - (eye.z / len) * 2));
+      // R3a — look at the cabin's escape HATCH (HATCH_AZ=-2.0 → outward dir (sin,cos)). The wake
+      //   camera yaw faced that way in-beat; mirror it here so the shot frames the hatch + the
+      //   dawn desert past it, with the riveted cabin wall around (the SAME hero cabin read).
+      const haz = -1.25;
+      cam.lookAt(new V(eye.x + Math.sin(haz) * 2, eye.y - 0.05, eye.z + Math.cos(haz) * 2));
       cam.updateMatrixWorld(true);
-      const wi = ctx.three.scene.getObjectByName('podWakeInterior');
+      const wi = ctx.three.scene.getObjectByName('escapePodCabin');
       let meshes = 0; if (wi) wi.traverse((o) => { if (o.isMesh) meshes++; });
       return { found: !!wi, meshes, eye: [+eye.x.toFixed(2), +eye.y.toFixed(2), +eye.z.toFixed(2)] };
     });
     await page.waitForTimeout(300);
-    await page.screenshot({ path: join(OUT, 'scen-wake.png'), fullPage: false });
-    console.log(`[wake] ${JSON.stringify(meas)} → scen-wake.png`);
+    const wtag = argv.blow ? 'scen-wake-blown.png' : 'scen-wake.png';
+    await page.screenshot({ path: join(OUT, wtag), fullPage: false });
+    console.log(`[wake] ${JSON.stringify(meas)} → ${wtag}`);
   },
 
   // Smoke-intro (T1.2): run the whole intro beat chain headless + report {ok,beats}.

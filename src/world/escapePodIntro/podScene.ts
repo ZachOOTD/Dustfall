@@ -236,6 +236,25 @@ let chuteLeverRestX = 0;                     // its resting pitch (radians); pul
 let leverBrokenTell: THREE.Group | null = null;  // the snapped-mount reveal (shown on snap)
 const _cabinDisposables: THREE.BufferGeometry[] = [];   // per-build geometry to free on dispose
 
+// ── R3a — the ONE POD: the escape HATCH on the hero cabin (the wake-exit, superseding the
+//    separate buildWakeInterior shell). A real openable door cut into the cabin wall arc that
+//    the player kicks open + climbs out of into the REAL desert (the cabin is visual-only at the
+//    spawn, the player walks straight out on the real terrain — same no-collision approach the
+//    wake shell used). Set by buildCabinHatch; blowCabinHatch swings it open. The hatch faces
+//    the cabin-LOCAL azimuth HATCH_AZ; the wake camera/emergence aims that way.
+const HATCH_AZ = -1.25;                // LEFT-forward wall arc: the clear gap between the grab/conduit (−0.85) + the EJECT (−1.97), well off the viewport (π) / console (+1.99) / seat (+Z)
+const HATCH_W = 0.90, HATCH_H = 1.62;  // door opening (climb-through size on the 2.56m bore)
+const HATCH_CY = 1.0;                  // hatch centre height (a standing climb-out + a seated dazed look)
+let cabinHatchPivot: THREE.Group | null = null;   // the cabin door's hinge pivot (blowCabinHatch)
+let _cabinHatchAjarY = 0;                          // the door's ajar resting yaw (blow swings from here)
+let hatchSpillLight: THREE.PointLight | null = null;   // dawn spilling through the open hatch (wake)
+let cabinLamp: THREE.PointLight | null = null;     // the ceiling lamp KEY (brightened a touch on the dawn wake)
+// R3a — the cabin's crashed POSE at the spawn: impact tilts/settles the descent cabin to a
+// crashed lean (it slammed in). 0 = upright (descent), 1 = full crashed lean. Applied to the pod
+// GROUP's rotation in _syncPodToAltitude / _applyCrashPose. The pivot is the floor-base centre.
+let _crashPose = 0;
+const _CRASH_PITCH = 0.26, _CRASH_ROLL = 0.14, _CRASH_YAW = 0.0;   // the settled crashed lean (radians)
+
 /** Is the pod currently built? */
 export function podBuilt(): boolean {
   return podGroup !== null;
@@ -318,20 +337,55 @@ function buildCabinInterior(group: THREE.Group): void {
   //     planet reads through the real lofted gap; the wall reads as an unbroken barrel
   //     with a hole, NOT two posts flanking a rectangle (P1 — kills the visor gestalt).
   const vpY0 = VP_CY - VP_R, vpY1 = VP_CY + VP_R;   // porthole vertical span
-  // lower full band: floor → porthole bottom
-  const wallLo = _tube(CAB_R, vpY0, WALL_SEG, _cabShell);
-  wallLo.position.y = vpY0 / 2;
-  group.add(wallLo);
-  // upper full band: porthole top → shoulder
-  const wallHi = _tube(CAB_R, WALL_H - vpY1, WALL_SEG, _cabShell);
-  wallHi.position.y = (vpY1 + WALL_H) / 2;
-  group.add(wallHi);
-  // the two side arcs at window height — everything EXCEPT the porthole azimuth window
-  const vpStart = VP_AZ_C + VP_AZ_HALF;             // CCW end of the porthole arc
-  const vpLen = Math.PI * 2 - VP_AZ_HALF * 2;       // the wall arc = everything BUT the porthole
-  const wallMid = _tube(CAB_R, vpY1 - vpY0, WALL_SEG, _cabShell, vpStart, vpLen);
-  wallMid.position.y = (vpY0 + vpY1) / 2;
-  group.add(wallMid);
+  // R3a — the cabin wall is built CONTINUOUS as a stack of horizontal bands, with TWO real
+  //   apertures cut out: the forward round PORTHOLE (§4) and the rear-left escape HATCH (§10).
+  //   Each band that overlaps an aperture's height is emitted as the wall arc(s) that AVOID the
+  //   aperture azimuth (a real lofted gap, not a decal — procedural-mesh-authoring.md). Both
+  //   the porthole + the hatch read as holes cut in an unbroken banded barrel.
+  const hY0 = HATCH_CY - HATCH_H / 2, hY1 = HATCH_CY + HATCH_H / 2;   // hatch vertical span
+  const hatchAzHalf = Math.min(Math.PI * 0.9, (HATCH_W / 2) / CAB_R + 0.02);   // hatch azimuth half-extent
+  // emit a horizontal wall band [y0,y1], skipping any azimuth window in `gaps`
+  //   (each gap = {c: centre azimuth, h: half-extent}). Splits the ring into the
+  //   complementary arcs that bridge the gaps.
+  const emitWallBand = (y0: number, y1: number, gaps: { c: number; h: number }[]): void => {
+    const h = y1 - y0;
+    if (h <= 0.0001) return;
+    if (gaps.length === 0) {
+      const t = _tube(CAB_R, h, WALL_SEG, _cabShell);
+      t.position.y = (y0 + y1) / 2;
+      group.add(t);
+      return;
+    }
+    // normalize gap centres to [0,2π) + sort, then walk the gaps emitting the arc between them.
+    const gs = gaps.map((g) => ({ s: g.c - g.h, e: g.c + g.h })).map((g) => {
+      let s = g.s; while (s < 0) s += Math.PI * 2; while (s >= Math.PI * 2) s -= Math.PI * 2;
+      return { s, e: s + (g.e - g.s) };   // e may exceed 2π (the arc wraps); handled by modulo on emit
+    }).sort((a, b) => a.s - b.s);
+    for (let i = 0; i < gs.length; i++) {
+      const cur = gs[i], next = gs[(i + 1) % gs.length];
+      const arcStart = cur.e % (Math.PI * 2);
+      let arcEnd = next.s; if (i === gs.length - 1) arcEnd = gs[0].s + Math.PI * 2;
+      const len = arcEnd - arcStart;
+      if (len <= 0.001) continue;
+      const t = _tube(CAB_R, h, WALL_SEG, _cabShell, arcStart, len);
+      t.position.y = (y0 + y1) / 2;
+      group.add(t);
+    }
+  };
+  // the four height zones (the union of the porthole + hatch spans split the wall into bands):
+  //   the band sequence ascends; a band gets a porthole gap if it overlaps [vpY0,vpY1] and a
+  //   hatch gap if it overlaps [hY0,hY1]. Build the sorted unique band edges, then emit each.
+  const portGap = { c: VP_AZ_C, h: VP_AZ_HALF };
+  const hatchGap = { c: HATCH_AZ, h: hatchAzHalf };
+  const edges = Array.from(new Set([0, hY0, vpY0, hY1, vpY1, WALL_H].filter((y) => y >= 0 && y <= WALL_H))).sort((a, b) => a - b);
+  for (let i = 0; i < edges.length - 1; i++) {
+    const y0 = edges[i], y1 = edges[i + 1];
+    const mid = (y0 + y1) / 2;
+    const gaps: { c: number; h: number }[] = [];
+    if (mid > vpY0 && mid < vpY1) gaps.push(portGap);
+    if (mid > hY0 && mid < hY1) gaps.push(hatchGap);
+    emitWallBand(y0, y1, gaps);
+  }
   // 1.b the OGIVE DOME ceiling — a lathe cap from the shoulder radius pulling in to a
   //     blunt apex, matching the exterior's tucked nose. Back-faced (seen from inside).
   const domeProf: THREE.Vector2[] = [];
@@ -432,29 +486,49 @@ function buildCabinInterior(group: THREE.Group): void {
     const halfW = Math.sqrt(Math.max(0, (VP_R + 0.06) * (VP_R + 0.06) - dy * dy));  // along-wall horiz half-width
     return Math.min(Math.PI * 0.9, halfW / CAB_R + 0.04);
   };
+  // R3a — does the hatch (§10) cross this hoop height, and if so its azimuth half-extent
+  //   (0 if the row is clear of the door). Gaps the hoop so the band doesn't bar the opening.
+  const hY0r = HATCH_CY - HATCH_H / 2, hY1r = HATCH_CY + HATCH_H / 2;
+  const hatchAzHalfR = Math.min(Math.PI * 0.9, (HATCH_W / 2) / CAB_R + 0.04);
+  const hatchAzHalfAt = (y: number) => (y > hY0r - 0.04 && y < hY1r + 0.04) ? hatchAzHalfR : 0;
+  // is the wall point at (az,y) inside the hatch opening? (used to skip studs over the door)
+  const inHatch = (az: number, y: number) => {
+    if (y <= hY0r || y >= hY1r) return false;
+    let d = az - HATCH_AZ; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2;
+    return Math.abs(d) < hatchAzHalfR;
+  };
   // A ring-frame hoop. `proud` = how far it stands INTO the cabin off the wall (a BENT
   //  bright band that visibly arcs L→R is the fastest "this is round" cue — FIX 1). Rivets
   //  are small FLUSH dome studs seated tight to the wall (FIX 3 — not chunky proud pegs).
+  //  The hoop gaps BOTH the porthole AND the hatch (R3a) so neither aperture is barred.
   const addRing = (y: number, h: number, proud = 0.05, riveted = true) => {
     const ringR = CAB_R - proud;
-    const gapHalf = portholeAzHalfAt(y);
-    if (gapHalf > 0) {
-      // the hoop CROSSES the porthole → build it as an arc that brackets the window (so it
-      // doesn't bar the glass, but the band continues past the porthole on each side).
-      const start = VP_AZ_C + gapHalf;
-      const len = Math.PI * 2 - gapHalf * 2;
-      const hoop = _tube(ringR, h, WALL_SEG, _cabBandShell, start, len);
-      hoop.position.y = y;
-      group.add(hoop);
-    } else {
+    // collect the azimuth windows this hoop must bridge (porthole + hatch)
+    const gaps: { c: number; hh: number }[] = [];
+    const pg = portholeAzHalfAt(y); if (pg > 0) gaps.push({ c: VP_AZ_C, hh: pg });
+    const hg = hatchAzHalfAt(y); if (hg > 0) gaps.push({ c: HATCH_AZ, hh: hg });
+    if (gaps.length === 0) {
       const hoop = _tube(ringR, h, WALL_SEG, _cabBandShell);
       hoop.position.y = y;
       group.add(hoop);
+    } else {
+      // emit the complementary arcs that bridge the gaps (same scheme as the wall bands).
+      const gs = gaps.map((g) => { let s = g.c - g.hh; while (s < 0) s += Math.PI * 2; while (s >= Math.PI * 2) s -= Math.PI * 2; return { s, e: s + g.hh * 2 }; }).sort((a, b) => a.s - b.s);
+      for (let i = 0; i < gs.length; i++) {
+        const arcStart = gs[i].e % (Math.PI * 2);
+        let arcEnd = gs[(i + 1) % gs.length].s; if (i === gs.length - 1) arcEnd = gs[0].s + Math.PI * 2;
+        const len = arcEnd - arcStart;
+        if (len <= 0.001) continue;
+        const hoop = _tube(ringR, h, WALL_SEG, _cabBandShell, arcStart, len);
+        hoop.position.y = y;
+        group.add(hoop);
+      }
     }
     if (!riveted) return;
     for (let i = 0; i < RING_RIVETS; i++) {
       const az = (i / RING_RIVETS) * Math.PI * 2;
       if (inPorthole(az, y)) continue;                 // skip studs that fall on the glass
+      if (inHatch(az, y)) continue;                    // R3a — skip studs over the hatch opening
       // small low-poly FLUSH dome stud (a half-sphere flush to the wall — reads as a
       // fastened seam rivet, NOT a furniture bolt sticking proud).
       const sg = new THREE.SphereGeometry(0.013, 6, 4, 0, Math.PI * 2, 0, Math.PI / 2);
@@ -483,7 +557,7 @@ function buildCabinInterior(group: THREE.Group): void {
   //    behind the seated head-turn-forward read); (c) THINNER (a slim batten, not a wide
   //    plate+spine slab) so even when a head-turn catches one it doesn't chord the arc.
   //    The horizontal RING-FRAMES (§2) now carry the structure read instead.
-  const ribAzs = [0.0, 2.25, -2.25];   // rear + far-side only; nothing on the forward arc
+  const ribAzs = [0.0, 2.25];   // rear + far-side only; nothing on the forward arc (the −2.25 rib is dropped — the escape HATCH §10 lives on that rear-left arc)
   const ribY = WALL_H / 2 - 0.02, ribH = WALL_H - 0.30;
   for (const az of ribAzs) {
     // a SLIM batten hugging the wall (band-metal so it reads welded-on, but narrow → no chord)
@@ -574,7 +648,7 @@ function buildCabinInterior(group: THREE.Group): void {
   // ── 9. A grab handle overhead (brace against the jolts) — a humanising prop on the
   //    aft-left (θ≈−0.85) so it doesn't block the forward viewport read. A tangential bar
   //    on two stubby standoffs off the curve.
-  const grabAz = -0.85;
+  const grabAz = 0.55;   // R3a — moved to the rear-right (was −0.85) to clear the escape HATCH arc (−1.25)
   const gDir = new THREE.Vector3(Math.sin(grabAz), 0, Math.cos(grabAz));
   const grab = _cyl(0.026, 0.026, 0.42, 8, _cabSteel);
   grab.position.set(gDir.x * (CAB_R - 0.14), WALL_H - 0.18, gDir.z * (CAB_R - 0.14));
@@ -593,6 +667,13 @@ function buildCabinInterior(group: THREE.Group): void {
     standoff.rotation.set(0, 0, 0);          // short radial stub (vertical-ish is fine; tiny)
     group.add(standoff);
   }
+
+  // ── 10. The ESCAPE HATCH (R3a) — a real framed DOOR cut into the rear-left wall arc
+  //    (HATCH_AZ), the wake-exit. The wall + hoops gap over its opening (§1.a/§2); here we
+  //    add the channel-steel frame, a dark recessed jamb (depth read), and the swinging DOOR
+  //    on its hinge pivot. Blown open by blowCabinHatch; the player climbs out into the real
+  //    desert past it (the cabin is visual-only at the spawn — no collider on the door).
+  buildCabinHatch(group);
 }
 
 // ── Section builders (split out so buildCabinInterior reads as the cabin assembly) ──
@@ -900,7 +981,7 @@ function buildConduitAndLight(group: THREE.Group): void {
   // two conduit pipes running UP the REAR curve (θ near 0, behind/beside the seat where
   // they NEVER cross the forward viewport OR sit behind the console/eject as a stray
   // diagonal). Vertical pipes + a couple of bracket clamps each so they read as conduit.
-  for (const [az, yc] of [[0.85, WALL_H / 2], [-0.85, WALL_H / 2 + 0.05]] as const) {
+  for (const [az, yc] of [[0.85, WALL_H / 2], [-0.45, WALL_H / 2 + 0.05]] as const) {   // R3a — the −0.85 conduit moved to −0.45 to clear the escape HATCH arc (−1.25)
     const conduit = _cyl(0.05, 0.05, WALL_H - 0.35, 8, _cabCable);
     _seatOnWall(conduit, az, CAB_R - 0.1, yc);
     group.add(conduit);
@@ -932,6 +1013,107 @@ function buildConduitAndLight(group: THREE.Group): void {
   const lamp = _cyl(0.11, 0.13, 0.03, 14, _ledAmber);
   lamp.position.set(0, CAB_APEX - 0.09, -0.1);
   group.add(lamp);
+}
+
+/** R3a — the ESCAPE HATCH on the hero cabin (HATCH_AZ rear-left arc): a curve-seated
+ *  channel-steel FRAME bordering the wall opening (cut in §1.a/§2), a dark recessed jamb
+ *  WELL going outward through the hull (so the opening reads deep), and the swinging DOOR
+ *  on a hinge pivot (closed/ajar at rest; blowCabinHatch flings it open). The real desert
+ *  reads through the opening when the door swings clear (the cabin is at the spawn; the
+ *  wall arc is genuinely absent over the door, so the world shows through). Mirrors the
+ *  exterior wreck's blown-hatch language (channel-steel frame, bright pried-aluminium door,
+ *  a handle) so the in↔out hatch reads as the SAME door. Sets cabinHatchPivot. */
+function buildCabinHatch(group: THREE.Group): void {
+  const az = HATCH_AZ;
+  const dir = new THREE.Vector3(Math.sin(az), 0, Math.cos(az));   // outward radial at the hatch
+  const cy = HATCH_CY;
+  // a hatch-LOCAL frame: a group seated on the wall, local +Z pointing INWARD (toward centre),
+  //   local +X tangential (along the wall arc) — so the door + frame build in a flat plane.
+  const hatch = new THREE.Group();
+  hatch.position.set(dir.x * CAB_R, cy, dir.z * CAB_R);
+  hatch.rotation.y = az + Math.PI;       // local +Z → inward (matches _seatOnWall)
+  group.add(hatch);
+  // ── channel-steel FRAME bordering the opening (4 bars). Built in the hatch-local XY plane
+  //    (local +X = tangential, local +Y = up); slightly proud INTO the cabin (local −Z? no —
+  //    local +Z is inward, so push toward +Z to stand proud into the bore).
+  const fT = 0.10;                       // frame bar thickness
+  const fb = (w: number, h: number, ox: number, oy: number) => {
+    const bar = _box(w, h, 0.12, _cabChannel);
+    bar.position.set(ox, oy, 0.02);
+    hatch.add(bar);
+  };
+  fb(HATCH_W + fT * 2, fT, 0, HATCH_H / 2 + fT / 2);      // top
+  fb(HATCH_W + fT * 2, fT, 0, -HATCH_H / 2 - fT / 2);     // bottom
+  fb(fT, HATCH_H + fT * 2, -HATCH_W / 2 - fT / 2, 0);     // left jamb
+  fb(fT, HATCH_H + fT * 2, HATCH_W / 2 + fT / 2, 0);      // right jamb (hinge side)
+  // ── recessed jamb WELL — a dark short box going OUTWARD (−Z local, into the hull thickness)
+  //    so the opening reads as a real deep aperture, not a flat hole. Dark unlit inner faces.
+  for (const [w, h, ox, oy] of [
+    [HATCH_W, 0.04, 0, HATCH_H / 2] as const,             // well top
+    [HATCH_W, 0.04, 0, -HATCH_H / 2] as const,            // well bottom
+    [0.04, HATCH_H, -HATCH_W / 2, 0] as const,            // well left
+    [0.04, HATCH_H, HATCH_W / 2, 0] as const,             // well right
+  ]) {
+    const wall = _box(w, h, SHELL + 0.02, _cabChannel);   // a SHALLOW jamb (hull-thickness only) in lit channel-steel so the opening reads framed, not a black tunnel; the real desert shows through the centre
+    wall.position.set(ox, oy, -SHELL / 2);   // recessed outward by the hull thickness only
+    hatch.add(wall);
+  }
+  // riveted studs around the frame (the fastened-port tell; matches the cabin rivet idiom)
+  for (let i = 0; i < 14; i++) {
+    const u = i / 14;
+    let sx: number, sy: number;
+    if (u < 0.25) { sx = (u / 0.25 - 0.5) * HATCH_W; sy = HATCH_H / 2 + fT * 0.5; }
+    else if (u < 0.5) { sx = HATCH_W / 2 + fT * 0.5; sy = (1 - (u - 0.25) / 0.25 - 0.5) * HATCH_H; }
+    else if (u < 0.75) { sx = (0.5 - (u - 0.5) / 0.25) * HATCH_W; sy = -HATCH_H / 2 - fT * 0.5; }
+    else { sx = -HATCH_W / 2 - fT * 0.5; sy = ((u - 0.75) / 0.25 - 0.5) * HATCH_H; }
+    const sg = new THREE.SphereGeometry(0.014, 6, 4, 0, Math.PI * 2, 0, Math.PI / 2);
+    _cabinDisposables.push(sg);
+    const stud = new THREE.Mesh(sg, _cabRivet);
+    stud.rotation.x = -Math.PI / 2;      // dome faces +Z (into the cabin)
+    stud.position.set(sx, sy, 0.07);
+    hatch.add(stud);
+  }
+  // ── the swinging DOOR on a hinge pivot at the RIGHT jamb (hinge side), so it opens like a
+  //    door (and blowCabinHatch swings it wide). Built bright pried-aluminium (matches the
+  //    exterior _podDoorMat language) so the exit door reads as the same kind of door, in↔out.
+  const pivot = new THREE.Group();
+  pivot.position.set(HATCH_W / 2 + fT / 2, 0, 0.04);    // at the right jamb, just proud
+  const door = new THREE.Group();
+  const doorTh = SHELL * 1.1;
+  const doorPlate = _box(HATCH_W, HATCH_H * 0.98, doorTh, _cabBand);   // bright band-aluminium door slab
+  door.add(doorPlate);
+  const doorInset = _box(HATCH_W * 0.66, HATCH_H * 0.7, doorTh * 0.8, _cabDeck);
+  doorInset.position.z = doorTh * 0.5;
+  door.add(doorInset);
+  // a lever HANDLE near the free (left) edge so it reads as a door you grab + kick
+  const handle = _box(0.06, 0.30, 0.10, _cabSteel);
+  handle.position.set(-HATCH_W * 0.30, 0, doorTh * 0.9);
+  door.add(handle);
+  // corner rivets on the door
+  for (const bx of [-1, 1]) for (const by of [-1, 1]) {
+    const rv = _cyl(0.022, 0.022, doorTh * 0.7, 6, _cabRivet);
+    rv.rotation.x = Math.PI / 2;
+    rv.position.set(bx * HATCH_W * 0.38, by * HATCH_H * 0.40, doorTh * 0.6);
+    door.add(rv);
+  }
+  door.position.set(-HATCH_W / 2, 0, 0);   // door local origin → the hinge (right) edge
+  pivot.add(door);
+  // at rest the door sits AJAR (the crash sprang it) so the dawn desert already reads past it
+  //   on wake; blowCabinHatch swings it the rest of the way + drops it.
+  _cabinHatchAjarY = -0.95;   // swung well aside (the blast cracked it) so the dawn reads past it on wake
+  pivot.rotation.y = _cabinHatchAjarY;
+  hatch.add(pivot);
+  cabinHatchPivot = pivot;
+}
+
+/** R3a — blow/kick the cabin escape hatch open. `t` 0→1 swings the ajar door fully wide +
+ *  drops it as it tears off its hinge. No-op before build / after dispose. (Supersedes the old
+ *  blowWakeHatch on the separate wake shell — this acts on the hero cabin's own door.) */
+export function blowCabinHatch(t: number): void {
+  if (!cabinHatchPivot) return;
+  const k = Math.min(1, Math.max(0, t));
+  cabinHatchPivot.rotation.y = _cabinHatchAjarY - k * 1.7;           // fling the rest of the way wide
+  cabinHatchPivot.rotation.x = -k * 0.25;                            // sags/tears down off the hinge
 }
 
 // ─── RE-ENTRY FX (Phase 2 / T2.2 — the violent atmospheric-entry climax) ──────
@@ -1157,6 +1339,7 @@ export function buildPodScene(ctx: GameContext): void {
   // Warm ceiling lamp KEY — pooled (lower range + faster decay) so it pools at the apex
   // and the lower wall / corners fall off into shadow (form, not a flat fill).
   const lamp = new THREE.PointLight(0xffd2a0, 1.7, 3.8, 2.9);   // cooler tint + tighter pool (was washing the upper wall warm-tan)
+  cabinLamp = lamp;   // R3a — brightened a touch on the crashed dawn wake
   lamp.position.set(0.1, CAB_APEX - 0.20, 0.05);   // at the ceiling dome light, nudged off-axis
   group.add(lamp);
   // LOW COOL ambient — a cool-grey sky / dark-cool ground hemisphere, so the aluminium skin
@@ -1186,6 +1369,14 @@ export function buildPodScene(ctx: GameContext): void {
   vpGlow.position.set(0, VP_CY, -CAB_R + 0.05);
   group.add(vpGlow);
   vpGlowLight = vpGlow;   // T2.1 — the literal exterior light entering the cabin; warms+brightens on descent
+  // R3a — DAWN SPILL through the escape HATCH (HATCH_AZ). Off during the descent (intensity 0);
+  //   setCabinCrashPose(>0) raises it so the crashed wake cabin is lit by the dawn pouring in the
+  //   open hatch (the wake read: the SAME riveted cabin, lit warm from the door the player exits).
+  const hDir = new THREE.Vector3(Math.sin(HATCH_AZ), 0, Math.cos(HATCH_AZ));
+  const hSpill = new THREE.PointLight(0xffcaa0, 0.0, 5.5, 1.6);   // warm dawn; intensity ramped on crash
+  hSpill.position.set(hDir.x * (CAB_R - 0.1), HATCH_CY + 0.1, hDir.z * (CAB_R - 0.1));
+  group.add(hSpill);
+  hatchSpillLight = hSpill;
 
   // ── Conservative cage collider (seated → can't walk, but keep the capsule caged so a
   //    physics nudge can't drop the player out). The cabin is a round bore; a boxy AABB
@@ -1210,6 +1401,7 @@ export function buildPodScene(ctx: GameContext): void {
   // Remember the collider offsets (pod-local) so the per-frame descent sync can re-place the
   // cage as the pod falls (the floor must ride under the seated body each frame — R1b).
   _shellOffsets = shellSpecs.map(([, , , cx, cy, cz]) => [cx, cy, cz]);
+  _cabinColliderCtx = ctx;   // R3a — kept so setCabinCrashPose can drop the cage (free the player to walk out)
 
   // R1b — the porthole is now an OPEN aperture onto the REAL world (terrain + sky); only the
   // re-entry plasma/shimmer layer over that real view as the pod punches the atmosphere.
@@ -1223,6 +1415,9 @@ export function buildPodScene(ctx: GameContext): void {
 // Pod-local collider offsets (captured at build) so _syncPodToAltitude can re-place the static
 // cage each frame as the pod descends. Parallel to podBodies.
 let _shellOffsets: ReadonlyArray<[number, number, number]> = [];
+// R3a — the ctx kept at build so setCabinCrashPose can remove the seated cage (free the player
+// to walk out the hatch onto the real terrain at the crashed spawn). Cleared on dispose.
+let _cabinColliderCtx: GameContext | null = null;
 
 /** R1b — re-place the descending pod GROUP + its collider cage at the current world origin
  *  (descent base + _podAltitude). Called each descent frame (after the altitude is updated)
@@ -1233,12 +1428,48 @@ function _syncPodToAltitude(): void {
   if (!podGroup || !_descentBase) return;
   const o = _podWorldOrigin();
   podGroup.position.copy(o);
+  // R3a — apply the crashed LEAN (settled at impact: _crashPose 0→1). The pivot is the pod
+  //   group origin (the floor-base centre, sat on the spawn ground), so the capsule tips at its
+  //   foot like it slammed in. During the descent _crashPose is 0 (upright); the impact beat
+  //   eases it to 1 via setCabinCrashPose.
+  podGroup.rotation.set(_CRASH_PITCH * _crashPose, _CRASH_YAW * _crashPose, _CRASH_ROLL * _crashPose);
   for (let i = 0; i < podBodies.length; i++) {
     const off = _shellOffsets[i];
     if (!off) continue;
     // makeStaticBox bodies are FIXED; teleport (setTranslation) the cage so it tracks the fall.
     podBodies[i].setTranslation({ x: o.x + off[0], y: o.y + off[1], z: o.z + off[2] }, true);
   }
+}
+
+/** R3a — settle the (landed) cabin to its CRASHED pose at the spawn + free the player to walk
+ *  out. `pose` 0→1 eases the descent cabin from upright into a crashed lean (it slammed in).
+ *  At the FIRST nonzero pose it ALSO removes the cabin's static collider cage so the player can
+ *  walk straight out of the hatch onto the REAL terrain (the wake/exit no-collision approach the
+ *  separate shell used — the cabin is now visual-only at the spawn, the salvage wreck §exterior
+ *  carries the persistent world collider). Safe no-op if the pod isn't built. */
+export function setCabinCrashPose(pose: number): void {
+  if (!podGroup) return;
+  _crashPose = Math.max(0, Math.min(1, pose));
+  // free the player: drop the seated cage so they can walk out the hatch onto real ground.
+  if (_crashPose > 0 && podBodies.length > 0 && _cabinColliderCtx) {
+    for (const body of podBodies) _cabinColliderCtx.physics.world.removeRigidBody(body);
+    podBodies.length = 0;
+    _shellOffsets = [];
+  }
+  // DAWN WAKE LIGHT — as the cabin settles crashed, the dawn pours in the open hatch + the
+  //   cabin warms/brightens (the wake read: a warm-lit riveted cabin, not the dim space cabin).
+  const s = _crashPose;
+  if (hatchSpillLight) hatchSpillLight.intensity = s * 5.5;             // dawn FLOODING the hatch arc (the door's open → bright dawn pours in)
+  if (cabinFill) {
+    cabinFill.color.copy(_fillScratch.copy(_FILL_COOL).lerp(_FILL_WARM, s));   // warm dawn ambient
+    cabinFill.intensity = 0.72 + s * 1.9;                              // lift the whole cabin well out of the gloom (the desert dawn fills it)
+  }
+  if (vpGlowLight) {
+    vpGlowLight.color.copy(_vpScratch.copy(_VP_COOL).lerp(_VP_WARM, s));
+    vpGlowLight.intensity = 0.95 + s * 1.6;                            // the porthole also reads the dawn
+  }
+  if (cabinLamp) cabinLamp.intensity = 1.7 + s * 0.9;
+  _syncPodToAltitude();
 }
 
 /** Descent driver (REBUILD v2 R1b) — drive the PHYSICAL fall off the fall's single 0..1
@@ -1358,6 +1589,11 @@ export function disposePodScene(ctx: GameContext): void {
   cabinFill = null;
   chuteLever = null;
   leverBrokenTell = null;
+  cabinHatchPivot = null;        // R3a — the cabin escape-hatch pivot
+  hatchSpillLight = null;        // R3a
+  cabinLamp = null;              // R3a
+  _cabinColliderCtx = null;      // R3a
+  _crashPose = 0;                // R3a — reset the crashed lean (a re-played intro starts upright)
   _shellOffsets = [];
   // R1b — clear the descent grounding so a re-played intro / the orbit-frame beats start
   // from the offset again until the next descent re-grounds it. (The base is re-set by the
@@ -1427,10 +1663,17 @@ export function removeCrashedPodWreck(ctx: GameContext): void {
 // read as a Mandalorian HELMET). Target visible height:width ≥ ~2:1 with a small,
 // tucked ogive nose (~25% of total height, crown ~65% of body width — NOT a
 // full-width hemisphere). Diameter ~1.7m, ~3.1m tall to the apex.
-const POD_R = 0.85;        // body radius (≈1.7m diameter — narrow → TALL capsule, not a head)
+// ── R3a (C18 in↔out SIZE-MATCH) — the exterior wreck now matches the HERO CABIN the player
+//    rode down + climbed out of (buildPodScene: interior radius CAB_R=1.28, outer ≈ CAB_R+SHELL
+//    ≈ 1.44; interior apex CAB_APEX≈2.57). So the exterior BODY RADIUS = the cabin's OUTER hull
+//    radius, and the body+nose height matches the cabin's wall+dome — when the player climbs out
+//    + looks back, the wreck IS the same vessel (same diameter/height/proportions). This widens
+//    the C11 "tall torpedo" into the FAT capsule the cabin actually is (the cabin is the hero the
+//    player lives in 20-30s → it's the anchor; consistency > the old narrow-silhouette pref).
+const POD_R = 1.44;        // body radius = the cabin's OUTER hull radius (CAB_R 1.28 + SHELL 0.16) → ≈2.88m diameter, MATCHING the bore the player rode in
 const POD_BASE_H = 0.34;   // heat-shield base slab height (scorched, sunk in sand)
-const POD_BODY_H = 2.5;    // straight cylindrical body height — the DOMINANT visual zone
-const POD_NOSE_H = 0.84;   // tucked ogive nose-cap (~25% of total; crown well inside body width)
+const POD_BODY_H = 1.95;   // straight cylindrical body = the cabin's straight WALL_H (1.95) → the standing-wall zone matches
+const POD_NOSE_H = 0.70;   // tucked ogive nose-cap ≈ the cabin's DOME_H (0.62) + a little crown (the exterior nose reads above the interior dome)
 const POD_SEG = 28;        // lathe/cylinder radial segments — round but low-poly
 const SKIN = 0.16;         // panel / rim depth (rule 7: ≥15cm for hull-substantial)
 
@@ -1740,8 +1983,8 @@ function buildHeroPodMesh(): THREE.Group {
   // hatch faces +Z directly (azimuth 0) → all hatch geometry sits at x≈0, z=+bodyR.
   // A CLEAN rectangular recessed opening (the tutorial salvage target — it must be
   // the clearest, least-cluttered feature; no cross-struts/scaffolding in front).
-  const hatchCY = baseTop + POD_BODY_H * 0.42;
-  const hatchW = 0.74, hatchH = 1.0;     // narrower → fits cleanly on the slim body
+  const hatchCY = baseTop + POD_BODY_H * 0.46;
+  const hatchW = 0.92, hatchH = 1.5;     // R3a — match the cabin's escape hatch (0.90×1.62) so the in↔out door reads as the SAME door on the now-fatter body
   const hzOut = bodyR;                    // the +Z body-surface point at the hatch centre
   const seatZ = (x: number) => Math.sqrt(Math.max(0.01, bodyR * bodyR - x * x)) + 0.03;
   const seatYaw = (x: number) => -Math.asin(Math.max(-1, Math.min(1, x / bodyR)));
@@ -2026,93 +2269,10 @@ function buildHeroPodMesh(): THREE.Group {
  *  PERSISTS into the real game (NOT disposed by endEscapePodIntro). A vertical
  *  cylinder collider (from the invisible proxy) follows the standing silhouette;
  *  the dome/antenna/door/decorations are noCollider. */
-// ── T4.1 — the CRASHED-POD WAKE INTERIOR. The player comes to INSIDE the pod (in the desert)
-//    and blows the hatch to climb out (the C18 walk-test req: wake in the pod + release the
-//    door, NOT teleport into open desert). Visual-only (noCollider — the player stands on the
-//    REAL terrain + walks straight out the open hatch, so there's no co-location/collision
-//    fragility). A cramped dark capsule shell around the wake camera, slightly crash-tilted,
-//    OPEN at the front (−Z local) where a framed HATCH + an ajar DOOR show the dawn desert; the
-//    real sun lights the interior through the opening. GREYBOX-grade — the HERO crashed-cabin
-//    interior + the exact exterior↔interior size-match (C18) are deferred to the user's
-//    art-direction pass (with the other hero visuals). `yaw` aims the hatch (the look-out
-//    direction — face open desert). Returns the world EYE + LOOK so the beat seats the camera.
-let _wakeGroup: THREE.Group | null = null;
-let _wakeDoorPivot: THREE.Group | null = null;
-const _wakeGeo: THREE.BufferGeometry[] = [];
-const _wakeMats: THREE.Material[] = [];
-const WAKE_DOOR_AJAR = -1.05;   // the ajar door's resting swing (well aside so the dawn desert reads past it)
-
-export function buildWakeInterior(ctx: GameContext, x: number, z: number, eyeY: number, yaw = 0): void {
-  removeWakeInterior(ctx);
-  const gy = ctx.terrain.heightAt(x, z);
-  const g = new THREE.Group();
-  g.name = 'podWakeInterior';
-  g.position.set(x, gy, z);
-  g.rotation.set(-0.04, yaw, 0.10);   // a slight crashed lean; `yaw` aims the hatch (the look-out direction)
-  const dark = new THREE.MeshStandardMaterial({
-    color: 0x352e27, roughness: 0.92, metalness: 0.16, side: THREE.DoubleSide, flatShading: true,
-  });
-  _wakeMats.push(dark);
-  const mk = (geo: THREE.BufferGeometry, mat: THREE.Material): THREE.Mesh => {
-    _wakeGeo.push(geo);
-    const m = new THREE.Mesh(geo, mat);
-    m.userData.noCollider = true; m.castShadow = false; m.receiveShadow = true;
-    return m;
-  };
-  // EYE = the player's eye height relative to the group origin, so the hatch frames the seated
-  // wake look + still clears the standing eye when they rise to climb out.
-  const EYE = eyeY - gy;
-  const W = 1.8, H = 2.1, D = 1.7;
-  // cramped dark shell: back (+Z), sides (±X), top, deck — front (−Z) OPEN for the hatch.
-  const back = mk(new THREE.BoxGeometry(W, H, 0.08), dark); back.position.set(0, EYE, D / 2); g.add(back);
-  for (const sx of [-1, 1]) {
-    const side = mk(new THREE.BoxGeometry(0.08, H, D), dark); side.position.set(sx * W / 2, EYE, 0); g.add(side);
-  }
-  const top = mk(new THREE.BoxGeometry(W, 0.08, D), dark); top.position.set(0, EYE + H / 2, 0); g.add(top);
-  const deck = mk(new THREE.BoxGeometry(W, 0.06, D), dark); deck.position.set(0, EYE - H / 2 + 0.03, 0); g.add(deck);
-  // the HATCH FRAME on the open −Z front (worn steel) + an ajar DOOR hinged on the right jamb.
-  const fz = -D / 2 + 0.03, hatchW = 0.92, hatchH = 1.5;
-  const fb = (w: number, h: number, px: number, py: number): void => {
-    const m = mk(new THREE.BoxGeometry(w, h, 0.13), _podFrameMat); m.position.set(px, py, fz); g.add(m);
-  };
-  fb(hatchW + 0.20, 0.12, 0, EYE + hatchH / 2);
-  fb(hatchW + 0.20, 0.12, 0, EYE - hatchH / 2);
-  fb(0.12, hatchH, -hatchW / 2, EYE);
-  fb(0.12, hatchH, hatchW / 2, EYE);
-  const pivot = new THREE.Group();
-  pivot.position.set(hatchW / 2, EYE, fz - 0.04);
-  const doorGeo = new THREE.BoxGeometry(hatchW, hatchH * 0.96, 0.08);
-  _wakeGeo.push(doorGeo);
-  const door = new THREE.Mesh(doorGeo, _podDoorMat);
-  door.position.set(-hatchW / 2, 0, 0);   // spans left from the right-edge hinge
-  door.userData.noCollider = true; door.castShadow = false;
-  pivot.add(door);
-  pivot.rotation.y = WAKE_DOOR_AJAR;   // swung well aside (the blast cracked it open) — the desert reads past it
-  g.add(pivot);
-  _wakeDoorPivot = pivot;
-  ctx.three.scene.add(g);
-  _wakeGroup = g;
-}
-
-/** Blow/kick the wake hatch off — fling the ajar door fully open + drop it as it tears free.
- *  `t` 0→1 drives the swing (the beat eases it). No-op if no wake interior. */
-export function blowWakeHatch(t: number): void {
-  if (!_wakeDoorPivot) return;
-  const k = Math.min(1, Math.max(0, t));
-  _wakeDoorPivot.rotation.y = WAKE_DOOR_AJAR - k * 1.5;          // fling the rest of the way wide open
-  (_wakeDoorPivot.children[0] as THREE.Mesh).position.y = -k * 0.35;   // tears down off the hinge
-}
-
-/** Tear down the wake interior (geometry + the per-build dark material; the shared pod frame/
- *  door mats persist). Called at the desert handoff. */
-export function removeWakeInterior(ctx: GameContext): void {
-  if (_wakeGroup) { ctx.three.scene.remove(_wakeGroup); _wakeGroup = null; }
-  for (const geo of _wakeGeo) geo.dispose();
-  _wakeGeo.length = 0;
-  for (const m of _wakeMats) m.dispose();
-  _wakeMats.length = 0;
-  _wakeDoorPivot = null;
-}
+// R3a — the separate buildWakeInterior / blowWakeHatch / removeWakeInterior SHELL is GONE.
+//   The player now wakes inside + climbs out of the SAME hero cabin (buildPodScene), crashed at
+//   the spawn — see setCabinCrashPose + blowCabinHatch above. This kept the pod from being THREE
+//   stitched models; it's ONE consistent pod through impact → wake → exit.
 
 export function placeCrashedPodWreck(ctx: GameContext, x: number, z: number): void {
   removeCrashedPodWreck(ctx);
@@ -2130,14 +2290,17 @@ export function placeCrashedPodWreck(ctx: GameContext, x: number, z: number): vo
   //    HIGHEST rim point at +POD_R·sin(θ) above the base centre. To bury the whole
   //    leaned base + ~35% of the body, the centre must drop so that highest rim
   //    point sits clearly (BURY_MARGIN) below grade.
-  group.rotation.set(0.34, 0.55, 0.18);   // pitch (lean) + yaw (face cam) + roll
+  // R3a — a GENTLER lean (the wider POD_R 1.44 makes a tilted base disc raise its high rim far
+  //   more, which over-buried the fatter capsule into a dome). A shallower lean keeps the now-fat
+  //   capsule STANDING + proud so it reads as the vessel the player climbed out of.
+  group.rotation.set(0.13, 0.55, 0.06);   // pitch (lean) + yaw (face cam) + roll — a SLIGHT crash lean (the wide base disc's rim-rise dominates the burial, so keep the tilt small to keep the capsule proud)
   // total tilt of the local +Y axis away from world-up (how far the base disc tilts)
   const _up = new THREE.Vector3(0, 1, 0).applyEuler(group.rotation);
   const tiltCos = Math.max(-1, Math.min(1, _up.y));
   const tilt = Math.acos(tiltCos);                       // radians off vertical
   const rimRise = POD_R * Math.sin(tilt);               // highest base-rim point above centre
-  const BURY_MARGIN = 0.22;                              // clearance of the high rim below grade
-  const bodyBury = POD_BODY_H * 0.35;                    // ~35% of the body below grade
+  const BURY_MARGIN = 0.14;                              // clearance of the high rim below grade
+  const bodyBury = POD_BODY_H * 0.12;                    // ~12% of the body below grade — keep the STRAIGHT cylindrical body proud (the dominant silhouette; less buried = less dome-only read)
   // centre must sit this far below grade so (centre + rimRise) ≤ grade − margin AND
   // ~35% of the (vertical-ish) body is swallowed.
   const sink = Math.max(POD_BASE_H + rimRise + BURY_MARGIN, bodyBury);
