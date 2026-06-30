@@ -1874,6 +1874,102 @@ const SCENARIOS = {
     console.log(`[hauler] ${JSON.stringify(meas)} → scen-hauler-${angle}.png`);
   },
 
+  // Cockpit (T3.3): the GAME'S OPENING SHOT — the REAL seated first-person view inside the
+  // HERO single-pilot cockpit. Drives the game's OWN intro path (startIntro → jumpToBeat
+  // 'cockpit') so the beat machine builds the ship + seats the player at getShipSpawn facing
+  // −Z (looking out the forward window at the orbit view) — NOT an idealized studio rig.
+  //   --angle: forward (Beat-0 seated, out the window)   [default]
+  //            console (look down-forward at the dash/screens)
+  //            door    (stood + turned aft to the corridor doorway — the "check engines" exit)
+  //            left/right (head-turned reads of the side walls / clutter)
+  //            wide    (head-turned 3/4 of the whole bridge)
+  //   --stand draws the standing eye (rise + walk read) instead of the seated eye.
+  //   --alert=<0|1|2> drives the cockpit alert state (verify the escalation surface).
+  'cockpit': async (page) => {
+    const angle = argv.angle || 'forward';
+    const stand = !!argv.stand;
+    const alert = argv.alert !== undefined ? Number(argv.alert) : 0;
+    await page.evaluate(() => {
+      const g = window.__game;
+      const ctx = g.ctx;
+      // First-person seated read; hide the rig so it doesn't block the FP camera.
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      // KILL the weather (the rain/dust streaks read as a dirty-lens filter over the cockpit
+      // — they are world atmosphere, not the cabin) + a touch of warm exposure for the mood.
+      try { ctx.weather.intensity = 0; ctx.weather.cloudiness = 0; } catch {}
+      try { ctx.three.renderer.toneMappingExposure = 1.08; } catch {}
+      // Drive the real intro: start it (force) + jump to the cockpit beat → the beat
+      // controller builds the ship + seats the player facing −Z (the genuine FP frame).
+      g.startIntro();
+      g.jumpToBeat('cockpit');
+      ctx.three.renderer.setSize(1100, 760, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1100 / 760; cam.updateProjectionMatrix(); }
+    });
+    // Let the beat controller tick (page RAF) so the ship builds + the player seats.
+    await page.waitForTimeout(700);
+    const meas = await page.evaluate(({ angle, stand, alert }) => {
+      const g = window.__game;
+      const ctx = g.ctx;
+      if (alert > 0) { try { g.setCockpitAlert(alert); } catch {} }
+      ctx.flags.paused = true;
+      const cam = ctx.three.camera;
+      const V = cam.position.constructor;
+      // Keep the framed aspect for THIS shot (other scenarios may have left a stale size).
+      ctx.three.renderer.setSize(1100, 760, false);
+      if (cam.isPerspectiveCamera) { cam.aspect = 1100 / 760; cam.updateProjectionMatrix(); }
+      // The SEATED PILOT eye: LOW + leaned back into the seat (a pilot sits low at the
+      // controls). The spawn is the forward pilot station; the seated pose lowers the eye to
+      // ~1.15m above the floor (this mirrors the in-game seated pose sequence.ts will wire —
+      // see the agent's hand-back note). For "stand", raise to a standing eye + step aft.
+      const tr = ctx.player.body.body.translation();
+      const floorY = tr.y - (ctx.player.body.halfHeight + ctx.player.body.radius); // ship floor world-y
+      if (angle === 'wide') {
+        // The WIDE 3/4 is NOT a seated-eye shot — it must SHOW the seat + station, so park the
+        // camera up + WELL behind the pilot's right shoulder (near the aft wall), looking
+        // forward-down over the whole chair at the dash + window (the chair clearly in frame).
+        const sx = tr.x + 1.3, sy = floorY + 2.05, sz = tr.z + 2.0;
+        cam.position.set(sx, sy, sz);
+        cam.lookAt(tr.x - 0.25, floorY + 0.7, tr.z - 1.4);
+        cam.updateMatrixWorld(true);
+        const ship0 = ctx.three.scene.getObjectByName('escapePodShipCockpit');
+        let m0 = 0; if (ship0) ship0.traverse((o) => { if (o.isMesh) m0++; });
+        return { found: !!ship0, meshes: m0, eye: [+sx.toFixed(2), +sy.toFixed(2), +sz.toFixed(2)], alert };
+      }
+      // The SEATED PILOT eye = the REAL in-game seated eye: body-centre + the seated eye
+      // offset (POD_SEATED_EYE_OFFSET 0.50 → floor + 0.85 + 0.50 = floor+1.35). This is the
+      // genuine Beat-0 frame the player sees (NOT a fabricated viewpoint). For "stand", raise
+      // to a standing eye + step aft (the rise + walk-to-the-door read).
+      const seatedEye = (ctx.player.eyeOffset || 0.5);   // the controller sets this to the seated offset in intro
+      const eyeY = stand ? floorY + 1.62 : (tr.y + seatedEye);
+      const eyeZ = tr.z + (stand ? -0.1 : 0.1);   // seated: a hair back into the seat
+      const eye = new V(tr.x, eyeY, eyeZ);
+      cam.position.copy(eye);
+      // Look directions in the cockpit-local frame: −Z is forward (window), +Z is aft
+      // (the corridor doorway), +X right, −X left.
+      let look;
+      if (angle === 'forward') look = new V(eye.x, eye.y + 0.06, eye.z - 1);          // out the window (slightly UP at the planet)
+      else if (angle === 'console') look = new V(eye.x, eye.y - 0.7, eye.z - 0.8);    // down-forward at the dash
+      else if (angle === 'door') look = new V(eye.x, eye.y - 0.05, eye.z + 1);        // turn aft to the corridor
+      else if (angle === 'left') look = new V(eye.x - 1, eye.y - 0.1, eye.z - 0.2);
+      else if (angle === 'right') look = new V(eye.x + 1, eye.y - 0.1, eye.z - 0.2);
+      else look = new V(eye.x, eye.y + 0.06, eye.z - 1);
+      cam.lookAt(look);
+      cam.updateMatrixWorld(true);
+      // Report: is the cockpit built? mesh count? eye height?
+      const ship = ctx.three.scene.getObjectByName('escapePodShipCockpit');
+      let meshes = 0;
+      if (ship) ship.traverse((o) => { if (o.isMesh) meshes++; });
+      return { found: !!ship, meshes, eye: [+eye.x.toFixed(2), +eye.y.toFixed(2), +eye.z.toFixed(2)], alert };
+    }, { angle, stand, alert });
+    await page.waitForTimeout(300);
+    const tag = `cockpit-${angle}${stand ? '-stand' : ''}${alert > 0 ? '-a' + alert : ''}`;
+    await page.screenshot({ path: join(OUT, `scen-${tag}.png`), fullPage: false });
+    console.log(`[cockpit] ${JSON.stringify(meas)} → scen-${tag}.png`);
+  },
+
   // Smoke-intro (T1.2): run the whole intro beat chain headless + report {ok,beats}.
   // Confirms the new hero cabin + the lever hook don't break the eject→descent→
   // parachute→impact sequence. No screenshot.

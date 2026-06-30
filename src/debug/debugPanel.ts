@@ -22,6 +22,7 @@ import { applyLungePose, applyMeshTransform } from '../enemies/sandWorm.ts';   /
 import { startEscapePodIntro, endEscapePodIntro, jumpToBeat as jumpToIntroBeat, smokeTestIntro, type BeatId } from '../world/escapePodIntro/sequence.ts';   // escape-pod intro — __game.startIntro/skipIntro/jumpToBeat/smokeIntro
 import { placeCrashedPodWreck, setDescentProgress as setPodDescent, setParachuteLeverPull as setPodChute } from '../world/escapePodIntro/podScene.ts';   // T1.1/T1.2 — __game.placeCrashedPod / setDescentProgress / setParachuteLeverPull (pod rig-shots)
 import { buildHaulerExterior, disposeHaulerExterior } from '../world/escapePodIntro/haulerScene.ts';   // T3.1 — __game.buildHauler / disposeHauler (hauler-exterior rig-shots)
+import { setCockpitAlert as setShipCockpitAlert } from '../world/escapePodIntro/shipScene.ts';   // T3.3 — __game.setCockpitAlert (cockpit alert escalation + the cockpit rig-shot)
 import { makeLatheHull, fuselageProfile, makeFormerRings, makeBreach, makeSandMound } from '../world/wreckForms.ts';
 import { createRustedHullMaterial, HULL_WEATHERING_ACAY } from '../world/hullMaterial.ts';
 import { placeProcgenComposite, type ProcgenWreckClass } from '../world/procgenWreck.ts';
@@ -72,6 +73,9 @@ interface DebugApi {
   buildHauler: () => void;
   /** Escape-pod T3.1 — tear down the hauler exterior. */
   disposeHauler: () => void;
+  /** Escape-pod T3.3 — drive the cockpit alert state (0 = ORBIT ACHIEVED calm, 1 = caution,
+   *  2 = red-alert). For the cockpit rig-shot + the disaster escalation. */
+  setCockpitAlert: (level: 0 | 1 | 2) => void;
   setStats: (s: {
     thirst?: number;
     temperature?: number;
@@ -282,6 +286,7 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
     setParachuteLeverPull: (t, snapped) => { setPodChute(t, snapped); },
     buildHauler: () => { buildHaulerExterior(ctx); },
     disposeHauler: () => { disposeHaulerExterior(ctx); },
+    setCockpitAlert: (level) => { setShipCockpitAlert(level); },
     sunInfo: () => ({
       exposure: ctx.player.sunExposure01,
       occluders: getSunOccluders().length,

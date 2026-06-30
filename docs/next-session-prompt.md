@@ -15,21 +15,26 @@ file-driven).
 - The intro plays behind `FEATURES.escapePodIntro` (off in master; the preview build flips it on).
 - **Each cycle PUSHES the branch** (the preview link refreshes) — keep doing this so the user can re-test in the morning.
 
-## ⚠ Phase 3 STATUS (C19 overnight) — the HAULER is DEFERRED to user art-direction; build T3.3 NEXT
-- **T3.1 Hauler exterior — BUILT but BELOW the hero bar → DEFERRED to USER ART-DIRECTION.** The adversarial gate failed
-  it TWICE (beauty 4-5; the silhouette/engines/cockpit don't read through the porthole; the material reads muddy). After
-  8 modeler rounds the autonomous modeler PLATEAUED — this hero ship needs the user's specific eye (as the descent did).
-  The model EXISTS as a wired placeholder: `src/world/escapePodIntro/haulerScene.ts` (`buildHaulerExterior`), viewable via
-  `__game.buildHauler()` or `rig-shot --scenario=hauler --angle=porthole|broadside|engines`. **Do NOT spin more autonomous
-  rounds on it overnight** — it's flagged for the user's morning. **T3.2 (explosion) is DEFERRED with it** (depends on the
-  finalized hauler). When the user art-directs the hauler, finish T3.1 → T3.2.
-- **▶ BUILD NEXT (overnight): T3.3 — the COCKPIT interior** (procedural-modeler — an INTERIOR, which the modeler does well,
-  like the pod cabin; the hauler EXTERIOR silhouette was the hard part): the single-pilot cockpit you START in — a seat, the
-  big forward window, the consoles with the **escalating diegetic readouts** (E2: `ORBIT ACHIEVED → ⚠ CORE TEMP CRITICAL →
-  HULL BREACH`), a 2-second personal touch (photo/mug for the lone pilot). Real in-game FP view (you're seated in it) →
-  the adversarial gate (5-8 rounds). This is Beat 0 (the intro opens here).
-- **Then T3.4 — corridor + disaster staging** (3 lighting zones, only-open-door funnel, engine-fire-behind-the-door, red-alert
-  strobe, spatial audio cues). Then continue to Phase 4 (crash/tutorial — incl. the wake-in-pod + exterior-size reqs) → Phase 5 (audio).
+## ⚠ Phase 3 STATUS (C20 overnight) — STRATEGIC PIVOT: hero VISUALS → user's morning; overnight builds the PLAYABLE intro
+**Why the pivot:** two consecutive Phase-3 hero VISUAL assets (C19 hauler exterior, C20 cockpit interior) plateaued below the
+released-game bar across multiple modeler rounds + adversarial gates (each gate failed ×2) — AND both are assets the user will
+art-direct regardless (the hero ship + the game's opening shot; the descent took 5 user rounds). So **stop grinding the modeler
+on hero visuals overnight; build the LOGIC/STAGING/AUDIO that makes the whole intro PLAY** (the main loop's strength, no user-eye
+needed). The user wakes to a fully-playable intro end-to-end + a hero-visual art-direction list.
+
+**⚠ DEFERRED to the user's MORNING art-direction (do NOT spin more autonomous modeler rounds on these overnight):**
+- **T3.1 hauler exterior** — wired placeholder, `__game.buildHauler()` / `rig-shot --scenario=hauler`. Gate: silhouette/engines/cockpit don't read; muddy material.
+- **T3.3 cockpit surface-fidelity** — the real cockpit (`shipScene.ts`), much improved, `rig-shot --scenario=cockpit`. Gate: flat untextured walls, no rivets-as-geometry, blank CRT text, candy-button gauges, blank photo, flat lighting, planet cropped too big. The OPENING SHOT reads but needs the user's eye.
+- **T3.2 explosion FX** + the **hero corridor geometry** — deferred with them.
+
+**▶ BUILD NEXT (overnight): T3.4 — the disaster STAGING** (main-loop logic, over the EXISTING greybox corridor — NOT new hero
+geometry). The Beat 1-2 disaster: the "check engines" prompt → the corridor walk → reaching the back triggers the disaster
+(engine fire behind the door) → **red-alert** (drive the cockpit `setCockpitAlert(2)` [hook built C20] + corridor red lighting +
+strobe) → the 3 lighting zones + the only-open-door funnel (guide the player) + spatial-audio cue hooks → flee back to the pod
+(enterPod). Make the ship's DEATH play. Wire the E2 console escalation (ORBIT→CORE TEMP CRITICAL→HULL BREACH) via setCockpitAlert.
+**Then Phase 4** (crash/wake/reveal + tutorial — the C18 reqs: crashed-pod exterior matches the interior size; WAKE INSIDE the pod
++ blow-the-door to step out, NOT teleport-out; desert reveal; craft+salvage tutorial [machete→pry D261]; the chute-pop payoff) →
+**Phase 5** (audio: the full SFX arc + music cues + the chute fwoomp). These are logic/integration/audio — the main loop's strength.
 - Decompose via `/feature-slice` if a tier is >2 sub-tasks; one sub-task per cycle to the DoD (the beat plays as the vision).
 
 ## Then Phase 4 + Phase 5 (continue through them)
