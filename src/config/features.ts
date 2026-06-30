@@ -69,7 +69,11 @@ export const FEATURES = {
    *  docs/feature-escape-pod-intro.md). Landed INERT by T0.0 (the sequence framework
    *  scaffold); T0.1 wires the new-game branch. The `introComplete` save field is additive
    *  (legacy saves default true → never replay) — no SAVE_VERSION bump. */
-  escapePodIntro: false,
+  // PREVIEW-DEPLOY OVERRIDE (2026-06-29, user steering): the source default stays FALSE (master /
+  // the live game / dev mode byte-unchanged), but a build with the env var VITE_ESCAPE_POD_INTRO=1
+  // turns it ON — that's how the Cloudflare/Netlify campaign-branch PREVIEW serves the playable intro
+  // without flipping the committed flag. `?.` keeps it safe in node (import.meta.env undefined → false).
+  escapePodIntro: import.meta.env?.VITE_ESCAPE_POD_INTRO === '1',
 } as const;
 
 /** A valid feature-flag key (e.g. for a dev-panel toggle list later). */

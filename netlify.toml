@@ -1,0 +1,24 @@
+# Netlify config for the campaign-branch PREVIEW deploy (user steering, 2026-06-29).
+#
+# This makes a PLAYABLE preview of the in-progress escape-pod intro, separate from the live
+# master GitHub-Pages site. To activate: in Netlify, "Add new site → Import from GitHub →
+# pick this repo", then set the branch to deploy = `campaign/escape-pod-intro`. Netlify reads
+# this file for the build; every push to that branch rebuilds the preview link automatically.
+#
+# (Cloudflare Pages instead? It's dashboard-configured, not file-configured — see
+# docs/deploy-preview.md for the equivalent settings.)
+
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  VITE_ESCAPE_POD_INTRO = "1"   # turn the escape-pod intro ON for the preview (source default stays OFF)
+  VITE_BASE = "/"               # the preview serves at the domain root (not /Dustfall/ like GitHub Pages)
+  NODE_VERSION = "20"
+
+# The game is a single index.html (a Vite app) — route any unknown path to it.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
