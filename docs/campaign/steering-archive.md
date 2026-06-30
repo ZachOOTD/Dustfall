@@ -5,6 +5,19 @@ loop at the cycle boundary so they're not re-applied each cycle.
 
 ---
 
+## 2026-06-29 (Phase 2 milestone WALK-TEST feedback, via the Netlify preview link) — descent-feel fixes + forward reqs
+
+The user walk-tested the descent (Phase 2) via the deployed preview and gave 5 notes:
+1. **Screen shake too much + too early.** Wants it PEACEFUL while still far/high (orbit); shake ONLY when going through the atmosphere (re-entry); and gentler. → **FIXED (post-C17):** removed the constant descent base-rumble (`addTrauma(0.04+re*0.45)` → `addTrauma(re*0.18)` — re-entry-only + gentle), softened the eject kick (0.95→0.55) + the tumble buffet (`0.05+settle*0.30` → `settle*0.12`).
+2. **Exterior pod model should match the INTERIOR's size** for consistency. → captured as a roadmap **Phase 4** req (the exterior `placeCrashedPodWreck` must match the cabin CAB_R/WALL_H — same vessel inside vs out).
+3. **Player teleports outside the pod on landing — wants to START in the pod (in the desert) + RELEASE the door to walk out** (the vision's "blow the pod door"). → captured as a roadmap **Phase 4 T4.1** req (rework the greybox `stepOut`: wake INSIDE the pod, the BLOW-DOOR is the player-triggered step-out).
+4. **Weird purple lines across the landscape** (the dunes) when nearing the surface. → **FIXED (post-C17):** the dune lee-shadow trough colour was a saturated blue-violet (`vec3(0.28,0.26,0.44)`) reading as purple lines; desaturated to a cool dusty shadow (`vec3(0.33,0.27,0.31)`).
+5. **Interior pod detail/improvement pass** — acknowledged as LATER ("decent first model for now"). → backlog.
+
+**Action:** #1 + #4 fixed immediately (descent-feel, this pass) + pushed so the preview link refreshes for a re-test; #2 + #3 captured as Phase 4 reqs in the roadmap; #5 to backlog. Campaign stays paused at the Phase 2 milestone (the user re-tests the shake/dunes, then `/campaign-approve` → Phase 3).
+
+---
+
 ## 2026-06-29 (received during cycle 17, the Phase 2 milestone) — A pushed campaign branch + a playable preview link to walk-test each cycle
 
 **Directive:**

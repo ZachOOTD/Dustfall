@@ -1283,7 +1283,7 @@ const LOWALT_FS = /* glsl */ `
     // desert SAND palette — DISTINCTLY cool-violet troughs → ochre body → pale dawn-lit
     // crests. 3-tone keyed off HEIGHT so it reads regardless of the warm light; crests gated
     // by the rake so only sun-lit crests go pale → directional dune relief.
-    vec3 cTrough = mix(vec3(0.28,0.26,0.44), vec3(0.36,0.30,0.44), uWarm);     // COOL blue-violet lee shadow (deeper, cooler)
+    vec3 cTrough = mix(vec3(0.33,0.27,0.31), vec3(0.42,0.32,0.32), uWarm);     // cool DUSTY shadow (desaturated — the old blue-violet read as weird purple lines across the dunes)
     vec3 cBody   = mix(vec3(0.78,0.55,0.34), vec3(0.86,0.58,0.32), uWarm);     // ochre sand body
     vec3 cCrest  = mix(vec3(1.02,0.90,0.66), vec3(1.06,0.90,0.60), uWarm);     // pale dawn-lit crest
     float hn = clamp(hC, 0.0, 1.0);

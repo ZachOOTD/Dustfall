@@ -287,7 +287,7 @@ function tickShipExplode(ctx: GameContext, dt: number): void {
     showIntroPrompt('');
     setDescentProgress(0);           // the orbital vista (planet + stars) shows through the window during the tumble
     faceControl(ctx, 0, 0);          // base look = the descent framing (−Z, level) so the tumble settles ONTO it (seamless handoff to the descent — no snap)
-    addTrauma(0.95);                 // the violent eject/blast kick
+    addTrauma(0.55);                 // the eject/blast kick (softened per the C17 walk-test — a kick, not violent)
     intro.mode = 'scripted';         // the beat owns the camera — the tumble post-multiplies on the look
     intro.scratch.tumble = 1;        // full tumble at the blast (controller applyIntroTumble rides this)
     intro.scratch.init = true;
@@ -299,7 +299,7 @@ function tickShipExplode(ctx: GameContext, dt: number): void {
   const e = Math.min(1, d / SHIP_EXPLODE_DWELL);
   const settle = 1 - e * e * (3 - 2 * e);   // smoothstep ease-out
   intro.scratch.tumble = settle;            // the camera tumble rides this (controller post-multiply)
-  addTrauma(0.05 + settle * 0.30);          // a settling buffet (decays with the tumble)
+  addTrauma(settle * 0.12);                 // a GENTLE jostle that decays as the tumble settles (no base rumble — the tumble is mostly the visual roll now)
   setTumbleLight(settle);                   // the cabin-light swing: blast-orange flood → orbital cool
   if (d > SHIP_EXPLODE_DWELL) {
     intro.scratch.tumble = 0;               // fully settled → hand off level to the descent
@@ -329,8 +329,10 @@ function tickDescent(ctx: GameContext, dt: number): void {
   // doesn't stack on the warm desert cross-fade (~0.34→0.48): a sharp bump, 0 at p≈0.08, peak at
   // p≈0.24, gone by p≈0.40 — the violence at entry releases into the calm, beautiful descent.
   const re = Math.max(0, 1 - Math.pow((progress - 0.24) / 0.16, 2));
-  // Speed-coupled SHAKE — a buffet at peak re-entry layered over the base fall-rumble.
-  addTrauma(0.04 + re * 0.45);
+  // Speed-coupled SHAKE — ONLY during the atmosphere entry (the `re` window), and GENTLE
+  // (user walk-test C17: the descent should be PEACEFUL when still far/high; shake only as you
+  // punch through the air). No constant base rumble → orbit + the calm fall read serene.
+  addTrauma(re * 0.18);
   // The WHITE FLASH on entry — one warm-white blast at peak heat (the punch-through moment).
   if (progress >= 0.24 && !intro.scratch.reFlash) {
     flashScreen(0xfff2e6, 0.7);

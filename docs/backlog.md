@@ -10,6 +10,8 @@ When ready to ship one → promote it into a session in [roadmap.md](roadmap.md)
 
 ## PENDING
 
+- `[polish]` **Escape-pod INTERIOR detail/improvement pass** (C17 walk-test — user: "decent first model for now, tackle later"). The cabin (`buildPodScene`) reads as a solid first model but wants a craft pass — surface detail, wear, more lived-in tells, material refinement. Do after the intro's other phases land. (Sibling: the descent vista + re-entry FX already gate-passed @ beauty 8; this is the CABIN interior specifically.)
+
 ### A. Owed walk-tests + in-motion feel-tunes (need a human in `npm run dev` — the headless harness can't judge feel; the "D150" pile)
 
 - `[perf]` **⑰ pickup-instancing — MEASURED + planned (C59/D263), build human-attended.** Measured: **382 world-scatter pickups (239 scrap + 137 branch + 6 relic) = ~75% of 505 draw calls** — instancing → ~3 calls → ~126 total (a ~75% cut). High-value. **Build (per D263's plan):** one `InstancedMesh` per type (scrap/branch/relic); `bobPickups` writes per-instance matrices; take = swap-remove + an id↔instanceIndex map; the interaction raycast maps `intersection.instanceId` → pickupId on InstancedMesh hits (keep `userData.pickupId` for dropped/physics pickups via `spawnDroppedPickup`); leave the body-synced dropped path per-mesh. **It's a core item-collection-loop rewrite** — do it with a human watching the frame counter + confirming every pickup still collects. Verify: drawCalls before/after + an eval-simulated take loop. Files: `src/pickups/pickups.ts`, `src/player/interaction.ts` (the raycast resolver).
