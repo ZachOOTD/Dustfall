@@ -10,6 +10,10 @@ import { defineConfig } from 'vite';
 // byte-unchanged (/Dustfall/ in prod, / in dev).
 export default defineConfig(({ mode }) => ({
   base: process.env.VITE_BASE || (mode === 'production' ? '/Dustfall/' : '/'),
+  // Empty by default (we add no Vite plugins). Present so Cloudflare Workers' `wrangler deploy`
+  // framework-setup can find a plugins array to inject @cloudflare/vite-plugin into (it errors
+  // "could not find a valid plugins array" otherwise). Harmless for the master/Netlify builds.
+  plugins: [],
   optimizeDeps: {
     // Rapier ships WASM that breaks Vite's dep optimization. Exclude to avoid
     // a dev-server hang on first load.
