@@ -53,6 +53,8 @@ import { createInventory, updateInventoryInput } from './inventory/inventory.ts'
 import { updateInteraction } from './player/interaction.ts';
 import { updatePlayer } from './player/controller.ts';
 import { updateEscapePodIntro, startEscapePodIntro, introActive } from './world/escapePodIntro/sequence.ts';   // escape-pod intro (FEATURES.escapePodIntro) — T0.1 wires the new-game branch
+import { updatePodTutorial } from './world/escapePodIntro/podTutorial.ts';   // T4.3 — the post-handoff craft→salvage→chute-pop tutorial (self-guarded no-op unless running)
+import { updateChutePop } from './world/escapePodIntro/podScene.ts';   // T4.3 — the chute-pop inflate one-shot (no-op unless the chute is popping; driven always so dev/rig-shot also animates)
 import { setGameHudHidden } from './world/escapePodIntro/introHud.ts';   // escape-pod intro — re-assert HUD-hide after handoff
 import { FEATURES } from './config/features.ts';
 import { createShelterRegistry, updateShelter } from './shelter/shelterZones.ts';
@@ -943,6 +945,8 @@ startLoop(ctx, (c, dt) => {
   updateCacti(c);                // CC-4 — regrow harvested alien-cactus fruit after a day cycle
   updateSledRiders(c);           // ACC P2 — drive any pickup riding a sled + promote settled pickups (must run AFTER updateSleds so sled.group transforms reflect this-frame's tow correction)
   updateInteraction(c, dt);      // raycast hover + E to open/refill/harvest/cook/sleep/etc (UU — pickup-take moved to LMB)
+  updatePodTutorial(c, dt);      // T4.3 — the escape-pod first-salvage tutorial + chute-pop (no-op unless running; after interaction so the pry is seen this frame)
+  updateChutePop(dt);            // T4.3 — advance the chute-pop inflate one-shot (no-op unless popping; always ticks so dev popChute() + rig-shots animate too)
   updateInventoryInput(c, dt);   // 1-4, wheel, Q to use (Q still drives def.onUse as backup)
   updateWieldAction(c, dt);      // UU — sole LMB dispatcher: attack/place/hold_use. Calls updateCombat internally for 'attack' items.
   updateReload(c);               // ABE — R-key scrap_gun reload (drains scrap_bullet → slot.meta.ammoRemaining)

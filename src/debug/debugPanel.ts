@@ -20,7 +20,8 @@ import { fireSignalFlare, advanceSignalFlares, activeSignalFlareCount } from '..
 import { damageVulture } from '../enemies/vulture.ts';
 import { applyLungePose, applyMeshTransform } from '../enemies/sandWorm.ts';   // M12 ⓖ (C66) — __game.poseLunge (dive render)
 import { startEscapePodIntro, endEscapePodIntro, jumpToBeat as jumpToIntroBeat, smokeTestIntro, type BeatId } from '../world/escapePodIntro/sequence.ts';   // escape-pod intro — __game.startIntro/skipIntro/jumpToBeat/smokeIntro
-import { placeCrashedPodWreck, setDescentProgress as setPodDescent, setParachuteLeverPull as setPodChute, setCabinCrashPose as setPodCrashPose, blowCabinHatch as blowPodHatch } from '../world/escapePodIntro/podScene.ts';   // T1.1/T1.2 · R3a — __game.placeCrashedPod / setDescentProgress / setParachuteLeverPull / setCabinCrashPose / blowCabinHatch (pod rig-shots)
+import { placeCrashedPodWreck, setDescentProgress as setPodDescent, setParachuteLeverPull as setPodChute, setCabinCrashPose as setPodCrashPose, blowCabinHatch as blowPodHatch, popChute as popPodChute } from '../world/escapePodIntro/podScene.ts';   // T1.1/T1.2 · R3a · T4.3 — __game.placeCrashedPod / setDescentProgress / setParachuteLeverPull / setCabinCrashPose / blowCabinHatch / popChute (pod rig-shots + the chute-pop payoff)
+import { smokePodTutorial } from '../world/escapePodIntro/podTutorial.ts';   // T4.3 — __game.smokePodTutorial (drive the craft→salvage→chute-pop loop headlessly)
 import { buildHaulerExterior, disposeHaulerExterior } from '../world/escapePodIntro/haulerScene.ts';   // T3.1 — __game.buildHauler / disposeHauler (hauler-exterior rig-shots)
 import { setCockpitAlert as setShipCockpitAlert, setShipAlert as setShipRedAlert, setEngineFire as setShipEngineFire } from '../world/escapePodIntro/shipScene.ts';   // T3.3/T3.4 — __game.setCockpitAlert / setShipAlert / setEngineFire (alert escalation + the disaster rig-shot)
 import { setSkyIntroMode } from '../world/sky.ts';   // REBUILD v2 R1a — __game.setSkyIntroMode (space mode for the orbit/cockpit beats)
@@ -74,6 +75,11 @@ interface DebugApi {
   setCabinCrashPose: (pose: number) => void;
   /** Escape-pod R3a — blow the cabin escape hatch open (0=ajar, 1=flung wide). For the wake rig-shot. */
   blowCabinHatch: (t: number) => void;
+  /** Escape-pod T4.3 — fire the comic chute-pop on the crashed pod (the failed chute finally
+   *  deploys). For the chute-pop rig-shot / manual payoff test (needs a crashed pod placed). */
+  popChute: () => void;
+  /** Escape-pod T4.3 — smoke the whole craft→salvage→chute-pop tutorial loop headlessly. */
+  smokePodTutorial: () => ReturnType<typeof smokePodTutorial>;
   /** Escape-pod T3.1 — build the HERO cargo-hauler exterior in front of the pod (the
    *  ship the player fled, seen through the porthole at shipExplode). For the hauler rig-shot. */
   buildHauler: () => void;
@@ -299,6 +305,8 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
     setParachuteLeverPull: (t, snapped) => { setPodChute(t, snapped); },
     setCabinCrashPose: (pose) => { setPodCrashPose(pose); },
     blowCabinHatch: (t) => { blowPodHatch(t); },
+    popChute: () => { popPodChute(); },
+    smokePodTutorial: () => smokePodTutorial(ctx),
     buildHauler: () => { buildHaulerExterior(ctx); },
     disposeHauler: () => { disposeHaulerExterior(ctx); },
     setCockpitAlert: (level) => { setShipCockpitAlert(level); },

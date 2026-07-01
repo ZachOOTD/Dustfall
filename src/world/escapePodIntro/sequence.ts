@@ -42,6 +42,7 @@ import {
   getPodBayThreshold, getPodBaySeatedEye, releasePodFromBay,   // R5c — the docked-pod bay + physical release
 } from './shipScene.ts';
 import { buildPodScene, disposePodScene, getPodSpawn, setDescentProgress, setDescentBase, setTumbleLight, setParachuteLeverPull, placeCrashedPodWreck, setCabinCrashPose, blowCabinHatch } from './podScene.ts';
+import { startPodTutorial } from './podTutorial.ts';   // T4.3 — the first craft→salvage→chute-pop tutorial (runs as gameplay post-handoff)
 import { setGameHudHidden, showIntroPrompt, hideIntroPrompt, setIntroBlack } from './introHud.ts';
 import { flashScreen } from '../../fx/screenFlash.ts';
 import { addTrauma } from '../../fx/cameraShake.ts';
@@ -855,9 +856,14 @@ function tickStepOut(ctx: GameContext, dt: number): void {
   // emergence faces the M5a landmark field) — before the game's bustle. Then hand off + the hint.
   intro.scratch.t = (intro.scratch.t as number) + dt;
   if ((intro.scratch.t as number) > REVEAL_DWELL) {
+    // Capture the pod spawn BEFORE endEscapePodIntro clears ctx.intro (returnPos is where the
+    //   crashed pod was placed by placeCrashedPodWreck above — the tutorial scatters around it).
+    const podX = intro.returnPos.x, podZ = intro.returnPos.z;
     endEscapePodIntro(ctx);   // hand control back — the desert game runs from here (HUD returns)
-    // T0.4b tutorial scaffold — the first-gameplay hint (the real craft→pry→chute-pop is T4.3).
-    ctx.ui.showToast('Salvage your pod — craft a machete to pry it open', { kind: 'discovery' });
+    // T4.3 — THE FIRST TUTORIAL. Now that control is the player's, seed the craft→salvage→
+    //   chute-pop loop on their own crashed pod: scatter scrap + cloth, cue the machete craft,
+    //   then (in updatePodTutorial) the pry → the comic chute-pop. Runs as normal gameplay.
+    startPodTutorial(ctx, podX, podZ);
   }
 }
 

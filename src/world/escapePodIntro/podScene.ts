@@ -28,6 +28,10 @@ import type { GameContext } from '../../GameContext.ts';
 import { makeStaticBox, attachCompoundCollider } from '../../physics/bodies.ts';
 import { Tuning } from '../../config/tuning.ts';
 import { createRustedHullMaterial } from '../hullMaterial.ts';
+import { addAccessPanel } from '../wrecks.ts';                                   // T4.3 — the crashed pod's REAL salvage panel (the first-salvage tutorial target)
+import { registerSalvageable } from '../salvage.ts';                            // T4.3 — register the pod as a machete-salvageable
+import { makeRng } from '../../core/rng.ts';                                    // T4.3 — deterministic position-seeded rng for the pod's salvage roll
+import { playChutePop } from '../../audio/audio.ts';                            // T4.3 — the comic chute-pop FWOOMP
 
 // ── REBUILD v2 R1b — the pod PHYSICALLY falls through the REAL world ─────────────
 // The orbit-frame beats (cockpit/corridor/enterPod/shipExplode) still build the pod at
@@ -1612,11 +1616,38 @@ export function disposePodScene(ctx: GameContext): void {
 let crashedWreck: THREE.Group | null = null;
 let crashedWreckBody: RAPIER.RigidBody | null = null;
 let crashedBerm: THREE.Mesh | null = null;   // displaced-sand drift banked against the pod
+// T4.3 — the Salvageable id of the crashed pod's panel (so the tutorial driver can detect
+// when THIS pod (not some other wreck) is first pried/searched → fire the chute-pop). -1 = none.
+let crashedPodSalvageableId = -1;
+
+// ─── The comic CHUTE-POP payoff (T4.3) ────────────────────────────────────────
+// The parachute that FAILED during the fall (the 3-pull → snap gag) comically bursts
+// out of the pod crown when the player first-salvages their crashed pod — "now it works",
+// uselessly, on the ground. The callback/comedy button. A canopy + shroud lines parented
+// to the crashed-pod GROUP (so it rides the pod's crash pose), hidden until popChute() fires;
+// then a springy one-shot inflate (scale + a little bob) runs via updateChutePop each frame.
+let chuteCanopy: THREE.Group | null = null;   // the folded→inflated canopy assembly (child of crashedWreck)
+let chutePopT = -1;                           // pop animation clock (seconds); <0 = not popped / not armed
+let chutePopArmed = false;                    // the canopy is built + ready to pop on the first salvage strike
+const CHUTE_POP_DUR = 1.15;                   // seconds of the inflate+settle one-shot
+// Comic canopy material — faded orange-white ripstop (reads as a real chute; a bit worn).
+const _chuteCanopyMat = new THREE.MeshLambertMaterial({ color: 0xd8894a, flatShading: true, side: THREE.DoubleSide });
+const _chuteGoreMat = new THREE.MeshLambertMaterial({ color: 0xe8e2d4, flatShading: true, side: THREE.DoubleSide });   // the alternating pale gores
+const _chuteLineMat = new THREE.MeshLambertMaterial({ color: 0x2a2620, flatShading: true });                          // dark shroud lines
+const _chuteDisposables: THREE.BufferGeometry[] = [];
 
 /** Remove the crashed-pod wreck (so a re-played intro doesn't stack duplicates).
  *  Disposes per-mesh GEOMETRY but NOT the materials — the hero pod's materials are
  *  module-shared + reused on the next placement (disposing them would break it). */
 export function removeCrashedPodWreck(ctx: GameContext): void {
+  disarmChutePop();
+  // T4.3 — drop the pod's salvageable record so a replay doesn't leave a stale entry pointing
+  //   at the disposed group (its panel/interactId is gone with the geometry).
+  if (crashedPodSalvageableId >= 0) {
+    const i = ctx.salvageables.list.findIndex((s) => s.id === crashedPodSalvageableId);
+    if (i >= 0) ctx.salvageables.list.splice(i, 1);
+    crashedPodSalvageableId = -1;
+  }
   if (crashedWreck) {
     crashedWreck.traverse((o) => {
       if (o instanceof THREE.Mesh) o.geometry.dispose();
@@ -1632,6 +1663,122 @@ export function removeCrashedPodWreck(ctx: GameContext): void {
   if (crashedWreckBody) {
     ctx.physics.world.removeRigidBody(crashedWreckBody);
     crashedWreckBody = null;
+  }
+}
+
+/** Build the comic parachute CANOPY assembly (a dome of alternating orange/pale gores +
+ *  a ring of shroud lines gathering down to a riser) in the pod-LOCAL frame, anchored just
+ *  above the pod crown/apex. Starts hidden + folded (tiny scale); popChute inflates it.
+ *  Parented to the crashed-pod group so it rides the crash lean. */
+function buildChuteCanopy(): THREE.Group {
+  const grp = new THREE.Group();
+  const apex = POD_BASE_H + POD_BODY_H + POD_NOSE_H;   // the pod crown height (local)
+  // ── the CANOPY DOME — a half-sphere of gores; alternate two materials so it reads as a
+  //    real segmented chute. A single sphere-cap per material (even/odd gores), low-poly.
+  const CANOPY_R = 2.3;
+  const GORES = 12;
+  for (let g = 0; g < GORES; g++) {
+    const a0 = (g / GORES) * Math.PI * 2;
+    const geo = new THREE.SphereGeometry(CANOPY_R, 3, 8, a0, (Math.PI * 2) / GORES, 0, Math.PI * 0.5);
+    _chuteDisposables.push(geo);
+    const gore = new THREE.Mesh(geo, g % 2 === 0 ? _chuteCanopyMat : _chuteGoreMat);
+    gore.userData.noCollider = true;
+    grp.add(gore);
+  }
+  // a small crown vent cap so the dome apex reads finished, not a hole.
+  const ventGeo = new THREE.CylinderGeometry(CANOPY_R * 0.14, CANOPY_R * 0.18, 0.1, 12);
+  _chuteDisposables.push(ventGeo);
+  const vent = new THREE.Mesh(ventGeo, _chuteLineMat);
+  vent.position.y = CANOPY_R * 0.02;
+  vent.userData.noCollider = true;
+  grp.add(vent);
+  // ── SHROUD LINES — thin lines from the canopy skirt gathering down to a riser knot at
+  //    the pod crown. A ring of slim cylinders.
+  const riserY = -CANOPY_R * 0.95;   // the riser gather point below the dome
+  for (let i = 0; i < GORES; i++) {
+    const a = (i / GORES) * Math.PI * 2 + Math.PI / GORES;
+    const skirt = new THREE.Vector3(Math.cos(a) * CANOPY_R * 0.98, 0.02, Math.sin(a) * CANOPY_R * 0.98);
+    const riser = new THREE.Vector3(0, riserY, 0);
+    const mid = skirt.clone().lerp(riser, 0.5);
+    const len = skirt.distanceTo(riser);
+    const lineGeo = new THREE.CylinderGeometry(0.018, 0.018, len, 4);
+    _chuteDisposables.push(lineGeo);
+    const line = new THREE.Mesh(lineGeo, _chuteLineMat);
+    line.position.copy(mid);
+    line.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), riser.clone().sub(skirt).normalize());
+    line.userData.noCollider = true;
+    grp.add(line);
+  }
+  // a chunky riser strap/knot at the gather (where it "attaches" to the pod crown)
+  const knotGeo = new THREE.CylinderGeometry(0.12, 0.16, 0.34, 8);
+  _chuteDisposables.push(knotGeo);
+  const knot = new THREE.Mesh(knotGeo, _chuteLineMat);
+  knot.position.y = riserY + 0.1;
+  knot.userData.noCollider = true;
+  grp.add(knot);
+  // anchor the whole assembly so the riser knot sits just above the crown, dome overhead.
+  grp.position.set(0, apex + CANOPY_R * 0.95 + 0.2, 0);
+  grp.scale.setScalar(0.001);   // folded/hidden until the pop
+  grp.visible = false;
+  return grp;
+}
+
+/** ARM the chute-pop: build the canopy + parent it to the crashed pod, hidden + folded.
+ *  Called by placeCrashedPodWreck (the pod is the salvage target). No-op if no wreck. */
+export function armChutePop(): void {
+  disarmChutePop();
+  if (!crashedWreck) return;
+  chuteCanopy = buildChuteCanopy();
+  crashedWreck.add(chuteCanopy);
+  chutePopArmed = true;
+  chutePopT = -1;
+}
+
+/** Dispose the chute canopy (its geometry) + reset state. */
+function disarmChutePop(): void {
+  if (chuteCanopy) {
+    chuteCanopy.parent?.remove(chuteCanopy);
+    chuteCanopy = null;
+  }
+  for (const g of _chuteDisposables) g.dispose();
+  _chuteDisposables.length = 0;
+  chutePopArmed = false;
+  chutePopT = -1;
+}
+
+/** Is the chute armed + not yet popped? (the tutorial driver checks this to fire the payoff). */
+export function chutePopReady(): boolean {
+  return chutePopArmed && chutePopT < 0 && chuteCanopy !== null;
+}
+
+/** FIRE the comic chute-pop (the failed chute finally deploys, uselessly, on the ground).
+ *  Reveals the canopy + starts the one-shot springy inflate (updateChutePop drives it) +
+ *  plays the FWOOMP. Idempotent — a second call while popping is a no-op. */
+export function popChute(): void {
+  if (!chuteCanopy || chutePopT >= 0) return;
+  chuteCanopy.visible = true;
+  chutePopT = 0;
+  playChutePop();
+}
+
+/** Per-frame driver for the chute-pop inflate (T4.3). No-op unless popping. A springy
+ *  ease with a little overshoot (comic "sproing") + a settling bob, then it rests fully
+ *  inflated. Called from the tutorial driver's tick (normal gameplay, post-handoff). */
+export function updateChutePop(dt: number): void {
+  if (!chuteCanopy || chutePopT < 0) return;
+  chutePopT += dt;
+  const k = Math.min(1, chutePopT / CHUTE_POP_DUR);
+  // springy scale: overshoot past 1 then settle (a back-ease with a decaying wobble).
+  const wobble = Math.sin(k * Math.PI * 3) * (1 - k) * 0.12;   // decaying overshoot
+  const base = k * k * (3 - 2 * k);                            // smoothstep to 1
+  const s = Math.max(0.001, base + wobble);
+  chuteCanopy.scale.setScalar(s);
+  // a gentle bob of the whole canopy as it fills (settles to rest)
+  chuteCanopy.rotation.z = Math.sin(chutePopT * 6.5) * (1 - k) * 0.14;
+  if (k >= 1) {
+    chuteCanopy.scale.setScalar(1);
+    chuteCanopy.rotation.z = 0;
+    // leave chutePopT at its end value (>0) so chutePopReady() stays false — popped once.
   }
 }
 
@@ -2168,7 +2315,8 @@ function buildHeroPodMesh(): THREE.Group {
   };
   addPanel(Math.PI * 1.18, baseTop + POD_BODY_H * 0.4, 0.62, 0.84, true);   // −X flank, corner PRIED
   addPanel(Math.PI * 0.72, baseTop + POD_BODY_H * 0.6, 0.5, 0.5);           // small inspection plate
-  addPanel(Math.PI, baseTop + POD_BODY_H * 0.72, 0.46, 0.4);               // −Z back inspection plate
+  // (T4.3 — the −Z back is now the REAL salvage panel (addAccessPanel in placeCrashedPodWreck),
+  //  so the decorative −Z back inspection plate is dropped to avoid a competing "won't-open" tease.)
 
   // ── 7. SHOULDER-MOUNTED ANTENNA MAST (the chute-deploy / comms mast). Moved OFF
   //    the apex (a single thin stalk from the dome centre read as a Mandalorian
@@ -2280,6 +2428,17 @@ export function placeCrashedPodWreck(ctx: GameContext, x: number, z: number): vo
   const group = buildHeroPodMesh();
   group.name = 'crashedPod';   // findable by the rig-shot framer (visual-diagnostic-methodology.md)
 
+  // ── T4.3 — the REAL salvage panel (the first-salvage TUTORIAL target). Reuse the shared
+  //    salvage-panel system (wrecks.ts addAccessPanel + salvage.ts registerSalvageable) so the
+  //    player pries + strips their OWN pod with the machete, teaching the core loop. A NEWER /
+  //    less-rusted panel (D271 vision: "newer than world salvage") on the −Z BACK of the capsule
+  //    at a comfortable reach height, facing −Z outward (faceYaw=π). 'escape_pod' kind = the
+  //    medical loot palette (bandages/cloth — a survivor's kit). The panel is added BEFORE the
+  //    shadow pass + collider so its meshes get shadow flags + its noCollider subtree is skipped.
+  const PANEL_LY = POD_BASE_H + POD_BODY_H * 0.5;   // comfortable standing reach on the body
+  const PANEL_LZ = -POD_R;                          // −Z back-face surface point
+  addAccessPanel(group, 0, PANEL_LY, PANEL_LZ, 1.05, Math.PI, 'escape_pod');
+
   // ── Crash pose + LEAN-AWARE burial (P1 float fix). The capsule origin is at the
   //    heat-shield BASE centre (y=0). The previous bug: sink was a PURE VERTICAL
   //    drop, then the group leaned ~22° ABOUT that origin — which rotated the base
@@ -2350,4 +2509,16 @@ export function placeCrashedPodWreck(ctx: GameContext, x: number, z: number): vo
     crashedBerm = berm;
     ctx.three.scene.add(berm);
   }
+
+  // ── T4.3 — register the pod's panel as a machete-salvageable + ARM the chute-pop. The
+  //    registry drives the hover prompt ("escape pod — pry open" → "search") + the two-stage
+  //    pry/extract loop (interaction.ts), gated behind a pry tool (scrap_machete / scrap_bar).
+  //    A deterministic position-seeded rng keeps the condition/loot roll stable across replays.
+  const podRng = makeRng((Math.abs(Math.round(x * 73.7 + z * 149.3)) % 0x7fffffff) || 1);
+  const rec = registerSalvageable(ctx.salvageables, group, 'escape_pod', new THREE.Vector3(x, gy, z), podRng);
+  crashedPodSalvageableId = rec.id;
+  armChutePop();   // build the folded canopy on the crown, ready to burst out on the first salvage strike
 }
+
+/** The crashed pod's salvageable id (the tutorial driver watches it for the pry → chute-pop). */
+export function getCrashedPodSalvageableId(): number { return crashedPodSalvageableId; }

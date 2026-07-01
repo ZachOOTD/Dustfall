@@ -279,6 +279,44 @@ export function playDoorBlow(): void {
   src.start(t); src.stop(t + 0.4);
 }
 
+/** Chute POP (T4.3) — the comic parachute FWOOMP as the failed chute finally deploys, uselessly,
+ *  on the ground. A soft airy WHOOSH (band-passed noise swelling as the canopy inflates) + a low
+ *  springy BOING that wobbles up then settles (the "sproing" of the spring-loaded chute mortar).
+ *  Deliberately a bit goofy — it's the comedy button on the whole opening. */
+export function playChutePop(): void {
+  const a = getAudioInternals();
+  if (!a) return;
+  const t = a.ctx.currentTime;
+  // 1. the airy canopy WHOOSH — band-passed noise that swells (fabric filling) then trails off.
+  const src = a.ctx.createBufferSource();
+  src.buffer = a.noiseBuffer; src.playbackRate.value = 0.85;
+  const bp = a.ctx.createBiquadFilter();
+  bp.type = 'bandpass'; bp.Q.value = 0.6;
+  bp.frequency.setValueAtTime(500, t);
+  bp.frequency.linearRampToValueAtTime(1400, t + 0.18);   // the canopy fills — brightens
+  bp.frequency.exponentialRampToValueAtTime(400, t + 0.9); // then the flap settles
+  const ne = a.ctx.createGain();
+  ne.gain.setValueAtTime(0.0001, t);
+  ne.gain.linearRampToValueAtTime(0.26, t + 0.09);         // fast swell (the pop)
+  ne.gain.exponentialRampToValueAtTime(0.001, t + 0.95);   // airy trail
+  src.connect(bp).connect(ne).connect(a.sfx);
+  src.start(t); src.stop(t + 1.0);
+  // 2. the springy BOING — a mortar "sproing": a wobbling sine that jumps up, overshoots, settles.
+  const o = a.ctx.createOscillator();
+  o.type = 'sine';
+  o.frequency.setValueAtTime(90, t);
+  o.frequency.exponentialRampToValueAtTime(230, t + 0.06);   // the spring launches
+  o.frequency.exponentialRampToValueAtTime(150, t + 0.16);   // overshoot back down
+  o.frequency.exponentialRampToValueAtTime(180, t + 0.28);   // wobble up (the comic sproing)
+  o.frequency.exponentialRampToValueAtTime(120, t + 0.5);    // settle
+  const oe = a.ctx.createGain();
+  oe.gain.setValueAtTime(0.0001, t);
+  oe.gain.exponentialRampToValueAtTime(0.3, t + 0.02);
+  oe.gain.exponentialRampToValueAtTime(0.001, t + 0.6);
+  o.connect(oe).connect(a.sfx);
+  o.start(t); o.stop(t + 0.62);
+}
+
 // ── Looping ambient beds (Phase 5 T5.1b) — sustained intro loops with explicit start/stop
 //    lifecycle (C16 lesson: stop on beat exit so nothing dangles). Keyed by name; idempotent
 //    start, safe fade-out stop, stopAllIntroLoops() on intro teardown. They feed a.ambient.
