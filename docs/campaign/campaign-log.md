@@ -422,3 +422,12 @@ The user walk-tested R1, approved it to continue, and reported 2 bugs (both fixe
 - **→ THE INTRO IS FEATURE-COMPLETE.** Every beat of the 2026-06-28 vision is built (orbit → disaster → eject → watch-the-ship-die → descent → parachute → crash → wake → step out → horizon reveal → craft → salvage → chute-pop).
 - **Verify:** verify:all + smoke `{ok:true,beats:12}` throughout.
 - **Loop wound down here:** remaining = FEEL walk-tests + minor art-direction polish (the user's domain, not autonomous-buildable). See next-session-prompt.
+
+---
+
+## Cycle 35 — hardening: coherence + audio (overnight 2026-07-01)
+- User kept the loop running post-feature-complete → hardening passes on the whole intro.
+- **Coherence** (`768890f`): re-shot all beats faithfully; fixed the ride-down cabin reading white-plastic (desert sun following the pod to orbit + too-light shell) → worn aluminium; whole intro now one tone. Flagged 2 items for walk-test.
+- **Audio** (`5d8bc4c`): 6 new procedural synths filling the silent beats (engine fire, bolt shear, hatch seal, ship-death roar, desert wind, awe swell); every beat scored; leak-safe. Mix balance = user's LISTEN.
+- **Verify:** verify:all + smoke `{ok:true,beats:12}`.
+- **Tail note:** the substantive autonomous work (build + coherence + audio + bug-hunt) is now done; remaining = the user's feel walk-tests + audio balance + minor art-direction. Further cycles are marginal polish.
