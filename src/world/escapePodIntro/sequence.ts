@@ -483,7 +483,12 @@ function tickEnterPod(ctx: GameContext, dt: number): void {
     setIntroBlack(dim * 0.9);
     if (!intro.scratch.swapped && k >= 0.5) {
       ensureInPod(ctx);                  // build the REAL ridden cabin (offset frame) + seat the player
-      faceControl(ctx, Math.PI / 2, -0.12);   // face the YELLOW eject control (the next cue points at it)
+      // Frame CENTRED on the YELLOW eject control so the "Pull the eject lever" prompt POINTS at it
+      // (buckle-lesson: a control the prompt names must be in the framed view, not shoved to the edge).
+      // The eject panel sits on the −X wall at az≈−1.97 (curve-seated left-forward); yaw=π/2 aimed
+      // dead −X, leaving the control jammed in the right third with the camera centred on empty wall +
+      // the hatch. yaw 1.20 / pitch −0.20 lands the guarded T-handle at screen centre (probe-verified).
+      faceControl(ctx, 1.20, -0.20);   // frame the YELLOW eject control dead-centre (the next cue points at it)
       intro.scratch.swapped = true;
     }
     if (k >= 1) {
