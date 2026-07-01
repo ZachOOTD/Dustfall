@@ -126,17 +126,65 @@ const REVEAL_DWELL = 4.0;
  *  pod falls into = the sky you step out into, automatically. Clear skies = cloudiness/storm 0. */
 const INTRO_MIDDAY_TIME = 0.46;
 
+/** CLEAR-SKIES (user ask, 2026-07-01): the fog density the intro's atmospheric leg (descent →
+ *  crash → wake → step-out) is pinned to so the horizon reads genuinely CLEAR, not hazy. The game's
+ *  survival FogExp2 (FOG_DENSITY_CLEAR = 0.0018, tuned for a ~1 km ground-visibility limit) washes
+ *  the far dunes + the Leviathan into haze from a few hundred metres up — the exact "cloudless but
+ *  hazy" the user flagged. This value is the SAME the descent's altitude ramp LANDS on at the ground
+ *  (0.00006 + 0.00006·1 = 0.00012), so the crashing-down view and the stepping-out view MATCH: crisp
+ *  long-distance visibility, dunes + Leviathan sharp on a clean horizon. Still warm (the fog COLOUR
+ *  is left as the desert's warm tan — we cut haze DENSITY, not the palette; no blue/alien shift). */
+const INTRO_CLEAR_FOG_DENSITY = 0.00012;
+/** Seconds to EASE the fog back from the intro's clear value up to the game's survival fog after the
+ *  handoff (endEscapePodIntro), so gameplay doesn't fog-POP the instant control returns. updateWeather
+ *  re-derives the survival target every frame; updateIntroFogEase lerps density from clear→that target
+ *  over this window (a gentle haze rolling back in over the first seconds of play). */
+const INTRO_FOG_EASE_S = 6.0;
+/** Ease-back countdown (seconds remaining), set at endEscapePodIntro, ticked by updateIntroFogEase. */
+let _introFogEase = 0;
+
 /** Force the real world to a bright clear MIDDAY (the intro's atmospheric handoff look). Sets the
  *  diurnal clock to noon-ish + clears any cloud/storm so the descent sky, the crash, the wake, and
  *  the step-out all share ONE consistent bright sky (no dawn, no time jump on exit). Cloudiness is
  *  RESET (not pinned) so normal gameplay weather resumes after the handoff — it's just clear at the
- *  moment you arrive. Called at the descent re-grounding AND at step-out so both ends match. */
+ *  moment you arrive. Called at the descent re-grounding AND at step-out so both ends match.
+ *  NOTE: this sets intensity/cloudiness/time; the FOG is pinned separately, per-frame, by
+ *  applyIntroClearFog (updateWeather re-derives density each frame, so a one-time set wouldn't stick). */
 function setIntroMiddayClear(ctx: GameContext): void {
   ctx.time.dayTime = INTRO_MIDDAY_TIME;
   if (ctx.weather) {
     ctx.weather.intensity = 0;    // no sandstorm dust dimming the sky
     ctx.weather.cloudiness = 0;   // clear skies (eases back to normal gameplay cover afterward)
   }
+}
+
+/** CLEAR-SKIES — pin the fog to the intro's clear-day density for THIS frame. updateWeather runs
+ *  BEFORE updateEscapePodIntro in the main tick and re-sets fog.density from FOG_DENSITY_CLEAR every
+ *  frame, so this override (applied after, from the intro tick) is what STICKS. Called for every
+ *  ground-level atmospheric beat (impact / wake / stepOut) so the crashed cabin, the wake, and the
+ *  step-out reveal all read on the SAME crisp clear horizon the descent falls through — the far dunes
+ *  + the Leviathan stay sharp, not hazed. (The descent/parachute beats set their OWN altitude-scaled
+ *  ramp that LANDS on this value, so the whole leg is continuous.) Density only — the warm fog COLOUR
+ *  is untouched (updateLighting owns it), so cutting the haze keeps the warm desert tone. */
+function applyIntroClearFog(ctx: GameContext): void {
+  const fog = ctx.three.scene.fog as { density?: number } | null;
+  if (fog && 'density' in fog) fog.density = INTRO_CLEAR_FOG_DENSITY;
+}
+
+/** CLEAR-SKIES ease-back — called every frame from the main tick (AFTER updateWeather, which set the
+ *  survival target). While the countdown is live (armed at endEscapePodIntro), lerp fog.density from
+ *  the intro's clear value toward the survival value updateWeather just wrote, over INTRO_FOG_EASE_S —
+ *  so the survival haze rolls GENTLY back in over the first seconds of play instead of popping the
+ *  instant the intro hands off. No-op once the window elapses (the real game owns the fog again). */
+export function updateIntroFogEase(ctx: GameContext, dt: number): void {
+  if (_introFogEase <= 0) return;
+  _introFogEase = Math.max(0, _introFogEase - dt);
+  const fog = ctx.three.scene.fog as { density?: number } | null;
+  if (!fog || !('density' in fog) || fog.density == null) return;
+  const survival = fog.density;                       // updateWeather's target for this frame
+  const k = _introFogEase / INTRO_FOG_EASE_S;         // 1 at handoff → 0 at the end of the window
+  const eased = k * k * (3 - 2 * k);                  // smoothstep so it eases in AND out gently
+  fog.density = survival + (INTRO_CLEAR_FOG_DENSITY - survival) * eased;
 }
 
 /** ONE-ENTERABLE-POD (user re-scope): the descent base whose FLOOR sits on the terrain at the real
@@ -346,8 +394,14 @@ export function endEscapePodIntro(ctx: GameContext): void {
   //   do NOT dispose it. It stays in the game behind the flag. Only tear the pod down on the OTHER
   //   exit paths (skipIntro / quit / a dev jump-away before step-out), where it's still the intro
   //   prop. (restoreCabinExposure keeps the desert-base exposure either way — unify already set it.)
-  if (podIsEnterable()) restoreCabinExposure(ctx);
-  else disposePodScene(ctx);
+  if (podIsEnterable()) {
+    restoreCabinExposure(ctx);
+    // CLEAR-SKIES: this is the REAL step-out handoff into gameplay (the pod unified + persists) — the
+    //   intro just held CLEAR fog, so arm the gentle clear→survival ease-back (updateIntroFogEase) so
+    //   the survival haze rolls back in over a few seconds instead of popping the instant control
+    //   returns. Gated on enterable so skip/quit/dev-jump exits (fog never made clear) don't ease.
+    _introFogEase = INTRO_FOG_EASE_S;
+  } else disposePodScene(ctx);
   stopAllIntroLoops();       // T5.1b — stop any ambient loop (cockpit hum / descent rush) on any exit
   setSkyIntroMode(0);                  // R1a — restore the normal game sky on any exit
   setIntroAtmosphereHidden(ctx, false); // R1a — restore the desert atmosphere on any exit
@@ -995,7 +1049,7 @@ function tickStepOut(ctx: GameContext, dt: number): void {
     // Capture the pod spawn BEFORE endEscapePodIntro clears ctx.intro (returnPos is where the
     //   crashed pod was placed by placeCrashedPodWreck above — the tutorial scatters around it).
     const podX = intro.returnPos.x, podZ = intro.returnPos.z;
-    endEscapePodIntro(ctx);   // hand control back — the desert game runs from here (HUD returns)
+    endEscapePodIntro(ctx);   // hand control back — the desert game runs from here (HUD returns); it arms the CLEAR-SKIES fog ease-back (pod is enterable)
     // T4.3 — THE FIRST TUTORIAL. Now that control is the player's, seed the craft→salvage→
     //   chute-pop loop on their own crashed pod: scatter scrap + cloth, cue the machete craft,
     //   then (in updatePodTutorial) the pry → the comic chute-pop. Runs as normal gameplay.
@@ -1033,6 +1087,13 @@ export function updateEscapePodIntro(ctx: GameContext, dt: number): void {
   // it suppressed each frame here (this runs after them) through the space/ship/descent/crash
   // beats; stepOut restores the desert atmosphere when the player steps out into the dunes.
   if (intro.beat !== 'stepOut' && intro.beat !== 'done') setIntroAtmosphereHidden(ctx, true);
+  // CLEAR-SKIES (user ask) — pin the fog to the intro's clear-day density for the GROUND-level
+  // atmospheric beats (impact / wake / stepOut). updateWeather ran earlier this frame and re-set
+  // fog.density to the survival value (0.0018 = hazy), so without this the crashed cabin, the wake,
+  // and the step-out reveal inherit the survival haze — the "cloudless but hazy" the user flagged.
+  // The descent/parachute beats set their OWN altitude-scaled ramp that LANDS on this exact value
+  // (0.00012), so the whole leg (falling-in → stepping-out) reads on one continuous crisp horizon.
+  if (intro.beat === 'impact' || intro.beat === 'wake' || intro.beat === 'stepOut') applyIntroClearFog(ctx);
   // R4 — the phase-transition dip-to-black: HOLD at full black, then fade in over the new beat
   // (a REAL ~2 s blackout). _phaseFade counts down in SECONDS from PHASE_FADE_TOTAL; the opacity
   // is full through the hold, then a linear fade-out. Only on the descent-chain cinematic beats

@@ -1867,7 +1867,7 @@ const SCENARIOS = {
     await page.waitForTimeout(300);
     const dtag = descent !== null ? `-d${String(descent).replace('.', '')}` : '';
     const tag = `pod-interior-${angle}${dtag}${pull > 0 ? '-pull' + pull : ''}${snap ? '-snap' : ''}`;
-    await page.screenshot({ path: join(OUT, `scen-${tag}.png`), fullPage: false });
+    await page.screenshot({ path: join(OUT, `scen-${tag}.png`), fullPage: false, animations: 'disabled', timeout: 60000 });
     console.log(`[pod-interior] ${JSON.stringify(meas)} → scen-${tag}.png`);
   },
 
@@ -2556,7 +2556,7 @@ const SCENARIOS = {
       return { angle: ang, podAt: [+px.toFixed(1), +pz.toFixed(1)], groundY: +gy.toFixed(2), exposedH: +(maxY - gy).toFixed(2), meshes, podCols, podSalvageable, scatter, dayTime: +ctx.time.dayTime.toFixed(3), introActive, sunI, found: !!pod };
     }, { ang: angle });
     await page.waitForTimeout(350);
-    await page.screenshot({ path: join(OUT, `scen-stepout-pod-${angle}.png`), fullPage: false });
+    await page.screenshot({ path: join(OUT, `scen-stepout-pod-${angle}.png`), fullPage: false, animations: 'disabled', timeout: 60000 });
     console.log(`[stepout-pod] ${JSON.stringify(r)}`);
   },
 
@@ -2663,7 +2663,7 @@ const SCENARIOS = {
       };
     }, { fov, exp });
     await page.waitForTimeout(300);
-    await page.screenshot({ path: join(OUT, `scen-leviathan-reveal.png`), fullPage: false });
+    await page.screenshot({ path: join(OUT, `scen-leviathan-reveal.png`), fullPage: false, animations: 'disabled', timeout: 60000 });
     console.log(`[leviathan-reveal] ${JSON.stringify(r)}`);
   },
 
