@@ -669,16 +669,20 @@ const FIREBALL_FS = /* glsl */ `
     // tongues at the rim (NOT a hollow ring: the whole interior within the warped edge is opaque fire).
     float edge = uGrow * (0.80 + 0.42*lump);
     float ball = smoothstep(edge, edge - 0.40, r);       // 1 across the whole interior → 0 past the tongues
-    if (ball < 0.004) discard;
+    // Discard well OUTSIDE both the fire body AND the smoke-billow shell (which balloons to edge+1.05).
+    if (r > edge + 1.08) discard;
     // The WHOLE fireball cools as uT climbs (bloom hottest early; late = a smoky red husk-glow). A
     //   small FLOOR keeps a dull-red ember glow at the tail so the husk reads as burning wreckage,
     //   not empty space (round-3: the husk went fully dark → an empty window).
     float coolAll = mix(0.14, 1.0, 1.0 - smoothstep(0.20, 0.82, uT));   // 1 early (hot) → 0.14 late (dull ember floor)
     // CORE-WEIGHTED heat: hottest dead-centre → cooling toward the rim, roiled by the churn. coreHot
-    //   fills the middle so the ball reads SOLID, but the white-hot ZONE is kept SMALL (only the very
-    //   centre) so most of the ball is churning orange/yellow, not a flat white blob (round-3 fix).
+    //   fills the middle so the ball reads SOLID, but the white-hot ZONE is kept TIGHT (a hot POINT-ish
+    //   heart) so most of the ball is churning orange/yellow, not a flat white blob (FX-polish fix).
     float coreHot = 1.0 - smoothstep(0.0, edge, r);      // 1 dead-centre → 0 at the edge
-    float whiteCore = pow(smoothstep(0.74, 1.0, coreHot), 2.2);   // ONLY the innermost ~26% is white-eligible (a tight hot core, not a big white blob)
+    // A separate, MUCH tighter incandescent-core mask: only the innermost ~12% goes white, feathered
+    //   by the churn so the hot heart isn't a clean disc. (Was smoothstep(0.74,1.0)^2.2 → ~26% blob.)
+    float whiteMask = pow(smoothstep(0.86, 1.0, coreHot), 3.2);
+    float whiteCore = whiteMask;
     float heat = ball * (0.42 + 0.92*coreHot) * (0.62 + 0.72*lump);
     heat *= (0.45 + 0.85*coolAll);
     vec3 cDark  = vec3(0.34, 0.06, 0.01);
@@ -689,21 +693,43 @@ const FIREBALL_FS = /* glsl */ `
     vec3 col = mix(cDark, cRed, smoothstep(0.04, 0.30, heat));
     col = mix(col, cOrange, smoothstep(0.26, 0.78, heat));
     col = mix(col, cYellow, smoothstep(0.80, 1.35, heat));
-    col = mix(col, cWhite,  whiteCore * (0.5 + 0.5*lump) * coolAll);   // white ONLY in the small hot core (churn-broken)
+    col = mix(col, cWhite,  whiteCore * (0.5 + 0.5*lump) * coolAll);   // white ONLY in the tight hot heart (churn-broken)
     // SMOKY dark lumps within the roil (unburnt debris/smoke rolling through the fireball) — STRONG
     //   dark lanes so the body reads as CHURNING billows with internal contrast, not a uniform disc.
-    float smoke = smoothstep(0.48, 0.92, roil2) * (0.7 + 0.3*(1.0-coolAll));
-    col *= (1.0 - 0.62*smoke);
+    //   Widened band + more depth so more of the ball reads as smoke-shot churn (FX-polish).
+    float smoke = smoothstep(0.38, 0.88, roil2) * (0.75 + 0.25*(1.0-coolAll));
+    col *= (1.0 - 0.80*smoke);   // strong dark churn lanes cutting through the fire body
+    // SMOKY BILLOW HALO — a brown-grey emissive cloud ballooning JUST BEYOND the fire edge (and
+    //   into the smoke lanes), so the blast reads as PRODUCING SMOKE against the void — additive
+    //   blending can't paint dark over black, so the smoke must self-glow faintly to show. It's a
+    //   ragged, lumpy shell (churn-warped) that thins outward; a dissipating dark cloud, not light.
+    //   A DEEP + LUMPY shell (reaches edge+0.95) so it reads as real billowing mass, not a thin rim.
+    float smokeShell = smoothstep(edge + 0.10, edge + 0.46, r) * (1.0 - smoothstep(edge + 0.52, edge + 1.05, r));
+    // A big low-freq roll on top so the smoke clumps into a few fat billows (mushroom lobes) rather
+    //   than an even fringe — sampled off a coarser churn so the lobes are chunky.
+    float smokeRoll = fbm(p*1.5 + vec2(-uTime*0.25, uTime*0.35));
+    float billow = smokeShell * (0.30 + 0.95*lump) * pow(0.28 + 0.72*smokeRoll, 1.9);   // chunky fat lobes (high lump contrast → billows, not an even halo)
+    vec3 cSmoke = vec3(0.26, 0.17, 0.12);   // warm-grey smoke — dull enough to read dark vs fire, bright enough to show vs the void
     // EMISSION — kept MODEST so the fire's colour GRADIENT reads (toneMapped:false means the
     //   output clips to white above 1.0 — a big additive value blows the whole disc to a white
-    //   blob, which is what round-1 did). Only the hot CORE is allowed to exceed 1 (white-hot);
-    //   the orange/red body stays <1 so its hue shows. The lump/churn modulates it HARD so it roils.
-    float em = ball * (0.28 + 0.42*heat) * (0.45 + 0.75*coolAll) * (0.55 + 0.75*lump) * (1.0 - 0.55*smoke);
+    //   blob). Only the tight hot CORE exceeds 1 (white-hot); the orange/red/yellow body is HELD
+    //   below clip so its hue shows (the mid-body no longer blooms to white). The lump/churn roils it.
+    float bodyEm = ball * (0.20 + 0.30*heat) * (0.45 + 0.75*coolAll) * (0.55 + 0.75*lump) * (1.0 - 0.62*smoke);
+    bodyEm = min(bodyEm, 0.60);                // CAP the body emission so yellow/orange never clip to white
+    float coreEm = whiteCore * (0.8 + 0.6*lump) * coolAll * 1.6;   // the tight heart is allowed to blow hot
+    float em = bodyEm + coreEm;
+    // Composite the fire body (col*em) with the dim smoke billow. The billow is a faint self-glow so
+    //   it shows against the void, but its own dark lanes (via smoke) keep it reading as CLOUD not fire.
+    //   It rises as uT climbs (the blast dies down → smoke takes over the outer read).
+    float smokeUp = 1.30 + 0.60*smoothstep(0.12, 0.55, uT);   // smoke reads strong from the peak onward
+    vec3 outCol = col * em + cSmoke * billow * smokeUp * (0.85 + 0.45*(1.0-coolAll));
     // ALPHA — the fireball is a translucent-but-dense body over the aperture (additive blending,
     //   so alpha only feathers the edges; the brightness comes from em). Near-full inside, soft rim.
-    float a = clamp(ball * (0.40 + 0.55*coreHot) * (0.5 + 0.6*coolAll), 0.0, 0.9);
-    if (em < 0.015 && a < 0.02) discard;
-    gl_FragColor = vec4(col * em, a);
+    //   The smoke billow adds its own soft edge presence so the outer smoke feathers the silhouette.
+    float a = clamp(ball * (0.40 + 0.55*coreHot) * (0.5 + 0.6*coolAll)
+                    + billow * smokeUp * 0.5, 0.0, 0.9);
+    if (em < 0.008 && billow < 0.01 && a < 0.02) discard;
+    gl_FragColor = vec4(outCol, a);
   }
 `;
 // FLASH — the initial blinding white-hot detonation core (a bright soft disc, only in the
