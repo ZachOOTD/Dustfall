@@ -1604,12 +1604,7 @@ const SCENARIOS = {
   // methodology.md D165). Angles: wake (player's-eye approach), hatch (close-up into
   // the blown salvage face), oblique (3/4 of the whole silhouette), back (the modular
   // panels). --time=<0..1> for the dawn/morning desert light. Front-lit.
-  // Smoke-intro (T4.3): run the headless intro smoke chain + log {ok,beats}. A quick
-  //   gate that the chute-pop geometry changes didn't break the beat pipeline.
-  'smoke-intro': async (page) => {
-    const r = await page.evaluate(() => window.__game.smokeIntro());
-    console.log('[smoke-intro] ' + JSON.stringify(r));
-  },
+  // (the 'smoke-intro' health GATE lives further down — a single definition now.)
 
   'crashed-pod': async (page) => {
     const angle = argv.angle || 'wake';
@@ -2437,11 +2432,13 @@ const SCENARIOS = {
   },
 
   // Smoke-intro (T1.2): run the whole intro beat chain headless + report {ok,beats}.
-  // Confirms the new hero cabin + the lever hook don't break the eject→descent→
-  // parachute→impact sequence. No screenshot.
+  // Escape-pod intro health GATE: drives the whole 12-beat chain headless + asserts
+  // {ok:true, beats:12}. THROWS on failure so `node rig-shot.mjs --scenario=smoke-intro`
+  // exits non-zero (main().catch → exit 1) — usable as `npm run verify:intro`. No screenshot.
   'smoke-intro': async (page) => {
     const r = await page.evaluate(() => window.__game.smokeIntro());
     console.log(`[smoke-intro] ${JSON.stringify(r)}`);
+    if (!r || !r.ok || r.beats !== 12) throw new Error(`smoke-intro GATE FAILED: ${JSON.stringify(r)}`);
   },
 
   'tree': async (page) => {

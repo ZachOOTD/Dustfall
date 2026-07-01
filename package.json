@@ -12,6 +12,7 @@
     "verify:all": "npm run verify && npm run verify:placement && npm run verify:colliders",
     "verify:placement": "node scripts/verify-placement.mjs",
     "verify:colliders": "node scripts/verify-colliders.mjs",
+    "verify:intro": "node scripts/rig-shot.mjs --scenario=smoke-intro",
     "rig-shot": "node scripts/rig-shot.mjs"
   },
   "devDependencies": {
