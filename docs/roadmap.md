@@ -172,8 +172,19 @@ at each `### Milestone:` for the user's art-direction. The v1 logic/audio/stagin
   the pod keeps falling to impact at the ground — `tickParachute` continues the fall; was "on the ground"). **Real
   ~2s+ blackouts** (`_phaseFade` hold-then-fade ~2.3s; impact→wake ~2.07s; was a 0.35s flash). The fall FEEL is a walk-test item.
 ### Milestone: REBUILD R4 — physical descent + crash COMPLETE (checkpoint=none → no pause; user reviews the batch)
-- **R5 — Ship interior redesign:** the cockpit redesigned OFF the greybox box (a real ship interior) + the
-  corridor FULLY modelled/detailed. [hero models — user art-direction]
+- **R5 — Ship interior redesign** (⏸ PAUSED by the user 2026-06-30):
+  - **✅ R5a — the COCKPIT redesigned OFF the greybox box → a worn industrial-hauler fuselage cockpit** (SHIPPED as a
+    strong default via a 4-round adversarial-gate loop, beauty 4→6.75; commit `07fa124`): lofted vaulted ribbed
+    D-section fuselage + raked mullioned windscreen + asymmetric avionics console + a real crash-seat + a deep
+    bulkhead doorway + cool neutral metal. The box/wine-barrel/grinning-face/floating-seat/placeholder-doorway reads
+    are all KILLED. **RESIDUALS → the user's art-direction (why we paused):** (a) finish the rugged/matte hull material
+    pass (user steering — the current metal reads "too pristine/shiny"; the pass was interrupted mid-flight); (b) the
+    FP "strapped-in" seat read is a plateaued procedural nut (geometry's all there); (c) the planet frames the
+    windscreen too large/flat at the cockpit beat (R2/sky framing).
+  - **▶ R5b — the CORRIDOR fully modelled/detailed** (UNBUILT — next after resume).
+  - **▶ R5c — the pod-bay + the physical ENTER/EJECT** (UNBUILT — folded from R3b; the pod docked in the ship the
+    player walks into + that detaches, no teleport).
+  [hero models — user art-direction]
 ### Milestone: REBUILD R5 — ship interiors COMPLETE → FEATURE REWORK COMPLETE → USER final walk-test/listen → /campaign-approve
 
 ### Escape-pod intro — the phased build (v1, SUPERSEDED by REBUILD v2 above — historical) ([feature-escape-pod-intro.md](feature-escape-pod-intro.md))

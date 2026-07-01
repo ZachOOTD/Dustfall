@@ -1,13 +1,13 @@
 {
-  "status": "active",
+  "status": "paused",
   "campaign": "escape-pod-intro",
   "started": "2026-06-28",
   "branch": "campaign/escape-pod-intro",
   "preview_deploy": "User steering 2026-06-29 (C17): the campaign branch is now PUSHED to origin (github.com/ZachOOTD/Dustfall) for a playable preview link. POLICY CHANGE: each cycle now PUSHES the branch after its commit (was local-only) so the preview rebuilds. The preview build is env-gated (VITE_ESCAPE_POD_INTRO=1 turns the intro ON, VITE_BASE=/ serves at root) — see netlify.toml + docs/deploy-preview.md; the live master GitHub-Pages site is untouched (push-to-master-only). The user activates the host (Cloudflare Pages / Netlify) on their side one-time → then each push refreshes the link.",
-  "cycles_completed": 30,
+  "cycles_completed": 31,
   "current_tier": "** REBUILD v2 ACTIVE (2026-06-30, user morning feedback) -> ATTENDED collaborative rebuild (NOT the autonomous loop; the user art-directs the hero/visual pieces). The v1 intro was built at a hidden OFFSET + faked space/descent via shaders + split the pod into 3 teleport-stitched models -> the root of every 'fake' read. USER-APPROVED shift: re-ground in the REAL world; ONE physical pod (enter/eject/ride/crash/wake/exit, no teleport); space = a wrapping celestial SKYBOX (real-scale look, no precision cost); descent = the pod PHYSICALLY falling + crashing into the real desert (viewport = the actual spawn world; multiplayer-ready); orbit->atmosphere is a scripted re-entry (NOT a literal 100km fall -- float precision wall ~10km). Rebuild order R1 real-world re-grounding (keystone) -> R2 space skybox+planet -> R3 the ONE physical pod -> R4 physical descent+crash + timing fixes (parachute MID-fall, longer ~2s+ blackouts) -> R5 ship interior/corridor redesign. The v1 beat-machine + sequence + audio + staging CARRY OVER (re-grounded, not rewritten). Full plan: docs/feature-escape-pod-intro.md '## REBUILD v2'. NEXT = R1. [Prior overnight-complete summary superseded:] ", "current_tier_prior": "** OVERNIGHT RUN COMPLETE (C19-C26) -> PAUSED for the user's morning review. The whole escape-pod intro PLAYS end-to-end (behind FEATURES.escapePodIntro) WITH FULL SFX + MUSIC: cockpit (hum) -> check-engines (console escalation) -> corridor disaster (fire + red-alert + klaxon + escape sting) -> enter pod -> eject + ship explodes -> re-entry -> the beautiful descent (vista + rush + swell) -> the parachute gag -> crash -> WAKE INSIDE the pod -> kick the hatch open -> walk out into the DAWN desert (aftermath-silence + horizon hook + desert-easing music). SHIPPED this overnight: T3.4 disaster staging (C21), T4.1 wake-inside+blow-door [the C18 req] (C22), T4.2 desert reveal (C23), T5.1a SFX (C24), T5.1b loops (C25), T5.2 music (C26). PIVOT (C20): the autonomous procedural-modeler PLATEAUED on Phase-3 hero visuals (hauler, cockpit) -> the loop deferred all hero VISUALS + feel/playtest items to the user + built the playable LOGIC/STAGING/AUDIO instead. AWAITING THE USER (the morning list, prioritized): [hero VISUALS - art-direction] hauler exterior (__game.buildHauler()), cockpit surface-fidelity (rig --scenario=cockpit), ship-explosion FX (T3.2), hero corridor geometry + fire FX, the HERO crashed-cabin wake interior + the crashed-pod EXTERIOR<->INTERIOR size-match (C18), a dedicated horizon-hook landmark; [feel/playtest] T4.3 craft+salvage tutorial (wire the pod as a pryable escape_pod salvageable -- scrap_machete/D261 + the salvage system EXIST) + the comic chute-pop payoff; [audio] LISTEN + balance the mix. Then the Phase 3-5 walk-tests. Resume via /campaign-approve (or steer via steering.md). ENRICH-NOT-CUT; behind FEATURES.escapePodIntro; no SAVE_VERSION bump. Plan: docs/feature-escape-pod-intro.md.",
-  "awaiting_approval": false,
-  "stop_reasons": [],
+  "awaiting_approval": true,
+  "stop_reasons": ["paused"],
   "plan_doc": "docs/feature-escape-pod-intro.md",
   "plan_review_note": "The plan was authored (feature-slice) + critically reviewed + the review fixes folded in + USER-APPROVED in-conversation 2026-06-28 ('proceed with your recommendation'). So NO plan-review pause — cycle 1 (Phase 0 T0.0) is released. The next pause is the Phase 0 milestone (the greybox-spine walk-test).",
   "self_author": "propose",
@@ -505,6 +505,24 @@
       "ultracode": true,
       "commit": "73a09ac",
       "spend_approx_tokens": 350000
+    },
+    {
+      "cycle": 31,
+      "date": "2026-06-30",
+      "focus": "REBUILD v2 R5a -- the HERO COCKPIT redesign (box -> worn fuselage), driven through a 4-round adversarial visual-gate loop. USER-PAUSED mid-material-pass.",
+      "tier": "REBUILD v2 R5 -- ship interior/corridor redesign (R5a = the cockpit)",
+      "outcome": "SHIPPED-as-strong-default (paused for the user's art-direction on residuals)",
+      "units": ["R5a cockpit redesign (procedural-modeler, 4 build/fix rounds + 3 adversarial gates): the greybox-BOX cockpit became a real industrial-hauler spaceship cockpit -- a lofted vaulted ribbed D-section FUSELAGE tapering to the nose, a raked faceted WINDSCREEN w/ a real mullion frame + glazing specular streaks, a multi-tier ASYMMETRIC avionics console (recessed MFD + CRT scanline + amber readouts), a real crash-SEAT (bucket+bolsters+headrest+5-point harness+central buckle+slim converging straps), a deep recessed bulkhead DOORWAY (hazard stripes+kick-plate), cool NEUTRAL metal (killed the brown-wood 'wine-barrel' read). The adversarial gate (5 critics + code-auditor, run 3x) repeatedly caught real defects under confident builder self-grades: gate-1 5.2/FAIL (box/barrel/grinning-face/no-seat/placeholder-door/blown-lighting -- the builder self-graded 8); gate-2 6.5 (5/6 blockers fixed); gate-3 6.75 (seat still didn't read as strapped-in -- root-caused round 4: the harness straps were too WIDE/CLOSE -> foreshortened into tan wedges the critics misread as 'leaning over a console' -> slimmed to a thin converging V + a chunky central buckle). Contract byte-identical (COCKPIT_COLLIDERS/getShipSpawn/doorway/setCockpitAlert WYSIWYG; crown <=2.98)."],
+      "verify": "tsc + verify:all + smoke {ok:true,beats:12} at the pause commit. Behind FEATURES.escapePodIntro.",
+      "visual": "4 gate rounds, beauty 4 -> 5.2 -> 6.5 -> 6.75. The box/wine-barrel/grinning-face/floating-seat/flat-placeholder-doorway pareidolia are all KILLED by consensus. The adversarial gate earned its keep (caught a 5.2 under a self-graded 8).",
+      "steering": "USER note this cycle (processed + archived): the hull metal reads 'too pristine and shiny'; the user preferred the OLDER rugged/matte texture. -> a rugged/matte material pass was launched + INTERRUPTED by the user's pause (partial edits committed, tsc/smoke green). Finish at resume.",
+      "deferred": "PAUSED HERE by the user ('pause where we are now, pick it back up later'). RESIDUALS for the user's art-direction + resume: (1) finish the rugged/matte hull material pass (interrupted); (2) the FP 'strapped-in' seat read is a plateaued procedural nut (4 rounds -- the geometry is all there; the exact first-person read is the gap); (3) the planet frames the windscreen too large/flat at the cockpit beat (R2/sky framing -- the user's queued 'planet size/placement' item). STILL UNBUILT in R5: R5b (corridor full-model redesign) + R5c (the pod-bay + physical enter/eject, folded from R3b). Earlier owed: R1 polish + descent feel.",
+      "save": "no change (SAVE_VERSION stays 15).",
+      "decisions": ["(no new D-entry. R5a shipped as a strong default -- the cockpit is hugely improved from the box but the seat-read + material-taste + planet-framing are the user's art-direction domain, and the user paused to take the wheel. The adversarial-gate discipline [[hero-asset-adversarial-gate]] was decisive: it caught defects the builder's self-grade + the orchestrator's own eyes missed.)"],
+      "agent": "procedural-modeler x4 rounds (~770K) + 3 adversarial-gate workflows (~830K) + orchestration.",
+      "ultracode": true,
+      "commit": "07fa124",
+      "spend_approx_tokens": 1800000
     }
   ]
 }

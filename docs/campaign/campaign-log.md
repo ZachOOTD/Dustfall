@@ -379,3 +379,13 @@ The user walk-tested R1, approved it to continue, and reported 2 bugs (both fixe
 - **Reordered:** R3b (docked enter/eject) → folded into R5 (the pod-bay is part of the ship).
 - **Commit:** `73a09ac` (+ docs).
 - **Next (run-through, LAST piece): R5** — ship interior + corridor redesign + the pod-bay + physical enter/eject. Then the rework is feature-complete → the user's big review.
+
+---
+
+## Cycle 31 — REBUILD v2 R5a: hero cockpit redesign (box → worn fuselage) → ⏸ USER-PAUSED (2026-06-30)
+- **R5a — the cockpit:** redesigned the greybox-BOX cockpit into a worn industrial-hauler spaceship cockpit (lofted ribbed D-section fuselage + raked mullioned windscreen + asymmetric avionics console + a real crash-seat + a deep bulkhead doorway + cool neutral metal). Driven through a **4-round adversarial visual-gate loop** (beauty 4 → 5.2 → 6.5 → 6.75). The gate (5 critics + code-auditor, 3×) repeatedly caught real defects under confident builder self-grades (a 5.2 under a self-graded 8; a wine-barrel + grinning-face + floating-seat + placeholder-doorway — all since killed).
+- **Steering (processed + archived):** user note — the hull metal reads "too pristine/shiny"; they preferred the OLDER rugged/matte texture. A rugged/matte material pass was launched + **interrupted by the user's pause** (partial edits committed, tsc/smoke green).
+- **PAUSED** by the user ("pause where we are now, pick it back up later"). Commit `07fa124` (+ docs). status=paused, awaiting_approval=true.
+- **Verify:** tsc + verify:all + smoke `{ok:true,beats:12}`.
+- **Resume (see next-session-prompt):** finish the matte-material pass · the FP seat read (plateaued — may want the user's eye) · the planet-framing (R2) · then R5b (corridor) + R5c (pod-bay + enter/eject). Resume via `/campaign-approve` or steer.
+- **Cost note:** ~1.8M tokens (4 modeler rounds + 3 gates) — the adversarial gate earns its keep on hero visuals but is expensive; scope gate width to stakes.
