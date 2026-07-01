@@ -41,7 +41,7 @@ import {
   setCockpitAlert, setShipAlert, setEngineFire,
   getPodBayThreshold, getPodBaySeatedEye, releasePodFromBay,   // R5c — the docked-pod bay + physical release
 } from './shipScene.ts';
-import { buildPodScene, disposePodScene, getPodSpawn, setDescentProgress, setDescentBase, setTumbleLight, setParachuteLeverPull, placeCrashedPodWreck, setCabinCrashPose, blowCabinHatch } from './podScene.ts';
+import { buildPodScene, disposePodScene, getPodSpawn, setDescentProgress, setDescentBase, setTumbleLight, setParachuteLeverPull, placeCrashedPodWreck, setCabinCrashPose, blowCabinHatch, restoreCabinExposure } from './podScene.ts';
 import { buildHaulerExterior, disposeHaulerExterior, setHaulerExplosion } from './haulerScene.ts';   // Phase 3 (T3.1/T3.2) — the hero freighter + its death staged through the post-eject porthole
 import { startPodTutorial } from './podTutorial.ts';   // T4.3 — the first craft→salvage→chute-pop tutorial (runs as gameplay post-handoff)
 import { setGameHudHidden, showIntroPrompt, hideIntroPrompt, setIntroBlack } from './introHud.ts';
@@ -272,6 +272,13 @@ export function startEscapePodIntro(ctx: GameContext, force = false): void {
 export function jumpToBeat(ctx: GameContext, beat: BeatId): void {
   if (!ctx.intro) return;
   if (beat === 'done') { endEscapePodIntro(ctx); return; }
+  // GLOBAL-STATE-RESTORE guard: the impact/wake beats LIFT the global renderer exposure
+  // (setCabinCrashPose 1.05 → 2.0) so the enclosed crashed dawn cabin reads. In normal play
+  // beats only advance forward and the exposure is restored at teardown (disposePodScene, via
+  // stepOut / endEscapePodIntro). But a dev `jumpToBeat` OUT of a crash beat to an earlier beat
+  // (wake → cockpit) does NOT tear down the pod, so the 2.0 exposure would LEAK and render the
+  // orbit/desert washed out. Restore the base whenever we're not landing on a lifting beat.
+  if (beat !== 'impact' && beat !== 'wake') restoreCabinExposure(ctx);
   ctx.intro.beat = beat;
   ctx.intro.beatStartedAt = ctx.time.elapsed;
   ctx.intro.scratch = {};

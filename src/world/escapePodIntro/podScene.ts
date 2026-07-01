@@ -1507,6 +1507,18 @@ export function setCabinCrashPose(pose: number): void {
   _syncPodToAltitude();
 }
 
+/** Restore the renderer to the desert-base exposure. The impact/wake crash-pose LIFTS the
+ *  global renderer.toneMappingExposure (1.05 → 2.0) so the enclosed dawn interior reads on the
+ *  Reinhard curve (setCabinCrashPose). disposePodScene restores it on the normal exit, but a
+ *  dev `jumpToBeat` OUT of a crash beat back to an earlier beat (e.g. wake → cockpit) does NOT
+ *  tear down the pod — so without this the lifted exposure LEAKS into the non-crash beat (and,
+ *  since sequence.setSkyIntroMode/etc. only reset on endEscapePodIntro, it would render washed
+ *  out). jumpToBeat calls this whenever it lands on a beat that is not a crash beat. Idempotent;
+ *  takes ctx so it works even when the pod isn't built (_cabinColliderCtx is null). */
+export function restoreCabinExposure(ctx: GameContext): void {
+  ctx.three.renderer.toneMappingExposure = CABIN_BASE_EXPOSURE;
+}
+
 /** Descent driver (REBUILD v2 R1b) — drive the PHYSICAL fall off the fall's single 0..1
  *  input. The pod now physically falls through the REAL world (the porthole shows the real
  *  terrain + sky), so this drives:
