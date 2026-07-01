@@ -229,3 +229,5 @@ detail + the "consciously NOT chasing" list in [iteration-plan.md](iteration-pla
 [feat] gunshot + reload SFX for all guns (scrap_gun / energy_pistol / amban_rifle / scrap-bolt etc.)
 [polish] speeder engine sound too loud/abrasive — lower-pitched, smoother engine hum
 [feat] cave rework — currently a recessed box in the sand, not a real cave; rethink (DEDICATED session, user direction pending)
+
+- [infra] **Preview hosting — Netlify usage limit reached (2026-06-30)** — can't deploy new pages; the `campaign/escape-pod-intro` preview link won't refresh. Need a new solution — the user suggested a separate locally-hosted testing branch. Tackle when the user is back. (The overnight loop keeps committing + pushing regardless; verification is via `rig-shot.mjs` + the adversarial gates, which don't need a deploy.)

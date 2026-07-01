@@ -131,18 +131,24 @@ function _installGrime(m: THREE.MeshStandardMaterial): void {
       '#include <color_fragment>',
       `#include <color_fragment>
        vec3 gp = vGrimeW; gp.y = mod(gp.y, 64.0);           // fold the high world origin out
-       float gVal = _gn(gp * 1.7) * 0.6 + _gn(gp * 5.3) * 0.4; // broad + finer value break
+       // R5a-r6: 3 octaves (added a coarse streak band) + a stronger amplitude → the big flat panels
+       //   read as MOTTLED worn metal, not a dead-uniform showroom plate (the user's "too pristine").
+       float gVal = _gn(gp * 0.9) * 0.42 + _gn(gp * 1.7) * 0.38 + _gn(gp * 5.3) * 0.20;
+       // long vertical streak grime (dirt runs down the walls) — a directional wash keyed to a hash
+       //   band, only on near-vertical surfaces so the floor doesn't get vertical stripes.
+       float gStreak = smoothstep(0.55, 0.95, _gn(vec3(gp.x * 3.1, gp.y * 0.35, gp.z * 3.1)));
        // floorY≈0 in local; world floor ≈ SHIP_ORIGIN.y (3000). height above the deck, 0..~3:
        float gAbove = clamp(mod(vGrimeW.y, 64.0) - mod(3000.0, 64.0), 0.0, 3.0);
        float gDust = 1.0 - clamp(gAbove / 2.6, 0.0, 1.0);   // 1 at the floor → 0 at the crown
        // a HARDER low pool for the deck + lower walls (grime settles at the floor — the worn tell).
-       float gFloor = 1.0 - clamp(gAbove / 0.85, 0.0, 1.0); // 1 right at the deck, gone by ~waist
-       // darken: a broad mottle (±) settling darker low, a dust wash pooling toward the deck, and a
-       // heavier grime pool at the floor (breaks the "clean bright floor" read the gate flagged).
-       float gDark = (gVal - 0.5) * 0.24 - gDust * 0.20 - gFloor * (0.14 + gVal * 0.16);
-       diffuseColor.rgb *= clamp(1.0 + gDark, 0.48, 1.12);
+       float gFloor = 1.0 - clamp(gAbove / 0.95, 0.0, 1.0); // 1 right at the deck, gone by ~waist
+       // darken: a broad mottle (±) settling darker low, a dust wash pooling toward the deck, a
+       // heavier grime pool at the floor, + vertical streaks (grime runs down the walls). Pushed
+       //   harder per the user directive (the flat panels were too clean/pristine).
+       float gDark = (gVal - 0.5) * 0.34 - gDust * 0.26 - gFloor * (0.20 + gVal * 0.18) - gStreak * 0.10;
+       diffuseColor.rgb *= clamp(1.0 + gDark, 0.40, 1.14);
        // a faint desaturated warm-grey grime cast in the pooled-dust band (dust, not clean metal).
-       diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.06, 1.0, 0.9), gDust * 0.40);`,
+       diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.07, 1.0, 0.88), gDust * 0.48);`,
     );
     // modulate ROUGHNESS — grimier/rougher low + in the mottle (streaky worn sheen, not uniform gloss).
     shader.fragmentShader = shader.fragmentShader.replace(
@@ -150,9 +156,12 @@ function _installGrime(m: THREE.MeshStandardMaterial): void {
       `#include <roughnessmap_fragment>
        vec3 rp = vGrimeW; rp.y = mod(rp.y, 64.0);
        float rVal = _gn(rp * 2.1);
+       float rStreak = smoothstep(0.55, 0.95, _gn(vec3(rp.x * 3.1, rp.y * 0.35, rp.z * 3.1)));
        float rAbove = clamp(mod(vGrimeW.y, 64.0) - mod(3000.0, 64.0), 0.0, 3.0);
        float rDust = 1.0 - clamp(rAbove / 2.6, 0.0, 1.0);
-       roughnessFactor = clamp(roughnessFactor + (rVal - 0.4) * 0.14 + rDust * 0.10, 0.30, 1.0);`,
+       // R5a-r6: rougher overall + streaky (kills the broad specular hotspot sweep on the crown that
+       //   still read as showroom gloss — the highlight is now a soft varied wash, not a mirror sheen).
+       roughnessFactor = clamp(roughnessFactor + (rVal - 0.35) * 0.20 + rDust * 0.14 + rStreak * 0.10, 0.34, 1.0);`,
     );
   };
 }
@@ -206,12 +215,26 @@ const _seatWorn = _metal(0x3c3833, 0.04, 0.80, { flat: true });
 //   are this, so it must stay dark under the warm key — R5a-r5 FIX-2 killed the brown-block read in
 //   the aft-turned shot). 0x241f1c (warm) → 0x1c1b1a (near-neutral very dark).
 const _seatBack = _metal(0x1a1a1c, 0.04, 0.90, { flat: true });
+// ── R5a-r6 FIX-2 (the TAN-WEDGE recurrence, user directive 2026-07-01) — the FORWARD-INTRUDING seat
+//   forms (armrest pad + tops + forward thigh-horns) reach into the lower-L/R corners of the SEATED
+//   frame, where the warm crown key + warm rake hit their light-facing faces and STILL lifted the
+//   dark vinyl to a bright TAN wedge (the recurring gate/user complaint). Root cause: the warm-tinted
+//   albedo (R>G>B) + a whisper of env → warm diffuse catch renders them tan. Fix = a dedicated
+//   material for JUST these forward forms: NEAR-BLACK + COOL-neutral (B≥G≥R, so warm light can only
+//   grey it, never warm it to tan), ZERO metalness, ZERO env, MATTE. Under the warm key these read
+//   as dim cool cradling forms flanking the buckle → the BUCKLE + thin straps are what the eye reads.
+const _seatArm = _metal(0x121316, 0.0, 0.95, { flat: true });
 // piping / seam welt — a worn pale stitch-line welt between cushion sections (lifts the seams).
 const _seam = _metal(0x4a4338, 0.04, 0.74, { flat: true });
-// Restraint webbing — faded safety-orange strap (reads as a real harness, pops vs the dark seat).
-const _strap = _metal(0xc06a36, 0.05, 0.82, { flat: true });
-// strap wear — a grimed darker band on the webbing (the harness isn't a clean flat orange).
-const _strapWorn = _metal(0x7e4824, 0.05, 0.86, { flat: true });
+// Restraint webbing — worn safety-orange strap (reads as a real harness, pops vs the dark seat).
+//   R5a-r6 (the "tan wedge" root cause): the over-shoulder straps anchor right beside the seated eye,
+//   so a bright-orange band foreshortens into a huge TAN WEDGE under the warm key (the user/gate
+//   complaint — misattributed to the bolsters, actually the HARNESS). Pull the webbing DARKER + off
+//   the bright orange toward a muted worn oxblood-brown so even foreshortened + key-lit it reads as a
+//   dark strap, never a bright tan slab. Still clearly a harness (warm vs the cool hull) — just not neon.
+const _strap = _metal(0x572d1a, 0.05, 0.88, { flat: true });
+// strap wear — a grimed darker band on the webbing (the harness isn't a clean flat strip).
+const _strapWorn = _metal(0x3a1f13, 0.05, 0.90, { flat: true });
 // Warm self-lit accents — unlit so they GLOW (points of life on the dash).
 const _ledGreen = new THREE.MeshBasicMaterial({ color: 0x66d877 });
 const _ledAmber = new THREE.MeshBasicMaterial({ color: 0xe09838 });
@@ -343,7 +366,7 @@ let _cockpitAlertLevel: 0 | 1 | 2 = 0;
 let _cockpitEnv: THREE.Texture | null = null;
 const _ENV_MATS = (): THREE.MeshStandardMaterial[] => [
   _shell, _band, _steel, _channel, _rivet, _deck, _ceil, _cable,
-  _seat, _seatWorn, _seatBack, _seam, _strap, _strapWorn, _screenGlass, _winFrame, _glass,
+  _seat, _seatWorn, _seatBack, _seatArm, _seam, _strap, _strapWorn, _screenGlass, _winFrame, _glass,
 ];
 // ── R5a MATERIAL-FEEL PASS — env intensity is the PRISTINE/SHINY tell. At 0.85 every big flat
 //    panel MIRRORED the bright planet → the "showroom sheen" the user + gate flagged. Cut hard:
@@ -351,12 +374,13 @@ const _ENV_MATS = (): THREE.MeshStandardMaterial[] => [
 //    reflecting the scene; the seat vinyls (already the tan-wedge risk) go lower still (0.12 →
 //    0.08); small hardware (rivets) + the glass keep a bit more so worn studs + the canopy still
 //    catch a highlight (that reads as USED hardware, not showroom).
-const _LOW_ENV = new Set<THREE.Material>([_seat, _seatWorn, _seatBack, _seam]);   // seat vinyls
+const _LOW_ENV = new Set<THREE.Material>([_seat, _seatWorn, _seatBack, _seam, _strap, _strapWorn]);   // seat vinyls + harness webbing (R5a-r6: no scene catch → no tan blowout)
 const _MED_ENV = new Set<THREE.Material>([_rivet, _glass, _winFrame, _screenGlass]); // worn hardware/glass keep a small catch
+const _NO_ENV = new Set<THREE.Material>([_seatArm]);   // R5a-r6: forward tan-wedge forms take ZERO env (no scene catch → can't warm to tan)
 function _applyCockpitEnv(env: THREE.Texture | null): void {
   for (const m of _ENV_MATS()) {
     m.envMap = env;
-    m.envMapIntensity = _LOW_ENV.has(m) ? 0.08 : _MED_ENV.has(m) ? 0.40 : 0.20;
+    m.envMapIntensity = _NO_ENV.has(m) ? 0.0 : _LOW_ENV.has(m) ? 0.08 : _MED_ENV.has(m) ? 0.40 : 0.14;
     m.needsUpdate = true;
   }
 }
@@ -1117,7 +1141,7 @@ function buildPilotSeat(group: THREE.Group): void {
     //   smaller + rolled so its top face turns AWAY from the warm overhead key (no tan flat-top
     //   slab → it stays a dark bolster, not the warned "tan wedge"). The roll is OUTBOARD (top
     //   leans toward the side wall) so the lit face is the dark outer cheek, not the up-face.
-    const horn = _box(0.16, 0.30, 0.38, _seatBack);
+    const horn = _box(0.16, 0.30, 0.38, _seatArm);   // R5a-r6: dedicated near-black cool matte (was _seatBack → read tan under the warm key)
     horn.position.set(sx * 0.38, sy + 0.16, sz - 0.28);
     horn.rotation.x = 0.10;
     horn.rotation.z = sx * -0.22;                      // crown rolls toward the pilot's centre
@@ -1234,11 +1258,13 @@ function buildPilotSeat(group: THREE.Group): void {
     armPost.position.set(sx * 0.37, sy + 0.20, sz - 0.04);
     group.add(armPost);
     // the armrest pad — raised + reaching forward so its tip lands in the lower-side forward frame.
-    const arm = _box(0.13, 0.10, 0.60, _seatBack);
+    //   R5a-r6: the forward armrest forms are the #1 tan-wedge offender under the warm key → the
+    //   dedicated near-black COOL matte _seatArm (was _seatBack/_seat, warm-tinted → lifted to tan).
+    const arm = _box(0.13, 0.10, 0.60, _seatArm);
     arm.position.set(sx * 0.37, sy + 0.42, sz - 0.34);
     group.add(arm);
-    const armPad = _box(0.14, 0.06, 0.40, _seat);       // DARK vinyl top (was tan _seatWorn → it loomed
-    armPad.position.set(sx * 0.37, sy + 0.48, sz - 0.40); //  as a tan wall in the close forward POV)
+    const armPad = _box(0.14, 0.06, 0.40, _seatArm);    // DARK cool vinyl top (was _seat → still warmed
+    armPad.position.set(sx * 0.37, sy + 0.48, sz - 0.40); //  to a tan wall in the close forward POV)
     group.add(armPad);
     const armWear = _box(0.06, 0.02, 0.30, _seatWorn);  // a THIN worn rub-stripe (a sliver, not a slab)
     armWear.position.set(sx * 0.37, sy + 0.515, sz - 0.42);
@@ -1294,14 +1320,18 @@ function buildPilotSeat(group: THREE.Group): void {
   for (const sx of [-1, 1]) {
     // OVER-SHOULDER strap: from high + outboard (shoulder height, behind the eye), descending
     //   down-forward-INWARD onto the buckle → a clear thick diagonal converging into the lower-center.
-    const shAx = sx * 0.34, shAy = 1.40, shAz = -0.26;
-    _webBetween(shAx, shAy, shAz, bkX + sx * 0.05, bkY + 0.04, bkZ, 0.055, _strap, 0.03);
-    // a grimed wear band overlaid on the shoulder strap (breaks the flat tan webbing)
-    _webBetween((shAx + bkX) / 2 + sx * 0.01, (shAy + bkY) / 2 + 0.02, (shAz + bkZ) / 2 - 0.006, bkX + sx * 0.05, bkY + 0.02, bkZ - 0.006, 0.028, _strapWorn, 0.022);
+    // R5a-r6: anchor pulled OUTBOARD + BACK (0.34→0.40 x, -0.26→-0.18 z) so the strap starts further
+    //   from the near-eye plane + NARROWED (0.055→0.038) → it reads as a thin diagonal harness band,
+    //   not the near-eye tan wedge it foreshortened into. The buckle stays the read.
+    const shAx = sx * 0.40, shAy = 1.40, shAz = -0.18;
+    _webBetween(shAx, shAy, shAz, bkX + sx * 0.05, bkY + 0.04, bkZ, 0.038, _strap, 0.028);
+    // a grimed wear band overlaid on the shoulder strap (breaks the flat webbing)
+    _webBetween((shAx + bkX) / 2 + sx * 0.01, (shAy + bkY) / 2 + 0.02, (shAz + bkZ) / 2 - 0.006, bkX + sx * 0.05, bkY + 0.02, bkZ - 0.006, 0.020, _strapWorn, 0.020);
     // LAP strap: a THIN webbing band tucking from the buckle horizontally out to the hip (kept
     //   narrow + close so it reads as a belt, NOT a wide foreshortened slab — the "tan wedge" the
-    //   wide version produced). Ends at the bolster inner edge, low + just below the buckle.
-    _webBetween(bkX + sx * 0.05, bkY - 0.07, bkZ + 0.02, sx * 0.26, bkY - 0.16, sz - 0.18, 0.05, _strap, 0.03);
+    //   wide version produced). Ends at the bolster inner edge, low + just below the buckle. R5a-r6:
+    //   narrowed 0.05→0.036 to match the slimmed shoulder straps.
+    _webBetween(bkX + sx * 0.05, bkY - 0.07, bkZ + 0.02, sx * 0.26, bkY - 0.16, sz - 0.18, 0.036, _strap, 0.028);
     // a steel adjuster slider partway down each shoulder strap (hardware detail)
     const slider = _box(0.09, 0.05, 0.05, _rivet);
     slider.position.set(sx * 0.16, (shAy + bkY) / 2 + 0.08, (shAz + bkZ) / 2 - 0.02);
