@@ -41,7 +41,7 @@ import {
   setCockpitAlert, setShipAlert, setEngineFire,
   getPodBayThreshold, getPodBaySeatedEye, releasePodFromBay,   // R5c — the docked-pod bay + physical release
 } from './shipScene.ts';
-import { buildPodScene, disposePodScene, getPodSpawn, setDescentProgress, setDescentBase, setTumbleLight, setParachuteLeverPull, placeCrashedPodWreck, setCabinCrashPose, blowCabinHatch, restoreCabinExposure } from './podScene.ts';
+import { buildPodScene, disposePodScene, getPodSpawn, setDescentProgress, setDescentBase, setTumbleLight, setParachuteLeverPull, setCabinCrashPose, blowCabinHatch, restoreCabinExposure, unifyEnterablePod, podIsEnterable } from './podScene.ts';
 import { buildHaulerExterior, disposeHaulerExterior, setHaulerExplosion } from './haulerScene.ts';   // Phase 3 (T3.1/T3.2) — the hero freighter + its death staged through the post-eject porthole
 import { startPodTutorial } from './podTutorial.ts';   // T4.3 — the first craft→salvage→chute-pop tutorial (runs as gameplay post-handoff)
 import { setGameHudHidden, showIntroPrompt, hideIntroPrompt, setIntroBlack } from './introHud.ts';
@@ -115,6 +115,41 @@ const WAKE_CLIMB_FALLBACK = 8.0;
 /** T4.2 — the desert reveal: seconds of held aftermath-silence (E7) as you stand in the dawn
  *  (your pod beside you, the horizon hook ahead, no HUD/objectives) before the game takes over. */
 const REVEAL_DWELL = 4.0;
+
+/** CONSISTENT-MIDDAY (user re-scope, 2026-07-01): the whole atmospheric leg — from the pod
+ *  falling into the real sky through the crash, wake, and step-out — plays at a BRIGHT CLEAR
+ *  MIDDAY, IDENTICAL crashing-down vs stepping-out (no dawn, no time/light jump on exit). The
+ *  game's diurnal clock (core/lighting.ts) puts NOON at dayTime=0.5 (sun height peaks); 0.46 is
+ *  a hair past noon → still bright midday but a sliver of sun-angle so the dunes + the pod read
+ *  with form (dead 0.5 flattens shadows). setSkyIntroMode's "real sky" leg is fully driven by
+ *  ctx.time.sunHeight (from dayTime), so setting this at DESCENT re-grounding makes the sky the
+ *  pod falls into = the sky you step out into, automatically. Clear skies = cloudiness/storm 0. */
+const INTRO_MIDDAY_TIME = 0.46;
+
+/** Force the real world to a bright clear MIDDAY (the intro's atmospheric handoff look). Sets the
+ *  diurnal clock to noon-ish + clears any cloud/storm so the descent sky, the crash, the wake, and
+ *  the step-out all share ONE consistent bright sky (no dawn, no time jump on exit). Cloudiness is
+ *  RESET (not pinned) so normal gameplay weather resumes after the handoff — it's just clear at the
+ *  moment you arrive. Called at the descent re-grounding AND at step-out so both ends match. */
+function setIntroMiddayClear(ctx: GameContext): void {
+  ctx.time.dayTime = INTRO_MIDDAY_TIME;
+  if (ctx.weather) {
+    ctx.weather.intensity = 0;    // no sandstorm dust dimming the sky
+    ctx.weather.cloudiness = 0;   // clear skies (eases back to normal gameplay cover afterward)
+  }
+}
+
+/** ONE-ENTERABLE-POD (user re-scope): the descent base whose FLOOR sits on the terrain at the real
+ *  spawn (x,z). returnPos.y is the player CAPSULE CENTRE (≈ ground + halfHeight + radius); the pod's
+ *  local origin is its FLOOR, so we drop the base by (halfHeight + radius) to seat the landed cabin
+ *  floor ON the sand. Grounding the WHOLE descent (ride → land → wake → step-out) at this one base
+ *  means the crashed cabin is walk-in-able at ground level from the moment it lands, and step-out's
+ *  unify adds the exterior skin + colliders with NO vertical jump (the pod was already grounded). */
+function groundedDescentBase(ctx: GameContext): { x: number; y: number; z: number } {
+  const rp = ctx.intro!.returnPos;
+  const gy = ctx.terrain?.heightAt ? ctx.terrain.heightAt(rp.x, rp.z) : rp.y;
+  return { x: rp.x, y: gy, z: rp.z };   // floor on the sand (returnPos.y − (halfHeight+radius) ≈ gy at the spawn)
+}
 
 /** C18 (user walk-test: "black out briefly between each phase to make things feel smoother") —
  *  a DIP-TO-BLACK at the descent-chain transitions. advanceBeat cuts to black; the new beat
@@ -306,7 +341,13 @@ export function endEscapePodIntro(ctx: GameContext): void {
   setGameHudHidden(false);
   disposeShipScene(ctx);
   disposeHaulerExterior(ctx);   // Phase 3 — the exterior hauler + its explosion FX (belt-and-suspenders: never leak past the intro on any exit)
-  disposePodScene(ctx);       // R3a — the ONE cabin is the only pod interior now (no separate wake shell to tear down)
+  // ONE-ENTERABLE-POD (user re-scope): if the pod was UNIFIED into the persistent walk-in structure
+  //   at step-out, it is now a REAL-WORLD object (the SAME pod you rode down + can walk back into) —
+  //   do NOT dispose it. It stays in the game behind the flag. Only tear the pod down on the OTHER
+  //   exit paths (skipIntro / quit / a dev jump-away before step-out), where it's still the intro
+  //   prop. (restoreCabinExposure keeps the desert-base exposure either way — unify already set it.)
+  if (podIsEnterable()) restoreCabinExposure(ctx);
+  else disposePodScene(ctx);
   stopAllIntroLoops();       // T5.1b — stop any ambient loop (cockpit hum / descent rush) on any exit
   setSkyIntroMode(0);                  // R1a — restore the normal game sky on any exit
   setIntroAtmosphereHidden(ctx, false); // R1a — restore the desert atmosphere on any exit
@@ -633,10 +674,15 @@ function tickDescent(ctx: GameContext, dt: number): void {
     // falls. (The orbit→real-world jump is the accepted scripted re-entry — the PLAYER stays
     // inside the pod throughout; only the pod's world coords change, hidden under the re-entry
     // FX/flash. setDescentProgress then drives the altitude DESCENT_ALT→0 to the spawn ground.)
-    setDescentBase(intro.returnPos);
+    setDescentBase(groundedDescentBase(ctx));
     disposeHaulerExterior(ctx);   // Phase 3 — ensure the exterior hauler/FX is gone before the fall (defensive: a dev jump past shipExplode could leave it built)
     disposePodScene(ctx);   // tear down the offset pod (its group + colliders were at y=3200)
-    setDescentBase(intro.returnPos);   // re-assert after dispose cleared it (dispose nulls the base)
+    setDescentBase(groundedDescentBase(ctx));   // re-assert after dispose cleared it (dispose nulls the base)
+    // CONSISTENT-MIDDAY (user re-scope): set the REAL world to a bright clear MIDDAY NOW, at the
+    //   re-grounding — the pod is about to physically fall through the real sky, and setSkyIntroMode
+    //   blends space→THIS sky (driven by dayTime/sunHeight). Setting it here (not just at step-out)
+    //   makes the sky you crash down through IDENTICAL to the sky you step out into (no dawn, no jump).
+    setIntroMiddayClear(ctx);
     ensureInPod(ctx);       // rebuild at the grounded base + full altitude; seat the player there
     setIntroAtmosphereHidden(ctx, true);   // the desert dust is camera-anchored — hide it at altitude
     // (the seated look-pitch is driven per-frame below — shallow when high → steep as you near.)
@@ -852,7 +898,8 @@ function tickWake(ctx: GameContext, dt: number): void {
     //   them at its hatch. If we got here via a dev jump (no descent/impact ran), ensureInPod
     //   builds the cabin at the grounded spawn + setCabinCrashPose tilts it so the wake still
     //   reads inside the real tilted cabin.
-    setDescentBase(intro.returnPos);
+    setDescentBase(groundedDescentBase(ctx));   // ONE-POD: the crashed cabin floor sits on the terrain (grounded — a dev jump straight to wake still lands it on the sand)
+    setIntroMiddayClear(ctx);    // CONSISTENT-MIDDAY: re-assert the bright clear midday (defensive — a dev jump straight to wake skips the descent that set it, so the wake cabin is lit by the same midday desert as step-out)
     buildPodScene(ctx);          // no-op if already built (the crashed cabin from impact); else builds it at the spawn
     setCabinCrashPose(1);        // ensure the crashed lean + the dropped cage (idempotent)
     blowCabinHatch(0);           // the cabin's own door sits ajar (the blast cracked it)
@@ -920,21 +967,19 @@ function tickStepOut(ctx: GameContext, dt: number): void {
   if (!intro) return;
   if (!intro.scratch.init) {
     const rp = intro.returnPos;
-    // T4.2 — the DESERT REVEAL. DAWN: the player emerges into the dawn dunes (cohesion with the
-    // descent's dawn; the game otherwise starts mid-morning at START_DAY_TIME). 0.26 = just past
-    // dawn — a low, warm sun raking the dunes.
-    ctx.time.dayTime = 0.26;
-    setSkyIntroMode(0);                  // R1a — the REAL dawn desert sky (space mode fully off)
+    // CONSISTENT-MIDDAY (user re-scope): the DESERT REVEAL is a bright CLEAR MIDDAY, IDENTICAL to
+    //   the sky the pod fell through (set at descent re-grounding). Re-assert it here so a dev jump
+    //   straight to stepOut (skipping the descent) still lands the same midday — no dawn, no jump.
+    setIntroMiddayClear(ctx);
+    setSkyIntroMode(0);                  // R1a — the REAL desert sky (space mode fully off), now driven by the midday sun
     setIntroAtmosphereHidden(ctx, false); // R1a — the desert dust/atmosphere returns
-    // R3a — NO teleport: the player ALREADY walked out the cabin hatch into the desert (the wake
-    //   beat). Now SWAP the interior-only crashed cabin (back-faced shell, can't be viewed from
-    //   outside) for the matching EXTERIOR wreck at the SAME spot — the SIZE-MATCHED capsule (C18:
-    //   same diameter/height/proportions as the cabin), so when the player looks back the wreck IS
-    //   the vessel they climbed out of. The exterior wreck PERSISTS into the real game (the salvage
-    //   target). The player is already outside, looking at the exterior, so disposing the interior
-    //   cabin they just left is seamless.
-    disposePodScene(ctx);
-    placeCrashedPodWreck(ctx, rp.x, rp.z);
+    // ONE-ENTERABLE-POD (user re-scope): NO dispose-and-swap. The player ALREADY walked out the
+    //   hatch of the SAME hero cabin they woke in (the wake beat). Now UNIFY that cabin into the ONE
+    //   persistent WALK-IN pod: wrap the exterior aluminium skin around it, re-ground it so its floor
+    //   sits on the terrain, add walkable colliders (walk back IN + around it), and register its
+    //   salvage panel + chute-pop. It's the SAME pod — you rode it down, woke in it, climbed out of
+    //   it, and can walk back into it. It PERSISTS into the real game (NOT disposed on handoff).
+    unifyEnterablePod(ctx, rp.x, rp.z);
     playAweSwell();                   // T5.3 — a low, wide awe-drone UNDER the music as the vista/horizon opens (the horizon-hook reveal)
     startMusicDesert();               // T5.2 — the gentle desert-easing cue (resolves into gameplay)
     showIntroPrompt('');

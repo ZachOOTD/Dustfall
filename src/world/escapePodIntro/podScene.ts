@@ -234,9 +234,13 @@ let _reentryT0 = 0;   // build-time epoch (for the plasma/shimmer animation time
 let vpGlowLight: THREE.PointLight | null = null;
 let cabinFill: THREE.HemisphereLight | null = null;
 const _VP_COOL = new THREE.Color(0xa6c0d6);    // porthole spill in space — cool window light
-const _VP_WARM = new THREE.Color(0xffb070);    // porthole spill at the dawn desert — warm wash
+// CONSISTENT-MIDDAY (user re-scope, 2026-07-01): the descent arrives at + the crash/wake happen in
+//   a bright CLEAR MIDDAY (not dawn). The porthole/hatch spill that washes the cabin is now bright
+//   neutral MIDDAY SUN (a faint warm, near-white daylight), NOT the old dawn-orange — so the cabin
+//   the player wakes/climbs out of is lit by the SAME midday desert they step out into.
+const _VP_WARM = new THREE.Color(0xfff2e0);    // porthole spill at the midday desert — bright near-white daylight (was dawn-orange 0xffb070)
 const _FILL_COOL = new THREE.Color(0x93a0b0);  // ambient sky-tint in space (matches the build default)
-const _FILL_WARM = new THREE.Color(0xb89a82);  // ambient sky-tint warmed by the dawn
+const _FILL_WARM = new THREE.Color(0xd9d2c4);  // ambient sky-tint at midday (bright neutral daylight; was warm-dawn 0xb89a82)
 const _VP_BLAST = new THREE.Color(0xff7a2e);   // T2.3 — the explosion flooding the cabin (hot blast-orange) during the tumble
 const _FILL_BLAST = new THREE.Color(0xdc8a48); // T2.3 — the blast wash on the ambient fill
 const _vpScratch = new THREE.Color();
@@ -263,12 +267,21 @@ let cabinLamp: THREE.PointLight | null = null;     // the ceiling lamp KEY (brig
 // crashed lean (it slammed in). 0 = upright (descent), 1 = full crashed lean. Applied to the pod
 // GROUP's rotation in _syncPodToAltitude / _applyCrashPose. The pivot is the floor-base centre.
 let _crashPose = 0;
-const _CRASH_PITCH = 0.26, _CRASH_ROLL = 0.14, _CRASH_YAW = 0.0;   // the settled crashed lean (radians)
+// ONE-ENTERABLE-POD (user re-scope): the crashed lean is now GENTLE — the SAME pod persists as a
+//   WALK-IN structure the player walks back into, so the floor must stay walkable (a steep 15° tilt
+//   is disorienting to walk on). A slight slam-in lean reads "crashed" while keeping the bore level
+//   enough to stand + walk. unify keeps THIS lean (no tilt-snap at step-out — the wake cabin already
+//   sits at it). (Was 0.26/0.14 — a steep lean tuned for the old non-walkable interior-only cabin.)
+const _CRASH_PITCH = 0.075, _CRASH_ROLL = 0.045, _CRASH_YAW = 0.0;   // the settled GENTLE crashed lean (radians ≈ 4°/2.6°)
 // WAKE exposure lift (coherence-pass fix): the desert base exposure (scene.ts, Reinhard) is too
 //   dim for an enclosed interior; the crashed wake cabin lifts the renderer exposure so the dawn
 //   interior reads. Restored to the base on any intro exit (endEscapePodIntro → restoreCabinExposure).
 const CABIN_BASE_EXPOSURE = 1.05;   // matches scene.ts renderer.toneMappingExposure (the desert base)
-const CABIN_WAKE_EXPOSURE = 2.0;    // the crashed-cabin dawn interior reads on the Reinhard curve at this lift
+// CONSISTENT-MIDDAY (user re-scope): the wake happens at BRIGHT midday now (not dim dawn), so the
+//   enclosed crashed cabin needs LESS exposure compensation than the old dawn lift (2.0 → 1.5) —
+//   the midday sun flooding the hatch already lights it far more. Restored to the base on step-out
+//   (the unified pod becomes a real-world object lit by the real sun at the desert-base exposure).
+const CABIN_WAKE_EXPOSURE = 1.5;    // the crashed-cabin MIDDAY interior reads on the Reinhard curve at this modest lift
 
 /** Is the pod currently built? */
 export function podBuilt(): boolean {
@@ -1131,6 +1144,346 @@ export function blowCabinHatch(t: number): void {
   cabinHatchPivot.rotation.x = -k * 0.25;                            // sags/tears down off the hinge
 }
 
+// ─── ONE ENTERABLE POD (user re-scope, 2026-07-01) ────────────────────────────
+// The user walk-tested the old flow: descent → wake INSIDE the cabin → step-out DISPOSED that
+// cabin + placed a SEPARATE exterior wreck → "the world changes, there's a different pod". The
+// fix: ONE unified pod. The SAME hero cabin the player rode down + woke in gets an EXTERIOR SKIN
+// wrapped around it + WALKABLE colliders at step-out, becoming a single real, walk-in-able
+// structure at the spawn — you climb out the hatch, and can walk back IN + around the SAME pod.
+// NO dispose-and-swap; it PERSISTS into the real game (behind the flag) as an enterable landmark.
+//
+// The exterior skin is built at the SAME cabin-local frame + dimensions as buildCabinInterior
+// (CAB_R/WALL_H/DOME_H/SHELL), with a real WALK-IN OPENING at the cabin's own HATCH_AZ (so the
+// door you climbed out of = the door you walk back in), and the salvage panel on the −Z back.
+let _podEnterable = false;              // true once the cabin has been unified into the walk-in pod (persists into the game)
+let _enterableExteriorRoot: THREE.Group | null = null;  // the exterior-skin subtree added to podGroup
+let _enterableBerm: THREE.Mesh | null = null;
+
+/** Is the crashed pod currently the unified WALK-IN structure (exterior skin + walkable colliders,
+ *  persisting into the real game)? */
+export function podIsEnterable(): boolean { return _podEnterable; }
+
+/** Build the EXTERIOR aluminium skin around the (already-built) interior cabin, in the cabin-LOCAL
+ *  frame (floor top = y=0), matching the cabin's own radius/height. A revolved capsule body +
+ *  ogive nose + riveted bands, FRONT-faced (seen from outside; culled from inside so it never
+ *  occludes the interior read), with a real ARC GAP left over the escape-HATCH azimuth so the
+ *  opening you walk through reads as a true hole in the hull, not a decal. Reentry scorch up the
+ *  lower body ties it to the descent (it burned coming down). All meshes tagged noCollider — the
+ *  walkable colliders are added separately by _addWalkableColliders. */
+function buildExteriorSkin(group: THREE.Group): THREE.Group {
+  const root = new THREE.Group();
+  root.name = 'podExteriorSkin';
+  const OUTR = CAB_R + SHELL;                     // outer hull radius (= POD_R; the exterior surface)
+  const bodyTop = WALL_H;                         // shoulder where the nose springs (= interior wall height)
+  const NOSE_H = DOME_H + 0.10;                   // exterior nose ≈ interior dome + a little crown
+  const apex = bodyTop + NOSE_H;
+  // the escape-hatch azimuth window to LEAVE OPEN in the exterior body (so you can walk in) —
+  //   a touch wider than the door frame so the frame reads inside the opening, not clipped.
+  const hAzHalf = Math.min(Math.PI * 0.9, (HATCH_W / 2 + 0.10) / OUTR);
+  const hY0 = HATCH_CY - HATCH_H / 2, hY1 = HATCH_CY + HATCH_H / 2;
+
+  // ── 1. BODY — a revolved lathe capsule (flared foot → straight body → shoulder → tucked ogive
+  //    nose), matching the interior proportions. Built as the full revolve MINUS the hatch arc:
+  //    the straight-body band that spans the hatch height is emitted as the complementary arc
+  //    (bridging around the opening); the foot, upper body, shoulder + nose are full revolves.
+  const prof: THREE.Vector2[] = [];
+  prof.push(new THREE.Vector2(0.0, 0.0));
+  prof.push(new THREE.Vector2(OUTR * 0.90, 0.0));
+  prof.push(new THREE.Vector2(OUTR * 1.02, 0.16));                 // flared heat-shield foot
+  prof.push(new THREE.Vector2(OUTR, 0.28));
+  const SHOULDER_R = OUTR * 0.80;
+  // Build the body as horizontal LATHE segments so we can gap the hatch band. Simpler + robust:
+  //   emit the body as ONE full-revolve lathe (foot→shoulder→nose→apex), then CUT the hatch by
+  //   overlaying a dark jamb (the interior hatch §10 already frames it) — but a real gap reads
+  //   best. Use CylinderGeometry arc tubes for the straight-body zone (where the hatch lives) and
+  //   a lathe for the nose. The straight body runs 0.28 → bodyTop.
+  const straightY0 = 0.28, straightY1 = bodyTop - 0.05;
+  // straight-body bands, gapping the hatch azimuth on any band that overlaps the door height.
+  const bandEdges = Array.from(new Set([straightY0, hY0, hY1, straightY1].filter((y) => y >= straightY0 && y <= straightY1))).sort((a, b) => a - b);
+  for (let i = 0; i < bandEdges.length - 1; i++) {
+    const y0 = bandEdges[i], y1 = bandEdges[i + 1], mid = (y0 + y1) / 2, h = y1 - y0;
+    if (h <= 0.001) continue;
+    const overlapsHatch = mid > hY0 && mid < hY1;
+    if (!overlapsHatch) {
+      const t = _tube(OUTR, h, POD_SEG, _podPaint);
+      t.position.y = (y0 + y1) / 2;
+      root.add(t);
+    } else {
+      // the complementary arc that bridges AROUND the hatch opening (a real gap, not a decal)
+      const arcStart = HATCH_AZ + hAzHalf;
+      const arcLen = Math.PI * 2 - hAzHalf * 2;
+      const t = _tube(OUTR, h, POD_SEG, _podPaint, arcStart, arcLen);
+      t.position.y = (y0 + y1) / 2;
+      root.add(t);
+    }
+  }
+  // the flared FOOT (below the hatch) — a short full-revolve lathe.
+  const footProf: THREE.Vector2[] = [
+    new THREE.Vector2(OUTR * 0.90, 0.0),
+    new THREE.Vector2(OUTR * 1.02, 0.16),
+    new THREE.Vector2(OUTR, 0.28),
+  ];
+  root.add(_lathe(footProf, POD_SEG, _podPaint));
+  // the SHOULDER + tucked OGIVE NOSE (above the body) — a full-revolve lathe cap.
+  const noseProf: THREE.Vector2[] = [];
+  noseProf.push(new THREE.Vector2(OUTR, straightY1));
+  noseProf.push(new THREE.Vector2(SHOULDER_R, bodyTop + 0.04));    // shoulder chamfer
+  const noseSegs = 8;
+  for (let i = 1; i <= noseSegs; i++) {
+    const t = i / noseSegs, a = t * (Math.PI / 2);
+    const r = SHOULDER_R * Math.pow(Math.cos(a), 1.7) + 0.001;
+    const y = bodyTop + 0.04 + Math.sin(a) * (NOSE_H - 0.04);
+    noseProf.push(new THREE.Vector2(Math.max(0.05, r), y));
+  }
+  noseProf.push(new THREE.Vector2(0.001, apex));
+  root.add(_lathe(noseProf, POD_SEG, _podPaint));
+  // a scorched flat heat-shield base cap peeking at the sand (reentered base-first).
+  const baseCap = _cyl(OUTR * 0.92, OUTR * 0.80, 0.24, POD_SEG, _podScorchMat);
+  baseCap.position.y = 0.11;
+  root.add(baseCap);
+
+  // ── 2. REENTRY SCORCH — a char fade up the lower ~45% of the body (it burned coming down),
+  //    a proud lathe shell over the body. Vertex-color char→tarnish→aluminium.
+  const scorchTopY = WALL_H * 0.45;
+  const scorchProf: THREE.Vector2[] = [
+    new THREE.Vector2(OUTR * 0.90 + 0.008, 0.0),
+    new THREE.Vector2(OUTR * 1.03, 0.16),
+    new THREE.Vector2(OUTR + 0.012, 0.28),
+    new THREE.Vector2(OUTR + 0.010, scorchTopY),
+  ];
+  const scorchGeo = new THREE.LatheGeometry(scorchProf, POD_SEG);
+  scorchGeo.computeVertexNormals();
+  {
+    const pos = scorchGeo.attributes.position;
+    const cols = new Float32Array(pos.count * 3);
+    const cChar = new THREE.Color(0x0d0906), cTarn = new THREE.Color(0x5a4126), cAlu = new THREE.Color(0xb6b9b3);
+    const tmp = new THREE.Color();
+    for (let i = 0; i < pos.count; i++) {
+      const vx = pos.getX(i), vy = pos.getY(i), vz = pos.getZ(i);
+      const az = Math.atan2(vx, vz);
+      const lick = 0.5 * Math.exp(-Math.pow((az - 0.4) / 0.7, 2)) + 0.18 * Math.sin(az * 5.0 + vy * 3.0);
+      const span = Math.max(0.01, scorchTopY * (1 + lick));
+      const t = Math.max(0, Math.min(1, vy / span));
+      if (t < 0.45) tmp.copy(cChar).lerp(cTarn, t / 0.45);
+      else tmp.copy(cTarn).lerp(cAlu, (t - 0.45) / 0.55);
+      cols.set([tmp.r, tmp.g, tmp.b], i * 3);
+    }
+    scorchGeo.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
+  }
+  _cabinDisposables.push(scorchGeo);
+  root.add(new THREE.Mesh(scorchGeo, _podScorchFadeMat));
+
+  // ── 3. RIVETED LATITUDE BANDS — proud steel hoops + sparse rivet rings up the body (the
+  //    hand-riveted aluminium read; matches the exterior wreck idiom). Gaps the hatch band.
+  const bandYs = [WALL_H * 0.20, WALL_H * 0.44, WALL_H * 0.68, WALL_H * 0.90];
+  for (const by of bandYs) {
+    const crossesHatch = by > hY0 - 0.06 && by < hY1 + 0.06;
+    if (!crossesHatch) {
+      const hoop = _tube(OUTR + 0.05, 0.10, POD_SEG, _podBandMat);
+      hoop.position.y = by;
+      root.add(hoop);
+    } else {
+      const arcStart = HATCH_AZ + hAzHalf, arcLen = Math.PI * 2 - hAzHalf * 2;
+      const hoop = _tube(OUTR + 0.05, 0.10, POD_SEG, _podBandMat, arcStart, arcLen);
+      hoop.position.y = by;
+      root.add(hoop);
+    }
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2 + 0.1;
+      // skip rivets over the hatch opening
+      let d = a - HATCH_AZ; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2;
+      if (crossesHatch && Math.abs(d) < hAzHalf) continue;
+      const sg = new THREE.SphereGeometry(0.017, 6, 4, 0, Math.PI * 2, 0, Math.PI / 2);
+      _cabinDisposables.push(sg);
+      const rivet = new THREE.Mesh(sg, _podFrameMat);
+      rivet.position.set(Math.sin(a) * (OUTR + 0.006), by, Math.cos(a) * (OUTR + 0.006));
+      rivet.lookAt(0, by, 0);
+      root.add(rivet);
+    }
+  }
+
+  // ── 4. The OUTER hatch-opening TRIM — a channel-steel frame ringing the walk-in opening on
+  //    the outside (the interior §10 frames the inside; this trims the outer lip) + a torn/pried
+  //    tell so it reads as the blown escape hatch you climbed out of.
+  {
+    const dir = new THREE.Vector3(Math.sin(HATCH_AZ), 0, Math.cos(HATCH_AZ));
+    const hFrame = new THREE.Group();
+    hFrame.position.set(dir.x * OUTR, HATCH_CY, dir.z * OUTR);
+    hFrame.rotation.y = HATCH_AZ;   // local +Z outward
+    const fT = 0.10;
+    const bar = (w: number, h: number, ox: number, oy: number) => {
+      const b = _box(w, h, 0.10, _podSteel);
+      b.position.set(ox, oy, -0.03);   // just proud of the outer surface
+      hFrame.add(b);
+    };
+    bar(HATCH_W + fT * 2, fT, 0, HATCH_H / 2 + fT / 2);
+    bar(HATCH_W + fT * 2, fT, 0, -HATCH_H / 2 - fT / 2);
+    bar(fT, HATCH_H, -HATCH_W / 2 - fT / 2, 0);
+    bar(fT, HATCH_H, HATCH_W / 2 + fT / 2, 0);
+    root.add(hFrame);
+  }
+
+  // ── 5. A small OUTER porthole BEZEL echoing the forward viewport (so the −Z front reads a
+  //    window from outside too) — a flat proud RING (torus) hugging the hull at VP height on the
+  //    −Z arc, in the bright band-metal (not the dark steel, which read as a detached brown ring).
+  {
+    const vpDir = new THREE.Vector3(Math.sin(VP_AZ_C), 0, Math.cos(VP_AZ_C));
+    const bezGeo = new THREE.TorusGeometry(VP_R + 0.03, 0.05, 10, 24);
+    _cabinDisposables.push(bezGeo);
+    const bez = new THREE.Mesh(bezGeo, _podBandMat);
+    bez.position.set(vpDir.x * (OUTR + 0.01), VP_CY, vpDir.z * (OUTR + 0.01));
+    // the torus lies in its local XY plane; orient its axis (local +Z) along the outward radial.
+    bez.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), vpDir);
+    root.add(bez);
+  }
+
+  root.traverse((o) => { (o as THREE.Mesh).userData.noCollider = true; });
+  group.add(root);
+  return root;
+}
+
+/** Add WALKABLE colliders for the unified pod so the player can walk IN through the hatch + around
+ *  the interior without passing through the hull. Replaces the seated cage (dropped at crash). The
+ *  wall is a ring of thin box segments hugging the outer radius, GAPPED over the hatch azimuth (the
+ *  walk-in opening) + a floor slab. Cabin-local offsets are stored so the collider ring rides the
+ *  group transform (built AFTER the group is re-grounded, so world-space is baked at build time). */
+function _addWalkableColliders(ctx: GameContext): void {
+  if (!podGroup) return;
+  podGroup.updateMatrixWorld(true);
+  const OUTR = CAB_R + SHELL;
+  const hAzHalf = Math.min(Math.PI * 0.9, (HATCH_W / 2 + 0.05) / CAB_R);
+  const SEGN = 20;                       // wall arc segments
+  const segLen = (Math.PI * 2) / SEGN;
+  // the collider wall sits AT the visible interior bore (CAB_R) + a hair so the player stops at the
+  //   riveted wall they SEE, not 24 cm past it. Box half-z (radial) is thin, centred just outside CAB_R.
+  const wallColR = CAB_R + SHELL / 2;
+  // FLOOR — a thin slab under the whole bore (the player stands on it inside).
+  const _tmp = new THREE.Vector3();
+  const _q = new THREE.Quaternion();
+  const _s = new THREE.Vector3();
+  const _localQuat = new THREE.Quaternion();
+  const _worldQuat = new THREE.Quaternion();
+  const addBox = (half: { x: number; y: number; z: number }, localPos: THREE.Vector3, yaw: number) => {
+    // bake the group world transform into the collider pose (the group is static post-handoff).
+    podGroup!.matrixWorld.decompose(_tmp, _q, _s);
+    const worldPos = localPos.clone().applyMatrix4(podGroup!.matrixWorld);
+    // world rotation = the group's rotation composed with the segment's local yaw about +Y.
+    _localQuat.setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+    _worldQuat.copy(_q).multiply(_localQuat);
+    const col = makeStaticBox(ctx.physics.world, half,
+      { x: worldPos.x, y: worldPos.y, z: worldPos.z },
+      { x: _worldQuat.x, y: _worldQuat.y, z: _worldQuat.z, w: _worldQuat.w });
+    const body = col.parent();
+    if (body) podBodies.push(body);
+  };
+  // floor slab (bore radius) — a squat box.
+  addBox({ x: OUTR, y: SHELL, z: OUTR }, new THREE.Vector3(0, -SHELL, 0), 0);
+  // wall ring — box segments, skipping the ones over the hatch opening.
+  for (let i = 0; i < SEGN; i++) {
+    const az = i * segLen + segLen / 2;
+    let d = az - HATCH_AZ; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2;
+    if (Math.abs(d) < hAzHalf) continue;    // leave the hatch open (walk-in gap)
+    const dir = new THREE.Vector3(Math.sin(az), 0, Math.cos(az));
+    const segHalfTangent = wallColR * Math.tan(segLen / 2) + 0.02;   // half-width to cover the arc
+    const localPos = new THREE.Vector3(dir.x * wallColR, CAB_APEX / 2, dir.z * wallColR);
+    // a thin panel tangent to the wall: half-x = tangential half-width, half-z = thin (radial).
+    addBox({ x: segHalfTangent, y: CAB_APEX / 2, z: SHELL }, localPos, az);
+  }
+  _cabinColliderCtx = ctx;
+  _shellOffsets = [];   // walkable colliders are baked world-space + static (the group no longer moves), so no per-frame re-place
+}
+
+/** UNIFY the crashed cabin into the ONE persistent WALK-IN pod at the spawn (user re-scope). Called
+ *  at step-out INSTEAD of dispose-and-swap: the SAME hero cabin the player woke in gets (1) the
+ *  exterior aluminium skin wrapped around it, (2) re-grounded so its floor sits ON the terrain (the
+ *  seated ride left the floor ~1.7 m up — fine seated, wrong to walk into), (3) walkable colliders,
+ *  and (4) the salvage panel + chute-pop armed. It then PERSISTS into the real game (NOT disposed by
+ *  endEscapePodIntro) as an enterable landmark — the SAME pod you rode down, that you can walk back
+ *  into. Returns the pod's world (x,z) so the tutorial can scatter around it. */
+export function unifyEnterablePod(ctx: GameContext, x: number, z: number): { x: number; z: number } {
+  if (!podGroup) { buildPodScene(ctx); setCabinCrashPose(1); }
+  const group = podGroup!;
+  // (1) remove the seated cage (may already be gone from the crash) so we can add the walkable set.
+  for (const body of podBodies) ctx.physics.world.removeRigidBody(body);
+  podBodies.length = 0;
+  _shellOffsets = [];
+  // (2) RE-GROUND: the floor must sit on the terrain so the player can walk in. Sever the descent
+  //     base coupling (else _syncPodToAltitude would haul it back to returnPos+altitude), then place
+  //     the group with its floor on the ground + a GENTLE crashed lean (proud, not buried — you walk
+  //     IN, so the hatch must reach the ground + the bore stay clear).
+  _descentBase = null;
+  const gy = ctx.terrain.heightAt(x, z);
+  _crashPose = 1;
+  // KEEP the exact GENTLE crashed lean the wake cabin already sits at (_CRASH_*) so there is NO
+  //   tilt-snap at step-out — the pod the player climbed out of and the pod they can walk back into
+  //   are the same object at the same pose. (_syncPodToAltitude normally applies this, but we just
+  //   severed _descentBase, so set it directly here.) Pivot is the floor-base centre.
+  group.rotation.set(_CRASH_PITCH, _CRASH_YAW, _CRASH_ROLL);
+  // seat the floor on the sand (a hair below grade so the flared foot has no float gap). The cabin
+  //   was already grounded here during wake (groundedDescentBase), so this is at most a ~6 cm nudge.
+  group.position.set(x, gy - 0.06, z);
+  group.updateMatrixWorld(true);
+  // (3) EXTERIOR SKIN — wrap the outer hull around the interior (matched dims, hatch gap).
+  if (!_enterableExteriorRoot) _enterableExteriorRoot = buildExteriorSkin(group);
+  group.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } });
+  // (4) WALKABLE COLLIDERS (floor + wall ring gapped at the hatch).
+  _addWalkableColliders(ctx);
+  // (5) the pod is now a REAL-WORLD object lit by the real midday sun → restore the desert-base
+  //     exposure (the wake lift was for the enclosed dim-interior moment).
+  ctx.three.renderer.toneMappingExposure = CABIN_BASE_EXPOSURE;
+  // widen the hatch fully open (you walk through it) + keep the dawn/midday hatch flood.
+  blowCabinHatch(1);
+  // (6) the REAL salvage panel on the −Z back + register as a machete-salvageable + arm chute-pop —
+  //     the SAME first-salvage tutorial, now on the ONE persistent pod (not the separate wreck).
+  _registerEnterablePodSalvage(ctx, group, x, z, gy);
+  // (7) a displaced-sand berm banked against the buried foot so the dune swallows the base cleanly.
+  _addEnterableBerm(ctx, x, z, gy);
+  _podEnterable = true;
+  return { x, z };
+}
+
+/** Register the unified pod's REAL salvage panel + arm the chute-pop (the first-salvage tutorial,
+ *  now on the ONE persistent pod instead of the separate wreck). The panel sits on the +Z back
+ *  arc (clear of the −Z viewport / the hatch / the side controls), facing +Z outward, at standing
+ *  reach. 'escape_pod' kind = the survivor's-kit loot palette. The salvageable id is what the
+ *  tutorial driver watches to fire the chute-pop on the first pry. */
+function _registerEnterablePodSalvage(ctx: GameContext, group: THREE.Group, x: number, z: number, gy: number): void {
+  const OUTR = CAB_R + SHELL;
+  const PANEL_LY = WALL_H * 0.5;      // standing reach on the body (cabin-local)
+  const PANEL_LZ = OUTR;              // +Z back-face surface point
+  addAccessPanel(group, 0, PANEL_LY, PANEL_LZ, 1.05, 0, 'escape_pod');   // faceYaw=0 → faces +Z outward
+  group.updateMatrixWorld(true);
+  // register the pod (the whole group) as a machete-salvageable — the same registry the world
+  //   wrecks use; drives the pry/extract loop + the hover prompt. Deterministic position-seeded rng.
+  const podRng = makeRng((Math.abs(Math.round(x * 73.7 + z * 149.3)) % 0x7fffffff) || 1);
+  const rec = registerSalvageable(ctx.salvageables, group, 'escape_pod', new THREE.Vector3(x, gy, z), podRng);
+  crashedPodSalvageableId = rec.id;
+  // the unified pod IS the crashed wreck now (for the chute-pop parent + the salvageable teardown).
+  crashedWreck = group;
+  armChutePop(group);   // build the folded canopy on the crown of the UNIFIED pod, ready to burst on the first salvage strike
+}
+
+/** Bank a displaced-sand berm against the buried foot of the unified pod so the dune swallows the
+ *  base with no clean float seam (the pod slammed in). Reuses the wreck-berm idiom. */
+function _addEnterableBerm(ctx: GameContext, x: number, z: number, gy: number): void {
+  const OUTR = CAB_R + SHELL;
+  const bermGeo = new THREE.ConeGeometry(OUTR + 1.1, 0.85, 14, 2, false);
+  const bp = bermGeo.attributes.position;
+  for (let i = 0; i < bp.count; i++) {
+    const vx = bp.getX(i), vy = bp.getY(i), vz = bp.getZ(i);
+    const t = (vy + 0.42) / 0.85;
+    const wob = 1 + (Math.sin(vx * 4.6 + vz * 3.3) * 0.22 + Math.cos(vz * 5.2) * 0.11) * (1 - t);
+    bp.setXYZ(i, vx * wob, vy * 0.4, vz * wob);
+  }
+  bermGeo.computeVertexNormals();
+  const berm = new THREE.Mesh(bermGeo, _podBermMat);
+  berm.position.set(x, gy + 0.04, z);
+  berm.receiveShadow = true;
+  berm.castShadow = false;
+  _enterableBerm = berm;
+  ctx.three.scene.add(berm);
+}
+
 // ─── RE-ENTRY FX (Phase 2 / T2.2 — the violent atmospheric-entry climax) ──────
 // As the pod punches the upper atmosphere (the `re` bump, peak ~p0.28) the air ahead
 // IONIZES and burns past the viewport. Two layered shaders, both reading THROUGH the
@@ -1481,13 +1834,14 @@ export function setCabinCrashPose(pose: number): void {
   //   so the cabin clears the gloom, and warm the porthole glow — the player must WAKE in a
   //   readable dawn-lit crashed cabin, not a black box.
   if (hatchSpillLight) {
-    hatchSpillLight.intensity = s * 12.0;   // dawn FLOODING the hatch arc (the open door → bright dawn pours in)
+    hatchSpillLight.color.copy(_VP_WARM);   // CONSISTENT-MIDDAY — bright near-white daylight pouring in (was the warm-dawn build color 0xffcaa0)
+    hatchSpillLight.intensity = s * 14.0;   // MIDDAY FLOODING the hatch arc (brighter than dawn — the open door → full daylight pours in)
     hatchSpillLight.distance = 9.0;         // reach across the whole bore (was 5.5 — fell off before the far wall)
     hatchSpillLight.decay = 1.0;            // gentler falloff so the flood actually lights the cabin
   }
   if (cabinFill) {
-    cabinFill.color.copy(_fillScratch.copy(_FILL_COOL).lerp(_FILL_WARM, s));   // warm dawn ambient
-    cabinFill.intensity = 0.72 + s * 4.0;   // lift the WHOLE cabin well out of the gloom (the desert dawn fills it)
+    cabinFill.color.copy(_fillScratch.copy(_FILL_COOL).lerp(_FILL_WARM, s));   // bright neutral midday ambient
+    cabinFill.intensity = 0.72 + s * 6.5;   // lift the WHOLE cabin well out of the gloom (the bright midday desert fills the enclosed bore — the user: "not too dark")
   }
   if (vpGlowLight) {
     vpGlowLight.color.copy(_vpScratch.copy(_VP_COOL).lerp(_VP_WARM, s));
@@ -1651,6 +2005,21 @@ export function disposePodScene(ctx: GameContext): void {
   // descent beat from intro.returnPos; the altitude resets to full.)
   _descentBase = null;
   _podAltitude = DESCENT_ALT;
+  // ONE-ENTERABLE-POD (user re-scope) — reset the unified-pod state on a real teardown. The
+  //   exterior-skin geometry lives in _cabinDisposables (freed above); the berm + the salvage
+  //   record + the chute are cleaned here so a disposed enterable pod leaves nothing dangling.
+  //   (endEscapePodIntro SKIPS this dispose when the pod is enterable — it PERSISTS into the game;
+  //   this branch only runs on the offset-pod teardown or a dev re-dispose.)
+  if (_enterableBerm) { _enterableBerm.geometry.dispose(); ctx.three.scene.remove(_enterableBerm); _enterableBerm = null; }
+  if (crashedPodSalvageableId >= 0) {
+    const i = ctx.salvageables.list.findIndex((s) => s.id === crashedPodSalvageableId);
+    if (i >= 0) ctx.salvageables.list.splice(i, 1);
+    crashedPodSalvageableId = -1;
+  }
+  disarmChutePop();
+  crashedWreck = null;
+  _enterableExteriorRoot = null;
+  _podEnterable = false;
   for (const body of podBodies) ctx.physics.world.removeRigidBody(body);
   podBodies.length = 0;
 }
@@ -1791,12 +2160,14 @@ function buildChuteCanopy(): THREE.Group {
 }
 
 /** ARM the chute-pop: build the canopy + parent it to the crashed pod, hidden + folded.
- *  Called by placeCrashedPodWreck (the pod is the salvage target). No-op if no wreck. */
-export function armChutePop(): void {
+ *  Called by placeCrashedPodWreck (separate wreck) OR unifyEnterablePod (the ONE persistent pod),
+ *  passing the group to parent the canopy under. No-op if no target. */
+export function armChutePop(target?: THREE.Group | null): void {
   disarmChutePop();
-  if (!crashedWreck) return;
+  const host = target ?? crashedWreck;
+  if (!host) return;
   chuteCanopy = buildChuteCanopy();
-  crashedWreck.add(chuteCanopy);
+  host.add(chuteCanopy);
   chutePopArmed = true;
   chutePopT = -1;
 }

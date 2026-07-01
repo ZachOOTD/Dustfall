@@ -7,10 +7,33 @@ This doc is the maintainer's map of the built feature (post-REBUILD-v2, 2026-07-
 ## The beat arc (what the player experiences)
 `orbit (cockpit)` → `check engines` → `corridor disaster (fire + red-alert)` → `enter the pod-bay
 (physically climb in, no teleport)` → `eject → WATCH THE SHIP EXPLODE` → `the beautiful descent
-(the pod physically falls through the real sky)` → `the parachute gag (mid-fall, 3 pulls → snap)`
-→ `crash + blackout` → `wake (in the SAME pod you rode down)` → `step out into the dawn dunes`
-→ `the horizon reveal (the Beached Leviathan beckons)` → `craft a machete → salvage your own pod
-→ the failed parachute comically pops out`.
+(the pod physically falls through the real BRIGHT-MIDDAY sky)` → `the parachute gag (mid-fall, 3 pulls → snap)`
+→ `crash + blackout` → `wake (in the SAME pod you rode down)` → `step out into the MIDDAY dunes BESIDE
+the SAME pod` → `the horizon reveal (the Beached Leviathan beckons)` → `craft a machete → salvage your
+own pod → the failed parachute comically pops out`.
+
+## ⚑ ONE ENTERABLE POD + CONSISTENT MIDDAY (user re-scope, 2026-07-01) — READ THIS
+Two linked user-walk-test fixes that supersede the older R3a "dispose+swap" + "dawn" notes below:
+- **ONE ENTERABLE POD (no model swap).** The descent/wake pod and the step-out pod are the SAME
+  object. At step-out `unifyEnterablePod` (podScene) wraps the EXTERIOR aluminium skin around the
+  hero cabin, re-grounds it so the floor sits on the terrain, adds WALKABLE colliders (a floor slab +
+  a wall-ring of box segments GAPPED at the hatch azimuth), opens the hatch, and registers the salvage
+  panel + chute-pop. `tickStepOut` NO LONGER `disposePodScene` + `placeCrashedPodWreck` — it UNIFIES in
+  place. `endEscapePodIntro` SKIPS the pod dispose when `podIsEnterable()` — the ONE pod PERSISTS into
+  the real game as a walk-in landmark (the SAME pod you rode down, woke in, climbed out of, and can walk
+  back into). `placeCrashedPodWreck` (the old separate wreck) is now used ONLY by the dev `smokePodTutorial`.
+- **CONSISTENT BRIGHT MIDDAY (no time/light jump).** The descent re-grounding, the crash, the wake, and
+  step-out all call `setIntroMiddayClear` (sequence.ts) → `dayTime=0.46` (bright midday; noon=0.5) +
+  cloudiness/storm 0. `setSkyIntroMode`'s "real sky" leg is driven by `sunHeight` (from dayTime), so the
+  sky the pod FALLS THROUGH == the sky you STEP OUT into, by construction. The cabin crash-pose/wake
+  lighting was retuned dawn-orange → bright neutral midday (`_VP_WARM`/`_FILL_WARM` + hatch flood);
+  `CABIN_WAKE_EXPOSURE` 2.0→1.5 (midday needs less lift than dawn). `_CRASH_PITCH/_ROLL` gentled
+  (0.26/0.14 → 0.075/0.045) so the persisting pod's floor stays WALKABLE (no steep tilt-snap at step-out).
+  The descent is grounded at the TERRAIN floor (`groundedDescentBase`) from the fall onward, so the wake
+  cabin is walk-in-able at ground level with no vertical jump at the unify.
+- **Rig:** `--scenario=stepout-pod --angle=beside|approach|interior|3q` drives the REAL chain through
+  step-out (unify) + shoots the ONE pod from outside (the step-out-beside / walk-back-in / into-the-hatch
+  reads); reports podCols (walkable-collider count), podSalvageable, dayTime.
 
 ## The spine — `sequence.ts` (the beat state machine)
 `ctx.intro: IntroState | undefined` (undefined = not in the intro). Key fields: `active`, `beat`
@@ -34,11 +57,15 @@ beat**), `returnPos` (the real desert spawn the intro hands back to).
 ## The scene modules
 - **`podScene.ts`** — the ONE hero pod (riveted aluminium capsule). The cabin interior the player
   rides down (`buildPodScene`), the descent altitude drive (`setDescentProgress`/`setDescentBase`,
-  `getPodSpawn`), the crashed-pose settle + wake lighting (`setCabinCrashPose`), the hatch
-  (`buildCabinHatch`/`blowCabinHatch`), the crashed EXTERIOR wreck (`placeCrashedPodWreck`, size-
-  matched — persists into the real game as the salvage target), and the comic chute-pop
-  (`armChutePop`/`popChute`/`updateChutePop`). ONE consistent model: you wake in + climb out of the
-  SAME cabin you rode down.
+  `getPodSpawn`), the crashed-pose settle + wake lighting (`setCabinCrashPose`, retuned MIDDAY), the
+  hatch (`buildCabinHatch`/`blowCabinHatch`), and the comic chute-pop (`armChutePop(target?)`/
+  `popChute`/`updateChutePop`). At step-out `unifyEnterablePod` turns the crashed cabin into the ONE
+  persistent WALK-IN pod: `buildExteriorSkin` (the matched outer aluminium skin, hatch-gapped) +
+  `_addWalkableColliders` (floor + wall-ring gapped at the hatch) + `_registerEnterablePodSalvage`
+  (the salvage panel + chute-pop). `podIsEnterable()` gates its persistence past `endEscapePodIntro`.
+  ONE consistent model, in↔out↔real-game: you ride it down, wake in it, climb out of it, and can walk
+  back INTO it. (`placeCrashedPodWreck` — the old separate size-matched wreck — is now DEV-ONLY, used
+  by `smokePodTutorial`; the real flow uses `unifyEnterablePod`.)
 - **`shipScene.ts`** — the hauler INTERIOR: the hero cockpit (a lofted vaulted ribbed D-section
   fuselage, NOT a box), the fully-modelled corridor (`buildCorridor`, `CORRIDOR_COLLIDERS`), the
   pod-BAY (the docked pod + `getPodBayThreshold`/`getPodBaySeatedEye`/`releasePodFromBay` — the
@@ -67,10 +94,12 @@ fixed this build:
   cabin white. Both dimmed by the orbit blend; SAFE because mutations gate on `s>0.001` AND
   `updateWeather`/`updateLighting` re-derive fog/bg/sun/ambient every frame → a single frame at `s=0`
   self-heals.
-- **`renderer.toneMappingExposure`** (`setCabinCrashPose` lifts 1.05→2.0 so the enclosed crashed
-  cabin reads on the Reinhard curve — the game's 1.05 desert exposure CRUSHES interiors; lumens don't
-  fix it, the tone curve does). Restored by `disposePodScene` (teardown) AND `restoreCabinExposure`
-  (called by `jumpToBeat` when leaving a crash beat — else a dev jump-back leaks 2.0 into the orbit).
+- **`renderer.toneMappingExposure`** (`setCabinCrashPose` lifts 1.05→1.5 so the enclosed crashed
+  MIDDAY cabin reads on the Reinhard curve — the game's 1.05 desert exposure CRUSHES interiors; the
+  tone curve, not lumens, is the bottleneck. Midday needs less lift than the old dawn 2.0). Restored by
+  `disposePodScene` (teardown), `restoreCabinExposure` (a dev jump-back off a crash beat — else 1.5
+  leaks into the orbit), AND `unifyEnterablePod`/`endEscapePodIntro` (the pod becomes a real-world
+  midday-sun-lit object at step-out → back to the desert base 1.05).
 - **HUD / atmosphere-hide / pod+ship+hauler dispose**: all routed through `endEscapePodIntro`, which
   EVERY exit path reaches. New global mutations MUST add their restore here (or self-heal per-frame).
 

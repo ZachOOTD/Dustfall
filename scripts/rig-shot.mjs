@@ -2387,9 +2387,8 @@ const SCENARIOS = {
     await page.evaluate(() => {
       const g = window.__game;
       const ctx = g.ctx;
-      g.setTime(0.32);   // dawn — sun low + warm (matches the reveal)
-      ctx.weather.intensity = 0; ctx.weather.cloudiness = 0.12;
-      ctx.three.renderer.toneMappingExposure = 1.2;
+      g.setTime(0.46);   // CONSISTENT-MIDDAY (user re-scope) — the wake now happens at bright clear midday (not dawn); the beat sets this too
+      ctx.weather.intensity = 0; ctx.weather.cloudiness = 0;
       ctx.flags.thirdPerson = false;
       if (ctx.player.rig) ctx.player.rig.group.visible = false;
       if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
@@ -2423,12 +2422,119 @@ const SCENARIOS = {
       cam.updateMatrixWorld(true);
       const wi = ctx.three.scene.getObjectByName('escapePodCabin');
       let meshes = 0; if (wi) wi.traverse((o) => { if (o.isMesh) meshes++; });
-      return { found: !!wi, meshes, eye: [+eye.x.toFixed(2), +eye.y.toFixed(2), +eye.z.toFixed(2)] };
+      let sunI = 0; ctx.three.scene.traverse((o) => { if (o.isDirectionalLight && o.castShadow) sunI = o.intensity; });
+      const expo = +ctx.three.renderer.toneMappingExposure.toFixed(2);
+      return { found: !!wi, meshes, sunI: +sunI.toFixed(2), expo, dayTime: +ctx.time.dayTime.toFixed(3), eye: [+eye.x.toFixed(2), +eye.y.toFixed(2), +eye.z.toFixed(2)] };
     });
     await page.waitForTimeout(300);
     const wtag = argv.blow ? 'scen-wake-blown.png' : 'scen-wake.png';
     await page.screenshot({ path: join(OUT, wtag), fullPage: false });
     console.log(`[wake] ${JSON.stringify(meas)} → ${wtag}`);
+  },
+
+  // ONE-ENTERABLE-POD (user re-scope, 2026-07-01) — drive the REAL chain through stepOut, which
+  // UNIFIES the crashed cabin into the ONE persistent walk-in pod (exterior skin + walkable
+  // colliders), then shoot it FROM OUTSIDE in the real game: the step-out-beside read, the
+  // walk-back-in approach at the hatch, a look INTO the interior through the open hatch, and a
+  // descent-low-vs-stepout light-match. --angle=beside|approach|interior|3q (default beside).
+  // Verifies: no model swap (ONE pod in↔out), it's enterable (open hatch + walkable interior),
+  // and the light/time is a CONSISTENT bright midday. Front-lit by the real midday sun.
+  'stepout-pod': async (page) => {
+    const angle = argv.angle || 'beside';
+    await page.evaluate(() => {
+      const g = window.__game;
+      const ctx = g.ctx;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      ctx.three.renderer.setSize(1000, 800, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1000 / 800; cam.updateProjectionMatrix(); }
+      g.startIntro();
+      g.jumpToBeat('impact');
+    });
+    await page.waitForTimeout(2600);
+    await page.evaluate(() => { window.__game.jumpToBeat('wake'); });
+    await page.waitForTimeout(1600);
+    // drive the REAL stepOut (unify) — jump to stepOut + let its init tick run (unifyEnterablePod),
+    //   then let the reveal-dwell (~4s) elapse so endEscapePodIntro HANDS OFF to the real game (the
+    //   real midday sun + game exposure take over — the pod is now a real-world lit object). Shoot
+    //   the HANDED-OFF game, not the mid-intro suppressed-light frame.
+    await page.evaluate(() => { window.__game.jumpToBeat('stepOut'); });
+    await page.waitForTimeout(1400);   // let stepOut's init tick run unifyEnterablePod (builds the skin + colliders + salvage)
+    // The rig tab is throttled (dustfall_preview_gotchas), so the reveal-dwell may not tick to the
+    //   natural handoff — force it: skipIntro() calls endEscapePodIntro, which (post-re-scope) does
+    //   NOT dispose the now-ENTERABLE pod (podIsEnterable) but DOES clear the black overlay + restore
+    //   the game HUD/sun. So we hand off to the real game with the ONE unified pod persisting.
+    await page.evaluate(() => { window.__game.skipIntro(); });
+    await page.waitForTimeout(900);    // let the handed-off game run a lit frame (sun/sky/exposure restored)
+    const r = await page.evaluate(({ ang }) => {
+      const g = window.__game;
+      const ctx = g.ctx;
+      ctx.flags.paused = true;
+      const cam = ctx.three.camera;
+      const V = cam.position.constructor;
+      // the unified pod persists under the SAME group name ('escapePodCabin'); find its world (x,z).
+      const pod = ctx.three.scene.getObjectByName('escapePodCabin');
+      let px = 0, pz = 0;
+      if (pod) { pod.updateMatrixWorld(true); const p = new V(); p.setFromMatrixPosition(pod.matrixWorld); px = p.x; pz = p.z; }
+      const gy = ctx.terrain.heightAt(px, pz);
+      // the hatch faces cabin-local HATCH_AZ=-1.25 → world outward dir (sin,cos) (the pod yaw≈0).
+      const haz = -1.25, hnx = Math.sin(haz), hnz = Math.cos(haz);
+      if (ang === 'beside') {
+        // the STEP-OUT read: standing a few m out on the hatch side, looking back at the whole pod.
+        cam.position.set(px + hnx * 4.4 + 1.2, gy + 1.7, pz + hnz * 4.4 + 0.6);
+        cam.lookAt(px, gy + 1.1, pz);
+      } else if (ang === 'approach') {
+        // WALK BACK IN: squarely on the open hatch from ~2.6 m out along its normal (the entry read).
+        cam.position.set(px + hnx * 2.8, gy + 1.55, pz + hnz * 2.8);
+        cam.lookAt(px + hnx * 0.2, gy + 1.0, pz + hnz * 0.2);
+      } else if (ang === 'interior') {
+        // look INTO the interior through the open hatch (right at the sill) — the walk-in read.
+        cam.position.set(px + hnx * 0.9, gy + 1.5, pz + hnz * 0.9);
+        cam.lookAt(px - hnx * 1.0, gy + 1.0, pz - hnz * 1.0);
+      } else { // 3q — a 3/4 of the whole standing silhouette (the exterior form)
+        cam.position.set(px + 4.2, gy + 2.4, pz + 4.0);
+        cam.lookAt(px, gy + 1.2, pz);
+      }
+      cam.updateMatrixWorld(true);
+      // FRONT-LIGHT prerequisite (visual-diagnostic-methodology.md): the intro's own midday sun is
+      //   set, but a paused frame may not have re-derived the lit exposure — set a modest exposure +
+      //   a front KEY from beside/above the camera so the camera-facing hull is LIT (not a backlit
+      //   silhouette). This is the harness front-light, NOT a substitute viewpoint (D165) — the
+      //   camera IS the real step-out-beside/approach/interior read.
+      ctx.three.renderer.toneMappingExposure = 1.3;
+      let DirCtor = null, HemiCtor = null;
+      ctx.three.scene.traverse((o) => { if (o.isDirectionalLight && !DirCtor) DirCtor = o.constructor; if (o.isHemisphereLight && !HemiCtor) HemiCtor = o.constructor; });
+      let key = ctx.three.scene.getObjectByName('__soKey');
+      if (!key && DirCtor) { key = new DirCtor(); key.name = '__soKey'; key.color.set(0xfff2e0); ctx.three.scene.add(key.target); ctx.three.scene.add(key); }
+      if (key) {
+        key.intensity = 3.0;
+        const toP = new V(px - cam.position.x, 0, pz - cam.position.z);
+        key.position.set(cam.position.x + toP.x * 0.2 + 2, cam.position.y + 4, cam.position.z + toP.z * 0.2 + 1);
+        key.target.position.set(px, gy + 1.0, pz); key.target.updateMatrixWorld(true);
+      }
+      let fill = ctx.three.scene.getObjectByName('__soFill');
+      if (!fill && HemiCtor) { fill = new HemiCtor(0xcfe0f0, 0x7a6848, 0); fill.name = '__soFill'; ctx.three.scene.add(fill); }
+      if (fill) fill.intensity = 1.1;
+      // report the pod's exposed height + mesh count + the current dayTime (light-consistency check).
+      let meshes = 0, maxY = -1e9;
+      if (pod) pod.traverse((o) => { if (o.isMesh && o.geometry) { meshes++; o.geometry.computeBoundingBox(); const bb = o.geometry.boundingBox; const wv = new V(0, bb.max.y, 0); o.localToWorld(wv); maxY = Math.max(maxY, wv.y); } });
+      const introActive = !!(ctx.intro && ctx.intro.active);
+      const sunI = (() => { let s = 0; ctx.three.scene.traverse((o) => { if (o.isDirectionalLight && o.castShadow) s = o.intensity; }); return +s.toFixed(2); })();
+      // walkable-collider check: count STATIC boxes near the pod (floor + wall-ring segments). A
+      //   healthy walk-in pod has ~a dozen (the ring is gapped at the hatch, so not a full circle).
+      let podCols = 0;
+      ctx.physics.world.forEachCollider((c) => { const t = c.translation(); const d = Math.hypot(t.x - px, t.z - pz); if (d < 3.0 && Math.abs(t.y - gy) < 3.0) podCols++; });
+      // the tutorial chain: is the unified pod registered as a machete-salvageable (the first-salvage
+      //   target), and did the tutorial scatter scrap/cloth around it?
+      const podSalvageable = (ctx.salvageables && ctx.salvageables.list || []).some((s) => s.kind === 'escape_pod');
+      const scatter = (ctx.pickups && ctx.pickups.list || []).filter((p) => p.itemId === 'scrap' || p.itemId === 'cloth').length;
+      return { angle: ang, podAt: [+px.toFixed(1), +pz.toFixed(1)], groundY: +gy.toFixed(2), exposedH: +(maxY - gy).toFixed(2), meshes, podCols, podSalvageable, scatter, dayTime: +ctx.time.dayTime.toFixed(3), introActive, sunI, found: !!pod };
+    }, { ang: angle });
+    await page.waitForTimeout(350);
+    await page.screenshot({ path: join(OUT, `scen-stepout-pod-${angle}.png`), fullPage: false });
+    console.log(`[stepout-pod] ${JSON.stringify(r)}`);
   },
 
   // FLOW-CLARITY (action-beat framing audit): drive each REAL action beat to its PROMPT
