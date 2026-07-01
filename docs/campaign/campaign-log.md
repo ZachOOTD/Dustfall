@@ -444,3 +444,13 @@ The user kept the loop running past feature-complete; each pass found + fixed re
 - **Tooling** (`ecc15e6`): `npm run verify:intro` gate (smoke-intro now exits non-zero on failure) + removed a duplicate handler.
 - **Perf check**: the intro's per-frame hot path (beat machine + scene updates) is allocation-CLEAN (no GC-hitch risk); per-beat mesh counts modest. No fix needed.
 - **VERDICT: the autonomous work is genuinely exhausted** — feature-complete + hardened (bug-hunt/coherence/audio/lifecycle/perf) + documented + gated. Remaining = the user's feel walk-tests, audio balance, art-direction taste. Loop rested.
+
+---
+
+## Cycles 41-46 — usability vein + the USER'S CONSISTENCY RE-SCOPE + clear skies (2026-07-01)
+- **Usability/readability vein** (each a real find): the cockpit seat BUCKLE faced AWAY from the pilot (the root cause of the whole 4-round seat saga — flipped + self-lit, `8651866`); the fireball's radial sunburst → a turbulent ball (same commit); the EJECT-lever prompt aimed at a wall (re-framed, `49b4027`); the checkEngines aft doorway was a black void (lit exit-glow, `a978b93`).
+- **USER STEERING (walk-test) — POD+WORLD CONSISTENCY re-scope** (`e098ea6`→`8af6074`): ONE enterable pod (unifyEnterablePod — no dispose+swap; walk back in; persists into the real game) + consistent bright MIDDAY (dayTime 0.46, no time/light jump; the fall-through sky == the step-out sky).
+- **Residuals** (`929e1c5`): wake-inside brightened (a rig fade-overlay footgun + directional rake lights); chute anchored to the unified crown; bezel neutralized; ONE-pod verified in real play (the "two pods" was a dev-scene artifact).
+- **Downstream catches**: the Leviathan was dawn-tuned + washed out at midday → its own deeper hull value (`4878da2`); "clear skies" was a real INCONSISTENCY — the descent thinned fog but the step-out inherited the dense survival fog → INTRO_CLEAR_FOG_DENSITY pinned across the whole atmospheric leg + a 6s ease-back post-handoff (`1b17698`).
+- **Verify:** verify:all + smoke `{ok:true,beats:12}` at every step. (A mid-cycle session restart was resumed cleanly — the sky-clarity work was verified + committed on resume.)
+- **State:** all of the user's walk-test feedback is implemented + verified. Remaining = the user's next walk-test round (feel/motion + the new consistency in person) + audio balance.
