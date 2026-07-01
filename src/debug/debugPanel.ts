@@ -20,9 +20,9 @@ import { fireSignalFlare, advanceSignalFlares, activeSignalFlareCount } from '..
 import { damageVulture } from '../enemies/vulture.ts';
 import { applyLungePose, applyMeshTransform } from '../enemies/sandWorm.ts';   // M12 ⓖ (C66) — __game.poseLunge (dive render)
 import { startEscapePodIntro, endEscapePodIntro, jumpToBeat as jumpToIntroBeat, smokeTestIntro, type BeatId } from '../world/escapePodIntro/sequence.ts';   // escape-pod intro — __game.startIntro/skipIntro/jumpToBeat/smokeIntro
-import { placeCrashedPodWreck, setDescentProgress as setPodDescent, setParachuteLeverPull as setPodChute, setCabinCrashPose as setPodCrashPose, blowCabinHatch as blowPodHatch, popChute as popPodChute } from '../world/escapePodIntro/podScene.ts';   // T1.1/T1.2 · R3a · T4.3 — __game.placeCrashedPod / setDescentProgress / setParachuteLeverPull / setCabinCrashPose / blowCabinHatch / popChute (pod rig-shots + the chute-pop payoff)
+import { placeCrashedPodWreck, setDescentProgress as setPodDescent, setParachuteLeverPull as setPodChute, setCabinCrashPose as setPodCrashPose, blowCabinHatch as blowPodHatch, popChute as popPodChute, buildPodScene as buildPodSceneDbg, getPodSpawn as getPodSpawnDbg } from '../world/escapePodIntro/podScene.ts';   // T1.1/T1.2 · R3a · T4.3 · T3.2 — __game.placeCrashedPod / setDescentProgress / … / buildPodOrbit (explosion rig-shot: build+seat the pod at the orbit frame)
 import { smokePodTutorial } from '../world/escapePodIntro/podTutorial.ts';   // T4.3 — __game.smokePodTutorial (drive the craft→salvage→chute-pop loop headlessly)
-import { buildHaulerExterior, disposeHaulerExterior } from '../world/escapePodIntro/haulerScene.ts';   // T3.1 — __game.buildHauler / disposeHauler (hauler-exterior rig-shots)
+import { buildHaulerExterior, disposeHaulerExterior, setHaulerExplosion } from '../world/escapePodIntro/haulerScene.ts';   // T3.1/T3.2 — __game.buildHauler / disposeHauler / setHaulerExplosion (hauler-exterior + explosion rig-shots)
 import { setCockpitAlert as setShipCockpitAlert, setShipAlert as setShipRedAlert, setEngineFire as setShipEngineFire } from '../world/escapePodIntro/shipScene.ts';   // T3.3/T3.4 — __game.setCockpitAlert / setShipAlert / setEngineFire (alert escalation + the disaster rig-shot)
 import { setSkyIntroMode } from '../world/sky.ts';   // REBUILD v2 R1a — __game.setSkyIntroMode (space mode for the orbit/cockpit beats)
 import { makeLatheHull, fuselageProfile, makeFormerRings, makeBreach, makeSandMound } from '../world/wreckForms.ts';
@@ -87,6 +87,11 @@ interface DebugApi {
   buildHauler: () => void;
   /** Escape-pod T3.1 — tear down the hauler exterior. */
   disposeHauler: () => void;
+  /** Escape-pod T3.2 — drive the ship EXPLOSION FX (0 = intact, ~0.05 = flash, 0.1–0.4 =
+   *  fireball/breakup/shockwave, → 1 = receding husk). For the explosion rig-shot iteration. */
+  setHaulerExplosion: (t: number) => void;
+  /** Escape-pod T3.2 — build + seat the pod cabin at the ORBIT frame (for the explosion rig-shot). */
+  buildPodOrbit: () => void;
   /** Escape-pod T3.3 — drive the cockpit alert state (0 = ORBIT ACHIEVED calm, 1 = caution,
    *  2 = red-alert). For the cockpit rig-shot + the disaster escalation. */
   setCockpitAlert: (level: 0 | 1 | 2) => void;
@@ -311,6 +316,16 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
     smokePodTutorial: () => smokePodTutorial(ctx),
     buildHauler: () => { buildHaulerExterior(ctx); },
     disposeHauler: () => { disposeHaulerExterior(ctx); },
+    setHaulerExplosion: (t) => { setHaulerExplosion(t); },
+    // T3.2 — build + seat the pod cabin at the ORBIT frame (no descent base) so the
+    //   explosion rig-shot can frame the real seated porthole eye against the star void.
+    buildPodOrbit: () => {
+      buildPodSceneDbg(ctx);
+      const s = getPodSpawnDbg(ctx);
+      ctx.player.body.body.setTranslation({ x: s.x, y: s.y, z: s.z }, true);
+      ctx.player.cameraSnapNextFrame = true;
+      if (ctx.intro) ctx.intro.mode = 'seated';
+    },
     setCockpitAlert: (level) => { setShipCockpitAlert(level); },
     setSkyIntroMode: (space01) => { setSkyIntroMode(space01); },
     setShipAlert: (level, strobe) => { setShipRedAlert(level, strobe); },

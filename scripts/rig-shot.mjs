@@ -1977,6 +1977,92 @@ const SCENARIOS = {
     console.log(`[hauler] ${JSON.stringify(meas)} → scen-hauler-${angle}.png`);
   },
 
+  // Ship-explode (T3.2): THE CLIMACTIC SPECTACLE — the player watches their hauler DIE
+  // through the porthole. Builds the pod cabin (porthole frame) + the hauler, drives the
+  // explosion FX to a chosen moment (--t=<0..1> into the blast; default 0.22 = mid-fireball),
+  // and shoots the REAL seated FP-through-the-window view (−Z). --view=free renders a free
+  // 3/4 angle on the exploding ship instead (the studio diagnostic). --strip captures a
+  // sequence of moments (0.03 flash → 0.15 fireball → 0.35 breakup → 0.7 husk) in one boot.
+  'ship-explode': async (page) => {
+    const view = argv.view || 'porthole';
+    const t = argv.t !== undefined ? Number(argv.t) : 0.22;
+    const strip = !!argv.strip;
+    await page.evaluate(() => {
+      const g = window.__game;
+      const ctx = g.ctx;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      // Build the real pod cabin at the ORBIT frame + seat the player at the porthole eye,
+      // then the hauler. (buildPodOrbit builds+seats deterministically — the enterPod beat
+      // stalls in its walk-up phase in a headless boot, never sealing the cabin.)
+      g.startIntro();
+      g.jumpToBeat('shipExplode');   // the real beat context (mode seated, faces −Z)
+      g.buildPodOrbit();             // build + seat the pod cabin at orbit (porthole eye)
+      try { g.setDescentProgress(0); } catch {}   // orbital vista through the window
+      g.buildHauler();
+      ctx.three.renderer.setSize(1000, 760, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1000 / 760; cam.updateProjectionMatrix(); }
+    });
+    await page.waitForTimeout(600);   // let the pod cabin build + seat on a tick
+    // Frame + drive-explosion + shoot. `moments` is a list of (tag, explosionT) — one for a
+    // single shot, or the strip preset.
+    const moments = strip
+      ? [['f00-flash', 0.03], ['f01-bloom', 0.13], ['f02-fireball', 0.24], ['f03-breakup', 0.42], ['f04-husk', 0.72]]
+      : [[`t${String(t).replace('.', '')}`, t]];
+    for (const [tag, et] of moments) {
+      const meas = await page.evaluate(({ view, et }) => {
+        const g = window.__game;
+        const ctx = g.ctx;
+        ctx.flags.paused = true;
+        try { g.setDescentProgress(0); } catch {}
+        try { g.setHaulerExplosion(et); } catch {}
+        const cam = ctx.three.camera;
+        const V = cam.position.constructor;
+        // Hide any cabin ShaderMaterial meshes (the re-entry plasma/shimmer — invisible at
+        // descent=0 anyway) so nothing layers over the porthole read (matches the hauler scenario).
+        const cabin = ctx.three.scene.getObjectByName('escapePodCabin');
+        if (cabin) cabin.traverse((o) => {
+          if (!o.isMesh) return;
+          const m = o.material;
+          if ((m && m.isShaderMaterial) || (o.userData && o.userData.starOccluder)) o.visible = false;
+        });
+        const hauler = ctx.three.scene.getObjectByName('escapePodHauler');
+        let hc = null;
+        if (hauler) { hauler.updateMatrixWorld(true); hc = new V(); hauler.getWorldPosition(hc); }
+        if (view === 'porthole') {
+          // THE GATE: the seated EYE world pos (derived from the cabin group), looking −Z.
+          let eye;
+          const pod0 = ctx.three.scene.getObjectByName('escapePodCabin');
+          if (pod0) {
+            pod0.updateMatrixWorld(true);
+            const o = pod0.getWorldPosition(new V());
+            const pb = ctx.player.body;
+            const bodyY = o.y + (pb.halfHeight || 0.6) + (pb.radius || 0.3);
+            eye = new V(o.x, bodyY + (ctx.player.eyeOffset || 0.5), o.z + 0.35);
+          } else {
+            const tr = ctx.player.body.body.translation();
+            eye = new V(tr.x, tr.y + (ctx.player.eyeOffset || 0.5), tr.z);
+          }
+          cam.position.copy(eye);
+          cam.lookAt(eye.x, eye.y - 0.05, eye.z - 1);
+        } else if (hc) {
+          // FREE 3/4 on the exploding ship (studio diagnostic — hide the cabin).
+          if (cabin) cabin.visible = false;
+          cam.position.set(hc.x + 12, hc.y + 6, hc.z + 17);
+          cam.lookAt(hc.x, hc.y, hc.z);
+        }
+        cam.updateMatrixWorld(true);
+        return { view, et, hauler: !!hauler };
+      }, { view, et });
+      await page.waitForTimeout(250);
+      const fname = strip ? `scen-ship-explode-${tag}.png` : `scen-ship-explode-${view}-${tag}.png`;
+      await page.screenshot({ path: join(OUT, fname), fullPage: false });
+      console.log(`[ship-explode] ${JSON.stringify(meas)} → ${fname}`);
+    }
+  },
+
   // Cockpit (T3.3): the GAME'S OPENING SHOT — the REAL seated first-person view inside the
   // HERO single-pilot cockpit. Drives the game's OWN intro path (startIntro → jumpToBeat
   // 'cockpit') so the beat machine builds the ship + seats the player at getShipSpawn facing

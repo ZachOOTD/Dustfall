@@ -42,6 +42,7 @@ import {
   getPodBayThreshold, getPodBaySeatedEye, releasePodFromBay,   // R5c — the docked-pod bay + physical release
 } from './shipScene.ts';
 import { buildPodScene, disposePodScene, getPodSpawn, setDescentProgress, setDescentBase, setTumbleLight, setParachuteLeverPull, placeCrashedPodWreck, setCabinCrashPose, blowCabinHatch } from './podScene.ts';
+import { buildHaulerExterior, disposeHaulerExterior, setHaulerExplosion } from './haulerScene.ts';   // Phase 3 (T3.1/T3.2) — the hero freighter + its death staged through the post-eject porthole
 import { startPodTutorial } from './podTutorial.ts';   // T4.3 — the first craft→salvage→chute-pop tutorial (runs as gameplay post-handoff)
 import { setGameHudHidden, showIntroPrompt, hideIntroPrompt, setIntroBlack } from './introHud.ts';
 import { flashScreen } from '../../fx/screenFlash.ts';
@@ -58,9 +59,18 @@ import {
 const COCKPIT_DWELL = 3.0;
 /** Eject auto-fires after this long if the player doesn't pull the lever (anti-softlock). */
 const EJECT_FALLBACK = 6.0;
-/** Seconds the eject/blast beat holds (the ship dies in a flash; the cabin briefly lit) before
- *  the descent. C18 (user walk-test): NO tumble — the pod stays UPRIGHT; this is just a brief blast. */
-const SHIP_EXPLODE_DWELL = 1.2;   // C18: SHORT — the fall begins sooner (less static "freeze" between phases)
+/** Phase 3 (T3.2) — the SHIP-EXPLOSION beat is now the vision's climactic SPECTACLE: the
+ *  player watches their hauler DIE through the porthole (a white flash → a blooming fireball
+ *  → the hull breaking into tumbling debris → a shockwave → a receding burning husk), the
+ *  cabin flooded by the blast light — then it settles into the descent. Staged over these
+ *  sub-timings (seconds). C18 honoured: the POD stays UPRIGHT + LEVEL facing the window (no
+ *  tumble) — the SHIP tumbles/breaks; the pod holds steady + watches.
+ *    INTACT_DWELL — the ship reads WHOLE in the window (you see what you fled) before it dies.
+ *    EXPLODE_DUR  — the fireball/breakup unfolds over this many seconds (the spectacle breathes).
+ *    HUSK_DWELL   — a last beat on the receding burning husk/debris before the fall begins. */
+const SHIP_INTACT_DWELL = 0.9;    // the intact hauler hangs in the window (the "that's my ship" beat)
+const SHIP_EXPLODE_DUR = 2.3;     // the explosion unfolds (flash→fireball→breakup→shockwave→husk)
+const SHIP_HUSK_DWELL = 0.5;      // a breath on the receding husk before the descent
 /** Seconds of the SLOW, seamless atmospheric fall (C18 user walk-test: descend slowly + serenely —
  *  watch the planet get closer, space fade to sky, the ground slowly approach). Was 8.0.
  *  REBUILD v2 R4 — this is the FULL-FALL clock (progress 0→1 over this many seconds AT a fixed
@@ -286,6 +296,7 @@ export function endEscapePodIntro(ctx: GameContext): void {
   setIntroBlack(0);        // never leave a black overlay over the real game
   setGameHudHidden(false);
   disposeShipScene(ctx);
+  disposeHaulerExterior(ctx);   // Phase 3 — the exterior hauler + its explosion FX (belt-and-suspenders: never leak past the intro on any exit)
   disposePodScene(ctx);       // R3a — the ONE cabin is the only pod interior now (no separate wake shell to tear down)
   stopAllIntroLoops();       // T5.1b — stop any ambient loop (cockpit hum / descent rush) on any exit
   setSkyIntroMode(0);                  // R1a — restore the normal game sky on any exit
@@ -478,56 +489,114 @@ function tickEnterPod(ctx: GameContext, dt: number): void {
   if (pulledLever(ctx) || (intro.scratch.t as number) > EJECT_FALLBACK) advanceBeat(ctx);   // → shipExplode
 }
 
-/** shipExplode beat (T0.3a) — eject fires: the ship dies in a blast (a flash + the cabin briefly
- *  lit by the explosion), then the pod settles UPRIGHT into the slow, serene descent. C18 (user
- *  walk-test): NO tumble — the pod stays upright + level, facing the window; you just watch the
- *  world come up to meet you. (The hero ship explosion staged through this frame = Phase 3.) */
+/** shipExplode beat (T0.3a → Phase 3 T3.2) — eject fires; the docked pod tears free; the pod is
+ *  flung clear facing the window; then THE PLAYER WATCHES THEIR HAULER DIE through the porthole —
+ *  the vision's climactic beat. A white-hot flash → a blooming fireball → the hull breaking into
+ *  tumbling debris → a shockwave → sparks → a receding burning husk, the cabin flooded by the
+ *  blast light — settling into the slow serene descent. C18 (user walk-test): NO POD TUMBLE — the
+ *  pod stays UPRIGHT + LEVEL facing the window; the SHIP tumbles/breaks, the pod holds + watches.
+ *
+ *  Phases: release (bolts fire, pod tears from the cradle) → watch (the hauler hangs intact in the
+ *  window) → blast (the detonation → the fireball/breakup unfolds over EXPLODE_DUR) → husk (a breath
+ *  on the receding husk) → the descent. The hauler + its FX DISPOSE at the hand-off (they never leak
+ *  into the fall). */
 const EJECT_RELEASE_DUR = 0.7;   // R5c — seconds of the physical detach (bolts fire + the pod tears from the bay cradle) before the blast
 function tickShipExplode(ctx: GameContext, dt: number): void {
   const intro = ctx.intro;
   if (!intro) return;
   if (!intro.scratch.init) {
     // ── PHASE A: the PHYSICAL RELEASE (R5c). The explosive bolts fire + the docked pod TEARS FREE
-    //    of its bay cradle — the ship is still here for this beat so the detach reads (a shudder on
-    //    the docked pod + the clamps releasing). The player, sealed in the cabin, FEELS it (a rising
-    //    shudder + the bay glow flaring). Then PHASE B (the blast) disposes the ship + hands to the fall.
+    //    of its bay cradle — the interior ship is still here so the detach reads (a shudder + the
+    //    clamps releasing). The player, sealed in the cabin, FEELS it (a rising shudder + bay glow).
     playEjectThunk();                // T5.1 — the eject bolts fire
     faceControl(ctx, 0, 0);          // upright, facing the window (−Z) — the pod stays LEVEL (no tumble)
     intro.mode = 'seated';
     intro.scratch.init = true;
     intro.scratch.phase = 'release';
     intro.scratch.dwell = 0;
-    intro.scratch.blasted = false;
+    intro.scratch.reFlash = false;   // the one-shot detonation flash/boom hasn't fired yet
+    intro.scratch.sec2 = false;      // one-shot secondary-blast flash (mid-explosion punch)
+    intro.scratch.built = false;
   }
   intro.scratch.dwell = (intro.scratch.dwell as number) + dt;
   const d = intro.scratch.dwell as number;
+  const phase = intro.scratch.phase as string;
 
-  if (intro.scratch.phase === 'release') {
+  if (phase === 'release') {
     // the pod shudders + tears from the cradle (drives the bay-pod detach in shipScene) + a rising
     //   felt shudder in the sealed cabin. Trauma is ONE-SHOT per step-up so it can't saturate/spin.
     const rk = Math.min(1, d / EJECT_RELEASE_DUR);
     releasePodFromBay(rk);           // the physical detach in the bay (bolts fire, cradle releases, pod tears free)
-    setTumbleLight(0.4 + rk * 0.3);  // the bay/blast glow rising into the cabin
+    setTumbleLight(0.3 + rk * 0.2);  // the bay glow rising into the cabin
     if (rk >= 1) {
-      // ── PHASE B: the BLAST — the ship dies + the pod is clear; hand to the calm fall.
-      flashScreen(0xffe6c0, 0.9);    // the blast flash (the ship dies as the pod clears)
-      playExplosionBoom();           // T5.1 — the ship explodes
+      // ── PHASE B: the pod is CLEAR — dispose the interior ship (+ bay), show the ORBITAL VISTA
+      //    (planet + stars) through the window, and stage the HERO HAULER out in that view (−Z,
+      //    offset to one side of the planet), INTACT, so the player sees what they just fled.
       stopCockpitHum();              // T5.1b — the ship's hum dies with it
-      disposeShipScene(ctx);         // the ship (+ the emptied bay) is gone after the blast
-      showIntroPrompt('');
+      disposeShipScene(ctx);         // the interior ship (+ the emptied bay) is gone — the exterior hauler is the NEW separate thing
       setDescentProgress(0);         // the orbital vista (planet + stars) through the window
-      addTrauma(0.35);               // a ONE-TIME concussive kick at the blast as the pod is flung clear (one-shot, decays)
-      intro.scratch.phase = 'settle';
+      buildHaulerExterior(ctx);      // T3.1 — the worn freighter floats out in space ahead (−Z), about to die
+      setHaulerExplosion(0);         // intact (ember idle) — the "that's my ship" beat
+      showIntroPrompt('');
+      addTrauma(0.2);                // a small kick as the pod is flung clear (one-shot, decays)
+      intro.scratch.built = true;
+      intro.scratch.phase = 'watch';
       intro.scratch.dwell = 0;
     }
     return;
   }
 
-  // PHASE B tail — a brief warm blast-glow lighting the cabin from the explosion, fading — the pod
-  //   stays UPRIGHT + settles into the descent (C18: no tumble).
-  const glow = Math.max(0, 1 - d / 1.4);    // the blast light decays over ~1.4s to the orbital cool
-  setTumbleLight(glow * 0.7);
-  if (d > SHIP_EXPLODE_DWELL) advanceBeat(ctx);   // → the slow descent (the calm fall)
+  if (phase === 'watch') {
+    // the intact hauler hangs in the window — a held beat so the player reads THE SHIP before it
+    //   dies (the vision: "watch the ship explode" wants an intact ship to watch first).
+    setTumbleLight(0.5 * Math.max(0, 1 - d / SHIP_INTACT_DWELL));   // the bay glow decays to orbital cool
+    if (d > SHIP_INTACT_DWELL) {
+      intro.scratch.phase = 'blast';
+      intro.scratch.dwell = 0;
+    }
+    return;
+  }
+
+  if (phase === 'blast') {
+    // THE DETONATION → the fireball/breakup unfolds over EXPLODE_DUR. Drive the hauler-explosion
+    //   `t` 0→1 across it (haulerScene runs the flash/fireball/debris/shockwave/sparks/blast-light);
+    //   the CABIN flash is driven here (setTumbleLight — a hot orange pulse that decays); a one-shot
+    //   screen flash + boom punctuate the detonation, and a mid-blast secondary punch.
+    const te = Math.min(1, d / SHIP_EXPLODE_DUR);
+    setHaulerExplosion(te);
+    // the detonation punch (one-shot at te≈0): a bright warm screen flash + the boom + a single kick.
+    if (!intro.scratch.reFlash && te > 0.02) {
+      flashScreen(0xfff0d8, 1.0);    // the blinding detonation flash (the ship dies)
+      playExplosionBoom();           // T5.1 — the ship explodes (the concussive boom, felt through the hull)
+      addTrauma(0.5);                // a ONE-TIME concussive kick (one-shot — never per-frame, which would spin the view)
+      intro.scratch.reFlash = true;
+    }
+    // a mid-explosion SECONDARY blast punch (one-shot ~te0.4) — a fuel cell / magazine cooks off.
+    if (!intro.scratch.sec2 && te > 0.4) {
+      flashScreen(0xffcaa0, 0.45);
+      playExplosionBoom();
+      addTrauma(0.25);
+      intro.scratch.sec2 = true;
+    }
+    // CABIN FLASH — the blast floods the cabin hot blast-orange (setTumbleLight), a sharp pulse at
+    //   the detonation decaying through the fireball to the orbital cool (C18: light only, no tumble).
+    const cabin = Math.max(0, 1 - te / 0.55);   // 1 at detonation → 0 by mid-explosion
+    setTumbleLight(cabin);
+    if (te >= 1) {
+      intro.scratch.phase = 'husk';
+      intro.scratch.dwell = 0;
+    }
+    return;
+  }
+
+  // phase 'husk' — a breath on the receding burning husk + drifting debris field (te held at 1),
+  //   the cabin light settled to the orbital cool, before the fall begins.
+  setHaulerExplosion(1);
+  setTumbleLight(0);
+  if (d > SHIP_HUSK_DWELL) {
+    disposeHaulerExterior(ctx);   // the hauler + all its FX dispose HERE — they never leak into the descent
+    advanceBeat(ctx);             // → the slow descent (the calm fall)
+  }
 }
 
 /** descent beat (T0.3b) — the atmospheric fall: the planet swells (setDescentProgress)
@@ -546,6 +615,7 @@ function tickDescent(ctx: GameContext, dt: number): void {
     // inside the pod throughout; only the pod's world coords change, hidden under the re-entry
     // FX/flash. setDescentProgress then drives the altitude DESCENT_ALT→0 to the spawn ground.)
     setDescentBase(intro.returnPos);
+    disposeHaulerExterior(ctx);   // Phase 3 — ensure the exterior hauler/FX is gone before the fall (defensive: a dev jump past shipExplode could leave it built)
     disposePodScene(ctx);   // tear down the offset pod (its group + colliders were at y=3200)
     setDescentBase(intro.returnPos);   // re-assert after dispose cleared it (dispose nulls the base)
     ensureInPod(ctx);       // rebuild at the grounded base + full altitude; seat the player there
