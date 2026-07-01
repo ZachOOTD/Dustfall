@@ -431,3 +431,16 @@ The user walk-tested R1, approved it to continue, and reported 2 bugs (both fixe
 - **Audio** (`5d8bc4c`): 6 new procedural synths filling the silent beats (engine fire, bolt shear, hatch seal, ship-death roar, desert wind, awe swell); every beat scored; leak-safe. Mix balance = user's LISTEN.
 - **Verify:** verify:all + smoke `{ok:true,beats:12}`.
 - **Tail note:** the substantive autonomous work (build + coherence + audio + bug-hunt) is now done; remaining = the user's feel walk-tests + audio balance + minor art-direction. Further cycles are marginal polish.
+
+---
+
+## Cycles 36-40 — post-feature-complete hardening + QA (overnight → morning 2026-07-01)
+The user kept the loop running past feature-complete; each pass found + fixed real things:
+- **Coherence fix** (`768890f`): the ride-down cabin read white-plastic (desert sun following the pod to orbit + too-light shell) → worn aluminium; whole intro one tone.
+- **2 coherence-flag fixes** (`106a526`): the WAKE interior was near-BLACK (Reinhard tone-curve crushes the enclosed interior at the desert's 1.05 exposure — lift to 2.0 during the crashed pose, restore on teardown) + the explosion HUSK left a brown wash → clears to star-space (uFade).
+- **Lifecycle fix** (`a144f03`): the wake exposure leaked 2.0 via dev jumpToBeat (washed-out orbit) → restoreCabinExposure. SAVE (introComplete/replay/mid-intro) + PAUSE (all timers freeze) confirmed CLEAN.
+- **Fireball polish** (`605ce0a`): tighter hot core (was an additive-clip white blob) + smoke billow.
+- **Docs** (`44e0aef`): docs/architecture-escape-pod-intro.md — the as-built map (beat machine, scenes, the STATE-RESTORE discipline, gating, dev hooks, audio).
+- **Tooling** (`ecc15e6`): `npm run verify:intro` gate (smoke-intro now exits non-zero on failure) + removed a duplicate handler.
+- **Perf check**: the intro's per-frame hot path (beat machine + scene updates) is allocation-CLEAN (no GC-hitch risk); per-beat mesh counts modest. No fix needed.
+- **VERDICT: the autonomous work is genuinely exhausted** — feature-complete + hardened (bug-hunt/coherence/audio/lifecycle/perf) + documented + gated. Remaining = the user's feel walk-tests, audio balance, art-direction taste. Loop rested.
