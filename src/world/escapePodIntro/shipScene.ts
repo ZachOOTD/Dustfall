@@ -341,6 +341,27 @@ const COR_LEN = COR_Z1 - COR_Z0;    // 12
 const COR_ZC = (COR_Z0 + COR_Z1) / 2;   // 8.6 (tunnel centre)
 const COR_WALL_T = 0.2;       // structural wall/floor/ceiling thickness (matches the collider spec)
 
+// ── POD-BAY (REBUILD v2 R5c) — the ESCAPE-POD AIRLOCK BAY at the BRIDGE end of the corridor
+//    (where the flee leads). A recessed alcove in the −X wall holding the DOCKED escape pod:
+//    the SAME size-matched riveted capsule (POD_R) the player rides down, standing on its
+//    heat-shield in a clamped bay cradle, its HATCH OPEN toward the corridor with the lit cabin
+//    interior visible through it. The fleeing player runs down the corridor + straight up to the
+//    open hatch; enterPod then plays a scripted climb-IN (no teleport). Everything here is at/
+//    outside the −X wall over BAY_Z0..BAY_Z1 (the structural −X wall + wall-finish skip that span,
+//    §buildCorridor); the walkable tube envelope + the +X wall + the collider set are unchanged.
+//    The bay is placed near the mouth (bridge end) so it's the first thing the fleeing eye meets.
+const BAY_Z0 = 3.2;           // bay opening start (local z) — just aft of the corridor mouth
+const BAY_Z1 = 6.4;           // bay opening end (local z) — a ~3.2m airlock frame
+const BAY_ZC = (BAY_Z0 + BAY_Z1) / 2;   // 4.8 — bay centre (the docked pod's local z)
+const BAY_RECESS = 2.9;       // how far the bay alcove recesses into −X off the wall (room for the 2.88m pod)
+// The docked pod stands vertically on its heat-shield in the bay, its body axis +Y, offset into
+// the recess; its HATCH faces +X (toward the corridor centreline / the arriving player). The pod
+// LOCAL frame's hatch (HATCH_AZ on the cabin, +Z-forward capsule) is rotated to face +X here.
+const BAY_POD_X = -(COR_HW + BAY_RECESS * 0.52);   // pod centre X (well into the −X recess)
+// Is a corridor-wall emission on the −X wall inside the bay opening span? (so buildCorridor
+// SKIPS the −X structural wall + finish panels there, revealing the docked pod in the alcove).
+function _inBayGap(z: number): boolean { return z > BAY_Z0 - 0.05 && z < BAY_Z1 + 0.05; }
+
 // ── Static-collider specs for the CORRIDOR walkable shell (WYSIWYG — the KCC walks these). These
 //    are BYTE-IDENTICAL to the old greybox CORRIDOR_SPECS so collision + flow are unchanged.
 const CORRIDOR_COLLIDERS: ReadonlyArray<BoxSpec> = [
@@ -1943,6 +1964,7 @@ export function buildShipScene(ctx: GameContext): void {
   //    lit fixtures), matching the cockpit's worn-gunmetal idiom. Emits the WYSIWYG walkable
   //    colliders (unchanged from the greybox). setShipAlert/setEngineFire hooks stay wired.
   buildCorridor(group);
+  buildPodBay(group);   // R5c — the docked escape pod in its bay at the bridge end (the flee target + the physical enter)
   for (const [w, h, d, cx, cy, cz] of CORRIDOR_COLLIDERS) {
     const col = makeStaticBox(
       ctx.physics.world,
@@ -2065,6 +2087,22 @@ function buildCorridor(group: THREE.Group): void {
   roof.position.set(0, COR_CH + COR_WALL_T / 2, zc);
   group.add(roof);
   for (const sx of [1, -1]) {
+    if (sx === -1) {
+      // R5c — the −X structural wall is SPLIT around the pod-bay opening (BAY_Z0..BAY_Z1): a
+      //   forward segment (mouth → bay) + an aft segment (bay → dead-end), so the bay alcove is a
+      //   real gap in the hull revealing the docked pod (not a decal). The COLLIDER stays the full
+      //   span (CORRIDOR_COLLIDERS unchanged) — the player never walks INTO the bay (the enter is
+      //   scripted), so the invisible collider over the gap is correct WYSIWYG for the walk.
+      const fwdLen = (BAY_Z0) - COR_Z0;
+      const wf = _box(COR_WALL_T, COR_CH + 0.2, fwdLen, _shell);
+      wf.position.set(-(COR_HW + COR_WALL_T / 2), COR_CH / 2, COR_Z0 + fwdLen / 2);
+      group.add(wf);
+      const aftLen = COR_Z1 - BAY_Z1;
+      const wa = _box(COR_WALL_T, COR_CH + 0.2, aftLen, _shell);
+      wa.position.set(-(COR_HW + COR_WALL_T / 2), COR_CH / 2, BAY_Z1 + aftLen / 2);
+      group.add(wa);
+      continue;
+    }
     const wall = _box(COR_WALL_T, COR_CH + 0.2, COR_LEN, _shell);
     wall.position.set(sx * (COR_HW + COR_WALL_T / 2), COR_CH / 2, zc);
     group.add(wall);
@@ -2150,6 +2188,7 @@ function buildCorridor(group: THREE.Group): void {
       const [z0, z1] = seg[si];
       const zmid = (z0 + z1) / 2, len = z1 - z0 - 0.14;
       if (len < 0.2) continue;
+      if (sx === -1 && _inBayGap(zmid)) continue;   // R5c — skip −X wall-finish where the pod-bay opens
       // proud upper panel (raised battleship-grey plate — stands proud of the wall so the reveal
       //   around it reads as a real recessed seam)
       const panel = _box(0.06, 1.0, len, _band);
@@ -2190,6 +2229,7 @@ function buildCorridor(group: THREE.Group): void {
     [-1, 1.6, 11.8, 0.4, 0.14],
   ];
   for (const [sx, py, pz, pw, ph] of placards) {
+    if (sx === -1 && _inBayGap(pz)) continue;   // R5c — no placard floating over the pod-bay gap
     const back = _box(0.02, ph + 0.03, pw + 0.03, _decal);
     back.position.set(sx * (COR_HW - 0.052), py, pz);
     group.add(back);
@@ -2250,18 +2290,24 @@ function buildCorridor(group: THREE.Group): void {
       group.add(clamp);
     }
   }
-  // a low PIPE run along the −X wall foot (a plumbing/coolant line, waist-low)
-  const pipe = _cyl(0.05, 0.05, COR_LEN - 0.2, 10, _steel);
-  pipe.rotation.x = Math.PI / 2;
-  pipe.position.set(-(COR_HW - 0.08), 0.5, zc);
-  group.add(pipe);
+  // a low PIPE run along the −X wall foot (a plumbing/coolant line, waist-low) — R5c: SPLIT around
+  //   the pod-bay opening so it doesn't bar the docked-hatch view (a fwd stub + the aft run).
+  for (const [pz0, pz1] of [[COR_Z0, BAY_Z0], [BAY_Z1, COR_Z1]] as const) {
+    const plen = pz1 - pz0 - 0.2;
+    if (plen < 0.2) continue;
+    const pipe = _cyl(0.05, 0.05, plen, 10, _steel);
+    pipe.rotation.x = Math.PI / 2;
+    pipe.position.set(-(COR_HW - 0.08), 0.5, (pz0 + pz1) / 2);
+    group.add(pipe);
+  }
   for (let z = COR_Z0 + 0.7; z < COR_Z1; z += 1.4) {
+    if (_inBayGap(z)) continue;   // R5c — no bracket over the bay gap
     const bracket = _box(0.06, 0.12, 0.05, _steel);
     bracket.position.set(-(COR_HW - 0.06), 0.5, z);
     group.add(bracket);
   }
   // a couple of inline VALVES / gauges on the low pipe (breaks the straight run — worked hardware)
-  for (const [vz, sx] of [[5.6, -1], [10.2, -1]] as const) {
+  for (const [vz, sx] of [[10.2, -1], [10.2, -1]] as const) {
     const wheel = _cyl(0.09, 0.09, 0.03, 10, _corrRail);
     wheel.rotation.z = Math.PI / 2;
     wheel.position.set(sx * (COR_HW - 0.12), 0.5, vz);
@@ -2311,6 +2357,24 @@ function buildCorridor(group: THREE.Group): void {
   // ── GRAB-RAILS — a horizontal handrail down each wall at grip height, on stand-off brackets
   //    (a real freighter corridor detail; reads as a walked, worked space).
   for (const sx of [1, -1]) {
+    if (sx === -1) {
+      // R5c — the −X grab-rail is SPLIT around the bay opening (it would otherwise bar the hatch).
+      for (const [rz0, rz1] of [[COR_Z0 + 0.3, BAY_Z0], [BAY_Z1, COR_Z1 - 0.3]] as const) {
+        const rlen = rz1 - rz0;
+        if (rlen < 0.2) continue;
+        const rail = _cyl(0.028, 0.028, rlen, 8, _corrRail);
+        rail.rotation.x = Math.PI / 2;
+        rail.position.set(-(COR_HW - 0.09), 1.15, (rz0 + rz1) / 2);
+        group.add(rail);
+      }
+      for (let z = COR_Z0 + 0.7; z < COR_Z1; z += 2.0) {
+        if (_inBayGap(z)) continue;
+        const stand = _box(0.05, 0.05, 0.05, _rivet);
+        stand.position.set(-(COR_HW - 0.05), 1.15, z);
+        group.add(stand);
+      }
+      continue;
+    }
     const rail = _cyl(0.028, 0.028, COR_LEN - 0.6, 8, _corrRail);
     rail.rotation.x = Math.PI / 2;
     rail.position.set(sx * (COR_HW - 0.09), 1.15, zc);
@@ -2388,6 +2452,7 @@ function buildCorridor(group: THREE.Group): void {
   _corrRedStripMats.length = 0;
   for (const sx of [1, -1]) {
     for (let z = COR_Z0 + 0.4; z < COR_Z1; z += 1.5) {
+      if (sx === -1 && _inBayGap(z + 0.75)) continue;   // R5c — no red strip across the bay opening
       const sm = new THREE.MeshBasicMaterial({ color: 0x1c0604 });
       _buildMats.push(sm);
       _corrRedStripMats.push(sm);
@@ -2421,6 +2486,287 @@ function buildCorridor(group: THREE.Group): void {
 
 // tiny helper — a downward face vector (for studs domed downward off a lintel/beam underside).
 function down_(_up: THREE.Vector3): THREE.Vector3 { return new THREE.Vector3(0, -1, 0); }
+
+// ── R5c — the ESCAPE-POD BAY + the DOCKED POD. Built into the −X alcove opened above (the
+//    structural wall + finish skip BAY_Z0..BAY_Z1). This is what the fleeing player runs toward:
+//    a hazard-framed airlock recess with the SAME size-matched riveted capsule (POD_R) they ride
+//    down, standing on its heat-shield in a clamped cradle, HATCH OPEN toward the corridor with a
+//    warm-lit cabin interior peek behind it. Everything is at/outside the −X wall line (x ≤ −COR_HW)
+//    so the walkable tube + colliders are untouched. Warm bay-light spills back into the corridor.
+// The pod's exterior identity mirrors buildHeroPodMesh (podScene) — a light cool-aluminium
+//   riveted capsule with dark channel-steel bands/frames — but authored in the corridor's own
+//   worn-gunmetal materials so the docked pod reads as part of THIS ship's bay (grimed, lit by the
+//   bay's own lamps), not a desert-weathered wreck. The RIDDEN cabin (buildPodScene) is the same
+//   vessel; enterPod builds it + carries the eye in.
+const BAY_POD_R = 1.44;        // MATCH POD_R (podScene) — the 2.88m-diameter capsule the player rides
+const BAY_POD_BASE_H = 0.34;   // heat-shield foot (matches POD_BASE_H)
+const BAY_POD_BODY_H = 1.95;   // straight body (matches POD_BODY_H / the cabin WALL_H)
+const BAY_POD_NOSE_H = 0.70;   // ogive nose (matches POD_NOSE_H)
+// Docked-pod exterior materials: reuse the corridor's grimed gunmetal skin + hardware so the pod
+//   reads as bay-lit ship hardware. A dedicated LIGHT band material so the capsule reads aluminium
+//   (lighter than the dark hull walls) and its hatch reads as an opened bright plate.
+const _bayPodSkin = _metal(0x8f9498, 0.42, 0.70, { flat: true, grime: true });   // light cool-aluminium capsule skin
+const _bayPodHatch = _metal(0xa7acb0, 0.40, 0.62, { flat: true, grime: true });  // bright opened hatch plate (pops off the body)
+const _bayCabinGlow = new THREE.MeshBasicMaterial({ color: 0x7a5a34 });          // warm-lit cabin-interior peek (unlit → glows behind the open hatch, reads clearly LIT)
+let _bayGlowLight: THREE.PointLight | null = null;   // warm spill from the open hatch into the corridor
+let _bayGroup: THREE.Group | null = null;            // the docked-pod group (release shudder rides this)
+
+/** World-space position of the DOCKED pod's HATCH THRESHOLD — where the fleeing player ends up +
+ *  the scripted climb-in starts (just outside the open hatch, on the corridor centre-ish). And the
+ *  docked pod's SEATED-EYE target inside the cabin (where the climb-in lands). Both in world coords
+ *  (SHIP_ORIGIN + local). Used by sequence.ts's enterPod climb-in. Null-safe values (constants). */
+export function getPodBayThreshold(): THREE.Vector3 {
+  // just corridor-side of the hatch, at standing eye height, centred on the bay z
+  return new THREE.Vector3(SHIP_ORIGIN.x - COR_HW + 0.55, SHIP_ORIGIN.y + 1.62, SHIP_ORIGIN.z + BAY_ZC);
+}
+export function getPodBaySeatedEye(): THREE.Vector3 {
+  // inside the docked cabin, at the seated eye (the pod interior peek centre) — the climb-in target
+  return new THREE.Vector3(SHIP_ORIGIN.x + BAY_POD_X + 0.15, SHIP_ORIGIN.y + 1.34, SHIP_ORIGIN.z + BAY_ZC);
+}
+
+/** Build the escape-pod BAY alcove + the DOCKED pod at the bridge end (into the −X recess). */
+function buildPodBay(group: THREE.Group): void {
+  const bay = new THREE.Group();
+  bay.name = 'escapePodBay';
+  group.add(bay);
+  const xNear = -COR_HW;                       // the corridor wall line (bay mouth)
+  const xFar = -COR_HW - BAY_RECESS;           // the back of the recess
+  const zc = BAY_ZC, halfZ = (BAY_Z1 - BAY_Z0) / 2;
+  const up = new THREE.Vector3(0, 1, 0);
+
+  // ── ALCOVE SHELL — floor / ceiling / back wall / end walls closing the recess (dark steel so torn
+  //    edges never read thin; the pod + cradle sit in front). The near face is the open bay mouth.
+  const bayFloor = _box(BAY_RECESS + 0.2, COR_WALL_T, (halfZ + 0.1) * 2, _channel);
+  bayFloor.position.set((xNear + xFar) / 2, -COR_WALL_T / 2, zc);
+  bay.add(bayFloor);
+  const bayCeil = _box(BAY_RECESS + 0.2, COR_WALL_T, (halfZ + 0.1) * 2, _ceil);
+  bayCeil.position.set((xNear + xFar) / 2, COR_CH + COR_WALL_T / 2, zc);
+  bay.add(bayCeil);
+  const bayBack = _box(COR_WALL_T, COR_CH + 0.2, (halfZ + 0.1) * 2, _shell);
+  bayBack.position.set(xFar - COR_WALL_T / 2, COR_CH / 2, zc);
+  bay.add(bayBack);
+  for (const sz of [-1, 1]) {
+    const end = _box(BAY_RECESS, COR_CH + 0.2, COR_WALL_T, _shell);
+    end.position.set((xNear + xFar) / 2, COR_CH / 2, zc + sz * (halfZ + COR_WALL_T / 2));
+    bay.add(end);
+    // a ribbed frame on each end wall (the bay reads as a fabricated recess)
+    const erib = _box(BAY_RECESS - 0.2, 0.14, 0.12, _steel);
+    erib.position.set((xNear + xFar) / 2, COR_CH - 0.4, zc + sz * halfZ);
+    bay.add(erib);
+  }
+  // bay floor tread + a rivet ring (a real deck under the pod)
+  const bayDeck = _box(BAY_RECESS - 0.1, 0.04, (halfZ) * 2, _deck);
+  bayDeck.position.set((xNear + xFar) / 2 - 0.05, 0.02, zc);
+  bay.add(bayDeck);
+  for (const bx of [xNear - 0.4, (xNear + xFar) / 2, xFar + 0.5]) for (const bz of [zc - halfZ + 0.4, zc, zc + halfZ - 0.4]) {
+    bay.add(_stud(bx, 0.05, bz, up, _rivet, 0.016));
+  }
+
+  // ── HAZARD-STRIPED BAY PORTAL FRAME around the mouth (the airlock threshold the player crosses).
+  //    A proud channel-steel frame + safety-yellow chevron jambs + a lintel + rivet rows.
+  //  side jambs
+  for (const sz of [-1, 1]) {
+    const jamb = _box(0.22, COR_CH, 0.34, _corrHazard);
+    jamb.position.set(xNear - 0.05, COR_CH / 2, zc + sz * halfZ);
+    bay.add(jamb);
+    for (let y = 0.35; y < COR_CH; y += 0.42) bay.add(_stud(xNear - 0.24, y, zc + sz * halfZ, new THREE.Vector3(1, 0, 0), _rivet, 0.016));
+  }
+  //  lintel across the top of the bay mouth
+  const lintel = _box(0.24, 0.3, halfZ * 2 + 0.3, _corrHazard);
+  lintel.position.set(xNear - 0.05, COR_CH - 0.1, zc);
+  bay.add(lintel);
+  for (let z = zc - halfZ; z <= zc + halfZ; z += 0.4) bay.add(_stud(xNear - 0.22, COR_CH - 0.25, z, new THREE.Vector3(1, 0, 0), _rivet, 0.014));
+  //  a threshold sill plate on the deck at the mouth
+  const sill = _box(0.24, 0.06, halfZ * 2, _steel);
+  sill.position.set(xNear - 0.06, 0.04, zc);
+  bay.add(sill);
+  //  a stencilled "ESCAPE POD" placard over the lintel (a lit decal face on a dark backing)
+  const placBack = _box(0.02, 0.2, 1.1, _decal);
+  placBack.position.set(xNear - 0.19, COR_CH - 0.55, zc);
+  bay.add(placBack);
+  const placFace = _box(0.01, 0.13, 0.92, _corrPlacard);
+  placFace.position.set(xNear - 0.2, COR_CH - 0.55, zc);
+  bay.add(placFace);
+
+  // ── THE DOCKED POD — the size-matched riveted capsule standing in the recess, HATCH toward +X.
+  const podLocalX = BAY_POD_X, podZ = zc;
+  const pod = new THREE.Group();
+  _bayGroup = pod;
+  pod.position.set(podLocalX, 0, podZ);
+  bay.add(pod);
+  buildDockedPodExterior(pod);
+
+  // ── CRADLE CLAMPS — the bay hardware holding the pod (explosive-bolt clamps that release on
+  //    eject). Two arms hugging the body + a base cradle ring. Dark steel with hazard tips.
+  for (const cz of [-1, 1]) {
+    const arm = _box(0.5, 0.24, 0.2, _steel);
+    arm.position.set(podLocalX + BAY_POD_R * 0.55, 1.15, podZ + cz * (BAY_POD_R * 0.62));
+    bay.add(arm);
+    const clampPad = _box(0.18, 0.3, 0.28, _corrHazard);
+    clampPad.position.set(podLocalX + BAY_POD_R * 0.86, 1.15, podZ + cz * (BAY_POD_R * 0.62));
+    bay.add(clampPad);
+    // the arm's mount into the back wall
+    const mount = _box(BAY_RECESS * 0.4, 0.16, 0.16, _channel);
+    mount.position.set(xFar + BAY_RECESS * 0.3, 1.15, podZ + cz * (BAY_POD_R * 0.62));
+    bay.add(mount);
+  }
+  // a base cradle ring cupping the heat-shield foot
+  const cradle = _cyl(BAY_POD_R + 0.14, BAY_POD_R + 0.2, 0.22, 20, _steel);
+  cradle.position.set(podLocalX, 0.11, podZ);
+  bay.add(cradle);
+
+  // ── BAY LIGHTING — a warm hatch glow spilling into the corridor + a cool bay fill so the pod
+  //    reads modelled in the recess. The glow brightens the corridor mouth (the "way out" beacon).
+  const glow = new THREE.PointLight(0xffcf9a, 1.5, 5.5, 1.8);
+  glow.position.set(podLocalX + BAY_POD_R + 0.2, 1.35, podZ);   // at the open hatch, spilling toward the corridor
+  bay.add(glow);
+  _bayGlowLight = glow;
+  const bayFill = new THREE.PointLight(0xbcd0e0, 0.7, 5.0, 1.7);
+  bayFill.position.set((xNear + xFar) / 2, COR_CH - 0.3, podZ);
+  bay.add(bayFill);
+}
+
+/** The docked pod's exterior mesh (local frame: heat-shield base centre at y=0, body on +Y, the
+ *  open HATCH + interior peek face +X toward the corridor). Mirrors buildHeroPodMesh's identity in
+ *  the corridor's grimed-gunmetal idiom: a light-aluminium lathe capsule, dark channel bands +
+ *  frames, riveted hoops, a real recessed hatch swung OPEN with a warm cabin peek behind it. */
+function buildDockedPodExterior(pod: THREE.Group): void {
+  const baseTop = BAY_POD_BASE_H;
+  const bodyTop = baseTop + BAY_POD_BODY_H;
+  const apex = bodyTop + BAY_POD_NOSE_H;
+  const SHOULDER_R = BAY_POD_R * 0.78;
+  // (1) the revolved capsule skin — flared foot → straight body → tucked ogive nose (matches POD).
+  const prof: THREE.Vector2[] = [
+    new THREE.Vector2(0.0, 0.0),
+    new THREE.Vector2(BAY_POD_R * 0.86, 0.0),
+    new THREE.Vector2(BAY_POD_R * 1.02, BAY_POD_BASE_H * 0.55),
+    new THREE.Vector2(BAY_POD_R, baseTop),
+    new THREE.Vector2(BAY_POD_R, baseTop + BAY_POD_BODY_H * 0.5),
+    new THREE.Vector2(BAY_POD_R, bodyTop - 0.06),
+    new THREE.Vector2(SHOULDER_R, bodyTop + 0.04),
+  ];
+  // tucked ogive nose (high exponent → narrow crown, matches POD)
+  const NOSE_SEG = 6;
+  for (let i = 1; i <= NOSE_SEG; i++) {
+    const t = i / NOSE_SEG;
+    const r = SHOULDER_R * Math.pow(Math.cos(t * (Math.PI / 2)), 1.4);
+    prof.push(new THREE.Vector2(Math.max(0.02, r), bodyTop + 0.04 + t * (apex - bodyTop - 0.04)));
+  }
+  const skinGeo = new THREE.LatheGeometry(prof, POD_SEG_BAY);
+  skinGeo.computeVertexNormals();
+  _disposables.push(skinGeo);
+  pod.add(new THREE.Mesh(skinGeo, _bayPodSkin));
+  // charred heat-shield foot cap (a dark end-cap peeking under the flare)
+  const foot = _cyl(BAY_POD_R * 0.9, BAY_POD_R * 0.9, BAY_POD_BASE_H * 0.5, POD_SEG_BAY, _channel);
+  foot.position.y = BAY_POD_BASE_H * 0.25;
+  pod.add(foot);
+
+  // (2) RIVETED LATITUDE BANDS (the "riveted aluminium capsule" read) — proud channel hoops with
+  //     rivet studs, matching the exterior/interior banding idiom.
+  const bandYs = [baseTop + 0.05, baseTop + BAY_POD_BODY_H * 0.4, baseTop + BAY_POD_BODY_H * 0.8, bodyTop - 0.02];
+  for (const by of bandYs) {
+    const band = _cyl(BAY_POD_R + 0.03, BAY_POD_R + 0.03, 0.12, POD_SEG_BAY, _band);
+    band.position.y = by;
+    pod.add(band);
+    for (let i = 0; i < 20; i++) {
+      const a = (i / 20) * Math.PI * 2;
+      const dir = new THREE.Vector3(Math.cos(a), 0, Math.sin(a));
+      pod.add(_stud(dir.x * (BAY_POD_R + 0.04), by, dir.z * (BAY_POD_R + 0.04), dir, _rivet, 0.016));
+    }
+  }
+  // a couple of vertical seam battens on the back (aft) arc so the barrel isn't a smooth drum
+  for (const a of [Math.PI, Math.PI * 0.75, Math.PI * 1.25]) {
+    const dir = new THREE.Vector3(Math.cos(a), 0, Math.sin(a));
+    const batten = _box(0.06, BAY_POD_BODY_H - 0.2, 0.05, _steel);
+    batten.position.set(dir.x * (BAY_POD_R + 0.02), baseTop + BAY_POD_BODY_H / 2, dir.z * (BAY_POD_R + 0.02));
+    batten.rotation.y = -a;
+    pod.add(batten);
+  }
+
+  // (3) THE OPEN HATCH (faces +X toward the corridor) — a real aperture in the +X body arc with a
+  //     channel-steel frame, a warm-lit cabin INTERIOR peek behind it, and the swung-open door.
+  const hCY = 1.28, hW = 0.98, hH = 1.6;      // hatch centre/size (a climb-through door)
+  const hazHalf = (hW / 2) / BAY_POD_R + 0.02;   // azimuth half-extent of the opening on the body
+  // a recessed interior BOX behind the opening (the cabin void) with WARM-LIT walls so the interior
+  //   reads clearly LIT (the cabin the player is about to climb into — the "hatch open, cabin
+  //   visible" requirement). The glow material is unlit warm so it reads bright regardless of the
+  //   bay lamps. Set inboard of the +X wall so there's real depth behind the aperture.
+  const cabinBack = _box(0.14, hH + 0.2, hW + 0.3, _bayCabinGlow);
+  cabinBack.position.set(BAY_POD_R - 0.95, hCY, 0);   // the back wall of the peek (warm-lit)
+  pod.add(cabinBack);
+  for (const sz of [-1, 1]) {   // side walls of the cabin peek (warm, angled slightly in)
+    const cw = _box(0.85, hH + 0.2, 0.14, _bayCabinGlow);
+    cw.position.set(BAY_POD_R - 0.5, hCY, sz * (hW / 2 + 0.05));
+    pod.add(cw);
+  }
+  const cabinFloor = _box(0.85, 0.12, hW + 0.2, _bayCabinGlow);
+  cabinFloor.position.set(BAY_POD_R - 0.5, hCY - hH / 2, 0);
+  pod.add(cabinFloor);
+  // a WARM POINT LIGHT inside the cabin peek so the interior + the aperture rim read genuinely lit
+  //   (a lamp glow spilling out the open hatch — the inviting "get in" read).
+  const cabLamp = new THREE.PointLight(0xffd29a, 1.4, 2.6, 2.2);
+  cabLamp.position.set(BAY_POD_R - 0.55, hCY + 0.2, 0);
+  pod.add(cabLamp);
+  // a hint of interior structure (a seat-back silhouette + a rivet hoop) so the peek isn't a flat
+  //   glow slab — dark forms catching the warm interior light, reading as the cabin's guts.
+  const innerSeat = _box(0.12, 0.72, 0.46, _channel);
+  innerSeat.position.set(BAY_POD_R - 0.72, hCY - 0.05, 0);
+  pod.add(innerSeat);
+  const innerHoop = _cyl(0.5, 0.5, 0.08, 16, _band);
+  innerHoop.rotation.z = Math.PI / 2;
+  innerHoop.position.set(BAY_POD_R - 0.9, hCY + 0.3, 0);
+  pod.add(innerHoop);
+  // the channel-steel HATCH FRAME ring around the +X opening (a recessed jamb → depth)
+  for (const [oy, oh, ow, oz] of [[hCY + hH / 2, 0.14, hW + 0.24, 0], [hCY - hH / 2, 0.14, hW + 0.24, 0]] as const) {
+    const bar = _box(0.16, oh, ow, _podFrameBay);
+    bar.position.set(BAY_POD_R + 0.02, oy, oz);
+    pod.add(bar);
+  }
+  for (const sz of [-1, 1]) {
+    const jamb = _box(0.16, hH + 0.24, 0.14, _podFrameBay);
+    jamb.position.set(BAY_POD_R + 0.02, hCY, sz * (hW / 2 + 0.05));
+    pod.add(jamb);
+  }
+  void hazHalf;
+  // THE SWUNG-OPEN DOOR — a bright aluminium plate hinged on the +Z jamb, swung ~100° outward into
+  //   the bay so it reads OPEN + inviting (the player enters here). A hinge stub + a latch wheel.
+  const doorPivot = new THREE.Group();
+  doorPivot.position.set(BAY_POD_R + 0.04, hCY, hW / 2 + 0.02);   // hinge at the +Z edge of the opening
+  pod.add(doorPivot);
+  const door = _box(0.08, hH, hW, _bayPodHatch);
+  door.position.set(0, 0, -hW / 2);   // extends from the hinge across the opening (local −Z)
+  doorPivot.add(door);
+  // rivets + a lock wheel on the door
+  for (let i = 0; i < 6; i++) {
+    doorPivot.add(_stud(0.05, -hH / 2 + 0.2 + i * (hH - 0.4) / 5, -0.08, new THREE.Vector3(1, 0, 0), _rivet, 0.018));
+  }
+  const wheel = _cyl(0.12, 0.12, 0.05, 12, _corrRail);
+  wheel.rotation.z = Math.PI / 2;
+  wheel.position.set(0.08, 0, -hW + 0.18);
+  doorPivot.add(wheel);
+  // swing it OPEN past 90° so the APERTURE + the lit cabin peek are CLEAR to the approaching player
+  //   (the door doesn't cover the opening), but angled INTO the bay (inviting), not flat on the hull.
+  doorPivot.rotation.y = -2.1;   // ~120° open — clearly ajar, aperture + lit cabin visible
+}
+const POD_SEG_BAY = 28;   // docked-pod lathe segments (matches POD_SEG)
+// dedicated hatch-frame steel for the docked pod (grimed dark channel, corridor idiom)
+const _podFrameBay = _metal(0x3a3f45, 0.5, 0.6, { flat: true, grime: true });
+
+/** R5c — the PHYSICAL EJECT release: shudder the docked pod in its cradle as the explosive bolts
+ *  fire (a decaying jitter on the bay pod group) + drop the bay/clamp lighting. `t` 0→1 over the
+ *  release. Called by tickShipExplode before the ship is disposed. Safe no-op if the bay isn't built. */
+export function releasePodFromBay(t: number): void {
+  if (!_bayGroup) return;
+  const k = Math.max(0, Math.min(1, t));
+  // a hard jitter that grows then the pod tears free (a violent shudder in the cradle)
+  const shudder = (1 - Math.abs(k - 0.5) * 2) * 0.06;   // peaks mid-release
+  const ph = k * 60;
+  _bayGroup.position.x = BAY_POD_X + Math.sin(ph * 1.7) * shudder;
+  _bayGroup.position.y = Math.sin(ph * 2.3) * shudder;
+  _bayGroup.rotation.z = Math.sin(ph * 1.3) * shudder * 0.5;
+  // the bay glow flares hot then everything's about to be disposed
+  if (_bayGlowLight) _bayGlowLight.intensity = 1.5 + k * 3.0;
+}
 
 // ── T3.4 — the engine-bay FIRE at the corridor dead-end (the disaster reveal). Additive
 //    emissive flame quads (the corridor is unlit greybox, so the fire is its own glow). Hidden
@@ -2560,6 +2906,8 @@ export function disposeShipScene(ctx: GameContext): void {
   _corrRedStripMats.length = 0;
   _corrRedLight = null;
   _corrRedLight2 = null;
+  _bayGroup = null;         // R5c — the docked-pod bay group (geometry freed via _disposables + traverse)
+  _bayGlowLight = null;     // R5c
   _shipAlertLevel = 0;
   // free the per-cockpit IBL + detach it from the persistent metal materials.
   _applyCockpitEnv(null);

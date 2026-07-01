@@ -39,6 +39,7 @@ import {
   buildShipScene, disposeShipScene, getShipSpawn,
   SHIP_CORRIDOR_ENTER_Z, SHIP_DEAD_END_Z,
   setCockpitAlert, setShipAlert, setEngineFire,
+  getPodBayThreshold, getPodBaySeatedEye, releasePodFromBay,   // R5c — the docked-pod bay + physical release
 } from './shipScene.ts';
 import { buildPodScene, disposePodScene, getPodSpawn, setDescentProgress, setDescentBase, setTumbleLight, setParachuteLeverPull, placeCrashedPodWreck, setCabinCrashPose, blowCabinHatch } from './podScene.ts';
 import { setGameHudHidden, showIntroPrompt, hideIntroPrompt, setIntroBlack } from './introHud.ts';
@@ -369,47 +370,153 @@ function tickCorridor(ctx: GameContext, dt: number): void {
   if (z < SHIP_CORRIDOR_ENTER_Z) advanceBeat(ctx);   // fled back to the bridge → enterPod
 }
 
-/** enterPod beat (T0.3a) — on entry, build the pod + seat the player inside it (mode
- *  seated) looking out the viewport, cue "pull the eject lever". Pulling it (E/click), or
- *  a fallback dwell (anti-softlock), → shipExplode. */
+/** R5c — enterPod is now a PHYSICAL entry, NO teleport. The player fled to the bridge end + the
+ *  DOCKED pod sits in its bay there (shipScene buildPodBay), hatch open. Phases:
+ *   • walkUp  — free-walk the last steps up to the open hatch (cue "Get in the escape pod").
+ *   • climbIn — a ~1.4s SCRIPTED continuous first-person move that carries the eye from the hatch
+ *               threshold INTO the pod seat (no blink/teleport — the whole point). Locomotion off.
+ *   • seal    — the hatch SEALS behind them (a thunk + a brief dim as the door closes over the eye);
+ *               under that dim we swap the bay-pod peek for the REAL ridden cabin (buildPodScene) +
+ *               seat the player, so the cabin they're now inside IS the one they ride down (R3a).
+ *   • cue     — "pull the eject lever". Pull (E/click) or the fallback dwell → shipExplode.
+ *  Anti-softlock: a fallback auto-advances walkUp→climbIn, and the eject fallback stays. */
+const ENTER_CLIMB_DUR = 1.4;      // seconds of the continuous climb-in move (hatch → seat)
+const ENTER_SEAL_DUR = 0.9;       // seconds the hatch seals over the eye (the swap happens here)
+const ENTER_WALK_FALLBACK = 6.0;  // auto-begin the climb-in if the player just stands at the mouth
+const ENTER_REACH_DIST = 1.5;     // how near the hatch threshold counts as "at the pod"
 function tickEnterPod(ctx: GameContext, dt: number): void {
   const intro = ctx.intro;
   if (!intro) return;
   if (!intro.scratch.init) {
-    ensureInPod(ctx);
-    faceControl(ctx, Math.PI / 2, -0.12);   // T1.3 — turn LEFT (−X) to the YELLOW eject control so the "pull the eject lever" cue points at the right control
-    showIntroPrompt('Pull the eject lever  [click]');
     intro.scratch.init = true;
-    intro.scratch.dwell = 0;
+    intro.scratch.phase = 'walkUp';
+    intro.scratch.t = 0;
+    intro.mode = 'walk';                 // free-walk the last steps up to the docked hatch
+    showIntroPrompt('Get in the escape pod');
   }
-  intro.scratch.dwell = (intro.scratch.dwell as number) + dt;
-  if (pulledLever(ctx) || (intro.scratch.dwell as number) > EJECT_FALLBACK) advanceBeat(ctx);   // → shipExplode
+  intro.scratch.t = (intro.scratch.t as number) + dt;
+  const phase = intro.scratch.phase as string;
+  const thr = getPodBayThreshold();      // world: just outside the open hatch, standing eye
+  const seat = getPodBaySeatedEye();     // world: inside the docked cabin, seated eye
+
+  if (phase === 'walkUp') {
+    // reached the open hatch? (planar distance from the threshold) — or the anti-softlock fallback.
+    const tr = ctx.player.body.body.translation();
+    const dx = tr.x - thr.x, dz = tr.z - thr.z;
+    const reached = (dx * dx + dz * dz) < ENTER_REACH_DIST * ENTER_REACH_DIST;
+    if (reached || (intro.scratch.t as number) > ENTER_WALK_FALLBACK) {
+      // capture the eye's CURRENT world pose as the climb-in start (seamless from wherever they are)
+      const st = ctx.three.camera.position;
+      intro.scratch.startX = st.x; intro.scratch.startY = st.y; intro.scratch.startZ = st.z;
+      intro.scratch.phase = 'climbIn';
+      intro.mode = 'scripted';           // locomotion off; the beat drives the eye
+      intro.scratch.t = 0;
+      showIntroPrompt('');
+    }
+    return;
+  }
+
+  if (phase === 'climbIn') {
+    // CONTINUOUS first-person carry: ease the eye from the captured start pose to the seated eye
+    //   inside the docked cabin. Position-drive the body + camera each frame (no snap-cut); a gentle
+    //   ease-in-out so it reads as climbing in + settling, not a lerp jerk. Look toward the seat.
+    const k = Math.min(1, (intro.scratch.t as number) / ENTER_CLIMB_DUR);
+    const e = k * k * (3 - 2 * k);       // smoothstep ease
+    const sx = intro.scratch.startX as number, sy = intro.scratch.startY as number, sz = intro.scratch.startZ as number;
+    const ex = sx + (seat.x - sx) * e, ey = sy + (seat.y - sy) * e, ez = sz + (seat.z - sz) * e;
+    // drive the body (eye rides body + eyeOffset) so gravity can't drift it, then pin the camera.
+    ctx.player.body.body.setTranslation({ x: ex, y: ey - ctx.player.eyeOffset, z: ez }, true);
+    ctx.player.velocityY = 0;
+    ctx.three.camera.position.set(ex, ey, ez);
+    // look INTO the pod (toward −X, the cabin interior) as we climb through the hatch, easing to
+    //   the forward viewport (−Z) read so we settle facing where the descent view will be.
+    ctx.three.camera.rotation.order = 'YXZ';
+    const yaw = -Math.PI / 2 + (Math.PI - (-Math.PI / 2)) * (e * 0.5);   // from facing −X (into hatch) toward −Z-ish
+    ctx.three.camera.rotation.set(-0.05, yaw, 0);
+    ctx.player.cameraSnapNextFrame = true;
+    if (k >= 1) {
+      intro.scratch.phase = 'seal';
+      intro.scratch.t = 0;
+      playDoorBlow();                    // the hatch THUNKS shut behind them (reuse the door SFX)
+      addTrauma(0.2);                    // a one-time clunk as it seals
+    }
+    return;
+  }
+
+  if (phase === 'seal') {
+    // the hatch seals over the eye — a brief black dim (the closing door occludes the view); UNDER
+    //   it we swap the bay-pod peek for the REAL ridden cabin + seat the player (R3a continuity: the
+    //   capsule they're now inside IS the one they ride down). The dim hides the model swap.
+    const k = Math.min(1, (intro.scratch.t as number) / ENTER_SEAL_DUR);
+    // a quick dip: dark in (0→0.5), then hold+lift as the cabin lights read (0.5→1).
+    const dim = k < 0.5 ? (k / 0.5) : Math.max(0, 1 - (k - 0.5) / 0.5);
+    setIntroBlack(dim * 0.9);
+    if (!intro.scratch.swapped && k >= 0.5) {
+      ensureInPod(ctx);                  // build the REAL ridden cabin (offset frame) + seat the player
+      faceControl(ctx, Math.PI / 2, -0.12);   // face the YELLOW eject control (the next cue points at it)
+      intro.scratch.swapped = true;
+    }
+    if (k >= 1) {
+      setIntroBlack(0);
+      intro.scratch.phase = 'cue';
+      intro.scratch.t = 0;
+      intro.mode = 'seated';
+      showIntroPrompt('Pull the eject lever  [click]');
+    }
+    return;
+  }
+
+  // phase 'cue' — seated in the sealed pod; pull the eject lever (or the anti-softlock fallback).
+  if (pulledLever(ctx) || (intro.scratch.t as number) > EJECT_FALLBACK) advanceBeat(ctx);   // → shipExplode
 }
 
 /** shipExplode beat (T0.3a) — eject fires: the ship dies in a blast (a flash + the cabin briefly
  *  lit by the explosion), then the pod settles UPRIGHT into the slow, serene descent. C18 (user
  *  walk-test): NO tumble — the pod stays upright + level, facing the window; you just watch the
  *  world come up to meet you. (The hero ship explosion staged through this frame = Phase 3.) */
+const EJECT_RELEASE_DUR = 0.7;   // R5c — seconds of the physical detach (bolts fire + the pod tears from the bay cradle) before the blast
 function tickShipExplode(ctx: GameContext, dt: number): void {
   const intro = ctx.intro;
   if (!intro) return;
   if (!intro.scratch.init) {
-    flashScreen(0xffe6c0, 0.85);    // the blast flash (the ship dies)
-    playEjectThunk();                // T5.1 — the eject fires
-    playExplosionBoom();             // T5.1 — the ship explodes
-    stopCockpitHum();                // T5.1b — the ship's hum dies with it
-    disposeShipScene(ctx);           // the ship is gone after the blast (greybox; hero ship = Phase 3)
-    showIntroPrompt('');
-    setDescentProgress(0);           // the orbital vista (planet + stars) through the window
+    // ── PHASE A: the PHYSICAL RELEASE (R5c). The explosive bolts fire + the docked pod TEARS FREE
+    //    of its bay cradle — the ship is still here for this beat so the detach reads (a shudder on
+    //    the docked pod + the clamps releasing). The player, sealed in the cabin, FEELS it (a rising
+    //    shudder + the bay glow flaring). Then PHASE B (the blast) disposes the ship + hands to the fall.
+    playEjectThunk();                // T5.1 — the eject bolts fire
     faceControl(ctx, 0, 0);          // upright, facing the window (−Z) — the pod stays LEVEL (no tumble)
-    addTrauma(0.1);                  // a tiny ONE-TIME nudge at the blast (one-shot, decays — not per-frame, so it can't saturate)
-    intro.mode = 'seated';           // calm seated FP, free-look (no scripted tumble)
+    intro.mode = 'seated';
     intro.scratch.init = true;
+    intro.scratch.phase = 'release';
     intro.scratch.dwell = 0;
+    intro.scratch.blasted = false;
   }
   intro.scratch.dwell = (intro.scratch.dwell as number) + dt;
   const d = intro.scratch.dwell as number;
-  // A brief warm blast-glow lighting the cabin from the explosion, fading — the pod stays UPRIGHT.
+
+  if (intro.scratch.phase === 'release') {
+    // the pod shudders + tears from the cradle (drives the bay-pod detach in shipScene) + a rising
+    //   felt shudder in the sealed cabin. Trauma is ONE-SHOT per step-up so it can't saturate/spin.
+    const rk = Math.min(1, d / EJECT_RELEASE_DUR);
+    releasePodFromBay(rk);           // the physical detach in the bay (bolts fire, cradle releases, pod tears free)
+    setTumbleLight(0.4 + rk * 0.3);  // the bay/blast glow rising into the cabin
+    if (rk >= 1) {
+      // ── PHASE B: the BLAST — the ship dies + the pod is clear; hand to the calm fall.
+      flashScreen(0xffe6c0, 0.9);    // the blast flash (the ship dies as the pod clears)
+      playExplosionBoom();           // T5.1 — the ship explodes
+      stopCockpitHum();              // T5.1b — the ship's hum dies with it
+      disposeShipScene(ctx);         // the ship (+ the emptied bay) is gone after the blast
+      showIntroPrompt('');
+      setDescentProgress(0);         // the orbital vista (planet + stars) through the window
+      addTrauma(0.35);               // a ONE-TIME concussive kick at the blast as the pod is flung clear (one-shot, decays)
+      intro.scratch.phase = 'settle';
+      intro.scratch.dwell = 0;
+    }
+    return;
+  }
+
+  // PHASE B tail — a brief warm blast-glow lighting the cabin from the explosion, fading — the pod
+  //   stays UPRIGHT + settles into the descent (C18: no tumble).
   const glow = Math.max(0, 1 - d / 1.4);    // the blast light decays over ~1.4s to the orbital cool
   setTumbleLight(glow * 0.7);
   if (d > SHIP_EXPLODE_DWELL) advanceBeat(ctx);   // → the slow descent (the calm fall)

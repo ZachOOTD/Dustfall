@@ -2085,6 +2085,69 @@ const SCENARIOS = {
     console.log(`[corridor] ${JSON.stringify(meas)} → scen-${tag}.png`);
   },
 
+  // Pod-bay (R5c): the DOCKED escape pod in its bay at the bridge end — what the fleeing player
+  // runs toward + physically enters (no teleport). Builds the ship (bay + docked pod), then shoots
+  // the REAL in-corridor view. --angle: flee (down the corridor at the bay, the flee approach)
+  //   [default] · hatch (close at the open hatch — cabin peek + the swung door) · wide (a framing
+  //   3/4 of the bay alcove). --calm shoots pre-disaster lighting (default calm; --disaster for red).
+  'pod-bay': async (page) => {
+    const angle = argv.angle || 'flee';
+    await page.evaluate(() => {
+      const g = window.__game;
+      const ctx = g.ctx;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      try { ctx.weather.intensity = 0; ctx.weather.cloudiness = 0; } catch {}
+      g.startIntro();
+      g.jumpToBeat('cockpit');   // builds the ship (incl. the pod-bay + docked pod)
+    });
+    await page.waitForTimeout(700);
+    const disaster = !!argv.disaster;
+    const meas = await page.evaluate(({ angle, disaster }) => {
+      const g = window.__game;
+      const ctx = g.ctx;
+      if (disaster) { try { g.setEngineFire(1, 2.1); g.setShipAlert(2, 0.9); g.setCockpitAlert(2); } catch {} }
+      ctx.flags.paused = true;
+      ctx.three.renderer.setSize(1100, 760, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1100 / 760; cam.updateProjectionMatrix(); }
+      const tr = ctx.player.body.body.translation();
+      const floorY = tr.y - (ctx.player.body.halfHeight + ctx.player.body.radius);   // ship floor world-y
+      const V = cam.position.constructor;
+      // Bay is at local z≈4.8 on the −X wall; docked pod centre x≈SHIP_ORIGIN.x - (COR_HW+BAY_RECESS*0.52).
+      const bayZ = tr.z + 4.8;            // world z of the bay centre (tr.z is SHIP_ORIGIN.z at spawn)
+      const podX = tr.x - (1.0 + 2.9 * 0.52);   // world x of the docked pod centre (≈ tr.x - 2.5)
+      const hatchX = tr.x - 1.0 + 0.2;   // just corridor-side of the open hatch
+      void hatchX;
+      let eye, look;
+      if (angle === 'hatch') {
+        // close at the open hatch, looking −X straight into the aperture + the lit cabin peek
+        eye = new V(tr.x + 0.2, floorY + 1.4, bayZ + 0.5);
+        look = new V(podX + 0.8, floorY + 1.28, bayZ - 0.05);
+      } else if (angle === 'wide') {
+        // a 3/4 framing from down the corridor, angled INTO the bay (the pod is the subject)
+        eye = new V(tr.x + 0.3, floorY + 1.65, bayZ + 3.2);
+        look = new V(podX + 0.5, floorY + 1.2, bayZ);
+      } else {
+        // flee: standing at the +X wall, level with the bay, looking across the corridor INTO the
+        //   alcove — frames the whole docked pod + its open hatch (the run-past-and-see-the-pod read)
+        eye = new V(tr.x + 0.85, floorY + 1.62, bayZ + 2.2);
+        look = new V(podX + 0.7, floorY + 1.25, bayZ - 0.1);
+      }
+      cam.position.copy(eye);
+      cam.lookAt(look);
+      cam.updateMatrixWorld(true);
+      const bay = ctx.three.scene.getObjectByName('escapePodBay');
+      let meshes = 0; if (bay) bay.traverse((o) => { if (o.isMesh) meshes++; });
+      return { found: !!bay, meshes, eye: [+eye.x.toFixed(2), +eye.y.toFixed(2), +eye.z.toFixed(2)] };
+    }, { angle, disaster });
+    await page.waitForTimeout(300);
+    const tag = `pod-bay-${angle}${disaster ? '-red' : ''}`;
+    await page.screenshot({ path: join(OUT, `scen-${tag}.png`), fullPage: false });
+    console.log(`[pod-bay] ${JSON.stringify(meas)} → scen-${tag}.png`);
+  },
+
   // Wake interior (T4.1): the REAL first-person view as you COME TO inside the crashed pod in
   // the desert, looking out the ajar hatch (the C18 wake-inside read). Drives the intro to the
   // wake beat (which builds the wake interior + seats the player at the desert spawn), lets the
