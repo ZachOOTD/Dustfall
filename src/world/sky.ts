@@ -62,9 +62,9 @@ let _spacePlanet: SpacePlanet | null = null;
 let _spaceScene: THREE.Scene | null = null;  // remembered so we can lazily attach the planet
 // A fixed WORLD direction for the orbit planet (off to one side + below the
 // forward sightline so it reads "below you" out the window). Normalized below.
-const _SPACE_PLANET_DIR = new THREE.Vector3(0.24, -0.04, -1).normalize();
-const _SPACE_PLANET_DISTANCE = 380;        // < SKY_SPHERE_RADIUS (480): sits inside the dome, in front of the stars
-const _SPACE_PLANET_RADIUS = 82;           // a large distant world framed IN the window (ang. radius ~12°)
+const _SPACE_PLANET_DIR = new THREE.Vector3(0.30, 0.10, -1).normalize();
+const _SPACE_PLANET_DISTANCE = 400;        // < SKY_SPHERE_RADIUS (480): sits inside the dome, in front of the stars
+const _SPACE_PLANET_RADIUS = 66;           // a distant world framed IN the window (ang. radius ~9.5°, diam ~19°) — big enough to read as a real world with its curved limb + terminator, small enough that STARS + the atmosphere limb fill the void around it (the orbit vista), not a wall of surface
 // Fixed orbit sun-light dir (side-on so the terminator curves across the crown).
 const _SPACE_LIGHT = new THREE.Vector3(-0.78, 0.40, 0.30).normalize();
 // Near-black space dome colors (the cloud-free orbit void).
@@ -333,7 +333,7 @@ const SPACE_ATMO_FS = /* glsl */ `
     vec3 warm  = vec3(0.95, 0.46, 0.20);
     vec3 tint = mix(warm, white, smoothstep(0.0, 0.30, k));
     tint = mix(tint, blue, smoothstep(0.16, 0.50, k));
-    float glow = fres * day * 0.46;
+    float glow = fres * day * 0.62;   // R5b — lift the limb glow so the atmosphere edge reads as a gorgeous glowing rim in the cockpit vista
     float twilight = smoothstep(-0.55, -0.20, vNdl) * (1.0 - day) * core;
     vec3 col = tint * glow + vec3(0.18, 0.30, 0.55) * twilight * 0.5;
     float alpha = (glow + twilight * 0.5) * uOpacity;
@@ -1120,7 +1120,7 @@ function applySpaceMode(cam: THREE.Vector3): void {
   // lift the per-star gain so the field reads richly against the black orbit void.
   const starsU = bundle.starsMat.uniforms;
   starsU.uOpacity.value = Math.max(starsU.uOpacity.value, s);
-  starsU.uBrightness.value = THREE.MathUtils.lerp(Tuning.STAR_BRIGHTNESS, 2.45, s);
+  starsU.uBrightness.value = THREE.MathUtils.lerp(Tuning.STAR_BRIGHTNESS, 3.0, s);   // R5b — richer starfield in orbit (was 2.45) so the void reads as a deep field, not a few faint specks
   // R2 — drive the milky-way band lift by space01 (0 normal sky → 1 luminous river).
   starsU.uSpace.value = s;
 
@@ -1133,5 +1133,26 @@ function applySpaceMode(cam: THREE.Vector3): void {
     _spacePlanet.group.position.copy(_spacePlanetPos);
     _spacePlanet.planetMat.uniforms.uOpacity.value = s;
     _spacePlanet.atmoMat.uniforms.uOpacity.value = s;
+  }
+
+  // ── VACUUM: kill the desert survival FOG + darken the scene BACKGROUND in orbit.
+  // The bug this fixes: the game's FogExp2 (a warm desert color ~#e2b582 @ dens 1.8e-3, tuned for
+  // ground-level haze) fogs the near-black space dome toward TAN at the dome's large radius — so the
+  // cockpit windscreen read as a flat "tan wall", NOT space + stars + planet. updateWeather resets
+  // fog every frame BEFORE updateSky, so overriding it here sticks. We THIN the density toward ~0
+  // (near-vacuum: the black dome + stars + planet all read crisply through the window) and lerp the
+  // fog/background COLOR toward the space void, scaled by the orbit blend so re-entry eases back to
+  // the desert haze cleanly. The descent beat further tunes fog for the fall (compatible — it runs
+  // later in the tick); at space01→0 this branch is skipped and weather's desert fog is untouched.
+  if (_spaceScene) {
+    const fog = _spaceScene.fog as THREE.FogExp2 | null;
+    if (fog && (fog as { density?: number }).density !== undefined) {
+      const desertDens = fog.density;
+      // ease density: full desert at s=0 → ~vacuum (2e-5) at s=1 (a whisper so distant stars/planet stay crisp)
+      fog.density = THREE.MathUtils.lerp(desertDens, 0.00002, s);
+      if (fog.color) fog.color.lerp(_SPACE_HORIZON, s);   // fog tint → the black void so any residual haze is space-dark, not tan
+    }
+    const bg = _spaceScene.background as THREE.Color | null;
+    if (bg && (bg as THREE.Color).isColor) bg.lerp(_SPACE_TOP, s);   // the clear/background color → space-black (no tan showing anywhere)
   }
 }

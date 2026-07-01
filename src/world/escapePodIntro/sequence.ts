@@ -304,6 +304,13 @@ function tickCockpit(ctx: GameContext, dt: number): void {
     startCockpitHum();                          // T5.1b — the calm in-orbit ambient bed (until eject)
     setSkyIntroMode(1);                         // R1a — the REAL sky in space mode (wrapping stars + planet through the window)
     setIntroAtmosphereHidden(ctx, true);        // R1a — no desert dust floating in orbit
+    // OPENING VISTA FRAMING (R5b): the seated pilot opens looking OUT at the orbit — not dead-level
+    // −Z (which put the planet low + half-behind the console), but a hair RIGHT + UP so the planet's
+    // curved disc sits in the clear upper-right pane with the black + the starfield filling the
+    // window around it (a "we're in orbit above a world" read, not "a wall behind the glass"). The
+    // planet sits at world dir (0.30,0.10,−1); this look lands it framed. Free-look stays active —
+    // this only sets the INITIAL gaze. (yaw − = look right toward +X; pitch + = look up.)
+    faceControl(ctx, -0.09, -0.03);
     intro.mode = 'seated';                      // open seated, looking at the planet
     intro.scratch.shipBuilt = true;
     intro.scratch.dwell = 0;

@@ -1741,6 +1741,9 @@ const SCENARIOS = {
       if (descent !== null) {
         const fog = ctx.three.scene.fog;
         if (fog && 'density' in fog) fog.density = 0.00006 + 0.00006 * descent;
+        // Mirror tickDescent's SKY blend: space (1) high → dawn desert (0) as the pod drops. Without
+        // this the rig's descent shows the normal daytime sky (a tan fog wall), not the orbit vista.
+        try { g.setSkyIntroMode(1 - Math.min(1, Math.max(0, (descent - 0.05) / 0.4))); } catch {}
       }
       const cam = ctx.three.camera;
       const V = cam.position.constructor;
@@ -1796,6 +1799,57 @@ const SCENARIOS = {
         podY, altAboveSpawn, spawn: rp ? [+rp.x.toFixed(1), +rp.y.toFixed(1), +rp.z.toFixed(1)] : null,
       };
     }, { angle, pull, snap, descent });
+    // RE-ANCHOR the camera-relative space planet + star field + sky dome to the posed camera, and
+    // apply the space-mode fog/background darkening — all of which updateSky does per-frame but we
+    // paused before it could run at the pod's high-altitude camera. Without this the porthole shows
+    // the stale desert-fog/background TAN (the same bug the cockpit had), not the real orbit vista.
+    await page.evaluate((descent) => {
+      const ctx = window.__game.ctx;
+      const cam = ctx.three.camera; cam.updateMatrixWorld(true);
+      const V = cam.position.constructor;
+      const s = (ctx.three.scene);
+      if (descent === null) return;
+      // The space blend for this altitude (mirrors tickDescent): full space high → dawn desert low.
+      const space01 = 1 - Math.min(1, Math.max(0, (descent - 0.05) / 0.4));
+      if (space01 <= 0.01) return;   // low in the fall the sky has crossed to the dawn desert — leave it
+      let dome = null, stars = null, planetGroup = null;
+      s.traverse((o) => {
+        if (o.isMesh && o.material && o.material.uniforms && o.material.uniforms.uTopColor) dome = o;
+        if (o.isPoints && o.renderOrder === -0.5) stars = o;
+        if (o.isMesh && o.renderOrder === -0.4 && o.parent) planetGroup = o.parent;
+      });
+      // Manually APPLY the space-mode uniforms + anchor (applySpaceMode runs in updateSky, which is
+      // gated by the pause — so at a paused descent frame the dome is still the daytime sky). Set the
+      // dome black + kill clouds + lift stars, matching applySpaceMode, scaled by space01.
+      if (dome) {
+        const u = dome.material.uniforms; const C = u.uTopColor.value.constructor;
+        u.uTopColor.value.lerp(new C(0x01020a), space01);
+        u.uHorizonColor.value.lerp(new C(0x03050f), space01);
+        if (u.uSpace) u.uSpace.value = space01;
+        if (u.uCloudiness) u.uCloudiness.value *= (1 - space01);
+        if (u.uSunGlow) u.uSunGlow.value *= (1 - space01 * 0.9);
+        dome.position.copy(cam.position); dome.updateMatrixWorld(true);
+      }
+      if (stars) {
+        const u = stars.material.uniforms;
+        if (u.uOpacity) u.uOpacity.value = Math.max(u.uOpacity.value, space01);
+        if (u.uBrightness) u.uBrightness.value = 3.0 * space01 + u.uBrightness.value * (1 - space01);
+        if (u.uSpace) u.uSpace.value = space01;
+        stars.position.copy(cam.position); stars.updateMatrixWorld(true);
+      }
+      const dir = new V(0.30, 0.10, -1).normalize();
+      const DIST = 400;
+      if (planetGroup) {
+        planetGroup.position.set(cam.position.x + dir.x*DIST, cam.position.y + dir.y*DIST, cam.position.z + dir.z*DIST);
+        planetGroup.updateMatrixWorld(true);
+        planetGroup.traverse((o) => { if (o.material && o.material.uniforms && o.material.uniforms.uOpacity) o.material.uniforms.uOpacity.value = space01; });
+      }
+      // darken the background + thin/space-tint the fog (mirrors applySpaceMode) so no tan shows.
+      const bg = s.background;
+      if (bg && bg.isColor) { const C = bg.constructor; bg.lerp(new C(0x01020a), space01); }
+      const fog = s.fog;
+      if (fog && fog.density !== undefined) { fog.density = fog.density * (1 - space01) + 0.00002 * space01; if (fog.color) { const C = fog.color.constructor; fog.color.lerp(new C(0x03050f), space01); } }
+    }, descent);
     await page.waitForTimeout(300);
     const dtag = descent !== null ? `-d${String(descent).replace('.', '')}` : '';
     const tag = `pod-interior-${angle}${dtag}${pull > 0 ? '-pull' + pull : ''}${snap ? '-snap' : ''}`;
@@ -1928,8 +1982,16 @@ const SCENARIOS = {
     const alert = argv.alert !== undefined ? Number(argv.alert) : 0;
     const space = argv.space !== undefined ? Number(argv.space === true ? 1 : argv.space) : 0; // REBUILD v2 R1a — --space[=0..1] drives the orbit sky
     const hideStars = !!argv.hidestars;
-    await page.evaluate(({ space, hideStars }) => {
+    const noPlanet = !!argv.noplanet;
+    const noGlass = !!argv.noglass;
+    const noDome = !!argv.nodome;
+    const noHull = !!argv.nohull;
+    await page.evaluate(({ space, hideStars, noPlanet, noGlass, noDome, noHull }) => {
       window.__RIG_HIDESTARS = hideStars;
+      window.__RIG_NOPLANET = noPlanet;
+      window.__RIG_NOGLASS = noGlass;
+      window.__RIG_NODOME = noDome;
+      window.__RIG_NOHULL = noHull;
       const g = window.__game;
       const ctx = g.ctx;
       // First-person seated read; hide the rig so it doesn't block the FP camera.
@@ -1957,7 +2019,7 @@ const SCENARIOS = {
       ctx.three.renderer.setSize(1100, 760, false);
       const cam = ctx.three.camera;
       if (cam.isPerspectiveCamera) { cam.aspect = 1100 / 760; cam.updateProjectionMatrix(); }
-    }, { space, hideStars });
+    }, { space, hideStars, noPlanet, noGlass, noDome, noHull });
     // Let the beat controller tick (page RAF) so the ship builds + the player seats.
     await page.waitForTimeout(700);
     const meas = await page.evaluate(({ angle, stand, alert }) => {
@@ -1968,6 +2030,31 @@ const SCENARIOS = {
       // real star sphere (set the env via argv passthrough below).
       if (window.__RIG_HIDESTARS) {
         ctx.three.scene.traverse((o) => { if (o.isPoints && o.renderOrder === -0.5) o.visible = false; });
+      }
+      if (window.__RIG_NOPLANET) { ctx.three.scene.traverse((o)=>{ if(o.isMesh && (o.renderOrder===-0.4||o.renderOrder===-0.39)) o.visible=false; }); }
+      // --noglass: hide the windscreen glass + smudge + streak overlays (transparent meshes near the
+      // -Z window plane) to see the RAW background behind the window.
+      if (window.__RIG_NOGLASS) {
+        const ship = ctx.three.scene.getObjectByName('escapePodShipCockpit');
+        if (ship) ship.traverse((o) => {
+          if (o.isMesh && o.material && o.material.transparent && o.position.z < -1.8) o.visible = false;
+        });
+      }
+      // --nodome: hide the sky dome sphere (the big uTopColor mesh) so we can tell if the tan is the sky.
+      if (window.__RIG_NODOME) {
+        ctx.three.scene.traverse((o) => { if (o.isMesh && o.material && o.material.uniforms && o.material.uniforms.uTopColor) o.visible = false; });
+      }
+      // --nohull: hide every ship mesh FORWARD of the eye (world z<2998.7) to strip whatever fills the window.
+      if (window.__RIG_NOHULL) {
+        const ship = ctx.three.scene.getObjectByName('escapePodShipCockpit');
+        const hidden = {};
+        if (ship) ship.traverse((o) => {
+          if (o.isMesh && o.visible) {
+            const wp = o.getWorldPosition(new (ctx.three.camera.position.constructor)());
+            if (wp.z < 2998.7) { o.visible = false; const k=(o.material&&o.material.name)||(o.geometry&&o.geometry.type)||'?'; hidden[k]=(hidden[k]||0)+1; }
+          }
+        });
+        console.error('[nohull] hid ' + JSON.stringify(hidden));
       }
       ctx.flags.paused = true;
       const cam = ctx.three.camera;
@@ -2004,24 +2091,59 @@ const SCENARIOS = {
       cam.position.copy(eye);
       // Look directions in the cockpit-local frame: −Z is forward (window), +Z is aft
       // (the corridor doorway), +X right, −X left.
-      let look;
-      if (angle === 'forward') look = new V(eye.x, eye.y + 0.06, eye.z - 1);          // out the window (slightly UP at the planet)
-      else if (angle === 'console') look = new V(eye.x, eye.y - 0.7, eye.z - 0.8);    // down-forward at the dash
-      else if (angle === 'door') look = new V(eye.x, eye.y - 0.05, eye.z + 1);        // turn aft to the corridor
-      else if (angle === 'left') look = new V(eye.x - 1, eye.y - 0.1, eye.z - 0.2);
-      else if (angle === 'right') look = new V(eye.x + 1, eye.y - 0.1, eye.z - 0.2);
-      else look = new V(eye.x, eye.y + 0.06, eye.z - 1);
-      cam.lookAt(look);
-      cam.updateMatrixWorld(true);
+      if (angle === 'forward') {
+        // Mirror the beat's OWN opening framing (tickCockpit faceControl(-0.09, -0.03)) via the SAME
+        // YXZ euler method — so this shot is the REAL in-game opening gaze, not a fabricated lookAt.
+        // rotation.set(pitch, yaw, 0) with YXZ; faceControl(yaw, pitch) → set(pitch, yaw, 0).
+        cam.rotation.order = 'YXZ';
+        cam.rotation.set(-0.03, -0.09, 0);
+        cam.updateMatrixWorld(true);
+      } else {
+        let look;
+        if (angle === 'console') look = new V(eye.x, eye.y - 0.7, eye.z - 0.8);    // down-forward at the dash
+        else if (angle === 'door') look = new V(eye.x, eye.y - 0.05, eye.z + 1);        // turn aft to the corridor
+        else if (angle === 'left') look = new V(eye.x - 1, eye.y - 0.1, eye.z - 0.2);
+        else if (angle === 'right') look = new V(eye.x + 1, eye.y - 0.1, eye.z - 0.2);
+        else look = new V(eye.x, eye.y + 0.06, eye.z - 1);
+        cam.lookAt(look);
+        cam.updateMatrixWorld(true);
+      }
       // Report: is the cockpit built? mesh count? eye height?
       const ship = ctx.three.scene.getObjectByName('escapePodShipCockpit');
       let meshes = 0;
       if (ship) ship.traverse((o) => { if (o.isMesh) meshes++; });
       return { found: !!ship, meshes, eye: [+eye.x.toFixed(2), +eye.y.toFixed(2), +eye.z.toFixed(2)], alert };
     }, { angle, stand, alert });
+    // RE-ANCHOR the camera-relative space planet to the NOW-POSED camera. The planet is
+    // anchored each frame in updateSky (cam + dir*distance); we paused before it could run
+    // at the ship-origin camera (y≈3000), so it was left stale 3000m below at y≈0 → NOT in
+    // the window. Mirror applySpaceMode's anchor here so the rig shows the REAL in-game
+    // frame (the planet where the seated pilot actually sees it out the windscreen).
+    await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      let group = null;
+      ctx.three.scene.traverse((o) => { if (o.isMesh && o.renderOrder === -0.4 && o.parent) group = o.parent; });
+      if (!group) return;
+      const cam = ctx.three.camera; cam.updateMatrixWorld(true);
+      const V = cam.position.constructor;
+      const dir = new V(0.30, 0.10, -1).normalize();
+      const DIST = 400;   // keep in sync with _SPACE_PLANET_DIR/_DISTANCE in sky.ts
+      group.position.set(cam.position.x + dir.x * DIST, cam.position.y + dir.y * DIST, cam.position.z + dir.z * DIST);
+      group.updateMatrixWorld(true);
+      // Re-anchor the star field + sky DOME to the posed camera too (updateSky does this each
+      // frame via .position.copy(cam), but we paused before it ran at the ship-origin camera →
+      // they'd be stuck at the world origin 3000m below, so the window showed no stars). Mirror it.
+      ctx.three.scene.traverse((o) => {
+        if (o.isPoints && o.renderOrder === -0.5) { o.position.copy(cam.position); o.updateMatrixWorld(true); }        // stars
+        if (o.isMesh && o.material && o.material.uniforms && o.material.uniforms.uTopColor) { o.position.copy(cam.position); o.updateMatrixWorld(true); }   // dome sphere
+      });
+    });
     await page.waitForTimeout(300);
     const tag = `cockpit-${angle}${stand ? '-stand' : ''}${alert > 0 ? '-a' + alert : ''}${space > 0 ? '-space' + (space === 1 ? '' : space) : ''}${hideStars ? '-nostars' : ''}`;
-    await page.screenshot({ path: join(OUT, `scen-${tag}.png`), fullPage: false });
+    // Clip to the canvas rect + disable animations + generous timeout: the full-page
+    // font/compositor wait can stall on the space-mode ship scene (the cockpit build);
+    // a clipped grab of just the WebGL canvas snapshots reliably.
+    await page.screenshot({ path: join(OUT, `scen-${tag}.png`), fullPage: false, clip: { x: 0, y: 0, width: 1100, height: 760 }, animations: 'disabled', timeout: 60000 });
     console.log(`[cockpit] ${JSON.stringify(meas)} → scen-${tag}.png`);
   },
 
