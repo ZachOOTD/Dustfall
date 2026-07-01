@@ -53,7 +53,9 @@ import {
   playReentryRumble, playLeverClick, playLeverSnap, playDoorBlow, playCrashImpact,
   startCockpitHum, stopCockpitHum, startDescentRush, stopDescentRush, stopAllIntroLoops,
   startMusicEscape, stopMusicEscape, startMusicDescent, stopMusicDescent, startMusicDesert,
-} from '../../audio/audio.ts';   // T5.1 SFX + ambient loops · T5.2 music cues
+  startEngineFire, stopEngineFire, startDesertWind,
+  playBoltShear, playHatchSeal, playShipDeathRoar, playAweSwell,
+} from '../../audio/audio.ts';   // T5.1 SFX + ambient loops · T5.2 music cues · T5.3 gap-fill (fire/wind beds + bolt/seal/death-roar/awe one-shots)
 
 /** Seconds the cockpit opens SEATED (looking at the planet) before control + the cue. */
 const COCKPIT_DWELL = 3.0;
@@ -374,6 +376,7 @@ function tickCorridor(ctx: GameContext, dt: number): void {
       playExplosionBoom();          // T5.1 — the engine blast
       playHullGroan();             // T5.1 — the ship groans, dying
       playKlaxon();                // T5.1 — the red-alert alarm
+      startEngineFire();           // T5.3 — the crackling engine-bay BLAZE roars (a bed under the alarm; stopped on eject)
       startMusicEscape();          // T5.2 — the tense escape sting kicks in
       showIntroPrompt('🔥 ENGINE FIRE — GET TO THE ESCAPE POD!');
     }
@@ -457,6 +460,7 @@ function tickEnterPod(ctx: GameContext, dt: number): void {
       intro.scratch.phase = 'seal';
       intro.scratch.t = 0;
       playDoorBlow();                    // the hatch THUNKS shut behind them (reuse the door SFX)
+      playHatchSeal();                   // T5.3 — the pressure HISS + airtight pressurise under the clunk (the cabin seals)
       addTrauma(0.2);                    // a one-time clunk as it seals
     }
     return;
@@ -508,7 +512,8 @@ function tickShipExplode(ctx: GameContext, dt: number): void {
     // ── PHASE A: the PHYSICAL RELEASE (R5c). The explosive bolts fire + the docked pod TEARS FREE
     //    of its bay cradle — the interior ship is still here so the detach reads (a shudder + the
     //    clamps releasing). The player, sealed in the cabin, FEELS it (a rising shudder + bay glow).
-    playEjectThunk();                // T5.1 — the eject bolts fire
+    playBoltShear();                 // T5.3 — the explosive bolts SHEAR (a sharp bright crack + tearing metal), layered before the heave
+    playEjectThunk();                // T5.1 — the pneumatic eject heave under the shear (the pod fires clear)
     faceControl(ctx, 0, 0);          // upright, facing the window (−Z) — the pod stays LEVEL (no tumble)
     intro.mode = 'seated';
     intro.scratch.init = true;
@@ -533,6 +538,7 @@ function tickShipExplode(ctx: GameContext, dt: number): void {
       //    (planet + stars) through the window, and stage the HERO HAULER out in that view (−Z,
       //    offset to one side of the planet), INTACT, so the player sees what they just fled.
       stopCockpitHum();              // T5.1b — the ship's hum dies with it
+      stopEngineFire();              // T5.3 — the engine blaze is left behind with the ship (the pod is clear + sealed)
       disposeShipScene(ctx);         // the interior ship (+ the emptied bay) is gone — the exterior hauler is the NEW separate thing
       setDescentProgress(0);         // the orbital vista (planet + stars) through the window
       buildHaulerExterior(ctx);      // T3.1 — the worn freighter floats out in space ahead (−Z), about to die
@@ -568,6 +574,7 @@ function tickShipExplode(ctx: GameContext, dt: number): void {
     if (!intro.scratch.reFlash && te > 0.02) {
       flashScreen(0xfff0d8, 1.0);    // the blinding detonation flash (the ship dies)
       playExplosionBoom();           // T5.1 — the ship explodes (the concussive boom, felt through the hull)
+      playShipDeathRoar();           // T5.3 — the sustained roar + tearing-sub + debris-groan tail UNDER the boom (the ~2.3s spectacle lands sonically)
       addTrauma(0.5);                // a ONE-TIME concussive kick (one-shot — never per-frame, which would spin the view)
       intro.scratch.reFlash = true;
     }
@@ -839,6 +846,7 @@ function tickWake(ctx: GameContext, dt: number): void {
     blowCabinHatch(0);           // the cabin's own door sits ajar (the blast cracked it)
     seatPlayerAt(ctx, getPodSpawn(ctx));   // body at the seated spawn INSIDE the crashed cabin
     faceControl(ctx, CABIN_HATCH_YAW, -0.05);   // look at the cabin hatch (the dawn desert past it), slightly down (dazed)
+    startDesertWind();           // T5.3 — the dawn-desert WIND fades in as you come to (the quiet aftermath; persists into step-out, stopped at handoff)
     intro.mode = 'seated';       // dazed: free-look, can't move yet
     setIntroBlack(1);
     intro.scratch.t = 0;
@@ -915,6 +923,7 @@ function tickStepOut(ctx: GameContext, dt: number): void {
     //   cabin they just left is seamless.
     disposePodScene(ctx);
     placeCrashedPodWreck(ctx, rp.x, rp.z);
+    playAweSwell();                   // T5.3 — a low, wide awe-drone UNDER the music as the vista/horizon opens (the horizon-hook reveal)
     startMusicDesert();               // T5.2 — the gentle desert-easing cue (resolves into gameplay)
     showIntroPrompt('');
     intro.mode = 'walk';              // free to look around / step into the dawn
