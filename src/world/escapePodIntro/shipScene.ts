@@ -232,9 +232,19 @@ const _seam = _metal(0x4a4338, 0.04, 0.74, { flat: true });
 //   complaint — misattributed to the bolsters, actually the HARNESS). Pull the webbing DARKER + off
 //   the bright orange toward a muted worn oxblood-brown so even foreshortened + key-lit it reads as a
 //   dark strap, never a bright tan slab. Still clearly a harness (warm vs the cool hull) — just not neon.
+//   dark strap, never a bright tan slab. Still clearly a harness (warm vs the cool hull) — just not neon.
+//   R5a-r7 (harness READ, re-judged on the FAITHFUL frame): a first attempt added a self-lit floor to
+//   the WHOLE webbing so it'd read at dim orbit — but that re-lit the LAP straps (which foreshorten near
+//   the lens) straight back into the twin TAN WEDGES r6 killed. Reverted: the lap straps stay DARK; the
+//   "strapped-in" read now rides the raised SELF-LIT BUCKLE (below) as the single clear token, which is
+//   what the prior learning says (the buckle is the read, the near-lens straps are the wedge liability).
 const _strap = _metal(0x572d1a, 0.05, 0.88, { flat: true });
 // strap wear — a grimed darker band on the webbing (the harness isn't a clean flat strip).
 const _strapWorn = _metal(0x3a1f13, 0.05, 0.90, { flat: true });
+// R5a-r7 — the buckle FACEPLATE material: a brushed pewter with a self-lit floor so the chunky central
+//   buckle stays a legible bright plate under the dim orbit key (the _rivet lit-only plate went dark at
+//   orbit alongside the straps). Slightly warm so it reads as worn hardware catching a little cabin light.
+const _bucklePlate = _metal(0xa9adb2, 0.55, 0.46, { emissive: 0x2a2b2d, emissiveI: 0.85 });
 // Warm self-lit accents — unlit so they GLOW (points of life on the dash).
 const _ledGreen = new THREE.MeshBasicMaterial({ color: 0x66d877 });
 const _ledAmber = new THREE.MeshBasicMaterial({ color: 0xe09838 });
@@ -412,6 +422,7 @@ let _cockpitEnv: THREE.Texture | null = null;
 const _ENV_MATS = (): THREE.MeshStandardMaterial[] => [
   _shell, _band, _steel, _channel, _rivet, _deck, _ceil, _cable,
   _seat, _seatWorn, _seatBack, _seatArm, _seam, _strap, _strapWorn, _screenGlass, _winFrame, _glass,
+  _bucklePlate,
 ];
 // ── R5a MATERIAL-FEEL PASS — env intensity is the PRISTINE/SHINY tell. At 0.85 every big flat
 //    panel MIRRORED the bright planet → the "showroom sheen" the user + gate flagged. Cut hard:
@@ -420,7 +431,7 @@ const _ENV_MATS = (): THREE.MeshStandardMaterial[] => [
 //    0.08); small hardware (rivets) + the glass keep a bit more so worn studs + the canopy still
 //    catch a highlight (that reads as USED hardware, not showroom).
 const _LOW_ENV = new Set<THREE.Material>([_seat, _seatWorn, _seatBack, _seam, _strap, _strapWorn]);   // seat vinyls + harness webbing (R5a-r6: no scene catch → no tan blowout)
-const _MED_ENV = new Set<THREE.Material>([_rivet, _glass, _winFrame, _screenGlass]); // worn hardware/glass keep a small catch
+const _MED_ENV = new Set<THREE.Material>([_rivet, _glass, _winFrame, _screenGlass, _bucklePlate]); // worn hardware/glass keep a small catch
 const _NO_ENV = new Set<THREE.Material>([_seatArm]);   // R5a-r6: forward tan-wedge forms take ZERO env (no scene catch → can't warm to tan)
 function _applyCockpitEnv(env: THREE.Texture | null): void {
   for (const m of _ENV_MATS()) {
@@ -1370,7 +1381,16 @@ function buildPilotSeat(group: THREE.Group): void {
   // The central CHEST BUCKLE — dead-center, parked in the lower-center third of the forward frame.
   //   bkY=1.12, bkZ=-0.92 → ~0.45m ahead + ~0.23m below the eye → lands ~15-20% up from the bottom
   //   edge, centered. Palm-sized in frame.
-  const bkX = 0, bkY = 1.15, bkZ = -0.90;
+  // R5a-r7 (the recurring "does it read as strapped-in?" concern, re-judged on the FAITHFUL frame):
+  //   the debug-probe proved the buckle at y=1.15 projected at the very BOTTOM EDGE (half off-frame) of
+  //   the real seated forward gaze (eye y≈1.35, pitch −0.03 ≈ level) — so the "5-point center buckle"
+  //   the whole harness reads off was falling out of shot. RAISE it to y≈1.26 so it lands ~18% up from
+  //   the bottom, dead-center, with the shoulder-strap V converging INTO frame above it. Pull it a hair
+  //   CLOSER (−0.90→−0.86) so it's palm-sized + unmistakable in the lower-center third.
+  //   (r7: after the eye-facing fix the plate READS — but at bkY 1.34/bkZ −0.86 it ballooned to a wall
+  //   that occluded the planet vista. Settle at bkY 1.30 + push it back to bkZ −0.98 so it's palm-sized:
+  //   clearly a 5-point chest buckle low-center, with the window/vista reading OVER it.)
+  const bkX = 0, bkY = 1.30, bkZ = -0.98;
   for (const sx of [-1, 1]) {
     // OVER-SHOULDER strap: from high + outboard (shoulder height, behind the eye), descending
     //   down-forward-INWARD onto the buckle → a clear thick diagonal converging into the lower-center.
@@ -1400,15 +1420,20 @@ function buildPilotSeat(group: THREE.Group): void {
   const buckleBevel = _box(0.21, 0.05, 0.13, _band);   // a top bevel rim catching the cabin key
   buckleBevel.position.set(bkX, bkY + 0.085, bkZ);
   group.add(buckleBevel);
-  const bucklePlate = _box(0.155, 0.12, 0.04, _rivet);  // bright faceplate (catches light)
-  bucklePlate.position.set(bkX, bkY, bkZ - 0.07);
+  // R5a-r7 ROOT-CAUSE FIX — the faceplate + release tab + latches were on bkZ−0.07/−0.092, the −Z
+  //   (WINDOW-facing) side of the housing → they faced AWAY from the seated pilot, who looks toward
+  //   −Z and so saw only the dark _channel BACK of the buckle (dark-on-dark = the harness "vanished",
+  //   the recurring concern). Move them to the +Z (EYE-facing) face so the pilot actually sees the
+  //   bright brushed plate + the lit amber release, and the "5-point center buckle" reads.
+  const bucklePlate = _box(0.155, 0.12, 0.04, _bucklePlate);  // self-lit brushed faceplate — now EYE-facing
+  bucklePlate.position.set(bkX, bkY, bkZ + 0.07);
   group.add(bucklePlate);
   const buckleBtn = _box(0.085, 0.07, 0.03, _ledAmber); // a lit central release tab (a point of life)
-  buckleBtn.position.set(bkX, bkY, bkZ - 0.092);
+  buckleBtn.position.set(bkX, bkY, bkZ + 0.092);
   group.add(buckleBtn);
   for (const lx of [-1, 1]) {                            // two latch slots flanking the release tab
     const latch = _box(0.022, 0.05, 0.03, _channel);
-    latch.position.set(lx * 0.058, bkY, bkZ - 0.092);
+    latch.position.set(lx * 0.058, bkY, bkZ + 0.092);
     group.add(latch);
   }
 }

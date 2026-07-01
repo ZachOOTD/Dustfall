@@ -659,12 +659,19 @@ const FIREBALL_FS = /* glsl */ `
     vec2 p = (vUv - 0.5) * 2.0;              // -1..1
     float r = length(p);
     float ang = atan(p.y, p.x);
-    // Churn coordinate — the flame billows OUTWARD (mushroom/roil), scrolling. Sampled in a mix of
-    //   CARTESIAN (p) + polar so it isn't ruled radial streaks (round-3: pure angular sampling read
-    //   as regular rays). The cartesian octave breaks the radial banding into turbulent cells.
-    float roil = fbm(p*2.6 + vec2(uTime*0.4, -uTime*0.7));
-    float roil2 = fbm(vec2(ang*3.1 - uTime*0.8, r*4.2 - uTime*1.9) + roil*1.3);
-    float lump = roil*0.6 + roil2*0.5;
+    // Churn coordinate — the flame billows OUTWARD (mushroom/roil), scrolling. CARTESIAN-DOMINANT so
+    //   the ball reads as turbulent CELLS, not a radial sunburst. (round-3 already mixed in a polar
+    //   octave; the residual — flagged then left — was that the polar term fbm(ang,r) produces
+    //   features CONSTANT along radius = straight rays from the core. r7 breaks it three ways:)
+    //   (1) DOMAIN-WARP the cartesian field by itself -> swirling cellular churn (kills straight lines).
+    vec2 warp = vec2(fbm(p*2.1 + vec2(uTime*0.5, 1.3)), fbm(p*2.1 + vec2(-uTime*0.4, 7.1))) - 0.5;
+    float roil = fbm(p*2.6 + warp*1.6 + vec2(uTime*0.4, -uTime*0.7));
+    //   (2) the polar octave now RIDES the warped cartesian noise on BOTH axes (its angle is perturbed
+    //       by roil + a radius-coupled twist, and its radius axis runs FAST at r*7 so a feature cannot
+    //       persist across the whole radius) and (3) it is DAMPED in the mix — cartesian carries the read.
+    float angW = ang + (roil - 0.5) * 2.4 + r * 1.5;      // per-radius angular twist -> rays curve + shear apart
+    float roil2 = fbm(vec2(angW*2.2 - uTime*0.8, r*7.0 - uTime*1.9) + warp*1.2);
+    float lump = roil*0.74 + roil2*0.30;                  // cartesian-weighted (was 0.6/0.5) → cells, not rays
     // The fireball edge: a bloomed radius (uGrow) with a lumpy, turbulent boundary (not a smooth
     // disc). SOLID inside — a FILLED churning ball, densest at the core, feathering into billowing
     // tongues at the rim (NOT a hollow ring: the whole interior within the warped edge is opaque fire).
