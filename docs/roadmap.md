@@ -181,11 +181,18 @@ at each `### Milestone:` for the user's art-direction. The v1 logic/audio/stagin
     pass (user steering — the current metal reads "too pristine/shiny"; the pass was interrupted mid-flight); (b) the
     FP "strapped-in" seat read is a plateaued procedural nut (geometry's all there); (c) the planet frames the
     windscreen too large/flat at the cockpit beat (R2/sky framing).
-  - **▶ R5b — the CORRIDOR fully modelled/detailed** (UNBUILT — next after resume).
-  - **▶ R5c — the pod-bay + the physical ENTER/EJECT** (UNBUILT — folded from R3b; the pod docked in the ship the
-    player walks into + that detaches, no teleport).
-  [hero models — user art-direction]
-### Milestone: REBUILD R5 — ship interiors COMPLETE → FEATURE REWORK COMPLETE → USER final walk-test/listen → /campaign-approve
+  - **✅ R5b — the CORRIDOR fully modelled/detailed** (`49b4e08`): greybox tube → a lived-in freighter passage (rib
+    frames + deck plating + conduit/cable runs + access hatches + grab-rails + real can-lights, cockpit materials/grime
+    reused); the disaster staging drives real fire + red-alert lighting (not a flat wash). Colliders byte-identical.
+  - **✅ R5c — the pod-bay + the physical ENTER/EJECT** (`fb7cb6f`): the size-matched pod docked in a hazard-framed
+    airlock bay at the corridor's bridge end; `tickEnterPod` is now a physical walk-up → continuous scripted climb-in
+    → hatch-seal (NO teleport; R3a cabin swapped-in under the dim) → eject; `tickShipExplode` fires explosive-bolt
+    release before the blast → the R1b descent. Bay visual = greybox-plus (cost-scoped); motion/feel = walk-test.
+  [hero models — bay/cockpit look polish → user art-direction]
+### Milestone: REBUILD R5 — ship interiors COMPLETE ✅ → **REBUILD v2 FEATURE REWORK COMPLETE (2026-06-30/07-01 overnight)** → USER final walk-test/listen
+Remaining polish/residuals (NOT blockers — for the user's review + art-direction): the planet frames the cockpit-beat
+windscreen too large/flat (R2/sky framing — being addressed next); the FP seat-read (geometry done); the pod-bay + cockpit
+look polish; the walk-test-only feel items (climb-in curve, eject shudder, corridor strobe/fire, the beautiful-descent).
 
 ### Escape-pod intro — the phased build (v1, SUPERSEDED by REBUILD v2 above — historical) ([feature-escape-pod-intro.md](feature-escape-pod-intro.md))
 The loop builds these in order, pausing at each `### Milestone:` (phase boundary) for the user's walk-test.

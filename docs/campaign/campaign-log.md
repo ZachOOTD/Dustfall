@@ -389,3 +389,15 @@ The user walk-tested R1, approved it to continue, and reported 2 bugs (both fixe
 - **Verify:** tsc + verify:all + smoke `{ok:true,beats:12}`.
 - **Resume (see next-session-prompt):** finish the matte-material pass · the FP seat read (plateaued — may want the user's eye) · the planet-framing (R2) · then R5b (corridor) + R5c (pod-bay + enter/eject). Resume via `/campaign-approve` or steer.
 - **Cost note:** ~1.8M tokens (4 modeler rounds + 3 gates) — the adversarial gate earns its keep on hero visuals but is expensive; scope gate width to stakes.
+
+---
+
+## Cycle 32 — REBUILD v2 R5 FINISH → REBUILD v2 COMPLETE (overnight 2026-07-01)
+- **User:** "unpause + work through the night, lots of progress." Also flagged: Netlify usage limit reached (preview won't deploy — logged to backlog; the loop keeps committing+pushing, verifies via rig+gates).
+- **R5a-finish** (`65af5eb`): rugged/matte hull (user steering) + the 4-round seat "tan wedge" ROOT-CAUSED — it was the harness straps (bright orange, foreshortened near the eye), not the bolsters → dark oxblood + slimmed. The buckle now reads.
+- **R5b** (`49b4e08`): the corridor greybox tube → a fully-modelled freighter passage + real fire/red-alert disaster lighting. Colliders byte-identical.
+- **R5c** (`fb7cb6f`): the pod-bay + PHYSICAL enter/eject (no teleport) — dock → walk-up → scripted climb-in → seal → eject via explosive-bolt release → the R1b descent.
+- **→ REBUILD v2 (R1-R5) COMPLETE.** The whole real-world re-architecture the user directed (2026-06-30 morning) is built end-to-end.
+- **Cost discipline:** after R5a's ~1.8M (4 modeler rounds + 3 gates), scoped R5b/R5c to own-eyes + verify:all (walked-through/flow pieces), reserving the full adversarial gate for the hero opening frame.
+- **Verify:** verify:all PASS + smoke `{ok:true,beats:12}` each step.
+- **Next (this overnight):** the planet-framing residual (the cockpit-beat windscreen), then wrap for the user's full walk-test/review.
