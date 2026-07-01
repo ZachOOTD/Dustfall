@@ -2,6 +2,11 @@
 
 Detailed file map, footguns, FPS-debug path, and full session history. CLAUDE.md links here so the auto-loaded summary stays small. Read this on demand.
 
+> **Escape-pod intro** (the `FEATURES.escapePodIntro` opening — `src/world/escapePodIntro/`) has its own
+> as-built map: [architecture-escape-pod-intro.md](architecture-escape-pod-intro.md) — the beat machine +
+> contract, the scene modules, the ⚠ global STATE-RESTORE discipline (the recurring bug class), gating,
+> the dev hooks + rig scenarios, and the per-beat audio map.
+
 ## File map
 
 ```
