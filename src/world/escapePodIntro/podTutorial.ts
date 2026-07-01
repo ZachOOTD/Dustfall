@@ -49,16 +49,19 @@ export function podTutorialActive(): boolean {
  *  (scrap + cloth) in a loose ring around the pod so the player has what they need to
  *  craft the machete, then cues the craft. Idempotent-ish (a re-call restarts clean). */
 export function startPodTutorial(ctx: GameContext, podX: number, podZ: number): void {
-  // Guard against a double-start (would double-scatter materials): only (re)seed when we're
-  //   not already mid-tutorial. A genuine new-game replay reloads the page (fresh module state),
-  //   so this fires exactly once per playthrough; the guard just hardens the dev/smoke path.
-  const wasRunning = podTutorialActive();
+  // Guard against a double-scatter: only (re)seed when the tutorial has NEVER run this page load.
+  //   A genuine new-game replay reloads the page (fresh module state → _phase 'idle'), so this
+  //   fires exactly once per playthrough. NOTE: we key off `_phase !== 'idle'` (NOT
+  //   podTutorialActive(), which is false in the 'done' phase) — captured BEFORE the 'craft'
+  //   assignment below — so a same-page dev/smoke replay (which leaves _phase 'done') does NOT
+  //   re-scatter another 5 pickups on top of the lingering batch (the +5-per-replay leak).
+  const alreadySeeded = _phase !== 'idle';
   _phase = 'craft';
   _t = 0;
   _cuedSalvage = false;
   _podX = podX;
   _podZ = podZ;
-  if (!wasRunning) scatterMaterials(ctx, podX, podZ);
+  if (!alreadySeeded) scatterMaterials(ctx, podX, podZ);
   // The first cue: point the player at the scattered scrap + the crafting menu. One-shot
   //   (persisted so it doesn't re-nag on a resumed intro); resettable via __game.resetTutorial().
   maybeShowEventHint(ctx, 'intro_craft', 'Scrap litters the sand — press C to combine scrap + cloth into a machete');
