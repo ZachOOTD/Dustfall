@@ -19,6 +19,7 @@ import { createBiomeSampler } from './world/biomes.ts';
 import { placePOIs, getAnchorPOIPositions, getWreckYardCarcasses } from './world/poi.ts';
 import { placeProcgenPOIs } from './world/procgenPoi.ts';
 import { placeHeroLandmarks } from './world/heroLandmarks.ts';
+import { placeLeviathanLandmark } from './world/leviathanLandmark.ts';   // horizon-hook: the beached-leviathan wreck ~360m out on the intro reveal gaze
 import { placeWordlessScenes } from './world/wordlessScenes.ts';   // M5b (C32) — environmental-storytelling tableaux
 import { addHorizonSilhouettesByName } from './world/horizonSilhouettes.ts';   // M5a (C28) — registers tall wrecks as sun occluders (billboards removed ACBD)
 import { initSpyglass, updateSpyglass } from './player/spyglass.ts';   // M5a (C29) — hold-RMB spyglass zoom
@@ -220,6 +221,15 @@ placePOIs(three.scene, physics.world, terrain, scatterRand, pickupList, salvagea
 // read as navigation cues from across the map (FogExp2 blends the real models into the
 // sky past ~0.5km). The hero-landmark wrecks get theirs inline in placeHeroLandmarks.
 addHorizonSilhouettesByName(three.scene, ['megaShip', 'megaWreck', 'satelliteDish', 'crashedHull']);
+// Horizon-hook landmark (2026-07-01) — the BEACHED LEVIATHAN: a colossal broken
+// capital-ship wreck breaching the dunes ~360m out on the escape-pod-intro step-out
+// gaze, a bigger echo of the player's own crashed pod ("go there"). Hand-placed at a
+// fixed world position (deterministic), silhouette-only, additive.
+// SCOPE: gated behind FEATURES.escapePodIntro so it ships with the intro arc and does
+// NOT silently alter the live master desert world. It reads great as a permanent
+// normal-play nav monument too — if the user wants that, promote it to always-on by
+// dropping this guard (a one-line change).
+if (FEATURES.escapePodIntro) placeLeviathanLandmark(three.scene, physics.world, terrain);
 // ACAQ (Cycle 8) — the wreck-yard's ribcages join the ecology: vultures wheel over
 // the graveyard ("something died here" approach telegraph) + prey gathers at them.
 carcasses.push(...getWreckYardCarcasses());
