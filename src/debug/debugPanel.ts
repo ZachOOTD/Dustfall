@@ -76,8 +76,10 @@ interface DebugApi {
   /** Escape-pod R3a — blow the cabin escape hatch open (0=ajar, 1=flung wide). For the wake rig-shot. */
   blowCabinHatch: (t: number) => void;
   /** Escape-pod T4.3 — fire the comic chute-pop on the crashed pod (the failed chute finally
-   *  deploys). For the chute-pop rig-shot / manual payoff test (needs a crashed pod placed). */
-  popChute: () => void;
+   *  deploys). For the chute-pop rig-shot / manual payoff test (needs a crashed pod placed).
+   *  Optional `advanceSeconds` synchronously drives the inflate that many seconds (rig-shots
+   *  pause the loop, so pass ≥ the pop duration to freeze on the FULLY-inflated frame). */
+  popChute: (advanceSeconds?: number) => void;
   /** Escape-pod T4.3 — smoke the whole craft→salvage→chute-pop tutorial loop headlessly. */
   smokePodTutorial: () => ReturnType<typeof smokePodTutorial>;
   /** Escape-pod T3.1 — build the HERO cargo-hauler exterior in front of the pod (the
@@ -305,7 +307,7 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
     setParachuteLeverPull: (t, snapped) => { setPodChute(t, snapped); },
     setCabinCrashPose: (pose) => { setPodCrashPose(pose); },
     blowCabinHatch: (t) => { blowPodHatch(t); },
-    popChute: () => { popPodChute(); },
+    popChute: (advanceSeconds) => { popPodChute(advanceSeconds); },
     smokePodTutorial: () => smokePodTutorial(ctx),
     buildHauler: () => { buildHaulerExterior(ctx); },
     disposeHauler: () => { disposeHaulerExterior(ctx); },

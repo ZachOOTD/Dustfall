@@ -1629,7 +1629,10 @@ let crashedPodSalvageableId = -1;
 let chuteCanopy: THREE.Group | null = null;   // the folded→inflated canopy assembly (child of crashedWreck)
 let chutePopT = -1;                           // pop animation clock (seconds); <0 = not popped / not armed
 let chutePopArmed = false;                    // the canopy is built + ready to pop on the first salvage strike
-const CHUTE_POP_DUR = 1.15;                   // seconds of the inflate+settle one-shot
+const CHUTE_POP_DUR = 1.55;                   // seconds of the inflate+overshoot+saggy-settle one-shot
+const CHUTE_OVERSHOOT = 0.34;                 // how far the springy inflate punches PAST full (was ~0.12) — a big comic POOF
+const CHUTE_DROOP_LEAN = 0.11;                // rad — the gentle asymmetric lean the billow settles into ("useless" sag; too much tips it over BESIDE the pod)
+const CHUTE_DROOP_SAG = 0.14;                 // extra vertical squash the dome sags by as it deflates onto the wreck
 // Comic canopy material — faded orange-white ripstop (reads as a real chute; a bit worn).
 const _chuteCanopyMat = new THREE.MeshLambertMaterial({ color: 0xd8894a, flatShading: true, side: THREE.DoubleSide });
 const _chuteGoreMat = new THREE.MeshLambertMaterial({ color: 0xe8e2d4, flatShading: true, side: THREE.DoubleSide });   // the alternating pale gores
@@ -1673,35 +1676,51 @@ export function removeCrashedPodWreck(ctx: GameContext): void {
 function buildChuteCanopy(): THREE.Group {
   const grp = new THREE.Group();
   const apex = POD_BASE_H + POD_BODY_H + POD_NOSE_H;   // the pod crown height (local)
-  // ── the CANOPY DOME — a half-sphere of gores; alternate two materials so it reads as a
-  //    real segmented chute. A single sphere-cap per material (even/odd gores), low-poly.
-  const CANOPY_R = 2.3;
-  const GORES = 12;
+  // ── the CANOPY DOME — a big BILLOW of gores that dwarfs the little pod. The gag is
+  //    "this HUGE chute finally deployed, way too late" — so it reads big + worn + draped,
+  //    not a tidy tight balloon. A broad, slightly-SQUASHED dome (a settling chute puffs
+  //    WIDE, not tall), gored (alternating orange/pale ripstop), low-poly.
+  const CANOPY_R = 3.3;             // was 2.3 — a proper POOF that overwhelms the ~1.4m-radius pod
+  const SQUASH = 0.74;              // flatten the dome vertically → a wide billow, not a tall balloon
+  const GORES = 14;
+  const dome = new THREE.Group();   // the billowing canopy (droops as a unit in the settle)
   for (let g = 0; g < GORES; g++) {
     const a0 = (g / GORES) * Math.PI * 2;
-    const geo = new THREE.SphereGeometry(CANOPY_R, 3, 8, a0, (Math.PI * 2) / GORES, 0, Math.PI * 0.5);
+    // Sweep the cap a bit past the equator (to 0.58π) so the brim curves gently DOWN into
+    //   a draped skirt — but NOT so far it closes into an egg (a chute is an OPEN dome, the
+    //   shroud lines must read below it). A mushroom/dome, not a balloon.
+    const geo = new THREE.SphereGeometry(CANOPY_R, 4, 10, a0, (Math.PI * 2) / GORES, 0, Math.PI * 0.58);
     _chuteDisposables.push(geo);
     const gore = new THREE.Mesh(geo, g % 2 === 0 ? _chuteCanopyMat : _chuteGoreMat);
     gore.userData.noCollider = true;
-    grp.add(gore);
+    dome.add(gore);
   }
-  // a small crown vent cap so the dome apex reads finished, not a hole.
-  const ventGeo = new THREE.CylinderGeometry(CANOPY_R * 0.14, CANOPY_R * 0.18, 0.1, 12);
+  dome.scale.y = SQUASH;
+  // a crown vent cap so the dome apex reads finished, not a hole.
+  const ventGeo = new THREE.CylinderGeometry(CANOPY_R * 0.13, CANOPY_R * 0.17, 0.1, 12);
   _chuteDisposables.push(ventGeo);
   const vent = new THREE.Mesh(ventGeo, _chuteLineMat);
-  vent.position.y = CANOPY_R * 0.02;
+  vent.position.y = CANOPY_R * SQUASH * 0.98;
   vent.userData.noCollider = true;
-  grp.add(vent);
-  // ── SHROUD LINES — thin lines from the canopy skirt gathering down to a riser knot at
-  //    the pod crown. A ring of slim cylinders.
-  const riserY = -CANOPY_R * 0.95;   // the riser gather point below the dome
+  dome.add(vent);
+  dome.name = 'chuteDome';
+  grp.add(dome);
+  // ── SHROUD LINES — from the canopy skirt gathering down to a riser knot near the crown.
+  //    Kept SHORT (the skirt sits low + close) so the chute drapes ONTO the wreck rather
+  //    than hanging taut above it like a balloon.
+  // the draping brim is low (the gores sweep down past the equator), so pin the shroud
+  //   lines to that low outer edge and gather them to the riser knot at the crown.
+  const brimA = Math.PI * 0.575;                         // just inside the gore bottom edge (sweep 0.58π)
+  const skirtR = CANOPY_R * Math.sin(brimA) * 0.99;
+  const skirtY = CANOPY_R * Math.cos(brimA) * SQUASH;    // slightly negative — the brim hangs a touch low
+  const riserY = -1.85;                       // the riser gather well below the brim → LONG shroud lines that bridge to the crown
   for (let i = 0; i < GORES; i++) {
     const a = (i / GORES) * Math.PI * 2 + Math.PI / GORES;
-    const skirt = new THREE.Vector3(Math.cos(a) * CANOPY_R * 0.98, 0.02, Math.sin(a) * CANOPY_R * 0.98);
+    const skirt = new THREE.Vector3(Math.cos(a) * skirtR, skirtY, Math.sin(a) * skirtR);
     const riser = new THREE.Vector3(0, riserY, 0);
     const mid = skirt.clone().lerp(riser, 0.5);
     const len = skirt.distanceTo(riser);
-    const lineGeo = new THREE.CylinderGeometry(0.018, 0.018, len, 4);
+    const lineGeo = new THREE.CylinderGeometry(0.026, 0.026, len, 4);   // reads clearly at distance without looking like a rod
     _chuteDisposables.push(lineGeo);
     const line = new THREE.Mesh(lineGeo, _chuteLineMat);
     line.position.copy(mid);
@@ -1710,14 +1729,15 @@ function buildChuteCanopy(): THREE.Group {
     grp.add(line);
   }
   // a chunky riser strap/knot at the gather (where it "attaches" to the pod crown)
-  const knotGeo = new THREE.CylinderGeometry(0.12, 0.16, 0.34, 8);
+  const knotGeo = new THREE.CylinderGeometry(0.13, 0.17, 0.36, 8);
   _chuteDisposables.push(knotGeo);
   const knot = new THREE.Mesh(knotGeo, _chuteLineMat);
-  knot.position.y = riserY + 0.1;
+  knot.position.y = riserY + 0.12;
   knot.userData.noCollider = true;
   grp.add(knot);
-  // anchor the whole assembly so the riser knot sits just above the crown, dome overhead.
-  grp.position.set(0, apex + CANOPY_R * 0.95 + 0.2, 0);
+  // anchor so the riser knot sits just above the crown and the billow puffs LOW over the
+  //   nose — the wide dome drapes down around the pod's upper body, not floating overhead.
+  grp.position.set(0, apex + 0.55, 0);
   grp.scale.setScalar(0.001);   // folded/hidden until the pop
   grp.visible = false;
   return grp;
@@ -1754,30 +1774,51 @@ export function chutePopReady(): boolean {
 /** FIRE the comic chute-pop (the failed chute finally deploys, uselessly, on the ground).
  *  Reveals the canopy + starts the one-shot springy inflate (updateChutePop drives it) +
  *  plays the FWOOMP. Idempotent — a second call while popping is a no-op. */
-export function popChute(): void {
+export function popChute(advanceSeconds?: number): void {
   if (!chuteCanopy || chutePopT >= 0) return;
   chuteCanopy.visible = true;
   chutePopT = 0;
   playChutePop();
+  // Rig-shot helper: synchronously drive the inflate (the harness pauses the main
+  //   loop, which gates updateChutePop, so without this a paused frame catches the
+  //   canopy still folded). Step in small increments so the settle math resolves.
+  if (advanceSeconds && advanceSeconds > 0) {
+    let left = advanceSeconds;
+    while (left > 0) { const step = Math.min(1 / 60, left); updateChutePop(step); left -= step; }
+  }
 }
 
-/** Per-frame driver for the chute-pop inflate (T4.3). No-op unless popping. A springy
- *  ease with a little overshoot (comic "sproing") + a settling bob, then it rests fully
- *  inflated. Called from the tutorial driver's tick (normal gameplay, post-handoff). */
+/** Per-frame driver for the chute-pop inflate (T4.3). No-op unless popping. The COMIC arc:
+ *  a fast springy inflate that punches PAST full (a big "FWOOMP" overshoot POOF), then the
+ *  billow sags back and DROOPS — the dome deflates a touch + leans limply to one side and
+ *  the canopy squashes down onto the wreck (the useless-anticlimax gag). Called from the
+ *  tutorial driver's tick (normal gameplay, post-handoff). */
 export function updateChutePop(dt: number): void {
   if (!chuteCanopy || chutePopT < 0) return;
   chutePopT += dt;
   const k = Math.min(1, chutePopT / CHUTE_POP_DUR);
-  // springy scale: overshoot past 1 then settle (a back-ease with a decaying wobble).
-  const wobble = Math.sin(k * Math.PI * 3) * (1 - k) * 0.12;   // decaying overshoot
-  const base = k * k * (3 - 2 * k);                            // smoothstep to 1
+  // ── SCALE: springy inflate with a big early overshoot, then ease down to rest.
+  //   base smoothsteps 1→ slightly-past-1 fast; the overshoot is a decaying wobble.
+  const base = k * k * (3 - 2 * k);                                 // smoothstep to 1
+  const wobble = Math.sin(k * Math.PI * 2.3) * (1 - k) * CHUTE_OVERSHOOT;  // big decaying POOF
   const s = Math.max(0.001, base + wobble);
   chuteCanopy.scale.setScalar(s);
-  // a gentle bob of the whole canopy as it fills (settles to rest)
-  chuteCanopy.rotation.z = Math.sin(chutePopT * 6.5) * (1 - k) * 0.14;
+  // ── DROOP: after the overshoot peaks (k≳0.45) the billow goes limp — it leans to one
+  //   side + sags down onto the pod. Ramp the droop in over the back half of the arc.
+  const droop = Math.max(0, (k - 0.45) / 0.55);       // 0 until mid, →1 at rest
+  const droopE = droop * droop * (3 - 2 * droop);     // smooth
+  // whole-assembly lean (asymmetric, sells "useless") + a little bob that decays as it settles
+  const bob = Math.sin(chutePopT * 5.5) * (1 - k) * 0.10;
+  chuteCanopy.rotation.z = CHUTE_DROOP_LEAN * droopE + bob;
+  chuteCanopy.rotation.x = CHUTE_DROOP_LEAN * 0.30 * droopE;   // a touch of forward flop too
+  // the DOME sub-group sags vertically (deflates onto the wreck) as it droops
+  const dome = chuteCanopy.getObjectByName('chuteDome');
+  if (dome) dome.scale.y = 0.72 * (1 - CHUTE_DROOP_SAG * droopE);
   if (k >= 1) {
     chuteCanopy.scale.setScalar(1);
-    chuteCanopy.rotation.z = 0;
+    chuteCanopy.rotation.z = CHUTE_DROOP_LEAN;
+    chuteCanopy.rotation.x = CHUTE_DROOP_LEAN * 0.30;
+    if (dome) dome.scale.y = 0.72 * (1 - CHUTE_DROOP_SAG);
     // leave chutePopT at its end value (>0) so chutePopReady() stays false — popped once.
   }
 }

@@ -1604,10 +1604,18 @@ const SCENARIOS = {
   // methodology.md D165). Angles: wake (player's-eye approach), hatch (close-up into
   // the blown salvage face), oblique (3/4 of the whole silhouette), back (the modular
   // panels). --time=<0..1> for the dawn/morning desert light. Front-lit.
+  // Smoke-intro (T4.3): run the headless intro smoke chain + log {ok,beats}. A quick
+  //   gate that the chute-pop geometry changes didn't break the beat pipeline.
+  'smoke-intro': async (page) => {
+    const r = await page.evaluate(() => window.__game.smokeIntro());
+    console.log('[smoke-intro] ' + JSON.stringify(r));
+  },
+
   'crashed-pod': async (page) => {
     const angle = argv.angle || 'wake';
     const t = argv.time !== undefined ? Number(argv.time) : 0.32;   // dawn-ish, sun low + warm
-    const r = await page.evaluate(({ ang, t }) => {
+    const popchute = !!argv.popchute;   // T4.3 — fire the comic chute-pop + freeze on the fully-inflated frame
+    const r = await page.evaluate(({ ang, t, popchute }) => {
       const g = window.__game;
       const ctx = g.ctx;
       g.setTime(t);
@@ -1625,6 +1633,9 @@ const SCENARIOS = {
       const tr = ctx.player.body.body.translation();
       const px = tr.x + 14, pz = tr.z - 12;
       g.placeCrashedPod(px, pz);
+      // T4.3 — fire the comic chute-pop + advance it fully so the paused frame catches
+      //   the FULLY-inflated canopy draped over the pod (placeCrashedPod arms it).
+      if (popchute) g.popChute(3.0);
       const gy = ctx.terrain.heightAt(px, pz);
       const V = cam.position.constructor;
       ctx.flags.paused = true;
@@ -1686,9 +1697,10 @@ const SCENARIOS = {
       let meshes = 0, maxY = -1e9, minY = 1e9;
       if (pod) { pod.updateMatrixWorld(true); pod.traverse((o) => { if (o.isMesh && o.geometry) { meshes++; o.geometry.computeBoundingBox(); const bb = o.geometry.boundingBox; for (const cy of [bb.min.y, bb.max.y]) { const wv = new V(0, cy, 0); o.localToWorld(wv); maxY = Math.max(maxY, wv.y); minY = Math.min(minY, wv.y); } } }); }
       return { angle: ang, podAt: [+px.toFixed(1), +pz.toFixed(1)], groundY: +gy.toFixed(2), exposedH: +(maxY - gy).toFixed(2), meshes, found: !!pod };
-    }, { ang: angle, t });
+    }, { ang: angle, t, popchute });
     await page.waitForTimeout(350);
-    await page.screenshot({ path: join(OUT, `scen-crashed-pod-${angle}.png`), fullPage: false });
+    const tag = popchute ? `${angle}-chute` : angle;
+    await page.screenshot({ path: join(OUT, `scen-crashed-pod-${tag}.png`), fullPage: false });
     console.log(`[crashed-pod] ${JSON.stringify(r)}`);
   },
 
