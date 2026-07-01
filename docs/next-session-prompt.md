@@ -1,9 +1,33 @@
-# Next session — REBUILD v2 COMPLETE + review (overnight 2026-07-01)
+# Next session — the ESCAPE-POD INTRO is FEATURE-COMPLETE (overnight 2026-07-01)
 
-The campaign `campaign/escape-pod-intro` is ACTIVE (checkpoint=none, autonomous overnight per the
-user's "work through the night"). Everything below is committed + pushed to the branch. **Netlify
+The campaign `campaign/escape-pod-intro` is ACTIVE. Everything is committed + pushed. **Netlify
 is maxed → the preview link won't refresh** (backlog item; verify via `rig-shot.mjs` + gates, which
 don't need a deploy). Resume/redirect anytime via `docs/campaign/steering.md`.
+
+## 🎉 EVERY BEAT OF THE VISION IS BUILT
+The whole intro flows end-to-end: **orbit** (the cockpit + the beautiful planet vista) → **disaster**
+(the corridor, engine fire + red-alert) → **eject** (physically enter the pod-bay + release, no teleport)
+→ **watch the SHIP EXPLODE** (Phase-3 — the hauler dies in a fireball through the porthole) → **the
+beautiful descent** (the pod physically falls through the real sky) → **the parachute gag** (mid-fall,
+3 pulls → snap) → **crash + blackout** → **wake** (in the SAME pod you rode down) → **step out** into
+the dawn dunes → **the horizon reveal** (the Beached Leviathan wreck beckons "go there") → **craft a
+machete** → **salvage your own pod** → **the failed chute comically pops out**. All behind
+`FEATURES.escapePodIntro` (default off); no SAVE_VERSION bump; the live master world untouched.
+
+## WHAT'S LEFT = the user's domain (FEEL + art-direction — not autonomous-buildable)
+The overnight loop wound down here because the remaining work genuinely needs YOUR eyes/taste:
+- **FEEL walk-tests** (a still/headless can't gate these): the beautiful-descent pacing + the parachute
+  gag timing; the ship-explosion ~4.4s rhythm + the cabin flash pulse; the pod-bay climb-in curve + the
+  eject shudder; the corridor strobe/fire cadence; the chute-pop FWOOMP→flop spring; whether the eye
+  catches the Leviathan during the 4s reveal dwell.
+- **Minor art-direction polish** (your call): the fireball white-hot core is a touch large at peak; the
+  FP "strapped-in" seat read; whether to promote the Leviathan to always-on (a one-line un-guard in
+  main.ts); the seat harness could recede another notch.
+- **Deferred (bigger, needs you):** an audio balance/mix LISTEN pass; the CAVE rework + the Skyfall hero
+  wreck (separate solo sessions, per CLAUDE.md).
+
+Restarting `/loop /campaign-cycle` from here will do QA/polish passes, but the high-value building is
+done — the feature is complete and best advanced by your walk-test + direction.
 
 ## ✅ REBUILD v2 (R1–R5) — the whole real-world physical intro — COMPLETE
 The v1 intro (offset + faked shaders + 3 teleport-stitched pods) → re-architected into the real world:

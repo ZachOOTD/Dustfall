@@ -410,3 +410,15 @@ The user walk-tested R1, approved it to continue, and reported 2 bugs (both fixe
 - **Bug-hunt** (`bf07847`): an adversarial 4-reviewer + verify + synth sweep of the night's heavily-changed intro code found the code essentially CLEAN — ONE sev-3 dev-only bug (podTutorial re-scatter guard keyed off the wrong predicate → re-scattered on same-page replay). Fixed.
 - **→ The intro now flows end-to-end** (orbit → disaster → eject → descent → crash → wake → step out → craft → salvage → chute-pop) and is bug-clean. Loop wound down at ~05:15 — the remaining work (Phase-3 ship-explosion-through-the-frame [depends on the plateaued hauler exterior], look/feel polish) is best with the user's review + art-direction, not a saturated-context 5am autonomous attempt.
 - **Verify:** verify:all + smokeIntro `{ok:true,beats:12}` throughout.
+
+---
+
+## Cycle 34 — polish batch + Phase-3 → INTRO FEATURE-COMPLETE (overnight 2026-07-01)
+- The user restarted the loop post-REBUILD-v2 for more overnight progress. Polish + the last beat:
+- **Pod-bay** greybox-plus → corridor bar (`3fb8daa`): de-cluttered hazard, detailed docked capsule + clamps/umbilicals/airlock, fixed lighting.
+- **Beached Leviathan** horizon-hook (`90b8749`): a colossal wrecked ship ~360m out, dead-center in the step-out gaze — the dawn-reveal "go there" payoff. Gated behind the intro flag (doesn't touch live master); promotable to always-on.
+- **Chute-pop** (`78359ba`): bigger comic billow (CANOPY_R 2.3→3.3 + squash + droop/flop) — the payoff lands.
+- **Phase-3 SHIP EXPLOSION** (`44c7354`): the last missing beat. Wired the existing (T3.1, previously-unwired) hauler into the post-eject porthole view + built the explosion FX (fireball + 38-chunk debris + shockwave + cabin flash, pod level/no-tumble). Dwell 1.2s→~4.4s.
+- **→ THE INTRO IS FEATURE-COMPLETE.** Every beat of the 2026-06-28 vision is built (orbit → disaster → eject → watch-the-ship-die → descent → parachute → crash → wake → step out → horizon reveal → craft → salvage → chute-pop).
+- **Verify:** verify:all + smoke `{ok:true,beats:12}` throughout.
+- **Loop wound down here:** remaining = FEEL walk-tests + minor art-direction polish (the user's domain, not autonomous-buildable). See next-session-prompt.
