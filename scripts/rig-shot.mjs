@@ -1861,6 +1861,13 @@ const SCENARIOS = {
       if (bg && bg.isColor) { const C = bg.constructor; bg.lerp(new C(0x01020a), space01); }
       const fog = s.fog;
       if (fog && fog.density !== undefined) { fog.density = fog.density * (1 - space01) + 0.00002 * space01; if (fog.color) { const C = fog.color.constructor; fog.color.lerp(new C(0x03050f), space01); } }
+      // Full-intro coherence fix mirror: dim the WORLD sun + ambient by the orbit blend so the
+      // paused rig shows the SAME vacuum-lit cabin the in-game applySpaceMode now produces (the
+      // desert noon light no longer floods the pod cabin to pale white). See sky.ts applySpaceMode.
+      if (ctx.lights) {
+        ctx.lights.sun.intensity *= (1 - space01 * 0.88);
+        ctx.lights.ambient.intensity *= (1 - space01 * 0.94);
+      }
     }, descent);
     await page.waitForTimeout(300);
     const dtag = descent !== null ? `-d${String(descent).replace('.', '')}` : '';
@@ -2028,6 +2035,10 @@ const SCENARIOS = {
           const m = o.material;
           if ((m && m.isShaderMaterial) || (o.userData && o.userData.starOccluder)) o.visible = false;
         });
+        // Full-intro coherence fix mirror: this beat sits in full orbit (descent=0, space01=1) —
+        // dim the world sun+ambient so the paused rig shows the vacuum-lit cabin (not the pale
+        // noon-flooded one). Matches sky.ts applySpaceMode's new sun/ambient dim.
+        if (ctx.lights) { ctx.lights.sun.intensity *= 0.12; ctx.lights.ambient.intensity *= 0.06; }
         const hauler = ctx.three.scene.getObjectByName('escapePodHauler');
         let hc = null;
         if (hauler) { hauler.updateMatrixWorld(true); hc = new V(); hauler.getWorldPosition(hc); }
@@ -2085,6 +2096,7 @@ const SCENARIOS = {
     const noDome = !!argv.nodome;
     const noHull = !!argv.nohull;
     await page.evaluate(({ space, hideStars, noPlanet, noGlass, noDome, noHull }) => {
+      window.__RIG_SPACE01 = space;
       window.__RIG_HIDESTARS = hideStars;
       window.__RIG_NOPLANET = noPlanet;
       window.__RIG_NOGLASS = noGlass;
@@ -2235,6 +2247,10 @@ const SCENARIOS = {
         if (o.isPoints && o.renderOrder === -0.5) { o.position.copy(cam.position); o.updateMatrixWorld(true); }        // stars
         if (o.isMesh && o.material && o.material.uniforms && o.material.uniforms.uTopColor) { o.position.copy(cam.position); o.updateMatrixWorld(true); }   // dome sphere
       });
+      // Full-intro coherence fix mirror: dim the world sun+ambient by the orbit blend so the paused
+      // cockpit rig shows the SAME vacuum lighting the in-game applySpaceMode now applies (no desert
+      // noon flooding the cockpit at orbit). Uses window.__RIG space passthrough via the closure arg.
+      if (ctx.lights) { const sp = (window.__RIG_SPACE01 || 0); ctx.lights.sun.intensity *= (1 - sp * 0.88); ctx.lights.ambient.intensity *= (1 - sp * 0.94); }
     });
     await page.waitForTimeout(300);
     const tag = `cockpit-${angle}${stand ? '-stand' : ''}${alert > 0 ? '-a' + alert : ''}${space > 0 ? '-space' + (space === 1 ? '' : space) : ''}${hideStars ? '-nostars' : ''}`;

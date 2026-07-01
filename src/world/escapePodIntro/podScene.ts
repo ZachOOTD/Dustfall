@@ -100,12 +100,18 @@ const VP_AZ_HALF = Math.asin(Math.min(0.95, VP_R / CAB_R));   // ≈ the disc's 
 //    SAME light cool aluminium skin as the exterior so the cabin reads as the inside of
 //    THIS capsule, not a beige box.
 const _cabPaintOpts = {
-  baseColor: 0xa3a8ac,           // COOL aluminium-grey shell skin (lifted + cooled — the warm key was pushing the prior 0x9ba0a2 to brown)
-  bareMetalHex: 0xccd2d6,        // bright cool scuffed-aluminium reveal (near-white, cool)
-  rustHex: 0x3a3a3e,             // COOL near-grey grime tone (was warm 0x4a3826 → read as brown wash; now a neutral shadow accent)
-  streakIntensity: 0.22, wearAmplitude: 0.34,   // plate-to-plate tonal break-up (denting), streaks pulled down (less drip-brown)
-  fleckStrength: 0.55,           // moderate scuff scratches (high fleck read as speckle dots under the lamp)
-  oxStrength: 0.08, oxHex: 0x6a6a66,            // very sparse, NEUTRAL patina (interior clean; warm oxide was the brown culprit)
+  // Full-intro coherence fix: the shell base was 0xa3a8ac — a LIGHT grey that, under the stacked
+  // interior rig (lamp 1.7 + hemi fill 0.72 + key 0.6 + coolRake + porthole spill), blew to a pale
+  // near-WHITE plastic read that broke the worn-industrial through-line vs the cockpit/corridor
+  // (same weathered-aluminium idiom but darker exterior tone). Darkened to a MID worn-aluminium
+  // value so the SAME lights land the walls at a grimy grey (form/curvature gradients unchanged —
+  // everything just sits ~30% lower in value), matching the crashed-pod exterior + the hauler tone.
+  baseColor: 0x71767a,           // MID worn cool-aluminium shell skin (was 0xa3a8ac → over-lit to white)
+  bareMetalHex: 0xb2b8bc,        // bright cool scuffed-aluminium reveal (scratches still pop against the darker skin)
+  rustHex: 0x33333a,             // COOL near-grey grime tone (a neutral shadow accent, no brown)
+  streakIntensity: 0.26, wearAmplitude: 0.38,   // a touch more plate-to-plate tonal break-up now that the base is darker (denting reads)
+  fleckStrength: 0.55,           // moderate scuff scratches
+  oxStrength: 0.10, oxHex: 0x5c5c58,            // sparse neutral patina (slightly stronger against the darker skin)
 } as const;
 // BACK-FACED aluminium shell — the curved wall + dome are viewed from INSIDE (back faces).
 const _cabShell = createRustedHullMaterial(_cabPaintOpts);

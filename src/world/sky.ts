@@ -1087,12 +1087,12 @@ export function updateSky(ctx: GameContext, dt: number): void {
   // ── REBUILD v2 R1a — SPACE MODE override (intro-only). Applied LAST so it
   // cleanly overrides the day/night gradient while on, and leaves zero residue at
   // space01=0 (the normal sky is byte-unchanged). Blends by _space01.
-  applySpaceMode(cam);
+  applySpaceMode(cam, ctx);
 }
 
 /** Blend the real sky toward the in-orbit "space mode" by _space01 (0..1). At 0
  *  this is a pure no-op except hiding the (already-hidden) planet. */
-function applySpaceMode(cam: THREE.Vector3): void {
+function applySpaceMode(cam: THREE.Vector3, ctx: GameContext): void {
   if (!bundle) return;
   const s = _space01;
   const planetVisible = !!_spacePlanet && s > 0.001;
@@ -1154,5 +1154,24 @@ function applySpaceMode(cam: THREE.Vector3): void {
     }
     const bg = _spaceScene.background as THREE.Color | null;
     if (bg && (bg as THREE.Color).isColor) bg.lerp(_SPACE_TOP, s);   // the clear/background color → space-black (no tan showing anywhere)
+  }
+
+  // ── VACUUM LIGHT: dim the WORLD sun + desert ambient by the orbit blend. Fix (full-intro
+  // coherence pass): updateLighting runs earlier in the tick and sets the sun/ambient to full
+  // DAYTIME intensity following the player up to orbit altitude — so the desert noon light
+  // FLOODED the escape-pod cabin from OUTSIDE, blowing the worn cool-aluminium walls to a pale
+  // near-WHITE plastic read that broke the worn-industrial through-line vs the (correctly-lit)
+  // cockpit/corridor/pod-bay. In vacuum there's no atmosphere to scatter fill light; the cabin
+  // should read by its OWN warm lamp + cool porthole spill. We scale the sun/ambient toward a
+  // low floor by _space01 (physically: no diffuse skylight in orbit). Runs AFTER updateLighting
+  // (tick order), so it sticks; at space01=0 this is a no-op (values already at their day
+  // targets), keeping the normal game byte-unchanged. The re-entry ramp (space01→0 as the pod
+  // drops into atmosphere) eases the desert light back in cleanly for the dawn approach.
+  if (s > 0.001 && ctx.lights) {
+    const { sun, ambient } = ctx.lights;
+    // Keep a faint rim of direct sun in orbit (the hard star-sun still catches an edge), but
+    // pull the flooding intensity + the ambient bath down hard so the lamp-lit cabin dominates.
+    sun.intensity = THREE.MathUtils.lerp(sun.intensity, sun.intensity * 0.12, s);
+    ambient.intensity = THREE.MathUtils.lerp(ambient.intensity, ambient.intensity * 0.06, s);
   }
 }
