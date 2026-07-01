@@ -363,7 +363,9 @@ function tickCorridor(ctx: GameContext, dt: number): void {
   intro.scratch.t = (intro.scratch.t as number) + dt;
   const t = intro.scratch.t as number;
   setEngineFire(1, t);
-  setShipAlert(2, 0.5 + 0.5 * Math.sin(t * 11.0));   // a fast red strobe
+  const strobe = 0.5 + 0.5 * Math.sin(t * 11.0);
+  setShipAlert(2, strobe);                           // a fast red strobe (corridor)
+  setCockpitAlert(2, strobe);                        // the cockpit beacon pulses with the same strobe
   if (z < SHIP_CORRIDOR_ENTER_Z) advanceBeat(ctx);   // fled back to the bridge → enterPod
 }
 

@@ -32,10 +32,10 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import * as THREE from 'three';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import type RAPIER from '@dimforge/rapier3d-compat';
 import type { GameContext } from '../../GameContext.ts';
 import { makeStaticBox } from '../../physics/bodies.ts';
-import { createRustedHullMaterial } from '../hullMaterial.ts';
 
 /** Far offset — high "in orbit", enclosed so the desert far below is not seen. */
 const SHIP_ORIGIN = new THREE.Vector3(0, 3000, 0);
@@ -55,7 +55,7 @@ const CK_X = CK_W / 2;     // 3
 const CK_Z = CK_D / 2;     // 2.5
 const WALL_T = 0.2;        // wall/floor/ceiling thickness (matches the collider half-spec)
 // Forward (−Z) window gap: x −1.5..1.5, y 0.9..2.5.
-const WIN_X = 1.5, WIN_Y0 = 0.9, WIN_Y1 = 2.5;
+const WIN_X = 1.5, WIN_Y0 = 0.9;   // windscreen sill half-width + sill height (top = WIN_TOP_Y)
 // Corridor opening in the +Z wall: x −1..1, y 0..2.4.
 const DOOR_X = 1.0, DOOR_Y1 = 2.4;
 
@@ -70,77 +70,222 @@ const SEAT_Y = 0.42;       // cushion-top height
 // ── Materials — weathered ALUMINIUM idiom (podScene.ts), pushed HARDER on weathering per the
 //    gate's fidelity note (rust streaks, grime, oxidation, edge wear). Module-scope; shared
 //    across rebuilds; disposeShipScene frees per-build geometry/materials, not these.
-const _shell = createRustedHullMaterial({
-  baseColor: 0x9aa0a4,           // cool aluminium-grey shell skin
-  bareMetalHex: 0xc8ced2,        // bright cool scuffed-aluminium edge-wear reveal
-  rustHex: 0x5a3a26,             // warm rust streaks (reads as RUST, not just shadow — gate)
-  streakIntensity: 0.42, wearAmplitude: 0.40,   // strong plate-to-plate break-up + drip streaks
-  fleckStrength: 0.8,            // bare-metal scuff flecks (chipped paint)
-  oxStrength: 0.34, oxHex: 0x8a5230,            // warm oxidation patchwork (corroded plates)
-  seamRustStrength: 0.30,        // rust pooling at seams
-});
-// Dark channel-steel — ribs / conduit / console body / frames. Value contrast to skin.
-const _steel = createRustedHullMaterial({
-  baseColor: 0x3e434a, rustHex: 0x3a2014, streakIntensity: 0.40, wearAmplitude: 0.30,
-  fleckStrength: 0.6, oxStrength: 0.30, oxHex: 0x6e3c1e, seamRustStrength: 0.28,
-});
-// Bright grey-aluminium band/rib metal (proud riveted frames).
-const _band = createRustedHullMaterial({
-  baseColor: 0xafb4b8, bareMetalHex: 0xd2d8dc,
-  streakIntensity: 0.30, wearAmplitude: 0.30, fleckStrength: 0.75,
-  oxStrength: 0.22, oxHex: 0x8a5230, seamRustStrength: 0.20,
-});
-// Cool near-charcoal recessed steel (console body, kickplates, deep frames).
-const _channel = createRustedHullMaterial({
-  baseColor: 0x33383e, rustHex: 0x301a10, streakIntensity: 0.38, wearAmplitude: 0.28,
-  fleckStrength: 0.5, oxStrength: 0.28, oxHex: 0x6e3c1e, seamRustStrength: 0.30,
-});
-// Rivets / studs / small cast hardware — mid steel-grey.
-const _rivet = createRustedHullMaterial({
-  baseColor: 0x8d9094, rustHex: 0x4a2a18, streakIntensity: 0.24,
-  oxStrength: 0.22, oxHex: 0x7a4424, fleckStrength: 0.5,
-});
-// Floor DECK plate — bright aluminium tread-plate with a worn TRAFFIC lane down the centre
-// (the gate: floor traffic wear). The wear-amplitude + flecks read as scuffed footfall.
-const _deck = createRustedHullMaterial({
-  baseColor: 0x8e9296, bareMetalHex: 0xc4c9cc,
-  streakIntensity: 0.24, wearAmplitude: 0.40, fleckStrength: 0.85,
-  oxStrength: 0.24, oxHex: 0x7a4828, seamRustStrength: 0.22,
-});
-// Ceiling — darker grimed panel (overhead soot/grime).
-const _ceil = createRustedHullMaterial({
-  baseColor: 0x6e7378, rustHex: 0x33261c, streakIntensity: 0.34, wearAmplitude: 0.40,
-  oxStrength: 0.26, oxHex: 0x5e3a22,
-});
-// Conduit / cabling — dark matte near-black (lambert, flat).
-const _cable = new THREE.MeshLambertMaterial({ color: 0x1c1a16, flatShading: true });
-// Seat cushion — worn cracked vinyl, a desaturated warm tan (lambert).
-const _seat = new THREE.MeshLambertMaterial({ color: 0x5f5446, flatShading: true });
-// A worn leather-tan seat highlight (the cushion crown/wear) for tonal break-up.
-const _seatWorn = new THREE.MeshLambertMaterial({ color: 0x7a6b54, flatShading: true });
-// Restraint webbing — faded olive-tan strap.
-const _strap = new THREE.MeshLambertMaterial({ color: 0x837a5c, flatShading: true });
+// ── REBUILD v2 R5a FIX — COOL BRUSHED-ALUMINIUM PBR (the gate's #1 fix). The hull is now real
+//    MeshStandardMaterial metal (metalness/roughness response), HARD-desaturated to cool
+//    grey/blue-grey — NOT the warm-brown Lambert wood that drove the "wine barrel" read. Five+
+//    genuinely distinct materials by metalness/roughness/colour so surfaces read DIFFERENT.
+//    Patched with subtle procedural plate break-up via onBeforeCompile (keeps the lived-in
+//    plated look without the warm rust). flatShading on the hull = per-triangle plate facets.
+function _metal(color: number, metalness: number, roughness: number, opts: { flat?: boolean; emissive?: number; emissiveI?: number; grime?: boolean } = {}): THREE.MeshStandardMaterial {
+  const m = new THREE.MeshStandardMaterial({
+    color, metalness, roughness,
+    flatShading: opts.flat ?? false,
+    emissive: opts.emissive ?? 0x000000,
+    emissiveIntensity: opts.emissiveI ?? 1,
+  });
+  if (opts.grime) _installGrime(m);
+  return m;
+}
+// ── R5a MATERIAL-FEEL PASS — the WORN layer. A shared world-space grime shader that turns the flat
+//    gunmetal panels into a lived-in surface WITHOUT texture files or new draw calls: (1) a VERTICAL
+//    DUST GRADIENT — the surface darkens + roughens toward the floor (world-Y), so the deck + lower
+//    walls read grimier than the crown (grime pools low). (2) a broad low-frequency VALUE BREAK
+//    (a cheap 3-axis value noise) so a big flat panel reads as mottled worn metal, not one dead
+//    value + it also modulates roughness (streaky worn sheen, not a uniform gloss). (3) darker
+//    grime settling into the low world-Y band (oil/dust pooling). The GLSL is BYTE-IDENTICAL for
+//    every grimed material (only the material's `color`/`roughness` uniforms differ), so all grimed
+//    metals SHARE ONE compiled program — no per-instance baked literals → no cache-key collision,
+//    no key needed (the D207 "global-constant factory → sharing is correct" case). World-space
+//    coords (D109) are right here: these hull panels are STATIC, and adjacent panels get coherent,
+//    seam-matched weathering for free. SHIP_ORIGIN.y (3000) is folded out via a modulo so the noise
+//    reads at a sane frequency despite the high world origin.
+function _installGrime(m: THREE.MeshStandardMaterial): void {
+  m.onBeforeCompile = (shader: THREE.WebGLProgramParametersWithUniforms) => {
+    shader.vertexShader = shader.vertexShader.replace(
+      '#include <common>',
+      `#include <common>
+       varying vec3 vGrimeW;`,
+    );
+    shader.vertexShader = shader.vertexShader.replace(
+      '#include <begin_vertex>',
+      `#include <begin_vertex>
+       vGrimeW = (modelMatrix * vec4(transformed, 1.0)).xyz;`,
+    );
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <common>',
+      `#include <common>
+       varying vec3 vGrimeW;
+       // cheap value-noise (hash of a lattice cell, trilerp) — no texture, byte-identical everywhere.
+       float _gh(vec3 p){ return fract(sin(dot(floor(p), vec3(17.1, 47.7, 93.3))) * 4375.85); }
+       float _gn(vec3 p){
+         vec3 f = fract(p); vec3 i = floor(p); f = f*f*(3.0-2.0*f);
+         float a = mix(_gh(i+vec3(0,0,0)), _gh(i+vec3(1,0,0)), f.x);
+         float b = mix(_gh(i+vec3(0,1,0)), _gh(i+vec3(1,1,0)), f.x);
+         float c = mix(_gh(i+vec3(0,0,1)), _gh(i+vec3(1,0,1)), f.x);
+         float d = mix(_gh(i+vec3(0,1,1)), _gh(i+vec3(1,1,1)), f.x);
+         return mix(mix(a,b,f.y), mix(c,d,f.y), f.z);
+       }`,
+    );
+    // modulate the DIFFUSE (value break + vertical dust) right after the map-color is set.
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <color_fragment>',
+      `#include <color_fragment>
+       vec3 gp = vGrimeW; gp.y = mod(gp.y, 64.0);           // fold the high world origin out
+       float gVal = _gn(gp * 1.7) * 0.6 + _gn(gp * 5.3) * 0.4; // broad + finer value break
+       // floorY≈0 in local; world floor ≈ SHIP_ORIGIN.y (3000). height above the deck, 0..~3:
+       float gAbove = clamp(mod(vGrimeW.y, 64.0) - mod(3000.0, 64.0), 0.0, 3.0);
+       float gDust = 1.0 - clamp(gAbove / 2.6, 0.0, 1.0);   // 1 at the floor → 0 at the crown
+       // a HARDER low pool for the deck + lower walls (grime settles at the floor — the worn tell).
+       float gFloor = 1.0 - clamp(gAbove / 0.85, 0.0, 1.0); // 1 right at the deck, gone by ~waist
+       // darken: a broad mottle (±) settling darker low, a dust wash pooling toward the deck, and a
+       // heavier grime pool at the floor (breaks the "clean bright floor" read the gate flagged).
+       float gDark = (gVal - 0.5) * 0.24 - gDust * 0.20 - gFloor * (0.14 + gVal * 0.16);
+       diffuseColor.rgb *= clamp(1.0 + gDark, 0.48, 1.12);
+       // a faint desaturated warm-grey grime cast in the pooled-dust band (dust, not clean metal).
+       diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.06, 1.0, 0.9), gDust * 0.40);`,
+    );
+    // modulate ROUGHNESS — grimier/rougher low + in the mottle (streaky worn sheen, not uniform gloss).
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <roughnessmap_fragment>',
+      `#include <roughnessmap_fragment>
+       vec3 rp = vGrimeW; rp.y = mod(rp.y, 64.0);
+       float rVal = _gn(rp * 2.1);
+       float rAbove = clamp(mod(vGrimeW.y, 64.0) - mod(3000.0, 64.0), 0.0, 3.0);
+       float rDust = 1.0 - clamp(rAbove / 2.6, 0.0, 1.0);
+       roughnessFactor = clamp(roughnessFactor + (rVal - 0.4) * 0.14 + rDust * 0.10, 0.30, 1.0);`,
+    );
+  };
+}
+// ── REBUILD v2 R5a MATERIAL-FEEL PASS (user directive + independent gate, 2026-06-30):
+//    "liked the older metal texture better — the new one looks way too pristine and shiny; the
+//    previous had a rugged feel." The cool recolor (killing the wine-barrel brown) was RIGHT, but
+//    it was authored as PRISTINE brushed aluminium: high metalness (~0.86) + low roughness (~0.46)
+//    + strong envMap (0.85) → surfaces MIRROR the bright planet and glint like a showroom. This
+//    pass keeps the COOL NEUTRAL colour but retunes the whole hull idiom to WORN MATTE GUNMETAL:
+//    roughness UP hard (broad soft highlights, no sharp glints), metalness DOWN (painted/worn
+//    metal, not chrome), envMap CUT (see _applyCockpitEnv → no mirror-sheen), values DARKER + more
+//    varied, plus layered grime (see _grime() below). Target = "worn lived-in industrial hauler",
+//    not "clean sci-fi showroom". Before→after per material noted inline (metal / rough).
+// HULL SKIN — worn cool gunmetal, MATTE. Painted-over-metal read: broad soft sheen, no glint.
+//   0.86/0.46 → 0.44/0.78. Darker + a faint desaturated warm-grey grime cast (not the near-white).
+const _shell = _metal(0x686e73, 0.44, 0.78, { flat: true, grime: true });
+// PAINTED-PANEL metal — a worn battleship-grey painted plate (proud panels + windscreen fascia).
+//   0.55/0.34 → 0.40/0.72. Still reads DIFFERENT (a touch lighter + smoother) but no longer glossy.
+const _band = _metal(0x7c8288, 0.40, 0.72, { flat: true, grime: true });
+// DARK STRUCTURAL STEEL — ribs / console body / deep frames. Kept the DARKEST + a touch less rough
+//   so the ribs still pop OFF the hull as harder metal (gate: "ribs read as molding"), but the
+//   highlight is now a broad soft sheen, not a mirror. 0.90/0.30 → 0.55/0.62.
+const _steel = _metal(0x373c42, 0.55, 0.62, { flat: true, grime: true });
+// CHANNEL / recessed near-charcoal steel (console body, kickplates, sockets, grime channels) —
+//   the deepest matte value; recessed crevices read dark + dead. 0.80/0.42 → 0.42/0.80.
+const _channel = _metal(0x24282e, 0.42, 0.80, { flat: true, grime: true });
+// RIVETS / studs / cast hardware — scuffed bright bare steel (the ONE place a small glint reads as
+//   worn hardware, not showroom). Kept metallic but rougher. 0.92/0.38 → 0.62/0.52.
+const _rivet = _metal(0x9299a0, 0.62, 0.52);
+// DECK PLATE — worn cool aluminium tread, MATTE + scuffed footfall. Darker so the floor stops
+//   reading near-white. 0.82/0.52 → 0.42/0.80.
+const _deck = _metal(0x5c6167, 0.42, 0.80, { flat: true, grime: true });
+// CEILING / outer-shell darker panel — overhead grime, the roughest/darkest big panel so the vault
+//   never blows out to bright grey. 0.78/0.58 → 0.40/0.84.
+const _ceil = _metal(0x474c52, 0.40, 0.84, { flat: true, grime: true });
+// Conduit / cabling — dark matte rubber (low metal, high rough → reads NON-metal vs the hull).
+const _cable = _metal(0x18161a, 0.10, 0.85, { flat: true });
+// SEAT — WORN VINYL/LEATHER upholstery. R5a-r5 FIX-2 (the "tan wedge" recurrence): the forward
+//   bolsters/cushion caught the warm key + a bright env and lifted to a TAN slab in the seated
+//   forward shot. Fix: pull the base vinyl DARKER + off the warm-brown toward a neutral cool-warm
+//   charcoal (0x2a2620 → 0x211f20), and (below) kill its env catch so the warm key can't render it
+//   bright. Still distinctly darker + a hair warmer than the hull grey → reads as a separate worn
+//   upholstered object, not painted hull, but never a bright wedge. Very high rough = matte cushion.
+const _seat = _metal(0x1a1917, 0.03, 0.92, { flat: true });
+// worn seat highlight — a scuffed rub-through crown on the wear-points. R5a-r5 FIX-2: was a warm
+//   TAN (0x6b5d4c) that read as the bright wedge under the key; pull it to a muted NEUTRAL worn
+//   grey (0x3c3833) + rougher so it stays a subtle tonal break, not a tan highlight slab. Neutral
+//   (not warm-brown) so the warm key can't render it tan.
+const _seatWorn = _metal(0x3c3833, 0.04, 0.80, { flat: true });
+// seat back / shell sides — the DARKEST + coolest-neutral vinyl (the big visible bolster/back forms
+//   are this, so it must stay dark under the warm key — R5a-r5 FIX-2 killed the brown-block read in
+//   the aft-turned shot). 0x241f1c (warm) → 0x1c1b1a (near-neutral very dark).
+const _seatBack = _metal(0x1a1a1c, 0.04, 0.90, { flat: true });
+// piping / seam welt — a worn pale stitch-line welt between cushion sections (lifts the seams).
+const _seam = _metal(0x4a4338, 0.04, 0.74, { flat: true });
+// Restraint webbing — faded safety-orange strap (reads as a real harness, pops vs the dark seat).
+const _strap = _metal(0xc06a36, 0.05, 0.82, { flat: true });
+// strap wear — a grimed darker band on the webbing (the harness isn't a clean flat orange).
+const _strapWorn = _metal(0x7e4824, 0.05, 0.86, { flat: true });
 // Warm self-lit accents — unlit so they GLOW (points of life on the dash).
 const _ledGreen = new THREE.MeshBasicMaterial({ color: 0x66d877 });
 const _ledAmber = new THREE.MeshBasicMaterial({ color: 0xe09838 });
 const _ledBlue = new THREE.MeshBasicMaterial({ color: 0x52b0cc });
-// Backlit dial-face (a faint amber lit gauge face — unlit so it glows under the bezel).
-const _dialFace = new THREE.MeshBasicMaterial({ color: 0x3a2c12 });
-// Yellow/black HAZARD decal (a warning placard) — unlit so it reads as printed.
+// Backlit dial-face (a faint lit gauge face — unlit so it glows under the bezel).
+const _dialFace = new THREE.MeshBasicMaterial({ color: 0x223240 });
+// Yellow/black HAZARD decal (a warning placard) — unlit so it reads as printed paint.
 const _hazard = new THREE.MeshBasicMaterial({ color: 0xc9a52e });
 // A printed-decal dark base (stencil text/label backing).
 const _decal = new THREE.MeshBasicMaterial({ color: 0x20242a });
-// Window frame — chunky channel-steel mullion frame (dark, fitted, weathered).
-const _winFrame = createRustedHullMaterial({
-  baseColor: 0x363b41, rustHex: 0x3a2014, streakIntensity: 0.40, wearAmplitude: 0.28,
-  oxStrength: 0.28, oxHex: 0x6e3c1e, seamRustStrength: 0.26,
-});
-// Window GLASS — a faint cool tint, glossy; slightly emissive so it never goes black.
+// EMISSIVE SCREEN — a real recessed MFD: a dark glass face with a green emissive content layer
+//   driven separately (the bright bars). Standard so it takes a faint reflection.
+const _screenGlass = _metal(0x0c1410, 0.15, 0.22, { emissive: 0x0a1a0e, emissiveI: 0.5 });
+// Window frame — the canopy ring / mullion structural beams (dark cool steel, semi-gloss).
+const _winFrame = _metal(0x3a4047, 0.85, 0.36, { flat: true });
+// Window GLASS — a real transmissive cool-tinted pane: faint blue tint, very glossy, low opacity
+//   so the orbit reads through, but with enough surface to catch a Fresnel rim + reflection.
+//   R5a-r3 SEV-2 #1: the panes were reading as open holes against the bright planet. A Fresnel
+//   patch (onBeforeCompile) brightens the pane toward grazing angles (the glazing rim glows where
+//   the eye sees it edge-on) + adds a soft diagonal reflection sweep + a vertical tint gradient, so
+//   the eye registers a sheet of glass between it and the orbit, not a void. Single shared material
+//   → no program-cache-key concern (one instance, identical source).
 const _glass = new THREE.MeshStandardMaterial({
-  color: 0x2a3640, roughness: 0.16, metalness: 0.30,
-  emissive: 0x0a1418, emissiveIntensity: 0.40,
-  transparent: true, opacity: 0.12,   // see the orbit clearly through it
+  color: 0x33444f, roughness: 0.08, metalness: 0.0,
+  emissive: 0x0a1620, emissiveIntensity: 0.30,
+  transparent: true, opacity: 0.20,
 });
+_glass.onBeforeCompile = (shader: THREE.WebGLProgramParametersWithUniforms) => {
+  shader.vertexShader = shader.vertexShader.replace(
+    '#include <common>',
+    `#include <common>
+     varying vec3 vGlassViewPos;
+     varying vec3 vGlassViewNrm;
+     varying vec2 vGlassLocal;`,
+  );
+  shader.vertexShader = shader.vertexShader.replace(
+    '#include <begin_vertex>',
+    `#include <begin_vertex>
+     vGlassViewPos = (modelViewMatrix * vec4(transformed, 1.0)).xyz;
+     vGlassViewNrm = normalize(normalMatrix * normal);
+     vGlassLocal = uv;`,
+  );
+  shader.fragmentShader = shader.fragmentShader.replace(
+    '#include <common>',
+    `#include <common>
+     varying vec3 vGlassViewPos;
+     varying vec3 vGlassViewNrm;
+     varying vec2 vGlassLocal;`,
+  );
+  // After the emissive is composed, add the Fresnel rim + reflection sweep + tint gradient.
+  shader.fragmentShader = shader.fragmentShader.replace(
+    '#include <emissivemap_fragment>',
+    `#include <emissivemap_fragment>
+     vec3 gV = normalize(-vGlassViewPos);
+     float gFres = pow(1.0 - clamp(dot(normalize(vGlassViewNrm), gV), 0.0, 1.0), 2.5);
+     // a soft diagonal reflection band sweeping across the pane (a window-light streak)
+     float gSweep = smoothstep(0.62, 0.96, sin((vGlassLocal.x * 2.4 + vGlassLocal.y * 3.1) + 1.3) * 0.5 + 0.5);
+     // a faint vertical tint gradient (cooler/bluer toward the top of the pane)
+     float gGrad = vGlassLocal.y;
+     vec3 gRim = mix(vec3(0.14, 0.22, 0.30), vec3(0.30, 0.42, 0.55), gGrad);
+     totalEmissiveRadiance += gRim * gFres * 1.7;          // grazing-angle rim glow
+     totalEmissiveRadiance += vec3(0.20, 0.27, 0.34) * gSweep * (0.35 + 0.5 * gFres); // reflection sweep`,
+  );
+  // raise the alpha toward grazing angles so the glazing reads as a real edge-lit sheet, not a hole.
+  shader.fragmentShader = shader.fragmentShader.replace(
+    '#include <opaque_fragment>',
+    `gl_FragColor = vec4( outgoingLight, diffuseColor.a );
+     #ifdef OPAQUE
+     gl_FragColor.a = 1.0;
+     #endif
+     float gFres2 = pow(1.0 - clamp(dot(normalize(vGlassViewNrm), normalize(-vGlassViewPos)), 0.0, 1.0), 2.0);
+     gl_FragColor.a = clamp(gl_FragColor.a + gFres2 * 0.55, 0.0, 0.9);`,
+  );
+};
 
 
 // ── Greybox CORRIDOR palette (UNCHANGED — flat / unlit; T3.4 reworks it). ──
@@ -184,10 +329,37 @@ let _alertScreenGlow: THREE.Mesh | null = null;
 let _alertStatusLeds: THREE.Mesh[] = [];
 let _alertWashLight: THREE.PointLight | null = null;   // the console wash → red flood
 let _alertRimLight: THREE.DirectionalLight | null = null; // a red rim across the shell on alert
+let _alertBeaconLight: THREE.PointLight | null = null;  // a real red beacon SOURCE (falloff + pulse)
+let _alertBeaconMesh: THREE.Mesh | null = null;         // the beacon dome (its emissive pulses)
+let _alertStripMats: THREE.MeshBasicMaterial[] = [];    // rib strip-lights (dark→red on alert)
 let _alertKeyLights: THREE.Light[] = [];               // the warm keys → dimmed on alert
 let _alertAmbient: THREE.HemisphereLight | null = null; // the cabin ambient → reddened on alert
-const _AMBIENT_SKY = new THREE.Color(0xb59878);        // the calm warm-grounded ambient sky tint
 let _cockpitAlertLevel: 0 | 1 | 2 = 0;
+
+// ── A per-cockpit IBL env map — required so the cool brushed-aluminium PBR metals reflect
+//    something (metalness without an envMap renders near-black). PMREM-baked from RoomEnvironment;
+//    applied per-material (NOT scene.environment) so it never leaks to the desert world. Freed in
+//    disposeShipScene. The list of metal mats that take the env (the unlit/basic ones don't).
+let _cockpitEnv: THREE.Texture | null = null;
+const _ENV_MATS = (): THREE.MeshStandardMaterial[] => [
+  _shell, _band, _steel, _channel, _rivet, _deck, _ceil, _cable,
+  _seat, _seatWorn, _seatBack, _seam, _strap, _strapWorn, _screenGlass, _winFrame, _glass,
+];
+// ── R5a MATERIAL-FEEL PASS — env intensity is the PRISTINE/SHINY tell. At 0.85 every big flat
+//    panel MIRRORED the bright planet → the "showroom sheen" the user + gate flagged. Cut hard:
+//    the big matte hull/deck/ceiling panels take a WHISPER of env (0.85 → 0.20) so they stop
+//    reflecting the scene; the seat vinyls (already the tan-wedge risk) go lower still (0.12 →
+//    0.08); small hardware (rivets) + the glass keep a bit more so worn studs + the canopy still
+//    catch a highlight (that reads as USED hardware, not showroom).
+const _LOW_ENV = new Set<THREE.Material>([_seat, _seatWorn, _seatBack, _seam]);   // seat vinyls
+const _MED_ENV = new Set<THREE.Material>([_rivet, _glass, _winFrame, _screenGlass]); // worn hardware/glass keep a small catch
+function _applyCockpitEnv(env: THREE.Texture | null): void {
+  for (const m of _ENV_MATS()) {
+    m.envMap = env;
+    m.envMapIntensity = _LOW_ENV.has(m) ? 0.08 : _MED_ENV.has(m) ? 0.40 : 0.20;
+    m.needsUpdate = true;
+  }
+}
 
 // ── T3.4 DISASTER-STAGING hooks (the corridor is greybox MeshBasicMaterial = unlit, so the
 //    red-alert is a material TINT, not a light; the engine fire is additive emissive geometry).
@@ -239,8 +411,60 @@ function _stud(x: number, y: number, z: number, faceDir: THREE.Vector3, mat: THR
   m.lookAt(x + faceDir.x, y + faceDir.y, z + faceDir.z);
   return m;
 }
-// ── COCKPIT SHELL — the worn riveted-aluminium box. The space is CLOSED-IN (a forward
-//    soffit + a lowered aft header) so it reads cramped, not tall + empty (gate #10).
+// ── A custom-vertex skin mesh from a flat list of triangle vertices (each tri = 9 floats).
+//    Used to loft the curved fuselage cross-sections into a real hull surface.
+function _skin(verts: number[], mat: THREE.Material): THREE.Mesh {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+  g.computeVertexNormals();
+  _disposables.push(g);
+  return new THREE.Mesh(g, mat);
+}
+
+// ── THE FUSELAGE CROSS-SECTION — this is what BREAKS THE BOX. For a station at depth `z`
+//    (−CK_Z..CK_Z) it returns a chamfered, vaulted half-profile: an arc of [x, y] points from
+//    the floor edge (low, near the wall) up over a CANTED (tumblehome) side wall to a VAULTED
+//    crown at the centre-top. Mirrored about x=0 → a full hull hoop. The nose (−Z) TAPERS
+//    narrower + the crown drops, so the eye reads a fuselage narrowing to the windscreen, not a
+//    rectangular room. The floor stays FLAT (the collider/walk envelope); the curve lives above
+//    ~waist height where the player can't reach the canted upper corners anyway.
+const HULL_PTS = 9;            // arc samples up the continuous D-section (per half)
+const HULL_CROWN_MAX = 2.96;  // vault apex cap (≤2.98 collider top — gate contract)
+// A CONTINUOUS D-SECTION half-profile (the gate fix: "wall rolls into floor + ceiling, no flat
+// vertical face, no 90° floor seam"). From the deck edge: a floor CHAMFER coving up into a
+// gently-curved lower wall, continuously bending through the shoulder into the vaulted crown —
+// ONE smooth curve, no hard corner. Nose (−Z) tapers narrower + the crown drops.
+function hullProfile(z: number): { x: number; y: number }[] {
+  const tz = (z + CK_Z) / CK_D;                 // 0 at nose, 1 at tail
+  const taper = THREE.MathUtils.lerp(0.76, 1.0, THREE.MathUtils.smoothstep(tz, 0.0, 0.85));
+  const halfW = CK_X * taper;                   // deck half-width here
+  const crownY = THREE.MathUtils.lerp(2.58, HULL_CROWN_MAX, THREE.MathUtils.smoothstep(tz, 0.0, 0.9));
+  const pts: { x: number; y: number }[] = [];
+  // (1) floor COVING — a short chamfer rolling the deck edge up into the wall (no 90° seam).
+  pts.push({ x: halfW - 0.06, y: 0.0 });        // on the deck, just inboard of the wall
+  pts.push({ x: halfW, y: 0.14 });              // chamfer top → the lower wall
+  // (2) ONE continuous super-ellipse-ish arc from (halfW, 0.14) to the crown (0, crownY). Use a
+  //     blended cosine so the lower portion is near-vertical and it bends smoothly to horizontal
+  //     at the crown — the "D" / rounded-rectangle tube section.
+  const yLow = 0.14;
+  for (let i = 1; i <= HULL_PTS; i++) {
+    const t = i / HULL_PTS;                      // 0..1 along the arc
+    const a = t * (Math.PI / 2);
+    // x: stays wide low (cos^1.4 keeps the lower wall near-vertical), tucks in toward the crown
+    const x = halfW * Math.pow(Math.cos(a), 1.35);
+    // y: rises slowly low then sweeps to the crown (sin^0.85 → fuller shoulder)
+    const y = yLow + (crownY - yLow) * Math.pow(Math.sin(a), 0.85);
+    pts.push({ x, y });
+  }
+  return pts;                                   // [deckEdge, chamfer, ...continuous arc..., crown]
+}
+
+// ── COCKPIT SHELL — REBUILD v2 R5a: NO LONGER A BOX. A lofted, ribbed, VAULTED fuselage shell:
+//    a flat walkable deck, side walls that CANT inward to a vaulted/ribbed roof (structural hoop
+//    frames arc over the cabin), the cross-section TAPERING to the nose, and a RAKED faceted
+//    windscreen forward. The OLD collider box (COCKPIT_COLLIDERS) is unchanged — the curved skin
+//    lives at/outside that envelope above waist height (unreachable corners), the deck + the aft
+//    doorway stay WYSIWYG so the walk + corridor join are byte-identical.
 function buildCockpitShell(group: THREE.Group): void {
   // FLOOR — sub-floor + bright deck plate + a worn CENTRE traffic lane + tread strips + rivets.
   const floor = _box(CK_W, WALL_T, CK_D, _channel);
@@ -259,168 +483,556 @@ function buildCockpitShell(group: THREE.Group): void {
     tread.position.set(sx * 0.62, 0.05, 0.2);
     group.add(tread);
   }
-  // deck-plate rivet ring near the floor edge
   const up = new THREE.Vector3(0, 1, 0);
+  // ── DECK PANEL SEAMS — break the flat deck into riveted plates (gate: floor was a flat plane).
+  //    Cross seams + corner fasteners → reads as a real bolted deck, not cardboard.
+  for (const sz0 of [-1.6, -0.6, 0.4, 1.4]) {
+    const seam = _box(CK_W - 0.5, 0.012, 0.03, _channel);
+    seam.position.set(0, 0.043, sz0);
+    group.add(seam);
+    for (const fx of [-2.0, -1.0, 1.0, 2.0]) group.add(_stud(fx, 0.05, sz0, up, _rivet, 0.013));
+  }
+  for (const sx0 of [-1.5, 1.5]) {
+    const seam = _box(0.03, 0.012, CK_D - 0.5, _channel);
+    seam.position.set(sx0, 0.043, 0.0);
+    group.add(seam);
+  }
+  // deck-plate rivet ring near the floor edge
   for (let i = 0; i < 24; i++) {
     const a = (i / 24) * Math.PI * 2;
     const rx = Math.cos(a) * (CK_X - 0.4), rz = Math.sin(a) * (CK_Z - 0.4);
     group.add(_stud(rx, 0.05, rz, up, _rivet, 0.016));
   }
 
-  // CEILING — darker grimed panel + crossbeam ribs + a lowered forward SOFFIT (closes the
-  //   space over the pilot's head so it reads cramped + frames the window from above).
-  const ceil = _box(CK_W, WALL_T, CK_D, _ceil);
-  ceil.position.set(0, CK_H + WALL_T / 2, 0);
-  group.add(ceil);
-  const down = new THREE.Vector3(0, -1, 0);
-  // forward soffit bulkhead — a deep header dropping from the ceiling above the window,
-  // bringing the overhead IN over the seated pilot (cramped) without blocking the window.
-  const soffit = _box(CK_W - 0.2, 0.5, 0.5, _steel);
-  soffit.position.set(0, CK_H - 0.30, -CK_Z + 0.55);
-  group.add(soffit);
-  for (let i = -2; i <= 2; i++) group.add(_stud(i * 1.1, CK_H - 0.55, -CK_Z + 0.30, down, _rivet, 0.016));
-  // crossbeam ribs aft
-  for (const cz of [-0.4, 1.0, 1.9]) {
-    const beam = _box(CK_W - 0.3, 0.14, 0.16, _steel);
-    beam.position.set(0, CK_H - 0.09, cz);
-    group.add(beam);
-    for (let i = -2; i <= 2; i++) group.add(_stud(i * 1.2, CK_H - 0.18, cz, down, _rivet, 0.016));
-  }
-
-  // ── SIDE WALLS (±X) — riveted aluminium plates with panel lines, vertical channel ribs,
-  //    a proud waist rail, a kickplate, and a warning placard. Brought IN visually by the
-  //    side consoles (buildSideConsoles) so the station feels enclosed.
-  for (const sx of [-1, 1]) {
-    const wallX = sx * (CK_X - 0.02);
-    const wall = _box(0.04, CK_H, CK_D, _shell);
-    wall.position.set(wallX, CK_H / 2, 0);
-    group.add(wall);
-    const inward = new THREE.Vector3(-sx, 0, 0);
-    // panel-line breakup (horizontal seams at two heights + verticals)
-    for (const py of [0.9, 1.95]) {
-      const pl = _box(0.012, 0.018, CK_D - 0.4, _channel);
-      pl.position.set(sx * (CK_X - 0.045), py, 0.1);
-      group.add(pl);
-    }
-    for (const pz of [-1.0, 0.8]) {
-      const pv = _box(0.012, CK_H - 0.5, 0.018, _channel);
-      pv.position.set(sx * (CK_X - 0.045), CK_H / 2, pz);
-      group.add(pv);
-    }
-    // vertical channel ribs + rivets
-    for (const cz of [-1.7, -0.1, 1.6]) {
-      const rib = _box(0.05, CK_H - 0.3, 0.14, _steel);
-      rib.position.set(sx * (CK_X - 0.09), CK_H / 2, cz);
-      group.add(rib);
-      for (let k = 0; k < 5; k++) {
-        group.add(_stud(sx * (CK_X - 0.05), 0.4 + k * ((CK_H - 0.8) / 4), cz, inward, _rivet, 0.016));
+  // ── THE LOFTED VAULTED HULL SKIN (this is the box-breaker). Loft the chamfered, tapering
+  //    hullProfile() cross-section along Z from the nose (−Z) to the aft door wall (+Z): the
+  //    walls cant inward, the roof vaults, the whole cross-section narrows to the nose. Built as
+  //    a triangle-soup skin per side (mirrored), DOUBLE-skinned (a darker outer shell behind a
+  //    lit inner skin) so torn edges never read paper-thin. The aft 0.4m is left flat (the door
+  //    wall owns it). The deck stays flat below the profile foot.
+  const SECZ: number[] = [];
+  const segZ = 10;
+  for (let s = 0; s <= segZ; s++) SECZ.push(THREE.MathUtils.lerp(-CK_Z + 0.02, CK_Z - 0.42, s / segZ));
+  const profiles = SECZ.map((z) => hullProfile(z));
+  // per-profile-point OUTWARD 2D normals (so the outer shell offsets uniformly along the whole
+  // section — no gated band, no coincident-skin z-fight). Normal of the polyline at point i.
+  const OFF = 0.08;
+  const normals = profiles.map((p) => p.map((_, i) => {
+    const a = p[Math.max(0, i - 1)], b = p[Math.min(p.length - 1, i + 1)];
+    const tx = b.x - a.x, ty = b.y - a.y;          // tangent
+    const nx = ty, ny = -tx;                        // 2D normal (points outboard for this winding)
+    const L = Math.hypot(nx, ny) || 1;
+    return { nx: nx / L, ny: ny / L };
+  }));
+  for (const side of [1, -1]) {
+    const innerV: number[] = [];
+    const outerV: number[] = [];
+    for (let s = 0; s < SECZ.length - 1; s++) {
+      const z0 = SECZ[s], z1 = SECZ[s + 1];
+      const p0 = profiles[s], p1 = profiles[s + 1];
+      const n0 = normals[s], n1 = normals[s + 1];
+      for (let i = 0; i < p0.length - 1; i++) {
+        const a = { x: side * p0[i].x, y: p0[i].y, z: z0 };
+        const b = { x: side * p0[i + 1].x, y: p0[i + 1].y, z: z0 };
+        const c = { x: side * p1[i].x, y: p1[i].y, z: z1 };
+        const d = { x: side * p1[i + 1].x, y: p1[i + 1].y, z: z1 };
+        if (side > 0) {
+          innerV.push(a.x, a.y, a.z, c.x, c.y, c.z, b.x, b.y, b.z);
+          innerV.push(b.x, b.y, b.z, c.x, c.y, c.z, d.x, d.y, d.z);
+        } else {
+          innerV.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
+          innerV.push(b.x, b.y, b.z, d.x, d.y, d.z, c.x, c.y, c.z);
+        }
+        // outer skin: each vertex pushed out along ITS OWN 2D normal (uniform shell thickness)
+        const ao = { x: side * (p0[i].x + n0[i].nx * OFF), y: p0[i].y + n0[i].ny * OFF, z: z0 };
+        const bo = { x: side * (p0[i + 1].x + n0[i + 1].nx * OFF), y: p0[i + 1].y + n0[i + 1].ny * OFF, z: z0 };
+        const co = { x: side * (p1[i].x + n1[i].nx * OFF), y: p1[i].y + n1[i].ny * OFF, z: z1 };
+        const dn = { x: side * (p1[i + 1].x + n1[i + 1].nx * OFF), y: p1[i + 1].y + n1[i + 1].ny * OFF, z: z1 };
+        if (side > 0) {
+          outerV.push(ao.x, ao.y, ao.z, bo.x, bo.y, bo.z, co.x, co.y, co.z);
+          outerV.push(bo.x, bo.y, bo.z, dn.x, dn.y, dn.z, co.x, co.y, co.z);
+        } else {
+          outerV.push(ao.x, ao.y, ao.z, co.x, co.y, co.z, bo.x, bo.y, bo.z);
+          outerV.push(bo.x, bo.y, bo.z, co.x, co.y, co.z, dn.x, dn.y, dn.z);
+        }
       }
     }
-    // a proud waist rail (bright horizontal band)
-    const rail = _box(0.07, 0.16, CK_D - 0.4, _band);
-    rail.position.set(sx * (CK_X - 0.07), 1.2, 0.1);
+    group.add(_skin(innerV, _shell));
+    group.add(_skin(outerV, _ceil));
+  }
+
+  // ── STRUCTURAL HOOP RIBS — the fuselage frames. At a set of Z stations, a chunky channel-steel
+  //    arch follows the hullProfile (a ring of short box segments hugging the curve) so the eye
+  //    reads "ribbed fuselage", not "flat ceiling". Rivet studs march along each rib.
+  //    HEAVY bulkhead frames (z=-0.9, 1.3) are wider/deeper; lighter intermediates between. Each
+  //    rib is darker, more-specular steel (pops OFF the hull), with a rivet row down the flange +
+  //    a bracket GUSSET where it lands on the deck. A keel STRINGER runs the crown fore-aft.
+  const ribDefs: [number, boolean][] = [[-2.0, false], [-0.9, true], [0.2, false], [1.3, true], [2.2, false]];
+  for (const [rz, heavy] of ribDefs) {
+    const prof = hullProfile(rz);
+    const w = heavy ? 0.16 : 0.09, dep = heavy ? 0.17 : 0.11;
+    for (const side of [1, -1]) {
+      for (let i = 0; i < prof.length - 1; i++) {
+        const ax = side * prof[i].x, ay = prof[i].y;
+        const bx = side * prof[i + 1].x, by = prof[i + 1].y;
+        const mx = (ax + bx) / 2, my = (ay + by) / 2;
+        const len = Math.hypot(bx - ax, by - ay) + 0.02;
+        const rib = _box(w, len, dep, _steel);
+        rib.position.set(mx, my, rz);
+        rib.rotation.z = Math.atan2(by - ay, bx - ax) - Math.PI / 2;
+        group.add(rib);
+        const inward = new THREE.Vector3(-Math.sign(mx || side), -0.2, 0).normalize();
+        group.add(_stud(mx, my, rz + dep * 0.55, inward, _rivet, heavy ? 0.018 : 0.013));
+      }
+      // a bracket GUSSET where the rib foot meets the deck (a triangular knee)
+      const foot = { x: side * prof[0].x, y: prof[0].y };
+      const gus = _box(w + 0.04, 0.18, dep + 0.05, _channel);
+      gus.position.set(foot.x - side * 0.04, 0.12, rz);
+      group.add(gus);
+    }
+  }
+  // KEEL STRINGER along the crown (fore-aft) — ties the ribs together overhead.
+  const stringer = _box(0.08, 0.10, CK_D - 0.5, _steel);
+  stringer.position.set(0, HULL_CROWN_MAX - 0.05, 0.0);
+  group.add(stringer);
+  for (let i = -2; i <= 2; i++) group.add(_stud(0, HULL_CROWN_MAX - 0.10, i * 0.9, new THREE.Vector3(0, -1, 0), _rivet, 0.014));
+
+  // ── A lowered forward SOFFIT brow — a deep canted header dropping over the windscreen top
+  //    (brings the overhead IN over the seated pilot + frames the canopy from above). Canted to
+  //    follow the windscreen rake.
+  const down = new THREE.Vector3(0, -1, 0);
+  const soffit = _box(CK_W - 0.7, 0.42, 0.5, _steel);
+  soffit.position.set(0, 2.46, -CK_Z + 0.62);
+  soffit.rotation.x = 0.35;
+  group.add(soffit);
+  for (let i = -2; i <= 2; i++) group.add(_stud(i * 0.95, 2.30, -CK_Z + 0.42, down, _rivet, 0.016));
+
+  // ── OVERHEAD SWITCH PANEL — the cockpit "roof console": a canted instrument panel hanging off
+  //    the soffit brow into the pilot's upper view (wraps the pilot in instruments — a key
+  //    cockpit-vs-room tell). Toggle-guard rows + a couple of lit telltales + a placard.
+  const ohY = 2.34, ohZ = -CK_Z + 0.95;
+  const ohPanel = _box(1.5, 0.06, 0.42, _channel);
+  ohPanel.position.set(0, ohY, ohZ);
+  ohPanel.rotation.x = -0.62;          // faces down-aft toward the seated pilot's eyes
+  group.add(ohPanel);
+  const ohFace = _box(1.42, 0.02, 0.36, _band);
+  ohFace.position.set(0, ohY - 0.04, ohZ + 0.04);
+  ohFace.rotation.x = -0.62;
+  group.add(ohFace);
+  // guarded toggle rows
+  for (let r = 0; r < 2; r++) {
+    for (let c = 0; c < 6; c++) {
+      const sw = _cyl(0.011, 0.011, 0.05, 6, _rivet);
+      sw.rotation.x = -0.62 - 0.35;
+      sw.position.set(-0.55 + c * 0.22, ohY - 0.06 - r * 0.02, ohZ - 0.06 + r * 0.13);
+      group.add(sw);
+    }
+    const guard = _box(1.36, 0.015, 0.02, _steel);
+    guard.position.set(0, ohY - 0.02 - r * 0.02, ohZ - 0.10 + r * 0.13);
+    guard.rotation.x = -0.62;
+    group.add(guard);
+  }
+  // a few lit telltales on the overhead (calm green/amber)
+  const ohLeds = [_ledGreen, _ledAmber, _ledGreen, _ledBlue];
+  for (let i = 0; i < 4; i++) {
+    const led = _cyl(0.016, 0.016, 0.02, 8, ohLeds[i]);
+    led.rotation.x = -0.62 + Math.PI / 2;
+    led.position.set(-0.30 + i * 0.20, ohY - 0.10, ohZ + 0.14);
+    group.add(led);
+  }
+  const ohPlac = _box(0.4, 0.005, 0.07, _hazard);
+  ohPlac.position.set(0.5, ohY - 0.09, ohZ + 0.10);
+  ohPlac.rotation.x = -0.62;
+  group.add(ohPlac);
+
+  // ── SIDE-WALL detailing on the canted lower wall (waist rail + kickplate + placard + panel
+  //    lines), riding the now-canted profile so it reads as hull detail, not flat-wall trim.
+  for (const sx of [-1, 1]) {
+    const inward = new THREE.Vector3(-sx, 0, 0);
+    const wallX = sx * (CK_X - 0.04);
+    // panel-line breakup on the lower vertical wall
+    for (const pz of [-1.0, 0.8]) {
+      const pv = _box(0.012, 1.4, 0.018, _channel);
+      pv.position.set(sx * (CK_X - 0.05), 0.75, pz);
+      group.add(pv);
+    }
+    // a proud waist rail at the shoulder line (where the wall starts to cant — reads the chine)
+    const rail = _box(0.09, 0.14, CK_D - 0.7, _band);
+    rail.position.set(sx * (CK_X - 0.10), 1.5, 0.1);
     group.add(rail);
-    // kickplate skirt
-    const kick = _box(0.05, 0.26, CK_D - 0.2, _steel);
-    kick.position.set(sx * (CK_X - 0.06), 0.13, 0.1);
+    for (let k = 0; k < 6; k++) group.add(_stud(sx * (CK_X - 0.05), 1.5, -1.5 + k * 0.6, inward, _rivet, 0.015));
+    // kickplate skirt at the floor
+    const kick = _box(0.05, 0.26, CK_D - 0.4, _steel);
+    kick.position.set(wallX, 0.13, 0.1);
     group.add(kick);
-    // a stencilled hazard placard on the wall (a lived-in warning decal)
+    // a stencilled hazard placard on the lower wall (a lived-in warning decal)
     const plac = _box(0.005, 0.16, 0.30, _hazard);
-    plac.position.set(sx * (CK_X - 0.07), 1.7, 1.3);
+    plac.position.set(sx * (CK_X - 0.06), 1.0, 1.3);
     group.add(plac);
     const placTxt = _box(0.006, 0.05, 0.22, _decal);
-    placTxt.position.set(sx * (CK_X - 0.072), 1.66, 1.3);
+    placTxt.position.set(sx * (CK_X - 0.062), 0.96, 1.3);
     group.add(placTxt);
   }
 
-  // ── FORWARD (−Z) WINDOW WALL — the four hull segments around the gap, worn hull, plus a
-  //    chunky channel-steel mullion frame bezel (the focal point). The orbit view shows
-  //    through. The BIG read comes from the planet sized large + the soffit/dash framing it.
+  // ── FORWARD RAKED WINDSCREEN / CANOPY (the focal point — NOT a flat wall with a hole). The
+  //    glass RAKES BACK from a low sill up toward the soffit brow, faceted into a lower + upper
+  //    pane, divided + framed by structural canopy spars that sweep up. Below the sill is solid
+  //    hull (the dash sits against it); the canted cheek panels close the sides. The orbit view
+  //    (the planet) reads through the raked glass.
   const fwZ = -CK_Z + 0.02;
   const fwdIn = new THREE.Vector3(0, 0, 1);
-  const wBelow = _box(CK_W, WIN_Y0, 0.04, _shell);
-  wBelow.position.set(0, WIN_Y0 / 2, fwZ);
-  group.add(wBelow);
-  const wAbove = _box(CK_W, CK_H - WIN_Y1, 0.04, _shell);
-  wAbove.position.set(0, (WIN_Y1 + CK_H) / 2, fwZ);
-  group.add(wAbove);
-  for (const sx of [-1, 1]) {
-    const side = _box(CK_X - WIN_X, WIN_Y1 - WIN_Y0, 0.04, _shell);
-    side.position.set(sx * (WIN_X + (CK_X - WIN_X) / 2), (WIN_Y0 + WIN_Y1) / 2, fwZ);
-    group.add(side);
-  }
-  buildWindowFrame(group, fwZ, fwdIn);
+  // sill hull below the windscreen (≥0.10m — rule #7; the dash sits against it)
+  const sill = _box(CK_W - 0.4, WIN_Y0, 0.12, _shell);
+  sill.position.set(0, WIN_Y0 / 2, fwZ + 0.02);
+  group.add(sill);
+  buildWindscreen(group, fwZ, fwdIn);
 
-  // ── AFT (+Z) DOOR WALL — the three hull segments, worn hull, + a real bulkhead doorway.
+  // ── AFT TRANSITION COLLAR — loft the last hull ring (z=CK_Z−0.42) to the FLAT aft bulkhead plane
+  //    (z=afZ) so the curved fuselage ROLLS into the door wall (no abrupt curved-meets-flat seam).
   const afZ = CK_Z - 0.02;
   const aftIn = new THREE.Vector3(0, 0, -1);
+  {
+    const ringZ = CK_Z - 0.42;
+    const prof = hullProfile(ringZ);
+    for (const side of [1, -1]) {
+      const collarV: number[] = [];
+      for (let i = 0; i < prof.length - 1; i++) {
+        // curved ring point → flattened toward the bulkhead rectangle (clamp x to door+frame width)
+        const a = { x: side * prof[i].x, y: prof[i].y, z: ringZ };
+        const b = { x: side * prof[i + 1].x, y: prof[i + 1].y, z: ringZ };
+        const fx = (px: number) => side * Math.min(Math.abs(px), CK_X);
+        const c = { x: fx(prof[i].x), y: Math.min(prof[i].y, CK_H), z: afZ };
+        const d = { x: fx(prof[i + 1].x), y: Math.min(prof[i + 1].y, CK_H), z: afZ };
+        if (side > 0) {
+          collarV.push(a.x, a.y, a.z, c.x, c.y, c.z, b.x, b.y, b.z);
+          collarV.push(b.x, b.y, b.z, c.x, c.y, c.z, d.x, d.y, d.z);
+        } else {
+          collarV.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
+          collarV.push(b.x, b.y, b.z, d.x, d.y, d.z, c.x, c.y, c.z);
+        }
+      }
+      group.add(_skin(collarV, _ceil));
+    }
+  }
+  // ── AFT (+Z) DOOR WALL — the bulkhead segments around the doorway (≥0.10m thick — rule #7) + a
+  //    real bulkhead doorway. Side segments + head close the wall around the corridor opening.
   for (const sx of [-1, 1]) {
-    const side = _box(CK_X - DOOR_X, CK_H, 0.04, _shell);
+    const side = _box(CK_X - DOOR_X, CK_H, 0.12, _shell);
     side.position.set(sx * (DOOR_X + (CK_X - DOOR_X) / 2), CK_H / 2, afZ);
     group.add(side);
-    const rib = _box(0.05, CK_H - 0.3, 0.12, _steel);
-    rib.position.set(sx * (CK_X - 0.6), CK_H / 2, afZ - 0.02);
+    const rib = _box(0.07, CK_H - 0.3, 0.14, _steel);
+    rib.position.set(sx * (CK_X - 0.6), CK_H / 2, afZ - 0.07);
     group.add(rib);
+    // ── R5a-r3 SEV-2 #2 — bring the flat aft bay UP TO THE RIBS' BAR. A recessed darker sub-panel
+    //    + panel-line seams + a bolt row + a scuffed-bright proud plate, so the big flat face takes
+    //    light as PLATES, not one value.
+    const inward = new THREE.Vector3(0, 0, -1);
+    const bayX = sx * (DOOR_X + (CK_X - DOOR_X) / 2);
+    // a recessed darker access sub-panel (a channel-steel inset → a value break + depth)
+    const recess = _box((CK_X - DOOR_X) - 0.5, 1.1, 0.04, _channel);
+    recess.position.set(bayX, 1.5, afZ - 0.055);
+    group.add(recess);
+    // a proud brighter plate above it (painted hull plate → a third value)
+    const plate = _box((CK_X - DOOR_X) - 0.7, 0.6, 0.05, _band);
+    plate.position.set(bayX, 2.45, afZ - 0.06);
+    group.add(plate);
+    // horizontal panel-line seams across the bay
+    for (const py of [0.55, 2.05]) {
+      const seamH = _box((CK_X - DOOR_X) - 0.2, 0.02, 0.02, _channel);
+      seamH.position.set(bayX, py, afZ - 0.06);
+      group.add(seamH);
+    }
+    // a vertical panel line
+    const seamV = _box(0.02, CK_H - 0.4, 0.02, _channel);
+    seamV.position.set(bayX + sx * 0.35, CK_H / 2, afZ - 0.06);
+    group.add(seamV);
+    // a bolt row down the recess edge
+    for (let k = 0; k < 6; k++) {
+      group.add(_stud(bayX - sx * 0.62, 1.05 + k * 0.18, afZ - 0.075, inward, _rivet, 0.014));
+    }
+    // a conduit run dropping down the bay (lived-in greeble — gate: aft walls bare greybox)
+    const cond = _cyl(0.035, 0.035, 1.6, 7, _cable);
+    cond.position.set(bayX + sx * 0.55, 1.3, afZ - 0.10);
+    group.add(cond);
+    for (const cy of [0.7, 1.5, 2.1]) {
+      const clamp = _cyl(0.05, 0.05, 0.03, 7, _rivet);
+      clamp.rotation.x = Math.PI / 2;
+      clamp.position.set(bayX + sx * 0.55, cy, afZ - 0.12);
+      group.add(clamp);
+    }
   }
-  const aHead = _box(2 * DOOR_X, CK_H - DOOR_Y1, 0.04, _shell);
+  const aHead = _box(2 * DOOR_X, CK_H - DOOR_Y1, 0.12, _shell);
   aHead.position.set(0, (DOOR_Y1 + CK_H) / 2, afZ);
   group.add(aHead);
   buildDoorway(group, afZ, aftIn);
+
+  // ── STENCILLED PLACARDS / LABELS (lived-in — gate: walls had no labels). A hull-serial plate
+  //    beside the door + a unit-number panel near a rib + small warning labels. Printed decals.
+  const serial = _box(0.34, 0.10, 0.008, _decal);   // hull serial plate beside the doorway
+  serial.position.set(DOOR_X + 0.42, 2.2, afZ - 0.07);
+  group.add(serial);
+  const serialTxt = _box(0.28, 0.04, 0.004, _hazard);
+  serialTxt.position.set(DOOR_X + 0.42, 2.2, afZ - 0.078);
+  group.add(serialTxt);
+  const unit = _box(0.24, 0.16, 0.008, _hazard);    // a unit-number panel near the −X heavy rib
+  unit.position.set(-(CK_X - 0.5), 1.7, -0.9);
+  unit.rotation.y = 0.5;
+  group.add(unit);
+  const unitTxt = _box(0.16, 0.10, 0.004, _decal);
+  unitTxt.position.set(-(CK_X - 0.52), 1.7, -0.88);
+  unitTxt.rotation.y = 0.5;
+  group.add(unitTxt);
 }
 
-/** The forward window bezel — a chunky channel-steel mullion frame set proud into the gap, a
- *  vertical centre mullion, a faint glass pane, rivet rows, trim, + an "ORBITAL OPS" placard. */
-function buildWindowFrame(group: THREE.Group, fwZ: number, inward: THREE.Vector3): void {
-  const cy = (WIN_Y0 + WIN_Y1) / 2;
-  const hh = (WIN_Y1 - WIN_Y0) / 2;
-  const proudZ = fwZ + 0.10;
-  const barT = 0.12;
-  const top = _box(2 * WIN_X + barT, barT, 0.16, _winFrame);
-  top.position.set(0, WIN_Y1, proudZ);
-  group.add(top);
-  const bot = _box(2 * WIN_X + barT, barT, 0.16, _winFrame);
-  bot.position.set(0, WIN_Y0, proudZ);
-  group.add(bot);
-  for (const sx of [-1, 1]) {
-    const jamb = _box(barT, 2 * hh + barT, 0.16, _winFrame);
-    jamb.position.set(sx * WIN_X, cy, proudZ);
-    group.add(jamb);
-  }
-  const mull = _box(0.07, 2 * hh, 0.14, _winFrame);
-  mull.position.set(0, cy, proudZ);
-  group.add(mull);
-  for (const sx of [-1, 1]) {
-    for (let k = 0; k < 5; k++) {
-      group.add(_stud(sx * WIN_X, WIN_Y0 + 0.1 + k * (2 * hh - 0.2) / 4, proudZ + 0.08, inward, _rivet, 0.016));
+/** The RAKED FACETED WINDSCREEN — the cockpit's focal point. The glazing rakes back from the
+ *  low sill (y=WIN_Y0, z=fwZ) up + aft to the brow (y≈WIN_TOP_Y, z=fwZ+RAKE), split into a lower
+ *  + upper pane by a horizontal transom; a central vertical mullion + raked side spars + a sill
+ *  bar + brow bar frame it as a real canopy. Canted cheek panels close the sides. The orbit view
+ *  reads through the angled glass. Verts are wound so glass faces the cabin. */
+const WIN_TOP_Y = 2.55;            // the windscreen top (at the brow)
+const WIN_RAKE = 0.92;             // how far aft (+Z) the top leans from the sill
+const WIN_MIDY = 1.72;             // the transom split height
+function _winZ(y: number): number {
+  // the rake line: z grows with height from the sill up to the brow
+  const t = THREE.MathUtils.clamp((y - WIN_Y0) / (WIN_TOP_Y - WIN_Y0), 0, 1);
+  return -CK_Z + 0.02 + WIN_RAKE * t * t;   // eased so the lower pane is steeper, the top lies back
+}
+function _winHalfW(y: number): number {
+  // the windscreen narrows toward the top (the canopy tapers up as well as the nose tapering)
+  const t = (y - WIN_Y0) / (WIN_TOP_Y - WIN_Y0);
+  return THREE.MathUtils.lerp(WIN_X + 0.05, WIN_X - 0.45, THREE.MathUtils.clamp(t, 0, 1));
+}
+function buildWindscreen(group: THREE.Group, fwZ: number, inward: THREE.Vector3): void {
+  // ── the two faceted GLASS panes (lower steeper, upper raked back), each a thin angled slab.
+  //    Real transmissive cool-tinted glass (envMap-reflective) + a faint reticle/smudge overlay so
+  //    the pane reads as GLASS, not a hole (gate #5 — space was compositing behind like a void).
+  const panes: [number, number][] = [[WIN_Y0 + 0.02, WIN_MIDY - 0.02], [WIN_MIDY + 0.02, WIN_TOP_Y - 0.02]];
+  for (const [y0, y1] of panes) {
+    const cy = (y0 + y1) / 2;
+    const z0 = _winZ(y0), z1 = _winZ(y1);
+    const h = Math.hypot(y1 - y0, z1 - z0);
+    const w = 2 * Math.min(_winHalfW(y0), _winHalfW(y1)) - 0.06;
+    const rake = -Math.atan2(z1 - z0, y1 - y0);
+    const glass = _box(w, h, 0.025, _glass);
+    glass.position.set(0, cy, (z0 + z1) / 2);
+    glass.rotation.x = rake;
+    group.add(glass);
+    // a faint additive SMUDGE/dust film on the inner face (catches the cabin light → reads as a
+    // real grimy pane the eye sits behind). Very low opacity so the orbit still reads through.
+    const smGeo = new THREE.PlaneGeometry(w * 0.9, h * 0.8);
+    _disposables.push(smGeo);
+    const smMat = new THREE.MeshBasicMaterial({ color: 0x9fb4c4, transparent: true, opacity: 0.08, depthWrite: false });
+    _buildMats.push(smMat);
+    const smudge = new THREE.Mesh(smGeo, smMat);
+    smudge.position.set(0, cy, (z0 + z1) / 2 + 0.02 * Math.cos(rake));
+    smudge.rotation.x = rake;
+    group.add(smudge);
+    // ── R5a-r4 SEV-2 (UNANIMOUS): baked diagonal SPECULAR STREAKS on the inner pane face. ONE clear
+    //    bright streak flips "hole" → "glass". Additive, cool-white, angled — a window-light reflection
+    //    sliding across the canopy. Two streaks per pane (a wide soft one + a thin bright one), offset
+    //    so the grazing WIDE 3/4 catches at least one. blending=Additive so it pops against the planet.
+    for (const [sw, so, sx0, srot] of [[0.085, 0.42, -0.18, 0.62], [0.035, 0.62, 0.12, 0.55]] as [number, number, number, number][]) {
+      const stGeo = new THREE.PlaneGeometry(sw, h * 1.18);
+      _disposables.push(stGeo);
+      const stMat = new THREE.MeshBasicMaterial({
+        color: 0xcfe2f2, transparent: true, opacity: so, depthWrite: false, blending: THREE.AdditiveBlending,
+      });
+      _buildMats.push(stMat);
+      const streak = new THREE.Mesh(stGeo, stMat);
+      streak.position.set(w * sx0, cy, (z0 + z1) / 2 + 0.026 * Math.cos(rake));
+      streak.rotation.x = rake;
+      streak.rotation.z = srot;   // the diagonal slant of the reflection
+      group.add(streak);
+    }
+    // faint dust GLOW pooled at the mullion joints (the corners of the pane catch dust)
+    for (const dx of [-1, 1]) {
+      const dGeo = new THREE.PlaneGeometry(w * 0.22, h * 0.3);
+      _disposables.push(dGeo);
+      const dMat = new THREE.MeshBasicMaterial({ color: 0xaebccb, transparent: true, opacity: 0.10, depthWrite: false, blending: THREE.AdditiveBlending });
+      _buildMats.push(dMat);
+      const dust = new THREE.Mesh(dGeo, dMat);
+      dust.position.set(dx * w * 0.40, y0 + (y1 - y0) * 0.12, (z0 + z1) / 2 + 0.024 * Math.cos(rake));
+      dust.rotation.x = rake;
+      group.add(dust);
     }
   }
-  const trimTop = _box(2 * WIN_X, 0.04, 0.06, _band);
-  trimTop.position.set(0, WIN_Y1 - 0.07, proudZ + 0.06);
-  group.add(trimTop);
-  const trimBot = _box(2 * WIN_X, 0.04, 0.06, _band);
-  trimBot.position.set(0, WIN_Y0 + 0.07, proudZ + 0.06);
-  group.add(trimBot);
-  const glass = _box(2 * WIN_X - 0.05, 2 * hh - 0.05, 0.02, _glass);
-  glass.position.set(0, cy, fwZ - 0.04);
-  group.add(glass);
-  // a stencilled placard low-left of the window (lived-in)
+  // a faint HUD RETICLE etched on the lower pane (a thin green crosshair ring — diegetic avionics
+  //   reflected in the glass; sells "you're looking THROUGH a cockpit canopy").
+  const retY = WIN_Y0 + 0.5, retZ = _winZ(retY) + 0.03;
+  const retMat = new THREE.MeshBasicMaterial({ color: 0x5fae73, transparent: true, opacity: 0.5, depthWrite: false });
+  _buildMats.push(retMat);
+  const ringGeo = new THREE.TorusGeometry(0.12, 0.004, 6, 20);
+  _disposables.push(ringGeo);
+  const ret = new THREE.Mesh(ringGeo, retMat);
+  ret.position.set(0.0, retY, retZ);
+  ret.rotation.x = -Math.atan2(_winZ(WIN_MIDY) - _winZ(WIN_Y0), WIN_MIDY - WIN_Y0) + Math.PI / 2;
+  group.add(ret);
+  for (const [tw, th] of [[0.18, 0.004], [0.004, 0.18]] as [number, number][]) {
+    const tick = _box(tw, th, 0.002, retMat);
+    tick.position.set(0.0, retY, retZ);
+    tick.rotation.x = ret.rotation.x - Math.PI / 2;
+    group.add(tick);
+  }
+  // ── SILL BAR (chunky, along the bottom of the glazing) + BROW BAR (along the top) + TRANSOM
+  const sillBar = _box(2 * _winHalfW(WIN_Y0) + 0.14, 0.14, 0.20, _winFrame);
+  sillBar.position.set(0, WIN_Y0, _winZ(WIN_Y0) + 0.02);
+  group.add(sillBar);
+  const browBar = _box(2 * _winHalfW(WIN_TOP_Y) + 0.14, 0.13, 0.20, _winFrame);
+  browBar.position.set(0, WIN_TOP_Y, _winZ(WIN_TOP_Y));
+  browBar.rotation.x = 0.5;
+  group.add(browBar);
+  const transom = _box(2 * _winHalfW(WIN_MIDY), 0.10, 0.15, _winFrame);
+  transom.position.set(0, WIN_MIDY, _winZ(WIN_MIDY));
+  transom.rotation.x = -0.35;
+  group.add(transom);
+  // ── NOSE-CAP ROOF FAIRING — closes the entire forward roof above the windscreen so there is NO
+  //    dark void. Loft the UPPER arc (windscreen-top → crown) between a BROW ring (at the
+  //    windscreen top edge, narrow, aft) and the FRONT hull ring (at z=−CK_Z, full crown). Both
+  //    rings sampled as an arc from the windscreen-top corner up to the crown; the loft sweeps the
+  //    fairing from aft-low to forward-high, capping the nose.
+  const browZ = _winZ(WIN_TOP_Y);
+  const frontProf = hullProfile(-CK_Z + 0.02);
+  const ARC_N = 6;
+  // brow ring arc: from (winHalfW(top), WIN_TOP_Y, browZ) sweeping in/up to (0, crown≈brow+0.2)
+  const browRing = (side: number) => {
+    const x0 = side * _winHalfW(WIN_TOP_Y), y0 = WIN_TOP_Y;
+    const pts = [];
+    for (let i = 0; i <= ARC_N; i++) {
+      const a = (i / ARC_N) * (Math.PI / 2);
+      pts.push({ x: x0 * Math.cos(a), y: y0 + 0.18 * Math.sin(a), z: browZ - 0.05 * Math.sin(a) });
+    }
+    return pts;
+  };
+  // front ring arc: the upper arc of the front hull profile (shoulder→crown), at z=−CK_Z
+  const frontRing = (side: number) => {
+    const upper = frontProf.slice(2);   // skip foot+shoulder; the arc above the shoulder
+    return upper.map((p) => ({ x: side * p.x, y: p.y, z: -CK_Z + 0.02 }));
+  };
+  for (const side of [1, -1]) {
+    const capV: number[] = [];
+    const b = browRing(side), f = frontRing(side);
+    const n = Math.min(b.length, f.length);
+    for (let i = 0; i < n - 1; i++) {
+      const a0 = b[i], a1 = b[i + 1], c0 = f[i], c1 = f[i + 1];
+      if (side > 0) {
+        capV.push(a0.x, a0.y, a0.z, c0.x, c0.y, c0.z, a1.x, a1.y, a1.z);
+        capV.push(a1.x, a1.y, a1.z, c0.x, c0.y, c0.z, c1.x, c1.y, c1.z);
+      } else {
+        capV.push(a0.x, a0.y, a0.z, a1.x, a1.y, a1.z, c0.x, c0.y, c0.z);
+        capV.push(a1.x, a1.y, a1.z, c1.x, c1.y, c1.z, c0.x, c0.y, c0.z);
+      }
+    }
+    // SIDE GUSSET — close the wedge between the windscreen-top OUTER corner, the brow-ring base,
+    //   and the front-ring shoulder. SUBDIVIDED into 3 tris (gate: the single oversized gusset was
+    //   crease-popping) by inserting a midpoint along the brow→front edge.
+    const wc = { x: side * (_winHalfW(WIN_TOP_Y) + 0.06), y: WIN_TOP_Y - 0.06, z: browZ };
+    const br = b[0];
+    const fr = f[0];
+    const mid = { x: (br.x + fr.x) / 2, y: (br.y + fr.y) / 2, z: (br.z + fr.z) / 2 };
+    const tri = (p: typeof wc, q: typeof wc, r: typeof wc) => {
+      if (side > 0) capV.push(p.x, p.y, p.z, r.x, r.y, r.z, q.x, q.y, q.z);
+      else capV.push(p.x, p.y, p.z, q.x, q.y, q.z, r.x, r.y, r.z);
+    };
+    tri(wc, br, mid);
+    tri(wc, mid, fr);
+    tri(br, fr, mid);
+    group.add(_skin(capV, _ceil));
+  }
+  // ── BROW OVERLAP FASCIA — a slim opaque metal strip overlapping the windscreen-top edge ~12cm
+  //    UP past the glass, sealing the top-center slit where the nose-cap meets the upper pane.
+  const fascia = _box(2 * _winHalfW(WIN_TOP_Y) + 0.05, 0.16, 0.06, _winFrame);
+  fascia.position.set(0, WIN_TOP_Y + 0.04, _winZ(WIN_TOP_Y) - 0.04);
+  fascia.rotation.x = 0.5;
+  group.add(fascia);
+  // ── RAKED SIDE SPARS (the canopy A-pillars) + a CENTRE mullion, each following the rake line
+  const spars: number[] = [-1, 0, 1];
+  for (const sx of spars) {
+    const segs = 6;
+    for (let s = 0; s < segs; s++) {
+      const ya = WIN_Y0 + (WIN_TOP_Y - WIN_Y0) * (s / segs);
+      const yb = WIN_Y0 + (WIN_TOP_Y - WIN_Y0) * ((s + 1) / segs);
+      const za = _winZ(ya), zb = _winZ(yb);
+      const xa = sx * _winHalfW(ya), xb = sx * _winHalfW(yb);
+      const mx = (xa + xb) / 2, my = (ya + yb) / 2, mz = (za + zb) / 2;
+      const len = Math.hypot(xb - xa, yb - ya, zb - za) + 0.01;
+      const bar = _box(sx === 0 ? 0.055 : 0.09, len, 0.13, _winFrame);
+      bar.position.set(mx, my, mz);
+      bar.rotation.x = -Math.atan2(zb - za, yb - ya);
+      bar.rotation.z = Math.atan2(xb - xa, yb - ya);
+      group.add(bar);
+      // a GASKET retainer strip on the cabin face of each spar (frame depth + a real glazed look)
+      const gasket = _box((sx === 0 ? 0.055 : 0.09) - 0.01, len, 0.03, _channel);
+      gasket.position.set(mx, my, mz + 0.07);
+      gasket.rotation.copy(bar.rotation);
+      group.add(gasket);
+      if (s % 2 === 0) group.add(_stud(mx, my, mz + 0.10, inward, _rivet, 0.015));
+    }
+  }
+  // ── CANTED CHEEK panels — close the gap between the windscreen edge + the canted side wall
+  //    (a triangle skin each side so there's hull, not a void, beside the glazing).
+  for (const side of [1, -1]) {
+    const cheek: number[] = [];
+    const a = { x: side * _winHalfW(WIN_Y0), y: WIN_Y0, z: _winZ(WIN_Y0) };
+    const b = { x: side * _winHalfW(WIN_TOP_Y), y: WIN_TOP_Y, z: _winZ(WIN_TOP_Y) };
+    const prof0 = hullProfile(-CK_Z + 0.02);
+    const c = { x: side * prof0[1].x, y: 1.55, z: -CK_Z + 0.02 };   // the shoulder of the front ring
+    const d = { x: side * prof0[1].x, y: WIN_Y0, z: -CK_Z + 0.02 };
+    if (side > 0) {
+      cheek.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
+      cheek.push(a.x, a.y, a.z, c.x, c.y, c.z, d.x, d.y, d.z);
+    } else {
+      cheek.push(a.x, a.y, a.z, c.x, c.y, c.z, b.x, b.y, b.z);
+      cheek.push(a.x, a.y, a.z, d.x, d.y, d.z, c.x, c.y, c.z);
+    }
+    group.add(_skin(cheek, _shell));
+  }
+  // a stencilled placard low on the sill (lived-in)
   const plac = _box(0.30, 0.07, 0.012, _hazard);
-  plac.position.set(-WIN_X + 0.30, WIN_Y0 + 0.14, fwZ + 0.04);
+  plac.position.set(-WIN_X + 0.30, WIN_Y0 + 0.10, fwZ + 0.05);
   group.add(plac);
 }
 
 /** The aft doorway — a fitted channel-steel bulkhead door frame (jambs + header + rivets +
- *  amber threshold + a green "door clear" telltale). */
+ *  amber threshold + a green "door clear" telltale). R5a-r3 SEV-2 #4: the opening read as a flat
+ *  lit monitor — it now has a DEEP recessed jamb TUNNEL (near-black inner faces) + a beveled jamb +
+ *  a raised kick-plate threshold + hazard-stripe edging, so it reads as a doorway INTO somewhere. */
 function buildDoorway(group: THREE.Group, afZ: number, inward: THREE.Vector3): void {
   const proudZ = afZ - 0.09;
   const jambT = 0.14;
+  // ── RECESSED JAMB TUNNEL — dark inner reveal faces lining the opening, set BACK into the wall
+  //    (toward +Z) + near-black so the doorway reads with real depth (not a flush flat panel). The
+  //    corridor's lit greybox sits past it; this dark collar frames it as a tunnel mouth.
+  const tunZ = afZ + 0.22;     // the reveal sits back inside the wall
+  for (const sx of [-1, 1]) {
+    const reveal = _box(0.14, DOOR_Y1, 0.55, _channel);   // side reveal (deep, dark)
+    reveal.position.set(sx * (DOOR_X + 0.02), DOOR_Y1 / 2, tunZ);
+    group.add(reveal);
+  }
+  const revHead = _box(2 * DOOR_X + 0.04, 0.16, 0.55, _channel);   // top reveal
+  revHead.position.set(0, DOOR_Y1 - 0.06, tunZ);
+  group.add(revHead);
+  // a near-black shadow-gasket lip right at the mouth (deepens the threshold read)
+  for (const sx of [-1, 1]) {
+    const gask = _box(0.04, DOOR_Y1, 0.04, _cable);
+    gask.position.set(sx * (DOOR_X - 0.03), DOOR_Y1 / 2, afZ + 0.02);
+    group.add(gask);
+  }
   for (const sx of [-1, 1]) {
     const jamb = _box(jambT, DOOR_Y1, 0.18, _winFrame);
     jamb.position.set(sx * DOOR_X, DOOR_Y1 / 2, proudZ);
     group.add(jamb);
+    // a beveled inner jamb chamfer (a 45° return between the proud frame + the dark reveal)
+    const bevel = _box(0.06, DOOR_Y1, 0.10, _steel);
+    bevel.position.set(sx * (DOOR_X - 0.05), DOOR_Y1 / 2, proudZ + 0.10);
+    bevel.rotation.y = sx * 0.6;
+    group.add(bevel);
     for (let k = 0; k < 5; k++) {
       group.add(_stud(sx * DOOR_X, 0.25 + k * (DOOR_Y1 - 0.5) / 4, proudZ - 0.07, inward, _rivet, 0.016));
     }
+    // hazard-stripe edging down each jamb (a painted warning border — the door surround)
+    const hazEdge = _box(0.03, DOOR_Y1 - 0.2, 0.02, _hazard);
+    hazEdge.position.set(sx * (DOOR_X + 0.10), DOOR_Y1 / 2, proudZ - 0.10);
+    group.add(hazEdge);
   }
   const lintel = _box(2 * DOOR_X + jambT, jambT, 0.18, _winFrame);
   lintel.position.set(0, DOOR_Y1, proudZ);
@@ -428,9 +1040,19 @@ function buildDoorway(group: THREE.Group, afZ: number, inward: THREE.Vector3): v
   const hband = _box(2 * DOOR_X, 0.05, 0.06, _band);
   hband.position.set(0, DOOR_Y1 - 0.12, proudZ - 0.07);
   group.add(hband);
-  const thr = _box(2 * DOOR_X, 0.012, 0.10, _hazard);
-  thr.position.set(0, 0.06, afZ - 0.18);
-  group.add(thr);
+  // hazard-stripe lintel edging
+  const hazTop = _box(2 * DOOR_X + 0.1, 0.04, 0.02, _hazard);
+  hazTop.position.set(0, DOOR_Y1 + 0.10, proudZ - 0.10);
+  group.add(hazTop);
+  // ── RAISED THRESHOLD KICK-PLATE SILL — a real stepped sill across the floor of the opening (a
+  //    bulkhead doorway you step OVER), with a hazard-stripe tread on its face.
+  const sillBox = _box(2 * DOOR_X + 0.1, 0.10, 0.14, _steel);
+  sillBox.position.set(0, 0.05, afZ - 0.04);
+  group.add(sillBox);
+  const sillTread = _box(2 * DOOR_X, 0.012, 0.10, _hazard);
+  sillTread.position.set(0, 0.105, afZ - 0.06);
+  group.add(sillTread);
+  for (const sx of [-0.7, 0, 0.7]) group.add(_stud(sx, 0.10, afZ - 0.10, inward, _rivet, 0.013));
   const tell = _cyl(0.022, 0.022, 0.02, 8, _ledGreen);
   tell.rotation.x = Math.PI / 2;
   tell.position.set(DOOR_X - 0.12, 1.4, proudZ - 0.06);
@@ -445,89 +1067,266 @@ function buildDoorway(group: THREE.Group, afZ: number, inward: THREE.Vector3): v
  *  forward shot needs) carrying the throttle + a side stick. */
 function buildPilotSeat(group: THREE.Group): void {
   const sz = SEAT_Z, sy = SEAT_Y;
-  // pedestal column + foot + a swivel collar
-  const ped = _cyl(0.15, 0.20, sy - 0.06, 12, _channel);
-  ped.position.set(0, (sy - 0.06) / 2, sz + 0.04);
+  // ── PEDESTAL on a deck RAIL (a real seat track) + a gas-strut column + swivel collar.
+  const railL = _box(0.26, 0.05, 0.9, _steel);   // floor seat-rail
+  railL.position.set(0, 0.025, sz + 0.1);
+  group.add(railL);
+  for (const rz of [-0.3, 0.0, 0.35]) {
+    const tie = _box(0.30, 0.03, 0.04, _channel);
+    tie.position.set(0, 0.05, sz + 0.1 + rz);
+    group.add(tie);
+  }
+  const ped = _cyl(0.13, 0.17, sy - 0.08, 12, _channel);
+  ped.position.set(0, (sy - 0.08) / 2 + 0.05, sz + 0.04);
   group.add(ped);
-  const pedFoot = _cyl(0.30, 0.32, 0.06, 16, _steel);
-  pedFoot.position.set(0, 0.04, sz + 0.04);
-  group.add(pedFoot);
-  const collar = _cyl(0.17, 0.17, 0.05, 14, _band);
+  const collar = _cyl(0.15, 0.15, 0.05, 14, _rivet);
   collar.position.set(0, sy - 0.08, sz + 0.04);
   group.add(collar);
-  // cushion pan (cracked vinyl) + a worn crown + side bolsters
-  const cushion = _box(0.56, 0.13, 0.52, _seat);
-  cushion.position.set(0, sy, sz);
+  // ── CUSHION PAN — a contoured bucket (pan + a raised front lip + deep side bolsters). The pan
+  //    is EXTENDED forward (a longer squab) so the knee-roll lip + bolster fronts intrude into the
+  //    lower forward frustum (R5a-r3 SEV-1: the seat must show in the seated opening shot).
+  const cushion = _box(0.58, 0.14, 0.66, _seat);
+  cushion.position.set(0, sy, sz - 0.06);
   group.add(cushion);
-  const crown = _box(0.40, 0.04, 0.40, _seatWorn);
-  crown.position.set(0, sy + 0.075, sz);
-  group.add(crown);
+  // cushion seam welts (two cross channels → the pan reads as stitched sections, not a slab)
+  for (const cz of [sz - 0.10, sz - 0.28]) {
+    const welt = _box(0.50, 0.03, 0.02, _seam);
+    welt.position.set(0, sy + 0.075, cz);
+    group.add(welt);
+  }
+  // the knee-roll FRONT LIP — the squab's front roll (dark vinyl); a low foreground edge of "your
+  //   own seat" between the thighs (kept low so it doesn't loom over the dash/window).
+  const frontLip = _box(0.52, 0.12, 0.13, _seat);
+  frontLip.position.set(0, sy + 0.01, sz - 0.34);
+  group.add(frontLip);
+  const lipWelt = _box(0.46, 0.02, 0.02, _seam);   // a worn welt cresting the front roll
+  lipWelt.position.set(0, sy + 0.07, sz - 0.39);
+  group.add(lipWelt);
+  // ── DEEP SIDE BOLSTERS — the bucket sides, EXTENDED forward + raised into tall front horns that
+  //    flank the seated eye at the lower-left/right frame corners (the unmistakable "I'm sitting in
+  //    a seat" foreground). Each = a long low bolster + a proud forward horn that rises up beside
+  //    the pilot's hips/thighs into the POV.
   for (const sx of [-1, 1]) {
-    const bolster = _box(0.11, 0.13, 0.50, _seat);
-    bolster.position.set(sx * 0.27, sy + 0.06, sz);
+    const bolster = _box(0.15, 0.24, 0.64, _seat);      // deep side bolster (bucket side)
+    bolster.position.set(sx * 0.29, sy + 0.09, sz - 0.06);
     group.add(bolster);
+    // forward THIGH-BOLSTER (R5a-r4 SEV-1): symmetric dark-vinyl knee-bolsters brought UP + forward
+    //   into the lower-LEFT/RIGHT corners of the FP frame, so the pilot reads as CRADLED between
+    //   them. Raised crest (y≈0.92) lands in the lower corners; kept DARK so it reads as a bolster.
+    // A compact DARK knee-bolster hugging the lower corner (the pilot reads as cradled). Kept
+    //   smaller + rolled so its top face turns AWAY from the warm overhead key (no tan flat-top
+    //   slab → it stays a dark bolster, not the warned "tan wedge"). The roll is OUTBOARD (top
+    //   leans toward the side wall) so the lit face is the dark outer cheek, not the up-face.
+    const horn = _box(0.16, 0.30, 0.38, _seatBack);
+    horn.position.set(sx * 0.38, sy + 0.16, sz - 0.28);
+    horn.rotation.x = 0.10;
+    horn.rotation.z = sx * -0.22;                      // crown rolls toward the pilot's centre
+    group.add(horn);
+    // a worn welt down the INNER crest (the only highlight — a thin sliver, not a slab)
+    const hornWelt = _box(0.02, 0.30, 0.04, _seam);
+    hornWelt.position.set(sx * 0.30, sy + 0.20, sz - 0.28);
+    group.add(hornWelt);
+    // a worn welt down the bolster crest
+    const bWelt = _box(0.02, 0.03, 0.56, _seam);
+    bWelt.position.set(sx * 0.355, sy + 0.18, sz - 0.10);
+    group.add(bWelt);
   }
-  // the seat BACK — tall + ribbed (clearly a chair), canted to recline
-  const back = _box(0.50, 0.86, 0.13, _seat);
-  back.position.set(0, sy + 0.50, sz + 0.27);
-  back.rotation.x = -0.16;
+  // ── BACKREST — tall + raked, with a padded centre column flanked by bolsters + a head BOX.
+  const back = _box(0.54, 0.96, 0.16, _seatBack);
+  back.position.set(0, sy + 0.56, sz + 0.28);
+  back.rotation.x = -0.18;
   group.add(back);
-  // back ribs (padded channels — a recognizable seat-back read)
-  for (const rx of [-0.14, 0, 0.14]) {
-    const ribb = _box(0.08, 0.78, 0.05, _seatWorn);
-    ribb.position.set(rx, sy + 0.50, sz + 0.34);
-    ribb.rotation.x = -0.16;
-    group.add(ribb);
+  const backPad = _box(0.34, 0.84, 0.07, _seat);    // the padded centre channel (darker vinyl)
+  backPad.position.set(0, sy + 0.56, sz + 0.37);
+  backPad.rotation.x = -0.18;
+  group.add(backPad);
+  // CONTOUR QUILTING (R5a-r4 SEV-2): replace the even horizontal "drawer" seams with vinyl quilting
+  //   that follows the seat form — VERTICAL channel seams splitting the centre pad into upholstered
+  //   columns + just TWO horizontal lumbar bands. This never reads as a filing-cabinet's drawers.
+  //   The rake (x=-0.18) is baked into every seam so they track the leaned backrest.
+  const _rakeZ = (yLocal: number) => sz + 0.405 + (yLocal - (sy + 0.56)) * Math.tan(0.18);
+  for (const vx of [-0.105, 0, 0.105]) {              // three vertical bolster/quilt channels
+    const vs = _box(0.018, 0.80, 0.022, _seam);
+    vs.position.set(vx, sy + 0.56, _rakeZ(sy + 0.56));
+    vs.rotation.x = -0.18;
+    group.add(vs);
+  }
+  for (const ly of [sy + 0.40, sy + 0.70]) {          // two horizontal lumbar bands (not 4 drawers)
+    const ls = _box(0.30, 0.022, 0.02, _seam);
+    ls.position.set(0, ly, _rakeZ(ly));
+    ls.rotation.x = -0.18;
+    group.add(ls);
   }
   for (const sx of [-1, 1]) {
-    const wing = _box(0.10, 0.66, 0.22, _seat);
-    wing.position.set(sx * 0.27, sy + 0.46, sz + 0.22);
-    wing.rotation.x = -0.16;
+    const wing = _box(0.12, 0.78, 0.26, _seatBack);      // shoulder wings (bucket sides)
+    wing.position.set(sx * 0.29, sy + 0.54, sz + 0.24);
+    wing.rotation.x = -0.18;
     group.add(wing);
+    // a scuffed worn crest on each shoulder wing (where the pilot rubs through)
+    const wingWorn = _box(0.07, 0.50, 0.07, _seatWorn);
+    wingWorn.position.set(sx * 0.31, sy + 0.62, sz + 0.12);
+    wingWorn.rotation.x = -0.18;
+    group.add(wingWorn);
   }
-  const headRest = _box(0.32, 0.20, 0.14, _seat);
-  headRest.position.set(0, sy + 0.94, sz + 0.36);
-  headRest.rotation.x = -0.16;
-  group.add(headRest);
-  // ── ARMRESTS — the seated foreground the forward shot needs (the hands rest here). Two
-  //    padded arms reaching FORWARD toward the dash, each on a steel post; the right arm
-  //    carries a side-stick, the left a small armrest console pad.
+  // a metal back FRAME (the seat shell shows its structure — not a soft box)
+  const backFrame = _box(0.60, 1.0, 0.06, _steel);
+  backFrame.position.set(0, sy + 0.56, sz + 0.235);
+  backFrame.rotation.x = -0.18;
+  group.add(backFrame);
+  // ── AFT-FACE detail (R5a-r4 SEV-2): the back of the seat is what the DOOR shot sees. Break the
+  //    smooth-crate read with TWO vertical channel seams, SHOULDER CUT-OUTS where the harness exits
+  //    (slotted recesses near the top), + a stencilled PLACARD. The aft face sits ~z=sz+0.16 (the
+  //    +Z side of the raked frame).
+  // The seat back's DOOR-FACING face (the standing door camera sits at z≈sz-0.10 and looks +Z, so
+  //   it sees the LOW-Z side of the backrest assembly ≈ z=sz+0.19, raking back with height). Detail
+  //   must sit PROUD of THAT face (a hair toward -Z / the camera) or it hides on the far side.
+  const aftZ = (yLocal: number) => sz + 0.19 + (yLocal - (sy + 0.56)) * Math.tan(0.18);
+  for (const ax of [-0.15, 0.15]) {                   // two vertical channel seams down the door-facing face
+    const ac = _box(0.035, 0.86, 0.05, _seatWorn);    // lighter worn welt → the seam reads as relief, not dark-on-dark
+    ac.position.set(ax, sy + 0.52, aftZ(sy + 0.52) - 0.03);
+    ac.rotation.x = -0.18;
+    group.add(ac);
+  }
+  for (const sx of [-1, 1]) {                          // shoulder harness exit cut-outs (dark recessed slots)
+    const slot = _box(0.10, 0.13, 0.05, _channel);
+    slot.position.set(sx * 0.15, sy + 0.90, aftZ(sy + 0.90) - 0.02);
+    slot.rotation.x = -0.18;
+    group.add(slot);
+    const slotWeb = _box(0.06, 0.05, 0.03, _strap);   // a stub of harness webbing poking through the slot
+    slotWeb.position.set(sx * 0.15, sy + 0.86, aftZ(sy + 0.86) - 0.05);
+    slotWeb.rotation.x = -0.18;
+    group.add(slotWeb);
+  }
+  // a headrest BUMP proud of the door-facing face (so the silhouette isn't a flat crate top)
+  const aftHead = _box(0.30, 0.20, 0.10, _seatBack);
+  aftHead.position.set(0, sy + 1.06, aftZ(sy + 1.06) - 0.03);
+  aftHead.rotation.x = -0.18;
+  group.add(aftHead);
+  const placard = _box(0.18, 0.12, 0.02, _decal);     // a stencilled placard on the door-facing face
+  placard.position.set(0, sy + 0.32, aftZ(sy + 0.32) - 0.03);
+  placard.rotation.x = -0.18;
+  group.add(placard);
+  const placTxt = _box(0.13, 0.05, 0.015, _hazard);   // a printed warn-stripe on the placard
+  placTxt.position.set(0, sy + 0.33, aftZ(sy + 0.33) - 0.045);
+  placTxt.rotation.x = -0.18;
+  group.add(placTxt);
+  // HEAD BOX — a real padded head restraint (≥10cm depth, rule #7), clearly SEPARATED from the
+  //   backrest top by a gap + two steel guide posts (a distinct headrest, not a continuous slab).
   for (const sx of [-1, 1]) {
-    const armPost = _box(0.06, 0.26, 0.06, _steel);
-    armPost.position.set(sx * 0.34, sy + 0.13, sz - 0.05);
-    group.add(armPost);
-    const arm = _box(0.10, 0.07, 0.52, _seat);
-    arm.position.set(sx * 0.34, sy + 0.28, sz - 0.28);
-    group.add(arm);
-    const armPad = _box(0.11, 0.05, 0.30, _seatWorn);
-    armPad.position.set(sx * 0.34, sy + 0.32, sz - 0.34);
-    group.add(armPad);
+    const post = _box(0.03, 0.14, 0.03, _steel);
+    post.position.set(sx * 0.10, sy + 0.96, sz + 0.40);
+    post.rotation.x = -0.18;
+    group.add(post);
   }
-  // RIGHT side-stick (a control grip rising off the right armrest — "hands on the controls")
-  const stickBase = _box(0.10, 0.06, 0.12, _channel);
-  stickBase.position.set(0.34, sy + 0.34, sz - 0.50);
+  const headRest = _box(0.34, 0.22, 0.18, _seatBack);
+  headRest.position.set(0, sy + 1.10, sz + 0.44);
+  headRest.rotation.x = -0.18;
+  group.add(headRest);
+  const headPad = _box(0.24, 0.16, 0.07, _seatWorn);
+  headPad.position.set(0, sy + 1.10, sz + 0.53);
+  headPad.rotation.x = -0.18;
+  group.add(headPad);
+  // ── ARMRESTS — reach FORWARD into the seated POV (the hands rest here); on steel posts, with
+  //    control nubs; the right carries a side-stick. These + the harness MUST read in the forward
+  //    frame (the player is seated). Brought up + forward so they sit in the lower POV.
+  for (const sx of [-1, 1]) {
+    const armPost = _box(0.08, 0.40, 0.08, _steel);
+    armPost.position.set(sx * 0.37, sy + 0.20, sz - 0.04);
+    group.add(armPost);
+    // the armrest pad — raised + reaching forward so its tip lands in the lower-side forward frame.
+    const arm = _box(0.13, 0.10, 0.60, _seatBack);
+    arm.position.set(sx * 0.37, sy + 0.42, sz - 0.34);
+    group.add(arm);
+    const armPad = _box(0.14, 0.06, 0.40, _seat);       // DARK vinyl top (was tan _seatWorn → it loomed
+    armPad.position.set(sx * 0.37, sy + 0.48, sz - 0.40); //  as a tan wall in the close forward POV)
+    group.add(armPad);
+    const armWear = _box(0.06, 0.02, 0.30, _seatWorn);  // a THIN worn rub-stripe (a sliver, not a slab)
+    armWear.position.set(sx * 0.37, sy + 0.515, sz - 0.42);
+    group.add(armWear);
+    // a control nub cluster on each armrest tip (lit telltales — a point of life)
+    for (const nb of [-0.035, 0.035]) {
+      const nub = _cyl(0.013, 0.013, 0.032, 6, sx < 0 ? _ledAmber : _ledGreen);
+      nub.position.set(sx * 0.37 + nb, sy + 0.54, sz - 0.56);
+      group.add(nub);
+    }
+  }
+  // RIGHT side-stick (a control grip rising off the right armrest — "hands on the controls"); it
+  //   rises into the lower-right of the forward frame (the freighter pilot's stick).
+  const stickBase = _box(0.12, 0.08, 0.14, _channel);
+  stickBase.position.set(0.37, sy + 0.54, sz - 0.58);
   group.add(stickBase);
-  const stick = _cyl(0.022, 0.03, 0.20, 8, _steel);
-  stick.position.set(0.34, sy + 0.44, sz - 0.52);
+  const stick = _cyl(0.026, 0.034, 0.24, 8, _steel);
+  stick.position.set(0.37, sy + 0.66, sz - 0.60);
   stick.rotation.x = -0.25;
   group.add(stick);
-  const grip = _cyl(0.04, 0.045, 0.10, 10, _seat);
-  grip.position.set(0.34, sy + 0.55, sz - 0.55);
+  const grip = _cyl(0.047, 0.052, 0.12, 10, _cable);
+  grip.position.set(0.37, sy + 0.78, sz - 0.63);
   grip.rotation.x = -0.25;
   group.add(grip);
   const trigger = _box(0.04, 0.03, 0.02, _ledAmber);
-  trigger.position.set(0.34, sy + 0.55, sz - 0.50);
+  trigger.position.set(0.37, sy + 0.78, sz - 0.56);
   group.add(trigger);
-  // over-shoulder harness straps + a lap buckle
-  for (const sx of [-1, 1]) {
-    const strap = _box(0.09, 0.82, 0.035, _strap);
-    strap.position.set(sx * 0.16, sy + 0.46, sz + 0.06);
-    strap.rotation.x = 0.30;
+  // ── 5-POINT HARNESS (R5a-r4 SEV-1, ASSERTIVE) — the defining "I am STRAPPED IN" token. The
+  //    seated eye is at LOCAL (0, 1.35, sz+0.1=-0.45), 78° FOV, pitched a hair UP. The forward
+  //    frame's lower-center third sits at roughly local y≈1.10, z≈-0.90 (~0.45m ahead of the
+  //    eye). So: a CHUNKY central quick-release buckle parked DEAD-CENTER-LOW there, with two
+  //    over-shoulder straps converging from the upper-outer shoulders into it (a clear V/Y in the
+  //    lower-center), plus lap belts out to the bolsters. The shoulder ANCHORS are kept outboard
+  //    (x≈±0.27) + at shoulder height (y≈1.34) + slightly behind the eye (z≈-0.30) so the straps
+  //    stay diagonal bands in the lower periphery — a chunky buckle low + THIN straps converging
+  //    reads as "harness", NOT a tan wall. A small helper lays a webbing box between two points.
+  const _webBetween = (ax: number, ay: number, az: number, bx: number, by: number, bz: number, w: number, mat: THREE.Material, thick = 0.035) => {
+    const dx = bx - ax, dy = by - ay, dz = bz - az;
+    const len = Math.hypot(dx, dy, dz);
+    const strap = _box(w, len, thick, mat);
+    strap.position.set((ax + bx) / 2, (ay + by) / 2, (az + bz) / 2);
+    // orient the box's +Y (length) axis along (dx,dy,dz)
+    const up = new THREE.Vector3(0, 1, 0);
+    const dir = new THREE.Vector3(dx, dy, dz).normalize();
+    strap.quaternion.setFromUnitVectors(up, dir);
     group.add(strap);
+    return strap;
+  };
+  // The central CHEST BUCKLE — dead-center, parked in the lower-center third of the forward frame.
+  //   bkY=1.12, bkZ=-0.92 → ~0.45m ahead + ~0.23m below the eye → lands ~15-20% up from the bottom
+  //   edge, centered. Palm-sized in frame.
+  const bkX = 0, bkY = 1.15, bkZ = -0.90;
+  for (const sx of [-1, 1]) {
+    // OVER-SHOULDER strap: from high + outboard (shoulder height, behind the eye), descending
+    //   down-forward-INWARD onto the buckle → a clear thick diagonal converging into the lower-center.
+    const shAx = sx * 0.34, shAy = 1.40, shAz = -0.26;
+    _webBetween(shAx, shAy, shAz, bkX + sx * 0.05, bkY + 0.04, bkZ, 0.055, _strap, 0.03);
+    // a grimed wear band overlaid on the shoulder strap (breaks the flat tan webbing)
+    _webBetween((shAx + bkX) / 2 + sx * 0.01, (shAy + bkY) / 2 + 0.02, (shAz + bkZ) / 2 - 0.006, bkX + sx * 0.05, bkY + 0.02, bkZ - 0.006, 0.028, _strapWorn, 0.022);
+    // LAP strap: a THIN webbing band tucking from the buckle horizontally out to the hip (kept
+    //   narrow + close so it reads as a belt, NOT a wide foreshortened slab — the "tan wedge" the
+    //   wide version produced). Ends at the bolster inner edge, low + just below the buckle.
+    _webBetween(bkX + sx * 0.05, bkY - 0.07, bkZ + 0.02, sx * 0.26, bkY - 0.16, sz - 0.18, 0.05, _strap, 0.03);
+    // a steel adjuster slider partway down each shoulder strap (hardware detail)
+    const slider = _box(0.09, 0.05, 0.05, _rivet);
+    slider.position.set(sx * 0.16, (shAy + bkY) / 2 + 0.08, (shAz + bkZ) / 2 - 0.02);
+    group.add(slider);
   }
-  const buckle = _box(0.16, 0.12, 0.07, _steel);
-  buckle.position.set(0, sy + 0.10, sz - 0.22);
+  // the BUCKLE HOUSING — a chunky painted quick-release release-box, palm-sized in frame, catching
+  //   light. A dark steel body → a bright rivet faceplate → a lit amber release tab + two latch
+  //   slots, so it reads unmistakably as a 5-point center buckle, not a strap junction.
+  const buckle = _box(0.20, 0.17, 0.12, _channel);
+  buckle.position.set(bkX, bkY, bkZ);
   group.add(buckle);
+  const buckleBevel = _box(0.21, 0.05, 0.13, _band);   // a top bevel rim catching the cabin key
+  buckleBevel.position.set(bkX, bkY + 0.085, bkZ);
+  group.add(buckleBevel);
+  const bucklePlate = _box(0.155, 0.12, 0.04, _rivet);  // bright faceplate (catches light)
+  bucklePlate.position.set(bkX, bkY, bkZ - 0.07);
+  group.add(bucklePlate);
+  const buckleBtn = _box(0.085, 0.07, 0.03, _ledAmber); // a lit central release tab (a point of life)
+  buckleBtn.position.set(bkX, bkY, bkZ - 0.092);
+  group.add(buckleBtn);
+  for (const lx of [-1, 1]) {                            // two latch slots flanking the release tab
+    const latch = _box(0.022, 0.05, 0.03, _channel);
+    latch.position.set(lx * 0.058, bkY, bkZ - 0.092);
+    group.add(latch);
+  }
 }
 
 /** The forward CONSOLE bank — the WRAP-AROUND dash right at the pilot's knees, below the
@@ -580,98 +1379,182 @@ function buildConsoleBank(group: THREE.Group): void {
   group.add(deck);
   for (let i = -3; i <= 3; i++) group.add(_stud(i * 0.48, deckY + 0.02, conZ + 0.30, inward, _rivet, 0.015));
 
-  // ── THE CENTREPIECE CRT — a hooded green "ORBIT ACHIEVED" screen standing up off the dash
-  //    centre, canted toward the pilot. Hooded body + brow visor + glowing face + readout text
-  //    bars (the calm level-0 green state). setCockpitAlert flips it red.
-  // The screen sits LOW + flatter on the dash (cant nearly flat so it lies on the deck and
-  // does NOT tower up into the window — the window/planet own the upper frame, the dash the
-  // lower). A modest hood, no tall brow slab.
+  // ── THE MAIN MFD — a recessed multi-line display in a real beveled bezel housing, set
+  //    OFF-CENTRE to the LEFT (kills the symmetric "mouth"). Hooded body + a recessed dark glass
+  //    face + green emissive content (a horizon bar + nav glyphs + scrolling readout lines) + a
+  //    CRT scanline overlay. setCockpitAlert flips it red.
   const CANT = -0.80;                       // tilted up toward the seated pilot (reads as a screen)
-  const scrCY = deckY + 0.18, scrZ = conZ + 0.05;
-  const hood = _box(1.14, 0.52, 0.10, _channel);
-  hood.position.set(0, scrCY, scrZ);
-  hood.rotation.x = CANT;
-  group.add(hood);
-  const glowGeo = new THREE.PlaneGeometry(0.98, 0.42);
+  const mfdX = -0.55;                        // OFF-CENTRE left (asymmetry — anti-face)
+  const scrCY = deckY + 0.20, scrZ = conZ + 0.04;
+  // recessed housing (a deep bezel box the screen sits INSIDE)
+  const housing = _box(1.06, 0.62, 0.16, _channel);
+  housing.position.set(mfdX, scrCY, scrZ - 0.02);
+  housing.rotation.x = CANT;
+  group.add(housing);
+  const bezel = _box(0.98, 0.54, 0.06, _steel);   // a proud bezel frame around the glass
+  bezel.position.set(mfdX, scrCY, scrZ + 0.05);
+  bezel.rotation.x = CANT;
+  group.add(bezel);
+  // the recessed glass face (sits BACK inside the bezel → real depth)
+  const faceGlass = _box(0.82, 0.40, 0.015, _screenGlass);
+  faceGlass.position.set(mfdX, scrCY, scrZ + 0.035);
+  faceGlass.rotation.x = CANT;
+  group.add(faceGlass);
+  // the emissive CONTENT layer (the lit screen base — recolored by setCockpitAlert)
+  const glowGeo = new THREE.PlaneGeometry(0.80, 0.38);
   _disposables.push(glowGeo);
-  const glowMat = new THREE.MeshBasicMaterial({ color: 0x224a26 });   // dim green CRT base (calm)
+  const glowMat = new THREE.MeshBasicMaterial({ color: 0x163a1c });   // dim green CRT base (calm)
   _buildMats.push(glowMat);
   const scrGlow = new THREE.Mesh(glowGeo, glowMat);
-  scrGlow.position.set(0, scrCY, scrZ + 0.065);
+  scrGlow.position.set(mfdX, scrCY, scrZ + 0.04);
   scrGlow.rotation.x = CANT;
   group.add(scrGlow);
   _alertScreenGlow = scrGlow;
-  const lineGeo = new THREE.PlaneGeometry(0.70, 0.06);
+  // a HORIZON bar + nav glyph block (UI content — reads as a real avionics page)
+  const horizGeo = new THREE.PlaneGeometry(0.6, 0.02);
+  _disposables.push(horizGeo);
+  const brightGreen = new THREE.MeshBasicMaterial({ color: 0x8cf29a });
+  _buildMats.push(brightGreen);
+  const horiz = new THREE.Mesh(horizGeo, brightGreen);
+  horiz.position.set(mfdX, scrCY + 0.02, scrZ + 0.045);
+  horiz.rotation.set(CANT, 0, 0.06);   // a slightly banked horizon line
+  group.add(horiz);
+  _alertStatusLeds.push(horiz);
+  // scrolling readout lines (varying widths — real text, not even dots)
+  const lineGeo = new THREE.PlaneGeometry(0.62, 0.035);
   _disposables.push(lineGeo);
-  const lineMat = new THREE.MeshBasicMaterial({ color: 0x86f292 });   // bright green text bar
-  _buildMats.push(lineMat);
   for (let r = 0; r < 4; r++) {
-    const line = new THREE.Mesh(lineGeo, lineMat);
-    const w = [1.0, 0.62, 0.78, 0.4][r];
+    const line = new THREE.Mesh(lineGeo, brightGreen);
+    const w = [0.95, 0.5, 0.72, 0.38][r];
     line.scale.x = w;
-    const dy = 0.15 - r * 0.085;
-    line.position.set(-0.10 * (1 - w), scrCY + dy * Math.cos(CANT), scrZ + 0.07 + dy * -Math.sin(CANT));
+    const dy = -0.05 - r * 0.058;
+    line.position.set(mfdX - 0.28 * (1 - w), scrCY + dy * Math.cos(CANT), scrZ + 0.045 + dy * -Math.sin(CANT));
     line.rotation.x = CANT;
     group.add(line);
     _alertStatusLeds.push(line);
   }
+  // CRT scanline overlay (faint dark stripes → the screen reads as a real CRT, not a flat quad)
+  const scanGeo = new THREE.PlaneGeometry(0.80, 0.004);
+  _disposables.push(scanGeo);
+  const scanMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.32 });
+  _buildMats.push(scanMat);
+  for (let s = 0; s < 9; s++) {
+    const sl = new THREE.Mesh(scanGeo, scanMat);
+    const dy = 0.16 - s * 0.04;
+    sl.position.set(mfdX, scrCY + dy * Math.cos(CANT), scrZ + 0.046 + dy * -Math.sin(CANT));
+    sl.rotation.x = CANT;
+    group.add(sl);
+  }
 
-  // ── flanking BEZELED backlit gauge dials (clustered left + right of the CRT) — a ring
-  //    bezel + a lit dial face + a needle each (a real grouped instrument cluster).
-  for (const dx of [-1.25, -0.92, 0.92, 1.25]) {
-    const ring = _cyl(0.12, 0.12, 0.05, 18, _band);   // bright bezel
+  // ── A SECOND raised SCREEN TIER to the RIGHT (asymmetric — a smaller amber data readout in its
+  //    own bezel, set higher + at a different angle than the main MFD → no mirror symmetry).
+  const mfd2X = 0.78, mfd2Y = deckY + 0.30;
+  const housing2 = _box(0.5, 0.42, 0.12, _channel);
+  housing2.position.set(mfd2X, mfd2Y, conZ + 0.0);
+  housing2.rotation.set(CANT + 0.15, -0.25, 0);
+  group.add(housing2);
+  const face2Geo = new THREE.PlaneGeometry(0.38, 0.30);
+  _disposables.push(face2Geo);
+  const amberScr = new THREE.MeshBasicMaterial({ color: 0x4a3208 });
+  _buildMats.push(amberScr);
+  const face2 = new THREE.Mesh(face2Geo, amberScr);
+  face2.position.set(mfd2X - 0.04, mfd2Y, conZ + 0.07);
+  face2.rotation.set(CANT + 0.15, -0.25, 0);
+  group.add(face2);
+  for (let r = 0; r < 3; r++) {
+    const l2Geo = new THREE.PlaneGeometry(0.3, 0.03);
+    _disposables.push(l2Geo);
+    const l2 = new THREE.Mesh(l2Geo, new THREE.MeshBasicMaterial({ color: 0xe0a040 }));
+    _buildMats.push(l2.material as THREE.Material);
+    l2.scale.x = [0.9, 0.6, 0.8][r];
+    l2.position.set(mfd2X - 0.04, mfd2Y + 0.08 - r * 0.07, conZ + 0.075);
+    l2.rotation.set(CANT + 0.15, -0.25, 0);
+    group.add(l2);
+  }
+
+  // ── ASYMMETRIC GAUGE DIALS — a TIGHT cluster of THREE on the LEFT (different sizes), and just
+  //    ONE big dial on the RIGHT (varying counts L≠R → no mirror = anti-face). Each recessed into
+  //    a beveled socket with a lit face + needle.
+  const dialSpec: [number, number][] = [[-1.35, 0.13], [-1.15, 0.10], [-1.02, 0.085], [1.18, 0.15]];
+  for (const [dx, dr] of dialSpec) {
+    const socket = _cyl(dr + 0.02, dr + 0.02, 0.06, 18, _channel);   // recessed socket
+    socket.rotation.x = Math.PI / 2 + CANT;
+    socket.position.set(dx, deckY + 0.20, conZ - 0.04);
+    group.add(socket);
+    const ring = _cyl(dr, dr, 0.04, 18, _band);   // bright bezel
     ring.rotation.x = Math.PI / 2 + CANT;
-    ring.position.set(dx, deckY + 0.21, conZ - 0.03);
+    ring.position.set(dx, deckY + 0.21, conZ - 0.02);
     group.add(ring);
-    const fce = _cyl(0.093, 0.093, 0.016, 18, _dialFace);   // backlit face (glows)
+    const fce = _cyl(dr * 0.78, dr * 0.78, 0.012, 18, _dialFace);   // lit face
     fce.rotation.x = Math.PI / 2 + CANT;
-    fce.position.set(dx, deckY + 0.215, conZ - 0.02);
+    fce.position.set(dx, deckY + 0.215, conZ - 0.01);
     group.add(fce);
-    const needle = _box(0.08, 0.009, 0.005, _ledAmber);
-    needle.position.set(dx, deckY + 0.22, conZ - 0.01);
-    needle.rotation.set(CANT, 0, dx < 0 ? 0.7 : -0.5);
+    const needle = _box(dr * 0.7, 0.009, 0.005, _ledAmber);
+    needle.position.set(dx, deckY + 0.22, conZ);
+    needle.rotation.set(CANT, 0, dx < 0 ? 0.7 - dr : -0.5 + dr);
     group.add(needle);
   }
-  // ── telltale LED status row on the dash just FORWARD of the CRT (calm green/green/amber/blue)
-  const ledCols = [_ledGreen, _ledGreen, _ledAmber, _ledBlue];
-  for (let i = 0; i < 4; i++) {
-    const led = _cyl(0.022, 0.022, 0.024, 8, ledCols[i]);
+  // ── telltale LED status row — OFF-CENTRE + irregular spacing (anti-face: not a centered even row).
+  //    R5a-r3 SEV-2 #3: each telltale now sits in a recessed bezel SOCKET (real ~1.5cm depth — a
+  //    powered indicator, not a painted dot) + an irregular cluster (no centred even grille).
+  const ledCols = [_ledGreen, _ledAmber, _ledGreen, _ledBlue, _ledGreen];
+  const ledXs = [-0.30, -0.16, 0.02, 0.10, 0.24];
+  const ledYs = [0.0, 0.02, -0.01, 0.03, 0.0];   // jitter the row vertically (kills the even line)
+  for (let i = 0; i < ledCols.length; i++) {
+    const socket = _cyl(0.026, 0.026, 0.03, 8, _channel);   // recessed bezel socket (depth)
+    socket.rotation.x = Math.PI / 2 - 0.55;
+    socket.position.set(0.15 + ledXs[i], deckY + 0.10 + ledYs[i], conZ + 0.255);
+    group.add(socket);
+    const led = _cyl(0.018, 0.018, 0.024, 8, ledCols[i]);
     led.rotation.x = Math.PI / 2 - 0.55;
-    led.position.set(-0.18 + i * 0.12, deckY + 0.10, conZ + 0.26);
+    led.position.set(0.15 + ledXs[i], deckY + 0.105 + ledYs[i], conZ + 0.275);
     group.add(led);
   }
-  // ── GUARDED switch banks (a flip-guard over toggle rows — a freighter dash tell) L + R
-  for (const sx of [-1, 1]) {
-    const bankX = sx * 0.65;
-    const plate = _box(0.34, 0.02, 0.18, _band);
-    plate.position.set(bankX, deckY + 0.10, conZ + 0.20);
+  // a small EMISSIVE label readout beside the telltales (a powered amber data strip — life)
+  const readoutGeo = new THREE.PlaneGeometry(0.16, 0.03);
+  _disposables.push(readoutGeo);
+  const readoutMat = new THREE.MeshBasicMaterial({ color: 0xffb24a });
+  _buildMats.push(readoutMat);
+  const readout = new THREE.Mesh(readoutGeo, readoutMat);
+  readout.rotation.x = -0.55;
+  readout.position.set(-0.30, deckY + 0.085, conZ + 0.275);
+  group.add(readout);
+  // ── GUARDED switch banks — TWO on the LEFT-of-centre, ONE wide bank on the RIGHT (asymmetric).
+  for (const [bankX, n] of [[-0.10, 4], [0.30, 2], [1.0, 3]] as [number, number][]) {
+    const plate = _box(0.08 + n * 0.09, 0.02, 0.18, _band);
+    plate.position.set(bankX, deckY + 0.10, conZ + 0.21);
     plate.rotation.x = -0.55;
     group.add(plate);
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < n; i++) {
       const sw = _cyl(0.012, 0.012, 0.06, 6, _rivet);
       sw.rotation.x = -0.55 - 0.4;
-      sw.position.set(bankX - 0.10 + i * 0.10, deckY + 0.13, conZ + 0.18);
+      sw.position.set(bankX - (n - 1) * 0.045 + i * 0.09, deckY + 0.13, conZ + 0.19);
       group.add(sw);
     }
-    // the flip-guard (a wire/bracket over the switches)
-    const guard = _box(0.32, 0.02, 0.03, _steel);
-    guard.position.set(bankX, deckY + 0.18, conZ + 0.14);
+    const guard = _box(0.06 + n * 0.09, 0.02, 0.03, _steel);
+    guard.position.set(bankX, deckY + 0.18, conZ + 0.15);
     guard.rotation.x = -0.55;
     group.add(guard);
   }
-  // ── a chunky THROTTLE quadrant on the right end of the dash (the freighter tell)
-  const throttleBase = _box(0.22, 0.08, 0.28, _steel);
-  throttleBase.position.set(1.55, deckY + 0.06, conZ + 0.18);
+  // ── CENTRE THROTTLE QUADRANT (the freighter tell) — moved to the CENTRE-RIGHT, a chunky housing
+  //    with twin levers (this breaks the centre, replacing the symmetric green "mouth").
+  const throttleBase = _box(0.26, 0.10, 0.30, _steel);
+  throttleBase.position.set(0.40, deckY + 0.07, conZ + 0.16);
   group.add(throttleBase);
-  for (const tx of [-0.05, 0.05]) {
-    const lever = _cyl(0.016, 0.022, 0.24, 8, _steel);
-    lever.position.set(1.55 + tx, deckY + 0.18, conZ + 0.18);
+  for (const tx of [-0.06, 0.06]) {
+    const lever = _cyl(0.018, 0.024, 0.26, 8, _steel);
+    lever.position.set(0.40 + tx, deckY + 0.19, conZ + 0.16);
     lever.rotation.x = -0.55;
     group.add(lever);
-    const knob = _cyl(0.034, 0.034, 0.05, 10, _ledAmber);
-    knob.position.set(1.55 + tx, deckY + 0.30, conZ + 0.28);
+    const knob = _cyl(0.038, 0.038, 0.055, 10, _ledAmber);
+    knob.position.set(0.40 + tx, deckY + 0.32, conZ + 0.27);
     group.add(knob);
   }
+  // a grab-rail across the dash top edge (lived-in cockpit detail)
+  const grab = _cyl(0.018, 0.018, 1.4, 8, _band);
+  grab.rotation.z = Math.PI / 2;
+  grab.position.set(-0.3, deckY + 0.02, conZ + 0.34);
+  group.add(grab);
 }
 
 /** The 2-second PERSONAL TOUCH — the lone pilot's humanity, made recognizable (gate #6): a
@@ -722,40 +1605,72 @@ function buildPersonalTouch(group: THREE.Group): void {
   mugHandle.position.set(0.64, deckY + 0.12, conZ + 0.20);
   mugHandle.rotation.y = Math.PI / 2;
   group.add(mugHandle);
-  // ── a TOKEN on a cord off the window centre mullion (a hanging charm), off-centre
+  // ── a TOKEN on a cord hung off the windscreen brow bar (a hanging charm), off-centre, in
+  //    front of the raked glass so it dangles into the orbit view (the lone pilot's keepsake).
+  const browZ = -CK_Z + 0.02 + WIN_RAKE * 0.85;   // near the brow rake, a hair into the cabin
   const cordMat = new THREE.MeshLambertMaterial({ color: 0x2a2620, flatShading: true });
   _buildMats.push(cordMat);
-  const cord = _cyl(0.004, 0.004, 0.28, 5, cordMat);
-  cord.position.set(0.10, WIN_Y1 - 0.20, -CK_Z + 0.16);
+  const cord = _cyl(0.004, 0.004, 0.30, 5, cordMat);
+  cord.position.set(0.35, 2.20, browZ - 0.10);
   group.add(cord);
   const tokenMat = new THREE.MeshLambertMaterial({ color: 0xc8a050, flatShading: true });
   _buildMats.push(tokenMat);
   const token = _cyl(0.035, 0.035, 0.008, 12, tokenMat);
   token.rotation.x = Math.PI / 2;
-  token.position.set(0.10, WIN_Y1 - 0.35, -CK_Z + 0.16);
+  token.position.set(0.35, 2.04, browZ - 0.10);
   group.add(token);
 }
 
 /** SIDE CONSOLES + clutter — short auxiliary consoles down the side walls (bring the space
  *  IN around the pilot — gate #10), conduit runs, an overhead grab rail, a stowed crate. */
 function buildSideConsoles(group: THREE.Group): void {
-  // short side-wall consoles flanking the seat (close the station in, add instrument density)
-  for (const sx of [-1, 1]) {
-    const sc = _box(0.5, 0.85, 1.4, _channel);
-    sc.position.set(sx * (CK_X - 0.32), 0.43, -0.3);
+  // ── ASYMMETRIC side-wall consoles (anti-face: the two flanking pods were reading as bright
+  //    oval EYES). LEFT = a TALL angled instrument stack; RIGHT = a LOWER bench with a raised
+  //    screen pod — different silhouettes + heights → the symmetry that drove the face is broken.
+  // LEFT (−X): a taller console with a canted top deck of recessed readouts.
+  {
+    const sx = -1;
+    const sc = _box(0.5, 0.95, 1.5, _channel);
+    sc.position.set(sx * (CK_X - 0.32), 0.48, -0.25);
     group.add(sc);
-    const scTop = _box(0.52, 0.05, 1.42, _steel);
-    scTop.position.set(sx * (CK_X - 0.32), 0.88, -0.3);
+    const scTop = _box(0.52, 0.06, 1.5, _steel);   // canted top (does NOT read as a flat oval)
+    scTop.position.set(sx * (CK_X - 0.30), 0.98, -0.25);
+    scTop.rotation.z = sx * 0.18;
     group.add(scTop);
-    // a couple of lit readouts on the side console top
-    for (const cz of [-0.7, -0.2, 0.3]) {
-      const rd = _box(0.18, 0.012, 0.10, sx < 0 ? _ledGreen : _ledAmber);
-      rd.position.set(sx * (CK_X - 0.32), 0.91, -0.3 + cz);
+    for (const cz of [-0.7, -0.3, 0.1, 0.5]) {
+      const rd = _box(0.16, 0.012, 0.09, cz < 0 ? _ledGreen : _ledAmber);
+      rd.position.set(sx * (CK_X - 0.30), 1.02, -0.25 + cz);
+      rd.rotation.z = sx * 0.18;
       group.add(rd);
     }
-    // a hazard stripe on the side-console face
-    const haz = _box(0.02, 0.10, 1.2, _hazard);
-    haz.position.set(sx * (CK_X - 0.58), 0.7, -0.3);
+    const haz = _box(0.02, 0.12, 1.3, _hazard);
+    haz.position.set(sx * (CK_X - 0.58), 0.74, -0.25);
+    group.add(haz);
+  }
+  // RIGHT (+X): a LOWER bench + a raised angled screen pod at the forward end (different mass).
+  {
+    const sx = 1;
+    const sc = _box(0.5, 0.72, 1.5, _channel);
+    sc.position.set(sx * (CK_X - 0.32), 0.36, -0.25);
+    group.add(sc);
+    const scTop = _box(0.52, 0.06, 1.5, _steel);
+    scTop.position.set(sx * (CK_X - 0.32), 0.74, -0.25);
+    group.add(scTop);
+    // a raised angled screen pod (forward end) — gives this side a taller forward mass
+    const pod = _box(0.46, 0.34, 0.4, _channel);
+    pod.position.set(sx * (CK_X - 0.34), 0.94, -0.8);
+    pod.rotation.x = -0.4;
+    group.add(pod);
+    const podScr = _box(0.34, 0.24, 0.02, _screenGlass);
+    podScr.position.set(sx * (CK_X - 0.36), 0.98, -0.96);
+    podScr.rotation.x = -0.4;
+    group.add(podScr);
+    const podGlow = _box(0.28, 0.18, 0.01, _ledAmber);
+    podGlow.position.set(sx * (CK_X - 0.37), 0.98, -0.97);
+    podGlow.rotation.x = -0.4;
+    group.add(podGlow);
+    const haz = _box(0.02, 0.10, 1.3, _hazard);
+    haz.position.set(sx * (CK_X - 0.58), 0.56, -0.25);
     group.add(haz);
   }
   // conduit runs along the upper +X/−X wall (drooping bundles + clamps)
@@ -771,27 +1686,40 @@ function buildSideConsoles(group: THREE.Group): void {
       group.add(clamp);
     }
   }
-  // overhead grab rail (+X side, clear of the central lane)
-  const railY = CK_H - 0.5;
-  const grab = _cyl(0.028, 0.028, 1.2, 8, _steel);
-  grab.rotation.z = Math.PI / 2;
-  grab.position.set(CK_X - 0.55, railY, 0.8);
-  group.add(grab);
-  for (const gz of [-0.5, 0.5]) {
-    const standoff = _cyl(0.022, 0.022, 0.14, 6, _steel);
-    standoff.position.set(CK_X - 0.55, railY + 0.07, 0.8 + gz);
-    group.add(standoff);
+  // overhead grab rails on BOTH ribs (clear of the central lane) — lived-in handholds.
+  for (const sx of [-1, 1]) {
+    const railY = CK_H - 0.55;
+    const grab = _cyl(0.026, 0.026, 1.0, 8, _band);
+    grab.rotation.z = Math.PI / 2;
+    grab.position.set(sx * (CK_X - 0.7), railY, sx > 0 ? 0.8 : 1.2);
+    group.add(grab);
+    for (const gz of [-0.42, 0.42]) {
+      const standoff = _cyl(0.02, 0.02, 0.13, 6, _steel);
+      standoff.position.set(sx * (CK_X - 0.7), railY + 0.06, (sx > 0 ? 0.8 : 1.2) + gz);
+      group.add(standoff);
+    }
   }
-  // a stowed crate in the aft-right corner (cargo clutter), clear of the lane
-  const crate = _box(0.5, 0.5, 0.5, _steel);
-  crate.position.set(CK_X - 0.42, 0.27, CK_Z - 0.5);
-  group.add(crate);
-  const crateLid = _box(0.52, 0.04, 0.52, _band);
-  crateLid.position.set(CK_X - 0.42, 0.53, CK_Z - 0.5);
-  group.add(crateLid);
-  const crateHaz = _box(0.02, 0.3, 0.3, _hazard);
-  crateHaz.position.set(CK_X - 0.68, 0.27, CK_Z - 0.5);
-  group.add(crateHaz);
+  // ── CABLE LOOMS — flex conduit bundles running the rib valleys + behind the console (lived-in).
+  //    A drooping catenary-ish run per side (3 segment cylinders) + a couple of flex conduits down
+  //    to the dash. Dark matte rubber (non-metal) → reads as cabling vs the brushed hull.
+  for (const sx of [-1, 1]) {
+    const runZ = [-1.4, 0.0, 1.4];
+    for (let i = 0; i < runZ.length; i++) {
+      const loom = _cyl(0.05, 0.05, 1.5, 7, _cable);
+      loom.rotation.set(Math.PI / 2, 0, 0.04 * (i - 1));
+      loom.position.set(sx * (CK_X - 0.5), 1.9 - 0.05 * Math.abs(i - 1), runZ[i]);
+      group.add(loom);
+    }
+  }
+  // a flex conduit dropping from the −X wall down behind the console
+  const flex = _cyl(0.035, 0.035, 1.3, 7, _cable);
+  flex.rotation.set(0.5, 0, 0.3);
+  flex.position.set(-(CK_X - 0.55), 1.1, -1.0);
+  group.add(flex);
+  const flex2 = _cyl(0.03, 0.03, 1.0, 7, _cable);
+  flex2.rotation.set(-0.4, 0, -0.4);
+  flex2.position.set(CK_X - 0.6, 1.0, -0.9);
+  group.add(flex2);
 }
 
 /** Self-contained cockpit LIGHTING (the offset ship sees no world sun) — WARM + MOODY (gate
@@ -800,34 +1728,65 @@ function buildSideConsoles(group: THREE.Group): void {
  *  glow + an amber console wash pooling on the dash/floor/face. Lived-in + a-bit-claustrophobic. */
 function buildLighting(group: THREE.Group): void {
   _alertKeyLights = [];
-  // warm KEY over the station — pooled (faster decay → corners fall to shadow = cramped mood)
-  const key = new THREE.PointLight(0xffcf96, 2.4, 5.2, 2.4);
-  key.position.set(0.0, CK_H - 0.45, -0.4);
+  // ── REAL RECESSED LIGHT FIXTURES (the actual sources) — caged metal can-lights in the crown,
+  //    each = a metal bezel + a warm emissive lens. The point lights sit AT these so the light has
+  //    a believable origin (gate: "the light is a blown white blob with no fixture").
+  const down = new THREE.Vector3(0, -1, 0);
+  for (const fz of [-0.9, 0.7]) {
+    const can = _cyl(0.13, 0.15, 0.10, 12, _channel);
+    can.position.set(0, HULL_CROWN_MAX - 0.16, fz);
+    group.add(can);
+    const lens = _cyl(0.10, 0.10, 0.02, 12, _ledAmber);
+    lens.position.set(0, HULL_CROWN_MAX - 0.22, fz);
+    group.add(lens);
+    // a cross cage bar under each
+    const cage = _box(0.22, 0.012, 0.012, _steel);
+    cage.position.set(0, HULL_CROWN_MAX - 0.24, fz);
+    group.add(cage);
+    void down;
+  }
+  // warm KEY at the FORWARD fixture — pulled DOWN + softened so it no longer blows the crown out.
+  const key = new THREE.PointLight(0xffd0a0, 1.8, 5.2, 2.0);
+  key.position.set(0.0, HULL_CROWN_MAX - 0.30, -0.7);
   group.add(key);
   _alertKeyLights.push(key);
-  // a softer warm aft fill so the corridor end isn't dead black (but stays dim — pocketed)
-  const aft = new THREE.PointLight(0xffc488, 1.0, 4.5, 2.6);
-  aft.position.set(0.0, CK_H - 0.5, 1.4);
+  // a softer warm aft fill at the aft fixture (lights the corridor mouth + aft curve).
+  const aft = new THREE.PointLight(0xffc488, 1.1, 4.8, 2.4);
+  aft.position.set(0.0, HULL_CROWN_MAX - 0.30, 0.7);
   group.add(aft);
   _alertKeyLights.push(aft);
-  // WARM-GROUNDED ambient — a warm sky tint over a dark warm ground (lived-in, not cold grey
-  //   fill). Low so the keys do the modelling + the corners stay moody.
-  const fill = new THREE.HemisphereLight(0xb59878, 0x2a2620, 0.58);
+  // ── COOL FILL (gate #6 — lift the crushed shadows + reveal the tube curvature as a gradient).
+  //    A neutral-cool hemisphere: a cool sky over a NOT-black floor so the lower walls + deck read
+  //    a mid-tone and the brushed metal shows a modeling spec gradient across the curve.
+  const fill = new THREE.HemisphereLight(0xaebccc, 0x4a4f55, 0.95);
   group.add(fill);
   _alertKeyLights.push(fill);
   _alertAmbient = fill;
-  // a gentle warm raking directional from upper-right (form across the box)
+  // a cool FILL spot from the windscreen direction (lifts the floor/console front + sells the
+  //   "cold space outside" key washing into the cabin) — the curve-revealing soft light.
+  const coolFill = new THREE.PointLight(0xa8c2d8, 1.3, 7.0, 1.5);
+  coolFill.position.set(0, 1.5, -CK_Z + 1.0);
+  group.add(coolFill);
+  _alertKeyLights.push(coolFill);
+  // a gentle warm raking directional from upper-right (form across the curved hull + ribs)
   const rake = new THREE.DirectionalLight(0xffe0bc, 0.5);
-  rake.position.set(2.2, CK_H, 0.6);
-  rake.target.position.set(-1.2, 0.7, -0.8);
+  rake.position.set(2.2, CK_H + 0.5, 0.6);
+  rake.target.position.set(-1.2, 0.9, -0.8);
   group.add(rake);
   group.add(rake.target);
   _alertKeyLights.push(rake);
-  // cool WINDOW spill — the orbit-light entering from −Z (a cool accent that complements the
-  //   warm cabin — the temperature contrast that sells "warm room, cold space outside").
-  const winGlow = new THREE.PointLight(0xaecbe0, 1.5, 6.0, 1.8);
+  // a cool counter-rake from the upper-LEFT (models the opposite curved wall — the temp split)
+  const crake = new THREE.DirectionalLight(0x9ab2cc, 0.40);
+  crake.position.set(-2.4, CK_H + 0.6, 1.2);
+  crake.target.position.set(1.0, 1.2, -0.6);
+  group.add(crake);
+  group.add(crake.target);
+  _alertKeyLights.push(crake);
+  // cool WINDOW spill — the orbit-light entering from −Z onto the dash/sill.
+  const winGlow = new THREE.PointLight(0xbcd2e4, 1.4, 6.0, 1.8);
   winGlow.position.set(0, 1.7, -CK_Z + 0.6);
   group.add(winGlow);
+  _alertKeyLights.push(winGlow);
   // GREEN CRT glow — the diegetic screen throwing green light onto the dash + the pilot's
   //   chest area (a key mood cue: the instruments light the room).
   const crtGlow = new THREE.PointLight(0x4fd06a, 0.7, 2.0, 2.6);
@@ -838,13 +1797,52 @@ function buildLighting(group: THREE.Group): void {
   conWash.position.set(0, CON_DECK_Y + 0.5, CON_Z + 0.4);
   group.add(conWash);
   _alertWashLight = conWash;
-  // a RED RIM directional, OFF by default, that floods the whole shell on red-alert (gate #8).
+  // a RED RIM directional, OFF by default, a subtle ambient red on alert (NOT the main source).
   const rim = new THREE.DirectionalLight(0xff2418, 0.0);
   rim.position.set(-2.0, 1.4, 1.5);
   rim.target.position.set(0.5, 1.0, -1.0);
   group.add(rim);
   group.add(rim.target);
   _alertRimLight = rim;
+  // ── A REAL RED BEACON (gate sev-2 — alert must come from a SOURCE, not a uniform filter): a
+  //    caged strobe dome on the soffit + a red point light AT it (strong falloff → the cabin is
+  //    brightest near the beacon, falling to the corners) that pulses on alert. OFF at level 0.
+  const beaconCan = _cyl(0.07, 0.09, 0.06, 10, _channel);
+  beaconCan.position.set(0, 2.34, -CK_Z + 1.0);
+  group.add(beaconCan);
+  const beaconMat = new THREE.MeshBasicMaterial({ color: 0x2a0604 });   // dark dome (calm)
+  _buildMats.push(beaconMat);
+  const beaconGeo = new THREE.SphereGeometry(0.06, 10, 8, 0, Math.PI * 2, 0, Math.PI / 2);
+  _disposables.push(beaconGeo);
+  const beaconDome = new THREE.Mesh(beaconGeo, beaconMat);
+  beaconDome.rotation.x = Math.PI;
+  beaconDome.position.set(0, 2.32, -CK_Z + 1.0);
+  group.add(beaconDome);
+  _alertBeaconMesh = beaconDome;
+  const beacon = new THREE.PointLight(0xff2010, 0.0, 5.5, 2.0);
+  beacon.position.set(0, 2.25, -CK_Z + 1.0);
+  group.add(beacon);
+  _alertBeaconLight = beacon;
+  // RIB STRIP-LIGHTS — thin emissive strips down two ribs (dark at level 0, hot red on alert →
+  //   the alert reads as the SHIP's own warning lights firing, not a global tint).
+  _alertStripMats = [];
+  for (const rz of [-0.9, 1.3]) {
+    const prof = hullProfile(rz);
+    for (const side of [1, -1]) {
+      for (let i = 2; i < prof.length - 1; i += 2) {
+        const ax = side * prof[i].x, ay = prof[i].y;
+        const bx = side * prof[i + 1].x, by = prof[i + 1].y;
+        const mx = (ax + bx) / 2, my = (ay + by) / 2;
+        const sm = new THREE.MeshBasicMaterial({ color: 0x1a0604 });
+        _buildMats.push(sm);
+        _alertStripMats.push(sm);
+        const strip = _box(0.03, Math.hypot(bx - ax, by - ay), 0.02, sm);
+        strip.position.set(mx, my, rz + 0.1);
+        strip.rotation.z = Math.atan2(by - ay, bx - ax) - Math.PI / 2;
+        group.add(strip);
+      }
+    }
+  }
 }
 
 /** Build the HERO cockpit + the greybox corridor (mesh group + matched static colliders)
@@ -852,6 +1850,16 @@ function buildLighting(group: THREE.Group): void {
 export function buildShipScene(ctx: GameContext): void {
   if (shipGroup) return;
   _cockpitAlertLevel = 0;
+  // ── Bake the per-cockpit IBL (so the brushed-metal PBR reflects + shows a modeling spec
+  //    gradient across the curved hull). PMREM from RoomEnvironment; applied per-material only.
+  if (!_cockpitEnv) {
+    const pmrem = new THREE.PMREMGenerator(ctx.three.renderer);
+    const room = new RoomEnvironment();
+    _cockpitEnv = pmrem.fromScene(room, 0.04).texture;
+    room.dispose();
+    pmrem.dispose();
+  }
+  _applyCockpitEnv(_cockpitEnv);
   const group = new THREE.Group();
   group.name = 'escapePodShipCockpit';   // findable by the rig framer
   group.position.copy(SHIP_ORIGIN);
@@ -910,20 +1918,20 @@ export function buildShipScene(ctx: GameContext): void {
  *  ACHIEVED" (green); 1 = caution (amber shift); 2 = full RED-ALERT — the whole cabin goes
  *  hot-red (red wash + a red rim flooding the shell + dimmed warm keys = menace, not a local
  *  texture swap). Safe no-op if the ship isn't built. Wired to 0 at build. */
-export function setCockpitAlert(level: 0 | 1 | 2): void {
+export function setCockpitAlert(level: 0 | 1 | 2, pulse = 1): void {
   _cockpitAlertLevel = level;
   if (!shipGroup) return;
   // screen face base colour
   if (_alertScreenGlow) {
     const m = _alertScreenGlow.material as THREE.MeshBasicMaterial;
-    if (level === 0) m.color.setHex(0x224a26);        // dim green CRT (calm)
+    if (level === 0) m.color.setHex(0x163a1c);        // dim green CRT (calm)
     else if (level === 1) m.color.setHex(0x4a3208);   // amber caution
     else m.color.setHex(0x5a1410);                    // deep red alert
   }
   // the readout text bars
   for (const led of _alertStatusLeds) {
     const m = led.material as THREE.MeshBasicMaterial;
-    if (level === 0) m.color.setHex(0x86f292);        // green text
+    if (level === 0) m.color.setHex(0x8cf29a);        // green text
     else if (level === 1) m.color.setHex(0xe6a73a);   // amber text
     else m.color.setHex(0xff5a4e);                    // red text
   }
@@ -931,24 +1939,43 @@ export function setCockpitAlert(level: 0 | 1 | 2): void {
   if (_alertWashLight) {
     if (level === 0) { _alertWashLight.color.setHex(0xffb24a); _alertWashLight.intensity = 1.2; }
     else if (level === 1) { _alertWashLight.color.setHex(0xff7a2e); _alertWashLight.intensity = 1.5; }
-    else { _alertWashLight.color.setHex(0xff2418); _alertWashLight.intensity = 2.4; }
+    else { _alertWashLight.color.setHex(0xff2418); _alertWashLight.intensity = 2.0; }
   }
-  // the whole-cabin red rim flood (off until level 2 — the menace cue) — strong so the shell
-  // walls/soffit visibly go hot-red, not just the dash.
+  // ── THE BEACON is the real SOURCE (gate sev-2). It PULSES (the `pulse` param 0..1, driven
+  //    per-frame by the disaster tick) so the alert reads as a strobing warning light with real
+  //    falloff, not a flat global tint. Its dome emissive tracks the pulse too.
+  if (_alertBeaconLight) {
+    _alertBeaconLight.intensity = level === 2 ? (1.8 + 4.5 * pulse) : (level === 1 ? 0.6 : 0.0);
+  }
+  if (_alertBeaconMesh) {
+    const m = _alertBeaconMesh.material as THREE.MeshBasicMaterial;
+    if (level === 0) m.color.setHex(0x2a0604);
+    else if (level === 1) m.color.setHex(0x7a3008);
+    else m.color.setHex(level === 2 ? (pulse > 0.5 ? 0xff3018 : 0x901008) : 0x2a0604);
+  }
+  // rib STRIP-LIGHTS fire on alert (the ship's own warning lights → not a global wash)
+  for (const sm of _alertStripMats) {
+    if (level === 2) sm.color.setHex(pulse > 0.4 ? 0xff2814 : 0x5a0c06);
+    else if (level === 1) sm.color.setHex(0x6a3a10);
+    else sm.color.setHex(0x1a0604);
+  }
+  // a GENTLE global red rim on alert (ambient menace ONLY — the beacon does the heavy lifting so
+  //   the surfaces still MODEL, not a flat Photoshop red).
   if (_alertRimLight) {
-    _alertRimLight.intensity = level === 2 ? 3.0 : (level === 1 ? 0.7 : 0.0);
+    _alertRimLight.intensity = level === 2 ? (0.7 + 0.5 * pulse) : (level === 1 ? 0.4 : 0.0);
   }
-  // redden the cabin AMBIENT on alert so the WHOLE space reads hot-red (gate #8 — menace).
+  // KEEP a COOL FILL alive even on alert (gate: "keep some cool fill so material still reads") —
+  //   nudge the ambient toward a desaturated red-grey, NOT a saturated flat red, and keep value.
   if (_alertAmbient) {
-    if (level === 2) { _alertAmbient.color.setHex(0xb02418); _alertAmbient.groundColor.setHex(0x300806); _alertAmbient.intensity = 0.7; }
-    else if (level === 1) { _alertAmbient.color.setHex(0xb07840); _alertAmbient.groundColor.setHex(0x2a1f18); _alertAmbient.intensity = 0.6; }
-    else { _alertAmbient.color.copy(_AMBIENT_SKY); _alertAmbient.groundColor.setHex(0x2a2620); _alertAmbient.intensity = 0.58; }
+    if (level === 2) { _alertAmbient.color.setHex(0x7a4a4a); _alertAmbient.groundColor.setHex(0x382226); _alertAmbient.intensity = 0.65; }
+    else if (level === 1) { _alertAmbient.color.setHex(0x9a7a64); _alertAmbient.groundColor.setHex(0x40383a); _alertAmbient.intensity = 0.75; }
+    else { _alertAmbient.color.setHex(0xaebccc); _alertAmbient.groundColor.setHex(0x4a4f55); _alertAmbient.intensity = 0.95; }
   }
-  // dim the warm keys HARD on red-alert so the red dominates (darkened mood, not just a swap).
+  // dim the WARM keys on red-alert (cool fill + winGlow stay so the metal still reads).
   for (const k of _alertKeyLights) {
-    if (k === _alertAmbient) continue;   // ambient handled above
+    if (k === _alertAmbient) continue;
     const base = (k.userData.baseIntensity ??= k.intensity) as number;
-    k.intensity = level === 2 ? base * 0.25 : (level === 1 ? base * 0.7 : base);
+    k.intensity = level === 2 ? base * 0.45 : (level === 1 ? base * 0.8 : base);
   }
 }
 
@@ -1035,11 +2062,17 @@ export function disposeShipScene(ctx: GameContext): void {
   _alertStatusLeds = [];
   _alertWashLight = null;
   _alertRimLight = null;
+  _alertBeaconLight = null;
+  _alertBeaconMesh = null;
+  _alertStripMats = [];
   _alertKeyLights = [];
   _corridorMats.length = 0;
   _engineFire = null;
   _fireMats.length = 0;
   _shipAlertLevel = 0;
+  // free the per-cockpit IBL + detach it from the persistent metal materials.
+  _applyCockpitEnv(null);
+  if (_cockpitEnv) { _cockpitEnv.dispose(); _cockpitEnv = null; }
   for (const body of shipBodies) ctx.physics.world.removeRigidBody(body);
   shipBodies.length = 0;
 }

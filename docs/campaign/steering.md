@@ -17,4 +17,4 @@ _(empty — drop steering notes above this line)_
 
 ## Applied (archived by the loop)
 
-See [steering-archive.md](steering-archive.md). Most recent: **C10 (2026-06-28)** — pod is too boxy → redesign the exterior CYLINDRICAL (+ research refs, + update the interior to match). Triggered a research pass (`docs/research/escape-pod-cylindrical.md`) + a direction pick before the rebuild. Prior: C53 — pause before M10 for a user review. C44 — remove the watchtower + ruin the well (D252).
+See [steering-archive.md](steering-archive.md). Most recent: **R5a (2026-06-30)** — the redesigned cockpit HULL METAL reads "too pristine and shiny"; the user preferred the OLDER rugged/matte metal texture. → re-scope the cockpit hull material to a worn/matte/rugged idiom (roughen + drop the metalness-shine/envMap, keep the neutral non-brown color that killed the barrel read, layer real grime/edge-wear). Aligns with the gate's own "too clean for the Mad-Max/Dune tone" finding. Prior: **C10 (2026-06-28)** — pod is too boxy → redesign the exterior CYLINDRICAL. Prior: C53 — pause before M10. C44 — remove the watchtower + ruin the well (D252).
