@@ -4,6 +4,21 @@ The campaign `campaign/escape-pod-intro` is ACTIVE. Everything is committed + pu
 is maxed → the preview link won't refresh** (backlog item; verify via `rig-shot.mjs` + gates, which
 don't need a deploy). Resume/redirect anytime via `docs/campaign/steering.md`.
 
+## ⚑ SINCE feature-complete: the USER'S CONSISTENCY RE-SCOPE (2026-07-01, all done + verified)
+The user's walk-test steering re-shaped the crash→game handoff (see cycles 41-46 in the campaign
+log + the ⚑ section of `docs/architecture-escape-pod-intro.md`):
+- **ONE enterable pod** (`unifyEnterablePod`) — no dispose+swap; wake in it, step out beside it,
+  walk BACK IN; it persists into the real game. The descent chain is grounded (no vertical jump).
+- **Consistent bright MIDDAY** (`setIntroMiddayClear`, dayTime 0.46) — the fall-through sky == the
+  step-out sky; wake cabin midday-lit; the crash lean gentled so the floor stays walkable.
+- **Genuine CLEAR SKIES** (`INTRO_CLEAR_FOG_DENSITY` 0.00012 pinned across the atmospheric leg +
+  a 6s ease-back to survival fog post-handoff) — crisp dunes/horizon; the Leviathan re-valued to
+  read at midday (was dawn-tuned).
+- Usability finds fixed en route: the seat buckle faced AWAY from the pilot (the 4-round seat-saga
+  root cause), the eject-lever prompt aimed at a wall, the checkEngines aft doorway was a black void.
+**Next user walk-test should verify:** the in↔out pod continuity in motion, the midday/clear feel,
+and the earlier feel items (descent pacing, explosion rhythm, chute-pop spring, audio balance).
+
 ## 🎉 EVERY BEAT OF THE VISION IS BUILT
 The whole intro flows end-to-end: **orbit** (the cockpit + the beautiful planet vista) → **disaster**
 (the corridor, engine fire + red-alert) → **eject** (physically enter the pod-bay + release, no teleport)
