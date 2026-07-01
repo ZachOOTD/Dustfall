@@ -1864,6 +1864,17 @@ function buildLighting(group: THREE.Group): void {
   aft.position.set(0.0, HULL_CROWN_MAX - 0.30, 0.7);
   group.add(aft);
   _alertKeyLights.push(aft);
+  // FLOW-CLARITY (checkEngines beat): the "check the engines (aft)" cue sends the seated pilot
+  //   AFT (+Z) — but the aft bulkhead DOORWAY reads as a near-black void from the window-facing
+  //   seat (the deep recessed jamb + the orbit-dim cabin), giving NO visual pull toward where to
+  //   go. Add a warm EXIT-GLOW pooling ON the doorway aperture from just inside the corridor mouth
+  //   (z past the doorway at afZ≈2.48), so the aft opening reads as a LIT passage — the discoverable
+  //   destination. In _alertKeyLights so it DIMS on the disaster (the warm invite yields to red-alert
+  //   when the flee begins). A diegetic affordance (a lit doorway), not an arrow/marker.
+  const exitGlow = new THREE.PointLight(0xffcaa0, 1.6, 4.2, 2.2);
+  exitGlow.position.set(0.0, 1.55, CK_Z + 0.42);   // just aft of the doorway, mid-height — pools on the aperture
+  group.add(exitGlow);
+  _alertKeyLights.push(exitGlow);
   // ── COOL FILL (gate #6 — lift the crushed shadows + reveal the tube curvature as a gradient).
   //    A neutral-cool hemisphere: a cool sky over a NOT-black floor so the lower walls + deck read
   //    a mid-tone and the brushed metal shows a modeling spec gradient across the curve.

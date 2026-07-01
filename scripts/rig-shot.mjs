@@ -2431,6 +2431,156 @@ const SCENARIOS = {
     console.log(`[wake] ${JSON.stringify(meas)} → ${wtag}`);
   },
 
+  // FLOW-CLARITY (action-beat framing audit): drive each REAL action beat to its PROMPT
+  // moment and shoot the ACTUAL viewpoint the game gives the player (the beat's own
+  // faceControl pose — NOT a rig-substituted lookAt, per D165). Answers "when the prompt
+  // fires, can the player SEE where to go / what to do?". --beat=checkEngines|corridor|
+  // enterPod|wake (default all four in one run). No camera override: reads camera.rotation
+  // as the game left it + reports yaw so direction is checkable.
+  'flow-clarity': async (page) => {
+    const which = argv.beat ? [String(argv.beat)] : ['checkEngines', 'corridor', 'enterPod', 'wake'];
+    const flowAngle = argv.angle || 'hatch';
+    await page.evaluate((a) => { window.__FLOW_ANGLE = a; }, flowAngle);
+    const results = [];
+    for (const beat of which) {
+      const meas = await page.evaluate(async (beat) => {
+        const g = window.__game;
+        const ctx = g.ctx;
+        const V = ctx.three.camera.position.constructor;
+        // clean render: no weather streaks, FP (hide rig/viewmodel), warm-ish exposure.
+        ctx.flags.thirdPerson = false;
+        if (ctx.player.rig) ctx.player.rig.group.visible = false;
+        if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+        try { ctx.weather.intensity = 0; ctx.weather.cloudiness = 0; } catch {}
+        try { ctx.three.renderer.toneMappingExposure = 1.1; } catch {}
+        ctx.three.renderer.setSize(1100, 760, false);
+        const cam = ctx.three.camera;
+        if (cam.isPerspectiveCamera) { cam.aspect = 1100 / 760; cam.updateProjectionMatrix(); }
+        const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+        ctx.flags.paused = false;           // UNPAUSE — the prior iteration paused to freeze for its shot;
+                                            //   the intro beat controllers only tick while unpaused.
+        ctx.input.controls.isLocked = true; // keep isPlaying()===true so updateEscapePodIntro ticks
+        try { g.skipIntro(); } catch {}     // FULL teardown of any prior iteration's intro (no state bleed)
+        await sleep(250);
+        // Helper: build the ship interior + seat at the bridge, waiting until getShipSpawn takes
+        //   (the cockpit tick reseats to y≈3000). Retries the jump if the async tick raced.
+        const seatInShip = async () => {
+          g.startIntro();
+          g.jumpToBeat('cockpit');
+          for (let i = 0; i < 20; i++) {
+            await sleep(120);
+            const t = ctx.player.body.body.translation();
+            if (t.y > 2900) return true;    // seated in the ship (SHIP_ORIGIN.y=3000)
+            g.jumpToBeat('cockpit');        // nudge the init again
+          }
+          return false;
+        };
+
+        if (beat === 'checkEngines') {
+          // Drive the REAL cockpit→checkEngines transition so the camera is EXACTLY where
+          // the game leaves it when "check the engines (aft)" fires (inherited from the
+          // cockpit's opening faceControl — the game does NOT reframe on checkEngines).
+          await seatInShip();
+          try { g.setSkyIntroMode(1); } catch {}   // in orbit — the window shows space
+          await sleep(300);                 // let the open framing settle
+          g.jumpToBeat('checkEngines');     // fires the prompt; mode→walk; NO faceControl
+          await sleep(250);                 // let the beat tick set the prompt/mode
+        } else if (beat === 'corridor') {
+          // Realistic pose at the disaster trigger: the player walked AFT to the dead-end
+          // (facing +Z, aft). Fire the disaster + shoot what they see when "GET TO THE
+          // ESCAPE POD" appears (they're facing the fire; the pod-bay is behind them fwd).
+          await seatInShip();
+          try { g.setSkyIntroMode(0); } catch {}   // interior beat — normal lighting, not the space skybox
+          await sleep(200);
+          const sp = ctx.player.body.body.translation();   // the FRESH cockpit spawn (bridge)
+          g.jumpToBeat('corridor');
+          try { g.setEngineFire(1, 2.1); g.setShipAlert(2, 0.9); g.setCockpitAlert(2); } catch {}
+          // The disaster erupts at the aft dead-end; the player TURNS AND FLEES FORWARD (−Z)
+          // toward the bridge/pod. --angle=fire → face aft at the blaze (the trigger view);
+          // default → the FLEE view: mid-corridor facing forward −Z (is the pod signposted
+          // ahead as they run for it?). The pod-bay is on the −X wall at z≈4.8.
+          cam.rotation.order = 'YXZ';
+          if ((window.__FLOW_ANGLE || '') === 'fire') {
+            ctx.player.body.body.setTranslation({ x: sp.x, y: sp.y, z: sp.z + 13.4 }, true);
+            cam.rotation.set(0, Math.PI, 0);   // face +Z (aft, toward the engine bay blaze)
+          } else {
+            ctx.player.body.body.setTranslation({ x: sp.x, y: sp.y, z: sp.z + 9.0 }, true);
+            cam.rotation.set(0, 0, 0);         // face −Z (forward, fleeing toward the bridge/pod)
+          }
+          ctx.player.cameraSnapNextFrame = true;
+          await sleep(150);
+        } else if (beat === 'enterPod') {
+          // Drive the REAL enterPod walkUp start: the player fled to the bridge; the docked
+          // pod-bay hatch is on the −X wall at world z≈4.8. Place the body a little aft of
+          // the bay facing the flee direction (−Z, forward toward the bridge) — the pose they
+          // arrive in — so the shot answers "is the open hatch obvious as they arrive?".
+          await seatInShip();
+          try { g.setSkyIntroMode(0); } catch {}   // interior beat — normal lighting, not the space skybox
+          await sleep(200);
+          const sp = ctx.player.body.body.translation();   // FRESH bridge spawn
+          g.jumpToBeat('enterPod');
+          await sleep(150);                  // let walkUp init (prompt "Get in the escape pod")
+          // --angle=flee: stand aft of the bay facing forward −Z (the arriving pose — is the
+          //   hatch visible as they run up?). --angle=hatch (default): at the threshold facing
+          //   the bay hatch (−X) — is the open lit entry obvious to walk into?
+          const ang = window.__FLOW_ANGLE || 'hatch';
+          cam.rotation.order = 'YXZ';
+          if (ang === 'flee') {
+            ctx.player.body.body.setTranslation({ x: sp.x + 0.4, y: sp.y, z: sp.z + 6.6 }, true);
+            cam.rotation.set(0, 0, 0);       // face −Z (forward, the flee direction); bay is ahead-left
+          } else {
+            // at the bay threshold (corridor-side of the hatch), facing −X into the aperture.
+            ctx.player.body.body.setTranslation({ x: sp.x - 0.45, y: sp.y, z: sp.z + 4.8 }, true);
+            cam.rotation.set(0, Math.PI / 2, 0);   // yaw +90° → face −X (into the docked-pod hatch)
+          }
+          ctx.player.cameraSnapNextFrame = true;
+          try { g.setEngineFire(1, 2.1); g.setShipAlert(2, 0.9); } catch {}
+          await sleep(150);
+        } else if (beat === 'wake') {
+          // Drive the REAL wake: run through impact (settles the crashed cabin) then wake
+          // (seats inside it + faceControl(CABIN_HATCH_YAW) at the hatch), let the come-to
+          // black fade, and shoot the ACTUAL pose — do NOT override rotation.
+          g.setTime(0.32);
+          g.startIntro();
+          g.jumpToBeat('impact');
+          await sleep(2600);                 // impact settles the crashed cabin + fades
+          g.jumpToBeat('wake');
+          await sleep(4200);                 // come-to black fades naturally (mode seated ticking)
+        }
+
+        // Read the ACTUAL pose the game left (no override). Pin the camera to the body eye
+        // for position but KEEP the rotation the beat set.
+        ctx.flags.paused = true;
+        const tr = ctx.player.body.body.translation();
+        cam.position.set(tr.x, tr.y + (ctx.player.eyeOffset || 0.5), tr.z);
+        cam.updateMatrixWorld(true);
+        const yaw = cam.rotation.y, pitch = cam.rotation.x;
+        const ship = ctx.three.scene.getObjectByName('escapePodShipCockpit');
+        let shipMeshes = 0; if (ship) ship.traverse((o) => { if (o.isMesh && o.visible) shipMeshes++; });
+        return {
+          beat,
+          mode: ctx.intro ? ctx.intro.mode : null,
+          eye: [+cam.position.x.toFixed(2), +cam.position.y.toFixed(2), +cam.position.z.toFixed(2)],
+          yawDeg: +(yaw * 180 / Math.PI).toFixed(1),
+          pitchDeg: +(pitch * 180 / Math.PI).toFixed(1),
+          shipMeshes,
+        };
+      }, beat);
+      await page.waitForTimeout(250);
+      // only tag a suffix when an explicit --angle was passed that overrides the beat default.
+      const dfl = { enterPod: 'hatch', corridor: 'flee' };
+      const suffix = (argv.angle && dfl[beat] && argv.angle !== dfl[beat]) ? `-${argv.angle}` : '';
+      const path = join(OUT, `scen-flow-${beat}${suffix}.png`);
+      // wake sits over the full desert scene (heavy) — the clipped/animations-disabled grab
+      //   stalls there (known); use a plain grab for it. Interior beats use the clean clip.
+      if (beat === 'wake') await page.screenshot({ path, fullPage: false });
+      else await page.screenshot({ path, fullPage: false, clip: { x: 0, y: 0, width: 1100, height: 760 }, animations: 'disabled', timeout: 60000 });
+      results.push(meas);
+      console.log(`[flow-clarity] ${JSON.stringify(meas)} → scen-flow-${beat}${suffix}.png`);
+    }
+    console.log(`[flow-clarity] all: ${JSON.stringify(results)}`);
+  },
+
   // Smoke-intro (T1.2): run the whole intro beat chain headless + report {ok,beats}.
   // Escape-pod intro health GATE: drives the whole 12-beat chain headless + asserts
   // {ok:true, beats:12}. THROWS on failure so `node rig-shot.mjs --scenario=smoke-intro`
