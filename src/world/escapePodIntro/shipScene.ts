@@ -245,6 +245,19 @@ const _dialFace = new THREE.MeshBasicMaterial({ color: 0x223240 });
 const _hazard = new THREE.MeshBasicMaterial({ color: 0xc9a52e });
 // A printed-decal dark base (stencil text/label backing).
 const _decal = new THREE.MeshBasicMaterial({ color: 0x20242a });
+// ── CORRIDOR accents (R5b). Painted safety-yellow hazard stripe paint (chevrons / door frames) —
+//   worn matte metal, not unlit, so it takes the corridor lighting + the red-alert wash like real
+//   painted steel. Distinct from the cockpit's unlit _hazard placard.
+const _corrHazard = _metal(0xb89224, 0.30, 0.72, { flat: true, grime: true });
+// Grab-rail steel — a worn hand-polished tube (bare metal vs the painted wall, but NOT bright-white:
+//   pulled down + rougher so it reads as a used oily handrail, not a chrome bar).
+const _corrRail = _metal(0x63696f, 0.5, 0.62, { grime: false });
+// Recessed-fixture lens (unlit warm-white can-light lens — GLOWS as the corridor's own light).
+const _corrLens = new THREE.MeshBasicMaterial({ color: 0xffe4b0 });
+// Corridor strip-light emissive (unlit) — a low warm channel-light bar (normal), driven to hot-red
+//   by setShipAlert. Instanced per-strip (each captured) so the alert can strobe them.
+// Placard face (a lit stencil label — dim so it reads as painted, not a screen).
+const _corrPlacard = new THREE.MeshBasicMaterial({ color: 0x9aa6ae });
 // EMISSIVE SCREEN — a real recessed MFD: a dark glass face with a green emissive content layer
 //   driven separately (the bright bars). Standard so it takes a faint reflection.
 const _screenGlass = _metal(0x0c1410, 0.15, 0.22, { emissive: 0x0a1a0e, emissiveI: 0.5 });
@@ -311,20 +324,31 @@ _glass.onBeforeCompile = (shader: THREE.WebGLProgramParametersWithUniforms) => {
 };
 
 
-// ── Greybox CORRIDOR palette (UNCHANGED — flat / unlit; T3.4 reworks it). ──
-const C_CORR_FLOOR = 0x52565d;
-const C_CORR_WALL = 0x5e636b;
-const C_FRAME = 0x26292d;
-
-/** A greybox box's dimensions + centre: [w, h, d, centerX, centerY, centerZ] (LOCAL). */
+/** A box's dimensions + centre: [w, h, d, centerX, centerY, centerZ] (LOCAL). */
 type BoxSpec = [number, number, number, number, number, number];
 
-const CORRIDOR_SPECS: ReadonlyArray<readonly [BoxSpec, number]> = [
-  [[2, 0.2, 12, 0, -0.1, 8.6], C_CORR_FLOOR],   // corridor floor
-  [[2, 0.2, 12, 0, 2.5, 8.6], C_CORR_WALL],     // corridor ceiling
-  [[0.2, 2.4, 12, 1.1, 1.2, 8.6], C_CORR_WALL], // corridor +X wall
-  [[0.2, 2.4, 12, -1.1, 1.2, 8.6], C_CORR_WALL],// corridor −X wall
-  [[2, 2.4, 0.2, 0, 1.2, 14.7], C_FRAME],       // corridor dead-end (disaster trigger)
+// ── CORRIDOR ENVELOPE (REBUILD v2 R5b — fully-modelled). The WALKABLE box is UNCHANGED from the
+//    greybox so the KCC collision + the SHIP_CORRIDOR_ENTER_Z/SHIP_DEAD_END_Z beat triggers + the
+//    cockpit aft-doorway join are byte-identical: floor top y=0, inner walls x ±1.0, ceiling
+//    underside y=2.4, the tunnel runs local z ≈2.6 (mouth, meeting the cockpit +Z doorway) → 14.6
+//    (dead-end). The rich geometry lives at/outside this envelope (recessed panels, ribs proud of
+//    the wall, ceiling greeble ABOVE 2.4) so the player still walks a clean 2m×2.4m tube.
+const COR_HW = 1.0;            // walkable half-width (inner wall face at x ±1.0)
+const COR_CH = 2.4;           // ceiling underside (walkable height)
+const COR_Z0 = 2.6;           // corridor mouth (joins the cockpit +Z doorway, whose outer face is z 2.6)
+const COR_Z1 = 14.6;          // the dead-end bulkhead inner face (SHIP_DEAD_END_Z region)
+const COR_LEN = COR_Z1 - COR_Z0;    // 12
+const COR_ZC = (COR_Z0 + COR_Z1) / 2;   // 8.6 (tunnel centre)
+const COR_WALL_T = 0.2;       // structural wall/floor/ceiling thickness (matches the collider spec)
+
+// ── Static-collider specs for the CORRIDOR walkable shell (WYSIWYG — the KCC walks these). These
+//    are BYTE-IDENTICAL to the old greybox CORRIDOR_SPECS so collision + flow are unchanged.
+const CORRIDOR_COLLIDERS: ReadonlyArray<BoxSpec> = [
+  [2, 0.2, 12, 0, -0.1, 8.6],   // corridor floor  (top y=0)
+  [2, 0.2, 12, 0, 2.5, 8.6],    // corridor ceiling (underside y=2.4)
+  [0.2, 2.4, 12, 1.1, 1.2, 8.6], // +X wall (inner face x=1.0)
+  [0.2, 2.4, 12, -1.1, 1.2, 8.6],// −X wall (inner face x=−1.0)
+  [2, 2.4, 0.2, 0, 1.2, 14.7],   // dead-end bulkhead (inner face z=14.6 — the disaster trigger)
 ];
 
 // ── Static-collider specs for the COCKPIT walkable shell (WYSIWYG — the KCC walks these),
@@ -393,7 +417,16 @@ const _corridorMats: { mat: THREE.MeshBasicMaterial; base: THREE.Color }[] = [];
 const _ALERT_RED = new THREE.Color(0xff1808);
 let _engineFire: THREE.Group | null = null;
 const _fireMats: THREE.MeshBasicMaterial[] = [];
+let _engineFireLight: THREE.PointLight | null = null;   // the real flickering light the blaze casts up the corridor
 let _shipAlertLevel: 0 | 2 = 0;
+// ── R5b — the corridor is now LIT metal (not unlit greybox), so setShipAlert drives REAL lights,
+//    not a material tint: the normal recessed fixtures + fill DROP toward dark, and the corridor's
+//    own RED strip-lights + a pulsing beacon fire. Refs captured at build, restored on level 0.
+const _corrNormalLights: THREE.Light[] = [];       // recessed can-lights + fill — dimmed on alert
+const _corrLensMats: THREE.MeshBasicMaterial[] = [];    // the warm fixture lenses — cut on alert
+const _corrRedStripMats: THREE.MeshBasicMaterial[] = []; // wall/ceiling red channel strips — dark→red
+let _corrRedLight: THREE.PointLight | null = null;      // a pulsing red flood down the corridor on alert
+let _corrRedLight2: THREE.PointLight | null = null;     // a second red source (mid-corridor) for even wash
 
 /** Is the ship currently built? */
 export function shipBuilt(): boolean {
@@ -1906,18 +1939,11 @@ export function buildShipScene(ctx: GameContext): void {
   buildLighting(group);
   setCockpitAlert(0);   // wire the calm "ORBIT ACHIEVED" default
 
-  // ── GREYBOX CORRIDOR (flat unlit boxes; hero geometry deferred). Each mat is captured so
-  //    setShipAlert can tint it red on the disaster (MeshBasicMaterial is unlit → tint = the look).
-  for (const [spec, color] of CORRIDOR_SPECS) {
-    const [w, h, d, cx, cy, cz] = spec;
-    const g = new THREE.BoxGeometry(w, h, d);
-    _disposables.push(g);
-    const corrMat = new THREE.MeshBasicMaterial({ color });
-    _buildMats.push(corrMat);
-    _corridorMats.push({ mat: corrMat, base: new THREE.Color(color) });
-    const mesh = new THREE.Mesh(g, corrMat);
-    mesh.position.set(cx, cy, cz);
-    group.add(mesh);
+  // ── HERO CORRIDOR (R5b) — fully-modelled worn industrial ship corridor (structure + greeble +
+  //    lit fixtures), matching the cockpit's worn-gunmetal idiom. Emits the WYSIWYG walkable
+  //    colliders (unchanged from the greybox). setShipAlert/setEngineFire hooks stay wired.
+  buildCorridor(group);
+  for (const [w, h, d, cx, cy, cz] of CORRIDOR_COLLIDERS) {
     const col = makeStaticBox(
       ctx.physics.world,
       { x: w / 2, y: h / 2, z: d / 2 },
@@ -2014,6 +2040,388 @@ export function cockpitAlertLevel(): 0 | 1 | 2 {
   return _cockpitAlertLevel;
 }
 
+// ── HERO CORRIDOR (REBUILD v2 R5b) — the greybox tube → a fully-modelled, lived-in industrial
+//    ship corridor, MATCHING the cockpit's worn-gunmetal idiom (same _shell/_deck/_steel/_channel/
+//    _rivet metals + grime shader). Structure: a metal-tread deck (panel seams + rivets + a worn
+//    centre traffic-lane), painted side walls broken into recessed panels with bolt rows + access
+//    hatches, structural BULKHEAD RIB FRAMES at intervals (the tube reads as framed segments, not
+//    one extruded pipe), a ceiling with a raceway spine + recessed can-lights (the corridor's own
+//    real light sources) + ducting. Greeble: conduit + cable-loom runs at both wall/ceiling
+//    junctions, a pipe run, grab-rails, hazard-stripe door frames, stencil placards + hull
+//    numbers, wear + grime. Detail VARIES along the length (a mid junction, an aft engine-bay
+//    frame) so it isn't a repeated segment. Self-contained lighting (warm can-lights + a cool
+//    fill) that setShipAlert escalates to red. Everything within the WYSIWYG envelope (COR_*).
+function buildCorridor(group: THREE.Group): void {
+  const up = new THREE.Vector3(0, 1, 0);
+  const nz = new THREE.Vector3(0, 0, -1);
+  const zc = COR_ZC;
+
+  // ── SHELL: structural floor / ceiling / walls (behind the finish surfaces — dark steel so torn
+  //    edges + the recessed-panel gaps never read paper-thin). These sit at the collider envelope.
+  const subFloor = _box(2 + 0.02, COR_WALL_T, COR_LEN, _channel);
+  subFloor.position.set(0, -COR_WALL_T / 2, zc);
+  group.add(subFloor);
+  const roof = _box(2.6, COR_WALL_T, COR_LEN, _ceil);
+  roof.position.set(0, COR_CH + COR_WALL_T / 2, zc);
+  group.add(roof);
+  for (const sx of [1, -1]) {
+    const wall = _box(COR_WALL_T, COR_CH + 0.2, COR_LEN, _shell);
+    wall.position.set(sx * (COR_HW + COR_WALL_T / 2), COR_CH / 2, zc);
+    group.add(wall);
+  }
+  // dead-end BULKHEAD (the disaster trigger wall) — a heavy riveted end-cap with a central
+  //   engine-access hatch (the fire ruptures through it). Structural steel + a painted frame.
+  const endWall = _box(2.4, COR_CH + 0.2, COR_WALL_T, _steel);
+  endWall.position.set(0, COR_CH / 2, COR_Z1 + COR_WALL_T / 2 + 0.05);
+  group.add(endWall);
+
+  // ── DECK: bright worn tread over the sub-floor, a darker centre traffic-lane (footfall wear),
+  //    tread strips, cross panel-seams with corner fasteners, and an edge rivet run.
+  const deck = _box(1.96, 0.04, COR_LEN - 0.04, _deck);
+  deck.position.set(0, 0.02, zc);
+  group.add(deck);
+  const lane = _box(0.86, 0.045, COR_LEN - 0.3, _steel);
+  lane.position.set(0, 0.024, zc);
+  group.add(lane);
+  for (const sx of [-1, 1]) {
+    const tread = _box(0.07, 0.03, COR_LEN - 0.4, _band);
+    tread.position.set(sx * 0.62, 0.05, zc);
+    group.add(tread);
+  }
+  // deck panel seams every ~1.5m + corner fasteners (a bolted plate deck, not a plane)
+  for (let z = COR_Z0 + 0.9; z < COR_Z1; z += 1.5) {
+    const seam = _box(1.9, 0.014, 0.03, _channel);
+    seam.position.set(0, 0.044, z);
+    group.add(seam);
+    for (const fx of [-0.86, -0.3, 0.3, 0.86]) group.add(_stud(fx, 0.052, z, up, _rivet, 0.014));
+  }
+  // deck edge kickplate + rivet run along both wall feet (grime channel where deck meets wall)
+  for (const sx of [1, -1]) {
+    const kick = _box(0.05, 0.16, COR_LEN - 0.2, _channel);
+    kick.position.set(sx * (COR_HW - 0.025), 0.08, zc);
+    group.add(kick);
+    for (let z = COR_Z0 + 0.5; z < COR_Z1; z += 0.75) group.add(_stud(sx * (COR_HW - 0.05), 0.055, z, up, _rivet, 0.012));
+  }
+
+  // ── BULKHEAD RIB FRAMES — the structural hoops that segment the tube. A rib = proud vertical
+  //    posts (both walls) + a top cross-beam, in dark steel, with bolt rows. Placed at intervals;
+  //    every other one carries a HAZARD-STRIPE painted frame (a doorway/bulkhead threshold read).
+  const ribZ = [3.4, 5.2, 7.0, 8.8, 10.6, 12.4, 14.1];
+  for (let ri = 0; ri < ribZ.length; ri++) {
+    const z = ribZ[ri];
+    const hazard = ri % 2 === 1;
+    const postMat = hazard ? _corrHazard : _steel;
+    for (const sx of [1, -1]) {
+      // vertical rib post proud of the wall
+      const post = _box(0.14, COR_CH, 0.16, postMat);
+      post.position.set(sx * (COR_HW - 0.07), COR_CH / 2, z);
+      group.add(post);
+      // bolt column up the post
+      for (let y = 0.35; y < COR_CH; y += 0.42) group.add(_stud(sx * (COR_HW - 0.145), y, z, new THREE.Vector3(-sx, 0, 0), _rivet, 0.016));
+      // a flanking dark channel (recessed seam beside the rib)
+      const chan = _box(0.04, COR_CH - 0.2, 0.06, _channel);
+      chan.position.set(sx * (COR_HW - 0.16), COR_CH / 2, z);
+      group.add(chan);
+    }
+    // top cross-beam of the frame
+    const beam = _box(2 - 0.28, 0.16, 0.16, postMat);
+    beam.position.set(0, COR_CH - 0.08, z);
+    group.add(beam);
+    for (const fx of [-0.7, -0.24, 0.24, 0.7]) group.add(_stud(fx, COR_CH - 0.165, z, down_(up), _rivet, 0.015));
+    // hazard chevrons painted on the beam face of the "threshold" frames (a warning-striped lintel)
+    if (hazard) {
+      for (let cx = -0.7; cx <= 0.7; cx += 0.2) {
+        const chev = _box(0.09, 0.1, 0.02, _channel);
+        chev.position.set(cx, COR_CH - 0.08, z - 0.09);
+        chev.rotation.z = 0.5;
+        group.add(chev);
+      }
+    }
+  }
+
+  // ── WALL FINISH: each wall broken into recessed panels between the ribs (a raised panel face
+  //    with a bolt border + a recessed dark reveal around it), plus access hatches + a placard.
+  const seg: [number, number][] = [];   // [zStart, zEnd] gaps between ribs to panelize
+  const bounds = [COR_Z0 + 0.15, ...ribZ.slice(0, -1).map((z, i) => (z + ribZ[i + 1]) / 2), COR_Z1 - 0.15];
+  for (let i = 0; i < ribZ.length; i++) seg.push([i === 0 ? COR_Z0 + 0.15 : (ribZ[i - 1] + ribZ[i]) / 2, i === ribZ.length - 1 ? COR_Z1 - 0.15 : (ribZ[i] + ribZ[i + 1]) / 2]);
+  void bounds;
+  for (const sx of [1, -1]) {
+    for (let si = 0; si < seg.length; si++) {
+      const [z0, z1] = seg[si];
+      const zmid = (z0 + z1) / 2, len = z1 - z0 - 0.14;
+      if (len < 0.2) continue;
+      // proud upper panel (raised battleship-grey plate — stands proud of the wall so the reveal
+      //   around it reads as a real recessed seam)
+      const panel = _box(0.06, 1.0, len, _band);
+      panel.position.set(sx * (COR_HW - 0.02), 1.5, zmid);
+      group.add(panel);
+      // recessed lower panel (near-charcoal — a distinctly DARKER plate so the wall reads two clear
+      //   values, not one flat grey; a grimy lower dado where scuffs + oil settle)
+      const low = _box(0.035, 0.66, len, _channel);
+      low.position.set(sx * (COR_HW - 0.005), 0.55, zmid);
+      group.add(low);
+      // a horizontal rub-rail / dado line between the two plates
+      const dado = _box(0.06, 0.06, len + 0.1, _channel);
+      dado.position.set(sx * (COR_HW - 0.03), 0.98, zmid);
+      group.add(dado);
+      // bolt border on the upper panel corners
+      for (const py of [1.08, 1.92]) for (const pz of [zmid - len / 2 + 0.12, zmid + len / 2 - 0.12]) {
+        group.add(_stud(sx * (COR_HW - 0.05), py, pz, new THREE.Vector3(-sx, 0, 0), _rivet, 0.014));
+      }
+      // an ACCESS HATCH on some panels (a recessed door with a latch + hinge studs) — varies the wall
+      if (si % 3 === 1) {
+        const hatch = _box(0.06, 0.7, Math.min(0.6, len - 0.1), _channel);
+        hatch.position.set(sx * (COR_HW - 0.03), 1.45, zmid);
+        group.add(hatch);
+        const latch = _box(0.05, 0.08, 0.05, _rivet);
+        latch.position.set(sx * (COR_HW - 0.065), 1.45, zmid + 0.22);
+        group.add(latch);
+        for (const hy of [1.15, 1.75]) group.add(_stud(sx * (COR_HW - 0.055), hy, zmid - 0.24, new THREE.Vector3(-sx, 0, 0), _rivet, 0.02));
+      }
+    }
+  }
+
+  // ── PLACARDS + HULL NUMBERS — stencilled labels on the wall (a lit decal face + a dark backing).
+  //    Placed at a couple of spots along the length so the corridor has printed "signage".
+  const placards: [number, number, number, number, number][] = [
+    // [sx, y, z, w(along z), h]
+    [-1, 1.75, 4.2, 0.34, 0.16],
+    [1, 1.68, 9.0, 0.30, 0.20],
+    [-1, 1.6, 11.8, 0.4, 0.14],
+  ];
+  for (const [sx, py, pz, pw, ph] of placards) {
+    const back = _box(0.02, ph + 0.03, pw + 0.03, _decal);
+    back.position.set(sx * (COR_HW - 0.052), py, pz);
+    group.add(back);
+    const face = _box(0.01, ph, pw, _corrPlacard);
+    face.position.set(sx * (COR_HW - 0.058), py, pz);
+    group.add(face);
+  }
+  // a big painted hull-number panel (a stencilled "block" near the mouth)
+  const numBack = _box(0.02, 0.5, 0.5, _corrHazard);
+  numBack.position.set(-(COR_HW - 0.055), 1.7, 3.0);
+  group.add(numBack);
+  const numFace = _box(0.01, 0.34, 0.34, _channel);
+  numFace.position.set(-(COR_HW - 0.062), 1.7, 3.0);
+  group.add(numFace);
+
+  // ── CEILING RACEWAY + DUCTING — a central spine box (cable raceway) down the crown, flanked by a
+  //    round duct run, so the ceiling isn't a flat lid. Sits ABOVE the walkable underside (y>2.4).
+  const raceway = _box(0.5, 0.14, COR_LEN - 0.2, _steel);
+  raceway.position.set(0, COR_CH - 0.07, zc);
+  group.add(raceway);
+  for (let z = COR_Z0 + 0.6; z < COR_Z1; z += 1.2) {
+    const clamp = _box(0.56, 0.05, 0.06, _channel);
+    clamp.position.set(0, COR_CH - 0.14, z);
+    group.add(clamp);
+  }
+  // a fat round DUCT running along one shoulder of the ceiling (darker steel so it doesn't read
+  //   as a bright pale pipe dominating the crown)
+  const duct = _cyl(0.11, 0.11, COR_LEN - 0.3, 12, _steel);
+  duct.rotation.x = Math.PI / 2;
+  duct.position.set(0.66, COR_CH - 0.14, zc);
+  group.add(duct);
+  // duct support straps
+  for (let z = COR_Z0 + 1.0; z < COR_Z1; z += 1.8) {
+    const strap = _cyl(0.135, 0.135, 0.04, 12, _steel);
+    strap.rotation.x = Math.PI / 2;
+    strap.position.set(0.66, COR_CH - 0.14, z);
+    group.add(strap);
+  }
+
+  // ── CONDUIT + CABLE-LOOM RUNS at BOTH wall/ceiling junctions (the "lived-in" greeble). A pair of
+  //    parallel conduit pipes + a fat rubber cable loom, clamped at intervals, running the length.
+  for (const sx of [1, -1]) {
+    for (let ci = 0; ci < 2; ci++) {
+      const cd = _cyl(0.035 + ci * 0.012, 0.035 + ci * 0.012, COR_LEN - 0.2, 8, ci === 0 ? _steel : _band);
+      cd.rotation.x = Math.PI / 2;
+      cd.position.set(sx * (COR_HW - 0.07 - ci * 0.1), COR_CH - 0.2 - ci * 0.14, zc);
+      group.add(cd);
+    }
+    // the fat black cable loom, sagging slightly (a lower position, thicker, matte rubber)
+    const loom = _cyl(0.06, 0.06, COR_LEN - 0.2, 8, _cable);
+    loom.rotation.x = Math.PI / 2;
+    loom.position.set(sx * (COR_HW - 0.05), COR_CH - 0.5, zc);
+    group.add(loom);
+    // clamps holding the runs to the wall
+    for (let z = COR_Z0 + 0.55; z < COR_Z1; z += 0.9) {
+      const clamp = _box(0.05, 0.06, 0.04, _channel);
+      clamp.position.set(sx * (COR_HW - 0.05), COR_CH - 0.32, z);
+      group.add(clamp);
+    }
+  }
+  // a low PIPE run along the −X wall foot (a plumbing/coolant line, waist-low)
+  const pipe = _cyl(0.05, 0.05, COR_LEN - 0.2, 10, _steel);
+  pipe.rotation.x = Math.PI / 2;
+  pipe.position.set(-(COR_HW - 0.08), 0.5, zc);
+  group.add(pipe);
+  for (let z = COR_Z0 + 0.7; z < COR_Z1; z += 1.4) {
+    const bracket = _box(0.06, 0.12, 0.05, _steel);
+    bracket.position.set(-(COR_HW - 0.06), 0.5, z);
+    group.add(bracket);
+  }
+  // a couple of inline VALVES / gauges on the low pipe (breaks the straight run — worked hardware)
+  for (const [vz, sx] of [[5.6, -1], [10.2, -1]] as const) {
+    const wheel = _cyl(0.09, 0.09, 0.03, 10, _corrRail);
+    wheel.rotation.z = Math.PI / 2;
+    wheel.position.set(sx * (COR_HW - 0.12), 0.5, vz);
+    group.add(wheel);
+    const body = _box(0.1, 0.14, 0.14, _channel);
+    body.position.set(sx * (COR_HW - 0.05), 0.5, vz);
+    group.add(body);
+  }
+
+  // ── WALL-MOUNTED HARDWARE (varies the length so it's not a repeated tube): a junction/breaker
+  //    box + a fire-suppression bottle on brackets, at distinct spots on opposite walls.
+  //  breaker box (+X wall, mid) — a proud grey cabinet with a hazard-yellow door + a latch + vents
+  {
+    const bz = 6.4, sx = 1;
+    const cab = _box(0.12, 0.6, 0.5, _band);
+    cab.position.set(sx * (COR_HW - 0.06), 1.5, bz);
+    group.add(cab);
+    const door = _box(0.03, 0.5, 0.42, _corrHazard);
+    door.position.set(sx * (COR_HW - 0.13), 1.5, bz);
+    group.add(door);
+    for (const vy of [1.66, 1.58, 1.5, 1.42, 1.34]) {   // louvre vents
+      const vent = _box(0.01, 0.015, 0.34, _channel);
+      vent.position.set(sx * (COR_HW - 0.145), vy, bz);
+      group.add(vent);
+    }
+    const latch = _box(0.04, 0.1, 0.04, _rivet);
+    latch.position.set(sx * (COR_HW - 0.15), 1.5, bz + 0.18);
+    group.add(latch);
+  }
+  //  a red fire-suppression BOTTLE on brackets (−X wall, aft) — a diegetic safety detail
+  {
+    const fz = 11.0, sx = -1;
+    const bottle = _cyl(0.09, 0.1, 0.6, 12, _corrHazard);
+    bottle.position.set(sx * (COR_HW - 0.11), 0.95, fz);
+    group.add(bottle);
+    // recolor via a dedicated red-ish look — reuse the hazard paint but cap it with a dark valve head
+    const head = _cyl(0.05, 0.07, 0.08, 10, _channel);
+    head.position.set(sx * (COR_HW - 0.11), 1.29, fz);
+    group.add(head);
+    for (const by of [1.1, 0.8]) {   // wall brackets
+      const brk = _box(0.06, 0.05, 0.16, _steel);
+      brk.position.set(sx * (COR_HW - 0.05), by, fz);
+      group.add(brk);
+    }
+  }
+
+  // ── GRAB-RAILS — a horizontal handrail down each wall at grip height, on stand-off brackets
+  //    (a real freighter corridor detail; reads as a walked, worked space).
+  for (const sx of [1, -1]) {
+    const rail = _cyl(0.028, 0.028, COR_LEN - 0.6, 8, _corrRail);
+    rail.rotation.x = Math.PI / 2;
+    rail.position.set(sx * (COR_HW - 0.09), 1.15, zc);
+    group.add(rail);
+    for (let z = COR_Z0 + 0.7; z < COR_Z1; z += 2.0) {
+      const stand = _box(0.05, 0.05, 0.05, _rivet);
+      stand.position.set(sx * (COR_HW - 0.05), 1.15, z);
+      group.add(stand);
+    }
+  }
+
+  // ── RECESSED CEILING CAN-LIGHTS — the corridor's OWN light sources (gate: light must have a
+  //    believable origin, not a floating blob). A metal bezel + a glowing warm lens + a real point
+  //    light AT each. These + a cool fill are the ONLY corridor lighting (self-contained; the ship
+  //    sees no world sun). setShipAlert dims these + fires the red strips.
+  _corrNormalLights.length = 0;
+  _corrLensMats.length = 0;
+  const canZ = [3.6, 6.2, 8.8, 11.4, 13.8];
+  for (let li = 0; li < canZ.length; li++) {
+    const z = canZ[li];
+    // recessed housing set into the ceiling either side of the raceway
+    for (const sx of [-1, 1]) {
+      const bezel = _box(0.34, 0.06, 0.5, _channel);
+      bezel.position.set(sx * 0.42, COR_CH - 0.03, z);
+      group.add(bezel);
+      const lensMat = _corrLens.clone();
+      _buildMats.push(lensMat);
+      _corrLensMats.push(lensMat);
+      const lens = _box(0.24, 0.02, 0.4, lensMat);
+      lens.position.set(sx * 0.42, COR_CH - 0.065, z);
+      group.add(lens);
+      // a wire guard cage across the lens (industrial fixture read)
+      for (const gx of [-0.08, 0, 0.08]) {
+        const bar = _box(0.012, 0.012, 0.42, _steel);
+        bar.position.set(sx * 0.42 + gx, COR_CH - 0.08, z);
+        group.add(bar);
+      }
+    }
+    // one point light per fixture station (warm worn-industrial white); a softer falloff (1.6) +
+    //   more reach so the pools OVERLAP down the tube (no dead-dark gaps between fixtures — the
+    //   round-1 read was patchy/underlit). Two lamps per station (a hair off-centre) so the light
+    //   lands on BOTH walls, not just the crown.
+    for (const lx of [-0.42, 0.42]) {
+      const lamp = new THREE.PointLight(0xffd6a0, 0.95, 6.4, 1.6);
+      lamp.position.set(lx, COR_CH - 0.2, z);
+      group.add(lamp);
+      _corrNormalLights.push(lamp);
+    }
+  }
+  // a warm ambient FILL so the crushed lower walls + deck read a mid-tone + the metal shows a
+  //   modeling gradient across the tube (mirrors the cockpit's hemisphere fill idiom). Warm-over-
+  //   cool (a warm worn-industrial cast up top, cooler grimy deck) + lifted so it's not a cold morgue.
+  const corrFill = new THREE.HemisphereLight(0xc4b299, 0x40454c, 0.72);
+  corrFill.position.set(0, COR_CH, zc);
+  group.add(corrFill);
+  _corrNormalLights.push(corrFill);
+  // a couple of soft warm pooling points down the tube (fills the mid-corridor between fixtures so
+  //   the walls read a warm lived-in wash + the deep sections aren't near-black).
+  for (const pz of [5.0, 9.4, 12.6]) {
+    const pool = new THREE.PointLight(0xffc890, 0.5, 5.5, 1.7);
+    pool.position.set(0, 1.5, pz);
+    group.add(pool);
+    _corrNormalLights.push(pool);
+  }
+  // a faint cool spill from the corridor MOUTH (the cockpit's cool space-light bleeding aft)
+  const mouthGlow = new THREE.PointLight(0xa8c2d8, 0.7, 6.0, 1.6);
+  mouthGlow.position.set(0, 1.6, COR_Z0 + 0.4);
+  group.add(mouthGlow);
+  _corrNormalLights.push(mouthGlow);
+
+  // ── RED STRIP-LIGHTS + BEACON WASH (the corridor's own warning system) — thin emissive channel
+  //    strips low on both walls + on the ceiling raceway, DARK at level 0, driven hot-red +
+  //    strobing by setShipAlert. Plus two red point lights (mid + aft) that flood the tube on
+  //    alert with real falloff (so the red is a SOURCE + a modelled wash, not a flat filter).
+  _corrRedStripMats.length = 0;
+  for (const sx of [1, -1]) {
+    for (let z = COR_Z0 + 0.4; z < COR_Z1; z += 1.5) {
+      const sm = new THREE.MeshBasicMaterial({ color: 0x1c0604 });
+      _buildMats.push(sm);
+      _corrRedStripMats.push(sm);
+      const strip = _box(0.03, 0.05, 1.1, sm);
+      strip.position.set(sx * (COR_HW - 0.02), 0.32, z + 0.75);
+      group.add(strip);
+    }
+  }
+  // ceiling raceway-edge red runners (a continuous alert line down the crown)
+  for (const sx of [-1, 1]) {
+    const sm = new THREE.MeshBasicMaterial({ color: 0x1c0604 });
+    _buildMats.push(sm);
+    _corrRedStripMats.push(sm);
+    const run = _box(0.03, 0.03, COR_LEN - 0.6, sm);
+    run.position.set(sx * 0.27, COR_CH - 0.02, zc);
+    group.add(run);
+  }
+  const redLight = new THREE.PointLight(0xff2214, 0.0, 7.5, 1.8);
+  redLight.position.set(0, 1.5, COR_Z1 - 3.0);
+  group.add(redLight);
+  _corrRedLight = redLight;
+  const redLight2 = new THREE.PointLight(0xff2214, 0.0, 7.0, 1.8);
+  redLight2.position.set(0, 1.5, COR_ZC - 1.0);
+  group.add(redLight2);
+  _corrRedLight2 = redLight2;
+
+  void nz;
+  // wire the calm default (lights up, red off) — safe (refs just set above).
+  setShipAlert(0);
+}
+
+// tiny helper — a downward face vector (for studs domed downward off a lintel/beam underside).
+function down_(_up: THREE.Vector3): THREE.Vector3 { return new THREE.Vector3(0, -1, 0); }
+
 // ── T3.4 — the engine-bay FIRE at the corridor dead-end (the disaster reveal). Additive
 //    emissive flame quads (the corridor is unlit greybox, so the fire is its own glow). Hidden
 //    until setEngineFire erupts it; setEngineFire flickers it each frame. Greybox-grade — the
@@ -2022,8 +2430,21 @@ function buildEngineBay(group: THREE.Group): void {
   const fire = new THREE.Group();
   // at the dead-end door (local z≈14.5), corridor-side, low so it climbs the bulkhead
   fire.position.set(0, 0.7, 14.4);
+  // ── the RUPTURED ENGINE-ACCESS HATCH: a blown-open dark maw in the dead-end bulkhead the fire
+  //    erupts from (so the blaze reads as a breach in real hardware, not a floating flame). A dark
+  //    recessed frame + peeled/blackened plate edges around the hole; always visible (the hatch is
+  //    there before it ruptures), the fire quads + light appear on setEngineFire.
+  const maw = _box(1.0, 1.4, 0.05, _channel);   // the dark opening (deep, near-black recess)
+  maw.position.set(0, 0.75, -0.05);
+  fire.add(maw);
+  // scorched/peeled plate lips around the breach (blackened battered steel)
+  for (const [ox, oy, ow, oh] of [[-0.6, 0.75, 0.16, 1.5], [0.6, 0.75, 0.16, 1.5], [0, 1.55, 1.3, 0.16], [0, -0.02, 1.3, 0.16]] as const) {
+    const lip = _box(ow, oh, 0.12, _steel);
+    lip.position.set(ox, oy, 0.0);
+    fire.add(lip);
+  }
   const cols = [0xff2c0c, 0xff7a1e, 0xffc23a];   // deep-red → orange → yellow flame tones
-  for (let i = 0; i < 9; i++) {
+  for (let i = 0; i < 12; i++) {
     const w = 0.5 + (i % 3) * 0.28, h = 1.0 + (i % 2) * 0.7;
     const g = new THREE.PlaneGeometry(w, h);
     _disposables.push(g);
@@ -2033,9 +2454,14 @@ function buildEngineBay(group: THREE.Group): void {
     });
     _fireMats.push(m); _buildMats.push(m);
     const q = new THREE.Mesh(g, m);
-    q.position.set(Math.sin(i * 1.7) * 0.55, (i % 3) * 0.32, -0.04 * i);
+    q.position.set(Math.sin(i * 1.7) * 0.55, (i % 3) * 0.32, 0.06 + 0.04 * i);
     fire.add(q);
   }
+  // the REAL light the blaze casts up the corridor (hot orange, strong falloff) — off until erupt.
+  const fireLight = new THREE.PointLight(0xff5a1e, 0.0, 9.0, 1.7);
+  fireLight.position.set(0, 1.0, -0.6);   // corridor-side of the breach, throwing light forward (−z)
+  fire.add(fireLight);
+  _engineFireLight = fireLight;
   fire.visible = false;
   group.add(fire);
   _engineFire = fire;
@@ -2051,6 +2477,11 @@ export function setEngineFire(intensity: number, t = 0): void {
     const tier = i % 3 === 0 ? 1.0 : (i % 3 === 1 ? 0.8 : 0.6);   // red core brightest
     _fireMats[i].opacity = Math.min(1, intensity * tier * flick);
   }
+  // the real light the blaze throws up the corridor — flickers with the flames.
+  if (_engineFireLight) {
+    const lflick = 0.7 + 0.3 * Math.sin(t * 9.3 + 0.6) + 0.12 * Math.sin(t * 21.0);
+    _engineFireLight.intensity = intensity * 5.0 * lflick;
+  }
   // flicker-scale the blaze (taller/shorter licks)
   _engineFire.scale.set(1 + 0.10 * Math.sin(t * 8.0), 1 + 0.16 * Math.sin(t * 6.3 + 1.0), 1);
 }
@@ -2059,13 +2490,37 @@ export function setEngineFire(intensity: number, t = 0): void {
  *  pulsing with `strobe` (0..1). Level 0 restores the base greybox. Safe no-op if not built. */
 export function setShipAlert(level: 0 | 2, strobe = 0): void {
   _shipAlertLevel = level;
-  for (const { mat, base } of _corridorMats) {
-    if (level === 0) { mat.color.copy(base); continue; }
-    // lerp base→red, KEEPING ~32-66% of the base greybox so the corridor structure (walls/
-    // floor/ceiling value differences) still reads as FORM under the red, not a flat-red wash;
-    // the strobe pulse breathes the intensity (a hard red flash that ebbs).
-    mat.color.copy(base).lerp(_ALERT_RED, 0.34 + 0.34 * strobe);
+  // ── R5b — the corridor is LIT metal now, so the alert is driven by REAL LIGHTS + emissive
+  //    strips, NOT a MeshBasicMaterial tint (the old greybox mechanism). On alert: the normal warm
+  //    can-lights + fill DROP toward dark, the fixture lenses cut, and the ship's RED warning
+  //    strips + two red floods fire + strobe — so the surfaces still MODEL (form + material read)
+  //    under a menacing red source, not a flat-red Photoshop wash.
+  if (level === 0) {
+    for (const l of _corrNormalLights) {
+      const base = (l.userData.corrBase ??= l.intensity) as number;
+      l.intensity = base;
+    }
+    for (const m of _corrLensMats) m.color.setHex(0xffe4b0);
+    for (const m of _corrRedStripMats) m.color.setHex(0x1c0604);
+    if (_corrRedLight) _corrRedLight.intensity = 0;
+    if (_corrRedLight2) _corrRedLight2.intensity = 0;
+    // legacy: restore any (now unused) tint-mats if present.
+    for (const { mat, base } of _corridorMats) mat.color.copy(base);
+    return;
   }
+  // full red-alert: normal lights crushed (a faint ember of the fill survives so metal still reads),
+  //   lenses dimmed to a dead amber, red strips + floods pulsing.
+  for (const l of _corrNormalLights) {
+    const base = (l.userData.corrBase ??= l.intensity) as number;
+    l.intensity = base * 0.14;
+  }
+  for (const m of _corrLensMats) m.color.setHex(0x3a2410);
+  const hot = strobe > 0.45;
+  for (const m of _corrRedStripMats) m.color.setHex(hot ? 0xff3218 : 0x5a0e06);
+  if (_corrRedLight) _corrRedLight.intensity = 2.4 + 3.4 * strobe;
+  if (_corrRedLight2) _corrRedLight2.intensity = 1.8 + 2.6 * strobe;
+  // legacy tint (no-op unless old greybox mats exist)
+  for (const { mat, base } of _corridorMats) mat.color.copy(base).lerp(_ALERT_RED, 0.34 + 0.34 * strobe);
 }
 
 /** Current ship red-alert level (for tests). */
@@ -2099,6 +2554,12 @@ export function disposeShipScene(ctx: GameContext): void {
   _corridorMats.length = 0;
   _engineFire = null;
   _fireMats.length = 0;
+  _engineFireLight = null;
+  _corrNormalLights.length = 0;
+  _corrLensMats.length = 0;
+  _corrRedStripMats.length = 0;
+  _corrRedLight = null;
+  _corrRedLight2 = null;
   _shipAlertLevel = 0;
   // free the per-cockpit IBL + detach it from the persistent metal materials.
   _applyCockpitEnv(null);

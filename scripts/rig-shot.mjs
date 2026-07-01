@@ -2031,6 +2031,12 @@ const SCENARIOS = {
   //   [default] · flee (at the dead-end looking FORWARD down the red corridor toward the bridge).
   'corridor': async (page) => {
     const angle = argv.angle || 'fire';
+    if (argv.smoke) {
+      await page.evaluate(() => { window.__game.startIntro(); });
+      const res = await page.evaluate(() => window.__game.smokeIntro());
+      console.log(`[corridor-smoke] ${JSON.stringify(res)}`);
+      return;
+    }
     await page.evaluate(() => {
       const g = window.__game;
       const ctx = g.ctx;
@@ -2042,11 +2048,13 @@ const SCENARIOS = {
       g.jumpToBeat('cockpit');   // builds the ship + seats the player
     });
     await page.waitForTimeout(700);
-    const meas = await page.evaluate(({ angle }) => {
+    const calm = !!argv.calm;   // --calm shoots the pre-disaster (normal-lit) corridor
+    const meas = await page.evaluate(({ angle, calm }) => {
       const g = window.__game;
       const ctx = g.ctx;
       // Drive the disaster state directly (the corridor beat does this at the dead-end).
-      try { g.setEngineFire(1, 2.1); g.setShipAlert(2, 0.9); g.setCockpitAlert(2); } catch {}
+      if (calm) { try { g.setEngineFire(0, 0); g.setShipAlert(0, 0); g.setCockpitAlert(0); } catch {} }
+      else { try { g.setEngineFire(1, 2.1); g.setShipAlert(2, 0.9); g.setCockpitAlert(2); } catch {} }
       ctx.flags.paused = true;
       ctx.three.renderer.setSize(1100, 760, false);
       const cam = ctx.three.camera;
@@ -2070,9 +2078,9 @@ const SCENARIOS = {
       let meshes = 0;
       if (ship) ship.traverse((o) => { if (o.isMesh) meshes++; });
       return { found: !!ship, meshes, shipAlert: g.ctx ? undefined : 0, eye: [+eye.x.toFixed(2), +eye.y.toFixed(2), +eye.z.toFixed(2)] };
-    }, { angle });
+    }, { angle, calm });
     await page.waitForTimeout(300);
-    const tag = `corridor-${angle}`;
+    const tag = `corridor-${angle}${calm ? '-calm' : ''}`;
     await page.screenshot({ path: join(OUT, `scen-${tag}.png`), fullPage: false });
     console.log(`[corridor] ${JSON.stringify(meas)} → scen-${tag}.png`);
   },
