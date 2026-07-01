@@ -454,3 +454,10 @@ The user kept the loop running past feature-complete; each pass found + fixed re
 - **Downstream catches**: the Leviathan was dawn-tuned + washed out at midday → its own deeper hull value (`4878da2`); "clear skies" was a real INCONSISTENCY — the descent thinned fog but the step-out inherited the dense survival fog → INTRO_CLEAR_FOG_DENSITY pinned across the whole atmospheric leg + a 6s ease-back post-handoff (`1b17698`).
 - **Verify:** verify:all + smoke `{ok:true,beats:12}` at every step. (A mid-cycle session restart was resumed cleanly — the sky-clarity work was verified + committed on resume.)
 - **State:** all of the user's walk-test feedback is implemented + verified. Remaining = the user's next walk-test round (feel/motion + the new consistency in person) + audio balance.
+
+---
+
+## ⏸ Paused mid-cycle 47 (2026-07-01 evening) — resume note
+- **In-flight when paused:** a full-chain visual REGRESSION sweep (checking interaction effects of the 3 stacked structural changes — unified/grounded pod + midday + pinned clear fog — across all beats; the descent is where all 3 meet). The sweep was stopped in its SHOOTING phase — **no code edits were made**; the tree is clean; nothing to reconcile.
+- **On resume:** just re-run that sweep (`/loop /campaign-cycle` boots it from this note), or skip it if the user walk-tests first (their walk-test covers the same ground with better eyes).
+- Everything through `ee70c94` is committed + pushed. All user walk-test feedback (one pod / midday / clear skies) is implemented + verified.
