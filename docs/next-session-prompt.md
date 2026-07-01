@@ -25,9 +25,15 @@ The v1 intro (offset + faked shaders + 3 teleport-stitched pods) → re-architec
 - **FEEL walk-tests** (a still can't judge): the climb-in curve + eject shudder (R5c), the corridor strobe/fire cadence (R5b), the beautiful-descent + parachute gag timing (R4), the seat-read in motion.
 - **NOTE on the gates:** the cockpit adversarial gates (R5a) were partly shot on the LYING rig (tan fog, no planet in the window) — the GEOMETRY judgments hold, but the window/sky reads in those gate shots were unreliable; the real opening now reads as a beautiful orbit vista (see `verification/scen-cockpit-forward-space.png`).
 
-## ▶ In progress / next (overnight continues)
-- **T4.3 — the craft + salvage tutorial** (the original vision's next beat): after you wake + climb out into the dawn desert (R3a stepOut), craft a machete (scrap_machete/D261 exists) + salvage your own crashed pod (the salvage system exists) → the failed parachute comically pops out (the payoff). Being wired now.
-- Then the original pre-rework deferred items: Phase-3 hero ship-explosion-through-the-frame, a horizon-hook landmark.
+## ✅ Also shipped this overnight (beyond the R1–R5 rework)
+- **T4.3 — the first tutorial** (`59795bf`): the intro now flows into gameplay — wake + climb out → gather scattered scrap+cloth → craft a machete → salvage your own crashed pod (wired into the existing pry/extract flow) → the failed parachute comically POPS OUT (a procedural canopy + a "sproing"). `__game.smokePodTutorial()` passes all stages; behind the flag, no save bump.
+- **Bug-hunt** (`bf07847`): an adversarial 4-reviewer sweep of the night's heavily-changed intro code → essentially CLEAN (one sev-3 dev-only re-scatter bug, fixed). No fog-restore leak, no softlocks, no accumulating leaks in the shipping path.
+
+## ▶ Next (queued — best done WITH your review/direction)
+- **Phase-3 — the hero ship explosion through the pod window** (on eject, watch the hauler explode). Deferred because it depends on the **hauler exterior model, which plateaued** earlier (C19) — this is art-direction territory + a known-hard hero visual, so it wants your eye, not another 5am autonomous attempt.
+- **Look/feel polish** (your domain): the pod-bay + cockpit visuals, the chute-pop size, and all the FEEL walk-tests (climb-in, eject, descent, corridor).
+- A horizon-hook landmark for the desert reveal.
+The overnight loop wound down after completing the whole rework + the tutorial + a clean bug-hunt — the remaining work needs your direction. Restart with `/loop /campaign-cycle` or steer via `steering.md` to continue autonomously.
 
 ## Cost note
 The overnight ran ~5M tokens (R5 + the gates + the vista fix). The adversarial gate is worth it for

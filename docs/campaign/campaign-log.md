@@ -401,3 +401,12 @@ The user walk-tested R1, approved it to continue, and reported 2 bugs (both fixe
 - **Cost discipline:** after R5a's ~1.8M (4 modeler rounds + 3 gates), scoped R5b/R5c to own-eyes + verify:all (walked-through/flow pieces), reserving the full adversarial gate for the hero opening frame.
 - **Verify:** verify:all PASS + smoke `{ok:true,beats:12}` each step.
 - **Next (this overnight):** the planet-framing residual (the cockpit-beat windscreen), then wrap for the user's full walk-test/review.
+
+---
+
+## Cycle 33 — overnight continuation: orbit-vista fix + T4.3 tutorial + bug-hunt (2026-07-01)
+- **Orbit-vista fix** (`3d271d3`): the cockpit "tan wall" was a BUG — the desert FogExp2 + scene.background were never thinned in space mode → they fogged the black dome tan. Root-fixed in sky.ts applySpaceMode (thin fog/bg in orbit, eased back at re-entry) + reframed the planet as a real disc + limb + stars. ALSO fixed the cockpit RIG (it paused before the sky updated at the ship-origin camera → every prior cockpit shot, incl. the gates, rendered stale/no planet + tan fog). Rig now faithful.
+- **T4.3 the first tutorial** (`59795bf`): craft a machete → salvage your own crashed pod (wired into the existing pry/extract flow) → the failed parachute comically POPS OUT (procedural canopy + a "sproing"). New podTutorial.ts state machine. smokePodTutorial all stages pass. No SAVE bump; purely additive.
+- **Bug-hunt** (`bf07847`): an adversarial 4-reviewer + verify + synth sweep of the night's heavily-changed intro code found the code essentially CLEAN — ONE sev-3 dev-only bug (podTutorial re-scatter guard keyed off the wrong predicate → re-scattered on same-page replay). Fixed.
+- **→ The intro now flows end-to-end** (orbit → disaster → eject → descent → crash → wake → step out → craft → salvage → chute-pop) and is bug-clean. Loop wound down at ~05:15 — the remaining work (Phase-3 ship-explosion-through-the-frame [depends on the plateaued hauler exterior], look/feel polish) is best with the user's review + art-direction, not a saturated-context 5am autonomous attempt.
+- **Verify:** verify:all + smokeIntro `{ok:true,beats:12}` throughout.
