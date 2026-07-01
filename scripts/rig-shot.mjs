@@ -2560,6 +2560,113 @@ const SCENARIOS = {
     console.log(`[stepout-pod] ${JSON.stringify(r)}`);
   },
 
+  // LEVIATHAN-REVEAL (2026-07-01 midday consistency re-scope) — shoot the STEP-OUT reveal
+  // looking OUT toward the beached-leviathan horizon landmark at the NEW bright midday
+  // (was designed as a dawn-backlit silhouette; verify it still commands the horizon front-
+  // lit). Drives the REAL chain: startIntro → jumpToBeat('stepOut') → let stepOut's init tick
+  // run (teleport to the real desert spawn, setIntroMiddayClear, sky mode 0, atmosphere on),
+  // then face the leviathan world-bearing from the spawn eye and shoot with the GAME'S OWN
+  // midday sun (NO front-key override — the whole point is the natural front-lit read).
+  // REQUIRES the intro feature ON so the leviathan is placed at world build:
+  //   VITE_ESCAPE_POD_INTRO=1 node scripts/rig-shot.mjs --scenario=leviathan-reveal
+  // --fov to widen the horizon read (default 62). --exp exposure (default = leave the game's).
+  'leviathan-reveal': async (page) => {
+    const fov = argv.fov !== undefined ? Number(argv.fov) : 62;
+    const exp = argv.exp !== undefined ? Number(argv.exp) : 0;
+    await page.evaluate(() => {
+      const g = window.__game;
+      const ctx = g.ctx;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      ctx.three.renderer.setSize(1100, 720, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1100 / 720; cam.updateProjectionMatrix(); }
+      g.startIntro();
+      // Jump straight to stepOut: its init tick teleports to the real spawn + sets the bright
+      // clear midday + real desert sky/atmosphere (the exact handed-off world the player sees).
+      g.jumpToBeat('stepOut');
+    });
+    await page.waitForTimeout(1400);   // let tickStepOut's init run (teleport + midday + sky/atmosphere + unify)
+    // Force the HANDOFF to the real game (skipIntro → endEscapePodIntro) so the REAL midday sun/sky/
+    //   exposure/atmosphere take over — the throttled rig tab won't auto-tick the reveal-dwell to the
+    //   natural handoff, and we must judge the HANDED-OFF world (bright clear midday), not the mid-
+    //   intro suppressed-sky frame. The unified pod + leviathan persist (not disposed).
+    await page.evaluate(() => { window.__game.skipIntro(); });
+    await page.waitForTimeout(900);    // let several handed-off game frames run so the sky/sun/exposure settle to real midday
+    const r = await page.evaluate(({ fov, exp }) => {
+      const g = window.__game;
+      const ctx = g.ctx;
+      ctx.flags.paused = true;
+      const cam = ctx.three.camera;
+      const V = cam.position.constructor;
+      // The player capsule is at the real desert spawn (stepOut teleported it to intro.returnPos).
+      //   The enterable pod is UNIFIED at that same spot, so the raw spawn eye is INSIDE the cabin.
+      //   The real reveal is the player having STEPPED OUT — stand a few m out along the leviathan
+      //   bearing (clear of the hull), the honest step-out standpoint looking at the horizon.
+      const tr = ctx.player.body.body.translation();
+      // The leviathan's fixed world position (its own module reports it).
+      const lev = ctx.three.scene.getObjectByName('leviathanLandmark');
+      let lx = -403, lz = 106, foundLev = !!lev;
+      if (lev) lev.updateMatrixWorld(true);
+      // Bearing from spawn to the landmark.
+      const bx = lx - tr.x, bz = lz - tr.z;
+      const bl = Math.hypot(bx, bz);
+      const bnx = bx / bl, bnz = bz / bl;
+      // Step OUT ~5m along the bearing so the camera clears the unified pod hull.
+      const STEP = 5.0;
+      const ex = tr.x + bnx * STEP, ez = tr.z + bnz * STEP;
+      const egy = ctx.terrain.heightAt(ex, ez);
+      const ey = egy + 1.7;   // standing eye height on the sand
+      // Compute the bearing from THIS standpoint to the landmark; aim along it, pitched a hair up.
+      const dx = lx - ex, dz = lz - ez;
+      const dist = Math.hypot(dx, dz);
+      // Aim a touch above the horizon: the leviathan mass sits ~gy..gy+~30 at 340m; a small
+      //   upward pitch keeps the skyline centred without cropping the prow.
+      const aimY = ctx.terrain.heightAt(lx, lz) + 14;
+      if (cam.isPerspectiveCamera) { cam.fov = fov; cam.updateProjectionMatrix(); }
+      cam.position.set(ex, ey, ez);
+      cam.lookAt(lx, aimY, lz);
+      cam.updateMatrixWorld(true);
+      if (exp) ctx.three.renderer.toneMappingExposure = exp;
+      // Report the true bearing (unit dir) so we can confirm it matches (-0.949,+0.315), the
+      //   current dayTime (midday consistency), the sun direction/intensity (front-lit check),
+      //   and the leviathan's exposed silhouette height above its ground (does it clear the horizon).
+      const dir = [+(dx / dist).toFixed(3), +(dz / dist).toFixed(3)];
+      let sunDir = null, sunI = 0;
+      ctx.three.scene.traverse((o) => {
+        if (o.isDirectionalLight && o.castShadow) {
+          sunI = +o.intensity.toFixed(2);
+          const p = o.getWorldPosition(new V());
+          const t2 = o.target ? o.target.getWorldPosition(new V()) : new V();
+          const d = new V().subVectors(t2, p);
+          if (d.length() > 1e-4) { d.normalize(); sunDir = [+d.x.toFixed(2), +d.y.toFixed(2), +d.z.toFixed(2)]; }
+        }
+      });
+      // Leviathan silhouette extent above its ground (from its meshes).
+      let levMinY = 1e9, levMaxY = -1e9, levMeshes = 0;
+      if (lev) lev.traverse((o) => {
+        if (o.isMesh && o.geometry) {
+          levMeshes++;
+          o.geometry.computeBoundingBox();
+          const b = o.geometry.boundingBox;
+          for (const cy of [b.min.y, b.max.y]) { const w = new V(0, cy, 0); o.localToWorld(w); levMinY = Math.min(levMinY, w.y); levMaxY = Math.max(levMaxY, w.y); }
+        }
+      });
+      const levGy = ctx.terrain.heightAt(lx, lz);
+      return {
+        foundLev, levMeshes, dist: +dist.toFixed(1), bearing: dir,
+        exposedH: lev ? +(levMaxY - levGy).toFixed(1) : 0,
+        dayTime: +ctx.time.dayTime.toFixed(3),
+        exposure: +ctx.three.renderer.toneMappingExposure.toFixed(2),
+        sunDir, sunI, spawn: [+ex.toFixed(1), +ez.toFixed(1)],
+      };
+    }, { fov, exp });
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: join(OUT, `scen-leviathan-reveal.png`), fullPage: false });
+    console.log(`[leviathan-reveal] ${JSON.stringify(r)}`);
+  },
+
   // FLOW-CLARITY (action-beat framing audit): drive each REAL action beat to its PROMPT
   // moment and shoot the ACTUAL viewpoint the game gives the player (the beat's own
   // faceControl pose — NOT a rig-substituted lookAt, per D165). Answers "when the prompt

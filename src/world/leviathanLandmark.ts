@@ -2,9 +2,12 @@
 // 2026-07-01). A colossal broken capital-ship wreck breaching the dunes far on the
 // horizon in the step-out reveal direction: a BIGGER, older echo of the player's own
 // crashed pod, saying "a greater disaster happened out there — go see." Read purely
-// as a DISTANT SILHOUETTE against the dawn sky (~360m from the intro/opening spawn),
-// so it is built silhouette-first: a monumental snapped hull, prow reared skyward, a
-// leaning superstructure, exposed former rings at the fracture, half-buried in sand.
+// as a DISTANT SILHOUETTE against the sky (~360m from the intro/opening spawn), so it
+// is built silhouette-first: a monumental snapped hull, prow reared skyward, a leaning
+// superstructure, exposed former rings at the fracture, half-buried in sand. (2026-07-01:
+// the intro moved DAWN → bright MIDDAY; the hull value was deepened so a FRONT-LIT noon
+// wreck still reads as a dark monumental mass against the bright horizon — see the
+// LEVIATHAN_HULL_HEX material block below.)
 //
 // PLACEMENT (world-fixed, deterministic): the opening-scene / intro spawn is at a
 // stable nominal position (~(-61,-2), west of origin) and the step-out gaze faces
@@ -47,17 +50,27 @@ const HULL_HALF_H = 11.0;     // hull half-height at midships
 // length reads (R2 fix — YAW 2.15 was nearly end-on, so it looked like a single fin).
 const HULL_YAW = 0.34;
 
-// Shared materials (reuse the wreck palette; DoubleSide so the open lofted belly
-// + torn fracture faces never punch a hole to the sky at this distance/angle).
+// MIDDAY-READ (2026-07-01 consistency re-scope): the leviathan was tuned as a DAWN-BACKLIT
+// silhouette — dark shape against the salt-flat glow band. At the new bright MIDDAY it is
+// FRONT-LIT + the sun is high, and the shared warm rust-brown wreck value (0x5b4c3c) sat
+// tonally INSIDE the orange horizon-haze band, so at the real ~355m reveal (≈47% fog blend at
+// FOG_DENSITY_CLEAR) it washed toward the sky and lost its "go there" pull. Fix: give the
+// leviathan its OWN DEEPER, COOLER, DESATURATED hull value (NOT the shared WRECK_HULL_HEX —
+// that would darken every wreck in the game) so a front-lit noon wreck still reads as a DARK
+// MONUMENTAL MASS punching below the bright hazed horizon. chalkStrength also dropped (no dawn
+// to catch — bleached upper decks were adding light value that killed the mass at midday).
+// DoubleSide so the open lofted belly + torn fracture faces never punch a hole to the sky.
+const LEVIATHAN_HULL_HEX = 0x362d24;      // deep desaturated brown-grey — clearly below the midday horizon-haze value
+const LEVIATHAN_HULL_DARK_HEX = 0x281f18; // the shadowed under-mass / tower — darker still for value depth
 const _hullMat = createRustedHullMaterial({
-  baseColor: Tuning.WRECK_HULL_HEX,
+  baseColor: LEVIATHAN_HULL_HEX,
   streakIntensity: 0.8,
   oxDeepStrength: 0.5,
-  chalkStrength: 0.35,        // sun-bleached upper decks catch the dawn
+  chalkStrength: 0.12,        // minimal bleach — a high noon sun, not a raking dawn; keep the mass dark
 });
 _hullMat.side = THREE.DoubleSide;
 const _hullDarkMat = createRustedHullMaterial({
-  baseColor: Tuning.WRECK_HULL_DARK_HEX,
+  baseColor: LEVIATHAN_HULL_DARK_HEX,
   streakIntensity: 0.6,
 });
 _hullDarkMat.side = THREE.DoubleSide;
@@ -222,8 +235,11 @@ export function placeLeviathanLandmark(
     { x: q.x, y: q.y, z: q.z, w: q.w },
   );
 
-  // ── Fog-resistant skyline registration (a real nav monument + a sun-shade for the
-  //    long hike out) — the same system the flagships use. No rand draw.
+  // ── Skyline / sun-occluder registration (a sun-shade for the long hike out) — the same
+  //    system the flagships use. NOTE (ACBD): this no longer draws a fog-resistant billboard;
+  //    it only registers the bounding box as a sun occluder. The leviathan reads on the
+  //    horizon purely via its REAL geometry + its own deepened hull value (see the material
+  //    block above — the midday-read fix), not a billboard. No rand draw.
   addHorizonSilhouette(scene, new THREE.Box3().setFromObject(group));
 
   _group = group;
