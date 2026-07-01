@@ -649,6 +649,7 @@ const FIREBALL_FS = /* glsl */ `
   uniform float uT;      // 0..1 beat progress (drives bloom→cool)
   uniform float uGrow;   // 0..1 the fireball's current radius fraction of the billboard
   uniform float uTime;   // seconds (churn animation)
+  uniform float uFade;   // 1 through the blast → 0 as the husk dissipates to clear space (late-beat)
   float hash(vec2 p){ p = fract(p*vec2(127.1,311.7)); p += dot(p, p+34.5); return fract(p.x*p.y); }
   float vn(vec2 x){ vec2 p=floor(x), f=fract(x); f=f*f*(3.0-2.0*f);
     return mix(mix(hash(p),hash(p+vec2(1,0)),f.x), mix(hash(p+vec2(0,1)),hash(p+vec2(1,1)),f.x), f.y); }
@@ -728,7 +729,15 @@ const FIREBALL_FS = /* glsl */ `
     //   The smoke billow adds its own soft edge presence so the outer smoke feathers the silhouette.
     float a = clamp(ball * (0.40 + 0.55*coreHot) * (0.5 + 0.6*coolAll)
                     + billow * smokeUp * 0.5, 0.0, 0.9);
-    if (em < 0.008 && billow < 0.01 && a < 0.02) discard;
+    // HUSK DISSIPATION (coherence pass): the fireball's dull-red ember floor + its expanding radius
+    //   left a FLAT BROWN WASH filling the whole porthole at the husk beat, instead of clearing to
+    //   black star-space. uFade drives BOTH the colour and the alpha to ~0 across the late beat so
+    //   the cloud genuinely thins away — the window opens back onto the void + stars + the small
+    //   receding debris (not an ugly brown fill). Alpha fades faster than emission so the last of it
+    //   reads as a few faint dwindling embers, not a solid pane.
+    outCol *= uFade;
+    a *= uFade * uFade;
+    if (em*uFade < 0.008 && billow*uFade < 0.01 && a < 0.02) discard;
     gl_FragColor = vec4(outCol, a);
   }
 `;
@@ -784,7 +793,7 @@ function buildExplosionFx(root: THREE.Group, ship: THREE.Group): void {
   _disposables.push(fbGeo);
   fireballMat = new THREE.ShaderMaterial({
     vertexShader: EXPLODE_VS, fragmentShader: FIREBALL_FS,
-    uniforms: { uT: { value: 0 }, uGrow: { value: 0 }, uTime: { value: 0 } },
+    uniforms: { uT: { value: 0 }, uGrow: { value: 0 }, uTime: { value: 0 }, uFade: { value: 1 } },
     // depthTest ON so the OPAQUE cabin wall/bezel occludes the fireball to the round porthole
     //   aperture (the re-entry-plasma pattern — the fire reads THROUGH the window, never on the
     //   cabin interior). The fireball is out in space at z≈−24; the cabin is in front at z≈−1.2.
@@ -961,7 +970,13 @@ export function setHaulerExplosion(t: number): void {
     fireballMat.uniforms.uGrow.value = p > 0.02 ? grow : 0;
     fireballMat.uniforms.uT.value = p;
     fireballMat.uniforms.uTime.value = anim;
-    fireballMesh.visible = p > 0.02;
+    // HUSK DISSIPATION (coherence pass): fade the whole fireball out across the LATE beat so the
+    //   husk frame clears to black star-space + the small receding debris, instead of leaving a
+    //   flat brown ember wash filling the porthole. Full presence until p≈0.55, then ease to ~0 by
+    //   p≈0.9 (the debris field + drifting sparks carry the "burning wreckage" read from there).
+    const fade = 1 - Math.max(0, Math.min(1, (p - 0.55) / 0.35));
+    fireballMat.uniforms.uFade.value = fade * fade;   // eased (quadratic) so it lingers a touch then clears
+    fireballMesh.visible = p > 0.02 && fade > 0.02;
   }
 
   // ── SHOCKWAVE — a single expanding ring launched at detonation (p≈0.05), racing out +

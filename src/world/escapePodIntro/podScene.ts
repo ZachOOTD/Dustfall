@@ -264,6 +264,11 @@ let cabinLamp: THREE.PointLight | null = null;     // the ceiling lamp KEY (brig
 // GROUP's rotation in _syncPodToAltitude / _applyCrashPose. The pivot is the floor-base centre.
 let _crashPose = 0;
 const _CRASH_PITCH = 0.26, _CRASH_ROLL = 0.14, _CRASH_YAW = 0.0;   // the settled crashed lean (radians)
+// WAKE exposure lift (coherence-pass fix): the desert base exposure (scene.ts, Reinhard) is too
+//   dim for an enclosed interior; the crashed wake cabin lifts the renderer exposure so the dawn
+//   interior reads. Restored to the base on any intro exit (endEscapePodIntro → restoreCabinExposure).
+const CABIN_BASE_EXPOSURE = 1.05;   // matches scene.ts renderer.toneMappingExposure (the desert base)
+const CABIN_WAKE_EXPOSURE = 2.0;    // the crashed-cabin dawn interior reads on the Reinhard curve at this lift
 
 /** Is the pod currently built? */
 export function podBuilt(): boolean {
@@ -1469,16 +1474,36 @@ export function setCabinCrashPose(pose: number): void {
   // DAWN WAKE LIGHT — as the cabin settles crashed, the dawn pours in the open hatch + the
   //   cabin warms/brightens (the wake read: a warm-lit riveted cabin, not the dim space cabin).
   const s = _crashPose;
-  if (hatchSpillLight) hatchSpillLight.intensity = s * 5.5;             // dawn FLOODING the hatch arc (the door's open → bright dawn pours in)
+  // WAKE-READABILITY FIX (coherence pass): the numeric intensities were "set" but the small
+  //   bore still rendered near-black — the point spills decay too fast to actually FILL the
+  //   riveted walls (world sun is ~0 in the intro dawn frame, so these cabin lights carry the
+  //   whole read). Raise the hatch flood + widen its reach (lower decay), lift the ambient fill
+  //   so the cabin clears the gloom, and warm the porthole glow — the player must WAKE in a
+  //   readable dawn-lit crashed cabin, not a black box.
+  if (hatchSpillLight) {
+    hatchSpillLight.intensity = s * 12.0;   // dawn FLOODING the hatch arc (the open door → bright dawn pours in)
+    hatchSpillLight.distance = 9.0;         // reach across the whole bore (was 5.5 — fell off before the far wall)
+    hatchSpillLight.decay = 1.0;            // gentler falloff so the flood actually lights the cabin
+  }
   if (cabinFill) {
     cabinFill.color.copy(_fillScratch.copy(_FILL_COOL).lerp(_FILL_WARM, s));   // warm dawn ambient
-    cabinFill.intensity = 0.72 + s * 1.9;                              // lift the whole cabin well out of the gloom (the desert dawn fills it)
+    cabinFill.intensity = 0.72 + s * 4.0;   // lift the WHOLE cabin well out of the gloom (the desert dawn fills it)
   }
   if (vpGlowLight) {
     vpGlowLight.color.copy(_vpScratch.copy(_VP_COOL).lerp(_VP_WARM, s));
-    vpGlowLight.intensity = 0.95 + s * 1.6;                            // the porthole also reads the dawn
+    vpGlowLight.intensity = 0.95 + s * 2.6;                            // the porthole also reads the dawn
   }
-  if (cabinLamp) cabinLamp.intensity = 1.7 + s * 0.9;
+  if (cabinLamp) cabinLamp.intensity = 1.7 + s * 2.0;                  // the ceiling lamp lifts too (the cabin's own read)
+  // WAKE-READABILITY FIX (coherence pass, root cause): the game runs ReinhardToneMapping @ a
+  //   dim base exposure (1.05) tuned for the bright open desert — it CRUSHES a dark enclosed
+  //   interior, so the crashed dawn cabin rendered near-black no matter how high the cabin lights
+  //   went (a 4× light bump barely moved the read; the tone-curve was the bottleneck, not the
+  //   lumens). Lift the renderer exposure as the cabin settles crashed so the enclosed dawn
+  //   interior sits READABLE on the Reinhard curve; endEscapePodIntro restores the desert base.
+  if (_cabinColliderCtx) {
+    const r = _cabinColliderCtx.three.renderer;
+    r.toneMappingExposure = CABIN_BASE_EXPOSURE + s * (CABIN_WAKE_EXPOSURE - CABIN_BASE_EXPOSURE);
+  }
   _syncPodToAltitude();
 }
 
@@ -1579,6 +1604,10 @@ export function setParachuteLeverPull(t: number, snapped = false): void {
 
 /** Tear down the pod (meshes + geometry + colliders + the per-build geometry pool). */
 export function disposePodScene(ctx: GameContext): void {
+  // Restore the desert-base exposure (the wake crash-pose lifted it for the enclosed dawn
+  //   interior — see setCabinCrashPose). Runs on every teardown path (stepOut swap +
+  //   endEscapePodIntro), so the real game never inherits the lifted interior exposure.
+  ctx.three.renderer.toneMappingExposure = CABIN_BASE_EXPOSURE;
   if (podGroup) {
     ctx.three.scene.remove(podGroup);
     podGroup = null;
