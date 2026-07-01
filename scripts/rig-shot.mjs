@@ -2405,6 +2405,10 @@ const SCENARIOS = {
     await page.evaluate(() => { window.__game.jumpToBeat('wake'); });
     await page.waitForTimeout(4200);   // let the come-to black fade naturally (mode seated, ticking)
     if (argv.blow) await page.evaluate(() => { try { window.__game.blowCabinHatch(1); } catch {} });   // R3a — force the hatch fully open (the climb-out read: the dawn desert through the wide door)
+    // The come-to fade is a transient; we grade the STEADY wake-INSIDE read (the cabin lighting),
+    //   so force the black overlay clear before the shot (else we'd grade the fade, not the cabin —
+    //   the fade doesn't auto-complete in the non-pointer-locked scenario tick).
+    await page.evaluate(() => { const f = document.getElementById('intro-fade'); if (f) f.style.opacity = '0'; });
     const meas = await page.evaluate(() => {
       const g = window.__game;
       const ctx = g.ctx;
@@ -2424,7 +2428,11 @@ const SCENARIOS = {
       let meshes = 0; if (wi) wi.traverse((o) => { if (o.isMesh) meshes++; });
       let sunI = 0; ctx.three.scene.traverse((o) => { if (o.isDirectionalLight && o.castShadow) sunI = o.intensity; });
       const expo = +ctx.three.renderer.toneMappingExposure.toFixed(2);
-      return { found: !!wi, meshes, sunI: +sunI.toFixed(2), expo, dayTime: +ctx.time.dayTime.toFixed(3), eye: [+eye.x.toFixed(2), +eye.y.toFixed(2), +eye.z.toFixed(2)] };
+      // sanity: the come-to fade overlay must be clear for the wake read (else the shot grades the
+      //   black fade, not the cabin — the footgun this scenario hit before the pre-shot fade-clear).
+      const fadeEl = document.getElementById('intro-fade');
+      const fadeOp = fadeEl ? +getComputedStyle(fadeEl).opacity : -1;
+      return { found: !!wi, meshes, fadeOp, sunI: +sunI.toFixed(2), expo, dayTime: +ctx.time.dayTime.toFixed(3), eye: [+eye.x.toFixed(2), +eye.y.toFixed(2), +eye.z.toFixed(2)] };
     });
     await page.waitForTimeout(300);
     const wtag = argv.blow ? 'scen-wake-blown.png' : 'scen-wake.png';
@@ -2468,6 +2476,10 @@ const SCENARIOS = {
     //   the game HUD/sun. So we hand off to the real game with the ONE unified pod persisting.
     await page.evaluate(() => { window.__game.skipIntro(); });
     await page.waitForTimeout(900);    // let the handed-off game run a lit frame (sun/sky/exposure restored)
+    // --popchute (Item 2): fire the comic chute-pop on the UNIFIED pod + synchronously inflate it
+    //   (the paused loop gates the per-frame driver, so advanceSeconds drives the settle). Verifies
+    //   the canopy anchors ON the unified pod's true crown (not floating ~0.4m above it).
+    if (argv.popchute) await page.evaluate(() => { try { window.__game.popChute(2.5); } catch (e) { console.log('popChute err', e); } });
     const r = await page.evaluate(({ ang }) => {
       const g = window.__game;
       const ctx = g.ctx;
@@ -2493,6 +2505,17 @@ const SCENARIOS = {
         // look INTO the interior through the open hatch (right at the sill) — the walk-in read.
         cam.position.set(px + hnx * 0.9, gy + 1.5, pz + hnz * 0.9);
         cam.lookAt(px - hnx * 1.0, gy + 1.0, pz - hnz * 1.0);
+      } else if (ang === 'porthole') {
+        // Item 3 — frame the −Z FORWARD arc where the exterior porthole echo bezel sits (VP_AZ=π →
+        //   outward −Z). Stand off the −Z side + a touch high/oblique so the bezel is seen at the
+        //   grazing angle where it read warm/detached — it must now read flush cool band-metal.
+        cam.position.set(px - 1.6, gy + 2.0, pz - 4.2);
+        cam.lookAt(px, gy + 1.5, pz);
+      } else if (ang === 'chute') {
+        // CHUTE-POP read (Item 2): stand well back + a touch high so the whole pod crown + the
+        //   draped canopy frame together — the anchor must sit ON the crown, not float above it.
+        cam.position.set(px + 6.6, gy + 3.4, pz + 6.2);
+        cam.lookAt(px, gy + 2.4, pz);
       } else { // 3q — a 3/4 of the whole standing silhouette (the exterior form)
         cam.position.set(px + 4.2, gy + 2.4, pz + 4.0);
         cam.lookAt(px, gy + 1.2, pz);

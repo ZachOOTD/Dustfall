@@ -263,6 +263,13 @@ let cabinHatchPivot: THREE.Group | null = null;   // the cabin door's hinge pivo
 let _cabinHatchAjarY = 0;                          // the door's ajar resting yaw (blow swings from here)
 let hatchSpillLight: THREE.PointLight | null = null;   // dawn spilling through the open hatch (wake)
 let cabinLamp: THREE.PointLight | null = null;     // the ceiling lamp KEY (brightened a touch on the dawn wake)
+// Item 1 (wake brightness) — the interior RAKE directionals. On the crashed wake, the metallic
+//   hull surfaces need DIRECTIONAL light to read (a hemisphere ambient barely lights PBR metal);
+//   these are the only interior lights that hit every surface uniformly like the real midday sun,
+//   so setCabinCrashPose floods them UP (the point lamps/hatch-spill are pooled + can't reach the
+//   walls). Stored at build; driven by setCabinCrashPose / reset to the dim descent base.
+let cabinKeyRake: THREE.DirectionalLight | null = null;   // warm right→left rake (the form/curvature key)
+let cabinCoolRake: THREE.DirectionalLight | null = null;  // cool left counter-rake (keeps the far arc alive)
 // R3a — the cabin's crashed POSE at the spawn: impact tilts/settles the descent cabin to a
 // crashed lean (it slammed in). 0 = upright (descent), 1 = full crashed lean. Applied to the pod
 // GROUP's rotation in _syncPodToAltitude / _applyCrashPose. The pivot is the floor-base centre.
@@ -281,7 +288,13 @@ const CABIN_BASE_EXPOSURE = 1.05;   // matches scene.ts renderer.toneMappingExpo
 //   enclosed crashed cabin needs LESS exposure compensation than the old dawn lift (2.0 → 1.5) —
 //   the midday sun flooding the hatch already lights it far more. Restored to the base on step-out
 //   (the unified pod becomes a real-world object lit by the real sun at the desert-base exposure).
-const CABIN_WAKE_EXPOSURE = 1.5;    // the crashed-cabin MIDDAY interior reads on the Reinhard curve at this modest lift
+// WAKE-BRIGHTNESS (Item 1, user re-scope): 1.5 still rendered the enclosed midday cabin as a near-
+//   BLACK box (the Reinhard curve crushes the interior + the ajar hatch blocks the sun flood — the
+//   point-light fill was the whole read and it wasn't reaching). Lifted so the wake cabin reads as a
+//   MIDDAY-lit crashed capsule (bore/seat/console/eject clearly legible), CLOSE to the bright step-out
+//   that follows (no dim→bright pop when the hatch opens) — still a hair under step-out's real-sun read
+//   so a slight dazed-enclosed mood survives. Paired with a much stronger cabinFill + lamp below.
+const CABIN_WAKE_EXPOSURE = 1.62;   // the crashed-cabin MIDDAY interior reads on the Reinhard curve at this lift (was 1.5 → near-black box; the real bottleneck was the come-to fade, not the lift)
 
 /** Is the pod currently built? */
 export function podBuilt(): boolean {
@@ -1325,12 +1338,14 @@ function buildExteriorSkin(group: THREE.Group): THREE.Group {
 
   // ── 5. A small OUTER porthole BEZEL echoing the forward viewport (so the −Z front reads a
   //    window from outside too) — a flat proud RING (torus) hugging the hull at VP height on the
-  //    −Z arc, in the bright band-metal (not the dark steel, which read as a detached brown ring).
+  //    −Z arc, in a FLUSH COOL band-metal matching the exterior skin (Item 3 — the shared warm
+  //    _podBandMat oxide haloed the ring off the hull at some angles; this cool variant reads as
+  //    part of the hull, not a detached warm ring).
   {
     const vpDir = new THREE.Vector3(Math.sin(VP_AZ_C), 0, Math.cos(VP_AZ_C));
     const bezGeo = new THREE.TorusGeometry(VP_R + 0.03, 0.05, 10, 24);
     _cabinDisposables.push(bezGeo);
-    const bez = new THREE.Mesh(bezGeo, _podBandMat);
+    const bez = new THREE.Mesh(bezGeo, _podPortholeBandMat);
     bez.position.set(vpDir.x * (OUTR + 0.01), VP_CY, vpDir.z * (OUTR + 0.01));
     // the torus lies in its local XY plane; orient its axis (local +Z) along the outward radial.
     bez.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), vpDir);
@@ -1724,6 +1739,7 @@ export function buildPodScene(ctx: GameContext): void {
   key.target.position.set(-0.8, 0.7, 0.0);
   group.add(key);
   group.add(key.target);
+  cabinKeyRake = key;   // Item 1 — flooded UP on the crashed wake (the directional carries the metallic-hull read)
   // a faint COOL counter-rake from the left so the far-left arc doesn't go dead black (keeps
   // the gradient readable as curvature, not a hard light/dark split).
   const coolRake = new THREE.DirectionalLight(0x8ea4ba, 0.28);
@@ -1731,6 +1747,7 @@ export function buildPodScene(ctx: GameContext): void {
   coolRake.target.position.set(0.6, 0.8, 0.4);
   group.add(coolRake);
   group.add(coolRake.target);
+  cabinCoolRake = coolRake;   // Item 1 — the left counter-rake, flooded UP on the crashed wake too
   // Cool PORTHOLE spill (the planet-glow from −Z) — brighter so the forward arc + bezel get
   // a cool accent pool (a window casts cool light into a warm-lamp cabin).
   const vpGlow = new THREE.PointLight(0xa6c0d6, 0.95, 4.2, 2.2);
@@ -1841,13 +1858,26 @@ export function setCabinCrashPose(pose: number): void {
   }
   if (cabinFill) {
     cabinFill.color.copy(_fillScratch.copy(_FILL_COOL).lerp(_FILL_WARM, s));   // bright neutral midday ambient
-    cabinFill.intensity = 0.72 + s * 6.5;   // lift the WHOLE cabin well out of the gloom (the bright midday desert fills the enclosed bore — the user: "not too dark")
+    // Item 1 — the hemisphere fill is the WHOLE-cabin lift (the ajar hatch blocks the sun flood, so
+    //   this + the rakes carry the read). Lifted so the enclosed bore clears the gloom to a readable
+    //   MIDDAY interior, a hair under the step-out (a slight dazed mood survives). NOTE (footgun): the
+    //   original "still dark" read was the come-to FADE overlay at ~0.8, not the cabin lumens — these
+    //   values are tuned against the FADE-CLEARED steady wake read (the rig now clears it pre-shot).
+    cabinFill.intensity = 0.72 + s * 6.6;
   }
   if (vpGlowLight) {
     vpGlowLight.color.copy(_vpScratch.copy(_VP_COOL).lerp(_VP_WARM, s));
-    vpGlowLight.intensity = 0.95 + s * 2.6;                            // the porthole also reads the dawn
+    vpGlowLight.intensity = 0.95 + s * 2.3;                            // the porthole also reads the bright midday desert (lifted with the rest)
   }
-  if (cabinLamp) cabinLamp.intensity = 1.7 + s * 2.0;                  // the ceiling lamp lifts too (the cabin's own read)
+  if (cabinLamp) cabinLamp.intensity = 1.7 + s * 1.7;                  // the ceiling lamp KEY pools the dome/apex — a modest lift (the rakes/fill carry the wall read; keep the dome from over-hotting for a dazed mood)
+  // Item 1 — the RAKE directionals hit every wall/seat/console face uniformly (a hemisphere ambient
+  //   alone leaves the curved bore flat), so the crashed wake floods them up toward a midday-sun rake
+  //   — every face reads lit, matching the step-out. The warm key drifts toward neutral daylight.
+  if (cabinKeyRake) {
+    cabinKeyRake.intensity = 0.6 + s * 1.9;                            // 0.6 dim descent key → ~2.5 midday flood
+    cabinKeyRake.color.copy(_fillScratch.set(0xffe8cc).lerp(_FILL_WARM, s));   // warm → bright neutral daylight
+  }
+  if (cabinCoolRake) cabinCoolRake.intensity = 0.28 + s * 1.0;         // the far-arc counter-rake lifts too (no dead-black side)
   // WAKE-READABILITY FIX (coherence pass, root cause): the game runs ReinhardToneMapping @ a
   //   dim base exposure (1.05) tuned for the bright open desert — it CRUSHES a dark enclosed
   //   interior, so the crashed dawn cabin rendered near-black no matter how high the cabin lights
@@ -1997,6 +2027,8 @@ export function disposePodScene(ctx: GameContext): void {
   cabinHatchPivot = null;        // R3a — the cabin escape-hatch pivot
   hatchSpillLight = null;        // R3a
   cabinLamp = null;              // R3a
+  cabinKeyRake = null;           // Item 1 — the interior rake directionals
+  cabinCoolRake = null;
   _cabinColliderCtx = null;      // R3a
   _crashPose = 0;                // R3a — reset the crashed lean (a re-played intro starts upright)
   _shellOffsets = [];
@@ -2089,9 +2121,9 @@ export function removeCrashedPodWreck(ctx: GameContext): void {
  *  a ring of shroud lines gathering down to a riser) in the pod-LOCAL frame, anchored just
  *  above the pod crown/apex. Starts hidden + folded (tiny scale); popChute inflates it.
  *  Parented to the crashed-pod group so it rides the crash lean. */
-function buildChuteCanopy(): THREE.Group {
+function buildChuteCanopy(crownY: number): THREE.Group {
   const grp = new THREE.Group();
-  const apex = POD_BASE_H + POD_BODY_H + POD_NOSE_H;   // the pod crown height (local)
+  const apex = crownY;   // the host pod's crown height (local) — differs between the standalone wreck + the unified pod
   // ── the CANOPY DOME — a big BILLOW of gores that dwarfs the little pod. The gag is
   //    "this HUGE chute finally deployed, way too late" — so it reads big + worn + draped,
   //    not a tidy tight balloon. A broad, slightly-SQUASHED dome (a settling chute puffs
@@ -2166,7 +2198,16 @@ export function armChutePop(target?: THREE.Group | null): void {
   disarmChutePop();
   const host = target ?? crashedWreck;
   if (!host) return;
-  chuteCanopy = buildChuteCanopy();
+  // The canopy anchors on the HOST's crown, in host-local coords. The two hosts differ:
+  //   - the UNIFIED enterable pod (target passed in) wears buildExteriorSkin, whose foot is
+  //     at local y=0 and crown = WALL_H + DOME_H + 0.10 (≈2.67).
+  //   - the standalone placeCrashedPodWreck (crashedWreck) sinks a heat-shield base slab, so
+  //     its crown = POD_BASE_H + POD_BODY_H + POD_NOSE_H (≈2.99).
+  // Using the wreck constants on the unified pod floated the canopy ~0.4m above its true crown.
+  const crownY = target
+    ? WALL_H + DOME_H + 0.10                       // unified pod (exterior-skin crown)
+    : POD_BASE_H + POD_BODY_H + POD_NOSE_H;        // standalone wreck crown
+  chuteCanopy = buildChuteCanopy(crownY);
   host.add(chuteCanopy);
   chutePopArmed = true;
   chutePopT = -1;
@@ -2341,6 +2382,17 @@ const _podBandMat = createRustedHullMaterial({
   baseColor: 0x8c8d85,           // mid grey-aluminium band
   streakIntensity: 0.3, wearAmplitude: 0.34, fleckStrength: 0.7,
   oxStrength: 0.32, oxHex: 0x96602e, oxDeepStrength: 0.28, seamRustStrength: 0.3,
+});
+// FLUSH cool porthole-echo BEZEL band-metal (Item 3) — the outer −Z porthole echo bezel read
+//   slightly WARM/detached at some angles because it wore the shared _podBandMat, whose warm
+//   burnt-umber oxide (oxHex 0x96602e @ 0.32) haloed the ring off the hull. This dedicated
+//   variant matches the exterior SKIN's cool aluminium tone with the warm oxide stripped to a
+//   neutral cool patina, so the echo ring reads as flush hull, not a detached warm band.
+const _podPortholeBandMat = createRustedHullMaterial({
+  baseColor: 0xaeb1ab,           // cool aluminium matching the skin (_podPaint 0xb6b9b3), a hair darker so the proud ring still reads as a rim
+  bareMetalHex: 0xcdd0d0,
+  streakIntensity: 0.24, wearAmplitude: 0.30, fleckStrength: 0.7,
+  oxStrength: 0.14, oxHex: 0x6b6c66, oxDeepStrength: 0.12, seamRustStrength: 0.12,   // neutral COOL patina (no warm oxide → reads flush with the cool skin)
 });
 // PRIED-OPEN HATCH DOOR — a distinctly LIGHTER bright-aluminium value so the
 // strippable salvage door POPS off the body (it's the tutorial target, must read
