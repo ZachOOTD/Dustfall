@@ -94,3 +94,6 @@ Cockpit: the tapered hull kept the OLD box collision (off); side boxes/furniture
 
 ## 2026-07-02 — camera resets to face the DOOR/VIEWPORT at every transition (verbal, partially garbled — interpretation confirmed-pending)
 On EJECT the camera starts facing FORWARD at the merged door/viewport; and after EVERY blackout / beat transition (eject → descent → parachute → impact → wake), RESET the view to face the door/viewport — the player always comes out of a fade oriented at the window, immediately re-grounded in what's happening. (The door/viewport is the visual anchor of the ride.) → CLUSTER B (owns the boarding flow + beat framing; faceControl at beat inits). NOTE: the tail of the user's message was garbled — interpretation flagged for their confirmation; free-look stays available between transitions.
+
+## 2026-07-02 — REGRESSION: player trapped in the cockpit chair at game start (verbal; → folded into B1 as B1.f, urgent)
+Cluster A's new furniture colliders box in the seated capsule (the chair collider ~7cm aft + the dash/console colliders ahead) — the player can't move when the cockpit beat hands over control. smokeIntro missed it (it jumps beats, never physically stands up). Fix in B1: ≥0.25m egress clearance, a collider-free stand-up path, and PROVE with real KCC motion (move ≥1m from the seat + walk aft through the doorway), not clearance numbers.
