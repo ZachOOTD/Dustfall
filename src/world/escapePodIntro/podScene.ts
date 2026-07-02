@@ -1448,8 +1448,14 @@ export function unifyEnterablePod(ctx: GameContext, x: number, z: number): { x: 
   // (4) WALKABLE COLLIDERS (floor + wall ring gapped at the hatch).
   _addWalkableColliders(ctx);
   // (5) the pod is now a REAL-WORLD object lit by the real midday sun → restore the desert-base
-  //     exposure (the wake lift was for the enclosed dim-interior moment).
+  //     exposure (the wake lift was for the enclosed dim-interior moment) AND park the interior
+  //     lights down to calm walk-in levels. The wake beat floods the cabin lights HARD (hemi 7.3,
+  //     hatch flood 14@dist9, …) to punch the dazed enclosed cabin through the come-to fade at the
+  //     lifted wake exposure; left un-parked they PERSIST into the real midday game (this SAME pod
+  //     persists) and — now at the desert-base exposure, with the real sun already lighting the pod —
+  //     blow the interior out + pool a hot spot on the sand (the USER-reported wash-out). Park them.
   ctx.three.renderer.toneMappingExposure = CABIN_BASE_EXPOSURE;
+  parkPodLights();
   // widen the hatch fully open (you walk through it) + keep the dawn/midday hatch flood.
   blowCabinHatch(1);
   // (6) the REAL salvage panel on the −Z back + register as a machete-salvageable + arm chute-pop —
@@ -2009,6 +2015,41 @@ export function setCabinCrashPose(pose: number): void {
  *  takes ctx so it works even when the pod isn't built (_cabinColliderCtx is null). */
 export function restoreCabinExposure(ctx: GameContext): void {
   ctx.three.renderer.toneMappingExposure = CABIN_BASE_EXPOSURE;
+}
+
+/** PARK the pod's interior lights to calm ambient-interior levels for the REAL game (the wash-out
+ *  fix). The wake beat (setCabinCrashPose(1)) floods these HARD — hemi fill 7.3, rakes 2.5/1.28,
+ *  hatch flood 14@dist9, vpGlow 3.25, lamp 3.4 — tuned to punch the enclosed dazed-wake cabin
+ *  through the come-to fade + the crushed Reinhard curve at the WAKE exposure lift (1.62). Those
+ *  levels are CORRECT during the wake beat, but with the ONE-ENTERABLE-POD re-scope the SAME pod
+ *  PERSISTS into the real midday game — and there the renderer exposure is back at the desert base
+ *  (1.05), the real midday sun already lights the pod through the wide-open hatch, and the hatch
+ *  flood pools a bright spot on the terrain. Left un-parked, the interior blows out white + the
+ *  ground washes out (the USER-reported "everything is really bright and washed out"). So on the
+ *  step-out handoff / on Continue-restore, ease the interior lights down to a READABLE-but-CALM
+ *  walk-in interior at gameplay exposure: the sun through the open hatch carries the read; these
+ *  are only a gentle interior fill + the small cozy lamp. Idempotent + a safe no-op if a light ref
+ *  is null. Called from unifyEnterablePod → covers BOTH the live stepOut AND the load path
+ *  (restoreEnterablePod → unifyEnterablePod). */
+export function parkPodLights(): void {
+  // Hemisphere fill — near the dim build default (0.72); a touch above so the far arc away from
+  //   the hatch stays legible when you walk back in, but nowhere near the 7.3 wake flood.
+  if (cabinFill) {
+    cabinFill.intensity = 1.1;
+    cabinFill.color.copy(_FILL_WARM);   // keep the neutral-midday tint (matches the real sky)
+  }
+  // Rake directionals — back to a gentle form rake (build 0.6 / 0.28); the real sun does the heavy
+  //   lifting on the walk-in now, these just keep the curved bore from reading flat/dead in shadow.
+  if (cabinKeyRake) { cabinKeyRake.intensity = 0.7; cabinKeyRake.color.copy(_FILL_WARM); }
+  if (cabinCoolRake) cabinCoolRake.intensity = 0.32;
+  // Hatch spill — the wash-out CULPRIT (14@dist9 spilled a bright pool onto the sand). Drop it to a
+  //   faint warm bounce that dies inside the doorway (short range), so the OPEN hatch reads lit-from-
+  //   within without a hot terrain pool. The real midday sun lights the ground.
+  if (hatchSpillLight) { hatchSpillLight.intensity = 1.4; hatchSpillLight.distance = 4.0; }
+  // Porthole glow — back near the build default (0.95); a calm cool accent forward, not a 3.25 pool.
+  if (vpGlowLight) vpGlowLight.intensity = 1.0;
+  // Ceiling lamp — KEEP the small lamp as a cozy lived-in interior tell (a hair under the build 1.7).
+  if (cabinLamp) cabinLamp.intensity = 1.5;
 }
 
 /** Descent driver (REBUILD v2 R1b) — drive the PHYSICAL fall off the fall's single 0..1

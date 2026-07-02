@@ -101,6 +101,7 @@ interface DebugApi {
     salvageMatches: boolean;
     chuteMatches: boolean;
     exposureRestored: boolean;
+    lightsParked: boolean;
     error?: string;
   };
   /** Escape-pod T3.1 — build the HERO cargo-hauler exterior in front of the pod (the
@@ -341,6 +342,7 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
       const report = {
         ok: false, builtBeforeSave: false, savedPodCrash: false, goneAfterTeardown: false,
         rebuiltAfterRestore: false, salvageMatches: false, chuteMatches: false, exposureRestored: false,
+        lightsParked: false,
       } as ReturnType<NonNullable<Window['__game']>['smokePodPersistence']>;
       try {
         // 1. Drive the REAL intro to step-out — smokeTestIntro runs the whole chain incl. tickStepOut's
@@ -395,9 +397,29 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
         //   lift while building, then restores the desert-base 1.05 — assert it landed at base.
         report.exposureRestored = Math.abs(ctx.three.renderer.toneMappingExposure - 1.05) < 0.001;
 
+        // WASH-OUT FIX (user-reported): the restore must ALSO park the pod's interior lights (unify →
+        //   parkPodLights). The wake beat floods them HARD (hemi ~7.3, hatch spill ~14@dist9, …) to
+        //   punch the dazed enclosed cabin through the come-to fade at the lifted wake exposure; if
+        //   they leaked into the LOADED game (at the desert-base 1.05, real sun already on the pod)
+        //   the interior blows out white + the hatch pools a hot spot on the sand. Assert the restored
+        //   pod's lights are PARKED (no light above a calm interior ceiling; the hatch spill's short).
+        const restoredPod = ctx.three.scene.getObjectByName('escapePodCabin');
+        let maxLightI = 0, maxSpillDist = 0;
+        if (restoredPod) restoredPod.traverse((o) => {
+          const l = o as THREE.Light & { distance?: number };
+          if (l.isLight) {
+            maxLightI = Math.max(maxLightI, l.intensity);
+            // a wide-reaching point light (the hatch flood) is the terrain-pool culprit — track its reach.
+            if ((o as THREE.PointLight).isPointLight) maxSpillDist = Math.max(maxSpillDist, (o as THREE.PointLight).distance);
+          }
+        });
+        // parked ceiling: no interior light above ~2.5 (wake floods hit 7.3/14) and no point light
+        //   reaching past ~5 m (the wake hatch flood was dist 9 — a bright terrain pool).
+        report.lightsParked = !!restoredPod && maxLightI <= 2.5 && maxSpillDist <= 5.0;
+
         report.ok = report.builtBeforeSave && report.savedPodCrash && report.goneAfterTeardown
           && report.rebuiltAfterRestore && report.salvageMatches && report.chuteMatches
-          && report.exposureRestored;
+          && report.exposureRestored && report.lightsParked;
         return report;
       } catch (e) {
         report.error = e instanceof Error ? e.message : String(e);
