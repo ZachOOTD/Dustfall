@@ -2558,6 +2558,15 @@ export function getPodBaySeatedEye(): THREE.Vector3 {
 // B1.a — the docked pod's front DOOR pivot (so the boarding flow / release can reference it later).
 let _bayDoorPivot: THREE.Group | null = null;
 
+/** B2 flow surface — drive the docked pod's front door: 0 = closed/flush → 1 = open (~110°).
+ *  The boarding flow (sequence.ts) animates this for the player-gated E-open; kept here so the
+ *  flow task never edits this file (the cockpit design pass owns it concurrently). Safe no-op
+ *  before the bay builds / after dispose. (releasePodFromBay's judder overwrites rotation.y
+ *  during the release phase only — by then the door is sealed shut at 0, which is correct.) */
+export function setBayPodDoorOpen(t: number): void {
+  if (_bayDoorPivot) _bayDoorPivot.rotation.y = -1.9 * Math.max(0, Math.min(1, t));
+}
+
 /** Build the escape-pod BAY airlock + the DOCKED CANONICAL pod at the bridge end (into the −X
  *  recess). B1.b: a CLEAN framed doorway/airlock collar the player steps through — no clamp
  *  clutter, no floating yellow-bolt cylinders, no overlapping archway. B1.a: the ONE canonical
