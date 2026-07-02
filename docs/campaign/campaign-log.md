@@ -461,3 +461,13 @@ The user kept the loop running past feature-complete; each pass found + fixed re
 - **In-flight when paused:** a full-chain visual REGRESSION sweep (checking interaction effects of the 3 stacked structural changes — unified/grounded pod + midday + pinned clear fog — across all beats; the descent is where all 3 meet). The sweep was stopped in its SHOOTING phase — **no code edits were made**; the tree is clean; nothing to reconcile.
 - **On resume:** just re-run that sweep (`/loop /campaign-cycle` boots it from this note), or skip it if the user walk-tests first (their walk-test covers the same ground with better eyes).
 - Everything through `ee70c94` is committed + pushed. All user walk-test feedback (one pod / midday / clear skies) is implemented + verified.
+
+---
+
+## Cycle 47 — full-chain regression sweep: CLEAN (2026-07-01 evening)
+- Run INLINE by the main loop after two subagent interruptions (progress persists shot-by-shot). Checked the 3 stacked structural changes (unified/grounded pod + midday + pinned clear fog) for cross-beat interaction regressions.
+- **The descent (where all 3 meet): coherent** — d0 orbit-top = clean space+planet (no midday/fog bleed into the space beats); d0.15 re-entry plasma reads at midday; d0.5 = a crisp clean high-altitude blue (no fog seam); d0.9 = the warm midday dunes (matches step-out, verified last cycle).
+- **Space/ship beats unaffected** — the explosion porthole (t0.24) clean; pod-bay healthy; cockpit confirmed rendering.
+- **Ground beats** (wake/stepout/leviathan/chute) verified at the current state within the last 2 cycles.
+- **VERDICT: no regressions — no code changes this cycle.** verify gates unchanged (nothing edited).
+- State: all user walk-test feedback implemented + the chain verified coherent end-to-end. Awaiting the user's next walk-test round.
