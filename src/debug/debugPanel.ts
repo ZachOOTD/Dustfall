@@ -52,6 +52,8 @@ declare global {
 }
 
 interface DebugApi {
+  /** The THREE namespace — exposed for dev/rig overlays (e.g. the A1 collider wireframe). */
+  THREE: typeof THREE;
   setTime: (t: number) => void;
   /** Escape-pod intro (T0.1) — force-start the intro (works even with the build flag off). */
   startIntro: () => void;
@@ -320,6 +322,7 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
   let procgenRigGroup: THREE.Group | null = null;
 
   window.__game = {
+    THREE,   // expose the THREE namespace for dev/rig overlays (e.g. the collider wireframe)
     setTime: (t) => { ctx.time.dayTime = t; },
     // Escape-pod intro (T0.1) — dev hooks for fast iteration (T0.2+ beats).
     startIntro: () => startEscapePodIntro(ctx, true),
