@@ -71,6 +71,27 @@ const _SPACE_LIGHT = new THREE.Vector3(-0.78, 0.40, 0.30).normalize();
 const _SPACE_TOP = new THREE.Color(0x01020a);
 const _SPACE_HORIZON = new THREE.Color(0x03050f);
 const _spacePlanetPos = new THREE.Vector3();
+// ── PARALLAX FIX — the space planet is anchored at a FIXED WORLD position while in
+// orbit, NOT re-centered on the camera every frame. Camera-anchoring gave the planet
+// ZERO parallax, so walking aft down the corridor (the ship shrinks with distance but
+// the planet held its angular size) read as the planet ballooning enormous; walking to
+// the window read it small. With a fixed world anchor the planet keeps a real, tiny
+// parallax as the player walks 10-20m in the ship — "the same size no matter where I am".
+//
+// The anchor is captured once when space mode engages (= camera + dir·distance, so at
+// capture it EQUALS the old camera-relative placement → the cockpit seated view + the
+// descent-top orbit view read exactly as before). It is RE-CAPTURED whenever the camera
+// teleports far from the capture point (> _SPACE_ANCHOR_RECAPTURE_DIST) — this covers the
+// eject→descent jump (cockpit spawn → the real desert spawn +600m are unrelated world
+// coords), so the descent frames re-ground the planet correctly instead of dragging the
+// stale cockpit anchor into the fall. Corridor walking (~10-20m) never trips the recapture,
+// so the parallax is preserved. Reset on space-mode exit so nothing leaks into the real game.
+const _spaceAnchor = new THREE.Vector3();   // fixed WORLD position of the planet while in orbit
+let _spaceAnchorSet = false;                // has the anchor been captured this space-mode session?
+const _spaceAnchorCam = new THREE.Vector3();// camera position at capture time (teleport-detect reference)
+const _SPACE_ANCHOR_RECAPTURE_DIST = 60;    // m — camera jump beyond this re-captures the anchor (corridor walk ≪ this; the descent teleport ≫ this)
+const _SPACE_PLANET_MAX_CAM_DIST = 460;     // clamp: keep the anchored planet strictly inside the camera-centred dome (SKY_SPHERE_RADIUS 480)
+const _tmpAnchorDelta = new THREE.Vector3();
 // REBUILD v2 R2 — the galactic-plane normal for the milky-way band. MUST match the
 // (gnx,gny,gnz) used in buildStarGeometry so the dome haze + the band stars align.
 const _GAL_NORMAL = new THREE.Vector3(0.62, 0.60, 0.18).normalize();
@@ -1102,6 +1123,7 @@ function applySpaceMode(cam: THREE.Vector3, ctx: GameContext): void {
     bundle.starsMat.uniforms.uBrightness.value = Tuning.STAR_BRIGHTNESS;
     bundle.starsMat.uniforms.uSpace.value = 0;   // R2 — kill the milky-way band lift
     bundle.sphereMat.uniforms.uSpace.value = 0;  // R2 — kill the dome milky-way haze
+    _spaceAnchorSet = false;                      // PARALLAX FIX — drop the world anchor; next engage re-captures (no leak into the real game sky)
     return;
   }
 
@@ -1127,9 +1149,32 @@ function applySpaceMode(cam: THREE.Vector3, ctx: GameContext): void {
   // The small distant-planet SPRITE is replaced by the big celestial body — fade it out.
   bundle.planetMat.opacity *= (1 - s);
 
-  // Position + light the large camera-relative planet.
+  // Position + light the large planet — anchored at a FIXED WORLD position (NOT
+  // re-centered on the camera every frame). See _spaceAnchor notes above.
   if (_spacePlanet) {
-    _spacePlanetPos.copy(cam).addScaledVector(_SPACE_PLANET_DIR, _SPACE_PLANET_DISTANCE);
+    // Capture the anchor on first engage, and re-capture if the camera has TELEPORTED
+    // far from where we captured it (the eject→descent world jump). At capture the anchor
+    // equals the old camera-relative placement, so the cockpit seated view + the descent-top
+    // orbit view read exactly as before; between captures the planet holds its world spot so
+    // corridor walking gives real (tiny) parallax instead of the old ballooning read.
+    if (!_spaceAnchorSet ||
+        _tmpAnchorDelta.copy(cam).sub(_spaceAnchorCam).lengthSq() >
+          _SPACE_ANCHOR_RECAPTURE_DIST * _SPACE_ANCHOR_RECAPTURE_DIST) {
+      _spaceAnchor.copy(cam).addScaledVector(_SPACE_PLANET_DIR, _SPACE_PLANET_DISTANCE);
+      _spaceAnchorCam.copy(cam);
+      _spaceAnchorSet = true;
+    }
+    // Hold the planet at the fixed world anchor. Clamp so the camera-to-planet distance
+    // stays strictly inside the camera-centred sky dome (radius 480) even after a long
+    // corridor walk toward/away from it — otherwise the planet could poke past the dome
+    // and clip. If the anchor is within range (the normal case) this is a no-op.
+    _spacePlanetPos.copy(_spaceAnchor);
+    _tmpAnchorDelta.copy(_spacePlanetPos).sub(cam);
+    const camDist = _tmpAnchorDelta.length();
+    if (camDist > _SPACE_PLANET_MAX_CAM_DIST) {
+      _spacePlanetPos.copy(cam).addScaledVector(
+        _tmpAnchorDelta.multiplyScalar(1 / camDist), _SPACE_PLANET_MAX_CAM_DIST);
+    }
     _spacePlanet.group.position.copy(_spacePlanetPos);
     _spacePlanet.planetMat.uniforms.uOpacity.value = s;
     _spacePlanet.atmoMat.uniforms.uOpacity.value = s;

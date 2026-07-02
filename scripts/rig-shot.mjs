@@ -2083,6 +2083,7 @@ const SCENARIOS = {
   'cockpit': async (page) => {
     const angle = argv.angle || 'forward';
     const stand = !!argv.stand;
+    const colliders = !!argv.colliders;   // A1 evidence — overlay the Rapier collider wireframe on the hull
     const alert = argv.alert !== undefined ? Number(argv.alert) : 0;
     const space = argv.space !== undefined ? Number(argv.space === true ? 1 : argv.space) : 0; // REBUILD v2 R1a — --space[=0..1] drives the orbit sky
     const hideStars = !!argv.hidestars;
@@ -2127,10 +2128,15 @@ const SCENARIOS = {
     }, { space, hideStars, noPlanet, noGlass, noDome, noHull });
     // Let the beat controller tick (page RAF) so the ship builds + the player seats.
     await page.waitForTimeout(700);
-    const meas = await page.evaluate(({ angle, stand, alert }) => {
+    const meas = await page.evaluate(({ angle, stand, alert, colliders }) => {
       const g = window.__game;
       const ctx = g.ctx;
       if (alert > 0) { try { g.setCockpitAlert(alert); } catch {} }
+      // A1 EVIDENCE — overlay the Rapier collider wireframe (bright green LineSegments, depthTest off)
+      //   so the shot shows the collider surface OVER the visible hull skin. The COCKPIT colliders are
+      //   at world y≈3000 (SHIP_ORIGIN.y), so they render right on the cockpit hull. `three` is reached
+      //   via a dynamic import (Vite serves the module); the overlay is finished in an async step below.
+      if (colliders) { window.__RIG_WANT_COLLIDERS = true; }
       // REBUILD v2 R1a debug — --hidestars proves whether the top speckles are the
       // real star sphere (set the env via argv passthrough below).
       if (window.__RIG_HIDESTARS) {
@@ -2218,7 +2224,23 @@ const SCENARIOS = {
       let meshes = 0;
       if (ship) ship.traverse((o) => { if (o.isMesh) meshes++; });
       return { found: !!ship, meshes, eye: [+eye.x.toFixed(2), +eye.y.toFixed(2), +eye.z.toFixed(2)], alert };
-    }, { angle, stand, alert });
+    }, { angle, stand, alert, colliders });
+    // A1 — inject the collider wireframe (green LineSegments) using the game's exposed THREE namespace.
+    if (colliders) {
+      const cinfo = await page.evaluate(async () => {
+        const ctx = window.__game.ctx;
+        const three = window.__game.THREE;
+        const dr = ctx.physics.world.debugRender();
+        const bg = new three.BufferGeometry();
+        bg.setAttribute('position', new three.BufferAttribute(dr.vertices, 3));
+        const mat = new three.LineBasicMaterial({ color: 0x39ff5a, depthTest: false, transparent: true, opacity: 0.95 });
+        const seg = new three.LineSegments(bg, mat);
+        seg.renderOrder = 9999; seg.frustumCulled = false;
+        ctx.three.scene.add(seg);
+        return { segVerts: dr.vertices.length / 3 };
+      });
+      console.log('[cockpit] collider wireframe: ' + JSON.stringify(cinfo));
+    }
     // RE-ANCHOR the camera-relative space planet to the NOW-POSED camera. The planet is
     // anchored each frame in updateSky (cam + dir*distance); we paused before it could run
     // at the ship-origin camera (y≈3000), so it was left stale 3000m below at y≈0 → NOT in
@@ -2254,6 +2276,107 @@ const SCENARIOS = {
     // a clipped grab of just the WebGL canvas snapshots reliably.
     await page.screenshot({ path: join(OUT, `scen-${tag}.png`), fullPage: false, clip: { x: 0, y: 0, width: 1100, height: 760 }, animations: 'disabled', timeout: 60000 });
     console.log(`[cockpit] ${JSON.stringify(meas)} → scen-${tag}.png`);
+  },
+
+  // PARALLAX-FIX PROBE (sky.ts): measure the space planet's projected ANGULAR DIAMETER
+  // from (a) the seated pilot eye and (b) ~10m aft down the corridor doorway, comparing the
+  // OLD camera-anchored placement (planet re-centered on the camera → ZERO parallax → it
+  // balloons as the ship shrinks) vs the NEW fixed-world-anchor placement (near-constant
+  // angular size + natural tiny parallax). Prints hard numbers — the reproduction + the fix
+  // evidence. Drives the real cockpit beat + space mode LIVE (updateSky/applySpaceMode run,
+  // so the NEW numbers come from the shipped code, not a rig fabrication).
+  //   node scripts/rig-shot.mjs --scenario=planet-parallax
+  'planet-parallax': async (page) => {
+    const aft = argv.aft !== undefined ? Number(argv.aft) : 10;   // metres aft to sample the "backed down the corridor" view
+    await page.evaluate(() => {
+      const g = window.__game;
+      const ctx = g.ctx;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      try { ctx.weather.intensity = 0; ctx.weather.cloudiness = 0; } catch {}
+      g.startIntro();
+      g.jumpToBeat('cockpit');
+      g.setSkyIntroMode(1);
+    });
+    // Let the beat build the ship + seat the player, and let a few live frames run so
+    // updateSky→applySpaceMode CAPTURES the world anchor at the seated eye (the fix).
+    await page.waitForTimeout(900);
+    // Shrink the canvas so each throttled tick is cheap, then RESET + re-engage space mode
+    // AFTER the seat has settled — the first (transient, pre-seat) capture frame is gone, so
+    // the anchor now captures at the real seated eye. Then pump time so the recapture-on-teleport
+    // path also has a chance to run. Mirrors the real game where the 60fps loop recaptures freely.
+    await page.evaluate(() => {
+      const g = window.__game;
+      g.ctx.three.renderer.setSize(96, 96, false);
+      g.setSkyIntroMode(0);   // drop the stale pre-seat anchor
+      g.setSkyIntroMode(1);   // re-engage → next sky tick captures at the seated eye
+    });
+    await page.waitForTimeout(1400);
+    const r = await page.evaluate(({ aft }) => {
+      const g = window.__game; const ctx = g.ctx;
+      const cam = ctx.three.camera;
+      const V = cam.position.constructor;
+      // Find the space-planet group + its geometric radius.
+      let planetMesh = null;
+      ctx.three.scene.traverse((o) => { if (o.isMesh && o.renderOrder === -0.4) planetMesh = o; });
+      if (!planetMesh) return { error: 'planet mesh not found (space mode not built?)' };
+      const group = planetMesh.parent;
+      const R = (planetMesh.geometry.boundingSphere
+        ? planetMesh.geometry.boundingSphere.radius
+        : (planetMesh.geometry.computeBoundingSphere(), planetMesh.geometry.boundingSphere.radius));
+
+      // The REAL seated eye (mirror the cockpit scenario's seated pose).
+      const tr = ctx.player.body.body.translation();
+      const seatedEye = (ctx.player.eyeOffset || 0.5);
+      const eye = new V(tr.x, tr.y + seatedEye, tr.z + 0.1);
+      // Aft sample = eye stepped +Z down the corridor doorway (backing away from the −Z window).
+      const eyeAft = new V(eye.x, eye.y, eye.z + aft);
+
+      // Angular DIAMETER (deg) of a sphere radius R at centre C seen from P: 2*asin(R/|C−P|).
+      const angDiam = (Cx, Cy, Cz, P) => {
+        const dx = Cx - P.x, dy = Cy - P.y, dz = Cz - P.z;
+        const dist = Math.hypot(dx, dy, dz);
+        const s = Math.min(1, R / dist);
+        return { deg: 2 * Math.asin(s) * 180 / Math.PI, dist };
+      };
+
+      // The LIVE (NEW, fixed-world-anchor) planet centre — where applySpaceMode has it now.
+      const Cnew = group.getWorldPosition(new V());
+
+      // OLD camera-anchored math: centre = camera + dir*400 (recomputed per camera pos → the bug).
+      const dir = new V(0.30, 0.10, -1).normalize();
+      const DIST = 400;
+      const oldCentre = (P) => new V(P.x + dir.x * DIST, P.y + dir.y * DIST, P.z + dir.z * DIST);
+
+      const oldSeat = angDiam(oldCentre(eye).x, oldCentre(eye).y, oldCentre(eye).z, eye);
+      const oldAft  = angDiam(oldCentre(eyeAft).x, oldCentre(eyeAft).y, oldCentre(eyeAft).z, eyeAft);
+      // NEW: the planet is fixed at Cnew; only the eye moves.
+      const newSeat = angDiam(Cnew.x, Cnew.y, Cnew.z, eye);
+      const newAft  = angDiam(Cnew.x, Cnew.y, Cnew.z, eyeAft);
+
+      const pct = (a, b) => +((b.deg - a.deg) / a.deg * 100).toFixed(2);
+      return {
+        // World-fixed planet centre (NEW) + the seated eye it was captured from.
+        planetWorld: [+Cnew.x.toFixed(1), +Cnew.y.toFixed(1), +Cnew.z.toFixed(1)],
+        seatedEye: [+eye.x.toFixed(1), +eye.y.toFixed(1), +eye.z.toFixed(1)],
+        aftMeters: aft,
+        planetRadius: R,
+        old: {
+          seatedDeg: +oldSeat.deg.toFixed(3), aftDeg: +oldAft.deg.toFixed(3),
+          seatedDist: +oldSeat.dist.toFixed(1), aftDist: +oldAft.dist.toFixed(1),
+          changePct: pct(oldSeat, oldAft),
+        },
+        new: {
+          seatedDeg: +newSeat.deg.toFixed(3), aftDeg: +newAft.deg.toFixed(3),
+          seatedDist: +newSeat.dist.toFixed(1), aftDist: +newAft.dist.toFixed(1),
+          changePct: pct(newSeat, newAft),
+        },
+        // Sanity: at the SEATED eye the new anchor should EQUAL the old placement (capture == camera-relative).
+        seatedMatchDeg: +(newSeat.deg - oldSeat.deg).toFixed(4),
+        maxCamDist: +Math.max(newSeat.dist, newAft.dist).toFixed(1),
+      };
+    }, { aft });
+    console.log(`[planet-parallax] ${JSON.stringify(r, null, 2)}`);
   },
 
   // Corridor disaster (T3.4): the engine-bay FIRE + the RED-ALERT corridor (the disaster the
