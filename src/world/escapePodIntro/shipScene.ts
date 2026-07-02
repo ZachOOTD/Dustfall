@@ -935,24 +935,25 @@ function buildCockpitShell(group: THREE.Group): void {
  *  replaced with ONE continuous curved glass sheet, lofted from the SAME `_winHalfW(y)`/`_winZ(y)`
  *  functions the hull opening uses — so its perimeter meets the opening EXACTLY (it seals by
  *  construction, no floating slivers). A single slim frame/gasket RING traces that perimeter.
- *  ONE subtle diagonal glazing streak keeps the "there's glass here, not a hole" read. The cheek
- *  panels + nose-cap fairing (hull closure, not glass) stay — they fill the voids beside/above.
+ *  ONE subtle diagonal glazing streak keeps the "there's glass here, not a hole" read. The glass now
+ *  fills the WHOLE front opening (its edge tracks the FRONT HULL WALL by construction) so there are
+ *  NO cheek panels + NO diagonal strut wedges beside it — just glass meeting hull at a slim frame.
  *  Verts wound so the glass faces the cabin (+Z inward). */
-const WIN_TOP_Y = 2.55;            // the windscreen top (at the brow)
+const WIN_TOP_Y = 2.42;            // the windscreen top/brow (kept below the crown so the top has real width, not a razor point)
 const WIN_RAKE = 0.92;             // how far aft (+Z) the top leans from the sill
-const WIN_MIDY = 1.72;             // the mid-height reference (curve sample / cheek shoulder)
+const WIN_MIDY = 1.72;             // the mid-height reference (curve sample)
 function _winZ(y: number): number {
   // the rake line: z grows with height from the sill up to the brow
   const t = THREE.MathUtils.clamp((y - WIN_Y0) / (WIN_TOP_Y - WIN_Y0), 0, 1);
   return -CK_Z + 0.02 + WIN_RAKE * t * t;   // eased so the lower pane is steeper, the top lies back
 }
 function _winHalfW(y: number): number {
-  // the windscreen narrows toward the top (the canopy tapers up as well as the nose tapering).
-  // A3: the taper was AGGRESSIVE (1.55→1.05) → a sharply-pointed arch, leaving big triangular CHEEK
-  //   panels beside the glass that read as bright diagonal STRUTS. Gentled (1.55→1.32) so the glass
-  //   fills more of the frontal opening + the cheeks shrink to thin slivers hugging the hull.
-  const t = (y - WIN_Y0) / (WIN_TOP_Y - WIN_Y0);
-  return THREE.MathUtils.lerp(WIN_X + 0.05, WIN_X - 0.18, THREE.MathUtils.clamp(t, 0, 1));
+  // A3 KEY FIX: the glass edge now FOLLOWS THE FRONT HULL WALL (hullWallXAt at the nose ring) inset
+  //   by a slim frame margin — so the glass FILLS the entire front opening. There is no gap between
+  //   the glass arch and the hull → the CHEEK wedges (the "diagonal struts" the user flagged) are
+  //   ELIMINATED by construction. The D-section hull naturally gives the canopy its rounded arch.
+  const wall = hullWallXAt(-CK_Z + 0.02, THREE.MathUtils.clamp(y, WIN_Y0, WIN_TOP_Y));
+  return Math.max(0.28, wall - 0.06);
 }
 // The glazed-opening perimeter point at rail height `y`, side `sx` (±1). The glass edge, the frame
 //   ring, and the cheek/cap closures ALL read this ONE function → they seal to each other exactly.
@@ -1007,13 +1008,14 @@ function buildWindscreen(group: THREE.Group, fwZ: number, inward: THREE.Vector3)
   seg(sillL, sillR, 0.07, _winFrame);   // the sill bar closes the bottom (a touch chunkier + steel — the dash meets it)
   // ── ONE subtle diagonal glazing STREAK (a single window-light reflection sliding across) so the
   //    sheet reads as glass, not a void — SIMPLE + CLEAN per the directive (no dust/reticle clutter).
-  const stGeo = new THREE.PlaneGeometry(0.10, WIN_TOP_Y - WIN_Y0);
+  //    Kept SMALL + faint + off to the side (a short soft glint near the frame, NOT a bar across the view).
+  const stGeo = new THREE.PlaneGeometry(0.07, (WIN_TOP_Y - WIN_Y0) * 0.5);
   _disposables.push(stGeo);
-  const stMat = new THREE.MeshBasicMaterial({ color: 0xcfe2f2, transparent: true, opacity: 0.32, depthWrite: false, blending: THREE.AdditiveBlending });
+  const stMat = new THREE.MeshBasicMaterial({ color: 0xbcd0e2, transparent: true, opacity: 0.16, depthWrite: false, blending: THREE.AdditiveBlending });
   _buildMats.push(stMat);
   const streak = new THREE.Mesh(stGeo, stMat);
-  const scy = (WIN_Y0 + WIN_TOP_Y) / 2;
-  streak.position.set(-0.35, scy, _winZ(scy) + 0.12);
+  const scy = WIN_Y0 + (WIN_TOP_Y - WIN_Y0) * 0.62;
+  streak.position.set(-0.85, scy, _winZ(scy) + 0.10);
   streak.rotation.x = -Math.atan2(_winZ(WIN_TOP_Y) - _winZ(WIN_Y0), WIN_TOP_Y - WIN_Y0);
   streak.rotation.z = 0.5;
   streak.renderOrder = 3;
@@ -1084,24 +1086,9 @@ function _buildWindscreenClosures(group: THREE.Group, fwZ: number): void {
   //   DELETED — they were the "floating bars + slivers" the user flagged. The single perimeter frame
   //   ring (built in buildWindscreen) now closes the glass edge cleanly on all sides.
   void inward;
-  // ── CANTED CHEEK panels — close the gap between the windscreen edge + the canted side wall
-  //    (a triangle skin each side so there's hull, not a void, beside the glazing).
-  for (const side of [1, -1]) {
-    const cheek: number[] = [];
-    const a = { x: side * _winHalfW(WIN_Y0), y: WIN_Y0, z: _winZ(WIN_Y0) };
-    const b = { x: side * _winHalfW(WIN_TOP_Y), y: WIN_TOP_Y, z: _winZ(WIN_TOP_Y) };
-    const prof0 = hullProfile(-CK_Z + 0.02);
-    const c = { x: side * prof0[1].x, y: 1.55, z: -CK_Z + 0.02 };   // the shoulder of the front ring
-    const d = { x: side * prof0[1].x, y: WIN_Y0, z: -CK_Z + 0.02 };
-    if (side > 0) {
-      cheek.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
-      cheek.push(a.x, a.y, a.z, c.x, c.y, c.z, d.x, d.y, d.z);
-    } else {
-      cheek.push(a.x, a.y, a.z, c.x, c.y, c.z, b.x, b.y, b.z);
-      cheek.push(a.x, a.y, a.z, d.x, d.y, d.z, c.x, c.y, c.z);
-    }
-    group.add(_skin(cheek, _shell));
-  }
+  // A3: the CHEEK panels are DELETED — the glass now fills the whole front opening (its edge tracks
+  //   the hull wall) so there's no gap to cheek-fill + no diagonal strut wedges. The only forward
+  //   closure left is the NOSE-CAP roof fairing above the brow (built above).
   // a stencilled placard low on the sill (lived-in)
   const plac = _box(0.30, 0.07, 0.012, _hazard);
   plac.position.set(-WIN_X + 0.30, WIN_Y0 + 0.10, fwZ + 0.05);
@@ -1353,10 +1340,11 @@ function buildPilotSeat(group: THREE.Group): void {
   //    player sits in the OPEN cushion gap (no collider), rises, and walks aft — but from the aisle
   //    the chair is a solid body you round, not one you pass through. Two flanking bolster columns
   //    close the sides at hip/shoulder height, kept OUTBOARD of the spawn capsule (x>radius).
-  //    Backrest block: x±0.34, y 0.30→1.15, centred just aft of the sit-volume.
-  _addFurnitureCollider(0.68, 0.90, 0.42, 0, sy + 0.30, sz + 0.44);   // reclined back + headrest mass
+  //    Backrest block: x±0.34, y 0.30→1.15, centred AFT of the seated capsule (z-min 0.12 > the
+  //    capsule aft edge SEAT_Z+radius=0.05) so the seated pilot never overlaps it → no rise-eject.
+  _addFurnitureCollider(0.68, 0.90, 0.36, 0, sy + 0.30, sz + 0.60);   // reclined back + headrest mass (z 0.12→0.48)
   for (const sx of [-1, 1]) {                                          // side bolster columns (outboard of the spawn capsule, x>radius)
-    _addFurnitureCollider(0.16, 0.55, 0.62, sx * 0.44, sy + 0.14, sz - 0.06);
+    _addFurnitureCollider(0.16, 0.55, 0.62, sx * 0.46, sy + 0.14, sz - 0.06);
   }
 }
 
