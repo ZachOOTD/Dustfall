@@ -471,3 +471,10 @@ The user kept the loop running past feature-complete; each pass found + fixed re
 - **Ground beats** (wake/stepout/leviathan/chute) verified at the current state within the last 2 cycles.
 - **VERDICT: no regressions — no code changes this cycle.** verify gates unchanged (nothing edited).
 - State: all user walk-test feedback implemented + the chain verified coherent end-to-end. Awaiting the user's next walk-test round.
+
+---
+
+## Cycle 48 — local playable intro build (the Netlify replacement) (2026-07-01 evening)
+- **`npm run preview:intro`** — a one-command LOCAL replacement for the dead Netlify preview: `tsc && vite build --mode intro` (a real production build with the intro ON via `.env.intro`, base `/` from the non-production-mode fallback) + `vite preview --mode intro` at http://localhost:4173/. No new deps (no cross-env — Vite mode files are Windows-safe).
+- **Verified:** the intro bundle inlines `escapePodIntro:!0` + root asset paths; serve → HTTP 200; **the master GitHub-Pages build is untouched** (`escapePodIntro:!1`, `/Dustfall/` base — the live site is safe).
+- Backlog + review brief updated. Remaining (user-side, optional): a new remote host if a shareable link is wanted — netlify.toml ports as-is.

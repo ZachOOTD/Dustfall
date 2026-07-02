@@ -1,8 +1,9 @@
 # Next session — the ESCAPE-POD INTRO is FEATURE-COMPLETE (overnight 2026-07-01)
 
 The campaign `campaign/escape-pod-intro` is ACTIVE. Everything is committed + pushed. **Netlify
-is maxed → the preview link won't refresh** (backlog item; verify via `rig-shot.mjs` + gates, which
-don't need a deploy). Resume/redirect anytime via `docs/campaign/steering.md`.
+is maxed → the old preview link won't refresh — use **`npm run preview:intro`** instead (a local
+production build with the intro ON, served at http://localhost:4173/ — shipped cycle 48). Or plain
+`npm run dev` + `__game.startIntro()`. Resume/redirect anytime via `docs/campaign/steering.md`.
 
 ## ⚑ SINCE feature-complete: the USER'S CONSISTENCY RE-SCOPE (2026-07-01, all done + verified)
 The user's walk-test steering re-shaped the crash→game handoff (see cycles 41-46 in the campaign
