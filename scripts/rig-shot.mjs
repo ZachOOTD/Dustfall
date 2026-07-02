@@ -2421,6 +2421,9 @@ const SCENARIOS = {
       if (angle === 'flee') {
         eye = new V(tr.x, floorY + 1.55, tr.z + 12.5);              // at the dead-end
         look = new V(tr.x, floorY + 1.2, tr.z + 2.0);              // forward down the red corridor to the bridge
+      } else if (angle === 'engineroom') {
+        eye = new V(tr.x, floorY + 1.55, tr.z + 12.4);             // close to the dead-end glass door
+        look = new V(tr.x, floorY + 1.35, tr.z + 17.0);           // aft THROUGH the glass into the engine room
       } else {
         eye = new V(tr.x, floorY + 1.5, tr.z + 7.0);               // mid-corridor
         look = new V(tr.x, floorY + 1.1, tr.z + 14.5);            // aft at the engine-bay blaze

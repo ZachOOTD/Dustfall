@@ -1367,6 +1367,342 @@ function buildExteriorSkin(group: THREE.Group): THREE.Group {
   return root;
 }
 
+// ─── B1.a — THE CANONICAL POD MODULE + THE MERGED GLASS FRONT DOOR ────────────────
+// The user's core ask: the EXACT SAME pod (the docked bay one they LIKE) the whole way —
+// interior + exterior as ONE coherent asset. This is the shared EXTERIOR builder, used by
+// the docked bay pod NOW (replacing shipScene's bespoke buildDockedPodExterior) and
+// designed so the descent/landed swap onto it is trivial later (CLUSTER D): same body
+// proportions (POD_R/WALL_H), same riveted-aluminium identity, and — the design change the
+// user specified — the VIEWPORT IS IN THE DOOR: ONE front-facing unit the player faces for
+// everything (board it, sit facing it, watch the descent through its glass, kick it open at
+// the wake). No side viewport, no side hatch — the front door is the single aperture.
+//
+// LOCAL FRAME: the capsule stands on +Y (heat-shield base centre at y=0), the FRONT DOOR
+// faces +X (the +X arc). In the bay, +X points at the arriving corridor player. The door
+// has explicit STATES: 'closed' (flush, sealed — a clean glass window filling most of the
+// door; the default the descent/crash ride in) and 'open' (swung ~110° for boarding/exit).
+//
+// GEOMETRY DIMENSIONS (front-door on the +X arc):
+const CPOD_DOOR_AZ = Math.PI / 2;        // +X arc (toward the corridor player in the bay)
+const CPOD_DOOR_W = 1.02;                // door aperture width (a wide climb-through unit)
+const CPOD_DOOR_H = 1.74;                // door aperture height
+const CPOD_DOOR_CY = 1.08;               // door centre height (seated-eye glance + standing walk-in)
+// The merged front door (user clarification 2026-07-02): a SOLID riveted aluminium door with a
+//   ROUND DOMED PORTHOLE integral to it (the same domed-circular viewport character the ride-down
+//   cabin has), NOT a flat glass pane. The porthole is generous enough to carry the descent view.
+const CPOD_PORT_R = 0.40;                // the domed porthole radius (generous — carries the descent view; fits the 1.02×1.74 door upper half)
+
+// FRONT-DOOR DOMED-PORTHOLE GLASS — a faint cool-tinted glossy glass (the domed disc set into the
+//   door). Low opacity so the descent reads through, a Fresnel rim so the eye registers glass, not
+//   a hole. Shared across all canonical pods (one program). Matches the cabin viewport's character.
+const _cpodGlass = new THREE.MeshStandardMaterial({
+  color: 0x2b3a44, roughness: 0.10, metalness: 0.30,
+  emissive: 0x0a1620, emissiveIntensity: 0.42,
+  transparent: true, opacity: 0.32, side: THREE.DoubleSide,
+});
+// inner-rim shadow well behind the domed glass — near-black, unlit, so the porthole reads as a deep
+//   inset window in the door (a dark ring inside the bezel).
+const _cpodRimShadow = new THREE.MeshBasicMaterial({ color: 0x07090a, side: THREE.DoubleSide });
+_cpodGlass.onBeforeCompile = (shader: THREE.WebGLProgramParametersWithUniforms) => {
+  shader.vertexShader = shader.vertexShader.replace('#include <common>',
+    `#include <common>
+     varying vec3 vCGVpos; varying vec3 vCGVnrm;`);
+  shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>',
+    `#include <begin_vertex>
+     vCGVpos = (modelViewMatrix * vec4(transformed,1.0)).xyz;
+     vCGVnrm = normalize(normalMatrix * normal);`);
+  shader.fragmentShader = shader.fragmentShader.replace('#include <common>',
+    `#include <common>
+     varying vec3 vCGVpos; varying vec3 vCGVnrm;`);
+  shader.fragmentShader = shader.fragmentShader.replace('#include <emissivemap_fragment>',
+    `#include <emissivemap_fragment>
+     vec3 gV = normalize(-vCGVpos);
+     float gF = pow(1.0 - clamp(dot(normalize(vCGVnrm), gV), 0.0, 1.0), 2.4);
+     totalEmissiveRadiance += vec3(0.16,0.24,0.32) * gF * 1.6;`);
+  shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>',
+    `gl_FragColor = vec4( outgoingLight, diffuseColor.a );
+     #ifdef OPAQUE
+     gl_FragColor.a = 1.0;
+     #endif
+     float gF2 = pow(1.0 - clamp(dot(normalize(vCGVnrm), normalize(-vCGVpos)), 0.0, 1.0), 2.0);
+     gl_FragColor.a = clamp(gl_FragColor.a + gF2 * 0.5, 0.0, 0.9);`);
+};
+// A DIM warm-lit cabin peek BEHIND the domed glass (so through the sealed porthole you see a lit
+//   interior, inviting — "get in here"). Unlit warm but MUTED so the domed GLASS tint + Fresnel
+//   still read as a window (not a blown-white disc); the descent view reads through it in-phase.
+const _cpodCabinGlow = new THREE.MeshBasicMaterial({ color: 0x3a2c18 });
+
+export type CanonicalPodDoorState = 'closed' | 'open';
+export interface CanonicalPodOpts {
+  /** door state at build ('closed' = flush sealed glass window; 'open' = swung for boarding). */
+  door?: CanonicalPodDoorState;
+  /** body radius (defaults to POD_R — the hero cabin's outer hull radius). */
+  r?: number;
+}
+
+/** Build the CANONICAL pod exterior (the shared module) in its LOCAL frame: a vertical
+ *  riveted-aluminium capsule standing on its heat-shield (base centre y=0), with the MERGED
+ *  GLASS FRONT DOOR on the +X arc. Returns { root, doorPivot } — doorPivot is the front door's
+ *  hinge group (setCanonicalPodDoor / an animator can swing it). Reuses the shared _podPaint/
+ *  _podBandMat/_podSteel/_podFrameMat/scorch identity so it's the SAME vessel inside↔out↔phase. */
+export function buildCanonicalPodExterior(opts: CanonicalPodOpts = {}): { root: THREE.Group; doorPivot: THREE.Group } {
+  const R = opts.r ?? POD_R;
+  const state: CanonicalPodDoorState = opts.door ?? 'closed';
+  const root = new THREE.Group();
+  root.name = 'canonicalPod';
+  const bodyTop = POD_BODY_H;                       // shoulder where the nose springs
+  const NOSE_H = POD_NOSE_H;
+  const apex = bodyTop + NOSE_H;
+  const SHOULDER_R = R * 0.80;
+  // the front-door azimuth window to leave OPEN in the body (a real gap the door seats into).
+  const dAzHalf = Math.min(Math.PI * 0.85, (CPOD_DOOR_W / 2 + 0.08) / R);
+  const dY0 = CPOD_DOOR_CY - CPOD_DOOR_H / 2, dY1 = CPOD_DOOR_CY + CPOD_DOOR_H / 2;
+
+  // ── 1. BODY — the revolved capsule MINUS the front-door arc. Straight-body bands that span the
+  //    door height are emitted as the complementary arc (bridging around the opening); the foot,
+  //    upper body, shoulder + nose are full revolves. (Single clean geometry — B1.d: no doubled
+  //    nested hoop shells; ONE band ring per latitude, below.)
+  const straightY0 = 0.28, straightY1 = bodyTop - 0.05;
+  const bandEdges = Array.from(new Set([straightY0, dY0, dY1, straightY1].filter((y) => y >= straightY0 && y <= straightY1))).sort((a, b) => a - b);
+  for (let i = 0; i < bandEdges.length - 1; i++) {
+    const y0 = bandEdges[i], y1 = bandEdges[i + 1], mid = (y0 + y1) / 2, h = y1 - y0;
+    if (h <= 0.001) continue;
+    const overlapsDoor = mid > dY0 && mid < dY1;
+    if (!overlapsDoor) {
+      const t = _tube(R, h, POD_SEG, _podPaint);
+      t.position.y = mid; root.add(t);
+    } else {
+      const t = _tube(R, h, POD_SEG, _podPaint, CPOD_DOOR_AZ + dAzHalf, Math.PI * 2 - dAzHalf * 2);
+      t.position.y = mid; root.add(t);
+    }
+  }
+  // flared FOOT (below the door)
+  root.add(_lathe([
+    new THREE.Vector2(R * 0.90, 0.0), new THREE.Vector2(R * 1.02, 0.16), new THREE.Vector2(R, 0.28),
+  ], POD_SEG, _podPaint));
+  // SHOULDER + tucked OGIVE NOSE (above the body)
+  const noseProf: THREE.Vector2[] = [new THREE.Vector2(R, straightY1), new THREE.Vector2(SHOULDER_R, bodyTop + 0.04)];
+  for (let i = 1; i <= 8; i++) {
+    const t = i / 8, a = t * (Math.PI / 2);
+    noseProf.push(new THREE.Vector2(Math.max(0.05, SHOULDER_R * Math.pow(Math.cos(a), 1.7) + 0.001), bodyTop + 0.04 + Math.sin(a) * (NOSE_H - 0.04)));
+  }
+  noseProf.push(new THREE.Vector2(0.001, apex));
+  root.add(_lathe(noseProf, POD_SEG, _podPaint));
+  // scorched heat-shield base cap
+  const baseCap = _cyl(R * 0.92, R * 0.80, 0.24, POD_SEG, _podScorchMat);
+  baseCap.position.y = 0.11; root.add(baseCap);
+
+  // ── 2. REENTRY SCORCH — a char fade up the lower body (the shared identity weathering).
+  const scorchTopY = POD_BODY_H * 0.45;
+  const scorchGeo = new THREE.LatheGeometry([
+    new THREE.Vector2(R * 0.90 + 0.008, 0.0), new THREE.Vector2(R * 1.03, 0.16),
+    new THREE.Vector2(R + 0.012, 0.28), new THREE.Vector2(R + 0.010, scorchTopY),
+  ], POD_SEG);
+  scorchGeo.computeVertexNormals();
+  {
+    const pos = scorchGeo.attributes.position;
+    const cols = new Float32Array(pos.count * 3);
+    const cChar = new THREE.Color(0x0d0906), cTarn = new THREE.Color(0x5a4126), cAlu = new THREE.Color(0xb6b9b3);
+    const tmp = new THREE.Color();
+    for (let i = 0; i < pos.count; i++) {
+      const vx = pos.getX(i), vy = pos.getY(i), vz = pos.getZ(i);
+      const az = Math.atan2(vx, vz);
+      const lick = 0.5 * Math.exp(-Math.pow((az - 0.4) / 0.7, 2)) + 0.18 * Math.sin(az * 5.0 + vy * 3.0);
+      const span = Math.max(0.01, scorchTopY * (1 + lick));
+      const t = Math.max(0, Math.min(1, vy / span));
+      if (t < 0.45) tmp.copy(cChar).lerp(cTarn, t / 0.45); else tmp.copy(cTarn).lerp(cAlu, (t - 0.45) / 0.55);
+      cols.set([tmp.r, tmp.g, tmp.b], i * 3);
+    }
+    scorchGeo.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
+  }
+  _cabinDisposables.push(scorchGeo);
+  root.add(new THREE.Mesh(scorchGeo, _podScorchFadeMat));
+
+  // ── 3. RIVETED LATITUDE BANDS — ONE clean proud hoop per latitude + a sparse rivet ring (B1.d:
+  //    single geometry, NO doubled/nested hoop shells). Gaps the door band.
+  for (const by of [POD_BODY_H * 0.20, POD_BODY_H * 0.44, POD_BODY_H * 0.68, POD_BODY_H * 0.90]) {
+    const crossesDoor = by > dY0 - 0.06 && by < dY1 + 0.06;
+    const hoop = crossesDoor
+      ? _tube(R + 0.05, 0.10, POD_SEG, _podBandMat, CPOD_DOOR_AZ + dAzHalf, Math.PI * 2 - dAzHalf * 2)
+      : _tube(R + 0.05, 0.10, POD_SEG, _podBandMat);
+    hoop.position.y = by; root.add(hoop);
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2 + 0.1;
+      let d = a - CPOD_DOOR_AZ; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2;
+      if (crossesDoor && Math.abs(d) < dAzHalf) continue;
+      const sg = new THREE.SphereGeometry(0.017, 6, 4, 0, Math.PI * 2, 0, Math.PI / 2);
+      _cabinDisposables.push(sg);
+      const rivet = new THREE.Mesh(sg, _podFrameMat);
+      rivet.position.set(Math.sin(a) * (R + 0.006), by, Math.cos(a) * (R + 0.006));
+      rivet.lookAt(0, by, 0); root.add(rivet);
+    }
+  }
+  // vertical seam battens around the barrel (skipping the front-door arc) — the panelled-plate read.
+  for (const a of [Math.PI, Math.PI * 1.25, Math.PI * 1.5, Math.PI * 1.75, Math.PI * 0]) {
+    let d = a - CPOD_DOOR_AZ; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2;
+    if (Math.abs(d) < dAzHalf + 0.15) continue;
+    const dir = new THREE.Vector3(Math.sin(a), 0, Math.cos(a));
+    const batten = _box(0.06, POD_BODY_H - 0.2, 0.05, _podSteel);
+    batten.position.set(dir.x * (R + 0.02), POD_BODY_H / 2 + 0.1, dir.z * (R + 0.02));
+    batten.rotation.y = -a; root.add(batten);
+  }
+
+  // ── 4. THE FRONT-DOOR APERTURE FRAME — a recessed channel-steel jamb ringing the +X opening
+  //    (real depth, not a decal) + a warm-lit cabin peek behind it (so the sealed glass shows a
+  //    lit interior). Built in a door-LOCAL group (local +Z = outward radial along +X).
+  const doorDir = new THREE.Vector3(Math.sin(CPOD_DOOR_AZ), 0, Math.cos(CPOD_DOOR_AZ));
+  const frame = new THREE.Group();
+  frame.position.set(doorDir.x * R, CPOD_DOOR_CY, doorDir.z * R);
+  frame.rotation.y = CPOD_DOOR_AZ;   // local +Z faces outward (+X); local +X tangential; local +Y up
+  root.add(frame);
+  // recessed jamb WELL going INWARD (−Z local, into the hull) so the opening reads deep.
+  const fT = 0.11;
+  for (const [w, h, ox, oy] of [
+    [CPOD_DOOR_W, 0.05, 0, CPOD_DOOR_H / 2] as const,
+    [CPOD_DOOR_W, 0.05, 0, -CPOD_DOOR_H / 2] as const,
+    [0.05, CPOD_DOOR_H, -CPOD_DOOR_W / 2, 0] as const,
+    [0.05, CPOD_DOOR_H, CPOD_DOOR_W / 2, 0] as const,
+  ]) {
+    const wall = _box(w, h, SKIN + 0.04, _podSteel);
+    wall.position.set(ox, oy, -SKIN / 2 - 0.02);
+    frame.add(wall);
+  }
+  // proud channel-steel frame border on the outer lip
+  for (const [w, h, ox, oy] of [
+    [CPOD_DOOR_W + fT * 2, fT, 0, CPOD_DOOR_H / 2 + fT / 2] as const,
+    [CPOD_DOOR_W + fT * 2, fT, 0, -CPOD_DOOR_H / 2 - fT / 2] as const,
+    [fT, CPOD_DOOR_H, -CPOD_DOOR_W / 2 - fT / 2, 0] as const,
+    [fT, CPOD_DOOR_H, CPOD_DOOR_W / 2 + fT / 2, 0] as const,
+  ]) {
+    const bar = _box(w, h, 0.11, _podSteel);
+    bar.position.set(ox, oy, 0.045);
+    frame.add(bar);
+  }
+  // frame rivets
+  for (let i = 0; i < 14; i++) {
+    const u = i / 14; let sx: number, sy: number;
+    if (u < 0.25) { sx = (u / 0.25 - 0.5) * CPOD_DOOR_W; sy = CPOD_DOOR_H / 2 + fT * 0.5; }
+    else if (u < 0.5) { sx = CPOD_DOOR_W / 2 + fT * 0.5; sy = (1 - (u - 0.25) / 0.25 - 0.5) * CPOD_DOOR_H; }
+    else if (u < 0.75) { sx = (0.5 - (u - 0.5) / 0.25) * CPOD_DOOR_W; sy = -CPOD_DOOR_H / 2 - fT * 0.5; }
+    else { sx = -CPOD_DOOR_W / 2 - fT * 0.5; sy = ((u - 0.75) / 0.25 - 0.5) * CPOD_DOOR_H; }
+    const sg = new THREE.SphereGeometry(0.015, 6, 4, 0, Math.PI * 2, 0, Math.PI / 2);
+    _cabinDisposables.push(sg);
+    const stud = new THREE.Mesh(sg, _podFrameMat);
+    stud.rotation.x = -Math.PI / 2; stud.position.set(sx, sy, 0.10);
+    frame.add(stud);
+  }
+  // a warm-lit cabin peek BEHIND the aperture (a dim interior box so the sealed glass reads LIT).
+  const peekBack = _box(CPOD_DOOR_W + 0.2, CPOD_DOOR_H + 0.1, 0.12, _cpodCabinGlow);
+  peekBack.position.set(0, 0, -0.95);
+  frame.add(peekBack);
+  for (const sx of [-1, 1]) {
+    const side = _box(0.12, CPOD_DOOR_H + 0.1, 0.86, _cpodCabinGlow);
+    side.position.set(sx * (CPOD_DOOR_W / 2 + 0.05), 0, -0.5);
+    frame.add(side);
+  }
+  const peekFloor = _box(CPOD_DOOR_W + 0.1, 0.12, 0.86, _cpodCabinGlow);
+  peekFloor.position.set(0, -CPOD_DOOR_H / 2, -0.5);
+  frame.add(peekFloor);
+  // a hint of interior structure (a seat-back + a rib) catching the warm light so the peek isn't flat.
+  const innerSeat = _box(0.5, 0.66, 0.12, _podSteel);
+  innerSeat.position.set(0, -0.05, -0.7); frame.add(innerSeat);
+  // a DIM warm point lamp inside the peek so the interior reads lit but the domed glass stays a
+  //   tinted window (not a blown disc).
+  const peekLamp = new THREE.PointLight(0xffcf96, 0.35, 1.0, 2.8);
+  peekLamp.position.set(0, 0.2, -0.6);
+  frame.add(peekLamp);
+
+  // ── 5. THE MERGED DOOR + DOMED PORTHOLE (user clarification 2026-07-02) — a SOLID riveted
+  //    aluminium door with the ROUND DOMED porthole glass INTEGRAL to it (the same domed-circular
+  //    viewport character the ride-down cabin has), NOT a flat glass pane. The player faces this
+  //    door+porthole for everything (board through it, sit facing it, watch the descent through the
+  //    round domed glass, kick it open at the wake). The bezel/frame is integral to the door — ONE
+  //    clean ring, no doubled/floating rings (B1.d rule applies here too). Hinged on the +X edge.
+  const doorPivot = new THREE.Group();
+  doorPivot.name = 'canonicalPodDoor';
+  doorPivot.position.set(CPOD_DOOR_W / 2 + fT / 2, 0, 0.06);   // hinge at the +X (right) edge, proud
+  frame.add(doorPivot);
+  const door = new THREE.Group();
+  const doorTh = 0.10;
+  // (a) the SOLID door PLATE — one riveted aluminium slab filling the opening (the door is solid;
+  //     the porthole is a domed window set INTO it).
+  const plate = _box(CPOD_DOOR_W, CPOD_DOOR_H, doorTh, _podDoorMat);
+  plate.position.set(0, 0, 0);
+  door.add(plate);
+  // door-panel edge battens (a couple of proud stiffeners → the door reads as a fabricated plate)
+  for (const by of [-CPOD_DOOR_H * 0.32, CPOD_DOOR_H * 0.34]) {
+    const batten = _box(CPOD_DOOR_W - 0.14, 0.06, doorTh * 0.7, _podBandMat);
+    batten.position.set(0, by, doorTh * 0.55);
+    door.add(batten);
+  }
+  // perimeter rivet rows (the door is bolted together)
+  for (let i = 0; i < 18; i++) {
+    const u = i / 18; let rx: number, ry: number;
+    if (u < 0.25) { rx = (u / 0.25 - 0.5) * (CPOD_DOOR_W - 0.14); ry = CPOD_DOOR_H / 2 - 0.06; }
+    else if (u < 0.5) { rx = (CPOD_DOOR_W - 0.14) / 2; ry = (1 - (u - 0.25) / 0.25 - 0.5) * (CPOD_DOOR_H - 0.14); }
+    else if (u < 0.75) { rx = (0.5 - (u - 0.5) / 0.25) * (CPOD_DOOR_W - 0.14); ry = -CPOD_DOOR_H / 2 + 0.06; }
+    else { rx = -(CPOD_DOOR_W - 0.14) / 2; ry = ((u - 0.75) / 0.25 - 0.5) * (CPOD_DOOR_H - 0.14); }
+    const sg = new THREE.SphereGeometry(0.013, 6, 4, 0, Math.PI * 2, 0, Math.PI / 2);
+    _cabinDisposables.push(sg);
+    const stud = new THREE.Mesh(sg, _podFrameMat);
+    stud.rotation.x = -Math.PI / 2; stud.position.set(rx, ry, doorTh * 0.55);
+    door.add(stud);
+  }
+  // (b) the ROUND DOMED PORTHOLE set into the UPPER portion of the door (generous — carries the
+  //     descent view). A dark inner-rim shadow well (aperture depth) → a domed convex glass disc →
+  //     ONE integral proud bezel ring → a ring of bezel bolts. The dome bulges OUTWARD (+local Z).
+  const portCY = CPOD_DOOR_H / 2 - CPOD_PORT_R - 0.14;   // porthole centre, in the door's upper half
+  //  the recessed shadow well (the aperture through the door → depth, reads as inset)
+  const wellGeo = new THREE.CylinderGeometry(CPOD_PORT_R, CPOD_PORT_R, doorTh + 0.02, 28, 1, true);
+  _cabinDisposables.push(wellGeo);
+  const well = new THREE.Mesh(wellGeo, _cpodRimShadow);
+  well.rotation.x = Math.PI / 2;   // axis Y → local Z (through the door)
+  well.position.set(0, portCY, -0.01);
+  door.add(well);
+  //  the DOMED glass disc (a shallow convex sphere cap bulging outward, +Z) — the same domed
+  //    porthole character as the ride-down cabin viewport.
+  const glassGeo = new THREE.SphereGeometry(CPOD_PORT_R, 28, 14, 0, Math.PI * 2, 0, Math.PI * 0.32);
+  _cabinDisposables.push(glassGeo);
+  const glass = new THREE.Mesh(glassGeo, _cpodGlass);
+  glass.rotation.x = -Math.PI / 2;   // bulge toward +local Z (outward, toward the player)
+  glass.position.set(0, portCY, doorTh * 0.5 + 0.02);
+  door.add(glass);
+  //  ONE integral proud BEZEL ring framing the porthole (channel-steel torus, part of the door)
+  const bezGeo = new THREE.TorusGeometry(CPOD_PORT_R + 0.04, 0.05, 12, 30);
+  _cabinDisposables.push(bezGeo);
+  const bez = new THREE.Mesh(bezGeo, _podSteel);
+  bez.position.set(0, portCY, doorTh * 0.5 + 0.02);   // in the door's XY plane, proud outward
+  door.add(bez);
+  //  a ring of bezel bolts (the porthole is bolted to the door) — flush studs on the bezel face
+  for (let i = 0; i < 16; i++) {
+    const a = (i / 16) * Math.PI * 2;
+    const sg = new THREE.SphereGeometry(0.012, 6, 4, 0, Math.PI * 2, 0, Math.PI / 2);
+    _cabinDisposables.push(sg);
+    const stud = new THREE.Mesh(sg, _podFrameMat);
+    stud.rotation.x = -Math.PI / 2;
+    stud.position.set(Math.cos(a) * (CPOD_PORT_R + 0.04), portCY + Math.sin(a) * (CPOD_PORT_R + 0.04), doorTh * 0.5 + 0.06);
+    door.add(stud);
+  }
+  // (c) a wheel/lever LATCH near the free (−X) edge, low on the door (grab + turn to open)
+  const wheel = _cyl(0.12, 0.12, 0.05, 14, _podFrameMat);
+  wheel.rotation.y = Math.PI / 2;
+  wheel.position.set(-CPOD_DOOR_W / 2 + 0.16, -CPOD_DOOR_H * 0.28, doorTh * 0.7);
+  door.add(wheel);
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2;
+    const spoke = _cyl(0.011, 0.011, 0.10, 5, _podFrameMat);
+    spoke.rotation.z = Math.PI / 2; spoke.rotation.y = a;
+    spoke.position.set(-CPOD_DOOR_W / 2 + 0.16, -CPOD_DOOR_H * 0.28, doorTh * 0.7);
+    door.add(spoke);
+  }
+  door.position.set(-CPOD_DOOR_W / 2, 0, 0);   // door-local origin → the hinge (+X) edge
+  doorPivot.add(door);
+  // door state: closed = flush over the aperture (sealed); open = swung ~110° outward (into +X).
+  doorPivot.rotation.y = state === 'open' ? -1.9 : 0;
+
+  return { root, doorPivot };
+}
+
 /** Add WALKABLE colliders for the unified pod so the player can walk IN through the hatch + around
  *  the interior without passing through the hull. Replaces the seated cage (dropped at crash). The
  *  wall is a ring of thin box segments hugging the outer radius, GAPPED over the hatch azimuth (the
