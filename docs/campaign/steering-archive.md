@@ -100,3 +100,6 @@ Cluster A's new furniture colliders box in the seated capsule (the chair collide
 
 ## 2026-07-02 — cockpit DESIGN round 2 (verbal; queued behind B1, same file)
 (1) The windscreen glass still doesn't connect to ALL sides of the hull cleanly — make cockpit+glass a SEAMLESS, clean design that also looks COOL, not just a flat piece of glass (a shaped/raked wrap canopy built FROM the hull profile so it seals by construction; slim intentional framing only; interest from the shape, not clutter). (2) The ship CONTROLS look messy — overlapping/floating pieces; redesign cleaner + more STREAMLINED (coherent surfaces, recessed screens, purposeful groupings). (3) The 2 boxes left+right of the cockpit hull are out of place now — REMOVE + redesign that space (clean hull wall or something integrated that belongs; no free-standing crates). Launch when B1 frees shipScene.ts; parallel-ok with B2 (flow, different files).
+
+## 2026-07-02 — pod door design: KEEP the domed circular porthole, ON the door (verbal; sent live to B1)
+The merged door/viewport is NOT a flat glass door: a solid riveted door with the existing DOMED CIRCULAR viewport glass integrated in it (the same domed porthole character as today's cabin), sized to carry the descent view, bezel integral (no doubled rings).
