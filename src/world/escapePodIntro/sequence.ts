@@ -32,6 +32,7 @@
 //    ship/pod beats run in their own offset geometry while the desert sits ready.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import * as THREE from 'three';   // B2 — the boarding-flow gaze/proximity math (Vector3 scratch)
 import type { GameContext } from '../../GameContext.ts';
 import { FEATURES } from '../../config/features.ts';
 import { Tuning } from '../../config/tuning.ts';
@@ -40,6 +41,7 @@ import {
   SHIP_CORRIDOR_ENTER_Z, SHIP_DEAD_END_Z,
   setCockpitAlert, setShipAlert, setEngineFire,
   getPodBayThreshold, getPodBaySeatedEye, releasePodFromBay,   // R5c — the docked-pod bay + physical release
+  setBayPodDoorOpen, getPodBayDoorWorld, getPodBayInteriorStand,   // B2 — the player-gated boarding flow (E-open door + walk-in gate + E-sit)
 } from './shipScene.ts';
 import { buildPodScene, disposePodScene, getPodSpawn, setDescentProgress, setDescentBase, setTumbleLight, setParachuteLeverPull, setCabinCrashPose, blowCabinHatch, restoreCabinExposure, unifyEnterablePod, podIsEnterable } from './podScene.ts';
 import { buildHaulerExterior, disposeHaulerExterior, setHaulerExplosion } from './haulerScene.ts';   // Phase 3 (T3.1/T3.2) — the hero freighter + its death staged through the post-eject porthole
@@ -59,8 +61,8 @@ import {
 
 /** Seconds the cockpit opens SEATED (looking at the planet) before control + the cue. */
 const COCKPIT_DWELL = 3.0;
-/** Eject auto-fires after this long if the player doesn't pull the lever (anti-softlock). */
-const EJECT_FALLBACK = 6.0;
+// B2 — the EJECT_FALLBACK auto-fire timer is REMOVED: the eject is now PURELY player-gated (the
+//   user: "nothing automatic; it waits until the player actually does all of these things").
 /** Phase 3 (T3.2) — the SHIP-EXPLOSION beat is now the vision's climactic SPECTACLE: the
  *  player watches their hauler DIE through the porthole (a white flash → a blooming fireball
  *  → the hull breaking into tumbling debris → a shockwave → a receding burning husk), the
@@ -223,6 +225,34 @@ function phaseFadeOpacity(remaining: number): number {
 /** Did the player "pull the lever" this frame (click or E)? */
 function pulledLever(ctx: GameContext): boolean {
   return ctx.input.pressed.has('KeyE') || ctx.input.mousePressed.has(0);
+}
+
+/** B2 — did the player press E this frame (edge-triggered)? The boarding gates (open the door, sit)
+ *  are E-ONLY per the user spec ("press E on it"); the eject/parachute pulls stay E-or-click. The
+ *  smoke path synthesizes this by seeding ctx.input.pressed (see smokeTestIntro's E-driver). */
+function pressedE(ctx: GameContext): boolean {
+  return ctx.input.pressed.has('KeyE');
+}
+
+/** B2 — boarding-flow gaze/proximity gate. Is the player standing within `dist` of `target` (planar)
+ *  AND looking roughly at it (camera-forward · dir-to-target ≥ `facing`)? Returns { near, look, ok }.
+ *  Player-gated prompts show when `near`; the action fires on E while `ok`. Scratch vectors so this
+ *  is allocation-free per frame. */
+const _bfCamDir = new THREE.Vector3();
+const _bfToTarget = new THREE.Vector3();
+function gazeGate(ctx: GameContext, target: THREE.Vector3, dist: number, facing: number): { near: boolean; look: boolean; ok: boolean } {
+  const cam = ctx.three.camera;
+  const dx = target.x - cam.position.x, dz = target.z - cam.position.z;
+  const planar = Math.hypot(dx, dz);
+  const near = planar <= dist;
+  cam.getWorldDirection(_bfCamDir); _bfCamDir.y = 0;
+  if (_bfCamDir.lengthSq() < 1e-6) _bfCamDir.set(0, 0, -1);
+  _bfCamDir.normalize();
+  _bfToTarget.set(dx, 0, dz);
+  if (_bfToTarget.lengthSq() < 1e-6) _bfToTarget.set(0, 0, -1);
+  _bfToTarget.normalize();
+  const look = _bfCamDir.dot(_bfToTarget) >= facing;
+  return { near, look, ok: near && look };
 }
 
 /** Place the player capsule + camera at a world spawn, facing −Z, and snap the camera. */
@@ -504,100 +534,121 @@ function tickCorridor(ctx: GameContext, dt: number): void {
  *               seat the player, so the cabin they're now inside IS the one they ride down (R3a).
  *   • cue     — "pull the eject lever". Pull (E/click) or the fallback dwell → shipExplode.
  *  Anti-softlock: a fallback auto-advances walkUp→climbIn, and the eject fallback stays. */
-const ENTER_CLIMB_DUR = 1.4;      // seconds of the continuous climb-in move (hatch → seat)
-const ENTER_SEAL_DUR = 0.9;       // seconds the hatch seals over the eye (the swap happens here)
-const ENTER_WALK_FALLBACK = 6.0;  // auto-begin the climb-in if the player just stands at the mouth
-const ENTER_REACH_DIST = 1.5;     // how near the hatch threshold counts as "at the pod"
+// ── B2 — THE PLAYER-GATED BOARDING FLOW (the user's #1 requested interaction, 2026-07-02):
+//    "the pod door should be closed, you press E on it to open, you physically walk inside YOURSELF,
+//     press E on the seat to sit, press E on the lever to eject — NOTHING automatic; it waits until
+//     the player actually does all of these things." Every progression step is gated on real player
+//    action; the ONLY scripted assist is the E-SIT snap-to-seat (natural) + the consequent auto-seal
+//    (the door closing behind you IS the launch prep, per the user). No timeouts, no auto-eject.
+//
+//    Phases: approach (free-walk; E-open the closed door) → enter (door swings open; the player WALKS
+//    IN themselves through the door into the bore — real KCC, no scripted carry) → atSeat (E to sit)
+//    → sealing (seat + swap to the ridden cabin under a seal dim; the door AUTO-SEALS shut behind
+//    them as launch prep) → eject (seated, framed on the lever; E/click to fire — no fallback).
+const ENTER_DOOR_OPEN_DUR = 0.75;    // seconds the door swings open on E (0→1)
+const ENTER_SEAL_DUR = 0.9;          // seconds the seal dim + model swap + door auto-close play over
+const ENTER_DOOR_GAZE_DIST = 3.2;    // within this (planar, m) of the door + looking at it → the E-open prompt
+const ENTER_DOOR_GAZE_FACING = 0.55; // camera-forward · dir-to-door ≥ this (≈57°) counts as "looking at the door"
+const ENTER_INSIDE_DIST = 1.05;      // within this (planar, m) of the bore-stand point → "the player is INSIDE"
+const ENTER_SEAT_GAZE_DIST = 1.6;    // within this of the seat + looking in → the E-sit prompt
+const ENTER_SEAT_GAZE_FACING = 0.2;  // a loose facing gate for the seat (they're right on top of it inside the bore)
 function tickEnterPod(ctx: GameContext, dt: number): void {
   const intro = ctx.intro;
   if (!intro) return;
   if (!intro.scratch.init) {
     intro.scratch.init = true;
-    intro.scratch.phase = 'walkUp';
+    intro.scratch.phase = 'approach';
+    intro.scratch.doorT = 0;           // the door-open animation param (0=closed → 1=open)
     intro.scratch.t = 0;
-    intro.mode = 'walk';                 // free-walk the last steps up to the docked hatch
-    showIntroPrompt('Get in the escape pod');
+    intro.mode = 'walk';               // free-walk the last steps to the closed pod door
+    setBayPodDoorOpen(0);              // the door starts CLOSED (the user spec)
+    // the klaxon/alert cue keeps pointing the fleeing player at the pod until they're at the door.
+    showIntroPrompt('GET TO THE ESCAPE POD');
   }
   intro.scratch.t = (intro.scratch.t as number) + dt;
   const phase = intro.scratch.phase as string;
-  const thr = getPodBayThreshold();      // world: just outside the open hatch, standing eye
-  const seat = getPodBaySeatedEye();     // world: inside the docked cabin, seated eye
 
-  if (phase === 'walkUp') {
-    // reached the open hatch? (planar distance from the threshold) — or the anti-softlock fallback.
-    const tr = ctx.player.body.body.translation();
-    const dx = tr.x - thr.x, dz = tr.z - thr.z;
-    const reached = (dx * dx + dz * dz) < ENTER_REACH_DIST * ENTER_REACH_DIST;
-    if (reached || (intro.scratch.t as number) > ENTER_WALK_FALLBACK) {
-      // capture the eye's CURRENT world pose as the climb-in start (seamless from wherever they are)
-      const st = ctx.three.camera.position;
-      intro.scratch.startX = st.x; intro.scratch.startY = st.y; intro.scratch.startZ = st.z;
-      intro.scratch.phase = 'climbIn';
-      intro.mode = 'scripted';           // locomotion off; the beat drives the eye
-      intro.scratch.t = 0;
+  // ── PHASE approach — free-walk up to the CLOSED door; a gaze/proximity prompt to E-open it. The
+  //    door does NOT open on its own — only on the player's E press while looking at it.
+  if (phase === 'approach') {
+    const door = getPodBayDoorWorld();
+    const g = gazeGate(ctx, door, ENTER_DOOR_GAZE_DIST, ENTER_DOOR_GAZE_FACING);
+    showIntroPrompt(g.near ? 'Open the pod  [E]' : 'GET TO THE ESCAPE POD');
+    if (g.ok && pressedE(ctx)) {
+      playDoorBlow();                  // the door mechanism THUNKS + starts to swing (reuse the door SFX)
+      intro.scratch.phase = 'enter';
+      intro.scratch.doorT = 0;
       showIntroPrompt('');
     }
     return;
   }
 
-  if (phase === 'climbIn') {
-    // CONTINUOUS first-person carry: ease the eye from the captured start pose to the seated eye
-    //   inside the docked cabin. Position-drive the body + camera each frame (no snap-cut); a gentle
-    //   ease-in-out so it reads as climbing in + settling, not a lerp jerk. Look toward the seat.
-    const k = Math.min(1, (intro.scratch.t as number) / ENTER_CLIMB_DUR);
-    const e = k * k * (3 - 2 * k);       // smoothstep ease
-    const sx = intro.scratch.startX as number, sy = intro.scratch.startY as number, sz = intro.scratch.startZ as number;
-    const ex = sx + (seat.x - sx) * e, ey = sy + (seat.y - sy) * e, ez = sz + (seat.z - sz) * e;
-    // drive the body (eye rides body + eyeOffset) so gravity can't drift it, then pin the camera.
-    ctx.player.body.body.setTranslation({ x: ex, y: ey - ctx.player.eyeOffset, z: ez }, true);
-    ctx.player.velocityY = 0;
-    ctx.three.camera.position.set(ex, ey, ez);
-    // look INTO the pod (toward −X, the cabin interior) as we climb through the hatch, easing to
-    //   the forward viewport (−Z) read so we settle facing where the descent view will be.
-    ctx.three.camera.rotation.order = 'YXZ';
-    const yaw = -Math.PI / 2 + (Math.PI - (-Math.PI / 2)) * (e * 0.5);   // from facing −X (into hatch) toward −Z-ish
-    ctx.three.camera.rotation.set(-0.05, yaw, 0);
-    ctx.player.cameraSnapNextFrame = true;
-    if (k >= 1) {
-      intro.scratch.phase = 'seal';
-      intro.scratch.t = 0;
-      playDoorBlow();                    // the hatch THUNKS shut behind them (reuse the door SFX)
-      playHatchSeal();                   // T5.3 — the pressure HISS + airtight pressurise under the clunk (the cabin seals)
-      addTrauma(0.2);                    // a one-time clunk as it seals
+  // ── PHASE enter — the door swings OPEN (animated); then the player physically WALKS IN themselves
+  //    (real KCC — mode stays 'walk', no scripted carry). The bore has a walkable floor + a hull ring
+  //    gapped at the door (shipScene _addBayPodColliders), so they walk through the door into the pod.
+  if (phase === 'enter') {
+    intro.scratch.doorT = Math.min(1, (intro.scratch.doorT as number) + dt / ENTER_DOOR_OPEN_DUR);
+    setBayPodDoorOpen(intro.scratch.doorT as number);   // swing 0→1 (~110°)
+    if ((intro.scratch.doorT as number) >= 1) showIntroPrompt('Step inside');   // cue the walk-in once it's open
+    // are they physically INSIDE the bore now? (planar distance from the interior stand-point).
+    const stand = getPodBayInteriorStand();
+    const tr = ctx.player.body.body.translation();
+    const dx = tr.x - stand.x, dz = tr.z - stand.z;
+    if ((dx * dx + dz * dz) < ENTER_INSIDE_DIST * ENTER_INSIDE_DIST) {
+      intro.scratch.phase = 'atSeat';
+      showIntroPrompt('');
     }
     return;
   }
 
-  if (phase === 'seal') {
-    // the hatch seals over the eye — a brief black dim (the closing door occludes the view); UNDER
-    //   it we swap the bay-pod peek for the REAL ridden cabin + seat the player (R3a continuity: the
-    //   capsule they're now inside IS the one they ride down). The dim hides the model swap.
+  // ── PHASE atSeat — inside the pod; an E-SIT gate (looking toward the seat). On E, the ONE scripted
+  //    assist: snap to the seated pose + swap to the ridden cabin under a seal dim + AUTO-SEAL the door.
+  if (phase === 'atSeat') {
+    const seat = getPodBaySeatedEye();
+    const g = gazeGate(ctx, seat, ENTER_SEAT_GAZE_DIST, ENTER_SEAT_GAZE_FACING);
+    showIntroPrompt(g.near ? 'Sit  [E]' : 'Step to the seat');
+    if (g.ok && pressedE(ctx)) {
+      intro.scratch.phase = 'sealing';
+      intro.scratch.t = 0;
+      intro.mode = 'scripted';         // locomotion off from here (they're being seated + sealed)
+      playHatchSeal();                 // the pressure HISS as the door seals behind them (launch prep)
+      addTrauma(0.2);                  // a one-time clunk as it seals
+      showIntroPrompt('');
+    }
+    return;
+  }
+
+  // ── PHASE sealing — the seat snap + the model swap (bay pod → the REAL ridden cabin) + the door
+  //    AUTO-SEALS shut behind them, all under a brief seal dim (the door closing over the eye is the
+  //    correct launch-prep staging — the "nothing automatic" gate is on PROGRESSION [open/sit/eject];
+  //    the seal is the consequence of sitting). Then → eject (player-gated, no fallback).
+  if (phase === 'sealing') {
     const k = Math.min(1, (intro.scratch.t as number) / ENTER_SEAL_DUR);
+    setBayPodDoorOpen(1 - k);          // the door swings SHUT (auto-seal) as the dim covers the swap
     // a quick dip: dark in (0→0.5), then hold+lift as the cabin lights read (0.5→1).
     const dim = k < 0.5 ? (k / 0.5) : Math.max(0, 1 - (k - 0.5) / 0.5);
     setIntroBlack(dim * 0.9);
     if (!intro.scratch.swapped && k >= 0.5) {
-      ensureInPod(ctx);                  // build the REAL ridden cabin (offset frame) + seat the player
+      ensureInPod(ctx);                // build the REAL ridden cabin (offset frame) + seat the player
       // Frame CENTRED on the YELLOW eject control so the "Pull the eject lever" prompt POINTS at it
       // (buckle-lesson: a control the prompt names must be in the framed view, not shoved to the edge).
-      // The eject panel sits on the −X wall at az≈−1.97 (curve-seated left-forward); yaw=π/2 aimed
-      // dead −X, leaving the control jammed in the right third with the camera centred on empty wall +
-      // the hatch. yaw 1.20 / pitch −0.20 lands the guarded T-handle at screen centre (probe-verified).
+      // yaw 1.20 / pitch −0.20 lands the guarded T-handle at screen centre (probe-verified, unchanged).
       faceControl(ctx, 1.20, -0.20);   // frame the YELLOW eject control dead-centre (the next cue points at it)
       intro.scratch.swapped = true;
     }
     if (k >= 1) {
       setIntroBlack(0);
-      intro.scratch.phase = 'cue';
+      intro.scratch.phase = 'eject';
       intro.scratch.t = 0;
-      intro.mode = 'seated';
-      showIntroPrompt('Pull the eject lever  [click]');
+      intro.mode = 'seated';           // free-look, locomotion off — seated, sealed, ready to eject
+      showIntroPrompt('Pull the eject lever  [E / click]');
     }
     return;
   }
 
-  // phase 'cue' — seated in the sealed pod; pull the eject lever (or the anti-softlock fallback).
-  if (pulledLever(ctx) || (intro.scratch.t as number) > EJECT_FALLBACK) advanceBeat(ctx);   // → shipExplode
+  // ── PHASE eject — seated in the SEALED pod; pull the eject lever. PURELY PLAYER-GATED (E or click)
+  //    — the EJECT_FALLBACK auto-fire is REMOVED (the user: "nothing automatic; it waits").
+  if (pulledLever(ctx)) advanceBeat(ctx);   // → shipExplode
 }
 
 /** shipExplode beat (T0.3a → Phase 3 T3.2) — eject fires; the docked pod tears free; the pod is
@@ -1104,10 +1155,51 @@ export function updateEscapePodIntro(ctx: GameContext, dt: number): void {
   }
 }
 
+/** B2 — the SMOKE DRIVER for the player-gated enterPod flow. The smoke can't wait for real player
+ *  input, so it SYNTHESIZES the E-presses + the walk-in body motion to drive tickEnterPod through
+ *  ALL its gated phases (approach → E-open → walk in → E-sit → seal → E-eject), proving the gated
+ *  chain runs headlessly + leaving the beat at 'shipExplode' (whereupon the smoke loop's next
+ *  jumpToBeat is a harmless re-jump to the beat it already reached). Seeds ctx.input.pressed + the
+ *  camera look + the body position per phase; clears the synthesized press each iteration (there's
+ *  no main-loop endInputFrame in the smoke). Safe if the ship/bay aren't built (the gates just
+ *  won't fire — but the smoke jumps to shipExplode next regardless, so the count is preserved). */
+function driveEnterPodForSmoke(ctx: GameContext): void {
+  const pressE = () => { ctx.input.pressed.add('KeyE'); };
+  const clearE = () => { ctx.input.pressed.delete('KeyE'); };
+  const lookAt = (t: THREE.Vector3) => {
+    const cam = ctx.three.camera;
+    cam.rotation.order = 'YXZ';
+    cam.rotation.y = Math.atan2(t.x - cam.position.x, -(t.z - cam.position.z)) + Math.PI;   // yaw toward the target (−Z basis)
+  };
+  const setBody = (p: THREE.Vector3) => {
+    ctx.player.body.body.setTranslation({ x: p.x, y: p.y, z: p.z }, true);
+    ctx.three.camera.position.set(p.x, p.y + ctx.player.eyeOffset, p.z);
+  };
+  // guard: bail out after a bounded number of iterations so a wiring bug can't infinite-loop the smoke.
+  for (let i = 0; i < 200 && ctx.intro?.beat === 'enterPod'; i++) {
+    const phase = ctx.intro.scratch.phase as string;
+    if (phase === 'approach') {
+      setBody(getPodBayThreshold()); lookAt(getPodBayDoorWorld()); pressE();
+    } else if (phase === 'enter') {
+      // walk into the bore: teleport the body to the interior stand-point (real motion is proven by
+      //   the rig; the smoke just needs the gate to register "inside").
+      setBody(getPodBayInteriorStand());
+    } else if (phase === 'atSeat') {
+      lookAt(getPodBaySeatedEye()); pressE();
+    } else if (phase === 'eject') {
+      pressE();
+    }   // 'sealing' just needs time — tick through it
+    updateEscapePodIntro(ctx, 0.05);
+    clearE();
+  }
+}
+
 /** Dev smoke (T0.4b) — programmatically force every beat + tick it, confirming the whole
  *  sequence is wired (each controller ticks without throwing; the chain reaches the desert
  *  handoff). Returns {ok, beats, error?}. Exposed via `__game.smokeIntro()`. Leaves the game
- *  in the post-handoff state (a greybox crashed wreck at the spawn). */
+ *  in the post-handoff state (a greybox crashed wreck at the spawn). B2 — the enterPod beat is now
+ *  player-gated, so its 3 blind ticks would stall in 'approach'; driveEnterPodForSmoke synthesizes
+ *  the E-presses + walk-in so the gated flow is exercised end-to-end (still {ok, beats:12}). */
 export function smokeTestIntro(ctx: GameContext): { ok: boolean; beats: number; error?: string } {
   let beats = 0;
   try {
@@ -1117,6 +1209,7 @@ export function smokeTestIntro(ctx: GameContext): { ok: boolean; beats: number; 
       if (!introActive(ctx)) break;          // stepOut ends the intro mid-chain
       jumpToBeat(ctx, beat);
       for (let i = 0; i < 3; i++) updateEscapePodIntro(ctx, 0.05);
+      if (beat === 'enterPod') driveEnterPodForSmoke(ctx);   // B2 — drive the player-gated boarding through its phases
       beats++;
     }
     if (introActive(ctx)) endEscapePodIntro(ctx);

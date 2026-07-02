@@ -2953,6 +2953,91 @@ const SCENARIOS = {
     if (!r || !r.ok || r.beats !== 12) throw new Error(`smoke-intro GATE FAILED: ${JSON.stringify(r)}`);
   },
 
+  // B2 — THE PLAYER-GATED BOARDING WALK-IN PROOF (reuses the B1.f trapped-in-chair real-motion test
+  //   pattern: prove the walkable path with REAL KCC motion, not collider math). Drives the enterPod
+  //   beat LIVE: seats the player in the ship, jumps to enterPod, then (1) E-opens the closed door,
+  //   (2) drives real WASD → the KCC physically WALKS the player corridor → through the airlock
+  //   doorway → INTO the pod bore (sampling the body position each leg so we PROVE it traversed, not
+  //   teleported), (3) E-sits, and asserts the beat reached the sealed/eject phase. THROWS if the
+  //   walk-in path is blocked (the body never gets inside) so this gates like smoke-intro. No shot —
+  //   it's a motion proof; the console log reports the traversal.
+  'pod-walkin': async (page) => {
+    const log = await page.evaluate(async () => {
+      const g = window.__game;
+      const ctx = g.ctx;
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      const trace = [];
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      try { ctx.weather.intensity = 0; ctx.weather.cloudiness = 0; } catch {}
+      ctx.flags.paused = false;
+      ctx.input.controls.isLocked = true;   // isPlaying()===true → updatePlayer processes real KCC motion
+      try { g.skipIntro(); } catch {}
+      await sleep(200);
+      // seat in the ship (retry the cockpit jump until the reseat to y≈3000 takes).
+      g.startIntro();
+      g.jumpToBeat('cockpit');
+      for (let i = 0; i < 20; i++) { await sleep(120); if (ctx.player.body.body.translation().y > 2900) break; g.jumpToBeat('cockpit'); }
+      try { g.setSkyIntroMode(0); } catch {}
+      const sp = ctx.player.body.body.translation();
+      const SHIP = { x: sp.x, y: sp.y, z: sp.z };   // SHIP_ORIGIN.x/z (bridge spawn is at origin x/z)
+      // Position the player in the CORRIDOR, just fore of the bay opening (bay z-span ≈ +3.2..+6.4 on
+      //   the −X wall), on the +X side of the walkable tube, facing −X toward the docked pod door.
+      g.jumpToBeat('enterPod');
+      await sleep(150);
+      const startPos = { x: SHIP.x + 0.6, y: SHIP.y, z: SHIP.z + 4.8 };   // corridor, +X side, level with the bay
+      ctx.player.body.body.setTranslation(startPos, true);
+      ctx.player.cameraSnapNextFrame = true;
+      const cam = ctx.three.camera;
+      cam.rotation.order = 'YXZ';
+      cam.rotation.set(0, Math.PI / 2, 0);   // face −X (toward the docked pod door)
+      await sleep(200);
+      const p0 = ctx.player.body.body.translation();
+      trace.push({ leg: 'start(corridor)', phase: ctx.intro.scratch.phase, x: +(p0.x - SHIP.x).toFixed(2), z: +(p0.z - SHIP.z).toFixed(2) });
+      // (1) E-OPEN the door — inject E for a few ticks while looking at it (gaze gate).
+      let opened = false;
+      for (let i = 0; i < 20 && !opened; i++) {
+        ctx.input.pressed.add('KeyE');
+        await sleep(80);
+        opened = ctx.intro.scratch.phase === 'enter' || ctx.intro.scratch.phase === 'atSeat';
+      }
+      trace.push({ leg: 'after E-open', phase: ctx.intro.scratch.phase, doorOpened: opened });
+      // (2) WALK IN — hold W (real KCC) to walk −X through the doorway into the bore. Keys persist;
+      //     pressed is cleared each frame, so W drives sustained motion. Face −X the whole way.
+      ctx.input.keys['KeyW'] = true;
+      let insideAt = -1;
+      for (let i = 0; i < 40; i++) {
+        cam.rotation.set(0, Math.PI / 2, 0);   // keep facing −X so WASD forward = −X (into the pod)
+        await sleep(80);
+        const t = ctx.player.body.body.translation();
+        if (i % 8 === 0) trace.push({ leg: 'walking', tick: i, phase: ctx.intro.scratch.phase, x: +(t.x - SHIP.x).toFixed(2), z: +(t.z - SHIP.z).toFixed(2) });
+        if (ctx.intro.scratch.phase === 'atSeat' && insideAt < 0) { insideAt = i; break; }
+      }
+      ctx.input.keys['KeyW'] = false;
+      const pIn = ctx.player.body.body.translation();
+      const walkedInX = pIn.x - SHIP.x;   // should be well into −X (past the −1.0 wall line, toward the pod at −2.5)
+      trace.push({ leg: 'inside?', phase: ctx.intro.scratch.phase, x: +walkedInX.toFixed(2), z: +(pIn.z - SHIP.z).toFixed(2), insideAtTick: insideAt });
+      // (3) E-SIT — inject E while looking at the seat.
+      let seated = false;
+      for (let i = 0; i < 25 && !seated; i++) {
+        ctx.input.pressed.add('KeyE');
+        await sleep(80);
+        const ph = ctx.intro.scratch.phase;
+        seated = ph === 'sealing' || ph === 'eject' || ctx.intro.beat !== 'enterPod';
+      }
+      trace.push({ leg: 'after E-sit', beat: ctx.intro.beat, phase: ctx.intro.beat === 'enterPod' ? ctx.intro.scratch.phase : '(advanced)', seated });
+      return { trace, walkedInX, reachedInside: insideAt >= 0, seated };
+    });
+    console.log('[pod-walkin] ' + JSON.stringify(log.trace, null, 0));
+    console.log(`[pod-walkin] walkedInX=${log.walkedInX.toFixed(2)} reachedInside=${log.reachedInside} seated=${log.seated}`);
+    // GATE: the body must have physically walked PAST the −1.0 corridor-wall line into the bore
+    //   (x < −1.2 relative to SHIP_ORIGIN) via real KCC, reached the atSeat gate, and E-sit advanced it.
+    if (!log.reachedInside) throw new Error(`pod-walkin GATE FAILED: the player never walked INTO the pod (walkedInX=${log.walkedInX.toFixed(2)}, expected < −1.2). The walkable boarding path is blocked.`);
+    if (log.walkedInX > -1.2) throw new Error(`pod-walkin GATE FAILED: the body only reached x=${log.walkedInX.toFixed(2)} (expected < −1.2 inside the bore).`);
+    if (!log.seated) throw new Error(`pod-walkin GATE FAILED: E-sit did not seat/advance the beat.`);
+    console.log('[pod-walkin] GATE PASS — corridor → through the doorway → inside the pod → seated (real KCC motion).');
+  },
+
   // FLAG-OFF byte-identical GATE — a normal (no-intro) game save must write NO podCrash field, so
   // the live game is unaffected by this feature. enterLive already ran enterGame (a normal dev game,
   // NO intro/unify); we just save + assert the field is absent. THROWS on failure.

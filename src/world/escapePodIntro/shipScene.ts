@@ -392,13 +392,43 @@ const BAY_POD_X = -(COR_HW + BAY_RECESS * 0.52);   // pod centre X (well into th
 function _inBayGap(z: number): boolean { return z > BAY_Z0 - 0.05 && z < BAY_Z1 + 0.05; }
 
 // ── Static-collider specs for the CORRIDOR walkable shell (WYSIWYG — the KCC walks these). These
-//    are BYTE-IDENTICAL to the old greybox CORRIDOR_SPECS so collision + flow are unchanged.
+//    are BYTE-IDENTICAL to the old greybox CORRIDOR_SPECS so collision + flow are unchanged, EXCEPT
+//    the −X wall is now GAPPED at the escape-pod bay opening (B2 — the walkable boarding path): the
+//    old single −X wall [0.2,2.4,12,−1.1,1.2,8.6] spanned z 2.6..14.6; the bay mouth is z BAY_Z0..
+//    BAY_Z1 (3.2..6.4), so the wall is split into a FORE stub (z 2.6..3.2) + an AFT run (z 6.4..14.6)
+//    leaving the bay opening walkable. BAY_COLLIDERS (below) then wall off the recess + floor it so
+//    the player walks IN, not out of the world. (The +X wall + floor + ceiling are unchanged.)
+const _BAY_WALL_FORE_LEN = BAY_Z0 - COR_Z0;                 // 0.6 — corridor mouth → bay opening
+const _BAY_WALL_AFT_LEN = COR_Z1 - BAY_Z1;                  // 8.2 — bay opening end → dead-end
 const CORRIDOR_COLLIDERS: ReadonlyArray<BoxSpec> = [
   [2, 0.2, 12, 0, -0.1, 8.6],   // corridor floor  (top y=0)
   [2, 0.2, 12, 0, 2.5, 8.6],    // corridor ceiling (underside y=2.4)
   [0.2, 2.4, 12, 1.1, 1.2, 8.6], // +X wall (inner face x=1.0)
-  [0.2, 2.4, 12, -1.1, 1.2, 8.6],// −X wall (inner face x=−1.0)
+  // −X wall, GAPPED at the bay opening (B2 walkable boarding path) — a fore stub + an aft run.
+  [0.2, 2.4, _BAY_WALL_FORE_LEN, -1.1, 1.2, COR_Z0 + _BAY_WALL_FORE_LEN / 2],  // −X wall fore (z 2.6..3.2)
+  [0.2, 2.4, _BAY_WALL_AFT_LEN, -1.1, 1.2, BAY_Z1 + _BAY_WALL_AFT_LEN / 2],    // −X wall aft  (z 6.4..14.6)
   [2, 2.4, 0.2, 0, 1.2, 14.7],   // dead-end bulkhead (inner face z=14.6 — the disaster trigger)
+];
+
+// ── B2 — THE POD-BAY WALKABLE ENVELOPE (the boarding path). The player walks through the gapped
+//    −X wall into the docking recess and up INTO the pod. These box colliders floor + wall off the
+//    recess so they can't fall out of the world or slip behind the pod. WYSIWYG-matched to the bay
+//    shell geometry (buildPodBay): recess x −1.0..−3.9, z BAY_Z0..BAY_Z1, floor top y=0 (flush with
+//    the corridor deck — a seamless walk-in, no lip). The INTERIOR FLOOR sits inside the pod bore so
+//    the player stands where the seat is; the pod's own hull is a low ring wall (the pod is a
+//    noCollider prop, so the player would otherwise walk through it — these give it a walkable inside
+//    + a step-through door gap on the +X (door) side). Spec = [w,h,d, cx,cy,cz] LOCAL to SHIP_ORIGIN.
+const _BAY_RECESS_XC = (-COR_HW + (-COR_HW - BAY_RECESS)) / 2;   // −2.45 (recess centre X)
+const BAY_COLLIDERS: ReadonlyArray<BoxSpec> = [
+  // recess floor (flush with the corridor deck; spans the full recess + a touch under the doorway)
+  [BAY_RECESS + 0.1, 0.2, (BAY_Z1 - BAY_Z0) + 0.2, _BAY_RECESS_XC, -0.1, BAY_ZC],
+  // recess ceiling (caps the alcove so you can't jump out the top)
+  [BAY_RECESS + 0.1, 0.2, (BAY_Z1 - BAY_Z0) + 0.2, _BAY_RECESS_XC, COR_CH + 0.1, BAY_ZC],
+  // back wall of the recess (inner face at xFar = −3.9)
+  [0.2, COR_CH + 0.4, (BAY_Z1 - BAY_Z0) + 0.2, -COR_HW - BAY_RECESS - 0.1, COR_CH / 2, BAY_ZC],
+  // the two END walls closing the recess sides (so you can't slip fore/aft behind the pod)
+  [BAY_RECESS + 0.2, COR_CH + 0.4, 0.2, _BAY_RECESS_XC, COR_CH / 2, BAY_Z0 - 0.1],
+  [BAY_RECESS + 0.2, COR_CH + 0.4, 0.2, _BAY_RECESS_XC, COR_CH / 2, BAY_Z1 + 0.1],
 ];
 
 // ── Static-collider specs for the COCKPIT walkable shell (WYSIWYG — the KCC walks these).
@@ -1958,7 +1988,9 @@ export function buildShipScene(ctx: GameContext): void {
   //    colliders (unchanged from the greybox). setShipAlert/setEngineFire hooks stay wired.
   buildCorridor(group);
   buildPodBay(group);   // R5c — the docked escape pod in its bay at the bridge end (the flee target + the physical enter)
-  for (const [w, h, d, cx, cy, cz] of CORRIDOR_COLLIDERS) {
+  _bayPodBodies.length = 0;   // B2 — reset the docked-pod hull ring accumulator (idempotent rebuild)
+  _addBayPodColliders(ctx);   // B2 — the walkable pod hull ring (gapped at the door) so the player walks IN through the door, not through the hull
+  for (const [w, h, d, cx, cy, cz] of [...CORRIDOR_COLLIDERS, ...BAY_COLLIDERS]) {   // B2 — bay recess is now walkable (gapped −X wall + recess floor/walls)
     const col = makeStaticBox(
       ctx.physics.world,
       { x: w / 2, y: h / 2, z: d / 2 },
@@ -2555,6 +2587,54 @@ export function getPodBaySeatedEye(): THREE.Vector3 {
   return new THREE.Vector3(SHIP_ORIGIN.x + BAY_POD_X + 0.15, SHIP_ORIGIN.y + 1.34, SHIP_ORIGIN.z + BAY_ZC);
 }
 
+// ── B2 — THE PLAYER-GATED BOARDING SURFACES (the docked pod is now physically walked into, not
+//    scripted). World-space anchors the boarding flow (sequence.ts) gazes/gates against:
+/** World centre of the docked pod's front DOOR (on the +X arc, at door centre-height) — the E-OPEN
+ *  gaze/proximity target. */
+export function getPodBayDoorWorld(): THREE.Vector3 {
+  return new THREE.Vector3(SHIP_ORIGIN.x + BAY_POD_X + BAY_POD_R, SHIP_ORIGIN.y + CPOD_BAY_DOOR_CY, SHIP_ORIGIN.z + BAY_ZC);
+}
+/** World-space STANDING position just INSIDE the pod bore (where the player ends up after walking in
+ *  through the open door) — the "am I inside?" + the E-SIT proximity anchor (floor-level body pos). */
+export function getPodBayInteriorStand(): THREE.Vector3 {
+  return new THREE.Vector3(SHIP_ORIGIN.x + BAY_POD_X + 0.30, SHIP_ORIGIN.y, SHIP_ORIGIN.z + BAY_ZC);
+}
+/** The door-centre height on the canonical bay pod (mirrors podScene CPOD_DOOR_CY=1.08). Local. */
+const CPOD_BAY_DOOR_CY = 1.08;
+
+// B2 — the docked pod's walkable HULL RING colliders (gapped at the +X door). The pod mesh is a
+//   noCollider prop; without these the player would walk straight THROUGH the hull. This channels
+//   them through the DOOR opening into the bore (they stand on the recess floor at y=0). Baked
+//   world-space static (the docked pod never moves pre-eject; the release-shudder is cosmetic).
+const _bayPodBodies: RAPIER.RigidBody[] = [];
+function _addBayPodColliders(ctx: GameContext): void {
+  const cx = SHIP_ORIGIN.x + BAY_POD_X, cz = SHIP_ORIGIN.z + BAY_ZC;
+  const R = BAY_POD_R;
+  const wallColR = R - 0.06;                       // stop the player at the visible inner hull, not past it
+  const wallH = COR_CH;                            // full walk-height ring (floor→ceiling of the recess)
+  // the DOOR gap azimuth: +X arc (CPOD_DOOR_AZ = π/2 in the pod frame; dir = (sin,0,cos) → +X here).
+  const doorAz = Math.PI / 2;
+  const doorHalf = Math.min(Math.PI * 0.9, (1.02 / 2 + 0.10) / R);   // CPOD_DOOR_W=1.02 + clearance
+  const SEGN = 20;
+  const segLen = (Math.PI * 2) / SEGN;
+  const _up = new THREE.Vector3(0, 1, 0);
+  const _q = new THREE.Quaternion();
+  for (let i = 0; i < SEGN; i++) {
+    const az = i * segLen + segLen / 2;
+    let d = az - doorAz; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2;
+    if (Math.abs(d) < doorHalf) continue;          // leave the DOOR open (the walk-in gap)
+    const dir = new THREE.Vector3(Math.sin(az), 0, Math.cos(az));
+    const halfTangent = wallColR * Math.tan(segLen / 2) + 0.02;
+    _q.setFromAxisAngle(_up, az);
+    const col = makeStaticBox(ctx.physics.world,
+      { x: halfTangent, y: wallH / 2, z: 0.08 },
+      { x: cx + dir.x * wallColR, y: SHIP_ORIGIN.y + wallH / 2, z: cz + dir.z * wallColR },
+      { x: _q.x, y: _q.y, z: _q.z, w: _q.w });
+    const body = col.parent();
+    if (body) _bayPodBodies.push(body);
+  }
+}
+
 // B1.a — the docked pod's front DOOR pivot (so the boarding flow / release can reference it later).
 let _bayDoorPivot: THREE.Group | null = null;
 
@@ -3032,4 +3112,6 @@ export function disposeShipScene(ctx: GameContext): void {
   if (_cockpitEnv) { _cockpitEnv.dispose(); _cockpitEnv = null; }
   for (const body of shipBodies) ctx.physics.world.removeRigidBody(body);
   shipBodies.length = 0;
+  for (const body of _bayPodBodies) ctx.physics.world.removeRigidBody(body);   // B2 — the docked-pod hull ring colliders
+  _bayPodBodies.length = 0;
 }
