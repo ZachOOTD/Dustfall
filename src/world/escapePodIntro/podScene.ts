@@ -112,6 +112,7 @@ const _cabPaintOpts = {
   streakIntensity: 0.26, wearAmplitude: 0.38,   // a touch more plate-to-plate tonal break-up now that the base is darker (denting reads)
   fleckStrength: 0.55,           // moderate scuff scratches
   oxStrength: 0.10, oxHex: 0x5c5c58,            // sparse neutral patina (slightly stronger against the darker skin)
+  localSpace: true,   // the pod FALLS ~600m during the descent — pin the grime to the surface so it doesn't crawl (see hullMaterial.ts localSpace)
 } as const;
 // BACK-FACED aluminium shell — the curved wall + dome are viewed from INSIDE (back faces).
 const _cabShell = createRustedHullMaterial(_cabPaintOpts);
@@ -122,6 +123,7 @@ const _cabSteel = createRustedHullMaterial({
   baseColor: 0x40454b,           // COOL dark-grey steel (lifted a touch; value contrast vs bright skin)
   rustHex: 0x242830, streakIntensity: 0.26, wearAmplitude: 0.24,
   oxStrength: 0.08, oxHex: 0x55555a, seamRustStrength: 0.12,   // neutral grime (warm oxide stripped → no brown)
+  localSpace: true,   // pod falls during descent → pin grime (see hullMaterial.ts)
 });
 // Mid grey-aluminium ring/band metal (the riveted hoops) — lighter than the dark channel
 // so the latitude rings read as fitted RIVETED FRAMES, not dark drum-divisions (matches
@@ -131,6 +133,7 @@ const _cabBandOpts = {
   bareMetalHex: 0xd2d8dc,
   streakIntensity: 0.18, wearAmplitude: 0.26, fleckStrength: 0.6,
   oxStrength: 0.06, oxHex: 0x6a6a66, seamRustStrength: 0.10,   // near-clean: the hoops are the curvature read, keep them bright + cool
+  localSpace: true,   // pod falls during descent → pin grime (see hullMaterial.ts)
 } as const;
 const _cabBand = createRustedHullMaterial(_cabBandOpts);
 // BACK-FACED band for the riveted ring-frame hoops (open tubes seen from inside) — a
@@ -143,6 +146,7 @@ const _cabChannel = createRustedHullMaterial({
   baseColor: 0x363b41,           // cool near-charcoal steel
   rustHex: 0x222631,
   streakIntensity: 0.24, wearAmplitude: 0.22, oxStrength: 0.08, oxHex: 0x55555a, seamRustStrength: 0.12,
+  localSpace: true,   // pod falls during descent → pin grime (see hullMaterial.ts)
 });
 // Dedicated DoubleSide variant of the channel steel for the curved viewport bezel ring
 // (seen from both faces). A SEPARATE material so we never mutate the shared _cabChannel
@@ -158,6 +162,7 @@ _cabChannelBack.side = THREE.BackSide;
 const _cabRivet = createRustedHullMaterial({
   baseColor: 0x8d9094, rustHex: 0x3a3a3e, streakIntensity: 0.18,   // cool mid steel-grey studs (warm rivet read as brassy)
   oxStrength: 0.08, oxHex: 0x6a6a66, fleckStrength: 0.5,
+  localSpace: true,   // pod falls during descent → pin grime (see hullMaterial.ts)
 });
 // Conduit / cabling — dark matte near-black (lambert, flat).
 const _cabCable = new THREE.MeshLambertMaterial({ color: 0x201d18, flatShading: true });
@@ -166,6 +171,7 @@ const _cabDeck = createRustedHullMaterial({
   baseColor: 0x969a9e, bareMetalHex: 0xc4c9cc,
   streakIntensity: 0.18, wearAmplitude: 0.28, fleckStrength: 0.7,
   oxStrength: 0.08, oxHex: 0x66666a, seamRustStrength: 0.10,   // neutralised (deck was reading warm-tan under the lamp)
+  localSpace: true,   // pod falls during descent → pin grime (see hullMaterial.ts)
 });
 // Seat cushion — worn padded vinyl, a desaturated warm tan, slightly soft (lambert).
 const _cabSeat = new THREE.MeshLambertMaterial({ color: 0x6e6353, flatShading: true });
@@ -2494,6 +2500,7 @@ const _podPaint = createRustedHullMaterial({
   // (P5: the nose must read as the SAME weathered aluminium as the body, not plaster).
   dustStrength: 0.28, dustHex: 0xa89c84, chalkStrength: 0.16,
   oxDeepStrength: 0.28, seamRustStrength: 0.46, abrasionStrength: 0.62,  // drip-stain + sand-blast
+  localSpace: true,   // the exterior skin rides the descent/tumble in future work — pin the grime now (see hullMaterial.ts)
 });
 // Darker channel-steel material (porthole + hatch frames, rivet bands) — a value
 // contrast to the bright aluminium skin so the steel hardware reads as fitted-on.
@@ -2501,6 +2508,7 @@ const _podSteel = createRustedHullMaterial({
   baseColor: 0x4f4c46,           // dark warm-grey channel steel
   streakIntensity: 0.4, wearAmplitude: 0.3,
   oxStrength: 0.4, oxDeepStrength: 0.45, seamRustStrength: 0.45,
+  localSpace: true,   // pod rides the descent/tumble in future work — pin grime (see hullMaterial.ts)
 });
 // Rivets / studs / small hardware — mid steel-grey (reads as cast/forged fittings,
 // distinct from both the bright skin and the dark channel frames).
@@ -2508,6 +2516,7 @@ const _podFrameMat = createRustedHullMaterial({
   baseColor: 0x7d7a72,           // mid steel-grey hardware
   rustHex: 0x4a2810, streakIntensity: 0.3, oxStrength: 0.3, oxHex: 0x9a5a2e,
   oxDeepStrength: 0.3, seamRustStrength: 0.3, fleckStrength: 0.6,
+  localSpace: true,   // pod rides the descent/tumble in future work — pin grime (see hullMaterial.ts)
 });
 // Cables / antenna — dark matte, near-black.
 const _podCableMat = new THREE.MeshLambertMaterial({ color: Tuning.WRECK_ANTENNA_HEX, flatShading: true });
@@ -2524,6 +2533,7 @@ const _podScorchMat = createRustedHullMaterial({
   streakIntensity: 0.3, wearAmplitude: 0.35,
   oxStrength: 0.5, oxHex: 0x5e3a1e,     // burnt-umber discolouration zones
   oxTopStrength: 0.4, abrasionStrength: 0.3,
+  localSpace: true,   // pod rides the descent/tumble in future work — pin grime (see hullMaterial.ts)
 });
 // Riveted SEAM-BAND metal — a mid grey-aluminium tone (lighter than the dark
 // channel steel) so the latitude bands read as fitted RIVETED HOOPS, not as dark
@@ -2532,6 +2542,7 @@ const _podBandMat = createRustedHullMaterial({
   baseColor: 0x8c8d85,           // mid grey-aluminium band
   streakIntensity: 0.3, wearAmplitude: 0.34, fleckStrength: 0.7,
   oxStrength: 0.32, oxHex: 0x96602e, oxDeepStrength: 0.28, seamRustStrength: 0.3,
+  localSpace: true,   // pod rides the descent/tumble in future work — pin grime (see hullMaterial.ts)
 });
 // FLUSH cool porthole-echo BEZEL band-metal (Item 3) — the outer −Z porthole echo bezel read
 //   slightly WARM/detached at some angles because it wore the shared _podBandMat, whose warm
@@ -2543,6 +2554,7 @@ const _podPortholeBandMat = createRustedHullMaterial({
   bareMetalHex: 0xcdd0d0,
   streakIntensity: 0.24, wearAmplitude: 0.30, fleckStrength: 0.7,
   oxStrength: 0.14, oxHex: 0x6b6c66, oxDeepStrength: 0.12, seamRustStrength: 0.12,   // neutral COOL patina (no warm oxide → reads flush with the cool skin)
+  localSpace: true,   // pod rides the descent/tumble in future work — pin grime (see hullMaterial.ts)
 });
 // PRIED-OPEN HATCH DOOR — a distinctly LIGHTER bright-aluminium value so the
 // strippable salvage door POPS off the body (it's the tutorial target, must read
@@ -2552,6 +2564,7 @@ const _podDoorMat = createRustedHullMaterial({
   bareMetalHex: 0xe2e4e2,
   streakIntensity: 0.2, wearAmplitude: 0.34, fleckStrength: 1.0,
   oxStrength: 0.18, oxHex: 0x9a6a3e, abrasionStrength: 0.4,
+  localSpace: true,   // pod rides the descent/tumble in future work — pin grime (see hullMaterial.ts)
 });
 // Dark cavity (blown hatch interior + viewport glass void).
 const _podVoidMat = new THREE.MeshBasicMaterial({ color: 0x0a0908 });
