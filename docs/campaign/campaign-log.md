@@ -512,3 +512,14 @@ The user kept the loop running past feature-complete; each pass found + fixed re
 3. **CLUSTER D** — the SEAMLESS LANDING: the canonical pod through the fall + surface ("the exact same model the whole way"), unify at the CRASH, wake already in the real world, WALK OUT yourself (no teleport at stepOut), eased exposure (no "different instance" feel).
 4. Then: the user's remaining pod/landing feedback + the PERFORMANCE pass (phase-transition freezes/hitches).
 **Note:** the user's camera-anchor item had a garbled transcription tail — interpretation (reset view to the door/viewport at transitions) awaiting their confirm.
+
+---
+
+## ⏸ PAUSED (user break) — mid ship-fix queue (2026-07-02 evening)
+**Since the last pause:** B1 SHIPPED (`331a40e` — canonical pod + domed-porthole door + clean airlock entranceway + engine room behind glass + corridor clipping + THE CHAIR-TRAP FIX proven with real motion) + the door helper (`9dde5da`).
+**B2 (player-gated boarding) = a WIP CHECKPOINT** (see the B2 CHECKPOINT commit): implementation complete + tsc/smoke green, but the agent was stopped MID-PROOF — the real-KCC walk-in motion proof did not run. **ON RESUME: finish B2 verification first** (re-run the walk-in proof; review against the spec: E-open/walk-in/E-sit+seal/E-eject, no auto-fallbacks, camera anchors), fix anything it finds, THEN the queue continues:
+1. **Cockpit design round 2** (steering 2026-07-02: seamless COOL canopy sealing to the hull on all sides [not a flat pane], streamlined controls redesign, REMOVE + redesign the 2 side boxes).
+2. **CLUSTER C** — post-eject in-world ship-exterior+planet view (few seconds → slight fade → the explosion scene) + AUDIO gating (no desert wind/game music on the ship).
+3. **CLUSTER D** — the seamless landing (canonical pod through the fall + surface, unify at crash, walk out yourself, no teleport, eased exposure).
+4. The user's remaining pod/landing feedback + the PERFORMANCE pass.
+**Deliverable contract:** when ALL of it is done — final combined verify, REBUILD the 4173 preview, kill stray test servers/stale tasks, then ONE ready-to-test ping.
