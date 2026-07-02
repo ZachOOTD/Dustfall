@@ -496,3 +496,19 @@ The user kept the loop running past feature-complete; each pass found + fixed re
 - **Proofs:** stability (colliders 4× consecutive 40/40; placement full-count passes) + strictness (deliberately trimmed/blocked runs FAIL listing the exact missing combos). `verify:all` exit 0, now stricter.
 - Also this session: the intro preview server stood back up for the user (dist had the master build; rebuilt `--mode intro` + a `dustfall-intro-preview` launch.json entry, live at :4173).
 - **The user just played the full intro** → feedback incoming; the autonomous queue is now EMPTY — the user's feedback becomes the queue.
+
+---
+
+## ⏸ PAUSED (user restarting Claude) — the SHIP-FIX batch, mid-queue (2026-07-02)
+**SHIPPED this batch (all committed + pushed; the 4173 preview rebuilt with everything):**
+- Planet parallax fix (`f7a7d56`) — the planet no longer balloons as you walk (world-anchored).
+- Washed-out step-out (`c1a0489`) — the wake flood-lights now PARK at handoff + Continue (proven live; permanent lightsParked gate).
+- CLUSTER A cockpit (`41fe823`) — hull-true collision (1.13m clip → 0.21m max), furniture re-seated, ONE clean windscreen (multi-pane assembly deleted), chair per the user (harness DELETED, headrest flush, reclined backward, moved aft, collidable), console colliders, −67 meshes.
+- Descent texture-crawl (`89e63ff`) — pod grime pinned to OBJECT space (was world-space → slid during the fall; ~25x pinned; 13 pod materials; other wrecks byte-identical).
+
+**RESUME QUEUE (in order; all specs in steering-archive.md 2026-07-02 entries):**
+1. **CLUSTER B** — the bay ENTRANCEWAY (a distinct clean doorway/airlock, corridor language; kill the clamp-blocks/yellow-arch mess) + the CANONICAL POD as a shared module (interior+exterior+the MERGED GLASS FRONT DOOR — the viewport IS in the door) + the player-gated boarding flow (door CLOSED → E-open → walk in YOURSELF → E-seat → E-lever; NO auto-fallbacks; door SEALED through descent+crash) + camera re-anchors to the door/viewport at every beat transition/blackout + corridor clipping fixes (the vent @ the doorway, the left wall, a coplanar sweep) + bay-pod ribbing clipping + a REAL ENGINE ROOM behind a glass sliding door at the corridor end (fire inside, visible, unreachable).
+2. **CLUSTER C** — the post-eject IN-WORLD ship-exterior+planet view (a few seconds, then a slight fade → the explosion scene) + AUDIO gating (no desert wind/game music on the ship; intro-own audio only).
+3. **CLUSTER D** — the SEAMLESS LANDING: the canonical pod through the fall + surface ("the exact same model the whole way"), unify at the CRASH, wake already in the real world, WALK OUT yourself (no teleport at stepOut), eased exposure (no "different instance" feel).
+4. Then: the user's remaining pod/landing feedback + the PERFORMANCE pass (phase-transition freezes/hitches).
+**Note:** the user's camera-anchor item had a garbled transcription tail — interpretation (reset view to the door/viewport at transitions) awaiting their confirm.
