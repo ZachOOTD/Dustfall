@@ -478,3 +478,12 @@ The user kept the loop running past feature-complete; each pass found + fixed re
 - **`npm run preview:intro`** — a one-command LOCAL replacement for the dead Netlify preview: `tsc && vite build --mode intro` (a real production build with the intro ON via `.env.intro`, base `/` from the non-production-mode fallback) + `vite preview --mode intro` at http://localhost:4173/. No new deps (no cross-env — Vite mode files are Windows-safe).
 - **Verified:** the intro bundle inlines `escapePodIntro:!0` + root asset paths; serve → HTTP 200; **the master GitHub-Pages build is untouched** (`escapePodIntro:!1`, `/Dustfall/` base — the live site is safe).
 - Backlog + review brief updated. Remaining (user-side, optional): a new remote host if a shareable link is wanted — netlify.toml ports as-is.
+
+---
+
+## Cycle 49 — the persistent pod SURVIVES save/reload (2026-07-02 early)
+- **Real bug found by inspection + proven headlessly**: the unified enterable pod (the user's one-pod re-scope) is built only by the intro flow — never at boot — and save.ts only patches salvageables by id. So: step out → SAVE → CONTINUE ⇒ **the pod vanished** (geometry, walkable interior, salvage target, chute). Proven: `goneAfterTeardown:true`.
+- **Fix**: an additive optional `podCrash` save record + a pending-stash restore on Continue (the meteorCrash idiom; applied AFTER handoffToGame). Saved salvage state applied DIRECTLY (the id counter differs between sessions). The chute-pop payoff survives reload (popped → settled pose; unpopped → the tutorial driver re-homes to `salvage` so the gag still fires). Scattered scrap/cloth already persist generically.
+- **Proven end-to-end**: a REAL page reload + Continue click → the same pod at the same position, 20 walkable colliders, salvageable. Flag-off saves byte-identical (`hasPodCrash:false`). Old saves unaffected; NO SAVE_VERSION bump.
+- New rig gates: `smoke-pod-persistence` / `pod-persistence-reload` / `pod-persistence-flagoff` (throw on failure — CI-usable) + `__game.smokePodPersistence()`.
+- verify:all exit 0 + smokeIntro `{ok:true,beats:12}` + smokePodTutorial pass.

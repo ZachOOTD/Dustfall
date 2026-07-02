@@ -153,6 +153,22 @@ export function resetPodTutorial(): void {
   _cuedSalvage = false;
 }
 
+/** SAVE/LOAD — resume the tutorial driver after a Continue re-built the enterable pod
+ *  (restoreEnterablePod), so the comic chute-pop still fires on the pod's first pry post-reload.
+ *  On a fresh boot the module state is 'idle', which would kill the payoff button; this re-homes the
+ *  driver to the 'salvage' phase watching THIS pod's panel. No cues are (re)shown — the salvage cue
+ *  is already marked seen in localStorage from the pre-save session (maybeShowEventHint is a persisted
+ *  one-shot), so `_cuedSalvage=true` here suppresses a re-nag. Only meaningful when the chute has NOT
+ *  already popped (caller gates on that): a reload AFTER the payoff leaves the driver idle (nothing to
+ *  resume). `podX/podZ` = the re-built pod's world (x,z). */
+export function resumePodTutorialAfterRestore(podX: number, podZ: number): void {
+  _phase = 'salvage';   // watching for the pry → the chute-pop payoff (skip 'craft' — the pry is what matters)
+  _t = 1.0;             // past the salvage-cue delay so no cue timer fires
+  _cuedSalvage = true;  // the cue was shown pre-save (persisted one-shot) — don't re-nag
+  _podX = podX;
+  _podZ = podZ;
+}
+
 // (kept for a potential dev hook: the pod's world position the tutorial seeded around.)
 export function podTutorialAnchor(): THREE.Vector2 {
   return new THREE.Vector2(_podX, _podZ);

@@ -2827,6 +2827,96 @@ const SCENARIOS = {
     if (!r || !r.ok || r.beats !== 12) throw new Error(`smoke-intro GATE FAILED: ${JSON.stringify(r)}`);
   },
 
+  // FLAG-OFF byte-identical GATE — a normal (no-intro) game save must write NO podCrash field, so
+  // the live game is unaffected by this feature. enterLive already ran enterGame (a normal dev game,
+  // NO intro/unify); we just save + assert the field is absent. THROWS on failure.
+  'pod-persistence-flagoff': async (page) => {
+    const r = await page.evaluate(() => {
+      const g = window.__game;
+      const sv = g.saveGame();
+      const raw = localStorage.getItem('dustfall.save.v1');
+      const parsed = raw ? JSON.parse(raw) : {};
+      return { saveOk: sv.ok, hasPodCrash: 'podCrash' in parsed };
+    });
+    console.log(`[pod-persistence-flagoff] ${JSON.stringify(r)}`);
+    if (!r.saveOk || r.hasPodCrash) throw new Error(`FLAG-OFF GATE FAILED — a no-pod save wrote podCrash: ${JSON.stringify(r)}`);
+    console.log('[pod-persistence-flagoff] PASS — no podCrash in a normal (no-pod) save.');
+  },
+
+  // Pod-tutorial GATE — the craft→salvage→chute-pop loop, headless. Mirrors smoke-intro's gate.
+  'smoke-pod-tutorial': async (page) => {
+    const r = await page.evaluate(() => window.__game.smokePodTutorial());
+    console.log(`[smoke-pod-tutorial] ${JSON.stringify(r)}`);
+    if (!r || !r.ok) throw new Error(`smoke-pod-tutorial GATE FAILED: ${JSON.stringify(r)}`);
+  },
+
+  // SAVE/LOAD pod-persistence GATE — headless save→teardown→restore round-trip on the ONE walk-in
+  // pod. Proves (a) the bug (the pod is GONE after a fresh-boot teardown) and (b) the fix (the restore
+  // re-builds it with matching salvage/chute state). THROWS on failure so `--scenario=smoke-pod-
+  // persistence` exits non-zero (usable as a gate). No screenshot.
+  'smoke-pod-persistence': async (page) => {
+    const r = await page.evaluate(() => window.__game.smokePodPersistence());
+    console.log(`[smoke-pod-persistence] ${JSON.stringify(r)}`);
+    if (!r || !r.ok) throw new Error(`smoke-pod-persistence GATE FAILED: ${JSON.stringify(r)}`);
+  },
+
+  // END-TO-END pod persistence via a REAL page reload + Continue. Drives the intro to step-out (the
+  // ONE walk-in pod unifies + persists), SAVES, RELOADS the page (a genuine fresh boot — the pod is
+  // NOT re-built at boot), then clicks CONTINUE and asserts the pod is back. This is the strongest
+  // proof: it exercises the actual boot → onContinue → loadGameState → handoff → restore chain, not
+  // an in-page simulation. THROWS on failure.
+  'pod-persistence-reload': async (page) => {
+    // 1. Force-start the intro + drive the whole chain to step-out (unify the pod), then hand off.
+    const before = await page.evaluate(() => {
+      const g = window.__game;
+      const r = g.smokeIntro();   // runs the chain incl. tickStepOut → unifyEnterablePod; ends the intro
+      const pod = g.ctx.three.scene.getObjectByName('escapePodCabin');
+      let px = 0, pz = 0;
+      if (pod) { pod.updateMatrixWorld(true); const V = g.ctx.three.camera.position.constructor; const p = new V(); p.setFromMatrixPosition(pod.matrixWorld); px = +p.x.toFixed(2); pz = +p.z.toFixed(2); }
+      // save to the single slot (the exact menu Save path, minus UI)
+      const sv = g.saveGame();
+      const raw = localStorage.getItem('dustfall.save.v1');
+      const parsed = raw ? JSON.parse(raw) : {};
+      return { beats: r.beats, podPresent: !!pod, podAt: [px, pz], saveOk: sv.ok, hasPodCrash: !!parsed.podCrash };
+    });
+    console.log(`[pod-persistence-reload] before-reload: ${JSON.stringify(before)}`);
+    if (!before.podPresent || !before.saveOk || !before.hasPodCrash) {
+      throw new Error(`pod-persistence-reload SETUP FAILED (pod not built / not saved): ${JSON.stringify(before)}`);
+    }
+    // 2. REAL fresh boot — reload the page. (addInitScript re-pins the SAME seed each load, so the save
+    //    passes the seed check; it also re-sets seenIntro so no controls panel opens.)
+    await page.reload();
+    await page.waitForFunction(() => !!(window.__game && window.__game.ctx?.player?.rig), undefined, { timeout: 30000 });
+    // 3. Click the real CONTINUE button on the title overlay (drives main.ts onContinue →
+    //    loadGameState → handoffToGame → applyPendingPodCrashRestore).
+    const clicked = await page.evaluate(() => {
+      const btns = Array.from(document.querySelectorAll('button'));
+      const cont = btns.find((b) => (b.textContent || '').trim().toUpperCase() === 'CONTINUE');
+      if (!cont) return false;
+      cont.click();
+      return true;
+    });
+    if (!clicked) throw new Error('pod-persistence-reload: no CONTINUE button on the reloaded title (save missing?)');
+    await page.waitForTimeout(1200);   // let onContinue + the restore run
+    // 4. Assert the pod is BACK after the real reload + Continue.
+    const after = await page.evaluate(() => {
+      const g = window.__game;
+      const pod = g.ctx.three.scene.getObjectByName('escapePodCabin');
+      let px = 0, pz = 0;
+      if (pod) { pod.updateMatrixWorld(true); const V = g.ctx.three.camera.position.constructor; const p = new V(); p.setFromMatrixPosition(pod.matrixWorld); px = +p.x.toFixed(2); pz = +p.z.toFixed(2); }
+      const podSalvageable = (g.ctx.salvageables && g.ctx.salvageables.list || []).some((s) => s.kind === 'escape_pod');
+      // walkable colliders near the pod (floor + gapped wall ring) — the walk-in read survived
+      let podCols = 0;
+      if (pod) { const gy = g.ctx.terrain.heightAt(px, pz); g.ctx.physics.world.forEachCollider((c) => { const t = c.translation(); if (Math.hypot(t.x - px, t.z - pz) < 3.0 && Math.abs(t.y - gy) < 3.0) podCols++; }); }
+      return { podPresent: !!pod, podAt: [px, pz], podSalvageable, podCols, titleActive: !!g.ctx.flags.titleActive };
+    });
+    console.log(`[pod-persistence-reload] after-continue: ${JSON.stringify(after)}`);
+    if (!after.podPresent || !after.podSalvageable || after.podCols < 3) {
+      throw new Error(`pod-persistence-reload GATE FAILED — pod did NOT survive reload+Continue: ${JSON.stringify(after)}`);
+    }
+    console.log('[pod-persistence-reload] PASS — the walk-in pod survived save → reload → Continue.');
+  },
+
   'tree': async (page) => {
     const t = argv.time !== undefined ? Number(argv.time) : 0.42;
     const r = await page.evaluate((t) => {

@@ -114,6 +114,18 @@ frame). Verify headlessly (jumpToBeat away + read the value back).**
 - **Save**: `introComplete` (`ctx.intro?.beat==='done'`) prevents replay; save is blocked mid-intro;
   quit-mid-intro = reload = restart (per design). **Pause**: the `flags.paused` guard returns before
   the intro ticks + the time increment → all beat timers freeze.
+- **The persistent pod SURVIVES save/reload** (cycle 49): the walk-in pod is built by the intro flow
+  (never at boot), and `save.ts` only patches salvageables by id — so pre-fix, a post-intro Continue
+  silently LOST the pod. Now: an additive optional `podCrash` save record (`serializeEnterablePod` —
+  `{x,z,salvageRemaining,stripped,panelOpened,extractedIndices,chutePopped}`; null/absent for flag-off
+  or pre-step-out saves, NO SAVE_VERSION bump) + a pending-stash restore on Continue (the meteorCrash
+  idiom: `setPendingPodCrashRestore` in loadGameState → `applyPendingPodCrashRestore` in main.ts AFTER
+  `handoffToGame`, since the load runs before the handoff's world reset). Saved salvage state is applied
+  DIRECTLY to the fresh record (the registry id counter differs between sessions — never rely on the
+  generic by-id patch for intro-built objects). A popped chute restores to its settled pose; an unpopped
+  one re-homes the tutorial driver to `salvage` (`resumePodTutorialAfterRestore`) so the gag still fires
+  post-reload. Scattered scrap/cloth persist generically (`droppedPickups`). Rig gates:
+  `smoke-pod-persistence` / `pod-persistence-reload` / `pod-persistence-flagoff` (+ `__game.smokePodPersistence()`).
 
 ## Dev hooks + rig (verification — preview HANGS on the desert; use these)
 - Console (`__game`): `startIntro()` (force), `jumpToBeat('<beat>')`, `skipIntro()`, `smokeIntro()`

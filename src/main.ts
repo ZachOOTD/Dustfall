@@ -54,8 +54,8 @@ import { createInventory, updateInventoryInput } from './inventory/inventory.ts'
 import { updateInteraction } from './player/interaction.ts';
 import { updatePlayer } from './player/controller.ts';
 import { updateEscapePodIntro, updateIntroFogEase, startEscapePodIntro, introActive } from './world/escapePodIntro/sequence.ts';   // escape-pod intro (FEATURES.escapePodIntro) — T0.1 wires the new-game branch
-import { updatePodTutorial } from './world/escapePodIntro/podTutorial.ts';   // T4.3 — the post-handoff craft→salvage→chute-pop tutorial (self-guarded no-op unless running)
-import { updateChutePop } from './world/escapePodIntro/podScene.ts';   // T4.3 — the chute-pop inflate one-shot (no-op unless the chute is popping; driven always so dev/rig-shot also animates)
+import { updatePodTutorial, resumePodTutorialAfterRestore } from './world/escapePodIntro/podTutorial.ts';   // T4.3 — the post-handoff craft→salvage→chute-pop tutorial (self-guarded no-op unless running); resumePodTutorialAfterRestore — re-arm the payoff after a Continue re-built the pod
+import { updateChutePop, applyPendingPodCrashRestore } from './world/escapePodIntro/podScene.ts';   // T4.3 — the chute-pop inflate one-shot (no-op unless the chute is popping; driven always so dev/rig-shot also animates); applyPendingPodCrashRestore — re-build the ONE walk-in pod on Continue
 import { setGameHudHidden } from './world/escapePodIntro/introHud.ts';   // escape-pod intro — re-assert HUD-hide after handoff
 import { FEATURES } from './config/features.ts';
 import { createShelterRegistry, updateShelter } from './shelter/shelterZones.ts';
@@ -852,6 +852,12 @@ const titleOverlay = createTitleOverlay(ctx, {
     ctx.flags.devMode = false;
     handoffToGame();
     applyPendingCrashRestore(ctx);   // ACBE (D1) — re-spawn saved crash sites AFTER handoff's reset cleared in-session ones
+    // escape-pod intro — re-build the ONE walk-in pod AFTER handoff (it's built only by the intro,
+    //   never at boot; no-op with an empty stash → flag-off/pre-feature saves unaffected). If the
+    //   comic chute hadn't yet popped, resume the tutorial driver so it still fires on the first
+    //   post-reload pry (a fresh boot leaves the driver idle, which would silently kill the payoff).
+    const podRestore = applyPendingPodCrashRestore(ctx);
+    if (podRestore && !podRestore.chutePopped) resumePodTutorialAfterRestore(podRestore.x, podRestore.z);
   } : undefined,
   // AAX — DEV MODE button. Pre-AAX this set a localStorage flag + cleared
   // the save + reloaded; the boot-time loadout block then fired from the

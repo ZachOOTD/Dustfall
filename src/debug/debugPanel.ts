@@ -20,7 +20,7 @@ import { fireSignalFlare, advanceSignalFlares, activeSignalFlareCount } from '..
 import { damageVulture } from '../enemies/vulture.ts';
 import { applyLungePose, applyMeshTransform } from '../enemies/sandWorm.ts';   // M12 ⓖ (C66) — __game.poseLunge (dive render)
 import { startEscapePodIntro, endEscapePodIntro, jumpToBeat as jumpToIntroBeat, smokeTestIntro, type BeatId } from '../world/escapePodIntro/sequence.ts';   // escape-pod intro — __game.startIntro/skipIntro/jumpToBeat/smokeIntro
-import { placeCrashedPodWreck, setDescentProgress as setPodDescent, setParachuteLeverPull as setPodChute, setCabinCrashPose as setPodCrashPose, blowCabinHatch as blowPodHatch, popChute as popPodChute, buildPodScene as buildPodSceneDbg, getPodSpawn as getPodSpawnDbg } from '../world/escapePodIntro/podScene.ts';   // T1.1/T1.2 · R3a · T4.3 · T3.2 — __game.placeCrashedPod / setDescentProgress / … / buildPodOrbit (explosion rig-shot: build+seat the pod at the orbit frame)
+import { placeCrashedPodWreck, setDescentProgress as setPodDescent, setParachuteLeverPull as setPodChute, setCabinCrashPose as setPodCrashPose, blowCabinHatch as blowPodHatch, popChute as popPodChute, buildPodScene as buildPodSceneDbg, getPodSpawn as getPodSpawnDbg, disposePodScene, podIsEnterable, getCrashedPodSalvageableId as getPodSalvageId, chutePopReady, setPendingPodCrashRestore, applyPendingPodCrashRestore } from '../world/escapePodIntro/podScene.ts';   // T1.1/T1.2 · R3a · T4.3 · T3.2 — __game.placeCrashedPod / … ; + smokePodPersistence deps (save→wipe→restore round-trip)
 import { smokePodTutorial } from '../world/escapePodIntro/podTutorial.ts';   // T4.3 — __game.smokePodTutorial (drive the craft→salvage→chute-pop loop headlessly)
 import { buildHaulerExterior, disposeHaulerExterior, setHaulerExplosion } from '../world/escapePodIntro/haulerScene.ts';   // T3.1/T3.2 — __game.buildHauler / disposeHauler / setHaulerExplosion (hauler-exterior + explosion rig-shots)
 import { setCockpitAlert as setShipCockpitAlert, setShipAlert as setShipRedAlert, setEngineFire as setShipEngineFire } from '../world/escapePodIntro/shipScene.ts';   // T3.3/T3.4 — __game.setCockpitAlert / setShipAlert / setEngineFire (alert escalation + the disaster rig-shot)
@@ -82,6 +82,25 @@ interface DebugApi {
   popChute: (advanceSeconds?: number) => void;
   /** Escape-pod T4.3 — smoke the whole craft→salvage→chute-pop tutorial loop headlessly. */
   smokePodTutorial: () => ReturnType<typeof smokePodTutorial>;
+  /** Write the game to the single save slot (dev/rig — the menu Save path without the UI).
+   *  Used by the pod-persistence-reload rig scenario to save mid-game before a page reload. */
+  saveGame: () => { ok: boolean; error?: string };
+  /** Escape-pod SAVE/LOAD — smoke the enterable-pod persistence round-trip headlessly:
+   *  run the intro to step-out (unify the ONE walk-in pod), mutate its salvage/chute state, SAVE,
+   *  simulate a fresh-boot teardown (disposePodScene → the pod is gone, PROVING the bug), then run
+   *  the restore path (setPending + applyPending) and assert the pod is back with matching state.
+   *  Returns a per-stage pass report. Guards this fix against silent regression. */
+  smokePodPersistence: () => {
+    ok: boolean;
+    builtBeforeSave: boolean;
+    savedPodCrash: boolean;
+    goneAfterTeardown: boolean;
+    rebuiltAfterRestore: boolean;
+    salvageMatches: boolean;
+    chuteMatches: boolean;
+    exposureRestored: boolean;
+    error?: string;
+  };
   /** Escape-pod T3.1 — build the HERO cargo-hauler exterior in front of the pod (the
    *  ship the player fled, seen through the porthole at shipExplode). For the hauler rig-shot. */
   buildHauler: () => void;
@@ -313,7 +332,75 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
     setCabinCrashPose: (pose) => { setPodCrashPose(pose); },
     blowCabinHatch: (t) => { blowPodHatch(t); },
     popChute: (advanceSeconds) => { popPodChute(advanceSeconds); },
+    saveGame: () => saveGameState(ctx),
     smokePodTutorial: () => smokePodTutorial(ctx),
+    smokePodPersistence: () => {
+      const report = {
+        ok: false, builtBeforeSave: false, savedPodCrash: false, goneAfterTeardown: false,
+        rebuiltAfterRestore: false, salvageMatches: false, chuteMatches: false, exposureRestored: false,
+      } as ReturnType<NonNullable<Window['__game']>['smokePodPersistence']>;
+      try {
+        // 1. Drive the REAL intro to step-out — smokeTestIntro runs the whole chain incl. tickStepOut's
+        //    unifyEnterablePod, leaving the ONE walk-in pod built + persisting (podIsEnterable()).
+        smokeTestIntro(ctx);
+        report.builtBeforeSave = podIsEnterable() && !!ctx.three.scene.getObjectByName('escapePodCabin');
+        // Mutate the salvage state so the round-trip proves state (not just presence) survives:
+        //   knock salvageRemaining down + pry the panel + pop the chute.
+        const podId = getPodSalvageId();
+        const rec = podId >= 0 ? ctx.salvageables.list.find((s) => s.id === podId) : undefined;
+        if (rec) {
+          rec.salvageRemaining = 2;
+          const comps = (rec.panel.userData.panelComponents as Array<{ visible: boolean }> | undefined) ?? [];
+          if (comps[0]) comps[0].visible = false;   // one component extracted (WYSIWYG)
+          rec.panel.userData.panelOpened = true;
+        }
+        if (chutePopReady()) popPodChute(2.5);   // burst the comic chute (its state must round-trip)
+        const wantRemaining = rec ? rec.salvageRemaining : -1;
+        const wantChutePopped = !chutePopReady();   // popped → chutePopReady() is now false
+
+        // 2. SAVE → localStorage, then read the podCrash record back out of the written blob.
+        saveGameState(ctx);
+        const raw = localStorage.getItem('dustfall.save.v1');
+        const parsed = raw ? JSON.parse(raw) : {};
+        report.savedPodCrash = !!parsed.podCrash
+          && Math.abs(parsed.podCrash.salvageRemaining - wantRemaining) < 0.5
+          && parsed.podCrash.chutePopped === wantChutePopped
+          && parsed.podCrash.panelOpened === true;
+
+        // 3. Simulate the FRESH-BOOT teardown: the pod is NOT re-built at boot (only the intro builds
+        //    it). disposePodScene tears down the runtime pod exactly as a fresh page would have none.
+        //    THIS is the bug: without a restore, the pod is now GONE forever on Continue.
+        disposePodScene(ctx);
+        report.goneAfterTeardown = !podIsEnterable() && !ctx.three.scene.getObjectByName('escapePodCabin');
+
+        // 4. RUN THE FIX: stash the saved podCrash + apply it (the exact main.ts onContinue path).
+        setPendingPodCrashRestore(parsed.podCrash ?? null);
+        const restored = applyPendingPodCrashRestore(ctx);
+        report.rebuiltAfterRestore = podIsEnterable() && !!ctx.three.scene.getObjectByName('escapePodCabin');
+        const newId = getPodSalvageId();
+        const newRec = newId >= 0 ? ctx.salvageables.list.find((s) => s.id === newId) : undefined;
+        report.salvageMatches = !!newRec
+          && Math.abs(newRec.salvageRemaining - wantRemaining) < 0.5
+          && newRec.panel.userData.panelOpened === true
+          && (((newRec.panel.userData.panelComponents as Array<{ visible: boolean }> | undefined) ?? [])[0]?.visible === false);
+        // the chute was popped pre-save → restore must leave it popped (chutePopReady() false), and
+        //   applyPendingPodCrashRestore reports it so main.ts skips the tutorial resume.
+        report.chuteMatches = !chutePopReady() && !!restored && restored.chutePopped === wantChutePopped;
+
+        // STATE-RESTORE discipline (architecture doc): the restore must NOT leak the intro's lifted
+        //   cabin exposure into the loaded game. unifyEnterablePod transiently sets the crash-pose
+        //   lift while building, then restores the desert-base 1.05 — assert it landed at base.
+        report.exposureRestored = Math.abs(ctx.three.renderer.toneMappingExposure - 1.05) < 0.001;
+
+        report.ok = report.builtBeforeSave && report.savedPodCrash && report.goneAfterTeardown
+          && report.rebuiltAfterRestore && report.salvageMatches && report.chuteMatches
+          && report.exposureRestored;
+        return report;
+      } catch (e) {
+        report.error = e instanceof Error ? e.message : String(e);
+        return report;
+      }
+    },
     buildHauler: () => { buildHaulerExterior(ctx); },
     disposeHauler: () => { disposeHaulerExterior(ctx); },
     setHaulerExplosion: (t) => { setHaulerExplosion(t); },

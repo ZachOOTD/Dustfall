@@ -20,6 +20,7 @@ import { despawnPickup, spawnDroppedPickup } from '../pickups/pickups.ts';
 import { harvestCactus } from '../world/cactus.ts';
 import { markSalvageStripped } from '../world/salvage.ts';
 import { serializeCrashes, setPendingCrashRestore, type SavedCrash } from '../world/meteorCrash.ts';   // ACBE (D1) — crash-site persistence
+import { serializeEnterablePod, setPendingPodCrashRestore, type SavedPodCrash } from '../world/escapePodIntro/podScene.ts';   // escape-pod intro — the ONE walk-in pod is built only by the intro (not at boot), so Continue must re-build it from the save
 import {
   applyDeadPose,
   lootLizard,
@@ -316,6 +317,16 @@ export interface SaveV1 {
    *  replays the intro regardless — this field documents + future-proofs that invariant. */
   introComplete?: boolean;
 
+  /** Escape-pod intro — the ONE enterable crashed pod (the walk-in landmark the intro's stepOut
+   *  builds via unifyEnterablePod). It is NOT re-derived at boot (only the intro flow builds it, and
+   *  Continue never runs the intro), so unlike deterministic world objects it must be RE-BUILT from
+   *  this record on load. Additive + optional (NO version bump — follows the introComplete/D81
+   *  precedent): absent on pre-feature saves + on any save written before the pod was unified (or with
+   *  the feature flag off) → no pod restored (unchanged behaviour). Carries the placement (x,z) + the
+   *  salvage/pried/chute state so a reload is WYSIWYG. Restored AFTER handoffToGame (like crashes[]),
+   *  since the load runs before handoff's reset. */
+  podCrash?: SavedPodCrash;
+
   /** Hover speeder pose. Optional so v1 saves written before this field
    *  was added still load cleanly (the speeder just stays at the default
    *  position from setupOpeningScene). */
@@ -590,6 +601,10 @@ export function saveGameState(ctx: GameContext): { ok: boolean; error?: string }
       // Escape-pod intro (T0.1) — additive, no version bump. True unless mid-intro (and the
       // menu Save is blocked mid-intro, so a written save always records true).
       introComplete: ctx.intro ? ctx.intro.beat === 'done' : true,
+      // Escape-pod intro — the ONE enterable pod's crash record (or omit if there's no walk-in pod:
+      // flag-off games, or an intro that never reached step-out). serializeEnterablePod returns null
+      // in those cases → the field is absent → byte-identical to a game without the pod.
+      ...(() => { const pc = serializeEnterablePod(ctx); return pc ? { podCrash: pc } : {}; })(),
       sleds: ctx.sleds.list.map((s) => {
         const tr = s.body.translation();
         return {
@@ -1362,6 +1377,13 @@ export function loadGameState(ctx: GameContext): { ok: boolean; error?: string }
   // handoffToGame (whose resetMeteorCrash clears in-session sites; load runs before that, so
   // restoring here would be wiped). Pre-v15 saves have no `crashes` → an empty stash.
   setPendingCrashRestore(save.crashes ?? []);
+
+  // Escape-pod intro — STASH the enterable-pod crash record; main.ts onContinue applies it right
+  // AFTER handoffToGame (same reason as crashes[]: the pod is a real-world object that must be built
+  // AFTER the handoff's world reset, not mid-load). Absent on pre-feature / flag-off / pre-step-out
+  // saves → an empty stash → no pod restored (unchanged behaviour). This is what makes the ONE walk-in
+  // pod survive save → quit → Continue (it isn't re-built at boot — only the intro builds it).
+  setPendingPodCrashRestore(save.podCrash ?? null);
 
   return { ok: true };
 }

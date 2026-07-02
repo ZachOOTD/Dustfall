@@ -29,7 +29,7 @@ import { makeStaticBox, attachCompoundCollider } from '../../physics/bodies.ts';
 import { Tuning } from '../../config/tuning.ts';
 import { createRustedHullMaterial } from '../hullMaterial.ts';
 import { addAccessPanel } from '../wrecks.ts';                                   // T4.3 — the crashed pod's REAL salvage panel (the first-salvage tutorial target)
-import { registerSalvageable } from '../salvage.ts';                            // T4.3 — register the pod as a machete-salvageable
+import { registerSalvageable, markSalvageStripped } from '../salvage.ts';       // T4.3 — register the pod as a machete-salvageable; markSalvageStripped — restore stripped state on load
 import { makeRng } from '../../core/rng.ts';                                    // T4.3 — deterministic position-seeded rng for the pod's salvage roll
 import { playChutePop } from '../../audio/audio.ts';                            // T4.3 — the comic chute-pop FWOOMP
 
@@ -1171,6 +1171,10 @@ export function blowCabinHatch(t: number): void {
 let _podEnterable = false;              // true once the cabin has been unified into the walk-in pod (persists into the game)
 let _enterableExteriorRoot: THREE.Group | null = null;  // the exterior-skin subtree added to podGroup
 let _enterableBerm: THREE.Mesh | null = null;
+// SAVE/LOAD (persistence fix) — the unified pod's world (x,z) placement, captured at unify so the
+//   save can record it + a fresh-boot Continue can re-build the pod (which isn't rebuilt at boot —
+//   only the intro flow builds it, and Continue never runs the intro). Null until unified.
+let _enterablePodXZ: { x: number; z: number } | null = null;
 
 /** Is the crashed pod currently the unified WALK-IN structure (exterior skin + walkable colliders,
  *  persisting into the real game)? */
@@ -1454,6 +1458,7 @@ export function unifyEnterablePod(ctx: GameContext, x: number, z: number): { x: 
   // (7) a displaced-sand berm banked against the buried foot so the dune swallows the base cleanly.
   _addEnterableBerm(ctx, x, z, gy);
   _podEnterable = true;
+  _enterablePodXZ = { x, z };   // SAVE/LOAD — record the placement so the save can persist + re-build it on Continue
   return { x, z };
 }
 
@@ -1497,6 +1502,109 @@ function _addEnterableBerm(ctx: GameContext, x: number, z: number, gy: number): 
   berm.castShadow = false;
   _enterableBerm = berm;
   ctx.three.scene.add(berm);
+}
+
+// ─── SAVE/LOAD — the enterable pod is a PERSISTENT world object built ONLY by the intro's stepOut
+//    (unifyEnterablePod), NOT re-derived at boot. So Continue (which never runs the intro) must
+//    re-build it from a saved record + re-apply its salvage/chute state. serializeEnterablePod reads
+//    that state for the save; restoreEnterablePod re-builds the pod on load. Both no-op / return null
+//    when the pod isn't present, so a flag-off game (no unify ever) writes nothing + restores nothing.
+
+/** The saved additive pod-crash record. Optional in the save (older saves omit it → no pod restore,
+ *  matching the `introComplete` additive precedent — NO SAVE_VERSION bump). */
+export interface SavedPodCrash {
+  x: number;
+  z: number;
+  salvageRemaining: number;
+  stripped: boolean;
+  panelOpened: boolean;
+  extractedIndices: number[];
+  chutePopped: boolean;
+}
+
+/** Read the enterable pod's current crash state for the save. Returns null when there is no unified
+ *  walk-in pod (flag-off games, or an intro that never reached step-out) → the save writes no
+ *  podCrash field (additive/optional). State is read from the pod's salvageable record + panel +
+ *  the chute-pop module state, so it is WYSIWYG on reload (the exact visible/pried/popped set). */
+export function serializeEnterablePod(ctx: GameContext): SavedPodCrash | null {
+  if (!_podEnterable || !_enterablePodXZ) return null;
+  const rec = crashedPodSalvageableId >= 0
+    ? ctx.salvageables.list.find((s) => s.id === crashedPodSalvageableId)
+    : undefined;
+  const panel = rec?.panel;
+  const comps = (panel?.userData.panelComponents as Array<{ visible: boolean }> | undefined) ?? [];
+  return {
+    x: _enterablePodXZ.x,
+    z: _enterablePodXZ.z,
+    salvageRemaining: rec?.salvageRemaining ?? 0,
+    stripped: rec?.stripped ?? false,
+    panelOpened: panel ? panel.userData.panelOpened === true : false,
+    // ACAX WYSIWYG — which interior components are GONE (extracted OR condition-surplus).
+    extractedIndices: comps.flatMap((c, i) => (c.visible ? [] : [i])),
+    // the comic chute has already burst (popped once) if the pop clock has been started (>=0).
+    chutePopped: chutePopT >= 0,
+  };
+}
+
+/** Re-build the enterable pod on load from a saved record, WITHOUT the intro running (Continue never
+ *  runs the intro). Builds the cabin + exterior skin + walkable colliders + salvage panel + chute
+ *  (reusing unifyEnterablePod's machinery), then applies the saved salvage/pried/chute state DIRECTLY
+ *  to the pod's fresh salvageable record (the id counter differs between sessions, so the generic
+ *  by-id patch in save.ts cannot reach it — we apply here off crashedPodSalvageableId). No-op if the
+ *  pod is already built (defensive — a re-entered intro or a double-restore). This is a real-world
+ *  handoff: unifyEnterablePod already restores the desert-base exposure + sets no intro state, so it
+ *  leaks nothing (exposure/fog/HUD stay the loaded game's — STATE-RESTORE discipline). */
+export function restoreEnterablePod(ctx: GameContext, saved: SavedPodCrash): void {
+  if (_podEnterable) return;   // already present (shouldn't happen on a fresh Continue boot)
+  // Build the ONE walk-in pod at the saved (x,z). unifyEnterablePod builds the cabin if needed
+  //   (podGroup null on a fresh boot), wraps the skin, grounds it, adds colliders, registers the
+  //   salvage panel + arms the chute-pop, and sets _podEnterable + _enterablePodXZ.
+  unifyEnterablePod(ctx, saved.x, saved.z);
+  // Apply the saved salvage state DIRECTLY to the just-registered record (NOT via the generic
+  //   by-id patch — the id counter differs between sessions). crashedPodSalvageableId now points at
+  //   the fresh record from unify's _registerEnterablePodSalvage.
+  const rec = crashedPodSalvageableId >= 0
+    ? ctx.salvageables.list.find((s) => s.id === crashedPodSalvageableId)
+    : undefined;
+  if (rec) {
+    rec.salvageRemaining = saved.salvageRemaining;
+    if (saved.stripped) markSalvageStripped(rec);
+    const panel = rec.panel;
+    // re-hide the components that were gone at save (extracted + condition-surplus) so the visible
+    //   set matches salvageRemaining (WYSIWYG) — mirrors the save.ts salvageables restore.
+    const comps = (panel.userData.panelComponents as Array<{ visible: boolean }> | undefined) ?? [];
+    for (const idx of saved.extractedIndices) { if (comps[idx]) comps[idx].visible = false; }
+    // if the panel was already pried open, restore the opened door state (updatePanelDoors keeps
+    //   it open thereafter — it reads panelOpened + panelDoorTarget).
+    if (saved.panelOpened) {
+      panel.userData.panelOpened = true;
+      panel.userData.panelDoorTarget = Tuning.SALVAGE_PANEL_DOOR_OPEN_ANGLE;
+      panel.userData.panelDoorAngle = Tuning.SALVAGE_PANEL_DOOR_OPEN_ANGLE;
+    }
+  }
+  // if the comic chute had already burst before save, restore it to its settled popped pose
+  //   INSTANTLY (popChute(advanceSeconds) drives the inflate/settle synchronously). armChutePop
+  //   built a fresh folded canopy inside unify; pop it to the end state so a reload shows the gag
+  //   already deployed (not re-triggering it).
+  if (saved.chutePopped) popChute(CHUTE_POP_DUR + 0.5);
+}
+
+// Load order (mirrors meteorCrash's pending-restore): onContinue runs loadGameState (which stashes
+//   here) THEN handoffToGame (whose world resets run). We can't restore inside loadGameState — it'd
+//   run before the handoff. So loadGameState stashes the saved podCrash; main.ts applies it right
+//   AFTER the handoff via applyPendingPodCrashRestore.
+let _pendingPodCrash: SavedPodCrash | null = null;
+export function setPendingPodCrashRestore(saved: SavedPodCrash | null): void { _pendingPodCrash = saved; }
+/** Apply the stashed pod-crash restore (called by main.ts right after handoffToGame on Continue).
+ *  Returns the re-built pod's placement + whether its comic chute already popped, so main.ts can
+ *  resume the pod tutorial driver (fire the chute-pop on a first post-reload pry) WITHOUT this module
+ *  importing podTutorial (which imports us — avoids a cycle). Null when there was nothing to restore. */
+export function applyPendingPodCrashRestore(ctx: GameContext): { x: number; z: number; chutePopped: boolean } | null {
+  const p = _pendingPodCrash;
+  _pendingPodCrash = null;
+  if (!p) return null;
+  restoreEnterablePod(ctx, p);
+  return { x: p.x, z: p.z, chutePopped: p.chutePopped };
 }
 
 // ─── RE-ENTRY FX (Phase 2 / T2.2 — the violent atmospheric-entry climax) ──────
@@ -2052,6 +2160,7 @@ export function disposePodScene(ctx: GameContext): void {
   crashedWreck = null;
   _enterableExteriorRoot = null;
   _podEnterable = false;
+  _enterablePodXZ = null;   // SAVE/LOAD — the pod is torn down; no placement to persist
   for (const body of podBodies) ctx.physics.world.removeRigidBody(body);
   podBodies.length = 0;
 }
