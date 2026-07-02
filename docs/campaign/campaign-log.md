@@ -487,3 +487,12 @@ The user kept the loop running past feature-complete; each pass found + fixed re
 - **Proven end-to-end**: a REAL page reload + Continue click → the same pod at the same position, 20 walkable colliders, salvageable. Flag-off saves byte-identical (`hasPodCrash:false`). Old saves unaffected; NO SAVE_VERSION bump.
 - New rig gates: `smoke-pod-persistence` / `pod-persistence-reload` / `pod-persistence-flagoff` (throw on failure — CI-usable) + `__game.smokePodPersistence()`.
 - verify:all exit 0 + smokeIntro `{ok:true,beats:12}` + smokePodTutorial pass.
+
+---
+
+## Cycle 50 — hardened the flaky verify gates (2026-07-02)
+- **Root cause:** a headless-boot race — rig-shot's shared boot `waitForFunction` (30s) can time out on a cold swiftshader boot → zero audit lines → a false FAIL ("NO AUDIT LINES"). No LIVE masking bug (colliders is atomic all-or-nothing; placement already failed on a missing seed) — but the latent under-count gap is closed.
+- **Fixes (scripts only):** strict expected counts (colliders 8×5=40 rows; placement names never-audited seeds) — a gate can never pass under-counted; a bounded SINGLE retry fires only on a zero/partial harvest (a real fails>0 run is never retried away); root waits bumped (domcontentloaded + 30→45s).
+- **Proofs:** stability (colliders 4× consecutive 40/40; placement full-count passes) + strictness (deliberately trimmed/blocked runs FAIL listing the exact missing combos). `verify:all` exit 0, now stricter.
+- Also this session: the intro preview server stood back up for the user (dist had the master build; rebuilt `--mode intro` + a `dustfall-intro-preview` launch.json entry, live at :4173).
+- **The user just played the full intro** → feedback incoming; the autonomous queue is now EMPTY — the user's feedback becomes the queue.

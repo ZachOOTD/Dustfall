@@ -4988,8 +4988,15 @@ async function main() {
       try { localStorage.setItem('dustfall.pendingSeed', String(seed)); } catch { /* ignore */ }
     }, Number(argv.seed ?? 1337));
     await page.goto(`http://127.0.0.1:${PORT}/`);
-    // Wait for the rig to exist (Rapier WASM + boot done).
-    await page.waitForFunction(() => !!(window.__game && window.__game.ctx?.player?.rig), undefined, { timeout: 30000 });
+    // Ensure the document is parsed before we poll for __game — under swiftshader the
+    // first WebGL context creation can lag, and polling before DOM-ready can catch a
+    // half-initialised window (the boot-race root the verify:* gates retry around).
+    await page.waitForLoadState('domcontentloaded').catch(() => {});
+    // Wait for the rig to exist (Rapier WASM + boot done). 45s (up from 30s): the
+    // swiftshader first-paint tail can exceed 30s on a cold/loaded headless boot,
+    // which surfaced as the "NO AUDIT LINE" flake. The verify:* single-retry is the
+    // real safety net; this just makes the retry fire less often.
+    await page.waitForFunction(() => !!(window.__game && window.__game.ctx?.player?.rig), undefined, { timeout: 45000 });
     // ACN — live scenario mode short-circuits the static pose/angle path.
     if (SCENARIO) {
       const fn = SCENARIOS[SCENARIO];
