@@ -28,6 +28,7 @@ import type { GameContext } from '../../GameContext.ts';
 import { makeStaticBox, attachCompoundCollider } from '../../physics/bodies.ts';
 import { Tuning } from '../../config/tuning.ts';
 import { createRustedHullMaterial } from '../hullMaterial.ts';
+import { mergeStaticByMaterial } from '../wreckForms.ts';                        // PERF — static-merge the cabin's shared-material greebles (ring rivets/ribs/bands) into batched draws
 import { addAccessPanel } from '../wrecks.ts';                                   // T4.3 — the crashed pod's REAL salvage panel (the first-salvage tutorial target)
 import { registerSalvageable, markSalvageStripped } from '../salvage.ts';       // T4.3 — register the pod as a machete-salvageable; markSalvageStripped — restore stripped state on load
 import { makeRng } from '../../core/rng.ts';                                    // T4.3 — deterministic position-seeded rng for the pod's salvage roll
@@ -2258,6 +2259,21 @@ export function buildPodScene(ctx: GameContext): void {
   buildReentryFx(group);
 
   group.traverse((o) => { if ((o as THREE.Mesh).isMesh) { o.castShadow = false; o.receiveShadow = false; } });
+
+  // ── PERF: STATIC-MERGE the cabin's shared-material greebles into batched draws (the wreck-field
+  //    discipline). The round bore is ~380 tiny meshes — ring-frame rivets (rings of 16/32),
+  //    curved ribs, banded wall arcs, deck-plate studs — nearly all sharing a handful of materials
+  //    (_cabShell / _podFrameMat / _podRivetMat / _cabDeck). mergeStaticByMaterial collapses each
+  //    material into ONE draw. PROTECT the animated FRONT DOOR (cabinHatchPivot swings open at the
+  //    wake — the door slab + integral porthole glass/bezel must move as one; merging would detach
+  //    them from the pivot). The re-entry plasma/shimmer are transparent → the helper skips them by
+  //    default; tag them too so a future includeTransparent can't fold them. The salvage panel +
+  //    exterior skin are added LATER (unifyEnterablePod), so they aren't present at this merge.
+  if (cabinHatchPivot) cabinHatchPivot.userData.noMerge = true;   // the swinging front door (+ its integral domed porthole) rides the pivot
+  if (reentryPlasmaMesh) reentryPlasmaMesh.userData.noMerge = true;
+  if (reentryShimmerMesh) reentryShimmerMesh.userData.noMerge = true;
+  mergeStaticByMaterial(group);
+
   ctx.three.scene.add(group);
   podGroup = group;
 }
@@ -2571,6 +2587,11 @@ export function disposePodScene(ctx: GameContext): void {
   cancelExposureEase();   // CLUSTER D — a hard teardown cancels any live step-out exposure ease
   ctx.three.renderer.toneMappingExposure = CABIN_BASE_EXPOSURE;
   if (podGroup) {
+    // PERF-merge cleanup: the static-merge (buildPodScene) creates NEW batched geometries that
+    // aren't tracked in _cabinDisposables (that list holds the pre-merge originals, freed below).
+    // Traverse the live graph to dispose whatever geometry is actually mounted (the merged batches
+    // + the un-merged hatch/plasma), so a replayed intro doesn't leak the merged buffers.
+    podGroup.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh && m.geometry) m.geometry.dispose(); });
     ctx.three.scene.remove(podGroup);
     podGroup = null;
   }

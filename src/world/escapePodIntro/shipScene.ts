@@ -36,6 +36,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import type RAPIER from '@dimforge/rapier3d-compat';
 import type { GameContext } from '../../GameContext.ts';
 import { makeStaticBox } from '../../physics/bodies.ts';
+import { mergeStaticByMaterial } from '../wreckForms.ts';   // PERF — static-merge shared-material greebles (rivets/panels) into batched draws
 import { buildCanonicalPodExterior } from './podScene.ts';   // B1.a — the ONE canonical pod module (shared interior+exterior+merged front door)
 
 /** Far offset — high "in orbit", enclosed so the desert far below is not seen. */
@@ -2053,6 +2054,27 @@ export function buildShipScene(ctx: GameContext): void {
   }
 
   group.traverse((o) => { if ((o as THREE.Mesh).isMesh) { o.castShadow = false; o.receiveShadow = false; } });
+
+  // ── PERF: STATIC-MERGE the shared-material greebles (rivets, panels, structure) into batched
+  //    draws (the wreck-field discipline — mergeStaticByMaterial groups by material UUID). The
+  //    cockpit alone is ~1400 tiny meshes (hundreds of _rivet studs sharing one material) → this
+  //    collapses each material into ONE draw. PROTECT the disaster/alert dynamics: the merge helper
+  //    skips any subtree tagged userData.noMerge, so tag every mesh/group the alert-recolor + the
+  //    fire/door animation hold by REFERENCE (merging would detach those refs → they'd stop
+  //    recoloring/animating). Their materials are recolored in place, so keeping the meshes whole
+  //    keeps setCockpitAlert/setShipAlert/setEngineFire working exactly as before.
+  const _protect = (o: THREE.Object3D | null): void => { if (o) o.userData.noMerge = true; };
+  _protect(_alertScreenGlow);
+  for (const led of _alertStatusLeds) _protect(led);
+  _protect(_alertBeaconMesh);
+  _protect(_engineFire);            // the additive engine-bay fire (flickers + repositions each frame)
+  _protect(_engineDoorJudderL);     // the sliding engine-room door leaves (judder open on fire)
+  _protect(_engineDoorJudderR);
+  _protect(_bayDoorPivot);          // the docked-pod bay door pivot (swings)
+  // (the engine-room glass panes ride under the sliding-door leaves _engineDoorJudderL/R → already
+  //  protected as children of a noMerge subtree, so their emissive-on-fire lift keeps working.)
+  mergeStaticByMaterial(group);
+
   ctx.three.scene.add(group);
   shipGroup = group;
 }

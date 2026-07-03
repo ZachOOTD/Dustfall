@@ -1879,6 +1879,8 @@ const SCENARIOS = {
       }
     }, descent);
     await page.waitForTimeout(300);
+    const perfPi = await page.evaluate(() => { const ctx = window.__game.ctx; ctx.three.renderer.info.reset(); ctx.three.renderer.render(ctx.three.scene, ctx.three.camera); const i = ctx.three.renderer.info; const pod = ctx.three.scene.getObjectByName('escapePodCabin'); let pm = 0; if (pod) pod.traverse((o) => { if (o.isMesh) pm++; }); return { draws: i.render.calls, tris: i.render.triangles, programs: i.programs?.length ?? -1, podMeshes: pm }; });
+    console.log('[pod-interior-perf] ' + JSON.stringify(perfPi));
     const dtag = descent !== null ? `-d${String(descent).replace('.', '')}` : '';
     const tag = `pod-interior-${angle}${dtag}${pull > 0 ? '-pull' + pull : ''}${snap ? '-snap' : ''}`;
     await page.screenshot({ path: join(OUT, `scen-${tag}.png`), fullPage: false, animations: 'disabled', timeout: 60000 });
@@ -2290,6 +2292,8 @@ const SCENARIOS = {
       if (ctx.lights) { const sp = (window.__RIG_SPACE01 || 0); ctx.lights.sun.intensity *= (1 - sp * 0.88); ctx.lights.ambient.intensity *= (1 - sp * 0.94); }
     });
     await page.waitForTimeout(300);
+    const perfC = await page.evaluate(() => { const ctx = window.__game.ctx; ctx.three.renderer.info.reset(); ctx.three.renderer.render(ctx.three.scene, ctx.three.camera); const i = ctx.three.renderer.info; const ship = ctx.three.scene.getObjectByName('escapePodShipCockpit'); let sm = 0; if (ship) ship.traverse((o) => { if (o.isMesh) sm++; }); return { draws: i.render.calls, tris: i.render.triangles, programs: i.programs?.length ?? -1, shipMeshes: sm }; });
+    console.log('[cockpit-perf] ' + JSON.stringify(perfC));
     const tag = `cockpit-${angle}${stand ? '-stand' : ''}${alert > 0 ? '-a' + alert : ''}${space > 0 ? '-space' + (space === 1 ? '' : space) : ''}${hideStars ? '-nostars' : ''}`;
     // Clip to the canvas rect + disable animations + generous timeout: the full-page
     // font/compositor wait can stall on the space-mode ship scene (the cockpit build);
@@ -2457,6 +2461,8 @@ const SCENARIOS = {
       return { found: !!ship, meshes, shipAlert: g.ctx ? undefined : 0, eye: [+eye.x.toFixed(2), +eye.y.toFixed(2), +eye.z.toFixed(2)] };
     }, { angle, calm });
     await page.waitForTimeout(300);
+    const perfCo = await page.evaluate(() => { const ctx = window.__game.ctx; ctx.three.renderer.info.reset(); ctx.three.renderer.render(ctx.three.scene, ctx.three.camera); const i = ctx.three.renderer.info; return { draws: i.render.calls, tris: i.render.triangles, programs: i.programs?.length ?? -1 }; });
+    console.log('[corridor-perf] ' + JSON.stringify(perfCo));
     const tag = `corridor-${angle}${calm ? '-calm' : ''}`;
     await page.screenshot({ path: join(OUT, `scen-${tag}.png`), fullPage: false });
     console.log(`[corridor] ${JSON.stringify(meas)} → scen-${tag}.png`);
