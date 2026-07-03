@@ -43,7 +43,7 @@ import {
   getPodBayThreshold, getPodBaySeatedEye, releasePodFromBay,   // R5c — the docked-pod bay + physical release
   setBayPodDoorOpen, getPodBayDoorWorld, getPodBayInteriorStand,   // B2 — the player-gated boarding flow (E-open door + walk-in gate + E-sit)
 } from './shipScene.ts';
-import { buildPodScene, disposePodScene, getPodSpawn, setDescentProgress, setDescentBase, setTumbleLight, setParachuteLeverPull, setCabinCrashPose, blowCabinHatch, restoreCabinExposure, unifyEnterablePod, podIsEnterable, setPodHidden } from './podScene.ts';
+import { buildPodScene, disposePodScene, getPodSpawn, getCrashedSeatWorld, getPodAltitude, setDescentProgress, setDescentBase, setTumbleLight, setParachuteLeverPull, setCabinCrashPose, blowCabinHatch, restoreCabinExposure, unifyEnterablePod, podIsEnterable, setPodHidden } from './podScene.ts';
 import { buildHaulerExterior, disposeHaulerExterior, setHaulerExplosion, setHaulerDeparture, setHaulerHidden, haulerBuilt } from './haulerScene.ts';   // Phase 3 (T3.1/T3.2) — the hero freighter + its death staged through the post-eject porthole; C1 — the post-eject departure recession; PERF — reveal the preloaded (parked) hauler instead of a cold build
 import { startPodTutorial } from './podTutorial.ts';   // T4.3 — the first craft→salvage→chute-pop tutorial (runs as gameplay post-handoff)
 import { setGameHudHidden, showIntroPrompt, hideIntroPrompt, setIntroBlack } from './introHud.ts';
@@ -74,24 +74,60 @@ const COCKPIT_DWELL = 3.0;
  *    INTACT_DWELL — the ship reads WHOLE in the window (you see what you fled) before it dies.
  *    EXPLODE_DUR  — the fireball/breakup unfolds over this many seconds (the spectacle breathes).
  *    HUSK_DWELL   — a last beat on the receding burning husk/debris before the fall begins. */
-const SHIP_INTACT_DWELL = 0.9;    // the intact hauler hangs in the window (the "that's my ship" beat)
 const SHIP_EXPLODE_DUR = 2.3;     // the explosion unfolds (flash→fireball→breakup→shockwave→husk)
-const SHIP_HUSK_DWELL = 0.5;      // a breath on the receding husk before the descent
-/** C1 (user, 2026-07-02) — THE EJECT MOMENT. Right after the physical eject, before the ship
- *  dies, the pod pulls AWAY and the player sees the REAL intact hauler + planet through the
- *  porthole for a FEW SECONDS, in-world + continuous (the pod visibly departing the ship).
- *  SHIP_DEPART_DUR = the seconds of that recession (the ship drifting/shrinking in the window);
- *  SHIP_DEPART_FADE = the "slight fade" (a quick dip-to-black) that then bridges into the
- *  explosion staging (which continues unchanged — the intact-watch hold + the detonation). */
-const SHIP_DEPART_DUR = 3.2;      // "a few seconds" of the pod pulling away from the intact ship (user)
-const SHIP_DEPART_FADE = 0.55;    // the "slight fade" bridging the departure → the explosion staging
+const SHIP_HUSK_DWELL = 0.7;      // a breath on the receding burning husk before the descent
+/** W6 item 2 (user, 2026-07-03: "just have ONE view where we're getting further away while it
+ *  explodes") — the depart + explosion are now ONE continuous shot: the pod pulls away from the
+ *  ship AND the ship explodes DURING the recession (no fade, no re-frame). The `recede` phase
+ *  drives setHaulerDeparture the WHOLE time; setHaulerExplosion fires mid-recession, once the
+ *  ship has drifted out to a good distance (~40 m), so the blast reads with the husk receding.
+ *    SHIP_RECEDE_DUR — total seconds the ship recedes (departure 0→1: 24 m → ~58 m out).
+ *    SHIP_BLAST_AT   — seconds into the recession the detonation fires. At the ease-out departure
+ *                      curve, ~1.6 s puts the ship ~40 m out (a good "read at distance" blast) — the
+ *                      intact hauler is watched receding for that beat, THEN it blows mid-drift.
+ *  After BOTH the recession completes AND the explosion finishes, → husk → the descent. */
+const SHIP_RECEDE_DUR = 4.6;      // total recession time (the pod pulls away the whole shot)
+const SHIP_BLAST_AT = 1.6;        // seconds into the recession the ship detonates (~40 m out by the ease-out curve)
 /** Seconds of the SLOW, seamless atmospheric fall (C18 user walk-test: descend slowly + serenely —
  *  watch the planet get closer, space fade to sky, the ground slowly approach). Was 8.0.
  *  REBUILD v2 R4 — this is the FULL-FALL clock (progress 0→1 over this many seconds AT a fixed
  *  rate). The descent beat only rides it to DESCENT_HANDOFF_PROGRESS, then HANDS OFF to the
  *  parachute beat MID-AIR; the parachute beat resumes the SAME clock/rate down to the ground, so
- *  the fall rate is seamless across the hand-off (no speed change, no camera jump). */
-const DESCENT_DURATION = 18.0;
+ *  the fall rate is seamless across the hand-off (no speed change, no camera jump).
+ *  W6 item 3 (user, 2026-07-03: "moving way too fast toward the planet — slower"): lengthened
+ *  18.0 → 22.0 (×1.22). The SPACE leg (progress 0→~0.24, the planet-approach + plasma) now runs
+ *  ~5.3 s (was ~4.3 s, ≈1.35× the near-plasma segment given the reshaped approach curve below);
+ *  the whole fall stays a serene ~22 s without dragging. All progress-keyed timings (handoff 0.55,
+ *  ground 0.98) are unchanged — only the wall-clock lengthens. */
+const DESCENT_DURATION = 22.0;
+
+/** W6 item 3 — THE PLANET-APPROACH CURVE (progress 0..1 → approach 0..1). Slower + TWO PHASES, so
+ *  the planet reads as APPROACH PHYSICS (slow when far, faster as the atmosphere nears), not a
+ *  linear zoom. Two segments across the space leg (both before the plasma hands over at p≈0.24):
+ *    • PHASE A (far, subtle): progress 0 → APPROACH_PHASE_A · a GENTLE drift — most of the space
+ *      leg spent barely growing (the distant disc creeping closer). Ends at approach ≈ 0.32.
+ *    • PHASE B (near, accelerating): progress APPROACH_PHASE_A → APPROACH_PHASE_B · the growth
+ *      ACCELERATES — the limb fills the porthole + overflows it just as the plasma fires.
+ *  sky.ts squares this again (ease-in) before scaling, so PHASE A reads truly subtle (0.32²≈0.10
+ *  of the scale range) and PHASE B genuinely rushes in. Beyond PHASE_B it's clamped at 1 (filling).*/
+const APPROACH_PHASE_A = 0.15;   // progress at which the far→near handover happens (most of the space leg is far/slow)
+const APPROACH_PHASE_B = 0.24;   // progress at which the approach is full (the limb fills) — hands into the plasma here
+const APPROACH_A_END = 0.32;     // the approach value reached by the end of PHASE A (a subtle far drift)
+export function planetApproachCurve(progress: number): number {
+  if (progress <= 0) return 0;
+  if (progress < APPROACH_PHASE_A) {
+    // PHASE A — far + slow. A gentle drift: ease the approach 0 → APPROACH_A_END over the far leg,
+    //   shaped so it stays low early (the distant disc barely growing). (Squared again in sky.ts.)
+    const kf = progress / APPROACH_PHASE_A;          // 0→1 across the far leg
+    return APPROACH_A_END * kf * kf;                 // slow-start drift (very subtle when truly far)
+  }
+  if (progress < APPROACH_PHASE_B) {
+    // PHASE B — near + accelerating. Ramp APPROACH_A_END → 1 as the atmosphere limb sweeps up + fills.
+    const kn = (progress - APPROACH_PHASE_A) / (APPROACH_PHASE_B - APPROACH_PHASE_A);   // 0→1 across the near leg
+    return APPROACH_A_END + (1 - APPROACH_A_END) * kn;
+  }
+  return 1;   // filling the porthole (handed into the plasma)
+}
 /** REBUILD v2 R4 — the descent beat hands off to the parachute gag at THIS progress, MID-FALL.
  *  At p=0.55 the pod is ~383 m up (altitude = DESCENT_ALT·(1−p^1.7); DESCENT_ALT≈600) with the
  *  bulk of the fall still ahead — so the gag (3 pulls + the snap) plays clearly AIRBORNE with the
@@ -138,65 +174,58 @@ const REVEAL_DWELL = 4.0;
  *  pod falls into = the sky you step out into, automatically. Clear skies = cloudiness/storm 0. */
 const INTRO_MIDDAY_TIME = 0.46;
 
-/** CLEAR-SKIES (user ask, 2026-07-01): the fog density the intro's atmospheric leg (descent →
- *  crash → wake → step-out) is pinned to so the horizon reads genuinely CLEAR, not hazy. The game's
- *  survival FogExp2 (FOG_DENSITY_CLEAR = 0.0018, tuned for a ~1 km ground-visibility limit) washes
- *  the far dunes + the Leviathan into haze from a few hundred metres up — the exact "cloudless but
- *  hazy" the user flagged. This value is the SAME the descent's altitude ramp LANDS on at the ground
- *  (0.00006 + 0.00006·1 = 0.00012), so the crashing-down view and the stepping-out view MATCH: crisp
- *  long-distance visibility, dunes + Leviathan sharp on a clean horizon. Still warm (the fog COLOUR
- *  is left as the desert's warm tan — we cut haze DENSITY, not the palette; no blue/alien shift). */
-const INTRO_CLEAR_FOG_DENSITY = 0.00012;
-/** Seconds to EASE the fog back from the intro's clear value up to the game's survival fog after the
- *  handoff (endEscapePodIntro), so gameplay doesn't fog-POP the instant control returns. updateWeather
- *  re-derives the survival target every frame; updateIntroFogEase lerps density from clear→that target
- *  over this window (a gentle haze rolling back in over the first seconds of play). */
-const INTRO_FOG_EASE_S = 6.0;
-/** Ease-back countdown (seconds remaining), set at endEscapePodIntro, ticked by updateIntroFogEase. */
-let _introFogEase = 0;
+/** W6 item 5 (user, 2026-07-03: "the weather stays the same as when crashing… NOTHING changes when
+ *  I leave the pod"): the fog is NORMALIZED to the game's survival fog DURING THE FALL, so the
+ *  crash/wake/exit are ALREADY at plain game fog — there is nothing to pin at ground level and
+ *  nothing to ease back after the handoff (both the ground-level clear-fog pin AND the 6 s post-exit
+ *  ease are RETIRED). The descent keeps a THIN fog at ALTITUDE (so the vista + far dunes read clear
+ *  from high up), then blends imperceptibly to the survival density as the pod drops through the
+ *  lower atmosphere — by the time it lands, the fog IS the survival fog (no hazing-over on step-out).
+ *  ALTITUDE_CLEAR_FOG = the thin high-altitude value (the vista); FOG_BLEND_ALT = the altitude (m)
+ *  below which the blend to survival runs (so it's done well before the ground). */
+const ALTITUDE_CLEAR_FOG = 0.00006;   // very thin fog high up (the clear vista through the porthole)
+const FOG_BLEND_ALT = 150;            // metres — below this the descent fog blends to the survival density (done by landing)
 
 /** Force the real world to a bright clear MIDDAY (the intro's atmospheric handoff look). Sets the
  *  diurnal clock to noon-ish + clears any cloud/storm so the descent sky, the crash, the wake, and
  *  the step-out all share ONE consistent bright sky (no dawn, no time jump on exit). Cloudiness is
- *  RESET (not pinned) so normal gameplay weather resumes after the handoff — it's just clear at the
- *  moment you arrive. Called at the descent re-grounding AND at step-out so both ends match.
- *  NOTE: this sets intensity/cloudiness/time; the FOG is pinned separately, per-frame, by
- *  applyIntroClearFog (updateWeather re-derives density each frame, so a one-time set wouldn't stick). */
+ *  RESET (not pinned) so normal gameplay weather resumes after the handoff. W6 item 5: this is set
+ *  DURING THE FALL (the descent re-grounding) so the crash/wake/exit run at the SAME midday-clear the
+ *  game continues at — the clock + weather simply carry on from here; nothing is restored at the exit.
+ *
+ *  W6 item 5 — SET ONCE PER INTRO. The clock keeps advancing during the descent/wake (updatePlayer
+ *  runs the diurnal clock throughout the intro), so RE-setting dayTime at wake/stepOut would SNAP the
+ *  sun BACKWARD (the "time jump / different instance" the user felt). So this establishes midday only
+ *  the FIRST time it's called this intro (the descent on the live path; or the first ground beat on a
+ *  dev jump that skipped the descent) — after that it's a NO-OP and the game's clock+weather simply
+ *  CONTINUE from that state through the crash, wake, exit, and into gameplay. `_introMiddaySet` is
+ *  reset at startEscapePodIntro so each new intro re-establishes it. */
+let _introMiddaySet = false;
 function setIntroMiddayClear(ctx: GameContext): void {
+  if (_introMiddaySet) return;   // already established this intro — let the clock/weather continue (no backward snap)
+  _introMiddaySet = true;
   ctx.time.dayTime = INTRO_MIDDAY_TIME;
   if (ctx.weather) {
     ctx.weather.intensity = 0;    // no sandstorm dust dimming the sky
-    ctx.weather.cloudiness = 0;   // clear skies (eases back to normal gameplay cover afterward)
+    ctx.weather.cloudiness = 0;   // clear skies (normal gameplay weather resumes from here)
   }
 }
 
-/** CLEAR-SKIES — pin the fog to the intro's clear-day density for THIS frame. updateWeather runs
- *  BEFORE updateEscapePodIntro in the main tick and re-sets fog.density from FOG_DENSITY_CLEAR every
- *  frame, so this override (applied after, from the intro tick) is what STICKS. Called for every
- *  ground-level atmospheric beat (impact / wake / stepOut) so the crashed cabin, the wake, and the
- *  step-out reveal all read on the SAME crisp clear horizon the descent falls through — the far dunes
- *  + the Leviathan stay sharp, not hazed. (The descent/parachute beats set their OWN altitude-scaled
- *  ramp that LANDS on this value, so the whole leg is continuous.) Density only — the warm fog COLOUR
- *  is untouched (updateLighting owns it), so cutting the haze keeps the warm desert tone. */
-function applyIntroClearFog(ctx: GameContext): void {
-  const fog = ctx.three.scene.fog as { density?: number } | null;
-  if (fog && 'density' in fog) fog.density = INTRO_CLEAR_FOG_DENSITY;
-}
-
-/** CLEAR-SKIES ease-back — called every frame from the main tick (AFTER updateWeather, which set the
- *  survival target). While the countdown is live (armed at endEscapePodIntro), lerp fog.density from
- *  the intro's clear value toward the survival value updateWeather just wrote, over INTRO_FOG_EASE_S —
- *  so the survival haze rolls GENTLY back in over the first seconds of play instead of popping the
- *  instant the intro hands off. No-op once the window elapses (the real game owns the fog again). */
-export function updateIntroFogEase(ctx: GameContext, dt: number): void {
-  if (_introFogEase <= 0) return;
-  _introFogEase = Math.max(0, _introFogEase - dt);
+/** W6 item 5 — blend the descent fog from the thin high-altitude value toward the game's SURVIVAL
+ *  fog as the pod drops, so the crash/wake/exit are already at plain game fog (no hazing-over at
+ *  step-out). updateWeather ran earlier THIS frame and wrote the survival density into fog.density;
+ *  we read that as the target and blend from ALTITUDE_CLEAR_FOG toward it based on altitude: full
+ *  thin above FOG_BLEND_ALT, easing to survival by the ground. Density only (updateLighting owns the
+ *  warm fog COLOUR). Called every descent/parachute frame with the current altitude. */
+function blendDescentFog(ctx: GameContext, altitude: number): void {
   const fog = ctx.three.scene.fog as { density?: number } | null;
   if (!fog || !('density' in fog) || fog.density == null) return;
-  const survival = fog.density;                       // updateWeather's target for this frame
-  const k = _introFogEase / INTRO_FOG_EASE_S;         // 1 at handoff → 0 at the end of the window
-  const eased = k * k * (3 - 2 * k);                  // smoothstep so it eases in AND out gently
-  fog.density = survival + (INTRO_CLEAR_FOG_DENSITY - survival) * eased;
+  const survival = fog.density;   // updateWeather's survival target for this frame (the game's normal fog)
+  // k = 0 high (above FOG_BLEND_ALT → full thin clear) → 1 at the ground (→ survival). Smoothstepped
+  //   so the survival haze rolls in imperceptibly through the lower atmosphere, not a hard threshold.
+  const kRaw = Math.max(0, Math.min(1, 1 - altitude / FOG_BLEND_ALT));
+  const k = kRaw * kRaw * (3 - 2 * kRaw);
+  fog.density = ALTITUDE_CLEAR_FOG + (survival - ALTITUDE_CLEAR_FOG) * k;
 }
 
 /** ONE-ENTERABLE-POD (user re-scope): the descent base whose FLOOR sits on the terrain at the real
@@ -272,6 +301,17 @@ function seatPlayerAt(ctx: GameContext, spawn: { x: number; y: number; z: number
   ctx.player.cameraSnapNextFrame = true;
   ctx.three.camera.position.set(spawn.x, spawn.y + ctx.player.eyeOffset, spawn.z);
   ctx.three.camera.rotation.set(0, 0, 0);   // face −Z
+}
+
+/** W6 item 1 — re-seat the player BODY at a world spawn WITHOUT touching the camera rotation, so
+ *  the player's free-look orientation carries across the reseat (used by the wake: the player rode
+ *  the descent free-looking; coming to inside the SAME crashed cabin must NOT snap their gaze — it's
+ *  one continuous seated view, fades included). Position + eye height only; rotation left as-is. */
+function seatBodyKeepLook(ctx: GameContext, spawn: { x: number; y: number; z: number }): void {
+  ctx.player.body.body.setTranslation(spawn, true);
+  ctx.player.velocityY = 0;
+  ctx.player.cameraSnapNextFrame = true;
+  ctx.three.camera.position.set(spawn.x, spawn.y + ctx.player.eyeOffset, spawn.z);
 }
 
 /** Ensure the player is seated in the (built) pod, mode seated. Idempotent — used by every
@@ -374,6 +414,7 @@ export function startEscapePodIntro(ctx: GameContext, force = false): void {
   if (!force && !FEATURES.escapePodIntro) return;
   // Capture the desert spawn NOW — setupOpeningScene placed the player there at boot, and
   // we're about to teleport them to the ship; stepOut hands back to this position (R3).
+  _introMiddaySet = false;   // W6 item 5 — a fresh intro re-establishes midday-clear on its first setIntroMiddayClear (then the clock continues)
   ensureAudioStarted();   // T5.1 — the intro starts on a new-game click; make the audio ctx ready for the beat SFX
   const t = ctx.player.body.body.translation();
   ctx.intro = {
@@ -443,14 +484,13 @@ export function endEscapePodIntro(ctx: GameContext): void {
   //   at step-out, it is now a REAL-WORLD object (the SAME pod you rode down + can walk back into) —
   //   do NOT dispose it. It stays in the game behind the flag. Only tear the pod down on the OTHER
   //   exit paths (skipIntro / quit / a dev jump-away before step-out), where it's still the intro
-  //   prop. (restoreCabinExposure keeps the desert-base exposure either way — unify already set it.)
+  //   prop. (restoreCabinExposure re-asserts the desert-base exposure either way — unify already set it;
+  //   the crash/wake never lifted it, so this is a defensive no-op on the step-out path — W6 item 5.)
+  // W6 item 5 — NO fog ease-back is armed here: the fog was already normalized to the survival
+  //   density during the fall (blendDescentFog), so the world is bit-stable across the exit — nothing
+  //   to roll back in. (The old clear→survival ease is gone with the ground-level clear pin.)
   if (podIsEnterable()) {
     restoreCabinExposure(ctx);
-    // CLEAR-SKIES: this is the REAL step-out handoff into gameplay (the pod unified + persists) — the
-    //   intro just held CLEAR fog, so arm the gentle clear→survival ease-back (updateIntroFogEase) so
-    //   the survival haze rolls back in over a few seconds instead of popping the instant control
-    //   returns. Gated on enterable so skip/quit/dev-jump exits (fog never made clear) don't ease.
-    _introFogEase = INTRO_FOG_EASE_S;
   } else disposePodScene(ctx);
   stopAllIntroLoops();       // T5.1b — stop any ambient loop (cockpit hum / descent rush) on any exit
   // C2 — RESTORE the normal game soundscape + music (they were suppressed at startEscapePodIntro).
@@ -686,18 +726,17 @@ function tickEnterPod(ctx: GameContext, dt: number): void {
  *  blast light — settling into the slow serene descent. C18 (user walk-test): NO POD TUMBLE — the
  *  pod stays UPRIGHT + LEVEL facing the window; the SHIP tumbles/breaks, the pod holds + watches.
  *
- *  Phases: release (bolts fire, pod tears from the cradle) → depart (C1 — the pod PULLS AWAY; the
- *  player sees the REAL intact hauler + planet through the porthole for a few seconds, in-world +
- *  continuous — the ship receding/shrinking as the pod separates) → [a slight fade] → watch (the
- *  hauler hangs intact, re-framed close at the hero distance) → blast (the detonation → the
- *  fireball/breakup unfolds over EXPLODE_DUR) → husk (a breath on the receding husk) → the descent.
+ *  W6 item 2 (user, 2026-07-03: "there seem to be 2 different views of the ship — just have ONE
+ *  where we're getting further away while it explodes"). The old depart→fade→re-framed-explosion
+ *  is MERGED into ONE unbroken shot:
+ *  Phases: release (bolts fire, pod tears from the cradle) → recede (the pod pulls AWAY continuously
+ *  AND the ship EXPLODES mid-recession — no fade, no re-frame: tear free → drift away → it blows at
+ *  ~40 m out → the burning husk keeps receding) → husk (a breath on the receding husk) → the descent.
  *  The hauler + its FX DISPOSE at the hand-off (they never leak into the fall).
  *
- *  C1 (user, 2026-07-02): "when it ejects, it physically ejects and you can see outside and see the
- *  planet AND THE SHIP for a few seconds right after you eject. This isn't a separate scene — it's
- *  the same, physically in the world; you see the exterior of the ship. Then a slight fade to when
- *  you see the ship explode, which can be a different scene." → the `depart` phase is that in-world
- *  pull-away; `SHIP_DEPART_FADE` is the slight fade; `watch`+`blast` are the (unchanged) explosion. */
+ *  The recession (setHaulerDeparture) runs the WHOLE recede phase; the detonation (setHaulerExplosion)
+ *  fires at SHIP_BLAST_AT seconds in, when the ship has drifted to a good read distance — so the blast
+ *  reads with the husk still receding, one continuous camera-static shot (the pod holds LEVEL, C18). */
 const EJECT_RELEASE_DUR = 0.7;   // R5c — seconds of the physical detach (bolts fire + the pod tears from the bay cradle) before the blast
 function tickShipExplode(ctx: GameContext, dt: number): void {
   const intro = ctx.intro;
@@ -741,67 +780,39 @@ function tickShipExplode(ctx: GameContext, dt: number): void {
       if (haulerBuilt()) setHaulerHidden(false);
       else buildHaulerExterior(ctx); // T3.1 — the worn freighter floats out in space ahead (−Z), about to die
       setHaulerExplosion(0);         // intact (ember idle) — the "that's my ship" beat
-      setHaulerDeparture(0);         // C1 — start at the framed hero pose; the depart phase eases it out (recedes)
+      setHaulerDeparture(0);         // start at the framed hero pose; the recede phase eases it out (recedes) the whole shot
       showIntroPrompt('');
       addTrauma(0.2);                // a small kick as the pod is flung clear (one-shot, decays)
       intro.scratch.built = true;
-      intro.scratch.phase = 'depart';   // C1 — the pod pulls AWAY first (in-world), THEN the fade → the explosion
+      intro.scratch.phase = 'recede';   // W6 item 2 — ONE continuous shot: recede + explode (no fade, no re-frame)
       intro.scratch.dwell = 0;
     }
     return;
   }
 
-  // ── C1 — PHASE depart — the pod PULLS AWAY from the intact hauler, in-world + continuous. The
-  //    real exterior ship + the planet hang in the porthole and RECEDE (drift/shrink) over
-  //    SHIP_DEPART_DUR seconds as the pod separates — the "you see the exterior of the ship for a
-  //    few seconds right after you eject" beat. A slight fade (SHIP_DEPART_FADE) at the very end
-  //    bridges into the explosion staging (watch/blast), which re-frames the ship close (the
-  //    "different scene" the user allows) + plays unchanged. Purely time-driven; the pod stays
-  //    LEVEL facing the window (no tumble — C18), the cabin lit to the orbital cool.
-  if (phase === 'depart') {
-    setHaulerDeparture(Math.min(1, d / SHIP_DEPART_DUR));   // ease the ship out (recedes in the porthole)
-    setTumbleLight(0.5 * Math.max(0, 1 - d / 0.9));         // the last of the bay glow decays to orbital cool
-    // The slight fade begins in the final SHIP_DEPART_FADE seconds of the departure — a quick dip
-    //   toward black under which we hand off to the (re-framed) explosion staging.
-    const fadeStart = SHIP_DEPART_DUR;
-    if (d >= fadeStart) {
-      const fk = Math.min(1, (d - fadeStart) / SHIP_DEPART_FADE);
-      setIntroBlack(fk);                                     // dip to black over the slight fade
-      if (d >= fadeStart + SHIP_DEPART_FADE) {
-        // Under full black: re-frame the intact ship close (reset the departure), then clear the
-        //   black + enter the watch/blast explosion staging (unchanged) — the "different scene".
-        setHaulerDeparture(0);
-        setIntroBlack(0);
-        intro.scratch.phase = 'watch';
-        intro.scratch.dwell = 0;
-      }
+  // ── W6 item 2 — PHASE recede — ONE continuous shot: the pod pulls AWAY from the ship the WHOLE
+  //    time (setHaulerDeparture runs 0→1 across SHIP_RECEDE_DUR), and the ship EXPLODES mid-recession
+  //    (setHaulerExplosion fires at SHIP_BLAST_AT, once the ship has drifted to ~40 m out). NO fade,
+  //    NO re-frame — the camera holds LEVEL facing the window (C18) and the player watches the ship
+  //    recede → blow → the burning husk keep receding, all in one unbroken exterior view. The
+  //    detonation punch + the mid-blast secondary + the cabin blast-flash are one-shots along the way.
+  if (phase === 'recede') {
+    // the ship recedes continuously the whole phase (drift/shrink in the porthole) — never reset.
+    setHaulerDeparture(Math.min(1, d / SHIP_RECEDE_DUR));
+    // the detonation fires mid-recession; before it, the intact ship is watched receding (bay glow decays).
+    if (d < SHIP_BLAST_AT) {
+      setTumbleLight(0.5 * Math.max(0, 1 - d / 0.9));   // the last of the bay glow decays to the orbital cool as it drifts
+      return;
     }
-    return;
-  }
-
-  if (phase === 'watch') {
-    // the intact hauler hangs in the window — a held beat so the player reads THE SHIP before it
-    //   dies (the vision: "watch the ship explode" wants an intact ship to watch first).
-    setTumbleLight(0.5 * Math.max(0, 1 - d / SHIP_INTACT_DWELL));   // the bay glow decays to orbital cool
-    if (d > SHIP_INTACT_DWELL) {
-      intro.scratch.phase = 'blast';
-      intro.scratch.dwell = 0;
-    }
-    return;
-  }
-
-  if (phase === 'blast') {
-    // THE DETONATION → the fireball/breakup unfolds over EXPLODE_DUR. Drive the hauler-explosion
-    //   `t` 0→1 across it (haulerScene runs the flash/fireball/debris/shockwave/sparks/blast-light);
-    //   the CABIN flash is driven here (setTumbleLight — a hot orange pulse that decays); a one-shot
-    //   screen flash + boom punctuate the detonation, and a mid-blast secondary punch.
-    const te = Math.min(1, d / SHIP_EXPLODE_DUR);
-    setHaulerExplosion(te);
+    // ── THE EXPLOSION, unfolding DURING the recession. te 0→1 over SHIP_EXPLODE_DUR from the blast time.
+    const de = d - SHIP_BLAST_AT;
+    const te = Math.min(1, de / SHIP_EXPLODE_DUR);
+    setHaulerExplosion(te);   // the fireball/breakup rides the receding husk (haulerScene FX follow the departing group)
     // the detonation punch (one-shot at te≈0): a bright warm screen flash + the boom + a single kick.
-    if (!intro.scratch.reFlash && te > 0.02) {
+    if (!intro.scratch.reFlash && te > 0.0) {
       flashScreen(0xfff0d8, 1.0);    // the blinding detonation flash (the ship dies)
       playExplosionBoom();           // T5.1 — the ship explodes (the concussive boom, felt through the hull)
-      playShipDeathRoar();           // T5.3 — the sustained roar + tearing-sub + debris-groan tail UNDER the boom (the ~2.3s spectacle lands sonically)
+      playShipDeathRoar();           // T5.3 — the sustained roar + tearing-sub + debris-groan tail UNDER the boom
       addTrauma(0.5);                // a ONE-TIME concussive kick (one-shot — never per-frame, which would spin the view)
       intro.scratch.reFlash = true;
     }
@@ -814,9 +825,9 @@ function tickShipExplode(ctx: GameContext, dt: number): void {
     }
     // CABIN FLASH — the blast floods the cabin hot blast-orange (setTumbleLight), a sharp pulse at
     //   the detonation decaying through the fireball to the orbital cool (C18: light only, no tumble).
-    const cabin = Math.max(0, 1 - te / 0.55);   // 1 at detonation → 0 by mid-explosion
-    setTumbleLight(cabin);
-    if (te >= 1) {
+    setTumbleLight(Math.max(0, 1 - te / 0.55));   // 1 at detonation → 0 by mid-explosion
+    // advance once the ship has fully receded AND the explosion has finished (both complete = husk).
+    if (te >= 1 && d >= SHIP_RECEDE_DUR) {
       intro.scratch.phase = 'husk';
       intro.scratch.dwell = 0;
     }
@@ -824,7 +835,9 @@ function tickShipExplode(ctx: GameContext, dt: number): void {
   }
 
   // phase 'husk' — a breath on the receding burning husk + drifting debris field (te held at 1),
-  //   the cabin light settled to the orbital cool, before the fall begins.
+  //   the cabin light settled to the orbital cool, before the fall begins. The ship holds at its
+  //   full-receded pose (setHaulerDeparture(1)) so it doesn't snap back.
+  setHaulerDeparture(1);
   setHaulerExplosion(1);
   setTumbleLight(0);
   if (d > SHIP_HUSK_DWELL) {
@@ -882,36 +895,30 @@ function tickDescent(ctx: GameContext, dt: number): void {
   ctx.player.body.body.setTranslation({ x: ds.x, y: ds.y, z: ds.z }, true);
   ctx.player.velocityY = 0;
   ctx.player.cameraSnapNextFrame = true;
-  // R1b — the seated look-pitch tracks the altitude: SHALLOW when high (near the horizon, so the
-  // real dawn horizon + distant desert read through the porthole), STEEPENING to the porthole's
-  // ~22° cap as the pod nears the ground (so the dunes fill the window + rush up at impact). This
-  // gives the real arc — high: sky+horizon+far dunes; low: the desert rushing up — within the
-  // fixed side-porthole's down-look limit. Scripted (overwrites free-look) only on the descent.
-  const pitch = -0.12 - 0.28 * (progress * progress);   // ≈7° high → ≈23° low (eased late)
-  faceControl(ctx, 0, pitch);
-  // C3 — THE PLANET-APPROACH ARC. Across the early (space) leg the planet GROWS to fill the
-  //   porthole — "we are falling INTO that". It ramps 0→1 over progress 0→0.22, so it's filling
-  //   the view + its atmosphere limb dominating just as the re-entry plasma flash fires (p≈0.24);
-  //   from there setSkyIntroMode blends the whole space planet out as the blue sky takes over, so
-  //   the read is one continuous arc: distant disc → planet fills view → atmosphere limb → plasma
-  //   burn → sky-blend → the ground approach (not "planet fades away, next phase"). Descent-only.
-  setPlanetApproach(Math.min(1, progress / 0.22));
+  // W6 item 1 — CAMERA IS FREE-LOOK. The per-frame look-pitch drive is REMOVED (was a scripted
+  //   pitch ramp that fought the player's mouse-look each frame). The seated orientation was set
+  //   ONCE at the eject (shipExplode release faceControl(0,0) = facing the −Z door/porthole); from
+  //   here the player free-looks through the ENTIRE fall — they can look at the vista through the
+  //   porthole, glance around the cabin, whatever. Position-only ride (above); rotation untouched.
+  // W6 item 3 — THE PLANET-APPROACH ARC (reworked: slower + TWO PHASES). The planet grows to fill
+  //   the porthole across the space leg ("we are falling INTO that"), handing into the re-entry
+  //   plasma at p≈0.24. planetApproachCurve(progress) shapes it as approach physics: PHASE A (far)
+  //   a slow subtle drift over most of the space leg, then PHASE B (near) an accelerating growth as
+  //   the atmosphere limb sweeps up + fills the view. sky.ts squares the value again (ease-in), so
+  //   the far phase reads genuinely gentle and the near phase genuinely rushes in — not a linear zoom.
+  setPlanetApproach(planetApproachCurve(progress));
   // R1a — RE-ENTRY: blend the real sky from space (1) → the dawn desert sky (0) as the pod drops
   // into the atmosphere (the orbit dissolves into the real sky; the pod physically falls through it).
   // C3 — HOLD full space a touch longer (start the blend at 0.14, not 0.05) so the grown planet +
   //   its atmosphere limb READ as the pod falls toward them BEFORE the sky dissolves them into blue
   //   — the approach + limb get their moment; the plasma (p≈0.24) then carries the entry.
   setSkyIntroMode(1 - Math.min(1, Math.max(0, (progress - 0.14) / 0.34)));
-  // R1b — THIN the fog hard during the fall. The game's FogExp2 (tuned for ~1 km ground-level
-  // survival visibility) blends the terrain into the sky from a few hundred metres up — so from
-  // altitude the real ground would just read as haze. updateWeather already ran THIS frame, so
-  // overriding density here sticks. A high-altitude clear-air value lets the REAL desert read
-  // through the porthole (far + hazy high, crisp as the ground rushes up); restored at handoff
-  // by updateWeather (the descent overrides only while this beat ticks). Clears more as you near.
-  {
-    const fog = ctx.three.scene.fog as { density?: number } | null;
-    if (fog && 'density' in fog) fog.density = 0.00006 + 0.00006 * progress;   // very thin high → a touch denser low (aerial haze on the far dunes)
-  }
+  // W6 item 5 — NORMALIZE THE FOG TO SURVIVAL DURING THE FALL. High up the fog is thin (the clear
+  //   vista); as the pod drops below FOG_BLEND_ALT it blends imperceptibly to the game's survival
+  //   fog (what updateWeather wrote this frame), so by landing the fog IS the survival fog — the
+  //   crash/wake/exit are already at plain game fog (no clear-fog pin at ground level, no post-exit
+  //   haze roll-in). blendDescentFog reads the pod's live altitude.
+  blendDescentFog(ctx, getPodAltitude());
   // T2.2 — RE-ENTRY FX. The plasma + heat-shimmer VISUALS live in setDescentProgress, driven by
   // this SAME curve; here we drive the felt half (shake + flash). Re-entry is HIGH + EARLY (the
   // thin upper atmosphere at hypersonic speed) and DONE before the desert appears, so the plasma
@@ -974,19 +981,19 @@ function tickParachute(ctx: GameContext, dt: number): void {
   ctx.player.body.body.setTranslation({ x: ds.x, y: ds.y, z: ds.z }, true);
   ctx.player.velocityY = 0;
   ctx.player.cameraSnapNextFrame = true;
-  // The seated look-pitch steepens as the pod nears the ground (same curve as the descent), so the
-  // dunes fill the porthole + rush up — the gag is clearly airborne with the ground coming up.
-  const pitch = -0.12 - 0.28 * (progress * progress);
-  faceControl(ctx, 0, pitch);
+  // W6 item 1 — CAMERA IS FREE-LOOK. The per-frame look-pitch drive is REMOVED (was a scripted
+  //   pitch ramp identical to the descent's). The seated orientation set once at the eject holds;
+  //   the player free-looks through the whole gag + the fall (position-only ride above; no rotation
+  //   drive). They watch the ground rush up through the porthole if they choose to look at it.
   // Keep the sky + fog blending so the late descent reads identically through the porthole. C3 —
   //   use the SAME (progress−0.14)/0.34 curve as tickDescent so the space→sky blend is seamless
   //   across the hand-off (both are ≈0 by progress 0.55, but kept exact). The planet approach is
   //   already reset (space mode is off by now); no setPlanetApproach needed here.
   setSkyIntroMode(1 - Math.min(1, Math.max(0, (progress - 0.14) / 0.34)));
-  {
-    const fog = ctx.three.scene.fog as { density?: number } | null;
-    if (fog && 'density' in fog) fog.density = 0.00006 + 0.00006 * progress;
-  }
+  // W6 item 5 — the SAME survival-fog normalization as tickDescent. The parachute beat carries the
+  //   pod through the lower atmosphere (below FOG_BLEND_ALT) to the ground, so this is where the fog
+  //   finishes blending to the survival density — the crash then lands already at plain game fog.
+  blendDescentFog(ctx, getPodAltitude());
 
   // (No per-frame rumble — addTrauma stacks every frame → saturates → the disorienting view-spin.
   //  The gag's punch comes from the ONE-TIME per-yank jolts below; the fall stays calm. C18.)
@@ -1056,6 +1063,14 @@ function tickImpact(ctx: GameContext, dt: number): void {
     //   the pose. (If we arrived here via a dev jump without a descent, the pod is at the offset;
     //   setCabinCrashPose is a safe no-op when the cabin isn't grounded — _crashPose still eases.)
     setDescentProgress(1);   // fully landed (altitude 0; cabin floor on the spawn ground)
+    // W6 item 4 — RE-SEAT THE BODY ONTO THE GROUNDED SEAT IMMEDIATELY. The parachute's last frame
+    //   left the body at the pod's ~20 m-up altitude (getPodSpawn at p<1); setDescentProgress(1)
+    //   just dropped the CABIN to the ground but NOT the body — so without this the eye hangs 20 m
+    //   above the grounded cabin for the first impact frames (the "seeing above the pod / the
+    //   landscape" bug the user reported, visible before the fade fully covers). Snap the body onto
+    //   the landed seat now (look preserved — free-look continuity), so the view is INSIDE the cabin
+    //   from frame 1 of the impact. getCrashedSeatWorld tracks the tilt as the crash pose settles.
+    seatBodyKeepLook(ctx, getCrashedSeatWorld(ctx));
     intro.scratch.t = 0;
     intro.scratch.init = true;
   }
@@ -1064,6 +1079,11 @@ function tickImpact(ctx: GameContext, dt: number): void {
   // settle the cabin into its crashed lean over the fade (it tips as it slams in). This ALSO
   //   drops the seated cage at the first nonzero pose so the player can later walk out the hatch.
   setCabinCrashPose(Math.min(1, t / (IMPACT_FADE * 0.9)));
+  // W6 item 4 — the pod TILTS as it settles (setCabinCrashPose rotates the group about its floor
+  //   pivot), so keep the body planted in the seat AS IT LEANS (getCrashedSeatWorld transforms the
+  //   local seat through the live tilt). This holds the eye inside the bore through the whole
+  //   impact→wake, so the camera never clips outside the cabin during the settle (fades included).
+  seatBodyKeepLook(ctx, getCrashedSeatWorld(ctx));
   setIntroBlack(Math.min(1, t / IMPACT_FADE));
   if (t > IMPACT_FADE + IMPACT_HOLD) advanceBeat(ctx);   // → wake
 }
@@ -1074,9 +1094,8 @@ function tickImpact(ctx: GameContext, dt: number): void {
  *  open desert). The impact beat already settled the descent cabin to its crashed pose + freed the
  *  player (dropped the seated cage). Here we just come to inside it: fade in dazed, looking at the −Z
  *  front door (the blast cracked it ajar), kick it wide, walk out through it onto the real terrain.
- *  Phases: comeTo → prompt → blowing → climb. The front door faces −Z (FDOOR_AZ) → the wake look is
- *  yaw 0, the SAME orientation as the whole descent (the user's "always face the door" anchor). */
-const FRONT_DOOR_YAW = 0;   // face the −Z merged front door (FDOOR_AZ=π → seated yaw 0 faces it), the descent-ride anchor
+ *  Phases: comeTo → prompt → blowing → climb. The front door faces −Z (FDOOR_AZ) → the descent-ride
+ *  free-look already points there; the wake keeps that look (W6 item 1 — no re-anchor). */
 function tickWake(ctx: GameContext, dt: number): void {
   const intro = ctx.intro;
   if (!intro) return;
@@ -1091,8 +1110,12 @@ function tickWake(ctx: GameContext, dt: number): void {
     buildPodScene(ctx);          // no-op if already built (the crashed cabin from impact); else builds it at the spawn
     setCabinCrashPose(1);        // ensure the crashed lean + the dropped cage (idempotent)
     blowCabinHatch(0);           // the front door sits ajar (the blast cracked it) — the dawn reads past it
-    seatPlayerAt(ctx, getPodSpawn(ctx));   // body at the seated spawn INSIDE the crashed cabin
-    faceControl(ctx, FRONT_DOOR_YAW, -0.05);   // look at the −Z front door (the dawn desert past it), slightly down (dazed)
+    // W6 item 1 — re-seat the BODY inside the crashed cabin but DON'T re-drive the camera: the player
+    //   free-looked through the descent + impact, and the wake is a continuous seated view (fades
+    //   included), so their gaze carries over (no snap to face the door). seatBodyKeepLook keeps the
+    //   camera rotation; the front door is already dead-ahead (−Z) if they were watching the vista.
+    //   (Was seatPlayerAt + faceControl(FRONT_DOOR_YAW,−0.05) — a re-anchor the user asked us to drop.)
+    seatBodyKeepLook(ctx, getCrashedSeatWorld(ctx));   // body at the seated spawn INSIDE the crashed (tilted) cabin; look preserved (W6 item 4 — tilt-aware seat keeps the eye in the bore)
     startDesertWind();           // T5.3 — the dawn-desert WIND fades in as you come to (the quiet aftermath; persists into step-out, stopped at handoff)
     intro.mode = 'seated';       // dazed: free-look, can't move yet
     setIntroBlack(1);
@@ -1221,13 +1244,11 @@ export function updateEscapePodIntro(ctx: GameContext, dt: number): void {
   // it suppressed each frame here (this runs after them) through the space/ship/descent/crash
   // beats; stepOut restores the desert atmosphere when the player steps out into the dunes.
   if (intro.beat !== 'stepOut' && intro.beat !== 'done') setIntroAtmosphereHidden(ctx, true);
-  // CLEAR-SKIES (user ask) — pin the fog to the intro's clear-day density for the GROUND-level
-  // atmospheric beats (impact / wake / stepOut). updateWeather ran earlier this frame and re-set
-  // fog.density to the survival value (0.0018 = hazy), so without this the crashed cabin, the wake,
-  // and the step-out reveal inherit the survival haze — the "cloudless but hazy" the user flagged.
-  // The descent/parachute beats set their OWN altitude-scaled ramp that LANDS on this exact value
-  // (0.00012), so the whole leg (falling-in → stepping-out) reads on one continuous crisp horizon.
-  if (intro.beat === 'impact' || intro.beat === 'wake' || intro.beat === 'stepOut') applyIntroClearFog(ctx);
+  // W6 item 5 — NO ground-level fog pin. The descent/parachute already blended the fog to the
+  //   game's survival density during the fall (blendDescentFog), so by the crash it IS the survival
+  //   fog — impact/wake/stepOut just let updateWeather's survival fog stand (nothing to override).
+  //   The Leviathan reveal reads through survival fog now (acceptable — it was re-valued for that
+  //   range) rather than the old artificial ground-level clear pin the user read as an "instance".
   // R4 — the phase-transition dip-to-black: HOLD at full black, then fade in over the new beat
   // (a REAL ~2 s blackout). _phaseFade counts down in SECONDS from PHASE_FADE_TOTAL; the opacity
   // is full through the hold, then a linear fade-out. Only on the descent-chain cinematic beats

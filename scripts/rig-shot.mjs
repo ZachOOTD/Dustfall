@@ -1747,14 +1747,21 @@ const SCENARIOS = {
       // view the player gets (the game's survival fog otherwise hazes the ground from altitude).
       if (descent !== null) {
         const fog = ctx.three.scene.fog;
-        if (fog && 'density' in fog) fog.density = 0.00006 + 0.00006 * descent;
-        // Mirror tickDescent's SKY blend: space (1) high → dawn desert (0) as the pod drops. Without
-        // this the rig's descent shows the normal daytime sky (a tan fog wall), not the orbit vista.
-        // C3 — the formula MATCHES tickDescent (start the blend at 0.14, /0.34) + drive the planet
-        //   APPROACH (grow 0→1 over descent 0→0.22) so the rig shows the planet swelling to fill the
-        //   porthole across d0→d0.2 (the coordinator's check). Both keep the rig faithful to sky.ts.
+        // W6 item 5 — mirror the descent fog: thin high (the clear vista), blending to survival as
+        //   the pod drops below ~150 m (altitude = 600·(1−p^1.7)). Faithful to blendDescentFog.
+        if (fog && 'density' in fog) {
+          const alt = 600 * (1 - Math.pow(descent, 1.7));
+          const kRaw = Math.max(0, Math.min(1, 1 - alt / 150));
+          const k = kRaw * kRaw * (3 - 2 * kRaw);
+          const survival = 0.0018;   // FOG_DENSITY_CLEAR (the game's survival target at ground level)
+          fog.density = 0.00006 + (survival - 0.00006) * k;
+        }
+        // Mirror tickDescent's SKY blend: space (1) high → desert (0) as the pod drops. Without this
+        // the rig's descent shows the normal daytime sky (a tan fog wall), not the orbit vista.
+        // W6 item 3 — drive the planet APPROACH with the NEW two-phase curve (slow far, faster near)
+        //   via the exported planetApproachCurve, so the rig shows the reworked approach faithfully.
         try { g.setSkyIntroMode(1 - Math.min(1, Math.max(0, (descent - 0.14) / 0.34))); } catch {}
-        try { g.setPlanetApproach(Math.min(1, descent / 0.22)); } catch {}
+        try { g.setPlanetApproach(g.planetApproachCurve(descent)); } catch {}
       }
       const cam = ctx.three.camera;
       const V = cam.position.constructor;
@@ -1823,8 +1830,9 @@ const SCENARIOS = {
       // The space blend for this altitude (mirrors tickDescent): full space high → dawn desert low.
       // C3 — MATCH tickDescent's (descent−0.14)/0.34 curve so the rig's blend is faithful.
       const space01 = 1 - Math.min(1, Math.max(0, (descent - 0.14) / 0.34));
-      // C3 — the planet-approach factor at this altitude (grows 0→1 over descent 0→0.22).
-      const approach = Math.min(1, descent / 0.22);
+      // W6 item 3 — the planet-approach factor at this altitude via the NEW two-phase curve (slow
+      //   far, faster near), so the paused rig mirrors the reworked approach.
+      const approach = window.__game.planetApproachCurve(descent);
       if (space01 <= 0.01) return;   // low in the fall the sky has crossed to the dawn desert — leave it
       let dome = null, stars = null, planetGroup = null;
       s.traverse((o) => {
@@ -1885,6 +1893,58 @@ const SCENARIOS = {
     const tag = `pod-interior-${angle}${dtag}${pull > 0 ? '-pull' + pull : ''}${snap ? '-snap' : ''}`;
     await page.screenshot({ path: join(OUT, `scen-${tag}.png`), fullPage: false, animations: 'disabled', timeout: 60000 });
     console.log(`[pod-interior] ${JSON.stringify(meas)} → scen-${tag}.png`);
+  },
+
+  // W6 item 6 — THE SEALED CABIN DOOR must sit FLUSH (not slanted) at every sealed stage. Probes the
+  //   cabin hatch pivot's rotation (x,y,z) at descent (sealed), impact (sealed, crashed), and reports
+  //   whether any residual tilt exists; then shoots a TRUE head-on porthole-centred frame at descent
+  //   so the door slab edges vs the frame can be eyeballed. A non-zero pivot.x/z (or y≠0 when sealed)
+  //   = the slant. --descent=<0..1> picks the sealed descent altitude to shoot (default 0.02).
+  'door-check': async (page) => {
+    const descent = argv.descent !== undefined ? Number(argv.descent) : 0.02;
+    await page.evaluate(() => {
+      const g = window.__game;
+      const ctx = g.ctx;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      g.startIntro();
+      g.jumpToBeat('descent');   // the descent init tick (next RAF) builds + seats the pod
+    });
+    await page.waitForTimeout(700);   // let the descent init tick build the pod (like pod-interior)
+    const probe = await page.evaluate((descent) => {
+      const g = window.__game;
+      try { g.setDescentProgress(descent); } catch {}
+      const atDescent = g.probeCabinDoor();
+      // IMPACT (sealed, crashed) — the crash pose tilts the GROUP; the door pivot LOCAL should stay 0.
+      try { g.setDescentProgress(1); g.setCabinCrashPose(1); } catch {}
+      const atImpact = g.probeCabinDoor();
+      // back to the sealed descent pose for the head-on shot
+      try { g.setCabinCrashPose(0); g.setDescentProgress(descent); } catch {}
+      return { atDescent, atImpact };
+    }, descent);
+    console.log('[door-check] pivot ' + JSON.stringify(probe));
+    // head-on shot: camera at the porthole centre height, dead −Z, close.
+    await page.waitForTimeout(300);
+    await page.evaluate((descent) => {
+      const ctx = window.__game.ctx;
+      ctx.flags.paused = true;
+      try { window.__game.setDescentProgress(descent); } catch {}
+      const cam = ctx.three.camera;
+      const V = cam.position.constructor;
+      const pod = ctx.three.scene.getObjectByName('escapePodCabin');
+      pod.updateMatrixWorld(true);
+      const o = pod.getWorldPosition(new V());
+      // VP_CY = 1.34 (porthole centre height above the floor origin); CAB_R front wall at z = o.z − 1.28.
+      cam.position.set(o.x, o.y + 1.34, o.z + 0.9);
+      cam.lookAt(o.x, o.y + 1.34, o.z - 1.28);
+      cam.updateMatrixWorld(true);
+      ctx.three.renderer.setSize(900, 900, false);
+      if (cam.isPerspectiveCamera) { cam.aspect = 1; cam.updateProjectionMatrix(); }
+    }, descent);
+    await page.waitForTimeout(200);
+    await page.screenshot({ path: join(OUT, 'scen-door-check.png'), fullPage: false, animations: 'disabled', timeout: 60000 });
+    console.log('[door-check] → scen-door-check.png');
   },
 
   // Hauler (T3.1): the HERO cargo-hauler exterior seen THROUGH the pod porthole at the
@@ -3597,12 +3657,11 @@ const SCENARIOS = {
       const pOut = ctx.player.body.body.translation();
       const walkedOutZ = pOut.z - inside.z;   // negative = walked −Z out the front door
 
-      // ── EXPOSURE EASE PROOF (deterministic, throttle-proof). The step-out arms the eye-adaptation
-      //    ease, but the throttled headless tab feeds huge dt (the real-loop ease can complete in ~1
-      //    frame → a false "snap"). __game.smokeExposureEase() re-arms from the wake lift + ticks the
-      //    exported driver with SMALL FIXED dt, returning the sampled curve — proving it's a GRADUAL
-      //    ease (mid values, monotone) that lands on the base, independent of RAF timing.
-      const easeReport = g.smokeExposureEase();
+      // ── ZERO-SHIFT EXPOSURE PROOF (W6 item 5). The wake NO LONGER lifts the exposure — it stays at
+      //    the desert base (1.05) from the crash onward, so there is nothing to ease and no washed-out
+      //    exit. __game.smokeExposureConstant() drives the crash-pose settle 0→1 and asserts the
+      //    renderer exposure is CONSTANT at 1.05 across the whole settle (min==max==base).
+      const easeReport = g.smokeExposureConstant();
       return {
         walkExpoAtWake: +expoAtWake.toFixed(3), walkExpoFinal: +ctx.three.renderer.toneMappingExposure.toFixed(3),
         ease: easeReport,
@@ -3628,10 +3687,166 @@ const SCENARIOS = {
     if (log.maxJump > 3.0) throw new Error(`pod-walkout GATE FAILED: a discontinuous ${log.maxJump}m jump (a teleport, not a KCC step) occurred during the walk-out.`);
     // GATE 3 — the wake-climb advanced to stepOut (the walk-out → stepOut chain fired).
     if (!log.reachedStepOut) throw new Error(`pod-walkout GATE FAILED: the walk-out never advanced to stepOut (the climb-out distance gate didn't fire).`);
-    // GATE 4 — the exposure EASED (eye-adaptation), not snapped: smokeExposureEase proves a gradual
-    //   monotone descent (mid values) from the wake lift landing on the desert base under fixed dt.
-    if (!log.ease || !log.ease.ok) throw new Error(`pod-walkout GATE FAILED: the exposure did not EASE like eye-adaptation — smokeExposureEase=${JSON.stringify(log.ease)} (expected a gradual monotone ${log.ease ? log.ease.from : '?'}→base with ≥4 mid samples).`);
-    console.log(`[pod-walkout] GATE PASS — kicked the front door + walked OUT on real legs (Δz=${log.walkedOutZ}m over ${log.driver.simElapsed}s sim / ${log.driver.framesTicked} fixed-dt frames, maxJump=${log.maxJump}m, handoff jump=${log.teleportAtHandoff}m = NO teleport), reached stepOut, and the exposure EASED ${log.ease.from}→${log.ease.final} (eye-adaptation: ${log.ease.midSamples} mid samples, monotone=${log.ease.monotone}).`);
+    // GATE 4 — ZERO-SHIFT EXPOSURE (W6 item 5): the exposure is CONSTANT at the desert base (1.05)
+    //   across the whole crash-pose settle — the wake never lifts it, so there's no washed-out exit
+    //   + nothing to ease. Both the settle-sweep (smokeExposureConstant) AND the live wake capture
+    //   must sit at the base.
+    if (!log.ease || !log.ease.ok || !log.ease.constant) throw new Error(`pod-walkout GATE FAILED: the exposure is NOT CONSTANT at the desert base across the crash settle — smokeExposureConstant=${JSON.stringify(log.ease)} (expected min==max==${log.ease ? log.ease.base : '1.05'}).`);
+    if (Math.abs(log.walkExpoAtWake - 1.05) > 1e-2) throw new Error(`pod-walkout GATE FAILED: the LIVE wake exposure lifted to ${log.walkExpoAtWake} (expected 1.05 — the wake must not lift the exposure; W6 item 5).`);
+    if (Math.abs(log.walkExpoFinal - 1.05) > 1e-2) throw new Error(`pod-walkout GATE FAILED: the exposure ended at ${log.walkExpoFinal} after the walk-out (expected 1.05 — bit-stable across the exit).`);
+    console.log(`[pod-walkout] GATE PASS — kicked the front door + walked OUT on real legs (Δz=${log.walkedOutZ}m over ${log.driver.simElapsed}s sim / ${log.driver.framesTicked} fixed-dt frames, maxJump=${log.maxJump}m, handoff jump=${log.teleportAtHandoff}m = NO teleport), reached stepOut, and the exposure held CONSTANT at ${log.ease.base} (wake=${log.walkExpoAtWake}, settle min/max=${log.ease.min}/${log.ease.max}) — zero-shift handoff.`);
+  },
+
+  // W6 item 4 GATE — the IMPACT VIEW NEVER LEAVES THE POD. Drives the real descent→parachute→impact
+  //   →wake chain with a FIXED sim-dt and, each ticked frame from the ground-approach through the
+  //   crash-settle + wake, probes whether the camera EYE is inside the (possibly-tilted) cabin shell
+  //   (probeEyeInCabin). Asserts the eye stays INSIDE the whole time — no frame where the view clips
+  //   outside the pod (the "seeing above the pod / the landscape" bug). The bug this catches: the
+  //   body left ~20 m up when the cabin grounded at impact → the eye hung above the pod for a few frames.
+  'impact-eye': async (page) => {
+    const log = await page.evaluate(async () => {
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      const g = window.__game;
+      const ctx = g.ctx;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      const FIXED_DT = 0.05;
+      const realClock = ctx.three.clock;
+      const origGetDelta = realClock.getDelta.bind(realClock);
+      const origW = ctx.three.renderer.domElement.width, origH = ctx.three.renderer.domElement.height;
+      const cam = ctx.three.camera;
+      let worstMargin = 999;        // the smallest radial margin seen (negative = clipped outside the wall)
+      let worstReport = null;
+      let anyOutside = false, framesProbed = 0, sawImpact = false, sawWake = false;
+      const beatsSeen = {};
+      try {
+        realClock.getDelta = () => FIXED_DT;
+        ctx.three.renderer.setSize(48, 48, false);
+        g.startIntro();
+        // enter the descent LATE (near the ground) so we exercise the ground-approach → impact → wake
+        //   frames densely; then let the chain auto-advance through parachute → impact → wake.
+        g.jumpToBeat('descent');
+        // drive frames; sample the eye vs cabin each ticked frame once we're at/after the parachute
+        //   (the ground-approach) and all the way through wake's come-to.
+        const simStart = ctx.time.elapsed;
+        let lastSim = simStart, stalls = 0;
+        for (let i = 0; i < 8000; i++) {
+          await sleep(16);
+          const beat = ctx.intro ? ctx.intro.beat : 'done';
+          beatsSeen[beat] = (beatsSeen[beat] || 0) + 1;
+          if (beat === 'impact') sawImpact = true;
+          if (beat === 'wake') sawWake = true;
+          // probe from the parachute (ground-approach) through impact + wake — the window the bug lived in.
+          if (beat === 'parachute' || beat === 'impact' || beat === 'wake') {
+            const eye = { x: cam.position.x, y: cam.position.y, z: cam.position.z };
+            const r = g.probeEyeInCabin(eye);
+            if (r.built) {
+              framesProbed++;
+              if (!r.inside) anyOutside = true;
+              if (r.radialMargin < worstMargin) { worstMargin = r.radialMargin; worstReport = { beat, ...r }; }
+            }
+          }
+          const nowSim = ctx.time.elapsed;
+          if (nowSim > lastSim + 1e-6) { lastSim = nowSim; stalls = 0; }
+          else if (++stalls > 600) break;
+          // stop a couple seconds into wake (past the come-to fade) — the whole impact→wake window is covered.
+          if (sawWake && (beatsSeen['wake'] || 0) > 30) break;
+          if (nowSim - simStart > 40) break;   // hard sim-time cap
+        }
+      } finally {
+        realClock.getDelta = origGetDelta;
+        ctx.three.renderer.setSize(origW, origH, false);
+        if (window.__game.ctx.intro && window.__game.ctx.intro.active) { try { window.__game.skipIntro(); } catch {} }
+      }
+      return { anyOutside, framesProbed, sawImpact, sawWake, worstMargin: +worstMargin.toFixed(3), worstReport, beatsSeen };
+    });
+    console.log('[impact-eye] ' + JSON.stringify(log));
+    if (!log.sawImpact) throw new Error(`impact-eye GATE FAILED: the chain never reached the impact beat (beatsSeen=${JSON.stringify(log.beatsSeen)}).`);
+    if (!log.sawWake) throw new Error(`impact-eye GATE FAILED: the chain never reached the wake beat (beatsSeen=${JSON.stringify(log.beatsSeen)}).`);
+    if (log.framesProbed < 10) throw new Error(`impact-eye GATE FAILED: too few eye probes (${log.framesProbed}) — the descent/impact window wasn't exercised.`);
+    if (log.anyOutside) throw new Error(`impact-eye GATE FAILED: the camera eye CLIPPED OUTSIDE the cabin on at least one frame (worst=${JSON.stringify(log.worstReport)}) — the view left the pod during impact/wake (the "seeing above the pod / the landscape" bug).`);
+    console.log(`[impact-eye] GATE PASS — the eye stayed INSIDE the cabin across ${log.framesProbed} probed frames through impact→wake (worst radial margin=${log.worstMargin}m, all inside). The view never leaves the pod.`);
+  },
+
+  // W6 item 5 GATE — THE ZERO-SHIFT HANDOFF. The visible world must be BIT-STABLE across the exit
+  //   threshold: exposure, fog density, sun intensity, and the diurnal clock must NOT snap at the
+  //   wake, at step-out, or after handoff — the wake IS the survival world; walking out is just a
+  //   door. Drives the real chain to wake, then to step-out + handoff + 5 s of gameplay, sampling
+  //   the world state at each point and asserting they match (within tight tolerances). The clock
+  //   ADVANCES continuously (that's fine — it must not SNAP BACKWARD); exposure/fog/sun hold.
+  'zero-shift-handoff': async (page) => {
+    const log = await page.evaluate(async () => {
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      const g = window.__game;
+      const ctx = g.ctx;
+      const FIXED_DT = 0.05;
+      const realClock = ctx.three.clock;
+      const origGetDelta = realClock.getDelta.bind(realClock);
+      const origW = ctx.three.renderer.domElement.width, origH = ctx.three.renderer.domElement.height;
+      const sample = () => ({
+        expo: +ctx.three.renderer.toneMappingExposure.toFixed(4),
+        fog: ctx.three.scene.fog && ctx.three.scene.fog.density != null ? +ctx.three.scene.fog.density.toFixed(6) : null,
+        sun: ctx.lights && ctx.lights.sun ? +ctx.lights.sun.intensity.toFixed(4) : null,
+        dayTime: +ctx.time.dayTime.toFixed(4),
+      });
+      const drive = async (cond, budget) => {
+        const start = ctx.time.elapsed; let last = start, stalls = 0;
+        for (let i = 0; i < 8000; i++) {
+          await sleep(16);
+          if (cond()) return true;
+          const now = ctx.time.elapsed;
+          if (now > last + 1e-6) { last = now; stalls = 0; } else if (++stalls > 600) break;
+          if (now - start > budget) break;
+        }
+        return cond();
+      };
+      let atWake = null, atStepOut = null, afterHandoff = null, reachedWake = false, reachedStepOut = false, handedOff = false;
+      try {
+        realClock.getDelta = () => FIXED_DT;
+        ctx.three.renderer.setSize(48, 48, false);
+        g.startIntro();
+        // run the REAL descent → crash → wake so the fog/exposure/time are set by the actual flow.
+        g.jumpToBeat('descent');
+        reachedWake = await drive(() => ctx.intro && ctx.intro.beat === 'wake' && ctx.intro.scratch.init === true, 30);
+        atWake = sample();
+        // force the wake to walk-out-ready + walk out to trigger stepOut → endEscapePodIntro.
+        g.blowCabinHatch(1);
+        const f = document.getElementById('intro-fade'); if (f) f.style.opacity = '0';
+        if (ctx.intro) { ctx.intro.mode = 'walk'; ctx.intro.scratch.phase = 'climb'; ctx.intro.scratch.t = 0; }
+        const cam = ctx.three.camera; cam.rotation.order = 'YXZ';
+        // capture the moment we enter stepOut (the unify has just run — the pod is now the persistent world object).
+        reachedStepOut = await drive(() => { cam.rotation.set(-0.05, 0, 0); ctx.input.keys['KeyW'] = true; return ctx.intro && ctx.intro.beat === 'stepOut'; }, 6);
+        atStepOut = sample();
+        ctx.input.keys['KeyW'] = false;
+        // let stepOut's REVEAL_DWELL elapse → endEscapePodIntro (handoff), then 5 s of gameplay.
+        handedOff = await drive(() => !ctx.intro || !ctx.intro.active, 8);
+        await drive(() => false, 5);   // 5 s of real gameplay ticks (the fog-ease window that USED to exist)
+        afterHandoff = sample();
+      } finally {
+        realClock.getDelta = origGetDelta;
+        ctx.three.renderer.setSize(origW, origH, false);
+        if (ctx.intro && ctx.intro.active) { try { g.skipIntro(); } catch {} }
+      }
+      return { atWake, atStepOut, afterHandoff, reachedWake, reachedStepOut, handedOff };
+    });
+    console.log('[zero-shift-handoff] ' + JSON.stringify(log));
+    if (!log.reachedWake) throw new Error(`zero-shift-handoff GATE FAILED: never reached wake (${JSON.stringify(log)}).`);
+    if (!log.reachedStepOut) throw new Error(`zero-shift-handoff GATE FAILED: never reached stepOut (${JSON.stringify(log)}).`);
+    if (!log.handedOff) throw new Error(`zero-shift-handoff GATE FAILED: the intro never handed off (${JSON.stringify(log)}).`);
+    const w = log.atWake, s = log.atStepOut, a = log.afterHandoff;
+    // EXPOSURE — constant 1.05 at every point (no lift, no ease).
+    for (const [tag, p] of [['wake', w], ['stepOut', s], ['afterHandoff', a]]) {
+      if (Math.abs(p.expo - 1.05) > 1e-2) throw new Error(`zero-shift-handoff GATE FAILED: exposure at ${tag} was ${p.expo} (expected 1.05 — no lift/ease anywhere).`);
+    }
+    // FOG — bit-stable across the exit (already at survival by the crash; no clear pin, no ease). The
+    //   wake→stepOut→afterHandoff fog must not jump (tolerance covers float noise, not a visible shift).
+    if (Math.abs(w.fog - s.fog) > 2e-5 || Math.abs(s.fog - a.fog) > 2e-5) throw new Error(`zero-shift-handoff GATE FAILED: fog density shifted across the exit — wake=${w.fog} stepOut=${s.fog} afterHandoff=${a.fog} (must be bit-stable; the fog is already survival by the crash).`);
+    // SUN intensity — bit-stable (the midday sun the pod fell under continues; no relight at exit).
+    if (w.sun != null && (Math.abs(w.sun - s.sun) > 0.05 || Math.abs(s.sun - a.sun) > 0.1)) throw new Error(`zero-shift-handoff GATE FAILED: sun intensity shifted across the exit — wake=${w.sun} stepOut=${s.sun} afterHandoff=${a.sun}.`);
+    // CLOCK — must ADVANCE (or hold), never SNAP BACKWARD (the old setIntroMiddayClear re-set was a backward jump).
+    const wrap = (b, x) => x < b - 0.5 ? x + 1 : x;   // handle a midnight wrap (won't happen at midday, but be safe)
+    if (wrap(w.dayTime, s.dayTime) < w.dayTime - 1e-4 || wrap(s.dayTime, a.dayTime) < s.dayTime - 1e-4) throw new Error(`zero-shift-handoff GATE FAILED: the diurnal clock SNAPPED BACKWARD across the exit — wake=${w.dayTime} stepOut=${s.dayTime} afterHandoff=${a.dayTime} (the clock must continue, not reset).`);
+    console.log(`[zero-shift-handoff] GATE PASS — the world is bit-stable across the exit: exposure ${w.expo}/${s.expo}/${a.expo} (constant 1.05), fog ${w.fog}/${s.fog}/${a.fog} (stable), sun ${w.sun}/${s.sun}/${a.sun} (stable), clock ${w.dayTime}→${s.dayTime}→${a.dayTime} (continuous, no backward snap). The wake IS the survival world.`);
   },
 
   // B2 dev diagnostic — dump every physics collider whose AABB centre falls in the pod-bay boarding

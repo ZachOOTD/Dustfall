@@ -295,21 +295,34 @@ let _crashPose = 0;
 //   enough to stand + walk. unify keeps THIS lean (no tilt-snap at step-out — the wake cabin already
 //   sits at it). (Was 0.26/0.14 — a steep lean tuned for the old non-walkable interior-only cabin.)
 const _CRASH_PITCH = 0.075, _CRASH_ROLL = 0.045, _CRASH_YAW = 0.0;   // the settled GENTLE crashed lean (radians ≈ 4°/2.6°)
-// WAKE exposure lift (coherence-pass fix): the desert base exposure (scene.ts, Reinhard) is too
-//   dim for an enclosed interior; the crashed wake cabin lifts the renderer exposure so the dawn
-//   interior reads. Restored to the base on any intro exit (endEscapePodIntro → restoreCabinExposure).
-const CABIN_BASE_EXPOSURE = 1.05;   // matches scene.ts renderer.toneMappingExposure (the desert base)
-// CONSISTENT-MIDDAY (user re-scope): the wake happens at BRIGHT midday now (not dim dawn), so the
-//   enclosed crashed cabin needs LESS exposure compensation than the old dawn lift (2.0 → 1.5) —
-//   the midday sun flooding the hatch already lights it far more. Restored to the base on step-out
-//   (the unified pod becomes a real-world object lit by the real sun at the desert-base exposure).
-// WAKE-BRIGHTNESS (Item 1, user re-scope): 1.5 still rendered the enclosed midday cabin as a near-
-//   BLACK box (the Reinhard curve crushes the interior + the ajar hatch blocks the sun flood — the
-//   point-light fill was the whole read and it wasn't reaching). Lifted so the wake cabin reads as a
-//   MIDDAY-lit crashed capsule (bore/seat/console/eject clearly legible), CLOSE to the bright step-out
-//   that follows (no dim→bright pop when the hatch opens) — still a hair under step-out's real-sun read
-//   so a slight dazed-enclosed mood survives. Paired with a much stronger cabinFill + lamp below.
-const CABIN_WAKE_EXPOSURE = 1.62;   // the crashed-cabin MIDDAY interior reads on the Reinhard curve at this lift (was 1.5 → near-black box; the real bottleneck was the come-to fade, not the lift)
+// W6 item 5 (user, 2026-07-03: "the lighting is STILL super bright and washed out at exit — make
+//   it the original world lighting"): the wake EXPOSURE LIFT is REMOVED. The renderer exposure stays
+//   at the desert base (1.05) from the crash onward; the enclosed wake cabin reads by REAL INTERIOR
+//   LAMPS (the WAKE_* levels below), not a global tone-curve lift that then had to ease back at exit
+//   (that ease WAS the washed-out exit the user still saw). CABIN_BASE_EXPOSURE is the ONE exposure
+//   the whole crash→wake→step-out→walk-in leg runs at — nothing to lift, nothing to ease, no shift.
+const CABIN_BASE_EXPOSURE = 1.05;   // matches scene.ts renderer.toneMappingExposure (the desert base) — held constant from the crash onward
+// ── WAKE / WALK-IN interior LAMP levels (W6 item 5). ONE set of levels for BOTH the wake cabin
+//    (setCabinCrashPose s→1) AND the persistent walk-in pod (parkPodLights), so there is ZERO light
+//    shift across the wake→step-out→walk-in threshold. Tuned to read the enclosed crashed cabin at
+//    the desert-base exposure (1.05) with only the ajar door letting sun in; the walk-in adds the
+//    real midday sun through the blown-open door on top (a natural brighten walking into daylight,
+//    the SAME lamps — not a state change). The BASE_* are the dim descent (in-space) build levels the
+//    lamps lerp FROM as the crash pose settles. (Replaces the old flood levels tuned for the 1.62 lift.)
+const CABIN_FILL_BASE = 0.72;       // hemisphere fill — the dim in-space descent level (build default)
+const LAMP_BASE = 1.7;              // ceiling lamp — build default
+const KEY_RAKE_BASE = 0.6;          // warm rake — build default
+const COOL_RAKE_BASE = 0.28;        // cool counter-rake — build default
+// (kept under the persistence gate's anti-wash-out ceilings — max interior intensity ≤ 2.5, hatch
+//  point-light reach ≤ 5.0 m — so the walk-in never blows out the interior or pools a hot spot on
+//  the sand; the enclosed read is carried by the fill + rakes + lamp, not a bright terrain-reaching spill.)
+const WAKE_CABIN_FILL = 1.9;        // hemisphere fill at the wake / walk-in — the WHOLE-cabin lift that reads the enclosed bore at 1.05 (sun tops it up on the walk-in)
+const WAKE_CABIN_LAMP = 2.0;        // ceiling lamp at the wake / walk-in (a warm lived-in key on the dome)
+const WAKE_KEY_RAKE = 1.25;         // warm rake — every wall/console face reads lit at 1.05
+const WAKE_COOL_RAKE = 0.55;        // cool counter-rake — no dead-black far arc
+const WAKE_VP_GLOW = 1.35;          // porthole glow — a calm cool accent forward
+const WAKE_HATCH_SPILL = 2.4;       // the door spill (a warm bounce into the bore); ≤ 2.5 so it never blows out / pools on the sand
+const WAKE_HATCH_DIST = 4.8;        // the door-spill reach (≤ 5.0 — covers the bore without spilling far onto the terrain)
 
 /** Is the pod currently built? */
 export function podBuilt(): boolean {
@@ -352,6 +365,72 @@ export function getPodSpawn(ctx: GameContext): THREE.Vector3 {
   const pb = ctx.player.body;
   const o = _podWorldOrigin();
   return new THREE.Vector3(o.x, o.y + pb.halfHeight + pb.radius, o.z + 0.35);
+}
+
+/** W6 item 6 — probe the cabin door (hatch) pivot's rotation, to diagnose the "slanted sealed door".
+ *  Reports the pivot's LOCAL euler + its WORLD euler (the group tilt folds in at the crash). A sealed
+ *  door should read local (0,0,0); a non-zero local x/z is a build/anim residual (the slant). */
+export function probeCabinDoor(): {
+  built: boolean; localX: number; localY: number; localZ: number;
+  worldX: number; worldY: number; worldZ: number; ajarY: number;
+} {
+  if (!cabinHatchPivot) return { built: false, localX: 0, localY: 0, localZ: 0, worldX: 0, worldY: 0, worldZ: 0, ajarY: _cabinHatchAjarY };
+  cabinHatchPivot.updateMatrixWorld(true);
+  const we = new THREE.Euler().setFromQuaternion(cabinHatchPivot.getWorldQuaternion(new THREE.Quaternion()), 'YXZ');
+  return {
+    built: true,
+    localX: +cabinHatchPivot.rotation.x.toFixed(4), localY: +cabinHatchPivot.rotation.y.toFixed(4), localZ: +cabinHatchPivot.rotation.z.toFixed(4),
+    worldX: +we.x.toFixed(4), worldY: +we.y.toFixed(4), worldZ: +we.z.toFixed(4), ajarY: _cabinHatchAjarY,
+  };
+}
+
+/** W6 item 5 — the pod's CURRENT ALTITUDE above the descent base (m). DESCENT_ALT high at the
+ *  start of the fall, eased to 0 at the ground by setDescentProgress. Used by the descent-fog blend
+ *  (the fog normalizes to survival as the pod drops through the lower atmosphere). */
+export function getPodAltitude(): number { return _podAltitude; }
+
+/** W6 item 4 — the seated spawn TRANSFORMED THROUGH THE POD'S CURRENT TILT. getPodSpawn returns the
+ *  UPRIGHT seat (pod origin + seat offset); during the crash the pod GROUP rotates about its floor
+ *  origin (setCabinCrashPose eases _crashPose 0→1), so the true in-cabin seat swings with it. This
+ *  applies the group's live world matrix to the LOCAL seat point so the re-seated body/eye tracks the
+ *  tilting cabin exactly — the camera stays planted in the seat as the pod grounds + leans, instead of
+ *  hanging at the untilted position (a small lag that, stacked with a mid-air body, is the
+ *  "view above the pod" bug). Falls back to getPodSpawn when the pod isn't grounded/built. */
+export function getCrashedSeatWorld(ctx: GameContext): THREE.Vector3 {
+  const pb = ctx.player.body;
+  if (!podGroup || !_descentBase) return getPodSpawn(ctx);
+  podGroup.updateMatrixWorld(true);
+  // LOCAL seat point: the group origin is the floor-top centre, so the seat is at
+  //   (0, halfHeight+radius, +0.35) in the pod's local frame (matches getPodSpawn's offset).
+  const localSeat = new THREE.Vector3(0, pb.halfHeight + pb.radius, 0.35);
+  return podGroup.localToWorld(localSeat);
+}
+
+/** W6 item 4 — IMPACT EYE-INSIDE-THE-CABIN probe (verification). Given a WORLD point (the camera
+ *  eye), report whether it is inside the cabin shell THIS frame — accounting for the pod group's
+ *  current crashed tilt (the group rotates about its floor origin, so a world point must be tested
+ *  in the pod's LOCAL frame). Returns the local coords, the radial/height margins to the shell, and
+ *  `inside` (true = the eye is within the bore, so the view stays in the pod; false = it clipped
+ *  outside → the "seeing above the pod / the landscape" bug). Used by the impact-eye rig gate to
+ *  prove the camera never leaves the cabin through the whole impact→wake. Null-safe (returns a
+ *  built:false report when the pod isn't built). */
+export function probeEyeInCabin(eye: { x: number; y: number; z: number }): {
+  built: boolean; inside: boolean; localX: number; localY: number; localZ: number;
+  radial: number; radialMargin: number; heightMargin: number;
+} {
+  if (!podGroup) return { built: false, inside: false, localX: 0, localY: 0, localZ: 0, radial: 0, radialMargin: 0, heightMargin: 0 };
+  podGroup.updateMatrixWorld(true);
+  const local = podGroup.worldToLocal(new THREE.Vector3(eye.x, eye.y, eye.z));
+  const radial = Math.hypot(local.x, local.z);   // distance from the pod's vertical axis (local Y)
+  // margins: how far INSIDE the shell the eye sits (positive = inside). The bore is radius CAB_R,
+  //   floor 0 → apex CAB_APEX. A small tolerance lets the eye sit right at the shell without flagging.
+  const radialMargin = CAB_R - radial;                    // + = inside the wall
+  const heightMargin = Math.min(local.y, CAB_APEX - local.y);   // + = between floor and ceiling
+  const inside = radialMargin > -0.02 && local.y > -0.02 && local.y < CAB_APEX + 0.02;
+  return {
+    built: true, inside, localX: +local.x.toFixed(3), localY: +local.y.toFixed(3), localZ: +local.z.toFixed(3),
+    radial: +radial.toFixed(3), radialMargin: +radialMargin.toFixed(3), heightMargin: +heightMargin.toFixed(3),
+  };
 }
 
 // ── Build helpers (closure-free; push geometry onto _cabinDisposables to free later) ──
@@ -1080,7 +1159,12 @@ function buildCabinHatch(group: THREE.Group): void {
   //    slab (the door reads as the same fabricated plate as the canonical bay door) with the DOMED
   //    CIRCULAR PORTHOLE set into its UPPER portion so the seated pilot reads the descent through it.
   const pivot = new THREE.Group();
-  pivot.position.set(HATCH_W / 2 + fT / 2, 0, 0.04);    // hinge at the right jamb, just proud
+  // W6 item 6 (slanted-door fix): the hinge sits at the aperture's RIGHT EDGE (x = +HATCH_W/2), NOT
+  //   HATCH_W/2 + fT/2. The old `+ fT/2` pushed the hinge 5 cm PAST the aperture edge into the frame,
+  //   so the closed door (which extends HATCH_W left from the hinge) landed 5 cm to the right of the
+  //   aperture centre — it overhung the right jamb + left a 5 cm gap on the left, reading as a SLANTED
+  //   /misaligned door. With the hinge on the aperture edge, the closed door fills the aperture flush.
+  pivot.position.set(HATCH_W / 2, 0, 0.04);    // hinge ON the right aperture edge (the door closes flush)
   const door = new THREE.Group();
   const doorTh = SHELL * 1.1;
   // The porthole y in door-local coords (door origin = door centre height HATCH_CY).
@@ -1808,11 +1892,11 @@ function _addWalkableColliders(ctx: GameContext): void {
  *  seated ride left the floor ~1.7 m up — fine seated, wrong to walk into), (3) walkable colliders,
  *  and (4) the salvage panel + chute-pop armed. It then PERSISTS into the real game (NOT disposed by
  *  endEscapePodIntro) as an enterable landmark — the SAME pod you rode down, that you can walk back
- *  into. Returns the pod's world (x,z) so the tutorial can scatter around it. `easeExposure` (default
- *  true = the live stepOut path) EASES the wake exposure down to the desert base like eye-adaptation
- *  (user spec #4 — no snap); the Continue-load path (restoreEnterablePod) passes false → snap to base
- *  (no wake exposure ever ran to ease from). */
-export function unifyEnterablePod(ctx: GameContext, x: number, z: number, easeExposure = true): { x: number; z: number } {
+ *  into. Returns the pod's world (x,z) so the tutorial can scatter around it. W6 item 5: the exposure
+ *  is CONSTANT at the desert base throughout (no wake lift → nothing to ease/snap at step-out) and the
+ *  walk-in lamps park at the SAME levels the wake ran at, so the wake→step-out→walk-in threshold is a
+ *  ZERO visual shift — the wake IS the survival world. */
+export function unifyEnterablePod(ctx: GameContext, x: number, z: number): { x: number; z: number } {
   if (!podGroup) { buildPodScene(ctx); setCabinCrashPose(1); }
   const group = podGroup!;
   // (1) remove the seated cage (may already be gone from the crash) so we can add the walkable set.
@@ -1840,19 +1924,12 @@ export function unifyEnterablePod(ctx: GameContext, x: number, z: number, easeEx
   group.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } });
   // (4) WALKABLE COLLIDERS (floor + wall ring gapped at the hatch).
   _addWalkableColliders(ctx);
-  // (5) the pod is now a REAL-WORLD object lit by the real midday sun → restore the desert-base
-  //     exposure (the wake lift was for the enclosed dim-interior moment) AND park the interior
-  //     lights down to calm walk-in levels. The wake beat floods the cabin lights HARD (hemi 7.3,
-  //     hatch flood 14@dist9, …) to punch the dazed enclosed cabin through the come-to fade at the
-  //     lifted wake exposure; left un-parked they PERSIST into the real midday game (this SAME pod
-  //     persists) and — now at the desert-base exposure, with the real sun already lighting the pod —
-  //     blow the interior out + pool a hot spot on the sand (the USER-reported wash-out). Park them.
-  // CLUSTER D — spec #4: EASE the wake exposure down to the desert base like eye-adaptation (no snap
-  //   "instance change") on the live stepOut; SNAP on the Continue-load path (no wake exposure to ease
-  //   from). Either way the interior lights park now (they don't need to ease — the ease is the tone
-  //   curve, and the sun already lights the walk-in; the park just stops the wake flood blowing out).
-  if (easeExposure) armExposureEase(ctx);   // ease over EXPO_EASE_S (ticked by updatePodExposureEase)
-  else ctx.three.renderer.toneMappingExposure = CABIN_BASE_EXPOSURE;   // load path: snap to base
+  // (5) W6 item 5 — the exposure is ALREADY at the desert base (the crash/wake never lifted it), so
+  //     stepping out is a ZERO exposure shift. Re-assert the base defensively (belt-and-braces — the
+  //     load path may enter here without a wake having run), then park the interior lamps at the SAME
+  //     levels the wake ran at (parkPodLights uses the WAKE_* constants) → no light shift at the
+  //     threshold either. The real midday sun through the blown-open door tops it up (the real world).
+  ctx.three.renderer.toneMappingExposure = CABIN_BASE_EXPOSURE;
   parkPodLights();
   // widen the hatch fully open (you walk through it) + keep the dawn/midday hatch flood.
   blowCabinHatch(1);
@@ -2226,9 +2303,9 @@ export function restoreEnterablePod(ctx: GameContext, saved: SavedPodCrash): voi
   if (_podEnterable) return;   // already present (shouldn't happen on a fresh Continue boot)
   // Build the ONE walk-in pod at the saved (x,z). unifyEnterablePod builds the cabin if needed
   //   (podGroup null on a fresh boot), wraps the skin, grounds it, adds colliders, registers the
-  //   salvage panel + arms the chute-pop, and sets _podEnterable + _enterablePodXZ. easeExposure=false
-  //   → SNAP to the desert base (a Continue load never ran the wake lift, so there's nothing to ease).
-  unifyEnterablePod(ctx, saved.x, saved.z, false);
+  //   salvage panel + arms the chute-pop, and sets _podEnterable + _enterablePodXZ. W6 item 5: it
+  //   holds the desert-base exposure (no lift anywhere), so the Continue load is byte-clean too.
+  unifyEnterablePod(ctx, saved.x, saved.z);
   // Apply the saved salvage state DIRECTLY to the just-registered record (NOT via the generic
   //   by-id patch — the id counter differs between sessions). crashedPodSalvageableId now points at
   //   the fresh record from unify's _registerEnterablePodSalvage.
@@ -2638,136 +2715,86 @@ export function setCabinCrashPose(pose: number): void {
     podBodies.length = 0;
     _shellOffsets = [];
   }
-  // DAWN WAKE LIGHT — as the cabin settles crashed, the dawn pours in the open hatch + the
-  //   cabin warms/brightens (the wake read: a warm-lit riveted cabin, not the dim space cabin).
+  // WAKE LIGHT — as the cabin settles crashed, the interior warms + brightens to a REAL-LAMP-lit
+  //   read (a warm-lit riveted cabin, not the dim space cabin). The COLOR warms (cool→warm by `s`);
+  //   the INTENSITIES lerp from the dim descent base to the WAKE_* targets, which are the SAME levels
+  //   the persistent walk-in pod parks at (parkPodLights) — so there is ZERO light shift across the
+  //   wake→step-out→walk-in threshold (W6 item 5: the wake IS the survival world).
   const s = _crashPose;
-  // WAKE-READABILITY FIX (coherence pass): the numeric intensities were "set" but the small
-  //   bore still rendered near-black — the point spills decay too fast to actually FILL the
-  //   riveted walls (world sun is ~0 in the intro dawn frame, so these cabin lights carry the
-  //   whole read). Raise the hatch flood + widen its reach (lower decay), lift the ambient fill
-  //   so the cabin clears the gloom, and warm the porthole glow — the player must WAKE in a
-  //   readable dawn-lit crashed cabin, not a black box.
+  // W6 item 5 — NO EXPOSURE LIFT. The renderer exposure stays at the desert base (1.05) from the
+  //   crash onward — the wake cabin reads by REAL INTERIOR LAMPS at 1.05, not a global tone-curve
+  //   lift that then had to ease back at exit (the washed-out exit the user still saw). The lamp
+  //   levels below are tuned to read the enclosed dazed cabin at 1.05; the blown-open front door +
+  //   midday sun floods in past that. (The old CABIN_WAKE_EXPOSURE lift + the eye-adaptation ease
+  //   are REMOVED entirely.)
   if (hatchSpillLight) {
-    hatchSpillLight.color.copy(_VP_WARM);   // CONSISTENT-MIDDAY — bright near-white daylight pouring in (was the warm-dawn build color 0xffcaa0)
-    hatchSpillLight.intensity = s * 14.0;   // MIDDAY FLOODING the hatch arc (brighter than dawn — the open door → full daylight pours in)
-    hatchSpillLight.distance = 9.0;         // reach across the whole bore (was 5.5 — fell off before the far wall)
-    hatchSpillLight.decay = 1.0;            // gentler falloff so the flood actually lights the cabin
+    hatchSpillLight.color.copy(_VP_WARM);                             // bright near-white daylight pouring in the ajar/open door
+    hatchSpillLight.intensity = s * WAKE_HATCH_SPILL;                 // the door spill (a warm bounce into the bore); parked-equal so no shift at unify
+    hatchSpillLight.distance = WAKE_HATCH_DIST;
+    hatchSpillLight.decay = 1.0;
   }
   if (cabinFill) {
-    cabinFill.color.copy(_fillScratch.copy(_FILL_COOL).lerp(_FILL_WARM, s));   // bright neutral midday ambient
-    // Item 1 — the hemisphere fill is the WHOLE-cabin lift (the ajar hatch blocks the sun flood, so
-    //   this + the rakes carry the read). Lifted so the enclosed bore clears the gloom to a readable
-    //   MIDDAY interior, a hair under the step-out (a slight dazed mood survives). NOTE (footgun): the
-    //   original "still dark" read was the come-to FADE overlay at ~0.8, not the cabin lumens — these
-    //   values are tuned against the FADE-CLEARED steady wake read (the rig now clears it pre-shot).
-    cabinFill.intensity = 0.72 + s * 6.6;
+    cabinFill.color.copy(_fillScratch.copy(_FILL_COOL).lerp(_FILL_WARM, s));   // cool descent → warm neutral midday ambient
+    // the hemisphere fill is the whole-cabin lift (the door blocks part of the sun flood, so this +
+    //   the rakes carry the enclosed read). Tuned so the bore clears the gloom to a readable interior
+    //   AT the desert-base exposure — the SAME level the walk-in parks at (zero shift at step-out).
+    cabinFill.intensity = CABIN_FILL_BASE + s * (WAKE_CABIN_FILL - CABIN_FILL_BASE);
   }
   if (vpGlowLight) {
     vpGlowLight.color.copy(_vpScratch.copy(_VP_COOL).lerp(_VP_WARM, s));
-    vpGlowLight.intensity = 0.95 + s * 2.3;                            // the porthole also reads the bright midday desert (lifted with the rest)
+    vpGlowLight.intensity = 0.95 + s * (WAKE_VP_GLOW - 0.95);
   }
   if (cabinLamp) {
-    cabinLamp.intensity = 1.7 + s * 1.7;                              // the ceiling lamp KEY pools the dome/apex — a modest lift (the rakes/fill carry the wall read; keep the dome from over-hotting for a dazed mood)
+    cabinLamp.intensity = LAMP_BASE + s * (WAKE_CABIN_LAMP - LAMP_BASE);   // the ceiling lamp KEY pools the dome/apex
     // CRASH-AFTERMATH — publish the CLEAN base each frame so the wake flicker (updateChutePop, later
     //   in the tick) modulates the correct value even as the crashed-settle ease drives it (no drift).
     cabinLamp.userData._flickerBase = cabinLamp.intensity;
   }
-  // Item 1 — the RAKE directionals hit every wall/seat/console face uniformly (a hemisphere ambient
-  //   alone leaves the curved bore flat), so the crashed wake floods them up toward a midday-sun rake
-  //   — every face reads lit, matching the step-out. The warm key drifts toward neutral daylight.
+  // the RAKE directionals hit every wall/seat/console face uniformly (a hemisphere ambient alone
+  //   leaves the curved bore flat), so the crashed wake lifts them to the parked rake level — every
+  //   face reads lit, matching the walk-in. The warm key drifts toward neutral daylight.
   if (cabinKeyRake) {
-    cabinKeyRake.intensity = 0.6 + s * 1.9;                            // 0.6 dim descent key → ~2.5 midday flood
+    cabinKeyRake.intensity = KEY_RAKE_BASE + s * (WAKE_KEY_RAKE - KEY_RAKE_BASE);
     cabinKeyRake.color.copy(_fillScratch.set(0xffe8cc).lerp(_FILL_WARM, s));   // warm → bright neutral daylight
   }
-  if (cabinCoolRake) cabinCoolRake.intensity = 0.28 + s * 1.0;         // the far-arc counter-rake lifts too (no dead-black side)
-  // WAKE-READABILITY FIX (coherence pass, root cause): the game runs ReinhardToneMapping @ a
-  //   dim base exposure (1.05) tuned for the bright open desert — it CRUSHES a dark enclosed
-  //   interior, so the crashed dawn cabin rendered near-black no matter how high the cabin lights
-  //   went (a 4× light bump barely moved the read; the tone-curve was the bottleneck, not the
-  //   lumens). Lift the renderer exposure as the cabin settles crashed so the enclosed dawn
-  //   interior sits READABLE on the Reinhard curve; endEscapePodIntro restores the desert base.
-  if (_cabinColliderCtx) {
-    const r = _cabinColliderCtx.three.renderer;
-    r.toneMappingExposure = CABIN_BASE_EXPOSURE + s * (CABIN_WAKE_EXPOSURE - CABIN_BASE_EXPOSURE);
-  }
+  if (cabinCoolRake) cabinCoolRake.intensity = COOL_RAKE_BASE + s * (WAKE_COOL_RAKE - COOL_RAKE_BASE);
   _syncPodToAltitude();
 }
 
-/** Restore the renderer to the desert-base exposure. The impact/wake crash-pose LIFTS the
- *  global renderer.toneMappingExposure (1.05 → 2.0) so the enclosed dawn interior reads on the
- *  Reinhard curve (setCabinCrashPose). disposePodScene restores it on the normal exit, but a
- *  dev `jumpToBeat` OUT of a crash beat back to an earlier beat (e.g. wake → cockpit) does NOT
- *  tear down the pod — so without this the lifted exposure LEAKS into the non-crash beat (and,
- *  since sequence.setSkyIntroMode/etc. only reset on endEscapePodIntro, it would render washed
- *  out). jumpToBeat calls this whenever it lands on a beat that is not a crash beat. Idempotent;
- *  takes ctx so it works even when the pod isn't built (_cabinColliderCtx is null). */
+/** Hard-set the renderer to the desert-base exposure. W6 item 5: the crash/wake no longer LIFT the
+ *  exposure (it stays at the base throughout), so this is now just a defensive re-assert of the base
+ *  — used by disposePodScene (teardown) + jumpToBeat (dev jumps) so nothing can ever leave a stray
+ *  exposure. Idempotent; takes ctx so it works even when the pod isn't built. */
 export function restoreCabinExposure(ctx: GameContext): void {
-  cancelExposureEase();   // CLUSTER D — a hard exposure restore (dev jump away) cancels a live step-out ease
   ctx.three.renderer.toneMappingExposure = CABIN_BASE_EXPOSURE;
 }
 
-// ─── CLUSTER D — the EYE-ADAPTATION exposure EASE at step-out (user spec #4: "no lighting instance
-//    change; ease the exposure like eye adaptation"). The wake cabin runs a lifted exposure
-//    (CABIN_WAKE_EXPOSURE, so the enclosed crashed interior reads on the Reinhard curve). When the
-//    player steps out into the bright real desert, the exposure must drop to the desert base — but
-//    NOT snap (a hard cut reads as an "instance change"). Instead ease it over ~1.8 s as they cross
-//    the threshold, like an eye adapting to daylight. Armed at the LIVE stepOut (unifyEnterablePod);
-//    ticked every frame from the main loop (it must persist PAST endEscapePodIntro, since it's a
-//    gameplay-side ease — the fog-ease idiom). The Continue-load path (restoreEnterablePod) snaps to
-//    base directly (no wake exposure ever ran to ease from). Hard-restored on skip/quit/dev-jump.
-const EXPO_EASE_S = 1.8;              // seconds to ease the wake exposure down to the desert base
-let _expoEase = 0;                    // countdown (s remaining); 0 = inactive
-let _expoEaseFrom = CABIN_WAKE_EXPOSURE;   // the exposure to ease FROM (captured at arm)
-/** Arm the step-out exposure ease (wake exposure → desert base over EXPO_EASE_S). Captures the
- *  current exposure as the start. Called from unifyEnterablePod on the LIVE stepOut path only. */
-function armExposureEase(ctx: GameContext): void {
-  _expoEaseFrom = ctx.three.renderer.toneMappingExposure;
-  _expoEase = EXPO_EASE_S;
-}
-/** Tick the step-out exposure ease from the main loop (like updateIntroFogEase). Lerps the renderer
- *  exposure from the wake lift down to the desert base over EXPO_EASE_S (smoothstep, no snap), then
- *  lands EXACTLY on the base + disarms. No-op when inactive. Persists past endEscapePodIntro (it's a
- *  gameplay-side ease); a hard restore (disposePodScene/restoreCabinExposure) cancels a live ease. */
-export function updatePodExposureEase(ctx: GameContext, dt: number): void {
-  if (_expoEase <= 0) return;
-  _expoEase = Math.max(0, _expoEase - dt);
-  const k = _expoEase / EXPO_EASE_S;              // 1 at arm → 0 at the end
-  const eased = k * k * (3 - 2 * k);              // smoothstep so it eases in AND out
-  ctx.three.renderer.toneMappingExposure = CABIN_BASE_EXPOSURE + (_expoEaseFrom - CABIN_BASE_EXPOSURE) * eased;
-  if (_expoEase <= 0) ctx.three.renderer.toneMappingExposure = CABIN_BASE_EXPOSURE;   // land exactly on base
-}
-/** Cancel any live exposure ease (a hard exposure restore happened — skip/quit/dev-jump). */
-function cancelExposureEase(): void { _expoEase = 0; }
+/** W6 item 5 — the exposure-ease machinery is REMOVED entirely (the wake no longer lifts the
+ *  exposure, so there is nothing to ease back at step-out — the old updatePodExposureEase main-loop
+ *  tick + the arm/cancel helpers are gone). The exposure is CONSTANT at the desert base throughout. */
 
-/** Dev smoke (CLUSTER D) — prove the step-out exposure EASE is a gradual eye-adaptation, not a snap.
- *  Arms the ease from the wake lift, then ticks updatePodExposureEase with SMALL FIXED dt (bypassing
- *  the throttled headless RAF, which feeds huge dt and can complete the ease in one frame → a false
- *  "snap"), collecting the exposure curve. Asserts: it starts at the wake lift, DESCENDS through
- *  several distinct mid values (an ease), is monotone non-increasing, and LANDS exactly on the desert
- *  base. Exposed via `__game.smokeExposureEase()`; consumed by the pod-walkout rig gate. */
-export function smokeExposureEase(ctx: GameContext): {
-  ok: boolean; from: number; final: number; midSamples: number; monotone: boolean; curve: number[];
+/** W6 item 5 — the ZERO-SHIFT EXPOSURE proof (replaces smokeExposureEase). Proves the renderer
+ *  exposure stays CONSTANT at the desert base (1.05) across the ENTIRE crash-pose settle (crash 0 →
+ *  wake 1) — i.e. the wake never lifts the exposure, so there is no washed-out exit + nothing to ease.
+ *  Drives setCabinCrashPose 0→1 in fine steps, sampling the renderer exposure at each; asserts every
+ *  sample == CABIN_BASE_EXPOSURE. Exposed via `__game.smokeExposureConstant()`; consumed by the
+ *  pod-walkout rig gate (the ease sub-check is now a CONSTANT-1.05 sub-check). */
+export function smokeExposureConstant(ctx: GameContext): {
+  ok: boolean; base: number; min: number; max: number; samples: number; constant: boolean;
 } {
   const r = ctx.three.renderer;
   const prev = r.toneMappingExposure;
-  r.toneMappingExposure = CABIN_WAKE_EXPOSURE;   // start at the wake lift
-  armExposureEase(ctx);                          // arm the eye-adaptation ease from here
-  const curve: number[] = [+r.toneMappingExposure.toFixed(4)];
-  // tick past the full ease (EXPO_EASE_S) in small fixed steps so the descent is sampled finely.
-  const steps = Math.ceil((EXPO_EASE_S / 0.08) + 4);
-  for (let i = 0; i < steps; i++) { updatePodExposureEase(ctx, 0.08); curve.push(+r.toneMappingExposure.toFixed(4)); }
-  const from = curve[0];
-  const final = curve[curve.length - 1];
-  // mid samples: strictly between the base and the wake lift (proves a gradual transition, not a snap).
-  const midSamples = curve.filter((e) => e > CABIN_BASE_EXPOSURE + 0.03 && e < CABIN_WAKE_EXPOSURE - 0.03).length;
-  // monotone non-increasing (an ease never rises).
-  let monotone = true;
-  for (let i = 1; i < curve.length; i++) if (curve[i] > curve[i - 1] + 1e-4) monotone = false;
-  r.toneMappingExposure = prev;   // restore whatever was there (leave no side effect)
-  cancelExposureEase();
-  const ok = Math.abs(from - CABIN_WAKE_EXPOSURE) < 1e-3 && Math.abs(final - CABIN_BASE_EXPOSURE) < 1e-3
-    && midSamples >= 4 && monotone;
-  return { ok, from: +from.toFixed(3), final: +final.toFixed(3), midSamples, monotone, curve };
+  r.toneMappingExposure = CABIN_BASE_EXPOSURE;   // start at the base (the crash onward runs here)
+  const vals: number[] = [];
+  const N = 24;
+  for (let i = 0; i <= N; i++) {
+    setCabinCrashPose(i / N);                    // drive the settle 0→1 (this is where the OLD lift lived)
+    vals.push(+r.toneMappingExposure.toFixed(4));
+  }
+  const min = Math.min(...vals), max = Math.max(...vals);
+  const constant = Math.abs(min - CABIN_BASE_EXPOSURE) < 1e-3 && Math.abs(max - CABIN_BASE_EXPOSURE) < 1e-3;
+  r.toneMappingExposure = prev;   // leave no side effect
+  return { ok: constant, base: CABIN_BASE_EXPOSURE, min: +min.toFixed(4), max: +max.toFixed(4), samples: vals.length, constant };
 }
 
 /** PARK the pod's interior lights to calm ambient-interior levels for the REAL game (the wash-out
@@ -2785,24 +2812,20 @@ export function smokeExposureEase(ctx: GameContext): {
  *  is null. Called from unifyEnterablePod → covers BOTH the live stepOut AND the load path
  *  (restoreEnterablePod → unifyEnterablePod). */
 export function parkPodLights(): void {
-  // Hemisphere fill — near the dim build default (0.72); a touch above so the far arc away from
-  //   the hatch stays legible when you walk back in, but nowhere near the 7.3 wake flood.
-  if (cabinFill) {
-    cabinFill.intensity = 1.1;
-    cabinFill.color.copy(_FILL_WARM);   // keep the neutral-midday tint (matches the real sky)
-  }
-  // Rake directionals — back to a gentle form rake (build 0.6 / 0.28); the real sun does the heavy
-  //   lifting on the walk-in now, these just keep the curved bore from reading flat/dead in shadow.
-  if (cabinKeyRake) { cabinKeyRake.intensity = 0.7; cabinKeyRake.color.copy(_FILL_WARM); }
-  if (cabinCoolRake) cabinCoolRake.intensity = 0.32;
-  // Hatch spill — the wash-out CULPRIT (14@dist9 spilled a bright pool onto the sand). Drop it to a
-  //   faint warm bounce that dies inside the doorway (short range), so the OPEN hatch reads lit-from-
-  //   within without a hot terrain pool. The real midday sun lights the ground.
-  if (hatchSpillLight) { hatchSpillLight.intensity = 1.4; hatchSpillLight.distance = 4.0; }
-  // Porthole glow — back near the build default (0.95); a calm cool accent forward, not a 3.25 pool.
-  if (vpGlowLight) vpGlowLight.intensity = 1.0;
-  // Ceiling lamp — KEEP the small lamp as a cozy lived-in interior tell (a hair under the build 1.7).
-  if (cabinLamp) cabinLamp.intensity = 1.5;
+  // W6 item 5 — the walk-in pod parks at the EXACT SAME lamp levels the wake cabin runs at (the
+  //   WAKE_* constants), so stepping out of the crashed cabin into the persistent walk-in pod is a
+  //   ZERO light shift (same lamps, same exposure 1.05) — the real midday sun through the blown-open
+  //   door tops it up, which is the real world, not an intro-held state change. (Was a SEPARATE,
+  //   DIMMER park set that DROPPED the lights at unify — a visible shift the user read as an "instance
+  //   change"; and the old wake flood was tuned for the removed 1.62 exposure lift.)
+  if (cabinFill) { cabinFill.intensity = WAKE_CABIN_FILL; cabinFill.color.copy(_FILL_WARM); }   // neutral-midday tint (matches the real sky)
+  if (cabinKeyRake) { cabinKeyRake.intensity = WAKE_KEY_RAKE; cabinKeyRake.color.copy(_FILL_WARM); }
+  if (cabinCoolRake) cabinCoolRake.intensity = WAKE_COOL_RAKE;
+  // Hatch spill — a warm bounce that dies inside the doorway (short range WAKE_HATCH_DIST), so the
+  //   open door reads lit-from-within without a hot terrain pool; the real midday sun lights the ground.
+  if (hatchSpillLight) { hatchSpillLight.intensity = WAKE_HATCH_SPILL; hatchSpillLight.distance = WAKE_HATCH_DIST; }
+  if (vpGlowLight) vpGlowLight.intensity = WAKE_VP_GLOW;
+  if (cabinLamp) cabinLamp.intensity = WAKE_CABIN_LAMP;
 }
 
 /** Descent driver (REBUILD v2 R1b) — drive the PHYSICAL fall off the fall's single 0..1
@@ -2902,10 +2925,8 @@ export function setParachuteLeverPull(t: number, snapped = false): void {
 
 /** Tear down the pod (meshes + geometry + colliders + the per-build geometry pool). */
 export function disposePodScene(ctx: GameContext): void {
-  // Restore the desert-base exposure (the wake crash-pose lifted it for the enclosed dawn
-  //   interior — see setCabinCrashPose). Runs on every teardown path (stepOut swap +
-  //   endEscapePodIntro), so the real game never inherits the lifted interior exposure.
-  cancelExposureEase();   // CLUSTER D — a hard teardown cancels any live step-out exposure ease
+  // W6 item 5 — the crash/wake no longer lift the exposure, so this is just a defensive re-assert of
+  //   the desert base on teardown (belt-and-braces so the real game never inherits a stray exposure).
   ctx.three.renderer.toneMappingExposure = CABIN_BASE_EXPOSURE;
   if (podGroup) {
     // PERF-merge cleanup: the static-merge (buildPodScene) creates NEW batched geometries that

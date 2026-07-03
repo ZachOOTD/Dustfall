@@ -53,9 +53,9 @@ import type { Journal } from './world/journal.ts';
 import { createInventory, updateInventoryInput } from './inventory/inventory.ts';
 import { updateInteraction } from './player/interaction.ts';
 import { updatePlayer } from './player/controller.ts';
-import { updateEscapePodIntro, updateIntroFogEase, startEscapePodIntro, introActive } from './world/escapePodIntro/sequence.ts';   // escape-pod intro (FEATURES.escapePodIntro) — T0.1 wires the new-game branch
+import { updateEscapePodIntro, startEscapePodIntro, introActive } from './world/escapePodIntro/sequence.ts';   // escape-pod intro (FEATURES.escapePodIntro) — T0.1 wires the new-game branch
 import { updatePodTutorial, resumePodTutorialAfterRestore } from './world/escapePodIntro/podTutorial.ts';   // T4.3 — the post-handoff craft→salvage→chute-pop tutorial (self-guarded no-op unless running); resumePodTutorialAfterRestore — re-arm the payoff after a Continue re-built the pod
-import { updateChutePop, updatePodExposureEase, applyPendingPodCrashRestore } from './world/escapePodIntro/podScene.ts';   // T4.3 — the chute-pop inflate one-shot (no-op unless the chute is popping; driven always so dev/rig-shot also animates); CLUSTER D — updatePodExposureEase eases the step-out exposure like eye-adaptation (no snap); applyPendingPodCrashRestore — re-build the ONE walk-in pod on Continue
+import { updateChutePop, applyPendingPodCrashRestore } from './world/escapePodIntro/podScene.ts';   // T4.3 — the chute-pop inflate one-shot (no-op unless the chute is popping; driven always so dev/rig-shot also animates); applyPendingPodCrashRestore — re-build the ONE walk-in pod on Continue
 import { setGameHudHidden, hideIntroLoading, introLoadingAwaitLaunchClick } from './world/escapePodIntro/introHud.ts';   // escape-pod intro — HUD-hide + the loading screen's click-to-launch recovery (the pointer-lock gesture-expiry freeze fix)
 import { preloadIntro } from './world/escapePodIntro/introPreload.ts';   // PERF — build every intro scene + compile every shader UP FRONT behind the loading screen (kills the beat-entry freezes)
 import { FEATURES } from './config/features.ts';
@@ -968,7 +968,9 @@ startLoop(ctx, (c, dt) => {
   updateSpeeder(c, dt);          // hover speeder forces + mount/dismount (CC) — must run BEFORE updatePlayer so the player capsule is teleported to the rider seat before camera-sync
   updateSleds(c, dt);            // QQ — per-sled tow spring + rope visual. Moved BEFORE updatePlayer so this-frame's sled XZ delta is fresh when updatePlayer reads it for moving-platform-ride. Tether endpoint resolution reads ctx.player.body.body.translation() = position committed by this-frame's physics.step (one frame behind setNext, but negligible at tow speeds).
   updateEscapePodIntro(c, dt);   // escape-pod intro sequence (FEATURES.escapePodIntro) — no-op unless ctx.intro.active; runs BEFORE updatePlayer so it can set the capsule + drive the camera first
-  updateIntroFogEase(c, dt);     // CLEAR-SKIES — after the intro handoff, ease the fog from the intro's clear value back to survival haze over a few seconds (no fog-pop at gameplay start); no-op otherwise
+  // W6 item 5 — the post-handoff fog ease-back is GONE: the intro now normalizes the fog to the
+  //   game's survival density DURING the fall (blendDescentFog), so the world is already at plain
+  //   game fog at the crash/exit — nothing to ease. (updateIntroFogEase was removed with the pin.)
   updatePlayer(c, dt);           // movement + camera + advance dayTime
   updateStaminaWobble(c);        // WW — sin-driven camera jitter when stamina low (must run AFTER updatePlayer's camera-anchor)
   updateCameraShake(c, dt);      // ACBE (D1) — trauma shake (stacks on the anchored camera, like stamina wobble)
@@ -1009,7 +1011,9 @@ startLoop(ctx, (c, dt) => {
   updateInteraction(c, dt);      // raycast hover + E to open/refill/harvest/cook/sleep/etc (UU — pickup-take moved to LMB)
   updatePodTutorial(c, dt);      // T4.3 — the escape-pod first-salvage tutorial + chute-pop (no-op unless running; after interaction so the pry is seen this frame)
   updateChutePop(c, dt);         // T4.3 — advance the chute-pop inflate one-shot (no-op unless popping); D5 — also fires the pry→pop gag robustly (tutorial-phase-independent), so it always ticks / sees the pry
-  updatePodExposureEase(c, dt);  // CLUSTER D — ease the step-out renderer exposure (wake lift → desert base) like eye-adaptation over ~1.8s (no snap "instance change"); no-op unless armed at stepOut
+  // W6 item 5 — the step-out exposure ease is GONE (the wake no longer lifts the exposure; it stays
+  //   at the desert base 1.05 from the crash onward, so there's nothing to ease). The old
+  //   updatePodExposureEase tick was removed with it.
   updateInventoryInput(c, dt);   // 1-4, wheel, Q to use (Q still drives def.onUse as backup)
   updateWieldAction(c, dt);      // UU — sole LMB dispatcher: attack/place/hold_use. Calls updateCombat internally for 'attack' items.
   updateReload(c);               // ABE — R-key scrap_gun reload (drains scrap_bullet → slot.meta.ammoRemaining)

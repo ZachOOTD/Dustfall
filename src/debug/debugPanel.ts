@@ -19,8 +19,8 @@ import { spawnWormCrossing, updateWormHorizonCrossing } from '../world/wormHoriz
 import { fireSignalFlare, advanceSignalFlares, activeSignalFlareCount } from '../world/signalFlare.ts';   // M6 (C37) — __game.fireSignalFlare
 import { damageVulture } from '../enemies/vulture.ts';
 import { applyLungePose, applyMeshTransform } from '../enemies/sandWorm.ts';   // M12 ⓖ (C66) — __game.poseLunge (dive render)
-import { startEscapePodIntro, endEscapePodIntro, jumpToBeat as jumpToIntroBeat, smokeTestIntro, benchIntro, type BeatId, type IntroBenchResult } from '../world/escapePodIntro/sequence.ts';   // escape-pod intro — __game.startIntro/skipIntro/jumpToBeat/smokeIntro/benchIntro
-import { placeCrashedPodWreck, setDescentProgress as setPodDescent, setParachuteLeverPull as setPodChute, setCabinCrashPose as setPodCrashPose, blowCabinHatch as blowPodHatch, popChute as popPodChute, buildPodScene as buildPodSceneDbg, getPodSpawn as getPodSpawnDbg, disposePodScene, podIsEnterable, getCrashedPodSalvageableId as getPodSalvageId, chutePopReady, setPendingPodCrashRestore, applyPendingPodCrashRestore, smokeExposureEase, smokeWakeFlicker } from '../world/escapePodIntro/podScene.ts';   // T1.1/T1.2 · R3a · T4.3 · T3.2 — __game.placeCrashedPod / … ; + smokePodPersistence deps; CLUSTER D — smokeExposureEase (the eye-adaptation ease proof)
+import { startEscapePodIntro, endEscapePodIntro, jumpToBeat as jumpToIntroBeat, smokeTestIntro, benchIntro, planetApproachCurve, type BeatId, type IntroBenchResult } from '../world/escapePodIntro/sequence.ts';   // escape-pod intro — __game.startIntro/skipIntro/jumpToBeat/smokeIntro/benchIntro; W6 item 3 — planetApproachCurve (the rig mirrors the new two-phase approach)
+import { placeCrashedPodWreck, setDescentProgress as setPodDescent, setParachuteLeverPull as setPodChute, setCabinCrashPose as setPodCrashPose, blowCabinHatch as blowPodHatch, popChute as popPodChute, buildPodScene as buildPodSceneDbg, getPodSpawn as getPodSpawnDbg, disposePodScene, podIsEnterable, getCrashedPodSalvageableId as getPodSalvageId, chutePopReady, setPendingPodCrashRestore, applyPendingPodCrashRestore, smokeExposureConstant, smokeWakeFlicker, probeEyeInCabin, probeCabinDoor } from '../world/escapePodIntro/podScene.ts';   // T1.1/T1.2 · R3a · T4.3 · T3.2 — __game.placeCrashedPod / … ; + smokePodPersistence deps; W6 item 5 — smokeExposureConstant (the zero-shift constant-exposure proof); W6 item 4 — probeEyeInCabin (the impact eye-inside gate); W6 item 6 — probeCabinDoor (the slanted-door diagnostic)
 import { smokePodTutorial } from '../world/escapePodIntro/podTutorial.ts';   // T4.3 — __game.smokePodTutorial (drive the craft→salvage→chute-pop loop headlessly)
 import { buildHaulerExterior, disposeHaulerExterior, setHaulerExplosion, setHaulerDeparture } from '../world/escapePodIntro/haulerScene.ts';   // T3.1/T3.2 — __game.buildHauler / disposeHauler / setHaulerExplosion (hauler-exterior + explosion rig-shots); C1 — setHaulerDeparture (the eject-departure recession)
 import { setCockpitAlert as setShipCockpitAlert, setShipAlert as setShipRedAlert, setEngineFire as setShipEngineFire } from '../world/escapePodIntro/shipScene.ts';   // T3.3/T3.4 — __game.setCockpitAlert / setShipAlert / setEngineFire (alert escalation + the disaster rig-shot)
@@ -89,8 +89,14 @@ interface DebugApi {
   popChute: (advanceSeconds?: number) => void;
   /** Escape-pod T4.3 — smoke the whole craft→salvage→chute-pop tutorial loop headlessly. */
   smokePodTutorial: () => ReturnType<typeof smokePodTutorial>;
-  /** Escape-pod CLUSTER D — prove the step-out exposure EASE is a gradual eye-adaptation, not a snap. */
-  smokeExposureEase: () => ReturnType<typeof smokeExposureEase>;
+  /** Escape-pod W6 item 5 — prove the renderer exposure stays CONSTANT at the desert base (1.05)
+   *  across the whole crash-pose settle (no wake lift → no washed-out exit → nothing to ease). */
+  smokeExposureConstant: () => ReturnType<typeof smokeExposureConstant>;
+  /** Escape-pod W6 item 4 — probe whether a world eye point is INSIDE the (possibly-tilted) cabin
+   *  shell this frame (the impact-eye gate: the view must never leave the pod). */
+  probeEyeInCabin: (eye: { x: number; y: number; z: number }) => ReturnType<typeof probeEyeInCabin>;
+  /** Escape-pod W6 item 6 — probe the cabin door pivot rotation (diagnose the slanted sealed door). */
+  probeCabinDoor: () => ReturnType<typeof probeCabinDoor>;
   /** Escape-pod CRASH-AFTERMATH (2026-07-03) — GATE the wake lamp-flicker one-shot (a still can't
    *  judge a temporal flicker): arms it, drives it headlessly, reports lamp varied + spark toggled + settled. */
   smokeWakeFlicker: () => ReturnType<typeof smokeWakeFlicker>;
@@ -141,6 +147,9 @@ interface DebugApi {
    *  the planet grown to fill the porthole + its atmosphere limb dominating). For the
    *  planet-approach rig-shots (the planet should visibly grow across d0→d0.2). */
   setPlanetApproach: (t: number) => void;
+  /** Escape-pod W6 item 3 — the two-phase planet-approach curve (progress 0..1 → approach 0..1),
+   *  so the rig can drive the descent planet-approach with the SAME shape the game uses. */
+  planetApproachCurve: (progress: number) => number;
   setStats: (s: {
     thirst?: number;
     temperature?: number;
@@ -356,7 +365,9 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
     popChute: (advanceSeconds) => { popPodChute(advanceSeconds); },
     saveGame: () => saveGameState(ctx),
     smokePodTutorial: () => smokePodTutorial(ctx),
-    smokeExposureEase: () => smokeExposureEase(ctx),
+    smokeExposureConstant: () => smokeExposureConstant(ctx),
+    probeEyeInCabin: (eye) => probeEyeInCabin(eye),
+    probeCabinDoor: () => probeCabinDoor(),
     smokeWakeFlicker: () => smokeWakeFlicker(),
     smokePodPersistence: () => {
       const report = {
@@ -412,17 +423,14 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
         //   applyPendingPodCrashRestore reports it so main.ts skips the tutorial resume.
         report.chuteMatches = !chutePopReady() && !!restored && restored.chutePopped === wantChutePopped;
 
-        // STATE-RESTORE discipline (architecture doc): the restore must NOT leak the intro's lifted
-        //   cabin exposure into the loaded game. unifyEnterablePod transiently sets the crash-pose
-        //   lift while building, then restores the desert-base 1.05 — assert it landed at base.
+        // W6 item 5 — the exposure is CONSTANT at the desert base (1.05) throughout (the crash/wake
+        //   never lift it), so the restore is trivially at base too. Assert it landed at 1.05.
         report.exposureRestored = Math.abs(ctx.three.renderer.toneMappingExposure - 1.05) < 0.001;
 
-        // WASH-OUT FIX (user-reported): the restore must ALSO park the pod's interior lights (unify →
-        //   parkPodLights). The wake beat floods them HARD (hemi ~7.3, hatch spill ~14@dist9, …) to
-        //   punch the dazed enclosed cabin through the come-to fade at the lifted wake exposure; if
-        //   they leaked into the LOADED game (at the desert-base 1.05, real sun already on the pod)
-        //   the interior blows out white + the hatch pools a hot spot on the sand. Assert the restored
-        //   pod's lights are PARKED (no light above a calm interior ceiling; the hatch spill's short).
+        // WASH-OUT FIX: the restore parks the pod's interior lights (unify → parkPodLights) at the
+        //   SAME calm WAKE_* levels the wake ran at (W6 item 5 — zero shift). Assert the restored
+        //   pod's lights sit under the anti-wash-out ceiling (no interior light above ~2.5, no point
+        //   light reaching past ~5 m) so the walk-in never blows out the interior or pools on the sand.
         const restoredPod = ctx.three.scene.getObjectByName('escapePodCabin');
         let maxLightI = 0, maxSpillDist = 0;
         if (restoredPod) restoredPod.traverse((o) => {
@@ -462,6 +470,7 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
     setSkyIntroMode: (space01) => { setSkyIntroMode(space01); },
     setHaulerDeparture: (t) => { setHaulerDeparture(t); },   // C1 — the eject-departure recession (rig-shot)
     setPlanetApproach: (t) => { setPlanetApproach(t); },     // C3 — the descent planet-approach (rig-shot)
+    planetApproachCurve: (progress) => planetApproachCurve(progress),   // W6 item 3 — the two-phase approach curve (rig mirror)
     setShipAlert: (level, strobe) => { setShipRedAlert(level, strobe); },
     setEngineFire: (intensity, t) => { setShipEngineFire(intensity, t); },
     sunInfo: () => ({
