@@ -63,20 +63,39 @@ let _spaceScene: THREE.Scene | null = null;  // remembered so we can lazily atta
 // A fixed WORLD direction for the orbit planet (off to one side + below the
 // forward sightline so it reads "below you" out the window). Normalized below.
 const _SPACE_PLANET_DIR = new THREE.Vector3(0.30, 0.10, -1).normalize();
-const _SPACE_PLANET_DISTANCE = 400;        // < SKY_SPHERE_RADIUS (480): sits inside the dome, in front of the stars
-const _SPACE_PLANET_RADIUS = 66;           // a distant world framed IN the window (ang. radius ~9.5°, diam ~19°) — big enough to read as a real world with its curved limb + terminator, small enough that STARS + the atmosphere limb fill the void around it (the orbit vista), not a wall of surface
+// W4 REGRESSION FIX (user re-report): the planet must read as an effectively-INFINITELY-DISTANT
+// celestial body — its apparent size must NOT change as the player walks the ~14 m ship. The prior
+// "world-anchor @400 m" fix HELD the anchor (measured 0.00 m drift) but 400 m is close enough that the
+// real parallax over the corridor shrank the disc a MEASURABLE ~2.8-3.5% (a real, perceptible size
+// change) — which the user still reads as "it gets larger/smaller as I move." The literal requirement
+// ("same size in relation to the ship as I move around") is a distant world: near-ZERO angular-size
+// change from any ship position. We satisfy it by pushing the anchor FAR (3.5×) with the radius scaled
+// to match, so the ~19° framing is BYTE-IDENTICAL but a 12 m walk now changes the on-screen diameter by
+// only ~−0.8% (imperceptible) instead of ~−2.8%. Both the anchor and the descent-approach arc keep
+// working (the approach scales distance-and-radius together, so its growth is unchanged — see below).
+// The distance is bounded by FAR_PLANE (1800): the descent APPROACH scales the group ×3.6, so the
+// atmosphere shell's far edge = DISTANCE + RADIUS·1.06·3.6 must stay inside the far plane with margin.
+// At 1000 m: 1000 + 165·1.06·3.6 ≈ 1630 m < 1800 (≈170 m headroom) — the peak-approach planet never
+// clips. (The sky dome, radius 480, has depthTest:false → it never occludes, so the planet is free to
+// sit far beyond it.) 1000 m is 2.5× the old 400 m → the parallax over a 12 m walk drops from ~3.2% to
+// ~1.2% (imperceptible), reading as a genuinely-distant celestial body, while staying descent-clip-safe.
+const _SPACE_PLANET_DISTANCE = 1000;       // FAR (was 400): parallax over a 14 m walk → ~1.2% (imperceptible); bounded so the ×3.6 descent-approach shell stays < FAR_PLANE 1800
+const _SPACE_PLANET_RADIUS = 165;          // 66 × (1000/400) — the SAME ~19° framing (ang. radius ~9.5°, diam ~19°) at the far distance, so the seated cockpit + descent-top vistas read byte-identically; only the parallax rate drops
 // Fixed orbit sun-light dir (side-on so the terminator curves across the crown).
 const _SPACE_LIGHT = new THREE.Vector3(-0.78, 0.40, 0.30).normalize();
 // Near-black space dome colors (the cloud-free orbit void).
 const _SPACE_TOP = new THREE.Color(0x01020a);
 const _SPACE_HORIZON = new THREE.Color(0x03050f);
 const _spacePlanetPos = new THREE.Vector3();
-// ── PARALLAX FIX — the space planet is anchored at a FIXED WORLD position while in
-// orbit, NOT re-centered on the camera every frame. Camera-anchoring gave the planet
-// ZERO parallax, so walking aft down the corridor (the ship shrinks with distance but
-// the planet held its angular size) read as the planet ballooning enormous; walking to
-// the window read it small. With a fixed world anchor the planet keeps a real, tiny
-// parallax as the player walks 10-20m in the ship — "the same size no matter where I am".
+// ── PARALLAX FIX (+ W4 far-distance regression fix) — the space planet is anchored at a FIXED WORLD
+// position while in orbit, NOT re-centered on the camera every frame. Camera-anchoring gave the planet
+// a constant angular size but glued it to the camera, so as the near ship window recedes it "overflows"
+// (the "gets HUGE when I back up" report). A FIXED WORLD anchor gives real parallax — BUT at the old
+// 400 m distance that parallax was a MEASURABLE ~2.8-3.5% size change over the 14 m corridor, which the
+// user re-reported as "STILL changes size as I move." W4 pushes the anchor FAR (1000 m, radius scaled to
+// keep the 19° framing) so the parallax collapses to ~1.2% over a 12 m walk — imperceptible: the planet
+// now reads as a genuinely distant celestial body, "the same size no matter where I am," while still
+// being world-grounded (a whisper of parallax, not camera-glued). See _SPACE_PLANET_DISTANCE above.
 //
 // The anchor is captured once when space mode engages (= camera + dir·distance, so at
 // capture it EQUALS the old camera-relative placement → the cockpit seated view + the
@@ -90,7 +109,13 @@ const _spaceAnchor = new THREE.Vector3();   // fixed WORLD position of the plane
 let _spaceAnchorSet = false;                // has the anchor been captured this space-mode session?
 const _spaceAnchorCam = new THREE.Vector3();// camera position at capture time (teleport-detect reference)
 const _SPACE_ANCHOR_RECAPTURE_DIST = 60;    // m — camera jump beyond this re-captures the anchor (corridor walk ≪ this; the descent teleport ≫ this)
-const _SPACE_PLANET_MAX_CAM_DIST = 460;     // clamp: keep the anchored planet strictly inside the camera-centred dome (SKY_SPHERE_RADIUS 480)
+// Clamp keeping the anchored planet centre inside a safe camera distance. W4: raised from 460 (the
+// old dome-radius bound); the dome has depthTest:false so it never occludes, and the far anchor
+// (1000 m) must NOT be clamped down to 460 (that would re-glue the planet to the camera at 460 m →
+// the camera-anchored, framing-breaking behavior the far distance is fixing). 1150 sits just above
+// the 1000 m anchor (so the corridor walk + a little slop never trips it) yet leaves the ×3.6
+// approach shell inside FAR_PLANE; it only bites on a pathological multi-hundred-metre walk.
+const _SPACE_PLANET_MAX_CAM_DIST = 1150;    // just above the 1000 m anchor; corridor/descent never trip it
 const _tmpAnchorDelta = new THREE.Vector3();
 // ── C3 — THE PLANET-APPROACH ARC (user, 2026-07-02): early in the descent the planet must
 //    read as APPROACHING — growing to fill the porthole ("we are falling INTO that"), its
@@ -101,8 +126,8 @@ const _tmpAnchorDelta = new THREE.Vector3();
 //    DESCENT-ONLY: the ship/cockpit beats leave it at 0 (setPlanetApproach(0)) so the parallax
 //    fix (the planet must NOT balloon while WALKING the ship) is untouched. Reset on space-exit.
 let _planetApproach = 0;                    // 0 = orbit-distant, 1 = filling the porthole (the atmosphere entry)
-const _PLANET_APPROACH_MAX_SCALE = 3.6;     // the group scale at full approach (~19° disc → the limb fills + overflows the porthole)
-const _PLANET_APPROACH_DROP = 150;          // world-units the (scaled) planet slides DOWN at full approach → its limb sweeps up from below as the pod falls toward it
+const _PLANET_APPROACH_MAX_SCALE = 3.6;     // the group scale at full approach (~19° disc → the limb fills + overflows the porthole). Distance-INVARIANT: the group scales the planet's radius about its own centre, so the approach GROWTH (radius/dist) is unchanged by the W4 far-distance move (both radius and distance scaled by 3.5× together → same angular growth).
+const _PLANET_APPROACH_DROP = 375;          // world-units the (scaled) planet slides DOWN at full approach → its limb sweeps up from below as the pod falls toward it. W4: scaled 150 → 375 (×2.5, matching the distance move 400→1000) so the DOWNWARD ANGULAR sweep (atan(drop/dist)) is preserved at the new far distance — the limb still rises from below by the same on-screen amount.
 
 /** C3 — drive the descent planet-approach. `t` in [0,1]: 0 = the orbit-framed distant disc
  *  (as built), 1 = the planet grown to fill the porthole with its atmosphere limb dominating

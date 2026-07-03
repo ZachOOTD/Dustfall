@@ -2091,6 +2091,140 @@ const SCENARIOS = {
     }
   },
 
+  // W1 COLLIDER ENUM (item 7 diagnosis) — list every collider whose AABB sits in the cockpit box,
+  //   flagging those AFT of the seat (z_local > 0) that could box the player in. No shot.
+  'cockpit-colliders': async (page) => {
+    const out = await page.evaluate(async () => {
+      const g = window.__game; const ctx = g.ctx;
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      const realClock = ctx.three.clock; realClock.getDelta = () => 0.05;
+      ctx.three.renderer.setSize(48, 48, false);
+      try { g.skipIntro(); } catch {}
+      for (let i = 0; i < 40; i++) { await sleep(16); if (!ctx.intro || !ctx.intro.active) break; }
+      g.startIntro();
+      for (let a = 0; a < 20; a++) { g.jumpToBeat('cockpit'); for (let i = 0; i < 30; i++) { await sleep(16); if (ctx.player.body.body.translation().y > 2900) break; } if (ctx.player.body.body.translation().y > 2900) break; }
+      const sp = ctx.player.body.body.translation();
+      const ORIGIN = { x: sp.x, y: sp.y - (ctx.player.body.halfHeight + ctx.player.body.radius) - 0.85, z: sp.z + 0.30 };  // approx ship origin (seat z_local=-0.30)
+      const world = ctx.physics.world;
+      const hits = [];
+      world.forEachCollider((col) => {
+        const t = col.translation();
+        // local to ship origin
+        const lx = t.x - sp.x, ly = t.y, lz = t.z - (sp.z + 0.30);
+        // only near the cockpit (|lx|<4, |lz|<4, world y near ship origin ~3000)
+        if (Math.abs(lx) < 4 && Math.abs(lz) < 4 && ty(t.y)) {
+          let half = null;
+          try { const s = col.halfExtents ? col.halfExtents() : null; if (s) half = [ +s.x.toFixed(2), +s.y.toFixed(2), +s.z.toFixed(2) ]; } catch {}
+          hits.push({ lx: +lx.toFixed(2), lz: +lz.toFixed(2), wy: +t.y.toFixed(1), half, aftOfSeat: lz > -0.15 && Math.abs(lx) < 0.9 });
+        }
+        function ty(y) { return y > 2990 && y < 3010; }
+      });
+      const aft = hits.filter((h) => h.aftOfSeat);
+      return { total: hits.length, aftOfSeat: aft, all: hits };
+    });
+    console.log('[cockpit-colliders] total=' + out.total + ' aftOfSeat=' + out.aftOfSeat.length);
+    for (const h of out.aftOfSeat) console.log('[cockpit-colliders][AFT] ' + JSON.stringify(h));
+    for (const h of out.all) console.log('[cockpit-colliders] ' + JSON.stringify(h));
+  },
+
+  // W1 COCKPIT MOTION PROBE (item 7 — "remove the chair collider + the invisible collider behind
+  //   the chair; I want to walk the cockpit freely"). The B1.f real-KCC motion proof: seat the
+  //   player at getShipSpawn, then drive REAL WASD in each direction (aft / left / right / fwd) and
+  //   report the max body displacement. A FREE cockpit = large Δ aft + strafe (no wall boxing the
+  //   seat). No screenshot — a motion assertion (like pod-walkin). Pins a FIXED dt so it's
+  //   throttle-proof under the ~1 fps headless tab.
+  'cockpit-motion': async (page) => {
+    const out = await page.evaluate(async () => {
+      const g = window.__game; const ctx = g.ctx;
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      try { ctx.weather.intensity = 0; ctx.weather.cloudiness = 0; } catch {}
+      const realClock = ctx.three.clock; const FIXED_DT = 0.05;
+      realClock.getDelta = () => FIXED_DT;
+      ctx.three.renderer.setSize(48, 48, false);
+      const drive = async (simBudget, perTick) => {
+        const s0 = ctx.time.elapsed; let last = s0, stalls = 0;
+        for (let i = 0; i < 8000; i++) {
+          if (perTick) perTick();
+          await sleep(16);
+          const now = ctx.time.elapsed;
+          if (now > last + 1e-6) { last = now; stalls = 0; } else if (++stalls > 600) break;
+          if (now - s0 >= simBudget) break;
+        }
+      };
+      try { g.skipIntro(); } catch {}
+      await drive(0.2);
+      g.startIntro();
+      for (let a = 0; a < 20; a++) { g.jumpToBeat('cockpit'); await drive(0.3); if (ctx.player.body.body.translation().y > 2900) break; }
+      try { g.setSkyIntroMode(0); } catch {}
+      ctx.flags.paused = false;
+      ctx.input.controls.isLocked = true;   // isPlaying() → real KCC motion processed
+      const cam = ctx.three.camera; cam.rotation.order = 'YXZ';
+      const clearKeys = () => { for (const k of ['KeyW', 'KeyS', 'KeyA', 'KeyD']) ctx.input.keys[k] = false; };
+      const origin = () => ctx.player.body.body.translation();
+      // capture the SEAT as the seated spawn position (the body is at getShipSpawn right after the jump)
+      const s0 = origin(); const SEAT = { x: s0.x, y: s0.y, z: s0.z };
+      const reseat = () => ctx.player.body.body.setTranslation({ x: SEAT.x, y: SEAT.y, z: SEAT.z }, true);
+      const runLeg = async (label, yaw, key) => {
+        clearKeys(); reseat();
+        // force WALK mode + standing eye (the cockpit opening is SEATED by design → locomotion off;
+        //   "walk the cockpit freely" is the walk-enabled state — that's what item 7 tests).
+        if (ctx.intro) { ctx.intro.mode = 'walk'; ctx.player.eyeOffset = 0.85; }
+        await drive(0.2);
+        const start = origin(); const p0 = { x: start.x, z: start.z };
+        await drive(2.2, () => { cam.rotation.set(0, yaw, 0); ctx.input.keys[key] = true; });
+        clearKeys();
+        const p1 = origin();
+        const d = Math.hypot(p1.x - p0.x, p1.z - p0.z);
+        const dir = ctx.three.camera.getWorldDirection(new (ctx.three.camera.position.constructor)());
+        return { label, dx: +(p1.x - p0.x).toFixed(2), dz: +(p1.z - p0.z).toFixed(2), d: +d.toFixed(2),
+                 camY: +ctx.three.camera.rotation.y.toFixed(2), fwd: [+dir.x.toFixed(2), +dir.z.toFixed(2)],
+                 introActive: !!(ctx.intro && ctx.intro.active), mode: ctx.intro && ctx.intro.mode, eyeOff: +(ctx.player.eyeOffset||0).toFixed(2) };
+      };
+      const legs = [];
+      // KeyW drives ALONG the camera-forward; yaw π → aft(+Z, the door egress), −π/2 → −X, +π/2 → +X, 0 → fwd(−Z)
+      legs.push(await runLeg('aft(+Z)', Math.PI, 'KeyW'));
+      legs.push(await runLeg('left(−X)', -Math.PI / 2, 'KeyW'));
+      legs.push(await runLeg('right(+X)', Math.PI / 2, 'KeyW'));
+      legs.push(await runLeg('fwd(−Z)', 0, 'KeyW'));
+      // ── WHOLE-COCKPIT ROAM (coordinator: prove the whole floor, not just the egress lane). Place
+      //    the body at each aisle spot + walk TOWARD a target corner; report how close it reaches.
+      //    ORIGIN.z = SEAT.z + 0.30. Walkable band ≈ |x|<1.9, z ∈ (−1.0 .. 2.2).
+      const OZ = SEAT.z + 0.30;
+      const roam = [];
+      const roamTo = async (label, from, target) => {
+        clearKeys();
+        if (ctx.intro) { ctx.intro.mode = 'walk'; ctx.player.eyeOffset = 0.85; }
+        ctx.player.body.body.setTranslation({ x: SEAT.x + from.x, y: SEAT.y, z: OZ + from.z }, true);
+        await drive(0.2);
+        const yawTo = Math.atan2(-(target.x - from.x), -(target.z - from.z));   // face the target (YXZ fwd = (−sinθ,0,−cosθ))
+        await drive(2.0, () => { cam.rotation.set(0, yawTo, 0); ctx.input.keys['KeyW'] = true; });
+        clearKeys();
+        const p = origin();
+        const reached = Math.hypot((p.x - SEAT.x) - target.x, (p.z - OZ) - target.z);
+        return { label, at: [+(p.x - SEAT.x).toFixed(2), +(p.z - OZ).toFixed(2)], distToTarget: +reached.toFixed(2) };
+      };
+      roam.push(await roamTo('fwd-L (beside console)', { x: -1.4, z: -0.6 }, { x: -1.6, z: -1.1 }));
+      roam.push(await roamTo('fwd-R (beside console)', { x: 1.4, z: -0.6 }, { x: 1.6, z: -1.1 }));
+      roam.push(await roamTo('wall-L (mid)', { x: 0, z: 0.4 }, { x: -1.8, z: 0.4 }));
+      roam.push(await roamTo('wall-R (mid)', { x: 0, z: 0.4 }, { x: 1.8, z: 0.4 }));
+      roam.push(await roamTo('aft-door', { x: 0, z: 1.0 }, { x: 0, z: 2.3 }));
+      return { legs, roam, seat: [+SEAT.x.toFixed(2), +SEAT.y.toFixed(2), +SEAT.z.toFixed(2)] };
+    });
+    const freeDirs = out.legs.filter((l) => l.d >= 0.8).length;
+    // roam OK = each target reached within a capsule-radius standoff (~0.55) OR the body walked PAST
+    //   it (overshoot past a wall-clear target = even freer). The aft-door target is a pass-through.
+    const roamOk = out.roam.every((r) => {
+      if (r.label === 'aft-door') return r.at[1] >= 2.0;          // walked to/through the door mouth
+      return r.distToTarget <= 0.6 || Math.abs(r.at[0]) >= Math.abs(1.6);   // reached the corner or the wall standoff
+    });
+    const pass = freeDirs >= 3 && out.legs.find((l) => l.label === 'aft(+Z)').d >= 0.8 && roamOk;
+    console.log('[cockpit-motion] ' + (pass ? 'PASS' : 'FAIL') + ' freeDirs=' + freeDirs + ' roamOk=' + roamOk);
+    console.log('[cockpit-motion][legs] ' + JSON.stringify(out.legs.map((l) => ({ [l.label]: l.d }))));
+    console.log('[cockpit-motion][roam] ' + JSON.stringify(out.roam));
+  },
+
   // Cockpit (T3.3): the GAME'S OPENING SHOT — the REAL seated first-person view inside the
   // HERO single-pilot cockpit. Drives the game's OWN intro path (startIntro → jumpToBeat
   // 'cockpit') so the beat machine builds the ship + seats the player at getShipSpawn facing
@@ -2367,9 +2501,11 @@ const SCENARIOS = {
       // The LIVE (NEW, fixed-world-anchor) planet centre — where applySpaceMode has it now.
       const Cnew = group.getWorldPosition(new V());
 
-      // OLD camera-anchored math: centre = camera + dir*400 (recomputed per camera pos → the bug).
+      // OLD camera-anchored math: centre = camera + dir*DIST (recomputed per camera pos → the bug).
+      // DIST is read LIVE from the current anchor→seat distance (W4 moved it 400→1400), so the "old"
+      // camera-anchored reference uses the SAME geometry as the live planet — the comparison stays honest.
       const dir = new V(0.30, 0.10, -1).normalize();
-      const DIST = 400;
+      const DIST = Cnew.distanceTo(eye);
       const oldCentre = (P) => new V(P.x + dir.x * DIST, P.y + dir.y * DIST, P.z + dir.z * DIST);
 
       const oldSeat = angDiam(oldCentre(eye).x, oldCentre(eye).y, oldCentre(eye).z, eye);
@@ -2401,6 +2537,202 @@ const SCENARIOS = {
       };
     }, { aft });
     console.log(`[planet-parallax] ${JSON.stringify(r, null, 2)}`);
+  },
+
+  // REAL-CHAIN PARALLAX PROBE (W4 regression). The old `planet-parallax` probe FABRICATES the aft
+  // sample (it measures a synthetic eyeAft point against the already-captured centre; it never moves
+  // the body + re-runs updateSky), so it can't see a per-frame regression. THIS drives the REAL chain:
+  // start intro → cockpit (space mode engaged live) → physically walk the body +Z down the corridor
+  // frame-by-frame, letting updateSky→applySpaceMode run EACH ticked frame, and SAMPLES the planet
+  // group's WORLD position + projected angular DIAMETER at the seat / 10m aft / 15m aft. If the planet
+  // moves WITH the camera (world pos tracks the body) the anchor isn't holding → the balloon regression.
+  //   node scripts/rig-shot.mjs --scenario=planet-parallax-real
+  'planet-parallax-real': async (page) => {
+    const log = await page.evaluate(async () => {
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      const g = window.__game;
+      const ctx = g.ctx;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      try { ctx.weather.intensity = 0; ctx.weather.cloudiness = 0; } catch {}
+      const FIXED_DT = 0.05;
+      const realClock = ctx.three.clock;
+      const origGetDelta = realClock.getDelta.bind(realClock);
+      const origW = ctx.three.renderer.domElement.width, origH = ctx.three.renderer.domElement.height;
+      const V = ctx.three.camera.position.constructor;
+      // Drive the live loop until cond() or simBudget sim-seconds (throttle-proof; mirrors pod-walkout).
+      const drive = async (simBudget, cond, perTick) => {
+        const simStart = ctx.time.elapsed;
+        let lastSim = simStart, stalls = 0;
+        for (let i = 0; i < 8000; i++) {
+          if (perTick) perTick();
+          await sleep(16);
+          const nowSim = ctx.time.elapsed;
+          if (nowSim > lastSim + 1e-6) { lastSim = nowSim; stalls = 0; }
+          else if (++stalls > 600) break;
+          if (cond && cond()) return { ok: true, sim: +(nowSim - simStart).toFixed(2) };
+          if (nowSim - simStart >= simBudget) break;
+        }
+        return { ok: cond ? cond() : true, sim: +(ctx.time.elapsed - simStart).toFixed(2) };
+      };
+      // Find the space-planet mesh + its geometric radius (renderOrder −0.4).
+      const findPlanet = () => { let m = null; ctx.three.scene.traverse((o) => { if (o.isMesh && o.renderOrder === -0.4) m = o; }); return m; };
+      // Angular DIAMETER (deg) of the planet sphere seen from the current camera, using the LIVE
+      // world-space group position + the live group scale (the approach scale grows the visual radius).
+      const sample = (label) => {
+        const planetMesh = findPlanet();
+        if (!planetMesh) return { label, error: 'planet mesh not found' };
+        const group = planetMesh.parent;
+        group.updateMatrixWorld(true);
+        const C = group.getWorldPosition(new V());
+        const R0 = planetMesh.geometry.boundingSphere
+          ? planetMesh.geometry.boundingSphere.radius
+          : (planetMesh.geometry.computeBoundingSphere(), planetMesh.geometry.boundingSphere.radius);
+        const scl = group.scale.x;                         // the approach scale (1 in orbit)
+        const R = R0 * scl;
+        const cam = ctx.three.camera.position;
+        const body = ctx.player.body.body.translation();
+        const dx = C.x - cam.x, dy = C.y - cam.y, dz = C.z - cam.z;
+        const dist = Math.hypot(dx, dy, dz);
+        const s = Math.min(1, R / dist);
+        // The camera-anchored distant-planet SPRITE (makePlanetTexture, renderOrder 0) — should be
+        // fully faded (opacity ~0) in full space mode. If it's still visible it's a 2nd, zero-parallax
+        // planet (a candidate "balloon" the anchor fix never touched).
+        let spriteOp = -1, spriteVis = false;
+        ctx.three.scene.traverse((o) => { if (o.isSprite && o.material && o.material.map && o.renderOrder === 0 && o.scale.x > 5) { spriteOp = o.material.opacity; spriteVis = o.visible; } });
+        return {
+          label,
+          bodyZ: +body.z.toFixed(2), camZ: +cam.z.toFixed(2), camY: +cam.y.toFixed(1),
+          planetWorld: [+C.x.toFixed(1), +C.y.toFixed(1), +C.z.toFixed(1)],
+          groupScale: +scl.toFixed(3),
+          camDist: +dist.toFixed(1),
+          angDiamDeg: +(2 * Math.asin(s) * 180 / Math.PI).toFixed(3),
+          distSprite: { op: +spriteOp.toFixed(3), vis: spriteVis },
+        };
+      };
+      const samples = [];
+      try {
+        realClock.getDelta = () => FIXED_DT;
+        ctx.three.renderer.setSize(64, 64, false);   // tiny canvas → more real frames tick per second
+        // FORCE the pointer-lock gate open so isPlaying()===true → updatePlayer runs REAL KCC + camera-anchor.
+        ctx.input.controls.isLocked = true;
+        ctx.flags.paused = false;
+        g.startIntro();                              // REAL new-game entry point (beat 0 = cockpit)
+        // let the cockpit build + several live frames run so applySpaceMode CAPTURES the anchor at the SEATED eye
+        await drive(2.0, () => ctx.intro && ctx.intro.beat === 'cockpit' && ctx.intro.scratch.shipBuilt === true);
+        await drive(0.6, null);
+        samples.push(sample('seat'));
+        // Advance to checkEngines the REAL way: the cockpit dwell auto-advances after COCKPIT_DWELL, but
+        // drive it deterministically — jumpToBeat('checkEngines') flips mode='walk' (stand up + walk),
+        // matching the real transition. NO setSkyIntroMode call here → the anchor must HOLD.
+        g.jumpToBeat('checkEngines');
+        await drive(0.6, null);
+        samples.push(sample('stand'));               // stood up (eyeOffset 0.5→0.85) — anchor still held?
+        // WALK AFT by translating the body in small increments, letting updatePlayer anchor the camera
+        // NATURALLY (no cameraSnapNextFrame) so this is the realest possible per-frame camera-follow the
+        // anchor path sees. Each increment is followed by ticked frames so updateSky→applySpaceMode runs
+        // at the freshly-anchored camera. This traverses the full 14m corridor + then a big 80m jump to
+        // FORCE the recapture path (proving whether recapture returns the camera-relative balloon).
+        const shipZ = ctx.player.body.body.translation().z;
+        const glideTo = async (targetDz, label, snap) => {
+          const steps = Math.max(6, Math.ceil(Math.abs(targetDz)));   // ~1m per increment
+          const startZ = ctx.player.body.body.translation().z;
+          for (let k = 1; k <= steps; k++) {
+            const t = ctx.player.body.body.translation();
+            const z = startZ + (shipZ + targetDz - startZ) * (k / steps);
+            ctx.player.body.body.setTranslation({ x: t.x, y: t.y, z }, true);
+            if (snap) ctx.player.cameraSnapNextFrame = true;   // else the camera lerps/snaps via syncCameraToBody naturally
+            await drive(0.15, null);
+          }
+          samples.push(sample(label));
+        };
+        window.__PP_seatZ = shipZ;
+        await glideTo(10, 'aft10', false);
+        await glideTo(14, 'aft14', false);
+        // Back toward the window (−Z) — "walk back" toward the seat/planet.
+        await glideTo(0.5, 'backToWindow', false);
+        // ── A/B MODEL COMPARISON (the design call, kept for the record). At the SEAT and 12m AFT,
+        //   compute the planet's projected on-screen DIAMETER (NDC, = "size in the frame") under three
+        //   anchor models at the SAME ~19° seat framing: (400) the OLD world-anchor @400m [the W4
+        //   regression the user re-reported], (cam) pure camera-anchor [0% — but glued to the camera],
+        //   and (LIVE) the SHIPPED far world-anchor [read from the module's live geometry]. This is what
+        //   the user actually SEES; it shows the shipped model reads "same size as I move" (≈−1%).
+        {
+          const cam = ctx.three.camera;
+          const planetMesh = findPlanet();
+          const Rlive = planetMesh.geometry.boundingSphere.radius;     // the SHIPPED radius (module const)
+          const Clive = planetMesh.parent.getWorldPosition(new V());   // the SHIPPED anchor (module const · dir)
+          const distLive = Clive.distanceTo(new V(0, 3001.4, shipZ));  // the SHIPPED distance
+          const dir = new V(0.30, 0.10, -1).normalize();
+          const ndcDiam = (C, R, eye) => {
+            const d = Math.hypot(C.x - eye.x, C.y - eye.y, C.z - eye.z);
+            const ang = 2 * Math.asin(Math.min(1, R / d));
+            const fov = cam.fov * Math.PI / 180;
+            return ang / fov;                                          // fraction of the vertical FOV the disc spans
+          };
+          const seatEye = new V(0, 3001.4, shipZ);
+          const aftEye = new V(0, 3001.4, shipZ + 12);
+          // OLD 400m world anchor with a radius that hits the SAME seat framing (66 for a 19° disc @400).
+          const R400 = 66, D400 = 400;
+          const C400 = new V(seatEye.x + dir.x * D400, seatEye.y + dir.y * D400, seatEye.z + dir.z * D400);
+          const mk = (eye) => ({
+            oldWorldAnchor400: +ndcDiam(C400, R400, eye).toFixed(4),
+            cameraAnchored: +ndcDiam(new V(eye.x + dir.x * D400, eye.y + dir.y * D400, eye.z + dir.z * D400), R400, eye).toFixed(4),
+            shippedFarAnchor: +ndcDiam(Clive, Rlive, eye).toFixed(4),
+          });
+          window.__PP_ab = { seat: mk(seatEye), aft12: mk(aftEye), shippedDist: +distLive.toFixed(0) };
+        }
+        // ── DESCENT-APPROACH regression check: the planet MUST still GROW during the descent beats
+        //   (intentional — "we are falling INTO that"). Drive setSkyIntroMode + setPlanetApproach exactly
+        //   as tickDescent does, at progress 0 / 0.11 / 0.22, and measure the group scale + angular diameter
+        //   from the descending pod eye. The disc should visibly swell across the approach (scale 1→3.6).
+        const descSamples = [];
+        for (const prog of [0.0, 0.11, 0.22]) {
+          g.setSkyIntroMode(1 - Math.min(1, Math.max(0, (prog - 0.14) / 0.34)));
+          g.setPlanetApproach(Math.min(1, prog / 0.22));
+          await drive(0.15, null);
+          const pm = findPlanet();
+          const grp = pm.parent; grp.updateMatrixWorld(true);
+          const C = grp.getWorldPosition(new V());
+          const scl = grp.scale.x;
+          const R = pm.geometry.boundingSphere.radius * scl;
+          const cam2 = ctx.three.camera.position;
+          const dist = Math.hypot(C.x - cam2.x, C.y - cam2.y, C.z - cam2.z);
+          descSamples.push({ prog, groupScale: +scl.toFixed(3), camDist: +dist.toFixed(0), angDiamDeg: +(2 * Math.asin(Math.min(1, R / dist)) * 180 / Math.PI).toFixed(2) });
+        }
+        window.__PP_desc = descSamples;
+      } finally {
+        ctx.input.keys['KeyW'] = false;
+        realClock.getDelta = origGetDelta;
+        ctx.three.renderer.setSize(origW, origH, false);
+      }
+      return { samples, ab: window.__PP_ab, desc: window.__PP_desc };
+    });
+    if (log.desc) {
+      console.log('[planet-parallax-real] DESCENT-APPROACH (must GROW — intentional): progress → group scale / angular diameter:');
+      for (const d of log.desc) console.log(`[planet-parallax-real]   p=${d.prog}: scale ${d.groupScale}× · camDist ${d.camDist}m · angDiam ${d.angDiamDeg}°`);
+    }
+    if (log.ab) {
+      const pct = (a, b) => ((b - a) / a * 100).toFixed(1) + '%';
+      console.log(`[planet-parallax-real] MODEL A/B — planet on-screen diameter (fraction of vertical FOV), seat → 12m aft (shipped anchor dist=${log.ab.shippedDist}m):`);
+      for (const model of ['oldWorldAnchor400', 'cameraAnchored', 'shippedFarAnchor']) {
+        const s = log.ab.seat[model], a = log.ab.aft12[model];
+        console.log(`[planet-parallax-real]   ${model}: ${s} → ${a}  (${pct(s, a)} change as you back up 12m)`);
+      }
+    }
+    console.log('[planet-parallax-real] REAL-CHAIN samples (seat → 10m aft → 15m aft):');
+    for (const s of log.samples) console.log('[planet-parallax-real] ' + JSON.stringify(s));
+    // Drift = angular-diameter change relative to the seat sample.
+    const seat = log.samples.find((s) => s.label === 'seat');
+    if (seat && !seat.error) {
+      for (const s of log.samples) {
+        if (s.error || s.label === 'seat') continue;
+        const drift = (s.angDiamDeg - seat.angDiamDeg) / seat.angDiamDeg * 100;
+        const posDrift = Math.hypot(s.planetWorld[0] - seat.planetWorld[0], s.planetWorld[1] - seat.planetWorld[1], s.planetWorld[2] - seat.planetWorld[2]);
+        console.log(`[planet-parallax-real] ${s.label}: angDiam ${seat.angDiamDeg}°→${s.angDiamDeg}° (${drift >= 0 ? '+' : ''}${drift.toFixed(2)}%), planet world moved ${posDrift.toFixed(2)}m from the seat anchor`);
+      }
+    }
   },
 
   // Corridor disaster (T3.4): the engine-bay FIRE + the RED-ALERT corridor (the disaster the
