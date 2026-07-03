@@ -123,3 +123,6 @@ W3 SHIP MISC: (a) the grey bolts on walls+floor are rotated WRONG (undersides ex
 W4 PLANET PARALLAX REGRESSION: the planet STILL grows relative to the ship as the player walks back (in the real built game, post-fix) — re-diagnose in the real context.
 W5 CREW QUARTERS (new): opposite side of the hallway from the pod, further down toward (not too close to) the engine room — sliding doors + a clean entranceway (clear any pipes/models blocking the door front).
 THEN: the user has a separate escape-pod-SEQUENCE feedback batch to give after the ship work.
+
+## 2026-07-03 — STANDING RULE: collision matches models exactly (→ CLAUDE.md rule 9 + a ship-wide audit in the wrap)
+User: collision doesn't match the models in places; some collision uses OLD models that no longer exist. RULE: always update collision when updating a model; collision matches the visible geometry exactly unless stated otherwise. → CLAUDE.md Architecture rule 9 (permanent). Sent live to W1 (cockpit collider sweep + whole-cockpit motion probe + a --colliders overlay in its report). The W2/W3/W5 briefs carry the rule. The END-OF-OVERHAUL WRAP adds a SHIP-WIDE COLLISION AUDIT: every collider vs the visible geometry across cockpit/corridor/bay/engine/quarters, stale ones deleted, proven by motion probes.
