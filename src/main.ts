@@ -504,8 +504,15 @@ ctx.player.rig = buildPlayerRig(ctx);
 // has no way to bootstrap any crafting (scrap is a near-universal
 // recipe input). Machete is now found-only (could be added as wreck
 // loot or quest reward in a future session).
-addItem(ctx.inventory, 'scrap_bar');
-addItem(ctx.inventory, 'canteen', { fillLevel: 1 });
+// SHIP-FIX (2026-07-03, user): NO starter loadout on the escape-pod-intro path —
+// the crash story starts you with empty pockets; the T4.3 tutorial's scattered
+// scrap/cloth (→ craft the machete, the pry tool) + your own pod's salvage kit
+// are the bootstrap. The non-intro path keeps the ABL loadout (its balance
+// rationale above still holds there).
+if (!FEATURES.escapePodIntro) {
+  addItem(ctx.inventory, 'scrap_bar');
+  addItem(ctx.inventory, 'canteen', { fillLevel: 1 });
+}
 ctx.inventory.selectedIdx = 0;
 
 // AAX — dev loadout extracted into a helper so it can be invoked from
