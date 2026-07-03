@@ -292,17 +292,21 @@ function _makeEngineGlass(): THREE.MeshStandardMaterial {
 const _engMachine = _metal(0x54585e, 0.5, 0.6, { flat: true, grime: true });
 // Engine-room deep steel (the reactor block / engine mass) — dark, heavy.
 const _engBlock = _metal(0x33373d, 0.55, 0.55, { flat: true, grime: true });
-// Window GLASS — a real transmissive cool-tinted pane: faint blue tint, very glossy, low opacity
-//   so the orbit reads through, but with enough surface to catch a Fresnel rim + reflection.
-//   R5a-r3 SEV-2 #1: the panes were reading as open holes against the bright planet. A Fresnel
-//   patch (onBeforeCompile) brightens the pane toward grazing angles (the glazing rim glows where
-//   the eye sees it edge-on) + adds a soft diagonal reflection sweep + a vertical tint gradient, so
-//   the eye registers a sheet of glass between it and the orbit, not a void. Single shared material
-//   → no program-cache-key concern (one instance, identical source).
+// Window GLASS — a real transmissive cool-tinted CANOPY pane: faint blue tint, very glossy, low
+//   base opacity so the orbit reads through, but with a real SURFACE that catches a Fresnel rim +
+//   a curved-glass sheen so the eye reads a BUBBLE of glass, not a void.
+//   COCKPIT-ROUND-2 (the user: "the glass reads as a flat piece / a black hole; make it a real
+//   curved canopy that meets the hull on every edge and looks COOL"): the pane was reading as an
+//   open black hole (opacity 0.20 + a near-black tint against black space) with two dark rail bars
+//   crossing it. This pass keeps the planet crisp through the CENTRE but lifts the pane's own
+//   presence: (1) a stronger, warmer-cool Fresnel RIM so the curved bubble edge GLOWS where the eye
+//   sees it grazing (the wrap-form reads); (2) a faint broad curved-sheen highlight band so a large
+//   flat-looking sheet reads as a gently-domed canopy catching cabin/limb light; (3) the alpha still
+//   opens up toward the centre so the world reads through. Single shared material → one program.
 const _glass = new THREE.MeshStandardMaterial({
-  color: 0x33444f, roughness: 0.08, metalness: 0.0,
-  emissive: 0x0a1620, emissiveIntensity: 0.30,
-  transparent: true, opacity: 0.20,
+  color: 0x3a4e5c, roughness: 0.06, metalness: 0.0,
+  emissive: 0x102232, emissiveIntensity: 0.40,
+  transparent: true, opacity: 0.17,
 });
 _glass.onBeforeCompile = (shader: THREE.WebGLProgramParametersWithUniforms) => {
   shader.vertexShader = shader.vertexShader.replace(
@@ -326,29 +330,35 @@ _glass.onBeforeCompile = (shader: THREE.WebGLProgramParametersWithUniforms) => {
      varying vec3 vGlassViewNrm;
      varying vec2 vGlassLocal;`,
   );
-  // After the emissive is composed, add the Fresnel rim + reflection sweep + tint gradient.
+  // After the emissive is composed, add the Fresnel rim + a curved-sheen band + a tint gradient.
+  //   COCKPIT-ROUND-2: the rim is stronger + the sheen is a broad CURVED band (a domed-canopy
+  //   highlight) so the pane reads as a curved bubble catching light, not a flat black hole.
   shader.fragmentShader = shader.fragmentShader.replace(
     '#include <emissivemap_fragment>',
     `#include <emissivemap_fragment>
      vec3 gV = normalize(-vGlassViewPos);
-     float gFres = pow(1.0 - clamp(dot(normalize(vGlassViewNrm), gV), 0.0, 1.0), 2.5);
-     // a soft diagonal reflection band sweeping across the pane (a window-light streak)
-     float gSweep = smoothstep(0.62, 0.96, sin((vGlassLocal.x * 2.4 + vGlassLocal.y * 3.1) + 1.3) * 0.5 + 0.5);
+     float gNdV = clamp(dot(normalize(vGlassViewNrm), gV), 0.0, 1.0);
+     float gFres = pow(1.0 - gNdV, 2.2);
+     // a broad CURVED sheen band arcing across the dome (a canopy highlight following the wrap) —
+     //   a smooth wide arc keyed to the pane's u,v so a big sheet reads as a gently-domed surface.
+     float gArc = 1.0 - abs((vGlassLocal.x - 0.5) * 1.7 + (vGlassLocal.y - 0.62) * 0.6);
+     float gSheen = smoothstep(0.55, 1.0, gArc) * (0.35 + 0.4 * gFres);
      // a faint vertical tint gradient (cooler/bluer toward the top of the pane)
      float gGrad = vGlassLocal.y;
-     vec3 gRim = mix(vec3(0.14, 0.22, 0.30), vec3(0.30, 0.42, 0.55), gGrad);
-     totalEmissiveRadiance += gRim * gFres * 1.7;          // grazing-angle rim glow
-     totalEmissiveRadiance += vec3(0.20, 0.27, 0.34) * gSweep * (0.35 + 0.5 * gFres); // reflection sweep`,
+     vec3 gRim = mix(vec3(0.16, 0.26, 0.36), vec3(0.34, 0.48, 0.62), gGrad);
+     totalEmissiveRadiance += gRim * gFres * 2.1;               // grazing-angle rim glow (the bubble edge)
+     totalEmissiveRadiance += vec3(0.26, 0.34, 0.42) * gSheen;  // the curved-canopy sheen band`,
   );
-  // raise the alpha toward grazing angles so the glazing reads as a real edge-lit sheet, not a hole.
+  // raise the alpha toward grazing angles so the glazing reads as a real edge-lit CURVED sheet
+  //   (the wrap-form seals visibly to the hull at the rim) — the centre stays open for the planet.
   shader.fragmentShader = shader.fragmentShader.replace(
     '#include <opaque_fragment>',
     `gl_FragColor = vec4( outgoingLight, diffuseColor.a );
      #ifdef OPAQUE
      gl_FragColor.a = 1.0;
      #endif
-     float gFres2 = pow(1.0 - clamp(dot(normalize(vGlassViewNrm), normalize(-vGlassViewPos)), 0.0, 1.0), 2.0);
-     gl_FragColor.a = clamp(gl_FragColor.a + gFres2 * 0.55, 0.0, 0.9);`,
+     float gFres2 = pow(1.0 - clamp(dot(normalize(vGlassViewNrm), normalize(-vGlassViewPos)), 0.0, 1.0), 1.7);
+     gl_FragColor.a = clamp(gl_FragColor.a + gFres2 * 0.62, 0.0, 0.92);`,
   );
 };
 
@@ -594,6 +604,17 @@ function _stud(x: number, y: number, z: number, faceDir: THREE.Vector3, mat: THR
 function _skin(verts: number[], mat: THREE.Material): THREE.Mesh {
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+  g.computeVertexNormals();
+  _disposables.push(g);
+  return new THREE.Mesh(g, mat);
+}
+// ── Like _skin, but carries a UV attribute (per-vertex u,v) — the canopy glass needs real UVs so
+//    its onBeforeCompile sheen/tint gradient reads across the pane (computeVertexNormals leaves uv
+//    unset otherwise → the shader's vGlassLocal was garbage).
+function _skinUV(verts: number[], uvs: number[], mat: THREE.Material): THREE.Mesh {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
   g.computeVertexNormals();
   _disposables.push(g);
   return new THREE.Mesh(g, mat);
@@ -991,8 +1012,9 @@ function buildCockpitShell(group: THREE.Group): void {
  *  fills the WHOLE front opening (its edge tracks the FRONT HULL WALL by construction) so there are
  *  NO cheek panels + NO diagonal strut wedges beside it — just glass meeting hull at a slim frame.
  *  Verts wound so the glass faces the cabin (+Z inward). */
-const WIN_TOP_Y = 2.42;            // the windscreen top/brow (kept below the crown so the top has real width, not a razor point)
-const WIN_RAKE = 0.92;             // how far aft (+Z) the top leans from the sill
+const WIN_TOP_Y = 2.50;            // R2: raised toward the crown → a taller, rounder canopy arch (was 2.42, which pinched the top)
+const WIN_RAKE = 0.52;             // R2: LESS aft rake (was 0.92) → a more upright canopy; the old deep rake made a ~0.9m
+                                   //   raked HOOD whose dark side gussets read as heavy A-pillar diagonals across the vista.
 const WIN_MIDY = 1.72;             // the mid-height reference (curve sample)
 function _winZ(y: number): number {
   // the rake line: z grows with height from the sill up to the brow
@@ -1013,19 +1035,32 @@ function _winEdge(y: number, sx: number): THREE.Vector3 {
   return new THREE.Vector3(sx * _winHalfW(y), y, _winZ(y));
 }
 function buildWindscreen(group: THREE.Group, fwZ: number, inward: THREE.Vector3): void {
-  // ── ONE CLEAN GLASS SHEET — a single curved pane lofted across the opening. Sample the sill→brow
-  //    rail in N rows; each row spans −halfW..+halfW at that row's rake-z. A gentle inward BOW (the
-  //    centre bulges a hair toward the cabin) gives the canopy a curved-glass read without facets.
-  const ROWS = 10, COLS = 8;
+  // ── ONE CLEAN CURVED CANOPY BUBBLE — a single continuous glass sheet lofted across the whole
+  //    opening. COCKPIT-ROUND-2 (the user: seamless + clean + COOL, meeting the hull on every edge
+  //    by construction, a real curved wrap not a flat pane): the glass edge tracks `_winEdge` (=the
+  //    hull opening perimeter) on ALL FOUR sides, so it seals to the hull by construction. A DEEPER
+  //    dual-axis inward bow (bulges toward the cabin across the width AND up over the brow) gives it
+  //    a genuine domed/bubble character — the canopy WRAPS the pilot. No facets, no crossing
+  //    mullions/struts; just one smooth pane inside a slim frame line.
+  const ROWS = 12, COLS = 12;
   const glassV: number[] = [];
   const railY = (i: number) => WIN_Y0 + 0.02 + (WIN_TOP_Y - WIN_Y0 - 0.04) * (i / ROWS);
   const pt = (i: number, j: number): [number, number, number] => {
     const y = railY(i);
-    const hw = _winHalfW(y) - 0.05;                       // a hair inside the opening (frame overlaps the seam)
+    const hw = _winHalfW(y) - 0.04;                       // a hair inside the opening (frame overlaps the seam)
     const u = j / COLS;                                    // 0..1 across
-    const x = (u * 2 - 1) * hw;
-    const bow = (1 - (u * 2 - 1) * (u * 2 - 1)) * 0.10;    // parabolic inward bow (0 at edges, +0.10 centre)
-    return [x, y, _winZ(y) + bow];
+    const sx = (u * 2 - 1);
+    const x = sx * hw;
+    const vy = (y - WIN_Y0) / (WIN_TOP_Y - WIN_Y0);        // 0 sill → 1 brow
+    // a DUAL-AXIS OUTWARD bulge (a real bubble/blister canopy): the pane swells toward SPACE (−Z)
+    //   across the width (parabola in x) AND over the mid-height, flattening to seal flush at the
+    //   side/sill/brow edges. Bulging OUT (not in toward the cabin) reads as a cool wrap-canopy and
+    //   pushes the glass forward of the pinched nose-cheek diagonals. Edges stay ON the hull plane
+    //   (bowX→0, bowY→0) so the seal to the frame is exact.
+    const bowX = (1.0 - sx * sx);                         // 1 centre → 0 side edges
+    const bowY = Math.sin(vy * Math.PI);                  // 0 sill/brow → 1 mid (the dome swell)
+    const bulge = bowX * (0.06 + 0.20 * bowY);            // outward blister depth
+    return [x, y, _winZ(y) - bulge];                       // −Z = toward space (a bubble that bulges OUT)
   };
   for (let i = 0; i < ROWS; i++) {
     for (let j = 0; j < COLS; j++) {
@@ -1034,18 +1069,24 @@ function buildWindscreen(group: THREE.Group, fwZ: number, inward: THREE.Vector3)
       glassV.push(...a, ...c, ...b, ...b, ...c, ...d);
     }
   }
-  const glassSheet = _skin(glassV, _glass);
+  // UV = normalized (u across, v up) so the glass shader's curved sheen + tint gradient read right.
+  const glassUV: number[] = [];
+  for (let i = 0; i < ROWS; i++) for (let j = 0; j < COLS; j++) {
+    const u0 = j / COLS, u1 = (j + 1) / COLS, v0 = i / ROWS, v1 = (i + 1) / ROWS;
+    glassUV.push(u0, v0, u0, v1, u1, v0, u1, v0, u0, v1, u1, v1);
+  }
+  const glassSheet = _skinUV(glassV, glassUV, _glass);
   glassSheet.renderOrder = 2;   // transparent — draw after the opaque hull
   group.add(glassSheet);
-  // ── ONE SLIM FRAME/GASKET RING tracing the opening perimeter (sill → up the L rail → across the
-  //    brow → down the R rail). Short box segments following _winEdge, so the frame HUGS the glass
-  //    edge exactly — no floating bars, no separate transom/mullion. Dark cool steel.
+  // ── ONE SLIM CLEAN FRAME/GASKET RING tracing the opening perimeter (up the L rail → across the
+  //    brow → down the R rail → across the sill). Short box segments following _winEdge, so the frame
+  //    HUGS the glass edge exactly on all sides — a single continuous gasket, no floating bars, no
+  //    crossing mullion/struts. SLIM (the whole point is the glass + the planet, not the frame).
   const ring: THREE.Vector3[] = [];
   for (let i = 0; i <= ROWS; i++) ring.push(_winEdge(railY(i), -1));   // up the left rail
   for (let i = ROWS; i >= 0; i--) ring.push(_winEdge(railY(i), 1));    // down the right rail (brow bridges the top)
-  // close across the sill (bottom)
   const sillL = _winEdge(WIN_Y0 + 0.02, -1), sillR = _winEdge(WIN_Y0 + 0.02, 1);
-  const seg = (p: THREE.Vector3, q: THREE.Vector3, t: number, mat: THREE.Material = _channel) => {
+  const seg = (p: THREE.Vector3, q: THREE.Vector3, t: number, mat: THREE.Material = _winFrame) => {
     const mid = p.clone().add(q).multiplyScalar(0.5);
     const len = p.distanceTo(q) + 0.02;
     const bar = _box(t, len, t, mat);
@@ -1053,21 +1094,18 @@ function buildWindscreen(group: THREE.Group, fwZ: number, inward: THREE.Vector3)
     bar.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), q.clone().sub(p).normalize());
     group.add(bar);
   };
-  for (let k = 0; k < ring.length - 1; k++) {
-    // skip the single implicit bridge between the last-left-rail point and the first-right point at the brow
-    seg(ring[k], ring[k + 1], 0.045);   // SLIM gasket (was 0.07 → read as heavy A-pillars crossing the view)
-  }
-  seg(sillL, sillR, 0.07, _winFrame);   // the sill bar closes the bottom (a touch chunkier + steel — the dash meets it)
-  // ── ONE subtle diagonal glazing STREAK (a single window-light reflection sliding across) so the
-  //    sheet reads as glass, not a void — SIMPLE + CLEAN per the directive (no dust/reticle clutter).
-  //    Kept SMALL + faint + off to the side (a short soft glint near the frame, NOT a bar across the view).
-  const stGeo = new THREE.PlaneGeometry(0.07, (WIN_TOP_Y - WIN_Y0) * 0.5);
+  for (let k = 0; k < ring.length - 1; k++) seg(ring[k], ring[k + 1], 0.038);   // slim continuous gasket
+  seg(sillL, sillR, 0.06, _winFrame);   // the sill bar closes the bottom (a touch chunkier — the dash meets it)
+  // ── ONE subtle curved GLAZING GLINT — a single soft reflection catching the dome, off to the side
+  //    (a short soft highlight near the L frame, NOT a bar across the view) so the sheet reads as
+  //    curved glass. Simple + clean per the directive (no dust/reticle clutter).
+  const stGeo = new THREE.PlaneGeometry(0.06, (WIN_TOP_Y - WIN_Y0) * 0.42);
   _disposables.push(stGeo);
-  const stMat = new THREE.MeshBasicMaterial({ color: 0xbcd0e2, transparent: true, opacity: 0.16, depthWrite: false, blending: THREE.AdditiveBlending });
+  const stMat = new THREE.MeshBasicMaterial({ color: 0xbcd0e2, transparent: true, opacity: 0.13, depthWrite: false, blending: THREE.AdditiveBlending });
   _buildMats.push(stMat);
   const streak = new THREE.Mesh(stGeo, stMat);
-  const scy = WIN_Y0 + (WIN_TOP_Y - WIN_Y0) * 0.62;
-  streak.position.set(-0.85, scy, _winZ(scy) + 0.10);
+  const scy = WIN_Y0 + (WIN_TOP_Y - WIN_Y0) * 0.60;
+  streak.position.set(-0.78, scy, _winZ(scy) + 0.14);
   streak.rotation.x = -Math.atan2(_winZ(WIN_TOP_Y) - _winZ(WIN_Y0), WIN_TOP_Y - WIN_Y0);
   streak.rotation.z = 0.5;
   streak.renderOrder = 3;
@@ -1132,7 +1170,7 @@ function _buildWindscreenClosures(group: THREE.Group, fwZ: number): void {
     tri(wc, br, mid);
     tri(wc, mid, fr);
     tri(br, fr, mid);
-    group.add(_skin(capV, _ceil));
+    group.add(_skin(capV, _band));   // R2: LIGHTER painted panel (was _ceil dark) → the nose-cap hood + gussets read as an INTENTIONAL canopy fairing surround, not a dark void-edge / heavy A-pillar
   }
   // A3: the old BROW FASCIA strip + the RAKED SIDE SPARS + CENTRE MULLION + gasket retainers are
   //   DELETED — they were the "floating bars + slivers" the user flagged. The single perimeter frame
@@ -1400,235 +1438,251 @@ function buildPilotSeat(group: THREE.Group): void {
   _addFurnitureCollider(0.60, 0.86, 0.28, 0, sy + 0.34, backCZ);   // reclined back + headrest mass ONLY (front face z≈0.72, clear of the capsule)
 }
 
-/** The forward CONSOLE bank — the WRAP-AROUND dash right at the pilot's knees, below the
- *  window. A real instrument dash: a grouped centre cluster with the green ORBIT ACHIEVED CRT
- *  as the centrepiece, flanking bezeled backlit gauge dials, guarded switch banks, a throttle
- *  quadrant, labeled decals — clustered + dense (gate #7). A console wash + the CRT throw
- *  warm/green glow. setCockpitAlert recolors the screen + status + wash. */
+/** The forward CONSOLE — COCKPIT-ROUND-2 REDESIGN (the user: "the whole controls look a bit
+ *  messy — overlapping/floating pieces; redesign cleaner + more streamlined").
+ *
+ *  The old dash was a jumble: a floating proud MFD housing, an amber screen-pod + big dial
+ *  floating at odd angles, coplanar face panels z-fighting, scattered dial/LED/switch/throttle
+ *  clutter reading as overlapping boxes. This rebuild is ONE COHERENT STREAMLINED CONSOLE:
+ *   (1) a single flowing PEDESTAL body — a clean front kneewell wall + a wrapped top that reads as
+ *       one continuous surface (the pieces share planes, so no overlap/z-fight);
+ *   (2) a GLARE-SHIELD HOOD over a single canted INSTRUMENT FASCIA — the screens are RECESSED into
+ *       this one fascia plane with integral bezels (real depth, no proud floating housings);
+ *   (3) the MAIN MFD (off-centre left, keeps _alertScreenGlow + _alertStatusLeds + the setCockpitAlert
+ *       hooks) + ONE clean secondary readout (right) on the SAME fascia plane → coherent, not scattered;
+ *   (4) a tidy CONTROL SHELF below the fascia: one grouped switch strip, two clean flush dials, and a
+ *       throttle quadrant on a raised boss — purposeful groupings, all seated on the shelf (nothing floats).
+ *  Everything is built off two reference planes (the fascia + the shelf) so faces never overlap/coplane. */
 function buildConsoleBank(group: THREE.Group): void {
   _alertStatusLeds = [];
   const conZ = CON_Z, deckY = CON_DECK_Y;
   const inward = new THREE.Vector3(0, 0, 1);
-  // ── the wrap-around dash body (a wide low dash hugging the forward sill, wrapping toward
-  //    the pilot at the ends so it reads as a station, not a flat counter)
-  const body = _box(3.6, deckY, 0.78, _channel);
-  body.position.set(0, deckY / 2, conZ);
-  group.add(body);
-  // A5 COLLIDER — the forward dash is solid (the player can't walk through the console toward the
-  //   window). Covers the dash body + the canted deck reach; sits forward of the seated spawn so it
-  //   never interferes with the sit/rise (the player walks AFT away from it). Front-lip to deck-back.
-  _addFurnitureCollider(3.6, deckY + 0.30, 0.95, 0, (deckY + 0.30) / 2, conZ + 0.05);
-  // wrap-around side wings angled toward the seat (close the station in around the pilot)
-  for (const sx of [-1, 1]) {
-    const wing = _box(0.5, deckY, 0.7, _channel);
-    wing.position.set(sx * 1.7, deckY / 2, conZ + 0.5);
-    wing.rotation.y = sx * 0.5;
-    group.add(wing);
-  }
-  // bright seat-facing face panel + a kickplate + a seam rail + riveted access panels
-  const face = _box(3.5, deckY - 0.06, 0.04, _band);
-  face.position.set(0, deckY / 2, conZ + 0.38);
-  group.add(face);
-  const kick = _box(3.5, 0.16, 0.08, _steel);
-  kick.position.set(0, 0.08, conZ + 0.37);
-  group.add(kick);
-  const seam = _box(3.5, 0.05, 0.05, _steel);
-  seam.position.set(0, deckY * 0.55, conZ + 0.39);
-  group.add(seam);
-  for (const px of [-1.1, 1.1]) {
-    const panel = _box(0.8, 0.34, 0.03, _shell);
-    panel.position.set(px, deckY * 0.30, conZ + 0.39);
-    group.add(panel);
-    for (const cxp of [-0.36, 0.36]) for (const cyp of [-0.14, 0.14]) {
-      group.add(_stud(px + cxp, deckY * 0.30 + cyp, conZ + 0.41, inward, _rivet, 0.013));
-    }
-  }
-  // a small stencilled panel label on the dash face
-  const lbl = _box(0.5, 0.05, 0.006, _decal);
-  lbl.position.set(0, deckY * 0.30, conZ + 0.41);
-  group.add(lbl);
-  // ── canted instrument deck (the top surface tilts up toward the seated pilot)
-  const deck = _box(3.6, 0.06, 0.72, _steel);
-  deck.position.set(0, deckY + 0.04, conZ);
-  deck.rotation.x = -0.55;
-  group.add(deck);
-  for (let i = -3; i <= 3; i++) group.add(_stud(i * 0.48, deckY + 0.02, conZ + 0.30, inward, _rivet, 0.015));
+  const CANT = -0.62;   // the single instrument-fascia tilt (up toward the seated pilot)
 
-  // ── THE MAIN MFD — a recessed multi-line display in a real beveled bezel housing, set
-  //    OFF-CENTRE to the LEFT (kills the symmetric "mouth"). Hooded body + a recessed dark glass
-  //    face + green emissive content (a horizon bar + nav glyphs + scrolling readout lines) + a
-  //    CRT scanline overlay. setCockpitAlert flips it red.
-  const CANT = -0.80;                       // tilted up toward the seated pilot (reads as a screen)
-  const mfdX = -0.55;                        // OFF-CENTRE left (asymmetry — anti-face)
-  const scrCY = deckY + 0.20, scrZ = conZ + 0.04;
-  // recessed housing (a deep bezel box the screen sits INSIDE)
-  const housing = _box(1.06, 0.62, 0.16, _channel);
-  housing.position.set(mfdX, scrCY, scrZ - 0.02);
-  housing.rotation.x = CANT;
-  group.add(housing);
-  const bezel = _box(0.98, 0.54, 0.06, _steel);   // a proud bezel frame around the glass
-  bezel.position.set(mfdX, scrCY, scrZ + 0.05);
+  // ── (1) THE PEDESTAL BODY — one clean wrapped console mass. A front kneewell wall (seat-facing),
+  //    a top deck, and two gently-angled end returns that WRAP toward the pilot. Depth-staggered so
+  //    the faces never coplane. This is the console's whole lower body; the fascia + shelf sit on it.
+  const bodyH = deckY;                 // 0.78 — knee-height dash
+  const bodyD = 0.72;
+  const bodyFrontZ = conZ + bodyD / 2; // the seat-facing front plane
+  // the core body block
+  const body = _box(3.2, bodyH, bodyD, _channel);
+  body.position.set(0, bodyH / 2, conZ);
+  group.add(body);
+  // the seat-facing FRONT FASCIA WALL (one clean painted plate, proud of the body front by 1cm so
+  //   it reads as the finished skin — not coplanar with the body face)
+  const frontWall = _box(3.14, bodyH - 0.04, 0.05, _band);
+  frontWall.position.set(0, bodyH / 2, bodyFrontZ + 0.005);
+  group.add(frontWall);
+  // a slim kickplate at the floor + a single clean waist reveal line (panel break, real depth)
+  const kick = _box(3.14, 0.14, 0.07, _steel);
+  kick.position.set(0, 0.07, bodyFrontZ + 0.01);
+  group.add(kick);
+  const reveal = _box(3.0, 0.03, 0.02, _channel);
+  reveal.position.set(0, bodyH * 0.62, bodyFrontZ + 0.03);
+  group.add(reveal);
+  // two flush access panels + a stencil label on the front wall (lived-in, NOT proud clutter)
+  for (const px of [-1.05, 1.05]) {
+    for (const cyp of [-0.13, 0.13]) group.add(_stud(px - 0.34, bodyH * 0.34 + cyp, bodyFrontZ + 0.03, inward, _rivet, 0.012));
+    for (const cyp of [-0.13, 0.13]) group.add(_stud(px + 0.34, bodyH * 0.34 + cyp, bodyFrontZ + 0.03, inward, _rivet, 0.012));
+  }
+  const lbl = _box(0.46, 0.05, 0.006, _decal);
+  lbl.position.set(-0.9, bodyH * 0.30, bodyFrontZ + 0.035);
+  group.add(lbl);
+  // the WRAP end-returns — angled panels closing the console around the pilot (a station, not a
+  //   flat counter). Set BACK + angled; their inner edges meet the body so no gap/overlap reads.
+  for (const sx of [-1, 1]) {
+    const ret = _box(0.42, bodyH, 0.66, _channel);
+    ret.position.set(sx * 1.78, bodyH / 2, conZ + 0.42);
+    ret.rotation.y = sx * 0.46;
+    group.add(ret);
+    const retFace = _box(0.40, bodyH - 0.06, 0.04, _band);
+    retFace.position.set(sx * 1.78 + sx * 0.02, bodyH / 2, conZ + 0.42 + 0.30);
+    retFace.rotation.y = sx * 0.46;
+    group.add(retFace);
+  }
+  // A5 COLLIDER — the solid console mass (unchanged spec — the egress path is aft of it, untouched).
+  _addFurnitureCollider(3.6, deckY + 0.30, 0.95, 0, (deckY + 0.30) / 2, conZ + 0.05);
+
+  // ── (2) THE CONTROL SHELF — one flat top surface on the body (the physical shelf that all the
+  //    controls sit ON, so nothing floats). Slightly proud of the body top; a rear lip rises to the
+  //    fascia. This single plane is the datum for the switch/dial/throttle groups below.
+  const shelfY = bodyH + 0.02;
+  const shelf = _box(3.14, 0.05, bodyD - 0.06, _steel);
+  shelf.position.set(0, shelfY, conZ - 0.01);
+  group.add(shelf);
+  for (let i = -3; i <= 3; i++) group.add(_stud(i * 0.46, shelfY + 0.03, bodyFrontZ - 0.06, inward, _rivet, 0.013));
+
+  // ── (2b) THE GLARE-SHIELD HOOD + INSTRUMENT FASCIA — one canted plane rising off the shelf's rear
+  //    edge, hooded by a brow so the screens read RECESSED. This is the ONE fascia the MFDs live in.
+  const fasCY = deckY + 0.30;                 // fascia centre height
+  const fasZ = conZ - 0.14;                    // set back (behind the shelf, toward the window)
+  // the fascia backing panel (the instrument face all screens recess INTO)
+  const fascia = _box(3.0, 0.56, 0.05, _channel);
+  fascia.position.set(0, fasCY, fasZ);
+  fascia.rotation.x = CANT;
+  group.add(fascia);
+  // the GLARE-SHIELD BROW — a slim hood cantilevered over the fascia top (shades the screens; gives
+  //   the console its purposeful silhouette). One clean bar, angled to overhang.
+  const brow = _box(3.06, 0.06, 0.22, _steel);
+  brow.position.set(0, fasCY + 0.30, fasZ + 0.10);
+  brow.rotation.x = CANT + 0.5;
+  group.add(brow);
+  for (let i = -3; i <= 3; i++) group.add(_stud(i * 0.46, fasCY + 0.30, fasZ + 0.16, inward, _rivet, 0.012));
+
+  // ── (3) THE MAIN MFD — recessed INTO the fascia (off-centre left). Integral bezel, recessed dark
+  //    glass, green emissive content (horizon + readout lines) + scanlines. Keeps the alert refs.
+  const mfdX = -0.62;
+  const scrCY = fasCY + 0.02, scrZ = fasZ + 0.05;
+  const bezel = _box(1.0, 0.50, 0.05, _steel);   // integral bezel proud of the fascia
+  bezel.position.set(mfdX, scrCY, scrZ);
   bezel.rotation.x = CANT;
   group.add(bezel);
-  // the recessed glass face (sits BACK inside the bezel → real depth)
-  const faceGlass = _box(0.82, 0.40, 0.015, _screenGlass);
-  faceGlass.position.set(mfdX, scrCY, scrZ + 0.035);
+  const faceGlass = _box(0.86, 0.40, 0.02, _screenGlass);   // recessed glass (sits back in the bezel)
+  faceGlass.position.set(mfdX, scrCY, scrZ + 0.015);
   faceGlass.rotation.x = CANT;
   group.add(faceGlass);
-  // the emissive CONTENT layer (the lit screen base — recolored by setCockpitAlert)
-  const glowGeo = new THREE.PlaneGeometry(0.80, 0.38);
+  // ── the screen CONTENT lives in a child GROUP carrying the screen's position + CANT tilt, so all
+  //    content is authored in flat local (x, y) coords + reads correctly on the tilted plane (the
+  //    prior hand-projected z-math pushed the lower readout lines BEHIND the glass — a real bug).
+  const scr = new THREE.Group();
+  scr.position.set(mfdX, scrCY, scrZ + 0.03);
+  scr.rotation.x = CANT;
+  group.add(scr);
+  const scrLocal = (mesh: THREE.Mesh, x: number, y: number, z = 0) => { mesh.position.set(x, y, z); scr.add(mesh); };
+  const glowGeo = new THREE.PlaneGeometry(0.84, 0.38);
   _disposables.push(glowGeo);
-  const glowMat = new THREE.MeshBasicMaterial({ color: 0x163a1c });   // dim green CRT base (calm)
+  const glowMat = new THREE.MeshBasicMaterial({ color: 0x1f5a2c });   // R2: brighter green CRT base → the screen reads as a lit avionics page
   _buildMats.push(glowMat);
   const scrGlow = new THREE.Mesh(glowGeo, glowMat);
-  scrGlow.position.set(mfdX, scrCY, scrZ + 0.04);
-  scrGlow.rotation.x = CANT;
-  group.add(scrGlow);
+  scrLocal(scrGlow, 0, 0, 0);
   _alertScreenGlow = scrGlow;
-  // a HORIZON bar + nav glyph block (UI content — reads as a real avionics page)
-  const horizGeo = new THREE.PlaneGeometry(0.6, 0.02);
-  _disposables.push(horizGeo);
+  // content: a banked horizon line + a nav crosshair + scrolling readout lines (alert refs recolor).
   const brightGreen = new THREE.MeshBasicMaterial({ color: 0x8cf29a });
   _buildMats.push(brightGreen);
+  const horizGeo = new THREE.PlaneGeometry(0.6, 0.018);
+  _disposables.push(horizGeo);
   const horiz = new THREE.Mesh(horizGeo, brightGreen);
-  horiz.position.set(mfdX, scrCY + 0.02, scrZ + 0.045);
-  horiz.rotation.set(CANT, 0, 0.06);   // a slightly banked horizon line
-  group.add(horiz);
+  scrLocal(horiz, 0, 0.10, 0.004); horiz.rotation.z = 0.05;   // a slightly banked horizon
   _alertStatusLeds.push(horiz);
-  // scrolling readout lines (varying widths — real text, not even dots)
-  const lineGeo = new THREE.PlaneGeometry(0.62, 0.035);
+  // a small nav crosshair box on the horizon (a real avionics glyph, not just lines)
+  const crossGeo = new THREE.PlaneGeometry(0.05, 0.05);
+  _disposables.push(crossGeo);
+  const cross = new THREE.Mesh(crossGeo, brightGreen);
+  scrLocal(cross, 0, 0.10, 0.005);
+  _alertStatusLeds.push(cross);
+  const lineGeo = new THREE.PlaneGeometry(0.6, 0.028);
   _disposables.push(lineGeo);
   for (let r = 0; r < 4; r++) {
     const line = new THREE.Mesh(lineGeo, brightGreen);
-    const w = [0.95, 0.5, 0.72, 0.38][r];
+    const w = [0.95, 0.5, 0.72, 0.4][r];
     line.scale.x = w;
-    const dy = -0.05 - r * 0.058;
-    line.position.set(mfdX - 0.28 * (1 - w), scrCY + dy * Math.cos(CANT), scrZ + 0.045 + dy * -Math.sin(CANT));
-    line.rotation.x = CANT;
-    group.add(line);
+    scrLocal(line, -0.28 * (1 - w), -0.02 - r * 0.05, 0.004);
     _alertStatusLeds.push(line);
   }
-  // CRT scanline overlay (faint dark stripes → the screen reads as a real CRT, not a flat quad)
-  const scanGeo = new THREE.PlaneGeometry(0.80, 0.004);
+  // faint CRT scanlines (in the same local frame → they stay ON the screen)
+  const scanGeo = new THREE.PlaneGeometry(0.84, 0.004);
   _disposables.push(scanGeo);
-  const scanMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.32 });
+  const scanMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.26 });
   _buildMats.push(scanMat);
   for (let s = 0; s < 9; s++) {
     const sl = new THREE.Mesh(scanGeo, scanMat);
-    const dy = 0.16 - s * 0.04;
-    sl.position.set(mfdX, scrCY + dy * Math.cos(CANT), scrZ + 0.046 + dy * -Math.sin(CANT));
-    sl.rotation.x = CANT;
-    group.add(sl);
+    scrLocal(sl, 0, 0.16 - s * 0.04, 0.006);
   }
 
-  // ── A SECOND raised SCREEN TIER to the RIGHT (asymmetric — a smaller amber data readout in its
-  //    own bezel, set higher + at a different angle than the main MFD → no mirror symmetry).
-  const mfd2X = 0.78, mfd2Y = deckY + 0.30;
-  const housing2 = _box(0.5, 0.42, 0.12, _channel);
-  housing2.position.set(mfd2X, mfd2Y, conZ + 0.0);
-  housing2.rotation.set(CANT + 0.15, -0.25, 0);
-  group.add(housing2);
-  const face2Geo = new THREE.PlaneGeometry(0.38, 0.30);
-  _disposables.push(face2Geo);
-  const amberScr = new THREE.MeshBasicMaterial({ color: 0x4a3208 });
+  // ── (3b) THE SECONDARY READOUT — recessed into the SAME fascia plane to the right (coherent, not a
+  //    floating pod). A small amber data screen in its own integral bezel + two clean flush gauges.
+  const rX = 0.9;
+  const bez2 = _box(0.62, 0.42, 0.05, _steel);
+  bez2.position.set(rX, fasCY + 0.03, scrZ);
+  bez2.rotation.x = CANT;
+  group.add(bez2);
+  // the secondary screen content in a child GROUP (same tilt-correct pattern as the MFD).
+  const scr2 = new THREE.Group();
+  scr2.position.set(rX, fasCY + 0.03, scrZ + 0.03);
+  scr2.rotation.x = CANT;
+  group.add(scr2);
+  const scr2Geo = new THREE.PlaneGeometry(0.5, 0.32);
+  _disposables.push(scr2Geo);
+  const amberScr = new THREE.MeshBasicMaterial({ color: 0x6a4a12 });   // R2: brighter amber base (was 0x4a3208 → too dark to read as lit)
   _buildMats.push(amberScr);
-  const face2 = new THREE.Mesh(face2Geo, amberScr);
-  face2.position.set(mfd2X - 0.04, mfd2Y, conZ + 0.07);
-  face2.rotation.set(CANT + 0.15, -0.25, 0);
-  group.add(face2);
+  const scr2Face = new THREE.Mesh(scr2Geo, amberScr);
+  scr2.add(scr2Face);
+  const amberBar = new THREE.MeshBasicMaterial({ color: 0xe0a040 });
+  _buildMats.push(amberBar);
   for (let r = 0; r < 3; r++) {
-    const l2Geo = new THREE.PlaneGeometry(0.3, 0.03);
+    const l2Geo = new THREE.PlaneGeometry(0.4, 0.03);
     _disposables.push(l2Geo);
-    const l2 = new THREE.Mesh(l2Geo, new THREE.MeshBasicMaterial({ color: 0xe0a040 }));
-    _buildMats.push(l2.material as THREE.Material);
+    const l2 = new THREE.Mesh(l2Geo, amberBar);
     l2.scale.x = [0.9, 0.6, 0.8][r];
-    l2.position.set(mfd2X - 0.04, mfd2Y + 0.08 - r * 0.07, conZ + 0.075);
-    l2.rotation.set(CANT + 0.15, -0.25, 0);
-    group.add(l2);
+    l2.position.set(-0.02, 0.08 - r * 0.07, 0.004);
+    scr2.add(l2);
   }
-
-  // ── ASYMMETRIC GAUGE DIALS — a TIGHT cluster of THREE on the LEFT (different sizes), and just
-  //    ONE big dial on the RIGHT (varying counts L≠R → no mirror = anti-face). Each recessed into
-  //    a beveled socket with a lit face + needle.
-  const dialSpec: [number, number][] = [[-1.35, 0.13], [-1.15, 0.10], [-1.02, 0.085], [1.18, 0.15]];
-  for (const [dx, dr] of dialSpec) {
-    const socket = _cyl(dr + 0.02, dr + 0.02, 0.06, 18, _channel);   // recessed socket
-    socket.rotation.x = Math.PI / 2 + CANT;
-    socket.position.set(dx, deckY + 0.20, conZ - 0.04);
-    group.add(socket);
-    const ring = _cyl(dr, dr, 0.04, 18, _band);   // bright bezel
+  // two clean flush GAUGES recessed in the fascia, low-right (a tidy pair, not a scattered cluster)
+  for (const [gx, gr] of [[1.42, 0.12], [1.42, 0.0]] as [number, number][]) {
+    if (gr === 0) continue;
+    const gy = fasCY - 0.16;
+    const ring = _cyl(gr, gr, 0.035, 20, _band);
     ring.rotation.x = Math.PI / 2 + CANT;
-    ring.position.set(dx, deckY + 0.21, conZ - 0.02);
+    ring.position.set(gx, gy, fasZ + 0.05);
     group.add(ring);
-    const fce = _cyl(dr * 0.78, dr * 0.78, 0.012, 18, _dialFace);   // lit face
+    const fce = _cyl(gr * 0.8, gr * 0.8, 0.01, 20, _dialFace);
     fce.rotation.x = Math.PI / 2 + CANT;
-    fce.position.set(dx, deckY + 0.215, conZ - 0.01);
+    fce.position.set(gx, gy, fasZ + 0.065);
     group.add(fce);
-    const needle = _box(dr * 0.7, 0.009, 0.005, _ledAmber);
-    needle.position.set(dx, deckY + 0.22, conZ);
-    needle.rotation.set(CANT, 0, dx < 0 ? 0.7 - dr : -0.5 + dr);
+    const needle = _box(gr * 0.7, 0.008, 0.004, _ledAmber);
+    needle.position.set(gx, gy, fasZ + 0.075);
+    needle.rotation.set(CANT, 0, -0.4);
     group.add(needle);
   }
-  // ── telltale LED status row — OFF-CENTRE + irregular spacing (anti-face: not a centered even row).
-  //    R5a-r3 SEV-2 #3: each telltale now sits in a recessed bezel SOCKET (real ~1.5cm depth — a
-  //    powered indicator, not a painted dot) + an irregular cluster (no centred even grille).
-  const ledCols = [_ledGreen, _ledAmber, _ledGreen, _ledBlue, _ledGreen];
-  const ledXs = [-0.30, -0.16, 0.02, 0.10, 0.24];
-  const ledYs = [0.0, 0.02, -0.01, 0.03, 0.0];   // jitter the row vertically (kills the even line)
-  for (let i = 0; i < ledCols.length; i++) {
-    const socket = _cyl(0.026, 0.026, 0.03, 8, _channel);   // recessed bezel socket (depth)
-    socket.rotation.x = Math.PI / 2 - 0.55;
-    socket.position.set(0.15 + ledXs[i], deckY + 0.10 + ledYs[i], conZ + 0.255);
-    group.add(socket);
-    const led = _cyl(0.018, 0.018, 0.024, 8, ledCols[i]);
-    led.rotation.x = Math.PI / 2 - 0.55;
-    led.position.set(0.15 + ledXs[i], deckY + 0.105 + ledYs[i], conZ + 0.275);
-    group.add(led);
-  }
-  // a small EMISSIVE label readout beside the telltales (a powered amber data strip — life)
-  const readoutGeo = new THREE.PlaneGeometry(0.16, 0.03);
-  _disposables.push(readoutGeo);
-  const readoutMat = new THREE.MeshBasicMaterial({ color: 0xffb24a });
-  _buildMats.push(readoutMat);
-  const readout = new THREE.Mesh(readoutGeo, readoutMat);
-  readout.rotation.x = -0.55;
-  readout.position.set(-0.30, deckY + 0.085, conZ + 0.275);
-  group.add(readout);
-  // ── GUARDED switch banks — TWO on the LEFT-of-centre, ONE wide bank on the RIGHT (asymmetric).
-  for (const [bankX, n] of [[-0.10, 4], [0.30, 2], [1.0, 3]] as [number, number][]) {
-    const plate = _box(0.08 + n * 0.09, 0.02, 0.18, _band);
-    plate.position.set(bankX, deckY + 0.10, conZ + 0.21);
-    plate.rotation.x = -0.55;
+
+  // ── (4) THE CONTROL SHELF GROUPS — all seated ON the shelf plane (shelfY), grouped + tidy.
+  //    (a) one clean grouped SWITCH STRIP (guarded), left-of-centre.
+  {
+    const bx = -0.35;
+    const plate = _box(0.6, 0.02, 0.16, _band);
+    plate.position.set(bx, shelfY + 0.03, conZ + 0.10);
     group.add(plate);
-    for (let i = 0; i < n; i++) {
-      const sw = _cyl(0.012, 0.012, 0.06, 6, _rivet);
-      sw.rotation.x = -0.55 - 0.4;
-      sw.position.set(bankX - (n - 1) * 0.045 + i * 0.09, deckY + 0.13, conZ + 0.19);
+    for (let i = 0; i < 5; i++) {
+      const sw = _cyl(0.011, 0.011, 0.05, 6, _rivet);
+      sw.rotation.x = -0.5;
+      sw.position.set(bx - 0.22 + i * 0.11, shelfY + 0.06, conZ + 0.09);
       group.add(sw);
     }
-    const guard = _box(0.06 + n * 0.09, 0.02, 0.03, _steel);
-    guard.position.set(bankX, deckY + 0.18, conZ + 0.15);
-    guard.rotation.x = -0.55;
+    const guard = _box(0.62, 0.015, 0.02, _steel);
+    guard.position.set(bx, shelfY + 0.10, conZ + 0.04);
     group.add(guard);
   }
-  // ── CENTRE THROTTLE QUADRANT (the freighter tell) — moved to the CENTRE-RIGHT, a chunky housing
-  //    with twin levers (this breaks the centre, replacing the symmetric green "mouth").
-  const throttleBase = _box(0.26, 0.10, 0.30, _steel);
-  throttleBase.position.set(0.40, deckY + 0.07, conZ + 0.16);
-  group.add(throttleBase);
+  //    (b) the telltale LED status row — a tidy grouped strip on the shelf (recessed sockets).
+  const ledCols = [_ledGreen, _ledAmber, _ledGreen, _ledBlue, _ledGreen];
+  for (let i = 0; i < ledCols.length; i++) {
+    const lx = -0.32 + i * 0.11;
+    const socket = _cyl(0.022, 0.022, 0.028, 8, _channel);
+    socket.rotation.x = Math.PI / 2;
+    socket.position.set(lx, shelfY + 0.03, conZ + 0.30);
+    group.add(socket);
+    const led = _cyl(0.015, 0.015, 0.02, 8, ledCols[i]);
+    led.rotation.x = Math.PI / 2;
+    led.position.set(lx, shelfY + 0.05, conZ + 0.30);
+    group.add(led);
+  }
+  //    (c) THE THROTTLE QUADRANT — on a raised boss, centre-right (the freighter tell). Twin levers.
+  const boss = _box(0.3, 0.08, 0.28, _steel);
+  boss.position.set(0.5, shelfY + 0.05, conZ + 0.12);
+  group.add(boss);
   for (const tx of [-0.06, 0.06]) {
-    const lever = _cyl(0.018, 0.024, 0.26, 8, _steel);
-    lever.position.set(0.40 + tx, deckY + 0.19, conZ + 0.16);
-    lever.rotation.x = -0.55;
+    const lever = _cyl(0.016, 0.022, 0.24, 8, _steel);
+    lever.position.set(0.5 + tx, shelfY + 0.17, conZ + 0.12);
+    lever.rotation.x = -0.5;
     group.add(lever);
-    const knob = _cyl(0.038, 0.038, 0.055, 10, _ledAmber);
-    knob.position.set(0.40 + tx, deckY + 0.32, conZ + 0.27);
+    const knob = _cyl(0.034, 0.034, 0.05, 10, _ledAmber);
+    knob.position.set(0.5 + tx, shelfY + 0.28, conZ + 0.22);
     group.add(knob);
   }
-  // a grab-rail across the dash top edge (lived-in cockpit detail)
-  const grab = _cyl(0.018, 0.018, 1.4, 8, _band);
+  // a single grab-rail across the shelf front edge (one clean lived-in handhold, not clutter).
+  const grab = _cyl(0.016, 0.016, 2.4, 8, _band);
   grab.rotation.z = Math.PI / 2;
-  grab.position.set(-0.3, deckY + 0.02, conZ + 0.34);
+  grab.position.set(0, shelfY + 0.02, bodyFrontZ - 0.02);
   group.add(grab);
 }
 
@@ -1637,137 +1691,122 @@ function buildConsoleBank(group: THREE.Group): void {
  *  surface), and a small TOKEN hanging on a cord off the window mullion. */
 function buildPersonalTouch(group: THREE.Group): void {
   const conZ = CON_Z, deckY = CON_DECK_Y;
-  // ── a framed PHOTO propped on the dash's left flat, canted toward the seat
+  // R2 RE-SEAT for the redesigned console: the clutter now sits ON the control shelf (shelfY≈0.80),
+  //   tucked to the FAR corners (out of the MFD + the window sightline) so it reads as lived-in
+  //   detail, not a piece floating over the instruments. shelfTop = the physical surface it rests on.
+  const shelfTop = deckY + 0.02 + 0.03;   // shelf plate top (matches buildConsoleBank shelfY + half)
+  const cornerZ = conZ + 0.22;            // on the shelf, toward the pilot but clear of the fascia
+  // ── a framed PHOTO propped in the FAR-LEFT shelf corner, canted toward the seat
   const photoMat = new THREE.MeshLambertMaterial({ color: 0xc9b890, flatShading: true });
   _buildMats.push(photoMat);
-  const photo = _box(0.18, 0.23, 0.012, photoMat);
-  photo.position.set(-0.62, deckY + 0.23, conZ + 0.16);
-  photo.rotation.set(-0.45, 0.14, 0.03);
+  const photoFrame = new THREE.MeshLambertMaterial({ color: 0x3e362c, flatShading: true });
+  _buildMats.push(photoFrame);
+  const stand = _box(0.06, 0.05, 0.10, photoFrame);
+  stand.position.set(-1.28, shelfTop + 0.02, cornerZ + 0.02);
+  group.add(stand);
+  const frame = _box(0.20, 0.25, 0.02, photoFrame);
+  frame.position.set(-1.28, shelfTop + 0.15, cornerZ);
+  frame.rotation.set(-0.4, 0.2, 0.02);
+  group.add(frame);
+  const photo = _box(0.16, 0.21, 0.012, photoMat);
+  photo.position.set(-1.28, shelfTop + 0.155, cornerZ + 0.012);
+  photo.rotation.set(-0.4, 0.2, 0.02);
   group.add(photo);
-  const frameTone = new THREE.MeshLambertMaterial({ color: 0x3e362c, flatShading: true });
-  _buildMats.push(frameTone);
-  const photoFrame = _box(0.22, 0.27, 0.022, frameTone);
-  photoFrame.position.set(-0.62, deckY + 0.22, conZ + 0.155);
-  photoFrame.rotation.set(-0.45, 0.14, 0.03);
-  group.add(photoFrame);
-  // a faded figure on the photo (a hint of a face — a pale oval) so it reads as a portrait
   const figMat = new THREE.MeshLambertMaterial({ color: 0x9a8a70, flatShading: true });
   _buildMats.push(figMat);
-  const fig = _cyl(0.04, 0.04, 0.006, 10, figMat);
-  fig.position.set(-0.62, deckY + 0.26, conZ + 0.17);
-  fig.rotation.set(Math.PI / 2 - 0.45, 0, 0.03);
+  const fig = _cyl(0.035, 0.035, 0.006, 10, figMat);
+  fig.position.set(-1.28, shelfTop + 0.18, cornerZ + 0.02);
+  fig.rotation.set(Math.PI / 2 - 0.4, 0, 0.02);
   group.add(fig);
-  const stand = _box(0.06, 0.05, 0.12, frameTone);
-  stand.position.set(-0.62, deckY + 0.07, conZ + 0.22);
-  group.add(stand);
-  // ── a chipped enamel MUG on the dash's right flat (body + interior + dark coffee + handle)
+  // ── a chipped enamel MUG in the FAR-RIGHT shelf corner (body + rim + dark coffee + handle)
   const mugMat = new THREE.MeshLambertMaterial({ color: 0xb06a44, flatShading: true });
   _buildMats.push(mugMat);
-  const mugBody = _cyl(0.05, 0.044, 0.11, 16, mugMat);
-  mugBody.position.set(0.58, deckY + 0.12, conZ + 0.20);
+  const mugBody = _cyl(0.05, 0.044, 0.10, 16, mugMat);
+  mugBody.position.set(1.24, shelfTop + 0.05, cornerZ);
   group.add(mugBody);
   const mugRim = _cyl(0.052, 0.052, 0.012, 16, _band);   // a bright chipped enamel rim
-  mugRim.position.set(0.58, deckY + 0.175, conZ + 0.20);
+  mugRim.position.set(1.24, shelfTop + 0.10, cornerZ);
   group.add(mugRim);
   const coffeeMat = new THREE.MeshLambertMaterial({ color: 0x2a1a0e, flatShading: true });
   _buildMats.push(coffeeMat);
   const coffee = _cyl(0.044, 0.044, 0.004, 16, coffeeMat);
-  coffee.position.set(0.58, deckY + 0.172, conZ + 0.20);
+  coffee.position.set(1.24, shelfTop + 0.097, cornerZ);
   group.add(coffee);
-  const mugGeo = new THREE.TorusGeometry(0.034, 0.01, 6, 12);
+  const mugGeo = new THREE.TorusGeometry(0.032, 0.01, 6, 12);
   _disposables.push(mugGeo);
   const mugHandle = new THREE.Mesh(mugGeo, mugMat);
-  mugHandle.position.set(0.64, deckY + 0.12, conZ + 0.20);
+  mugHandle.position.set(1.30, shelfTop + 0.05, cornerZ);
   mugHandle.rotation.y = Math.PI / 2;
   group.add(mugHandle);
   // ── a TOKEN on a cord hung off the windscreen brow bar (a hanging charm), off-centre, in
   //    front of the raked glass so it dangles into the orbit view (the lone pilot's keepsake).
-  const browZ = -CK_Z + 0.02 + WIN_RAKE * 0.85;   // near the brow rake, a hair into the cabin
+  // R2: hung well OFF to the right so it doesn't dangle dead-centre over the planet in the hero
+  //   framing (it read as a distraction bisecting the vista) — a keepsake in the corner of the eye.
+  const browZ = -CK_Z + 0.02 + WIN_RAKE * 0.72;   // near the brow rake, a hair into the cabin
   const cordMat = new THREE.MeshLambertMaterial({ color: 0x2a2620, flatShading: true });
   _buildMats.push(cordMat);
-  const cord = _cyl(0.004, 0.004, 0.30, 5, cordMat);
-  cord.position.set(0.35, 2.20, browZ - 0.10);
+  const cord = _cyl(0.004, 0.004, 0.26, 5, cordMat);
+  cord.position.set(0.92, 2.24, browZ - 0.08);
   group.add(cord);
   const tokenMat = new THREE.MeshLambertMaterial({ color: 0xc8a050, flatShading: true });
   _buildMats.push(tokenMat);
-  const token = _cyl(0.035, 0.035, 0.008, 12, tokenMat);
+  const token = _cyl(0.032, 0.032, 0.008, 12, tokenMat);
   token.rotation.x = Math.PI / 2;
-  token.position.set(0.35, 2.04, browZ - 0.10);
+  token.position.set(0.92, 2.10, browZ - 0.08);
   group.add(token);
 }
 
-/** SIDE CONSOLES + clutter — short auxiliary consoles down the side walls (bring the space
- *  IN around the pilot — gate #10), conduit runs, an overhead grab rail, a stowed crate. */
+/** SIDE WALLS — COCKPIT-ROUND-2 (the user: "those 2 boxes on the right + left of the cockpit hull
+ *  seem out of place now — remove + redesign"). The two free-standing side consoles are DELETED
+ *  (and their colliders with them). The space is redesigned as INTEGRATED, RECESSED WALL PANELS
+ *  that sit FLUSH to the ribbed hull curve (`hullWallXAt`) — letting the fuselage BREATHE. Each side
+ *  gets a shallow inset panel (a value break with real depth) carrying a small flush avionics
+ *  readout + a stencil placard + a hazard strip, so the walls read as lived-in hull, not detached
+ *  furniture blocks. Nothing is proud enough to need a collider (the walk band is unchanged). The
+ *  conduit/cable/grab-rail greeble below is retained (that's hull dressing, not a "box"). */
 function buildSideConsoles(group: THREE.Group): void {
-  // ── ASYMMETRIC side-wall consoles (anti-face: the two flanking pods were reading as bright
-  //    oval EYES). LEFT = a TALL angled instrument stack; RIGHT = a LOWER bench with a raised
-  //    screen pod — different silhouettes + heights → the symmetry that drove the face is broken.
-  // A2 RE-SEAT (user walk-test 2026-07-02): the side consoles were positioned against the OLD box
-  //   wall (x≈2.7) → against the tapered/canted hull they poked THROUGH the wall near the top. Now
-  //   each console is a free-standing floor unit whose OUTER face sits just INSIDE the narrowest
-  //   wall x over its z-band at its own top height (hullWallXAt) — flush-near-the-wall, never
-  //   embedded, never floating. The console runs z −0.9..0.4 (depth 1.3). A collider is paired (A5).
-  const _CONS_Z0 = -0.9, _CONS_Z1 = 0.4, _CONS_D = _CONS_Z1 - _CONS_Z0, _CONS_ZC = (_CONS_Z0 + _CONS_Z1) / 2;
-  const _consMinWall = (topY: number) => {
-    let m = 99; for (let z = _CONS_Z0; z <= _CONS_Z1; z += 0.1) m = Math.min(m, hullWallXAt(z, topY));
-    return m;
-  };
-  // LEFT (−X): a taller console with a top deck of recessed readouts (outer face flush to the wall).
-  {
-    const sx = -1;
-    const consW = 0.5, topY = 0.95;
-    const outer = _consMinWall(0.98) - 0.03;         // just inside the wall at the console's top height
-    const cx = sx * (outer - consW / 2);             // centre so the OUTER face lands at `outer`
-    const sc = _box(consW, 0.95, _CONS_D, _channel);
-    sc.position.set(cx, 0.48, _CONS_ZC);
-    group.add(sc);
-    const scTop = _box(consW + 0.02, 0.06, _CONS_D, _steel);   // flat top deck
-    scTop.position.set(cx, topY + 0.03, _CONS_ZC);
-    group.add(scTop);
-    for (const cz of [-0.45, -0.15, 0.15, 0.45]) {
-      const rd = _box(0.16, 0.012, 0.09, cz < 0 ? _ledGreen : _ledAmber);
-      rd.position.set(cx, topY + 0.07, _CONS_ZC + cz);
-      group.add(rd);
+  // ── INTEGRATED RECESSED WALL PANELS (flush to the canted hull). One per side, asymmetric in Z + Y
+  //    so the two sides don't mirror. Built at the hull wall x at their own centre height so they
+  //    hug the curve — a shallow inset frame (proud lip) around a darker recessed sub-panel.
+  const panelSpec: { sx: number; z0: number; z1: number; y: number; h: number }[] = [
+    { sx: -1, z0: -1.0, z1: 0.6, y: 0.95, h: 0.7 },   // LEFT — a longer, higher inset run
+    { sx: 1, z0: -0.6, z1: 0.7, y: 0.80, h: 0.6 },    // RIGHT — a shorter, lower inset (asymmetric)
+  ];
+  for (const { sx, z0, z1, y, h } of panelSpec) {
+    const zc = (z0 + z1) / 2, len = z1 - z0;
+    const wallX = hullWallXAt(zc, y);                  // the hull wall x at this panel's centre
+    // a slim INSET FRAME lip (flush to the wall, barely proud — a panel border, not a bright plate).
+    //   R2: _steel (not bright _band) + thinner, so it reads as an integrated hull panel line, not a
+    //   pale plate stuck on the wall (the "out of place box" read the user flagged).
+    const frame = _box(0.03, h + 0.06, len + 0.06, _steel);
+    frame.position.set(sx * (wallX - 0.012), y, zc);
+    group.add(frame);
+    // the recessed darker SUB-PANEL (set slightly INTO the wall → a genuine value break + depth)
+    const sub = _box(0.04, h, len, _channel);
+    sub.position.set(sx * (wallX + 0.02), y, zc);
+    group.add(sub);
+    // panel-line seams + a bolt row down the frame (the lived-in bolted-plate read)
+    const inward = new THREE.Vector3(-sx, 0, 0);
+    for (const bz of [z0 + 0.1, z1 - 0.1]) for (const by of [y - h / 2 + 0.08, y + h / 2 - 0.08]) {
+      group.add(_stud(sx * (wallX - 0.05), by, bz, inward, _rivet, 0.012));
     }
-    // a hazard strip on the wall face BEHIND the console (flush to the real canted wall, not floating)
-    const haz = _box(0.02, 0.12, 1.1, _hazard);
-    haz.position.set(sx * (hullWallXAt(_CONS_ZC, 0.74) - 0.02), 0.74, _CONS_ZC);
+    // a small FLUSH avionics readout recessed in the sub-panel (a powered strip — a point of life,
+    //   integrated INTO the wall, not sitting on a box). Recessed glass + an emissive content bar.
+    const rdGlass = _box(0.02, 0.14, 0.34, _screenGlass);
+    rdGlass.position.set(sx * (wallX + 0.005), y + 0.08, zc - len * 0.2);
+    group.add(rdGlass);
+    const rdGlow = _box(0.012, 0.09, 0.26, sx < 0 ? _ledGreen : _ledAmber);
+    rdGlow.position.set(sx * (wallX - 0.01), y + 0.08, zc - len * 0.2);
+    group.add(rdGlow);
+    // a stencil placard + a hazard strip low on the panel (worn hull labelling)
+    const plac = _box(0.008, 0.10, 0.24, _decal);
+    plac.position.set(sx * (wallX - 0.03), y - h / 2 + 0.12, zc + len * 0.28);
+    group.add(plac);
+    const haz = _box(0.02, 0.09, len - 0.2, _hazard);
+    haz.position.set(sx * (wallX - 0.03), y - h / 2 - 0.02, zc);
     group.add(haz);
-    _addFurnitureCollider(consW, 0.95, _CONS_D, cx, 0.475, _CONS_ZC);   // A5 collider
   }
-  // RIGHT (+X): a LOWER bench + a raised angled screen pod at the forward end (different mass).
-  //   Re-seated flush to the wall like the LEFT (A2). The angled pod sits ON the bench top (not
-  //   floating). Screen face + glow are flush to the pod face.
-  {
-    const sx = 1;
-    const consW = 0.5, topY = 0.72;
-    const outer = _consMinWall(0.74) - 0.03;
-    const cx = sx * (outer - consW / 2);
-    const sc = _box(consW, 0.72, _CONS_D, _channel);
-    sc.position.set(cx, 0.36, _CONS_ZC);
-    group.add(sc);
-    const scTop = _box(consW + 0.02, 0.06, _CONS_D, _steel);
-    scTop.position.set(cx, topY + 0.03, _CONS_ZC);
-    group.add(scTop);
-    // a raised angled screen pod sitting ON the bench top at the forward end (a taller forward mass)
-    const podZ = _CONS_Z0 + 0.35;
-    const pod = _box(0.46, 0.34, 0.4, _channel);
-    pod.position.set(cx, 0.95, podZ);
-    pod.rotation.x = -0.4;
-    group.add(pod);
-    const podScr = _box(0.34, 0.24, 0.02, _screenGlass);
-    podScr.position.set(cx - sx * 0.02, 0.99, podZ - 0.16);
-    podScr.rotation.x = -0.4;
-    group.add(podScr);
-    const podGlow = _box(0.28, 0.18, 0.01, _ledAmber);
-    podGlow.position.set(cx - sx * 0.03, 0.99, podZ - 0.17);
-    podGlow.rotation.x = -0.4;
-    group.add(podGlow);
-    const haz = _box(0.02, 0.10, 1.1, _hazard);
-    haz.position.set(sx * (hullWallXAt(_CONS_ZC, 0.56) - 0.02), 0.56, _CONS_ZC);
-    group.add(haz);
-    _addFurnitureCollider(consW, 0.72, _CONS_D, cx, 0.36, _CONS_ZC);   // A5 collider
-  }
+  // (the old free-standing LEFT stack + RIGHT bench/screen-pod + their two A5 colliders are DELETED.)
   // conduit runs along the upper +X/−X wall (drooping bundles + clamps)
   for (const sx of [-1, 1]) {
     const conduit = _cyl(0.045, 0.045, CK_D - 0.6, 8, _cable);
@@ -2028,7 +2067,7 @@ export function setCockpitAlert(level: 0 | 1 | 2, pulse = 1): void {
   // screen face base colour
   if (_alertScreenGlow) {
     const m = _alertScreenGlow.material as THREE.MeshBasicMaterial;
-    if (level === 0) m.color.setHex(0x163a1c);        // dim green CRT (calm)
+    if (level === 0) m.color.setHex(0x1f5a2c);        // green CRT (calm)  [R2: brighter base]
     else if (level === 1) m.color.setHex(0x4a3208);   // amber caution
     else m.color.setHex(0x5a1410);                    // deep red alert
   }
