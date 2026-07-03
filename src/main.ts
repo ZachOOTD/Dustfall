@@ -57,6 +57,7 @@ import { updateEscapePodIntro, updateIntroFogEase, startEscapePodIntro, introAct
 import { updatePodTutorial, resumePodTutorialAfterRestore } from './world/escapePodIntro/podTutorial.ts';   // T4.3 — the post-handoff craft→salvage→chute-pop tutorial (self-guarded no-op unless running); resumePodTutorialAfterRestore — re-arm the payoff after a Continue re-built the pod
 import { updateChutePop, updatePodExposureEase, applyPendingPodCrashRestore } from './world/escapePodIntro/podScene.ts';   // T4.3 — the chute-pop inflate one-shot (no-op unless the chute is popping; driven always so dev/rig-shot also animates); CLUSTER D — updatePodExposureEase eases the step-out exposure like eye-adaptation (no snap); applyPendingPodCrashRestore — re-build the ONE walk-in pod on Continue
 import { setGameHudHidden } from './world/escapePodIntro/introHud.ts';   // escape-pod intro — re-assert HUD-hide after handoff
+import { preloadIntro } from './world/escapePodIntro/introPreload.ts';   // PERF — build every intro scene + compile every shader UP FRONT behind the loading screen (kills the beat-entry freezes)
 import { FEATURES } from './config/features.ts';
 import { createShelterRegistry, updateShelter } from './shelter/shelterZones.ts';
 import { updateSoundscape } from './audio/soundscape.ts';
@@ -834,10 +835,26 @@ const titleOverlay = createTitleOverlay(ctx, {
     // Escape-pod intro (FEATURES.escapePodIntro) — a NEW game plays the intro before
     // gameplay; DEV MODE + Continue use the normal spawn (they call handoffToGame from
     // their own branches, never reach here). No-op when the flag is off (today's
-    // behaviour, byte-identical). The intro hands off to the desert spawn (T0.4); for
-    // now it sits at beat 0 until the per-beat controllers land (T0.2+) — exit via
-    // `__game.skipIntro()`.
-    if (FEATURES.escapePodIntro && !ctx.flags.devMode) startEscapePodIntro(ctx);
+    // behaviour, byte-identical).
+    if (FEATURES.escapePodIntro && !ctx.flags.devMode) {
+      // PERF (the user's #1 intro complaint — freezes/stutters between beats): pay the
+      //   whole intro's build + shader-compile cost UP FRONT behind an honest loading
+      //   screen, so no beat cold-builds the ship (~1400 meshes) / hauler / pod / plasma
+      //   mid-play. handoffToGame FIRST (hide the title, un-hide then re-hide the HUD as
+      //   the intro owns a clean view) so the loading screen sits over the game canvas the
+      //   warm-up renders into; THEN preload; THEN start the cockpit beat — by which point
+      //   every scene is prebuilt + every shader compiled (the beats just reuse them).
+      handoffToGame({ skipLock: true });   // don't grab pointer-lock while the loading screen is up
+      void preloadIntro(ctx).then(() => {
+        startEscapePodIntro(ctx);            // start the cockpit beat — everything is warm now
+        // Re-hide the HUD (handoffToGame un-hid it; the intro owns a clean view) + acquire
+        //   pointer-lock now that the loading screen is gone, matching handoffToGame's guard.
+        setGameHudHidden(true);
+        const c = three.renderer.domElement;
+        if (!pointerLockSuppressed(c)) ctx.input.controls.lock();
+      });
+      return;
+    }
     handoffToGame();
   },
   onContinue: hadSaveAtBoot ? () => {

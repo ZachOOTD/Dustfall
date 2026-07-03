@@ -15,6 +15,7 @@
     "verify:placement": "node scripts/verify-placement.mjs",
     "verify:colliders": "node scripts/verify-colliders.mjs",
     "verify:intro": "node scripts/rig-shot.mjs --scenario=smoke-intro",
+    "bench:intro": "node scripts/bench-intro.mjs",
     "rig-shot": "node scripts/rig-shot.mjs"
   },
   "devDependencies": {

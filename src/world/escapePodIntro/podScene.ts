@@ -315,6 +315,16 @@ export function podBuilt(): boolean {
   return podGroup !== null;
 }
 
+/** PERF PRELOAD — hide (true) or reveal (false) the PREBUILT pod cabin without disposing it, so
+ *  the up-front preload can build+compile the cabin (+ its re-entry FX) once, then park it
+ *  INVISIBLE (at the orbit offset y=3200) so its cabin lights don't leak into the cockpit view —
+ *  until the beat that seats the player inside it (ensureInPod / the descent rebuild) reveals it.
+ *  Null-guarded (safe if the pod isn't built). The descent's dispose+rebuild yields a fresh
+ *  visible pod regardless; this only matters for the enterPod-seal reuse of the preloaded cabin. */
+export function setPodHidden(hidden: boolean): void {
+  if (podGroup) podGroup.visible = !hidden;
+}
+
 /** Set the real-world pod BASE for the descent from the player's real spawn (returnPos —
  *  the floor-top centre on the ground). The descending pod = this base + the current
  *  altitude. Called when the descent begins (the beats pass returnPos). Idempotent-ish:

@@ -1168,3 +1168,16 @@ export function disposeHaulerExterior(ctx: GameContext): void {
   _disposables.length = 0;
   // Module-shared hull materials are NOT disposed (reused on the next placement).
 }
+
+/** PERF PRELOAD — hide (true) or reveal (false) the PREBUILT hauler without disposing it, so
+ *  the up-front preload can build+compile the freighter + its explosion FX once, then park it
+ *  INVISIBLE (group + the scene-level starfield backdrop + the hero lights all off) until the
+ *  shipExplode beat reveals it — instead of building it cold mid-play (the freeze the preload
+ *  kills). shipExplode's buildHaulerExterior is a no-op reuse when already built, so it calls
+ *  this to make the parked hauler visible again. Null-guarded (safe if the hauler isn't built). */
+export function setHaulerHidden(hidden: boolean): void {
+  const vis = !hidden;
+  if (haulerGroup) haulerGroup.visible = vis;
+  if (starMesh) starMesh.visible = vis;
+  for (const light of _heroLights) light.visible = vis;   // scene-level directional/point lights — kill their contribution while parked
+}

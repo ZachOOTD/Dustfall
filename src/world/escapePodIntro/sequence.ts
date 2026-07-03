@@ -43,8 +43,8 @@ import {
   getPodBayThreshold, getPodBaySeatedEye, releasePodFromBay,   // R5c — the docked-pod bay + physical release
   setBayPodDoorOpen, getPodBayDoorWorld, getPodBayInteriorStand,   // B2 — the player-gated boarding flow (E-open door + walk-in gate + E-sit)
 } from './shipScene.ts';
-import { buildPodScene, disposePodScene, getPodSpawn, setDescentProgress, setDescentBase, setTumbleLight, setParachuteLeverPull, setCabinCrashPose, blowCabinHatch, restoreCabinExposure, unifyEnterablePod, podIsEnterable } from './podScene.ts';
-import { buildHaulerExterior, disposeHaulerExterior, setHaulerExplosion, setHaulerDeparture } from './haulerScene.ts';   // Phase 3 (T3.1/T3.2) — the hero freighter + its death staged through the post-eject porthole; C1 — the post-eject departure recession
+import { buildPodScene, disposePodScene, getPodSpawn, setDescentProgress, setDescentBase, setTumbleLight, setParachuteLeverPull, setCabinCrashPose, blowCabinHatch, restoreCabinExposure, unifyEnterablePod, podIsEnterable, setPodHidden } from './podScene.ts';
+import { buildHaulerExterior, disposeHaulerExterior, setHaulerExplosion, setHaulerDeparture, setHaulerHidden, haulerBuilt } from './haulerScene.ts';   // Phase 3 (T3.1/T3.2) — the hero freighter + its death staged through the post-eject porthole; C1 — the post-eject departure recession; PERF — reveal the preloaded (parked) hauler instead of a cold build
 import { startPodTutorial } from './podTutorial.ts';   // T4.3 — the first craft→salvage→chute-pop tutorial (runs as gameplay post-handoff)
 import { setGameHudHidden, showIntroPrompt, hideIntroPrompt, setIntroBlack } from './introHud.ts';
 import { flashScreen } from '../../fx/screenFlash.ts';
@@ -279,6 +279,7 @@ function seatPlayerAt(ctx: GameContext, spawn: { x: number; y: number; z: number
  *  too, not just the real enterPod→… chain). */
 function ensureInPod(ctx: GameContext): void {
   buildPodScene(ctx);
+  setPodHidden(false);   // PERF: the preload may have parked the prebuilt cabin invisible — reveal it now the player sits inside
   seatPlayerAt(ctx, getPodSpawn(ctx));
   if (ctx.intro) ctx.intro.mode = 'seated';
 }
@@ -734,7 +735,11 @@ function tickShipExplode(ctx: GameContext, dt: number): void {
       stopEngineFire();              // T5.3 — the engine blaze is left behind with the ship (the pod is clear + sealed)
       disposeShipScene(ctx);         // the interior ship (+ the emptied bay) is gone — the exterior hauler is the NEW separate thing
       setDescentProgress(0);         // the orbital vista (planet + stars) through the window
-      buildHaulerExterior(ctx);      // T3.1 — the worn freighter floats out in space ahead (−Z), about to die
+      // PERF: the preload already BUILT the hauler + compiled its FX (parked invisible). REVEAL
+      //   it here (no cold build/compile freeze); the fallback build-on-entry stays for the
+      //   dev/jumpToBeat path (no preload ran → haulerBuilt() false → build it cold as before).
+      if (haulerBuilt()) setHaulerHidden(false);
+      else buildHaulerExterior(ctx); // T3.1 — the worn freighter floats out in space ahead (−Z), about to die
       setHaulerExplosion(0);         // intact (ember idle) — the "that's my ship" beat
       setHaulerDeparture(0);         // C1 — start at the framed hero pose; the depart phase eases it out (recedes)
       showIntroPrompt('');
@@ -1295,5 +1300,90 @@ export function smokeTestIntro(ctx: GameContext): { ok: boolean; beats: number; 
   } catch (e) {
     if (introActive(ctx)) endEscapePodIntro(ctx);
     return { ok: false, beats, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PERF INSTRUMENTATION — prove the preload win. benchIntro drives the WHOLE beat chain
+// (like smokeTestIntro) but TIMES each beat's ENTRY tick — the first updateEscapePodIntro
+// per beat runs that beat's init (buildShipScene at cockpit, the hauler reveal/build at
+// shipExplode, the pod rebuild + first-plasma-visible at descent, etc.), so its duration IS
+// the beat-entry stall the user feels as a freeze. Run it WITHOUT the preload (cold builds
+// on entry — the freezes) and WITH it (everything prebuilt — entries ~0) to measure the win.
+//
+// It ALSO records the per-TICK frame time across the chain + counts the >50ms/>100ms hitches
+// (the "stutter" metric). Real GPU shader-compile hitches only show in a live browser (the
+// warm-up + first-draw path); in headless node this captures the geometry-build stalls (the
+// dominant CPU cost — the ~1400-mesh ship build). Playwright timings are noisy → the caller
+// runs it a few times + reports medians (see the perf report / scripts/bench-intro.mjs).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** One beat's measured entry cost. `ms` = the duration of the beat's FIRST tick (its build/init). */
+export interface BeatEntryTiming { beat: BeatId; ms: number; }
+
+export interface IntroBenchResult {
+  ok: boolean;
+  preloaded: boolean;
+  /** Per-beat entry-tick durations (the stall the player feels on each beat transition). */
+  beatEntries: BeatEntryTiming[];
+  /** Total time across all ticks of the whole chain (ms). */
+  totalMs: number;
+  /** The single worst tick frame time (ms). */
+  maxFrameMs: number;
+  /** How many ticks took >50ms (a visible stutter). */
+  framesOver50: number;
+  /** How many ticks took >100ms (a hard freeze). */
+  framesOver100: number;
+  /** If preloaded: the preload's own per-step timings + total (the up-front cost we moved the freezes into). */
+  preload?: { totalMs: number; steps: Array<{ label: string; ms: number; error?: string }> };
+  error?: string;
+}
+
+/**
+ * Drive the full intro beat chain with per-beat-entry + per-tick timing. If `opts.preload` is
+ * true, run the up-front preload FIRST (awaited) so the beats reuse prebuilt scenes — the
+ * beat-entry stalls should then collapse to ~0. Exposed via `__game.benchIntro({preload})`.
+ * Leaves the game in the post-handoff state (like smokeTestIntro).
+ *
+ * NOTE: async because the preload is async (compileAsync + rAF yields). In headless node the
+ * preload's GPU steps are guarded to fast no-ops, so this still measures the CPU build stalls.
+ */
+export async function benchIntro(ctx: GameContext, opts?: { preload?: boolean }): Promise<IntroBenchResult> {
+  const beatEntries: BeatEntryTiming[] = [];
+  let maxFrameMs = 0, framesOver50 = 0, framesOver100 = 0, totalMs = 0;
+  let preload: IntroBenchResult['preload'];
+  try {
+    startEscapePodIntro(ctx, true);
+    if (opts?.preload) {
+      const { preloadIntro } = await import('./introPreload.ts');
+      const r = await preloadIntro(ctx);
+      preload = { totalMs: r.totalMs, steps: r.steps };
+    }
+    const tick = (dt: number): number => {
+      const t0 = performance.now();
+      updateEscapePodIntro(ctx, dt);
+      const ms = performance.now() - t0;
+      totalMs += ms;
+      if (ms > maxFrameMs) maxFrameMs = ms;
+      if (ms > 50) framesOver50++;
+      if (ms > 100) framesOver100++;
+      return ms;
+    };
+    for (const beat of BEAT_ORDER) {
+      if (beat === 'done') break;
+      if (!introActive(ctx)) break;
+      jumpToBeat(ctx, beat);
+      // The FIRST tick of the beat runs its init (the build/reveal cost) — that's the entry stall.
+      const entryMs = tick(0.05);
+      beatEntries.push({ beat, ms: entryMs });
+      // A few more ticks to settle the beat (not counted as the entry, but they feed the hitch stats).
+      for (let i = 0; i < 2; i++) tick(0.05);
+      if (beat === 'enterPod') driveEnterPodForSmoke(ctx);
+    }
+    if (introActive(ctx)) endEscapePodIntro(ctx);
+    return { ok: true, preloaded: !!opts?.preload, beatEntries, totalMs, maxFrameMs, framesOver50, framesOver100, preload };
+  } catch (e) {
+    if (introActive(ctx)) endEscapePodIntro(ctx);
+    return { ok: false, preloaded: !!opts?.preload, beatEntries, totalMs, maxFrameMs, framesOver50, framesOver100, preload, error: e instanceof Error ? e.message : String(e) };
   }
 }

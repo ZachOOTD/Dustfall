@@ -19,7 +19,7 @@ import { spawnWormCrossing, updateWormHorizonCrossing } from '../world/wormHoriz
 import { fireSignalFlare, advanceSignalFlares, activeSignalFlareCount } from '../world/signalFlare.ts';   // M6 (C37) — __game.fireSignalFlare
 import { damageVulture } from '../enemies/vulture.ts';
 import { applyLungePose, applyMeshTransform } from '../enemies/sandWorm.ts';   // M12 ⓖ (C66) — __game.poseLunge (dive render)
-import { startEscapePodIntro, endEscapePodIntro, jumpToBeat as jumpToIntroBeat, smokeTestIntro, type BeatId } from '../world/escapePodIntro/sequence.ts';   // escape-pod intro — __game.startIntro/skipIntro/jumpToBeat/smokeIntro
+import { startEscapePodIntro, endEscapePodIntro, jumpToBeat as jumpToIntroBeat, smokeTestIntro, benchIntro, type BeatId, type IntroBenchResult } from '../world/escapePodIntro/sequence.ts';   // escape-pod intro — __game.startIntro/skipIntro/jumpToBeat/smokeIntro/benchIntro
 import { placeCrashedPodWreck, setDescentProgress as setPodDescent, setParachuteLeverPull as setPodChute, setCabinCrashPose as setPodCrashPose, blowCabinHatch as blowPodHatch, popChute as popPodChute, buildPodScene as buildPodSceneDbg, getPodSpawn as getPodSpawnDbg, disposePodScene, podIsEnterable, getCrashedPodSalvageableId as getPodSalvageId, chutePopReady, setPendingPodCrashRestore, applyPendingPodCrashRestore, smokeExposureEase } from '../world/escapePodIntro/podScene.ts';   // T1.1/T1.2 · R3a · T4.3 · T3.2 — __game.placeCrashedPod / … ; + smokePodPersistence deps; CLUSTER D — smokeExposureEase (the eye-adaptation ease proof)
 import { smokePodTutorial } from '../world/escapePodIntro/podTutorial.ts';   // T4.3 — __game.smokePodTutorial (drive the craft→salvage→chute-pop loop headlessly)
 import { buildHaulerExterior, disposeHaulerExterior, setHaulerExplosion, setHaulerDeparture } from '../world/escapePodIntro/haulerScene.ts';   // T3.1/T3.2 — __game.buildHauler / disposeHauler / setHaulerExplosion (hauler-exterior + explosion rig-shots); C1 — setHaulerDeparture (the eject-departure recession)
@@ -63,6 +63,11 @@ interface DebugApi {
   jumpToBeat: (beat: BeatId) => void;
   /** Escape-pod intro (T0.4b) — smoke the whole sequence (force every beat, confirm no throw). */
   smokeIntro: () => { ok: boolean; beats: number; error?: string };
+  /** Escape-pod PERF — bench the intro chain with per-beat-entry + per-tick timing. Pass
+   *  {preload:true} to run the up-front preload first (beats reuse prebuilt scenes → entries ~0),
+   *  {preload:false} for the cold build-on-entry baseline. Returns the beat-entry stalls + hitch
+   *  counts (>50ms/>100ms). Async (the preload is async). */
+  benchIntro: (opts?: { preload?: boolean }) => Promise<IntroBenchResult>;
   /** Escape-pod T1.1 — place the HERO crashed pod at world (x,z), half-buried + tilted. For the
    *  crashed-pod rig-shot (reproduces the real stepOut wake-beside-the-pod placement). */
   placeCrashedPod: (x: number, z: number) => void;
@@ -339,6 +344,7 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
     skipIntro: () => endEscapePodIntro(ctx),
     jumpToBeat: (beat) => jumpToIntroBeat(ctx, beat),
     smokeIntro: () => smokeTestIntro(ctx),
+    benchIntro: (opts) => benchIntro(ctx, opts),
     placeCrashedPod: (x, z) => { placeCrashedPodWreck(ctx, x, z); },
     setDescentProgress: (p) => { setPodDescent(p); },
     setParachuteLeverPull: (t, snapped) => { setPodChute(t, snapped); },
