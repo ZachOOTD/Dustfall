@@ -2590,6 +2590,10 @@ const SCENARIOS = {
     const wtag = argv.blow ? 'scen-wake-blown.png' : 'scen-wake.png';
     await page.screenshot({ path: join(OUT, wtag), fullPage: false });
     console.log(`[wake] ${JSON.stringify(meas)} → ${wtag}`);
+    // CRASH-AFTERMATH (2026-07-03) — GATE the interior wake lamp-flicker mechanism (a still can't
+    //   judge a temporal flicker): arm + drive it headlessly, report lamp varied / spark toggled / settled.
+    const flick = await page.evaluate(() => { try { return window.__game.smokeWakeFlicker(); } catch (e) { return { error: String(e) }; } });
+    console.log(`[wake-flicker] ${JSON.stringify(flick)}`);
   },
 
   // ONE-ENTERABLE-POD (user re-scope, 2026-07-01) — drive the REAL chain through stepOut, which
@@ -2669,6 +2673,24 @@ const SCENARIOS = {
         //   draped canopy frame together — the anchor must sit ON the crown, not float above it.
         cam.position.set(px + 6.6, gy + 3.4, pz + 6.2);
         cam.lookAt(px, gy + 2.4, pz);
+      } else if (ang === 'furrow') {
+        // CRASH-AFTERMATH (2026-07-03) — look DOWN the landing furrow from beyond its far end back
+        //   toward the pod, so the whole skid gouge + berms + scattered debris + scorch read as one
+        //   "this thing CRASHED here" story. The furrow trails the pod's back-left along the world
+        //   heading dir≈(-0.57,+0.82) (crashAftermath _FURROW_DIR); stand ~24 m out along +dir, a
+        //   little high + off-axis so the trench + both berms + the base scorch all read.
+        const fx = -0.57, fz = 0.82;                 // must match _FURROW_DIR in podScene.ts
+        cam.position.set(px + fx * 15 - 2.6, gy + 2.7, pz + fz * 15 + 1.0);   // closer + lower so the trench relief + berm shadows read (a high/far shot flattens them)
+        cam.lookAt(px + fx * 3, gy + 0.4, pz + fz * 3);
+      } else if (ang === 'furrow3q') {
+        // a 3/4 CROSS view of the furrow's mid-section — perpendicular-ish to the skid so the trench
+        //   BASIN + both proud berms + the shadow they rake read as real relief (the length view is
+        //   near-axial, which flattens the ridges). Stand off the furrow's side, low + raking.
+        const fx = -0.57, fz = 0.82;                 // furrow heading
+        const perpx = -fz, perpz = fx;               // perpendicular (across the furrow)
+        const midx = px + fx * 9, midz = pz + fz * 9;   // ~9 m down the furrow (its mid-section)
+        cam.position.set(midx + perpx * 7 + fx * 2, gy + 2.2, midz + perpz * 7 + fz * 2);
+        cam.lookAt(midx, gy - 0.1, midz);
       } else { // 3q — a 3/4 of the whole standing silhouette (the exterior form)
         cam.position.set(px + 4.2, gy + 2.4, pz + 4.0);
         cam.lookAt(px, gy + 1.2, pz);

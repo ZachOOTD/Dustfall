@@ -989,6 +989,33 @@ function buildConduitAndLight(group: THREE.Group): void {
   const lamp = _cyl(0.11, 0.13, 0.03, 14, _ledAmber);
   lamp.position.set(0, CAB_APEX - 0.09, -0.1);
   group.add(lamp);
+
+  // ── CRASH-AFTERMATH (2026-07-03) — a DANGLING CONDUIT torn loose in the crash, on the front-left
+  //    shoulder arc (θ≈2.55, off the seated forward sight-line so it doesn't block the door read but
+  //    reads in the peripheral/head-turn wake frame). A slack pipe hanging off a broken clamp with a
+  //    small exposed-wire SPARK tell (a self-lit stub) that stutters with the wake lamp flicker
+  //    (_wakeFlickerT), then settles dark. SUBTLE — the wake beat's mood, not a haunted house.
+  {
+    const az = 2.55;
+    const dir = new THREE.Vector3(Math.sin(az), 0, Math.cos(az));
+    // the broken clamp it tore from (up high on the shoulder)
+    const clamp = _box(0.11, 0.06, 0.06, _cabSteel);
+    _seatOnWall(clamp, az, CAB_R - 0.07, WALL_H - 0.14);
+    group.add(clamp);
+    // the slack dangling pipe: hangs down + swings a little off the wall (torn free at the bottom).
+    const dangle = _cyl(0.032, 0.038, 0.62, 6, _cabCable);
+    dangle.position.set(dir.x * (CAB_R - 0.13), WALL_H - 0.44, dir.z * (CAB_R - 0.13));
+    dangle.rotation.z = 0.28;   // hangs askew off the broken clamp
+    dangle.rotation.x = 0.14;
+    group.add(dangle);
+    // the exposed frayed-wire SPARK stub at the torn end — a tiny self-lit tell (unlit basic so it
+    //   glows regardless of light). Driven by the wake flicker; parked dark once settled.
+    const spark = _box(0.03, 0.05, 0.03, _ledAmber);
+    spark.position.set(dir.x * (CAB_R - 0.20), WALL_H - 0.72, dir.z * (CAB_R - 0.20));
+    spark.visible = false;   // dark until the wake arms the flicker
+    group.add(spark);
+    _danglingConduitSpark = spark;
+  }
 }
 
 /** CLUSTER D — the MERGED FRONT DOOR on the hero cabin (−Z, FDOOR_AZ): the ONE aperture the player
@@ -1192,6 +1219,26 @@ let _enterableBerm: THREE.Mesh | null = null;
 //   save can record it + a fresh-boot Continue can re-build the pod (which isn't rebuilt at boot —
 //   only the intro flow builds it, and Continue never runs the intro). Null until unified.
 let _enterablePodXZ: { x: number; z: number } | null = null;
+
+// ── CRASH-AFTERMATH DRESSING (2026-07-03, user-approved bonus) — the physical crash story
+//    read at the wake + step-out + walk-back views: a gouged landing FURROW behind the pod
+//    (skid berms + darkened scorch streaking), a scorch RING under+around the base, and a
+//    handful of scattered hull-fragment DEBRIS half-buried along the furrow. All procedural
+//    geometry laid ON TOP of the terrain (overlay/skirt meshes conforming to heightAt — the
+//    real heightfield is NOT deformed), position-seeded deterministic (identical on the
+//    Continue/load path), noCollider (berms low + walkthrough — nothing traps the player).
+//    Built by _buildCrashAftermath from unifyEnterablePod (so it appears on both the live
+//    step-out AND the restoreEnterablePod load path). Disposed with the pod (_disposeCrashAftermath).
+//    The interior post-crash touches (a brief lamp flicker at the wake + a dangling conduit +
+//    a door-threshold dust drift) are built/driven separately (see _armWakeLampFlicker / the
+//    aftermath interior block).
+let _crashAftermath: THREE.Group | null = null;              // furrow + scorch + debris overlay subtree (scene-parented, world-placed)
+const _crashAftermathGeos: THREE.BufferGeometry[] = [];      // per-build geometry to free on dispose
+// Interior wake-lamp flicker (post-crash "sparking" touch) — a self-settling one-shot driven each
+//   frame by updateChutePop while armed. Armed at the wake (setCabinCrashPose s→1); settles ~9s later.
+let _wakeFlickerT = -1;                                       // <0 = not armed; else seconds since the wake flicker started
+const _WAKE_FLICKER_DUR = 9.0;                               // the flicker self-settles within ~9s of the wake
+let _danglingConduitSpark: THREE.Object3D | null = null;     // a self-lit tell on the dangling conduit that stutters with the lamp
 
 /** Is the crashed pod currently the unified WALK-IN structure (exterior skin + walkable colliders,
  *  persisting into the real game)? */
@@ -1814,6 +1861,11 @@ export function unifyEnterablePod(ctx: GameContext, x: number, z: number, easeEx
   _registerEnterablePodSalvage(ctx, group, x, z, gy);
   // (7) a displaced-sand berm banked against the buried foot so the dune swallows the base cleanly.
   _addEnterableBerm(ctx, x, z, gy);
+  // (8) CRASH-AFTERMATH DRESSING (2026-07-03) — the physical crash story: a gouged landing furrow +
+  //     skid berms trailing behind the pod, a scorch ring under the base, scattered hull debris. All
+  //     deterministic from (x,z) so it appears identically on the Continue/load path (this same unify
+  //     runs on restore). noCollider (nothing traps the player); laid on top of the terrain.
+  _buildCrashAftermath(ctx, x, z, gy);
   _podEnterable = true;
   _enterablePodXZ = { x, z };   // SAVE/LOAD — record the placement so the save can persist + re-build it on Continue
   return { x, z };
@@ -1859,6 +1911,265 @@ function _addEnterableBerm(ctx: GameContext, x: number, z: number, gy: number): 
   berm.castShadow = false;
   _enterableBerm = berm;
   ctx.three.scene.add(berm);
+}
+
+// ─── CRASH-AFTERMATH DRESSING (2026-07-03, user-approved bonus) ───────────────────────────────
+// The physical crash story around the grounded pod, read at the wake + step-out + walk-back views.
+// All geometry is laid ON TOP of the real terrain (conforming skirt/overlay meshes sampled at
+// terrain.heightAt — the heightfield itself is never deformed) and is deterministic from the pod's
+// (x,z) so it appears IDENTICALLY on the Continue/load path (restoreEnterablePod → unify → here).
+//
+// COMPOSITION (the heading choice): the merged FRONT DOOR faces cabin-local −Z (FDOOR_AZ=π; pod
+// yaw≈0 → world −Z), which is the walk-out path + the step-out gaze side (the player steps out and
+// looks toward the Leviathan at ~(-0.95,+0.31)). The salvage panel is on the +Z BACK. So the pod
+// "plowed in front-first and skidded to a stop" reading with the furrow trailing BEHIND it would
+// run straight up +Z — but that collides with the salvage-panel approach + the tutorial scatter
+// ring on the +Z back. Instead the furrow trails off the pod's BACK-LEFT (a heading biased +Z and
+// −X, dir ≈ (-0.57,+0.82)): it reads clearly behind/athwart the pod in the beside + 3q views, lies
+// ACROSS the step-out gaze (composing with it, not down its axis), and leaves BOTH the −Z door path
+// and the +Z salvage face clear. The pod sits at the near (deep) end; the furrow fades out ~20 m off.
+const _FURROW_DIR = new THREE.Vector2(-0.57, 0.82).normalize();   // world XZ heading the furrow trails AWAY from the pod
+const _FURROW_LEN = 21.0;          // furrow length (m) — within the 15-25 m ask; deepest at the pod, fades at the far end
+const _FURROW_HALF_W = 1.55;       // half-width of the trench floor at the pod end (tapers to a point at the far end)
+
+/** Build the crash-aftermath ground dressing (furrow + scorch + scattered debris) around the pod at
+ *  world (x,z), ground gy. Deterministic from (x,z). Scene-parented + world-placed (like the berm),
+ *  noCollider throughout. Idempotent-ish: disposes any prior aftermath first. */
+function _buildCrashAftermath(ctx: GameContext, x: number, z: number, gy: number): void {
+  _disposeCrashAftermath(ctx);
+  const root = new THREE.Group();
+  root.name = 'podCrashAftermath';
+  const rng = makeRng((Math.abs(Math.round(x * 191.7 + z * 313.9)) % 0x7fffffff) || 1);   // position-seeded, independent stream
+  const OUTR = CAB_R + SHELL;
+  const dir = _FURROW_DIR;                       // unit heading (XZ) the furrow trails away
+  const perp = new THREE.Vector2(-dir.y, dir.x); // left-perpendicular
+  const hAt = (wx: number, wz: number) => ctx.terrain.heightAt(wx, wz);   // sample the REAL surface
+
+  // ── 1. THE FURROW — a conforming ribbon of quad-strip segments from the pod (s=0, deepest +
+  //    widest) out to the far end (s=1, faded to nothing). Each cross-section has a sunken packed
+  //    trench FLOOR + a raised skid BERM ridge on each edge (the plowed-up sand). Built as vertex
+  //    strips so it conforms to the terrain per-sample (no heightfield deform, no z-fight — the
+  //    floor sits a hair above grade, the berms rise off it).
+  const SEGS = 26;                                // lengthwise samples along the furrow
+  const START = OUTR * 0.72;                      // begin just inside the pod foot so the trench reads emerging from under it
+  // per-sample cross-section arrays (world positions): floor L/R + centre, berm crest L/R.
+  const floorL: THREE.Vector3[] = [], floorR: THREE.Vector3[] = [], floorC: THREE.Vector3[] = [];
+  const crestL: THREE.Vector3[] = [], crestR: THREE.Vector3[] = [];
+  const outerL: THREE.Vector3[] = [], outerR: THREE.Vector3[] = [];   // where the berm feathers back to grade
+  for (let i = 0; i <= SEGS; i++) {
+    const s = i / SEGS;                           // 0 at pod, 1 at far end
+    const along = START + s * (_FURROW_LEN - START);
+    // a slight wander so the skid isn't a ruled line (the plow drifted) — SMALL so it reads as a
+    //   violent straight gouge, not a wandering path (R3 fix: the smooth wide wander read road-like).
+    const wander = (Math.sin(s * 4.1 + 1.4) * 0.32 + Math.sin(s * 9.0) * 0.12) * (0.25 + s * 0.4);
+    const cx = x + dir.x * along + perp.x * wander;
+    const cz = z + dir.y * along + perp.y * wander;
+    // width + depth TAPER: full at the pod, → 0 at the far end (the pod decelerated, so the gouge is
+    //   deepest where it stopped and shallows out where it first touched down further along).
+    const taper = Math.pow(1 - s, 0.8);
+    // WIDE dark trench + a NARROW proud berm LIP (R4 — the R3 wide light berms swamped the thin dark
+    //   floor → read as a light path; invert it: the sunken DARK floor is the dominant read, the berm
+    //   is a tight raised lip of turned sand right at its edge that catches a shadow line).
+    const halfW = _FURROW_HALF_W * (0.62 + 0.5 * taper) + 0.08;
+    const depth = (1.05 * taper + 0.08) * (0.9 + 0.2 * Math.sin(s * 6.0));   // trench floor drop below grade
+    const bermH = 0.8 * taper + 0.07;             // berm crest rise above grade (a proud plowed lip; step-over)
+    const bermOut = halfW + 0.42 + 0.22 * taper;  // TIGHT berm lip (was wide → swamped the floor); feathers quickly back to grade
+    // sample the real terrain across the section so the ribbon conforms.
+    const lx = cx + perp.x * halfW, lz = cz + perp.y * halfW;
+    const rx = cx - perp.x * halfW, rz = cz - perp.y * halfW;
+    const olx = cx + perp.x * bermOut, olz = cz + perp.y * bermOut;
+    const orx = cx - perp.x * bermOut, orz = cz - perp.y * bermOut;
+    floorC.push(new THREE.Vector3(cx, hAt(cx, cz) - depth + 0.02, cz));
+    floorL.push(new THREE.Vector3(lx, hAt(lx, lz) - depth * 0.82 + 0.02, lz));   // edges drop near-full depth → a real sunken basin, not a shallow vee
+    floorR.push(new THREE.Vector3(rx, hAt(rx, rz) - depth * 0.82 + 0.02, rz));
+    crestL.push(new THREE.Vector3(lx, hAt(lx, lz) + bermH, lz));
+    crestR.push(new THREE.Vector3(rx, hAt(rx, rz) + bermH, rz));
+    outerL.push(new THREE.Vector3(olx, hAt(olx, olz) + 0.02, olz));
+    outerR.push(new THREE.Vector3(orx, hAt(orx, orz) + 0.02, orz));
+  }
+  // helper: build a triangle-strip mesh between two same-length rails of world points.
+  //   `cast` — the proud BERM strips cast shadow (the raking sun rakes a shadow off the ridge INTO the
+  //   trench, which is what makes the relief read as a real gouge, not a painted stripe — R3 fix).
+  const strip = (a: THREE.Vector3[], b: THREE.Vector3[], mat: THREE.Material, cast = false): void => {
+    const verts: number[] = [], idx: number[] = [];
+    for (let i = 0; i < a.length; i++) { verts.push(a[i].x, a[i].y, a[i].z, b[i].x, b[i].y, b[i].z); }
+    for (let i = 0; i < a.length - 1; i++) {
+      const p = i * 2; idx.push(p, p + 1, p + 2, p + 1, p + 3, p + 2);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+    g.setIndex(idx); g.computeVertexNormals();
+    _crashAftermathGeos.push(g);
+    const m = new THREE.Mesh(g, mat);
+    m.receiveShadow = true; m.castShadow = cast;
+    root.add(m);
+  };
+  // the packed trench floor (centre split into two half-strips so the vee reads).
+  strip(floorL, floorC, _furrowFloorMat);
+  strip(floorC, floorR, _furrowFloorMat);
+  // the skid berms (floor edge → raised crest → feather back to grade), each side. The inner face
+  //   (floor→crest) is the trench wall; the crest strips CAST shadow so the ridge rakes a shadow line.
+  strip(floorL, crestL, _furrowBermMat, true);
+  strip(crestL, outerL, _furrowBermMat, true);
+  strip(floorR, crestR, _furrowBermMat, true);
+  strip(crestR, outerR, _furrowBermMat, true);
+  // a darkened SCORCH STREAK down the trench floor (the hull dragged hot) — a narrow transparent
+  //   overlay just above the floor, fading out toward the far end (opacity via a second thinner strip).
+  {
+    const scL: THREE.Vector3[] = [], scR: THREE.Vector3[] = [];
+    for (let i = 0; i <= SEGS; i++) {
+      const s = i / SEGS; const fw = _FURROW_HALF_W * 0.6 * Math.pow(1 - s, 1.1) + 0.04;
+      const c = floorC[i];
+      scL.push(new THREE.Vector3(c.x + perp.x * fw, c.y + 0.03, c.z + perp.y * fw));
+      scR.push(new THREE.Vector3(c.x - perp.x * fw, c.y + 0.03, c.z - perp.y * fw));
+    }
+    const g = new THREE.BufferGeometry();
+    const verts: number[] = [], idx: number[] = [];
+    for (let i = 0; i <= SEGS; i++) { verts.push(scL[i].x, scL[i].y, scL[i].z, scR[i].x, scR[i].y, scR[i].z); }
+    for (let i = 0; i < SEGS; i++) { const p = i * 2; idx.push(p, p + 1, p + 2, p + 1, p + 3, p + 2); }
+    g.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+    g.setIndex(idx); g.computeVertexNormals();
+    _crashAftermathGeos.push(g);
+    const m = new THREE.Mesh(g, _crashScorchMat); m.renderOrder = 2; m.receiveShadow = false;
+    root.add(m);
+  }
+
+  // ── 2. THE SCORCH under+around the pod base — the re-entry-hot hull met the sand. A char smear
+  //    HUGGING the base (not a big flat halo) + a fainter heat-discolour edge, conforming flat discs
+  //    just above grade (meteorCrash scorch idiom: transparent lambert, depthWrite off, renderOrder).
+  //    Elongated along the furrow heading (the hull skidded in), so it reads as a smear that CONNECTS
+  //    to the furrow, not a clean concentric ring. Built as a RingGeometry (annulus) hugging the foot
+  //    so it doesn't paint a big opaque disc over the whole clearing (the R1 over-large read).
+  //    Elongation is baked into the GEOMETRY (scale then bake) so the flat-on-ground rotation is clean.
+  const skidYaw = Math.atan2(dir.x, dir.y);   // world yaw of the furrow heading (about +Y)
+  // An IRREGULAR conforming scorch patch (NOT a clean concentric ring — the R1 "landing-pad" read):
+  //   a radial fan of verts whose radius wobbles per-angle (a lobed blob) and is EXTENDED toward the
+  //   furrow heading (the skid smeared the char back along the gouge). Two layers: a tight dark char
+  //   + a fainter heat-discolour skirt. Conforms to the terrain per-vert; depthWrite off + renderOrder.
+  const scorchLobe = (rBase: number, rWob: number, mat: THREE.Material, ro: number, yLift: number, seed: number): void => {
+    const N = 40;
+    const verts: number[] = [], idx: number[] = [];
+    verts.push(x, hAt(x, z) + yLift, z);   // centre
+    for (let i = 0; i <= N; i++) {
+      const a = (i / N) * Math.PI * 2;
+      // lobed wobble + a smear extension where the angle aligns with the furrow heading.
+      const along = Math.cos(a - skidYaw);            // 1 when pointing down the furrow
+      const wob = 1 + rWob * (Math.sin(a * 3.0 + seed) * 0.5 + Math.sin(a * 5.0 + seed * 1.7) * 0.3);
+      const smear = 1 + Math.max(0, along) * 0.55;     // reach further along the skid
+      const r = rBase * wob * smear;
+      const wx = x + Math.cos(a) * r, wz = z + Math.sin(a) * r;
+      verts.push(wx, hAt(wx, wz) + yLift, wz);
+    }
+    for (let i = 1; i <= N; i++) idx.push(0, i, i + 1);
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+    g.setIndex(idx); g.computeVertexNormals();
+    _crashAftermathGeos.push(g);
+    const m = new THREE.Mesh(g, mat);
+    m.renderOrder = ro; m.receiveShadow = false; m.castShadow = false;
+    root.add(m);
+  };
+  // heat-discolour skirt first (fainter, wider, under) → then the tight dark char on top.
+  scorchLobe(OUTR + 0.7, 0.16, _crashHeatMat, 1, 0.03, 2.1);
+  scorchLobe(OUTR + 0.05, 0.18, _crashScorchMat, 2, 0.045, 0.7);
+
+  // ── 3. SCATTERED CRASH DEBRIS — a handful of the pod's OWN hull fragments (riveted aluminium
+  //    panels, a scorched band fragment, a snapped antenna) strewn along the furrow + around the
+  //    pod, half-buried at varied angles. noCollider set-dressing (NOT lootable — the salvage panel
+  //    is the loot). Deterministic from the seeded rng.
+  const debrisN = 7 + Math.floor(rng() * 3);           // 7-9 fragments
+  for (let i = 0; i < debrisN; i++) {
+    // bias placement along the furrow (most debris trails the skid) with a couple flung to the sides.
+    const alongT = rng();
+    const along = OUTR * 0.9 + alongT * (_FURROW_LEN * 0.92);
+    const side = (rng() - 0.5) * (_FURROW_HALF_W * 2.2 + 1.6 * alongT);   // spreads wider further out
+    const dx = x + dir.x * along + perp.x * side;
+    const dz = z + dir.y * along + perp.y * side;
+    const dy = hAt(dx, dz);
+    const kind = rng();
+    let frag: THREE.Mesh;
+    if (kind < 0.42) {
+      // a torn riveted aluminium HULL PANEL — a thin slab with a few rivet studs.
+      const pw = 0.42 + rng() * 0.55, pd = 0.34 + rng() * 0.4;
+      frag = _box(pw, 0.06, pd, _crashPanelMat);   // flat scuffed-aluminium (fragment-safe; see _crashPanelMat)
+      const rvN = 2 + Math.floor(rng() * 3);
+      for (let r = 0; r < rvN; r++) {
+        const sg = new THREE.SphereGeometry(0.02, 6, 4, 0, Math.PI * 2, 0, Math.PI / 2);
+        _crashAftermathGeos.push(sg);
+        const rv = new THREE.Mesh(sg, _crashCharMat);   // flat dark stud (no warm-oxide fragment glow)
+        rv.position.set((rng() - 0.5) * pw * 0.7, 0.03, (rng() - 0.5) * pd * 0.7);
+        frag.add(rv);
+      }
+    } else if (kind < 0.68) {
+      // a SCORCHED BAND FRAGMENT — a short curved band offcut, scorched dark (a neutral flat matte,
+      //   NOT _podBandMat: the hull shader's warm oxide layers glow coral-red on a small fragment
+      //   under the low raking sun — the R1 "red toy" read; a scorched band offcut reads dark anyway).
+      const arc = 0.5 + rng() * 0.8;
+      const bg = new THREE.CylinderGeometry(0.34, 0.34, 0.11 + rng() * 0.08, 10, 1, true, 0, arc);
+      _crashAftermathGeos.push(bg);
+      frag = new THREE.Mesh(bg, _crashCharMat);
+      frag.rotation.x = Math.PI / 2;   // lay the band arc on the sand
+    } else if (kind < 0.84) {
+      // a CHARRED HULL CHUNK — a small dark scorched fragment (heat-shield/base offcut).
+      const cw = 0.3 + rng() * 0.4;
+      frag = _box(cw, 0.14 + rng() * 0.12, cw * (0.7 + rng() * 0.5), _crashCharMat);
+    } else {
+      // a SNAPPED ANTENNA / strut — a thin dark rod half-sunk at an angle.
+      const len = 0.9 + rng() * 0.8;
+      const ag = new THREE.CylinderGeometry(0.025, 0.035, len, 6);
+      _crashAftermathGeos.push(ag);
+      frag = new THREE.Mesh(ag, _crashCharMat);   // dark matte strut (no warm-oxide fragment glow)
+      frag.rotation.z = Math.PI / 2 - (0.3 + rng() * 0.5);   // tilted, mostly lying down
+    }
+    // half-bury: sink each fragment part-way + random yaw + a small settle tilt.
+    frag.position.set(dx, dy - (0.02 + rng() * 0.06), dz);
+    frag.rotation.y = rng() * Math.PI * 2;
+    frag.rotation.x += (rng() - 0.5) * 0.6;
+    frag.rotation.z += (rng() - 0.5) * 0.5;
+    frag.castShadow = true; frag.receiveShadow = true;
+    frag.traverse((o) => { (o as THREE.Mesh).userData.noCollider = true; });
+    if (frag.geometry) _crashAftermathGeos.push(frag.geometry);   // _box geos already tracked in _cabinDisposables; band/antenna tracked above — harmless dup-safe (dispose is idempotent per-geo)
+    root.add(frag);
+  }
+
+  // ── 4. DOOR-THRESHOLD SAND DRIFT — a light drift of sand blown in over the open −Z door sill
+  //    (the desert crept in through the blown door). A low flat wedge tonguing from the sill INWARD
+  //    across the floor, fingering out. Subtle. The door faces cabin-local −Z; the pod yaw≈0, so the
+  //    sill is at world (x, gy, z−OUTR). Built here (deterministic, disposed with the aftermath) but
+  //    placed at the interior floor so it reads on the walk-in / wake-toward-door frames.
+  {
+    const sillZ = z - OUTR * 0.9;                 // just inside the −Z door opening
+    const driftGeo = new THREE.PlaneGeometry(HATCH_W + 0.5, 1.4, 6, 4);
+    const dp = driftGeo.attributes.position;
+    for (let i = 0; i < dp.count; i++) {
+      const px = dp.getX(i), py = dp.getY(i);     // plane local: x across the sill, y from sill (−) inward (+)
+      // taper the tongue to fingers inward + a slight wind-rippled crest near the sill.
+      const inward = (py + 0.7) / 1.4;            // 0 at the sill edge, 1 at the inner tip
+      const ripple = Math.sin(px * 6.0) * 0.02 * (1 - inward);
+      const lift = (0.06 * (1 - inward) + ripple) * (1 - Math.abs(px) / (HATCH_W * 0.5 + 0.3));   // sand piled at the sill, thinning inward + at the edges
+      dp.setZ(i, Math.max(0, lift));
+    }
+    driftGeo.computeVertexNormals();
+    _crashAftermathGeos.push(driftGeo);
+    const drift = new THREE.Mesh(driftGeo, _furrowBermMat);
+    drift.rotation.x = -Math.PI / 2;              // lay flat on the floor
+    // position at the sill, tongue pointing inward (+Z, toward the cabin centre from the −Z door).
+    drift.position.set(x, gy + 0.05, sillZ + 0.5);
+    drift.receiveShadow = true; drift.castShadow = false;
+    root.add(drift);
+  }
+
+  root.traverse((o) => { (o as THREE.Mesh).userData.noCollider = true; });
+  _crashAftermath = root;
+  ctx.three.scene.add(root);
+}
+
+/** Tear down the crash-aftermath dressing (disposes its owned geometry; materials are module-shared).
+ *  Called by _buildCrashAftermath (rebuild) + disposePodScene (teardown). */
+function _disposeCrashAftermath(ctx: GameContext): void {
+  if (_crashAftermath) { ctx.three.scene.remove(_crashAftermath); _crashAftermath = null; }
+  for (const g of _crashAftermathGeos) g.dispose();
+  _crashAftermathGeos.length = 0;
 }
 
 // ─── SAVE/LOAD — the enterable pod is a PERSISTENT world object built ONLY by the intro's stepOut
@@ -2315,7 +2626,12 @@ function _syncPodToAltitude(): void {
  *  carries the persistent world collider). Safe no-op if the pod isn't built. */
 export function setCabinCrashPose(pose: number): void {
   if (!podGroup) return;
+  const prevPose = _crashPose;
   _crashPose = Math.max(0, Math.min(1, pose));
+  // CRASH-AFTERMATH (2026-07-03) — arm the interior wake LAMP FLICKER as the cabin first settles
+  //   crashed (the come-to moment: the lamp stutters + the torn-conduit wire sparks, then settles
+  //   within ~9s). Armed once on the 0→crashed transition; updateChutePop drives + self-settles it.
+  if (prevPose < 0.5 && _crashPose >= 0.5 && _wakeFlickerT < 0) _wakeFlickerT = 0;
   // free the player: drop the seated cage so they can walk out the hatch onto real ground.
   if (_crashPose > 0 && podBodies.length > 0 && _cabinColliderCtx) {
     for (const body of podBodies) _cabinColliderCtx.physics.world.removeRigidBody(body);
@@ -2350,7 +2666,12 @@ export function setCabinCrashPose(pose: number): void {
     vpGlowLight.color.copy(_vpScratch.copy(_VP_COOL).lerp(_VP_WARM, s));
     vpGlowLight.intensity = 0.95 + s * 2.3;                            // the porthole also reads the bright midday desert (lifted with the rest)
   }
-  if (cabinLamp) cabinLamp.intensity = 1.7 + s * 1.7;                  // the ceiling lamp KEY pools the dome/apex — a modest lift (the rakes/fill carry the wall read; keep the dome from over-hotting for a dazed mood)
+  if (cabinLamp) {
+    cabinLamp.intensity = 1.7 + s * 1.7;                              // the ceiling lamp KEY pools the dome/apex — a modest lift (the rakes/fill carry the wall read; keep the dome from over-hotting for a dazed mood)
+    // CRASH-AFTERMATH — publish the CLEAN base each frame so the wake flicker (updateChutePop, later
+    //   in the tick) modulates the correct value even as the crashed-settle ease drives it (no drift).
+    cabinLamp.userData._flickerBase = cabinLamp.intensity;
+  }
   // Item 1 — the RAKE directionals hit every wall/seat/console face uniformly (a hemisphere ambient
   //   alone leaves the curved bore flat), so the crashed wake floods them up toward a midday-sun rake
   //   — every face reads lit, matching the step-out. The warm key drifts toward neutral daylight.
@@ -2630,6 +2951,9 @@ export function disposePodScene(ctx: GameContext): void {
   //   (endEscapePodIntro SKIPS this dispose when the pod is enterable — it PERSISTS into the game;
   //   this branch only runs on the offset-pod teardown or a dev re-dispose.)
   if (_enterableBerm) { _enterableBerm.geometry.dispose(); ctx.three.scene.remove(_enterableBerm); _enterableBerm = null; }
+  _disposeCrashAftermath(ctx);   // CRASH-AFTERMATH (2026-07-03) — tear down the furrow/scorch/debris overlay with the pod
+  _wakeFlickerT = -1;            // reset the wake lamp-flicker one-shot (a replayed intro re-arms it at the next wake)
+  _danglingConduitSpark = null;
   if (crashedPodSalvageableId >= 0) {
     const i = ctx.salvageables.list.findIndex((s) => s.id === crashedPodSalvageableId);
     if (i >= 0) ctx.salvageables.list.splice(i, 1);
@@ -2863,6 +3187,64 @@ function _autoFireChuteOnPry(ctx: GameContext): void {
 export function updateChutePop(ctx: GameContext, dt: number): void {
   _autoFireChuteOnPry(ctx);   // D5 — fire the gag on the pry event itself (decoupled from the tutorial phase)
   _advanceChuteInflate(dt);   // advance the one-shot inflate animation (no-op unless popping)
+  _updateWakeFlicker(dt);     // CRASH-AFTERMATH (2026-07-03) — the wake lamp/conduit-spark flicker one-shot (no-op unless armed)
+}
+
+/** Advance the interior wake LAMP-FLICKER one-shot (the post-crash "sparking" tell): the ceiling lamp
+ *  stutters + the torn-conduit wire sparks for ~9s at the wake, then settles clean. No-op unless armed
+ *  (_wakeFlickerT ≥ 0, set on the crashed settle in setCabinCrashPose). Cheap; self-terminating. The
+ *  flicker RIDES the current lamp intensity (setCabinCrashPose sets the base) — it only modulates it,
+ *  so it composes with the wake brighten instead of fighting it. */
+function _updateWakeFlicker(dt: number): void {
+  if (_wakeFlickerT < 0) return;
+  _wakeFlickerT += dt;
+  const k = Math.min(1, _wakeFlickerT / _WAKE_FLICKER_DUR);
+  // envelope: heaviest stutter at the wake, decaying to steady as the electrics settle.
+  const env = (1 - k) * (1 - k);
+  // a stochastic-ish stutter (two incommensurate sines → irregular dropouts) gated by the envelope.
+  const t = _wakeFlickerT;
+  const raw = Math.sin(t * 37.0) * 0.5 + Math.sin(t * 61.3 + 1.1) * 0.5;
+  const dropout = raw > 0.55 - env * 0.7 ? 1 : (0.35 + 0.65 * (1 - env));   // brief dark dips early, fewer later
+  const flick = 1 - env * (1 - dropout);   // 1 = full brightness; dips toward `dropout` in the stutters
+  if (cabinLamp) {
+    // ride the clean base setCabinCrashPose publishes each frame (no drift as the settle-ease drives it).
+    const base = (cabinLamp.userData._flickerBase as number | undefined) ?? cabinLamp.intensity;
+    cabinLamp.intensity = k >= 1 ? base : base * flick;
+  }
+  if (_danglingConduitSpark) {
+    // the frayed-wire spark: pops bright on the deepest dropouts early, dark once settled.
+    const sparking = k < 1 && env > 0.12 && dropout < 0.6;
+    _danglingConduitSpark.visible = sparking;
+  }
+  if (k >= 1) {
+    _wakeFlickerT = -1;   // settled — one-shot done (a replayed wake re-arms via setCabinCrashPose)
+    if (_danglingConduitSpark) _danglingConduitSpark.visible = false;
+  }
+}
+
+/** DEV/rig probe — a headless GATE for the wake lamp-flicker one-shot (a still can't judge a temporal
+ *  flicker, so prove the MECHANISM: arming modulates the lamp + toggles the spark, then self-settles).
+ *  Arms the flicker from the current crashed lamp base, drives _updateWakeFlicker synchronously in
+ *  small steps over the full window, and reports whether the lamp intensity varied, the spark toggled,
+ *  and it settled clean. No-op-safe if the pod isn't built. Mirrors popChute's synchronous-drive idiom. */
+export function smokeWakeFlicker(): { built: boolean; armed: boolean; lampVaried: boolean; sparkToggled: boolean; settled: boolean; lampMin: number; lampMax: number } {
+  const out = { built: !!cabinLamp, armed: false, lampVaried: false, sparkToggled: false, settled: false, lampMin: Infinity, lampMax: -Infinity };
+  if (!cabinLamp) return out;
+  // publish a clean crashed base (as setCabinCrashPose does at the wake) so the modulation rides it.
+  cabinLamp.intensity = 3.4; cabinLamp.userData._flickerBase = 3.4;
+  _wakeFlickerT = 0; out.armed = true;   // arm the one-shot
+  let sparkOn = false, sparkOff = false;
+  const steps = Math.ceil((_WAKE_FLICKER_DUR + 0.5) / 0.05);
+  for (let i = 0; i < steps; i++) {
+    _updateWakeFlicker(0.05);
+    out.lampMin = Math.min(out.lampMin, cabinLamp.intensity);
+    out.lampMax = Math.max(out.lampMax, cabinLamp.intensity);
+    if (_danglingConduitSpark) { if (_danglingConduitSpark.visible) sparkOn = true; else sparkOff = true; }
+  }
+  out.lampVaried = out.lampMax - out.lampMin > 0.2;   // the flicker actually dipped the lamp
+  out.sparkToggled = sparkOn && sparkOff;             // the spark both fired AND went dark
+  out.settled = _wakeFlickerT < 0 && Math.abs(cabinLamp.intensity - 3.4) < 0.01 && (!_danglingConduitSpark || !_danglingConduitSpark.visible);
+  return out;
 }
 
 /** Advance the chute-pop inflate one-shot (the scale/droop/settle animation). Split out of
@@ -2982,6 +3364,36 @@ const _podFrameMat = createRustedHullMaterial({
 const _podCableMat = new THREE.MeshLambertMaterial({ color: Tuning.WRECK_ANTENNA_HEX, flatShading: true });
 // Displaced-sand berm (the drift banked against the speared-in pod). Sand tone.
 const _podBermMat = new THREE.MeshLambertMaterial({ color: 0xc69a5a, flatShading: true });
+// CRASH-AFTERMATH (2026-07-03) — the ground-story materials.
+// Displaced-sand SKID BERM (the plowed-up sand along the furrow edges) — a touch cooler/darker
+//   than the base berm so the disturbed ridge reads as freshly-turned sand (shadowed side of the
+//   plow), matching the terrain sand idiom without a hard tint.
+const _furrowBermMat = new THREE.MeshLambertMaterial({ color: 0xbc9052, flatShading: true });
+// Furrow FLOOR — the exposed, compacted skid trench floor (darker, packed sand where the hull
+//   scraped down to sub-surface + shadow). Sits just above the terrain as a conforming skirt.
+const _furrowFloorMat = new THREE.MeshLambertMaterial({ color: 0x765634, flatShading: true });
+// SCORCH streak / RING — a transparent darkened overlay (re-entry-hot hull met the sand), matching
+//   the meteorCrash scorch idiom (transparent lambert, depthWrite off, renderOrder so it lays over
+//   the sand without z-fighting). Warm near-black char — a MODERATE opacity so it reads as burnt sand,
+//   not an opaque black hole (the R1 over-dark blob).
+const _crashScorchMat = new THREE.MeshLambertMaterial({
+  color: 0x241812, transparent: true, opacity: 0.55, depthWrite: false, flatShading: true,
+});
+// A lighter HEAT-DISCOLOUR halo (the tarnished/baked sand ringing the char) — a warm scorched-tan,
+//   fainter, so the scorch fades OUT into clean sand instead of a hard char edge.
+const _crashHeatMat = new THREE.MeshLambertMaterial({
+  color: 0x5c4526, transparent: true, opacity: 0.5, depthWrite: false, flatShading: true,
+});
+// CHARRED DEBRIS — a flat dark matte for the scorched hull chunks. NOT createRustedHullMaterial (its
+//   warm oxide layers glow coral-red on a small fragment under the low orange sun — the R1 "toy" read);
+//   a plain lambert reads as burnt metal at any light angle.
+const _crashCharMat = new THREE.MeshLambertMaterial({ color: 0x28221c, flatShading: true });
+// SCUFFED-ALUMINIUM DEBRIS — a cool grey lambert for the torn hull-PANEL fragments. The pod's OWN
+//   aluminium tone (matches _podPaint's base 0xb6b9b3), but a FLAT lambert: the full hull shader's
+//   warm seam/oxide layers, on a tiny fragment quad under a low raking sun, collapse into a lit
+//   coral-red chip (the R1 "red toy" — panels AND bands both hit it). Flat aluminium reads correct
+//   at fragment scale + any light angle. A hair darker than the body so it reads as a scuffed offcut.
+const _crashPanelMat = new THREE.MeshLambertMaterial({ color: 0xa2a6a2, flatShading: true });
 // Reentry SCORCH — a vertex-COLOR-driven Lambert so the char→tarnish→aluminium
 // fade is baked into the geometry (no hard top edge, no painted-stripe read). The
 // per-vertex gradient (built in §2) supplies the color; flat-shaded low-poly.
