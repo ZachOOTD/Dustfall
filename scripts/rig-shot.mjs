@@ -3116,6 +3116,8 @@ const SCENARIOS = {
   //   the pod radius via real KCC, not a teleport — sampled continuity), (2) the step-out did NOT
   //   teleport (no discontinuous jump at the handoff), and (3) the renderer exposure EASED from the
   //   wake lift toward the desert base over ~1.8s (monotone-ish descent, no single-frame snap).
+  //   The real-KCC walk is driven by a FIXED-DT sim-budget loop (see below) so the proof is
+  //   DETERMINISTIC under the ~2 fps headless swiftshader tab — no wall-clock timing dependence.
   'pod-walkout': async (page) => {
     const log = await page.evaluate(async () => {
       const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -3150,20 +3152,56 @@ const SCENARIOS = {
       let prev = { x: inside.x, y: inside.y, z: inside.z };
       let reachedStepOut = false;
       let teleportAtHandoff = 0;
-      for (let i = 0; i < 90; i++) {
-        cam.rotation.set(-0.05, 0, 0);   // face −Z (yaw 0) → W walks toward/through the −Z front door
-        await sleep(70);
-        const t = ctx.player.body.body.translation();
-        const jump = Math.hypot(t.x - prev.x, t.z - prev.z);
-        if (jump > maxJump) maxJump = jump;
-        prev = { x: t.x, y: t.y, z: t.z };
-        // the wake-climb advanced to stepOut (or handed off) — capture whether the body JUMPED at that
-        //   moment (a teleport-to-returnPos would spike jump exactly here; the real flow does NOT teleport).
-        if (!reachedStepOut && ctx.intro && (ctx.intro.beat === 'stepOut' || !ctx.intro.active)) {
-          reachedStepOut = true; teleportAtHandoff = jump;
+      // ── DETERMINISTIC WALK DRIVER (throttle-proof). The OLD loop held W for 90 × sleep(70) of
+      //    WALL-CLOCK time and measured however far the KCC happened to travel — but the headless
+      //    swiftshader tab renders the heavy scene at ~2 fps, so the number of REAL game frames that
+      //    tick inside that window (and thus the walked distance) swings run-to-run: walkedOutZ
+      //    ranged ~−5.6..−6.9 m on a good run and could dip under the −2.0 GATE-2 floor when the
+      //    machine was loaded (the pre-existing flake). Worse, a single fat-dt catch-up frame could
+      //    spike maxJump toward the 3.0 GATE-3 ceiling. The FIX (same philosophy as smokeExposureEase
+      //    below): pin the loop's dt to a FIXED value so every ticked frame advances a KNOWN sim-dt,
+      //    then drive until a SIM-TIME budget elapses (NOT a wall-clock count) — so the proof (real
+      //    KCC walk ≥ the distance → stepOut → no teleport) is identical every run regardless of the
+      //    tab's frame rate. The assertions below are UNCHANGED and strict.
+      const FIXED_DT = 0.05;      // sim-seconds per frame (under the loop's 0.1 clamp → never clamped)
+      const SIM_BUDGET = 2.0;     // sim-seconds of walking: at WALK_SPEED 6 m/s → ~11 m out the door
+                                  //   (well past the −2.0 GATE-2 floor + the 2.2 m stepOut climb gate)
+      const realClock = ctx.three.clock;
+      const origGetDelta = realClock.getDelta.bind(realClock);
+      const origW = ctx.three.renderer.domElement.width, origH = ctx.three.renderer.domElement.height;
+      let framesTicked = 0, simElapsed = 0;
+      try {
+        realClock.getDelta = () => FIXED_DT;             // pin the per-frame sim-dt (throttle-proof)
+        ctx.three.renderer.setSize(48, 48, false);       // tiny canvas → more REAL frames tick per second
+        const simStart = ctx.time.elapsed;
+        let lastSim = simStart, stalls = 0;
+        // Bounded iteration cap + a stall-bail (no sim progress across ~5 s of yields) so the driver
+        //   can NEVER hang even if the loop wedges — but termination is by SIM budget, not wall time.
+        for (let i = 0; i < 4000; i++) {
+          cam.rotation.set(-0.05, 0, 0);   // face −Z (yaw 0) → W walks toward/through the −Z front door
+          ctx.input.keys['KeyW'] = true;   // re-assert each iteration (endInputFrame clears pressed; keys persist, belt-and-braces)
+          await sleep(16);                 // yield so real rAF frames tick between samples
+          const t = ctx.player.body.body.translation();
+          const jump = Math.hypot(t.x - prev.x, t.z - prev.z);
+          if (jump > maxJump) maxJump = jump;
+          prev = { x: t.x, y: t.y, z: t.z };
+          // the wake-climb advanced to stepOut (or handed off) — capture whether the body JUMPED at that
+          //   moment (a teleport-to-returnPos would spike jump exactly here; the real flow does NOT teleport).
+          if (!reachedStepOut && ctx.intro && (ctx.intro.beat === 'stepOut' || !ctx.intro.active)) {
+            reachedStepOut = true; teleportAtHandoff = jump;
+          }
+          const nowSim = ctx.time.elapsed;
+          if (nowSim > lastSim + 1e-6) { lastSim = nowSim; stalls = 0; }
+          else if (++stalls > 300) break;   // ~5 s of yields with no ticked frame → loop wedged, bail
+          simElapsed = nowSim - simStart;
+          framesTicked = Math.round(simElapsed / FIXED_DT);
+          if (simElapsed >= SIM_BUDGET) break;
         }
+      } finally {
+        ctx.input.keys['KeyW'] = false;
+        realClock.getDelta = origGetDelta;               // restore the real clock (leak-free)
+        ctx.three.renderer.setSize(origW, origH, false); // restore the canvas
       }
-      ctx.input.keys['KeyW'] = false;
       const pOut = ctx.player.body.body.translation();
       const walkedOutZ = pOut.z - inside.z;   // negative = walked −Z out the front door
 
@@ -3178,6 +3216,7 @@ const SCENARIOS = {
         ease: easeReport,
         inside: [+inside.x.toFixed(2), +inside.z.toFixed(2)], walkedOutZ: +walkedOutZ.toFixed(2),
         maxJump: +maxJump.toFixed(2), reachedStepOut, teleportAtHandoff: +teleportAtHandoff.toFixed(2),
+        driver: { simElapsed: +simElapsed.toFixed(2), framesTicked },   // deterministic-driver diagnostics
       };
     });
     console.log('[pod-walkout] ' + JSON.stringify(log));
@@ -3185,18 +3224,18 @@ const SCENARIOS = {
     if (log.walkedOutZ > -1.0) throw new Error(`pod-walkout GATE FAILED: the body only moved z=${log.walkedOutZ} out the door (expected < −1.0 — the walk-out path is blocked or the door didn't open).`);
     // GATE 2 — NO TELEPORT: a stepOut teleport-to-returnPos would SNAP the body back near the spawn
     //   (returnPos ≈ the inside/origin) — but the player ends where they WALKED (z well past the door),
-    //   proving no teleport. (maxJump/teleportAtHandoff can read ~1.25m from a big throttled KCC step
-    //   at the dt-clamp, so the definitive no-teleport signal is the END POSITION, not a per-tick jump:
-    //   a real teleport to returnPos would land the body back at |Δz|≈0, not the −7m they walked to.)
+    //   proving no teleport. The definitive no-teleport signal is the END POSITION: a real teleport to
+    //   returnPos would land the body back at |Δz|≈0, not the ~−11 m the deterministic driver walks to.
     if (Math.abs(log.walkedOutZ) < 2.0) throw new Error(`pod-walkout GATE FAILED: the body ended only ${log.walkedOutZ}m from the spawn — a teleport-back-to-returnPos would land here; the walk-out should leave the player where they WALKED (well out the door).`);
-    // a per-tick jump far beyond any walking step (KCC step ≤ ~1.4m at the dt-clamp) WOULD be a teleport.
+    // a per-tick jump far beyond any walking step WOULD be a teleport. With the fixed-dt driver the KCC
+    //   step is a steady ~0.6 m (FIXED_DT 0.05 s × WALK_SPEED 6 m/s); the 3.0 m ceiling flags a real snap.
     if (log.maxJump > 3.0) throw new Error(`pod-walkout GATE FAILED: a discontinuous ${log.maxJump}m jump (a teleport, not a KCC step) occurred during the walk-out.`);
     // GATE 3 — the wake-climb advanced to stepOut (the walk-out → stepOut chain fired).
     if (!log.reachedStepOut) throw new Error(`pod-walkout GATE FAILED: the walk-out never advanced to stepOut (the climb-out distance gate didn't fire).`);
     // GATE 4 — the exposure EASED (eye-adaptation), not snapped: smokeExposureEase proves a gradual
     //   monotone descent (mid values) from the wake lift landing on the desert base under fixed dt.
     if (!log.ease || !log.ease.ok) throw new Error(`pod-walkout GATE FAILED: the exposure did not EASE like eye-adaptation — smokeExposureEase=${JSON.stringify(log.ease)} (expected a gradual monotone ${log.ease ? log.ease.from : '?'}→base with ≥4 mid samples).`);
-    console.log(`[pod-walkout] GATE PASS — kicked the front door + walked OUT on real legs (Δz=${log.walkedOutZ}m, maxJump=${log.maxJump}m, handoff jump=${log.teleportAtHandoff}m = NO teleport), reached stepOut, and the exposure EASED ${log.ease.from}→${log.ease.final} (eye-adaptation: ${log.ease.midSamples} mid samples, monotone=${log.ease.monotone}).`);
+    console.log(`[pod-walkout] GATE PASS — kicked the front door + walked OUT on real legs (Δz=${log.walkedOutZ}m over ${log.driver.simElapsed}s sim / ${log.driver.framesTicked} fixed-dt frames, maxJump=${log.maxJump}m, handoff jump=${log.teleportAtHandoff}m = NO teleport), reached stepOut, and the exposure EASED ${log.ease.from}→${log.ease.final} (eye-adaptation: ${log.ease.midSamples} mid samples, monotone=${log.ease.monotone}).`);
   },
 
   // B2 dev diagnostic — dump every physics collider whose AABB centre falls in the pod-bay boarding
