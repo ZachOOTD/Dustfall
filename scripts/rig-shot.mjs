@@ -2980,12 +2980,14 @@ const SCENARIOS = {
       for (let i = 0; i < 20; i++) { await sleep(120); if (ctx.player.body.body.translation().y > 2900) break; g.jumpToBeat('cockpit'); }
       try { g.setSkyIntroMode(0); } catch {}
       const sp = ctx.player.body.body.translation();
-      const SHIP = { x: sp.x, y: sp.y, z: sp.z };   // SHIP_ORIGIN.x/z (bridge spawn is at origin x/z)
+      // the bridge spawn sits at SEAT_Z = −0.30 off the ship origin → origin.z = sp.z + 0.30. Use
+      //   the ORIGIN frame so the walk line is centred on the bay door (local z = BAY_ZC = 4.8).
+      const SHIP = { x: sp.x, y: sp.y, z: sp.z + 0.30 };
       // Position the player in the CORRIDOR, just fore of the bay opening (bay z-span ≈ +3.2..+6.4 on
       //   the −X wall), on the +X side of the walkable tube, facing −X toward the docked pod door.
       g.jumpToBeat('enterPod');
       await sleep(150);
-      const startPos = { x: SHIP.x + 0.6, y: SHIP.y, z: SHIP.z + 4.8 };   // corridor, +X side, level with the bay
+      const startPos = { x: SHIP.x + 0.6, y: sp.y, z: SHIP.z + 4.8 };   // corridor, +X side, on the door centreline
       ctx.player.body.body.setTranslation(startPos, true);
       ctx.player.cameraSnapNextFrame = true;
       const cam = ctx.three.camera;
@@ -3006,12 +3008,19 @@ const SCENARIOS = {
       //     pressed is cleared each frame, so W drives sustained motion. Face −X the whole way.
       ctx.input.keys['KeyW'] = true;
       let insideAt = -1;
-      for (let i = 0; i < 40; i++) {
+      // generous wall-clock budget: the headless rig renders the heavy scene at low FPS and the
+      //   dt-clamp (0.1 s) loses sim distance on slow frames — the WALK is what's being proven,
+      //   not the frame rate. Break as soon as the inside-gate flips the phase.
+      let deeper = 0;
+      for (let i = 0; i < 160; i++) {
         cam.rotation.set(0, Math.PI / 2, 0);   // keep facing −X so WASD forward = −X (into the pod)
         await sleep(80);
         const t = ctx.player.body.body.translation();
-        if (i % 8 === 0) trace.push({ leg: 'walking', tick: i, phase: ctx.intro.scratch.phase, x: +(t.x - SHIP.x).toFixed(2), z: +(t.z - SHIP.z).toFixed(2) });
-        if (ctx.intro.scratch.phase === 'atSeat' && insideAt < 0) { insideAt = i; break; }
+        if (i % 12 === 0) trace.push({ leg: 'walking', tick: i, phase: ctx.intro.scratch.phase, x: +(t.x - SHIP.x).toFixed(2), z: +(t.z - SHIP.z).toFixed(2) });
+        if (ctx.intro.scratch.phase === 'atSeat') {
+          if (insideAt < 0) insideAt = i;
+          if (++deeper >= 10) break;   // keep walking a few ticks INTO the bore (up to the seat) like a real player
+        }
       }
       ctx.input.keys['KeyW'] = false;
       const pIn = ctx.player.body.body.translation();
@@ -3026,7 +3035,20 @@ const SCENARIOS = {
         seated = ph === 'sealing' || ph === 'eject' || ctx.intro.beat !== 'enterPod';
       }
       trace.push({ leg: 'after E-sit', beat: ctx.intro.beat, phase: ctx.intro.beat === 'enterPod' ? ctx.intro.scratch.phase : '(advanced)', seated });
-      return { trace, walkedInX, reachedInside: insideAt >= 0, seated };
+      // (4) E-EJECT — wait out the auto-seal (~0.9 s), then inject E at the eject gate and confirm
+      //     the beat ADVANCES to shipExplode (the lever is purely player-gated — no fallback timer).
+      // generous budget: the seal is 0.9 SIM-seconds, but the ridden-cabin build + shader compiles
+      //   land right here and the headless rig can drop under 1 fps (dt clamped 0.1 → sim time
+      //   crawls). Bounded at ~40 s wall; breaks the moment the eject fires.
+      let ejected = false;
+      for (let i = 0; i < 400 && !ejected; i++) {
+        if (ctx.intro.beat === 'enterPod' && ctx.intro.scratch.phase === 'eject') ctx.input.pressed.add('KeyE');
+        await sleep(100);
+        ejected = ctx.intro.beat !== 'enterPod';
+        if (i % 50 === 0) trace.push({ leg: 'eject-wait', tick: i, beat: ctx.intro.beat, phase: ctx.intro.beat === 'enterPod' ? ctx.intro.scratch.phase : '(advanced)', t: ctx.intro.beat === 'enterPod' ? +Number(ctx.intro.scratch.t || 0).toFixed(2) : undefined });
+      }
+      trace.push({ leg: 'after E-eject', beat: ctx.intro.beat, ejected });
+      return { trace, walkedInX, reachedInside: insideAt >= 0, seated, ejected };
     });
     console.log('[pod-walkin] ' + JSON.stringify(log.trace, null, 0));
     console.log(`[pod-walkin] walkedInX=${log.walkedInX.toFixed(2)} reachedInside=${log.reachedInside} seated=${log.seated}`);
@@ -3035,7 +3057,75 @@ const SCENARIOS = {
     if (!log.reachedInside) throw new Error(`pod-walkin GATE FAILED: the player never walked INTO the pod (walkedInX=${log.walkedInX.toFixed(2)}, expected < −1.2). The walkable boarding path is blocked.`);
     if (log.walkedInX > -1.2) throw new Error(`pod-walkin GATE FAILED: the body only reached x=${log.walkedInX.toFixed(2)} (expected < −1.2 inside the bore).`);
     if (!log.seated) throw new Error(`pod-walkin GATE FAILED: E-sit did not seat/advance the beat.`);
-    console.log('[pod-walkin] GATE PASS — corridor → through the doorway → inside the pod → seated (real KCC motion).');
+    if (!log.ejected) throw new Error(`pod-walkin GATE FAILED: E-eject did not fire/advance to shipExplode.`);
+    console.log('[pod-walkin] GATE PASS — corridor → through the doorway → inside the pod → seated → E-eject fired (real KCC motion + real input path).');
+  },
+
+  // B2 dev diagnostic — dump every physics collider whose AABB centre falls in the pod-bay boarding
+  //   region (relative to the bridge spawn) so a blocked walk-in path can be diagnosed exactly.
+  'bay-probe': async (page) => {
+    const out = await page.evaluate(async () => {
+      const g = window.__game;
+      const ctx = g.ctx;
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      ctx.flags.paused = false;
+      ctx.input.controls.isLocked = true;
+      try { g.skipIntro(); } catch {}
+      await sleep(200);
+      g.startIntro();
+      g.jumpToBeat('cockpit');
+      for (let i = 0; i < 20; i++) { await sleep(120); if (ctx.player.body.body.translation().y > 2900) break; g.jumpToBeat('cockpit'); }
+      const sp = ctx.player.body.body.translation();
+      const SHIP = { x: sp.x, y: sp.y - 0.85, z: sp.z + 0.30 };   // bridge spawn → ship origin (seat at z −0.30; body centre ≈ +0.85)
+      const hits = [];
+      ctx.physics.world.forEachCollider((col) => {
+        const t = col.translation();
+        const lx = t.x - SHIP.x, lz = t.z - SHIP.z;
+        if (t.y < SHIP.y - 2 || t.y > SHIP.y + 6) return;      // ship-deck band only
+        const sh = col.shape;
+        // AABB-overlap the boarding region (a long wall's CENTRE can sit far outside it).
+        const hx = sh.halfExtents ? Math.max(sh.halfExtents.x, sh.halfExtents.z) : (sh.radius || 0.5);
+        const hz = hx;
+        if (lx + hx < -4.5 || lx - hx > 1.5 || lz + hz < 2.0 || lz - hz > 7.5) return;
+        const desc = { type: sh.type, x: +lx.toFixed(2), y: +(t.y - SHIP.y).toFixed(2), z: +lz.toFixed(2) };
+        if (sh.halfExtents) { desc.he = [+sh.halfExtents.x.toFixed(2), +sh.halfExtents.y.toFixed(2), +sh.halfExtents.z.toFixed(2)]; }
+        if (sh.radius != null) desc.r = +sh.radius.toFixed(2);
+        if (sh.halfHeight != null) desc.hh = +sh.halfHeight.toFixed(2);
+        const q = col.rotation();
+        const yaw = Math.atan2(2 * (q.w * q.y + q.x * q.z), 1 - 2 * (q.y * q.y + q.z * q.z));
+        if (Math.abs(yaw) > 0.01) desc.yawDeg = +(yaw * 180 / Math.PI).toFixed(0);
+        hits.push(desc);
+      });
+      hits.sort((a, b) => a.x - b.x);
+      // ── KCC blocker interrogation: park the capsule AT the stall point on the door centreline and
+      //    ask the character controller for a −X step; report exactly which collider(s) it hits.
+      ctx.flags.paused = true;   // freeze the sim so nothing re-moves the body under us
+      const pb = ctx.player.body;
+      pb.body.setTranslation({ x: SHIP.x - 0.7, y: sp.y, z: SHIP.z + 4.8 }, true);
+      pb.controller.computeColliderMovement(pb.collider, { x: -0.6, y: -0.05, z: 0 });
+      const mv = pb.controller.computedMovement();
+      const cols = [];
+      try {
+        const n = pb.controller.numComputedCollisions();
+        for (let i = 0; i < n; i++) {
+          const c = pb.controller.computedCollision(i);
+          if (!c || !c.collider) continue;
+          const ct = c.collider.translation();
+          const cs = c.collider.shape;
+          cols.push({
+            type: cs.type, x: +(ct.x - SHIP.x).toFixed(2), y: +(ct.y - SHIP.y).toFixed(2), z: +(ct.z - SHIP.z).toFixed(2),
+            he: cs.halfExtents ? [+cs.halfExtents.x.toFixed(2), +cs.halfExtents.y.toFixed(2), +cs.halfExtents.z.toFixed(2)] : undefined,
+            r: cs.radius != null ? +cs.radius.toFixed(2) : undefined,
+            n1: c.normal1 ? [+c.normal1.x.toFixed(2), +c.normal1.y.toFixed(2), +c.normal1.z.toFixed(2)] : undefined,
+          });
+        }
+      } catch (e) { cols.push({ err: String(e) }); }
+      ctx.flags.paused = false;
+      return { shipY: +SHIP.y.toFixed(1), n: hits.length, hits, kcc: { moved: [+mv.x.toFixed(3), +mv.y.toFixed(3), +mv.z.toFixed(3)], cols } };
+    });
+    console.log('[bay-probe] shipY=' + out.shipY + ' n=' + out.n);
+    for (const h of out.hits) console.log('[bay-probe] ' + JSON.stringify(h));
+    console.log('[bay-probe][kcc] ' + JSON.stringify(out.kcc));
   },
 
   // FLAG-OFF byte-identical GATE — a normal (no-intro) game save must write NO podCrash field, so

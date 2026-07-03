@@ -2614,17 +2614,25 @@ function _addBayPodColliders(ctx: GameContext): void {
   const wallH = COR_CH;                            // full walk-height ring (floor→ceiling of the recess)
   // the DOOR gap azimuth: +X arc (CPOD_DOOR_AZ = π/2 in the pod frame; dir = (sin,0,cos) → +X here).
   const doorAz = Math.PI / 2;
-  const doorHalf = Math.min(Math.PI * 0.9, (1.02 / 2 + 0.10) / R);   // CPOD_DOOR_W=1.02 + clearance
-  const SEGN = 20;
-  const segLen = (Math.PI * 2) / SEGN;
+  // The gap half-angle sized to the VISIBLE aperture + its proud frame (CPOD_DOOR_W 1.02 + fT 0.11
+  //   per side ≈ a 1.25m opening): chord = 2·wallColR·sin(doorHalf) ≈ 1.25m. The KCC capsule is
+  //   effectively 0.80m wide (r 0.35 + controller offset 0.05) — the walk-in PROOF (rig pod-walkin)
+  //   caught the first cut of this ring leaving only a ~0.85m gap (whole-segment skipping): the
+  //   capsule GROUND on the flanking segment corners and never got in. The ring is now built with
+  //   EXACT gap edges — the wall arc runs doorAz+doorHalf → doorAz+2π−doorHalf, subdivided — so the
+  //   opening is exactly the door aperture: the player walks through the visible doorway with
+  //   comfortable slop and still stops AT the visible jamb either side.
+  const doorHalf = (1.02 / 2 + 0.14) / wallColR;   // ≈0.47 rad → a ≈1.25m clear chord (matches aperture+frame)
+  const az0 = doorAz + doorHalf;                   // wall arc start (one jamb edge)
+  const arcLen = Math.PI * 2 - doorHalf * 2;       // the wall arc (everything except the door gap)
+  const SEGN = 18;
+  const segArc = arcLen / SEGN;
   const _up = new THREE.Vector3(0, 1, 0);
   const _q = new THREE.Quaternion();
   for (let i = 0; i < SEGN; i++) {
-    const az = i * segLen + segLen / 2;
-    let d = az - doorAz; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2;
-    if (Math.abs(d) < doorHalf) continue;          // leave the DOOR open (the walk-in gap)
+    const az = az0 + (i + 0.5) * segArc;
     const dir = new THREE.Vector3(Math.sin(az), 0, Math.cos(az));
-    const halfTangent = wallColR * Math.tan(segLen / 2) + 0.02;
+    const halfTangent = wallColR * Math.tan(segArc / 2) + 0.02;
     _q.setFromAxisAngle(_up, az);
     const col = makeStaticBox(ctx.physics.world,
       { x: halfTangent, y: wallH / 2, z: 0.08 },
