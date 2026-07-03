@@ -523,3 +523,8 @@ The user kept the loop running past feature-complete; each pass found + fixed re
 3. **CLUSTER D** — the seamless landing (canonical pod through the fall + surface, unify at crash, walk out yourself, no teleport, eased exposure).
 4. The user's remaining pod/landing feedback + the PERFORMANCE pass.
 **Deliverable contract:** when ALL of it is done — final combined verify, REBUILD the 4173 preview, kill stray test servers/stale tasks, then ONE ready-to-test ping.
+
+---
+
+## 🌙 OVERNIGHT PLAN (user approved the direction, 2026-07-03, heading to bed) — "lots done, super high quality"
+Order: (1) finish CLUSTER C (in flight: eject departure + planet-approach arc + audio gating) → (2) CLUSTER D the seamless landing (canonical pod through bay=fall=surface, wake kicks the FRONT door, walk out yourself, no teleport, eased exposure, save-path replumb + all persistence gates re-proven) → (3) full-chain regression sweep + a fresh bug-hunt on the C/D-touched code → (4) the FIRST-NEW-GAME LOADING SCREEN (prebuild all intro scenes + force-compile shaders behind a real progress bar — the user's headline perf idea) → (5) PROFILING + top fixes w/ before/after numbers (suspects: per-rivet mesh counts → static-merge per material; light audit; beat-init builds) → (6) the PLATFORM DECISION BRIEF (Tauri/Electron vs Godot vs WebGPU, effort grounded in the codebase; a morning read, NO action) → (7) BONUS if core is solid: crash-aftermath dressing (sand furrow + scorch trail + debris + post-crash interior state). MORNING CONTRACT: everything verified+committed+pushed, git status CLEAN, strays killed, the 4173 preview rebuilt, ONE summary ping (shipped + perf numbers + the brief).
