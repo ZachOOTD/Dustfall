@@ -475,6 +475,7 @@ function tickCockpit(ctx: GameContext, dt: number): void {
     seatPlayerAt(ctx, getShipSpawn(ctx));
     startCockpitHum();                          // T5.1b — the calm in-orbit ambient bed (until eject)
     setSkyIntroMode(1);                         // R1a — the REAL sky in space mode (wrapping stars + planet through the window)
+    setPlanetApproach(0);                       // C3 — the cockpit shows the ORBIT-FRAMED distant disc (the descent's planet-approach grow is DESCENT-only). Self-heals a dev jumpToBeat BACK to cockpit after a mid-descent grow (else the scaled+dropped planet would balloon in the orbit view — _planetApproach only auto-resets when space mode is FULLY off, but the cockpit re-engages space mode at 1). Real forward flow: this is already 0, a harmless no-op.
     setIntroAtmosphereHidden(ctx, true);        // R1a — no desert dust floating in orbit
     // OPENING VISTA FRAMING (R5b): the seated pilot opens looking OUT at the orbit — not dead-level
     // −Z (which put the planet low + half-behind the console), but a hair RIGHT + UP so the planet's
