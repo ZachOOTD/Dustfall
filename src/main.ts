@@ -56,7 +56,7 @@ import { updatePlayer } from './player/controller.ts';
 import { updateEscapePodIntro, updateIntroFogEase, startEscapePodIntro, introActive } from './world/escapePodIntro/sequence.ts';   // escape-pod intro (FEATURES.escapePodIntro) — T0.1 wires the new-game branch
 import { updatePodTutorial, resumePodTutorialAfterRestore } from './world/escapePodIntro/podTutorial.ts';   // T4.3 — the post-handoff craft→salvage→chute-pop tutorial (self-guarded no-op unless running); resumePodTutorialAfterRestore — re-arm the payoff after a Continue re-built the pod
 import { updateChutePop, updatePodExposureEase, applyPendingPodCrashRestore } from './world/escapePodIntro/podScene.ts';   // T4.3 — the chute-pop inflate one-shot (no-op unless the chute is popping; driven always so dev/rig-shot also animates); CLUSTER D — updatePodExposureEase eases the step-out exposure like eye-adaptation (no snap); applyPendingPodCrashRestore — re-build the ONE walk-in pod on Continue
-import { setGameHudHidden } from './world/escapePodIntro/introHud.ts';   // escape-pod intro — re-assert HUD-hide after handoff
+import { setGameHudHidden, hideIntroLoading, introLoadingAwaitLaunchClick } from './world/escapePodIntro/introHud.ts';   // escape-pod intro — HUD-hide + the loading screen's click-to-launch recovery (the pointer-lock gesture-expiry freeze fix)
 import { preloadIntro } from './world/escapePodIntro/introPreload.ts';   // PERF — build every intro scene + compile every shader UP FRONT behind the loading screen (kills the beat-entry freezes)
 import { FEATURES } from './config/features.ts';
 import { createShelterRegistry, updateShelter } from './shelter/shelterZones.ts';
@@ -844,15 +844,36 @@ const titleOverlay = createTitleOverlay(ctx, {
       //   the intro owns a clean view) so the loading screen sits over the game canvas the
       //   warm-up renders into; THEN preload; THEN start the cockpit beat — by which point
       //   every scene is prebuilt + every shader compiled (the beats just reuse them).
-      handoffToGame({ skipLock: true });   // don't grab pointer-lock while the loading screen is up
-      void preloadIntro(ctx).then(() => {
-        startEscapePodIntro(ctx);            // start the cockpit beat — everything is warm now
-        // Re-hide the HUD (handoffToGame un-hid it; the intro owns a clean view) + acquire
-        //   pointer-lock now that the loading screen is gone, matching handoffToGame's guard.
-        setGameHudHidden(true);
-        const c = three.renderer.domElement;
-        if (!pointerLockSuppressed(c)) ctx.input.controls.lock();
-      });
+      handoffToGame({ skipLock: true });   // skipLock: we lock EXPLICITLY on the next line instead
+      // BUGFIX (the "loading finishes, game never starts" freeze): acquire the pointer lock
+      //   NOW, while the New-Game click's user gesture is still fresh. The old flow locked
+      //   AFTER the multi-second preload — by then the gesture had EXPIRED, the browser
+      //   silently refused the lock, flags.paused stayed true, and the intro sat frozen
+      //   behind a finished loading bar (the documented pointer-lock freeze mode). Locking
+      //   here is harmless: the loading overlay covers the canvas and swallows input.
+      {
+        const c0 = three.renderer.domElement;
+        if (!pointerLockSuppressed(c0)) ctx.input.controls.lock();
+      }
+      void preloadIntro(ctx)
+        .catch((e) => {
+          // A preload failure must NEVER brick the New Game — the beats all keep their
+          //   build-on-entry fallbacks, so we just cold-start (the old pre-preload behavior).
+          console.error('[introPreload] failed — cold-starting the intro:', e);
+        })
+        .then(async () => {
+          // If the lock didn't take (or the player Esc'd during loading), a post-preload
+          //   lock() would be refused (stale gesture) → recover via a FRESH gesture: the
+          //   loading screen flips to "READY — CLICK TO LAUNCH" and we lock inside that click.
+          const c = three.renderer.domElement;
+          if (!document.pointerLockElement && !pointerLockSuppressed(c)) {
+            await introLoadingAwaitLaunchClick();
+            ctx.input.controls.lock();
+          }
+          hideIntroLoading();
+          startEscapePodIntro(ctx);            // start the cockpit beat — everything is warm now
+          setGameHudHidden(true);              // re-hide (handoffToGame un-hid; the intro owns a clean view)
+        });
       return;
     }
     handoffToGame();

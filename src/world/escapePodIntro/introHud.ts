@@ -237,3 +237,28 @@ export function hideIntroLoading(): void {
 export function introLoadingVisible(): boolean {
   return loadingRefs != null && loadingRefs.root.style.display !== 'none' && loadingRefs.root.style.opacity !== '0';
 }
+
+/** BUGFIX (the "loading screen finishes, nothing happens" freeze): flip the loading screen
+ *  into a "READY — CLICK TO LAUNCH" state and resolve on the player's click. Needed because
+ *  the New-Game click's user-gesture EXPIRES during the multi-second preload, so a
+ *  post-preload `controls.lock()` is silently refused by the browser → `flags.paused` stays
+ *  true → the intro starts but every tick is frozen (the documented pointer-lock freeze
+ *  mode). The promise resolves INSIDE a fresh click gesture, so the caller's lock() succeeds.
+ *  (Re-shows the overlay if the preload already faded it.) */
+export function introLoadingAwaitLaunchClick(): Promise<void> {
+  const r = ensureLoading();
+  r.root.style.display = 'flex';
+  r.root.style.opacity = '1';
+  r.bar.style.width = '100%';
+  r.pct.textContent = '100%';
+  r.step.textContent = 'READY — CLICK TO LAUNCH';
+  r.root.style.cursor = 'pointer';
+  return new Promise((resolve) => {
+    const go = (): void => {
+      r.root.style.cursor = '';
+      r.root.removeEventListener('click', go);
+      resolve();
+    };
+    r.root.addEventListener('click', go);
+  });
+}

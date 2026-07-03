@@ -54,27 +54,41 @@ interface PreloadStep {
   run: (ctx: GameContext) => void | Promise<void>;
 }
 
-/** Yield one animation frame so the loading bar paints + the tab stays responsive. */
+/** Per-step timeout + the whole-preload budget (the anti-hang hardening): generous enough
+ *  for a slow first boot on weak hardware, tight enough that a wedged await can't hold the
+ *  New Game hostage — everything skipped is covered by the beats' build-on-entry fallbacks. */
+const STEP_TIMEOUT_MS = 20_000;
+const PRELOAD_BUDGET_MS = 75_000;
+
+/** Yield one animation frame so the loading bar paints + the tab stays responsive.
+ *  BUGFIX (the "stuck at 0%" hang, mode 2): rAF NEVER FIRES in a hidden/backgrounded tab
+ *  (Chromium stops scheduling frames), so a bare rAF await here hung the whole preload the
+ *  moment the tab wasn't foreground (minimize/tab-switch during loading = a frozen New Game).
+ *  Race the rAF against a short timer: foreground tabs still sync to the real frame (the bar
+ *  paints); hidden tabs fall through on the timer and the preload keeps working. */
 function nextFrame(): Promise<void> {
   return new Promise((resolve) => {
-    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => resolve());
-    else setTimeout(resolve, 0);   // headless (node/rig) — no rAF; fall through fast
+    if (typeof requestAnimationFrame === 'function') {
+      let done = false;
+      const settle = (): void => { if (!done) { done = true; resolve(); } };
+      requestAnimationFrame(settle);
+      setTimeout(settle, 120);
+    } else {
+      setTimeout(resolve, 0);   // headless (node/rig) — no rAF; fall through fast
+    }
   });
 }
 
-/** Compile every program the given scene needs against the intro camera. compileAsync uses
- *  the browser's parallel off-thread compile path (same as main.ts's boot pre-warm) and
- *  resolves when done; in headless/node it may be a plain compile — either way we await it. */
+/** Compile every program the given scene needs against the intro camera.
+ *  BUGFIX (the user's "stuck at 0%, game never starts" hang): this used compileAsync, whose
+ *  KHR_parallel_shader_compile completion-polling can NEVER RESOLVE on some drivers/contexts —
+ *  the first step then awaits forever and the whole New Game silently hangs behind the loading
+ *  bar. SYNCHRONOUS renderer.compile() is the deterministic choice here: it may block for a
+ *  moment (fine — we're literally behind a loading screen, and we yield a frame between steps
+ *  so the bar still paints), but it CANNOT hang. */
 async function compileScene(ctx: GameContext): Promise<void> {
   const { renderer, scene, camera } = ctx.three;
-  const compileAsync = (renderer as unknown as {
-    compileAsync?: (s: THREE.Scene, c: THREE.Camera) => Promise<unknown>;
-  }).compileAsync;
-  if (typeof compileAsync === 'function') {
-    await compileAsync.call(renderer, scene, camera);
-  } else {
-    renderer.compile(scene, camera);
-  }
+  renderer.compile(scene, camera);
 }
 
 /** A brief HIDDEN warm-up DRAW. Some drivers only fully warm a program on a real draw (not
@@ -295,7 +309,17 @@ export async function preloadIntro(ctx: GameContext): Promise<{ ok: boolean; tot
       const s0 = performance.now();
       let error: string | undefined;
       try {
-        await step.run(ctx);
+        // BUGFIX hardening: race every step against a per-step TIMEOUT so no awaited work
+        //   (driver quirk, a pending promise that never settles) can hang the New Game — on
+        //   timeout we log + move on; the beat's build-on-entry fallback covers the skipped
+        //   warm-up. (A pegged-main-thread sync block can't be raced, but the sync work here
+        //   is bounded — the race guards the ASYNC awaits.)
+        await Promise.race([
+          Promise.resolve(step.run(ctx)),
+          new Promise<never>((_, reject) => {
+            window.setTimeout(() => reject(new Error(`step timed out after ${STEP_TIMEOUT_MS}ms`)), STEP_TIMEOUT_MS);
+          }),
+        ]);
       } catch (e) {
         // NEVER soft-lock: log + continue. The beat's own build-on-entry is the fallback.
         error = e instanceof Error ? e.message : String(e);
@@ -304,6 +328,12 @@ export async function preloadIntro(ctx: GameContext): Promise<{ ok: boolean; tot
       timings.push({ label: step.label, ms: performance.now() - s0, error });
       setIntroLoadingProgress((i + 1) / steps.length, step.label);
       await nextFrame();   // yield so the bar animates + the tab never hard-freezes
+      // The global WATCHDOG: if the whole preload has somehow chewed through its budget,
+      //   stop warming and let the intro start — a slower first beat beats a hung game.
+      if (performance.now() - t0 > PRELOAD_BUDGET_MS) {
+        console.warn(`[introPreload] budget exceeded (${Math.round(performance.now() - t0)}ms) — starting the intro with ${steps.length - 1 - i} step(s) unwarmed`);
+        break;
+      }
     }
   } finally {
     // ALWAYS restore the global state the warm-up poked, hide the screen, clear the guard —
