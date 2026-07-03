@@ -57,6 +57,25 @@ interface MusicState {
 
 let _state: MusicState | null = null;
 
+// Escape-pod intro (C2, 2026-07-02) — the intro/ship/space beats have their OWN audio
+// (cockpit hum, klaxon, its music cues), so the normal game MUSIC must go SILENT while
+// the intro owns the scene (gameplay music over the ship-in-orbit read is wrong). We
+// duck the master `bus` to 0 while suppressed and restore it when the intro hands off —
+// a smooth ramp (no pop) via the bus gain, orthogonal to the per-track crossfade. The
+// tracks keep synthesizing (cheap oscillators) behind a silent bus; nothing is torn
+// down, so there's no muted-forever state — clearing suppression ramps the bus back up.
+let _musicSuppressed = false;
+
+/** Suppress (duck to silent) or restore the game music bus — called by the escape-pod
+ *  intro so the ship/space beats play only the intro's own audio. Idempotent; ramps the
+ *  master bus so there's no pop. Safe before startMusic (the flag is honored at start). */
+export function setMusicSuppressed(suppressed: boolean): void {
+  _musicSuppressed = suppressed;
+  if (!_state) return;
+  const target = suppressed ? 0 : MUSIC_BUS_TARGET;
+  rampParam(_state.bus.gain, target, _state.ctx, 0.6);
+}
+
 function clamp01(x: number): number { return x < 0 ? 0 : x > 1 ? 1 : x; }
 function smoothstep(e0: number, e1: number, x: number): number {
   const t = clamp01((x - e0) / (e1 - e0));
@@ -240,7 +259,10 @@ export function startMusic(): void {
   bus.connect(a.ambient);
   const now = a.ctx.currentTime;
   bus.gain.setValueAtTime(0, now);
-  bus.gain.linearRampToValueAtTime(MUSIC_BUS_TARGET, now + 5.0);
+  // C2 — if the escape-pod intro is already suppressing (music started while the intro
+  //   owns the scene), stay silent; else the normal fade-in. setMusicSuppressed(false)
+  //   at the desert handoff ramps it up.
+  if (!_musicSuppressed) bus.gain.linearRampToValueAtTime(MUSIC_BUS_TARGET, now + 5.0);
 
   _state = {
     ctx: a.ctx,
@@ -256,6 +278,11 @@ export function startMusic(): void {
 export function updateMusic(ctx: GameContext, dt: number): void {
   if (!_state) return;
   const s = _state;
+  // C2 — while the escape-pod intro owns the scene, the bus is ducked to 0 (setMusicSuppressed).
+  //   Skip the per-track crossfade + motif scheduling so we don't spin oscillators/fire motifs
+  //   under a silent bus, and so nothing fights the duck. The bus ramp is owned by
+  //   setMusicSuppressed; restored at the desert handoff. (No teardown → no muted-forever state.)
+  if (_musicSuppressed) return;
   s.driftPhase += dt;
 
   // Signals (mirror soundscape.ts conventions). Storm reads perceived

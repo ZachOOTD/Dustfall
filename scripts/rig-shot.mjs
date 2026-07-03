@@ -1750,7 +1750,11 @@ const SCENARIOS = {
         if (fog && 'density' in fog) fog.density = 0.00006 + 0.00006 * descent;
         // Mirror tickDescent's SKY blend: space (1) high → dawn desert (0) as the pod drops. Without
         // this the rig's descent shows the normal daytime sky (a tan fog wall), not the orbit vista.
-        try { g.setSkyIntroMode(1 - Math.min(1, Math.max(0, (descent - 0.05) / 0.4))); } catch {}
+        // C3 — the formula MATCHES tickDescent (start the blend at 0.14, /0.34) + drive the planet
+        //   APPROACH (grow 0→1 over descent 0→0.22) so the rig shows the planet swelling to fill the
+        //   porthole across d0→d0.2 (the coordinator's check). Both keep the rig faithful to sky.ts.
+        try { g.setSkyIntroMode(1 - Math.min(1, Math.max(0, (descent - 0.14) / 0.34))); } catch {}
+        try { g.setPlanetApproach(Math.min(1, descent / 0.22)); } catch {}
       }
       const cam = ctx.three.camera;
       const V = cam.position.constructor;
@@ -1817,7 +1821,10 @@ const SCENARIOS = {
       const s = (ctx.three.scene);
       if (descent === null) return;
       // The space blend for this altitude (mirrors tickDescent): full space high → dawn desert low.
-      const space01 = 1 - Math.min(1, Math.max(0, (descent - 0.05) / 0.4));
+      // C3 — MATCH tickDescent's (descent−0.14)/0.34 curve so the rig's blend is faithful.
+      const space01 = 1 - Math.min(1, Math.max(0, (descent - 0.14) / 0.34));
+      // C3 — the planet-approach factor at this altitude (grows 0→1 over descent 0→0.22).
+      const approach = Math.min(1, descent / 0.22);
       if (space01 <= 0.01) return;   // low in the fall the sky has crossed to the dawn desert — leave it
       let dome = null, stars = null, planetGroup = null;
       s.traverse((o) => {
@@ -1847,7 +1854,14 @@ const SCENARIOS = {
       const dir = new V(0.30, 0.10, -1).normalize();
       const DIST = 400;
       if (planetGroup) {
-        planetGroup.position.set(cam.position.x + dir.x*DIST, cam.position.y + dir.y*DIST, cam.position.z + dir.z*DIST);
+        // C3 — mirror applySpaceMode's APPROACH: scale the group up + slide it DOWN as the planet
+        //   approaches (ease-in), so the paused rig shows the SAME swelling planet the live descent
+        //   produces (the planet fills the porthole across d0→d0.2). Match sky.ts constants.
+        const ae = approach * approach;
+        const scale = 1 + (3.6 - 1) * ae;      // _PLANET_APPROACH_MAX_SCALE = 3.6
+        const drop = 150 * ae;                  // _PLANET_APPROACH_DROP = 150
+        planetGroup.scale.setScalar(scale);
+        planetGroup.position.set(cam.position.x + dir.x*DIST, cam.position.y + dir.y*DIST - drop, cam.position.z + dir.z*DIST);
         planetGroup.updateMatrixWorld(true);
         planetGroup.traverse((o) => { if (o.material && o.material.uniforms && o.material.uniforms.uOpacity) o.material.uniforms.uOpacity.value = space01; });
       }
@@ -1883,6 +1897,9 @@ const SCENARIOS = {
   //   nose      a closer 3/4 on the cockpit/bridge
   'hauler': async (page) => {
     const angle = argv.angle || 'porthole';
+    // C1 — --depart=<0..1> drives the post-eject DEPARTURE recession (0 = the framed hero pose,
+    //   1 = the ship receded/drifted away as the pod pulls clear). For the eject-departure shots.
+    const depart = argv.depart !== undefined ? Number(argv.depart) : null;
     await page.evaluate(() => {
       const g = window.__game;
       const ctx = g.ctx;
@@ -1905,11 +1922,13 @@ const SCENARIOS = {
     });
     // Let the beat controller tick so the pod builds + the player is seated.
     await page.waitForTimeout(600);
-    const meas = await page.evaluate(({ angle }) => {
+    const meas = await page.evaluate(({ angle, depart }) => {
       const g = window.__game;
       const ctx = g.ctx;
       ctx.flags.paused = true;
       try { g.setDescentProgress(0); } catch {}
+      // C1 — pose the eject-departure recession (the ship receding in the porthole).
+      if (depart !== null) { try { g.setHaulerDeparture(depart); } catch {} }
       // Hide the descent VISTA (orbital planet + atmosphere + its own starfield + the
       // depth-occluder) so the porthole shows the HAULER against ITS star backdrop. The
       // vista meshes use ShaderMaterials or the starOccluder flag; the cabin structure
@@ -1973,10 +1992,11 @@ const SCENARIOS = {
         ' haulerPos=' + (hc ? [hc.x, hc.y, hc.z].map((v) => +v.toFixed(1)).join(',') : 'null') +
         ' cabin=' + !!cabin + ' lowAlt=' + JSON.stringify(lowAltVis));
       return { found: !!hauler, meshes, angle };
-    }, { angle });
+    }, { angle, depart });
     await page.waitForTimeout(300);
-    await page.screenshot({ path: join(OUT, `scen-hauler-${angle}.png`), fullPage: false });
-    console.log(`[hauler] ${JSON.stringify(meas)} → scen-hauler-${angle}.png`);
+    const deptag = depart !== null ? `-depart${String(depart).replace('.', '')}` : '';
+    await page.screenshot({ path: join(OUT, `scen-hauler-${angle}${deptag}.png`), fullPage: false });
+    console.log(`[hauler] ${JSON.stringify(meas)} → scen-hauler-${angle}${deptag}.png`);
   },
 
   // Ship-explode (T3.2): THE CLIMACTIC SPECTACLE — the player watches their hauler DIE

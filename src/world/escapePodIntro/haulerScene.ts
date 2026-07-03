@@ -1047,6 +1047,33 @@ export function setHaulerExplosion(t: number): void {
   }
 }
 
+// ── C1 — THE EJECT DEPARTURE (user, 2026-07-02): "when it ejects, it physically ejects and
+//    you can see outside and see the planet AND THE SHIP for a few seconds right after you
+//    eject... you see the exterior of the ship." Right after the physical eject the pod pulls
+//    AWAY from the intact hauler — in-world, continuous. We DRIFT the hauler root further down
+//    −Z (receding, shrinking in the porthole against the fixed starfield) with a slight lateral
+//    + downward slide, so it reads as the pod departing the ship. `setHaulerDeparture(t)` moves
+//    the ship from its framed hero pose (t=0) out to the receded pose (t=1); the shipExplode
+//    beat eases t 0→1 over the departure window, then RESETS to 0 under the slight fade so the
+//    explosion stages at the close hero distance (the "different scene" the user allows).
+const HAULER_DEPART_BACK = 34;   // extra metres −Z the ship drifts away over the departure (recedes to ~2.4× distance)
+const HAULER_DEPART_DOWN = 2.2;  // a slight downward slide (the pod pulls up/away)
+const HAULER_DEPART_SIDE = 3.0;  // a slight lateral drift (parallax as the pod separates)
+
+/** C1 — drive the post-eject DEPARTURE recession. `t` in [0,1]: 0 = the framed hero pose
+ *  (as built), 1 = the receded pose (drifted away down −Z + a slight down/side slide). Eased
+ *  so the pull-away decelerates (a heavy pod coasting clear). Safe no-op if not built. */
+export function setHaulerDeparture(t: number): void {
+  if (!haulerGroup) return;
+  const k = Math.max(0, Math.min(1, t));
+  const e = 1 - (1 - k) * (1 - k);   // ease-out (fast pull-away, then coasting)
+  haulerGroup.position.set(
+    HAULER_POS.x + HAULER_DEPART_SIDE * e,
+    HAULER_POS.y - HAULER_DEPART_DOWN * e,
+    HAULER_POS.z - HAULER_DEPART_BACK * e,
+  );
+}
+
 /** Build + place the HERO cargo hauler in front of the pod (−Z), against a star
  *  backdrop, framed through the porthole. Idempotent (no-op if already built). */
 export function buildHaulerExterior(ctx: GameContext): void {

@@ -44,12 +44,12 @@ import {
   setBayPodDoorOpen, getPodBayDoorWorld, getPodBayInteriorStand,   // B2 — the player-gated boarding flow (E-open door + walk-in gate + E-sit)
 } from './shipScene.ts';
 import { buildPodScene, disposePodScene, getPodSpawn, setDescentProgress, setDescentBase, setTumbleLight, setParachuteLeverPull, setCabinCrashPose, blowCabinHatch, restoreCabinExposure, unifyEnterablePod, podIsEnterable } from './podScene.ts';
-import { buildHaulerExterior, disposeHaulerExterior, setHaulerExplosion } from './haulerScene.ts';   // Phase 3 (T3.1/T3.2) — the hero freighter + its death staged through the post-eject porthole
+import { buildHaulerExterior, disposeHaulerExterior, setHaulerExplosion, setHaulerDeparture } from './haulerScene.ts';   // Phase 3 (T3.1/T3.2) — the hero freighter + its death staged through the post-eject porthole; C1 — the post-eject departure recession
 import { startPodTutorial } from './podTutorial.ts';   // T4.3 — the first craft→salvage→chute-pop tutorial (runs as gameplay post-handoff)
 import { setGameHudHidden, showIntroPrompt, hideIntroPrompt, setIntroBlack } from './introHud.ts';
 import { flashScreen } from '../../fx/screenFlash.ts';
 import { addTrauma } from '../../fx/cameraShake.ts';
-import { setSkyIntroMode } from '../sky.ts';   // REBUILD v2 R1a — drive the real sky into "space mode" for orbit, ease to dawn at re-entry
+import { setSkyIntroMode, setPlanetApproach } from '../sky.ts';   // REBUILD v2 R1a — drive the real sky into "space mode" for orbit, ease to dawn at re-entry; C3 — grow the planet toward the porthole across the early descent (the approach arc)
 import {
   ensureAudioStarted, playEjectThunk, playExplosionBoom, playKlaxon, playHullGroan,
   playReentryRumble, playLeverClick, playLeverSnap, playDoorBlow, playCrashImpact,
@@ -58,6 +58,8 @@ import {
   startEngineFire, stopEngineFire, startDesertWind,
   playBoltShear, playHatchSeal, playShipDeathRoar, playAweSwell,
 } from '../../audio/audio.ts';   // T5.1 SFX + ambient loops · T5.2 music cues · T5.3 gap-fill (fire/wind beds + bolt/seal/death-roar/awe one-shots)
+import { setSoundscapeSuppressed } from '../../audio/soundscape.ts';   // C2 — silence the normal desert wind while the intro owns the scene (its own ambience plays)
+import { setMusicSuppressed } from '../../audio/music.ts';             // C2 — silence the normal game music while the intro owns the scene (its own music cues play)
 
 /** Seconds the cockpit opens SEATED (looking at the planet) before control + the cue. */
 const COCKPIT_DWELL = 3.0;
@@ -75,6 +77,14 @@ const COCKPIT_DWELL = 3.0;
 const SHIP_INTACT_DWELL = 0.9;    // the intact hauler hangs in the window (the "that's my ship" beat)
 const SHIP_EXPLODE_DUR = 2.3;     // the explosion unfolds (flash→fireball→breakup→shockwave→husk)
 const SHIP_HUSK_DWELL = 0.5;      // a breath on the receding husk before the descent
+/** C1 (user, 2026-07-02) — THE EJECT MOMENT. Right after the physical eject, before the ship
+ *  dies, the pod pulls AWAY and the player sees the REAL intact hauler + planet through the
+ *  porthole for a FEW SECONDS, in-world + continuous (the pod visibly departing the ship).
+ *  SHIP_DEPART_DUR = the seconds of that recession (the ship drifting/shrinking in the window);
+ *  SHIP_DEPART_FADE = the "slight fade" (a quick dip-to-black) that then bridges into the
+ *  explosion staging (which continues unchanged — the intact-watch hold + the detonation). */
+const SHIP_DEPART_DUR = 3.2;      // "a few seconds" of the pod pulling away from the intact ship (user)
+const SHIP_DEPART_FADE = 0.55;    // the "slight fade" bridging the departure → the explosion staging
 /** Seconds of the SLOW, seamless atmospheric fall (C18 user walk-test: descend slowly + serenely —
  *  watch the planet get closer, space fade to sky, the ground slowly approach). Was 8.0.
  *  REBUILD v2 R4 — this is the FULL-FALL clock (progress 0→1 over this many seconds AT a fixed
@@ -378,6 +388,15 @@ export function startEscapePodIntro(ctx: GameContext, force = false): void {
   // view. handoffToGame re-asserts this after it un-hides the in-game HUD; endEscapePodIntro
   // restores it.
   setGameHudHidden(true);
+  // C2 (user, 2026-07-02) — "remove the wind and music audio when we're on the ship — the
+  //   intro should have its own audio." Silence the normal DESERT soundscape (procedural
+  //   wind) + the game MUSIC up front, for ANY entry path (like the HUD hide). The intro's
+  //   own audio (cockpit hum / klaxon / startMusicEscape/Descent/Desert) is unaffected — it
+  //   feeds the same ambient bus but through its own loops/one-shots, not these two systems.
+  //   endEscapePodIntro restores both at the desert handoff (the intro's own desert-wind cue
+  //   hands off to the game's live soundscape there — no double-wind).
+  setSoundscapeSuppressed(true);
+  setMusicSuppressed(true);
 }
 
 /** Jump straight to a beat (the per-beat controllers call this to advance; the dev
@@ -433,6 +452,13 @@ export function endEscapePodIntro(ctx: GameContext): void {
     _introFogEase = INTRO_FOG_EASE_S;
   } else disposePodScene(ctx);
   stopAllIntroLoops();       // T5.1b — stop any ambient loop (cockpit hum / descent rush) on any exit
+  // C2 — RESTORE the normal game soundscape + music (they were suppressed at startEscapePodIntro).
+  //   This is the single exit path EVERY path reaches (stepOut handoff, skipIntro, quit, a dev
+  //   jump to 'done'), so the desert wind + game music can never leak-stay-muted. The intro's own
+  //   desert-wind cue (startDesertWind) was just stopped by stopAllIntroLoops above, so the live
+  //   game wind bed rolls in cleanly in its place (no double-wind). Smooth ramps → no pop.
+  setSoundscapeSuppressed(false);
+  setMusicSuppressed(false);
   setSkyIntroMode(0);                  // R1a — restore the normal game sky on any exit
   setIntroAtmosphereHidden(ctx, false); // R1a — restore the desert atmosphere on any exit
 }
@@ -658,10 +684,18 @@ function tickEnterPod(ctx: GameContext, dt: number): void {
  *  blast light — settling into the slow serene descent. C18 (user walk-test): NO POD TUMBLE — the
  *  pod stays UPRIGHT + LEVEL facing the window; the SHIP tumbles/breaks, the pod holds + watches.
  *
- *  Phases: release (bolts fire, pod tears from the cradle) → watch (the hauler hangs intact in the
- *  window) → blast (the detonation → the fireball/breakup unfolds over EXPLODE_DUR) → husk (a breath
- *  on the receding husk) → the descent. The hauler + its FX DISPOSE at the hand-off (they never leak
- *  into the fall). */
+ *  Phases: release (bolts fire, pod tears from the cradle) → depart (C1 — the pod PULLS AWAY; the
+ *  player sees the REAL intact hauler + planet through the porthole for a few seconds, in-world +
+ *  continuous — the ship receding/shrinking as the pod separates) → [a slight fade] → watch (the
+ *  hauler hangs intact, re-framed close at the hero distance) → blast (the detonation → the
+ *  fireball/breakup unfolds over EXPLODE_DUR) → husk (a breath on the receding husk) → the descent.
+ *  The hauler + its FX DISPOSE at the hand-off (they never leak into the fall).
+ *
+ *  C1 (user, 2026-07-02): "when it ejects, it physically ejects and you can see outside and see the
+ *  planet AND THE SHIP for a few seconds right after you eject. This isn't a separate scene — it's
+ *  the same, physically in the world; you see the exterior of the ship. Then a slight fade to when
+ *  you see the ship explode, which can be a different scene." → the `depart` phase is that in-world
+ *  pull-away; `SHIP_DEPART_FADE` is the slight fade; `watch`+`blast` are the (unchanged) explosion. */
 const EJECT_RELEASE_DUR = 0.7;   // R5c — seconds of the physical detach (bolts fire + the pod tears from the bay cradle) before the blast
 function tickShipExplode(ctx: GameContext, dt: number): void {
   const intro = ctx.intro;
@@ -701,11 +735,40 @@ function tickShipExplode(ctx: GameContext, dt: number): void {
       setDescentProgress(0);         // the orbital vista (planet + stars) through the window
       buildHaulerExterior(ctx);      // T3.1 — the worn freighter floats out in space ahead (−Z), about to die
       setHaulerExplosion(0);         // intact (ember idle) — the "that's my ship" beat
+      setHaulerDeparture(0);         // C1 — start at the framed hero pose; the depart phase eases it out (recedes)
       showIntroPrompt('');
       addTrauma(0.2);                // a small kick as the pod is flung clear (one-shot, decays)
       intro.scratch.built = true;
-      intro.scratch.phase = 'watch';
+      intro.scratch.phase = 'depart';   // C1 — the pod pulls AWAY first (in-world), THEN the fade → the explosion
       intro.scratch.dwell = 0;
+    }
+    return;
+  }
+
+  // ── C1 — PHASE depart — the pod PULLS AWAY from the intact hauler, in-world + continuous. The
+  //    real exterior ship + the planet hang in the porthole and RECEDE (drift/shrink) over
+  //    SHIP_DEPART_DUR seconds as the pod separates — the "you see the exterior of the ship for a
+  //    few seconds right after you eject" beat. A slight fade (SHIP_DEPART_FADE) at the very end
+  //    bridges into the explosion staging (watch/blast), which re-frames the ship close (the
+  //    "different scene" the user allows) + plays unchanged. Purely time-driven; the pod stays
+  //    LEVEL facing the window (no tumble — C18), the cabin lit to the orbital cool.
+  if (phase === 'depart') {
+    setHaulerDeparture(Math.min(1, d / SHIP_DEPART_DUR));   // ease the ship out (recedes in the porthole)
+    setTumbleLight(0.5 * Math.max(0, 1 - d / 0.9));         // the last of the bay glow decays to orbital cool
+    // The slight fade begins in the final SHIP_DEPART_FADE seconds of the departure — a quick dip
+    //   toward black under which we hand off to the (re-framed) explosion staging.
+    const fadeStart = SHIP_DEPART_DUR;
+    if (d >= fadeStart) {
+      const fk = Math.min(1, (d - fadeStart) / SHIP_DEPART_FADE);
+      setIntroBlack(fk);                                     // dip to black over the slight fade
+      if (d >= fadeStart + SHIP_DEPART_FADE) {
+        // Under full black: re-frame the intact ship close (reset the departure), then clear the
+        //   black + enter the watch/blast explosion staging (unchanged) — the "different scene".
+        setHaulerDeparture(0);
+        setIntroBlack(0);
+        intro.scratch.phase = 'watch';
+        intro.scratch.dwell = 0;
+      }
     }
     return;
   }
@@ -820,9 +883,19 @@ function tickDescent(ctx: GameContext, dt: number): void {
   // fixed side-porthole's down-look limit. Scripted (overwrites free-look) only on the descent.
   const pitch = -0.12 - 0.28 * (progress * progress);   // ≈7° high → ≈23° low (eased late)
   faceControl(ctx, 0, pitch);
+  // C3 — THE PLANET-APPROACH ARC. Across the early (space) leg the planet GROWS to fill the
+  //   porthole — "we are falling INTO that". It ramps 0→1 over progress 0→0.22, so it's filling
+  //   the view + its atmosphere limb dominating just as the re-entry plasma flash fires (p≈0.24);
+  //   from there setSkyIntroMode blends the whole space planet out as the blue sky takes over, so
+  //   the read is one continuous arc: distant disc → planet fills view → atmosphere limb → plasma
+  //   burn → sky-blend → the ground approach (not "planet fades away, next phase"). Descent-only.
+  setPlanetApproach(Math.min(1, progress / 0.22));
   // R1a — RE-ENTRY: blend the real sky from space (1) → the dawn desert sky (0) as the pod drops
   // into the atmosphere (the orbit dissolves into the real sky; the pod physically falls through it).
-  setSkyIntroMode(1 - Math.min(1, Math.max(0, (progress - 0.05) / 0.4)));
+  // C3 — HOLD full space a touch longer (start the blend at 0.14, not 0.05) so the grown planet +
+  //   its atmosphere limb READ as the pod falls toward them BEFORE the sky dissolves them into blue
+  //   — the approach + limb get their moment; the plasma (p≈0.24) then carries the entry.
+  setSkyIntroMode(1 - Math.min(1, Math.max(0, (progress - 0.14) / 0.34)));
   // R1b — THIN the fog hard during the fall. The game's FogExp2 (tuned for ~1 km ground-level
   // survival visibility) blends the terrain into the sky from a few hundred metres up — so from
   // altitude the real ground would just read as haze. updateWeather already ran THIS frame, so
@@ -899,8 +972,11 @@ function tickParachute(ctx: GameContext, dt: number): void {
   // dunes fill the porthole + rush up — the gag is clearly airborne with the ground coming up.
   const pitch = -0.12 - 0.28 * (progress * progress);
   faceControl(ctx, 0, pitch);
-  // Keep the sky + fog blending so the late descent reads identically through the porthole.
-  setSkyIntroMode(1 - Math.min(1, Math.max(0, (progress - 0.05) / 0.4)));   // ≈0 by now (we handed off at 0.55), but kept exact for seamlessness
+  // Keep the sky + fog blending so the late descent reads identically through the porthole. C3 —
+  //   use the SAME (progress−0.14)/0.34 curve as tickDescent so the space→sky blend is seamless
+  //   across the hand-off (both are ≈0 by progress 0.55, but kept exact). The planet approach is
+  //   already reset (space mode is off by now); no setPlanetApproach needed here.
+  setSkyIntroMode(1 - Math.min(1, Math.max(0, (progress - 0.14) / 0.34)));
   {
     const fog = ctx.three.scene.fog as { density?: number } | null;
     if (fog && 'density' in fog) fog.density = 0.00006 + 0.00006 * progress;

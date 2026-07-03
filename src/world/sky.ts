@@ -92,6 +92,25 @@ const _spaceAnchorCam = new THREE.Vector3();// camera position at capture time (
 const _SPACE_ANCHOR_RECAPTURE_DIST = 60;    // m — camera jump beyond this re-captures the anchor (corridor walk ≪ this; the descent teleport ≫ this)
 const _SPACE_PLANET_MAX_CAM_DIST = 460;     // clamp: keep the anchored planet strictly inside the camera-centred dome (SKY_SPHERE_RADIUS 480)
 const _tmpAnchorDelta = new THREE.Vector3();
+// ── C3 — THE PLANET-APPROACH ARC (user, 2026-07-02): early in the descent the planet must
+//    read as APPROACHING — growing to fill the porthole ("we are falling INTO that"), its
+//    atmosphere limb dominating → handing off into the re-entry plasma — instead of the old
+//    "distant disc that just fades away". `setPlanetApproach(t)` (0 = the orbit-framed ~19°
+//    disc, 1 = filling the view) SCALES the space-planet group about its anchor + slides it
+//    DOWN so the growing limb sweeps up from below (the pod dropping toward the surface). It's
+//    DESCENT-ONLY: the ship/cockpit beats leave it at 0 (setPlanetApproach(0)) so the parallax
+//    fix (the planet must NOT balloon while WALKING the ship) is untouched. Reset on space-exit.
+let _planetApproach = 0;                    // 0 = orbit-distant, 1 = filling the porthole (the atmosphere entry)
+const _PLANET_APPROACH_MAX_SCALE = 3.6;     // the group scale at full approach (~19° disc → the limb fills + overflows the porthole)
+const _PLANET_APPROACH_DROP = 150;          // world-units the (scaled) planet slides DOWN at full approach → its limb sweeps up from below as the pod falls toward it
+
+/** C3 — drive the descent planet-approach. `t` in [0,1]: 0 = the orbit-framed distant disc
+ *  (as built), 1 = the planet grown to fill the porthole with its atmosphere limb dominating
+ *  (the entry). Applied in applySpaceMode by scaling the space-planet group + sliding it down.
+ *  DESCENT-ONLY — the ship beats hold it at 0 so the parallax anchor read is unchanged. */
+export function setPlanetApproach(t: number): void {
+  _planetApproach = Math.max(0, Math.min(1, t));
+}
 // REBUILD v2 R2 — the galactic-plane normal for the milky-way band. MUST match the
 // (gnx,gny,gnz) used in buildStarGeometry so the dome haze + the band stars align.
 const _GAL_NORMAL = new THREE.Vector3(0.62, 0.60, 0.18).normalize();
@@ -1124,6 +1143,9 @@ function applySpaceMode(cam: THREE.Vector3, ctx: GameContext): void {
     bundle.starsMat.uniforms.uSpace.value = 0;   // R2 — kill the milky-way band lift
     bundle.sphereMat.uniforms.uSpace.value = 0;  // R2 — kill the dome milky-way haze
     _spaceAnchorSet = false;                      // PARALLAX FIX — drop the world anchor; next engage re-captures (no leak into the real game sky)
+    // C3 — reset the descent approach + the planet-group scale so no growth leaks past the intro.
+    _planetApproach = 0;
+    if (_spacePlanet) _spacePlanet.group.scale.setScalar(1);
     return;
   }
 
@@ -1174,6 +1196,19 @@ function applySpaceMode(cam: THREE.Vector3, ctx: GameContext): void {
     if (camDist > _SPACE_PLANET_MAX_CAM_DIST) {
       _spacePlanetPos.copy(cam).addScaledVector(
         _tmpAnchorDelta.multiplyScalar(1 / camDist), _SPACE_PLANET_MAX_CAM_DIST);
+    }
+    // C3 — THE APPROACH: as the descent begins, GROW the planet toward filling the porthole +
+    //   slide it DOWN so its atmosphere limb sweeps up from below (the pod falling toward the
+    //   surface). Eased (accelerating) so it reads as an accelerating fall into the world. At
+    //   approach 0 the scale is 1 + drop 0 → the exact orbit anchor read (parallax fix intact).
+    const ap = _planetApproach;
+    if (ap > 0.0001) {
+      const ae = ap * ap;   // ease-in — the approach accelerates (a fall toward the planet)
+      const scale = 1 + (_PLANET_APPROACH_MAX_SCALE - 1) * ae;
+      _spacePlanet.group.scale.setScalar(scale);
+      _spacePlanetPos.y -= _PLANET_APPROACH_DROP * ae;   // the growing limb sweeps up from below
+    } else {
+      _spacePlanet.group.scale.setScalar(1);
     }
     _spacePlanet.group.position.copy(_spacePlanetPos);
     _spacePlanet.planetMat.uniforms.uOpacity.value = s;
