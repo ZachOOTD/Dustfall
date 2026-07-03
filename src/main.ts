@@ -55,7 +55,7 @@ import { updateInteraction } from './player/interaction.ts';
 import { updatePlayer } from './player/controller.ts';
 import { updateEscapePodIntro, updateIntroFogEase, startEscapePodIntro, introActive } from './world/escapePodIntro/sequence.ts';   // escape-pod intro (FEATURES.escapePodIntro) — T0.1 wires the new-game branch
 import { updatePodTutorial, resumePodTutorialAfterRestore } from './world/escapePodIntro/podTutorial.ts';   // T4.3 — the post-handoff craft→salvage→chute-pop tutorial (self-guarded no-op unless running); resumePodTutorialAfterRestore — re-arm the payoff after a Continue re-built the pod
-import { updateChutePop, applyPendingPodCrashRestore } from './world/escapePodIntro/podScene.ts';   // T4.3 — the chute-pop inflate one-shot (no-op unless the chute is popping; driven always so dev/rig-shot also animates); applyPendingPodCrashRestore — re-build the ONE walk-in pod on Continue
+import { updateChutePop, updatePodExposureEase, applyPendingPodCrashRestore } from './world/escapePodIntro/podScene.ts';   // T4.3 — the chute-pop inflate one-shot (no-op unless the chute is popping; driven always so dev/rig-shot also animates); CLUSTER D — updatePodExposureEase eases the step-out exposure like eye-adaptation (no snap); applyPendingPodCrashRestore — re-build the ONE walk-in pod on Continue
 import { setGameHudHidden } from './world/escapePodIntro/introHud.ts';   // escape-pod intro — re-assert HUD-hide after handoff
 import { FEATURES } from './config/features.ts';
 import { createShelterRegistry, updateShelter } from './shelter/shelterZones.ts';
@@ -970,7 +970,8 @@ startLoop(ctx, (c, dt) => {
   updateSledRiders(c);           // ACC P2 — drive any pickup riding a sled + promote settled pickups (must run AFTER updateSleds so sled.group transforms reflect this-frame's tow correction)
   updateInteraction(c, dt);      // raycast hover + E to open/refill/harvest/cook/sleep/etc (UU — pickup-take moved to LMB)
   updatePodTutorial(c, dt);      // T4.3 — the escape-pod first-salvage tutorial + chute-pop (no-op unless running; after interaction so the pry is seen this frame)
-  updateChutePop(dt);            // T4.3 — advance the chute-pop inflate one-shot (no-op unless popping; always ticks so dev popChute() + rig-shots animate too)
+  updateChutePop(c, dt);         // T4.3 — advance the chute-pop inflate one-shot (no-op unless popping); D5 — also fires the pry→pop gag robustly (tutorial-phase-independent), so it always ticks / sees the pry
+  updatePodExposureEase(c, dt);  // CLUSTER D — ease the step-out renderer exposure (wake lift → desert base) like eye-adaptation over ~1.8s (no snap "instance change"); no-op unless armed at stepOut
   updateInventoryInput(c, dt);   // 1-4, wheel, Q to use (Q still drives def.onUse as backup)
   updateWieldAction(c, dt);      // UU — sole LMB dispatcher: attack/place/hold_use. Calls updateCombat internally for 'attack' items.
   updateReload(c);               // ABE — R-key scrap_gun reload (drains scrap_bullet → slot.meta.ammoRemaining)

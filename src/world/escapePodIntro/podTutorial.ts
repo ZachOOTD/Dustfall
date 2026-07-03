@@ -24,7 +24,7 @@ import { spawnDroppedPickup } from '../../pickups/pickups.ts';
 import { countItems } from '../../inventory/inventory.ts';
 import { findSalvageableById } from '../salvage.ts';
 import { maybeShowEventHint } from '../../ui/tutorial.ts';
-import { getCrashedPodSalvageableId, chutePopReady, popChute, placeCrashedPodWreck } from './podScene.ts';
+import { getCrashedPodSalvageableId, chutePopReady, popChute, placeCrashedPodWreck, updateChutePop } from './podScene.ts';   // D5 — updateChutePop owns the decoupled pry→pop gag trigger (smoke proves it fires regardless of tutorial phase)
 
 /** Tutorial phase — a tiny linear state machine over the craft→salvage→payoff loop. */
 type TutPhase =
@@ -126,11 +126,13 @@ export function updatePodTutorial(ctx: GameContext, dt: number): void {
       if (id < 0 || (id >= 0 && !s)) { _phase = 'done'; return; }
       const opened = s ? (s.panel.userData.panelOpened === true) : false;
       if (opened) {
-        if (chutePopReady()) {
-          popChute();   // the failed chute FINALLY deploys — uselessly, on the ground (the gag)
-          maybeShowEventHint(ctx, 'intro_chute_pop', 'Your parachute finally deploys — now that you\'ve already crashed.');
-        }
-        // advance regardless (if the chute somehow wasn't armed, still don't spin the driver).
+        // D5 — the GAG FIRE itself is now decoupled: updateChutePop (always-running, main tick)
+        //   detects panelOpened + pops the chute robustly, regardless of which phase THIS driver is
+        //   in (the old bug: if the pry happened outside 'salvage', the pop was never observed). Here
+        //   we only show the reactive TOAST + advance the driver. Belt-and-suspenders popChute() too
+        //   (idempotent — a no-op if updateChutePop already fired it this frame / it's already popped).
+        if (chutePopReady()) popChute();
+        maybeShowEventHint(ctx, 'intro_chute_pop', 'Your parachute finally deploys — now that you\'ve already crashed.');
         _phase = 'popped';
         _t = 0;
       }
@@ -186,11 +188,13 @@ export function smokePodTutorial(ctx: GameContext): {
   reachedSalvage: boolean;
   chutePopped: boolean;
   reachedDone: boolean;
+  poppedViaAutoFireWrongPhase: boolean;   // D5 — the gag fires on the pry even when the tutorial is NOT in 'salvage'
   error?: string;
 } {
   const report = {
     ok: false, materialsScattered: 0, podSalvageable: false,
     reachedSalvage: false, chutePopped: false, reachedDone: false,
+    poppedViaAutoFireWrongPhase: false,
   } as ReturnType<typeof smokePodTutorial>;
   try {
     const pod = ctx.player.body.body.translation();
@@ -206,21 +210,43 @@ export function smokePodTutorial(ctx: GameContext): {
     const podRec = podId >= 0 ? findSalvageableById(ctx.salvageables.list, podId) : undefined;
     report.podSalvageable = !!podRec && podRec.kind === 'escape_pod' && podRec.salvageRemaining > 0;
 
-    // grant a machete (as if the player crafted it) → tick → should advance to 'salvage'
+    // ── D5 ORDER A (the phase-mismatch / decoupled path — the USER-REPORTED failure). The player
+    //    pries the pod panel while the tutorial is STILL in 'craft' (no machete yet / the machine
+    //    hasn't advanced). The OLD code only watched the pry inside 'salvage' → the gag was missed.
+    //    Now updateChutePop (always-running, tutorial-phase-independent) MUST fire the pop here even
+    //    though _phase is 'craft'. Prove it: pry → updateChutePop → chutePopReady goes false (popped).
+    const wrongPhase = _phase;                          // 'craft' at this point (machete not yet granted)
+    if (podRec) podRec.panel.userData.panelOpened = true;
+    const readyBeforeAutoFire = chutePopReady();        // armed + unpopped before the pry is observed
+    updateChutePop(ctx, 0.05);                          // the decoupled trigger sees panelOpened + pops — no tutorial dependency
+    report.poppedViaAutoFireWrongPhase = wrongPhase !== 'salvage' && readyBeforeAutoFire && !chutePopReady();
+
+    // reset to prove ORDER B (the normal in-order path) cleanly on a fresh pod.
+    resetPodTutorial();
+    placeCrashedPodWreck(ctx, px, pz);   // re-place (re-arms a fresh chute + a fresh salvageable record)
+    startPodTutorial(ctx, px, pz);
+    const podId2 = getCrashedPodSalvageableId();
+    const podRec2 = podId2 >= 0 ? findSalvageableById(ctx.salvageables.list, podId2) : undefined;
+
+    // ── D5 ORDER B (craft → cue → pry). grant a machete (as if the player crafted it) → tick →
+    //    should advance to 'salvage', then pry → the gag fires (via updateChutePop) + the driver
+    //    advances. This is the happy path the tutorial toast follows.
     grantMachete(ctx);
     updatePodTutorial(ctx, 0.1);
     report.reachedSalvage = _phase === 'salvage';
 
     // simulate the pry completing on the pod's panel (interaction.ts completePry sets this)
-    if (podRec) podRec.panel.userData.panelOpened = true;
-    updatePodTutorial(ctx, 1.0);   // > 0.8 so the salvage cue also fires; detects the pry → pops
+    if (podRec2) podRec2.panel.userData.panelOpened = true;
+    updateChutePop(ctx, 0.05);      // the decoupled trigger fires the gag on the pry (as in the real main tick)
+    updatePodTutorial(ctx, 1.0);    // > 0.8 so the salvage cue also fires; the driver reacts + advances
     report.chutePopped = _phase === 'popped' || _phase === 'done';
 
-    // tick the inflate + settle to completion
-    for (let i = 0; i < 60; i++) updatePodTutorial(ctx, 0.05);
+    // tick the inflate + settle to completion (updateChutePop drives the inflate, as in the main tick)
+    for (let i = 0; i < 60; i++) { updateChutePop(ctx, 0.05); updatePodTutorial(ctx, 0.05); }
     report.reachedDone = _phase === 'done';
 
-    report.ok = report.podSalvageable && report.reachedSalvage && report.chutePopped && report.reachedDone;
+    report.ok = report.podSalvageable && report.reachedSalvage && report.chutePopped
+      && report.reachedDone && report.poppedViaAutoFireWrongPhase;
     return report;
   } catch (e) {
     report.error = e instanceof Error ? e.message : String(e);

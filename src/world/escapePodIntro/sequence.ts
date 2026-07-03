@@ -1062,14 +1062,15 @@ function tickImpact(ctx: GameContext, dt: number): void {
   if (t > IMPACT_FADE + IMPACT_HOLD) advanceBeat(ctx);   // → wake
 }
 
-/** wake beat (R3a — the ONE-POD rework) — you COME TO INSIDE the SAME hero cabin you rode down,
- *  now crashed + tilted at the desert spawn, and BLOW ITS HATCH to climb out (NOT a separate wake
- *  shell, NOT a teleport into open desert). The impact beat already settled the descent cabin to
- *  its crashed pose at the spawn + freed the player (dropped the seated cage). Here we just come to
- *  inside it: fade in dazed, looking at the cabin's own ajar escape HATCH (the blast cracked it),
- *  kick it open, walk out through it onto the real terrain. Phases: comeTo → prompt → blowing →
- *  climb. (HATCH_AZ on the cabin is the local hatch azimuth; the look/emergence aims that way.) */
-const CABIN_HATCH_YAW = -1.25 + Math.PI;   // face the cabin's escape hatch (HATCH_AZ=-1.25 → yaw=az+π)
+/** wake beat (CLUSTER D — the ONE-POD, ONE-DOOR rework) — you COME TO INSIDE the SAME hero cabin you
+ *  rode down, now crashed + tilted at the desert spawn, facing the SAME merged FRONT DOOR you watched
+ *  the descent through, and KICK IT OPEN to walk out (NOT a separate wake shell, NOT a teleport into
+ *  open desert). The impact beat already settled the descent cabin to its crashed pose + freed the
+ *  player (dropped the seated cage). Here we just come to inside it: fade in dazed, looking at the −Z
+ *  front door (the blast cracked it ajar), kick it wide, walk out through it onto the real terrain.
+ *  Phases: comeTo → prompt → blowing → climb. The front door faces −Z (FDOOR_AZ) → the wake look is
+ *  yaw 0, the SAME orientation as the whole descent (the user's "always face the door" anchor). */
+const FRONT_DOOR_YAW = 0;   // face the −Z merged front door (FDOOR_AZ=π → seated yaw 0 faces it), the descent-ride anchor
 function tickWake(ctx: GameContext, dt: number): void {
   const intro = ctx.intro;
   if (!intro) return;
@@ -1083,9 +1084,9 @@ function tickWake(ctx: GameContext, dt: number): void {
     setIntroMiddayClear(ctx);    // CONSISTENT-MIDDAY: re-assert the bright clear midday (defensive — a dev jump straight to wake skips the descent that set it, so the wake cabin is lit by the same midday desert as step-out)
     buildPodScene(ctx);          // no-op if already built (the crashed cabin from impact); else builds it at the spawn
     setCabinCrashPose(1);        // ensure the crashed lean + the dropped cage (idempotent)
-    blowCabinHatch(0);           // the cabin's own door sits ajar (the blast cracked it)
+    blowCabinHatch(0);           // the front door sits ajar (the blast cracked it) — the dawn reads past it
     seatPlayerAt(ctx, getPodSpawn(ctx));   // body at the seated spawn INSIDE the crashed cabin
-    faceControl(ctx, CABIN_HATCH_YAW, -0.05);   // look at the cabin hatch (the dawn desert past it), slightly down (dazed)
+    faceControl(ctx, FRONT_DOOR_YAW, -0.05);   // look at the −Z front door (the dawn desert past it), slightly down (dazed)
     startDesertWind();           // T5.3 — the dawn-desert WIND fades in as you come to (the quiet aftermath; persists into step-out, stopped at handoff)
     intro.mode = 'seated';       // dazed: free-look, can't move yet
     setIntroBlack(1);

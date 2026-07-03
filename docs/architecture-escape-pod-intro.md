@@ -12,6 +12,43 @@ This doc is the maintainer's map of the built feature (post-REBUILD-v2, 2026-07-
 the SAME pod` → `the horizon reveal (the Beached Leviathan beckons)` → `craft a machete → salvage your
 own pod → the failed parachute comically pops out`.
 
+## ⚑ ONE POD, ONE DOOR, NO SEAMS (CLUSTER D, 2026-07-03) — READ THIS FIRST
+The user's "same pod inside↔out↔phase, one aperture" re-scope. Supersedes the split-aperture notes:
+- **ONE MERGED FRONT DOOR (−Z).** The old −Z round VIEWPORT and the old side ESCAPE HATCH (−1.25) are
+  UNIFIED into a SINGLE front-facing DOOR on the −Z arc (`FDOOR_AZ = π`, `FDOOR_W/H/CY`), with the
+  DOMED CIRCULAR PORTHOLE integral to the door SLAB (`buildCabinHatch` builds the door + the porthole
+  hole/glass/bezel; the door slab is a FRAME around the aperture so the descent reads THROUGH the
+  porthole glass). The player faces this ONE door for everything: sits facing it, watches the whole
+  descent through its porthole (the door SEALED closed at rest — `_cabinHatchAjarY = 0`), then
+  `blowCabinHatch` kicks THE SAME door open at the wake + they walk out the −Z opening. `HATCH_*` now
+  ALIAS `FDOOR_*` so the wall/hoop-gap + `buildExteriorSkin` gap + `_addWalkableColliders` gap all cut
+  the ONE −Z aperture. `buildViewport` RETIRED (porthole moved into the door); the exterior −Z
+  porthole-echo bezel + `_podPortholeBandMat` RETIRED (the −Z arc is now the walk-in opening). `VP_R`
+  (0.44) + `VP_CY` (1.34) are kept as the porthole disc radius + the seated-eye height.
+- **Camera anchor = the door, every beat.** Eject-release / descent / parachute / impact all
+  `faceControl(0, …)` (−Z door, yaw 0); the wake now `faceControl(FRONT_DOOR_YAW=0, −0.05)` (was the
+  −1.25 side-hatch yaw). The sole exception is the enterPod SEAL framing `faceControl(1.20, −0.20)`,
+  which deliberately frames the EJECT control for the "pull eject" prompt (then the ride faces the door).
+- **NO teleport at step-out + the exposure EASES (eye-adaptation).** `unifyEnterablePod` now ARMS an
+  exposure ease (`armExposureEase`; `updatePodExposureEase` ticked every frame from main.ts, persisting
+  past `endEscapePodIntro` like the fog-ease) — the wake lift (`CABIN_WAKE_EXPOSURE 1.62`) eases DOWN to
+  the desert base (1.05) over `EXPO_EASE_S = 1.8s`, no snap "instance change". The Continue-load path
+  (`restoreEnterablePod` → `unifyEnterablePod(…, easeExposure=false)`) SNAPS (no wake exposure ran).
+  `disposePodScene`/`restoreCabinExposure` `cancelExposureEase` on hard-restore paths. The player walks
+  out on their OWN legs (the wake-climb phase; `tickStepOut` does NOT `seatPlayerAt`).
+- **The BAY pod stays the canonical +X door** (`buildCanonicalPodExterior`, `CPOD_DOOR_AZ = π/2`) — the
+  user-approved reference; the B2 seal-swap (bay +X pod → ride −Z cabin) is the accepted concession.
+  Both are the SAME riveted-aluminium capsule with a domed-porthole front door (shared materials/dims).
+- **D5 — the chute-pop GAG is DECOUPLED from the tutorial state machine.** `updateChutePop(ctx, dt)`
+  (always-running, main tick) now fires the pop on the PRY EVENT itself (`panelOpened` on the pod's
+  salvageable) regardless of the tutorial phase — the old bug was the pop firing only inside
+  `updatePodTutorial`'s 'salvage' phase (missed if the player pried in another phase). Once ever
+  (idempotent; `chutePopReady` false after). Proven by `smokePodTutorial`'s `poppedViaAutoFireWrongPhase`.
+- **Gates:** `pod-walkout` (kick the front door → real-KCC walk out, NO teleport, the exposure ease via
+  `smokeExposureEase`), `pod-walkin`, `smoke-pod-persistence`, `smoke-pod-tutorial`, `pod-interior
+  --angle=descent --descent=0.15/0.5/0.9` (the arc through the door porthole), `wake --blow`,
+  `stepout-pod` (the `haz` framing = π now). `smokeIntro` = `{ok:true,beats:12}`.
+
 ## ⚑ ONE ENTERABLE POD + CONSISTENT MIDDAY (user re-scope, 2026-07-01) — READ THIS
 Two linked user-walk-test fixes that supersede the older R3a "dispose+swap" + "dawn" notes below:
 - **ONE ENTERABLE POD (no model swap).** The descent/wake pod and the step-out pod are the SAME

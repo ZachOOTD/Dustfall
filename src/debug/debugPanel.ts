@@ -20,7 +20,7 @@ import { fireSignalFlare, advanceSignalFlares, activeSignalFlareCount } from '..
 import { damageVulture } from '../enemies/vulture.ts';
 import { applyLungePose, applyMeshTransform } from '../enemies/sandWorm.ts';   // M12 ⓖ (C66) — __game.poseLunge (dive render)
 import { startEscapePodIntro, endEscapePodIntro, jumpToBeat as jumpToIntroBeat, smokeTestIntro, type BeatId } from '../world/escapePodIntro/sequence.ts';   // escape-pod intro — __game.startIntro/skipIntro/jumpToBeat/smokeIntro
-import { placeCrashedPodWreck, setDescentProgress as setPodDescent, setParachuteLeverPull as setPodChute, setCabinCrashPose as setPodCrashPose, blowCabinHatch as blowPodHatch, popChute as popPodChute, buildPodScene as buildPodSceneDbg, getPodSpawn as getPodSpawnDbg, disposePodScene, podIsEnterable, getCrashedPodSalvageableId as getPodSalvageId, chutePopReady, setPendingPodCrashRestore, applyPendingPodCrashRestore } from '../world/escapePodIntro/podScene.ts';   // T1.1/T1.2 · R3a · T4.3 · T3.2 — __game.placeCrashedPod / … ; + smokePodPersistence deps (save→wipe→restore round-trip)
+import { placeCrashedPodWreck, setDescentProgress as setPodDescent, setParachuteLeverPull as setPodChute, setCabinCrashPose as setPodCrashPose, blowCabinHatch as blowPodHatch, popChute as popPodChute, buildPodScene as buildPodSceneDbg, getPodSpawn as getPodSpawnDbg, disposePodScene, podIsEnterable, getCrashedPodSalvageableId as getPodSalvageId, chutePopReady, setPendingPodCrashRestore, applyPendingPodCrashRestore, smokeExposureEase } from '../world/escapePodIntro/podScene.ts';   // T1.1/T1.2 · R3a · T4.3 · T3.2 — __game.placeCrashedPod / … ; + smokePodPersistence deps; CLUSTER D — smokeExposureEase (the eye-adaptation ease proof)
 import { smokePodTutorial } from '../world/escapePodIntro/podTutorial.ts';   // T4.3 — __game.smokePodTutorial (drive the craft→salvage→chute-pop loop headlessly)
 import { buildHaulerExterior, disposeHaulerExterior, setHaulerExplosion, setHaulerDeparture } from '../world/escapePodIntro/haulerScene.ts';   // T3.1/T3.2 — __game.buildHauler / disposeHauler / setHaulerExplosion (hauler-exterior + explosion rig-shots); C1 — setHaulerDeparture (the eject-departure recession)
 import { setCockpitAlert as setShipCockpitAlert, setShipAlert as setShipRedAlert, setEngineFire as setShipEngineFire } from '../world/escapePodIntro/shipScene.ts';   // T3.3/T3.4 — __game.setCockpitAlert / setShipAlert / setEngineFire (alert escalation + the disaster rig-shot)
@@ -84,6 +84,8 @@ interface DebugApi {
   popChute: (advanceSeconds?: number) => void;
   /** Escape-pod T4.3 — smoke the whole craft→salvage→chute-pop tutorial loop headlessly. */
   smokePodTutorial: () => ReturnType<typeof smokePodTutorial>;
+  /** Escape-pod CLUSTER D — prove the step-out exposure EASE is a gradual eye-adaptation, not a snap. */
+  smokeExposureEase: () => ReturnType<typeof smokeExposureEase>;
   /** Write the game to the single save slot (dev/rig — the menu Save path without the UI).
    *  Used by the pod-persistence-reload rig scenario to save mid-game before a page reload. */
   saveGame: () => { ok: boolean; error?: string };
@@ -345,6 +347,7 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
     popChute: (advanceSeconds) => { popPodChute(advanceSeconds); },
     saveGame: () => saveGameState(ctx),
     smokePodTutorial: () => smokePodTutorial(ctx),
+    smokeExposureEase: () => smokeExposureEase(ctx),
     smokePodPersistence: () => {
       const report = {
         ok: false, builtBeforeSave: false, savedPodCrash: false, goneAfterTeardown: false,

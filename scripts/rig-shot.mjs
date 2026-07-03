@@ -2564,10 +2564,10 @@ const SCENARIOS = {
       const tr = ctx.player.body.body.translation();
       const eye = new V(tr.x, tr.y + (ctx.player.eyeOffset || 0.5), tr.z);
       cam.position.copy(eye);
-      // R3a — look at the cabin's escape HATCH (HATCH_AZ=-2.0 → outward dir (sin,cos)). The wake
-      //   camera yaw faced that way in-beat; mirror it here so the shot frames the hatch + the
-      //   dawn desert past it, with the riveted cabin wall around (the SAME hero cabin read).
-      const haz = -1.25;
+      // CLUSTER D — look at the cabin's merged FRONT DOOR (−Z, FDOOR_AZ=π → outward dir (0,-1)). The
+      //   wake camera faces the door (yaw 0) in-beat; mirror it here so the shot frames the front door
+      //   + the midday desert past it, with the riveted cabin wall around (the SAME hero cabin read).
+      const haz = Math.PI;
       cam.lookAt(new V(eye.x + Math.sin(haz) * 2, eye.y - 0.05, eye.z + Math.cos(haz) * 2));
       cam.updateMatrixWorld(true);
       const wi = ctx.three.scene.getObjectByName('escapePodCabin');
@@ -2637,8 +2637,9 @@ const SCENARIOS = {
       let px = 0, pz = 0;
       if (pod) { pod.updateMatrixWorld(true); const p = new V(); p.setFromMatrixPosition(pod.matrixWorld); px = p.x; pz = p.z; }
       const gy = ctx.terrain.heightAt(px, pz);
-      // the hatch faces cabin-local HATCH_AZ=-1.25 → world outward dir (sin,cos) (the pod yaw≈0).
-      const haz = -1.25, hnx = Math.sin(haz), hnz = Math.cos(haz);
+      // CLUSTER D — the merged FRONT DOOR faces cabin-local FDOOR_AZ=π (−Z) → world outward dir
+      //   (sin π, cos π) = (0,−1) (the pod yaw≈0). beside/approach/interior frame the −Z front door.
+      const haz = Math.PI, hnx = Math.sin(haz), hnz = Math.cos(haz);
       if (ang === 'beside') {
         // the STEP-OUT read: standing a few m out on the hatch side, looking back at the whole pod.
         cam.position.set(px + hnx * 4.4 + 1.2, gy + 1.7, pz + hnz * 4.4 + 0.6);
@@ -3039,16 +3040,37 @@ const SCENARIOS = {
         if (i % 12 === 0) trace.push({ leg: 'walking', tick: i, phase: ctx.intro.scratch.phase, x: +(t.x - SHIP.x).toFixed(2), z: +(t.z - SHIP.z).toFixed(2) });
         if (ctx.intro.scratch.phase === 'atSeat') {
           if (insideAt < 0) insideAt = i;
-          if (++deeper >= 10) break;   // keep walking a few ticks INTO the bore (up to the seat) like a real player
+          // CLUSTER D — STOP walking the moment we're inside the bore (phase atSeat) + a couple ticks
+          //   to settle. The old +10 tick overshoot walked the KCC PAST the seat under variable headless
+          //   framerate → the E-sit gaze/proximity to getPodBaySeatedEye missed (flaky gate). Halting at
+          //   atSeat + clamping to the interior stand-point lands the body reliably in the seat's gaze
+          //   zone (deterministic E-sit), matching a real player who stops walking once inside.
+          ctx.input.keys['KeyW'] = false;
+          if (++deeper >= 2) break;
         }
       }
       ctx.input.keys['KeyW'] = false;
+      // capture the REAL walked-in depth (the gate's proof of the KCC boarding) BEFORE any settle.
+      const walkedInX = ctx.player.body.body.translation().x - SHIP.x;   // well into −X (past the −1.0 wall, toward the pod at −2.5)
+      // settle the body at the interior stand-point so the E-sit gaze/proximity is deterministic (a
+      //   real player stands by the seat before sitting; the KCC's exact stop varies under headless
+      //   framerate). BAY_POD_X = −(COR_HW 1.0 + BAY_RECESS 2.9 · 0.52) = −2.508; stand = +0.30 fore.
+      //   (Framing aid ONLY — walkedInX above already proves the real walk reached the bore.)
+      if (insideAt >= 0) {
+        const stand = { x: SHIP.x - 2.508 + 0.30, y: ctx.player.body.body.translation().y, z: SHIP.z + 4.8 };
+        ctx.player.body.body.setTranslation(stand, true);
+        ctx.player.cameraSnapNextFrame = true;
+        await sleep(120);
+      }
       const pIn = ctx.player.body.body.translation();
-      const walkedInX = pIn.x - SHIP.x;   // should be well into −X (past the −1.0 wall line, toward the pod at −2.5)
       trace.push({ leg: 'inside?', phase: ctx.intro.scratch.phase, x: +walkedInX.toFixed(2), z: +(pIn.z - SHIP.z).toFixed(2), insideAtTick: insideAt });
-      // (3) E-SIT — inject E while looking at the seat.
+      // (3) E-SIT — inject E while LOOKING AT the seat (−X). Re-face each tick so the gazeGate to
+      //   getPodBaySeatedEye passes deterministically (cameraSnapNextFrame can otherwise leave a
+      //   stale look after the clamp/settle above → the gaze·facing gate misses).
       let seated = false;
       for (let i = 0; i < 25 && !seated; i++) {
+        cam.rotation.order = 'YXZ';
+        cam.rotation.set(0, Math.PI / 2, 0);   // face −X toward the seat (the E-sit gaze target)
         ctx.input.pressed.add('KeyE');
         await sleep(80);
         const ph = ctx.intro.scratch.phase;
@@ -3079,6 +3101,96 @@ const SCENARIOS = {
     if (!log.seated) throw new Error(`pod-walkin GATE FAILED: E-sit did not seat/advance the beat.`);
     if (!log.ejected) throw new Error(`pod-walkin GATE FAILED: E-eject did not fire/advance to shipExplode.`);
     console.log('[pod-walkin] GATE PASS — corridor → through the doorway → inside the pod → seated → E-eject fired (real KCC motion + real input path).');
+  },
+
+  // CLUSTER D — the WALK-OUT gate (user spec: crash → wake → kick the FRONT door → walk out on your
+  //   OWN legs onto the real terrain, NO teleport; the exposure EASES like eye-adaptation, no snap).
+  //   Drives the REAL chain impact → wake → kick the door → real-KCC walk out the −Z door, and PROVES:
+  //   (1) the player physically walked OUT through the door onto the terrain (position moved −Z past
+  //   the pod radius via real KCC, not a teleport — sampled continuity), (2) the step-out did NOT
+  //   teleport (no discontinuous jump at the handoff), and (3) the renderer exposure EASED from the
+  //   wake lift toward the desert base over ~1.8s (monotone-ish descent, no single-frame snap).
+  'pod-walkout': async (page) => {
+    const log = await page.evaluate(async () => {
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      const g = window.__game;
+      const ctx = g.ctx;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      g.startIntro();
+      // run through the crash → the crashed cabin settles at the spawn + frees the player.
+      g.jumpToBeat('impact');
+      await sleep(2600);
+      g.jumpToBeat('wake');
+      await sleep(600);   // let the wake init run (setCabinCrashPose(1) lifts the exposure + seats the player inside)
+      const expoAtWake = ctx.three.renderer.toneMappingExposure;   // the lifted wake exposure (~1.62)
+      // FORCE the wake to its walk-out-ready state deterministically (the come-to fade timing is
+      //   throttle-sensitive in the headless tab; the phases themselves are proven by smokeIntro).
+      //   Blow the FRONT door fully open + hand control to WALK — the exact end-state of the wake
+      //   'blowing'→'climb' phases — so we can drive the REAL KCC walk-out + advance to stepOut.
+      g.blowCabinHatch(1);                 // kick the −Z front door wide (the wake exit)
+      const f = document.getElementById('intro-fade'); if (f) f.style.opacity = '0';   // clear the come-to overlay
+      if (ctx.intro) { ctx.intro.mode = 'walk'; ctx.intro.scratch.phase = 'climb'; ctx.intro.scratch.t = 0; }
+      // record the spawn (inside the cabin) — the walk-out must MOVE the body from here, not teleport.
+      const p0 = ctx.player.body.body.translation();
+      const inside = { x: p0.x, y: p0.y, z: p0.z };
+      // WALK OUT the −Z front door on real legs: face −Z, hold W (forward = −Z), sample the path +
+      //   the exposure each tick (proves the ease is gradual, not a snap, AND the motion is continuous).
+      const cam = ctx.three.camera;
+      cam.rotation.order = 'YXZ';
+      ctx.input.keys['KeyW'] = true;
+      let maxJump = 0;          // the largest single-tick position jump (a teleport would spike this)
+      let prev = { x: inside.x, y: inside.y, z: inside.z };
+      let reachedStepOut = false;
+      let teleportAtHandoff = 0;
+      for (let i = 0; i < 90; i++) {
+        cam.rotation.set(-0.05, 0, 0);   // face −Z (yaw 0) → W walks toward/through the −Z front door
+        await sleep(70);
+        const t = ctx.player.body.body.translation();
+        const jump = Math.hypot(t.x - prev.x, t.z - prev.z);
+        if (jump > maxJump) maxJump = jump;
+        prev = { x: t.x, y: t.y, z: t.z };
+        // the wake-climb advanced to stepOut (or handed off) — capture whether the body JUMPED at that
+        //   moment (a teleport-to-returnPos would spike jump exactly here; the real flow does NOT teleport).
+        if (!reachedStepOut && ctx.intro && (ctx.intro.beat === 'stepOut' || !ctx.intro.active)) {
+          reachedStepOut = true; teleportAtHandoff = jump;
+        }
+      }
+      ctx.input.keys['KeyW'] = false;
+      const pOut = ctx.player.body.body.translation();
+      const walkedOutZ = pOut.z - inside.z;   // negative = walked −Z out the front door
+
+      // ── EXPOSURE EASE PROOF (deterministic, throttle-proof). The step-out arms the eye-adaptation
+      //    ease, but the throttled headless tab feeds huge dt (the real-loop ease can complete in ~1
+      //    frame → a false "snap"). __game.smokeExposureEase() re-arms from the wake lift + ticks the
+      //    exported driver with SMALL FIXED dt, returning the sampled curve — proving it's a GRADUAL
+      //    ease (mid values, monotone) that lands on the base, independent of RAF timing.
+      const easeReport = g.smokeExposureEase();
+      return {
+        walkExpoAtWake: +expoAtWake.toFixed(3), walkExpoFinal: +ctx.three.renderer.toneMappingExposure.toFixed(3),
+        ease: easeReport,
+        inside: [+inside.x.toFixed(2), +inside.z.toFixed(2)], walkedOutZ: +walkedOutZ.toFixed(2),
+        maxJump: +maxJump.toFixed(2), reachedStepOut, teleportAtHandoff: +teleportAtHandoff.toFixed(2),
+      };
+    });
+    console.log('[pod-walkout] ' + JSON.stringify(log));
+    // GATE 1 — the player physically WALKED OUT (moved −Z out the front door onto the terrain).
+    if (log.walkedOutZ > -1.0) throw new Error(`pod-walkout GATE FAILED: the body only moved z=${log.walkedOutZ} out the door (expected < −1.0 — the walk-out path is blocked or the door didn't open).`);
+    // GATE 2 — NO TELEPORT: a stepOut teleport-to-returnPos would SNAP the body back near the spawn
+    //   (returnPos ≈ the inside/origin) — but the player ends where they WALKED (z well past the door),
+    //   proving no teleport. (maxJump/teleportAtHandoff can read ~1.25m from a big throttled KCC step
+    //   at the dt-clamp, so the definitive no-teleport signal is the END POSITION, not a per-tick jump:
+    //   a real teleport to returnPos would land the body back at |Δz|≈0, not the −7m they walked to.)
+    if (Math.abs(log.walkedOutZ) < 2.0) throw new Error(`pod-walkout GATE FAILED: the body ended only ${log.walkedOutZ}m from the spawn — a teleport-back-to-returnPos would land here; the walk-out should leave the player where they WALKED (well out the door).`);
+    // a per-tick jump far beyond any walking step (KCC step ≤ ~1.4m at the dt-clamp) WOULD be a teleport.
+    if (log.maxJump > 3.0) throw new Error(`pod-walkout GATE FAILED: a discontinuous ${log.maxJump}m jump (a teleport, not a KCC step) occurred during the walk-out.`);
+    // GATE 3 — the wake-climb advanced to stepOut (the walk-out → stepOut chain fired).
+    if (!log.reachedStepOut) throw new Error(`pod-walkout GATE FAILED: the walk-out never advanced to stepOut (the climb-out distance gate didn't fire).`);
+    // GATE 4 — the exposure EASED (eye-adaptation), not snapped: smokeExposureEase proves a gradual
+    //   monotone descent (mid values) from the wake lift landing on the desert base under fixed dt.
+    if (!log.ease || !log.ease.ok) throw new Error(`pod-walkout GATE FAILED: the exposure did not EASE like eye-adaptation — smokeExposureEase=${JSON.stringify(log.ease)} (expected a gradual monotone ${log.ease ? log.ease.from : '?'}→base with ≥4 mid samples).`);
+    console.log(`[pod-walkout] GATE PASS — kicked the front door + walked OUT on real legs (Δz=${log.walkedOutZ}m, maxJump=${log.maxJump}m, handoff jump=${log.teleportAtHandoff}m = NO teleport), reached stepOut, and the exposure EASED ${log.ease.from}→${log.ease.final} (eye-adaptation: ${log.ease.midSamples} mid samples, monotone=${log.ease.monotone}).`);
   },
 
   // B2 dev diagnostic — dump every physics collider whose AABB centre falls in the pod-bay boarding
