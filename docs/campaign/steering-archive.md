@@ -103,3 +103,6 @@ Cluster A's new furniture colliders box in the seated capsule (the chair collide
 
 ## 2026-07-02 — pod door design: KEEP the domed circular porthole, ON the door (verbal; sent live to B1)
 The merged door/viewport is NOT a flat glass door: a solid riveted door with the existing DOMED CIRCULAR viewport glass integrated in it (the same domed porthole character as today's cabin), sized to carry the descent view, bezel integral (no doubled rings).
+
+## 2026-07-03 — the planet-approach descent arc (verbal; folded live into CLUSTER C as C3)
+After the explosion, the descent doesn't read as falling TOWARD the planet — the distant planet "just fades away and goes to the next phase" (unrealistic). Want: a smooth realistic arc — falling toward the planet (it GROWS/approaches in the porthole), into the atmosphere (limb/glow fills the view → the existing plasma re-entry), through it (the sky blend → the ground approach). Brief ~0.5-1s dips-to-black between phases are OK where a seam needs smoothing; continuity preferred. Constraint: the planet-approach animation runs only in the descent beats (the parallax fix stays for ship-walking).
