@@ -2987,7 +2987,9 @@ const SCENARIOS = {
   //   doorway → INTO the pod bore (sampling the body position each leg so we PROVE it traversed, not
   //   teleported), (3) E-sits, and asserts the beat reached the sealed/eject phase. THROWS if the
   //   walk-in path is blocked (the body never gets inside) so this gates like smoke-intro. No shot —
-  //   it's a motion proof; the console log reports the traversal.
+  //   it's a motion proof; the console log reports the traversal. Every boarding phase is driven by
+  //   the FIXED-DT sim-budget loop (see below) so the proof is DETERMINISTIC under the ~1 fps
+  //   headless swiftshader tab — no wall-clock timing dependence.
   'pod-walkin': async (page) => {
     const log = await page.evaluate(async () => {
       const g = window.__game;
@@ -2999,104 +3001,123 @@ const SCENARIOS = {
       try { ctx.weather.intensity = 0; ctx.weather.cloudiness = 0; } catch {}
       ctx.flags.paused = false;
       ctx.input.controls.isLocked = true;   // isPlaying()===true → updatePlayer processes real KCC motion
-      try { g.skipIntro(); } catch {}
-      await sleep(200);
-      // seat in the ship (retry the cockpit jump until the reseat to y≈3000 takes).
-      g.startIntro();
-      g.jumpToBeat('cockpit');
-      for (let i = 0; i < 20; i++) { await sleep(120); if (ctx.player.body.body.translation().y > 2900) break; g.jumpToBeat('cockpit'); }
-      try { g.setSkyIntroMode(0); } catch {}
-      const sp = ctx.player.body.body.translation();
-      // the bridge spawn sits at SEAT_Z = −0.30 off the ship origin → origin.z = sp.z + 0.30. Use
-      //   the ORIGIN frame so the walk line is centred on the bay door (local z = BAY_ZC = 4.8).
-      const SHIP = { x: sp.x, y: sp.y, z: sp.z + 0.30 };
-      // Position the player in the CORRIDOR, just fore of the bay opening (bay z-span ≈ +3.2..+6.4 on
-      //   the −X wall), on the +X side of the walkable tube, facing −X toward the docked pod door.
-      g.jumpToBeat('enterPod');
-      await sleep(150);
-      const startPos = { x: SHIP.x + 0.6, y: sp.y, z: SHIP.z + 4.8 };   // corridor, +X side, on the door centreline
-      ctx.player.body.body.setTranslation(startPos, true);
-      ctx.player.cameraSnapNextFrame = true;
+      // ── DETERMINISTIC DRIVER (throttle-proof — the same fixed-dt sim-budget technique as
+      //    pod-walkout). The OLD driver gave each boarding phase a WALL-CLOCK iteration budget
+      //    (E-open 20×80 ms, E-sit 25×80 ms, …) — but the headless swiftshader tab renders this
+      //    heavy ship+bay scene at ~1 fps, so a whole phase budget could elapse with ZERO game
+      //    frames ticking (instrumented: 15 straight E-sit iterations with phase=atSeat, the gaze
+      //    near/look BOTH true and E pending, while ctx.time.elapsed sat frozen — the game-side
+      //    gate is healthy; the harness just raced a starved loop → "E-sit did not seat", flaky).
+      //    THE FIX: pin the loop's dt to FIXED_DT so every ticked frame advances a KNOWN sim-dt,
+      //    and drive each phase until its PHASE-FLIP CONDITION (or a sim-time budget) — never a
+      //    wall-clock count — re-asserting facing + input every yield. Assertions stay strict.
+      const FIXED_DT = 0.05;   // sim-seconds per frame (under the loop's 0.1 clamp → never clamped)
       const cam = ctx.three.camera;
-      cam.rotation.order = 'YXZ';
-      cam.rotation.set(0, Math.PI / 2, 0);   // face −X (toward the docked pod door)
-      await sleep(200);
-      const p0 = ctx.player.body.body.translation();
-      trace.push({ leg: 'start(corridor)', phase: ctx.intro.scratch.phase, x: +(p0.x - SHIP.x).toFixed(2), z: +(p0.z - SHIP.z).toFixed(2) });
-      // (1) E-OPEN the door — inject E for a few ticks while looking at it (gaze gate).
-      let opened = false;
-      for (let i = 0; i < 20 && !opened; i++) {
-        ctx.input.pressed.add('KeyE');
-        await sleep(80);
-        opened = ctx.intro.scratch.phase === 'enter' || ctx.intro.scratch.phase === 'atSeat';
-      }
-      trace.push({ leg: 'after E-open', phase: ctx.intro.scratch.phase, doorOpened: opened });
-      // (2) WALK IN — hold W (real KCC) to walk −X through the doorway into the bore. Keys persist;
-      //     pressed is cleared each frame, so W drives sustained motion. Face −X the whole way.
-      ctx.input.keys['KeyW'] = true;
-      let insideAt = -1;
-      // generous wall-clock budget: the headless rig renders the heavy scene at low FPS and the
-      //   dt-clamp (0.1 s) loses sim distance on slow frames — the WALK is what's being proven,
-      //   not the frame rate. Break as soon as the inside-gate flips the phase.
-      let deeper = 0;
-      for (let i = 0; i < 160; i++) {
-        cam.rotation.set(0, Math.PI / 2, 0);   // keep facing −X so WASD forward = −X (into the pod)
-        await sleep(80);
-        const t = ctx.player.body.body.translation();
-        if (i % 12 === 0) trace.push({ leg: 'walking', tick: i, phase: ctx.intro.scratch.phase, x: +(t.x - SHIP.x).toFixed(2), z: +(t.z - SHIP.z).toFixed(2) });
-        if (ctx.intro.scratch.phase === 'atSeat') {
-          if (insideAt < 0) insideAt = i;
-          // CLUSTER D — STOP walking the moment we're inside the bore (phase atSeat) + a couple ticks
-          //   to settle. The old +10 tick overshoot walked the KCC PAST the seat under variable headless
-          //   framerate → the E-sit gaze/proximity to getPodBaySeatedEye missed (flaky gate). Halting at
-          //   atSeat + clamping to the interior stand-point lands the body reliably in the seat's gaze
-          //   zone (deterministic E-sit), matching a real player who stops walking once inside.
-          ctx.input.keys['KeyW'] = false;
-          if (++deeper >= 2) break;
+      const faceNegX = () => { cam.rotation.order = 'YXZ'; cam.rotation.set(0, Math.PI / 2, 0); };   // face −X (toward the docked pod / the seat)
+      /** Drive the live loop until cond() is true or simBudget sim-seconds elapse. perTick
+       *  re-asserts input/facing every yield (so whenever a real frame lands, the inputs are
+       *  there). Stall-bail: ~10 s of yields with no ticked frame → the loop is wedged, bail
+       *  (never hangs; a long BLOCKING frame — e.g. a shader compile — can't false-trip it,
+       *  because these yields don't run while the main thread is blocked either). */
+      const drive = async (simBudget, cond, perTick) => {
+        const simStart = ctx.time.elapsed;
+        let lastSim = simStart, stalls = 0;
+        for (let i = 0; i < 8000; i++) {
+          if (perTick) perTick();
+          await sleep(16);
+          const nowSim = ctx.time.elapsed;
+          if (nowSim > lastSim + 1e-6) { lastSim = nowSim; stalls = 0; }
+          else if (++stalls > 600) break;
+          if (cond()) return { ok: true, sim: +(nowSim - simStart).toFixed(2) };
+          if (nowSim - simStart >= simBudget) break;
         }
-      }
-      ctx.input.keys['KeyW'] = false;
-      // capture the REAL walked-in depth (the gate's proof of the KCC boarding) BEFORE any settle.
-      const walkedInX = ctx.player.body.body.translation().x - SHIP.x;   // well into −X (past the −1.0 wall, toward the pod at −2.5)
-      // settle the body at the interior stand-point so the E-sit gaze/proximity is deterministic (a
-      //   real player stands by the seat before sitting; the KCC's exact stop varies under headless
-      //   framerate). BAY_POD_X = −(COR_HW 1.0 + BAY_RECESS 2.9 · 0.52) = −2.508; stand = +0.30 fore.
-      //   (Framing aid ONLY — walkedInX above already proves the real walk reached the bore.)
-      if (insideAt >= 0) {
-        const stand = { x: SHIP.x - 2.508 + 0.30, y: ctx.player.body.body.translation().y, z: SHIP.z + 4.8 };
-        ctx.player.body.body.setTranslation(stand, true);
+        return { ok: cond(), sim: +(ctx.time.elapsed - simStart).toFixed(2) };
+      };
+      const realClock = ctx.three.clock;
+      const origGetDelta = realClock.getDelta.bind(realClock);
+      const origW = ctx.three.renderer.domElement.width, origH = ctx.three.renderer.domElement.height;
+      let walkedInX = 0, insideOk = false, seated = false, ejected = false;
+      try {
+        realClock.getDelta = () => FIXED_DT;             // pin the per-frame sim-dt (throttle-proof)
+        ctx.three.renderer.setSize(48, 48, false);       // tiny canvas → more REAL frames tick per second (this gate takes no screenshots)
+        try { g.skipIntro(); } catch {}
+        await drive(0.2, () => !ctx.intro || !ctx.intro.active);   // let the teardown tick run
+        // seat in the ship (retry the cockpit jump until the reseat to y≈3000 takes).
+        g.startIntro();
+        for (let a = 0; a < 20; a++) {
+          g.jumpToBeat('cockpit');
+          const r = await drive(0.3, () => ctx.player.body.body.translation().y > 2900);
+          if (r.ok) break;
+        }
+        try { g.setSkyIntroMode(0); } catch {}
+        const sp = ctx.player.body.body.translation();
+        // the bridge spawn sits at SEAT_Z = −0.30 off the ship origin → origin.z = sp.z + 0.30. Use
+        //   the ORIGIN frame so the walk line is centred on the bay door (local z = BAY_ZC = 4.8).
+        const SHIP = { x: sp.x, y: sp.y, z: sp.z + 0.30 };
+        // Position the player in the CORRIDOR, just fore of the bay opening (bay z-span ≈ +3.2..+6.4 on
+        //   the −X wall), on the +X side of the walkable tube, facing −X toward the docked pod door.
+        g.jumpToBeat('enterPod');
+        await drive(0.4, () => ctx.intro.beat === 'enterPod' && ctx.intro.scratch.phase === 'approach');   // the beat's init tick ran (mode=walk, door closed)
+        const startPos = { x: SHIP.x + 0.6, y: sp.y, z: SHIP.z + 4.8 };   // corridor, +X side, on the door centreline
+        ctx.player.body.body.setTranslation(startPos, true);
         ctx.player.cameraSnapNextFrame = true;
-        await sleep(120);
+        faceNegX();
+        await drive(0.15, () => false, faceNegX);        // ≥2 ticked frames: the camera snap + anchor apply
+        const p0 = ctx.player.body.body.translation();
+        trace.push({ leg: 'start(corridor)', phase: ctx.intro.scratch.phase, x: +(p0.x - SHIP.x).toFixed(2), z: +(p0.z - SHIP.z).toFixed(2) });
+        // (1) E-OPEN the door — re-assert E + the −X facing every yield until the gaze-gated press
+        //     lands (phase flips approach→enter). Sim budget 2 s ≈ 40 fixed-dt frames.
+        const rOpen = await drive(2.0,
+          () => ctx.intro.scratch.phase === 'enter' || ctx.intro.scratch.phase === 'atSeat',
+          () => { faceNegX(); ctx.input.pressed.add('KeyE'); });
+        trace.push({ leg: 'after E-open', phase: ctx.intro.scratch.phase, doorOpened: rOpen.ok, sim: rOpen.sim });
+        // (2) WALK IN — hold W (real KCC) to walk −X through the doorway into the bore. The stop
+        //     condition is phase=atSeat AND a fixed DEPTH LINE (x < −1.8): the atSeat gate flips at
+        //     the 1.05 m stand radius (x ≈ −1.16), shy of the assertion's −1.2 walked-in-depth
+        //     proof, so we walk the deterministic 2-3 extra fixed-dt frames to −1.8 — well past the
+        //     −1.2 line, still 0.4 m fore of the stand-point (no seat overshoot; the CLUSTER D
+        //     halt-near-the-seat intent holds, now deterministic). The door swing (0.75 sim-s) runs
+        //     concurrently in this phase; budget 6 sim-s covers the swing + the ~2.8 m walk.
+        const rWalk = await drive(6.0,
+          () => ctx.intro.scratch.phase === 'atSeat' && (ctx.player.body.body.translation().x - SHIP.x) < -1.8,
+          () => { faceNegX(); ctx.input.keys['KeyW'] = true; });
+        ctx.input.keys['KeyW'] = false;
+        insideOk = rWalk.ok;
+        // capture the REAL walked-in depth (the gate's proof of the KCC boarding) BEFORE any settle.
+        walkedInX = ctx.player.body.body.translation().x - SHIP.x;   // well into −X (past the −1.0 wall, toward the pod at −2.5)
+        // settle the body at the interior stand-point so the E-sit gaze/proximity is deterministic (a
+        //   real player stands by the seat before sitting). BAY_POD_X = −(COR_HW 1.0 + BAY_RECESS
+        //   2.9 · 0.52) = −2.508; stand = +0.30 fore. (Framing aid ONLY — walkedInX above already
+        //   proves the real walk reached the bore.)
+        if (insideOk) {
+          const stand = { x: SHIP.x - 2.508 + 0.30, y: ctx.player.body.body.translation().y, z: SHIP.z + 4.8 };
+          ctx.player.body.body.setTranslation(stand, true);
+          ctx.player.cameraSnapNextFrame = true;
+          await drive(0.15, () => false, faceNegX);      // ≥2 ticked frames: the snap + camera anchor land at the stand
+        }
+        const pIn = ctx.player.body.body.translation();
+        trace.push({ leg: 'inside?', phase: ctx.intro.scratch.phase, x: +walkedInX.toFixed(2), z: +(pIn.z - SHIP.z).toFixed(2), insideOk, walkSim: rWalk.sim });
+        // (3) E-SIT — re-assert E + the −X facing (the seat gaze target) every yield until the
+        //     edge-triggered sit lands (phase flips atSeat→sealing). Sim budget 2 s.
+        const rSit = await drive(2.0,
+          () => { const ph = ctx.intro.scratch.phase; return ph === 'sealing' || ph === 'eject' || ctx.intro.beat !== 'enterPod'; },
+          () => { faceNegX(); ctx.input.pressed.add('KeyE'); });
+        seated = rSit.ok;
+        trace.push({ leg: 'after E-sit', beat: ctx.intro.beat, phase: ctx.intro.beat === 'enterPod' ? ctx.intro.scratch.phase : '(advanced)', seated, sim: rSit.sim });
+        // (4) E-EJECT — the auto-seal is 0.9 SIM-seconds (deterministic now: 18 fixed-dt frames),
+        //     then inject E at the eject gate until the beat ADVANCES to shipExplode (the lever is
+        //     purely player-gated — no fallback timer). Sim budget 5 s covers the seal + the press.
+        const rEject = await drive(5.0,
+          () => ctx.intro.beat !== 'enterPod',
+          () => { if (ctx.intro.beat === 'enterPod' && ctx.intro.scratch.phase === 'eject') ctx.input.pressed.add('KeyE'); });
+        ejected = rEject.ok;
+        trace.push({ leg: 'after E-eject', beat: ctx.intro.beat, ejected, sim: rEject.sim });
+      } finally {
+        ctx.input.keys['KeyW'] = false;
+        realClock.getDelta = origGetDelta;               // restore the real clock (leak-free)
+        ctx.three.renderer.setSize(origW, origH, false); // restore the canvas
       }
-      const pIn = ctx.player.body.body.translation();
-      trace.push({ leg: 'inside?', phase: ctx.intro.scratch.phase, x: +walkedInX.toFixed(2), z: +(pIn.z - SHIP.z).toFixed(2), insideAtTick: insideAt });
-      // (3) E-SIT — inject E while LOOKING AT the seat (−X). Re-face each tick so the gazeGate to
-      //   getPodBaySeatedEye passes deterministically (cameraSnapNextFrame can otherwise leave a
-      //   stale look after the clamp/settle above → the gaze·facing gate misses).
-      let seated = false;
-      for (let i = 0; i < 25 && !seated; i++) {
-        cam.rotation.order = 'YXZ';
-        cam.rotation.set(0, Math.PI / 2, 0);   // face −X toward the seat (the E-sit gaze target)
-        ctx.input.pressed.add('KeyE');
-        await sleep(80);
-        const ph = ctx.intro.scratch.phase;
-        seated = ph === 'sealing' || ph === 'eject' || ctx.intro.beat !== 'enterPod';
-      }
-      trace.push({ leg: 'after E-sit', beat: ctx.intro.beat, phase: ctx.intro.beat === 'enterPod' ? ctx.intro.scratch.phase : '(advanced)', seated });
-      // (4) E-EJECT — wait out the auto-seal (~0.9 s), then inject E at the eject gate and confirm
-      //     the beat ADVANCES to shipExplode (the lever is purely player-gated — no fallback timer).
-      // generous budget: the seal is 0.9 SIM-seconds, but the ridden-cabin build + shader compiles
-      //   land right here and the headless rig can drop under 1 fps (dt clamped 0.1 → sim time
-      //   crawls). Bounded at ~40 s wall; breaks the moment the eject fires.
-      let ejected = false;
-      for (let i = 0; i < 400 && !ejected; i++) {
-        if (ctx.intro.beat === 'enterPod' && ctx.intro.scratch.phase === 'eject') ctx.input.pressed.add('KeyE');
-        await sleep(100);
-        ejected = ctx.intro.beat !== 'enterPod';
-        if (i % 50 === 0) trace.push({ leg: 'eject-wait', tick: i, beat: ctx.intro.beat, phase: ctx.intro.beat === 'enterPod' ? ctx.intro.scratch.phase : '(advanced)', t: ctx.intro.beat === 'enterPod' ? +Number(ctx.intro.scratch.t || 0).toFixed(2) : undefined });
-      }
-      trace.push({ leg: 'after E-eject', beat: ctx.intro.beat, ejected });
-      return { trace, walkedInX, reachedInside: insideAt >= 0, seated, ejected };
+      return { trace, walkedInX, reachedInside: insideOk, seated, ejected };
     });
     console.log('[pod-walkin] ' + JSON.stringify(log.trace, null, 0));
     console.log(`[pod-walkin] walkedInX=${log.walkedInX.toFixed(2)} reachedInside=${log.reachedInside} seated=${log.seated}`);
@@ -3126,58 +3147,75 @@ const SCENARIOS = {
       ctx.flags.thirdPerson = false;
       if (ctx.player.rig) ctx.player.rig.group.visible = false;
       if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
-      g.startIntro();
-      // run through the crash → the crashed cabin settles at the spawn + frees the player.
-      g.jumpToBeat('impact');
-      await sleep(2600);
-      g.jumpToBeat('wake');
-      await sleep(600);   // let the wake init run (setCabinCrashPose(1) lifts the exposure + seats the player inside)
-      const expoAtWake = ctx.three.renderer.toneMappingExposure;   // the lifted wake exposure (~1.62)
-      // FORCE the wake to its walk-out-ready state deterministically (the come-to fade timing is
-      //   throttle-sensitive in the headless tab; the phases themselves are proven by smokeIntro).
-      //   Blow the FRONT door fully open + hand control to WALK — the exact end-state of the wake
-      //   'blowing'→'climb' phases — so we can drive the REAL KCC walk-out + advance to stepOut.
-      g.blowCabinHatch(1);                 // kick the −Z front door wide (the wake exit)
-      const f = document.getElementById('intro-fade'); if (f) f.style.opacity = '0';   // clear the come-to overlay
-      if (ctx.intro) { ctx.intro.mode = 'walk'; ctx.intro.scratch.phase = 'climb'; ctx.intro.scratch.t = 0; }
-      // record the spawn (inside the cabin) — the walk-out must MOVE the body from here, not teleport.
-      const p0 = ctx.player.body.body.translation();
-      const inside = { x: p0.x, y: p0.y, z: p0.z };
-      // WALK OUT the −Z front door on real legs: face −Z, hold W (forward = −Z), sample the path +
-      //   the exposure each tick (proves the ease is gradual, not a snap, AND the motion is continuous).
-      const cam = ctx.three.camera;
-      cam.rotation.order = 'YXZ';
-      ctx.input.keys['KeyW'] = true;
-      let maxJump = 0;          // the largest single-tick position jump (a teleport would spike this)
-      let prev = { x: inside.x, y: inside.y, z: inside.z };
-      let reachedStepOut = false;
-      let teleportAtHandoff = 0;
-      // ── DETERMINISTIC WALK DRIVER (throttle-proof). The OLD loop held W for 90 × sleep(70) of
-      //    WALL-CLOCK time and measured however far the KCC happened to travel — but the headless
-      //    swiftshader tab renders the heavy scene at ~2 fps, so the number of REAL game frames that
-      //    tick inside that window (and thus the walked distance) swings run-to-run: walkedOutZ
-      //    ranged ~−5.6..−6.9 m on a good run and could dip under the −2.0 GATE-2 floor when the
-      //    machine was loaded (the pre-existing flake). Worse, a single fat-dt catch-up frame could
-      //    spike maxJump toward the 3.0 GATE-3 ceiling. The FIX (same philosophy as smokeExposureEase
-      //    below): pin the loop's dt to a FIXED value so every ticked frame advances a KNOWN sim-dt,
-      //    then drive until a SIM-TIME budget elapses (NOT a wall-clock count) — so the proof (real
-      //    KCC walk ≥ the distance → stepOut → no teleport) is identical every run regardless of the
-      //    tab's frame rate. The assertions below are UNCHANGED and strict.
+      // ── DETERMINISTIC DRIVER (throttle-proof). The OLD driver was wall-clock end to end: the
+      //    impact/wake setup slept 2600+600 ms and the walk loop held W for 90×70 ms, measuring
+      //    however far the KCC happened to travel — but the headless swiftshader tab renders this
+      //    heavy scene at ~1-2 fps, so BOTH legs raced a starved loop: (a) the wake beat's init tick
+      //    could MISS the 600 ms window, so forcing phase='climb' got undone by the late init
+      //    (blowCabinHatch(0) re-shut the door + mode='seated' → walkedOutZ≈0, flaky), and (b) the
+      //    walked distance swung run-to-run (~−5.6..−6.9 m; could dip under the −2.0 GATE-2 floor).
+      //    THE FIX (same technique as pod-walkin / smokeExposureEase): pin the loop's dt to FIXED_DT
+      //    so every ticked frame advances a KNOWN sim-dt, drive the impact→wake chain by its REAL
+      //    phase-flip conditions, and drive the walk until a SIM-TIME budget elapses — never a
+      //    wall-clock count. The assertions below are UNCHANGED and strict.
       const FIXED_DT = 0.05;      // sim-seconds per frame (under the loop's 0.1 clamp → never clamped)
       const SIM_BUDGET = 2.0;     // sim-seconds of walking: at WALK_SPEED 6 m/s → ~11 m out the door
                                   //   (well past the −2.0 GATE-2 floor + the 2.2 m stepOut climb gate)
+      /** Drive the live loop until cond() or simBudget sim-seconds. Stall-bail: ~10 s of yields with
+       *  no ticked frame → the loop is wedged, bail (a long BLOCKING frame can't false-trip it —
+       *  these yields don't run while the main thread is blocked either). */
+      const drive = async (simBudget, cond, perTick) => {
+        const simStart = ctx.time.elapsed;
+        let lastSim = simStart, stalls = 0;
+        for (let i = 0; i < 8000; i++) {
+          if (perTick) perTick();
+          await sleep(16);
+          const nowSim = ctx.time.elapsed;
+          if (nowSim > lastSim + 1e-6) { lastSim = nowSim; stalls = 0; }
+          else if (++stalls > 600) break;
+          if (cond()) return { ok: true, sim: +(nowSim - simStart).toFixed(2) };
+          if (nowSim - simStart >= simBudget) break;
+        }
+        return { ok: cond(), sim: +(ctx.time.elapsed - simStart).toFixed(2) };
+      };
       const realClock = ctx.three.clock;
       const origGetDelta = realClock.getDelta.bind(realClock);
       const origW = ctx.three.renderer.domElement.width, origH = ctx.three.renderer.domElement.height;
+      const cam = ctx.three.camera;
+      let expoAtWake = 0, wakeInitOk = false;
+      let inside = { x: 0, y: 0, z: 0 };
+      let maxJump = 0;          // the largest single-tick position jump (a teleport would spike this)
+      let reachedStepOut = false;
+      let teleportAtHandoff = 0;
       let framesTicked = 0, simElapsed = 0;
       try {
         realClock.getDelta = () => FIXED_DT;             // pin the per-frame sim-dt (throttle-proof)
-        ctx.three.renderer.setSize(48, 48, false);       // tiny canvas → more REAL frames tick per second
+        ctx.three.renderer.setSize(48, 48, false);       // tiny canvas → more REAL frames tick per second (no screenshots in this gate)
+        g.startIntro();
+        // run through the crash → the REAL impact beat auto-advances → wake, whose init tick seats
+        //   the player inside the crashed cabin + lifts the exposure. Driven by the CHAIN's own
+        //   conditions (impact runs IMPACT_FADE+IMPACT_HOLD = 2.7 sim-s, then advanceBeat → wake).
+        g.jumpToBeat('impact');
+        const rWake = await drive(4.5, () => ctx.intro && ctx.intro.beat === 'wake' && ctx.intro.scratch.init === true);
+        wakeInitOk = rWake.ok;
+        expoAtWake = ctx.three.renderer.toneMappingExposure;   // the lifted wake exposure (~1.62)
+        // FORCE the wake to its walk-out-ready state deterministically (the come-to fade phases are
+        //   proven by smokeIntro; this gate proves the WALK). Safe now: the wake init has PROVABLY
+        //   run (rWake cond), so no late init will undo this. Blow the FRONT door fully open + hand
+        //   control to WALK — the exact end-state of the wake 'blowing'→'climb' phases.
+        g.blowCabinHatch(1);                 // kick the −Z front door wide (the wake exit)
+        const f = document.getElementById('intro-fade'); if (f) f.style.opacity = '0';   // clear the come-to overlay
+        if (ctx.intro) { ctx.intro.mode = 'walk'; ctx.intro.scratch.phase = 'climb'; ctx.intro.scratch.t = 0; }
+        // record the spawn (inside the cabin) — the walk-out must MOVE the body from here, not teleport.
+        const p0 = ctx.player.body.body.translation();
+        inside = { x: p0.x, y: p0.y, z: p0.z };
+        // WALK OUT the −Z front door on real legs: face −Z, hold W (forward = −Z), sample the path
+        //   each yield (proves the motion is continuous). Terminated by the SIM budget.
+        cam.rotation.order = 'YXZ';
+        let prev = { x: inside.x, y: inside.y, z: inside.z };
         const simStart = ctx.time.elapsed;
         let lastSim = simStart, stalls = 0;
-        // Bounded iteration cap + a stall-bail (no sim progress across ~5 s of yields) so the driver
-        //   can NEVER hang even if the loop wedges — but termination is by SIM budget, not wall time.
-        for (let i = 0; i < 4000; i++) {
+        for (let i = 0; i < 8000; i++) {
           cam.rotation.set(-0.05, 0, 0);   // face −Z (yaw 0) → W walks toward/through the −Z front door
           ctx.input.keys['KeyW'] = true;   // re-assert each iteration (endInputFrame clears pressed; keys persist, belt-and-braces)
           await sleep(16);                 // yield so real rAF frames tick between samples
@@ -3192,7 +3230,7 @@ const SCENARIOS = {
           }
           const nowSim = ctx.time.elapsed;
           if (nowSim > lastSim + 1e-6) { lastSim = nowSim; stalls = 0; }
-          else if (++stalls > 300) break;   // ~5 s of yields with no ticked frame → loop wedged, bail
+          else if (++stalls > 600) break;   // ~10 s of yields with no ticked frame → loop wedged, bail
           simElapsed = nowSim - simStart;
           framesTicked = Math.round(simElapsed / FIXED_DT);
           if (simElapsed >= SIM_BUDGET) break;
@@ -3216,10 +3254,14 @@ const SCENARIOS = {
         ease: easeReport,
         inside: [+inside.x.toFixed(2), +inside.z.toFixed(2)], walkedOutZ: +walkedOutZ.toFixed(2),
         maxJump: +maxJump.toFixed(2), reachedStepOut, teleportAtHandoff: +teleportAtHandoff.toFixed(2),
-        driver: { simElapsed: +simElapsed.toFixed(2), framesTicked },   // deterministic-driver diagnostics
+        driver: { simElapsed: +simElapsed.toFixed(2), framesTicked, wakeInitOk },   // deterministic-driver diagnostics
       };
     });
     console.log('[pod-walkout] ' + JSON.stringify(log));
+    // GATE 0 — the SETUP proved itself: the real impact→wake chain advanced + the wake init tick ran
+    //   (seats the player inside the crashed cabin). Without this, a walk failure below would be a
+    //   confusing symptom of a broken setup, not a broken walk-out.
+    if (!log.driver.wakeInitOk) throw new Error(`pod-walkout GATE FAILED: the impact→wake chain never initialised the wake (driver=${JSON.stringify(log.driver)}) — the crash-chain setup is broken.`);
     // GATE 1 — the player physically WALKED OUT (moved −Z out the front door onto the terrain).
     if (log.walkedOutZ > -1.0) throw new Error(`pod-walkout GATE FAILED: the body only moved z=${log.walkedOutZ} out the door (expected < −1.0 — the walk-out path is blocked or the door didn't open).`);
     // GATE 2 — NO TELEPORT: a stepOut teleport-to-returnPos would SNAP the body back near the spawn
