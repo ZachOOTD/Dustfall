@@ -28,7 +28,7 @@ editing `sequence.ts` / `sky.ts` / `podScene.ts` / `rig-shot.mjs`. At boot: `git
   changes when exiting the pod — wake = spawning into the world).
 - ▶ **W2 — the canonical pod + airlock bay** (the user's #1 repeated ask: "the EXACT same
   model through the whole sequence — I don't think you're getting this correctly"): make the
-  pod TALLER (reads short/stubby); BIG interior overhaul (the porthole circle overlaps the
+  pod TALLER (reads short/stubby); BIG interior overhaul (the porthole is TOO BIG for the door + its bezel CLIPS the hull sides — size it within the door slab w/ clear margins; the porthole circle overlaps the
   door, overlapping models/textures — clean redesign where everything connects); ONE model
   used in the bay + the fall + the surface (full interior + see-through porthole visible in
   the bay). NEW BAY LAYOUT: an OPERATIONAL sliding door (engine-room style) → a small

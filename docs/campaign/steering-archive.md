@@ -133,3 +133,6 @@ W2 EXPANDED (the canonical pod): the pod is TOO SHORT/STUBBY in the world → ta
 
 ## 2026-07-03 — the pod door sits slightly SLANTED when closed (verbal; sent live to W6 as item 6)
 Should be closed cleanly/flush. Suspects: an animation ending not-exactly-closed (the seal swing landing off 0, the release judder's sine residue, the cabin door's sealed state), or a static pivot/mount offset. Verify flush at EVERY sealed stage (bay pre-open, post-seal, descent, impact, pre-kick wake).
+
+## 2026-07-03 — pod porthole proportions (verbal; → W2 spec refinement)
+The viewport/porthole is TOO BIG for the door, and its circular bezel CLIPS the pod's hull sides. W2's door+porthole rebuild must size the porthole to sit comfortably WITHIN the door slab (clear margin to the door edges on all sides) and keep the bezel fully on the door face (no wrap/clip past the pod's curvature). Pairs with: the taller pod body + "the circle overlaps the door" from the same batch.
