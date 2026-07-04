@@ -1,59 +1,55 @@
-# Next session — the X-queue OVERNIGHT batch (W2 walk-test feedback, 2026-07-04 pre-bed)
+# Next session — X-queue COMPLETE (overnight 2026-07-04); awaiting the user's walk-test
 
-The user walk-tested W2 and left a large feedback batch + 4 clarifying answers (steering-archive
-2026-07-04 — read it verbatim first). Branch `campaign/escape-pod-intro`; W2 shipped as `65bb290`.
-Overnight autonomous execution approved: "plan it all perfectly... wake up to a lot of well done
-progress." Quality bar: very high; verify thoroughly; adversarial gates on hero visuals.
-**Standing rule 9: collision matches models, same change, motion-proven.**
+The full overnight batch from the user's W2 walk-test feedback SHIPPED (9 commits,
+`bab0cd9..a97a3de`, all pushed). Boot from this file + `docs/campaign/steering-archive.md`
+(2026-07-04 entries). Branch `campaign/escape-pod-intro`. The intro preview build + local
+server (port 4173, `dustfall-intro-preview`) were rebuilt at close-out.
 
-## User's clarifying answers (2026-07-04)
-1. **Canopy scope = FULL REBUILD** — tear down most of the cockpit front section, build the
-   multi-pane wraparound canopy fresh (keep chair, console [redesign allowed], arched ribs);
-   update the exterior hauler nose ROUGHLY to match (the eject shot).
-2. **Eject view = BAY UNTIL EJECT** — seated+sealed you see the airlock/bay through the porthole
-   (red-alert still flashing); the frame swap happens under the eject blast/tumble.
-3. **Crew quarters = LIVED-IN BASICS** — bunk, locker, small desk/shelf, a few personal props.
-4. **Hallway windows = ONE LONG VIEWPORT STRIP** on the right/starboard wall.
+## What shipped (all gates green; per-unit detail in the git log)
+- ✅ **X1+X1p COCKPIT FULL REBUILD** — 8-pane faceted panoramic canopy (research-grounded),
+  side walls cleaned, bolts root-caused (_stud axis), rib strips re-seated, hauler nose
+  matched + made legible; polish: uniform pane clarity (Fresnel overdrive), slim A-posts,
+  rooted beacon, sill fascia. Adversarial gate PASS.
+- ✅ **X2a THE ONE POD** — the bay pod IS the real cabin (one interior path, sealed shell,
+  no space visible inside), console/eject detail redesign, flush door (hinge root cause),
+  pale-at-eject killed, landed pod on plain terrain w/ clear plumb door + walk-back-in.
+- ✅ **X3 FLOW** — board straight from the engine check (bay-reach arming); red-alert strobes
+  through the whole boarding + release; BAY-UNTIL-EJECT (the frame swap rides the eject
+  blast; same door in view before/after).
+- ✅ **X4 CORRIDOR** — walkable lived-in crew quarters (sliding door, CREW placard, bunk/
+  locker/desk/props); the starboard viewport strip; bay-entrance hull seams root-caused +
+  sealed; bay-pod collision ring verified; airlock detail; pipe ends in manifolds; engine
+  detail.
+- ✅ **X6 WRAP** — combined 3-lens adversarial gate (11 agents) → 3 confirmed SEV1s + SEV2s
+  ALL fixed + own-eyes re-verified (viewport = real starfield window [root cause: an opaque
+  reveal panel COVERED the glass], quarters doorway conduits split + capped, airlock leaves
+  matched + aligned seal lamps, plumb open pod door [swing sag + over-rotation], sealed ring
+  seams, capped conduits, seated hauler brow). SHIP-WIDE COLLISION AUDIT: rule-9 PASS, zero
+  stale colliders, zero uncovered walkables. Suite: verify:all · smoke-intro beats:12 ·
+  pod-walkin · pod-walkout · airlock-motion · smoke-pod-persistence · bench:intro (PRELOAD
+  Σ-entry 21.3ms, 0 frames >50ms — no hitch regression; bench takes ~30min wall-clock under
+  swiftshader, that is NORMAL).
 
-## The X-queue (waves = file-ownership; parallel within a wave)
+## WALK-TEST FLAGS for the user (stills can't gate these — their eyes decide)
+1. The cockpit seated WOW + head-turn parallax through the wrap panes (+ the planet framing).
+2. The boarding rhythm end-to-end: engine check → straight to the airlock → E-opens → sit →
+   red-alert flashing throughout → eject WITH the bay visible until the blast.
+3. The collar depth read in motion (a critic still counts the door jamb as a "nested frame").
+4. The viewport strip on the corridor walk (star backdrop; largest stars read faintly square).
+5. The quarters peek (lived-in read; furniture is intentionally walk-through decoration).
+6. The landed pod: plumb open door, walk-back-in, plain terrain (sand dressing removed —
+   re-enable lever: ENABLE_CRASH_GROUND_DRESSING in podScene.ts).
+7. Audio mix balance (standing flag).
 
-### WAVE 1 (parallel: shipScene ∥ podScene)
-- ▶ **X1 — COCKPIT FULL REBUILD** (shipScene cockpit region + haulerScene nose; modeler +
-  research digest + adversarial gate): multi-pane ANGLED glass canopy wrapping partial
-  top+left+right (user reference: framed panoramic, Millennium-Falcon-like; flat front sheet =
-  the complaint); keep chair/console/arches; REMOVE side-wall pipes + the light-grey/dark-grey
-  long rectangles (back wall→glass); REMOVE the yellow box consoles on both cockpit walls; fix
-  the FRONT ribs' orange light-strip placement (back ribs OK); fix cockpit bolt orientations;
-  colliders same-change; hauler nose roughly matched.
-- ▶ **X2a — THE ONE POD, FOR REAL** (podScene; modeler + adversarial gate) — the #1 ask, 3rd
-  repeat: the bay pod must BE the real cabin — full real interior (not the canonical "peek"),
-  NO space visible from inside (seal the exterior-skin/wall gaps); INTERIOR DETAIL REDESIGN
-  (levers/console/buttons realistic); door EXACTLY flush in every sealed state (still ajar
-  pre-eject); hunt+kill the PALE/BRIGHT pod that appears at eject (all phases, one tone);
-  LANDED POD: same door as the ship one (it reads different), remove the metal sheet blocking
-  the landed doorway, remove the sand streaks + mound, WALK-BACK-IN works (motion gate).
-### WAVE 2 (after X1 frees shipScene; parallel: shipScene ∥ sequence)
-- ▶ **X4 — CORRIDOR: QUARTERS + VIEWPORT + MISC** (shipScene; modeler + gate): crew quarters
-  room LEFT side toward the engine room (sliding door, lived-in basics per answer 3); the long
-  right-wall viewport strip (answer 4); seal the hull GAPS beside the pod-bay entrance (space
-  visible!); airlock detail pass; bay-pod COLLISION (player can't pass through its hull);
-  W3 leftovers: bolt orientation ship-wide, corridor-entrance pipe ends routed into the
-  wall/arch, engine-room detail. Colliders + motion probes.
-- ▶ **X3 — FLOW + STATE** (sequence; main loop): board straight after the engine check (no
-  cockpit detour to arm the pod door); red-alert flashing PERSISTS until seated + LAUNCH;
-  pre-eject seated view = the BAY through the porthole, frame swap at eject under the blast
-  (answer 2 — move the ensureInPod swap from the seal phase to the eject fire); smoke driver +
-  gates updated.
-### WAVE 3
-- ▶ **X6 — THE WRAP**: ship-wide collision audit (rule 9, motion-proven) → full gate suite
-  (verify:all · smoke-intro · pod-walkin/out · airlock-motion · persistence · bench:intro
-  [NOTE: bench takes ~30 min wall-clock under swiftshader — that is NORMAL, do not kill it]) →
-  adversarial visual gates on X1/X2a/X4 → rebuild `npm run build:intro` + restart the
-  `dustfall-intro-preview` server (port 4173) → kill stray rig dev servers → clean `git status`
-  → ONE wake-up summary.
+## Known non-blocking residuals
+- ship-explode rig scenario shows a false-pale cabin (live-loop noon stomp — documented in
+  steering-archive; judge the eject cabin in-game or via pod-interior scenarios).
+- The bench COLD path rose 124→181ms with the new geometry; the shipped PRELOAD path is
+  the gate and held (~21ms). If COLD ever matters, extend the preload warm list.
+- Star quads: texture point-sprites would be crisper (deferred by draw-call discipline).
 
-## Contracts + tools (unchanged from W2)
-Commit+push per unit. Modeler agents own one file each; sequence.ts is main-loop-owned.
-Rig ports: 5191/5192 split when parallel. The rig aspect fix + flee-cam fix are in (65bb290) —
-shots are true now. Adversarial gate: 3 lenses + confirm pass; own-eyes verify every fix on the
-finding shot. `docs/architecture-escape-pod-intro.md` = the map.
+## Next after the walk-test
+Fold the user's feedback (steering → a new queue); then the remaining campaign phases
+(the CLAUDE.md note: Phase 3 hauler/disaster polish → 4 crash/tutorial → 5 audio) per
+`docs/campaign/campaign-state.json`. Rule 9 stands: collision matches models, same change,
+motion-proven.
