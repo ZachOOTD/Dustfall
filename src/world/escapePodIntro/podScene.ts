@@ -312,6 +312,16 @@ const _fillScratch = new THREE.Color();
 let chuteLever: THREE.Group | null = null;  // the parachute lever pivot (setParachuteLeverPull)
 let chuteLeverRestX = 0;                     // its resting pitch (radians); pulls jolt from here
 let leverBrokenTell: THREE.Group | null = null;  // the snapped-mount reveal (shown on snap)
+let _chutePullState = 0;                     // Y7 — last chute pull t (re-applied after a rebuild re-creates the interior)
+let _chuteSnapState = false;                 // Y7 — last chute snapped flag (re-applied after a rebuild)
+// Y7 — the EJECT lever pull animation. The T-handle now hangs off a clevis PIVOT so it can swing
+//   DOWN when the player ejects (previously the eject fired with no visible lever motion). setEjectLeverPull
+//   drives ejectLever.rotation.z from ejectLeverRestZ (rest/up) to +swing (fully pulled down). Module-scope
+//   so a descent/crash rebuild doesn't realloc; _ejectPullState is re-applied when the interior rebuilds.
+let ejectLever: THREE.Group | null = null;   // the eject T-handle pivot (setEjectLeverPull)
+let ejectLeverRestZ = 0;                     // its resting swing angle (radians, local Z); 0 = up/rest
+let _ejectPullState = 0;                     // Y7 — last eject pull t (re-applied after a rebuild)
+const EJECT_SWING = 1.15;                    // radians the handle swings on a full pull (~66°) — a clear pull-down throw
 const _cabinDisposables: THREE.BufferGeometry[] = [];   // per-build geometry to free on dispose
 
 // ── CLUSTER D — the escape exit is now THE MERGED FRONT DOOR (−Z, unified with the viewport).
@@ -1002,35 +1012,41 @@ function buildConsoleAndLever(group: THREE.Group): void {
     }
   }
 
-  // ── the big clean PARACHUTE LEVER (redesigned — the old messy assembly is gone). A stout steel
-  //    MOUNT block on the deck's forward end → a hinge PIVOT (chuteLever) → a thick shaft with ONE
-  //    hazard collar → a fat worn-red grip. Canted back toward the pilot at rest; setParachuteLever-
-  //    Pull swings it DOWN-and-return, and the SNAP flops it dead + exposes leverBrokenTell.
-  const leverBaseX = -0.06, leverBaseY = deckY + 0.11, leverBaseZ = -0.34;
-  const mount = _box(0.16, 0.14, 0.20, _cabSteel);      // chunky steel clevis mount (the lever bolts to this)
-  mount.position.set(leverBaseX, leverBaseY - 0.02, leverBaseZ);
+  // ── Y7 — the PARACHUTE LEVER, REPOSITIONED LOW + SEATED-NATURAL. It used to mount HIGH on the deck
+  //    (grip ~1.95m — a weird overhead reach for a seated pilot). It now mounts LOW, beside-and-forward
+  //    of the seat on the +X (right) flank: a stout clevis at the console's forward-lower corner → a
+  //    short shaft angled UP toward the seated hand → a fat red grip at ~1.0m (seated elbow/thigh reach).
+  //    Minimal: clevis + shaft + ONE hazard collar + the fat grip. The animation contract is UNCHANGED —
+  //    the pivot still swings on rotation.x from chuteLeverRestX (setParachuteLeverPull), snap unchanged.
+  //    Base con-local ≈ (-0.65, 0.60, 0.52) → grip pod-local ≈ (0.36, 1.0, 0.34): FORWARD-right of the
+  //    seat so the seated glance is a natural ~45° down-right (faceControl yaw ≈ 0.79, pitch ≈ −0.55),
+  //    not a 115° reach behind. The clevis sits just off the console's forward face (con-local z≈0.46).
+  const leverBaseX = -0.65, leverBaseY = 0.60, leverBaseZ = 0.52;
+  const mount = _box(0.18, 0.16, 0.20, _cabSteel);      // chunky steel clevis mount (bolts to the console flank, low + forward)
+  mount.position.set(leverBaseX + 0.05, leverBaseY - 0.04, leverBaseZ);
   con.add(mount);
-  const cheek = _box(0.03, 0.16, 0.16, _cabSteel);      // one visible clevis cheek plate (reads as a real hinge bracket)
-  cheek.position.set(leverBaseX - 0.10, leverBaseY + 0.02, leverBaseZ);
+  const cheek = _box(0.16, 0.16, 0.03, _cabSteel);      // one visible clevis cheek plate (reads as a real hinge bracket)
+  cheek.position.set(leverBaseX, leverBaseY + 0.02, leverBaseZ + 0.11);
   con.add(cheek);
   const leverPivot = new THREE.Group();
-  leverPivot.position.set(leverBaseX, leverBaseY + 0.03, leverBaseZ);
-  chuteLeverRestX = -0.34;              // resting back-cant (toward the pilot); pulls swing forward from here
+  leverPivot.position.set(leverBaseX, leverBaseY + 0.02, leverBaseZ);
+  leverPivot.userData.noMerge = true;  // Y7 — the swinging lever must NOT be folded into the static batch (the pull + snap must move)
+  chuteLeverRestX = -0.34;              // resting back-cant (toward the pilot/hand); pulls swing forward from here
   leverPivot.rotation.x = chuteLeverRestX;
   con.add(leverPivot);
-  const shaft = _cyl(0.032, 0.040, 0.52, 10, _cabSteel);   // one stout shaft (thicker + taller → reads chunky)
-  shaft.position.set(0, 0.26, 0);
+  const shaft = _cyl(0.032, 0.040, 0.40, 10, _cabSteel);   // one stout shaft (shorter now — the mount is low, the grip lands at reach)
+  shaft.position.set(0, 0.20, 0);
   leverPivot.add(shaft);
   const hazBand = _cyl(0.046, 0.046, 0.08, 10, _ejectGrip);   // ONE hazard-yellow collar (the "pull" tell)
-  hazBand.position.set(0, 0.34, 0);
+  hazBand.position.set(0, 0.28, 0);
   leverPivot.add(hazBand);
-  const grip = _cyl(0.088, 0.095, 0.20, 12, _chuteGrip);   // fat worn-red grip (bigger → the gag star reads "pull me")
-  grip.position.set(0, 0.60, 0);
+  const grip = _cyl(0.088, 0.095, 0.20, 12, _chuteGrip);   // fat worn-red grip (the gag star reads "pull me")
+  grip.position.set(0, 0.46, 0);
   leverPivot.add(grip);
   const capGeo = new THREE.SphereGeometry(0.092, 12, 8);
   _cabinDisposables.push(capGeo);
   const gripCap = new THREE.Mesh(capGeo, _chuteGrip);
-  gripCap.position.set(0, 0.70, 0);
+  gripCap.position.set(0, 0.56, 0);
   leverPivot.add(gripCap);
   chuteLever = leverPivot;
   // ── the SNAPPED-MOUNT tell (hidden until setParachuteLeverPull(_, true) shows it): a torn bracket
@@ -1048,15 +1064,29 @@ function buildConsoleAndLever(group: THREE.Group): void {
   brokenTell.add(sprungPin);
   con.add(brokenTell);
   leverBrokenTell = brokenTell;
-  // a chunky hazard-yellow "CHUTE" placard on the deck beside the lever (one clear label, not text greebles)
-  const placard = _box(0.20, 0.02, 0.12, _ejectGrip);
-  placard.position.set(-0.02, deckY + 0.10, -0.10);
-  placard.rotation.z = dt;
+  // Y7 — a stout BRACKET ARM cantilevers the low clevis off the console body's forward-left corner, so
+  //   the repositioned lever is physically MOUNTED (no floater) — it reads as bolted to the console, out
+  //   forward-and-inboard beside the seat where the seated hand falls. The arm spans the X gap from the
+  //   console body (x≈+0.10) to the clevis (x=leverBaseX) at the low mount height.
+  const armX0 = 0.12;                                  // where the arm ties into the console body
+  const armW = Math.abs(armX0 - leverBaseX) + 0.10;    // spans body → clevis
+  const bracket = _box(armW, 0.13, 0.18, _cabChannel);
+  bracket.position.set((armX0 + leverBaseX) / 2, leverBaseY - 0.05, leverBaseZ);
+  con.add(bracket);
+  const bracketGusset = _box(0.10, 0.28, 0.14, _cabSteel);   // a gusset tying the arm down to the console body (stiffens the read, no floating cantilever)
+  bracketGusset.position.set(armX0, leverBaseY - 0.20, leverBaseZ);
+  con.add(bracketGusset);
+  // a chunky hazard-yellow "CHUTE" placard on the bracket top beside the grip (one clear label)
+  const placard = _box(0.15, 0.02, 0.10, _ejectGrip);
+  placard.position.set(leverBaseX + 0.16, leverBaseY + 0.02, leverBaseZ - 0.12);
   con.add(placard);
-  const placardText = _box(0.14, 0.024, 0.03, _cabScreen);
-  placardText.position.set(-0.02, deckY + 0.125, -0.10);
-  placardText.rotation.z = dt;
+  const placardText = _box(0.10, 0.024, 0.03, _cabScreen);
+  placardText.position.set(leverBaseX + 0.16, leverBaseY + 0.035, leverBaseZ - 0.12);
   con.add(placardText);
+  // Y7 — re-apply the last pull/snap pose so a descent/crash rebuild restores the lever where the
+  //   sequence left it (the chute beat re-drives per-frame, but this makes the rebuild self-correct
+  //   even on a static frame — mirrors applyEjectLeverPose in buildEjectControl).
+  setParachuteLeverPull(_chutePullState, _chuteSnapState);
 }
 
 /** Y3 Interior Mk-II — the big guarded EJECT handle, curve-seated on the −X (left) wall, facing
@@ -1100,24 +1130,74 @@ function buildEjectControl(group: THREE.Group): void {
     leg.rotation.z = 0.7;
     ej.add(leg);
   }
-  // ONE fat red T-handle reaching inboard (−X): a stout stem + a fat crossbar grip + end caps.
-  const stem = _cyl(0.044, 0.044, 0.30, 8, _cabSteel);
+  // ── Y7 — the T-handle now hangs off a CLEVIS PIVOT so it SWINGS DOWN on a pull (setEjectLeverPull).
+  //    A stout steel clevis is fixed on the housing face; the pivot group sits at its pin; the handle
+  //    (stem + fat red crossbar) is a child reaching inboard (−X). At rest it points inboard-and-up
+  //    (ejectLeverRestZ); a pull rotates it about the group-local +Z (a horizontal tangent axis) so the
+  //    inboard-pointing arm swings DOWN toward −Y — a clear yank-down. KISS: the clevis + the handle only.
+  const pinX = -0.20, pinY = 0.10;   // the pivot pin location on the housing face (inboard of the well)
+  // the clevis: two steel cheek plates flanking the arm root + a cross pin (reads as a real hinge).
+  for (const sz of [-1, 1]) {
+    const cheekE = _box(0.05, 0.16, 0.04, _cabSteel);
+    cheekE.position.set(pinX, pinY + 0.02, sz * 0.075);
+    ej.add(cheekE);
+  }
+  const clevisPin = _cyl(0.020, 0.020, 0.20, 8, _cabRivet);
+  clevisPin.rotation.x = Math.PI / 2;
+  clevisPin.position.set(pinX, pinY, 0);
+  ej.add(clevisPin);
+  // the swinging handle group, hinged at the pin. Local −X = the arm reach; a pull rotates +Z → down.
+  ejectLever = new THREE.Group();
+  _ejectLevers.add(ejectLever);         // release wiring — the setter drives EVERY live instance (see _ejectLevers)
+  ejectLever.position.set(pinX, pinY, 0);
+  ejectLever.userData.noMerge = true;   // Y7 — the swinging handle must NOT be folded into the static batch (or the pull reads dead)
+  ejectLeverRestZ = -0.30;              // resting: arm points inboard-and-slightly-UP (a raised handle at rest)
+  ejectLever.rotation.z = ejectLeverRestZ;
+  ej.add(ejectLever);
+  const stem = _cyl(0.044, 0.044, 0.30, 8, _cabSteel);   // stout stem reaching inboard from the pin
   stem.rotation.z = Math.PI / 2;
-  stem.position.set(-0.30, 0.02, 0);
-  ej.add(stem);
-  const barT = _cyl(0.062, 0.062, 0.36, 10, _ledRed);     // fat RED crossbar (the pull grip — reads distinct from the yellow housing)
-  barT.position.set(-0.46, 0.02, 0);
-  ej.add(barT);
+  stem.position.set(-0.15, 0, 0);
+  ejectLever.add(stem);
+  const barT = _cyl(0.062, 0.062, 0.36, 10, _ledRed);     // fat RED crossbar grip at the arm end (distinct from the yellow housing)
+  barT.position.set(-0.30, 0, 0);
+  ejectLever.add(barT);
   for (const sz of [-1, 1]) {
     const cap = _cyl(0.072, 0.058, 0.04, 8, _cabSteel);
     cap.rotation.x = Math.PI / 2;
-    cap.position.set(-0.46, 0.02, sz * 0.18);
-    ej.add(cap);
+    cap.position.set(-0.30, 0, sz * 0.18);
+    ejectLever.add(cap);
   }
   // a chunky stencilled "EJECT" placard on the lower housing (one dark-on-yellow label bar)
   const ejLabel = _box(0.03, 0.10, 0.34, _cabScreen);
   ejLabel.position.set(-0.135, -0.30, 0);
   ej.add(ejLabel);
+  // Y7 — re-apply the last pull pose so a descent/crash rebuild restores the handle where it was
+  //   (mirrors how buildConsoleAndLever re-applies the chute state below).
+  applyEjectLeverPose();
+}
+
+/** Release wiring — ALL live eject-lever pivots. The single `ejectLever` ref is last-build-wins,
+ *  but during the BOARDING beat the visible lever is the BAY pod's interior, which the preload
+ *  builds BEFORE the (parked, invisible) ride cabin — so the single ref would animate the wrong
+ *  instance. The setter drives every registered pivot; detached ones (disposed ship) no-op
+ *  visually. Cleared with the cabin dispose; the bay instance dies with the ship scene graph. */
+const _ejectLevers = new Set<THREE.Group>();
+
+/** Y7 — pose the eject lever from `_ejectPullState` (0 = rest/up, 1 = fully pulled down). Split out so
+ *  both the public setter AND the rebuild re-apply drive the exact same math. Safe if unbuilt. */
+function applyEjectLeverPose(): void {
+  const k = Math.max(0, Math.min(1, _ejectPullState));
+  for (const lev of _ejectLevers) lev.rotation.z = ejectLeverRestZ + k * EJECT_SWING;
+  if (ejectLever && !_ejectLevers.has(ejectLever)) ejectLever.rotation.z = ejectLeverRestZ + k * EJECT_SWING;
+}
+
+/** Pose the EJECT lever. `t` in [0,1]: 0 = at rest (handle up), 1 = fully pulled DOWN (the yank that
+ *  fires the eject). The enterPod "pull eject" beat eases t 0→1 as the player commits the pull; the
+ *  ease is the caller's job. Persists `t` so a descent/crash rebuild re-applies the pose. Safe no-op
+ *  if the pod isn't built. */
+export function setEjectLeverPull(t: number): void {
+  _ejectPullState = Math.max(0, Math.min(1, t));
+  applyEjectLeverPose();
 }
 
 /** Conduit pipes following the curve, a junction box, drooping cables, a ceiling dome
@@ -2829,6 +2909,14 @@ export function buildPodScene(ctx: GameContext): void {
   if (cabinHatchPivot) cabinHatchPivot.userData.noMerge = true;   // the swinging front door (+ its integral domed porthole) rides the pivot
   if (reentryPlasmaMesh) reentryPlasmaMesh.userData.noMerge = true;
   if (reentryShimmerMesh) reentryShimmerMesh.userData.noMerge = true;
+  // Y7 — PROTECT the animated LEVER PIVOTS from the merge. Both hang on a hinge group that
+  //   setEjectLeverPull / setParachuteLeverPull rotates; merging would bake the shaft+grip into a
+  //   root-static batch (detached from the pivot) so the pull-down + snap would never move. Mark the
+  //   pivot groups noMerge so their children stay parented to the hinge. (The chute lever survived
+  //   before by luck of unique materials; the eject lever's steel/red bars share the batch materials
+  //   and WERE being folded — the pull read dead. This makes both explicit + correct.)
+  if (chuteLever) chuteLever.userData.noMerge = true;
+  if (ejectLever) ejectLever.userData.noMerge = true;
   mergeStaticByMaterial(group);
 
   ctx.three.scene.add(group);
@@ -3090,6 +3178,8 @@ export function setTumbleLight(settle: number): void {
  *  the lever hangs slack off its pivot (the 3rd-pull SNAP, no chute). Safe no-op if the
  *  pod isn't built. */
 export function setParachuteLeverPull(t: number, snapped = false): void {
+  _chutePullState = Math.max(0, Math.min(1, t));   // Y7 — persist so a rebuild re-applies the pose
+  _chuteSnapState = snapped;
   if (!chuteLever) return;
   if (snapped) {
     // The lever SNAPPED off its mount: it hangs DEAD — flopped fully forward + past its
@@ -3141,6 +3231,8 @@ export function disposePodScene(ctx: GameContext): void {
   cabinFill = null;
   chuteLever = null;
   leverBrokenTell = null;
+  if (ejectLever) _ejectLevers.delete(ejectLever);
+  ejectLever = null;             // Y7 — the eject-handle pivot (re-created on the next interior build)
   cabinHatchPivot = null;        // R3a — the cabin escape-hatch pivot
   hatchSpillLight = null;        // R3a
   cabinLamp = null;              // R3a
