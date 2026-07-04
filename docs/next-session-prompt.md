@@ -1,4 +1,20 @@
-# Next session — X-queue COMPLETE (overnight 2026-07-04); awaiting the user's walk-test
+# Next session — Y-QUEUE COMPLETE (2026-07-04); RELEASE PENDING the user's final walk-test
+
+**THE RELEASE IS STAGED.** The full Y-queue shipped through `b6ade67` (cockpit Mk-III glazed
+dome w/ user review round; the ONE-pod consistency + interior Mk-II; pivoting levers at
+seated reach; rotate-then-eject 180° beat; visible eject pull; real-glass hallway windows +
+densified real starfield; z-fights root-caused; menu freeze-frame loading; Model Stage +
+Geometry Lint tooling; E-to-sit + no-emoji fixes). Full suite green incl. the new permanent
+gates (door-flush-audit 7 states · doorway-torture 6/6). The 4173 server serves the release
+build. ON THE USER'S CONFIRMATION: (1) flip `FEATURES.escapePodIntro` default ON w/ env
+kill-switch (`!== '0'`), (2) re-gate the DEFAULT build (plain `npm run build` + smoke) + the
+Continue-with-old-save path, (3) `git merge --no-ff` → master + push, (4) watch deploy.yml →
+verify the LIVE Pages link (New Game → cockpit; old-save Continue skips the intro), (5) docs
++ campaign-state to RELEASED. If the user reports issues instead: fold into a new queue,
+re-verify, THEN release.
+
+--- (superseded prior state below) ---
+# X-queue COMPLETE (overnight 2026-07-04); awaiting the user's walk-test
 
 The full overnight batch from the user's W2 walk-test feedback SHIPPED (9 commits,
 `bab0cd9..a97a3de`, all pushed). Boot from this file + `docs/campaign/steering-archive.md`
