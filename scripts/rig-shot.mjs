@@ -2890,25 +2890,50 @@ const SCENARIOS = {
       const tr = ctx.player.body.body.translation();
       const floorY = tr.y - (ctx.player.body.halfHeight + ctx.player.body.radius);   // ship floor world-y
       const V = cam.position.constructor;
-      // Bay is at local z≈4.8 on the −X wall; docked pod centre x≈SHIP_ORIGIN.x - (COR_HW+BAY_RECESS*0.52).
-      const bayZ = tr.z + 4.8;            // world z of the bay centre (tr.z is SHIP_ORIGIN.z at spawn)
-      const podX = tr.x - (1.0 + 2.9 * 0.52);   // world x of the docked pod centre (≈ tr.x - 2.5)
-      const hatchX = tr.x - 1.0 + 0.2;   // just corridor-side of the open hatch
-      void hatchX;
+      // W2b airlock layout: aperture at local z≈4.8 on the −X wall (x=−1.0); collar to x=−1.92; the
+      //   docked pod centre x = SHIP_ORIGIN.x − 3.36 (mostly OUTSIDE the hull); pod door face x=−1.92.
+      const bayZ = tr.z + 4.8;            // world z of the airlock centre (tr.z is SHIP_ORIGIN.z at spawn)
+      const wallX = tr.x - 1.0;           // the −X wall / sliding-door plane
+      const podDoorX = tr.x - 1.92;       // the pod door face (collar far end)
+      const podX = tr.x - 3.36;           // the docked pod centre (out in the void)
+      // open the sliding door for the hatch/collar/exterior reads so the pod door + collar show.
+      //   setBayAirlockDoor isn't yet on __game (the orchestrator wires it) — drive the named leaves
+      //   directly here (mirror the slide math: fore leaf −Z, aft leaf +Z into wall pockets).
+      if (angle === 'hatch' || angle === 'collar' || angle === 'exterior') {
+        const aHW = 0.72, travel = 0.82, bzL = 4.8;   // LOCAL bay-group z (group is at SHIP_ORIGIN)
+        const lL = ctx.three.scene.getObjectByName('airlockDoorLeafL');
+        const lR = ctx.three.scene.getObjectByName('airlockDoorLeafR');
+        if (lL) lL.position.z = (bzL - aHW / 2) - travel;
+        if (lR) lR.position.z = (bzL + aHW / 2) + travel;
+      }
       let eye, look;
       if (angle === 'hatch') {
-        // close at the open hatch, looking −X straight into the aperture + the lit cabin peek
-        eye = new V(tr.x + 0.2, floorY + 1.4, bayZ + 0.5);
-        look = new V(podX + 0.8, floorY + 1.28, bayZ - 0.05);
+        // in the collar mouth, looking −X at the whole pod door face + the lit cabin peek through its glass
+        eye = new V(wallX - 0.05, floorY + 1.45, bayZ + 0.05);
+        look = new V(podDoorX - 0.2, floorY + 1.2, bayZ);
+      } else if (angle === 'collar') {
+        // stood back in the CORRIDOR at the open sliding door, looking down the lit collar to the pod
+        //   door (the sliding door → airlock collar → docked pod read — the money shot)
+        eye = new V(wallX + 1.9, floorY + 1.55, bayZ);
+        look = new V(podDoorX, floorY + 1.28, bayZ);
+      } else if (angle === 'exterior') {
+        // DIAGNOSTIC — from outside the ship's −X hull, looking back at the docked pod (verifies the pod
+        //   sits OUTSIDE the hull, not floating/clipping). Not a player view; a build check.
+        eye = new V(podX - 2.6, floorY + 2.2, bayZ + 2.4);
+        look = new V(podX + 0.2, floorY + 1.3, bayZ);
       } else if (angle === 'wide') {
-        // a 3/4 framing from down the corridor, angled INTO the bay (the pod is the subject)
+        // a 3/4 framing from down the corridor, angled INTO the airlock (the docked pod is the subject)
         eye = new V(tr.x + 0.3, floorY + 1.65, bayZ + 3.2);
-        look = new V(podX + 0.5, floorY + 1.2, bayZ);
+        look = new V(podDoorX + 0.2, floorY + 1.3, bayZ);
       } else {
-        // flee: standing at the +X wall, level with the bay, looking across the corridor INTO the
-        //   alcove — frames the whole docked pod + its open hatch (the run-past-and-see-the-pod read)
-        eye = new V(tr.x + 0.85, floorY + 1.62, bayZ + 2.2);
-        look = new V(podX + 0.7, floorY + 1.25, bayZ - 0.1);
+        // flee: near the corridor centreline, level with the airlock, looking across at the
+        //   sliding door in the −X wall (the run-past-and-see-THE-EXIT read; door CLOSED by default).
+        //   W2 gate post-mortem: the old x=+0.85 eye stood 0.15m off the +X wall — proud wall hardware
+        //   (breaker-box latch, steel greebles) grazed the frame edge as "floating triangle" slivers
+        //   the real centreline player never sees (the D165 harness-viewpoint trap). Judge from where
+        //   the player actually runs.
+        eye = new V(tr.x + 0.45, floorY + 1.62, bayZ + 2.2);
+        look = new V(wallX - 0.2, floorY + 1.3, bayZ - 0.1);
       }
       cam.position.copy(eye);
       cam.lookAt(look);
@@ -3542,6 +3567,135 @@ const SCENARIOS = {
     if (!log.seated) throw new Error(`pod-walkin GATE FAILED: E-sit did not seat/advance the beat.`);
     if (!log.ejected) throw new Error(`pod-walkin GATE FAILED: E-eject did not fire/advance to shipExplode.`);
     console.log('[pod-walkin] GATE PASS — corridor → through the doorway → inside the pod → seated → E-eject fired (real KCC motion + real input path).');
+  },
+
+  // W2b — THE AIRLOCK COLLIDER MOTION PROBE (Rule 9: collision matches the visible airlock, proven by
+  //   real motion). Independent of the sequence flow (the orchestrator rewires that later). Boots the
+  //   ship, seats the KCC body in the corridor on the airlock centreline (+X side), and proves:
+  //   (1) CLOSED sliding door BLOCKS — drive W(−X) into the closed door; the body stops at the wall
+  //       plane (can't cross past x ≈ AIRLOCK_WALL_X − a small margin). The seal collider works.
+  //   (2) OPEN sliding door PASSES — slide the leaves open (by name) + drop the seal (find + remove
+  //       the aperture static box), drive W(−X); the body walks THROUGH into the collar and reaches
+  //       near the pod-door threshold (x < COLLAR_FAR_X + margin). The collar floor/walls are walkable.
+  //   (3) NO FALL-THROUGH / NO GAP TO SPACE — y stays on the ship floor (≈3000) the whole way.
+  //   No screenshot — a motion assertion (like cockpit-motion / pod-walkin).
+  'airlock-motion': async (page) => {
+    const log = await page.evaluate(async () => {
+      const g = window.__game; const ctx = g.ctx;
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      try { ctx.weather.intensity = 0; ctx.weather.cloudiness = 0; } catch {}
+      const realClock = ctx.three.clock; const FIXED_DT = 0.05;
+      const origGetDelta = realClock.getDelta.bind(realClock);
+      const origW = ctx.three.renderer.domElement.width, origH = ctx.three.renderer.domElement.height;
+      realClock.getDelta = () => FIXED_DT;
+      ctx.three.renderer.setSize(48, 48, false);
+      const drive = async (simBudget, perTick) => {
+        const s0 = ctx.time.elapsed; let last = s0, stalls = 0;
+        for (let i = 0; i < 8000; i++) {
+          if (perTick) perTick();
+          await sleep(16);
+          const now = ctx.time.elapsed;
+          if (now > last + 1e-6) { last = now; stalls = 0; } else if (++stalls > 600) break;
+          if (now - s0 >= simBudget) break;
+        }
+      };
+      const result = { legs: [], closedBlocked: false, openedPassed: false, onFloor: true };
+      try {
+        try { g.skipIntro(); } catch {}
+        await drive(0.2);
+        g.startIntro();
+        for (let a = 0; a < 20; a++) { g.jumpToBeat('cockpit'); await drive(0.3); if (ctx.player.body.body.translation().y > 2900) break; }
+        try { g.setSkyIntroMode(0); } catch {}
+        ctx.flags.paused = false;
+        ctx.input.controls.isLocked = true;   // isPlaying() → real KCC motion processed
+        if (ctx.intro) { ctx.intro.mode = 'walk'; ctx.player.eyeOffset = 0.85; }   // free-walk (the cockpit opens seated → locomotion gated otherwise)
+        const cam = ctx.three.camera; cam.rotation.order = 'YXZ';
+        // ORIGIN frame: the bridge spawn is at SEAT_Z = −0.30 → origin.z = spawn.z + 0.30. Airlock is
+        //   at local z = BAY_ZC = 4.8, wall plane at local x = AIRLOCK_WALL_X = −1.0, collar far = −1.92.
+        const sp = ctx.player.body.body.translation();
+        const OX = sp.x, OY = sp.y, OZ = sp.z + 0.30;   // ship-origin frame
+        const WALL_X = -1.0, COLLAR_FAR = -1.92, POD_X = -3.36, AHW = 0.72, TRAVEL = 0.82, BZ = 4.8;
+        const faceNegX = () => { cam.rotation.set(0, Math.PI / 2, 0); if (ctx.intro) ctx.intro.mode = 'walk'; };   // YXZ yaw +π/2 → forward = −X; keep walk mode
+        const floorY = OY;   // the KCC body-centre y at the corridor floor (spawn y ≈ ship floor)
+
+        // ── LEG 1: CLOSED door blocks. Place the body in the corridor on the airlock centreline, +X
+        //    side (x = −0.4 local, well corridor-side of the −1.0 wall), face −X, drive W into the door.
+        ctx.player.body.body.setTranslation({ x: OX - 0.4, y: OY, z: OZ + BZ }, true);
+        ctx.player.cameraSnapNextFrame = true;
+        await drive(0.15, faceNegX);
+        await drive(2.4, () => { faceNegX(); ctx.input.keys['KeyW'] = true; });
+        ctx.input.keys['KeyW'] = false;
+        const p1 = ctx.player.body.body.translation();
+        const x1 = p1.x - OX;
+        // BLOCKED if the body did NOT cross meaningfully past the wall plane (allow the KCC skin ~0.1).
+        result.closedBlocked = x1 > (WALL_X - 0.15);
+        if (Math.abs(p1.y - floorY) > 0.6) result.onFloor = false;
+        result.legs.push({ leg: 'closed-block', xEnd: +x1.toFixed(2), wallX: WALL_X, blocked: result.closedBlocked, y: +p1.y.toFixed(1) });
+
+        // ── OPEN the door: slide the leaves into their pockets (by name) + DROP the seal collider. The
+        //    seal is the ONE static collider at the aperture centre (world x = OX+WALL_X, z = OZ+BZ,
+        //    y ≈ OY + AIRLOCK_TOP/2). Find + remove it from the rapier world.
+        const lL = ctx.three.scene.getObjectByName('airlockDoorLeafL');
+        const lR = ctx.three.scene.getObjectByName('airlockDoorLeafR');
+        if (lL) lL.position.z = (BZ - AHW / 2) - TRAVEL;
+        if (lR) lR.position.z = (BZ + AHW / 2) + TRAVEL;
+        // remove the seal collider (search the rapier world for a collider at the aperture centre)
+        const world = ctx.physics.world;
+        const sealWX = OX + WALL_X, sealWZ = OZ + BZ;
+        let removed = 0;
+        world.forEachCollider((col) => {
+          const body = col.parent(); if (!body) return;
+          const t = body.translation();   // world position lives on the BODY (makeStaticBox sets it there)
+          let hz = 1; try { hz = col.halfExtents().z; } catch {}
+          // the seal is the box at the aperture centre (x/z) spanning the aperture width (hz≈AIRLOCK_HW 0.72).
+          if (Math.abs(t.x - sealWX) < 0.2 && Math.abs(t.z - sealWZ) < 0.25 && hz > 0.6 && hz < 0.85) {
+            world.removeRigidBody(body); removed++;
+          }
+        });
+        result.sealRemoved = removed;
+        // DIAGNOSTIC — dump every collider near the boarding lane (x −2.2..0, z BZ±1) so we can see
+        //   what blocks the walk-in. (After the seal removal, so it shows the remaining set.)
+        result.nearColliders = [];
+        world.forEachCollider((col) => {
+          const body = col.parent(); if (!body) return;
+          const t = body.translation();
+          const lx = t.x - OX, lz = t.z - OZ;
+          if (lx > -2.4 && lx < 0.2 && Math.abs(lz - BZ) < 1.0 && t.y > OY - 0.5 && t.y < OY + 2.6) {
+            let hx = 0, hy = 0, hz = 0;
+            try { const h = col.halfExtents(); hx = h.x; hy = h.y; hz = h.z; } catch {}
+            result.nearColliders.push({ lx: +lx.toFixed(2), lz: +lz.toFixed(2), ly: +(t.y - OY).toFixed(2), hx: +hx.toFixed(2), hy: +hy.toFixed(2), hz: +hz.toFixed(2) });
+          }
+        });
+
+        // ── LEG 2: OPEN door passes. Re-place in the corridor (+X side), face −X, drive W through the
+        //    open door + collar toward the pod door.
+        ctx.player.body.body.setTranslation({ x: OX - 0.4, y: OY, z: OZ + BZ }, true);
+        ctx.player.cameraSnapNextFrame = true;
+        await drive(0.15, faceNegX);
+        await drive(3.5, () => { faceNegX(); ctx.input.keys['KeyW'] = true; });
+        ctx.input.keys['KeyW'] = false;
+        const p2 = ctx.player.body.body.translation();
+        const x2 = p2.x - OX;
+        // PASSED if the body walked past the wall into the collar, near the pod-door threshold.
+        result.openedPassed = x2 < (COLLAR_FAR + 0.35);
+        if (Math.abs(p2.y - floorY) > 0.6) result.onFloor = false;
+        result.legs.push({ leg: 'open-pass', xEnd: +x2.toFixed(2), collarFar: COLLAR_FAR, passed: result.openedPassed, y: +p2.y.toFixed(1) });
+      } finally {
+        ctx.input.keys['KeyW'] = false;
+        realClock.getDelta = origGetDelta;
+        ctx.three.renderer.setSize(origW, origH, false);
+      }
+      return result;
+    });
+    console.log('[airlock-motion] ' + JSON.stringify(log.legs, null, 0));
+    console.log('[airlock-motion] nearColliders=' + JSON.stringify(log.nearColliders || []));
+    console.log(`[airlock-motion] closedBlocked=${log.closedBlocked} openedPassed=${log.openedPassed} onFloor=${log.onFloor} sealRemoved=${log.sealRemoved}`);
+    if (!log.closedBlocked) throw new Error('airlock-motion GATE FAILED: the CLOSED sliding door did NOT block the player (they crossed the wall plane) — the seal collider is missing/misplaced.');
+    if (!log.openedPassed) throw new Error('airlock-motion GATE FAILED: the OPEN sliding door did NOT let the player through to the pod threshold — the collar is not walkable (a blocking collider or a floor gap).');
+    if (!log.onFloor) throw new Error('airlock-motion GATE FAILED: the player fell through the floor / a gap to space along the boarding path.');
+    console.log('[airlock-motion] GATE PASS — closed door blocks, open door + collar are walkable to the pod threshold, no fall-through (real KCC motion).');
   },
 
   // CLUSTER D — the WALK-OUT gate (user spec: crash → wake → kick the FRONT door → walk out on your
@@ -6062,6 +6216,26 @@ async function main() {
   try {
     const ctx = await browser.newContext({ viewport: { width: 900, height: 1100 }, deviceScaleFactor: 1 });
     const page = await ctx.newPage();
+    // W2 ASPECT FIX — scenarios resize the RENDER BUFFER (renderer.setSize(w,h,false) + a matching
+    // camera.aspect) but the canvas CSS box stays at the fixed 900×1100 viewport, so page.screenshot
+    // resampled the buffer into the wrong aspect → every non-900×1100 shot was stretched (the
+    // "oval porthole" false frame; circles are just where it shows). Snap the viewport to the canvas
+    // buffer dims right before each capture so CSS == buffer == camera aspect and shots are true.
+    const _origScreenshot = page.screenshot.bind(page);
+    page.screenshot = async (opts = {}) => {
+      try {
+        const dims = await page.evaluate(() => {
+          const c = document.querySelector('canvas');
+          return c && c.width > 50 ? { w: c.width, h: c.height } : null;
+        });
+        const vp = page.viewportSize();
+        if (dims && vp && (dims.w !== vp.width || dims.h !== vp.height)) {
+          await page.setViewportSize({ width: dims.w, height: dims.h });
+          await page.waitForTimeout(120);   // let layout/compositor settle before the capture
+        }
+      } catch { /* fall through — a wrong-aspect shot beats no shot */ }
+      return _origScreenshot(opts);
+    };
     page.on('pageerror', (e) => console.log(`  [page error] ${e.message}`));
     page.on('console', (m) => { if (m.type() === 'error') console.log(`  [browser error] ${m.text()}`); });
     // ACN — mark the tutorial intro as seen BEFORE any page script runs, so the

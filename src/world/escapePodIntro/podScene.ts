@@ -70,9 +70,14 @@ let _podAltitude = DESCENT_ALT;   // current pod altitude above the base (eased 
 //    player reads the planet dead-ahead + glances down-right to the lever). NOT a bridge
 //    — a humble welded capsule. The shell is a ROUND back-faced cylinder, NOT a box.
 const CAB_R = 1.28;       // interior radius (≈2.56m-diameter capsule bore — 1-person believable)
-const WALL_H = 1.95;      // straight cylindrical-wall height (floor 0 → shoulder where the dome springs)
-const DOME_H = 0.62;      // ogive dome rise (LOWERED — a cramped capsule, not a rotunda; was 0.95)
-const CAB_APEX = WALL_H + DOME_H;   // ceiling apex
+// W2a (2026-07-03, user "TOO SHORT/STUBBY → make it TALLER"): the straight body rises from
+//   1.95 → 2.55 and the dome 0.62 → 0.85, so total height ≈ 3.40m and h/d climbs 0.92 → ~1.18.
+//   ONE dimension contract now (frozen — the sibling agent builds the bay to these numbers): the
+//   exterior POD_BODY_H/POD_NOSE_H below ALIAS these so the exterior skin, the canonical bay pod,
+//   and this ride cabin are the SAME proportions. Killed the old dome-heavy "helmet" read.
+const WALL_H = 2.55;      // straight cylindrical-wall height (floor 0 → shoulder where the dome springs) — TALLER (was 1.95)
+const DOME_H = 0.85;      // ogive dome rise (taller crown to match the taller body; was 0.62)
+const CAB_APEX = WALL_H + DOME_H;   // ceiling apex (≈ 3.40)
 const SHELL = 0.16;       // panel/ring depth (hull-substantial, rule 7)
 const WALL_SEG = 48;      // shell radial segments — round + smooth (raised from 32; faceting bands showed)
 // (the seated FP eye lands ~1.7 above the floor — the viewport + controls are centred near it)
@@ -90,17 +95,25 @@ const WALL_SEG = 48;      // shell radial segments — round + smooth (raised fr
 //    terrain. No side hatch, no separate viewport — the door IS the window, on the seat's sight-line.
 //    (This mirrors the canonical bay pod's merged glass front door — buildCanonicalPodExterior — so
 //    the ride-down cabin is the SAME vessel the player boarded, inside AND out.)
+// ── W2a — THE ONE DOOR + PORTHOLE CONTRACT (frozen; the sibling bay agent builds to these). The
+//    OLD FDOOR_/VP_ (ride cabin) and CPOD_DOOR_/CPOD_PORT_ (bay) sets are UNIFIED here: the canonical
+//    CPOD_ constants below ALIAS these, so the door aperture + porthole are IDENTICAL geometry inside,
+//    out, in the bay, and on the descent — one model. Only the AZIMUTH differs by placement (−Z here
+//    for the seated sight-line; +X in the bay); every SIZE is shared.
 const FDOOR_AZ = Math.PI;         // the merged front door centre azimuth = straight forward (−Z), on the seated sight-line
-const FDOOR_W = 1.02;             // door aperture width (a wide climb-through; matches the canonical CPOD_DOOR_W)
-const FDOOR_H = 1.86;             // door aperture height (contains the porthole + a climb-through opening)
-const FDOOR_CY = 1.04;            // door centre height (base ≈0.11 for a floor-level climb-out; spans up past the seated eye)
+const FDOOR_W = 1.02;             // door aperture width (a wide climb-through) — CONTRACT
+const FDOOR_H = 1.98;             // door aperture height (was 1.86) — CONTRACT: contains the porthole with clear margin + a full climb-through
+const FDOOR_CY = 1.10;            // door centre height (was 1.04) — CONTRACT: base ≈0.11 for a floor-level climb-out; spans up past the seated eye
 // the door's azimuth half-extent on the cylinder wall (arc the wall/hoops omit for the aperture)
 const FDOOR_AZ_HALF = Math.min(Math.PI * 0.85, (FDOOR_W / 2 + 0.06) / CAB_R);
-// The DOMED PORTHOLE set into the door slab — sits at the seated eye line so the descent reads
-//   dead-ahead at eye level through the glass. VP_* names kept (the viewport → the door's porthole).
-//   (The porthole shares the door azimuth FDOOR_AZ = −Z; no separate azimuth const needed.)
-const VP_R = 0.44;                // domed porthole radius (fits inside the FDOOR_W×FDOOR_H door slab)
-const VP_CY = 1.34;              // porthole centre height (on the seated ~1.4 eye glance)
+// The DOMED PORTHOLE set into the door slab — sized to sit COMFORTABLY WITHIN the door slab with a
+//   clear margin to every door edge (user W2a: the old R 0.44 crowded the 1.02-wide door + the bezel
+//   clipped the hull). glass R 0.33, bezel outer ≤ 0.41 (contract), centre 1.38 (seated ~1.4 eye —
+//   the descent reads dead-ahead through it). Margins to the door edges: sides = 1.02/2 − 0.41 = 0.10;
+//   top = (1.10+1.98/2) − (1.38+0.41) = 2.09 − 1.79 = 0.30; bottom = 1.79-0.41-... comfortably clear.
+const VP_R = 0.33;                // domed porthole GLASS radius (was 0.44) — CONTRACT: fits WITHIN the door with ≥0.10 margin
+const VP_BEZEL_OUT = 0.41;        // bezel OUTER edge radius (torus outer) — CONTRACT ceiling; ≥0.10m from every door edge
+const VP_CY = 1.38;              // porthole centre height (was 1.34) — CONTRACT: on the seated ~1.4 eye glance
 
 // ── Materials — the SAME weathered-ALUMINIUM idiom as the exterior hero pod (below,
 //    D271). Module-scope so a rebuild doesn't realloc; disposePodScene disposes GEOMETRY
@@ -138,10 +151,15 @@ const _cabSteel = createRustedHullMaterial({
 // so the latitude rings read as fitted RIVETED FRAMES, not dark drum-divisions (matches
 // the exterior _podBandMat).
 const _cabBandOpts = {
-  baseColor: 0xb0b5b8,           // BRIGHT cool grey-aluminium band — lighter than the shell so the riveted hoops POP as proud bright frames (sells the curve)
-  bareMetalHex: 0xd2d8dc,
+  // User steering 2026-07-03 (match the ship, not pale): the band was BRIGHT near-white
+  // aluminium (0xb0b5b8 / reveal 0xd2d8dc) — it read pale against the darker shell + the
+  // ship gunmetal. Pulled to the ship _band gunmetal (0x7c8288) but kept a step LIGHTER
+  // than the shell (0x71767a) so the riveted hoops still POP as proud frames + sell the
+  // curve — just in-family, not bleached.
+  baseColor: 0x868c90,           // WORN GUNMETAL band, a step lighter than the shell (was 0xb0b5b8 near-white)
+  bareMetalHex: 0xafb4b8,        // cool scuff reveal (was 0xd2d8dc near-white)
   streakIntensity: 0.18, wearAmplitude: 0.26, fleckStrength: 0.6,
-  oxStrength: 0.06, oxHex: 0x6a6a66, seamRustStrength: 0.10,   // near-clean: the hoops are the curvature read, keep them bright + cool
+  oxStrength: 0.06, oxHex: 0x5a5c5e, seamRustStrength: 0.10,   // cool grime; the hoops carry the curvature read, keep them a bright cool value but not white
   localSpace: true,   // pod falls during descent → pin grime (see hullMaterial.ts)
 } as const;
 const _cabBand = createRustedHullMaterial(_cabBandOpts);
@@ -177,9 +195,12 @@ const _cabRivet = createRustedHullMaterial({
 const _cabCable = new THREE.MeshLambertMaterial({ color: 0x201d18, flatShading: true });
 // Floor DECK plate — bright cool aluminium tread-plate (a lit, finished floor, not a void).
 const _cabDeck = createRustedHullMaterial({
-  baseColor: 0x969a9e, bareMetalHex: 0xc4c9cc,
+  // User steering (match the ship): the tread-plate was bright cool aluminium (0x969a9e /
+  // reveal 0xc4c9cc) → read pale. Pulled to the ship _deck gunmetal (0x5c6167) but kept a
+  // touch lighter/lit so the floor still reads as a finished lit deck, not a void.
+  baseColor: 0x71767a, bareMetalHex: 0xa4a9ad,   // worn gunmetal tread (was 0x969a9e pale)
   streakIntensity: 0.18, wearAmplitude: 0.28, fleckStrength: 0.7,
-  oxStrength: 0.08, oxHex: 0x66666a, seamRustStrength: 0.10,   // neutralised (deck was reading warm-tan under the lamp)
+  oxStrength: 0.08, oxHex: 0x5a5c5e, seamRustStrength: 0.10,   // cool grime (deck was reading warm-tan under the lamp)
   localSpace: true,   // pod falls during descent → pin grime (see hullMaterial.ts)
 });
 // Seat cushion — worn padded vinyl, a desaturated warm tan, slightly soft (lambert).
@@ -193,15 +214,39 @@ const _ledAmber = new THREE.MeshBasicMaterial({ color: 0xd98a32 });
 const _ledRed = new THREE.MeshBasicMaterial({ color: 0xc0392b });
 // Dim screen face — a faint amber CRT glow.
 const _cabScreen = new THREE.MeshBasicMaterial({ color: 0x2a2410 });
-// Inner-rim shadow well behind the porthole bezel — near-black, unlit, so the aperture
-// reads as a deep inset recess (a dark ring inside the bezel → "inset window").
-const _cabRimShadow = new THREE.MeshBasicMaterial({ color: 0x07090a, side: THREE.DoubleSide });
+// SEV1 (2026-07-03) — the OPEN-door porthole read as a big BLACK VOID: the old full-depth OPAQUE
+// near-black tube behind the door glass walled off the aperture, so when the door was kicked
+// open on the desert you saw an opaque black ring instead of sky/sand through the glass. The
+// proud bezel torus (dBez) already carries the inset-depth read; the well now uses a SHALLOW,
+// TRANSPARENT dark-tinted COLLAR — it still darkens to a soft shadow rim when SEALED (backed by
+// the dark aperture behind the door) but lets the desert read THROUGH when the door swings open.
+const _cabDoorWellTint = new THREE.MeshBasicMaterial({
+  color: 0x141a1e, side: THREE.DoubleSide,
+  transparent: true, opacity: 0.42, depthWrite: false,   // see-through collar → no black void when open
+});
+// SEV1 (2026-07-03) — the merged FRONT DOOR slab read PALER than the gunmetal hull (a kit-bashed
+// two-family read): the slab was drawn in _cabBand (0x868c90, the light riveted-hoop highlight
+// grey). This dedicated slab material lands the door in the SAME cool gunmetal family as the
+// exterior hull (_podPaint 0x565c62), a SMALL step lighter so it still reads as THE door — mirrors
+// the exterior salvage-door value (_podDoorMat 0x6a7076), not warm pale aluminium.
+const _cabDoorSlab = createRustedHullMaterial({
+  baseColor: 0x646a70,           // WORN GUNMETAL door slab — a step lighter than the hull skin (0x565c62), same cool family (was 0x868c90 pale band-grey)
+  bareMetalHex: 0x8f959b,        // cool scuffed reveal (matches _podPaint reveal; was near-white band reveal)
+  rustHex: 0x2c3036,             // cool grime channel
+  streakIntensity: 0.30, wearAmplitude: 0.36, fleckStrength: 0.8,
+  oxStrength: 0.12, oxHex: 0x54585c, oxDeepStrength: 0.18, seamRustStrength: 0.22,   // cool grime, no warm oxide
+  localSpace: true,   // the door rides the descent SEALED then swings at the wake — pin the grime (see hullMaterial.ts)
+});
 // Porthole GLASS — a faint cool tint, glossy so a small spec catch reads (a window, not an
 // open hole). Slightly emissive so it never goes fully black against the void.
 const _cabGlass = new THREE.MeshStandardMaterial({
-  color: 0x2a3640, roughness: 0.16, metalness: 0.30,
-  emissive: 0x0a1418, emissiveIntensity: 0.45,
-  transparent: true, opacity: 0.32,   // see the planet through it, but a glazed pane reads
+  // SEV1 — lifted the tint a touch cooler/lighter + dropped opacity so the whole disc reads
+  // see-through in BOTH states: the DESCENT view (sky/planet through it) AND the OPEN door on the
+  // desert (the upper half no longer darkens toward the old void read). Still glazed enough that a
+  // spec catch + faint tint sell it as a real pane, not an open hole.
+  color: 0x36434e, roughness: 0.16, metalness: 0.28,
+  emissive: 0x0c1620, emissiveIntensity: 0.45,
+  transparent: true, opacity: 0.24,   // see the planet/desert through it, but a glazed pane reads
 });
 // A faint bright spec highlight on the porthole glass (a glazed-pane tell). A SOFT
 // radial-falloff additive blob (NOT a hard-edged plane — the old PlaneGeometry quad read
@@ -806,7 +851,7 @@ function buildCabinInterior(group: THREE.Group): void {
 // CLUSTER D — buildViewport RETIRED: the porthole is no longer a bare-wall window; it's the DOMED
 //   PORTHOLE built INTO the swinging front door (buildCabinHatch §10), so it seals the aperture
 //   through the descent + swings away with the door at the wake. The glass materials (_cabGlass /
-//   _cabGlassSpec / _cabRimShadow) are reused there.
+//   _cabGlassSpec / the door-well tint _cabDoorWellTint) live with the door there.
 
 /** The right-side console + the chunky red PARACHUTE LEVER, curve-seated on the +X wall.
  *  Sets the module `chuteLever` pivot (the setParachuteLeverPull hook drives it). */
@@ -1177,7 +1222,7 @@ function buildCabinHatch(group: THREE.Group): void {
   const pTop = portY + portOpen, pBot = portY - portOpen;   // the aperture's vertical span
   const addSlab = (h: number, cy: number, w = HATCH_W, cx = 0) => {
     if (h <= 0.001) return;
-    const s = _box(w, h, doorTh, _cabBand);
+    const s = _box(w, h, doorTh, _cabDoorSlab);   // SEV1 — gunmetal door slab (in-family with the hull), was pale _cabBand
     s.position.set(cx, cy, 0);
     door.add(s);
   };
@@ -1187,11 +1232,15 @@ function buildCabinHatch(group: THREE.Group): void {
   const sideW = HATCH_W / 2 - portOpen;
   addSlab(pTop - pBot, portY, sideW, -(portOpen + sideW / 2));   // left flank
   addSlab(pTop - pBot, portY, sideW, (portOpen + sideW / 2));    // right flank
-  // door-panel edge batten (a proud stiffener on the lower panel → the door reads as a fabricated plate)
+  // door-panel stiffener ribs on the lower panel — a clean TWIN horizontal rib set (a fabricated-plate
+  //   read, no lonely T). Spans the lower panel between the door base and the aperture bottom.
   {
-    const batten = _box(HATCH_W - 0.14, 0.06, doorTh * 0.7, _cabDeck);
-    batten.position.set(0, (pBot - dHalf) / 2, doorTh * 0.55);
-    door.add(batten);
+    const lowMid = (pBot + (-dHalf)) / 2;   // centre of the lower panel
+    for (const dy of [-0.16, 0.16]) {
+      const rib = _box(HATCH_W - 0.16, 0.05, doorTh * 0.6, _cabDoorSlab);   // SEV1 — gunmetal (was pale _cabBand)
+      rib.position.set(0, lowMid + dy, doorTh * 0.55);
+      door.add(rib);
+    }
   }
   // ── the DOMED PORTHOLE set into the door aperture (the descent view reads through it — glass is
   //    see-through). Porthole centre at the SEATED EYE line (portY = VP_CY − HATCH_CY, computed above).
@@ -1201,15 +1250,21 @@ function buildCabinHatch(group: THREE.Group): void {
   //      outer = past the square-aperture corners. Double-sided so it reads from the well side too.
   const dCapGeo = new THREE.RingGeometry(VP_R + 0.005, portOpen * Math.SQRT2 + 0.02, 30, 1);
   _cabinDisposables.push(dCapGeo);
-  const dCap = new THREE.Mesh(dCapGeo, _cabBand);   // front-faced door aluminium; RingGeometry faces +Z → toward the cabin
+  const dCap = new THREE.Mesh(dCapGeo, _cabDoorSlab);   // front-faced door gunmetal (in-family, was pale _cabBand); RingGeometry faces +Z → toward the cabin
   dCap.position.set(0, portY, doorTh * 0.5 + 0.006);
   door.add(dCap);
-  // (a) the recessed inner-rim shadow WELL (the aperture through the door → depth, reads inset)
-  const dWellGeo = new THREE.CylinderGeometry(VP_R, VP_R, doorTh + 0.02, 28, 1, true);
+  // (a) the recessed inner-rim shadow WELL — a SHALLOW TRANSPARENT dark collar just behind the
+  //     glass (NOT the old full-depth OPAQUE black tube: that walled the aperture, so the OPEN door
+  //     read as a black-void ring on the desert — SEV1). The proud bezel torus (dBez) carries the
+  //     inset-depth read; this collar only tints the immediate rim to a soft shadow when SEALED
+  //     (backed by the dark aperture) while letting the desert read THROUGH when the door swings open.
+  const dWellH = doorTh * 0.5;
+  const dWellGeo = new THREE.CylinderGeometry(VP_R, VP_R, dWellH, 28, 1, true);
   _cabinDisposables.push(dWellGeo);
-  const dWell = new THREE.Mesh(dWellGeo, _cabRimShadow);
+  const dWell = new THREE.Mesh(dWellGeo, _cabDoorWellTint);
   dWell.rotation.x = Math.PI / 2;        // axis Y → local Z (through the door)
-  dWell.position.set(0, portY, -0.01);
+  dWell.position.set(0, portY, doorTh * 0.5 - dWellH / 2 - 0.005);   // hug the cabin-facing lip behind the glass, not spanning the full slab
+  dWell.renderOrder = -1;                // draw the transparent collar before the glass so both blend cleanly
   door.add(dWell);
   // (b) the DOMED glass disc bulging INTO the cabin (+local Z, toward the seated eye) — the same
   //     domed-porthole character as the canonical door. See-through (low opacity) → descent reads.
@@ -1226,26 +1281,43 @@ function buildCabinHatch(group: THREE.Group): void {
   dSpec.position.set(-VP_R * 0.20, portY + VP_R * 0.40, doorTh * 0.5 + 0.14);
   dSpec.rotation.z = -0.6;
   door.add(dSpec);
-  // (c) ONE integral proud BEZEL ring framing the porthole (channel-steel torus, part of the door)
-  const dBezGeo = new THREE.TorusGeometry(VP_R + 0.04, 0.05, 12, 30);
+  // (c) ONE integral proud BEZEL ring framing the porthole (channel-steel torus, part of the door).
+  //     W2a — sized so the OUTER edge = VP_BEZEL_OUT (0.41), keeping ≥0.10m margin to every door edge
+  //     (no clip past the door slab / the hull curvature). tube 0.045, centre = VP_BEZEL_OUT − tube.
+  const bezTube = 0.045;
+  const bezCtr = VP_BEZEL_OUT - bezTube;   // torus centre radius → outer edge lands exactly at VP_BEZEL_OUT
+  const dBezGeo = new THREE.TorusGeometry(bezCtr, bezTube, 12, 30);
   _cabinDisposables.push(dBezGeo);
   const dBez = new THREE.Mesh(dBezGeo, _cabChannel);
   dBez.position.set(0, portY, doorTh * 0.5 + 0.02);
   door.add(dBez);
-  // (d) a ring of bezel bolts (the porthole is bolted to the door)
+  // (d) a ring of bezel bolts (the porthole is bolted to the door) — seated on the bezel centre ring
   for (let i = 0; i < 16; i++) {
     const a = (i / 16) * Math.PI * 2;
     const sg = new THREE.SphereGeometry(0.013, 6, 4, 0, Math.PI * 2, 0, Math.PI / 2);
     _cabinDisposables.push(sg);
     const stud = new THREE.Mesh(sg, _cabRivet);
     stud.rotation.x = -Math.PI / 2;
-    stud.position.set(Math.cos(a) * (VP_R + 0.04), portY + Math.sin(a) * (VP_R + 0.04), doorTh * 0.5 + 0.06);
+    stud.position.set(Math.cos(a) * bezCtr, portY + Math.sin(a) * bezCtr, doorTh * 0.5 + 0.06);
     door.add(stud);
   }
-  // a lever HANDLE / latch near the free (left) edge, low on the door (grab + kick to open)
-  const handle = _box(0.06, 0.30, 0.10, _cabSteel);
-  handle.position.set(-HATCH_W * 0.32, -HATCH_H * 0.22, doorTh * 0.9);
-  door.add(handle);
+  // a LATCH near the free (left) edge, low on the door (grab + kick to open): a mount plate + a
+  //   vertical grab bar standing off it on two stubs (reads as a real door handle, not a floating box).
+  {
+    const hx = -HATCH_W * 0.30, hy = -HATCH_H * 0.20;
+    const mount = _box(0.14, 0.34, doorTh * 0.5, _cabChannel);
+    mount.position.set(hx, hy, doorTh * 0.55);
+    door.add(mount);
+    const bar = _cyl(0.022, 0.022, 0.30, 8, _cabSteel);
+    bar.position.set(hx, hy, doorTh * 0.9 + 0.03);
+    door.add(bar);
+    for (const sy of [-0.13, 0.13]) {
+      const stub = _cyl(0.018, 0.018, 0.06, 6, _cabSteel);
+      stub.rotation.x = Math.PI / 2;
+      stub.position.set(hx, hy + sy, doorTh * 0.75);
+      door.add(stub);
+    }
+  }
   // perimeter door rivets (the door is bolted together) — skip the porthole disc
   for (let i = 0; i < 18; i++) {
     const u = i / 18; let rx: number, ry: number;
@@ -1421,7 +1493,7 @@ function buildExteriorSkin(group: THREE.Group): THREE.Group {
   {
     const pos = scorchGeo.attributes.position;
     const cols = new Float32Array(pos.count * 3);
-    const cChar = new THREE.Color(0x0d0906), cTarn = new THREE.Color(0x5a4126), cAlu = new THREE.Color(0xb6b9b3);
+    const cChar = new THREE.Color(0x0d0906), cTarn = new THREE.Color(0x3e3a34), cAlu = new THREE.Color(0x565c62);   // cAlu → new gunmetal skin (was pale 0xb6b9b3); cTarn cooled to match (was warm 0x5a4126) — the scorch fade must blend UP into the retuned gunmetal, not the old pale aluminium
     const tmp = new THREE.Color();
     for (let i = 0; i < pos.count; i++) {
       const vx = pos.getX(i), vy = pos.getY(i), vz = pos.getZ(i);
@@ -1515,26 +1587,34 @@ function buildExteriorSkin(group: THREE.Group): THREE.Group {
 // door; the default the descent/crash ride in) and 'open' (swung ~110° for boarding/exit).
 //
 // GEOMETRY DIMENSIONS (front-door on the +X arc):
+// W2a — the canonical bay door is now the SAME aperture + porthole as the ride cabin (FDOOR_/VP_
+//   above): ONE dimension contract. Only the AZIMUTH is bay-specific (+X toward the corridor player).
 const CPOD_DOOR_AZ = Math.PI / 2;        // +X arc (toward the corridor player in the bay)
-const CPOD_DOOR_W = 1.02;                // door aperture width (a wide climb-through unit)
-const CPOD_DOOR_H = 1.74;                // door aperture height
-const CPOD_DOOR_CY = 1.08;               // door centre height (seated-eye glance + standing walk-in)
-// The merged front door (user clarification 2026-07-02): a SOLID riveted aluminium door with a
-//   ROUND DOMED PORTHOLE integral to it (the same domed-circular viewport character the ride-down
-//   cabin has), NOT a flat glass pane. The porthole is generous enough to carry the descent view.
-const CPOD_PORT_R = 0.40;                // the domed porthole radius (generous — carries the descent view; fits the 1.02×1.74 door upper half)
+const CPOD_DOOR_W = FDOOR_W;             // = 1.02 — SHARED with the ride cabin (one door)
+const CPOD_DOOR_H = FDOOR_H;             // = 1.98 — SHARED (was a divergent 1.74)
+const CPOD_DOOR_CY = FDOOR_CY;           // = 1.10 — SHARED (was a divergent 1.08); NOTE: shipScene's CPOD_BAY_DOOR_CY mirror must match → 1.10
+// The domed porthole is the SAME size as the ride cabin's (VP_R/VP_BEZEL_OUT) so it's one model.
+const CPOD_PORT_R = VP_R;                // = 0.33 — SHARED (was a divergent 0.40, which crowded the door)
 
 // FRONT-DOOR DOMED-PORTHOLE GLASS — a faint cool-tinted glossy glass (the domed disc set into the
 //   door). Low opacity so the descent reads through, a Fresnel rim so the eye registers glass, not
 //   a hole. Shared across all canonical pods (one program). Matches the cabin viewport's character.
 const _cpodGlass = new THREE.MeshStandardMaterial({
-  color: 0x2b3a44, roughness: 0.10, metalness: 0.30,
-  emissive: 0x0a1620, emissiveIntensity: 0.42,
-  transparent: true, opacity: 0.32, side: THREE.DoubleSide,
+  // W2a — leaned CLEARER + slightly warmer so the modeled interior reads through as a lived-in lit
+  //   cabin (not a cold blue fog). Lower opacity + softer emissive tint → the seat/bore behind it show.
+  color: 0x33414a, roughness: 0.10, metalness: 0.28,
+  emissive: 0x0c1214, emissiveIntensity: 0.28,
+  transparent: true, opacity: 0.22, side: THREE.DoubleSide,
 });
 // inner-rim shadow well behind the domed glass — near-black, unlit, so the porthole reads as a deep
 //   inset window in the door (a dark ring inside the bezel).
-const _cpodRimShadow = new THREE.MeshBasicMaterial({ color: 0x07090a, side: THREE.DoubleSide });
+// W2 gate fix — was opaque near-black (0x07090a): at oblique angles the ring walled the porthole
+//   into a black annulus (the same class as the cabin-hatch void-ring bug). A transparent dark tint
+//   keeps the inset-shadow read while letting the through-view survive when the door swings open.
+const _cpodRimShadow = new THREE.MeshBasicMaterial({
+  color: 0x141a1e, side: THREE.DoubleSide,
+  transparent: true, opacity: 0.42, depthWrite: false,
+});
 _cpodGlass.onBeforeCompile = (shader: THREE.WebGLProgramParametersWithUniforms) => {
   shader.vertexShader = shader.vertexShader.replace('#include <common>',
     `#include <common>
@@ -1550,7 +1630,7 @@ _cpodGlass.onBeforeCompile = (shader: THREE.WebGLProgramParametersWithUniforms) 
     `#include <emissivemap_fragment>
      vec3 gV = normalize(-vCGVpos);
      float gF = pow(1.0 - clamp(dot(normalize(vCGVnrm), gV), 0.0, 1.0), 2.4);
-     totalEmissiveRadiance += vec3(0.16,0.24,0.32) * gF * 1.6;`);
+     totalEmissiveRadiance += vec3(0.14,0.20,0.26) * gF * 1.05;`);
   shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>',
     `gl_FragColor = vec4( outgoingLight, diffuseColor.a );
      #ifdef OPAQUE
@@ -1559,10 +1639,25 @@ _cpodGlass.onBeforeCompile = (shader: THREE.WebGLProgramParametersWithUniforms) 
      float gF2 = pow(1.0 - clamp(dot(normalize(vCGVnrm), normalize(-vCGVpos)), 0.0, 1.0), 2.0);
      gl_FragColor.a = clamp(gl_FragColor.a + gF2 * 0.5, 0.0, 0.9);`);
 };
-// A DIM warm-lit cabin peek BEHIND the domed glass (so through the sealed porthole you see a lit
-//   interior, inviting — "get in here"). Unlit warm but MUTED so the domed GLASS tint + Fresnel
-//   still read as a window (not a blown-white disc); the descent view reads through it in-phase.
-const _cpodCabinGlow = new THREE.MeshBasicMaterial({ color: 0x3a2c18 });
+// W2a — the canonical pod's GENUINELY MODELED interior (seen through the see-through porthole in the
+//   bay + open-door boarding). Shared module-scope (one program per material; disposePodScene disposes
+//   geometry only). Back-faced worn-aluminium bore + bands + deck + seat — the SAME riveted-aluminium
+//   idiom as the ride cabin (createRustedHullMaterial), just tuned dim/warm for an enclosed interior.
+const _cpodInteriorShell = createRustedHullMaterial({
+  baseColor: 0x71767a, bareMetalHex: 0xb2b8bc, rustHex: 0x33333a,
+  streakIntensity: 0.24, wearAmplitude: 0.36, fleckStrength: 0.5, oxStrength: 0.10, oxHex: 0x5c5c58,
+});
+_cpodInteriorShell.side = THREE.BackSide;   // the bore is viewed from inside (through the door/porthole)
+const _cpodInteriorBand = createRustedHullMaterial({
+  baseColor: 0x868c90, bareMetalHex: 0xafb4b8,   // match _cabBandOpts gunmetal (was 0xb0b5b8 pale)
+  streakIntensity: 0.18, wearAmplitude: 0.26, fleckStrength: 0.6, oxStrength: 0.06, oxHex: 0x5a5c5e,
+});
+_cpodInteriorBand.side = THREE.BackSide;
+const _cpodInteriorDeck = createRustedHullMaterial({
+  baseColor: 0x71767a, bareMetalHex: 0xa4a9ad,   // match _cabDeck gunmetal (was 0x969a9e pale)
+  streakIntensity: 0.18, wearAmplitude: 0.28, fleckStrength: 0.7, oxStrength: 0.08, oxHex: 0x5a5c5e,
+});
+const _cpodInteriorSeat = new THREE.MeshLambertMaterial({ color: 0x6e6353, flatShading: true });
 
 export type CanonicalPodDoorState = 'closed' | 'open';
 export interface CanonicalPodOpts {
@@ -1634,7 +1729,7 @@ export function buildCanonicalPodExterior(opts: CanonicalPodOpts = {}): { root: 
   {
     const pos = scorchGeo.attributes.position;
     const cols = new Float32Array(pos.count * 3);
-    const cChar = new THREE.Color(0x0d0906), cTarn = new THREE.Color(0x5a4126), cAlu = new THREE.Color(0xb6b9b3);
+    const cChar = new THREE.Color(0x0d0906), cTarn = new THREE.Color(0x3e3a34), cAlu = new THREE.Color(0x565c62);   // cAlu → new gunmetal skin (was pale 0xb6b9b3); cTarn cooled to match (was warm 0x5a4126) — the scorch fade must blend UP into the retuned gunmetal, not the old pale aluminium
     const tmp = new THREE.Color();
     for (let i = 0; i < pos.count; i++) {
       const vx = pos.getX(i), vy = pos.getY(i), vz = pos.getZ(i);
@@ -1723,26 +1818,67 @@ export function buildCanonicalPodExterior(opts: CanonicalPodOpts = {}): { root: 
     stud.rotation.x = -Math.PI / 2; stud.position.set(sx, sy, 0.10);
     frame.add(stud);
   }
-  // a warm-lit cabin peek BEHIND the aperture (a dim interior box so the sealed glass reads LIT).
-  const peekBack = _box(CPOD_DOOR_W + 0.2, CPOD_DOOR_H + 0.1, 0.12, _cpodCabinGlow);
-  peekBack.position.set(0, 0, -0.95);
-  frame.add(peekBack);
-  for (const sx of [-1, 1]) {
-    const side = _box(0.12, CPOD_DOOR_H + 0.1, 0.86, _cpodCabinGlow);
-    side.position.set(sx * (CPOD_DOOR_W / 2 + 0.05), 0, -0.5);
-    frame.add(side);
+  // ── W2a — a GENUINELY MODELED interior chamber behind the aperture, seen through the SEE-THROUGH
+  //    porthole glass (replaces the old flat _cpodCabinGlow box "peek" — user #4: one model, real
+  //    lit interior through real glass). Built in the frame-local frame (−Z = inward into the bore).
+  //    The porthole (glass R 0.33 at door-local portCY 0.28 above door centre → this local Y 0.28)
+  //    frames the FAR bore + a seat back + a warm lamp. Kept COMPACT: only what the small porthole
+  //    (and the swung-open door) reveals is modeled, so the bay pod isn't a full duplicate cabin.
+  const interior = new THREE.Group();
+  interior.name = 'canonicalPodInterior';
+  frame.add(interior);
+  const portCY = VP_CY - CPOD_DOOR_CY;   // W2a — porthole centre in door/frame-local coords (SAME height as the ride cabin: VP_CY 1.38 − door centre 1.10 → 0.28); one model. Shared by the interior chamber + the door.
+  // (a) the far curved BORE wall — a back-faced cylinder arc centred on the pod axis, so through the
+  //     porthole you read the round riveted bore (not a flat box). Built in FRAME-local space: the
+  //     pod axis is at frame-local (−R along +Z-out → i.e. local z = −R), running up in local Y from
+  //     the floor (local y = −CPOD_DOOR_CY) to the shoulder. Arc faces the door (the seen half).
+  const boreAxisZ = -R;                        // pod centre, in frame-local coords (door sits at z=0, axis is R inward)
+  const boreFloorY = -CPOD_DOOR_CY;            // pod floor, frame-local
+  const boreWallH = POD_BODY_H;                // full straight wall height
+  const innerR = R - SKIN;                     // interior bore radius (= CAB_R)
+  // a back-faced arc tube covering the ~120° the porthole+open-door can see (centred toward the door)
+  {
+    const arc = Math.PI * 0.75;
+    const wg = new THREE.CylinderGeometry(innerR, innerR, boreWallH, 24, 1, true, Math.PI - arc / 2, arc);
+    _cabinDisposables.push(wg);
+    const wall = new THREE.Mesh(wg, _cpodInteriorShell);   // back-faced worn-aluminium bore
+    // the cylinder axis is +Y; place its centre on the pod axis at mid-wall height (frame-local).
+    wall.position.set(0, boreFloorY + boreWallH / 2, boreAxisZ);
+    interior.add(wall);
+    // two riveted band hoops on the far bore (the round-capsule read through the glass)
+    for (const by of [0.28, 0.30 + 0.55]) {
+      const bg = new THREE.CylinderGeometry(innerR - 0.03, innerR - 0.03, 0.10, 24, 1, true, Math.PI - arc / 2, arc);
+      _cabinDisposables.push(bg);
+      const band = new THREE.Mesh(bg, _cpodInteriorBand);
+      band.position.set(0, boreFloorY + boreWallH * 0.5 + by, boreAxisZ);
+      interior.add(band);
+    }
+    // a deck-floor disc catching the lamp so the porthole doesn't bottom out into black
+    const fg = new THREE.CylinderGeometry(innerR - 0.06, innerR - 0.06, 0.05, 20);
+    _cabinDisposables.push(fg);
+    const deck = new THREE.Mesh(fg, _cpodInteriorDeck);
+    deck.position.set(0, boreFloorY + 0.03, boreAxisZ);
+    interior.add(deck);
   }
-  const peekFloor = _box(CPOD_DOOR_W + 0.1, 0.12, 0.86, _cpodCabinGlow);
-  peekFloor.position.set(0, -CPOD_DOOR_H / 2, -0.5);
-  frame.add(peekFloor);
-  // a hint of interior structure (a seat-back + a rib) catching the warm light so the peek isn't flat.
-  const innerSeat = _box(0.5, 0.66, 0.12, _podSteel);
-  innerSeat.position.set(0, -0.05, -0.7); frame.add(innerSeat);
-  // a DIM warm point lamp inside the peek so the interior reads lit but the domed glass stays a
-  //   tinted window (not a blown disc).
-  const peekLamp = new THREE.PointLight(0xffcf96, 0.35, 1.0, 2.8);
-  peekLamp.position.set(0, 0.2, -0.6);
-  frame.add(peekLamp);
+  // (b) a SEAT the porthole reveals — the pilot's bucket back + headrest facing the door, on the pod
+  //     axis just aft, catching the warm lamp (so through the glass you see "a seat, get in").
+  const seatBack = _box(0.52, 0.72, 0.14, _cpodInteriorSeat);
+  seatBack.position.set(0, portCY - 0.10, boreAxisZ - 0.30);
+  seatBack.rotation.x = 0.12; interior.add(seatBack);
+  const headRest = _box(0.30, 0.20, 0.13, _cpodInteriorSeat);
+  headRest.position.set(0, portCY + 0.32, boreAxisZ - 0.34);
+  interior.add(headRest);
+  // (c) a warm lamp lighting the bore + seat so the sealed glass reads a LIVED-IN lit interior (an
+  //     inviting "get in here" — W2a: the interior must read clearly through the see-through glass,
+  //     not a murky fog). Kept off the blown-disc line by the glass tint/Fresnel above.
+  const cabLamp = new THREE.PointLight(0xffce8f, 1.1, 3.0, 2.4);
+  cabLamp.position.set(0, portCY + 0.30, boreAxisZ + 0.30);   // between the seat and the porthole, high
+  interior.add(cabLamp);
+  // a small unlit amber telltale low-right in the bore (a point of warm life through the glass) —
+  //   seated just in front of the seat, on the pod axis side, so it reads as a console light.
+  const tell = _box(0.05, 0.05, 0.03, _ledAmber);
+  tell.position.set(0.30, portCY - 0.24, boreAxisZ - 0.10);
+  interior.add(tell);
 
   // ── 5. THE MERGED DOOR + DOMED PORTHOLE (user clarification 2026-07-02) — a SOLID riveted
   //    aluminium door with the ROUND DOMED porthole glass INTEGRAL to it (the same domed-circular
@@ -1756,11 +1892,25 @@ export function buildCanonicalPodExterior(opts: CanonicalPodOpts = {}): { root: 
   frame.add(doorPivot);
   const door = new THREE.Group();
   const doorTh = 0.10;
-  // (a) the SOLID door PLATE — one riveted aluminium slab filling the opening (the door is solid;
-  //     the porthole is a domed window set INTO it).
-  const plate = _box(CPOD_DOOR_W, CPOD_DOOR_H, doorTh, _podDoorMat);
-  plate.position.set(0, 0, 0);
-  door.add(plate);
+  // portCY (porthole centre, frame/door-local) declared above with the interior chamber — reused here.
+  // (a) the door PLATE built as a FRAME around a REAL porthole APERTURE (W2a — a genuine hole so the
+  //     modeled interior reads THROUGH the see-through glass; a solid slab would occlude it). Bottom
+  //     panel below the porthole, a top strip above it, two side strips flanking it at porthole height.
+  //     portCY is the porthole centre in door-local coords (= VP_CY − CPOD_DOOR_CY, computed above).
+  const cPortOpen = VP_R + 0.05;   // the open aperture radius through the door slab (glass + a hair)
+  const cdHalf = CPOD_DOOR_H / 2;
+  const cpTop = portCY + cPortOpen, cpBot = portCY - cPortOpen;
+  const addDoorSlab = (h: number, cy: number, w = CPOD_DOOR_W, cx = 0) => {
+    if (h <= 0.001) return;
+    const s = _box(w, h, doorTh, _podDoorMat);
+    s.position.set(cx, cy, 0);
+    door.add(s);
+  };
+  addDoorSlab(cpBot - (-cdHalf), (cpBot + (-cdHalf)) / 2);   // bottom panel (door base → aperture bottom)
+  addDoorSlab(cdHalf - cpTop, (cdHalf + cpTop) / 2);         // top strip (aperture top → door top)
+  const cSideW = CPOD_DOOR_W / 2 - cPortOpen;
+  addDoorSlab(cpTop - cpBot, portCY, cSideW, -(cPortOpen + cSideW / 2));   // left flank
+  addDoorSlab(cpTop - cpBot, portCY, cSideW, (cPortOpen + cSideW / 2));    // right flank
   // door-panel edge battens (a couple of proud stiffeners → the door reads as a fabricated plate)
   for (const by of [-CPOD_DOOR_H * 0.32, CPOD_DOOR_H * 0.34]) {
     const batten = _box(CPOD_DOOR_W - 0.14, 0.06, doorTh * 0.7, _podBandMat);
@@ -1774,22 +1924,31 @@ export function buildCanonicalPodExterior(opts: CanonicalPodOpts = {}): { root: 
     else if (u < 0.5) { rx = (CPOD_DOOR_W - 0.14) / 2; ry = (1 - (u - 0.25) / 0.25 - 0.5) * (CPOD_DOOR_H - 0.14); }
     else if (u < 0.75) { rx = (0.5 - (u - 0.5) / 0.25) * (CPOD_DOOR_W - 0.14); ry = -CPOD_DOOR_H / 2 + 0.06; }
     else { rx = -(CPOD_DOOR_W - 0.14) / 2; ry = ((u - 0.75) / 0.25 - 0.5) * (CPOD_DOOR_H - 0.14); }
+    // skip a perimeter rivet if it falls on the porthole aperture (no studs floating over the glass)
+    if ((rx * rx + (ry - portCY) * (ry - portCY)) < (VP_R + 0.08) * (VP_R + 0.08)) continue;
     const sg = new THREE.SphereGeometry(0.013, 6, 4, 0, Math.PI * 2, 0, Math.PI / 2);
     _cabinDisposables.push(sg);
     const stud = new THREE.Mesh(sg, _podFrameMat);
     stud.rotation.x = -Math.PI / 2; stud.position.set(rx, ry, doorTh * 0.55);
     door.add(stud);
   }
-  // (b) the ROUND DOMED PORTHOLE set into the UPPER portion of the door (generous — carries the
-  //     descent view). A dark inner-rim shadow well (aperture depth) → a domed convex glass disc →
-  //     ONE integral proud bezel ring → a ring of bezel bolts. The dome bulges OUTWARD (+local Z).
-  const portCY = CPOD_DOOR_H / 2 - CPOD_PORT_R - 0.14;   // porthole centre, in the door's upper half
-  //  the recessed shadow well (the aperture through the door → depth, reads as inset)
-  const wellGeo = new THREE.CylinderGeometry(CPOD_PORT_R, CPOD_PORT_R, doorTh + 0.02, 28, 1, true);
+  // (b) the ROUND DOMED PORTHOLE set into the door aperture (W2a — the modeled interior reads THROUGH
+  //     the see-through glass). A flat ANNULAR CAP rounding off the square aperture corners → a THIN
+  //     dark rim collar → a domed convex glass disc → ONE integral proud bezel ring → bezel bolts.
+  //  a flat ANNULAR PLATE (door aluminium) capping the square door-aperture CORNERS around the round
+  //    porthole, so no interior/sky leaks in the rectangle corners past the round bezel (the slab hole
+  //    is square; this rounds it off flush on the outer face — matches the ride cabin's dCap).
+  const cCapGeo = new THREE.RingGeometry(VP_R + 0.004, cPortOpen * Math.SQRT2 + 0.02, 30, 1);
+  _cabinDisposables.push(cCapGeo);
+  const cCap = new THREE.Mesh(cCapGeo, _podDoorMat);   // front-faced door aluminium; RingGeometry faces +Z outward
+  cCap.position.set(0, portCY, doorTh * 0.5 + 0.006);
+  door.add(cCap);
+  //  a thin dark rim collar just inside the aperture (short depth ring; does NOT cap the hole).
+  const wellGeo = new THREE.CylinderGeometry(CPOD_PORT_R + 0.006, CPOD_PORT_R + 0.006, doorTh + 0.01, 28, 1, true);
   _cabinDisposables.push(wellGeo);
   const well = new THREE.Mesh(wellGeo, _cpodRimShadow);
   well.rotation.x = Math.PI / 2;   // axis Y → local Z (through the door)
-  well.position.set(0, portCY, -0.01);
+  well.position.set(0, portCY, 0);
   door.add(well);
   //  the DOMED glass disc (a shallow convex sphere cap bulging outward, +Z) — the same domed
   //    porthole character as the ride-down cabin viewport.
@@ -1799,8 +1958,10 @@ export function buildCanonicalPodExterior(opts: CanonicalPodOpts = {}): { root: 
   glass.rotation.x = -Math.PI / 2;   // bulge toward +local Z (outward, toward the player)
   glass.position.set(0, portCY, doorTh * 0.5 + 0.02);
   door.add(glass);
-  //  ONE integral proud BEZEL ring framing the porthole (channel-steel torus, part of the door)
-  const bezGeo = new THREE.TorusGeometry(CPOD_PORT_R + 0.04, 0.05, 12, 30);
+  //  ONE integral proud BEZEL ring framing the porthole — W2a: outer edge = VP_BEZEL_OUT (0.41), the
+  //    SAME bezel as the ride cabin, so the door reads identical in↔out↔bay.
+  const bezTube = 0.045, bezCtr = VP_BEZEL_OUT - bezTube;
+  const bezGeo = new THREE.TorusGeometry(bezCtr, bezTube, 12, 30);
   _cabinDisposables.push(bezGeo);
   const bez = new THREE.Mesh(bezGeo, _podSteel);
   bez.position.set(0, portCY, doorTh * 0.5 + 0.02);   // in the door's XY plane, proud outward
@@ -1812,7 +1973,7 @@ export function buildCanonicalPodExterior(opts: CanonicalPodOpts = {}): { root: 
     _cabinDisposables.push(sg);
     const stud = new THREE.Mesh(sg, _podFrameMat);
     stud.rotation.x = -Math.PI / 2;
-    stud.position.set(Math.cos(a) * (CPOD_PORT_R + 0.04), portCY + Math.sin(a) * (CPOD_PORT_R + 0.04), doorTh * 0.5 + 0.06);
+    stud.position.set(Math.cos(a) * bezCtr, portCY + Math.sin(a) * bezCtr, doorTh * 0.5 + 0.06);
     door.add(stud);
   }
   // (c) a wheel/lever LATCH near the free (−X) edge, low on the door (grab + turn to open)
@@ -3336,49 +3497,56 @@ function _advanceChuteInflate(dt: number): void {
 //    + looks back, the wreck IS the same vessel (same diameter/height/proportions). This widens
 //    the C11 "tall torpedo" into the FAT capsule the cabin actually is (the cabin is the hero the
 //    player lives in 20-30s → it's the anchor; consistency > the old narrow-silhouette pref).
-const POD_R = 1.44;        // body radius = the cabin's OUTER hull radius (CAB_R 1.28 + SHELL 0.16) → ≈2.88m diameter, MATCHING the bore the player rode in
+const POD_R = 1.44;        // body radius = the cabin's OUTER hull radius (CAB_R 1.28 + SHELL 0.16) → ≈2.88m diameter, MATCHING the bore the player rode in — CONTRACT (unchanged)
 const POD_BASE_H = 0.34;   // heat-shield base slab height (scorched, sunk in sand)
-const POD_BODY_H = 1.95;   // straight cylindrical body = the cabin's straight WALL_H (1.95) → the standing-wall zone matches
-const POD_NOSE_H = 0.70;   // tucked ogive nose-cap ≈ the cabin's DOME_H (0.62) + a little crown (the exterior nose reads above the interior dome)
+// W2a — ALIAS the taller cabin dims so the exterior skin, the canonical bay pod, AND the wreck all
+//   match the TALLER interior (one model). The exterior nose reads a touch above the interior dome.
+const POD_BODY_H = WALL_H;          // = 2.55 — straight cylindrical body = the cabin's straight wall (was hardcoded 1.95)
+const POD_NOSE_H = DOME_H + 0.10;   // = 0.95 — tucked ogive nose-cap ≈ the cabin's dome + a little crown
 const POD_SEG = 28;        // lathe/cylinder radial segments — round but low-poly
 const SKIN = 0.16;         // panel / rim depth (rule 7: ≥15cm for hull-substantial)
 
 // ── Shared pod materials (module-scope so re-placing the wreck doesn't realloc;
 //    disposed materials in removeCrashedPodWreck reference these — see note there).
-// WEATHERED ALUMINIUM skin (D271) — the dominant read. TUNED toward aluminium vs
-// the procgen desert profile: a LIGHTER cool-grey base, the HUE-shifting rust
-// layers pulled to ACCENTS (sand-abrasion + sparse oxide patina, not a rust-brown
-// wash), more bare-metal flecks (scuffed aluminium scratches to bright metal), a
-// cool bare-metal reveal. Reads as a dented hand-riveted aluminium capsule that's
-// sat in the dunes — patina'd + sand-abraded, but unmistakably ALUMINIUM not iron.
+// WORN GUNMETAL skin (D271 → user steering 2026-07-03: "the pod should match the
+// rest of the ship, not read pale/bright"). RETUNED out of the pale sun-bleached
+// aluminium zone (0xb6b9b3 near-white) into the ship's WORN COOL-GUNMETAL idiom
+// (shipScene _shell 0x686e73 / _band 0x7c8288 — worn cool grey with a cool
+// desaturated grime cast, NOT a warm rust wash). Same one-vessel tone as the
+// cockpit/corridor/bay: darker cool base + a COOL scuff reveal (no near-white),
+// the warm oxide/dust channels PULLED DOWN + cooled so the skin no longer glows
+// warm-tan under the low sun. Keeps the riveted-capsule character (dents, streaks,
+// sparse patina) — just landed in gunmetal, not bleached aluminium.
 const _podPaint = createRustedHullMaterial({
-  baseColor: 0xb6b9b3,           // light cool aluminium-grey — the DOMINANT read
-  bareMetalHex: 0xd6d9da,        // bright scuffed-aluminium reveal (cool, near-white)
-  rustHex: 0x6a4a2c,             // warm grime tone for the drip-staining channel
-  streakIntensity: 0.42,         // grime drip-runs (the seam channel rides this hue too)
-  wearAmplitude: 0.46,           // STRONG plate-to-plate tonal break-up (dents + denting)
-  fleckStrength: 1.0,            // dense tight bare-metal scuff scratches → scrappy aluminium
-  oxStrength: 0.34, oxHex: 0x9a6a3e,    // more warm oxide/patina patches (weathered hero)
-  // dust + chalk PULLED DOWN — they washed the up-facing nose dome chalky-white
-  // (P5: the nose must read as the SAME weathered aluminium as the body, not plaster).
-  dustStrength: 0.28, dustHex: 0xa89c84, chalkStrength: 0.16,
-  oxDeepStrength: 0.28, seamRustStrength: 0.46, abrasionStrength: 0.62,  // drip-stain + sand-blast
+  baseColor: 0x565c62,           // WORN COOL GUNMETAL — set BELOW shipScene _shell 0x686e73 so it lands gunmetal even under the point-blank WARM airlock spill (the bay hatch close-up lifts+warms it ~1 value step) + the desert dawn (was 0xb6b9b3 pale aluminium)
+  bareMetalHex: 0x8f959b,        // COOL scuffed-metal reveal (matches _rivet 0x9299a0; was 0xd6d9da near-white)
+  rustHex: 0x30343a,             // COOL near-grey grime tone for the drip channel (was warm 0x6a4a2c)
+  streakIntensity: 0.40,         // grime drip-runs (the seam channel rides this hue too)
+  wearAmplitude: 0.44,           // STRONG plate-to-plate tonal break-up (dents + denting)
+  fleckStrength: 1.0,            // dense tight bare-metal scuff scratches → scrappy worn metal
+  oxStrength: 0.16, oxHex: 0x585c60,    // sparse COOL patina patches (warm oxide pulled DOWN + cooled → no coral glow)
+  // dust + chalk PULLED DOWN + cooled — they washed the up-facing nose dome pale/warm
+  // (the nose must read as the SAME worn gunmetal as the body, not a bleached cap).
+  dustStrength: 0.14, dustHex: 0x8c8e8c, chalkStrength: 0.06,
+  oxDeepStrength: 0.20, seamRustStrength: 0.30, abrasionStrength: 0.52,  // drip-stain + sand-blast, cool
   localSpace: true,   // the exterior skin rides the descent/tumble in future work — pin the grime now (see hullMaterial.ts)
 });
 // Darker channel-steel material (porthole + hatch frames, rivet bands) — a value
 // contrast to the bright aluminium skin so the steel hardware reads as fitted-on.
 const _podSteel = createRustedHullMaterial({
-  baseColor: 0x4f4c46,           // dark warm-grey channel steel
+  baseColor: 0x3a4047,           // COOL dark structural steel — matches shipScene _steel 0x373c42 (was warm 0x4f4c46 → read coppery under the sun)
+  rustHex: 0x24272d,             // cool grime (was default warm rust)
   streakIntensity: 0.4, wearAmplitude: 0.3,
-  oxStrength: 0.4, oxDeepStrength: 0.45, seamRustStrength: 0.45,
+  oxStrength: 0.18, oxHex: 0x50555b,   // warm oxide PULLED DOWN + cooled (was 0.4 warm-default → the bezel glowed copper)
+  oxDeepStrength: 0.24, seamRustStrength: 0.26,
   localSpace: true,   // pod rides the descent/tumble in future work — pin grime (see hullMaterial.ts)
 });
 // Rivets / studs / small hardware — mid steel-grey (reads as cast/forged fittings,
 // distinct from both the bright skin and the dark channel frames).
 const _podFrameMat = createRustedHullMaterial({
-  baseColor: 0x7d7a72,           // mid steel-grey hardware
-  rustHex: 0x4a2810, streakIntensity: 0.3, oxStrength: 0.3, oxHex: 0x9a5a2e,
-  oxDeepStrength: 0.3, seamRustStrength: 0.3, fleckStrength: 0.6,
+  baseColor: 0x82868c,           // COOL mid steel-grey rivets/studs — matches shipScene _rivet 0x9299a0 (was warm 0x7d7a72)
+  rustHex: 0x2a2d33, streakIntensity: 0.3, oxStrength: 0.14, oxHex: 0x54585e,   // cool grime + faint cool patina (was warm rust 0x4a2810 / 0x9a5a2e)
+  oxDeepStrength: 0.2, seamRustStrength: 0.22, fleckStrength: 0.6,
   localSpace: true,   // pod rides the descent/tumble in future work — pin grime (see hullMaterial.ts)
 });
 // Cables / antenna — dark matte, near-black.
@@ -3409,12 +3577,12 @@ const _crashHeatMat = new THREE.MeshLambertMaterial({
 //   warm oxide layers glow coral-red on a small fragment under the low orange sun — the R1 "toy" read);
 //   a plain lambert reads as burnt metal at any light angle.
 const _crashCharMat = new THREE.MeshLambertMaterial({ color: 0x28221c, flatShading: true });
-// SCUFFED-ALUMINIUM DEBRIS — a cool grey lambert for the torn hull-PANEL fragments. The pod's OWN
-//   aluminium tone (matches _podPaint's base 0xb6b9b3), but a FLAT lambert: the full hull shader's
+// SCUFFED-GUNMETAL DEBRIS — a cool grey lambert for the torn hull-PANEL fragments. The pod's OWN
+//   gunmetal tone (matches the retuned _podPaint base 0x565c62), but a FLAT lambert: the full hull shader's
 //   warm seam/oxide layers, on a tiny fragment quad under a low raking sun, collapse into a lit
 //   coral-red chip (the R1 "red toy" — panels AND bands both hit it). Flat aluminium reads correct
 //   at fragment scale + any light angle. A hair darker than the body so it reads as a scuffed offcut.
-const _crashPanelMat = new THREE.MeshLambertMaterial({ color: 0xa2a6a2, flatShading: true });
+const _crashPanelMat = new THREE.MeshLambertMaterial({ color: 0x6f7377, flatShading: true });   // matches the retuned _podPaint gunmetal (was 0xa2a6a2, keyed to the old pale skin)
 // Reentry SCORCH — a vertex-COLOR-driven Lambert so the char→tarnish→aluminium
 // fade is baked into the geometry (no hard top edge, no painted-stripe read). The
 // per-vertex gradient (built in §2) supplies the color; flat-shaded low-poly.
@@ -3432,9 +3600,11 @@ const _podScorchMat = createRustedHullMaterial({
 // channel steel) so the latitude bands read as fitted RIVETED HOOPS, not as dark
 // drum-divisions cutting the capsule into stacked segments.
 const _podBandMat = createRustedHullMaterial({
-  baseColor: 0x8c8d85,           // mid grey-aluminium band
+  baseColor: 0x7c8288,           // WORN COOL painted-band grey — matches shipScene _band 0x7c8288 (was mid warm-grey 0x8c8d85); a touch lighter than the skin so hoops read proud
+  bareMetalHex: 0x9aa0a6,        // cool scuff reveal (no near-white)
+  rustHex: 0x2c3036,             // cool grime channel
   streakIntensity: 0.3, wearAmplitude: 0.34, fleckStrength: 0.7,
-  oxStrength: 0.32, oxHex: 0x96602e, oxDeepStrength: 0.28, seamRustStrength: 0.3,
+  oxStrength: 0.14, oxHex: 0x56585c, oxDeepStrength: 0.2, seamRustStrength: 0.24,   // warm oxide pulled DOWN + cooled (was 0.32 warm 0x96602e)
   localSpace: true,   // pod rides the descent/tumble in future work — pin grime (see hullMaterial.ts)
 });
 // (CLUSTER D — _podPortholeBandMat RETIRED with the outer −Z porthole-echo bezel: the −Z arc is now
@@ -3443,10 +3613,11 @@ const _podBandMat = createRustedHullMaterial({
 // strippable salvage door POPS off the body (it's the tutorial target, must read
 // as the clearest thing on the model). Heavy bare-metal scuffs (it's been forced).
 const _podDoorMat = createRustedHullMaterial({
-  baseColor: 0xcdd0cb,           // bright pried aluminium — lighter than the body skin
-  bareMetalHex: 0xe2e4e2,
+  baseColor: 0x6a7076,           // WORN GUNMETAL salvage door — a step LIGHTER than the skin (0x565c62) so it still POPS as the tutorial target, but in-family + survives the point-blank WARM airlock spill as gunmetal, not near-white (was 0xcdd0cb → the "pale door" the user flagged in the bay)
+  bareMetalHex: 0x93999f,        // cool scuffed reveal — it's been forced (was 0xe2e4e2 near-white)
+  rustHex: 0x2e3238,             // cool grime channel
   streakIntensity: 0.2, wearAmplitude: 0.34, fleckStrength: 1.0,
-  oxStrength: 0.18, oxHex: 0x9a6a3e, abrasionStrength: 0.4,
+  oxStrength: 0.10, oxHex: 0x585c60, abrasionStrength: 0.4,   // faint cool patina (was warm 0x9a6a3e)
   localSpace: true,   // pod rides the descent/tumble in future work — pin grime (see hullMaterial.ts)
 });
 // Dark cavity (blown hatch interior + viewport glass void).
@@ -3573,8 +3744,8 @@ function buildHeroPodMesh(): THREE.Group {
     const pos = scorchGeo.attributes.position;
     const cols = new Float32Array(pos.count * 3);
     const cChar = new THREE.Color(0x0d0906);   // near-black reentry char (deepened — P2)
-    const cTarn = new THREE.Color(0x5a4126);   // tarnished warm transition
-    const cAlu = new THREE.Color(0xb6b9b3);    // body aluminium (top → blends in)
+    const cTarn = new THREE.Color(0x3e3a34);   // tarnished transition — cooled to match the retuned palette (was warm 0x5a4126)
+    const cAlu = new THREE.Color(0x565c62);    // body GUNMETAL (top → blends into the retuned _podPaint; was pale 0xb6b9b3)
     const tmp = new THREE.Color();
     for (let i = 0; i < pos.count; i++) {
       const vx = pos.getX(i), vy = pos.getY(i), vz = pos.getZ(i);

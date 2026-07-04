@@ -136,3 +136,6 @@ Should be closed cleanly/flush. Suspects: an animation ending not-exactly-closed
 
 ## 2026-07-03 — pod porthole proportions (verbal; → W2 spec refinement)
 The viewport/porthole is TOO BIG for the door, and its circular bezel CLIPS the pod's hull sides. W2's door+porthole rebuild must size the porthole to sit comfortably WITHIN the door slab (clear margin to the door edges on all sides) and keep the bezel fully on the door face (no wrap/clip past the pod's curvature). Pairs with: the taller pod body + "the circle overlaps the door" from the same batch.
+
+## 2026-07-03 — the pod is too PALE/BRIGHT (verbal; sent live to W2a) — match the ship
+The canonical pod reads pale/bright (sun-bleached beige aluminium) against the rest of the ship. It must MATCH the ship's worn-gunmetal + grime idiom — one vessel family, one tone (cockpit/corridor/bay/pod). Retune the pod material set (exterior skin + interior) to the shipScene metal family; keep the riveted capsule character. Verify with side-by-side shots against ship surfaces.

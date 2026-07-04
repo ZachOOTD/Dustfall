@@ -388,65 +388,90 @@ const COR_LEN = COR_Z1 - COR_Z0;    // 12
 const COR_ZC = (COR_Z0 + COR_Z1) / 2;   // 8.6 (tunnel centre)
 const COR_WALL_T = 0.2;       // structural wall/floor/ceiling thickness (matches the collider spec)
 
-// ── POD-BAY (REBUILD v2 R5c) — the ESCAPE-POD AIRLOCK BAY at the BRIDGE end of the corridor
-//    (where the flee leads). A recessed alcove in the −X wall holding the DOCKED escape pod:
-//    the SAME size-matched riveted capsule (POD_R) the player rides down, standing on its
-//    heat-shield in a clamped bay cradle, its HATCH OPEN toward the corridor with the lit cabin
-//    interior visible through it. The fleeing player runs down the corridor + straight up to the
-//    open hatch; enterPod then plays a scripted climb-IN (no teleport). Everything here is at/
-//    outside the −X wall over BAY_Z0..BAY_Z1 (the structural −X wall + wall-finish skip that span,
-//    §buildCorridor); the walkable tube envelope + the +X wall + the collider set are unchanged.
-//    The bay is placed near the mouth (bridge end) so it's the first thing the fleeing eye meets.
-const BAY_Z0 = 3.2;           // bay opening start (local z) — just aft of the corridor mouth
-const BAY_Z1 = 6.4;           // bay opening end (local z) — a ~3.2m airlock frame
-const BAY_ZC = (BAY_Z0 + BAY_Z1) / 2;   // 4.8 — bay centre (the docked pod's local z)
-const BAY_RECESS = 2.9;       // how far the bay alcove recesses into −X off the wall (room for the 2.88m pod)
-// The docked pod stands vertically on its heat-shield in the bay, its body axis +Y, offset into
-// the recess; its HATCH faces +X (toward the corridor centreline / the arriving player). The pod
-// LOCAL frame's hatch (HATCH_AZ on the cabin, +Z-forward capsule) is rotated to face +X here.
-const BAY_POD_X = -(COR_HW + BAY_RECESS * 0.52);   // pod centre X (well into the −X recess)
-// Is a corridor-wall emission on the −X wall inside the bay opening span? (so buildCorridor
-// SKIPS the −X structural wall + finish panels there, revealing the docked pod in the alcove).
+// ── POD-BAY → AIRLOCK RE-ARCHITECTURE (W2b, user playtest 2026-07-03). The escape pod is now a
+//    VESSEL DOCKED TO THE SHIP, not parked in an open closet. Reading corridor → outboard (−X):
+//      1. an OPERATIONAL SLIDING DOOR in the corridor −X wall plane (2 leaves that slide apart into
+//         wall pockets — setBayAirlockDoor drives it; the engine-room glass idiom but OPAQUE + it
+//         actually OPENS). Closed = the wall is sealed (a collider blocks). Open = a walk-through.
+//      2. a short GASKETED AIRLOCK COLLAR (a docking passage) behind the sliding door — the ribbed
+//         tube that mates the ship to the pod. Walkable.
+//      3. the POD'S OWN DOOR at the collar's FAR (outboard) end — the canonical pod's merged glass
+//         front door IS the airlock's far end (an airlock-style connection). E-open it to board.
+//      4. the POD BODY sits MOSTLY OUTSIDE the ship's hull (beyond the −X wall plane); only its
+//         door-face/collar side protrudes into the airlock ring → it reads DOCKED, not parked.
+//    The airlock opening spans BAY_Z0..BAY_Z1 on the −X wall; buildCorridor skips the −X structural
+//    wall + finish there (the sliding door + collar fill it). The +X wall / floor / ceiling / tube
+//    envelope + the corridor collider set are UNCHANGED. Placed near the mouth (bridge end) — the
+//    first thing the fleeing eye meets.
+const BAY_Z0 = 3.2;           // airlock opening start (local z)
+const BAY_Z1 = 6.4;           // airlock opening end (local z) — a ~3.2m aperture span
+const BAY_ZC = (BAY_Z0 + BAY_Z1) / 2;   // 4.8 — airlock centre (the docked pod's local z + door centreline)
+// The airlock APERTURE (the sliding-door opening cut in the −X wall) — sized to the pod door + a
+//   comfortable walk-through. The door aperture is W 1.02 (frozen); the sliding-door opening is a
+//   touch wider so the collar/pod-door read inside it.
+const AIRLOCK_HW = 0.72;      // sliding-door opening half-width (1.44m clear — clears the KCC + frames the pod door)
+const AIRLOCK_TOP = 2.18;     // sliding-door opening top (a tall walk-through, under the ceiling)
+const AIRLOCK_WALL_X = -COR_HW;   // the −X corridor wall plane (x = −1.0) — the sliding-door plane
+// The COLLAR — the gasketed docking passage from the wall plane (−1.0) outboard to the pod door
+//   face. Short (a docking collar, not a room). Its outboard end is the pod-door plane.
+const COLLAR_LEN = 0.92;      // collar depth (−X) from the wall plane to the pod-door face
+const COLLAR_FAR_X = AIRLOCK_WALL_X - COLLAR_LEN;   // −1.92 — the pod-door face plane (collar far end)
+// The DOCKED POD — frozen dims (the sibling builds to these): R 1.44; door on the +X arc; door
+//   aperture W 1.02 / H 1.98 / centre-height CY 1.10 above the pod base. The pod's +X arc (door
+//   face) sits AT the collar-far plane, so the pod hull is mostly OUTSIDE the ship (x < −1.0).
+const BAY_POD_R = 1.44;       // MATCH POD_R (podScene) — the 2.88m-diameter capsule the player rides
+const BAY_POD_X = COLLAR_FAR_X - BAY_POD_R;   // −3.36 — pod centre X (only the +X door-arc protrudes toward the collar)
+// Is a corridor-wall emission on the −X wall inside the airlock opening span? (buildCorridor SKIPS
+// the −X structural wall + finish panels there so the sliding door + collar + docked pod show).
 function _inBayGap(z: number): boolean { return z > BAY_Z0 - 0.05 && z < BAY_Z1 + 0.05; }
 
 // ── Static-collider specs for the CORRIDOR walkable shell (WYSIWYG — the KCC walks these). These
 //    are BYTE-IDENTICAL to the old greybox CORRIDOR_SPECS so collision + flow are unchanged, EXCEPT
-//    the −X wall is now GAPPED at the escape-pod bay opening (B2 — the walkable boarding path): the
-//    old single −X wall [0.2,2.4,12,−1.1,1.2,8.6] spanned z 2.6..14.6; the bay mouth is z BAY_Z0..
-//    BAY_Z1 (3.2..6.4), so the wall is split into a FORE stub (z 2.6..3.2) + an AFT run (z 6.4..14.6)
-//    leaving the bay opening walkable. BAY_COLLIDERS (below) then wall off the recess + floor it so
-//    the player walks IN, not out of the world. (The +X wall + floor + ceiling are unchanged.)
-const _BAY_WALL_FORE_LEN = BAY_Z0 - COR_Z0;                 // 0.6 — corridor mouth → bay opening
-const _BAY_WALL_AFT_LEN = COR_Z1 - BAY_Z1;                  // 8.2 — bay opening end → dead-end
+//    the −X wall is now GAPPED at the airlock opening: the old single −X wall spanned z 2.6..14.6;
+//    the airlock aperture is z BAY_Z0..BAY_Z1 (3.2..6.4), so the wall is split into a FORE stub
+//    (z 2.6..3.2) + an AFT run (z 6.4..14.6) leaving the airlock walkable. AIRLOCK_COLLIDERS (below)
+//    then wall off the collar + floor it + the sliding-door leaf (state-driven) seals it when shut.
+const _BAY_WALL_FORE_LEN = BAY_Z0 - COR_Z0;                 // 0.6 — corridor mouth → airlock opening
+const _BAY_WALL_AFT_LEN = COR_Z1 - BAY_Z1;                  // 8.2 — airlock opening end → dead-end
 const CORRIDOR_COLLIDERS: ReadonlyArray<BoxSpec> = [
   [2, 0.2, 12, 0, -0.1, 8.6],   // corridor floor  (top y=0)
   [2, 0.2, 12, 0, 2.5, 8.6],    // corridor ceiling (underside y=2.4)
   [0.2, 2.4, 12, 1.1, 1.2, 8.6], // +X wall (inner face x=1.0)
-  // −X wall, GAPPED at the bay opening (B2 walkable boarding path) — a fore stub + an aft run.
+  // −X wall, GAPPED at the airlock opening — a fore stub + an aft run.
   [0.2, 2.4, _BAY_WALL_FORE_LEN, -1.1, 1.2, COR_Z0 + _BAY_WALL_FORE_LEN / 2],  // −X wall fore (z 2.6..3.2)
   [0.2, 2.4, _BAY_WALL_AFT_LEN, -1.1, 1.2, BAY_Z1 + _BAY_WALL_AFT_LEN / 2],    // −X wall aft  (z 6.4..14.6)
+  // −X wall JAMBS flanking the airlock aperture (the solid wall either side of the 1.44m opening),
+  //   over the airlock z-span, from the opening edge out to the walkable wall line — so you can't
+  //   slip past the sliding-door frame into the collar off-centre.
+  [0.2, 2.4, (BAY_ZC - AIRLOCK_HW) - BAY_Z0, -1.1, 1.2, (BAY_Z0 + (BAY_ZC - AIRLOCK_HW)) / 2],  // fore jamb
+  [0.2, 2.4, BAY_Z1 - (BAY_ZC + AIRLOCK_HW), -1.1, 1.2, ((BAY_ZC + AIRLOCK_HW) + BAY_Z1) / 2],  // aft jamb
+  [0.2, 2.4 - AIRLOCK_TOP, 2 * AIRLOCK_HW, -1.1, (AIRLOCK_TOP + 2.4) / 2, BAY_ZC],               // lintel over the opening
   [2, 2.4, 0.2, 0, 1.2, 14.7],   // dead-end bulkhead (inner face z=14.6 — the disaster trigger)
 ];
 
-// ── B2 — THE POD-BAY WALKABLE ENVELOPE (the boarding path). The player walks through the gapped
-//    −X wall into the docking recess and up INTO the pod. These box colliders floor + wall off the
-//    recess so they can't fall out of the world or slip behind the pod. WYSIWYG-matched to the bay
-//    shell geometry (buildPodBay): recess x −1.0..−3.9, z BAY_Z0..BAY_Z1, floor top y=0 (flush with
-//    the corridor deck — a seamless walk-in, no lip). The INTERIOR FLOOR sits inside the pod bore so
-//    the player stands where the seat is; the pod's own hull is a low ring wall (the pod is a
-//    noCollider prop, so the player would otherwise walk through it — these give it a walkable inside
-//    + a step-through door gap on the +X (door) side). Spec = [w,h,d, cx,cy,cz] LOCAL to SHIP_ORIGIN.
-const _BAY_RECESS_XC = (-COR_HW + (-COR_HW - BAY_RECESS)) / 2;   // −2.45 (recess centre X)
-const BAY_COLLIDERS: ReadonlyArray<BoxSpec> = [
-  // recess floor (flush with the corridor deck; spans the full recess + a touch under the doorway)
-  [BAY_RECESS + 0.1, 0.2, (BAY_Z1 - BAY_Z0) + 0.2, _BAY_RECESS_XC, -0.1, BAY_ZC],
-  // recess ceiling (caps the alcove so you can't jump out the top)
-  [BAY_RECESS + 0.1, 0.2, (BAY_Z1 - BAY_Z0) + 0.2, _BAY_RECESS_XC, COR_CH + 0.1, BAY_ZC],
-  // back wall of the recess (inner face at xFar = −3.9)
-  [0.2, COR_CH + 0.4, (BAY_Z1 - BAY_Z0) + 0.2, -COR_HW - BAY_RECESS - 0.1, COR_CH / 2, BAY_ZC],
-  // the two END walls closing the recess sides (so you can't slip fore/aft behind the pod)
-  [BAY_RECESS + 0.2, COR_CH + 0.4, 0.2, _BAY_RECESS_XC, COR_CH / 2, BAY_Z0 - 0.1],
-  [BAY_RECESS + 0.2, COR_CH + 0.4, 0.2, _BAY_RECESS_XC, COR_CH / 2, BAY_Z1 + 0.1],
+// ── THE AIRLOCK COLLAR walkable envelope (the docking passage). The player walks through the open
+//    sliding door into the short collar and up to the POD DOOR at its far end. These box colliders
+//    floor + wall + cap the collar so they can't fall out of the world; the pod-door plane at the
+//    far end is walled by the pod's own hull-ring colliders (gapped at the door). Collar spans
+//    x AIRLOCK_WALL_X..COLLAR_FAR_X (−1.0..−1.92), z BAY_Z0..BAY_Z1, floor top y=0 (flush deck).
+//    Spec = [w,h,d, cx,cy,cz] LOCAL to SHIP_ORIGIN.
+const _COLLAR_XC = (AIRLOCK_WALL_X + COLLAR_FAR_X) / 2;   // −1.46 (collar centre X)
+// The pod BORE floor — a walkable deck INSIDE the docked pod's hull (the bay pod is a noCollider prop
+//   with no interior floor of its own; the ridden-cabin floor is podScene's job in a DIFFERENT frame).
+//   Without this the player walks through the open pod door + falls to space. Spans collar-far → past
+//   the pod centre, over the bore width; floor top y=0 (flush with the collar deck).
+const _BORE_X0 = COLLAR_FAR_X, _BORE_X1 = BAY_POD_X - BAY_POD_R + 0.15;   // −1.92 .. −4.65 (inner hull)
+const AIRLOCK_COLLIDERS: ReadonlyArray<BoxSpec> = [
+  // collar floor (flush with the corridor deck — a seamless step-in, no lip)
+  [COLLAR_LEN + 0.2, 0.2, (BAY_Z1 - BAY_Z0), _COLLAR_XC, -0.1, BAY_ZC],
+  // collar ceiling (caps the passage)
+  [COLLAR_LEN + 0.2, 0.2, (BAY_Z1 - BAY_Z0), _COLLAR_XC, COR_CH + 0.1, BAY_ZC],
+  // the two SIDE walls closing the collar fore/aft (so you can't slip beside the collar tube)
+  [COLLAR_LEN + 0.2, COR_CH + 0.4, 0.2, _COLLAR_XC, COR_CH / 2, BAY_ZC - AIRLOCK_HW - 0.1],
+  [COLLAR_LEN + 0.2, COR_CH + 0.4, 0.2, _COLLAR_XC, COR_CH / 2, BAY_ZC + AIRLOCK_HW + 0.1],
+  // the pod BORE floor (walkable deck inside the docked pod — so walking through the pod door lands
+  //   on a floor, not a fall to space). The pod-hull-ring colliders (_addBayPodColliders) wall it.
+  [_BORE_X0 - _BORE_X1 + 0.2, 0.2, BAY_POD_R * 1.9, (_BORE_X0 + _BORE_X1) / 2, -0.1, BAY_ZC],
 ];
 
 // ── Static-collider specs for the COCKPIT walkable shell (WYSIWYG — the KCC walks these).
@@ -600,6 +625,15 @@ function _cyl(rt: number, rb: number, h: number, seg: number, mat: THREE.Materia
   const g = new THREE.CylinderGeometry(rt, rb, h, seg);
   _disposables.push(g);
   return new THREE.Mesh(g, mat);
+}
+/** An OPEN-ENDED cylinder BAND (no end caps) — a see-through ring/hoop. Used for the docking-bellows
+ *  convolutions + mating flanges so you look THROUGH the collar to the pod (a capped _cyl reads as a
+ *  solid disc). DoubleSide so the inner wall shows when viewed down the axis. */
+function _ring(r: number, h: number, seg: number, mat: THREE.Material): THREE.Mesh {
+  const g = new THREE.CylinderGeometry(r, r, h, seg, 1, true);   // openEnded
+  _disposables.push(g);
+  const m = new THREE.Mesh(g, mat);
+  return m;
 }
 /** A small flush dome rivet stud (a half-sphere) at (x,y,z), domed toward `faceDir`. */
 function _stud(x: number, y: number, z: number, faceDir: THREE.Vector3, mat: THREE.Material, r = 0.018): THREE.Mesh {
@@ -959,6 +993,7 @@ function buildCockpitShell(group: THREE.Group): void {
       group.add(_skin(collarV, _ceil));
     }
   }
+
   // ── AFT (+Z) DOOR WALL — the bulkhead segments around the doorway (≥0.10m thick — rule #7) + a
   //    real bulkhead doorway. Side segments + head close the wall around the corridor opening.
   for (const sx of [-1, 1]) {
@@ -2020,7 +2055,10 @@ export function buildShipScene(ctx: GameContext): void {
   buildPodBay(group);   // R5c — the docked escape pod in its bay at the bridge end (the flee target + the physical enter)
   _bayPodBodies.length = 0;   // B2 — reset the docked-pod hull ring accumulator (idempotent rebuild)
   _addBayPodColliders(ctx);   // B2 — the walkable pod hull ring (gapped at the door) so the player walks IN through the door, not through the hull
-  for (const [w, h, d, cx, cy, cz] of [...CORRIDOR_COLLIDERS, ...BAY_COLLIDERS]) {   // B2 — bay recess is now walkable (gapped −X wall + recess floor/walls)
+  _airlockCtx = ctx;          // W2b — capture ctx for the state-driven sliding-door seal collider
+  _airlockSealBody = null;    // idempotent rebuild — the previous seal (if any) was freed in dispose
+  setBayAirlockDoor(0);       // W2b — the sliding door starts CLOSED (installs the seal collider that blocks the aperture)
+  for (const [w, h, d, cx, cy, cz] of [...CORRIDOR_COLLIDERS, ...AIRLOCK_COLLIDERS]) {   // W2b — the airlock collar is walkable (gapped −X wall + collar floor/walls); the sliding-door seal is state-driven (_addAirlockDoorCollider)
     const col = makeStaticBox(
       ctx.physics.world,
       { x: w / 2, y: h / 2, z: d / 2 },
@@ -2073,6 +2111,8 @@ export function buildShipScene(ctx: GameContext): void {
   _protect(_engineDoorJudderL);     // the sliding engine-room door leaves (judder open on fire)
   _protect(_engineDoorJudderR);
   _protect(_bayDoorPivot);          // the docked-pod bay door pivot (swings)
+  _protect(_airlockDoorL);          // W2b — the operational sliding-door leaves (slide open/shut)
+  _protect(_airlockDoorR);
   // (the engine-room glass panes ride under the sliding-door leaves _engineDoorJudderL/R → already
   //  protected as children of a noMerge subtree, so their emissive-on-fire lift keeps working.)
   mergeStaticByMaterial(group);
@@ -2262,13 +2302,17 @@ function buildCorridor(group: THREE.Group): void {
   // ── BULKHEAD RIB FRAMES — the structural hoops that segment the tube. A rib = proud vertical
   //    posts (both walls) + a top cross-beam, in dark steel, with bolt rows. Placed at intervals;
   //    every other one carries a HAZARD-STRIPE painted frame (a doorway/bulkhead threshold read).
-  const ribZ = [3.4, 5.2, 7.0, 8.8, 10.6, 12.4, 14.1];
+  // W2b — moved OFF the airlock span (was [3.4, 5.2, …]) so no rib post/beam crosses the sliding-door
+  //   front (spec: the door front must be clean + readable as THE exit). The airlock frame's own jambs +
+  //   lintel are the structure over BAY_Z0..BAY_Z1; the ribs pick up aft of it.
+  const ribZ = [7.0, 8.8, 10.6, 12.4, 14.1];
   for (let ri = 0; ri < ribZ.length; ri++) {
     const z = ribZ[ri];
     const hazard = ri % 2 === 1;
     const postMat = hazard ? _corrHazard : _steel;
     for (const sx of [1, -1]) {
-      // vertical rib post proud of the wall
+      // vertical rib post proud of the wall — skip the −X post over the airlock gap (the frame covers it)
+      if (sx === -1 && _inBayGap(z)) continue;
       const post = _box(0.14, COR_CH, 0.16, postMat);
       post.position.set(sx * (COR_HW - 0.07), COR_CH / 2, z);
       group.add(post);
@@ -2279,7 +2323,8 @@ function buildCorridor(group: THREE.Group): void {
       chan.position.set(sx * (COR_HW - 0.16), COR_CH / 2, z);
       group.add(chan);
     }
-    // top cross-beam of the frame
+    // top cross-beam of the frame — skip over the airlock gap so nothing crosses above the door front
+    if (_inBayGap(z)) continue;
     const beam = _box(2 - 0.28, 0.16, 0.16, postMat);
     beam.position.set(0, COR_CH - 0.08, z);
     group.add(beam);
@@ -2297,10 +2342,11 @@ function buildCorridor(group: THREE.Group): void {
 
   // ── WALL FINISH: each wall broken into recessed panels between the ribs (a raised panel face
   //    with a bolt border + a recessed dark reveal around it), plus access hatches + a placard.
-  const seg: [number, number][] = [];   // [zStart, zEnd] gaps between ribs to panelize
-  const bounds = [COR_Z0 + 0.15, ...ribZ.slice(0, -1).map((z, i) => (z + ribZ[i + 1]) / 2), COR_Z1 - 0.15];
-  for (let i = 0; i < ribZ.length; i++) seg.push([i === 0 ? COR_Z0 + 0.15 : (ribZ[i - 1] + ribZ[i]) / 2, i === ribZ.length - 1 ? COR_Z1 - 0.15 : (ribZ[i] + ribZ[i + 1]) / 2]);
-  void bounds;
+  // W2b — fixed panel dividers (the ribs no longer sit fore of z=7, so panelize on a stable set that
+  //   keeps the whole tube finished; the −X wall panels over the airlock are skipped below).
+  const panelEdges = [COR_Z0 + 0.15, 3.5, 4.8, 6.1, 7.0, 8.8, 10.6, 12.4, COR_Z1 - 0.15];
+  const seg: [number, number][] = [];   // [zStart, zEnd] panel spans
+  for (let i = 0; i < panelEdges.length - 1; i++) seg.push([panelEdges[i], panelEdges[i + 1]]);
   for (const sx of [1, -1]) {
     for (let si = 0; si < seg.length; si++) {
       const [z0, z1] = seg[si];
@@ -2610,60 +2656,73 @@ function buildCorridor(group: THREE.Group): void {
 // tiny helper — a downward face vector (for studs domed downward off a lintel/beam underside).
 function down_(_up: THREE.Vector3): THREE.Vector3 { return new THREE.Vector3(0, -1, 0); }
 
-// ── R5c — the ESCAPE-POD BAY + the DOCKED POD. Built into the −X alcove opened above (the
-//    structural wall + finish skip BAY_Z0..BAY_Z1). This is what the fleeing player runs toward:
-//    a hazard-framed airlock recess with the SAME size-matched riveted capsule (POD_R) they ride
-//    down, standing on its heat-shield in a clamped cradle, HATCH OPEN toward the corridor with a
-//    warm-lit cabin interior peek behind it. Everything is at/outside the −X wall line (x ≤ −COR_HW)
-//    so the walkable tube + colliders are untouched. Warm bay-light spills back into the corridor.
-// The pod's exterior identity mirrors buildHeroPodMesh (podScene) — a light cool-aluminium
-//   riveted capsule with dark channel-steel bands/frames — but authored in the corridor's own
-//   worn-gunmetal materials so the docked pod reads as part of THIS ship's bay (grimed, lit by the
-//   bay's own lamps), not a desert-weathered wreck. The RIDDEN cabin (buildPodScene) is the same
-//   vessel; enterPod builds it + carries the eye in.
-const BAY_POD_R = 1.44;        // MATCH POD_R (podScene) — the 2.88m-diameter capsule the player rides
-// B1.a — the docked pod is now the CANONICAL module (buildCanonicalPodExterior, podScene). Its
-//   skin/scorch/band/frame materials + geometry live there (the ONE pod, shared across phases).
-//   Only the BAY's own dressing materials remain here.
+// ── W2b — THE ESCAPE-POD AIRLOCK + THE DOCKED POD. The sliding door (in the −X wall) → a short
+//    gasketed collar → the pod's own door (the canonical pod's merged glass front door IS the
+//    collar's far end). The pod body sits MOSTLY OUTSIDE the hull (x < −1.0); only its +X door-arc
+//    protrudes toward the collar → it reads as a VESSEL DOCKED to the ship, not parked in a closet.
+//    Everything is at/outside the −X wall line (buildCorridor skips the wall over the aperture); the
+//    walkable tube + corridor colliders are untouched. Warm airlock-light spills back into the corridor.
+// The docked pod is the ONE CANONICAL module (buildCanonicalPodExterior, podScene) — its skin/scorch/
+//   band/frame materials + geometry + real glass porthole (full interior visible through it) live
+//   there, shared across phases. Only the AIRLOCK's own dressing materials remain here.
 // hazard ACCENT chevron paint — a saturated warn-yellow used ONLY as thin edge accents (doorway
-//   leading edges), NOT the primary read. Worn matte so it takes the bay light like painted steel.
+//   leading edges), NOT the primary read. Worn matte so it takes the airlock light like painted steel.
 const _bayHazardAccent = _metal(0xc39a22, 0.28, 0.70, { flat: true, grime: true });
 // umbilical hoses — dark ribbed rubber conduit (reuse the corridor cable idiom).
 const _bayHose = _metal(0x1c1a1e, 0.10, 0.86, { flat: true });
 // a brass/bronze coupling on the umbilicals + fuel line (a warm hardware pop vs the grey hull).
 const _bayCoupling = _metal(0x6e5a34, 0.55, 0.55, { flat: true });
-// airlock seal collar — a dark rubber gasket ring at the bay mouth (matte, non-metal).
+// airlock seal collar — a dark rubber gasket ring at the collar mouth (matte, non-metal).
 const _baySeal = _metal(0x16151a, 0.06, 0.90, { flat: true });
-let _bayGlowLight: THREE.PointLight | null = null;   // warm spill from the open hatch into the corridor
+// the OPERATIONAL sliding-door leaf face — a heavy blast-door slab (the engine-room door idiom but
+//   OPAQUE steel + it actually OPENS). Worn gunmetal, a touch glossier than the hull so it reads as
+//   a fabricated door plate, not wall.
+const _bayDoorLeaf = _metal(0x4a5056, 0.52, 0.54, { flat: true, grime: true });
+let _bayGlowLight: THREE.PointLight | null = null;   // warm spill from the airlock into the corridor
 let _bayGroup: THREE.Group | null = null;            // the docked-pod group (release shudder rides this)
+// W2b — the OPERATIONAL sliding door: two leaves that slide apart into wall pockets. setBayAirlockDoor
+//   drives them; a state-driven seal collider blocks the aperture when closed.
+let _airlockDoorL: THREE.Group | null = null;
+let _airlockDoorR: THREE.Group | null = null;
+let _airlockDoorT = 0;                                // current open param (0 closed → 1 open)
 
-/** World-space position of the DOCKED pod's HATCH THRESHOLD — where the fleeing player ends up +
- *  the scripted climb-in starts (just outside the open hatch, on the corridor centre-ish). And the
- *  docked pod's SEATED-EYE target inside the cabin (where the climb-in lands). Both in world coords
- *  (SHIP_ORIGIN + local). Used by sequence.ts's enterPod climb-in. Null-safe values (constants). */
-export function getPodBayThreshold(): THREE.Vector3 {
-  // just corridor-side of the hatch, at standing eye height, centred on the bay z
-  return new THREE.Vector3(SHIP_ORIGIN.x - COR_HW + 0.55, SHIP_ORIGIN.y + 1.62, SHIP_ORIGIN.z + BAY_ZC);
+// ── W2b — THE AIRLOCK BOARDING SURFACES. World-space anchors the boarding flow (sequence.ts)
+//    gazes/gates against. The flow is now: approach the SLIDING DOOR (getBayAirlockThreshold, trigger
+//    it) → walk the collar → the POD DOOR (getPodBayDoorWorld / getPodBayThreshold) → sit.
+/** World-space STANDING position in the corridor in front of the SLIDING DOOR — where the player
+ *  stands to trigger it (the sliding-door E-open gaze/proximity anchor). Corridor-side of the −X wall
+ *  plane, centred on the airlock aperture, standing eye height. NEW W2b export. */
+export function getBayAirlockThreshold(): THREE.Vector3 {
+  return new THREE.Vector3(SHIP_ORIGIN.x + AIRLOCK_WALL_X + 0.60, SHIP_ORIGIN.y + 1.62, SHIP_ORIGIN.z + BAY_ZC);
 }
+/** World centre of the SLIDING DOOR (in the −X wall plane, at aperture centre-height) — the E-OPEN
+ *  gaze/proximity target for the sliding door. NEW W2b export. */
+export function getBayAirlockDoorWorld(): THREE.Vector3 {
+  return new THREE.Vector3(SHIP_ORIGIN.x + AIRLOCK_WALL_X, SHIP_ORIGIN.y + AIRLOCK_TOP * 0.5, SHIP_ORIGIN.z + BAY_ZC);
+}
+/** World-space STANDING position INSIDE the collar in front of the POD DOOR — where the player stands
+ *  to interact with the pod's own door (the E-open pod-door gaze anchor + the climb-in start). Just
+ *  corridor-side of the pod-door face, standing eye height, centred on the airlock z. */
+export function getPodBayThreshold(): THREE.Vector3 {
+  return new THREE.Vector3(SHIP_ORIGIN.x + COLLAR_FAR_X + 0.55, SHIP_ORIGIN.y + 1.62, SHIP_ORIGIN.z + BAY_ZC);
+}
+/** The docked pod's SEATED-EYE target inside the cabin (the pod-interior peek centre / E-sit gaze +
+ *  the climb-in landing). World coords. */
 export function getPodBaySeatedEye(): THREE.Vector3 {
-  // inside the docked cabin, at the seated eye (the pod interior peek centre) — the climb-in target
   return new THREE.Vector3(SHIP_ORIGIN.x + BAY_POD_X + 0.15, SHIP_ORIGIN.y + 1.34, SHIP_ORIGIN.z + BAY_ZC);
 }
-
-// ── B2 — THE PLAYER-GATED BOARDING SURFACES (the docked pod is now physically walked into, not
-//    scripted). World-space anchors the boarding flow (sequence.ts) gazes/gates against:
 /** World centre of the docked pod's front DOOR (on the +X arc, at door centre-height) — the E-OPEN
- *  gaze/proximity target. */
+ *  gaze/proximity target for the POD door (the collar's far end). */
 export function getPodBayDoorWorld(): THREE.Vector3 {
   return new THREE.Vector3(SHIP_ORIGIN.x + BAY_POD_X + BAY_POD_R, SHIP_ORIGIN.y + CPOD_BAY_DOOR_CY, SHIP_ORIGIN.z + BAY_ZC);
 }
 /** World-space STANDING position just INSIDE the pod bore (where the player ends up after walking in
- *  through the open door) — the "am I inside?" + the E-SIT proximity anchor (floor-level body pos). */
+ *  through the open pod door) — the "am I inside?" + the E-SIT proximity anchor (floor-level body pos). */
 export function getPodBayInteriorStand(): THREE.Vector3 {
   return new THREE.Vector3(SHIP_ORIGIN.x + BAY_POD_X + 0.30, SHIP_ORIGIN.y, SHIP_ORIGIN.z + BAY_ZC);
 }
-/** The door-centre height on the canonical bay pod (mirrors podScene CPOD_DOOR_CY=1.08). Local. */
-const CPOD_BAY_DOOR_CY = 1.08;
+/** The pod-door centre height on the canonical bay pod (frozen contract CPOD_DOOR_CY → 1.10). Local. */
+const CPOD_BAY_DOOR_CY = 1.10;
 
 // B2 — the docked pod's walkable HULL RING colliders (gapped at the +X door). The pod mesh is a
 //   noCollider prop; without these the player would walk straight THROUGH the hull. This channels
@@ -2718,6 +2777,48 @@ export function setBayPodDoorOpen(t: number): void {
   if (_bayDoorPivot) _bayDoorPivot.rotation.y = -1.9 * Math.max(0, Math.min(1, t));
 }
 
+// ── W2b — THE OPERATIONAL SLIDING DOOR. Two leaves ride apart into wall pockets fore/aft. A single
+//    static SEAL collider (rebuilt on state) blocks the aperture while the door is even slightly
+//    shut, and is removed once it's essentially open — so a closed door blocks the KCC and an open
+//    one passes. Ctx captured at build (the collider needs the physics world). Collider matches the
+//    VISIBLE leaves: when closed the two leaf faces meet at the aperture centre → one seal box across
+//    the opening; the moment the leaves part enough to walk through, the seal is dropped.
+let _airlockSealBody: RAPIER.RigidBody | null = null;
+let _airlockCtx: GameContext | null = null;
+const AIRLOCK_LEAF_TRAVEL = AIRLOCK_HW + 0.10;   // how far each leaf slides (fully clears the aperture)
+function _syncAirlockDoorCollider(): void {
+  const ctx = _airlockCtx;
+  if (!ctx) return;
+  // OPEN enough to pass? (leaves parted past the KCC half-width ~0.45m of clear each side). Drop the seal.
+  const open = _airlockDoorT > 0.62;
+  if (open) {
+    if (_airlockSealBody) { ctx.physics.world.removeRigidBody(_airlockSealBody); _airlockSealBody = null; }
+    return;
+  }
+  if (!_airlockSealBody) {
+    // one seal box filling the aperture (z BAY_ZC ± AIRLOCK_HW, y 0..AIRLOCK_TOP) at the wall plane.
+    const col = makeStaticBox(ctx.physics.world,
+      { x: 0.12, y: AIRLOCK_TOP / 2, z: AIRLOCK_HW },
+      { x: SHIP_ORIGIN.x + AIRLOCK_WALL_X, y: SHIP_ORIGIN.y + AIRLOCK_TOP / 2, z: SHIP_ORIGIN.z + BAY_ZC });
+    const body = col.parent();
+    if (body) _airlockSealBody = body;
+  }
+}
+/** W2b flow surface — drive the OPERATIONAL SLIDING DOOR in the corridor wall: 0 = closed → 1 = open
+ *  (the two leaves slide apart into wall pockets). The boarding flow (sequence.ts, wired by the
+ *  orchestrator) animates this for the player-gated sliding-door open. Moves the leaves AND updates
+ *  the state-driven seal collider (closed blocks the KCC, open passes). Safe no-op before build/after
+ *  dispose. */
+export function setBayAirlockDoor(t: number): void {
+  _airlockDoorT = Math.max(0, Math.min(1, t));
+  const d = _airlockDoorT * AIRLOCK_LEAF_TRAVEL;
+  if (_airlockDoorL) _airlockDoorL.position.z = (BAY_ZC - AIRLOCK_HW / 2) - d;   // fore leaf slides −Z
+  if (_airlockDoorR) _airlockDoorR.position.z = (BAY_ZC + AIRLOCK_HW / 2) + d;   // aft leaf slides +Z
+  _syncAirlockDoorCollider();
+}
+/** W2b — current sliding-door open param (0..1). */
+export function bayAirlockDoorOpen(): number { return _airlockDoorT; }
+
 /** Build the escape-pod BAY airlock + the DOCKED CANONICAL pod at the bridge end (into the −X
  *  recess). B1.b: a CLEAN framed doorway/airlock collar the player steps through — no clamp
  *  clutter, no floating yellow-bolt cylinders, no overlapping archway. B1.a: the ONE canonical
@@ -2727,102 +2828,167 @@ function buildPodBay(group: THREE.Group): void {
   const bay = new THREE.Group();
   bay.name = 'escapePodBay';
   group.add(bay);
-  const xNear = -COR_HW;                       // the corridor wall line (bay mouth / doorway plane)
-  const xFar = -COR_HW - BAY_RECESS;           // the back of the docking recess
-  const zc = BAY_ZC, halfZ = (BAY_Z1 - BAY_Z0) / 2;
+  const wallX = AIRLOCK_WALL_X;               // the −X corridor wall plane (x = −1.0) — the sliding-door plane
+  const collarFar = COLLAR_FAR_X;             // −1.92 — the collar's outboard end (the pod-door face)
+  const zc = BAY_ZC, aHW = AIRLOCK_HW;
   const up = new THREE.Vector3(0, 1, 0);
+  _airlockDoorL = _airlockDoorR = null;
+  _airlockDoorT = 0;
 
-  // ── DOCKING RECESS SHELL — floor / ceiling / back wall / end walls closing the alcove (dark
-  //    steel so torn edges never read thin; the pod sits in front). The near face is the doorway.
-  const bayFloor = _box(BAY_RECESS + 0.2, COR_WALL_T, (halfZ + 0.1) * 2, _channel);
-  bayFloor.position.set((xNear + xFar) / 2, -COR_WALL_T / 2, zc);
-  bay.add(bayFloor);
-  const bayCeil = _box(BAY_RECESS + 0.2, COR_WALL_T, (halfZ + 0.1) * 2, _ceil);
-  bayCeil.position.set((xNear + xFar) / 2, COR_CH + COR_WALL_T / 2, zc);
-  bay.add(bayCeil);
-  const bayBack = _box(COR_WALL_T, COR_CH + 0.2, (halfZ + 0.1) * 2, _shell);
-  bayBack.position.set(xFar - COR_WALL_T / 2, COR_CH / 2, zc);
-  bay.add(bayBack);
+  // ═══ 1. THE AIRLOCK FRAME — a fabricated blast-door portal cut in the −X corridor wall. Channel-
+  //    steel jambs + a header + a threshold sill on the CORRIDOR face (so the door reads as THE exit),
+  //    a rubber gasket ring, slim hazard accents. Framed cleanly to the wall (buildCorridor skipped
+  //    the −X wall over BAY_Z0..BAY_Z1 for this). The proud frame stands 0.14m into the corridor.
+  const frameProud = wallX + 0.14;            // frame face stands into the corridor off the wall line
+  const jambHW = aHW;                         // the aperture half-width (matches AIRLOCK_HW)
+  const top = AIRLOCK_TOP;
+  //  side JAMBS — worn channel-steel posts framing the sliding-door opening (corridor-facing)
   for (const sz of [-1, 1]) {
-    const end = _box(BAY_RECESS, COR_CH + 0.2, COR_WALL_T, _shell);
-    end.position.set((xNear + xFar) / 2, COR_CH / 2, zc + sz * (halfZ + COR_WALL_T / 2));
-    bay.add(end);
-  }
-  // bay floor tread + a rivet ring (a real deck under the pod)
-  const bayDeck = _box(BAY_RECESS - 0.1, 0.04, (halfZ) * 2, _deck);
-  bayDeck.position.set((xNear + xFar) / 2 - 0.05, 0.02, zc);
-  bay.add(bayDeck);
-  for (const bx of [xNear - 0.5, (xNear + xFar) / 2, xFar + 0.5]) for (const bz of [zc - halfZ + 0.4, zc, zc + halfZ - 0.4]) {
-    bay.add(_stud(bx, 0.05, bz, up, _rivet, 0.016));
-  }
-
-  // ── B1.b — THE ENTRANCEWAY: a CLEAN framed DOORWAY / short airlock collar the player steps
-  //    through (integrated with the corridor's design language: worn channel-steel jambs, a
-  //    recessed reveal, rivet rows, a rubber seal gasket, hazard YELLOW only as slim accents).
-  //    NO clamp arms, NO floating yellow-bolt cylinders, NO overlapping archway — a fabricated
-  //    doorway that connects cleanly to the wall. The collar stands PROUD of the −X wall line
-  //    (into the corridor) so it reads as a distinct portal, its inner reveal recessed toward
-  //    the docking bay. The pod's CLOSED glass front door sits just behind it.
-  const collarProud = xNear + 0.14;    // the collar face stands 0.14m INTO the corridor off the wall line
-  const collarInner = xNear - 0.10;    // the recessed reveal, just bay-side of the wall line
-  const dHalfZ = halfZ - 0.04;         // the doorway opening half-width (clears the walk envelope)
-  const dTop = COR_CH - 0.06;          // the doorway opening top (a tall walk-through)
-  //  side JAMBS — worn channel-steel posts framing the opening (proud collar face + a recessed reveal)
-  for (const sz of [-1, 1]) {
-    // the proud collar post (stands into the corridor)
-    const post = _box(0.18, dTop + 0.12, 0.20, _steel);
-    post.position.set(collarProud, (dTop + 0.12) / 2, zc + sz * (dHalfZ + 0.10));
+    const post = _box(0.22, top + 0.14, 0.22, _steel);
+    post.position.set(frameProud, (top + 0.14) / 2, zc + sz * (jambHW + 0.11));
     bay.add(post);
-    // the recessed reveal jamb (the depth of the doorway between collar + bay)
-    const reveal = _box(0.24, dTop, 0.10, _channel);
-    reveal.position.set((collarProud + collarInner) / 2, dTop / 2, zc + sz * dHalfZ);
-    bay.add(reveal);
-    // rivet column up the collar post (corridor-facing)
-    for (let y = 0.4; y < dTop; y += 0.44) bay.add(_stud(collarProud + 0.10, y, zc + sz * (dHalfZ + 0.10), new THREE.Vector3(1, 0, 0), _rivet, 0.016));
-    // a SLIM hazard accent down the leading edge only (yellow = accent, not the wall)
-    const haz = _box(0.03, dTop - 0.4, 0.07, _bayHazardAccent);
-    haz.position.set(collarProud + 0.09, dTop / 2, zc + sz * (dHalfZ + 0.10));
+    for (let y = 0.4; y < top; y += 0.42) bay.add(_stud(frameProud + 0.12, y, zc + sz * (jambHW + 0.11), new THREE.Vector3(1, 0, 0), _rivet, 0.016));
+    // a SLIM hazard accent down the leading edge (yellow = accent, not the wall)
+    const haz = _box(0.03, top - 0.4, 0.08, _bayHazardAccent);
+    haz.position.set(frameProud + 0.11, top / 2, zc + sz * (jambHW + 0.11));
     bay.add(haz);
   }
-  //  LINTEL across the top — a proud collar header + a recessed reveal soffit + a slim hazard band
-  const lintel = _box(0.18, 0.22, dHalfZ * 2 + 0.5, _steel);
-  lintel.position.set(collarProud, dTop + 0.11, zc);
+  //  HEADER lintel across the top + a slim hazard band + a stencilled placard
+  const lintel = _box(0.22, 0.24, jambHW * 2 + 0.66, _steel);
+  lintel.position.set(frameProud, top + 0.12, zc);
   bay.add(lintel);
-  const lintelReveal = _box(0.24, 0.10, dHalfZ * 2, _channel);
-  lintelReveal.position.set((collarProud + collarInner) / 2, dTop - 0.05, zc);
-  bay.add(lintelReveal);
-  const lintelHaz = _box(0.03, 0.07, dHalfZ * 2 + 0.2, _bayHazardAccent);
-  lintelHaz.position.set(collarProud + 0.07, dTop + 0.02, zc);
+  const lintelHaz = _box(0.03, 0.08, jambHW * 2 + 0.3, _bayHazardAccent);
+  lintelHaz.position.set(frameProud + 0.11, top + 0.02, zc);
   bay.add(lintelHaz);
-  for (let z = zc - dHalfZ; z <= zc + dHalfZ; z += 0.42) bay.add(_stud(collarProud + 0.06, dTop + 0.02, z, up, _rivet, 0.014));
-  //  THRESHOLD sill plate on the deck at the doorway + a slim hazard tread accent
-  const sill = _box(0.30, 0.05, dHalfZ * 2, _steel);
-  sill.position.set(collarProud - 0.03, 0.03, zc);
-  bay.add(sill);
-  const sillHaz = _box(0.30, 0.02, 0.06, _bayHazardAccent);
-  sillHaz.position.set(collarProud - 0.03, 0.055, zc);
-  bay.add(sillHaz);
-  //  a rubber SEAL gasket ring just inboard of the collar (the airlock docking seal) — four edge bars
-  for (const [w, h, d, py, pz] of [
-    [0.05, 0.10, dHalfZ * 2, dTop - 0.06, 0] as const,
-    [0.05, 0.10, dHalfZ * 2, 0.30, 0] as const,
-    [0.05, dTop - 0.4, 0.10, dTop / 2, -(dHalfZ - 0.01)] as const,
-    [0.05, dTop - 0.4, 0.10, dTop / 2, (dHalfZ - 0.01)] as const,
-  ]) {
-    const seg = _box(w, h, d, _baySeal);
-    seg.position.set(collarInner - 0.02, py, zc + pz);
-    bay.add(seg);
-  }
-  //  a stencilled "ESCAPE POD" placard on the lintel face (a lit decal on a dark backing)
+  for (let z = zc - jambHW; z <= zc + jambHW; z += 0.40) bay.add(_stud(frameProud + 0.07, top + 0.02, z, up, _rivet, 0.014));
   const placBack = _box(0.02, 0.18, 1.0, _decal);
-  placBack.position.set(collarProud + 0.11, dTop + 0.12, zc);
+  placBack.position.set(frameProud + 0.13, top + 0.13, zc);
   bay.add(placBack);
   const placFace = _box(0.01, 0.11, 0.82, _corrPlacard);
-  placFace.position.set(collarProud + 0.12, dTop + 0.12, zc);
+  placFace.position.set(frameProud + 0.14, top + 0.13, zc);
   bay.add(placFace);
+  //  THRESHOLD sill plate on the deck at the door + a slim hazard tread
+  const sill = _box(0.34, 0.05, jambHW * 2, _steel);
+  sill.position.set(frameProud - 0.02, 0.03, zc);
+  bay.add(sill);
+  const sillHaz = _box(0.34, 0.02, 0.06, _bayHazardAccent);
+  sillHaz.position.set(frameProud - 0.02, 0.055, zc);
+  bay.add(sillHaz);
 
-  // ── THE DOCKED CANONICAL POD — the ONE pod (buildCanonicalPodExterior), its merged glass FRONT
-  //    DOOR CLOSED + facing +X (the arriving player), standing in the docking recess.
+  // ═══ 2. THE OPERATIONAL SLIDING DOOR — two heavy opaque blast-door leaves in the wall plane, riding
+  //    a header rail + a floor track, meeting at the aperture centre when CLOSED. setBayAirlockDoor
+  //    slides them apart into wall pockets. (The engine-room sliding-door idiom — but OPAQUE steel +
+  //    it actually OPENS.) The leaves are protected from the static merge (they move).
+  const railZ = jambHW + 0.20;
+  const headerRail = _box(0.16, 0.14, railZ * 2, _steel);   // header rail (leaves hang from it)
+  headerRail.position.set(wallX, top + 0.05, zc);
+  bay.add(headerRail);
+  const floorTrack = _box(0.16, 0.06, railZ * 2, _channel); // floor track
+  floorTrack.position.set(wallX, 0.03, zc);
+  bay.add(floorTrack);
+  for (const [sz, ref] of [[-1, 'L'], [1, 'R']] as const) {
+    const leaf = new THREE.Group();
+    leaf.name = 'airlockDoorLeaf' + ref;   // findable by the rig framer
+    // each leaf covers half the aperture when closed (meeting at centre); fore leaf −Z, aft leaf +Z.
+    leaf.position.set(wallX, 0, zc + sz * (aHW / 2));
+    bay.add(leaf);
+    if (ref === 'L') _airlockDoorL = leaf; else _airlockDoorR = leaf;
+    // the door slab (opaque blast plate)
+    const slab = _box(0.10, top - 0.06, aHW - 0.02, _bayDoorLeaf);
+    slab.position.set(0, top / 2, 0);
+    leaf.add(slab);
+    // a recessed panel + a diagonal rib on the slab face (a worked blast-door read)
+    const inset = _box(0.03, top - 0.44, aHW - 0.20, _channel);
+    inset.position.set(0.06, top / 2, 0);
+    leaf.add(inset);
+    const strut = _box(0.04, 0.10, aHW - 0.14, _steel);
+    strut.rotation.x = sz * 0.5;
+    strut.position.set(0.075, top / 2, 0);
+    leaf.add(strut);
+    // a vertical grab handle on the meeting stile + rivet studs down the outer edge
+    const handle = _box(0.06, 0.44, 0.06, _corrRail);
+    handle.position.set(0.09, top * 0.5, -sz * (aHW / 2 - 0.08));
+    leaf.add(handle);
+    for (let y = 0.4; y < top - 0.2; y += 0.4) leaf.add(_stud(0.055, y, sz * (aHW / 2 - 0.06), new THREE.Vector3(1, 0, 0), _rivet, 0.014));
+    // a slim hazard chevron band down the leading (meeting) edge
+    const lhaz = _box(0.02, top - 0.5, 0.05, _bayHazardAccent);
+    lhaz.position.set(0.055, top / 2, -sz * (aHW / 2 - 0.03));
+    leaf.add(lhaz);
+  }
+
+  // ═══ 3. THE AIRLOCK COLLAR — a short gasketed docking passage from the wall plane (−1.0) OUTBOARD
+  //    to the pod-door face (−1.92). GATE FIX (W2c, hall-of-mirrors SEV1, 2-critic): the old collar
+  //    was a RECTANGULAR tube + 3 square concentric gasket rings, so the corridor → blast-door →
+  //    collar → pod chain read as 4-5 near-identical rectangular frames telescoping to the porthole —
+  //    the "short docking collar" was indistinguishable from more ship framing. Redesign: the collar
+  //    is now visually a ROUND RIBBED FLEXIBLE BELLOWS (concentric dark-rubber convolution rings along
+  //    the −X axis) seated in a recessed dark housing — a completely different SHAPE + MATERIAL from
+  //    the ONE yellow-accented rectangular blast-door frame. The eye now reads: ship doorway (the
+  //    rectangular yellow blast frame) → docking bellows (a round rubber tube) → the pod (the round
+  //    porthole). The walk envelope is UNCHANGED (the bellows inner bore clears the 1.44m aperture);
+  //    the collar structural floor/ceiling/side walls stay (the AIRLOCK_COLLIDERS still match them).
+  const collarXC = (wallX + collarFar) / 2, collarLen = wallX - collarFar;
+  // the collar HOUSING — a recessed DARK tube (channel steel), read as the socket the bellows sits in
+  //   (not bright framing). Floor + ceiling + side walls, kept for structure + the collider match.
+  const cFloor = _box(collarLen + 0.1, COR_WALL_T, aHW * 2 + 0.2, _channel);
+  cFloor.position.set(collarXC, -COR_WALL_T / 2, zc);
+  bay.add(cFloor);
+  const cCeil = _box(collarLen + 0.1, COR_WALL_T, aHW * 2 + 0.2, _channel);
+  cCeil.position.set(collarXC, top + COR_WALL_T / 2 + 0.1, zc);
+  bay.add(cCeil);
+  for (const sz of [-1, 1]) {
+    const wall = _box(collarLen + 0.1, top + 0.2, COR_WALL_T, _channel);
+    wall.position.set(collarXC, (top + 0.2) / 2, zc + sz * (aHW + COR_WALL_T / 2));
+    bay.add(wall);
+  }
+  // ── THE ROUND RIBBED BELLOWS — concentric dark-rubber convolution rings threaded along the −X axis
+  //    from just inboard of the blast door to the pod-door seal. Each ring is an open cylinder band
+  //    (axis along X) whose radius ALTERNATES (a fat convolution, then a tucked valley) so the eye
+  //    reads a flexible accordion docking sleeve, NOT stacked rectangular frames. Radius clears the
+  //    aperture (bore ≥ aHW so the 1.44m walk-through is unobstructed). The bellows CY centres it on
+  //    the aperture (aperture spans y 0..AIRLOCK_TOP → centre AIRLOCK_TOP/2).
+  const belCY = top * 0.52;                           // vertical centre of the bore (a hair high → clears
+                                                      //   the deck + frames the pod-door porthole)
+  const belBoreR = aHW + 0.12;                        // inner bore radius — comfortably clears the walk-through
+  const belRings = 7;
+  for (let bi = 0; bi < belRings; bi++) {
+    const bt = bi / (belRings - 1);                   // 0 at the ship end → 1 at the pod end
+    const bx = (wallX - 0.06) - bt * (collarLen - 0.10);   // step from just inboard of the door → the pod seal
+    const convo = bi % 2 === 0;                        // alternate: a proud convolution vs a tucked valley
+    const ringR = belBoreR + (convo ? 0.14 : 0.04);   // the accordion profile (fat ring / thin valley)
+    const ringThick = convo ? 0.11 : 0.06;
+    const ring = _ring(ringR, ringThick, 24, _baySeal);   // OPEN round band (dark rubber) — see through it
+    ring.rotation.z = Math.PI / 2;                    // cylinder axis Y → align to the collar's X axis
+    ring.position.set(bx, belCY, zc);
+    bay.add(ring);
+  }
+  // a pair of STEEL retaining bands clamping the bellows at each end (a fabricated tell — the sleeve is
+  //   bolted to the ship ring + the pod ring, not floating). Open round bands in bare steel.
+  for (const [bx, r] of [[wallX - 0.05, belBoreR + 0.18], [collarFar + 0.10, belBoreR + 0.18]] as const) {
+    const band = _ring(r, 0.07, 24, _steel);
+    band.rotation.z = Math.PI / 2;
+    band.position.set(bx, belCY, zc);
+    bay.add(band);
+    // a few bolt studs marching around the retaining band (worked hardware) — only the ones that
+    //   land in the visible housing (not below the deck / above the ceiling).
+    for (let a = 0; a < 10; a++) {
+      const ang = (a / 10) * Math.PI * 2;
+      const sy = belCY + Math.cos(ang) * r, sz2 = zc + Math.sin(ang) * r;
+      if (sy < 0.16 || sy > top - 0.04) continue;
+      const dir = new THREE.Vector3(0, Math.cos(ang), Math.sin(ang));
+      bay.add(_stud(bx + 0.02, sy, sz2, dir, _rivet, 0.02));
+    }
+  }
+  // the round rubber SEAL GASKET where the bellows mates the pod hull (a soft dark compression ring
+  //   pressed against the pod door face) — a fatter dark band at the pod end.
+  const seal = _ring(belBoreR + 0.06, 0.14, 26, _baySeal);
+  seal.rotation.z = Math.PI / 2;
+  seal.position.set(collarFar + 0.04, belCY, zc);
+  bay.add(seal);
+
+  // ═══ 4. THE DOCKED CANONICAL POD — the ONE pod (buildCanonicalPodExterior), its merged glass FRONT
+  //    DOOR CLOSED + facing +X (the collar), mostly OUTSIDE the hull. Its +X door-arc mates the collar
+  //    far end; the rest of the barrel hangs in the void off the ship (it reads DOCKED, not parked).
   const podLocalX = BAY_POD_X, podZ = zc;
   const { root: pod, doorPivot } = buildCanonicalPodExterior({ door: 'closed', r: BAY_POD_R });
   pod.name = 'dockedCanonicalPod';
@@ -2833,61 +2999,104 @@ function buildPodBay(group: THREE.Group): void {
   // tag every mesh in the docked pod so it never spawns a collider (it's the scripted-entry prop).
   pod.traverse((o) => { (o as THREE.Mesh).userData.noCollider = true; });
 
-  // ── A CLEAN base cradle ring cupping the heat-shield foot (worn steel, riveted) + two tidy
-  //    umbilical hoses to the back wall (reads as a live docked vessel, not a tangle).
-  const cradle = _cyl(BAY_POD_R + 0.12, BAY_POD_R + 0.18, 0.20, 20, _steel);
-  cradle.position.set(podLocalX, 0.10, podZ);
-  bay.add(cradle);
-  for (let i = 0; i < 12; i++) {
-    const a = (i / 12) * Math.PI * 2;
-    bay.add(_stud(podLocalX + Math.cos(a) * (BAY_POD_R + 0.15), 0.19, podZ + Math.sin(a) * (BAY_POD_R + 0.15), up, _rivet, 0.02));
+  // ── EXTERIOR MATING SHROUD (W2c, gate SEV1+2: "the pod doesn't read as MATED from outside — the
+  //    hull just ENDS at a straight edge and the pod floats adjacent"). Add the visible ship→pod
+  //    docking interface on the void side: (a) a HULL-SIDE COLLAR RING that flares off the −X wall
+  //    aperture and CUPS onto the pod's +X arc (a truncated-cone skirt hugging the pod curvature), so
+  //    the ship visibly reaches out and grips the pod; (b) a dark rubber COMPRESSION SEAL pressed onto
+  //    the pod hull at the mate line; (c) CLAMP ARMS that terminate on REAL ship-side anchor pads
+  //    (not mid-air). Void-side, non-walkable → NO colliders (rule 7 depths on the boxy bits).
+  //  (a) the hull-side collar SKIRT — cone bands stepping from the wall-plane aperture (x=−1.0, r≈aHW)
+  //      out to the pod arc (x=−1.92, r≈aHW), reading as a fabricated docking ring wrapping the pod.
+  const mateCY = top * 0.52;
+  const skirtBands = 4;
+  for (let mi = 0; mi < skirtBands; mi++) {
+    const mt = mi / (skirtBands - 1);
+    const mx = wallX - 0.02 - mt * (collarLen - 0.06);      // wall plane → pod-door face
+    const rr = (aHW + 0.26) + mt * 0.16;                    // flares slightly as it reaches toward the pod
+    const band = _ring(rr, 0.07, 22, _steel);               // open band (a fabricated docking-ring flange)
+    band.rotation.z = Math.PI / 2;
+    band.position.set(mx, mateCY, zc);
+    bay.add(band);
   }
-  // two tidy umbilicals from the back wall to a coupling plate on the aft body (−X side of the pod)
-  const umbPlateX = podLocalX - BAY_POD_R * 0.72;
-  const umbPlate = _box(0.09, 0.42, 0.36, _channel);
-  umbPlate.position.set(umbPlateX, 1.45, podZ);
+  //  (b) a dark COMPRESSION SEAL + a steel CLAMP BAND wrapping the pod's barrel at the door band — open
+  //      rings coaxial with the vertical pod cylinder, so the ship visibly grips the pod hull curvature
+  //      (a docking flange banding the barrel, not a floating disc). Reads "clamped/docked" from outside.
+  const podArcX = podLocalX + BAY_POD_R;                    // −1.92, the pod's +X-most (door) face
+  const mateSeal = _ring(BAY_POD_R + 0.04, 0.16, 34, _baySeal);   // dark rubber gasket hugging the barrel
+  mateSeal.position.set(podLocalX, CPOD_BAY_DOOR_CY, podZ);       // axis Y (default) = the pod's own axis
+  bay.add(mateSeal);
+  const mateBand = _ring(BAY_POD_R + 0.10, 0.10, 34, _steel);     // steel clamp band just above it
+  mateBand.position.set(podLocalX, CPOD_BAY_DOOR_CY + 0.44, podZ);
+  bay.add(mateBand);
+  // bolt studs marching around the FRONT (+X, ship-facing) arc of the clamp band (worked docking hardware)
+  for (let a = 0; a < 24; a++) {
+    const ang = (a / 24) * Math.PI * 2;
+    const dx = Math.sin(ang), dz = Math.cos(ang);
+    if (dx < 0.25) continue;                                 // only the +X (ship-facing) arc — the mate side
+    const bx2 = podLocalX + dx * (BAY_POD_R + 0.10), bz2 = podZ + dz * (BAY_POD_R + 0.10);
+    bay.add(_stud(bx2, CPOD_BAY_DOOR_CY + 0.44, bz2, new THREE.Vector3(dx, 0, dz), _rivet, 0.02));
+  }
+  //  (c) two clamp arms reaching from a REAL ship-side ANCHOR PAD (bolted to the wall-plane aperture
+  //      rim) out to a gripper pad cupping the pod's door-collar shoulder — both ends on real hardware.
+  for (const sz of [-1, 1]) {
+    const armZ = zc + sz * (aHW + 0.10);
+    // ship-side anchor pad — bolted to the −X wall aperture jamb (a real termination, not mid-air)
+    const anchor = _box(0.16, 0.34, 0.18, _steel);
+    anchor.position.set(wallX - 0.09, 1.10, armZ);
+    bay.add(anchor);
+    for (const ay of [0.94, 1.26]) bay.add(_stud(wallX - 0.01, ay, armZ, new THREE.Vector3(1, 0, 0), _rivet, 0.02));
+    // the arm — a hydraulic strut spanning the anchor → the pod gripper
+    const armLen = (wallX - 0.09) - (podArcX - 0.06);
+    const arm = _cyl(0.06, 0.06, armLen, 8, _bayCoupling);
+    arm.rotation.z = Math.PI / 2;
+    arm.position.set((wallX - 0.09 + podArcX - 0.06) / 2, 1.10, armZ);
+    bay.add(arm);
+    // the gripper PAD cupping the pod shoulder — cupped onto the pod's +X arc (real termination)
+    const pad = _box(0.14, 0.32, 0.16, _bayCoupling);
+    pad.position.set(podArcX - 0.05, 1.10, armZ);
+    bay.add(pad);
+  }
+  //  two tidy umbilicals from the collar wall to a coupling plate on the pod shoulder (−Z side)
+  const umbY = 1.72;
+  const umbPlate = _box(0.10, 0.36, 0.30, _channel);
+  umbPlate.position.set(podLocalX + BAY_POD_R * 0.30, umbY, podZ - BAY_POD_R * 0.62);
   bay.add(umbPlate);
-  for (const [hy, sag] of [[1.56, 0.16], [1.34, 0.20]] as const) {
-    const x0 = xFar + 0.14, x1 = umbPlateX - 0.04, midX = (x0 + x1) / 2;
-    const socket = _cyl(0.055, 0.055, 0.18, 10, _bayCoupling);
-    socket.rotation.z = Math.PI / 2; socket.position.set(x0 + 0.08, hy, podZ);
+  for (const [hy, sag] of [[umbY + 0.06, 0.14], [umbY - 0.14, 0.18]] as const) {
+    const x0 = collarFar - 0.02, x1 = podLocalX + BAY_POD_R * 0.30 - 0.02;
+    const z0 = zc - aHW + 0.1, z1 = podZ - BAY_POD_R * 0.62;
+    const socket = _cyl(0.05, 0.05, 0.16, 10, _bayCoupling);
+    socket.rotation.z = Math.PI / 2; socket.position.set(x0, hy, z0);
     bay.add(socket);
-    for (const [sx, ex, dip] of [[x0, midX, sag], [midX, x1, sag]] as const) {
-      const len = Math.hypot(ex - sx, dip);
-      const hose = _cyl(0.042, 0.042, len, 8, _bayHose);
-      hose.position.set((sx + ex) / 2, hy - dip / 2, podZ);
-      hose.rotation.z = Math.atan2(ex - sx, dip) * (sx < midX ? 1 : -1);
-      bay.add(hose);
-    }
-    const end = _cyl(0.05, 0.05, 0.1, 10, _bayCoupling);
-    end.rotation.z = Math.PI / 2; end.position.set(x1, hy - sag, podZ);
-    bay.add(end);
+    // a single sagging hose spanning collar → pod shoulder (diagonal in x/z, sagging in y)
+    const midX = (x0 + x1) / 2, midZ = (z0 + z1) / 2;
+    const len = Math.hypot(x1 - x0, z1 - z0);
+    const hose = _cyl(0.04, 0.04, len, 8, _bayHose);
+    hose.position.set(midX, hy - sag, midZ);
+    hose.rotation.y = Math.atan2(x1 - x0, z1 - z0);
+    hose.rotation.x = Math.PI / 2;
+    bay.add(hose);
   }
-  // a rigid conduit up the back wall + a junction box (bracket-mounted, tidy)
-  const conduit = _cyl(0.06, 0.06, COR_CH - 0.7, 10, _channel);
-  conduit.position.set(xFar + 0.13, COR_CH / 2, podZ - halfZ + 0.35);
-  bay.add(conduit);
-  const junc = _box(0.2, 0.34, 0.26, _steel);
-  junc.position.set(xFar + 0.18, 1.65, podZ - halfZ + 0.35);
-  bay.add(junc);
 
-  // ── BAY LIGHTING — a warm glow washing the FRONT DOOR (the "board here" beacon) spilling into the
-  //    corridor + two recessed can-lights casting cool fill onto the pod so it reads modelled.
-  const glow = new THREE.PointLight(0xffcf9a, 1.05, 4.0, 2.3);
-  glow.position.set(podLocalX + BAY_POD_R + 0.4, 1.2, podZ);   // off the front door, toward the corridor
+  // ═══ 5. AIRLOCK LIGHTING — the collar is a lit docking passage, not a black tube. A warm glow at the
+  //    pod-door end (the "board here" beacon, spilling back into the corridor through the open door) +
+  //    a brighter cool can-light on the collar ceiling washing the whole passage so it reads modelled.
+  // W2 gate fix — was 0xffcf9a @ 1.7: at point-blank the warm wash lifted the gunmetal door face
+  //   back into the pale-warm family the user flagged. Cooler + dimmer keeps the beacon read.
+  const glow = new THREE.PointLight(0xffe6c4, 1.25, 3.4, 2.0);
+  glow.position.set(collarFar + 0.30, 1.35, podZ);   // at the pod door, off it, toward the corridor
   bay.add(glow);
   _bayGlowLight = glow;
-  for (const lz of [zc - halfZ * 0.5, zc + halfZ * 0.5]) {
-    const can = new THREE.PointLight(0xbcd0e0, 0.5, 4.6, 1.9);
-    can.position.set((xNear + xFar) / 2 - 0.2, COR_CH - 0.15, lz);
-    bay.add(can);
-    const housing = _box(0.5, 0.1, 0.28, _channel);
-    housing.position.set((xNear + xFar) / 2 - 0.2, COR_CH - 0.04, lz);
-    bay.add(housing);
-    const lens = _box(0.4, 0.04, 0.2, _corrLens);
-    lens.position.set((xNear + xFar) / 2 - 0.2, COR_CH - 0.09, lz);
-    bay.add(lens);
-  }
+  // a cool can-light filling the collar tube (so the passage isn't dark when the door opens)
+  const can = new THREE.PointLight(0xc6d6e4, 1.15, 3.4, 1.7);
+  can.position.set(collarXC, top - 0.08, zc);
+  bay.add(can);
+  const housing = _box(0.4, 0.1, 0.28, _channel);
+  housing.position.set(collarXC, top + 0.02, zc);
+  bay.add(housing);
+  const lens = _box(0.3, 0.04, 0.2, _corrLens);
+  lens.position.set(collarXC, top - 0.03, zc);
+  bay.add(lens);
 }
 
 /** R5c — the PHYSICAL EJECT release: shudder the docked pod in its cradle as the explosive bolts
@@ -3177,6 +3386,12 @@ export function disposeShipScene(ctx: GameContext): void {
   _bayGroup = null;         // R5c — the docked-pod bay group (geometry freed via _disposables + traverse)
   _bayDoorPivot = null;     // B1.a — the docked pod's front-door pivot
   _bayGlowLight = null;     // R5c
+  // W2b — the operational sliding door: free the state-driven seal collider + null the leaf refs.
+  if (_airlockSealBody) { ctx.physics.world.removeRigidBody(_airlockSealBody); _airlockSealBody = null; }
+  _airlockDoorL = null;
+  _airlockDoorR = null;
+  _airlockDoorT = 0;
+  _airlockCtx = null;
   _shipAlertLevel = 0;
   // free the per-cockpit IBL + detach it from the persistent metal materials.
   _applyCockpitEnv(null);

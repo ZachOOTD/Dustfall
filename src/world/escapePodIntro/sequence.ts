@@ -42,6 +42,7 @@ import {
   setCockpitAlert, setShipAlert, setEngineFire,
   getPodBayThreshold, getPodBaySeatedEye, releasePodFromBay,   // R5c — the docked-pod bay + physical release
   setBayPodDoorOpen, getPodBayDoorWorld, getPodBayInteriorStand,   // B2 — the player-gated boarding flow (E-open door + walk-in gate + E-sit)
+  setBayAirlockDoor, getBayAirlockThreshold, getBayAirlockDoorWorld,   // W2b — the airlock sliding door in front of the pod (E-open → walk the collar → the pod's own door)
 } from './shipScene.ts';
 import { buildPodScene, disposePodScene, getPodSpawn, getCrashedSeatWorld, getPodAltitude, setDescentProgress, setDescentBase, setTumbleLight, setParachuteLeverPull, setCabinCrashPose, blowCabinHatch, restoreCabinExposure, unifyEnterablePod, podIsEnterable, setPodHidden } from './podScene.ts';
 import { buildHaulerExterior, disposeHaulerExterior, setHaulerExplosion, setHaulerDeparture, setHaulerHidden, haulerBuilt } from './haulerScene.ts';   // Phase 3 (T3.1/T3.2) — the hero freighter + its death staged through the post-eject porthole; C1 — the post-eject departure recession; PERF — reveal the preloaded (parked) hauler instead of a cold build
@@ -609,10 +610,13 @@ function tickCorridor(ctx: GameContext, dt: number): void {
 //    action; the ONLY scripted assist is the E-SIT snap-to-seat (natural) + the consequent auto-seal
 //    (the door closing behind you IS the launch prep, per the user). No timeouts, no auto-eject.
 //
-//    Phases: approach (free-walk; E-open the closed door) → enter (door swings open; the player WALKS
-//    IN themselves through the door into the bore — real KCC, no scripted carry) → atSeat (E to sit)
-//    → sealing (seat + swap to the ridden cabin under a seal dim; the door AUTO-SEALS shut behind
-//    them as launch prep) → eject (seated, framed on the lever; E/click to fire — no fallback).
+//    Phases (W2b — the bay is now an AIRLOCK: sliding blast-door → gasketed collar → the pod's own
+//    door, the pod docked mostly OUTSIDE the hull): airlock (free-walk; E-open the sliding door) →
+//    collar (leaves slide open; walk the short collar) → approach (E-open the pod's closed door) →
+//    enter (door swings open; the player WALKS IN themselves through the door into the bore — real
+//    KCC, no scripted carry) → atSeat (E to sit) → sealing (seat + swap to the ridden cabin under a
+//    seal dim; BOTH doors AUTO-SEAL shut behind them as launch prep) → eject (seated, framed on the
+//    lever; E/click to fire — no fallback).
 const ENTER_DOOR_OPEN_DUR = 0.75;    // seconds the door swings open on E (0→1)
 const ENTER_SEAL_DUR = 0.9;          // seconds the seal dim + model swap + door auto-close play over
 const ENTER_DOOR_GAZE_DIST = 3.2;    // within this (planar, m) of the door + looking at it → the E-open prompt
@@ -625,19 +629,45 @@ function tickEnterPod(ctx: GameContext, dt: number): void {
   if (!intro) return;
   if (!intro.scratch.init) {
     intro.scratch.init = true;
-    intro.scratch.phase = 'approach';
-    intro.scratch.doorT = 0;           // the door-open animation param (0=closed → 1=open)
+    intro.scratch.phase = 'airlock';   // W2b — the boarding now starts at the SLIDING airlock door
+    intro.scratch.doorT = 0;           // the pod-door-open animation param (0=closed → 1=open)
+    intro.scratch.airlockT = 0;        // the sliding-door animation param (0=closed → 1=open)
     intro.scratch.t = 0;
-    intro.mode = 'walk';               // free-walk the last steps to the closed pod door
-    setBayPodDoorOpen(0);              // the door starts CLOSED (the user spec)
+    intro.mode = 'walk';               // free-walk the last steps to the closed airlock door
+    setBayAirlockDoor(0);              // the sliding door starts CLOSED (its seal collider blocks)
+    setBayPodDoorOpen(0);              // the pod's own door starts CLOSED (the user spec)
     // the klaxon/alert cue keeps pointing the fleeing player at the pod until they're at the door.
     showIntroPrompt('GET TO THE ESCAPE POD');
   }
   intro.scratch.t = (intro.scratch.t as number) + dt;
   const phase = intro.scratch.phase as string;
 
-  // ── PHASE approach — free-walk up to the CLOSED door; a gaze/proximity prompt to E-open it. The
-  //    door does NOT open on its own — only on the player's E press while looking at it.
+  // ── PHASE airlock (W2b) — free-walk up to the CLOSED sliding blast-door; a gaze/proximity prompt
+  //    to E-open it. Same player-gated contract as the pod door: only opens on the player's E.
+  if (phase === 'airlock') {
+    const door = getBayAirlockDoorWorld();
+    const g = gazeGate(ctx, door, ENTER_DOOR_GAZE_DIST, ENTER_DOOR_GAZE_FACING);
+    showIntroPrompt(g.near ? 'Open the airlock  [E]' : 'GET TO THE ESCAPE POD');
+    if (g.ok && pressedE(ctx)) {
+      playDoorBlow();                  // the door mechanism THUNKS + the leaves start to slide
+      intro.scratch.phase = 'collar';
+      intro.scratch.airlockT = 0;
+      showIntroPrompt('');
+    }
+    return;
+  }
+
+  // ── PHASE collar (W2b) — the sliding leaves part (animated; the seal collider clears past ~62%);
+  //    once open, the player walks the short gasketed collar to the pod's own closed door → 'approach'.
+  if (phase === 'collar') {
+    intro.scratch.airlockT = Math.min(1, (intro.scratch.airlockT as number) + dt / ENTER_DOOR_OPEN_DUR);
+    setBayAirlockDoor(intro.scratch.airlockT as number);
+    if ((intro.scratch.airlockT as number) >= 1) intro.scratch.phase = 'approach';
+    return;
+  }
+
+  // ── PHASE approach — through the collar to the pod's CLOSED door; a gaze/proximity prompt to
+  //    E-open it. The door does NOT open on its own — only on the player's E press while looking at it.
   if (phase === 'approach') {
     const door = getPodBayDoorWorld();
     const g = gazeGate(ctx, door, ENTER_DOOR_GAZE_DIST, ENTER_DOOR_GAZE_FACING);
@@ -693,6 +723,7 @@ function tickEnterPod(ctx: GameContext, dt: number): void {
   if (phase === 'sealing') {
     const k = Math.min(1, (intro.scratch.t as number) / ENTER_SEAL_DUR);
     setBayPodDoorOpen(1 - k);          // the door swings SHUT (auto-seal) as the dim covers the swap
+    setBayAirlockDoor(1 - k);          // W2b — the airlock sliding door reseals behind them too (launch prep)
     // a quick dip: dark in (0→0.5), then hold+lift as the cabin lights read (0.5→1).
     const dim = k < 0.5 ? (k / 0.5) : Math.max(0, 1 - (k - 0.5) / 0.5);
     setIntroBlack(dim * 0.9);
@@ -1261,7 +1292,8 @@ export function updateEscapePodIntro(ctx: GameContext, dt: number): void {
 
 /** B2 — the SMOKE DRIVER for the player-gated enterPod flow. The smoke can't wait for real player
  *  input, so it SYNTHESIZES the E-presses + the walk-in body motion to drive tickEnterPod through
- *  ALL its gated phases (approach → E-open → walk in → E-sit → seal → E-eject), proving the gated
+ *  ALL its gated phases (E-open the airlock → collar → E-open the pod → walk in → E-sit → seal →
+ *  E-eject), proving the gated
  *  chain runs headlessly + leaving the beat at 'shipExplode' (whereupon the smoke loop's next
  *  jumpToBeat is a harmless re-jump to the beat it already reached). Seeds ctx.input.pressed + the
  *  camera look + the body position per phase; clears the synthesized press each iteration (there's
@@ -1282,7 +1314,10 @@ function driveEnterPodForSmoke(ctx: GameContext): void {
   // guard: bail out after a bounded number of iterations so a wiring bug can't infinite-loop the smoke.
   for (let i = 0; i < 200 && ctx.intro?.beat === 'enterPod'; i++) {
     const phase = ctx.intro.scratch.phase as string;
-    if (phase === 'approach') {
+    if (phase === 'airlock') {
+      // W2b — stand at the sliding blast-door + E-open it (the boarding now starts here).
+      setBody(getBayAirlockThreshold()); lookAt(getBayAirlockDoorWorld()); pressE();
+    } else if (phase === 'approach') {   // ('collar' just needs time — the leaves slide open)
       setBody(getPodBayThreshold()); lookAt(getPodBayDoorWorld()); pressE();
     } else if (phase === 'enter') {
       // walk into the bore: teleport the body to the interior stand-point (real motion is proven by

@@ -17,14 +17,24 @@ matches the models — update both in the same change; prove with motion probes.
   the fall; the clock backward-snap fixed; proven by the new zero-shift-handoff gate); the door-slant
   hinge fix. NEW gates: impact-eye, zero-shift-handoff, door-check. Walk-test flags: the merged shot
   rhythm, approach pacing, free-look feel.
-- ▶ **W2 — the canonical pod + airlock bay** (the user's #1 repeated ask: "the EXACT same
-  model through the whole sequence — I don't think you're getting this correctly"): make the
-  pod TALLER (reads short/stubby); BIG interior overhaul (the porthole is TOO BIG for the door + its bezel CLIPS the hull sides — size it within the door slab w/ clear margins; the porthole circle overlaps the
-  door, overlapping models/textures — clean redesign where everything connects); ONE model
-  used in the bay + the fall + the surface (full interior + see-through porthole visible in
-  the bay). NEW BAY LAYOUT: an OPERATIONAL sliding door (engine-room style) → a small
-  corridor/airlock → the pod's own door at its end → the pod body mostly OUTSIDE the hull.
-  Clean the hallway pipes/arches crossing in front. (Files: podScene + shipScene + sequence boarding flow — ALL FREE now.)
+- ✅ **W2 — the canonical pod + airlock bay** (committed this session): pod TALLER (2.65→3.40m,
+  h/d 0.92→1.18); ONE unified door/porthole constant set (FDOOR/CPOD divergence deleted; porthole
+  R 0.44→0.33, bezel ≤0.41, ≥0.10m margins, no hull clip); `buildCanonicalPodExterior` returns the
+  FULL modeled interior behind genuinely see-through glass (the `_cpodCabinGlow` fake killed); pod
+  materials retuned into the ship's worn-gunmetal family (incl. the scorch-fade `cAlu` offender +
+  the cabin-hatch door set + a transparent porthole rim well — the open door reads THROUGH now).
+  NEW BAY: operational sliding blast-door (`setBayAirlockDoor`, seal collider opens with it) →
+  round ribbed gasketed collar (de-telescoped after an adversarial-gate FAIL) → the pod's own door,
+  pod body mostly OUTSIDE the hull w/ exterior mating hardware. Boarding flow: new `airlock`/`collar`
+  phases (player-gated E-opens), both doors auto-reseal at launch prep; smoke driver updated;
+  `__game.setBayAirlockDoor` exposed. RIG ASPECT FIX: `page.screenshot` was resampling non-900×1100
+  buffers into the fixed viewport — every such rig shot was stretched (the "oval porthole" false
+  frame); the capture now snaps the viewport to the canvas buffer. Flee-cam pulled off the +X wall
+  (grazing-sliver false positives, D165 class). Gates: verify:all · smoke-intro beats:12 ·
+  pod-walkin · pod-walkout · airlock-motion · smoke-pod-persistence all PASS. Adversarial gate run
+  (3 critics + 1 confirm): all cross-confirmed SEV1s fixed. WALK-TEST residuals: the collar
+  jamb-stack read at the still camera (motion parallax should resolve it), the rig-only exterior
+  mating legibility (no player vantage sees it), the hatch close-up's warm beacon wash.
 - ▶ **W3** — grey bolts on walls/floor rotated wrong (undersides exposed — rotation must
   match the surface; note the ship is static-merged, fix the SOURCE builders); the corridor-
   entrance pipes end abruptly (route into the wall/an archway); more engine-room detail.
