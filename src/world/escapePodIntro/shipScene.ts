@@ -635,13 +635,20 @@ function _ring(r: number, h: number, seg: number, mat: THREE.Material): THREE.Me
   const m = new THREE.Mesh(g, mat);
   return m;
 }
-/** A small flush dome rivet stud (a half-sphere) at (x,y,z), domed toward `faceDir`. */
+/** A small flush dome rivet stud (a half-sphere) at (x,y,z), domed toward `faceDir`.
+ *  X1 BOLT-ORIENTATION FIX (user walk-test 2026-07-04: "cockpit bolts must sit flush on their
+ *  surface — undersides were exposed"). ROOT CAUSE: a SphereGeometry hemisphere (thetaStart 0 →
+ *  θ=π/2) domes along its LOCAL +Y axis, with the flat cut face at the base (−Y). But the old code
+ *  used `mesh.lookAt(pos + faceDir)`, which aligns the mesh's local −Z (not +Y) to faceDir — so the
+ *  dome pointed 90° OFF the surface normal and the flat underside cut showed edge-on. FIX: align the
+ *  dome's +Y axis directly to faceDir with setFromUnitVectors, so the round crown faces out along the
+ *  surface normal and the flat cut seats flush against the surface (no exposed underside). */
 function _stud(x: number, y: number, z: number, faceDir: THREE.Vector3, mat: THREE.Material, r = 0.018): THREE.Mesh {
   const g = new THREE.SphereGeometry(r, 6, 4, 0, Math.PI * 2, 0, Math.PI / 2);
   _disposables.push(g);
   const m = new THREE.Mesh(g, mat);
   m.position.set(x, y, z);
-  m.lookAt(x + faceDir.x, y + faceDir.y, z + faceDir.z);
+  m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), faceDir.clone().normalize());
   return m;
 }
 // ── A custom-vertex skin mesh from a flat list of triangle vertices (each tri = 9 floats).
@@ -917,40 +924,26 @@ function buildCockpitShell(group: THREE.Group): void {
   ohPlac.position.set(0.5, -0.10, 0.02);
   ohG.add(ohPlac);
 
-  // ── SIDE-WALL detailing on the canted lower wall (waist rail + kickplate + placard + panel
-  //    lines), riding the now-canted profile so it reads as hull detail, not flat-wall trim.
+  // ── SIDE-WALL detailing on the canted lower wall — X1 CLEANUP (user walk-test 2026-07-04:
+  //    "the long light-grey rectangle + darker-grey rectangle running back-wall→glass are too
+  //    messy, remove them"). The proud WAIST RAIL (the light-grey _band bar) + its rivet row are
+  //    DELETED (that WAS the light-grey rectangle running the length of the wall). A clean KICKPLATE
+  //    skirt + subtle panel-line breakup stay (they read as flush hull detail, not a rectangle
+  //    lying against the wall). The stencil placard is dropped too (part of the yellow clutter the
+  //    user flagged on the side walls). Panel lines are re-seated per hull taper (unchanged idiom).
   for (const sx of [-1, 1]) {
-    const inward = new THREE.Vector3(-sx, 0, 0);
-    // W1 PURGE: all lower-wall detail re-seated to the ACTUAL hull wall at each piece's z (the fixed
-    //   CK_X−k offsets poked these outside the tapering nose). Spanning pieces use the NARROWEST wall
-    //   along their run (the nose station) so they never clip out.
-    // panel-line breakup on the lower vertical wall
+    // panel-line breakup on the lower vertical wall (thin flush scribe lines — hull detail)
     for (const pz of [-1.0, 0.8]) {
       const wpv = hullWallXAt(pz, 0.75);
       const pv = _box(0.012, 1.4, 0.018, _channel);
       pv.position.set(sx * (wpv - 0.02), 0.75, pz);
       group.add(pv);
     }
-    // a proud waist rail at the shoulder line (spanning z −2.9..2.9; use the narrowest wall along it)
-    const railZ0 = -2.0, railZ1 = 2.0, railYr = 1.5;
-    const railWallMin = Math.min(hullWallXAt(railZ0, railYr), hullWallXAt(railZ1, railYr), hullWallXAt(-2.4, railYr));
-    const rail = _box(0.09, 0.14, CK_D - 0.7, _band);
-    rail.position.set(sx * (railWallMin - 0.06), railYr, 0.1);
-    group.add(rail);
-    for (let k = 0; k < 6; k++) { const rz = -1.5 + k * 0.6; group.add(_stud(sx * (hullWallXAt(rz, railYr) - 0.05), railYr, rz, inward, _rivet, 0.015)); }
     // kickplate skirt at the floor (low → the wall is near full width here; still seat per nose)
     const kickWallMin = Math.min(hullWallXAt(-2.4, 0.13), hullWallXAt(2.0, 0.13));
     const kick = _box(0.05, 0.26, CK_D - 0.4, _steel);
     kick.position.set(sx * (kickWallMin - 0.02), 0.13, 0.1);
     group.add(kick);
-    // a stencilled hazard placard on the lower wall (a lived-in warning decal)
-    const wplac = hullWallXAt(1.3, 1.0);
-    const plac = _box(0.005, 0.16, 0.30, _hazard);
-    plac.position.set(sx * (wplac - 0.02), 1.0, 1.3);
-    group.add(plac);
-    const placTxt = _box(0.006, 0.05, 0.22, _decal);
-    placTxt.position.set(sx * (wplac - 0.026), 0.96, 1.3);
-    group.add(placTxt);
   }
 
   // ── FORWARD RAKED WINDSCREEN / CANOPY (the focal point — NOT a flat wall with a hole). The
@@ -1054,143 +1047,170 @@ function buildCockpitShell(group: THREE.Group): void {
   const serialTxt = _box(0.28, 0.04, 0.004, _hazard);
   serialTxt.position.set(DOOR_X + 0.42, 2.2, afZ - 0.078);
   group.add(serialTxt);
-  const unit = _box(0.24, 0.16, 0.008, _hazard);    // a unit-number panel near the −X heavy rib
-  unit.position.set(-(CK_X - 0.5), 1.7, -0.9);
-  unit.rotation.y = 0.5;
-  group.add(unit);
-  const unitTxt = _box(0.16, 0.10, 0.004, _decal);
-  unitTxt.position.set(-(CK_X - 0.52), 1.7, -0.88);
-  unitTxt.rotation.y = 0.5;
-  group.add(unitTxt);
+  // X1 CLEANUP: the yellow-hazard "unit-number" panel that floated on the −X side wall near the
+  //   heavy rib is DELETED (the user flagged a yellow box out of place on the cockpit side wall).
 }
 
-/** THE WINDSCREEN — A3 REWORK (user walk-test 2026-07-02): "the glass looked really weird — a
- *  bunch of different pieces, floating, doesn't connect to the hull cleanly. We need ONE clean
- *  glass in the front that connects perfectly to the hull."
+/** THE CANOPY — X1 FULL REBUILD (user walk-test 2026-07-04, full-rebuild scope explicitly approved:
+ *  "revise the WHOLE shape of the cockpit… the glass should have multiple angled panes that connect
+ *  together and kind of wrap around part of the top, right, and left sides… right now the glass is
+ *  more just a flat sheet in the front which is kinda boring… we need to get it right"). Reference:
+ *  a framed panoramic freighter canopy (Millennium-Falcon-like) — slim structural mullions between
+ *  angled panes, a huge view of space from the pilot seat.
  *
- *  So the old multi-pane assembly (two faceted panes + transom + central mullion + raked side
- *  spars + gaskets + brow fascia + specular-streak/smudge/dust/reticle overlays) is DELETED and
- *  replaced with ONE continuous curved glass sheet, lofted from the SAME `_winHalfW(y)`/`_winZ(y)`
- *  functions the hull opening uses — so its perimeter meets the opening EXACTLY (it seals by
- *  construction, no floating slivers). A single slim frame/gasket RING traces that perimeter.
- *  ONE subtle diagonal glazing streak keeps the "there's glass here, not a hole" read. The glass now
- *  fills the WHOLE front opening (its edge tracks the FRONT HULL WALL by construction) so there are
- *  NO cheek panels + NO diagonal strut wedges beside it — just glass meeting hull at a slim frame.
- *  Verts wound so the glass faces the cabin (+Z inward). */
-// W1 CANOPY REDESIGN — the glass now runs from the LOW sill (0.55) UP INTO THE ROOFLINE (2.78, just
-//   under the 2.96 crown) → a panoramic band that fills the seated field of view. The old opaque
-//   nose-cap roof fairing (that capped the view above 2.5) is GONE — the glass IS the forward roof.
-const WIN_TOP_Y = 2.78;            // W1: glass carried up into the roofline (was 2.50) — the canopy wraps overhead
-const WIN_RAKE = 0.62;             // W1: a touch more rake at the taller top so the crown lies back over the pilot (a wrap, not a windshield)
-const WIN_MIDY = 1.72;             // the mid-height reference (curve sample)
+ *  The old build (W1: ONE gently-bowed sheet with a converging birdcage of hair-thin curved spars)
+ *  is DELETED. The new canopy is a set of DISCRETE FLAT ANGLED PANES (research digest
+ *  docs/research/cockpit-canopy-design.md, findings 1/2/9): a wide raked front broken into 3 panes
+ *  (a wide centre + a raked pane each side), two TOP panes tilting down over the pilot, and two SIDE
+ *  panes that angle inward + pull AFT so the glass wraps past the shoulder line. Between every pane is
+ *  a REAL structural mullion — a box beam ~9cm wide × 14cm deep (CLAUDE.md rule 7: a 3D lip, not a
+ *  decal) — and the glass is OFFSET ~2cm behind the mullion front faces (no z-fight at shared edges).
+ *  Panes seal to the hull opening by construction (their outer corners land on the hull-wall perimeter
+ *  `_canopyNode(u=±1)`). Sill LOW (0.55, ~0.8m below the seated eye 1.35), header HIGH (2.78, into the
+ *  crown) → the vista dominates the seated field of view. Verts wound so the glass faces the cabin. */
+// The canopy runs from the LOW sill (0.55) up into the ROOFLINE (2.78, just under the 2.96 crown).
+const WIN_TOP_Y = 2.78;
+const WIN_RAKE = 0.62;             // base fore/aft rake amount (the front rakes back with height)
+const WIN_MIDY = 1.72;
 function _winZ(y: number): number {
-  // the rake line: z grows with height from the sill up to the brow
+  // the base rake line at the canopy CENTRE: z grows with height from the sill up to the header.
   const t = THREE.MathUtils.clamp((y - WIN_Y0) / (WIN_TOP_Y - WIN_Y0), 0, 1);
-  return -CK_Z + 0.02 + WIN_RAKE * t * t;   // eased so the lower pane is steeper, the top lies back
+  return -CK_Z + 0.02 + WIN_RAKE * t * t;   // eased so the lower panes are steeper, the top lies back
 }
 function _winHalfW(y: number): number {
-  // W1 WRAPAROUND: the glass edge follows the FRONT HULL WALL inset by a SLIM 3cm frame margin (was
-  //   6cm) so the panes reach nearly to the hull skin — maximum glass, minimum frame (the refs'
-  //   glass-to-structure ratio). The D-section hull gives the arch; carrying the glass right out to
-  //   the wall (and down to the low 0.55 sill, up to the 2.78 roofline) wraps the vista around the
-  //   pilot toward the seat. No cheek hull remains beside the glass → no diagonal strut wedges.
+  // the glass edge follows the FRONT HULL WALL inset by a slim frame margin so the panes reach nearly
+  //   to the hull skin (max glass, min frame — the refs' glass-to-structure ratio).
   const wall = hullWallXAt(-CK_Z + 0.02, THREE.MathUtils.clamp(y, WIN_Y0, WIN_TOP_Y));
   return Math.max(0.30, wall - 0.03);
 }
-// The glazed-opening perimeter point at rail height `y`, side `sx` (±1). The glass edge, the frame
-//   ring, and the cheek/cap closures ALL read this ONE function → they seal to each other exactly.
+// The glazed-opening perimeter point at rail height `y`, side `sx` (±1) — used by the collider derivation.
 function _winEdge(y: number, sx: number): THREE.Vector3 {
   return new THREE.Vector3(sx * _winHalfW(y), y, _winZ(y));
 }
+// ── THE CANOPY NODE FIELD — the faceted skeleton. Maps a parametric (u ∈ [−1,1] across, y height) to
+//    a WORLD corner. The FRONT panes (|u| small) sit on the rake line at the hull-inset half-width; the
+//    SIDE-WRAP panes (|u|→1) pull AFT (+Z, toward the pilot) and stay at the hull wall so the glass
+//    wraps past the shoulder line. Top rows (high y) rake further back so the crown lies over the pilot.
+//    Every pane is a FLAT quad between four nodes → the facets read as distinct angled panes (not a bowed
+//    sheet), and the |u|=±1 nodes land on the hull perimeter so the outer edges seal to the hull skin.
+function _canopyNode(u: number, y: number): THREE.Vector3 {
+  const vy = THREE.MathUtils.clamp((y - WIN_Y0) / (WIN_TOP_Y - WIN_Y0), 0, 1);
+  const hwTop = _winHalfW(y);                               // hull-inset half-width at THIS height (tucks at crown)
+  const hwWaist = _winHalfW(_CANOPY_YMID);                  // the waist reference width (the front's "true" width)
+  // X: the FRONT columns (|u| ≤ 0.55) stay NEAR-VERTICAL — their x is anchored to the WAIST width, only
+  //   easing toward the tucking hull near the crown, so the front struts DON'T pinch into an X over the
+  //   vista. The OUTER perimeter (|u|→1) follows the actual hull wall so the glass seals to the skin.
+  const frontX = Math.abs(u) * hwWaist;                    // near-vertical front column x (waist-anchored)
+  const wallX = Math.abs(u) * hwTop;                       // the tucking-hull x (perimeter)
+  // Only the OUTER PERIMETER (|u| ≥ 0.62) tucks toward the crown; the front grid (|u| ≤ 0.60, incl. the
+  //   side-divide struts) stays a clean upright rectangle so ALL front struts read VERTICAL, not an
+  //   A-frame converging over the vista. Only the |u|=1 hull-seam edge tucks to the tapering crown.
+  const perim = THREE.MathUtils.smoothstep(Math.abs(u), 0.62, 1.0);   // 0 for the front, 1 at the edge
+  const tuck = THREE.MathUtils.clamp((vy - 0.55) / 0.45, 0, 1) * perim;
+  const xMag = frontX + (wallX - frontX) * tuck;           // front stays vertical; only the edges tuck at the top
+  const x = Math.sign(u) * xMag;
+  // Z: base rake with height + a SIDE-WRAP that pulls the outer columns AFT (toward the pilot) so the
+  //   glass wraps past the shoulder line. The wrap ramps in beyond the front (|u| > 0.45) and grows with
+  //   height — the front stays a clean raked windshield, the sides curl back around the pilot.
+  const sideRamp = THREE.MathUtils.smoothstep(Math.abs(u), 0.45, 1.0);
+  const wrap = sideRamp * (0.24 + 0.40 * vy);
+  const z = _winZ(y) + wrap;
+  return new THREE.Vector3(x, y, z);
+}
+// The canopy pane grid (X1). Column splits in u ∈ [−1,1] and the height rails. The panes:
+//   • side-wrap L (u −1.0..−0.55, full height) + side-wrap R (0.55..1.0, full height) — 2 panes
+//   • front lower row (y 0.55..1.55): L (−0.55..−0.18) · centre (−0.18..0.18) · R (0.18..0.55) — 3
+//   • front upper/top row (y 1.55..2.78): L · centre · R — 3
+//   = 8 flat angled panes total (research digest: 6–9). The centre reads as a wide flat pane, the
+//   flanks rake in, the side-wraps pull aft past the shoulder, the top row tips back over the pilot.
+const _CANOPY_U = [-1.0, -0.62, -0.40, 0.40, 0.62, 1.0];   // column boundaries (a WIDE hero centre pane)
+const _CANOPY_YMID = 1.55;                                 // the waist rail (front row split)
 function buildWindscreen(group: THREE.Group, fwZ: number, inward: THREE.Vector3): void {
-  // ── W1 FACETED PANORAMIC CANOPY (the WOW headline, from the user's refs) — the forward view is
-  //    now GLASS with THIN FLAT MULLIONS: several LARGE glass panels (a wide centre + two flanking +
-  //    two side-wrap panels) separated by slim vertical mullions, plus one horizontal waist mullion
-  //    (the refs' band). Each pane is lofted between `_winEdge` rails so it seals to the hull opening
-  //    by construction (no floating slivers) and its side edges land EXACTLY on the mullion lines.
-  //    The whole band runs from the LOW sill (0.55) up into the ROOFLINE (2.78) → mostly space/planet.
-  const ROWS = 8;                                     // vertical loft resolution per panel
-  const railY = (i: number) => WIN_Y0 + 0.015 + (WIN_TOP_Y - WIN_Y0 - 0.03) * (i / ROWS);
-  // The u→x map across the whole opening at height y (u ∈ [-1,1]); a gentle OUTWARD bow toward space
-  //   so the canopy reads as a curved wrap, not a flat pane. Edges (|u|→1) + sill/brow flatten to the
-  //   hull plane so every seam is exact.
-  const canopyPt = (u: number, y: number): [number, number, number] => {
-    const hw = _winHalfW(y) - 0.03;                   // a hair inside the opening (mullion/frame overlaps the seam)
-    const x = u * hw;
-    const vy = (y - WIN_Y0) / (WIN_TOP_Y - WIN_Y0);   // 0 sill → 1 roofline
-    const bowX = (1.0 - u * u);                        // 1 centre → 0 side edges
-    const bowY = Math.sin(THREE.MathUtils.clamp(vy, 0, 1) * Math.PI);  // 0 sill/roof → 1 mid
-    const bulge = bowX * (0.05 + 0.16 * bowY);         // outward blister depth (toward −Z / space)
-    return [x, y, _winZ(y) - bulge];
-  };
-  // PANEL SPLITS in u ∈ [-1,1] — 3 panels: |LEFT | CENTRE(wide) | RIGHT| → only TWO interior mullions
-  //   (the refs' few-large-panes look — a wide central pane with a slim divider each side, not a
-  //   birdcage). The mullions sit at these u lines; the panes butt to them so the frame lands on the seam.
-  const uSplits = [-1.0, -0.42, 0.42, 1.0];
+  const yB = WIN_Y0 + 0.015, yT = WIN_TOP_Y - 0.015;       // glass sill/header (a hair inside the frame)
+  const yM = _CANOPY_YMID;
+  const IN = 0.02;   // glass sits 2cm behind the mullion front faces (no z-fight at shared edges)
+  // ── PANES — each a FLAT quad between four _canopyNode corners, pushed IN by IN along the outward
+  //    normal so it recesses behind the frame. Wound so the lit face points at the cabin (+Z).
   const glassV: number[] = [], glassUV: number[] = [];
-  for (let p = 0; p < uSplits.length - 1; p++) {
-    const uL = uSplits[p], uR = uSplits[p + 1];
-    for (let i = 0; i < ROWS; i++) {
-      const y0 = railY(i), y1 = railY(i + 1);
-      const a = canopyPt(uL, y0), b = canopyPt(uR, y0), c = canopyPt(uL, y1), d = canopyPt(uR, y1);
-      // wound so the front face points +Z (into the cabin, toward the seated pilot)
-      glassV.push(...a, ...c, ...b, ...b, ...c, ...d);
-      // per-pane UV (0..1 within each panel) so the glass shader's sheen reads per-pane (a faceted look)
-      const v0 = i / ROWS, v1 = (i + 1) / ROWS;
-      glassUV.push(0, v0, 0, v1, 1, v0, 1, v0, 0, v1, 1, v1);
-    }
+  const addPane = (uL: number, uR: number, y0: number, y1: number): void => {
+    const a = _canopyNode(uL, y0), b = _canopyNode(uR, y0), c = _canopyNode(uL, y1), d = _canopyNode(uR, y1);
+    // recess each corner IN (toward +Z, the cabin) so the pane sits behind the frame beams
+    for (const v of [a, b, c, d]) v.z += IN;
+    glassV.push(a.x, a.y, a.z, c.x, c.y, c.z, b.x, b.y, b.z);
+    glassV.push(b.x, b.y, b.z, c.x, c.y, c.z, d.x, d.y, d.z);
+    glassUV.push(0, 0, 0, 1, 1, 0, 1, 0, 0, 1, 1, 1);       // 0..1 per-pane → the shader sheen reads per-facet
+  };
+  // side wraps (full height, one pane each)
+  addPane(_CANOPY_U[0], _CANOPY_U[1], yB, yT);
+  addPane(_CANOPY_U[4], _CANOPY_U[5], yB, yT);
+  // front lower + upper rows (3 columns each)
+  for (const [uL, uR] of [[_CANOPY_U[1], _CANOPY_U[2]], [_CANOPY_U[2], _CANOPY_U[3]], [_CANOPY_U[3], _CANOPY_U[4]]] as const) {
+    addPane(uL, uR, yB, yM);
+    addPane(uL, uR, yM, yT);
   }
   const glassSheet = _skinUV(glassV, glassUV, _glass);
   glassSheet.renderOrder = 2;   // transparent — draw after the opaque hull
   group.add(glassSheet);
-  // ── THE FRAME + MULLIONS — a slim perimeter gasket + thin flat vertical mullions on the panel
-  //    splits + one horizontal waist mullion. All SLIM + flat (the refs: struts, not pillars).
-  // W1: the canopy frame is LIGHT brushed metal (_band), not dark _winFrame — dark struts silhouetted
-  //   against bright space read as heavy A-pillars; a light strut reads as a slim divider (the refs).
-  const seg = (p: THREE.Vector3, q: THREE.Vector3, t: number, mat: THREE.Material = _band, depth?: number) => {
+
+  // ── THE MULLIONS — REAL structural box beams (rule 7: ~9cm wide × 14cm deep, a 3D lip). A beam runs
+  //    each shared pane edge. They sit PROUD of the glass (front face toward the cabin) so the frame
+  //    reads with depth at oblique angles. Light brushed metal (_band) so they read as slim dividers,
+  //    not dark A-pillars silhouetted against bright space.
+  const MW = 0.09, MD = 0.14;   // mullion cross-section (width across the frame plane, depth into cabin)
+  const beam = (p: THREE.Vector3, q: THREE.Vector3, w = MW, d = MD, mat: THREE.Material = _band): void => {
     const mid = p.clone().add(q).multiplyScalar(0.5);
-    const len = p.distanceTo(q) + 0.02;
-    const bar = _box(t, len, depth ?? t, mat);
+    const len = p.distanceTo(q) + 0.03;
+    const bar = _box(w, len, d, mat);
     bar.position.copy(mid);
     bar.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), q.clone().sub(p).normalize());
     group.add(bar);
   };
-  // perimeter gasket ring (up L rail → across roofline → down R rail; sill bar closes the bottom).
-  //   SLIM so the outer edge reads as a gasket hugging the hull, not a heavy A-pillar.
-  const ring: THREE.Vector3[] = [];
-  for (let i = 0; i <= ROWS; i++) ring.push(_winEdge(railY(i), -1));   // up the left rail
-  for (let i = ROWS; i >= 0; i--) ring.push(_winEdge(railY(i), 1));    // down the right rail
-  const sillL = _winEdge(WIN_Y0 + 0.015, -1), sillR = _winEdge(WIN_Y0 + 0.015, 1);
-  for (let k = 0; k < ring.length - 1; k++) seg(ring[k], ring[k + 1], 0.028);   // slim continuous gasket
-  seg(sillL, sillR, 0.045, _band, 0.05);   // the sill bar closes the bottom (the dash meets it)
-  // TWO slim FLAT vertical mullions on the interior panel splits (skip the |u|=1 edges — the
-  //   perimeter owns those). Thin + shallow → flat struts between big panes, not pillars. They STOP
-  //   at ~88% height (TOP_STOP) so they don't all pinch together at the apex → the crown stays open
-  //   glass (declutters the top — a cleaner faceted wrap, not a cage converging to a point).
-  const TOP_STOP = Math.round(ROWS * 0.88);
-  const mullU = uSplits.slice(1, -1);
-  for (const u of mullU) {
-    const pts: THREE.Vector3[] = [];
-    for (let i = 0; i <= TOP_STOP; i++) { const y = railY(i); const c = canopyPt(u, y); pts.push(new THREE.Vector3(c[0], c[1], c[2] + 0.006)); }
-    for (let k = 0; k < pts.length - 1; k++) seg(pts[k], pts[k + 1], 0.024, _band, 0.03);   // slim flat strut
+  // vertical mullions — a clear HIERARCHY (refs: heavy structural bows + slim dividers, not a birdcage):
+  //   • the SIDE-DIVIDE struts (u=±0.62) are the heavy structural canopy bows (front↔side-wrap seam) —
+  //     full height, chunky.
+  //   • the FRONT-INTERIOR struts (u=±0.40) are SLIM dividers framing the wide hero centre pane.
+  for (const u of [-0.62, 0.62]) beam(_canopyNode(u, yB), _canopyNode(u, yT), MW * 1.15, MD);
+  for (const u of [-0.40, 0.40]) beam(_canopyNode(u, yB), _canopyNode(u, yT), MW * 0.72, MD * 0.85);
+  // the horizontal WAIST mullion across the FRONT columns only (u −0.62..0.62) — the refs' cross band.
+  //   Split at each interior vertical so it reads as segments meeting the struts (a real frame joint).
+  for (const [uL, uR] of [[-0.62, -0.40], [-0.40, 0.40], [0.40, 0.62]] as const) {
+    beam(_canopyNode(uL, yM), _canopyNode(uR, yM), MW * 0.72, MD * 0.85);
   }
-  // ONE horizontal WAIST mullion across the band at ~mid height (the refs' cross band) — the thinnest.
-  {
-    const wy = WIN_Y0 + (WIN_TOP_Y - WIN_Y0) * 0.46;
-    const wSeg: THREE.Vector3[] = [];
-    for (let s = 0; s <= 4; s++) { const u = -1 + s * 0.5; const c = canopyPt(u, wy); wSeg.push(new THREE.Vector3(c[0], c[1], c[2] + 0.006)); }
-    for (let k = 0; k < wSeg.length - 1; k++) seg(wSeg[k], wSeg[k + 1], 0.022, _band, 0.028);
+  // ── THE PERIMETER GASKET RING — a continuous slim beam tracing the whole opening edge so the glass
+  //    seals to the hull skin (up the L rail → across the header → down the R rail → across the sill).
+  const RW = 0.10, RD = 0.15;   // the perimeter is a touch heftier (the structural canopy bow)
+  const railYs = [yB, yM, WIN_Y0 + (WIN_TOP_Y - WIN_Y0) * 0.72, yT];
+  for (const side of [-1, 1]) {                                     // each side rail separately (no top crossing)
+    for (let i = 0; i < railYs.length - 1; i++) beam(_canopyNode(side, railYs[i]), _canopyNode(side, railYs[i + 1]), RW, RD);
   }
-  // ── ONE subtle curved GLAZING GLINT — a single soft reflection catching the dome, off to the side
-  //    (a short soft highlight near the L frame, NOT a bar across the view) so the sheet reads as
-  //    curved glass. Simple + clean per the directive (no dust/reticle clutter).
-  const stGeo = new THREE.PlaneGeometry(0.06, (WIN_TOP_Y - WIN_Y0) * 0.42);
+  // the sill bar closes the bottom (the dash meets it)
+  beam(_canopyNode(-1, yB), _canopyNode(1, yB), 0.06, 0.06);
+  // the FRONT HEADER bar — spans the front region (side-divide to side-divide) at the top so it CAPS
+  //   the front vertical struts flush (they don't poke into the crown). Split at each interior strut so
+  //   it reads as a jointed frame. A short corner return connects the front header out to the wrapped
+  //   perimeter rail on each side.
+  for (const [uL, uR] of [[-0.62, -0.40], [-0.40, 0.40], [0.40, 0.62]] as const) {
+    beam(_canopyNode(uL, yT), _canopyNode(uR, yT), RW, RD);
+  }
+  for (const s of [-1, 1]) beam(_canopyNode(s * 0.62, yT), _canopyNode(s * 1, yT), RW, RD);   // corner return to the hull rail
+  // rivet studs marching the two heavy side-divide struts (worked structure — flush on the strut face)
+  for (const u of [-0.62, 0.62]) {
+    for (let i = 0; i <= 4; i++) {
+      const y = THREE.MathUtils.lerp(yB, yT, i / 4);
+      const n = _canopyNode(u, y); n.z += MD * 0.5;
+      group.add(_stud(n.x, n.y, n.z, new THREE.Vector3(0, 0, 1), _rivet, 0.014));
+    }
+  }
+  // ── ONE subtle GLAZING GLINT — a soft reflection off to the side (so the glass reads as glass, not
+  //    a hole). Kept short + off-axis so it doesn't bar across the vista.
+  const stGeo = new THREE.PlaneGeometry(0.06, (WIN_TOP_Y - WIN_Y0) * 0.34);
   _disposables.push(stGeo);
-  const stMat = new THREE.MeshBasicMaterial({ color: 0xbcd0e2, transparent: true, opacity: 0.13, depthWrite: false, blending: THREE.AdditiveBlending });
+  const stMat = new THREE.MeshBasicMaterial({ color: 0xbcd0e2, transparent: true, opacity: 0.12, depthWrite: false, blending: THREE.AdditiveBlending });
   _buildMats.push(stMat);
   const streak = new THREE.Mesh(stGeo, stMat);
-  const scy = WIN_Y0 + (WIN_TOP_Y - WIN_Y0) * 0.60;
-  streak.position.set(-0.78, scy, _winZ(scy) + 0.14);
+  const scy = WIN_Y0 + (WIN_TOP_Y - WIN_Y0) * 0.58;
+  const sc = _canopyNode(-0.36, scy);
+  streak.position.set(sc.x, sc.y, sc.z + 0.16);
   streak.rotation.x = -Math.atan2(_winZ(WIN_TOP_Y) - _winZ(WIN_Y0), WIN_TOP_Y - WIN_Y0);
   streak.rotation.z = 0.5;
   streak.renderOrder = 3;
@@ -1199,30 +1219,54 @@ function buildWindscreen(group: THREE.Group, fwZ: number, inward: THREE.Vector3)
   _buildWindscreenClosures(group, fwZ);
 }
 
-/** Legacy multi-pane windscreen body (REPLACED by the single-sheet build above at A3). Retained only
- *  as the cheek/nose-cap HULL-CLOSURE helper — the parts that fill the voids BESIDE + ABOVE the glass
- *  (not glass themselves). Split out so buildWindscreen stays a clean single-glass build. */
+/** Hull CLOSURES around the faceted canopy — the opaque wedges that fill the small voids BETWEEN the
+ *  canopy's outer perimeter and the actual front hull skin. With the panes' |u|=±1 nodes now WRAPPED
+ *  AFT (`_canopyNode` pulls the side rails back), there is a thin triangular void between the canopy
+ *  outer rail and the hull wall on each side, plus the small crown band above the header. Loft slim
+ *  opaque skins to close both so the glass reads as sealed INTO the hull by construction (no gaps to
+ *  space beside/above the canopy). */
 function _buildWindscreenClosures(group: THREE.Group, fwZ: number): void {
-  // ── W1: the closures are SIMPLIFIED to a THIN ROOFLINE CAP only. With the glass now tracking the
-  //    hull wall (_winHalfW = wall − 3cm) and reaching up to WIN_TOP_Y=2.78 (crown 2.96), the ONLY
-  //    void to close is the small band ABOVE the glass at the very front (2.78 → crown). The old
-  //    wide nose-cap fairing (swept from the shoulder up) + the SIDE GUSSETS are DELETED — THEY were
-  //    the heavy converging "A-pillar" diagonals over the vista. Loft a slim strip from the glass-top
-  //    rail to the front hull crown, following the arc — a clean canopy header, not a cage.
-  const browZ = _winZ(WIN_TOP_Y);
+  // (1) SIDE CLOSURES — a slim wedge from the canopy's outer (wrapped) rail out to the hull wall
+  //     perimeter (`_winEdge`, on the front hull plane) at a few height samples. This fills the void
+  //     the aft-wrap opens up between the glass edge and the hull skin on each side.
+  const sampY = [WIN_Y0 + 0.015, _CANOPY_YMID, WIN_Y0 + (WIN_TOP_Y - WIN_Y0) * 0.72, WIN_TOP_Y - 0.015];
+  for (const side of [1, -1]) {
+    const skinV: number[] = [];
+    for (let i = 0; i < sampY.length - 1; i++) {
+      const y0 = sampY[i], y1 = sampY[i + 1];
+      // inner = the canopy outer rail (wrapped aft); outer = the hull wall on the front plane
+      const ai = _canopyNode(side * 1, y0), bi = _canopyNode(side * 1, y1);
+      const ao = _winEdge(y0, side), bo = _winEdge(y1, side);
+      if (side > 0) {
+        skinV.push(ai.x, ai.y, ai.z, ao.x, ao.y, ao.z, bi.x, bi.y, bi.z);
+        skinV.push(bi.x, bi.y, bi.z, ao.x, ao.y, ao.z, bo.x, bo.y, bo.z);
+      } else {
+        skinV.push(ai.x, ai.y, ai.z, bi.x, bi.y, bi.z, ao.x, ao.y, ao.z);
+        skinV.push(bi.x, bi.y, bi.z, bo.x, bo.y, bo.z, ao.x, ao.y, ao.z);
+      }
+    }
+    group.add(_skin(skinV, _shell));   // opaque hull cheek closing the side void
+  }
+  // (2) CROWN CAP — the opaque band ABOVE the glass header (2.78 → hull crown). CRITICAL: its base
+  //     must span the ACTUAL canopy header line (the front panes top out WIDE, at the `_canopyNode`
+  //     x, not the narrow `_winHalfW(crown)` — using the narrow width left a triangular GAP TO SPACE
+  //     above each front strut, the "poke" the user would see). So the base samples `_canopyNode(u, yT)`
+  //     across u ∈ [−1,1], and lofts UP to the front hull crown profile — closing the whole band with
+  //     no gaps. Per side, mapped to matching sample counts.
+  const yTcap = WIN_TOP_Y - 0.015;
   const frontProf = hullProfile(-CK_Z + 0.02);
-  // the front hull points ABOVE the glass top (y > WIN_TOP_Y) — only the thin crown band.
   const crownPts = frontProf.filter((p) => p.y >= WIN_TOP_Y - 0.02);
   for (const side of [1, -1]) {
     const capV: number[] = [];
-    // top rail of the glass (the canopy top edge) at a few x samples, matched to the crown-band pts.
     const n = crownPts.length;
     if (n >= 2) {
-      // glass-top edge points (at WIN_TOP_Y, tracking _winHalfW), mapped to the same count as crownPts
+      // the canopy header edge (base of the cap): sample the front pane-top from the side-divide out to
+      //   the wrapped hull rail, so the base aligns exactly with where the glass actually ends.
       const glassTop = crownPts.map((_p, i) => {
         const t = i / (n - 1);
-        const gx = side * _winHalfW(WIN_TOP_Y) * (1 - t);   // from the outer glass edge in to centre
-        return { x: gx, y: WIN_TOP_Y, z: browZ };
+        const u = side * (1 - t);            // from the outer wrapped edge (|u|=1) in toward centre
+        const nd = _canopyNode(u, yTcap);
+        return { x: nd.x, y: nd.y, z: nd.z };
       });
       const front = crownPts.map((p) => ({ x: side * p.x, y: p.y, z: -CK_Z + 0.02 }));
       for (let i = 0; i < n - 1; i++) {
@@ -1235,7 +1279,7 @@ function _buildWindscreenClosures(group: THREE.Group, fwZ: number): void {
           capV.push(a1.x, a1.y, a1.z, c1.x, c1.y, c1.z, c0.x, c0.y, c0.z);
         }
       }
-      group.add(_skin(capV, _band));   // a slim lighter-painted canopy header band (no gussets, no cage)
+      group.add(_skin(capV, _band));   // a slim lighter-painted canopy header band
     }
   }
   // a stencilled placard low on the sill (lived-in)
@@ -1815,71 +1859,15 @@ function buildPersonalTouch(group: THREE.Group): void {
  *  furniture blocks. Nothing is proud enough to need a collider (the walk band is unchanged). The
  *  conduit/cable/grab-rail greeble below is retained (that's hull dressing, not a "box"). */
 function buildSideConsoles(group: THREE.Group): void {
-  // ── W1 (user: "REMOVE both rectangular side-wall panels — the ones with the yellow bar at the
-  //    bottom; they clip through the hull and look weird"). The two integrated recessed wall panels
-  //    (frame + sub-panel + avionics readout + placard + the hazard-yellow strip) are DELETED. The
-  //    fuselage side walls are now clean lofted hull with only the hull dressing below (conduit +
-  //    grab-rails + cable looms) — nothing proud, nothing clipping, nothing off-purpose.
-  // W1 PURGE-LEFTOVERS: the hull dressing (conduit / grab-rails / looms) was placed at FIXED
-  //   x=CK_X−k offsets — but the hull now TAPERS to the nose + tucks IN at the crown, so those fixed
-  //   offsets poked the greeble OUTSIDE the skin (esp. near the crown, where the wall x is small).
-  //   Every run below is now re-seated to `hullWallXAt(z, y)` at its OWN z + y (embedded a few cm
-  //   inside the skin), so nothing floats off or clips through the lofted hull.
-  // conduit runs along the WAIST of the +X/−X wall (drooping bundles + clamps), tracking the curve.
-  const condY = 1.75;                                  // a waist height where the wall is genuinely wide
-  for (const sx of [-1, 1]) {
-    for (const cz of [-1.4, 0, 1.4]) {
-      const wallX = hullWallXAt(cz + 0.2, condY);
-      const seg = _cyl(0.045, 0.045, 1.5, 8, _cable);
-      seg.rotation.x = Math.PI / 2;
-      seg.position.set(sx * (wallX - 0.06), condY, cz + 0.2);
-      group.add(seg);
-      const clamp = _cyl(0.055, 0.055, 0.045, 8, _rivet);
-      clamp.rotation.z = Math.PI / 2;
-      clamp.position.set(sx * (wallX - 0.03), condY, cz + 0.2);
-      group.add(clamp);
-    }
-  }
-  // overhead grab rails on the lower shoulder (clear of the central lane) — lived-in handholds,
-  //   re-seated to the wall at their height so they sit ON the shoulder, not floating in the crown.
-  for (const sx of [-1, 1]) {
-    const railY = 1.95, railZ = sx > 0 ? 0.8 : 1.2;
-    const wallX = hullWallXAt(railZ, railY);
-    const grab = _cyl(0.026, 0.026, 1.0, 8, _band);
-    grab.rotation.z = Math.PI / 2;
-    grab.position.set(sx * (wallX - 0.14), railY, railZ);
-    group.add(grab);
-    for (const gz of [-0.42, 0.42]) {
-      const standoff = _cyl(0.02, 0.02, 0.10, 6, _steel);
-      standoff.position.set(sx * (wallX - 0.09), railY + 0.05, railZ + gz);
-      group.add(standoff);
-    }
-  }
-  // ── CABLE LOOMS — flex conduit bundles running the rib valleys (lived-in). Re-seated to the wall
-  //    at each run's z so they hug the tapering hull instead of a fixed CK_X offset.
-  for (const sx of [-1, 1]) {
-    const runZ = [-1.4, 0.0, 1.4];
-    for (let i = 0; i < runZ.length; i++) {
-      const wallX = hullWallXAt(runZ[i], 1.55);
-      const loom = _cyl(0.05, 0.05, 1.5, 7, _cable);
-      loom.rotation.set(Math.PI / 2, 0, 0.04 * (i - 1));
-      loom.position.set(sx * (wallX - 0.10), 1.55 - 0.05 * Math.abs(i - 1), runZ[i]);
-      group.add(loom);
-    }
-  }
-  // flex conduits dropping down each wall behind the console — re-seated to the wall at their z/y.
-  {
-    const wL = hullWallXAt(-1.0, 1.1);
-    const flex = _cyl(0.035, 0.035, 1.3, 7, _cable);
-    flex.rotation.set(0.5, 0, 0.3);
-    flex.position.set(-(wL - 0.16), 1.1, -1.0);
-    group.add(flex);
-    const wR = hullWallXAt(-0.9, 1.0);
-    const flex2 = _cyl(0.03, 0.03, 1.0, 7, _cable);
-    flex2.rotation.set(-0.4, 0, -0.4);
-    flex2.position.set(wR - 0.16, 1.0, -0.9);
-    group.add(flex2);
-  }
+  // ── X1 CLEANUP (user walk-test 2026-07-04: "the side hull-wall pipes are too messy, can just be
+  //    removed"). ALL side-wall pipe/conduit/grab-rail/cable-loom dressing that ran the length of
+  //    the +X/−X fuselage walls is DELETED. The waist conduit bundles + clamps, the overhead
+  //    grab-rails + standoffs, the rib-valley cable looms, and the flex-conduit drops behind the
+  //    console are ALL removed — the fuselage side walls are now clean lofted ribbed hull, which
+  //    the user's ref (a purposeful framed canopy over clean structure) calls for. Nothing proud,
+  //    nothing clipping, nothing off-purpose. (The aft-bay conduit runs in buildCockpitShell stay
+  //    — those are on the door bulkhead behind the pilot, well out of the seated forward read.)
+  void group;
 }
 
 /** Self-contained cockpit LIGHTING (the offset ship sees no world sun) — WARM + MOODY (gate
@@ -1996,9 +1984,18 @@ function buildLighting(group: THREE.Group): void {
   _alertBeaconLight = beacon;
   // RIB STRIP-LIGHTS — thin emissive strips down two ribs (dark at level 0, hot red on alert →
   //   the alert reads as the SHIP's own warning lights firing, not a global tint).
+  // X1 FIX (user: "the orange light rectangles on the FRONT ribs are misplaced — back ribs read
+  //   fine; re-seat them on the new front structure"). ROOT CAUSE: the forward strip sat at z=−0.9,
+  //   which is BETWEEN the ribs (the rib stations are [−1.35, −0.5, 0.4, 1.3, 2.2]) — so it floated
+  //   in the hull gap at a slight z-offset (+0.1) that no longer landed on a rib flange after the
+  //   forward rib was pulled back to −1.35 in W1. FIX: seat BOTH strips on ACTUAL rib stations
+  //   (−0.5 heavy + 1.3 heavy) and lay the strip flush on the rib's proud FACE (rib depth ~0.17 →
+  //   sit the strip at rz + 0.09, right on the rib's cabin-side flange). Now they read as light
+  //   channels down two real structural ribs, front and aft, matching each other exactly.
   _alertStripMats = [];
-  for (const rz of [-0.9, 1.3]) {
+  for (const rz of [-0.5, 1.3]) {
     const prof = hullProfile(rz);
+    const ribDep = 0.17;   // heavy-rib depth (matches ribDefs heavy=true in buildCockpitShell)
     for (const side of [1, -1]) {
       for (let i = 2; i < prof.length - 1; i += 2) {
         const ax = side * prof[i].x, ay = prof[i].y;
@@ -2008,7 +2005,7 @@ function buildLighting(group: THREE.Group): void {
         _buildMats.push(sm);
         _alertStripMats.push(sm);
         const strip = _box(0.03, Math.hypot(bx - ax, by - ay), 0.02, sm);
-        strip.position.set(mx, my, rz + 0.1);
+        strip.position.set(mx, my, rz + ribDep * 0.55);   // flush on the rib's cabin-side flange
         strip.rotation.z = Math.atan2(by - ay, bx - ax) - Math.PI / 2;
         group.add(strip);
       }

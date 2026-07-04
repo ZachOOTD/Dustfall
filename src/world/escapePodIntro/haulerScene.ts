@@ -409,20 +409,50 @@ function buildCockpit(g: THREE.Group, noseX: number): void {
   chin.position.set(noseX - 0.05, -HULL_R * 0.55, 0);
   g.add(chin);
 
-  // 2.b the WARM-LIT raked WINDSCREEN across the front of the bridge house — glossy
-  //     tinted glass + a bright interior glow + framed panes → reads as a cockpit you
-  //     fled (the lit bridge is a key hero cue through the porthole).
+  // 2.b the WARM-LIT raked WINDSCREEN — X1: reworked to ROUGHLY MATCH the new interior FACETED
+  //     PANORAMIC CANOPY (the exterior + interior should read as the same ship). Instead of one flat
+  //     raked box, the front glazing is now a FACETED WRAP: a wide centre pane flanked by two panes
+  //     that angle back around the bridge-house corners (front + partial side wrap), separated by slim
+  //     structural mullions, over a bright warm glow. Seen from afar in the eject/explosion shot, so
+  //     this is an APPROXIMATION — the silhouette (a framed multi-pane greenhouse canopy) is what reads.
   const wsX = noseX - COCKPIT_LEN * 0.18;
   const wsY = HULL_R * 1.28;
-  const canopy = _box(0.12, HULL_R * 1.1, HULL_R * 1.35, _cockpitGlass);   // bigger windscreen
-  canopy.position.set(wsX, wsY, 0);
-  canopy.rotation.z = 0.62;
-  g.add(canopy);
-  // a BRIGHT warm glow plate just behind the glass (the lit bridge)
-  const glow = _box(0.06, HULL_R * 0.96, HULL_R * 1.16, _cockpitGlow);
-  glow.position.set(wsX - 0.14, wsY - 0.04, 0);
+  const paneH = HULL_R * 1.1;
+  const halfZ = HULL_R * 0.66;               // half the canopy span across the flank axis (±Z)
+  // the bright warm glow plate behind the whole glazing (the lit bridge you just fled)
+  const glow = _box(0.06, HULL_R * 0.98, HULL_R * 1.3, _cockpitGlow);
+  glow.position.set(wsX - 0.15, wsY - 0.04, 0);
   glow.rotation.z = 0.62;
   g.add(glow);
+  // the CENTRE front pane (raked back), + two SIDE-WRAP panes that toe back around the house corners
+  //   (yaw rotation about Y pulls each side pane aft — the wrap). All share the 0.62 rake.
+  const centre = _box(0.11, paneH, halfZ * 1.05, _cockpitGlass);
+  centre.position.set(wsX, wsY, 0);
+  centre.rotation.z = 0.62;
+  g.add(centre);
+  for (const sz of [-1, 1]) {
+    const side = _box(0.11, paneH * 0.94, halfZ * 0.9, _cockpitGlass);
+    side.position.set(wsX + 0.10, wsY, sz * (halfZ * 0.92));
+    side.rotation.set(0, sz * 0.6, 0.62);    // yaw the pane back around the corner (the wrap)
+    g.add(side);
+  }
+  // slim structural MULLIONS on the two pane splits (between centre + each side-wrap) + a header +
+  //   a waist band → the framed-canopy read at distance.
+  for (const sz of [-1, 1]) {
+    const mull = _box(0.13, paneH * 1.02, 0.10, _hullFrame);
+    mull.position.set(wsX + 0.04, wsY, sz * (halfZ * 0.5));
+    mull.rotation.z = 0.62;
+    g.add(mull);
+  }
+  const hMull = _box(0.14, 0.09, HULL_R * 1.25, _hullFrame);   // waist band across the canopy
+  hMull.position.set(wsX + 0.05, wsY, 0);
+  hMull.rotation.z = 0.62;
+  g.add(hMull);
+  // a brow visor over the windscreen top (the canopy header/roofline cap)
+  const brow = _box(0.95, 0.15, HULL_R * 1.4, _hullSteel);
+  brow.position.set(noseX - COCKPIT_LEN * 0.45, HULL_R * 1.80, 0);
+  brow.rotation.z = 0.18;
+  g.add(brow);
   // a row of small lit SIDE WINDOWS on the camera-facing (+Z) flank of the bridge house
   // (so the cockpit reads as lit + occupied even from the porthole 3/4 angle).
   for (let i = 0; i < 3; i++) {
@@ -433,22 +463,6 @@ function buildCockpit(g: THREE.Group, noseX: number): void {
     winGlow.position.set(noseX - COCKPIT_LEN * 0.32 - i * 0.42, HULL_R * 1.2, HULL_R * 0.6);
     g.add(winGlow);
   }
-  // windscreen mullions (vertical pane splits) + a horizontal split
-  for (const mf of [-0.62, 0, 0.62]) {
-    const mull = _box(0.14, HULL_R * 1.0, 0.09, _hullFrame);
-    mull.position.set(wsX + 0.03, wsY, mf * HULL_R * 0.68);
-    mull.rotation.z = 0.62;
-    g.add(mull);
-  }
-  const hMull = _box(0.16, 0.1, HULL_R * 1.2, _hullFrame);
-  hMull.position.set(wsX + 0.05, wsY, 0);
-  hMull.rotation.z = 0.62;
-  g.add(hMull);
-  // a brow visor over the windscreen top
-  const brow = _box(0.9, 0.14, HULL_R * 1.3, _hullSteel);
-  brow.position.set(noseX - COCKPIT_LEN * 0.46, HULL_R * 1.78, 0);
-  brow.rotation.z = 0.18;
-  g.add(brow);
 
   // 2.c sensor MAST + comms DISH + whip antennae on the bridge roof.
   const mast = _cyl(0.06, 0.08, 1.5, 8, _hullFrame);
