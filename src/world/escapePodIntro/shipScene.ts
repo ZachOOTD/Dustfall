@@ -56,11 +56,9 @@ const CK_D = 5;            // cockpit depth  (z −2.5..2.5)
 const CK_X = CK_W / 2;     // 3
 const CK_Z = CK_D / 2;     // 2.5
 const WALL_T = 0.2;        // wall/floor/ceiling thickness (matches the collider half-spec)
-// Forward (−Z) window gap: x −1.5..1.5. W1 CANOPY REDESIGN — the sill dropped 0.9→0.55 (the glass
-// wraps DOWN to just above the lowered glare-shield) so the planet sits at the pilot's eye, not
-// above a tall wall. Top raised into the roofline (WIN_TOP_Y below). This is the "GLASS DOMINATES"
-// re-loft: a low sill + a high crown-line = a panoramic band that fills the seated field of view.
-const WIN_X = 1.5, WIN_Y0 = 0.55;   // windscreen sill half-width + sill height (top = WIN_TOP_Y)
+// Forward glazing: Y1 GLAZED-DOME REBUILD — the forward hull is demolished and the front section IS
+// the glazing (a glass dome on a metal skeleton). The dome geometry/params live with buildGlazedDome
+// (DOME_* + _domeNode). The old flat-windscreen sill/rake constants are gone with the demolished hull.
 // Corridor opening in the +Z wall: x −1..1, y 0..2.4.
 const DOOR_X = 1.0, DOOR_Y1 = 2.4;
 
@@ -571,36 +569,79 @@ const AIRLOCK_COLLIDERS: ReadonlyArray<BoxSpec> = [
 //    band. The FLOOR (flat), the −Z window-sill walls, and the +Z DOOR-WALL segments stay UNCHANGED
 //    so the doorway↔corridor join (SHIP_CORRIDOR_ENTER_Z) is byte-identical + walkable. Values
 //    generated from `hullProfile` (see the audit in buildShipScene's collider-sample verify).
+//    Y1 GLAZED-DOME REBUILD (rule 9 — colliders match the visible model). The whole FORWARD hull is
+//    demolished: the −Z window-sill band, the above-glass band, the forward cheeks, and the FORWARD
+//    side-wall segments (z < COLLAR_Z) are all DELETED. The glass-line wall (so the player can't walk
+//    through the glass) is a curve-fit RING of ROTATED box segments generated in `_addDomeColliders`
+//    from the dome sill footprint (added alongside this array in buildShipScene). This axis-aligned
+//    array keeps: the floor, the ceiling, the AFT side walls (only aft of the collar), + the aft door
+//    wall (byte-identical — the corridor join must stay walkable).
 const COCKPIT_COLLIDERS: ReadonlyArray<BoxSpec> = [
-  [6, 0.2, 5, 0, -0.1, 0],         // floor (flat deck — unchanged)
-  [6, 0.2, 5, 0, 3.1, 0],          // ceiling (underside y=3.0, just above the 2.96 crown — unchanged)
-  // ── SIDE WALLS — curve-fit to the lofted hullProfile taper+cant (A1). Inner face tracks the
-  //    shoulder-height wall x; segments run nose(−Z)→tail(+Z). −X side then +X side.
-  [0.2, 3, 0.80, -2.179, 1.5, -2.10],
-  [0.2, 3, 0.80, -2.248, 1.5, -1.30],
-  [0.2, 3, 0.80, -2.412, 1.5, -0.50],
-  [0.2, 3, 0.80, -2.610, 1.5, 0.30],
+  [6, 0.2, 5, 0, -0.1, 0],         // floor (flat deck — unchanged, full length)
+  [3.5, 0.2, 5, 0, 3.1, 0],        // ceiling — aft/over-seat only (the dome crown owns forward; keep it from z≈−2.5..2.5 at the mid width so look-up isn't capped by an invisible plate over the glass)
+  // ── AFT SIDE WALLS — curve-fit to the lofted hullProfile, ONLY aft of the collar (z ≥ COLLAR_Z≈0.34).
+  //    The forward segments are gone (demolished hull). −X then +X.
+  [0.2, 3, 0.80, -2.610, 1.5, 0.34],
   [0.2, 3, 0.80, -2.790, 1.5, 1.10],
   [0.2, 3, 0.68, -2.895, 1.5, 1.84],
-  [0.2, 3, 0.80, 2.179, 1.5, -2.10],
-  [0.2, 3, 0.80, 2.248, 1.5, -1.30],
-  [0.2, 3, 0.80, 2.412, 1.5, -0.50],
-  [0.2, 3, 0.80, 2.610, 1.5, 0.30],
+  [0.2, 3, 0.80, 2.610, 1.5, 0.34],
   [0.2, 3, 0.80, 2.790, 1.5, 1.10],
   [0.2, 3, 0.68, 2.895, 1.5, 1.84],
-  // ── FORWARD (−Z) WINDOW-SILL WALL — W1 re-lofted to the new canopy: the sill dropped to y=0.55
-  //    (below-window solid is now 0..0.55) + the glass runs up to y=2.78, leaving a thin solid band
-  //    above (2.78..3.0). The player can't reach the tapered forward cheeks (behind the low console),
-  //    so the below-sill + above-glass bands + the side-wall colliders bound the nose. WYSIWYG (A1).
-  [6, 0.55, 0.2, 0, 0.275, -2.6],  // below the canopy sill (solid hull the dash sits against)
-  [6, 0.24, 0.2, 0, 2.88, -2.6],   // above the canopy (thin roofline band up to the crown)
-  [1.2, 2.3, 0.2, -2.4, 1.7, -2.6], // left forward cheek (tapered — well outboard of the reachable band)
-  [1.2, 2.3, 0.2, 2.4, 1.7, -2.6],  // right forward cheek
   // ── AFT (+Z) DOOR WALL (UNCHANGED — the corridor join must stay byte-identical + walkable).
   [2, 3, 0.2, -2, 1.5, 2.6],       // left of corridor opening
   [2, 3, 0.2, 2, 1.5, 2.6],        // right of corridor opening
   [2, 0.6, 0.2, 0, 2.7, 2.6],      // above corridor opening
 ];
+// ── THE GLAZED-DOME PERIMETER WALL (rule 9). A curve-fit ring of ROTATED thin box segments hugging
+//    the dome SILL footprint (the outer bound the walking player would reach), floor→ceiling tall, so
+//    the KCC is blocked exactly at the glass line — no walking through the canopy. Generated from
+//    `_domeNode(m, 0)` (the sill ring) so it tracks the visible glass by construction. Each segment
+//    spans two adjacent sill nodes, biased a hair inboard so the collider face sits just inside the
+//    glass. Built at SHIP_ORIGIN by the caller. A dedicated fn (rotated boxes — the axis-aligned array
+//    can't express the arc). `curve-fit-collider-segments.md`.
+function _addDomeColliders(ctx: GameContext): void {
+  const inb = new THREE.Vector3(DOME_CX, DOME_CY, DOME_CZ);   // dome centre — "inboard" is toward this
+  const H = 3.0;                                              // floor→ceiling tall (block the whole walk band)
+  const cyLocal = 1.5;                                        // segment centre height (matches the side-wall band)
+  for (let mi = 0; mi < _DOME_M.length - 1; mi++) {
+    const a = _domeNode(_DOME_M[mi], 0);
+    const b = _domeNode(_DOME_M[mi + 1], 0);
+    const mid = a.clone().add(b).multiplyScalar(0.5);
+    // inboard normal in the XZ plane (toward the dome centre), used to bias the wall a hair inside the glass
+    const toC = new THREE.Vector3(inb.x - mid.x, 0, inb.z - mid.z).normalize();
+    const cx = mid.x + toC.x * 0.10;                          // bias 10cm inboard (block just inside the glass)
+    const cz = mid.z + toC.z * 0.10;
+    const segLen = a.distanceTo(b) + 0.10;                    // overlap neighbours a touch (no gaps)
+    const yaw = Math.atan2(b.x - a.x, b.z - a.z);             // segment heading in XZ (about +Y)
+    const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+    const col = makeStaticBox(
+      ctx.physics.world,
+      { x: segLen / 2, y: H / 2, z: 0.10 },                  // long × tall × thin (thickness into the hull)
+      { x: SHIP_ORIGIN.x + cx, y: SHIP_ORIGIN.y + cyLocal, z: SHIP_ORIGIN.z + cz },
+      q,
+    );
+    const body = col.parent();
+    if (body) shipBodies.push(body);   // tracked for dispose (like the array colliders)
+  }
+  // -- THE SIDE-CLOSURE WALL: bridge each outer dome sill node (m=±1, z≈−0.44) back to the collar side
+  //    (z=COLLAR_Z) so the wrap-to-collar GLASS also has collision (no walking out the side gap).
+  for (const side of [-1, 1]) {
+    const a = _domeNode(side, 0);                            // outer dome sill node
+    const cp = hullProfile(COLLAR_Z);
+    const b = new THREE.Vector3(side * (cp[1].x - 0.05), a.y, COLLAR_Z);   // collar side, at the sill height
+    const mid = a.clone().add(b).multiplyScalar(0.5);
+    const yaw = Math.atan2(b.x - a.x, b.z - a.z);
+    const q2 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+    const col2 = makeStaticBox(
+      ctx.physics.world,
+      { x: (a.distanceTo(b) + 0.1) / 2, y: H / 2, z: 0.10 },
+      { x: SHIP_ORIGIN.x + mid.x, y: SHIP_ORIGIN.y + cyLocal, z: SHIP_ORIGIN.z + mid.z },
+      q2,
+    );
+    const body2 = col2.parent();
+    if (body2) shipBodies.push(body2);
+  }
+}
 
 let shipGroup: THREE.Group | null = null;
 const shipBodies: RAPIER.RigidBody[] = [];
@@ -856,14 +897,15 @@ function buildCockpitShell(group: THREE.Group): void {
   }
 
   // ── THE LOFTED VAULTED HULL SKIN (this is the box-breaker). Loft the chamfered, tapering
-  //    hullProfile() cross-section along Z from the nose (−Z) to the aft door wall (+Z): the
-  //    walls cant inward, the roof vaults, the whole cross-section narrows to the nose. Built as
-  //    a triangle-soup skin per side (mirrored), DOUBLE-skinned (a darker outer shell behind a
-  //    lit inner skin) so torn edges never read paper-thin. The aft 0.4m is left flat (the door
-  //    wall owns it). The deck stays flat below the profile foot.
+  //    hullProfile() cross-section along Z. Y1 DEMOLITION: the skin now starts at the COLLAR
+  //    (COLLAR_Z, just behind the seated shoulders) — the WHOLE forward hull is gone, replaced by
+  //    the glazed dome. So the opaque ribbed hull only exists AFT of the pilot; forward of the
+  //    collar the shell is glass on a skeleton. Built as a triangle-soup skin per side (mirrored),
+  //    DOUBLE-skinned so torn edges never read paper-thin. The aft 0.4m is left flat (the door wall
+  //    owns it). The deck stays flat below the profile foot + runs the FULL length (kept).
   const SECZ: number[] = [];
-  const segZ = 10;
-  for (let s = 0; s <= segZ; s++) SECZ.push(THREE.MathUtils.lerp(-CK_Z + 0.02, CK_Z - 0.42, s / segZ));
+  const segZ = 6;
+  for (let s = 0; s <= segZ; s++) SECZ.push(THREE.MathUtils.lerp(COLLAR_Z, CK_Z - 0.42, s / segZ));
   const profiles = SECZ.map((z) => hullProfile(z));
   // per-profile-point OUTWARD 2D normals (so the outer shell offsets uniformly along the whole
   // section — no gated band, no coincident-skin z-fight). Normal of the polyline at point i.
@@ -918,10 +960,11 @@ function buildCockpitShell(group: THREE.Group): void {
   //    HEAVY bulkhead frames (z=-0.9, 1.3) are wider/deeper; lighter intermediates between. Each
   //    rib is darker, more-specular steel (pops OFF the hull), with a rivet row down the flange +
   //    a bracket GUSSET where it lands on the deck. A keel STRINGER runs the crown fore-aft.
-  // W1: the forward-most rib pulled back −2.0 → −1.35 so it no longer arcs OVER the canopy opening
-  //   and read as a heavy A-pillar cage across the vista (the user's "hull blocks a lot of vision").
-  //   The canopy is now framed by its OWN slim perimeter gasket only; the ribs live aft of the glass.
-  const ribDefs: [number, boolean][] = [[-1.35, false], [-0.5, true], [0.4, false], [1.3, true], [2.2, false]];
+  // Y1 DEMOLITION: every rib FORWARD of the collar (the old −1.35 / −0.5 A-pillar ribs) is DELETED —
+  //   there is no opaque forward hull to rib. Only the AFT ribs (behind the pilot) remain; the glass
+  //   dome is framed by its OWN metal skeleton (buildGlazedDome), and the collar (buildCollar) is the
+  //   forwardmost structural hoop.
+  const ribDefs: [number, boolean][] = [[0.5, true], [1.3, true], [2.2, false]];
   for (const [rz, heavy] of ribDefs) {
     const prof = hullProfile(rz);
     const w = heavy ? 0.16 : 0.09, dep = heavy ? 0.17 : 0.11;
@@ -945,103 +988,38 @@ function buildCockpitShell(group: THREE.Group): void {
       group.add(gus);
     }
   }
-  // KEEL STRINGER along the crown (fore-aft) — ties the ribs together overhead.
-  const stringer = _box(0.08, 0.10, CK_D - 0.5, _steel);
-  stringer.position.set(0, HULL_CROWN_MAX - 0.05, 0.0);
+  // KEEL STRINGER along the crown (fore-aft) — ties the AFT ribs together overhead. Y1: truncated to
+  //   the aft section only (from the collar to the door wall) — forward of the collar the crown is
+  //   the glass dome + its skeleton crown spine (buildGlazedDome), not an opaque stringer.
+  const stringerLen = (CK_Z - 0.25) - COLLAR_Z;
+  const stringer = _box(0.08, 0.10, stringerLen, _steel);
+  stringer.position.set(0, HULL_CROWN_MAX - 0.05, COLLAR_Z + stringerLen / 2);
   group.add(stringer);
-  for (let i = -2; i <= 2; i++) group.add(_stud(0, HULL_CROWN_MAX - 0.10, i * 0.9, new THREE.Vector3(0, -1, 0), _rivet, 0.014));
+  for (let i = 0; i < 3; i++) group.add(_stud(0, HULL_CROWN_MAX - 0.10, COLLAR_Z + 0.4 + i * 0.9, new THREE.Vector3(0, -1, 0), _rivet, 0.014));
 
-  // ── W1: the forward SOFFIT brow is now a SLIM CANOPY HEADER hugging the crown, ABOVE the glass
-  //    top (2.78) — it frames the canopy from above WITHOUT dropping into the vista (the old deep
-  //    0.42m brow at y=2.46 ate the upper view). A thin header bar + a rivet row at the crown line.
-  const down = new THREE.Vector3(0, -1, 0);
-  const soffit = _box(CK_W - 0.9, 0.12, 0.34, _steel);
-  soffit.position.set(0, WIN_TOP_Y + 0.11, -CK_Z + 0.30);
-  soffit.rotation.x = 0.22;
-  group.add(soffit);
-  for (let i = -2; i <= 2; i++) group.add(_stud(i * 0.95, WIN_TOP_Y + 0.06, -CK_Z + 0.20, down, _rivet, 0.014));
-
-  // ── OVERHEAD SWITCH PANEL — the cockpit "roof console" — W1 RAISED to the CROWN over the pilot's
-  //    HEAD (was hanging at y=2.34 into the forward vista). It sits behind the canopy header at
-  //    z≈-CK_Z+1.15, tilted to face down-aft toward the seated pilot's eyes — a real overhead
-  //    console you glance UP at, NOT a block eating the planet. Its LEDs/telltales are seated on the
-  //    face plane via a child GROUP carrying the panel tilt (item 5 fix — no floating buttons).
-  const ohY = WIN_TOP_Y + 0.14, ohZ = -CK_Z + 1.15;
-  const ohTilt = -0.5;                 // face down-aft
-  const ohPanel = _box(1.5, 0.06, 0.40, _channel);
-  ohPanel.position.set(0, ohY, ohZ);
-  ohPanel.rotation.x = ohTilt;
-  group.add(ohPanel);
-  const ohFace = _box(1.42, 0.02, 0.34, _band);
-  ohFace.position.set(0, ohY - 0.035, ohZ + 0.035);
-  ohFace.rotation.x = ohTilt;
-  group.add(ohFace);
-  // A child GROUP on the panel face plane — everything mounted here is authored in flat local (x,y)
-  //   and inherits the tilt, so switches/guards/LEDs sit ON the face (item 5: buttons were floating
-  //   because they were positioned in world coords that didn't track the tilted panel plane).
-  const ohG = new THREE.Group();
-  ohG.position.set(0, ohY - 0.03, ohZ + 0.04);
-  ohG.rotation.x = ohTilt;
-  group.add(ohG);
-  // guarded toggle rows (seated on the face plane, local coords)
-  for (let r = 0; r < 2; r++) {
-    for (let c = 0; c < 6; c++) {
-      const sw = _cyl(0.011, 0.011, 0.045, 6, _rivet);
-      sw.rotation.x = Math.PI / 2;                        // stand proud of the (tilted) face
-      sw.position.set(-0.55 + c * 0.22, 0.03 - r * 0.11, 0.02);
-      ohG.add(sw);
-    }
-    const guard = _box(1.36, 0.015, 0.02, _steel);
-    guard.position.set(0, 0.06 - r * 0.11, 0.02);
-    ohG.add(guard);
-  }
-  // lit telltales SEATED flush on the face (item 5) — thin discs standing just proud of the plane.
-  const ohLeds = [_ledGreen, _ledAmber, _ledGreen, _ledBlue];
-  for (let i = 0; i < 4; i++) {
-    const led = _cyl(0.016, 0.016, 0.012, 8, ohLeds[i]);
-    led.rotation.x = Math.PI / 2;
-    led.position.set(-0.30 + i * 0.20, -0.10, 0.02);
-    ohG.add(led);
-  }
-  // a stencil placard seated on the face (local coords → rides the tilt with everything else)
-  const ohPlac = _box(0.4, 0.06, 0.005, _hazard);
-  ohPlac.position.set(0.5, -0.10, 0.02);
-  ohG.add(ohPlac);
-
-  // ── SIDE-WALL detailing on the canted lower wall — X1 CLEANUP (user walk-test 2026-07-04:
-  //    "the long light-grey rectangle + darker-grey rectangle running back-wall→glass are too
-  //    messy, remove them"). The proud WAIST RAIL (the light-grey _band bar) + its rivet row are
-  //    DELETED (that WAS the light-grey rectangle running the length of the wall). A clean KICKPLATE
-  //    skirt + subtle panel-line breakup stay (they read as flush hull detail, not a rectangle
-  //    lying against the wall). The stencil placard is dropped too (part of the yellow clutter the
-  //    user flagged on the side walls). Panel lines are re-seated per hull taper (unchanged idiom).
+  // ── SIDE-WALL detailing — Y1: only AFT of the collar now (forward walls are demolished). A clean
+  //    kickplate skirt + a subtle panel-line, seated on the aft hull wall behind the pilot.
   for (const sx of [-1, 1]) {
-    // panel-line breakup on the lower vertical wall (thin flush scribe lines — hull detail)
-    for (const pz of [-1.0, 0.8]) {
-      const wpv = hullWallXAt(pz, 0.75);
-      const pv = _box(0.012, 1.4, 0.018, _channel);
-      pv.position.set(sx * (wpv - 0.02), 0.75, pz);
-      group.add(pv);
-    }
-    // kickplate skirt at the floor (low → the wall is near full width here; still seat per nose)
-    const kickWallMin = Math.min(hullWallXAt(-2.4, 0.13), hullWallXAt(2.0, 0.13));
-    const kick = _box(0.05, 0.26, CK_D - 0.4, _steel);
-    kick.position.set(sx * (kickWallMin - 0.02), 0.13, 0.1);
+    const pz = 1.4;   // an aft panel-line scribe (behind the seat)
+    const wpv = hullWallXAt(pz, 0.75);
+    const pv = _box(0.012, 1.4, 0.018, _channel);
+    pv.position.set(sx * (wpv - 0.02), 0.75, pz);
+    group.add(pv);
+    // kickplate skirt at the floor — aft section only (collar → door wall)
+    const kickLen = (CK_Z - 0.2) - COLLAR_Z;
+    const kickWallMin = hullWallXAt(1.2, 0.13);
+    const kick = _box(0.05, 0.26, kickLen, _steel);
+    kick.position.set(sx * (kickWallMin - 0.02), 0.13, COLLAR_Z + kickLen / 2);
     group.add(kick);
   }
 
-  // ── FORWARD RAKED WINDSCREEN / CANOPY (the focal point — NOT a flat wall with a hole). The
-  //    glass RAKES BACK from a low sill up toward the soffit brow, faceted into a lower + upper
-  //    pane, divided + framed by structural canopy spars that sweep up. Below the sill is solid
-  //    hull (the dash sits against it); the canted cheek panels close the sides. The orbit view
-  //    (the planet) reads through the raked glass.
-  const fwZ = -CK_Z + 0.02;
-  const fwdIn = new THREE.Vector3(0, 0, 1);
-  // sill hull below the windscreen (≥0.10m — rule #7; the dash sits against it)
-  const sill = _box(CK_W - 0.4, WIN_Y0, 0.12, _shell);
-  sill.position.set(0, WIN_Y0 / 2, fwZ + 0.02);
-  group.add(sill);
-  buildWindscreen(group, fwZ, fwdIn);
+  // ── THE FORWARD SHELL — Y1 REBUILD. The whole opaque forward hull (skin, ribs, soffit, overhead
+  //    console, windscreen) is DEMOLISHED. In its place: ONE structural COLLAR hoop at the shoulder
+  //    line + a GLAZED DOME that wraps the pilot left/overhead/right down to a low sill. The console
+  //    (buildConsoleBank) sits under the forward panes; the collar/aft hull are only behind the
+  //    shoulders. See buildCollar + buildGlazedDome above.
+  buildCollar(group);
+  buildGlazedDome(group);
 
   // ── AFT TRANSITION COLLAR — loft the last hull ring (z=CK_Z−0.42) to the FLAT aft bulkhead plane
   //    (z=afZ) so the curved fuselage ROLLS into the door wall (no abrupt curved-meets-flat seam).
@@ -1152,252 +1130,298 @@ function buildCockpitShell(group: THREE.Group): void {
  *  Panes seal to the hull opening by construction (their outer corners land on the hull-wall perimeter
  *  `_canopyNode(u=±1)`). Sill LOW (0.55, ~0.8m below the seated eye 1.35), header HIGH (2.78, into the
  *  crown) → the vista dominates the seated field of view. Verts wound so the glass faces the cabin. */
-// The canopy runs from the LOW sill (0.55) up into the ROOFLINE (2.78, just under the 2.96 crown).
-const WIN_TOP_Y = 2.78;
-const WIN_RAKE = 0.62;             // base fore/aft rake amount (the front rakes back with height)
-const WIN_MIDY = 1.72;
-function _winZ(y: number): number {
-  // the base rake line at the canopy CENTRE: z grows with height from the sill up to the header.
-  const t = THREE.MathUtils.clamp((y - WIN_Y0) / (WIN_TOP_Y - WIN_Y0), 0, 1);
-  return -CK_Z + 0.02 + WIN_RAKE * t * t;   // eased so the lower panes are steeper, the top lies back
-}
-function _winHalfW(y: number): number {
-  // the glass edge follows the FRONT HULL WALL inset by a slim frame margin so the panes reach nearly
-  //   to the hull skin (max glass, min frame — the refs' glass-to-structure ratio).
-  const wall = hullWallXAt(-CK_Z + 0.02, THREE.MathUtils.clamp(y, WIN_Y0, WIN_TOP_Y));
-  return Math.max(0.30, wall - 0.03);
-}
-// The glazed-opening perimeter point at rail height `y`, side `sx` (±1) — used by the collider derivation.
-function _winEdge(y: number, sx: number): THREE.Vector3 {
-  return new THREE.Vector3(sx * _winHalfW(y), y, _winZ(y));
-}
-// ── THE CANOPY NODE FIELD — the faceted skeleton. Maps a parametric (u ∈ [−1,1] across, y height) to
-//    a WORLD corner. The FRONT panes (|u| small) sit on the rake line at the hull-inset half-width; the
-//    SIDE-WRAP panes (|u|→1) pull AFT (+Z, toward the pilot) and stay at the hull wall so the glass
-//    wraps past the shoulder line. Top rows (high y) rake further back so the crown lies over the pilot.
-//    Every pane is a FLAT quad between four nodes → the facets read as distinct angled panes (not a bowed
-//    sheet), and the |u|=±1 nodes land on the hull perimeter so the outer edges seal to the hull skin.
-function _canopyNode(u: number, y: number): THREE.Vector3 {
-  const vy = THREE.MathUtils.clamp((y - WIN_Y0) / (WIN_TOP_Y - WIN_Y0), 0, 1);
-  const hwTop = _winHalfW(y);                               // hull-inset half-width at THIS height (tucks at crown)
-  const hwWaist = _winHalfW(_CANOPY_YMID);                  // the waist reference width (the front's "true" width)
-  // X: the FRONT columns (|u| ≤ 0.55) stay NEAR-VERTICAL — their x is anchored to the WAIST width, only
-  //   easing toward the tucking hull near the crown, so the front struts DON'T pinch into an X over the
-  //   vista. The OUTER perimeter (|u|→1) follows the actual hull wall so the glass seals to the skin.
-  const frontX = Math.abs(u) * hwWaist;                    // near-vertical front column x (waist-anchored)
-  const wallX = Math.abs(u) * hwTop;                       // the tucking-hull x (perimeter)
-  // Only the OUTER PERIMETER (|u| ≥ 0.62) tucks toward the crown; the front grid (|u| ≤ 0.60, incl. the
-  //   side-divide struts) stays a clean upright rectangle so ALL front struts read VERTICAL, not an
-  //   A-frame converging over the vista. Only the |u|=1 hull-seam edge tucks to the tapering crown.
-  const perim = THREE.MathUtils.smoothstep(Math.abs(u), 0.62, 1.0);   // 0 for the front, 1 at the edge
-  const tuck = THREE.MathUtils.clamp((vy - 0.55) / 0.45, 0, 1) * perim;
-  const xMag = frontX + (wallX - frontX) * tuck;           // front stays vertical; only the edges tuck at the top
-  const x = Math.sign(u) * xMag;
-  // Z: base rake with height + a SIDE-WRAP that pulls the outer columns AFT (toward the pilot) so the
-  //   glass wraps past the shoulder line. The wrap ramps in beyond the front (|u| > 0.45) and grows with
-  //   height — the front stays a clean raked windshield, the sides curl back around the pilot.
-  const sideRamp = THREE.MathUtils.smoothstep(Math.abs(u), 0.45, 1.0);
-  const wrap = sideRamp * (0.24 + 0.40 * vy);
-  const z = _winZ(y) + wrap;
+// ================================================================================================
+//  THE GLAZED CANOPY DOME - Y1 FULL REBUILD (user walk-test 2026-07-04, 3rd cockpit pass, structural
+//  fix, PLAN-approved docs/plan-y-queue.md Y1). The user's verdict on the prior 2 canopies: "still a
+//  tunnel with a window at the front; the glass doesn't line up with the hull; messy, not connected;
+//  nothing like the references." ROOT CAUSE the plan names: both prior builds kept the opaque lofted
+//  D-section hull forward and cut a WINDOW into it -> the hull stayed a tunnel, the glass a front hole,
+//  and the top/sides were OPAQUE metal (look-left from the seat = a wall of ribs). The reference
+//  (Falcon-class) is the inverse: the front section IS the glazing - a GLASS SHELL on a METAL
+//  SKELETON, almost no opaque hull forward of the pilot.
+//
+//  THE FIX (user-locked design): DEMOLISH the whole forward hull (skin + ribs + soffit + overhead +
+//  windscreen). Forward of a single structural COLLAR hoop (at the shoulder line, z=COLLAR_Z), the
+//  shell is a GLASS DOME that wraps LEFT -> OVERHEAD -> RIGHT continuously down to a LOW front sill -
+//  so from the seat, looking 9-o'clock / straight-up / 3-o'clock all read GLASS + skeleton, sky in
+//  every forward direction. The dome is a PARAMETRIC NODE FIELD (rings x meridians) -> pane counts /
+//  angles / sill / crown are cheap to retune after review. Every pane edge carries a real metal
+//  member (rule 7 depth); the glass sits IN the skeleton, recessed ~2cm -> alignment is by
+//  construction, no pane floats free of a frame. Research digest: docs/research/cockpit-canopy-design.md
+//  (findings 1/2/4/9 - trapezoidal tessellation of a curved shell, flat angled panes read panoramic,
+//  low sill relative to the seated eye reads "huge").
+// ================================================================================================
+
+// -- DOME PARAMETERS (all cheap to retune) -------------------------------------------------------
+const COLLAR_Z = 0.34;             // the springing hoop: just AFT of the seated shoulders (seat back ~ +0.05).
+//   The dome is a shell of an ellipsoid centred on the PILOT'S HEAD. Meridians sweep the azimuth
+//   (left->front->right), rings sweep the elevation (low front sill -> overhead crown). This guarantees
+//   overhead + side glass by construction (a node's y/x/z come straight from (elevation, azimuth)).
+const DOME_CX = 0.0;               // dome centre x (pilot head, on axis)
+const DOME_CY = 1.30;              // dome centre y (~ the seated eye height)
+const DOME_CZ = -0.12;             // dome centre z (~ the seated head, a hair fwd of the seat cushion)
+const DOME_RX = 2.42;              // lateral radius (reaches to ~the hull side at the sill)
+const DOME_RY = 1.52;              // vertical radius (crown tops out ~ DOME_CY + RY*sin(elCrown) ~ 2.75)
+const DOME_RZ = 2.46;              // forward radius (front sill reaches ~ DOME_CZ - RZ*cos ~ -2.4, the nose)
+const DOME_AZ_MAX = 1.42;          // +/-81deg azimuth at the side meridians -> the glass wraps PAST the shoulders
+const DOME_EL_SILL = -0.52;        // -30deg elevation at the sill ring -> sill y~0.55 (a LOW sill, well below eye ~1.35)
+const DOME_EL_CROWN = 1.15;        // +66deg elevation at the crown ring (well overhead -> look-up = glass)
+// A dome node from parametric (m in [-1,1] azimuth: -1 left, 0 front, +1 right) x (t in [0,1] ring: 0
+//   sill, 1 crown). The elevation eases sill->crown so the lower panes stand tall + the top lies back.
+function _domeNode(m: number, t: number): THREE.Vector3 {
+  const az = m * DOME_AZ_MAX;
+  const te = THREE.MathUtils.smoothstep(t, 0, 1);          // ease so ring spacing reads even on the sphere
+  const el = THREE.MathUtils.lerp(DOME_EL_SILL, DOME_EL_CROWN, te);
+  const ce = Math.cos(el), se = Math.sin(el);
+  // forward is -Z; the shell faces the cabin. az>0 = the pilot's RIGHT (+X).
+  const x = DOME_CX + DOME_RX * ce * Math.sin(az);
+  const y = DOME_CY + DOME_RY * se;
+  const z = DOME_CZ - DOME_RZ * ce * Math.cos(az);
   return new THREE.Vector3(x, y, z);
 }
-// The canopy pane grid (X1). Column splits in u ∈ [−1,1] and the height rails. The panes:
-//   • side-wrap L (u −1.0..−0.55, full height) + side-wrap R (0.55..1.0, full height) — 2 panes
-//   • front lower row (y 0.55..1.55): L (−0.55..−0.18) · centre (−0.18..0.18) · R (0.18..0.55) — 3
-//   • front upper/top row (y 1.55..2.78): L · centre · R — 3
-//   = 8 flat angled panes total (research digest: 6–9). The centre reads as a wide flat pane, the
-//   flanks rake in, the side-wraps pull aft past the shoulder, the top row tips back over the pilot.
-const _CANOPY_U = [-1.0, -0.62, -0.40, 0.40, 0.62, 1.0];   // column boundaries (a WIDE hero centre pane)
-const _CANOPY_YMID = 1.55;                                 // the waist rail (front row split)
-function buildWindscreen(group: THREE.Group, fwZ: number, inward: THREE.Vector3): void {
-  const yB = WIN_Y0 + 0.015, yT = WIN_TOP_Y - 0.015;       // glass sill/header (a hair inside the frame)
-  const yM = _CANOPY_YMID;
-  const IN = 0.02;   // glass sits 2cm behind the mullion front faces (no z-fight at shared edges)
-  // ── PANES — each a FLAT quad between four _canopyNode corners, pushed IN by IN along the outward
-  //    normal so it recesses behind the frame. Wound so the lit face points at the cabin (+Z).
-  const glassV: number[] = [], glassUV: number[] = [];
-  const addPane = (uL: number, uR: number, y0: number, y1: number): void => {
-    const a = _canopyNode(uL, y0), b = _canopyNode(uR, y0), c = _canopyNode(uL, y1), d = _canopyNode(uR, y1);
-    // recess each corner IN (toward +Z, the cabin) so the pane sits behind the frame beams
-    for (const v of [a, b, c, d]) v.z += IN;
-    glassV.push(a.x, a.y, a.z, c.x, c.y, c.z, b.x, b.y, b.z);
-    glassV.push(b.x, b.y, b.z, c.x, c.y, c.z, d.x, d.y, d.z);
-    glassUV.push(0, 0, 0, 1, 1, 0, 1, 0, 0, 1, 1, 1);       // 0..1 per-pane → the shader sheen reads per-facet
-  };
-  // side wraps (full height, one pane each)
-  addPane(_CANOPY_U[0], _CANOPY_U[1], yB, yT);
-  addPane(_CANOPY_U[4], _CANOPY_U[5], yB, yT);
-  // front lower + upper rows (3 columns each)
-  for (const [uL, uR] of [[_CANOPY_U[1], _CANOPY_U[2]], [_CANOPY_U[2], _CANOPY_U[3]], [_CANOPY_U[3], _CANOPY_U[4]]] as const) {
-    addPane(uL, uR, yB, yM);
-    addPane(uL, uR, yM, yT);
-  }
-  const glassSheet = _skinUV(glassV, glassUV, _glass);
-  glassSheet.renderOrder = 2;   // transparent — draw after the opaque hull
-  group.add(glassSheet);
+// The meridian / ring grid. 7 meridians (-> 6 columns) x 3 rings (-> 2 bands): 12 trapezoid panes.
+//   Meridian columns: L side-wrap . L flank . L-centre . R-centre . R flank . R side-wrap (6).
+//   Ring bands: LOWER (tall panes rising from the sill) + UPPER (converging toward the crown).
+const _DOME_M = [-1.0, -0.66, -0.34, 0.0, 0.34, 0.66, 1.0];   // 7 meridians
+const _DOME_T = [0.0, 0.52, 1.0];                             // 3 rings (sill, waist, crown)
 
-  // ── THE MULLIONS — REAL structural box beams (rule 7: ~9cm wide × 14cm deep, a 3D lip). A beam runs
-  //    each shared pane edge. They sit PROUD of the glass (front face toward the cabin) so the frame
-  //    reads with depth at oblique angles. Light brushed metal (_band) so they read as slim dividers,
-  //    not dark A-pillars silhouetted against bright space.
-  const MW = 0.09, MD = 0.14;   // mullion cross-section (width across the frame plane, depth into cabin)
-  const beam = (p: THREE.Vector3, q: THREE.Vector3, w = MW, d = MD, mat: THREE.Material = _band): void => {
-    const mid = p.clone().add(q).multiplyScalar(0.5);
-    const len = p.distanceTo(q) + 0.03;
-    const bar = _box(w, len, d, mat);
-    bar.position.copy(mid);
-    bar.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), q.clone().sub(p).normalize());
-    group.add(bar);
-  };
-  // vertical mullions — a clear HIERARCHY (refs: heavy structural bows + slim dividers, not a birdcage):
-  //   • the SIDE-DIVIDE struts (u=±0.62) are the heavy structural canopy bows (front↔side-wrap seam) —
-  //     full height, chunky.
-  //   • the FRONT-INTERIOR struts (u=±0.40) are SLIM dividers framing the wide hero centre pane.
-  // X1-POLISH item-4c: the heavy side-divide A-posts were slimmed ~34% across (MW×1.15 → ×0.76) — from
-  //   the seat they read as chunky ~5-8× the slim dividers, boxing in the side-wrap vista. They keep the
-  //   FULL depth (MD) so they still read as the heavy structural bows in profile (the frame stays stable),
-  //   but the narrower face opens the shoulder view. Still clearly heftier than the ×0.72 interior dividers.
-  for (const u of [-0.62, 0.62]) beam(_canopyNode(u, yB), _canopyNode(u, yT), MW * 0.76, MD);
-  for (const u of [-0.40, 0.40]) beam(_canopyNode(u, yB), _canopyNode(u, yT), MW * 0.72, MD * 0.85);
-  // the horizontal WAIST mullion across the FRONT columns only (u −0.62..0.62) — the refs' cross band.
-  //   Split at each interior vertical so it reads as segments meeting the struts (a real frame joint).
-  for (const [uL, uR] of [[-0.62, -0.40], [-0.40, 0.40], [0.40, 0.62]] as const) {
-    beam(_canopyNode(uL, yM), _canopyNode(uR, yM), MW * 0.72, MD * 0.85);
+// ── FABRICATED SKELETON MEMBERS (user feedback 2026-07-04 on the Mk-II canopy: "the mullions look way
+//    too blocky and don't connect cleanly, and are on weird angles"). Three fixes are baked in here:
+//    (1) MEMBER PROFILE — every member is a BEVELED beam (a chamfered-rectangle / elongated-hex cross-
+//        section extruded along its length), not a raw BoxGeometry, so it reads as a fabricated
+//        structural section (eased corners catch a highlight line) instead of a flat blocky bar.
+//    (2) REAL JOINTS — every node carries a NODE BOSS (a beveled octagonal hub) that both members
+//        visibly enter; the members are drawn a hair SHORT so their ends tuck INSIDE the boss → no
+//        butt-gaps, no overshoot, no two beams crossing through each other at an angle.
+//    (3) RHYTHM lives in the node field (_DOME_M / _DOME_T even steps); members just follow it.
+// A shared beveled cross-section (a rectangle with the 4 corners cut) → one Shape, scaled per member.
+const _BEVEL_SHAPE = (() => {
+  const s = new THREE.Shape();
+  // unit half-extents 0.5 × 0.5; chamfer c on each corner → an octagon reading as a chamfered beam.
+  const c = 0.28;
+  s.moveTo(-0.5 + c, -0.5); s.lineTo(0.5 - c, -0.5); s.lineTo(0.5, -0.5 + c); s.lineTo(0.5, 0.5 - c);
+  s.lineTo(0.5 - c, 0.5); s.lineTo(-0.5 + c, 0.5); s.lineTo(-0.5, 0.5 - c); s.lineTo(-0.5, -0.5 + c);
+  s.closePath();
+  return s;
+})();
+// A beveled member between p and q with cross-section (w across × d deep). Extruded along +Z then
+//   oriented so its length runs p→q, scaled to (w,d). The ends are inset by `short` so they tuck into
+//   the node bosses. Shared geometry is impractical (per-length), so cache by a coarse length key.
+const _beamGeoCache = new Map<string, THREE.ExtrudeGeometry>();
+function _beveledBeam(p: THREE.Vector3, q: THREE.Vector3, w: number, d: number, mat: THREE.Material, short = 0.06): THREE.Mesh {
+  const dir = q.clone().sub(p);
+  const len = Math.max(0.04, dir.length() - short);
+  const key = w.toFixed(3) + '|' + d.toFixed(3) + '|' + len.toFixed(2);
+  let geo = _beamGeoCache.get(key);
+  if (!geo) {
+    geo = new THREE.ExtrudeGeometry(_BEVEL_SHAPE, { depth: len, bevelEnabled: false, steps: 1 });
+    geo.translate(0, 0, -len / 2);                 // centre the extrusion on the origin
+    geo.scale(w, d, 1);                            // w across the frame plane, d into the cabin
+    _beamGeoCache.set(key, geo);
+    _disposables.push(geo);
   }
-  // ── THE PERIMETER GASKET RING — a continuous slim beam tracing the whole opening edge so the glass
-  //    seals to the hull skin (up the L rail → across the header → down the R rail → across the sill).
-  const RW = 0.10, RD = 0.15;   // the perimeter is a touch heftier (the structural canopy bow)
-  const railYs = [yB, yM, WIN_Y0 + (WIN_TOP_Y - WIN_Y0) * 0.72, yT];
-  for (const side of [-1, 1]) {                                     // each side rail separately (no top crossing)
-    for (let i = 0; i < railYs.length - 1; i++) beam(_canopyNode(side, railYs[i]), _canopyNode(side, railYs[i + 1]), RW, RD);
-  }
-  // the sill bar closes the bottom (the dash meets it). X1-POLISH item-4b: the sill/dash lip read as a
-  //   featureless black band. It now reads as the canopy's bottom FRAME MEMBER: a proper box sill (a hair
-  //   deeper), a lighter-metal top-face CAP seam catching the cabin light along its length, + a run of
-  //   small fasteners marching it — so the eye reads a bolted-down frame rail, not a dead black strip.
-  beam(_canopyNode(-1, yB), _canopyNode(1, yB), 0.08, 0.11);
-  {
-    const sL = _canopyNode(-1, yB), sR = _canopyNode(1, yB);
-    const sillZ = (sL.z + sR.z) * 0.5;
-    const capLen = sL.distanceTo(sR);
-    // a lighter-painted CAP FASCIA running the full sill front — a proud, lit frame rail that caps the
-    //   below-canopy band (kills the featureless-black-strip read). Sits proud into the cabin (+Z) so it
-    //   catches the crown key + reads as the canopy's bottom structural member from the seated eye.
-    const cap = _box(capLen, 0.10, 0.10, _band);
-    cap.position.set(0, yB - 0.02, sillZ + 0.06);
-    group.add(cap);
-    // a thin darker reveal SEAM just under the cap (a panel break — the fascia reads as fitted-on)
-    const seam = _box(capLen, 0.02, 0.06, _channel);
-    seam.position.set(0, yB - 0.085, sillZ + 0.075);
-    group.add(seam);
-    // a run of fasteners marching the fascia (bolted-down frame member) — larger so they read from the seat
-    const nF = 11;
-    for (let i = 0; i <= nF; i++) {
-      const t = i / nF;
-      const p = sL.clone().lerp(sR, t);
-      group.add(_stud(p.x, yB - 0.02, sillZ + 0.115, new THREE.Vector3(0, 0, 1), _rivet, 0.018));
-    }
-  }
-  // the FRONT HEADER bar — spans the front region (side-divide to side-divide) at the top so it CAPS
-  //   the front vertical struts flush (they don't poke into the crown). Split at each interior strut so
-  //   it reads as a jointed frame. A short corner return connects the front header out to the wrapped
-  //   perimeter rail on each side.
-  for (const [uL, uR] of [[-0.62, -0.40], [-0.40, 0.40], [0.40, 0.62]] as const) {
-    beam(_canopyNode(uL, yT), _canopyNode(uR, yT), RW, RD);
-  }
-  for (const s of [-1, 1]) beam(_canopyNode(s * 0.62, yT), _canopyNode(s * 1, yT), RW, RD);   // corner return to the hull rail
-  // rivet studs marching the two heavy side-divide struts (worked structure — flush on the strut face)
-  for (const u of [-0.62, 0.62]) {
-    for (let i = 0; i <= 4; i++) {
-      const y = THREE.MathUtils.lerp(yB, yT, i / 4);
-      const n = _canopyNode(u, y); n.z += MD * 0.5;
-      group.add(_stud(n.x, n.y, n.z, new THREE.Vector3(0, 0, 1), _rivet, 0.014));
-    }
-  }
-  // ── ONE subtle GLAZING GLINT — a soft reflection off to the side (so the glass reads as glass, not
-  //    a hole). Kept short + off-axis so it doesn't bar across the vista.
-  const stGeo = new THREE.PlaneGeometry(0.06, (WIN_TOP_Y - WIN_Y0) * 0.34);
-  _disposables.push(stGeo);
-  const stMat = new THREE.MeshBasicMaterial({ color: 0xbcd0e2, transparent: true, opacity: 0.12, depthWrite: false, blending: THREE.AdditiveBlending });
-  _buildMats.push(stMat);
-  const streak = new THREE.Mesh(stGeo, stMat);
-  const scy = WIN_Y0 + (WIN_TOP_Y - WIN_Y0) * 0.58;
-  const sc = _canopyNode(-0.36, scy);
-  streak.position.set(sc.x, sc.y, sc.z + 0.16);
-  streak.rotation.x = -Math.atan2(_winZ(WIN_TOP_Y) - _winZ(WIN_Y0), WIN_TOP_Y - WIN_Y0);
-  streak.rotation.z = 0.5;
-  streak.renderOrder = 3;
-  group.add(streak);
-  void inward; void WIN_MIDY;
-  _buildWindscreenClosures(group, fwZ);
+  const m = new THREE.Mesh(geo, mat);
+  m.position.copy(p.clone().add(q).multiplyScalar(0.5));
+  m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir.clone().normalize());
+  return m;
+}
+// A NODE BOSS — a squat beveled hub centred on a joint so members enter it cleanly (hides ends/angles).
+//   Faces the cabin (its axis ≈ the local surface normal). r sized to swallow the members meeting here.
+function _nodeBoss(centre: THREE.Vector3, faceDir: THREE.Vector3, r: number, mat: THREE.Material): THREE.Mesh {
+  const g = new THREE.CylinderGeometry(r, r * 1.06, r * 1.1, 8);   // 8-sided beveled hub (slight taper)
+  _disposables.push(g);
+  const m = new THREE.Mesh(g, mat);
+  m.position.copy(centre);
+  m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), faceDir.clone().normalize());
+  return m;
 }
 
-/** Hull CLOSURES around the faceted canopy — the opaque wedges that fill the small voids BETWEEN the
- *  canopy's outer perimeter and the actual front hull skin. With the panes' |u|=±1 nodes now WRAPPED
- *  AFT (`_canopyNode` pulls the side rails back), there is a thin triangular void between the canopy
- *  outer rail and the hull wall on each side, plus the small crown band above the header. Loft slim
- *  opaque skins to close both so the glass reads as sealed INTO the hull by construction (no gaps to
- *  space beside/above the canopy). */
-function _buildWindscreenClosures(group: THREE.Group, fwZ: number): void {
-  // (1) SIDE CLOSURES — a slim wedge from the canopy's outer (wrapped) rail out to the hull wall
-  //     perimeter (`_winEdge`, on the front hull plane) at a few height samples. This fills the void
-  //     the aft-wrap opens up between the glass edge and the hull skin on each side.
-  const sampY = [WIN_Y0 + 0.015, _CANOPY_YMID, WIN_Y0 + (WIN_TOP_Y - WIN_Y0) * 0.72, WIN_TOP_Y - 0.015];
-  for (const side of [1, -1]) {
-    const skinV: number[] = [];
-    for (let i = 0; i < sampY.length - 1; i++) {
-      const y0 = sampY[i], y1 = sampY[i + 1];
-      // inner = the canopy outer rail (wrapped aft); outer = the hull wall on the front plane
-      const ai = _canopyNode(side * 1, y0), bi = _canopyNode(side * 1, y1);
-      const ao = _winEdge(y0, side), bo = _winEdge(y1, side);
-      if (side > 0) {
-        skinV.push(ai.x, ai.y, ai.z, ao.x, ao.y, ao.z, bi.x, bi.y, bi.z);
-        skinV.push(bi.x, bi.y, bi.z, ao.x, ao.y, ao.z, bo.x, bo.y, bo.z);
+/** THE GLAZED DOME SHELL - 12 flat trapezoid glass panes on the parametric node field, each framed by
+ *  a real metal skeleton member; a heavy crown spine + collar-line members, lighter mullions between
+ *  panes (hierarchy). Called from buildCockpitShell after the collar. */
+function buildGlazedDome(group: THREE.Group): void {
+  const IN = 0.02;   // glass sits 2cm behind (outboard of) the skeleton front faces -> no z-fight.
+  // outboard = away from the pilot-head centre (the local surface normal ~ node - centre).
+  const centre = new THREE.Vector3(DOME_CX, DOME_CY, DOME_CZ);
+  const outward = (p: THREE.Vector3): THREE.Vector3 => p.clone().sub(centre).normalize();
+
+  // -- PANES: a flat quad per (column, band) cell, recessed OUTBOARD by IN so it sits behind the
+  //    skeleton. Wound so the lit face points inboard (at the cabin). UVs 0..1 per pane -> the glass
+  //    shader's per-facet sheen/tint reads cleanly.
+  const glassV: number[] = [], glassUV: number[] = [];
+  const node = (mi: number, ti: number): THREE.Vector3 => {
+    const p = _domeNode(_DOME_M[mi], _DOME_T[ti]);
+    return p.add(outward(p).multiplyScalar(IN));   // recess behind the frame
+  };
+  for (let c = 0; c < _DOME_M.length - 1; c++) {
+    for (let b = 0; b < _DOME_T.length - 1; b++) {
+      const a = node(c, b), d = node(c + 1, b), e = node(c, b + 1), f = node(c + 1, b + 1);
+      // wind so the normal points INBOARD (toward the cabin): a,e,d / d,e,f.
+      glassV.push(a.x, a.y, a.z, e.x, e.y, e.z, d.x, d.y, d.z);
+      glassV.push(d.x, d.y, d.z, e.x, e.y, e.z, f.x, f.y, f.z);
+      glassUV.push(0, 0, 0, 1, 1, 0, 1, 0, 0, 1, 1, 1);
+    }
+  }
+  // -- SIDE-CLOSURE GLASS: the outer dome meridian (|m|=1) ends forward of the collar; without this
+  //    there is an open triangular GAP to space between the glass side edge and the collar (the "black
+  //    void on the left" defect). Continue the WRAP as glass: loft a strip from the outer dome meridian
+  //    back to the COLLAR arch (matched by height) per ring, per side, so the glass wraps all the way to
+  //    the shoulder line + seals to the collar by construction. The player looks 9/3-o'clock -> glass.
+  const cprof = hullProfile(COLLAR_Z);
+  const collarPtAtY = (side: number, y: number): THREE.Vector3 => {
+    // walk the collar half-profile, interpolate x by y; inset a hair inboard of the ring's inboard face.
+    for (let i = 0; i < cprof.length - 1; i++) {
+      const A = cprof[i], B = cprof[i + 1];
+      if ((y >= A.y && y <= B.y) || (y >= B.y && y <= A.y)) {
+        const t = (y - A.y) / ((B.y - A.y) || 1e-6);
+        return new THREE.Vector3(side * (A.x + (B.x - A.x) * t - 0.04), y, COLLAR_Z - 0.14);
+      }
+    }
+    const P = cprof[cprof.length - 1];
+    return new THREE.Vector3(side * (P.x - 0.04), Math.min(y, P.y), COLLAR_Z - 0.14);
+  };
+  for (const side of [-1, 1]) {
+    const mi = side < 0 ? 0 : _DOME_M.length - 1;   // the outer meridian for this side
+    for (let ti = 0; ti < _DOME_T.length - 1; ti++) {
+      const dLo = _domeNode(_DOME_M[mi], _DOME_T[ti]);
+      const dHi = _domeNode(_DOME_M[mi], _DOME_T[ti + 1]);
+      const cLo = collarPtAtY(side, dLo.y);
+      const cHi = collarPtAtY(side, dHi.y);
+      // recess the glass a hair outboard so the frame reads proud (match the pane IN)
+      for (const v of [dLo, dHi]) v.add(outward(v).multiplyScalar(IN));
+      // wind so the closure normal points INBOARD. For −X side vs +X side the winding flips.
+      if (side < 0) {
+        glassV.push(cLo.x, cLo.y, cLo.z, dLo.x, dLo.y, dLo.z, cHi.x, cHi.y, cHi.z);
+        glassV.push(cHi.x, cHi.y, cHi.z, dLo.x, dLo.y, dLo.z, dHi.x, dHi.y, dHi.z);
       } else {
-        skinV.push(ai.x, ai.y, ai.z, bi.x, bi.y, bi.z, ao.x, ao.y, ao.z);
-        skinV.push(bi.x, bi.y, bi.z, bo.x, bo.y, bo.z, ao.x, ao.y, ao.z);
+        glassV.push(cLo.x, cLo.y, cLo.z, cHi.x, cHi.y, cHi.z, dLo.x, dLo.y, dLo.z);
+        glassV.push(cHi.x, cHi.y, cHi.z, dHi.x, dHi.y, dHi.z, dLo.x, dLo.y, dLo.z);
+      }
+      glassUV.push(0, 0, 0, 1, 1, 0, 1, 0, 0, 1, 1, 1);
+    }
+  }
+  const glassSheet = _skinUV(glassV, glassUV, _glass);
+  glassSheet.renderOrder = 2;    // transparent - draw after the opaque hull/collar
+  group.add(glassSheet);
+
+  // -- THE METAL SKELETON (user feedback: "mullions too blocky, don't connect cleanly, weird angles").
+  //    Every member is a BEVELED beam (_beveledBeam — chamfered section, not a raw box) drawn a hair
+  //    SHORT so its ends tuck INSIDE a NODE BOSS at each joint → clean fabricated connections, no
+  //    butt-gaps / overshoot / crossing-through. Members sit PROUD (inboard of the glass) for depth.
+  //    Hierarchy: heavy members on the crown + collar-line + the two side bows; slim mullions between.
+  const MW = 0.085, MD = 0.13;   // slim mullion cross-section (width across frame plane × depth into cabin)
+  const HW = 0.115, HD = 0.15;   // heavy member (crown spine + collar bows + the structural side bows)
+  const N = (mi: number, ti: number): THREE.Vector3 => _domeNode(_DOME_M[mi], _DOME_T[ti]);
+  // every skeleton segment records its endpoints so we can drop a NODE BOSS wherever ≥2 members meet.
+  type Seg = { p: THREE.Vector3; q: THREE.Vector3; w: number; d: number };
+  const segs: Seg[] = [];
+  const addBeam = (p: THREE.Vector3, q: THREE.Vector3, w: number, d: number): void => {
+    group.add(_beveledBeam(p, q, w, d, _band, 0.07));   // short 7cm each end → tucks into the bosses
+    segs.push({ p, q, w, d });
+  };
+
+  // (1) THE MERIDIAN RIBS — sill→crown along every meridian (the canopy "bows"). |m|≥0.60 = heavy side
+  //     bows; inner meridians = slim dividers framing the two wide centre panes.
+  for (let mi = 0; mi < _DOME_M.length; mi++) {
+    const heavy = Math.abs(_DOME_M[mi]) >= 0.60;
+    for (let ti = 0; ti < _DOME_T.length - 1; ti++) addBeam(N(mi, ti), N(mi, ti + 1), heavy ? HW : MW, heavy ? HD : MD);
+  }
+  // (2) THE RING MEMBERS — one per ring, segmented at each meridian (a jointed frame). Sill + crown
+  //     hoops are heavy (the two structural rings the eye reads as top & bottom); the waist is slim.
+  for (let ti = 0; ti < _DOME_T.length; ti++) {
+    const heavy = (ti === 0 || ti === _DOME_T.length - 1);
+    for (let mi = 0; mi < _DOME_M.length - 1; mi++) addBeam(N(mi, ti), N(mi + 1, ti), heavy ? HW : MW, heavy ? HD : MD);
+  }
+  // (3) THE CROWN SPINE — a heavy fore-aft keel from the front crown node back to the collar crown.
+  const cp0 = hullProfile(COLLAR_Z);
+  const collarCrown = new THREE.Vector3(0, cp0[cp0.length - 1].y - 0.06, COLLAR_Z);
+  addBeam(N(3, _DOME_T.length - 1), collarCrown, HW, HD);
+  // (4) THE SIDE-CLOSURE FRAME — a bow from each outer dome meridian back to the collar (frames the
+  //     wrap-to-collar glass so it seals cleanly, no raw glass edge to space).
+  const cpf = hullProfile(COLLAR_Z);
+  const collarPt = (side: number, y: number): THREE.Vector3 => {
+    for (let i = 0; i < cpf.length - 1; i++) {
+      const A = cpf[i], B = cpf[i + 1];
+      if ((y >= A.y && y <= B.y) || (y >= B.y && y <= A.y)) {
+        const t = (y - A.y) / ((B.y - A.y) || 1e-6);
+        return new THREE.Vector3(side * (A.x + (B.x - A.x) * t - 0.04), y, COLLAR_Z - 0.13);
       }
     }
-    group.add(_skin(skinV, _shell));   // opaque hull cheek closing the side void
+    const P = cpf[cpf.length - 1];
+    return new THREE.Vector3(side * (P.x - 0.04), Math.min(y, P.y), COLLAR_Z - 0.13);
+  };
+  for (const side of [-1, 1]) {
+    const mi = side < 0 ? 0 : _DOME_M.length - 1;
+    for (let ti = 0; ti < _DOME_T.length; ti++) addBeam(N(mi, ti), collarPt(side, N(mi, ti).y), MW, MD);
   }
-  // (2) CROWN CAP — the opaque band ABOVE the glass header (2.78 → hull crown). CRITICAL: its base
-  //     must span the ACTUAL canopy header line (the front panes top out WIDE, at the `_canopyNode`
-  //     x, not the narrow `_winHalfW(crown)` — using the narrow width left a triangular GAP TO SPACE
-  //     above each front strut, the "poke" the user would see). So the base samples `_canopyNode(u, yT)`
-  //     across u ∈ [−1,1], and lofts UP to the front hull crown profile — closing the whole band with
-  //     no gaps. Per side, mapped to matching sample counts.
-  const yTcap = WIN_TOP_Y - 0.015;
-  const frontProf = hullProfile(-CK_Z + 0.02);
-  const crownPts = frontProf.filter((p) => p.y >= WIN_TOP_Y - 0.02);
+
+  // (5) NODE BOSSES — drop a beveled hub at every point where ≥2 members meet, sized to swallow the
+  //     thickest member entering it (+ the 7cm short we cut). This is what makes the joints read CLEAN:
+  //     the members visibly enter a fabricated node, no gaps/overshoot/crossing. Dedup by rounded key.
+  const nodeMap = new Map<string, { c: THREE.Vector3; r: number }>();
+  const noteNode = (c: THREE.Vector3, memW: number): void => {
+    const key = c.x.toFixed(2) + ',' + c.y.toFixed(2) + ',' + c.z.toFixed(2);
+    const r = Math.max(memW * 0.72, 0.075) + 0.05;   // swallow the member half-width + the short cut
+    const cur = nodeMap.get(key);
+    if (!cur) nodeMap.set(key, { c: c.clone(), r });
+    else cur.r = Math.max(cur.r, r);
+  };
+  for (const s of segs) { noteNode(s.p, s.w); noteNode(s.q, s.w); }
+  for (const { c, r } of nodeMap.values()) {
+    const boss = _nodeBoss(c, outward(c).negate(), r, _steel);   // darker steel hub → reads as the joint
+    group.add(boss);
+    // a small rivet centred on the boss face (a fabricated fastener at the node)
+    group.add(_stud(c.x, c.y, c.z, outward(c).negate(), _rivet, Math.min(0.02, r * 0.4)));
+  }
+
+  // -- THE SILL FASCIA CAP: a lighter-painted proud cap running the SILL hoop so the glass's bottom
+  //    edge reads as a finished frame rail (the console meets it), not a raw seam. Beveled + short so it
+  //    joins into the sill node bosses like the rest of the frame.
+  for (let mi = 0; mi < _DOME_M.length - 1; mi++) {
+    const p = N(mi, 0), q = N(mi + 1, 0);
+    const mid = p.clone().add(q).multiplyScalar(0.5);
+    const dir = outward(mid).negate();
+    const capMesh = _beveledBeam(p.clone().add(dir.clone().multiplyScalar(0.06)), q.clone().add(dir.clone().multiplyScalar(0.06)), HW * 1.05, 0.085, _band, 0.12);
+    group.add(capMesh);
+  }
+}
+
+/** THE STRUCTURAL COLLAR - the ONE clean hull<->glass transition hoop the dome springs from. The aft
+ *  ribbed hull ends at COLLAR_Z; this deliberate ring closes the aft hull to the dome sill ring. It's a
+ *  chunky channel-steel arch following the hull profile (deck -> up over the crown -> deck), with a
+ *  proud inboard flange face + a rivet row, so from the seat it reads as the finished mouth the glass
+ *  canopy bolts onto (not a raw cut edge). Behind the pilot's shoulders -> it never eats the vista. */
+function buildCollar(group: THREE.Group): void {
+  const prof = hullProfile(COLLAR_Z);
+  const centre = new THREE.Vector3(DOME_CX, DOME_CY, DOME_CZ);
+  // (1) the arch RING - box segments hugging the hull profile, both sides, forming the springing hoop.
   for (const side of [1, -1]) {
-    const capV: number[] = [];
-    const n = crownPts.length;
-    if (n >= 2) {
-      // the canopy header edge (base of the cap): sample the front pane-top from the side-divide out to
-      //   the wrapped hull rail, so the base aligns exactly with where the glass actually ends.
-      const glassTop = crownPts.map((_p, i) => {
-        const t = i / (n - 1);
-        const u = side * (1 - t);            // from the outer wrapped edge (|u|=1) in toward centre
-        const nd = _canopyNode(u, yTcap);
-        return { x: nd.x, y: nd.y, z: nd.z };
-      });
-      const front = crownPts.map((p) => ({ x: side * p.x, y: p.y, z: -CK_Z + 0.02 }));
-      for (let i = 0; i < n - 1; i++) {
-        const a0 = glassTop[i], a1 = glassTop[i + 1], c0 = front[i], c1 = front[i + 1];
-        if (side > 0) {
-          capV.push(a0.x, a0.y, a0.z, c0.x, c0.y, c0.z, a1.x, a1.y, a1.z);
-          capV.push(a1.x, a1.y, a1.z, c0.x, c0.y, c0.z, c1.x, c1.y, c1.z);
-        } else {
-          capV.push(a0.x, a0.y, a0.z, a1.x, a1.y, a1.z, c0.x, c0.y, c0.z);
-          capV.push(a1.x, a1.y, a1.z, c1.x, c1.y, c1.z, c0.x, c0.y, c0.z);
-        }
-      }
-      group.add(_skin(capV, _band));   // a slim lighter-painted canopy header band
+    for (let i = 0; i < prof.length - 1; i++) {
+      const ax = side * prof[i].x, ay = prof[i].y;
+      const bx = side * prof[i + 1].x, by = prof[i + 1].y;
+      const mx = (ax + bx) / 2, my = (ay + by) / 2;
+      const len = Math.hypot(bx - ax, by - ay) + 0.03;
+      const ring = _box(0.20, len, 0.16, _steel);           // chunky collar member (heaviest frame in the cabin)
+      ring.position.set(mx, my, COLLAR_Z);
+      ring.rotation.z = Math.atan2(by - ay, bx - ax) - Math.PI / 2;
+      group.add(ring);
+      // a lighter proud inboard flange cap (a machined mating face the dome bolts to) + a rivet.
+      //   The cabin is on the -Z (forward) side of the collar, so inboard/proud = -Z.
+      const flange = _box(0.10, len, 0.06, _band);
+      flange.position.set(mx, my, COLLAR_Z - 0.11);
+      group.add(flange);
+      const inb = new THREE.Vector3(mx - centre.x, my - centre.y, 0).normalize().negate();
+      group.add(_stud(mx, my, COLLAR_Z - 0.11, new THREE.Vector3(inb.x, inb.y, 0.4).normalize(), _rivet, 0.016));
     }
+    // a bracket GUSSET where the collar foot lands on the deck (a triangular knee - the hoop is footed)
+    const foot = { x: side * prof[0].x, y: prof[0].y };
+    const gus = _box(0.22, 0.20, 0.20, _channel);
+    gus.position.set(foot.x - side * 0.05, 0.13, COLLAR_Z);
+    group.add(gus);
   }
-  // a stencilled placard low on the sill (lived-in)
-  const plac = _box(0.30, 0.06, 0.012, _hazard);
-  plac.position.set(-WIN_X + 0.30, WIN_Y0 + 0.09, fwZ + 0.05);
+  // (2) a stencilled placard low on the collar foot (lived-in)
+  const plac = _box(0.28, 0.06, 0.012, _hazard);
+  plac.position.set(-prof[0].x + 0.34, 0.30, COLLAR_Z - 0.10);
   group.add(plac);
 }
 
@@ -1698,20 +1722,11 @@ function buildConsoleBank(group: THREE.Group): void {
   const lbl = _box(0.46, 0.05, 0.006, _decal);
   lbl.position.set(-0.9, bodyH * 0.30, bodyFrontZ + 0.035);
   group.add(lbl);
-  // the WRAP end-returns — angled panels closing the console around the pilot (a station, not a
-  //   flat counter). Set BACK + angled; their inner edges meet the body so no gap/overlap reads.
-  for (const sx of [-1, 1]) {
-    const ret = _box(0.42, bodyH, 0.66, _channel);
-    ret.position.set(sx * 1.78, bodyH / 2, conZ + 0.42);
-    ret.rotation.y = sx * 0.46;
-    group.add(ret);
-    const retFace = _box(0.40, bodyH - 0.06, 0.04, _band);
-    retFace.position.set(sx * 1.78 + sx * 0.02, bodyH / 2, conZ + 0.42 + 0.30);
-    retFace.rotation.y = sx * 0.46;
-    group.add(retFace);
-  }
-  // A5 COLLIDER — the solid console mass (unchanged spec — the egress path is aft of it, untouched).
-  _addFurnitureCollider(3.6, deckY + 0.30, 0.95, 0, (deckY + 0.30) / 2, conZ + 0.05);
+  // (Mk-III review round 1 — the WRAP end-returns REMOVED per the user: the angled end blocks with
+  //   their proud lighter face plates read as odd handle-boxes on the console's far ends. The
+  //   console now ends cleanly at its body; the collider narrows to match (rule 9).)
+  // A5 COLLIDER — the solid console mass (narrowed to the body now the end-returns are gone).
+  _addFurnitureCollider(3.3, deckY + 0.30, 0.95, 0, (deckY + 0.30) / 2, conZ + 0.05);
 
   // ── (2) THE CONTROL SHELF — one flat top surface on the body (the physical shelf that all the
   //    controls sit ON, so nothing floats). Slightly proud of the body top; a rear lip rises to the
@@ -1724,7 +1739,10 @@ function buildConsoleBank(group: THREE.Group): void {
 
   // ── (2b) THE GLARE-SHIELD HOOD + INSTRUMENT FASCIA — one canted plane rising off the shelf's rear
   //    edge, hooded by a brow so the screens read RECESSED. This is the ONE fascia the MFDs live in.
-  const fasCY = deckY + 0.30;                 // fascia centre height
+  // Mk-III review round 1 (user): the raised back was "a bit tall — blocks the view" → the fascia
+  //   centre drops 10cm and the brow hugs the fascia top instead of riding 2cm above it; the whole
+  //   silhouette falls from ~1.38 (right AT the 1.35 seated eye) to ~1.26 — horizon clears it.
+  const fasCY = deckY + 0.20;                 // fascia centre height (was +0.30)
   const fasZ = conZ - 0.14;                    // set back (behind the shelf, toward the window)
   // the fascia backing panel (the instrument face all screens recess INTO)
   const fascia = _box(3.0, 0.56, 0.05, _channel);
@@ -1734,10 +1752,10 @@ function buildConsoleBank(group: THREE.Group): void {
   // the GLARE-SHIELD BROW — a slim hood cantilevered over the fascia top (shades the screens; gives
   //   the console its purposeful silhouette). One clean bar, angled to overhang.
   const brow = _box(3.06, 0.06, 0.22, _steel);
-  brow.position.set(0, fasCY + 0.30, fasZ + 0.10);
+  brow.position.set(0, fasCY + 0.28, fasZ + 0.10);   // hugs the fascia top (review round 1)
   brow.rotation.x = CANT + 0.5;
   group.add(brow);
-  for (let i = -3; i <= 3; i++) group.add(_stud(i * 0.46, fasCY + 0.30, fasZ + 0.16, inward, _rivet, 0.012));
+  for (let i = -3; i <= 3; i++) group.add(_stud(i * 0.46, fasCY + 0.28, fasZ + 0.16, inward, _rivet, 0.012));
 
   // ── (3) THE MAIN MFD — recessed INTO the fascia (off-centre left). Integral bezel, recessed dark
   //    glass, green emissive content (horizon + readout lines) + scanlines. Keeps the alert refs.
@@ -2079,18 +2097,20 @@ function buildLighting(group: THREE.Group): void {
   // ── A REAL RED BEACON (gate sev-2 — alert must come from a SOURCE, not a uniform filter): a
   //    caged strobe dome on the soffit + a red point light AT it (strong falloff → the cabin is
   //    brightest near the beacon, falling to the corners) that pulses on alert. OFF at level 0.
+  // Y1 RE-SEAT (glazed dome): the beacon now mounts UNDER THE CROWN SPINE (buildGlazedDome's fore-aft
+  //   ridge beam), just forward of the collar, over the pilot's head — a real ceiling-mounted strobe
+  //   on a real member, NOT floating in the glass. The spine runs ~(z −1.13, y 2.69) → (z COLLAR_Z,
+  //   y 2.90); mount at zB, hanging just under the ridge.
+  const zB = COLLAR_Z - 0.15;                        // just forward of the collar, under the crown spine
+  const spineY = 2.80;                               // the ridge-beam underside at this z
   const beaconCan = _cyl(0.07, 0.09, 0.06, 10, _channel);
-  beaconCan.position.set(0, 2.34, -CK_Z + 1.0);
+  beaconCan.position.set(0, spineY - 0.10, zB);
   group.add(beaconCan);
-  // X1-POLISH item-4a: a STALK + mount pad rooting the beacon into the crown soffit (from the aft 3/4
-  //   it read as a floating dome with a 0.6m gap to the ceiling). A slim drop-stem from the crown down
-  //   to the can + a bracket pad flush on the soffit → the beacon reads as CEILING-MOUNTED hardware.
-  const beaconCrownY = 2.86;                         // just under the vaulted crown at this z
-  const beaconStem = _cyl(0.028, 0.028, beaconCrownY - 2.37, 8, _channel);
-  beaconStem.position.set(0, (2.37 + beaconCrownY) * 0.5, -CK_Z + 1.0);
+  const beaconStem = _cyl(0.028, 0.028, 0.10, 8, _channel);
+  beaconStem.position.set(0, spineY - 0.05, zB);
   group.add(beaconStem);
-  const beaconPad = _cyl(0.11, 0.13, 0.05, 12, _band);   // the mount bracket flush on the soffit
-  beaconPad.position.set(0, beaconCrownY, -CK_Z + 1.0);
+  const beaconPad = _cyl(0.11, 0.13, 0.05, 12, _band);   // the mount bracket flush under the spine
+  beaconPad.position.set(0, spineY, zB);
   group.add(beaconPad);
   const beaconMat = new THREE.MeshBasicMaterial({ color: 0x2a0604 });   // dark dome (calm)
   _buildMats.push(beaconMat);
@@ -2098,27 +2118,21 @@ function buildLighting(group: THREE.Group): void {
   _disposables.push(beaconGeo);
   const beaconDome = new THREE.Mesh(beaconGeo, beaconMat);
   beaconDome.rotation.x = Math.PI;
-  beaconDome.position.set(0, 2.32, -CK_Z + 1.0);
+  beaconDome.position.set(0, spineY - 0.12, zB);
   group.add(beaconDome);
   _alertBeaconMesh = beaconDome;
   const beacon = new THREE.PointLight(0xff2010, 0.0, 5.5, 2.0);
-  beacon.position.set(0, 2.25, -CK_Z + 1.0);
+  beacon.position.set(0, spineY - 0.18, zB);
   group.add(beacon);
   _alertBeaconLight = beacon;
-  // RIB STRIP-LIGHTS — thin emissive strips down two ribs (dark at level 0, hot red on alert →
-  //   the alert reads as the SHIP's own warning lights firing, not a global tint).
-  // X1 FIX (user: "the orange light rectangles on the FRONT ribs are misplaced — back ribs read
-  //   fine; re-seat them on the new front structure"). ROOT CAUSE: the forward strip sat at z=−0.9,
-  //   which is BETWEEN the ribs (the rib stations are [−1.35, −0.5, 0.4, 1.3, 2.2]) — so it floated
-  //   in the hull gap at a slight z-offset (+0.1) that no longer landed on a rib flange after the
-  //   forward rib was pulled back to −1.35 in W1. FIX: seat BOTH strips on ACTUAL rib stations
-  //   (−0.5 heavy + 1.3 heavy) and lay the strip flush on the rib's proud FACE (rib depth ~0.17 →
-  //   sit the strip at rz + 0.09, right on the rib's cabin-side flange). Now they read as light
-  //   channels down two real structural ribs, front and aft, matching each other exactly.
+  // RIB STRIP-LIGHTS — thin emissive strips down real structural members (dark at level 0, hot red on
+  //   alert → the alert reads as the SHIP's own warning lights firing, not a global tint).
+  // Y1 RE-SEAT (glazed dome): the forward ribs are demolished, so the strips now ride the COLLAR arch
+  //   (the springing hoop the pilot faces) + the aft heavy rib (z=1.3). Each is laid flush on the
+  //   member's cabin-side flange. `zOff` = the member's cabin-side face offset from its centre z.
   _alertStripMats = [];
-  for (const rz of [-0.5, 1.3]) {
+  for (const [rz, zOff] of [[COLLAR_Z, -0.14], [1.3, 0.09]] as const) {
     const prof = hullProfile(rz);
-    const ribDep = 0.17;   // heavy-rib depth (matches ribDefs heavy=true in buildCockpitShell)
     for (const side of [1, -1]) {
       for (let i = 2; i < prof.length - 1; i += 2) {
         const ax = side * prof[i].x, ay = prof[i].y;
@@ -2128,7 +2142,7 @@ function buildLighting(group: THREE.Group): void {
         _buildMats.push(sm);
         _alertStripMats.push(sm);
         const strip = _box(0.03, Math.hypot(bx - ax, by - ay), 0.02, sm);
-        strip.position.set(mx, my, rz + ribDep * 0.55);   // flush on the rib's cabin-side flange
+        strip.position.set(mx, my, rz + zOff);   // flush on the member's cabin-side flange
         strip.rotation.z = Math.atan2(by - ay, bx - ax) - Math.PI / 2;
         group.add(strip);
       }
@@ -2214,6 +2228,7 @@ export function buildShipScene(ctx: GameContext): void {
     const body = col.parent();
     if (body) shipBodies.push(body);
   }
+  _addDomeColliders(ctx);   // Y1 — the curve-fit glazed-dome perimeter wall (rotated segments; can't walk through the glass)
 
   group.traverse((o) => { if ((o as THREE.Mesh).isMesh) { o.castShadow = false; o.receiveShadow = false; } });
 
@@ -2232,6 +2247,7 @@ export function buildShipScene(ctx: GameContext): void {
   _protect(_engineFire);            // the additive engine-bay fire (flickers + repositions each frame)
   _protect(_engineDoorJudderL);     // the sliding engine-room door leaves (judder open on fire)
   _protect(_engineDoorJudderR);
+  _protect(_bayGroup);              // Y3.4 — the docked-pod ROOT: releasePodFromBay moves its position/roll AND setBayPodYaw rotates it about its own axis; if merged, the pod BODY meshes would detach from the root and neither the shudder NOR the rotate-then-eject would move the pod (only the door pivot subtree would). Protecting the whole subtree keeps the root transformable as one rigid capsule.
   _protect(_bayDoorPivot);          // the docked-pod bay door pivot (swings)
   _protect(_airlockDoorL);          // W2b — the operational sliding-door leaves (slide open/shut)
   _protect(_airlockDoorR);
@@ -2941,6 +2957,11 @@ export function getBayAirlockDoorWorld(): THREE.Vector3 {
 export function getPodBayThreshold(): THREE.Vector3 {
   return new THREE.Vector3(SHIP_ORIGIN.x + COLLAR_FAR_X + 0.55, SHIP_ORIGIN.y + 1.62, SHIP_ORIGIN.z + BAY_ZC);
 }
+/** World centre of the docked pod's vertical axis — the pivot the rotate-then-eject beat orbits the
+ *  seated player around (setBayPodYaw rotates the pod root about this axis). Y = the deck plane. */
+export function getBayPodCenter(): THREE.Vector3 {
+  return new THREE.Vector3(SHIP_ORIGIN.x + BAY_POD_X, SHIP_ORIGIN.y, SHIP_ORIGIN.z + BAY_ZC);
+}
 /** The docked pod's SEATED-EYE target inside the cabin (the pod-interior peek centre / E-sit gaze +
  *  the climb-in landing). World coords. */
 export function getPodBaySeatedEye(): THREE.Vector3 {
@@ -3011,6 +3032,29 @@ let _bayDoorPivot: THREE.Group | null = null;
 export function setBayPodDoorOpen(t: number): void {
   if (_bayDoorPivot) _bayDoorPivot.rotation.y = -1.9 * Math.max(0, Math.min(1, t));
 }
+
+// ── Y3.4 — THE ROTATE-THEN-EJECT beat. After the player sits + seals inside, the docked pod
+//    mechanically rotates in its cradle (player inside, felt + heard) so the porthole faces OUT into
+//    open space, then the eject prompt fires. `setBayPodYaw(rad)` rotates the DOCKED bay pod ROOT
+//    (the buildCanonicalPodExterior instance + its child door pivot) about its OWN vertical axis;
+//    0 = docked/door-to-collar (the boarding orientation). It COMPOSES cleanly with the other bay
+//    pod animators, which all write DIFFERENT channels: releasePodFromBay writes the root's POSITION
+//    (x,y) + the root's ROLL (rotation.z) + the door pivot's rattle (rotation.y) — none touch the
+//    root's rotation.y — and setBayPodDoorOpen writes the CHILD door pivot's rotation.y. So the yaw
+//    lives on the root's rotation.y and survives the shudder + the door swing (the door pivot is a
+//    child, so it yaws WITH the pod, exactly as a real hatch on a rotating capsule would).
+//    NO COLLIDER CHANGES: the boarding-time walkable hull-ring colliders (_addBayPodColliders) are
+//    baked in WORLD space at yaw 0 (door gap on the +X arc) and are correct only at yaw 0. That is
+//    fine by design — the player is SEALED INSIDE (seated, controls locked) before this rotates, so
+//    they can never walk against the now-mismatched ring during the rotate/eject; boarding + the
+//    walk-in only ever happen at yaw 0. Safe no-op before the bay builds / after dispose.
+let _bayPodYaw = 0;
+export function setBayPodYaw(rad: number): void {
+  _bayPodYaw = rad;
+  if (_bayGroup) _bayGroup.rotation.y = rad;
+}
+/** Current docked bay-pod yaw (radians about its own vertical axis; 0 = docked/door-to-collar). */
+export function getBayPodYaw(): number { return _bayPodYaw; }
 
 // ── W2b — THE OPERATIONAL SLIDING DOOR. Two leaves ride apart into wall pockets fore/aft. A single
 //    static SEAL collider (rebuilt on state) blocks the aperture while the door is even slightly
@@ -3441,11 +3485,19 @@ function buildCrewQuarters(group: THREE.Group): void {
   // ═══ 1. ROOM SHELL — floor / ceiling / back wall / side walls (dark grimed steel; matches the
   //    corridor family). The corridor-side face (the −X wall line) is the buildCorridor wall, gapped
   //    at the door; here we add the room's own inner faces so the room reads finished from inside.
+  // Y2 Z-FIGHT SWEEP (crew-quarters entrance): the room floor/ceiling slabs extend +0.2 past the wall
+  //   line (x=−1.0) to tuck gap-free under the corridor wall — but that put their walkable faces
+  //   COPLANAR with the corridor's floor top (y=0) / roof underside (y=2.4) over the ~0.1m threshold
+  //   overlap, and the DIFFERENT materials (_deck vs corridor _channel sub-floor; _ceil vs corridor
+  //   _ceil roof) shimmered there on a slow pan. FIX (real geometry offset, ≥6mm): sink the room floor
+  //   6mm (top y=−0.006) + raise the room ceiling 6mm so their planes are cleanly SEPARATED from the
+  //   corridor's in the overlap zone. The gap-free tuck is preserved (the boxes still span past the
+  //   wall); the 6mm step is under the door sill/roof line and imperceptible.
   const rFloor = _box(wallX - farX + 0.2, COR_WALL_T, z1 - z0 + 0.2, _deck);
-  rFloor.position.set(QTR_XC, -COR_WALL_T / 2, (z0 + z1) / 2);
+  rFloor.position.set(QTR_XC, -COR_WALL_T / 2 - 0.006, (z0 + z1) / 2);
   q.add(rFloor);
   const rCeil = _box(wallX - farX + 0.2, COR_WALL_T, z1 - z0 + 0.2, _ceil);
-  rCeil.position.set(QTR_XC, H + COR_WALL_T / 2, (z0 + z1) / 2);
+  rCeil.position.set(QTR_XC, H + COR_WALL_T / 2 + 0.006, (z0 + z1) / 2);
   q.add(rCeil);
   const rBack = _box(COR_WALL_T, H + 0.2, z1 - z0 + 0.2, _shell);
   rBack.position.set(farX - COR_WALL_T / 2, H / 2, (z0 + z1) / 2);
@@ -3457,10 +3509,16 @@ function buildCrewQuarters(group: THREE.Group): void {
   }
   // the room's corridor-side wall RETURNS (the −X wall line inside the room, flanking the door) — so
   //   from INSIDE the room the wall reads solid either side of the door, dressed to match.
+  // Y2 Z-FIGHT SWEEP (crew-quarters entrance, BOTH sides): the return's FRONT face sat at x=−1.00,
+  //   COPLANAR with the door-jamb POSTS' front (also x=−1.00) where they overlap in z beside the door
+  //   → the jamb posts shimmered on a slow pan (the mask showed hard vertical red bands on both jambs).
+  //   FIX (real geometry offset): recess the return so its front face is at x=−1.05 (5cm behind the
+  //   wall line), clearly BEHIND the proud jamb posts (front −1.00) + the dado (front −0.99) — the
+  //   posts/dado now read as intended proud framing over a recessed wall, no shared plane.
   for (const [rz0, rz1] of [[z0, zc - dHW], [zc + dHW, z1]] as const) {
     const rlen = rz1 - rz0; if (rlen < 0.05) continue;
     const ret = _box(0.10, H + 0.2, rlen, _band);
-    ret.position.set(wallX - 0.05, H / 2, (rz0 + rz1) / 2);
+    ret.position.set(wallX - 0.10, H / 2, (rz0 + rz1) / 2);   // front x=−1.05 (recessed behind the jamb posts)
     q.add(ret);
     // a recessed lower dado band (two-value wall, matching the corridor) + a bolt border
     const dado = _box(0.06, 0.6, rlen - 0.1, _channel);
@@ -3496,16 +3554,21 @@ function buildCrewQuarters(group: THREE.Group): void {
   //    on the aft side (so the corridor walk sees INTO the lit cabin — the lived-in read). Frame:
   //    channel-steel jambs + a header + a threshold + a stencilled placard + a slim hazard accent, so
   //    it reads as a real, intentional operational door. setQuartersDoor can close it later.
-  //  side JAMBS (corridor-facing, proud of the wall)
+  //  side JAMBS (proud of the wall INTO the room). Y2 Z-FIGHT SWEEP: the posts' +X face sat at x=−1.0
+  //   — COPLANAR with the corridor structural wall front (also x=−1.0) where they flank the door, so
+  //   the posts shimmered on a slow pan (the flicker mask showed hard red vertical bands on both
+  //   jambs). FIX (real offset): the frame stands 2cm further into the room (post/lintel base wallX−0.11
+  //   → +X face at −1.02), clearly proud of the wall front, no shared plane. Depth/read unchanged.
+  const qFrameX = wallX - 0.11;   // door-frame base X: +X face 2cm proud into the room off the wall line
   for (const sz of [-1, 1]) {
     const post = _box(0.18, dTop + 0.12, 0.18, _steel);
-    post.position.set(wallX - 0.09, (dTop + 0.12) / 2, zc + sz * (dHW + 0.09));
+    post.position.set(qFrameX, (dTop + 0.12) / 2, zc + sz * (dHW + 0.09));
     q.add(post);
-    for (let y = 0.4; y < dTop; y += 0.42) q.add(_stud(wallX - 0.01, y, zc + sz * (dHW + 0.09), new THREE.Vector3(1, 0, 0), _rivet, 0.015));
+    for (let y = 0.4; y < dTop; y += 0.42) q.add(_stud(qFrameX + 0.08, y, zc + sz * (dHW + 0.09), new THREE.Vector3(1, 0, 0), _rivet, 0.015));
   }
   //  HEADER lintel + a slim hazard band + a stencilled placard ("CREW")
   const lintel = _box(0.18, 0.2, dHW * 2 + 0.5, _steel);
-  lintel.position.set(wallX - 0.09, dTop + 0.10, zc);
+  lintel.position.set(qFrameX, dTop + 0.10, zc);
   q.add(lintel);
   const lintelHaz = _box(0.03, 0.06, dHW * 2 + 0.2, _bayHazardAccent);
   lintelHaz.position.set(wallX - 0.01, dTop + 0.02, zc);
@@ -3689,36 +3752,27 @@ function buildCrewQuarters(group: THREE.Group): void {
   q.add(can);
 }
 
-// ── X4 item-2 — the STARBOARD VIEWPORT glass: a sealed cool space-tinted transmissive pane.
-//    FIX PASS (adversarial gate SEV1: "the strip reads as BLACK WALL PANELS — no stars, no glass
-//    cues"). ROOT CAUSE: the glass (opacity 0.22) only showed whatever lay behind it — the
-//    camera-relative space dome, which reads as 2-3 diffuse light-bloom smudges depending on the
-//    planet azimuth. A standing player couldn't tell it was a window. FIX: a DEDICATED emissive
-//    STAR-SPECKLE BACKDROP is built just OUTBOARD of the glass (buildViewportStrip) so the window
-//    ALWAYS reads as deep space regardless of the sky's planet azimuth — dozens of small crisp
-//    points at varied brightness (restrained: deep space, not a christmas tree). The glass tint is
-//    lifted a touch + kept glossy so a frame-edge glint + a faint vertical tint gradient read as a
-//    real sealed pane over the stars. Cloned per-pane. Cool blue-grey tint.
+// ── X4 item-2 — the STARBOARD VIEWPORT glass: a GENUINELY TRANSPARENT cool space-tinted pane.
+//    Y2 TRUTH PASS (user: "the star-backdrop reads fake"). The old fix bolted an emissive
+//    star-quad BACKDROP just outboard of the glass so the window "always read as deep space" — but
+//    that is a FAKE window (a painted panel, not a view onto the real sky). DELETED. The panes are
+//    now genuinely transparent tinted glass: the camera-relative space DOME + its real (now-DENSIFIED,
+//    sky.ts) STARFIELD + the celestial planet show THROUGH the glass, exactly as a real window would.
+//    Depth discipline: depthWrite:false so the glass does NOT occlude the star Points behind it
+//    (the stars are additive, depthWrite-off, drawn before the transparent glass — with the glass
+//    also not writing depth, they composite through cleanly). A faint cool tint + gloss keeps the
+//    pane readable (edge glints, a whisper of reflection) without hiding the stars. Cloned per-pane.
 function _makeViewportGlass(): THREE.MeshStandardMaterial {
   return new THREE.MeshStandardMaterial({
-    color: 0x2a3d4d, roughness: 0.08, metalness: 0.0,
-    emissive: 0x0c1826, emissiveIntensity: 0.30,
-    transparent: true, opacity: 0.20, side: THREE.DoubleSide,
+    color: 0x3a5468, roughness: 0.10, metalness: 0.0,
+    // a faint self-lit tint so the pane never reads as pure invisible void (a hint it is glass),
+    // but far dimmer than the old 0.30 so it doesn't wash out the real stars behind it.
+    emissive: 0x0a141e, emissiveIntensity: 0.10,
+    transparent: true, opacity: 0.14, side: THREE.DoubleSide,
+    depthWrite: false,   // Y2 — do NOT occlude the real star Points / sky dome behind the glass
   });
 }
 const _viewportGlassMats: THREE.MeshStandardMaterial[] = [];
-// ── FIX PASS — the STAR-SPECKLE BACKDROP behind the viewport glass. A near-black deep-space panel
-//    (unlit, so it stays pure black regardless of cabin lighting) speckled with many small emissive
-//    star quads at graded brightness. Three brightness tiers (faint / mid / bright) so the field
-//    reads as REAL varied stars, not a uniform dot-grid. A single faint cool limb-glow band gives a
-//    "planet edge in the deep" space cue. All unlit MeshBasic → the window reads at a glance even
-//    when the corridor is dim or the sky dome faces the wrong way. Restrained star count (deep
-//    space). These are module-scope shared mats (one draw family); freed via _buildMats at dispose.
-const _vpVoid = new THREE.MeshBasicMaterial({ color: 0x080b14 });            // the deep-space backdrop (a hair blue → reads as space, not wall)
-const _vpStarDim = new THREE.MeshBasicMaterial({ color: 0xaeb9cc });          // faint distant stars
-const _vpStarMid = new THREE.MeshBasicMaterial({ color: 0xdfe7f2 });          // mid stars
-const _vpStarHot = new THREE.MeshBasicMaterial({ color: 0xffffff });          // a few bright near stars
-const _vpLimb = new THREE.MeshBasicMaterial({ color: 0x3a5f7d, transparent: true, opacity: 0.6 });  // a faint planet-limb glow band
 
 /** X4 item-2 — build the ONE LONG STARBOARD VIEWPORT STRIP: a framed rectangular band of sealed glass
  *  in the +X corridor wall (the wall is cut over the band in buildCorridor; the collider stays solid).
@@ -3731,60 +3785,12 @@ function buildViewportStrip(group: THREE.Group): void {
   const xIn = VP_WALL_X - 0.03;              // glass sits just inboard of the wall plane
   const vpLo = VP_CY - VP_HH, vpHi = VP_CY + VP_HH;
   const zc = (VP_Z0 + VP_Z1) / 2, len = VP_Z1 - VP_Z0;
-  // ── FIX PASS (SEV1) — the DEEP-SPACE STAR BACKDROP, built OUTBOARD of the glass so the strip
-  //    ALWAYS reads as a window on space (not black wall panels), regardless of the sky dome's planet
-  //    azimuth. A near-black void panel spanning the whole band + a deterministic field of many small
-  //    emissive star quads at three brightness tiers + one faint cool limb-glow band low in the frame.
-  // The backdrop (void + stars) lives in its OWN noMerge sub-group: mergeStaticByMaterial batches
-  //   opaque shared-material meshes by material UUID and adds the merged mesh to the SHIP ROOT — which
-  //   hoisted these tiny emissive star quads out of the viewport frame + broke the window read (the
-  //   round-1/2 "still black panels" bug). Tagging the subtree noMerge keeps them as-authored, exactly
-  //   inboard-facing behind the glass, at a trivial mesh cost (~dozens of quads).
-  const bg = new THREE.Group();
-  bg.userData.noMerge = true;
-  v.add(bg);
-  const xVoid = VP_WALL_X + 0.10;              // the void panel sits ~0.13m OUTBOARD of the glass (a shallow depth read)
-  const back = _box(0.02, VP_HH * 2 + 0.02, len + 0.02, _vpVoid);
-  back.position.set(xVoid, VP_CY, zc);
-  bg.add(back);
-  // a faint cool limb-glow band low in the band (a distant planet edge — a space cue, kept dim)
-  const limb = _box(0.015, 0.22, len - 0.4, _vpLimb);
-  limb.position.set(xVoid - 0.006, VP_CY - VP_HH + 0.24, zc);
-  bg.add(limb);
-  // the STAR FIELD — deterministic (a cheap hash lattice, NO RNG budget): march a fine grid across
-  //   the band and place a small star quad at ~40% of cells, sizing/brightness by the hash so the
-  //   field reads varied (faint field + occasional bright near-stars). Stars face the corridor (−X)
-  //   and sit a hair proud of the void so they're crisp points, not merged into the black.
-  const _hash = (a: number, b: number): number => {
-    const s = Math.sin(a * 127.1 + b * 311.7) * 43758.5453;
-    return s - Math.floor(s);
-  };
-  const starZ0 = VP_Z0 + 0.12, starZ1 = VP_Z1 - 0.12;
-  const starY0 = VP_CY - VP_HH + 0.10, starY1 = VP_CY + VP_HH - 0.08;
-  const nZ = 30, nY = 8;                       // lattice density (→ ~dozens of stars after the gate)
-  for (let iz = 0; iz < nZ; iz++) {
-    for (let iy = 0; iy < nY; iy++) {
-      const h = _hash(iz + 1, iy + 1);
-      if (h < 0.60) continue;                  // ~40% of cells get a star (restrained — deep space)
-      const h2 = _hash(iz * 2.3 + 5.1, iy * 1.7 + 2.9);
-      const h3 = _hash(iz * 0.7 + 9.3, iy * 3.1 + 4.4);
-      // jitter within the cell so the field isn't a visible grid
-      const jz = (h2 - 0.5) * ((starZ1 - starZ0) / nZ) * 0.9;
-      const jy = (h3 - 0.5) * ((starY1 - starY0) / nY) * 0.9;
-      const sz = starZ0 + (iz + 0.5) * (starZ1 - starZ0) / nZ + jz;
-      const sy = starY0 + (iy + 0.5) * (starY1 - starY0) / nY + jy;
-      // brightness tier + size by hash. Sizes tuned so stars read as crisp POINTS through the glass
-      //   from ~2m (round-3's 2.4-5cm quads read as blocky squares — cheapened it); most are fine
-      //   faint points, a few brighter mid-stars, a rare bright near-star. Deep space, not squares.
-      let mat = _vpStarDim, r = 0.016;
-      if (h > 0.93) { mat = _vpStarHot; r = 0.032; }
-      else if (h > 0.80) { mat = _vpStarMid; r = 0.023; }
-      const star = _box(0.012, r, r, mat);     // a small emissive quad facing −X (into the corridor)
-      star.position.set(xVoid - 0.03, sy, sz);  // stand well proud of the void → crisp, no z-fight
-      bg.add(star);
-    }
-  }
-  // ── the GLASS panes (split by mullions into a run of long panes) — sealed, showing the star backdrop.
+  // Y2 TRUTH PASS — the fake emissive star-quad backdrop (a painted "space" panel outboard of the
+  //   glass) is DELETED. The panes are genuinely transparent now (see _makeViewportGlass), so the
+  //   REAL camera-relative sky dome + the (densified) starfield + the planet show THROUGH the glass —
+  //   a true window onto space. NOTHING is built outboard of the glass; the corridor +X wall is cut
+  //   over the band (buildCorridor) and there is no exterior hull there, so the view is clear sky.
+  // ── the GLASS panes (split by mullions into a run of long panes) — showing the REAL space sky.
   const paneN = 4;
   const paneGap = 0.06;                       // mullion width between panes
   const paneW = (len - paneGap * (paneN + 1)) / paneN;
@@ -4231,6 +4237,7 @@ export function disposeShipScene(ctx: GameContext): void {
   _corrRedLight2 = null;
   _bayGroup = null;         // R5c — the docked-pod bay group (geometry freed via _disposables + traverse)
   _bayDoorPivot = null;     // B1.a — the docked pod's front-door pivot
+  _bayPodYaw = 0;           // Y3.4 — reset the rotate-then-eject yaw (idempotent rebuild starts docked at 0)
   _bayGlowLight = null;     // R5c
   _qtrDoorLeaf = null;      // X4 — the crew-quarters sliding-door leaf
   _qtrLamp = null;          // X4 — the crew-quarters bunk lamp

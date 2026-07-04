@@ -130,6 +130,16 @@ const _engineChar = createRustedHullMaterial({
   baseColor: 0x241c16, rustHex: 0x140d08, bleachHex: 0x342820,
   streakIntensity: 0.3, wearAmplitude: 0.35, oxStrength: 0.5, oxHex: 0x6a3a1e, oxTopStrength: 0.4,
 });
+// Y1 (user steering #3, 2026-07-04) — the bell lathe is an OPEN single-sided shell → it read SEE-THROUGH
+//   from many angles (hollow/transparent nozzle). A DoubleSide clone of the bell metal renders the INNER
+//   skirt wall too, so the nozzle reads SOLID from every turntable angle. flatShading for the facet read.
+const _engineBellSolid = _engineBell.clone();
+_engineBellSolid.side = THREE.DoubleSide;
+_engineBellSolid.flatShading = true;
+// A dark matte inner-throat cap (closes the small combustion end so you can't see through the throat).
+const _engineThroatCap = new THREE.MeshLambertMaterial({ color: 0x1a120c, side: THREE.DoubleSide, flatShading: true });
+// Faceted-canopy glass (FLAT-shaded so each nose facet reads flat, per user steering #2). Module-scope.
+const _cockpitGlassFacet = (() => { const m = new THREE.MeshStandardMaterial({ color: 0x1a2632, roughness: 0.1, metalness: 0.6, emissive: 0x223a4a, emissiveIntensity: 1.1, flatShading: true }); return m; })();
 // Cockpit glass — a glossy dark-tinted canopy (a clear glass spec catch + a lit-from-
 // within bridge so the FRONT reads unmistakably as a cockpit you just fled).
 const _cockpitGlass = new THREE.MeshStandardMaterial({
@@ -146,7 +156,7 @@ const _navAmber = new THREE.MeshBasicMaterial({ color: 0xffb028, toneMapped: fal
 // Stencilled registration paint — a faded off-white hull number (basic, unlit).
 const _stencil = new THREE.MeshBasicMaterial({ color: 0xb4ad9e, toneMapped: false });
 // Warm cockpit interior glow plate (behind the glass — the lit bridge spill).
-const _cockpitGlow = new THREE.MeshBasicMaterial({ color: 0x6a5230, toneMapped: false });
+const _cockpitGlow = new THREE.MeshBasicMaterial({ color: 0x9c7a44, toneMapped: false });
 // Engine-throat EMBER (a hot idle deep in the bells — pre-stages the T3.2 failure).
 const _engineEmber = new THREE.MeshBasicMaterial({ color: 0xc24a1e, toneMapped: false });
 
@@ -424,52 +434,69 @@ function buildCockpit(g: THREE.Group, noseX: number): void {
   //   reads; (3) the mullions/header/waist are DARK channel-steel (_hullSteel) not mid-grey (_hullFrame) →
   //   the frame lines silhouette as HIGH-CONTRAST dark bars against the lit glass at the eject distance;
   //   (4) a brighter, larger glow behind so the whole bridge reads as lit-and-occupied from afar.
-  const wsX = noseX - COCKPIT_LEN * 0.16;
-  const wsY = HULL_R * 1.28;
-  const paneH = HULL_R * 1.4;
-  const halfZ = HULL_R * 0.98;               // half the canopy span across the flank axis (±Z) — WIDE
-  // the bright warm glow plate behind the whole glazing (the lit bridge you just fled)
-  const glow = _box(0.06, HULL_R * 1.28, HULL_R * 1.9, _cockpitGlow);
-  glow.position.set(wsX - 0.16, wsY - 0.02, 0);
-  glow.rotation.z = 0.62;
+  // Y1 (2026-07-04, user steering #2): the exterior nose is a FACETED polyhedral greenhouse dome — FLAT
+  //   trapezoid glass panes joined by visible mullions that APPROXIMATE a dome, NOT a smooth curved
+  //   bubble. Same construction as the interior canopy (one structure, two views: the player sits inside
+  //   it, then sees it from outside at eject). Fewer/larger facets (eject distance), but each pane FLAT
+  //   with a crisp mullion edge → the silhouette breaks at flat-facet highlights, not a specular sweep.
+  const dr = HULL_R * 1.15;
+  const domeC = new THREE.Vector3(noseX - COCKPIT_LEN * 0.28, HULL_R * 1.05, 0);
+  const flatZ = 1.12;                        // flank scale (a freighter greenhouse — a touch wider ±Z)
+  const crownH = dr * 0.72;                  // the dome apex height above the base ring
+  const NMER = 8;                            // meridians → 8 facets around (polyhedral, not round)
+  const RINGS = [0.0, 0.5, 0.86];            // base ring, mid ring, upper ring (apex above the top ring)
+  // a FACET NODE on the polyhedral dome at meridian i (0..NMER) × ring t. Elevation eases to the apex.
+  const domePt = (i: number, t: number, proud = 0): THREE.Vector3 => {
+    const az = (i / NMER) * Math.PI * 2;
+    const el = t * (Math.PI / 2);
+    const rr = (dr + proud) * Math.cos(el);
+    return new THREE.Vector3(domeC.x + rr * Math.cos(az), domeC.y + (crownH + proud) * Math.sin(el), domeC.z + rr * Math.sin(az) * flatZ);
+  };
+  const apex = new THREE.Vector3(domeC.x, domeC.y + crownH, domeC.z);
+  // the lit-bridge GLOW core inside the faceted dome (dark faceted frame silhouettes against it)
+  const glow = _sphere(dr * 0.8, _cockpitGlow, 8, 6);
+  glow.position.copy(domeC); glow.scale.set(1, 0.85, flatZ);
   g.add(glow);
-  // the FRONT face is 3 raked panes across (a wide hero centre + a flank each side), then two SIDE-WRAP
-  //   panes that toe aft around the house corners → the panoramic greenhouse. All share the 0.62 rake.
-  const cW = halfZ * 0.62;                    // half-width of the wide centre pane (the hero pane)
-  const centre = _box(0.11, paneH, cW * 2, _cockpitGlass);
-  centre.position.set(wsX, wsY, 0);
-  centre.rotation.z = 0.62;
-  g.add(centre);
-  for (const sz of [-1, 1]) {                 // the two front FLANK panes (between centre + the wrap)
-    const flank = _box(0.11, paneH * 0.98, halfZ * 0.42, _cockpitGlass);
-    flank.position.set(wsX + 0.03, wsY, sz * (cW + halfZ * 0.21));
-    flank.rotation.z = 0.62;
-    g.add(flank);
-  }
-  for (const sz of [-1, 1]) {                 // the two aft-WRAPPED side panes (curl around the corner)
-    const side = _box(0.11, paneH * 0.9, halfZ * 0.62, _cockpitGlass);
-    side.position.set(wsX + 0.14, wsY, sz * (halfZ * 1.04));
-    side.rotation.set(0, sz * 0.7, 0.62);     // yaw the pane back around the corner (the wrap)
-    g.add(side);
-  }
-  // structural MULLIONS on the pane splits — DARK steel for high contrast at distance. Splits: centre↔flank
-  //   (u≈±cW) and flank↔side-wrap (u≈±(cW+halfZ*0.42)), + a header cap + a waist band across the whole span.
-  for (const sz of [-1, 1]) {
-    for (const zAt of [cW, cW + halfZ * 0.42] as const) {
-      const mull = _box(0.15, paneH * 1.04, 0.11, _hullSteel);
-      mull.position.set(wsX + 0.05, wsY, sz * zAt);
-      mull.rotation.z = 0.62;
-      g.add(mull);
+  // FLAT GLASS PANES — a quad per (meridian, ring-band) + a triangle fan to the apex. flatShading via
+  //   a triangle-soup skin so each facet reads FLAT (a crisp per-facet highlight, no smooth curve).
+  const paneV: number[] = [];
+  const pushTri = (a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3): void => { paneV.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z); };
+  for (let i = 0; i < NMER; i++) {
+    for (let r = 0; r < RINGS.length - 1; r++) {
+      const a = domePt(i, RINGS[r]), b = domePt(i + 1, RINGS[r]), c = domePt(i, RINGS[r + 1]), d = domePt(i + 1, RINGS[r + 1]);
+      pushTri(a, c, b); pushTri(b, c, d);   // outward-facing (seen from outside)
     }
+    // the top band → apex triangle
+    const e = domePt(i, RINGS[RINGS.length - 1]), f = domePt(i + 1, RINGS[RINGS.length - 1]);
+    pushTri(e, apex, f);
   }
-  const hMull = _box(0.16, 0.12, HULL_R * 1.95, _hullSteel);   // waist band across the whole canopy (dark)
-  hMull.position.set(wsX + 0.06, wsY, 0);
-  hMull.rotation.z = 0.62;
-  g.add(hMull);
-  const headMull = _box(0.16, 0.13, HULL_R * 2.0, _hullSteel); // header cap along the canopy top (dark)
-  headMull.position.set(wsX - Math.sin(0.62) * paneH * 0.5 + 0.02, wsY + Math.cos(0.62) * paneH * 0.5, 0);
-  headMull.rotation.z = 0.62;
-  g.add(headMull);
+  const paneGeo = new THREE.BufferGeometry();
+  paneGeo.setAttribute('position', new THREE.Float32BufferAttribute(paneV, 3));
+  paneGeo.computeVertexNormals();
+  _disposables.push(paneGeo);
+  g.add(new THREE.Mesh(paneGeo, _cockpitGlassFacet));
+  // MULLIONS on every facet edge — box beams (dark steel) along the meridian ribs + the ring bands, so
+  //   the faceted structure reads exactly like the interior skeleton (flat panes in a metal frame).
+  const noseMull = (p: THREE.Vector3, q: THREE.Vector3, w: number): void => {
+    const mid = p.clone().add(q).multiplyScalar(0.5);
+    const bar = _box(w, p.distanceTo(q) + 0.04, w * 1.1, _hullSteel);
+    bar.position.copy(mid);
+    bar.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), q.clone().sub(p).normalize());
+    g.add(bar);
+  };
+  for (let i = 0; i < NMER; i++) {
+    // meridian rib: base → mid → top → apex (chorded, following the facet edges)
+    let prev = domePt(i, RINGS[0], 0.05);
+    for (let r = 1; r < RINGS.length; r++) { const n = domePt(i, RINGS[r], 0.05); noseMull(prev, n, 0.1); prev = n; }
+    noseMull(prev, apex, 0.09);
+  }
+  for (let r = 0; r < RINGS.length; r++) {   // ring bands (segmented per meridian → jointed frame)
+    for (let i = 0; i < NMER; i++) noseMull(domePt(i, RINGS[r], 0.05), domePt(i + 1, RINGS[r], 0.05), r === 0 ? 0.11 : 0.09);
+  }
+  // a crown node boss at the apex (matches the interior crown node)
+  const crownBoss = _cyl(0.13, 0.15, 0.15, 8, _hullSteel);
+  crownBoss.position.copy(apex);
+  g.add(crownBoss);
   // a brow visor over the windscreen top (the canopy header/roofline cap).
   // SEV2 floating-plate fix (2026-07-04): the brow sat at y=HULL_R*1.80 (≈2.43) — a wide flat grey
   //   plate hanging ~0.1m ABOVE the bridge-house roof (top ≈HULL_R*1.15 + HULL_R*1.05/2 ≈2.26), so
@@ -563,6 +590,48 @@ function buildEngineCluster(g: THREE.Group, tailX: number): void {
     [-HULL_R * 0.95, HULL_R * 0.7, false],         // lower-near
     [HULL_R * 0.4, -HULL_R * 0.85, false],         // upper-far (depth)
   ];
+  // 3.b.0 THRUST STRUCTURE (Y1 lint fix 2026-07-04 — the engine bells were FLOATING behind the hull with
+  //   a visible gap: model-stage flagged 7 floaters at x≈−7..−8.7). Root the whole nozzle cluster to the
+  //   reactor block: a THRUST-MOUNT PLATE across the block's aft face + a short PYLON stub from the plate
+  //   to each bell throat, so every bell physically enters a mount (connected to the main component).
+  // a DEEP thrust plate/bulkhead spanning from inside the block AFT past the bell throats (~aftFace−0.4),
+  //   so it physically envelops every nozzle throat (their forward ends sit ~aftFace−0.24) → all bells
+  //   share the plate's connected component (the 0-floater requirement), and it reads as a real thrust
+  //   bulkhead the engines bolt through.
+  const thrustPlate = _box(0.9, HULL_R * 2.7, HULL_R * 2.7, _hullSteel);
+  thrustPlate.position.set(aftFace - 0.1, 0, 0);   // spans ~[-7.55, -6.65] → straddles block aft face + bell throats
+  g.add(thrustPlate);
+  for (const [by, bz, big] of bells) {
+    const bellLen = big ? 2.3 : 1.7;
+    const mouthR = big ? 1.15 : 0.72;
+    const mouthX = aftFace - bellLen;
+    // MOUNT STRUTS — two OFF-AXIS gimbal struts per bell from the thrust plate out to the bell's OUTER
+    //   skirt (NOT a rod down the throat — that would read through the mouth). Each strut runs from the
+    //   plate (aftFace) to a point on the mouth rim, so it overlaps the bell AABB → the bell is part of
+    //   the main connected component (0-floater lint), and reads as real engine mounting hardware.
+    void mouthX;
+    const skirtX = aftFace - bellLen * 0.7;   // ~the bell's mid-skirt in world X (where its AABB sits)
+    // a central AXIAL mount spindle from the plate into the bell's core (hidden by the throat cap + ember
+    //   from the mouth view) — guarantees the bell shares the plate's connected component. Fat + short.
+    {
+      // span from the plate all the way to PAST the mouth rim (skirtX − bellLen*0.35) so the axial
+      //   spindle bridges the throat, skirt, AND the mouth-rim assembly into one connected component.
+      const s0 = aftFace + 0.15, s1 = skirtX - bellLen * 0.35, sl = s0 - s1;
+      const spindle = _cyl(0.13, 0.16, sl, 8, _hullSteel);
+      spindle.rotation.z = Math.PI / 2;
+      spindle.position.set((s0 + s1) / 2, by, bz);
+      g.add(spindle);
+    }
+    for (const [oy, oz] of [[mouthR * 0.55, mouthR * 0.28], [-mouthR * 0.5, -mouthR * 0.34]] as const) {
+      const a = new THREE.Vector3(aftFace + 0.1, by + oy * 0.35, bz + oz * 0.35);   // on the plate
+      const b = new THREE.Vector3(skirtX, by + oy, bz + oz);                         // on the outer skirt (inside the bell AABB)
+      const mid = a.clone().add(b).multiplyScalar(0.5);
+      const strut = _cyl(0.075, 0.11, a.distanceTo(b) + 0.1, 8, _hullSteel);
+      strut.position.copy(mid);
+      strut.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize());
+      g.add(strut);
+    }
+  }
   for (const [by, bz, big] of bells) {
     const mouthR = big ? 1.15 : 0.72;
     const throatR = mouthR * 0.28;
@@ -576,11 +645,17 @@ function buildEngineCluster(g: THREE.Group, tailX: number): void {
       const r = throatR + (mouthR - throatR) * Math.pow(t, 1.85);   // tight throat → exp flare
       nzProf.push(new THREE.Vector2(Math.max(0.04, r), t * bellLen));
     }
-    const bell = _lathe(nzProf, SEG, _engineBell);
+    const bell = _lathe(nzProf, SEG, _engineBellSolid);   // DoubleSide → the inner skirt renders (not see-through)
     bell.rotation.z = -Math.PI / 2;     // lathe profile (throat→mouth) runs toward −X (aft)
     bell.position.set(throatX, by, bz);
     g.add(bell);
-    // charred throat plug at the combustion end
+    // THROAT CAP — a solid disc closing the small combustion end so nothing reads THROUGH the throat
+    //   (the see-through fix: an open lathe has no cap at the narrow end). Sits just inside the throat.
+    const cap = _cyl(throatR * 1.05, throatR * 1.05, 0.05, SEG, _engineThroatCap);
+    cap.rotation.z = Math.PI / 2;
+    cap.position.set(throatX - 0.03, by, bz);
+    g.add(cap);
+    // charred throat plug at the combustion end (a solid soot mass over the cap)
     const throat = _sphere(throatR * 1.6, _engineChar, 10, 6);
     throat.scale.x = 0.6;
     throat.position.set(throatX + 0.1, by, bz);
@@ -601,15 +676,16 @@ function buildEngineCluster(g: THREE.Group, tailX: number): void {
       new THREE.Vector2(mouthR + 0.14, 0.14),
       new THREE.Vector2(mouthR + 0.15, 0.26),
     ];
-    const rim = _lathe(lipProf, SEG, _engineBell);
+    const rim = _lathe(lipProf, SEG, _engineBellSolid);   // DoubleSide → not see-through
     rim.rotation.z = Math.PI / 2;          // profile runs toward −X (aft), flaring out at the mouth
     rim.position.set(mouthX + 0.02, by, bz);
     g.add(rim);
-    // a bright heat-tarnished bead on the very rim edge (a slim frame-steel highlight so the lip catches a
-    //   glint at distance without reading as a floating pale hoop — it sits ON the dark lip, tied to it)
-    const bead = _cyl(mouthR + 0.16, mouthR + 0.16, 0.05, SEG, _hullFrame, true);
+    // a heat-tarnished bead on the rim edge (a slim highlight). Y1 lint fix: pulled INWARD to
+    //   mouthX+0.06 so it sits ON the mouth (overlaps the bell AABB) — it was at mouthX−0.24,
+    //   sticking past the mouth as a disconnected floating ring.
+    const bead = _cyl(mouthR + 0.15, mouthR + 0.15, 0.05, SEG, _hullFrame);
     bead.rotation.z = Math.PI / 2;
-    bead.position.set(mouthX - 0.24, by, bz);
+    bead.position.set(mouthX + 0.06, by, bz);
     g.add(bead);
     // turbopump greeble above the throat
     const pump = _box(0.5, 0.5, 0.5, _hullFrame);

@@ -206,7 +206,11 @@ void main() {
   // has body (the soft haze comes from the fragment soft-disc widening).
   float sizePulse = mix(1.0 - uSizeDepth, 1.0 + uSizeDepth, tw);
   float bandSize = 1.0 + uSpace * band * 0.85;
-  gl_PointSize = uBaseSize * size * sizePulse * bandSize;
+  // Y2 — a modest GLOBAL size lift in orbit (uSpace-gated) so the DENSIFIED faint-bed stars read as
+  // crisp points through the corridor viewport / cockpit dome instead of dropping below a pixel. The
+  // desert night sky (uSpace=0) is byte-unchanged.
+  float spaceSize = 1.0 + uSpace * 0.55;
+  gl_PointSize = uBaseSize * size * sizePulse * bandSize * spaceSize;
   gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
 }
 `;
@@ -658,10 +662,17 @@ export function buildStarGeometry(): THREE.BufferGeometry {
     // filling between these brightened stars (the stars themselves stay uniform).
     const dist = Math.abs(x * nx + y * ny + z * nz);
     band[i] = Math.max(0, 1 - dist / 0.34);
-    // Brightness jitter — 80% are small/dim, 20% noticeably brighter. This is
-    // now a SIZE MULTIPLIER (× uBaseSize in the shader), centered near ~0.8–1.4
-    // for the common stars and ~1.4–2.4 for the bright ones.
-    sizes[i] = Math.random() < 0.2 ? 1.4 + Math.random() * 1.0 : 0.55 + Math.random() * 0.45;
+    // Y2 — a WIDER magnitude SPREAD (a real brightness distribution) so the densified
+    // field reads with depth — a deep bed of faint pinpricks, a scatter of mid stars,
+    // and a rare bright near-star — instead of a uniform wall of equal dots. This is a
+    // SIZE MULTIPLIER (× uBaseSize in the shader). Tiers: ~64% very-faint (0.40–0.78),
+    // ~28% mid (0.85–1.55), ~8% bright (1.6–2.7). The faint bed is what fills every
+    // azimuth of the orbit dome without reading as noise; the bright scatter gives the
+    // field structure. (The size-pulse/twinkle in the shader still applies on top.)
+    const mag = Math.random();
+    if (mag < 0.64) sizes[i] = 0.40 + Math.random() * 0.38;         // deep faint bed
+    else if (mag < 0.92) sizes[i] = 0.85 + Math.random() * 0.70;    // mid stars
+    else sizes[i] = 1.60 + Math.random() * 1.10;                    // rare bright near-stars
     // Random starting phase across a full period.
     phases[i] = Math.random() * Math.PI * 2;
   }

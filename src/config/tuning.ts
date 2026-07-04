@@ -652,7 +652,7 @@ export const Tuning = {
   // Session V — moon, stars, shooting stars, distant planet
   MOON_DISC_SIZE: 32,                 // larger crescent (was 16 full disc)
   MOON_DISC_DISTANCE: 400,
-  STAR_COUNT: 800,
+  STAR_COUNT: 2400,                   // Y2 — DENSIFIED (was 800): the corridor viewport now shows the REAL space dome (the fake star-quad backdrop was deleted), so NO azimuth may read as empty black. A dense field fills every direction; also enriches the cockpit dome + the desert night sky. Draw cost is one Points call regardless of count.
   STAR_SPHERE_RADIUS: 460,            // just inside sky sphere
   SHOOTING_STAR_POOL: 4,
   SHOOTING_STAR_MIN_INTERVAL: 4,      // seconds, scaled inversely with nightMix
