@@ -56,7 +56,7 @@ import { updatePlayer } from './player/controller.ts';
 import { updateEscapePodIntro, startEscapePodIntro, introActive } from './world/escapePodIntro/sequence.ts';   // escape-pod intro (FEATURES.escapePodIntro) — T0.1 wires the new-game branch
 import { updatePodTutorial, resumePodTutorialAfterRestore } from './world/escapePodIntro/podTutorial.ts';   // T4.3 — the post-handoff craft→salvage→chute-pop tutorial (self-guarded no-op unless running); resumePodTutorialAfterRestore — re-arm the payoff after a Continue re-built the pod
 import { updateChutePop, applyPendingPodCrashRestore } from './world/escapePodIntro/podScene.ts';   // T4.3 — the chute-pop inflate one-shot (no-op unless the chute is popping; driven always so dev/rig-shot also animates); applyPendingPodCrashRestore — re-build the ONE walk-in pod on Continue
-import { setGameHudHidden, hideIntroLoading, introLoadingAwaitLaunchClick } from './world/escapePodIntro/introHud.ts';   // escape-pod intro — HUD-hide + the loading screen's click-to-launch recovery (the pointer-lock gesture-expiry freeze fix)
+import { setGameHudHidden, hideIntroLoading, introLoadingAwaitLaunchClick, showIntroLoading, setIntroLoadingBackdrop } from './world/escapePodIntro/introHud.ts';   // escape-pod intro — HUD-hide + the loading screen's click-to-launch recovery (the pointer-lock gesture-expiry freeze fix) + Y6 the frozen-menu backdrop (kills the desert flash)
 import { preloadIntro } from './world/escapePodIntro/introPreload.ts';   // PERF — build every intro scene + compile every shader UP FRONT behind the loading screen (kills the beat-entry freezes)
 import { FEATURES } from './config/features.ts';
 import { createShelterRegistry, updateShelter } from './shelter/shelterZones.ts';
@@ -844,6 +844,26 @@ const titleOverlay = createTitleOverlay(ctx, {
       //   the intro owns a clean view) so the loading screen sits over the game canvas the
       //   warm-up renders into; THEN preload; THEN start the cockpit beat — by which point
       //   every scene is prebuilt + every shader compiled (the beats just reuse them).
+      //
+      // Y6 (kill the desert flash): handoffToGame flips titleActive, so the very next
+      //   painted frame is the in-game DESERT SPAWN — which used to flash before the
+      //   loading overlay's 0.35s fade-in covered it. Freeze the menu's last frame
+      //   instead: render the title vista once explicitly (preserveDrawingBuffer is
+      //   false, so toDataURL is only valid in the same task as a render) and mount it
+      //   as the loading screen's opaque backdrop, shown INSTANTLY before the handoff.
+      //   The menu visual then persists under the loading bar for the whole preload
+      //   (the warm-up frames render behind it, invisible), stays up through the
+      //   READY — CLICK TO LAUNCH recovery state if that triggers, and the overlay
+      //   fades out (~350ms) directly onto the cockpit's first frame. A capture failure
+      //   falls back to the overlay's own fully-opaque gradient — no desert either way.
+      try {
+        three.renderer.render(title.scene, title.camera);
+        setIntroLoadingBackdrop(three.renderer.domElement.toDataURL('image/jpeg', 0.85));
+      } catch (e) {
+        console.warn('[introLoading] menu freeze-frame capture failed — plain backdrop:', e);
+        setIntroLoadingBackdrop(null);
+      }
+      showIntroLoading({ instant: true });   // cover the canvas BEFORE titleActive flips
       handoffToGame({ skipLock: true });   // skipLock: we lock EXPLICITLY on the next line instead
       // BUGFIX (the "loading finishes, game never starts" freeze): acquire the pointer lock
       //   NOW, while the New-Game click's user gesture is still fresh. The old flow locked
