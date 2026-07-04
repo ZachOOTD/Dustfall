@@ -739,11 +739,16 @@ function tickEnterPod(ctx: GameContext, dt: number): void {
     const dim = k < 0.5 ? (k / 0.5) : Math.max(0, 1 - (k - 0.5) / 0.5);
     setIntroBlack(dim * 0.9);
     if (!intro.scratch.swapped && k >= 0.5) {
-      ensureInPod(ctx);                // build the REAL ridden cabin (offset frame) + seat the player
-      // Frame CENTRED on the YELLOW eject control so the "Pull the eject lever" prompt POINTS at it
-      // (buckle-lesson: a control the prompt names must be in the framed view, not shoved to the edge).
-      // yaw 1.20 / pitch −0.20 lands the guarded T-handle at screen centre (probe-verified, unchanged).
-      faceControl(ctx, 1.20, -0.20);   // frame the YELLOW eject control dead-centre (the next cue points at it)
+      // X3b (user answer 2026-07-04: BAY UNTIL EJECT) — NO model swap here anymore. The player is
+      // seated in the BAY pod itself (X2a made it the real cabin, byte-identical) and stays IN THE
+      // SHIP until the eject actually fires; the swap to the offset ride frame now happens in
+      // tickShipExplode under the eject blast. Seat at the bay pod's seat (eye export → body y).
+      const eye = getPodBaySeatedEye();
+      seatPlayerAt(ctx, { x: eye.x, y: eye.y - ctx.player.eyeOffset, z: eye.z });
+      // Frame CENTRED on the YELLOW eject control ("Pull the eject lever" points at it). The bay
+      // pod's unified interior is yawed −π/2 (cabin −Z door → bay +X), so the ride frame's proven
+      // yaw 1.20 becomes 1.20 − π/2 here (same control, bay frame).
+      faceControl(ctx, 1.20 - Math.PI / 2, -0.20);
       intro.scratch.swapped = true;
     }
     if (k >= 1) {
@@ -789,7 +794,9 @@ function tickShipExplode(ctx: GameContext, dt: number): void {
     //    clamps releasing). The player, sealed in the cabin, FEELS it (a rising shudder + bay glow).
     playBoltShear();                 // T5.3 — the explosive bolts SHEAR (a sharp bright crack + tearing metal), layered before the heave
     playEjectThunk();                // T5.1 — the pneumatic eject heave under the shear (the pod fires clear)
-    faceControl(ctx, 0, 0);          // upright, facing the window (−Z) — the pod stays LEVEL (no tumble)
+    // X3b — the player is still seated in the BAY pod (bay-until-eject): face its +X door, level.
+    // The swap to the offset ride frame (door at −Z, yaw 0) happens at the release end, under the flash.
+    faceControl(ctx, -Math.PI / 2, 0);
     intro.mode = 'seated';
     intro.scratch.init = true;
     intro.scratch.phase = 'release';
@@ -808,6 +815,16 @@ function tickShipExplode(ctx: GameContext, dt: number): void {
     const rk = Math.min(1, d / EJECT_RELEASE_DUR);
     releasePodFromBay(rk);           // the physical detach in the bay (bolts fire, cradle releases, pod tears free)
     setTumbleLight(0.3 + rk * 0.2);  // the bay glow rising into the cabin
+    // X3b — the player RIDES the bay pod through the release now; the dying ship's red-alert keeps
+    // strobing outside the porthole until the ship is disposed (no frozen mid-pulse light).
+    setShipAlert(2, 0.5 + 0.5 * Math.sin(d * 11.0));
+    if (rk >= 1) {
+      // X3b — THE SWAP, under the eject blast: a hot flash covers relocating the seated player from
+      // the bay pod (ship frame, door +X) into the offset ride cabin (door −Z). Same cabin (X2a),
+      // same door in view before/after — the flash + 90° reframe read as the pod being FLUNG clear.
+      flashScreen(0xffd9b0, 0.5);
+      ensureInPod(ctx);              // build/reveal the ride cabin + seat the player (faces −Z = the door)
+    }
     if (rk >= 1) {
       // ── PHASE B: the pod is CLEAR — dispose the interior ship (+ bay), show the ORBITAL VISTA
       //    (planet + stars) through the window, and stage the HERO HAULER out in that view (−Z,
