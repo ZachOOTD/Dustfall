@@ -1,53 +1,59 @@
-# Next session — MID ship+sequence OVERHAUL (session handoff 2026-07-03)
+# Next session — the X-queue OVERNIGHT batch (W2 walk-test feedback, 2026-07-04 pre-bed)
 
-The prior (very long) session ended mid-overhaul by user choice. Boot from THIS file + the
-campaign log + `docs/campaign/steering-archive.md` (the 2026-07-03 entries hold every spec,
-verbatim-derived from the user's playtests). Branch `campaign/escape-pod-intro`; everything
-committed through `aa77968` is pushed. **Standing rule 9 (CLAUDE.md): collision always
-matches the models — update both in the same change; prove with motion probes.**
+The user walk-tested W2 and left a large feedback batch + 4 clarifying answers (steering-archive
+2026-07-04 — read it verbatim first). Branch `campaign/escape-pod-intro`; W2 shipped as `65bb290`.
+Overnight autonomous execution approved: "plan it all perfectly... wake up to a lot of well done
+progress." Quality bar: very high; verify thoroughly; adversarial gates on hero visuals.
+**Standing rule 9: collision matches models, same change, motion-proven.**
 
-## The work queue (the user's playtest feedback — specs in steering-archive 2026-07-03)
-- ✅ **W1** (`aa77968`) — cockpit WOW canopy (58% glass, panoramic), console lowered, side
-  panels deleted, pre-taper purge, chair collider deleted + roam-proven.
-- ✅ **W4** (`9a8f7e7`) — planet ballooning truly fixed (anchor at 1000m — the old fix held
-  but 400m had real parallax; on-screen drift now −1.1% over the walk).
-- ✅ **W6** (committed) — free-look seated camera; ONE continuous recede-while-exploding ship shot;
-  the 2-phase slower planet approach (DESCENT_DURATION 18→22s); the impact eye-in-cabin fix (proven
-  3519 frames); the ZERO-SHIFT handoff (exposure lift DELETED — constant 1.05; fog normalized during
-  the fall; the clock backward-snap fixed; proven by the new zero-shift-handoff gate); the door-slant
-  hinge fix. NEW gates: impact-eye, zero-shift-handoff, door-check. Walk-test flags: the merged shot
-  rhythm, approach pacing, free-look feel.
-- ✅ **W2 — the canonical pod + airlock bay** (committed this session): pod TALLER (2.65→3.40m,
-  h/d 0.92→1.18); ONE unified door/porthole constant set (FDOOR/CPOD divergence deleted; porthole
-  R 0.44→0.33, bezel ≤0.41, ≥0.10m margins, no hull clip); `buildCanonicalPodExterior` returns the
-  FULL modeled interior behind genuinely see-through glass (the `_cpodCabinGlow` fake killed); pod
-  materials retuned into the ship's worn-gunmetal family (incl. the scorch-fade `cAlu` offender +
-  the cabin-hatch door set + a transparent porthole rim well — the open door reads THROUGH now).
-  NEW BAY: operational sliding blast-door (`setBayAirlockDoor`, seal collider opens with it) →
-  round ribbed gasketed collar (de-telescoped after an adversarial-gate FAIL) → the pod's own door,
-  pod body mostly OUTSIDE the hull w/ exterior mating hardware. Boarding flow: new `airlock`/`collar`
-  phases (player-gated E-opens), both doors auto-reseal at launch prep; smoke driver updated;
-  `__game.setBayAirlockDoor` exposed. RIG ASPECT FIX: `page.screenshot` was resampling non-900×1100
-  buffers into the fixed viewport — every such rig shot was stretched (the "oval porthole" false
-  frame); the capture now snaps the viewport to the canvas buffer. Flee-cam pulled off the +X wall
-  (grazing-sliver false positives, D165 class). Gates: verify:all · smoke-intro beats:12 ·
-  pod-walkin · pod-walkout · airlock-motion · smoke-pod-persistence all PASS. Adversarial gate run
-  (3 critics + 1 confirm): all cross-confirmed SEV1s fixed. WALK-TEST residuals: the collar
-  jamb-stack read at the still camera (motion parallax should resolve it), the rig-only exterior
-  mating legibility (no player vantage sees it), the hatch close-up's warm beacon wash.
-- ▶ **W3** — grey bolts on walls/floor rotated wrong (undersides exposed — rotation must
-  match the surface; note the ship is static-merged, fix the SOURCE builders); the corridor-
-  entrance pipes end abruptly (route into the wall/an archway); more engine-room detail.
-- ▶ **W5** — CREW QUARTERS: opposite side of the hallway from the pod, toward (not at) the
-  engine room; sliding doors + a clean entranceway (clear blockers in front).
-- ▶ **THE WRAP** (after all): a SHIP-WIDE COLLISION AUDIT (rule 9 — every collider vs the
-  visible geometry, motion-proven) → full gate suite → rebuild `npm run preview:intro`
-  (serve via the `dustfall-intro-preview` launch.json entry, port 4173) → kill stray test
-  servers → clean `git status` → ONE "everything's done" summary to the user.
+## User's clarifying answers (2026-07-04)
+1. **Canopy scope = FULL REBUILD** — tear down most of the cockpit front section, build the
+   multi-pane wraparound canopy fresh (keep chair, console [redesign allowed], arched ribs);
+   update the exterior hauler nose ROUGHLY to match (the eject shot).
+2. **Eject view = BAY UNTIL EJECT** — seated+sealed you see the airlock/bay through the porthole
+   (red-alert still flashing); the frame swap happens under the eject blast/tumble.
+3. **Crew quarters = LIVED-IN BASICS** — bunk, locker, small desk/shelf, a few personal props.
+4. **Hallway windows = ONE LONG VIEWPORT STRIP** on the right/starboard wall.
 
-## Contracts + tools (unchanged)
-Gates: `verify:all` · `smoke-intro` (beats:12) · `pod-walkin`/`pod-walkout` ·
-`smoke-pod-persistence` · `bench:intro` (no hitch regression). Behind
-`FEATURES.escapePodIntro`; no SAVE_VERSION bumps; the live master untouched. Modeler agents
-for hero geometry; verify claims with own eyes + motion probes; commit+push per unit.
-The architecture map: `docs/architecture-escape-pod-intro.md`.
+## The X-queue (waves = file-ownership; parallel within a wave)
+
+### WAVE 1 (parallel: shipScene ∥ podScene)
+- ▶ **X1 — COCKPIT FULL REBUILD** (shipScene cockpit region + haulerScene nose; modeler +
+  research digest + adversarial gate): multi-pane ANGLED glass canopy wrapping partial
+  top+left+right (user reference: framed panoramic, Millennium-Falcon-like; flat front sheet =
+  the complaint); keep chair/console/arches; REMOVE side-wall pipes + the light-grey/dark-grey
+  long rectangles (back wall→glass); REMOVE the yellow box consoles on both cockpit walls; fix
+  the FRONT ribs' orange light-strip placement (back ribs OK); fix cockpit bolt orientations;
+  colliders same-change; hauler nose roughly matched.
+- ▶ **X2a — THE ONE POD, FOR REAL** (podScene; modeler + adversarial gate) — the #1 ask, 3rd
+  repeat: the bay pod must BE the real cabin — full real interior (not the canonical "peek"),
+  NO space visible from inside (seal the exterior-skin/wall gaps); INTERIOR DETAIL REDESIGN
+  (levers/console/buttons realistic); door EXACTLY flush in every sealed state (still ajar
+  pre-eject); hunt+kill the PALE/BRIGHT pod that appears at eject (all phases, one tone);
+  LANDED POD: same door as the ship one (it reads different), remove the metal sheet blocking
+  the landed doorway, remove the sand streaks + mound, WALK-BACK-IN works (motion gate).
+### WAVE 2 (after X1 frees shipScene; parallel: shipScene ∥ sequence)
+- ▶ **X4 — CORRIDOR: QUARTERS + VIEWPORT + MISC** (shipScene; modeler + gate): crew quarters
+  room LEFT side toward the engine room (sliding door, lived-in basics per answer 3); the long
+  right-wall viewport strip (answer 4); seal the hull GAPS beside the pod-bay entrance (space
+  visible!); airlock detail pass; bay-pod COLLISION (player can't pass through its hull);
+  W3 leftovers: bolt orientation ship-wide, corridor-entrance pipe ends routed into the
+  wall/arch, engine-room detail. Colliders + motion probes.
+- ▶ **X3 — FLOW + STATE** (sequence; main loop): board straight after the engine check (no
+  cockpit detour to arm the pod door); red-alert flashing PERSISTS until seated + LAUNCH;
+  pre-eject seated view = the BAY through the porthole, frame swap at eject under the blast
+  (answer 2 — move the ensureInPod swap from the seal phase to the eject fire); smoke driver +
+  gates updated.
+### WAVE 3
+- ▶ **X6 — THE WRAP**: ship-wide collision audit (rule 9, motion-proven) → full gate suite
+  (verify:all · smoke-intro · pod-walkin/out · airlock-motion · persistence · bench:intro
+  [NOTE: bench takes ~30 min wall-clock under swiftshader — that is NORMAL, do not kill it]) →
+  adversarial visual gates on X1/X2a/X4 → rebuild `npm run build:intro` + restart the
+  `dustfall-intro-preview` server (port 4173) → kill stray rig dev servers → clean `git status`
+  → ONE wake-up summary.
+
+## Contracts + tools (unchanged from W2)
+Commit+push per unit. Modeler agents own one file each; sequence.ts is main-loop-owned.
+Rig ports: 5191/5192 split when parallel. The rig aspect fix + flee-cam fix are in (65bb290) —
+shots are true now. Adversarial gate: 3 lenses + confirm pass; own-eyes verify every fix on the
+finding shot. `docs/architecture-escape-pod-intro.md` = the map.
