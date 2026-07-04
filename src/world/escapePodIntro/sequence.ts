@@ -542,7 +542,7 @@ function tickCheckEngines(ctx: GameContext): void {
   if (!intro.scratch.init) {
     intro.mode = 'walk';
     setCockpitAlert(1);   // E2 escalation — the bridge console flips ORBIT ACHIEVED → CORE TEMP CRITICAL (the diegetic reason to check)
-    showIntroPrompt('⚠ CORE TEMP CRITICAL — check the engines (aft)');
+    showIntroPrompt('CORE TEMP CRITICAL — check the engines (aft)');
     intro.scratch.init = true;
   }
   if (ctx.player.body.body.translation().z > SHIP_CORRIDOR_ENTER_Z) advanceBeat(ctx);   // → corridor
@@ -579,7 +579,7 @@ function tickCorridor(ctx: GameContext, dt: number): void {
       playKlaxon();                // T5.1 — the red-alert alarm
       startEngineFire();           // T5.3 — the crackling engine-bay BLAZE roars (a bed under the alarm; stopped on eject)
       startMusicEscape();          // T5.2 — the tense escape sting kicks in
-      showIntroPrompt('🔥 ENGINE FIRE — GET TO THE ESCAPE POD!');
+      showIntroPrompt('ENGINE FIRE — GET TO THE ESCAPE POD!');
     }
     return;
   }
@@ -716,7 +716,11 @@ function tickEnterPod(ctx: GameContext, dt: number): void {
     const seat = getPodBaySeatedEye();
     const g = gazeGate(ctx, seat, ENTER_SEAT_GAZE_DIST, ENTER_SEAT_GAZE_FACING);
     showIntroPrompt(g.near ? 'Sit  [E]' : 'Step to the seat');
-    if (g.ok && pressedE(ctx)) {
+    // Y3 (user walk-test 2026-07-04): E-to-sit failed on first presses. Root cause: the sit
+    // required the FACING test too, and dir-to-target degenerates when standing basically ON
+    // the seat point — any look direction could fail it. Proximity alone gates the sit now:
+    // inside the pod near the seat + E = sit, first press, every time.
+    if (g.near && pressedE(ctx)) {
       intro.scratch.phase = 'sealing';
       intro.scratch.t = 0;
       intro.mode = 'scripted';         // locomotion off from here (they're being seated + sealed)
