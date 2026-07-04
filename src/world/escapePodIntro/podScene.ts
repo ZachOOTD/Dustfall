@@ -607,6 +607,19 @@ function buildCabinInterior(group: THREE.Group, opts: CabinInteriorOpts = {}): v
   }
   const dome = _lathe(domeProf, WALL_SEG, _cabShell);
   group.add(dome);
+  // SEV2 ceiling light-leak fix (2026-07-04): the wall is emitted as VERTICALLY-STACKED open-tube
+  //   height bands (split at the door top/bottom) topped by the dome lathe — so there are horizontal
+  //   ABUTMENT seams at the door-top band edge (hY1) AND at the wall↔dome shoulder (WALL_H). The two
+  //   BackSide tubes at each seam sit edge-to-edge with slightly mismatched 48-facet vertex rings, so
+  //   at grazing angles the bright exterior sparkled through the hairline facet gaps as faint DASHED
+  //   arcs near the ceiling (undermining the sealed-shell read). FIX: a single tall back-faced inner
+  //   LINER spanning the whole upper wall from just below hY1 up past the wall↔dome seam, set a hair
+  //   INSIDE the shell radius so it covers BOTH seams (and the band between) from inside regardless of
+  //   any sub-mm gap. Same _cabShell skin → invisible as a distinct surface; it only closes the seams.
+  const linerY0 = hY1 - 0.06, linerY1 = WALL_H + 0.08;   // straddle the hY1 seam → past the shoulder seam
+  const seamLiner = _tube(CAB_R - 0.006, linerY1 - linerY0, WALL_SEG, _cabShell);
+  seamLiner.position.y = (linerY0 + linerY1) / 2;
+  group.add(seamLiner);
   // (the dome is left as smooth back-faced aluminium with the shoulder ring §2 capping it
   //  — radial seam ribs read as floating bars in the seated FP frame, and the exterior's
   //  ogive nose is itself mostly smooth aluminium, so smooth is the faithful read.)
@@ -1195,9 +1208,20 @@ function buildConduitAndLight(group: THREE.Group): void {
   // they NEVER cross the forward viewport OR sit behind the console/eject as a stray
   // diagonal). Vertical pipes + a couple of bracket clamps each so they read as conduit.
   for (const [az, yc] of [[0.85, WALL_H / 2], [-0.45, WALL_H / 2 + 0.05]] as const) {   // R3a — the −0.85 conduit moved to −0.45 to clear the escape HATCH arc (−1.25)
-    const conduit = _cyl(0.05, 0.05, WALL_H - 0.35, 8, _cabCable);
+    const condH = WALL_H - 0.35;
+    const condTop = yc + condH / 2;   // the conduit's upper end (≈2.375, up near the shoulder)
+    const conduit = _cyl(0.05, 0.05, condH, 8, _cabCable);
     _seatOnWall(conduit, az, CAB_R - 0.1, yc);
     group.add(conduit);
+    // SEV2 conduit-termination fix (2026-07-04): the pipe's TOP end (condTop ≈2.375) had NO bracket
+    //   near it — the clamps stopped at yc+0.4 (≈1.68), so the upper 0.7m ran to an OPEN CUT hanging
+    //   in mid-air below the ceiling (the seat-looking-aft read: a disconnected pipe ending in space).
+    //   FIX: cap the top with a JUNCTION BOX where the run meets the shoulder (it disappears INTO
+    //   structure, not open air) + keep the two mid clamps. Now the pipe reads as a real run: routed
+    //   from the junction at the shoulder, clamped down the wall.
+    const jtop = _box(0.13, 0.14, 0.09, _cabSteel);
+    _seatOnWall(jtop, az, CAB_R - 0.07, condTop - 0.04);   // seat over the open top end → caps it into a junction
+    group.add(jtop);
     for (const cy of [yc - 0.4, yc + 0.4]) {
       const clamp = _box(0.1, 0.05, 0.05, _cabSteel);
       _seatOnWall(clamp, az, CAB_R - 0.08, cy);
@@ -1464,10 +1488,20 @@ function buildCabinHatch(group: THREE.Group): void {
 export function blowCabinHatch(t: number): void {
   if (!cabinHatchPivot) return;
   const k = Math.min(1, Math.max(0, t));
-  // swing from sealed (0) through ajar to fully wide (the hinge is on the +X/right edge → swing −Y
-  //   opens it outward to the −Z/left). A gentle ajar crack at t=0 reads "the blast sprang it".
-  cabinHatchPivot.rotation.y = -0.28 - k * 1.55;   // ajar (~−16°) → fully wide (~−105°)
-  cabinHatchPivot.rotation.x = -k * 0.25;          // sags/tears down off the hinge as it flings
+  // swing from sealed (0) through ajar to a clean ~85° kicked-open (the hinge is a VERTICAL axis on
+  //   the +X/right jamb → swing −Y opens it outward to the −Z/left).
+  // SEV2 door-slant fix (2026-07-04): the OPEN leaf must hang PLUMB from every angle + never pierce
+  //   the terrain. The old pose over-swung (~−105°, so the beside view caught the leaf edge-on as a
+  //   "propped plank") AND applied a rotation.x=−0.25 "tear/sag" that pitched the whole swung plane so
+  //   the free-edge BOTTOM corner dropped below Y=0 into the sand (compounded by the pod's crash tilt,
+  //   which read plumb from one azimuth + buried from another). FIX: swing about the VERTICAL hinge
+  //   ONLY (rotation.x = 0) so the leaf stays perfectly plumb at any swing angle — its bottom edge
+  //   holds at its rest height (cabin-Y ≈0.11, just above the floor) and can never dip into the ground;
+  //   and cap the swing at ~85° so the leaf reads as a real open door held clear of the aperture (not
+  //   flung past perpendicular). The only lean it now shows is the pod's own gentle crash tilt, applied
+  //   uniformly to the whole pod → consistent from all azimuths.
+  cabinHatchPivot.rotation.y = -0.24 - k * 1.24;   // ajar (~−14°) → kicked wide (~−85°)
+  cabinHatchPivot.rotation.x = 0;                  // NO tear/sag — the vertical hinge keeps the leaf plumb + clear of the sand
 }
 
 // ─── ONE ENTERABLE POD (user re-scope, 2026-07-01) ────────────────────────────

@@ -470,11 +470,22 @@ function buildCockpit(g: THREE.Group, noseX: number): void {
   headMull.position.set(wsX - Math.sin(0.62) * paneH * 0.5 + 0.02, wsY + Math.cos(0.62) * paneH * 0.5, 0);
   headMull.rotation.z = 0.62;
   g.add(headMull);
-  // a brow visor over the windscreen top (the canopy header/roofline cap)
+  // a brow visor over the windscreen top (the canopy header/roofline cap).
+  // SEV2 floating-plate fix (2026-07-04): the brow sat at y=HULL_R*1.80 (≈2.43) — a wide flat grey
+  //   plate hanging ~0.1m ABOVE the bridge-house roof (top ≈HULL_R*1.15 + HULL_R*1.05/2 ≈2.26), so
+  //   from the eject/explosion 3/4 it read as an orphaned plate floating over the nose with starfield
+  //   showing in the gap beneath it. FIX: SEAT it on the roof (lower to y≈2.28 so its underside laps
+  //   into the house top — no gap) + a short riser BLOCK tying the brow down to the roofline so the
+  //   join is solid from every angle (rooted, not floating).
+  const browY = HULL_R * 1.62;   // ≈2.19 centre → underside ≈2.11 laps into the house roof (top ≈2.26)
   const brow = _box(0.95, 0.15, HULL_R * 1.4, _hullSteel);
-  brow.position.set(noseX - COCKPIT_LEN * 0.45, HULL_R * 1.80, 0);
+  brow.position.set(noseX - COCKPIT_LEN * 0.45, browY, 0);
   brow.rotation.z = 0.18;
   g.add(brow);
+  // riser tying the brow to the house roof (kills any residual under-brow gap at grazing angles)
+  const browRiser = _box(0.7, 0.34, HULL_R * 1.3, _hullSteel);
+  browRiser.position.set(noseX - COCKPIT_LEN * 0.45, browY - 0.22, 0);
+  g.add(browRiser);
   // a row of small lit SIDE WINDOWS on the camera-facing (+Z) flank of the bridge house
   // (so the cockpit reads as lit + occupied even from the porthole 3/4 angle).
   for (let i = 0; i < 3; i++) {
