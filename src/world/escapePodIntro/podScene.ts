@@ -212,12 +212,9 @@ const _cabStrap = new THREE.MeshLambertMaterial({ color: 0x837a5c, flatShading: 
 const _ledGreen = new THREE.MeshBasicMaterial({ color: 0x57c46a });
 const _ledAmber = new THREE.MeshBasicMaterial({ color: 0xd98a32 });
 const _ledRed = new THREE.MeshBasicMaterial({ color: 0xc0392b });
-// X2a — interior detail redesign: a cool CYAN readout accent + an off-white label/stencil face, so
-//   the console/eject read as purposeful labeled hardware (not just red/amber/green blobs). Self-lit.
-const _ledCyan = new THREE.MeshBasicMaterial({ color: 0x3fb6c8 });
-const _labelFace = new THREE.MeshBasicMaterial({ color: 0xb8bcc0 });   // stencil/placard field (reads as a printed label)
-const _labelInk = new THREE.MeshBasicMaterial({ color: 0x14171a });    // the dark ink on a placard
-// X2a — a lit CRT readout face (a faint cyan-green scanned glow, brighter than the dead _cabScreen).
+// Y3 Interior Mk-II — the X2a label/CRT-clutter accents (_ledCyan / _labelFace / _labelInk) are
+//   RETIRED with the tiny-greeble console detail; the Mk-II console keeps only the chunky screen glow.
+// A lit screen face (a faint cyan-green scanned glow, brighter than the dead _cabScreen).
 const _crtGlow = new THREE.MeshBasicMaterial({ color: 0x1c3630 });
 // Dim screen face — a faint amber CRT glow.
 const _cabScreen = new THREE.MeshBasicMaterial({ color: 0x2a2410 });
@@ -536,7 +533,22 @@ interface CabinInteriorOpts { door?: boolean; }
  *  X2a — this is the ONE interior-construction path: BOTH the ride cabin (buildPodScene) and
  *  the canonical bay pod (buildCanonicalPodExterior, via buildUnifiedPodInterior) build their
  *  contents here, so the pod is the SAME model inside — no empty-shell "peek". */
+// Y3 finding 4 — ROOT the duplicate-interior build. buildCabinInterior is the ONE interior
+//   construction path (its only two callers are buildPodScene for the ride cabin + buildUnified-
+//   PodInterior for the bay/landed pod). To make it IMPOSSIBLE for two interior generations to
+//   coexist in one pod (the user's "old + new versions overlapping"), we (a) tag each group the
+//   first time an interior is built into it + assert it's never built twice into the SAME group,
+//   and (b) count live interiors module-wide so a stray second build (a rebuild that didn't
+//   dispose) is caught at author time rather than shipping as visible clutter.
+let _liveInteriorBuilds = 0;   // # of interiors constructed since the last dispose (should be ≤ the # of live pods)
 function buildCabinInterior(group: THREE.Group, opts: CabinInteriorOpts = {}): void {
+  // GUARD: never build a second interior into a group that already has one (the duplicate-build bug).
+  if (group.userData._cabinInteriorBuilt) {
+    console.warn('[podScene] buildCabinInterior called twice on the same group — refusing the duplicate (Y3 finding 4 guard).');
+    return;
+  }
+  group.userData._cabinInteriorBuilt = true;
+  _liveInteriorBuilds++;
   const withDoor = opts.door ?? true;
   // ── 1. SHELL — the ROUND capsule bore. A back-faced cylinder wall (you see the
   //    INSIDE of the curve) from the floor up to the shoulder, with a small ROUND
@@ -641,8 +653,13 @@ function buildCabinInterior(group: THREE.Group, opts: CabinInteriorOpts = {}): v
   //     aluminium deck disc (bright skin tone) + a ring of deck-plate rivets + a forward
   //     FOOTWELL recess (where the feet rest below the seat). A dark structural sub-floor
   //     disc beneath the deck so any rim gap reads as hull, not space.
-  const subFloor = _cyl(CAB_R + SHELL, CAB_R + SHELL, SHELL, WALL_SEG, _cabChannel);
-  subFloor.position.y = -SHELL / 2;
+  // Y5 lint fix (base penetration): the old subFloor sat at y=−0.08 (bottom −0.16), dipping 16cm
+  //   BELOW the pod's authored y=0 base plane (poking through the exterior heat-shield foot). It's a
+  //   RIM-CLOSER (fills the seam between the deck disc r=1.26 and the wall r=1.28), so it only needs
+  //   to sit UNDER the deck, not below the hull base. Seat it flush ON y=0 (spans 0→0.05, under the
+  //   0.025-centred deck plate) → no penetration, same "no space through the rim" read.
+  const subFloor = _cyl(CAB_R + SHELL, CAB_R + SHELL, 0.05, WALL_SEG, _cabChannel);
+  subFloor.position.y = 0.025;
   group.add(subFloor);
   // the visible aluminium deck plate (bright skin so the floor is LIT, not a void)
   const deck = _cyl(CAB_R - 0.02, CAB_R - 0.02, 0.05, WALL_SEG, _cabDeck);
@@ -664,13 +681,15 @@ function buildCabinInterior(group: THREE.Group, opts: CabinInteriorOpts = {}): v
     tread.position.set(r * 0.34, 0.06, 0.05);
     group.add(tread);
   }
-  // FOOTWELL — a shallow recessed pan FORWARD of the seat (−Z) where the feet rest. A dark
-  // recessed box sunk into the deck + a bright rim lip so it reads as a real footwell.
+  // FOOTWELL — a marked foot-rest zone FORWARD of the seat (−Z): a bright rim lip + a dark inset
+  //   pan. Y5 lint fix: the old pan sat at y=−0.02 (bottom −0.07), dipping BELOW the y=0 base plane
+  //   (poking through the hull foot). It now sits FLUSH ON the base (pan spans 0→0.045, just below the
+  //   0.05 deck-top so it still reads inset) — the same footwell read without penetrating the base.
   const wellRim = _cyl(0.44, 0.44, 0.06, 20, _cabBand);
   wellRim.position.set(0, 0.05, -0.62);
   group.add(wellRim);
-  const wellPan = _cyl(0.38, 0.38, 0.10, 20, _cabSteel);
-  wellPan.position.set(0, -0.02, -0.62);
+  const wellPan = _cyl(0.38, 0.38, 0.045, 20, _cabSteel);
+  wellPan.position.set(0, 0.0225, -0.62);
   group.add(wellPan);
   // a couple of foot-rest treads in the well
   for (const wz of [-0.5, -0.74]) {
@@ -678,11 +697,22 @@ function buildCabinInterior(group: THREE.Group, opts: CabinInteriorOpts = {}): v
     ft.position.set(0, 0.02, wz);
     group.add(ft);
   }
-  // 1.d a chunky channel-steel FLOOR RING capping the wall-to-floor seam (full circle —
-  //     well below the porthole, so the curve springs from a real welded foot).
-  const footRing = _tube(CAB_R - 0.03, 0.18, WALL_SEG, _cabBandShell);
-  footRing.position.y = 0.09;
-  group.add(footRing);
+  // 1.d a chunky channel-steel FLOOR RING capping the wall-to-floor seam. Y3 finding 1 (the "black
+  //     wall lower half" on first door-open): the old full-circle footRing (r=CAB_R−0.03, y 0→0.18)
+  //     was a SOLID band crossing the lower ~7cm of the door aperture (bottom at HATCH_CY−HATCH_H/2 =
+  //     0.11) — proud into the bore, BackSide, dark — so looking IN through the open door the lower
+  //     doorway read as a dark wall. FIX: gap the ring over the door azimuth (same complementary-arc
+  //     scheme as the wall bands/hoops), and drop its top to the sill line (0.11) so the walk-through
+  //     threshold is clean. The foot seam still reads as a welded ring everywhere except the doorway.
+  {
+    // Gap at HATCH_AZ ALWAYS — the shell aperture is cut there in BOTH the ride cabin (its own −Z
+    //   door) and the bay/landed pod (the whole interior sub-group is yawed so −Z→+X, and its +X
+    //   door fills that same aperture), so the foot ring must clear the doorway in both cases.
+    const fRingR = CAB_R - 0.03, fRingH = 0.11, fRingY = fRingH / 2;   // top at 0.11 = the door sill (no lip into the aperture)
+    const fGapHalf = Math.min(Math.PI * 0.9, (HATCH_W / 2 + 0.06) / CAB_R);
+    const arcStart = HATCH_AZ + fGapHalf, arcLen = Math.PI * 2 - fGapHalf * 2;
+    const fr = _tube(fRingR, fRingH, WALL_SEG, _cabBandShell, arcStart, arcLen); fr.position.y = fRingY; group.add(fr);
+  }
 
   // ── 2. RIVETED RING-FRAMES — proud aluminium hoops banding the curved wall at
   //    intervals (the "riveted aluminium capsule" read, matching the exterior latitude
@@ -920,192 +950,122 @@ function buildUnifiedPodInterior(parent: THREE.Group): THREE.Group {
 //   through the descent + swings away with the door at the wake. The glass materials (_cabGlass /
 //   _cabGlassSpec / the door-well tint _cabDoorWellTint) live with the door there.
 
-/** The right-side console + the chunky red PARACHUTE LEVER, curve-seated on the +X wall.
- *  Sets the module `chuteLever` pivot (the setParachuteLeverPull hook drives it). */
+/** Y3 Interior Mk-II (user-locked: MINIMAL + CHUNKY). ONE compact integrated console on the +X
+ *  (right) flank + a big clean PARACHUTE LEVER rising off it. Few elements, each chunky + readable
+ *  — NO fields of tiny greebles (the X2a CRT/telltale/gauge/rocker clutter that read as "two
+ *  generations" is GONE). Sets the module `chuteLever` pivot + `chuteLeverRestX` + `leverBrokenTell`
+ *  (the setParachuteLeverPull hook drives them: a visible pull-down + a snapped-off broken state). */
 function buildConsoleAndLever(group: THREE.Group): void {
-  // The console sits on the +X (right) flank, canted toward FORWARD (θ from +Z→+X; right
-  // = π/2, forward = π), so the seated player glances down-forward-right to it + the lever
-  // is in natural reach. dir = (sin az, 0, cos az); group local +X → outward at az−π/2.
-  const conAz = Math.PI / 2 + 0.42;   // right flank, swung toward the forward viewport
+  // The console sits on the +X (right) flank, swung toward FORWARD (θ from +Z→+X; right = π/2,
+  //   forward = π), so the seated player glances down-forward-right to it + the lever is in reach.
+  const conAz = Math.PI / 2 + 0.42;
   const conDir = new THREE.Vector3(Math.sin(conAz), 0, Math.cos(conAz));
-  const conR = CAB_R - 0.42;          // console body centre, inboard of the wall
-  const deckY = 1.30;
-  // a console GROUP yawed so its local +X points radially OUTWARD (toward the wall); local
-  // −X then faces the cabin centre / seat (where the instruments + lever read).
+  const conR = CAB_R - 0.40;
+  const deckY = 1.24;                  // waist-high deck (a touch lower than the old 1.30 so it clears the seated eye-line to the door)
+  // a console GROUP yawed so its local +X points radially OUTWARD (toward the wall); local −X
+  //   faces the cabin centre / seat (where the lever + the one screen read).
   const con = new THREE.Group();
   con.position.set(conDir.x * conR, 0, conDir.z * conR);
   con.rotation.y = conAz - Math.PI / 2;
   group.add(con);
-  // cabinet body (a curved-back cabinet hugging the wall) — in console-local frame, +X
-  // is outward (toward wall), local −X faces the seat. WIDER + a closed seat-facing FACE
-  // panel + a kickplate skirt so looking DOWN at it shows a solid lit cabinet, not a dark
-  // void cavity under the deck (P2 floor-shot fix).
-  const body = _box(0.46, deckY, 1.0, _cabChannel);
-  body.position.set(0.13, deckY / 2, 0);
+  // ── ONE chunky cabinet body hugging the wall: a solid gunmetal block, a lit seat-facing FACE
+  //    panel closing the front (no dark void under the deck), and a recessed kickplate skirt at
+  //    the floor. Few big volumes — reads as a single fabricated console, not a greeble pile.
+  const body = _box(0.44, deckY, 0.92, _cabChannel);
+  body.position.set(0.12, deckY / 2, 0);
   con.add(body);
-  // seat-facing FACE panel (closes the front of the cabinet, lighter band-metal so it's lit)
-  const facePanel = _box(0.03, deckY - 0.04, 0.94, _cabBand);
+  const facePanel = _box(0.04, deckY - 0.06, 0.86, _cabBand);   // lit seat-facing face (a step lighter → reads as a finished panel)
   facePanel.position.set(-0.10, deckY / 2, 0);
   con.add(facePanel);
-  // kickplate skirt at the floor (a recessed darker base — the cabinet meets the deck)
-  const kick = _box(0.40, 0.12, 0.96, _cabSteel);
-  kick.position.set(-0.06, 0.06, 0);
+  const kick = _box(0.38, 0.12, 0.90, _cabSteel);               // recessed base skirt (meets the deck)
+  kick.position.set(-0.05, 0.06, 0);
   con.add(kick);
-  // angled instrument DECK canted up toward the seat
-  const deck = _box(0.46, 0.05, 1.0, _cabSteel);
-  deck.position.set(0.0, deckY + 0.05, 0);
-  deck.rotation.z = 0.34;             // cant up on the inboard (seat-facing) edge
+  // a chunky top DECK slab, canted up toward the seat (one clean surface the lever mounts on).
+  const dt = 0.30;
+  const deck = _box(0.46, 0.07, 0.94, _cabSteel);
+  deck.position.set(0.0, deckY + 0.055, 0);
+  deck.rotation.z = dt;
   con.add(deck);
-  // ── X2a — INTERIOR DETAIL REDESIGN (user: "more detailed + realistic — purposeful, connected,
-  //    labeled-looking hardware"). The instrument deck now reads as a real fabricated panel: a
-  //    RECESSED bezeled CRT (a proud steel surround + a lit scanned face + a couple of readout bars),
-  //    a labeled TELLTALE STRIP (each LED in a drilled bezel with a stencil tag beside it), a proper
-  //    guarded ROCKER-SWITCH BANK on a sub-plate, and — on the seat-facing vertical face — two real
-  //    instrument GAUGES (bezel ring + tick marks + a coloured warning arc + needle). All in the
-  //    gunmetal/steel family; the self-lit accents are the points of life. The deck cants up 0.34 rad
-  //    toward the seat, so everything is built at that tilt (rotation.z = 0.34) to sit flush on it.
-  const dt = 0.34;   // the deck cant (matches `deck.rotation.z`)
-  // (a) the RECESSED CRT — a proud steel bezel frame + a lit scanned face + two data bars + a corner tag.
+  // ── ONE big readable readout on the seat-facing face — a chunky recessed screen in a proud
+  //    steel bezel (a single lit panel, not a strip of tiny lights). The one point of console life.
   {
-    const cx = -0.075, cz = -0.30;   // deck-local screen centre (forward end)
-    const cy = deckY + 0.10;
-    const bezel = _box(0.30, 0.03, 0.26, _cabSteel);        // proud steel surround (the CRT housing lip)
-    bezel.position.set(cx, cy + 0.02, cz); bezel.rotation.z = dt; con.add(bezel);
-    const face = _box(0.22, 0.02, 0.18, _crtGlow);          // the lit scanned face (recessed inside the bezel)
-    face.position.set(cx - 0.006, cy + 0.045, cz); face.rotation.z = dt; con.add(face);
-    // two horizontal data bars scrolling on the face (a readout tell) + a cyan cursor block
-    for (const [bz, bw, m] of [[-0.05, 0.14, _ledGreen], [0.0, 0.10, _ledGreen], [0.045, 0.06, _ledCyan]] as const) {
-      const bar = _box(bw, 0.006, 0.014, m);
-      bar.position.set(cx - 0.03, cy + 0.058, cz + bz); bar.rotation.z = dt; con.add(bar);
+    const bez = _box(0.05, 0.34, 0.42, _cabSteel);        // proud steel bezel (chunky, one piece)
+    bez.position.set(-0.11, deckY - 0.30, 0.14);
+    con.add(bez);
+    const glow = _box(0.03, 0.26, 0.34, _crtGlow);        // the lit screen face (recessed, one flat glow)
+    glow.position.set(-0.135, deckY - 0.30, 0.14);
+    con.add(glow);
+    // two fat status LEDs beside the screen (chunky, in drilled seats — the only small accents kept)
+    for (const [ly, m] of [[deckY - 0.10, _ledGreen], [deckY - 0.20, _ledAmber]] as const) {
+      const seat = _box(0.04, 0.06, 0.06, _cabSteel); seat.position.set(-0.11, ly, -0.30); con.add(seat);
+      const led = _cyl(0.022, 0.022, 0.03, 8, m); led.rotation.z = Math.PI / 2; led.position.set(-0.135, ly, -0.30); con.add(led);
     }
-    // a small printed corner tag on the bezel lip (a label field)
-    const tag = _box(0.07, 0.006, 0.03, _labelFace);
-    tag.position.set(cx + 0.09, cy + 0.05, cz - 0.08); tag.rotation.z = dt; con.add(tag);
-  }
-  // (b) the LABELED TELLTALE STRIP — 4 LEDs each seated in a drilled steel bezel with a stencil tag
-  //     alongside (so they read as annunciator lights, not floating dots).
-  for (let i = 0; i < 4; i++) {
-    const mat = [_ledGreen, _ledGreen, _ledAmber, _ledRed][i];
-    const lz = -0.03 + i * 0.078;
-    const sub = _box(0.05, 0.014, 0.055, _cabSteel);        // a drilled bezel plate under each light
-    sub.position.set(-0.145, deckY + 0.148, lz); sub.rotation.z = dt; con.add(sub);
-    const led = _cyl(0.014, 0.014, 0.016, 8, mat);
-    led.rotation.x = Math.PI / 2; led.rotation.z = dt;
-    led.position.set(-0.148, deckY + 0.162, lz); con.add(led);
-    const tag = _box(0.02, 0.006, 0.05, _labelInk);         // a stencil tag beside the light (the label)
-    tag.position.set(-0.115, deckY + 0.155, lz); tag.rotation.z = dt; con.add(tag);
-  }
-  // (c) a guarded ROCKER-SWITCH BANK on a raised sub-plate (aft of the LEDs) — 3 rockers with coloured
-  //     caps + a steel guard rail (a real switch panel, not bare pins).
-  {
-    const plate = _box(0.20, 0.02, 0.26, _cabChannel);      // the switch sub-plate
-    plate.position.set(-0.03, deckY + 0.135, 0.20); plate.rotation.z = dt; con.add(plate);
-    for (let i = 0; i < 3; i++) {
-      const sz = 0.13 + i * 0.075;
-      const base = _box(0.05, 0.02, 0.045, _cabSteel);       // switch base
-      base.position.set(-0.02, deckY + 0.152, sz); base.rotation.z = dt; con.add(base);
-      const rocker = _box(0.035, 0.03, 0.03, [_ledRed, _ledAmber, _ledGreen][i]);
-      rocker.position.set(-0.03, deckY + 0.168, sz); rocker.rotation.z = dt - 0.5; con.add(rocker);   // canted (thrown)
-    }
-    // a steel guard rail arching over the rockers (protects them from a knee/elbow)
-    const rail = _cyl(0.008, 0.008, 0.24, 6, _cabSteel);
-    rail.rotation.x = Math.PI / 2; rail.position.set(-0.055, deckY + 0.21, 0.20); rail.rotation.z += dt; con.add(rail);
-    for (const rz of [0.10, 0.30]) {
-      const post = _cyl(0.006, 0.006, 0.06, 5, _cabSteel);
-      post.position.set(-0.05, deckY + 0.19, rz); con.add(post);
-    }
-  }
-  // (d) two real instrument GAUGES on the seat-facing vertical face (local −X face) — a proud bezel
-  //     ring + a dark face + a ring of tick marks + a coloured warning arc + a needle. Reads as a
-  //     pressure/fuel dial, not a featureless disc.
-  for (const [dy, warnMat] of [[0.92, _ledRed], [0.58, _ledAmber]] as const) {
-    const ring = _cyl(0.078, 0.078, 0.03, 18, _cabSteel);   // proud steel bezel
-    ring.rotation.x = Math.PI / 2; ring.position.set(-0.18, dy, -0.38); con.add(ring);
-    const face = _cyl(0.062, 0.062, 0.012, 18, _cabScreen); // dark dial face
-    face.rotation.x = Math.PI / 2; face.position.set(-0.205, dy, -0.38); con.add(face);
-    // tick marks around the dial (8 minor)
-    for (let k = 0; k < 8; k++) {
-      const a = -Math.PI * 0.75 + (k / 7) * Math.PI * 1.5;
-      const tick = _box(0.014, 0.004, 0.004, _labelFace);
-      tick.position.set(-0.214, dy + Math.sin(a) * 0.05, -0.38 + Math.cos(a) * 0.05);
-      tick.rotation.x = a; con.add(tick);
-    }
-    // a coloured warning arc on the upper dial (a printed danger zone) — an open-tube arc segment
-    const warnArc = new THREE.Mesh(new THREE.CylinderGeometry(0.058, 0.058, 0.006, 12, 1, true, 0.4, 1.0), warnMat);
-    _cabinDisposables.push(warnArc.geometry);
-    warnArc.rotation.x = Math.PI / 2; warnArc.position.set(-0.212, dy, -0.38); con.add(warnArc);
-    // the needle (canted to a plausible reading), on a small hub
-    const hub = _cyl(0.01, 0.01, 0.016, 8, _cabSteel);
-    hub.rotation.x = Math.PI / 2; hub.position.set(-0.216, dy, -0.38); con.add(hub);
-    const needle = _box(0.052, 0.008, 0.005, _labelFace);
-    needle.position.set(-0.22, dy + 0.012, -0.38);
-    needle.rotation.z = dy > 0.8 ? 0.6 : -0.4; con.add(needle);
   }
 
-  // ── the chunky PARACHUTE LEVER — rises off the deck's forward end into easy seated
-  //    reach. A steel clevis bracket + a stout shaft + a fat worn-red rubber grip, canted
-  //    back toward the pilot. A pivot GROUP (chuteLever) so setParachuteLeverPull jolts /
-  //    droops it. Built in console-local space (folds into the console's curve-seat yaw).
-  const leverBaseX = -0.04, leverBaseY = deckY + 0.08, leverBaseZ = -0.42;
-  const bracket = _box(0.14, 0.16, 0.18, _cabSteel);
-  bracket.position.set(leverBaseX, leverBaseY, leverBaseZ);
-  con.add(bracket);
+  // ── the big clean PARACHUTE LEVER (redesigned — the old messy assembly is gone). A stout steel
+  //    MOUNT block on the deck's forward end → a hinge PIVOT (chuteLever) → a thick shaft with ONE
+  //    hazard collar → a fat worn-red grip. Canted back toward the pilot at rest; setParachuteLever-
+  //    Pull swings it DOWN-and-return, and the SNAP flops it dead + exposes leverBrokenTell.
+  const leverBaseX = -0.06, leverBaseY = deckY + 0.11, leverBaseZ = -0.34;
+  const mount = _box(0.16, 0.14, 0.20, _cabSteel);      // chunky steel clevis mount (the lever bolts to this)
+  mount.position.set(leverBaseX, leverBaseY - 0.02, leverBaseZ);
+  con.add(mount);
+  const cheek = _box(0.03, 0.16, 0.16, _cabSteel);      // one visible clevis cheek plate (reads as a real hinge bracket)
+  cheek.position.set(leverBaseX - 0.10, leverBaseY + 0.02, leverBaseZ);
+  con.add(cheek);
   const leverPivot = new THREE.Group();
-  leverPivot.position.set(leverBaseX, leverBaseY + 0.04, leverBaseZ);
-  chuteLeverRestX = -0.32;
+  leverPivot.position.set(leverBaseX, leverBaseY + 0.03, leverBaseZ);
+  chuteLeverRestX = -0.34;              // resting back-cant (toward the pilot); pulls swing forward from here
   leverPivot.rotation.x = chuteLeverRestX;
   con.add(leverPivot);
-  const shaft = _cyl(0.028, 0.034, 0.46, 8, _cabSteel);
-  shaft.position.set(0, 0.23, 0);
+  const shaft = _cyl(0.032, 0.040, 0.52, 10, _cabSteel);   // one stout shaft (thicker + taller → reads chunky)
+  shaft.position.set(0, 0.26, 0);
   leverPivot.add(shaft);
-  const collar = _cyl(0.05, 0.05, 0.05, 10, _cabSteel);
-  collar.position.set(0, 0.16, 0);
-  leverPivot.add(collar);
-  const hazBand = _cyl(0.038, 0.038, 0.06, 8, _ejectGrip);
-  hazBand.position.set(0, 0.30, 0);
+  const hazBand = _cyl(0.046, 0.046, 0.08, 10, _ejectGrip);   // ONE hazard-yellow collar (the "pull" tell)
+  hazBand.position.set(0, 0.34, 0);
   leverPivot.add(hazBand);
-  const grip = _cyl(0.078, 0.085, 0.16, 12, _chuteGrip);
-  grip.position.set(0, 0.5, 0);
+  const grip = _cyl(0.088, 0.095, 0.20, 12, _chuteGrip);   // fat worn-red grip (bigger → the gag star reads "pull me")
+  grip.position.set(0, 0.60, 0);
   leverPivot.add(grip);
-  const capGeo = new THREE.SphereGeometry(0.082, 12, 8);
+  const capGeo = new THREE.SphereGeometry(0.092, 12, 8);
   _cabinDisposables.push(capGeo);
   const gripCap = new THREE.Mesh(capGeo, _chuteGrip);
-  gripCap.position.set(0, 0.58, 0);
+  gripCap.position.set(0, 0.70, 0);
   leverPivot.add(gripCap);
   chuteLever = leverPivot;
-  // ── the SNAPPED-MOUNT tell (hidden until setParachuteLeverPull(_, true) shows it): a
-  //    bent/sprung clevis pin + a torn bracket lip at the lever base, so the 3rd-pull SNAP
-  //    reads as a wrenched-off mount, not just an extreme lever angle (P4).
+  // ── the SNAPPED-MOUNT tell (hidden until setParachuteLeverPull(_, true) shows it): a torn bracket
+  //    lip + a sprung clevis pin at the base, so the 3rd-pull SNAP reads as a wrenched-off mount.
   const brokenTell = new THREE.Group();
   brokenTell.position.set(leverBaseX, leverBaseY, leverBaseZ);
   brokenTell.visible = false;
-  const tornLip = _box(0.12, 0.05, 0.06, _cabSteel);
-  tornLip.position.set(0, 0.06, 0.0);
+  const tornLip = _box(0.14, 0.06, 0.07, _cabSteel);
+  tornLip.position.set(0, 0.05, 0.0);
   tornLip.rotation.set(0.6, 0, 0.4);            // peeled up (metal tore)
   brokenTell.add(tornLip);
-  const sprungPin = _cyl(0.014, 0.014, 0.14, 6, _cabRivet);
+  const sprungPin = _cyl(0.016, 0.016, 0.16, 6, _cabRivet);
   sprungPin.rotation.set(0.3, 0, 1.1);          // the clevis pin sprung out at an angle
-  sprungPin.position.set(0.06, 0.05, 0.03);
+  sprungPin.position.set(0.07, 0.04, 0.03);
   brokenTell.add(sprungPin);
   con.add(brokenTell);
   leverBrokenTell = brokenTell;
-  // a hazard-yellow "CHUTE" placard on the deck beside the lever (a dark stencil bar on the
-  // yellow plate reads as a label, P4)
-  const placard = _box(0.18, 0.012, 0.11, _ledAmber);
-  placard.position.set(-0.02, deckY + 0.12, -0.56);
-  placard.rotation.z = 0.34;
+  // a chunky hazard-yellow "CHUTE" placard on the deck beside the lever (one clear label, not text greebles)
+  const placard = _box(0.20, 0.02, 0.12, _ejectGrip);
+  placard.position.set(-0.02, deckY + 0.10, -0.10);
+  placard.rotation.z = dt;
   con.add(placard);
-  const placardText = _box(0.13, 0.014, 0.025, _cabScreen);
-  placardText.position.set(-0.018, deckY + 0.135, -0.56);
-  placardText.rotation.z = 0.34;
+  const placardText = _box(0.14, 0.024, 0.03, _cabScreen);
+  placardText.position.set(-0.02, deckY + 0.125, -0.10);
+  placardText.rotation.z = dt;
   con.add(placardText);
 }
 
-/** The eject control — a guarded hazard-yellow T-handle on a panel curve-seated on the
- *  −X (left) wall, facing inboard (toward the seat). The enterPod "pull eject" beat. */
+/** Y3 Interior Mk-II — the big guarded EJECT handle, curve-seated on the −X (left) wall, facing
+ *  inboard toward the seat. MINIMAL + CHUNKY: a chunky yellow guarded housing, a flip-up steel
+ *  guard cage, and ONE fat red T-handle inside it — nothing tiny. Readable at the ride-frame
+ *  eject look (faceControl yaw 1.20, pitch −0.20 → facing −X-ish). The enterPod "pull eject" beat. */
 function buildEjectControl(group: THREE.Group): void {
-  // Left (−X) flank, canted toward forward (left = −π/2, forward = π). dir=(sin,cos);
-  // group local +X → outward at az−π/2, so local −X faces the seat (where the T-handle reaches).
+  // Left (−X) flank, swung toward forward (left = −π/2, forward = π). dir=(sin,cos); group local
+  //   +X → outward at az−π/2, so local −X faces the seat (where the handle reaches).
   const ejAz = -Math.PI / 2 - 0.40;
   const ej = new THREE.Group();
   const ejR = CAB_R - 0.05;
@@ -1113,143 +1073,101 @@ function buildEjectControl(group: THREE.Group): void {
   ej.rotation.y = ejAz - Math.PI / 2;
   group.add(ej);
   // In ej-local: −X faces the cabin centre. Build the control reaching inboard (−X).
-  // C12 FIX 3: BIGGER + clearer so it reads as a real distinct control (the other control),
-  // not a tiny dim yellow rectangle. A chunky steel mounting plate → a bright safety-yellow
-  // guarded housing → a real guarded toggle inside.
-  const panel = _box(0.12, 0.72, 0.62, _cabChannel);   // bigger steel mounting plate
-  panel.position.set(-0.04, 0, 0);
-  ej.add(panel);
-  // hazard-stripe top + bottom bars on the plate (the warning-placard tell — reads "danger")
+  // ── ONE chunky steel mounting PLATE → a bright safety-yellow guarded HOUSING → a recessed dark
+  //    guard well → a flip-up steel guard cage → ONE fat red T-handle. Big volumes, no greeble field.
+  const plate = _box(0.10, 0.66, 0.56, _cabChannel);      // chunky steel mounting plate
+  plate.position.set(-0.03, 0, 0);
+  ej.add(plate);
+  const housing = _box(0.06, 0.50, 0.48, _ejectGrip);     // bright-yellow guarded housing (one block)
+  housing.position.set(-0.10, 0, 0);
+  ej.add(housing);
+  // hazard stripe bars top + bottom of the housing (the "danger" tell — two clean bars)
   for (const sy of [-1, 1]) {
-    const hz = _box(0.02, 0.10, 0.60, _ejectGrip);
-    hz.position.set(-0.11, sy * 0.30, 0);
+    const hz = _box(0.02, 0.08, 0.46, _cabScreen);
+    hz.position.set(-0.135, sy * 0.29, 0);
     ej.add(hz);
   }
-  const inset = _box(0.05, 0.50, 0.50, _ejectGrip);    // bright-yellow guarded housing (bigger)
-  inset.position.set(-0.11, 0, 0);
-  ej.add(inset);
-  const well = _box(0.07, 0.38, 0.38, _cabScreen);     // recessed dark guard cavity
-  well.position.set(-0.135, 0, 0);
+  const well = _box(0.08, 0.34, 0.34, _cabScreen);        // recessed dark guard cavity
+  well.position.set(-0.14, 0.02, 0);
   ej.add(well);
-  // a visible red ARMING TOGGLE inside the well — a chunky base + a canted red switch body
-  // so the guard clearly protects a real control (bigger to match the enlarged housing).
-  const togBase = _cyl(0.06, 0.07, 0.05, 10, _cabSteel);
-  togBase.rotation.z = Math.PI / 2;
-  togBase.position.set(-0.155, -0.02, 0);
-  ej.add(togBase);
-  const togSwitch = _cyl(0.028, 0.038, 0.15, 8, _ledRed);
-  togSwitch.rotation.z = Math.PI / 2 + 0.5;     // canted (a thrown toggle)
-  togSwitch.position.set(-0.21, 0.0, 0);
-  ej.add(togSwitch);
-  const togTip = new THREE.Mesh(new THREE.SphereGeometry(0.032, 8, 6), _ledRed);
-  _cabinDisposables.push(togTip.geometry);
-  togTip.position.set(-0.275, 0.035, 0);
-  ej.add(togTip);
-  // flip-up guard arching inboard over the toggle (a chunky steel cage — reads "guarded")
-  const guard = _box(0.26, 0.04, 0.42, _cabSteel);
-  guard.position.set(-0.32, 0.20, 0);
+  // flip-up guard CAGE arching inboard over the handle (a chunky steel bar cage — reads "guarded")
+  const guard = _box(0.30, 0.05, 0.40, _cabSteel);
+  guard.position.set(-0.34, 0.22, 0);
   ej.add(guard);
   for (const sz of [-1, 1]) {
-    const leg = _box(0.22, 0.04, 0.04, _cabSteel);
-    leg.position.set(-0.24, 0.10, sz * 0.18);
+    const leg = _box(0.24, 0.05, 0.05, _cabSteel);
+    leg.position.set(-0.25, 0.11, sz * 0.17);
     leg.rotation.z = 0.7;
     ej.add(leg);
   }
-  // stencilled "EJECT" label strip on the lower housing (a dark-on-yellow placard tell)
-  const ejLabel = _box(0.025, 0.07, 0.40, _cabScreen);
-  ejLabel.position.set(-0.122, -0.34, 0);
-  ej.add(ejLabel);
-  // the T-handle reaching inboard (−X) + a vertical crossbar grip (chunkier)
-  const stem = _cyl(0.038, 0.038, 0.28, 8, _cabSteel);
+  // ONE fat red T-handle reaching inboard (−X): a stout stem + a fat crossbar grip + end caps.
+  const stem = _cyl(0.044, 0.044, 0.30, 8, _cabSteel);
   stem.rotation.z = Math.PI / 2;
-  stem.position.set(-0.30, 0.20, 0);
+  stem.position.set(-0.30, 0.02, 0);
   ej.add(stem);
-  const barT = _cyl(0.055, 0.055, 0.34, 8, _ejectGrip);
-  barT.position.set(-0.44, 0.20, 0);
+  const barT = _cyl(0.062, 0.062, 0.36, 10, _ledRed);     // fat RED crossbar (the pull grip — reads distinct from the yellow housing)
+  barT.position.set(-0.46, 0.02, 0);
   ej.add(barT);
   for (const sz of [-1, 1]) {
-    const cap = _cyl(0.065, 0.052, 0.035, 8, _cabSteel);
+    const cap = _cyl(0.072, 0.058, 0.04, 8, _cabSteel);
     cap.rotation.x = Math.PI / 2;
-    cap.position.set(-0.44, 0.20, sz * 0.17);
+    cap.position.set(-0.46, 0.02, sz * 0.18);
     ej.add(cap);
   }
-  // X2a — a small ARM-STATUS READOUT window recessed in the lower housing (a lit segment display in a
-  //   steel bezel — reads as "the eject system is powered/armed", the "small readouts" the user asked
-  //   for). Between the EJECT label and the status LEDs, facing the seat (−X).
-  {
-    const bezel = _box(0.03, 0.09, 0.22, _cabSteel);       // recessed readout bezel
-    bezel.position.set(-0.118, -0.07, 0);
-    ej.add(bezel);
-    const glow = _box(0.02, 0.06, 0.17, _crtGlow);         // the lit display field
-    glow.position.set(-0.134, -0.07, 0);
-    ej.add(glow);
-    for (const [gz, m] of [[-0.05, _ledCyan], [0.0, _ledCyan], [0.05, _ledAmber]] as const) {   // 3 tiny segment bars
-      const seg = _box(0.014, 0.035, 0.035, m);
-      seg.position.set(-0.146, -0.07, gz);
-      ej.add(seg);
-    }
-  }
-  // status LEDs (on the lower housing face) — each in a small drilled bezel with a stencil tag
-  for (const [lz, m] of [[0.12, _ledRed], [-0.12, _ledGreen]] as const) {
-    const sub = _box(0.02, 0.05, 0.05, _cabSteel);
-    sub.position.set(-0.116, -0.22, lz); ej.add(sub);
-    const led = _cyl(0.024, 0.024, 0.02, 8, m);
-    led.rotation.z = Math.PI / 2; led.position.set(-0.13, -0.22, lz); ej.add(led);
-  }
+  // a chunky stencilled "EJECT" placard on the lower housing (one dark-on-yellow label bar)
+  const ejLabel = _box(0.03, 0.10, 0.34, _cabScreen);
+  ejLabel.position.set(-0.135, -0.30, 0);
+  ej.add(ejLabel);
 }
 
 /** Conduit pipes following the curve, a junction box, drooping cables, a ceiling dome
  *  light — the lived-in cramped-capsule tells. */
 function buildConduitAndLight(group: THREE.Group): void {
-  // NOTE (NEW azimuth convention θ from +Z→+X): forward/viewport = θ=π, aft/seat = θ=0.
-  // Keep all conduit/cables on the REAR + side arcs (θ near 0 / ±2.x) so NOTHING crosses
-  // the forward viewport read.
-  // two conduit pipes running UP the REAR curve (θ near 0, behind/beside the seat where
-  // they NEVER cross the forward viewport OR sit behind the console/eject as a stray
-  // diagonal). Vertical pipes + a couple of bracket clamps each so they read as conduit.
-  for (const [az, yc] of [[0.85, WALL_H / 2], [-0.45, WALL_H / 2 + 0.05]] as const) {   // R3a — the −0.85 conduit moved to −0.45 to clear the escape HATCH arc (−1.25)
-    const condH = WALL_H - 0.35;
-    const condTop = yc + condH / 2;   // the conduit's upper end (≈2.375, up near the shoulder)
-    const conduit = _cyl(0.05, 0.05, condH, 8, _cabCable);
-    _seatOnWall(conduit, az, CAB_R - 0.1, yc);
-    group.add(conduit);
-    // SEV2 conduit-termination fix (2026-07-04): the pipe's TOP end (condTop ≈2.375) had NO bracket
-    //   near it — the clamps stopped at yc+0.4 (≈1.68), so the upper 0.7m ran to an OPEN CUT hanging
-    //   in mid-air below the ceiling (the seat-looking-aft read: a disconnected pipe ending in space).
-    //   FIX: cap the top with a JUNCTION BOX where the run meets the shoulder (it disappears INTO
-    //   structure, not open air) + keep the two mid clamps. Now the pipe reads as a real run: routed
-    //   from the junction at the shoulder, clamped down the wall.
-    const jtop = _box(0.13, 0.14, 0.09, _cabSteel);
-    _seatOnWall(jtop, az, CAB_R - 0.07, condTop - 0.04);   // seat over the open top end → caps it into a junction
-    group.add(jtop);
-    for (const cy of [yc - 0.4, yc + 0.4]) {
-      const clamp = _box(0.1, 0.05, 0.05, _cabSteel);
-      _seatOnWall(clamp, az, CAB_R - 0.08, cy);
-      group.add(clamp);
-    }
-  }
-  // junction box on the rear wall (directly behind the seat, θ≈0)
-  const jbox = _box(0.22, 0.28, 0.13, _cabSteel);
-  _seatOnWall(jbox, -0.3, CAB_R - 0.07, 1.45);
-  group.add(jbox);
+  // Y3 Interior Mk-II — MINIMAL conduit, and it lives INSIDE THE WALL LINE (the user saw pipes
+  //   clipping THROUGH the wall). Conduit hugs the wall at CAB_R−0.055 (≈5.5cm proud — the pipe
+  //   radius 0.045 clears the rivet hoops but never pokes out through the shell). ONE clean vertical
+  //   run on the REAR arc (θ≈0.7, behind the seat, clear of the forward door AND the −X eject / +X
+  //   console), capped top + bottom into structure (junction box + foot clamp) so no open-cut ends.
+  const az = 0.7;                     // rear arc, behind/beside the seat — off every control + the door
+  const condH = WALL_H - 0.55, condY = WALL_H / 2 - 0.05;
+  const condTop = condY + condH / 2;
+  const RC = CAB_R - 0.055;           // conduit centre radius — tight to the wall (inside the wall line)
+  const conduit = _cyl(0.045, 0.045, condH, 8, _cabCable);
+  _seatOnWall(conduit, az, RC, condY);
+  group.add(conduit);
+  // a junction BOX capping the top end (into the shoulder structure) + a foot clamp at the bottom.
+  const jtop = _box(0.16, 0.18, 0.11, _cabSteel);
+  _seatOnWall(jtop, az, CAB_R - 0.06, condTop - 0.02);
+  group.add(jtop);
   for (const [aoff, mat] of [[-0.05, _ledGreen], [0.05, _ledAmber]] as const) {
-    const led = _box(0.025, 0.025, 0.02, mat);
-    _seatOnWall(led, -0.3 + aoff, CAB_R - 0.12, 1.55);
+    const led = _box(0.03, 0.03, 0.02, mat);
+    _seatOnWall(led, az + aoff, CAB_R - 0.11, condTop + 0.02);
     group.add(led);
   }
-  // a short drooping cable on the REAR-left flank (θ≈−0.5, behind the seat) — minimal
-  //  tilt so it reads as a slack loop, not a bar crossing the cabin.
-  const cable = _cyl(0.024, 0.024, 0.5, 6, _cabCable);
-  _seatOnWall(cable, -0.5, CAB_R - 0.14, WALL_H - 0.32);
-  cable.rotation.x += 0.35;   // sag forward-down a touch (stays tucked against the rear wall)
-  group.add(cable);
-  // ceiling dome light at the apex (the warm interior source; unlit glow mat)
-  const domeRing = _cyl(0.14, 0.16, 0.05, 14, _cabSteel);
-  domeRing.position.set(0, CAB_APEX - 0.06, -0.1);
+  for (const cy of [condY - condH / 2 + 0.06, condY, condY + condH / 2 - 0.1]) {
+    const clamp = _box(0.11, 0.05, 0.05, _cabSteel);
+    _seatOnWall(clamp, az, CAB_R - 0.045, cy);
+    group.add(clamp);
+  }
+  // ── the ceiling dome LAMP at the apex (the one warm interior source; a chunky ring + a glow disc).
+  const domeRing = _cyl(0.16, 0.18, 0.06, 14, _cabSteel);
+  domeRing.position.set(0, CAB_APEX - 0.06, -0.08);
   group.add(domeRing);
-  const lamp = _cyl(0.11, 0.13, 0.03, 14, _ledAmber);
-  lamp.position.set(0, CAB_APEX - 0.09, -0.1);
+  const lamp = _cyl(0.13, 0.15, 0.035, 14, _ledAmber);
+  lamp.position.set(0, CAB_APEX - 0.09, -0.08);
   group.add(lamp);
+  // a SECOND small forward wall lamp above the door (1-2 lamps per the spec) — a warm point tell on
+  //   the forward shoulder so the door/porthole surround isn't dead; hugs the wall, clear of the glass.
+  const lamp2Az = Math.PI;   // forward (−Z), above the door
+  const l2dir = new THREE.Vector3(Math.sin(lamp2Az), 0, Math.cos(lamp2Az));
+  const lamp2Ring = _cyl(0.09, 0.10, 0.05, 12, _cabSteel);
+  lamp2Ring.position.set(l2dir.x * (CAB_R - 0.05), WALL_H - 0.10, l2dir.z * (CAB_R - 0.05));
+  lamp2Ring.lookAt(0, WALL_H - 0.10, 0);
+  group.add(lamp2Ring);
+  const lamp2 = _cyl(0.07, 0.08, 0.03, 12, _ledAmber);
+  lamp2.position.set(l2dir.x * (CAB_R - 0.08), WALL_H - 0.10, l2dir.z * (CAB_R - 0.08));
+  lamp2.lookAt(0, WALL_H - 0.10, 0);
+  group.add(lamp2);
 
   // ── CRASH-AFTERMATH (2026-07-03) — a DANGLING CONDUIT torn loose in the crash, on the front-left
   //    shoulder arc (θ≈2.55, off the seated forward sight-line so it doesn't block the door read but
@@ -2072,7 +1990,13 @@ function _addWalkableColliders(ctx: GameContext): void {
   if (!podGroup) return;
   podGroup.updateMatrixWorld(true);
   const OUTR = CAB_R + SHELL;
-  const hAzHalf = Math.min(Math.PI * 0.9, (HATCH_W / 2 + 0.05) / CAB_R);
+  // Y3 fix 6 (doorway friction) — the COLLIDER door gap is WIDER than the visual aperture so the KCC
+  //   (radius 0.35) walks through with comfortable clearance (the pod-walkout probe stopped 0.3m short
+  //   with the old tight gap: half 0.44 rad → ~1.15m gap, only 0.22m clearance each side of the 0.7m
+  //   body, and the segment corners adjacent to the gap poked into the path). A +0.30m wider aperture
+  //   (gap ≈1.75m at the wall) clears the body with margin — the VISUAL door design is unchanged (this
+  //   only affects where the invisible wall colliders stop; the player walks the door they SEE, wider).
+  const hAzHalf = Math.min(Math.PI * 0.9, (HATCH_W / 2 + 0.35) / CAB_R);
   const SEGN = 20;                       // wall arc segments
   const segLen = (Math.PI * 2) / SEGN;
   // the collider wall sits AT the visible interior bore (CAB_R) + a hair so the player stops at the
@@ -2114,6 +2038,25 @@ function _addWalkableColliders(ctx: GameContext): void {
   _shellOffsets = [];   // walkable colliders are baked world-space + static (the group no longer moves), so no per-frame re-place
 }
 
+/** Y3 fix 7 — build the LANDED WALK-IN state (exterior skin + the walkable floor/wall colliders) on
+ *  the pod, so the pod is a real walk-in structure from the CRASH onward (not a state-flip added at
+ *  step-out). Idempotent: guarded on _enterableExteriorRoot (a second call is a no-op), so both the
+ *  crash path (setCabinCrashPose) and the step-out path (unifyEnterablePod) can call it safely — the
+ *  FIRST one wins and the state never changes. Requires the pod GROUP to be at its FINAL grounded +
+ *  leaned pose (the colliders bake the world matrix). Does NOT touch lights/exposure/salvage. */
+function _landPodWalkable(ctx: GameContext): void {
+  if (!podGroup || _enterableExteriorRoot) return;
+  const group = podGroup;
+  group.updateMatrixWorld(true);
+  // (a) EXTERIOR SKIN — the outer hull wrapped around the interior (matched dims, hatch gap). This is
+  //     the visible base/body the user saw "swap in" at landing — now it's present from the crash, so
+  //     the landed pod looks IDENTICAL from the crash to forever (Y3 finding 3, fix 7).
+  _enterableExteriorRoot = buildExteriorSkin(group);
+  group.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } });
+  // (b) WALKABLE COLLIDERS — floor slab + wall ring gapped at the −Z door (walk in/out + around).
+  _addWalkableColliders(ctx);
+}
+
 /** UNIFY the crashed cabin into the ONE persistent WALK-IN pod at the spawn (user re-scope). Called
  *  at step-out INSTEAD of dispose-and-swap: the SAME hero cabin the player woke in gets (1) the
  *  exterior aluminium skin wrapped around it, (2) re-grounded so its floor sits ON the terrain (the
@@ -2127,31 +2070,29 @@ function _addWalkableColliders(ctx: GameContext): void {
 export function unifyEnterablePod(ctx: GameContext, x: number, z: number): { x: number; z: number } {
   if (!podGroup) { buildPodScene(ctx); setCabinCrashPose(1); }
   const group = podGroup!;
-  // (1) remove the seated cage (may already be gone from the crash) so we can add the walkable set.
-  for (const body of podBodies) ctx.physics.world.removeRigidBody(body);
-  podBodies.length = 0;
-  _shellOffsets = [];
-  // (2) RE-GROUND: the floor must sit on the terrain so the player can walk in. Sever the descent
-  //     base coupling (else _syncPodToAltitude would haul it back to returnPos+altitude), then place
-  //     the group with its floor on the ground + a GENTLE crashed lean (proud, not buried — you walk
-  //     IN, so the hatch must reach the ground + the bore stay clear).
-  _descentBase = null;
   const gy = ctx.terrain.heightAt(x, z);
-  _crashPose = 1;
-  // KEEP the exact GENTLE crashed lean the wake cabin already sits at (_CRASH_*) so there is NO
-  //   tilt-snap at step-out — the pod the player climbed out of and the pod they can walk back into
-  //   are the same object at the same pose. (_syncPodToAltitude normally applies this, but we just
-  //   severed _descentBase, so set it directly here.) Pivot is the floor-base centre.
-  group.rotation.set(_CRASH_PITCH, _CRASH_YAW, _CRASH_ROLL);
-  // seat the floor on the sand (a hair below grade so the flared foot has no float gap). The cabin
-  //   was already grounded here during wake (groundedDescentBase), so this is at most a ~6 cm nudge.
-  group.position.set(x, gy - 0.06, z);
-  group.updateMatrixWorld(true);
-  // (3) EXTERIOR SKIN — wrap the outer hull around the interior (matched dims, hatch gap).
-  if (!_enterableExteriorRoot) _enterableExteriorRoot = buildExteriorSkin(group);
-  group.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } });
-  // (4) WALKABLE COLLIDERS (floor + wall ring gapped at the hatch).
-  _addWalkableColliders(ctx);
+  // Y3 fix 7 — the walkable colliders + exterior skin are now built at the CRASH (setCabinCrashPose →
+  //   _landPodWalkable), so by the time we reach step-out they usually already exist and this call is
+  //   a NO-OP for them (no state-flip, no base-swap — the landed pod is identical from crash → forever).
+  //   BUT the LOAD path (restoreEnterablePod → here) and a dev jump straight to stepOut arrive WITHOUT
+  //   a crash having grounded the pod, so we still (re-)ground + build here defensively. We only RE-
+  //   GROUND / rebuild when the walkable state ISN'T built yet (crash didn't run); if it's built, the
+  //   pod is already correctly grounded + collidered and we must NOT disturb it (that WAS the flip).
+  if (!_enterableExteriorRoot) {
+    // remove any leftover seated cage (a dev jump may still have it) before adding the walkable set.
+    for (const body of podBodies) ctx.physics.world.removeRigidBody(body);
+    podBodies.length = 0;
+    _shellOffsets = [];
+    // RE-GROUND: sever the descent base coupling + seat the floor on the terrain at the gentle crashed
+    //   lean (pivot = the floor-base centre), so the walk-in floor sits on the sand + the hatch reaches it.
+    _descentBase = null;
+    _crashPose = 1;
+    group.rotation.set(_CRASH_PITCH, _CRASH_YAW, _CRASH_ROLL);
+    group.position.set(x, gy - 0.06, z);
+    group.updateMatrixWorld(true);
+    _cabinColliderCtx = ctx;
+    _landPodWalkable(ctx);   // exterior skin + walkable floor/wall colliders (the SAME as the crash path)
+  }
   // (5) W6 item 5 — the exposure is ALREADY at the desert base (the crash/wake never lifted it), so
   //     stepping out is a ZERO exposure shift. Re-assert the base defensively (belt-and-braces — the
   //     load path may enter here without a wake having run), then park the interior lamps at the SAME
@@ -2937,11 +2878,29 @@ export function setCabinCrashPose(pose: number): void {
   //   crashed (the come-to moment: the lamp stutters + the torn-conduit wire sparks, then settles
   //   within ~9s). Armed once on the 0→crashed transition; updateChutePop drives + self-settles it.
   if (prevPose < 0.5 && _crashPose >= 0.5 && _wakeFlickerT < 0) _wakeFlickerT = 0;
-  // free the player: drop the seated cage so they can walk out the hatch onto real ground.
-  if (_crashPose > 0 && podBodies.length > 0 && _cabinColliderCtx) {
+  // Y3 fix 7 — COLLISION, ONE STATE FOREVER (the user got TRAPPED when he lingered inside; the old
+  //   flow dropped the seated cage at the crash then added the WALK-IN walls only at step-out, so for
+  //   the whole wake there were NO pod walls, then walls snapped in around a lingering player). NOW:
+  //   at the first crash pose we drop the seated cage AND immediately build the LANDED WALK-IN state
+  //   (exterior skin + walkable floor + gapped wall ring) — the SAME colliders that persist forever.
+  //   The player is still scripted/seated (can't move) at the crash, so building the walls around them
+  //   here can't trap them; and because they never change again, there is no state-flip trap or
+  //   base-swap later (unifyEnterablePod becomes a no-op for the skin/colliders — see below).
+  //   GUARD: only drop the SEATED CAGE (before the walk-in state is built). Once _landPodWalkable has
+  //   run, podBodies holds the PERSISTENT WALK-IN walls — a later setCabinCrashPose(1) re-assert must
+  //   NOT clear them (that was the bug: the walls got dropped on the next pose call, leaving the pod
+  //   collider-less → the walk-in never blocked). So gate on !_enterableExteriorRoot.
+  if (_crashPose > 0 && podBodies.length > 0 && _cabinColliderCtx && !_enterableExteriorRoot) {
     for (const body of podBodies) _cabinColliderCtx.physics.world.removeRigidBody(body);
     podBodies.length = 0;
     _shellOffsets = [];
+  }
+  // Build the persistent landed shell+colliders ONCE, when the crash has fully settled (the group is
+  //   at its final grounded+leaned pose so the baked world-space colliders align). Only when GROUNDED
+  //   (a dev jump into a crash beat without a descent leaves the pod at the offset — skip until unify
+  //   re-grounds it). _landPodWalkable is idempotent (guarded on _enterableExteriorRoot).
+  if (_crashPose >= 0.999 && _descentBase && _cabinColliderCtx && !_enterableExteriorRoot) {
+    _landPodWalkable(_cabinColliderCtx);
   }
   // WAKE LIGHT — as the cabin settles crashed, the interior warms + brightens to a REAL-LAMP-lit
   //   read (a warm-lit riveted cabin, not the dim space cabin). The COLOR warms (cool→warm by `s`);
@@ -3162,6 +3121,7 @@ export function disposePodScene(ctx: GameContext): void {
     // Traverse the live graph to dispose whatever geometry is actually mounted (the merged batches
     // + the un-merged hatch/plasma), so a replayed intro doesn't leak the merged buffers.
     podGroup.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh && m.geometry) m.geometry.dispose(); });
+    if (podGroup.userData._cabinInteriorBuilt) { _liveInteriorBuilds = Math.max(0, _liveInteriorBuilds - 1); }
     ctx.three.scene.remove(podGroup);
     podGroup = null;
   }

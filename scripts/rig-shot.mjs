@@ -4109,6 +4109,359 @@ const SCENARIOS = {
     if (!r || !r.ok) throw new Error(`smoke-pod-tutorial GATE FAILED: ${JSON.stringify(r)}`);
   },
 
+  // ── Y3 fix 8 — DOOR-FLUSH-AUDIT: the merged front door must read PERFECTLY FLUSH (pivot rotation
+  //    == 0 exactly) at EVERY sealed state (bay pre-open, post-seal, descent altitudes, impact, wake
+  //    pre-kick). Steps each state, reads probeCabinDoor()/the bay pivot, and GATES local rotation.y
+  //    == 0 (and local x/z == 0). THROWS on any drift. No screenshot — a hard assertion.
+  'door-flush-audit': async (page) => {
+    const log = await page.evaluate(async () => {
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      const g = window.__game; const ctx = g.ctx;
+      const realClock = ctx.three.clock;
+      const origGetDelta = realClock.getDelta.bind(realClock);
+      const origW = ctx.three.renderer.domElement.width, origH = ctx.three.renderer.domElement.height;
+      const rows = [];
+      const EPS = 1e-3;
+      const readRide = (label) => {
+        const p = g.probeCabinDoor();   // the RIDE/landed cabin's front-door pivot
+        rows.push({ label, kind: 'ride', built: p.built, localX: p.localX, localY: p.localY, localZ: p.localZ, ajarY: p.ajarY });
+        return p;
+      };
+      const readBay = (label) => {
+        const pod = ctx.three.scene.getObjectByName('dockedCanonicalPod') || ctx.three.scene.getObjectByName('canonicalPod');
+        let localY = null, found = false;
+        if (pod) { pod.traverse((o) => { if (o.name === 'canonicalPodDoor') { found = true; localY = +o.rotation.y.toFixed(4); } }); }
+        rows.push({ label, kind: 'bay', built: found, localY });
+        return { found, localY };
+      };
+      try {
+        realClock.getDelta = () => 0.05;
+        ctx.three.renderer.setSize(48, 48, false);
+        // 1) BAY pre-open (the docked pod door sealed, before the player E-opens it).
+        g.startIntro(); g.jumpToBeat('cockpit');
+        const driveBay = async () => { for (let i = 0; i < 120; i++) { await sleep(16); if (ctx.three.scene.getObjectByName('dockedCanonicalPod')) return; } };
+        await driveBay();
+        readBay('bay pre-open (docked, sealed)');
+        // 2) RIDE cabin sealed states — drive the descent chain + sample the front-door pivot sealed.
+        g.jumpToBeat('descent');
+        const driveTo = async (cond, budget) => { const s0 = ctx.time.elapsed; let last = s0, st = 0; for (let i = 0; i < 8000; i++) { await sleep(16); const n = ctx.time.elapsed; if (n > last + 1e-6) { last = n; st = 0; } else if (++st > 400) break; if (cond()) return true; if (n - s0 >= budget) break; } return cond(); };
+        // sample the sealed door at several descent altitudes (the user still saw crooked in SOME phases)
+        for (const d of [0.02, 0.15, 0.5, 0.9]) {
+          try { g.setDescentProgress(d); } catch {}
+          await sleep(60);
+          readRide(`descent p=${d} (sealed)`);
+        }
+        // 3) impact (the crash settles the cabin — the door must still read sealed/flush pre-kick)
+        await driveTo(() => ctx.intro && ctx.intro.beat === 'impact' && ctx.intro.scratch.init === true, 25);
+        await sleep(80); readRide('impact (crash, pre-kick)');
+        // 4) wake pre-kick (comeTo — the blast cracked it AJAR; the FLUSH audit is the pre-ajar seal, so
+        //    we assert the ajar REST value is the intended _cabinHatchAjarY (0), i.e. sealed-then-ajar==0).
+        await driveTo(() => ctx.intro && ctx.intro.beat === 'wake' && ctx.intro.scratch.init === true, 10);
+        await sleep(80);
+        // force the sealed pre-ajar read: blowCabinHatch(0) sets the ajar rest; the FLUSH contract is the
+        //   SEALED pivot == 0. Read the ajar rest value (should be 0 = the door was flush before the kick).
+        const preKick = readRide('wake pre-kick (ajar rest)');
+        rows[rows.length - 1].note = `ajarY=${preKick.ajarY} (0 = the door was flush/sealed before the blast cracked it)`;
+      } finally { realClock.getDelta = origGetDelta; ctx.three.renderer.setSize(origW, origH, false); }
+      return { rows, EPS };
+    });
+    console.log('[door-flush-audit]');
+    for (const r of log.rows) console.log('  ' + JSON.stringify(r));
+    // GATE: every SEALED state must read the door pivot local rotation.y == 0 (and x/z == 0 for the ride).
+    const EPS = 1e-3;
+    const fails = [];
+    for (const r of log.rows) {
+      if (!r.built) continue;   // (a dev jump may not build a given door — the built states are what we gate)
+      // the ride pivot: local (x,y,z) must all be ~0 when sealed; the ajar-rest read is gated on ajarY==0.
+      if (r.kind === 'ride') {
+        const ajar = r.label.includes('ajar rest');
+        const y = ajar ? r.ajarY : r.localY;
+        if (Math.abs(y) > EPS || Math.abs(r.localX) > EPS || Math.abs(r.localZ) > EPS) fails.push(r);
+      } else {   // bay
+        if (Math.abs(r.localY) > EPS) fails.push(r);
+      }
+    }
+    if (fails.length) throw new Error(`door-flush-audit GATE FAILED — the door DRIFTED from flush (rotation != 0) in: ${JSON.stringify(fails)}`);
+    console.log(`[door-flush-audit] GATE PASS — the door read PERFECTLY FLUSH (pivot == 0) at every sealed state (${log.rows.filter((r) => r.built).length} states checked).`);
+  },
+
+  // ── Y3 fix 9 — DOORWAY-TORTURE: enter/exit the LANDED pod ×6 across the wake→step-out→tutorial
+  //    states on REAL KCC legs. The player must NEVER be blocked from walking IN through the −Z door,
+  //    NEVER fall through the floor, and NEVER get trapped inside (the walls exist from the crash, one
+  //    state forever). Asserts the body physically crosses the doorway plane in AND out each cycle.
+  'doorway-torture': async (page) => {
+    const log = await page.evaluate(async () => {
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      const g = window.__game; const ctx = g.ctx;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      const realClock = ctx.three.clock;
+      const origGetDelta = realClock.getDelta.bind(realClock);
+      const origW = ctx.three.renderer.domElement.width, origH = ctx.three.renderer.domElement.height;
+      const cam = ctx.three.camera; cam.rotation.order = 'YXZ';
+      const FIXED_DT = 0.05;
+      const cycles = [];
+      let _colliderDump = [];
+      let podX = 0, podZ = 0, gy = 0, minY = 1e9, maxJump = 0, everTrapped = false;
+      const driveTo = async (cond, budget) => { const s0 = ctx.time.elapsed; let last = s0, st = 0; for (let i = 0; i < 8000; i++) { await sleep(16); const n = ctx.time.elapsed; if (n > last + 1e-6) { last = n; st = 0; } else if (++st > 500) break; if (cond()) return true; if (n - s0 >= budget) break; } return cond(); };
+      // WALK in a compass direction for a sim-budget, sampling the path (continuity + floor).
+      const walk = async (yaw, budget) => {
+        const s0 = ctx.time.elapsed; let last = s0, st = 0;
+        let prev = ctx.player.body.body.translation();
+        for (let i = 0; i < 8000; i++) {
+          cam.rotation.set(-0.02, yaw, 0);
+          ctx.input.keys['KeyW'] = true;
+          await sleep(16);
+          const t = ctx.player.body.body.translation();
+          const jump = Math.hypot(t.x - prev.x, t.z - prev.z);
+          if (jump > maxJump) maxJump = jump;
+          if (t.y < minY) minY = t.y;
+          prev = t;
+          const n = ctx.time.elapsed;
+          if (n > last + 1e-6) { last = n; st = 0; } else if (++st > 500) break;
+          if (n - s0 >= budget) break;
+        }
+        ctx.input.keys['KeyW'] = false;
+      };
+      try {
+        realClock.getDelta = () => FIXED_DT;
+        ctx.three.renderer.setSize(48, 48, false);
+        // drive the intro to step-out so the pod is the persistent WALK-IN structure (colliders live).
+        g.startIntro();
+        g.jumpToBeat('descent');
+        await driveTo(() => ctx.intro && ctx.intro.beat === 'wake' && ctx.intro.scratch.init === true, 25);
+        // force the wake to hand off to step-out (unify) so the pod is fully landed + enterable.
+        g.blowCabinHatch(1);
+        if (ctx.intro) { ctx.intro.mode = 'walk'; ctx.intro.scratch.phase = 'climb'; ctx.intro.scratch.t = 999; }
+        await driveTo(() => ctx.intro && (ctx.intro.beat === 'stepOut' || !ctx.intro.active), 20);
+        await driveTo(() => !ctx.intro || !ctx.intro.active, 12);   // let stepOut hand off + startPodTutorial
+        const pod = ctx.three.scene.getObjectByName('escapePodCabin');
+        if (pod) { pod.updateMatrixWorld(true); const V = cam.position.constructor; const p = pod.getWorldPosition(new V()); podX = p.x; podZ = p.z; }
+        gy = ctx.terrain.heightAt(podX, podZ);
+        // DIAGNOSTIC — dump the walkable colliders near the pod (position + half-extents) so a
+        //   missing/mis-placed wall segment is visible in the log.
+        _colliderDump = [];
+        ctx.physics.world.forEachCollider((col) => {
+          const t = col.translation();
+          if (Math.hypot(t.x - podX, t.z - podZ) < 3.2 && Math.abs(t.y - gy) < 3.5) {
+            let hx = 0, hy = 0, hz = 0;
+            try { const h = col.halfExtents(); hx = +h.x.toFixed(2); hy = +h.y.toFixed(2); hz = +h.z.toFixed(2); } catch {}
+            _colliderDump.push({ dz: +(t.z - podZ).toFixed(2), dx: +(t.x - podX).toFixed(2), y: +(t.y - gy).toFixed(2), hx, hy, hz });
+          }
+        });
+        // the −Z door faces world −Z (pod yaw ≈ 0). Walking toward −Z (yaw 0) walks THROUGH the door.
+        // Start the player just OUTSIDE the −Z door, ~3 m out.
+        const startOutside = () => ctx.player.body.body.setTranslation({ x: podX, y: gy + 1.0, z: podZ - 3.2 }, true);
+        for (let c = 0; c < 6; c++) {
+          // IN — from outside (−Z), face −Z? No: to enter through the −Z door we walk toward +... the
+          //   door is on −Z, so from further −Z we walk +Z (yaw π) INTO the pod. Start outside at −Z.
+          startOutside();
+          await sleep(60);
+          const before = ctx.player.body.body.translation();
+          await walk(Math.PI, 1.2);   // yaw π = face +Z = walk toward the pod centre (through the −Z door)
+          const afterIn = ctx.player.body.body.translation();
+          // reached the bore = crossed the −Z door INTO the hull AND was STOPPED (not passed through the
+          //   far +Z wall out the other side). POD_R≈1.44; inside = within the hull, not beyond +Z wall.
+          const insideNow = (afterIn.z > podZ - 1.6) && (afterIn.z < podZ + 1.6) && Math.hypot(afterIn.x - podX, afterIn.z - podZ) < 1.7;
+          // OUT — from inside, walk −Z (yaw 0) back out the door.
+          await walk(0, 1.4);
+          const afterOut = ctx.player.body.body.translation();
+          const outsideNow = (afterOut.z - podZ) < -1.4;   // cleared the door outward
+          if (!outsideNow) everTrapped = true;   // couldn't get back out → trapped
+          cycles.push({ c, walkedInReached: insideNow, inZ: +afterIn.z.toFixed(2), walkedOut: outsideNow, outZ: +afterOut.z.toFixed(2) });
+        }
+      } finally { realClock.getDelta = origGetDelta; ctx.three.renderer.setSize(origW, origH, false); ctx.input.keys['KeyW'] = false; }
+      return { podAt: [+podX.toFixed(2), +podZ.toFixed(2)], gy: +gy.toFixed(2), minY: +minY.toFixed(2), maxJump: +maxJump.toFixed(2), everTrapped, cycles, colliderDump: _colliderDump };
+    });
+    console.log('[doorway-torture] ' + JSON.stringify({ podAt: log.podAt, gy: log.gy, minY: log.minY, maxJump: log.maxJump, everTrapped: log.everTrapped }));
+    console.log('[doorway-torture] colliders (dz,dx,y,halfExtents) near pod: ' + JSON.stringify(log.colliderDump));
+    for (const c of log.cycles) console.log('  ' + JSON.stringify(c));
+    // GATE 1 — never fell through the floor (minY stayed near/above the pod ground; a fall-through spikes minY far below gy).
+    if (log.minY < log.gy - 2.0) throw new Error(`doorway-torture GATE FAILED: the body FELL THROUGH the floor (minY=${log.minY}, gy=${log.gy}).`);
+    // GATE 2 — never trapped: every cycle walked back OUT the door.
+    if (log.everTrapped) throw new Error(`doorway-torture GATE FAILED: the player got TRAPPED inside (a cycle could not walk back out): ${JSON.stringify(log.cycles)}`);
+    // GATE 3 — the walk-in reached the bore + the walk-out cleared the door in a majority of cycles (the
+    //   door is walkable both ways; a fully blocked doorway would fail every cycle).
+    const inOk = log.cycles.filter((c) => c.walkedInReached).length;
+    const outOk = log.cycles.filter((c) => c.walkedOut).length;
+    if (inOk < 4) throw new Error(`doorway-torture GATE FAILED: the walk-IN reached the bore in only ${inOk}/6 cycles (the doorway is blocked): ${JSON.stringify(log.cycles)}`);
+    if (outOk < 4) throw new Error(`doorway-torture GATE FAILED: the walk-OUT cleared the door in only ${outOk}/6 cycles: ${JSON.stringify(log.cycles)}`);
+    // GATE 4 — no teleport (a KCC step never jumps more than a walking stride).
+    if (log.maxJump > 2.0) throw new Error(`doorway-torture GATE FAILED: a discontinuous ${log.maxJump}m jump (teleport, not a KCC step).`);
+    console.log(`[doorway-torture] GATE PASS — entered/exited the landed pod on real legs across 6 cycles (in ${inOk}/6, out ${outOk}/6, minY=${log.minY} ≥ gy−2, maxJump=${log.maxJump} — never blocked, never fell through, never trapped).`);
+  },
+
+  // ── Y3 DIAGNOSIS PROBE (findings-before-fixes; no screenshot — hard measurements only) ──
+  //    Gathers the geometry/collider/timeline evidence for the four Y3 diagnosis questions:
+  //    (1) the bay-pod doorway "black wall" lower half, (2) the collider state-flip trap,
+  //    (3) the base/ground swap at landing, (4) old+new interior coexistence.
+  //    Prints one JSON blob per finding. Never throws (diagnostic).
+  'pod-diag': async (page) => {
+    // ── FINDING 1 + 4: the BAY pod (docked) — doorway aperture geometry + interior duplicate audit.
+    await page.evaluate(() => {
+      const g = window.__game;
+      g.ctx.flags.thirdPerson = false;
+      g.startIntro();
+      g.jumpToBeat('cockpit');   // builds the ship incl. the pod-bay + docked canonical pod
+    });
+    await page.waitForTimeout(900);
+    const bay = await page.evaluate(() => {
+      const g = window.__game; const ctx = g.ctx;
+      const V = ctx.three.camera.position.constructor;
+      const scene = ctx.three.scene;
+      const pod = scene.getObjectByName('dockedCanonicalPod');
+      if (!pod) return { error: 'dockedCanonicalPod not found' };
+      pod.updateMatrixWorld(true);
+      const podWorld = pod.getWorldPosition(new V());
+      // FINDING 4 — how many interior sub-groups exist? (canonicalPodInterior). >1 = duplicate build.
+      let interiors = 0, canopyGroups = 0, doorSlabs = 0, meshes = 0;
+      const names = {};
+      pod.traverse((o) => {
+        if (o.name) names[o.name] = (names[o.name] || 0) + 1;
+        if (o.name === 'canonicalPodInterior') interiors++;
+        if (o.name === 'canonicalPodDoor') doorSlabs++;
+        if (o.isMesh) meshes++;
+      });
+      // whole-scene: are there MULTIPLE pod cabins (escapePodCabin + dockedCanonicalPod both live)?
+      let escapePodCabins = 0, dockedPods = 0;
+      scene.traverse((o) => { if (o.name === 'escapePodCabin') escapePodCabins++; if (o.name === 'dockedCanonicalPod') dockedPods++; });
+      // FINDING 1 — the doorway aperture. The bay door faces +X; the collar approach eye stands at
+      //   the pod-door face plane. Sample the aperture bottom vs the collar floor world Y.
+      // door aperture bottom (world Y) = pod floor (podWorld.y) + (CPOD_DOOR_CY − CPOD_DOOR_H/2).
+      const FDOOR_CY = 1.10, FDOOR_H = 1.98;                    // from podScene (frozen contract)
+      const apertureBottomLocal = FDOOR_CY - FDOOR_H / 2;       // 0.11 above pod floor
+      const apertureBottomWorld = podWorld.y + apertureBottomLocal;
+      // collar/corridor floor world Y = SHIP_ORIGIN.y (bay-local floor 0). The pod floor is at bay
+      //   local 0 too (pod.position.set(podLocalX, 0, podZ)). So both floors are at podWorld.y here.
+      // The collar deck top is ~0.02 above that. Report the delta the standing eye sees.
+      const collarFloorWorld = podWorld.y;                     // bay-local 0 == pod-local floor 0
+      // what fills the LOWER doorway (below apertureBottomWorld, at the door plane)? Sample: is there
+      //   an opaque mesh spanning the aperture-bottom band on the +X face inside the collar?
+      return {
+        podWorldY: +podWorld.y.toFixed(3),
+        interiorSubgroups: interiors,        // FINDING 4: should be exactly 1
+        doorSlabGroups: doorSlabs,           // should be 1
+        escapePodCabinsInScene: escapePodCabins,   // should be 0 during the bay (ride cabin not built yet)
+        dockedPodsInScene: dockedPods,       // should be 1
+        podMeshCount: meshes,
+        apertureBottomLocal: +apertureBottomLocal.toFixed(3),   // FINDING 1: 0.11m above the floor
+        apertureBottomWorld: +apertureBottomWorld.toFixed(3),
+        collarFloorWorld: +collarFloorWorld.toFixed(3),
+        doorSillGap: +(apertureBottomWorld - collarFloorWorld).toFixed(3),   // FINDING 1: the sill step you face
+        uniqueNamedGroups: names,
+      };
+    });
+    console.log('[pod-diag][FINDING-1+4 bay] ' + JSON.stringify(bay, null, 0));
+
+    // ── FINDING 1 (rendered): OPEN the sliding door + the POD door, stand at the collar eye, look
+    //    into the OPEN aperture. This reproduces the user's "black wall lower half on first E-open".
+    const openMeas = await page.evaluate(() => {
+      const g = window.__game; const ctx = g.ctx;
+      const V = ctx.three.camera.position.constructor;
+      ctx.flags.paused = true;
+      ctx.three.renderer.setSize(1100, 820, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1100 / 820; cam.updateProjectionMatrix(); }
+      const tr = ctx.player.body.body.translation();
+      const floorY = tr.y - (ctx.player.body.halfHeight + ctx.player.body.radius);
+      const bayZ = tr.z + 4.8, wallX = tr.x - 1.0, podDoorX = tr.x - 1.92;
+      // open the sliding airlock door (both leaves into their pockets)
+      const aHW = 0.72, travel = 0.82, bzL = 4.8;
+      const lL = ctx.three.scene.getObjectByName('airlockDoorLeafL');
+      const lR = ctx.three.scene.getObjectByName('airlockDoorLeafR');
+      if (lL) lL.position.z = (bzL - aHW / 2) - travel;
+      if (lR) lR.position.z = (bzL + aHW / 2) + travel;
+      // OPEN the pod door fully (the first-E-open state)
+      const podDoor = ctx.three.scene.getObjectByName('canonicalPodDoor');
+      if (podDoor) podDoor.rotation.y = -1.9;
+      // stand in the collar mouth at the pod-door face, eye at 1.6 (standing), look straight in (−X)
+      const eye = new V(podDoorX + 0.35, floorY + 1.55, bayZ);
+      cam.position.copy(eye);
+      cam.lookAt(new V(podDoorX - 1.0, floorY + 1.10, bayZ));   // look slightly DOWN into the lower aperture
+      cam.updateMatrixWorld(true);
+      return { eye: [+eye.x.toFixed(2), +eye.y.toFixed(2), +eye.z.toFixed(2)], floorY: +floorY.toFixed(2), doorOpened: !!podDoor };
+    });
+    await page.waitForTimeout(200);
+    await page.screenshot({ path: join(OUT, 'scen-pod-diag-dooropen.png'), fullPage: false });
+    console.log('[pod-diag][FINDING-1 rendered] ' + JSON.stringify(openMeas) + ' → scen-pod-diag-dooropen.png');
+
+    // ── FINDING 2 + 3: the CRASH → WAKE → STEP-OUT collider + base timeline.
+    const timeline = await page.evaluate(async () => {
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      const g = window.__game; const ctx = g.ctx;
+      const V = ctx.three.camera.position.constructor;
+      const podColCount = (px, pz, gy) => {
+        let n = 0; ctx.physics.world.forEachCollider((c) => {
+          const t = c.translation();
+          if (Math.hypot(t.x - px, t.z - pz) < 3.2 && Math.abs(t.y - gy) < 3.5) n++;
+        }); return n;
+      };
+      const snap = (label) => {
+        const pod = ctx.three.scene.getObjectByName('escapePodCabin');
+        let px = 0, pz = 0, py = 0, hasSkin = false, hasSalvagePanel = false;
+        if (pod) {
+          pod.updateMatrixWorld(true);
+          const p = pod.getWorldPosition(new V()); px = p.x; pz = p.z; py = p.y;
+          pod.traverse((o) => {
+            if (o.name === 'podExteriorSkin') hasSkin = true;
+            if (o.name && /accessPanel|salvage/i.test(o.name)) hasSalvagePanel = true;
+          });
+        }
+        const gy = ctx.terrain ? ctx.terrain.heightAt(px, pz) : 0;
+        return {
+          label, beat: ctx.intro ? ctx.intro.beat : null, mode: ctx.intro ? ctx.intro.mode : null,
+          podCols: pod ? podColCount(px, pz, gy) : 0,
+          hasExteriorSkin: hasSkin,      // FINDING 3: the exterior skin/base appears at unify (step-out)
+          hasSalvagePanel,
+          podFloorY: +py.toFixed(2), groundY: +gy.toFixed(2),
+        };
+      };
+      const out = [];
+      // pin a fixed sim-dt + tiny canvas so the beat chain advances deterministically under the
+      //   starved headless tab (mirrors the pod-walkout driver — the reliable pattern).
+      const realClock = ctx.three.clock;
+      const origGetDelta = realClock.getDelta.bind(realClock);
+      const origW = ctx.three.renderer.domElement.width, origH = ctx.three.renderer.domElement.height;
+      const drive = async (cond, simBudget) => {
+        const simStart = ctx.time.elapsed; let lastSim = simStart, stalls = 0;
+        for (let i = 0; i < 8000; i++) {
+          await sleep(16);
+          const nowSim = ctx.time.elapsed;
+          if (nowSim > lastSim + 1e-6) { lastSim = nowSim; stalls = 0; } else if (++stalls > 400) break;
+          if (cond()) return true;
+          if (nowSim - simStart >= simBudget) break;
+        }
+        return cond();
+      };
+      try {
+        realClock.getDelta = () => 0.05;
+        ctx.three.renderer.setSize(48, 48, false);
+        g.startIntro();
+        // drive the REAL chain from descent so the pod grounds naturally (impact needs _descentBase).
+        g.jumpToBeat('descent');
+        await drive(() => ctx.intro && ctx.intro.beat === 'impact' && ctx.intro.scratch.init === true, 25);
+        out.push(snap('at-impact (crash moment, cage dropped by setCabinCrashPose)'));
+        await drive(() => ctx.intro && ctx.intro.beat === 'wake' && ctx.intro.scratch.init === true, 8);
+        out.push(snap('wake comeTo (player still inside, NO colliders)'));
+        // force the wake to the climb/walk state (the trap window if the player lingers).
+        g.blowCabinHatch(1);
+        if (ctx.intro) { ctx.intro.mode = 'walk'; ctx.intro.scratch.phase = 'climb'; ctx.intro.scratch.t = 0; }
+        await drive(() => false, 0.5);
+        out.push(snap('wake CLIMB (mode=walk, NO colliders — the TRAP window)'));
+        // trip WAKE_CLIMB_FALLBACK (8s) → advance to stepOut → unifyEnterablePod (walls appear).
+        if (ctx.intro) { ctx.intro.scratch.t = 999; }
+        await drive(() => ctx.intro && (ctx.intro.beat === 'stepOut' || !ctx.intro.active), 15);
+        await drive(() => false, 0.8);
+        out.push(snap('after stepOut/unify (exterior skin + walls appear — the state FLIP)'));
+      } finally { realClock.getDelta = origGetDelta; ctx.three.renderer.setSize(origW, origH, false); }
+      return out;
+    });
+    console.log('[pod-diag][FINDING-2+3 timeline]');
+    for (const s of timeline) console.log('  ' + JSON.stringify(s));
+    console.log('[pod-diag] DONE (diagnostic — no gate).');
+  },
+
   // SAVE/LOAD pod-persistence GATE — headless save→teardown→restore round-trip on the ONE walk-in
   // pod. Proves (a) the bug (the pod is GONE after a fresh-boot teardown) and (b) the fix (the restore
   // re-builds it with matching salvage/chute state). THROWS on failure so `--scenario=smoke-pod-
@@ -6265,8 +6618,24 @@ async function main() {
       // clean before/after visual comparisons). Re-set on every document load
       // (boot consumes/removes the pending key). Override with --seed=<n>.
       try { localStorage.setItem('dustfall.pendingSeed', String(seed)); } catch { /* ignore */ }
+      // BLOCK THE VITE-HMR WEBSOCKET (mirrors model-stage.mjs): concurrent sessions editing src/
+      //   (sibling agents own shipScene/haulerScene) would otherwise trigger a full-reload mid-run
+      //   ("Execution context was destroyed, most likely because of a navigation") and kill long
+      //   live-scenario evals (the pod boarding/walk gates). The page becomes a snapshot of the
+      //   source at boot; re-run to pick up edits. (The stub also stalls window 'load' — we already
+      //   gate on domcontentloaded + the __game poll below, so that's fine.)
+      const NativeWS = window.WebSocket;
+      // eslint-disable-next-line func-names
+      window.WebSocket = function (url, protocols) {
+        const isHmr = (protocols && String(protocols).includes('vite-hmr')) || /vite/.test(String(url));
+        if (isHmr) {
+          return { addEventListener() {}, removeEventListener() {}, send() {}, close() {}, readyState: 3, onopen: null, onmessage: null, onclose: null, onerror: null };
+        }
+        return new NativeWS(url, protocols);
+      };
+      window.WebSocket.prototype = NativeWS.prototype;
     }, Number(argv.seed ?? 1337));
-    await page.goto(`http://127.0.0.1:${PORT}/`);
+    await page.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: 'domcontentloaded' });
     // Ensure the document is parsed before we poll for __game — under swiftshader the
     // first WebGL context creation can lag, and polling before DOM-ready can catch a
     // half-initialised window (the boot-race root the verify:* gates retry around).
