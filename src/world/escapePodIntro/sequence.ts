@@ -590,7 +590,11 @@ function tickCorridor(ctx: GameContext, dt: number): void {
   const strobe = 0.5 + 0.5 * Math.sin(t * 11.0);
   setShipAlert(2, strobe);                           // a fast red strobe (corridor)
   setCockpitAlert(2, strobe);                        // the cockpit beacon pulses with the same strobe
-  if (z < SHIP_CORRIDOR_ENTER_Z) advanceBeat(ctx);   // fled back to the bridge → enterPod
+  // X3 (user walk-test 2026-07-04): arm the boarding when the fleeing player REACHES THE BAY,
+  // not only after over-running all the way back to the bridge — they were forced to detour to
+  // the cockpit (crossing ENTER_Z) before the pod door would respond. The bay airlock sits at
+  // the pod-bay threshold's z; a ~2.6m reach covers arriving from the engine-room side.
+  if (z < getPodBayThreshold().z + 2.6) advanceBeat(ctx);   // reached the bay (or beyond) → enterPod
 }
 
 /** R5c — enterPod is now a PHYSICAL entry, NO teleport. The player fled to the bridge end + the
@@ -640,6 +644,13 @@ function tickEnterPod(ctx: GameContext, dt: number): void {
     showIntroPrompt('GET TO THE ESCAPE POD');
   }
   intro.scratch.t = (intro.scratch.t as number) + dt;
+  // X3 (user walk-test 2026-07-04): the red-alert must KEEP FLASHING through the whole boarding —
+  // the corridor beat's strobe froze mid-pulse on advance. Strobe here until the launch fires
+  // (shipExplode then owns the staging). Dedicated scratch key — per-phase code resets scratch.t.
+  intro.scratch.alertT = ((intro.scratch.alertT as number) ?? 0) + dt;
+  const alertStrobe = 0.5 + 0.5 * Math.sin((intro.scratch.alertT as number) * 11.0);
+  setShipAlert(2, alertStrobe);
+  setCockpitAlert(2, alertStrobe);
   const phase = intro.scratch.phase as string;
 
   // ── PHASE airlock (W2b) — free-walk up to the CLOSED sliding blast-door; a gaze/proximity prompt
