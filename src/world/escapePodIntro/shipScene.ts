@@ -425,6 +425,52 @@ const BAY_POD_X = COLLAR_FAR_X - BAY_POD_R;   // −3.36 — pod centre X (only 
 // the −X structural wall + finish panels there so the sliding door + collar + docked pod show).
 function _inBayGap(z: number): boolean { return z > BAY_Z0 - 0.05 && z < BAY_Z1 + 0.05; }
 
+// ── X4 item-2 — THE STARBOARD (+X) VIEWPORT STRIP. ONE long framed rectangular viewport band in the
+//    +X corridor wall (opposite the airlock/quarters −X side), at standing-eye height. The opaque
+//    −X-family _shell wall is CUT over the band + replaced with SEALED tinted glass showing space/the
+//    planet (the camera-relative space dome reads through it). The COLLIDER stays solid (item 2: cut
+//    NO walkable opening — the wall blocks, only the glass is see-through). Placed where the walk
+//    passes (between the corridor mouth and the engine room). A slim mullioned frame (rule 7 depth).
+const VP_Z0 = 7.2;                        // viewport band fore edge (z)
+const VP_Z1 = 12.2;                       // viewport band aft edge (z) — a ~5m strip
+const VP_CY = 1.58;                        // band vertical centre (standing eye ~1.5-1.7m)
+const VP_HH = 0.42;                        // band half-height (glass 0.84m tall; sill ~1.16, head ~2.0)
+const VP_WALL_X = COR_HW;                  // +X corridor wall plane (x=1.0)
+// Is a +X corridor greeble emission over the viewport band (skip the finish panel there — the frame
+//   + glass dress it)?  (z within the band + the vertical band is handled per-emission by y.)
+function _inViewportZ(z: number): boolean { return z > VP_Z0 - 0.05 && z < VP_Z1 + 0.05; }
+
+// ── X4 item-3 — the ACTUAL structural −X wall APERTURE (the hole the sliding door + collar fill).
+//    The old build gapped the FULL BAY_Z0..BAY_Z1 (3.2..6.4) span of the −X structural wall, but the
+//    blast-door frame only covers the aperture ± its jamb posts (z 4.08..5.52) — so the flanking
+//    strips z 3.2..4.08 (fore) + 5.52..6.4 (aft) were LEFT OPEN to the void: the tan space-bg leaked
+//    through at floor + ceiling beside the frame (the user's "SPACE visible left+right of the pod-bay
+//    entrance"). FIX: the structural −X wall now only gaps the true aperture (BAY_ZC ± AIRLOCK_HW, up
+//    to AIRLOCK_TOP); the flanking strips + the above-aperture band are SOLID wall again (matching the
+//    CORRIDOR_COLLIDERS fore/aft jambs + lintel exactly = WYSIWYG). `_inBayGap` still gates the finish
+//    greeble off the whole bay recess (the docked pod shows through the aperture), but the STRUCTURE
+//    seals the void beside the frame.
+const BAY_APERTURE_Z0 = BAY_ZC - AIRLOCK_HW;   // 4.08 — the sliding-door opening fore edge
+const BAY_APERTURE_Z1 = BAY_ZC + AIRLOCK_HW;   // 5.52 — the sliding-door opening aft edge
+
+// ── X4 item-1 — THE CREW QUARTERS. A small lived-in cabin off the −X corridor wall (same side as the
+//    airlock), DOWN the corridor toward the engine room (well aft of the bay, before the dead-end).
+//    A sliding door (the airlock/engine-room leaf idiom) in the −X wall → the room OUTBOARD of the
+//    hull (x < −1.0). Walkable: floor/ceiling/back/side walls + a door gap; matching colliders +
+//    a clean entranceway (the corridor greeble is gated off the door front by `_inQuartersGap`).
+const QTR_ZC = 9.6;                       // the quarters door + room centreline (between ribs 8.8 & 10.6)
+const QTR_DOOR_HW = 0.62;                 // door opening half-width (1.24m clear walk-through)
+const QTR_DOOR_TOP = 2.06;                // door opening top
+const QTR_WALL_X = -COR_HW;               // the −X corridor wall plane (x=−1.0) — the door plane
+const QTR_FAR_X = QTR_WALL_X - 3.1;       // −4.1 — the room's outboard back wall (a ~3m-deep cabin)
+const QTR_Z0 = 8.2;                       // room fore wall (z)
+const QTR_Z1 = 12.0;                      // room aft wall (z) — a ~3.8m-wide cabin
+const QTR_H = 2.4;                        // room ceiling underside (walkable height, matches the corridor)
+const QTR_XC = (QTR_WALL_X + QTR_FAR_X) / 2;   // room centre X
+// Is a −X corridor-wall / greeble emission over the quarters DOOR aperture? (skip it for a clean
+//   entranceway — no pipe/rail/panel/strip barring the door front).
+function _inQuartersDoor(z: number): boolean { return z > QTR_ZC - QTR_DOOR_HW - 0.06 && z < QTR_ZC + QTR_DOOR_HW + 0.06; }
+
 // ── Static-collider specs for the CORRIDOR walkable shell (WYSIWYG — the KCC walks these). These
 //    are BYTE-IDENTICAL to the old greybox CORRIDOR_SPECS so collision + flow are unchanged, EXCEPT
 //    the −X wall is now GAPPED at the airlock opening: the old single −X wall spanned z 2.6..14.6;
@@ -432,21 +478,49 @@ function _inBayGap(z: number): boolean { return z > BAY_Z0 - 0.05 && z < BAY_Z1 
 //    (z 2.6..3.2) + an AFT run (z 6.4..14.6) leaving the airlock walkable. AIRLOCK_COLLIDERS (below)
 //    then wall off the collar + floor it + the sliding-door leaf (state-driven) seals it when shut.
 const _BAY_WALL_FORE_LEN = BAY_Z0 - COR_Z0;                 // 0.6 — corridor mouth → airlock opening
-const _BAY_WALL_AFT_LEN = COR_Z1 - BAY_Z1;                  // 8.2 — airlock opening end → dead-end
+// −X aft-wall run split around the QUARTERS door (z QTR_ZC ± QTR_DOOR_HW = 8.98..10.22): a run from
+//   the airlock aperture end (6.4) → the quarters door fore edge, + a run from the door aft edge →
+//   the dead-end (14.6). The quarters door aperture is walkable INTO the room (its own colliders wall
+//   the room); below/above the door stays solid via the sill + lintel below.
+const _QTR_DOOR_Z0 = QTR_ZC - QTR_DOOR_HW;   // 8.98
+const _QTR_DOOR_Z1 = QTR_ZC + QTR_DOOR_HW;   // 10.22
+const _AFT_A_LEN = _QTR_DOOR_Z0 - BAY_Z1;    // 6.4 → 8.98
+const _AFT_B_LEN = COR_Z1 - _QTR_DOOR_Z1;    // 10.22 → 14.6
 const CORRIDOR_COLLIDERS: ReadonlyArray<BoxSpec> = [
   [2, 0.2, 12, 0, -0.1, 8.6],   // corridor floor  (top y=0)
   [2, 0.2, 12, 0, 2.5, 8.6],    // corridor ceiling (underside y=2.4)
   [0.2, 2.4, 12, 1.1, 1.2, 8.6], // +X wall (inner face x=1.0)
-  // −X wall, GAPPED at the airlock opening — a fore stub + an aft run.
+  // −X wall, GAPPED at the airlock opening — a fore stub + an aft run split at the quarters door.
   [0.2, 2.4, _BAY_WALL_FORE_LEN, -1.1, 1.2, COR_Z0 + _BAY_WALL_FORE_LEN / 2],  // −X wall fore (z 2.6..3.2)
-  [0.2, 2.4, _BAY_WALL_AFT_LEN, -1.1, 1.2, BAY_Z1 + _BAY_WALL_AFT_LEN / 2],    // −X wall aft  (z 6.4..14.6)
+  [0.2, 2.4, _AFT_A_LEN, -1.1, 1.2, BAY_Z1 + _AFT_A_LEN / 2],                  // −X aft-A (z 6.4..8.98, up to the quarters door)
+  [0.2, 2.4, _AFT_B_LEN, -1.1, 1.2, _QTR_DOOR_Z1 + _AFT_B_LEN / 2],            // −X aft-B (z 10.22..14.6, quarters door → dead-end)
   // −X wall JAMBS flanking the airlock aperture (the solid wall either side of the 1.44m opening),
   //   over the airlock z-span, from the opening edge out to the walkable wall line — so you can't
   //   slip past the sliding-door frame into the collar off-centre.
   [0.2, 2.4, (BAY_ZC - AIRLOCK_HW) - BAY_Z0, -1.1, 1.2, (BAY_Z0 + (BAY_ZC - AIRLOCK_HW)) / 2],  // fore jamb
   [0.2, 2.4, BAY_Z1 - (BAY_ZC + AIRLOCK_HW), -1.1, 1.2, ((BAY_ZC + AIRLOCK_HW) + BAY_Z1) / 2],  // aft jamb
   [0.2, 2.4 - AIRLOCK_TOP, 2 * AIRLOCK_HW, -1.1, (AIRLOCK_TOP + 2.4) / 2, BAY_ZC],               // lintel over the opening
+  // QUARTERS door — a SILL below the opening (0..0.05 flush step) + a LINTEL above (top→ceiling) so
+  //   only the walk-through gap is open; the room floor is flush (the sill is cosmetic-thin).
+  [0.2, 2.4 - QTR_DOOR_TOP, 2 * QTR_DOOR_HW, -1.1, (QTR_DOOR_TOP + 2.4) / 2, QTR_ZC],            // quarters lintel over the door
   [2, 2.4, 0.2, 0, 1.2, 14.7],   // dead-end bulkhead (inner face z=14.6 — the disaster trigger)
+];
+
+// ── X4 item-1 — THE CREW QUARTERS walkable envelope (the room OUTBOARD of the −X wall). Floor +
+//    ceiling + back wall + two side walls (fore/aft) box the room; the door gap in the −X corridor
+//    wall (above, walkable) is the only way in. Spec = [w,h,d, cx,cy,cz] LOCAL to SHIP_ORIGIN.
+const _QTR_DEPTH = QTR_WALL_X - QTR_FAR_X;            // 3.1 — room X depth
+const _QTR_WIDTH = QTR_Z1 - QTR_Z0;                   // 3.8 — room Z width
+const QUARTERS_COLLIDERS: ReadonlyArray<BoxSpec> = [
+  [_QTR_DEPTH + 0.2, 0.2, _QTR_WIDTH + 0.2, QTR_XC, -0.1, (QTR_Z0 + QTR_Z1) / 2],           // room floor (top y=0, flush)
+  [_QTR_DEPTH + 0.2, 0.2, _QTR_WIDTH + 0.2, QTR_XC, QTR_H + 0.1, (QTR_Z0 + QTR_Z1) / 2],     // room ceiling (underside y=2.4)
+  [0.2, QTR_H + 0.2, _QTR_WIDTH + 0.2, QTR_FAR_X - 0.1, QTR_H / 2, (QTR_Z0 + QTR_Z1) / 2],   // back (outboard −X) wall
+  [_QTR_DEPTH + 0.2, QTR_H + 0.2, 0.2, QTR_XC, QTR_H / 2, QTR_Z0 - 0.1],                      // fore (−Z) side wall
+  [_QTR_DEPTH + 0.2, QTR_H + 0.2, 0.2, QTR_XC, QTR_H / 2, QTR_Z1 + 0.1],                      // aft (+Z) side wall
+  // NOTE: the room's CORRIDOR-SIDE face (the −X wall line, flanking the door) is already sealed by
+  //   the CORRIDOR_COLLIDERS −X aft-A/aft-B runs (they span z 6.4..8.98 + 10.22..14.6 at x=−1.0);
+  //   the door gap (8.98..10.22) is the only opening. So no extra returns are needed here (they'd
+  //   duplicate the corridor wall). The room is entered ONLY through the door.
 ];
 
 // ── THE AIRLOCK COLLAR walkable envelope (the docking passage). The player walks through the open
@@ -2049,13 +2123,15 @@ export function buildShipScene(ctx: GameContext): void {
   //    lit fixtures), matching the cockpit's worn-gunmetal idiom. Emits the WYSIWYG walkable
   //    colliders (unchanged from the greybox). setShipAlert/setEngineFire hooks stay wired.
   buildCorridor(group);
+  buildCrewQuarters(group);   // X4 — the lived-in crew quarters off the −X wall, down toward the engine room
+  buildViewportStrip(group);  // X4 — the long starboard viewport band (+X wall) showing space on the walk
   buildPodBay(group);   // R5c — the docked escape pod in its bay at the bridge end (the flee target + the physical enter)
   _bayPodBodies.length = 0;   // B2 — reset the docked-pod hull ring accumulator (idempotent rebuild)
   _addBayPodColliders(ctx);   // B2 — the walkable pod hull ring (gapped at the door) so the player walks IN through the door, not through the hull
   _airlockCtx = ctx;          // W2b — capture ctx for the state-driven sliding-door seal collider
   _airlockSealBody = null;    // idempotent rebuild — the previous seal (if any) was freed in dispose
   setBayAirlockDoor(0);       // W2b — the sliding door starts CLOSED (installs the seal collider that blocks the aperture)
-  for (const [w, h, d, cx, cy, cz] of [...CORRIDOR_COLLIDERS, ...AIRLOCK_COLLIDERS]) {   // W2b — the airlock collar is walkable (gapped −X wall + collar floor/walls); the sliding-door seal is state-driven (_addAirlockDoorCollider)
+  for (const [w, h, d, cx, cy, cz] of [...CORRIDOR_COLLIDERS, ...AIRLOCK_COLLIDERS, ...QUARTERS_COLLIDERS]) {   // W2b — airlock collar walkable; X4 — the crew quarters room walkable (both gapped through their doors)
     const col = makeStaticBox(
       ctx.physics.world,
       { x: w / 2, y: h / 2, z: d / 2 },
@@ -2110,6 +2186,7 @@ export function buildShipScene(ctx: GameContext): void {
   _protect(_bayDoorPivot);          // the docked-pod bay door pivot (swings)
   _protect(_airlockDoorL);          // W2b — the operational sliding-door leaves (slide open/shut)
   _protect(_airlockDoorR);
+  _protect(_qtrDoorLeaf);           // X4 — the crew-quarters sliding-door leaf (setQuartersDoor slides it)
   // (the engine-room glass panes ride under the sliding-door leaves _engineDoorJudderL/R → already
   //  protected as children of a noMerge subtree, so their emissive-on-fire lift keeps working.)
   mergeStaticByMaterial(group);
@@ -2212,26 +2289,55 @@ function buildCorridor(group: THREE.Group): void {
   const roof = _box(2.6, COR_WALL_T, COR_LEN, _ceil);
   roof.position.set(0, COR_CH + COR_WALL_T / 2, zc);
   group.add(roof);
+  const wallXm = -(COR_HW + COR_WALL_T / 2);   // −X structural wall plane centre (x)
+  const _mkSeg = (z0: number, z1: number, y0: number, y1: number): void => {
+    const len = z1 - z0; if (len < 0.02) return;
+    const h = y1 - y0; if (h < 0.02) return;
+    const w = _box(COR_WALL_T, h, len, _shell);
+    w.position.set(wallXm, (y0 + y1) / 2, z0 + len / 2);
+    group.add(w);
+  };
   for (const sx of [1, -1]) {
     if (sx === -1) {
-      // R5c — the −X structural wall is SPLIT around the pod-bay opening (BAY_Z0..BAY_Z1): a
-      //   forward segment (mouth → bay) + an aft segment (bay → dead-end), so the bay alcove is a
-      //   real gap in the hull revealing the docked pod (not a decal). The COLLIDER stays the full
-      //   span (CORRIDOR_COLLIDERS unchanged) — the player never walks INTO the bay (the enter is
-      //   scripted), so the invisible collider over the gap is correct WYSIWYG for the walk.
-      const fwdLen = (BAY_Z0) - COR_Z0;
-      const wf = _box(COR_WALL_T, COR_CH + 0.2, fwdLen, _shell);
-      wf.position.set(-(COR_HW + COR_WALL_T / 2), COR_CH / 2, COR_Z0 + fwdLen / 2);
-      group.add(wf);
-      const aftLen = COR_Z1 - BAY_Z1;
-      const wa = _box(COR_WALL_T, COR_CH + 0.2, aftLen, _shell);
-      wa.position.set(-(COR_HW + COR_WALL_T / 2), COR_CH / 2, BAY_Z1 + aftLen / 2);
-      group.add(wa);
+      // X4 — the −X structural wall is built as SOLID runs with two APERTURES cut for real doors: the
+      //   AIRLOCK sliding-door opening (z BAY_APERTURE_Z0..Z1, up to AIRLOCK_TOP) + the CREW QUARTERS
+      //   door (z _QTR_DOOR_Z0..Z1, up to QTR_DOOR_TOP). Item-3 FIX: the old build gapped the FULL
+      //   BAY_Z0..BAY_Z1 which left the flanking strips beside the frame OPEN to the void (the tan
+      //   space-bg leaked through). Now only the true door apertures are open; everything else is
+      //   solid wall (matching the colliders = WYSIWYG). Above each aperture is a solid header band.
+      const yTop = COR_CH + 0.2;
+      // full-height solid runs BETWEEN the apertures
+      _mkSeg(COR_Z0, BAY_APERTURE_Z0, 0, yTop);                 // mouth → airlock fore edge
+      _mkSeg(BAY_APERTURE_Z1, _QTR_DOOR_Z0, 0, yTop);           // airlock aft edge → quarters door fore
+      _mkSeg(_QTR_DOOR_Z1, COR_Z1, 0, yTop);                    // quarters door aft → dead-end
+      // header bands ABOVE each aperture (so the wall seals over the door tops, not to the void)
+      _mkSeg(BAY_APERTURE_Z0, BAY_APERTURE_Z1, AIRLOCK_TOP, yTop);   // over the airlock opening
+      _mkSeg(_QTR_DOOR_Z0, _QTR_DOOR_Z1, QTR_DOOR_TOP, yTop);        // over the quarters door
       continue;
     }
-    const wall = _box(COR_WALL_T, COR_CH + 0.2, COR_LEN, _shell);
-    wall.position.set(sx * (COR_HW + COR_WALL_T / 2), COR_CH / 2, zc);
-    group.add(wall);
+    // +X wall — X4 item-2: gap a horizontal STRIP for the starboard viewport (VP_Z0..VP_Z1 at
+    //   VP_CY ± VP_HH), leaving solid wall fore + aft + a sill band below + a header band above the
+    //   glass. The glass (sealed) + frame fill the hole (buildViewportStrip). The collider stays the
+    //   full solid +X wall (no walkable opening — you can't walk through the window).
+    const xw = sx * (COR_HW + COR_WALL_T / 2);
+    const vpLo = VP_CY - VP_HH, vpHi = VP_CY + VP_HH;
+    // fore solid run (mouth → viewport)
+    const wf2 = _box(COR_WALL_T, COR_CH + 0.2, VP_Z0 - COR_Z0, _shell);
+    wf2.position.set(xw, COR_CH / 2, (COR_Z0 + VP_Z0) / 2);
+    group.add(wf2);
+    // aft solid run (viewport → dead-end)
+    const wa2 = _box(COR_WALL_T, COR_CH + 0.2, COR_Z1 - VP_Z1, _shell);
+    wa2.position.set(xw, COR_CH / 2, (VP_Z1 + COR_Z1) / 2);
+    group.add(wa2);
+    // sill band below the glass (0 → vpLo) + header band above (vpHi → ceiling), over the viewport span
+    const sillH = vpLo;
+    const wsill = _box(COR_WALL_T, sillH, VP_Z1 - VP_Z0, _shell);
+    wsill.position.set(xw, sillH / 2, (VP_Z0 + VP_Z1) / 2);
+    group.add(wsill);
+    const hdrH = (COR_CH + 0.2) - vpHi;
+    const whdr = _box(COR_WALL_T, hdrH, VP_Z1 - VP_Z0, _shell);
+    whdr.position.set(xw, vpHi + hdrH / 2, (VP_Z0 + VP_Z1) / 2);
+    group.add(whdr);
   }
   // dead-end BULKHEAD (the disaster trigger wall) — B1.e: a heavy riveted end-cap FRAMED around a
   //   central DOORWAY that reveals the ENGINE ROOM through its glass sliding door (buildEngineRoom).
@@ -2349,7 +2455,8 @@ function buildCorridor(group: THREE.Group): void {
       const [z0, z1] = seg[si];
       const zmid = (z0 + z1) / 2, len = z1 - z0 - 0.14;
       if (len < 0.2) continue;
-      if (sx === -1 && _inBayGap(zmid)) continue;   // R5c — skip −X wall-finish where the pod-bay opens
+      if (sx === -1 && (_inBayGap(zmid) || _inQuartersDoor(zmid))) continue;   // skip −X wall-finish where the pod-bay + quarters doors open (the door frames dress those)
+      if (sx === 1 && _inViewportZ(zmid)) continue;   // X4 — skip +X wall-finish over the viewport band (the frame + glass dress it)
       // proud upper panel (raised battleship-grey plate — stands proud of the wall so the reveal
       //   around it reads as a real recessed seam)
       const panel = _box(0.06, 1.0, len, _band);
@@ -2386,11 +2493,12 @@ function buildCorridor(group: THREE.Group): void {
   const placards: [number, number, number, number, number][] = [
     // [sx, y, z, w(along z), h]
     [-1, 1.75, 4.2, 0.34, 0.16],
-    [1, 1.68, 9.0, 0.30, 0.20],
+    [1, 1.68, 6.2, 0.30, 0.20],   // X4 — moved fore of the viewport band (was z=9.0, floated on the glass)
     [-1, 1.6, 11.8, 0.4, 0.14],
   ];
   for (const [sx, py, pz, pw, ph] of placards) {
-    if (sx === -1 && _inBayGap(pz)) continue;   // R5c — no placard floating over the pod-bay gap
+    if (sx === -1 && (_inBayGap(pz) || _inQuartersDoor(pz))) continue;   // no placard over the pod-bay gap or the quarters door
+    if (sx === 1 && _inViewportZ(pz)) continue;   // X4 — no placard over the viewport glass
     const back = _box(0.02, ph + 0.03, pw + 0.03, _decal);
     back.position.set(sx * (COR_HW - 0.052), py, pz);
     group.add(back);
@@ -2455,10 +2563,34 @@ function buildCorridor(group: THREE.Group): void {
       clamp.position.set(sx * (COR_HW - 0.05), COR_CH - 0.32, z);
       group.add(clamp);
     }
+    // X4 item-6b — the conduit/loom runs must NOT end abruptly at the corridor mouth. A JUNCTION
+    //   MANIFOLD box at each wall's fore end swallows the pipe/cable ends (they route INTO it), so
+    //   the entrance reads terminated + worked, not floating cut-off tubes. A matching smaller
+    //   terminator caps the aft ends at the dead-end.
+    for (const [mz, mw, mmat] of [[COR_Z0 + 0.02, 0.42, _steel], [COR_Z1 - 0.02, 0.30, _channel]] as const) {
+      const manifold = _box(0.18, 0.62, mw, mmat);
+      manifold.position.set(sx * (COR_HW - 0.09), COR_CH - 0.35, mz);
+      group.add(manifold);
+      // a proud face plate + a bolt border (a real electrical box)
+      const plate = _box(0.05, 0.5, mw - 0.08, _band);
+      plate.position.set(sx * (COR_HW - 0.185), COR_CH - 0.35, mz);
+      group.add(plate);
+      for (const py of [COR_CH - 0.14, COR_CH - 0.56]) for (const pz of [mz - mw / 2 + 0.08, mz + mw / 2 - 0.08]) {
+        group.add(_stud(sx * (COR_HW - 0.21), py, pz, new THREE.Vector3(-sx, 0, 0), _rivet, 0.014));
+      }
+      // a couple of cable GLANDS on the box face where the looms enter (small collars)
+      for (const gy of [COR_CH - 0.24, COR_CH - 0.46]) {
+        const gland = _cyl(0.035, 0.045, 0.06, 8, _channel);
+        gland.rotation.z = Math.PI / 2;
+        gland.position.set(sx * (COR_HW - 0.16), gy, mz + (mz < COR_ZC ? mw / 2 - 0.06 : -mw / 2 + 0.06));
+        group.add(gland);
+      }
+    }
   }
-  // a low PIPE run along the −X wall foot (a plumbing/coolant line, waist-low) — R5c: SPLIT around
-  //   the pod-bay opening so it doesn't bar the docked-hatch view (a fwd stub + the aft run).
-  for (const [pz0, pz1] of [[COR_Z0, BAY_Z0], [BAY_Z1, COR_Z1]] as const) {
+  // a low PIPE run along the −X wall foot (a plumbing/coolant line, waist-low) — SPLIT around BOTH
+  //   the pod-bay opening AND the quarters door so it doesn't bar either entranceway (item 1: clean
+  //   quarters door front). Fwd stub → bay → quarters-door fore → aft run.
+  for (const [pz0, pz1] of [[COR_Z0, BAY_Z0], [BAY_Z1, _QTR_DOOR_Z0], [_QTR_DOOR_Z1, COR_Z1]] as const) {
     const plen = pz1 - pz0 - 0.2;
     if (plen < 0.2) continue;
     const pipe = _cyl(0.05, 0.05, plen, 10, _steel);
@@ -2466,8 +2598,21 @@ function buildCorridor(group: THREE.Group): void {
     pipe.position.set(-(COR_HW - 0.08), 0.5, (pz0 + pz1) / 2);
     group.add(pipe);
   }
+  // X4 item-6b — the low pipe's fore end at the corridor MOUTH ran to an open cut. Route it DOWN into
+  //   the deck with a vertical elbow + a floor flange (a real plumbing termination, not a floating cut).
+  {
+    const elbow = _cyl(0.05, 0.05, 0.44, 10, _steel);
+    elbow.position.set(-(COR_HW - 0.08), 0.28, COR_Z0 + 0.02);   // vertical drop to the deck
+    group.add(elbow);
+    const flange = _cyl(0.09, 0.09, 0.04, 12, _channel);
+    flange.position.set(-(COR_HW - 0.08), 0.08, COR_Z0 + 0.02);   // floor flange
+    group.add(flange);
+    const knuckle = _cyl(0.06, 0.06, 0.1, 10, _steel);            // the elbow knuckle at the bend
+    knuckle.position.set(-(COR_HW - 0.08), 0.5, COR_Z0 + 0.06);
+    group.add(knuckle);
+  }
   for (let z = COR_Z0 + 0.7; z < COR_Z1; z += 1.4) {
-    if (_inBayGap(z)) continue;   // R5c — no bracket over the bay gap
+    if (_inBayGap(z) || _inQuartersDoor(z)) continue;   // no bracket over the bay gap or the quarters door
     const bracket = _box(0.06, 0.12, 0.05, _steel);
     bracket.position.set(-(COR_HW - 0.06), 0.5, z);
     group.add(bracket);
@@ -2524,8 +2669,9 @@ function buildCorridor(group: THREE.Group): void {
   //    (a real freighter corridor detail; reads as a walked, worked space).
   for (const sx of [1, -1]) {
     if (sx === -1) {
-      // R5c — the −X grab-rail is SPLIT around the bay opening (it would otherwise bar the hatch).
-      for (const [rz0, rz1] of [[COR_Z0 + 0.3, BAY_Z0], [BAY_Z1, COR_Z1 - 0.3]] as const) {
+      // the −X grab-rail is SPLIT around the bay opening AND the quarters door (it would otherwise
+      //   bar the entranceway). Fwd → bay → quarters-door fore → aft.
+      for (const [rz0, rz1] of [[COR_Z0 + 0.3, BAY_Z0], [BAY_Z1, _QTR_DOOR_Z0], [_QTR_DOOR_Z1, COR_Z1 - 0.3]] as const) {
         const rlen = rz1 - rz0;
         if (rlen < 0.2) continue;
         const rail = _cyl(0.028, 0.028, rlen, 8, _corrRail);
@@ -2534,7 +2680,7 @@ function buildCorridor(group: THREE.Group): void {
         group.add(rail);
       }
       for (let z = COR_Z0 + 0.7; z < COR_Z1; z += 2.0) {
-        if (_inBayGap(z)) continue;
+        if (_inBayGap(z) || _inQuartersDoor(z)) continue;
         const stand = _box(0.05, 0.05, 0.05, _rivet);
         stand.position.set(-(COR_HW - 0.05), 1.15, z);
         group.add(stand);
@@ -2618,7 +2764,7 @@ function buildCorridor(group: THREE.Group): void {
   _corrRedStripMats.length = 0;
   for (const sx of [1, -1]) {
     for (let z = COR_Z0 + 0.4; z < COR_Z1; z += 1.5) {
-      if (sx === -1 && _inBayGap(z + 0.75)) continue;   // R5c — no red strip across the bay opening
+      if (sx === -1 && (_inBayGap(z + 0.75) || _inQuartersDoor(z + 0.75))) continue;   // no red strip across the bay opening or the quarters door
       const sm = new THREE.MeshBasicMaterial({ color: 0x1c0604 });
       _buildMats.push(sm);
       _corrRedStripMats.push(sm);
@@ -2872,6 +3018,61 @@ function buildPodBay(group: THREE.Group): void {
   sillHaz.position.set(frameProud - 0.02, 0.055, zc);
   bay.add(sillHaz);
 
+  // ═══ 1b. X4 item-5 — AIRLOCK DETAIL PASS (the collar "should read functional"). Restrained,
+  //    purposeful, in the gunmetal family: a wall CONTROL PANEL beside the door with a small readout
+  //    + status LEDs, SEAL INDICATOR lamps up the jambs, and CAUTION striping on the sill approach.
+  //    All corridor-facing (proud of the wall) so the arriving player reads it as an operable airlock.
+  //  (a) a CONTROL PANEL on the corridor wall, aft side of the door (a recessed console with a readout
+  //      + a green/amber status stack + a couple of buttons) — the "operate the airlock" station.
+  const panZ = zc + jambHW + 0.42;
+  const panel = _box(0.10, 0.62, 0.42, _steel);
+  panel.position.set(frameProud + 0.02, 1.42, panZ);
+  bay.add(panel);
+  const panScreen = _box(0.02, 0.22, 0.30, _screenGlass);   // a dark readout face
+  panScreen.position.set(frameProud - 0.04, 1.58, panZ);
+  bay.add(panScreen);
+  for (let i = 0; i < 3; i++) {   // green readout bars (unlit glow)
+    const bar = _box(0.01, 0.02, 0.16 - i * 0.03, _ledGreen);
+    bar.position.set(frameProud - 0.055, 1.64 - i * 0.05, panZ - 0.04);
+    bay.add(bar);
+  }
+  for (const [by, mat] of [[1.30, _ledGreen], [1.24, _ledAmber], [1.18, _ledAmber]] as const) {   // a status LED stack
+    const led = _cyl(0.018, 0.018, 0.02, 8, mat);
+    led.rotation.z = Math.PI / 2;
+    led.position.set(frameProud - 0.045, by, panZ + 0.12);
+    bay.add(led);
+  }
+  for (const bz of [-0.08, 0.0, 0.08]) {   // a row of push-buttons
+    const btn = _cyl(0.02, 0.02, 0.02, 8, _corrRail);
+    btn.rotation.z = Math.PI / 2;
+    btn.position.set(frameProud - 0.045, 1.24, panZ + bz - 0.14);
+    bay.add(btn);
+  }
+  //  (b) SEAL-INDICATOR lamps up BOTH jambs (small green domes = "sealed/pressurised" — the airlock
+  //      status telltales) — restrained green points marching the door edge.
+  for (const sz of [-1, 1]) for (const ly of [0.5, 1.1, 1.7]) {
+    const ind = _cyl(0.022, 0.022, 0.03, 8, _ledGreen);
+    ind.rotation.x = Math.PI / 2;
+    ind.position.set(frameProud + 0.12, ly, zc + sz * (jambHW + 0.02));
+    bay.add(ind);
+  }
+  //  (c) CAUTION striping — angled hazard chevrons on the deck at the door approach (a painted warning
+  //      threshold you step over), corridor-side of the sill.
+  for (let i = 0; i < 5; i++) {
+    const chev = _box(0.26, 0.006, 0.05, _bayHazardAccent);
+    chev.position.set(frameProud + 0.14, 0.056, zc - 0.36 + i * 0.18);
+    chev.rotation.y = 0.5;
+    bay.add(chev);
+  }
+  //  (d) a small OVERHEAD status beacon housing above the door (a warning strobe fixture — dark now,
+  //      reads as the airlock's own alert lamp) + a placard-lit "AIRLOCK" is already on the header.
+  const beaconHousing = _box(0.14, 0.10, 0.18, _channel);
+  beaconHousing.position.set(frameProud + 0.06, top + 0.02, zc - jambHW - 0.3);
+  bay.add(beaconHousing);
+  const beaconLens = _cyl(0.05, 0.06, 0.06, 10, _ledAmber);
+  beaconLens.position.set(frameProud + 0.06, top - 0.02, zc - jambHW - 0.3);
+  bay.add(beaconLens);
+
   // ═══ 2. THE OPERATIONAL SLIDING DOOR — two heavy opaque blast-door leaves in the wall plane, riding
   //    a header rail + a floor track, meeting at the aperture centre when CLOSED. setBayAirlockDoor
   //    slides them apart into wall pockets. (The engine-room sliding-door idiom — but OPAQUE steel +
@@ -3096,6 +3297,377 @@ function buildPodBay(group: THREE.Group): void {
   bay.add(lens);
 }
 
+// ── X4 item-1 — CREW QUARTERS materials (lived-in basics, in the ship's gunmetal family). Bunk
+//    mattress + a folded blanket, a locker, a desk, plus the cockpit's personal-touch idiom (mug,
+//    framed photo). Warm fabric tones read the "human" note against the grey hull.
+const _qtrMattress = new THREE.MeshLambertMaterial({ color: 0x8f8a7c, flatShading: true });   // pale worn ticking
+const _qtrBlanket = new THREE.MeshLambertMaterial({ color: 0x7a4a34, flatShading: true });    // a rust-red wool blanket
+const _qtrPillow = new THREE.MeshLambertMaterial({ color: 0xbdb6a4, flatShading: true });     // a grubby pillow
+const _qtrLocker = _metal(0x54595f, 0.44, 0.62, { flat: true, grime: true });                 // a steel locker (ship family)
+const _qtrDesk = _metal(0x4a4f55, 0.40, 0.66, { flat: true, grime: true });                   // a folding desk/shelf
+let _qtrDoorLeaf: THREE.Group | null = null;     // the quarters sliding-door leaf (parked open by default)
+let _qtrLamp: THREE.PointLight | null = null;    // the room's warm bunk lamp (kept out of the alert dim)
+
+/** X4 item-1 — build the CREW QUARTERS: a small lived-in cabin OUTBOARD of the −X corridor wall
+ *  (x < −1.0), entered through a sliding door in the wall (parked OPEN so the walk peeks in). LIVED-IN
+ *  BASICS: a bunk (mattress + folded blanket + pillow), a wall locker, a folding desk with a mug +
+ *  a pinned photo, a shelf. Walkable — the QUARTERS_COLLIDERS box the room; the corridor −X wall is
+ *  gapped at the door (buildCorridor). The room has its own warm lamp (spills into the corridor
+ *  through the open door). The engine-room disaster red-alert still reads in the doorway (the corridor
+ *  red floods reach the entrance; the room lamp is a modest warm pool that the menace overrides). */
+function buildCrewQuarters(group: THREE.Group): void {
+  const q = new THREE.Group();
+  q.name = 'escapeShipCrewQuarters';
+  group.add(q);
+  const wallX = QTR_WALL_X;               // −1.0 (the door plane / corridor wall line)
+  const farX = QTR_FAR_X;                 // −4.1 (back wall)
+  const zc = QTR_ZC, dHW = QTR_DOOR_HW, dTop = QTR_DOOR_TOP;
+  const z0 = QTR_Z0, z1 = QTR_Z1, H = QTR_H;
+
+  // ═══ 1. ROOM SHELL — floor / ceiling / back wall / side walls (dark grimed steel; matches the
+  //    corridor family). The corridor-side face (the −X wall line) is the buildCorridor wall, gapped
+  //    at the door; here we add the room's own inner faces so the room reads finished from inside.
+  const rFloor = _box(wallX - farX + 0.2, COR_WALL_T, z1 - z0 + 0.2, _deck);
+  rFloor.position.set(QTR_XC, -COR_WALL_T / 2, (z0 + z1) / 2);
+  q.add(rFloor);
+  const rCeil = _box(wallX - farX + 0.2, COR_WALL_T, z1 - z0 + 0.2, _ceil);
+  rCeil.position.set(QTR_XC, H + COR_WALL_T / 2, (z0 + z1) / 2);
+  q.add(rCeil);
+  const rBack = _box(COR_WALL_T, H + 0.2, z1 - z0 + 0.2, _shell);
+  rBack.position.set(farX - COR_WALL_T / 2, H / 2, (z0 + z1) / 2);
+  q.add(rBack);
+  for (const sz of [-1, 1]) {
+    const side = _box(wallX - farX + 0.2, H + 0.2, COR_WALL_T, _shell);
+    side.position.set(QTR_XC, H / 2, (sz < 0 ? z0 : z1) + sz * COR_WALL_T / 2);
+    q.add(side);
+  }
+  // the room's corridor-side wall RETURNS (the −X wall line inside the room, flanking the door) — so
+  //   from INSIDE the room the wall reads solid either side of the door, dressed to match.
+  for (const [rz0, rz1] of [[z0, zc - dHW], [zc + dHW, z1]] as const) {
+    const rlen = rz1 - rz0; if (rlen < 0.05) continue;
+    const ret = _box(0.10, H + 0.2, rlen, _band);
+    ret.position.set(wallX - 0.05, H / 2, (rz0 + rz1) / 2);
+    q.add(ret);
+    // a recessed lower dado band (two-value wall, matching the corridor) + a bolt border
+    const dado = _box(0.06, 0.6, rlen - 0.1, _channel);
+    dado.position.set(wallX - 0.02, 0.5, (rz0 + rz1) / 2);
+    q.add(dado);
+  }
+  // ── WALL DRESSING (round-2): the bare shell walls read institutional; break them with a proud
+  //    upper panel + a darker lower dado + a rub-rail + a bolt border on the BACK + BOTH SIDE walls,
+  //    matching the corridor's two-value language, so the cabin reads finished + lived-in, not empty.
+  const _dressWall = (nx: number, nz: number, cx: number, cz: number, spanZ: boolean, spanLen: number): void => {
+    // proud upper panel (raised battleship grey) + lower dark dado + a rub-rail line + a bolt border.
+    const along = spanZ ? spanLen : spanLen;   // panel runs along the wall
+    const upper = spanZ
+      ? _box(0.05, 1.0, along - 0.2, _band) : _box(along - 0.2, 1.0, 0.05, _band);
+    upper.position.set(cx + nx * 0.03, 1.5, cz + nz * 0.03);
+    q.add(upper);
+    const lower = spanZ
+      ? _box(0.035, 0.66, along - 0.2, _channel) : _box(along - 0.2, 0.66, 0.035, _channel);
+    lower.position.set(cx + nx * 0.02, 0.55, cz + nz * 0.02);
+    q.add(lower);
+    const rail = spanZ
+      ? _box(0.06, 0.05, along - 0.1, _channel) : _box(along - 0.1, 0.05, 0.06, _channel);
+    rail.position.set(cx + nx * 0.04, 0.98, cz + nz * 0.04);
+    q.add(rail);
+  };
+  //  back wall (−X face, normal +X into the room)
+  _dressWall(1, 0, farX + 0.02, (z0 + z1) / 2, true, z1 - z0);
+  //  fore + aft side walls (normal into the room along ∓Z)
+  _dressWall(0, 1, QTR_XC, z0 + 0.02, false, wallX - farX);
+  _dressWall(0, -1, QTR_XC, z1 - 0.02, false, wallX - farX);
+
+  // ═══ 2. THE SLIDING DOOR — a single heavy leaf riding a header rail, PARKED OPEN in a wall pocket
+  //    on the aft side (so the corridor walk sees INTO the lit cabin — the lived-in read). Frame:
+  //    channel-steel jambs + a header + a threshold + a stencilled placard + a slim hazard accent, so
+  //    it reads as a real, intentional operational door. setQuartersDoor can close it later.
+  //  side JAMBS (corridor-facing, proud of the wall)
+  for (const sz of [-1, 1]) {
+    const post = _box(0.18, dTop + 0.12, 0.18, _steel);
+    post.position.set(wallX - 0.09, (dTop + 0.12) / 2, zc + sz * (dHW + 0.09));
+    q.add(post);
+    for (let y = 0.4; y < dTop; y += 0.42) q.add(_stud(wallX - 0.01, y, zc + sz * (dHW + 0.09), new THREE.Vector3(1, 0, 0), _rivet, 0.015));
+  }
+  //  HEADER lintel + a slim hazard band + a stencilled placard ("CREW")
+  const lintel = _box(0.18, 0.2, dHW * 2 + 0.5, _steel);
+  lintel.position.set(wallX - 0.09, dTop + 0.10, zc);
+  q.add(lintel);
+  const lintelHaz = _box(0.03, 0.06, dHW * 2 + 0.2, _bayHazardAccent);
+  lintelHaz.position.set(wallX - 0.01, dTop + 0.02, zc);
+  q.add(lintelHaz);
+  const placBack = _box(0.02, 0.14, 0.6, _decal);
+  placBack.position.set(wallX - 0.11, dTop + 0.11, zc);
+  q.add(placBack);
+  const placFace = _box(0.01, 0.09, 0.46, _corrPlacard);
+  placFace.position.set(wallX - 0.12, dTop + 0.11, zc);
+  q.add(placFace);
+  //  THRESHOLD sill + a hazard tread
+  const sill = _box(0.30, 0.05, dHW * 2, _steel);
+  sill.position.set(wallX - 0.06, 0.03, zc);
+  q.add(sill);
+  const sillHaz = _box(0.30, 0.02, 0.05, _bayHazardAccent);
+  sillHaz.position.set(wallX - 0.06, 0.055, zc);
+  q.add(sillHaz);
+  //  the header rail the leaf hangs from (spanning to the pocket)
+  const rail = _box(0.10, 0.10, dHW * 3.4, _channel);
+  rail.position.set(wallX - 0.14, dTop + 0.04, zc + dHW);
+  q.add(rail);
+  //  the LEAF — parked OPEN, slid into the aft pocket (z > the door). A worked blast-plate.
+  const leaf = new THREE.Group();
+  leaf.name = 'quartersDoorLeaf';
+  leaf.position.set(wallX - 0.14, 0, zc + dHW * 2.05);   // parked aft (open)
+  q.add(leaf);
+  _qtrDoorLeaf = leaf;
+  const slab = _box(0.08, dTop - 0.04, dHW * 2 - 0.04, _bayDoorLeaf);
+  slab.position.set(0, dTop / 2, 0);
+  leaf.add(slab);
+  const inset = _box(0.03, dTop - 0.4, dHW * 2 - 0.24, _channel);
+  inset.position.set(0.05, dTop / 2, 0);
+  leaf.add(inset);
+  const handle = _box(0.05, 0.4, 0.05, _corrRail);
+  handle.position.set(0.07, dTop * 0.5, -(dHW - 0.1));
+  leaf.add(handle);
+
+  // ═══ 3. THE BUNK — against the BACK wall (−X), running along Z. A steel frame + a mattress + a
+  //    folded rust-red blanket + a grubby pillow (the lived-in centrepiece).
+  const bunkY = 0.5, bunkLen = 1.9, bunkD = 0.72;
+  const bunkX = farX + bunkD / 2 + 0.06;
+  const bunkFrame = _box(bunkD, 0.14, bunkLen, _qtrLocker);
+  bunkFrame.position.set(bunkX, bunkY, z0 + 0.55 + bunkLen / 2);
+  q.add(bunkFrame);
+  // legs
+  for (const lz of [z0 + 0.6, z0 + 0.5 + bunkLen]) for (const lx of [bunkX - bunkD / 2 + 0.06, bunkX + bunkD / 2 - 0.06]) {
+    const leg = _box(0.06, bunkY, 0.06, _qtrLocker);
+    leg.position.set(lx, bunkY / 2, lz);
+    q.add(leg);
+  }
+  const mattress = _box(bunkD - 0.08, 0.12, bunkLen - 0.06, _qtrMattress);
+  mattress.position.set(bunkX, bunkY + 0.13, z0 + 0.55 + bunkLen / 2);
+  q.add(mattress);
+  const pillow = _box(bunkD - 0.18, 0.10, 0.42, _qtrPillow);
+  pillow.position.set(bunkX - 0.02, bunkY + 0.20, z0 + 0.8);
+  q.add(pillow);
+  // a folded blanket at the foot
+  const blanket = _box(bunkD - 0.06, 0.14, 0.62, _qtrBlanket);
+  blanket.position.set(bunkX, bunkY + 0.20, z0 + 0.55 + bunkLen - 0.5);
+  q.add(blanket);
+
+  // ═══ 4. A WALL LOCKER — a tall steel cabinet against the aft side wall (a place for kit).
+  const lockerX = farX + 0.30, lockerZ = z1 - 0.5;
+  const locker = _box(0.5, 1.8, 0.5, _qtrLocker);
+  locker.position.set(lockerX, 0.9, lockerZ);
+  q.add(locker);
+  // twin doors + louvre vents + a handle
+  const lseam = _box(0.51, 1.7, 0.02, _channel);
+  lseam.position.set(lockerX, 0.9, lockerZ);
+  q.add(lseam);
+  for (const vy of [1.5, 1.42, 1.34]) {
+    const vent = _box(0.42, 0.012, 0.02, _channel);
+    vent.position.set(lockerX, vy, lockerZ - 0.24);
+    q.add(vent);
+  }
+  const lhandle = _box(0.05, 0.16, 0.04, _corrRail);
+  lhandle.position.set(lockerX + 0.01, 0.95, lockerZ + 0.24);
+  q.add(lhandle);
+
+  // ═══ 5. A FOLDING DESK / SHELF on the fore side wall + personal props (mug, pinned photo) — the
+  //    cockpit personal-touch idiom, so the room reads as SOMEONE'S.
+  const deskX = farX + 0.55, deskZ = z0 + 0.45, deskY = 0.78;
+  const desk = _box(0.7, 0.05, 0.5, _qtrDesk);
+  desk.position.set(deskX, deskY, deskZ);
+  q.add(desk);
+  for (const dx of [deskX - 0.28, deskX + 0.28]) {   // a couple of bracket legs to the wall
+    const brace = _box(0.05, deskY, 0.05, _qtrDesk);
+    brace.position.set(dx, deskY / 2, deskZ - 0.2);
+    q.add(brace);
+  }
+  // a small shelf above the desk on the fore wall
+  const shelf = _box(0.7, 0.04, 0.22, _qtrDesk);
+  shelf.position.set(deskX, 1.5, z0 + 0.18);
+  q.add(shelf);
+  for (const sx2 of [deskX - 0.3, deskX + 0.3]) {
+    const brk = _box(0.04, 0.14, 0.2, _channel);
+    brk.position.set(sx2, 1.43, z0 + 0.18);
+    q.add(brk);
+  }
+  // a chipped enamel MUG on the desk (the cockpit mug idiom)
+  const mugBody = _cyl(0.045, 0.04, 0.09, 14, _qtrBlanket);
+  mugBody.position.set(deskX + 0.18, deskY + 0.07, deskZ + 0.1);
+  q.add(mugBody);
+  const mugRim = _cyl(0.047, 0.047, 0.01, 14, _band);
+  mugRim.position.set(deskX + 0.18, deskY + 0.115, deskZ + 0.1);
+  q.add(mugRim);
+  // a couple of stowed items on the shelf (a folded cloth + a tin)
+  const tin = _cyl(0.05, 0.05, 0.08, 12, _qtrLocker);
+  tin.position.set(deskX - 0.18, 1.56, z0 + 0.18);
+  q.add(tin);
+  const cloth = _box(0.16, 0.08, 0.14, _qtrPillow);
+  cloth.position.set(deskX + 0.14, 1.56, z0 + 0.18);
+  q.add(cloth);
+  // a PINNED PHOTO on the fore wall above the desk (a framed portrait — the human note). The fore
+  //   wall is at z0 with its inner face normal +Z, so the frame is THIN in Z + broad in X/Y, standing
+  //   proud of the wall facing into the room.
+  const photoFrameMat = new THREE.MeshLambertMaterial({ color: 0x2e281f, flatShading: true });
+  _buildMats.push(photoFrameMat);
+  const photoMat = new THREE.MeshLambertMaterial({ color: 0xb8a67e, flatShading: true });
+  _buildMats.push(photoMat);
+  const pframe = _box(0.30, 0.36, 0.03, photoFrameMat);
+  pframe.position.set(deskX - 0.05, 1.22, z0 + 0.075);
+  q.add(pframe);
+  const photo = _box(0.24, 0.30, 0.012, photoMat);
+  photo.position.set(deskX - 0.05, 1.22, z0 + 0.092);
+  q.add(photo);
+  // a second, smaller snapshot taped beside it (a scatter of the pilot's people — lived-in)
+  const snap = _box(0.14, 0.18, 0.01, photoMat);
+  snap.position.set(deskX + 0.22, 1.16, z0 + 0.085);
+  snap.rotation.z = 0.14;
+  q.add(snap);
+
+  // ═══ 5b. MORE LIVED-IN CLUTTER (round-2: the room read empty). A hung coverall on a hook on the
+  //    aft wall, a stowed duffel + a crate on the floor, a wall towel — the "someone lives here" read.
+  //  a HOOK + a hung coverall/jacket on the aft side wall (a soft draped form)
+  const hook = _box(0.04, 0.06, 0.04, _corrRail);
+  hook.position.set(farX + 1.3, 1.85, z1 - 0.08);
+  q.add(hook);
+  const coverall = _box(0.34, 0.9, 0.14, _qtrDesk);   // a hung coverall (dark work-cloth)
+  coverall.position.set(farX + 1.3, 1.35, z1 - 0.18);
+  q.add(coverall);
+  const coverallLo = _box(0.30, 0.4, 0.12, _channel);   // the darker legs, tapering
+  coverallLo.position.set(farX + 1.3, 0.78, z1 - 0.2);
+  q.add(coverallLo);
+  //  a canvas DUFFEL on the floor by the bunk foot
+  const duffel = _cyl(0.18, 0.18, 0.6, 12, _qtrMattress);
+  duffel.rotation.x = Math.PI / 2;
+  duffel.position.set(farX + 0.4, 0.18, z1 - 0.9);
+  q.add(duffel);
+  //  a low stowage CRATE tucked in the aft-corner
+  const crate = _box(0.42, 0.4, 0.42, _qtrLocker);
+  crate.position.set(farX + 0.3, 0.2, z1 - 0.55);
+  q.add(crate);
+  const crateLid = _box(0.44, 0.04, 0.44, _channel);
+  crateLid.position.set(farX + 0.3, 0.42, z1 - 0.55);
+  q.add(crateLid);
+  //  a towel draped over the bunk rail (a small soft tell)
+  const towel = _box(0.06, 0.28, 0.34, _qtrPillow);
+  towel.position.set(bunkX + bunkD / 2 - 0.02, bunkY - 0.02, z0 + 1.7);
+  q.add(towel);
+
+  // ═══ 6. LIGHTING — a warm bunk lamp (a lived-in pool) + a small ceiling fixture. The lamp spills
+  //    through the OPEN door into the corridor (a warm "someone lives here" tell). Kept modest so the
+  //    red-alert corridor floods still dominate the doorway during the disaster.
+  const lampHousing = _box(0.14, 0.08, 0.2, _channel);
+  lampHousing.position.set(farX + 0.16, 1.5, z0 + 1.0);
+  q.add(lampHousing);
+  const lampLens = _box(0.03, 0.06, 0.16, _corrLens);
+  lampLens.position.set(farX + 0.24, 1.5, z0 + 1.0);
+  q.add(lampLens);
+  const lamp = new THREE.PointLight(0xffcf94, 0.9, 4.0, 1.9);
+  lamp.position.set(farX + 0.5, 1.55, z0 + 1.1);
+  q.add(lamp);
+  _qtrLamp = lamp;
+  // a soft ceiling fill so the whole room reads modelled (cool over warm, matching the corridor idiom)
+  const roomFill = new THREE.HemisphereLight(0xbfae94, 0x3a3f46, 0.5);
+  roomFill.position.set(QTR_XC, H, (z0 + z1) / 2);
+  q.add(roomFill);
+  const can = new THREE.PointLight(0xd6dae2, 0.6, 4.5, 1.8);
+  can.position.set(QTR_XC, H - 0.1, (z0 + z1) / 2);
+  q.add(can);
+}
+
+// ── X4 item-2 — the STARBOARD VIEWPORT glass: a sealed cool space-tinted transmissive pane (the
+//    camera-relative space dome / planet read through it). Cloned per-pane. Cool blue-grey tint,
+//    glossy, low opacity so the stars/planet read; a faint emissive so it isn't a black void.
+function _makeViewportGlass(): THREE.MeshStandardMaterial {
+  return new THREE.MeshStandardMaterial({
+    color: 0x243441, roughness: 0.10, metalness: 0.0,
+    emissive: 0x0a141e, emissiveIntensity: 0.35,
+    transparent: true, opacity: 0.22, side: THREE.DoubleSide,
+  });
+}
+const _viewportGlassMats: THREE.MeshStandardMaterial[] = [];
+
+/** X4 item-2 — build the ONE LONG STARBOARD VIEWPORT STRIP: a framed rectangular band of sealed glass
+ *  in the +X corridor wall (the wall is cut over the band in buildCorridor; the collider stays solid).
+ *  Slim structural frame (rule 7 depth ≥0.10m on the boxy members) + mullions splitting the strip into
+ *  panes → the "long viewport" read. The space dome / planet shows through the glass on the walk. */
+function buildViewportStrip(group: THREE.Group): void {
+  const v = new THREE.Group();
+  v.name = 'escapeShipViewport';
+  group.add(v);
+  const xIn = VP_WALL_X - 0.03;              // glass sits just inboard of the wall plane
+  const vpLo = VP_CY - VP_HH, vpHi = VP_CY + VP_HH;
+  const zc = (VP_Z0 + VP_Z1) / 2, len = VP_Z1 - VP_Z0;
+  // ── the GLASS panes (split by mullions into a run of long panes) — sealed, showing space.
+  const paneN = 4;
+  const paneGap = 0.06;                       // mullion width between panes
+  const paneW = (len - paneGap * (paneN + 1)) / paneN;
+  for (let i = 0; i < paneN; i++) {
+    const pz = VP_Z0 + paneGap + paneW / 2 + i * (paneW + paneGap);
+    const gm = _makeViewportGlass();
+    _viewportGlassMats.push(gm); _buildMats.push(gm);
+    const pane = _box(0.04, VP_HH * 2 - 0.04, paneW, gm);
+    pane.position.set(xIn, VP_CY, pz);
+    v.add(pane);
+  }
+  // ── the FRAME: a slim proud channel-steel surround (top rail + sill rail + end jambs) + mullions
+  //    between panes. Rule 7: the boxy frame members are ≥0.12m deep (into the corridor) so they read
+  //    thick, not paper-thin, at oblique angles. Frame stands proud of the wall into the corridor.
+  const fx = VP_WALL_X - 0.07;                // frame face stands 0.07m into the corridor off the wall line
+  const fDepth = 0.14;                        // proud depth toward the corridor (rule 7)
+  // top rail + sill rail (run the length)
+  for (const [ry, rh] of [[vpHi + 0.05, 0.14], [vpLo - 0.05, 0.14]] as const) {
+    const rail = _box(fDepth, rh, len + 0.24, _winFrame);
+    rail.position.set(fx, ry, zc);
+    v.add(rail);
+  }
+  // end jambs (cap the strip fore + aft)
+  for (const jz of [VP_Z0 - 0.06, VP_Z1 + 0.06]) {
+    const jamb = _box(fDepth, VP_HH * 2 + 0.30, 0.14, _winFrame);
+    jamb.position.set(fx, VP_CY, jz);
+    v.add(jamb);
+  }
+  // mullions between the panes (thin vertical dividers)
+  for (let i = 1; i < paneN; i++) {
+    const mz = VP_Z0 + paneGap / 2 + i * (paneW + paneGap) - paneGap / 2 + paneW / 2 + paneGap / 2;
+    // simpler: place at the gap centres
+    const gz = VP_Z0 + paneGap + i * (paneW + paneGap) - paneGap / 2;
+    const mul = _box(fDepth - 0.02, VP_HH * 2, 0.06, _winFrame);
+    mul.position.set(fx + 0.005, VP_CY, gz);
+    v.add(mul);
+    void mz;
+  }
+  // a slim inner reveal (a dark channel around the glass, so the pane reads recessed into the frame)
+  const reveal = _box(0.02, VP_HH * 2 + 0.04, len + 0.06, _channel);
+  reveal.position.set(VP_WALL_X - 0.02, VP_CY, zc);
+  v.add(reveal);
+  // bolt studs marching along the rails (worked hardware) — face into the corridor (−X)
+  for (let z = VP_Z0 + 0.2; z <= VP_Z1; z += 0.6) {
+    for (const by of [vpHi + 0.05, vpLo - 0.05]) v.add(_stud(fx - fDepth / 2, by, z, new THREE.Vector3(-1, 0, 0), _rivet, 0.014));
+  }
+  // a small grab-rail below the sill (a real freighter window has a hand-hold — reads lived-in)
+  const grab = _cyl(0.024, 0.024, len - 0.2, 8, _corrRail);
+  grab.rotation.x = Math.PI / 2;
+  grab.position.set(VP_WALL_X - 0.12, vpLo - 0.18, zc);
+  v.add(grab);
+  for (const gz2 of [VP_Z0 + 0.4, zc, VP_Z1 - 0.4]) {
+    const stand = _box(0.05, 0.05, 0.05, _rivet);
+    stand.position.set(VP_WALL_X - 0.06, vpLo - 0.18, gz2);
+    v.add(stand);
+  }
+}
+
+/** X4 — drive the crew-quarters sliding door: 0 = open (parked, default) → 1 = closed (across the
+ *  aperture). Currently the room is left OPEN so the corridor walk peeks in; kept for future scripting
+ *  (e.g. sealing it during the disaster). Safe no-op before build / after dispose. */
+export function setQuartersDoor(t: number): void {
+  if (!_qtrDoorLeaf) return;
+  const k = Math.max(0, Math.min(1, t));
+  // open (k=0): parked aft at zc + dHW*2.05; closed (k=1): centred over the door (z=QTR_ZC)
+  const openZ = QTR_ZC + QTR_DOOR_HW * 2.05, closedZ = QTR_ZC;
+  _qtrDoorLeaf.position.z = openZ + (closedZ - openZ) * k;
+}
+
 /** R5c — the PHYSICAL EJECT release: shudder the docked pod in its cradle as the explosive bolts
  *  fire (a decaying jitter on the bay pod group) + drop the bay/clamp lighting. `t` 0→1 over the
  *  release. Called by tickShipExplode before the ship is disposed. Safe no-op if the bay isn't built. */
@@ -3197,6 +3769,82 @@ function buildEngineBay(group: THREE.Group): void {
   const grate = _box(roomHW * 1.4, 0.04, roomZ1 - roomZ0 - 0.6, _deck);
   grate.position.set(0, 0.03, roomZc);
   room.add(grate);
+
+  // ── 2b. X4 item-6c — MORE MECHANICAL DETAIL that CONNECTS (manifolds + coil banks + piping that
+  //    ties the reactor to the block/turbine, not floating masses). Kept to the SIDES + BACK so the
+  //    fire at the core (roomZ1−1.2, centre) still reads clearly through the glass door.
+  //  (a) a PIPE MANIFOLD HEADER across the back wall linking the reactor to the side machines — a fat
+  //      horizontal drum with take-off pipes dropping to the block + turbine (the plumbing that binds
+  //      the machinery into one plant).
+  const header = _cyl(0.16, 0.16, roomHW * 1.7, 14, _engMachine);
+  header.rotation.z = Math.PI / 2;
+  header.position.set(0, roomH - 0.5, roomZ1 - 0.35);
+  room.add(header);
+  for (const tx of [-roomHW + 0.7, -0.4, 0.4, roomHW - 0.7]) {   // take-off drops from the header
+    const drop = _cyl(0.06, 0.06, 1.4, 8, _engMachine);
+    drop.position.set(tx, roomH - 1.2, roomZ1 - 0.35);
+    room.add(drop);
+    const flange = _cyl(0.1, 0.1, 0.05, 10, _engBlock);
+    flange.position.set(tx, roomH - 0.5, roomZ1 - 0.35);
+    room.add(flange);
+  }
+  //  (b) COIL BANKS on the engine block (−X) — a stack of ring coils (toroidal windings) reading as an
+  //      induction/cooling coil bank; a real machine texture, connected by a bus bar.
+  const blockX = -roomHW + 0.7;
+  for (let ci = 0; ci < 4; ci++) {
+    const coilGeo = new THREE.TorusGeometry(0.22, 0.06, 8, 16);
+    _disposables.push(coilGeo);
+    const coil = new THREE.Mesh(coilGeo, _engMachine);
+    coil.rotation.y = Math.PI / 2;
+    coil.position.set(blockX + 0.6, 0.45 + ci * 0.34, roomZc + 0.3);
+    room.add(coil);
+  }
+  const bus = _box(0.06, 1.4, 0.06, _corrRail);   // a copper-ish bus bar up the coil stack
+  bus.position.set(blockX + 0.82, 0.9, roomZc + 0.3);
+  room.add(bus);
+  //  (c) a CONNECTING PIPE ARC from the reactor mid to the turbine (+X) — the coolant loop tying the
+  //      core to the turbine (a bent pipe run, not two islands).
+  for (const [x0, x1, py] of [[-0.55, blockX + 0.6, 1.6], [0.55, roomHW - 0.75, 1.35]] as const) {
+    const run = _cyl(0.07, 0.07, Math.abs(x1 - x0), 8, _engMachine);
+    run.rotation.z = Math.PI / 2;
+    run.position.set((x0 + x1) / 2, py, roomZ1 - 0.7);
+    room.add(run);
+    const knee = _cyl(0.08, 0.08, 0.3, 8, _engMachine);   // a vertical knee where it turns down
+    knee.position.set(x1, py - 0.15, roomZ1 - 0.7);
+    room.add(knee);
+  }
+  //  (d) a CABLE TRAY down one wall + conduits into a small control cabinet by the door (a manned
+  //      station read) — cabling that ROUTES somewhere, not decoration.
+  const tray = _box(0.14, 0.06, roomZ1 - roomZ0 - 0.5, _channel);
+  tray.position.set(roomHW - 0.14, roomH - 0.7, roomZc);
+  room.add(tray);
+  for (let z = roomZ0 + 0.4; z < roomZ1; z += 0.5) {
+    const rung = _box(0.16, 0.02, 0.04, _corrRail);
+    rung.position.set(roomHW - 0.14, roomH - 0.7, z);
+    room.add(rung);
+  }
+  const cabinet = _box(0.4, 1.3, 0.4, _engBlock);   // a control cabinet by the door
+  cabinet.position.set(roomHW - 0.5, 0.65, doorZ + 0.7);
+  room.add(cabinet);
+  const cabFace = _box(0.02, 0.5, 0.32, _screenGlass);   // a dark readout face
+  cabFace.position.set(roomHW - 0.71, 1.0, doorZ + 0.7);
+  room.add(cabFace);
+  for (const cy of [0.55, 0.7]) {   // a couple of status LEDs on the cabinet (unlit glow)
+    const led = _box(0.02, 0.03, 0.03, _ledAmber);
+    led.position.set(roomHW - 0.71, cy, doorZ + 0.56);
+    room.add(led);
+  }
+  //  (e) a couple of PRESSURE GAUGES + valve wheels clustered on the manifold (worked hardware)
+  for (const [gx, gz] of [[-0.7, roomZ1 - 0.55], [0.7, roomZ1 - 0.55]] as const) {
+    const gauge = _cyl(0.09, 0.09, 0.05, 12, _steel);
+    gauge.rotation.x = Math.PI / 2;
+    gauge.position.set(gx, roomH - 0.5, gz + 0.16);
+    room.add(gauge);
+    const gface = _cyl(0.06, 0.06, 0.02, 12, _dialFace);
+    gface.rotation.x = Math.PI / 2;
+    gface.position.set(gx, roomH - 0.5, gz + 0.19);
+    room.add(gface);
+  }
 
   // ── 3. THE GLASS SLIDING DOOR — two leaves meeting in the centre of the doorway, CLOSED. Heavy
   //    scuffed safety glass in steel frames, riding a header rail + a floor track (a real sliding
@@ -3319,6 +3967,7 @@ export function setShipAlert(level: 0 | 2, strobe = 0): void {
     for (const m of _corrRedStripMats) m.color.setHex(0x1c0604);
     if (_corrRedLight) _corrRedLight.intensity = 0;
     if (_corrRedLight2) _corrRedLight2.intensity = 0;
+    if (_qtrLamp) _qtrLamp.intensity = (_qtrLamp.userData.qtrBase ??= _qtrLamp.intensity) as number;   // X4 — quarters lamp back to warm
     // legacy: restore any (now unused) tint-mats if present.
     for (const { mat, base } of _corridorMats) mat.color.copy(base);
     return;
@@ -3334,6 +3983,7 @@ export function setShipAlert(level: 0 | 2, strobe = 0): void {
   for (const m of _corrRedStripMats) m.color.setHex(hot ? 0xff3218 : 0x5a0e06);
   if (_corrRedLight) _corrRedLight.intensity = 2.4 + 3.4 * strobe;
   if (_corrRedLight2) _corrRedLight2.intensity = 1.8 + 2.6 * strobe;
+  if (_qtrLamp) _qtrLamp.intensity = ((_qtrLamp.userData.qtrBase ??= _qtrLamp.intensity) as number) * 0.2;   // X4 — the crew lamp all but dies under the alert
   // legacy tint (no-op unless old greybox mats exist)
   for (const { mat, base } of _corridorMats) mat.color.copy(base).lerp(_ALERT_RED, 0.34 + 0.34 * strobe);
 }
@@ -3383,6 +4033,9 @@ export function disposeShipScene(ctx: GameContext): void {
   _bayGroup = null;         // R5c — the docked-pod bay group (geometry freed via _disposables + traverse)
   _bayDoorPivot = null;     // B1.a — the docked pod's front-door pivot
   _bayGlowLight = null;     // R5c
+  _qtrDoorLeaf = null;      // X4 — the crew-quarters sliding-door leaf
+  _qtrLamp = null;          // X4 — the crew-quarters bunk lamp
+  _viewportGlassMats.length = 0;   // X4 — the starboard viewport glass (freed via _buildMats)
   // W2b — the operational sliding door: free the state-driven seal collider + null the leaf refs.
   if (_airlockSealBody) { ctx.physics.world.removeRigidBody(_airlockSealBody); _airlockSealBody = null; }
   _airlockDoorL = null;
