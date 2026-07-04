@@ -2584,6 +2584,20 @@ function buildCorridor(group: THREE.Group): void {
   duct.rotation.x = Math.PI / 2;
   duct.position.set(0.66, COR_CH - 0.14, ceilZc);
   group.add(duct);
+  // FIX PASS (SEV5: "the ceiling pipe above the viewport ends open-bore in mid-air"). The duct's
+  //   fore + aft ends were bare cylinder discs floating over the corridor — from the viewport walk the
+  //   fore end read as an open bore hanging in mid-air above the viewport top rail. Land BOTH ends in
+  //   a ceiling JUNCTION BOX + a flange collar (the same "terminate the pipe in a manifold/flange"
+  //   idiom as the low-pipe elbow + the conduit manifolds), so the run reads as ducted-into-a-plenum.
+  for (const [dz, sfore] of [[ceilZc - ceilLen / 2, true], [ceilZc + ceilLen / 2, false]] as const) {
+    const jbox = _box(0.34, 0.30, 0.22, _channel);            // a ceiling plenum/junction box the duct enters
+    jbox.position.set(0.66, COR_CH - 0.12, dz + (sfore ? -0.10 : 0.10));
+    group.add(jbox);
+    const collar = _cyl(0.135, 0.135, 0.06, 12, _steel);      // a flange collar where the duct meets the box
+    collar.rotation.x = Math.PI / 2;
+    collar.position.set(0.66, COR_CH - 0.14, dz + (sfore ? -0.02 : 0.02));
+    group.add(collar);
+  }
   // duct support straps
   for (let z = COR_Z0 + 1.0; z < COR_Z1; z += 1.8) {
     const strap = _cyl(0.135, 0.135, 0.04, 12, _steel);
@@ -2594,20 +2608,49 @@ function buildCorridor(group: THREE.Group): void {
 
   // ── CONDUIT + CABLE-LOOM RUNS at BOTH wall/ceiling junctions (the "lived-in" greeble). A pair of
   //    parallel conduit pipes + a fat rubber cable loom, clamped at intervals, running the length.
+  //  FIX PASS (SEV1: "the UPPER handrail + trim bar cross the quarters doorway at head height").
+  //    ROOT CAUSE: these −X-wall runs (loom at y≈1.9, lower conduit at y≈2.06 — right at the
+  //    QTR_DOOR_TOP 2.06 head-height) ran the FULL corridor length with no aperture split, so they
+  //    barred the OPEN quarters doorway (and the pod-bay opening) exactly like the lower rail used to.
+  //    FIX: the −X (sx=−1) runs are now SPLIT around BOTH the bay gap AND the quarters door — a fore
+  //    stub → bay → quarters-door-fore → aft run — with a capped JUNCTION BOX at each cut edge (both
+  //    sides), the same clean-terminated idiom as the lower rail's end caps + the fore/aft manifolds.
+  //    The +X (sx=1) runs stay continuous (no door on that wall). These carry NO colliders (greeble),
+  //    so no collider split is needed (rule 9 VERIFY: the structural wall gap + KCC are unchanged).
+  const _runSegsX = (sx: number): Array<[number, number]> =>
+    sx === 1
+      ? [[COR_Z0 + 0.1, COR_Z1 - 0.1]]                                     // +X wall: one continuous run
+      : [[COR_Z0 + 0.1, BAY_Z0], [BAY_Z1, _QTR_DOOR_Z0], [_QTR_DOOR_Z1, COR_Z1 - 0.1]];  // −X: split around both doors
   for (const sx of [1, -1]) {
-    for (let ci = 0; ci < 2; ci++) {
-      const cd = _cyl(0.035 + ci * 0.012, 0.035 + ci * 0.012, COR_LEN - 0.2, 8, ci === 0 ? _steel : _band);
-      cd.rotation.x = Math.PI / 2;
-      cd.position.set(sx * (COR_HW - 0.07 - ci * 0.1), COR_CH - 0.2 - ci * 0.14, zc);
-      group.add(cd);
+    const segs = _runSegsX(sx);
+    for (const [rz0, rz1] of segs) {
+      const rlen = rz1 - rz0;
+      if (rlen < 0.25) continue;
+      const rzc = (rz0 + rz1) / 2;
+      for (let ci = 0; ci < 2; ci++) {
+        const cd = _cyl(0.035 + ci * 0.012, 0.035 + ci * 0.012, rlen, 8, ci === 0 ? _steel : _band);
+        cd.rotation.x = Math.PI / 2;
+        cd.position.set(sx * (COR_HW - 0.07 - ci * 0.1), COR_CH - 0.2 - ci * 0.14, rzc);
+        group.add(cd);
+      }
+      // the fat black cable loom, sagging slightly (a lower position, thicker, matte rubber)
+      const loom = _cyl(0.06, 0.06, rlen, 8, _cable);
+      loom.rotation.x = Math.PI / 2;
+      loom.position.set(sx * (COR_HW - 0.05), COR_CH - 0.5, rzc);
+      group.add(loom);
+      // cap EACH cut edge that lands at a door aperture with a small junction box (so the runs read
+      //   terminated + worked at the doorway, not floating cut tubes — the end-cap idiom). Skip the
+      //   corridor-mouth/dead-end ends (the fore/aft manifolds below already terminate those).
+      for (const [cz, isFore] of [[rz0, true], [rz1, false]] as const) {
+        if (cz <= COR_Z0 + 0.15 || cz >= COR_Z1 - 0.15) continue;   // mouth/dead-end handled by the manifolds
+        const cap = _box(0.14, 0.42, 0.10, _channel);
+        cap.position.set(sx * (COR_HW - 0.08), COR_CH - 0.32, cz + (isFore ? 0.05 : -0.05));
+        group.add(cap);
+      }
     }
-    // the fat black cable loom, sagging slightly (a lower position, thicker, matte rubber)
-    const loom = _cyl(0.06, 0.06, COR_LEN - 0.2, 8, _cable);
-    loom.rotation.x = Math.PI / 2;
-    loom.position.set(sx * (COR_HW - 0.05), COR_CH - 0.5, zc);
-    group.add(loom);
-    // clamps holding the runs to the wall
+    // clamps holding the runs to the wall — skip over the −X door apertures (no clamp on the void)
     for (let z = COR_Z0 + 0.55; z < COR_Z1; z += 0.9) {
+      if (sx === -1 && (_inBayGap(z) || _inQuartersDoor(z))) continue;
       const clamp = _box(0.05, 0.06, 0.04, _channel);
       clamp.position.set(sx * (COR_HW - 0.05), COR_CH - 0.32, z);
       group.add(clamp);
@@ -3097,13 +3140,29 @@ function buildPodBay(group: THREE.Group): void {
     btn.position.set(frameProud - 0.045, 1.24, panZ + bz - 0.14);
     bay.add(btn);
   }
-  //  (b) SEAL-INDICATOR lamps up BOTH jambs (small green domes = "sealed/pressurised" — the airlock
-  //      status telltales) — restrained green points marching the door edge.
-  for (const sz of [-1, 1]) for (const ly of [0.5, 1.1, 1.7]) {
-    const ind = _cyl(0.022, 0.022, 0.03, 8, _ledGreen);
-    ind.rotation.x = Math.PI / 2;
-    ind.position.set(frameProud + 0.12, ly, zc + sz * (jambHW + 0.02));
-    bay.add(ind);
+  //  (b) SEAL-INDICATOR lamps — a REGULAR ALIGNED COLUMN up each jamb (the airlock status telltales).
+  //      FIX PASS (SEV2: "the seal lamps read as splotches — irregular sizes/heights, unlit"). ROOT
+  //      CAUSE: the old lamps were _cyl discs oriented rotation.x=π/2 (axis along Z), so a corridor eye
+  //      saw them EDGE-ON as thin slivers whose apparent size/shape swung wildly with the view angle =
+  //      the "splotch" read. FIX: a tidy vertical column of IDENTICAL small emissive units per jamb —
+  //      each = a dark recessed housing + a flush green lens box FACING THE CORRIDOR (+X), on a fixed
+  //      even pitch (a real status stack), + a matched RED pair at the base ("unsealed" telltales). All
+  //      the same size + aligned to the jamb centreline so they read as an instrument column, not nubs.
+  const _sealYs = [0.55, 0.90, 1.25, 1.60, 1.95];        // even pitch up the jamb (identical units)
+  for (const sz of [-1, 1]) {
+    const jz = zc + sz * (jambHW + 0.11);                // on the jamb centreline (matches the post)
+    for (let i = 0; i < _sealYs.length; i++) {
+      // a small dark housing recessed into the jamb face
+      const housing = _box(0.04, 0.05, 0.05, _channel);
+      housing.position.set(frameProud + 0.11, _sealYs[i], jz);
+      bay.add(housing);
+      // the emissive lens facing the corridor (+X). Green = sealed for the column; the single base
+      //   unit is amber ("cycle/unsealed" telltale) so the stack reads as a real status column.
+      //   Kept small + identical so the column reads as an instrument stack, not chunky green squares.
+      const lens = _box(0.02, 0.026, 0.026, i === 0 ? _ledAmber : _ledGreen);
+      lens.position.set(frameProud + 0.135, _sealYs[i], jz);
+      bay.add(lens);
+    }
   }
   //  (c) CAUTION striping — angled hazard chevrons on the deck at the door approach (a painted warning
   //      threshold you step over), corridor-side of the sill.
@@ -3144,14 +3203,20 @@ function buildPodBay(group: THREE.Group): void {
     const slab = _box(0.10, top - 0.06, aHW - 0.02, _bayDoorLeaf);
     slab.position.set(0, top / 2, 0);
     leaf.add(slab);
-    // a recessed panel + a diagonal rib on the slab face (a worked blast-door read)
+    // a recessed panel + two flush horizontal ribs framing it (a worked blast-door read).
+    //  FIX PASS (SEV2: "the LEFT leaf's diagonal bar reads unmounted + would clip on slide"). The old
+    //  `strut` was a chunky bar tilted by sz·0.5 → a diagonal slash across the leaf with an unmounted
+    //  lower end, MIRRORED opposite on each leaf so the two didn't match. Replaced with a symmetric,
+    //  SLIDE-SAFE pair of flush horizontal stiffener ribs (no tilt, fully inside the leaf face,
+    //  identical on both leaves) — the leaf reads clean + fabricated + slides without clipping.
     const inset = _box(0.03, top - 0.44, aHW - 0.20, _channel);
     inset.position.set(0.06, top / 2, 0);
     leaf.add(inset);
-    const strut = _box(0.04, 0.10, aHW - 0.14, _steel);
-    strut.rotation.x = sz * 0.5;
-    strut.position.set(0.075, top / 2, 0);
-    leaf.add(strut);
+    for (const ry of [top * 0.62, top * 0.38]) {
+      const rib = _box(0.045, 0.075, aHW - 0.20, _steel);
+      rib.position.set(0.078, ry, 0);
+      leaf.add(rib);
+    }
     // a vertical grab handle on the meeting stile + rivet studs down the outer edge
     const handle = _box(0.06, 0.44, 0.06, _corrRail);
     handle.position.set(0.09, top * 0.5, -sz * (aHW / 2 - 0.08));
@@ -3624,17 +3689,36 @@ function buildCrewQuarters(group: THREE.Group): void {
   q.add(can);
 }
 
-// ── X4 item-2 — the STARBOARD VIEWPORT glass: a sealed cool space-tinted transmissive pane (the
-//    camera-relative space dome / planet read through it). Cloned per-pane. Cool blue-grey tint,
-//    glossy, low opacity so the stars/planet read; a faint emissive so it isn't a black void.
+// ── X4 item-2 — the STARBOARD VIEWPORT glass: a sealed cool space-tinted transmissive pane.
+//    FIX PASS (adversarial gate SEV1: "the strip reads as BLACK WALL PANELS — no stars, no glass
+//    cues"). ROOT CAUSE: the glass (opacity 0.22) only showed whatever lay behind it — the
+//    camera-relative space dome, which reads as 2-3 diffuse light-bloom smudges depending on the
+//    planet azimuth. A standing player couldn't tell it was a window. FIX: a DEDICATED emissive
+//    STAR-SPECKLE BACKDROP is built just OUTBOARD of the glass (buildViewportStrip) so the window
+//    ALWAYS reads as deep space regardless of the sky's planet azimuth — dozens of small crisp
+//    points at varied brightness (restrained: deep space, not a christmas tree). The glass tint is
+//    lifted a touch + kept glossy so a frame-edge glint + a faint vertical tint gradient read as a
+//    real sealed pane over the stars. Cloned per-pane. Cool blue-grey tint.
 function _makeViewportGlass(): THREE.MeshStandardMaterial {
   return new THREE.MeshStandardMaterial({
-    color: 0x243441, roughness: 0.10, metalness: 0.0,
-    emissive: 0x0a141e, emissiveIntensity: 0.35,
-    transparent: true, opacity: 0.22, side: THREE.DoubleSide,
+    color: 0x2a3d4d, roughness: 0.08, metalness: 0.0,
+    emissive: 0x0c1826, emissiveIntensity: 0.30,
+    transparent: true, opacity: 0.20, side: THREE.DoubleSide,
   });
 }
 const _viewportGlassMats: THREE.MeshStandardMaterial[] = [];
+// ── FIX PASS — the STAR-SPECKLE BACKDROP behind the viewport glass. A near-black deep-space panel
+//    (unlit, so it stays pure black regardless of cabin lighting) speckled with many small emissive
+//    star quads at graded brightness. Three brightness tiers (faint / mid / bright) so the field
+//    reads as REAL varied stars, not a uniform dot-grid. A single faint cool limb-glow band gives a
+//    "planet edge in the deep" space cue. All unlit MeshBasic → the window reads at a glance even
+//    when the corridor is dim or the sky dome faces the wrong way. Restrained star count (deep
+//    space). These are module-scope shared mats (one draw family); freed via _buildMats at dispose.
+const _vpVoid = new THREE.MeshBasicMaterial({ color: 0x080b14 });            // the deep-space backdrop (a hair blue → reads as space, not wall)
+const _vpStarDim = new THREE.MeshBasicMaterial({ color: 0xaeb9cc });          // faint distant stars
+const _vpStarMid = new THREE.MeshBasicMaterial({ color: 0xdfe7f2 });          // mid stars
+const _vpStarHot = new THREE.MeshBasicMaterial({ color: 0xffffff });          // a few bright near stars
+const _vpLimb = new THREE.MeshBasicMaterial({ color: 0x3a5f7d, transparent: true, opacity: 0.6 });  // a faint planet-limb glow band
 
 /** X4 item-2 — build the ONE LONG STARBOARD VIEWPORT STRIP: a framed rectangular band of sealed glass
  *  in the +X corridor wall (the wall is cut over the band in buildCorridor; the collider stays solid).
@@ -3647,7 +3731,60 @@ function buildViewportStrip(group: THREE.Group): void {
   const xIn = VP_WALL_X - 0.03;              // glass sits just inboard of the wall plane
   const vpLo = VP_CY - VP_HH, vpHi = VP_CY + VP_HH;
   const zc = (VP_Z0 + VP_Z1) / 2, len = VP_Z1 - VP_Z0;
-  // ── the GLASS panes (split by mullions into a run of long panes) — sealed, showing space.
+  // ── FIX PASS (SEV1) — the DEEP-SPACE STAR BACKDROP, built OUTBOARD of the glass so the strip
+  //    ALWAYS reads as a window on space (not black wall panels), regardless of the sky dome's planet
+  //    azimuth. A near-black void panel spanning the whole band + a deterministic field of many small
+  //    emissive star quads at three brightness tiers + one faint cool limb-glow band low in the frame.
+  // The backdrop (void + stars) lives in its OWN noMerge sub-group: mergeStaticByMaterial batches
+  //   opaque shared-material meshes by material UUID and adds the merged mesh to the SHIP ROOT — which
+  //   hoisted these tiny emissive star quads out of the viewport frame + broke the window read (the
+  //   round-1/2 "still black panels" bug). Tagging the subtree noMerge keeps them as-authored, exactly
+  //   inboard-facing behind the glass, at a trivial mesh cost (~dozens of quads).
+  const bg = new THREE.Group();
+  bg.userData.noMerge = true;
+  v.add(bg);
+  const xVoid = VP_WALL_X + 0.10;              // the void panel sits ~0.13m OUTBOARD of the glass (a shallow depth read)
+  const back = _box(0.02, VP_HH * 2 + 0.02, len + 0.02, _vpVoid);
+  back.position.set(xVoid, VP_CY, zc);
+  bg.add(back);
+  // a faint cool limb-glow band low in the band (a distant planet edge — a space cue, kept dim)
+  const limb = _box(0.015, 0.22, len - 0.4, _vpLimb);
+  limb.position.set(xVoid - 0.006, VP_CY - VP_HH + 0.24, zc);
+  bg.add(limb);
+  // the STAR FIELD — deterministic (a cheap hash lattice, NO RNG budget): march a fine grid across
+  //   the band and place a small star quad at ~40% of cells, sizing/brightness by the hash so the
+  //   field reads varied (faint field + occasional bright near-stars). Stars face the corridor (−X)
+  //   and sit a hair proud of the void so they're crisp points, not merged into the black.
+  const _hash = (a: number, b: number): number => {
+    const s = Math.sin(a * 127.1 + b * 311.7) * 43758.5453;
+    return s - Math.floor(s);
+  };
+  const starZ0 = VP_Z0 + 0.12, starZ1 = VP_Z1 - 0.12;
+  const starY0 = VP_CY - VP_HH + 0.10, starY1 = VP_CY + VP_HH - 0.08;
+  const nZ = 30, nY = 8;                       // lattice density (→ ~dozens of stars after the gate)
+  for (let iz = 0; iz < nZ; iz++) {
+    for (let iy = 0; iy < nY; iy++) {
+      const h = _hash(iz + 1, iy + 1);
+      if (h < 0.60) continue;                  // ~40% of cells get a star (restrained — deep space)
+      const h2 = _hash(iz * 2.3 + 5.1, iy * 1.7 + 2.9);
+      const h3 = _hash(iz * 0.7 + 9.3, iy * 3.1 + 4.4);
+      // jitter within the cell so the field isn't a visible grid
+      const jz = (h2 - 0.5) * ((starZ1 - starZ0) / nZ) * 0.9;
+      const jy = (h3 - 0.5) * ((starY1 - starY0) / nY) * 0.9;
+      const sz = starZ0 + (iz + 0.5) * (starZ1 - starZ0) / nZ + jz;
+      const sy = starY0 + (iy + 0.5) * (starY1 - starY0) / nY + jy;
+      // brightness tier + size by hash. Sizes tuned so stars read as crisp POINTS through the glass
+      //   from ~2m (round-3's 2.4-5cm quads read as blocky squares — cheapened it); most are fine
+      //   faint points, a few brighter mid-stars, a rare bright near-star. Deep space, not squares.
+      let mat = _vpStarDim, r = 0.016;
+      if (h > 0.93) { mat = _vpStarHot; r = 0.032; }
+      else if (h > 0.80) { mat = _vpStarMid; r = 0.023; }
+      const star = _box(0.012, r, r, mat);     // a small emissive quad facing −X (into the corridor)
+      star.position.set(xVoid - 0.03, sy, sz);  // stand well proud of the void → crisp, no z-fight
+      bg.add(star);
+    }
+  }
+  // ── the GLASS panes (split by mullions into a run of long panes) — sealed, showing the star backdrop.
   const paneN = 4;
   const paneGap = 0.06;                       // mullion width between panes
   const paneW = (len - paneGap * (paneN + 1)) / paneN;
@@ -3686,10 +3823,23 @@ function buildViewportStrip(group: THREE.Group): void {
     v.add(mul);
     void mz;
   }
-  // a slim inner reveal (a dark channel around the glass, so the pane reads recessed into the frame)
-  const reveal = _box(0.02, VP_HH * 2 + 0.04, len + 0.06, _channel);
-  reveal.position.set(VP_WALL_X - 0.02, VP_CY, zc);
-  v.add(reveal);
+  // a slim inner reveal — a dark channel BORDER around the glass so the pane reads recessed.
+  //  FIX PASS (SEV1 ROOT CAUSE): the old reveal was a FULL SOLID PANEL (VP_HH·2+0.04 tall × len+0.06
+  //  long) of opaque _channel sitting just inboard of the glass — it OCCLUDED the glass, the star
+  //  backdrop, and space entirely. THAT is what made the strip read as "black wall panels" (the
+  //  player was looking at the dark reveal panel, not through a window). FIX: build the reveal as a
+  //  thin BORDER (top + sill + fore/aft edge strips only), leaving the glazed area OPEN so the stars
+  //  read through the glass.
+  for (const [ry, rh, rz, rd] of [
+    [vpHi - 0.01, 0.04, zc, len + 0.06] as const,          // top edge strip
+    [vpLo + 0.01, 0.04, zc, len + 0.06] as const,          // sill edge strip
+    [VP_CY, VP_HH * 2 - 0.02, VP_Z0 - 0.01, 0.04] as const,  // fore edge strip
+    [VP_CY, VP_HH * 2 - 0.02, VP_Z1 + 0.01, 0.04] as const,  // aft edge strip
+  ]) {
+    const rv = _box(0.02, rh, rd, _channel);
+    rv.position.set(VP_WALL_X - 0.02, ry, rz);
+    v.add(rv);
+  }
   // bolt studs marching along the rails (worked hardware) — face into the corridor (−X)
   for (let z = VP_Z0 + 0.2; z <= VP_Z1; z += 0.6) {
     for (const by of [vpHi + 0.05, vpLo - 0.05]) v.add(_stud(fx - fDepth / 2, by, z, new THREE.Vector3(-1, 0, 0), _rivet, 0.014));
