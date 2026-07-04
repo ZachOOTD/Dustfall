@@ -2114,8 +2114,15 @@ const SCENARIOS = {
         });
         // Full-intro coherence fix mirror: this beat sits in full orbit (descent=0, space01=1) —
         // dim the world sun+ambient so the paused rig shows the vacuum-lit cabin (not the pale
-        // noon-flooded one). Matches sky.ts applySpaceMode's new sun/ambient dim.
-        if (ctx.lights) { ctx.lights.sun.intensity *= 0.12; ctx.lights.ambient.intensity *= 0.06; }
+        // noon-flooded one). Matches sky.ts applySpaceMode (sun ×0.12, ambient ×0.06 at s=1).
+        // X2a gate post-mortem: the old one-shot `*=` compounded across strip re-evaluates AND
+        // could be re-derived back to noon by a live lighting tick before the capture (the false
+        // PALE frame). Idempotent SET from a stashed base; re-applied again just before capture.
+        if (ctx.lights) {
+          if (window.__rigSpaceBase === undefined) window.__rigSpaceBase = { sun: ctx.lights.sun.intensity, amb: ctx.lights.ambient.intensity };
+          ctx.lights.sun.intensity = window.__rigSpaceBase.sun * 0.12;
+          ctx.lights.ambient.intensity = window.__rigSpaceBase.amb * 0.06;
+        }
         const hauler = ctx.three.scene.getObjectByName('escapePodHauler');
         let hc = null;
         if (hauler) { hauler.updateMatrixWorld(true); hc = new V(); hauler.getWorldPosition(hc); }
@@ -2145,6 +2152,15 @@ const SCENARIOS = {
         return { view, et, hauler: !!hauler };
       }, { view, et });
       await page.waitForTimeout(250);
+      // Re-assert the vacuum dim AFTER the settle wait — a live lighting tick during the wait
+      // re-derives noon sun/ambient and produced the false PALE cabin frame (X2a flag).
+      await page.evaluate(() => {
+        const ctx = window.__game.ctx;
+        if (ctx.lights && window.__rigSpaceBase !== undefined) {
+          ctx.lights.sun.intensity = window.__rigSpaceBase.sun * 0.12;
+          ctx.lights.ambient.intensity = window.__rigSpaceBase.amb * 0.06;
+        }
+      });
       const fname = strip ? `scen-ship-explode-${tag}.png` : `scen-ship-explode-${view}-${tag}.png`;
       await page.screenshot({ path: join(OUT, fname), fullPage: false });
       console.log(`[ship-explode] ${JSON.stringify(meas)} → ${fname}`);

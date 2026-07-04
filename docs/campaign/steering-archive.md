@@ -149,3 +149,5 @@ HALLWAY (X4): (t) windows in the hallway; (u) a small CREW QUARTERS room off the
 Execution: overnight autonomous batch; plan carefully, verify thoroughly, very high quality bar.
 
 ## 2026-07-04 — X-queue clarifying answers (pre-bed): canopy = FULL REBUILD (+ hauler nose roughly matched) · eject view = BAY UNTIL EJECT (swap under the blast) · quarters = LIVED-IN BASICS · hallway windows = ONE LONG VIEWPORT STRIP (right wall). Overnight autonomous execution approved. Plan: docs/next-session-prompt.md (the X-queue).
+
+## 2026-07-04 — KNOWN RIG LIMITATION (ship-explode scenario): the porthole-explosion frame shows a PALE noon-flooded cabin — a FALSE frame. The scenario is a LIVE capture (the loop runs for FX), so per-frame updateLighting re-derives noon and stomps the rig's vacuum dim (the real game's applySpaceMode isn't active on the rig's jump path). The in-game eject cabin is VERIFIED dark (X2a). Fix if it matters later: a per-frame dim hook in the scenario's capture loop. Do NOT art-direct the cabin tone from this scenario's frames.
