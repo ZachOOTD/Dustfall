@@ -43,8 +43,9 @@ import {
   getPodBayThreshold, getPodBaySeatedEye, releasePodFromBay,   // R5c — the docked-pod bay + physical release
   setBayPodDoorOpen, getPodBayDoorWorld, getPodBayInteriorStand,   // B2 — the player-gated boarding flow (E-open door + walk-in gate + E-sit)
   setBayAirlockDoor, getBayAirlockThreshold, getBayAirlockDoorWorld,   // W2b — the airlock sliding door in front of the pod (E-open → walk the collar → the pod's own door)
+  setBayPodYaw, getBayPodCenter,   // Y-queue — the rotate-then-eject beat (the pod turns in its cradle, porthole to space)
 } from './shipScene.ts';
-import { buildPodScene, disposePodScene, getPodSpawn, getCrashedSeatWorld, getPodAltitude, setDescentProgress, setDescentBase, setTumbleLight, setParachuteLeverPull, setCabinCrashPose, blowCabinHatch, restoreCabinExposure, unifyEnterablePod, podIsEnterable, setPodHidden } from './podScene.ts';
+import { buildPodScene, disposePodScene, getPodSpawn, getCrashedSeatWorld, getPodAltitude, setDescentProgress, setDescentBase, setTumbleLight, setParachuteLeverPull, setEjectLeverPull, setCabinCrashPose, blowCabinHatch, restoreCabinExposure, unifyEnterablePod, podIsEnterable, setPodHidden } from './podScene.ts';
 import { buildHaulerExterior, disposeHaulerExterior, setHaulerExplosion, setHaulerDeparture, setHaulerHidden, haulerBuilt } from './haulerScene.ts';   // Phase 3 (T3.1/T3.2) — the hero freighter + its death staged through the post-eject porthole; C1 — the post-eject departure recession; PERF — reveal the preloaded (parked) hauler instead of a cold build
 import { startPodTutorial } from './podTutorial.ts';   // T4.3 — the first craft→salvage→chute-pop tutorial (runs as gameplay post-handoff)
 import { setGameHudHidden, showIntroPrompt, hideIntroPrompt, setIntroBlack } from './introHud.ts';
@@ -618,11 +619,14 @@ function tickCorridor(ctx: GameContext, dt: number): void {
 //    door, the pod docked mostly OUTSIDE the hull): airlock (free-walk; E-open the sliding door) →
 //    collar (leaves slide open; walk the short collar) → approach (E-open the pod's closed door) →
 //    enter (door swings open; the player WALKS IN themselves through the door into the bore — real
-//    KCC, no scripted carry) → atSeat (E to sit) → sealing (seat + swap to the ridden cabin under a
-//    seal dim; BOTH doors AUTO-SEAL shut behind them as launch prep) → eject (seated, framed on the
-//    lever; E/click to fire — no fallback).
+//    KCC, no scripted carry) → atSeat (E to sit) → sealing (seat snap under a brief dim; BOTH doors
+//    AUTO-SEAL shut as launch prep) → rotate (Y-queue: the pod grinds 180° in its cradle, player +
+//    camera riding the turn — the porthole swings to open space) → eject (E/click, no fallback) →
+//    ejectPull (the handle VISIBLY drags down ~0.35s, then the bolts fire).
 const ENTER_DOOR_OPEN_DUR = 0.75;    // seconds the door swings open on E (0→1)
 const ENTER_SEAL_DUR = 0.9;          // seconds the seal dim + model swap + door auto-close play over
+const ENTER_ROTATE_DUR = 3.4;        // seconds the sealed pod grinds 180° in its cradle (porthole → space)
+const EJECT_PULL_DUR = 0.35;         // seconds the eject handle visibly drags down before the bolts fire
 const ENTER_DOOR_GAZE_DIST = 3.2;    // within this (planar, m) of the door + looking at it → the E-open prompt
 const ENTER_DOOR_GAZE_FACING = 0.55; // camera-forward · dir-to-door ≥ this (≈57°) counts as "looking at the door"
 const ENTER_INSIDE_DIST = 1.05;      // within this (planar, m) of the bore-stand point → "the player is INSIDE"
@@ -757,17 +761,69 @@ function tickEnterPod(ctx: GameContext, dt: number): void {
     }
     if (k >= 1) {
       setIntroBlack(0);
+      // Y-queue (user answer: AUTO 180° ON SEAL) — sealed in, the pod now mechanically ROTATES in
+      // its docking cradle so the porthole swings from the airlock to OPEN SPACE. The player (and
+      // camera) ride the rotation; then the eject prompt.
+      intro.scratch.phase = 'rotate';
+      intro.scratch.t = 0;
+      intro.scratch.rotPrev = 0;
+      intro.mode = 'seated';           // free-look, locomotion off — seated + sealed, riding the turn
+      playHullGroan();                 // the cradle motors grind the capsule around
+      addTrauma(0.12);                 // the engage clunk
+    }
+    return;
+  }
+
+  // ── PHASE rotate (Y-queue) — the pod turns 180° in its cradle, the player inside: the pod root
+  //    yaws via setBayPodYaw while the seated body + camera ORBIT the pod's own axis in lockstep,
+  //    so the cabin stays fixed around the player and the porthole view sweeps airlock → stars.
+  if (phase === 'rotate') {
+    const k = Math.min(1, (intro.scratch.t as number) / ENTER_ROTATE_DUR);
+    const e = k * k * (3 - 2 * k);                      // smoothstep — heavy machinery ease
+    const yaw = e * Math.PI;
+    const delta = yaw - (intro.scratch.rotPrev as number);
+    intro.scratch.rotPrev = yaw;
+    setBayPodYaw(yaw);
+    // ride the turn: rotate the body + camera about the pod's vertical axis by this frame's delta.
+    const c = getBayPodCenter();
+    const tr = ctx.player.body.body.translation();
+    const rx = tr.x - c.x, rz = tr.z - c.z;
+    const cos = Math.cos(delta), sin = Math.sin(delta);
+    // three.js yaw is CCW about +Y looking down −Y; rotate the offset with the same handedness.
+    const nx = c.x + rx * cos + rz * sin;
+    const nz = c.z - rx * sin + rz * cos;
+    ctx.player.body.body.setTranslation({ x: nx, y: tr.y, z: nz }, true);
+    ctx.three.camera.position.set(nx, tr.y + ctx.player.eyeOffset, nz);
+    ctx.three.camera.rotation.order = 'YXZ';
+    ctx.three.camera.rotation.y += delta;               // the look rides the turn (free-look preserved)
+    if (k >= 1) {
+      playDoorBlow();                  // the cradle latches at launch attitude (a heavy clunk)
+      addTrauma(0.1);
       intro.scratch.phase = 'eject';
       intro.scratch.t = 0;
-      intro.mode = 'seated';           // free-look, locomotion off — seated, sealed, ready to eject
       showIntroPrompt('Pull the eject lever  [E / click]');
     }
     return;
   }
 
-  // ── PHASE eject — seated in the SEALED pod; pull the eject lever. PURELY PLAYER-GATED (E or click)
-  //    — the EJECT_FALLBACK auto-fire is REMOVED (the user: "nothing automatic; it waits").
-  if (pulledLever(ctx)) advanceBeat(ctx);   // → shipExplode
+  // ── PHASE eject — seated in the SEALED pod, porthole to the stars; pull the eject lever. PURELY
+  //    PLAYER-GATED (E or click) — no fallback. The pull VISIBLY drags the handle down (Y7 pivot)
+  //    over ~0.35s and THEN the eject fires.
+  if (phase === 'eject') {
+    if (pulledLever(ctx)) {
+      playLeverClick();
+      intro.scratch.phase = 'ejectPull';
+      intro.scratch.t = 0;
+      showIntroPrompt('');
+    }
+    return;
+  }
+  if (phase === 'ejectPull') {
+    const k = Math.min(1, (intro.scratch.t as number) / EJECT_PULL_DUR);
+    setEjectLeverPull(k * k);          // ease-in — the yank commits
+    if (k >= 1) advanceBeat(ctx);      // → shipExplode (the bolts fire on the fully-pulled handle)
+    return;
+  }
 }
 
 /** shipExplode beat (T0.3a → Phase 3 T3.2) — eject fires; the docked pod tears free; the pod is
@@ -798,9 +854,10 @@ function tickShipExplode(ctx: GameContext, dt: number): void {
     //    clamps releasing). The player, sealed in the cabin, FEELS it (a rising shudder + bay glow).
     playBoltShear();                 // T5.3 — the explosive bolts SHEAR (a sharp bright crack + tearing metal), layered before the heave
     playEjectThunk();                // T5.1 — the pneumatic eject heave under the shear (the pod fires clear)
-    // X3b — the player is still seated in the BAY pod (bay-until-eject): face its +X door, level.
-    // The swap to the offset ride frame (door at −Z, yaw 0) happens at the release end, under the flash.
-    faceControl(ctx, -Math.PI / 2, 0);
+    // X3b/Y-queue — the player is still seated in the BAY pod (bay-until-eject), and the rotate
+    // beat just turned the pod 180° with the camera riding the turn — their free-look is already
+    // on the door/porthole. NO snap here (W6 free-look discipline); the swap to the offset ride
+    // frame (door at −Z, yaw 0) happens at the release end, under the flash, via ensureInPod.
     intro.mode = 'seated';
     intro.scratch.init = true;
     intro.scratch.phase = 'release';
