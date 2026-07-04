@@ -392,10 +392,12 @@ function buildCargoSpine(g: THREE.Group, midX: number): void {
 //    The unmistakable FRONT (you just fled this).
 function buildCockpit(g: THREE.Group, noseX: number): void {
   // 2.a the forward bridge BLOCK + a RAISED house on top (a clear "head").
-  const bridge = _box(COCKPIT_LEN, HULL_R * 1.55, HULL_R * 1.5, _hullSkinReal);
+  const bridge = _box(COCKPIT_LEN, HULL_R * 1.55, HULL_R * 1.7, _hullSkinReal);
   bridge.position.set(noseX - COCKPIT_LEN / 2, HULL_R * 0.15, 0);
   g.add(bridge);
-  const house = _box(COCKPIT_LEN * 0.7, HULL_R * 1.0, HULL_R * 1.2, _hullSkinReal);
+  // X1-POLISH item-3: the house widened (Z 1.2→1.7 of HULL_R) so the enlarged panoramic glazing sits on a
+  //   broad bridge face (the wide greenhouse needs a wide house behind it — else the glass overhung the box).
+  const house = _box(COCKPIT_LEN * 0.7, HULL_R * 1.05, HULL_R * 1.7, _hullSkinReal);
   house.position.set(noseX - COCKPIT_LEN * 0.52, HULL_R * 1.15, 0);
   g.add(house);
   // a pointed nose prow (a clear FRONT, not a flat brick face).
@@ -415,39 +417,59 @@ function buildCockpit(g: THREE.Group, noseX: number): void {
   //     that angle back around the bridge-house corners (front + partial side wrap), separated by slim
   //     structural mullions, over a bright warm glow. Seen from afar in the eject/explosion shot, so
   //     this is an APPROXIMATION — the silhouette (a framed multi-pane greenhouse canopy) is what reads.
-  const wsX = noseX - COCKPIT_LEN * 0.18;
+  // X1-POLISH item-3: the nose read as a tiny-cab truck front, not the panoramic 8-pane greenhouse the
+  //   player just sat in. FIX: (1) the glazed area is WIDER + TALLER (halfZ 0.66→0.98, paneH 1.1→1.4 of
+  //   HULL_R) so glass DOMINATES the nose face; (2) the front is split into a WIDE HERO CENTRE + two flanks
+  //   (a 3-across front, matching the interior) + the two aft-wrapped side panes → the multi-pane greenhouse
+  //   reads; (3) the mullions/header/waist are DARK channel-steel (_hullSteel) not mid-grey (_hullFrame) →
+  //   the frame lines silhouette as HIGH-CONTRAST dark bars against the lit glass at the eject distance;
+  //   (4) a brighter, larger glow behind so the whole bridge reads as lit-and-occupied from afar.
+  const wsX = noseX - COCKPIT_LEN * 0.16;
   const wsY = HULL_R * 1.28;
-  const paneH = HULL_R * 1.1;
-  const halfZ = HULL_R * 0.66;               // half the canopy span across the flank axis (±Z)
+  const paneH = HULL_R * 1.4;
+  const halfZ = HULL_R * 0.98;               // half the canopy span across the flank axis (±Z) — WIDE
   // the bright warm glow plate behind the whole glazing (the lit bridge you just fled)
-  const glow = _box(0.06, HULL_R * 0.98, HULL_R * 1.3, _cockpitGlow);
-  glow.position.set(wsX - 0.15, wsY - 0.04, 0);
+  const glow = _box(0.06, HULL_R * 1.28, HULL_R * 1.9, _cockpitGlow);
+  glow.position.set(wsX - 0.16, wsY - 0.02, 0);
   glow.rotation.z = 0.62;
   g.add(glow);
-  // the CENTRE front pane (raked back), + two SIDE-WRAP panes that toe back around the house corners
-  //   (yaw rotation about Y pulls each side pane aft — the wrap). All share the 0.62 rake.
-  const centre = _box(0.11, paneH, halfZ * 1.05, _cockpitGlass);
+  // the FRONT face is 3 raked panes across (a wide hero centre + a flank each side), then two SIDE-WRAP
+  //   panes that toe aft around the house corners → the panoramic greenhouse. All share the 0.62 rake.
+  const cW = halfZ * 0.62;                    // half-width of the wide centre pane (the hero pane)
+  const centre = _box(0.11, paneH, cW * 2, _cockpitGlass);
   centre.position.set(wsX, wsY, 0);
   centre.rotation.z = 0.62;
   g.add(centre);
-  for (const sz of [-1, 1]) {
-    const side = _box(0.11, paneH * 0.94, halfZ * 0.9, _cockpitGlass);
-    side.position.set(wsX + 0.10, wsY, sz * (halfZ * 0.92));
-    side.rotation.set(0, sz * 0.6, 0.62);    // yaw the pane back around the corner (the wrap)
+  for (const sz of [-1, 1]) {                 // the two front FLANK panes (between centre + the wrap)
+    const flank = _box(0.11, paneH * 0.98, halfZ * 0.42, _cockpitGlass);
+    flank.position.set(wsX + 0.03, wsY, sz * (cW + halfZ * 0.21));
+    flank.rotation.z = 0.62;
+    g.add(flank);
+  }
+  for (const sz of [-1, 1]) {                 // the two aft-WRAPPED side panes (curl around the corner)
+    const side = _box(0.11, paneH * 0.9, halfZ * 0.62, _cockpitGlass);
+    side.position.set(wsX + 0.14, wsY, sz * (halfZ * 1.04));
+    side.rotation.set(0, sz * 0.7, 0.62);     // yaw the pane back around the corner (the wrap)
     g.add(side);
   }
-  // slim structural MULLIONS on the two pane splits (between centre + each side-wrap) + a header +
-  //   a waist band → the framed-canopy read at distance.
+  // structural MULLIONS on the pane splits — DARK steel for high contrast at distance. Splits: centre↔flank
+  //   (u≈±cW) and flank↔side-wrap (u≈±(cW+halfZ*0.42)), + a header cap + a waist band across the whole span.
   for (const sz of [-1, 1]) {
-    const mull = _box(0.13, paneH * 1.02, 0.10, _hullFrame);
-    mull.position.set(wsX + 0.04, wsY, sz * (halfZ * 0.5));
-    mull.rotation.z = 0.62;
-    g.add(mull);
+    for (const zAt of [cW, cW + halfZ * 0.42] as const) {
+      const mull = _box(0.15, paneH * 1.04, 0.11, _hullSteel);
+      mull.position.set(wsX + 0.05, wsY, sz * zAt);
+      mull.rotation.z = 0.62;
+      g.add(mull);
+    }
   }
-  const hMull = _box(0.14, 0.09, HULL_R * 1.25, _hullFrame);   // waist band across the canopy
-  hMull.position.set(wsX + 0.05, wsY, 0);
+  const hMull = _box(0.16, 0.12, HULL_R * 1.95, _hullSteel);   // waist band across the whole canopy (dark)
+  hMull.position.set(wsX + 0.06, wsY, 0);
   hMull.rotation.z = 0.62;
   g.add(hMull);
+  const headMull = _box(0.16, 0.13, HULL_R * 2.0, _hullSteel); // header cap along the canopy top (dark)
+  headMull.position.set(wsX - Math.sin(0.62) * paneH * 0.5 + 0.02, wsY + Math.cos(0.62) * paneH * 0.5, 0);
+  headMull.rotation.z = 0.62;
+  g.add(headMull);
   // a brow visor over the windscreen top (the canopy header/roofline cap)
   const brow = _box(0.95, 0.15, HULL_R * 1.4, _hullSteel);
   brow.position.set(noseX - COCKPIT_LEN * 0.45, HULL_R * 1.80, 0);
@@ -557,11 +579,27 @@ function buildEngineCluster(g: THREE.Group, tailX: number): void {
     ember.rotation.z = Math.PI / 2;
     ember.position.set(throatX - bellLen * 0.45, by, bz);
     g.add(ember);
-    // mouth ring (the nozzle rim)
-    const rim = _cyl(mouthR + 0.06, mouthR + 0.06, 0.16, SEG, _hullFrame, true);
-    rim.rotation.z = Math.PI / 2;
-    rim.position.set(mouthX, by, bz);
+    // mouth ring (the nozzle rim). X1-POLISH item-4d: the pale thin rim read as a floating C-arc/wisp at
+    //   the eject distance — divorced from the dark bell behind it. It's now a SUBSTANTIAL heat-tarnished
+    //   lip in the BELL material (not the pale frame steel): a short flared collar lathe (an outward-turned
+    //   rim rooted onto the mouth), so the nozzle mouth reads as solid engine hardware continuous with the
+    //   skirt, not a bright hoop hanging in space.
+    const lipProf: THREE.Vector2[] = [
+      new THREE.Vector2(mouthR, 0),
+      new THREE.Vector2(mouthR + 0.05, 0.06),
+      new THREE.Vector2(mouthR + 0.14, 0.14),
+      new THREE.Vector2(mouthR + 0.15, 0.26),
+    ];
+    const rim = _lathe(lipProf, SEG, _engineBell);
+    rim.rotation.z = Math.PI / 2;          // profile runs toward −X (aft), flaring out at the mouth
+    rim.position.set(mouthX + 0.02, by, bz);
     g.add(rim);
+    // a bright heat-tarnished bead on the very rim edge (a slim frame-steel highlight so the lip catches a
+    //   glint at distance without reading as a floating pale hoop — it sits ON the dark lip, tied to it)
+    const bead = _cyl(mouthR + 0.16, mouthR + 0.16, 0.05, SEG, _hullFrame, true);
+    bead.rotation.z = Math.PI / 2;
+    bead.position.set(mouthX - 0.24, by, bz);
+    g.add(bead);
     // turbopump greeble above the throat
     const pump = _box(0.5, 0.5, 0.5, _hullFrame);
     pump.position.set(throatX + 0.25, by + throatR + 0.35, bz + throatR);

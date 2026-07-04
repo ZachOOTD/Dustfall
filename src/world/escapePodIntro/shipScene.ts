@@ -354,7 +354,12 @@ _glass.onBeforeCompile = (shader: THREE.WebGLProgramParametersWithUniforms) => {
      // a faint vertical tint gradient (cooler/bluer toward the top of the pane)
      float gGrad = vGlassLocal.y;
      vec3 gRim = mix(vec3(0.16, 0.26, 0.36), vec3(0.34, 0.48, 0.62), gGrad);
-     totalEmissiveRadiance += gRim * gFres * 2.1;               // grazing-angle rim glow (the bubble edge)
+     // X1-POLISH item-2: the rim glow is confined to a THIN grazing sliver (pow raised 2.2→3.4) and
+     //   its strength cut (2.1→0.9) so the steeply-angled SIDE-WRAP panes stay glassy-clear instead of
+     //   fogging to an opaque pink-milk sheet. A pane that faces away from the eye should read as tinted
+     //   glass you see the planet through, not frosted. The centre pane is unchanged (it was already clear).
+     float gRimEdge = pow(1.0 - gNdV, 3.4);
+     totalEmissiveRadiance += gRim * gRimEdge * 0.9;            // a THIN grazing-edge rim glint (the bubble seam)
      totalEmissiveRadiance += vec3(0.26, 0.34, 0.42) * gSheen;  // the curved-canopy sheen band`,
   );
   // raise the alpha toward grazing angles so the glazing reads as a real edge-lit CURVED sheet
@@ -365,8 +370,13 @@ _glass.onBeforeCompile = (shader: THREE.WebGLProgramParametersWithUniforms) => {
      #ifdef OPAQUE
      gl_FragColor.a = 1.0;
      #endif
-     float gFres2 = pow(1.0 - clamp(dot(normalize(vGlassViewNrm), normalize(-vGlassViewPos)), 0.0, 1.0), 1.7);
-     gl_FragColor.a = clamp(gl_FragColor.a + gFres2 * 0.62, 0.0, 0.92);`,
+     // X1-POLISH item-2: the grazing-angle alpha boost is confined to a THIN edge sliver (pow 1.7→3.2)
+     //   + its magnitude + cap dropped hard (0.62→0.26, cap 0.92→0.55), so the SIDE-WRAP panes stay
+     //   see-through tinted glass rather than climbing to near-opaque milk at their oblique viewing
+     //   angle. Only the outermost few pixels of each pane firm up (the sealed-edge read); the pane body
+     //   stays clear + uniform with the centre.
+     float gFres2 = pow(1.0 - clamp(dot(normalize(vGlassViewNrm), normalize(-vGlassViewPos)), 0.0, 1.0), 3.2);
+     gl_FragColor.a = clamp(gl_FragColor.a + gFres2 * 0.26, 0.0, 0.55);`,
   );
 };
 
@@ -1243,7 +1253,11 @@ function buildWindscreen(group: THREE.Group, fwZ: number, inward: THREE.Vector3)
   //   • the SIDE-DIVIDE struts (u=±0.62) are the heavy structural canopy bows (front↔side-wrap seam) —
   //     full height, chunky.
   //   • the FRONT-INTERIOR struts (u=±0.40) are SLIM dividers framing the wide hero centre pane.
-  for (const u of [-0.62, 0.62]) beam(_canopyNode(u, yB), _canopyNode(u, yT), MW * 1.15, MD);
+  // X1-POLISH item-4c: the heavy side-divide A-posts were slimmed ~34% across (MW×1.15 → ×0.76) — from
+  //   the seat they read as chunky ~5-8× the slim dividers, boxing in the side-wrap vista. They keep the
+  //   FULL depth (MD) so they still read as the heavy structural bows in profile (the frame stays stable),
+  //   but the narrower face opens the shoulder view. Still clearly heftier than the ×0.72 interior dividers.
+  for (const u of [-0.62, 0.62]) beam(_canopyNode(u, yB), _canopyNode(u, yT), MW * 0.76, MD);
   for (const u of [-0.40, 0.40]) beam(_canopyNode(u, yB), _canopyNode(u, yT), MW * 0.72, MD * 0.85);
   // the horizontal WAIST mullion across the FRONT columns only (u −0.62..0.62) — the refs' cross band.
   //   Split at each interior vertical so it reads as segments meeting the struts (a real frame joint).
@@ -1257,8 +1271,33 @@ function buildWindscreen(group: THREE.Group, fwZ: number, inward: THREE.Vector3)
   for (const side of [-1, 1]) {                                     // each side rail separately (no top crossing)
     for (let i = 0; i < railYs.length - 1; i++) beam(_canopyNode(side, railYs[i]), _canopyNode(side, railYs[i + 1]), RW, RD);
   }
-  // the sill bar closes the bottom (the dash meets it)
-  beam(_canopyNode(-1, yB), _canopyNode(1, yB), 0.06, 0.06);
+  // the sill bar closes the bottom (the dash meets it). X1-POLISH item-4b: the sill/dash lip read as a
+  //   featureless black band. It now reads as the canopy's bottom FRAME MEMBER: a proper box sill (a hair
+  //   deeper), a lighter-metal top-face CAP seam catching the cabin light along its length, + a run of
+  //   small fasteners marching it — so the eye reads a bolted-down frame rail, not a dead black strip.
+  beam(_canopyNode(-1, yB), _canopyNode(1, yB), 0.08, 0.11);
+  {
+    const sL = _canopyNode(-1, yB), sR = _canopyNode(1, yB);
+    const sillZ = (sL.z + sR.z) * 0.5;
+    const capLen = sL.distanceTo(sR);
+    // a lighter-painted CAP FASCIA running the full sill front — a proud, lit frame rail that caps the
+    //   below-canopy band (kills the featureless-black-strip read). Sits proud into the cabin (+Z) so it
+    //   catches the crown key + reads as the canopy's bottom structural member from the seated eye.
+    const cap = _box(capLen, 0.10, 0.10, _band);
+    cap.position.set(0, yB - 0.02, sillZ + 0.06);
+    group.add(cap);
+    // a thin darker reveal SEAM just under the cap (a panel break — the fascia reads as fitted-on)
+    const seam = _box(capLen, 0.02, 0.06, _channel);
+    seam.position.set(0, yB - 0.085, sillZ + 0.075);
+    group.add(seam);
+    // a run of fasteners marching the fascia (bolted-down frame member) — larger so they read from the seat
+    const nF = 11;
+    for (let i = 0; i <= nF; i++) {
+      const t = i / nF;
+      const p = sL.clone().lerp(sR, t);
+      group.add(_stud(p.x, yB - 0.02, sillZ + 0.115, new THREE.Vector3(0, 0, 1), _rivet, 0.018));
+    }
+  }
   // the FRONT HEADER bar — spans the front region (side-divide to side-divide) at the top so it CAPS
   //   the front vertical struts flush (they don't poke into the crown). Split at each interior strut so
   //   it reads as a jointed frame. A short corner return connects the front header out to the wrapped
@@ -2043,6 +2082,16 @@ function buildLighting(group: THREE.Group): void {
   const beaconCan = _cyl(0.07, 0.09, 0.06, 10, _channel);
   beaconCan.position.set(0, 2.34, -CK_Z + 1.0);
   group.add(beaconCan);
+  // X1-POLISH item-4a: a STALK + mount pad rooting the beacon into the crown soffit (from the aft 3/4
+  //   it read as a floating dome with a 0.6m gap to the ceiling). A slim drop-stem from the crown down
+  //   to the can + a bracket pad flush on the soffit → the beacon reads as CEILING-MOUNTED hardware.
+  const beaconCrownY = 2.86;                         // just under the vaulted crown at this z
+  const beaconStem = _cyl(0.028, 0.028, beaconCrownY - 2.37, 8, _channel);
+  beaconStem.position.set(0, (2.37 + beaconCrownY) * 0.5, -CK_Z + 1.0);
+  group.add(beaconStem);
+  const beaconPad = _cyl(0.11, 0.13, 0.05, 12, _band);   // the mount bracket flush on the soffit
+  beaconPad.position.set(0, beaconCrownY, -CK_Z + 1.0);
+  group.add(beaconPad);
   const beaconMat = new THREE.MeshBasicMaterial({ color: 0x2a0604 });   // dark dome (calm)
   _buildMats.push(beaconMat);
   const beaconGeo = new THREE.SphereGeometry(0.06, 10, 8, 0, Math.PI * 2, 0, Math.PI / 2);
