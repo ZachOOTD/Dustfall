@@ -212,6 +212,13 @@ const _cabStrap = new THREE.MeshLambertMaterial({ color: 0x837a5c, flatShading: 
 const _ledGreen = new THREE.MeshBasicMaterial({ color: 0x57c46a });
 const _ledAmber = new THREE.MeshBasicMaterial({ color: 0xd98a32 });
 const _ledRed = new THREE.MeshBasicMaterial({ color: 0xc0392b });
+// X2a — interior detail redesign: a cool CYAN readout accent + an off-white label/stencil face, so
+//   the console/eject read as purposeful labeled hardware (not just red/amber/green blobs). Self-lit.
+const _ledCyan = new THREE.MeshBasicMaterial({ color: 0x3fb6c8 });
+const _labelFace = new THREE.MeshBasicMaterial({ color: 0xb8bcc0 });   // stencil/placard field (reads as a printed label)
+const _labelInk = new THREE.MeshBasicMaterial({ color: 0x14171a });    // the dark ink on a placard
+// X2a — a lit CRT readout face (a faint cyan-green scanned glow, brighter than the dead _cabScreen).
+const _crtGlow = new THREE.MeshBasicMaterial({ color: 0x1c3630 });
 // Dim screen face — a faint amber CRT glow.
 const _cabScreen = new THREE.MeshBasicMaterial({ color: 0x2a2410 });
 // SEV1 (2026-07-03) — the OPEN-door porthole read as a big BLACK VOID: the old full-depth OPAQUE
@@ -513,11 +520,24 @@ function _seatOnWall(mesh: THREE.Mesh, az: number, r: number, y: number): void {
   mesh.rotation.y = az + Math.PI;        // local +Z → inward (toward centre)
 }
 
+/** X2a — options for the ONE interior-construction path. `door` (default true) builds the
+ *  merged −Z front door via buildCabinHatch (the ride cabin wants its own swinging door + the
+ *  descent-view porthole). The BAY pod passes door:false + supplies its OWN +X door (shipScene
+ *  drives its hinge), so the cabin door isn't doubled up on the bay build — but EVERYTHING ELSE
+ *  (the sealing BackSide shell, dome, deck, rings, ribs, seat, console, eject, conduit) is the
+ *  SAME real interior both places. `hatchAzHalfOverride` widens the shell/hoop door gap on the bay
+ *  build so the bay's own (slightly wider) +X door aperture reads inside the opening, not clipped. */
+interface CabinInteriorOpts { door?: boolean; }
+
 /** Build the HERO cabin interior (mesh group) in the pod-LOCAL frame (floor top=0).
  *  A ROUND riveted-aluminium CAPSULE bore: a back-faced cylinder wall + an ogive dome
  *  ceiling, riveted ring-frames + curved ribs, a forward viewport arc, with the C10
- *  hardware (lever / eject / console / seat) re-homed curve-seated on the round wall. */
-function buildCabinInterior(group: THREE.Group): void {
+ *  hardware (lever / eject / console / seat) re-homed curve-seated on the round wall.
+ *  X2a — this is the ONE interior-construction path: BOTH the ride cabin (buildPodScene) and
+ *  the canonical bay pod (buildCanonicalPodExterior, via buildUnifiedPodInterior) build their
+ *  contents here, so the pod is the SAME model inside — no empty-shell "peek". */
+function buildCabinInterior(group: THREE.Group, opts: CabinInteriorOpts = {}): void {
+  const withDoor = opts.door ?? true;
   // ── 1. SHELL — the ROUND capsule bore. A back-faced cylinder wall (you see the
   //    INSIDE of the curve) from the floor up to the shoulder, with a small ROUND
   //    PORTHOLE cut in the forward arc; a lathe OGIVE DOME ceiling; a floor disc + deck.
@@ -844,7 +864,41 @@ function buildCabinInterior(group: THREE.Group): void {
   //    add the channel-steel frame, a dark recessed jamb (depth read), and the swinging DOOR
   //    on its hinge pivot. Blown open by blowCabinHatch; the player climbs out into the real
   //    desert past it (the cabin is visual-only at the spawn — no collider on the door).
-  buildCabinHatch(group);
+  //    X2a — SKIPPED on the bay build (opts.door=false): the bay pod supplies its OWN +X door
+  //    (shipScene drives its hinge), so the cabin's −Z door isn't built there. The shell/hoop gap
+  //    (§1.a/§2, cut at HATCH_AZ) is yawed to +X with the whole interior sub-group, so the bay's
+  //    +X door fills a real opening in the sealing shell either way.
+  if (withDoor) buildCabinHatch(group);
+}
+
+// ── X2a — THE ONE INTERIOR, BUILT FOR THE BAY POD TOO ────────────────────────────────────────
+// The user's #1 repeated ask: the bay pod's interior must BE the real cabin interior (not a token
+// "peek"), so from inside the bay pod you see the SAME sealed riveted bore, seat, console, eject,
+// and controls — indistinguishable from the ride-down cabin — with NO open space through any seam.
+// buildCabinInterior builds everything in the pod-LOCAL frame with the front door on −Z (θ=π). The
+// bay pod's door faces +X (θ=π/2), so we build the full interior into a sub-group YAWED so the
+// cabin's −Z front rotates to +X: −Z=(0,0,−1) under a −π/2 yaw about +Y maps to +X=(1,0,0), so the
+// sealing-shell door gap, the seat (which backs the aft wall + faces the door), and all the controls
+// line up with the bay's own +X door. We build WITHOUT the cabin's own −Z door (door:false) — the
+// bay supplies its own +X door slab + hinge (shipScene drives it) — so the door isn't doubled.
+const UNIFIED_INTERIOR_YAW = -Math.PI / 2;   // rotate the cabin's −Z front → the bay's +X door
+
+/** Build the FULL real cabin interior into `parent`, yawed so its front (door/seat sight-line)
+ *  faces +X (the canonical bay-pod door azimuth). Used by buildCanonicalPodExterior so the bay pod
+ *  contains the SAME sealed interior as the ride cabin. Returns the yawed sub-group. */
+function buildUnifiedPodInterior(parent: THREE.Group): THREE.Group {
+  const inner = new THREE.Group();
+  inner.name = 'canonicalPodInterior';
+  inner.rotation.y = UNIFIED_INTERIOR_YAW;   // cabin −Z front → +X (the bay door)
+  buildCabinInterior(inner, { door: false });   // full sealed interior, minus the cabin's own −Z door (the bay has its own +X door)
+  // PERF — the interior is ~380 tiny shared-material greebles (rivets, ribs, banded arcs, deck studs);
+  //   the bay build (unlike buildPodScene) doesn't otherwise merge them. The bay interior has NO
+  //   animated parts (door:false → no swinging hatch here), so it's safe to static-merge the whole
+  //   sub-group into batched draws (keeps the docked-pod draw-call budget in line with the old token
+  //   peek). mergeStaticByMaterial skips transparent (the glass) + respects noMerge tags.
+  mergeStaticByMaterial(inner);
+  parent.add(inner);
+  return inner;
 }
 
 // ── Section builders (split out so buildCabinInterior reads as the cabin assembly) ──
@@ -889,45 +943,90 @@ function buildConsoleAndLever(group: THREE.Group): void {
   deck.position.set(0.0, deckY + 0.05, 0);
   deck.rotation.z = 0.34;             // cant up on the inboard (seat-facing) edge
   con.add(deck);
-  // dim amber CRT screen recessed in the deck (forward end)
-  const screen = _box(0.24, 0.02, 0.2, _cabScreen);
-  screen.position.set(-0.06, deckY + 0.12, -0.3);
-  screen.rotation.z = 0.34;
-  con.add(screen);
-  const screenGlow = _box(0.17, 0.015, 0.13, _ledAmber);
-  screenGlow.position.set(-0.075, deckY + 0.135, -0.3);
-  screenGlow.rotation.z = 0.34;
-  con.add(screenGlow);
-  // a row of telltale LEDs (aft of the screen)
+  // ── X2a — INTERIOR DETAIL REDESIGN (user: "more detailed + realistic — purposeful, connected,
+  //    labeled-looking hardware"). The instrument deck now reads as a real fabricated panel: a
+  //    RECESSED bezeled CRT (a proud steel surround + a lit scanned face + a couple of readout bars),
+  //    a labeled TELLTALE STRIP (each LED in a drilled bezel with a stencil tag beside it), a proper
+  //    guarded ROCKER-SWITCH BANK on a sub-plate, and — on the seat-facing vertical face — two real
+  //    instrument GAUGES (bezel ring + tick marks + a coloured warning arc + needle). All in the
+  //    gunmetal/steel family; the self-lit accents are the points of life. The deck cants up 0.34 rad
+  //    toward the seat, so everything is built at that tilt (rotation.z = 0.34) to sit flush on it.
+  const dt = 0.34;   // the deck cant (matches `deck.rotation.z`)
+  // (a) the RECESSED CRT — a proud steel bezel frame + a lit scanned face + two data bars + a corner tag.
+  {
+    const cx = -0.075, cz = -0.30;   // deck-local screen centre (forward end)
+    const cy = deckY + 0.10;
+    const bezel = _box(0.30, 0.03, 0.26, _cabSteel);        // proud steel surround (the CRT housing lip)
+    bezel.position.set(cx, cy + 0.02, cz); bezel.rotation.z = dt; con.add(bezel);
+    const face = _box(0.22, 0.02, 0.18, _crtGlow);          // the lit scanned face (recessed inside the bezel)
+    face.position.set(cx - 0.006, cy + 0.045, cz); face.rotation.z = dt; con.add(face);
+    // two horizontal data bars scrolling on the face (a readout tell) + a cyan cursor block
+    for (const [bz, bw, m] of [[-0.05, 0.14, _ledGreen], [0.0, 0.10, _ledGreen], [0.045, 0.06, _ledCyan]] as const) {
+      const bar = _box(bw, 0.006, 0.014, m);
+      bar.position.set(cx - 0.03, cy + 0.058, cz + bz); bar.rotation.z = dt; con.add(bar);
+    }
+    // a small printed corner tag on the bezel lip (a label field)
+    const tag = _box(0.07, 0.006, 0.03, _labelFace);
+    tag.position.set(cx + 0.09, cy + 0.05, cz - 0.08); tag.rotation.z = dt; con.add(tag);
+  }
+  // (b) the LABELED TELLTALE STRIP — 4 LEDs each seated in a drilled steel bezel with a stencil tag
+  //     alongside (so they read as annunciator lights, not floating dots).
   for (let i = 0; i < 4; i++) {
     const mat = [_ledGreen, _ledGreen, _ledAmber, _ledRed][i];
-    const led = _cyl(0.018, 0.018, 0.018, 6, mat);
-    led.rotation.x = Math.PI / 2;
-    led.rotation.z = 0.34;
-    led.position.set(-0.14, deckY + 0.155, -0.02 + i * 0.085);
-    con.add(led);
+    const lz = -0.03 + i * 0.078;
+    const sub = _box(0.05, 0.014, 0.055, _cabSteel);        // a drilled bezel plate under each light
+    sub.position.set(-0.145, deckY + 0.148, lz); sub.rotation.z = dt; con.add(sub);
+    const led = _cyl(0.014, 0.014, 0.016, 8, mat);
+    led.rotation.x = Math.PI / 2; led.rotation.z = dt;
+    led.position.set(-0.148, deckY + 0.162, lz); con.add(led);
+    const tag = _box(0.02, 0.006, 0.05, _labelInk);         // a stencil tag beside the light (the label)
+    tag.position.set(-0.115, deckY + 0.155, lz); tag.rotation.z = dt; con.add(tag);
   }
-  // 3 toggle switches
-  for (let i = 0; i < 3; i++) {
-    const sw = _cyl(0.012, 0.012, 0.06, 6, _cabRivet);
-    sw.rotation.z = 0.34 - 0.4;
-    sw.position.set(0.0, deckY + 0.13, 0.16 + i * 0.075);
-    con.add(sw);
+  // (c) a guarded ROCKER-SWITCH BANK on a raised sub-plate (aft of the LEDs) — 3 rockers with coloured
+  //     caps + a steel guard rail (a real switch panel, not bare pins).
+  {
+    const plate = _box(0.20, 0.02, 0.26, _cabChannel);      // the switch sub-plate
+    plate.position.set(-0.03, deckY + 0.135, 0.20); plate.rotation.z = dt; con.add(plate);
+    for (let i = 0; i < 3; i++) {
+      const sz = 0.13 + i * 0.075;
+      const base = _box(0.05, 0.02, 0.045, _cabSteel);       // switch base
+      base.position.set(-0.02, deckY + 0.152, sz); base.rotation.z = dt; con.add(base);
+      const rocker = _box(0.035, 0.03, 0.03, [_ledRed, _ledAmber, _ledGreen][i]);
+      rocker.position.set(-0.03, deckY + 0.168, sz); rocker.rotation.z = dt - 0.5; con.add(rocker);   // canted (thrown)
+    }
+    // a steel guard rail arching over the rockers (protects them from a knee/elbow)
+    const rail = _cyl(0.008, 0.008, 0.24, 6, _cabSteel);
+    rail.rotation.x = Math.PI / 2; rail.position.set(-0.055, deckY + 0.21, 0.20); rail.rotation.z += dt; con.add(rail);
+    for (const rz of [0.10, 0.30]) {
+      const post = _cyl(0.006, 0.006, 0.06, 5, _cabSteel);
+      post.position.set(-0.05, deckY + 0.19, rz); con.add(post);
+    }
   }
-  // two round gauge dials on the seat-facing vertical face (local −X face)
-  for (const dy of [0.92, 0.58]) {
-    const ring = _cyl(0.075, 0.075, 0.03, 14, _cabRivet);
-    ring.rotation.x = Math.PI / 2;
-    ring.position.set(-0.18, dy, -0.38);
-    con.add(ring);
-    const face = _cyl(0.058, 0.058, 0.012, 14, _cabScreen);
-    face.rotation.x = Math.PI / 2;
-    face.position.set(-0.2, dy, -0.38);
-    con.add(face);
-    const needle = _box(0.05, 0.008, 0.004, _ledAmber);
-    needle.position.set(-0.21, dy + 0.01, -0.38);
-    needle.rotation.z = dy > 0.8 ? 0.6 : -0.4;
-    con.add(needle);
+  // (d) two real instrument GAUGES on the seat-facing vertical face (local −X face) — a proud bezel
+  //     ring + a dark face + a ring of tick marks + a coloured warning arc + a needle. Reads as a
+  //     pressure/fuel dial, not a featureless disc.
+  for (const [dy, warnMat] of [[0.92, _ledRed], [0.58, _ledAmber]] as const) {
+    const ring = _cyl(0.078, 0.078, 0.03, 18, _cabSteel);   // proud steel bezel
+    ring.rotation.x = Math.PI / 2; ring.position.set(-0.18, dy, -0.38); con.add(ring);
+    const face = _cyl(0.062, 0.062, 0.012, 18, _cabScreen); // dark dial face
+    face.rotation.x = Math.PI / 2; face.position.set(-0.205, dy, -0.38); con.add(face);
+    // tick marks around the dial (8 minor)
+    for (let k = 0; k < 8; k++) {
+      const a = -Math.PI * 0.75 + (k / 7) * Math.PI * 1.5;
+      const tick = _box(0.014, 0.004, 0.004, _labelFace);
+      tick.position.set(-0.214, dy + Math.sin(a) * 0.05, -0.38 + Math.cos(a) * 0.05);
+      tick.rotation.x = a; con.add(tick);
+    }
+    // a coloured warning arc on the upper dial (a printed danger zone) — an open-tube arc segment
+    const warnArc = new THREE.Mesh(new THREE.CylinderGeometry(0.058, 0.058, 0.006, 12, 1, true, 0.4, 1.0), warnMat);
+    _cabinDisposables.push(warnArc.geometry);
+    warnArc.rotation.x = Math.PI / 2; warnArc.position.set(-0.212, dy, -0.38); con.add(warnArc);
+    // the needle (canted to a plausible reading), on a small hub
+    const hub = _cyl(0.01, 0.01, 0.016, 8, _cabSteel);
+    hub.rotation.x = Math.PI / 2; hub.position.set(-0.216, dy, -0.38); con.add(hub);
+    const needle = _box(0.052, 0.008, 0.005, _labelFace);
+    needle.position.set(-0.22, dy + 0.012, -0.38);
+    needle.rotation.z = dy > 0.8 ? 0.6 : -0.4; con.add(needle);
   }
 
   // ── the chunky PARACHUTE LEVER — rises off the deck's forward end into easy seated
@@ -1061,15 +1160,29 @@ function buildEjectControl(group: THREE.Group): void {
     cap.position.set(-0.44, 0.20, sz * 0.17);
     ej.add(cap);
   }
-  // status LEDs (on the lower housing face)
-  const ledR = _cyl(0.026, 0.026, 0.02, 8, _ledRed);
-  ledR.rotation.z = Math.PI / 2;
-  ledR.position.set(-0.125, -0.20, 0.12);
-  ej.add(ledR);
-  const ledG = _cyl(0.022, 0.022, 0.02, 8, _ledGreen);
-  ledG.rotation.z = Math.PI / 2;
-  ledG.position.set(-0.125, -0.20, -0.12);
-  ej.add(ledG);
+  // X2a — a small ARM-STATUS READOUT window recessed in the lower housing (a lit segment display in a
+  //   steel bezel — reads as "the eject system is powered/armed", the "small readouts" the user asked
+  //   for). Between the EJECT label and the status LEDs, facing the seat (−X).
+  {
+    const bezel = _box(0.03, 0.09, 0.22, _cabSteel);       // recessed readout bezel
+    bezel.position.set(-0.118, -0.07, 0);
+    ej.add(bezel);
+    const glow = _box(0.02, 0.06, 0.17, _crtGlow);         // the lit display field
+    glow.position.set(-0.134, -0.07, 0);
+    ej.add(glow);
+    for (const [gz, m] of [[-0.05, _ledCyan], [0.0, _ledCyan], [0.05, _ledAmber]] as const) {   // 3 tiny segment bars
+      const seg = _box(0.014, 0.035, 0.035, m);
+      seg.position.set(-0.146, -0.07, gz);
+      ej.add(seg);
+    }
+  }
+  // status LEDs (on the lower housing face) — each in a small drilled bezel with a stencil tag
+  for (const [lz, m] of [[0.12, _ledRed], [-0.12, _ledGreen]] as const) {
+    const sub = _box(0.02, 0.05, 0.05, _cabSteel);
+    sub.position.set(-0.116, -0.22, lz); ej.add(sub);
+    const led = _cyl(0.024, 0.024, 0.02, 8, m);
+    led.rotation.z = Math.PI / 2; led.position.set(-0.13, -0.22, lz); ej.add(led);
+  }
 }
 
 /** Conduit pipes following the curve, a junction box, drooping cables, a ceiling dome
@@ -1368,6 +1481,10 @@ export function blowCabinHatch(t: number): void {
 // The exterior skin is built at the SAME cabin-local frame + dimensions as buildCabinInterior
 // (CAB_R/WALL_H/DOME_H/SHELL), with a real WALK-IN OPENING at the cabin's own HATCH_AZ (so the
 // door you climbed out of = the door you walk back in), and the salvage panel on the −Z back.
+// X2a item 6c — the crash GROUND dressing (displaced-sand berm + gouged furrow/scorch/debris) is
+//   DISABLED at the user's request ("remove the sand streaks + mound — plain terrain"). Kept behind
+//   this flag (off) rather than deleted, so it can be re-enabled if the user wants a subtler version.
+const ENABLE_CRASH_GROUND_DRESSING = false;
 let _podEnterable = false;              // true once the cabin has been unified into the walk-in pod (persists into the game)
 let _enterableExteriorRoot: THREE.Group | null = null;  // the exterior-skin subtree added to podGroup
 let _enterableBerm: THREE.Mesh | null = null;
@@ -1596,68 +1713,14 @@ const CPOD_DOOR_CY = FDOOR_CY;           // = 1.10 — SHARED (was a divergent 1
 // The domed porthole is the SAME size as the ride cabin's (VP_R/VP_BEZEL_OUT) so it's one model.
 const CPOD_PORT_R = VP_R;                // = 0.33 — SHARED (was a divergent 0.40, which crowded the door)
 
-// FRONT-DOOR DOMED-PORTHOLE GLASS — a faint cool-tinted glossy glass (the domed disc set into the
-//   door). Low opacity so the descent reads through, a Fresnel rim so the eye registers glass, not
-//   a hole. Shared across all canonical pods (one program). Matches the cabin viewport's character.
-const _cpodGlass = new THREE.MeshStandardMaterial({
-  // W2a — leaned CLEARER + slightly warmer so the modeled interior reads through as a lived-in lit
-  //   cabin (not a cold blue fog). Lower opacity + softer emissive tint → the seat/bore behind it show.
-  color: 0x33414a, roughness: 0.10, metalness: 0.28,
-  emissive: 0x0c1214, emissiveIntensity: 0.28,
-  transparent: true, opacity: 0.22, side: THREE.DoubleSide,
-});
-// inner-rim shadow well behind the domed glass — near-black, unlit, so the porthole reads as a deep
-//   inset window in the door (a dark ring inside the bezel).
-// W2 gate fix — was opaque near-black (0x07090a): at oblique angles the ring walled the porthole
-//   into a black annulus (the same class as the cabin-hatch void-ring bug). A transparent dark tint
-//   keeps the inset-shadow read while letting the through-view survive when the door swings open.
-const _cpodRimShadow = new THREE.MeshBasicMaterial({
-  color: 0x141a1e, side: THREE.DoubleSide,
-  transparent: true, opacity: 0.42, depthWrite: false,
-});
-_cpodGlass.onBeforeCompile = (shader: THREE.WebGLProgramParametersWithUniforms) => {
-  shader.vertexShader = shader.vertexShader.replace('#include <common>',
-    `#include <common>
-     varying vec3 vCGVpos; varying vec3 vCGVnrm;`);
-  shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>',
-    `#include <begin_vertex>
-     vCGVpos = (modelViewMatrix * vec4(transformed,1.0)).xyz;
-     vCGVnrm = normalize(normalMatrix * normal);`);
-  shader.fragmentShader = shader.fragmentShader.replace('#include <common>',
-    `#include <common>
-     varying vec3 vCGVpos; varying vec3 vCGVnrm;`);
-  shader.fragmentShader = shader.fragmentShader.replace('#include <emissivemap_fragment>',
-    `#include <emissivemap_fragment>
-     vec3 gV = normalize(-vCGVpos);
-     float gF = pow(1.0 - clamp(dot(normalize(vCGVnrm), gV), 0.0, 1.0), 2.4);
-     totalEmissiveRadiance += vec3(0.14,0.20,0.26) * gF * 1.05;`);
-  shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>',
-    `gl_FragColor = vec4( outgoingLight, diffuseColor.a );
-     #ifdef OPAQUE
-     gl_FragColor.a = 1.0;
-     #endif
-     float gF2 = pow(1.0 - clamp(dot(normalize(vCGVnrm), normalize(-vCGVpos)), 0.0, 1.0), 2.0);
-     gl_FragColor.a = clamp(gl_FragColor.a + gF2 * 0.5, 0.0, 0.9);`);
-};
-// W2a — the canonical pod's GENUINELY MODELED interior (seen through the see-through porthole in the
-//   bay + open-door boarding). Shared module-scope (one program per material; disposePodScene disposes
-//   geometry only). Back-faced worn-aluminium bore + bands + deck + seat — the SAME riveted-aluminium
-//   idiom as the ride cabin (createRustedHullMaterial), just tuned dim/warm for an enclosed interior.
-const _cpodInteriorShell = createRustedHullMaterial({
-  baseColor: 0x71767a, bareMetalHex: 0xb2b8bc, rustHex: 0x33333a,
-  streakIntensity: 0.24, wearAmplitude: 0.36, fleckStrength: 0.5, oxStrength: 0.10, oxHex: 0x5c5c58,
-});
-_cpodInteriorShell.side = THREE.BackSide;   // the bore is viewed from inside (through the door/porthole)
-const _cpodInteriorBand = createRustedHullMaterial({
-  baseColor: 0x868c90, bareMetalHex: 0xafb4b8,   // match _cabBandOpts gunmetal (was 0xb0b5b8 pale)
-  streakIntensity: 0.18, wearAmplitude: 0.26, fleckStrength: 0.6, oxStrength: 0.06, oxHex: 0x5a5c5e,
-});
-_cpodInteriorBand.side = THREE.BackSide;
-const _cpodInteriorDeck = createRustedHullMaterial({
-  baseColor: 0x71767a, bareMetalHex: 0xa4a9ad,   // match _cabDeck gunmetal (was 0x969a9e pale)
-  streakIntensity: 0.18, wearAmplitude: 0.28, fleckStrength: 0.7, oxStrength: 0.08, oxHex: 0x5a5c5e,
-});
-const _cpodInteriorSeat = new THREE.MeshLambertMaterial({ color: 0x6e6353, flatShading: true });
+// X2a — the divergent bay-door glass/rim materials (_cpodGlass + its Fresnel program + _cpodRimShadow)
+//   are RETIRED: the bay door now uses the SAME _cabGlass + _cabDoorWellTint as the ride/landed cabin
+//   door (buildCabinHatch), so the porthole reads IDENTICAL in↔out↔bay↔landed (one door, and one fewer
+//   shader program).
+// X2a — the old token-interior materials (_cpodInteriorShell/Band/Deck/Seat) are RETIRED: the bay
+//   pod now builds the FULL real cabin interior (buildUnifiedPodInterior → buildCabinInterior), which
+//   uses the shared _cab* materials — so the bay interior is the SAME materials as the ride cabin, not
+//   a separate near-duplicate set (the source of the "not the same model" read).
 
 export type CanonicalPodDoorState = 'closed' | 'open';
 export interface CanonicalPodOpts {
@@ -1818,67 +1881,27 @@ export function buildCanonicalPodExterior(opts: CanonicalPodOpts = {}): { root: 
     stud.rotation.x = -Math.PI / 2; stud.position.set(sx, sy, 0.10);
     frame.add(stud);
   }
-  // ── W2a — a GENUINELY MODELED interior chamber behind the aperture, seen through the SEE-THROUGH
-  //    porthole glass (replaces the old flat _cpodCabinGlow box "peek" — user #4: one model, real
-  //    lit interior through real glass). Built in the frame-local frame (−Z = inward into the bore).
-  //    The porthole (glass R 0.33 at door-local portCY 0.28 above door centre → this local Y 0.28)
-  //    frames the FAR bore + a seat back + a warm lamp. Kept COMPACT: only what the small porthole
-  //    (and the swung-open door) reveals is modeled, so the bay pod isn't a full duplicate cabin.
-  const interior = new THREE.Group();
-  interior.name = 'canonicalPodInterior';
-  frame.add(interior);
-  const portCY = VP_CY - CPOD_DOOR_CY;   // W2a — porthole centre in door/frame-local coords (SAME height as the ride cabin: VP_CY 1.38 − door centre 1.10 → 0.28); one model. Shared by the interior chamber + the door.
-  // (a) the far curved BORE wall — a back-faced cylinder arc centred on the pod axis, so through the
-  //     porthole you read the round riveted bore (not a flat box). Built in FRAME-local space: the
-  //     pod axis is at frame-local (−R along +Z-out → i.e. local z = −R), running up in local Y from
-  //     the floor (local y = −CPOD_DOOR_CY) to the shoulder. Arc faces the door (the seen half).
-  const boreAxisZ = -R;                        // pod centre, in frame-local coords (door sits at z=0, axis is R inward)
-  const boreFloorY = -CPOD_DOOR_CY;            // pod floor, frame-local
-  const boreWallH = POD_BODY_H;                // full straight wall height
-  const innerR = R - SKIN;                     // interior bore radius (= CAB_R)
-  // a back-faced arc tube covering the ~120° the porthole+open-door can see (centred toward the door)
-  {
-    const arc = Math.PI * 0.75;
-    const wg = new THREE.CylinderGeometry(innerR, innerR, boreWallH, 24, 1, true, Math.PI - arc / 2, arc);
-    _cabinDisposables.push(wg);
-    const wall = new THREE.Mesh(wg, _cpodInteriorShell);   // back-faced worn-aluminium bore
-    // the cylinder axis is +Y; place its centre on the pod axis at mid-wall height (frame-local).
-    wall.position.set(0, boreFloorY + boreWallH / 2, boreAxisZ);
-    interior.add(wall);
-    // two riveted band hoops on the far bore (the round-capsule read through the glass)
-    for (const by of [0.28, 0.30 + 0.55]) {
-      const bg = new THREE.CylinderGeometry(innerR - 0.03, innerR - 0.03, 0.10, 24, 1, true, Math.PI - arc / 2, arc);
-      _cabinDisposables.push(bg);
-      const band = new THREE.Mesh(bg, _cpodInteriorBand);
-      band.position.set(0, boreFloorY + boreWallH * 0.5 + by, boreAxisZ);
-      interior.add(band);
-    }
-    // a deck-floor disc catching the lamp so the porthole doesn't bottom out into black
-    const fg = new THREE.CylinderGeometry(innerR - 0.06, innerR - 0.06, 0.05, 20);
-    _cabinDisposables.push(fg);
-    const deck = new THREE.Mesh(fg, _cpodInteriorDeck);
-    deck.position.set(0, boreFloorY + 0.03, boreAxisZ);
-    interior.add(deck);
-  }
-  // (b) a SEAT the porthole reveals — the pilot's bucket back + headrest facing the door, on the pod
-  //     axis just aft, catching the warm lamp (so through the glass you see "a seat, get in").
-  const seatBack = _box(0.52, 0.72, 0.14, _cpodInteriorSeat);
-  seatBack.position.set(0, portCY - 0.10, boreAxisZ - 0.30);
-  seatBack.rotation.x = 0.12; interior.add(seatBack);
-  const headRest = _box(0.30, 0.20, 0.13, _cpodInteriorSeat);
-  headRest.position.set(0, portCY + 0.32, boreAxisZ - 0.34);
-  interior.add(headRest);
-  // (c) a warm lamp lighting the bore + seat so the sealed glass reads a LIVED-IN lit interior (an
-  //     inviting "get in here" — W2a: the interior must read clearly through the see-through glass,
-  //     not a murky fog). Kept off the blown-disc line by the glass tint/Fresnel above.
-  const cabLamp = new THREE.PointLight(0xffce8f, 1.1, 3.0, 2.4);
-  cabLamp.position.set(0, portCY + 0.30, boreAxisZ + 0.30);   // between the seat and the porthole, high
-  interior.add(cabLamp);
-  // a small unlit amber telltale low-right in the bore (a point of warm life through the glass) —
-  //   seated just in front of the seat, on the pod axis side, so it reads as a console light.
-  const tell = _box(0.05, 0.05, 0.03, _ledAmber);
-  tell.position.set(0.30, portCY - 0.24, boreAxisZ - 0.10);
-  interior.add(tell);
+  // ── X2a — THE ONE REAL INTERIOR (user's #1 repeated ask): the bay pod's interior is now the
+  //    SAME sealed cabin the player rides down + wakes in — the full BackSide riveted bore, seat,
+  //    console, eject control, conduit, deck — NOT the old token 120° "peek" that left open SPACE
+  //    visible through the seams from inside. buildUnifiedPodInterior builds buildCabinInterior into
+  //    the ROOT (pod-local, floor at y=0), yawed so the cabin's front (−Z) faces the bay's +X door,
+  //    so the seated player faces the door + the sealing shell walls off every other azimuth (no more
+  //    "I can see out into space from inside it"). Built WITHOUT the cabin's own −Z door (the bay
+  //    supplies its own +X door slab + hinge, §5) — so the interior + exterior are ONE model.
+  const portCY = VP_CY - CPOD_DOOR_CY;   // porthole centre in door/frame-local coords (VP_CY 1.38 − door centre 1.10 → 0.28); used by the door §5 below.
+  buildUnifiedPodInterior(root);
+  // a warm ceiling lamp lighting the sealed bore so the interior reads LIVED-IN through the porthole
+  //   + boarding (the ride cabin's lamps are added in buildPodScene; the bay pod needs its own so the
+  //   docked interior isn't a dark void when the airlock spill doesn't reach deep). Pod-local (root),
+  //   at the dome apex, warm — matches the ride cabin's ceiling-lamp read.
+  const bayLamp = new THREE.PointLight(0xffce8f, 1.3, 4.4, 2.2);
+  bayLamp.position.set(0, CAB_APEX - 0.25, 0);
+  root.add(bayLamp);
+  // a low cool fill so the far bore reads (a hemisphere ambient lifts the BackSide aluminium off black
+  //   — PBR metal barely lights from a point lamp alone; matches the ride cabin's cabinFill idiom).
+  const bayFill = new THREE.HemisphereLight(0x93a0b0, 0x2a2d30, 0.55);
+  root.add(bayFill);
 
   // ── 5. THE MERGED DOOR + DOMED PORTHOLE (user clarification 2026-07-02) — a SOLID riveted
   //    aluminium door with the ROUND DOMED porthole glass INTEGRAL to it (the same domed-circular
@@ -1888,7 +1911,12 @@ export function buildCanonicalPodExterior(opts: CanonicalPodOpts = {}): { root: 
   //    clean ring, no doubled/floating rings (B1.d rule applies here too). Hinged on the +X edge.
   const doorPivot = new THREE.Group();
   doorPivot.name = 'canonicalPodDoor';
-  doorPivot.position.set(CPOD_DOOR_W / 2 + fT / 2, 0, 0.06);   // hinge at the +X (right) edge, proud
+  // X2a item 4 (door-slant fix, mirrors buildCabinHatch's W6-item-6 fix): the hinge sits ON the
+  //   aperture's RIGHT EDGE (x = +CPOD_DOOR_W/2), NOT +fT/2 PAST it. The old `+fT/2` pushed the hinge
+  //   5.5 cm past the edge, so the closed door (which extends CPOD_DOOR_W left from the hinge) landed
+  //   5.5 cm right of the aperture centre — overhanging the right jamb + gapping the left, reading as
+  //   a SLANTED/ajar door (the user's "still slightly ajar pre-eject"). Hinge on the edge → flush.
+  doorPivot.position.set(CPOD_DOOR_W / 2, 0, 0.06);   // hinge ON the +X aperture edge (the door closes flush)
   frame.add(doorPivot);
   const door = new THREE.Group();
   const doorTh = 0.10;
@@ -1900,9 +1928,14 @@ export function buildCanonicalPodExterior(opts: CanonicalPodOpts = {}): { root: 
   const cPortOpen = VP_R + 0.05;   // the open aperture radius through the door slab (glass + a hair)
   const cdHalf = CPOD_DOOR_H / 2;
   const cpTop = portCY + cPortOpen, cpBot = portCY - cPortOpen;
+  // X2a item 6a/6r — the bay door uses the EXACT SAME materials as the ride/landed cabin door
+  //   (buildCabinHatch: _cabDoorSlab / _cabGlass / _cabDoorWellTint / _cabChannel bezel / _cabRivet
+  //   studs), so the door reads IDENTICAL on the ship, the descent, and the crashed pod (the user:
+  //   "the landed pod's door reads different from the ship one — same door, same porthole, same
+  //   materials"). Was the divergent _podDoorMat / _cpodGlass / _cpodRimShadow / _podSteel / _podFrameMat set.
   const addDoorSlab = (h: number, cy: number, w = CPOD_DOOR_W, cx = 0) => {
     if (h <= 0.001) return;
-    const s = _box(w, h, doorTh, _podDoorMat);
+    const s = _box(w, h, doorTh, _cabDoorSlab);
     s.position.set(cx, cy, 0);
     door.add(s);
   };
@@ -1913,7 +1946,7 @@ export function buildCanonicalPodExterior(opts: CanonicalPodOpts = {}): { root: 
   addDoorSlab(cpTop - cpBot, portCY, cSideW, (cPortOpen + cSideW / 2));    // right flank
   // door-panel edge battens (a couple of proud stiffeners → the door reads as a fabricated plate)
   for (const by of [-CPOD_DOOR_H * 0.32, CPOD_DOOR_H * 0.34]) {
-    const batten = _box(CPOD_DOOR_W - 0.14, 0.06, doorTh * 0.7, _podBandMat);
+    const batten = _box(CPOD_DOOR_W - 0.14, 0.06, doorTh * 0.7, _cabDoorSlab);   // X2a — match the ride door batten (was _podBandMat)
     batten.position.set(0, by, doorTh * 0.55);
     door.add(batten);
   }
@@ -1928,7 +1961,7 @@ export function buildCanonicalPodExterior(opts: CanonicalPodOpts = {}): { root: 
     if ((rx * rx + (ry - portCY) * (ry - portCY)) < (VP_R + 0.08) * (VP_R + 0.08)) continue;
     const sg = new THREE.SphereGeometry(0.013, 6, 4, 0, Math.PI * 2, 0, Math.PI / 2);
     _cabinDisposables.push(sg);
-    const stud = new THREE.Mesh(sg, _podFrameMat);
+    const stud = new THREE.Mesh(sg, _cabRivet);   // X2a — match the ride door rivets (was _podFrameMat)
     stud.rotation.x = -Math.PI / 2; stud.position.set(rx, ry, doorTh * 0.55);
     door.add(stud);
   }
@@ -1940,13 +1973,13 @@ export function buildCanonicalPodExterior(opts: CanonicalPodOpts = {}): { root: 
   //    is square; this rounds it off flush on the outer face — matches the ride cabin's dCap).
   const cCapGeo = new THREE.RingGeometry(VP_R + 0.004, cPortOpen * Math.SQRT2 + 0.02, 30, 1);
   _cabinDisposables.push(cCapGeo);
-  const cCap = new THREE.Mesh(cCapGeo, _podDoorMat);   // front-faced door aluminium; RingGeometry faces +Z outward
+  const cCap = new THREE.Mesh(cCapGeo, _cabDoorSlab);   // X2a — match the ride door cap (was _podDoorMat); RingGeometry faces +Z outward
   cCap.position.set(0, portCY, doorTh * 0.5 + 0.006);
   door.add(cCap);
   //  a thin dark rim collar just inside the aperture (short depth ring; does NOT cap the hole).
   const wellGeo = new THREE.CylinderGeometry(CPOD_PORT_R + 0.006, CPOD_PORT_R + 0.006, doorTh + 0.01, 28, 1, true);
   _cabinDisposables.push(wellGeo);
-  const well = new THREE.Mesh(wellGeo, _cpodRimShadow);
+  const well = new THREE.Mesh(wellGeo, _cabDoorWellTint);   // X2a — match the ride door well tint (was _cpodRimShadow)
   well.rotation.x = Math.PI / 2;   // axis Y → local Z (through the door)
   well.position.set(0, portCY, 0);
   door.add(well);
@@ -1954,7 +1987,7 @@ export function buildCanonicalPodExterior(opts: CanonicalPodOpts = {}): { root: 
   //    porthole character as the ride-down cabin viewport.
   const glassGeo = new THREE.SphereGeometry(CPOD_PORT_R, 28, 14, 0, Math.PI * 2, 0, Math.PI * 0.32);
   _cabinDisposables.push(glassGeo);
-  const glass = new THREE.Mesh(glassGeo, _cpodGlass);
+  const glass = new THREE.Mesh(glassGeo, _cabGlass);   // X2a — match the ride door porthole glass (was _cpodGlass)
   glass.rotation.x = -Math.PI / 2;   // bulge toward +local Z (outward, toward the player)
   glass.position.set(0, portCY, doorTh * 0.5 + 0.02);
   door.add(glass);
@@ -1963,7 +1996,7 @@ export function buildCanonicalPodExterior(opts: CanonicalPodOpts = {}): { root: 
   const bezTube = 0.045, bezCtr = VP_BEZEL_OUT - bezTube;
   const bezGeo = new THREE.TorusGeometry(bezCtr, bezTube, 12, 30);
   _cabinDisposables.push(bezGeo);
-  const bez = new THREE.Mesh(bezGeo, _podSteel);
+  const bez = new THREE.Mesh(bezGeo, _cabChannel);   // X2a — match the ride door bezel (was _podSteel)
   bez.position.set(0, portCY, doorTh * 0.5 + 0.02);   // in the door's XY plane, proud outward
   door.add(bez);
   //  a ring of bezel bolts (the porthole is bolted to the door) — flush studs on the bezel face
@@ -1971,7 +2004,7 @@ export function buildCanonicalPodExterior(opts: CanonicalPodOpts = {}): { root: 
     const a = (i / 16) * Math.PI * 2;
     const sg = new THREE.SphereGeometry(0.012, 6, 4, 0, Math.PI * 2, 0, Math.PI / 2);
     _cabinDisposables.push(sg);
-    const stud = new THREE.Mesh(sg, _podFrameMat);
+    const stud = new THREE.Mesh(sg, _cabRivet);   // X2a — match the ride door bezel bolts (was _podFrameMat)
     stud.rotation.x = -Math.PI / 2;
     stud.position.set(Math.cos(a) * bezCtr, portCY + Math.sin(a) * bezCtr, doorTh * 0.5 + 0.06);
     door.add(stud);
@@ -2097,13 +2130,13 @@ export function unifyEnterablePod(ctx: GameContext, x: number, z: number): { x: 
   // (6) the REAL salvage panel on the −Z back + register as a machete-salvageable + arm chute-pop —
   //     the SAME first-salvage tutorial, now on the ONE persistent pod (not the separate wreck).
   _registerEnterablePodSalvage(ctx, group, x, z, gy);
-  // (7) a displaced-sand berm banked against the buried foot so the dune swallows the base cleanly.
-  _addEnterableBerm(ctx, x, z, gy);
-  // (8) CRASH-AFTERMATH DRESSING (2026-07-03) — the physical crash story: a gouged landing furrow +
-  //     skid berms trailing behind the pod, a scorch ring under the base, scattered hull debris. All
-  //     deterministic from (x,z) so it appears identically on the Continue/load path (this same unify
-  //     runs on restore). noCollider (nothing traps the player); laid on top of the terrain.
-  _buildCrashAftermath(ctx, x, z, gy);
+  // X2a item 6c (user, 2026-07-04: "remove the sand streaks + mound around the crashed pod — the pod
+  //   settles on plain terrain"): the displaced-sand berm (_addEnterableBerm) + the crash-aftermath
+  //   dressing (_buildCrashAftermath: the gouged furrow + skid berms + scorch ring + scattered debris
+  //   + door-sill sand drift) are REMOVED. The pod now sits on the plain survival terrain, no ground
+  //   decoration. (The functions are kept for the dev-only placeCrashedPodWreck path but no longer run
+  //   on the real step-out/restore.) _disposeCrashAftermath in disposePodScene stays a safe no-op.
+  if (ENABLE_CRASH_GROUND_DRESSING) { _addEnterableBerm(ctx, x, z, gy); _buildCrashAftermath(ctx, x, z, gy); }
   _podEnterable = true;
   _enterablePodXZ = { x, z };   // SAVE/LOAD — record the placement so the save can persist + re-build it on Continue
   return { x, z };
