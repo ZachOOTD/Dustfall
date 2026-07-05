@@ -45,6 +45,7 @@ import {
 } from './podScene.ts';
 import { buildHaulerExterior, setHaulerExplosion, setHaulerHidden } from './haulerScene.ts';
 import { setSkyIntroMode } from '../sky.ts';
+import { flashScreen, updateScreenFlash, resetScreenFlash } from '../../fx/screenFlash.ts';   // PERF candidate 5 — warm the detonation flash overlay
 
 /** A single preload step: a label the loading screen shows + the async work. Steps run
  *  in order; each is awaited, then the bar advances, then we yield a frame. A step that
@@ -150,6 +151,12 @@ function restore(ctx: GameContext, snap: PreloadSnapshot): void {
   setDescentProgress(0);   // clears any re-entry FX visibility the warm-up toggled on
   setTumbleLight(0);
   setCabinCrashPose(0);    // idempotent; ensures no lifted-exposure/crash-lean leaks from the warm pass
+  // The candidate-5 light-environment passes (steps 4/5) hide the SHIP while compiling the
+  //   descent/detonation variants. Their own finally re-shows it, but a step TIMEOUT resolves the
+  //   race while the step is still wedged mid-hide — re-assert the parked contract here (the ship
+  //   stays VISIBLE: the cockpit beat opens inside it) so a preload failure can't brick New Game.
+  const ship = ctx.three.scene.getObjectByName('escapePodShipCockpit');
+  if (ship) ship.visible = true;
 }
 
 /** Build the ordered step queue. Ordered so the FIRST-NEEDED scenes compile first (the
@@ -215,9 +222,25 @@ function buildSteps(): PreloadStep[] {
       label: 'Pressurizing re-entry shielding — plasma envelope',
       run: async (ctx) => {
         if (podBuilt()) {
-          setDescentProgress(0.24);   // peak re-entry — plasma + shimmer meshes visible
-          await compileAndWarm(ctx);
-          setDescentProgress(0);      // back to orbital-cool (restore() also re-asserts)
+          // PERF (2026-07-05 profile, candidate 5): compile the descent states in the descent's
+          //   REAL LIGHT ENVIRONMENT. three.js keys every lit material's program on the visible-
+          //   light COUNTS (NUM_POINT_LIGHTS…), and by the descent the ship interior is gone —
+          //   its cabin lights no longer count. Warming with the ship still visible (it is, from
+          //   step 1) compiles the WRONG variants; the right ones then recompiled mid-play (the
+          //   measured residual: ~9 programs at the beat). Hide the ship for the pass — the
+          //   finally + restore() both re-assert it visible, so a throw can't leak a hidden ship.
+          const ship = ctx.three.scene.getObjectByName('escapePodShipCockpit');
+          const shipWasVisible = ship ? ship.visible : true;
+          try {
+            if (ship) ship.visible = false;
+            setDescentProgress(0.24);   // peak re-entry — plasma + shimmer meshes visible
+            await compileAndWarm(ctx);
+            setDescentProgress(0.7);    // the low-altitude dawn-warm cabin state (past the plasma window)
+            await compileAndWarm(ctx);
+            setDescentProgress(0);      // back to orbital-cool (restore() also re-asserts)
+          } finally {
+            if (ship) ship.visible = shipWasVisible;
+          }
         }
       },
     },
@@ -231,11 +254,34 @@ function buildSteps(): PreloadStep[] {
       run: async (ctx) => {
         buildHaulerExterior(ctx);
         setHaulerHidden(false);         // ensure visible for the compile+warm draws
-        setHaulerExplosion(0);          // intact — compile the hull/hero materials
-        await compileAndWarm(ctx);
-        setHaulerExplosion(0.35);       // mid-blast — flash/fireball/shockwave/debris visible
-        await compileAndWarm(ctx);
-        setHaulerExplosion(0);          // reset to intact (shipExplode drives it from 0)
+        // PERF (2026-07-05 profile, candidate 5 — the 92-program detonation spike): two gaps
+        //   made the detonation compile mid-play despite this warm pass:
+        //   (a) LIGHT ENVIRONMENT — the beat plays with the ship INTERIOR gone (the player is
+        //       outside, watching the exterior explode), and three.js keys every lit material's
+        //       program on the visible-light counts — warming with the ship visible compiled the
+        //       wrong variants. Hide it for the pass (finally + restore() re-assert visible).
+        //   (b) FX VISIBILITY WINDOWS — the FX sub-meshes have DISJOINT windows across the blast
+        //       t, and renderer.compile only compiles VISIBLE meshes; a single mid-blast state
+        //       misses the rest. Two states cover every window (setHaulerExplosion's own curves):
+        //         t=0.06 → the white-hot ignition FLASH core (visible only p<0.13 — it compiled ON
+        //                  detonation entry before), the early shockwave (0.03<p<0.42), the primary
+        //                  fireball (p>0.02) + the still-intact ship exterior (p<0.16).
+        //         t=0.35 → the secondary spine fireball (p>0.14), debris (p>0.08), sparks (p>0.06),
+        //                  shockwave mid-race + the primary fireball at full bloom.
+        const ship = ctx.three.scene.getObjectByName('escapePodShipCockpit');
+        const shipWasVisible = ship ? ship.visible : true;
+        try {
+          if (ship) ship.visible = false;
+          setHaulerExplosion(0);          // intact — compile the hull/hero materials
+          await compileAndWarm(ctx);
+          setHaulerExplosion(0.06);       // ignition — the detonation-ENTRY program set
+          await compileAndWarm(ctx);
+          setHaulerExplosion(0.35);       // mid-blast — fireball2/shockwave/debris/sparks visible
+          await compileAndWarm(ctx);
+          setHaulerExplosion(0);          // reset to intact (shipExplode drives it from 0)
+        } finally {
+          if (ship) ship.visible = shipWasVisible;
+        }
         // PARK the hauler INVISIBLE (group + starfield backdrop + hero lights all off) so it
         //   doesn't leak into the cockpit/enterPod views; shipExplode reveals it on entry.
         setHaulerHidden(true);
@@ -265,6 +311,15 @@ function buildSteps(): PreloadStep[] {
     {
       label: 'Finalizing flight computer',
       run: async (ctx) => {
+        // PERF (2026-07-05 profile, candidate 5): warm the SCREEN-FLASH overlay. Its quad is
+        //   parked invisible (updateScreenFlash gates visibility on a live pulse), so every
+        //   compile pass above skipped it — measured compiling ON the detonation flash, the
+        //   very frame the beat needs to be clean. Pulse it sub-visibly (the DOM loading
+        //   overlay covers the canvas), make the mesh live for THIS compile, then reset idle.
+        flashScreen(0xfff0d8, 0.05);
+        updateScreenFlash(ctx, 0);      // applies the pulse → the quad goes visible for the pass
+        await compileAndWarm(ctx);
+        resetScreenFlash();             // back to the idle parked state (invisible, opacity 0)
         await compileScene(ctx);
         // Park the hero scenes to their beat-entry state:
         //   • SHIP stays VISIBLE — the cockpit beat opens inside it (at the ship offset).

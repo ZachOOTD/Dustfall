@@ -26,7 +26,7 @@ import type RAPIER from '@dimforge/rapier3d-compat';
 import type { Terrain } from './terrain.ts';
 import { Tuning } from '../config/tuning.ts';
 import { makeRng } from '../core/rng.ts';
-import { makeLoftedHull, makeFormerRings, makeSandMound, type LoftStation } from './wreckForms.ts';
+import { makeLoftedHull, makeFormerRings, makeSandMound, mergeStaticByMaterial, type LoftStation } from './wreckForms.ts';   // PERF (2026-07-05 profile #2) — static-merge the landmark into per-material draws
 import { createRustedHullMaterial } from './hullMaterial.ts';
 import { createMetalMaterial } from './metalMaterial.ts';
 import { makeStaticBox } from '../physics/bodies.ts';
@@ -185,6 +185,17 @@ function buildLeviathanMesh(rand: () => number): THREE.Group {
     const m = o as THREE.Mesh;
     if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; }
   });
+  // ── PERF (2026-07-05 profile, candidate 2): STATIC-MERGE into one draw per (material,
+  //    attribute-signature) bucket — the same wreck-field discipline every other wreck/POI
+  //    applies. Everything here is static scenery: no interactables, no animated parts, no
+  //    transparent materials — nothing needs a noMerge protect (the proxy collider is a
+  //    separate hand-placed static box, untouched; merge bakes the same verts into g-local
+  //    space, so the silhouette + the Box3 the sun-occluder registers are unchanged).
+  //    Folds the 16 meshes → 5 (hull-loft / hull-box / dark-hull / former-rings / rib metal).
+  mergeStaticByMaterial(g);
+  // The merge re-parents FRESH merged meshes under g (tagging them noCollider itself) —
+  // re-assert the decoration tag so the whole landmark keeps its decor contract.
+  g.traverse((o) => { o.userData.isWreckDecoration = true; o.userData.noCollider = true; });
   void rand;   // reserved for future per-instance variation; determinism handle
   return g;
 }
