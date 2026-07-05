@@ -84,7 +84,10 @@ const LINT_PARAMS = {
   penDepth: 0.0105,    // floor dip > 1.05cm (the 0.5mm guard absorbs FP epsilon on authored 1cm-flush parts)
   envelopeMul: 1.2,    // orphan: mesh AABB centre beyond 1.2× the MAIN component's bounding sphere
   triCapPerMesh: 160,  // z-fight triangle samples per mesh (stride-sampled)
-  pairBudget: 400000,  // total tri-pair comparisons cap (honesty: reported as counts.capped)
+  // --pair-budget raises the tri-pair comparison cap for large pre-merge scenes (a full ship
+  //   staged --no-merge has ~1600 meshes; the default 400k caps mid-cockpit before the sweep
+  //   reaches the corridor/quarters/engine regions).
+  pairBudget: Number(argv['pair-budget'] || 400000),
 };
 
 // 12-shot turntable: 8 orbit @45° (el 12°) + 2 top-3/4 + 1 under-3/4 + 1 tight hero front.
@@ -656,9 +659,14 @@ async function main() {
     };
     page.on('pageerror', (e) => console.log(`  [page error] ${e.message}`));
     page.on('console', (m) => { if (m.type() === 'error') console.log(`  [browser error] ${m.text()}`); });
-    await page.addInitScript((seed) => {
+    await page.addInitScript((cfg) => {
+      const { seed, noMerge } = cfg;
       try { localStorage.setItem('dustfall.tutorial.v1', JSON.stringify({ seenIntro: true, usedItems: [] })); } catch { /* ignore */ }
       try { localStorage.setItem('dustfall.pendingSeed', String(seed)); } catch { /* ignore */ }
+      // --no-merge: builders that static-merge shared-material greebles (shipScene) honor this to
+      //   skip the merge, so the z-fight sampler sees individual meshes (merged geometry hides its
+      //   internal coplanar overlaps behind one BufferGeometry / one mesh identity).
+      if (noMerge) { try { window.__stageNoMerge = true; } catch { /* ignore */ } }
       // Block the vite-hmr websocket: concurrent sessions editing src/ would
       // otherwise trigger a full-reload mid-run and wipe the staged model +
       // window.__stageLib (observed live — sibling agents own src/world files).
@@ -674,7 +682,7 @@ async function main() {
         return new NativeWS(url, protocols);
       };
       window.WebSocket.prototype = NativeWS.prototype;
-    }, Number(argv.seed ?? 1337));
+    }, { seed: Number(argv.seed ?? 1337), noMerge: !!argv['no-merge'] });
     // domcontentloaded, not load: the HMR-blocking WebSocket stub leaves the vite
     // client module pending forever, which stalls the window 'load' event. The
     // game entry is an independent module graph — the __game poll below is the gate.

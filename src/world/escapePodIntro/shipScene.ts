@@ -1679,13 +1679,19 @@ function buildDoorway(group: THREE.Group, afZ: number, inward: THREE.Vector3): v
   // ── RECESSED JAMB TUNNEL — dark inner reveal faces lining the opening, set BACK into the wall
   //    (toward +Z) + near-black so the doorway reads with real depth (not a flush flat panel). The
   //    corridor's lit greybox sits past it; this dark collar frames it as a tunnel mouth.
+  // ROUND-1e Z-FIGHT SWEEP (hallway↔cockpit archway): the reveal side/head boxes (_channel) reached to
+  //   x=±(DOOR_X+0.02)=±1.02 with their OUTER faces near-coplanar with the corridor-mouth wall run front
+  //   (x=±1.0, _shell) where the doorway meets the corridor at the seam → a hard flicker at the archway
+  //   top (the dolly probe caught it @ hardPct 0.66). FIX: the reveals are made SLIMMER (outer face pulled
+  //   in to x=±0.99, INSIDE the wall line) so the dark reveal reads as an inner tunnel lining strictly
+  //   inboard of the wall plane — no _channel/_shell shared face at the seam. Depth/read unchanged.
   const tunZ = afZ + 0.22;     // the reveal sits back inside the wall
   for (const sx of [-1, 1]) {
-    const reveal = _box(0.14, DOOR_Y1, 0.55, _channel);   // side reveal (deep, dark)
-    reveal.position.set(sx * (DOOR_X + 0.02), DOOR_Y1 / 2, tunZ);
+    const reveal = _box(0.10, DOOR_Y1, 0.55, _channel);   // side reveal (deep, dark) — slimmer, outer face at ±0.99
+    reveal.position.set(sx * (DOOR_X - 0.06), DOOR_Y1 / 2, tunZ);
     group.add(reveal);
   }
-  const revHead = _box(2 * DOOR_X + 0.04, 0.16, 0.55, _channel);   // top reveal
+  const revHead = _box(2 * DOOR_X - 0.06, 0.16, 0.55, _channel);   // top reveal — inboard of the wall line
   revHead.position.set(0, DOOR_Y1 - 0.06, tunZ);
   group.add(revHead);
   // a near-black shadow-gasket lip right at the mouth (deepens the threshold read)
@@ -2504,7 +2510,12 @@ export function buildShipScene(ctx: GameContext): void {
   _protect(_qtrDoorLeaf);           // X4 — the crew-quarters sliding-door leaf (setQuartersDoor slides it)
   // (the engine-room glass panes ride under the sliding-door leaves _engineDoorJudderL/R → already
   //  protected as children of a noMerge subtree, so their emissive-on-fire lift keeps working.)
-  mergeStaticByMaterial(group);
+  // DEV-ONLY: the geometry-lint stage sets `window.__stageNoMerge` so the z-fight sampler can see
+  //   individual greeble meshes (the merge collapses shared-material greebles into one BufferGeometry
+  //   whose internal coplanar overlaps the per-mesh sweep can't resolve). Never set in the game.
+  if (!(typeof window !== 'undefined' && (window as unknown as { __stageNoMerge?: boolean }).__stageNoMerge)) {
+    mergeStaticByMaterial(group);
+  }
 
   ctx.three.scene.add(group);
   shipGroup = group;
@@ -2821,13 +2832,28 @@ function buildCorridor(group: THREE.Group): void {
     face.position.set(sx * (COR_HW - 0.058), py, pz);
     group.add(face);
   }
-  // a big painted hull-number panel (a stencilled "block" near the mouth)
-  const numBack = _box(0.02, 0.5, 0.5, _corrHazard);
-  numBack.position.set(-(COR_HW - 0.055), 1.7, 3.0);
-  group.add(numBack);
-  const numFace = _box(0.01, 0.34, 0.34, _channel);
-  numFace.position.set(-(COR_HW - 0.062), 1.7, 3.0);
-  group.add(numFace);
+  // ROUND-1c ENTRANCEWAY FLANK CLEANUP — the old "hull-number block" here was a yellow-hazard 0.5×0.5
+  //   square with a dark inset (numBack _corrHazard + numFace _channel) that read as an unfinished
+  //   yellow-bordered open box on the −X mouth flank (the user's "yellow-bordered box"). Replaced with a
+  //   CLEAN stencilled hull-number placard in the corridor signage idiom (dark backing + slim steel bezel
+  //   + lit stencil face, no yellow border), and MOVED to the +X (right) mouth flank so each flank reads
+  //   ONE purposeful signature element: −X = the service spine, +X = this hull-number sign. Sits proud
+  //   of the +X wall (front faces −X into the corridor), clear of the +X fore manifold + the viewport.
+  {
+    const sxx = 1, nx = sxx * (COR_HW - 0.02), nz = 3.35;
+    const nrm = new THREE.Vector3(-sxx, 0, 0);
+    const bezel = _box(0.04, 0.46, 0.42, _steel);        // a slim steel frame bezel (proud, framed)
+    bezel.position.set(nx + sxx * 0.02, 1.55, nz);       // bezel back embeds into the wall (not coplanar)
+    group.add(bezel);
+    const back = _box(0.02, 0.36, 0.32, _decal);         // the dark stencil backing (recessed IN the bezel front)
+    back.position.set(nx - sxx * 0.006, 1.55, nz);
+    group.add(back);
+    const face = _box(0.01, 0.28, 0.24, _corrPlacard);   // the lit stencil face (hull number), proud of the backing
+    face.position.set(nx - sxx * 0.014, 1.55, nz);
+    group.add(face);
+    // four corner bolts on the bezel (a bolted signage plate — matches the placard/panel bolt idiom)
+    for (const by of [1.37, 1.73]) for (const bz of [nz - 0.16, nz + 0.16]) group.add(_stud(nx + sxx * 0.01, by, bz, nrm, _rivet, 0.014));
+  }
 
   // ── CEILING RACEWAY + DUCTING — a central spine box (cable raceway) down the crown, flanked by a
   //    round duct run, so the ceiling isn't a flat lid. Sits ABOVE the walkable underside (y>2.4).
@@ -2890,9 +2916,17 @@ function buildCorridor(group: THREE.Group): void {
   for (const sx of [1, -1]) {
     const segs = _runSegsX(sx);
     for (const [rz0, rz1] of segs) {
-      const rlen = rz1 - rz0;
+      // ROUND-1e Z-FIGHT SWEEP: the conduit/loom cylinder END-DISCS landed exactly at the door-aperture
+      //   cut edge (rz0/rz1), coplanar with the junction CAP box's near face there → shimmer at the
+      //   quarters-door fore/aft jamb top (the lint flagged mesh#918-922 at z=8.98/10.22). FIX: recess
+      //   each end that lands at a DOOR APERTURE (not the mouth/dead-end, which the manifolds terminate)
+      //   by 0.06 so the disc hides INSIDE the cap box (depth 0.10), not on its face plane.
+      const foreDoor = rz0 > COR_Z0 + 0.15;   // this seg's fore end is a door-aperture edge (gets a cap)
+      const aftDoor = rz1 < COR_Z1 - 0.15;    // this seg's aft end is a door-aperture edge (gets a cap)
+      const cz0 = rz0 + (foreDoor ? 0.06 : 0), cz1 = rz1 - (aftDoor ? 0.06 : 0);
+      const rlen = cz1 - cz0;
       if (rlen < 0.25) continue;
-      const rzc = (rz0 + rz1) / 2;
+      const rzc = (cz0 + cz1) / 2;
       for (let ci = 0; ci < 2; ci++) {
         const cd = _cyl(0.035 + ci * 0.012, 0.035 + ci * 0.012, rlen, 8, ci === 0 ? _steel : _band);
         cd.rotation.x = Math.PI / 2;
@@ -2914,18 +2948,28 @@ function buildCorridor(group: THREE.Group): void {
         group.add(cap);
       }
     }
-    // clamps holding the runs to the wall — skip over the −X door apertures (no clamp on the void)
+    // clamps holding the runs to the wall — skip over the −X door apertures (no clamp on the void).
+    //   ROUND-1e FLOATER FIX: the clamp sat at x=±0.95, y=2.08 — between/below the two conduits (ci=0 at
+    //   x±0.93/y2.2, ci=1 at x±0.83/y2.06), touching NEITHER within the 1.5cm tol → the lint flagged it
+    //   as a floating island (a pre-existing finding). Now a wider clamp saddle that BRIDGES from the
+    //   wall over BOTH conduit tubes (spans x to the inner conduit, y across both) — it visibly clamps
+    //   the run to the wall, no floater.
     for (let z = COR_Z0 + 0.55; z < COR_Z1; z += 0.9) {
       if (sx === -1 && (_inBayGap(z) || _inQuartersDoor(z))) continue;
-      const clamp = _box(0.05, 0.06, 0.04, _channel);
-      clamp.position.set(sx * (COR_HW - 0.05), COR_CH - 0.32, z);
+      const clamp = _box(0.05, 0.30, 0.04, _channel);   // taller saddle: y-spans both conduits (2.06..2.2)
+      clamp.position.set(sx * (COR_HW - 0.09), COR_CH - 0.27, z);   // x=±0.91 (over the ci=0 tube), centred on the run
       group.add(clamp);
     }
-    // X4 item-6b — the conduit/loom runs must NOT end abruptly at the corridor mouth. A JUNCTION
-    //   MANIFOLD box at each wall's fore end swallows the pipe/cable ends (they route INTO it), so
-    //   the entrance reads terminated + worked, not floating cut-off tubes. A matching smaller
-    //   terminator caps the aft ends at the dead-end.
-    for (const [mz, mw, mmat] of [[COR_Z0 + 0.02, 0.42, _steel], [COR_Z1 - 0.02, 0.30, _channel]] as const) {
+    // The conduit/loom runs must NOT end abruptly at the corridor mouth. A JUNCTION box at each wall's
+    //   fore end swallows the pipe/cable ends (they route INTO it). A matching smaller terminator caps
+    //   the aft ends at the dead-end. ROUND-1c ENTRANCEWAY CLEANUP: the −X FORE end is now handled by a
+    //   single full-height SERVICE SPINE built below (the high runs AND the low coolant pipe both
+    //   terminate into one clean vertical box, replacing the old separate high-manifold + floor-drop
+    //   elbow that read kit-bashed). So here the −X fore manifold is SKIPPED; the +X fore + both aft
+    //   terminators are kept.
+    const ends: Array<[number, number, THREE.Material]> = [[COR_Z1 - 0.02, 0.30, _channel]];   // aft terminator (both walls)
+    if (sx === 1) ends.unshift([COR_Z0 + 0.02, 0.42, _steel]);                                  // +X fore manifold (kept)
+    for (const [mz, mw, mmat] of ends) {
       const manifold = _box(0.18, 0.62, mw, mmat);
       manifold.position.set(sx * (COR_HW - 0.09), COR_CH - 0.35, mz);
       group.add(manifold);
@@ -2945,6 +2989,50 @@ function buildCorridor(group: THREE.Group): void {
       }
     }
   }
+  // ROUND-1c ENTRANCEWAY FLANK CLEANUP (−X mouth) — ONE clean full-height SERVICE SPINE at the fore
+  //   end, replacing the old cluster (a high electrical manifold + a separate low-pipe floor-drop elbow
+  //   + scattered glands that read kit-bashed). The high conduit/loom runs terminate into its TOP; the
+  //   low coolant pipe rises INTO its BASE — one purposeful vertical junction everything visibly enters.
+  {
+    const sx = -1, sz = COR_Z0 + 0.30;   // just aft of the archway, fore of the airlock jamb (z≈2.9)
+    const wx = sx * (COR_HW - 0.08);      // the spine body centre (−0.92) — its BACK embeds INTO the wall (see below)
+    // the spine body — a tall slim junction cabinet from waist to the ceiling raceway. ROUND-1e Z-FIGHT
+    //   SWEEP: sized/placed so its BACK face embeds 0.07m INTO the corridor wall (back x=−1.07, behind
+    //   the wall front −1.0) — NOT coplanar with the wall front (the first build's back sat exactly at
+    //   −1.0 → an _steel/_shell coplanar flicker at the archway, caught by the dolly probe). Front proud.
+    const spine = _box(0.30, 1.9, 0.34, _steel);   // back −1.07, front −0.77 (proud into the corridor)
+    spine.position.set(wx, 1.35, sz);
+    group.add(spine);
+    // a proud face panel (two-value, matches the corridor panel idiom) + a bolt border. The spine front
+    //   is at wx+0.15 (−0.77); the face stands PROUD of that at −0.74 (offset +0.18 from wx along +X).
+    const face = _box(0.05, 1.6, 0.24, _band);
+    face.position.set(wx - sx * 0.18, 1.35, sz);   // −0.74, proud of the spine front (−0.77)
+    group.add(face);
+    for (const fy of [0.62, 1.35, 2.08]) for (const fz of [sz - 0.09, sz + 0.09]) group.add(_stud(wx - sx * 0.205, fy, fz, new THREE.Vector3(-sx, 0, 0), _rivet, 0.014));
+    // a small dark readout + two status lenses (a live junction, not a blank box) — on the face front
+    const readout = _box(0.03, 0.16, 0.16, _screenGlass);
+    readout.position.set(wx - sx * 0.21, 1.7, sz);
+    group.add(readout);
+    for (const [ly, lm] of [[1.5, _ledGreen], [1.42, _ledAmber]] as const) {
+      const led = _cyl(0.02, 0.02, 0.02, 8, lm);
+      led.rotation.z = Math.PI / 2;
+      led.position.set(wx - sx * 0.215, ly, sz + 0.12);
+      group.add(led);
+    }
+    // cable GLANDS on the TOP face where the two conduits + the loom enter from above (they route in)
+    for (const gz of [sz - 0.08, sz, sz + 0.08]) {
+      const gland = _cyl(0.035, 0.045, 0.08, 8, _channel);
+      gland.position.set(wx, 2.28, gz);   // vertical, entering the spine top
+      group.add(gland);
+    }
+    // the low coolant pipe rises INTO the spine base: a short vertical riser + a flange where it enters
+    const riser = _cyl(0.05, 0.05, 0.5, 10, _steel);
+    riser.position.set(wx, 0.62, sz + 0.02);
+    group.add(riser);
+    const rflange = _cyl(0.08, 0.08, 0.05, 12, _channel);
+    rflange.position.set(wx, 0.88, sz + 0.02);   // the flange where the riser meets the spine base
+    group.add(rflange);
+  }
   // a low PIPE run along the −X wall foot (a plumbing/coolant line, waist-low) — SPLIT around BOTH
   //   the pod-bay opening AND the quarters door so it doesn't bar either entranceway (item 1: clean
   //   quarters door front). Fwd stub → bay → quarters-door fore → aft run.
@@ -2956,17 +3044,13 @@ function buildCorridor(group: THREE.Group): void {
     pipe.position.set(-(COR_HW - 0.08), 0.5, (pz0 + pz1) / 2);
     group.add(pipe);
   }
-  // X4 item-6b — the low pipe's fore end at the corridor MOUTH ran to an open cut. Route it DOWN into
-  //   the deck with a vertical elbow + a floor flange (a real plumbing termination, not a floating cut).
+  // ROUND-1c ENTRANCEWAY CLEANUP — the low pipe's fore end now routes UP into the SERVICE SPINE (built
+  //   above) via an elbow knuckle, instead of the old separate floor-drop elbow + flange near the
+  //   archway (which read as a floating rod on the mouth flank). One clean termination: the pipe rises
+  //   into the spine base where the riser + flange receive it.
   {
-    const elbow = _cyl(0.05, 0.05, 0.44, 10, _steel);
-    elbow.position.set(-(COR_HW - 0.08), 0.28, COR_Z0 + 0.02);   // vertical drop to the deck
-    group.add(elbow);
-    const flange = _cyl(0.09, 0.09, 0.04, 12, _channel);
-    flange.position.set(-(COR_HW - 0.08), 0.08, COR_Z0 + 0.02);   // floor flange
-    group.add(flange);
-    const knuckle = _cyl(0.06, 0.06, 0.1, 10, _steel);            // the elbow knuckle at the bend
-    knuckle.position.set(-(COR_HW - 0.08), 0.5, COR_Z0 + 0.06);
+    const knuckle = _cyl(0.06, 0.06, 0.12, 10, _steel);   // the elbow knuckle turning the pipe up toward the spine
+    knuckle.position.set(-(COR_HW - 0.08), 0.5, COR_Z0 + 0.32);
     group.add(knuckle);
   }
   for (let z = COR_Z0 + 0.7; z < COR_Z1; z += 1.4) {
@@ -3028,8 +3112,10 @@ function buildCorridor(group: THREE.Group): void {
   for (const sx of [1, -1]) {
     if (sx === -1) {
       // the −X grab-rail is SPLIT around the bay opening AND the quarters door (it would otherwise
-      //   bar the entranceway). Fwd → bay → quarters-door fore → aft.
-      for (const [rz0, rz1] of [[COR_Z0 + 0.3, BAY_Z0], [BAY_Z1, _QTR_DOOR_Z0], [_QTR_DOOR_Z1, COR_Z1 - 0.3]] as const) {
+      //   bar the entranceway). ROUND-1c: the old FORE stub [COR_Z0+0.3, BAY_Z0] (a 0.3m rail behind the
+      //   service spine) read as a floating rod on the mouth flank → dropped; the rail now starts AFT of
+      //   the airlock. Runs: airlock-aft → quarters-door fore → aft.
+      for (const [rz0, rz1] of [[BAY_Z1, _QTR_DOOR_Z0], [_QTR_DOOR_Z1, COR_Z1 - 0.3]] as const) {
         const rlen = rz1 - rz0;
         if (rlen < 0.2) continue;
         const rail = _cyl(0.028, 0.028, rlen, 8, _corrRail);
@@ -3770,20 +3856,23 @@ function buildCrewQuarters(group: THREE.Group): void {
   }
   // the room's corridor-side wall RETURNS (the −X wall line inside the room, flanking the door) — so
   //   from INSIDE the room the wall reads solid either side of the door, dressed to match.
-  // Y2 Z-FIGHT SWEEP (crew-quarters entrance, BOTH sides): the return's FRONT face sat at x=−1.00,
-  //   COPLANAR with the door-jamb POSTS' front (also x=−1.00) where they overlap in z beside the door
-  //   → the jamb posts shimmered on a slow pan (the mask showed hard vertical red bands on both jambs).
-  //   FIX (real geometry offset): recess the return so its front face is at x=−1.05 (5cm behind the
-  //   wall line), clearly BEHIND the proud jamb posts (front −1.00) + the dado (front −0.99) — the
-  //   posts/dado now read as intended proud framing over a recessed wall, no shared plane.
+  // ROUND-1e Z-FIGHT SWEEP (crew-quarters entrance, BOTH sides — the Y2 offsets were insufficient/
+  //   regressed at grazing vantages). The residual flicker came from the room-return's DADO band, which
+  //   was centred x=−1.02 (front face −0.99) — a _channel face poking 1cm PAST the corridor wall front
+  //   (x=−1.0, _shell) into the corridor, near-coplanar with a different material → shimmer on a slow
+  //   pan. FIX: the return front is recessed to −1.06 (was −1.05) and its DADO is recessed to sit ON the
+  //   return face (front −1.04), 4cm clear BEHIND the corridor wall front — it no longer shares or
+  //   crosses the wall plane, and no longer pokes into the corridor. The return + dado are room-interior
+  //   detail (seen through the door aperture); nothing of them lands on the corridor-side wall plane now.
   for (const [rz0, rz1] of [[z0, zc - dHW], [zc + dHW, z1]] as const) {
     const rlen = rz1 - rz0; if (rlen < 0.05) continue;
-    const ret = _box(0.10, H + 0.2, rlen, _band);
-    ret.position.set(wallX - 0.10, H / 2, (rz0 + rz1) / 2);   // front x=−1.05 (recessed behind the jamb posts)
+    const ret = _box(0.12, H + 0.2, rlen, _band);
+    ret.position.set(wallX - 0.12, H / 2, (rz0 + rz1) / 2);   // front x=−1.06 (recessed 6cm behind the wall line)
     q.add(ret);
-    // a recessed lower dado band (two-value wall, matching the corridor) + a bolt border
-    const dado = _box(0.06, 0.6, rlen - 0.1, _channel);
-    dado.position.set(wallX - 0.02, 0.5, (rz0 + rz1) / 2);
+    // a lower dado band recessed ONTO the return face (front −1.04) — matches the corridor two-value
+    //   language but stays clear behind the corridor wall plane (no proud-into-corridor poke).
+    const dado = _box(0.04, 0.6, rlen - 0.1, _channel);
+    dado.position.set(wallX - 0.08, 0.5, (rz0 + rz1) / 2);   // center −1.08, front −1.06 → flush on the return, 6cm behind the wall
     q.add(dado);
   }
   // ── WALL DRESSING (round-2): the bare shell walls read institutional; break them with a proud
@@ -3815,37 +3904,47 @@ function buildCrewQuarters(group: THREE.Group): void {
   //    on the aft side (so the corridor walk sees INTO the lit cabin — the lived-in read). Frame:
   //    channel-steel jambs + a header + a threshold + a stencilled placard + a slim hazard accent, so
   //    it reads as a real, intentional operational door. setQuartersDoor can close it later.
-  //  side JAMBS (proud of the wall INTO the room). Y2 Z-FIGHT SWEEP: the posts' +X face sat at x=−1.0
-  //   — COPLANAR with the corridor structural wall front (also x=−1.0) where they flank the door, so
-  //   the posts shimmered on a slow pan (the flicker mask showed hard red vertical bands on both
-  //   jambs). FIX (real offset): the frame stands 2cm further into the room (post/lintel base wallX−0.11
-  //   → +X face at −1.02), clearly proud of the wall front, no shared plane. Depth/read unchanged.
-  const qFrameX = wallX - 0.11;   // door-frame base X: +X face 2cm proud into the room off the wall line
+  //  side JAMBS (proud of the wall INTO the room). ROUND-1e Z-FIGHT SWEEP: the Y2 offset (+X face −1.02,
+  //   only 2cm proud) was too shallow — at grazing vantages the 2cm gap between the _steel post front
+  //   and the _shell wall front (−1.0) still shimmered, and the hazard accents STRADDLED the wall plane.
+  //   FIX: the frame stands 4cm proud (base wallX−0.14 → +X face −1.04), an unambiguous proud frame, and
+  //   EVERY accent (hazard bands, placard) is seated cleanly ON a frame face, never on/across the wall
+  //   plane. Studs face into the frame (not out toward the wall). No _steel/_shell coplanar pair remains.
+  const qFrameX = wallX - 0.14;   // door-frame base X: +X face 4cm proud into the room off the wall line
+  const qFrontX = qFrameX + 0.09; // the proud frame front face (x=−1.04) — hazard/placard seat OUTBOARD of this
   for (const sz of [-1, 1]) {
     const post = _box(0.18, dTop + 0.12, 0.18, _steel);
     post.position.set(qFrameX, (dTop + 0.12) / 2, zc + sz * (dHW + 0.09));
     q.add(post);
-    for (let y = 0.4; y < dTop; y += 0.42) q.add(_stud(qFrameX + 0.08, y, zc + sz * (dHW + 0.09), new THREE.Vector3(1, 0, 0), _rivet, 0.015));
+    // studs on the FRONT face of the post (facing +X into the room), proud of the frame front, clear of
+    //   the wall plane (tip ≈ −1.06, well behind the corridor wall front −1.0 is wrong sign — front face
+    //   is at −1.04 toward the room, so studs sit at −1.05 facing +X, proud of the frame, no wall contact)
+    for (let y = 0.4; y < dTop; y += 0.42) q.add(_stud(qFrontX + 0.01, y, zc + sz * (dHW + 0.09), new THREE.Vector3(1, 0, 0), _rivet, 0.015));
   }
-  //  HEADER lintel + a slim hazard band + a stencilled placard ("CREW")
+  //  HEADER lintel + a slim hazard band + a stencilled placard ("CREW") — all seated on the proud frame
   const lintel = _box(0.18, 0.2, dHW * 2 + 0.5, _steel);
   lintel.position.set(qFrameX, dTop + 0.10, zc);
   q.add(lintel);
+  // the hazard band sits PROUD on the lintel front (front face ≈ −1.06, clear of the wall −1.0), not
+  //   straddling the wall plane as before.
   const lintelHaz = _box(0.03, 0.06, dHW * 2 + 0.2, _bayHazardAccent);
-  lintelHaz.position.set(wallX - 0.01, dTop + 0.02, zc);
+  lintelHaz.position.set(qFrontX + 0.015, dTop + 0.02, zc);
   q.add(lintelHaz);
+  // the placard reads PROUD of the lintel front (back at −1.05, face at −1.06) — no longer buried in the
+  //   lintel (the old placBack was coincident with the lintel centre).
   const placBack = _box(0.02, 0.14, 0.6, _decal);
-  placBack.position.set(wallX - 0.11, dTop + 0.11, zc);
+  placBack.position.set(qFrontX + 0.02, dTop + 0.11, zc);
   q.add(placBack);
   const placFace = _box(0.01, 0.09, 0.46, _corrPlacard);
-  placFace.position.set(wallX - 0.12, dTop + 0.11, zc);
+  placFace.position.set(qFrontX + 0.035, dTop + 0.11, zc);
   q.add(placFace);
-  //  THRESHOLD sill + a hazard tread
+  //  THRESHOLD sill + a hazard tread (on the deck, seated on the sill top — the sillHaz sits proud on
+  //   the sill top face, not sharing the deck plane)
   const sill = _box(0.30, 0.05, dHW * 2, _steel);
-  sill.position.set(wallX - 0.06, 0.03, zc);
+  sill.position.set(wallX - 0.08, 0.03, zc);
   q.add(sill);
-  const sillHaz = _box(0.30, 0.02, 0.05, _bayHazardAccent);
-  sillHaz.position.set(wallX - 0.06, 0.055, zc);
+  const sillHaz = _box(0.26, 0.02, 0.05, _bayHazardAccent);
+  sillHaz.position.set(wallX - 0.08, 0.065, zc);
   q.add(sillHaz);
   //  the header rail the leaf hangs from (spanning to the pocket)
   const rail = _box(0.10, 0.10, dHW * 3.4, _channel);
@@ -3964,15 +4063,18 @@ function buildCrewQuarters(group: THREE.Group): void {
 
   // ═══ 5b. MORE LIVED-IN CLUTTER (round-2: the room read empty). A hung coverall on a hook on the
   //    aft wall, a stowed duffel + a crate on the floor, a wall towel — the "someone lives here" read.
-  //  a HOOK + a hung coverall/jacket on the aft side wall (a soft draped form)
-  const hook = _box(0.04, 0.06, 0.04, _corrRail);
-  hook.position.set(farX + 1.3, 1.85, z1 - 0.08);
+  //  a HOOK + a hung coverall/jacket on the aft side wall (a soft draped form). ROUND-1e FLOATER FIX:
+  //   the coverall hung with a ~11cm gap to the aft wall (z1−0.18) and the hook gapped too → the
+  //   coverall pair read as a floating island (pre-existing lint finding). Now the hook touches the wall
+  //   and the coverall hangs flush against it (aft face at the wall, hanging FROM the hook) — connected.
+  const hook = _box(0.05, 0.06, 0.10, _corrRail);       // deeper hook, reaching from the wall out to the coverall
+  hook.position.set(farX + 1.3, 1.85, z1 - 0.06);       // aft face at the wall inner plane (z1−0.01)
   q.add(hook);
-  const coverall = _box(0.34, 0.9, 0.14, _qtrDesk);   // a hung coverall (dark work-cloth)
-  coverall.position.set(farX + 1.3, 1.35, z1 - 0.18);
+  const coverall = _box(0.34, 0.9, 0.14, _qtrDesk);     // a hung coverall (dark work-cloth) — flush to the wall
+  coverall.position.set(farX + 1.3, 1.42, z1 - 0.09);   // aft face ≈z1−0.02 (against the wall); top overlaps the hook
   q.add(coverall);
   const coverallLo = _box(0.30, 0.4, 0.12, _channel);   // the darker legs, tapering
-  coverallLo.position.set(farX + 1.3, 0.78, z1 - 0.2);
+  coverallLo.position.set(farX + 1.3, 0.85, z1 - 0.10);
   q.add(coverallLo);
   //  a canvas DUFFEL on the floor by the bunk foot
   const duffel = _cyl(0.18, 0.18, 0.6, 12, _qtrMattress);
@@ -4269,7 +4371,10 @@ function buildEngineBay(group: THREE.Group): void {
     room.add(coil);
   }
   const bus = _box(0.06, 1.4, 0.06, _corrRail);   // a copper-ish bus bar up the coil stack
-  bus.position.set(blockX + 0.82, 0.9, roomZc + 0.3);
+  //   ROUND-1e FLOATER FIX: was at blockX+0.82 (x=−0.38), just PAST the coils' outer radius (blockX+0.6
+  //   ±0.22 → −0.38) → a near-miss island. Moved ONTO the coil stack (x=blockX+0.6) so the bar rides the
+  //   coils (touching), tying the bank together. (Engine room is behind glass, but the lint stays clean.)
+  bus.position.set(blockX + 0.6, 0.9, roomZc + 0.3);
   room.add(bus);
   //  (c) a CONNECTING PIPE ARC from the reactor mid to the turbine (+X) — the coolant loop tying the
   //      core to the turbine (a bent pipe run, not two islands).
@@ -4284,12 +4389,16 @@ function buildEngineBay(group: THREE.Group): void {
   }
   //  (d) a CABLE TRAY down one wall + conduits into a small control cabinet by the door (a manned
   //      station read) — cabling that ROUTES somewhere, not decoration.
-  const tray = _box(0.14, 0.06, roomZ1 - roomZ0 - 0.5, _channel);
-  tray.position.set(roomHW - 0.14, roomH - 0.7, roomZc);
+  // ROUND-1e FLOATER FIX: the cable tray + rungs sat at x=roomHW−0.14 (1.76), 14cm off the +X wall
+  //   (1.9) → the tray/rung island didn't touch the wall (a pre-existing floater). Widened + shifted so
+  //   the tray back meets the wall (x=roomHW−0.07 → back face at the wall plane) — it now mounts to the
+  //   wall it routes along.
+  const tray = _box(0.18, 0.06, roomZ1 - roomZ0 - 0.5, _channel);
+  tray.position.set(roomHW - 0.07, roomH - 0.7, roomZc);
   room.add(tray);
   for (let z = roomZ0 + 0.4; z < roomZ1; z += 0.5) {
-    const rung = _box(0.16, 0.02, 0.04, _corrRail);
-    rung.position.set(roomHW - 0.14, roomH - 0.7, z);
+    const rung = _box(0.20, 0.02, 0.04, _corrRail);
+    rung.position.set(roomHW - 0.07, roomH - 0.7, z);
     room.add(rung);
   }
   const cabinet = _box(0.4, 1.3, 0.4, _engBlock);   // a control cabinet by the door

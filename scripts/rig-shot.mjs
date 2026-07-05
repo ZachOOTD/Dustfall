@@ -3012,6 +3012,98 @@ const SCENARIOS = {
     console.log(`[corridor] ${JSON.stringify(meas)} → scen-${tag}.png`);
   },
 
+  // ZFIGHT-PROBE (the Y2 flicker-metric): pan the camera in tiny sub-steps across a named ship
+  //   junction and measure the % of pixels that FLIP between consecutive sub-frames (z-fighting =
+  //   the depth-test winner alternating as the camera moves sub-pixel amounts → a churning band).
+  //   A clean junction reads near-0% (only AA edges churn a trace); a real coplanar z-fight reads a
+  //   distinct percentage. Reports per-junction flickerPct (mean churn across the pan) + a peak.
+  //   Usage: node scripts/rig-shot.mjs --scenario=zfight-probe --junction=quarters --port=5192
+  //   --junction=all runs the whole hotspot set (archway, quarters-fore, quarters-aft, airlock,
+  //   engine-glass, viewport). Target: <0.1% mean per junction.
+  'zfight-probe': async (page) => {
+    await page.evaluate(() => {
+      const g = window.__game; const ctx = g.ctx;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      try { ctx.weather.intensity = 0; ctx.weather.cloudiness = 0; } catch {}
+      g.startIntro();
+      g.jumpToBeat('cockpit');
+    });
+    await page.waitForTimeout(700);
+    const which = argv.junction || 'all';
+    const out = await page.evaluate((which) => {
+      const g = window.__game; const ctx = g.ctx;
+      try { g.setEngineFire(0, 0); g.setShipAlert(0, 0); g.setCockpitAlert(0); } catch {}
+      // OPEN the sliding airlock door + quarters door so the apertures + jambs read (not sealed).
+      try { g.setBayAirlockDoor?.(1); } catch {}
+      try { g.setQuartersDoor?.(0); } catch {}
+      ctx.flags.paused = true;
+      const W = 300, H = 300;
+      ctx.three.renderer.setSize(W, H, false);
+      const cam = ctx.three.camera;
+      cam.aspect = W / H; cam.updateProjectionMatrix();
+      const tr = ctx.player.body.body.translation();
+      const floorY = tr.y - (ctx.player.body.halfHeight + ctx.player.body.radius);
+      const V = cam.position.constructor;
+      // Each junction: an eye + a look target; the pan sweeps the eye a small arc laterally.
+      // pan = a TINY lateral jitter (≈1cm total) so real-geometry silhouette reprojection stays sub-pixel
+      //   (near-zero AA churn on a clean scene) while a z-fight depth-winner still flips across the whole
+      //   coplanar band (it flips at ANY camera motion). The flicker thus isolates the z-fighting face.
+      const J = {
+        'archway':       { eye: [tr.x, floorY + 1.55, tr.z + 4.6], look: [tr.x, floorY + 1.35, tr.z + 2.4], pan: [0.01, 0, 0] },
+        'quarters-fore': { eye: [tr.x + 0.7, floorY + 1.45, tr.z + 8.6], look: [tr.x - 2.0, floorY + 1.3, tr.z + 8.98], pan: [0, 0, 0.01] },
+        'quarters-aft':  { eye: [tr.x + 0.7, floorY + 1.45, tr.z + 10.6], look: [tr.x - 2.0, floorY + 1.3, tr.z + 10.22], pan: [0, 0, 0.01] },
+        'airlock':       { eye: [tr.x + 0.7, floorY + 1.5, tr.z + 4.8], look: [tr.x - 2.0, floorY + 1.3, tr.z + 4.8], pan: [0, 0, 0.01] },
+        'engine-glass':  { eye: [tr.x, floorY + 1.55, tr.z + 12.4], look: [tr.x, floorY + 1.35, tr.z + 16.5], pan: [0.008, 0, 0] },
+        'viewport':      { eye: [tr.x - 0.7, floorY + 1.5, tr.z + 9.7], look: [tr.x + 2.0, floorY + 1.35, tr.z + 9.7], pan: [0, 0, 0.008] },
+      };
+      for (const k of Object.keys(J)) if (J[k].pan[0] === 0.01 || J[k].pan[2] === 0.01) { J[k].pan = J[k].pan.map((v) => v === 0.01 ? 0.008 : v); }
+      const names = which === 'all' ? Object.keys(J) : [which];
+      const gl = ctx.three.renderer.getContext();
+      const readFrame = (ex, ey, ez, lx, ly, lz) => {
+        cam.position.set(ex, ey, ez); cam.lookAt(lx, ly, lz); cam.updateMatrixWorld(true);
+        ctx.three.renderer.render(ctx.three.scene, ctx.three.camera);
+        const buf = new Uint8Array(W * H * 4);
+        gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, buf);
+        return buf;
+      };
+      const results = {};
+      // Motion = a tiny AXIAL DOLLY (a few mm toward/away from the look target) instead of a lateral pan.
+      //   A dolly barely moves silhouettes laterally (near-zero AA churn) but it perturbs the depth buffer
+      //   maximally → a z-fight's per-pixel depth-winner flips across the whole coplanar band. This
+      //   isolates z-fighting from ordinary silhouette AA far better than a lateral pan (which reprojects
+      //   the whole scene). THRESH=60 counts a hard color flip; hardPct (Δ>150) counts only the strongest
+      //   winner-flips (a different-material coplanar pair), the cleanest z-fight signal.
+      const STEPS = 12, THRESH = 60, HARD = 150, DOLLY = 0.012;   // ±6mm dolly
+      const churn = (a, b, th) => { let f = 0; for (let i = 0; i < W * H; i++) { const o = i * 4; if (Math.abs(a[o] - b[o]) + Math.abs(a[o + 1] - b[o + 1]) + Math.abs(a[o + 2] - b[o + 2]) > th) f++; } return (f / (W * H)) * 100; };
+      for (const nm of names) {
+        const j = J[nm];
+        const dir = [j.look[0] - j.eye[0], j.look[1] - j.eye[1], j.look[2] - j.eye[2]];
+        const dl = Math.hypot(dir[0], dir[1], dir[2]); const u = [dir[0] / dl, dir[1] / dl, dir[2] / dl];
+        // static noise floor: two renders at the CENTRE with no motion (renderer non-determinism/dither)
+        const c0 = readFrame(j.eye[0], j.eye[1], j.eye[2], j.look[0], j.look[1], j.look[2]);
+        const c1 = readFrame(j.eye[0], j.eye[1], j.eye[2], j.look[0], j.look[1], j.look[2]);
+        const floor = churn(c0, c1, THRESH);
+        let prev = null; let churnSum = 0; let churnPeak = 0; let hardSum = 0; let frames = 0;
+        for (let s = 0; s < STEPS; s++) {
+          const t = ((s / (STEPS - 1)) - 0.5) * DOLLY;   // ±DOLLY/2 along the view axis
+          const ex = j.eye[0] + u[0] * t, ey = j.eye[1] + u[1] * t, ez = j.eye[2] + u[2] * t;
+          const buf = readFrame(ex, ey, ez, j.look[0], j.look[1], j.look[2]);
+          if (prev) { const pct = churn(buf, prev, THRESH); churnSum += pct; churnPeak = Math.max(churnPeak, pct); hardSum += churn(buf, prev, HARD); frames++; }
+          prev = buf;
+        }
+        results[nm] = { meanPct: +(churnSum / Math.max(1, frames)).toFixed(3), hardPct: +(hardSum / Math.max(1, frames)).toFixed(3), peakPct: +churnPeak.toFixed(3), floorPct: +floor.toFixed(3) };
+      }
+      return results;
+    }, which);
+    console.log('[zfight-probe] ' + JSON.stringify(out));
+    // gate on hardPct (Δ>150 under an axial dolly = a different-material coplanar winner-flip = a real
+    //   z-fight; meanPct still carries residual silhouette AA in dense views). Target: hardPct < 0.1%.
+    const fails = Object.entries(out).filter(([, v]) => v.hardPct >= 0.1);
+    console.log('[zfight-probe] ' + (fails.length ? 'FLICKER: ' + fails.map(([k, v]) => `${k} hard=${v.hardPct}% mean=${v.meanPct}%`).join(' ') : 'CLEAN (all junctions hardPct < 0.1%)'));
+  },
+
   // Pod-bay (R5c): the DOCKED escape pod in its bay at the bridge end — what the fleeing player
   // runs toward + physically enters (no teleport). Builds the ship (bay + docked pod), then shoots
   // the REAL in-corridor view. --angle: flee (down the corridor at the bay, the flee approach)
