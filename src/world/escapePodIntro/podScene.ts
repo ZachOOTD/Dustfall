@@ -2637,11 +2637,12 @@ export function restoreEnterablePod(ctx: GameContext, saved: SavedPodCrash): voi
       panel.userData.panelDoorAngle = Tuning.SALVAGE_PANEL_DOOR_OPEN_ANGLE;
     }
   }
-  // if the comic chute had already burst before save, restore it to its settled popped pose
-  //   INSTANTLY (popChute(advanceSeconds) drives the inflate/settle synchronously). armChutePop
-  //   built a fresh folded canopy inside unify; pop it to the end state so a reload shows the gag
-  //   already deployed (not re-triggering it).
-  if (saved.chutePopped) popChute(CHUTE_POP_DUR + 0.5);
+  // if the comic chute had already burst before save, restore it DIRECTLY to the settled DRAPE
+  //   INSTANTLY (popChute(advanceSeconds) drives the whole pop→flutter→deflate→settle life-cycle
+  //   synchronously at calm wind — no flutter replay on reload). armChutePop built a fresh folded
+  //   canopy inside unify; fast-forward it past CHUTE_SETTLED_AT so a reload shows the crumpled
+  //   drape, not a re-triggered pop.
+  if (saved.chutePopped) popChute(CHUTE_SETTLED_AT + 0.6);
 }
 
 // Load order (mirrors meteorCrash's pending-restore): onContinue runs loadGameState (which stashes
@@ -3365,17 +3366,55 @@ let crashedPodSalvageableId = -1;
 // to the crashed-pod GROUP (so it rides the pod's crash pose), hidden until popChute() fires;
 // then a springy one-shot inflate (scale + a little bob) runs via updateChutePop each frame.
 let chuteCanopy: THREE.Group | null = null;   // the folded→inflated canopy assembly (child of crashedWreck)
-let chutePopT = -1;                           // pop animation clock (seconds); <0 = not popped / not armed
+let chutePopT = -1;                           // pop/lifecycle clock (seconds since the pop); <0 = not popped / not armed
 let chutePopArmed = false;                    // the canopy is built + ready to pop on the first salvage strike
 const CHUTE_POP_DUR = 1.55;                   // seconds of the inflate+overshoot+saggy-settle one-shot
 const CHUTE_OVERSHOOT = 0.34;                 // how far the springy inflate punches PAST full (was ~0.12) — a big comic POOF
 const CHUTE_DROOP_LEAN = 0.11;                // rad — the gentle asymmetric lean the billow settles into ("useless" sag; too much tips it over BESIDE the pod)
 const CHUTE_DROOP_SAG = 0.14;                 // extra vertical squash the dome sags by as it deflates onto the wreck
+// ─── The DEFLATE + DRAPE LIFE-CYCLE (round-2b) — the deployed chute no longer HOVERS static.
+//   After the pop settles it FLUTTERS in the wind (procedural cloth), then DEFLATES + collapses
+//   into an authored draped pose over the pod's shoulder, then SETTLES as permanent scenery with
+//   a barely-there hem stir. All time-parameterised off chutePopT (seconds since the pop), so the
+//   restore path can fast-forward straight to the settled drape (no flutter replay). Phase edges:
+const CHUTE_FLUTTER_START = CHUTE_POP_DUR;              // 1.55s — flutter begins as the pop settles
+const CHUTE_FLUTTER_DUR   = 10.0;                       // ~10s of wind-flutter before the chute gives up
+const CHUTE_DEFLATE_START = CHUTE_FLUTTER_START + CHUTE_FLUTTER_DUR;   // 11.55s
+const CHUTE_DEFLATE_DUR   = 2.6;                        // ~2.6s to lose form + slump into the drape
+const CHUTE_SETTLED_AT    = CHUTE_DEFLATE_START + CHUTE_DEFLATE_DUR;   // 14.15s — settled scenery from here on
+// Flutter amplitude/frequency band — layered noise, all scaled by the live wind (0=calm..1=storm).
+const CHUTE_BILLOW_AMP    = 0.16;   // low-freq whole-canopy breathing (m of radial swell at calm), grows w/ wind
+const CHUTE_BILLOW_FREQ   = 0.55;   // rad/s — the slow breath
+const CHUTE_RIPPLE_AMP    = 0.10;   // travelling ripple across the gores (m)
+const CHUTE_RIPPLE_FREQ   = 1.7;    // rad/s — the mid ripple travel rate
+const CHUTE_HEM_AMP       = 0.14;   // high-freq edge flutter on the skirt hem (m) — snaps in wind
+const CHUTE_HEM_FREQ      = 5.2;    // rad/s — the fast hem chatter
+const CHUTE_WIND_LEAN     = 0.22;   // rad — max whole-canopy downwind lean at full storm
+const CHUTE_SETTLED_STIR  = 0.06;   // residual hem-stir amplitude fraction once settled (barely-there cloth read)
 // Comic canopy material — faded orange-white ripstop (reads as a real chute; a bit worn).
 const _chuteCanopyMat = new THREE.MeshLambertMaterial({ color: 0xd8894a, flatShading: true, side: THREE.DoubleSide });
 const _chuteGoreMat = new THREE.MeshLambertMaterial({ color: 0xe8e2d4, flatShading: true, side: THREE.DoubleSide });   // the alternating pale gores
 const _chuteLineMat = new THREE.MeshLambertMaterial({ color: 0x2a2620, flatShading: true });                          // dark shroud lines
 const _chuteDisposables: THREE.BufferGeometry[] = [];
+// Per-gore flutter/deflate data captured at build (rest verts + crumple target + per-vertex params).
+interface ChuteFlutterGore {
+  pos: THREE.BufferAttribute;   // the live position attribute (written each frame)
+  rest: Float32Array;           // inflated rest positions
+  crumple: Float32Array;        // authored deflated/draped target positions
+  polar: Float32Array;          // 0 apex → 1 brim
+  azim: Float32Array;           // vertex azimuth (rad)
+  n: number;                    // vertex count
+}
+// Per-shroud-line data so the deflate re-lays each line into a slack catenary droop.
+interface ChuteLine {
+  mesh: THREE.Mesh;
+  skirt: THREE.Vector3;   // upper attach (canopy brim), rest
+  riser: THREE.Vector3;   // lower attach (riser knot)
+  restLen: number;
+  up: THREE.Vector3;
+}
+let _chuteLines: ChuteLine[] = [];
+const _CHUTE_UP = new THREE.Vector3(0, 1, 0);   // shared scratch axis for line orientation
 
 /** Remove the crashed-pod wreck (so a re-played intro doesn't stack duplicates).
  *  Disposes per-mesh GEOMETRY but NOT the materials — the hero pod's materials are
@@ -3422,6 +3461,10 @@ function buildChuteCanopy(crownY: number): THREE.Group {
   const SQUASH = 0.74;              // flatten the dome vertically → a wide billow, not a tall balloon
   const GORES = 14;
   const dome = new THREE.Group();   // the billowing canopy (droops as a unit in the settle)
+  // ── FLUTTER/DRAPE data: per-gore rest positions + precomputed per-vertex params (polar 0..1
+  //    from apex, azimuth) + an authored CRUMPLE target the deflate morphs into. Captured once
+  //    at build so the per-frame flutter/deflate driver is a cheap parametric write (no allocs).
+  const flutter: ChuteFlutterGore[] = [];
   for (let g = 0; g < GORES; g++) {
     const a0 = (g / GORES) * Math.PI * 2;
     // Sweep the cap a bit past the equator (to 0.58π) so the brim curves gently DOWN into
@@ -3432,13 +3475,57 @@ function buildChuteCanopy(crownY: number): THREE.Group {
     const gore = new THREE.Mesh(geo, g % 2 === 0 ? _chuteCanopyMat : _chuteGoreMat);
     gore.userData.noCollider = true;
     dome.add(gore);
+    // Capture rest + build the crumple target for this gore.
+    const pos = geo.attributes.position as THREE.BufferAttribute;
+    const n = pos.count;
+    const rest = new Float32Array(pos.array as Float32Array);   // copy of the inflated rest verts
+    const crumple = new Float32Array(n * 3);
+    const polar = new Float32Array(n);   // 0 at apex → 1 at the brim (drives ripple travel + hem weighting)
+    const azim = new Float32Array(n);    // vertex azimuth (drives billow phase + downwind lean sign)
+    for (let i = 0; i < n; i++) {
+      const rx = rest[i * 3], ry = rest[i * 3 + 1], rz = rest[i * 3 + 2];
+      const rXZ = Math.hypot(rx, rz);
+      // polar: apex has y≈CANOPY_R, brim y≈CANOPY_R*cos(0.58π) — normalise by the y drop.
+      const p = Math.min(1, Math.max(0, (CANOPY_R - ry) / (CANOPY_R * 1.3)));
+      polar[i] = p;
+      const az = Math.atan2(rz, rx);
+      azim[i] = az;
+      // CRUMPLE TARGET — the AUTHORED DRAPE. The deflated canopy loses ALL internal form and collapses
+      //   into a LOW rumpled heap slumped over the pod's +X shoulder (away from the −Z front doorway so
+      //   the drape never blocks it). Not a shrunk balloon: the fabric flattens hard (little vertical
+      //   rise), the whole mass shifts toward +X + sags down the flank, and uneven azimuthal + radial
+      //   fold creases read as slack crumpled cloth. The driver ALSO drops the whole group onto the
+      //   shoulder, so this target is authored LOW + flat relative to the canopy origin.
+      const nx = rXZ > 1e-4 ? rx / rXZ : 0;                 // radial unit dir (for the slump bias)
+      const nz = rXZ > 1e-4 ? rz / rXZ : 0;
+      const slumpSide = nx;                                 // +1 on the +X slump side, −1 on the far side
+      // radius: collapse inward toward a chunky bunched mound that still COVERS the crown (not a thin
+      //   rag). The +X slump side spills a touch WIDER + lower (fabric flops down that flank); the far
+      //   side stays tucked in. Small X shift only — the heap stays centred OVER the pod, draping one side.
+      const fold = 0.62 - 0.10 * p + 0.12 * slumpSide;      // keeps real width → a mounded drape
+      const crease = 1 + 0.20 * Math.sin(az * 5 + p * 3.2) + 0.10 * Math.sin(p * 9); // rumpled folds
+      const cXZ = rXZ * Math.max(0.25, fold * crease);
+      const cx = nx * cXZ + 0.28;                           // gentle +X bias (drapes toward that shoulder, stays on the pod)
+      const cz = nz * cXZ;
+      // height: a low BUNCHED mound — keeps ~30% of the rise (volume, not a flat rag); the +X slump
+      //   side sags lower (draping down the flank), the far side sits higher. Fold ripples add crumple.
+      const mound = ry * 0.30;
+      const sag = 0.15 + 0.55 * slumpSide;                  // slump side droops down the flank
+      const cy = mound - sag - 0.25 * p + 0.16 * Math.sin(az * 4 + p * 6);
+      crumple[i * 3] = cx; crumple[i * 3 + 1] = cy; crumple[i * 3 + 2] = cz;
+    }
+    flutter.push({ pos, rest, crumple, polar, azim, n });
   }
   dome.scale.y = SQUASH;
+  dome.userData.flutter = flutter;
   // a crown vent cap so the dome apex reads finished, not a hole.
   const ventGeo = new THREE.CylinderGeometry(CANOPY_R * 0.13, CANOPY_R * 0.17, 0.1, 12);
   _chuteDisposables.push(ventGeo);
   const vent = new THREE.Mesh(ventGeo, _chuteLineMat);
-  vent.position.y = CANOPY_R * SQUASH * 0.98;
+  const ventRestY = CANOPY_R * SQUASH * 0.98;
+  vent.position.y = ventRestY;
+  vent.name = 'chuteVent';
+  vent.userData.ventRestY = ventRestY;
   vent.userData.noCollider = true;
   dome.add(vent);
   dome.name = 'chuteDome';
@@ -3452,30 +3539,38 @@ function buildChuteCanopy(crownY: number): THREE.Group {
   const skirtR = CANOPY_R * Math.sin(brimA) * 0.99;
   const skirtY = CANOPY_R * Math.cos(brimA) * SQUASH;    // slightly negative — the brim hangs a touch low
   const riserY = -1.85;                       // the riser gather well below the brim → LONG shroud lines that bridge to the crown
+  _chuteLines = [];
   for (let i = 0; i < GORES; i++) {
     const a = (i / GORES) * Math.PI * 2 + Math.PI / GORES;
     const skirt = new THREE.Vector3(Math.cos(a) * skirtR, skirtY, Math.sin(a) * skirtR);
     const riser = new THREE.Vector3(0, riserY, 0);
     const mid = skirt.clone().lerp(riser, 0.5);
     const len = skirt.distanceTo(riser);
-    const lineGeo = new THREE.CylinderGeometry(0.026, 0.026, len, 4);   // reads clearly at distance without looking like a rod
+    // Unit-length cylinder (scaled per-frame in Y to the current segment length) so the deflate can
+    //   re-lay each line into a slacker catenary sag without rebuilding geometry.
+    const lineGeo = new THREE.CylinderGeometry(0.026, 0.026, 1, 4);   // reads clearly at distance without looking like a rod
     _chuteDisposables.push(lineGeo);
     const line = new THREE.Mesh(lineGeo, _chuteLineMat);
     line.position.copy(mid);
-    line.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), riser.clone().sub(skirt).normalize());
+    line.scale.y = len;
+    line.quaternion.setFromUnitVectors(_CHUTE_UP, riser.clone().sub(skirt).normalize());
     line.userData.noCollider = true;
     grp.add(line);
+    _chuteLines.push({ mesh: line, skirt: skirt.clone(), riser: riser.clone(), restLen: len, up: _CHUTE_UP });
   }
   // a chunky riser strap/knot at the gather (where it "attaches" to the pod crown)
   const knotGeo = new THREE.CylinderGeometry(0.13, 0.17, 0.36, 8);
   _chuteDisposables.push(knotGeo);
   const knot = new THREE.Mesh(knotGeo, _chuteLineMat);
   knot.position.y = riserY + 0.12;
+  knot.name = 'chuteKnot';
+  knot.userData.knotRestY = riserY + 0.12;
   knot.userData.noCollider = true;
   grp.add(knot);
   // anchor so the riser knot sits just above the crown and the billow puffs LOW over the
   //   nose — the wide dome drapes down around the pod's upper body, not floating overhead.
   grp.position.set(0, apex + 0.55, 0);
+  grp.userData.baseY = apex + 0.55;   // the driver drops the group DOWN from here onto the shoulder as it deflates
   grp.scale.setScalar(0.001);   // folded/hidden until the pop
   grp.visible = false;
   return grp;
@@ -3511,6 +3606,7 @@ function disarmChutePop(): void {
   }
   for (const g of _chuteDisposables) g.dispose();
   _chuteDisposables.length = 0;
+  _chuteLines = [];
   chutePopArmed = false;
   chutePopT = -1;
 }
@@ -3518,6 +3614,18 @@ function disarmChutePop(): void {
 /** Is the chute armed + not yet popped? (the tutorial driver checks this to fire the payoff). */
 export function chutePopReady(): boolean {
   return chutePopArmed && chutePopT < 0 && chuteCanopy !== null;
+}
+
+/** DEV/rig probe — the chute life-cycle clock + phase name (for the chute-lifecycle strip log, so a
+ *  still-strip's caption confirms pop→flutter→deflate→settle progression). -1 clock = not popped. */
+export function chuteLifecyclePhase(): { t: number; phase: string } {
+  if (chutePopT < 0) return { t: -1, phase: chutePopArmed ? 'armed' : 'none' };
+  const t = chutePopT;
+  const phase = t < CHUTE_POP_DUR ? 'pop'
+    : t < CHUTE_DEFLATE_START ? 'flutter'
+    : t < CHUTE_SETTLED_AT ? 'deflate'
+    : 'settled';
+  return { t: +t.toFixed(2), phase };
 }
 
 /** FIRE the comic chute-pop (the failed chute finally deploys, uselessly, on the ground).
@@ -3528,13 +3636,24 @@ export function popChute(advanceSeconds?: number): void {
   chuteCanopy.visible = true;
   chutePopT = 0;
   playChutePop();
-  // Rig-shot helper: synchronously drive the inflate (the harness pauses the main
-  //   loop, which gates updateChutePop, so without this a paused frame catches the
-  //   canopy still folded). Step in small increments so the settle math resolves.
+  // Rig-shot / restore helper: synchronously drive the lifecycle (the harness pauses the main
+  //   loop, which gates updateChutePop, so without this a paused frame catches the canopy still
+  //   folded). Step in small increments so the flutter/deflate/settle math resolves. Driven at
+  //   CALM wind so a restore lands deterministically on the settled drape (no flutter replay).
   if (advanceSeconds && advanceSeconds > 0) {
     let left = advanceSeconds;
-    while (left > 0) { const step = Math.min(1 / 60, left); _advanceChuteInflate(step); left -= step; }
+    while (left > 0) { const step = Math.min(1 / 60, left); _advanceChuteLifecycle(step, 0, chutePopT); left -= step; }
   }
+}
+
+/** DEV/rig — step the chute life-cycle by `dt` seconds at a given `wind` (0..1) + downwind
+ *  direction (world XZ), for a PAUSED-frame time strip (the harness pauses the loop so the
+ *  camera stays fixed; this ticks the canopy motion deterministically without waiting real time).
+ *  `elapsed` supplies the noise phase. No-op unless popped. Returns the current phase for the log. */
+export function advanceChuteLifecycle(dt: number, wind: number, elapsed: number, dirX = 1, dirZ = 0): { t: number; phase: string } {
+  _windDirX = dirX; _windDirZ = dirZ;
+  _advanceChuteLifecycle(dt, Math.max(0, Math.min(1, wind)), elapsed);
+  return chuteLifecyclePhase();
 }
 
 /** D5 — the ROBUST chute-pop TRIGGER (decoupled from the tutorial state machine). The gag
@@ -3556,17 +3675,21 @@ function _autoFireChuteOnPry(ctx: GameContext): void {
   if (rec.panel?.userData.panelOpened === true) popChute();   // pried → the chute finally deploys (the gag)
 }
 
-/** Per-frame driver for the chute-pop inflate (T4.3). No-op unless popping. The COMIC arc:
- *  a fast springy inflate that punches PAST full (a big "FWOOMP" overshoot POOF), then the
- *  billow sags back and DROOPS — the dome deflates a touch + leans limply to one side and
- *  the canopy squashes down onto the wreck (the useless-anticlimax gag). Called from the
- *  tutorial driver's tick (normal gameplay, post-handoff). D5 — ALSO owns the robust pry→pop
- *  trigger (always-running, tutorial-phase-independent) so the gag can never be missed. */
+/** Per-frame driver for the chute-pop + DEFLATE/DRAPE life-cycle (T4.3 + round-2b). No-op unless
+ *  popping. The full arc: a springy inflate POOF → wind FLUTTER (procedural cloth, wind-scaled) →
+ *  DEFLATE + collapse into an authored draped pose → SETTLED scenery with a residual hem stir.
+ *  Called from the tutorial driver's tick (normal gameplay, post-handoff). D5 — ALSO owns the
+ *  robust pry→pop trigger (always-running, tutorial-phase-independent) so the gag can't be missed. */
 export function updateChutePop(ctx: GameContext, dt: number): void {
   _autoFireChuteOnPry(ctx);   // D5 — fire the gag on the pry event itself (decoupled from the tutorial phase)
-  _advanceChuteInflate(dt);   // advance the one-shot inflate animation (no-op unless popping)
+  // Live wind (0=calm..1=storm) + its downwind direction from the active storm wall (world XZ).
+  const wind = Math.max(0, Math.min(1, ctx.weather.perceivedIntensity ?? ctx.weather.intensity ?? 0));
+  _windDirX = ctx.weather.wall.dirX; _windDirZ = ctx.weather.wall.dirZ;
+  _advanceChuteLifecycle(dt, wind, ctx.time.elapsed);   // advance pop→flutter→deflate→settle (no-op unless popping)
   _updateWakeFlicker(dt);     // CRASH-AFTERMATH (2026-07-03) — the wake lamp/conduit-spark flicker one-shot (no-op unless armed)
 }
+// downwind direction (world XZ) captured each frame from the active storm wall; used for the lean.
+let _windDirX = 1, _windDirZ = 0;
 
 /** Advance the interior wake LAMP-FLICKER one-shot (the post-crash "sparking" tell): the ceiling lamp
  *  stutters + the torn-conduit wire sparks for ~9s at the wake, then settles clean. No-op unless armed
@@ -3625,38 +3748,140 @@ export function smokeWakeFlicker(): { built: boolean; armed: boolean; lampVaried
   return out;
 }
 
-/** Advance the chute-pop inflate one-shot (the scale/droop/settle animation). Split out of
- *  updateChutePop so popChute's synchronous rig-shot advance loop can drive it WITHOUT the
- *  ctx-dependent pry check (D5). No-op unless popping. */
-function _advanceChuteInflate(dt: number): void {
+/** Advance the chute POP → FLUTTER → DEFLATE → SETTLE life-cycle (round-2b). Split out of
+ *  updateChutePop so popChute's synchronous rig-shot/restore advance loop can drive it WITHOUT
+ *  the ctx-dependent pry check (D5). No-op unless popping. `wind` (0..1) scales the flutter (0
+ *  in the sync/restore path so a reload lands on a calm settled drape); `elapsed` is the wall
+ *  clock for deterministic time-based noise phase (no Math.random per frame). */
+function _advanceChuteLifecycle(dt: number, wind: number, elapsed: number): void {
   if (!chuteCanopy || chutePopT < 0) return;
   chutePopT += dt;
-  const k = Math.min(1, chutePopT / CHUTE_POP_DUR);
-  // ── SCALE: springy inflate with a big early overshoot, then ease down to rest.
-  //   base smoothsteps 1→ slightly-past-1 fast; the overshoot is a decaying wobble.
-  const base = k * k * (3 - 2 * k);                                 // smoothstep to 1
-  const wobble = Math.sin(k * Math.PI * 2.3) * (1 - k) * CHUTE_OVERSHOOT;  // big decaying POOF
-  const s = Math.max(0.001, base + wobble);
-  chuteCanopy.scale.setScalar(s);
-  // ── DROOP: after the overshoot peaks (k≳0.45) the billow goes limp — it leans to one
-  //   side + sags down onto the pod. Ramp the droop in over the back half of the arc.
-  const droop = Math.max(0, (k - 0.45) / 0.55);       // 0 until mid, →1 at rest
-  const droopE = droop * droop * (3 - 2 * droop);     // smooth
-  // whole-assembly lean (asymmetric, sells "useless") + a little bob that decays as it settles
-  const bob = Math.sin(chutePopT * 5.5) * (1 - k) * 0.10;
-  chuteCanopy.rotation.z = CHUTE_DROOP_LEAN * droopE + bob;
-  chuteCanopy.rotation.x = CHUTE_DROOP_LEAN * 0.30 * droopE;   // a touch of forward flop too
-  // the DOME sub-group sags vertically (deflates onto the wreck) as it droops
+  const t = chutePopT;
   const dome = chuteCanopy.getObjectByName('chuteDome');
-  if (dome) dome.scale.y = 0.72 * (1 - CHUTE_DROOP_SAG * droopE);
-  if (k >= 1) {
-    chuteCanopy.scale.setScalar(1);
-    chuteCanopy.rotation.z = CHUTE_DROOP_LEAN;
-    chuteCanopy.rotation.x = CHUTE_DROOP_LEAN * 0.30;
-    if (dome) dome.scale.y = 0.72 * (1 - CHUTE_DROOP_SAG);
-    // leave chutePopT at its end value (>0) so chutePopReady() stays false — popped once.
+  const flutter = dome?.userData.flutter as ChuteFlutterGore[] | undefined;
+
+  if (t < CHUTE_POP_DUR) {
+    // ── PHASE 0 — the springy inflate POOF (unchanged; the gag's pop spring + timing are frozen).
+    const k = Math.min(1, t / CHUTE_POP_DUR);
+    const base = k * k * (3 - 2 * k);                                 // smoothstep to 1
+    const wobble = Math.sin(k * Math.PI * 2.3) * (1 - k) * CHUTE_OVERSHOOT;  // big decaying POOF
+    chuteCanopy.scale.setScalar(Math.max(0.001, base + wobble));
+    const droop = Math.max(0, (k - 0.45) / 0.55);
+    const droopE = droop * droop * (3 - 2 * droop);
+    const bob = Math.sin(t * 5.5) * (1 - k) * 0.10;
+    chuteCanopy.rotation.z = CHUTE_DROOP_LEAN * droopE + bob;
+    chuteCanopy.rotation.x = CHUTE_DROOP_LEAN * 0.30 * droopE;
+    if (dome) dome.scale.y = 0.72 * (1 - CHUTE_DROOP_SAG * droopE);
+    return;
+  }
+
+  // Past the pop the assembly is at full scale; the dome carries the settled vertical squash.
+  chuteCanopy.scale.setScalar(1);
+  if (dome) dome.scale.y = 0.72 * (1 - CHUTE_DROOP_SAG);
+
+  // deflateK: 0 through the flutter, ramps 0→1 across the deflate window, holds at 1 when settled.
+  const deflateK = t <= CHUTE_DEFLATE_START ? 0
+    : Math.min(1, (t - CHUTE_DEFLATE_START) / CHUTE_DEFLATE_DUR);
+  const deflateE = deflateK * deflateK * (3 - 2 * deflateK);   // smoothstep
+  const settled = t >= CHUTE_SETTLED_AT;
+
+  // ── GROUP DROP — as the canopy deflates, lower the WHOLE assembly onto the pod's shoulder + nudge
+  //    it toward +X so the rumpled heap sits ON the hull flank, not perched high on the crown.
+  const baseY = (chuteCanopy.userData.baseY as number | undefined) ?? chuteCanopy.position.y;
+  chuteCanopy.position.set(0.18 * deflateE, baseY - 0.75 * deflateE, 0);
+
+  // ── VENT CAP — track the crown vent to the COLLAPSED heap top as the canopy deflates (else it
+  //    floats detached above the drape). Ease it down onto the fabric + toward the +X slump + shrink
+  //    it so it nestles into the folds instead of reading as a hard disc perched overhead.
+  const vent = dome?.getObjectByName('chuteVent');
+  if (vent) {
+    const restY = (vent.userData.ventRestY as number) ?? vent.position.y;
+    // the collapsed heap top ≈ crumple(p≈0) ≈ cy ~0.7 (mound retains volume; dome-local, pre-squash).
+    vent.position.set(0.28 * deflateE, restY + (0.7 - restY) * deflateE, 0);
+    vent.scale.setScalar(1 - 0.4 * deflateE);
+  }
+
+  // ── FLUTTER envelope: full during the flutter phase, eased OUT across the deflate (the cloth
+  //    loses internal form, so the lively flutter dies into the slump), leaving only a residual
+  //    stir once settled so it still reads as cloth (never a rigid shell).
+  const flutterEnv = settled ? CHUTE_SETTLED_STIR : (1 - deflateE) * (0.35 + 0.65 * wind) + CHUTE_SETTLED_STIR * deflateE;
+
+  // ── WHOLE-CANOPY LEAN: the settled droop lean + a downwind lean that grows with wind, then the
+  //    deflate slumps it further over the pod's shoulder (a limp collapse, not a tidy fold).
+  const windLean = CHUTE_WIND_LEAN * wind * (1 - 0.6 * deflateE);   // flutter leans downwind; the slump takes over on deflate
+  // world downwind dir → canopy-local (pod yaw≈0, so world XZ ≈ local XZ). rotation.z leans about
+  //   local +X (toward ±Z world); rotation.x leans about local +Z (toward ±X world). Map the wind
+  //   vector onto both so the lean actually points downwind.
+  const breathLean = Math.sin(elapsed * CHUTE_BILLOW_FREQ * 0.6) * 0.03 * flutterEnv;   // gentle sway
+  chuteCanopy.rotation.z = CHUTE_DROOP_LEAN + windLean * _windDirX * -1 + breathLean + CHUTE_DROOP_LEAN * 0.9 * deflateE;
+  chuteCanopy.rotation.x = CHUTE_DROOP_LEAN * 0.30 + windLean * _windDirZ + CHUTE_DROOP_LEAN * 0.5 * deflateE;
+
+  // ── VERTEX FIELD — layered wind cloth blended toward the authored crumple as it deflates.
+  if (flutter) {
+    // BILLOW: a slow whole-canopy breathing pulse (all verts swell/contract together, phase off elapsed).
+    const billowPhase = elapsed * CHUTE_BILLOW_FREQ;
+    for (const gore of flutter) {
+      const { pos, rest, crumple, polar, azim, n } = gore;
+      const arr = pos.array as Float32Array;
+      for (let i = 0; i < n; i++) {
+        const ix = i * 3;
+        const p = polar[i];       // 0 apex → 1 brim
+        const az = azim[i];
+        // BILLOW — the whole canopy breathes; strongest mid-canopy, driven radially outward.
+        const billow = Math.sin(billowPhase + az * 0.5) * CHUTE_BILLOW_AMP * (0.4 + 0.6 * p);
+        // RIPPLE — a wave travelling from apex to brim across the gores (phase advances with polar).
+        const ripple = Math.sin(elapsed * CHUTE_RIPPLE_FREQ - p * 6.0 + az * 2.0) * CHUTE_RIPPLE_AMP * p;
+        // EDGE FLUTTER — fast high-freq chatter concentrated on the skirt hem (p→1).
+        const hemW = Math.max(0, (p - 0.6) / 0.4);   // 0 until the outer 40%, →1 at the hem
+        const hem = Math.sin(elapsed * CHUTE_HEM_FREQ + az * 4.0) * CHUTE_HEM_AMP * hemW * hemW;
+        // radial swell (billow+ripple push out along XZ) + a vertical hem flap.
+        const swell = (billow + ripple) * flutterEnv;
+        const rx = rest[ix], ry = rest[ix + 1], rz = rest[ix + 2];
+        const rXZ = Math.hypot(rx, rz) || 1e-4;
+        const flx = rx + (rx / rXZ) * swell;
+        const fly = ry + hem * flutterEnv * 0.7;
+        const flz = rz + (rz / rXZ) * swell;
+        // MORPH the fluttering inflated pose → the authored crumple as the chute deflates.
+        arr[ix]     = flx + (crumple[ix]     - flx) * deflateE;
+        arr[ix + 1] = fly + (crumple[ix + 1] - fly) * deflateE;
+        arr[ix + 2] = flz + (crumple[ix + 2] - flz) * deflateE;
+      }
+      pos.needsUpdate = true;
+    }
+  }
+
+  // ── SHROUD LINES — tension/slacken with the billow during flutter; as the canopy DEFLATES they go
+  //    fully limp: BOTH ends converge near the collapsed heap (the skirt to the rumpled brim, the riser
+  //    gather UP right under the heap) so each line becomes a SHORT slack thread bunched into the fabric
+  //    fold — no rigid rods radiating out. Each bellies into a catenary sag.
+  const billowSlack = 0.06 * flutterEnv * Math.sin(elapsed * CHUTE_BILLOW_FREQ + 1.3);
+  for (const ln of _chuteLines) {
+    // skirt end → pulled HARD in toward a tight gather right under the mound (a small radius) so the
+    //   lines collapse into a short tucked bunch, NOT rods radiating out. A per-line azimuth keeps them
+    //   from all coinciding (reads as a few slack threads at the fabric base).
+    const sk = _chuteScratchA.copy(ln.skirt);
+    if (deflateE > 0) sk.lerp(_chuteScratchB.set(ln.skirt.x * 0.14 + 0.28, -0.85, ln.skirt.z * 0.14), deflateE);
+    // riser gather → RISES from its low knot to just under the heap so the lines are SHORT (no spikes).
+    const rY = ln.riser.y + (-1.05 - ln.riser.y) * deflateE;   // −1.85 → ~−1.05 (tucked under the drape brim)
+    const rx = ln.riser.x + 0.28 * deflateE, rz = ln.riser.z;
+    const dir = _chuteScratchB.set(rx - sk.x, rY - sk.y, rz - sk.z);
+    const chord = dir.length();
+    const slack = billowSlack + 0.22 * deflateE;               // slack grows as it deflates
+    const len = chord * (1 - slack * 0.25);
+    const sag = ln.restLen * (billowSlack * 0.5 + 0.10 * deflateE);   // a small belly (short lines can't sag far)
+    ln.mesh.position.set((sk.x + rx) * 0.5, (sk.y + rY) * 0.5 - sag, (sk.z + rz) * 0.5);
+    ln.mesh.scale.y = Math.max(0.05, len);
+    ln.mesh.quaternion.setFromUnitVectors(ln.up, dir.normalize());
+  }
+  // the riser knot rides up with the gather so the lines terminate in it (not floating below).
+  const knot = chuteCanopy.getObjectByName('chuteKnot');
+  if (knot) {
+    const kRest = (knot.userData.knotRestY as number) ?? knot.position.y;
+    knot.position.set(0.28 * deflateE, kRest + (-1.05 - kRest) * deflateE, 0);
   }
 }
+const _chuteScratchA = new THREE.Vector3();
+const _chuteScratchB = new THREE.Vector3();
 
 // ─── The HERO crashed escape pod (Phase 1 / T1.1 — C11 CYLINDRICAL redo) ──────
 // A VERTICAL RIVETED ALUMINIUM CAPSULE / TORPEDO (the LOCKED identity — D271,

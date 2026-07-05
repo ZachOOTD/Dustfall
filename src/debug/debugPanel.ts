@@ -20,7 +20,7 @@ import { fireSignalFlare, advanceSignalFlares, activeSignalFlareCount } from '..
 import { damageVulture } from '../enemies/vulture.ts';
 import { applyLungePose, applyMeshTransform } from '../enemies/sandWorm.ts';   // M12 ⓖ (C66) — __game.poseLunge (dive render)
 import { startEscapePodIntro, endEscapePodIntro, jumpToBeat as jumpToIntroBeat, smokeTestIntro, benchIntro, planetApproachCurve, type BeatId, type IntroBenchResult } from '../world/escapePodIntro/sequence.ts';   // escape-pod intro — __game.startIntro/skipIntro/jumpToBeat/smokeIntro/benchIntro; W6 item 3 — planetApproachCurve (the rig mirrors the new two-phase approach)
-import { placeCrashedPodWreck, setDescentProgress as setPodDescent, setParachuteLeverPull as setPodChute, setEjectLeverPull as setPodEject, setCabinCrashPose as setPodCrashPose, blowCabinHatch as blowPodHatch, popChute as popPodChute, buildPodScene as buildPodSceneDbg, getPodSpawn as getPodSpawnDbg, disposePodScene, podIsEnterable, getCrashedPodSalvageableId as getPodSalvageId, chutePopReady, setPendingPodCrashRestore, applyPendingPodCrashRestore, smokeExposureConstant, smokeWakeFlicker, probeEyeInCabin, probeCabinDoor } from '../world/escapePodIntro/podScene.ts';   // T1.1/T1.2 · R3a · T4.3 · T3.2 — __game.placeCrashedPod / … ; + smokePodPersistence deps; W6 item 5 — smokeExposureConstant (the zero-shift constant-exposure proof); W6 item 4 — probeEyeInCabin (the impact eye-inside gate); W6 item 6 — probeCabinDoor (the slanted-door diagnostic)
+import { placeCrashedPodWreck, setDescentProgress as setPodDescent, setParachuteLeverPull as setPodChute, setEjectLeverPull as setPodEject, setCabinCrashPose as setPodCrashPose, blowCabinHatch as blowPodHatch, popChute as popPodChute, chuteLifecyclePhase, advanceChuteLifecycle as advanceChuteDbg, buildPodScene as buildPodSceneDbg, getPodSpawn as getPodSpawnDbg, disposePodScene, podIsEnterable, getCrashedPodSalvageableId as getPodSalvageId, chutePopReady, setPendingPodCrashRestore, applyPendingPodCrashRestore, smokeExposureConstant, smokeWakeFlicker, probeEyeInCabin, probeCabinDoor } from '../world/escapePodIntro/podScene.ts';   // T1.1/T1.2 · R3a · T4.3 · T3.2 — __game.placeCrashedPod / … ; + smokePodPersistence deps; W6 item 5 — smokeExposureConstant (the zero-shift constant-exposure proof); W6 item 4 — probeEyeInCabin (the impact eye-inside gate); W6 item 6 — probeCabinDoor (the slanted-door diagnostic)
 import { smokePodTutorial } from '../world/escapePodIntro/podTutorial.ts';   // T4.3 — __game.smokePodTutorial (drive the craft→salvage→chute-pop loop headlessly)
 import { buildHaulerExterior, disposeHaulerExterior, setHaulerExplosion, setHaulerDeparture } from '../world/escapePodIntro/haulerScene.ts';   // T3.1/T3.2 — __game.buildHauler / disposeHauler / setHaulerExplosion (hauler-exterior + explosion rig-shots); C1 — setHaulerDeparture (the eject-departure recession)
 import { setCockpitAlert as setShipCockpitAlert, setShipAlert as setShipRedAlert, setEngineFire as setShipEngineFire, setBayAirlockDoor as setBayAirlockDoorDbg, setBayPodDoorOpen as setBayPodDoorOpenDbg } from '../world/escapePodIntro/shipScene.ts';   // T3.3/T3.4 — __game.setCockpitAlert / setShipAlert / setEngineFire (alert escalation + the disaster rig-shot)
@@ -94,6 +94,11 @@ interface DebugApi {
    *  Optional `advanceSeconds` synchronously drives the inflate that many seconds (rig-shots
    *  pause the loop, so pass ≥ the pop duration to freeze on the FULLY-inflated frame). */
   popChute: (advanceSeconds?: number) => void;
+  /** Escape-pod round-2b — the chute DEFLATE/DRAPE life-cycle clock + phase name (for the rig strip). */
+  chutePopT: () => { t: number; phase: string };
+  /** Escape-pod round-2b — step the chute life-cycle by dt at a wind (0..1) + downwind dir (for a
+   *  PAUSED rig strip; the camera stays fixed while the canopy motion ticks deterministically). */
+  tickChute: (dt: number, wind: number, elapsed: number, dirX?: number, dirZ?: number) => { t: number; phase: string };
   /** Escape-pod T4.3 — smoke the whole craft→salvage→chute-pop tutorial loop headlessly. */
   smokePodTutorial: () => ReturnType<typeof smokePodTutorial>;
   /** Escape-pod W6 item 5 — prove the renderer exposure stays CONSTANT at the desert base (1.05)
@@ -379,6 +384,8 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
     blowCabinHatch: (t) => { blowPodHatch(t); },
     setBayPodDoorOpen: (t) => { setBayPodDoorOpenDbg(t); },
     popChute: (advanceSeconds) => { popPodChute(advanceSeconds); },
+    chutePopT: () => chuteLifecyclePhase(),
+    tickChute: (dt, wind, elapsed, dirX, dirZ) => advanceChuteDbg(dt, wind, elapsed, dirX, dirZ),
     saveGame: () => saveGameState(ctx),
     smokePodTutorial: () => smokePodTutorial(ctx),
     smokeExposureConstant: () => smokeExposureConstant(ctx),

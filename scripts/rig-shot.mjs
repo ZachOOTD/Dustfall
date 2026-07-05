@@ -104,7 +104,7 @@ async function captureStrip(page, name, perFrame) {
     if (perFrame) await page.evaluate(`(${perFrame})(${i})`);
     await page.waitForTimeout(INTERVAL);
     const path = join(OUT, `scen-${name}-f${String(i).padStart(2, '0')}.png`);
-    await page.screenshot({ path, fullPage: false });
+    await page.screenshot({ path, fullPage: false, animations: 'disabled', timeout: 60000 });
   }
   console.log(`[rig-shot] saved ${FRAMES} frames: scen-${name}-f00..f${String(FRAMES - 1).padStart(2, '0')}.png`);
 }
@@ -1636,7 +1636,7 @@ const SCENARIOS = {
     await page.waitForTimeout(1400);   // let stepOut's init tick run unifyEnterablePod (skin + colliders + salvage)
     await page.evaluate(() => { window.__game.skipIntro(); });   // hand off to the real game (pod persists, HUD/sun restored)
     await page.waitForTimeout(900);
-    if (popchute) await page.evaluate(() => { try { window.__game.popChute(3.0); } catch (e) { console.log('popChute err', e); } });
+    if (popchute) { const adv = argv.settled ? 16.0 : 3.0; await page.evaluate((a) => { try { window.__game.popChute(a); } catch (e) { console.log('popChute err', e); } }, adv); }
     const r = await page.evaluate(({ ang, t }) => {
       const g = window.__game;
       const ctx = g.ctx;
@@ -1702,6 +1702,85 @@ const SCENARIOS = {
     const tag = popchute ? `${angle}-chute` : angle;
     await page.screenshot({ path: join(OUT, `scen-crashed-pod-${tag}.png`), fullPage: false, animations: 'disabled', timeout: 60000 });
     console.log(`[crashed-pod] ${JSON.stringify(r)}`);
+  },
+
+  // Chute-lifecycle (round-2b) — a MOTION strip through the deployed chute's DEFLATE + DRAPE
+  //   life-cycle (pop → flutter → deflate → settle). Drives the REAL crash→wake→stepOut→handoff
+  //   chain (like crashed-pod) to land the ONE persistent pod, frames the pod + chute from a
+  //   fixed exterior vantage, keeps the loop LIVE (updateChutePop ticks the lifecycle), pops the
+  //   chute, then captures --frames screenshots --interval ms apart across the ~14s arc. The
+  //   camera is fixed (not per-frame) so the strip reads as pure canopy motion. Flags:
+  //     --wind=<0..1>   drive the storm intensity/wind so the flutter reads (default 0 = calm)
+  //     --angle=front|side|high   the vantage on the pod+chute
+  //     --frames=15 --interval=1000  (defaults tuned to span pop→settle; override for detail)
+  //     --time=<0..1>   dawn/morning light (default 0.34 midday for max read)
+  'chute-lifecycle': async (page) => {
+    const angle = argv.angle || 'front';
+    const wind = argv.wind !== undefined ? Math.max(0, Math.min(1, Number(argv.wind))) : 0;
+    const t = argv.time !== undefined ? Number(argv.time) : 0.34;
+    // Drive the REAL chain to the landed pod (mirrors crashed-pod), but leave the loop LIVE.
+    await page.evaluate(() => {
+      const g = window.__game; const ctx = g.ctx;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      ctx.three.renderer.setSize(960, 720, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 960 / 720; cam.updateProjectionMatrix(); }
+      g.startIntro();
+      g.jumpToBeat('impact');
+    });
+    await page.waitForTimeout(2600);
+    await page.evaluate(() => { window.__game.jumpToBeat('wake'); });
+    await page.waitForTimeout(1600);
+    await page.evaluate(() => { window.__game.jumpToBeat('stepOut'); });
+    await page.waitForTimeout(1400);
+    await page.evaluate(() => { window.__game.skipIntro(); });   // hand off to the real game (pod persists)
+    await page.waitForTimeout(900);
+    // PAUSE the loop (so the game's updatePlayer can't stomp the camera) + fix camera/light/wind,
+    //   then POP the chute at t=0. The lifecycle is ticked MANUALLY per frame via __game.tickChute
+    //   (deterministic, no real-time wait) so the strip reads as pure canopy motion.
+    const info = await page.evaluate(({ ang, t, wind }) => {
+      const g = window.__game; const ctx = g.ctx;
+      g.setTime(t);
+      ctx.weather.intensity = wind; ctx.weather.perceivedIntensity = wind; ctx.weather.cloudiness = wind * 0.4;
+      ctx.three.renderer.toneMappingExposure = 1.25;
+      const cam = ctx.three.camera;
+      const V = cam.position.constructor;
+      ctx.flags.paused = true;   // freeze the sim — the camera stays where we put it below
+      const pod = ctx.three.scene.getObjectByName('escapePodCabin');
+      let px = 0, pz = 0;
+      if (pod) { pod.updateMatrixWorld(true); const p = new V(); p.setFromMatrixPosition(pod.matrixWorld); px = p.x; pz = p.z; }
+      const gy = ctx.terrain.heightAt(px, pz);
+      const haz = Math.PI, hnx = Math.sin(haz), hnz = Math.cos(haz);
+      window.__CHUTE_CAM = { px, pz, gy, hnx, hnz, ang };   // stash for the per-frame re-assert
+      window.__CHUTE_WIND = wind; window.__CHUTE_WIND_DIR = { x: 0.85, z: 0.52 };   // fixed downwind for the lean
+      // POP the chute directly (the real gag path is the pry; here we fire it so the strip starts at
+      //   lifecycle t=0). The per-frame tickChute advances it.
+      try { g.popChute(); } catch (e) { console.log('popChute err', e); }
+      return { podAt: [+px.toFixed(1), +pz.toFixed(1)], groundY: +gy.toFixed(2), wind, angle: ang, found: !!pod };
+    }, { ang: angle, t, wind });
+    console.log(`[chute-lifecycle] setup ${JSON.stringify(info)}`);
+    // Each strip frame: RE-ASSERT the camera + light (the pause holds them, but be safe), step the
+    //   lifecycle ~1.05s (so 15 frames span the ~14s arc + a settled tail), pin exposure.
+    const wtag = wind > 0.02 ? `-wind${Math.round(wind * 100)}` : '';
+    await captureStrip(page, `chute-lifecycle-${angle}${wtag}`, `(i)=>{
+      const g=window.__game; const ctx=g.ctx; const V=ctx.three.camera.position.constructor;
+      const s=window.__CHUTE_CAM; const cam=ctx.three.camera; const {px,pz,gy,hnx,hnz,ang}=s;
+      if(ang==='side'){cam.position.set(px-hnz*9.5+1.0,gy+3.6,pz+hnx*9.5+0.5);cam.lookAt(px,gy+2.5,pz);}
+      else if(ang==='high'){cam.position.set(px+hnx*7.5+2.5,gy+6.5,pz+hnz*7.5+1.5);cam.lookAt(px,gy+2.2,pz);}
+      else{cam.position.set(px+hnx*8.8+1.4,gy+3.6,pz+hnz*8.8+0.6);cam.lookAt(px-0.1,gy+2.6,pz);}
+      cam.updateMatrixWorld(true);
+      let DirCtor=null,HemiCtor=null; ctx.three.scene.traverse((o)=>{if(o.isDirectionalLight&&!DirCtor)DirCtor=o.constructor;if(o.isHemisphereLight&&!HemiCtor)HemiCtor=o.constructor;});
+      let key=ctx.three.scene.getObjectByName('__podKey');
+      if(!key&&DirCtor){key=new DirCtor();key.name='__podKey';key.intensity=1.7;key.color.set(0xffe9cf);ctx.three.scene.add(key.target);ctx.three.scene.add(key);}
+      if(key){const toP=new V(px-cam.position.x,0,pz-cam.position.z);key.position.set(cam.position.x+toP.x*0.2+2,cam.position.y+4,cam.position.z+toP.z*0.2+1);key.target.position.set(px,gy+2.5,pz);key.target.updateMatrixWorld(true);}
+      if(!ctx.three.scene.getObjectByName('__podFill')&&HemiCtor){const fill=new HemiCtor(0xbfccdd,0x6b5840,0.55);fill.name='__podFill';ctx.three.scene.add(fill);}
+      ctx.three.renderer.toneMappingExposure=1.25;
+      // step the lifecycle ~1.05s this frame (i>0; frame 0 shows the fresh pop). elapsed drives noise.
+      if(i>0){const el=i*1.05; const dir=window.__CHUTE_WIND_DIR||{x:0.85,z:0.52}; for(let k=0;k<21;k++){g.tickChute(0.05,window.__CHUTE_WIND||0,el+k*0.05,dir.x,dir.z);}}
+      const ph=g.chutePopT?g.chutePopT():{t:'?',phase:'?'}; console.log('[chute-lc] f'+i+' t='+ph.t+' phase='+ph.phase);
+    }`);
   },
 
   // Pod-interior (T1.2): the REAL seated first-person view inside the HERO escape-pod
