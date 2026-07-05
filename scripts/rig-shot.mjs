@@ -1598,85 +1598,89 @@ const SCENARIOS = {
   },
 
   // Crashed-pod (T1.1) — the HERO escape-pod exterior at the desert wake spot.
-  // Reproduces the REAL stepOut placement (placeCrashedPodWreck at player+4,+4,
-  // half-buried + tilted; camera at the player's wake eye looking at the pod), NOT
-  // an isolated studio rig (the C60/C63 false-pass trap — visual-diagnostic-
-  // methodology.md D165). Angles: wake (player's-eye approach), hatch (close-up into
-  // the blown salvage face), oblique (3/4 of the whole silhouette), back (the modular
-  // panels). --time=<0..1> for the dawn/morning desert light. Front-lit.
+  // SCENARIO-TRUTH FIX (2026-07-05): this scenario USED to place the DEV-ONLY placeCrashedPodWreck
+  // (buildHeroPodMesh — a squat DOMED capsule, buried at yaw≈0.55, with an unconditional sand berm) —
+  // a build the PLAYER NEVER SEES. The real crash flow grounds the ONE persistent walk-in pod via
+  // unifyEnterablePod (buildPodScene canonical geometry, gentle _CRASH_PITCH/ROLL lean, NO yaw, plain
+  // terrain — ENABLE_CRASH_GROUND_DRESSING off). So the old wake-frame findings (a detached flank
+  // plate, tilt/drift/hardware mismatches) were grading a phantom. This now DRIVES THE REAL CHAIN
+  // (startIntro → impact → wake → stepOut → unifyEnterablePod), like door-flush-audit / stepout-pod,
+  // and frames the REAL landed 'escapePodCabin'. The player's-eye wake read is the gate (D165). The
+  // real front DOOR faces cabin-local −Z (FDOOR_AZ=π; pod yaw≈0 → world outward (0,−1)); angles frame
+  // relative to that normal. Angles: wake (player's-eye beside), hatch (close on the −Z door face),
+  // oblique (3/4 whole silhouette), back (the +Z salvage-panel flank), close (upper-hull detail).
+  // --time=<0..1> for the dawn/morning desert light. Front-lit.
   // (the 'smoke-intro' health GATE lives further down — a single definition now.)
 
   'crashed-pod': async (page) => {
     const angle = argv.angle || 'wake';
     const t = argv.time !== undefined ? Number(argv.time) : 0.32;   // dawn-ish, sun low + warm
     const popchute = !!argv.popchute;   // T4.3 — fire the comic chute-pop + freeze on the fully-inflated frame
-    const r = await page.evaluate(({ ang, t, popchute }) => {
-      const g = window.__game;
-      const ctx = g.ctx;
-      g.setTime(t);
-      ctx.weather.intensity = 0; ctx.weather.cloudiness = 0.12;
-      ctx.three.renderer.toneMappingExposure = 1.25;
+    // ── Drive the REAL crash → wake → step-out chain so the REAL unified landed pod is the subject
+    //    (mirrors stepout-pod / door-flush-audit — NOT the dev wreck). Each jump needs a live tick.
+    await page.evaluate(() => {
+      const g = window.__game; const ctx = g.ctx;
       ctx.flags.thirdPerson = false;
       if (ctx.player.rig) ctx.player.rig.group.visible = false;
       if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
       ctx.three.renderer.setSize(960, 720, false);
       const cam = ctx.three.camera;
       if (cam.isPerspectiveCamera) { cam.aspect = 960 / 720; cam.updateProjectionMatrix(); }
-      // Place the pod at a clear anchor near the player (mirrors stepOut's +4,+4
-      // wake-beside read, offset further to clear the spawn-area fuselage wreck so
-      // the hero pod is the subject — the real stepOut spot still applies in-game).
-      const tr = ctx.player.body.body.translation();
-      const px = tr.x + 14, pz = tr.z - 12;
-      g.placeCrashedPod(px, pz);
-      // T4.3 — fire the comic chute-pop + advance it fully so the paused frame catches
-      //   the FULLY-inflated canopy draped over the pod (placeCrashedPod arms it).
-      if (popchute) g.popChute(3.0);
-      const gy = ctx.terrain.heightAt(px, pz);
+      g.startIntro();
+      g.jumpToBeat('impact');
+    });
+    await page.waitForTimeout(2600);
+    await page.evaluate(() => { window.__game.jumpToBeat('wake'); });
+    await page.waitForTimeout(1600);
+    await page.evaluate(() => { window.__game.jumpToBeat('stepOut'); });
+    await page.waitForTimeout(1400);   // let stepOut's init tick run unifyEnterablePod (skin + colliders + salvage)
+    await page.evaluate(() => { window.__game.skipIntro(); });   // hand off to the real game (pod persists, HUD/sun restored)
+    await page.waitForTimeout(900);
+    if (popchute) await page.evaluate(() => { try { window.__game.popChute(3.0); } catch (e) { console.log('popChute err', e); } });
+    const r = await page.evaluate(({ ang, t }) => {
+      const g = window.__game;
+      const ctx = g.ctx;
+      g.setTime(t);
+      ctx.weather.intensity = 0; ctx.weather.cloudiness = 0.12;
+      ctx.three.renderer.toneMappingExposure = 1.25;
+      const cam = ctx.three.camera;
       const V = cam.position.constructor;
       ctx.flags.paused = true;
-      // C11 — TALL VERTICAL CAPSULE: the visible standing pod runs ~gy → gy+1.9
-      // (hatch centred ~gy+0.65, porthole ~gy+1.25). Aim at the mid-body so the
-      // whole standing silhouette frames; cameras pulled back + raised vs the old
-      // wide box. Still reproduces the real half-buried wake placement.
+      // the REAL unified landed pod persists under 'escapePodCabin'; derive its world (x,z).
+      const pod = ctx.three.scene.getObjectByName('escapePodCabin');
+      let px = 0, pz = 0;
+      if (pod) { pod.updateMatrixWorld(true); const p = new V(); p.setFromMatrixPosition(pod.matrixWorld); px = p.x; pz = p.z; }
+      const gy = ctx.terrain.heightAt(px, pz);
+      // the front DOOR world-outward normal (FDOOR_AZ = π → (0,−1) at pod yaw≈0).
+      const haz = Math.PI, hnx = Math.sin(haz), hnz = Math.cos(haz);
+      // TALL VERTICAL CAPSULE: exposed body ~gy → gy+1.9. Aim at mid-body so the whole standing
+      //   silhouette frames.
       const aimY = gy + 0.95;
       if (ang === 'wake') {
-        // Player's-eye: standing ~4.5m away, eye height, biased to the +X side so
-        // the +Z hatch/porthole face AND the +X riveted flank both read at ~45°
-        // (a round 3D volume, not a flat-on slab). The real wake-beside read.
-        cam.position.set(px + 4.0, gy + 1.7, pz + 2.6);
+        // Player's-eye wake-beside: ~4.5m out on the hatch (−Z) side, biased +X so the door face AND
+        //   the riveted flank both read at ~45° (a round 3D volume, not a flat slab).
+        cam.position.set(px + hnx * 4.2 + 1.4, gy + 1.7, pz + hnz * 4.2 + 0.6);
         cam.lookAt(px - 0.1, aimY, pz);
       } else if (ang === 'hatch') {
-        // Close-up squarely onto the blown-open hatch (the salvage face). The hatch
-        // is on the capsule's LOCAL +Z face; the pod is yawed ~0.55, so the hatch
-        // world-normal is (sin0.55, 0, cos0.55). Frame dead-on along that normal.
-        const hy = 0.55, hnx = Math.sin(hy), hnz = Math.cos(hy);
+        // Close-up squarely onto the −Z front door (the blown-open walk-in / salvage-adjacent face).
         const hd2 = 3.0;
         cam.position.set(px + hnx * hd2, gy + 1.2, pz + hnz * hd2);
-        cam.lookAt(px + hnx * 0.3, gy + 0.8, pz + hnz * 0.3);
+        cam.lookAt(px + hnx * 0.3, gy + 0.9, pz + hnz * 0.3);
       } else if (ang === 'oblique') {
-        // 3/4 of the WHOLE standing silhouette from a higher, further vantage so
-        // the nose dome + base both frame.
-        cam.position.set(px + 4.6, gy + 2.6, pz + 4.0);
+        // 3/4 of the WHOLE standing silhouette from a higher, further vantage (nose dome + base frame).
+        cam.position.set(px + hnx * 4.4 + 2.2, gy + 2.6, pz + hnz * 4.4 + 1.4);
         cam.lookAt(px, aimY + 0.1, pz);
       } else if (ang === 'back') {
-        // The riveted flank away from the hatch — verifies the strippable panels.
-        cam.position.set(px - 4.0, gy + 1.9, pz - 3.4);
+        // The +Z back flank (away from the −Z door) — the real salvage panel + riveted flank.
+        cam.position.set(px - hnx * 4.2 + 0.6, gy + 1.9, pz - hnz * 4.2 - 0.4);
         cam.lookAt(px, aimY, pz);
-      } else if (ang === 'iso') {
-        // DIAGNOSTIC studio: lift the whole capsule ABOVE the sand (un-bury) so the
-        // FULL standing form is judgeable in isolation (additional shot, never the
-        // verdict — the buried wake read is the gate). Re-pose upright, clean 3/4.
-        const pod2 = ctx.three.scene.getObjectByName('crashedPod');
-        if (pod2) { pod2.position.y = gy + 0.1; pod2.rotation.set(0, 0.55, 0); pod2.updateMatrixWorld(true); }
-        cam.position.set(px + 3.6, gy + 1.9, pz + 4.0);
-        cam.lookAt(px, gy + 1.2, pz);
       } else { // close — tight detail of the upper hull (porthole / rivets / nose)
-        cam.position.set(px + 2.8, gy + 2.0, pz + 2.8);
+        cam.position.set(px + hnx * 2.6 + 1.2, gy + 2.0, pz + hnz * 2.6 + 0.8);
         cam.lookAt(px, gy + 1.3, pz);
       }
       cam.updateMatrixWorld(true);
-      // Front KEY light from above + beside the camera so the camera-facing hull is
-      // LIT (not a backlit silhouette — the harness front-light prerequisite).
+      // Front KEY light from above + beside the camera so the camera-facing hull is LIT (not a backlit
+      //   silhouette — the harness front-light prerequisite).
       let DirCtor = null, HemiCtor = null;
       ctx.three.scene.traverse((o) => { if (o.isDirectionalLight && !DirCtor) DirCtor = o.constructor; if (o.isHemisphereLight && !HemiCtor) HemiCtor = o.constructor; });
       let key = ctx.three.scene.getObjectByName('__podKey');
@@ -1687,15 +1691,16 @@ const SCENARIOS = {
         key.target.position.set(px, aimY, pz); key.target.updateMatrixWorld(true);
       }
       if (!ctx.three.scene.getObjectByName('__podFill') && HemiCtor) { const fill = new HemiCtor(0xbfccdd, 0x6b5840, 0.5); fill.name = '__podFill'; ctx.three.scene.add(fill); }
-      // Report: the pod's exposed height above the sand + structural mesh count.
-      const pod = ctx.three.scene.getObjectByName('crashedPod');
+      // Report: the REAL pod's exposed height above the sand + structural mesh count + the settled pose.
       let meshes = 0, maxY = -1e9, minY = 1e9;
       if (pod) { pod.updateMatrixWorld(true); pod.traverse((o) => { if (o.isMesh && o.geometry) { meshes++; o.geometry.computeBoundingBox(); const bb = o.geometry.boundingBox; for (const cy of [bb.min.y, bb.max.y]) { const wv = new V(0, cy, 0); o.localToWorld(wv); maxY = Math.max(maxY, wv.y); minY = Math.min(minY, wv.y); } } }); }
-      return { angle: ang, podAt: [+px.toFixed(1), +pz.toFixed(1)], groundY: +gy.toFixed(2), exposedH: +(maxY - gy).toFixed(2), meshes, found: !!pod };
-    }, { ang: angle, t, popchute });
+      const rot = pod ? [+pod.rotation.x.toFixed(3), +pod.rotation.y.toFixed(3), +pod.rotation.z.toFixed(3)] : null;
+      const enterable = !!(g.probeCabinDoor && g.probeCabinDoor().built);
+      return { angle: ang, podAt: [+px.toFixed(1), +pz.toFixed(1)], groundY: +gy.toFixed(2), exposedH: +(maxY - gy).toFixed(2), meshes, rot, enterable, found: !!pod, real: true };
+    }, { ang: angle, t });
     await page.waitForTimeout(350);
     const tag = popchute ? `${angle}-chute` : angle;
-    await page.screenshot({ path: join(OUT, `scen-crashed-pod-${tag}.png`), fullPage: false });
+    await page.screenshot({ path: join(OUT, `scen-crashed-pod-${tag}.png`), fullPage: false, animations: 'disabled', timeout: 60000 });
     console.log(`[crashed-pod] ${JSON.stringify(r)}`);
   },
 
@@ -1859,15 +1864,21 @@ const SCENARIOS = {
         if (u.uSpace) u.uSpace.value = space01;
         stars.position.copy(cam.position); stars.updateMatrixWorld(true);
       }
-      const dir = new V(0.30, 0.10, -1).normalize();
-      const DIST = 400;
       if (planetGroup) {
         // C3 — mirror applySpaceMode's APPROACH: scale the group up + slide it DOWN as the planet
         //   approaches (ease-in), so the paused rig shows the SAME swelling planet the live descent
-        //   produces (the planet fills the porthole across d0→d0.2). Match sky.ts constants.
+        //   produces (the planet fills the porthole across d0→d0.2).
+        // SEV2 2026-07-05 — anchor/approach constants now read from sky.ts's userData TRUTH STAMP
+        //   (buildSpacePlanet stamps them on the group) so this mirror can't drift again: the old
+        //   hardcoded DIST=400/drop=150 predated the W4 400→1000 retune (radius 66→165, drop 375)
+        //   → the paused rig rendered a 2.6×-oversized planet (false frame). Fallbacks = current sky.ts.
+        const ud = planetGroup.userData || {};
+        const ad = ud.spaceAnchorDir || [0.30, 0.10, -1];
+        const dir = new V(ad[0], ad[1], ad[2]).normalize();
+        const DIST = ud.spaceAnchorDistance || 1000;
         const ae = approach * approach;
-        const scale = 1 + (3.6 - 1) * ae;      // _PLANET_APPROACH_MAX_SCALE = 3.6
-        const drop = 150 * ae;                  // _PLANET_APPROACH_DROP = 150
+        const scale = 1 + ((ud.approachMaxScale || 3.6) - 1) * ae;   // _PLANET_APPROACH_MAX_SCALE
+        const drop = (ud.approachDrop || 375) * ae;                  // _PLANET_APPROACH_DROP
         planetGroup.scale.setScalar(scale);
         planetGroup.position.set(cam.position.x + dir.x*DIST, cam.position.y + dir.y*DIST - drop, cam.position.z + dir.z*DIST);
         planetGroup.updateMatrixWorld(true);
@@ -2477,7 +2488,7 @@ const SCENARIOS = {
       if (window.__RIG_HIDESTARS) {
         ctx.three.scene.traverse((o) => { if (o.isPoints && o.renderOrder === -0.5) o.visible = false; });
       }
-      if (window.__RIG_NOPLANET) { ctx.three.scene.traverse((o)=>{ if(o.isMesh && (o.renderOrder===-0.4||o.renderOrder===-0.39)) o.visible=false; }); }
+      if (window.__RIG_NOPLANET) { ctx.three.scene.traverse((o)=>{ if(o.isMesh && (o.renderOrder===-0.4||o.renderOrder===-0.39||o.renderOrder===-0.41)) o.visible=false; }); }   // -0.41 = the SEV2 depth-occluder shell (sky.ts) — hide it with the planet or --noplanet leaves an invisible star-blocking disc
       // --noglass: hide the windscreen glass + smudge + streak overlays (transparent meshes near the
       // -Z window plane) to see the RAW background behind the window.
       if (window.__RIG_NOGLASS) {
@@ -2598,8 +2609,16 @@ const SCENARIOS = {
       if (!group) return;
       const cam = ctx.three.camera; cam.updateMatrixWorld(true);
       const V = cam.position.constructor;
-      const dir = new V(0.30, 0.10, -1).normalize();
-      const DIST = 400;   // keep in sync with _SPACE_PLANET_DIR/_DISTANCE in sky.ts
+      // SEV2 2026-07-05 — read the anchor from sky.ts's userData TRUTH STAMP (buildSpacePlanet
+      // stamps spaceAnchorDir/spaceAnchorDistance on the group) instead of a hand mirror. The
+      // old hardcoded DIST=400 predated the W4 400→1000 retune (radius 66→165), so this block
+      // placed the 165m planet at 400m — a 2.6×-oversized (~49° vs the real ~19°) FALSE FRAME;
+      // the adversarial gate read the open starfield inside its huge limb arcs as "stars
+      // visible through the planet's dark side". Fallbacks match sky.ts's current constants.
+      const ud = group.userData || {};
+      const ad = ud.spaceAnchorDir || [0.30, 0.10, -1];
+      const dir = new V(ad[0], ad[1], ad[2]).normalize();
+      const DIST = ud.spaceAnchorDistance || 1000;
       group.position.set(cam.position.x + dir.x * DIST, cam.position.y + dir.y * DIST, cam.position.z + dir.z * DIST);
       group.updateMatrixWorld(true);
       // Re-anchor the star field + sky DOME to the posed camera too (updateSky does this each

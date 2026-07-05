@@ -692,9 +692,16 @@ function buildCabinInterior(group: THREE.Group, opts: CabinInteriorOpts = {}): v
   }
   // raised tread strips across the deck (anti-slip plate ribs — break up the flat disc so
   // the floor reads as a fabricated deck, not a smooth pan). Run fore-aft, offset rows.
+  // D-fix (2026-07-05): the OUTER strips (|r|=2, x≈±0.68) ran full-length (1.5m) out to where the deck
+  //   disc curves down toward the wall — at the raking descent camera their fore ends read as a lone
+  //   floating "rod" lying diagonally on the floor (no fabricated-deck read, just a stray bar). Fix:
+  //   keep the strips ON the flat central deck by TAPERING the length with |r| (outer rows shorter) and
+  //   biasing them slightly aft (+z), clear of the footwell rim (z≈−0.62) and the curving deck edge, so
+  //   every strip's ends land on flat plate — no end floats at the rim.
   for (let r = -2; r <= 2; r++) {
-    const tread = _box(0.07, 0.018, 1.5, _cabSteel);
-    tread.position.set(r * 0.34, 0.06, 0.05);
+    const len = 1.34 - Math.abs(r) * 0.30;                 // 1.34 centre → 0.74 outer (kept on the flat deck)
+    const tread = _box(0.07, 0.018, len, _cabSteel);
+    tread.position.set(r * 0.34, 0.06, 0.12);              // biased aft so no fore end reaches the rim
     group.add(tread);
   }
   // FOOTWELL — a marked foot-rest zone FORWARD of the seat (−Z): a bright rim lip + a dark inset
@@ -1265,29 +1272,47 @@ function buildConduitAndLight(group: THREE.Group): void {
   lamp2.lookAt(0, WALL_H - 0.10, 0);
   group.add(lamp2);
 
-  // ── CRASH-AFTERMATH (2026-07-03) — a DANGLING CONDUIT torn loose in the crash, on the front-left
-  //    shoulder arc (θ≈2.55, off the seated forward sight-line so it doesn't block the door read but
-  //    reads in the peripheral/head-turn wake frame). A slack pipe hanging off a broken clamp with a
-  //    small exposed-wire SPARK tell (a self-lit stub) that stutters with the wake lamp flicker
-  //    (_wakeFlickerT), then settles dark. SUBTLE — the wake beat's mood, not a haunted house.
+  // ── A SECONDARY CONDUIT RUN on the front-left shoulder arc (θ≈2.55) — a lived-in utility tell that
+  //    reads in the peripheral/head-turn frame without blocking the seated forward door read.
+  //    D-fix (2026-07-05): this was a "dangling conduit torn loose in the crash" — a slack pipe with a
+  //    CLEAN-CUT free end floating mid-air + a detached amber SPARK stub touching nothing. That read as
+  //    a modeling bug the ENTIRE pristine descent (long before any crash). Per the mount-or-remove rule
+  //    it's now an INTACT clamped conduit: a pipe capped into a top junction clamp AND a bottom foot
+  //    clamp seated on the wall (both ends INTO structure, no floating cut). The wake SPARK tell moves to
+  //    a small wire nub SNUG against the lower clamp (not floating) — still hidden until the wake flicker
+  //    arms it (_danglingConduitSpark), so the crash "electrics stutter" moment still lands.
   {
     const az = 2.55;
-    const dir = new THREE.Vector3(Math.sin(az), 0, Math.cos(az));
-    // the broken clamp it tore from (up high on the shoulder)
-    const clamp = _box(0.11, 0.06, 0.06, _cabSteel);
-    _seatOnWall(clamp, az, CAB_R - 0.07, WALL_H - 0.14);
-    group.add(clamp);
-    // the slack dangling pipe: hangs down + swings a little off the wall (torn free at the bottom).
-    const dangle = _cyl(0.032, 0.038, 0.62, 6, _cabCable);
-    dangle.position.set(dir.x * (CAB_R - 0.13), WALL_H - 0.44, dir.z * (CAB_R - 0.13));
-    dangle.rotation.z = 0.28;   // hangs askew off the broken clamp
-    dangle.rotation.x = 0.14;
-    group.add(dangle);
-    // the exposed frayed-wire SPARK stub at the torn end — a tiny self-lit tell (unlit basic so it
-    //   glows regardless of light). Driven by the wake flicker; parked dark once settled.
-    const spark = _box(0.03, 0.05, 0.03, _ledAmber);
-    spark.position.set(dir.x * (CAB_R - 0.20), WALL_H - 0.72, dir.z * (CAB_R - 0.20));
+    const RC2 = CAB_R - 0.075;                 // conduit centre radius — tight to the wall (matches the main run)
+    const runTopY = WALL_H - 0.16, runBotY = WALL_H - 0.86;   // spans the upper-shoulder → mid-wall
+    const runY = (runTopY + runBotY) / 2, runH = runTopY - runBotY;
+    // the pipe — a clean vertical run hugging the wall
+    const pipe = _cyl(0.036, 0.036, runH, 8, _cabCable);
+    _seatOnWall(pipe, az, RC2, runY);
+    group.add(pipe);
+    // top junction clamp (caps the upper end into the shoulder structure) — no open-cut top end.
+    const clampTop = _box(0.12, 0.07, 0.07, _cabSteel);
+    _seatOnWall(clampTop, az, CAB_R - 0.05, runTopY);
+    group.add(clampTop);
+    // bottom foot clamp (caps the lower end onto the wall) — no floating free end.
+    const clampBot = _box(0.11, 0.06, 0.06, _cabSteel);
+    _seatOnWall(clampBot, az, CAB_R - 0.05, runBotY);
+    group.add(clampBot);
+    // a mid-run band clamp (reads as a fitted, fastened run)
+    const clampMid = _box(0.10, 0.05, 0.05, _cabSteel);
+    _seatOnWall(clampMid, az, CAB_R - 0.045, runY);
+    group.add(clampMid);
+    // the wake SPARK tell — a tiny self-lit wire nub SNUG against the lower clamp (unlit basic so it
+    //   glows regardless of light). Hidden until the wake flicker arms it (_updateWakeFlicker), then
+    //   stutters + settles dark. Seated on the wall right at the foot clamp, not floating in the bore.
+    const spark = _box(0.03, 0.045, 0.03, _ledAmber);
+    _seatOnWall(spark, az + 0.06, CAB_R - 0.10, runBotY + 0.04);
     spark.visible = false;   // dark until the wake arms the flicker
+    // D-fix (2026-07-05): the spark MUST stay a live mesh — mergeStaticByMaterial folds geometry
+    //   IGNORING the `visible` flag, so a merged spark rendered ALWAYS (the floating amber chip the
+    //   player saw the whole descent) AND the wake toggle (which flips THIS mesh's .visible) did
+    //   nothing once it was merged away. Tag noMerge so .visible actually gates it.
+    spark.userData.noMerge = true;
     group.add(spark);
     _danglingConduitSpark = spark;
   }

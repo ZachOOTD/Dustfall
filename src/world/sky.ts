@@ -56,6 +56,7 @@ interface SpacePlanet {
   planet: THREE.Mesh;
   planetMat: THREE.ShaderMaterial;
   atmoMat: THREE.ShaderMaterial;
+  occluder: THREE.Mesh;     // SEV2 2026-07-05 — invisible depth-writing shell (see buildSpacePlanet)
 }
 let _space01 = 0;                          // 0 normal → 1 full space
 let _spacePlanet: SpacePlanet | null = null;
@@ -861,6 +862,19 @@ export function createSky(scene: THREE.Scene): void {
 function buildSpacePlanet(scene: THREE.Scene): SpacePlanet {
   const group = new THREE.Group();
   group.frustumCulled = false;
+  // ── SEV2 2026-07-05 — ANCHOR TRUTH STAMP. The rig-shot paused blocks mirror this module's
+  // anchor by hand (updateSky is pause-gated, so the rig re-places the planet itself). A
+  // hardcoded mirror DRIFTS when these constants are retuned — the W4 400→1000 move left the
+  // rig placing the 165m-radius planet at 400m (a 2.6×-oversized, ~49°-diameter false frame;
+  // the adversarial gate then read open starfield inside its sweeping limb arcs as "stars
+  // through the planet's dark side"). Stamping the live values on the group lets the rig (and
+  // any future tool) read the TRUTH at runtime instead of hardcoding a copy. Not used by the
+  // game itself — updateSky/applySpaceMode keep using the module constants directly.
+  group.userData.spaceAnchorDir = [_SPACE_PLANET_DIR.x, _SPACE_PLANET_DIR.y, _SPACE_PLANET_DIR.z];
+  group.userData.spaceAnchorDistance = _SPACE_PLANET_DISTANCE;
+  group.userData.spacePlanetRadius = _SPACE_PLANET_RADIUS;
+  group.userData.approachMaxScale = _PLANET_APPROACH_MAX_SCALE;
+  group.userData.approachDrop = _PLANET_APPROACH_DROP;
 
   const planetGeo = new THREE.SphereGeometry(_SPACE_PLANET_RADIUS, 96, 64);
   const planetMat = new THREE.ShaderMaterial({
@@ -905,8 +919,31 @@ function buildSpacePlanet(scene: THREE.Scene): SpacePlanet {
   atmo.frustumCulled = false;
   group.add(atmo);
 
+  // ── SEV2 2026-07-05 — DEPTH OCCLUDER (the z-occluder, made structural). The planet body is
+  // transparent + depthWrite:false (it must cross-fade by uOpacity), so its star-occlusion
+  // previously relied ONLY on paint order (stars renderOrder -0.5 draw first, the alpha-1 body
+  // paints over them). That leaves every depth-tested layer drawn AFTER the body — the moon
+  // sprite, shooting-star lines, any future transparent — free to punch THROUGH the planet
+  // (nothing writes depth for it). This invisible shell writes DEPTH ONLY (colorWrite:false,
+  // opaque pass → drawn before all transparents) so the planet's volume occludes the starfield
+  // and every depth-tested sprite/line from EVERY viewing angle, structurally, regardless of
+  // render order. Radius ×0.985: a hair inside the body so the atmo limb's inner glow band
+  // (which hugs the silhouette edge, drawn depth-tested after the body) is NOT culled — the
+  // Fresnel rim reads exactly as before; the 1.5% edge annulus is still covered by the body's
+  // own paint-over. Visible ONLY at s>0.98 (applySpaceMode, per-frame): during the space01
+  // cross-fade the translucent body must NOT punch a star-less hole in the sky, and at
+  // space01=0 the group is hidden → the desert sky path is byte-unchanged.
+  const occluderGeo = new THREE.SphereGeometry(_SPACE_PLANET_RADIUS * 0.985, 48, 32);
+  const occluderMat = new THREE.MeshBasicMaterial({ colorWrite: false });  // depthWrite:true default — depth-only shell
+  occluderMat.fog = false;
+  const occluder = new THREE.Mesh(occluderGeo, occluderMat);
+  occluder.renderOrder = -0.41;  // opaque pass (order tag only); lets the rig's --noplanet filter catch it
+  occluder.frustumCulled = false;
+  occluder.visible = false;      // engaged by applySpaceMode at s>0.98 only
+  group.add(occluder);
+
   scene.add(group);
-  return { group, planet, planetMat, atmoMat };
+  return { group, planet, planetMat, atmoMat, occluder };
 }
 
 /**
@@ -1139,7 +1176,12 @@ export function updateSky(ctx: GameContext, dt: number): void {
   bundle.planetMat.opacity = planetGlow * (1 - storm * 0.7);
 
   // ── Shooting stars: tick active ones, occasionally arm a new one. ──
-  const nightVisibility = Math.max(0, nightMix - dayMix * 0.4) * (1 - storm * 0.9);
+  // SEV2 2026-07-05 — × (1 - _space01): shooters are an ATMOSPHERIC phenomenon (meteors burning
+  // in air), so space-mode kills spawn + fades active streaks. They also render at the star-sphere
+  // radius (460m) — NEARER than the space planet (1000m) and drawn AFTER it (renderOrder 0.5), so
+  // an orbital-night shooter would streak ACROSS the planet disc (the depth occluder can't catch a
+  // nearer object). At _space01=0 the multiplier is 1 → the desert night sky is byte-unchanged.
+  const nightVisibility = Math.max(0, nightMix - dayMix * 0.4) * (1 - storm * 0.9) * (1 - _space01);
   for (const s of bundle.shooters) {
     if (s.active) updateShooter(s, dt, cam, nightVisibility);
   }
@@ -1249,6 +1291,12 @@ function applySpaceMode(cam: THREE.Vector3, ctx: GameContext): void {
     _spacePlanet.group.position.copy(_spacePlanetPos);
     _spacePlanet.planetMat.uniforms.uOpacity.value = s;
     _spacePlanet.atmoMat.uniforms.uOpacity.value = s;
+    // SEV2 2026-07-05 — the depth-only occluder shell engages only when the body is effectively
+    // OPAQUE (s>0.98): in full space it makes the planet's volume occlude stars/moon/shooters by
+    // DEPTH from every angle; during the space01 cross-fade it stays off so the translucent body
+    // doesn't punch a star-less hole in the sky. Re-derived per frame (self-heal); at s<=0.001
+    // the whole group is hidden above, so the desert path never sees it.
+    _spacePlanet.occluder.visible = s > 0.98;
   }
 
   // ── VACUUM: kill the desert survival FOG + darken the scene BACKGROUND in orbit.

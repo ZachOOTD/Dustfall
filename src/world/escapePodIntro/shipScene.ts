@@ -3148,7 +3148,15 @@ function buildCorridor(group: THREE.Group): void {
   //    sees no world sun). setShipAlert dims these + fires the red strips.
   _corrNormalLights.length = 0;
   _corrLensMats.length = 0;
-  const canZ = [3.6, 6.2, 8.8, 11.4, 13.8];
+  // FIX PASS (SEV2: "the yellow hazard rib crosses the recessed ceiling can-light above the quarters
+  //   door"). ROOT CAUSE: the can-light at z=8.8 shared its z with the hazard BULKHEAD RIB at ribZ[1]=8.8
+  //   (its full-crown cross-beam + the +X post routed straight over/through the light bezel — a structural
+  //   member occluding a fixture). FIX: slid THIS fixture fore to z=8.2 (into the clear panel gap between
+  //   the z=7.0 and z=8.8 ribs), so neither occludes the other; both elements kept. The light's point
+  //   lamps ride the bezel z, so the corridor pool just shifts 0.6m fore — spacing stays even (6.2→8.2→
+  //   11.4, with the z=9.4 pool light still filling the aft stretch). No collider involved (can-lights +
+  //   ribs are pure greeble; CORRIDOR_COLLIDERS is untouched — rule 9 VERIFY).
+  const canZ = [3.6, 6.2, 8.2, 11.4, 13.8];
   for (let li = 0; li < canZ.length; li++) {
     const z = canZ[li];
     // recessed housing set into the ceiling either side of the raceway
