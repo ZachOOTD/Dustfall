@@ -173,8 +173,14 @@ const _heroLights: THREE.Light[] = [];
 //    swap in a debris field of tumbling chunks. Refs captured at build; driven by
 //    setHaulerExplosion(t) (0=intact → 1=receding husk), disposed with the hauler.
 let shipGroup: THREE.Group | null = null;   // the intact hero ship (hidden as it breaks apart)
-let fireballMat: THREE.ShaderMaterial | null = null;   // the blooming additive fireball
+// HERO PASS (2026-07-05) — the death now reads in STAGES from the ENGINE aft. The reactor goes
+//   critical first (a fireball blooming AT the engine, not the centroid), then a secondary blast
+//   marches forward along the spine, then the hull breaks. Two fireball billboards (primary aft +
+//   secondary fore) + the flash + shock, ALL camera-facing so they fill the narrow porthole cone.
+let fireballMat: THREE.ShaderMaterial | null = null;   // PRIMARY — the reactor fireball (blooms at the engine/aft)
 let fireballMesh: THREE.Mesh | null = null;
+let fireball2Mat: THREE.ShaderMaterial | null = null;  // SECONDARY — the spine blast (blooms fore, marching the detonation forward)
+let fireball2Mesh: THREE.Mesh | null = null;
 let shockMat: THREE.ShaderMaterial | null = null;      // the expanding shockwave ring
 let shockMesh: THREE.Mesh | null = null;
 let flashMat: THREE.ShaderMaterial | null = null;      // the white-hot core flash (first frames)
@@ -183,6 +189,32 @@ let sparkPoints: THREE.Points | null = null;           // ember/spark cloud flun
 let sparkMat: THREE.PointsMaterial | null = null;
 let sparkGeo: THREE.BufferGeometry | null = null;
 let blastLight: THREE.PointLight | null = null;        // the explosion's own light (lights the debris)
+// Blast anchors (root-local). CRITICAL constraint: the porthole from the seated eye subtends a NARROW
+//   cone through the ship centre (the root origin ≈ on the line of sight). A billboard placed too far
+//   off-axis (e.g. the true engine at −4.6) has its bright core swing OUT of that cone → the porthole
+//   reads black (the round-1 miss). So the PRIMARY fireball sits only modestly aft of centre (kept in
+//   the aperture), while the FLASH / blast light / sparks sit at the true ENGINE_ANCHOR — the ignition
+//   READS aft (flash + light origin + ember spray + the aft debris) without pushing the fireball core
+//   out of the window. The SECONDARY marches a touch FORE of centre.
+const ENGINE_ANCHOR = new THREE.Vector3(-4.6, 0.2, 0.3);   // root-local: the true reactor (flash/light/spark origin)
+const PRIMARY_ANCHOR = new THREE.Vector3(-1.6, 0.1, 0);    // root-local: the fireball core, aft-biased but IN the aperture cone
+const SPINE_ANCHOR = new THREE.Vector3(1.2, 0.3, 0);       // root-local: fore mid-spine (the secondary marches here)
+// A billboard helper — orient a plane to FACE the active camera each render (the fireball/flash/shock
+//   must fill the narrow porthole cone from the seated eye; a ship-yaw-locked plane read edge-on and
+//   the porthole showed only a rim arc — the hero-pass root-cause). onBeforeRender gets the camera, so
+//   no signature change to setHaulerExplosion is needed. We only steal the ROTATION (keep the local
+//   position so the anchor still recedes with the ship group + sits at the engine/spine).
+function _faceCamera(this: THREE.Object3D, _r: THREE.WebGLRenderer, _s: THREE.Scene, camera: THREE.Camera): void {
+  // world-face the camera, then convert to the parent's local frame (the plane lives under the yawed root).
+  const parent = this.parent;
+  if (!parent) return;
+  parent.updateWorldMatrix(true, false);
+  _bbCamQuat.copy(camera.quaternion);   // the camera's WORLD quaternion (cameras aren't nested here)
+  _bbParentQuat.copy(parent.getWorldQuaternion(_bbParentQuat));
+  this.quaternion.copy(_bbParentQuat.invert()).multiply(_bbCamQuat);
+}
+const _bbCamQuat = new THREE.Quaternion();
+const _bbParentQuat = new THREE.Quaternion();
 // The tumbling debris chunks: each carries a local origin (relative to the ship centre),
 // a linear velocity (m/s outward), and an angular velocity (rad/s) so the blast flings +
 // spins them. Local-frame so the yawed `root` transform carries them into the porthole view.
@@ -789,6 +821,7 @@ const FIREBALL_FS = /* glsl */ `
   uniform float uGrow;   // 0..1 the fireball's current radius fraction of the billboard
   uniform float uTime;   // seconds (churn animation)
   uniform float uFade;   // 1 through the blast → 0 as the husk dissipates to clear space (late-beat)
+  uniform float uSeed;   // per-fireball churn offset (primary vs secondary read as distinct blasts, not twins)
   float hash(vec2 p){ p = fract(p*vec2(127.1,311.7)); p += dot(p, p+34.5); return fract(p.x*p.y); }
   float vn(vec2 x){ vec2 p=floor(x), f=fract(x); f=f*f*(3.0-2.0*f);
     return mix(mix(hash(p),hash(p+vec2(1,0)),f.x), mix(hash(p+vec2(0,1)),hash(p+vec2(1,1)),f.x), f.y); }
@@ -803,7 +836,7 @@ const FIREBALL_FS = /* glsl */ `
     //   octave; the residual — flagged then left — was that the polar term fbm(ang,r) produces
     //   features CONSTANT along radius = straight rays from the core. r7 breaks it three ways:)
     //   (1) DOMAIN-WARP the cartesian field by itself -> swirling cellular churn (kills straight lines).
-    vec2 warp = vec2(fbm(p*2.1 + vec2(uTime*0.5, 1.3)), fbm(p*2.1 + vec2(-uTime*0.4, 7.1))) - 0.5;
+    vec2 warp = vec2(fbm(p*2.1 + vec2(uTime*0.5 + uSeed, 1.3)), fbm(p*2.1 + vec2(-uTime*0.4, 7.1 + uSeed))) - 0.5;
     float roil = fbm(p*2.6 + warp*1.6 + vec2(uTime*0.4, -uTime*0.7));
     //   (2) the polar octave now RIDES the warped cartesian noise on BOTH axes (its angle is perturbed
     //       by roil + a radius-coupled twist, and its radius axis runs FAST at r*7 so a feature cannot
@@ -821,14 +854,16 @@ const FIREBALL_FS = /* glsl */ `
     // The WHOLE fireball cools as uT climbs (bloom hottest early; late = a smoky red husk-glow). A
     //   small FLOOR keeps a dull-red ember glow at the tail so the husk reads as burning wreckage,
     //   not empty space (round-3: the husk went fully dark → an empty window).
-    float coolAll = mix(0.14, 1.0, 1.0 - smoothstep(0.20, 0.82, uT));   // 1 early (hot) → 0.14 late (dull ember floor)
+    float coolAll = mix(0.24, 1.0, 1.0 - smoothstep(0.20, 0.82, uT));   // 1 early (hot) → 0.24 late (dull ember floor, lifted so the receding husk still glows)
     // CORE-WEIGHTED heat: hottest dead-centre → cooling toward the rim, roiled by the churn. coreHot
     //   fills the middle so the ball reads SOLID, but the white-hot ZONE is kept TIGHT (a hot POINT-ish
     //   heart) so most of the ball is churning orange/yellow, not a flat white blob (FX-polish fix).
     float coreHot = 1.0 - smoothstep(0.0, edge, r);      // 1 dead-centre → 0 at the edge
-    // A separate, MUCH tighter incandescent-core mask: only the innermost ~12% goes white, feathered
-    //   by the churn so the hot heart isn't a clean disc. (Was smoothstep(0.74,1.0)^2.2 → ~26% blob.)
-    float whiteMask = pow(smoothstep(0.86, 1.0, coreHot), 3.2);
+    // A separate, MUCH tighter incandescent-core mask: only the innermost ~8% goes white, feathered
+    //   by the churn so the hot heart isn't a clean disc. Tightened (0.86→0.90, ^3.2→^3.9) after the
+    //   hero-pass porthole read showed the white core as a slightly flat blob filling the aperture —
+    //   pulling it tighter keeps most of the ball as churning orange/yellow fire (restraint).
+    float whiteMask = pow(smoothstep(0.90, 1.0, coreHot), 3.9);
     float whiteCore = whiteMask;
     float heat = ball * (0.42 + 0.92*coreHot) * (0.62 + 0.72*lump);
     heat *= (0.45 + 0.85*coolAll);
@@ -933,13 +968,14 @@ function buildExplosionFx(root: THREE.Group, ship: THREE.Group): void {
   _explodeT0 = performance.now() / 1000;
   shipGroup = ship;
 
-  // ── FIREBALL billboard — a big camera-facing plane at the ship centre. Sized to
-  //    engulf the whole hull span when bloomed. Additive; the shader grows the lit disc.
-  const fbGeo = new THREE.PlaneGeometry(46, 46);
+  // ── PRIMARY FIREBALL — the REACTOR blast. Anchored at the ENGINE (aft), CAMERA-FACING (billboard)
+  //    so it fills the narrow porthole cone (the hero-pass fix: the old ship-yaw-locked plane read
+  //    edge-on → the porthole showed only a rim arc). Sized to engulf the tail when bloomed.
+  const fbGeo = new THREE.PlaneGeometry(44, 44);
   _disposables.push(fbGeo);
   fireballMat = new THREE.ShaderMaterial({
     vertexShader: EXPLODE_VS, fragmentShader: FIREBALL_FS,
-    uniforms: { uT: { value: 0 }, uGrow: { value: 0 }, uTime: { value: 0 }, uFade: { value: 1 } },
+    uniforms: { uT: { value: 0 }, uGrow: { value: 0 }, uTime: { value: 0 }, uFade: { value: 1 }, uSeed: { value: 0 } },
     // depthTest ON so the OPAQUE cabin wall/bezel occludes the fireball to the round porthole
     //   aperture (the re-entry-plasma pattern — the fire reads THROUGH the window, never on the
     //   cabin interior). The fireball is out in space at z≈−24; the cabin is in front at z≈−1.2.
@@ -947,13 +983,42 @@ function buildExplosionFx(root: THREE.Group, ship: THREE.Group): void {
     depthWrite: false, depthTest: true, toneMapped: false,
   });
   fireballMesh = new THREE.Mesh(fbGeo, fireballMat);
-  fireballMesh.renderOrder = 20;
+  fireballMesh.position.copy(PRIMARY_ANCHOR);
+  fireballMesh.onBeforeRender = _faceCamera;   // billboard — always faces the eye → fills the porthole
+  // renderOrder NEGATIVE (hero-pass root-cause fix): the porthole GLASS (_cabGlass) is a transparent
+  //   MeshStandard that WRITES DEPTH (three.js default for transparent) at z≈−1.2. An additive plane
+  //   with a HIGHER renderOrder drew AFTER the glass → its depthTest failed against the glass depth →
+  //   the whole aperture read BLACK except a rim arc (the exact round-1 miss). Drawing the FX BEFORE
+  //   the glass (negative order → distance-sorted first) lets them composite, then the 24%-opacity
+  //   glass lays over them (reads correctly as "fire seen THROUGH the window"). The opaque cabin WALL
+  //   still clips them to the round aperture (it wrote depth in the earlier opaque pass).
+  fireballMesh.renderOrder = -6;
   fireballMesh.frustumCulled = false;
   fireballMesh.visible = false;
   root.add(fireballMesh);
 
-  // ── FLASH billboard — a smaller bright core, in FRONT of the fireball (renderOrder up).
-  const flGeo = new THREE.PlaneGeometry(30, 30);
+  // ── SECONDARY FIREBALL — the spine blast that MARCHES the detonation forward (the reactor took
+  //    the cargo run with it). Anchored fore of the engine, blooms a beat later + smaller. Different
+  //    churn seed so it reads as a distinct blast, not a twin of the primary.
+  const fb2Geo = new THREE.PlaneGeometry(30, 30);
+  _disposables.push(fb2Geo);
+  fireball2Mat = new THREE.ShaderMaterial({
+    vertexShader: EXPLODE_VS, fragmentShader: FIREBALL_FS,
+    uniforms: { uT: { value: 0 }, uGrow: { value: 0 }, uTime: { value: 0 }, uFade: { value: 1 }, uSeed: { value: 17.3 } },
+    transparent: true, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+    depthWrite: false, depthTest: true, toneMapped: false,
+  });
+  fireball2Mesh = new THREE.Mesh(fb2Geo, fireball2Mat);
+  fireball2Mesh.position.copy(SPINE_ANCHOR);
+  fireball2Mesh.onBeforeRender = _faceCamera;
+  fireball2Mesh.renderOrder = -5;   // before the depth-writing porthole glass (see fireball note); above the primary
+  fireball2Mesh.frustumCulled = false;
+  fireball2Mesh.visible = false;
+  root.add(fireball2Mesh);
+
+  // ── FLASH billboard — the blinding white-hot core, at the ENGINE anchor (the ignition point),
+  //    in FRONT of the fireball (renderOrder up), camera-facing.
+  const flGeo = new THREE.PlaneGeometry(34, 34);
   _disposables.push(flGeo);
   flashMat = new THREE.ShaderMaterial({
     vertexShader: EXPLODE_VS, fragmentShader: FLASH_FS,
@@ -962,14 +1027,16 @@ function buildExplosionFx(root: THREE.Group, ship: THREE.Group): void {
     depthWrite: false, depthTest: true, toneMapped: false,   // clipped to the porthole aperture (see fireball)
   });
   flashMesh = new THREE.Mesh(flGeo, flashMat);
-  flashMesh.renderOrder = 22;
+  flashMesh.position.copy(ENGINE_ANCHOR);
+  flashMesh.onBeforeRender = _faceCamera;
+  flashMesh.renderOrder = -4;   // before the depth-writing porthole glass (see fireball note); topmost FX layer
   flashMesh.frustumCulled = false;
   flashMesh.visible = false;
   root.add(flashMesh);
 
-  // ── SHOCKWAVE ring — a big flat billboard (bigger than the fireball so the ring can
-  //    expand past the wreck). Behind the fireball so the fire reads over it.
-  const swGeo = new THREE.PlaneGeometry(70, 70);
+  // ── SHOCKWAVE ring — a big camera-facing billboard (bigger than the fireball so the ring can
+  //    expand past the wreck), centred on the ENGINE anchor. Behind the fireball so fire reads over.
+  const swGeo = new THREE.PlaneGeometry(76, 76);
   _disposables.push(swGeo);
   shockMat = new THREE.ShaderMaterial({
     vertexShader: EXPLODE_VS, fragmentShader: SHOCK_FS,
@@ -978,66 +1045,113 @@ function buildExplosionFx(root: THREE.Group, ship: THREE.Group): void {
     depthWrite: false, depthTest: true, toneMapped: false,   // clipped to the porthole aperture (see fireball)
   });
   shockMesh = new THREE.Mesh(swGeo, shockMat);
-  shockMesh.renderOrder = 18;
+  shockMesh.position.copy(PRIMARY_ANCHOR);
+  shockMesh.onBeforeRender = _faceCamera;
+  shockMesh.renderOrder = -7;   // before the depth-writing porthole glass (see fireball note); behind the fireballs
   shockMesh.frustumCulled = false;
   shockMesh.visible = false;
   root.add(shockMesh);
 
-  // ── DEBRIS FIELD — real chunks of hull/cargo/engine that break off + tumble outward.
-  //    A separate group parented to root (so the yaw carries it into view). Each chunk is
-  //    a chunky primitive using the hauler's own materials, given an outward velocity from
-  //    the ship centre + a random spin. Deterministic (a fixed pseudo-random from an index)
-  //    so the seed budget is fixed (procgen seed-stability).
+  // ── DEBRIS FIELD — the hull BREAKING into RECOGNIZABLE PIECES (nose section, cargo containers,
+  //    engine bells, tanks) + smaller torn-plate filler, each thrown from ITS OWN place on the ship
+  //    so the break reads as the hull coming apart (not a generic shard-cloud). A separate group
+  //    parented to root (so the yaw carries it into view). Deterministic index-seeded RNG → the
+  //    seed budget is fixed (procgen seed-stability). Origins are ship-LOCAL X (tail −5.5 ↔ nose 5.5),
+  //    offset by the ship's own recenter (spanMid) so a piece launches from where it sat on the hull.
   debrisGroup = new THREE.Group();
   debrisGroup.visible = false;
   root.add(debrisGroup);
   debris = [];
-  // a small deterministic RNG (index-seeded) — no external seed budget consumed.
   const rand = (n: number, salt: number) => {
     const s = Math.sin(n * 127.1 + salt * 311.7) * 43758.5453;
     return s - Math.floor(s);
   };
+  const spanMid = ((-HULL_LEN / 2 - ENGINE_LEN) + (HULL_LEN / 2 + COCKPIT_LEN)) / 2;
+  const shipToLocal = (sx: number, sy: number, sz: number) =>
+    new THREE.Vector3(sx - spanMid, sy, sz);   // ship-local → root-local (matches ship.position.x = -spanMid)
+  let di = 0;
+  const addChunk = (mesh: THREE.Mesh, origin: THREE.Vector3, speed: number, aftBias: number, spinScale: number): void => {
+    const idx = di++;
+    mesh.position.copy(origin);
+    debrisGroup!.add(mesh);
+    // radially outward from the blast ORIGIN (the engine anchor) so pieces fly apart from the reactor,
+    //   + an aft bias (the tail blew). Slower dispersal → a good spread stays framed through the husk.
+    const outward = origin.clone().sub(ENGINE_ANCHOR);
+    if (outward.lengthSq() < 0.01) outward.set(rand(idx, 30) - 0.5, rand(idx, 31) - 0.5, rand(idx, 32) - 0.5);
+    outward.normalize();
+    const vel = outward.multiplyScalar(speed);
+    vel.x -= aftBias;                                    // aft bias (the engine detonated)
+    vel.y += (rand(idx, 12) - 0.35) * 2.0;
+    vel.z += (rand(idx, 13) - 0.5) * 1.6;
+    const spin = new THREE.Vector3(
+      (rand(idx, 14) - 0.5) * spinScale, (rand(idx, 15) - 0.5) * spinScale, (rand(idx, 16) - 0.5) * spinScale);
+    debris.push({ mesh, origin, vel, spin });
+  };
+
+  // 1) HERO PIECES — recognizable chunks of the ship, each from its real location. Slower + bigger
+  //    spin so they read as identifiable tumbling mass (the nose, containers, engine bells).
+  //    (a) the NOSE / cockpit prow — a tapered cylinder + a lit-window shard, thrown FORE (it tore off
+  //        the front). One big readable piece.
+  {
+    const noseGrp = new THREE.Group();
+    const cone = _cyl(0.16, HULL_R * 0.95, 1.7, SEG, _hullSkinReal); cone.rotation.z = -Math.PI / 2; cone.scale.y = 0.78;
+    noseGrp.add(cone);
+    const win = _box(0.5, 0.4, 0.9, _cockpitGlass); win.position.set(-0.7, 0.2, 0); noseGrp.add(win);
+    const winGlow = _box(0.4, 0.3, 0.7, _cockpitGlow); winGlow.position.set(-0.74, 0.2, 0); noseGrp.add(winGlow);
+    addChunk(noseGrp as unknown as THREE.Mesh, shipToLocal(HULL_LEN / 2 + 1.0, HULL_R * 0.4, 0.3), 2.4, -1.6, 3.6);
+  }
+  // (b) TWO cargo CONTAINERS — corrugated boxes with corner castings, tumbling as whole units.
+  for (const [xf, mat, seed] of [[-0.05, _container2, 41], [0.30, _container, 42]] as const) {
+    const box = new THREE.Group();
+    const body = _box(1.7, 1.2, 1.5, mat); box.add(body);
+    for (const sx of [-1, 1]) for (const sy of [-1, 1]) {
+      const cast = _box(0.2, 0.2, 1.55, _hullFrame); cast.position.set(sx * 0.75, sy * 0.5, 0); box.add(cast);
+    }
+    for (let s = 0; s < 4; s++) { const corr = _box(0.06, 1.0, 0.05, _hullFrame); corr.position.set(-0.65 + s * 0.43, 0, 0.78); box.add(corr); }
+    addChunk(box as unknown as THREE.Mesh, shipToLocal(xf * HULL_LEN, HULL_R * 1.9, rand(seed, 3) * 0.6 - 0.3), 3.2 + rand(seed, 5) * 1.5, 1.0, 4.6);
+  }
+  // (c) TWO engine BELLS — flared nozzle skirts torn from the reactor, thrown aft/outward (they were
+  //     AT the blast). The most on-story piece: the reader sees the engines fly off the detonation.
+  for (const [bz, seed] of [[HULL_R * 0.9, 51], [-HULL_R * 0.85, 52]] as const) {
+    const bellGrp = new THREE.Group();
+    const nzProf: THREE.Vector2[] = [];
+    for (let k = 0; k <= 8; k++) { const t = k / 8; nzProf.push(new THREE.Vector2(Math.max(0.06, 0.28 + (0.95 - 0.28) * Math.pow(t, 1.8)), t * 1.7)); }
+    const bell = _lathe(nzProf, SEG, _engineBellSolid); bell.rotation.z = -Math.PI / 2; bellGrp.add(bell);
+    const ember = _cyl(0.5, 0.14, 0.06, SEG, _engineEmber); ember.rotation.z = Math.PI / 2; ember.position.x = -0.6; bellGrp.add(ember);
+    addChunk(bellGrp as unknown as THREE.Mesh, shipToLocal(-HULL_LEN / 2 - 2.0, HULL_R * 0.3, bz), 4.2 + rand(seed, 5) * 1.6, 2.2, 4.0);
+  }
+  // (d) a slung TANK — a capsule cylinder, thrown from the belly.
+  {
+    const tankGrp = new THREE.Group();
+    const cyl = _cyl(0.55, 0.55, 3.0, SEG, _tank); cyl.rotation.z = Math.PI / 2; tankGrp.add(cyl);
+    for (const ef of [-1, 1]) { const cap = _sphere(0.55, _tank, SEG, 8); cap.scale.x = 0.55; cap.position.x = ef * 1.5; tankGrp.add(cap); }
+    addChunk(tankGrp as unknown as THREE.Mesh, shipToLocal(-HULL_LEN * 0.16, -HULL_R * 1.1, HULL_R * 0.5), 3.0, 1.4, 3.2);
+  }
+
+  // 2) FILLER torn-plate shards — smaller chunky hull/frame pieces from all over (a busy field of
+  //    wreckage AROUND the hero pieces), engine-heavy so more blows off the tail. Faster + spinnier.
   const chunkMats = [_hullSkinReal, _hullSteel, _container, _container2, _hullFrame, _engineBell, _tank];
-  const N = 38;   // enough that a good spread stays in the porthole through the husk beat
+  const N = 30;
   for (let i = 0; i < N; i++) {
-    // seed the chunk's origin somewhere along the hull span (−X tail ↔ +X nose), biased
-    // toward the ENGINE tail (where the failure ignites → more debris blows off the rear).
-    const along = -HULL_LEN * 0.6 + rand(i, 1) * HULL_LEN * 1.3;   // ship-local X, engine-heavy
-    const oy = (rand(i, 2) - 0.5) * HULL_R * 2.4;
-    const oz = (rand(i, 3) - 0.5) * HULL_R * 2.2;
-    const origin = new THREE.Vector3(along, oy, oz);
-    // chunk geometry: mostly chunky torn plate boxes, some cylindrical (pipe/tank/bell shard).
+    const along = -HULL_LEN * 0.62 + rand(i, 1) * HULL_LEN * 1.24;   // ship-local X, engine-heavy
+    const oy = (rand(i, 2) - 0.5) * HULL_R * 2.2;
+    const oz = (rand(i, 3) - 0.5) * HULL_R * 2.0;
+    const mat = chunkMats[Math.floor(rand(i, 9) * chunkMats.length) % chunkMats.length];
     const kind = rand(i, 4);
     let mesh: THREE.Mesh;
-    const mat = chunkMats[Math.floor(rand(i, 9) * chunkMats.length) % chunkMats.length];
-    if (kind < 0.62) {
-      const w = 0.5 + rand(i, 5) * 1.7, h = 0.35 + rand(i, 6) * 1.1, d = 0.3 + rand(i, 7) * 0.9;
-      mesh = _box(w, h, d, mat);
-    } else if (kind < 0.85) {
-      const r = 0.22 + rand(i, 5) * 0.5, len = 0.8 + rand(i, 6) * 2.2;
-      mesh = _cyl(r, r * (0.5 + rand(i, 8) * 0.6), len, 8, mat);
-      mesh.rotation.z = Math.PI / 2;
+    if (kind < 0.7) {
+      // a TORN plate — a flat-ish box with a bent tab (reads as sheared hull, not a dice cube).
+      const w = 0.5 + rand(i, 5) * 1.5, h = 0.14 + rand(i, 6) * 0.4, d = 0.4 + rand(i, 7) * 1.1;
+      const grp = new THREE.Group();
+      const plate = _box(w, h, d, mat); grp.add(plate);
+      const tab = _box(w * 0.4, h + 0.02, d * 0.5, mat); tab.position.set(w * 0.4, h * 0.6, d * 0.2); tab.rotation.z = 0.5; grp.add(tab);
+      mesh = grp as unknown as THREE.Mesh;
     } else {
-      // a flared shard (broken engine-bell / cone lump)
-      const r = 0.35 + rand(i, 5) * 0.7;
-      mesh = _sphere(r, mat, 8, 5);
-      mesh.scale.set(1, 0.5 + rand(i, 6) * 0.6, 0.7 + rand(i, 7) * 0.5);
+      const r = 0.2 + rand(i, 5) * 0.42, len = 0.7 + rand(i, 6) * 1.8;
+      mesh = _cyl(r, r * (0.4 + rand(i, 8) * 0.6), len, 8, mat);
+      mesh.rotation.z = Math.PI / 2;
     }
-    mesh.position.copy(origin);
-    debrisGroup.add(mesh);
-    // velocity: radially outward from the ship centre (so it flies apart), + a bias AFT
-    //   (−X, the engine blew) + a little up. Speed varies; the biggest chunks move slower.
-    // slower dispersal so a good spread of chunks stays framed through the husk beat (round-3: the
-    //   debris had flown out of the aperture by the husk, leaving it near-empty).
-    const outward = origin.clone().normalize();
-    const speed = 1.6 + rand(i, 10) * 4.2;
-    const vel = outward.multiplyScalar(speed);
-    vel.x -= 1.0 + rand(i, 11) * 1.6;                 // aft bias (the tail's engine detonated)
-    vel.y += (rand(i, 12) - 0.35) * 2.2;
-    vel.z += (rand(i, 13) - 0.5) * 1.8;
-    const spin = new THREE.Vector3(
-      (rand(i, 14) - 0.5) * 6.0, (rand(i, 15) - 0.5) * 6.0, (rand(i, 16) - 0.5) * 6.0);
-    debris.push({ mesh, origin, vel, spin });
+    addChunk(mesh, shipToLocal(along, oy, oz), 2.4 + rand(i, 10) * 4.6, 1.0 + rand(i, 11) * 1.4, 6.4);
   }
 
   // ── SPARK / EMBER cloud — a Points cloud of hot embers flung out with the debris,
@@ -1048,12 +1162,13 @@ function buildExplosionFx(root: THREE.Group, ship: THREE.Group): void {
   const sVel = new Float32Array(SN * 3);
   _sparkOrigin = new Float32Array(SN * 3);
   for (let i = 0; i < SN; i++) {
-    const along = -HULL_LEN * 0.55 + rand(i, 21) * HULL_LEN * 1.2;
-    const oy = (rand(i, 22) - 0.5) * HULL_R * 1.6;
+    // embers launch from the ENGINE anchor zone (the ignition point) — a spray blowing off the reactor.
+    const along = ENGINE_ANCHOR.x - 1.0 + rand(i, 21) * HULL_LEN * 1.1;
+    const oy = ENGINE_ANCHOR.y + (rand(i, 22) - 0.5) * HULL_R * 1.6;
     const oz = (rand(i, 23) - 0.5) * HULL_R * 1.6;
     sPos[i * 3] = along; sPos[i * 3 + 1] = oy; sPos[i * 3 + 2] = oz;
     _sparkOrigin[i * 3] = along; _sparkOrigin[i * 3 + 1] = oy; _sparkOrigin[i * 3 + 2] = oz;
-    const dir = new THREE.Vector3(along, oy, oz).normalize();
+    const dir = new THREE.Vector3(along - ENGINE_ANCHOR.x, oy - ENGINE_ANCHOR.y, oz).normalize();
     const sp = 5 + rand(i, 24) * 16;
     sVel[i * 3] = dir.x * sp - 2 - rand(i, 25) * 4;   // aft bias
     sVel[i * 3 + 1] = dir.y * sp + (rand(i, 26) - 0.4) * 8;
@@ -1066,16 +1181,17 @@ function buildExplosionFx(root: THREE.Group, ship: THREE.Group): void {
     transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
   });
   sparkPoints = new THREE.Points(sparkGeo, sparkMat);
-  sparkPoints.renderOrder = 19;
+  sparkPoints.renderOrder = -5;   // before the depth-writing porthole glass (see fireball note)
   sparkPoints.frustumCulled = false;
   sparkPoints.visible = false;
   root.add(sparkPoints);
 
-  // ── BLAST LIGHT — the explosion's own point light (lights the tumbling debris + spills
-  //    on the nearby hull). Parented to `root` at the ship centre (local origin) so it
-  //    rides with the group + reaches the debris (also root's children). Intensity driven.
-  blastLight = new THREE.PointLight(0xff8a3a, 0, 90, 1.6);
-  blastLight.position.set(0, 0, 0);
+  // ── BLAST LIGHT — the explosion's own point light, at the ENGINE anchor (the ignition point) so
+  //    it throws HARD across the nearby tumbling debris + the fore hull (a raking blast-lit read, not
+  //    a centred glow). Parented to `root` so it rides the group + reaches the debris (root's children).
+  //    A wide range + low decay so the whole debris field catches it. Intensity/colour driven per-frame.
+  blastLight = new THREE.PointLight(0xff8a3a, 0, 110, 1.5);
+  blastLight.position.copy(ENGINE_ANCHOR);
   root.add(blastLight);
 }
 
@@ -1088,50 +1204,67 @@ export function setHaulerExplosion(t: number): void {
   const now = performance.now() / 1000;
   const anim = now - _explodeT0;
 
-  // ── INTACT SHIP visibility — the ship reads whole until the detonation, then it's
-  //    consumed: hide it once the fireball has bloomed enough to engulf it (the debris
-  //    field + fireball carry the read from there).
-  if (shipGroup) shipGroup.visible = p < 0.14;
+  // ── INTACT SHIP visibility — the ship reads whole until the detonation, then the primary
+  //    fireball + the debris field take over. The engine-anchored blast is well bloomed by p≈0.16.
+  if (shipGroup) shipGroup.visible = p < 0.16;
 
-  // ── FLASH — a sharp blinding core in the first ~0.12 of the beat (detonation), rising
-  //    fast then decaying. Envelope peaks ~p0.04.
+  // ── FLASH — the piercing white-hot IGNITION core at the engine, in the first ~0.12 of the beat.
+  //    A hard, brief spike (peaks ~p0.035) so the detonation READS as a stab of light, not a slow
+  //    swell — the black-space→white-flash contrast is where the power comes from (restraint).
   if (flashMesh && flashMat) {
-    const fl = p < 0.14 ? Math.max(0, 1 - Math.abs(p - 0.04) / 0.10) : 0;
+    const fl = p < 0.13 ? Math.max(0, 1 - Math.abs(p - 0.035) / 0.085) : 0;
     flashMat.uniforms.uFl.value = fl;
     flashMesh.visible = fl > 0.001;
   }
 
-  // ── FIREBALL — blooms open from p≈0.03, reaches its (capped) peak radius by ~p0.28, then
-  //    cools + slowly shrinks to a dim husk-glow by p1. uGrow drives the lit-disc radius; the
-  //    peak is CAPPED below the aperture-filling size so the ship + stars still read AROUND the
-  //    ball (a fireball engulfing the ship, not a white-out that fills the whole window).
+  // ── PRIMARY FIREBALL (the REACTOR) — ignites at the engine anchor. Blooms FAST off the flash
+  //    (p≈0.03), reaching its capped peak by ~p0.24, then cools + thins into a receding ember/smoke
+  //    cloud. uGrow drives the lit-disc radius; capped so debris + stars still read AROUND the ball.
   if (fireballMesh && fireballMat) {
-    const PEAK = 0.62;   // max grow — leaves a margin of space/debris/ship visible around the ball
-    const bloom = Math.min(1, p / 0.3);
-    // bloom to the cap by p0.3, then EXPAND-and-thin into a broad dull ember/smoke cloud (the husk
-    //   dissipating outward, NOT shrinking to a point — round-3: the shrunk husk read as an empty
-    //   radial burst). uT cools it to dull red + the emission drops, so it's a big faint smoky glow.
-    const grow = p < 0.3 ? PEAK * bloom * bloom * (3 - 2 * bloom)   // smoothstep bloom to the cap
-      : PEAK * (1 + (p - 0.3) / 0.7 * 0.35);                        // grow slightly + thin (dissipating cloud)
+    const PEAK = 0.66;
+    const bloom = Math.min(1, p / 0.24);
+    const grow = p < 0.24 ? PEAK * bloom * bloom * (3 - 2 * bloom)   // smoothstep bloom to the cap
+      : PEAK * (1 + (p - 0.24) / 0.76 * 0.32);                       // grow slightly + thin (dissipating cloud)
     fireballMat.uniforms.uGrow.value = p > 0.02 ? grow : 0;
     fireballMat.uniforms.uT.value = p;
     fireballMat.uniforms.uTime.value = anim;
-    // HUSK DISSIPATION (coherence pass): fade the whole fireball out across the LATE beat so the
-    //   husk frame clears to black star-space + the small receding debris, instead of leaving a
-    //   flat brown ember wash filling the porthole. Full presence until p≈0.55, then ease to ~0 by
-    //   p≈0.9 (the debris field + drifting sparks carry the "burning wreckage" read from there).
-    const fade = 1 - Math.max(0, Math.min(1, (p - 0.55) / 0.35));
-    fireballMat.uniforms.uFade.value = fade * fade;   // eased (quadratic) so it lingers a touch then clears
+    // HUSK DISSIPATION — hold a dull-red ember husk-glow LONGER, then clear to star-space by the very
+    //   end (round-2: the husk went abruptly empty-black at p0.72 — no "burning wreckage receding" read).
+    //   Fade starts later (0.62) + ends at the tail (0.98) so a dim smoky ember cloud lingers on the
+    //   receding husk (the shader's coolAll floor keeps it a dull red glow), then genuinely clears.
+    const fade = 1 - Math.max(0, Math.min(1, (p - 0.66) / 0.30));
+    fireballMat.uniforms.uFade.value = fade * fade;
     fireballMesh.visible = p > 0.02 && fade > 0.02;
   }
 
-  // ── SHOCKWAVE — a single expanding ring launched at detonation (p≈0.05), racing out +
-  //    fading; gone by ~p0.45.
+  // ── SECONDARY FIREBALL (the SPINE) — the detonation MARCHES forward: a second, smaller bloom on
+  //    the cargo spine, kicking a beat AFTER the reactor (p≈0.14) so the eye reads two staged blasts
+  //    walking down the ship, not one flash. Its own churn seed → a distinct fireball, not a twin.
+  if (fireball2Mesh && fireball2Mat) {
+    const p2 = (p - 0.14) / 0.86;                     // remapped local progress (0 at p0.14)
+    if (p2 > 0.0) {
+      const PEAK2 = 0.62;
+      const bloom2 = Math.min(1, p2 / 0.22);
+      const grow2 = p2 < 0.22 ? PEAK2 * bloom2 * bloom2 * (3 - 2 * bloom2)
+        : PEAK2 * (1 + (p2 - 0.22) / 0.78 * 0.28);
+      fireball2Mat.uniforms.uGrow.value = grow2;
+      fireball2Mat.uniforms.uT.value = p2;
+      fireball2Mat.uniforms.uTime.value = anim + 3.1;   // offset animation phase (not lock-step with the primary)
+      const fade2 = 1 - Math.max(0, Math.min(1, (p - 0.50) / 0.34));
+      fireball2Mat.uniforms.uFade.value = fade2 * fade2;
+      fireball2Mesh.visible = fade2 > 0.02;
+    } else {
+      fireball2Mesh.visible = false;
+    }
+  }
+
+  // ── SHOCKWAVE — a single expanding ring launched at detonation (p≈0.04), racing out + fading;
+  //    gone by ~p0.42. Kept THIN + brief so it's a crisp pressure pulse, not a lingering halo.
   if (shockMesh && shockMat) {
-    const sw = Math.max(0, (p - 0.04) / 0.40);       // 0 at p0.04 → 1 at p0.44
+    const sw = Math.max(0, (p - 0.03) / 0.39);       // 0 at p0.03 → 1 at p0.42
     if (sw > 0 && sw < 1) {
-      shockMat.uniforms.uRing.value = 0.08 + sw * 0.92;
-      shockMat.uniforms.uFade.value = (1 - sw) * 0.9;
+      shockMat.uniforms.uRing.value = 0.06 + sw * 0.94;
+      shockMat.uniforms.uFade.value = (1 - sw) * (1 - sw) * 0.95;   // fades faster (a quick pulse, not a slow ring)
       shockMesh.visible = true;
     } else {
       shockMesh.visible = false;
@@ -1140,12 +1273,14 @@ export function setHaulerExplosion(t: number): void {
 
   // ── DEBRIS — the chunks fly apart + tumble from detonation (p≈0.08). Position = origin +
   //    vel·τ where τ is the seconds of flight since breakup (mapped off the beat progress).
-  //    They keep drifting for the whole beat + spin continuously.
+  //    They keep drifting for the whole beat + spin continuously. τ scale REDUCED (7→5.2s) so a
+  //    good spread of the recognizable pieces stays FRAMED through the husk beat (round-2: the
+  //    debris had flown clear of the aperture by the husk, leaving it near-empty).
   if (debrisGroup) {
     const flying = p > 0.08;
     debrisGroup.visible = flying;
     if (flying) {
-      const tau = (p - 0.08) / 0.92 * 7.0;           // up to ~7 s of drift across the beat tail
+      const tau = (p - 0.08) / 0.92 * 5.2;           // slower dispersal → wreckage stays in the porthole longer
       for (const c of debris) {
         c.mesh.position.set(
           c.origin.x + c.vel.x * tau,
@@ -1177,11 +1312,14 @@ export function setHaulerExplosion(t: number): void {
     }
   }
 
-  // ── BLAST LIGHT — a hot flash spike at detonation, decaying to a low husk-ember glow.
+  // ── BLAST LIGHT — TWO spikes (the reactor, then the spine march) throwing hard across the debris,
+  //    decaying to a low husk-ember glow. Anchored at the engine so the raking light rims the near
+  //    faces of the tumbling pieces (a lit debris field reads as violent, not a floating grey cloud).
   if (blastLight) {
-    const spike = p < 0.18 ? Math.max(0, 1 - Math.abs(p - 0.05) / 0.13) : 0;   // sharp detonation spike
-    const glow = Math.max(0, 1 - p) * 0.4;                                       // lingering ember light
-    blastLight.intensity = spike * 9 + glow * 3;
+    const spike1 = p < 0.16 ? Math.max(0, 1 - Math.abs(p - 0.04) / 0.11) : 0;   // reactor detonation
+    const spike2 = (p > 0.12 && p < 0.30) ? Math.max(0, 1 - Math.abs(p - 0.18) / 0.10) : 0;  // spine march
+    const glow = Math.max(0, 1 - p) * 0.45;                                       // lingering ember light
+    blastLight.intensity = spike1 * 11 + spike2 * 6 + glow * 3.2;
     blastLight.color.setRGB(1.0, 0.54 - 0.1 * p, 0.22);
   }
 }
@@ -1295,11 +1433,12 @@ export function disposeHaulerExterior(ctx: GameContext): void {
   //   under haulerGroup so they're removed with it above; only the per-build mats leak).
   //   The fireball/flash/shock/debris/spark GEOMETRY lives in _disposables (freed below).
   if (fireballMat) { fireballMat.dispose(); fireballMat = null; }
+  if (fireball2Mat) { fireball2Mat.dispose(); fireball2Mat = null; }
   if (flashMat) { flashMat.dispose(); flashMat = null; }
   if (shockMat) { shockMat.dispose(); shockMat = null; }
   if (sparkMat) { sparkMat.dispose(); sparkMat = null; }
   if (sparkGeo) { sparkGeo.dispose(); sparkGeo = null; }
-  fireballMesh = null; flashMesh = null; shockMesh = null; sparkPoints = null;
+  fireballMesh = null; fireball2Mesh = null; flashMesh = null; shockMesh = null; sparkPoints = null;
   blastLight = null; shipGroup = null; debrisGroup = null;
   debris = [];
   _sparkOrigin = new Float32Array(0);
