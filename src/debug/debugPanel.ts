@@ -23,7 +23,7 @@ import { startEscapePodIntro, endEscapePodIntro, jumpToBeat as jumpToIntroBeat, 
 import { placeCrashedPodWreck, setDescentProgress as setPodDescent, setParachuteLeverPull as setPodChute, setEjectLeverPull as setPodEject, setCabinCrashPose as setPodCrashPose, blowCabinHatch as blowPodHatch, popChute as popPodChute, buildPodScene as buildPodSceneDbg, getPodSpawn as getPodSpawnDbg, disposePodScene, podIsEnterable, getCrashedPodSalvageableId as getPodSalvageId, chutePopReady, setPendingPodCrashRestore, applyPendingPodCrashRestore, smokeExposureConstant, smokeWakeFlicker, probeEyeInCabin, probeCabinDoor } from '../world/escapePodIntro/podScene.ts';   // T1.1/T1.2 · R3a · T4.3 · T3.2 — __game.placeCrashedPod / … ; + smokePodPersistence deps; W6 item 5 — smokeExposureConstant (the zero-shift constant-exposure proof); W6 item 4 — probeEyeInCabin (the impact eye-inside gate); W6 item 6 — probeCabinDoor (the slanted-door diagnostic)
 import { smokePodTutorial } from '../world/escapePodIntro/podTutorial.ts';   // T4.3 — __game.smokePodTutorial (drive the craft→salvage→chute-pop loop headlessly)
 import { buildHaulerExterior, disposeHaulerExterior, setHaulerExplosion, setHaulerDeparture } from '../world/escapePodIntro/haulerScene.ts';   // T3.1/T3.2 — __game.buildHauler / disposeHauler / setHaulerExplosion (hauler-exterior + explosion rig-shots); C1 — setHaulerDeparture (the eject-departure recession)
-import { setCockpitAlert as setShipCockpitAlert, setShipAlert as setShipRedAlert, setEngineFire as setShipEngineFire, setBayAirlockDoor as setBayAirlockDoorDbg } from '../world/escapePodIntro/shipScene.ts';   // T3.3/T3.4 — __game.setCockpitAlert / setShipAlert / setEngineFire (alert escalation + the disaster rig-shot)
+import { setCockpitAlert as setShipCockpitAlert, setShipAlert as setShipRedAlert, setEngineFire as setShipEngineFire, setBayAirlockDoor as setBayAirlockDoorDbg, setBayPodDoorOpen as setBayPodDoorOpenDbg } from '../world/escapePodIntro/shipScene.ts';   // T3.3/T3.4 — __game.setCockpitAlert / setShipAlert / setEngineFire (alert escalation + the disaster rig-shot)
 import { setSkyIntroMode, setPlanetApproach } from '../world/sky.ts';   // REBUILD v2 R1a — __game.setSkyIntroMode (space mode for the orbit/cockpit beats); C3 — setPlanetApproach (the descent planet-approach arc)
 import { makeLatheHull, fuselageProfile, makeFormerRings, makeBreach, makeSandMound } from '../world/wreckForms.ts';
 import { createRustedHullMaterial, HULL_WEATHERING_ACAY } from '../world/hullMaterial.ts';
@@ -85,6 +85,8 @@ interface DebugApi {
   setCabinCrashPose: (pose: number) => void;
   /** Escape-pod R3a — blow the cabin escape hatch open (0=ajar, 1=flung wide). For the wake rig-shot. */
   blowCabinHatch: (t: number) => void;
+  /** Escape-pod W2 — swing the DOCKED bay-pod door (0=closed, 1=~110° open). For the pod-diag rig-shot. */
+  setBayPodDoorOpen: (t: number) => void;
   /** Escape-pod T4.3 — fire the comic chute-pop on the crashed pod (the failed chute finally
    *  deploys). For the chute-pop rig-shot / manual payoff test (needs a crashed pod placed).
    *  Optional `advanceSeconds` synchronously drives the inflate that many seconds (rig-shots
@@ -136,6 +138,10 @@ interface DebugApi {
   /** Escape-pod W2b — drive the pod-bay AIRLOCK sliding door (0 = sealed → 1 = open; the seal
    *  collider clears past ~0.62). For the boarding flow + the airlock rig-shots. */
   setBayAirlockDoor: (t: number) => void;
+  /** 1i — one-paste LIVE lighting readout (exposure/clock/sun/ambient/weather/intro state). If
+   *  "world lighting broken" is ever seen again, run this and paste the result — it names the
+   *  stuck value (the headless probes prove the code paths restore; this catches live-only state). */
+  lightDebug: () => Record<string, unknown>;
   /** Escape-pod T3.3 — drive the cockpit alert state (0 = ORBIT ACHIEVED calm, 1 = caution,
    *  2 = red-alert). For the cockpit rig-shot + the disaster escalation. */
   setCockpitAlert: (level: 0 | 1 | 2) => void;
@@ -369,6 +375,7 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
     setEjectLeverPull: (t) => { setPodEject(t); },
     setCabinCrashPose: (pose) => { setPodCrashPose(pose); },
     blowCabinHatch: (t) => { blowPodHatch(t); },
+    setBayPodDoorOpen: (t) => { setBayPodDoorOpenDbg(t); },
     popChute: (advanceSeconds) => { popPodChute(advanceSeconds); },
     saveGame: () => saveGameState(ctx),
     smokePodTutorial: () => smokePodTutorial(ctx),
@@ -474,6 +481,23 @@ export function installDebugPanel(ctx: GameContext, hooks: DebugHooks = {}): voi
       if (ctx.intro) ctx.intro.mode = 'seated';
     },
     setBayAirlockDoor: (t) => { setBayAirlockDoorDbg(t); },
+    lightDebug: () => {
+      const r = ctx.three.renderer;
+      const fog = ctx.three.scene.fog as THREE.Fog | null;
+      const bg = ctx.three.scene.background;
+      return {
+        exposure: r.toneMappingExposure,
+        toneMapping: r.toneMapping,
+        dayTime: ctx.time.dayTime,
+        sun: ctx.lights?.sun?.intensity,
+        ambient: ctx.lights?.ambient?.intensity,
+        cloudiness: ctx.weather?.cloudiness,
+        introActive: !!ctx.intro?.active,
+        introBeat: ctx.intro?.beat ?? null,
+        fogNear: fog?.near ?? null,
+        bg: bg instanceof THREE.Color ? bg.getHexString() : String(bg),
+      };
+    },
     setCockpitAlert: (level) => { setShipCockpitAlert(level); },
     setSkyIntroMode: (space01) => { setSkyIntroMode(space01); },
     setHaulerDeparture: (t) => { setHaulerDeparture(t); },   // C1 — the eject-departure recession (rig-shot)

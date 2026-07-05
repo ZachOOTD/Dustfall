@@ -875,7 +875,10 @@ function tickShipExplode(ctx: GameContext, dt: number): void {
     //   felt shudder in the sealed cabin. Trauma is ONE-SHOT per step-up so it can't saturate/spin.
     const rk = Math.min(1, d / EJECT_RELEASE_DUR);
     releasePodFromBay(rk);           // the physical detach in the bay (bolts fire, cradle releases, pod tears free)
-    setTumbleLight(0.3 + rk * 0.2);  // the bay glow rising into the cabin
+    // 1h (user live-test): NO pre-blast wash — the release is mechanical (bolts + shudder); the
+    // hot flood belongs to the DETONATION later. A whisper of rising glow only (the quadratic
+    // source curve keeps this near-invisible); the old 0.3-0.5 read "bright and weird" pre-blast.
+    setTumbleLight(rk * 0.1);
     // X3b — the player RIDES the bay pod through the release now; the dying ship's red-alert keeps
     // strobing outside the porthole until the ship is disposed (no frozen mid-pulse light).
     setShipAlert(2, 0.5 + 0.5 * Math.sin(d * 11.0));
@@ -921,7 +924,7 @@ function tickShipExplode(ctx: GameContext, dt: number): void {
     setHaulerDeparture(Math.min(1, d / SHIP_RECEDE_DUR));
     // the detonation fires mid-recession; before it, the intact ship is watched receding (bay glow decays).
     if (d < SHIP_BLAST_AT) {
-      setTumbleLight(0.5 * Math.max(0, 1 - d / 0.9));   // the last of the bay glow decays to the orbital cool as it drifts
+      setTumbleLight(0.1 * Math.max(0, 1 - d / 0.9));   // 1h: continuous with the release's 0.1 peak — no brightness jump at the swap; decays to the orbital cool
       return;
     }
     // ── THE EXPLOSION, unfolding DURING the recession. te 0→1 over SHIP_EXPLODE_DUR from the blast time.
@@ -1344,6 +1347,24 @@ export function updateEscapePodIntro(ctx: GameContext, dt: number): void {
   // updatePlayer + regardless of isPlaying) so the lower seated eye also applies in the
   // preview/rig where updatePlayer early-returns at !isPlaying. 'walk' beats keep standing.
   if (intro.mode !== 'walk') ctx.player.eyeOffset = Tuning.POD_SEATED_EYE_OFFSET;
+  // 1i SEQUENCE-BREAK WATCHDOG (user live-test: they escaped the ship through a collision hole
+  // and fell 3000m to the desert WITH THE INTRO STILL ACTIVE — space sky + pinned midday +
+  // suppressed weather = the "world lighting broken" report). During ship-interior WALK beats,
+  // if the player ever leaves the hull envelope (fell below the deck or strayed far off the
+  // ship), rescue them back to the ship spawn — collision holes must degrade to a hiccup, not
+  // a sequence-broken world. (Seated/scripted beats pin the body; only walk beats can stray.)
+  if (intro.mode === 'walk' && (intro.beat === 'cockpit' || intro.beat === 'checkEngines' ||
+      intro.beat === 'corridor' || intro.beat === 'enterPod')) {
+    const spawn = getShipSpawn(ctx);
+    const tr = ctx.player.body.body.translation();
+    const fellBelowDeck = tr.y < spawn.y - 6;          // the deck sits near spawn.y; 6m = well through the floor
+    const strayedOffShip = Math.abs(tr.x - spawn.x) > 25 || Math.abs(tr.z - spawn.z) > 40;
+    if (fellBelowDeck || strayedOffShip) {
+      seatPlayerAt(ctx, spawn);
+      ctx.player.velocityY = 0;
+      showIntroPrompt(intro.scratch.disaster ? 'GET TO THE ESCAPE POD' : '');
+    }
+  }
   switch (intro.beat) {
     case 'cockpit': tickCockpit(ctx, dt); break;
     case 'checkEngines': tickCheckEngines(ctx); break;
