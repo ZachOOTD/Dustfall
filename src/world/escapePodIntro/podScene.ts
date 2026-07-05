@@ -4304,12 +4304,15 @@ function buildHeroPodMesh(): THREE.Group {
   return g;
 }
 
-/** Place the HERO crashed pod at desert (x,z) — the VERTICAL aluminium capsule
- *  standing on its heat-shield base, LEANED + half-buried in the dune, hatch +
- *  porthole facing the player's wake spot. Idempotent (replaces any prior).
- *  PERSISTS into the real game (NOT disposed by endEscapePodIntro). A vertical
- *  cylinder collider (from the invisible proxy) follows the standing silhouette;
- *  the dome/antenna/door/decorations are noCollider. */
+/** ⚠ DEV-ONLY — place a STANDALONE crashed-pod wreck at desert (x,z). The SHIPPED game never
+ *  shows this model: since the ONE-ENTERABLE-POD re-scope (2026-07-01) the real crash-site pod
+ *  is the unified enterable pod (`unifyEnterablePod` — the SAME cabin the player rode down),
+ *  and the walk-in colliders build at the CRASH (rule 9). This separate squat wreck exists only
+ *  for `smokePodTutorial` (podTutorial.ts) and the `__game.placeCrashedPod(x,z)` dev hook —
+ *  isolated tutorial testing without driving the full intro chain. Do NOT use it as visual
+ *  reference for the real landed pod (it manufactured false gate findings on 2026-07-05 when a
+ *  rig scenario shot it as "the" crashed pod). Idempotent (replaces any prior); the vertical
+ *  cylinder collider proxy matches ITS OWN silhouette. */
 // R3a — the separate buildWakeInterior / blowWakeHatch / removeWakeInterior SHELL is GONE.
 //   The player now wakes inside + climbs out of the SAME hero cabin (buildPodScene), crashed at
 //   the spawn — see setCabinCrashPose + blowCabinHatch above. This kept the pod from being THREE

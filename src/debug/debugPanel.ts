@@ -68,8 +68,10 @@ interface DebugApi {
    *  {preload:false} for the cold build-on-entry baseline. Returns the beat-entry stalls + hitch
    *  counts (>50ms/>100ms). Async (the preload is async). */
   benchIntro: (opts?: { preload?: boolean }) => Promise<IntroBenchResult>;
-  /** Escape-pod T1.1 — place the HERO crashed pod at world (x,z), half-buried + tilted. For the
-   *  crashed-pod rig-shot (reproduces the real stepOut wake-beside-the-pod placement). */
+  /** ⚠ DEV-ONLY — place the STANDALONE crashed-pod wreck at world (x,z). NOT the shipped
+   *  crash-site pod (that's the unified enterable pod via unifyEnterablePod — shot by the
+   *  stepout-pod/crashed-pod rig scenarios, which drive the REAL chain). This wreck exists for
+   *  isolated tutorial testing (smokePodTutorial) only; do not use it as visual reference. */
   placeCrashedPod: (x: number, z: number) => void;
   /** Escape-pod T1.2 — grow the descent planet in the cabin viewport (0..1). For the
    *  pod-interior rig-shot (frame the descent forward view). */

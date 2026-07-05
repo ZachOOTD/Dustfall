@@ -1327,7 +1327,9 @@ function tickStepOut(ctx: GameContext, dt: number): void {
   intro.scratch.t = (intro.scratch.t as number) + dt;
   if ((intro.scratch.t as number) > REVEAL_DWELL) {
     // Capture the pod spawn BEFORE endEscapePodIntro clears ctx.intro (returnPos is where the
-    //   crashed pod was placed by placeCrashedPodWreck above — the tutorial scatters around it).
+    //   UNIFIED ENTERABLE POD stands — the same cabin the player rode down, grounded at the crash
+    //   (unifyEnterablePod / _landPodWalkable); the tutorial scatters around it. The old separate
+    //   placeCrashedPodWreck is DEV-ONLY now — smokePodTutorial + the __game hook only).
     const podX = intro.returnPos.x, podZ = intro.returnPos.z;
     endEscapePodIntro(ctx);   // hand control back — the desert game runs from here (HUD returns); it arms the CLEAR-SKIES fog ease-back (pod is enterable)
     // T4.3 — THE FIRST TUTORIAL. Now that control is the player's, seed the craft→salvage→
