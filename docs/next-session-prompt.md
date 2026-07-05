@@ -1,4 +1,16 @@
-# Next session — Y-QUEUE COMPLETE (2026-07-04); RELEASE PENDING the user's final walk-test
+# Next session — PAUSED PRE-WALK-TEST (2026-07-04 evening); dist BUILT from 0cef120
+
+**RESUME POINT:** the user paused to take a break BEFORE the final walk-test. ALL Y-queue +
+round-2 work is committed/pushed through `0cef120` (…+ Y8 one-door-construction w/ sealed
+bore + two-face hardware + lamp parity + quadratic blast ramp; Y9 cockpit dome round 2
+[8 wide panes, two-tone machined members, sill/floor base channel, junction tabs fixed] +
+the bay doorway bands gapped). `npm run build:intro` RAN on this exact state — dist is
+CURRENT (never let the user test a stale dist again; that caused two false bug reports).
+Final bench: PRELOAD Σ-entry 31.6ms, 0 stutters >50ms, 0 freezes. The user SKIPPED the
+final redundant gate re-run (each unit gated individually). ON RESUME: (1) start the
+`dustfall-intro-preview` server (port 4173) — it serves the already-built dist; (2) the
+user walk-tests; (3) on their confirmation run the RELEASE steps below (flag flip → default-
+build re-gate → merge --no-ff to master → push → watch deploy.yml → probe the live link).
 
 **THE RELEASE IS STAGED.** The full Y-queue shipped through `b6ade67` (cockpit Mk-III glazed
 dome w/ user review round; the ONE-pod consistency + interior Mk-II; pivoting levers at
