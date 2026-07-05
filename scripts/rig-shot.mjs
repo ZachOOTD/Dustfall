@@ -22,7 +22,7 @@ import { chromium } from 'playwright';
 import { spawn, spawnSync } from 'node:child_process';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = resolve(ROOT, 'verification');
@@ -4463,6 +4463,152 @@ const SCENARIOS = {
     }
     if (fails.length) throw new Error(`door-flush-audit GATE FAILED — the door DRIFTED from flush (rotation != 0) in: ${JSON.stringify(fails)}`);
     console.log(`[door-flush-audit] GATE PASS — the door read PERFECTLY FLUSH (pivot == 0) at every sealed state (${log.rows.filter((r) => r.built).length} states checked).`);
+  },
+
+  // ── LANDED-DOORWAY-DIAG (round-2a): the REAL landed 'escapePodCabin' with the door OPEN.
+  //    Drives the real crash→wake→stepOut→skipIntro chain (like crashed-pod), OPENS the front
+  //    door, then fires a RAYCAST FAN from the user's exact OUTSIDE vantage (standing ~2m out on
+  //    the −Z door side at eye height, aiming through the LOWER doorway) and names the FIRST
+  //    opaque hit per ray + its nearest-named ancestor + pod-local Y. Any near hit that isn't the
+  //    interior deck/wall names the blocking exterior-skin band/lathe/foot. Also renders the shot.
+  'landed-doorway-diag': async (page) => {
+    await page.evaluate(() => {
+      const g = window.__game; const ctx = g.ctx;
+      ctx.flags.thirdPerson = false;
+      if (ctx.player.rig) ctx.player.rig.group.visible = false;
+      if (ctx.player.viewModel && ctx.player.viewModel.group) ctx.player.viewModel.group.visible = false;
+      ctx.three.renderer.setSize(1100, 820, false);
+      const cam = ctx.three.camera;
+      if (cam.isPerspectiveCamera) { cam.aspect = 1100 / 820; cam.updateProjectionMatrix(); }
+      g.startIntro();
+      g.jumpToBeat('impact');
+    });
+    await page.waitForTimeout(2600);
+    await page.evaluate(() => { window.__game.jumpToBeat('wake'); });
+    await page.waitForTimeout(1600);
+    await page.evaluate(() => { window.__game.jumpToBeat('stepOut'); });
+    await page.waitForTimeout(1400);
+    await page.evaluate(() => { window.__game.skipIntro(); });
+    await page.waitForTimeout(900);
+    const camMode = argv.angle || 'outside';
+    const diag = await page.evaluate((camMode) => {
+      const g = window.__game; const ctx = g.ctx;
+      const THREE = g.THREE;
+      g.setTime(0.32);
+      ctx.weather.intensity = 0; ctx.weather.cloudiness = 0.12;
+      ctx.three.renderer.toneMappingExposure = 1.25;
+      ctx.flags.paused = true;
+      const V = THREE.Vector3;
+      const pod = ctx.three.scene.getObjectByName('escapePodCabin');
+      if (!pod) return { error: 'escapePodCabin not found' };
+      pod.updateMatrixWorld(true);
+      const podWorld = pod.getWorldPosition(new V());
+      // BLOW the front door fully open (the wake-exit state), so the aperture is clear of the slab.
+      try { g.blowCabinHatch(1); } catch {}
+      pod.updateMatrixWorld(true);
+      // Front door outward normal: FDOOR_AZ = π → world (sin π, cos π) = (0,-1) at pod yaw≈0, but the
+      //   pod settled with a small crash tilt — use the pod's actual −Z world axis for the door face.
+      const haz = Math.PI;
+      const nrm = new V(Math.sin(haz), 0, Math.cos(haz)).applyQuaternion(pod.quaternion); nrm.y = 0; nrm.normalize();
+      const sillWorldY = podWorld.y + 0.11;   // aperture bottom (FDOOR_CY 1.10 − FDOOR_H/2 0.99)
+      const side = new V().crossVectors(nrm, new V(0, 1, 0)).normalize();
+      const cam = ctx.three.camera;
+      let eye;
+      if (camMode === 'inside') {
+        // INSIDE looking OUT through the door (no new holes from the interior side) — eye at the deck
+        //   centre, seated-ish, aiming out the −Z aperture toward the sand/sky.
+        eye = podWorld.clone().add(nrm.clone().multiplyScalar(-0.55)); eye.y = podWorld.y + 1.35;
+        cam.position.copy(eye);
+        cam.lookAt(podWorld.clone().add(nrm.clone().multiplyScalar(3.0)).setY(podWorld.y + 0.6));
+      } else if (camMode === 'oblique') {
+        // The user's actual screenshot vantage: standing ~2m out, biased to one side (oblique), eye 1.62.
+        eye = podWorld.clone().add(nrm.clone().multiplyScalar(2.3)).add(side.clone().multiplyScalar(1.4)); eye.y = podWorld.y + 1.62;
+        cam.position.copy(eye);
+        cam.lookAt(podWorld.x, sillWorldY + 0.45, podWorld.z);
+      } else {
+        // USER VANTAGE (outside, straight on): ~2m out on the door side, standing eye 1.62, aim LOWER doorway.
+        eye = podWorld.clone().add(nrm.clone().multiplyScalar(2.1)); eye.y = podWorld.y + 1.62;
+        cam.position.copy(eye);
+        cam.lookAt(podWorld.x, sillWorldY + 0.35, podWorld.z);
+      }
+      cam.updateMatrixWorld(true);
+      // Aperture plane at the pod's outer door face: podWorld + nrm*(CAB_R+SHELL)=1.44
+      const apCenter = podWorld.clone().add(nrm.clone().multiplyScalar(1.44));
+      const rc = new THREE.Raycaster();
+      const meshes = [];
+      pod.traverse((o) => { if (o.isMesh && o.visible && o.material && !o.material.transparent) meshes.push(o); });
+      const rows = [];
+      const tally = {};
+      // scan LOWER HALF of the door: y from sill (0.11) up to mid (~1.15), width ±0.48
+      for (let yi = 0; yi <= 6; yi++) {
+        const ty = sillWorldY + (yi / 6) * 1.04;
+        const cols = [];
+        for (let zi = -3; zi <= 3; zi++) {
+          const target = apCenter.clone().add(side.clone().multiplyScalar((zi / 3) * 0.48));
+          target.y = ty;
+          const dir = target.clone().sub(eye).normalize();
+          rc.set(eye, dir); rc.far = 5.0;
+          const hits = rc.intersectObjects(meshes, false).filter((h) => h.distance > 0.05);
+          if (hits.length === 0) { cols.push('·'); continue; }
+          const h = hits[0];
+          let nm = h.object.name, node = h.object;
+          while (!nm && node.parent && node !== pod) { node = node.parent; nm = node.name; }
+          nm = nm || (h.object.material && h.object.material.name) || '?';
+          const local = pod.worldToLocal(h.point.clone());
+          const radial = Math.hypot(local.x, local.z);
+          // a NEAR occluder = radial ≥ ~outer body (1.2+) i.e. it's the shell crossing the aperture,
+          //   not the far interior wall/deck (which sits at the interior side, radial small or opposite).
+          const near = radial > 1.15 && local.z < -0.2;   // outer radius, on the −Z door side
+          cols.push({ named: nm, hitY: +h.point.y.toFixed(2), locY: +local.y.toFixed(2), radial: +radial.toFixed(2), dist: +h.distance.toFixed(2), near });
+          if (near) tally[nm] = (tally[nm] || 0) + 1;
+        }
+        rows.push({ ty: +ty.toFixed(2), cols });
+      }
+      // also: list every mesh whose material is _podScorchFadeMat-like (Lambert vertexColors) and its Y-span
+      const suspects = [];
+      pod.traverse((o) => {
+        if (!o.isMesh || !o.geometry) return;
+        o.geometry.computeBoundingBox(); const bb = o.geometry.boundingBox; if (!bb) return;
+        // world Y span
+        const lo = new V(0, bb.min.y, 0); o.localToWorld(lo);
+        const hi = new V(0, bb.max.y, 0); o.localToWorld(hi);
+        let nm = o.name, node = o; while (!nm && node.parent && node !== pod) { node = node.parent; nm = node.name; }
+        const isLambert = o.material && o.material.type === 'MeshLambertMaterial';
+        const podLocalMinY = +(lo.y - podWorld.y).toFixed(2), podLocalMaxY = +(hi.y - podWorld.y).toFixed(2);
+        // crosses the lower doorway band (sill 0.11 → mid 1.15)?
+        const crossesLowerDoor = podLocalMinY < 1.15 && podLocalMaxY > 0.11;
+        if (crossesLowerDoor && (isLambert || /scorch|foot|band|skin|base/i.test(nm || ''))) {
+          suspects.push({ named: nm || '?', matType: o.material && o.material.type, vertexColors: !!(o.material && o.material.vertexColors), side: o.material && o.material.side, podLocalMinY, podLocalMaxY });
+        }
+      });
+      ctx.three.renderer.render(ctx.three.scene, cam);
+      return {
+        podWorld: [+podWorld.x.toFixed(2), +podWorld.y.toFixed(2), +podWorld.z.toFixed(2)],
+        podRot: [+pod.rotation.x.toFixed(3), +pod.rotation.y.toFixed(3), +pod.rotation.z.toFixed(3)],
+        eye: [+eye.x.toFixed(2), +eye.y.toFixed(2), +eye.z.toFixed(2)], sillWorldY: +sillWorldY.toFixed(2),
+        rows, blockerTally: tally, suspects,
+      };
+    }, camMode);
+    console.log('[landed-doorway-diag] mode=' + camMode + ' eye ' + JSON.stringify(diag.eye) + ' sillY ' + diag.sillWorldY + ' podRot ' + JSON.stringify(diag.podRot));
+    console.log('[landed-doorway-diag] BLOCKER TALLY (near occluders crossing lower doorway): ' + JSON.stringify(diag.blockerTally));
+    console.log('[landed-doorway-diag] SUSPECT meshes crossing lower door band:');
+    for (const s of (diag.suspects || [])) console.log('  ' + JSON.stringify(s));
+    console.log('[landed-doorway-diag] RAY FAN (sill→mid):');
+    for (const r of (diag.rows || [])) console.log('  y=' + r.ty + ' ' + JSON.stringify(r.cols));
+    await page.waitForTimeout(200);
+    // Grab the canvas via toDataURL IN-PAGE (avoids Playwright's screenshot compositor wait that
+    //   hangs on the heavy full-desert frame — the known limitation). Force one render first.
+    const dataUrl = await page.evaluate(() => {
+      const ctx = window.__game.ctx;
+      ctx.three.renderer.render(ctx.three.scene, ctx.three.camera);
+      return ctx.three.renderer.domElement.toDataURL('image/png');
+    });
+    try {
+      const b64 = dataUrl.split(',')[1];
+      const fn = `scen-landed-doorway-diag-${camMode}.png`;
+      writeFileSync(join(OUT, fn), Buffer.from(b64, 'base64'));
+      console.log('[landed-doorway-diag] → ' + fn + ' (canvas toDataURL)');
+    } catch (e) { console.log('[landed-doorway-diag] canvas write failed: ' + e.message); }
   },
 
   // ── Y3 fix 9 — DOORWAY-TORTURE: enter/exit the LANDED pod ×6 across the wake→step-out→tutorial

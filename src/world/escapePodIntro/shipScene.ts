@@ -324,16 +324,15 @@ const _engBlock = _metal(0x33373d, 0.55, 0.55, { flat: true, grime: true });
 //   vista through; the edge sliver still firms the seal.
 const _glass = new THREE.MeshStandardMaterial({
   color: 0x3a4e5c, roughness: 0.06, metalness: 0.0,
-  // LIVE-fix #2b (2026-07-05): the DOUBLE-SIDED glaze read too HAZY (the user: "a bit too hazy now,
-  //   want it more transparent but still read as glass"). Root cause: DoubleSide draws BOTH faces of
-  //   each pane, so every view-independent glaze term (base emissive + the constant tint floor + the
-  //   base opacity) STACKED ≈2× along the view → a milky veil over the stars. Rebalanced toward
-  //   TRANSPARENCY: base emissive 0.40→0.16, base opacity 0.225→0.10. The glass PRESENCE now comes
-  //   almost entirely from the EDGE glint (the uv-border sheen + the grazing-rim) — see onBeforeCompile,
-  //   where the constant body-tint floor is cut 0.08→0.02. Head-on the stars/planet read through with a
-  //   near-zero veil; the sealed-frame glint + a whisper of tint still say "glass, not open hole".
-  emissive: 0x0c1a26, emissiveIntensity: 0.16,
-  transparent: true, opacity: 0.10,
+  // ROUND-2c (the user's 2nd haze report): the remaining head-on veil was the BASE OPACITY body tint —
+  //   with DoubleSide drawing both faces, the 0.10 blue-grey body STACKED ≈2× → a constant milky floor
+  //   over the stars even after the sheen band was killed (see onBeforeCompile). Dropped 0.10→0.06 +
+  //   base emissive 0.16→0.12, so head-on the pane body is near-clear (stars/planet read straight
+  //   through); the "this cell is glass, not an open hole" read is carried by the UNIFORM border glint +
+  //   the thin grazing rim (both in onBeforeCompile) — which every cell shows identically, so the top
+  //   crown panes and the side panes now read the SAME (the per-pane-inconsistency fix).
+  emissive: 0x0c1a26, emissiveIntensity: 0.12,
+  transparent: true, opacity: 0.06,
   side: THREE.DoubleSide,
 });
 _glass.onBeforeCompile = (shader: THREE.WebGLProgramParametersWithUniforms) => {
@@ -358,38 +357,37 @@ _glass.onBeforeCompile = (shader: THREE.WebGLProgramParametersWithUniforms) => {
      varying vec3 vGlassViewNrm;
      varying vec2 vGlassLocal;`,
   );
-  // After the emissive is composed, add the Fresnel rim + a curved-sheen band + a tint gradient.
-  //   COCKPIT-ROUND-2: the rim is stronger + the sheen is a broad CURVED band (a domed-canopy
-  //   highlight) so the pane reads as a curved bubble catching light, not a flat black hole.
+  // ROUND-2c HAZE ROOT-CAUSE FIX (the user's 2nd haze report + the per-pane inconsistency).
+  //   DIAGNOSED (not guessed): the milky veil against the starfield came from the BROAD CURVED-SHEEN
+  //   BAND — `totalEmissiveRadiance += vec3(0.26,0.34,0.42) * gSheen * 0.6`, where gSheen =
+  //   smoothstep(0.55,1.0,gArc)*(0.35+0.4*gFres) covered a WIDE swath of each pane (a UV-arc, not an
+  //   edge). It was BOTH the dominant haze AND the per-pane inconsistency: gArc keys off per-pane UV
+  //   and gFres off view angle, so grazing SIDE panes lit up milky while face-on CROWN panes fell
+  //   below the smoothstep → pure-black/invisible. THE SHEEN BAND IS DELETED. Glass presence now comes
+  //   from a UNIFORM per-cell floor (identical on every pane regardless of angle → top+side panes match)
+  //   + a THIN edge glint. The centre body is clear: near-zero veil head-on, stars/planet read through.
   shader.fragmentShader = shader.fragmentShader.replace(
     '#include <emissivemap_fragment>',
     `#include <emissivemap_fragment>
      vec3 gV = normalize(-vGlassViewPos);
      float gNdV = clamp(dot(normalize(vGlassViewNrm), gV), 0.0, 1.0);
-     float gFres = pow(1.0 - gNdV, 2.2);
-     // a broad CURVED sheen band arcing across the dome (a canopy highlight following the wrap) —
-     //   a smooth wide arc keyed to the pane's u,v so a big sheet reads as a gently-domed surface.
-     float gArc = 1.0 - abs((vGlassLocal.x - 0.5) * 1.7 + (vGlassLocal.y - 0.62) * 0.6);
-     float gSheen = smoothstep(0.55, 1.0, gArc) * (0.35 + 0.4 * gFres);
-     // a faint vertical tint gradient (cooler/bluer toward the top of the pane)
      float gGrad = vGlassLocal.y;
      vec3 gRim = mix(vec3(0.16, 0.26, 0.36), vec3(0.34, 0.48, 0.62), gGrad);
-     // X1-POLISH item-2: the rim glow is confined to a THIN grazing sliver (pow raised 2.2→3.4) and
-     //   its strength cut (2.1→0.9) so the steeply-angled SIDE-WRAP panes stay glassy-clear instead of
-     //   fogging to an opaque pink-milk sheet. A pane that faces away from the eye should read as tinted
-     //   glass you see the planet through, not frosted. The centre pane is unchanged (it was already clear).
+     // a THIN grazing-edge rim glint (the bubble seam) — confined to the outer sliver (pow 3.4) + weak
+     //   (0.9→0.55) so a side-wrap pane facing away stays see-through tinted glass, never a fogged sheet.
      float gRimEdge = pow(1.0 - gNdV, 3.4);
-     totalEmissiveRadiance += gRim * gRimEdge * 0.9;            // a THIN grazing-edge rim glint (the bubble seam)
-     totalEmissiveRadiance += vec3(0.26, 0.34, 0.42) * gSheen * 0.6;  // the curved-canopy sheen band (dialled back)
-     // LIVE-fix #2b: the CONSTANT cool-glaze tint floor is cut 0.08→0.02 (a bare whisper) so a pane facing
-     //   dead-on at black space reads as clear glass with the stars through it, NOT a milky film. The
-     //   "this cell is glass, not an open hole" read now leans on the edge glint (border + rim) below.
-     totalEmissiveRadiance += vec3(0.10, 0.15, 0.20) * 0.02;
-     // a hairline BORDER sheen on the outer few % of each pane's uv → every cell shows a sealed frame
-     //   glint even head-on (the "no missing pane" read), without touching the clear centre body.
+     totalEmissiveRadiance += gRim * gRimEdge * 0.55;
+     // the UNIFORM glaze floor — a bare cool whisper, view-INDEPENDENT + UV-independent, so EVERY cell
+     //   (crown or side) reads the SAME faint glass presence (the fix for "top panes invisible / sides
+     //   hazy" — all cells converge). Nudged 0.03→0.05: enough that a face-on crown pane over a BLACK
+     //   sky patch shows the same faint glaze as a side pane over the galaxy glow (they read identical),
+     //   still low enough that head-on the stars read straight through, not a milky film.
+     totalEmissiveRadiance += vec3(0.12, 0.17, 0.22) * 0.05;
+     // a hairline BORDER glint on the outer few % of each pane's uv → every cell shows a sealed frame
+     //   even head-on (the "no missing pane" read), uniform per cell, without touching the clear centre.
      float gEdgeU = min(vGlassLocal.x, 1.0 - vGlassLocal.x);
      float gEdgeV = min(vGlassLocal.y, 1.0 - vGlassLocal.y);
-     float gBorder = 1.0 - smoothstep(0.0, 0.055, min(gEdgeU, gEdgeV));
+     float gBorder = 1.0 - smoothstep(0.0, 0.05, min(gEdgeU, gEdgeV));
      totalEmissiveRadiance += vec3(0.22, 0.30, 0.38) * gBorder * 0.35;`,
   );
   // raise the alpha toward grazing angles so the glazing reads as a real edge-lit CURVED sheet
@@ -400,18 +398,17 @@ _glass.onBeforeCompile = (shader: THREE.WebGLProgramParametersWithUniforms) => {
      #ifdef OPAQUE
      gl_FragColor.a = 1.0;
      #endif
-     // X1-POLISH item-2: the grazing-angle alpha boost is confined to a THIN edge sliver (pow 1.7→3.2)
-     //   + its magnitude + cap dropped hard (0.62→0.26, cap 0.92→0.55), so the SIDE-WRAP panes stay
-     //   see-through tinted glass rather than climbing to near-opaque milk at their oblique viewing
-     //   angle. Only the outermost few pixels of each pane firm up (the sealed-edge read); the pane body
-     //   stays clear + uniform with the centre.
-     float gFres2 = pow(1.0 - clamp(dot(normalize(vGlassViewNrm), normalize(-vGlassViewPos)), 0.0, 1.0), 3.2);
-     // COCKPIT-ROUND-2 item-2: a hairline uv-border alpha bump so every pane shows a firm sealed frame
-     //   even viewed head-on (no cell reads as an open hole); the clear centre body is untouched.
+     // ROUND-2c: the grazing-angle alpha boost was firming the SIDE-WRAP panes toward milk (a haze
+     //   contributor). Cut hard (0.26→0.09) + confined to the outer sliver (pow 3.2→3.6), so the pane
+     //   BODY stays uniformly see-through at every angle — the presence is the border seal glint, not a
+     //   view-driven opacification. Top + side panes now read the same transparency.
+     float gFres2 = pow(1.0 - clamp(dot(normalize(vGlassViewNrm), normalize(-vGlassViewPos)), 0.0, 1.0), 3.6);
+     // a hairline uv-border alpha bump so every pane shows a firm sealed frame even head-on (no cell
+     //   reads as an open hole); UNIFORM per cell; the clear centre body is untouched.
      float gEdgeU2 = min(vGlassLocal.x, 1.0 - vGlassLocal.x);
      float gEdgeV2 = min(vGlassLocal.y, 1.0 - vGlassLocal.y);
      float gBorderA = 1.0 - smoothstep(0.0, 0.05, min(gEdgeU2, gEdgeV2));
-     gl_FragColor.a = clamp(gl_FragColor.a + gFres2 * 0.26 + gBorderA * 0.30, 0.0, 0.6);`,
+     gl_FragColor.a = clamp(gl_FragColor.a + gFres2 * 0.09 + gBorderA * 0.30, 0.0, 0.5);`,
   );
 };
 
@@ -2261,7 +2258,13 @@ function buildLighting(group: THREE.Group): void {
   //    each = a metal bezel + a warm emissive lens. The point lights sit AT these so the light has
   //    a believable origin (gate: "the light is a blown white blob with no fixture").
   const down = new THREE.Vector3(0, -1, 0);
-  for (const fz of [-0.9, 0.7]) {
+  // ROUND-2c RE-SEAT (ZERO luminaires in the glazing): the FORWARD can at fz=−0.9 sat deep inside the
+  //   glazed dome (z −0.9 is well forward of the collar 0.34) — its amber lens read as the "yellow-capped
+  //   lamp floating in the glazing" (the user's 2nd report). Both can MESHES now mount on the OPAQUE aft
+  //   ceiling (fz ≥ COLLAR_Z: on the collar crown + along the keel stringer). The forward KEY POINT light
+  //   (below, an invisible source, not a mesh) stays forward to throw warm light onto the dash — a light
+  //   in front of the glass is fine; only a visible FIXTURE in the glazing is the defect.
+  for (const fz of [COLLAR_Z + 0.16, 1.35]) {   // =0.50, 1.35 — both aft of the collar, on the opaque hull
     const can = _cyl(0.13, 0.15, 0.10, 12, _channel);
     can.position.set(0, HULL_CROWN_MAX - 0.16, fz);
     group.add(can);
@@ -2274,7 +2277,8 @@ function buildLighting(group: THREE.Group): void {
     group.add(cage);
     void down;
   }
-  // warm KEY at the FORWARD fixture — pulled DOWN + softened so it no longer blows the crown out.
+  // warm KEY (an invisible source, forward of the collar) — throws warm light DOWN onto the dash. Pulled
+  //   DOWN + softened so it no longer blows the crown out. No mesh here (the fixtures are aft, opaque).
   const key = new THREE.PointLight(0xffd0a0, 1.8, 5.2, 2.0);
   key.position.set(0.0, HULL_CROWN_MAX - 0.30, -0.7);
   group.add(key);
@@ -2347,21 +2351,29 @@ function buildLighting(group: THREE.Group): void {
   // ── A REAL RED BEACON (gate sev-2 — alert must come from a SOURCE, not a uniform filter): a
   //    caged strobe dome on the soffit + a red point light AT it (strong falloff → the cabin is
   //    brightest near the beacon, falling to the corners) that pulses on alert. OFF at level 0.
-  // Y1 RE-SEAT (glazed dome): the beacon now mounts UNDER THE CROWN SPINE (buildGlazedDome's fore-aft
-  //   ridge beam), just forward of the collar, over the pilot's head — a real ceiling-mounted strobe
-  //   on a real member, NOT floating in the glass. The spine runs ~(z −1.13, y 2.69) → (z COLLAR_Z,
-  //   y 2.90); mount at zB, hanging just under the ridge.
-  const zB = COLLAR_Z - 0.15;                        // just forward of the collar, under the crown spine
-  const spineY = 2.80;                               // the ridge-beam underside at this z
+  // ROUND-2c RE-SEAT (ABSOLUTE rule: ZERO luminaires in the glazing). The previous mount at
+  //   z=COLLAR_Z−0.15 (=0.19) sat FORWARD of the collar — inside the glazed dome, hanging under the
+  //   crown SPINE which is a glass-frame member with panes on both sides. From the seat the red dome
+  //   read as floating IN the glass (the user's 2nd report). FIX: mount it on the OPAQUE KEEL
+  //   STRINGER (buildCockpitShell — a real fore-aft box beam at y=HULL_CROWN_MAX−0.05, running
+  //   COLLAR_Z→CK_Z−0.25, strictly AFT of the collar over/behind the pilot's head). Bracket goes UP
+  //   INTO the stringer; the dome hangs just below it. Still glanced up-aft from the seat + reads on
+  //   alert, but on real opaque structure — never in the glazing.
+  const zB = COLLAR_Z + 0.66;                        // =1.00 — well AFT of the collar, under the keel stringer (opaque); spaced clear of the fwd down-light (z=0.50)
+  const spineY = HULL_CROWN_MAX - 0.10;              // =2.86 — the keel-stringer underside
   const beaconCan = _cyl(0.07, 0.09, 0.06, 10, _channel);
   beaconCan.position.set(0, spineY - 0.10, zB);
   group.add(beaconCan);
   const beaconStem = _cyl(0.028, 0.028, 0.10, 8, _channel);
   beaconStem.position.set(0, spineY - 0.05, zB);
   group.add(beaconStem);
-  const beaconPad = _cyl(0.11, 0.13, 0.05, 12, _band);   // the mount bracket flush under the spine
+  const beaconPad = _cyl(0.11, 0.13, 0.05, 12, _band);   // the mount bracket flush under the keel stringer
   beaconPad.position.set(0, spineY, zB);
   group.add(beaconPad);
+  // a short riser lug bolting the bracket UP INTO the opaque keel stringer (the visible mount)
+  const beaconLug = _box(0.10, 0.10, 0.10, _steel);
+  beaconLug.position.set(0, spineY + 0.06, zB);
+  group.add(beaconLug);
   const beaconMat = new THREE.MeshBasicMaterial({ color: 0x2a0604 });   // dark dome (calm)
   _buildMats.push(beaconMat);
   const beaconGeo = new THREE.SphereGeometry(0.06, 10, 8, 0, Math.PI * 2, 0, Math.PI / 2);

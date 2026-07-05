@@ -525,6 +525,19 @@ function _tube(r: number, h: number, seg: number, mat: THREE.Material, thetaStar
   _cabinDisposables.push(g);
   return new THREE.Mesh(g, mat);
 }
+/** THE ONE door-gap window helper (round-2a). Every full-revolve exterior piece (body bands,
+ *  flared foot, reentry-scorch shell, riveted hoops) that crosses the door height MUST be emitted
+ *  as the COMPLEMENTARY ARC that bridges AROUND the door opening — otherwise it stands a curved
+ *  plate in the door plane, walling the aperture (invisible from inside = FrontSide, visible from
+ *  outside — the exact round-1f/2a bug). This returns `[phiStart, phiLength]` for the surviving arc
+ *  given the door azimuth `az` + its half-width `azHalf`. ALL THREE codepaths (buildCabinHatch's
+ *  wall/hoops, buildCanonicalPodExterior, buildExteriorSkin) call this so a fourth divergent copy
+ *  of the gap math is impossible by construction. (sin/cos θ-from-+Z convention — matches
+ *  _tube/CylinderGeometry + _lathe/LatheGeometry.) */
+function _doorGapArc(az: number, azHalf: number): [number, number] {
+  return [az + azHalf, Math.PI * 2 - azHalf * 2];
+}
+
 /** Seat a mesh flush on the cylinder wall at azimuth `az` (θ from +Z toward +X — the
  *  CylinderGeometry convention; dir = (sin az, 0, cos az)), radius `r`, height `y`. The
  *  mesh is yawed so its local +Z faces the cabin centre (inward), matching the box-face
@@ -1717,20 +1730,21 @@ function buildExteriorSkin(group: THREE.Group): THREE.Group {
       root.add(t);
     } else {
       // the complementary arc that bridges AROUND the hatch opening (a real gap, not a decal)
-      const arcStart = HATCH_AZ + hAzHalf;
-      const arcLen = Math.PI * 2 - hAzHalf * 2;
-      const t = _tube(OUTR, h, POD_SEG, _podPaint, arcStart, arcLen);
+      const t = _tube(OUTR, h, POD_SEG, _podPaint, ..._doorGapArc(HATCH_AZ, hAzHalf));
       t.position.y = (y0 + y1) / 2;
       root.add(t);
     }
   }
-  // the flared FOOT (below the hatch) — a short full-revolve lathe.
+  // the flared FOOT — GAPPED at the hatch arc (round-2a: it's a full revolve up to y=0.28, which
+  //   crests the door sill at 0.11, so it walled the very bottom of the aperture; same fix +
+  //   _doorGapArc window as the canonical build's foot). Clear from the sill down; the welded flare
+  //   still rings the rest of the base.
   const footProf: THREE.Vector2[] = [
     new THREE.Vector2(OUTR * 0.90, 0.0),
     new THREE.Vector2(OUTR * 1.02, 0.16),
     new THREE.Vector2(OUTR, 0.28),
   ];
-  root.add(_lathe(footProf, POD_SEG, _podPaint));
+  root.add(_lathe(footProf, POD_SEG, _podPaint, ..._doorGapArc(HATCH_AZ, hAzHalf)));
   // the SHOULDER + tucked OGIVE NOSE (above the body) — a full-revolve lathe cap.
   const noseProf: THREE.Vector2[] = [];
   noseProf.push(new THREE.Vector2(OUTR, straightY1));
@@ -1751,6 +1765,15 @@ function buildExteriorSkin(group: THREE.Group): THREE.Group {
 
   // ── 2. REENTRY SCORCH — a char fade up the lower ~45% of the body (it burned coming down),
   //    a proud lathe shell over the body. Vertex-color char→tarnish→aluminium.
+  //    ROUND-2a FIX (the user's "invisible-from-inside / visible-from-outside plate walling the
+  //    lower doorway"): this scorch fade was a FULL 360° revolve at OUTR+0.01 up to scorchTopY≈1.15
+  //    — the THIRD ungapped door-crossing revolve (buildCabinHatch's wall + buildCanonicalPodExterior
+  //    were already gapped; THIS unify-time skin was the survivor). Its FrontSide face stood a curved
+  //    grey plate right in the door plane across the whole lower aperture (the raycast fan from the
+  //    outside eye hit podExteriorSkin/vertexColors at radial≈1.44 for every sill→mid ray). GAP it
+  //    over the hatch arc (the SAME _doorGapArc window as the body bands/foot/hoops) so the doorway is
+  //    clear from the sill up; the scorch still wraps the rest of the lower body. The az-derived
+  //    vertex-colour fade is unchanged (atan2 still resolves the azimuth within the surviving arc).
   const scorchTopY = WALL_H * 0.45;
   const scorchProf: THREE.Vector2[] = [
     new THREE.Vector2(OUTR * 0.90 + 0.008, 0.0),
@@ -1758,7 +1781,7 @@ function buildExteriorSkin(group: THREE.Group): THREE.Group {
     new THREE.Vector2(OUTR + 0.012, 0.28),
     new THREE.Vector2(OUTR + 0.010, scorchTopY),
   ];
-  const scorchGeo = new THREE.LatheGeometry(scorchProf, POD_SEG);
+  const scorchGeo = new THREE.LatheGeometry(scorchProf, POD_SEG, ..._doorGapArc(HATCH_AZ, hAzHalf));
   scorchGeo.computeVertexNormals();
   {
     const pos = scorchGeo.attributes.position;
@@ -1790,8 +1813,7 @@ function buildExteriorSkin(group: THREE.Group): THREE.Group {
       hoop.position.y = by;
       root.add(hoop);
     } else {
-      const arcStart = HATCH_AZ + hAzHalf, arcLen = Math.PI * 2 - hAzHalf * 2;
-      const hoop = _tube(OUTR + 0.05, 0.10, POD_SEG, _podBandMat, arcStart, arcLen);
+      const hoop = _tube(OUTR + 0.05, 0.10, POD_SEG, _podBandMat, ..._doorGapArc(HATCH_AZ, hAzHalf));
       hoop.position.y = by;
       root.add(hoop);
     }
@@ -1915,7 +1937,7 @@ export function buildCanonicalPodExterior(opts: CanonicalPodOpts = {}): { root: 
       const t = _tube(R, h, POD_SEG, _podPaint);
       t.position.y = mid; root.add(t);
     } else {
-      const t = _tube(R, h, POD_SEG, _podPaint, CPOD_DOOR_AZ + dAzHalf, Math.PI * 2 - dAzHalf * 2);
+      const t = _tube(R, h, POD_SEG, _podPaint, ..._doorGapArc(CPOD_DOOR_AZ, dAzHalf));
       t.position.y = mid; root.add(t);
     }
   }
@@ -1926,7 +1948,7 @@ export function buildCanonicalPodExterior(opts: CanonicalPodOpts = {}): { root: 
   const footProf = [
     new THREE.Vector2(R * 0.90, 0.0), new THREE.Vector2(R * 1.02, 0.16), new THREE.Vector2(R, 0.28),
   ];
-  root.add(_lathe(footProf, POD_SEG, _podPaint, CPOD_DOOR_AZ + dAzHalf, Math.PI * 2 - dAzHalf * 2));
+  root.add(_lathe(footProf, POD_SEG, _podPaint, ..._doorGapArc(CPOD_DOOR_AZ, dAzHalf)));
   // SHOULDER + tucked OGIVE NOSE (above the body)
   const noseProf: THREE.Vector2[] = [new THREE.Vector2(R, straightY1), new THREE.Vector2(SHOULDER_R, bodyTop + 0.04)];
   for (let i = 1; i <= 8; i++) {
@@ -1951,7 +1973,7 @@ export function buildCanonicalPodExterior(opts: CanonicalPodOpts = {}): { root: 
   const scorchGeo = new THREE.LatheGeometry([
     new THREE.Vector2(R * 0.90 + 0.008, 0.0), new THREE.Vector2(R * 1.03, 0.16),
     new THREE.Vector2(R + 0.012, 0.28), new THREE.Vector2(R + 0.010, scorchTopY),
-  ], POD_SEG, CPOD_DOOR_AZ + dAzHalf, Math.PI * 2 - dAzHalf * 2);
+  ], POD_SEG, ..._doorGapArc(CPOD_DOOR_AZ, dAzHalf));
   scorchGeo.computeVertexNormals();
   {
     const pos = scorchGeo.attributes.position;
@@ -1977,7 +1999,7 @@ export function buildCanonicalPodExterior(opts: CanonicalPodOpts = {}): { root: 
   for (const by of [POD_BODY_H * 0.20, POD_BODY_H * 0.44, POD_BODY_H * 0.68, POD_BODY_H * 0.90]) {
     const crossesDoor = by > dY0 - 0.06 && by < dY1 + 0.06;
     const hoop = crossesDoor
-      ? _tube(R + 0.05, 0.10, POD_SEG, _podBandMat, CPOD_DOOR_AZ + dAzHalf, Math.PI * 2 - dAzHalf * 2)
+      ? _tube(R + 0.05, 0.10, POD_SEG, _podBandMat, ..._doorGapArc(CPOD_DOOR_AZ, dAzHalf))
       : _tube(R + 0.05, 0.10, POD_SEG, _podBandMat);
     hoop.position.y = by; root.add(hoop);
     for (let i = 0; i < 16; i++) {
