@@ -4088,9 +4088,21 @@ const SCENARIOS = {
       //    exit. __game.smokeExposureConstant() drives the crash-pose settle 0→1 and asserts the
       //    renderer exposure is CONSTANT at 1.05 across the whole settle (min==max==base).
       const easeReport = g.smokeExposureConstant();
+      // ── WORLD-LIGHT LEAK CENSUS (2026-07-05 — the parked-pod global-light bug): after step-out
+      //    NO scene-global light (Directional/Hemisphere) may be lit except the core sun/moon set.
+      //    The persisted pod's fill+rakes once parked LIT (~3.7 units over the whole desert:
+      //    "too bright, shadows gone, day/night has no effect"). This census makes that class
+      //    machine-caught forever.
+      const foreignGlobals = [];
+      ctx.three.scene.traverse((o) => {
+        if ((o.isDirectionalLight || o.isHemisphereLight) && o.intensity > 0.01 &&
+            o !== ctx.lights.sun && o !== ctx.lights.moon && o !== ctx.lights.ambient) {
+          foreignGlobals.push({ type: o.type, name: o.name || '(unnamed)', intensity: +o.intensity.toFixed(2) });
+        }
+      });
       return {
         walkExpoAtWake: +expoAtWake.toFixed(3), walkExpoFinal: +ctx.three.renderer.toneMappingExposure.toFixed(3),
-        ease: easeReport,
+        ease: easeReport, foreignGlobals,
         inside: [+inside.x.toFixed(2), +inside.z.toFixed(2)], walkedOutZ: +walkedOutZ.toFixed(2),
         maxJump: +maxJump.toFixed(2), reachedStepOut, teleportAtHandoff: +teleportAtHandoff.toFixed(2),
         driver: { simElapsed: +simElapsed.toFixed(2), framesTicked, wakeInitOk },   // deterministic-driver diagnostics
@@ -4120,6 +4132,7 @@ const SCENARIOS = {
     if (!log.ease || !log.ease.ok || !log.ease.constant) throw new Error(`pod-walkout GATE FAILED: the exposure is NOT CONSTANT at the desert base across the crash settle — smokeExposureConstant=${JSON.stringify(log.ease)} (expected min==max==${log.ease ? log.ease.base : '1.05'}).`);
     if (Math.abs(log.walkExpoAtWake - 1.05) > 1e-2) throw new Error(`pod-walkout GATE FAILED: the LIVE wake exposure lifted to ${log.walkExpoAtWake} (expected 1.05 — the wake must not lift the exposure; W6 item 5).`);
     if (Math.abs(log.walkExpoFinal - 1.05) > 1e-2) throw new Error(`pod-walkout GATE FAILED: the exposure ended at ${log.walkExpoFinal} after the walk-out (expected 1.05 — bit-stable across the exit).`);
+    if (log.foreignGlobals && log.foreignGlobals.length) throw new Error(`pod-walkout GATE FAILED — WORLD-LIGHT LEAK: scene-global lights lit after step-out (the whole desert gets washed; shadows fill flat; night never darkens): ${JSON.stringify(log.foreignGlobals)}`);
     console.log(`[pod-walkout] GATE PASS — kicked the front door + walked OUT on real legs (Δz=${log.walkedOutZ}m over ${log.driver.simElapsed}s sim / ${log.driver.framesTicked} fixed-dt frames, maxJump=${log.maxJump}m, handoff jump=${log.teleportAtHandoff}m = NO teleport), reached stepOut, and the exposure held CONSTANT at ${log.ease.base} (wake=${log.walkExpoAtWake}, settle min/max=${log.ease.min}/${log.ease.max}) — zero-shift handoff.`);
   },
 

@@ -378,10 +378,11 @@ const COOL_RAKE_BASE = 0.28;        // cool counter-rake — build default
 // (kept under the persistence gate's anti-wash-out ceilings — max interior intensity ≤ 2.5, hatch
 //  point-light reach ≤ 5.0 m — so the walk-in never blows out the interior or pools a hot spot on
 //  the sand; the enclosed read is carried by the fill + rakes + lamp, not a bright terrain-reaching spill.)
-const WAKE_CABIN_FILL = 1.9;        // hemisphere fill at the wake / walk-in — the WHOLE-cabin lift that reads the enclosed bore at 1.05 (sun tops it up on the walk-in)
-const WAKE_CABIN_LAMP = 2.0;        // ceiling lamp at the wake / walk-in (a warm lived-in key on the dome)
-const WAKE_KEY_RAKE = 1.25;         // warm rake — every wall/console face reads lit at 1.05
-const WAKE_COOL_RAKE = 0.55;        // cool counter-rake — no dead-black far arc
+// (WAKE_CABIN_FILL / WAKE_KEY_RAKE / WAKE_COOL_RAKE removed 2026-07-05 — those drove SCENE-GLOBAL
+//  lights that washed the whole desert once the pod persisted; grounded, all globals park at ZERO.)
+const WAKE_CABIN_LAMP = 2.5;        // ceiling lamp at the wake / walk-in — boosted (2.0→2.5, AT the
+                                    //   persistence gate's anti-wash ceiling) to carry the interior
+                                    //   read now the scene-global fill/rakes park at ZERO (leak fix)
 const WAKE_VP_GLOW = 1.35;          // porthole glow — a calm cool accent forward
 const WAKE_HATCH_SPILL = 2.4;       // the door spill (a warm bounce into the bore); ≤ 2.5 so it never blows out / pools on the sand
 const WAKE_HATCH_DIST = 4.8;        // the door-spill reach (≤ 5.0 — covers the bore without spilling far onto the terrain)
@@ -3046,10 +3047,15 @@ export function setCabinCrashPose(pose: number): void {
   }
   if (cabinFill) {
     cabinFill.color.copy(_fillScratch.copy(_FILL_COOL).lerp(_FILL_WARM, s));   // cool descent → warm neutral midday ambient
-    // the hemisphere fill is the whole-cabin lift (the door blocks part of the sun flood, so this +
-    //   the rakes carry the enclosed read). Tuned so the bore clears the gloom to a readable interior
-    //   AT the desert-base exposure — the SAME level the walk-in parks at (zero shift at step-out).
-    cabinFill.intensity = CABIN_FILL_BASE + s * (WAKE_CABIN_FILL - CABIN_FILL_BASE);
+    // ⚠ WORLD-LIGHT LEAK FIX (user live-test 2026-07-05, 2nd report — "too bright, shadows gone,
+    //   day/night has no effect"): HemisphereLight + DirectionalLight are SCENE-GLOBAL in three —
+    //   position-independent. The grounded pod PERSISTS forever, so ramping these to the old WAKE
+    //   levels poured ~3.7 permanent light-units over the ENTIRE DESERT (vs the real noon sun ~1.3):
+    //   terrain at night lit brighter than noon, every shadow filled flat. Once the pod grounds
+    //   (s→1), all GLOBAL lights ramp to ZERO — the interior is carried by the LOCAL falloff lights
+    //   (the ceiling lamp, hatch spill, porthole glow) + the real sun through the open door. A
+    //   lamp-lit-only pod interior at night is correct — it is a real-world object now.
+    cabinFill.intensity = CABIN_FILL_BASE + s * (0 - CABIN_FILL_BASE);
   }
   if (vpGlowLight) {
     vpGlowLight.color.copy(_vpScratch.copy(_VP_COOL).lerp(_VP_WARM, s));
@@ -3061,14 +3067,13 @@ export function setCabinCrashPose(pose: number): void {
     //   in the tick) modulates the correct value even as the crashed-settle ease drives it (no drift).
     cabinLamp.userData._flickerBase = cabinLamp.intensity;
   }
-  // the RAKE directionals hit every wall/seat/console face uniformly (a hemisphere ambient alone
-  //   leaves the curved bore flat), so the crashed wake lifts them to the parked rake level — every
-  //   face reads lit, matching the walk-in. The warm key drifts toward neutral daylight.
+  // the RAKE directionals are SCENE-GLOBAL (see the leak-fix note above) — grounded, they ramp to
+  //   ZERO with the fill; the boosted local ceiling lamp + hatch spill carry the wake interior read.
   if (cabinKeyRake) {
-    cabinKeyRake.intensity = KEY_RAKE_BASE + s * (WAKE_KEY_RAKE - KEY_RAKE_BASE);
-    cabinKeyRake.color.copy(_fillScratch.set(0xffe8cc).lerp(_FILL_WARM, s));   // warm → bright neutral daylight
+    cabinKeyRake.intensity = KEY_RAKE_BASE + s * (0 - KEY_RAKE_BASE);
+    cabinKeyRake.color.copy(_fillScratch.set(0xffe8cc).lerp(_FILL_WARM, s));
   }
-  if (cabinCoolRake) cabinCoolRake.intensity = COOL_RAKE_BASE + s * (WAKE_COOL_RAKE - COOL_RAKE_BASE);
+  if (cabinCoolRake) cabinCoolRake.intensity = COOL_RAKE_BASE + s * (0 - COOL_RAKE_BASE);
   _syncPodToAltitude();
 }
 
@@ -3129,9 +3134,13 @@ export function parkPodLights(): void {
   //   door tops it up, which is the real world, not an intro-held state change. (Was a SEPARATE,
   //   DIMMER park set that DROPPED the lights at unify — a visible shift the user read as an "instance
   //   change"; and the old wake flood was tuned for the removed 1.62 exposure lift.)
-  if (cabinFill) { cabinFill.intensity = WAKE_CABIN_FILL; cabinFill.color.copy(_FILL_WARM); }   // neutral-midday tint (matches the real sky)
-  if (cabinKeyRake) { cabinKeyRake.intensity = WAKE_KEY_RAKE; cabinKeyRake.color.copy(_FILL_WARM); }
-  if (cabinCoolRake) cabinCoolRake.intensity = WAKE_COOL_RAKE;
+  // ⚠ WORLD-LIGHT LEAK FIX (2026-07-05): the fill (Hemisphere) + both rakes (Directional) are
+  //   SCENE-GLOBAL — parked lit on the forever-persisting pod they washed the whole desert
+  //   (~3.7 units > the noon sun), killing shadows and the day/night read. Parked at ZERO now;
+  //   the LOCAL falloff lights below carry the interior (see setCabinCrashPose's matching ramp).
+  if (cabinFill) { cabinFill.intensity = 0; cabinFill.color.copy(_FILL_WARM); }
+  if (cabinKeyRake) { cabinKeyRake.intensity = 0; cabinKeyRake.color.copy(_FILL_WARM); }
+  if (cabinCoolRake) cabinCoolRake.intensity = 0;
   // Hatch spill — a warm bounce that dies inside the doorway (short range WAKE_HATCH_DIST), so the
   //   open door reads lit-from-within without a hot terrain pool; the real midday sun lights the ground.
   if (hatchSpillLight) { hatchSpillLight.intensity = WAKE_HATCH_SPILL; hatchSpillLight.distance = WAKE_HATCH_DIST; }
