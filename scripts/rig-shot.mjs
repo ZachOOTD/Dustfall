@@ -4287,6 +4287,17 @@ const SCENARIOS = {
         const driveBay = async () => { for (let i = 0; i < 120; i++) { await sleep(16); if (ctx.three.scene.getObjectByName('dockedCanonicalPod')) return; } };
         await driveBay();
         readBay('bay pre-open (docked, sealed)');
+        // 1b) MID-RELEASE sampling (live-test 1h coverage hole: the audit only checked RESTING
+        //     sealed states while releasePodFromBay's old door rattle read as "tilted" IN TRANSIT —
+        //     the player now rides the bay pod through the release). Drive the real shipExplode
+        //     release and assert the bay door pivot stays pinned (the rattle fix) until the ship
+        //     disposes at the release end (found:false rows are skipped by the gate).
+        g.jumpToBeat('shipExplode');
+        for (let i = 0; i < 6; i++) {
+          await sleep(120);
+          const r = readBay(`mid-release sample ${i}`);
+          if (!r.found) break;   // phase B disposed the ship — the release window is over
+        }
         // 2) RIDE cabin sealed states — drive the descent chain + sample the front-door pivot sealed.
         g.jumpToBeat('descent');
         const driveTo = async (cond, budget) => { const s0 = ctx.time.elapsed; let last = s0, st = 0; for (let i = 0; i < 8000; i++) { await sleep(16); const n = ctx.time.elapsed; if (n > last + 1e-6) { last = n; st = 0; } else if (++st > 400) break; if (cond()) return true; if (n - s0 >= budget) break; } return cond(); };
