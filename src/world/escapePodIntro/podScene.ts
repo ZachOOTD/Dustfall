@@ -323,6 +323,9 @@ let ejectLeverRestZ = 0;                     // its resting swing angle (radians
 let _ejectPullState = 0;                     // Y7 — last eject pull t (re-applied after a rebuild)
 const EJECT_SWING = 1.15;                    // radians the handle swings on a full pull (~66°) — a clear pull-down throw
 const _cabinDisposables: THREE.BufferGeometry[] = [];   // per-build geometry to free on dispose
+// X2b — per-build CLONED door materials (the sealed through-bore's DoubleSide slab clone). Module
+//   materials are NOT disposed, but these per-build clones must be, so a replayed intro doesn't leak.
+const _cabinDoorMats: THREE.Material[] = [];
 
 // ── CLUSTER D — the escape exit is now THE MERGED FRONT DOOR (−Z, unified with the viewport).
 //    The old separate side hatch (HATCH_AZ=-1.25) RETIRES: the wake kicks open the SAME front door
@@ -1277,6 +1280,160 @@ function buildConduitAndLight(group: THREE.Group): void {
   }
 }
 
+/** UNIFIED POD DOOR SLAB (X2b — door-parity + face-parity + sealed through-bore). The ONE door
+ *  construction that serves BOTH the ride cabin (buildCabinHatch, −Z) and the canonical bay pod
+ *  (buildCanonicalPodExterior, +X). Prior to this, each host authored its own slab/porthole/latch
+ *  inline — same shared MATERIALS but structurally divergent geometry (the bay had a valve WHEEL +
+ *  0.10 slab; the ride had a grab-BAR + 0.176 slab; NEITHER had an exterior-face porthole/handle;
+ *  the porthole side was an OPEN ring — you saw straight through between glass + slab at a graze).
+ *  This builds the WHOLE door into `door` (origin = door centre, local +Z = the cabin-facing INNER
+ *  face, −Z = the world-facing OUTER face), IDENTICAL from every angle + both faces:
+ *   • a slab FRAME around a real square porthole aperture (a genuine hole so the view reads through);
+ *   • a SEALED through-BORE (a closed cylinder wall joining the two faces — no more open-sided ring);
+ *   • the full domed-porthole ASSEMBLY (annular cap → domed glass → integral bezel torus → bezel
+ *     bolts) MIRRORED on BOTH faces (an escape-pod porthole is glazed + bezelled inside AND out);
+ *   • a grab-bar LATCH mirrored on BOTH faces (a real hatch has an external grab too);
+ *   • twin stiffener ribs + perimeter rivets, both faces.
+ *  `portY` = the porthole centre in door-local Y (the caller passes VP_CY − doorCentreY). Nothing
+ *  here may clip the frame/jamb when the door swings ~85° open (all hardware sits within ±doorTh of
+ *  the slab faces). Rule 7: the slab + bezel are ≥0.10 m thick features. */
+function buildUnifiedDoorSlab(door: THREE.Group, doorTh: number, W: number, H: number, portY: number): void {
+  const portOpen = VP_R + 0.055;   // the OPEN aperture radius through the slab (glass + rim margin)
+  const zF = doorTh * 0.5;         // inner (cabin +Z) face plane
+  const zB = -doorTh * 0.5;        // outer (world −Z) face plane
+  // ── the SLAB built as a FRAME around the round aperture (a real hole → the view reads through it).
+  const dHalf = (H * 0.98) / 2;
+  const pTop = portY + portOpen, pBot = portY - portOpen;
+  const addSlab = (h: number, cy: number, w = W, cx = 0) => {
+    if (h <= 0.001) return;
+    const s = _box(w, h, doorTh, _cabDoorSlab);
+    s.position.set(cx, cy, 0);
+    door.add(s);
+  };
+  addSlab(pBot - (-dHalf), (pBot + (-dHalf)) / 2);   // bottom panel (door base → aperture bottom)
+  addSlab(dHalf - pTop, (dHalf + pTop) / 2);         // top strip (aperture top → door top)
+  const sideW = W / 2 - portOpen;
+  addSlab(pTop - pBot, portY, sideW, -(portOpen + sideW / 2));   // left flank
+  addSlab(pTop - pBot, portY, sideW, (portOpen + sideW / 2));    // right flank
+  // twin horizontal stiffener ribs on the lower panel — proud on BOTH faces (a fabricated plate).
+  {
+    const lowMid = (pBot + (-dHalf)) / 2;
+    for (const dy of [-0.16, 0.16]) {
+      for (const zc of [doorTh * 0.55, -doorTh * 0.55]) {
+        const rib = _box(W - 0.16, 0.05, doorTh * 0.6, _cabDoorSlab);
+        rib.position.set(0, lowMid + dy, zc);
+        door.add(rib);
+      }
+    }
+  }
+  // ── the SEALED through-BORE — a CLOSED cylinder wall spanning the full slab thickness, joining
+  //    the inner + outer aperture rims so the porthole reads as a solid tube from any graze angle
+  //    (the fix for "you can see straight through the sides between glass + slab"). Opaque door
+  //    aluminium, DoubleSide so it reads from inside the bore + from a grazing exterior look.
+  const boreGeo = new THREE.CylinderGeometry(portOpen, portOpen, doorTh + 0.002, 30, 1, true);
+  _cabinDisposables.push(boreGeo);
+  const boreMat = _cabDoorSlab.clone(); boreMat.side = THREE.DoubleSide;
+  _cabinDoorMats.push(boreMat);
+  const bore = new THREE.Mesh(boreGeo, boreMat);
+  bore.rotation.x = Math.PI / 2;   // axis Y → local Z (through the door)
+  bore.position.set(0, portY, 0);
+  door.add(bore);
+  // ── the domed-porthole ASSEMBLY, MIRRORED on both faces. face=+1 inner (+Z), −1 outer (−Z).
+  const addPorthole = (face: number) => {
+    const zPlane = face > 0 ? zF : zB;
+    // (a) flat ANNULAR CAP rounding the square aperture corners flush on this face (no leak past bezel)
+    const capGeo = new THREE.RingGeometry(VP_R + 0.005, portOpen * Math.SQRT2 + 0.02, 30, 1);
+    _cabinDisposables.push(capGeo);
+    const cap = new THREE.Mesh(capGeo, _cabDoorSlab);
+    cap.position.set(0, portY, zPlane + face * 0.006);
+    if (face < 0) cap.rotation.y = Math.PI;   // RingGeometry faces +Z → flip for the outer face
+    door.add(cap);
+    // (b) a shallow TRANSPARENT dark rim collar hugging the glass on this face (a soft inset shadow
+    //     when sealed, see-through when open — NOT the old opaque full-depth void tube).
+    const wellH = doorTh * 0.45;
+    const wellGeo = new THREE.CylinderGeometry(VP_R, VP_R, wellH, 28, 1, true);
+    _cabinDisposables.push(wellGeo);
+    const well = new THREE.Mesh(wellGeo, _cabDoorWellTint);
+    well.rotation.x = Math.PI / 2;
+    well.position.set(0, portY, zPlane - face * (wellH / 2 + 0.005));   // hug this face's lip behind the glass
+    well.renderOrder = -1;
+    door.add(well);
+    // (c) the DOMED glass disc bulging OUT of this face (see-through → the view reads through it)
+    const glassGeo = new THREE.SphereGeometry(VP_R, 28, 14, 0, Math.PI * 2, 0, Math.PI * 0.32);
+    _cabinDisposables.push(glassGeo);
+    const glass = new THREE.Mesh(glassGeo, _cabGlass);
+    glass.rotation.x = face > 0 ? -Math.PI / 2 : Math.PI / 2;   // bulge toward this face's outward normal
+    glass.position.set(0, portY, zPlane + face * 0.02);
+    door.add(glass);
+    // a faint spec crescent on the glass (glazed-pane tell; module-shared additive mat)
+    const specGeo = new THREE.PlaneGeometry(VP_R * 0.62, VP_R * 0.30);
+    _cabinDisposables.push(specGeo);
+    const spec = new THREE.Mesh(specGeo, _cabGlassSpec);
+    spec.position.set(-VP_R * 0.20 * face, portY + VP_R * 0.40, zPlane + face * 0.14);
+    spec.rotation.z = -0.6 * face;
+    door.add(spec);
+    // (d) ONE integral proud BEZEL ring (channel-steel torus) framing the porthole on this face
+    const bezTube = 0.045, bezCtr = VP_BEZEL_OUT - bezTube;
+    const bezGeo = new THREE.TorusGeometry(bezCtr, bezTube, 12, 30);
+    _cabinDisposables.push(bezGeo);
+    const bez = new THREE.Mesh(bezGeo, _cabChannel);
+    bez.position.set(0, portY, zPlane + face * 0.02);
+    door.add(bez);
+    // (e) a ring of bezel bolts (the porthole is bolted to the door) on this face
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2;
+      const sg = new THREE.SphereGeometry(0.013, 6, 4, 0, Math.PI * 2, 0, Math.PI / 2);
+      _cabinDisposables.push(sg);
+      const stud = new THREE.Mesh(sg, _cabRivet);
+      stud.rotation.x = -face * Math.PI / 2;   // dome faces this face's outward normal
+      stud.position.set(Math.cos(a) * bezCtr, portY + Math.sin(a) * bezCtr, zPlane + face * 0.03);   // on the proud bezel ring (overlaps it → connected)
+      door.add(stud);
+    }
+  };
+  addPorthole(1);    // inner (cabin) face
+  addPorthole(-1);   // outer (world) face
+  // ── a grab-bar LATCH near the free edge, low on the door, MIRRORED on both faces (a real hatch
+  //    has an external grab/latch too). Mount plate + a vertical grab bar on two stubs.
+  {
+    const hx = -W * 0.30, hy = -H * 0.20;
+    for (const face of [1, -1]) {
+      const zPlane = face > 0 ? zF : zB;
+      const mount = _box(0.14, 0.34, doorTh * 0.5, _cabChannel);
+      mount.position.set(hx, hy, zPlane + face * 0.05);
+      door.add(mount);
+      const bar = _cyl(0.022, 0.022, 0.30, 8, _cabSteel);
+      bar.position.set(hx, hy, zPlane + face * 0.13);
+      door.add(bar);
+      for (const sy of [-0.13, 0.13]) {
+        const stub = _cyl(0.018, 0.018, 0.06, 6, _cabSteel);
+        stub.rotation.x = Math.PI / 2;
+        stub.position.set(hx, hy + sy, zPlane + face * 0.08);
+        door.add(stub);
+      }
+    }
+  }
+  // ── perimeter door rivets (bolted plate) on BOTH faces — skip any that fall on the porthole disc.
+  for (const face of [1, -1]) {
+    const zPlane = face > 0 ? zF : zB;
+    for (let i = 0; i < 18; i++) {
+      const u = i / 18; let rx: number, ry: number;
+      if (u < 0.25) { rx = (u / 0.25 - 0.5) * (W - 0.14); ry = H / 2 - 0.06; }
+      else if (u < 0.5) { rx = (W - 0.14) / 2; ry = (1 - (u - 0.25) / 0.25 - 0.5) * (H - 0.14); }
+      else if (u < 0.75) { rx = (0.5 - (u - 0.5) / 0.25) * (W - 0.14); ry = -H / 2 + 0.06; }
+      else { rx = -(W - 0.14) / 2; ry = ((u - 0.75) / 0.25 - 0.5) * (H - 0.14); }
+      if ((rx * rx + (ry - portY) * (ry - portY)) < (VP_R + 0.08) * (VP_R + 0.08)) continue;
+      const sg = new THREE.SphereGeometry(0.013, 6, 4, 0, Math.PI * 2, 0, Math.PI / 2);
+      _cabinDisposables.push(sg);
+      const rv = new THREE.Mesh(sg, _cabRivet);
+      rv.rotation.x = -face * Math.PI / 2;
+      // base ON the slab face (zPlane) so the dome (0.013 proud) reads as a CONNECTED rivet, not a
+      //   stud floating 0.05 off the slab (the lint floaters). The dome faces outward via rotation.
+      rv.position.set(rx, ry, zPlane);
+      door.add(rv);
+    }
+  }
+}
+
 /** CLUSTER D — the MERGED FRONT DOOR on the hero cabin (−Z, FDOOR_AZ): the ONE aperture the player
  *  faces for everything. A curve-seated channel-steel FRAME bordering the −Z wall opening (cut in
  *  §1.a/§2), a dark recessed jamb WELL (opening depth), and the swinging DOOR on a hinge pivot with
@@ -1346,128 +1503,12 @@ function buildCabinHatch(group: THREE.Group): void {
   //   /misaligned door. With the hinge on the aperture edge, the closed door fills the aperture flush.
   pivot.position.set(HATCH_W / 2, 0, 0.04);    // hinge ON the right aperture edge (the door closes flush)
   const door = new THREE.Group();
-  const doorTh = SHELL * 1.1;
+  const doorTh = 0.10;   // X2b — UNIFIED with the bay door (was SHELL*1.1=0.176; the bay was 0.10 → they read as different-thickness slabs)
   // The porthole y in door-local coords (door origin = door centre height HATCH_CY).
   const portY = VP_CY - HATCH_CY;
-  const portOpen = VP_R + 0.055;   // the true OPEN aperture radius through the door slab (glass + rim)
-  // ── SOLID door SLAB built as a FRAME around the porthole APERTURE (a real hole so the descent
-  //    reads THROUGH the porthole glass — a solid slab would occlude the view). Bottom panel below
-  //    the porthole, a top strip above it, and two side strips flanking it at porthole height.
-  const dHalf = (HATCH_H * 0.98) / 2;
-  const pTop = portY + portOpen, pBot = portY - portOpen;   // the aperture's vertical span
-  const addSlab = (h: number, cy: number, w = HATCH_W, cx = 0) => {
-    if (h <= 0.001) return;
-    const s = _box(w, h, doorTh, _cabDoorSlab);   // SEV1 — gunmetal door slab (in-family with the hull), was pale _cabBand
-    s.position.set(cx, cy, 0);
-    door.add(s);
-  };
-  addSlab(pBot - (-dHalf), (pBot + (-dHalf)) / 2);          // bottom panel (door base → aperture bottom)
-  addSlab(dHalf - pTop, (dHalf + pTop) / 2);                // top strip (aperture top → door top)
-  // side strips at porthole height (flank the round aperture; width = the gap either side of the disc)
-  const sideW = HATCH_W / 2 - portOpen;
-  addSlab(pTop - pBot, portY, sideW, -(portOpen + sideW / 2));   // left flank
-  addSlab(pTop - pBot, portY, sideW, (portOpen + sideW / 2));    // right flank
-  // door-panel stiffener ribs on the lower panel — a clean TWIN horizontal rib set (a fabricated-plate
-  //   read, no lonely T). Spans the lower panel between the door base and the aperture bottom.
-  {
-    const lowMid = (pBot + (-dHalf)) / 2;   // centre of the lower panel
-    for (const dy of [-0.16, 0.16]) {
-      const rib = _box(HATCH_W - 0.16, 0.05, doorTh * 0.6, _cabDoorSlab);   // SEV1 — gunmetal (was pale _cabBand)
-      rib.position.set(0, lowMid + dy, doorTh * 0.55);
-      door.add(rib);
-    }
-  }
-  // ── the DOMED PORTHOLE set into the door aperture (the descent view reads through it — glass is
-  //    see-through). Porthole centre at the SEATED EYE line (portY = VP_CY − HATCH_CY, computed above).
-  // (a0) a flat ANNULAR PLATE (door aluminium) capping the square door-aperture CORNERS around the
-  //      round porthole, so no descent-sky leaks in the rectangle corners past the round bezel (the
-  //      slab hole is square; this rounds it off flush on the cabin face). Inner = the round opening,
-  //      outer = past the square-aperture corners. Double-sided so it reads from the well side too.
-  const dCapGeo = new THREE.RingGeometry(VP_R + 0.005, portOpen * Math.SQRT2 + 0.02, 30, 1);
-  _cabinDisposables.push(dCapGeo);
-  const dCap = new THREE.Mesh(dCapGeo, _cabDoorSlab);   // front-faced door gunmetal (in-family, was pale _cabBand); RingGeometry faces +Z → toward the cabin
-  dCap.position.set(0, portY, doorTh * 0.5 + 0.006);
-  door.add(dCap);
-  // (a) the recessed inner-rim shadow WELL — a SHALLOW TRANSPARENT dark collar just behind the
-  //     glass (NOT the old full-depth OPAQUE black tube: that walled the aperture, so the OPEN door
-  //     read as a black-void ring on the desert — SEV1). The proud bezel torus (dBez) carries the
-  //     inset-depth read; this collar only tints the immediate rim to a soft shadow when SEALED
-  //     (backed by the dark aperture) while letting the desert read THROUGH when the door swings open.
-  const dWellH = doorTh * 0.5;
-  const dWellGeo = new THREE.CylinderGeometry(VP_R, VP_R, dWellH, 28, 1, true);
-  _cabinDisposables.push(dWellGeo);
-  const dWell = new THREE.Mesh(dWellGeo, _cabDoorWellTint);
-  dWell.rotation.x = Math.PI / 2;        // axis Y → local Z (through the door)
-  dWell.position.set(0, portY, doorTh * 0.5 - dWellH / 2 - 0.005);   // hug the cabin-facing lip behind the glass, not spanning the full slab
-  dWell.renderOrder = -1;                // draw the transparent collar before the glass so both blend cleanly
-  door.add(dWell);
-  // (b) the DOMED glass disc bulging INTO the cabin (+local Z, toward the seated eye) — the same
-  //     domed-porthole character as the canonical door. See-through (low opacity) → descent reads.
-  const dGlassGeo = new THREE.SphereGeometry(VP_R, 28, 14, 0, Math.PI * 2, 0, Math.PI * 0.32);
-  _cabinDisposables.push(dGlassGeo);
-  const dGlass = new THREE.Mesh(dGlassGeo, _cabGlass);
-  dGlass.rotation.x = -Math.PI / 2;      // bulge toward +local Z (into the cabin, toward the eye)
-  dGlass.position.set(0, portY, doorTh * 0.5 + 0.02);
-  door.add(dGlass);
-  // a faint spec crescent on the domed glass (glazed-pane tell; module-shared additive mat)
-  const dSpecGeo = new THREE.PlaneGeometry(VP_R * 0.62, VP_R * 0.30);
-  _cabinDisposables.push(dSpecGeo);
-  const dSpec = new THREE.Mesh(dSpecGeo, _cabGlassSpec);
-  dSpec.position.set(-VP_R * 0.20, portY + VP_R * 0.40, doorTh * 0.5 + 0.14);
-  dSpec.rotation.z = -0.6;
-  door.add(dSpec);
-  // (c) ONE integral proud BEZEL ring framing the porthole (channel-steel torus, part of the door).
-  //     W2a — sized so the OUTER edge = VP_BEZEL_OUT (0.41), keeping ≥0.10m margin to every door edge
-  //     (no clip past the door slab / the hull curvature). tube 0.045, centre = VP_BEZEL_OUT − tube.
-  const bezTube = 0.045;
-  const bezCtr = VP_BEZEL_OUT - bezTube;   // torus centre radius → outer edge lands exactly at VP_BEZEL_OUT
-  const dBezGeo = new THREE.TorusGeometry(bezCtr, bezTube, 12, 30);
-  _cabinDisposables.push(dBezGeo);
-  const dBez = new THREE.Mesh(dBezGeo, _cabChannel);
-  dBez.position.set(0, portY, doorTh * 0.5 + 0.02);
-  door.add(dBez);
-  // (d) a ring of bezel bolts (the porthole is bolted to the door) — seated on the bezel centre ring
-  for (let i = 0; i < 16; i++) {
-    const a = (i / 16) * Math.PI * 2;
-    const sg = new THREE.SphereGeometry(0.013, 6, 4, 0, Math.PI * 2, 0, Math.PI / 2);
-    _cabinDisposables.push(sg);
-    const stud = new THREE.Mesh(sg, _cabRivet);
-    stud.rotation.x = -Math.PI / 2;
-    stud.position.set(Math.cos(a) * bezCtr, portY + Math.sin(a) * bezCtr, doorTh * 0.5 + 0.06);
-    door.add(stud);
-  }
-  // a LATCH near the free (left) edge, low on the door (grab + kick to open): a mount plate + a
-  //   vertical grab bar standing off it on two stubs (reads as a real door handle, not a floating box).
-  {
-    const hx = -HATCH_W * 0.30, hy = -HATCH_H * 0.20;
-    const mount = _box(0.14, 0.34, doorTh * 0.5, _cabChannel);
-    mount.position.set(hx, hy, doorTh * 0.55);
-    door.add(mount);
-    const bar = _cyl(0.022, 0.022, 0.30, 8, _cabSteel);
-    bar.position.set(hx, hy, doorTh * 0.9 + 0.03);
-    door.add(bar);
-    for (const sy of [-0.13, 0.13]) {
-      const stub = _cyl(0.018, 0.018, 0.06, 6, _cabSteel);
-      stub.rotation.x = Math.PI / 2;
-      stub.position.set(hx, hy + sy, doorTh * 0.75);
-      door.add(stub);
-    }
-  }
-  // perimeter door rivets (the door is bolted together) — skip the porthole disc
-  for (let i = 0; i < 18; i++) {
-    const u = i / 18; let rx: number, ry: number;
-    if (u < 0.25) { rx = (u / 0.25 - 0.5) * (HATCH_W - 0.14); ry = HATCH_H / 2 - 0.06; }
-    else if (u < 0.5) { rx = (HATCH_W - 0.14) / 2; ry = (1 - (u - 0.25) / 0.25 - 0.5) * (HATCH_H - 0.14); }
-    else if (u < 0.75) { rx = (0.5 - (u - 0.5) / 0.25) * (HATCH_W - 0.14); ry = -HATCH_H / 2 + 0.06; }
-    else { rx = -(HATCH_W - 0.14) / 2; ry = ((u - 0.75) / 0.25 - 0.5) * (HATCH_H - 0.14); }
-    // skip a rivet if it falls on the porthole disc
-    if ((rx * rx + (ry - portY) * (ry - portY)) < (VP_R + 0.08) * (VP_R + 0.08)) continue;
-    const sg = new THREE.SphereGeometry(0.013, 6, 4, 0, Math.PI * 2, 0, Math.PI / 2);
-    _cabinDisposables.push(sg);
-    const rv = new THREE.Mesh(sg, _cabRivet);
-    rv.rotation.x = -Math.PI / 2; rv.position.set(rx, ry, doorTh * 0.55);
-    door.add(rv);
-  }
+  // X2b — the ENTIRE door slab + double-faced porthole (sealed through-bore) + double-faced grab
+  //   latch + rivets are built by the ONE shared buildUnifiedDoorSlab (identical to the bay door).
+  buildUnifiedDoorSlab(door, doorTh, HATCH_W, HATCH_H, portY);
   door.position.set(-HATCH_W / 2, 0, 0);   // door local origin → the hinge (right) edge
   pivot.add(door);
   // CLUSTER D — at rest the door is FULLY CLOSED (sealed) so it rides the descent + crash SHUT
@@ -1743,7 +1784,7 @@ const CPOD_DOOR_W = FDOOR_W;             // = 1.02 — SHARED with the ride cabi
 const CPOD_DOOR_H = FDOOR_H;             // = 1.98 — SHARED (was a divergent 1.74)
 const CPOD_DOOR_CY = FDOOR_CY;           // = 1.10 — SHARED (was a divergent 1.08); NOTE: shipScene's CPOD_BAY_DOOR_CY mirror must match → 1.10
 // The domed porthole is the SAME size as the ride cabin's (VP_R/VP_BEZEL_OUT) so it's one model.
-const CPOD_PORT_R = VP_R;                // = 0.33 — SHARED (was a divergent 0.40, which crowded the door)
+//   (X2b — CPOD_PORT_R alias removed; the unified buildUnifiedDoorSlab uses VP_R directly.)
 
 // X2a — the divergent bay-door glass/rim materials (_cpodGlass + its Fresnel program + _cpodRimShadow)
 //   are RETIRED: the bay door now uses the SAME _cabGlass + _cabDoorWellTint as the ride/landed cabin
@@ -1923,17 +1964,12 @@ export function buildCanonicalPodExterior(opts: CanonicalPodOpts = {}): { root: 
   //    supplies its own +X door slab + hinge, §5) — so the interior + exterior are ONE model.
   const portCY = VP_CY - CPOD_DOOR_CY;   // porthole centre in door/frame-local coords (VP_CY 1.38 − door centre 1.10 → 0.28); used by the door §5 below.
   buildUnifiedPodInterior(root);
-  // a warm ceiling lamp lighting the sealed bore so the interior reads LIVED-IN through the porthole
-  //   + boarding (the ride cabin's lamps are added in buildPodScene; the bay pod needs its own so the
-  //   docked interior isn't a dark void when the airlock spill doesn't reach deep). Pod-local (root),
-  //   at the dome apex, warm — matches the ride cabin's ceiling-lamp read.
-  const bayLamp = new THREE.PointLight(0xffce8f, 1.3, 4.4, 2.2);
-  bayLamp.position.set(0, CAB_APEX - 0.25, 0);
-  root.add(bayLamp);
-  // a low cool fill so the far bore reads (a hemisphere ambient lifts the BackSide aluminium off black
-  //   — PBR metal barely lights from a point lamp alone; matches the ride cabin's cabinFill idiom).
-  const bayFill = new THREE.HemisphereLight(0x93a0b0, 0x2a2d30, 0.55);
-  root.add(bayFill);
+  // X2b — the bay pod uses the EXACT SAME cabin lamp rig as the ride cabin (buildCabinLampRig), so
+  //   the interior reads IDENTICAL bright/character across bay→eject→ride→descent (the "post-eject
+  //   cabin is TOO BRIGHT" defect was the bay being lit DIMMER — a lone 1.3 lamp + 0.55 fill, no
+  //   directionals — so the swap to the ride's 1.7 lamp + 0.72 fill + two rake directionals read as
+  //   a brightness JUMP). Same rig on both → no jump. (The bay doesn't animate these; refs dropped.)
+  buildCabinLampRig(root, false);
 
   // ── 5. THE MERGED DOOR + DOMED PORTHOLE (user clarification 2026-07-02) — a SOLID riveted
   //    aluminium door with the ROUND DOMED porthole glass INTEGRAL to it (the same domed-circular
@@ -1953,106 +1989,12 @@ export function buildCanonicalPodExterior(opts: CanonicalPodOpts = {}): { root: 
   const door = new THREE.Group();
   const doorTh = 0.10;
   // portCY (porthole centre, frame/door-local) declared above with the interior chamber — reused here.
-  // (a) the door PLATE built as a FRAME around a REAL porthole APERTURE (W2a — a genuine hole so the
-  //     modeled interior reads THROUGH the see-through glass; a solid slab would occlude it). Bottom
-  //     panel below the porthole, a top strip above it, two side strips flanking it at porthole height.
-  //     portCY is the porthole centre in door-local coords (= VP_CY − CPOD_DOOR_CY, computed above).
-  const cPortOpen = VP_R + 0.05;   // the open aperture radius through the door slab (glass + a hair)
-  const cdHalf = CPOD_DOOR_H / 2;
-  const cpTop = portCY + cPortOpen, cpBot = portCY - cPortOpen;
-  // X2a item 6a/6r — the bay door uses the EXACT SAME materials as the ride/landed cabin door
-  //   (buildCabinHatch: _cabDoorSlab / _cabGlass / _cabDoorWellTint / _cabChannel bezel / _cabRivet
-  //   studs), so the door reads IDENTICAL on the ship, the descent, and the crashed pod (the user:
-  //   "the landed pod's door reads different from the ship one — same door, same porthole, same
-  //   materials"). Was the divergent _podDoorMat / _cpodGlass / _cpodRimShadow / _podSteel / _podFrameMat set.
-  const addDoorSlab = (h: number, cy: number, w = CPOD_DOOR_W, cx = 0) => {
-    if (h <= 0.001) return;
-    const s = _box(w, h, doorTh, _cabDoorSlab);
-    s.position.set(cx, cy, 0);
-    door.add(s);
-  };
-  addDoorSlab(cpBot - (-cdHalf), (cpBot + (-cdHalf)) / 2);   // bottom panel (door base → aperture bottom)
-  addDoorSlab(cdHalf - cpTop, (cdHalf + cpTop) / 2);         // top strip (aperture top → door top)
-  const cSideW = CPOD_DOOR_W / 2 - cPortOpen;
-  addDoorSlab(cpTop - cpBot, portCY, cSideW, -(cPortOpen + cSideW / 2));   // left flank
-  addDoorSlab(cpTop - cpBot, portCY, cSideW, (cPortOpen + cSideW / 2));    // right flank
-  // door-panel edge battens (a couple of proud stiffeners → the door reads as a fabricated plate)
-  for (const by of [-CPOD_DOOR_H * 0.32, CPOD_DOOR_H * 0.34]) {
-    const batten = _box(CPOD_DOOR_W - 0.14, 0.06, doorTh * 0.7, _cabDoorSlab);   // X2a — match the ride door batten (was _podBandMat)
-    batten.position.set(0, by, doorTh * 0.55);
-    door.add(batten);
-  }
-  // perimeter rivet rows (the door is bolted together)
-  for (let i = 0; i < 18; i++) {
-    const u = i / 18; let rx: number, ry: number;
-    if (u < 0.25) { rx = (u / 0.25 - 0.5) * (CPOD_DOOR_W - 0.14); ry = CPOD_DOOR_H / 2 - 0.06; }
-    else if (u < 0.5) { rx = (CPOD_DOOR_W - 0.14) / 2; ry = (1 - (u - 0.25) / 0.25 - 0.5) * (CPOD_DOOR_H - 0.14); }
-    else if (u < 0.75) { rx = (0.5 - (u - 0.5) / 0.25) * (CPOD_DOOR_W - 0.14); ry = -CPOD_DOOR_H / 2 + 0.06; }
-    else { rx = -(CPOD_DOOR_W - 0.14) / 2; ry = ((u - 0.75) / 0.25 - 0.5) * (CPOD_DOOR_H - 0.14); }
-    // skip a perimeter rivet if it falls on the porthole aperture (no studs floating over the glass)
-    if ((rx * rx + (ry - portCY) * (ry - portCY)) < (VP_R + 0.08) * (VP_R + 0.08)) continue;
-    const sg = new THREE.SphereGeometry(0.013, 6, 4, 0, Math.PI * 2, 0, Math.PI / 2);
-    _cabinDisposables.push(sg);
-    const stud = new THREE.Mesh(sg, _cabRivet);   // X2a — match the ride door rivets (was _podFrameMat)
-    stud.rotation.x = -Math.PI / 2; stud.position.set(rx, ry, doorTh * 0.55);
-    door.add(stud);
-  }
-  // (b) the ROUND DOMED PORTHOLE set into the door aperture (W2a — the modeled interior reads THROUGH
-  //     the see-through glass). A flat ANNULAR CAP rounding off the square aperture corners → a THIN
-  //     dark rim collar → a domed convex glass disc → ONE integral proud bezel ring → bezel bolts.
-  //  a flat ANNULAR PLATE (door aluminium) capping the square door-aperture CORNERS around the round
-  //    porthole, so no interior/sky leaks in the rectangle corners past the round bezel (the slab hole
-  //    is square; this rounds it off flush on the outer face — matches the ride cabin's dCap).
-  const cCapGeo = new THREE.RingGeometry(VP_R + 0.004, cPortOpen * Math.SQRT2 + 0.02, 30, 1);
-  _cabinDisposables.push(cCapGeo);
-  const cCap = new THREE.Mesh(cCapGeo, _cabDoorSlab);   // X2a — match the ride door cap (was _podDoorMat); RingGeometry faces +Z outward
-  cCap.position.set(0, portCY, doorTh * 0.5 + 0.006);
-  door.add(cCap);
-  //  a thin dark rim collar just inside the aperture (short depth ring; does NOT cap the hole).
-  const wellGeo = new THREE.CylinderGeometry(CPOD_PORT_R + 0.006, CPOD_PORT_R + 0.006, doorTh + 0.01, 28, 1, true);
-  _cabinDisposables.push(wellGeo);
-  const well = new THREE.Mesh(wellGeo, _cabDoorWellTint);   // X2a — match the ride door well tint (was _cpodRimShadow)
-  well.rotation.x = Math.PI / 2;   // axis Y → local Z (through the door)
-  well.position.set(0, portCY, 0);
-  door.add(well);
-  //  the DOMED glass disc (a shallow convex sphere cap bulging outward, +Z) — the same domed
-  //    porthole character as the ride-down cabin viewport.
-  const glassGeo = new THREE.SphereGeometry(CPOD_PORT_R, 28, 14, 0, Math.PI * 2, 0, Math.PI * 0.32);
-  _cabinDisposables.push(glassGeo);
-  const glass = new THREE.Mesh(glassGeo, _cabGlass);   // X2a — match the ride door porthole glass (was _cpodGlass)
-  glass.rotation.x = -Math.PI / 2;   // bulge toward +local Z (outward, toward the player)
-  glass.position.set(0, portCY, doorTh * 0.5 + 0.02);
-  door.add(glass);
-  //  ONE integral proud BEZEL ring framing the porthole — W2a: outer edge = VP_BEZEL_OUT (0.41), the
-  //    SAME bezel as the ride cabin, so the door reads identical in↔out↔bay.
-  const bezTube = 0.045, bezCtr = VP_BEZEL_OUT - bezTube;
-  const bezGeo = new THREE.TorusGeometry(bezCtr, bezTube, 12, 30);
-  _cabinDisposables.push(bezGeo);
-  const bez = new THREE.Mesh(bezGeo, _cabChannel);   // X2a — match the ride door bezel (was _podSteel)
-  bez.position.set(0, portCY, doorTh * 0.5 + 0.02);   // in the door's XY plane, proud outward
-  door.add(bez);
-  //  a ring of bezel bolts (the porthole is bolted to the door) — flush studs on the bezel face
-  for (let i = 0; i < 16; i++) {
-    const a = (i / 16) * Math.PI * 2;
-    const sg = new THREE.SphereGeometry(0.012, 6, 4, 0, Math.PI * 2, 0, Math.PI / 2);
-    _cabinDisposables.push(sg);
-    const stud = new THREE.Mesh(sg, _cabRivet);   // X2a — match the ride door bezel bolts (was _podFrameMat)
-    stud.rotation.x = -Math.PI / 2;
-    stud.position.set(Math.cos(a) * bezCtr, portCY + Math.sin(a) * bezCtr, doorTh * 0.5 + 0.06);
-    door.add(stud);
-  }
-  // (c) a wheel/lever LATCH near the free (−X) edge, low on the door (grab + turn to open)
-  const wheel = _cyl(0.12, 0.12, 0.05, 14, _podFrameMat);
-  wheel.rotation.y = Math.PI / 2;
-  wheel.position.set(-CPOD_DOOR_W / 2 + 0.16, -CPOD_DOOR_H * 0.28, doorTh * 0.7);
-  door.add(wheel);
-  for (let i = 0; i < 5; i++) {
-    const a = (i / 5) * Math.PI * 2;
-    const spoke = _cyl(0.011, 0.011, 0.10, 5, _podFrameMat);
-    spoke.rotation.z = Math.PI / 2; spoke.rotation.y = a;
-    spoke.position.set(-CPOD_DOOR_W / 2 + 0.16, -CPOD_DOOR_H * 0.28, doorTh * 0.7);
-    door.add(spoke);
-  }
+  // X2b — the ENTIRE door slab + double-faced porthole (sealed through-bore) + double-faced grab
+  //   latch + rivets are built by the ONE shared buildUnifiedDoorSlab, IDENTICAL to the ride cabin
+  //   door (buildCabinHatch). This replaces the bay's bespoke inline slab that DIVERGED (a valve
+  //   WHEEL latch vs the ride's grab-bar, no exterior-face porthole/handle, an open-sided aperture
+  //   ring) — the "door reads as a different model during eject" defect. Same W/H/portY → same door.
+  buildUnifiedDoorSlab(door, doorTh, CPOD_DOOR_W, CPOD_DOOR_H, portCY);
   door.position.set(-CPOD_DOOR_W / 2, 0, 0);   // door-local origin → the hinge (+X) edge
   doorPivot.add(door);
   // door state: closed = flush over the aperture (sealed); open = swung ~110° outward (into +X).
@@ -2748,6 +2690,46 @@ const SHIMMER_FS = /* glsl */ `
   }
 `;
 
+/** X2b — the SHARED cabin lamp rig (a warm pooled ceiling KEY, a low cool ambient FILL, an
+ *  off-centre warm RAKE + a cool counter-rake to read the round bore, and a cool PORTHOLE spill).
+ *  ONE rig for BOTH the ride cabin (buildPodScene — it keeps the animated refs) AND the docked bay
+ *  pod (buildCanonicalPodExterior — refs dropped). Before this, the bay was lit dimmer (a lone 1.3
+ *  lamp + 0.55 fill, no rakes) so the eject→ride swap read as a brightness JUMP; now identical.
+ *  Stores the module refs the descent/crash/tumble paths animate. */
+function buildCabinLampRig(group: THREE.Group, storeRefs = true): void {
+  // Warm ceiling lamp KEY — pooled (lower range + faster decay) so it pools at the apex and the
+  //   lower wall / corners fall off into shadow (form, not a flat fill).
+  const lamp = new THREE.PointLight(0xffd2a0, 1.7, 3.8, 2.9);
+  lamp.position.set(0.1, CAB_APEX - 0.20, 0.05);
+  group.add(lamp);
+  // LOW COOL ambient — a cool-grey sky / dark-cool ground hemisphere → the aluminium reads cool bare
+  //   metal (the warm key is a POOL on top, not a bath).
+  const fill = new THREE.HemisphereLight(0x93a0b0, 0x2a2d30, 0.72);
+  group.add(fill);
+  // OFF-CENTRE warm directional — rakes ACROSS the bore from upper-right so the curved wall picks up
+  //   a clear left→right brightness GRADIENT (the biggest "this is round" cue at eye level).
+  const key = new THREE.DirectionalLight(0xffe8cc, 0.6);
+  key.position.set(1.6, CAB_APEX, 0.2);
+  key.target.position.set(-0.8, 0.7, 0.0);
+  group.add(key);
+  group.add(key.target);
+  // a faint COOL counter-rake from the left so the far-left arc doesn't go dead black (curvature
+  //   reads as a gradient, not a hard light/dark split).
+  const coolRake = new THREE.DirectionalLight(0x8ea4ba, 0.28);
+  coolRake.position.set(-1.4, WALL_H, -0.3);
+  coolRake.target.position.set(0.6, 0.8, 0.4);
+  group.add(coolRake);
+  group.add(coolRake.target);
+  // Cool PORTHOLE spill (the exterior glow from −Z) — a cool accent pool on the forward arc + bezel.
+  const vpGlow = new THREE.PointLight(0xa6c0d6, 0.95, 4.2, 2.2);
+  vpGlow.position.set(0, VP_CY, -CAB_R + 0.05);
+  group.add(vpGlow);
+  // Only the RIDE cabin (buildPodScene) keeps the animated refs — the descent/crash/tumble paths
+  //   drive them. The docked BAY pod uses the same rig for parity but must NOT clobber them (its
+  //   lights are disposed with the ship at the swap; a dangling ref would be a bug).
+  if (storeRefs) { cabinLamp = lamp; cabinFill = fill; cabinKeyRake = key; cabinCoolRake = coolRake; vpGlowLight = vpGlow; }
+}
+
 /** Build the RE-ENTRY FX (plasma + heat-shimmer) into the group, just in front of the −Z
  *  porthole. R1b: the fake vista is GONE — the porthole is an open aperture showing the
  *  REAL terrain + sky as the pod physically falls. These two additive planes layer over
@@ -2812,51 +2794,10 @@ export function buildPodScene(ctx: GameContext): void {
 
   buildCabinInterior(group);
 
-  // ── Lighting: the cabin is OFF in deep space at the offset (no terrain sun reaching
-  //    it), so add a warm dim interior point light + a faint fill hemisphere parented
-  //    to the group, giving the cramped-lived-in glow + form on the lambert surfaces.
-  // ── Lighting (C12 FIX 2): a dim LIVED-IN cabin with FORM + a cool aluminium read —
-  //    NOT a flat warm fill. The prior rig (high flat warm-ish hemisphere ×1.05) washed
-  //    the whole bore brown. New scheme: a tight WARM KEY pool from the ceiling lamp (POOLED,
-  //    fast decay → shadowed cramped corners), a LOW COOL ambient (so the bare aluminium
-  //    reads grey, not warm-bathed), an OFF-CENTRE directional that rakes the curved wall
-  //    left-to-right (a gradient across the arc → the curvature reads, FIX 1 support), and a
-  //    brighter cool PORTHOLE spill (a cool accent pool forward).
-  // Warm ceiling lamp KEY — pooled (lower range + faster decay) so it pools at the apex
-  // and the lower wall / corners fall off into shadow (form, not a flat fill).
-  const lamp = new THREE.PointLight(0xffd2a0, 1.7, 3.8, 2.9);   // cooler tint + tighter pool (was washing the upper wall warm-tan)
-  cabinLamp = lamp;   // R3a — brightened a touch on the crashed dawn wake
-  lamp.position.set(0.1, CAB_APEX - 0.20, 0.05);   // at the ceiling dome light, nudged off-axis
-  group.add(lamp);
-  // LOW COOL ambient — a cool-grey sky / dark-cool ground hemisphere, so the aluminium skin
-  // reads as cool bare metal (the warm key is a POOL on top, not a bath). Lifted a touch so
-  // the cool grey dominates the warm pool away from the lamp.
-  const fill = new THREE.HemisphereLight(0x93a0b0, 0x2a2d30, 0.72);   // cooler + a touch brighter
-  group.add(fill);
-  cabinFill = fill;   // T2.1 — setDescentProgress nudges the sky-tint warmer as the dawn fills the viewport
-  // OFF-CENTRE warm directional — rakes ACROSS the bore from upper-right so the curved wall
-  // picks up a clear left→right brightness GRADIENT (the single biggest "this is round" cue
-  // at eye level — a flat-lit cylinder reads boxy; a raked one reads curved).
-  const key = new THREE.DirectionalLight(0xffe8cc, 0.6);   // gentler, slightly cooler warm rake
-  key.position.set(1.6, CAB_APEX, 0.2);          // from the right, so the arc brightens R→L
-  key.target.position.set(-0.8, 0.7, 0.0);
-  group.add(key);
-  group.add(key.target);
-  cabinKeyRake = key;   // Item 1 — flooded UP on the crashed wake (the directional carries the metallic-hull read)
-  // a faint COOL counter-rake from the left so the far-left arc doesn't go dead black (keeps
-  // the gradient readable as curvature, not a hard light/dark split).
-  const coolRake = new THREE.DirectionalLight(0x8ea4ba, 0.28);
-  coolRake.position.set(-1.4, WALL_H, -0.3);
-  coolRake.target.position.set(0.6, 0.8, 0.4);
-  group.add(coolRake);
-  group.add(coolRake.target);
-  cabinCoolRake = coolRake;   // Item 1 — the left counter-rake, flooded UP on the crashed wake too
-  // Cool PORTHOLE spill (the planet-glow from −Z) — brighter so the forward arc + bezel get
-  // a cool accent pool (a window casts cool light into a warm-lamp cabin).
-  const vpGlow = new THREE.PointLight(0xa6c0d6, 0.95, 4.2, 2.2);
-  vpGlow.position.set(0, VP_CY, -CAB_R + 0.05);
-  group.add(vpGlow);
-  vpGlowLight = vpGlow;   // T2.1 — the literal exterior light entering the cabin; warms+brightens on descent
+  // ── Lighting — the SHARED cabin lamp rig (X2b: buildCabinLampRig), the SAME one the bay pod uses,
+  //    so the interior reads identical bright/character bay→eject→ride→descent. It stores the animated
+  //    refs (cabinLamp/cabinFill/cabinKeyRake/cabinCoolRake/vpGlowLight) that descent/crash paths drive.
+  buildCabinLampRig(group);
   // R3a — DAWN SPILL through the escape HATCH (HATCH_AZ). Off during the descent (intensity 0);
   //   setCabinCrashPose(>0) raises it so the crashed wake cabin is lit by the dawn pouring in the
   //   open hatch (the wake read: the SAME riveted cabin, lit warm from the door the player exits).
@@ -3162,13 +3103,21 @@ export function setDescentProgress(progress: number): void {
  *  cool state, so it hands off seamlessly). Safe no-op before build / after dispose. */
 export function setTumbleLight(settle: number): void {
   const s = Math.max(0, Math.min(1, settle));
+  // X2b (too-bright-post-eject fix): the blast flood is a SHARP PULSE at the actual detonation
+  //   (s→1), NOT a sustained lift across the release/recede. The intensity + tint now ramp
+  //   QUADRATICALLY in s, so the LOW-settle values the release passes (0.3–0.5, and the recede
+  //   decay tail) sit NEAR the cool orbital base — the freshly-revealed ride cabin at the swap reads
+  //   the same cool base as the bay pod, and only the genuine ship blast (s near 1) floods it hot
+  //   orange. The old LINEAR `0.95 + s*2.6` lifted the cabin to ~1.7–2.25 for the whole ~1.6 s
+  //   pre-blast window (the pale/warm lift the user read as "too bright after eject").
+  const sq = s * s;
   if (vpGlowLight) {
-    vpGlowLight.color.copy(_vpScratch.copy(_VP_COOL).lerp(_VP_BLAST, s));
-    vpGlowLight.intensity = 0.95 + s * 2.6;    // 0.95 orbital cool → ~3.5 the blast flooding the cabin
+    vpGlowLight.color.copy(_vpScratch.copy(_VP_COOL).lerp(_VP_BLAST, sq));
+    vpGlowLight.intensity = 0.95 + sq * 2.6;    // 0.95 orbital cool base → ~3.5 only at the blast peak
   }
   if (cabinFill) {
-    cabinFill.color.copy(_fillScratch.copy(_FILL_COOL).lerp(_FILL_BLAST, s * 0.9));
-    cabinFill.intensity = 0.72 + s * 0.5;       // the whole cabin brightens under the blast
+    cabinFill.color.copy(_fillScratch.copy(_FILL_COOL).lerp(_FILL_BLAST, sq * 0.9));
+    cabinFill.intensity = 0.72 + sq * 0.5;      // ambient base 0.72 (= the bay/ride base) → +0.5 only at the peak
   }
 }
 
@@ -3223,6 +3172,8 @@ export function disposePodScene(ctx: GameContext): void {
   if (reentryShimmerMat) reentryShimmerMat.dispose();
   for (const g of _cabinDisposables) g.dispose();
   _cabinDisposables.length = 0;
+  for (const m of _cabinDoorMats) m.dispose();   // X2b — free the per-build cloned door materials
+  _cabinDoorMats.length = 0;
   reentryPlasmaMat = null;
   reentryPlasmaMesh = null;
   reentryShimmerMat = null;
